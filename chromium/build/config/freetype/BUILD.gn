@@ -3,13 +3,14 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//build/config/freetype/freetype.gni")
 
 group("freetype") {
-  if (is_chromecast || is_android || is_win) {
+  if (use_system_freetype) {
+    public_configs = [ "//build/linux:freetype_from_pkgconfig" ]
+  } else {
     public_deps = [
       "//third_party/freetype",
     ]
-  } else if (is_linux) {
-    public_configs = [ "//build/linux:freetype_from_pkgconfig" ]
   }
 }

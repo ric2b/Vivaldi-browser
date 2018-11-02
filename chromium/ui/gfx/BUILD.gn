@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
-import("//device/vr/features.gni")
+import("//device/vr/features/features.gni")
 import("//testing/test.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 
@@ -163,8 +163,6 @@ component("gfx") {
     "shadow_value.h",
     "skbitmap_operations.cc",
     "skbitmap_operations.h",
-    "switches.cc",
-    "switches.h",
     "sys_color_change_listener.cc",
     "sys_color_change_listener.h",
     "text_constants.h",
@@ -185,6 +183,7 @@ component("gfx") {
     "win/direct_write.h",
     "win/hwnd_util.cc",
     "win/hwnd_util.h",
+    "win/msg_util.h",
     "win/physical_size.cc",
     "win/physical_size.h",
     "win/rendering_window_manager.cc",
@@ -241,6 +240,7 @@ component("gfx") {
     ":memory_buffer_sources",
     ":native_widget_types",
     ":selection_bound_sources",
+    ":switches_sources",
     "//base",
     "//skia",
     "//third_party/icu",
@@ -255,12 +255,13 @@ component("gfx") {
     "//base:base_static",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
+    "//device/vr/features",
     "//skia",
     "//third_party/zlib",
   ]
 
   # Text rendering conditions (complicated so separated out).
-  if (use_aura || is_mac) {
+  if (use_aura || is_mac || (is_android && enable_vr)) {
     # Mac doesn't use RenderTextHarfBuzz by default yet.
     sources += [
       "harfbuzz_font_skia.cc",
@@ -282,13 +283,16 @@ component("gfx") {
     # We don't support RenderText on these platforms.
   }
 
-  if (is_android && use_aura) {
+  if (is_android && enable_vr) {
     sources -= [
       "platform_font_android.cc",
       "text_utils_android.cc",
     ]
     set_sources_assignment_filter([])
-    sources += [ "platform_font_linux.cc" ]
+    sources += [
+      "platform_font_linux.cc",
+      "platform_font_linux.h",
+    ]
     set_sources_assignment_filter(sources_assignment_filter)
   }
 
@@ -306,7 +310,7 @@ component("gfx") {
 
   # Android.
   if (is_android) {
-    if (use_aura) {
+    if (enable_vr) {
       sources -= [ "canvas_notimplemented.cc" ]
       sources += [ "font_fallback_android.cc" ]
     } else {
@@ -409,6 +413,7 @@ component("color_space") {
     "//skia",
   ]
   deps = [
+    ":switches_sources",
     "//base",
     "//skia",
   ]
@@ -525,6 +530,7 @@ source_set("memory_buffer_sources") {
 
   deps = [
     ":native_widget_types",
+    ":switches_sources",
     "//base",
     "//ui/gfx/geometry",
   ]
@@ -539,6 +545,22 @@ source_set("memory_buffer_sources") {
 
     deps += [ "//third_party/libdrm" ]
   }
+}
+
+source_set("switches_sources") {
+  visibility = [ ":*" ]  # Depend on through ":switches_sources".
+
+  sources = [
+    "switches.cc",
+    "switches.h",
+  ]
+
+  defines = [ "GFX_IMPLEMENTATION" ]
+
+  deps = [
+    ":gfx_export",
+    "//base",
+  ]
 }
 
 static_library("test_support") {
@@ -719,6 +741,7 @@ test("gfx_unittests") {
       "font_fallback_win_unittest.cc",
       "icon_util_unittest.cc",
       "icon_util_unittests.rc",
+      "icon_util_unittests_resource.h",
       "path_win_unittest.cc",
       "platform_font_win_unittest.cc",
       "win/text_analysis_source_unittest.cc",

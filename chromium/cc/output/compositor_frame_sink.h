@@ -25,6 +25,7 @@ class GpuMemoryBufferManager;
 
 namespace cc {
 
+struct BeginFrameAck;
 class CompositorFrame;
 class CompositorFrameSinkClient;
 class LocalSurfaceId;
@@ -41,9 +42,13 @@ class CC_EXPORT CompositorFrameSink {
   struct Capabilities {
     Capabilities() = default;
 
-    // Whether ForceReclaimResources can be called to reclaim all resources
-    // from the CompositorFrameSink.
-    bool can_force_reclaim_resources = false;
+    // True if we must always swap, even if there is no damage to the frame.
+    // Needed for both the browser compositor as well as layout tests.
+    // TODO(ericrk): This should be test-only for layout tests, but tab
+    // capture has issues capturing offscreen tabs whithout this. We should
+    // remove this dependency. crbug.com/680196
+    bool must_always_swap = false;
+
     // True if sync points for resources are needed when swapping delegated
     // frames.
     bool delegated_sync_points_required = true;
@@ -102,10 +107,6 @@ class CC_EXPORT CompositorFrameSink {
     return shared_bitmap_manager_;
   }
 
-  // If supported, this causes a ReclaimResources for all resources that are
-  // currently in use.
-  virtual void ForceReclaimResources() {}
-
   // If supported, this sets the LocalSurfaceId the CompositorFrameSink will use
   // to submit a CompositorFrame.
   virtual void SetLocalSurfaceId(const LocalSurfaceId& local_surface_id) {}
@@ -120,6 +121,10 @@ class CC_EXPORT CompositorFrameSink {
   // DidReceiveCompositorFrameAck() asynchronously when the frame has been
   // processed in order to unthrottle the next frame.
   virtual void SubmitCompositorFrame(CompositorFrame frame) = 0;
+
+  // Signals that a BeginFrame issued by the BeginFrameSource provided to the
+  // client did not lead to a CompositorFrame submission.
+  virtual void DidNotProduceFrame(const BeginFrameAck& ack) = 0;
 
  protected:
   // Bound to the ContextProvider to hear about when it is lost and inform the

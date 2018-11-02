@@ -58,7 +58,7 @@ class MockNotificationView : public NotificationView {
                                 Test* test);
   ~MockNotificationView() override;
 
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
   int GetHeightForWidth(int w) const override;
   void Layout() override;
 
@@ -78,10 +78,10 @@ MockNotificationView::MockNotificationView(MessageCenterController* controller,
 MockNotificationView::~MockNotificationView() {
 }
 
-gfx::Size MockNotificationView::GetPreferredSize() const {
+gfx::Size MockNotificationView::CalculatePreferredSize() const {
   test_->RegisterCall(GET_PREFERRED_SIZE);
   DCHECK(child_count() > 0);
-  return NotificationView::GetPreferredSize();
+  return NotificationView::CalculatePreferredSize();
 }
 
 int MockNotificationView::GetHeightForWidth(int width) const {
@@ -578,7 +578,7 @@ TEST_F(MessageCenterViewTest, SizeAfterRemove) {
 
   EXPECT_FALSE(GetNotificationView(kNotificationId1));
   EXPECT_TRUE(GetNotificationView(kNotificationId2));
-  EXPECT_EQ(GetMessageListView()->height(), original_height);
+  EXPECT_EQ(original_height, GetMessageListView()->height());
 }
 
 TEST_F(MessageCenterViewTest, PositionAfterUpdate) {
@@ -851,7 +851,7 @@ TEST_F(MessageCenterViewTest,
 }
 
 TEST_F(MessageCenterViewTest, LockScreen) {
-  const int kLockedMessageCenterViewHeight = 50;
+  const int kLockedMessageCenterViewHeight = 51;
 
   EXPECT_TRUE(GetNotificationView(kNotificationId1)->IsDrawn());
   EXPECT_TRUE(GetNotificationView(kNotificationId2)->IsDrawn());
@@ -928,7 +928,7 @@ TEST_F(MessageCenterViewTest, LockScreen) {
 }
 
 TEST_F(MessageCenterViewTest, NoNotification) {
-  const int kEmptyMessageCenterViewHeight = 50;
+  const int kEmptyMessageCenterViewHeight = 51;
 
   GetMessageCenterView()->SizeToPreferredSize();
   EXPECT_NE(kEmptyMessageCenterViewHeight, GetMessageCenterView()->height());

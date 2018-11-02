@@ -15,7 +15,7 @@ import logging
 
 from webkitpy.common.memoized import memoized
 from webkitpy.common.net.git_cl import GitCL
-from webkitpy.common.webkit_finder import WebKitFinder
+from webkitpy.common.path_finder import PathFinder
 from webkitpy.layout_tests.models.test_expectations import TestExpectationLine, TestExpectations
 from webkitpy.w3c.wpt_manifest import WPTManifest
 
@@ -29,7 +29,7 @@ class WPTExpectationsUpdater(object):
     def __init__(self, host):
         self.host = host
         self.port = self.host.port_factory.get()
-        self.finder = WebKitFinder(self.host.filesystem)
+        self.finder = PathFinder(self.host.filesystem)
         self.port = self.host.port_factory.get()
 
     def run(self, args=None):
@@ -201,7 +201,8 @@ class WPTExpectationsUpdater(object):
             matching_value_keys = set()
         return merged_dict
 
-    def get_expectations(self, results):
+    def get_expectations(self, results, test_name=''):
+
         """Returns a set of test expectations to use based on results.
 
         Returns a set of one or more test expectations based on the expected
@@ -217,11 +218,21 @@ class WPTExpectationsUpdater(object):
                         'bug': 'crbug.com/11111'
                     }
                 }
+            test_name: The test name string (optional).
 
         Returns:
             A set of one or more test expectation strings with the first letter
             capitalized. Example: set(['Failure', 'Timeout']).
         """
+        # If the result is MISSING, this implies that the test was not
+        # rebaselined and has an actual result but no baseline. We can't
+        # add a Missing expectation (this is not allowed), but no other
+        # expectation is correct.
+        # We also want to skip any new manual tests that are not automated;
+        # see crbug.com/708241 for context.
+        if (results['actual'] == 'MISSING' or
+                '-manual.' in test_name and results['actual'] == 'TIMEOUT'):
+            return {'Skip'}
         expectations = set()
         failure_types = ('TEXT', 'IMAGE+TEXT', 'IMAGE', 'AUDIO')
         other_types = ('TIMEOUT', 'CRASH', 'PASS')
@@ -269,12 +280,8 @@ class WPTExpectationsUpdater(object):
         if specifier_part:
             line_parts.append(specifier_part)
         line_parts.append(test_name)
+        line_parts.append('[ %s ]' % ' '.join(self.get_expectations(results, test_name)))
 
-        # Skip new manual tests; see crbug.com/708241 for context.
-        if '-manual.' in test_name and results['actual'] in ('MISSING', 'TIMEOUT'):
-            line_parts.append('[ Skip ]')
-        else:
-            line_parts.append('[ %s ]' % ' '.join(self.get_expectations(results)))
         return ' '.join(line_parts)
 
     def specifier_part(self, port_names, test_name):
@@ -404,14 +411,14 @@ class WPTExpectationsUpdater(object):
         for test in tests_to_rebaseline:
             _log.info('  %s', test)
         if tests_to_rebaseline:
-            webkit_patch = self.host.filesystem.join(
-                self.finder.chromium_base(), self.finder.webkit_base(), self.finder.path_to_script('webkit-patch'))
+            webkit_patch = self.finder.path_from_tools_scripts('webkit-patch')
             self.host.executive.run_command([
                 'python',
                 webkit_patch,
                 'rebaseline-cl',
                 '--verbose',
                 '--no-trigger-jobs',
+                '--fill-missing',
             ] + tests_to_rebaseline)
         return tests_results
 

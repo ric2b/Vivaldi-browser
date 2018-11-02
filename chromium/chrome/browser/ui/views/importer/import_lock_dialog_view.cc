@@ -11,6 +11,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/importer/importer_lock_dialog.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -48,12 +49,13 @@ ImportLockDialogView::ImportLockDialogView(
   description_label_->SetMultiLine(true);
   description_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   AddChildView(description_label_);
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::IMPORT_LOCK);
 }
 
 ImportLockDialogView::~ImportLockDialogView() {
 }
 
-gfx::Size ImportLockDialogView::GetPreferredSize() const {
+gfx::Size ImportLockDialogView::CalculatePreferredSize() const {
   return gfx::Size(views::Widget::GetLocalizedContentsSize(
       IDS_IMPORTLOCK_DIALOG_WIDTH_CHARS,
       IDS_IMPORTLOCK_DIALOG_HEIGHT_LINES));
@@ -61,9 +63,11 @@ gfx::Size ImportLockDialogView::GetPreferredSize() const {
 
 void ImportLockDialogView::Layout() {
   gfx::Rect bounds(GetLocalBounds());
-  bounds.Inset(views::kButtonHEdgeMarginNew,
-               ChromeLayoutProvider::Get()->GetDistanceMetric(
-                   DISTANCE_PANEL_CONTENT_MARGIN));
+  const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+  bounds.Inset(provider->GetDistanceMetric(
+                   views::DISTANCE_DIALOG_CONTENTS_HORIZONTAL_MARGIN),
+               provider->GetDistanceMetric(
+                   views::DISTANCE_DIALOG_CONTENTS_VERTICAL_MARGIN));
   description_label_->SetBoundsRect(bounds);
 }
 
@@ -78,13 +82,13 @@ base::string16 ImportLockDialogView::GetWindowTitle() const {
 }
 
 bool ImportLockDialogView::Accept() {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                base::Bind(callback_, true));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(callback_, true));
   return true;
 }
 
 bool ImportLockDialogView::Cancel() {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                base::Bind(callback_, false));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(callback_, false));
   return true;
 }

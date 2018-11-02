@@ -17,6 +17,7 @@
 
 #include "base/macros.h"
 #include "base/strings/string16.h"
+#include "base/time/time.h"
 #include "base/win/scoped_handle.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/lzma_util.h"
@@ -121,6 +122,10 @@ bool IsDowngradeAllowed(const MasterPreferences& prefs);
 // Returns true if Chrome has been run within the last 28 days.
 bool IsChromeActivelyUsed(const InstallerState& installer_state);
 
+// Returns the age (in days) of the installation based on the creation time of
+// its installation directory, or -1 in case of error.
+int GetInstallAge(const InstallerState& installer_state);
+
 // Records UMA metrics for unpack result.
 void RecordUnPackMetrics(UnPackStatus unpack_status,
                          int32_t status,
@@ -144,6 +149,10 @@ bool AreBinariesInstalled(const InstallerState& installer_state);
 // Removes leftover bits from features that have been removed from the product.
 void DoLegacyCleanups(const InstallerState& installer_state,
                       InstallStatus install_status);
+
+// Returns the time of the start of the console user's Windows logon session, or
+// a null time in case of error.
+base::Time GetConsoleSessionStartTime();
 
 // Gets handles to all active processes on the system running from a given path,
 // that could be opened with the |desired_access|.

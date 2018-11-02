@@ -24,8 +24,6 @@
 <translation id="1774152462503052664">让 Chromium 在后台运行</translation>
 <translation id="1779356040007214683">为了提高 Chromium 的安全性，系统停用了一些未列在 <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />中、可能是在您不知情的情况下添加的扩展程序。</translation>
 <translation id="1808667845054772817">重新安装Chromium</translation>
-<translation id="1816404578968201294">Chromium 需要具有位置信息访问权限，才能批准此网站的分享请求。</translation>
-<translation id="1838412507805038478">Chromium 已证实：此网站的证书是由 <ph name="ISSUER" /> 签发的。</translation>
 <translation id="1869480248812203386">您可以选择自动向 Google 报告可能出现的安全事件详情，以帮助我们提高 Chromium 的安全性和易用性。</translation>
 <translation id="1881322772814446296">您目前登录的帐号是一个托管帐号，该帐号的管理员将能够控制您的 Chromium 个人资料。您的 Chromium 数据（例如您的应用、书签、历史记录、密码和其他设置）将永远与 <ph name="USER_NAME" /> 相关联。您可以通过 Google 帐号信息中心删除这些数据，但无法将这些数据与其他帐号相关联。您可以选择创建新的个人资料来单独存储您现有的 Chromium 数据。<ph name="LEARN_MORE" /></translation>
 <translation id="1929939181775079593">Chromium 未响应。要立即重新启动吗？</translation>
@@ -37,6 +35,7 @@
 <translation id="2119636228670142020">关于 Chromium 操作系统(&amp;C)</translation>
 <translation id="2158734852934720349">Chromium操作系统开放源代码许可</translation>
 <translation id="2241627712206172106">如果您与亲朋好友共用计算机，他们将能够使用单独的帐号进行浏览，并可随心所欲地设置Chromium。</translation>
+<translation id="2265088490657775772">在 iPhone 上下载 Chromium</translation>
 <translation id="2316129865977710310">不用了，谢谢</translation>
 <translation id="2347108572062610441">此扩展程序更改了 Chromium 启动后系统显示的页面。</translation>
 <translation id="2372704305038231957">32 位 Chromium 已不再适用于此 Linux 系统，因此可能无法正常运行。请升级到 64 位 Chromium。</translation>
@@ -49,7 +48,6 @@
 <translation id="2535480412977113886">您的帐号登录详细信息已过期，Chromium操作系统无法同步您的数据。</translation>
 <translation id="2572494885440352020">Chromium 帮助程序</translation>
 <translation id="2587578672395088481">需要重新启动 Chromium 操作系统以应用更新。</translation>
-<translation id="2636877269779209383">Chromium 需要具有摄像头使用权限，才能批准此网站的分享请求。</translation>
 <translation id="2647554856022461007">Chromium 可能会使用网络服务来改善您的浏览体验。不过，您可以选择停用这些服务。<ph name="BEGIN_LINK" />了解详情<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">安装过程中出现操作系统错误。请重新下载 Chromium。</translation>
 <translation id="2685838254101182273">Chromium 已停止更新，并且不再支持您的操作系统版本。</translation>
@@ -112,12 +110,14 @@
 <translation id="4549794359424059447">Chromium 的后续版本将不再支持 Windows XP 或 Windows Vista。</translation>
 <translation id="4567424176335768812">您已使用 <ph name="USER_EMAIL_ADDRESS" /> 的身份登录。现在您可在已登录的所有设备上访问您的书签、历史记录和其他设置。</translation>
 <translation id="459535195905078186">Chromium 应用</translation>
+<translation id="4611246891205775468">Chromium 需要获得相应权限，才能允许此网站使用您的麦克风。</translation>
 <translation id="4621240073146040695">即将更新到最新版本！重新启动 Chromium 即可完成更新。</translation>
 <translation id="4677944499843243528">其他计算机 (<ph name="HOST_NAME" />) 的另一个 Chromium 进程 (<ph name="PROCESS_ID" />) 好像正在使用此个人资料。Chromium 已锁定此个人资料以防止其受损。如果您确定其他进程目前未使用此个人资料，请为其解锁并重新启动 Chromium。</translation>
 <translation id="469338717132742108">获取有关 Chromium 操作系统的帮助</translation>
 <translation id="4708774505295300557">之前已有人在此计算机上以 <ph name="ACCOUNT_EMAIL_LAST" /> 的身份登录了 Chromium。请新建一个 Chromium 用户来单独保存您的信息。</translation>
 <translation id="4714956846925717402">更快地访问 Chromium</translation>
 <translation id="4743926867934016338">接受并搜索</translation>
+<translation id="4825874709045178029">Chromium 需要获得相应权限，才能允许此网站使用您的摄像头。</translation>
 <translation id="4888717733111232871">Chromium的入站规则，允许mDNS流量。</translation>
 <translation id="4943838377383847465">Chromium处于后台运行模式。</translation>
 <translation id="4987820182225656817">访客使用Chromium不会留下任何痕迹。</translation>
@@ -167,11 +167,11 @@
 <translation id="6403826409255603130">Chromium 是一款可高速运行网页和应用的网络浏览器。它快捷、稳定且易于使用。Chromium 内置的防护恶意软件和网上诱骗的功能可让您更安全地浏览网页。</translation>
 <translation id="6475912303565314141">它还能够控制Chromium启动后显示的页面。</translation>
 <translation id="6485906693002546646">您在使用<ph name="PROFILE_EMAIL" />同步自己的Chromium资料和数据。要更新您的同步偏好设置或在不登录Google帐号的情况下使用Chromium，请前往<ph name="SETTINGS_LINK" />部分。</translation>
+<translation id="6505742536731484931">Chromium 需要获得位置权限，才能将您的位置信息共享给此网站。</translation>
 <translation id="6510925080656968729">卸载 Chromium</translation>
 <translation id="6526111688217511984">Chromium 需要具备存储空间使用权限，才能下载文件。</translation>
 <translation id="6584627348340620412">32 位 Chromium 的后续版本将不再支持此 Linux 系统，请升级到 64 位 Chromium。</translation>
 <translation id="6593914713218535185">Chromium 不再支持此 Linux 系统，因此可能无法正常运行。</translation>
-<translation id="6637001341228460105">Chromium 需要具有麦克风使用权限，才能批准此网站的分享请求。</translation>
 <translation id="6638567566961868659">在 Chromium 菜单或书签栏中查找您的书签。</translation>
 <translation id="6676384891291319759">访问互联网</translation>
 <translation id="6717134281241384636">您的个人资料来自更高版本的 Chromium，因此无法使用。
@@ -229,19 +229,20 @@ Chromium 无法恢复您的设置。</translation>
 <translation id="7975919845073681630">这是 Chromium 的并行安装，您无法将此浏览器设为默认浏览器。</translation>
 <translation id="7979877361127045932">在 Chromium 菜单中隐藏</translation>
 <translation id="8030318113982266900">正在将您的设备更新至“<ph name="CHANNEL_NAME" />”版…</translation>
-<translation id="8033665941300843262">Chromium 需要具有这些功能的使用权限，才能批准此网站的分享请求。</translation>
 <translation id="8134284582177628525">如果您与<ph name="PROFILE_NAME" />共用这台计算机，将您的帐号添加到Chromium，即可在单独的环境中浏览。或者，您也可以取消与其Google帐号的关联。</translation>
 <translation id="8157153840442649507">Chromium 界面目前使用的是这种语言</translation>
 <translation id="81770708095080097">此文件存在危险，因此 Chromium 已将其拦截。</translation>
 <translation id="8222496066431494154">请在您的手机上安装 Chromium。我们会将一条短信发送到您帐号的辅助电话号码：<ph name="PHONE_NUMBER" /></translation>
 <translation id="8269379391216269538">帮助我们改进Chromium</translation>
 <translation id="8290862415967981663">此文件可能存在危险，因此 Chromium 已将其拦截。</translation>
+<translation id="8328596990138326317">Chromium 需要获得相应权限，才能允许此网站使用您的摄像头和麦克风。</translation>
 <translation id="8340674089072921962"><ph name="USER_EMAIL_ADDRESS" /> 之前使用的是 Chromium</translation>
 <translation id="8453117565092476964">安装程序归档损坏或无效。请重新下载 Chromium。</translation>
 <translation id="8493179195440786826">Chromium版本太旧</translation>
 <translation id="8563206822260884157">使用由 Chromium 生成的安全系数高的密码</translation>
 <translation id="85843667276690461">获取 Chromium 使用帮助</translation>
 <translation id="8586442755830160949">版权所有<ph name="YEAR" /> The Chromium Authors。保留所有权利。</translation>
+<translation id="8590769996813453836">Chromium 在您的计算机上发现了有害软件。Chromium 可移除该软件并恢复您的设置，以确保您的浏览器重新正常运行。</translation>
 <translation id="8621669128220841554">未指定的错误导致安装失败。请重新下载 Chromium。</translation>
 <translation id="8628626585870903697">Chromium 未包含运行打印预览所需的 PDF 查看器。</translation>
 <translation id="8667808506758191620">您的 <ph name="DEVICE_TYPE" /> 是最新版本。</translation>

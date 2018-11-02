@@ -29,89 +29,79 @@ var FileAsyncData;
  * @param {!DirectoryModel} directoryModel Directory model instance.
  * @param {!VolumeManagerWrapper} volumeManager Volume manager instance.
  * @param {!FileSelectionHandler} selectionHandler Selection handler.
+ * @param {function((!Entry|!FakeEntry)): boolean} shouldShowCommandFor
  * @struct
  * @constructor
  */
-function FileTransferController(doc,
-                                listContainer,
-                                directoryTree,
-                                multiProfileShareDialog,
-                                progressCenter,
-                                fileOperationManager,
-                                metadataModel,
-                                thumbnailModel,
-                                directoryModel,
-                                volumeManager,
-                                selectionHandler) {
+function FileTransferController(
+    doc, listContainer, directoryTree, multiProfileShareDialog, progressCenter,
+    fileOperationManager, metadataModel, thumbnailModel, directoryModel,
+    volumeManager, selectionHandler, shouldShowCommandFor) {
   /**
-   * @type {!Document}
-   * @private
+   * @private {!Document}
    * @const
    */
   this.document_ = doc;
 
   /**
-   * @type {!ListContainer}
-   * @private
+   * @private {!ListContainer}
    * @const
    */
   this.listContainer_ = listContainer;
 
   /**
-   * @type {!FileOperationManager}
-   * @private
+   * @private {!FileOperationManager}
    * @const
    */
   this.fileOperationManager_ = fileOperationManager;
 
   /**
-   * @type {!MetadataModel}
-   * @private
+   * @private {!MetadataModel}
    * @const
    */
   this.metadataModel_ = metadataModel;
 
   /**
-   * @type {!ThumbnailModel}
-   * @private
+   * @private {!ThumbnailModel}
    * @const
    */
   this.thumbnailModel_ = thumbnailModel;
 
   /**
-   * @type {!DirectoryModel}
-   * @private
+   * @private {!DirectoryModel}
    * @const
    */
   this.directoryModel_ = directoryModel;
 
   /**
-   * @type {!VolumeManagerWrapper}
-   * @private
+   * @private {!VolumeManagerWrapper}
    * @const
    */
   this.volumeManager_ = volumeManager;
 
   /**
-   * @type {!FileSelectionHandler}
-   * @private
+   * @private {!FileSelectionHandler}
    * @const
    */
   this.selectionHandler_ = selectionHandler;
 
   /**
-   * @type {!MultiProfileShareDialog}
-   * @private
+   * @private {!MultiProfileShareDialog}
    * @const
    */
   this.multiProfileShareDialog_ = multiProfileShareDialog;
 
   /**
-   * @type {!ProgressCenter}
-   * @private
+   * @private {!ProgressCenter}
    * @const
    */
   this.progressCenter_ = progressCenter;
+
+  /**
+   * @private {function((!Entry|!FakeEntry)): boolean}
+   * @const
+   */
+  this.shouldShowCommandFor_ = shouldShowCommandFor;
 
   /**
    * The array of pending task ID.
@@ -122,37 +112,32 @@ function FileTransferController(doc,
   /**
    * Promise to be fulfilled with the thumbnail image of selected file in drag
    * operation. Used if only one element is selected.
-   * @type {Promise}
-   * @private
+   * @private {Promise}
    */
   this.preloadedThumbnailImagePromise_ = null;
 
   /**
    * File objects for selected files.
    *
-   * @type {Object<FileAsyncData>}
-   * @private
+   * @private {Object<FileAsyncData>}
    */
   this.selectedAsyncData_ = {};
 
   /**
    * Drag selector.
-   * @type {DragSelector}
-   * @private
+   * @private {DragSelector}
    */
   this.dragSelector_ = new DragSelector();
 
   /**
    * Whether a user is touching the device or not.
-   * @type {boolean}
-   * @private
+   * @private {boolean}
    */
   this.touching_ = false;
 
   /**
    * Count of the SourceNotFound error.
-   * @type {number}
-   * @private
+   * @private {number}
    */
   this.sourceNotFoundErrorCount_ = 0;
 
@@ -169,32 +154,28 @@ function FileTransferController(doc,
   this.cutCommand_ = queryRequiredElement('command#cut', this.document_);
 
   /**
-   * @type {DirectoryEntry}
-   * @private
+   * @private {DirectoryEntry}
    */
   this.destinationEntry_ = null;
 
   /**
-   * @type {EventTarget}
-   * @private
+   * @private {EventTarget}
    */
   this.lastEnteredTarget_ = null;
 
   /**
-   * @type {Element}
-   * @private
+   * @private {Element}
    */
   this.dropTarget_ = null;
 
   /**
    * The element for showing a label while dragging files.
-   * @type {Element}
-   * @private
+   * @private {Element}
    */
   this.dropLabel_ = null;
 
   /**
-   * @type {number}
+   * @private {number}
    */
   this.navigateTimer_ = 0;
 
@@ -548,6 +529,16 @@ FileTransferController.prototype.paste =
   var shareEntries;
   var taskId = this.fileOperationManager_.generateTaskId();
 
+  // Creates early progress center item for faster user feedback.
+  var item = new ProgressCenterItem();
+  item.id = taskId;
+  if (toMove) {
+    item.message = strf('MOVE_ITEMS_REMAINING', sourceURLs.length);
+  } else {
+    item.message = strf('COPY_ITEMS_REMAINING', sourceURLs.length);
+  }
+  this.progressCenter_.updateItem(item);
+
   FileTransferController.URLsToEntriesWithAccess(sourceURLs)
       .then(
           /**
@@ -556,6 +547,8 @@ FileTransferController.prototype.paste =
            */
           function(result) {
             failureUrls = result.failureUrls;
+            // The promise is not rejected, so it's safe to not remove the early
+            // progress center item here.
             return this.fileOperationManager_.filterSameDirectoryEntry(
                 result.entries, destinationEntry, toMove);
           }.bind(this))
@@ -567,8 +560,14 @@ FileTransferController.prototype.paste =
            */
           function(filteredEntries) {
             entries = filteredEntries;
-            if (entries.length === 0)
+            if (entries.length === 0) {
+              // Remove the early progress center item.
+              var item = new ProgressCenterItem();
+              item.id = taskId;
+              item.state = ProgressItemState.CANCELED;
+              this.progressCenter_.updateItem(item);
               return Promise.reject('ABORT');
+            }
 
             this.pendingTaskIds.push(taskId);
             var item = new ProgressCenterItem();
@@ -1111,8 +1110,7 @@ FileTransferController.prototype.canCutOrCopy_ = function(isMove) {
     if (!selectedItem)
       return false;
 
-    if (!CommandUtil.shouldShowMenuItemForEntry(
-        this.volumeManager_, selectedItem.entry)) {
+    if (!this.shouldShowCommandFor_(selectedItem.entry)) {
       command.setHidden(true);
       return false;
     }
@@ -1134,8 +1132,12 @@ FileTransferController.prototype.canCutOrCopy_ = function(isMove) {
  * @private
  */
 FileTransferController.prototype.canCopyOrDrag_ = function() {
-  return this.selectionHandler_.isAvailable() &&
-      this.selectionHandler_.selection.entries.length > 0;
+  if (!this.selectionHandler_.isAvailable())
+    return false;
+  if (this.selectionHandler_.selection.entries.length <= 0)
+    return false;
+  var entries = this.selectionHandler_.selection.entries;
+  return entries.every(entry => !util.isTeamDriveRoot(entry));
 };
 
 /**
@@ -1261,20 +1263,30 @@ FileTransferController.prototype.simulateCommand_ = function(command, handler) {
  */
 FileTransferController.prototype.onFileSelectionChanged_ = function() {
   this.preloadedThumbnailImagePromise_ = null;
-  this.selectedAsyncData_ = {};
 };
 
 /**
  * @private
  */
 FileTransferController.prototype.onFileSelectionChangedThrottled_ = function() {
+  // Remove file objects that are no longer in the selection.
+  var asyncData = {};
   var entries = this.selectionHandler_.selection.entries;
-  var asyncData = this.selectedAsyncData_;
+  for (var i = 0; i < entries.length; i++) {
+    var entryUrl = entries[i].toURL();
+    if (entryUrl in this.selectedAsyncData_) {
+      asyncData[entryUrl] = this.selectedAsyncData_[entryUrl];
+    }
+  }
+  this.selectedAsyncData_ = asyncData;
+
   var fileEntries = [];
   for (var i = 0; i < entries.length; i++) {
     if (entries[i].isFile)
       fileEntries.push(entries[i]);
-    asyncData[entries[i].toURL()] = {externalFileUrl: '', file: null};
+    if (!(entries[i].toURL() in asyncData)) {
+      asyncData[entries[i].toURL()] = {externalFileUrl: '', file: null};
+    }
   }
   var containsDirectory = this.selectionHandler_.selection.directoryCount > 0;
 
@@ -1285,9 +1297,11 @@ FileTransferController.prototype.onFileSelectionChangedThrottled_ = function() {
   if (!containsDirectory) {
     for (var i = 0; i < fileEntries.length; i++) {
       (function(fileEntry) {
-        fileEntry.file(function(file) {
-          asyncData[fileEntry.toURL()].file = file;
-        });
+        if (!(asyncData[fileEntry.toURL()].file)) {
+          fileEntry.file(function(file) {
+            asyncData[fileEntry.toURL()].file = file;
+          });
+        }
       })(fileEntries[i]);
     }
   }

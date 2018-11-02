@@ -6,6 +6,7 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="2147651015520127414">Chrome s-a asigurat că certificatul acestui site a fost emis de <ph name="ISSUER" />.</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. Toate drepturile rezervate.</translation>
+<translation id="2342981853652716282">Conectează-te la Chrome pentru a accesa marcajele, parolele și altele pe toate dispozitivele tale.</translation>
 <translation id="2347208864470321755">Când este activată această funcție, Chrome se va oferi să traducă paginile scrise în alte limbi utilizând Google Traducere. <ph name="BEGIN_LINK" />Află mai multe<ph name="END_LINK" /></translation>
 <translation id="2441696206556358796">Pentru a salva imaginile, atinge Setări ca să permiți browserului Chrome să folosească fotografiile</translation>
 <translation id="2576431527583832481">Chrome a devenit și mai bun! Este disponibilă o nouă versiune.</translation>
@@ -16,8 +17,6 @@
 <translation id="3196546062792660320">Folosind Chrome, economisești timp, deoarece te conectează la conturi și pe web. Poți să adaugi sau să elimini conturi din Setări.</translation>
 <translation id="3282568296779691940">Conectați-vă la Chrome</translation>
 <translation id="3345341804167540816">Folosește Chrome oriunde</translation>
-<translation id="3531621179462011934">Pentru a accesa setările pe toate dispozitivele, conectează-te la Chrome.</translation>
-<translation id="3601960512121168237">Îți place Chrome? <ph name="BEGIN_LINK" />Mută-l în bara de andocare<ph name="END_LINK" /></translation>
 <translation id="3678774398092457402">Dorești ca Google Chrome să salveze parola pentru acest site?</translation>
 <translation id="384394811301901750">Momentan, Google Chrome nu poate folosi camera foto</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
@@ -25,6 +24,7 @@
 <translation id="3988789688219830639">Google Chrome nu are acces la fotografii și videoclipuri. Activează accesul din Setări iOS &gt; Confidențialitate &gt; Fotografii.</translation>
 <translation id="4099578267706723511">Contribuie la îmbunătățirea Chrome trimițând statistici de utilizare și rapoarte de blocare la Google.</translation>
 <translation id="415767770115540173">Beneficiază de o experiență Google mai bună în Chrome pe baza locației.</translation>
+<translation id="4248297594476034182">Pentru a accesa filele pe toate dispozitivele, conectează-te la Chrome.</translation>
 <translation id="424864128008805179">Te deconectezi de la Chrome?</translation>
 <translation id="4523886039239821078">Unele suplimente determină blocarea browserului Chrome. Dezinstalează:</translation>
 <translation id="4615174829807303908">Te deconectezi de la un cont gestionat de <ph name="SIGNOUT_MANAGED_DOMAIN" />. Astfel, se vor șterge datele Chrome de pe acest dispozitiv, dar datele vor rămâne în Contul Google.</translation>
@@ -43,7 +43,6 @@
 <translation id="7172660552945675509">Sfat: <ph name="BEGIN_LINK" />mută Chrome în bara de andocare<ph name="END_LINK" /></translation>
 <translation id="7265369419224458312">Accesează chiar aici filele pe care le-ai deschis pe computer. Deschide Chrome pe computer, accesează meniul și selectează „Conectează-te la Chrome...”</translation>
 <translation id="728488472449859922">Activează scanerul QR din Google Chrome</translation>
-<translation id="7311395200710390977">Pentru acces mai rapid, <ph name="BEGIN_LINK" />mută Chrome în bara de andocare<ph name="END_LINK" /></translation>
 <translation id="7400722733683201933">Despre Google Chrome</translation>
 <translation id="7437998757836447326">Deconectează-te de la Chrome</translation>
 <translation id="756809126120519699">Datele Chrome au fost șterse</translation>

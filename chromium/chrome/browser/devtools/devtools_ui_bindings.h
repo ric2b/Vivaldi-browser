@@ -57,6 +57,7 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
     virtual void SetIsDocked(bool is_docked) = 0;
     virtual void OpenInNewTab(const std::string& url) = 0;
     virtual void SetWhitelistedShortcuts(const std::string& message) = 0;
+    virtual void SetEyeDropperActive(bool active) = 0;
     virtual void OpenNodeFrontend() = 0;
 
     virtual void InspectedContentsClosing() = 0;
@@ -123,6 +124,7 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
                     const std::string& file_system_path,
                     const std::string& query) override;
   void SetWhitelistedShortcuts(const std::string& message) override;
+  void SetEyeDropperActive(bool active) override;
   void ShowCertificateViewer(const std::string& cert_chain) override;
   void ZoomIn() override;
   void ZoomOut() override;
@@ -130,7 +132,9 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
   void SetDevicesDiscoveryConfig(
       bool discover_usb_devices,
       bool port_forwarding_enabled,
-      const std::string& port_forwarding_config) override;
+      const std::string& port_forwarding_config,
+      bool network_discovery_enabled,
+      const std::string& network_discovery_config) override;
   void SetDevicesUpdatesEnabled(bool enabled) override;
   void PerformActionOnRemotePage(const std::string& page_id,
                                  const std::string& action) override;

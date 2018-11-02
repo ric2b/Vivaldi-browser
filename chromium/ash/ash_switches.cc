@@ -10,9 +10,6 @@
 namespace ash {
 namespace switches {
 
-// Enables adjustable large cursor.
-const char kAshAdjustableLargeCursor[] = "ash-adjustable-large-cursor";
-
 // Enables an animated transition from the boot splash screen (Chrome logo on a
 // white background) to the login screen.  Implies
 // |kAshCopyHostBackgroundAtBoot| and doesn't make much sense if used in
@@ -33,14 +30,6 @@ const char kAshDebugShortcuts[] = "ash-debug-shortcuts";
 // Enable keyboard shortcuts used by developers only.
 const char kAshDeveloperShortcuts[] = "ash-dev-shortcuts";
 
-// Disables the window backdrops normally used in maximize mode (TouchView).
-const char kAshDisableMaximizeModeWindowBackdrop[] =
-    "ash-disable-maximize-mode-window-backdrop";
-
-// Disable the support for WebContents to lock the screen orientation.
-const char kAshDisableScreenOrientationLock[] =
-    "ash-disable-screen-orientation-lock";
-
 // Disable the Touch Exploration Mode. Touch Exploration Mode will no longer be
 // turned on automatically when spoken feedback is enabled when this flag is
 // set.
@@ -50,6 +39,9 @@ const char kAshDisableTouchExplorationMode[] =
 // Enables key bindings to scroll magnified screen.
 const char kAshEnableMagnifierKeyScroller[] =
     "ash-enable-magnifier-key-scroller";
+
+// Enables the NightLight feature.
+const char kAshEnableNightLight[] = "ash-enable-night-light";
 
 // Enables the palette on every display, instead of only the internal one.
 const char kAshEnablePaletteOnAllDisplays[] =
@@ -61,17 +53,21 @@ const char kAshEnableTouchView[] = "enable-touchview";
 // Enables mirrored screen.
 const char kAshEnableMirroredScreen[] = "ash-enable-mirrored-screen";
 
-// Enables a smoother animation for screen rotation.
-const char kAshEnableSmoothScreenRotation[] =
-    "ash-enable-smooth-screen-rotation";
+// Enables display scale tray settings. This uses force-device-scale-factor flag
+// to modify the dsf of the device to any non discrete value.
+const char kAshEnableScaleSettingsTray[] = "ash-enable-scale-settings-tray";
+
+// Disables a smoother animation for screen rotation.
+const char kAshDisableSmoothScreenRotation[] =
+    "ash-disable-smooth-screen-rotation";
 
 // Specifies the estimated time (in milliseconds) from VSYNC event until when
 // visible light can be noticed by the user.
 const char kAshEstimatedPresentationDelay[] =
     "ash-estimated-presentation-delay";
 
-// Enables the palette next to the status area.
-const char kAshForceEnablePalette[] = "ash-force-enable-palette";
+// Enables the stylus tools next to the status area.
+const char kAshForceEnableStylusTools[] = "force-enable-stylus-tools";
 
 // Enables required things for the selected UI mode, regardless of whether the
 // Chromebook is currently in the selected UI mode.
@@ -109,6 +105,10 @@ const char kAshTouchHud[] = "ash-touch-hud";
 // lock the screen or shutdown the system immediately in response to a press
 // instead of displaying an interactive animation.
 const char kAuraLegacyPowerButton[] = "aura-legacy-power-button";
+
+// By default we use classic IME (i.e. InputMethodChromeOS) in kMus. This flag
+// enables the IME service (i.e. InputMethodMus) instead.
+const char kUseIMEService[] = "use-ime-service";
 
 // Constrains the pointer movement within a root window on desktop.
 bool ConstrainPointerToRoot() {

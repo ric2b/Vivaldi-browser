@@ -33,7 +33,8 @@ using signin_ui::CompletionCallback;
     ChromeIdentityInteractionManagerDelegate,
     ChromeSigninViewControllerDelegate> {
   ios::ChromeBrowserState* browserState_;
-  signin_metrics::AccessPoint signInAccessPoint_;
+  signin_metrics::AccessPoint accessPoint_;
+  signin_metrics::PromoAction promoAction_;
   base::scoped_nsobject<UIViewController> presentingViewController_;
   BOOL isPresentedOnSettings_;
   BOOL isCancelling_;
@@ -59,7 +60,8 @@ using signin_ui::CompletionCallback;
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
             presentingViewController:(UIViewController*)presentingViewController
                isPresentedOnSettings:(BOOL)isPresentedOnSettings
-                   signInAccessPoint:(signin_metrics::AccessPoint)accessPoint {
+                         accessPoint:(signin_metrics::AccessPoint)accessPoint
+                         promoAction:(signin_metrics::PromoAction)promoAction {
   self = [super init];
   if (self) {
     DCHECK(browserState);
@@ -67,7 +69,8 @@ using signin_ui::CompletionCallback;
     browserState_ = browserState;
     presentingViewController_.reset([presentingViewController retain]);
     isPresentedOnSettings_ = isPresentedOnSettings;
-    signInAccessPoint_ = accessPoint;
+    accessPoint_ = accessPoint;
+    promoAction_ = promoAction;
   }
   return self;
 }
@@ -94,7 +97,7 @@ using signin_ui::CompletionCallback;
 - (void)signInWithViewController:(UIViewController*)viewController
                         identity:(ChromeIdentity*)identity
                       completion:(signin_ui::CompletionCallback)completion {
-  signin_metrics::LogSigninAccessPointStarted(signInAccessPoint_);
+  signin_metrics::LogSigninAccessPointStarted(accessPoint_, promoAction_);
   completionCallback_.reset(completion, base::scoped_policy::RETAIN);
   ios::ChromeIdentityService* identityService =
       ios::GetChromeBrowserProvider()->GetChromeIdentityService();
@@ -129,7 +132,7 @@ using signin_ui::CompletionCallback;
 
 - (void)reAuthenticateWithCompletion:(CompletionCallback)completion
                       viewController:(UIViewController*)viewController {
-  signin_metrics::LogSigninAccessPointStarted(signInAccessPoint_);
+  signin_metrics::LogSigninAccessPointStarted(accessPoint_, promoAction_);
   completionCallback_.reset(completion, base::scoped_policy::RETAIN);
   AccountInfo accountInfo =
       ios::SigninManagerFactory::GetForBrowserState(browserState_)
@@ -266,7 +269,8 @@ using signin_ui::CompletionCallback;
   signinViewController_.reset([[ChromeSigninViewController alloc]
        initWithBrowserState:browserState_
       isPresentedOnSettings:isPresentedOnSettings_
-          signInAccessPoint:signInAccessPoint_
+                accessPoint:accessPoint_
+                promoAction:promoAction_
              signInIdentity:signInIdentity]);
   [signinViewController_ setDelegate:self];
   [signinViewController_

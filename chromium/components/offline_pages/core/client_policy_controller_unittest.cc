@@ -6,8 +6,6 @@
 
 #include <algorithm>
 
-#include "base/bind.h"
-#include "base/time/time.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -32,9 +30,12 @@ class ClientPolicyControllerTest : public testing::Test {
   void TearDown() override;
 
  protected:
+  void ExpectRemovedOnCacheReset(std::string name_space, bool expectation);
   void ExpectDownloadSupport(std::string name_space, bool expectation);
   void ExpectRecentTab(std::string name_space, bool expectation);
   void ExpectOnlyOriginalTab(std::string name_space, bool expectation);
+  void ExpectDisabledWhenPrefetchDisabled(std::string name_space,
+                                          bool expectation);
 
  private:
   std::unique_ptr<ClientPolicyController> controller_;
@@ -48,13 +49,28 @@ void ClientPolicyControllerTest::TearDown() {
   controller_.reset();
 }
 
+void ClientPolicyControllerTest::ExpectRemovedOnCacheReset(
+    std::string name_space,
+    bool expectation) {
+  EXPECT_EQ(expectation, controller()->IsRemovedOnCacheReset(name_space))
+      << "Namespace " << name_space
+      << " had incorrect removed_on_cache_reset setting when directly checking"
+         " is removed-on-cache-reset.";
+}
+
 void ClientPolicyControllerTest::ExpectDownloadSupport(std::string name_space,
                                                        bool expectation) {
   std::vector<std::string> cache =
       controller()->GetNamespacesSupportedByDownload();
   auto result = std::find(cache.begin(), cache.end(), name_space);
-  EXPECT_EQ(expectation, result != cache.end());
-  EXPECT_EQ(expectation, controller()->IsSupportedByDownload(name_space));
+  EXPECT_EQ(expectation, result != cache.end())
+      << "Namespace " << name_space
+      << " had incorrect download support when getting namespaces supported by"
+         " download.";
+  EXPECT_EQ(expectation, controller()->IsSupportedByDownload(name_space))
+      << "Namespace " << name_space
+      << " had incorrect download support when directly checking if supported"
+         " by download.";
 }
 
 void ClientPolicyControllerTest::ExpectRecentTab(std::string name_space,
@@ -62,9 +78,14 @@ void ClientPolicyControllerTest::ExpectRecentTab(std::string name_space,
   std::vector<std::string> cache =
       controller()->GetNamespacesShownAsRecentlyVisitedSite();
   auto result = std::find(cache.begin(), cache.end(), name_space);
-  EXPECT_EQ(expectation, result != cache.end());
-  EXPECT_EQ(expectation,
-            controller()->IsShownAsRecentlyVisitedSite(name_space));
+  EXPECT_EQ(expectation, result != cache.end())
+      << "Namespace " << name_space
+      << " had incorrect recent tab support when getting namespaces shown as a"
+         " recently visited site.";
+  EXPECT_EQ(expectation, controller()->IsShownAsRecentlyVisitedSite(name_space))
+      << "Namespace " << name_space
+      << " had incorrect recent tab support when directly checking if shown as"
+         " a recently visited site.";
 }
 
 void ClientPolicyControllerTest::ExpectOnlyOriginalTab(std::string name_space,
@@ -72,8 +93,31 @@ void ClientPolicyControllerTest::ExpectOnlyOriginalTab(std::string name_space,
   std::vector<std::string> cache =
       controller()->GetNamespacesRestrictedToOriginalTab();
   auto result = std::find(cache.begin(), cache.end(), name_space);
-  EXPECT_EQ(expectation, result != cache.end());
-  EXPECT_EQ(expectation, controller()->IsRestrictedToOriginalTab(name_space));
+  EXPECT_EQ(expectation, result != cache.end())
+      << "Namespace " << name_space
+      << " had incorrect restriction when getting namespaces restricted to"
+         " the original tab";
+  EXPECT_EQ(expectation, controller()->IsRestrictedToOriginalTab(name_space))
+      << "Namespace " << name_space
+      << " had incorrect restriction when directly checking if the namespace"
+         " is restricted to the original tab";
+}
+
+void ClientPolicyControllerTest::ExpectDisabledWhenPrefetchDisabled(
+    std::string name_space,
+    bool expectation) {
+  std::vector<std::string> cache =
+      controller()->GetNamespacesDisabledWhenPrefetchDisabled();
+  auto result = std::find(cache.begin(), cache.end(), name_space);
+  EXPECT_EQ(expectation, result != cache.end())
+      << "Namespace " << name_space
+      << " had incorrect prefetch pref support when getting namespaces"
+         " disabled when prefetch settings are disabled.";
+  EXPECT_EQ(expectation,
+            controller()->IsDisabledWhenPrefetchDisabled(name_space))
+      << "Namespace " << name_space
+      << " had incorrect download support when directly checking if disabled"
+         " when prefetch settings are disabled.";
 }
 
 TEST_F(ClientPolicyControllerTest, FallbackTest) {
@@ -81,9 +125,11 @@ TEST_F(ClientPolicyControllerTest, FallbackTest) {
   EXPECT_EQ(policy.name_space, kDefaultNamespace);
   EXPECT_TRUE(isTemporary(policy));
   EXPECT_TRUE(controller()->IsRemovedOnCacheReset(kUndefinedNamespace));
+  ExpectRemovedOnCacheReset(kUndefinedNamespace, true);
   ExpectDownloadSupport(kUndefinedNamespace, false);
   ExpectRecentTab(kUndefinedNamespace, false);
   ExpectOnlyOriginalTab(kUndefinedNamespace, false);
+  ExpectDisabledWhenPrefetchDisabled(kUndefinedNamespace, false);
 }
 
 TEST_F(ClientPolicyControllerTest, CheckBookmarkDefined) {
@@ -91,9 +137,11 @@ TEST_F(ClientPolicyControllerTest, CheckBookmarkDefined) {
   EXPECT_EQ(policy.name_space, kBookmarkNamespace);
   EXPECT_TRUE(isTemporary(policy));
   EXPECT_TRUE(controller()->IsRemovedOnCacheReset(kBookmarkNamespace));
+  ExpectRemovedOnCacheReset(kBookmarkNamespace, true);
   ExpectDownloadSupport(kBookmarkNamespace, false);
   ExpectRecentTab(kBookmarkNamespace, false);
   ExpectOnlyOriginalTab(kBookmarkNamespace, false);
+  ExpectDisabledWhenPrefetchDisabled(kBookmarkNamespace, false);
 }
 
 TEST_F(ClientPolicyControllerTest, CheckLastNDefined) {
@@ -101,9 +149,11 @@ TEST_F(ClientPolicyControllerTest, CheckLastNDefined) {
   EXPECT_EQ(policy.name_space, kLastNNamespace);
   EXPECT_TRUE(isTemporary(policy));
   EXPECT_TRUE(controller()->IsRemovedOnCacheReset(kLastNNamespace));
+  ExpectRemovedOnCacheReset(kLastNNamespace, true);
   ExpectDownloadSupport(kLastNNamespace, false);
   ExpectRecentTab(kLastNNamespace, true);
   ExpectOnlyOriginalTab(kLastNNamespace, true);
+  ExpectDisabledWhenPrefetchDisabled(kLastNNamespace, false);
 }
 
 TEST_F(ClientPolicyControllerTest, CheckAsyncDefined) {
@@ -111,9 +161,11 @@ TEST_F(ClientPolicyControllerTest, CheckAsyncDefined) {
   EXPECT_EQ(policy.name_space, kAsyncNamespace);
   EXPECT_FALSE(isTemporary(policy));
   EXPECT_FALSE(controller()->IsRemovedOnCacheReset(kAsyncNamespace));
+  ExpectRemovedOnCacheReset(kAsyncNamespace, false);
   ExpectDownloadSupport(kAsyncNamespace, true);
   ExpectRecentTab(kAsyncNamespace, false);
   ExpectOnlyOriginalTab(kAsyncNamespace, false);
+  ExpectDisabledWhenPrefetchDisabled(kAsyncNamespace, false);
 }
 
 TEST_F(ClientPolicyControllerTest, CheckCCTDefined) {
@@ -121,9 +173,11 @@ TEST_F(ClientPolicyControllerTest, CheckCCTDefined) {
   EXPECT_EQ(policy.name_space, kCCTNamespace);
   EXPECT_TRUE(isTemporary(policy));
   EXPECT_TRUE(controller()->IsRemovedOnCacheReset(kCCTNamespace));
+  ExpectRemovedOnCacheReset(kCCTNamespace, true);
   ExpectDownloadSupport(kCCTNamespace, false);
   ExpectRecentTab(kCCTNamespace, false);
   ExpectOnlyOriginalTab(kCCTNamespace, false);
+  ExpectDisabledWhenPrefetchDisabled(kCCTNamespace, true);
 }
 
 TEST_F(ClientPolicyControllerTest, CheckDownloadDefined) {
@@ -131,9 +185,11 @@ TEST_F(ClientPolicyControllerTest, CheckDownloadDefined) {
   EXPECT_EQ(policy.name_space, kDownloadNamespace);
   EXPECT_FALSE(isTemporary(policy));
   EXPECT_FALSE(controller()->IsRemovedOnCacheReset(kDownloadNamespace));
+  ExpectRemovedOnCacheReset(kDownloadNamespace, false);
   ExpectDownloadSupport(kDownloadNamespace, true);
   ExpectRecentTab(kDownloadNamespace, false);
   ExpectOnlyOriginalTab(kDownloadNamespace, false);
+  ExpectDisabledWhenPrefetchDisabled(kDownloadNamespace, false);
 }
 
 TEST_F(ClientPolicyControllerTest, CheckNTPSuggestionsDefined) {
@@ -141,10 +197,25 @@ TEST_F(ClientPolicyControllerTest, CheckNTPSuggestionsDefined) {
       controller()->GetPolicy(kNTPSuggestionsNamespace);
   EXPECT_EQ(policy.name_space, kNTPSuggestionsNamespace);
   EXPECT_FALSE(isTemporary(policy));
-  EXPECT_TRUE(controller()->IsRemovedOnCacheReset(kNTPSuggestionsNamespace));
+  EXPECT_FALSE(controller()->IsRemovedOnCacheReset(kNTPSuggestionsNamespace));
+  ExpectRemovedOnCacheReset(kNTPSuggestionsNamespace, false);
   ExpectDownloadSupport(kNTPSuggestionsNamespace, true);
   ExpectRecentTab(kNTPSuggestionsNamespace, false);
   ExpectOnlyOriginalTab(kNTPSuggestionsNamespace, false);
+  ExpectDisabledWhenPrefetchDisabled(kNTPSuggestionsNamespace, false);
+}
+
+TEST_F(ClientPolicyControllerTest, CheckSuggestedArticlesDefined) {
+  OfflinePageClientPolicy policy =
+      controller()->GetPolicy(kSuggestedArticlesNamespace);
+  EXPECT_EQ(policy.name_space, kSuggestedArticlesNamespace);
+  EXPECT_TRUE(isTemporary(policy));
+  EXPECT_TRUE(controller()->IsRemovedOnCacheReset(kSuggestedArticlesNamespace));
+  ExpectRemovedOnCacheReset(kSuggestedArticlesNamespace, true);
+  ExpectDownloadSupport(kSuggestedArticlesNamespace, false);
+  ExpectRecentTab(kSuggestedArticlesNamespace, false);
+  ExpectOnlyOriginalTab(kSuggestedArticlesNamespace, false);
+  ExpectDisabledWhenPrefetchDisabled(kSuggestedArticlesNamespace, true);
 }
 
 }  // namespace offline_pages

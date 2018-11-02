@@ -10,33 +10,45 @@ namespace payments {
 
 ValidatingTextfield::ValidatingTextfield(
     std::unique_ptr<ValidationDelegate> delegate)
-    : Textfield(), delegate_(std::move(delegate)), was_blurred_(false) {}
+    : Textfield(), delegate_(std::move(delegate)) {}
 
 ValidatingTextfield::~ValidatingTextfield() {}
 
 void ValidatingTextfield::OnBlur() {
   Textfield::OnBlur();
+  was_blurred_ = true;
 
-  // The first validation should be on a blur. The subsequent validations will
-  // occur when the content changes.
-  if (!was_blurred_) {
-    was_blurred_ = true;
+  // Do not validate if the view is being removed.
+  if (!being_removed_)
     Validate();
-  }
+
+  if (!text().empty() && delegate_->ShouldFormat())
+    SetText(delegate_->Format(text()));
+}
+
+void ValidatingTextfield::ViewHierarchyChanged(
+    const ViewHierarchyChangedDetails& details) {
+  if (details.child == this && !details.is_add)
+    being_removed_ = true;
 }
 
 void ValidatingTextfield::OnContentsChanged() {
-  // Validation on every keystroke only happens if the field has been validated
-  // before as part of a blur.
-  if (!was_blurred_)
-    return;
+  // This is called on every keystroke.
+  if (!text().empty() && GetCursorPosition() == text().length() &&
+      delegate_->ShouldFormat()) {
+    SetText(delegate_->Format(text()));
+  }
 
   Validate();
 }
 
+bool ValidatingTextfield::IsValid() {
+  return delegate_->IsValidTextfield(this);
+}
+
 void ValidatingTextfield::Validate() {
-  // ValidateTextfield may have side-effects, such as displaying errors.
-  SetInvalid(!delegate_->ValidateTextfield(this));
+  // TextfieldValueChanged may have side-effects, such as displaying errors.
+  SetInvalid(!delegate_->TextfieldValueChanged(this, was_blurred_));
 }
 
 }  // namespace payments

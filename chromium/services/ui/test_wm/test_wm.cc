@@ -13,6 +13,7 @@
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_runner.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/default_capture_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/mus/property_converter.h"
@@ -63,7 +64,7 @@ class TestWM : public service_manager::Service,
     aura_env_->SetWindowTreeClient(window_tree_client_.get());
     window_tree_client_->ConnectAsWindowManager();
   }
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {}
 
@@ -96,6 +97,7 @@ class TestWM : public service_manager::Service,
   void SetWindowManagerClient(aura::WindowManagerClient* client) override {
     window_manager_client_ = client;
   }
+  void OnWmConnected() override {}
   void OnWmSetBounds(aura::Window* window, const gfx::Rect& bounds) override {
     window->SetBounds(bounds);
   }
@@ -111,6 +113,8 @@ class TestWM : public service_manager::Service,
       ui::mojom::WindowType window_type,
       std::map<std::string, std::vector<uint8_t>>* properties) override {
     aura::Window* window = new aura::Window(nullptr);
+    window->SetProperty(aura::client::kEmbedType,
+                        aura::client::WindowEmbedType::TOP_LEVEL_IN_WM);
     SetWindowType(window, window_type);
     window->Init(LAYER_NOT_DRAWN);
     window->SetBounds(gfx::Rect(10, 10, 500, 500));

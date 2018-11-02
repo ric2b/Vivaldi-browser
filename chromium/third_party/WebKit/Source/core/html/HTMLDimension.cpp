@@ -81,7 +81,7 @@ static HTMLDimension ParseDimension(const CharacterType* characters,
 
       if (fraction_numbers.size()) {
         double fraction_value = CharactersToUIntStrict(
-            fraction_numbers.Data(), fraction_numbers.size(), &ok);
+            fraction_numbers.data(), fraction_numbers.size(), &ok);
         if (!ok)
           return HTMLDimension(0., HTMLDimension::kRelative);
 
@@ -134,7 +134,7 @@ Vector<HTMLDimension> ParseListOfDimensions(const String& input) {
   Vector<HTMLDimension> parsed_dimensions;
   size_t last_parsed_index = 0;
   while (true) {
-    size_t next_comma = trimmed_string.Find(kComma, last_parsed_index);
+    size_t next_comma = trimmed_string.find(kComma, last_parsed_index);
     if (next_comma == kNotFound)
       break;
 

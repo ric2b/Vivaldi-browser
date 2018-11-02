@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/containers/stack_container.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/referrer.h"
@@ -21,6 +22,7 @@ void ParamTraits<url::Origin>::GetSize(base::PickleSizer* s,
   GetParamSize(s, p.scheme());
   GetParamSize(s, p.host());
   GetParamSize(s, p.port());
+  GetParamSize(s, p.suborigin());
 }
 
 void ParamTraits<url::Origin>::Write(base::Pickle* m, const url::Origin& p) {
@@ -28,6 +30,7 @@ void ParamTraits<url::Origin>::Write(base::Pickle* m, const url::Origin& p) {
   WriteParam(m, p.scheme());
   WriteParam(m, p.host());
   WriteParam(m, p.port());
+  WriteParam(m, p.suborigin());
 }
 
 bool ParamTraits<url::Origin>::Read(const base::Pickle* m,
@@ -37,15 +40,17 @@ bool ParamTraits<url::Origin>::Read(const base::Pickle* m,
   std::string scheme;
   std::string host;
   uint16_t port;
+  std::string suborigin;
   if (!ReadParam(m, iter, &unique) || !ReadParam(m, iter, &scheme) ||
-      !ReadParam(m, iter, &host) || !ReadParam(m, iter, &port)) {
+      !ReadParam(m, iter, &host) || !ReadParam(m, iter, &port) ||
+      !ReadParam(m, iter, &suborigin)) {
     *p = url::Origin();
     return false;
   }
 
   *p = unique ? url::Origin()
               : url::Origin::UnsafelyCreateOriginWithoutNormalization(
-                    scheme, host, port);
+                    scheme, host, port, suborigin);
 
   // If a unique origin was created, but the unique flag wasn't set, then
   // the values provided to 'UnsafelyCreateOriginWithoutNormalization' were
@@ -120,25 +125,30 @@ void ParamTraits<net::IPEndPoint>::Log(const param_type& p, std::string* l) {
 
 void ParamTraits<net::IPAddress>::GetSize(base::PickleSizer* s,
                                           const param_type& p) {
-  GetParamSize(s, p.bytes());
+  base::StackVector<uint8_t, 16> bytes;
+  for (uint8_t byte : p.bytes())
+    bytes->push_back(byte);
+  GetParamSize(s, bytes);
 }
 
 void ParamTraits<net::IPAddress>::Write(base::Pickle* m, const param_type& p) {
-  WriteParam(m, p.bytes());
+  base::StackVector<uint8_t, 16> bytes;
+  for (uint8_t byte : p.bytes())
+    bytes->push_back(byte);
+  WriteParam(m, bytes);
 }
 
 bool ParamTraits<net::IPAddress>::Read(const base::Pickle* m,
                                        base::PickleIterator* iter,
                                        param_type* p) {
-  std::vector<uint8_t> bytes;
+  base::StackVector<uint8_t, 16> bytes;
   if (!ReadParam(m, iter, &bytes))
     return false;
-  if (bytes.size() &&
-      bytes.size() != net::IPAddress::kIPv4AddressSize &&
-      bytes.size() != net::IPAddress::kIPv6AddressSize) {
+  if (bytes->size() && bytes->size() != net::IPAddress::kIPv4AddressSize &&
+      bytes->size() != net::IPAddress::kIPv6AddressSize) {
     return false;
   }
-  *p = net::IPAddress(bytes);
+  *p = net::IPAddress(bytes->data(), bytes->size());
   return true;
 }
 

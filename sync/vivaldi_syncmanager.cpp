@@ -58,39 +58,36 @@ void VivaldiSyncManager::RemoveVivaldiObserver(
   vivaldi_observers_.RemoveObserver(observer);
 }
 
-void VivaldiSyncManager::ClearSyncData(base::Closure callback) {
+void VivaldiSyncManager::ClearSyncData() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  data_type_manager_->Stop();
-  engine_->StartConfiguration();
-  engine_->ClearServerData(base::Bind(&VivaldiSyncManager::OnSyncDataCleared,
-                                      weak_factory_.GetWeakPtr(), callback));
-}
 
-void VivaldiSyncManager::OnSyncDataCleared(base::Closure callback) {
-  Logout();
-  callback.Run();
+  if (!engine_)
+    return;
+
+  engine_->StartConfiguration();
+  engine_->ClearServerData(
+      base::Bind(&VivaldiSyncManager::Logout, weak_factory_.GetWeakPtr()));
 }
 
 void VivaldiSyncManager::Logout() {
+  // If the engine wasn't running, we need to clear the local data manually.
+  if (!engine_)
+    RequestStop(CLEAR_DATA);
+
   signin()->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS,
                     signin_metrics::SignoutDelete::IGNORE_METRIC);
-  sync_client_->GetPrefService()->ClearPref(prefs::kGoogleServicesAccountId);
-  sync_client_->GetPrefService()->ClearPref(prefs::kGoogleServicesUsername);
-  sync_client_->GetPrefService()->ClearPref(
-      prefs::kGoogleServicesUserAccountId);
-  RequestStop(CLEAR_DATA);
+}
+
+void VivaldiSyncManager::SetupComplete() {
+  if (!IsFirstSetupComplete()) {
+    SetFirstSetupComplete();
+    sync_blocker_.reset();
+  }
 }
 
 void VivaldiSyncManager::ConfigureTypes(bool sync_everything,
                                         syncer::ModelTypeSet chosen_types) {
   OnUserChoseDatatypes(sync_everything, chosen_types);
-
-  if (!IsFirstSetupComplete()) {
-    SetFirstSetupComplete();
-    sync_blocker_.reset();
-  }
-
-  NotifySyncConfigured();
 }
 
 void VivaldiSyncManager::StartPollingServer() {
@@ -115,6 +112,12 @@ void VivaldiSyncManager::PerformPollServer() {
 
 void VivaldiSyncManager::PollServer() {
   if (engine_) {
+    // Extra paranoia, except for non-official builds where we might need
+    // encyption off for debugging.
+    if (!IsEncryptEverythingEnabled() && version_info::IsOfficialBuild()) {
+      Logout();
+      return;
+    }
     syncer::ObjectIdInvalidationMap invalidation_map =
         syncer::ObjectIdInvalidationMap::InvalidateAll(
             syncer::ModelTypeSetToObjectIdSet(syncer::ProtocolTypes()));
@@ -126,12 +129,6 @@ void VivaldiSyncManager::PollServer() {
 void VivaldiSyncManager::NotifyLoginDone() {
   for (auto& observer : vivaldi_observers_) {
     observer.OnLoginDone();
-  }
-}
-
-void VivaldiSyncManager::NotifySyncConfigured() {
-  for (auto& observer : vivaldi_observers_) {
-    observer.OnSyncConfigured();
   }
 }
 
@@ -150,6 +147,12 @@ void VivaldiSyncManager::NotifySyncCompleted() {
 void VivaldiSyncManager::NotifySyncEngineInitFailed() {
   for (auto& observer : vivaldi_observers_) {
     observer.OnSyncEngineInitFailed();
+  }
+}
+
+void VivaldiSyncManager::NotifyLogoutDone() {
+  for (auto& observer : vivaldi_observers_) {
+    observer.OnLogoutDone();
   }
 }
 
@@ -173,6 +176,20 @@ void VivaldiSyncManager::OnSyncCycleCompleted(
   StartPollingServer();
 }
 
+void VivaldiSyncManager::OnConfigureDone(
+    const syncer::DataTypeManager::ConfigureResult& result) {
+  if (IsFirstSetupComplete()) {
+    // Extra paranoia, except for non-official builds where we might need
+    // encyption off for debugging.
+    if (!IsEncryptEverythingEnabled() && version_info::IsOfficialBuild()) {
+      Logout();
+      return;
+    }
+    PollServer();
+    ProfileSyncService::OnConfigureDone(result);
+  }
+}
+
 void VivaldiSyncManager::VivaldiTokenSuccess() {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&VivaldiSyncManager::VivaldiDoTokenSuccess,
@@ -180,8 +197,10 @@ void VivaldiSyncManager::VivaldiTokenSuccess() {
 }
 
 void VivaldiSyncManager::VivaldiDoTokenSuccess() {
-  ProfileSyncService::OnGetTokenSuccess(nullptr, vivaldi_access_token_,
-                                        expiration_time_);
+  if (!vivaldi_access_token_.empty())
+    ProfileSyncService::OnGetTokenSuccess(nullptr, vivaldi_access_token_,
+                                          expiration_time_);
+  vivaldi_access_token_.clear();
 }
 
 SyncCredentials VivaldiSyncManager::GetCredentials() {
@@ -191,10 +210,20 @@ SyncCredentials VivaldiSyncManager::GetCredentials() {
 }
 
 void VivaldiSyncManager::RequestAccessToken() {
-  if (!vivaldi::ForcedVivaldiRunning())
-    NotifyAccessTokenRequested();
-  else
+  if (vivaldi::ForcedVivaldiRunning())
     ProfileSyncService::RequestAccessToken();
+  else if (vivaldi_access_token_.empty())
+    NotifyAccessTokenRequested();
+}
+
+void VivaldiSyncManager::ShutdownImpl(syncer::ShutdownReason reason) {
+  if (reason == syncer::DISABLE_SYNC) {
+    content::BrowserThread::PostTask(
+        content::BrowserThread::UI, FROM_HERE,
+        base::Bind(&VivaldiSyncManager::NotifyLogoutDone,
+                   weak_factory_.GetWeakPtr()));
+  }
+  ProfileSyncService::ShutdownImpl(reason);
 }
 
 bool VivaldiSyncManager::DisableNotifications() const {
@@ -227,6 +256,7 @@ void VivaldiSyncManager::SetToken(bool has_login_details,
   token_service->SetConsumer(this);
 
   if (has_login_details) {
+    password_ = password;
     signin()->SetAuthenticatedAccountInfo(account_id, username);
   }
 
@@ -235,11 +265,17 @@ void VivaldiSyncManager::SetToken(bool has_login_details,
     RequestStart();
   }
 
-  sync_startup_tracker_.reset(
-      new SyncStartupTracker(sync_client_->GetProfile(), this));
+  if (!IsSyncActive()) {
+    sync_startup_tracker_.reset(
+        new SyncStartupTracker(sync_client_->GetProfile(), this));
+  } else if (has_login_details) {
+    NotifyLoginDone();
+  }
 
   if (has_login_details) {
-    GoogleSigninSucceeded(account_id, username, password);
+    // Avoid passing an implicit password here, so that we can detect later on
+    // if the account password needs to be provided for decryption.
+    GoogleSigninSucceeded(account_id, username, "");
   }
 
   token_service->UpdateCredentials(account_id, token);
@@ -247,17 +283,25 @@ void VivaldiSyncManager::SetToken(bool has_login_details,
 
 bool VivaldiSyncManager::SetEncryptionPassword(const std::string& password) {
   if (!IsEngineInitialized()) {
-    password_ = password;
-    return true;
+    return false;
   }
 
-  if (IsPassphraseRequired()) {
-    return SetDecryptionPassphrase(password_);
-  } else if (!IsUsingSecondaryPassphrase()) {
-    SetEncryptionPassphrase(password_, ProfileSyncService::EXPLICIT);
-    return true;
+  std::string password_used = password;
+  if (password_used.empty()) {
+    password_used = password_;
   }
-  return false;
+  password_.clear();
+
+  bool result = false;
+
+  if (IsPassphraseRequired()) {
+    result = SetDecryptionPassphrase(password);
+  } else if (!IsUsingSecondaryPassphrase()) {
+    SetEncryptionPassphrase(password_used, ProfileSyncService::EXPLICIT);
+    result = true;
+  }
+
+  return result;
 }
 
 void VivaldiSyncManager::SyncStartupCompleted() {
@@ -275,24 +319,20 @@ void VivaldiSyncManager::SyncStartupFailed() {
 }
 
 void VivaldiSyncManager::SetupConfiguration() {
-  EnableEncryptEverything();
+  if (IsSyncActive()) {
+    password_.clear();
+    SetFirstSetupComplete();
+  }
 
-  if (!password_.empty()) {
-    if (!SetEncryptionPassword(password_) && IsPassphraseRequired())
+  if (IsPassphraseRequiredForDecryption()) {
+    if (password_.empty() || !SetDecryptionPassphrase(password_))
       NotifyEncryptionPasswordRequested();
-    password_.empty();
-  } else {
-    if (IsPassphraseRequired())
-      NotifyEncryptionPasswordRequested();
+    password_.clear();
   }
 
   NotifyLoginDone();
 
-  if (IsSyncActive())
-    SetFirstSetupComplete();
-
   if (IsFirstSetupComplete())
     sync_blocker_.reset();
 }
-
 }  // namespace vivaldi

@@ -12,9 +12,9 @@
 #include "ash/shell_observer.h"
 #include "ash/wm/window_state_observer.h"
 #include "ash/wm/wm_types.h"
-#include "ash/wm_layout_manager.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
+#include "ui/aura/layout_manager.h"
 #include "ui/aura/window_observer.h"
 #include "ui/display/display_observer.h"
 #include "ui/gfx/geometry/rect.h"
@@ -28,8 +28,12 @@ class KeyboardController;
 namespace ash {
 
 class RootWindowController;
-class WmWindow;
-class WorkspaceLayoutManagerBackdropDelegate;
+class BackdropDelegate;
+class BackdropController;
+
+namespace test {
+class WorkspaceControllerTestApi;
+}
 
 namespace wm {
 class WMEvent;
@@ -37,7 +41,7 @@ class WMEvent;
 
 // LayoutManager used on the window created for a workspace.
 class ASH_EXPORT WorkspaceLayoutManager
-    : public WmLayoutManager,
+    : public aura::LayoutManager,
       public aura::WindowObserver,
       public aura::client::ActivationChangeObserver,
       public keyboard::KeyboardControllerObserver,
@@ -46,22 +50,22 @@ class ASH_EXPORT WorkspaceLayoutManager
       public wm::WindowStateObserver {
  public:
   // |window| is the container for this layout manager.
-  explicit WorkspaceLayoutManager(WmWindow* window);
+  explicit WorkspaceLayoutManager(aura::Window* window);
   ~WorkspaceLayoutManager() override;
 
   // A delegate which can be set to add a backdrop behind the top most visible
   // window. With the call the ownership of the delegate will be transferred to
   // the WorkspaceLayoutManager.
-  void SetMaximizeBackdropDelegate(
-      std::unique_ptr<WorkspaceLayoutManagerBackdropDelegate> delegate);
+  void SetBackdropDelegate(std::unique_ptr<BackdropDelegate> delegate);
 
-  // Overridden from WmLayoutManager:
+  // Overridden from aura::LayoutManager:
   void OnWindowResized() override;
-  void OnWindowAddedToLayout(WmWindow* child) override;
-  void OnWillRemoveWindowFromLayout(WmWindow* child) override;
-  void OnWindowRemovedFromLayout(WmWindow* child) override;
-  void OnChildWindowVisibilityChanged(WmWindow* child, bool visibile) override;
-  void SetChildBounds(WmWindow* child,
+  void OnWindowAddedToLayout(aura::Window* child) override;
+  void OnWillRemoveWindowFromLayout(aura::Window* child) override;
+  void OnWindowRemovedFromLayout(aura::Window* child) override;
+  void OnChildWindowVisibilityChanged(aura::Window* child,
+                                      bool visible) override;
+  void SetChildBounds(aura::Window* child,
                       const gfx::Rect& requested_bounds) override;
 
   // Overriden from aura::WindowObserver:
@@ -94,13 +98,14 @@ class ASH_EXPORT WorkspaceLayoutManager
 
   // ShellObserver overrides:
   void OnFullscreenStateChanged(bool is_fullscreen,
-                                WmWindow* root_window) override;
-  void OnPinnedStateChanged(WmWindow* pinned_window) override;
+                                aura::Window* root_window) override;
+  void OnPinnedStateChanged(aura::Window* pinned_window) override;
   void OnVirtualKeyboardStateChanged(bool activated,
-                                     WmWindow* root_window) override;
+                                     aura::Window* root_window) override;
 
  private:
-  typedef std::set<WmWindow*> WindowSet;
+  friend class test::WorkspaceControllerTestApi;
+  typedef std::set<aura::Window*> WindowSet;
 
   // Adjusts the bounds of all managed windows when the display area changes.
   // This happens when the display size, work area insets has changed.
@@ -120,10 +125,10 @@ class ASH_EXPORT WorkspaceLayoutManager
 
   // Updates the always-on-top state for windows managed by this layout
   // manager.
-  void UpdateAlwaysOnTop(WmWindow* window_on_top);
+  void UpdateAlwaysOnTop(aura::Window* window_on_top);
 
-  WmWindow* window_;
-  WmWindow* root_window_;
+  aura::Window* window_;
+  aura::Window* root_window_;
   RootWindowController* root_window_controller_;
 
   // Set of windows we're listening to.
@@ -137,7 +142,7 @@ class ASH_EXPORT WorkspaceLayoutManager
 
   // A window which covers the full container and which gets inserted behind the
   // topmost visible window.
-  std::unique_ptr<WorkspaceLayoutManagerBackdropDelegate> backdrop_delegate_;
+  std::unique_ptr<BackdropController> backdrop_controller_;
 
   ScopedObserver<keyboard::KeyboardController,
                  keyboard::KeyboardControllerObserver>

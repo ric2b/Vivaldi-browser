@@ -47,7 +47,6 @@
 #include "ui/gfx/geometry/rect.h"
 
 #if defined(OS_ANDROID)
-#include "base/android/context_utils.h"
 #include "chrome/browser/android/preferences/preferences_launcher.h"
 #include "chrome/browser/android/signin/signin_promo_util_android.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -81,8 +80,6 @@ ChromeAutofillClient::ChromeAutofillClient(content::WebContents* web_contents)
           user_prefs::UserPrefs::Get(web_contents->GetBrowserContext()),
           Profile::FromBrowserContext(web_contents->GetBrowserContext())
               ->IsOffTheRecord()) {
-  DCHECK(web_contents);
-
 #if !defined(OS_ANDROID)
   // Since ZoomController is also a WebContentsObserver, we need to be careful
   // about disconnecting from it since the relative order of destruction of
@@ -153,8 +150,8 @@ rappor::RapporServiceImpl* ChromeAutofillClient::GetRapporServiceImpl() {
   return g_browser_process->rappor_service();
 }
 
-ukm::UkmService* ChromeAutofillClient::GetUkmService() {
-  return g_browser_process->ukm_service();
+ukm::UkmRecorder* ChromeAutofillClient::GetUkmRecorder() {
+  return g_browser_process->ukm_recorder();
 }
 
 SaveCardBubbleController* ChromeAutofillClient::GetSaveCardBubbleController() {
@@ -197,7 +194,7 @@ void ChromeAutofillClient::ConfirmSaveCreditCardLocally(
       ->AddInfoBar(CreateSaveCardInfoBarMobile(
           base::MakeUnique<AutofillSaveCardInfoBarDelegateMobile>(
               false, card, std::unique_ptr<base::DictionaryValue>(nullptr),
-              callback)));
+              callback, GetPrefs())));
 #else
   // Do lazy initialization of SaveCardBubbleControllerImpl.
   autofill::SaveCardBubbleControllerImpl::CreateForWebContents(
@@ -217,7 +214,7 @@ void ChromeAutofillClient::ConfirmSaveCreditCardToCloud(
   InfoBarService::FromWebContents(web_contents())
       ->AddInfoBar(CreateSaveCardInfoBarMobile(
           base::MakeUnique<AutofillSaveCardInfoBarDelegateMobile>(
-              true, card, std::move(legal_message), callback)));
+              true, card, std::move(legal_message), callback, GetPrefs())));
 #else
   // Do lazy initialization of SaveCardBubbleControllerImpl.
   autofill::SaveCardBubbleControllerImpl::CreateForWebContents(web_contents());
@@ -340,10 +337,12 @@ void ChromeAutofillClient::WebContentsDestroyed() {
   HideAutofillPopup();
 }
 
+#if !defined(OS_ANDROID)
 void ChromeAutofillClient::OnZoomChanged(
     const zoom::ZoomController::ZoomChangedEventData& data) {
   HideAutofillPopup();
 }
+#endif  // !defined(OS_ANDROID)
 
 void ChromeAutofillClient::PropagateAutofillPredictions(
     content::RenderFrameHost* rfh,

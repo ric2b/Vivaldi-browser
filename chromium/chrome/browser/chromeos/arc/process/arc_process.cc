@@ -36,6 +36,17 @@ bool ArcProcess::operator<(const ArcProcess& rhs) const {
 ArcProcess::ArcProcess(ArcProcess&& other) = default;
 ArcProcess& ArcProcess::operator=(ArcProcess&& other) = default;
 
+bool ArcProcess::IsImportant() const {
+  return process_state() <= mojom::ProcessState::IMPORTANT_FOREGROUND;
+}
+
+bool ArcProcess::IsKernelKillable() const {
+  // Protect PERSISTENT, PERSISTENT_UI, and our HOME processes since they should
+  // never be killed even by the kernel. Returning false for them allows their
+  // OOM adjustment scores to remain negative.
+  return process_state() > arc::mojom::ProcessState::PERSISTENT_UI;
+}
+
 std::ostream& operator<<(std::ostream& out, const ArcProcess& arc_process) {
   out << "process_name: " << arc_process.process_name()
       << ", pid: " << arc_process.pid()

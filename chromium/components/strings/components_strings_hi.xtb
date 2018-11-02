@@ -7,23 +7,25 @@
 <translation id="1032854598605920125">घड़ी की दिशा में घुमाएं</translation>
 <translation id="1038842779957582377">अज्ञात नाम</translation>
 <translation id="1050038467049342496">दूूूूसरे ऐप्लिकेशन बंद करें</translation>
-<translation id="1053591932240354961">आप इस समय <ph name="SITE" /> पर विज़िट नहीं कर सकते क्योंकि वेबसाइट ने ऐसे अव्यवस्थित क्रेडेंशियल भेजे हैं जिन्हें Google Chrome संसाधित नहीं कर सकता. नेटवर्क की गड़बड़ियां और हमले आमतौर पर अस्थायी होते हैं, इसलिए संभवत: यह पेज बाद में काम करेगा. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="1055184225775184556">&amp;जोड़ना वापस लाएं</translation>
 <translation id="10614374240317010">कभी नहीं सहेजा गया</translation>
 <translation id="106701514854093668">डेस्कटॉप बुकमार्क</translation>
 <translation id="1074497978438210769">सुरक्षित नहीं है</translation>
 <translation id="1080116354587839789">चौड़ाई में फ़िट करें</translation>
 <translation id="1103523840287552314"><ph name="LANGUAGE" /> का हमेशा अनुवाद करें</translation>
-<translation id="1107591249535594099">चेक किए होने पर, अधिक तेज़ फ़ॉर्म भरने के लिए Chrome इस डिवाइस पर आपके कार्ड की प्रतिलिपि संग्रहित कर लेगा.</translation>
+<translation id="1107591249535594099">चेक किए होने पर, अधिक तेज़ फ़ॉर्म भरने के लिए Chrome इस डिवाइस पर आपके कार्ड की कॉपी संग्रहित कर लेगा.</translation>
 <translation id="1111153019813902504">हाल के बुकमार्क</translation>
 <translation id="1113869188872983271">&amp;पुन: क्रमित करना वापस लाएं</translation>
 <translation id="1126551341858583091">स्थानीय जगह का आकार <ph name="CRASH_SIZE" /> है.</translation>
 <translation id="112840717907525620">नीति संचय ठीक है</translation>
 <translation id="113188000913989374"><ph name="SITE" /> का कहना है:</translation>
 <translation id="1132774398110320017">Chrome ऑटोमैटिक भरने वाली सेटिंग...</translation>
+<translation id="1150979032973867961">यह सर्वर यह नहीं प्रमाणित कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र आपके कंप्यूटर के ऑपरेटिंग सिस्टम द्वारा विश्वसनीय नहीं है. ऐसा गलत कॉन्फ़िगरेशन या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन में अवरोध डालने के कारण हो सकता है.</translation>
+<translation id="1151972924205500581">पासवर्ड आवश्यक</translation>
 <translation id="1152921474424827756"><ph name="URL" /> की <ph name="BEGIN_LINK" />संचित प्रति<ph name="END_LINK" /> एक्सेस करें</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> ने अनपेक्षित रूप से कनेक्शन बंद कर दिया है.</translation>
 <translation id="1161325031994447685">वाई-फ़ाई से फिर से कनेक्ट करें</translation>
+<translation id="1165039591588034296">गड़बड़ी</translation>
 <translation id="1175364870820465910">&amp;प्रिंट करें...</translation>
 <translation id="1181037720776840403">निकालें</translation>
 <translation id="1184214524891303587">Google को संभावित सुरक्षा घटनाओं के विवरण की <ph name="BEGIN_WHITEPAPER_LINK" />अपने आप रिपोर्ट करें<ph name="END_WHITEPAPER_LINK" />. <ph name="PRIVACY_PAGE_LINK" /></translation>
@@ -31,30 +33,41 @@
 <translation id="1201895884277373915">इस साइट की ओर से अधिक</translation>
 <translation id="1206967143813997005">नाम के पहले अक्षर के गलत हस्ताक्षर</translation>
 <translation id="1209206284964581585">अभी छिपाएं</translation>
+<translation id="121201262018556460">आपने <ph name="DOMAIN" /> तक पहुंचने का प्रयास किया, लेकिन लेकिन सर्वर ने कमज़ोर कुंजी वाला प्रमाणपत्र प्रस्‍तुत किया. संभवत: हमलावर ने निजी कुंजी का पता लगा लिया है, और हो सकता है कि सर्वर आपका अपेक्षित सर्वर न हो (हो सकता है कि आप किसी हमलावर से बातचीत कर रहे हों).</translation>
 <translation id="1219129156119358924">सिस्‍टम सुरक्षा</translation>
 <translation id="1227224963052638717">अज्ञात नीति.</translation>
 <translation id="1227633850867390598">मान छिपाएं</translation>
 <translation id="1228893227497259893">गलत इकाई पहचानकर्ता</translation>
 <translation id="1232569758102978740">शीर्षक रहित</translation>
+<translation id="1253921432148366685"><ph name="TYPE_1" />, <ph name="TYPE_2" /> (सिंक किए गए)</translation>
 <translation id="1263231323834454256">पठन सूची</translation>
 <translation id="1264126396475825575">ख़राबी रिपोर्ट <ph name="CRASH_TIME" /> पर कैप्चर की गई (अभी तक अपलोड नहीं की गई या उसे अनदेखा किया गया)</translation>
+<translation id="1281526147609854549"><ph name="ISSUER" /> ने जारी किया है</translation>
+<translation id="1283919782143846010">खतरनाक सामग्री ब्लॉक की गई</translation>
 <translation id="1285320974508926690">कभी भी इस साइट का अनुवाद न करें</translation>
 <translation id="129553762522093515">हाल ही में बंद किए गए</translation>
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />अपनी कुकी साफ़ करके देखें<ph name="END_LINK" /></translation>
+<translation id="1333989956347591814">आपकी गतिविधि इन्हें <ph name="BEGIN_EMPHASIS" />अभी भी दिखाई दे सकती है<ph name="END_EMPHASIS" />:
+        <ph name="BEGIN_LIST" />
+          <ph name="LIST_ITEM" />जिन वेबसाइट पर आप जाते हैं
+          <ph name="LIST_ITEM" />आपका नियोक्ता या विद्यालय
+          <ph name="LIST_ITEM" />आपका इंटरनेट सेवा प्रदाता
+        <ph name="END_LIST" /></translation>
 <translation id="1339601241726513588">नामांकन डोमेन:</translation>
 <translation id="1340482604681802745">पिकअप पता</translation>
 <translation id="1344211575059133124">ऐसा लगता है कि आपको इस साइट पर जाने की अनुमति लेनी होगी</translation>
 <translation id="1344588688991793829">क्रोमियम ऑटोमैटिक भरने वाली सेटिंग...</translation>
+<translation id="1348198688976932919">आगे आने वाली साइट में खतरनाक ऐप्लिकेशन हैं</translation>
 <translation id="1374468813861204354">सुझाव</translation>
 <translation id="1375198122581997741">वर्शन के बारे में</translation>
 <translation id="1377321085342047638">कार्ड नंबर</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> ने कोई डेटा नहीं भेजा.</translation>
-<translation id="1407135791313364759">सभी खोलें</translation>
+<translation id="1407135791313364759">सभी बुकमार्क खोलें</translation>
 <translation id="1413809658975081374">निजता गड़बड़ी</translation>
+<translation id="14171126816530869"><ph name="ORGANIZATION" /> की पहचान <ph name="LOCALITY" /> में <ph name="ISSUER" /> द्वारा सत्यापित की गई है.</translation>
 <translation id="1426410128494586442">हां</translation>
 <translation id="1430915738399379752">प्रिंट करें</translation>
-<translation id="1442912890475371290"><ph name="BEGIN_LINK" /><ph name="DOMAIN" /> के किसी पेज पर जाने का <ph name="END_LINK" /> प्रयास अवरोधित किया गया.</translation>
-<translation id="1491663344921578213">आप इस समय <ph name="SITE" /> पर विज़िट नहीं कर सकते क्योंकि वेबसाइट प्रमाणपत्र पिनिंग का उपयोग करती है. नेटवर्क की गड़बड़ियां और हमले आमतौर पर अस्थायी होते हैं, इसलिए संभवत: यह पेज बाद में काम करेगा. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
+<translation id="1495172241291051507">{PAYMENT_METHOD,plural, =1{<ph name="PAYMENT_METHOD_PREVIEW" /> और <ph name="NUMBER_OF_ADDITIONAL_PAYMENT_METHODS" /> अन्य}one{<ph name="PAYMENT_METHOD_PREVIEW" /> और <ph name="NUMBER_OF_ADDITIONAL_PAYMENT_METHODS" /> अन्य}other{<ph name="PAYMENT_METHOD_PREVIEW" /> और <ph name="NUMBER_OF_ADDITIONAL_PAYMENT_METHODS" /> अन्य}}</translation>
 <translation id="1506687042165942984">इस पृष्‍ठ की सहेजी गई (अर्थात जिसे पुराना माना जाता है) कॉपी दिखाएं.</translation>
 <translation id="1517433312004943670">फ़ोन नंबर आवश्यक है</translation>
 <translation id="1519264250979466059">बिल्ड दिनांक</translation>
@@ -62,12 +75,11 @@
 <translation id="1549470594296187301">इस सुविधा का उपयोग करने के लिए JavaScript को सक्षम किया जाना चाहिए.</translation>
 <translation id="1555130319947370107">नीला</translation>
 <translation id="1559528461873125649">कोई ऐसी फ़ाइल या निर्देशिका नहीं है</translation>
-<translation id="1559572115229829303">&lt;p&gt;<ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> से निजी कनेक्‍शन स्‍थापित नहीं किया जा सकता क्‍योंकि आपके डिवाइस का दिनांक और समय (<ph name="DATE_AND_TIME" />) गलत है.&lt;/p&gt;
-
-      &lt;p&gt;कृपया दिनांक और समय को &lt;strong&gt;सेटिंग&lt;/strong&gt; ऐप के &lt;strong&gt;सामान्‍य&lt;/strong&gt; अनुभाग से एडजस्‍ट करें.&lt;/p&gt;</translation>
 <translation id="1583429793053364125">यह वेबपेज प्रदर्शित करते समय कोई समस्या हुई.</translation>
 <translation id="1592005682883173041">स्थानीय डेटा एक्सेस</translation>
+<translation id="1594030484168838125">चुनें</translation>
 <translation id="161042844686301425">स्यान</translation>
+<translation id="1620510694547887537">कैमरा</translation>
 <translation id="1629803312968146339">क्या आप चाहते हैं कि Chrome इस कार्ड को सहेजे?</translation>
 <translation id="1639239467298939599">लोड हो रहा है</translation>
 <translation id="1640180200866533862">उपयोगकर्ता नीतियां</translation>
@@ -75,11 +87,12 @@
 <translation id="1644184664548287040">नेटवर्क कॉन्फ़िगरेशन अमान्य है और उसे आयात नहीं किया जा सकेगा.</translation>
 <translation id="1644574205037202324">इतिहास</translation>
 <translation id="1645368109819982629">असमर्थित प्रोटोकॉल</translation>
+<translation id="1655462015569774233">{1,plural, =1{यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसके सुरक्षा प्रमाणपत्र की समय सीमा कल समाप्त हो गई थी. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन को बाधित करने के कारण हो सकता है. आपके कंप्यूटर की घड़ी वर्तमान में <ph name="CURRENT_DATE" /> पर सेट है. क्‍या यह सही है? यदि नहीं, तो आपको अपने सिस्टम की घड़ी सही करनी चाहिए और फिर इस पेज को रीफ्रेश करना चाहिए.}one{यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसके सुरक्षा प्रमाणपत्र की समय सीमा # दिन पहले समाप्त हो गई है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन को बाधित करने के कारण हो सकता है. आपके कंप्यूटर की घड़ी वर्तमान में <ph name="CURRENT_DATE" /> पर सेट है. क्‍या यह सही है? यदि नहीं, तो आपको अपने सिस्टम की घड़ी सही करनी चाहिए और फिर इस पेज को रीफ्रेश करना चाहिए.}other{यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसके सुरक्षा प्रमाणपत्र की समय सीमा # दिन पहले समाप्त हो गई है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन को बाधित करने के कारण हो सकता है. आपके कंप्यूटर की घड़ी वर्तमान में <ph name="CURRENT_DATE" /> पर सेट है. क्‍या यह सही है? यदि नहीं, तो आपको अपने सिस्टम की घड़ी सही करनी चाहिए और फिर इस पेज को रीफ्रेश करना चाहिए.}}</translation>
 <translation id="1656489000284462475">पिकअप</translation>
 <translation id="1663943134801823270">कार्ड और पते Chrome से मिलते हैं. आप उन्हें <ph name="BEGIN_LINK" />सेटिंग<ph name="END_LINK" /> में प्रबंधित कर सकते हैं.</translation>
 <translation id="1676269943528358898">आपकी जानकारी की सुरक्षा करने के लिए <ph name="SITE" /> आमतौर पर एन्क्रिप्शन का उपयोग करती है. जब Google Chrome ने इस बार <ph name="SITE" /> से कनेक्ट करने का प्रयास किया, तो वेबसाइट ने असामान्य और गलत क्रेडेंशियल वापस भेजे. ऐसा तब हो सकता है जब कोई हमलावर <ph name="SITE" /> होने का दावा करने का प्रयास कर रहा हो या किसी वाई-फ़ाई प्रवेश स्क्रीन ने कनेक्शन को बाधित कर दिया हो. आपकी जानकारी अभी भी सुरक्षित है क्योंकि किसी भी डेटा के आदान-प्रदान से पहले ही Google Chrome ने कनेक्शन को रोक दिया था.</translation>
-<translation id="168328519870909584"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> पर मौजूद हमलावर आपके डिवाइस पर ऐसे खतरनाक प्रोग्राम इंस्टॉल करने की कोशिश कर सकते हैं जो आपकी जानकारी (उदाहरण के लिए, फ़ोटो, पासवर्ड, संदेश और क्रेडिट कार्ड) को चुरा लेते हैं या उसे हटा देते हैं.</translation>
 <translation id="168841957122794586">सर्वर प्रमाणपत्र में कमज़ोर क्रिप्टोग्राफ़िक कुंजी है.</translation>
+<translation id="1706954506755087368">{1,plural, =1{यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र कल से माना जाएगा. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन को बाधित करने के कारण हो सकता है.}one{यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र # दिन बाद से माना जाएगा. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन को बाधित करने के कारण हो सकता है.}other{यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र # दिन बाद से माना जाएगा. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन को बाधित करने के कारण हो सकता है.}}</translation>
 <translation id="1710259589646384581">OS</translation>
 <translation id="1721312023322545264">आपको <ph name="NAME" /> से इस साइट पर जाने की अनुमति लेनी होगी</translation>
 <translation id="1721424275792716183">* फ़ील्ड ज़रूरी है</translation>
@@ -91,22 +104,26 @@
 <translation id="1745358365027406341">पेज को बाद में डाउनलोड करें</translation>
 <translation id="17513872634828108">टैब खोलें</translation>
 <translation id="1753706481035618306">पृष्‍ठ संख्‍या</translation>
+<translation id="1763864636252898013">यह सर्वर यह नहीं प्रमाणित कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र आपके डिवाइस के ऑपरेटिंग सिस्टम द्वारा विश्वसनीय नहीं है. ऐसा गलत कॉन्फ़िगरेशन या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन में अवरोध डालने के कारण हो सकता है.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windows नेटवर्क निदान चलाकर देखें<ph name="END_LINK" />.</translation>
 <translation id="1783075131180517613">कृपया अपना समन्‍वयन पासफ्रेज़ अपडेट करें.</translation>
 <translation id="1787142507584202372">आपके द्वारा खोले गए टैब, यहां दिखाई देंगे</translation>
+<translation id="1789575671122666129">पॉपअप</translation>
 <translation id="1791429645902722292">Google Smart Lock</translation>
 <translation id="1803264062614276815">कार्ड के मालिक का नाम</translation>
-<translation id="1803678881841855883">Google सुरक्षित ब्राउज़िंग को हाल ही में <ph name="SITE" /> पर <ph name="BEGIN_LINK" />मैलवेयर का पता चला<ph name="END_LINK" /> है. आमतौर पर सुरक्षित रहने वाली वेबसाइट कभी-कभी मैलवेयर से संक्रमित हो जाती हैं. दुर्भावनापूर्ण सामग्री <ph name="SUBRESOURCE_HOST" /> से आती है, जिसे ज्ञात मैलवेयर वितरक कहा जाता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="1806541873155184440"><ph name="ADDED_TO_AUTOFILL_MONTH" /> को जोड़ा गया</translation>
 <translation id="1821930232296380041">अमान्य अनुरोध या अनुरोध पैरामीटर</translation>
 <translation id="1826516787628120939">जांच की जा रही है</translation>
 <translation id="1834321415901700177">इस साइट में हानिकारक प्रोग्राम हैं</translation>
+<translation id="1840414022444569775">इस कार्ड नंबर का उपयोग पहले ही किया जा चुका है</translation>
 <translation id="1842969606798536927">भुगतान करें</translation>
 <translation id="1871208020102129563">प्रॉक्‍सी को फ़िक्‍स्‍ड प्रॉक्‍सी सर्वर का उपयोग करने के लिए सेट किया गया है, .pac स्‍क्रिप्‍ट फ़ाइल का उपयोग करने के लिए नहीं.</translation>
 <translation id="1871284979644508959">आवश्यक फ़ील्ड</translation>
 <translation id="187918866476621466">शुरुआती पन्ना खोलें</translation>
 <translation id="1883255238294161206">सूची संक्षिप्त करें</translation>
+<translation id="1894246157993903018">{SHIPPING_ADDRESS,plural, =1{<ph name="SHIPPING_ADDRESS_PREVIEW" /> और <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES" /> अन्य}one{<ph name="SHIPPING_ADDRESS_PREVIEW" /> और <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES" /> अन्य}other{<ph name="SHIPPING_ADDRESS_PREVIEW" /> और <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES" /> अन्य}}</translation>
 <translation id="1898423065542865115">फ़िल्टर किया जा रहा है</translation>
+<translation id="192020519938775529">{COUNT,plural, =0{कुछ नहीं}=1{1 साइट}one{# साइट}other{# साइट}}</translation>
 <translation id="194030505837763158"><ph name="LINK" /> पर जाएं</translation>
 <translation id="1962204205936693436"><ph name="DOMAIN" /> बुकमार्क</translation>
 <translation id="1973335181906896915">क्रमबद्ध करने में गड़बड़ी</translation>
@@ -130,42 +147,48 @@
 <translation id="2114841414352855701">ध्यान नहीं दिया गया क्योंकि यह <ph name="POLICY_NAME" /> द्वारा ओवरराइड की गई थी.</translation>
 <translation id="2138201775715568214">आस-पास के जीते-जागते वेब पृष्‍ठ खोजे जा रहे हैं</translation>
 <translation id="213826338245044447">मोबाइल बुकमार्क</translation>
-<translation id="2148716181193084225">आज</translation>
+<translation id="2147827593068025794">पृष्ठभूमि समन्वयन</translation>
 <translation id="2154054054215849342">आपके डोमेन के लिए सिंक करने की सुविधा उपलब्‍ध नहीं है</translation>
 <translation id="2154484045852737596">कार्ड संपादित करें</translation>
 <translation id="2166049586286450108">पूर्ण व्यवस्थापकीय एक्सेस</translation>
 <translation id="2166378884831602661">यह साइट सुरक्षित कनेक्शन प्रदान नहीं कर सकती</translation>
 <translation id="2181821976797666341">नीतियां</translation>
 <translation id="2184405333245229118">{COUNT,plural, =1{1 पता}one{# पते}other{# पते}}</translation>
+<translation id="2187317261103489799">पता लगाएं (डिफ़ॉल्ट)</translation>
 <translation id="2202020181578195191">खत्म होने का मान्य वर्ष डालें</translation>
 <translation id="2212735316055980242">नीति नहीं मिली</translation>
 <translation id="2213606439339815911">प्रविष्टियां फ़ेच की जा रही हैं...</translation>
+<translation id="2218879909401188352"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> पर इस समय मौजूद हमलावर ऐसे खतरनाक ऐप्लिकेशन इंस्टॉल कर सकते हैं जो आपके डिवाइस को नुकसान पहुंचा सकते हैं और आपके मोबाइल बिल में अनजाने खर्चे जोड़ सकते हैं या आपकी व्‍यक्‍तिगत जानकारी चुरा सकते हैं. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2230458221926704099"><ph name="BEGIN_LINK" />निदान ऐप्लिकेशन<ph name="END_LINK" /> का उपयोग करके अपने कनेक्शन को ठीक करें</translation>
 <translation id="2239100178324503013">अभी भेजें</translation>
 <translation id="225207911366869382">यह मान इस नीति के लिए हटा दिया गया है.</translation>
 <translation id="2262243747453050782">HTTP गड़बड़ी</translation>
+<translation id="2270484714375784793">फ़ोन नंबर</translation>
 <translation id="2282872951544483773">अनुपलब्ध प्रयोग</translation>
+<translation id="2283595600756901917">{MORE_ITEMS,plural, =1{<ph name="ITEM_COUNT" /> आइटम}one{<ph name="ITEM_COUNT" /> आइटम}other{<ph name="ITEM_COUNT" /> आइटम}}</translation>
 <translation id="2292556288342944218">आपका इंटरनेट कनेक्शन अवरुद्ध है</translation>
 <translation id="230155334948463882">नया कार्ड?</translation>
-<translation id="2305919008529760154">यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; हो सकता है कि उसका सुरक्षा प्रमाणपत्र कपटपूर्वक जारी किया गया हो. ऐसा किसी गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> के लिए उपयोगकर्ता नाम और पासवर्ड आवश्यक है.</translation>
-<translation id="2318774815570432836">आप इस समय <ph name="SITE" /> पर विज़िट नहीं कर सकते क्योंकि वेबसाइट HSTS का उपयोग करती है. नेटवर्क की गड़बड़ियां और हमले आमतौर पर अस्थायी होते हैं, इसलिए संभवत: यह पेज बाद में काम करेगा. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
+<translation id="2337852623177822836">वह सेटिंग जिसे आपका व्यवस्थापक नियंत्रित करता है</translation>
 <translation id="2354001756790975382">अन्य बुकमार्क</translation>
+<translation id="2354430244986887761">Google सुरक्षित ब्राउज़िंग को हाल में <ph name="SITE" /> पर <ph name="BEGIN_LINK" />नुकसान पहुंचाने वाले ऐप्लिकेशन मिले हैं<ph name="END_LINK" />.</translation>
 <translation id="2355395290879513365">आप इस साइट पर जिन चित्रों को देख रहे हैं, हो सकता है कि वे हमलावरों को दिखाई दें और हमलावर उन्हें बदलने के लिए आपको भ्रमित करें.</translation>
+<translation id="2356070529366658676">पूछें</translation>
+<translation id="2359629602545592467">एक से अधिक</translation>
 <translation id="2359808026110333948">जारी रखें</translation>
 <translation id="2365563543831475020"><ph name="CRASH_TIME" /> पर कैप्चर की गई ख़राबी रिपोर्ट अपलोड नहीं की गई</translation>
 <translation id="2367567093518048410">स्तर</translation>
-<translation id="2371153335857947666">{1,plural, =1{यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसके सुरक्षा प्रमाणपत्र की समय सीमा कल ही समाप्त हुई है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. आपके कंप्यूटर की घड़ी वर्तमान में <ph name="CURRENT_DATE" /> पर सेट है. क्‍या वह सही है? यदि नहीं, तो आपको अपने सिस्टम की घड़ी सही करनी चाहिए और इस पेज को रीफ्रेश करना चाहिए. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.}one{यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसके सुरक्षा प्रमाणपत्र की समय सीमा # दिन पहले समाप्त हुई है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. आपके कंप्यूटर की घड़ी वर्तमान में <ph name="CURRENT_DATE" /> पर सेट है. क्‍या वह सही है? यदि नहीं, तो आपको अपने सिस्टम की घड़ी सही करनी चाहिए और इस पेज को रीफ्रेश करना चाहिए. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.}other{यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसके सुरक्षा प्रमाणपत्र की समय सीमा # दिन पहले समाप्त हुई है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. आपके कंप्यूटर की घड़ी वर्तमान में <ph name="CURRENT_DATE" /> पर सेट है. क्‍या वह सही है? यदि नहीं, तो आपको अपने सिस्टम की घड़ी सही करनी चाहिए और इस पेज को रीफ्रेश करना चाहिए. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.}}</translation>
 <translation id="237718015863234333">कोई UI विकल्प उपलब्ध नहीं है</translation>
 <translation id="2384307209577226199">एंटरप्राइज़ डिफ़ॉल्ट</translation>
 <translation id="2386255080630008482">सर्वर का प्रमाणपत्र निरस्त कर दिया गया है.</translation>
 <translation id="2392959068659972793">कोई भी मान सेट नहीं की गई नीतियां दिखाएं</translation>
 <translation id="239429038616798445">शिपिंग का यह तरीका उपलब्ध नहीं है. कोई दूसरा तरीका आज़माएं.</translation>
 <translation id="2396249848217231973">&amp;हटाना वापस लाएं</translation>
-<translation id="2460160116472764928">Google सुरक्षित ब्राउज़िंग को हाल ही में <ph name="SITE" /> पर <ph name="BEGIN_LINK" />मैलवेयर का पता चला<ph name="END_LINK" /> है. आमतौर पर सुरक्षित रहने वाली वेबसाइट कभी-कभी मैलवेयर से संक्रमित हो जाती हैं. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
+<translation id="2413528052993050574">यह सर्वर यह प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" />; इसका सुरक्षा प्रमाणपत्र निरस्त कर दिया गया है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन में अवरोध डालने के कारण हो सकता है.</translation>
 <translation id="2463739503403862330">भरें</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />नेटवर्क निदान चलाकर देखें<ph name="END_LINK" /></translation>
 <translation id="2479410451996844060">अमान्‍य खोज URL.</translation>
+<translation id="2482878487686419369">अधिसूचनाएं</translation>
 <translation id="2491120439723279231">सर्वर के प्रमाणपत्र में त्रुटियां हैं.</translation>
 <translation id="2495083838625180221">JSON पार्सर</translation>
 <translation id="2495093607237746763">यदि चेक किया गया हो, तो अधिक तेज़ी से फ़ॉर्म भरने के लिए क्रोमियम इस डिवाइस पर आपके कार्ड की कॉपी संग्रहित करेगा.</translation>
@@ -173,27 +196,28 @@
 <translation id="2501278716633472235">वापस जाएं</translation>
 <translation id="2515629240566999685">अपने क्षेत्र में सिग्नल की जांच करें</translation>
 <translation id="2516305470678292029">UI विकल्प</translation>
+<translation id="2539524384386349900">पता लगाएं</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> ने एक अमान्य प्रतिसाद भेजा है.</translation>
-<translation id="2552545117464357659">इससे नए</translation>
 <translation id="2556876185419854533">&amp;संपादन वापस लाएं</translation>
 <translation id="2587730715158995865"><ph name="ARTICLE_PUBLISHER" /> की ओर से. यह और <ph name="OTHER_ARTICLE_COUNT" /> दूसरे समाचार पढ़ें.</translation>
 <translation id="2587841377698384444">निर्देशिका API आईडी:</translation>
 <translation id="2597378329261239068">यह दस्तावेज़ पासवर्ड सुरक्षित है.  कृपया पासवर्ड डालें.</translation>
 <translation id="2609632851001447353">विविधताएं</translation>
+<translation id="262424810616849754">{COUNT,plural, =0{कुछ नहीं}=1{1 ऐप्लिकेशन ($1)}=2{2 ऐप्लिकेशन ($1, $2)}one{# ऐप्लिकेशन ($1, $2, $3)}other{# ऐप्लिकेशन ($1, $2, $3)}}</translation>
 <translation id="2625385379895617796">आपकी घड़ी आगे है</translation>
 <translation id="2639739919103226564">स्थिति:</translation>
+<translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">फ़ाइल तक पहुंच अस्वीकृत थी</translation>
 <translation id="2653659639078652383">सबमिट करें</translation>
 <translation id="2666117266261740852">दूसरे टैब या ऐप्लिकेशन बंद करें</translation>
+<translation id="2670429602441959756">इस पेज में ऐसी सुविधाएं मौजूद हैं जो अभी तक VR में काम नहीं करती हैं. बाहर निकाला जा रहा है...</translation>
 <translation id="2674170444375937751">क्या आप वाकई अपने इतिहास से इन पृष्ठों को हटाना चाहते हैं?</translation>
 <translation id="2677748264148917807">छोड़ें</translation>
-<translation id="269990154133806163">सर्वर ने ऐसा प्रमाणपत्र प्रस्तुत किया है जिसे प्रमाणपत्र पारदर्शिता नीति का उपयोग करके सार्वजनिक रूप से प्रकट नहीं किया गया था. कुछ प्रमाणपत्रों के लिए यह सुनिश्चित करना आवश्यक है कि वे विश्वसनीय हैं और हमलावरों से सुरक्षा करते हैं. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="2702801445560668637">पठन सूची</translation>
 <translation id="2704283930420550640">मान का प्रारूप से मिलान नहीं होता.</translation>
 <translation id="2704951214193499422">क्रोमियम इस समय आपके कार्ड की पुष्टि नहीं कर सका. कृपया बाद में पुन: प्रयास करें.</translation>
 <translation id="2705137772291741111">इस साइट की सहेजी गई (संचित) कॉपी पढ़ने योग्य नहीं थी.</translation>
 <translation id="2709516037105925701">ऑटोमैटिक भरना</translation>
-<translation id="2712118517637785082">आपने <ph name="DOMAIN" /> पर पहुंचने का प्रयास किया, लेकिन सर्वर द्वारा प्रस्तुत किए गए प्रमाणपत्र को उसके जारीकर्ता ने निरस्त कर दिया है. इसका अर्थ है कि सर्वर द्वारा प्रस्तुत सुरक्षा क्रेडेंशियल पर बिल्कुल भी विश्वास नहीं किया जाना चाहिए. हो सकता है आप किसी हमलावर से बातचीत कर रहे हों. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="2712173769900027643">अनुमति मांगें</translation>
 <translation id="2713444072780614174">सफ़ेद</translation>
 <translation id="2720342946869265578">आस-पास</translation>
@@ -206,19 +230,22 @@
 <translation id="277499241957683684">डिवाइस का रिकॉर्ड लापता है</translation>
 <translation id="2784949926578158345">कनेक्‍शन रीसेट किया गया था.</translation>
 <translation id="2794233252405721443">साइट अवरोधित है</translation>
+<translation id="2799020568854403057">आगे आने वाली साइट में नुकसान पहुंचाने वाले ऐप्लिकेशन हैं</translation>
+<translation id="2803306138276472711">Google सुरक्षित ब्राउज़िंग को <ph name="SITE" /> पर हाल ही में <ph name="BEGIN_LINK" />मैलवेयर का पता चला<ph name="END_LINK" /> है. आमतौर पर सुरक्षित रहने वाली वेबसाइटें कभी-कभी मैलवेयर से संक्रमित हो जाती हैं.</translation>
 <translation id="2824775600643448204">पता और खोज बार</translation>
 <translation id="2826760142808435982">कनेक्शन को <ph name="CIPHER" /> का उपयोग करके एन्क्रिप्ट और प्रमाणित किया गया है और यह कुंजी विनिमय तकनीक के रूप में <ph name="KX" /> का उपयोग करता है.</translation>
 <translation id="2835170189407361413">फ़ॉर्म साफ़ करें</translation>
+<translation id="2856444702002559011">हो सकता है कि हमलावर <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> से आपकी जानकारी (उदाहरण के लिए, पासवर्ड, संदेश या क्रेडिट कार्ड) चुराने की कोशिश कर रहे हों. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2889159643044928134">पुन: लोड ना करें</translation>
 <translation id="2900469785430194048">यह वेबपेज दिखाते समय Google Chrome में जगह नहीं बची.</translation>
 <translation id="2909946352844186028">नेटवर्क में बदलाव का पता चला.</translation>
 <translation id="2916038427272391327">दूसरे प्रोग्राम बंद करें</translation>
 <translation id="2922350208395188000">सर्वर प्रमाणपत्र की जांच नहीं की जा सकती.</translation>
 <translation id="2928905813689894207">बिलिंग पता</translation>
+<translation id="2941952326391522266">यह सर्वर यह प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र <ph name="DOMAIN2" /> की ओर से है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन में अवरोध डालने के कारण हो सकता है.</translation>
 <translation id="2948083400971632585">आप किसी कनेक्शन के लिए कॉन्फ़िगर की गई किसी भी प्रॉक्सी को सेटिंग पेज से अक्षम कर सकते हैं.</translation>
 <translation id="2955913368246107853">खोज बार बंद करें</translation>
 <translation id="2958431318199492670">नेटवर्क कॉन्फ़िगरेशन ONC मानक का पालन नहीं करता. कॉन्फ़िगरेशन के कुछ भाग आयात नहीं किए जा सकते हैं.</translation>
-<translation id="29611076221683977"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> पर मौजूद हमलावर आपके Mac पर ऐसे खतरनाक प्रोग्राम इंस्टॉल करने की कोशिश कर सकते हैं जो आपकी जानकारी (उदाहरण के लिए, फ़ोटो, पासवर्ड, संदेश और क्रेडिट कार्ड) को चुराते हैं या उसे हटा देते हैं.</translation>
 <translation id="2966678944701946121">खत्म होने की तारीख: <ph name="EXPIRATION_DATE_ABBR" />, <ph name="ADDED_TO_AUTOFILL_MONTH" /> को जोड़ा गया</translation>
 <translation id="2969319727213777354">सुरक्षित कनेक्‍शन स्‍थापित करने के लिए, आपकी घड़ी को सही तरीके से सेट किए जाने की आवश्‍यकता है. ऐसा इसलिए क्‍योंकि वेबसाइटों द्वारा स्‍वयं की पहचान करने के लिए उपयोग किए जाने वाले प्रमाणपत्र केवल विशिष्‍ट समयावधियों के लिए ही मान्‍य होते हैं. चूंकि आपके डिवाइस की घड़ी गलत है, इसलिए Google Chrome इन प्रमाणपत्रों का सत्‍यापन नहीं कर सकता.</translation>
 <translation id="2972581237482394796">&amp;फिर से करें</translation>
@@ -226,19 +253,22 @@
 <translation id="2985398929374701810">मान्य पता डालें</translation>
 <translation id="2986368408720340940">पिकअप का यह तरीका उपलब्ध नहीं है. कोई दूसरा तरीका आज़माएं.</translation>
 <translation id="2991174974383378012">वेबसाइटों के साथ साझाकरण</translation>
-<translation id="3005723025932146533">सहेजी गई प्रतिलिपि दिखाएं</translation>
+<translation id="2991571918955627853">आप इस समय <ph name="SITE" /> पर नहीं जा सकते हैं क्योंकि वेबसाइट HSTS का उपयोग करती है. नेटवर्क की गड़बड़ियां और हमले आमतौर पर कुछ समय के लिए होते हैं, इसलिए पेज शायद बाद में ठीक से काम करेगा.</translation>
+<translation id="3005723025932146533">सहेजी गई कॉपी दिखाएं</translation>
 <translation id="3008447029300691911"><ph name="CREDIT_CARD" /> का CVC डालें. आपकी तरफ से पुष्टि हो जाने पर, आपके कार्ड के विवरण इस साइट के साथ साझा किए जाएंगे.</translation>
 <translation id="3010559122411665027">सूची प्रविष्ट‍ि "<ph name="ENTRY_INDEX" />": <ph name="ERROR" /></translation>
+<translation id="301521992641321250">ऑटोमैटिक रूप से ब्लॉक है</translation>
 <translation id="3024663005179499861">गलत नीति प्रकार</translation>
 <translation id="3032412215588512954">क्या आप इस साइट को फिर से लोड करना चाहते हैं?</translation>
 <translation id="3037605927509011580">हे भगवान!</translation>
-<translation id="3040955737384246924">{COUNT,plural, =0{समन्वयित डिवाइस पर कम से कम 1 आइटम}=1{1 आइटम (समन्वयित डिवाइस पर और भी)}one{# आइटम (समन्वयित डिवाइस पर और भी)}other{# आइटम (समन्वयित डिवाइस पर और भी)}}</translation>
 <translation id="3041612393474885105">प्रमाणपत्र जानकारी</translation>
 <translation id="3063697135517575841">Chrome इस समय आपके कार्ड की पुष्टि नहीं कर सका. कृपया बाद में पुन: प्रयास करें.</translation>
 <translation id="3064966200440839136">किसी बाहरी ऐप्लिकेशन के ज़रिए भुगतान करने के लिए गुप्त मोड छोड़ रहे हैं. जारी रखना चाहते हैं?</translation>
+<translation id="3083099961703215236">{COUNT,plural, =0{कुछ नहीं}=1{1 पासवर्ड}one{# पासवर्ड}other{# पासवर्ड}}</translation>
 <translation id="3093245981617870298">आप ऑफ़लाइन हैं.</translation>
 <translation id="3105172416063519923">एसेट आईडी:</translation>
 <translation id="3109728660330352905">आपके पास इस पेज को देखने के लिए प्राधिकरण नहीं है.</translation>
+<translation id="3120730422813725195">Elo</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />कनेक्टिविटी निदान चलाकर देखें<ph name="END_LINK" />.</translation>
 <translation id="3145945101586104090">उत्तर डीकोड करने में विफल</translation>
 <translation id="3150653042067488994">अस्थायी सर्वर गड़बड़ी</translation>
@@ -247,16 +277,20 @@
 <translation id="3167968892399408617">आपके द्वारा गुप्त टैब में देखे जाने वाले पेज, आपके द्वारा अपने सभी गुप्त टैब बंद कर देने के बाद आपके ब्राउज़र के इतिहास, कुकी संग्रह, या खोज इतिहास में नहीं रहेंगे. आपके द्वारा डाउनलोड की गईं सभी फ़ाइलें या बनाए गए बुकमार्क रख लिए जाएंगे.</translation>
 <translation id="3169472444629675720">तलाश करें</translation>
 <translation id="3174168572213147020">द्वीप</translation>
+<translation id="317583078218509884">पेज को पुन: लोड करने के बाद नई साइट अनुमतियां सेटिंग प्रभावी हो जाएंगी.</translation>
 <translation id="3176929007561373547">यह सुनिश्चित करने के लिए कि प्रॉक्सी सर्वर काम कर रहा है,
       अपनी प्रॉक्सी सेटिंग जांचें या अपने नेटवर्क व्यवस्थापक से संपर्क करें. यदि आपको विश्वास नहीं हो
       कि आप किसी प्रॉक्सी सर्वर का उपयोग कर रहे हैं, तो:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3200379322500587640">पेज को गुप्त मोड में खोलें</translation>
-<translation id="3202578601642193415">नवीनतम</translation>
+<translation id="320323717674993345">भुगतान रद्द करें</translation>
 <translation id="3207960819495026254">बुकमार्क किया गया</translation>
+<translation id="3225919329040284222">सर्वर द्वारा कोई प्रमाणपत्र प्रस्‍तुत किया गया, जो बिल्‍ट-इन अपेक्षाओं से मिलान नहीं करता. इन अपेक्षाओं को आपकी सुरक्षा करने के लिए कुछ, उच्‍च-सुरक्षा वेबसाइटों के लिए शामिल किया गया है.</translation>
 <translation id="3226128629678568754">पेज को लोड करने के लिए आवश्यक डेटा पुन: सबमिट करने के लिए पुन: लोड करें बटन दबाएं.</translation>
+<translation id="3227137524299004712">माइक्रोफ़ोन</translation>
 <translation id="3228969707346345236">अनुवाद विफल हो गया क्योंकि पेज पहले से ही <ph name="LANGUAGE" /> में है.</translation>
 <translation id="323107829343500871"><ph name="CREDIT_CARD" /> का CVC डालें.</translation>
+<translation id="3234666976984236645">इस साइट पर हमेशा महत्‍वपूर्ण सामग्री का पता लगाएं</translation>
 <translation id="3254409185687681395">इस पेज को बुकमार्क करें</translation>
 <translation id="3270847123878663523">&amp;पुन: क्रमित करना वापस लाएं</translation>
 <translation id="3282497668470633863">कार्ड पर नाम जोड़ें</translation>
@@ -270,42 +304,48 @@
 <translation id="3340978935015468852">सेटिंग</translation>
 <translation id="3345135638360864351">इस साइट को ऐक्‍सेस करने का आपका अनुरोध <ph name="NAME" /> को नहीं भेजा जा सका. कृपया पुन: प्रयास करें.</translation>
 <translation id="3355823806454867987">प्रॉक्सी सेटिंग बदलें...</translation>
+<translation id="3361596688432910856">Chrome नीचे दी गई जानकारी को <ph name="BEGIN_EMPHASIS" />सेव नहीं करेगा<ph name="END_EMPHASIS" />:
+        <ph name="BEGIN_LIST" />
+          <ph name="LIST_ITEM" />आपका ब्राउज़िंग इतिहास
+          <ph name="LIST_ITEM" />कुकी और साइट डेटा
+          <ph name="LIST_ITEM" />फ़ॉर्म में डाली गई जानकारी
+        <ph name="END_LIST" /></translation>
 <translation id="3369192424181595722">घड़ी गड़बड़ी</translation>
-<translation id="337311366426640088"><ph name="ITEM_COUNT" /> और आइटम...</translation>
 <translation id="337363190475750230">प्रावधान रद्द</translation>
 <translation id="3377188786107721145">नीति पार्स गड़बड़ी</translation>
 <translation id="3380365263193509176">अज्ञात गड़बड़ी</translation>
 <translation id="3380864720620200369">क्लाइंट आईडी:</translation>
 <translation id="3391030046425686457">वितरण पता</translation>
 <translation id="3395827396354264108">पिकअप का तरीका</translation>
-<translation id="340013220407300675">हो सकता है हमलावर <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> से आपकी जानकारी चुराने का प्रयास कर रहे हों (उदाहरण के लिए पासवर्ड, संदेश या क्रेडिट कार्ड).</translation>
 <translation id="3422248202833853650">जगह खाली करने के लिए दूसरे प्रोग्राम से बाहर निकलकर देखें.</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> वर्तमान में पहुंच योग्य नहीं है.</translation>
+<translation id="3427092606871434483">अनुमति दें (डिफ़ॉल्ट)</translation>
 <translation id="3427342743765426898">&amp;संपादित करना फिर से करें</translation>
 <translation id="3431636764301398940">इस कार्ड को इस डिवाइस पर सहेजें</translation>
 <translation id="3435896845095436175">सक्षम करें</translation>
 <translation id="3447661539832366887">इस डिवाइस के मालिक ने डायनासोर गेम को बंद कर दिया है.</translation>
-<translation id="3450660100078934250">MasterCard</translation>
 <translation id="3452404311384756672">प्राप्ति अंतराल:</translation>
 <translation id="3462200631372590220">उन्नत को छिपाएं</translation>
 <translation id="3467763166455606212">कार्ड मालिक का नाम ज़रूरी है</translation>
 <translation id="3478058380795961209">समाप्ति माह</translation>
 <translation id="3479539252931486093">क्या यह अनपेक्षित था? <ph name="BEGIN_LINK" />हमें बताएं<ph name="END_LINK" /></translation>
 <translation id="3479552764303398839">अभी नहीं</translation>
-<translation id="348000606199325318">क्रैश आईडी <ph name="CRASH_LOCAL_ID" /> (सर्वर आईडी: <ph name="CRASH_ID" />)</translation>
 <translation id="3498215018399854026">हम इस समय आपके अभिभावक तक नहीं पहुंच पा रहे हैं. कृपया पुन: प्रयास करें.</translation>
 <translation id="3528171143076753409">सर्वर का प्रमाणपत्र विश्वसनीय नहीं है.</translation>
-<translation id="3539171420378717834">इस डिवाइस पर इस कार्ड की प्रतिलिपि रखें</translation>
+<translation id="3530944546672790857">{COUNT,plural, =0{सिंक किए हुए डिवाइस पर कम से कम 1 आइटम}=1{1 आइटम (सिंक किए हुए डिवाइस पर और भी बहुत कुछ)}one{# आइटम (सिंक किए हुए डिवाइस पर और भी बहुत कुछ)}other{# आइटम (सिंक किए हुए डिवाइस पर और भी बहुत कुछ)}}</translation>
+<translation id="3539171420378717834">इस डिवाइस पर इस कार्ड की कॉपी रखें</translation>
 <translation id="3542684924769048008">इसके लिए पासवर्ड का उपयोग करें:</translation>
+<translation id="3545341443414427877"><ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> से निजी कनेक्शन नहीं बनाया जा सका क्योंकि आपके कंप्यूटर का दिनांक और समय (<ph name="DATE_AND_TIME" />) गलत है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3549644494707163724">सभी समन्वयित डेटा को अपने स्वयं के समन्वयन पासफ़्रेज़ के साथ एन्क्रिप्ट करें</translation>
-<translation id="3549761410225185768"><ph name="NUM_TABS_MORE" /> अधिक...</translation>
-<translation id="3555561725129903880">यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; उसका सुरक्षा प्रमाणपत्र <ph name="DOMAIN2" /> का है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में अवरोध डालने के कारण हो सकता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="3556433843310711081">आपका प्रबंधक इसे आपके लिए अनवरोधित कर सकता है</translation>
 <translation id="3566021033012934673">आपका कनेक्शन निजी नहीं है</translation>
+<translation id="3569145463236695319">&lt;p&gt;<ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> से निजी कनेक्शन नहीं बनाया जा सका क्योंकि आपके कंप्यूटर का दिनांक और समय (<ph name="DATE_AND_TIME" />) गलत है.&lt;/p&gt;
+
+      &lt;p&gt;कृपया &lt;strong&gt;सेटिंग&lt;/strong&gt; ऐप्लिकेशन के &lt;strong&gt;सामान्य&lt;/strong&gt; अनुभाग से दिनांक और समय एडजस्ट करें.&lt;/p&gt; <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" /></translation>
+<translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3582930987043644930">नाम जोड़ें</translation>
 <translation id="3583757800736429874">&amp;ले जाना फिर से करें</translation>
 <translation id="3586931643579894722">विवरण छुपाएं</translation>
-<translation id="3587482841069643663">सभी</translation>
 <translation id="3600246354004376029"><ph name="TITLE" />, <ph name="DOMAIN" />, <ph name="TIME" /></translation>
 <translation id="3615877443314183785">खत्म होने की मान्य तारीख डालें</translation>
 <translation id="36224234498066874">ब्राउज़िंग डेटा साफ़ करें...</translation>
@@ -322,7 +362,6 @@
 <translation id="3681007416295224113">प्रमाणपत्र जानकारी</translation>
 <translation id="3690164694835360974">लॉगिन सुरक्षित नहीं है</translation>
 <translation id="3693415264595406141">पासवर्ड:</translation>
-<translation id="3696411085566228381">कोई नहीं</translation>
 <translation id="3704609568417268905"><ph name="TIME" /> <ph name="BOOKMARKED" /> <ph name="TITLE" /> <ph name="DOMAIN" /></translation>
 <translation id="370665806235115550">लोड हो रही हैं...</translation>
 <translation id="3712624925041724820">लाइसेंस समाप्त हो गए</translation>
@@ -330,12 +369,15 @@
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />प्रॉक्सी, फायरवॉल और DNS कॉन्फ़िगरेशन की जांच करें<ph name="END_LINK" /></translation>
 <translation id="3736520371357197498">यदि आप अपनी सुरक्षा में होने वाले जोखिमों को समझते हैं, तो आप खतरनाक प्रोग्राम निकाले जाने से पहले <ph name="BEGIN_LINK" />इस असुरक्षित साइट पर विज़िट<ph name="END_LINK" /> कर सकते हैं.</translation>
 <translation id="3739623965217189342">काॅपी किया गया लिंक</translation>
+<translation id="3744899669254331632">आप इस समय <ph name="SITE" /> पर नहीं जा सकते क्‍योंकि वेबसाइट ने ऐसी अव्‍यवस्‍थित प्रमाणिकताएं भेजी थीं जिन्‍हें क्रोमियम संसाधित नहीं कर सकता. नेटवर्क की त्रुटियां और हमले आमतौर पर अस्‍थायी होते हैं, इसलिए संभवत: यह पृष्‍ठ बाद में काम करेगा.</translation>
+<translation id="3748148204939282805"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> पर मौजूद हमलावर आपको सॉफ़्टवेयर इंस्टॉल करने या अपनी व्यक्तिगत जानकारी (उदाहरण के लिए, पासवर्ड, फ़ोन नंबर या क्रेडिट कार्ड) का खुलासा करने जैसा खतरनाक काम करने के लिए भ्रमित कर सकते हैं. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="375403751935624634">सर्वर गड़बड़ी के कारण अनुवाद विफल.</translation>
 <translation id="3759461132968374835">आपके पास हाल ही में रिपोर्ट किए गए क्रैश नहीं हैं.  क्रैश रिपोर्टिंग अक्षम होने के दौरान होने वाले क्रैश यहां दिखाई नहीं देंगे.</translation>
+<translation id="3778403066972421603">क्या आप इस कार्ड को अपने Google खाते में और इस डिवाइस पर सहेजना चाहते हैं?</translation>
+<translation id="3783418713923659662">Mastercard</translation>
 <translation id="3787705759683870569"><ph name="EXPIRATION_MONTH" />/<ph name="EXPIRATION_YEAR" /> में खत्म होगा</translation>
 <translation id="382518646247711829">यदि आप प्रॉक्सी सर्वर का उपयोग करते हैं...</translation>
 <translation id="3828924085048779000">खाली पासफ़्रेज़ की अनुमति नहीं है.</translation>
-<translation id="3845539888601087042">आपके प्रवेश किए गए डिवाइस का इतिहास दिखाया जा रहा है. <ph name="BEGIN_LINK" />अधिक जानें<ph name="END_LINK" />.</translation>
 <translation id="385051799172605136">वापस</translation>
 <translation id="3858027520442213535">दिनांक और समय अपडेट करें</translation>
 <translation id="3884278016824448484">विरोधाभासी डिवाइस पहचानकर्ता</translation>
@@ -343,11 +385,13 @@
 <translation id="3886446263141354045">यह साइट एक्सेस करने का आपका अनुरोध <ph name="NAME" /> को भेज दिया गया है</translation>
 <translation id="3890664840433101773">ईमेल जोड़ें</translation>
 <translation id="3901925938762663762">इस कार्ड की समय सीमा समाप्‍त हो गई है</translation>
-<translation id="3933571093587347751">{1,plural, =1{यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र संभवत: कल से मान्य हो. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.}one{यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र संभवत: # दिन बाद से मान्य हो. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.}other{यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र संभवत: # दिन बाद से मान्य हो. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.}}</translation>
-<translation id="3934680773876859118">PDF दस्तावेज़ लोड करने में विफल</translation>
+<translation id="3945915738023014686">अपलोड की गई ख़राबी रिपोर्ट  आईडी <ph name="CRASH_ID" /> (स्थानीय क्रैश आईडी: <ph name="CRASH_LOCAL_ID" />)</translation>
+<translation id="3949571496842715403">यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसके सुरक्षा प्रमाणपत्र में विषय के वैकल्पिक नाम नहीं बताए गए हैं. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी आक्रमणकर्ता की ओर से आपके कनेक्शन में अवरोध डालने के कारण हो सकता है.</translation>
 <translation id="3963721102035795474">रीडर मोड</translation>
+<translation id="3964661563329879394">{COUNT,plural, =0{कुछ नहीं}=1{1 साइट से }one{# साइटों से }other{# साइटों से }}</translation>
 <translation id="397105322502079400">गणना की जा रही है...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> अवरुद्ध है</translation>
+<translation id="3987940399970879459">1 MB से कम</translation>
 <translation id="40103911065039147">{URL_count,plural, =1{आस-पास 1 वेब पेज है}one{आस-पास # वेब पेज हैं}other{आस-पास # वेब पेज हैं}}</translation>
 <translation id="4021036232240155012">DNS एक नेटवर्क सेवा है जो किसी वेबसाइट के नाम को उसके इंटरनेट पते में बदलती है.</translation>
 <translation id="4030383055268325496">&amp;जोड़ना वापस लाएं</translation>
@@ -358,56 +402,63 @@
 <translation id="4079302484614802869">प्रॉक्‍सी कॉन्‍फ़िगरेशन को .pac स्‍क्रिप्‍ट URL का उपयोग करने के लिए सेट किया जाता है, फ़िक्‍स्‍ड प्रॉक्‍सी सर्वर के लिए नहीं.</translation>
 <translation id="4098354747657067197">आगे भ्रामक साइट है</translation>
 <translation id="4103249731201008433">डिवाइस की क्रम संख्या अमान्य है</translation>
+<translation id="410351446219883937">स्वतः चलाएं</translation>
 <translation id="4103763322291513355">काली सूची में डाले गए URL तथा आपके सिस्टम व्यवस्थापक द्वारा लागू की गई अन्य नीतियों को देखने के लिए &lt;strong&gt;chrome://policy&lt;/strong&gt; पर जाएं.</translation>
-<translation id="4110615724604346410">यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसके सुरक्षा प्रमाणपत्र में गड़बड़ियां हैं. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4115378294792113321">मैजेंटा</translation>
+<translation id="4116663294526079822">इस साइट पर हमेशा अनुमति दें</translation>
 <translation id="4117700440116928470">नीति क्षेत्र समर्थित नहीं है.</translation>
-<translation id="4118212371799607889">यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र क्रोमियम द्वारा विश्वसनीय नहीं है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4129401438321186435">{COUNT,plural, =1{1 अन्य}one{# अन्‍य}other{# अन्‍य}}</translation>
 <translation id="4130226655945681476">नेटवर्क केबल, मोडेम और राउटर की जांच करें</translation>
+<translation id="413544239732274901">अधिक जानें</translation>
 <translation id="4148925816941278100">American Express</translation>
+<translation id="4151403195736952345">वैश्‍विक डिफ़ॉल्‍ट का उपयोग करें (पता करें)</translation>
+<translation id="4165986682804962316">साइट सेटिंग</translation>
 <translation id="4169947484918424451">क्या आप चाहते हैं कि क्रोमियम इस कार्ड को सहेजे?</translation>
 <translation id="4171400957073367226">गलत सत्यापन हस्ताक्षर</translation>
 <translation id="4196861286325780578">&amp;ले जाना फिर से करें</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />फायरवॉल और एंटीवायरस कॉन्फ़िगरेशन की जांच करें<ph name="END_LINK" /></translation>
-<translation id="4206349416402437184">{COUNT,plural, =0{कोई नहीं}=1{1 ऐप्लिकेशन ($1)}=2{2 ऐप्लिकेशन ($1, $2)}one{# ऐप्लिकेशन ($1, $2, $3)}other{# ऐप्लिकेशन ($1, $2, $3)}}</translation>
 <translation id="4220128509585149162">क्रैश</translation>
+<translation id="422022731706691852"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> पर मौजूद हमलावर आपको ऐसे प्रोग्राम इंस्टॉल करने के लिए भ्रमित करने की कोशिश सकते हैं जिनसे आपके ब्राउज़िंग अनुभव को नुकसान पहुंच सकता है (उदाहरण के लिए, आपका होमपेज बदलकर या आप जिन साइटों पर जाते हैं उन पर अतिरिक्त विज्ञापन दिखाकर). <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />नेटवर्क निदान चलाकर देखें<ph name="END_LINK" />.</translation>
+<translation id="4235360514405112390">मान्य</translation>
 <translation id="4250431568374086873">इस साइट से आपका कनेक्शन पूरी तरह से सुरक्षित नहीं है</translation>
 <translation id="4250680216510889253">नहीं</translation>
 <translation id="425582637250725228">हो सकता है कि आपके द्वारा किए गए बदलाव सहेजे ना जाएं.</translation>
 <translation id="4258748452823770588">खराब हस्ताक्षर</translation>
+<translation id="4265872034478892965">आपके व्यवस्थापक ने अनुमति दी है</translation>
 <translation id="4269787794583293679">(कोई उपयोगकर्ता नाम नहीं)</translation>
 <translation id="4275830172053184480">अपना डिवाइस पुन: प्रारंभ करें</translation>
 <translation id="4280429058323657511">, समाप्ति दिनांक <ph name="EXPIRATION_DATE_ABBR" /></translation>
-<translation id="4295944351946828969">Google सुरक्षित ब्राउज़िंग को हाल ही में <ph name="SITE" /> पर <ph name="BEGIN_LINK" />हानिकारक प्रोग्राम मिले हैं<ph name="END_LINK" />. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4300246636397505754">अभिभावक सुझाव</translation>
 <translation id="4304224509867189079">प्रवेश करें</translation>
-<translation id="432290197980158659">सर्वर ने ऐसा प्रमाणपत्र प्रस्तुत किया जिसका मिलान अंतर्निहित अपेक्षाओं से नहीं होता. आपकी सुरक्षा करने के लिए, ये अपेक्षाएं कुछ निश्चित, उच्च-सुरक्षा वेबसाइट के लिए शामिल की गई हैं. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
+<translation id="4312866146174492540">अवरुद्ध करें (डिफ़ॉल्ट)</translation>
 <translation id="4325863107915753736">लेख ढूंढ़ने में विफल</translation>
 <translation id="4326324639298822553">अपना समाप्ति दिनांक जांचें और फिर से कोशिश करें</translation>
 <translation id="4331708818696583467">सुरक्षित नहीं है</translation>
 <translation id="4356973930735388585">इस साइट पर मौजूद हमलावर आपके कंप्यूटर पर ऐसे खतरनाक प्रोग्राम इंस्टॉल करने की कोशिश कर सकते हैं जो आपकी जानकारी (उदाहरण के लिए, फ़ोटो, पासवर्ड, संदेश और क्रेडिट कार्ड) चुरा लेते हैं या उसे हटा देते हैं.</translation>
 <translation id="4372948949327679948">अपेक्षित <ph name="VALUE_TYPE" /> मान.</translation>
+<translation id="4377125064752653719">आपने <ph name="DOMAIN" /> तक पहुंचने का प्रयास किया, लेकिन सर्वर द्वारा प्रस्तुत प्रमाणपत्र को उसके जारीकर्ता द्वारा रद्द कर दिया गया है. इसका अर्थ है कि सर्वर द्वारा प्रस्तुत सुरक्षा प्रमाणिकता पर पूर्णतया विश्वास नहीं करना चाहिए. हो सकता है कि आप किसी हमलावर से बातचीत कर रहे हों.</translation>
 <translation id="4381091992796011497">उपयोगकर्ता नाम:</translation>
 <translation id="4394049700291259645">अक्षम करें</translation>
 <translation id="4406896451731180161">खोज परिणाम</translation>
+<translation id="4424024547088906515">यह सर्वर यह नहीं प्रमाणित कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र Chrome द्वारा विश्वसनीय नहीं है. ऐसा गलत कॉन्फ़िगरेशन या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन में अवरोध डालने के कारण हो सकता है.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> ने आपका लॉगिन प्रमाणपत्र स्वीकार नहीं किया है या हो सकता है कि प्रमाणपत्र उपलब्ध नहीं कराया गया हो.</translation>
 <translation id="443673843213245140">प्रॉक्‍सी का उपयोग अक्षम है लेकिन कोई स्‍पष्ट प्रॉक्‍सी कॉन्फ़िगरेशन निर्दिष्ट किया गया है.</translation>
-<translation id="4492190037599258964">'<ph name="SEARCH_STRING" />' के खोज परिणाम</translation>
 <translation id="4506176782989081258">सत्‍यापन गड़बड़ी: <ph name="VALIDATION_ERROR" /></translation>
 <translation id="4506599922270137252">सिस्टम व्यवस्थापक से संपर्क करें</translation>
 <translation id="450710068430902550">व्यवस्थापक के साथ साझा करना</translation>
 <translation id="4515275063822566619">कार्ड और पते Chrome और आपके Google खाते (<ph name="ACCOUNT_EMAIL" />) से मिलते हैं. आप उन्हें <ph name="BEGIN_LINK" />सेटिंग<ph name="END_LINK" /> में जाकर प्रबंधित कर सकते हैं.</translation>
 <translation id="4522570452068850558">विवरण</translation>
+<translation id="4552089082226364758">फ़्लैश</translation>
 <translation id="4558551763791394412">अपने एक्सटेंशन अक्षम करके देखें.</translation>
 <translation id="457875822857220463">वितरण</translation>
 <translation id="4587425331216688090">Chrome से पता निकालें?</translation>
-<translation id="4589078953350245614">आपने <ph name="DOMAIN" /> में पहुंचने का प्रयास किया, लेकिन सर्वर ने अमान्य प्रमाणपत्र प्रस्तुत किया. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4592951414987517459"><ph name="DOMAIN" /> से आपके कनेक्शन को किसी आधुनिक सिफ़र सुइट का उपयोग करके एन्‍क्रिप्‍ट किया गया है.</translation>
 <translation id="4594403342090139922">&amp;हटाना वापस लाएं</translation>
 <translation id="4619615317237390068">अन्य डिवाइस के टैब</translation>
 <translation id="4668929960204016307">,</translation>
+<translation id="467662567472608290">यह सर्वर यह प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसके सुरक्षा प्रमाणपत्र में त्रुटियां हैं. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन में अवरोध डालने के कारण हो सकता है.</translation>
+<translation id="4690462567478992370">अमान्य प्रमाणपत्र का उपयोग करना बंद करें</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">आपका कनेक्शन बाधित था</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows नेटवर्क निदान चलाकर देखें<ph name="END_LINK" /></translation>
@@ -424,36 +475,40 @@
 <translation id="4771973620359291008">अज्ञात गड़बड़ी आई.</translation>
 <translation id="4800132727771399293">अपना अवधि समाप्‍ति दिनांक और CVC जांचें और पुन: प्रयास करें</translation>
 <translation id="4803924862070940586"><ph name="CURRENCY_CODE" /> <ph name="FORMATTED_TOTAL_AMOUNT" /></translation>
+<translation id="4807049035289105102">आप इस समय <ph name="SITE" /> पर विज़िट नहीं कर सकते हैं क्योंकि वेबसाइट ने ऐसे अव्यवस्थित क्रेडेंशियल भेजे हैं जिन्हें Google Chrome संसाधित नहीं कर सकता. नेटवर्क की त्रुटियां और हमले आमतौर पर अस्थायी होते हैं, इसलिए संभवत: यह पेज बाद में काम करेगा.</translation>
 <translation id="4813512666221746211">नेटवर्क गड़बड़ी</translation>
 <translation id="4816492930507672669">पेज में फ़िट करें</translation>
 <translation id="483020001682031208">दिखाने के लिए कोई जीता-जागता वेब पेज नहीं है</translation>
 <translation id="4850886885716139402">देखें</translation>
 <translation id="4854362297993841467">वितरण का यह तरीका उपलब्ध नहीं है. कोई दूसरा तरीका आज़माएं.</translation>
 <translation id="4858792381671956233">आपने अपने अभिभावकों से पूछा था कि इस साइट पर जाना ठीक है या नहीं</translation>
+<translation id="4863764087567530506">यह सामग्री आपको सॉफ़्टवेयर इंस्‍टॉल करने या व्यक्तिगत जानकारी प्रकट करने के लिए भ्रमित कर सकती है. <ph name="BEGIN_LINK" />फिर भी दिखाएं<ph name="END_LINK" />.</translation>
 <translation id="4880827082731008257">खोज इतिहास</translation>
 <translation id="4895877746940133817"><ph name="TYPE_1" />, <ph name="TYPE_2" />, <ph name="TYPE_3" /></translation>
 <translation id="4914479371620770914">{URL_count,plural, =1{1 और वेब पेज}one{# और वेब पेज}other{# और वेब पेज}}</translation>
+<translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4923417429809017348">इस पेज का एक अज्ञात भाषा से <ph name="LANGUAGE_LANGUAGE" /> में अनुवाद किया गया है</translation>
 <translation id="4923459931733593730">भुगतान</translation>
 <translation id="4926049483395192435">निर्दिष्ट किया जाना चाहिए.</translation>
 <translation id="495170559598752135">क्रियाएं</translation>
 <translation id="4958444002117714549">सूची विस्तृत करें</translation>
-<translation id="4962322354953122629">यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र Chrome द्वारा विश्वसनीय नहीं है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
+<translation id="4974590756084640048">चेतावनियां फिर से सक्षम करें</translation>
 <translation id="4989809363548539747">यह प्लग इन समर्थित नहीं है</translation>
 <translation id="5002932099480077015">यदि सक्षम किया हुआ हो, तो Chrome फ़ॉर्म को तेज़ी से भरने के लिए इस डिवाइस पर आपके कार्ड की एक प्रति संग्रहित करेगा.</translation>
 <translation id="5018422839182700155">यह पेज खुल नहीं पा रहा है</translation>
 <translation id="5019198164206649151">बैकिंग संग्रह खराब स्थिति में है</translation>
 <translation id="5023310440958281426">अपने व्यवस्थापक की नीतियां देखें</translation>
-<translation id="5029568752722684782">स्‍पष्‍ट प्रतिलिपि</translation>
+<translation id="5029568752722684782">स्‍पष्‍ट कॉपी</translation>
 <translation id="5031870354684148875">Google अनुवाद के बारे में</translation>
+<translation id="5039804452771397117">अनुमति दें</translation>
 <translation id="5040262127954254034">निजता</translation>
 <translation id="5045550434625856497">ग़लत पासवर्ड</translation>
 <translation id="5056549851600133418">आपके लिए लेख</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />प्रॉक्सी पते की जांच करें<ph name="END_LINK" /></translation>
-<translation id="5076731569460970710">{COUNT,plural, =0{कोई कुकी नहीं}=1{1 साइट कुकी का उपयोग करती है. }one{# साइटें कुकी का उपयोग करती हैं. }other{# साइटें कुकी का उपयोग करती हैं. }}</translation>
 <translation id="5087286274860437796">सर्वर का प्रमाण पत्र इस समय मान्य नहीं है.</translation>
 <translation id="5087580092889165836">कार्ड जोड़ें</translation>
 <translation id="5089810972385038852">राज्य</translation>
+<translation id="5094747076828555589">यह सर्वर यह नहीं प्रमाणित कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र Chromium द्वारा विश्वसनीय नहीं है. ऐसा गलत कॉन्फ़िगरेशन या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन में अवरोध डालने के कारण हो सकता है.</translation>
 <translation id="5095208057601539847">प्रांत</translation>
 <translation id="5115563688576182185">(64-बिट)</translation>
 <translation id="5141240743006678641">समन्वयित पासवर्ड अपने Google प्रमाणिकता के साथ एन्क्रिप्ट करें</translation>
@@ -469,24 +524,24 @@
 <translation id="5222812217790122047">ईमेल आवश्यक है</translation>
 <translation id="5251803541071282808">क्लाउड</translation>
 <translation id="5277279256032773186">कार्यस्थल पर Chrome का उपयोग कर रहे हैं? कंपनियां अपने कर्मचारियों के लिए Chrome सेटिंग प्रबंधित कर सकती हैं. और जानें</translation>
+<translation id="5297526204711817721">इस साइट से आपका कनेक्शन निजी नहीं है. VR मोड से किसी भी समय बाहर निकलने के लिए, हेडसेट निकालें और वापस जाएं दबाएं.</translation>
 <translation id="5299298092464848405">नीति पार्स करने में गड़बड़ी</translation>
-<translation id="5300589172476337783">दिखाएं</translation>
 <translation id="5308689395849655368">क्रैश की रिपोर्ट करना अक्षम कर दिया गया है.</translation>
 <translation id="5317780077021120954">सहेजें</translation>
 <translation id="5327248766486351172">नाम</translation>
-<translation id="5337705430875057403"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> पर मौजूद हमलावर आपको धोखा देकर आपसे कुछ जोखिम वाला काम करा सकते हैं, जैसे सॉफ़्टवेयर इंस्टॉल करना या आपकी व्यक्तिगत जानकारी (उदाहरण के लिए, पासवर्ड, फ़ोन नंबर या क्रेडिट कार्ड) प्रकट करना.</translation>
-<translation id="5359637492792381994">यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र इस समय मान्य नहीं है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
+<translation id="5355557959165512791">आप इस समय <ph name="SITE" /> पर नहीं जा सकते हैं क्योंकि उसका प्रमाणपत्र निरस्त कर दिया गया है. नेटवर्क की गड़बड़ियां और हमले आमतौर पर कुछ देर के लिए होते हैं, इसलिए यह पेज शायद बाद में ठीक से काम करेगा.</translation>
 <translation id="536296301121032821">नीति सेटिंग संग्रहित करने में विफल</translation>
 <translation id="5386426401304769735">इस साइट की प्रमाणपत्र श्रृंखला में, SHA-1 का उपयोग करके हस्ताक्षर किया गया प्रमाणपत्र शामिल है.</translation>
 <translation id="5402410679244714488">समाप्ति दिनांक: <ph name="EXPIRATION_DATE_ABBR" />, पिछली बार एक वर्ष से पहले उपयोग किया गया</translation>
+<translation id="540969355065856584">यह सर्वर यह प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाण पत्र इस समय मान्य नहीं है. ऐसा गलत कॉन्फ़िगरेशन या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन में अवरोध डालने के कारण हो सकता है.</translation>
 <translation id="5421136146218899937">ब्राउज़िंग डेटा साफ़ करें...</translation>
 <translation id="5430298929874300616">बुकमार्क निकालें</translation>
 <translation id="5431657950005405462">आपकी फ़ाइल नहीं मिली</translation>
-<translation id="5435775191620395718">इस डिवाइस का इतिहास दिखाया जा रहा है. <ph name="BEGIN_LINK" />अधिक जानें<ph name="END_LINK" />.</translation>
 <translation id="5439770059721715174">"<ph name="ERROR_PATH" />" पर स्कीमा सत्यापन गड़बड़ी: <ph name="ERROR" /></translation>
 <translation id="5452270690849572955">यह <ph name="HOST_NAME" /> पेज प्राप्त नहीं किया जा सकता</translation>
 <translation id="5455374756549232013">खराब नीति टाइमस्टैम्प</translation>
 <translation id="5455790498993699893"><ph name="TOTAL_MATCHCOUNT" /> में से <ph name="ACTIVE_MATCH" /></translation>
+<translation id="5457113250005438886">अमान्य</translation>
 <translation id="5470861586879999274">&amp;संपादित करना फिर से करें</translation>
 <translation id="54817484435770891">मान्य पता जोड़ें</translation>
 <translation id="5492298309214877701">कंपनी, संगठन या विद्यालय के इंट्रानेट पर इस साइट का URL एक बाहरी वेबसाइट जैसा है.
@@ -503,6 +558,8 @@
 <translation id="5571083550517324815">इस पते से पिक अप नहीं किया जा सकता. कोई दूसरा पता चुनें.</translation>
 <translation id="5572851009514199876">कृपया Chrome शुरू करके उसमें प्रवेश करें ताकि Chrome देख सके कि क्या आपके पास यह साइट एक्सेस करने की अनुमति है.</translation>
 <translation id="5580958916614886209">अपना समाप्ति माह जांचें और फिर से कोशिश करें</translation>
+<translation id="5586446728396275693">कोई सहेजा गया पता नहीं है</translation>
+<translation id="5595485650161345191">पता संपादित करें</translation>
 <translation id="560412284261940334">प्रबंधन समर्थित नहीं</translation>
 <translation id="5610142619324316209">कनेक्शन की जांच करें</translation>
 <translation id="5610807607761827392">आप <ph name="BEGIN_LINK" />सेटिंग<ph name="END_LINK" /> में कार्ड और पते प्रबंधित कर सकते हैं.</translation>
@@ -510,15 +567,18 @@
 <translation id="5622887735448669177">क्या आप इस साइट को छोड़ना चाहते हैं?</translation>
 <translation id="5629630648637658800">नीति सेटिंग लोड करने में विफल</translation>
 <translation id="5631439013527180824">अमान्य डिवाइस प्रबंधन टोकन</translation>
+<translation id="5633066919399395251">इस समय <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> पर मौजूद हमलावर आपके कंप्यूटर पर ऐसे खतरनाक प्रोग्राम इंस्टॉल करने की कोशिश कर सकते हैं जो आपकी जानकारी (उदाहरण के लिए, फ़ोटो, पासवर्ड, संदेश और क्रेडिट कार्ड) चुराते हैं या उसे हटा देते हैं. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" /></translation>
+<translation id="5646376287012673985">स्थान</translation>
+<translation id="5659593005791499971">ईमेल</translation>
 <translation id="5669703222995421982">खास आपके लिए बनी सामग्री पाएं</translation>
 <translation id="5675650730144413517">यह पेज काम नहीं कर रहा है</translation>
-<translation id="5677928146339483299">अवरोधित</translation>
-<translation id="5694783966845939798">आपने <ph name="DOMAIN" /> पर पहुंचने का प्रयास किया, लेकिन सर्वर ने कमज़ोर हस्ताक्षर एल्गोरिदम के उपयोग से हस्ताक्षरित प्रमाणपत्र (जैसे कि SHA-1) प्रस्तुत किया. इसका अर्थ है कि सर्वर द्वारा प्रस्तुत सुरक्षा क्रेडेंशियल नकली हो सकते हैं और हो सकता है कि सर्वर आपका अपेक्षित सर्वर ना हो (हो सकता है आप किसी हमलावर से बातचीत कर रहे हों). <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="5710435578057952990">इस वेबसाइट की पहचान सत्यापित नहीं की गई है.</translation>
+<translation id="5713016350996637505">भ्रामक सामग्री ब्लॉक की गई</translation>
 <translation id="5720705177508910913">वर्तमान उपयोगकर्ता</translation>
 <translation id="5732392974455271431">आपके अभिभावक इसे आपके लिए अनवरोधित कर सकते हैं</translation>
 <translation id="5763042198335101085">मान्य ईमेल पता डालें</translation>
 <translation id="5765072501007116331">वितरण के तरीके और ज़रूरतें देखने के लिए, कोई पता चुनें</translation>
+<translation id="5778550464785688721">MIDI डिवाइस पूर्ण नियंत्रण</translation>
 <translation id="5784606427469807560">आपके कार्ड की पुष्टि करते समय समस्‍या हुई. अपना इंटरनेट कनेक्‍शन जांचें और पुन: प्रयास करें.</translation>
 <translation id="5785756445106461925">इसके अतिरिक्त, इस पेज में ऐसे अन्य संसाधन भी शामिल हैं, जो सुरक्षित नहीं हैं. ट्रांज़िट में होने के दौरान ये संसाधन अन्य लोगों द्वारा देखे जा सकते हैं और पेज का स्वरूप बदलने के लिए किसी हमवलावर द्वारा इनमें बदलाव किए जा सकते हैं.</translation>
 <translation id="5786044859038896871">क्या अपनी कार्ड जानकारी भरना चाहते हैं?</translation>
@@ -527,14 +587,14 @@
 <translation id="5813119285467412249">&amp;जोड़ना फिर से करें</translation>
 <translation id="5814352347845180253">आप <ph name="SITE" /> और कुछ अन्य साइटों से प्रीमियम सामग्री की एक्सेस खो सकते हैं.</translation>
 <translation id="5838278095973806738">आपको इस साइट पर कोई भी संवेदनशील जानकारी (उदाहरण के लिए, पासवर्ड या क्रेडिट कार्ड) नहीं डालनी चाहिए, क्योंकि उसे हमलावर चुरा सकते हैं.</translation>
-<translation id="5843436854350372569">आपने <ph name="DOMAIN" /> तक पहुंचने का प्रयास किया, लेकिन सर्वर ने कमज़ोर कुंजी वाला प्रमाणपत्र प्रस्‍तुत किया. संभवत: हमलावर ने निजी कुंजी का पता लगा लिया है और हो सकता है कि सर्वर आपका अपेक्षित सर्वर ना हो (हो सकता है कि आप किसी हमलावर से बातचीत कर रहे हों). <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="5869405914158311789">इस साइट तक नहीं पहुंचा जा सकता</translation>
 <translation id="5869522115854928033">सहेजे गए पासवर्ड</translation>
 <translation id="5872918882028971132">अभिभावक सुझाव</translation>
 <translation id="5901630391730855834">पीला</translation>
+<translation id="5908541034548427511"><ph name="TYPE_1" /> (सिंक किया गया)</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 उपयोग में है}one{# उपयोग में हैं}other{# उपयोग में हैं}}</translation>
 <translation id="5926846154125914413">आप कुछ साइटों से प्रीमियम सामग्री की एक्सेस खो सकते हैं.</translation>
 <translation id="5959728338436674663">Google को कुछ <ph name="BEGIN_WHITEPAPER_LINK" />सिस्टम संबंधी जानकारी और पेज सामग्री<ph name="END_WHITEPAPER_LINK" /> अपने आप भेजें ताकि खतरनाक ऐप्लिकेशन और साइटों का पता लगाने में सहायता मिल सके. <ph name="PRIVACY_PAGE_LINK" /></translation>
-<translation id="5966707198760109579">सप्ताह</translation>
 <translation id="5967867314010545767">इतिहास से निकालें</translation>
 <translation id="5975083100439434680">ज़ूम आउट</translation>
 <translation id="598637245381783098">भुगतान ऐप्लिकेशन नहीं खोला जा सकता</translation>
@@ -543,21 +603,29 @@
 <translation id="6008256403891681546">JCB</translation>
 <translation id="6016158022840135739">{COUNT,plural, =1{पेज 1}one{पेज #}other{पेज #}}</translation>
 <translation id="6017514345406065928">हरा</translation>
+<translation id="6017850046339264347"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> पर मौजूद हमलावर ऐसे भ्रामक ऐप्लिकेशन इंस्टॉल कर सकते हैं जो कुछ और होने का दावा करते हैं या ऐसा डेटा एकत्रित करते हैं जिसका उपयोग आप पर नज़र रखने के लिए किया जा सके. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" /></translation>
+<translation id="6025416945513303461"><ph name="TYPE_1" />, <ph name="TYPE_2" />, <ph name="TYPE_3" /> (सिंक किए गए)</translation>
 <translation id="6027201098523975773">नाम डालें</translation>
 <translation id="6040143037577758943">बंद करें</translation>
 <translation id="6042308850641462728">अधिक</translation>
+<translation id="6047233362582046994">अगर आप अपनी सुरक्षा में होने वाले जोखिमों को समझते हैं, तो खतरनाक ऐप्लिकेशन निकाले जाने से पहले आप <ph name="BEGIN_LINK" />इस साइट पर जा<ph name="END_LINK" /> सकते हैं.</translation>
+<translation id="6051221802930200923">आप इस समय <ph name="SITE" /> पर नहीं जा सकते हैं क्योंकि वेबसाइट प्रमाणपत्र पिनिंग का उपयोग करती है. नेटवर्क की गड़बड़ियां और हमले आमतौर पर कुछ देर के लिए होते हैं, इसलिए यह पेज शायद बाद में ठीक से काम करेगा.</translation>
 <translation id="6060685159320643512">सावधान, ये प्रयोग नुकसान पहुंचा सकते हैं</translation>
-<translation id="6108835911243775197">{COUNT,plural, =0{कोई नहीं}=1{1}one{#}other{#}}</translation>
+<translation id="6080696365213338172">आपने व्यवस्थापक द्वारा प्रदत्त प्रमाणपत्र के उपयोग से सामग्री एक्सेस की है. आपके द्वारा <ph name="DOMAIN" /> को प्रदान किया गया डेटा आपके व्यवस्थापक द्वारा बीच में रोका जा सकता है.</translation>
+<translation id="6144381551823904650">{COUNT,plural, =0{कुछ नहीं}=1{1 पासवर्ड (सिंक किया हुआ)}one{# पासवर्ड (सिंक किए हुए)}other{# पासवर्ड (सिंक किए हुए)}}</translation>
 <translation id="6146055958333702838">सभी केबल जांचें और आपके द्वारा उपयोग किए जा रहे सभी राउटर, मॉडेम या अन्य नेटवर्क
     डिवाइस को रीबूट करें.</translation>
 <translation id="614940544461990577">यह आज़माकर देखें:</translation>
 <translation id="6151417162996330722">सर्वर प्रमाणपत्र की मान्‍यता अवधि बहुत लंबी है.</translation>
 <translation id="6157877588268064908">शिपिंग के तरीके और ज़रूरतें देखने केे लिए, कोई पता चुनें</translation>
+<translation id="6158003235852588289">Google सुरक्षित ब्राउज़िंग को <ph name="SITE" /> पर हाल ही में फ़िशिंग का पता चला है. फ़िशिंग साइटें आपको भ्रमित करने के लिए अन्य वेबसाइटें होने का दावा करती हैं.</translation>
 <translation id="6165508094623778733">अधिक जानें</translation>
+<translation id="6169916984152623906">अब आप निजी रूप से ब्राउज़ कर सकते हैं और इस डिवाइस का उपयोग करने वाले दूसरे लोगों को आपकी गतिविधि दिखाई नहीं देगी. लेकिन डाउनलोड और बुकमार्क सेव होंगे.</translation>
 <translation id="6177128806592000436">इस साइट से आपका कनेक्‍शन सुरक्षित नहीं है</translation>
 <translation id="6184817833369986695">(समानता रखने वाले लोग: <ph name="UPDATE_COHORT_NAME" />)</translation>
 <translation id="6203231073485539293">अपना इंटरनेट कनेक्शन जांचें</translation>
 <translation id="6218753634732582820">क्रोमियम से पता निकालें?</translation>
+<translation id="6221345481584921695">Google सुरक्षित ब्राउज़िंग को <ph name="SITE" /> पर हाल ही में <ph name="BEGIN_LINK" />मैलवेयर का पता चला<ph name="END_LINK" /> है. आमतौर पर सुरक्षित रहने वाली वेबसाइटें कभी-कभी मैलेवयर से संक्रमित हो जाती हैं. दुर्भावनापूर्ण सामग्री <ph name="SUBRESOURCE_HOST" /> से आती है, जो कि एक ज्ञात मैलवेयर वितरक है.</translation>
 <translation id="6251924700383757765">निजता नीति</translation>
 <translation id="6254436959401408446">यह पेज खोलने के लिए ज़रूरी जगह नहीं है</translation>
 <translation id="625755898061068298">आपने इस साइट के लिए सुरक्षा चेतावनियों को अक्षम करना चुना है.</translation>
@@ -583,15 +651,14 @@
 <translation id="6404511346730675251">बुकमार्क संपादित करें</translation>
 <translation id="6410264514553301377"><ph name="CREDIT_CARD" /> का समाप्ति दिनांक और CVC डालें</translation>
 <translation id="6414888972213066896">आपने अपने अभिभावक से पूछा था कि इस साइट पर जाना ठीक है या नहीं</translation>
-<translation id="6416403317709441254">आप इस समय <ph name="SITE" /> पर विज़िट नहीं कर सकते क्योंकि वेबसाइट ने ऐसे अव्यवस्थित क्रेडेंशियल भेजे हैं जिन्हें क्रोमियम संसाधित नहीं कर सकता. नेटवर्क की गड़बड़ियां और हमले आमतौर पर अस्थायी होते हैं, इसलिए संभवत: पेज बाद में काम करेगा. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="6417515091412812850">प्रमाणपत्र को रद्द किया गया है या नहीं यह जांच करने में असमरर्थ.</translation>
 <translation id="6433490469411711332">संपर्क जानकारी संपादित करें</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> ने कनेक्ट करने से मना कर दिया है.</translation>
 <translation id="6446608382365791566">और जानकारी जोड़ें</translation>
+<translation id="6447842834002726250">कुकी</translation>
 <translation id="6451458296329894277">फ़ार्म पुन: जमा करने की दुबारा पूछें</translation>
 <translation id="6456339708790392414">आपका भुगतान</translation>
 <translation id="6458467102616083041">नीति के द्वारा डिफ़ॉल्‍ट खोज अक्षम कर दिए जाने के कारण उपेक्षित.</translation>
-<translation id="6462969404041126431">यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; हो सकता है इसका सुरक्षा प्रमाणपत्र निरस्त कर दिया गया हो. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="647261751007945333">डिवाइस नीतियां</translation>
 <translation id="6477321094435799029">Chrome को इस पेज पर असामान्य कोड मिला था और उसने आपकी व्यक्तिगत जानकारी (उदाहरण के लिए, पासवर्ड, फ़ोन नंबर और क्रेडिट कार्ड) की सुरक्षा करने के लिए उसे अवरुद्ध कर दिया है.</translation>
 <translation id="6489534406876378309">क्रैश अपलोड करना प्रारंभ करें</translation>
@@ -603,20 +670,19 @@
 <translation id="6556915248009097796">खत्म होने की तारीख: <ph name="EXPIRATION_DATE_ABBR" />, पिछली बार <ph name="LAST_USED_DATE_NO_DETAIL" /> को उपयोग किया गया</translation>
 <translation id="6563469144985748109">आपके प्रबंधक ने अभी तक इसकी स्वीकृति नहीं दी है</translation>
 <translation id="6569060085658103619">आप एक एक्सटेंशन पेज देख रहे हैं</translation>
-<translation id="6593753688552673085"><ph name="UPPER_ESTIMATE" /> से कम</translation>
+<translation id="657639383826808334">यह सामग्री आपके डिवाइस पर ऐसा खतरनाक सॉफ़्टवेयर इंस्टॉल करने की कोशिश कर सकती है जो आपकी जानकारी चुरा सकता है या उसे हटा सकता है. <ph name="BEGIN_LINK" />फिर भी दिखाएं<ph name="END_LINK" />.</translation>
 <translation id="6596325263575161958">सुरक्षित तरीका विकल्प</translation>
 <translation id="662080504995468778">इसपर रहें</translation>
 <translation id="6626291197371920147">मान्य कार्ड नंबर जोड़ें</translation>
 <translation id="6628463337424475685"><ph name="ENGINE" /> खोज</translation>
+<translation id="6630809736994426279">इस समय <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> पर मौजूद हमलावर आपके Mac पर ऐसे खतरनाक प्रोग्राम इंस्टॉल करने की कोशिश कर सकते हैं जो आपकी जानकारी (उदाहरण के लिए, फ़ोटो, पासवर्ड, संदेश और क्रेडिट कार्ड) चुराते हैं या उसे हटा देते हैं. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="6644283850729428850">यह नीति हटा दी गई है.</translation>
-<translation id="6652240803263749613">यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र आपके कंप्यूटर के ऑपरेटिंग सिस्टम द्वारा विश्वसनीय नहीं है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="6671697161687535275">क्रोमियम से फ़ॉर्म सुझाव निकालें?</translation>
 <translation id="6685834062052613830">प्रस्थान करें और सेटअप पूरा करें</translation>
 <translation id="6710213216561001401">पिछला</translation>
 <translation id="6710594484020273272">&lt;खोज शब्द लिखें&gt;</translation>
 <translation id="6711464428925977395">प्रॉक्सी सर्वर के साथ कुछ गलत है या पता गलत है.</translation>
 <translation id="6727102863431372879">सेट करें</translation>
-<translation id="6731320287533051140">{COUNT,plural, =0{कोई नहीं}=1{1 आइटम}one{# आइटम}other{# आइटम}}</translation>
 <translation id="674375294223700098">अज्ञात सर्वर प्रमाणपत्र गड़बड़ी.</translation>
 <translation id="6753269504797312559">नीति मान</translation>
 <translation id="6757797048963528358">आपका डिवाइस निष्क्रिय हो गया है.</translation>
@@ -624,6 +690,8 @@
 <translation id="6810899417690483278">कस्टमाइज़ेशन आईडी</translation>
 <translation id="6820686453637990663">CVC</translation>
 <translation id="6824266427216888781">क्षेत्र डेटा लोड नहीं हो सका</translation>
+<translation id="6825578344716086703">आपने <ph name="DOMAIN" /> तक पहुंचने की कोशिश की थी, लेकिन सर्वर ने कमज़ोर हस्ताक्षर एल्गोरिदम (जैसे कि SHA-1) वाला प्रमाणपत्र प्रस्तुत किया. इसका मतलब है कि सर्वर की ओर से प्रस्तुत किए गए सुरक्षा क्रेडेंशियल नकली हो सकते हैं और हो सकता है कि सर्वर आपका अपेक्षित सर्वर न हो (हो सकता है कि आप किसी हमलावर से बातचीत कर रहे हों).</translation>
+<translation id="6830728435402077660">सुरक्षित नहीं है</translation>
 <translation id="6831043979455480757">अनुवाद करें</translation>
 <translation id="6839929833149231406">क्षेत्र</translation>
 <translation id="6874604403660855544">&amp;जोड़ना फिर से करें</translation>
@@ -631,6 +699,7 @@
 <translation id="6895330447102777224">आपके कार्ड की पुष्टि हो गई है</translation>
 <translation id="6897140037006041989">उपयोगकर्ता एजेंट</translation>
 <translation id="6915804003454593391">उपयोगकर्ता:</translation>
+<translation id="6945221475159498467">चुनें</translation>
 <translation id="6948701128805548767">पिकअप के तरीके और ज़रूरतें देखने के लिए, कोई पता चुनें</translation>
 <translation id="6957887021205513506">सर्वर का प्रमाणपत्र फर्जी दिखाई देता है.</translation>
 <translation id="6965382102122355670">ठीक</translation>
@@ -639,15 +708,16 @@
 <translation id="6973656660372572881">फ़िक्‍स्‍ड प्रॉक्‍सी सर्वर और .pac स्‍क्रिप्‍ट URL दोनों ही निर्दिष्ट हैं.</translation>
 <translation id="6989763994942163495">अतिरिक्त सेटिंग दिखाएं...</translation>
 <translation id="7000990526846637657">कोई इतिहास प्रविष्टि नहीं मिली</translation>
-<translation id="7009986207543992532">आपने <ph name="DOMAIN" /> पर पहुंचने का प्रयास किया, लेकिन सर्वर ने ऐसा प्रमाणपत्र प्रस्तुत किया जिसकी सत्यापन अवधि इतनी लंबी है कि वह विश्वसनीय नहीं लगती है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7012363358306927923">China UnionPay</translation>
 <translation id="7012372675181957985">आपके Google खाते में <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> पर ब्राउज़िंग इतिहास के अन्य रूप उपलब्ध हो सकते हैं</translation>
 <translation id="7029809446516969842">पासवर्ड</translation>
+<translation id="7050187094878475250">आपने <ph name="DOMAIN" /> तक पहुंचने का प्रयास किया था, लेकिन सर्वर ने ऐसा प्रमाणपत्र प्रस्‍तुत किया जिसकी मान्‍यता अवधि विश्‍वसनीय होने के लिए बहुत लंबी है.</translation>
+<translation id="7053983685419859001">अवरोधित करें</translation>
 <translation id="7064851114919012435">संपर्क जानकारी</translation>
 <translation id="7079718277001814089">इस साइट में मैलवेयर है</translation>
 <translation id="7087282848513945231">काउंटी</translation>
-<translation id="7088615885725309056">इससे पुराने</translation>
 <translation id="7090678807593890770"><ph name="LINK" /> के लिए Google में खोज करें</translation>
+<translation id="7108819624672055576">किसी एक्सटेंशन ने अनुमति दी है</translation>
 <translation id="7119414471315195487">दूसरे टैब या प्रोग्राम बंद करें</translation>
 <translation id="7129409597930077180">इस पते पर शिप नहीं किया जा सकता. कोई दूसरा पता चुनें.</translation>
 <translation id="7138472120740807366">वितरण का तरीका</translation>
@@ -665,20 +735,18 @@
 <translation id="7220786058474068424">संसाधित हो रहा है</translation>
 <translation id="724691107663265825">साइट में आगे मैलवेयर हैं</translation>
 <translation id="724975217298816891">अपने कार्ड विवरण अपडेट करने के लिए <ph name="CREDIT_CARD" /> का समय समाप्ति दिनांक और CVC डालें. आपकी तरफ से पुष्टि हो जाने पर, आपके कार्ड के विवरण इस साइट के साथ साझा किए जाएंगे.</translation>
-<translation id="725866823122871198"><ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> से एक निजी कनेक्‍शन स्‍थापित नहीं किया जा सकता क्‍योंकि आपके कंप्‍यूटर का दिनांक और समय (<ph name="DATE_AND_TIME" />) गलत है.</translation>
+<translation id="7260504762447901703">एक्सेस निरस्त करें</translation>
 <translation id="7275334191706090484">प्रबंधित बुकमार्क</translation>
 <translation id="7298195798382681320">सुझाए गए</translation>
 <translation id="7309308571273880165">क्रैैश रिपोर्ट <ph name="CRASH_TIME" /> बजे कैप्चर की गई (उपयोगकर्ता द्वारा अपलोड करने का अनुरोध किया गया, अभी तक अपलोड नहीं किया गया)</translation>
 <translation id="7334320624316649418">&amp;पुन: क्रमित करना फिर से करें</translation>
 <translation id="733923710415886693">प्रमाणपत्र पारदर्शिता के माध्यम से सर्वर के प्रमाणपत्र को प्रकट नहीं किया गया.</translation>
-<translation id="7351800657706554155">आप इस समय <ph name="SITE" /> पर विज़िट नहीं कर सकते क्योंकि उसका प्रमाणपत्र निरस्त कर दिया गया है. नेटवर्क की गड़बड़ियां और हमले आमतौर पर अस्थायी होते हैं, इसलिए संभवत: यह पेज बाद में काम करने लगेगा. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7353601530677266744">आदेश पंक्ति</translation>
 <translation id="7372973238305370288">खोज परिणाम</translation>
 <translation id="7377249249140280793"><ph name="RELATIVE_DATE" /> - <ph name="FULL_DATE" /></translation>
 <translation id="7378627244592794276">नहीं</translation>
 <translation id="7378810950367401542">/</translation>
 <translation id="7390545607259442187">कार्ड की पुष्टि करें</translation>
-<translation id="7394102162464064926">क्या आप वाकई इन पृष्ठों को अपने इतिहास से हटाना चाहते हैं? श्श्श! गुप्त मोड <ph name="SHORTCUT_KEY" /> अगली बार उपयोगी हो सकता है.</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7419106976560586862">प्रोफ़ाइल पथ</translation>
 <translation id="7424977062513257142">इस वेबपृष्‍ठ पर एम्‍बेड किए गए पृष्‍ठ का कहना है:</translation>
@@ -686,6 +754,7 @@
 <translation id="7444046173054089907">यह साइट अवरोधित है</translation>
 <translation id="7445762425076701745">जिस सर्वर से आप कनेक्‍ट हैं उसकी पहचान पूर्णत: सत्‍यापित नहीं की जा सकती. आपने केवल आपके नेटवर्क में ही मान्‍य नाम का उपयोग कर किसी सर्वर से कनेक्‍ट किया है, जिसकी मान्‍यता का सत्‍यापन कोई बाह्य प्रमाणपत्र प्राधिकरण नहीं करता है. जैसा कि कुछ प्रमाणपत्र प्राधिकरण इन नामों के लिए प्रमाणपत्र जारी कर देंगे, और इस पर ध्यान नहीं दिया जाएगा कि यह सुनिश्‍चित करने का कोई तरीका नहीं है कि आप नियत वेबसाइट से कनेक्‍ट हैं, न कि किसी आक्रमणकर्ता से.</translation>
 <translation id="7451311239929941790">इस समस्या के बारे में <ph name="BEGIN_LINK" />अधिक जानें<ph name="END_LINK" />.</translation>
+<translation id="7455133967321480974">वैश्विक डिफ़ॉल्ट का उपयोग करें (अवरोधित करें)</translation>
 <translation id="7460163899615895653">आपके अन्य डिवाइस के हाल ही के टैब यहां दिखाई देंगे</translation>
 <translation id="7469372306589899959">कार्ड की पुष्टि की जा रही है</translation>
 <translation id="7481312909269577407">आगे भेजें</translation>
@@ -693,36 +762,43 @@
 <translation id="7508255263130623398">वापस लौटाया हुआ नीति डिवाइस आईडी खाली है या उसका मिलान वर्तमान डिवाइस आईडी से नहीं होता है</translation>
 <translation id="7514365320538308">डाउनलोड करें</translation>
 <translation id="7518003948725431193">इस वेब पते के लिए कोई वेब पेज नहीं मिला था: <ph name="URL" /></translation>
+<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7535087603100972091">मान</translation>
 <translation id="7537536606612762813">आवश्यक</translation>
+<translation id="7542403920425041731">आपकी तरफ से पुष्टि हो जाने पर, आपके कार्ड के विवरण इस साइट के साथ साझा किए जाएंगे.</translation>
 <translation id="7542995811387359312">स्वतः क्रेडिट कार्ड भरना अक्षम किया गया है क्योंकि यह फ़ॉर्म किसी सुरक्षित कनेक्शन का उपयोग नहीं करता है.</translation>
 <translation id="7543525346216957623">अपने अभिभावक से पूछें</translation>
 <translation id="7549584377607005141">इस वेबपेज को आपके द्वारा पहले दर्ज किए गए डेटा की आवश्यकता है, ताकि इसे सही रूप में प्रदर्शित किया जा सके. आप यह डेटा पुन: भेज सकते हैं, लेकिन ऐसा करके आप इस पेज द्वारा पहले की जा चुकी कोई कार्यवाही दोहराएंगे.</translation>
 <translation id="7552846755917812628">ये टिप्स आज़माएं:</translation>
 <translation id="7554791636758816595">नया टैब</translation>
+<translation id="7567204685887185387">यह सर्वर यह प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; हो सकता है इसका सुरक्षा प्रमाणपत्र धोखे से जारी किया गया हो. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी आक्रमणकर्ता द्वारा आपके कनेक्शन में अवरोध डालने के कारण हो सकता है.</translation>
+<translation id="7567794288553138946">{CONTACT,plural, =1{<ph name="CONTACT_PREVIEW" /> और <ph name="NUMBER_OF_ADDITIONAL_CONTACTS" /> अन्य}one{<ph name="CONTACT_PREVIEW" /> और <ph name="NUMBER_OF_ADDITIONAL_CONTACTS" /> अन्य}other{<ph name="CONTACT_PREVIEW" /> और <ph name="NUMBER_OF_ADDITIONAL_CONTACTS" /> अन्य}}</translation>
 <translation id="7568593326407688803">यह पृष्ठ<ph name="ORIGINAL_LANGUAGE" />में है क्या आप इसका अनुवाद करना चाहेंगे?</translation>
 <translation id="7569952961197462199">Chrome से क्रेडिट कार्ड निकालें?</translation>
 <translation id="7569983096843329377">काला</translation>
 <translation id="7578104083680115302">Google के साथ सहेजे गए कार्ड का उपयोग करके डिवाइसों में मौजूद साइटों और ऐप्‍स पर तुरंत भुगतान करें.</translation>
 <translation id="7588950540487816470">जीता-जागता वेब</translation>
 <translation id="7592362899630581445">सर्वर का प्रमाणपत्र नाम संबंधी प्रतिबंधों का उल्लंघन करता है.</translation>
+<translation id="7598391785903975535"><ph name="UPPER_ESTIMATE" /> से कम</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> वर्तमान में इस अनुरोध का प्रबंधन कर पाने में असमर्थ है.</translation>
 <translation id="7600965453749440009">कभी भी <ph name="LANGUAGE" /> का अनुवाद न करें</translation>
 <translation id="7610193165460212391"><ph name="VALUE" /> मान सीमा से बाहर है.</translation>
 <translation id="7613889955535752492">समय-सीमा समाप्त: <ph name="EXPIRATION_MONTH" />/<ph name="EXPIRATION_YEAR" /></translation>
 <translation id="7615602087246926389">आपके पास पहले से ऐसा डेटा है, जिसे आपके Google खाते के पासवर्ड के किसी भिन्‍न वर्शन का उपयोग करके एन्क्रिप्ट किया गया है. कृपया उसे नीचे लिखें.</translation>
-<translation id="7634554953375732414">इस साइट से आपका कनेक्‍शन निजी नहीं है.</translation>
 <translation id="7637571805876720304">क्रोमियम से क्रेडिट कार्ड निकालें?</translation>
 <translation id="765676359832457558">उन्नत सेटिंग्स छिपाएं...</translation>
 <translation id="7658239707568436148">अभी नहीं</translation>
+<translation id="7662298039739062396">सेटिंग किसी एक्सटेंशन से नियंत्रित है</translation>
 <translation id="7667346355482952095">वापस लौटा हुआ नीति टोकन खाली है या उसका मिलान वर्तमान टोकन से नहीं होता</translation>
 <translation id="7668654391829183341">अज्ञात डिवाइस</translation>
 <translation id="7669271284792375604">इस साइट पर मौजूद हमलावर आपके ब्राउज़िंग अनुभव को हानि पहुंचा सकने वाले प्रोग्राम इंस्टॉल करने के लिए आपको भ्रमित कर सकते हैं (उदाहरण के लिए, आपके मुखपृष्ठ को बदलकर या आपकी विज़िट की जा रहीं साइट पर अतिरिक्त विज्ञापन दिखाकर).</translation>
 <translation id="7674629440242451245">शानदार नई Chrome सुविधाओं में रूचि है? तो chrome.com/dev पर हमारा डेव चैनल आज़माएं.</translation>
 <translation id="7682287625158474539">शिपिंग</translation>
+<translation id="7701040980221191251">कुछ नहीं</translation>
 <translation id="7704050614460855821"><ph name="BEGIN_LINK" /><ph name="SITE" /> में आगे बढ़ें (असुरक्षित)<ph name="END_LINK" /></translation>
+<translation id="7714464543167945231">प्रमाणपत्र</translation>
+<translation id="7716147886133743102">आपके व्यवस्थापक की ओर से अवरोधित है</translation>
 <translation id="7716424297397655342">इस साइट को संचय से लोड नहीं किया जा सकता</translation>
-<translation id="7733391738235763478">(<ph name="NUMBER_VISITS" />)</translation>
 <translation id="7752995774971033316">अप्रबंधित</translation>
 <translation id="7755287808199759310">आपका अभिभावक इसे आपके लिए अनवरोधित कर सकता है</translation>
 <translation id="7758069387465995638">हो सकता है कि फायरवॉल या एंटीवायरस द्वारा कनेक्शन अवरुद्ध हो.</translation>
@@ -749,15 +825,15 @@
 <translation id="7951415247503192394">(32-बिट)</translation>
 <translation id="7956713633345437162">मोबाइल बुकमार्क</translation>
 <translation id="7961015016161918242">कभी नहीं</translation>
-<translation id="7962083544045318153">क्रैश आईडी <ph name="CRASH_LOCAL_ID" /></translation>
 <translation id="7983301409776629893">हमेशा <ph name="ORIGINAL_LANGUAGE" /> से <ph name="TARGET_LANGUAGE" /> में अनुवाद करें</translation>
 <translation id="7995512525968007366">निर्दिष्‍ट नहीं किया गया</translation>
 <translation id="800218591365569300">जगह खाली करने के लिए दूसरे टैब या प्रोग्राम बंद करके देखें.</translation>
 <translation id="8012647001091218357">हम इस समय आपके अभिभावकों तक नहीं पहुंच पा रहे हैं. कृपया पुन: प्रयास करें.</translation>
 <translation id="8025119109950072390">इस साइट पर मौजूद हमलावर आपको धोखा देकर आपसे कुछ जोखिम वाला काम करा सकते हैं, जैसे सॉफ़्टवेयर इंस्टॉल करना या आपकी व्यक्तिगत जानकारी (उदाहरण के लिए, पासवर्ड, फ़ोन नंबर या क्रेडिट कार्ड) प्रकट करना.</translation>
-<translation id="803030522067524905">Google सुरक्षित ब्राउज़िंग को हाल ही में <ph name="SITE" /> पर फ़िशिंग का पता चला है. आपको भ्रमित करने के लिए फ़िशिंग साइट अन्य वेबसाइट होने का दावा करती हैं. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="8034522405403831421">यह पेज <ph name="SOURCE_LANGUAGE" /> में है. इसका <ph name="TARGET_LANGUAGE" /> में अनुवाद करें?</translation>
+<translation id="8037357227543935929">पूछें (डिफ़ॉल्ट)</translation>
 <translation id="8041089156583427627">सुझाव भेजें</translation>
+<translation id="8041940743680923270">वैश्विक डिफ़ॉल्ट का उपयोग करें (पूछें)</translation>
 <translation id="8088680233425245692">लेख देखने में विफल रहा.</translation>
 <translation id="8089520772729574115">1 MB से कम</translation>
 <translation id="8091372947890762290">सर्वर पर सक्रियण लंबित है</translation>
@@ -766,13 +842,14 @@
 <translation id="8134994873729925007"><ph name="HOST_NAME" /> का सर्वर <ph name="BEGIN_ABBR" />DNS पता<ph name="END_ABBR" /> नहीं ढूंढ़ा जा सका.</translation>
 <translation id="8149426793427495338">आपका कंप्यूटर निष्क्रिय हो गया है.</translation>
 <translation id="8150722005171944719"><ph name="URL" /> पर मौजूद फ़ाइल पढ़ने योग्य नहीं है.  हो सकता है कि इसे निकाल दिया गया हो, कहीं ले जाया गया हो, या फ़ाइल की अनुमतियां पहुंच रोक रही हों.</translation>
+<translation id="8184538546369750125">वैश्विक डिफ़ॉल्ट का उपयोग करें (अनुमति दें)</translation>
+<translation id="8191494405820426728">स्थानीय क्रैश आईडी <ph name="CRASH_LOCAL_ID" /></translation>
 <translation id="8194797478851900357">&amp;ले जाना वापस लाएं</translation>
 <translation id="8201077131113104583">"<ph name="EXTENSION_ID" />" आईडी वाले एक्‍सटेंशन का अमान्‍य अपडेट URL.</translation>
 <translation id="8202097416529803614">आदेश सारांश</translation>
 <translation id="8218327578424803826">सौंपा गया स्‍थान:</translation>
 <translation id="8225771182978767009">जिस व्यक्ति ने इस कंप्यूटर को सेट किया है, उसने इस साइट को अवरुद्ध करना चुना है.</translation>
 <translation id="822964464349305906"><ph name="TYPE_1" />, <ph name="TYPE_2" /></translation>
-<translation id="8230421197304563332"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> पर मौजूद हमलावर आपके कंप्यूटर पर ऐसे खतरनाक प्रोग्राम इंस्टॉल करने की कोशिश कर सकते हैं जो आपकी जानकारी (उदाहरण के लिए, फ़ोटो, पासवर्ड, संदेश और क्रेडिट कार्ड) चुरा लेते हैं या उसे हटा देते हैं.</translation>
 <translation id="8241707690549784388">आपके द्वारा खोजे जा रहे पेज ने आपके द्वारा प्रविष्ट की गई जानकारी का उपयोग किया है. उस पेज पर वापस जाने से आपके द्वारा की गई किसी क्रिया को दोहराने की आवश्यकता हो सकती है. क्या आप जारी रखना चाहते हैं?</translation>
 <translation id="8249320324621329438">पिछली बार प्राप्त किया गया:</translation>
 <translation id="8253091569723639551">बिलिंग पता आवश्यक</translation>
@@ -780,6 +857,7 @@
 <translation id="8289355894181816810">यदि आप सुनिश्चित नहीं हैं कि इसका क्या मतलब है, तो अपने नेटवर्क व्यवस्थापक से संपर्क करें.</translation>
 <translation id="8293206222192510085">बुकमार्क जोड़ें</translation>
 <translation id="8294431847097064396">स्रोत</translation>
+<translation id="8306404619377842860"><ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> से निजी कनेक्शन नहीं बनाया जा सकता क्योंकि आपके डिवाइस का दिनांक और समय (<ph name="DATE_AND_TIME" />) गलत है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="8308427013383895095">नेटवर्क कनेक्शन में कोई समस्या होने के कारण अनुवाद विफल हुआ.</translation>
 <translation id="8332188693563227489"><ph name="HOST_NAME" /> का एक्सेस अस्वीकृत किया गया</translation>
 <translation id="834457929814110454">यदि आप अपनी सुरक्षा में होने वाले जोखिमों को समझते हैं, तो खतरनाक प्रोग्राम निकाले जाने से पहले आप <ph name="BEGIN_LINK" />इस साइट पर विज़िट<ph name="END_LINK" /> कर सकते हैं.</translation>
@@ -800,11 +878,9 @@
 <translation id="8483780878231876732">कार्ड का उपयोग अपने Google खाते से करने के लिए, Chrome में प्रवेश करें</translation>
 <translation id="8488350697529856933">इस पर लागू होती है</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ने प्रतिसाद देने में अत्यधिक समय लिया.</translation>
-<translation id="852346902619691059">यह सर्वर प्रमाणित नहीं कर सका कि यह <ph name="DOMAIN" /> है; इसका सुरक्षा प्रमाणपत्र आपके कंप्यूटर के ऑपरेटिंग सिस्टम द्वारा विश्वसनीय नहीं है. ऐसा गलत कॉन्फ़िगरेशन के कारण या किसी हमलावर द्वारा आपके कनेक्शन में बाधा डालने के कारण हो सकता है. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जानें<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="8532105204136943229">समाप्‍ति वर्ष</translation>
 <translation id="8543181531796978784">आप <ph name="BEGIN_ERROR_LINK" />पहचान संबंधी समस्‍या की रिपोर्ट<ph name="END_ERROR_LINK" /> कर सकते हैं या यदि आप अपनी सुरक्षा से जुड़े जोखिमों को समझते हैं, तो <ph name="BEGIN_LINK" />इस असुरक्षित साइट पर जा<ph name="END_LINK" /> सकते हैं.</translation>
 <translation id="8553075262323480129">अनुवाद विफल हो गया क्योंकि पेज की भाषा निर्धारित नहीं की जा सकी.</translation>
-<translation id="8559762987265718583"><ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> से एक निजी कनेक्‍शन स्‍थापित नहीं किया जा सकता क्‍योंकि आपके डिवाइस का दिनांक और समय (<ph name="DATE_AND_TIME" />) गलत है.</translation>
 <translation id="8571890674111243710">पेज का अनुवाद <ph name="LANGUAGE" /> में कर रहा है...</translation>
 <translation id="858637041960032120">फ़ोन नंबर जोड़ें
 </translation>
@@ -819,6 +895,7 @@
 <translation id="8738058698779197622">सुरक्षित कनेक्‍शन स्‍थापित करने के लिए, आपकी घड़ी को ठीक से सेट किए जाने की आवश्‍यकता है. ऐसा इसलिए क्‍योंकि वेबसाइटों द्वारा स्‍वयं की पहचान करने के लिए उपयोग किए जाने वाले प्रमाण पत्र केवल विशिष्‍ट समयावधियों के लिए ही मान्‍य होते हैं. चूंकि आपके डिवाइस की घड़ी गलत है, इसलिए क्रोमियम इन प्रमाणपत्रों को सत्‍यापित नहीं कर सकता.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> का &lt;abbr id="dnsDefinition"&gt;DNS पता&lt;/abbr&gt; प्राप्त नहीं किया जा सका. समस्या का निदान किया जा रहा है.</translation>
 <translation id="8759274551635299824">इस कार्ड की अवधि खत्म हो चुकी है</translation>
+<translation id="8761567432415473239">Google सुरक्षित ब्राउज़िंग को <ph name="SITE" /> पर हाल ही में <ph name="BEGIN_LINK" />हानिकारक प्रोग्राम मिले हैं<ph name="END_LINK" />.</translation>
 <translation id="8790007591277257123">&amp;हटाना फिर से करें</translation>
 <translation id="8800988563907321413">आपके आस-पास के सुझाव यहां दिखाई देंगे</translation>
 <translation id="8820817407110198400">बुकमार्क</translation>
@@ -831,29 +908,30 @@
 <translation id="8870413625673593573">हाल ही में बंद किए गए</translation>
 <translation id="8874824191258364635">मान्य कार्ड संख्या डालें</translation>
 <translation id="8876793034577346603">नेटवर्क कॉन्फ़िगरेशन पार्स होने में विफल रहा.</translation>
-<translation id="8877192140621905067">आपकी तरफ से पुष्टि हो जाने पर, आपके कार्ड के विवरण इस साइट के साथ साझा किए जाएंगे</translation>
 <translation id="8889402386540077796">रंग</translation>
 <translation id="8891727572606052622">अमान्य प्रॉक्सी मोड.</translation>
 <translation id="889901481107108152">क्षमा करें, यह प्रयोग आपके प्‍लेटफ़ॉर्म पर उपलब्ध नहीं है.</translation>
 <translation id="8903921497873541725">ज़ूम इन करें</translation>
 <translation id="8931333241327730545">क्या आप इस कार्ड को अपने Google खाते में सहेजना चाहते हैं?</translation>
 <translation id="8932102934695377596">आपकी घड़ी पीछे है</translation>
-<translation id="8954894007019320973">(जारी.)</translation>
 <translation id="8971063699422889582">सर्वर के प्रमाणपत्र की समय-सीमा समाप्त हो चुकी है.</translation>
 <translation id="8986494364107987395">उपयोग संबंधी आंकड़े और क्रैश रिपोर्ट अपने आप Google को भेजने की अनुमति दें</translation>
-<translation id="8987927404178983737">माह</translation>
 <translation id="8989148748219918422"><ph name="ORGANIZATION" /> [<ph name="COUNTRY" />]</translation>
 <translation id="8996941253935762404">साइट में आगे हानिकारक प्रोग्राम हैं</translation>
+<translation id="8997023839087525404">सर्वर ने एक प्रमाणपत्र प्रस्तुत किया है, जिसे प्रमाणपत्र पारदर्शिता पॉलिसी का उपयोग करके सार्वजनिक रूप से प्रकट नहीं किया गया था. कुछ प्रमाणपत्रों के लिए यह सुनिश्चित करना आवश्यक है कि वे विश्वसनीय हैं और आक्रमणकर्ताओं से रक्षा करते हैं.</translation>
 <translation id="9001074447101275817">प्रॉक्‍सी <ph name="DOMAIN" /> के लिए उपयोगकर्ता नाम और पासवर्ड की आवश्यकता है.</translation>
+<translation id="9005998258318286617">PDF दस्तावेज़ लोड नहीं किया जा सका.</translation>
 <translation id="901974403500617787">सिस्टम-व्यापी रूप से लागू होने वाले फ़्लैग केवल मालिक द्वारा ही सेट किए जा सकते हैं: <ph name="OWNER_EMAIL" />.</translation>
+<translation id="9020200922353704812">कार्ड बिलिंग पता ज़रूरी है</translation>
 <translation id="9020542370529661692">इस पेज का <ph name="TARGET_LANGUAGE" /> में अनुवाद कर दिया गया है</translation>
 <translation id="9035022520814077154">सुरक्षा गड़बड़ी</translation>
 <translation id="9038649477754266430">अधिक तेज़ी से पेज लोड करने के लिए किसी पूर्वानुमान सेवा का उपयोग करें</translation>
 <translation id="9039213469156557790">इसके अतिरिक्त, इस पेज में ऐसे अन्य संसाधन भी शामिल हैं, जो सुरक्षित नहीं हैं. ट्रांज़िट में होने के दौरान ये संसाधन अन्य लोगों द्वारा देखे जा सकते हैं और पेज का व्यवहार बदलने के लिए किसी हमवलावर द्वारा इनमें बदलाव किए जा सकते हैं.</translation>
-<translation id="9040185888511745258"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> पर मौजूद हमलावर आपको ऐसे प्रोग्राम इंस्टॉल करने के लिए भ्रमित कर सकते हैं जिनसे आपके ब्राउज़िंग अनुभव को हानि पहुंच सकती है (उदाहरण के लिए, आपके मुख्यपृष्ठ को बदलकर या आपके द्वारा देखी जाने वाली वेबसाइटों पर अतिरिक्त विज्ञापन दिखाकर).</translation>
+<translation id="9049981332609050619">आपने <ph name="DOMAIN" /> पर पहुंचने का प्रयास किया, लेकिन सर्वर ने एक अमान्‍य प्रमाणपत्र प्रस्तुत किया.</translation>
 <translation id="9050666287014529139">पासफ़्रेज़</translation>
 <translation id="9065203028668620118">संपादित करें</translation>
 <translation id="9068849894565669697">रंग चुनें</translation>
+<translation id="9069693763241529744">किसी एक्सटेंशन से अवरोधित है</translation>
 <translation id="9076283476770535406">इसमें वयस्क सामग्री हो सकती है</translation>
 <translation id="9078964945751709336">अधिक जानकारी की आवश्यकता है</translation>
 <translation id="9103872766612412690"><ph name="SITE" /> आपकी जानकारी की सुरक्षा करने के लिए आमतौर पर एन्क्रिप्शन का उपयोग करती है. जब क्रोमियम ने इस बार <ph name="SITE" /> से कनेक्ट करने का प्रयास किया, तो वेबसाइट ने असामान्य और गलत क्रेडेंशियल वापस भेजे. ऐसा तब हो सकता है जब कोई हमलावर <ph name="SITE" /> होने का दावा करने का प्रयास कर रहा हो या किसी वाई-फ़ाई प्रवेश स्क्रीन ने कनेक्शन को बाधित कर दिया हो. आपकी जानकारी अभी भी सुरक्षित है क्योंकि किसी भी डेटा के आदान-प्रदान से पहले ही क्रोमियम ने कनेक्शन को रोक दिया था.</translation>
@@ -862,16 +940,21 @@
 <translation id="9148507642005240123">&amp;संपादन वापस लाएं</translation>
 <translation id="9154194610265714752">अपडेट किया गया</translation>
 <translation id="9157595877708044936">सेट अप कर रहा है...</translation>
+<translation id="9169664750068251925">इस साइट पर हमेशा अवरोधित करें</translation>
 <translation id="9170848237812810038">&amp;पूर्ववत् करें</translation>
 <translation id="917450738466192189">सर्वर का प्रमाणपत्र अमान्य है.</translation>
+<translation id="9180730219696997905">{SHIPPING_OPTIONS,plural, =1{<ph name="SHIPPING_OPTION_PREVIEW" /> और <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS" /> अन्य}one{<ph name="SHIPPING_OPTION_PREVIEW" /> और <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS" /> अन्य}other{<ph name="SHIPPING_OPTION_PREVIEW" /> और <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS" /> अन्य}}</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> एक असमर्थित प्रोटोकॉल का उपयोग करता है.</translation>
 <translation id="9205078245616868884">आपका डेटा आपके समन्वयन पासफ़्रेज़ के साथ एन्क्रिप्ट किया गया है. समन्वयन शुरू करने के लिए इसे डालें.</translation>
 <translation id="9207861905230894330">लेख जोड़ने में विफल रहा.</translation>
+<translation id="9219103736887031265">चित्र</translation>
 <translation id="933612690413056017">कोई इंटरनेट कनेक्शन नहीं है</translation>
 <translation id="933712198907837967">Diners Club</translation>
 <translation id="935608979562296692">फ़ॉर्म साफ़ करें</translation>
 <translation id="939736085109172342">नया फ़ोल्डर</translation>
 <translation id="941721044073577244">ऐसा लगता है कि आपको इस साइट पर जाने की अनुमति नहीं है</translation>
 <translation id="969892804517981540">आधिकारिक बिल्ड</translation>
+<translation id="975560348586398090">{COUNT,plural, =0{कुछ नहीं}=1{1 आइटम}one{# आइटम}other{# आइटम}}</translation>
 <translation id="988159990683914416">डेवलपर बिल्ड</translation>
+<translation id="992115559265932548"><ph name="MICROSOFT_ACTIVE_DIRECTORY" /></translation>
 </translationbundle>

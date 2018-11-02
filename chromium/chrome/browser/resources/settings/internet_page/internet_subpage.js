@@ -7,9 +7,6 @@
  * WiMAX, or virtual networks.
  */
 
-/** @typedef {chrome.networkingPrivate.DeviceStateProperties} */
-var DeviceStateProperties;
-
 Polymer({
   is: 'settings-internet-subpage',
 
@@ -29,12 +26,9 @@ Polymer({
 
     /**
      * Device state for the network type.
-     * @type {?DeviceStateProperties}
+     * @type {!CrOnc.DeviceStateProperties|undefined}
      */
-    deviceState: {
-      type: Object,
-      value: null,
-    },
+    deviceState: Object,
 
     /** @type {!chrome.networkingPrivate.GlobalPolicy|undefined} */
     globalPolicy: Object,
@@ -204,17 +198,16 @@ Polymer({
   },
 
   /**
-   * @param {!DeviceStateProperties|undefined} deviceState
+   * @param {!CrOnc.DeviceStateProperties|undefined} deviceState
    * @return {boolean} Whether or not the device state is enabled.
    * @private
    */
   deviceIsEnabled_: function(deviceState) {
-    return !!deviceState &&
-        deviceState.State == chrome.networkingPrivate.DeviceStateType.ENABLED;
+    return !!deviceState && deviceState.State == CrOnc.DeviceState.ENABLED;
   },
 
   /**
-   * @param {!DeviceStateProperties|undefined} deviceState
+   * @param {!CrOnc.DeviceStateProperties|undefined} deviceState
    * @param {string} onstr
    * @param {string} offstr
    * @return {string}
@@ -225,7 +218,7 @@ Polymer({
   },
 
   /**
-   * @param {?DeviceStateProperties} deviceState
+   * @param {!CrOnc.DeviceStateProperties|undefined} deviceState
    * @return {boolean}
    * @private
    */
@@ -235,18 +228,16 @@ Polymer({
   },
 
   /**
-   * @param {?DeviceStateProperties} deviceState
+   * @param {!CrOnc.DeviceStateProperties|undefined} deviceState
    * @return {boolean}
    * @private
    */
   enableToggleIsEnabled_: function(deviceState) {
-    return !!deviceState &&
-        deviceState.State !=
-        chrome.networkingPrivate.DeviceStateType.PROHIBITED;
+    return !!deviceState && deviceState.State != CrOnc.DeviceState.PROHIBITED;
   },
 
   /**
-   * @param {!DeviceStateProperties} deviceState
+   * @param {!CrOnc.DeviceStateProperties|undefined} deviceState
    * @return {string}
    * @private
    */
@@ -254,6 +245,8 @@ Polymer({
     if (!this.enableToggleIsVisible_(deviceState))
       return '';
     switch (deviceState.Type) {
+      case CrOnc.Type.TETHER:
+        return this.i18n('internetToggleTetherA11yLabel');
       case CrOnc.Type.CELLULAR:
         return this.i18n('internetToggleMobileA11yLabel');
       case CrOnc.Type.WI_FI:
@@ -284,7 +277,7 @@ Polymer({
   },
 
   /**
-   * @param {!DeviceStateProperties} deviceState
+   * @param {!CrOnc.DeviceStateProperties|undefined} deviceState
    * @param {!chrome.networkingPrivate.GlobalPolicy} globalPolicy
    * @return {boolean}
    * @private
@@ -300,7 +293,10 @@ Polymer({
   /** @private */
   onAddButtonTap_: function() {
     assert(this.deviceState);
-    chrome.send('addNetwork', [this.deviceState.Type]);
+    if (loadTimeData.getBoolean('networkSettingsConfig'))
+      this.fire('show-config', {GUID: '', Type: this.deviceState.Type});
+    else
+      chrome.send('addNetwork', [this.deviceState.Type]);
   },
 
   /**
@@ -315,12 +311,12 @@ Polymer({
   },
 
   /**
-   * @param {!DeviceStateProperties} deviceState
+   * @param {!CrOnc.DeviceStateProperties|undefined} deviceState
    * @return {boolean}
    * @private
    */
   knownNetworksIsVisible_: function(deviceState) {
-    return deviceState && deviceState.Type == CrOnc.Type.WI_FI;
+    return !!deviceState && deviceState.Type == CrOnc.Type.WI_FI;
   },
 
   /**
@@ -328,7 +324,8 @@ Polymer({
    * @private
    */
   onKnownNetworksTap_: function() {
-    this.fire('show-known-networks', {Type: CrOnc.Type.WI_FI});
+    assert(this.deviceState.Type == CrOnc.Type.WI_FI);
+    this.fire('show-known-networks', {Type: this.deviceState.Type});
   },
 
   /**
@@ -378,7 +375,7 @@ Polymer({
     var state = e.detail;
     e.target.blur();
     if (this.canConnect_(state, this.globalPolicy, this.defaultNetwork)) {
-      this.connectToNetwork_(state);
+      this.fire('network-connect', {networkProperties: state});
       return;
     }
     this.fire('show-detail', state);
@@ -405,27 +402,6 @@ Polymer({
       return false;
     }
     return true;
-  },
-
-  /**
-   * Handles UI requests to connect to a network.
-   * TODO(stevenjb): Handle Cellular activation, etc.
-   * @param {!CrOnc.NetworkStateProperties} state The network state.
-   * @private
-   */
-  connectToNetwork_: function(state) {
-    this.networkingPrivate.startConnect(state.GUID, function() {
-      if (chrome.runtime.lastError) {
-        var message = chrome.runtime.lastError.message;
-        if (message == 'connecting' || message == 'connect-canceled' ||
-            message == 'connected' || message == 'Error.InvalidNetworkGuid') {
-          return;
-        }
-        console.error(
-            'Unexpected networkingPrivate.startConnect error: ' + message +
-                ' For: ' + state.GUID);
-      }
-    });
   },
 
   /**

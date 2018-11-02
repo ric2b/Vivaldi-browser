@@ -10,10 +10,12 @@
 #include "base/debug/leak_annotations.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/profiler/scoped_profile.h"
 #include "base/profiler/scoped_tracker.h"
+#include "base/run_loop.h"
 #include "base/time/time.h"
 #include "base/trace_event/heap_profiler_allocation_context_tracker.h"
 #include "base/trace_event/trace_event.h"
@@ -207,7 +209,7 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
       // Forcefully terminates the RunLoop inside MessagePumpForUI, ensuring
       // proper shutdown for content_browsertests. Shutdown() is not used by
       // the actual browser.
-      if (base::MessageLoop::current()->is_running())
+      if (base::RunLoop::IsRunningOnCurrentThread())
         base::MessageLoop::current()->QuitNow();
   #endif
       main_loop_.reset(NULL);

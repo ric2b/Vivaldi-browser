@@ -10,16 +10,9 @@
 
 namespace gfx {
 class Rect;
-class Size;
-}
-
-namespace ui {
-class Event;
 }
 
 namespace views {
-class Button;
-class InkDrop;
 class View;
 }
 
@@ -28,7 +21,6 @@ class OverflowBubble;
 class OverflowButton;
 class ShelfButton;
 class ShelfButtonPressedMetricTracker;
-class ShelfDelegate;
 class ShelfTooltipManager;
 class ShelfView;
 
@@ -93,22 +85,11 @@ class ShelfViewTestAPI {
   // An accessor for overflow button.
   OverflowButton* overflow_button() const;
 
-  // Returns the preferred size of |shelf_view_|.
-  gfx::Size GetPreferredSize();
-
   // Returns minimum distance before drag starts.
   int GetMinimumDragDistance() const;
 
-  // Wrapper for ShelfView::ButtonPressed.
-  void ButtonPressed(views::Button* sender,
-                     const ui::Event& event,
-                     views::InkDrop* ink_drop);
-
   // Wrapper for ShelfView::SameDragType.
   bool SameDragType(ShelfItemType typea, ShelfItemType typeb) const;
-
-  // Sets ShelfDelegate.
-  void SetShelfDelegate(ShelfDelegate* delegate);
 
   // Returns re-insertable bounds in screen.
   gfx::Rect GetBoundsForDragInsertInScreen();
@@ -116,8 +97,9 @@ class ShelfViewTestAPI {
   // Returns true if item is ripped off.
   bool IsRippedOffFromShelf();
 
-  // Returns true if an item is ripped off and entered into shelf.
-  bool DraggedItemFromOverflowToShelf();
+  // Returns true when an item is dragged from one shelf to another (eg.
+  // overflow).
+  bool DraggedItemToAnotherShelf();
 
   // An accessor for |shelf_button_pressed_metric_tracker_|.
   ShelfButtonPressedMetricTracker* shelf_button_pressed_metric_tracker();

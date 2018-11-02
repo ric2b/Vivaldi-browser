@@ -163,7 +163,9 @@ class SBNavigationObserverBrowserTest : public InProcessBrowserTest {
   SBNavigationObserverBrowserTest() {}
 
   void SetUpOnMainThread() override {
-    // Disable Safe Browsing service since it is irrelevant to this test.
+    // Disable Safe Browsing service so we can directly control when
+    // SafeBrowsingNavigationObserverManager and SafeBrowsingNavigationObserver
+    // are instantiated.
     browser()->profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled,
                                                  false);
     ASSERT_TRUE(embedded_test_server()->Start());
@@ -225,6 +227,8 @@ class SBNavigationObserverBrowserTest : public InProcessBrowserTest {
     content::DownloadManager* manager =
         content::BrowserContext::GetDownloadManager(browser()->profile());
     manager->GetAllDownloads(&download_items);
+    if (download_items.empty())
+      DownloadItemCreatedObserver(manager).WaitForDownloadItem(&download_items);
     EXPECT_EQ(1U, download_items.size());
     return download_items[0];
   }

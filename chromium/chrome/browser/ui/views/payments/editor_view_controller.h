@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
+#include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
 #include "chrome/browser/ui/views/payments/payment_request_sheet_controller.h"
 #include "chrome/browser/ui/views/payments/validation_delegate.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -37,14 +38,19 @@ namespace payments {
 
 class PaymentRequestSpec;
 class PaymentRequestState;
-class PaymentRequestDialogView;
 class ValidatingCombobox;
 class ValidatingTextfield;
 
 // Field definition for an editor field, used to build the UI.
 struct EditorField {
   enum class LengthHint : int { HINT_LONG, HINT_SHORT };
-  enum class ControlType : int { TEXTFIELD, COMBOBOX };
+  enum class ControlType : int {
+    TEXTFIELD,
+    TEXTFIELD_NUMBER,
+    COMBOBOX,
+    CUSTOMFIELD,
+    READONLY_LABEL
+  };
 
   EditorField(autofill::ServerFieldType type,
               base::string16 label,
@@ -56,12 +62,6 @@ struct EditorField {
         length_hint(length_hint),
         required(required),
         control_type(control_type) {}
-
-  struct Compare {
-    bool operator()(const EditorField& lhs, const EditorField& rhs) const {
-      return std::tie(lhs.type, lhs.label) < std::tie(rhs.type, rhs.label);
-    }
-  };
 
   // Data type in the field.
   autofill::ServerFieldType type;
@@ -85,31 +85,53 @@ class EditorViewController : public PaymentRequestSheetController,
       std::unordered_map<ValidatingTextfield*, const EditorField>;
   using ComboboxMap =
       std::unordered_map<ValidatingCombobox*, const EditorField>;
-  using ErrorLabelMap =
-      std::map<const EditorField, views::Label*, EditorField::Compare>;
+  using ErrorLabelMap = std::map<autofill::ServerFieldType, views::View*>;
 
   // Does not take ownership of the arguments, which should outlive this object.
+  // |back_navigation_type| identifies what sort of back navigation should be
+  // done when editing is successful. This is independent of the back arrow
+  // which always goes back one step.
   EditorViewController(PaymentRequestSpec* spec,
                        PaymentRequestState* state,
-                       PaymentRequestDialogView* dialog);
+                       PaymentRequestDialogView* dialog,
+                       BackNavigationType back_navigation_type);
   ~EditorViewController() override;
 
   // Will display |error_message| alongside the input field represented by
-  // |field|.
-  void DisplayErrorMessageForField(const EditorField& field,
+  // field |type|.
+  void DisplayErrorMessageForField(autofill::ServerFieldType type,
                                    const base::string16& error_message);
 
   const ComboboxMap& comboboxes() const { return comboboxes_; }
   const TextFieldsMap& text_fields() const { return text_fields_; }
 
+  // Returns the View ID that can be used to lookup the input field for |type|.
+  static int GetInputFieldViewId(autofill::ServerFieldType type);
+
  protected:
-  virtual std::unique_ptr<views::View> CreateHeaderView() = 0;
+  // Create a header view to be inserted before all fields.
+  virtual std::unique_ptr<views::View> CreateHeaderView();
+  // |focusable_field| is to be set with a pointer to the view that should get
+  // default focus within the custom view. |valid| should be set to the initial
+  // validity state of the custom view. If a custom view requires model
+  // validation, it should be tracked in |text_fields_| or |comboboxes_| (e.g.,
+  // by using CreateComboboxForField).
+  virtual std::unique_ptr<views::View> CreateCustomFieldView(
+      autofill::ServerFieldType type,
+      views::View** focusable_field,
+      bool* valid);
+  // Create an extra view to go to the right of the field with |type|, which
+  // can either be a textfield, combobox, or custom view.
+  virtual std::unique_ptr<views::View> CreateExtraViewForField(
+      autofill::ServerFieldType type);
+
   // Returns the field definitions used to build the UI.
   virtual std::vector<EditorField> GetFieldDefinitions() = 0;
   virtual base::string16 GetInitialValueForType(
       autofill::ServerFieldType type) = 0;
   // Validates the data entered and attempts to save; returns true on success.
   virtual bool ValidateModelAndSave() = 0;
+
   // Creates a ValidationDelegate which knows how to validate for a given
   // |field| definition.
   virtual std::unique_ptr<ValidationDelegate> CreateValidationDelegate(
@@ -117,10 +139,12 @@ class EditorViewController : public PaymentRequestSheetController,
   virtual std::unique_ptr<ui::ComboboxModel> GetComboboxModelForType(
       const autofill::ServerFieldType& type) = 0;
 
+  // Returns true if all fields are valid.
+  bool ValidateInputFields();
+
   // PaymentRequestSheetController;
   std::unique_ptr<views::Button> CreatePrimaryButton() override;
   void FillContentView(views::View* content_view) override;
-  std::unique_ptr<views::View> CreateExtraFooterView() override;
 
   // views::ComboboxListener:
   void OnPerformAction(views::Combobox* combobox) override;
@@ -131,10 +155,16 @@ class EditorViewController : public PaymentRequestSheetController,
   // UpdateEditorView.
   virtual void UpdateEditorView();
 
- private:
   // PaymentRequestSheetController:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  views::View* GetFirstFocusedView() override;
 
+  // Will create a combobox according to the |field| definition. Will also keep
+  // track of this field to populate the edited model on save.
+  std::unique_ptr<ValidatingCombobox> CreateComboboxForField(
+      const EditorField& field);
+
+ private:
   // views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,
                        const base::string16& new_contents) override;
@@ -146,8 +176,16 @@ class EditorViewController : public PaymentRequestSheetController,
   // Adds some views to |layout|, to represent an input field and its labels.
   // |field| is the field definition, which contains the label and the hint
   // about the length of the input field. A placeholder error label is also
-  // added (see implementation).
-  void CreateInputField(views::GridLayout* layout, const EditorField& field);
+  // added (see implementation). Returns the input view for this field that
+  // could be used as the initial focused and set |valid| with false if the
+  // initial value of the field is not valid.
+  views::View* CreateInputField(views::GridLayout* layout,
+                                const EditorField& field,
+                                bool* valid);
+
+  // Returns the widest column width of across all extra views of a certain
+  // |size| type.
+  int ComputeWidestExtraViewWidth(EditorField::LengthHint size);
 
   // Used to remember the association between the input field UI element and the
   // original field definition. The ValidatingTextfield* and ValidatingCombobox*
@@ -157,6 +195,12 @@ class EditorViewController : public PaymentRequestSheetController,
   ComboboxMap comboboxes_;
   // Tracks the relationship between a field and its error label.
   ErrorLabelMap error_labels_;
+
+  // The input field view in the editor used to set the initial focus.
+  views::View* initial_focus_field_view_;
+
+  // Identifies where to go back when the editing completes successfully.
+  BackNavigationType back_navigation_type_;
 
   DISALLOW_COPY_AND_ASSIGN(EditorViewController);
 };

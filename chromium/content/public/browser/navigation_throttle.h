@@ -40,6 +40,12 @@ class CONTENT_EXPORT NavigationThrottle {
     // is navigated.
     BLOCK_REQUEST,
 
+    // Blocks a navigation taking place in a subframe, and collapses the frame
+    // owner element in the parent document (i.e. removes it from the layout).
+    // This can only be returned from WillStartRequest, and also from
+    // WillRedirectRequest when PlzNavigate is enabled.
+    BLOCK_REQUEST_AND_COLLAPSE,
+
     // Blocks a navigation due to rules asserted by a response (for instance,
     // embedding restrictions like 'X-Frame-Options'). This result will only
     // be returned from WillProcessResponse.
@@ -76,6 +82,10 @@ class CONTENT_EXPORT NavigationThrottle {
   // CANCEL_AND_IGNORE, or BLOCK_RESPONSE and perform the destruction
   // asynchronously.
   virtual ThrottleCheckResult WillProcessResponse();
+
+  // Returns the name of the throttle for logging purposes. It must not return
+  // nullptr.
+  virtual const char* GetNameForLogging() = 0;
 
   // The NavigationHandle that is tracking the information related to this
   // navigation.

@@ -4,7 +4,7 @@
 
 #include "core/loader/modulescript/ModuleScriptLoader.h"
 
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/Document.h"
 #include "core/dom/Modulator.h"
 #include "core/dom/ModuleScript.h"
@@ -64,10 +64,12 @@ class ModuleScriptLoaderTestModulator final : public DummyModulator {
     return security_origin_.Get();
   }
 
-  ScriptModule CompileModule(
-      const String& script,
-      const String& url_str,
-      AccessControlStatus access_control_status) override {
+  ScriptState* GetScriptState() override { return script_state_.Get(); }
+
+  ScriptModule CompileModule(const String& script,
+                             const String& url_str,
+                             AccessControlStatus access_control_status,
+                             const TextPosition& position) override {
     ScriptState::Scope scope(script_state_.Get());
     return ScriptModule::Compile(script_state_->GetIsolate(),
                                  "export default 'foo';", "",

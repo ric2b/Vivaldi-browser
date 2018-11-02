@@ -13,6 +13,7 @@
 <translation id="2753617847762399167">Szabálytalan útvonal (abszolút vagy relatív „..” taggal): „<ph name="IMAGE_PATH" />”</translation>
 <translation id="27822970480436970">A bővítmény nem tudta módosítani a hálózati lekérést, mivel a módosítás egy másik bővítménnyel ütközött.</translation>
 <translation id="2857834222104759979">A jegyzékfájl érvénytelen.</translation>
+<translation id="2903070246402204397">A(z) <ph name="EXTENSION_NAME" /> bővítményt (bővítményazonosító: <ph name="EXTENSION_ID" />) tiltja a rendszergazda. <ph name="ADMIN_INFO" />.</translation>
 <translation id="2988488679308982380">Nem sikerült a következő csomag telepítése: "<ph name="ERROR_CODE" />"</translation>
 <translation id="3115238746683532089">Ismeretlen termék (<ph name="PRODUCT_ID" />) <ph name="VENDOR_ID" /> szolgáltatótól (sorozatszám: <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3163201441334626963">Ismeretlen termék (<ph name="PRODUCT_ID" />) a következő forgalmazótól: <ph name="VENDOR_ID" /></translation>
@@ -45,7 +46,6 @@
 <translation id="7003844668372540529">Ismeretlen termék (<ph name="PRODUCT_ID" />) a következő forgalmazótól: <ph name="VENDOR_NAME" /></translation>
 <translation id="7217838517480956708">Az eszköz rendszergazdája megköveteli, hogy a(z) <ph name="EXTENSION_NAME" /> telepítve legyen. A bővítményt nem lehet eltávolítani vagy módosítani.</translation>
 <translation id="7581279002575751816">Az NPAPI bővítmények nem támogatottak.</translation>
-<translation id="7809034755304591547">A(z) <ph name="EXTENSION_NAME" /> bővítményt (bővítményazonosító: „<ph name="EXTENSION_ID" />”) blokkolta a rendszergazda.</translation>
 <translation id="7972881773422714442">Lehetőségek: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Előlapi</translation>
 <translation id="8047248493720652249">Ez a bővítmény nem tudta elnevezni a(z) „<ph name="ATTEMPTED_FILENAME" />” letöltést, mert egy másik bővítmény (<ph name="EXTENSION_NAME" />) eltérő fájlnevet határozott meg: „<ph name="ACTUAL_FILENAME" />”.</translation>

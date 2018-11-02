@@ -16,7 +16,9 @@
 #include "ash/system/session/last_window_closed_observer.h"
 #include "ash/system/session/logout_button_observer.h"
 #include "ash/system/session/session_length_limit_observer.h"
+#include "ash/system/status_area_focus_observer.h"
 #include "ash/system/tray_tracing.h"
+#include "ash/system/update/update_observer.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_observer.h"
 
 namespace ash {
@@ -248,6 +250,21 @@ void SystemTrayNotifier::NotifySessionLengthLimitChanged() {
     observer.OnSessionLengthLimitChanged();
 }
 
+void SystemTrayNotifier::AddStatusAreaFocusObserver(
+    StatusAreaFocusObserver* observer) {
+  status_area_focus_observers_.AddObserver(observer);
+}
+
+void SystemTrayNotifier::RemoveStatusAreaFocusObserver(
+    StatusAreaFocusObserver* observer) {
+  status_area_focus_observers_.RemoveObserver(observer);
+}
+
+void SystemTrayNotifier::NotifyFocusOut(bool reverse) {
+  for (auto& observer : status_area_focus_observers_)
+    observer.OnFocusOut(reverse);
+}
+
 void SystemTrayNotifier::AddTracingObserver(TracingObserver* observer) {
   tracing_observers_.AddObserver(observer);
 }
@@ -259,6 +276,19 @@ void SystemTrayNotifier::RemoveTracingObserver(TracingObserver* observer) {
 void SystemTrayNotifier::NotifyTracingModeChanged(bool value) {
   for (auto& observer : tracing_observers_)
     observer.OnTracingModeChanged(value);
+}
+
+void SystemTrayNotifier::AddUpdateObserver(UpdateObserver* observer) {
+  update_observers_.AddObserver(observer);
+}
+
+void SystemTrayNotifier::RemoveUpdateObserver(UpdateObserver* observer) {
+  update_observers_.RemoveObserver(observer);
+}
+
+void SystemTrayNotifier::NotifyUpdateOverCellularTargetSet(bool success) {
+  for (auto& observer : update_observers_)
+    observer.OnUpdateOverCellularTargetSet(success);
 }
 
 void SystemTrayNotifier::AddVirtualKeyboardObserver(

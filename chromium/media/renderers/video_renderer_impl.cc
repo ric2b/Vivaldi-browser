@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
@@ -27,6 +28,82 @@
 
 namespace media {
 
+namespace {
+
+// Used for UMA stats, only add numbers to end!
+enum VideoFrameColorSpaceUMA {
+  Unknown = 0,
+  UnknownRGB = 1,
+  UnknownHDR = 2,
+  REC601 = 3,
+  REC709 = 4,
+  JPEG = 5,
+  PQ = 6,
+  HLG = 7,
+  SCRGB = 8,
+  MAX = SCRGB
+};
+
+VideoFrameColorSpaceUMA ColorSpaceUMAHelper(
+    const gfx::ColorSpace& color_space) {
+  if (!color_space.IsHDR()) {
+    if (color_space == gfx::ColorSpace::CreateREC709())
+      return VideoFrameColorSpaceUMA::REC709;
+
+    // TODO: Check for both PAL & NTSC rec601
+    if (color_space == gfx::ColorSpace::CreateREC601())
+      return VideoFrameColorSpaceUMA::REC601;
+
+    if (color_space == gfx::ColorSpace::CreateJpeg())
+      return VideoFrameColorSpaceUMA::JPEG;
+
+    if (color_space == color_space.GetAsFullRangeRGB())
+      return VideoFrameColorSpaceUMA::UnknownRGB;
+
+    return VideoFrameColorSpaceUMA::Unknown;
+  }
+
+  if (color_space == gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT2020,
+                                     gfx::ColorSpace::TransferID::SMPTEST2084,
+                                     gfx::ColorSpace::MatrixID::BT709,
+                                     gfx::ColorSpace::RangeID::LIMITED)) {
+    return VideoFrameColorSpaceUMA::PQ;
+  }
+
+  if (color_space == gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT2020,
+                                     gfx::ColorSpace::TransferID::SMPTEST2084,
+                                     gfx::ColorSpace::MatrixID::BT2020_NCL,
+                                     gfx::ColorSpace::RangeID::LIMITED)) {
+    return VideoFrameColorSpaceUMA::PQ;
+  }
+
+  if (color_space == gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT2020,
+                                     gfx::ColorSpace::TransferID::ARIB_STD_B67,
+                                     gfx::ColorSpace::MatrixID::BT709,
+                                     gfx::ColorSpace::RangeID::LIMITED)) {
+    return VideoFrameColorSpaceUMA::HLG;
+  }
+
+  if (color_space == gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT2020,
+                                     gfx::ColorSpace::TransferID::ARIB_STD_B67,
+                                     gfx::ColorSpace::MatrixID::BT2020_NCL,
+                                     gfx::ColorSpace::RangeID::LIMITED)) {
+    return VideoFrameColorSpaceUMA::HLG;
+  }
+
+  if (color_space == gfx::ColorSpace::CreateSCRGBLinear())
+    return VideoFrameColorSpaceUMA::SCRGB;
+
+  return VideoFrameColorSpaceUMA::UnknownHDR;
+}
+
+bool ShouldUseLowDelayMode(DemuxerStream* stream) {
+  return base::FeatureList::IsEnabled(kLowDelayVideoRenderingOnLiveStream) &&
+         stream->liveness() == DemuxerStream::LIVENESS_LIVE;
+}
+
+}  // namespace
+
 VideoRendererImpl::VideoRendererImpl(
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
     const scoped_refptr<base::TaskRunner>& worker_task_runner,
@@ -34,7 +111,7 @@ VideoRendererImpl::VideoRendererImpl(
     const CreateVideoDecodersCB& create_video_decoders_cb,
     bool drop_frames,
     GpuVideoAcceleratorFactories* gpu_factories,
-    const scoped_refptr<MediaLog>& media_log)
+    MediaLog* media_log)
     : task_runner_(media_task_runner),
       sink_(sink),
       sink_started_(false),
@@ -87,6 +164,7 @@ void VideoRendererImpl::Flush(const base::Closure& callback) {
     StopSink();
 
   base::AutoLock auto_lock(lock_);
+
   DCHECK_EQ(state_, kPlaying);
   flush_cb_ = callback;
   state_ = kFlushing;
@@ -150,9 +228,8 @@ void VideoRendererImpl::Initialize(
   DCHECK(!was_background_rendering_);
   DCHECK(!time_progressing_);
 
-  ScopedVector<VideoDecoder> decoders = create_video_decoders_cb_.Run();
-  video_frame_stream_.reset(
-      new VideoFrameStream(task_runner_, std::move(decoders), media_log_));
+  video_frame_stream_.reset(new VideoFrameStream(
+      task_runner_, create_video_decoders_cb_, media_log_));
 
   // Always re-initialize or reset the |gpu_memory_buffer_pool_| in case we are
   // switching between video tracks with incompatible video formats (e.g. 8-bit
@@ -165,7 +242,8 @@ void VideoRendererImpl::Initialize(
     gpu_memory_buffer_pool_.reset();
   }
 
-  low_delay_ = (stream->liveness() == DemuxerStream::LIVENESS_LIVE);
+  low_delay_ = ShouldUseLowDelayMode(stream);
+
   UMA_HISTOGRAM_BOOLEAN("Media.VideoRenderer.LowDelay", low_delay_);
   if (low_delay_)
     MEDIA_LOG(DEBUG, media_log_) << "Video rendering in low delay mode.";
@@ -378,7 +456,6 @@ void VideoRendererImpl::FrameReady(VideoFrameStream::Status status,
                                    const scoped_refptr<VideoFrame>& frame) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   base::AutoLock auto_lock(lock_);
-
   DCHECK_EQ(state_, kPlaying);
   CHECK(pending_read_);
   pending_read_ = false;
@@ -397,6 +474,10 @@ void VideoRendererImpl::FrameReady(VideoFrameStream::Status status,
     DCHECK_EQ(status, VideoFrameStream::DEMUXER_READ_ABORTED);
     return;
   }
+
+  UMA_HISTOGRAM_ENUMERATION("Media.VideoFrame.ColorSpace",
+                            ColorSpaceUMAHelper(frame->ColorSpace()),
+                            static_cast<int>(VideoFrameColorSpaceUMA::MAX) + 1);
 
   if (frame->metadata()->IsTrue(VideoFrameMetadata::END_OF_STREAM)) {
     DCHECK(!received_end_of_stream_);

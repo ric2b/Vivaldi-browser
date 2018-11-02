@@ -31,11 +31,14 @@ HeadlessDevToolsClientImpl* HeadlessDevToolsClientImpl::From(
 
 HeadlessDevToolsClientImpl::HeadlessDevToolsClientImpl()
     : agent_host_(nullptr),
+      raw_protocol_listener_(nullptr),
       next_message_id_(0),
+      next_raw_message_id_(1),
       renderer_crashed_(false),
       accessibility_domain_(this),
       animation_domain_(this),
       application_cache_domain_(this),
+      browser_domain_(this),
       cache_storage_domain_(this),
       console_domain_(this),
       css_domain_(this),
@@ -57,7 +60,6 @@ HeadlessDevToolsClientImpl::HeadlessDevToolsClientImpl()
       network_domain_(this),
       page_domain_(this),
       profiler_domain_(this),
-      rendering_domain_(this),
       runtime_domain_(this),
       security_domain_(this),
       service_worker_domain_(this),
@@ -95,10 +97,47 @@ void HeadlessDevToolsClientImpl::DetachFromHost(
   pending_messages_.clear();
 }
 
+void HeadlessDevToolsClientImpl::SetRawProtocolListener(
+    RawProtocolListener* raw_protocol_listener) {
+  raw_protocol_listener_ = raw_protocol_listener;
+}
+
+int HeadlessDevToolsClientImpl::GetNextRawDevToolsMessageId() {
+  int id = next_raw_message_id_;
+  next_raw_message_id_ += 2;
+  return id;
+}
+
+void HeadlessDevToolsClientImpl::SendRawDevToolsMessage(
+    const std::string& json_message) {
+#ifndef NDEBUG
+  std::unique_ptr<base::Value> message =
+      base::JSONReader::Read(json_message, base::JSON_PARSE_RFC);
+  const base::DictionaryValue* message_dict;
+  int id = 0;
+  if (!message || !message->GetAsDictionary(&message_dict) ||
+      !message_dict->GetInteger("id", &id)) {
+    NOTREACHED() << "Badly formed message";
+    return;
+  }
+  DCHECK_EQ((id % 2), 1) << "Raw devtools messages must have an odd ID.";
+#endif
+
+  agent_host_->DispatchProtocolMessage(this, json_message);
+}
+
+void HeadlessDevToolsClientImpl::SendRawDevToolsMessage(
+    const base::DictionaryValue& message) {
+  std::string json_message;
+  base::JSONWriter::Write(message, &json_message);
+  SendRawDevToolsMessage(json_message);
+}
+
 void HeadlessDevToolsClientImpl::DispatchProtocolMessage(
     content::DevToolsAgentHost* agent_host,
     const std::string& json_message) {
   DCHECK_EQ(agent_host_, agent_host);
+
   std::unique_ptr<base::Value> message =
       base::JSONReader::Read(json_message, base::JSON_PARSE_RFC);
   const base::DictionaryValue* message_dict;
@@ -106,6 +145,13 @@ void HeadlessDevToolsClientImpl::DispatchProtocolMessage(
     NOTREACHED() << "Badly formed reply";
     return;
   }
+
+  if (raw_protocol_listener_ &&
+      raw_protocol_listener_->OnProtocolMessage(agent_host->GetId(),
+                                                json_message, *message_dict)) {
+    return;
+  }
+
   if (!DispatchMessageReply(*message_dict) &&
       !DispatchEvent(std::move(message), *message_dict)) {
     DLOG(ERROR) << "Unhandled protocol message: " << json_message;
@@ -199,6 +245,10 @@ application_cache::Domain* HeadlessDevToolsClientImpl::GetApplicationCache() {
   return &application_cache_domain_;
 }
 
+browser::Domain* HeadlessDevToolsClientImpl::GetBrowser() {
+  return &browser_domain_;
+}
+
 cache_storage::Domain* HeadlessDevToolsClientImpl::GetCacheStorage() {
   return &cache_storage_domain_;
 }
@@ -283,10 +333,6 @@ profiler::Domain* HeadlessDevToolsClientImpl::GetProfiler() {
   return &profiler_domain_;
 }
 
-rendering::Domain* HeadlessDevToolsClientImpl::GetRendering() {
-  return &rendering_domain_;
-}
-
 runtime::Domain* HeadlessDevToolsClientImpl::GetRuntime() {
   return &runtime_domain_;
 }
@@ -314,7 +360,8 @@ void HeadlessDevToolsClientImpl::FinalizeAndSendMessage(
   if (renderer_crashed_)
     return;
   DCHECK(agent_host_);
-  int id = next_message_id_++;
+  int id = next_message_id_;
+  next_message_id_ += 2;  // We only send even numbered messages.
   message->SetInteger("id", id);
   std::string json_message;
   base::JSONWriter::Write(*message, &json_message);

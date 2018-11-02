@@ -14,11 +14,12 @@
 #include "base/file_version_info.h"
 #include "base/files/file_path.h"
 #include "base/mac/foundation_util.h"
+#include "base/mac/mac_util.h"
 #include "base/process/process_iterator.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -62,7 +63,16 @@ void CollectProcessDataForChromeProcess(
       base::ProcessMetrics::CreateProcessMetrics(
           pid, content::BrowserChildProcessHost::GetPortProvider());
   metrics->GetCommittedAndWorkingSetKBytes(&info.committed, &info.working_set);
-  info.phys_footprint = metrics->GetPhysicalFootprint();
+  base::ProcessMetrics::TaskVMInfo vm_info = metrics->GetTaskVMInfo();
+  info.phys_footprint = vm_info.phys_footprint;
+
+  // TODO(erikchen): Remove this temporary estimate for private memory once the
+  // memory infra service emits the same metric. https://crbug.com/720541.
+  if (base::mac::IsAtLeastOS10_12()) {
+    info.private_memory_footprint = vm_info.phys_footprint;
+  } else {
+    info.private_memory_footprint = vm_info.internal + vm_info.compressed;
+  }
 
   processes->push_back(info);
 }
@@ -86,10 +96,7 @@ ProcessData* MemoryDetails::ChromeBrowser() {
 
 void MemoryDetails::CollectProcessData(
     const std::vector<ProcessMemoryInformation>& child_info) {
-  // TODO(ellyjones): Does this still need to be run in the blocking pool?
-  // It used to need to be because it ran /bin/ps, but it might not need to any
-  // more.
-  DCHECK(BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
+  base::ThreadRestrictions::AssertIOAllowed();
 
   // Clear old data.
   process_data_[0].processes.clear();

@@ -5,20 +5,27 @@
 #ifndef CHROME_BROWSER_AUTOFILL_ANDROID_PERSONAL_DATA_MANAGER_ANDROID_H_
 #define CHROME_BROWSER_AUTOFILL_ANDROID_PERSONAL_DATA_MANAGER_ANDROID_H_
 
+#include <string>
+#include <vector>
+
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
-#include "components/payments/core/address_normalizer.h"
+#include "components/payments/core/address_normalizer_impl.h"
+#include "components/payments/core/subkey_requester.h"
+#include "third_party/libaddressinput/chromium/chrome_address_validator.h"
 
 namespace autofill {
 
 // Android wrapper of the PersonalDataManager which provides access from the
 // Java layer. Note that on Android, there's only a single profile, and
 // therefore a single instance of this wrapper.
-class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
+class PersonalDataManagerAndroid
+    : public PersonalDataManagerObserver,
+      public base::SupportsWeakPtr<PersonalDataManagerAndroid> {
  public:
   // Registers the JNI bindings for this class.
   static bool Register(JNIEnv* env);
@@ -159,9 +166,10 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jobject>& jcard);
 
-  // Returns the card type according to PaymentRequest spec, or an empty string
-  // if the given card number is not valid and |jempty_if_invalid| is true.
-  base::android::ScopedJavaLocalRef<jstring> GetBasicCardPaymentType(
+  // Returns the issuer network string according to PaymentRequest spec, or an
+  // empty string if the given card number is not valid and |jempty_if_invalid|
+  // is true.
+  base::android::ScopedJavaLocalRef<jstring> GetBasicCardIssuerNetwork(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jstring>& jcard_number,
@@ -284,7 +292,14 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
 
   // Starts loading the address validation rules for the specified
   // |region_code|.
-  void LoadRulesForRegion(
+  void LoadRulesForAddressNormalization(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& unused_obj,
+      const base::android::JavaParamRef<jstring>& region_code);
+
+  // Starts loading the rules for the specified |region_code| for the further
+  // subkey request.
+  void LoadRulesForSubKeys(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jstring>& region_code);
@@ -312,6 +327,21 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj);
 
+  // Gets the subkeys for the region with |jregion_code| code, if the
+  // |jregion_code| rules have finished loading. Otherwise, sets up a task to
+  // get the subkeys, when the rules are loaded.
+  void StartRegionSubKeysRequest(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& unused_obj,
+      const base::android::JavaParamRef<jstring>& jregion_code,
+      jint jtimeout_seconds,
+      const base::android::JavaParamRef<jobject>& jdelegate);
+
+  // Cancels the pending subkey request task.
+  void CancelPendingGetSubKeys(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& unused_obj);
+
  private:
   ~PersonalDataManagerAndroid() override;
 
@@ -324,9 +354,6 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
   base::android::ScopedJavaLocalRef<jobjectArray> GetCreditCardGUIDs(
       JNIEnv* env,
       const std::vector<CreditCard*>& credit_cards);
-
-  // Returns whether the rules are loaded for the specified |region_code|.
-  bool AreRulesLoadedForRegion(const std::string& region_code);
 
   // Gets the labels for the |profiles| passed as parameters. These labels are
   // useful for distinguishing the profiles from one another.
@@ -360,7 +387,10 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
   PersonalDataManager* personal_data_manager_;
 
   // The address validator used to normalize addresses.
-  payments::AddressNormalizer address_normalizer_;
+  payments::AddressNormalizerImpl address_normalizer_;
+
+  // Used for subkey request.
+  payments::SubKeyRequester subkey_requester_;
 
   DISALLOW_COPY_AND_ASSIGN(PersonalDataManagerAndroid);
 };

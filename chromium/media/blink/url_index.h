@@ -142,6 +142,9 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   // Accessor
   blink::WebFrame* frame() const { return frame_; }
 
+  void AddBytesRead(int64_t b) { bytes_read_from_cache_ += b; }
+  int64_t BytesReadFromCache() { return bytes_read_from_cache_; }
+
  protected:
   UrlData(const GURL& url,
           CORSMode cors_mode,
@@ -172,6 +175,9 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
 
   // Length of resource this url points to. (in bytes)
   int64_t length_;
+
+  // Number of bytes read from this resource.
+  int64_t bytes_read_from_cache_ = 0;
 
   std::string mime_type_;
 

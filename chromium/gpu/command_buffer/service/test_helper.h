@@ -197,8 +197,7 @@ class TestHelper {
       const UniformMap* const expected_uniform_map,
       const VaryingMap* const expected_varying_map,
       const InterfaceBlockMap* const expected_interface_block_map,
-      const OutputVariableList* const expected_output_variable_list,
-      const NameMap* const expected_name_map);
+      const OutputVariableList* const expected_output_variable_list);
 
   static void SetShaderStates(::gl::MockGLInterface* gl,
                               Shader* shader,
@@ -213,6 +212,20 @@ class TestHelper {
   static sh::Varying ConstructVarying(
       GLenum type, GLint array_size, GLenum precision,
       bool static_use, const std::string& name);
+  static sh::InterfaceBlockField ConstructInterfaceBlockField(
+      GLenum type,
+      GLint array_size,
+      GLenum precision,
+      bool static_use,
+      const std::string& name);
+  static sh::InterfaceBlock ConstructInterfaceBlock(
+      GLint array_size,
+      sh::BlockLayoutType layout,
+      bool is_row_major_layout,
+      bool static_use,
+      const std::string& name,
+      const std::string& instance_name,
+      const std::vector<sh::InterfaceBlockField>& fields);
   static sh::OutputVariable ConstructOutputVariable(GLenum type,
                                                     GLint array_size,
                                                     GLenum precision,

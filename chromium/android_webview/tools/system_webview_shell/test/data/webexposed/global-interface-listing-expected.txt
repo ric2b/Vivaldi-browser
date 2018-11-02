@@ -282,8 +282,6 @@ interface CSSRule
     attribute PAGE_RULE
     attribute STYLE_RULE
     attribute SUPPORTS_RULE
-    attribute WEBKIT_KEYFRAMES_RULE
-    attribute WEBKIT_KEYFRAME_RULE
     getter cssText
     getter parentRule
     getter parentStyleSheet
@@ -2539,7 +2537,6 @@ interface Headers
     method entries
     method forEach
     method get
-    method getAll
     method has
     method keys
     method set
@@ -3350,6 +3347,7 @@ interface Request
     method blob
     method clone
     method constructor
+    method formData
     method json
     method text
 interface Response
@@ -3367,6 +3365,7 @@ interface Response
     method blob
     method clone
     method constructor
+    method formData
     method json
     method text
 interface SVGAElement : SVGGraphicsElement

@@ -4,14 +4,16 @@
 
 #include "bindings/core/v8/ScriptCustomElementDefinitionBuilder.h"
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/IDLTypes.h"
+#include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/ScriptCustomElementDefinition.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8BindingMacros.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/ExceptionCode.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8BindingMacros.h"
 
 namespace blink {
 
@@ -82,7 +84,7 @@ bool ScriptCustomElementDefinitionBuilder::ValueForName(
   v8::Local<v8::Context> context = script_state_->GetContext();
   v8::Local<v8::String> name_string = V8AtomicString(isolate, name);
   v8::TryCatch try_catch(isolate);
-  if (!V8Call(object->Get(context, name_string), value, try_catch)) {
+  if (!object->Get(context, name_string).ToLocal(&value)) {
     exception_state_.RethrowV8Exception(try_catch.Exception());
     return false;
   }
@@ -114,7 +116,7 @@ bool ScriptCustomElementDefinitionBuilder::CallableForName(
     return true;
   if (!value->IsFunction()) {
     exception_state_.ThrowTypeError(String::Format(
-        "\"%s\" is not a callable object", name.ToString().Ascii().Data()));
+        "\"%s\" is not a callable object", name.ToString().Ascii().data()));
     return false;
   }
   callback = value.As<v8::Function>();
@@ -128,7 +130,7 @@ bool ScriptCustomElementDefinitionBuilder::RetrieveObservedAttributes() {
     return false;
   if (observed_attributes_value->IsUndefined())
     return true;
-  Vector<AtomicString> list = ToImplSequence<Vector<AtomicString>>(
+  Vector<String> list = NativeValueTraits<IDLSequence<IDLString>>::NativeValue(
       script_state_->GetIsolate(), observed_attributes_value, exception_state_);
   if (exception_state_.HadException())
     return false;
@@ -136,7 +138,7 @@ bool ScriptCustomElementDefinitionBuilder::RetrieveObservedAttributes() {
     return true;
   observed_attributes_.ReserveCapacityForSize(list.size());
   for (const auto& attribute : list)
-    observed_attributes_.insert(attribute);
+    observed_attributes_.insert(AtomicString(attribute));
   return true;
 }
 

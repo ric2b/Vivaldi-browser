@@ -5,8 +5,8 @@
 #ifndef USBAlternateInterface_h
 #define USBAlternateInterface_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "device/usb/public/interfaces/device.mojom-blink.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Heap.h"
 
 namespace blink {
@@ -28,7 +28,7 @@ class USBAlternateInterface : public GarbageCollected<USBAlternateInterface>,
 
   USBAlternateInterface(const USBInterface*, size_t alternate_index);
 
-  const device::usb::blink::AlternateInterfaceInfo& Info() const;
+  const device::mojom::blink::UsbAlternateInterfaceInfo& Info() const;
 
   uint8_t alternateSetting() const { return Info().alternate_setting; }
   uint8_t interfaceClass() const { return Info().class_code; }

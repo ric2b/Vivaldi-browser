@@ -8,10 +8,13 @@
 #include "core/css/CSSCustomIdentValue.h"
 #include "core/css/CSSIdentifierValue.h"
 #include "core/css/CSSPrimitiveValue.h"
+#include "core/css/CSSValueList.h"
 #include "core/css/parser/CSSParserMode.h"
 #include "core/css/parser/CSSParserTokenRange.h"
+#include "core/frame/UseCounter.h"
 #include "platform/Length.h"  // For ValueRange
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Optional.h"
 
 namespace blink {
 
@@ -52,7 +55,11 @@ CSSPrimitiveValue* ConsumeLengthOrPercent(
     CSSParserMode,
     ValueRange,
     UnitlessQuirk = UnitlessQuirk::kForbid);
-CSSPrimitiveValue* ConsumeAngle(CSSParserTokenRange&);
+
+CSSPrimitiveValue* ConsumeAngle(
+    CSSParserTokenRange&,
+    const CSSParserContext&,
+    WTF::Optional<UseCounter::Feature> unitlessZeroFeature);
 CSSPrimitiveValue* ConsumeTime(CSSParserTokenRange&, ValueRange);
 CSSPrimitiveValue* ConsumeResolution(CSSParserTokenRange&);
 
@@ -76,12 +83,15 @@ CSSValue* ConsumeColor(CSSParserTokenRange&,
 
 CSSValue* ConsumeLineWidth(CSSParserTokenRange&, CSSParserMode, UnitlessQuirk);
 
-CSSValuePair* ConsumePosition(CSSParserTokenRange&,
-                              CSSParserMode,
-                              UnitlessQuirk);
+CSSValuePair* ConsumePosition(
+    CSSParserTokenRange&,
+    const CSSParserContext&,
+    UnitlessQuirk,
+    WTF::Optional<UseCounter::Feature> threeValuePosition);
 bool ConsumePosition(CSSParserTokenRange&,
-                     CSSParserMode,
+                     const CSSParserContext&,
                      UnitlessQuirk,
+                     WTF::Optional<UseCounter::Feature> threeValuePosition,
                      CSSValue*& result_x,
                      CSSValue*& result_y);
 bool ConsumeOneOrTwoValuedPosition(CSSParserTokenRange&,
@@ -119,6 +129,24 @@ CSSIdentifierValue* ConsumeIdent(CSSParserTokenRange& range) {
       !IdentMatches<names...>(range.Peek().Id()))
     return nullptr;
   return CSSIdentifierValue::Create(range.ConsumeIncludingWhitespace().Id());
+}
+
+// ConsumeCommaSeparatedList takes a callback function to call on each item in
+// the list, followed by the arguments to pass to this callback.
+// The first argument to the callback must be the CSSParserTokenRange
+template <typename Func, typename... Args>
+CSSValueList* ConsumeCommaSeparatedList(Func callback,
+                                        CSSParserTokenRange& range,
+                                        Args... args) {
+  CSSValueList* list = CSSValueList::CreateCommaSeparated();
+  do {
+    CSSValue* value = callback(range, args...);
+    if (!value)
+      return nullptr;
+    list->Append(*value);
+  } while (ConsumeCommaIncludingWhitespace(range));
+  DCHECK(list->length());
+  return list;
 }
 
 }  // namespace CSSPropertyParserHelpers

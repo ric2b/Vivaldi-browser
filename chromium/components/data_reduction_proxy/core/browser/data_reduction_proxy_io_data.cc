@@ -291,27 +291,41 @@ void DataReductionProxyIOData::SetDataReductionProxyConfiguration(
 }
 
 bool DataReductionProxyIOData::ShouldEnableLoFi(
-    const net::URLRequest& request) {
+    const net::URLRequest& request,
+    previews::PreviewsDecider* previews_decider) {
+  DCHECK(previews_decider);
   DCHECK((request.load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) != 0);
   if (!config_ || (config_->IsBypassedByDataReductionProxyLocalRules(
                       request, configurator_->GetProxyConfig()))) {
     return false;
   }
-  return config_->ShouldEnableLoFi(request);
+  return config_->ShouldEnableLoFi(request, *previews_decider);
 }
 
 bool DataReductionProxyIOData::ShouldEnableLitePages(
-    const net::URLRequest& request) {
+    const net::URLRequest& request,
+    previews::PreviewsDecider* previews_decider) {
+  DCHECK(previews_decider);
   DCHECK((request.load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) != 0);
   if (!config_ || (config_->IsBypassedByDataReductionProxyLocalRules(
                       request, configurator_->GetProxyConfig()))) {
     return false;
   }
-  return config_->ShouldEnableLitePages(request);
+  return config_->ShouldEnableLitePages(request, *previews_decider);
 }
 
 void DataReductionProxyIOData::SetLoFiModeOff() {
   config_->SetLoFiModeOff();
+}
+
+void DataReductionProxyIOData::UpdateDataUseForHost(int64_t network_bytes,
+                                                    int64_t original_bytes,
+                                                    const std::string& host) {
+  DCHECK(io_task_runner_->BelongsToCurrentThread());
+
+  ui_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&DataReductionProxyService::UpdateDataUseForHost,
+                            service_, network_bytes, original_bytes, host));
 }
 
 void DataReductionProxyIOData::UpdateContentLengths(

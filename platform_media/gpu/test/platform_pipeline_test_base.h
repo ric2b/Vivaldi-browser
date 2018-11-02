@@ -21,13 +21,15 @@ protected:
   class DecodingMockVDA;
 
   Demuxer * CreatePlatformDemuxer(std::unique_ptr<DataSource> & data_source,
-                                  base::MessageLoop & message_loop_);
+                                  base::MessageLoop & message_loop_,
+                                  MediaLog* media_log);
 
-  void AppendPlatformAudioDecoders(ScopedVector<AudioDecoder> & audio_decoders,
+  void AppendPlatformAudioDecoders(std::vector<std::unique_ptr<AudioDecoder>> & audio_decoders,
           const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner);
 
-  void AppendPlatformVideoDecoders(ScopedVector<VideoDecoder> & video_decoders,
-          const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner);
+  void AppendPlatformVideoDecoders(std::vector<std::unique_ptr<VideoDecoder>> & video_decoders,
+          const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+          MediaLog* media_log);
 
   void EnableMockVDA();
   void DestroyMockVDA();

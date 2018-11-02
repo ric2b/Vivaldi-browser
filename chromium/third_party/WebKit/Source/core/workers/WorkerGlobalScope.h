@@ -28,9 +28,7 @@
 #define WorkerGlobalScope_h
 
 #include <memory>
-#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/V8CacheOptions.h"
-#include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/CoreExport.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/EventListener.h"
@@ -41,6 +39,7 @@
 #include "core/workers/WorkerEventQueue.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 #include "core/workers/WorkerSettings.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/CachedMetadataHandler.h"
 #include "platform/wtf/ListHashSet.h"
@@ -51,6 +50,7 @@ class ConsoleMessage;
 class ExceptionState;
 class V8AbstractEventListener;
 class WorkerClients;
+class WorkerFetchContext;
 class WorkerLocation;
 class WorkerNavigator;
 class WorkerThread;
@@ -83,8 +83,8 @@ class CORE_EXPORT WorkerGlobalScope
   // WorkerOrWorkletGlobalScope
   bool IsClosing() const final { return closing_; }
   virtual void Dispose();
-  void CountFeature(UseCounter::Feature) final;
-  void CountDeprecation(UseCounter::Feature) final;
+  void ReportFeature(UseCounter::Feature) final;
+  void ReportDeprecation(UseCounter::Feature) final;
   WorkerThread* GetThread() const final { return thread_; }
 
   void ExceptionUnhandled(int exception_id);
@@ -98,7 +98,7 @@ class CORE_EXPORT WorkerGlobalScope
   WorkerNavigator* navigator() const;
   void close();
   bool isSecureContextForBindings() const {
-    return ExecutionContext::IsSecureContext(kStandardSecureContextCheck);
+    return ExecutionContext::IsSecureContext();
   }
 
   String origin() const;
@@ -123,18 +123,16 @@ class CORE_EXPORT WorkerGlobalScope
 
   // ExecutionContext
   bool IsWorkerGlobalScope() const final { return true; }
-  bool IsJSExecutionForbidden() const final;
   bool IsContextThread() const final;
-  void DisableEval(const String& error_message) final;
   String UserAgent() const final { return user_agent_; }
 
   DOMTimerCoordinator* Timers() final { return &timers_; }
   SecurityContext& GetSecurityContext() final { return *this; }
   void AddConsoleMessage(ConsoleMessage*) final;
   WorkerEventQueue* GetEventQueue() const final;
-  bool IsSecureContext(
-      String& error_message,
-      const SecureContextCheck = kStandardSecureContextCheck) const override;
+  bool IsSecureContext(String& error_message) const override;
+
+  CoreProbeSink* GetProbeSink() final;
 
   // EventTarget
   ExecutionContext* GetExecutionContext() const final;
@@ -146,12 +144,10 @@ class CORE_EXPORT WorkerGlobalScope
 
   double TimeOrigin() const { return time_origin_; }
   WorkerSettings* GetWorkerSettings() const { return worker_settings_.get(); }
-
-  WorkerOrWorkletScriptController* ScriptController() final {
-    return script_controller_.Get();
-  }
-
   WorkerClients* Clients() const { return worker_clients_.Get(); }
+
+  // Available only when off-main-thread-fetch is enabled.
+  WorkerFetchContext* GetFetchContext();
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -191,10 +187,9 @@ class CORE_EXPORT WorkerGlobalScope
   mutable Member<WorkerLocation> location_;
   mutable Member<WorkerNavigator> navigator_;
 
-  Member<WorkerOrWorkletScriptController> script_controller_;
   WorkerThread* thread_;
 
-  bool closing_;
+  bool closing_ = false;
 
   Member<WorkerEventQueue> event_queue_;
 
@@ -207,7 +202,9 @@ class CORE_EXPORT WorkerGlobalScope
   HeapHashSet<Member<V8AbstractEventListener>> event_listeners_;
 
   HeapHashMap<int, Member<ErrorEvent>> pending_error_events_;
-  int last_pending_error_event_id_;
+  int last_pending_error_event_id_ = 0;
+
+  Member<WorkerFetchContext> fetch_context_;
 };
 
 DEFINE_TYPE_CASTS(WorkerGlobalScope,

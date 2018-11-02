@@ -17,8 +17,9 @@
 <translation id="3256316712990552818">A Chromiumra másolva</translation>
 <translation id="3413120535237193088">Ha az összes eszközén szeretné elérni könyvjelzőit, jelentkezzen be a Chromiumba.</translation>
 <translation id="3473048256428424907">A Chromium QR-olvasójának bekapcsolása</translation>
+<translation id="3605252743693911722">Jelentkezzen be a Chromiumba, hogy az összes eszközén hozzáférhessen könyvjelzőihez, jelszavaihoz és más beállításaihoz.</translation>
 <translation id="3805899903892079518">A Chromium nem fér hozzá az Ön képeihez és videóihoz. Engedélyezés iOS-en: Beállítások &gt; Adatvédelem &gt; Fényképek.</translation>
-<translation id="40863189315891987">A gyorsabb hozzáférés érdekében <ph name="BEGIN_LINK" />helyezze át a Chromiumot a Dockra<ph name="END_LINK" /></translation>
+<translation id="4024541897090868497">Ha az összes eszközén szeretne hozzáférni lapjaihoz, jelentkezzen be a Chromiumba.</translation>
 <translation id="418271229036116702">Ha hozzá szeretne férni lapjaihoz a többi eszközéről, jelentkezzen be a Chromiumba.</translation>
 <translation id="4241912885070669028">Kijelentkezik egy <ph name="SIGNOUT_MANAGED_DOMAIN" /> által felügyelt fiókból. Ezzel törli az eszközön található Chromium-adatokat, amelyek azonban Google-fiókjában megmaradnak.</translation>
 <translation id="4555020257205549924">Ha a funkció be van kapcsolva, a Chromium felajánlja a más nyelveken írt oldalak lefordítását a Google Fordító segítségével. <ph name="BEGIN_LINK" />További információ<ph name="END_LINK" />.</translation>
@@ -32,7 +33,6 @@
 <translation id="6268381023930128611">Kijelentkezik a Chromiumból?</translation>
 <translation id="6424492062988593837">A Chromium most még jobb lett! Új verzió áll rendelkezésre.</translation>
 <translation id="6604711459180487467">A helyadatokkal jobb felhasználói élményben lehet része a Chromium használatakor.</translation>
-<translation id="6989306073720242915">Tetszik Önnek a Chromium? <ph name="BEGIN_LINK" />Helyezze át a Dockra<ph name="END_LINK" />.</translation>
 <translation id="7099326575020694068">A Chromium Osztott nézet módban nem tudja használni a kamerát</translation>
 <translation id="7144758435978427212">Közeli objektumok által küldött weboldalak felfedezése. Ha a Bluetooth be van kapcsolva, a Chromium összegyűjtheti az Ön közelében található objektumokhoz társított weboldalakat, és névtelenül elküldheti őket a Google-nak, hogy megtalálja az Ön számára leghasznosabbakat. <ph name="BEGIN_LINK" />További információ<ph name="END_LINK" />.</translation>
 <translation id="7208566199746267865">A Chromium időt takarít meg Önnek azzal, hogy fiókjait az internetre viszi. A beállításokban tud fiókokat hozzáadni vagy eltávolítani.</translation>
@@ -44,7 +44,6 @@
 <translation id="786327964234957808">A(z) <ph name="USER_EMAIL1" /> szinkronizált fiókról a következőre vált át: <ph name="USER_EMAIL2" />. A meglévő Chromium-adatokat a(z) <ph name="DOMAIN" /> kezeli. Ezzel törli az adatait erről az eszközről, viszont azok továbbra is megmaradnak a(z) <ph name="USER_EMAIL1" /> fiókban.</translation>
 <translation id="8111736072665034317">Az alkalmazás használatával Ön elfogadja a Chromium <ph name="BEGIN_LINK" />Általános Szerződési Feltételeit<ph name="END_LINK" />.</translation>
 <translation id="8175055321229419309">Tipp: <ph name="BEGIN_LINK" />Helyezze át a Chromiumot a Dockra<ph name="END_LINK" />.</translation>
-<translation id="8200548749940012969">Ha az összes eszközén szeretne hozzáférni beállításaihoz, jelentkezzen be a Chromiumba.</translation>
 <translation id="8252885722420466166">Jobb Google-felhasználói élmény a Chromiumban a tartózkodási hely alapján.</translation>
 <translation id="8353224596138547809">Szeretné, hogy a Chromium mentse az oldalhoz tartozó jelszót?</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> – A Chromium szerzői. Minden jog fenntartva.</translation>

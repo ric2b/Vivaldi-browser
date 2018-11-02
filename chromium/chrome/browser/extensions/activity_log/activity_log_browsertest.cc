@@ -40,7 +40,8 @@ class ActivityLogPrerenderTest : public ExtensionApiTest {
 
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
-    prerender::PrerenderManager::SetMode(
+    host_resolver()->AddRule("*", "127.0.0.1");
+    prerender::PrerenderManager::SetOmniboxMode(
         prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
   }
 
@@ -70,8 +71,14 @@ class ActivityLogPrerenderTest : public ExtensionApiTest {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(ActivityLogPrerenderTest, TestScriptInjected) {
-  host_resolver()->AddRule("*", "127.0.0.1");
+// https://crbug.com/724553
+#if defined(OS_MACOSX) && defined(ADDRESS_SANITIZER)
+#define MAYBE_TestScriptInjected DISABLED_TestScriptInjected
+#else
+#define MAYBE_TestScriptInjected TestScriptInjected
+#endif  // defined(OS_MACOSX) && defined(ADDRESS_SANITIZER)
+
+IN_PROC_BROWSER_TEST_F(ActivityLogPrerenderTest, MAYBE_TestScriptInjected) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   uint16_t port = embedded_test_server()->port();
 

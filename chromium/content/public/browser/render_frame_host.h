@@ -29,7 +29,7 @@ class Value;
 }
 
 namespace service_manager {
-class InterfaceRegistry;
+class BinderRegistry;
 class InterfaceProvider;
 }
 
@@ -49,6 +49,9 @@ struct FileChooserFileInfo;
 class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
                                        public IPC::Sender {
  public:
+  // Constant used to denote that a lookup of a FrameTreeNode ID has failed.
+  static const int kNoFrameTreeNodeId = -1;
+
   // Returns the RenderFrameHost given its ID and the ID of its render process.
   // Returns nullptr if the IDs do not correspond to a live RenderFrameHost.
   static RenderFrameHost* FromID(int render_process_id, int render_frame_id);
@@ -58,10 +61,20 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // is present only to support Android WebView and must not be used in other
   // configurations.
   static void AllowInjectingJavaScriptForAndroidWebView();
+
+  // Temporary hack to enable data URLs on Android Webview until PlzNavigate
+  // ships.
+  static void AllowDataUrlNavigationForAndroidWebView();
+  static bool IsDataUrlNavigationAllowedForAndroidWebView();
 #endif
 
   // Returns a RenderFrameHost given its accessibility tree ID.
   static RenderFrameHost* FromAXTreeID(int ax_tree_id);
+
+  // Returns the FrameTreeNode ID corresponding to the specified |process_id|
+  // and |routing_id|. This routing ID pair may represent a placeholder for
+  // frame that is currently rendered in a different process than |process_id|.
+  static int GetFrameTreeNodeIdForRoutingId(int process_id, int routing_id);
 
   ~RenderFrameHost() override {}
 
@@ -178,9 +191,9 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // RenderViewHost for this frame.
   virtual RenderViewHost* GetRenderViewHost() = 0;
 
-  // Returns the InterfaceRegistry that this process uses to expose interfaces
+  // Returns the BinderRegistry that this process uses to expose interfaces
   // to the application running in this frame.
-  virtual service_manager::InterfaceRegistry* GetInterfaceRegistry() = 0;
+  virtual service_manager::BinderRegistry* GetInterfaceRegistry() = 0;
 
   // Returns the InterfaceProvider that this process can use to bind
   // interfaces exposed to it by the application running in this frame.
@@ -197,6 +210,16 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Returns whether the RenderFrame in the renderer process has been created
   // and still has a connection.  This is valid for all frames.
   virtual bool IsRenderFrameLive() = 0;
+
+  // Returns true if this is the currently-visible RenderFrameHost for our frame
+  // tree node. During process transfer, a RenderFrameHost may be created that
+  // is not current. After process transfer, the old RenderFrameHost becomes
+  // non-current until it is deleted (which may not happen until its unload
+  // handler runs).
+  //
+  // Changes to the IsCurrent() state of a RenderFrameHost may be observed via
+  // WebContentsObserver::RenderFrameHostChanged().
+  virtual bool IsCurrent() = 0;
 
   // Get the number of proxies to this frame, in all processes. Exposed for
   // use by resource metrics.
@@ -251,6 +274,9 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   virtual void DisableBeforeUnloadHangMonitorForTesting() = 0;
   virtual bool IsBeforeUnloadHangMonitorDisabledForTesting() = 0;
 
+  // Returns true if the given Feature Policy |feature| is enabled for this
+  // RenderFrameHost and is allowed to be used by it. Use this in the browser
+  // process to determine whether access to a feature is allowed.
   virtual bool IsFeatureEnabled(blink::WebFeaturePolicyFeature feature) = 0;
 
  private:

@@ -1,0 +1,46 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+import("//third_party/WebKit/Source/core/core.gni")
+
+blink_core_sources("exported") {
+  sources = [
+    "SharedWorkerRepositoryClientImpl.cpp",
+    "SharedWorkerRepositoryClientImpl.h",
+    "WebArrayBuffer.cpp",
+    "WebArrayBufferConverter.cpp",
+    "WebArrayBufferView.cpp",
+    "WebAssociatedURLLoaderImpl.cpp",
+    "WebAssociatedURLLoaderImpl.h",
+    "WebBlob.cpp",
+    "WebCSSParser.cpp",
+    "WebColorSuggestion.cpp",
+    "WebCustomElement.cpp",
+    "WebDOMActivityLogger.cpp",
+    "WebDOMEvent.cpp",
+    "WebDataSourceImpl.cpp",
+    "WebDataSourceImpl.h",
+    "WebDateTimeSuggestion.cpp",
+    "WebFileChooserCompletionImpl.cpp",
+    "WebFileChooserCompletionImpl.h",
+    "WebHeap.cpp",
+    "WebHistoryItem.cpp",
+    "WebImageCache.cpp",
+    "WebImageDecoder.cpp",
+    "WebMemoryStatistics.cpp",
+    "WebPerformance.cpp",
+    "WebPluginContainerBase.cpp",
+    "WebPluginContainerBase.h",
+    "WebRange.cpp",
+    "WebRenderTheme.cpp",
+    "WebScriptController.cpp",
+    "WebScriptSource.cpp",
+    "WebSecurityPolicy.cpp",
+    "WebSelection.cpp",
+    "WebSelector.cpp",
+    "WebSerializedScriptValue.cpp",
+    "WebViewBase.h",
+  ]
+
+  defines = [ "BLINK_IMPLEMENTATION=1" ]
+}

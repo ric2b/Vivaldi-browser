@@ -59,7 +59,7 @@ class HTMLCanvasPainterTestForSPv2 : public ::testing::Test,
     return AdoptRef(new Canvas2DLayerBridge(
         WTF::WrapUnique(new FakeWebGraphicsContext3DProvider(&gl_)), size, 0,
         kNonOpaque, Canvas2DLayerBridge::kForceAccelerationForTesting,
-        gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType));
+        CanvasColorParams()));
   }
 
  private:
@@ -74,7 +74,7 @@ TEST_P(HTMLCanvasPainterTestForSPv2, Canvas2DLayerAppearsInLayerTree) {
   // Insert a <canvas> and force it into accelerated mode.
   GetDocument().body()->setInnerHTML("<canvas width=300 height=200>");
   HTMLCanvasElement* element =
-      toHTMLCanvasElement(GetDocument().body()->FirstChild());
+      toHTMLCanvasElement(GetDocument().body()->firstChild());
   CanvasContextCreationAttributes attributes;
   attributes.setAlpha(true);
   CanvasRenderingContext* context =

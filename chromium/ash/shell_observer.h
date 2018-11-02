@@ -8,27 +8,21 @@
 #include "ash/ash_export.h"
 #include "ash/login_status.h"
 
+namespace aura {
+class Window;
+}
+
 namespace ash {
 
 class WmWindow;
 
 class ASH_EXPORT ShellObserver {
  public:
-  // Invoked when the user logs in.
-  virtual void OnLoginStateChanged(LoginStatus status) {}
-
-  // Invoked when the application is exiting.
-  virtual void OnAppTerminating() {}
-
-  // Invoked when the screen is locked (after the lock window is visible) or
-  // unlocked.
-  virtual void OnLockStateChanged(bool locked) {}
-
   // Called when a casting session is started or stopped.
   virtual void OnCastingSessionStartedOrStopped(bool started) {}
 
   // Invoked after a non-primary root window is created.
-  virtual void OnRootWindowAdded(WmWindow* root_window) {}
+  virtual void OnRootWindowAdded(aura::Window* root_window) {}
 
   // Invoked after the shelf has been created for |root_window|.
   virtual void OnShelfCreatedForRootWindow(WmWindow* root_window) {}
@@ -44,10 +38,10 @@ class ASH_EXPORT ShellObserver {
 
   // Invoked when entering or exiting fullscreen mode in |root_window|.
   virtual void OnFullscreenStateChanged(bool is_fullscreen,
-                                        WmWindow* root_window) {}
+                                        aura::Window* root_window) {}
 
   // Invoked when |pinned_window| enter or exit pinned mode.
-  virtual void OnPinnedStateChanged(WmWindow* pinned_window) {}
+  virtual void OnPinnedStateChanged(aura::Window* pinned_window) {}
 
   // Called when the overview mode is about to be started (before the windows
   // get re-arranged).
@@ -69,7 +63,7 @@ class ASH_EXPORT ShellObserver {
 
   // Called when keyboard is activated/deactivated in |root_window|.
   virtual void OnVirtualKeyboardStateChanged(bool activated,
-                                             WmWindow* root_window) {}
+                                             aura::Window* root_window) {}
 
   // Called at the end of Shell::Init.
   virtual void OnShellInitialized() {}

@@ -128,7 +128,10 @@ static void adobergb_to_cielab(float r, float g, float b, LAB* lab) {
 static bool bitmap_to_cielab(const SkBitmap* bitmap, ImageLAB* outImageLAB) {
   SkBitmap bm8888;
   if (bitmap->colorType() != kN32_SkColorType) {
-    if (!bitmap->copyTo(&bm8888, kN32_SkColorType)) {
+    SkImageInfo info8888 = bitmap->info().makeColorType(kN32_SkColorType);
+    if (!bm8888.tryAllocPixels(info8888) ||
+        !bitmap->readPixels(info8888, bm8888.getPixels(), bm8888.rowBytes(), 0,
+                            0)) {
       return false;
     }
     bitmap = &bm8888;
@@ -139,7 +142,6 @@ static bool bitmap_to_cielab(const SkBitmap* bitmap, ImageLAB* outImageLAB) {
   DCHECK(outImageLAB->width == width);
   DCHECK(outImageLAB->height == height);
 
-  bitmap->lockPixels();
   RGB rgb;
   LAB lab;
   for (int y = 0; y < height; y++) {
@@ -153,7 +155,6 @@ static bool bitmap_to_cielab(const SkBitmap* bitmap, ImageLAB* outImageLAB) {
       outImageLAB->writePixel(x, y, lab);
     }
   }
-  bitmap->unlockPixels();
   return true;
 }
 

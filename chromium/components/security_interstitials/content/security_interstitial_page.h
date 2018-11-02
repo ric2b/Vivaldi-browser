@@ -22,7 +22,6 @@ class WebContents;
 }
 
 namespace security_interstitials {
-class MetricsHelper;
 class SecurityInterstitialControllerClient;
 
 class SecurityInterstitialPage : public content::InterstitialPageDelegate {
@@ -54,6 +53,8 @@ class SecurityInterstitialPage : public content::InterstitialPageDelegate {
   // interstitial_page_ will now have a value.
   virtual void AfterShow() {}
 
+  virtual int GetHTMLTemplateId();
+
   // InterstitialPageDelegate method:
   std::string GetHTMLContents() override;
 
@@ -65,8 +66,6 @@ class SecurityInterstitialPage : public content::InterstitialPageDelegate {
   GURL request_url() const;
 
   SecurityInterstitialControllerClient* controller();
-
-  MetricsHelper* metrics_helper();
 
   // Update metrics when the interstitial is closed.
   void UpdateMetricsAfterSecurityInterstitial();
@@ -89,8 +88,6 @@ class SecurityInterstitialPage : public content::InterstitialPageDelegate {
 
   // For subclasses that don't have their own ControllerClients yet.
   std::unique_ptr<SecurityInterstitialControllerClient> controller_;
-
-  std::unique_ptr<MetricsHelper> metrics_helper_;
 
   DISALLOW_COPY_AND_ASSIGN(SecurityInterstitialPage);
 };

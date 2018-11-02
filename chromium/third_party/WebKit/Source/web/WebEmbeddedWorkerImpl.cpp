@@ -34,13 +34,18 @@
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/dom/Document.h"
 #include "core/dom/SecurityContext.h"
+#include "core/dom/TaskRunnerHelper.h"
+#include "core/exported/WebDataSourceImpl.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/ThreadableLoadingContext.h"
+#include "core/loader/WorkerFetchContext.h"
 #include "core/probe/CoreProbes.h"
 #include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerClients.h"
+#include "core/workers/WorkerContentSettingsClient.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerInspectorProxy.h"
 #include "core/workers/WorkerLoaderProxy.h"
@@ -49,6 +54,7 @@
 #include "modules/serviceworkers/ServiceWorkerContainerClient.h"
 #include "modules/serviceworkers/ServiceWorkerThread.h"
 #include "platform/Histogram.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/SubstituteData.h"
@@ -60,6 +66,7 @@
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/WebWorkerFetchContext.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
 #include "public/web/WebConsoleMessage.h"
@@ -71,9 +78,6 @@
 #include "web/IndexedDBClientImpl.h"
 #include "web/ServiceWorkerGlobalScopeClientImpl.h"
 #include "web/ServiceWorkerGlobalScopeProxy.h"
-#include "web/WebDataSourceImpl.h"
-#include "web/WebLocalFrameImpl.h"
-#include "web/WorkerContentSettingsClient.h"
 
 namespace blink {
 
@@ -212,10 +216,10 @@ void WebEmbeddedWorkerImpl::ReattachDevTools(const WebString& host_id,
   ResumeStartup();
 }
 
-void WebEmbeddedWorkerImpl::DetachDevTools() {
+void WebEmbeddedWorkerImpl::DetachDevTools(int session_id) {
   WebDevToolsAgent* devtools_agent = main_frame_->DevToolsAgent();
   if (devtools_agent)
-    devtools_agent->Detach();
+    devtools_agent->Detach(session_id);
 }
 
 void WebEmbeddedWorkerImpl::DispatchDevToolsMessage(int session_id,
@@ -262,21 +266,6 @@ void WebEmbeddedWorkerImpl::PostMessageToPageInspector(const String& message) {
   worker_inspector_proxy_->DispatchMessageFromWorker(message);
 }
 
-void WebEmbeddedWorkerImpl::PostTaskToLoader(
-    const WebTraceLocation& location,
-    std::unique_ptr<WTF::CrossThreadClosure> task) {
-  main_thread_task_runners_->Get(TaskType::kNetworking)
-      ->PostTask(BLINK_FROM_HERE, std::move(task));
-}
-
-void WebEmbeddedWorkerImpl::PostTaskToWorkerGlobalScope(
-    const WebTraceLocation& location,
-    std::unique_ptr<WTF::CrossThreadClosure> task) {
-  if (asked_to_terminate_ || !worker_thread_)
-    return;
-  worker_thread_->PostTask(location, std::move(task));
-}
-
 ThreadableLoadingContext* WebEmbeddedWorkerImpl::GetThreadableLoadingContext() {
   if (!loading_context_) {
     loading_context_ = ThreadableLoadingContext::Create(
@@ -304,7 +293,7 @@ void WebEmbeddedWorkerImpl::PrepareShadowPageForLoader() {
   settings->SetStrictMixedContentChecking(true);
   settings->SetAllowRunningOfInsecureContent(false);
   settings->SetDataSaverEnabled(worker_start_data_.data_saver_enabled);
-  main_frame_ = ToWebLocalFrameImpl(WebLocalFrame::Create(
+  main_frame_ = ToWebLocalFrameBase(WebLocalFrame::Create(
       WebTreeScopeType::kDocument, this, nullptr, nullptr));
   web_view_->SetMainFrame(main_frame_.Get());
   main_frame_->SetDevToolsAgentClient(this);
@@ -325,23 +314,29 @@ void WebEmbeddedWorkerImpl::LoadShadowPage() {
   // to have same origin as the worker so the loading checks work correctly.
   CString content("");
   RefPtr<SharedBuffer> buffer(
-      SharedBuffer::Create(content.Data(), content.length()));
+      SharedBuffer::Create(content.data(), content.length()));
   loading_shadow_page_ = true;
   main_frame_->GetFrame()->Loader().Load(
       FrameLoadRequest(0, ResourceRequest(worker_start_data_.script_url),
                        SubstituteData(buffer, "text/html", "UTF-8", KURL())));
 }
 
-void WebEmbeddedWorkerImpl::DidFinishDocumentLoad(WebLocalFrame* frame) {
-  DCHECK_EQ(frame, main_frame_);
+void WebEmbeddedWorkerImpl::FrameDetached(WebLocalFrame* frame,
+                                          DetachType type) {
+  DCHECK(type == DetachType::kRemove && frame->Parent());
+  DCHECK(frame->FrameWidget());
+  frame->Close();
+}
+
+void WebEmbeddedWorkerImpl::DidFinishDocumentLoad() {
   DCHECK(!main_script_loader_);
   DCHECK(main_frame_);
   DCHECK(worker_context_client_);
   DCHECK(loading_shadow_page_);
   DCHECK(!asked_to_terminate_);
   loading_shadow_page_ = false;
-  frame->DataSource()->SetServiceWorkerNetworkProvider(WTF::WrapUnique(
-      worker_context_client_->CreateServiceWorkerNetworkProvider()));
+  main_frame_->DataSource()->SetServiceWorkerNetworkProvider(
+      worker_context_client_->CreateServiceWorkerNetworkProvider());
   main_script_loader_ = WorkerScriptLoader::Create();
   main_script_loader_->SetRequestContext(
       WebURLRequest::kRequestContextServiceWorker);
@@ -430,8 +425,17 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
       worker_clients,
       ServiceWorkerGlobalScopeClientImpl::Create(*worker_context_client_));
   ProvideServiceWorkerContainerClientToWorker(
-      worker_clients,
-      WTF::WrapUnique(worker_context_client_->CreateServiceWorkerProvider()));
+      worker_clients, worker_context_client_->CreateServiceWorkerProvider());
+
+  if (RuntimeEnabledFeatures::offMainThreadFetchEnabled()) {
+    std::unique_ptr<WebWorkerFetchContext> web_worker_fetch_context =
+        worker_context_client_->CreateServiceWorkerFetchContext();
+    DCHECK(web_worker_fetch_context);
+    web_worker_fetch_context->SetDataSaverEnabled(
+        document->GetFrame()->GetSettings()->GetDataSaverEnabled());
+    ProvideWorkerFetchContextToWorker(worker_clients,
+                                      std::move(web_worker_fetch_context));
+  }
 
   // We need to set the CSP to both the shadow page's document and the
   // ServiceWorkerGlobalScope.
@@ -465,19 +469,19 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
 
   main_script_loader_.Clear();
 
+  worker_global_scope_proxy_ =
+      ServiceWorkerGlobalScopeProxy::Create(*this, *worker_context_client_);
+  loader_proxy_ = WorkerLoaderProxy::Create(this);
+  worker_thread_ =
+      ServiceWorkerThread::Create(loader_proxy_, *worker_global_scope_proxy_);
+
   // We have a dummy document here for loading but it doesn't really represent
   // the document/frame of associated document(s) for this worker. Here we
   // populate the task runners with null document not to confuse the frame
   // scheduler (which will end up using the thread's default task runner).
-  main_thread_task_runners_ = ParentFrameTaskRunners::Create(nullptr);
-
-  worker_global_scope_proxy_ = ServiceWorkerGlobalScopeProxy::Create(
-      *this, *document, *worker_context_client_);
-  loader_proxy_ = WorkerLoaderProxy::Create(this);
-  worker_thread_ =
-      ServiceWorkerThread::Create(loader_proxy_, *worker_global_scope_proxy_);
   worker_thread_->Start(std::move(startup_data),
-                        main_thread_task_runners_.Get());
+                        ParentFrameTaskRunners::Create(nullptr));
+
   worker_inspector_proxy_->WorkerThreadCreated(document, worker_thread_.get(),
                                                script_url);
 }

@@ -4,9 +4,9 @@
 
 #include "core/paint/TablePainter.h"
 
+#include "core/layout/CollapsedBorderValue.h"
 #include "core/layout/LayoutTable.h"
 #include "core/layout/LayoutTableSection.h"
-#include "core/style/CollapsedBorderValue.h"
 #include "core/paint/BoxClipper.h"
 #include "core/paint/BoxPainter.h"
 #include "core/paint/LayoutObjectDrawingRecorder.h"
@@ -44,7 +44,7 @@ void TablePainter::PaintObject(const PaintInfo& paint_info,
       }
     }
 
-    if (layout_table_.CollapseBorders() &&
+    if (layout_table_.ShouldCollapseBorders() &&
         ShouldPaintDescendantBlockBackgrounds(paint_phase) &&
         layout_table_.Style()->Visibility() == EVisibility::kVisible) {
       // Using our cached sorted styles, we then do individual passes,

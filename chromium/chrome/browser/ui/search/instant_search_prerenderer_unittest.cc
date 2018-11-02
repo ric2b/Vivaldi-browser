@@ -303,8 +303,8 @@ TEST_F(InstantSearchPrerendererTest, CommitQuery) {
   base::string16 query = ASCIIToUTF16("flowers");
   PrerenderSearchQuery(query);
   InstantSearchPrerenderer* prerenderer = GetInstantSearchPrerenderer();
-  EXPECT_CALL(*mock_search_box(), Submit(_, _));
-  prerenderer->Commit(query, EmbeddedSearchRequestParams());
+  EXPECT_CALL(*mock_search_box(), Submit(_));
+  prerenderer->Commit(EmbeddedSearchRequestParams());
 }
 
 TEST_F(InstantSearchPrerendererTest, CancelPrerenderRequestOnTabChangeEvent) {
@@ -355,7 +355,7 @@ TEST_F(InstantSearchPrerendererTest, PrerenderingAllowed) {
   custom_search_type_match.keyword = ASCIIToUTF16("k");
   custom_search_type_match.destination_url =
       GURL("https://www.dummyurl.com/search?q=fan&img=1");
-  TemplateURL* template_url =
+  const TemplateURL* template_url =
       custom_search_type_match.GetTemplateURL(service, false);
   EXPECT_TRUE(template_url);
   EXPECT_TRUE(AutocompleteMatch::IsSearchType(custom_search_type_match.type));
@@ -524,8 +524,7 @@ TEST_F(TestUsePrerenderPage, SetEmbeddedSearchRequestParams) {
   EXPECT_TRUE(browser()->instant_controller());
   EXPECT_CALL(
       *mock_search_box(),
-      Submit(Eq(ASCIIToUTF16("foo")),
-             AllOf(Field(&EmbeddedSearchRequestParams::original_query,
+      Submit(AllOf(Field(&EmbeddedSearchRequestParams::original_query,
                          Eq(base::ASCIIToUTF16("f"))),
                    Field(&EmbeddedSearchRequestParams::input_encoding,
                          Eq(base::ASCIIToUTF16("utf-8"))),

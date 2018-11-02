@@ -83,6 +83,10 @@ PaintLayer* LayerForNode(Node* node) {
   return layer;
 }
 
+bool IsInDocument(EventTarget* n) {
+  return n && n->ToNode() && n->ToNode()->isConnected();
+}
+
 ScrollableArea* AssociatedScrollableArea(const PaintLayer* layer) {
   if (PaintLayerScrollableArea* scrollable_area = layer->GetScrollableArea()) {
     if (scrollable_area->ScrollsOverflow())
@@ -90,14 +94,6 @@ ScrollableArea* AssociatedScrollableArea(const PaintLayer* layer) {
   }
 
   return nullptr;
-}
-
-Element* ParentElementIfNeeded(Node* node) {
-  if (!node)
-    return nullptr;
-  if (node->IsElementNode())
-    return ToElement(node);
-  return FlatTreeTraversal::ParentElement(*node);
 }
 
 ContainerNode* ParentForClickEvent(const Node& node) {

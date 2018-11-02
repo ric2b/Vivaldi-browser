@@ -7,6 +7,7 @@
 
 #include "base/scoped_observer.h"
 
+#include "base/single_thread_task_runner.h"
 #include "device/base/device_monitor_linux.h"
 #include "device/generic_sensor/generic_sensor_export.h"
 #include "device/generic_sensor/public/interfaces/sensor.mojom.h"
@@ -68,7 +69,8 @@ class DEVICE_GENERIC_SENSOR_EXPORT SensorDeviceManager
   // initial enumeration.
   SensorDeviceMap sensors_by_node_;
 
-  base::ThreadChecker thread_checker_;
+  THREAD_CHECKER(thread_checker_);
+
   ScopedObserver<DeviceMonitorLinux, DeviceMonitorLinux::Observer> observer_;
 
   Delegate* delegate_;

@@ -13,6 +13,7 @@
 <translation id="2753617847762399167">Непозволен път (абсолютен или относителен с (..): „<ph name="IMAGE_PATH" />“</translation>
 <translation id="27822970480436970">Това разширение не успя да промени заявка от мрежата, защото промяната влезе в конфликт с друго разширение.</translation>
 <translation id="2857834222104759979">Файлът на манифеста е невалиден.</translation>
+<translation id="2903070246402204397">Разширението <ph name="EXTENSION_NAME" /> (идентификационен номер <ph name="EXTENSION_ID" />) е блокирано от администратора. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">Пакетът не можа да се инсталира: „<ph name="ERROR_CODE" />“</translation>
 <translation id="3115238746683532089">Неизвестен продукт <ph name="PRODUCT_ID" /> от доставчик <ph name="VENDOR_ID" /> (сериен номер <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3163201441334626963">Неизвестен продукт <ph name="PRODUCT_ID" /> от доставчик <ph name="VENDOR_ID" /></translation>
@@ -45,7 +46,6 @@
 <translation id="7003844668372540529">Неизвестен продукт <ph name="PRODUCT_ID" /> от <ph name="VENDOR_NAME" /></translation>
 <translation id="7217838517480956708">Администраторът на тази машина изисква разширението <ph name="EXTENSION_NAME" /> да е инсталирано. То не може да бъде премахнато или променено.</translation>
 <translation id="7581279002575751816">Приставките NPAPI не се поддържат.</translation>
-<translation id="7809034755304591547">Разширението <ph name="EXTENSION_NAME" /> (идентификационен номер „<ph name="EXTENSION_ID" />“) е блокирано от администратора.</translation>
 <translation id="7972881773422714442">Опции: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Предна</translation>
 <translation id="8047248493720652249">Това разширение не успя да наименува изтеглянето „<ph name="ATTEMPTED_FILENAME" />“, защото друго разширение (<ph name="EXTENSION_NAME" />) определи различно файлово име – „<ph name="ACTUAL_FILENAME" />“.</translation>

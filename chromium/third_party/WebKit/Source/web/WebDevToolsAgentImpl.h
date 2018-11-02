@@ -48,7 +48,7 @@ namespace blink {
 
 class GraphicsLayer;
 class InspectedFrames;
-class InspectorOverlay;
+class InspectorOverlayAgent;
 class InspectorResourceContainer;
 class InspectorResourceContentLoader;
 class InspectorTraceEvents;
@@ -74,8 +74,10 @@ class WebDevToolsAgentImpl final
 
   void WillBeDestroyed();
   WebDevToolsAgentClient* Client() { return client_; }
-  InspectorOverlay* Overlay() const { return overlay_.Get(); }
   void FlushProtocolNotifications();
+  void PaintOverlay();
+  void LayoutOverlay();
+  bool HandleInputEvent(const WebInputEvent&);
 
   // Instrumentation from web/ layer.
   void DidCommitLoadForLocalFrame(LocalFrame*);
@@ -85,13 +87,14 @@ class WebDevToolsAgentImpl final
   void DidRemovePageOverlay(const GraphicsLayer*);
   void LayerTreeViewChanged(WebLayerTreeView*);
   void RootLayerCleared();
+  bool CacheDisabled() override;
 
   // WebDevToolsAgent implementation.
   void Attach(const WebString& host_id, int session_id) override;
   void Reattach(const WebString& host_id,
                 int session_id,
                 const WebString& saved_state) override;
-  void Detach() override;
+  void Detach(int session_id) override;
   void ContinueProgram() override;
   void DispatchOnInspectorBackend(int session_id,
                                   int call_id,
@@ -100,12 +103,10 @@ class WebDevToolsAgentImpl final
   void InspectElementAt(int session_id, const WebPoint&) override;
   void FailedToRequestDevTools() override;
   WebString EvaluateInWebInspectorOverlay(const WebString& script) override;
-  bool CacheDisabled() override;
 
  private:
   WebDevToolsAgentImpl(WebLocalFrameImpl*,
                        WebDevToolsAgentClient*,
-                       InspectorOverlay*,
                        bool include_view_agents);
 
   // InspectorTracingAgent::Client implementation.
@@ -119,7 +120,6 @@ class WebDevToolsAgentImpl final
 
   // InspectorPageAgent::Client implementation.
   void PageLayoutInvalidated(bool resized) override;
-  void ConfigureOverlay(bool suspended, const String& message) override;
   void WaitForCreateWindow(LocalFrame*) override;
 
   // InspectorSession::Client implementation.
@@ -148,18 +148,17 @@ class WebDevToolsAgentImpl final
   WebDevToolsAgentClient* client_;
   Member<WebLocalFrameImpl> web_local_frame_impl_;
 
-  Member<CoreProbeSink> instrumenting_agents_;
+  Member<CoreProbeSink> probe_sink_;
   Member<InspectorResourceContentLoader> resource_content_loader_;
-  Member<InspectorOverlay> overlay_;
   Member<InspectedFrames> inspected_frames_;
   Member<InspectorResourceContainer> resource_container_;
 
-  Member<InspectorDOMAgent> dom_agent_;
   Member<InspectorPageAgent> page_agent_;
   Member<InspectorNetworkAgent> network_agent_;
   Member<InspectorLayerTreeAgent> layer_tree_agent_;
   Member<InspectorTracingAgent> tracing_agent_;
   Member<InspectorTraceEvents> trace_events_agent_;
+  Member<InspectorOverlayAgent> overlay_agent_;
 
   Member<InspectorSession> session_;
   bool include_view_agents_;

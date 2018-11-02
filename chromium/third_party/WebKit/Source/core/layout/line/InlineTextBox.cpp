@@ -75,7 +75,7 @@ LayoutRect InlineTextBox::LogicalOverflowRect() const {
   if (KnownToHaveNoOverflow() || !g_text_boxes_with_overflow)
     return LogicalFrameRect();
 
-  const auto& it = g_text_boxes_with_overflow->Find(this);
+  const auto& it = g_text_boxes_with_overflow->find(this);
   if (it != g_text_boxes_with_overflow->end())
     return it->value;
 
@@ -94,7 +94,7 @@ void InlineTextBox::Move(const LayoutSize& delta) {
   InlineBox::Move(delta);
 
   if (!KnownToHaveNoOverflow() && g_text_boxes_with_overflow) {
-    const auto& it = g_text_boxes_with_overflow->Find(this);
+    const auto& it = g_text_boxes_with_overflow->find(this);
     if (it != g_text_boxes_with_overflow->end())
       it->value.Move(IsHorizontal() ? delta : delta.TransposedSize());
   }
@@ -125,6 +125,44 @@ LayoutUnit InlineTextBox::LineHeight() const {
                   kPositionOnContainingLine);
 }
 
+LayoutUnit InlineTextBox::OffsetTo(LineVerticalPositionType position_type,
+                                   FontBaseline baseline_type) const {
+  if (IsText() &&
+      (position_type == LineVerticalPositionType::TopOfEmHeight ||
+       position_type == LineVerticalPositionType::BottomOfEmHeight)) {
+    const Font& font = GetLineLayoutItem().Style(IsFirstLineStyle())->GetFont();
+    if (const SimpleFontData* font_data = font.PrimaryFont()) {
+      const FontMetrics& metrics = font_data->GetFontMetrics();
+      if (position_type == LineVerticalPositionType::TopOfEmHeight) {
+        // Use Ascent, not FixedAscent, to match to how InlineTextBoxPainter
+        // computes the baseline position.
+        return metrics.Ascent(baseline_type) -
+               font_data->EmHeightAscent(baseline_type);
+      }
+      if (position_type == LineVerticalPositionType::BottomOfEmHeight) {
+        return metrics.Ascent(baseline_type) +
+               font_data->EmHeightDescent(baseline_type);
+      }
+    }
+  }
+  switch (position_type) {
+    case LineVerticalPositionType::TextTop:
+    case LineVerticalPositionType::TopOfEmHeight:
+      return LayoutUnit();
+    case LineVerticalPositionType::TextBottom:
+    case LineVerticalPositionType::BottomOfEmHeight:
+      return LogicalHeight();
+  }
+  NOTREACHED();
+  return LayoutUnit();
+}
+
+LayoutUnit InlineTextBox::VerticalPosition(
+    LineVerticalPositionType position_type,
+    FontBaseline baseline_type) const {
+  return LogicalTop() + OffsetTo(position_type, baseline_type);
+}
+
 bool InlineTextBox::IsSelected(int start_pos, int end_pos) const {
   int s_pos = std::max(start_pos - start_, 0);
   // The position after a hard line break is considered to be past its end.
@@ -138,14 +176,15 @@ SelectionState InlineTextBox::GetSelectionState() const {
   if (state == SelectionStart || state == SelectionEnd ||
       state == SelectionBoth) {
     int start_pos, end_pos;
-    GetLineLayoutItem().SelectionStartEnd(start_pos, end_pos);
+    std::tie(start_pos, end_pos) = GetLineLayoutItem().SelectionStartEnd();
     // The position after a hard line break is considered to be past its end.
     // See the corresponding code in InlineTextBox::isSelected.
     int last_selectable = Start() + Len() - (IsLineBreak() ? 1 : 0);
 
     // FIXME: Remove -webkit-line-break: LineBreakAfterWhiteSpace.
     int end_of_line_adjustment_for_css_line_break =
-        GetLineLayoutItem().Style()->GetLineBreak() == kLineBreakAfterWhiteSpace
+        GetLineLayoutItem().Style()->GetLineBreak() ==
+                LineBreak::kAfterWhiteSpace
             ? -1
             : 0;
     bool start = (state != SelectionEnd && start_pos >= start_ &&
@@ -345,14 +384,9 @@ LayoutUnit InlineTextBox::PlaceEllipsisBox(bool flow_is_ltr,
   LayoutUnit ellipsis_x = flow_is_ltr ? visible_right_edge - ellipsis_width
                                       : visible_left_edge + ellipsis_width;
 
-  if (IsLeftToRightDirection() == flow_is_ltr && !flow_is_ltr &&
-      logical_left_offset < 0)
-    ellipsis_x -= logical_left_offset;
-
   bool ltr_full_truncation = flow_is_ltr && ellipsis_x <= adjusted_logical_left;
   bool rtl_full_truncation =
-      !flow_is_ltr &&
-      ellipsis_x > adjusted_logical_left + LogicalWidth() + ellipsis_width;
+      !flow_is_ltr && ellipsis_x > adjusted_logical_left + LogicalWidth();
   if (ltr_full_truncation || rtl_full_truncation) {
     // Too far.  Just set full truncation, but return -1 and let the ellipsis
     // just be placed at the edge of the box.
@@ -368,22 +402,14 @@ LayoutUnit InlineTextBox::PlaceEllipsisBox(bool flow_is_ltr,
   if (ltr_ellipsis_within_box || rtl_ellipsis_within_box) {
     found_box = true;
 
-    // The inline box may have different directionality than it's parent. Since
-    // truncation behavior depends both on both the parent and the inline
-    // block's directionality, we must keep track of these separately.
-    bool ltr = IsLeftToRightDirection();
-    if (ltr != flow_is_ltr) {
-      // Width in pixels of the visible portion of the box, excluding the
-      // ellipsis.
-      LayoutUnit visible_box_width =
-          visible_right_edge - visible_left_edge - ellipsis_width;
-      ellipsis_x = flow_is_ltr ? adjusted_logical_left + visible_box_width
-                               : LogicalRight() - visible_box_width;
-    }
+    // OffsetForPosition() expects the position relative to the root box.
+    ellipsis_x -= logical_left_offset;
 
     // We measure the text using the second half of the previous character and
     // the first half of the current one when the text is rtl. This gives a
     // more accurate position in rtl text.
+    // TODO(crbug.com/722043: This doesn't always give the best results.
+    bool ltr = IsLeftToRightDirection();
     int offset = OffsetForPosition(ellipsis_x, !ltr);
     // Full truncation is only necessary when we're flowing left-to-right.
     if (flow_is_ltr && offset == 0 && ltr == flow_is_ltr) {
@@ -502,7 +528,7 @@ void InlineTextBox::SelectionStartEnd(int& s_pos, int& e_pos) const {
     start_pos = 0;
     end_pos = GetLineLayoutItem().TextLength();
   } else {
-    GetLineLayoutItem().SelectionStartEnd(start_pos, end_pos);
+    std::tie(start_pos, end_pos) = GetLineLayoutItem().SelectionStartEnd();
     if (GetLineLayoutItem().GetSelectionState() == SelectionStart)
       end_pos = GetLineLayoutItem().TextLength();
     else if (GetLineLayoutItem().GetSelectionState() == SelectionEnd)
@@ -637,7 +663,7 @@ void InlineTextBox::CharacterWidths(Vector<float>& widths) const {
   Vector<CharacterRange> ranges = font.IndividualCharacterRanges(text_run);
   DCHECK_EQ(ranges.size(), len_);
 
-  widths.Resize(ranges.size());
+  widths.resize(ranges.size());
   for (unsigned i = 0; i < ranges.size(); i++)
     widths[i] = ranges[i].Width();
 }
@@ -723,7 +749,7 @@ void InlineTextBox::ShowBox(int printed_characters) const {
        printed_characters++)
     fputc(' ', stderr);
   fprintf(stderr, "(%d,%d) \"%s\"\n", Start(), Start() + Len(),
-          value.Utf8().Data());
+          value.Utf8().data());
 }
 
 #endif

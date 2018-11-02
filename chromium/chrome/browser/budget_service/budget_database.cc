@@ -52,11 +52,8 @@ BudgetDatabase::BudgetDatabase(Profile* profile,
     : profile_(profile),
       db_(new leveldb_proto::ProtoDatabaseImpl<budget_service::Budget>(
           base::CreateSequencedTaskRunnerWithTraits(
-              base::TaskTraits()
-                  .MayBlock()
-                  .WithPriority(base::TaskPriority::BACKGROUND)
-                  .WithShutdownBehavior(
-                      base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)))),
+              {base::MayBlock(), base::TaskPriority::BACKGROUND,
+               base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}))),
       clock_(base::WrapUnique(new base::DefaultClock)),
       weak_ptr_factory_(this) {
   db_->Init(kDatabaseUMAName, database_dir,
@@ -159,7 +156,7 @@ void BudgetDatabase::GetBudgetAfterSync(const url::Origin& origin,
   // Always add one entry at the front of the list for the total budget now.
   blink::mojom::BudgetStatePtr prediction(blink::mojom::BudgetState::New());
   prediction->budget_at = total;
-  prediction->time = clock_->Now().ToDoubleT();
+  prediction->time = clock_->Now().ToJsTime();
   predictions.push_back(std::move(prediction));
 
   // Starting with the soonest expiring chunks, add entries for the
@@ -169,7 +166,7 @@ void BudgetDatabase::GetBudgetAfterSync(const url::Origin& origin,
     blink::mojom::BudgetStatePtr prediction(blink::mojom::BudgetState::New());
     total -= chunk.amount;
     prediction->budget_at = total;
-    prediction->time = chunk.expiration.ToDoubleT();
+    prediction->time = chunk.expiration.ToJsTime();
     predictions.push_back(std::move(prediction));
   }
 
@@ -188,8 +185,7 @@ void BudgetDatabase::SpendBudgetAfterSync(const url::Origin& origin,
   }
 
   // Get the current SES score, to generate UMA.
-  SiteEngagementService* service = SiteEngagementService::Get(profile_);
-  double score = service->GetScore(origin.GetURL());
+  double score = GetSiteEngagementScoreForOrigin(origin);
 
   // Walk the list of budget chunks to see if the origin has enough budget.
   double total = 0;
@@ -327,10 +323,9 @@ void BudgetDatabase::AddEngagementBudget(const url::Origin& origin) {
   }
 
   // Get the current SES score, and calculate the hourly budget for that score.
-  SiteEngagementService* service = SiteEngagementService::Get(profile_);
   double hourly_budget = kMaximumHourlyBudget *
-                         service->GetScore(origin.GetURL()) /
-                         service->GetMaxPoints();
+                         GetSiteEngagementScoreForOrigin(origin) /
+                         SiteEngagementService::GetMaxPoints();
 
   // Update the last_engagement_award to the current time. If the origin wasn't
   // already in the map, this adds a new entry for it.
@@ -375,4 +370,12 @@ bool BudgetDatabase::CleanupExpiredBudget(const url::Origin& origin) {
   // Don't write to the DB now, write either when all chunks expire or when the
   // origin spends some budget.
   return false;
+}
+
+double BudgetDatabase::GetSiteEngagementScoreForOrigin(
+    const url::Origin& origin) const {
+  if (profile_->IsOffTheRecord())
+    return 0;
+
+  return SiteEngagementService::Get(profile_)->GetScore(origin.GetURL());
 }

@@ -187,9 +187,9 @@ class PLATFORM_EXPORT HeapObjectHeader {
     magic_ = GetMagic();
 #endif
 
-    ASSERT(gc_info_index < GCInfoTable::kMaxIndex);
-    ASSERT(size < kNonLargeObjectPageSizeMax);
-    ASSERT(!(size & kAllocationMask));
+    DCHECK(gc_info_index < GCInfoTable::kMaxIndex);
+    DCHECK_LT(size, kNonLargeObjectPageSizeMax);
+    DCHECK(!(size & kAllocationMask));
     encoded_ = static_cast<uint32_t>(
         (gc_info_index << kHeaderGCInfoIndexShift) | size |
         (gc_info_index == kGcInfoIndexForFreeListHeader ? kHeaderFreedBitMask
@@ -216,7 +216,7 @@ class PLATFORM_EXPORT HeapObjectHeader {
   }
 
   NO_SANITIZE_ADDRESS void SetSize(size_t size) {
-    ASSERT(size < kNonLargeObjectPageSizeMax);
+    DCHECK_LT(size, kNonLargeObjectPageSizeMax);
     CheckHeader();
     encoded_ = static_cast<uint32_t>(size) | (encoded_ & ~kHeaderSizeMask);
   }
@@ -242,6 +242,9 @@ class PLATFORM_EXPORT HeapObjectHeader {
   // its explanatory name makes the intention at the call sites easier to
   // understand, and is public.
   static void CheckFromPayload(const void*);
+
+  // Returns true if magic number is valid.
+  bool IsValid() const;
 
   static const uint32_t kZappedMagic = 0xDEAD4321;
 
@@ -277,7 +280,7 @@ class FreeListEntry final : public HeapObjectHeader {
   explicit FreeListEntry(size_t size)
       : HeapObjectHeader(size, kGcInfoIndexForFreeListHeader), next_(nullptr) {
 #if DCHECK_IS_ON() && CPU(64BIT)
-    ASSERT(size >= sizeof(HeapObjectHeader));
+    DCHECK_GE(size, sizeof(HeapObjectHeader));
     ZapMagic();
 #endif
   }
@@ -301,7 +304,7 @@ class FreeListEntry final : public HeapObjectHeader {
 
   NO_SANITIZE_ADDRESS
   void Append(FreeListEntry* next) {
-    ASSERT(!next_);
+    DCHECK(!next_);
     next_ = next;
   }
 
@@ -436,12 +439,12 @@ class BasePage {
   bool HasBeenSwept() const { return swept_; }
 
   void MarkAsSwept() {
-    ASSERT(!swept_);
+    DCHECK(!swept_);
     swept_ = true;
   }
 
   void MarkAsUnswept() {
-    ASSERT(swept_);
+    DCHECK(swept_);
     swept_ = false;
   }
 
@@ -762,8 +765,10 @@ class PLATFORM_EXPORT NormalPageArena final : public BaseArena {
  public:
   NormalPageArena(ThreadState*, int);
   void AddToFreeList(Address address, size_t size) {
-    ASSERT(FindPageFromAddress(address));
-    ASSERT(FindPageFromAddress(address + size - 1));
+#if DCHECK_IS_ON()
+    DCHECK(FindPageFromAddress(address));
+    DCHECK(FindPageFromAddress(address + size - 1));
+#endif
     free_list_.AddToFreeList(address, size);
   }
   void ClearFreeLists() override;
@@ -846,7 +851,9 @@ PLATFORM_EXPORT inline BasePage* PageFromObject(const void* object) {
   Address address = reinterpret_cast<Address>(const_cast<void*>(object));
   BasePage* page = reinterpret_cast<BasePage*>(BlinkPageAddress(address) +
                                                kBlinkGuardPageSize);
-  ASSERT(page->Contains(address));
+#if DCHECK_IS_ON()
+  DCHECK(page->Contains(address));
+#endif
   return page;
 }
 
@@ -854,15 +861,22 @@ NO_SANITIZE_ADDRESS inline size_t HeapObjectHeader::size() const {
   size_t result = encoded_ & kHeaderSizeMask;
   // Large objects should not refer to header->size(). The actual size of a
   // large object is stored in |LargeObjectPage::m_payloadSize|.
-  ASSERT(result != kLargeObjectSizeInHeader);
-  ASSERT(!PageFromObject(this)->IsLargeObjectPage());
+  DCHECK(result != kLargeObjectSizeInHeader);
+  DCHECK(!PageFromObject(this)->IsLargeObjectPage());
   return result;
+}
+
+NO_SANITIZE_ADDRESS inline bool HeapObjectHeader::IsValid() const {
+#if CPU(64BIT)
+  return GetMagic() == magic_;
+#else
+  return true;
+#endif
 }
 
 NO_SANITIZE_ADDRESS inline void HeapObjectHeader::CheckHeader() const {
 #if CPU(64BIT)
-  const bool good_magic = GetMagic() == magic_;
-  DCHECK(good_magic);
+  DCHECK(IsValid());
 #endif
 }
 
@@ -878,11 +892,11 @@ NO_SANITIZE_ADDRESS inline size_t HeapObjectHeader::PayloadSize() {
   CheckHeader();
   size_t size = encoded_ & kHeaderSizeMask;
   if (UNLIKELY(size == kLargeObjectSizeInHeader)) {
-    ASSERT(PageFromObject(this)->IsLargeObjectPage());
+    DCHECK(PageFromObject(this)->IsLargeObjectPage());
     return static_cast<LargeObjectPage*>(PageFromObject(this))->PayloadSize() -
            sizeof(HeapObjectHeader);
   }
-  ASSERT(!PageFromObject(this)->IsLargeObjectPage());
+  DCHECK(!PageFromObject(this)->IsLargeObjectPage());
   return size - sizeof(HeapObjectHeader);
 }
 
@@ -960,13 +974,13 @@ NO_SANITIZE_ADDRESS inline bool HeapObjectHeader::IsWrapperHeaderMarked()
 
 NO_SANITIZE_ADDRESS inline void HeapObjectHeader::MarkWrapperHeader() {
   CheckHeader();
-  ASSERT(!IsWrapperHeaderMarked());
+  DCHECK(!IsWrapperHeaderMarked());
   encoded_ |= kHeaderWrapperMarkBitMask;
 }
 
 NO_SANITIZE_ADDRESS inline void HeapObjectHeader::UnmarkWrapperHeader() {
   CheckHeader();
-  ASSERT(IsWrapperHeaderMarked());
+  DCHECK(IsWrapperHeaderMarked());
   encoded_ &= ~kHeaderWrapperMarkBitMask;
 }
 
@@ -977,13 +991,13 @@ NO_SANITIZE_ADDRESS inline bool HeapObjectHeader::IsMarked() const {
 
 NO_SANITIZE_ADDRESS inline void HeapObjectHeader::Mark() {
   CheckHeader();
-  ASSERT(!IsMarked());
+  DCHECK(!IsMarked());
   encoded_ = encoded_ | kHeaderMarkBitMask;
 }
 
 NO_SANITIZE_ADDRESS inline void HeapObjectHeader::Unmark() {
   CheckHeader();
-  ASSERT(IsMarked());
+  DCHECK(IsMarked());
   encoded_ &= ~kHeaderMarkBitMask;
 }
 
@@ -993,14 +1007,16 @@ inline Address NormalPageArena::AllocateObject(size_t allocation_size,
     Address header_address = current_allocation_point_;
     current_allocation_point_ += allocation_size;
     remaining_allocation_size_ -= allocation_size;
-    ASSERT(gc_info_index > 0);
+    DCHECK_GT(gc_info_index, 0u);
     new (NotNull, header_address)
         HeapObjectHeader(allocation_size, gc_info_index);
     Address result = header_address + sizeof(HeapObjectHeader);
-    ASSERT(!(reinterpret_cast<uintptr_t>(result) & kAllocationMask));
+    DCHECK(!(reinterpret_cast<uintptr_t>(result) & kAllocationMask));
 
     SET_MEMORY_ACCESSIBLE(result, allocation_size - sizeof(HeapObjectHeader));
-    ASSERT(FindPageFromAddress(header_address + allocation_size - 1));
+#if DCHECK_IS_ON()
+    DCHECK(FindPageFromAddress(header_address + allocation_size - 1));
+#endif
     return result;
   }
   return OutOfLineAllocate(allocation_size, gc_info_index);

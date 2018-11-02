@@ -14,7 +14,6 @@
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/identity.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/public/interfaces/service.mojom.h"
 
 namespace content {
@@ -83,8 +82,7 @@ class ChildConnection::IOThreadContext
     service_manager::mojom::ServicePtr service;
     service.Bind(mojo::InterfacePtrInfo<service_manager::mojom::Service>(
         std::move(service_pipe), 0u));
-    service_manager::mojom::PIDReceiverRequest pid_receiver_request(
-        &pid_receiver_);
+    auto pid_receiver_request = mojo::MakeRequest(&pid_receiver_);
 
     if (connector_) {
       connector_->StartService(child_identity, std::move(service),
@@ -116,18 +114,18 @@ class ChildConnection::IOThreadContext
 };
 
 ChildConnection::ChildConnection(
-    const std::string& service_name,
-    const std::string& instance_id,
-    mojo::edk::PendingProcessConnection* process_connection,
+    const service_manager::Identity& child_identity,
+    mojo::edk::OutgoingBrokerClientInvitation* invitation,
     service_manager::Connector* connector,
     scoped_refptr<base::SequencedTaskRunner> io_task_runner)
     : context_(new IOThreadContext),
-      child_identity_(service_name,
-                      service_manager::mojom::kInheritUserID,
-                      instance_id),
+      child_identity_(child_identity),
       weak_factory_(this) {
+  // TODO(rockot): Use a constant name for this pipe attachment rather than a
+  // randomly generated token.
+  service_token_ = mojo::edk::GenerateRandomToken();
   context_->Initialize(child_identity_, connector,
-                       process_connection->CreateMessagePipe(&service_token_),
+                       invitation->AttachMessagePipe(service_token_),
                        io_task_runner);
 }
 

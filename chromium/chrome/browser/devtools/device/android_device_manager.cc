@@ -11,6 +11,7 @@
 
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -43,7 +44,8 @@ static void PostDeviceInfoCallback(
     scoped_refptr<base::SingleThreadTaskRunner> response_task_runner,
     const AndroidDeviceManager::DeviceInfoCallback& callback,
     const AndroidDeviceManager::DeviceInfo& device_info) {
-  response_task_runner->PostTask(FROM_HERE, base::Bind(callback, device_info));
+  response_task_runner->PostTask(FROM_HERE,
+                                 base::BindOnce(callback, device_info));
 }
 
 static void PostCommandCallback(
@@ -52,7 +54,7 @@ static void PostCommandCallback(
     int result,
     const std::string& response) {
   response_task_runner->PostTask(FROM_HERE,
-                                 base::Bind(callback, result, response));
+                                 base::BindOnce(callback, result, response));
 }
 
 static void PostHttpUpgradeCallback(
@@ -63,8 +65,8 @@ static void PostHttpUpgradeCallback(
     const std::string& body_head,
     std::unique_ptr<net::StreamSocket> socket) {
   response_task_runner->PostTask(
-      FROM_HERE, base::Bind(callback, result, extensions, body_head,
-                            base::Passed(&socket)));
+      FROM_HERE, base::BindOnce(callback, result, extensions, body_head,
+                                base::Passed(&socket)));
 }
 
 class HttpRequest {
@@ -101,8 +103,8 @@ class HttpRequest {
               const CommandCallback& callback)
       : socket_(std::move(socket)),
         command_callback_(callback),
-        expected_size_(-1),
-        header_size_(0) {
+        expected_total_size_(0),
+        header_size_(std::string::npos) {
     SendRequest(request);
   }
 
@@ -111,8 +113,8 @@ class HttpRequest {
               const HttpUpgradeCallback& callback)
       : socket_(std::move(socket)),
         http_upgrade_callback_(callback),
-        expected_size_(-1),
-        header_size_(0) {
+        expected_total_size_(0),
+        header_size_(std::string::npos) {
     SendRequest(request);
   }
 
@@ -164,56 +166,63 @@ class HttpRequest {
   }
 
   void OnResponseData(int result) {
-    if (!CheckNetResultOrDie(result))
-      return;
-    if (result == 0) {
-      CheckNetResultOrDie(net::ERR_CONNECTION_CLOSED);
-      return;
-    }
+    do {
+      if (!CheckNetResultOrDie(result))
+        return;
+      if (result == 0) {
+        CheckNetResultOrDie(net::ERR_CONNECTION_CLOSED);
+        return;
+      }
 
-    response_.append(response_buffer_->data(), result);
-    if (expected_size_ < 0) {
-      int expected_length = 0;
+      response_.append(response_buffer_->data(), result);
 
-      // TODO(kaznacheev): Use net::HttpResponseHeader to parse the header.
-      std::string content_length = ExtractHeader("Content-Length:");
-      if (!content_length.empty()) {
-        if (!base::StringToInt(content_length, &expected_length)) {
-          CheckNetResultOrDie(net::ERR_FAILED);
-          return;
+      if (header_size_ == std::string::npos) {
+        header_size_ = response_.find("\r\n\r\n");
+
+        if (header_size_ != std::string::npos) {
+          header_size_ += 4;
+
+          int expected_body_size = 0;
+
+          // TODO(kaznacheev): Use net::HttpResponseHeader to parse the header.
+          std::string content_length = ExtractHeader("Content-Length:");
+          if (!content_length.empty()) {
+            if (!base::StringToInt(content_length, &expected_body_size)) {
+              CheckNetResultOrDie(net::ERR_FAILED);
+              return;
+            }
+          }
+
+          expected_total_size_ = header_size_ + expected_body_size;
         }
       }
 
-      header_size_ = response_.find("\r\n\r\n");
-      if (header_size_ != std::string::npos) {
-        header_size_ += 4;
-        expected_size_ = header_size_ + expected_length;
-      }
-    }
+      // WebSocket handshake doesn't contain the Content-Length header. For this
+      // case, |expected_total_size_| is set to the size of the header (opening
+      // handshake).
+      //
+      // Some (part of) WebSocket frames can be already received into
+      // |response_|.
+      if (header_size_ != std::string::npos &&
+          response_.length() >= expected_total_size_) {
+        const std::string& body = response_.substr(header_size_);
 
-    // WebSocket handshake doesn't contain the Content-Length. For this case,
-    // |expected_size_| is set to the size of the header (handshake).
-    // Some WebSocket frames can be already received into |response_|.
-    if (static_cast<int>(response_.length()) >= expected_size_) {
-      const std::string& body = response_.substr(header_size_);
-      if (!command_callback_.is_null()) {
-        command_callback_.Run(net::OK, body);
-      } else {
-        // Pass the WebSocket frames (in |body|), too.
-        http_upgrade_callback_.Run(net::OK,
-                                   ExtractHeader("Sec-WebSocket-Extensions:"),
-                                   body, std::move(socket_));
-      }
-      delete this;
-      return;
-    }
+        if (!command_callback_.is_null()) {
+          command_callback_.Run(net::OK, body);
+        } else {
+          http_upgrade_callback_.Run(net::OK,
+                                     ExtractHeader("Sec-WebSocket-Extensions:"),
+                                     body, std::move(socket_));
+        }
 
-    result = socket_->Read(
-        response_buffer_.get(),
-        kBufferSize,
-        base::Bind(&HttpRequest::OnResponseData, base::Unretained(this)));
-    if (result != net::ERR_IO_PENDING)
-      OnResponseData(result);
+        delete this;
+        return;
+      }
+
+      result = socket_->Read(
+          response_buffer_.get(), kBufferSize,
+          base::Bind(&HttpRequest::OnResponseData, base::Unretained(this)));
+    } while (result != net::ERR_IO_PENDING);
   }
 
   std::string ExtractHeader(const std::string& header) {
@@ -251,14 +260,17 @@ class HttpRequest {
   HttpUpgradeCallback http_upgrade_callback_;
 
   scoped_refptr<net::IOBuffer> response_buffer_;
-  // Initially -1. Once the end of the header is seen:
-  // - If the Content-Length header is included, this variable is set to the
-  //   sum of the header size (including the last two CRLFs) and the value of
+
+  // Initially set to 0. Once the end of the header is seen:
+  // - If the Content-Length header is included, set to the sum of the header
+  //   size (including the last two CRLFs) and the value of
   //   the header.
   // - Otherwise, this variable is set to the size of the header (including the
   //   last two CRLFs).
-  int expected_size_;
-  // Set to the size of the header part in |response_|.
+  size_t expected_total_size_;
+  // Initially set to std::string::npos. Once the end of the header is seen,
+  // set to the size of the header part in |response_| including the two CRLFs
+  // at the end.
   size_t header_size_;
 };
 
@@ -282,9 +294,9 @@ class DevicesRequest : public base::RefCountedThreadSafe<DevicesRequest> {
     for (DeviceProviders::const_iterator it = providers.begin();
          it != providers.end(); ++it) {
       device_task_runner->PostTask(
-          FROM_HERE, base::Bind(&DeviceProvider::QueryDevices, *it,
-                                base::Bind(&DevicesRequest::ProcessSerials,
-                                           request, *it)));
+          FROM_HERE, base::BindOnce(&DeviceProvider::QueryDevices, *it,
+                                    base::Bind(&DevicesRequest::ProcessSerials,
+                                               request, *it)));
     }
     device_task_runner->ReleaseSoon(FROM_HERE, request);
   }
@@ -298,7 +310,7 @@ class DevicesRequest : public base::RefCountedThreadSafe<DevicesRequest> {
   friend class base::RefCountedThreadSafe<DevicesRequest>;
   ~DevicesRequest() {
     response_task_runner_->PostTask(
-        FROM_HERE, base::Bind(callback_, base::Passed(&descriptors_)));
+        FROM_HERE, base::BindOnce(callback_, base::Passed(&descriptors_)));
   }
 
   typedef std::vector<std::string> Serials;
@@ -396,16 +408,17 @@ void AndroidDeviceManager::Device::QueryDeviceInfo(
     const DeviceInfoCallback& callback) {
   task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&DeviceProvider::QueryDeviceInfo, provider_, serial_,
-                 base::Bind(&PostDeviceInfoCallback,
-                            base::ThreadTaskRunnerHandle::Get(), callback)));
+      base::BindOnce(
+          &DeviceProvider::QueryDeviceInfo, provider_, serial_,
+          base::Bind(&PostDeviceInfoCallback,
+                     base::ThreadTaskRunnerHandle::Get(), callback)));
 }
 
 void AndroidDeviceManager::Device::OpenSocket(const std::string& socket_name,
                                               const SocketCallback& callback) {
   task_runner_->PostTask(
-      FROM_HERE, base::Bind(&DeviceProvider::OpenSocket, provider_, serial_,
-                            socket_name, callback));
+      FROM_HERE, base::BindOnce(&DeviceProvider::OpenSocket, provider_, serial_,
+                                socket_name, callback));
 }
 
 void AndroidDeviceManager::Device::SendJsonRequest(
@@ -413,11 +426,11 @@ void AndroidDeviceManager::Device::SendJsonRequest(
     const std::string& request,
     const CommandCallback& callback) {
   task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&DeviceProvider::SendJsonRequest, provider_, serial_,
-                 socket_name, request,
-                 base::Bind(&PostCommandCallback,
-                            base::ThreadTaskRunnerHandle::Get(), callback)));
+      FROM_HERE, base::BindOnce(&DeviceProvider::SendJsonRequest, provider_,
+                                serial_, socket_name, request,
+                                base::Bind(&PostCommandCallback,
+                                           base::ThreadTaskRunnerHandle::Get(),
+                                           callback)));
 }
 
 void AndroidDeviceManager::Device::HttpUpgrade(
@@ -426,11 +439,11 @@ void AndroidDeviceManager::Device::HttpUpgrade(
     const std::string& extensions,
     const HttpUpgradeCallback& callback) {
   task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&DeviceProvider::HttpUpgrade, provider_, serial_, socket_name,
-                 path, extensions,
-                 base::Bind(&PostHttpUpgradeCallback,
-                            base::ThreadTaskRunnerHandle::Get(), callback)));
+      FROM_HERE, base::BindOnce(&DeviceProvider::HttpUpgrade, provider_,
+                                serial_, socket_name, path, extensions,
+                                base::Bind(&PostHttpUpgradeCallback,
+                                           base::ThreadTaskRunnerHandle::Get(),
+                                           callback)));
 }
 
 AndroidDeviceManager::Device::Device(
@@ -448,8 +461,8 @@ AndroidDeviceManager::Device::~Device() {
   DeviceProvider* raw_ptr = provider_.get();
   provider_ = nullptr;
   task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&ReleaseDeviceAndProvider,
-                                    base::Unretained(raw_ptr), serial_));
+                         base::BindOnce(&ReleaseDeviceAndProvider,
+                                        base::Unretained(raw_ptr), serial_));
 }
 
 AndroidDeviceManager::HandlerThread*
@@ -496,7 +509,7 @@ AndroidDeviceManager::HandlerThread::~HandlerThread() {
   // Shut down thread on FILE thread to join into IO.
   content::BrowserThread::PostTask(
       content::BrowserThread::FILE, FROM_HERE,
-      base::Bind(&HandlerThread::StopThread, thread_));
+      base::BindOnce(&HandlerThread::StopThread, thread_));
 }
 
 // static

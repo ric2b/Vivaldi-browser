@@ -4,9 +4,14 @@
 
 #include "chrome/browser/chromeos/arc/arc_migration_guide_notification.h"
 
+#include "ash/system/devicetype_utils.h"
+#include "ash/system/power/power_status.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/chromeos/arc/arc_migration_constants.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
@@ -29,6 +34,8 @@ namespace {
 constexpr char kNotifierId[] = "arc_fs_migration";
 constexpr char kSuggestNotificationId[] = "arc_fs_migration/suggest";
 constexpr char kSuccessNotificationId[] = "arc_fs_migration/success";
+constexpr base::TimeDelta kSuccessNotificationDelay =
+    base::TimeDelta::FromSeconds(3);
 
 class ArcMigrationGuideNotificationDelegate
     : public message_center::NotificationDelegate {
@@ -44,6 +51,20 @@ class ArcMigrationGuideNotificationDelegate
   DISALLOW_COPY_AND_ASSIGN(ArcMigrationGuideNotificationDelegate);
 };
 
+void DoShowArcMigrationSuccessNotification(
+    const message_center::NotifierId& notifier_id) {
+  message_center::MessageCenter::Get()->AddNotification(
+      base::MakeUnique<message_center::Notification>(
+          message_center::NOTIFICATION_TYPE_SIMPLE, kSuccessNotificationId,
+          base::string16(),  // title
+          l10n_util::GetStringUTF16(IDS_ARC_MIGRATE_ENCRYPTION_SUCCESS_MESSAGE),
+          gfx::Image(gfx::CreateVectorIcon(
+              kArcMigrateEncryptionNotificationIcon, gfx::kPlaceholderColor)),
+          base::string16(), GURL(), notifier_id,
+          message_center::RichNotificationData(),
+          new message_center::NotificationDelegate()));
+}
+
 }  // namespace
 
 // static
@@ -58,6 +79,18 @@ void ShowArcMigrationGuideNotification(Profile* profile) {
   notifier_id.profile_id =
       multi_user_util::GetAccountIdFromProfile(profile).GetUserEmail();
 
+  const bool is_low_battery = ash::PowerStatus::IsInitialized() &&
+                              ash::PowerStatus::Get()->IsBatteryPresent() &&
+                              ash::PowerStatus::Get()->GetBatteryPercent() <
+                                  kMigrationMinimumBatteryPercent;
+
+  const base::string16 message =
+      is_low_battery
+          ? ash::SubstituteChromeOSDeviceType(
+                IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_LOW_BATTERY_MESSAGE)
+          : l10n_util::GetStringUTF16(
+                IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_MESSAGE);
+
   message_center::RichNotificationData data;
   data.buttons.push_back(message_center::ButtonInfo(l10n_util::GetStringUTF16(
       IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_RESTART_BUTTON)));
@@ -66,9 +99,7 @@ void ShowArcMigrationGuideNotification(Profile* profile) {
           message_center::NOTIFICATION_TYPE_SIMPLE, kSuggestNotificationId,
           l10n_util::GetStringUTF16(
               IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_TITLE),
-          // TODO(kinaba): crbug/710289 Change message for low-battery case.
-          l10n_util::GetStringUTF16(
-              IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_MESSAGE),
+          message,
           gfx::Image(gfx::CreateVectorIcon(
               kArcMigrateEncryptionNotificationIcon, gfx::kPlaceholderColor)),
           base::string16(), GURL(), notifier_id, data,
@@ -103,17 +134,12 @@ void ShowArcMigrationSuccessNotificationIfNeeded(Profile* profile) {
         message_center::NotifierId::SYSTEM_COMPONENT, kNotifierId);
     notifier_id.profile_id = account_id.GetUserEmail();
 
-    message_center::MessageCenter::Get()->AddNotification(
-        base::MakeUnique<message_center::Notification>(
-            message_center::NOTIFICATION_TYPE_SIMPLE, kSuccessNotificationId,
-            base::string16(),  // title
-            l10n_util::GetStringUTF16(
-                IDS_ARC_MIGRATE_ENCRYPTION_SUCCESS_MESSAGE),
-            gfx::Image(gfx::CreateVectorIcon(
-                kArcMigrateEncryptionNotificationIcon, gfx::kPlaceholderColor)),
-            base::string16(), GURL(), notifier_id,
-            message_center::RichNotificationData(),
-            new message_center::NotificationDelegate()));
+    // Delay the notification to make sure that it is not hidden behind windows
+    // which are shown at the beginnig of user session (e.g. Chrome).
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&DoShowArcMigrationSuccessNotification, notifier_id),
+        kSuccessNotificationDelay);
   }
 
   // Mark as notified.

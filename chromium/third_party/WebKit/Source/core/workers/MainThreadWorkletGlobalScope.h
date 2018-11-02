@@ -9,17 +9,17 @@
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/workers/WorkletGlobalScope.h"
-#include "core/workers/WorkletGlobalScopeProxy.h"
+#include "core/workers/WorkletPendingTasks.h"
+#include "public/platform/WebURLRequest.h"
 
 namespace blink {
 
 class ConsoleMessage;
 class LocalFrame;
-class ScriptSourceCode;
 
-class CORE_EXPORT MainThreadWorkletGlobalScope : public WorkletGlobalScope,
-                                                 public WorkletGlobalScopeProxy,
-                                                 public ContextClient {
+class CORE_EXPORT MainThreadWorkletGlobalScope
+    : public WorkletGlobalScope,
+      public ContextClient {
   USING_GARBAGE_COLLECTED_MIXIN(MainThreadWorkletGlobalScope);
 
  public:
@@ -32,21 +32,21 @@ class CORE_EXPORT MainThreadWorkletGlobalScope : public WorkletGlobalScope,
   bool IsMainThreadWorkletGlobalScope() const final { return true; }
 
   // WorkerOrWorkletGlobalScope
-  void CountFeature(UseCounter::Feature) final;
-  void CountDeprecation(UseCounter::Feature) final;
+  void ReportFeature(UseCounter::Feature) override;
+  void ReportDeprecation(UseCounter::Feature) override;
   WorkerThread* GetThread() const final;
 
-  // WorkletGlobalScopeProxy
-  void EvaluateScript(const ScriptSourceCode&) final;
-  void TerminateWorkletGlobalScope() final;
+  void FetchAndInvokeScript(const KURL& module_url_record,
+                            WebURLRequest::FetchCredentialsMode,
+                            WorkletPendingTasks*);
+  void Terminate();
 
+  // ExecutionContext
   void AddConsoleMessage(ConsoleMessage*) final;
   void ExceptionThrown(ErrorEvent*) final;
+  CoreProbeSink* GetProbeSink() final;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
-    WorkletGlobalScope::Trace(visitor);
-    ContextClient::Trace(visitor);
-  }
+  DECLARE_VIRTUAL_TRACE();
 };
 
 DEFINE_TYPE_CASTS(MainThreadWorkletGlobalScope,

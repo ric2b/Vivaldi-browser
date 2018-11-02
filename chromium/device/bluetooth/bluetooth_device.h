@@ -72,6 +72,13 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
     ~ConnectionInfo();
   };
 
+  // Possible connection latency values to pass to SetConnectionLatency().
+  enum ConnectionLatency {
+    CONNECTION_LATENCY_LOW,
+    CONNECTION_LATENCY_MEDIUM,
+    CONNECTION_LATENCY_HIGH,
+  };
+
   // Possible errors passed back to an error callback function in case of a
   // failed call to Connect().
   enum ConnectErrorCode {
@@ -264,7 +271,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   virtual bool IsGattConnected() const = 0;
 
   // Indicates whether the paired device accepts connections initiated from the
-  // adapter. This value is undefined for unpaired devices.
+  // adapter. This value is undefined for unpaired devices. Only available for
+  // Chrome OS.
   virtual bool IsConnectable() const = 0;
 
   // Indicates whether there is a call to Connect() ongoing. For this attribute,
@@ -388,6 +396,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // If the device isn't connected, then the ConnectionInfo struct passed into
   // the callback will be populated with |kUnknownPower|.
   virtual void GetConnectionInfo(const ConnectionInfoCallback& callback) = 0;
+
+  // Sets the connection latency for the device. This API is only valid for LE
+  // devices.
+  virtual void SetConnectionLatency(ConnectionLatency connection_latency,
+                                    const base::Closure& callback,
+                                    const ErrorCallback& error_callback) = 0;
 
   // Initiates a connection to the device, pairing first if necessary.
   //

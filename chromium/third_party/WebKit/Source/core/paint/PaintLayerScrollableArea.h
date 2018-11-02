@@ -238,7 +238,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
     return scrollbar_manager_.VerticalScrollbar();
   }
 
-  HostWindow* GetHostWindow() const override;
+  PlatformChromeClient* GetChromeClient() const override;
 
   // For composited scrolling, we allocate an extra GraphicsLayer to hold
   // onto the scrolling content. The layer can be shifted on the GPU and
@@ -263,15 +263,13 @@ class CORE_EXPORT PaintLayerScrollableArea final
   IntRect ConvertFromScrollbarToContainingFrameViewBase(
       const Scrollbar&,
       const IntRect&) const override;
-  IntRect ConvertFromContainingFrameViewBaseToScrollbar(
-      const Scrollbar&,
-      const IntRect&) const override;
   IntPoint ConvertFromScrollbarToContainingFrameViewBase(
       const Scrollbar&,
       const IntPoint&) const override;
   IntPoint ConvertFromContainingFrameViewBaseToScrollbar(
       const Scrollbar&,
       const IntPoint&) const override;
+  IntPoint ConvertFromRootFrame(const IntPoint&) const override;
   int ScrollSize(ScrollbarOrientation) const override;
   IntSize ScrollOffsetInt() const override;
   ScrollOffset GetScrollOffset() const override;
@@ -299,6 +297,16 @@ class CORE_EXPORT PaintLayerScrollableArea final
   ScrollBehavior ScrollBehaviorStyle() const override;
   CompositorAnimationHost* GetCompositorAnimationHost() const override;
   CompositorAnimationTimeline* GetCompositorAnimationTimeline() const override;
+
+  // These are temporary convenience methods.  They delegate to Box() methods,
+  // which will be up-to-date when UpdateAfterLayout runs.  By contrast,
+  // VisibleContentRect() is based on layer_.Size(), which isn't updated
+  // until later, when UpdateLayerPosition runs.  A future patch will cause
+  // layer_.Size() to be updated effectively simultaneously with Box()
+  // sizing.  When that lands, these methods should be removed in favor of
+  // using VisibleContentRect() and/or layer_.Size() everywhere.
+  LayoutSize ClientSize() const;
+  IntSize PixelSnappedClientSize() const;
 
   void VisibleSizeChanged();
 
@@ -427,7 +435,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   IntRect RectForHorizontalScrollbar(const IntRect& border_box_rect) const;
   IntRect RectForVerticalScrollbar(const IntRect& border_box_rect) const;
 
-  FrameViewBase* GetFrameViewBase() override;
+  bool ScheduleAnimation() override;
   bool ShouldPerformScrollAnchoring() const override;
   ScrollAnchor* GetScrollAnchor() override { return &scroll_anchor_; }
   bool IsPaintLayerScrollableArea() const override { return true; }

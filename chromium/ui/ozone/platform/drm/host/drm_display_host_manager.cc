@@ -155,6 +155,7 @@ DrmDisplayHostManager::DrmDisplayHostManager(
 DrmDisplayHostManager::~DrmDisplayHostManager() {
   device_manager_->RemoveObserver(this);
   proxy_->UnRegisterHandlerForDrmDisplayHostManager();
+  proxy_->RemoveGpuThreadObserver(this);
 }
 
 DrmDisplayHost* DrmDisplayHostManager::GetDisplay(int64_t display_id) {
@@ -247,10 +248,8 @@ void DrmDisplayHostManager::ProcessEvent() {
         if (drm_devices_.find(event.path) == drm_devices_.end()) {
           base::PostTaskWithTraits(
               FROM_HERE,
-              base::TaskTraits()
-                  .WithShutdownBehavior(
-                      base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
-                  .MayBlock(),
+              {base::MayBlock(),
+               base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
               base::Bind(&OpenDeviceAsync, event.path,
                          base::ThreadTaskRunnerHandle::Get(),
                          base::Bind(&DrmDisplayHostManager::OnAddGraphicsDevice,

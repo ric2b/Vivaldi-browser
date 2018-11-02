@@ -6,6 +6,7 @@
 
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/file_manager_browsertest_base.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -72,7 +73,7 @@ IN_PROC_BROWSER_TEST_P(FileManagerBrowserTestWithLegacyEventDispatch, Test) {
 #define MAYBE_FileDisplay FileDisplay
 #endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_FileDisplay,
+    MAYBE_FileDisplay,
     FileManagerBrowserTest,
     ::testing::Values(TestParameter(NOT_IN_GUEST_MODE, "fileDisplayDownloads"),
                       TestParameter(IN_GUEST_MODE, "fileDisplayDownloads"),
@@ -129,22 +130,15 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
                       TestParameter(NOT_IN_GUEST_MODE, "imageOpenDownloads"),
                       TestParameter(NOT_IN_GUEST_MODE, "imageOpenDrive")));
 
-#if defined(DISABLE_SLOW_FILESAPP_TESTS) || defined(OFFICIAL_BUILD)
-#define MAYBE_CreateNewFolder DISABLED_CreateNewFolder
-#else
-#define MAYBE_CreateNewFolder CreateNewFolder
-#endif
+// Flaky: crbug.com/715963
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    MAYBE_CreateNewFolder,
+    DISABLED_CreateNewFolder,
     FileManagerBrowserTest,
-    ::testing::Values(TestParameter(NOT_IN_GUEST_MODE,
-                                    "createNewFolderAfterSelectFile"),
-                      TestParameter(IN_GUEST_MODE,
-                                    "createNewFolderDownloads"),
-                      TestParameter(NOT_IN_GUEST_MODE,
-                                    "createNewFolderDownloads"),
-                      TestParameter(NOT_IN_GUEST_MODE,
-                                    "createNewFolderDrive")));
+    ::testing::Values(
+        TestParameter(NOT_IN_GUEST_MODE, "createNewFolderAfterSelectFile"),
+        TestParameter(IN_GUEST_MODE, "createNewFolderDownloads"),
+        TestParameter(NOT_IN_GUEST_MODE, "createNewFolderDownloads"),
+        TestParameter(NOT_IN_GUEST_MODE, "createNewFolderDrive")));
 
 // Fails on official build. http://crbug.com/429294
 #if defined(DISABLE_SLOW_FILESAPP_TESTS) || defined(OFFICIAL_BUILD)
@@ -153,7 +147,7 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
 #define MAYBE_KeyboardOperations KeyboardOperations
 #endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_KeyboardOperations,
+    MAYBE_KeyboardOperations,
     FileManagerBrowserTest,
     ::testing::Values(
         TestParameter(IN_GUEST_MODE, "keyboardDeleteDownloads"),
@@ -272,7 +266,7 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
 #define MAYBE_Transfer Transfer
 #endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_Transfer,
+    MAYBE_Transfer,
     FileManagerBrowserTest,
     ::testing::Values(
         TestParameter(NOT_IN_GUEST_MODE, "transferFromDriveToDownloads"),
@@ -388,7 +382,7 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
 #define MAYBE_GenericTask GenericTask
 #endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_GenericTask,
+    MAYBE_GenericTask,
     FileManagerBrowserTest,
     ::testing::Values(
         TestParameter(NOT_IN_GUEST_MODE, "genericTaskIsNotExecuted"),
@@ -560,7 +554,7 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
 #define MAYBE_GearMenu GearMenu
 #endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_GearMenu,
+    MAYBE_GearMenu,
     FileManagerBrowserTest,
     ::testing::Values(
         TestParameter(NOT_IN_GUEST_MODE, "showHiddenFilesOnDownloads"),
@@ -621,8 +615,9 @@ class MultiProfileFileManagerBrowserTest : public FileManagerBrowserTestBase {
 
   // Returns primary profile (if it is already created.)
   Profile* profile() override {
-    Profile* const profile = chromeos::ProfileHelper::GetProfileByUserIdHash(
-        kTestAccounts[PRIMARY_ACCOUNT_INDEX].hash);
+    Profile* const profile =
+        chromeos::ProfileHelper::GetProfileByUserIdHashForTest(
+            kTestAccounts[PRIMARY_ACCOUNT_INDEX].hash);
     return profile ? profile : FileManagerBrowserTestBase::profile();
   }
 
@@ -631,6 +626,7 @@ class MultiProfileFileManagerBrowserTest : public FileManagerBrowserTestBase {
 
   // Adds a new user for testing to the current session.
   void AddUser(const TestAccountInfo& info, bool log_in) {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
     const AccountId account_id(AccountId::FromUserEmail(info.email));
     if (log_in) {
       session_manager::SessionManager::Get()->CreateSession(account_id,
@@ -639,7 +635,7 @@ class MultiProfileFileManagerBrowserTest : public FileManagerBrowserTestBase {
     user_manager::UserManager::Get()->SaveUserDisplayName(
         account_id, base::UTF8ToUTF16(info.display_name));
     SigninManagerFactory::GetForProfile(
-        chromeos::ProfileHelper::GetProfileByUserIdHash(info.hash))
+        chromeos::ProfileHelper::GetProfileByUserIdHashForTest(info.hash))
         ->SetAuthenticatedAccountInfo(info.gaia_id, info.email);
   }
 
@@ -677,19 +673,20 @@ IN_PROC_BROWSER_TEST_F(MultiProfileFileManagerBrowserTest,
   StartTest();
 }
 
-// Fails on official build. http://crbug.com/429294
-#if defined(DISABLE_SLOW_FILESAPP_TESTS) || defined(OFFICIAL_BUILD)
-#define MAYBE_PRE_BasicDrive DISABLED_PRE_BasicDrive
-#define MAYBE_BasicDrive DISABLED_BasicDrive
-#else
-#define MAYBE_PRE_BasicDrive PRE_BasicDrive
-#define MAYBE_BasicDrive BasicDrive
-#endif
+// Flaky: crbug.com/715961.
+// Previously it was disabled via DISABLE_SLOW_FILESAPP_TESTS and in
+// OFFICIAL_BUILD, see http://crbug.com/429294.
 IN_PROC_BROWSER_TEST_F(MultiProfileFileManagerBrowserTest,
-                       MAYBE_PRE_BasicDrive) {
+                       DISABLED_PRE_BasicDrive) {
   AddAllUsers();
 }
 
+// Fails on official build. http://crbug.com/429294
+#if defined(DISABLE_SLOW_FILESAPP_TESTS) || defined(OFFICIAL_BUILD)
+#define MAYBE_BasicDrive DISABLED_BasicDrive
+#else
+#define MAYBE_BasicDrive BasicDrive
+#endif
 IN_PROC_BROWSER_TEST_F(MultiProfileFileManagerBrowserTest, MAYBE_BasicDrive) {
   AddAllUsers();
 

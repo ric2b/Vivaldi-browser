@@ -17,6 +17,7 @@
 #include "media/base/audio_decoder_config.h"
 #include "media/base/decoder_buffer.h"
 #include "platform_media/common/mac/framework_type_conversions.h"
+#include "platform_media/common/platform_logging_util.h"
 #include "media/formats/mpeg/adts_constants.h"
 
 namespace media {
@@ -27,6 +28,9 @@ using ScopedAudioChannelLayoutPtr = ATCodecHelper::ScopedAudioChannelLayoutPtr;
 
 ScopedAudioChannelLayoutPtr GetInputChannelLayoutFromChromeChannelLayout(
     const AudioDecoderConfig& config) {
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Using AudioDecoderConfig :"
+          << Loggable(config);
   ScopedAudioChannelLayoutPtr layout(
       static_cast<AudioChannelLayout*>(malloc(sizeof(AudioChannelLayout))));
   memset(layout.get(), 0, sizeof(AudioChannelLayout));
@@ -38,13 +42,17 @@ ScopedAudioChannelLayoutPtr GetInputChannelLayoutFromChromeChannelLayout(
 
 ScopedAudioChannelLayoutPtr ReadInputChannelLayoutFromEsds(
     const AudioDecoderConfig& config) {
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Using AudioDecoderConfig :"
+          << Loggable(config);
   UInt32 channel_layout_size = 0;
   OSStatus status = AudioFormatGetPropertyInfo(
       kAudioFormatProperty_ChannelLayoutFromESDS, config.extra_data().size(),
       &config.extra_data()[0], &channel_layout_size);
   if (status != noErr) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to get channel layout info";
+    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                             << " " << FourCCToString(status)
+                             << ": Failed to get channel layout info";
     return nullptr;
   }
 
@@ -55,11 +63,14 @@ ScopedAudioChannelLayoutPtr ReadInputChannelLayoutFromEsds(
                                   &config.extra_data()[0],
                                   &channel_layout_size, layout.get());
   if (status != noErr) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to get channel layout";
+    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                             << " " << FourCCToString(status)
+                             << ": Failed to get channel layout";
     return nullptr;
   }
 
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Successful";
   return layout;
 }
 
@@ -127,7 +138,7 @@ class ATAACHelper::AudioFormatReader {
 
 bool ATAACHelper::AudioFormatReader::ParseAndQueueBuffer(
     const scoped_refptr<DecoderBuffer>& buffer) {
-  DVLOG(1) << __func__;
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 
   buffers_.push_back(buffer);
 
@@ -136,8 +147,9 @@ bool ATAACHelper::AudioFormatReader::ParseAndQueueBuffer(
         this, &OnAudioFileStreamProperty, &OnAudioFileStreamData,
         kAudioFileAAC_ADTSType, stream_.InitializeInto());
     if (status != noErr) {
-      OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                                << ": Failed to open audio file stream";
+      OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                               << " " << FourCCToString(status)
+                               << ": Failed to open audio file stream";
       return false;
     }
   }
@@ -146,8 +158,9 @@ bool ATAACHelper::AudioFormatReader::ParseAndQueueBuffer(
   const OSStatus status = AudioFileStreamParseBytes(
       stream_, buffer->data_size(), buffer->data(), 0);
   if (status != noErr) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to parse audio file stream";
+    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                             << " " << FourCCToString(status)
+                             << ": Failed to parse audio file stream";
     return false;
   }
 
@@ -156,7 +169,7 @@ bool ATAACHelper::AudioFormatReader::ParseAndQueueBuffer(
 
 scoped_refptr<DecoderBuffer>
 ATAACHelper::AudioFormatReader::ReclaimQueuedBuffer() {
-  DVLOG(1) << __func__;
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 
   if (buffers_.empty())
     return nullptr;
@@ -172,7 +185,8 @@ void ATAACHelper::AudioFormatReader::OnAudioFileStreamProperty(
     AudioFileStreamID inAudioFileStream,
     AudioFileStreamPropertyID inPropertyID,
     UInt32* ioFlags) {
-  DVLOG(1) << __func__ << "(" << FourCCToString(inPropertyID) << ")";
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " (" << FourCCToString(inPropertyID) << ")";
 
   if (inPropertyID != kAudioFileStreamProperty_FormatList)
     return;
@@ -191,23 +205,26 @@ void ATAACHelper::AudioFormatReader::OnAudioFileStreamData(
     UInt32 inNumberPackets,
     const void* inInputData,
     AudioStreamPacketDescription* inPacketDescriptions) {
-  DVLOG(1) << __func__ << ", ignoring";
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << ", ignoring";
 }
 
 bool ATAACHelper::AudioFormatReader::ReadFormatList() {
-  DVLOG(1) << __func__;
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 
   UInt32 format_list_size = 0;
   OSStatus status = AudioFileStreamGetPropertyInfo(
       stream_, kAudioFileStreamProperty_FormatList, &format_list_size, nullptr);
   if (status != noErr || format_list_size % sizeof(AudioFormatListItem) != 0) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to get format list count";
+    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                             << " " << FourCCToString(status)
+                             << ": Failed to get format list count";
     return false;
   }
 
   const size_t format_count = format_list_size / sizeof(AudioFormatListItem);
-  DVLOG(1) << "Found " << format_count << " formats";
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Found " << format_count << " formats";
 
   std::unique_ptr<AudioFormatListItem[]> format_list(
       new AudioFormatListItem[format_count]);
@@ -216,8 +233,9 @@ bool ATAACHelper::AudioFormatReader::ReadFormatList() {
                                  &format_list_size, format_list.get());
   if (status != noErr ||
       format_list_size != format_count * sizeof(AudioFormatListItem)) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to get format list";
+    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                             << " " << FourCCToString(status)
+                             << ": Failed to get format list";
     return false;
   }
 
@@ -227,18 +245,23 @@ bool ATAACHelper::AudioFormatReader::ReadFormatList() {
       kAudioFormatProperty_FirstPlayableFormatFromList, format_list_size,
       format_list.get(), &format_index_size, &format_index);
   if (status != noErr) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to get format from list";
+    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                             << " " << FourCCToString(status)
+                             << ": Failed to get format from list";
     return false;
   }
 
   format_ = format_list[format_index].mASBD;
 
   if (format_.mFormatID != 0) {
-    DVLOG(1) << "mSampleRate = " << format_.mSampleRate;
-    DVLOG(1) << "mFormatID = " << FourCCToString(format_.mFormatID);
-    DVLOG(1) << "mFormatFlags = " << format_.mFormatFlags;
-    DVLOG(1) << "mChannelsPerFrame = " << format_.mChannelsPerFrame;
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " mSampleRate = " << format_.mSampleRate;
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " mFormatID = " << FourCCToString(format_.mFormatID);
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " mFormatFlags = " << format_.mFormatFlags;
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " mChannelsPerFrame = " << format_.mChannelsPerFrame;
   }
 
   return true;
@@ -253,6 +276,10 @@ bool ATAACHelper::Initialize(const AudioDecoderConfig& config,
                              const ConvertAudioCB& convert_audio_cb) {
   DCHECK_EQ(0, config.codec_delay());
 
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " with AudioDecoderConfig :"
+          << Loggable(config);
+
   input_format_known_cb_ = input_format_known_cb;
   convert_audio_cb_ = convert_audio_cb;
 
@@ -260,8 +287,13 @@ bool ATAACHelper::Initialize(const AudioDecoderConfig& config,
   // itself.  Fall back to the layout specified by AudioDecoderConfig.
   input_channel_layout_ = ReadInputChannelLayoutFromEsds(config);
   if (!input_channel_layout_) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Failed to Read InputChannelLayout From Esds - trying the config";
     input_channel_layout_ =
         GetInputChannelLayoutFromChromeChannelLayout(config);
+  } else  {
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << ": Read InputChannelLayout From Esds";
   }
 
   // We are not fully initialized yet, because the input format is still not

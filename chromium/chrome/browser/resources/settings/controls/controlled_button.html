@@ -1,5 +1,6 @@
-<link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_behavior.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_indicator.html">
@@ -11,9 +12,11 @@
   <template>
     <style include="settings-shared">
       :host {
+        --justify-margin: 8px;
+        -webkit-margin-end: calc(var(--settings-button-edge-spacing) * -1);
+        -webkit-margin-start: calc(var(--settings-button-edge-spacing) * -1);
         align-items: center;
         display: flex;
-        --justify-margin: 18px;
       }
 
       :host([enforced_]) {
@@ -29,11 +32,15 @@
       }
 
       :host(:not([end-justified])) cr-policy-pref-indicator {
-        -webkit-margin-start: var(--justify-margin);
+        -webkit-margin-end: calc(
+            var(--cr-controlled-by-spacing) - var(--justify-margin));
+        -webkit-margin-start: var(--cr-controlled-by-spacing);
       }
 
       :host([end-justified]) cr-policy-pref-indicator {
-        -webkit-margin-end: var(--justify-margin);
+        -webkit-margin-end: var(--cr-controlled-by-spacing);
+        -webkit-margin-start: calc(
+            var(--cr-controlled-by-spacing) - var(--justify-margin));
         order: -1;
       }
     </style>

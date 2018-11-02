@@ -8,6 +8,9 @@ source_set("tools") {
     "tools_coordinator.mm",
     "tools_mediator.h",
     "tools_mediator.mm",
+    "tools_mediator_private.h",
+    "tools_menu_model.h",
+    "tools_menu_model.mm",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -15,11 +18,16 @@ source_set("tools") {
   deps = [
     ":tools_ui",
     "//base",
-    "//ios/clean/chrome/browser/ui/actions",
+    "//components/strings",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/ui/tools_menu",
     "//ios/clean/chrome/browser/ui/animators",
+    "//ios/clean/chrome/browser/ui/commands",
     "//ios/clean/chrome/browser/ui/presenters",
     "//ios/shared/chrome/browser/ui/browser_list",
     "//ios/shared/chrome/browser/ui/coordinators",
+    "//ios/shared/chrome/browser/ui/tools_menu",
+    "//ui/base",
   ]
 }
 
@@ -40,6 +48,7 @@ source_set("tools_ui") {
   deps = [
     "//base",
     "//base:i18n",
+    "//ios/chrome/app/theme",
     "//ios/chrome/browser/ui",
     "//ios/clean/chrome/browser/ui/commands",
     "//ios/clean/chrome/browser/ui/toolbar:toolbar_components_ui",
@@ -62,6 +71,7 @@ source_set("unit_tests") {
     ":tools_ui",
     "//base/test:test_support",
     "//ios/chrome/test/base",
+    "//ios/shared/chrome/browser/ui/tools_menu",
     "//testing/gtest",
     "//third_party/ocmock",
   ]

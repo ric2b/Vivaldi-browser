@@ -16,13 +16,15 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/test/test_timeouts.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -198,8 +200,9 @@ class PushTimesMockURLRequestJob : public net::URLRequestMockHTTPJob {
             request,
             network_delegate,
             file_path,
-            BrowserThread::GetBlockingPool()->GetTaskRunnerWithShutdownBehavior(
-                base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)) {}
+            base::CreateTaskRunnerWithTraits(
+                {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                 base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {}
 
   void Start() override {
     load_timing_info_.socket_reused = true;
@@ -386,9 +389,7 @@ class DevToolsBeforeUnloadTest: public DevToolsSanityTest {
     ASSERT_TRUE(content::ExecuteScript(web_contents->GetRenderViewHost(),
         "window.addEventListener('beforeunload',"
         "function(event) { event.returnValue = 'Foo'; });"));
-    // Disable the hang monitor, otherwise there will be a race between the
-    // beforeunload dialog and the beforeunload hang timer.
-    web_contents->GetMainFrame()->DisableBeforeUnloadHangMonitorForTesting();
+    content::PrepContentsForBeforeUnloadTest(web_contents);
   }
 
   void RunBeforeUnloadSanityTest(bool is_docked,
@@ -593,6 +594,7 @@ class DevToolsExtensionTest : public DevToolsSanityTest,
   const Extension* GetExtensionByPath(
       const extensions::ExtensionSet& extensions,
       const base::FilePath& path) {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
     base::FilePath extension_path = base::MakeAbsoluteFilePath(path);
     EXPECT_TRUE(!extension_path.empty());
     for (const scoped_refptr<const Extension>& extension : extensions) {
@@ -741,7 +743,7 @@ class WorkerDevToolsSanityTest : public InProcessBrowserTest {
   static void TerminateWorker(scoped_refptr<WorkerData> worker_data) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&TerminateWorkerOnIOThread, worker_data));
+        base::BindOnce(&TerminateWorkerOnIOThread, worker_data));
     content::RunMessageLoop();
   }
 
@@ -767,9 +769,8 @@ class WorkerDevToolsSanityTest : public InProcessBrowserTest {
   static scoped_refptr<WorkerData> WaitForFirstSharedWorker(const char* path) {
     scoped_refptr<WorkerData> worker_data(new WorkerData());
     BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(&WaitForFirstSharedWorkerOnIOThread, path, worker_data));
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&WaitForFirstSharedWorkerOnIOThread, path, worker_data));
     content::RunMessageLoop();
     return worker_data;
   }
@@ -1669,12 +1670,13 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestNetworkPushTime) {
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&TestInterceptor::Register, push_url, file_path));
+      base::BindOnce(&TestInterceptor::Register, push_url, file_path));
 
   DispatchOnTestSuite(window_, "testPushTimes", push_url.spec().c_str());
 
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(&TestInterceptor::Unregister, push_url));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&TestInterceptor::Unregister, push_url));
 
   CloseDevToolsWindow();
 }
@@ -1724,13 +1726,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestDevToolsExternalNavigation) {
 }
 
 // Tests that toolbox window is loaded when DevTools window is undocked.
-// Crashes on Linux only.  https://crbug.com/702641
-#if defined(OS_LINUX)
-#define MAYBE_TestToolboxLoadedUndocked DISABLED_TestToolboxLoadedUndocked
-#else
-#define MAYBE_TestToolboxLoadedUndocked TestToolboxLoadedUndocked
-#endif
-IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, MAYBE_TestToolboxLoadedUndocked) {
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestToolboxLoadedUndocked) {
   OpenDevToolsWindow(kDebuggerTestPage, false);
   ASSERT_TRUE(toolbox_web_contents());
   DevToolsWindow* on_self =

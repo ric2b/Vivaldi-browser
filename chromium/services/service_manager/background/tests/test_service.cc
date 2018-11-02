@@ -15,30 +15,31 @@ namespace service_manager {
 // A service that exports a simple interface for testing. Used to test the
 // parent background service manager.
 class TestClient : public Service,
-                   public InterfaceFactory<mojom::TestService>,
                    public mojom::TestService {
  public:
-  TestClient() { registry_.AddInterface(this); }
+  TestClient() {
+    registry_.AddInterface(base::Bind(&TestClient::BindTestServiceRequest,
+                                      base::Unretained(this)));
+  }
   ~TestClient() override {}
 
  private:
   // Service:
-  void OnBindInterface(const ServiceInfo& source_info,
+  void OnBindInterface(const BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(source_info.identity, interface_name,
+    registry_.BindInterface(source_info, interface_name,
                             std::move(interface_pipe));
-  }
-
-  // InterfaceFactory<mojom::TestService>:
-  void Create(const Identity& remote_identity,
-              mojo::InterfaceRequest<mojom::TestService> request) override {
-    bindings_.AddBinding(this, std::move(request));
   }
 
   // mojom::TestService
   void Test(const TestCallback& callback) override {
     callback.Run();
+  }
+
+  void BindTestServiceRequest(const BindSourceInfo& source_info,
+                              mojom::TestServiceRequest request) {
+    bindings_.AddBinding(this, std::move(request));
   }
 
   void Quit() override { context()->RequestQuit(); }

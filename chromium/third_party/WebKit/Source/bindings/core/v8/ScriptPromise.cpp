@@ -32,9 +32,9 @@
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ToV8ForCore.h"
-#include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/DOMException.h"
 #include "platform/InstanceCounters.h"
+#include "platform/bindings/V8ThrowException.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -104,8 +104,8 @@ class PromiseAllHandler final
 
   PromiseAllHandler(ScriptState* script_state, Vector<ScriptPromise> promises)
       : number_of_pending_promises_(promises.size()), resolver_(script_state) {
-    ASSERT(!promises.IsEmpty());
-    values_.Resize(promises.size());
+    DCHECK(!promises.IsEmpty());
+    values_.resize(promises.size());
     for (size_t i = 0; i < promises.size(); ++i)
       promises[i].Then(CreateFulfillFunction(script_state, i),
                        CreateRejectFunction(script_state));
@@ -126,7 +126,7 @@ class PromiseAllHandler final
     if (is_settled_)
       return;
 
-    ASSERT(index < values_.size());
+    DCHECK_LT(index, values_.size());
     values_[index] = value;
     if (--number_of_pending_promises_ > 0)
       return;
@@ -151,9 +151,9 @@ class PromiseAllHandler final
   }
 
   void MarkPromiseSettled() {
-    ASSERT(!is_settled_);
+    DCHECK(!is_settled_);
     is_settled_ = true;
-    values_.Clear();
+    values_.clear();
   }
 
   size_t number_of_pending_promises_;
@@ -242,7 +242,7 @@ ScriptPromise ScriptPromise::Then(v8::Local<v8::Function> on_fulfilled,
 
   v8::Local<v8::Object> promise = promise_.V8Value().As<v8::Object>();
 
-  ASSERT(promise->IsPromise());
+  DCHECK(promise->IsPromise());
   // Return this Promise if no handlers are given.
   // In fact it is not the exact bahavior of Promise.prototype.then
   // but that is not a problem in this case.
@@ -301,7 +301,7 @@ ScriptPromise ScriptPromise::Reject(ScriptState* script_state,
 
 ScriptPromise ScriptPromise::RejectWithDOMException(ScriptState* script_state,
                                                     DOMException* exception) {
-  ASSERT(script_state->GetIsolate()->InContext());
+  DCHECK(script_state->GetIsolate()->InContext());
   return Reject(script_state,
                 ToV8(exception, script_state->GetContext()->Global(),
                      script_state->GetIsolate()));

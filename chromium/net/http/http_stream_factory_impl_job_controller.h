@@ -5,6 +5,8 @@
 #ifndef NET_HTTP_HTTP_STREAM_FACTORY_IMPL_JOB_CONTROLLER_H_
 #define NET_HTTP_HTTP_STREAM_FACTORY_IMPL_JOB_CONTROLLER_H_
 
+#include <memory>
+
 #include "net/base/host_port_pair.h"
 #include "net/base/privacy_mode.h"
 #include "net/http/http_stream_factory_impl_job.h"
@@ -106,7 +108,7 @@ class HttpStreamFactoryImpl::JobController
                                   const HttpResponseInfo& response_info,
                                   const SSLConfig& used_ssl_config,
                                   const ProxyInfo& used_proxy_info,
-                                  HttpStream* stream) override;
+                                  std::unique_ptr<HttpStream> stream) override;
 
   // Invoked when |job| raises failure for SSL Client Auth.
   void OnNeedsClientAuth(Job* job,
@@ -172,11 +174,18 @@ class HttpStreamFactoryImpl::JobController
 
   bool is_preconnect() const { return is_preconnect_; }
 
+  // Returns true if |this| has a pending request that is not completed.
+  bool HasPendingRequest() const { return request_ != nullptr; }
+
   // Returns true if |this| has a pending main job that is not completed.
   bool HasPendingMainJob() const;
 
   // Returns true if |this| has a pending alternative job that is not completed.
   bool HasPendingAltJob() const;
+
+  // TODO(xunjieli): Added to investigate crbug.com/711721. Remove when no
+  // longer needed.
+  void LogHistograms() const;
 
   // Returns the estimated memory usage in bytes.
   size_t EstimateMemoryUsage() const;
@@ -236,15 +245,12 @@ class HttpStreamFactoryImpl::JobController
   // Resumes the main job immediately.
   void ResumeMainJob();
 
-  // Returns true if QUIC is whitelisted for |host|.
-  bool IsQuicWhitelistedForHost(const std::string& host);
-
-  AlternativeService GetAlternativeServiceFor(
+  AlternativeServiceInfo GetAlternativeServiceInfoFor(
       const HttpRequestInfo& request_info,
       HttpStreamRequest::Delegate* delegate,
       HttpStreamRequest::StreamType stream_type);
 
-  AlternativeService GetAlternativeServiceForInternal(
+  AlternativeServiceInfo GetAlternativeServiceInfoInternal(
       const HttpRequestInfo& request_info,
       HttpStreamRequest::Delegate* delegate,
       HttpStreamRequest::StreamType stream_type);

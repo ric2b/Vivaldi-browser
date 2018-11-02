@@ -30,11 +30,11 @@
 
 #include "bindings/core/v8/V8AbstractEventListener.h"
 
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8Event.h"
 #include "bindings/core/v8/V8EventListenerHelper.h"
 #include "bindings/core/v8/V8EventTarget.h"
-#include "bindings/core/v8/V8PrivateProperty.h"
+#include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentParser.h"
 #include "core/dom/ExecutionContext.h"
@@ -42,6 +42,7 @@
 #include "core/events/Event.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/InstanceCounters.h"
+#include "platform/bindings/V8PrivateProperty.h"
 
 namespace blink {
 
@@ -63,7 +64,7 @@ V8AbstractEventListener::V8AbstractEventListener(bool is_attribute,
 }
 
 V8AbstractEventListener::~V8AbstractEventListener() {
-  ASSERT(listener_.IsEmpty());
+  DCHECK(listener_.IsEmpty());
   if (IsMainThread())
     InstanceCounters::DecrementCounter(
         InstanceCounters::kJSEventListenerCounter);
@@ -80,7 +81,7 @@ void V8AbstractEventListener::handleEvent(ExecutionContext* execution_context,
   // A ScriptState used by the event listener needs to be calculated based on
   // the ExecutionContext that fired the the event listener and the world
   // that installed the event listener.
-  ASSERT(event);
+  DCHECK(event);
   v8::HandleScope handle_scope(ToIsolate(execution_context));
   v8::Local<v8::Context> v8_context = ToV8Context(execution_context, World());
   if (v8_context.IsEmpty())
@@ -106,7 +107,7 @@ void V8AbstractEventListener::HandleEvent(ScriptState* script_state,
 
 void V8AbstractEventListener::SetListenerObject(
     v8::Local<v8::Object> listener) {
-  ASSERT(listener_.IsEmpty());
+  DCHECK(listener_.IsEmpty());
   // Balanced in wrapperCleared xor clearListenerObject.
   if (worker_global_scope_) {
     worker_global_scope_->RegisterEventListener(this);
@@ -204,7 +205,8 @@ bool V8AbstractEventListener::BelongsToTheCurrentWorld(
     return true;
   // If currently parsing, the parser could be accessing this listener
   // outside of any v8 context; check if it belongs to the main world.
-  if (!GetIsolate()->InContext() && execution_context->IsDocument()) {
+  if (!GetIsolate()->InContext() && execution_context &&
+      execution_context->IsDocument()) {
     Document* document = ToDocument(execution_context);
     if (document->Parser() && document->Parser()->IsParsing())
       return World().IsMainWorld();

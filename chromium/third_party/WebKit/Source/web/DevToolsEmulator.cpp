@@ -4,9 +4,12 @@
 
 #include "web/DevToolsEmulator.h"
 
+#include "core/events/WebInputEventConversion.h"
+#include "core/exported/WebViewBase.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/input/EventHandler.h"
 #include "core/page/Page.h"
 #include "core/style/ComputedStyle.h"
@@ -15,13 +18,11 @@
 #include "platform/geometry/FloatSize.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/IntSize.h"
+#include "platform/graphics/GraphicsLayer.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebLayerTreeView.h"
-#include "web/WebInputEventConversion.h"
-#include "web/WebLocalFrameImpl.h"
 #include "web/WebSettingsImpl.h"
-#include "web/WebViewImpl.h"
 
 namespace {
 
@@ -58,7 +59,7 @@ static float calculateDeviceScaleAdjustment(int width,
 
 namespace blink {
 
-DevToolsEmulator::DevToolsEmulator(WebViewImpl* web_view_impl)
+DevToolsEmulator::DevToolsEmulator(WebViewBase* web_view_impl)
     : web_view_impl_(web_view_impl),
       device_metrics_enabled_(false),
       emulate_mobile_enabled_(false),
@@ -102,8 +103,8 @@ DevToolsEmulator::DevToolsEmulator(WebViewImpl* web_view_impl)
 
 DevToolsEmulator::~DevToolsEmulator() {}
 
-DevToolsEmulator* DevToolsEmulator::Create(WebViewImpl* web_view_impl) {
-  return new DevToolsEmulator(web_view_impl);
+DevToolsEmulator* DevToolsEmulator::Create(WebViewBase* web_view_base) {
+  return new DevToolsEmulator(web_view_base);
 }
 
 DEFINE_TRACE(DevToolsEmulator) {}
@@ -393,7 +394,7 @@ void DevToolsEmulator::ResetViewport() {
     return;
 
   bool original_masking = viewport_override_->original_visual_viewport_masking;
-  viewport_override_ = WTF::kNullopt;
+  viewport_override_ = WTF::nullopt;
 
   GraphicsLayer* container_layer =
       web_view_impl_->GetPage()->GetVisualViewport().ContainerLayer();
@@ -459,7 +460,7 @@ void DevToolsEmulator::UpdateRootLayerTransform() {
 
 WTF::Optional<IntRect> DevToolsEmulator::VisibleContentRectForPainting() const {
   if (!viewport_override_)
-    return WTF::kNullopt;
+    return WTF::nullopt;
   FloatSize viewport_size(web_view_impl_->LayerTreeView()->GetViewportSize());
   viewport_size.Scale(1. / CompositorDeviceScaleFactor());
   viewport_size.Scale(1. / viewport_override_->scale);
@@ -517,43 +518,39 @@ bool DevToolsEmulator::HandleInputEvent(const WebInputEvent& input_event) {
   if (!page)
     return false;
 
-  // FIXME: This workaround is required for touch emulation on Mac, where
-  // compositor-side pinch handling is not enabled. See http://crbug.com/138003.
-  bool is_pinch = input_event.GetType() == WebInputEvent::kGesturePinchBegin ||
-                  input_event.GetType() == WebInputEvent::kGesturePinchUpdate ||
-                  input_event.GetType() == WebInputEvent::kGesturePinchEnd;
-  if (is_pinch && touch_event_emulation_enabled_) {
-    FrameView* frame_view = page->DeprecatedLocalMainFrame()->View();
-    WebGestureEvent scaled_event = TransformWebGestureEvent(
-        frame_view, static_cast<const WebGestureEvent&>(input_event));
-    float page_scale_factor = page->PageScaleFactor();
-    if (scaled_event.GetType() == WebInputEvent::kGesturePinchBegin) {
-      WebFloatPoint gesture_position = scaled_event.PositionInRootFrame();
-      last_pinch_anchor_css_ = WTF::WrapUnique(new IntPoint(
-          RoundedIntPoint(gesture_position + frame_view->GetScrollOffset())));
-      last_pinch_anchor_dip_ =
-          WTF::WrapUnique(new IntPoint(FlooredIntPoint(gesture_position)));
-      last_pinch_anchor_dip_->Scale(page_scale_factor, page_scale_factor);
-    }
-    if (scaled_event.GetType() == WebInputEvent::kGesturePinchUpdate &&
-        last_pinch_anchor_css_) {
-      float new_page_scale_factor =
-          page_scale_factor * scaled_event.PinchScale();
-      IntPoint anchor_css(*last_pinch_anchor_dip_.get());
-      anchor_css.Scale(1.f / new_page_scale_factor,
-                       1.f / new_page_scale_factor);
-      web_view_impl_->SetPageScaleFactor(new_page_scale_factor);
-      web_view_impl_->MainFrame()->SetScrollOffset(
-          ToIntSize(*last_pinch_anchor_css_.get() - ToIntSize(anchor_css)));
-    }
-    if (scaled_event.GetType() == WebInputEvent::kGesturePinchEnd) {
-      last_pinch_anchor_css_.reset();
-      last_pinch_anchor_dip_.reset();
-    }
-    return true;
+  if (!touch_event_emulation_enabled_ ||
+      !WebInputEvent::IsPinchGestureEventType(input_event.GetType())) {
+    return false;
   }
 
-  return false;
+  // FIXME: This workaround is required for touch emulation on Mac, where
+  // compositor-side pinch handling is not enabled. See http://crbug.com/138003.
+  FrameView* frame_view = page->DeprecatedLocalMainFrame()->View();
+  WebGestureEvent scaled_event = TransformWebGestureEvent(
+      frame_view, static_cast<const WebGestureEvent&>(input_event));
+  float page_scale_factor = page->PageScaleFactor();
+  if (scaled_event.GetType() == WebInputEvent::kGesturePinchBegin) {
+    WebFloatPoint gesture_position = scaled_event.PositionInRootFrame();
+    last_pinch_anchor_css_ = WTF::WrapUnique(new IntPoint(
+        RoundedIntPoint(gesture_position + frame_view->GetScrollOffset())));
+    last_pinch_anchor_dip_ =
+        WTF::WrapUnique(new IntPoint(FlooredIntPoint(gesture_position)));
+    last_pinch_anchor_dip_->Scale(page_scale_factor, page_scale_factor);
+  }
+  if (scaled_event.GetType() == WebInputEvent::kGesturePinchUpdate &&
+      last_pinch_anchor_css_) {
+    float new_page_scale_factor = page_scale_factor * scaled_event.PinchScale();
+    IntPoint anchor_css(*last_pinch_anchor_dip_.get());
+    anchor_css.Scale(1.f / new_page_scale_factor, 1.f / new_page_scale_factor);
+    web_view_impl_->SetPageScaleFactor(new_page_scale_factor);
+    web_view_impl_->MainFrame()->SetScrollOffset(
+        ToIntSize(*last_pinch_anchor_css_.get() - ToIntSize(anchor_css)));
+  }
+  if (scaled_event.GetType() == WebInputEvent::kGesturePinchEnd) {
+    last_pinch_anchor_css_.reset();
+    last_pinch_anchor_dip_.reset();
+  }
+  return true;
 }
 
 }  // namespace blink

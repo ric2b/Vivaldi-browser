@@ -39,7 +39,7 @@ std::string RoleVariantToString(const base::win::ScopedVariant& role) {
 
 HRESULT QueryIAccessible2(IAccessible* accessible, IAccessible2** accessible2) {
   base::win::ScopedComPtr<IServiceProvider> service_provider;
-  HRESULT hr = accessible->QueryInterface(service_provider.Receive());
+  HRESULT hr = accessible->QueryInterface(service_provider.GetAddressOf());
   return SUCCEEDED(hr) ?
       service_provider->QueryService(IID_IAccessible2, accessible2) : hr;
 }
@@ -47,7 +47,7 @@ HRESULT QueryIAccessible2(IAccessible* accessible, IAccessible2** accessible2) {
 HRESULT QueryIAccessibleText(IAccessible* accessible,
                              IAccessibleText** accessible_text) {
   base::win::ScopedComPtr<IServiceProvider> service_provider;
-  HRESULT hr = accessible->QueryInterface(service_provider.Receive());
+  HRESULT hr = accessible->QueryInterface(service_provider.GetAddressOf());
   return SUCCEEDED(hr) ?
       service_provider->QueryService(IID_IAccessibleText, accessible_text) : hr;
 }
@@ -60,7 +60,7 @@ std::string BstrToUTF8(BSTR bstr) {
   // Pretty-print the embedded object character as <obj> so that test output
   // is human-readable.
   base::StringPiece16 embedded_character(
-      &BrowserAccessibilityWin::kEmbeddedCharacter, 1);
+      &BrowserAccessibilityComWin::kEmbeddedCharacter, 1);
   base::ReplaceChars(str16, embedded_character, L"<obj>", &str16);
 
   return base::UTF16ToUTF8(str16);
@@ -165,10 +165,8 @@ void AccessibilityEventRecorderWin::OnWinEventHook(
     DWORD event_time) {
   base::win::ScopedComPtr<IAccessible> browser_accessible;
   HRESULT hr = AccessibleObjectFromWindowWrapper(
-      hwnd,
-      obj_id,
-      IID_IAccessible,
-      reinterpret_cast<void**>(browser_accessible.Receive()));
+      hwnd, obj_id, IID_IAccessible,
+      reinterpret_cast<void**>(browser_accessible.GetAddressOf()));
   if (!SUCCEEDED(hr)) {
     // Note: our event hook will pick up some superfluous events we
     // don't care about, so it's safe to just ignore these failures.
@@ -179,7 +177,8 @@ void AccessibilityEventRecorderWin::OnWinEventHook(
 
   base::win::ScopedVariant childid_variant(child_id);
   base::win::ScopedComPtr<IDispatch> dispatch;
-  hr = browser_accessible->get_accChild(childid_variant, dispatch.Receive());
+  hr = browser_accessible->get_accChild(childid_variant,
+                                        dispatch.GetAddressOf());
   if (!SUCCEEDED(hr) || !dispatch) {
     VLOG(1) << "Ignoring result " << hr << " and result " << dispatch
             << " from get_accChild";
@@ -187,7 +186,7 @@ void AccessibilityEventRecorderWin::OnWinEventHook(
   }
 
   base::win::ScopedComPtr<IAccessible> iaccessible;
-  hr = dispatch.QueryInterface(iaccessible.Receive());
+  hr = dispatch.CopyTo(iaccessible.GetAddressOf());
   if (!SUCCEEDED(hr)) {
     VLOG(1) << "Ignoring result " << hr << " from QueryInterface";
     return;
@@ -228,7 +227,7 @@ void AccessibilityEventRecorderWin::OnWinEventHook(
 
   AccessibleStates ia2_state = 0;
   base::win::ScopedComPtr<IAccessible2> iaccessible2;
-  hr = QueryIAccessible2(iaccessible.get(), iaccessible2.Receive());
+  hr = QueryIAccessible2(iaccessible.Get(), iaccessible2.GetAddressOf());
   if (SUCCEEDED(hr))
     iaccessible2->get_states(&ia2_state);
 
@@ -246,7 +245,7 @@ void AccessibilityEventRecorderWin::OnWinEventHook(
   // For TEXT_REMOVED and TEXT_INSERTED events, query the text that was
   // inserted or removed and include that in the log.
   base::win::ScopedComPtr<IAccessibleText> accessible_text;
-  hr = QueryIAccessibleText(iaccessible.get(), accessible_text.Receive());
+  hr = QueryIAccessibleText(iaccessible.Get(), accessible_text.GetAddressOf());
   if (SUCCEEDED(hr)) {
     if (event == IA2_EVENT_TEXT_REMOVED) {
       IA2TextSegment old_text;
@@ -287,7 +286,7 @@ HRESULT AccessibilityEventRecorderWin::AccessibleObjectFromWindowWrapper(
   if (accessibility_hwnd != hwnd)
     return E_FAIL;
 
-  IAccessible* obj = ToBrowserAccessibilityWin(manager_->GetRoot());
+  IAccessible* obj = ToBrowserAccessibilityComWin(manager_->GetRoot());
   obj->AddRef();
   *ppv_object = obj;
   return S_OK;

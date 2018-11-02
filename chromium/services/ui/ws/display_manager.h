@@ -47,13 +47,16 @@ class DisplayManager : public UserIdTrackerObserver,
   // Adds/removes a Display. DisplayManager owns the Displays.
   // TODO(sky): make add take a scoped_ptr.
   void AddDisplay(Display* display);
+  // Called when the window manager explicitly adds a new display.
+  void AddDisplayForWindowManager(const display::Display& display,
+                                  const display::ViewportMetrics& metrics);
   void DestroyDisplay(Display* display);
   void DestroyAllDisplays();
   const std::set<Display*>& displays() { return displays_; }
   std::set<const Display*> displays() const;
 
   // Notifies when something about the Display changes.
-  void OnDisplayUpdate(const display::Display& display);
+  void OnDisplayUpdated(const display::Display& display);
 
   // Returns the Display that contains |window|, or null if |window| is not
   // attached to a display.

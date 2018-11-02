@@ -115,8 +115,7 @@ void NonPresentingGvrDelegate::GetVSync(const GetVSyncCallback& callback) {
   if (!pending_vsync_) {
     if (!callback_.is_null()) {
       mojo::ReportBadMessage(
-          "Requested VSync before waiting for response to "
-          "previous request.");
+          "Requested VSync before waiting for response to previous request.");
       binding_.Close();
       return;
     }
@@ -160,6 +159,10 @@ void NonPresentingGvrDelegate::CreateVRDisplayInfo(
            << "x" << webvr_size.height();
   callback.Run(
       GvrDelegate::CreateVRDisplayInfo(gvr_api_.get(), webvr_size, device_id));
+}
+
+void NonPresentingGvrDelegate::UpdateContext(gvr_context* context) {
+  gvr_api_ = gvr::GvrApi::WrapNonOwned(context);
 }
 
 }  // namespace vr_shell

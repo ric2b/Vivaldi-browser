@@ -1,6 +1,6 @@
 {
   "name": "gpu driver bug list",
-  "version": "10.102",
+  "version": "10.93",
   "entries": [
     {
       "id": 1,
@@ -1053,10 +1053,7 @@
     {
       "id": 116,
       "description": "Adreno 420 support for EXT_multisampled_render_to_texture is buggy on Android < 5.1",
-      "comment": [
-        "Disabling EXT_multisampled_render_to_texture triggers the explicit multisample resolve path, which is broken on Adreno 4xx/5xx."
-      ],
-      "cr_bugs": [490379, 696126],
+      "cr_bugs": [490379],
       "os": {
         "type": "android",
         "version": {
@@ -1067,9 +1064,6 @@
       "gl_renderer": "Adreno \\(TM\\) 4.*",
       "disabled_extensions": [
         "GL_EXT_multisampled_render_to_texture"
-      ],
-      "features": [
-        "disable_chromium_framebuffer_multisample"
       ]
     },
     {
@@ -1745,7 +1739,7 @@
       "id": 174,
       "description": "Adreno 4xx support for EXT_multisampled_render_to_texture is buggy on Android 7.0",
       "comment": [
-        "Disabling EXT_multisampled_render_to_texture triggers the explicit multisample resolve path, which is broken on Adreno 4xx/5xx."
+        "Disabling EXT_multisampled_render_to_texture triggers the explicit multisample resolve path, which is broken on the same configurations. (See also software rendering list entry #147.)"
       ],
       "cr_bugs": [612474, 696126],
       "os": {
@@ -1768,10 +1762,7 @@
     {
       "id": 175,
       "description": "Adreno 5xx support for EXT_multisampled_render_to_texture is buggy on Android < 7.0",
-      "comment": [
-        "Disabling EXT_multisampled_render_to_texture triggers the explicit multisample resolve path, which is broken on Adreno 4xx/5xx."
-      ],
-      "cr_bugs": [612474, 696126],
+      "cr_bugs": [612474],
       "os": {
         "type": "android",
         "version": {
@@ -1782,9 +1773,6 @@
       "gl_renderer": "Adreno \\(TM\\) 5.*",
       "disabled_extensions": [
         "GL_EXT_multisampled_render_to_texture"
-      ],
-      "features": [
-        "disable_chromium_framebuffer_multisample"
       ]
     },
     {
@@ -2172,10 +2160,7 @@
     {
       "id": 205,
       "description": "Adreno 5xx support for EXT_multisampled_render_to_texture is buggy on Android 7.1",
-      "comment": [
-        "Disabling EXT_multisampled_render_to_texture triggers the explicit multisample resolve path, which is broken on Adreno 4xx/5xx."
-      ],
-      "cr_bugs": [663811, 696126],
+      "cr_bugs": [663811],
       "os": {
         "type": "android",
         "version": {
@@ -2186,9 +2171,6 @@
       "gl_renderer": "Adreno \\(TM\\) 5.*",
       "disabled_extensions": [
         "GL_EXT_multisampled_render_to_texture"
-      ],
-      "features": [
-        "disable_chromium_framebuffer_multisample"
       ]
     },
     {
@@ -2336,6 +2318,22 @@
       ]
     },
     {
+      "id": 218,
+      "description": "Certain Adreno 4xx and 5xx drivers often crash in glProgramBinary.",
+      "cr_bugs": [699122],
+      "os": {
+        "type": "android"
+      },
+      "driver_version": {
+        "op": ">=",
+        "value": "103.0"
+      },
+      "gl_renderer": "Adreno \\(TM\\) [45].*",
+      "features": [
+        "disable_program_disk_cache"
+      ]
+    },
+    {
       "id": 219,
       "description": "Zero-copy DXGI video hangs or displays incorrect colors on AMD drivers",
       "cr_bugs": [623029],
@@ -2388,17 +2386,15 @@
       ]
     },
     {
-      "id": 227,
-      "description": "Certain Apple devices leak stencil buffers",
-      "cr_bugs": [713854],
+      "id": 223,
+      "description": "Force integer or srgb cube map texture complete on Linux AMD",
+      "cr_bugs": [712117],
       "os": {
-        "type": "macosx"
+        "type": "linux"
       },
-      "vendor_id": "0x8086",
-      "device_id": ["0x0412", "0x0d26", "0x0a2e", "0x0a26", "0x0d22", "0x161e",
-                    "0x1626", "0x162b", "0x1622"],
+      "vendor_id": "0x1002",
       "features": [
-        "avoid_stencil_buffers"
+        "force_int_or_srgb_cube_texture_complete"
       ]
     },
     {
@@ -2455,6 +2451,34 @@
       ]
     },
     {
+      "id": 227,
+      "description": "Certain Apple devices leak stencil buffers",
+      "cr_bugs": [713854],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "device_id": ["0x0412", "0x0d26", "0x0a2e", "0x0a26", "0x0d22", "0x161e",
+                    "0x1626", "0x162b", "0x1622"],
+      "features": [
+        "avoid_stencil_buffers"
+      ]
+    },
+    {
+      "id": 228,
+      "description": "Intel HD 3000 driver crashes frequently on Mac",
+      "cr_bugs": [720152],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "device_id": ["0x0116", "0x0126"],
+      "multi_gpu_style": "amd_switchable",
+      "features": [
+        "force_discrete_gpu"
+      ]
+    },
+    {
       "id": 229,
       "description": "Overlay sizes bigger than screen aren't accelerated on some Intel drivers",
       "cr_bugs": [720059],
@@ -2472,11 +2496,24 @@
     },
     {
       "id": 230,
+      "description": "Disable use of Direct3D 11 on Intel Cherryview due to visual glitches.",
+      "cr_bugs": [730126],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x8086",
+      "device_id": ["0x22B0", "0x22B1", "0x22B2", "0x22B3"],
+      "features": [
+        "disable_d3d11"
+      ]
+    },
+    {
+      "id": 231,
       "description": "Adreno 4xx support for EXT_multisampled_render_to_texture is broken on Android 8.0",
       "comment": [
-        "Disabling EXT_multisampled_render_to_texture triggers the explicit multisample resolve path, which is broken on Adreno 4xx/5xx."
+        "Disabling EXT_multisampled_render_to_texture triggers the explicit multisample resolve path, which is broken on the same configurations. (See also software rendering list entry #148.)"
       ],
-      "cr_bugs": [722962, 696126],
+      "cr_bugs": [722962],
       "os": {
         "type": "android",
         "version": {
@@ -2495,21 +2532,19 @@
       ]
     },
     {
-      "id": 231,
-      "description": "Disable use of Direct3D 11 on Intel Cherryview due to visual glitches.",
-      "cr_bugs": [730126],
+      "id": 235,
+      "description": "Avoid waiting on a egl fence before pageflipping and rely on implicit sync.",
+      "cr_bugs": [721463],
       "os": {
-        "type": "win"
+        "type": "chromeos"
       },
-      "vendor_id": "0x8086",
-      "device_id": ["0x22B0", "0x22B1", "0x22B2", "0x22B3"],
+      "gl_vendor": "Intel.*",
       "features": [
-        "disable_d3d11"
+        "rely_on_implicit_sync_for_swap_buffers"
       ]
     }
   ],
   "comment": [
-    "Please update the version number on top whenever you change this file",
-    "Please run gpu/config/process_json.py whenever you change this file"
+    "Please update the version number on top whenever you change this file"
   ]
 }

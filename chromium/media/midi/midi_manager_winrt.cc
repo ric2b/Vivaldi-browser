@@ -11,6 +11,7 @@
 #include <cfgmgr32.h>
 #include <comdef.h>
 #include <devpkey.h>
+#include <objbase.h>
 #include <robuffer.h>
 #include <windows.devices.enumeration.h>
 #include <windows.devices.midi.h>
@@ -22,6 +23,7 @@
 
 #include "base/bind.h"
 #include "base/scoped_generic.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_checker.h"
@@ -175,7 +177,7 @@ ScopedComPtr<InterfaceType> WrlStaticsFactory() {
   }
 
   HRESULT hr = GetCombaseFunctions()->RoGetActivationFactory(
-      class_id_hstring.get(), __uuidof(InterfaceType), com_ptr.ReceiveVoid());
+      class_id_hstring.get(), IID_PPV_ARGS(&com_ptr));
   if (FAILED(hr)) {
     VLOG(1) << "RoGetActivationFactory failed: " << PrintHr(hr);
     com_ptr = nullptr;
@@ -229,7 +231,7 @@ std::string GetNameString(IDeviceInformation* info) {
 HRESULT GetPointerToBufferData(IBuffer* buffer, uint8_t** out) {
   ScopedComPtr<Windows::Storage::Streams::IBufferByteAccess> buffer_byte_access;
 
-  HRESULT hr = buffer_byte_access.QueryFrom(buffer);
+  HRESULT hr = buffer->QueryInterface(IID_PPV_ARGS(&buffer_byte_access));
   if (FAILED(hr)) {
     VLOG(1) << "QueryInterface failed: " << PrintHr(hr);
     return hr;
@@ -386,7 +388,7 @@ class MidiManagerWinrt::MidiPortManager {
       return false;
 
     hr = dev_info_statics->CreateWatcherAqsFilter(device_selector,
-                                                  watcher_.Receive());
+                                                  watcher_.GetAddressOf());
     if (FAILED(hr)) {
       VLOG(1) << "CreateWatcherAqsFilter failed: " << PrintHr(hr);
       return false;
@@ -793,21 +795,21 @@ class MidiManagerWinrt::MidiInPortManager final
               std::string dev_id = GetDeviceIdString(handle);
 
               ScopedComPtr<IMidiMessage> message;
-              HRESULT hr = args->get_Message(message.Receive());
+              HRESULT hr = args->get_Message(message.GetAddressOf());
               if (FAILED(hr)) {
                 VLOG(1) << "get_Message failed: " << PrintHr(hr);
                 return hr;
               }
 
               ScopedComPtr<IBuffer> buffer;
-              hr = message->get_RawData(buffer.Receive());
+              hr = message->get_RawData(buffer.GetAddressOf());
               if (FAILED(hr)) {
                 VLOG(1) << "get_RawData failed: " << PrintHr(hr);
                 return hr;
               }
 
               uint8_t* p_buffer_data = nullptr;
-              hr = GetPointerToBufferData(buffer.get(), &p_buffer_data);
+              hr = GetPointerToBufferData(buffer.Get(), &p_buffer_data);
               if (FAILED(hr))
                 return hr;
 
@@ -1013,7 +1015,7 @@ void MidiManagerWinrt::SendOnComThread(uint32_t port_index,
 
   ScopedComPtr<IBuffer> buffer;
   HRESULT hr = buffer_factory->Create(static_cast<UINT32>(data.size()),
-                                      buffer.Receive());
+                                      buffer.GetAddressOf());
   if (FAILED(hr)) {
     VLOG(1) << "Create failed: " << PrintHr(hr);
     return;
@@ -1026,13 +1028,13 @@ void MidiManagerWinrt::SendOnComThread(uint32_t port_index,
   }
 
   uint8_t* p_buffer_data = nullptr;
-  hr = GetPointerToBufferData(buffer.get(), &p_buffer_data);
+  hr = GetPointerToBufferData(buffer.Get(), &p_buffer_data);
   if (FAILED(hr))
     return;
 
   std::copy(data.begin(), data.end(), p_buffer_data);
 
-  hr = port->handle->SendBuffer(buffer.get());
+  hr = port->handle->SendBuffer(buffer.Get());
   if (FAILED(hr)) {
     VLOG(1) << "SendBuffer failed: " << PrintHr(hr);
     return;

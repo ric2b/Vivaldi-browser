@@ -242,10 +242,7 @@ void AUHALStream::Start(AudioSourceCallback* callback) {
 
   stopped_ = false;
   audio_fifo_.reset();
-  {
-    base::AutoLock auto_lock(source_lock_);
-    source_ = callback;
-  }
+  source_ = callback;
 
   OSStatus result = AudioOutputUnitStart(audio_unit_->audio_unit());
   if (result == noErr)
@@ -253,7 +250,7 @@ void AUHALStream::Start(AudioSourceCallback* callback) {
 
   Stop();
   OSSTATUS_DLOG(ERROR, result) << "AudioOutputUnitStart() failed.";
-  callback->OnError(this);
+  callback->OnError();
 }
 
 void AUHALStream::Stop() {
@@ -266,10 +263,9 @@ void AUHALStream::Stop() {
   OSSTATUS_DLOG_IF(ERROR, result != noErr, result)
       << "AudioOutputUnitStop() failed.";
   if (result != noErr)
-    source_->OnError(this);
+    source_->OnError();
   ReportAndResetStats();
-  base::AutoLock auto_lock(source_lock_);
-  source_ = NULL;
+  source_ = nullptr;
   stopped_ = true;
 }
 
@@ -328,11 +324,7 @@ OSStatus AUHALStream::Render(AudioUnitRenderActionFlags* flags,
 }
 
 void AUHALStream::ProvideInput(int frame_delay, AudioBus* dest) {
-  base::AutoLock auto_lock(source_lock_);
-  if (!source_) {
-    dest->Zero();
-    return;
-  }
+  DCHECK(source_);
 
   const base::TimeTicks playout_time =
       current_playout_time_ +

@@ -9,6 +9,7 @@
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventListener.h"
 #include "platform/heap/Handle.h"
+#include "public/platform/WebMediaPlayerClient.h"
 
 #include <set>
 
@@ -75,6 +76,7 @@ class CORE_EXPORT AutoplayUmaHelper : public EventListener,
   void RecordCrossOriginAutoplayResult(CrossOriginAutoplayResult);
   void RecordAutoplayUnmuteStatus(AutoplayUnmuteActionStatus);
 
+  void VideoWillBeDrawnToCanvas();
   void DidMoveToNewDocument(Document& old_document);
 
   bool IsVisible() const { return is_visible_; }
@@ -85,6 +87,9 @@ class CORE_EXPORT AutoplayUmaHelper : public EventListener,
 
  private:
   friend class MockAutoplayUmaHelper;
+
+  // Called when source is initialized and loading starts.
+  void OnLoadStarted();
 
   explicit AutoplayUmaHelper(HTMLMediaElement*);
   void handleEvent(ExecutionContext*, Event*) override;
@@ -112,7 +117,7 @@ class CORE_EXPORT AutoplayUmaHelper : public EventListener,
   // The autoplay sources.
   std::set<AutoplaySource> sources_;
 
-  // The media element this UMA helper is attached to. |m_element| owns |this|.
+  // The media element this UMA helper is attached to. |element| owns |this|.
   Member<HTMLMediaElement> element_;
 
   // The observer is used to observe whether a muted video autoplaying by play()
@@ -124,7 +129,7 @@ class CORE_EXPORT AutoplayUmaHelper : public EventListener,
   // -----------------------------------------------------------------------
   // Variables used for recording the duration of autoplay muted video playing
   // offscreen.  The variables are valid when
-  // |m_autoplayOffscrenVisibilityObserver| is non-null.
+  // |autoplayOffscrenVisibilityObserver| is non-null.
   // The recording stops whenever the playback pauses or the page is unloaded.
 
   // The starting time of autoplaying muted video.
@@ -143,6 +148,8 @@ class CORE_EXPORT AutoplayUmaHelper : public EventListener,
   // for recording as long as this observer is non-null.
   Member<ElementVisibilityObserver>
       muted_video_offscreen_duration_visibility_observer_;
+
+  double load_start_time_ms_;
 };
 
 }  // namespace blink

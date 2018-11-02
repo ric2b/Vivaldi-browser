@@ -25,7 +25,7 @@ cr.define('print_preview.ticket_items', function() {
     print_preview.ticket_items.TicketItem.call(
         this,
         appState,
-        print_preview.AppState.Field.MEDIA_SIZE,
+        print_preview.AppStateField.MEDIA_SIZE,
         destinationStore,
         documentInfo);
 
@@ -40,7 +40,7 @@ cr.define('print_preview.ticket_items', function() {
      * @private {!print_preview.ticket_items.CustomMargins}
      */
     this.customMargins_ = customMargins;
-  };
+  }
 
   MediaSize.prototype = {
     __proto__: print_preview.ticket_items.TicketItem.prototype,
@@ -109,7 +109,7 @@ cr.define('print_preview.ticket_items', function() {
       if (updateMargins) {
         // Reset the user set margins when media size changes.
         this.marginsType_.updateValue(
-            print_preview.ticket_items.MarginsType.Value.DEFAULT);
+            print_preview.ticket_items.MarginsTypeValue.DEFAULT);
         this.customMargins_.updateValue(null);
       }
     }

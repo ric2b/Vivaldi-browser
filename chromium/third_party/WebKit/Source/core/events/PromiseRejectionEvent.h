@@ -5,14 +5,14 @@
 #ifndef PromiseRejectionEvent_h
 #define PromiseRejectionEvent_h
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptPromise.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/TraceWrapperV8Reference.h"
 #include "core/CoreExport.h"
 #include "core/events/Event.h"
 #include "core/events/PromiseRejectionEventInit.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/TraceWrapperV8Reference.h"
 
 namespace blink {
 

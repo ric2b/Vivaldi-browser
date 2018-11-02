@@ -16,11 +16,18 @@ namespace WTF {
 // outside of the heap, similarly we enforce that one doesn't create garbage
 // collected types nested inside an Optional.
 template <typename T>
-using Optional = typename std::enable_if<!IsGarbageCollectedType<T>::value,
-                                         base::Optional<T>>::type;
+using Optional =
+    typename std::enable_if<!IsGarbageCollectedType<T>::value ||
+                                IsPersistentReferenceType<T>::value,
+                            base::Optional<T>>::type;
 
-constexpr base::nullopt_t kNullopt = base::nullopt;
+constexpr base::nullopt_t nullopt = base::nullopt;
 constexpr base::in_place_t in_place = base::in_place;
+
+template <typename T>
+constexpr Optional<typename std::decay<T>::type> make_optional(T&& value) {
+  return base::make_optional(std::forward<T>(value));
+}
 
 }  // namespace WTF
 

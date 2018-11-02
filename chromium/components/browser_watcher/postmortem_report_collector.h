@@ -21,8 +21,8 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
-#include "components/browser_watcher/postmortem_report_extractor.h"
 #include "components/browser_watcher/stability_report.pb.h"
+#include "components/browser_watcher/stability_report_extractor.h"
 #include "components/browser_watcher/system_session_analyzer_win.h"
 #include "third_party/crashpad/crashpad/client/crash_report_database.h"
 
@@ -87,10 +87,12 @@ class PostmortemReportCollector {
       const base::FilePath::StringType& debug_file_pattern,
       const std::set<base::FilePath>& excluded_debug_files);
 
-  CollectionStatus CollectAndSubmitOneReport(
-      const crashpad::UUID& client_id,
-      const base::FilePath& file,
-      crashpad::CrashReportDatabase* report_database);
+  // Collects a stability file, generates a report and registers it with the
+  // database. Returns true on success. False otherwise.
+  bool CollectAndSubmitOneReport(const crashpad::UUID& client_id,
+                                 const base::FilePath& file,
+                                 crashpad::CrashReportDatabase* report_database,
+                                 bool* system_unclean);
 
   virtual CollectionStatus CollectOneReport(
       const base::FilePath& stability_file,

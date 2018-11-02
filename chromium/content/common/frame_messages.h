@@ -48,6 +48,7 @@
 #include "content/public/common/three_d_api_types.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_platform_file.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 #include "ppapi/features/features.h"
 #include "third_party/WebKit/public/platform/WebFeaturePolicy.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
@@ -160,11 +161,8 @@ IPC_STRUCT_TRAITS_BEGIN(content::ContextMenuParams)
   IPC_STRUCT_TRAITS_MEMBER(custom_context)
   IPC_STRUCT_TRAITS_MEMBER(custom_items)
   IPC_STRUCT_TRAITS_MEMBER(source_type)
-#if defined(OS_ANDROID)
-  IPC_STRUCT_TRAITS_MEMBER(selection_start)
-  IPC_STRUCT_TRAITS_MEMBER(selection_end)
-#endif
   IPC_STRUCT_TRAITS_MEMBER(input_field_type)
+  IPC_STRUCT_TRAITS_MEMBER(selection_rect)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::CustomContextMenuContext)
@@ -429,6 +427,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameReplicationState)
   IPC_STRUCT_TRAITS_MEMBER(name)
   IPC_STRUCT_TRAITS_MEMBER(unique_name)
   IPC_STRUCT_TRAITS_MEMBER(feature_policy_header)
+  IPC_STRUCT_TRAITS_MEMBER(container_policy)
   IPC_STRUCT_TRAITS_MEMBER(accumulated_csp_headers)
   IPC_STRUCT_TRAITS_MEMBER(scope)
   IPC_STRUCT_TRAITS_MEMBER(insecure_request_policy)
@@ -548,6 +547,7 @@ IPC_STRUCT_BEGIN(FrameHostMsg_CreateChildFrame_Params)
   IPC_STRUCT_MEMBER(std::string, frame_name)
   IPC_STRUCT_MEMBER(std::string, frame_unique_name)
   IPC_STRUCT_MEMBER(blink::WebSandboxFlags, sandbox_flags)
+  IPC_STRUCT_MEMBER(content::ParsedFeaturePolicyHeader, container_policy)
   IPC_STRUCT_MEMBER(content::FrameOwnerProperties, frame_owner_properties)
 IPC_STRUCT_END()
 
@@ -623,6 +623,11 @@ IPC_STRUCT_BEGIN(FrameMsg_MixedContentFound_Params)
   IPC_STRUCT_MEMBER(bool, was_allowed)
   IPC_STRUCT_MEMBER(bool, had_redirect)
   IPC_STRUCT_MEMBER(content::SourceLocation, source_location)
+IPC_STRUCT_END()
+
+IPC_STRUCT_BEGIN(FrameMsg_CommitDataNetworkService_Params)
+  IPC_STRUCT_MEMBER(mojo::DataPipeConsumerHandle, handle)
+  IPC_STRUCT_MEMBER(mojo::MessagePipeHandle, url_loader_factory)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(FrameMsg_ExtendedLoadingProgress_Params)
@@ -828,8 +833,16 @@ IPC_MESSAGE_ROUTED1(FrameMsg_SetAccessibilityMode, content::AccessibilityMode)
 // Dispatch a load event in the iframe element containing this frame.
 IPC_MESSAGE_ROUTED0(FrameMsg_DispatchLoad)
 
-// Notifies the frame that its parent has changed the frame's sandbox flags.
-IPC_MESSAGE_ROUTED1(FrameMsg_DidUpdateSandboxFlags, blink::WebSandboxFlags)
+// Sent to a subframe to control whether to collapse its the frame owner element
+// in the embedder document, that is, to remove it from the layout as if it did
+// not exist.
+IPC_MESSAGE_ROUTED1(FrameMsg_Collapse, bool /* collapsed */)
+
+// Notifies the frame that its parent has changed the frame's sandbox flags or
+// container policy.
+IPC_MESSAGE_ROUTED2(FrameMsg_DidUpdateFramePolicy,
+                    blink::WebSandboxFlags,
+                    content::ParsedFeaturePolicyHeader)
 
 // Update a proxy's window.name property.  Used when the frame's name is
 // changed in another process.
@@ -923,11 +936,13 @@ IPC_MESSAGE_ROUTED2(FrameMsg_SelectPopupMenuItems,
 // Tells the renderer that a navigation is ready to commit.  The renderer should
 // request |stream_url| to get access to the stream containing the body of the
 // response. When --enable-network-service is in effect, |stream_url| is not
-// used, and instead the data is passed to the renderer in |handle|.
+// used, and instead the data is passed to the renderer in |commit_data.handle|.
+// When --enable-network-service, a URLLoaderFactory is optionally passed in
+// |commit_data| too.
 IPC_MESSAGE_ROUTED5(FrameMsg_CommitNavigation,
-                    content::ResourceResponseHead,   /* response */
-                    GURL,                            /* stream_url */
-                    mojo::DataPipeConsumerHandle,    /* handle */
+                    content::ResourceResponseHead,            /* response */
+                    GURL,                                     /* stream_url */
+                    FrameMsg_CommitDataNetworkService_Params, /* commit_data */
                     content::CommonNavigationParams, /* common_params */
                     content::RequestNavigationParams /* request_params */)
 
@@ -1000,6 +1015,10 @@ IPC_MESSAGE_ROUTED2(FrameMsg_CopyImageAt,
 IPC_MESSAGE_ROUTED2(FrameMsg_SaveImageAt,
                     int /* x */,
                     int /* y */)
+
+// Notify the renderer of our overlay routing token.
+IPC_MESSAGE_ROUTED1(FrameMsg_SetOverlayRoutingToken,
+                    base::UnguessableToken /* routing_token */)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 // Notifies the renderer of updates to the Plugin Power Saver origin whitelist.
@@ -1193,11 +1212,13 @@ IPC_MESSAGE_ROUTED0(FrameHostMsg_DidAccessInitialDocument)
 // window.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_DidChangeOpener, int /* opener_routing_id */)
 
-// Notifies the browser that sandbox flags have changed for a subframe of this
-// frame.
-IPC_MESSAGE_ROUTED2(FrameHostMsg_DidChangeSandboxFlags,
-                    int32_t /* subframe_routing_id */,
-                    blink::WebSandboxFlags /* updated_flags */)
+// Notifies the browser that sandbox flags or container policy have changed for
+// a subframe of this frame.
+IPC_MESSAGE_ROUTED3(
+    FrameHostMsg_DidChangeFramePolicy,
+    int32_t /* subframe_routing_id */,
+    blink::WebSandboxFlags /* updated_flags */,
+    content::ParsedFeaturePolicyHeader /* updated container policy */)
 
 // Notifies the browser that frame owner properties have changed for a subframe
 // of this frame.
@@ -1430,6 +1451,10 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_VisibilityChanged, bool /* visible */)
 // propagated to any remote frames.
 IPC_MESSAGE_ROUTED0(FrameHostMsg_SetHasReceivedUserGesture)
 
+// Used to tell the browser what the DevTools FrameId is. Needed by Headless
+// Chrome.
+IPC_MESSAGE_ROUTED1(FrameHostMsg_SetDevToolsFrameId, std::string)
+
 // Used to tell the parent that the user right clicked on an area of the
 // content area, and a context menu should be shown for it. The params
 // object contains information about the node(s) that were selected when the
@@ -1627,6 +1652,10 @@ IPC_MESSAGE_ROUTED5(FrameHostMsg_Find_Reply,
 
 // Sends hittesting data needed to perform hittesting on the browser process.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_HittestData, FrameHostMsg_HittestData_Params)
+
+// Request that the host send its overlay routing token for this render frame
+// via SetOverlayRoutingToken.
+IPC_MESSAGE_ROUTED0(FrameHostMsg_RequestOverlayRoutingToken)
 
 // Asks the browser to display the file chooser.  The result is returned in a
 // FrameMsg_RunFileChooserResponse message.

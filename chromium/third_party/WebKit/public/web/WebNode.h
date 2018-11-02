@@ -31,10 +31,10 @@
 #ifndef WebNode_h
 #define WebNode_h
 
-#include "../platform/WebCommon.h"
-#include "../platform/WebPrivatePtr.h"
-#include "../platform/WebString.h"
-#include "../platform/WebVector.h"
+#include "public/platform/WebCommon.h"
+#include "public/platform/WebPrivatePtr.h"
+#include "public/platform/WebString.h"
+#include "public/platform/WebVector.h"
 
 namespace blink {
 
@@ -111,8 +111,6 @@ class WebNode {
   const T ToConst() const;
 
 #if BLINK_IMPLEMENTATION
-  BLINK_EXPORT static WebPluginContainer* PluginContainerFromNode(const Node*);
-
   BLINK_EXPORT WebNode(Node*);
   BLINK_EXPORT WebNode& operator=(Node*);
   BLINK_EXPORT operator Node*() const;

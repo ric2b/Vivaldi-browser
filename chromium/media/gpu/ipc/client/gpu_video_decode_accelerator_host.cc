@@ -51,7 +51,7 @@ bool GpuVideoDecodeAcceleratorHost::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(AcceleratedVideoDecoderHostMsg_BitstreamBufferProcessed,
                         OnBitstreamBufferProcessed)
     IPC_MESSAGE_HANDLER(AcceleratedVideoDecoderHostMsg_ProvidePictureBuffers,
-                        OnProvidePictureBuffer)
+                        OnProvidePictureBuffers)
     IPC_MESSAGE_HANDLER(AcceleratedVideoDecoderHostMsg_PictureReady,
                         OnPictureReady)
     IPC_MESSAGE_HANDLER(AcceleratedVideoDecoderHostMsg_FlushDone, OnFlushDone)
@@ -169,12 +169,14 @@ void GpuVideoDecodeAcceleratorHost::Reset() {
   Send(new AcceleratedVideoDecoderMsg_Reset(decoder_route_id_));
 }
 
-void GpuVideoDecodeAcceleratorHost::SetSurface(int32_t surface_id) {
+void GpuVideoDecodeAcceleratorHost::SetSurface(
+    int32_t surface_id,
+    const base::Optional<base::UnguessableToken>& routing_token) {
   DCHECK(CalledOnValidThread());
   if (!channel_)
     return;
-  Send(
-      new AcceleratedVideoDecoderMsg_SetSurface(decoder_route_id_, surface_id));
+  Send(new AcceleratedVideoDecoderMsg_SetSurface(decoder_route_id_, surface_id,
+                                                 routing_token));
 }
 
 void GpuVideoDecodeAcceleratorHost::Destroy() {
@@ -225,7 +227,7 @@ void GpuVideoDecodeAcceleratorHost::OnBitstreamBufferProcessed(
     client_->NotifyEndOfBitstreamBuffer(bitstream_buffer_id);
 }
 
-void GpuVideoDecodeAcceleratorHost::OnProvidePictureBuffer(
+void GpuVideoDecodeAcceleratorHost::OnProvidePictureBuffers(
     uint32_t num_requested_buffers,
     VideoPixelFormat format,
     uint32_t textures_per_buffer,

@@ -2,10 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//mojo/public/tools/bindings/mojom.gni")
-
 static_library("content") {
   sources = [
+    "can_make_payment_query_factory.cc",
+    "can_make_payment_query_factory.h",
     "payment_request.cc",
     "payment_request.h",
     "payment_request_dialog.h",
@@ -20,46 +20,23 @@ static_library("content") {
   ]
 
   deps = [
-    ":mojom",
     ":utils",
     "//components/autofill/core/browser",
+    "//components/keyed_service/content",
     "//components/payments/core",
+    "//components/payments/mojom",
+    "//components/prefs",
+    "//components/strings:components_strings_grit",
     "//content/public/browser",
     "//mojo/public/cpp/bindings",
     "//third_party/libphonenumber",
   ]
 }
 
-mojom("mojom") {
-  sources = [
-    "payment_request.mojom",
-  ]
-}
-
-mojom("mojom_parser") {
-  sources = [
-    "payment_manifest_parser.mojom",
-  ]
-
-  public_deps = [
-    "//url/mojo:url_mojom_gurl",
-  ]
-}
-
-mojom("mojom_payment_app") {
-  sources = [
-    "payment_app.mojom",
-  ]
-
-  public_deps = [
-    ":mojom",
-    "//mojo/common:common_custom_types",
-    "//url/mojo:url_mojom_gurl",
-  ]
-}
-
 static_library("utils") {
   sources = [
+    "origin_security_checker.cc",
+    "origin_security_checker.h",
     "payment_details_validation.cc",
     "payment_details_validation.h",
     "payment_manifest_downloader.cc",
@@ -71,13 +48,13 @@ static_library("utils") {
   ]
 
   deps = [
-    ":mojom",
-    ":mojom_parser",
     "//base",
     "//components/autofill/core/browser",
     "//components/data_use_measurement/core",
     "//components/link_header_util",
     "//components/payments/core",
+    "//components/payments/mojom",
+    "//components/payments/mojom:mojom_parser",
     "//components/strings",
     "//content/public/browser",
     "//net",
@@ -104,13 +81,15 @@ source_set("unit_tests") {
 
   deps = [
     ":content",
-    ":mojom",
     ":utils",
     "//base",
     "//base/test:test_support",
     "//components/autofill/core/browser",
     "//components/autofill/core/browser:test_support",
     "//components/payments/core",
+    "//components/payments/core:test_support",
+    "//components/payments/mojom",
+    "//components/strings:components_strings_grit",
     "//content/test:test_support",
     "//net:test_support",
     "//testing/gtest",

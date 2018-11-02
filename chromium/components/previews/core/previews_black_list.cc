@@ -6,8 +6,9 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram.h"
 #include "base/optional.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/clock.h"
 #include "components/previews/core/previews_black_list_item.h"
 #include "components/previews/core/previews_experiments.h"
@@ -74,13 +75,12 @@ void PreviewsBlackList::AddPreviewNavigation(const GURL& url,
                                              PreviewsType type) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(url.has_host());
-  switch (type) {
-    case PreviewsType::OFFLINE:
-      UMA_HISTOGRAM_BOOLEAN("Previews.OptOut.UserOptedOut.Offline", opt_out);
-      break;
-    default:
-      NOTREACHED();
-  }
+
+  base::BooleanHistogram::FactoryGet(
+      base::StringPrintf("Previews.OptOut.UserOptedOut.%s",
+                         GetStringNameForType(type).c_str()),
+      base::HistogramBase::kUmaTargetedHistogramFlag)
+      ->Add(opt_out);
   if (opt_out) {
     last_opt_out_time_ = clock_->Now();
   }
@@ -158,6 +158,14 @@ void PreviewsBlackList::ClearBlackListSync(base::Time begin_time,
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(loaded_);
   DCHECK_LE(begin_time, end_time);
+
+  // Clear last_opt_out_time_ if the period being cleared is larger than the
+  // short black list timeout and the last time the user opted out was before
+  // |end_time|.
+  if (end_time - begin_time > params::SingleOptOutDuration() &&
+      last_opt_out_time_ && last_opt_out_time_.value() < end_time) {
+    last_opt_out_time_.reset();
+  }
   black_list_item_map_.reset();
   host_indifferent_black_list_item_.reset();
   loaded_ = false;

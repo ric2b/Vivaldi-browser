@@ -332,8 +332,6 @@ void RuleSet::AddRulesFromSheet(StyleSheetContents* sheet,
       sheet->ImportRules();
   for (unsigned i = 0; i < import_rules.size(); ++i) {
     StyleRuleImport* import_rule = import_rules[i].Get();
-    // TODO(sof): CHECK() added for crbug.com/699269 diagnosis, remove sooner.
-    CHECK_EQ(import_rules.Data(), sheet->ImportRules().Data());
     if (import_rule->GetStyleSheet() &&
         (!import_rule->MediaQueries() ||
          medium.Eval(*import_rule->MediaQueries(),
@@ -372,7 +370,7 @@ void RuleSet::CompactPendingRules(PendingRuleMap& pending_map,
 }
 
 void RuleSet::CompactRules() {
-  ASSERT(pending_rules_);
+  DCHECK(pending_rules_);
   PendingRuleMaps* pending_rules = pending_rules_.Release();
   CompactPendingRules(pending_rules->id_rules, id_rules_);
   CompactPendingRules(pending_rules->class_rules, class_rules_);

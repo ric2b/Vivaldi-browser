@@ -51,13 +51,13 @@ ImagePixelLocker::ImagePixelLocker(sk_sp<const SkImage> image,
   if (0 == size)
     return;
 
-  pixel_storage_.Resize(size);  // this will throw on failure
-  pixmap.reset(info, pixel_storage_.Data(), row_bytes);
+  pixel_storage_.resize(size);  // this will throw on failure
+  pixmap.reset(info, pixel_storage_.data(), row_bytes);
 
   if (!image_->readPixels(pixmap, 0, 0))
     return;
 
-  pixels_ = pixel_storage_.Data();
+  pixels_ = pixel_storage_.data();
 }
 
 }  // namespace blink

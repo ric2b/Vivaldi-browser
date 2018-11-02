@@ -9,8 +9,8 @@
 
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ash/system/screen_layout_observer.h"
 #include "ash/system/status_area_widget.h"
@@ -21,7 +21,6 @@
 #include "ash/test/status_area_widget_test_helper.h"
 #include "ash/test/test_system_tray_delegate.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm_window.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -310,7 +309,7 @@ TEST_F(WebNotificationTrayTest, PopupAndAutoHideShelf) {
 
   // Shelf's auto-hide state won't be HIDDEN unless window exists.
   std::unique_ptr<views::Widget> widget(CreateTestWidget());
-  WmShelf* shelf = GetPrimaryShelf();
+  Shelf* shelf = GetPrimaryShelf();
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
 
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
@@ -343,7 +342,7 @@ TEST_F(WebNotificationTrayTest, PopupAndFullscreen) {
 
   // Checks the work area for normal auto-hidden state.
   std::unique_ptr<views::Widget> widget(CreateTestWidget());
-  WmShelf* shelf = GetPrimaryShelf();
+  Shelf* shelf = GetPrimaryShelf();
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
   int bottom_auto_hidden = GetPopupWorkAreaBottom();
@@ -352,8 +351,7 @@ TEST_F(WebNotificationTrayTest, PopupAndFullscreen) {
   // Put |widget| into fullscreen without forcing the shelf to hide. Currently,
   // this is used by immersive fullscreen and forces the shelf to be auto
   // hidden.
-  WmWindow::Get(widget->GetNativeWindow())
-      ->GetWindowState()
+  wm::GetWindowState(widget->GetNativeWindow())
       ->set_hide_shelf_when_fullscreen(false);
   widget->SetFullscreen(true);
   RunAllPendingInMessageLoop();

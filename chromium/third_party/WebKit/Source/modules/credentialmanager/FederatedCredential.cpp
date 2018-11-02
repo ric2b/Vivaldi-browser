@@ -5,7 +5,7 @@
 #include "modules/credentialmanager/FederatedCredential.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "modules/credentialmanager/FederatedCredentialData.h"
+#include "modules/credentialmanager/FederatedCredentialInit.h"
 #include "platform/credentialmanager/PlatformFederatedCredential.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebFederatedCredential.h"
@@ -18,7 +18,7 @@ FederatedCredential* FederatedCredential::Create(
 }
 
 FederatedCredential* FederatedCredential::Create(
-    const FederatedCredentialData& data,
+    const FederatedCredentialInit& data,
     ExceptionState& exception_state) {
   if (data.id().IsEmpty()) {
     exception_state.ThrowTypeError("'id' must not be empty.");
@@ -39,13 +39,13 @@ FederatedCredential* FederatedCredential::Create(
 
 FederatedCredential::FederatedCredential(
     WebFederatedCredential* web_federated_credential)
-    : SiteBoundCredential(web_federated_credential->GetPlatformCredential()) {}
+    : CredentialUserData(web_federated_credential->GetPlatformCredential()) {}
 
 FederatedCredential::FederatedCredential(const String& id,
                                          const KURL& provider,
                                          const String& name,
                                          const KURL& icon)
-    : SiteBoundCredential(
+    : CredentialUserData(
           PlatformFederatedCredential::Create(id,
                                               SecurityOrigin::Create(provider),
                                               name,

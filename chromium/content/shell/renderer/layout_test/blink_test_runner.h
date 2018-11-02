@@ -68,7 +68,6 @@ class BlinkTestRunner : public RenderViewObserver,
   void SetEditCommand(const std::string& name,
                       const std::string& value) override;
   void SetGamepadProvider(test_runner::GamepadController* controller) override;
-  void SetDeviceLightData(const double data) override;
   void SetDeviceMotionData(const device::MotionData& data) override;
   void SetDeviceOrientationData(const device::OrientationData& data) override;
   void PrintMessageToStderr(const std::string& message) override;
@@ -85,6 +84,7 @@ class BlinkTestRunner : public RenderViewObserver,
                                       bool is_wpt_mode) override;
   test_runner::TestPreferences* Preferences() override;
   void ApplyPreferences() override;
+  void SetPopupBlockingEnabled(bool block_popups) override;
   virtual std::string makeURLErrorDescription(const blink::WebURLError& error);
   void UseUnfortunateSynchronousResizeMode(bool enable) override;
   void EnableAutoResizeMode(const blink::WebSize& min_size,
@@ -158,7 +158,6 @@ class BlinkTestRunner : public RenderViewObserver,
   void ResolveBeforeInstallPromptPromise(
       const std::string& platform) override;
   blink::WebPlugin* CreatePluginPlaceholder(
-    blink::WebLocalFrame* frame,
     const blink::WebPluginParams& params) override;
   float GetDeviceScaleFactor() const override;
   void RunIdleTasks(const base::Closure& callback) override;

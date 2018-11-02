@@ -36,18 +36,17 @@ class PaymentRequestItemList {
     Item(PaymentRequestSpec* spec,
          PaymentRequestState* state,
          PaymentRequestItemList* list,
-         bool selected);
+         bool selected,
+         bool show_edit_button);
     ~Item() override;
-
-    // Gets the view associated with this item. It's owned by this object so
-    // that it can listen to any changes to the underlying model and update the
-    // view.
-    views::View* GetItemView();
 
     bool selected() const { return selected_; }
     // Changes the selected state of this item to |selected|.
     // SelectedStateChanged is called if |notify| is true.
     void SetSelected(bool selected, bool notify);
+
+    // Creates and returns the view associated with this list item.
+    std::unique_ptr<views::View> CreateItemView();
 
     // Returns a pointer to the PaymentRequestItemList that owns this object.
     PaymentRequestItemList* list() { return list_; }
@@ -76,28 +75,33 @@ class PaymentRequestItemList {
     // item's view, such as the credit card icon.
     virtual std::unique_ptr<views::View> CreateExtraView();
 
+    // Whether the item should be enabled (if disabled, the user will not be
+    // able to click on the item).
+    virtual bool IsEnabled() = 0;
+
     // Returns whether this item is complete/valid and can be selected by the
     // user. If this returns false when the user attempts to select this item,
     // PerformSelectionFallback will be called instead.
-    virtual bool CanBeSelected() const = 0;
+    virtual bool CanBeSelected() = 0;
 
     // Performs the action that replaces selection when CanBeSelected returns
     // false. This will usually be to display an editor.
     virtual void PerformSelectionFallback() = 0;
 
-   private:
-    // Creates and returns the view associated with this list item.
-    std::unique_ptr<views::View> CreateItemView();
+    // Called when the edit button is pressed. Subclasses should open the editor
+    // appropriate for the item they represent.
+    virtual void EditButtonPressed() = 0;
 
+   private:
     // views::ButtonListener:
     void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-    std::unique_ptr<views::View> item_view_;
     PaymentRequestSpec* spec_;
     PaymentRequestState* state_;
     PaymentRequestItemList* list_;
     std::unique_ptr<views::ImageView> checkmark_;
     bool selected_;
+    bool show_edit_button_;
 
     DISALLOW_COPY_AND_ASSIGN(Item);
   };

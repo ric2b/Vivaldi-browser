@@ -12,6 +12,7 @@
 #include "core/animation/CSSColorInterpolationType.h"
 #include "core/animation/CSSFilterListInterpolationType.h"
 #include "core/animation/CSSFontSizeInterpolationType.h"
+#include "core/animation/CSSFontVariationSettingsInterpolationType.h"
 #include "core/animation/CSSFontWeightInterpolationType.h"
 #include "core/animation/CSSImageInterpolationType.h"
 #include "core/animation/CSSImageListInterpolationType.h"
@@ -25,6 +26,7 @@
 #include "core/animation/CSSPathInterpolationType.h"
 #include "core/animation/CSSPositionAxisListInterpolationType.h"
 #include "core/animation/CSSPositionInterpolationType.h"
+#include "core/animation/CSSResolutionInterpolationType.h"
 #include "core/animation/CSSRotateInterpolationType.h"
 #include "core/animation/CSSScaleInterpolationType.h"
 #include "core/animation/CSSShadowListInterpolationType.h"
@@ -58,7 +60,7 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
   using ApplicableTypesMap =
       HashMap<PropertyHandle, std::unique_ptr<const InterpolationTypes>>;
   DEFINE_STATIC_LOCAL(ApplicableTypesMap, applicable_types_map, ());
-  auto entry = applicable_types_map.Find(property);
+  auto entry = applicable_types_map.find(property);
   bool found_entry = entry != applicable_types_map.end();
 
   // Custom property interpolation types may change over time so don't trust the
@@ -216,6 +218,11 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
       applicable_types->push_back(
           WTF::MakeUnique<CSSFontWeightInterpolationType>(used_property));
       break;
+    case CSSPropertyFontVariationSettings:
+      applicable_types->push_back(
+          WTF::MakeUnique<CSSFontVariationSettingsInterpolationType>(
+              used_property));
+      break;
     case CSSPropertyVisibility:
       applicable_types->push_back(
           WTF::MakeUnique<CSSVisibilityInterpolationType>(used_property));
@@ -224,7 +231,6 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
       applicable_types->push_back(
           WTF::MakeUnique<CSSClipInterpolationType>(used_property));
       break;
-    case CSSPropertyOffsetRotation:
     case CSSPropertyOffsetRotate:
       applicable_types->push_back(
           WTF::MakeUnique<CSSOffsetRotateInterpolationType>(used_property));
@@ -356,13 +362,16 @@ CSSInterpolationTypesMap::CreateCSSInterpolationTypesForSyntax(
       case CSSSyntaxType::kNumber:
         result.push_back(WTF::MakeUnique<CSSNumberInterpolationType>(property));
         break;
+      case CSSSyntaxType::kResolution:
+        result.push_back(
+            WTF::MakeUnique<CSSResolutionInterpolationType>(property));
+        break;
       case CSSSyntaxType::kTime:
         result.push_back(WTF::MakeUnique<CSSTimeInterpolationType>(property));
         break;
       case CSSSyntaxType::kImage:
       case CSSSyntaxType::kUrl:
       case CSSSyntaxType::kInteger:
-      case CSSSyntaxType::kResolution:
       case CSSSyntaxType::kTransformFunction:
         // TODO(alancutter): Support smooth interpolation of these types.
         break;

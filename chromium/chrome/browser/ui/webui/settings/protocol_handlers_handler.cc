@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -99,9 +100,10 @@ void ProtocolHandlersHandler::GetHandlersForProtocol(
   handlers_value->SetBoolean("has_policy_recommendations",
                              registry->HasPolicyRegisteredHandler(protocol));
 
-  base::ListValue* handlers_list = new base::ListValue();
-  GetHandlersAsListValue(registry->GetHandlersFor(protocol), handlers_list);
-  handlers_value->Set("handlers", handlers_list);
+  auto handlers_list = base::MakeUnique<base::ListValue>();
+  GetHandlersAsListValue(registry->GetHandlersFor(protocol),
+                         handlers_list.get());
+  handlers_value->Set("handlers", std::move(handlers_list));
 }
 
 void ProtocolHandlersHandler::GetIgnoredHandlers(base::ListValue* handlers) {
@@ -127,11 +129,8 @@ void ProtocolHandlersHandler::UpdateHandlerList() {
 
   std::unique_ptr<base::ListValue> ignored_handlers(new base::ListValue());
   GetIgnoredHandlers(ignored_handlers.get());
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value("setProtocolHandlers"), handlers);
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value("setIgnoredProtocolHandlers"),
-                         *ignored_handlers);
+  FireWebUIListener("setProtocolHandlers", handlers);
+  FireWebUIListener("setIgnoredProtocolHandlers", *ignored_handlers);
 }
 
 void ProtocolHandlersHandler::HandleObserveProtocolHandlers(
@@ -148,9 +147,8 @@ void ProtocolHandlersHandler::HandleObserveProtocolHandlersEnabledState(
 }
 
 void ProtocolHandlersHandler::SendHandlersEnabledValue() {
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value("setHandlersEnabled"),
-                         base::Value(GetProtocolHandlerRegistry()->enabled()));
+  FireWebUIListener("setHandlersEnabled",
+                    base::Value(GetProtocolHandlerRegistry()->enabled()));
 }
 
 void ProtocolHandlersHandler::HandleRemoveHandler(const base::ListValue* args) {

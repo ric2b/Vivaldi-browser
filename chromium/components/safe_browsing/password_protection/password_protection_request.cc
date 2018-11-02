@@ -7,27 +7,33 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
-#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/web_contents.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
 #include "net/base/url_util.h"
 #include "net/http/http_status_code.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 using content::BrowserThread;
+using content::WebContents;
 
 namespace safe_browsing {
 
 PasswordProtectionRequest::PasswordProtectionRequest(
+    WebContents* web_contents,
     const GURL& main_frame_url,
+    const GURL& password_form_action,
+    const GURL& password_form_frame_url,
+    const std::string& saved_domain,
     LoginReputationClientRequest::TriggerType type,
-    bool is_extended_reporting,
-    bool is_incognito,
-    base::WeakPtr<PasswordProtectionService> pps,
+    PasswordProtectionService* pps,
     int request_timeout_in_ms)
-    : main_frame_url_(main_frame_url),
+    : web_contents_(web_contents),
+      main_frame_url_(main_frame_url),
+      password_form_action_(password_form_action),
+      password_form_frame_url_(password_form_frame_url),
+      saved_domain_(saved_domain),
       request_type_(type),
-      is_extended_reporting_(is_extended_reporting),
-      is_incognito_(is_incognito),
       password_protection_service_(pps),
       request_timeout_in_ms_(request_timeout_in_ms),
       weakptr_factory_(this) {
@@ -40,36 +46,27 @@ PasswordProtectionRequest::~PasswordProtectionRequest() {
 
 void PasswordProtectionRequest::Start() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  // Initially we only send ping for Safe Browsing Extended Reporting users when
-  // they are not in incognito mode. We may loose these conditions later.
-  if (is_incognito_) {
-    Finish(RequestOutcome::INCOGNITO, nullptr);
-    return;
-  }
-  if (!is_extended_reporting_) {
-    Finish(RequestOutcome::NO_EXTENDED_REPORTING, nullptr);
-    return;
-  }
-
-  CheckWhitelistsOnUIThread();
+  CheckWhitelistOnUIThread();
 }
 
-void PasswordProtectionRequest::CheckWhitelistsOnUIThread() {
+void PasswordProtectionRequest::CheckWhitelistOnUIThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(password_protection_service_);
+  bool* match_whitelist = new bool(false);
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  tracker_.PostTaskAndReply(
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO).get(), FROM_HERE,
       base::Bind(&PasswordProtectionService::CheckCsdWhitelistOnIOThread,
-                 password_protection_service_, main_frame_url_,
-                 base::Bind(&PasswordProtectionRequest::OnWhitelistCheckDone,
-                            GetWeakPtr())));
+                 base::Unretained(password_protection_service_),
+                 main_frame_url_, match_whitelist),
+      base::Bind(&PasswordProtectionRequest::OnWhitelistCheckDone, this,
+                 base::Owned(match_whitelist)));
 }
 
-void PasswordProtectionRequest::OnWhitelistCheckDone(bool match_whitelist) {
+void PasswordProtectionRequest::OnWhitelistCheckDone(
+    const bool* match_whitelist) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (match_whitelist)
-    Finish(RequestOutcome::MATCHED_WHITELIST, nullptr);
+  if (*match_whitelist)
+    Finish(PasswordProtectionService::MATCHED_WHITELIST, nullptr);
   else
     CheckCachedVerdicts();
 }
@@ -77,7 +74,7 @@ void PasswordProtectionRequest::OnWhitelistCheckDone(bool match_whitelist) {
 void PasswordProtectionRequest::CheckCachedVerdicts() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!password_protection_service_) {
-    Finish(RequestOutcome::SERVICE_DESTROYED, nullptr);
+    Finish(PasswordProtectionService::SERVICE_DESTROYED, nullptr);
     return;
   }
 
@@ -86,7 +83,8 @@ void PasswordProtectionRequest::CheckCachedVerdicts() {
   auto verdict = password_protection_service_->GetCachedVerdict(
       main_frame_url_, cached_response.get());
   if (verdict != LoginReputationClientResponse::VERDICT_TYPE_UNSPECIFIED)
-    Finish(RequestOutcome::RESPONSE_ALREADY_CACHED, std::move(cached_response));
+    Finish(PasswordProtectionService::RESPONSE_ALREADY_CACHED,
+           std::move(cached_response));
   else
     SendRequest();
 }
@@ -95,14 +93,43 @@ void PasswordProtectionRequest::FillRequestProto() {
   request_proto_ = base::MakeUnique<LoginReputationClientRequest>();
   request_proto_->set_page_url(main_frame_url_.spec());
   request_proto_->set_trigger_type(request_type_);
+  password_protection_service_->FillUserPopulation(request_type_,
+                                                   request_proto_.get());
   request_proto_->set_stored_verdict_cnt(
       password_protection_service_->GetStoredVerdictCount());
   LoginReputationClientRequest::Frame* main_frame =
       request_proto_->add_frames();
   main_frame->set_url(main_frame_url_.spec());
+  main_frame->set_frame_index(0 /* main frame */);
   password_protection_service_->FillReferrerChain(
       main_frame_url_, -1 /* tab id not available */, main_frame);
-  // TODO(jialiul): Add sub-frame information and password form information.
+
+  switch (request_type_) {
+    case LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE: {
+      LoginReputationClientRequest::Frame::Form* password_form;
+      if (password_form_frame_url_ == main_frame_url_) {
+        main_frame->set_has_password_field(true);
+        password_form = main_frame->add_forms();
+      } else {
+        LoginReputationClientRequest::Frame* password_frame =
+            request_proto_->add_frames();
+        password_frame->set_url(password_form_frame_url_.spec());
+        password_frame->set_has_password_field(true);
+        // TODO(jialiul): Add referrer chain for subframes later.
+        password_form = password_frame->add_forms();
+      }
+      password_form->set_action_url(password_form_action_.spec());
+      // TODO(jialiul): Fill more frame specific info when Safe Browsing backend
+      // is ready to handle these pieces of information.
+      break;
+    }
+    case LoginReputationClientRequest::PASSWORD_REUSE_EVENT: {
+      // TODO(jialiul): Fill more password reuse related information when ready.
+      break;
+    }
+    default:
+      NOTREACHED();
+  }
 }
 
 void PasswordProtectionRequest::SendRequest() {
@@ -111,16 +138,47 @@ void PasswordProtectionRequest::SendRequest() {
 
   std::string serialized_request;
   if (!request_proto_->SerializeToString(&serialized_request)) {
-    Finish(RequestOutcome::REQUEST_MALFORMED, nullptr);
+    Finish(PasswordProtectionService::REQUEST_MALFORMED, nullptr);
     return;
   }
 
   // In case the request take too long, we set a timer to cancel this request.
   StartTimeout();
-
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("password_protection_request", R"(
+        semantics {
+          sender: "Safe Browsing"
+          description:
+            "When the user is about to log in to a new, uncommon site, Chrome "
+            "will send a request to Safe Browsing to determine if the page is "
+            "phishing. It'll then show a warning if the page poses a risk of "
+            "phishing."
+          trigger:
+            "When a user focuses on a password field on a page that they "
+            "haven't visited before and that isn't popular or known to be safe."
+          data:
+            "URL and referrer of the current page, password form action, and "
+            "iframe structure."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: true
+          cookies_store: "Safe Browsing Cookie Store"
+          setting:
+            "Users can control this feature via 'Protect you and your device "
+            "from dangerous sites' or 'Automatically report details of "
+            "possible security incidents to Google' setting under 'Privacy'. "
+            "By default, the first setting is enabled and the second is not."
+          chrome_policy {
+            SafeBrowsingExtendedReportingOptInAllowed {
+              policy_options {mode: MANDATORY}
+              SafeBrowsingExtendedReportingOptInAllowed: false
+            }
+          }
+        })");
   fetcher_ = net::URLFetcher::Create(
       0, PasswordProtectionService::GetPasswordProtectionRequestUrl(),
-      net::URLFetcher::POST, this);
+      net::URLFetcher::POST, this, traffic_annotation);
   data_use_measurement::DataUseUserData::AttachToFetcher(
       fetcher_.get(), data_use_measurement::DataUseUserData::SAFE_BROWSING);
   fetcher_->SetLoadFlags(net::LOAD_DISABLE_CACHE);
@@ -157,7 +215,7 @@ void PasswordProtectionRequest::OnURLFetchComplete(
       is_success ? response_code : status.error());
 
   if (!is_success || net::HTTP_OK != response_code) {
-    Finish(RequestOutcome::FETCH_FAILED, nullptr);
+    Finish(PasswordProtectionService::FETCH_FAILED, nullptr);
     return;
   }
 
@@ -169,32 +227,37 @@ void PasswordProtectionRequest::OnURLFetchComplete(
   fetcher_.reset();  // We don't need it anymore.
   UMA_HISTOGRAM_TIMES("PasswordProtection.RequestNetworkDuration",
                       base::TimeTicks::Now() - request_start_time_);
-  if (response->ParseFromString(response_body)) {
-    Finish(RequestOutcome::SUCCEEDED, std::move(response));
-  } else {
-    Finish(RequestOutcome::RESPONSE_MALFORMED, nullptr);
-  }
+  if (response->ParseFromString(response_body))
+    Finish(PasswordProtectionService::SUCCEEDED, std::move(response));
+  else
+    Finish(PasswordProtectionService::RESPONSE_MALFORMED, nullptr);
 }
 
 void PasswordProtectionRequest::Finish(
-    RequestOutcome outcome,
+    PasswordProtectionService::RequestOutcome outcome,
     std::unique_ptr<LoginReputationClientResponse> response) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  tracker_.TryCancelAll();
 
-  UMA_HISTOGRAM_ENUMERATION("PasswordProtection.RequestOutcome", outcome,
-                            RequestOutcome::MAX_OUTCOME);
+  if (request_type_ == LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE) {
+    UMA_HISTOGRAM_ENUMERATION(kPasswordOnFocusRequestOutcomeHistogramName,
+                              outcome, PasswordProtectionService::MAX_OUTCOME);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION(kPasswordEntryRequestOutcomeHistogramName,
+                              outcome, PasswordProtectionService::MAX_OUTCOME);
+  }
 
   if (response) {
     switch (request_type_) {
       case LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE:
         UMA_HISTOGRAM_ENUMERATION(
-            "PasswordProtection.UnfamiliarLoginPageVerdict",
+            "PasswordProtection.Verdict.PasswordFieldOnFocus",
             response->verdict_type(),
             LoginReputationClientResponse_VerdictType_VerdictType_MAX + 1);
         break;
       case LoginReputationClientRequest::PASSWORD_REUSE_EVENT:
         UMA_HISTOGRAM_ENUMERATION(
-            "PasswordProtection.PasswordReuseEventVerdict",
+            "PasswordProtection.Verdict.ProtectedPasswordEntry",
             response->verdict_type(),
             LoginReputationClientResponse_VerdictType_VerdictType_MAX + 1);
         break;
@@ -211,7 +274,9 @@ void PasswordProtectionRequest::Cancel(bool timed_out) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   fetcher_.reset();
 
-  Finish(timed_out ? TIMEDOUT : CANCELED, nullptr);
+  Finish(timed_out ? PasswordProtectionService::TIMEDOUT
+                   : PasswordProtectionService::CANCELED,
+         nullptr);
 }
 
 }  // namespace safe_browsing

@@ -21,7 +21,7 @@ CSSPaintValue::CSSPaintValue(CSSCustomIdentValue* name)
 CSSPaintValue::CSSPaintValue(CSSCustomIdentValue* name,
                              Vector<RefPtr<CSSVariableData>>& variable_data)
     : CSSPaintValue(name) {
-  argument_variable_data_.Swap(variable_data);
+  argument_variable_data_.swap(variable_data);
 }
 
 CSSPaintValue::~CSSPaintValue() {}
@@ -43,8 +43,7 @@ String CSSPaintValue::GetName() const {
 }
 
 PassRefPtr<Image> CSSPaintValue::GetImage(const LayoutObject& layout_object,
-                                          const IntSize& size,
-                                          float zoom) {
+                                          const IntSize& size) {
   if (!generator_)
     generator_ =
         CSSPaintImageGenerator::Create(GetName(), layout_object.GetDocument(),
@@ -53,7 +52,7 @@ PassRefPtr<Image> CSSPaintValue::GetImage(const LayoutObject& layout_object,
   if (!ParseInputArguments())
     return nullptr;
 
-  return generator_->Paint(layout_object, size, zoom, parsed_input_arguments_);
+  return generator_->Paint(layout_object, size, parsed_input_arguments_);
 }
 
 bool CSSPaintValue::ParseInputArguments() {
@@ -101,7 +100,8 @@ void CSSPaintValue::PaintImageGeneratorReady() {
   }
 }
 
-bool CSSPaintValue::KnownToBeOpaque(const LayoutObject& layout_object) const {
+bool CSSPaintValue::KnownToBeOpaque(const Document&,
+                                    const ComputedStyle&) const {
   return generator_ && !generator_->HasAlpha();
 }
 

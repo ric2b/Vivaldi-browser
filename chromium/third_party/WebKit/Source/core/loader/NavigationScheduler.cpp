@@ -52,11 +52,11 @@
 #include "platform/SharedBuffer.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCachePolicy.h"
-#include "public/platform/WebScheduler.h"
 
 namespace blink {
 
@@ -176,7 +176,7 @@ class ScheduledURLNavigation : public ScheduledNavigation {
   void Fire(LocalFrame* frame) override {
     std::unique_ptr<UserGestureIndicator> gesture_indicator =
         CreateUserGestureIndicator();
-    FrameLoadRequest request(OriginDocument(), url_, "_self",
+    FrameLoadRequest request(OriginDocument(), ResourceRequest(url_), "_self",
                              should_check_main_world_content_security_policy_);
     request.SetReplacesCurrentItem(ReplacesCurrentItem());
     request.SetClientRedirect(ClientRedirectPolicy::kClientRedirect);
@@ -213,7 +213,7 @@ class ScheduledRedirect final : public ScheduledURLNavigation {
   void Fire(LocalFrame* frame) override {
     std::unique_ptr<UserGestureIndicator> gesture_indicator =
         CreateUserGestureIndicator();
-    FrameLoadRequest request(OriginDocument(), Url(), "_self");
+    FrameLoadRequest request(OriginDocument(), ResourceRequest(Url()), "_self");
     request.SetReplacesCurrentItem(ReplacesCurrentItem());
     if (EqualIgnoringFragmentIdentifier(frame->GetDocument()->Url(),
                                         request.GetResourceRequest().Url())) {
@@ -345,9 +345,11 @@ class ScheduledFormSubmission final : public ScheduledNavigation {
 
 NavigationScheduler::NavigationScheduler(LocalFrame* frame)
     : frame_(frame),
-      frame_type_(frame_->IsMainFrame()
-                      ? WebScheduler::NavigatingFrameType::kMainFrame
-                      : WebScheduler::NavigatingFrameType::kChildFrame) {}
+      frame_type_(
+          frame_->IsMainFrame()
+              ? scheduler::RendererScheduler::NavigatingFrameType::kMainFrame
+              : scheduler::RendererScheduler::NavigatingFrameType::
+                    kChildFrame) {}
 
 NavigationScheduler::~NavigationScheduler() {
   if (navigate_task_handle_.IsActive()) {
@@ -414,7 +416,7 @@ bool NavigationScheduler::MustReplaceCurrentItem(LocalFrame* target_frame) {
   // create a new back/forward item. See https://webkit.org/b/42861 for the
   // original motivation for this.
   if (!target_frame->GetDocument()->LoadEventFinished() &&
-      !UserGestureIndicator::UtilizeUserGesture())
+      !UserGestureIndicator::ProcessingUserGesture())
     return true;
 
   // Navigation of a subframe during loading of an ancestor frame does not
@@ -444,7 +446,7 @@ void NavigationScheduler::ScheduleLocationChange(Document* origin_document,
           frame_->GetDocument()->GetSecurityOrigin())) {
     if (url.HasFragmentIdentifier() &&
         EqualIgnoringFragmentIdentifier(frame_->GetDocument()->Url(), url)) {
-      FrameLoadRequest request(origin_document, url, "_self");
+      FrameLoadRequest request(origin_document, ResourceRequest(url), "_self");
       request.SetReplacesCurrentItem(replaces_current_item);
       if (replaces_current_item)
         request.SetClientRedirect(ClientRedirectPolicy::kClientRedirect);
@@ -513,6 +515,8 @@ void NavigationScheduler::Schedule(ScheduledNavigation* redirect) {
 
   Cancel();
   redirect_ = redirect;
+  if (redirect_->IsLocationChange())
+    frame_->GetDocument()->SuppressLoadEvent();
   StartTimer();
 }
 
@@ -536,7 +540,7 @@ void NavigationScheduler::StartTimer() {
           BLINK_FROM_HERE,
           WTF::Bind(&NavigationScheduler::NavigateTask,
                     WrapWeakPersistent(this)),
-          redirect_->Delay() * 1000.0);
+          TimeDelta::FromSecondsD(redirect_->Delay()));
 
   probe::frameScheduledNavigation(frame_, redirect_->Delay());
 }

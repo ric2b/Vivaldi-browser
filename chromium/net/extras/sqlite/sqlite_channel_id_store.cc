@@ -100,6 +100,9 @@ class SQLiteChannelIDStore::Backend
 
   void SetForceKeepSessionState();
 
+  // Posts a task to flush pending operations to the database.
+  void Flush();
+
  private:
   friend class base::RefCountedThreadSafe<SQLiteChannelIDStore::Backend>;
 
@@ -538,6 +541,11 @@ void SQLiteChannelIDStore::Backend::PrunePendingOperationsForDeletes(
   }
 }
 
+void SQLiteChannelIDStore::Backend::Flush() {
+  background_task_runner_->PostTask(FROM_HERE,
+                                    base::Bind(&Backend::Commit, this));
+}
+
 void SQLiteChannelIDStore::Backend::Commit() {
   DCHECK(background_task_runner_->RunsTasksOnCurrentThread());
 
@@ -685,6 +693,10 @@ void SQLiteChannelIDStore::DeleteAllInList(
 
 void SQLiteChannelIDStore::SetForceKeepSessionState() {
   backend_->SetForceKeepSessionState();
+}
+
+void SQLiteChannelIDStore::Flush() {
+  backend_->Flush();
 }
 
 SQLiteChannelIDStore::~SQLiteChannelIDStore() {

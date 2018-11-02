@@ -57,10 +57,10 @@ void TableLayoutAlgorithmAuto::RecalcColumn(unsigned eff_col) {
       for (unsigned i = 0; i < num_rows; i++) {
         if (eff_col >= section->NumCols(i))
           continue;
-        LayoutTableSection::CellStruct current = section->CellAt(i, eff_col);
-        LayoutTableCell* cell = current.PrimaryCell();
+        auto& grid_cell = section->GridCellAt(i, eff_col);
+        LayoutTableCell* cell = grid_cell.PrimaryCell();
 
-        if (current.in_col_span || !cell)
+        if (grid_cell.InColSpan() || !cell)
           continue;
         column_layout.column_has_no_cells = false;
 
@@ -161,7 +161,7 @@ void TableLayoutAlgorithmAuto::FullRecalc() {
   effective_logical_width_dirty_ = true;
 
   unsigned n_eff_cols = table_->NumEffectiveColumns();
-  layout_struct_.Resize(n_eff_cols);
+  layout_struct_.resize(n_eff_cols);
   layout_struct_.Fill(Layout());
   span_cells_.Fill(0);
 
@@ -630,7 +630,7 @@ void TableLayoutAlgorithmAuto::InsertSpanCell(LayoutTableCell* cell) {
   while (pos < span_cells_.size() && span_cells_[pos] &&
          span > span_cells_[pos]->ColSpan())
     pos++;
-  memmove(span_cells_.Data() + pos + 1, span_cells_.Data() + pos,
+  memmove(span_cells_.data() + pos + 1, span_cells_.data() + pos,
           (size - pos - 1) * sizeof(LayoutTableCell*));
   span_cells_[pos] = cell;
 }

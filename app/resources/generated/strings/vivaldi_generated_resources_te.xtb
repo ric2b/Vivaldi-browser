@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">ఈ పొడిగింపు మీరు హోమ్ బటన్‌ను క్లిక్ చేసినప్పుడు చూపబడే పేజీని మార్చింది.</translation>
 <translation id="1588438908519853928">సాధారణ</translation>
 <translation id="1616206807336925449">ఈ పొడిగింపుకు ప్రత్యేక అనుమతులు ఏవీ అవసరం లేదు.</translation>
-<translation id="1620510694547887537">కెమెరా</translation>
 <translation id="1635033183663317347">మీ పర్యవేక్షకుడు ఇన్‌స్టాల్ చేసారు.</translation>
 <translation id="1723824996674794290">&amp;క్రొత్త విండో</translation>
 <translation id="1729533290416704613">ఇది ఓమ్నిపెట్టె నుండి శోధించేటప్పుడు చూపబడే పేజీని కూడా నియంత్రిస్తుంది.</translation>
-<translation id="1789575671122666129">పాప్అప్‌లు</translation>
 <translation id="1850508293116537636">&amp;సవ్యదిశలో తిప్పు</translation>
 <translation id="1859234291848436338">వ్రాసే దిశ</translation>
 <translation id="1901303067676059328">&amp;అన్నీ ఎంచుకోండి</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">ఈ ప్లగ్ఇన్‌ని దాచిపెట్టు</translation>
 <translation id="2087822576218954668">ముద్రణ: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">ప్లగిన్‌ను నవీకరించండి</translation>
-<translation id="2147827593068025794">నేపథ్య సమకాలీకరణ</translation>
 <translation id="215753907730220065">పూర్తి స్క్రీన్‌ను నిష్క్రమించు</translation>
 <translation id="2177950615300672361">అజ్ఞాత ట్యాబ్: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">గుర్తించు (డిఫాల్ట్)</translation>
 <translation id="219008588003277019">ప్రాంతీయ క్లయింట్ మాడ్యూల్: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">సాధారణ వచనం వలె అతికించండి</translation>
 <translation id="2282146716419988068">GPU ప్రాసెస్</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">మీ కంప్యూటర్‌లోని మరో ప్రోగ్రామ్ జోడించిన పొడిగింపు కారణంగా Vivaldi పని చేసే విధానం మారవచ్చు.</translation>
 <translation id="2445081178310039857">పొడిగింపు మూలం డైరెక్టరీ అవసరం.</translation>
 <translation id="2470702053775288986">మద్దతు లేని పొడిగింపులు నిలిపివేయబడ్డాయి</translation>
-<translation id="2482878487686419369">ప్రకటనలు</translation>
 <translation id="2501797496290880632">సత్వరమార్గాన్ని టైప్ చేయండి</translation>
-<translation id="2509857212037838238"><ph name="PLUGIN_NAME" />ని ఇన్‌స్టాల్ చేయి</translation>
 <translation id="2550212893339833758">వినిమయం చేసిన మెమరీ</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">మళ్ళీ-ప్రారంభించు</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">వినియోగదారు నిర్వహించేవి</translation>
 <translation id="3222066309010235055">ప్రిరెండర్: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">మైక్రోఫోన్</translation>
 <translation id="3241680850019875542">ప్యాక్ చెయ్యడానికి పొడిగింపు యొక్క మూలం డైరెక్టరీని ఎంచుకోండి. ఒక పొడిగింపును నవీకరించడానికి, మళ్ళీ ఉపయోగించడానికి వ్యక్తిగత కీ ఫైల్‌ను కూడా ఎంచుకోండి.</translation>
 <translation id="3280237271814976245">&amp;ఇలా సేవ్ చెయ్యి</translation>
 <translation id="3288047731229977326">డెవలపర్ మోడ్‌లో అమలవుతున్న పొడిగింపులు మీ కంప్యూటర్‌కు హాని కలిగించవచ్చు. మీరు డెవలపర్ కాకపోతే, సురక్షితంగా ఉంచడానికి డెవలపర్ మోడ్‌లో అమలవుతున్న ఈ పొడిగింపులను నిలిపివేయాలి.</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">చిత్రం చిరునామాను కా&amp;పీ చేయి</translation>
 <translation id="335985608243443814">బ్రౌజ్ చెయ్యి...</translation>
 <translation id="3378572629723696641">ఈ పొడిగింపు పాడై ఉండవచ్చు.</translation>
-<translation id="3427092606871434483">అనుమతించు (డిఫాల్ట్)</translation>
 <translation id="3435896845095436175">ప్రారంభించండి</translation>
 <translation id="345693547134384690">క్రొత్త టాబ్‌లో &amp;చిత్రాన్ని తెరువు</translation>
 <translation id="3467267818798281173">సూచనల కోసం Googleను అడగండి</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">లింక్‌ను అజ్ఞా&amp;త విండోలో తెరువు</translation>
 <translation id="3678156199662914018">పొడిగింపు: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">లోడ్ అవుతోంది...</translation>
-<translation id="3789841737615482174">వ్యవస్థాపించు</translation>
 <translation id="3798449238516105146">సంస్కరణ</translation>
 <translation id="3866249974567520381">వివరణ</translation>
 <translation id="3905761538810670789">అనువర్తనాన్ని సరి చేయి</translation>
@@ -103,13 +94,11 @@
 <translation id="4096508467498758490">డెవలపర్ మోడ్ పొడిగింపులను నిలిపివేయండి</translation>
 <translation id="4100839878934973028">మీ కంప్యూటర్‌లోని మరో ప్రోగ్రామ్ జోడించిన అనువర్తనం కారణంగా Vivaldi పని చేసే విధానం మారవచ్చు.</translation>
 <translation id="4130207949184424187">ఈ పొడిగింపు మీరు ఓమ్నిపెట్టె నుండి శోధించేటప్పుడు చూపబడే పేజీని మార్చింది.</translation>
-<translation id="4165986682804962316">సైట్ సెట్టింగ్‌లు</translation>
 <translation id="4176463684765177261">ఆపివేయబడింది</translation>
 <translation id="4200983522494130825">క్రొత్త &amp;టాబ్</translation>
 <translation id="420665587194630159">(ఈ పొడిగింపు నిర్వహించబడుతుంది మరియు తీసివేయబడదు లేదా నిలిపివేయబడదు.)</translation>
 <translation id="4240511609794012987">భాగస్వామ్యం చేయబడిన మెమరీ</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K ప్రత్యక్షంగా)</translation>
-<translation id="4312866146174492540">బ్లాక్ చేయి (డిఫాల్ట్)</translation>
 <translation id="4384652540891215547">పొడిగింపును సక్రియం చేయండి</translation>
 <translation id="4394049700291259645">ఆపివెయ్యి</translation>
 <translation id="4423482519432579560">&amp;అక్షరక్రమ తనిఖీ</translation>
@@ -122,7 +111,6 @@
 <translation id="4677772697204437347">GPU మెమరీ</translation>
 <translation id="4711638718396952945">సెట్టింగ్‌లను పునరుద్ధరించు</translation>
 <translation id="4839303808932127586">వీడియోను ఇలా సే&amp;వ్ చెయ్యి...</translation>
-<translation id="4851858059374029925"><ph name="PLUGIN_NAME" />ని ఇన్‌స్టాల్ చేయాలా? కేవలం మీరు విశ్వసించే ప్లగిన్‌లను మాత్రమే ఇన్‌స్టాల్ చేయండి.</translation>
 <translation id="488785315393301722">వివరాలను చూపించు</translation>
 <translation id="4911714727432509308">ఏ పొడిగింపులకు కీబోర్డ్ సత్వరమార్గాలు కేటాయించబడలేదు.</translation>
 <translation id="4927301649992043040">ప్యాక్ పొడిగింపు</translation>
@@ -153,12 +141,10 @@
 <translation id="5646376287012673985">స్థానం</translation>
 <translation id="5715711091495208045">ప్లగిన్ బ్రోకర్: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">ఆడియోని ఇలా సే&amp;వ్ చెయ్యి...</translation>
-<translation id="5778550464785688721">MIDI పరికరాల పూర్తి నియంత్రణ</translation>
 <translation id="5780973441651030252">ప్రాసెస్ ప్రాధాన్యత</translation>
 <translation id="5804241973901381774">అనుమతులు</translation>
 <translation id="583281660410589416">తెలియని</translation>
 <translation id="59174027418879706">ప్రారంభించబడింది</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 వినియోగంలో ఉంది}other{# వినియోగంలో ఉన్నాయి}}</translation>
 <translation id="5956585768868398362">మీరు ఆశిస్తున్న శోధన పేజీ ఇదేనా?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> మిగిలి ఉన్నాయి)</translation>
 <translation id="5965661248935608907">ఇది మీరు హోమ్ బటన్‌ను క్లిక్ చేసేటప్పుడు లేదా ఓమ్నిపెట్టె నుండి శోధించేటప్పుడు చూపబడే పేజీని కూడా నియంత్రిస్తుంది.</translation>
@@ -187,14 +173,12 @@
 <translation id="6787839852456839824">కీబోర్డ్ సత్వరమార్గాలు</translation>
 <translation id="6798954102094737107">ప్లగిన్: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">మార్పులను ఉంచు</translation>
-<translation id="6863910145616405334">ప్లగిన్ కనుగొనబడలేదు</translation>
 <translation id="6886871292305414135">లింక్‌ను క్రొత్త &amp;ట్యాబ్‌లో తెరువు</translation>
 <translation id="6900284862687837908">నేపథ్య అనువర్తనం: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ఫైల్ ప్రాప్యతను ఉపసంహరించు</translation>
 <translation id="6974053822202609517">కుడి నుండి ఎడమకు</translation>
 <translation id="7013485839273047434">మరిన్ని పొడిగింపులను పొందండి</translation>
 <translation id="708060913198414444">ఆడియో చిరునామాను కా&amp;పీ చేయి</translation>
-<translation id="7105578512429498960">ఈ కంటెంట్‌ను ప్రదర్శించడానికి <ph name="PLUGIN_NAME" />ని ఇన్‌స్టాల్ చేయండి</translation>
 <translation id="7144878232160441200">మళ్లీ ప్రయత్నించండి</translation>
 <translation id="7206693748120342859"><ph name="PLUGIN_NAME" />ని డౌన్‌లోడ్ చేస్తోంది...</translation>
 <translation id="7287143125007575591">ప్రాప్యత నిరాకరించబడింది.</translation>
@@ -223,7 +207,6 @@
 
 పొడిగింపు: <ph name="EXTENSION_FILE" />కీ ఫైల్: <ph name="KEY_FILE" />మీ కీ ఫైల్‌ను ఒక సురక్షితమైన స్థలంలో ఉంచండి. మీ పొడిగింపు యొక్క క్రొత్త సంస్కరణను సృష్టించడానికి మీకు ఇది అవసరం అవుతుంది.</translation>
 <translation id="8004582292198964060">బ్రౌజర్</translation>
-<translation id="8037357227543935929">అడగాలి (డిఫాల్ట్)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">&amp;వచన ఫీల్డ్‌ల అక్షరక్రమాన్ని తనిఖీ చేయి</translation>
 <translation id="8261378640211443080">ఈ పొడిగింపు <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />లో జాబితా చేయబడలేదు మరియు మీకు తెలియకుండానే జోడించబడి ఉండవచ్చు.</translation>
@@ -239,7 +222,6 @@
 <translation id="8664389313780386848">పేజీ మూలాన్ని &amp;వీక్షించండి</translation>
 <translation id="8719653885894320876"><ph name="PLUGIN_NAME" /> డౌన్‌లోడ్ విఫలమైంది</translation>
 <translation id="873545264931343897"><ph name="PLUGIN_NAME" />ని నవీకరించడం పూర్తయినప్పుడు, దాన్ని సక్రియం చేయడానికి పేజీని మళ్లీ లోడ్ చేయండి</translation>
-<translation id="8763204422633679667"><ph name="PLUGIN_NAME" />ని ఇన్‌స్టాల్ చేయడం పూర్తయినప్పుడు, దీన్ని సక్రియం చేయడానికి పేజీని మళ్లీ లోడ్ చేయండి</translation>
 <translation id="8798099450830957504">డిఫాల్ట్</translation>
 <translation id="8808478386290700967">వెబ్ స్టోర్</translation>
 <translation id="8859174528519900719">సబ్‌ఫ్రేమ్: <ph name="SUBFRAME_SITE" /></translation>

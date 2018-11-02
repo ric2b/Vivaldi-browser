@@ -12,7 +12,6 @@
 #include "base/memory/ptr_util.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/public/cpp/service_context.h"
 
 #if defined(OS_WIN)
@@ -39,29 +38,28 @@ const char kUserDataDir[] = "user-data-dir";
 }  // namespace filesystem
 
 FileSystemApp::FileSystemApp() : lock_table_(new LockTable) {
-  registry_.AddInterface<mojom::FileSystem>(this);
+  registry_.AddInterface<mojom::FileSystem>(
+      base::Bind(&FileSystemApp::Create, base::Unretained(this)));
 }
 
 FileSystemApp::~FileSystemApp() {}
 
-void FileSystemApp::OnStart() {
-  tracing_.Initialize(context()->connector(), context()->identity().name());
-}
+void FileSystemApp::OnStart() {}
 
 void FileSystemApp::OnBindInterface(
-    const service_manager::ServiceInfo& source_info,
+    const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(source_info.identity, interface_name,
+  registry_.BindInterface(source_info, interface_name,
                           std::move(interface_pipe));
 }
 
-// |InterfaceFactory<Files>| implementation:
-void FileSystemApp::Create(const service_manager::Identity& remote_identity,
+void FileSystemApp::Create(const service_manager::BindSourceInfo& source_info,
                            mojom::FileSystemRequest request) {
-  mojo::MakeStrongBinding(base::MakeUnique<FileSystemImpl>(
-                              remote_identity, GetUserDataDir(), lock_table_),
-                          std::move(request));
+  mojo::MakeStrongBinding(
+      base::MakeUnique<FileSystemImpl>(source_info.identity, GetUserDataDir(),
+                                       lock_table_),
+      std::move(request));
 }
 
 //static

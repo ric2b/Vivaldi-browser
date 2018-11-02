@@ -15,12 +15,14 @@ namespace gpu {
 
 class ProprietaryMediaGpuChannelManager : public GpuChannelManager {
  public:
-  ProprietaryMediaGpuChannelManager(const GpuPreferences& gpu_preferences,
+  ProprietaryMediaGpuChannelManager(
+                    const GpuPreferences& gpu_preferences,
                     const GpuDriverBugWorkarounds& workarounds,
                     GpuChannelManagerDelegate* delegate,
                     GpuWatchdogThread* watchdog,
                     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+                    Scheduler* scheduler,
                     SyncPointManager* sync_point_manager,
                     GpuMemoryBufferFactory* gpu_memory_buffer_factory,
                     const GpuFeatureInfo& gpu_feature_info,

@@ -56,7 +56,7 @@ Result BytesConsumerTestUtil::ReplayingBytesConsumer::BeginRead(
   switch (command.GetName()) {
     case Command::kData:
       DCHECK_LE(offset_, command.Body().size());
-      *buffer = command.Body().Data() + offset_;
+      *buffer = command.Body().data() + offset_;
       *available = command.Body().size() - offset_;
       return Result::kOk;
     case Command::kDone:
@@ -64,7 +64,7 @@ Result BytesConsumerTestUtil::ReplayingBytesConsumer::BeginRead(
       Close();
       return Result::kDone;
     case Command::kError: {
-      Error e(String::FromUTF8(command.Body().Data(), command.Body().size()));
+      Error e(String::FromUTF8(command.Body().data(), command.Body().size()));
       commands_.pop_front();
       GetError(std::move(e));
       return Result::kError;
@@ -137,14 +137,14 @@ void BytesConsumerTestUtil::ReplayingBytesConsumer::NotifyAsReadable(
 }
 
 void BytesConsumerTestUtil::ReplayingBytesConsumer::Close() {
-  commands_.Clear();
+  commands_.clear();
   offset_ = 0;
   state_ = InternalState::kClosed;
   ++notification_token_;
 }
 
 void BytesConsumerTestUtil::ReplayingBytesConsumer::GetError(const Error& e) {
-  commands_.Clear();
+  commands_.clear();
   offset_ = 0;
   error_ = e;
   state_ = InternalState::kErrored;

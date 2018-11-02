@@ -207,7 +207,7 @@ RenderWidgetInputHandler::RenderWidgetInputHandler(
 
 RenderWidgetInputHandler::~RenderWidgetInputHandler() {}
 
-void RenderWidgetInputHandler::HandleInputEvent(
+InputEventAckState RenderWidgetInputHandler::HandleInputEvent(
     const blink::WebCoalescedInputEvent& coalesced_event,
     const ui::LatencyInfo& latency_info,
     InputEventDispatchType dispatch_type) {
@@ -393,16 +393,7 @@ void RenderWidgetInputHandler::HandleInputEvent(
 
   TRACE_EVENT_SYNTHETIC_DELAY_END("blink.HandleInputEvent");
 
-  if (dispatch_type == DISPATCH_TYPE_BLOCKING_NOTIFY_MAIN ||
-      dispatch_type == DISPATCH_TYPE_NON_BLOCKING_NOTIFY_MAIN) {
-    // |non_blocking| means it was ack'd already by the InputHandlerProxy
-    // so let the delegate know the event has been handled.
-    delegate_->NotifyInputEventHandled(input_event.GetType(), processed,
-                                       ack_result);
-  }
-
-  if ((dispatch_type == DISPATCH_TYPE_BLOCKING ||
-       dispatch_type == DISPATCH_TYPE_BLOCKING_NOTIFY_MAIN)) {
+  if (dispatch_type == DISPATCH_TYPE_BLOCKING) {
     std::unique_ptr<InputEventAck> response(new InputEventAck(
         InputEventAckSource::MAIN_THREAD, input_event.GetType(), ack_result,
         swap_latency_info, std::move(event_overscroll),
@@ -417,14 +408,6 @@ void RenderWidgetInputHandler::HandleInputEvent(
         ->DidHandleInputEventOnMainThread(input_event, processed);
   }
 
-#if defined(OS_ANDROID)
-  // Allow the IME to be shown when the focus changes as a consequence
-  // of a processed touch end event.
-  if (input_event.GetType() == WebInputEvent::kTouchEnd &&
-      processed != WebInputEventResult::kNotHandled) {
-    delegate_->ShowVirtualKeyboard();
-  }
-#elif defined(USE_AURA)
   // Show the virtual keyboard if enabled and a user gesture triggers a focus
   // change.
   if (processed != WebInputEventResult::kNotHandled &&
@@ -432,7 +415,6 @@ void RenderWidgetInputHandler::HandleInputEvent(
        input_event.GetType() == WebInputEvent::kMouseUp)) {
     delegate_->ShowVirtualKeyboard();
   }
-#endif
 
   if (!prevent_default &&
       WebInputEvent::IsKeyboardEventType(input_event.GetType()))
@@ -448,6 +430,7 @@ void RenderWidgetInputHandler::HandleInputEvent(
     delegate_->FocusChangeComplete();
   }
 #endif
+  return ack_result;
 }
 
 void RenderWidgetInputHandler::DidOverscrollFromBlink(

@@ -4,7 +4,9 @@
 
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 
+#include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/Deprecation.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/probe/CoreProbes.h"
@@ -15,29 +17,48 @@
 
 namespace blink {
 
-WorkerOrWorkletGlobalScope::WorkerOrWorkletGlobalScope()
-    : deprecation_warning_bits_(UseCounter::kNumberOfFeatures) {}
+WorkerOrWorkletGlobalScope::WorkerOrWorkletGlobalScope(v8::Isolate* isolate)
+    : script_controller_(
+          WorkerOrWorkletScriptController::Create(this, isolate)),
+      used_features_(UseCounter::kNumberOfFeatures) {}
 
-WorkerOrWorkletGlobalScope::~WorkerOrWorkletGlobalScope() {}
+WorkerOrWorkletGlobalScope::~WorkerOrWorkletGlobalScope() = default;
 
-void WorkerOrWorkletGlobalScope::AddDeprecationMessage(
-    UseCounter::Feature feature) {
+void WorkerOrWorkletGlobalScope::CountFeature(UseCounter::Feature feature) {
   DCHECK_NE(UseCounter::kOBSOLETE_PageDestruction, feature);
   DCHECK_GT(UseCounter::kNumberOfFeatures, feature);
-
-  // For each deprecated feature, send console message at most once
-  // per worker lifecycle.
-  if (deprecation_warning_bits_.QuickGet(feature))
+  if (used_features_.QuickGet(feature))
     return;
-  deprecation_warning_bits_.QuickSet(feature);
+  used_features_.QuickSet(feature);
+  ReportFeature(feature);
+}
+
+void WorkerOrWorkletGlobalScope::CountDeprecation(UseCounter::Feature feature) {
+  DCHECK_NE(UseCounter::kOBSOLETE_PageDestruction, feature);
+  DCHECK_GT(UseCounter::kNumberOfFeatures, feature);
+  if (used_features_.QuickGet(feature))
+    return;
+  used_features_.QuickSet(feature);
+
+  // Adds a deprecation message to the console.
   DCHECK(!Deprecation::DeprecationMessage(feature).IsEmpty());
   AddConsoleMessage(
       ConsoleMessage::Create(kDeprecationMessageSource, kWarningMessageLevel,
                              Deprecation::DeprecationMessage(feature)));
+
+  ReportDeprecation(feature);
+}
+
+bool WorkerOrWorkletGlobalScope::IsJSExecutionForbidden() const {
+  return script_controller_->IsExecutionForbidden();
+}
+
+void WorkerOrWorkletGlobalScope::DisableEval(const String& error_message) {
+  script_controller_->DisableEval(error_message);
 }
 
 void WorkerOrWorkletGlobalScope::PostTask(
-    TaskType,
+    TaskType type,
     const WebTraceLocation& location,
     std::unique_ptr<ExecutionContextTask> task,
     const String& task_name_for_instrumentation) {
@@ -49,10 +70,27 @@ void WorkerOrWorkletGlobalScope::PostTask(
     probe::AsyncTaskScheduled(this, "Worker task", task.get());
   }
 
-  GetThread()->PostTask(
-      location, CrossThreadBind(&WorkerOrWorkletGlobalScope::RunTask,
-                                WrapCrossThreadWeakPersistent(this),
-                                WTF::Passed(std::move(task)), is_instrumented));
+  TaskRunnerHelper::Get(type, this)
+      ->PostTask(location, CrossThreadBind(&WorkerOrWorkletGlobalScope::RunTask,
+                                           WrapCrossThreadWeakPersistent(this),
+                                           WTF::Passed(std::move(task)),
+                                           is_instrumented));
+}
+
+bool WorkerOrWorkletGlobalScope::CanExecuteScripts(
+    ReasonForCallingCanExecuteScripts) {
+  return !IsJSExecutionForbidden();
+}
+
+void WorkerOrWorkletGlobalScope::Dispose() {
+  DCHECK(script_controller_);
+  script_controller_->Dispose();
+  script_controller_.Clear();
+}
+
+DEFINE_TRACE(WorkerOrWorkletGlobalScope) {
+  visitor->Trace(script_controller_);
+  ExecutionContext::Trace(visitor);
 }
 
 void WorkerOrWorkletGlobalScope::RunTask(

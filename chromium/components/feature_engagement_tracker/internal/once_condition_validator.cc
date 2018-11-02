@@ -4,34 +4,45 @@
 
 #include "components/feature_engagement_tracker/internal/once_condition_validator.h"
 
-#include "base/feature_list.h"
 #include "components/feature_engagement_tracker/internal/configuration.h"
 #include "components/feature_engagement_tracker/internal/model.h"
 
 namespace feature_engagement_tracker {
 
-OnceConditionValidator::OnceConditionValidator() = default;
+OnceConditionValidator::OnceConditionValidator()
+    : currently_showing_feature_(nullptr) {}
 
 OnceConditionValidator::~OnceConditionValidator() = default;
 
-bool OnceConditionValidator::MeetsConditions(const base::Feature& feature,
-                                             const Model& model) {
-  if (!model.IsReady())
-    return false;
+ConditionValidator::Result OnceConditionValidator::MeetsConditions(
+    const base::Feature& feature,
+    const FeatureConfig& config,
+    const Model& model,
+    const AvailabilityModel& availability_model,
+    uint32_t current_day) const {
+  ConditionValidator::Result result(true);
+  result.event_model_ready_ok = model.IsReady();
 
-  if (model.IsCurrentlyShowing())
-    return false;
+  result.currently_showing_ok = currently_showing_feature_ == nullptr;
 
-  const FeatureConfig& config = model.GetFeatureConfig(feature);
-  if (!config.valid)
-    return false;
+  result.config_ok = config.valid;
 
-  if (shown_features_.find(&feature) == shown_features_.end()) {
-    shown_features_.insert(&feature);
-    return true;
-  }
+  result.session_rate_ok =
+      shown_features_.find(&feature) == shown_features_.end();
 
-  return false;
+  return result;
+}
+
+void OnceConditionValidator::NotifyIsShowing(const base::Feature& feature) {
+  DCHECK(currently_showing_feature_ == nullptr);
+  DCHECK(shown_features_.find(&feature) == shown_features_.end());
+  shown_features_.insert(&feature);
+  currently_showing_feature_ = &feature;
+}
+
+void OnceConditionValidator::NotifyDismissed(const base::Feature& feature) {
+  DCHECK(&feature == currently_showing_feature_);
+  currently_showing_feature_ = nullptr;
 }
 
 }  // namespace feature_engagement_tracker

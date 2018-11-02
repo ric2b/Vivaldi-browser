@@ -10,7 +10,7 @@
 #include "build/build_config.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/resources/single_release_callback.h"
-#include "components/display_compositor/gl_helper.h"
+#include "components/viz/display_compositor/gl_helper.h"
 #include "content/browser/compositor/frame_sink_manager_host.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -33,13 +33,10 @@ void CopyFromCompositingSurfaceFinished(
     const content::ReadbackRequestCallback& callback,
     std::unique_ptr<cc::SingleReleaseCallback> release_callback,
     std::unique_ptr<SkBitmap> bitmap,
-    std::unique_ptr<SkAutoLockPixels> bitmap_pixels_lock,
     bool result) {
-  bitmap_pixels_lock.reset();
-
   gpu::SyncToken sync_token;
   if (result) {
-    display_compositor::GLHelper* gl_helper =
+    viz::GLHelper* gl_helper =
         content::ImageTransportFactory::GetInstance()->GetGLHelper();
     if (gl_helper)
       gl_helper->GenerateSyncToken(&sync_token);
@@ -84,12 +81,10 @@ void PrepareTextureCopyOutputResult(
 
   content::ImageTransportFactory* factory =
       content::ImageTransportFactory::GetInstance();
-  display_compositor::GLHelper* gl_helper = factory->GetGLHelper();
+  viz::GLHelper* gl_helper = factory->GetGLHelper();
   if (!gl_helper)
     return;
 
-  std::unique_ptr<SkAutoLockPixels> bitmap_pixels_lock(
-      new SkAutoLockPixels(*bitmap));
   uint8_t* pixels = static_cast<uint8_t*>(bitmap->getPixels());
 
   cc::TextureMailbox texture_mailbox;
@@ -103,9 +98,8 @@ void PrepareTextureCopyOutputResult(
       texture_mailbox.mailbox(), texture_mailbox.sync_token(), result->size(),
       gfx::Rect(result->size()), dst_size_in_pixel, pixels, color_type,
       base::Bind(&CopyFromCompositingSurfaceFinished, callback,
-                 base::Passed(&release_callback), base::Passed(&bitmap),
-                 base::Passed(&bitmap_pixels_lock)),
-      display_compositor::GLHelper::SCALER_QUALITY_GOOD);
+                 base::Passed(&release_callback), base::Passed(&bitmap)),
+      viz::GLHelper::SCALER_QUALITY_GOOD);
 #endif
 }
 

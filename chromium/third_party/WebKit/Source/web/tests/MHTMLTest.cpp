@@ -35,6 +35,7 @@
 #include "platform/SerializedResource.h"
 #include "platform/SharedBuffer.h"
 #include "platform/mhtml/MHTMLArchive.h"
+#include "platform/mhtml/MHTMLParser.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/weborigin/KURL.h"
@@ -111,7 +112,7 @@ class MHTMLTest : public ::testing::Test {
   void AddResource(const char* url,
                    const char* mime,
                    PassRefPtr<SharedBuffer> data) {
-    SerializedResource resource(ToKURL(url), mime, data);
+    SerializedResource resource(ToKURL(url), mime, std::move(data));
     resources_.push_back(resource);
   }
 
@@ -161,6 +162,13 @@ class MHTMLTest : public ::testing::Test {
     }
     MHTMLArchive::GenerateMHTMLFooterForTesting(boundary,
                                                 *mhtml_data->MutableData());
+
+    // Validate the generated MHTML.
+    MHTMLParser parser(
+        SharedBuffer::Create(mhtml_data->data(), mhtml_data->length()));
+    EXPECT_FALSE(parser.ParseArchive().IsEmpty())
+        << "Generated MHTML is malformed";
+
     return mhtml_data.Release();
   }
 
@@ -196,10 +204,10 @@ TEST_F(MHTMLTest, CheckDomain) {
   Document* document = frame->GetDocument();
   ASSERT_TRUE(document);
 
-  EXPECT_STREQ(kFileURL, frame->DomWindow()->location()->href().Ascii().Data());
+  EXPECT_STREQ(kFileURL, frame->DomWindow()->location()->href().Ascii().data());
 
   SecurityOrigin* origin = document->GetSecurityOrigin();
-  EXPECT_STRNE("localhost", origin->Domain().Ascii().Data());
+  EXPECT_STRNE("localhost", origin->Domain().Ascii().data());
 }
 
 TEST_F(MHTMLTest, TestMHTMLEncoding) {
@@ -209,7 +217,7 @@ TEST_F(MHTMLTest, TestMHTMLEncoding) {
 
   // Read the MHTML data line per line and do some pseudo-parsing to make sure
   // the right encoding is used for the different sections.
-  LineReader line_reader(std::string(data->Data(), data->length()));
+  LineReader line_reader(std::string(data->data(), data->length()));
   int section_checked_count = 0;
   const char* expected_encoding = 0;
   std::string line;
@@ -242,8 +250,9 @@ TEST_F(MHTMLTest, MHTMLFromScheme) {
   AddTestResources();
   RefPtr<RawData> raw_data = Serialize("Test Serialization", "text/html",
                                        MHTMLArchive::kUseDefaultEncoding);
+
   RefPtr<SharedBuffer> data =
-      SharedBuffer::Create(raw_data->Data(), raw_data->length());
+      SharedBuffer::Create(raw_data->data(), raw_data->length());
   KURL http_url = ToKURL("http://www.example.com");
   KURL content_url = ToKURL("content://foo");
   KURL file_url = ToKURL("file://foo");
@@ -276,8 +285,11 @@ TEST_F(MHTMLTest, EnforceSandboxFlags) {
   Document* document = frame->GetDocument();
   ASSERT_TRUE(document);
 
-  // Full sandboxing should be turned on.
-  EXPECT_TRUE(document->IsSandboxed(kSandboxAll));
+  // Full sandboxing with the exception to new top-level windows should be
+  // turned on.
+  EXPECT_EQ(kSandboxAll & ~(kSandboxPopups |
+                            kSandboxPropagatesToAuxiliaryBrowsingContexts),
+            document->GetSandboxFlags());
 
   // MHTML document should be loaded into unique origin.
   EXPECT_TRUE(document->GetSecurityOrigin()->IsUnique());

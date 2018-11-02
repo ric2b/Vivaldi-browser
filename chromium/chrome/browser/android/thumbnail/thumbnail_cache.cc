@@ -387,13 +387,11 @@ void ThumbnailCache::CompressThumbnailIfNecessary(
   gfx::Size encoded_size = GetEncodedSize(
       raw_data_size, ui_resource_provider_->SupportsETC1NonPowerOfTwo());
 
-  base::PostTaskWithTraits(
-      FROM_HERE, base::TaskTraits()
-                     .WithPriority(base::TaskPriority::BACKGROUND)
-                     .WithShutdownBehavior(
-                         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
-      base::Bind(&ThumbnailCache::CompressionTask, bitmap, encoded_size,
-                 post_compression_task));
+  base::PostTaskWithTraits(FROM_HERE,
+                           {base::TaskPriority::BACKGROUND,
+                            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+                           base::Bind(&ThumbnailCache::CompressionTask, bitmap,
+                                      encoded_size, post_compression_task));
 }
 
 void ThumbnailCache::ReadNextThumbnail() {
@@ -510,28 +508,22 @@ bool WriteToFile(base::File& file,
     return false;
 
   // Write ETC1 header.
-  compressed_data->lockPixels();
-
   unsigned char etc1_buffer[ETC_PKM_HEADER_SIZE];
-  etc1_pkm_format_header(etc1_buffer,
-                         compressed_data->info().width(),
-                         compressed_data->info().height());
+  etc1_pkm_format_header(etc1_buffer, compressed_data->width(),
+                         compressed_data->height());
 
   int header_bytes_written = file.WriteAtCurrentPos(
       reinterpret_cast<char*>(etc1_buffer), ETC_PKM_HEADER_SIZE);
   if (header_bytes_written != ETC_PKM_HEADER_SIZE)
     return false;
 
-  int data_size = etc1_get_encoded_data_size(
-      compressed_data->info().width(),
-      compressed_data->info().height());
+  int data_size = etc1_get_encoded_data_size(compressed_data->width(),
+                                             compressed_data->height());
   int pixel_bytes_written = file.WriteAtCurrentPos(
       reinterpret_cast<char*>(compressed_data->pixels()),
       data_size);
   if (pixel_bytes_written != data_size)
     return false;
-
-  compressed_data->unlockPixels();
 
   if (!WriteBigEndianToFile(file, kCurrentExtraVersion))
     return false;
@@ -583,7 +575,6 @@ void ThumbnailCache::CompressionTask(
   gfx::Size content_size;
 
   if (!raw_data.empty()) {
-    SkAutoLockPixels raw_data_lock(raw_data);
     gfx::Size raw_data_size(raw_data.width(), raw_data.height());
     size_t pixel_size = 4;  // Pixel size is 4 bytes for kARGB_8888_Config.
     size_t stride = pixel_size * raw_data_size.width();
@@ -598,7 +589,6 @@ void ThumbnailCache::CompressionTask(
     sk_sp<SkPixelRef> etc1_pixel_ref(SkMallocPixelRef::MakeWithData(
         info, 0, NULL, std::move(etc1_pixel_data)));
 
-    etc1_pixel_ref->lockPixels();
     bool success = etc1_encode_image(
         reinterpret_cast<unsigned char*>(raw_data.getPixels()),
         raw_data_size.width(),
@@ -609,7 +599,6 @@ void ThumbnailCache::CompressionTask(
         encoded_size.width(),
         encoded_size.height());
     etc1_pixel_ref->setImmutable();
-    etc1_pixel_ref->unlockPixels();
 
     if (success) {
       compressed_data = std::move(etc1_pixel_ref);
@@ -783,8 +772,7 @@ void ThumbnailCache::ReadTask(
 
   if (decompress) {
     base::PostTaskWithTraits(
-        FROM_HERE,
-        base::TaskTraits().WithPriority(base::TaskPriority::BACKGROUND),
+        FROM_HERE, {base::TaskPriority::BACKGROUND},
         base::Bind(post_read_task, std::move(compressed_data), scale,
                    content_size));
   } else {
@@ -860,16 +848,14 @@ void ThumbnailCache::DecompressionTask(
   bool success = false;
 
   if (compressed_data.get()) {
-    gfx::Size buffer_size = gfx::Size(compressed_data->info().width(),
-                                      compressed_data->info().height());
+    gfx::Size buffer_size =
+        gfx::Size(compressed_data->width(), compressed_data->height());
 
     SkBitmap raw_data;
     raw_data.allocPixels(SkImageInfo::Make(buffer_size.width(),
                                            buffer_size.height(),
                                            kRGBA_8888_SkColorType,
                                            kOpaque_SkAlphaType));
-    SkAutoLockPixels raw_data_lock(raw_data);
-    compressed_data->lockPixels();
     success = etc1_decode_image(
         reinterpret_cast<unsigned char*>(compressed_data->pixels()),
         reinterpret_cast<unsigned char*>(raw_data.getPixels()),
@@ -877,7 +863,6 @@ void ThumbnailCache::DecompressionTask(
         buffer_size.height(),
         raw_data.bytesPerPixel(),
         raw_data.rowBytes());
-    compressed_data->unlockPixels();
     raw_data.setImmutable();
 
     if (!success) {
@@ -892,7 +877,6 @@ void ThumbnailCache::DecompressionTask(
                                                    content_size.height(),
                                                    kRGBA_8888_SkColorType,
                                                    kOpaque_SkAlphaType));
-      SkAutoLockPixels raw_data_small_lock(raw_data_small);
       SkCanvas small_canvas(raw_data_small);
       small_canvas.drawBitmap(raw_data, 0, 0);
       raw_data_small.setImmutable();
@@ -919,7 +903,6 @@ std::pair<SkBitmap, float> ThumbnailCache::CreateApproximation(
     float scale) {
   DCHECK(!bitmap.empty());
   DCHECK_GT(scale, 0);
-  SkAutoLockPixels bitmap_lock(bitmap);
   float new_scale = 1.f / kApproximationScaleFactor;
 
   gfx::Size dst_size = gfx::ScaleToFlooredSize(
@@ -930,8 +913,6 @@ std::pair<SkBitmap, float> ThumbnailCache::CreateApproximation(
                                            bitmap.info().colorType(),
                                            bitmap.info().alphaType()));
   dst_bitmap.eraseColor(0);
-  SkAutoLockPixels dst_bitmap_lock(dst_bitmap);
-
   SkCanvas canvas(dst_bitmap);
   canvas.scale(new_scale, new_scale);
   canvas.drawBitmap(bitmap, 0, 0, NULL);

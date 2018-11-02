@@ -195,7 +195,7 @@ class FileSystemGetWritableEntryFunction : public FileSystemEntryFunction {
 
  private:
   void CheckPermissionAndSendResponse();
-  void SetIsDirectoryOnFileThread();
+  void SetIsDirectoryAsync();
 
   // The path to the file for which a writable entry has been requested.
   base::FilePath path_;
@@ -267,10 +267,9 @@ class FileSystemChooseEntryFunction : public FileSystemEntryFunction {
   // directory. Calls OnDirectoryAccessConfirmed if the directory isn't
   // sensitive or the user chooses to open it. Otherwise, calls
   // FileSelectionCanceled.
-  void ConfirmDirectoryAccessOnFileThread(
-      bool non_native_path,
-      const std::vector<base::FilePath>& paths,
-      content::WebContents* web_contents);
+  void ConfirmDirectoryAccessAsync(bool non_native_path,
+                                   const std::vector<base::FilePath>& paths,
+                                   content::WebContents* web_contents);
   void OnDirectoryAccessConfirmed(const std::vector<base::FilePath>& paths);
 
   base::FilePath initial_path_;

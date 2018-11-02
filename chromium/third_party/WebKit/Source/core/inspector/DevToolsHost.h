@@ -29,10 +29,10 @@
 #ifndef DevToolsHost_h
 #define DevToolsHost_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
-#include "wtf/Vector.h"
-#include "wtf/text/WTFString.h"
+#include "platform/bindings/ScriptWrappable.h"
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 

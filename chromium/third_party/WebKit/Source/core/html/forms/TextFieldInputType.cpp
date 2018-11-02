@@ -36,7 +36,6 @@
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/FrameSelection.h"
-#include "core/editing/iterators/TextIterator.h"
 #include "core/events/BeforeTextInsertedEvent.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/TextEvent.h"
@@ -126,7 +125,7 @@ InputType::ValueMode TextFieldInputType::GetValueMode() const {
 
 SpinButtonElement* TextFieldInputType::GetSpinButtonElement() const {
   return ToSpinButtonElementOrDie(
-      GetElement().UserAgentShadowRoot()->GetElementById(
+      GetElement().UserAgentShadowRoot()->getElementById(
           ShadowElementNames::SpinButton()));
 }
 
@@ -157,16 +156,19 @@ void TextFieldInputType::SetValue(const String& sanitized_value,
   else
     GetElement().SetNonAttributeValueByUserEdit(sanitized_value);
 
-  if (value_changed)
-    GetElement().UpdateView();
+  // The following early-return can't be moved to the beginning of this
+  // function. We need to update non-attribute value even if the value is not
+  // changed.  For example, <input type=number> has a badInput string, that is
+  // to say, IDL value=="", and new value is "", which should clear the badInput
+  // string and update validiity.
+  if (!value_changed)
+    return;
+  GetElement().UpdateView();
 
   if (selection == TextControlSetValueSelection::kSetSelectionToEnd) {
     unsigned max = VisibleValue().length();
     GetElement().SetSelectionRange(max, max);
   }
-
-  if (!value_changed)
-    return;
 
   switch (event_behavior) {
     case kDispatchChangeEvent:
@@ -320,7 +322,7 @@ void TextFieldInputType::CreateShadowSubtree() {
 }
 
 Element* TextFieldInputType::ContainerElement() const {
-  return GetElement().UserAgentShadowRoot()->GetElementById(
+  return GetElement().UserAgentShadowRoot()->getElementById(
       ShadowElementNames::TextFieldContainer());
 }
 
@@ -333,7 +335,7 @@ void TextFieldInputType::DestroyShadowSubtree() {
 void TextFieldInputType::ListAttributeTargetChanged() {
   if (ChromeClient* chrome_client = this->GetChromeClient())
     chrome_client->TextFieldDataListChanged(GetElement());
-  Element* picker = GetElement().UserAgentShadowRoot()->GetElementById(
+  Element* picker = GetElement().UserAgentShadowRoot()->getElementById(
       ShadowElementNames::PickerIndicator());
   bool did_have_picker_indicator = picker;
   bool will_have_picker_indicator = GetElement().HasValidDataListOptions();
@@ -420,7 +422,7 @@ void TextFieldInputType::HandleBeforeTextInsertedEvent(
   // that case, and nothing in the text field will be removed.
   unsigned selection_length = 0;
   if (GetElement().IsFocused()) {
-    // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+    // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
     // needs to be audited.  See http://crbug.com/590369 for more details.
     GetElement().GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 

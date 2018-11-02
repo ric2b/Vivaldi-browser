@@ -23,9 +23,12 @@ class ShippingOptionItem : public PaymentRequestItemList::Item {
                      PaymentRequestItemList* parent_list,
                      PaymentRequestDialogView* dialog,
                      bool selected)
-      : PaymentRequestItemList::Item(spec, state, parent_list, selected),
-        shipping_option_(shipping_option),
-        dialog_(dialog) {}
+      : PaymentRequestItemList::Item(spec,
+                                     state,
+                                     parent_list,
+                                     selected,
+                                     /*show_edit_button=*/false),
+        shipping_option_(shipping_option) {}
   ~ShippingOptionItem() override {}
 
  private:
@@ -33,17 +36,22 @@ class ShippingOptionItem : public PaymentRequestItemList::Item {
   std::unique_ptr<views::View> CreateContentView() override {
     return CreateShippingOptionLabel(
         shipping_option_,
-        spec()->GetFormattedCurrencyAmount(shipping_option_->amount->value));
+        spec()->GetFormattedCurrencyAmount(shipping_option_->amount),
+        /*emphasize_label=*/true);
   }
 
   void SelectedStateChanged() override {
     if (selected()) {
       state()->SetSelectedShippingOption(shipping_option_->id);
-      dialog_->GoBack();
     }
   }
 
-  bool CanBeSelected() const override {
+  bool IsEnabled() override {
+    // Shipping options are vetted by the website; none are disabled.
+    return true;
+  }
+
+  bool CanBeSelected() override {
     // Shipping options are vetted by the website; they're all OK to select.
     return true;
   }
@@ -53,8 +61,12 @@ class ShippingOptionItem : public PaymentRequestItemList::Item {
     NOTREACHED();
   }
 
+  void EditButtonPressed() override {
+    // This subclass doesn't display the edit button.
+    NOTREACHED();
+  }
+
   mojom::PaymentShippingOption* shipping_option_;
-  PaymentRequestDialogView* dialog_;
 
   DISALLOW_COPY_AND_ASSIGN(ShippingOptionItem);
 };
@@ -79,7 +91,12 @@ ShippingOptionViewController::~ShippingOptionViewController() {
 }
 
 void ShippingOptionViewController::OnSpecUpdated() {
-  UpdateContentView();
+  if (spec()->current_update_reason() ==
+      PaymentRequestSpec::UpdateReason::SHIPPING_OPTION) {
+    dialog()->GoBack();
+  } else {
+    UpdateContentView();
+  }
 }
 
 base::string16 ShippingOptionViewController::GetSheetTitle() {

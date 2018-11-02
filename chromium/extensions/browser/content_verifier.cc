@@ -125,7 +125,7 @@ ContentVerifyJob* ContentVerifier::CreateJobFor(
   return new ContentVerifyJob(
       new ContentHashReader(extension_id, data->version, extension_root,
                             normalized_unix_path, delegate_->GetPublicKey()),
-      base::Bind(&ContentVerifier::VerifyFailed, this, extension_id));
+      base::BindOnce(&ContentVerifier::VerifyFailed, this, extension_id));
 }
 
 void ContentVerifier::VerifyFailed(const std::string& extension_id,
@@ -195,7 +195,7 @@ void ContentVerifier::OnExtensionLoaded(
 void ContentVerifier::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
-    UnloadedExtensionInfo::Reason reason) {
+    UnloadedExtensionReason reason) {
   if (shutdown_)
     return;
   content::BrowserThread::PostTask(
@@ -207,9 +207,10 @@ void ContentVerifier::OnExtensionUnloaded(
     fetcher_->ExtensionUnloaded(extension);
 }
 
-void ContentVerifier::OnFetchCompleteHelper(const std::string& extension_id,
-                                            bool shouldVerifyAnyPathsResult) {
-  if (shouldVerifyAnyPathsResult)
+void ContentVerifier::OnFetchCompleteHelper(
+    const std::string& extension_id,
+    bool should_verify_any_paths_result) {
+  if (should_verify_any_paths_result)
     delegate_->VerifyFailed(extension_id, ContentVerifyJob::MISSING_ALL_HASHES);
 }
 

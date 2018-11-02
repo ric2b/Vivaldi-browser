@@ -2,18 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef THIRD_PARTY_WEBKIT_PUBLIC_PLATFORM_SCHEDULER_UTILITY_WEBTHREAD_IMPL_FOR_UTILITY_THREAD_H_
-#define THIRD_PARTY_WEBKIT_PUBLIC_PLATFORM_SCHEDULER_UTILITY_WEBTHREAD_IMPL_FOR_UTILITY_THREAD_H_
+#ifndef THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_UTILITY_WEBTHREAD_IMPL_FOR_UTILITY_THREAD_H_
+#define THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_UTILITY_WEBTHREAD_IMPL_FOR_UTILITY_THREAD_H_
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "public/platform/WebCommon.h"
+#include "platform/PlatformExport.h"
 #include "public/platform/scheduler/child/webthread_base.h"
 
 namespace blink {
 namespace scheduler {
 
-class BLINK_PLATFORM_EXPORT WebThreadImplForUtilityThread
+class PLATFORM_EXPORT WebThreadImplForUtilityThread
     : public scheduler::WebThreadBase {
  public:
   WebThreadImplForUtilityThread();
@@ -38,4 +38,4 @@ class BLINK_PLATFORM_EXPORT WebThreadImplForUtilityThread
 }  // namespace scheduler
 }  // namespace blink
 
-#endif  // THIRD_PARTY_WEBKIT_PUBLIC_PLATFORM_SCHEDULER_UTILITY_WEBTHREAD_IMPL_FOR_UTILITY_THREAD_H_
+#endif  // THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_UTILITY_WEBTHREAD_IMPL_FOR_UTILITY_THREAD_H_

@@ -7,6 +7,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_resources.h"
+#include "base/files/file_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -486,16 +487,26 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
         // The app does not have access to file:// schemes, so handle it
         // differently.
         if (params.src_url.SchemeIs(url::kFileScheme)) {
+          // PathExists() triggers IO restriction.
+          base::ThreadRestrictions::ScopedAllowIO allow_io;
+
           // Strip any url encoding.
           std::string filename = net::UnescapeURLComponent(
               params.src_url.GetContent(),
               net::UnescapeRule::NORMAL | net::UnescapeRule::SPACES |
                   net::UnescapeRule::REPLACE_PLUS_WITH_SPACE |
                   net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
-          if (filename[0] == '/') {
-            // It might be in a format /D:/somefile.png so strip the first
-            // slash.
-            filename = filename.substr(1, std::string::npos);
+#if defined(OS_POSIX)
+          base::FilePath path(filename);
+#elif defined(OS_WIN)
+          base::FilePath path(base::UTF8ToWide(filename));
+#endif
+          if (!base::PathExists(path)) {
+            if (filename[0] == '/') {
+              // It might be in a format /D:/somefile.png so strip the first
+              // slash.
+              filename = filename.substr(1, std::string::npos);
+            }
           }
           SendSimpleAction(source_web_contents, event_flags,
                            "useLocalImageAsBackground", base::ASCIIToUTF16(""),

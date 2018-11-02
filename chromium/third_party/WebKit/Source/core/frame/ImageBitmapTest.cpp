@@ -106,9 +106,9 @@ TEST_F(ImageBitmapTest, ImageResourceConsistency) {
   const ImageBitmapOptions default_options;
   HTMLImageElement* image_element =
       HTMLImageElement::Create(*Document::Create());
-  ImageResourceContent* image =
-      ImageResourceContent::Create(StaticBitmapImage::Create(image_).Get());
-  image_element->SetImageResource(image);
+  ImageResourceContent* image = ImageResourceContent::CreateLoaded(
+      StaticBitmapImage::Create(image_).Get());
+  image_element->SetImageForTest(image);
 
   Optional<IntRect> crop_rect =
       IntRect(0, 0, image_->width(), image_->height());
@@ -149,8 +149,9 @@ TEST_F(ImageBitmapTest, ImageResourceConsistency) {
 TEST_F(ImageBitmapTest, ImageBitmapSourceChanged) {
   HTMLImageElement* image = HTMLImageElement::Create(*Document::Create());
   ImageResourceContent* original_image_resource =
-      ImageResourceContent::Create(StaticBitmapImage::Create(image_).Get());
-  image->SetImageResource(original_image_resource);
+      ImageResourceContent::CreateLoaded(
+          StaticBitmapImage::Create(image_).Get());
+  image->SetImageForTest(original_image_resource);
 
   const ImageBitmapOptions default_options;
   Optional<IntRect> crop_rect =
@@ -163,9 +164,9 @@ TEST_F(ImageBitmapTest, ImageBitmapSourceChanged) {
   ASSERT_NE(image_bitmap->BitmapImage()->ImageForCurrentFrame(),
             original_image_resource->GetImage()->ImageForCurrentFrame());
 
-  ImageResourceContent* new_image_resource =
-      ImageResourceContent::Create(StaticBitmapImage::Create(image2_).Get());
-  image->SetImageResource(new_image_resource);
+  ImageResourceContent* new_image_resource = ImageResourceContent::CreateLoaded(
+      StaticBitmapImage::Create(image2_).Get());
+  image->SetImageForTest(new_image_resource);
 
   {
     ASSERT_NE(image_bitmap->BitmapImage()->ImageForCurrentFrame(),
@@ -196,16 +197,18 @@ enum class ColorSpaceConversion : uint8_t {
   DEFAULT_COLOR_CORRECTED = 2,
   SRGB = 3,
   LINEAR_RGB = 4,
+  P3 = 5,
+  REC2020 = 6,
 
-  LAST = LINEAR_RGB
+  LAST = REC2020
 };
 
 static ImageBitmapOptions PrepareBitmapOptionsAndSetRuntimeFlags(
     const ColorSpaceConversion& color_space_conversion) {
   // Set the color space conversion in ImageBitmapOptions
   ImageBitmapOptions options;
-  static const Vector<String> kConversions = {"none", "default", "default",
-                                              "srgb", "linear-rgb"};
+  static const Vector<String> kConversions = {
+      "none", "default", "default", "srgb", "linear-rgb", "p3", "rec2020"};
   options.setColorSpaceConversion(
       kConversions[static_cast<uint8_t>(color_space_conversion)]);
 
@@ -219,7 +222,17 @@ static ImageBitmapOptions PrepareBitmapOptionsAndSetRuntimeFlags(
   return options;
 }
 
-TEST_F(ImageBitmapTest, ImageBitmapColorSpaceConversionHTMLImageElement) {
+// This test is failing on Android Arm 64 Official Test Bot.
+// See <http://crbug.com/721819>.
+#if OS(ANDROID)
+#define MAYBE_ImageBitmapColorSpaceConversionHTMLImageElement \
+  DISABLED_ImageBitmapColorSpaceConversionHTMLImageElement
+#else
+#define MAYBE_ImageBitmapColorSpaceConversionHTMLImageElement \
+  ImageBitmapColorSpaceConversionHTMLImageElement
+#endif
+
+TEST_F(ImageBitmapTest, MAYBE_ImageBitmapColorSpaceConversionHTMLImageElement) {
   HTMLImageElement* image_element =
       HTMLImageElement::Create(*Document::Create());
 
@@ -239,8 +252,9 @@ TEST_F(ImageBitmapTest, ImageBitmapColorSpaceConversionHTMLImageElement) {
                     image->width() * raster_image_info.bytesPerPixel(), 5, 5);
 
   ImageResourceContent* original_image_resource =
-      ImageResourceContent::Create(StaticBitmapImage::Create(image).Get());
-  image_element->SetImageResource(original_image_resource);
+      ImageResourceContent::CreateLoaded(
+          StaticBitmapImage::Create(image).Get());
+  image_element->SetImageForTest(original_image_resource);
 
   Optional<IntRect> crop_rect = IntRect(0, 0, image->width(), image->height());
 
@@ -288,6 +302,20 @@ TEST_F(ImageBitmapTest, ImageBitmapColorSpaceConversionHTMLImageElement) {
         color_type = SkColorType::kRGBA_F16_SkColorType;
         color_format = SkColorSpaceXform::ColorFormat::kRGBA_F16_ColorFormat;
         break;
+      case ColorSpaceConversion::P3:
+        color_space =
+            SkColorSpace::MakeRGB(SkColorSpace::kLinear_RenderTargetGamma,
+                                  SkColorSpace::kDCIP3_D65_Gamut);
+        color_type = SkColorType::kRGBA_F16_SkColorType;
+        color_format = SkColorSpaceXform::ColorFormat::kRGBA_F16_ColorFormat;
+        break;
+      case ColorSpaceConversion::REC2020:
+        color_space =
+            SkColorSpace::MakeRGB(SkColorSpace::kLinear_RenderTargetGamma,
+                                  SkColorSpace::kRec2020_Gamut);
+        color_type = SkColorType::kRGBA_F16_SkColorType;
+        color_format = SkColorSpaceXform::ColorFormat::kRGBA_F16_ColorFormat;
+        break;
       default:
         NOTREACHED();
     }
@@ -316,7 +344,17 @@ TEST_F(ImageBitmapTest, ImageBitmapColorSpaceConversionHTMLImageElement) {
   }
 }
 
-TEST_F(ImageBitmapTest, ImageBitmapColorSpaceConversionImageBitmap) {
+// This test is failing on Android Arm 64 Official Test Bot.
+// See <http://crbug.com/721819>.
+#if OS(ANDROID)
+#define MAYBE_ImageBitmapColorSpaceConversionImageBitmap \
+  DISABLED_ImageBitmapColorSpaceConversionImageBitmap
+#else
+#define MAYBE_ImageBitmapColorSpaceConversionImageBitmap \
+  ImageBitmapColorSpaceConversionImageBitmap
+#endif
+
+TEST_F(ImageBitmapTest, MAYBE_ImageBitmapColorSpaceConversionImageBitmap) {
   HTMLImageElement* image_element =
       HTMLImageElement::Create(*Document::Create());
 
@@ -336,8 +374,9 @@ TEST_F(ImageBitmapTest, ImageBitmapColorSpaceConversionImageBitmap) {
                     image->width() * raster_image_info.bytesPerPixel(), 5, 5);
 
   ImageResourceContent* source_image_resource =
-      ImageResourceContent::Create(StaticBitmapImage::Create(image).Get());
-  image_element->SetImageResource(source_image_resource);
+      ImageResourceContent::CreateLoaded(
+          StaticBitmapImage::Create(image).Get());
+  image_element->SetImageForTest(source_image_resource);
 
   Optional<IntRect> crop_rect = IntRect(0, 0, image->width(), image->height());
   ImageBitmapOptions options =
@@ -382,6 +421,20 @@ TEST_F(ImageBitmapTest, ImageBitmapColorSpaceConversionImageBitmap) {
         color_type = SkColorType::kRGBA_F16_SkColorType;
         color_format = SkColorSpaceXform::ColorFormat::kRGBA_F16_ColorFormat;
         break;
+      case ColorSpaceConversion::P3:
+        color_space =
+            SkColorSpace::MakeRGB(SkColorSpace::kLinear_RenderTargetGamma,
+                                  SkColorSpace::kDCIP3_D65_Gamut);
+        color_type = SkColorType::kRGBA_F16_SkColorType;
+        color_format = SkColorSpaceXform::ColorFormat::kRGBA_F16_ColorFormat;
+        break;
+      case ColorSpaceConversion::REC2020:
+        color_space =
+            SkColorSpace::MakeRGB(SkColorSpace::kLinear_RenderTargetGamma,
+                                  SkColorSpace::kRec2020_Gamut);
+        color_type = SkColorType::kRGBA_F16_SkColorType;
+        color_format = SkColorSpaceXform::ColorFormat::kRGBA_F16_ColorFormat;
+        break;
       default:
         NOTREACHED();
     }
@@ -410,7 +463,18 @@ TEST_F(ImageBitmapTest, ImageBitmapColorSpaceConversionImageBitmap) {
   }
 }
 
-TEST_F(ImageBitmapTest, ImageBitmapColorSpaceConversionStaticBitmapImage) {
+// This test is failing on Android Arm 64 Official Test Bot.
+// See <http://crbug.com/721819>.
+#if OS(ANDROID)
+#define MAYBE_ImageBitmapColorSpaceConversionStaticBitmapImage \
+  DISABLED_ImageBitmapColorSpaceConversionStaticBitmapImage
+#else
+#define MAYBE_ImageBitmapColorSpaceConversionStaticBitmapImage \
+  ImageBitmapColorSpaceConversionStaticBitmapImage
+#endif
+
+TEST_F(ImageBitmapTest,
+       MAYBE_ImageBitmapColorSpaceConversionStaticBitmapImage) {
   SkPaint p;
   p.setColor(SK_ColorRED);
   sk_sp<SkColorSpace> src_rgb_color_space = SkColorSpace::MakeSRGB();
@@ -467,6 +531,20 @@ TEST_F(ImageBitmapTest, ImageBitmapColorSpaceConversionStaticBitmapImage) {
         color_type = SkColorType::kRGBA_F16_SkColorType;
         color_format = SkColorSpaceXform::ColorFormat::kRGBA_F16_ColorFormat;
         break;
+      case ColorSpaceConversion::P3:
+        color_space =
+            SkColorSpace::MakeRGB(SkColorSpace::kLinear_RenderTargetGamma,
+                                  SkColorSpace::kDCIP3_D65_Gamut);
+        color_type = SkColorType::kRGBA_F16_SkColorType;
+        color_format = SkColorSpaceXform::ColorFormat::kRGBA_F16_ColorFormat;
+        break;
+      case ColorSpaceConversion::REC2020:
+        color_space =
+            SkColorSpace::MakeRGB(SkColorSpace::kLinear_RenderTargetGamma,
+                                  SkColorSpace::kRec2020_Gamut);
+        color_type = SkColorType::kRGBA_F16_SkColorType;
+        color_format = SkColorSpaceXform::ColorFormat::kRGBA_F16_ColorFormat;
+        break;
       default:
         NOTREACHED();
     }
@@ -514,7 +592,7 @@ TEST_F(ImageBitmapTest, ImageBitmapColorSpaceConversionImageData) {
 
   for (uint8_t i =
            static_cast<uint8_t>(ColorSpaceConversion::DEFAULT_COLOR_CORRECTED);
-       i <= static_cast<uint8_t>(ColorSpaceConversion::LAST); i++) {
+       i <= static_cast<uint8_t>(ColorSpaceConversion::LINEAR_RGB); i++) {
     ColorSpaceConversion color_space_conversion =
         static_cast<ColorSpaceConversion>(i);
     ImageBitmapOptions options =

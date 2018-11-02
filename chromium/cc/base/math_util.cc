@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#ifdef __SSE__
+#if defined(ARCH_CPU_X86_FAMILY)
 #include <xmmintrin.h>
 #endif
 
@@ -588,6 +588,12 @@ gfx::Vector2dF MathUtil::ComputeTransform2dScaleComponents(
   return gfx::Vector2dF(x_scale, y_scale);
 }
 
+float MathUtil::ComputeApproximateMaxScale(const gfx::Transform& transform) {
+  gfx::Vector3dF unit(1, 1, 0);
+  transform.TransformVector(&unit);
+  return std::max(std::abs(unit.x()), std::abs(unit.y()));
+}
+
 float MathUtil::SmallestAngleBetweenVectors(const gfx::Vector2dF& v1,
                                             const gfx::Vector2dF& v2) {
   double dot_product = gfx::DotProduct(v1, v2) / v1.Length() / v2.Length();
@@ -804,7 +810,7 @@ gfx::Vector3dF MathUtil::GetYAxis(const gfx::Transform& transform) {
 }
 
 ScopedSubnormalFloatDisabler::ScopedSubnormalFloatDisabler() {
-#ifdef __SSE__
+#if defined(ARCH_CPU_X86_FAMILY)
   // Turn on "subnormals are zero" and "flush to zero" CSR flags.
   orig_state_ = _mm_getcsr();
   _mm_setcsr(orig_state_ | 0x8040);
@@ -812,12 +818,12 @@ ScopedSubnormalFloatDisabler::ScopedSubnormalFloatDisabler() {
 }
 
 ScopedSubnormalFloatDisabler::~ScopedSubnormalFloatDisabler() {
-#ifdef __SSE__
+#if defined(ARCH_CPU_X86_FAMILY)
   _mm_setcsr(orig_state_);
 #endif
 }
 
-bool MathUtil::IsNearlyTheSameForTesting(float left, float right) {
+bool MathUtil::IsFloatNearlyTheSame(float left, float right) {
   return IsNearlyTheSame(left, right);
 }
 

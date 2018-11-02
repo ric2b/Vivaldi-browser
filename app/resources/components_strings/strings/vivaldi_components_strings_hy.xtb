@@ -4,6 +4,7 @@
 <translation id="1152921474424827756">Բացել <ph name="URL" /> էջի <ph name="BEGIN_LINK" />քեշի պատճենը<ph name="END_LINK" /></translation>
 <translation id="1158211211994409885">Միացումն անսպասելիորեն փակվեց <ph name="HOST_NAME" />-ի կողմից։</translation>
 <translation id="1161325031994447685">Վերամիանալ WiFi-ին</translation>
+<translation id="1175364870820465910">&amp;Տպել…</translation>
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Փորձեք մաքրել Ձեր քուքիները<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Տարբերակի մասին</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" />-ը չի ուղարկել որևէ տվյալ։</translation>
@@ -11,17 +12,21 @@
 <translation id="1559528461873125649">Այդպիսի ֆայլ կամ պանակ գոյություն չունի</translation>
 <translation id="1640244768702815859">Փորձեք <ph name="BEGIN_LINK" />այցելել կայքի գլխավոր էջը<ph name="END_LINK" />։</translation>
 <translation id="1645368109819982629">Չաջակցվող պրոտոկոլ</translation>
+<translation id="1676269943528358898">Սովորաբար <ph name="SITE" /> կայքն օգտագործում է գաղտնագրում՝ Ձեր տվյալները պաշտպանելու համար։ Սակայն այս անգամ Vivaldi-ն, փորձելով կապվել <ph name="SITE" /> կայքին, ստացավ ոչ սովորական և սխալ վկայագրեր։ Սա կարող է տեղի ունենալ, երբ հարձակվողը փորձում է իրեն ներկայացնել իբրև <ph name="SITE" />, կամ Wi-Fi-ի մուտքի պատուհանն ընդհատել է միացումը։ Ձեր տվյալները շարունակում են լինել պաշտպանված, քանի որ Vivaldi-ն ընդհատեց միացումը, մինչ տվյալների փոխանակվելը։</translation>
 <translation id="1710259589646384581">ՕՀ</translation>
 <translation id="1728677426644403582">Դուք դիտում եք վեբ էջի կոդը</translation>
 <translation id="1734878702283171397">Փորձեք կապվել համակարգի ադմինիստրատորի հետ։</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Փորձեք աշխատեցնել Windows-ի ցանցային ախտորոշումը<ph name="END_LINK" />։</translation>
 <translation id="194030505837763158">Անցնել <ph name="LINK" /> էջին</translation>
+<translation id="1974060860693918893">Մանրամասներ</translation>
 <translation id="2030481566774242610">Դուք սա՞ նկատի ունեիք՝ <ph name="LINK" />։</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Ստուգել պրոքսին և հրապատը<ph name="END_LINK" /></translation>
+<translation id="2065985942032347596">Պահանջվում է վավերացում</translation>
 <translation id="2166378884831602661">Այս կայքը չի կարող ապահովել անվտանգ միացում</translation>
 <translation id="2230458221926704099">Շտկեք Ձեր միացումն՝ օգտագործելով <ph name="BEGIN_LINK" />ախտորոշման հավելվածը<ph name="END_LINK" /></translation>
 <translation id="224482879335890159">Որոնել Google-ում «<ph name="LINK" />»</translation>
 <translation id="2292556288342944218">Ձեր մուտքն ինտերնետ արգելափակված է</translation>
+<translation id="2317259163369394535"><ph name="DOMAIN" />-ը պահանջում է օգտվողի անուն և գաղտնաբառ։</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Աշխատեցնել ցանցային ախտորոշումը<ph name="END_LINK" /></translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" />-ը ուղարկել է անվավեր պատասխան։</translation>
 <translation id="2609632851001447353">Վարիացիաներ</translation>
@@ -29,8 +34,10 @@
 <translation id="2705137772291741111">Այս կայքի՝ քեշում պահպանված պատճենն անընթեռնելի է։</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Աշխատեցնել կապակցելիության ախտորոշումը<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Միացումը վերադարձել է սկզբնական վիճակին։</translation>
+<translation id="2856444702002559011">Հարձակվողները կարող են փորձել գողանալ Ձեր տեղեկույթը <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />-ից (օրինակ՝ գաղտնաբառեր, հաղորդագրություններ կամ բանկային քարտերի տվյալներ)։ <ph name="BEGIN_LEARN_MORE_LINK" />Իմանալ ավելին<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Հայտնաբերված է ցանցի փոփոխություն։</translation>
 <translation id="2948083400971632585">Միացման համար կարգավորված ցանկացած պրոքսի Դուք կարող եք անջատել կարգավորումների էջից։</translation>
+<translation id="2991571918955627853">Դուք այս պահին չեք կարող այցելել <ph name="SITE" />, քանի որ այդ կայքն օգտագործում է HSTS մեխանիզմը։ Սովորաբար ցանցային սխալներն ու հարձակումները ժամանակավոր են, ուստի միառժամանակ հետո այս էջը հավանաբար կաշխատի։</translation>
 <translation id="3005723025932146533">Ցույց տալ պահպանված օրինակը</translation>
 <translation id="3093245981617870298">Դուք ցանցում չեք։</translation>
 <translation id="3109728660330352905">Դուք չունեք այս էջը դիտելու արտոնություն։</translation>
@@ -42,18 +49,25 @@
 <translation id="3226128629678568754">Սեղմեք թարմացնելու կոճակը՝ էջի բեռնման համար անհրաժեշտ տվյալները կրկին ուղարկելու համար։</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" />-ն այս պահին անհասանելի է։</translation>
 <translation id="3447661539832366887">Այս սարքի տերն անջատել է դինոզավրով խաղը։</translation>
+<translation id="3462200631372590220">Թաքցնել մանրամասները</translation>
+<translation id="3566021033012934673">Ձեր միացումն անվտանգ չէ</translation>
 <translation id="3586931643579894722">Թաքցնել մանրամասները</translation>
 <translation id="3630155396527302611">Եթե ծրագիրն ընդգրկված է այն ծրագրերի ցանկում, որոնց թույլատրված է ցանցից օգտվել,
 փորձեք հեռացնել այն այդ ցանկից և կրկին ավելացնել։</translation>
 <translation id="3658742229777143148">Վերստուգում</translation>
+<translation id="3693415264595406141">Գաղտնաբառ.</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Ստուգել պրոքսին, հրապատը և DNS-ի կոնֆիգուրացիան<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Եթե Դուք օգտագործում եք պրոքսի սերվեր…</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" />-ն արգելափակված է</translation>
+<translation id="3987940399970879459">1 ՄԲ-ից պակաս</translation>
 <translation id="4021036232240155012">DNS-ը ցանցային ծառայություն է, որը վեբ կայքի անունը վերածում է նրա IP հասցեին։</translation>
 <translation id="4075732493274867456">Սպասառուի և սերվերի կողմից չի աջակցվում SSL պրոտոկոլի ընդհանուր տարբերակը կամ գաղտնագրման մեթոդը։</translation>
 <translation id="4130226655945681476">Ստուգել ցանցային մալուխները, մոդեմը և երթուղիչը</translation>
+<translation id="4165986682804962316">Կայքի կարգավորումներ</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Ստուգել հրապատի և հակավիրուսային ծրագրի կոնֆիգուրացիաները<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Փորձեք աշխատեցնել ցանցային ախտորոշումը<ph name="END_LINK" />։</translation>
+<translation id="4304224509867189079">Մուտք</translation>
+<translation id="4381091992796011497">Օգտվողի անուն.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" />-ը չի ընդունել Ձեր մուտքի հավաստագիրը կամ այդպիսին չի տրամադրվել։</translation>
 <translation id="4506599922270137252">Կապվել համակարգի ադմինիստրատորի հետ</translation>
 <translation id="4522570452068850558">Մանրամասներ</translation>
@@ -62,9 +76,11 @@
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Աշխատեցնել Windows-ի ցանցային ախտորոշումը<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Կատարելի ֆայլի ուղի</translation>
 <translation id="4764776831041365478"><ph name="URL" /> հասցեով վեբ էջը, հնարավոր է, որ ժամանակավորապես անհասանելի է կամ մշտապես տեղափոխվել է նոր վեբ հասցե։</translation>
+<translation id="4807049035289105102">Դուք այս պահին չեք կարող այցելել <ph name="SITE" />, քանի որ կայքն ուղարկել է ծածկագրված վկայագրեր, որոնք Vivaldi-ն չի կարող մշակել։ Սովորաբար ցանցային սխալներն ու հարձակումները ժամանակավոր են, ուստի միառժամանակ հետո այս էջը հավանաբար կաշխատի։</translation>
 <translation id="5023310440958281426">Ստուգեք Ձեր ադմինիստրատորի կողմից սահմանված դրույթները</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Ստուգել պրոքսի հասցեն<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 բիթ)</translation>
+<translation id="5355557959165512791">Դուք այս պահին չեք կարող այցելել <ph name="SITE" />, քանի որ դրա հավաստագիրը հետ է կանչվել։ Սովորաբար ցանցային սխալներն ու հարձակումները ժամանակավոր են, ուստի միառժամանակ հետո այս էջը հավանաբար կաշխատի։</translation>
 <translation id="5431657950005405462">Ձեր ֆայլը չի գտնվել</translation>
 <translation id="5452270690849572955">Այս՝ <ph name="HOST_NAME" /> էջը չի գտնվել</translation>
 <translation id="5492298309214877701">Այս կայքի URL-ը ընկերության, ձեռնարկության կամ դպրոցի ինտրանետում համընկնում է արտաքին վեբ կայքի URL-ի հետ։
@@ -75,13 +91,16 @@
 <translation id="5610142619324316209">Ստուգել միացումը</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" />-ը չափից շատ է վերաուղղորդվել։</translation>
 <translation id="5675650730144413517">Այս էջը չի բացվում</translation>
+<translation id="5799902971440853357">Դուք այս պահին չեք կարող այցելել <ph name="SITE" />, քանի որ կայքն ուղարկել է ծածկագրված վկայագրեր, որոնք Vivaldi-ն չի կարող մշակել։ Սովորաբար ցանցային սխալներն ու հարձակումները ժամանակավոր են, ուստի միառժամանակ հետո այս էջը հավանաբար կաշխատի։</translation>
 <translation id="5869405914158311789">Այս կայքն անհասանելի է</translation>
 <translation id="5990559369517809815">Հարցումները սերվերին արգելափակված են ընդլայնման կողմից։</translation>
+<translation id="6051221802930200923">Դուք այս պահին չեք կարող այցելել <ph name="SITE" />, քանի որ այդ կայքն օգտագործում է Certificate Pinning մեխանիզմը։ Սովորաբար ցանցային սխալներն ու հարձակումները ժամանակավոր են, ուստի միառժամանակ հետո այս էջը հավանաբար կաշխատի։</translation>
 <translation id="6146055958333702838">Ստուգեք մալուխներն ու վերագործարկեք երթուղիչները, մոդեմները
 կամ այլ ցանցային սարքերը։</translation>
 <translation id="614940544461990577">Փորձեք՝</translation>
 <translation id="6165508094623778733">Իմանալ ավելին</translation>
 <translation id="6203231073485539293">Ստուգեք Ձեր ինտերնետի միացումը</translation>
+<translation id="6264485186158353794">Հետ՝ դեպի անվտանգ էջ</translation>
 <translation id="6305205051461490394"><ph name="URL" />-ն անհասանելի է։</translation>
 <translation id="6321917430147971392">Ստուգեք Ձեր DNS կարգավորումները</translation>
 <translation id="6328639280570009161">Փորձեք անջատել ցանցային կանխատեսումը</translation>
@@ -99,8 +118,8 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" />-ն ներկա պահին չի կարող մշակել այս հարցումը։</translation>
 <translation id="7716424297397655342">Այս կայքը չի կարող բեռնվել քեշից</translation>
 <translation id="7758069387465995638">Միացումը հնարավոր է արգելափակված լինի հրապատի կամ հակավիրուսային ծրագրի կողմից։</translation>
+<translation id="7834399512844817676">Սովորաբար <ph name="SITE" /> կայքն օգտագործում է գաղտնագրում՝ Ձեր տվյալները պաշտպանելու համար։ Սակայն այս անգամ Vivaldi-ն, փորձելով կապվել <ph name="SITE" /> կայքին, ստացավ ոչ սովորական և սխալ վկայագրեր։ Սա կարող է տեղի ունենալ, երբ հարձակվողը փորձում է իրեն ներկայացնել իբրև <ph name="SITE" />, կամ Wi-Fi-ի մուտքի պատուհանն ընդհատել է միացումը։ Ձեր տվյալները շարունակում են լինել պաշտպանված, քանի որ Vivaldi-ն ընդհատեց միացումը, մինչ տվյալների փոխանակվելը։</translation>
 <translation id="7951415247503192394">(32 բիթ)</translation>
-<translation id="8089520772729574115">1 ՄԲ-ից պակաս</translation>
 <translation id="8134994873729925007"><ph name="HOST_NAME" />-ի սերվերի <ph name="BEGIN_ABBR" />DNS հասցեն<ph name="END_ABBR" /> չի գտնվել։</translation>
 <translation id="8142868475871995937">Այցելեք &lt;strong&gt;vivaldi://policy&lt;/strong&gt;՝ տեսնելու համար URL-ների սև ցուցակը և այլ դրույթներ՝ պարտադրված Ձեր համակարգի ադմինիստրատորի կողմից։</translation>
 <translation id="8149426793427495338">Ձեր համակարգիչն անցել է քնի ռեժիմին։</translation>
@@ -110,6 +129,7 @@
 <translation id="8332188693563227489">Մուտքը <ph name="HOST_NAME" /> արգելված է</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> կայքի պատասխանը շատ է երկարաձգվում։</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />-ի &lt;abbr id="dnsDefinition"&gt;DNS հասցեն&lt;/abbr&gt; գտնել չհաջողվեց։ Կատարվում է խնդրի ախտորոշում։</translation>
+<translation id="9001074447101275817"><ph name="DOMAIN" /> պրոքսին պահանջում է օգտվողի անուն և գաղտնաբառ։</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />-ն օգտագործում է չաջակցվող պրոտոկոլ։</translation>
 <translation id="933612690413056017">Ինտերնետին միացում չկա</translation>
 <translation id="969892804517981540">Պաշտոնական նախատարբերակ</translation>

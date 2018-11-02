@@ -9,12 +9,12 @@ namespace features {
 
 // All features in alphabetical order.
 
-// Enables the Accessibility Object Model.
-// Explainer: https://github.com/WICG/aom/blob/master/explainer.md
-// Spec: https://wicg.github.io/aom/spec/
-const base::Feature kAccessibilityObjectModel(
-    "AccessibilityObjectModel",
-    base::FEATURE_DISABLED_BY_DEFAULT);
+// Enables content-initiated, main frame navigations to data URLs.
+// TODO(meacer): Remove when the deprecation is complete.
+//               https://www.chromestatus.com/feature/5669602927312896
+const base::Feature kAllowContentInitiatedDataUrlNavigations{
+    "AllowContentInitiatedDataUrlNavigations",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables asm.js to WebAssembly V8 backend.
 // http://asmjs.org/spec/latest/
@@ -40,6 +40,11 @@ const base::Feature kBrowserSideNavigation{"browser-side-navigation",
 const base::Feature kCanvas2DImageChromium{"Canvas2DImageChromium",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enabled decoding images asynchronously from raster in the renderer
+// compositor.
+const base::Feature kCheckerImaging{"CheckerImaging",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the compositing of fixed position content that is opaque and can
 // preserve LCD text.
 const base::Feature kCompositeOpaqueFixedPosition{
@@ -49,11 +54,6 @@ const base::Feature kCompositeOpaqueFixedPosition{
 // background with the foreground, such that LCD text will still be enabled.
 const base::Feature kCompositeOpaqueScrollers{"CompositeOpaqueScrollers",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables the credential management API:
-// https://w3c.github.io/webappsec-credential-management/
-const base::Feature kCredentialManagementAPI{"CredentialManagementAPI",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Speculatively pre-evaluate Javascript which will likely use document.write to
 // load an external script. The feature extracts the written markup and sends it
@@ -69,11 +69,15 @@ const base::Feature kExpensiveBackgroundTimerThrottling{
 // Enables the Feature Policy framework for granting and removing access to
 // other features through HTTP headers.
 const base::Feature kFeaturePolicy{"FeaturePolicy",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
+                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable filtering of same-origin tiny plugins
 const base::Feature kFilterSameOriginTinyPlugin{
     "FilterSameOriginTinyPlugins", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables Fetch API keepalive timeout setting.
+const base::Feature kFetchKeepaliveTimeoutSetting{
+    "FetchKeepaliveTimeoutSetting", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables a blink::FontCache optimization that reuses a font to serve different
 // size of font.
@@ -99,6 +103,13 @@ const base::Feature kGuestViewCrossProcessFrames{
 // Enables BlinkGC heap compaction.
 const base::Feature kHeapCompaction{"HeapCompaction",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables Blink's idle time spell checker.
+// Design: https://goo.gl/zONC3v
+// Note: The feature is implemented in Blink, and is independent to the
+// ENABLE_SPELLCHECK build flag defined in components/spellcheck.
+const base::Feature kIdleTimeSpellChecking{"IdleTimeSpellChecking",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables lazily parsing css properties for performance.
 const base::Feature kLazyParseCSS{"LazyParseCSS",
@@ -181,7 +192,7 @@ const base::Feature kPurgeAndSuspend {
 
 // RAF aligned mouse input events support.
 const base::Feature kRafAlignedMouseInputEvents{
-    "RafAlignedMouseInput", base::FEATURE_DISABLED_BY_DEFAULT};
+    "RafAlignedMouseInput", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // RAF aligned touch input events support.
 const base::Feature kRafAlignedTouchInputEvents{
@@ -202,6 +213,12 @@ const base::Feature kPepper3DImageChromium {
 const base::Feature kRenderingPipelineThrottling{
     "RenderingPipelineThrottling", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Require camera/mic requests from pepper plugins to be made from secure
+// origins.
+const base::Feature kRequireSecureOriginsForPepperMediaRequests{
+    "RequireSecureOriginsForPepperMediaRequests",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Scrolls to compensate for layout movements (bit.ly/scroll-anchoring).
 const base::Feature kScrollAnchoring{"ScrollAnchoring",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
@@ -212,7 +229,7 @@ const base::Feature kServiceWorkerNavigationPreload{
 
 // http://tc39.github.io/ecmascript_sharedmem/shmem.html
 const base::Feature kSharedArrayBuffer{"SharedArrayBuffer",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Paint invalidation based on slimming paint. See https://goo.gl/eQczQW
 const base::Feature kSlimmingPaintInvalidation{
@@ -227,26 +244,44 @@ const base::Feature kTimerThrottlingForHiddenFrames{
 const base::Feature kTokenBinding{"token-binding",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Groups all out-of-process iframes to a different process from the process of
+// the top document. This is a performance isolation mode.  Launch bug:
+// https://crbug.com/595987.
+const base::Feature kTopDocumentIsolation{"top-document-isolation",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables touchpad and wheel scroll latching.
 const base::Feature kTouchpadAndWheelScrollLatching{
     "TouchpadAndWheelScrollLatching", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether vibrate requires user gesture.
 const base::Feature kVibrateRequiresUserGesture{
-    "VibrateRequiresUserGesture", base::FEATURE_DISABLED_BY_DEFAULT};
+    "VibrateRequiresUserGesture", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables VR UI.
 const base::Feature kVrShell{"VrShell", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable WebAssembly.
+// Enable WebAssembly structured cloning.
 // http://webassembly.org/
 const base::Feature kWebAssembly{"WebAssembly",
                                  base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable WebAssembly streamed compilation.
+const base::Feature kWebAssemblyStreaming{"WebAssemblyStreaming",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable WebAssembly streamed compilation.
+const base::Feature kWebAssemblyTrapHandler{"WebAssemblyTrapHandler",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If WebGL Image Chromium is allowed, this feature controls whether it is
 // enabled.
 const base::Feature kWebGLImageChromium{"WebGLImageChromium",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
+
+// The JavaScript API for payments on the web.
+const base::Feature kWebPayments{"WebPayments",
+                                 base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Makes WebRTC use ECDSA certs by default (i.e., when no cert type was
 // specified in JS).
@@ -261,6 +296,16 @@ const base::Feature kWebRtcUseGpuMemoryBufferVideoFrames{
 // Enables HW H264 encoding on Android.
 const base::Feature kWebRtcHWH264Encoding{
     "WebRtcHWH264Encoding", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables HW VP8 encoding on Android.
+const base::Feature kWebRtcHWVP8Encoding {
+  "WebRtcHWVP8Encoding",
+#if defined(OS_ANDROID)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
 
 // Enables the WebRTC Echo Canceller version 3 (AEC3). Feature for
 // http://crbug.com/688388. This value is sent to WebRTC's echo canceller to
@@ -285,11 +330,7 @@ const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
 // Autofill Accessibility in Android.
 // crbug.com/627860
 const base::Feature kAndroidAutofillAccessibility{
-    "AndroidAutofillAccessibility", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// A browsing history manager implementation for Android.
-const base::Feature kNativeAndroidHistoryManager{
-  "AndroidHistoryManager", base::FEATURE_DISABLED_BY_DEFAULT};
+    "AndroidAutofillAccessibility", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // FeatureList definition for the Seccomp field trial.
 const base::Feature kSeccompSandboxAndroid{"SeccompSandboxAndroid",
@@ -301,22 +342,10 @@ const base::Feature kServiceWorkerPaymentApps{
     "ServiceWorkerPaymentApps",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// The JavaScript API for payments on the web.
-const base::Feature kWebPayments{"WebPayments",
-                                 base::FEATURE_ENABLED_BY_DEFAULT};
-#else
-// The JavaScript API for payments on the web.
-const base::Feature kWebPayments{"WebPayments",
-                                 base::FEATURE_DISABLED_BY_DEFAULT};
+// Controls whether the WebNFC API is enabled:
+// https://w3c.github.io/web-nfc/
+const base::Feature kWebNfc{"WebNFC", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
-
-#if !defined(OS_ANDROID)
-// Controls whether media playback in cross-origin iframes is enabled. The
-// feature overrides |kDisableGestureRequirementForMediaPlayback|.
-const base::Feature kCrossOriginMediaPlaybackRequiresUserGesture{
-    "CrossOriginMediaPlaybackRequiresUserGesture",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // !defined(OS_ANDROID)
 
 #if defined(OS_WIN)
 // Emergency "off switch" for new Windows sandbox security mitigation,

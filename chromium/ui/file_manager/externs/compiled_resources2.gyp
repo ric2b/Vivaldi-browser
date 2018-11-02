@@ -1,6 +1,11 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
+
+########################################################
+#    NOTE: THIS FILE IS GENERATED. DO NOT EDIT IT!     #
+# Instead, run create_include_gyp.py to regenerate it. #
+########################################################
 {
   'targets': [
     {
@@ -13,10 +18,6 @@
     },
     {
       'target_name': 'background_window',
-      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
-    },
-    {
-      'target_name': 'byte_reader',
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
@@ -37,6 +38,10 @@
     },
     {
       'target_name': 'chrome_webstore_widget_private',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
+      'target_name': 'command_handler_deps',
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
@@ -72,10 +77,6 @@
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
-      'target_name': 'file_browser_background',
-      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
-    },
-    {
       'target_name': 'file_operation_progress_event',
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
@@ -104,7 +105,7 @@
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
-      'target_name': 'metadata_parser_interface',
+      'target_name': 'menu_item_update_event',
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
@@ -124,11 +125,7 @@
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
-      'target_name': 'progress_center_panel',
-      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
-    },
-    {
-      'target_name': 'video_player_foreground',
+      'target_name': 'search_item',
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {

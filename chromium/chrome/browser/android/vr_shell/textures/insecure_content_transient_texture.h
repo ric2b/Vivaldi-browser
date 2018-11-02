@@ -5,20 +5,24 @@
 #ifndef CHROME_BROWSER_ANDROID_VR_SHELL_TEXTURES_INSECURE_CONTENT_TRANSIENT_TEXTURE_H_
 #define CHROME_BROWSER_ANDROID_VR_SHELL_TEXTURES_INSECURE_CONTENT_TRANSIENT_TEXTURE_H_
 
+#include "base/macros.h"
 #include "chrome/browser/android/vr_shell/textures/ui_texture.h"
 
 namespace vr_shell {
 
-class InsecureContentTransientTexture : public UITexture {
+class InsecureContentTransientTexture : public UiTexture {
  public:
-  InsecureContentTransientTexture(int texture_handle, int texture_size);
+  InsecureContentTransientTexture();
   ~InsecureContentTransientTexture() override;
+  gfx::Size GetPreferredTextureSize(int width) const override;
+  gfx::SizeF GetDrawnSize() const override;
 
  private:
-  void Draw(gfx::Canvas* canvas) override;
-  void SetSize() override;
+  void Draw(SkCanvas* sk_canvas, const gfx::Size& texture_size) override;
 
-  int height_;
+  gfx::SizeF size_;
+
+  DISALLOW_COPY_AND_ASSIGN(InsecureContentTransientTexture);
 };
 
 }  // namespace vr_shell

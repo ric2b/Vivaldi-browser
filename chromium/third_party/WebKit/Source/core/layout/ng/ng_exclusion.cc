@@ -13,7 +13,7 @@ bool NGExclusion::operator==(const NGExclusion& other) const {
 }
 
 String NGExclusion::ToString() const {
-  return String::Format("Rect: %s Type: %d", rect.ToString().Ascii().Data(),
+  return String::Format("Rect: %s Type: %d", rect.ToString().Ascii().data(),
                         type);
 }
 
@@ -67,7 +67,7 @@ void NGExclusions::Add(const NGExclusion& exclusion) {
 }
 
 inline NGExclusions& NGExclusions::operator=(const NGExclusions& other) {
-  storage.Clear();
+  storage.clear();
   last_left_float = nullptr;
   last_right_float = nullptr;
   for (const auto& exclusion : other.storage)

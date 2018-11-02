@@ -29,8 +29,10 @@ class NetworkPortalDetectorObserver;
 class ScreenCaptureObserver;
 class ScreenShareObserver;
 class SessionLengthLimitObserver;
+class StatusAreaFocusObserver;
 class TracingObserver;
 class VirtualKeyboardObserver;
+class UpdateObserver;
 
 namespace mojom {
 enum class UpdateSeverity;
@@ -116,10 +118,20 @@ class ASH_EXPORT SystemTrayNotifier {
   void NotifySessionStartTimeChanged();
   void NotifySessionLengthLimitChanged();
 
+  // Status area focus.
+  void AddStatusAreaFocusObserver(StatusAreaFocusObserver* observer);
+  void RemoveStatusAreaFocusObserver(StatusAreaFocusObserver* observer);
+  void NotifyFocusOut(bool reverse);
+
   // Tracing.
   void AddTracingObserver(TracingObserver* observer);
   void RemoveTracingObserver(TracingObserver* observer);
   void NotifyTracingModeChanged(bool value);
+
+  // Update.
+  void AddUpdateObserver(UpdateObserver* observer);
+  void RemoveUpdateObserver(UpdateObserver* observer);
+  void NotifyUpdateOverCellularTargetSet(bool success);
 
   // Virtual keyboard.
   void AddVirtualKeyboardObserver(VirtualKeyboardObserver* observer);
@@ -141,7 +153,9 @@ class ASH_EXPORT SystemTrayNotifier {
   base::ObserverList<ScreenShareObserver> screen_share_observers_;
   base::ObserverList<SessionLengthLimitObserver>
       session_length_limit_observers_;
+  base::ObserverList<StatusAreaFocusObserver> status_area_focus_observers_;
   base::ObserverList<TracingObserver> tracing_observers_;
+  base::ObserverList<UpdateObserver> update_observers_;
   base::ObserverList<VirtualKeyboardObserver> virtual_keyboard_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(SystemTrayNotifier);

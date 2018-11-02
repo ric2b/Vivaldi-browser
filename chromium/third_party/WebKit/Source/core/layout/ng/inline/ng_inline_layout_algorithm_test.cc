@@ -12,6 +12,7 @@
 #include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/ng_block_break_token.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
+#include "core/layout/ng/ng_layout_result.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/geometry/LayoutRect.h"
 
@@ -79,6 +80,37 @@ TEST_F(NGInlineLayoutAlgorithmTest, BreakToken) {
   EXPECT_EQ(0u, wrapper2_break_token->ChildBreakTokens().size());
 }
 
+// The test leaks memory. crbug.com/721932
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_VerticalAlignBottomReplaced DISABLED_VerticalAlignBottomReplaced
+#else
+#define MAYBE_VerticalAlignBottomReplaced VerticalAlignBottomReplaced
+#endif
+TEST_F(NGInlineLayoutAlgorithmTest, MAYBE_VerticalAlignBottomReplaced) {
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
+    html { font-size: 10px; }
+    img { vertical-align: bottom; }
+    </style>
+    <div id=container><img src="#" width="96" height="96"></div>
+  )HTML");
+  LayoutNGBlockFlow* block_flow =
+      ToLayoutNGBlockFlow(GetLayoutObjectByElementId("container"));
+  NGInlineNode* inline_node =
+      new NGInlineNode(block_flow->FirstChild(), block_flow);
+  RefPtr<NGConstraintSpace> space =
+      NGConstraintSpace::CreateFromLayoutObject(*block_flow);
+  RefPtr<NGLayoutResult> layout_result = inline_node->Layout(space.Get());
+  auto* wrapper =
+      ToNGPhysicalBoxFragment(layout_result->PhysicalFragment().Get());
+  EXPECT_EQ(1u, wrapper->Children().size());
+  auto* line = ToNGPhysicalLineBoxFragment(wrapper->Children()[0].Get());
+  EXPECT_EQ(LayoutUnit(96), line->Size().height);
+  auto* img = line->Children()[0].Get();
+  EXPECT_EQ(LayoutUnit(0), img->Offset().top);
+}
+
 // Verifies that text can flow correctly around floats that were positioned
 // before the inline block.
 TEST_F(NGInlineLayoutAlgorithmTest, TextFloatsAroundFloatsBefore) {
@@ -119,8 +151,10 @@ TEST_F(NGInlineLayoutAlgorithmTest, TextFloatsAroundFloatsBefore) {
       ToNGPhysicalBoxFragment(html_fragment->Children()[0].Get());
   auto* container_fragment =
       ToNGPhysicalBoxFragment(body_fragment->Children()[0].Get());
-  auto* line_box_fragments_wrapper =
+  auto* span_box_fragments_wrapper =
       ToNGPhysicalBoxFragment(container_fragment->Children()[0].Get());
+  auto* line_box_fragments_wrapper =
+      ToNGPhysicalBoxFragment(span_box_fragments_wrapper->Children()[0].Get());
   Vector<NGPhysicalTextFragment*> text_fragments;
   for (const auto& child : line_box_fragments_wrapper->Children()) {
     auto* line_box = ToNGPhysicalLineBoxFragment(child.Get());
@@ -133,25 +167,25 @@ TEST_F(NGInlineLayoutAlgorithmTest, TextFloatsAroundFloatsBefore) {
       ToLayoutText(GetLayoutObjectByElementId("text")->SlowFirstChild());
   DCHECK(layout_text->HasTextBoxes());
 
-  ASSERT_EQ(4UL, text_fragments.size());
+  // Line break points may vary by minor differences in fonts.
+  // The test is valid as long as we have 3 or more lines and their positions
+  // are correct.
+  EXPECT_GE(text_fragments.size(), 3UL);
 
   auto* text_fragment1 = text_fragments[0];
   // 40 = #left-float1' width 30 + #left-float2 10
-  EXPECT_EQ(LayoutUnit(40), text_fragment1->LeftOffset());
-  EXPECT_EQ("The quick ", text_fragment1->Text());
+  EXPECT_EQ(LayoutUnit(40), text_fragment1->Offset().left);
   InlineTextBox* inline_text_box1 = layout_text->FirstTextBox();
   EXPECT_EQ(LayoutUnit(40), inline_text_box1->X());
 
   auto* text_fragment2 = text_fragments[1];
   // 40 = #left-float1' width 30
-  EXPECT_EQ(LayoutUnit(30), text_fragment2->LeftOffset());
-  EXPECT_EQ("brown fox ", text_fragment2->Text());
+  EXPECT_EQ(LayoutUnit(30), text_fragment2->Offset().left);
   InlineTextBox* inline_text_box2 = inline_text_box1->NextTextBox();
   EXPECT_EQ(LayoutUnit(30), inline_text_box2->X());
 
   auto* text_fragment3 = text_fragments[2];
-  EXPECT_EQ(LayoutUnit(), text_fragment3->LeftOffset());
-  EXPECT_EQ("jumps over the lazy ", text_fragment3->Text());
+  EXPECT_EQ(LayoutUnit(), text_fragment3->Offset().left);
   InlineTextBox* inline_text_box3 = inline_text_box2->NextTextBox();
   EXPECT_EQ(LayoutUnit(), inline_text_box3->X());
 }
@@ -187,7 +221,7 @@ TEST_F(NGInlineLayoutAlgorithmTest, TextFloatsAroundInlineFloatThatFitsOnLine) {
   // 30 == narrow-float's width.
   EXPECT_EQ(LayoutUnit(30), inline_text_box1->X());
 
-  Element* narrow_float = GetDocument().GetElementById("narrow-float");
+  Element* narrow_float = GetDocument().getElementById("narrow-float");
   // 8 == body's margin.
   EXPECT_EQ(8, narrow_float->OffsetLeft());
   EXPECT_EQ(8, narrow_float->OffsetTop());
@@ -224,7 +258,7 @@ TEST_F(NGInlineLayoutAlgorithmTest,
   InlineTextBox* inline_text_box1 = layout_text->FirstTextBox();
   EXPECT_EQ(LayoutUnit(), inline_text_box1->X());
 
-  Element* wide_float = GetDocument().GetElementById("wide-float");
+  Element* wide_float = GetDocument().getElementById("wide-float");
   // 8 == body's margin.
   EXPECT_EQ(8, wide_float->OffsetLeft());
 }
@@ -258,11 +292,11 @@ TEST_F(NGInlineLayoutAlgorithmTest,
       </span>
     </div>
   )HTML");
-  Element* wide_float = GetDocument().GetElementById("left-wide");
+  Element* wide_float = GetDocument().getElementById("left-wide");
   // 8 == body's margin.
   EXPECT_EQ(8, wide_float->OffsetLeft());
 
-  Element* narrow_float = GetDocument().GetElementById("left-narrow");
+  Element* narrow_float = GetDocument().getElementById("left-narrow");
   // 160 float-wide's width + 8 body's margin.
   EXPECT_EQ(160 + 8, narrow_float->OffsetLeft());
 

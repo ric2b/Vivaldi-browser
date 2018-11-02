@@ -31,13 +31,13 @@
 #ifndef WebView_h
 #define WebView_h
 
-#include "../platform/WebColor.h"
-#include "../platform/WebDisplayMode.h"
-#include "../platform/WebDragOperation.h"
-#include "../platform/WebFocusType.h"
-#include "../platform/WebPageVisibilityState.h"
-#include "../platform/WebString.h"
-#include "../platform/WebVector.h"
+#include "public/platform/WebColor.h"
+#include "public/platform/WebDisplayMode.h"
+#include "public/platform/WebDragOperation.h"
+#include "public/platform/WebFocusType.h"
+#include "public/platform/WebPageVisibilityState.h"
+#include "public/platform/WebString.h"
+#include "public/platform/WebVector.h"
 #include "WebWidget.h"
 
 namespace gfx {
@@ -47,7 +47,6 @@ class ICCProfile;
 namespace blink {
 
 class WebAXObject;
-class WebCompositedDisplayList;
 class WebCredentialManagerClient;
 class WebFrame;
 class WebHitTestResult;
@@ -128,6 +127,7 @@ class WebView : protected WebWidget {
   // You can optionally modify the settings before calling this method.
   // This WebFrame will receive events for the main frame and must not
   // be null.
+  // TODO(mustaq): The non-null param should be a reference.
   virtual void SetMainFrame(WebFrame*) = 0;
 
   // Initializes the various client interfaces.
@@ -378,11 +378,6 @@ class WebView : protected WebWidget {
   virtual void SetPinchZoom(float scale, int x, int y) {};
   // Vivaldi end
 
-  // Retrieves a list of spelling markers.
-  virtual void SpellingMarkerOffsetsForTest(WebVector<unsigned>* offsets) = 0;
-  virtual void RemoveSpellingMarkersUnderWords(
-      const WebVector<WebString>& words) = 0;
-
   // Support for resource loading initiated by plugins -------------------
 
   // Returns next unused request identifier which is unique within the
@@ -478,10 +473,6 @@ class WebView : protected WebWidget {
   // Sets the visibility of the WebView.
   virtual void SetVisibilityState(WebPageVisibilityState visibility_state,
                                   bool is_initial_state) {}
-
-  // Graphics -------------------------------------------------------------
-
-  virtual WebCompositedDisplayList* CompositedDisplayList() { return nullptr; }
 
   // PageOverlay ----------------------------------------------------------
 

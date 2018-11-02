@@ -10,7 +10,7 @@
 #include "net/quic/core/quic_client_promised_info.h"
 #include "net/quic/core/spdy_utils.h"
 #include "net/quic/platform/api/quic_logging.h"
-#include "net/spdy/spdy_protocol.h"
+#include "net/spdy/core/spdy_protocol.h"
 #include "net/tools/quic/quic_client_session.h"
 
 using std::string;
@@ -28,15 +28,6 @@ QuicSpdyClientStream::QuicSpdyClientStream(QuicStreamId id,
       has_preliminary_headers_(false) {}
 
 QuicSpdyClientStream::~QuicSpdyClientStream() {}
-
-void QuicSpdyClientStream::OnStreamFrame(const QuicStreamFrame& frame) {
-  if (!allow_bidirectional_data() && !write_side_closed()) {
-    QUIC_DLOG(INFO) << "Got a response before the request was complete.  "
-                    << "Aborting request.";
-    CloseWriteSide();
-  }
-  QuicSpdyStream::OnStreamFrame(frame);
-}
 
 void QuicSpdyClientStream::OnInitialHeadersComplete(
     bool fin,

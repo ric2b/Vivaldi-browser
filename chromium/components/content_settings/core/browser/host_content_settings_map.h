@@ -31,6 +31,7 @@ class PrefService;
 
 namespace base {
 class Value;
+class Clock;
 }
 
 namespace content_settings {
@@ -66,7 +67,8 @@ class HostContentSettingsMap : public content_settings::Observer,
   // |is_incognito_profile| and |is_guest_profile| should be true.
   HostContentSettingsMap(PrefService* prefs,
                          bool is_incognito_profile,
-                         bool is_guest_profile);
+                         bool is_guest_profile,
+                         bool store_last_modified);
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
@@ -217,16 +219,27 @@ class HostContentSettingsMap : public content_settings::Observer,
   // This should only be called on the UI thread.
   void ClearSettingsForOneType(ContentSettingsType content_type);
 
+  // Return the |last_modified| date of a content setting. This will only return
+  // valid values for settings from the PreferenceProvider. Settings from other
+  // providers will return base::Time().
+  //
+  // This may be called on any thread.
+  base::Time GetSettingLastModifiedDate(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsType content_type) const;
+
+  using PatternSourcePredicate =
+      base::Callback<bool(const ContentSettingsPattern& primary_pattern,
+                          const ContentSettingsPattern& secondary_pattern)>;
+
   // If |pattern_predicate| is null, this method is equivalent to the above.
-  // Otherwise, it only deletes exceptions matched by |pattern_predicate|.
+  // Otherwise, it only deletes exceptions matched by |pattern_predicate| that
+  // were modified at or after |begin_time|.
   void ClearSettingsForOneTypeWithPredicate(
       ContentSettingsType content_type,
-      const base::Callback<bool(
-          const ContentSettingsPattern& primary_pattern,
-          const ContentSettingsPattern& secondary_pattern)>& pattern_predicate);
-
-  static bool IsDefaultSettingAllowedForType(ContentSetting setting,
-                                             ContentSettingsType content_type);
+      base::Time begin_time,
+      const PatternSourcePredicate& pattern_predicate);
 
   // RefcountedKeyedService implementation.
   void ShutdownOnUIThread() override;
@@ -266,6 +279,10 @@ class HostContentSettingsMap : public content_settings::Observer,
   void MigrateDomainScopedSettings(bool after_sync);
 
   base::WeakPtr<HostContentSettingsMap> GetWeakPtr();
+
+  // Injects a clock into the PrefProvider to allow control over the
+  // |last_modified| timestamp.
+  void SetClockForTesting(std::unique_ptr<base::Clock> clock);
 
  private:
   friend class base::RefCountedThreadSafe<HostContentSettingsMap>;
@@ -357,6 +374,10 @@ class HostContentSettingsMap : public content_settings::Observer,
 
   // Whether this settings map is for an incognito session.
   bool is_incognito_;
+
+  // Whether ContentSettings in the PrefProvider will store a last_modified
+  // timestamp.
+  bool store_last_modified_;
 
   // Content setting providers. This is only modified at construction
   // time and by RegisterExtensionService, both of which should happen

@@ -86,10 +86,7 @@ class ExternalMemoryAllocator final : public SkBitmap::Allocator {
     if (!CompatibleInfo(info_, info) || row_bytes_ != dst->rowBytes())
       return false;
 
-    if (!dst->installPixels(info, pixels_, row_bytes_))
-      return false;
-    dst->lockPixels();
-    return true;
+    return dst->installPixels(info, pixels_, row_bytes_);
   }
 
  private:
@@ -165,7 +162,6 @@ bool ImageFrameGenerator::DecodeAndScale(
   // provided. If not, make a copy.
   DCHECK_EQ(bitmap.width(), scaled_size.width());
   DCHECK_EQ(bitmap.height(), scaled_size.height());
-  SkAutoLockPixels bitmap_lock(bitmap);
   if (bitmap.getPixels() != pixels)
     CopyPixels(pixels, row_bytes, bitmap.getPixels(), bitmap.rowBytes(), info);
   return true;
@@ -285,7 +281,7 @@ void ImageFrameGenerator::SetHasAlpha(size_t index, bool has_alpha) {
   MutexLocker lock(alpha_mutex_);
   if (index >= has_alpha_.size()) {
     const size_t old_size = has_alpha_.size();
-    has_alpha_.Resize(index + 1);
+    has_alpha_.resize(index + 1);
     for (size_t i = old_size; i < has_alpha_.size(); ++i)
       has_alpha_[i] = true;
   }

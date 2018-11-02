@@ -27,6 +27,7 @@
 #include "content/public/common/stop_find_action.h"
 #include "ipc/ipc_sender.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/accessibility/ax_tree_update.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
@@ -41,6 +42,12 @@ class TimeTicks;
 
 namespace blink {
 struct WebFindOptions;
+}
+
+namespace device {
+namespace mojom {
+class WakeLockContext;
+}
 }
 
 namespace net {
@@ -244,9 +251,22 @@ class WebContents : public PageNavigator,
   virtual RenderFrameHost* GetFocusedFrame() = 0;
 
   // Returns the current RenderFrameHost for a given FrameTreeNode ID if it is
-  // part of this tab. See RenderFrameHost::GetFrameTreeNodeId for documentation
-  // on this ID.
-  virtual RenderFrameHost* FindFrameByFrameTreeNodeId(
+  // part of this frame tree, not including frames in any inner WebContents.
+  // Returns nullptr if |process_id| does not match the current
+  // RenderFrameHost's process ID, to avoid security bugs where callers do not
+  // realize a cross-process navigation (and thus privilege change) has taken
+  // place. See RenderFrameHost::GetFrameTreeNodeId for documentation on
+  // frame_tree_node_id.
+  virtual RenderFrameHost* FindFrameByFrameTreeNodeId(int frame_tree_node_id,
+                                                      int process_id) = 0;
+
+  // NOTE: This is generally unsafe to use. Use FindFrameByFrameTreeNodeId
+  // instead.
+  // Returns the current RenderFrameHost for a given FrameTreeNode ID if it is
+  // part of this frame tree. This may not match the caller's expectation, if a
+  // cross-process navigation (and thus privilege change) has taken place.
+  // See RenderFrameHost::GetFrameTreeNodeId for documentation on this ID.
+  virtual RenderFrameHost* UnsafeFindFrameByFrameTreeNodeId(
       int frame_tree_node_id) = 0;
 
   // Calls |on_frame| for each frame in the currently active view.
@@ -277,6 +297,12 @@ class WebContents : public PageNavigator,
   // RenderWidgetHostViewChildFrame), which can be used to create context
   // menus.
   virtual RenderWidgetHostView* GetTopLevelRenderWidgetHostView() = 0;
+
+  // Request a one-time snapshot of the accessibility tree without changing
+  // the accessibility mode.
+  using AXTreeSnapshotCallback = base::Callback<void(const ui::AXTreeUpdate&)>;
+  virtual void RequestAXTreeSnapshot(
+      const AXTreeSnapshotCallback& callback) = 0;
 
   // Causes the current page to be closed, including running its onunload event
   // handler.
@@ -590,7 +616,7 @@ class WebContents : public PageNavigator,
   virtual content::RendererPreferences* GetMutableRendererPrefs() = 0;
 
   // Tells the tab to close now. The tab will take care not to close until it's
-  // out of nested message loops.
+  // out of nested run loops.
   virtual void Close() = 0;
 
   // A render view-originated drag has ended. Informs the render view host and
@@ -658,6 +684,9 @@ class WebContents : public PageNavigator,
   // otherwise.
   virtual WebContents* GetOriginalOpener() const = 0;
 
+  // Returns the WakeLockContext accociated with this WebContents.
+  virtual device::mojom::WakeLockContext* GetWakeLockContext() = 0;
+
   typedef base::Callback<void(
       int, /* id */
       int, /* HTTP status code */
@@ -713,6 +742,9 @@ class WebContents : public PageNavigator,
 
   // Requests the manifest URL and the Manifest of the main frame's document.
   virtual void GetManifest(const GetManifestCallback& callback) = 0;
+
+  // Returns whether the renderer is in fullscreen mode.
+  virtual bool IsFullscreenForCurrentTab() const = 0;
 
   // Requests the renderer to exit fullscreen.
   // |will_cause_resize| indicates whether the fullscreen change causes a

@@ -41,6 +41,10 @@ Polymer({
     },
   },
 
+  listeners: {
+    'keydown': 'onKeydown_',
+  },
+
   /** @override */
   attached: function() {
     this.watch('item_', function(state) {
@@ -57,11 +61,188 @@ Polymer({
     });
 
     this.updateFromStore();
+
+    if (this.isSelectedFolder_) {
+      this.async(function() {
+        this.scrollIntoViewIfNeeded();
+      });
+    }
+  },
+
+  /** @return {HTMLElement} */
+  getFocusTarget: function() {
+    return this.$.container;
   },
 
   /** @return {HTMLElement} */
   getDropTarget: function() {
     return this.$.container;
+  },
+
+  /** @return {boolean} */
+  isTopLevelFolder_: function() {
+    return this.depth == 0;
+  },
+
+  /**
+   * @private
+   * @param {!Event} e
+   */
+  onKeydown_: function(e) {
+    var yDirection = 0;
+    var xDirection = 0;
+    var handled = true;
+    if (e.key == 'ArrowUp') {
+      yDirection = -1;
+    } else if (e.key == 'ArrowDown') {
+      yDirection = 1;
+    } else if (e.key == 'ArrowLeft') {
+      xDirection = -1;
+    } else if (e.key == 'ArrowRight') {
+      xDirection = 1;
+    } else {
+      handled = false;
+    }
+
+    if (this.getComputedStyleValue('direction') == 'rtl')
+      xDirection *= -1;
+
+    this.changeKeyboardSelection_(
+        xDirection, yDirection, this.root.activeElement);
+
+    if (!handled)
+      return;
+
+    e.preventDefault();
+    e.stopPropagation();
+  },
+
+  /**
+   * @private
+   * @param {number} xDirection
+   * @param {number} yDirection
+   * @param {!HTMLElement} currentFocus
+   */
+  changeKeyboardSelection_: function(xDirection, yDirection, currentFocus) {
+    var newFocusFolderNode = null;
+    var isChildFolderNodeFocused =
+        currentFocus.tagName == 'BOOKMARKS-FOLDER-NODE';
+
+    if (xDirection == 1) {
+      // The right arrow opens a folder if closed and goes to the first child
+      // otherwise.
+      if (this.hasChildFolder_()) {
+        if (this.isClosed_) {
+          this.dispatch(
+              bookmarks.actions.changeFolderOpen(this.item_.id, true));
+        } else {
+          yDirection = 1;
+        }
+      }
+    } else if (xDirection == -1) {
+      // The left arrow closes a folder if open and goes to the parent
+      // otherwise.
+      if (this.hasChildFolder_() && !this.isClosed_) {
+        this.dispatch(bookmarks.actions.changeFolderOpen(this.item_.id, false));
+      } else {
+        var parentFolderNode = this.getParentFolderNode_();
+        if (parentFolderNode.itemId != ROOT_NODE_ID) {
+          parentFolderNode.selectFolder_();
+          parentFolderNode.getFocusTarget().focus();
+        }
+      }
+    }
+
+    if (!yDirection)
+      return;
+
+    // The current node's successor is its first child when open.
+    if (!isChildFolderNodeFocused && yDirection == 1 && !this.isClosed_) {
+      var children = this.getChildFolderNodes_();
+      if (children.length)
+        newFocusFolderNode = children[0];
+    }
+
+    if (isChildFolderNodeFocused) {
+      // Get the next child folder node if a child is focused.
+      if (!newFocusFolderNode) {
+        newFocusFolderNode = this.getNextChild_(
+            yDirection == -1,
+            /** @type {!BookmarksFolderNodeElement} */ (currentFocus));
+      }
+
+      // The first child's predecessor is this node.
+      if (!newFocusFolderNode && yDirection == -1)
+        newFocusFolderNode = this;
+    }
+
+    // If there is no newly focused node, allow the parent to handle the change.
+    if (!newFocusFolderNode) {
+      if (this.itemId != ROOT_NODE_ID)
+        this.getParentFolderNode_().changeKeyboardSelection_(
+            0, yDirection, this);
+
+      return;
+    }
+
+    // The root node is not navigable.
+    if (newFocusFolderNode.itemId != ROOT_NODE_ID) {
+      newFocusFolderNode.selectFolder_();
+      newFocusFolderNode.getFocusTarget().focus();
+    }
+  },
+
+  /**
+   * Returns the next or previous visible bookmark node relative to |child|.
+   * @private
+   * @param {boolean} reverse
+   * @param {!BookmarksFolderNodeElement} child
+   * @return {BookmarksFolderNodeElement|null} Returns null if there is no child
+   *     before/after |child|.
+   */
+  getNextChild_: function(reverse, child) {
+    var newFocus = null;
+    var children = this.getChildFolderNodes_();
+
+    var index = children.indexOf(child);
+    assert(index != -1);
+    if (reverse) {
+      // A child node's predecessor is either the previous child's last visible
+      // descendant, or this node, which is its immediate parent.
+      newFocus =
+          index == 0 ? null : children[index - 1].getLastVisibleDescendant_();
+    } else if (index < children.length - 1) {
+      // A successor to a child is the next child.
+      newFocus = children[index + 1];
+    }
+
+    return newFocus;
+  },
+
+  /**
+   * Returns the immediate parent folder node, or null if there is none.
+   * @private
+   * @return {BookmarksFolderNodeElement|null}
+   */
+  getParentFolderNode_: function() {
+    var parentFolderNode = this.parentNode;
+    while (parentFolderNode &&
+           parentFolderNode.tagName != 'BOOKMARKS-FOLDER-NODE') {
+      parentFolderNode = parentFolderNode.parentNode || parentFolderNode.host;
+    }
+    return parentFolderNode || null;
+  },
+
+  /**
+   * @private
+   * @return {BookmarksFolderNodeElement}
+   */
+  getLastVisibleDescendant_: function() {
+    var children = this.getChildFolderNodes_();
+    if (this.isClosed_ || children.length == 0)
+      return this;
+
+    return children.pop().getLastVisibleDescendant_();
   },
 
   /**
@@ -74,7 +255,16 @@ Polymer({
 
   /** @private */
   selectFolder_: function() {
-    this.dispatch(bookmarks.actions.selectFolder(this.item_.id));
+    this.dispatch(
+        bookmarks.actions.selectFolder(this.item_.id, this.getState().nodes));
+  },
+
+  /**
+   * @private
+   * @return {!Array<!BookmarksFolderNodeElement>}
+   */
+  getChildFolderNodes_: function() {
+    return Array.from(this.root.querySelectorAll('bookmarks-folder-node'));
   },
 
   /**
@@ -86,6 +276,14 @@ Polymer({
     this.dispatch(
         bookmarks.actions.changeFolderOpen(this.item_.id, this.isClosed_));
     e.stopPropagation();
+  },
+
+  /**
+   * @private
+   * @param {!Event} e
+   */
+  preventDefault_: function(e) {
+    e.preventDefault();
   },
 
   /**
@@ -133,6 +331,14 @@ Polymer({
    * @return {boolean}
    */
   isRootFolder_: function() {
-    return this.depth == 0;
+    return this.itemId == ROOT_NODE_ID;
+  },
+
+  /**
+   * @private
+   * @return {string}
+   */
+  getTabIndex_: function() {
+    return this.isSelectedFolder_ ? '0' : '';
   },
 });

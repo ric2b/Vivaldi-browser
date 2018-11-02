@@ -26,9 +26,7 @@
 #include <memory>
 #include "bindings/core/v8/ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormDataOrURLSearchParams.h"
 #include "bindings/core/v8/ArrayBufferOrArrayBufferViewOrBlobOrUSVString.h"
-#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/DOMException.h"
@@ -65,6 +63,8 @@
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/blob/BlobData.h"
 #include "platform/loader/fetch/CrossOriginAccessControl.h"
 #include "platform/loader/fetch/FetchInitiatorTypeNames.h"
@@ -78,11 +78,11 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "platform/weborigin/Suborigin.h"
+#include "platform/wtf/Assertions.h"
+#include "platform/wtf/AutoReset.h"
+#include "platform/wtf/StdLibExtras.h"
+#include "platform/wtf/text/CString.h"
 #include "public/platform/WebURLRequest.h"
-#include "wtf/Assertions.h"
-#include "wtf/AutoReset.h"
-#include "wtf/StdLibExtras.h"
-#include "wtf/text/CString.h"
 
 namespace blink {
 
@@ -117,7 +117,7 @@ void ReplaceCharsetInMediaType(String& media_type,
   // Found at least one existing charset, replace all occurrences with new
   // charset.
   while (len) {
-    media_type.Replace(pos, len, charset_value);
+    media_type.replace(pos, len, charset_value);
     unsigned start = pos + charset_value.length();
     FindCharsetInMediaType(media_type, pos, len, start);
   }
@@ -307,8 +307,8 @@ void XMLHttpRequest::InitResponseDocument() {
     return;
   }
 
-  DocumentInit init =
-      DocumentInit::FromContext(GetDocument()->ContextDocument(), url_);
+  DocumentInit init = DocumentInit::FromContext(
+      GetDocument()->ContextDocument(), response_.Url());
   if (is_html)
     response_document_ = HTMLDocument::Create(init);
   else
@@ -843,7 +843,7 @@ void XMLHttpRequest::send(FormData* body, ExceptionState& exception_state) {
     if (GetRequestHeader(HTTPNames::Content_Type).IsEmpty()) {
       AtomicString content_type =
           AtomicString("multipart/form-data; boundary=") +
-          http_body->Boundary().Data();
+          http_body->Boundary().data();
       SetRequestHeaderInternal(HTTPNames::Content_Type, content_type);
     }
   }
@@ -916,10 +916,10 @@ void XMLHttpRequest::ThrowForLoadFailureIfNeeded(
 
   String message = "Failed to load '" + url_.ElidedString() + "'";
   if (reason.IsNull()) {
-    message.Append('.');
+    message.append('.');
   } else {
-    message.Append(": ");
-    message.Append(reason);
+    message.append(": ");
+    message.append(reason);
   }
 
   exception_state.ThrowDOMException(exception_code_, message);
@@ -1402,7 +1402,7 @@ String XMLHttpRequest::getAllResponseHeaders() const {
         !access_control_expose_header_set.Contains(it->key))
       continue;
 
-    string_builder.Append(it->key);
+    string_builder.Append(it->key.LowerASCII());
     string_builder.Append(':');
     string_builder.Append(' ');
     string_builder.Append(it->value);
@@ -1637,8 +1637,6 @@ void XMLHttpRequest::NotifyParserStopped() {
     return;
 
   ClearVariablesForLoading();
-
-  response_document_->ImplicitClose();
 
   if (!response_document_->WellFormed())
     response_document_ = nullptr;

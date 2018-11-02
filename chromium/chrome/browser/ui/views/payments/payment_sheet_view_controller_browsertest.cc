@@ -36,7 +36,11 @@ IN_PROC_BROWSER_TEST_F(PaymentSheetViewControllerNoShippingTest, NoData) {
 // With a supported card (Visa) present, the pay button should be enabled.
 IN_PROC_BROWSER_TEST_F(PaymentSheetViewControllerNoShippingTest,
                        SupportedCard) {
-  AddCreditCard(autofill::test::GetCreditCard());  // Visa card.
+  autofill::AutofillProfile profile(autofill::test::GetFullProfile());
+  AddAutofillProfile(profile);
+  autofill::CreditCard card(autofill::test::GetCreditCard());  // Visa card.
+  card.set_billing_address_id(profile.guid());
+  AddCreditCard(card);
 
   InvokePaymentRequestUI();
   EXPECT_TRUE(IsPayButtonEnabled());
@@ -60,8 +64,9 @@ IN_PROC_BROWSER_TEST_F(PaymentSheetViewControllerNoShippingTest,
 
   EXPECT_NE(nullptr, dialog_view()->GetViewByID(static_cast<int>(
                          DialogViewID::PAYMENT_SHEET_SUMMARY_SECTION)));
-  EXPECT_NE(nullptr, dialog_view()->GetViewByID(static_cast<int>(
-                         DialogViewID::PAYMENT_SHEET_PAYMENT_METHOD_SECTION)));
+  EXPECT_NE(nullptr,
+            dialog_view()->GetViewByID(static_cast<int>(
+                DialogViewID::PAYMENT_SHEET_PAYMENT_METHOD_SECTION_BUTTON)));
   EXPECT_EQ(nullptr,
             dialog_view()->GetViewByID(static_cast<int>(
                 DialogViewID::PAYMENT_SHEET_SHIPPING_ADDRESS_SECTION)));
@@ -104,8 +109,11 @@ IN_PROC_BROWSER_TEST_F(PaymentSheetViewControllerContactDetailsTest,
 // enough information to enable the pay button.
 IN_PROC_BROWSER_TEST_F(PaymentSheetViewControllerContactDetailsTest,
                        SupportedCard_CompleteContactInfo) {
-  AddCreditCard(autofill::test::GetCreditCard());  // Visa card.
-  AddAutofillProfile(autofill::test::GetFullProfile());
+  autofill::AutofillProfile profile(autofill::test::GetFullProfile());
+  AddAutofillProfile(profile);
+  autofill::CreditCard card(autofill::test::GetCreditCard());  // Visa card.
+  card.set_billing_address_id(profile.guid());
+  AddCreditCard(card);
 
   InvokePaymentRequestUI();
   EXPECT_TRUE(IsPayButtonEnabled());
@@ -142,6 +150,36 @@ IN_PROC_BROWSER_TEST_F(PaymentSheetViewControllerContactDetailsTest,
 // If shipping and contact info are requested, show all the rows.
 IN_PROC_BROWSER_TEST_F(PaymentSheetViewControllerContactDetailsTest,
                        AllRowsPresent) {
+  InvokePaymentRequestUI();
+
+  EXPECT_NE(nullptr, dialog_view()->GetViewByID(static_cast<int>(
+                         DialogViewID::PAYMENT_SHEET_SUMMARY_SECTION)));
+  // The buttons to select payment methods and shipping address are present.
+  EXPECT_NE(nullptr,
+            dialog_view()->GetViewByID(static_cast<int>(
+                DialogViewID::PAYMENT_SHEET_PAYMENT_METHOD_SECTION_BUTTON)));
+  EXPECT_NE(nullptr,
+            dialog_view()->GetViewByID(static_cast<int>(
+                DialogViewID::PAYMENT_SHEET_SHIPPING_ADDRESS_SECTION_BUTTON)));
+  // Shipping option section (or its button) is not yet present.
+  EXPECT_EQ(nullptr, dialog_view()->GetViewByID(static_cast<int>(
+                         DialogViewID::PAYMENT_SHEET_SHIPPING_OPTION_SECTION)));
+  EXPECT_EQ(nullptr,
+            dialog_view()->GetViewByID(static_cast<int>(
+                DialogViewID::PAYMENT_SHEET_SHIPPING_OPTION_SECTION_BUTTON)));
+  // Contact details button is present.
+  EXPECT_NE(nullptr,
+            dialog_view()->GetViewByID(static_cast<int>(
+                DialogViewID::PAYMENT_SHEET_CONTACT_INFO_SECTION_BUTTON)));
+}
+
+IN_PROC_BROWSER_TEST_F(PaymentSheetViewControllerContactDetailsTest,
+                       AllClickableRowsPresent) {
+  autofill::AutofillProfile profile(autofill::test::GetFullProfile());
+  AddAutofillProfile(profile);
+  autofill::CreditCard card(autofill::test::GetCreditCard());  // Visa card.
+  card.set_billing_address_id(profile.guid());
+  AddCreditCard(card);
   InvokePaymentRequestUI();
 
   EXPECT_NE(nullptr, dialog_view()->GetViewByID(static_cast<int>(

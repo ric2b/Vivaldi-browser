@@ -12,6 +12,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
@@ -248,6 +249,19 @@ void OSCrypt::SetMainThreadRunner(
   KeyStorageLinux::SetMainThreadRunner(main_thread_runner);
 }
 
+// static
+bool OSCrypt::IsEncryptionAvailable() {
+  return g_get_password[Version::V11]();
+}
+
+void ClearCacheForTesting() {
+  g_cache.Get().key_storage_cache.reset();
+  g_cache.Get().password_v10_cache.reset();
+  g_cache.Get().password_v11_cache.reset();
+  g_cache.Get().is_key_storage_cached = false;
+  g_cache.Get().is_password_v11_cached = false;
+}
+
 void UseMockKeyStorageForTesting(KeyStorageLinux* (*get_key_storage_mock)(),
                                  std::string* (*get_password_v11_mock)()) {
   // Save the real implementation to restore it later.
@@ -259,7 +273,7 @@ void UseMockKeyStorageForTesting(KeyStorageLinux* (*get_key_storage_mock)(),
     is_get_password_saved = true;
   }
 
-  if (get_key_storage_mock && get_password_v11_mock) {
+  if (get_key_storage_mock || get_password_v11_mock) {
     // Bypass calling KeyStorage::CreateService and caching of the key for V11
     if (get_password_v11_mock)
       g_get_password[Version::V11] = get_password_v11_mock;

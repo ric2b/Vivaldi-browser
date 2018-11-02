@@ -4,7 +4,7 @@
 
 #include "modules/peerconnection/RTCRtpReceiver.h"
 
-#include "bindings/core/v8/Microtask.h"
+#include "platform/bindings/Microtask.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebRTCRtpContributingSource.h"
 
@@ -31,7 +31,7 @@ RTCRtpReceiver::getContributingSources() {
 void RTCRtpReceiver::UpdateSourcesIfNeeded() {
   if (!contributing_sources_needs_updating_)
     return;
-  contributing_sources_.Clear();
+  contributing_sources_.clear();
   for (const std::unique_ptr<WebRTCRtpContributingSource>&
            web_contributing_source : receiver_->GetSources()) {
     if (web_contributing_source->SourceType() ==
@@ -42,7 +42,7 @@ void RTCRtpReceiver::UpdateSourcesIfNeeded() {
     }
     DCHECK_EQ(web_contributing_source->SourceType(),
               WebRTCRtpContributingSourceType::CSRC);
-    auto it = contributing_sources_by_source_id_.Find(
+    auto it = contributing_sources_by_source_id_.find(
         web_contributing_source->Source());
     if (it == contributing_sources_by_source_id_.end()) {
       RTCRtpContributingSource* contributing_source =

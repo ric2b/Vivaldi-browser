@@ -309,13 +309,14 @@ class BookmarkBarViewEventTestBase : public ViewEventTestBase {
 
     AddTestData(CreateBigMenu());
 
-    // Create the Widget. Note the initial size is given by GetPreferredSize()
-    // during initialization. This occurs after the WidgetDelegate provides
-    // |bb_view_| as the contents view and adds it to the hierarchy.
+    // Create the Widget. Note the initial size is given by
+    // GetPreferredSizeForContents() during initialization. This occurs after
+    // the WidgetDelegate provides |bb_view_| as the contents view and adds it
+    // to the hierarchy.
     ViewEventTestBase::SetUp();
 
     // Verify the layout triggered by the initial size preserves the overflow
-    // state calculated in GetPreferredSize().
+    // state calculated in GetPreferredSizeForContents().
     EXPECT_TRUE(GetBookmarkButton(5)->visible());
     EXPECT_FALSE(GetBookmarkButton(6)->visible());
   }
@@ -347,7 +348,7 @@ class BookmarkBarViewEventTestBase : public ViewEventTestBase {
  protected:
   views::View* CreateContentsView() override { return bb_view_.get(); }
 
-  gfx::Size GetPreferredSize() const override {
+  gfx::Size GetPreferredSizeForContents() const override {
     // Calculate the preferred size so that one button doesn't fit, which
     // triggers the overflow button to appear. We have to do this incrementally
     // as there isn't a good way to determine the point at which the overflow
@@ -1056,7 +1057,7 @@ class BookmarkBarViewTest9 : public BookmarkBarViewEventTestBase {
 
   void Step3() {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, base::Bind(&BookmarkBarViewTest9::Step4, this),
+        FROM_HERE, base::BindOnce(&BookmarkBarViewTest9::Step4, this),
         base::TimeDelta::FromMilliseconds(200));
   }
 
@@ -1072,7 +1073,7 @@ class BookmarkBarViewTest9 : public BookmarkBarViewEventTestBase {
     // which can interfere with Done. We need to run Done in the
     // next execution loop.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&ViewEventTestBase::Done, this));
+        FROM_HERE, base::BindOnce(&ViewEventTestBase::Done, this));
   }
 
   int start_y_;
@@ -1310,11 +1311,11 @@ class BookmarkBarViewTest12 : public BookmarkBarViewEventTestBase {
     ui_test_utils::MoveMouseToCenterAndPress(button, ui_controls::LEFT,
         ui_controls::DOWN | ui_controls::UP,
         CreateEventTask(this, &BookmarkBarViewTest12::Step2));
-    chrome::num_bookmark_urls_before_prompting = 1;
+    chrome::kNumBookmarkUrlsBeforePrompting = 1;
   }
 
   ~BookmarkBarViewTest12() override {
-    chrome::num_bookmark_urls_before_prompting = 15;
+    chrome::kNumBookmarkUrlsBeforePrompting = 15;
   }
 
  private:
@@ -1367,8 +1368,9 @@ class BookmarkBarViewTest12 : public BookmarkBarViewEventTestBase {
 
     // For some reason return isn't processed correctly unless we delay.
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, base::Bind(&BookmarkBarViewTest12::Step5, this,
-                              base::Unretained(dialog)),
+        FROM_HERE,
+        base::BindOnce(&BookmarkBarViewTest12::Step5, this,
+                       base::Unretained(dialog)),
         base::TimeDelta::FromSeconds(1));
   }
 

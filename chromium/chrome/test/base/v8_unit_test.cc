@@ -7,7 +7,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
@@ -182,6 +181,8 @@ void V8UnitTest::SetUp() {
   send_function->RemovePrototype();
   chrome->Set(v8::String::NewFromUtf8(isolate, "send"), send_function);
 
+  context_.Reset(isolate, v8::Context::New(isolate, NULL, global));
+
   // Set up console object for console.log(), etc.
   v8::Local<v8::ObjectTemplate> console = v8::ObjectTemplate::New(isolate);
   global->Set(v8::String::NewFromUtf8(isolate, "console"), console);
@@ -192,10 +193,14 @@ void V8UnitTest::SetUp() {
       v8::FunctionTemplate::New(isolate, &V8UnitTest::Error);
   error_function->RemovePrototype();
   console->Set(v8::String::NewFromUtf8(isolate, "error"), error_function);
-
-  context_.Reset(isolate, v8::Context::New(isolate, NULL, global));
-
-  loop_ = base::MakeUnique<base::MessageLoop>();
+  {
+    v8::Local<v8::Context> context = context_.Get(isolate);
+    v8::Context::Scope context_scope(context);
+    context->Global()
+        ->Set(context, v8::String::NewFromUtf8(isolate, "console"),
+              console->NewInstance(context).ToLocalChecked())
+        .ToChecked();
+  }
 }
 
 void V8UnitTest::SetGlobalStringVar(const std::string& var_name,

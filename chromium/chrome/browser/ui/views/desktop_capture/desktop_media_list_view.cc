@@ -95,7 +95,7 @@ DesktopMediaSourceView* DesktopMediaListView::GetSelection() {
   return nullptr;
 }
 
-gfx::Size DesktopMediaListView::GetPreferredSize() const {
+gfx::Size DesktopMediaListView::CalculatePreferredSize() const {
   int total_rows =
       (child_count() + active_style_->columns - 1) / active_style_->columns;
   return gfx::Size(active_style_->columns * active_style_->item_size.width(),
@@ -206,8 +206,8 @@ void DesktopMediaListView::OnSourceAdded(DesktopMediaList* list, int index) {
     source_view->OnFocus();
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&DesktopMediaListView::AcceptSelection,
-                   weak_factory_.GetWeakPtr()));
+        base::BindOnce(&DesktopMediaListView::AcceptSelection,
+                       weak_factory_.GetWeakPtr()));
   }
 }
 

@@ -6,12 +6,12 @@
 
 #include <memory>
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "modules/audio_output_devices/AudioOutputDeviceClient.h"
 #include "modules/audio_output_devices/SetSinkIdCallbacks.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebSecurityOrigin.h"
 
@@ -66,7 +66,8 @@ void SetSinkIdResolver::StartAsync() {
 
 void SetSinkIdResolver::TimerFired(TimerBase* timer) {
   ExecutionContext* context = GetExecutionContext();
-  ASSERT(context && context->IsDocument());
+  DCHECK(context);
+  DCHECK(context->IsDocument());
   std::unique_ptr<SetSinkIdCallbacks> callbacks =
       WTF::WrapUnique(new SetSinkIdCallbacks(this, *element_, sink_id_));
   WebMediaPlayer* web_media_player = element_->GetWebMediaPlayer();

@@ -41,6 +41,7 @@
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_request_headers.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_status.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -902,8 +903,36 @@ std::unique_ptr<net::URLFetcher> SearchProvider::CreateSuggestFetcher(
 
   LogOmniboxSuggestRequest(REQUEST_SENT);
 
-  std::unique_ptr<net::URLFetcher> fetcher =
-      net::URLFetcher::Create(id, suggest_url, net::URLFetcher::GET, this);
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("omnibox_suggest", R"(
+        semantics {
+          sender: "Omnibox"
+          description:
+            "Chrome can provide search and navigation suggestions from the "
+            "currently-selected search provider in the omnibox dropdown, based "
+            "on user input."
+          trigger: "User typing in the omnibox."
+          data:
+            "The text typed into the address bar. Potentially other metadata, "
+            "such as the current cursor position or URL of the current page."
+          destination: WEBSITE
+        }
+        policy {
+          cookies_allowed: true
+          cookies_store: "user"
+          setting:
+            "Users can control this feature via the 'Use a prediction service "
+            "to help complete searches and URLs typed in the address bar' "
+            "setting under 'Privacy'. The feature is enabled by default."
+          chrome_policy {
+            SearchSuggestEnabled {
+                policy_options {mode: MANDATORY}
+                SearchSuggestEnabled: false
+            }
+          }
+        })");
+  std::unique_ptr<net::URLFetcher> fetcher = net::URLFetcher::Create(
+      id, suggest_url, net::URLFetcher::GET, this, traffic_annotation);
   data_use_measurement::DataUseUserData::AttachToFetcher(
       fetcher.get(), data_use_measurement::DataUseUserData::OMNIBOX);
   fetcher->SetRequestContext(client()->GetRequestContext());
@@ -1016,11 +1045,11 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
   // that set a legal default match if possible.  If Instant Extended is enabled
   // and we have server-provided (and thus hopefully more accurate) scores for
   // some suggestions, we allow more of those, until we reach
-  // AutocompleteResult::kMaxMatches total matches (that is, enough to fill the
-  // whole popup).
+  // AutocompleteResult::GetMaxMatches() total matches (that is, enough to fill
+  // the whole popup).
   //
   // We will always return any verbatim matches, no matter how we obtained their
-  // scores, unless we have already accepted AutocompleteResult::kMaxMatches
+  // scores, unless we have already accepted AutocompleteResult::GetMaxMatches()
   // higher-scoring matches under the conditions above.
   std::sort(matches.begin(), matches.end(), &AutocompleteMatch::MoreRelevant);
 
@@ -1044,7 +1073,7 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
   size_t num_suggestions = 0;
   for (ACMatches::const_iterator i(matches.begin());
        (i != matches.end()) &&
-           (matches_.size() < AutocompleteResult::kMaxMatches);
+       (matches_.size() < AutocompleteResult::GetMaxMatches());
        ++i) {
     // SEARCH_OTHER_ENGINE is only used in the SearchProvider for the keyword
     // verbatim result, so this condition basically means "if this match is a

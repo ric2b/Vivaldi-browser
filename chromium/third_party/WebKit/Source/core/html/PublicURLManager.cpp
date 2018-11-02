@@ -88,7 +88,7 @@ void PublicURLManager::Revoke(const String& uuid) {
     }
     for (const auto& url : urls_to_remove)
       registered_urls.erase(url);
-    urls_to_remove.Clear();
+    urls_to_remove.clear();
   }
 }
 
@@ -102,7 +102,7 @@ void PublicURLManager::ContextDestroyed(ExecutionContext*) {
       registry_url.key->UnregisterURL(KURL(kParsedURLString, url.key));
   }
 
-  registry_to_url_.Clear();
+  registry_to_url_.clear();
 }
 
 DEFINE_TRACE(PublicURLManager) {

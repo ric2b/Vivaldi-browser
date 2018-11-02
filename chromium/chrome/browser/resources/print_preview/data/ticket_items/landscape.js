@@ -27,7 +27,7 @@ cr.define('print_preview.ticket_items', function() {
     print_preview.ticket_items.TicketItem.call(
         this,
         appState,
-        print_preview.AppState.Field.IS_LANDSCAPE_ENABLED,
+        print_preview.AppStateField.IS_LANDSCAPE_ENABLED,
         destinationStore,
         documentInfo);
 
@@ -44,7 +44,7 @@ cr.define('print_preview.ticket_items', function() {
      * @private
      */
     this.customMargins_ = customMargins;
-  };
+  }
 
   Landscape.prototype = {
     __proto__: print_preview.ticket_items.TicketItem.prototype,
@@ -103,7 +103,7 @@ cr.define('print_preview.ticket_items', function() {
       if (updateMargins) {
         // Reset the user set margins when page orientation changes.
         this.marginsType_.updateValue(
-          print_preview.ticket_items.MarginsType.Value.DEFAULT);
+          print_preview.ticket_items.MarginsTypeValue.DEFAULT);
         this.customMargins_.updateValue(null);
       }
     },

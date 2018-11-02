@@ -304,6 +304,7 @@ source_set("browser_sources") {
       "//crypto:platform",
       "//extensions:extensions_browser_resources",
       "//extensions/common",
+      "//services/preferences/public/cpp",
       "//services/service_manager/public/cpp",
     ]
   }
@@ -313,6 +314,11 @@ source_set("browser_tests") {
   testonly = true
   sources = [
     "api/audio/audio_apitest.cc",
+
+    # TODO(michaelpg): bluetooth_appshell_test.cc is a crutch until we have a
+    # better system for testing APIs in both app_shell and chrome. See
+    # crbug.com/650835.
+    "api/bluetooth/bluetooth_appshell_test.cc",
     "api/bluetooth_socket/bluetooth_socket_apitest.cc",
     "api/display_source/display_source_apitest.cc",
     "api/display_source/display_source_apitestbase.cc",
@@ -364,9 +370,15 @@ source_set("browser_tests") {
     deps += [ "//extensions/shell:app_shell" ]
   }
   if (is_chromeos) {
-    sources += [ "api/virtual_keyboard/virtual_keyboard_apitest.cc" ]
+    sources += [
+      "api/media_perception_private/media_perception_private_apitest.cc",
+      "api/virtual_keyboard/virtual_keyboard_apitest.cc",
+    ]
 
-    deps += [ "//chromeos" ]
+    deps += [
+      "//chromeos",
+      "//chromeos:media_perception_proto",
+    ]
   }
 }
 
@@ -500,15 +512,20 @@ source_set("unit_tests") {
     "//net:test_support",
     "//storage/browser:test_support",
     "//third_party/leveldatabase",
-    "//third_party/zlib:zip",
+    "//third_party/zlib/google:zip",
   ]
 
   if (is_chromeos) {
     sources += [
       "api/audio/audio_device_id_calculator_unittest.cc",
+      "api/media_perception_private/conversion_utils_unittest.cc",
+      "api/media_perception_private/media_perception_api_manager_unittest.cc",
       "api/webcam_private/visca_webcam_unittest.cc",
     ]
 
-    deps += [ "//chromeos:test_support" ]
+    deps += [
+      "//chromeos:media_perception_proto",
+      "//chromeos:test_support",
+    ]
   }
 }

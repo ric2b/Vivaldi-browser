@@ -468,7 +468,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // Default behavior is to animate both show and hide.
   void SetVisibilityAnimationTransition(VisibilityTransition transition);
 
-  // Starts a nested message loop that moves the window. This can be used to
+  // Starts a nested run loop that moves the window. This can be used to
   // start a window move operation from a mouse or touch event. This returns
   // when the move completes. |drag_offset| is the offset from the top left
   // corner of the window to the point where the cursor is dragging, and is used
@@ -504,7 +504,8 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   // Shows the widget. The widget is activated if during initialization the
   // can_activate flag in the InitParams structure is set to true.
-  virtual void Show();
+  void Show();
+
   // Hides the widget.
   void Hide();
 

@@ -23,8 +23,8 @@ cr.define('print_preview', function() {
     /** @private {!Array<print_preview.SettingsSection>} */
     this.settingsSections_ = settingsSections;
 
-    /** @private {MoreSettings.SettingsToShow} */
-    this.settingsToShow_ = MoreSettings.SettingsToShow.MOST_POPULAR;
+    /** @private {boolean} */
+    this.showAll_ = false;
 
     /** @private {boolean} */
     this.capabilitiesReady_ = false;
@@ -37,23 +37,14 @@ cr.define('print_preview', function() {
      * @private {!print_preview.PrintSettingsUiMetricsContext}
      */
     this.metrics_ = new print_preview.PrintSettingsUiMetricsContext();
-  };
-
-  /**
-   * Which settings are visible to the user.
-   * @enum {number}
-   */
-  MoreSettings.SettingsToShow = {
-    MOST_POPULAR: 1,
-    ALL: 2
-  };
+  }
 
   MoreSettings.prototype = {
     __proto__: print_preview.Component.prototype,
 
-    /** @return {boolean} Returns {@code true} if settings are expanded. */
+    /** @return {boolean} Whether the settings are expanded. */
     get isExpanded() {
-      return this.settingsToShow_ == MoreSettings.SettingsToShow.ALL;
+      return this.showAll_;
     },
 
     /** @override */
@@ -86,10 +77,7 @@ cr.define('print_preview', function() {
      * @private
      */
     onClick_: function() {
-      this.settingsToShow_ =
-          this.settingsToShow_ == MoreSettings.SettingsToShow.MOST_POPULAR ?
-              MoreSettings.SettingsToShow.ALL :
-              MoreSettings.SettingsToShow.MOST_POPULAR;
+      this.showAll_ = !this.showAll_;
       this.updateState_(false);
       this.metrics_.record(this.isExpanded ?
           print_preview.Metrics.PrintSettingsUiBucket.MORE_SETTINGS_CLICKED :
@@ -131,12 +119,12 @@ cr.define('print_preview', function() {
       if (!this.capabilitiesReady_)
         return;
 
-      var all = this.settingsToShow_ == MoreSettings.SettingsToShow.ALL;
       this.getChildElement('.more-settings-label').textContent =
-          loadTimeData.getString(all ? 'lessOptionsLabel' : 'moreOptionsLabel');
+          loadTimeData.getString(this.isExpanded ? 'lessOptionsLabel' :
+                                                   'moreOptionsLabel');
       var iconEl = this.getChildElement('.more-settings-icon');
-      iconEl.classList.toggle('more-settings-icon-plus', !all);
-      iconEl.classList.toggle('more-settings-icon-minus', all);
+      iconEl.classList.toggle('more-settings-icon-plus', !this.isExpanded);
+      iconEl.classList.toggle('more-settings-icon-minus', this.isExpanded);
 
       var availableSections = this.settingsSections_.reduce(
           function(count, section) {
@@ -156,9 +144,7 @@ cr.define('print_preview', function() {
       else
         fadeOutElement(this.getElement());
 
-      var collapseContent =
-          this.settingsToShow_ == MoreSettings.SettingsToShow.MOST_POPULAR &&
-          hasSectionsToToggle;
+      var collapseContent = !this.isExpanded && hasSectionsToToggle;
       this.settingsSections_.forEach(function(section) {
         section.setCollapseContent(collapseContent, noAnimation);
       });

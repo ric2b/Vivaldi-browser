@@ -78,7 +78,7 @@ bool AXTableCell::ComputeAccessibilityIsIgnored(
   return false;
 }
 
-AXObject* AXTableCell::ParentTable() const {
+AXObjectImpl* AXTableCell::ParentTable() const {
   if (!layout_object_ || !layout_object_->IsTableCell())
     return 0;
 
@@ -96,7 +96,7 @@ AXObject* AXTableCell::ParentTable() const {
 }
 
 bool AXTableCell::IsTableCell() const {
-  AXObject* parent = ParentObjectUnignored();
+  AXObjectImpl* parent = ParentObjectUnignored();
   if (!parent || !parent->IsTableRow())
     return false;
 
@@ -104,11 +104,13 @@ bool AXTableCell::IsTableCell() const {
 }
 
 unsigned AXTableCell::AriaColumnIndex() const {
-  const AtomicString& col_index = GetAttribute(aria_colindexAttr);
-  if (col_index.ToInt() >= 1)
-    return col_index.ToInt();
+  uint32_t col_index;
+  if (HasAOMPropertyOrARIAAttribute(AOMUIntProperty::kColIndex, col_index) &&
+      col_index >= 1) {
+    return col_index;
+  }
 
-  AXObject* parent = ParentObjectUnignored();
+  AXObjectImpl* parent = ParentObjectUnignored();
   if (!parent || !parent->IsTableRow())
     return 0;
 
@@ -116,11 +118,13 @@ unsigned AXTableCell::AriaColumnIndex() const {
 }
 
 unsigned AXTableCell::AriaRowIndex() const {
-  const AtomicString& row_index = GetAttribute(aria_rowindexAttr);
-  if (row_index.ToInt() >= 1)
-    return row_index.ToInt();
+  uint32_t row_index;
+  if (HasAOMPropertyOrARIAAttribute(AOMUIntProperty::kRowIndex, row_index) &&
+      row_index >= 1) {
+    return row_index;
+  }
 
-  AXObject* parent = ParentObjectUnignored();
+  AXObjectImpl* parent = ParentObjectUnignored();
   if (!parent || !parent->IsTableRow())
     return 0;
 

@@ -5,21 +5,24 @@
 #ifndef CHROME_BROWSER_PAYMENTS_PAYMENT_REQUEST_FACTORY_H_
 #define CHROME_BROWSER_PAYMENTS_PAYMENT_REQUEST_FACTORY_H_
 
-#include "components/payments/content/payment_request.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "components/payments/mojom/payment_request.mojom.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 
 namespace content {
+class RenderFrameHost;
 class WebContents;
 }
 
 namespace payments {
 
-// Will create a PaymentRequest attached to |web_contents|, based on the
-// contents of |request|. This is called everytime a new Mojo PaymentRequest is
-// created.
-void CreatePaymentRequestForWebContents(
-    content::WebContents* web_contents,
-    mojo::InterfaceRequest<payments::mojom::PaymentRequest> request);
+// Will create a PaymentRequest based on the contents of |request|. The
+// |request| was initiated by the frame hosted by |render_frame_host|, which is
+// inside of |web_contents|. This function is called every time a new instance
+// of PaymentRequest is created in the renderer.
+void CreatePaymentRequest(content::RenderFrameHost* render_frame_host,
+                          content::WebContents* web_contents,
+                          const service_manager::BindSourceInfo& source_info,
+                          mojom::PaymentRequestRequest request);
 
 }  // namespace payments
 

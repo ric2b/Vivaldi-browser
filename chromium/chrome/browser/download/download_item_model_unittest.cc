@@ -143,6 +143,8 @@ TEST_F(DownloadItemModelTest, InterruptedStatus) {
        "Failed - Virus scan failed"},
       {content::DOWNLOAD_INTERRUPT_REASON_FILE_TOO_SHORT,
        "Failed - File truncated"},
+      {content::DOWNLOAD_INTERRUPT_REASON_FILE_SAME_AS_SOURCE,
+       "Failed - Already downloaded"},
       {content::DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR,
        "Failed - System busy"},
       {content::DOWNLOAD_INTERRUPT_REASON_FILE_HASH_MISMATCH,
@@ -171,6 +173,8 @@ TEST_F(DownloadItemModelTest, InterruptedStatus) {
        "Failed - Forbidden"},
       {content::DOWNLOAD_INTERRUPT_REASON_SERVER_UNREACHABLE,
        "Failed - Server unreachable"},
+      {content::DOWNLOAD_INTERRUPT_REASON_SERVER_CONTENT_LENGTH_MISMATCH,
+       "Failed - File incomplete"},
       {content::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED, "Canceled"},
       {content::DOWNLOAD_INTERRUPT_REASON_USER_SHUTDOWN, "Failed - Shutdown"},
       {content::DOWNLOAD_INTERRUPT_REASON_CRASH, "Failed - Crash"},
@@ -217,6 +221,8 @@ TEST_F(DownloadItemModelTest, InterruptTooltip) {
        "foo.bar\nVirus scan failed"},
       {content::DOWNLOAD_INTERRUPT_REASON_FILE_TOO_SHORT,
        "foo.bar\nFile truncated"},
+      {content::DOWNLOAD_INTERRUPT_REASON_FILE_SAME_AS_SOURCE,
+       "foo.bar\nAlready downloaded"},
       {content::DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR,
        "foo.bar\nSystem busy"},
       {content::DOWNLOAD_INTERRUPT_REASON_FILE_HASH_MISMATCH,
@@ -245,6 +251,8 @@ TEST_F(DownloadItemModelTest, InterruptTooltip) {
        "foo.bar\nForbidden"},
       {content::DOWNLOAD_INTERRUPT_REASON_SERVER_UNREACHABLE,
        "foo.bar\nServer unreachable"},
+      {content::DOWNLOAD_INTERRUPT_REASON_SERVER_CONTENT_LENGTH_MISMATCH,
+       "foo.bar\nFile incomplete"},
       {content::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED, "foo.bar"},
       {content::DOWNLOAD_INTERRUPT_REASON_USER_SHUTDOWN, "foo.bar\nShutdown"},
       {content::DOWNLOAD_INTERRUPT_REASON_CRASH, "foo.bar\nCrash"},
@@ -362,15 +370,24 @@ TEST_F(DownloadItemModelTest, InProgressStatus) {
 TEST_F(DownloadItemModelTest, ShouldShowInShelf) {
   SetupDownloadItemDefaults();
 
-  // By default the download item should be displayable on the shelf.
+  // By default the download item should be displayable on the shelf when it is
+  // not a transient download.
+  EXPECT_CALL(item(), IsTransient()).WillOnce(Return(false));
   EXPECT_TRUE(model().ShouldShowInShelf());
 
-  // Once explicitly set, ShouldShowInShelf() should return the explicit value.
-  model().SetShouldShowInShelf(false);
+  EXPECT_CALL(item(), IsTransient()).WillOnce(Return(true));
   EXPECT_FALSE(model().ShouldShowInShelf());
+
+  // Once explicitly set, ShouldShowInShelf() should return the explicit value
+  // regardless of whether it's a transient download, which should no longer
+  // be considered by the model after initializing it.
+  EXPECT_CALL(item(), IsTransient()).Times(1);
 
   model().SetShouldShowInShelf(true);
   EXPECT_TRUE(model().ShouldShowInShelf());
+
+  model().SetShouldShowInShelf(false);
+  EXPECT_FALSE(model().ShouldShowInShelf());
 }
 
 TEST_F(DownloadItemModelTest, DangerLevel) {

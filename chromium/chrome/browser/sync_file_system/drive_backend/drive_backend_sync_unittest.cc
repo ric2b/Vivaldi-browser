@@ -12,7 +12,9 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/sync_file_system/drive_backend/callback_helper.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_constants.h"
@@ -88,18 +90,13 @@ class DriveBackendSyncTest : public testing::Test,
 
     io_task_runner_ = content::BrowserThread::GetTaskRunnerForThread(
         content::BrowserThread::IO);
-    scoped_refptr<base::SequencedWorkerPool> worker_pool(
-        content::BrowserThread::GetBlockingPool());
-    worker_task_runner_ =
-        worker_pool->GetSequencedTaskRunnerWithShutdownBehavior(
-            worker_pool->GetSequenceToken(),
-            base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
+    worker_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
+        {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
     file_task_runner_ = content::BrowserThread::GetTaskRunnerForThread(
         content::BrowserThread::FILE);
     scoped_refptr<base::SequencedTaskRunner> drive_task_runner =
-        worker_pool->GetSequencedTaskRunnerWithShutdownBehavior(
-            worker_pool->GetSequenceToken(),
-            base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
+        base::CreateSequencedTaskRunnerWithTraits(
+            {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 
     RegisterSyncableFileSystem();
     local_sync_service_ = LocalFileSyncService::CreateForTesting(
@@ -118,18 +115,18 @@ class DriveBackendSyncTest : public testing::Test,
         drive_service.get(), uploader.get(),
         kSyncRootFolderTitle));
 
-    remote_sync_service_.reset(
-        new SyncEngine(base::ThreadTaskRunnerHandle::Get(),  // ui_task_runner
-                       worker_task_runner_.get(), drive_task_runner.get(),
-                       worker_pool.get(), base_dir_.GetPath(),
-                       nullptr,  // task_logger
-                       nullptr,  // notification_manager
-                       nullptr,  // extension_service
-                       nullptr,  // signin_manager
-                       nullptr,  // token_service
-                       nullptr,  // request_context
-                       nullptr,  // drive_service
-                       in_memory_env_.get()));
+    remote_sync_service_.reset(new SyncEngine(
+        base::ThreadTaskRunnerHandle::Get(),  // ui_task_runner
+        worker_task_runner_.get(), drive_task_runner.get(),
+        content::BrowserThread::GetBlockingPool(), base_dir_.GetPath(),
+        nullptr,  // task_logger
+        nullptr,  // notification_manager
+        nullptr,  // extension_service
+        nullptr,  // signin_manager
+        nullptr,  // token_service
+        nullptr,  // request_context
+        nullptr,  // drive_service
+        in_memory_env_.get()));
     remote_sync_service_->AddServiceObserver(this);
     remote_sync_service_->InitializeForTesting(std::move(drive_service),
                                                std::move(uploader),
@@ -597,11 +594,9 @@ class DriveBackendSyncTest : public testing::Test,
     base::RunLoop run_loop;
     worker_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&SyncWorker::CallOnIdleForTesting,
-                   base::Unretained(sync_worker()),
-                   RelayCallbackToCurrentThread(
-                       FROM_HERE,
-                       run_loop.QuitClosure())));
+        base::BindOnce(
+            &SyncWorker::CallOnIdleForTesting, base::Unretained(sync_worker()),
+            RelayCallbackToCurrentThread(FROM_HERE, run_loop.QuitClosure())));
     run_loop.Run();
   }
 

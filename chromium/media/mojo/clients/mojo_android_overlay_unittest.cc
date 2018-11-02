@@ -4,18 +4,21 @@
 
 #include <memory>
 
+#include "base/android/jni_android.h"
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "gpu/ipc/common/gpu_surface_tracker.h"
 #include "media/base/mock_filters.h"
 #include "media/mojo/clients/mojo_android_overlay.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/interfaces/interface_provider.mojom.h"
-
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gl/android/scoped_java_surface.h"
+#include "ui/gl/android/surface_texture.h"
 
 using ::testing::_;
 using ::testing::StrictMock;
@@ -64,34 +67,9 @@ class MojoAndroidOverlayTest : public ::testing::Test {
     mojom::AndroidOverlayConfigPtr config_;
   };
 
-  // When the overlay client needs the provider interface, it'll ask us.
-  class MockInterfaceProvider
-      : public StrictMock<service_manager::mojom::InterfaceProvider> {
-   public:
-    // |provider| is the provider that we'll provide, provided that we're only
-    // asked to provide it once.  Savvy?
-    MockInterfaceProvider(mojom::AndroidOverlayProvider& provider)
-        : provider_binding_(&provider) {}
-
-    // We can't mock GetInterface directly because of |handle|'s deleted ctor.
-    MOCK_METHOD1(InterfaceGotten, void(const std::string&));
-
-    void GetInterface(const std::string& name,
-                      mojo::ScopedMessagePipeHandle handle) override {
-      // Let the mock know.
-      InterfaceGotten(name);
-
-      // Actually do the work.
-      provider_binding_.Bind(
-          mojo::MakeRequest<mojom::AndroidOverlayProvider>(std::move(handle)));
-    }
-
-    mojo::Binding<mojom::AndroidOverlayProvider> provider_binding_;
-  };
-
  public:
   MojoAndroidOverlayTest()
-      : overlay_binding_(&mock_overlay_), interface_provider_(mock_provider_) {}
+      : provider_binding_(&mock_provider_), overlay_binding_(&mock_overlay_) {}
 
   ~MojoAndroidOverlayTest() override {}
 
@@ -102,26 +80,37 @@ class MojoAndroidOverlayTest : public ::testing::Test {
                                   base::Unretained(&callbacks_));
     config_.failed_cb = base::Bind(&MockClientCallbacks::OnFailed,
                                    base::Unretained(&callbacks_));
-    config_.destroyed_cb = base::Bind(&MockClientCallbacks::OnDestroyed,
-                                      base::Unretained(&callbacks_));
+
+    // Make sure that we have an implementation of GpuSurfaceLookup.
+    gpu::GpuSurfaceTracker::Get();
   }
 
   void TearDown() override {
     overlay_client_.reset();
+
+    // If we registered a surface, then unregister it.
+    if (surface_texture_) {
+      gpu::GpuSurfaceTracker::Get()->RemoveSurface(surface_key_);
+      // Drop the surface before the surface texture.
+      surface_ = gl::ScopedJavaSurface();
+    }
+
     base::RunLoop().RunUntilIdle();
   }
 
   // Create an overlay in |overlay_client_| using the current config, but do
   // not bind anything to |overlay_request_| yet.
   void CreateOverlay() {
-    EXPECT_CALL(interface_provider_,
-                InterfaceGotten(mojom::AndroidOverlayProvider::Name_))
-        .Times(1);
     EXPECT_CALL(mock_provider_, OverlayCreated());
 
     base::UnguessableToken routing_token = base::UnguessableToken::Create();
-    overlay_client_.reset(
-        new MojoAndroidOverlay(&interface_provider_, config_, routing_token));
+    mojom::AndroidOverlayProviderPtr provider_ptr;
+    provider_binding_.Bind(mojo::MakeRequest(&provider_ptr));
+
+    overlay_client_.reset(new MojoAndroidOverlay(
+        std::move(provider_ptr), std::move(config_), routing_token));
+    overlay_client_->AddSurfaceDestroyedCallback(base::Bind(
+        &MockClientCallbacks::OnDestroyed, base::Unretained(&callbacks_)));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -137,9 +126,22 @@ class MojoAndroidOverlayTest : public ::testing::Test {
   // Notify |overlay_client_| that the surface is ready.
   void CreateSurface() {
     EXPECT_CALL(callbacks_, OnReady(overlay_client_.get()));
-    const int surface_key = 123;
-    mock_provider_.client_->OnSurfaceReady(surface_key);
+
+    // We have to actually add a valid surface, else the client will get mad
+    // when it tries to retrieve it.
+    surface_texture_ = gl::SurfaceTexture::Create(0);
+    surface_ = gl::ScopedJavaSurface(surface_texture_.get());
+    surface_key_ = gpu::GpuSurfaceTracker::Get()->AddSurfaceForNativeWidget(
+        gpu::GpuSurfaceTracker::SurfaceRecord(gfx::kNullAcceleratedWidget,
+                                              surface_.j_surface().obj()));
+
+    mock_provider_.client_->OnSurfaceReady(surface_key_);
     base::RunLoop().RunUntilIdle();
+
+    // Verify that we actually got back the right surface.
+    JNIEnv* env = base::android::AttachCurrentThread();
+    ASSERT_TRUE(env->IsSameObject(surface_.j_surface().obj(),
+                                  overlay_client_->GetJavaSurface().obj()));
   }
 
   // Destroy the overlay.  This includes onSurfaceDestroyed cases.
@@ -155,20 +157,27 @@ class MojoAndroidOverlayTest : public ::testing::Test {
   // |interface_provider_| will bind it.
   MockAndroidOverlayProvider mock_provider_;
 
+  // Binding for |mock_provider_|.
+  mojo::Binding<mojom::AndroidOverlayProvider> provider_binding_;
+
   // The mock overlay impl that |mock_provider_| will provide.
   MockAndroidOverlay mock_overlay_;
   mojo::Binding<mojom::AndroidOverlay> overlay_binding_;
 
-  // The InterfaceProvider impl that will provide |mock_provider_| to the
-  // overlay client |overlay_client_|.
-  MockInterfaceProvider interface_provider_;
-
   // The client under test.
   std::unique_ptr<AndroidOverlay> overlay_client_;
 
+  // If we create a surface, then these are the SurfaceTexture that owns it,
+  // the surface itself, and the key that we registered with GpuSurfaceLookup,
+  // respectively.  We could probably mock out GpuSurfaceLookup, but we'd still
+  // have to provide a (mock) ScopedJavaSurface, which isn't easy.
+  scoped_refptr<gl::SurfaceTexture> surface_texture_;
+  gl::ScopedJavaSurface surface_;
+  int surface_key_ = 0;
+
   // Inital config for |CreateOverlay|.
   // Set to sane values, but feel free to modify before CreateOverlay().
-  AndroidOverlay::Config config_;
+  AndroidOverlayConfig config_;
   MockClientCallbacks callbacks_;
 };
 
@@ -211,6 +220,20 @@ TEST_F(MojoAndroidOverlayTest, LayoutBeforeSurfaceIsIgnored) {
   gfx::Rect new_layout(5, 6, 7, 8);
   EXPECT_CALL(mock_overlay_, ScheduleLayout(_)).Times(0);
   overlay_client_->ScheduleLayout(new_layout);
+}
+
+// Test |secure| makes it to the mojo config when it is true
+TEST_F(MojoAndroidOverlayTest, SecureFlagIsSentViaMojoWhenTrue) {
+  config_.secure = true;
+  CreateOverlay();
+  ASSERT_TRUE(mock_provider_.config_->secure);
+}
+
+// Test |secure| makes it to the mojo config when it is false
+TEST_F(MojoAndroidOverlayTest, SecureFlagIsSentViaMojoWhenFalse) {
+  config_.secure = false;
+  CreateOverlay();
+  ASSERT_FALSE(mock_provider_.config_->secure);
 }
 
 }  // namespace media

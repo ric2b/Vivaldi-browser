@@ -33,7 +33,8 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace content {
 namespace {
@@ -84,9 +85,7 @@ class BrowserTargetImpl : public mojom::BrowserTarget {
   ~BrowserTargetImpl() override {}
 
   // mojom::BrowserTarget overrides:
-  void Start(const StartCallback& closure) override {
-    closure.Run();
-  }
+  void Start(StartCallback closure) override { std::move(closure).Run(); }
   void Stop() override {
     g_got_message = true;
     run_loop_->Quit();
@@ -134,7 +133,8 @@ class PingTestWebUIController : public TestWebUIController {
                    base::Unretained(this)));
   }
 
-  void CreateHandler(mojo::InterfaceRequest<mojom::BrowserTarget> request) {
+  void CreateHandler(const service_manager::BindSourceInfo& source_info,
+                     mojom::BrowserTargetRequest request) {
     browser_target_ =
         base::MakeUnique<BrowserTargetImpl>(run_loop_, std::move(request));
   }

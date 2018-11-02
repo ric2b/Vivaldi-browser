@@ -4,7 +4,7 @@
 
 #include "chrome/browser/chromeos/arc/arc_play_store_enabled_preference_handler.h"
 
-#include "ash/shelf/shelf_delegate.h"
+#include "ash/shelf/shelf_model.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -12,10 +12,10 @@
 #include "chrome/browser/chromeos/arc/arc_auth_notification.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
-#include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_util.h"
@@ -93,11 +93,11 @@ void ArcPlayStoreEnabledPreferenceHandler::OnPreferenceChanged() {
       // Remove the pinned Play Store icon launcher in Shelf.
       // This is only for non-Managed cases. In managed cases, it is expected
       // to be "disabled" rather than "removed", so keep it here.
-      auto* shelf_delegate = ash::Shell::HasInstance()
-                                 ? ash::Shell::Get()->shelf_delegate()
-                                 : nullptr;
-      if (shelf_delegate)
-        shelf_delegate->UnpinAppWithID(ArcSupportHost::kHostAppId);
+      auto* shelf_model = ash::Shell::HasInstance()
+                              ? ash::Shell::Get()->shelf_model()
+                              : nullptr;
+      if (shelf_model)
+        shelf_model->UnpinAppWithID(kPlayStoreAppId);
     }
   }
 

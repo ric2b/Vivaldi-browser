@@ -19,6 +19,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search/suggestions/suggestions_ui.h"
+#include "chrome/browser/ui/history_ui.h"
 #include "chrome/browser/ui/webui/about_ui.h"
 #include "chrome/browser/ui/webui/bluetooth_internals/bluetooth_internals_ui.h"
 #include "chrome/browser/ui/webui/bookmarks_ui.h"
@@ -32,7 +33,6 @@
 #include "chrome/browser/ui/webui/flash_ui.h"
 #include "chrome/browser/ui/webui/gcm_internals_ui.h"
 #include "chrome/browser/ui/webui/help/help_ui.h"
-#include "chrome/browser/ui/webui/history_ui.h"
 #include "chrome/browser/ui/webui/identity_internals_ui.h"
 #include "chrome/browser/ui/webui/instant_ui.h"
 #include "chrome/browser/ui/webui/interstitials/interstitial_ui.h"
@@ -101,14 +101,12 @@
 #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
 #endif
 
-#if defined(ENABLE_MEDIA_ROUTER)
 #if !defined(OS_ANDROID)
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/ui/webui/media_router/media_router_ui.h"
 #endif
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
 #include "chrome/browser/ui/webui/cast/cast_ui.h"
-#endif
 #endif
 
 #if defined(OS_ANDROID)
@@ -183,7 +181,7 @@
 #include "chrome/browser/ui/webui/sandbox_internals_ui.h"
 #endif
 
-#if (defined(USE_NSS_CERTS) || defined(USE_OPENSSL_CERTS)) && defined(USE_AURA)
+#if defined(USE_NSS_CERTS) && defined(USE_AURA)
 #include "chrome/browser/ui/webui/certificate_viewer_ui.h"
 #endif
 
@@ -342,8 +340,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<FlagsUI>;
   if (url.host_piece() == chrome::kChromeUIGCMInternalsHost)
     return &NewWebUI<GCMInternalsUI>;
-  if (url.host_piece() == chrome::kChromeUIHistoryFrameHost)
-    return &NewWebUI<HistoryUI>;
   if (url.host_piece() == chrome::kChromeUIInstantHost)
     return &NewWebUI<InstantUI>;
   if (url.host_piece() == chrome::kChromeUIInterstitialHost)
@@ -435,11 +431,8 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
       base::FeatureList::IsEnabled(features::kMaterialDesignExtensions)) {
     return &NewWebUI<extensions::ExtensionsUI>;
   }
-  // Material Design history is on its own host, rather than on an Uber page.
-  if (base::FeatureList::IsEnabled(features::kMaterialDesignHistory) &&
-      url.host_piece() == chrome::kChromeUIHistoryHost) {
+  if (url.host_piece() == chrome::kChromeUIHistoryHost)
     return &NewWebUI<MdHistoryUI>;
-  }
   // Material Design Settings gets its own host, if enabled.
   if (base::FeatureList::IsEnabled(features::kMaterialDesignSettings) &&
       url.host_piece() == chrome::kChromeUISettingsHost) {
@@ -573,14 +566,14 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<ConstrainedWebDialogUI>;
   }
 #endif
-#if (defined(USE_NSS_CERTS) || defined(USE_OPENSSL_CERTS)) && defined(USE_AURA)
+#if defined(USE_NSS_CERTS) && defined(USE_AURA)
   if (url.host_piece() == chrome::kChromeUICertificateViewerHost)
     return &NewWebUI<CertificateViewerUI>;
 #if defined(OS_CHROMEOS)
   if (url.host_piece() == chrome::kChromeUICertificateViewerDialogHost)
     return &NewWebUI<CertificateViewerModalDialogUI>;
 #endif
-#endif  // (USE_NSS_CERTS || USE_OPENSSL_CERTS) && USE_AURA
+#endif  // USE_NSS_CERTS && USE_AURA
 
   if (url.host_piece() == chrome::kChromeUIPolicyHost)
     return &NewWebUI<PolicyUI>;
@@ -616,7 +609,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   if (url.host_piece() == chrome::kChromeUIWebRtcLogsHost)
     return &NewWebUI<WebRtcLogsUI>;
 #endif
-#if defined(ENABLE_MEDIA_ROUTER)
 #if !defined(OS_ANDROID)
   if (url.host_piece() == chrome::kChromeUIMediaRouterHost &&
       media_router::MediaRouterEnabled(profile)) {
@@ -628,7 +620,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
       media_router::MediaRouterEnabled(profile)) {
     return &NewWebUI<CastUI>;
   }
-#endif
 #endif
 #if defined(OS_LINUX) || defined(OS_ANDROID)
   if (url.host_piece() == chrome::kChromeUISandboxHost) {
@@ -656,8 +647,8 @@ void RunFaviconCallbackAsync(
     const std::vector<favicon_base::FaviconRawBitmapResult>* results) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&favicon::FaviconService::FaviconResultsCallbackRunner,
-                 callback, base::Owned(results)));
+      base::BindOnce(&favicon::FaviconService::FaviconResultsCallbackRunner,
+                     callback, base::Owned(results)));
 }
 
 }  // namespace
@@ -801,8 +792,9 @@ base::RefCountedMemory* ChromeWebUIControllerFactory::GetFaviconResourceBytes(
   if (page_url.host_piece() == chrome::kChromeUIFlagsHost)
     return FlagsUI::GetFaviconResourceBytes(scale_factor);
 
+  // TODO(dbeam): does this actually need to exist on all platforms?
   if (page_url.host_piece() == chrome::kChromeUIHistoryHost)
-    return HistoryUI::GetFaviconResourceBytes(scale_factor);
+    return history_ui::GetFaviconResourceBytes(scale_factor);
 
 #if !defined(OS_ANDROID)
 #if !defined(OS_CHROMEOS)

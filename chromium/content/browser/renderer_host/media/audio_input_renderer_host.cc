@@ -39,8 +39,6 @@ namespace {
 #if BUILDFLAG(ENABLE_WEBRTC)
 const base::FilePath::CharType kDebugRecordingFileNameAddition[] =
     FILE_PATH_LITERAL("source_input");
-const base::FilePath::CharType kDebugRecordingFileNameExtension[] =
-    FILE_PATH_LITERAL("wav");
 #endif
 
 void LogMessage(int stream_id, const std::string& msg, bool add_prefix) {
@@ -178,9 +176,9 @@ void AudioInputRendererHost::DoCompleteCreation(
 
   // Once the audio stream is created then complete the creation process by
   // mapping shared memory and sharing with the renderer process.
-  base::SharedMemoryHandle foreign_memory_handle;
-  if (!entry->shared_memory.ShareToProcess(PeerHandle(),
-                                           &foreign_memory_handle)) {
+  base::SharedMemoryHandle foreign_memory_handle =
+      entry->shared_memory.handle().Duplicate();
+  if (!foreign_memory_handle.IsValid()) {
     // If we failed to map and share the shared memory then close the audio
     // stream and send an error message.
     DeleteEntryOnError(entry, MEMORY_SHARING_FAILED);
@@ -357,7 +355,6 @@ void AudioInputRendererHost::DoCreateStream(
             device_id, audio_params, audio_manager_->GetWorkerTaskRunner(),
             audio_mirroring_manager_),
         entry->writer.get(), user_input_monitor_,
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
         audio_params);
     // Only count for captures from desktop media picker dialog.
     if (entry->controller.get() && type == MEDIA_DESKTOP_AUDIO_CAPTURE)
@@ -365,8 +362,7 @@ void AudioInputRendererHost::DoCreateStream(
   } else {
     entry->controller = media::AudioInputController::Create(
         audio_manager_, this, entry->writer.get(), user_input_monitor_,
-        audio_params, device_id, config.automatic_gain_control,
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE));
+        audio_params, device_id, config.automatic_gain_control);
     oss << ", AGC=" << config.automatic_gain_control;
 
     // Only count for captures from desktop media picker dialog and system loop
@@ -589,8 +585,7 @@ void AudioInputRendererHost::EnableDebugRecordingForId(
   if (!entry)
     return;
   entry->controller->EnableDebugRecording(
-      file_name.AddExtension(IntToStringType(stream_id))
-          .AddExtension(kDebugRecordingFileNameExtension));
+      file_name.AddExtension(IntToStringType(stream_id)));
 }
 
 #undef IntToStringType

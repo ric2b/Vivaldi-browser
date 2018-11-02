@@ -31,7 +31,6 @@
 #include "core/inspector/InspectorPageAgent.h"
 
 #include <memory>
-#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptRegexp.h"
 #include "core/HTMLNames.h"
@@ -39,6 +38,7 @@
 #include "core/dom/Document.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -60,16 +60,17 @@
 #include "core/probe/CoreProbes.h"
 #include "platform/PlatformResourceLoader.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "wtf/CurrentTime.h"
-#include "wtf/ListHashSet.h"
-#include "wtf/Vector.h"
-#include "wtf/text/Base64.h"
-#include "wtf/text/TextEncoding.h"
+#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/ListHashSet.h"
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/Base64.h"
+#include "platform/wtf/text/TextEncoding.h"
 
 namespace blink {
 
@@ -81,8 +82,6 @@ static const char kPageAgentScriptsToEvaluateOnLoad[] =
     "pageAgentScriptsToEvaluateOnLoad";
 static const char kScreencastEnabled[] = "screencastEnabled";
 static const char kAutoAttachToCreatedPages[] = "autoAttachToCreatedPages";
-static const char kOverlaySuspended[] = "overlaySuspended";
-static const char kOverlayMessage[] = "overlayMessage";
 }
 
 namespace {
@@ -107,6 +106,8 @@ String DialogTypeToProtocol(ChromeClient::DialogType dialog_type) {
       return protocol::Page::DialogTypeEnum::Prompt;
     case ChromeClient::kHTMLDialog:
       return protocol::Page::DialogTypeEnum::Beforeunload;
+    case ChromeClient::kPrintDialog:
+      NOTREACHED();
   }
   return protocol::Page::DialogTypeEnum::Alert;
 }
@@ -376,19 +377,17 @@ InspectorPageAgent::InspectorPageAgent(
 void InspectorPageAgent::Restore() {
   if (state_->booleanProperty(PageAgentState::kPageAgentEnabled, false))
     enable();
-  if (client_) {
-    String overlay_message;
-    state_->getString(PageAgentState::kOverlayMessage, &overlay_message);
-    client_->ConfigureOverlay(
-        state_->booleanProperty(PageAgentState::kOverlaySuspended, false),
-        overlay_message);
-  }
 }
 
 Response InspectorPageAgent::enable() {
   enabled_ = true;
   state_->setBoolean(PageAgentState::kPageAgentEnabled, true);
   instrumenting_agents_->addInspectorPageAgent(this);
+
+  // Tell the browser the ids for all existing frames.
+  for (LocalFrame* frame : *inspected_frames_) {
+    frame->Client()->SetDevToolsFrameId(FrameId(frame));
+  }
   return Response::OK();
 }
 
@@ -403,7 +402,6 @@ Response InspectorPageAgent::disable() {
       resource_content_loader_client_id_);
 
   stopScreencast();
-  configureOverlay(false, String());
 
   FinishReload();
   return Response::OK();
@@ -461,6 +459,7 @@ Response InspectorPageAgent::reload(
 
 Response InspectorPageAgent::navigate(const String& url,
                                       Maybe<String> referrer,
+                                      Maybe<String> transitionType,
                                       String* out_frame_id) {
   *out_frame_id = FrameId(inspected_frames_->Root());
   return Response::OK();
@@ -684,8 +683,10 @@ void InspectorPageAgent::FrameAttachedToParent(LocalFrame* frame) {
     parent_frame = 0;
   std::unique_ptr<SourceLocation> location =
       SourceLocation::CaptureWithFullStackTrace();
+  String frame_id = FrameId(frame);
+  frame->Client()->SetDevToolsFrameId(frame_id);
   GetFrontend()->frameAttached(
-      FrameId(frame), FrameId(ToLocalFrame(parent_frame)),
+      frame_id, FrameId(ToLocalFrame(parent_frame)),
       location ? location->BuildInspectorObject() : nullptr);
 }
 
@@ -864,18 +865,6 @@ Response InspectorPageAgent::stopScreencast() {
   return Response::OK();
 }
 
-Response InspectorPageAgent::configureOverlay(Maybe<bool> suspended,
-                                              Maybe<String> message) {
-  state_->setBoolean(PageAgentState::kOverlaySuspended,
-                     suspended.fromMaybe(false));
-  state_->setString(PageAgentState::kOverlaySuspended,
-                    message.fromMaybe(String()));
-  if (client_)
-    client_->ConfigureOverlay(suspended.fromMaybe(false),
-                              message.fromMaybe(String()));
-  return Response::OK();
-}
-
 Response InspectorPageAgent::getLayoutMetrics(
     std::unique_ptr<protocol::Page::LayoutViewport>* out_layout_viewport,
     std::unique_ptr<protocol::Page::VisualViewport>* out_visual_viewport,
@@ -920,6 +909,29 @@ Response InspectorPageAgent::getLayoutMetrics(
           .setClientHeight(visible_rect.Height() - scrollbar_height)
           .setScale(scale)
           .build();
+  return Response::OK();
+}
+
+protocol::Response InspectorPageAgent::createIsolatedWorld(
+    const String& frame_id,
+    Maybe<String> world_name,
+    Maybe<bool> grant_universal_access) {
+  LocalFrame* frame =
+      IdentifiersFactory::FrameById(inspected_frames_, frame_id);
+  if (!frame)
+    return Response::Error("No frame for given id found");
+
+  int world_id = frame->GetScriptController().CreateNewDInspectorIsolatedWorld(
+      world_name.fromMaybe(""));
+  if (world_id == DOMWrapperWorld::kInvalidWorldId)
+    return Response::Error("Could not create isolated world");
+
+  if (grant_universal_access.fromMaybe(false)) {
+    RefPtr<SecurityOrigin> security_origin =
+        frame->GetSecurityContext()->GetSecurityOrigin()->IsolatedCopy();
+    security_origin->GrantUniversalAccess();
+    DOMWrapperWorld::SetIsolatedWorldSecurityOrigin(world_id, security_origin);
+  }
   return Response::OK();
 }
 

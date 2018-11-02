@@ -6,6 +6,7 @@
  * @fileoverview 'settings-about-page' contains version and OS related
  * information.
  */
+
 Polymer({
   is: 'settings-about-page',
 
@@ -65,13 +66,14 @@ Polymer({
     showRelaunchAndPowerwash_: {
       type: Boolean,
       computed: 'computeShowRelaunchAndPowerwash_(' +
-          'currentUpdateStatusEvent_, targetChannel_)',
+          'currentUpdateStatusEvent_, targetChannel_, currentChannel_)',
     },
 
     /** @private */
     showCheckUpdates_: {
       type: Boolean,
-      computed: 'computeShowCheckUpdates_(currentUpdateStatusEvent_)',
+      computed: 'computeShowCheckUpdates_(' +
+          'currentUpdateStatusEvent_, hasCheckedForUpdates_)',
     },
 
     /** @private {!Map<string, string>} */
@@ -84,7 +86,16 @@ Polymer({
             '#detailed-build-info-trigger');
         return map;
       },
-    }
+    },
+
+    /** @private */
+    showUpdateWarningDialog_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @private {!AboutPageUpdateInfo|undefined} */
+    updateInfo_: Object,
 // </if>
   },
 
@@ -140,6 +151,9 @@ Polymer({
 // <if expr="not chromeos">
     this.startListening_();
 // </if>
+    if (settings.getQueryParameters().get('checkForUpdate') == 'true') {
+      this.onCheckUpdatesTap_();
+    }
   },
 
   /** @private */
@@ -161,8 +175,12 @@ Polymer({
    */
   onUpdateStatusChanged_: function(event) {
 // <if expr="chromeos">
-    if (event.status == UpdateStatus.CHECKING)
+    if (event.status == UpdateStatus.CHECKING) {
       this.hasCheckedForUpdates_ = true;
+    } else if (event.status == UpdateStatus.NEED_PERMISSION_TO_UPDATE) {
+      this.showUpdateWarningDialog_ = true;
+      this.updateInfo_ = {version: event.version, size: event.size};
+    }
 // </if>
     this.currentUpdateStatusEvent_ = event;
   },
@@ -212,9 +230,10 @@ Polymer({
   /** @private */
   updateShowUpdateStatus_: function() {
 // <if expr="chromeos">
-    // Assume the "updated" status is stale if we haven't checked yet.
+    // Do not show the "updated" status if we haven't checked yet or the update
+    // warning dialog is shown to user.
     if (this.currentUpdateStatusEvent_.status == UpdateStatus.UPDATED &&
-        !this.hasCheckedForUpdates_) {
+        (!this.hasCheckedForUpdates_ || this.showUpdateWarningDialog_)) {
       this.showUpdateStatus_ = false;
       return;
     }
@@ -226,7 +245,7 @@ Polymer({
 
   /**
    * Hide the button container if all buttons are hidden, otherwise the
-   * container displayes an unwanted border (see secondary-action class).
+   * container displays an unwanted border (see separator class).
    * @private
    */
   updateShowButtonContainer_: function() {
@@ -257,6 +276,7 @@ Polymer({
   getUpdateStatusMessage_: function() {
     switch (this.currentUpdateStatusEvent_.status) {
       case UpdateStatus.CHECKING:
+      case UpdateStatus.NEED_PERMISSION_TO_UPDATE:
         return this.i18n('aboutUpgradeCheckStarted');
       case UpdateStatus.NEARLY_UPDATED:
 // <if expr="chromeos">
@@ -408,6 +428,14 @@ Polymer({
    */
   shouldShowRegulatoryInfo_: function() {
     return this.regulatoryInfo_ !== null;
+  },
+
+  /** @private */
+  onUpdateWarningDialogClose_: function() {
+    this.showUpdateWarningDialog_ = false;
+    // Shows 'check for updates' button in case that the user cancels the
+    // dialog and then intends to check for update again.
+    this.hasCheckedForUpdates_ = false;
   },
 // </if>
 

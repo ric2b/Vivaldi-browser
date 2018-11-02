@@ -25,10 +25,7 @@ class FakeWebTaskRunner : public WebTaskRunner {
   void SetTime(double new_time);
 
   // WebTaskRunner implementation:
-  void PostDelayedTask(const WebTraceLocation&,
-                       base::OnceClosure,
-                       double) override;
-  bool RunsTasksOnCurrentThread() override;
+  bool RunsTasksInCurrentSequence() override;
   double VirtualTimeSeconds() const override;
   double MonotonicallyIncreasingVirtualTimeSeconds() const override;
   SingleThreadTaskRunner* ToSingleThreadTaskRunner() override;

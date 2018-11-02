@@ -12,8 +12,8 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_manager.h"
+#include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/common/translate_constants.h"
-#include "components/translate/core/common/translate_pref_names.h"
 #include "components/translate/core/common/translate_switches.h"
 #include "components/translate/ios/browser/ios_translate_driver.h"
 #import "components/translate/ios/browser/js_translate_manager.h"
@@ -32,6 +32,10 @@
 #include "ios/web/public/test/response_providers/data_response_provider.h"
 #include "net/base/url_util.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -288,8 +292,9 @@ using translate::LanguageDetectionController;
   [super setUp];
   // Creates a LanguageDetectionController::Callback. The callback is deleted in
   // tearDown.
-  LanguageDetectionController::Callback copyDetailsCallback = base::BindBlock(
-      ^(const LanguageDetectionController::DetectionDetails& details) {
+  LanguageDetectionController::Callback copyDetailsCallback =
+      base::BindBlockArc(^(
+          const LanguageDetectionController::DetectionDetails& details) {
         _language_detection_details.reset(
             new LanguageDetectionController::DetectionDetails(details));
       });
@@ -558,11 +563,6 @@ using translate::LanguageDetectionController;
 
 // Tests that the language detection infobar is displayed.
 - (void)testLanguageDetectionInfobar {
-// TODO(crbug.com/709131): Evaluate and re-enable this test if necessary.
-#if !TARGET_IPHONE_SIMULATOR
-  EARL_GREY_TEST_DISABLED(@"Test disabled on device.");
-#endif
-
   // The translate machinery will not auto-fire without API keys, unless that
   // behavior is overridden for testing.
   translate::TranslateManager::SetIgnoreMissingKeyForTesting(true);
@@ -717,11 +717,6 @@ using translate::LanguageDetectionController;
 // Tests that translation occurs automatically on second navigation to an
 // already translated page.
 - (void)testAutoTranslate {
-// TODO(crbug.com/709131): Evaluate and re-enable this test if necessary.
-#if !TARGET_IPHONE_SIMULATOR
-  EARL_GREY_TEST_DISABLED(@"Test disabled on device.");
-#endif
-
   // The translate machinery will not auto-fire without API keys, unless that
   // behavior is overridden for testing.
   translate::TranslateManager::SetIgnoreMissingKeyForTesting(true);
@@ -740,9 +735,9 @@ using translate::LanguageDetectionController;
       chrome_test_util::GetCurrentWebState());
   translate::IOSTranslateDriver* driver =
       static_cast<translate::IOSTranslateDriver*>(client->GetTranslateDriver());
-  base::scoped_nsobject<MockTranslateScriptManager> jsTranslateManager(
+  MockTranslateScriptManager* jsTranslateManager =
       [[MockTranslateScriptManager alloc]
-          initWithWebState:chrome_test_util::GetCurrentWebState()]);
+          initWithWebState:chrome_test_util::GetCurrentWebState()];
   driver->translate_controller()->SetJsTranslateManagerForTesting(
       jsTranslateManager);
 
@@ -766,7 +761,7 @@ using translate::LanguageDetectionController;
   GREYAssert(testing::WaitUntilConditionOrTimeout(
                  testing::kWaitForJSCompletionTimeout,
                  ^{
-                   return jsTranslateManager.get().translateStatusChecked;
+                   return jsTranslateManager.translateStatusChecked;
                  }),
              @"Did not receive all translate status callbacks");
 

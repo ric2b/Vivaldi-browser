@@ -135,6 +135,13 @@ var GetState = requireNative('automationInternal').GetState;
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
+ * @return {string} The checked state, as undefined, "true", "false" or "mixed".
+ */
+var GetChecked = requireNative('automationInternal').GetChecked;
+
+/**
+ * @param {number} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
  * @return {string} The role of the node, or undefined if the tree or
  *     node wasn't found.
  */
@@ -283,6 +290,10 @@ AutomationNodeImpl.prototype = {
     return GetRole(this.treeID, this.id);
   },
 
+  get checked() {
+    return GetChecked(this.treeID, this.id);
+  },
+
   get location() {
     return GetLocation(this.treeID, this.id);
   },
@@ -387,8 +398,8 @@ AutomationNodeImpl.prototype = {
     // Convert from global to tree-relative coordinates.
     var location = GetLocation(this.treeID, GetRootID(this.treeID));
     this.performAction_('hitTest',
-                        { x: x - location.left,
-                          y: y - location.top,
+                        { x: Math.floor(x - location.left),
+                          y: Math.floor(y - location.top),
                           eventToFire: eventToFire });
   },
 
@@ -693,6 +704,7 @@ var stringAttributes = [
     'containerLiveStatus',
     'description',
     'display',
+    'htmlTag',
     'imageDataUrl',
     'language',
     'liveRelevant',
@@ -705,7 +717,6 @@ var stringAttributes = [
 
 var boolAttributes = [
     'ariaReadonly',
-    'buttonMixed',
     'containerLiveAtomic',
     'containerLiveBusy',
     'liveAtomic',
@@ -725,12 +736,16 @@ var intAttributes = [
     'scrollYMin',
     'setSize',
     'tableCellColumnIndex',
+    'ariaCellColumnIndex',
     'tableCellColumnSpan',
     'tableCellRowIndex',
+    'ariaCellRowIndex',
     'tableCellRowSpan',
     'tableColumnCount',
+    'ariaColumnCount',
     'tableColumnIndex',
     'tableRowCount',
+    'ariaRowCount',
     'tableRowIndex',
     'textSelEnd',
     'textSelStart'];
@@ -1113,6 +1128,7 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
       'nextSibling',
       'isRootNode',
       'role',
+      'checked',
       'state',
       'location',
       'indexInParent',

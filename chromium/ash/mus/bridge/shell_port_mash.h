@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/shell_port.h"
 #include "base/macros.h"
 
@@ -36,11 +37,11 @@ class WindowManager;
 class ShellPortMashTestApi;
 
 // ShellPort implementation for mash/mus. See ash/README.md for more.
-class ShellPortMash : public ShellPort {
+class ShellPortMash : public ShellPort, public WindowTreeHostManager::Observer {
  public:
   // If |create_session_state_delegate_stub| is true SessionStateDelegateStub is
   // created. If false, the SessionStateDelegate from Shell is used.
-  ShellPortMash(WmWindow* primary_root_window,
+  ShellPortMash(aura::Window* primary_root_window,
                 WindowManager* window_manager,
                 views::PointerWatcherEventRouter* pointer_watcher_event_router,
                 bool create_session_state_delegate_stub);
@@ -61,8 +62,8 @@ class ShellPortMash : public ShellPort {
   // ShellPort:
   void Shutdown() override;
   Config GetAshConfig() const override;
-  WmWindow* GetPrimaryRootWindow() override;
-  WmWindow* GetRootWindowForDisplayId(int64_t display_id) override;
+  aura::Window* GetPrimaryRootWindow() override;
+  aura::Window* GetRootWindowForDisplayId(int64_t display_id) override;
   const display::ManagedDisplayInfo& GetDisplayInfo(
       int64_t display_id) const override;
   bool IsActiveDisplayId(int64_t display_id) const override;
@@ -71,8 +72,13 @@ class ShellPortMash : public ShellPort {
   bool IsInUnifiedModeIgnoreMirroring() const override;
   void SetDisplayWorkAreaInsets(WmWindow* window,
                                 const gfx::Insets& insets) override;
+  std::unique_ptr<display::TouchTransformSetter> CreateTouchTransformDelegate()
+      override;
   void LockCursor() override;
   void UnlockCursor() override;
+  void ShowCursor() override;
+  void HideCursor() override;
+  void SetGlobalOverrideCursor(base::Optional<ui::CursorData> cursor) override;
   bool IsMouseEventsEnabled() override;
   std::vector<WmWindow*> GetAllRootWindows() override;
   void RecordGestureAction(GestureActionType action) override;
@@ -104,8 +110,14 @@ class ShellPortMash : public ShellPort {
   void SetLaserPointerEnabled(bool enabled) override;
   void SetPartialMagnifierEnabled(bool enabled) override;
   void CreatePointerWatcherAdapter() override;
+  std::unique_ptr<AshWindowTreeHost> CreateAshWindowTreeHost(
+      const AshWindowTreeHostInitParams& init_params) override;
+  void OnCreatedRootWindowContainers(
+      RootWindowController* root_window_controller) override;
   void CreatePrimaryHost() override;
   void InitHosts(const ShellInitParams& init_params) override;
+  std::unique_ptr<display::NativeDisplayDelegate> CreateNativeDisplayDelegate()
+      override;
   std::unique_ptr<AcceleratorController> CreateAcceleratorController() override;
 
  private:
@@ -132,9 +144,14 @@ class ShellPortMash : public ShellPort {
         accelerator_controller_delegate;
   };
 
+  // WindowTreeHostManager::Observer:
+  void OnDisplayConfigurationChanging() override;
+  void OnDisplayConfigurationChanged() override;
+
   WindowManager* window_manager_;
 
-  WmWindow* primary_root_window_;
+  // TODO(sky): remove this once mash supports simple display management.
+  aura::Window* primary_root_window_;
 
   // Only one of |mash_state_| or |mus_state_| is created, depending upon
   // Config.
@@ -142,6 +159,9 @@ class ShellPortMash : public ShellPort {
   std::unique_ptr<MusSpecificState> mus_state_;
 
   std::unique_ptr<SessionStateDelegate> session_state_delegate_;
+
+  bool added_display_observer_ = false;
+  base::ObserverList<WmDisplayObserver> display_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(ShellPortMash);
 };

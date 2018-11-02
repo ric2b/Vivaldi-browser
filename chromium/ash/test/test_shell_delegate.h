@@ -12,12 +12,16 @@
 #include "ash/test/test_session_state_delegate.h"
 #include "base/macros.h"
 
+class PrefService;
+
 namespace keyboard {
 class KeyboardUI;
 }
 
 namespace ash {
 namespace test {
+
+class ShelfInitializer;
 
 class TestShellDelegate : public ShellDelegate {
  public:
@@ -26,6 +30,10 @@ class TestShellDelegate : public ShellDelegate {
 
   void set_multi_profiles_enabled(bool multi_profiles_enabled) {
     multi_profiles_enabled_ = multi_profiles_enabled;
+  }
+
+  void set_active_user_pref_service(PrefService* pref_service) {
+    active_user_pref_service_ = pref_service;
   }
 
   // Overridden from ShellDelegate:
@@ -39,19 +47,20 @@ class TestShellDelegate : public ShellDelegate {
   void PreShutdown() override;
   void Exit() override;
   keyboard::KeyboardUI* CreateKeyboardUI() override;
+  void ShelfInit() override;
+  void ShelfShutdown() override;
   void OpenUrlFromArc(const GURL& url) override;
-  ShelfDelegate* CreateShelfDelegate(ShelfModel* model) override;
   SystemTrayDelegate* CreateSystemTrayDelegate() override;
   std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() override;
   TestSessionStateDelegate* CreateSessionStateDelegate() override;
   AccessibilityDelegate* CreateAccessibilityDelegate() override;
   std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() override;
-  ui::MenuModel* CreateContextMenu(WmShelf* wm_shelf,
+  ui::MenuModel* CreateContextMenu(Shelf* shelf,
                                    const ShelfItem* item) override;
   GPUSupport* CreateGPUSupport() override;
   base::string16 GetProductName() const override;
   gfx::Image GetDeprecatedAcceleratorImage() const override;
-
+  PrefService* GetActiveUserPrefService() const override;
   bool IsTouchscreenEnabledInPrefs(bool use_local_state) const override;
   void SetTouchscreenEnabledInPrefs(bool enabled,
                                     bool use_local_state) override;
@@ -68,6 +77,8 @@ class TestShellDelegate : public ShellDelegate {
   bool multi_profiles_enabled_;
   bool force_maximize_on_first_run_;
   bool touchscreen_enabled_in_local_pref_;
+  std::unique_ptr<ShelfInitializer> shelf_initializer_;
+  PrefService* active_user_pref_service_;  // Not owned.
 
   DISALLOW_COPY_AND_ASSIGN(TestShellDelegate);
 };

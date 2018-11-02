@@ -20,12 +20,12 @@ AndroidPageLoadMetricsObserver::AndroidPageLoadMetricsObserver(
     content::WebContents* web_contents)
     : web_contents_(web_contents) {}
 
-void AndroidPageLoadMetricsObserver::OnFirstContentfulPaint(
-    const page_load_metrics::PageLoadTiming& timing,
+void AndroidPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& extra_info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   int64_t first_contentful_paint_ms =
-      timing.first_contentful_paint->InMilliseconds();
+      timing.paint_timing->first_contentful_paint->InMilliseconds();
   base::android::ScopedJavaLocalRef<jobject> java_web_contents =
       web_contents_->GetJavaWebContents();
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -37,10 +37,11 @@ void AndroidPageLoadMetricsObserver::OnFirstContentfulPaint(
 }
 
 void AndroidPageLoadMetricsObserver::OnLoadEventStart(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  int64_t load_event_start_ms = timing.load_event_start->InMilliseconds();
+  int64_t load_event_start_ms =
+      timing.document_timing->load_event_start->InMilliseconds();
   base::android::ScopedJavaLocalRef<jobject> java_web_contents =
       web_contents_->GetJavaWebContents();
   JNIEnv* env = base::android::AttachCurrentThread();

@@ -18,6 +18,7 @@
 #include <algorithm>  // NOLINT
 
 #include "base/i18n/bidi_line_iterator.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/grit/components_scaled_resources.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -297,7 +299,7 @@ void OmniboxResultView::OnSelected() {
     NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
 }
 
-gfx::Size OmniboxResultView::GetPreferredSize() const {
+gfx::Size OmniboxResultView::CalculatePreferredSize() const {
   int height = GetTextHeight() + (2 * GetVerticalMargin());
   if (match_.answer)
     height += GetAnswerHeight() + kVerticalPadding;
@@ -401,7 +403,7 @@ int OmniboxResultView::DrawRenderText(
   const int remaining_width = mirroring_context_->remaining_width(x);
   int right_x = x + max_width;
 
-  // Infinite suggestions should appear with the leading ellipses vertically
+  // Tail suggestions should appear with the leading ellipses vertically
   // stacked.
   if (render_text_type == CONTENTS &&
       match.type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL) {
@@ -422,8 +424,8 @@ int OmniboxResultView::DrawRenderText(
     const int max_match_contents_width = model_->max_match_contents_width();
 
     if (is_ui_rtl != is_match_contents_rtl) {
-      // RTL infinite suggestions appear near the left edge in LTR UI, while LTR
-      // infinite suggestions appear near the right edge in RTL UI. This is
+      // RTL tail suggestions appear near the left edge in LTR UI, while LTR
+      // tail suggestions appear near the right edge in RTL UI. This is
       // against the natural horizontal alignment of the text. We reduce the
       // width of the box for suggestion display, so that the suggestions appear
       // in correct confines.  This reduced width allows us to modify the text
@@ -545,8 +547,8 @@ int OmniboxResultView::GetDisplayOffset(
   if (match.type != AutocompleteMatchType::SEARCH_SUGGEST_TAIL)
     return 0;
 
-  const base::string16& input_text =
-      base::UTF8ToUTF16(match.GetAdditionalInfo(kACMatchPropertyInputText));
+  const base::string16& input_text = base::UTF8ToUTF16(
+      match.GetAdditionalInfo(kACMatchPropertySuggestionText));
   int contents_start_index = 0;
   base::StringToInt(match.GetAdditionalInfo(kACMatchPropertyContentsStartIndex),
                     &contents_start_index);
@@ -724,7 +726,10 @@ int OmniboxResultView::GetVerticalMargin() const {
   // here. This minimum is larger for hybrid mouse/touch devices to ensure an
   // adequately sized touch target.
   using Md = ui::MaterialDesignController;
-  const int kIconVerticalPad = Md::GetMode() == Md::MATERIAL_HYBRID ? 8 : 4;
+  const int kIconVerticalPad = base::GetFieldTrialParamByFeatureAsInt(
+      omnibox::kUIExperimentVerticalMargin,
+      OmniboxFieldTrial::kUIVerticalMarginParam,
+      Md::GetMode() == Md::MATERIAL_HYBRID ? 8 : 4);
   const int min_height = LocationBarView::kIconWidth + 2 * kIconVerticalPad;
 
   return std::max(kVerticalPadding, (min_height - GetTextHeight()) / 2);

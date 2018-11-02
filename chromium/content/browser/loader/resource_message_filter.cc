@@ -88,8 +88,10 @@ void ResourceMessageFilter::CreateLoaderAndStart(
     mojom::URLLoaderAssociatedRequest request,
     int32_t routing_id,
     int32_t request_id,
+    uint32_t options,
     const ResourceRequest& url_request,
     mojom::URLLoaderClientPtr client) {
+  DCHECK_EQ(options, mojom::kURLLoadOptionNone);
   URLLoaderFactoryImpl::CreateLoaderAndStart(
       requester_info_.get(), std::move(request), routing_id, request_id,
       url_request, std::move(client));
@@ -98,9 +100,9 @@ void ResourceMessageFilter::CreateLoaderAndStart(
 void ResourceMessageFilter::SyncLoad(int32_t routing_id,
                                      int32_t request_id,
                                      const ResourceRequest& url_request,
-                                     const SyncLoadCallback& callback) {
+                                     SyncLoadCallback callback) {
   URLLoaderFactoryImpl::SyncLoad(requester_info_.get(), routing_id, request_id,
-                                 url_request, callback);
+                                 url_request, std::move(callback));
 }
 
 int ResourceMessageFilter::child_id() const {

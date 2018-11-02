@@ -5,12 +5,12 @@
 #include "media/audio/android/audio_manager_android.h"
 
 #include "base/android/build_info.h"
-#include "base/android/context_utils.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "jni/AudioManagerAndroid_jni.h"
@@ -46,45 +46,43 @@ const int kDefaultOutputBufferSize = 2048;
 
 }  // namespace
 
-ScopedAudioManagerPtr CreateAudioManager(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
+std::unique_ptr<AudioManager> CreateAudioManager(
+    std::unique_ptr<AudioThread> audio_thread,
     AudioLogFactory* audio_log_factory) {
-  return ScopedAudioManagerPtr(new AudioManagerAndroid(
-      std::move(task_runner), std::move(worker_task_runner),
-      audio_log_factory));
+  return base::MakeUnique<AudioManagerAndroid>(std::move(audio_thread),
+                                               audio_log_factory);
 }
 
 AudioManagerAndroid::AudioManagerAndroid(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
+    std::unique_ptr<AudioThread> audio_thread,
     AudioLogFactory* audio_log_factory)
-    : AudioManagerBase(std::move(task_runner),
-                       std::move(worker_task_runner),
-                       audio_log_factory),
+    : AudioManagerBase(std::move(audio_thread), audio_log_factory),
       communication_mode_is_on_(false),
       output_volume_override_set_(false),
       output_volume_override_(0) {
   SetMaxOutputStreamsAllowed(kMaxOutputStreams);
 }
 
-AudioManagerAndroid::~AudioManagerAndroid() {
-  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
-  Shutdown();
-
-  if (j_audio_manager_.is_null())
-    return;
-  DVLOG(2) << "Destroying Java part of the audio manager";
-  Java_AudioManagerAndroid_close(base::android::AttachCurrentThread(),
-                                 j_audio_manager_);
-  j_audio_manager_.Reset();
-}
+AudioManagerAndroid::~AudioManagerAndroid() = default;
 
 void AudioManagerAndroid::InitializeIfNeeded() {
   GetTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(base::IgnoreResult(&AudioManagerAndroid::GetJavaAudioManager),
                  base::Unretained(this)));
+}
+
+void AudioManagerAndroid::ShutdownOnAudioThread() {
+  AudioManagerBase::ShutdownOnAudioThread();
+
+  // Destory java android manager here because it can only be accessed on the
+  // audio thread.
+  if (!j_audio_manager_.is_null()) {
+    DVLOG(2) << "Destroying Java part of the audio manager";
+    Java_AudioManagerAndroid_close(base::android::AttachCurrentThread(),
+                                   j_audio_manager_);
+    j_audio_manager_.Reset();
+  }
 }
 
 bool AudioManagerAndroid::HasAudioOutputDevices() {
@@ -355,7 +353,6 @@ jobject AudioManagerAndroid::GetJavaAudioManager() {
     DVLOG(2) << "Creating Java part of the audio manager";
     j_audio_manager_.Reset(Java_AudioManagerAndroid_createAudioManagerAndroid(
         base::android::AttachCurrentThread(),
-        base::android::GetApplicationContext(),
         reinterpret_cast<intptr_t>(this)));
 
     // Prepare the list of audio devices and register receivers for device

@@ -48,6 +48,7 @@ const OncFieldSignature eap_fields[] = {
     {::onc::kRecommended, &kRecommendedSignature},
     {::onc::eap::kAnonymousIdentity, &kStringSignature},
     {::onc::client_cert::kClientCertPattern, &kCertificatePatternSignature},
+    {::onc::client_cert::kClientCertPKCS11Id, &kStringSignature},
     {::onc::client_cert::kClientCertRef, &kStringSignature},
     {::onc::client_cert::kClientCertType, &kStringSignature},
     {::onc::eap::kIdentity, &kStringSignature},
@@ -165,6 +166,15 @@ const OncFieldSignature ethernet_fields[] = {
     {::onc::kRecommended, &kRecommendedSignature},
     {::onc::ethernet::kAuthentication, &kStringSignature},
     {::onc::ethernet::kEAP, &kEAPSignature},
+    {NULL}};
+
+const OncFieldSignature tether_fields[] = {{NULL}};
+
+const OncFieldSignature tether_with_state_fields[] = {
+    {::onc::tether::kBatteryPercentage, &kIntegerSignature},
+    {::onc::tether::kCarrier, &kStringSignature},
+    {::onc::tether::kHasConnectedToHost, &kBoolSignature},
+    {::onc::tether::kSignalStrength, &kIntegerSignature},
     {NULL}};
 
 const OncFieldSignature ipconfig_fields[] = {
@@ -313,6 +323,7 @@ const OncFieldSignature network_configuration_fields[] = {
     {::onc::kRecommended, &kRecommendedSignature},
     {::onc::kRemove, &kBoolSignature},
     {::onc::network_config::kStaticIPConfig, &kStaticIPConfigSignature},
+    {::onc::network_config::kTether, &kTetherSignature},
     {::onc::network_config::kType, &kStringSignature},
     {::onc::network_config::kVPN, &kVPNSignature},
     {::onc::network_config::kWiFi, &kWiFiSignature},
@@ -329,6 +340,7 @@ const OncFieldSignature network_with_state_fields[] = {
     {::onc::network_config::kRestrictedConnectivity, &kBoolSignature},
     {::onc::network_config::kSavedIPConfig, &kSavedIPConfigSignature},
     {::onc::network_config::kSource, &kStringSignature},
+    {::onc::network_config::kTether, &kTetherWithStateSignature},
     {::onc::network_config::kWiFi, &kWiFiWithStateSignature},
     {::onc::network_config::kWimax, &kWiMAXWithStateSignature},
     {NULL}};
@@ -429,6 +441,11 @@ const OncValueSignature kNetworkWithStateSignature = {
 const OncValueSignature kWiFiWithStateSignature = {
     base::Value::Type::DICTIONARY, wifi_with_state_fields, NULL,
     &kWiFiSignature};
+const OncValueSignature kTetherSignature = {base::Value::Type::DICTIONARY,
+                                            tether_fields, NULL};
+const OncValueSignature kTetherWithStateSignature = {
+    base::Value::Type::DICTIONARY, tether_with_state_fields, NULL,
+    &kTetherSignature};
 const OncValueSignature kWiMAXWithStateSignature = {
     base::Value::Type::DICTIONARY, wimax_with_state_fields, NULL,
     &kWiMAXSignature};

@@ -10,18 +10,23 @@
 #import "base/ios/weak_nsobject.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "google_apis/google_api_keys.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/referrer.h"
 #include "ios/web/public/reload_type.h"
 #import "ios/web/public/web_state/context_menu_params.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
 #import "ios/web/public/web_state/ui/crw_web_delegate.h"
+#import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
+#import "ios/web/public/web_state/ui/crw_web_view_scroll_view_proxy.h"
 #import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_delegate_bridge.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
 #import "ios/web_view/internal/cwv_html_element_internal.h"
 #import "ios/web_view/internal/cwv_navigation_action_internal.h"
+#import "ios/web_view/internal/cwv_scroll_view_internal.h"
 #import "ios/web_view/internal/cwv_web_view_configuration_internal.h"
+#import "ios/web_view/internal/translate/cwv_translation_controller_internal.h"
 #import "ios/web_view/internal/translate/web_view_translate_client.h"
 #include "ios/web_view/internal/web_view_browser_state.h"
 #import "ios/web_view/internal/web_view_java_script_dialog_presenter.h"
@@ -33,7 +38,28 @@
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
+namespace {
+// A key used in NSCoder to store the session storage object.
+NSString* const kSessionStorageKey = @"sessionStorage";
+}
+
 @interface CWVWebView ()<CRWWebStateDelegate, CRWWebStateObserver> {
+  // |_configuration| must come before |_webState| here to avoid crash on
+  // deallocating CWVWebView. This is because the destructor of |_webState|
+  // indirectly accesses the BrowserState instance, which is owned by
+  // |_configuration|.
+  //
+  // Looks like the fields of the object are deallocated in the reverse order of
+  // their definition. If |_webState| comes before |_configuration|, the order
+  // of execution is like this:
+  //
+  // 1. |_configuration| is deallocated
+  // 1.1. BrowserState is deallocated
+  // 2. |_webState| is deallocated
+  // 2.1. The destructor of |_webState| indirectly accesses the BrowserState
+  //      deallocated above, causing crash.
+  //
+  // See crbug.com/712556 for the full stack trace.
   CWVWebViewConfiguration* _configuration;
   std::unique_ptr<web::WebState> _webState;
   std::unique_ptr<web::WebStateDelegateBridge> _webStateDelegate;
@@ -46,68 +72,65 @@
       _javaScriptDialogPresenter;
 }
 
-// Redefine the property as readwrite to define -setEstimatedProgress:, which
-// can be used to send KVO notification.
+// Redefine the property as readwrite.
+@property(nonatomic, copy) CWVWebViewConfiguration* configuration;
+// Redefine these properties as readwrite to define setters, which send KVO
+// notifications.
 @property(nonatomic, readwrite) double estimatedProgress;
+@property(nonatomic, readwrite) BOOL canGoBack;
+@property(nonatomic, readwrite) BOOL canGoForward;
+
+// Updates the availability of the back/forward navigation properties exposed
+// through |canGoBack| and |canGoForward|.
+- (void)updateNavigationAvailability;
 
 @end
 
+static NSString* gUserAgentProduct = nil;
+
 @implementation CWVWebView
 
+@synthesize canGoBack = _canGoBack;
+@synthesize canGoForward = _canGoForward;
 @synthesize configuration = _configuration;
-@synthesize navigationDelegate = _navigationDelegate;
-@synthesize translationDelegate = _translationDelegate;
 @synthesize estimatedProgress = _estimatedProgress;
+@synthesize navigationDelegate = _navigationDelegate;
+@synthesize translationController = _translationController;
 @synthesize UIDelegate = _UIDelegate;
+@synthesize scrollView = _scrollView;
+
++ (NSString*)userAgentProduct {
+  return gUserAgentProduct;
+}
+
++ (void)setUserAgentProduct:(NSString*)product {
+  gUserAgentProduct = [product copy];
+}
+
++ (void)setGoogleAPIKey:(NSString*)googleAPIKey
+               clientID:(NSString*)clientID
+           clientSecret:(NSString*)clientSecret {
+  google_apis::SetAPIKey(base::SysNSStringToUTF8(googleAPIKey));
+
+  std::string clientIDString = base::SysNSStringToUTF8(clientID);
+  std::string clientSecretString = base::SysNSStringToUTF8(clientSecret);
+  for (size_t i = 0; i < google_apis::CLIENT_NUM_ITEMS; ++i) {
+    google_apis::OAuth2Client client =
+        static_cast<google_apis::OAuth2Client>(i);
+    google_apis::SetOAuth2ClientID(client, clientIDString);
+    google_apis::SetOAuth2ClientSecret(client, clientSecretString);
+  }
+}
 
 - (instancetype)initWithFrame:(CGRect)frame
                 configuration:(CWVWebViewConfiguration*)configuration {
   self = [super initWithFrame:frame];
   if (self) {
     _configuration = [configuration copy];
-
-    web::WebState::CreateParams webStateCreateParams(
-        configuration.browserState);
-    _webState = web::WebState::Create(webStateCreateParams);
-    _webState->SetWebUsageEnabled(true);
-
-    _webStateObserver =
-        base::MakeUnique<web::WebStateObserverBridge>(_webState.get(), self);
-    _webStateDelegate = base::MakeUnique<web::WebStateDelegateBridge>(self);
-    _webState->SetDelegate(_webStateDelegate.get());
-
-    _webStatePolicyDecider =
-        base::MakeUnique<ios_web_view::WebViewWebStatePolicyDecider>(
-            _webState.get(), self);
-
-    _javaScriptDialogPresenter =
-        base::MakeUnique<ios_web_view::WebViewJavaScriptDialogPresenter>(
-            self, nullptr);
-
-    // Initialize Translate.
-    ios_web_view::WebViewTranslateClient::CreateForWebState(_webState.get());
+    _scrollView = [[CWVScrollView alloc] init];
+    [self resetWebStateWithSessionStorage:nil];
   }
   return self;
-}
-
-- (void)willMoveToSuperview:(UIView*)newSuperview {
-  [super willMoveToSuperview:newSuperview];
-  UIView* subview = _webState->GetView();
-  if (subview.superview == self) {
-    return;
-  }
-  subview.frame = self.frame;
-  subview.autoresizingMask =
-      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-  [self addSubview:subview];
-}
-
-- (BOOL)canGoBack {
-  return _webState && _webState->GetNavigationManager()->CanGoBack();
-}
-
-- (BOOL)canGoForward {
-  return _webState && _webState->GetNavigationManager()->CanGoForward();
 }
 
 - (BOOL)isLoading {
@@ -116,6 +139,10 @@
 
 - (NSURL*)visibleURL {
   return net::NSURLWithGURL(_webState->GetVisibleURL());
+}
+
+- (NSURL*)lastCommittedURL {
+  return net::NSURLWithGURL(_webState->GetLastCommittedURL());
 }
 
 - (NSString*)title {
@@ -166,17 +193,12 @@
   _javaScriptDialogPresenter->SetUIDelegate(_UIDelegate);
 }
 
-- (void)setTranslationDelegate:(id<CWVTranslateDelegate>)translationDelegate {
-  _translationDelegate = translationDelegate;
-  ios_web_view::WebViewTranslateClient::FromWebState(_webState.get())
-      ->set_translate_delegate(translationDelegate);
-}
-
 // -----------------------------------------------------------------------
 // WebStateObserver implementation.
 
 - (void)webState:(web::WebState*)webState
-    didStartProvisionalNavigationForURL:(const GURL&)URL {
+    didStartNavigation:(web::NavigationContext*)navigation {
+  [self updateNavigationAvailability];
   SEL selector = @selector(webViewDidStartProvisionalNavigation:);
   if ([_navigationDelegate respondsToSelector:selector]) {
     [_navigationDelegate webViewDidStartProvisionalNavigation:self];
@@ -189,6 +211,11 @@
           respondsToSelector:@selector(webViewDidCommitNavigation:)]) {
     [_navigationDelegate webViewDidCommitNavigation:self];
   }
+}
+
+- (void)webState:(web::WebState*)webState
+    didFinishNavigation:(web::NavigationContext*)navigation {
+  [self updateNavigationAvailability];
 }
 
 - (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
@@ -267,6 +294,92 @@
 - (web::JavaScriptDialogPresenter*)javaScriptDialogPresenterForWebState:
     (web::WebState*)webState {
   return _javaScriptDialogPresenter.get();
+}
+
+#pragma mark - Translation
+
+- (CWVTranslationController*)translationController {
+  if (!_translationController) {
+    _translationController = [[CWVTranslationController alloc] init];
+    _translationController.webState = _webState.get();
+  }
+  return _translationController;
+}
+
+#pragma mark - Preserving and Restoring State
+
+- (void)encodeRestorableStateWithCoder:(NSCoder*)coder {
+  [super encodeRestorableStateWithCoder:coder];
+  [coder encodeObject:_webState->BuildSessionStorage()
+               forKey:kSessionStorageKey];
+}
+
+- (void)decodeRestorableStateWithCoder:(NSCoder*)coder {
+  [super decodeRestorableStateWithCoder:coder];
+  CRWSessionStorage* sessionStorage =
+      [coder decodeObjectForKey:kSessionStorageKey];
+  [self resetWebStateWithSessionStorage:sessionStorage];
+}
+
+#pragma mark - Private methods
+
+// Creates a WebState instance and assigns it to |_webState|.
+// It replaces the old |_webState| if any.
+// The WebState is restored from |sessionStorage| if provided.
+- (void)resetWebStateWithSessionStorage:
+    (nullable CRWSessionStorage*)sessionStorage {
+  if (_webState && _webState->GetView().superview == self) {
+    // The web view provided by the old |_webState| has been added as a subview.
+    // It must be removed and replaced with a new |_webState|'s web view, which
+    // is added later.
+    [_webState->GetView() removeFromSuperview];
+  }
+
+  web::WebState::CreateParams webStateCreateParams(_configuration.browserState);
+  if (sessionStorage) {
+    _webState = web::WebState::CreateWithStorageSession(webStateCreateParams,
+                                                        sessionStorage);
+  } else {
+    _webState = web::WebState::Create(webStateCreateParams);
+  }
+  _webState->SetWebUsageEnabled(true);
+
+  _webStateObserver =
+      base::MakeUnique<web::WebStateObserverBridge>(_webState.get(), self);
+  _webStateDelegate = base::MakeUnique<web::WebStateDelegateBridge>(self);
+  _webState->SetDelegate(_webStateDelegate.get());
+
+  _webStatePolicyDecider =
+      base::MakeUnique<ios_web_view::WebViewWebStatePolicyDecider>(
+          _webState.get(), self);
+
+  _javaScriptDialogPresenter =
+      base::MakeUnique<ios_web_view::WebViewJavaScriptDialogPresenter>(self,
+                                                                       nullptr);
+
+  _scrollView.proxy = _webState.get()->GetWebViewProxy().scrollViewProxy;
+
+  _translationController.webState = _webState.get();
+
+  [self addInternalWebViewAsSubview];
+}
+
+// Adds the web view provided by |_webState| as a subview unless it has already.
+- (void)addInternalWebViewAsSubview {
+  UIView* subview = _webState->GetView();
+  if (subview.superview == self) {
+    return;
+  }
+  subview.frame = self.bounds;
+  subview.autoresizingMask =
+      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  [self addSubview:subview];
+}
+
+- (void)updateNavigationAvailability {
+  self.canGoBack = _webState && _webState->GetNavigationManager()->CanGoBack();
+  self.canGoForward =
+      _webState && _webState->GetNavigationManager()->CanGoForward();
 }
 
 @end

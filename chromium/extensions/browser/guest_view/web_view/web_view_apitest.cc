@@ -11,6 +11,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
@@ -29,6 +30,7 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_paths.h"
 #include "extensions/common/switches.h"
+#include "extensions/shell/browser/desktop_controller.h"
 #include "extensions/shell/browser/shell_content_browser_client.h"
 #include "extensions/shell/browser/shell_extension_system.h"
 #include "extensions/shell/test/shell_test.h"
@@ -48,10 +50,7 @@ const char kEmptyResponsePath[] = "/close-socket";
 const char kRedirectResponsePath[] = "/server-redirect";
 const char kRedirectResponseFullPath[] = "/guest_redirect.html";
 const char kUserAgentRedirectResponsePath[] = "/detect-user-agent";
-const char kTestDataDirectory[] = "testDataDirectory";
 const char kTestServerPort[] = "testServer.port";
-const char kTestWebSocketPort[] = "testWebSocketPort";
-const char kIsolateExtensions[] = "isolateExtensions";
 
 // Handles |request| by serving a redirect response if the |User-Agent| is
 // foobar.
@@ -137,12 +136,10 @@ WebViewAPITest::WebViewAPITest() {
 }
 
 void WebViewAPITest::LaunchApp(const std::string& app_location) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::FilePath test_data_dir;
   PathService::Get(DIR_TEST_DATA, &test_data_dir);
   test_data_dir = test_data_dir.AppendASCII(app_location.c_str());
-
-  test_config_.SetString(kTestDataDirectory,
-                         net::FilePathToFileURL(test_data_dir).spec());
 
   const Extension* extension = extension_system_->LoadApp(test_data_dir);
   ASSERT_TRUE(extension);
@@ -175,11 +172,6 @@ void WebViewAPITest::RunTest(const std::string& test_name,
   ASSERT_TRUE(done_listener.WaitUntilSatisfied());
 }
 
-void WebViewAPITest::RunTestOnMainThreadLoop() {
-  AppShellTest::RunTestOnMainThreadLoop();
-  GetGuestViewManager()->WaitForAllGuestsDeleted();
-}
-
 void WebViewAPITest::SetUpCommandLine(base::CommandLine* command_line) {
   AppShellTest::SetUpCommandLine(command_line);
   command_line->AppendSwitchASCII(::switches::kJavaScriptFlags, "--expose-gc");
@@ -189,13 +181,6 @@ void WebViewAPITest::SetUpOnMainThread() {
   AppShellTest::SetUpOnMainThread();
 
   TestGetConfigFunction::set_test_config_state(&test_config_);
-  base::FilePath test_data_dir;
-  test_config_.SetInteger(kTestWebSocketPort, 0);
-  bool isolate_extensions = base::CommandLine::ForCurrentProcess()->HasSwitch(
-                                ::switches::kSitePerProcess) ||
-                            base::CommandLine::ForCurrentProcess()->HasSwitch(
-                                extensions::switches::kIsolateExtensions);
-  test_config_.SetBoolean(kIsolateExtensions, isolate_extensions);
 }
 
 void WebViewAPITest::StartTestServer(const std::string& app_location) {
@@ -207,6 +192,7 @@ void WebViewAPITest::StartTestServer(const std::string& app_location) {
 
   test_config_.SetInteger(kTestServerPort, embedded_test_server()->port());
 
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::FilePath test_data_dir;
   PathService::Get(DIR_TEST_DATA, &test_data_dir);
   test_data_dir = test_data_dir.AppendASCII(app_location.c_str());
@@ -236,6 +222,8 @@ void WebViewAPITest::StopTestServer() {
 }
 
 void WebViewAPITest::TearDownOnMainThread() {
+  DesktopController::instance()->CloseAppWindows();
+  GetGuestViewManager()->WaitForAllGuestsDeleted();
   TestGetConfigFunction::set_test_config_state(nullptr);
 
   AppShellTest::TearDownOnMainThread();
@@ -615,6 +603,11 @@ IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestNavigateAfterResize) {
 
 IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestNavigationToExternalProtocol) {
   RunTest("testNavigationToExternalProtocol", "web_view/apitest");
+}
+
+IN_PROC_BROWSER_TEST_F(WebViewAPITest,
+                       TestContentInitiatedNavigationToDataUrlBlocked) {
+  RunTest("testContentInitiatedNavigationToDataUrlBlocked", "web_view/apitest");
 }
 
 IN_PROC_BROWSER_TEST_F(WebViewAPITest,

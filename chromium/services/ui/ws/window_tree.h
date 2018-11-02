@@ -188,7 +188,13 @@ class WindowTree : public mojom::WindowTree,
   bool Embed(const ClientWindowId& window_id,
              mojom::WindowTreeClientPtr window_tree_client,
              uint32_t flags);
-  void DispatchInputEvent(ServerWindow* target, const ui::Event& event);
+
+  // Dispatches an event to the client. |callback| is run with the result from
+  // the client.
+  using DispatchEventCallback = base::OnceCallback<void(mojom::EventResult)>;
+  void DispatchInputEvent(ServerWindow* target,
+                          const ui::Event& event,
+                          DispatchEventCallback callback);
 
   bool IsWaitingForNewTopLevelWindow(uint32_t wm_change_id);
   void OnWindowManagerCreatedTopLevelWindow(uint32_t wm_change_id,
@@ -198,12 +204,15 @@ class WindowTree : public mojom::WindowTree,
 
   // Calls through to the client.
   void OnChangeCompleted(uint32_t change_id, bool success);
-  // |state_to_ack| is the WindowManagerState to call through to when the ack
-  // from the accelerator is received. If |needs_ack| is true an ack is
-  // required.
+
+  // If |callback| is valid then an ack is expected from the client. When the
+  // ack from the client is received |callback| is Run().
+  using AcceleratorCallback = base::OnceCallback<void(
+      mojom::EventResult,
+      const std::unordered_map<std::string, std::vector<uint8_t>>&)>;
   void OnAccelerator(uint32_t accelerator_id,
                      const ui::Event& event,
-                     bool needs_ack);
+                     AcceleratorCallback callback);
 
   // Called when a display has been removed. This is only called on the
   // WindowTree associated with a WindowManager.
@@ -252,7 +261,7 @@ class WindowTree : public mojom::WindowTree,
                                    float new_opacity,
                                    bool originated_change);
   void ProcessCursorChanged(const ServerWindow* window,
-                            mojom::CursorType cursor_id,
+                            const ui::CursorData& cursor,
                             bool originated_change);
   void ProcessFocusChanged(const ServerWindow* old_focused_window,
                            const ServerWindow* new_focused_window);
@@ -369,7 +378,9 @@ class WindowTree : public mojom::WindowTree,
   // |event_ack_id_| and returns it.
   uint32_t GenerateEventAckId();
 
-  void DispatchInputEventImpl(ServerWindow* target, const ui::Event& event);
+  void DispatchInputEventImpl(ServerWindow* target,
+                              const ui::Event& event,
+                              DispatchEventCallback callback);
 
   // Returns true if the client has a pointer watcher and this event matches.
   bool EventMatchesPointerWatcher(const ui::Event& event) const;
@@ -383,9 +394,13 @@ class WindowTree : public mojom::WindowTree,
   // waiting for the last move to be acknowledged.
   void OnWmMoveDragImageAck();
 
-  // Called from SetDisplayRoot(), see mojom for details.
-  bool ProcessSetDisplayRoot(int64_t display_id,
-                             const ClientWindowId& client_window_id);
+  // Called from SetDisplayRoot(), see mojom for details. Returns the root
+  // of the display if successful, otherwise null.
+  ServerWindow* ProcessSetDisplayRoot(
+      const display::Display& display_to_create,
+      const mojom::WmViewportMetrics& transport_viewport_metrics,
+      bool is_primary_display,
+      const ClientWindowId& client_window_id);
 
   // WindowTree:
   void NewWindow(uint32_t change_id,
@@ -447,9 +462,9 @@ class WindowTree : public mojom::WindowTree,
   void SetCanFocus(Id transport_window_id, bool can_focus) override;
   void SetEventTargetingPolicy(Id transport_window_id,
                                mojom::EventTargetingPolicy policy) override;
-  void SetPredefinedCursor(uint32_t change_id,
-                           Id transport_window_id,
-                           ui::mojom::CursorType cursor_id) override;
+  void SetCursor(uint32_t change_id,
+                 Id transport_window_id,
+                 ui::CursorData cursor) override;
   void SetWindowTextInputState(Id transport_window_id,
                                mojo::TextInputStatePtr state) override;
   void SetImeVisibility(Id transport_window_id,
@@ -496,7 +511,9 @@ class WindowTree : public mojom::WindowTree,
   void RemoveActivationParent(Id transport_window_id) override;
   void ActivateNextWindow() override;
   void SetExtendedHitArea(Id window_id, const gfx::Insets& hit_area) override;
-  void SetDisplayRoot(int64_t display_id,
+  void SetDisplayRoot(const display::Display& display,
+                      mojom::WmViewportMetricsPtr viewport_metrics,
+                      bool is_primary_display,
                       Id window_id,
                       const SetDisplayRootCallback& callback) override;
   void WmResponse(uint32_t change_id, bool response) override;
@@ -504,8 +521,12 @@ class WindowTree : public mojom::WindowTree,
   void WmRequestClose(Id transport_window_id) override;
   void WmSetFrameDecorationValues(
       mojom::FrameDecorationValuesPtr values) override;
-  void WmSetNonClientCursor(uint32_t window_id,
-                            mojom::CursorType cursor_id) override;
+  void WmSetNonClientCursor(uint32_t window_id, ui::CursorData cursor) override;
+  void WmLockCursor() override;
+  void WmUnlockCursor() override;
+  void WmSetCursorVisible(bool visible) override;
+  void WmSetGlobalOverrideCursor(
+      base::Optional<ui::CursorData> cursor) override;
   void OnWmCreatedTopLevelWindow(uint32_t change_id,
                                  Id transport_window_id) override;
   void OnAcceleratorAck(
@@ -583,7 +604,13 @@ class WindowTree : public mojom::WindowTree,
   std::unordered_map<WindowId, ClientWindowId, WindowIdHash>
       window_id_to_client_id_map_;
 
+  // Id passed to the client and expected to be supplied back to
+  // OnWindowInputEventAck() or OnAcceleratorAck().
   uint32_t event_ack_id_;
+
+  DispatchEventCallback event_ack_callback_;
+
+  AcceleratorCallback accelerator_ack_callback_;
 
   // A client is considered janky if it hasn't ACK'ed input events within a
   // reasonable timeframe.

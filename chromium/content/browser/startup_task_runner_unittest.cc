@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
 
 #include "testing/gmock/include/gmock/gmock.h"
@@ -86,7 +87,7 @@ class MockTaskRunner {
 class TaskRunnerProxy : public base::SingleThreadTaskRunner {
  public:
   TaskRunnerProxy(MockTaskRunner* mock) : mock_(mock) {}
-  bool RunsTasksOnCurrentThread() const override { return true; }
+  bool RunsTasksInCurrentSequence() const override { return true; }
   bool PostDelayedTask(const tracked_objects::Location& location,
                        base::OnceClosure closure,
                        base::TimeDelta delta) override {

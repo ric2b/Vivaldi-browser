@@ -22,7 +22,6 @@
 
 #include "core/dom/Text.h"
 
-#include "bindings/core/v8/DOMDataStore.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/SVGNames.h"
 #include "core/css/resolver/StyleResolver.h"
@@ -40,6 +39,7 @@
 #include "core/layout/api/LayoutTextItem.h"
 #include "core/layout/svg/LayoutSVGInlineText.h"
 #include "core/svg/SVGForeignObjectElement.h"
+#include "platform/bindings/DOMDataStore.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/StringBuilder.h"
 
@@ -127,6 +127,8 @@ Text* Text::splitText(unsigned offset, ExceptionState& exception_state) {
 
   if (parentNode())
     GetDocument().DidSplitTextNode(*this);
+  else
+    GetDocument().DidRemoveText(*this, offset, old_str.length() - offset);
 
   // [NewObject] must always create a new wrapper.  Check that a wrapper
   // does not exist yet.
@@ -366,7 +368,7 @@ void Text::AttachLayoutTree(const AttachContext& context) {
   CharacterData::AttachLayoutTree(context);
 }
 
-void Text::ReattachLayoutTreeIfNeeded(const AttachContext& context) {
+void Text::ReattachLayoutTreeIfNeeded() {
   bool layout_object_is_needed = false;
   ContainerNode* style_parent = LayoutTreeBuilderTraversal::Parent(*this);
   LayoutObject* parent_layout_object =
@@ -383,7 +385,7 @@ void Text::ReattachLayoutTreeIfNeeded(const AttachContext& context) {
   // The following is almost the same as Node::reattachLayoutTree() except that
   // we create a layoutObject only if needed.  Not calling reattachLayoutTree()
   // to avoid repeated calls to Text::textLayoutObjectIsNeeded().
-  AttachContext reattach_context(context);
+  AttachContext reattach_context;
   reattach_context.performing_reattach = true;
 
   if (GetStyleChangeType() < kNeedsReattachStyleChange)
@@ -462,6 +464,7 @@ void Text::UpdateTextLayoutObject(unsigned offset_of_replaced_data,
     LazyReattachIfAttached();
     return;
   }
+
   text_layout_object->SetTextWithOffset(DataImpl(), offset_of_replaced_data,
                                         length_of_replaced_data);
 }

@@ -98,11 +98,11 @@ class DummyWebMediaPlayerClient : public blink::WebMediaPlayerClient {
   void RemotePlaybackStarted() override {}
   void OnBecamePersistentVideo(bool) override {}
   bool IsAutoplayingMuted() override { return is_autoplaying_muted_; }
-  void RequestReload(const blink::WebURL& newUrl) override {}
   bool HasSelectedVideoTrack() override { return false; }
   blink::WebMediaPlayer::TrackId GetSelectedVideoTrackId() override {
     return blink::WebMediaPlayer::TrackId();
   }
+  bool HasNativeControls() override { return false; }
 
   void set_is_autoplaying_muted(bool value) { is_autoplaying_muted_ = value; }
 
@@ -204,24 +204,33 @@ class WebMediaPlayerImplTest : public testing::Test {
                                          &web_frame_client_,
                                          nullptr,
                                          nullptr)),
-        media_log_(new MediaLog()),
         audio_parameters_(TestAudioParameters::Normal()) {
     web_view_->SetMainFrame(web_local_frame_);
     media_thread_.StartAndWaitForTesting();
   }
 
   void InitializeWebMediaPlayerImpl(bool allow_suspend) {
+    std::unique_ptr<MediaLog> media_log(new MediaLog());
+
+    auto factory_selector = base::MakeUnique<RendererFactorySelector>();
+    factory_selector->AddFactory(
+        RendererFactorySelector::FactoryType::DEFAULT,
+        base::MakeUnique<DefaultRendererFactory>(
+            media_log.get(), nullptr,
+            DefaultRendererFactory::GetGpuFactoriesCB()));
+    factory_selector->SetBaseFactoryType(
+        RendererFactorySelector::FactoryType::DEFAULT);
+
     wmpi_ = base::MakeUnique<WebMediaPlayerImpl>(
         web_local_frame_, &client_, nullptr, &delegate_,
-        base::MakeUnique<DefaultRendererFactory>(
-            media_log_, nullptr, DefaultRendererFactory::GetGpuFactoriesCB()),
-        url_index_,
-        WebMediaPlayerParams(
-            WebMediaPlayerParams::DeferLoadCB(),
-            scoped_refptr<SwitchableAudioRendererSink>(), media_log_,
+        std::move(factory_selector), url_index_,
+        base::MakeUnique<WebMediaPlayerParams>(
+            std::move(media_log), WebMediaPlayerParams::DeferLoadCB(),
+            scoped_refptr<SwitchableAudioRendererSink>(),
             media_thread_.task_runner(), message_loop_.task_runner(),
             message_loop_.task_runner(), WebMediaPlayerParams::Context3DCB(),
-            base::Bind(&OnAdjustAllocatedMemory), nullptr, nullptr, nullptr,
+            base::Bind(&OnAdjustAllocatedMemory), nullptr, nullptr,
+            RequestRoutingTokenCallback(), nullptr,
             kMaxKeyframeDistanceToDisableBackgroundVideo,
             kMaxKeyframeDistanceToDisableBackgroundVideoMSE, false,
             allow_suspend, false));
@@ -356,7 +365,6 @@ class WebMediaPlayerImplTest : public testing::Test {
   blink::WebView* web_view_;
   blink::WebLocalFrame* web_local_frame_;
 
-  scoped_refptr<MediaLog> media_log_;
   linked_ptr<media::UrlIndex> url_index_;
 
   // Audio hardware configuration.

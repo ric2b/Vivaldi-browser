@@ -573,7 +573,7 @@ void HTMLSelectElement::SaveLastSelection() {
     return;
   }
 
-  last_on_change_selection_.Clear();
+  last_on_change_selection_.clear();
   for (auto& element : GetListItems())
     last_on_change_selection_.push_back(
         isHTMLOptionElement(*element) &&
@@ -597,7 +597,7 @@ void HTMLSelectElement::SaveListboxActiveSelection() {
   // 3. Drag the mouse pointer onto the fourth OPTION
   //   m_activeSelectionEndIndex = 3, options at 1-3 indices are selected.
   //   updateListBoxSelection needs to clear selection of the fifth OPTION.
-  cached_state_for_active_selection_.Resize(0);
+  cached_state_for_active_selection_.resize(0);
   for (const auto& option : GetOptionList()) {
     cached_state_for_active_selection_.push_back(option->Selected());
   }
@@ -750,7 +750,7 @@ void HTMLSelectElement::SetRecalcListItems() {
 
 void HTMLSelectElement::RecalcListItems() const {
   TRACE_EVENT0("blink", "HTMLSelectElement::recalcListItems");
-  list_items_.Resize(0);
+  list_items_.resize(0);
 
   should_recalc_list_items_ = false;
 
@@ -940,7 +940,7 @@ void HTMLSelectElement::OptionInserted(HTMLOptionElement& option,
       ResetToDefaultSelection();
   }
   SetNeedsValidityCheck();
-  last_on_change_selection_.Clear();
+  last_on_change_selection_.clear();
 }
 
 void HTMLSelectElement::OptionRemoved(HTMLOptionElement& option) {
@@ -962,19 +962,19 @@ void HTMLSelectElement::OptionRemoved(HTMLOptionElement& option) {
   if (option.Selected())
     SetAutofilled(false);
   SetNeedsValidityCheck();
-  last_on_change_selection_.Clear();
+  last_on_change_selection_.clear();
 }
 
 void HTMLSelectElement::OptGroupInsertedOrRemoved(
     HTMLOptGroupElement& optgroup) {
   SetRecalcListItems();
   SetNeedsValidityCheck();
-  last_on_change_selection_.Clear();
+  last_on_change_selection_.clear();
 }
 
 void HTMLSelectElement::HrInsertedOrRemoved(HTMLHRElement& hr) {
   SetRecalcListItems();
-  last_on_change_selection_.Clear();
+  last_on_change_selection_.clear();
 }
 
 // TODO(tkent): This function is not efficient.  It contains multiple O(N)
@@ -1072,7 +1072,7 @@ void HTMLSelectElement::DispatchBlurEvent(
   // made.  This matches other browsers' behavior.
   if (UsesMenuList())
     DispatchInputAndChangeEventForMenuList();
-  last_on_change_selection_.Clear();
+  last_on_change_selection_.clear();
   if (PopupIsVisible())
     HidePopup();
   HTMLFormControlElementWithState::DispatchBlurEvent(new_focused_element, type,
@@ -1495,7 +1495,7 @@ void HTMLSelectElement::ListBoxDefaultEventHandler(Event* event) {
     // Convert to coords relative to the list box if needed.
     MouseEvent* mouse_event = ToMouseEvent(event);
     if (HTMLOptionElement* option = EventTargetOption(*mouse_event)) {
-      if (!IsDisabledFormControl()) {
+      if (!option->IsDisabledFormControl()) {
 #if OS(MACOSX)
         UpdateSelectedState(option, mouse_event->metaKey(),
                             mouse_event->shiftKey());
@@ -1949,6 +1949,9 @@ void HTMLSelectElement::ShowPopup() {
   if (!popup_)
     popup_ = GetDocument().GetPage()->GetChromeClient().OpenPopupMenu(
         *GetDocument().GetFrame(), *this);
+  if (!popup_)
+    return;
+
   popup_is_visible_ = true;
   ObserveTreeMutation();
 

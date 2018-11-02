@@ -112,20 +112,20 @@ TEST(UnicodeUtilitiesTest, ContainsKanaLetters) {
   // Non Kana symbols
   String non_kana_string;
   for (UChar character = 0; character < 0x3041; ++character)
-    non_kana_string.Append(character);
+    non_kana_string.append(character);
   EXPECT_FALSE(ContainsKanaLetters(non_kana_string));
 
   // Hiragana letters.
   for (UChar character = 0x3041; character <= 0x3096; ++character) {
     String str(non_kana_string);
-    str.Append(character);
+    str.append(character);
     EXPECT_TRUE(ContainsKanaLetters(str));
   }
 
   // Katakana letters.
   for (UChar character = 0x30A1; character <= 0x30FA; ++character) {
     String str(non_kana_string);
-    str.Append(character);
+    str.append(character);
     EXPECT_TRUE(ContainsKanaLetters(str));
   }
 }
@@ -149,7 +149,7 @@ TEST(UnicodeUtilitiesTest, FoldQuoteMarkOrSoftHyphenTest) {
                              WTF_ARRAY_LENGTH(kCharactersToFold));
   EXPECT_EQ(string_to_fold, folded_string);
 
-  FoldQuoteMarksAndSoftHyphens(buffer.Data(), buffer.size());
+  FoldQuoteMarksAndSoftHyphens(buffer.data(), buffer.size());
   EXPECT_EQ(String(buffer), folded_string);
 }
 

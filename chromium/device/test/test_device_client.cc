@@ -4,6 +4,7 @@
 
 #include "device/test/test_device_client.h"
 
+#include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 
 // This file unconditionally includes these headers despite conditionally
@@ -15,32 +16,23 @@
 
 namespace device {
 
-TestDeviceClient::TestDeviceClient(
-    scoped_refptr<base::SingleThreadTaskRunner> blocking_task_runner)
-    : blocking_task_runner_(blocking_task_runner) {}
+TestDeviceClient::TestDeviceClient() = default;
 
-TestDeviceClient::~TestDeviceClient() {
-  if (hid_service_)
-    hid_service_->Shutdown();
-  if (usb_service_)
-    usb_service_->Shutdown();
-}
+TestDeviceClient::~TestDeviceClient() = default;
 
 HidService* TestDeviceClient::GetHidService() {
 #if !defined(OS_ANDROID) && !defined(OS_IOS) && \
     !(defined(OS_LINUX) && !defined(USE_UDEV))
-  if (!hid_service_) {
-    hid_service_ = HidService::Create(blocking_task_runner_);
-  }
+  if (!hid_service_)
+    hid_service_ = HidService::Create();
 #endif
   return hid_service_.get();
 }
 
 UsbService* TestDeviceClient::GetUsbService() {
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-  if (!usb_service_) {
-    usb_service_ = UsbService::Create(blocking_task_runner_);
-  }
+  if (!usb_service_)
+    usb_service_ = UsbService::Create();
 #endif
   return usb_service_.get();
 }

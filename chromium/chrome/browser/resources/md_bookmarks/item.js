@@ -15,6 +15,8 @@ Polymer({
       observer: 'onItemIdChanged_',
     },
 
+    ironListTabIndex: String,
+
     /** @private {BookmarkNode} */
     item_: {
       type: Object,
@@ -28,6 +30,12 @@ Polymer({
     },
 
     /** @private */
+    mouseFocus_: {
+      type: Boolean,
+      reflectToAttribute: true,
+    },
+
+    /** @private */
     isFolder_: Boolean,
   },
 
@@ -36,8 +44,11 @@ Polymer({
   ],
 
   listeners: {
+    'mousedown': 'onMousedown_',
+    'blur': 'onItemBlur_',
     'click': 'onClick_',
     'dblclick': 'onDblClick_',
+    'contextmenu': 'onContextMenu_',
   },
 
   /** @override */
@@ -61,13 +72,27 @@ Polymer({
    * @param {Event} e
    * @private
    */
+  onContextMenu_: function(e) {
+    e.preventDefault();
+    if (!this.isSelectedItem_)
+      this.selectThisItem_();
+
+    this.fire('open-item-menu', {
+      x: e.clientX,
+      y: e.clientY,
+    });
+  },
+
+  /**
+   * @param {Event} e
+   * @private
+   */
   onMenuButtonClick_: function(e) {
     e.stopPropagation();
-    this.dispatch(bookmarks.actions.selectItem(
-        this.itemId, false, false, this.getState()));
+    e.preventDefault();
+    this.selectThisItem_();
     this.fire('open-item-menu', {
-      target: e.target,
-      item: this.item_,
+      targetElement: e.target,
     });
   },
 
@@ -77,6 +102,15 @@ Polymer({
    */
   onMenuButtonDblClick_: function(e) {
     e.stopPropagation();
+  },
+
+  /** @private */
+  selectThisItem_: function() {
+    this.dispatch(bookmarks.actions.selectItem(this.itemId, this.getState(), {
+      clear: true,
+      range: false,
+      toggle: false,
+    }));
   },
 
   /** @private */
@@ -93,24 +127,46 @@ Polymer({
   },
 
   /**
-   * @param {Event} e
    * @private
    */
-  onClick_: function(e) {
-    this.dispatch(bookmarks.actions.selectItem(
-        this.itemId, e.ctrlKey, e.shiftKey, this.getState()));
-    e.stopPropagation();
+  onMousedown_: function() {
+    this.mouseFocus_ = true;
   },
 
   /**
-   * @param {Event} e
+   * @private
+   */
+  onItemBlur_: function() {
+    this.mouseFocus_ = false;
+  },
+
+  /**
+   * @param {MouseEvent} e
+   * @private
+   */
+  onClick_: function(e) {
+    // Ignore double clicks so that Ctrl double-clicking an item won't deselect
+    // the item before opening.
+    if (e.detail != 2) {
+      this.dispatch(bookmarks.actions.selectItem(this.itemId, this.getState(), {
+        clear: !e.ctrlKey,
+        range: e.shiftKey,
+        toggle: e.ctrlKey && !e.shiftKey,
+      }));
+    }
+    e.stopPropagation();
+    e.preventDefault();
+  },
+
+  /**
+   * @param {MouseEvent} e
    * @private
    */
   onDblClick_: function(e) {
-    if (!this.item_.url)
-      this.dispatch(bookmarks.actions.selectFolder(this.item_.id));
-    else
-      chrome.tabs.create({url: this.item_.url});
+    var commandManager = bookmarks.CommandManager.getInstance();
+    var itemSet = this.getState().selection.items;
+    if (commandManager.canExecute(Command.OPEN, itemSet))
+      commandManager.handle(Command.OPEN, itemSet);
   },
 
   /**

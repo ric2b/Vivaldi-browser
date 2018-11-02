@@ -261,8 +261,8 @@ void CoreOobeHandler::ShowControlBar(bool show) {
   CallJSOrDefer("showControlBar", show);
 }
 
-void CoreOobeHandler::ShowPinKeyboard(bool show) {
-  CallJSOrDefer("showPinKeyboard", show);
+void CoreOobeHandler::SetVirtualKeyboardShown(bool shown) {
+  CallJSOrDefer("setVirtualKeyboardShown", shown);
 }
 
 void CoreOobeHandler::SetClientAreaSize(int width, int height) {
@@ -306,6 +306,15 @@ void CoreOobeHandler::HandleEnableVirtualKeyboard(bool enabled) {
 
 void CoreOobeHandler::HandleSetForceDisableVirtualKeyboard(bool disable) {
   scoped_keyboard_disabler_.SetForceDisableVirtualKeyboard(disable);
+
+  if (disable) {
+    keyboard::KeyboardController* controller =
+        keyboard::KeyboardController::GetInstance();
+    if (controller) {
+      controller->HideKeyboard(
+          keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
+    }
+  }
 }
 
 void CoreOobeHandler::HandleEnableScreenMagnifier(bool enabled) {
@@ -420,6 +429,10 @@ void CoreOobeHandler::OnEnterpriseInfoUpdated(
   CallJSOrDefer("setEnterpriseInfo", message_text, asset_id);
 }
 
+void CoreOobeHandler::OnDeviceInfoUpdated(const std::string& bluetooth_name) {
+  CallJSOrDefer("setBluetoothDeviceInfo", bluetooth_name);
+}
+
 ui::EventSink* CoreOobeHandler::GetEventSink() {
   return ash::Shell::GetPrimaryRootWindow()->GetHost()->event_sink();
 }
@@ -446,7 +459,7 @@ void CoreOobeHandler::UpdateKeyboardState() {
   if (keyboard_controller) {
     gfx::Rect bounds = keyboard_controller->current_keyboard_bounds();
     ShowControlBar(bounds.IsEmpty());
-    ShowPinKeyboard(bounds.IsEmpty());
+    SetVirtualKeyboardShown(!bounds.IsEmpty());
   }
 }
 
@@ -476,7 +489,7 @@ void CoreOobeHandler::HandleHeaderBarVisible() {
   if (login_display_host)
     login_display_host->SetStatusAreaVisible(true);
   if (ScreenLocker::default_screen_locker())
-    ScreenLocker::default_screen_locker()->web_ui()->OnHeaderBarVisible();
+    ScreenLocker::default_screen_locker()->delegate()->OnHeaderBarVisible();
 }
 
 void CoreOobeHandler::HandleRaiseTabKeyEvent(bool reverse) {

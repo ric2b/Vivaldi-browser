@@ -414,6 +414,10 @@ class TabStripModel {
   std::vector<int> GetIndicesClosedByCommand(int index,
                                              ContextMenuCommand id) const;
 
+  // Returns true if 'CommandToggleTabAudioMuted' will mute. |index| is the
+  // index supplied to |ExecuteContextMenuCommand|.
+  bool WillContextMenuMute(int index);
+
   // Returns true if 'CommandTogglePinned' will pin. |index| is the index
   // supplied to |ExecuteContextMenuCommand|.
   bool WillContextMenuPin(int index);

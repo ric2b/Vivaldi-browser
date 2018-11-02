@@ -64,9 +64,8 @@ class FakeDesktopMediaPicker : public DesktopMediaPicker {
     if (!expectation_->cancelled) {
       // Post a task to call the callback asynchronously.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE,
-          base::Bind(&FakeDesktopMediaPicker::CallCallback,
-                     weak_factory_.GetWeakPtr(), done_callback));
+          FROM_HERE, base::BindOnce(&FakeDesktopMediaPicker::CallCallback,
+                                    weak_factory_.GetWeakPtr(), done_callback));
     } else {
       // If we expect the dialog to be cancelled then store the callback to
       // retain reference to the callback handler.
@@ -150,6 +149,11 @@ class DesktopCaptureApiTest : public ExtensionApiTest {
   ~DesktopCaptureApiTest() override {
     DesktopCaptureChooseDesktopMediaFunction::
         SetPickerFactoryForTests(NULL);
+  }
+
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
   }
 
  protected:
@@ -245,7 +249,6 @@ IN_PROC_BROWSER_TEST_F(DesktopCaptureApiTest, DISABLED_Delegation) {
   embedded_test_server()->ServeFilesFromDirectory(test_data.AppendASCII(
       "extensions/api_test/desktop_capture_delegate"));
   ASSERT_TRUE(embedded_test_server()->Start());
-  host_resolver()->AddRule("*", embedded_test_server()->base_url().host());
 
   // Load extension.
   base::FilePath extension_path =

@@ -46,7 +46,6 @@ const unsigned kRafAlignedEnabledMouse = 1 << 1;
 // Simulate a 16ms frame signal.
 const base::TimeDelta kFrameInterval = base::TimeDelta::FromMilliseconds(16);
 
-const int kTestRoutingID = 13;
 const char* kCoalescedCountHistogram =
     "Event.MainThreadEventQueue.CoalescedCount";
 
@@ -62,8 +61,8 @@ class HandledTask {
 
 class HandledEvent : public HandledTask {
  public:
-  explicit HandledEvent(const blink::WebCoalescedInputEvent* event)
-      : event_(event->Event(), event->GetCoalescedEventsPointers()) {}
+  explicit HandledEvent(const blink::WebCoalescedInputEvent& event)
+      : event_(event.Event(), event.GetCoalescedEventsPointers()) {}
   ~HandledEvent() override {}
 
   blink::WebCoalescedInputEvent* taskAsEvent() override { return &event_; }
@@ -117,29 +116,9 @@ class MainThreadEventQueueTest : public testing::TestWithParam<unsigned>,
   }
 
   void SetUp() override {
-    queue_ = new MainThreadEventQueue(kTestRoutingID, this, main_task_runner_,
-                                      &renderer_scheduler_);
-  }
-
-  void HandleEventOnMainThread(int routing_id,
-                               const blink::WebCoalescedInputEvent* event,
-                               const ui::LatencyInfo& latency,
-                               InputEventDispatchType type) override {
-    EXPECT_EQ(kTestRoutingID, routing_id);
-
-    std::unique_ptr<HandledTask> handled_event(new HandledEvent(event));
-    handled_tasks_.push_back(std::move(handled_event));
-
-    queue_->EventHandled(event->Event().GetType(),
-                         blink::WebInputEventResult::kHandledApplication,
-                         INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  }
-
-  void SendInputEventAck(int routing_id,
-                         blink::WebInputEvent::Type type,
-                         InputEventAckState ack_result,
-                         uint32_t touch_event_id) override {
-    additional_acked_events_.push_back(touch_event_id);
+    queue_ = new MainThreadEventQueue(this, main_task_runner_,
+                                      &renderer_scheduler_, true);
+    queue_->set_use_raf_fallback_timer(false);
   }
 
   bool HandleEvent(WebInputEvent& event, InputEventAckState ack_result) {
@@ -158,8 +137,6 @@ class MainThreadEventQueueTest : public testing::TestWithParam<unsigned>,
     queue_->QueueClosure(base::Bind(&MainThreadEventQueueTest::RunClosure,
                                     base::Unretained(this), closure_id));
   }
-
-  void NeedsMainFrame(int routing_id) override { needs_main_frame_ = true; }
 
   MainThreadEventQueueTaskList& event_queue() {
     return queue_->shared_state_.events_;
@@ -189,6 +166,23 @@ class MainThreadEventQueueTest : public testing::TestWithParam<unsigned>,
       queue_->DispatchRafAlignedInput(frame_time_);
     }
   }
+
+  InputEventAckState HandleInputEvent(
+      const blink::WebCoalescedInputEvent& event,
+      const ui::LatencyInfo& latency,
+      InputEventDispatchType dispatch_type) override {
+    std::unique_ptr<HandledTask> handled_event(new HandledEvent(event));
+    handled_tasks_.push_back(std::move(handled_event));
+    return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
+  }
+
+  void SendInputEventAck(blink::WebInputEvent::Type type,
+                         InputEventAckState ack_result,
+                         uint32_t touch_event_id) override {
+    additional_acked_events_.push_back(touch_event_id);
+  }
+
+  void SetNeedsMainFrame() override { needs_main_frame_ = true; }
 
  protected:
   base::test::ScopedFeatureList feature_list_;
@@ -418,12 +412,12 @@ TEST_P(MainThreadEventQueueTest, BlockingTouch) {
 
   EXPECT_EQ(0u, event_queue().size());
   EXPECT_EQ(2u, additional_acked_events_.size());
-  EXPECT_EQ(kEvents[1].unique_touch_event_id, additional_acked_events_.at(0));
-  EXPECT_EQ(kEvents[2].unique_touch_event_id, additional_acked_events_.at(1));
+  EXPECT_EQ(kEvents[2].unique_touch_event_id, additional_acked_events_.at(0));
+  EXPECT_EQ(kEvents[3].unique_touch_event_id, additional_acked_events_.at(1));
 
   const WebTouchEvent* last_touch_event = static_cast<const WebTouchEvent*>(
       handled_tasks_.at(1)->taskAsEvent()->EventPointer());
-  EXPECT_EQ(kEvents[3].unique_touch_event_id,
+  EXPECT_EQ(kEvents[1].unique_touch_event_id,
             last_touch_event->unique_touch_event_id);
 
   HandleEvent(kEvents[1], INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING);
@@ -643,14 +637,13 @@ TEST_P(MainThreadEventQueueTest, RafAlignedTouchInputCoalescedMoves) {
   EXPECT_FALSE(main_task_runner_->HasPendingTask());
   EXPECT_EQ(0u, event_queue().size());
 
-  // Send a discrete input event and then a continuous
-  // (ack required)  event. The events should coalesce together
-  // and a post task should be on the queue at the end.
-  HandleEvent(kEvents[1], INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  // Send a non-blocking input event and then blocking  event.
+  // The events should coalesce together.
+  HandleEvent(kEvents[0], INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(1u, event_queue().size());
   EXPECT_FALSE(main_task_runner_->HasPendingTask());
   EXPECT_TRUE(needs_main_frame_);
-  HandleEvent(kEvents[0], INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  HandleEvent(kEvents[1], INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(1u, event_queue().size());
   EXPECT_FALSE(main_task_runner_->HasPendingTask());
   EXPECT_TRUE(needs_main_frame_);
@@ -880,22 +873,9 @@ INSTANTIATE_TEST_CASE_P(
     testing::Range(0u,
                    (kRafAlignedEnabledTouch | kRafAlignedEnabledMouse) + 1));
 
-class DummyMainThreadEventQueueClient : public MainThreadEventQueueClient {
-  void HandleEventOnMainThread(int routing_id,
-                               const blink::WebCoalescedInputEvent* event,
-                               const ui::LatencyInfo& latency,
-                               InputEventDispatchType dispatch_type) override {}
-
-  void SendInputEventAck(int routing_id,
-                         blink::WebInputEvent::Type type,
-                         InputEventAckState ack_result,
-                         uint32_t touch_event_id) override {}
-
-  void NeedsMainFrame(int routing_id) override {}
-};
-
 class MainThreadEventQueueInitializationTest
-    : public testing::Test {
+    : public testing::Test,
+      public MainThreadEventQueueClient {
  public:
   MainThreadEventQueueInitializationTest()
       : field_trial_list_(new base::FieldTrialList(nullptr)) {}
@@ -908,13 +888,25 @@ class MainThreadEventQueueInitializationTest
     return queue_->enable_non_blocking_due_to_main_thread_responsiveness_flag_;
   }
 
+  InputEventAckState HandleInputEvent(
+      const blink::WebCoalescedInputEvent& event,
+      const ui::LatencyInfo& latency,
+      InputEventDispatchType dispatch_type) override {
+    return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
+  }
+
+  void SendInputEventAck(blink::WebInputEvent::Type type,
+                         InputEventAckState ack_result,
+                         uint32_t touch_event_id) override {}
+
+  void SetNeedsMainFrame() override {}
+
  protected:
   scoped_refptr<MainThreadEventQueue> queue_;
   base::test::ScopedFeatureList feature_list_;
   blink::scheduler::MockRendererScheduler renderer_scheduler_;
   scoped_refptr<base::TestSimpleTaskRunner> main_task_runner_;
   std::unique_ptr<base::FieldTrialList> field_trial_list_;
-  DummyMainThreadEventQueueClient dummy_main_thread_event_queue_client_;
 };
 
 TEST_F(MainThreadEventQueueInitializationTest,
@@ -924,9 +916,8 @@ TEST_F(MainThreadEventQueueInitializationTest,
 
   base::FieldTrialList::CreateFieldTrial(
       "MainThreadResponsivenessScrollIntervention", "Enabled123");
-  queue_ = new MainThreadEventQueue(kTestRoutingID,
-                                    &dummy_main_thread_event_queue_client_,
-                                    main_task_runner_, &renderer_scheduler_);
+  queue_ = new MainThreadEventQueue(this, main_task_runner_,
+                                    &renderer_scheduler_, true);
   EXPECT_TRUE(enable_non_blocking_due_to_main_thread_responsiveness_flag());
   EXPECT_EQ(base::TimeDelta::FromMilliseconds(123),
             main_thread_responsiveness_threshold());
@@ -936,9 +927,8 @@ TEST_F(MainThreadEventQueueInitializationTest,
        MainThreadResponsivenessThresholdDisabled) {
   base::FieldTrialList::CreateFieldTrial(
       "MainThreadResponsivenessScrollIntervention", "Control");
-  queue_ = new MainThreadEventQueue(kTestRoutingID,
-                                    &dummy_main_thread_event_queue_client_,
-                                    main_task_runner_, &renderer_scheduler_);
+  queue_ = new MainThreadEventQueue(this, main_task_runner_,
+                                    &renderer_scheduler_, true);
   EXPECT_FALSE(enable_non_blocking_due_to_main_thread_responsiveness_flag());
   EXPECT_EQ(base::TimeDelta::FromMilliseconds(0),
             main_thread_responsiveness_threshold());

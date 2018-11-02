@@ -17,84 +17,6 @@ namespace media {
 // unique IDs.
 static base::StaticAtomicSequenceNumber g_media_log_count;
 
-// Audio+video watch time metrics.
-const char MediaLog::kWatchTimeAudioVideoAll[] =
-    "Media.WatchTime.AudioVideo.All";
-const char MediaLog::kWatchTimeAudioVideoMse[] =
-    "Media.WatchTime.AudioVideo.MSE";
-const char MediaLog::kWatchTimeAudioVideoEme[] =
-    "Media.WatchTime.AudioVideo.EME";
-const char MediaLog::kWatchTimeAudioVideoSrc[] =
-    "Media.WatchTime.AudioVideo.SRC";
-const char MediaLog::kWatchTimeAudioVideoBattery[] =
-    "Media.WatchTime.AudioVideo.Battery";
-const char MediaLog::kWatchTimeAudioVideoAc[] = "Media.WatchTime.AudioVideo.AC";
-const char MediaLog::kWatchTimeAudioVideoEmbeddedExperience[] =
-    "Media.WatchTime.AudioVideo.EmbeddedExperience";
-
-// Audio only "watch time" metrics.
-const char MediaLog::kWatchTimeAudioAll[] = "Media.WatchTime.Audio.All";
-const char MediaLog::kWatchTimeAudioMse[] = "Media.WatchTime.Audio.MSE";
-const char MediaLog::kWatchTimeAudioEme[] = "Media.WatchTime.Audio.EME";
-const char MediaLog::kWatchTimeAudioSrc[] = "Media.WatchTime.Audio.SRC";
-const char MediaLog::kWatchTimeAudioBattery[] = "Media.WatchTime.Audio.Battery";
-const char MediaLog::kWatchTimeAudioAc[] = "Media.WatchTime.Audio.AC";
-const char MediaLog::kWatchTimeAudioEmbeddedExperience[] =
-    "Media.WatchTime.Audio.EmbeddedExperience";
-
-// Audio+video background watch time metrics.
-const char MediaLog::kWatchTimeAudioVideoBackgroundAll[] =
-    "Media.WatchTime.AudioVideo.Background.All";
-const char MediaLog::kWatchTimeAudioVideoBackgroundMse[] =
-    "Media.WatchTime.AudioVideo.Background.MSE";
-const char MediaLog::kWatchTimeAudioVideoBackgroundEme[] =
-    "Media.WatchTime.AudioVideo.Background.EME";
-const char MediaLog::kWatchTimeAudioVideoBackgroundSrc[] =
-    "Media.WatchTime.AudioVideo.Background.SRC";
-const char MediaLog::kWatchTimeAudioVideoBackgroundBattery[] =
-    "Media.WatchTime.AudioVideo.Background.Battery";
-const char MediaLog::kWatchTimeAudioVideoBackgroundAc[] =
-    "Media.WatchTime.AudioVideo.Background.AC";
-const char MediaLog::kWatchTimeAudioVideoBackgroundEmbeddedExperience[] =
-    "Media.WatchTime.AudioVideo.Background.EmbeddedExperience";
-
-const char MediaLog::kWatchTimeFinalize[] = "FinalizeWatchTime";
-const char MediaLog::kWatchTimeFinalizePower[] = "FinalizePowerWatchTime";
-
-base::flat_set<base::StringPiece> MediaLog::GetWatchTimeKeys() {
-  return base::flat_set<base::StringPiece>(
-      {kWatchTimeAudioAll,
-       kWatchTimeAudioMse,
-       kWatchTimeAudioEme,
-       kWatchTimeAudioSrc,
-       kWatchTimeAudioBattery,
-       kWatchTimeAudioAc,
-       kWatchTimeAudioEmbeddedExperience,
-       kWatchTimeAudioVideoAll,
-       kWatchTimeAudioVideoMse,
-       kWatchTimeAudioVideoEme,
-       kWatchTimeAudioVideoSrc,
-       kWatchTimeAudioVideoBattery,
-       kWatchTimeAudioVideoAc,
-       kWatchTimeAudioVideoEmbeddedExperience,
-       kWatchTimeAudioVideoBackgroundAll,
-       kWatchTimeAudioVideoBackgroundMse,
-       kWatchTimeAudioVideoBackgroundEme,
-       kWatchTimeAudioVideoBackgroundSrc,
-       kWatchTimeAudioVideoBackgroundBattery,
-       kWatchTimeAudioVideoBackgroundAc,
-       kWatchTimeAudioVideoBackgroundEmbeddedExperience},
-      base::KEEP_FIRST_OF_DUPES);
-}
-
-base::flat_set<base::StringPiece> MediaLog::GetWatchTimePowerKeys() {
-  return base::flat_set<base::StringPiece>(
-      {kWatchTimeAudioBattery, kWatchTimeAudioAc, kWatchTimeAudioVideoBattery,
-       kWatchTimeAudioVideoAc, kWatchTimeAudioVideoBackgroundBattery,
-       kWatchTimeAudioVideoBackgroundAc},
-      base::KEEP_FIRST_OF_DUPES);
-}
-
 std::string MediaLog::MediaLogLevelToString(MediaLogLevel level) {
   switch (level) {
     case MEDIALOG_ERROR:
@@ -261,6 +183,14 @@ void MediaLog::RecordRapporWithSecurityOrigin(const std::string& metric) {
   DVLOG(1) << "Default MediaLog doesn't support rappor reporting.";
 }
 
+std::unique_ptr<MediaLogEvent> MediaLog::CreateCreatedEvent(
+    const std::string& origin_url) {
+  std::unique_ptr<MediaLogEvent> event(
+      CreateEvent(MediaLogEvent::WEBMEDIAPLAYER_CREATED));
+  event->params.SetString("origin_url", origin_url);
+  return event;
+}
+
 std::unique_ptr<MediaLogEvent> MediaLog::CreateEvent(MediaLogEvent::Type type) {
   std::unique_ptr<MediaLogEvent> event(new MediaLogEvent);
   event->id = id_;
@@ -391,10 +321,9 @@ void MediaLog::SetBooleanProperty(
   AddEvent(std::move(event));
 }
 
-LogHelper::LogHelper(MediaLog::MediaLogLevel level,
-                     const scoped_refptr<MediaLog>& media_log)
+LogHelper::LogHelper(MediaLog::MediaLogLevel level, MediaLog* media_log)
     : level_(level), media_log_(media_log) {
-  DCHECK(media_log_.get());
+  DCHECK(media_log_);
 }
 
 LogHelper::~LogHelper() {

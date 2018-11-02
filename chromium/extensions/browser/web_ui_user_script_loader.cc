@@ -4,34 +4,39 @@
 
 #include "extensions/browser/web_ui_user_script_loader.h"
 
+#include <set>
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/ref_counted.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "extensions/browser/guest_view/web_view/web_ui/web_ui_url_fetcher.h"
 
 namespace {
 
-void SerializeOnFileThread(
+void SerializeOnBlockingTask(
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
     std::unique_ptr<extensions::UserScriptList> user_scripts,
     extensions::UserScriptLoader::LoadScriptsCallback callback) {
   std::unique_ptr<base::SharedMemory> memory =
       extensions::UserScriptLoader::Serialize(*user_scripts);
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::Bind(callback, base::Passed(&user_scripts), base::Passed(&memory)));
+
+  task_runner->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), std::move(user_scripts),
+                                std::move(memory)));
 }
 
 }  // namespace
 
 struct WebUIUserScriptLoader::UserScriptRenderInfo {
-  int render_process_id;
-  int render_frame_id;
-
-  UserScriptRenderInfo() : render_process_id(-1), render_frame_id(-1) {}
+  const int render_process_id;
+  const int render_frame_id;
 
   UserScriptRenderInfo(int render_process_id, int render_frame_id)
       : render_process_id(render_process_id),
@@ -68,7 +73,7 @@ void WebUIUserScriptLoader::LoadScripts(
     LoadScriptsCallback callback) {
   DCHECK(!user_scripts_cache_) << "Loading scripts in flight.";
   user_scripts_cache_.swap(user_scripts);
-  scripts_loaded_callback_ = callback;
+  scripts_loaded_callback_ = std::move(callback);
 
   // The total number of the tasks is used to trace whether all the fetches
   // are complete. Therefore, we store all the fetcher pointers in |fetchers_|
@@ -86,14 +91,22 @@ void WebUIUserScriptLoader::LoadScripts(
     int render_process_id = iter->second.render_process_id;
     int render_frame_id = iter->second.render_frame_id;
 
-    content::BrowserContext* browser_context =
-        content::RenderProcessHost::FromID(render_process_id)
-            ->GetBrowserContext();
+    content::RenderProcessHost* render_process_host =
+        content::RenderProcessHost::FromID(render_process_id);
 
-    CreateWebUIURLFetchers(script->js_scripts(), browser_context,
-                           render_process_id, render_frame_id);
-    CreateWebUIURLFetchers(script->css_scripts(), browser_context,
-                           render_process_id, render_frame_id);
+    // LoadScripts may not be synchronous with AddScripts. Hence the
+    // |render_process_host| may no longer be alive. This should fix
+    // crbug.com/720331. TODO(karandeepb): Investigate if there are any side
+    // effects of the render process host no longer being alive and add a test.
+    if (render_process_host) {
+      content::BrowserContext* browser_context =
+          render_process_host->GetBrowserContext();
+
+      CreateWebUIURLFetchers(script->js_scripts(), browser_context,
+                             render_process_id, render_frame_id);
+      CreateWebUIURLFetchers(script->css_scripts(), browser_context,
+                             render_process_id, render_frame_id);
+    }
 
     script_render_info_map_.erase(script->id());
   }
@@ -156,10 +169,9 @@ void WebUIUserScriptLoader::OnSingleWebUIURLFetchComplete(
 }
 
 void WebUIUserScriptLoader::OnWebUIURLFetchComplete() {
-  content::BrowserThread::PostTask(
-      content::BrowserThread::FILE, FROM_HERE,
-      base::Bind(&SerializeOnFileThread, base::Passed(&user_scripts_cache_),
-                 scripts_loaded_callback_));
-  scripts_loaded_callback_.Reset();
-  user_scripts_cache_.reset();
+  base::PostTaskWithTraits(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(
+          &SerializeOnBlockingTask, base::SequencedTaskRunnerHandle::Get(),
+          std::move(user_scripts_cache_), std::move(scripts_loaded_callback_)));
 }

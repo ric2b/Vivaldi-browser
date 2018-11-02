@@ -227,21 +227,22 @@ void ChromeNativeAppWindowViews::InitializePanelWindow(
 
   gfx::Rect initial_window_bounds =
       create_params.GetInitialWindowBounds(gfx::Insets());
-  preferred_size_ = gfx::Size(initial_window_bounds.width(),
-                              initial_window_bounds.height());
-  if (preferred_size_.width() == 0)
-    preferred_size_.set_width(kDefaultPanelWidth);
-  else if (preferred_size_.width() < kMinPanelWidth)
-    preferred_size_.set_width(kMinPanelWidth);
+  gfx::Size preferred_size =
+      gfx::Size(initial_window_bounds.width(), initial_window_bounds.height());
+  if (preferred_size.width() == 0)
+    preferred_size.set_width(kDefaultPanelWidth);
+  else if (preferred_size.width() < kMinPanelWidth)
+    preferred_size.set_width(kMinPanelWidth);
 
-  if (preferred_size_.height() == 0)
-    preferred_size_.set_height(kDefaultPanelHeight);
-  else if (preferred_size_.height() < kMinPanelHeight)
-    preferred_size_.set_height(kMinPanelHeight);
+  if (preferred_size.height() == 0)
+    preferred_size.set_height(kDefaultPanelHeight);
+  else if (preferred_size.height() < kMinPanelHeight)
+    preferred_size.set_height(kMinPanelHeight);
+  SetPreferredSize(preferred_size);
 
   // A panel will be placed at a default origin in the currently active target
   // root window.
-  params.bounds = gfx::Rect(preferred_size_);
+  params.bounds = gfx::Rect(preferred_size);
   OnBeforePanelWidgetInit(&params, widget());
   widget()->Init(params);
   widget()->set_focus_on_creation(create_params.focused);
@@ -327,12 +328,6 @@ void ChromeNativeAppWindowViews::GetWidgetHitTestMask(gfx::Path* mask) const {
 
 // views::View implementation.
 
-gfx::Size ChromeNativeAppWindowViews::GetPreferredSize() const {
-  if (!preferred_size_.IsEmpty())
-    return preferred_size_;
-  return NativeAppWindowViews::GetPreferredSize();
-}
-
 bool ChromeNativeAppWindowViews::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
   const std::map<ui::Accelerator, int>& accelerator_table =
@@ -407,8 +402,7 @@ void ChromeNativeAppWindowViews::InitializeWindow(
   has_frame_color_ = create_params.has_frame_color;
   active_frame_color_ = create_params.active_frame_color;
   inactive_frame_color_ = create_params.inactive_frame_color;
-  if (create_params.window_type == AppWindow::WINDOW_TYPE_PANEL ||
-      create_params.window_type == AppWindow::WINDOW_TYPE_V1_PANEL) {
+  if (create_params.window_type == AppWindow::WINDOW_TYPE_PANEL) {
     InitializePanelWindow(create_params);
   } else {
     InitializeDefaultWindow(create_params);

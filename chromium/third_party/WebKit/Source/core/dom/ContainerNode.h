@@ -26,10 +26,10 @@
 #define ContainerNode_h
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "core/CoreExport.h"
 #include "core/dom/Node.h"
 #include "core/html/CollectionType.h"
+#include "platform/bindings/ScriptWrappableVisitor.h"
 #include "platform/wtf/Vector.h"
 #include "public/platform/WebFocusType.h"
 
@@ -42,7 +42,6 @@ class HTMLCollection;
 class NameNodeList;
 using StaticElementList = StaticNodeTypeList<Element>;
 class RadioNodeList;
-class TagCollection;
 
 enum DynamicRestyleFlags {
   kChildrenOrSiblingsAffectedByFocus = 1 << 0,
@@ -80,12 +79,17 @@ enum SubtreeModificationAction {
 const int kInitialNodeVectorSize = 11;
 using NodeVector = HeapVector<Member<Node>, kInitialNodeVectorSize>;
 
+// Note: while ContainerNode itself isn't web-exposed, a number of methods it
+// implements (such as firstChild, lastChild) use web-style naming to shadow
+// the corresponding methods on Node. This is a performance optimization, as it
+// avoids a virtual dispatch if the type is statically known to be
+// ContainerNode.
 class CORE_EXPORT ContainerNode : public Node {
  public:
   ~ContainerNode() override;
 
-  Node* FirstChild() const { return first_child_; }
-  Node* LastChild() const { return last_child_; }
+  Node* firstChild() const { return first_child_; }
+  Node* lastChild() const { return last_child_; }
   bool HasChildren() const { return first_child_; }
 
   bool HasOneChild() const {
@@ -115,9 +119,9 @@ class CORE_EXPORT ContainerNode : public Node {
   Node* AppendChild(Node* new_child, ExceptionState& = ASSERT_NO_EXCEPTION);
 
   Element* getElementById(const AtomicString& id) const;
-  TagCollection* getElementsByTagName(const AtomicString&);
-  TagCollection* getElementsByTagNameNS(const AtomicString& namespace_uri,
-                                        const AtomicString& local_name);
+  HTMLCollection* getElementsByTagName(const AtomicString&);
+  HTMLCollection* getElementsByTagNameNS(const AtomicString& namespace_uri,
+                                         const AtomicString& local_name);
   NameNodeList* getElementsByName(const AtomicString& element_name);
   ClassCollection* getElementsByClassName(const AtomicString& class_names);
   RadioNodeList* GetRadioNodeList(const AtomicString&,
@@ -139,6 +143,7 @@ class CORE_EXPORT ContainerNode : public Node {
   void DetachLayoutTree(const AttachContext& = AttachContext()) override;
   LayoutRect BoundingBox() const final;
   void SetFocused(bool, WebFocusType) override;
+  void SetHasFocusWithinUpToAncestor(bool, Node* ancestor);
   void FocusStateChanged();
   void FocusWithinStateChanged();
   void SetActive(bool = true) override;
@@ -252,6 +257,7 @@ class CORE_EXPORT ContainerNode : public Node {
                                    Node* node_after_change);
   void RecalcDescendantStyles(StyleRecalcChange);
   void RebuildChildrenLayoutTrees(Text*& next_text_sibling);
+  void RebuildLayoutTreeForChild(Node* child, Text*& next_text_sibling);
 
   bool ChildrenSupportStyleSharing() const { return !HasRestyleFlags(); }
 
@@ -366,8 +372,18 @@ class CORE_EXPORT ContainerNode : public Node {
 
   NodeListsNodeData& EnsureNodeLists();
   void RemoveBetween(Node* previous_child, Node* next_child, Node& old_child);
+  // Inserts the specified nodes before |next|.
+  // |next| may be nullptr.
+  // |post_insertion_notification_targets| must not be nullptr.
   template <typename Functor>
-  void InsertNodeVector(const NodeVector&, Node* next, const Functor&);
+  void InsertNodeVector(const NodeVector&,
+                        Node* next,
+                        const Functor&,
+                        NodeVector* post_insertion_notification_targets);
+  void DidInsertNodeVector(
+      const NodeVector&,
+      Node* next,
+      const NodeVector& post_insertion_notification_targets);
   class AdoptAndInsertBefore;
   class AdoptAndAppendChild;
   friend class AdoptAndInsertBefore;
@@ -455,13 +471,13 @@ inline unsigned Node::CountChildren() const {
 inline Node* Node::firstChild() const {
   if (!IsContainerNode())
     return nullptr;
-  return ToContainerNode(this)->FirstChild();
+  return ToContainerNode(this)->firstChild();
 }
 
 inline Node* Node::lastChild() const {
   if (!IsContainerNode())
     return nullptr;
-  return ToContainerNode(this)->LastChild();
+  return ToContainerNode(this)->lastChild();
 }
 
 inline ContainerNode* Node::ParentElementOrShadowRoot() const {
@@ -484,7 +500,7 @@ inline bool Node::IsTreeScope() const {
 
 inline void GetChildNodes(ContainerNode& node, NodeVector& nodes) {
   DCHECK(!nodes.size());
-  for (Node* child = node.FirstChild(); child; child = child->nextSibling())
+  for (Node* child = node.firstChild(); child; child = child->nextSibling())
     nodes.push_back(child);
 }
 

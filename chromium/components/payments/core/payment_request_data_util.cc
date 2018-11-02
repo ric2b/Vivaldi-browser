@@ -7,10 +7,13 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/autofill/core/browser/autofill_country.h"
+#include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/validation.h"
 #include "components/payments/core/basic_card_response.h"
 #include "components/payments/core/payment_address.h"
 #include "components/payments/core/payment_method_data.h"
@@ -71,7 +74,7 @@ PaymentAddress GetPaymentAddressFromAutofillProfile(
 BasicCardResponse GetBasicCardResponseFromAutofillCreditCard(
     const autofill::CreditCard& card,
     const base::string16& cvc,
-    const std::vector<autofill::AutofillProfile*>& billing_profiles,
+    const autofill::AutofillProfile& billing_profile,
     const std::string& app_locale) {
   BasicCardResponse response;
   response.cardholder_name = card.GetRawInfo(autofill::CREDIT_CARD_NAME_FULL);
@@ -81,79 +84,99 @@ BasicCardResponse GetBasicCardResponseFromAutofillCreditCard(
       card.GetRawInfo(autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR);
   response.card_security_code = cvc;
 
-  // TODO(crbug.com/602666): Ensure we reach here only if the card has a billing
-  // address. Then add DCHECK(!card->billing_address_id().empty()).
-  if (!card.billing_address_id().empty()) {
-    const autofill::AutofillProfile* billing_address =
-        autofill::PersonalDataManager::GetProfileFromProfilesByGUID(
-            card.billing_address_id(), billing_profiles);
-    DCHECK(billing_address);
-    response.billing_address =
-        GetPaymentAddressFromAutofillProfile(*billing_address, app_locale);
-  }
+  response.billing_address =
+      GetPaymentAddressFromAutofillProfile(billing_profile, app_locale);
 
   return response;
 }
 
-bool ParseBasicCardSupportedNetworks(
+void ParseBasicCardSupportedNetworks(
     const std::vector<PaymentMethodData>& method_data,
     std::vector<std::string>* out_supported_networks,
     std::set<std::string>* out_basic_card_specified_networks) {
   DCHECK(out_supported_networks->empty());
   DCHECK(out_basic_card_specified_networks->empty());
 
-  std::set<std::string> card_networks{"amex",     "diners",     "discover",
-                                      "jcb",      "mastercard", "mir",
-                                      "unionpay", "visa"};
+  const std::set<std::string> kBasicCardNetworks{
+      "amex",       "diners", "discover", "jcb",
+      "mastercard", "mir",    "unionpay", "visa"};
+  std::set<std::string> remaining_card_networks(kBasicCardNetworks);
   for (const PaymentMethodData& method_data_entry : method_data) {
     if (method_data_entry.supported_methods.empty())
-      return false;
+      return;
 
     for (const std::string& method : method_data_entry.supported_methods) {
       if (method.empty())
         continue;
 
-      // If a card network is specified right in "supportedMethods", add it.
       const char kBasicCardMethodName[] = "basic-card";
-      auto card_it = card_networks.find(method);
-      if (card_it != card_networks.end()) {
+      // If a card network is specified right in "supportedMethods", add it.
+      auto card_it = remaining_card_networks.find(method);
+      if (card_it != remaining_card_networks.end()) {
         out_supported_networks->push_back(method);
-        // |method| removed from |card_networks| so that it is not doubly added
-        // to |supported_card_networks_| if "basic-card" is specified with no
-        // supported networks.
-        card_networks.erase(card_it);
+        // |method| removed from |remaining_card_networks| so that it is not
+        // doubly added to |out_supported_networks|.
+        remaining_card_networks.erase(card_it);
       } else if (method == kBasicCardMethodName) {
         // For the "basic-card" method, check "supportedNetworks".
         if (method_data_entry.supported_networks.empty()) {
           // Empty |supported_networks| means all networks are supported.
           out_supported_networks->insert(out_supported_networks->end(),
-                                         card_networks.begin(),
-                                         card_networks.end());
-          out_basic_card_specified_networks->insert(card_networks.begin(),
-                                                    card_networks.end());
+                                         remaining_card_networks.begin(),
+                                         remaining_card_networks.end());
+          out_basic_card_specified_networks->insert(kBasicCardNetworks.begin(),
+                                                    kBasicCardNetworks.end());
           // Clear the set so that no further networks are added to
           // |out_supported_networks|.
-          card_networks.clear();
+          remaining_card_networks.clear();
         } else {
           // The merchant has specified a few basic card supported networks. Use
           // the mapping to transform to known basic-card types.
           for (const std::string& supported_network :
                method_data_entry.supported_networks) {
             // Make sure that the network was not already added to
-            // |out_supported_networks|. If it's still in |card_networks| it's
-            // fair game.
-            auto it = card_networks.find(supported_network);
-            if (it != card_networks.end()) {
+            // |out_supported_networks|. If it's still in
+            // |remaining_card_networks| it's fair game.
+            auto it = remaining_card_networks.find(supported_network);
+            if (it != remaining_card_networks.end()) {
               out_supported_networks->push_back(supported_network);
+              remaining_card_networks.erase(it);
+            }
+            if (kBasicCardNetworks.find(supported_network) !=
+                kBasicCardNetworks.end()) {
               out_basic_card_specified_networks->insert(supported_network);
-              card_networks.erase(it);
             }
           }
         }
       }
     }
   }
-  return true;
+}
+
+base::string16 GetFormattedPhoneNumberForDisplay(
+    const autofill::AutofillProfile& profile,
+    const std::string& locale) {
+  // Since the "+" is removed for some country's phone numbers, try to add a "+"
+  // and see if it is a valid phone number for a country.
+  // Having two "+" in front of a number has no effect on the formatted number.
+  // The reason for this is international phone numbers for another country. For
+  // example, without adding a "+", the US number 1-415-123-1234 for an AU
+  // address would be wrongly formatted as +61 1-415-123-1234 which is invalid.
+  std::string phone = base::UTF16ToUTF8(profile.GetInfo(
+      autofill::AutofillType(autofill::PHONE_HOME_WHOLE_NUMBER), locale));
+  std::string tentative_intl_phone = "+" + phone;
+
+  // Always favor the tentative international phone number if it's determined as
+  // being a valid number.
+  if (autofill::IsValidPhoneNumber(
+          base::UTF8ToUTF16(tentative_intl_phone),
+          GetCountryCodeWithFallback(&profile, locale))) {
+    return base::UTF8ToUTF16(FormatPhoneForDisplay(
+        tentative_intl_phone, GetCountryCodeWithFallback(&profile, locale)));
+  }
+
+  return base::UTF8ToUTF16(FormatPhoneForDisplay(
+      phone, GetCountryCodeWithFallback(&profile, locale)));
 }
 
 std::string FormatPhoneForDisplay(const std::string& phone_number,
@@ -166,6 +189,15 @@ std::string FormatPhoneForResponse(const std::string& phone_number,
                                    const std::string& country_code) {
   return FormatPhoneNumber(phone_number, country_code,
                            PhoneNumberUtil::PhoneNumberFormat::E164);
+}
+
+std::string GetCountryCodeWithFallback(const autofill::AutofillProfile* profile,
+                                       const std::string& app_locale) {
+  std::string country_code =
+      base::UTF16ToUTF8(profile->GetRawInfo(autofill::ADDRESS_HOME_COUNTRY));
+  if (!autofill::data_util::IsValidCountryCode(country_code))
+    country_code = autofill::AutofillCountry::CountryCodeForLocale(app_locale);
+  return country_code;
 }
 
 }  // namespace data_util

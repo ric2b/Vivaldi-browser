@@ -22,6 +22,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
 #include "chrome/browser/chromeos/login/arc_kiosk_controller.h"
@@ -57,6 +58,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "chromeos/login/auth/authpolicy_login_helper.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/arc/arc_util.h"
 #include "components/google/core/browser/google_util.h"
@@ -186,6 +188,11 @@ bool ShouldForceDircrypto(const AccountId& account_id) {
   // If the device is not officially supported to run ARC, we don't need to
   // force Ext4 dircrypto.
   if (!arc::IsArcAvailable())
+    return false;
+
+  // If the device requires ecryptfs to ext4 migration policy check, and the
+  // policy doesn't allow the migration, then return.
+  if (!arc::IsArcMigrationAllowed())
     return false;
 
   // In some login flows (e.g. when siging in supervised user), ARC can not
@@ -401,6 +408,8 @@ ExistingUserController::~ExistingUserController() {
 
 void ExistingUserController::CancelPasswordChangedFlow() {
   login_performer_.reset(nullptr);
+  if (authpolicy_login_helper_)
+    authpolicy_login_helper_->CancelRequestsAndRestart();
   PerformLoginFinishedActions(true /* start auto login timer */);
 }
 
@@ -476,11 +485,27 @@ void ExistingUserController::PerformLogin(
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   if (connector->IsActiveDirectoryManaged() &&
-      user_context.GetAuthFlow() != UserContext::AUTH_FLOW_ACTIVE_DIRECTORY) {
+      user_context.GetUserType() != user_manager::USER_TYPE_ACTIVE_DIRECTORY) {
     PerformLoginFinishedActions(false /* don't start auto login timer */);
     ShowError(IDS_LOGIN_ERROR_GOOGLE_ACCOUNT_NOT_ALLOWED,
               "Google accounts are not allowed on this device");
     return;
+  }
+  if (user_context.GetAccountId().GetAccountType() ==
+      AccountType::ACTIVE_DIRECTORY) {
+    DCHECK(user_context.GetKey()->GetKeyType() == Key::KEY_TYPE_PASSWORD_PLAIN);
+    if (!authpolicy_login_helper_)
+      authpolicy_login_helper_ = base::MakeUnique<AuthPolicyLoginHelper>();
+    // Try to get kerberos TGT while we have user's password typed on the pod
+    // screen. Failure to get TGT here is OK - that could mean e.g. Active
+    // Directory server is not reachable. We don't want to have user wait for
+    // the Active Directory Authentication on the pod screen. In the follow-up
+    // CL we're gonna create KeyedService inside the user session which would
+    // get status about last authentication and handle possible failures.
+    authpolicy_login_helper_->TryAuthenticateUser(
+        user_context.GetAccountId().GetUserEmail(),
+        user_context.GetAccountId().GetObjGuid(),
+        user_context.GetKey()->GetSecret());
   }
 
   if (gaia::ExtractDomainName(user_context.GetAccountId().GetUserEmail()) ==
@@ -498,6 +523,11 @@ void ExistingUserController::PerformLogin(
   }
   SendAccessibilityAlert(
       l10n_util::GetStringUTF8(IDS_CHROMEOS_ACC_LOGIN_SIGNING_IN));
+  if (!time_init_.is_null()) {
+    base::TimeDelta delta = base::Time::Now() - time_init_;
+    UMA_HISTOGRAM_MEDIUM_TIMES("Login.PromptToLoginTime", delta);
+    time_init_ = base::Time();  // Reset to null.
+  }
 }
 
 void ExistingUserController::ContinuePerformLogin(
@@ -738,6 +768,8 @@ void ExistingUserController::OnAuthFailure(const AuthFailure& failure) {
   if (auth_status_consumer_)
     auth_status_consumer_->OnAuthFailure(failure);
 
+  if (authpolicy_login_helper_)
+    authpolicy_login_helper_->CancelRequestsAndRestart();
   ClearRecordedNames();
 
   // TODO(ginkage): Fix this case once crbug.com/469990 is ready.
@@ -906,6 +938,8 @@ void ExistingUserController::WhiteListCheckFailed(const std::string& email) {
         AuthFailure(AuthFailure::WHITELIST_CHECK_FAILED));
   }
 
+  if (authpolicy_login_helper_)
+    authpolicy_login_helper_->CancelRequestsAndRestart();
   ClearRecordedNames();
 }
 
@@ -913,6 +947,8 @@ void ExistingUserController::PolicyLoadFailed() {
   ShowError(IDS_LOGIN_ERROR_OWNER_KEY_LOST, "");
 
   PerformLoginFinishedActions(false /* don't start auto login timer */);
+  if (authpolicy_login_helper_)
+    authpolicy_login_helper_->CancelRequestsAndRestart();
   ClearRecordedNames();
 }
 
@@ -1258,6 +1294,17 @@ void ExistingUserController::PerformLoginFinishedActions(
     StartAutoLoginTimer();
 }
 
+void ExistingUserController::ContinueLoginWhenCryptohomeAvailable(
+    base::OnceClosure continuation,
+    bool service_is_available) {
+  if (!service_is_available) {
+    LOG(ERROR) << "Cryptohome service is not available";
+    OnAuthFailure(AuthFailure(AuthFailure::COULD_NOT_MOUNT_CRYPTOHOME));
+    return;
+  }
+  std::move(continuation).Run();
+}
+
 void ExistingUserController::ContinueLoginIfDeviceNotDisabled(
     const base::Closure& continuation) {
   // Disable clicking on other windows and status tray.
@@ -1303,7 +1350,11 @@ void ExistingUserController::ContinueLoginIfDeviceNotDisabled(
     return;
   }
 
-  continuation.Run();
+  chromeos::DBusThreadManager::Get()
+      ->GetCryptohomeClient()
+      ->WaitForServiceToBeAvailable(base::Bind(
+          &ExistingUserController::ContinueLoginWhenCryptohomeAvailable,
+          weak_factory_.GetWeakPtr(), continuation));
 }
 
 void ExistingUserController::DoCompleteLogin(
@@ -1332,8 +1383,6 @@ void ExistingUserController::DoCompleteLogin(
     UMA_HISTOGRAM_MEDIUM_TIMES("Login.PromptToCompleteLoginTime", delta);
     time_init_ = base::Time();  // Reset to null.
   }
-
-  host_->OnCompleteLogin();
 
   if (user_context.GetAuthFlow() == UserContext::AUTH_FLOW_EASY_BOOTSTRAP) {
     bootstrap_user_context_initializer_.reset(

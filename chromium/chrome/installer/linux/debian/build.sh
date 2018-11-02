@@ -345,7 +345,7 @@ fi
 # libappindicator1: Make systray icons work in Unity.
 # libnss3: Pull a more recent version of NSS than required by runtime linking,
 #          for security and stability updates in NSS.
-# lsb-base: Implies many other dependencies.
+# lsb-release: For lsb_release.
 # xdg-utils: For OS integration.
 # wget: For uploading crash reports with Breakpad.
 ADDITIONAL_DEPS="ca-certificates, fonts-liberation, libappindicator1, \

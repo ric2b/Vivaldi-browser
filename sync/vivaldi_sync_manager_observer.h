@@ -10,11 +10,11 @@ class VivaldiSyncManagerObserver {
  public:
   virtual void OnAccessTokenRequested() {}
   virtual void OnEncryptionPasswordRequested() {}
-  virtual void OnSyncConfigured() {}
   virtual void OnLoginDone() {}
   virtual void OnSyncEngineInitFailed() {}
   virtual void OnBeginSyncing() {}
   virtual void OnEndSyncing() {}
+  virtual void OnLogoutDone() {}
 
   virtual void OnDeletingSyncManager() = 0;
 

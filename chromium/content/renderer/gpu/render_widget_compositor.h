@@ -53,6 +53,8 @@ class CONTENT_EXPORT RenderWidgetCompositor
     : NON_EXPORTED_BASE(public blink::WebLayerTreeView),
       NON_EXPORTED_BASE(public cc::LayerTreeHostClient),
       NON_EXPORTED_BASE(public cc::LayerTreeHostSingleThreadClient) {
+  using ReportTimeCallback = base::Callback<void(bool, double)>;
+
  public:
   // Attempt to construct and initialize a compositor instance for the widget
   // with the given settings. Returns NULL if initialization fails.
@@ -143,9 +145,12 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void CompositeAndReadbackAsync(
       blink::WebCompositeAndReadbackAsyncCallback* callback) override;
   void SetDeferCommits(bool defer_commits) override;
+  // TODO(pdr): Refactor to use a struct like LayerTreeHost::ViewportLayers.
   void RegisterViewportLayers(
       const blink::WebLayer* overscrollElasticityLayer,
       const blink::WebLayer* pageScaleLayer,
+      const blink::WebLayer* innerViewportContainerLayer,
+      const blink::WebLayer* outerViewportContainerLayer,
       const blink::WebLayer* innerViewportScrollLayer,
       const blink::WebLayer* outerViewportScrollLayer) override;
   void ClearViewportLayers() override;
@@ -167,6 +172,7 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void SetShowPaintRects(bool show) override;
   void SetShowDebugBorders(bool show) override;
   void SetShowScrollBottleneckRects(bool show) override;
+  void NotifySwapTime(ReportTimeCallback callback) override;
 
   void UpdateBrowserControlsState(blink::WebBrowserControlsState constraints,
                                   blink::WebBrowserControlsState current,
@@ -182,6 +188,7 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void DidBeginMainFrame() override;
   void BeginMainFrame(const cc::BeginFrameArgs& args) override;
   void BeginMainFrameNotExpectedSoon() override;
+  void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override;
   void UpdateLayerTreeHost() override;
   void ApplyViewportDeltas(const gfx::Vector2dF& inner_delta,
                            const gfx::Vector2dF& outer_delta,
@@ -240,6 +247,8 @@ class CONTENT_EXPORT RenderWidgetCompositor
   cc::FrameSinkId frame_sink_id_;
 
   base::WeakPtrFactory<RenderWidgetCompositor> weak_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(RenderWidgetCompositor);
 };
 
 }  // namespace content

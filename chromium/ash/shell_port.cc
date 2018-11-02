@@ -47,9 +47,9 @@ void ShellPort::ShowContextMenu(const gfx::Point& location_in_screen,
     return;
   }
 
-  WmWindow* root = wm::GetRootWindowAt(location_in_screen);
-  root->GetRootWindowController()->ShowContextMenu(location_in_screen,
-                                                   source_type);
+  aura::Window* root = wm::GetRootWindowAt(location_in_screen);
+  RootWindowController::ForWindow(root)->ShowContextMenu(location_in_screen,
+                                                         source_type);
 }
 
 void ShellPort::OnLockStateEvent(LockStateObserver::EventType event) {
@@ -68,10 +68,6 @@ void ShellPort::RemoveLockStateObserver(LockStateObserver* observer) {
 ShellPort::ShellPort() {
   DCHECK(!instance_);
   instance_ = this;
-}
-
-RootWindowController* ShellPort::GetPrimaryRootWindowController() {
-  return GetPrimaryRootWindow()->GetRootWindowController();
 }
 
 bool ShellPort::IsForceMaximizeOnFirstRun() {
@@ -98,25 +94,25 @@ bool ShellPort::IsSystemModalWindowOpen() {
   return false;
 }
 
-void ShellPort::CreateModalBackground(WmWindow* window) {
-  for (WmWindow* root_window : GetAllRootWindows()) {
-    root_window->GetRootWindowController()
+void ShellPort::CreateModalBackground(aura::Window* window) {
+  for (aura::Window* root_window : Shell::GetAllRootWindows()) {
+    RootWindowController::ForWindow(root_window)
         ->GetSystemModalLayoutManager(window)
         ->CreateModalBackground();
   }
 }
 
-void ShellPort::OnModalWindowRemoved(WmWindow* removed) {
-  WmWindow::Windows root_windows = GetAllRootWindows();
-  for (WmWindow* root_window : root_windows) {
-    if (root_window->GetRootWindowController()
+void ShellPort::OnModalWindowRemoved(aura::Window* removed) {
+  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
+  for (aura::Window* root_window : root_windows) {
+    if (RootWindowController::ForWindow(root_window)
             ->GetSystemModalLayoutManager(removed)
             ->ActivateNextModalWindow()) {
       return;
     }
   }
-  for (WmWindow* root_window : root_windows) {
-    root_window->GetRootWindowController()
+  for (aura::Window* root_window : root_windows) {
+    RootWindowController::ForWindow(root_window)
         ->GetSystemModalLayoutManager(removed)
         ->DestroyModalBackground();
   }

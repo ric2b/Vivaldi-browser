@@ -22,6 +22,7 @@
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "base/threading/thread_local.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/safe_browsing/incident_reporting/incident.h"
@@ -33,8 +34,8 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/csd.pb.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/quota_service.h"
@@ -374,7 +375,7 @@ class IncidentReportingServiceTest : public testing::Test {
       // Post a task that will provide the response.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE,
-          base::Bind(&FakeUploader::FinishUpload, base::Unretained(this)));
+          base::BindOnce(&FakeUploader::FinishUpload, base::Unretained(this)));
     }
     ~FakeUploader() override { on_deleted_.Run(); }
 
@@ -405,8 +406,8 @@ class IncidentReportingServiceTest : public testing::Test {
             callback) {
       // Post a task to run the callback.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(callback, base::Passed(&binary_download),
-                                base::Passed(&non_binary_download)));
+          FROM_HERE, base::BindOnce(callback, base::Passed(&binary_download),
+                                    base::Passed(&non_binary_download)));
       return std::unique_ptr<safe_browsing::LastDownloadFinder>(
           new FakeDownloadFinder(on_deleted));
     }
@@ -475,10 +476,9 @@ class IncidentReportingServiceTest : public testing::Test {
   // Posts a task to delete the profile.
   void DelayedDeleteProfile(Profile* profile) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&TestingProfileManager::DeleteTestingProfile,
-                   base::Unretained(&profile_manager_),
-                   profile->GetProfileUserName()));
+        FROM_HERE, base::BindOnce(&TestingProfileManager::DeleteTestingProfile,
+                                  base::Unretained(&profile_manager_),
+                                  profile->GetProfileUserName()));
   }
 
   // A callback run by the test fixture when a profile is added. An incident
@@ -1314,12 +1314,13 @@ TEST_F(IncidentReportingServiceTest, CleanLegacyPruneState) {
   // Set up a prune state dict with data to be cleared (and not).
   std::unique_ptr<base::DictionaryValue> incidents_sent(
       new base::DictionaryValue());
-  base::DictionaryValue* type_dict = new base::DictionaryValue();
+  auto type_dict = base::MakeUnique<base::DictionaryValue>();
   type_dict->SetStringWithoutPathExpansion("foo", "47");
-  incidents_sent->SetWithoutPathExpansion(omnibox_type, type_dict);
-  type_dict = new base::DictionaryValue();
+  incidents_sent->SetWithoutPathExpansion(omnibox_type, std::move(type_dict));
+  type_dict = base::MakeUnique<base::DictionaryValue>();
   type_dict->SetStringWithoutPathExpansion("bar", "43");
-  incidents_sent->SetWithoutPathExpansion(preference_type, type_dict);
+  incidents_sent->SetWithoutPathExpansion(preference_type,
+                                          std::move(type_dict));
 
   // Add a profile.
   Profile* profile =

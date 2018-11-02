@@ -15,7 +15,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/profiler/scoped_tracker.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -23,12 +22,9 @@
 #include "components/translate/core/browser/proto/ranker_model.pb.h"
 #include "components/translate/core/browser/proto/translate_ranker_model.pb.h"
 #include "components/translate/core/browser/ranker_model.h"
-#include "components/translate/core/browser/translate_download_manager.h"
-#include "components/translate/core/browser/translate_prefs.h"
-#include "components/translate/core/browser/translate_url_fetcher.h"
 #include "components/translate/core/common/translate_switches.h"
-#include "components/ukm/ukm_entry_builder.h"
-#include "components/ukm/ukm_service.h"
+#include "components/ukm/public/ukm_entry_builder.h"
+#include "components/ukm/public/ukm_recorder.h"
 #include "components/variations/variations_associated_data.h"
 #include "url/gurl.h"
 
@@ -40,7 +36,7 @@ using chrome_intelligence::RankerModel;
 using chrome_intelligence::RankerModelProto;
 using chrome_intelligence::TranslateRankerModel;
 
-const double kTranslationOfferThreshold = 0.5;
+const double kTranslationOfferDefaultThreshold = 0.5;
 
 const char kTranslateRankerModelFileName[] = "Translate Ranker Model";
 const char kUmaPrefix[] = "Translate.Ranker";
@@ -82,8 +78,8 @@ const base::Feature kTranslateRankerQuery{"TranslateRankerQuery",
 const base::Feature kTranslateRankerEnforcement{
     "TranslateRankerEnforcement", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kTranslateRankerLogging{"TranslateRankerLogging",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kTranslateRankerDecisionOverride{
+    "TranslateRankerDecisionOverride", base::FEATURE_DISABLED_BY_DEFAULT};
 
 TranslateRankerFeatures::TranslateRankerFeatures() {}
 
@@ -106,17 +102,16 @@ TranslateRankerFeatures::TranslateRankerFeatures(int accepted,
       denied_ratio(SafeRatio(denied_count, total_count)),
       ignored_ratio(SafeRatio(ignored_count, total_count)) {}
 
-TranslateRankerFeatures::TranslateRankerFeatures(const TranslatePrefs& prefs,
-                                                 const std::string& src,
-                                                 const std::string& dst,
-                                                 const std::string& locale)
-    : TranslateRankerFeatures(prefs.GetTranslationAcceptedCount(src),
-                              prefs.GetTranslationDeniedCount(src),
-                              prefs.GetTranslationIgnoredCount(src),
-                              src,
-                              dst,
-                              prefs.GetCountry(),
-                              locale) {}
+// TODO(hamelphi): Log locale in TranslateEventProtos.
+TranslateRankerFeatures::TranslateRankerFeatures(
+    const metrics::TranslateEventProto& translate_event)
+    : TranslateRankerFeatures(translate_event.accept_count(),
+                              translate_event.decline_count(),
+                              translate_event.ignore_count(),
+                              translate_event.source_language(),
+                              translate_event.target_language(),
+                              translate_event.country(),
+                              "" /*locale*/) {}
 
 TranslateRankerFeatures::~TranslateRankerFeatures() {}
 
@@ -136,21 +131,24 @@ void TranslateRankerFeatures::WriteTo(std::ostream& stream) const {
 
 TranslateRankerImpl::TranslateRankerImpl(const base::FilePath& model_path,
                                          const GURL& model_url,
-                                         ukm::UkmService* ukm_service)
-    : ukm_service_(ukm_service),
-      is_logging_enabled_(
-          base::FeatureList::IsEnabled(kTranslateRankerLogging)),
+                                         ukm::UkmRecorder* ukm_recorder)
+    : ukm_recorder_(ukm_recorder),
+      is_logging_enabled_(true),
       is_query_enabled_(base::FeatureList::IsEnabled(kTranslateRankerQuery)),
       is_enforcement_enabled_(
           base::FeatureList::IsEnabled(kTranslateRankerEnforcement)),
+      is_decision_override_enabled_(base::FeatureList::IsEnabled(
+          translate::kTranslateRankerDecisionOverride)),
       weak_ptr_factory_(this) {
-  if (IsQueryEnabled() || IsEnforcementEnabled()) {
+  if (is_query_enabled_ || is_enforcement_enabled_ ||
+      is_decision_override_enabled_) {
     model_loader_ = base::MakeUnique<RankerModelLoader>(
         base::Bind(&ValidateModel),
         base::Bind(&TranslateRankerImpl::OnModelAvailable,
                    weak_ptr_factory_.GetWeakPtr()),
         model_path, model_url, kUmaPrefix);
-    model_loader_->Start();
+    // Kick off the initial load from cache.
+    model_loader_->NotifyOfRankerActivity();
   }
 }
 
@@ -189,26 +187,12 @@ void TranslateRankerImpl::EnableLogging(bool value) {
   is_logging_enabled_ = value;
 }
 
-bool TranslateRankerImpl::IsLoggingEnabled() {
-  return is_logging_enabled_;
-}
-
-bool TranslateRankerImpl::IsQueryEnabled() {
-  return is_query_enabled_;
-}
-
-bool TranslateRankerImpl::IsEnforcementEnabled() {
-  return is_enforcement_enabled_;
-}
-
-int TranslateRankerImpl::GetModelVersion() const {
+uint32_t TranslateRankerImpl::GetModelVersion() const {
   return model_ ? model_->proto().translate().version() : 0;
 }
 
 bool TranslateRankerImpl::ShouldOfferTranslation(
-    const TranslatePrefs& translate_prefs,
-    const std::string& src_lang,
-    const std::string& dst_lang) {
+    metrics::TranslateEventProto* translate_event) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
   // The ranker is a gate in the "show a translation prompt" flow. To retain
   // the pre-existing functionality, it defaults to returning true in the
@@ -217,11 +201,23 @@ bool TranslateRankerImpl::ShouldOfferTranslation(
   // (or become False).
   const bool kDefaultResponse = true;
 
+  translate_event->set_ranker_request_timestamp_sec(
+      (base::TimeTicks::Now() - base::TimeTicks()).InSeconds());
+  translate_event->set_ranker_version(GetModelVersion());
+
+  if (!is_query_enabled_ && !is_enforcement_enabled_ &&
+      !is_decision_override_enabled_) {
+    translate_event->set_ranker_response(
+        metrics::TranslateEventProto::NOT_QUERIED);
+    return kDefaultResponse;
+  }
+
   if (model_loader_)
     model_loader_->NotifyOfRankerActivity();
 
-  // If we don't have a model, request one and return the default.
   if (model_ == nullptr) {
+    translate_event->set_ranker_response(
+        metrics::TranslateEventProto::NOT_QUERIED);
     return kDefaultResponse;
   }
 
@@ -232,43 +228,57 @@ bool TranslateRankerImpl::ShouldOfferTranslation(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "646711 translate::TranslateRankerImpl::ShouldOfferTranslation"));
 
-  TranslateRankerFeatures features(
-      translate_prefs, src_lang, dst_lang,
-      TranslateDownloadManager::GetInstance()->application_locale());
-
-  double score = CalculateScore(features);
-
-  DVLOG(2) << "TranslateRankerImpl::ShouldOfferTranslation: "
-           << "Score = " << score << ", Features=[" << features << "]";
-
-  bool result = (score >= kTranslationOfferThreshold);
+  bool result = GetModelDecision(*translate_event);
 
   UMA_HISTOGRAM_BOOLEAN("Translate.Ranker.QueryResult", result);
+
+  translate_event->set_ranker_response(
+      result ? metrics::TranslateEventProto::SHOW
+             : metrics::TranslateEventProto::DONT_SHOW);
+
+  if (!is_enforcement_enabled_ && !is_decision_override_enabled_) {
+    return kDefaultResponse;
+  }
 
   return result;
 }
 
-double TranslateRankerImpl::CalculateScore(
-    const TranslateRankerFeatures& features) {
+bool TranslateRankerImpl::GetModelDecision(
+    const metrics::TranslateEventProto& translate_event) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
   SCOPED_UMA_HISTOGRAM_TIMER("Translate.Ranker.Timer.CalculateScore");
   DCHECK(model_ != nullptr);
-  const TranslateRankerModel::LogisticRegressionModel& logit =
+
+  // TODO(hamelphi): consider deprecating TranslateRankerFeatures and move the
+  // logic here.
+  const TranslateRankerFeatures features(translate_event);
+
+  const TranslateRankerModel::LogisticRegressionModel& lr_model =
       model_->proto().translate().logistic_regression_model();
 
   double dot_product =
-      (features.accepted_count * logit.accept_count_weight()) +
-      (features.denied_count * logit.decline_count_weight()) +
-      (features.ignored_count * logit.ignore_count_weight()) +
-      (features.accepted_ratio * logit.accept_ratio_weight()) +
-      (features.denied_ratio * logit.decline_ratio_weight()) +
-      (features.ignored_ratio * logit.ignore_ratio_weight()) +
-      ScoreComponent(logit.source_language_weight(), features.src_lang) +
-      ScoreComponent(logit.target_language_weight(), features.dst_lang) +
-      ScoreComponent(logit.country_weight(), features.country) +
-      ScoreComponent(logit.locale_weight(), features.app_locale);
+      (features.accepted_count * lr_model.accept_count_weight()) +
+      (features.denied_count * lr_model.decline_count_weight()) +
+      (features.ignored_count * lr_model.ignore_count_weight()) +
+      (features.accepted_ratio * lr_model.accept_ratio_weight()) +
+      (features.denied_ratio * lr_model.decline_ratio_weight()) +
+      (features.ignored_ratio * lr_model.ignore_ratio_weight()) +
+      ScoreComponent(lr_model.source_language_weight(), features.src_lang) +
+      ScoreComponent(lr_model.target_language_weight(), features.dst_lang) +
+      ScoreComponent(lr_model.country_weight(), features.country) +
+      ScoreComponent(lr_model.locale_weight(), features.app_locale);
 
-  return Sigmoid(dot_product + logit.bias());
+  double score = Sigmoid(dot_product + lr_model.bias());
+
+  DVLOG(2) << "TranslateRankerImpl::GetModelDecision: "
+           << "Score = " << score << ", Features=[" << features << "]";
+
+  float decision_threshold = kTranslationOfferDefaultThreshold;
+  if (lr_model.threshold() > 0) {
+    decision_threshold = lr_model.threshold();
+  }
+
+  return score >= decision_threshold;
 }
 
 void TranslateRankerImpl::FlushTranslateEvents(
@@ -282,15 +292,15 @@ void TranslateRankerImpl::FlushTranslateEvents(
 void TranslateRankerImpl::SendEventToUKM(
     const metrics::TranslateEventProto& event,
     const GURL& url) {
-  if (!ukm_service_) {
+  if (!ukm_recorder_) {
     DVLOG(3) << "No UKM service.";
     return;
   }
   DVLOG(3) << "Sending event for url: " << url.spec();
-  int32_t source_id = ukm_service_->GetNewSourceID();
-  ukm_service_->UpdateSourceURL(source_id, url);
+  ukm::SourceId source_id = ukm_recorder_->GetNewSourceID();
+  ukm_recorder_->UpdateSourceURL(source_id, url);
   std::unique_ptr<ukm::UkmEntryBuilder> builder =
-      ukm_service_->GetEntryBuilder(source_id, "Translate");
+      ukm_recorder_->GetEntryBuilder(source_id, "Translate");
   // The metrics added here should be kept in sync with the documented
   // metrics in tools/metrics/ukm/ukm.xml.
   // TODO(hamelphi): Remove hashing functions once UKM accepts strings metrics.
@@ -311,7 +321,7 @@ void TranslateRankerImpl::AddTranslateEvent(
     const metrics::TranslateEventProto& event,
     const GURL& url) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
-  if (IsLoggingEnabled()) {
+  if (is_logging_enabled_) {
     DVLOG(3) << "Adding translate ranker event.";
     if (url.is_valid()) {
       SendEventToUKM(event, url);
@@ -327,6 +337,34 @@ void TranslateRankerImpl::OnModelAvailable(std::unique_ptr<RankerModel> model) {
 
 bool TranslateRankerImpl::CheckModelLoaderForTesting() {
   return model_loader_ != nullptr;
+}
+
+void TranslateRankerImpl::RecordTranslateEvent(
+    int event_type,
+    const GURL& url,
+    metrics::TranslateEventProto* translate_event) {
+  DCHECK(metrics::TranslateEventProto::EventType_IsValid(event_type));
+  translate_event->set_event_type(
+      static_cast<metrics::TranslateEventProto::EventType>(event_type));
+  translate_event->set_event_timestamp_sec(
+      (base::TimeTicks::Now() - base::TimeTicks()).InSeconds());
+  AddTranslateEvent(*translate_event, url);
+}
+
+bool TranslateRankerImpl::ShouldOverrideDecision(
+    int event_type,
+    const GURL& url,
+    metrics::TranslateEventProto* translate_event) {
+  DCHECK(metrics::TranslateEventProto::EventType_IsValid(event_type));
+  if (is_decision_override_enabled_) {
+    translate_event->add_decision_overrides(
+        static_cast<metrics::TranslateEventProto::EventType>(event_type));
+    DVLOG(3) << "Overriding decision of type: " << event_type;
+    return true;
+  } else {
+    RecordTranslateEvent(event_type, url, translate_event);
+    return false;
+  }
 }
 
 }  // namespace translate

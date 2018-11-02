@@ -36,7 +36,7 @@ WebGLUniformLocation* WebGLUniformLocation::Create(WebGLProgram* program,
 WebGLUniformLocation::WebGLUniformLocation(WebGLProgram* program,
                                            GLint location)
     : program_(program), location_(location) {
-  ASSERT(program_);
+  DCHECK(program_);
   link_count_ = program_->LinkCount();
 }
 
@@ -51,7 +51,7 @@ WebGLProgram* WebGLUniformLocation::Program() const {
 GLint WebGLUniformLocation::Location() const {
   // If the program has been linked again, then this UniformLocation is no
   // longer valid.
-  ASSERT(program_->LinkCount() == link_count_);
+  DCHECK_EQ(program_->LinkCount(), link_count_);
   return location_;
 }
 

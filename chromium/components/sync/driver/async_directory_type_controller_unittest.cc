@@ -16,6 +16,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -43,7 +44,7 @@ using testing::DoAll;
 using testing::InvokeWithoutArgs;
 using testing::Mock;
 using testing::Return;
-using testing::SetArgumentPointee;
+using testing::SetArgPointee;
 using testing::StrictMock;
 
 const ModelType kType = AUTOFILL_PROFILE;
@@ -177,7 +178,10 @@ class AsyncDirectoryTypeControllerFake : public AsyncDirectoryTypeController {
 class SyncAsyncDirectoryTypeControllerTest : public testing::Test,
                                              public FakeSyncClient {
  public:
-  SyncAsyncDirectoryTypeControllerTest() : backend_thread_("dbthread") {}
+  SyncAsyncDirectoryTypeControllerTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI),
+        backend_thread_("dbthread") {}
 
   void SetUp() override {
     backend_thread_.Start();
@@ -222,7 +226,7 @@ class SyncAsyncDirectoryTypeControllerTest : public testing::Test,
     EXPECT_CALL(*change_processor_.get(), CryptoReadyIfNecessary())
         .WillOnce(Return(true));
     EXPECT_CALL(*change_processor_.get(), SyncModelHasUserCreatedNodes(_))
-        .WillOnce(DoAll(SetArgumentPointee<0>(true), Return(true)));
+        .WillOnce(DoAll(SetArgPointee<0>(true), Return(true)));
     EXPECT_CALL(*change_processor_.get(), GetAllSyncDataReturnError(_, _))
         .WillOnce(Return(SyncError()));
     EXPECT_CALL(*change_processor_.get(), GetSyncCount()).WillOnce(Return(0));
@@ -253,7 +257,7 @@ class SyncAsyncDirectoryTypeControllerTest : public testing::Test,
 
   static void SignalDone(WaitableEvent* done) { done->Signal(); }
 
-  base::MessageLoopForUI message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::Thread backend_thread_;
 
   StartCallbackMock start_callback_;
@@ -282,7 +286,7 @@ TEST_F(SyncAsyncDirectoryTypeControllerTest, StartFirstRun) {
   EXPECT_CALL(*change_processor_.get(), CryptoReadyIfNecessary())
       .WillOnce(Return(true));
   EXPECT_CALL(*change_processor_.get(), SyncModelHasUserCreatedNodes(_))
-      .WillOnce(DoAll(SetArgumentPointee<0>(false), Return(true)));
+      .WillOnce(DoAll(SetArgPointee<0>(false), Return(true)));
   EXPECT_CALL(*change_processor_.get(), GetAllSyncDataReturnError(_, _))
       .WillOnce(Return(SyncError()));
   EXPECT_CALL(*change_processor_.get(), RecordAssociationTime(_));
@@ -316,7 +320,7 @@ TEST_F(SyncAsyncDirectoryTypeControllerTest, StartAssociationFailed) {
   EXPECT_CALL(*change_processor_.get(), CryptoReadyIfNecessary())
       .WillOnce(Return(true));
   EXPECT_CALL(*change_processor_.get(), SyncModelHasUserCreatedNodes(_))
-      .WillOnce(DoAll(SetArgumentPointee<0>(true), Return(true)));
+      .WillOnce(DoAll(SetArgPointee<0>(true), Return(true)));
   EXPECT_CALL(*change_processor_.get(), GetAllSyncDataReturnError(_, _))
       .WillOnce(Return(SyncError()));
   EXPECT_CALL(*change_processor_.get(), RecordAssociationTime(_));
@@ -341,7 +345,7 @@ TEST_F(SyncAsyncDirectoryTypeControllerTest,
   EXPECT_CALL(*change_processor_.get(), CryptoReadyIfNecessary())
       .WillRepeatedly(Return(true));
   EXPECT_CALL(*change_processor_.get(), SyncModelHasUserCreatedNodes(_))
-      .WillRepeatedly(DoAll(SetArgumentPointee<0>(false), Return(false)));
+      .WillRepeatedly(DoAll(SetArgPointee<0>(false), Return(false)));
   EXPECT_EQ(DataTypeController::NOT_RUNNING, non_ui_dtc_->state());
   Start();
   WaitForDTC();
@@ -377,8 +381,8 @@ TEST_F(SyncAsyncDirectoryTypeControllerTest, AbortDuringAssociation) {
       .WillOnce(Return(true));
   EXPECT_CALL(*change_processor_.get(), SyncModelHasUserCreatedNodes(_))
       .WillOnce(DoAll(SignalEvent(&wait_for_db_thread_pause),
-                      WaitOnEvent(&pause_db_thread),
-                      SetArgumentPointee<0>(true), Return(true)));
+                      WaitOnEvent(&pause_db_thread), SetArgPointee<0>(true),
+                      Return(true)));
   EXPECT_CALL(*change_processor_.get(), GetAllSyncDataReturnError(_, _))
       .WillOnce(Return(SyncError(FROM_HERE, SyncError::DATATYPE_ERROR,
                                  "Disconnected.", kType)));

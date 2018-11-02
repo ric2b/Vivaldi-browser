@@ -12,6 +12,7 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "chromecast/chromecast_features.h"
@@ -100,7 +101,7 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
 
   media::MediaPipelineBackendManager* media_pipeline_backend_manager();
 
-  ::media::ScopedAudioManagerPtr CreateAudioManager(
+  std::unique_ptr<::media::AudioManager> CreateAudioManager(
       ::media::AudioLogFactory* audio_log_factory) override;
   std::unique_ptr<::media::CdmFactory> CreateCdmFactory() override;
 #endif  // BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
@@ -147,9 +148,9 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   void SelectClientCertificate(
       content::WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
+      net::CertificateList client_certs,
       std::unique_ptr<content::ClientCertificateDelegate> delegate) override;
-  bool CanCreateWindow(int opener_render_process_id,
-                       int opener_render_frame_id,
+  bool CanCreateWindow(content::RenderFrameHost* opener,
                        const GURL& opener_url,
                        const GURL& opener_top_level_frame_url,
                        const GURL& source_origin,
@@ -161,10 +162,10 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
                        const blink::mojom::WindowFeatures& features,
                        bool user_gesture,
                        bool opener_suppressed,
-                       content::ResourceContext* context,
                        bool* no_javascript_access) override;
   void ExposeInterfacesToRenderer(
       service_manager::BinderRegistry* registry,
+      content::AssociatedInterfaceRegistry* associated_registry,
       content::RenderProcessHost* render_process_host) override;
   void RegisterInProcessServices(StaticServiceMap* services) override;
   std::unique_ptr<base::Value> GetServiceManifestOverlay(

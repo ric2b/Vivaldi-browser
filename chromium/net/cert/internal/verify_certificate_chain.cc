@@ -24,6 +24,7 @@ namespace net {
 
 DEFINE_CERT_ERROR_ID(kValidityFailedNotAfter, "Time is after notAfter");
 DEFINE_CERT_ERROR_ID(kValidityFailedNotBefore, "Time is before notBefore");
+DEFINE_CERT_ERROR_ID(kCertIsDistrusted, "Certificate is distrusted");
 
 namespace {
 
@@ -34,9 +35,9 @@ namespace {
 DEFINE_CERT_ERROR_ID(
     kSignatureAlgorithmMismatch,
     "Certificate.signatureAlgorithm != TBSCertificate.signature");
-DEFINE_CERT_ERROR_ID(kInvalidOrUnsupportedSignatureAlgorithm,
-                     "Invalid or unsupported signature algorithm");
 DEFINE_CERT_ERROR_ID(kChainIsEmpty, "Chain is empty");
+DEFINE_CERT_ERROR_ID(kChainIsLength1,
+                     "TODO: Cannot verify a chain of length 1");
 DEFINE_CERT_ERROR_ID(kUnconsumedCriticalExtension,
                      "Unconsumed critical extension");
 DEFINE_CERT_ERROR_ID(
@@ -60,18 +61,21 @@ DEFINE_CERT_ERROR_ID(kEkuLacksServerAuth,
                      "The extended key usage does not include server auth");
 DEFINE_CERT_ERROR_ID(kEkuLacksClientAuth,
                      "The extended key usage does not include client auth");
+DEFINE_CERT_ERROR_ID(kCertIsNotTrustAnchor,
+                     "Certificate is not a trust anchor");
 
 bool IsHandledCriticalExtensionOid(const der::Input& oid) {
   if (oid == BasicConstraintsOid())
     return true;
+  // Key Usage is NOT processed for end-entity certificates (this is the
+  // responsibility of callers), however it is considered "handled" here in
+  // order to allow being marked as critical.
   if (oid == KeyUsageOid())
     return true;
   if (oid == ExtKeyUsageOid())
     return true;
   if (oid == NameConstraintsOid())
     return true;
-  // TODO(eroman): SubjectAltName isn't actually used here, but rather is being
-  // checked by a higher layer.
   if (oid == SubjectAltNameOid())
     return true;
 
@@ -230,16 +234,10 @@ void BasicCertificateProcessing(
 
   // Verify the digital signature using the previous certificate's key (RFC
   // 5280 section 6.1.3 step a.1).
-  if (!cert.has_valid_supported_signature_algorithm()) {
-    errors->AddError(
-        kInvalidOrUnsupportedSignatureAlgorithm,
-        CreateCertErrorParams1Der("algorithm", cert.signature_algorithm_tlv()));
-  } else {
-    if (!VerifySignedData(cert.signature_algorithm(),
-                          cert.tbs_certificate_tlv(), cert.signature_value(),
-                          working_spki, signature_policy, errors)) {
-      errors->AddError(kVerifySignedDataFailed);
-    }
+  if (!VerifySignedData(cert.signature_algorithm(), cert.tbs_certificate_tlv(),
+                        cert.signature_value(), working_spki, signature_policy,
+                        errors)) {
+    errors->AddError(kVerifySignedDataFailed);
   }
 
   // Check the time range for the certificate's validity, ensuring it is valid
@@ -438,24 +436,16 @@ void WrapUp(const ParsedCertificate& cert, CertErrors* errors) {
   VerifyTargetCertHasConsistentCaBits(cert, errors);
 }
 
-// Initializes the path validation algorithm given anchor constraints. This
-// follows the description in RFC 5937
-void ProcessTrustAnchorConstraints(
-    const TrustAnchor& trust_anchor,
+// Enforces trust anchor constraints compatibile with RFC 5937.
+//
+// Note that the anchor constraints are encoded via the attached certificate
+// itself.
+void ApplyTrustAnchorConstraints(
+    const ParsedCertificate& cert,
     KeyPurpose required_key_purpose,
     size_t* max_path_length_ptr,
     std::vector<const NameConstraints*>* name_constraints_list,
     CertErrors* errors) {
-  // In RFC 5937 the enforcement of anchor constraints is governed by the input
-  // enforceTrustAnchorConstraints to path validation. In our implementation
-  // this is always on, and enforcement is controlled solely by whether or not
-  // the trust anchor specified constraints.
-  if (!trust_anchor.enforces_constraints())
-    return;
-
-  // Anchor constraints are encoded via the attached certificate.
-  const ParsedCertificate& cert = *trust_anchor.cert();
-
   // This is not part of RFC 5937 nor RFC 5280, but matches the EKU handling
   // done for intermediates (described in Web PKI's Baseline Requirements).
   VerifyExtendedKeyUsage(cert, required_key_purpose, errors);
@@ -497,22 +487,67 @@ void ProcessTrustAnchorConstraints(
   VerifyNoUnconsumedCriticalExtensions(cert, errors);
 }
 
+// Initializes the path validation algorithm given anchor constraints. This
+// follows the description in RFC 5937
+void ProcessRootCertificate(
+    const ParsedCertificate& cert,
+    const CertificateTrust& trust,
+    KeyPurpose required_key_purpose,
+    size_t* max_path_length_ptr,
+    std::vector<const NameConstraints*>* name_constraints_list,
+    der::Input* working_spki,
+    der::Input* working_normalized_issuer_name,
+    CertErrors* errors) {
+  // Use the certificate's SPKI and subject when verifying the next certificate.
+  // Note this is initialized even in the case of untrusted roots (they already
+  // emit an error for the distrust).
+  *working_spki = cert.tbs().spki_tlv;
+  *working_normalized_issuer_name = cert.normalized_subject();
+
+  switch (trust.type) {
+    case CertificateTrustType::UNSPECIFIED:
+      // Doesn't chain to a trust anchor - implicitly distrusted
+      errors->AddError(kCertIsNotTrustAnchor);
+      break;
+    case CertificateTrustType::DISTRUSTED:
+      // Chains to an actively distrusted certificate.
+      errors->AddError(kCertIsDistrusted);
+      break;
+    case CertificateTrustType::TRUSTED_ANCHOR:
+    case CertificateTrustType::TRUSTED_ANCHOR_WITH_CONSTRAINTS:
+      // If the trust anchor has constraints, enforce them.
+      if (trust.type == CertificateTrustType::TRUSTED_ANCHOR_WITH_CONSTRAINTS) {
+        ApplyTrustAnchorConstraints(cert, required_key_purpose,
+                                    max_path_length_ptr, name_constraints_list,
+                                    errors);
+      }
+      break;
+  }
+}
+
+}  // namespace
+
 // This implementation is structured to mimic the description of certificate
 // path verification given by RFC 5280 section 6.1.
-void VerifyCertificateChainNoReturnValue(
-    const ParsedCertificateList& certs,
-    const TrustAnchor* trust_anchor,
-    const SignaturePolicy* signature_policy,
-    const der::GeneralizedTime& time,
-    KeyPurpose required_key_purpose,
-    CertPathErrors* errors) {
-  DCHECK(trust_anchor);
+void VerifyCertificateChain(const ParsedCertificateList& certs,
+                            const CertificateTrust& last_cert_trust,
+                            const SignaturePolicy* signature_policy,
+                            const der::GeneralizedTime& time,
+                            KeyPurpose required_key_purpose,
+                            CertPathErrors* errors) {
   DCHECK(signature_policy);
   DCHECK(errors);
 
   // An empty chain is necessarily invalid.
   if (certs.empty()) {
     errors->GetOtherErrors()->AddError(kChainIsEmpty);
+    return;
+  }
+
+  // TODO(eroman): Verifying a trusted leaf certificate is not currently
+  // permitted.
+  if (certs.size() == 1) {
+    errors->GetOtherErrors()->AddError(kChainIsLength1);
     return;
   }
 
@@ -535,15 +570,14 @@ void VerifyCertificateChainNoReturnValue(
   //
   //    working_public_key:  the public key used to verify the
   //    signature of a certificate.
-  der::Input working_spki = trust_anchor->spki();
+  der::Input working_spki;
 
   // |working_normalized_issuer_name| is the normalized value of the
   // working_issuer_name variable in RFC 5280 section 6.1.2:
   //
   //    working_issuer_name:  the issuer distinguished name expected
   //    in the next certificate in the chain.
-  der::Input working_normalized_issuer_name =
-      trust_anchor->normalized_subject();
+  der::Input working_normalized_issuer_name;
 
   // |max_path_length| corresponds with the same named variable in RFC 5280
   // section 6.1.2:
@@ -555,23 +589,12 @@ void VerifyCertificateChainNoReturnValue(
   //    certificate.
   size_t max_path_length = certs.size();
 
-  // Apply any trust anchor constraints per RFC 5937.
-  //
-  // TODO(eroman): Errors on the trust anchor are put into a certificate bucket
-  //               GetErrorsForCert(certs.size()). This is a bit magical, and
-  //               has some integration issues.
-  ProcessTrustAnchorConstraints(*trust_anchor, required_key_purpose,
-                                &max_path_length, &name_constraints_list,
-                                errors->GetErrorsForCert(certs.size()));
-
   // Iterate over all the certificates in the reverse direction: starting from
-  // the certificate signed by trust anchor and progressing towards the target
-  // certificate.
+  // the root certificate and progressing towards the target certificate.
   //
-  // Note that |i| uses 0-based indexing whereas in RFC 5280 it is 1-based.
-  //
-  //   * i=0    :  Certificated signed by trust anchor.
-  //   * i=N-1  :  Target certificate.
+  //   * i=0               :  Root certificate (i.e. trust anchor)
+  //   * i=1               :  Certificated signed by the root certificate
+  //   * i=certs.size()-1  :  Target certificate.
   for (size_t i = 0; i < certs.size(); ++i) {
     const size_t index_into_certs = certs.size() - i - 1;
 
@@ -579,12 +602,23 @@ void VerifyCertificateChainNoReturnValue(
     // certificate being verified. The target certificate isn't necessarily an
     // end-entity certificate.
     const bool is_target_cert = index_into_certs == 0;
+    const bool is_root_cert = i == 0;
 
     const ParsedCertificate& cert = *certs[index_into_certs];
 
     // Output errors for the current certificate into an error bucket that is
     // associated with that certificate.
     CertErrors* cert_errors = errors->GetErrorsForCert(index_into_certs);
+
+    if (is_root_cert) {
+      ProcessRootCertificate(cert, last_cert_trust, required_key_purpose,
+                             &max_path_length, &name_constraints_list,
+                             &working_spki, &working_normalized_issuer_name,
+                             cert_errors);
+
+      // Don't do any other checks for root certificates.
+      continue;
+    }
 
     // Per RFC 5280 section 6.1:
     //  * Do basic processing for each certificate
@@ -607,8 +641,6 @@ void VerifyCertificateChainNoReturnValue(
                                 &name_constraints_list, cert_errors);
     } else {
       WrapUp(cert, cert_errors);
-      // TODO(eroman): Verify the Key Usage on target is consistent with
-      //               key_purpose.
     }
   }
 
@@ -616,22 +648,6 @@ void VerifyCertificateChainNoReturnValue(
   //
   //    A certificate MUST NOT appear more than once in a prospective
   //    certification path.
-}
-
-}  // namespace
-
-bool VerifyCertificateChain(const ParsedCertificateList& certs,
-                            const TrustAnchor* trust_anchor,
-                            const SignaturePolicy* signature_policy,
-                            const der::GeneralizedTime& time,
-                            KeyPurpose required_key_purpose,
-                            CertPathErrors* errors) {
-  // TODO(eroman): This function requires that |errors| is empty upon entry,
-  // which is not part of the API contract.
-  DCHECK(!errors->ContainsHighSeverityErrors());
-  VerifyCertificateChainNoReturnValue(certs, trust_anchor, signature_policy,
-                                      time, required_key_purpose, errors);
-  return !errors->ContainsHighSeverityErrors();
 }
 
 }  // namespace net

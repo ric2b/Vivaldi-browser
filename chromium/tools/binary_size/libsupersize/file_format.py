@@ -53,8 +53,8 @@ def _SaveSizeInfoToFile(size_info, file_obj):
   _LogSize(file_obj, 'paths')  # For libchrome, adds 200kb.
 
   # Symbol counts by section.
-  by_section = models.SymbolGroup(size_info.raw_symbols)
-  by_section = by_section.GroupBySectionName().SortedByName()
+  by_section = size_info.raw_symbols.GroupedBySectionName().Sorted(
+      key=lambda s:(s[0].IsBss(), s[0].address, s.full_name))
   file_obj.write('%s\n' % '\t'.join(g.name for g in by_section))
   file_obj.write('%s\n' % '\t'.join(str(len(g)) for g in by_section))
 
@@ -80,12 +80,15 @@ def _SaveSizeInfoToFile(size_info, file_obj):
                 delta=True)
   _LogSize(file_obj, 'path indices')  # For libchrome: adds 125kb.
 
+  prev_aliases = None
   for group in by_section:
     for symbol in group:
-      # Do not write name when full_name exists. It will be derived on load.
-      file_obj.write(symbol.full_name or symbol.name)
-      if symbol.is_anonymous:
-        file_obj.write('\t1')
+      file_obj.write(symbol.full_name)
+      if symbol.aliases and symbol.aliases is not prev_aliases:
+        file_obj.write('\t0%x' % symbol.num_aliases)
+      prev_aliases = symbol.aliases
+      if symbol.flags:
+        file_obj.write('\t%x' % symbol.flags)
       file_obj.write('\n')
   _LogSize(file_obj, 'names (final)')  # For libchrome: adds 3.5mb.
 
@@ -132,22 +135,49 @@ def _LoadSizeInfoFromFile(file_obj):
   raw_symbols = [None] * sum(section_counts)
   symbol_idx = 0
   for section_index, cur_section_name in enumerate(section_names):
+    alias_counter = 0
     for i in xrange(section_counts[section_index]):
-      line = next(lines)[:-1]
-      is_anonymous = line.endswith('\t1')
-      name = line[:-2] if is_anonymous else line
+      parts = next(lines)[:-1].split('\t')
+      flags_part = None
+      aliases_part = None
+
+      if len(parts) == 3:
+        aliases_part = parts[1]
+        flags_part = parts[2]
+      elif len(parts) == 2:
+        if parts[1][0] == '0':
+          aliases_part = parts[1]
+        else:
+          flags_part = parts[1]
+
+      full_name = parts[0]
+      flags = int(flags_part, 16) if flags_part else 0
+      num_aliases = int(aliases_part, 16) if aliases_part else 0
 
       new_sym = models.Symbol.__new__(models.Symbol)
       new_sym.section_name = cur_section_name
       new_sym.address = addresses[section_index][i]
       new_sym.size = sizes[section_index][i]
-      new_sym.name = name
+      new_sym.full_name = full_name
       paths = path_tuples[path_indices[section_index][i]]
       new_sym.object_path = paths[0]
       new_sym.source_path = paths[1]
-      new_sym.is_anonymous = is_anonymous
+      new_sym.flags = flags
       new_sym.padding = 0  # Derived
-      new_sym.full_name = None  # Derived
+      new_sym.template_name = ''  # Derived
+      new_sym.name = ''  # Derived
+
+      if num_aliases:
+        assert alias_counter == 0
+        new_sym.aliases = [new_sym]
+        alias_counter = num_aliases - 1
+      elif alias_counter > 0:
+        new_sym.aliases = raw_symbols[symbol_idx - 1].aliases
+        new_sym.aliases.append(new_sym)
+        alias_counter -= 1
+      else:
+        new_sym.aliases = None
+
       raw_symbols[symbol_idx] = new_sym
       symbol_idx += 1
 
@@ -156,7 +186,7 @@ def _LoadSizeInfoFromFile(file_obj):
 
 def SaveSizeInfo(size_info, path):
   """Saves |size_info| to |path}."""
-  if os.environ.get('MEASURE_GZIP') == '1':
+  if os.environ.get('SUPERSIZE_MEASURE_GZIP') == '1':
     with gzip.open(path, 'wb') as f:
       _SaveSizeInfoToFile(size_info, f)
   else:

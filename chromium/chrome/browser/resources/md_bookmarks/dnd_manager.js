@@ -158,7 +158,7 @@ cr.define('bookmarks', function() {
           return;
 
         var action = bookmarks.actions.changeFolderOpen(itemId, true);
-        store.handleAction(action);
+        store.dispatch(action);
       } else if (
           overElement && isBookmarkFolderNode(overElement) &&
           bookmarks.util.hasChildFolders(itemId, store.data.nodes) &&
@@ -205,7 +205,7 @@ cr.define('bookmarks', function() {
      * Used to instantly remove the indicator style in tests.
      * @private {function((Function|null|string), number)}
      */
-    this.setTimeout_ = window.setTimeout.bind(window);
+    this.setTimeout = window.setTimeout.bind(window);
   }
 
   DropIndicator.prototype = {
@@ -260,15 +260,9 @@ cr.define('bookmarks', function() {
       // The use of a timeout is in order to reduce flickering as we move
       // between valid drop targets.
       window.clearTimeout(this.removeDropIndicatorTimer_);
-      this.removeDropIndicatorTimer_ = this.setTimeout_(function() {
+      this.removeDropIndicatorTimer_ = this.setTimeout(function() {
         this.removeDropIndicatorStyle();
       }.bind(this), 100);
-    },
-
-    disableTimeoutForTesting: function() {
-      this.setTimeout_ = function(fn, timeout) {
-        fn();
-      };
     },
   };
 
@@ -288,6 +282,12 @@ cr.define('bookmarks', function() {
 
     /** @private {Object<string, function(!Event)>} */
     this.documentListeners_ = null;
+
+    /**
+     * Used to instantly clearDragData in tests.
+     * @private {function((Function|null|string), number)}
+     */
+    this.setTimeout_ = window.setTimeout.bind(window);
   }
 
   DNDManager.prototype = {
@@ -371,7 +371,6 @@ cr.define('bookmarks', function() {
         parentId = assert(node.parentId);
         index = state.nodes[parentId].children.indexOf(node.id);
 
-        // TODO(calamity): Handle dropping to an empty bookmark list.
         if (position == DropPosition.BELOW)
           index++;
       }
@@ -384,9 +383,14 @@ cr.define('bookmarks', function() {
 
     /** @private */
     clearDragData_: function() {
-      this.dragInfo_.clearDragData();
-      this.dropDestination_ = null;
-      this.dropIndicator_.finish();
+      // Defer the clearing of the data so that the bookmark manager API's drop
+      // event doesn't clear the drop data before the web drop event has a
+      // chance to execute (on Mac).
+      this.setTimeout_(function() {
+        this.dragInfo_.clearDragData();
+        this.dropDestination_ = null;
+        this.dropIndicator_.finish();
+      }.bind(this), 0);
     },
 
     /**
@@ -398,14 +402,26 @@ cr.define('bookmarks', function() {
       if (!dragElement)
         return;
 
+      var store = bookmarks.Store.getInstance();
+      var dragId = dragElement.itemId;
+
       // Determine the selected bookmarks.
-      var state = bookmarks.Store.getInstance().data;
+      var state = store.data;
       var draggedNodes = Array.from(state.selection.items);
 
+      // Change selection to the dragged node if the node is not part of the
+      // existing selection.
       if (isBookmarkFolderNode(dragElement) ||
-          draggedNodes.indexOf(dragElement.itemId) == -1) {
-        // TODO(calamity): clear current selection.
-        draggedNodes = [dragElement.itemId];
+          draggedNodes.indexOf(dragId) == -1) {
+        store.dispatch(bookmarks.actions.deselectItems());
+        if (!isBookmarkFolderNode(dragElement)) {
+          store.dispatch(bookmarks.actions.selectItem(dragId, state, {
+            clear: false,
+            range: false,
+            toggle: false,
+          }));
+        }
+        draggedNodes = [dragId];
       }
 
       e.preventDefault();
@@ -464,8 +480,10 @@ cr.define('bookmarks', function() {
       // below based on mouse position etc.
       this.dropDestination_ =
           this.calculateDropDestination_(e.clientY, overElement);
-      if (!this.dropDestination_)
+      if (!this.dropDestination_) {
+        this.dropIndicator_.finish();
         return;
+      }
 
       if (e.dataTransfer) {
         e.dataTransfer.dropEffect =
@@ -581,10 +599,6 @@ cr.define('bookmarks', function() {
 
       var nextElement = overElement.nextElementSibling;
 
-      // The template element sits past the end of the last bookmark element.
-      if (!isBookmarkItem(nextElement) && !isBookmarkFolderNode(nextElement))
-        nextElement = null;
-
       // Cannot drop below if the item below is already in the drag source.
       if (!nextElement || !dragInfo.isDraggingBookmark(nextElement.itemId))
         validDropPositions |= DropPosition.BELOW;
@@ -614,6 +628,13 @@ cr.define('bookmarks', function() {
 
       return !this.dragInfo_.isDraggingChildBookmark(overElement.itemId)
     },
+
+    disableTimeoutsForTesting: function() {
+      this.setTimeout_ = function(fn) {
+        fn();
+      };
+      this.dropIndicator_.setTimeout = this.setTimeout_;
+    }
   };
 
   return {

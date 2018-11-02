@@ -11,6 +11,7 @@
 #include "media/audio/audio_device_description.h"
 #include "media/audio/audio_manager.h"
 #include "media/audio/audio_output_stream_sink.h"
+#include "media/audio/audio_thread_impl.h"
 #include "media/base/cdm_factory.h"
 #include "media/base/media.h"
 #include "media/base/media_log.h"
@@ -26,11 +27,11 @@ TestMojoMediaClient::TestMojoMediaClient() {}
 
 TestMojoMediaClient::~TestMojoMediaClient() {
   DVLOG(1) << __func__;
-  // AudioManager destructor requires MessageLoop.
-  // Destroy it before the message loop goes away.
-  audio_manager_.reset();
-  // Flush the message loop to ensure that the audio manager is destroyed.
-  base::RunLoop().RunUntilIdle();
+
+  if (audio_manager_) {
+    audio_manager_->Shutdown();
+    audio_manager_.reset();
+  }
 }
 
 void TestMojoMediaClient::Initialize(
@@ -42,8 +43,7 @@ void TestMojoMediaClient::Initialize(
   AudioManager* audio_manager = AudioManager::Get();
   if (!audio_manager) {
     audio_manager_ = media::AudioManager::CreateForTesting(
-        base::ThreadTaskRunnerHandle::Get());
-    audio_manager = audio_manager_.get();
+        base::MakeUnique<AudioThreadImpl>());
     // Flush the message loop to ensure that the audio manager is initialized.
     base::RunLoop().RunUntilIdle();
   }
@@ -62,10 +62,9 @@ std::unique_ptr<VideoRendererSink> TestMojoMediaClient::CreateVideoRendererSink(
 }
 
 std::unique_ptr<RendererFactory> TestMojoMediaClient::CreateRendererFactory(
-    const scoped_refptr<MediaLog>& media_log) {
+    MediaLog* media_log) {
   return base::MakeUnique<DefaultRendererFactory>(
-      std::move(media_log), nullptr,
-      DefaultRendererFactory::GetGpuFactoriesCB());
+      media_log, nullptr, DefaultRendererFactory::GetGpuFactoriesCB());
 }
 
 std::unique_ptr<CdmFactory> TestMojoMediaClient::CreateCdmFactory(

@@ -56,11 +56,11 @@ class DocumentOrderedMap : public GarbageCollected<DocumentOrderedMap> {
   bool Contains(const AtomicString&) const;
   bool ContainsMultiple(const AtomicString&) const;
   // concrete instantiations of the get<>() method template
-  Element* GetElementById(const AtomicString&, const TreeScope*) const;
+  Element* GetElementById(const AtomicString&, const TreeScope&) const;
   const HeapVector<Member<Element>>& GetAllElementsById(const AtomicString&,
-                                                        const TreeScope*) const;
-  Element* GetElementByMapName(const AtomicString&, const TreeScope*) const;
-  HTMLSlotElement* GetSlotByName(const AtomicString&, const TreeScope*) const;
+                                                        const TreeScope&) const;
+  Element* GetElementByMapName(const AtomicString&, const TreeScope&) const;
+  HTMLSlotElement* GetSlotByName(const AtomicString&, const TreeScope&) const;
 
   DECLARE_TRACE();
 
@@ -91,7 +91,7 @@ class DocumentOrderedMap : public GarbageCollected<DocumentOrderedMap> {
   DocumentOrderedMap();
 
   template <bool keyMatches(const AtomicString&, const Element&)>
-  Element* Get(const AtomicString&, const TreeScope*) const;
+  Element* Get(const AtomicString&, const TreeScope&) const;
 
   class MapEntry : public GarbageCollected<MapEntry> {
    public:
@@ -115,7 +115,7 @@ inline bool DocumentOrderedMap::Contains(const AtomicString& id) const {
 }
 
 inline bool DocumentOrderedMap::ContainsMultiple(const AtomicString& id) const {
-  Map::const_iterator it = map_.Find(id);
+  Map::const_iterator it = map_.find(id);
   return it != map_.end() && it->value->count > 1;
 }
 

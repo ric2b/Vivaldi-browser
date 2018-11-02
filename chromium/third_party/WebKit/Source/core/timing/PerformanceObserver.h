@@ -5,11 +5,11 @@
 #ifndef PerformanceObserver_h
 #define PerformanceObserver_h
 
-#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
 #include "core/timing/PerformanceEntry.h"
+#include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 

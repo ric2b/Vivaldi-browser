@@ -164,8 +164,8 @@
     <message name="IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_LABEL" desc="Label for a slider which changes the size of large mouse cursor.">
       Adjust cursor size
     </message>
-    <message name="IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_SMALL_LABEL" desc="Label in the slider which indicates that this side makes the cursor small.">
-      Small
+    <message name="IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_DEFAULT_LABEL" desc="Label in the slider which indicates that this side makes the cursor to its default size.">
+      Default
     </message>
     <message name="IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_LARGE_LABEL" desc="Label in the slider which indicates that this side makes the cursor large.">
       Large
@@ -180,7 +180,7 @@
       Enable ChromeVox (spoken feedback)
     </message>
     <message name="IDS_SETTINGS_CHROMEVOX_OPTIONS_LABEL" desc="Label for button to open ChromeVox options.">
-      ChromeVox Options
+      Open ChromeVox settings
     </message>
     <message name="IDS_SETTINGS_SCREEN_MAGNIFIER_LABEL" desc="Label for checkbox which enables the screen magnifier">
       Enable screen magnifier
@@ -870,6 +870,15 @@
   <message name="IDS_SETTINGS_CLEAR_DATA_CLEARS_SYNCED_DATA" desc="Information that data which is synced across user's devices will be deleted from all those devices.">
     This clears synced data from all devices.
   </message>
+  <message name="IDS_SETTINGS_IMPORTANT_SITES_SUBTITLE" desc="Subtitle for the important sites dialog.">
+    This will clear cookies and site data for all sites, including
+  </message>
+  <message name="IDS_SETTINGS_IMPORTANT_SITES_CONFIRM" desc="Text for confirmation button of the important sites dialog.">
+    Confirm
+  </message>
+  <message name="IDS_SETTINGS_NOTIFICATION_WARNING" desc="A warning that notifications will be disabled by deleting cookies for this site.">
+    Notifications will be disabled
+  </message>
 
   <!-- Printing -->
   <message name="IDS_SETTINGS_PRINTING" desc="Title of the printing page and navigation item to get there.">
@@ -921,7 +930,10 @@
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_PROTOCOL" desc="Label for the CUPS printer protocol in the Advanced section in the printer details page.">
       Protocol
     </message>
-    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_NAME" desc="Lable for the CUPS printer name in the printer details page.">
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_URI" desc="Label for the CUPS printer URI (uniform resource identifier) in the Advanced section in the printer details page.">
+      URI
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_NAME" desc="Label for the CUPS printer name in the printer details page.">
       Name
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_MODEL" desc="Label for the CUPS printer model in the printer details page.">
@@ -974,9 +986,6 @@
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_FOUND_PRINTER" desc="The printer-found message shown in the manually add printer dialog.">
       Printer found
-    </message>
-    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_SELECT_MANUFACTURER_MODEL" desc="The message shown in the select manufacturer and model dialog.">
-      Could not detect your printer model. Select a manufacturer and model from the list.
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_MANUFACTURER" desc="Label for the dropdown menu to select a manufacturer for the printer.">
       Manufacturer
@@ -1096,6 +1105,9 @@
     <message name="IDS_SETTINGS_INTERNET" desc="Name of the settings page which displays internet preferences.">
       Network
     </message>
+    <message name="IDS_SETTINGS_INTERNET_CONFIG" desc="Name of the settings page for configuring a network.">
+      Configure network
+    </message>
     <message name="IDS_SETTINGS_INTERNET_DETAIL" desc="Name of the settings page which displays network details.">
       Network Details
     </message>
@@ -1120,8 +1132,20 @@
     <message name="IDS_SETTINGS_INTERNET_ADD_THIRD_PARTY_VPN" desc="Settings > Internet > Add third party VPN label">
       Add <ph name="PROVIDER_NAME">$1<ex>VPN Demo</ex></ph>...
     </message>
+    <message name="IDS_SETTINGS_INTERNET_DEVICE_ENABLING" desc="Settings > Internet > Message when a device (e.g a Cellular modem) is enabling.">
+      Enabling
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_CONFIG_SHARE" desc="Settings > Internet > Network config: Label for setting allowing other device users to use the network configuration.">
+      Allow other users of this device to use this network
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_CONFIG_SAVE_CREDENTIALS" desc="Settings > Internet > Network config: Label for the setting to save identity and password.">
+      Save identity and password
+    </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_ACCESS_POINT" desc="Settings > Internet > Network details: Access Point section label.">
       Access Point
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_MOBILE_SEARCH" desc="Settings > Internet > Message in Mobile section when searching for mobile networks.">
+      Searching for mobile networks
     </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_ADVANCED" desc="Settings > Internet > Network details: Advanced section label.">
       Advanced
@@ -1151,7 +1175,7 @@
       Allow mobile data roaming
     </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_SHARED" desc="Settings > Internet > Network details: Text to show when a network is shared.">
-      This network is shared with other users
+      Other users of this device can use this network.
     </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_PRIMARY_USER_CONTROLLED" desc="Settings > Internet > Network details: Text to show when a network configuration is controlled by the primary user.">
       Network configuration is controlled by <ph name="USER_EMAIL">$1<ex>joe@gmail.com</ex></ph>.
@@ -1348,6 +1372,9 @@
     <message name="IDS_SETTINGS_INTERNET_TETHER_CONNECTION_CONNECT_BUTTON" desc="Settings > Internet > Tether Connection Dialog > Button which, when tapped, starts a connection attempt to the device.">
       Connect
     </message>
+    <message name="IDS_SETTINGS_INTERNET_TOGGLE_TETHER_ACCESSIBILITY_LABEL" desc="Accessibility only label for tether enable/disable toggle .">
+      Tether enable
+    </message>
     <message name="IDS_SETTINGS_INTERNET_TOGGLE_MOBILE_ACCESSIBILITY_LABEL" desc="Accessibility only label for mobile data enable/disable toggle .">
       Mobile data enable
     </message>
@@ -1453,6 +1480,54 @@
     <message name="IDS_ONC_CONNECTING" desc="Settings > Internet, text in network summary when a network is connecting.">
       Connecting
     </message>
+    <message name="IDS_ONC_EAP_ANONYMOUS_IDENTITY" desc="ONC Property label for EAP.AnonymousIdentity">
+      Anonymous Identity
+    </message>
+    <message name="IDS_ONC_EAP_IDENTITY" desc="ONC Property label for EAP.Identity">
+      Identity
+    </message>
+    <message name="IDS_ONC_EAP_INNER" desc="ONC Property label for EAP.Inner (Phase 2 authentication)">
+      EAP Phase 2 authentication
+    </message>
+    <message name="IDS_ONC_EAP_INNER_AUTOMATIC" desc="ONC Property value for EAP.Inner = Automatic">
+      Automatic
+    </message>
+    <message name="IDS_ONC_EAP_INNER_MD5" desc="ONC Property value for EAP.Inner = MD5">
+      EAP-MD5
+    </message>
+    <message name="IDS_ONC_EAP_INNER_MSCHAP" desc="ONC Property value for EAP.Inner = MSCHAP">
+      MSCHAP
+    </message>
+    <message name="IDS_ONC_EAP_INNER_MSCHAPV2" desc="ONC Property value for EAP.Inner = MSCHAPv2">
+      MSCHAPv2
+    </message>
+    <message name="IDS_ONC_EAP_INNER_PAP" desc="ONC Property value for EAP.Inner = PAP">
+      PAP
+    </message>
+    <message name="IDS_ONC_EAP_INNER_CHAP" desc="ONC Property value for EAP.Inner = CHAP">
+      CHAP
+    </message>
+    <message name="IDS_ONC_EAP_INNER_GTC" desc="ONC Property value for EAP.Inner = GTC">
+      GTC
+    </message>
+    <message name="IDS_ONC_EAP_OUTER" desc="ONC Property label for EAP.Outer (Method)">
+      EAP method
+    </message>
+    <message name="IDS_ONC_EAP_OUTER_LEAP" desc="ONC Property value for EAP.Outer = LEAP">
+      LEAP
+    </message>
+    <message name="IDS_ONC_EAP_OUTER_PEAP" desc="ONC Property value for EAP.Outer = PEAP">
+      PEAP
+    </message>
+    <message name="IDS_ONC_EAP_OUTER_TLS" desc="ONC Property value for EAP.Outer = TLS">
+      EAP-TLS
+    </message>
+    <message name="IDS_ONC_EAP_OUTER_TTLS" desc="ONC Property value for EAP.Outer = TTLS">
+      EAP-TTLS
+    </message>
+    <message name="IDS_ONC_EAP_SUBJECT_MATCH" desc="ONC Property label for EAP.SubjectMatch">
+      Subject match
+    </message>
     <message name="IDS_ONC_NOT_CONNECTED" desc="Settings > Internet, text in network summary when a network is not connecting or connected.">
       Not Connected
     </message>
@@ -1461,6 +1536,36 @@
     </message>
     <message name="IDS_ONC_RESTRICTED_CONNECTIVITY" desc="ONC Property label for RestrictedConnectivity">
       Restricted IP
+    </message>
+    <message name="IDS_ONC_TETHER_BATTERY_PERCENTAGE" desc="Settings > Internet > Title of section which displays the battery percentage of another device which provides a tether hotspot for the current device to connect to.">
+      Battery
+    </message>
+    <message name="IDS_ONC_TETHER_BATTERY_PERCENTAGE_VALUE" desc="Settings > Internet > Text contents of section which displays the battery percentage of another device which provides a tether hotspot for the current device to connect to.">
+      <ph name="BATTERY_PERCENTAGE">$1<ex>100</ex></ph>%
+    </message>
+    <message name="IDS_ONC_TETHER_SIGNAL_STRENGTH" desc="Settings > Internet > Title of section which displays the cellular signal strength of another device which provides a tether hotspot for the current device to connect to. The signal strength is displayed as a string (e.g., Strong)">
+      Signal strength
+    </message>
+    <message name="IDS_ONC_TETHER_SIGNAL_STRENGTH_WEAK" desc="Settings > Internet > Label used to describe the signal strength of a device's cellular connection when the signal is weak. The strength value is 1 on a scale from 1 (min) to 5 (max).">
+      Weak
+    </message>
+    <message name="IDS_ONC_TETHER_SIGNAL_STRENGTH_OKAY" desc="Settings > Internet > Label used to describe the signal strength of a device's cellular connection when the signal is okay. The strength value is 2 on a scale from 1 (min) to 5 (max).">
+      Weak
+    </message>
+    <message name="IDS_ONC_TETHER_SIGNAL_STRENGTH_GOOD" desc="Settings > Internet > Label used to describe the signal strength of a device's cellular connection when the signal is good. The strength value is 3 on a scale from 1 (min) to 5 (max).">
+      Fine
+    </message>
+    <message name="IDS_ONC_TETHER_SIGNAL_STRENGTH_STRONG" desc="Settings > Internet > Label used to describe the signal strength of a device's cellular connection when the signal is strong. The strength value is 4 on a scale from 1 (min) to 5 (max).">
+      Strong
+    </message>
+    <message name="IDS_ONC_TETHER_SIGNAL_STRENGTH_VERY_STRONG" desc="Settings > Internet > Label used to describe the signal strength of a device's cellular connection when the signal is very strong. The strength value is 5 on a scale from 1 (min) to 5 (max).">
+      Very strong
+    </message>
+    <message name="IDS_ONC_TETHER_CARRIER" desc="Settings > Internet > Title of section which displays the name of the cellular provider (e.g., Verizon) of another device which provides a tether hotspot for the current device to connect to. To be clear, the current device does not have cellular service; instead, another device has it and can provide data to the current device via a Wi-Fi hotspot.">
+      Cellular provider
+    </message>
+    <message name="IDS_ONC_TETHER_CARRIER_UNKNOWN" desc="Settings > Internet > Text displayed in the settings UI in place of a cellular provider when the actual name of the provider is unknown. In this context, the cellular provider refers to the carrier which provides mobile data service to another device which can start a tether hotspot to provide a data connection to the current device.">
+      Unknown carrier
     </message>
     <message name="IDS_ONC_VPN_HOST" desc="ONC Property label for VPN.Host">
       Host
@@ -1480,11 +1585,29 @@
     <message name="IDS_ONC_WIFI_FREQUENCY" desc="ONC Property label for WiFi.Frequency">
       Frequency
     </message>
+    <message name="IDS_ONC_WIFI_PASSWORD" desc="ONC Property label for WiFi.Password">
+      Password
+    </message>
     <message name="IDS_ONC_WIFI_SECURITY" desc="ONC Property label for WiFi.Security">
       Security
     </message>
+    <message name="IDS_ONC_WIFI_SECURITY_NONE" desc="In settings > Internet, a string specifying security type = none.">
+      None
+    </message>
+    <message name="IDS_ONC_WIFI_SECURITY_WEP" desc="In settings > Internet, a string specifying security type = WEP.">
+      WEP
+    </message>
+    <message name="IDS_ONC_WIFI_SECURITY_PSK" desc="In settings > Internet, a string specifying security type = PSK (either WPA-PSK or RSN-PSK).">
+      PSK (WPA or RSN)
+    </message>
+    <message name="IDS_ONC_WIFI_SECURITY_EAP" desc="In settings > Internet, a string specifying security type = EAP (802.1X).">
+      EAP
+    </message>
     <message name="IDS_ONC_WIFI_SIGNAL_STRENGTH" desc="ONC Property label for WiFi.SignalStrength">
       Signal strength
+    </message>
+    <message name="IDS_ONC_WIFI_SSID" desc="ONC Property label for WiFi.SSID">
+      SSID
     </message>
     <message name="IDS_ONC_WIMAX_EAP_IDENTITY" desc="ONC Property label for WiMAX.EAP.Identity">
       Identity
@@ -1850,8 +1973,8 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_PDF_DOCUMENTS" desc="Label for the PDF documents site settings.">
     PDF documents
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_PDF_DIFFERENT_APPLICATION" desc="Label for opening PDF documents in a different application.">
-    Open PDFs using a different application
+  <message name="IDS_SETTINGS_SITE_SETTINGS_PDF_DOWNLOAD_PDFS" desc="Label for downloading PDF documents instead of automatically opening them in Chrome.">
+    Download PDF files instead of automatically opening them in Chrome
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_POPUPS" desc="Label for the popups site settings.">
     Popups
@@ -2110,10 +2233,13 @@
   <message name="IDS_SETTINGS_SITE_DETAILS" desc="A title for the site settings details subpage.">
     Site details
   </message>
-  <message name="IDS_SETTINGS_SITE_NO_SITES_ADDED" desc="Explenation for not showing a list of site exceptions">
+  <message name="IDS_SETTINGS_SITE_NO_SITES_ADDED" desc="Explanation for not showing a list of site exceptions">
     No sites added
   </message>
 
+  <message name="IDS_SETTINGS_NO_USB_DEVICES_FOUND" desc="Explanation for not showing USB devices in site settings.">
+    No USB devices found
+  </message>
   <message name="IDS_SETTINGS_ADD_SITE_EXCEPTION_PLACEHOLDER" desc="Placeholder text shown before the user starts typing a new content settings exception for a site." >
     [*.]example.com
   </message>
@@ -2268,6 +2394,9 @@
     <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_TITLE" desc="Text on the people page which opens up the quick unlock subpage and the title of the quick unlock subpage.">
       Screen lock
     </message>
+    <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_OPTIONS" desc="Text on the lock screen which is the subheader for the screen locking options.">
+      Screen lock options
+    </message>
     <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PASSWORD_ONLY" desc="Only the account password can be used to unlock the device.">
       Password only
     </message>
@@ -2288,6 +2417,9 @@
     </message>
     <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_EDIT_FINGERPRINTS_DESCRIPTION" desc="Secondary text on the lock screen which opens up the fingerprint subpage.">
       Set up a faster way to unlock your device
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_FINGERPRINT_SETUP_BUTTON" desc="Text on the lock screen button which opens up the fingerprint subpage.">
+      Set up
     </message>
     <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NUM_FINGERPRINTS" desc="Text on the lock screen which tells users how many fingerprints they have enrolled.">
       <ph name="NUM_FINGERPRINTS">$1<ex>1</ex></ph> fingerprints set up
@@ -2339,6 +2471,9 @@
     </message>
     <message name="IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_FINGER_TOO_FAST" desc="Warning text in the add fingerprint dialog to tell users they have moved their finger too fast.">
       Finger moved too quickly
+    </message>
+    <message name="IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_FINGER_IMMOBILE" desc="Warning text in the add fingerprint dialog to tell users they should move their finger slightly to capture different parts of the fingerprint.">
+      Move slightly to capture a different part of the fingerprint
     </message>
     <message name="IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_CANCEL_BUTTON" desc="Text on the button in the fingerprint setup dialog which allows users to cancel a current setup.">
       Cancel
@@ -2579,9 +2714,6 @@
   </if>
 
   <!-- Users Page -->
-  <message name="IDS_SETTINGS_USERS" desc="Name of the settings page which manages users on the device.">
-    Manage other users
-  </message>
   <if expr="chromeos">
     <message name="IDS_SETTINGS_USERS_MODIFIED_BY_OWNER_LABEL" desc="Label saying settings may only be modified by the device owner.">
       These settings may only be modified by the owner:
@@ -2813,6 +2945,9 @@
     <message name="IDS_SETTINGS_STYLUS_NOTE_TAKING_APP_LABEL" desc="Label describing a dropdown that lets the user pick their default note-taking applications. The dropdown contains a list of all available choices. The user can install additional apps, so the contents of the dropdown is dynamic.">
       Note-taking app
     </message>
+    <message name="IDS_SETTINGS_STYLUS_NOTE_TAKING_APP_LOCK_SCREEN_CHECKBOX" desc="Label for a check box that enables note-taking by selected note-taking application when user session is locked (i.e. when lock screen is shown).">
+      Enable note-taking from lock screen
+    </message>
     <message name="IDS_SETTINGS_STYLUS_NOTE_TAKING_APP_NONE_AVAILABLE" desc="Secondary label used when there are no note-taking applications available.">
       None available
     </message>
@@ -2832,6 +2967,33 @@
     </message>
     <message name="IDS_SETTINGS_DISPLAY_MIRROR" desc="In Device Settings > Displays, the label for the control for mirroring.">
       Mirroring
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_LABEL" desc="In Device Settings > Displays, the label for the Night Light feature (which controls the color temperature of the screen) section.">
+      Night Light
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_SCHEDULE_CUSTOM" desc="In Device Settings > Displays, the label of the option to set a custom schedule of the Night Light feature.">
+      Custom Schedule
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_SCHEDULE_LABEL" desc="In Device Settings > Displays, the label for the automatic schedule section of the Night Light feature.">
+      Schedule
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_SCHEDULE_NEVER" desc="In Device Settings > Displays, the label of the option to turn off the automatic schedule of the Night Light feature.">
+      Never
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_SCHEDULE_SUNSET_TO_SUNRISE" desc="In Device Settings > Displays, the label of the option to set the automatic schedule of the Night Light feature to turn on at sunset and off at sunrise.">
+      Sunset to Sunrise
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_TEXT" desc="In Device Settings > Displays, text describing the Night Light feature.">
+      Makes it easier to look at your screen or read in dim light
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_TEMPERATURE_LABEL" desc="In Device Settings > Displays, label of the slider that controls the color temperature of the screen when the Night Light feature is on.">
+      Color temperature
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_TEMP_SLIDER_MAX_LABEL" desc="In Device Settings > Displays, label of the maximum value settable by the color temperature slider.">
+      More warm
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_TEMP_SLIDER_MIN_LABEL" desc="In Device Settings > Displays, label of the minimum value settable by the color temperature slider.">
+      Less warm
     </message>
     <message name="IDS_SETTINGS_DISPLAY_UNIFIED_DESKTOP" desc="In Device Settings > Displays, the label for the control for the unified desktop feature.">
       Allow windows to span displays

@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/pending_task.h"
+#include "base/run_loop.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
 #include "platform/scheduler/base/enqueue_order.h"
@@ -51,17 +52,14 @@ class TaskTimeObserver;
 //    the incoming task queue (if any) are moved here. The work queues are
 //    registered with the selector as input to the scheduling decision.
 //
-class BLINK_PLATFORM_EXPORT TaskQueueManager
+class PLATFORM_EXPORT TaskQueueManager
     : public internal::TaskQueueSelector::Observer,
-      public base::MessageLoop::NestingObserver {
+      public base::RunLoop::NestingObserver {
  public:
   // Create a task queue manager where |delegate| identifies the thread
   // on which where the tasks are  eventually run. Category strings must have
   // application lifetime (statics or literals). They may not include " chars.
-  TaskQueueManager(scoped_refptr<TaskQueueManagerDelegate> delegate,
-                   const char* tracing_category,
-                   const char* disabled_by_default_tracing_category,
-                   const char* disabled_by_default_verbose_tracing_category);
+  explicit TaskQueueManager(scoped_refptr<TaskQueueManagerDelegate> delegate);
   ~TaskQueueManager() override;
 
   // Requests that a task to process work is posted on the main task runner.
@@ -105,7 +103,7 @@ class BLINK_PLATFORM_EXPORT TaskQueueManager
   scoped_refptr<internal::TaskQueueImpl> NewTaskQueue(
       const TaskQueue::Spec& spec);
 
-  class BLINK_PLATFORM_EXPORT Observer {
+  class PLATFORM_EXPORT Observer {
    public:
     virtual ~Observer() {}
 
@@ -236,8 +234,8 @@ class BLINK_PLATFORM_EXPORT TaskQueueManager
   void OnTriedToSelectBlockedWorkQueue(
       internal::WorkQueue* work_queue) override;
 
-  // base::MessageLoop::NestingObserver implementation:
-  void OnBeginNestedMessageLoop() override;
+  // base::RunLoop::NestingObserver implementation:
+  void OnBeginNestedRunLoop() override;
 
   // Called by the task queue to register a new pending task.
   void DidQueueTask(const internal::TaskQueueImpl::Task& pending_task);
@@ -275,7 +273,7 @@ class BLINK_PLATFORM_EXPORT TaskQueueManager
                                              LazyNow time_before_task,
                                              base::TimeTicks* time_after_task);
 
-  bool RunsTasksOnCurrentThread() const;
+  bool RunsTasksInCurrentSequence() const;
   bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
                                   const base::Closure& task,
                                   base::TimeDelta delay);
@@ -371,10 +369,6 @@ class BLINK_PLATFORM_EXPORT TaskQueueManager
   base::ObserverList<base::MessageLoop::TaskObserver> task_observers_;
 
   base::ObserverList<TaskTimeObserver> task_time_observers_;
-
-  const char* tracing_category_;
-  const char* disabled_by_default_tracing_category_;
-  const char* disabled_by_default_verbose_tracing_category_;
 
   internal::TaskQueueImpl* currently_executing_task_queue_;  // NOT OWNED
 

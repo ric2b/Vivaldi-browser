@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "content/common/media/audio_messages.h"
 #include "content/renderer/media/audio_message_filter.h"
@@ -23,6 +24,10 @@ class MockAudioDelegate : public media::AudioOutputIPCDelegate {
  public:
   MockAudioDelegate() {
     Reset();
+  }
+  ~MockAudioDelegate() override {
+    if (handle_.IsValid())
+      handle_.Close();
   }
 
   void OnError() override { error_received_ = true; }
@@ -54,7 +59,9 @@ class MockAudioDelegate : public media::AudioOutputIPCDelegate {
     device_status_ = media::OUTPUT_DEVICE_STATUS_ERROR_INTERNAL;
 
     created_received_ = false;
-    handle_ = base::SharedMemory::NULLHandle();
+    if (handle_.IsValid())
+      handle_.Close();
+    handle_ = base::SharedMemoryHandle();
     length_ = 0;
 
     volume_received_ = false;
@@ -130,7 +137,7 @@ TEST(AudioMessageFilterTest, Basic) {
   const uint32_t kLength = 1024;
   EXPECT_FALSE(delegate.created_received());
   filter->OnMessageReceived(AudioMsg_NotifyStreamCreated(
-      kStreamId, base::SharedMemory::NULLHandle(), socket_descriptor, kLength));
+      kStreamId, base::SharedMemoryHandle(), socket_descriptor, kLength));
   EXPECT_TRUE(delegate.created_received());
   EXPECT_FALSE(base::SharedMemory::IsHandleValid(delegate.handle()));
   EXPECT_EQ(kLength, delegate.length());

@@ -253,8 +253,8 @@ VTTCue::~VTTCue() {}
 #ifndef NDEBUG
 String VTTCue::ToString() const {
   return String::Format("%p id=%s interval=%f-->%f cue=%s)", this,
-                        id().Utf8().Data(), startTime(), endTime(),
-                        text().Utf8().Data());
+                        id().Utf8().data(), startTime(), endTime(),
+                        text().Utf8().data());
 }
 #endif
 
@@ -453,7 +453,7 @@ void VTTCue::CreateVTTNodeTree() {
 
 void VTTCue::CopyVTTNodeToDOMTree(ContainerNode* vtt_node,
                                   ContainerNode* parent) {
-  for (Node* node = vtt_node->FirstChild(); node; node = node->nextSibling()) {
+  for (Node* node = vtt_node->firstChild(); node; node = node->nextSibling()) {
     Node* cloned_node;
     if (node->IsVTTElement())
       cloned_node =
@@ -797,7 +797,7 @@ VTTCueBox* VTTCue::GetDisplayTree() {
     display_tree_->AppendChild(cue_background_box_);
   }
 
-  DCHECK_EQ(display_tree_->FirstChild(), cue_background_box_);
+  DCHECK_EQ(display_tree_->firstChild(), cue_background_box_);
 
   if (!display_tree_should_change_) {
     // Apply updated user style overrides for text tracks when display tree

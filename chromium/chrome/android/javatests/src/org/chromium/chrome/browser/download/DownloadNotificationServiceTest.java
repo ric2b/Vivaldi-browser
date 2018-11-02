@@ -20,6 +20,8 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.LegacyHelpers;
+import org.chromium.components.offline_items_collection.OfflineItem.Progress;
+import org.chromium.components.offline_items_collection.OfflineItemProgressUnit;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -32,7 +34,6 @@ import java.util.UUID;
  */
 public class DownloadNotificationServiceTest extends
         ServiceTestCase<MockDownloadNotificationService> {
-    private static final int MILLIS_PER_SECOND = 1000;
 
     private static class MockDownloadManagerService extends DownloadManagerService {
         final List<DownloadItem> mDownloads = new ArrayList<DownloadItem>();
@@ -296,7 +297,9 @@ public class DownloadNotificationServiceTest extends
 
         DownloadNotificationService service = bindNotificationService();
         ContentId id3 = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
-        service.notifyDownloadProgress(id3, "test", 1, 100L, 1L, 1L, true, true, false);
+        service.notifyDownloadProgress(id3, "test",
+                new Progress(1, 100L, OfflineItemProgressUnit.PERCENTAGE), 100L, 1L, 1L, true, true,
+                false, null);
         assertEquals(3, getService().getNotificationIds().size());
         int lastNotificationId = getService().getLastAddedNotificationId();
         Set<String> entries = DownloadManagerService.getStoredDownloadInfo(
@@ -305,13 +308,13 @@ public class DownloadNotificationServiceTest extends
 
         ContentId id1 = LegacyHelpers.buildLegacyContentId(false, guid1);
         service.notifyDownloadSuccessful(
-                id1, "/path/to/success", "success", 100L, false, false, true);
+                id1, "/path/to/success", "success", 100L, false, false, true, null);
         entries = DownloadManagerService.getStoredDownloadInfo(
                 sharedPrefs, DownloadSharedPreferenceHelper.KEY_PENDING_DOWNLOAD_NOTIFICATIONS);
         assertEquals(2, entries.size());
 
         ContentId id2 = LegacyHelpers.buildLegacyContentId(false, guid2);
-        service.notifyDownloadFailed(id2, "failed");
+        service.notifyDownloadFailed(id2, "failed", null);
         entries = DownloadManagerService.getStoredDownloadInfo(
                 sharedPrefs, DownloadSharedPreferenceHelper.KEY_PENDING_DOWNLOAD_NOTIFICATIONS);
         assertEquals(1, entries.size());
@@ -322,7 +325,7 @@ public class DownloadNotificationServiceTest extends
 
         ContentId id4 = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
         service.notifyDownloadSuccessful(
-                id4, "/path/to/success", "success", 100L, false, false, true);
+                id4, "/path/to/success", "success", 100L, false, false, true, null);
         assertEquals(3, getService().getNotificationIds().size());
         int nextNotificationId = getService().getLastAddedNotificationId();
         service.cancelNotification(nextNotificationId, id4);
@@ -341,7 +344,8 @@ public class DownloadNotificationServiceTest extends
         startNotificationService();
         DownloadNotificationService service = bindNotificationService();
         ContentId id = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
-        service.notifyDownloadSuccessful(id, "/path/to/test", "test", 100L, false, false, true);
+        service.notifyDownloadSuccessful(
+                id, "/path/to/test", "test", 100L, false, false, true, null);
         assertEquals(1, getService().getNotificationIds().size());
     }
 
@@ -427,45 +431,120 @@ public class DownloadNotificationServiceTest extends
 
     @SmallTest
     @Feature({"Download"})
-    public void testFormatRemainingTime() {
-        Context context = getSystemContext().getApplicationContext();
-        assertEquals("0 secs left", DownloadNotificationService.formatRemainingTime(context, 0));
-        assertEquals("1 sec left", DownloadNotificationService.formatRemainingTime(
-                context, MILLIS_PER_SECOND));
-        assertEquals("1 min left", DownloadNotificationService.formatRemainingTime(context,
-                DownloadNotificationService.SECONDS_PER_MINUTE * MILLIS_PER_SECOND));
-        assertEquals("2 mins left", DownloadNotificationService.formatRemainingTime(context,
-                149 * MILLIS_PER_SECOND));
-        assertEquals("3 mins left", DownloadNotificationService.formatRemainingTime(context,
-                150 * MILLIS_PER_SECOND));
-        assertEquals("1 hour left", DownloadNotificationService.formatRemainingTime(context,
-                DownloadNotificationService.SECONDS_PER_HOUR * MILLIS_PER_SECOND));
-        assertEquals("2 hours left", DownloadNotificationService.formatRemainingTime(context,
-                149 * DownloadNotificationService.SECONDS_PER_MINUTE * MILLIS_PER_SECOND));
-        assertEquals("3 hours left", DownloadNotificationService.formatRemainingTime(context,
-                150 * DownloadNotificationService.SECONDS_PER_MINUTE * MILLIS_PER_SECOND));
-        assertEquals("1 day left", DownloadNotificationService.formatRemainingTime(context,
-                DownloadNotificationService.SECONDS_PER_DAY * MILLIS_PER_SECOND));
-        assertEquals("2 days left", DownloadNotificationService.formatRemainingTime(context,
-                59 * DownloadNotificationService.SECONDS_PER_HOUR * MILLIS_PER_SECOND));
-        assertEquals("3 days left", DownloadNotificationService.formatRemainingTime(context,
-                60 * DownloadNotificationService.SECONDS_PER_HOUR * MILLIS_PER_SECOND));
+    public void testServiceWillStopOnCompletedDownload() throws Exception {
+        // On versions of Android that use a foreground service, the service will currently die with
+        // the notifications.
+        if (DownloadNotificationService.useForegroundService()) return;
+
+        setupService();
+        startNotificationService();
+        DownloadNotificationService service = bindNotificationService();
+        ContentId id = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
+        service.notifyDownloadProgress(id, "/path/to/test", Progress.createIndeterminateProgress(),
+                10L, 1000L, 10L, false, false, false, null);
+        assertFalse(service.hideSummaryNotificationIfNecessary(-1));
+        service.notifyDownloadSuccessful(
+                id, "/path/to/test", "test", 100L, false, false, true, null);
+        assertTrue(service.hideSummaryNotificationIfNecessary(-1));
     }
 
-    // Tests that the downloaded bytes on the notification is correct.
     @SmallTest
     @Feature({"Download"})
-    public void testFormatBytesReceived() {
-        Context context = getSystemContext().getApplicationContext();
-        assertEquals("Downloaded 0.0 KB", DownloadUtils.getStringForBytes(
-                context, DownloadUtils.BYTES_DOWNLOADED_STRINGS, 0));
-        assertEquals("Downloaded 0.5 KB", DownloadUtils.getStringForBytes(
-                context, DownloadUtils.BYTES_DOWNLOADED_STRINGS, 512));
-        assertEquals("Downloaded 1.0 KB", DownloadUtils.getStringForBytes(
-                context, DownloadUtils.BYTES_DOWNLOADED_STRINGS, 1024));
-        assertEquals("Downloaded 1.0 MB", DownloadUtils.getStringForBytes(
-                context, DownloadUtils.BYTES_DOWNLOADED_STRINGS, 1024 * 1024));
-        assertEquals("Downloaded 1.0 GB", DownloadUtils.getStringForBytes(
-                context, DownloadUtils.BYTES_DOWNLOADED_STRINGS, 1024 * 1024 * 1024));
+    public void testServiceWillStopOnFailedDownload() throws Exception {
+        // On versions of Android that use a foreground service, the service will currently die with
+        // the notifications.
+        if (DownloadNotificationService.useForegroundService()) return;
+
+        setupService();
+        startNotificationService();
+        DownloadNotificationService service = bindNotificationService();
+        ContentId id = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
+        service.notifyDownloadProgress(id, "/path/to/test", Progress.createIndeterminateProgress(),
+                10L, 1000L, 10L, false, false, false, null);
+        assertFalse(service.hideSummaryNotificationIfNecessary(-1));
+        service.notifyDownloadFailed(id, "/path/to/test", null);
+        assertTrue(service.hideSummaryNotificationIfNecessary(-1));
+    }
+
+    @SmallTest
+    @Feature({"Download"})
+    public void testServiceWillStopOnCancelledDownload() throws Exception {
+        // On versions of Android that use a foreground service, the service will currently die with
+        // the notifications.
+        if (DownloadNotificationService.useForegroundService()) return;
+
+        setupService();
+        startNotificationService();
+        DownloadNotificationService service = bindNotificationService();
+        ContentId id = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
+        service.notifyDownloadProgress(id, "/path/to/test", Progress.createIndeterminateProgress(),
+                10L, 1000L, 10L, false, false, false, null);
+        assertFalse(service.hideSummaryNotificationIfNecessary(-1));
+        service.notifyDownloadCanceled(id);
+        assertTrue(service.hideSummaryNotificationIfNecessary(-1));
+    }
+
+    @SmallTest
+    @Feature({"Download"})
+    public void testServiceWillNotStopOnInterruptedDownload() throws Exception {
+        // On versions of Android that use a foreground service, the service will currently die with
+        // the notifications.
+        if (DownloadNotificationService.useForegroundService()) return;
+
+        setupService();
+        startNotificationService();
+        DownloadNotificationService service = bindNotificationService();
+        ContentId id = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
+        service.notifyDownloadProgress(id, "/path/to/test", Progress.createIndeterminateProgress(),
+                10L, 1000L, 10L, false, false, false, null);
+        assertFalse(service.hideSummaryNotificationIfNecessary(-1));
+        service.notifyDownloadPaused(id, "/path/to/test", true, true, false, false, null);
+        assertFalse(service.hideSummaryNotificationIfNecessary(-1));
+    }
+
+    @SmallTest
+    @Feature({"Download"})
+    public void testServiceWillNotStopOnPausedDownload() throws Exception {
+        // On versions of Android that use a foreground service, the service will currently die with
+        // the notifications.
+        if (DownloadNotificationService.useForegroundService()) return;
+
+        setupService();
+        startNotificationService();
+        DownloadNotificationService service = bindNotificationService();
+        ContentId id = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
+        service.notifyDownloadProgress(id, "/path/to/test", Progress.createIndeterminateProgress(),
+                10L, 1000L, 10L, false, false, false, null);
+        assertFalse(service.hideSummaryNotificationIfNecessary(-1));
+        service.notifyDownloadPaused(id, "/path/to/test", true, false, false, false, null);
+        assertFalse(service.hideSummaryNotificationIfNecessary(-1));
+    }
+
+    @SmallTest
+    @Feature({"Download"})
+    public void testServiceWillNotStopWithOneOngoingDownload() throws Exception {
+        // On versions of Android that use a foreground service, the service will currently die with
+        // the notifications.
+        if (DownloadNotificationService.useForegroundService()) return;
+
+        setupService();
+        startNotificationService();
+        DownloadNotificationService service = bindNotificationService();
+        ContentId id1 = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
+        ContentId id2 = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
+
+        service.notifyDownloadProgress(id1, "/path/to/test", Progress.createIndeterminateProgress(),
+                10L, 1000L, 10L, false, false, false, null);
+        service.notifyDownloadProgress(id2, "/path/to/test", Progress.createIndeterminateProgress(),
+                10L, 1000L, 10L, false, false, false, null);
+        assertFalse(service.hideSummaryNotificationIfNecessary(-1));
+        service.notifyDownloadPaused(id1, "/path/to/test", true, false, false, false, null);
+        assertFalse(service.hideSummaryNotificationIfNecessary(-1));
+        service.notifyDownloadSuccessful(
+                id1, "/path/to/test", "test", 100L, false, false, true, null);
+        assertFalse(service.hideSummaryNotificationIfNecessary(-1));
+        service.notifyDownloadSuccessful(
+                id2, "/path/to/test", "test", 100L, false, false, true, null);
+        assertTrue(service.hideSummaryNotificationIfNecessary(-1));
     }
 }

@@ -23,11 +23,11 @@
 #define ElementRareData_h
 
 #include <memory>
-#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "core/animation/ElementAnimations.h"
 #include "core/css/cssom/InlineStylePropertyMap.h"
 #include "core/dom/AccessibleNode.h"
 #include "core/dom/Attr.h"
+#include "core/dom/ClassList.h"
 #include "core/dom/CompositorProxiedPropertySet.h"
 #include "core/dom/DatasetDOMStringMap.h"
 #include "core/dom/ElementIntersectionObserverData.h"
@@ -38,7 +38,7 @@
 #include "core/dom/custom/CustomElementDefinition.h"
 #include "core/dom/custom/V0CustomElementDefinition.h"
 #include "core/dom/shadow/ElementShadow.h"
-#include "core/html/ClassList.h"
+#include "platform/bindings/ScriptWrappableVisitor.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/HashSet.h"
 
@@ -50,7 +50,7 @@ class ResizeObserver;
 
 class ElementRareData : public NodeRareData {
  public:
-  static ElementRareData* Create(NodeLayoutData* node_layout_data) {
+  static ElementRareData* Create(NodeRenderingData* node_layout_data) {
     return new ElementRareData(node_layout_data);
   }
 
@@ -193,6 +193,9 @@ class ElementRareData : public NodeRareData {
   }
   ResizeObserverDataMap& EnsureResizeObserverData();
 
+  const AtomicString& GetNonce() const { return nonce_; }
+  void SetNonce(const AtomicString& nonce) { nonce_ = nonce; }
+
   DECLARE_TRACE_AFTER_DISPATCH();
   DECLARE_TRACE_WRAPPERS_AFTER_DISPATCH();
 
@@ -202,6 +205,7 @@ class ElementRareData : public NodeRareData {
 
   LayoutSize minimum_size_for_resizing_;
   ScrollOffset saved_layer_scroll_offset_;
+  AtomicString nonce_;
 
   Member<DatasetDOMStringMap> dataset_;
   Member<ElementShadow> shadow_;
@@ -225,7 +229,7 @@ class ElementRareData : public NodeRareData {
 
   Member<AccessibleNode> accessible_node_;
 
-  explicit ElementRareData(NodeLayoutData*);
+  explicit ElementRareData(NodeRenderingData*);
 };
 DEFINE_TRAIT_FOR_TRACE_WRAPPERS(ElementRareData);
 
@@ -233,7 +237,7 @@ inline LayoutSize DefaultMinimumSizeForResizing() {
   return LayoutSize(LayoutUnit::Max(), LayoutUnit::Max());
 }
 
-inline ElementRareData::ElementRareData(NodeLayoutData* node_layout_data)
+inline ElementRareData::ElementRareData(NodeRenderingData* node_layout_data)
     : NodeRareData(node_layout_data),
       minimum_size_for_resizing_(DefaultMinimumSizeForResizing()),
       class_list_(nullptr) {

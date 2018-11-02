@@ -78,7 +78,7 @@ DEFINE_TRACE(VisualViewport) {
   ScrollableArea::Trace(visitor);
 }
 
-void VisualViewport::UpdateStyleAndLayoutIgnorePendingStylesheets() {
+void VisualViewport::UpdateStyleAndLayoutIgnorePendingStylesheets() const {
   if (!MainFrame())
     return;
 
@@ -190,7 +190,7 @@ void VisualViewport::SetScale(float scale) {
   SetScaleAndLocation(scale, FloatPoint(offset_));
 }
 
-double VisualViewport::ScrollLeft() {
+double VisualViewport::OffsetLeft() const {
   if (!MainFrame())
     return 0;
 
@@ -200,7 +200,7 @@ double VisualViewport::ScrollLeft() {
                                      MainFrame()->PageZoomFactor());
 }
 
-double VisualViewport::ScrollTop() {
+double VisualViewport::OffsetTop() const {
   if (!MainFrame())
     return 0;
 
@@ -210,7 +210,7 @@ double VisualViewport::ScrollTop() {
                                      MainFrame()->PageZoomFactor());
 }
 
-double VisualViewport::ClientWidth() {
+double VisualViewport::Width() const {
   if (!MainFrame())
     return 0;
 
@@ -221,7 +221,7 @@ double VisualViewport::ClientWidth() {
   return width - MainFrame()->View()->VerticalScrollbarWidth() / scale_;
 }
 
-double VisualViewport::ClientHeight() {
+double VisualViewport::Height() const {
   if (!MainFrame())
     return 0;
 
@@ -232,10 +232,8 @@ double VisualViewport::ClientHeight() {
   return height - MainFrame()->View()->HorizontalScrollbarHeight() / scale_;
 }
 
-double VisualViewport::PageScale() {
-  UpdateStyleAndLayoutIgnorePendingStylesheets();
-
-  return scale_;
+double VisualViewport::ScaleForVisualViewport() const {
+  return Scale();
 }
 
 void VisualViewport::SetScaleAndLocation(float scale,
@@ -363,8 +361,10 @@ void VisualViewport::CreateLayerTree() {
   inner_viewport_scroll_layer_->PlatformLayer()->SetUserScrollable(true, true);
   if (MainFrame()) {
     if (Document* document = MainFrame()->GetDocument()) {
-      inner_viewport_scroll_layer_->SetElementId(CreateCompositorElementId(
-          DOMNodeIds::IdForNode(document), CompositorSubElementId::kViewport));
+      inner_viewport_scroll_layer_->SetElementId(
+          CompositorElementIdFromDOMNodeId(
+              DOMNodeIds::IdForNode(document),
+              CompositorElementIdNamespace::kViewport));
     }
   }
 
@@ -442,7 +442,7 @@ void VisualViewport::SetupScrollbar(WebScrollbar::Orientation orientation) {
 
   if (!web_scrollbar_layer) {
     ScrollingCoordinator* coordinator = GetPage().GetScrollingCoordinator();
-    ASSERT(coordinator);
+    DCHECK(coordinator);
     ScrollbarOrientation webcore_orientation =
         is_horizontal ? kHorizontalScrollbar : kVerticalScrollbar;
     web_scrollbar_layer = coordinator->CreateSolidColorScrollbarLayer(
@@ -494,7 +494,7 @@ bool VisualViewport::ScrollAnimatorEnabled() const {
   return GetPage().GetSettings().GetScrollAnimatorEnabled();
 }
 
-HostWindow* VisualViewport::GetHostWindow() const {
+PlatformChromeClient* VisualViewport::GetChromeClient() const {
   return &GetPage().GetChromeClient();
 }
 
@@ -637,9 +637,13 @@ RefPtr<WebTaskRunner> VisualViewport::GetTimerTaskRunner() const {
 
 void VisualViewport::UpdateScrollOffset(const ScrollOffset& position,
                                         ScrollType scroll_type) {
-  if (DidSetScaleOrLocation(scale_, FloatPoint(position)) &&
-      scroll_type != kAnchoringScroll)
+  if (!DidSetScaleOrLocation(scale_, FloatPoint(position)))
+    return;
+  if (IsExplicitScrollType(scroll_type)) {
     NotifyRootFrameViewport();
+    if (scroll_type != kCompositorScroll && LayerForScrolling())
+      LayerForScrolling()->PlatformLayer()->ShowScrollbars();
+  }
 }
 
 GraphicsLayer* VisualViewport::LayerForContainer() const {
@@ -674,8 +678,12 @@ LocalFrame* VisualViewport::MainFrame() const {
              : 0;
 }
 
-FrameViewBase* VisualViewport::GetFrameViewBase() {
-  return MainFrame()->View();
+bool VisualViewport::ScheduleAnimation() {
+  if (PlatformChromeClient* client = GetChromeClient()) {
+    client->ScheduleAnimation(MainFrame()->View());
+    return true;
+  }
+  return false;
 }
 
 void VisualViewport::ClampToBoundaries() {
@@ -848,7 +856,7 @@ String VisualViewport::DebugName(const GraphicsLayer* graphics_layer) const {
   } else if (graphics_layer == root_transform_layer_.get()) {
     name = "Root Transform Layer";
   } else {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
   }
 
   return name;

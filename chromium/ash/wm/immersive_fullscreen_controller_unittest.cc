@@ -8,12 +8,11 @@
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/root_window_controller.h"
 #include "ash/shared/immersive_fullscreen_controller_delegate.h"
-#include "ash/shelf/wm_shelf.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/immersive_fullscreen_controller_test_api.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/env.h"
@@ -733,7 +732,8 @@ TEST_F(ImmersiveFullscreenControllerTest, RevealViaGestureChildConsumesEvents) {
   aura::test::TestWindowDelegate child_delegate;
   std::unique_ptr<aura::Window> child(
       CreateTestWindowInShellWithDelegateAndType(
-          &child_delegate, ui::wm::WINDOW_TYPE_CONTROL, 1234, gfx::Rect()));
+          &child_delegate, aura::client::WINDOW_TYPE_CONTROL, 1234,
+          gfx::Rect()));
   content_view()->Attach(child.get());
   child->Show();
 
@@ -1052,7 +1052,7 @@ TEST_F(ImmersiveFullscreenControllerTest, Bubbles) {
 // immersive fullscreen and that the shelf's state before entering immersive
 // fullscreen is restored upon exiting immersive fullscreen.
 TEST_F(ImmersiveFullscreenControllerTest, Shelf) {
-  WmShelf* shelf = GetPrimaryShelf();
+  Shelf* shelf = GetPrimaryShelf();
 
   // Shelf is visible by default.
   window()->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);

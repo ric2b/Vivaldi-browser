@@ -19,10 +19,14 @@ void LaunchUpdateNotifier() {
   update_notifier_path =
       update_notifier_path.Append(installer::kVivaldiUpdateNotifierExe);
   base::string16 command;
+  base::string16 notifier_path_string(
+      L"\"" + update_notifier_path.value() + L"\"");
   if (base::win::ReadCommandFromAutoRun(
           HKEY_CURRENT_USER, ::vivaldi::kUpdateNotifierAutorunName, &command) &&
-      base::FilePath::CompareEqualIgnoreCase(command,
-                                             update_notifier_path.value())) {
+              (base::FilePath::CompareEqualIgnoreCase(command,
+                  notifier_path_string) ||
+              base::FilePath::CompareEqualIgnoreCase(command,
+                  update_notifier_path.value()))) {
     base::CommandLine* vivaldi_command_line =
         base::CommandLine::ForCurrentProcess();
 

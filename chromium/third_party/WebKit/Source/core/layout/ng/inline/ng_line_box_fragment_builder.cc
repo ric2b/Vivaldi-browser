@@ -13,10 +13,8 @@
 
 namespace blink {
 
-NGLineBoxFragmentBuilder::NGLineBoxFragmentBuilder(
-    NGInlineNode* node,
-    const NGLineHeightMetrics& metrics)
-    : direction_(TextDirection::kLtr), node_(node), metrics_(metrics) {}
+NGLineBoxFragmentBuilder::NGLineBoxFragmentBuilder(NGInlineNode* node)
+    : direction_(TextDirection::kLtr), node_(node) {}
 
 NGLineBoxFragmentBuilder& NGLineBoxFragmentBuilder::SetDirection(
     TextDirection direction) {
@@ -44,9 +42,27 @@ void NGLineBoxFragmentBuilder::MoveChildrenInBlockDirection(LayoutUnit delta) {
     offset.block_offset += delta;
 }
 
-void NGLineBoxFragmentBuilder::UniteMetrics(
-    const NGLineHeightMetrics& metrics) {
-  metrics_.Unite(metrics);
+void NGLineBoxFragmentBuilder::MoveChildrenInInlineDirection(LayoutUnit delta) {
+  NGWritingMode writing_mode(
+      FromPlatformWritingMode(node_->Style().GetWritingMode()));
+  LayoutUnit child_inline_size;
+  for (size_t i = 0; i < children_.size(); ++i) {
+    offsets_[i].inline_offset = delta + child_inline_size;
+    NGPhysicalFragment* child = children_[i].Get();
+    child_inline_size +=
+        child->Size().ConvertToLogical(writing_mode).inline_size;
+  }
+}
+
+void NGLineBoxFragmentBuilder::MoveChildrenInBlockDirection(LayoutUnit delta,
+                                                            unsigned start,
+                                                            unsigned end) {
+  for (unsigned index = start; index < end; index++)
+    offsets_[index].block_offset += delta;
+}
+
+void NGLineBoxFragmentBuilder::SetMetrics(const NGLineHeightMetrics& metrics) {
+  metrics_ = metrics;
 }
 
 void NGLineBoxFragmentBuilder::SetBreakToken(

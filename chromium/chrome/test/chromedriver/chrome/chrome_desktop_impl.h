@@ -11,9 +11,10 @@
 
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/process/process.h"
+#include "base/values.h"
 #include "chrome/test/chromedriver/chrome/chrome_impl.h"
+#include "chrome/test/chromedriver/chrome/scoped_temp_dir_with_retry.h"
 
 namespace base {
 class TimeDelta;
@@ -66,11 +67,35 @@ class ChromeDesktopImpl : public ChromeImpl {
   int GetNetworkConnection() const;
   void SetNetworkConnection(int network_connection);
 
+  Status GetWindowPosition(const std::string& target_id, int* x, int* y);
+  Status GetWindowSize(const std::string& target_id, int* width, int* height);
+  Status SetWindowPosition(const std::string& target_id, int x, int y);
+  Status SetWindowSize(const std::string& target_id, int width, int height);
+  Status MaximizeWindow(const std::string& target_id);
+
  private:
+  struct Window {
+    int id;
+    std::string state;
+    int left;
+    int top;
+    int width;
+    int height;
+  };
+  Status ParseWindowBounds(std::unique_ptr<base::DictionaryValue> params,
+                           Window* window);
+  Status ParseWindow(std::unique_ptr<base::DictionaryValue> params,
+                     Window* window);
+
+  Status GetWindow(const std::string& target_id, Window* window);
+  Status GetWindowBounds(int window_id, Window* window);
+  Status SetWindowBounds(int window_id,
+                         std::unique_ptr<base::DictionaryValue> bounds);
+
   base::Process process_;
   base::CommandLine command_;
-  base::ScopedTempDir user_data_dir_;
-  base::ScopedTempDir extension_dir_;
+  ScopedTempDirWithRetry user_data_dir_;
+  ScopedTempDirWithRetry extension_dir_;
   bool network_connection_enabled_;
   int network_connection_;
 

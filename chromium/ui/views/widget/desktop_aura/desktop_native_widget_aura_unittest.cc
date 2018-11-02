@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
@@ -178,12 +179,14 @@ TEST_F(DesktopNativeWidgetAuraTest, GlobalCursorState) {
 
   // Verify that setting the cursor using one cursor client
   // will set it for all root windows.
-  EXPECT_EQ(ui::kCursorNone, cursor_client_a->GetCursor().native_type());
-  EXPECT_EQ(ui::kCursorNone, cursor_client_b->GetCursor().native_type());
+  EXPECT_EQ(ui::CursorType::kNone, cursor_client_a->GetCursor().native_type());
+  EXPECT_EQ(ui::CursorType::kNone, cursor_client_b->GetCursor().native_type());
 
-  cursor_client_b->SetCursor(ui::kCursorPointer);
-  EXPECT_EQ(ui::kCursorPointer, cursor_client_a->GetCursor().native_type());
-  EXPECT_EQ(ui::kCursorPointer, cursor_client_b->GetCursor().native_type());
+  cursor_client_b->SetCursor(ui::CursorType::kPointer);
+  EXPECT_EQ(ui::CursorType::kPointer,
+            cursor_client_a->GetCursor().native_type());
+  EXPECT_EQ(ui::CursorType::kPointer,
+            cursor_client_b->GetCursor().native_type());
 
   // Verify that hiding the cursor using one cursor client will
   // hide it for all root windows. Note that hiding the cursor
@@ -255,7 +258,7 @@ TEST_F(DesktopNativeWidgetAuraTest, WidgetCanBeDestroyedFromNestedLoop) {
   // |RunWithDispatcher()| below.
   base::RunLoop run_loop;
   base::Closure quit_runloop = run_loop.QuitClosure();
-  message_loop()->task_runner()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&QuitNestedLoopAndCloseWidget, base::Passed(&widget),
                  base::Unretained(&quit_runloop)));
@@ -296,13 +299,13 @@ class DesktopAuraTopLevelWindowTest : public aura::WindowObserver {
     widget_.Init(init_params);
 
     owned_window_ = new aura::Window(&child_window_delegate_);
-    owned_window_->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+    owned_window_->SetType(aura::client::WINDOW_TYPE_NORMAL);
     owned_window_->SetName("TestTopLevelWindow");
     if (fullscreen) {
       owned_window_->SetProperty(aura::client::kShowStateKey,
                                  ui::SHOW_STATE_FULLSCREEN);
     } else {
-      owned_window_->SetType(ui::wm::WINDOW_TYPE_MENU);
+      owned_window_->SetType(aura::client::WINDOW_TYPE_MENU);
     }
     owned_window_->Init(ui::LAYER_TEXTURED);
     aura::client::ParentWindowWithContext(
@@ -459,7 +462,7 @@ TEST_F(DesktopAuraWidgetTest, TopLevelOwnedPopupRepositionTest) {
 
 // The following code verifies we can correctly destroy a Widget from a mouse
 // enter/exit. We could test move/drag/enter/exit but in general we don't run
-// nested message loops from such events, nor has the code ever really dealt
+// nested run loops from such events, nor has the code ever really dealt
 // with this situation.
 
 // Generates two moves (first generates enter, second real move), a press, drag

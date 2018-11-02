@@ -20,6 +20,7 @@
 #import "ios/shared/chrome/browser/ui/browser_list/browser.h"
 #import "ios/shared/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/shared/chrome/browser/ui/coordinators/browser_coordinator+internal.h"
+#import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/web_state/web_state.h"
 #import "net/base/mac/url_conversions.h"
@@ -47,18 +48,6 @@
 
 #pragma mark - Properties
 
-- (void)setBrowser:(Browser*)browser {
-  [super setBrowser:browser];
-
-  for (int i = 0; i < 7; i++) {
-    web::WebState::CreateParams webStateCreateParams(browser->browser_state());
-    std::unique_ptr<web::WebState> webState =
-        web::WebState::Create(webStateCreateParams);
-    self.webStateList.InsertWebState(0, std::move(webState));
-  }
-  self.webStateList.ActivateWebStateAt(0);
-}
-
 - (WebStateList&)webStateList {
   return self.browser->web_state_list();
 }
@@ -74,7 +63,6 @@
   [self registerForToolsMenuCommands];
 
   self.viewController = [[TabGridViewController alloc] init];
-  self.viewController.dataSource = self.mediator;
   self.viewController.dispatcher = static_cast<id>(self.browser->dispatcher());
 
   self.mediator.consumer = self.viewController;
@@ -86,8 +74,9 @@
   [super stop];
   [self.browser->dispatcher() stopDispatchingToTarget:self];
   [self.mediator disconnect];
+  // PLACEHOLDER: Remove child coordinators here for now. This might be handled
+  // differently later on.
   for (BrowserCoordinator* child in self.children) {
-    [child stop];
     [self removeChildCoordinator:child];
   }
 }
@@ -153,6 +142,10 @@
 - (void)showToolsMenu {
   ToolsCoordinator* toolsCoordinator = [[ToolsCoordinator alloc] init];
   [self addChildCoordinator:toolsCoordinator];
+  ToolsMenuConfiguration* menuConfiguration =
+      [[ToolsMenuConfiguration alloc] initWithDisplayView:nil];
+  menuConfiguration.inTabSwitcher = YES;
+  toolsCoordinator.toolsMenuConfiguration = menuConfiguration;
   [toolsCoordinator start];
   self.toolsMenuCoordinator = toolsCoordinator;
 }
@@ -208,6 +201,8 @@
 }
 
 - (void)registerForTabGridCommands {
+  [self.browser->dispatcher() startDispatchingToTarget:self
+                                           forSelector:@selector(showTabGrid)];
   [self.browser->dispatcher()
       startDispatchingToTarget:self
                    forSelector:@selector(showTabGridTabAtIndex:)];

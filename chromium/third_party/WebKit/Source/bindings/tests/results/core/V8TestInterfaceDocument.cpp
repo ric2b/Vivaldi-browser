@@ -14,13 +14,12 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8Location.h"
-#include "bindings/core/v8/V8ObjectConstructor.h"
 #include "core/animation/DocumentAnimation.h"
-#include "core/css/DocumentFontFaceSet.h"
 #include "core/dom/DocumentFullscreen.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/xml/DocumentXPathEvaluator.h"
+#include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
 
@@ -39,7 +38,7 @@ const WrapperTypeInfo V8TestInterfaceDocument::wrapperTypeInfo = { gin::kEmbedde
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestInterfaceDocument.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
-// bindings/core/v8/ScriptWrappable.h.
+// platform/bindings/ScriptWrappable.h.
 const WrapperTypeInfo& TestInterfaceDocument::wrapper_type_info_ = V8TestInterfaceDocument::wrapperTypeInfo;
 
 // not [ActiveScriptWrappable]
@@ -70,19 +69,22 @@ static void locationAttributeSetter(v8::Local<v8::Value> v8Value, const v8::Func
   ALLOW_UNUSED_LOCAL(isolate);
 
   v8::Local<v8::Object> holder = info.Holder();
-  TestInterfaceDocument* proxyImpl = V8TestInterfaceDocument::toImpl(holder);
-  Location* impl = WTF::GetPtr(proxyImpl->location());
-  if (!impl)
-    return;
+  ALLOW_UNUSED_LOCAL(holder);
 
+  // [PutForwards] => location.href
   ExceptionState exceptionState(isolate, ExceptionState::kSetterContext, "TestInterfaceDocument", "location");
-
-  // Prepare the value to be set.
-  V8StringResource<> cppValue = v8Value;
-  if (!cppValue.Prepare())
+  v8::Local<v8::Value> target;
+  if (!holder->Get(isolate->GetCurrentContext(), V8String(isolate, "location")).ToLocal(&target))
     return;
-
-  impl->setHref(CurrentDOMWindow(info.GetIsolate()), EnteredDOMWindow(info.GetIsolate()), cppValue, exceptionState);
+  if (!target->IsObject()) {
+    exceptionState.ThrowTypeError("The attribute value is not an object");
+    return;
+  }
+  bool result;
+  if (!target.As<v8::Object>()->Set(isolate->GetCurrentContext(), V8String(isolate, "href"), v8Value).To(&result))
+    return;
+  if (!result)
+    return;
 }
 
 } // namespace TestInterfaceDocumentV8Internal
@@ -98,7 +100,8 @@ void V8TestInterfaceDocument::locationAttributeSetterCallback(const v8::Function
 }
 
 static const V8DOMConfiguration::AccessorConfiguration V8TestInterfaceDocumentAccessors[] = {
-    {"location", V8TestInterfaceDocument::locationAttributeGetterCallback, V8TestInterfaceDocument::locationAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::DontDelete), V8DOMConfiguration::kOnInstance, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds},
+      { "location", V8TestInterfaceDocument::locationAttributeGetterCallback, V8TestInterfaceDocument::locationAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::DontDelete), V8DOMConfiguration::kOnInstance, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
+    ,
 };
 
 static void installV8TestInterfaceDocumentTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate) {

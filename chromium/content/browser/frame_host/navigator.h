@@ -121,6 +121,7 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       const std::string& extra_headers,
       const Referrer& referrer,
       WindowOpenDisposition disposition,
+      bool force_new_process_for_new_contents,
       bool should_replace_current_entry,
       bool user_gesture) {}
 
@@ -147,7 +148,8 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
   // response, then the request is either started or canceled, depending on the
   // value of |proceed|.
   virtual void OnBeforeUnloadACK(FrameTreeNode* frame_tree_node,
-                                 bool proceed) {}
+                                 bool proceed,
+                                 const base::TimeTicks& proceed_time) {}
 
   // PlzNavigate
   // Used to start a new renderer-initiated navigation, following a
@@ -184,8 +186,12 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       const base::TimeTicks& renderer_before_unload_end_time) {}
 
   // Called when a navigation has failed or the response is 204/205 to discard
-  // the pending entry in order to avoid url spoofs.
-  virtual void DiscardPendingEntryIfNeeded(NavigationHandleImpl* handle) {}
+  // the pending entry in order to avoid url spoofs. |expected_pending_entry_id|
+  // is the ID of the pending NavigationEntry at the start of the navigation.
+  // With sufficiently bad interleaving of IPCs, this may no longer be the
+  // pending NavigationEntry, in which case the pending NavigationEntry will not
+  // be discarded.
+  virtual void DiscardPendingEntryIfNeeded(int expected_pending_entry_id) {}
 
  protected:
   friend class base::RefCounted<Navigator>;

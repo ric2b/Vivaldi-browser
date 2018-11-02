@@ -324,27 +324,23 @@ bool ChromeContentBrowserClientExtensionsPart::ShouldUseProcessPerSite(
 bool ChromeContentBrowserClientExtensionsPart::DoesSiteRequireDedicatedProcess(
     content::BrowserContext* browser_context,
     const GURL& effective_site_url) {
-  if (IsIsolateExtensionsEnabled()) {
-    const Extension* extension =
-        ExtensionRegistry::Get(browser_context)
-            ->enabled_extensions()
-            .GetExtensionOrAppByURL(effective_site_url);
-    if (extension) {
-      // Always isolate Chrome Web Store.
-      if (extension->id() == kWebStoreAppId)
-        return true;
+  const Extension* extension = ExtensionRegistry::Get(browser_context)
+                                   ->enabled_extensions()
+                                   .GetExtensionOrAppByURL(effective_site_url);
+  if (!extension)
+    return false;
 
-      // --isolate-extensions should isolate extensions, except for hosted
-      // apps. Isolating hosted apps is a good idea, but ought to be a separate
-      // knob.
-      if (extension->is_hosted_app())
-        return false;
+  // Always isolate Chrome Web Store.
+  if (extension->id() == kWebStoreAppId)
+    return true;
 
-      // Isolate all extensions.
-      return true;
-    }
-  }
-  return false;
+  // Extensions should be isolated, except for hosted apps. Isolating hosted
+  // apps is a good idea, but ought to be a separate knob.
+  if (extension->is_hosted_app())
+    return false;
+
+  // Isolate all extensions.
+  return true;
 }
 
 // static
@@ -364,8 +360,8 @@ bool ChromeContentBrowserClientExtensionsPart::ShouldLockToOrigin(
 
     // http://crbug.com/600441 workaround: Extension process reuse, implemented
     // in ShouldTryToUseExistingProcessHost(), means that extension processes
-    // aren't always actually dedicated to a single origin, even in
-    // --isolate-extensions. TODO(nick): Fix this.
+    // aren't always actually dedicated to a single origin.
+    // TODO(nick): Fix this.
     if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
             ::switches::kSitePerProcess))
       return false;
@@ -686,6 +682,19 @@ ChromeContentBrowserClientExtensionsPart::GetVpnServiceProxy(
 }
 
 // static
+bool ChromeContentBrowserClientExtensionsPart::
+    ShouldFrameShareParentSiteInstanceDespiteTopDocumentIsolation(
+        const GURL& subframe_url,
+        content::SiteInstance* parent_site_instance) {
+  const Extension* extension =
+      ExtensionRegistry::Get(parent_site_instance->GetBrowserContext())
+          ->enabled_extensions()
+          .GetExtensionOrAppByURL(parent_site_instance->GetSiteURL());
+
+  return extension && extension->is_hosted_app();
+}
+
+// static
 void ChromeContentBrowserClientExtensionsPart::RecordShouldAllowOpenURLFailure(
     ShouldAllowOpenURLFailureReason reason,
     const GURL& site_url) {
@@ -767,9 +776,10 @@ void ChromeContentBrowserClientExtensionsPart::SiteInstanceGotProcess(
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&InfoMap::RegisterExtensionProcess,
-                 ExtensionSystem::Get(context)->info_map(), extension->id(),
-                 site_instance->GetProcess()->GetID(), site_instance->GetId()));
+      base::BindOnce(&InfoMap::RegisterExtensionProcess,
+                     ExtensionSystem::Get(context)->info_map(), extension->id(),
+                     site_instance->GetProcess()->GetID(),
+                     site_instance->GetId()));
 }
 
 void ChromeContentBrowserClientExtensionsPart::SiteInstanceDeleting(
@@ -791,9 +801,10 @@ void ChromeContentBrowserClientExtensionsPart::SiteInstanceDeleting(
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&InfoMap::UnregisterExtensionProcess,
-                 ExtensionSystem::Get(context)->info_map(), extension->id(),
-                 site_instance->GetProcess()->GetID(), site_instance->GetId()));
+      base::BindOnce(&InfoMap::UnregisterExtensionProcess,
+                     ExtensionSystem::Get(context)->info_map(), extension->id(),
+                     site_instance->GetProcess()->GetID(),
+                     site_instance->GetId()));
 }
 
 void ChromeContentBrowserClientExtensionsPart::OverrideWebkitPrefs(

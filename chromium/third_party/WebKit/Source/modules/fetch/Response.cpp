@@ -7,15 +7,12 @@
 #include <memory>
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
 #include "bindings/core/v8/V8ArrayBufferView.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8Blob.h"
 #include "bindings/core/v8/V8FormData.h"
-#include "bindings/core/v8/V8PrivateProperty.h"
 #include "bindings/core/v8/V8URLSearchParams.h"
-#include "bindings/modules/v8/ByteStringSequenceSequenceOrByteStringByteStringRecordOrHeaders.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/ExecutionContext.h"
@@ -28,6 +25,8 @@
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/FormDataBytesConsumer.h"
 #include "modules/fetch/ResponseInit.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8PrivateProperty.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/network/EncodedFormData.h"
 #include "platform/network/HTTPHeaderMap.h"
@@ -89,7 +88,7 @@ FetchResponseData* CreateFetchResponseDataFromWebResponse(
     case kWebServiceWorkerResponseTypeDefault:
       break;
     case kWebServiceWorkerResponseTypeError:
-      ASSERT(response->GetType() == FetchResponseData::kErrorType);
+      DCHECK_EQ(response->GetType(), FetchResponseData::kErrorType);
       break;
   }
 
@@ -149,20 +148,25 @@ Response* Response::Create(ScriptState* script_state,
         new BlobBytesConsumer(execution_context, blob->GetBlobDataHandle()));
     content_type = blob->type();
   } else if (body->IsArrayBuffer()) {
-    body_buffer = new BodyStreamBuffer(
-        script_state, new FormDataBytesConsumer(
-                          V8ArrayBuffer::toImpl(body.As<v8::Object>())));
+    // Avoid calling into V8 from the following constructor parameters, which
+    // is potentially unsafe.
+    DOMArrayBuffer* array_buffer = V8ArrayBuffer::toImpl(body.As<v8::Object>());
+    body_buffer = new BodyStreamBuffer(script_state,
+                                       new FormDataBytesConsumer(array_buffer));
   } else if (body->IsArrayBufferView()) {
+    // Avoid calling into V8 from the following constructor parameters, which
+    // is potentially unsafe.
+    DOMArrayBufferView* array_buffer_view =
+        V8ArrayBufferView::toImpl(body.As<v8::Object>());
     body_buffer = new BodyStreamBuffer(
-        script_state, new FormDataBytesConsumer(
-                          V8ArrayBufferView::toImpl(body.As<v8::Object>())));
+        script_state, new FormDataBytesConsumer(array_buffer_view));
   } else if (V8FormData::hasInstance(body, isolate)) {
     RefPtr<EncodedFormData> form_data =
         V8FormData::toImpl(body.As<v8::Object>())->EncodeMultiPartFormData();
     // Here we handle formData->boundary() as a C-style string. See
     // FormDataEncoder::generateUniqueBoundaryString.
     content_type = AtomicString("multipart/form-data; boundary=") +
-                   form_data->Boundary().Data();
+                   form_data->Boundary().data();
     body_buffer = new BodyStreamBuffer(
         script_state,
         new FormDataBytesConsumer(execution_context, form_data.Release()));
@@ -229,15 +233,7 @@ Response* Response::Create(ScriptState* script_state,
     r->response_->HeaderList()->ClearList();
     // "2. Fill |r|'s Headers object with |init|'s headers member. Rethrow
     // any exceptions."
-    if (init.headers().isByteStringSequenceSequence()) {
-      r->headers_->FillWith(init.headers().getAsByteStringSequenceSequence(),
-                            exception_state);
-    } else if (init.headers().isByteStringByteStringRecord()) {
-      r->headers_->FillWith(init.headers().getAsByteStringByteStringRecord(),
-                            exception_state);
-    } else if (init.headers().isHeaders()) {
-      r->headers_->FillWith(init.headers().getAsHeaders(), exception_state);
-    }
+    r->headers_->FillWith(init.headers(), exception_state);
     if (exception_state.HadException())
       return nullptr;
   }
@@ -335,7 +331,7 @@ String Response::type() const {
     case FetchResponseData::kOpaqueRedirectType:
       return "opaqueredirect";
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return "";
 }
 
@@ -432,6 +428,12 @@ bool Response::bodyUsed() {
 
 String Response::MimeType() const {
   return response_->MimeType();
+}
+
+String Response::ContentType() const {
+  String result;
+  response_->HeaderList()->Get(HTTPNames::Content_Type, result);
+  return result;
 }
 
 String Response::InternalMIMEType() const {

@@ -12,12 +12,17 @@
 
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "third_party/libaddressinput/src/cpp/include/libaddressinput/preload_supplier.h"
-#include "third_party/libaddressinput/src/cpp/include/libaddressinput/source.h"
-#include "third_party/libaddressinput/src/cpp/include/libaddressinput/storage.h"
 #include "ui/base/models/combobox_model.h"
 
+namespace i18n {
+namespace addressinput {
+class RegionData;
+}  // namespace addressinput
+}  // namespace i18n
+
 namespace autofill {
+
+class RegionDataLoader;
 
 // A model for country regions (aka state/provinces) to be used to enter
 // addresses. Note that loading these regions can happen asynchronously so a
@@ -25,19 +30,22 @@ namespace autofill {
 // the regions load is completed.
 class RegionComboboxModel : public ui::ComboboxModel {
  public:
-  // |source| and |storage| are needed to initialize the
-  // ::i18n::addressinput::PreloadSupplier, |app_locale| is needed for
-  // ::i18n::addressinput::RegionDataBuilder and |country_code| identifies which
-  // country's region to load into the model.
-  RegionComboboxModel(
-      std::unique_ptr<const ::i18n::addressinput::Source> source,
-      std::unique_ptr<::i18n::addressinput::Storage> storage,
-      const std::string& app_locale,
-      const std::string& country_code);
+  RegionComboboxModel();
   ~RegionComboboxModel() override;
 
-  bool pending_region_data_load() const { return pending_region_data_load_; }
+  void LoadRegionData(const std::string& country_code,
+                      RegionDataLoader* region_data_loader,
+                      int64_t timeout_ms);
+
+  bool IsPendingRegionDataLoad() const {
+    return region_data_loader_ != nullptr;
+  }
+
   bool failed_to_load_data() const { return failed_to_load_data_; }
+
+  const std::vector<std::pair<std::string, std::string>>& GetRegions() const {
+    return regions_;
+  }
 
   // ui::ComboboxModel implementation:
   int GetItemCount() const override;
@@ -46,33 +54,17 @@ class RegionComboboxModel : public ui::ComboboxModel {
   void AddObserver(ui::ComboboxModelObserver* observer) override;
   void RemoveObserver(ui::ComboboxModelObserver* observer) override;
 
-  // To allow testing failure states.
-  void SetFailureModeForTests(bool failed_to_load_data);
-
  private:
-  // Start the potentially asynchronous process of loading region data.
-  void LoadRegionData(const std::string& country_code);
-
-  // Callback for ::i18n::addressinput::PreloadSupplier::LoadRules
-  void RegionDataLoaded(bool success, const std::string&, int rule_count);
+  // Callback for the RegionDataLoader.
+  void OnRegionDataLoaded(
+      const std::vector<const ::i18n::addressinput::RegionData*>& regions);
 
   // Whether the region data load failed or not.
   bool failed_to_load_data_;
 
-  // Set to true during region data load, and false otherwise. Whether the load
-  // succeeded or not doesn't affect this value.
-  bool pending_region_data_load_;
-
-  // The application locale.
-  const std::string app_locale_;
-
-  // The callback to give to |region_data_supplier_| for async operations.
-  ::i18n::addressinput::scoped_ptr<
-      ::i18n::addressinput::PreloadSupplier::Callback>
-      region_data_supplier_callback_;
-
-  // A supplier of region data.
-  ::i18n::addressinput::PreloadSupplier region_data_supplier_;
+  // Lifespan not owned by RegionComboboxModel, but guaranteed to be alive up to
+  // a call to OnRegionDataLoaded where soft ownership must be released.
+  RegionDataLoader* region_data_loader_;
 
   // List of <code, name> pairs for ADDRESS_HOME_STATE combobox values;
   std::vector<std::pair<std::string, std::string>> regions_;

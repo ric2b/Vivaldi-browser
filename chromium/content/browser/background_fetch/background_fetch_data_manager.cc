@@ -10,6 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "content/browser/background_fetch/background_fetch_constants.h"
 #include "content/browser/background_fetch/background_fetch_context.h"
+#include "content/browser/background_fetch/background_fetch_cross_origin_filter.h"
 #include "content/browser/background_fetch/background_fetch_request_info.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/public/browser/blob_handle.h"
@@ -19,6 +20,14 @@
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
 
 namespace content {
+
+// Returns whether the response contained in the Background Fetch |request| is
+// considered OK. See https://fetch.spec.whatwg.org/#ok-status aka a successful
+// 2xx status per https://tools.ietf.org/html/rfc7231#section-6.3.
+bool IsOK(const BackgroundFetchRequestInfo& request) {
+  int status = request.GetResponseCode();
+  return status >= 200 && status < 300;
+}
 
 // The Registration Data class encapsulates the data stored for a particular
 // Background Fetch registration. This roughly matches the on-disk format that
@@ -197,6 +206,8 @@ void BackgroundFetchDataManager::GetSettledFetchesForRegistration(
   const std::vector<scoped_refptr<BackgroundFetchRequestInfo>>& requests =
       registration_data->GetCompletedRequests();
 
+  bool background_fetch_succeeded = true;
+
   std::vector<BackgroundFetchSettledFetch> settled_fetches;
   settled_fetches.reserve(requests.size());
 
@@ -206,22 +217,22 @@ void BackgroundFetchDataManager::GetSettledFetchesForRegistration(
     BackgroundFetchSettledFetch settled_fetch;
     settled_fetch.request = request->fetch_request();
 
-    // TODO(peter): Find the appropriate way to generalize CORS security checks.
-    const bool opaque = !registration_id.origin().IsSameOriginWith(
-        url::Origin(request->GetURLChain().back().GetOrigin()));
+    // The |filter| decides which values can be passed on to the Service Worker.
+    BackgroundFetchCrossOriginFilter filter(registration_id.origin(), *request);
 
     settled_fetch.response.url_list = request->GetURLChain();
     settled_fetch.response.response_type =
         blink::kWebServiceWorkerResponseTypeDefault;
 
-    if (!opaque) {
+    // Include the status code, status text and the response's body as a blob
+    // when this is allowed by the CORS protocol.
+    if (filter.CanPopulateBody()) {
       settled_fetch.response.status_code = request->GetResponseCode();
       settled_fetch.response.status_text = request->GetResponseText();
       settled_fetch.response.headers.insert(
           request->GetResponseHeaders().begin(),
           request->GetResponseHeaders().end());
 
-      // Include the response data as a blob backed by the downloaded file.
       if (request->GetFileSize() > 0) {
         DCHECK(!request->GetFilePath().empty());
         std::unique_ptr<BlobHandle> blob_handle =
@@ -237,16 +248,23 @@ void BackgroundFetchDataManager::GetSettledFetchesForRegistration(
           blob_handles.push_back(std::move(blob_handle));
         }
       }
+    } else {
+      // TODO(crbug.com/711354): Consider Background Fetches as failed when the
+      // response cannot be relayed to the developer.
+      background_fetch_succeeded = false;
     }
 
     // TODO: settled_fetch.response.error
     settled_fetch.response.response_time = request->GetResponseTime();
     // TODO: settled_fetch.response.cors_exposed_header_names
 
+    background_fetch_succeeded = background_fetch_succeeded && IsOK(*request);
+
     settled_fetches.push_back(settled_fetch);
   }
 
   std::move(callback).Run(blink::mojom::BackgroundFetchError::NONE,
+                          background_fetch_succeeded,
                           std::move(settled_fetches), std::move(blob_handles));
 }
 

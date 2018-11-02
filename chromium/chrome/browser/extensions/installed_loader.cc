@@ -40,6 +40,8 @@
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/manifest_url_handlers.h"
+#include "extensions/common/permissions/api_permission.h"
+#include "extensions/common/permissions/permissions_data.h"
 
 using content::BrowserThread;
 
@@ -354,6 +356,7 @@ void InstalledLoader::RecordExtensionsMetrics() {
   int file_access_not_allowed_count = 0;
   int eventless_event_pages_count = 0;
   int off_store_item_count = 0;
+  int web_request_blocking_count = 0;
 
   const ExtensionSet& extensions = extension_registry_->enabled_extensions();
   for (ExtensionSet::const_iterator iter = extensions.begin();
@@ -405,6 +408,11 @@ void InstalledLoader::RecordExtensionsMetrics() {
       }
     }
 
+    if (extension->permissions_data()->HasAPIPermission(
+            APIPermission::kWebRequestBlocking)) {
+      web_request_blocking_count++;
+    }
+
     // From now on, don't count component extensions, since they are only
     // extensions as an implementation detail. Continue to count unpacked
     // extensions for a few metrics.
@@ -438,8 +446,8 @@ void InstalledLoader::RecordExtensionsMetrics() {
         // Count extension event pages with no registered events. Either the
         // event page is badly designed, or there may be a bug where the event
         // page failed to start after an update (crbug.com/469361).
-        if (EventRouter::Get(extension_service_->profile())->
-                GetRegisteredEvents(extension->id()).size() == 0) {
+        if (!EventRouter::Get(extension_service_->profile())
+                 ->HasRegisteredEvents(extension->id())) {
           ++eventless_event_pages_count;
           VLOG(1) << "Event page without registered event listeners: "
                   << extension->id() << " " << extension->name();
@@ -619,6 +627,8 @@ void InstalledLoader::RecordExtensionsMetrics() {
                            eventless_event_pages_count);
   UMA_HISTOGRAM_COUNTS_100("Extensions.LoadOffStoreItems",
                            off_store_item_count);
+  UMA_HISTOGRAM_COUNTS_100("Extensions.WebRequestBlockingCount",
+                           web_request_blocking_count);
 }
 
 int InstalledLoader::GetCreationFlags(const ExtensionInfo* info) {

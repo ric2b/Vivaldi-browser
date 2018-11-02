@@ -14,6 +14,8 @@ source_set("constants") {
     "constants_mac.cc",
     "constants_mac.h",
   ]
+
+  deps = [ "//remoting/host:remoting_version" ]
 }
 
 # remoting_me2me_host-InfoPlist.strings
@@ -73,7 +75,7 @@ target("mac_app_bundle", "remoting_me2me_host") {
   # }
 
   deps = [
-    "//build/config/sanitizers:deps",
+    "//build/config:exe_and_shlib_deps",
     "//remoting/base:breakpad",
     "//remoting/host:main",
     "//remoting/host:remoting_me2me_host_static",

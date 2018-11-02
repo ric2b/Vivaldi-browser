@@ -5,9 +5,9 @@
 #include "net/tools/quic/quic_spdy_server_stream_base.h"
 
 #include "net/quic/platform/api/quic_ptr_util.h"
+#include "net/quic/platform/api/quic_test.h"
+#include "net/quic/test_tools/quic_spdy_session_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
-#include "testing/gmock/include/gmock/gmock.h"
-#include "testing/gtest/include/gtest/gtest.h"
 
 using testing::_;
 
@@ -23,13 +23,15 @@ class TestQuicSpdyServerStream : public QuicSpdyServerStreamBase {
   void OnDataAvailable() override {}
 };
 
-class QuicSpdyServerStreamBaseTest : public ::testing::Test {
+class QuicSpdyServerStreamBaseTest : public QuicTest {
  protected:
   QuicSpdyServerStreamBaseTest()
       : session_(new MockQuicConnection(&helper_,
                                         &alarm_factory_,
                                         Perspective::IS_SERVER)) {
-    stream_ = new TestQuicSpdyServerStream(kClientDataStreamId1, &session_);
+    stream_ = new TestQuicSpdyServerStream(
+        QuicSpdySessionPeer::GetNthClientInitiatedStreamId(session_, 0),
+        &session_);
     session_.ActivateStream(QuicWrapUnique(stream_));
   }
 

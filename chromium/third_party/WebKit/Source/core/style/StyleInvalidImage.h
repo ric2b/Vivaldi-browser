@@ -24,7 +24,7 @@ class StyleInvalidImage final : public StyleImage {
 
   CSSValue* ComputedCSSValue() const override { return CssValue(); }
 
-  LayoutSize ImageSize(const LayoutObject&,
+  LayoutSize ImageSize(const Document&,
                        float /*multiplier*/,
                        const LayoutSize& /*defaultObjectSize*/) const override {
     return LayoutSize();
@@ -34,11 +34,12 @@ class StyleInvalidImage final : public StyleImage {
   void AddClient(LayoutObject*) override {}
   void RemoveClient(LayoutObject*) override {}
   PassRefPtr<Image> GetImage(const LayoutObject&,
-                             const IntSize&,
-                             float) const override {
+                             const IntSize&) const override {
     return nullptr;
   }
-  bool KnownToBeOpaque(const LayoutObject&) const override { return false; }
+  bool KnownToBeOpaque(const Document&, const ComputedStyle&) const override {
+    return false;
+  }
 
   DEFINE_INLINE_VIRTUAL_TRACE() { StyleImage::Trace(visitor); }
 

@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
@@ -134,7 +135,6 @@ class MockInputRouter : public InputRouter {
     return NULL;
   }
   void NotifySiteIsMobileOptimized(bool is_mobile_optimized) override {}
-  void RequestNotificationWhenFlushed() override {}
   bool HasPendingEvents() const override { return false; }
   void SetDeviceScaleFactor(float device_scale_factor) override {}
   void SetFrameTreeNodeId(int frameTreeNodeId) override {}
@@ -638,7 +638,8 @@ class RenderWidgetHostTest : public testing::Test {
                                         GetNextSimulatedEventTimeSeconds());
     EditCommands commands;
     commands.emplace_back("name", "value");
-    host_->ForwardKeyboardEventWithCommands(native_event, &commands, nullptr);
+    host_->ForwardKeyboardEventWithCommands(native_event, ui::LatencyInfo(),
+                                            &commands, nullptr);
   }
 
   void SimulateMouseEvent(WebInputEvent::Type type) {

@@ -1,4 +1,5 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="certificate_entry.html">
@@ -22,7 +23,7 @@
         $i18n{certificateManagerImport}</paper-button>
 <if expr="chromeos">
       <paper-button id="importAndBind" on-tap="onImportAndBindTap_"
-          hidden="[[!canImportAndBind_(certificateType)]]">
+          hidden="[[!canImportAndBind_(certificateType, isGuest_)]]">
         $i18n{certificateManagerImportAndBind}</paper-button>
 </if>
     </div>

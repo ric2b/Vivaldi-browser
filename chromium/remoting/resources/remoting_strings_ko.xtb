@@ -64,10 +64,12 @@
 <translation id="225614027745146050">환영합니다.</translation>
 <translation id="228809120910082333">Chromoting을 통해 액세스할 수 있도록 계정 및 PIN을 확인하세요.</translation>
 <translation id="2314101195544969792"><ph name="APPLICATION_NAME" /> 세션이 일정 시간 비활성화 상태였으므로 곧 연결 해제됩니다.</translation>
+<translation id="2317666076142640974">새로운 <ph name="LINK_BEGIN" />Chrome 원격 데스크톱 웹 앱<ph name="LINK_END" />을 미리 체험해 보시고 의견을 들려주세요.</translation>
 <translation id="2353140552984634198">Chromoting을 사용하여 컴퓨터에 안전하게 액세스할 수 있습니다.</translation>
 <translation id="2359808026110333948">계속</translation>
 <translation id="2366718077645204424">호스트에 연결할 수 없습니다. 사용 중인 네트워크의 구성 때문일 수 있습니다.</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  <ph name="RELATIVE_TIMESTAMP" /> 온라인에 마지막으로 연결했습니다.</translation>
+<translation id="2405928220797050937">이 앱은 더 이상 지원되지 않습니다. 최신 기능과 보안 업데이트를 받으려면 <ph name="LINK_BEGIN" />Chrome 원격 데스크톱 웹 앱<ph name="LINK_END" />을 사용하시기 바랍니다.</translation>
 <translation id="2499160551253595098">사용 통계 및 비정상 종료 보고서 수집을 허용하여 Chrome 원격 데스크톱 개선에 참여하겠습니다.</translation>
 <translation id="2512228156274966424">참고: 모든 단축키를 사용하려면 Chrome 원격 데스크톱을 '창으로 열기'로 설정합니다.</translation>
 <translation id="2540992418118313681">이 컴퓨터를 다른 사용자가 보고 제어하도록 공유하시겠습니까?</translation>
@@ -95,7 +97,6 @@
 <translation id="3194245623920924351">Chrome 원격 데스크톱</translation>
 <translation id="3197730452537982411">원격 데스크톱</translation>
 <translation id="3258789396564295715">Chrome 원격 데스크톱을 사용하여 컴퓨터에 안전하게 액세스할 수 있습니다.</translation>
-<translation id="327263477022142889">Chrome 원격 데스크톱을 개선하도록 도와주려면 <ph name="LINK_BEGIN" />설문조사에 참여하세요.<ph name="LINK_END" /></translation>
 <translation id="3286521253923406898">Chromoting 호스트 컨트롤러</translation>
 <translation id="332624996707057614">컴퓨터 이름 수정</translation>
 <translation id="3339299787263251426">인터넷을 통해 안전하게 컴퓨터에 액세스</translation>
@@ -111,6 +112,7 @@
 <translation id="3649256019230929621">창 최소화</translation>
 <translation id="369442766917958684">오프라인.</translation>
 <translation id="3695446226812920698">자세히 알아보기</translation>
+<translation id="3718805989288361841">Chrome 원격 데스크톱 관련 정책 설정에 오류가 있습니다. 시스템 관리자에게 도움을 요청하세요.</translation>
 <translation id="3776024066357219166">Chrome 원격 데스크톱 세션이 종료되었습니다.</translation>
 <translation id="3785447812627779171">Chromoting
 호스트</translation>
@@ -137,7 +139,6 @@
 <translation id="4277463233460010382">이 컴퓨터는 한 개 이상의 클라이언트가 PIN을 입력하지 않고도 연결할 수 있도록 구성되었습니다.</translation>
 <translation id="4277736576214464567">액세스 코드가 잘못되었습니다. 다시 시도해 주세요.</translation>
 <translation id="4361728918881830843">다른 컴퓨터에 원격 연결을 사용하려면 Chrome 원격 데스크톱을 설치하고 '<ph name="BUTTON_NAME" />' 버튼을 클릭하세요.</translation>
-<translation id="4368630973089289038">Chromoting을 개선하도록 도와주려면 <ph name="LINK_BEGIN" />설문조사에 참여하세요.<ph name="LINK_END" /></translation>
 <translation id="4394049700291259645">사용 중지</translation>
 <translation id="4405930547258349619">핵심 라이브러리</translation>
 <translation id="4430435636878359009">컴퓨터에 원격 연결 사용중지</translation>
@@ -232,6 +233,7 @@
 <translation id="6930242544192836755">기간</translation>
 <translation id="6939719207673461467">키보드 표시/숨기기</translation>
 <translation id="6944854424004126054">복원 창</translation>
+<translation id="6948905685698011662">이제 Chrome 원격 데스크톱을 웹에서 이용할 수 있습니다. <ph name="LINK_BEGIN" />무료 웹 앱<ph name="LINK_END" />을 확인해 보세요.</translation>
 <translation id="6963936880795878952">누군가 잘못된 PIN으로 연결을 시도하여 원격 컴퓨터 연결이 일시적으로 차단되었습니다. 나중에 다시 시도해 주세요.</translation>
 <translation id="6965382102122355670">확인</translation>
 <translation id="6985691951107243942"><ph name="HOSTNAME" />와(과)의 원격 연결을 사용중지하시겠습니까? 생각이 바뀌면 해당 컴퓨터에서 연결을 다시 사용하도록 설정해야 합니다.</translation>
@@ -248,6 +250,7 @@
 <translation id="7401733114166276557">Chrome 원격 데스크톱</translation>
 <translation id="7434397035092923453"><ph name="CLIENT_USERNAME" /> 클라이언트의 액세스가 거부되었습니다.</translation>
 <translation id="7444276978508498879">연결된 클라이언트: <ph name="CLIENT_USERNAME" /></translation>
+<translation id="7589941250119944644">이제 웹에서 Chrome 원격 데스크톱을 이용할 수 있습니다. <ph name="LINK_BEGIN" />웹 앱<ph name="LINK_END" />을 사용해 보세요. 이전 앱의 모든 기능을 무료로 더 빠르게 이용할 수 있습니다.</translation>
 <translation id="7606912958770842224">원격 연결 사용</translation>
 <translation id="7649070708921625228">도움말</translation>
 <translation id="7658239707568436148">취소</translation>

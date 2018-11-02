@@ -6,6 +6,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -119,7 +120,13 @@ class FakeV4Database : public V4Database {
     }
   }
 
-  bool AreStoresAvailable(const StoresToCheck& stores_to_check) const override {
+  bool AreAllStoresAvailable(
+      const StoresToCheck& stores_to_check) const override {
+    return stores_available_;
+  }
+
+  bool AreAnyStoresAvailable(
+      const StoresToCheck& stores_to_check) const override {
     return stores_available_;
   }
 

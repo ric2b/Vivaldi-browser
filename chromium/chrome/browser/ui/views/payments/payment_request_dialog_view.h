@@ -21,6 +21,8 @@ class AutofillProfile;
 class CreditCard;
 }  // namespace autofill
 
+class Profile;
+
 namespace payments {
 
 class PaymentRequest;
@@ -31,6 +33,11 @@ class PaymentRequestSheetController;
 // views being removed from the hierarchy and delete the associated controllers.
 using ControllerMap =
     std::map<views::View*, std::unique_ptr<PaymentRequestSheetController>>;
+
+enum class BackNavigationType {
+  kOneStep = 0,
+  kPaymentSheet,
+};
 
 // The dialog delegate that represents a desktop WebPayments dialog. This class
 // is responsible for displaying the view associated with the current state of
@@ -57,7 +64,11 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
 
     virtual void OnShippingAddressEditorOpened() = 0;
 
+    virtual void OnContactInfoEditorOpened() = 0;
+
     virtual void OnBackNavigation() = 0;
+
+    virtual void OnBackToPaymentSheetNavigation() = 0;
 
     virtual void OnEditorViewUpdated() = 0;
 
@@ -75,8 +86,12 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
                            PaymentRequestDialogView::ObserverForTest* observer);
   ~PaymentRequestDialogView() override;
 
+  // views::View
+  void RequestFocus() override;
+
   // views::WidgetDelegate:
   ui::ModalType GetModalType() const override;
+  views::View* GetInitiallyFocusedView() override;
 
   // views::DialogDelegate:
   bool Cancel() override;
@@ -89,11 +104,12 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
   void ShowErrorMessage() override;
 
   // PaymentRequestSpec::Observer:
-  void OnInvalidSpecProvided() override {}
+  void OnStartUpdating(PaymentRequestSpec::UpdateReason reason) override;
   void OnSpecUpdated() override;
 
   void Pay();
   void GoBack();
+  void GoBackToPaymentSheet();
   void ShowContactProfileSheet();
   void ShowOrderSummary();
   void ShowShippingProfileSheet();
@@ -103,12 +119,37 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
   // |on_edited| is called when |credit_card| was successfully edited, and
   // |on_added| is called when a new credit card was added (the reference is
   // short-lived; callee should make a copy of the CreditCard object).
+  // |back_navigation_type| identifies the type of navigation to execute once
+  // the editor has completed successfully. |next_ui_tag| is the lowest value
+  // that the credit card editor can use to assign to custom controls.
   void ShowCreditCardEditor(
+      BackNavigationType back_navigation_type,
+      int next_ui_tag,
       base::OnceClosure on_edited,
       base::OnceCallback<void(const autofill::CreditCard&)> on_added,
       autofill::CreditCard* credit_card = nullptr);
   // |profile| is the address to be edited, or nullptr for adding an address.
-  void ShowShippingAddressEditor(autofill::AutofillProfile* profile = nullptr);
+  // |on_edited| is called when |profile| was successfully edited, and
+  // |on_added| is called when a new profile was added (the reference is
+  // short-lived; callee should make a copy of the profile object).
+  // |back_navigation_type| identifies the type of navigation to execute once
+  // the editor has completed successfully.
+  void ShowShippingAddressEditor(
+      BackNavigationType back_navigation_type,
+      base::OnceClosure on_edited,
+      base::OnceCallback<void(const autofill::AutofillProfile&)> on_added,
+      autofill::AutofillProfile* profile);
+  // |profile| is the profile to be edited, or nullptr for adding a profile.
+  // |on_edited| is called when |profile| was successfully edited, and
+  // |on_added| is called when a new profile was added (the reference is
+  // short-lived; callee should make a copy of the profile object).
+  // |back_navigation_type| identifies the type of navigation to execute once
+  // the editor has completed successfully.
+  void ShowContactInfoEditor(
+      BackNavigationType back_navigation_type,
+      base::OnceClosure on_edited,
+      base::OnceCallback<void(const autofill::AutofillProfile&)> on_added,
+      autofill::AutofillProfile* profile = nullptr);
   void EditorViewUpdated();
 
   void ShowCvcUnmaskPrompt(
@@ -117,18 +158,22 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
           result_delegate,
       content::WebContents* web_contents) override;
 
-  // Shows a full dialog spinner with the "processing" label that doesn't offer
-  // a way of closing the dialog.
+  // Shows/Hides a full dialog spinner with the "processing" label that doesn't
+  // offer a way of closing the dialog.
   void ShowProcessingSpinner();
+  void HideProcessingSpinner();
+
+  Profile* GetProfile();
 
   ViewStack* view_stack_for_testing() { return view_stack_.get(); }
+  views::View* throbber_overlay_for_testing() { return &throbber_overlay_; }
 
  private:
   void ShowInitialPaymentSheet();
   void SetupSpinnerOverlay();
 
   // views::View
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
 

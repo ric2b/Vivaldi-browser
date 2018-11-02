@@ -113,6 +113,7 @@ class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
   }
   bool IsPathValue() const { return class_type_ == kPathClass; }
   bool IsQuadValue() const { return class_type_ == kQuadClass; }
+  bool IsRayValue() const { return class_type_ == kRayClass; }
   bool IsRadialGradientValue() const {
     return class_type_ == kRadialGradientClass;
   }
@@ -128,6 +129,9 @@ class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
   }
   bool IsStepsTimingFunctionValue() const {
     return class_type_ == kStepsTimingFunctionClass;
+  }
+  bool IsFramesTimingFunctionValue() const {
+    return class_type_ == kFramesTimingFunctionClass;
   }
   bool IsGridTemplateAreasValue() const {
     return class_type_ == kGridTemplateAreasClass;
@@ -202,6 +206,7 @@ class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
     // Timing function classes.
     kCubicBezierTimingFunctionClass,
     kStepsTimingFunctionClass,
+    kFramesTimingFunctionClass,
 
     // Other class types.
     kBorderImageSliceClass,
@@ -219,6 +224,7 @@ class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
     kUnicodeRangeClass,
     kGridTemplateAreasClass,
     kPathClass,
+    kRayClass,
     kVariableReferenceClass,
     kCustomPropertyDeclarationClass,
     kPendingSubstitutionValueClass,

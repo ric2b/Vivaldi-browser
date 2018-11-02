@@ -215,7 +215,7 @@ void LocationBarView::Init() {
   gfx::FontList bubble_font_list =
       font_list.DeriveWithHeightUpperBound(bubble_height);
   keyword_hint_view_ = new KeywordHintView(
-      this, profile(), font_list, bubble_font_list, location_height,
+      this, profile(), font_list, bubble_font_list,
       GetColor(LocationBarView::DEEMPHASIZED_TEXT), background_color);
   AddChildView(keyword_hint_view_);
 
@@ -322,8 +322,10 @@ void LocationBarView::ZoomChangedForActiveTab(bool can_show_bubble) {
   }
 
   WebContents* web_contents = GetWebContents();
-  if (can_show_bubble && zoom_view_->visible() && web_contents)
-    ZoomBubbleView::ShowBubble(web_contents, ZoomBubbleView::AUTOMATIC);
+  if (can_show_bubble && web_contents) {
+    ZoomBubbleView::ShowBubble(web_contents, gfx::Point(),
+                               ZoomBubbleView::AUTOMATIC);
+  }
 }
 
 void LocationBarView::SetStarToggled(bool on) {
@@ -408,7 +410,7 @@ void LocationBarView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_GROUP;
 }
 
-gfx::Size LocationBarView::GetPreferredSize() const {
+gfx::Size LocationBarView::CalculatePreferredSize() const {
   // Compute minimum height.
   gfx::Size min_size(0, GetLayoutConstant(LOCATION_BAR_HEIGHT));
 
@@ -682,6 +684,7 @@ void LocationBarView::RefreshLocationIcon() {
                            : GetSecureTextColor(security_level);
   location_icon_view_->SetImage(gfx::CreateVectorIcon(
       omnibox_view_->GetVectorIcon(), kIconWidth, icon_color));
+  location_icon_view_->SetEnabled(!omnibox_view_->IsEditingOrEmpty());
 }
 
 bool LocationBarView::RefreshContentSettingViews() {
@@ -704,8 +707,6 @@ bool LocationBarView::RefreshZoomView() {
     return false;
   const bool was_visible = zoom_view_->visible();
   zoom_view_->Update(zoom::ZoomController::FromWebContents(web_contents));
-  if (!zoom_view_->visible())
-    ZoomBubbleView::CloseCurrentBubble();
   return was_visible != zoom_view_->visible();
 }
 
@@ -886,6 +887,11 @@ void LocationBarView::UpdateBookmarkStarVisibility() {
   }
 }
 
+void LocationBarView::UpdateZoomViewVisibility() {
+  RefreshZoomView();
+  OnChanged();
+}
+
 void LocationBarView::UpdateLocationBarVisibility(bool visible, bool animate) {
   if (!animate) {
     size_animation_.Reset(visible ? 1 : 0);
@@ -922,9 +928,10 @@ bool LocationBarView::TestContentSettingImagePressed(size_t index) {
   if (index >= content_setting_views_.size())
     return false;
 
-  // This up-cast is necessary since the descendant class moved OnKeyPressed
-  // to the protected section.
   views::View* image_view = content_setting_views_[index];
+  image_view->SetSize(gfx::Size(24, 24));
+  image_view->OnKeyPressed(
+      ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_SPACE, ui::EF_NONE));
   image_view->OnKeyReleased(
       ui::KeyEvent(ui::ET_KEY_RELEASED, ui::VKEY_SPACE, ui::EF_NONE));
   return true;

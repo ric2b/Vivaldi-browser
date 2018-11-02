@@ -1,23 +1,27 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/html/cr/ui/splitter.html">
 <link rel="import" href="chrome://bookmarks/api_listener.html">
+<link rel="import" href="chrome://bookmarks/command_manager.html">
 <link rel="import" href="chrome://bookmarks/constants.html">
 <link rel="import" href="chrome://bookmarks/dnd_manager.html">
 <link rel="import" href="chrome://bookmarks/list.html">
 <link rel="import" href="chrome://bookmarks/router.html">
 <link rel="import" href="chrome://bookmarks/shared_vars.html">
-<link rel="import" href="chrome://bookmarks/sidebar.html">
 <link rel="import" href="chrome://bookmarks/store.html">
 <link rel="import" href="chrome://bookmarks/toolbar.html">
+<link rel="import" href="chrome://bookmarks/folder_node.html">
 <link rel="import" href="chrome://bookmarks/util.html">
 
 <dom-module id="bookmarks-app">
   <template>
     <style>
       :host {
+        color: var(--primary-text-color);
         display: flex;
         flex-direction: column;
         height: 100%;
+        line-height: 154%;  /* 20px. */
       }
 
       #main-container {
@@ -28,17 +32,32 @@
       }
 
       #splitter {
+        box-sizing: border-box;
         cursor: e-resize;
         flex: 0 0 var(--splitter-width);
+        opacity: 0;
+      }
+
+      #splitter:hover,
+      #splitter.splitter-active {
+        -webkit-border-start: 1px solid rgba(0, 0, 0, 0.1);
+        opacity: 1;
+        transition: opacity 100ms ease-out;
       }
 
       :host-context([dir='rtl']) #splitter {
         cursor: w-resize;
       }
 
-      bookmarks-sidebar {
+      #sidebar {
+        -webkit-padding-start: 3px;
+        display: block;
         max-width: 40%;
         min-width: var(--min-sidebar-width);
+        overflow-x: hidden;
+        overflow-y: auto;
+        padding-top: 8px;
+        user-select: none;
         width: var(--min-sidebar-width);
       }
 
@@ -49,11 +68,14 @@
     </style>
     <bookmarks-toolbar sidebar-width="[[sidebarWidth_]]"></bookmarks-toolbar>
     <div id="main-container">
-      <bookmarks-sidebar id="sidebar"></bookmarks-sidebar>
+       <div id="sidebar">
+        <bookmarks-folder-node item-id="0" depth="-1"></bookmarks-folder-node>
+      </div>
       <div id="splitter"></div>
       <bookmarks-list></bookmarks-list>
     </div>
     <bookmarks-router></bookmarks-router>
+    <bookmarks-command-manager></bookmarks-command-manager>
   </template>
   <script src="chrome://bookmarks/app.js"></script>
 </dom-module>

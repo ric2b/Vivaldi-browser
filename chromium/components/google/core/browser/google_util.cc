@@ -45,6 +45,12 @@ bool IsPathHomePageBase(base::StringPiece path) {
   return (path == "/") || (path == "/webhp");
 }
 
+// Removes a single trailing dot if present in |host|.
+void StripTrailingDot(base::StringPiece* host) {
+  if (host->ends_with("."))
+    host->remove_suffix(1);
+}
+
 }  // namespace
 
 
@@ -109,9 +115,29 @@ bool IsCanonicalHostGoogleHostname(base::StringPiece canonical_host,
   if (!IsValidHostName(canonical_host, "google", subdomain_permission, &tld))
     return false;
 
+  // Remove the trailing dot from tld if present, as for google domain it's the
+  // same page.
+  StripTrailingDot(&tld);
+
   CR_DEFINE_STATIC_LOCAL(std::set<std::string>, google_tlds,
                          ({GOOGLE_TLD_LIST}));
   return base::ContainsKey(google_tlds, tld.as_string());
+}
+
+// True if |url| is a valid URL with a host that is in the static list of
+// Google subdomains for google search, and an HTTP or HTTPS scheme. Requires
+// |url| to use the standard port for its scheme (80 for HTTP, 443 for HTTPS).
+bool IsGoogleSearchSubdomainUrl(const GURL& url) {
+  if (!IsValidURL(url, PortPermission::DISALLOW_NON_STANDARD_PORTS))
+    return false;
+
+  base::StringPiece host(url.host_piece());
+  StripTrailingDot(&host);
+
+  CR_DEFINE_STATIC_LOCAL(std::set<std::string>, google_subdomains,
+                         ({"ipv4.google.com", "ipv6.google.com"}));
+
+  return base::ContainsKey(google_subdomains, host.as_string());
 }
 
 // Global functions -----------------------------------------------------------
@@ -151,10 +177,10 @@ GURL AppendGoogleLocaleParam(const GURL& url,
 
 std::string GetGoogleCountryCode(const GURL& google_homepage_url) {
   base::StringPiece google_hostname = google_homepage_url.host_piece();
+  // TODO(igorcov): This needs a fix for case when the host has a trailing dot,
+  // like "google.com./". https://crbug.com/720295.
   const size_t last_dot = google_hostname.find_last_of('.');
-  if (last_dot == std::string::npos) {
-    NOTREACHED();
-  }
+  DCHECK_NE(std::string::npos, last_dot);
   base::StringPiece country_code = google_hostname.substr(last_dot + 1);
   // Assume the com TLD implies the US.
   if (country_code == "com")
@@ -220,8 +246,11 @@ bool IsGoogleDomainUrl(const GURL& url,
 
 bool IsGoogleHomePageUrl(const GURL& url) {
   // First check to see if this has a Google domain.
-  if (!IsGoogleDomainUrl(url, DISALLOW_SUBDOMAIN, DISALLOW_NON_STANDARD_PORTS))
+  if (!IsGoogleDomainUrl(url, DISALLOW_SUBDOMAIN,
+                         DISALLOW_NON_STANDARD_PORTS) &&
+      !IsGoogleSearchSubdomainUrl(url)) {
     return false;
+  }
 
   // Make sure the path is a known home page path.
   base::StringPiece path(url.path_piece());
@@ -231,8 +260,11 @@ bool IsGoogleHomePageUrl(const GURL& url) {
 
 bool IsGoogleSearchUrl(const GURL& url) {
   // First check to see if this has a Google domain.
-  if (!IsGoogleDomainUrl(url, DISALLOW_SUBDOMAIN, DISALLOW_NON_STANDARD_PORTS))
+  if (!IsGoogleDomainUrl(url, DISALLOW_SUBDOMAIN,
+                         DISALLOW_NON_STANDARD_PORTS) &&
+      !IsGoogleSearchSubdomainUrl(url)) {
     return false;
+  }
 
   // Make sure the path is a known search path.
   base::StringPiece path(url.path_piece());

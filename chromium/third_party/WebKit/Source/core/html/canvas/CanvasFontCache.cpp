@@ -56,9 +56,9 @@ unsigned CanvasFontCache::HardMaxFonts() {
 bool CanvasFontCache::GetFontUsingDefaultStyle(const String& font_string,
                                                Font& resolved_font) {
   HashMap<String, Font>::iterator i =
-      fonts_resolved_using_default_style_.Find(font_string);
+      fonts_resolved_using_default_style_.find(font_string);
   if (i != fonts_resolved_using_default_style_.end()) {
-    ASSERT(font_lru_list_.Contains(font_string));
+    DCHECK(font_lru_list_.Contains(font_string));
     font_lru_list_.erase(font_string);
     font_lru_list_.insert(font_string);
     resolved_font = i->value;
@@ -75,15 +75,15 @@ bool CanvasFontCache::GetFontUsingDefaultStyle(const String& font_string,
   document_->EnsureStyleResolver().ComputeFont(font_style.Get(), *parsed_style);
   fonts_resolved_using_default_style_.insert(font_string,
                                              font_style->GetFont());
-  resolved_font = fonts_resolved_using_default_style_.Find(font_string)->value;
+  resolved_font = fonts_resolved_using_default_style_.find(font_string)->value;
   return true;
 }
 
 MutableStylePropertySet* CanvasFontCache::ParseFont(const String& font_string) {
   MutableStylePropertySet* parsed_style;
-  MutableStylePropertyMap::iterator i = fetched_fonts_.Find(font_string);
+  MutableStylePropertyMap::iterator i = fetched_fonts_.find(font_string);
   if (i != fetched_fonts_.end()) {
-    ASSERT(font_lru_list_.Contains(font_string));
+    DCHECK(font_lru_list_.Contains(font_string));
     parsed_style = i->value;
     font_lru_list_.erase(font_string);
     font_lru_list_.insert(font_string);
@@ -105,8 +105,8 @@ MutableStylePropertySet* CanvasFontCache::ParseFont(const String& font_string) {
     // Hard limit is applied here, on the fly, while the soft limit is
     // applied at the end of the task.
     if (fetched_fonts_.size() > HardMaxFonts()) {
-      ASSERT(fetched_fonts_.size() == HardMaxFonts() + 1);
-      ASSERT(font_lru_list_.size() == HardMaxFonts() + 1);
+      DCHECK_EQ(fetched_fonts_.size(), HardMaxFonts() + 1);
+      DCHECK_EQ(font_lru_list_.size(), HardMaxFonts() + 1);
       fetched_fonts_.erase(font_lru_list_.front());
       fonts_resolved_using_default_style_.erase(font_lru_list_.front());
       font_lru_list_.RemoveFirst();
@@ -118,8 +118,8 @@ MutableStylePropertySet* CanvasFontCache::ParseFont(const String& font_string) {
 }
 
 void CanvasFontCache::DidProcessTask() {
-  ASSERT(pruning_scheduled_);
-  ASSERT(main_cache_purge_preventer_);
+  DCHECK(pruning_scheduled_);
+  DCHECK(main_cache_purge_preventer_);
   while (fetched_fonts_.size() > MaxFonts()) {
     fetched_fonts_.erase(font_lru_list_.front());
     fonts_resolved_using_default_style_.erase(font_lru_list_.front());
@@ -133,20 +133,20 @@ void CanvasFontCache::DidProcessTask() {
 void CanvasFontCache::SchedulePruningIfNeeded() {
   if (pruning_scheduled_)
     return;
-  ASSERT(!main_cache_purge_preventer_);
+  DCHECK(!main_cache_purge_preventer_);
   main_cache_purge_preventer_ = WTF::WrapUnique(new FontCachePurgePreventer);
   Platform::Current()->CurrentThread()->AddTaskObserver(this);
   pruning_scheduled_ = true;
 }
 
 bool CanvasFontCache::IsInCache(const String& font_string) {
-  return fetched_fonts_.Find(font_string) != fetched_fonts_.end();
+  return fetched_fonts_.find(font_string) != fetched_fonts_.end();
 }
 
 void CanvasFontCache::PruneAll() {
-  fetched_fonts_.Clear();
-  font_lru_list_.Clear();
-  fonts_resolved_using_default_style_.Clear();
+  fetched_fonts_.clear();
+  font_lru_list_.clear();
+  fonts_resolved_using_default_style_.clear();
 }
 
 DEFINE_TRACE(CanvasFontCache) {

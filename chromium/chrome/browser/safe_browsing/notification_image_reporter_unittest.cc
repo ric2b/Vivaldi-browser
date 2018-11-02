@@ -13,8 +13,8 @@
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/csd.pb.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/safe_browsing_db/test_database_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -51,8 +51,8 @@ class TestingNotificationImageReporter : public NotificationImageReporter {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&TestingNotificationImageReporter::SkippedReportingOnUI,
-                   base::Unretained(this)));
+        base::BindOnce(&TestingNotificationImageReporter::SkippedReportingOnUI,
+                       base::Unretained(this)));
   }
 
  private:
@@ -144,8 +144,8 @@ void NotificationImageReporterTest::SetUp() {
   base::RunLoop run_loop;
   BrowserThread::PostTaskAndReply(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&NotificationImageReporterTest::SetUpOnIO,
-                 base::Unretained(this)),
+      base::BindOnce(&NotificationImageReporterTest::SetUpOnIO,
+                     base::Unretained(this)),
       run_loop.QuitClosure());
   run_loop.Run();
 }
@@ -180,8 +180,9 @@ void NotificationImageReporterTest::ReportNotificationImage() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&NotificationImageReporterTest::ReportNotificationImageOnIO,
-                 base::Unretained(this)));
+      base::BindOnce(
+          &NotificationImageReporterTest::ReportNotificationImageOnIO,
+          base::Unretained(this)));
 }
 
 void NotificationImageReporterTest::ReportNotificationImageOnIO() {

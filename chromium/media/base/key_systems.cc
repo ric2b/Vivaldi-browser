@@ -45,7 +45,10 @@ static const NamedCodec kMimeTypeToCodecMasks[] = {
     {"video/webm", EME_CODEC_WEBM_VIDEO_ALL},
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
     {"audio/mp4", EME_CODEC_MP4_AUDIO_ALL},
-    {"video/mp4", EME_CODEC_MP4_VIDEO_ALL}
+    {"video/mp4", EME_CODEC_MP4_VIDEO_ALL},
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+    {"video/mp2t", EME_CODEC_MP2T_VIDEO_ALL},
+#endif  // BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 };
 
@@ -59,12 +62,24 @@ static const NamedCodec kCodecStrings[] = {
     {"vp9.0", EME_CODEC_WEBM_VP9},      // VP9.
     {"vp09", EME_CODEC_COMMON_VP9},     // New multi-part VP9 for WebM and MP4.
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
-    {"mp4a", EME_CODEC_MP4_AAC},   // AAC.
-    {"avc1", EME_CODEC_MP4_AVC1},  // AVC1.
-    {"avc3", EME_CODEC_MP4_AVC1},  // AVC3.
+    {"mp4a", EME_CODEC_MP4_AAC},  // AAC.
+#if BUILDFLAG(ENABLE_AC3_EAC3_AUDIO_DEMUXING)
+    {"ac-3", EME_CODEC_MP4_AC3},   // AC3.
+    {"ec-3", EME_CODEC_MP4_EAC3},  // EAC3.
+#endif
+    {"avc1", EME_CODEC_MP4_AVC1},  // AVC1 for MP4 and MP2T
+    {"avc3", EME_CODEC_MP4_AVC1},  // AVC3 for MP4 and MP2T
 #if BUILDFLAG(ENABLE_HEVC_DEMUXING)
     {"hev1", EME_CODEC_MP4_HEVC},  // HEV1.
     {"hvc1", EME_CODEC_MP4_HEVC},  // HVC1.
+#endif
+#if BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
+    {"dva1", EME_CODEC_MP4_DV_AVC},  // DolbyVision AVC
+    {"dvav", EME_CODEC_MP4_DV_AVC},  // DolbyVision AVC
+#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+    {"dvh1", EME_CODEC_MP4_DV_HEVC},  // DolbyVision HEVC
+    {"dvhe", EME_CODEC_MP4_DV_HEVC},  // DolbyVision HEVC
+#endif
 #endif
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 };

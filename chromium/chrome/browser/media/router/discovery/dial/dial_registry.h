@@ -17,11 +17,14 @@
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/observer_list.h"
-#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/media/router/discovery/dial/dial_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "net/base/network_change_notifier.h"
+
+namespace base {
+class Clock;
+}
 
 namespace media_router {
 
@@ -59,13 +62,13 @@ class DialRegistry : public DialService::Observer,
   // Called by the DIAL API when event listeners are added or removed. The dial
   // service is started after the first listener is added and stopped after the
   // last listener is removed.
-  void OnListenerAdded();
-  void OnListenerRemoved();
+  virtual void OnListenerAdded();
+  virtual void OnListenerRemoved();
 
   // pass a reference of |observer| to allow it to notify on DIAL device events.
-  // This class does not take ownership of |observer|.
-  void RegisterObserver(Observer* observer);
-  void UnregisterObserver(Observer* observer);
+  // This class does not take ownership of observer.
+  virtual void RegisterObserver(Observer* observer);
+  virtual void UnregisterObserver(Observer* observer);
 
   // Called by the DIAL API to try to kickoff a discovery if there is not one
   // already active.
@@ -85,13 +88,13 @@ class DialRegistry : public DialService::Observer,
   // removed by PruneExpiredDevices().
   void AddDeviceForTest(const DialDeviceData& device_data);
 
+  // Allows tests to swap in a fake clock.
+  void SetClockForTest(std::unique_ptr<base::Clock> clock);
+
  protected:
   // Returns a new instance of the DIAL service.  Overridden by tests.
   virtual std::unique_ptr<DialService> CreateDialService();
   virtual void ClearDialService();
-
-  // Returns the current time.  Overridden by tests.
-  virtual base::Time Now() const;
 
   // The DIAL service. Periodic discovery is active when this is not NULL.
   std::unique_ptr<DialService> dial_;
@@ -102,6 +105,7 @@ class DialRegistry : public DialService::Observer,
   using DeviceByLabelMap = std::map<std::string, DialDeviceData*>;
 
   friend class MockDialRegistry;
+  friend class TestDialRegistry;
   friend struct base::DefaultSingletonTraits<DialRegistry>;
 
   DialRegistry();
@@ -188,6 +192,8 @@ class DialRegistry : public DialService::Observer,
   // Interface from which the DIAL API is notified of DIAL device events. the
   // DIAL API owns this DIAL registry.
   base::ObserverList<Observer> observers_;
+
+  std::unique_ptr<base::Clock> clock_;
 
   FRIEND_TEST_ALL_PREFIXES(DialRegistryTest, TestAddRemoveListeners);
   FRIEND_TEST_ALL_PREFIXES(DialRegistryTest, TestNoDevicesDiscovered);

@@ -30,8 +30,8 @@
 
 #include "bindings/core/v8/V8ErrorEvent.h"
 
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8PrivateProperty.h"
+#include "bindings/core/v8/V8BindingForCore.h"
+#include "platform/bindings/V8PrivateProperty.h"
 
 namespace blink {
 

@@ -7,12 +7,12 @@
 
 #include <memory>
 
-#include "bindings/core/v8/ScriptState.h"
 #include "core/testing/NullExecutionContext.h"
 #include "gin/public/isolate_holder.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WaitableEvent.h"
 #include "platform/WebThreadSupportingGC.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Deque.h"
 #include "platform/wtf/Locker.h"
@@ -111,24 +111,24 @@ class DataConsumerHandleTestUtil {
 
       void RegisterThreadHolder(ThreadHolder* holder) {
         MutexLocker locker(holder_mutex_);
-        ASSERT(!holder_);
+        DCHECK(!holder_);
         holder_ = holder;
       }
       void UnregisterThreadHolder() {
         MutexLocker locker(holder_mutex_);
-        ASSERT(holder_);
+        DCHECK(holder_);
         holder_ = nullptr;
       }
       void PostTaskToReadingThread(const WebTraceLocation& location,
                                    std::unique_ptr<CrossThreadClosure> task) {
         MutexLocker locker(holder_mutex_);
-        ASSERT(holder_);
+        DCHECK(holder_);
         holder_->ReadingThread()->PostTask(location, std::move(task));
       }
       void PostTaskToUpdatingThread(const WebTraceLocation& location,
                                     std::unique_ptr<CrossThreadClosure> task) {
         MutexLocker locker(holder_mutex_);
-        ASSERT(holder_);
+        DCHECK(holder_);
         holder_->UpdatingThread()->PostTask(location, std::move(task));
       }
 
@@ -187,7 +187,7 @@ class DataConsumerHandleTestUtil {
 
      public:
       ReaderImpl(const String& name, PassRefPtr<Context> context)
-          : name_(name.IsolatedCopy()), context_(context) {
+          : name_(name.IsolatedCopy()), context_(std::move(context)) {
         context_->RecordAttach(name_.IsolatedCopy());
       }
       ~ReaderImpl() override { context_->RecordDetach(name_.IsolatedCopy()); }
@@ -218,7 +218,7 @@ class DataConsumerHandleTestUtil {
 
      private:
       DataConsumerHandle(const String& name, PassRefPtr<Context> context)
-          : name_(name.IsolatedCopy()), context_(context) {}
+          : name_(name.IsolatedCopy()), context_(std::move(context)) {}
 
       std::unique_ptr<Reader> ObtainReader(Client*) {
         return WTF::MakeUnique<ReaderImpl>(name_, context_);
@@ -321,7 +321,7 @@ class DataConsumerHandleTestUtil {
           BLINK_FROM_HERE,
           CrossThreadBind(&Self::SignalDone, WrapPassRefPtr(this)));
     }
-    void DidGetReadable() override { ASSERT_NOT_REACHED(); }
+    void DidGetReadable() override { NOTREACHED(); }
 
     std::unique_ptr<WebDataConsumerHandle> handle_;
   };

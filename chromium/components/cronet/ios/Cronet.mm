@@ -37,6 +37,7 @@ BOOL gQuicEnabled = NO;
 cronet::URLRequestContextConfig::HttpCacheType gHttpCache =
     cronet::URLRequestContextConfig::HttpCacheType::DISK;
 ScopedVector<cronet::URLRequestContextConfig::QuicHint> gQuicHints;
+NSString* gExperimentalOptions = @"{}";
 NSString* gUserAgent = nil;
 BOOL gUserAgentPartial = NO;
 NSString* gSslKeyLogFileName = nil;
@@ -148,8 +149,9 @@ class CronetHttpProtocolHandlerDelegate
   gAcceptLanguages = acceptLanguages;
 }
 
+// TODO(lilyhoughton) this should either be removed, or made more sophisticated
 + (void)checkNotStarted {
-  CHECK(gChromeNet == NULL) << "Cronet is already started.";
+  CHECK(!gChromeNet.Get()) << "Cronet is already started.";
 }
 
 + (void)setHttp2Enabled:(BOOL)http2Enabled {
@@ -168,6 +170,11 @@ class CronetHttpProtocolHandlerDelegate
       base::SysNSStringToUTF8(host), port, altPort));
 }
 
++ (void)setExperimentalOptions:(NSString*)experimentalOptions {
+  [self checkNotStarted];
+  gExperimentalOptions = experimentalOptions;
+}
+
 + (void)setUserAgent:(NSString*)userAgent partial:(BOOL)partial {
   [self checkNotStarted];
   gUserAgent = userAgent;
@@ -176,7 +183,7 @@ class CronetHttpProtocolHandlerDelegate
 
 + (void)setSslKeyLogFileName:(NSString*)sslKeyLogFileName {
   [self checkNotStarted];
-  gSslKeyLogFileName = sslKeyLogFileName;
+  gSslKeyLogFileName = [self getNetLogPathForFile:sslKeyLogFileName];
 }
 
 + (void)setHttpCacheType:(CRNHttpCacheType)httpCacheType {
@@ -204,15 +211,18 @@ class CronetHttpProtocolHandlerDelegate
 }
 
 + (void)startInternal {
-  cronet::CronetEnvironment::Initialize();
   std::string user_agent = base::SysNSStringToUTF8(gUserAgent);
+
   gChromeNet.Get().reset(
       new cronet::CronetEnvironment(user_agent, gUserAgentPartial));
+
   gChromeNet.Get()->set_accept_language(
       base::SysNSStringToUTF8(gAcceptLanguages ?: [self getAcceptLanguages]));
 
   gChromeNet.Get()->set_http2_enabled(gHttp2Enabled);
   gChromeNet.Get()->set_quic_enabled(gQuicEnabled);
+  gChromeNet.Get()->set_experimental_options(
+      base::SysNSStringToUTF8(gExperimentalOptions));
   gChromeNet.Get()->set_http_cache(gHttpCache);
   gChromeNet.Get()->set_ssl_key_log_file_name(
       base::SysNSStringToUTF8(gSslKeyLogFileName));
@@ -236,12 +246,18 @@ class CronetHttpProtocolHandlerDelegate
   dispatch_once(&onceToken, ^{
     if (![NSThread isMainThread]) {
       dispatch_sync(dispatch_get_main_queue(), ^(void) {
-        [self startInternal];
+        cronet::CronetEnvironment::Initialize();
       });
     } else {
-      [self startInternal];
+      cronet::CronetEnvironment::Initialize();
     }
   });
+
+  [self startInternal];
+}
+
++ (void)shutdownForTesting {
+  gChromeNet.Get().reset();
 }
 
 + (void)registerHttpProtocolHandler {
@@ -252,7 +268,7 @@ class CronetHttpProtocolHandlerDelegate
   [NSURLCache setSharedURLCache:[EmptyNSURLCache emptyNSURLCache]];
   // Register the chrome http protocol handler to replace the default one.
   BOOL success =
-      [NSURLProtocol registerClass:[CRNPauseableHTTPProtocolHandler class]];
+      [NSURLProtocol registerClass:[CRNHTTPProtocolHandler class]];
   DCHECK(success);
 }
 
@@ -262,11 +278,11 @@ class CronetHttpProtocolHandlerDelegate
     [NSURLCache setSharedURLCache:gPreservedSharedURLCache];
     gPreservedSharedURLCache = nil;
   }
-  [NSURLProtocol unregisterClass:[CRNPauseableHTTPProtocolHandler class]];
+  [NSURLProtocol unregisterClass:[CRNHTTPProtocolHandler class]];
 }
 
 + (void)installIntoSessionConfiguration:(NSURLSessionConfiguration*)config {
-  config.protocolClasses = @[ [CRNPauseableHTTPProtocolHandler class] ];
+  config.protocolClasses = @[ [CRNHTTPProtocolHandler class] ];
 }
 
 + (NSString*)getNetLogPathForFile:(NSString*)fileName {

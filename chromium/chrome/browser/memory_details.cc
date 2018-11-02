@@ -13,7 +13,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
@@ -97,7 +97,8 @@ ProcessMemoryInformation::ProcessMemoryInformation()
       num_open_fds(-1),
       open_fds_soft_limit(-1),
       renderer_type(RENDERER_UNKNOWN),
-      phys_footprint(0) {}
+      phys_footprint(0),
+      private_memory_footprint(0) {}
 
 ProcessMemoryInformation::ProcessMemoryInformation(
     const ProcessMemoryInformation& other) = default;
@@ -147,7 +148,7 @@ void MemoryDetails::StartFetch() {
   // However, plugin process information is only available from the IO thread.
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&MemoryDetails::CollectChildInfoOnIOThread, this));
+      base::BindOnce(&MemoryDetails::CollectChildInfoOnIOThread, this));
 }
 
 MemoryDetails::~MemoryDetails() {}
@@ -213,11 +214,12 @@ void MemoryDetails::CollectChildInfoOnIOThread() {
     child_info.push_back(info);
   }
 
-  // Now go do expensive memory lookups on the blocking pool.
-  BrowserThread::GetBlockingPool()->PostWorkerTaskWithShutdownBehavior(
+  // Now go do expensive memory lookups in a thread pool.
+  base::PostTaskWithTraits(
       FROM_HERE,
-      base::Bind(&MemoryDetails::CollectProcessData, this, child_info),
-      base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
+      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::BindOnce(&MemoryDetails::CollectProcessData, this, child_info));
 }
 
 void MemoryDetails::CollectChildInfoOnUIThread() {

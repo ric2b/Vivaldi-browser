@@ -4,9 +4,9 @@
 
 #include "net/quic/core/congestion_control/bandwidth_sampler.h"
 
+#include "net/quic/platform/api/quic_flags.h"
+#include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/mock_clock.h"
-#include "testing/gmock/include/gmock/gmock.h"
-#include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
 namespace test {
@@ -14,11 +14,17 @@ namespace test {
 class BandwidthSamplerPeer {
  public:
   static size_t GetNumberOfTrackedPackets(const BandwidthSampler& sampler) {
+    if (FLAGS_quic_reloadable_flag_quic_faster_bandwidth_sampler) {
+      return sampler.connection_state_map_new_.number_of_present_entries();
+    }
     return sampler.connection_state_map_.size();
   }
 
   static QuicByteCount GetPacketSize(const BandwidthSampler& sampler,
                                      QuicPacketNumber packet_number) {
+    if (FLAGS_quic_reloadable_flag_quic_faster_bandwidth_sampler) {
+      return sampler.connection_state_map_new_.GetEntry(packet_number)->size;
+    }
     auto iterator = sampler.connection_state_map_.find(packet_number);
     return iterator->second.size;
   }
@@ -30,7 +36,7 @@ static_assert((kRegularPacketSize & 31) == 0,
               "kRegularPacketSize has to be five times divisible by 2");
 
 // A test fixture with utility methods for BandwidthSampler tests.
-class BandwidthSamplerTest : public ::testing::Test {
+class BandwidthSamplerTest : public QuicTest {
  protected:
   BandwidthSamplerTest() : bytes_in_flight_(0) {
     // Ensure that the clock does not start at zero.
@@ -198,9 +204,9 @@ TEST_F(BandwidthSamplerTest, NotCongestionControlled) {
   // Send 20 packets, each 1 ms apart. Every even packet is not congestion
   // controlled.
   for (QuicPacketNumber i = 1; i <= 20; i++) {
-    SendPacketInner(i, kRegularPacketSize, i % 2 == 0
-                                               ? HAS_RETRANSMITTABLE_DATA
-                                               : NO_RETRANSMITTABLE_DATA);
+    SendPacketInner(
+        i, kRegularPacketSize,
+        i % 2 == 0 ? HAS_RETRANSMITTABLE_DATA : NO_RETRANSMITTABLE_DATA);
     clock_.AdvanceTime(time_between_packets);
   }
 
@@ -213,9 +219,9 @@ TEST_F(BandwidthSamplerTest, NotCongestionControlled) {
     if (i % 2 == 0) {
       AckPacket(i);
     }
-    SendPacketInner(i + 20, kRegularPacketSize, i % 2 == 0
-                                                    ? HAS_RETRANSMITTABLE_DATA
-                                                    : NO_RETRANSMITTABLE_DATA);
+    SendPacketInner(
+        i + 20, kRegularPacketSize,
+        i % 2 == 0 ? HAS_RETRANSMITTABLE_DATA : NO_RETRANSMITTABLE_DATA);
     clock_.AdvanceTime(time_between_packets);
   }
 

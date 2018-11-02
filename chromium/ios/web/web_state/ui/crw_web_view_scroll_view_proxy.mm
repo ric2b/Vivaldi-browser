@@ -93,6 +93,14 @@
   [_scrollView setBounces:bounces];
 }
 
+- (BOOL)isDecelerating {
+  return [_scrollView isDecelerating];
+}
+
+- (BOOL)isDragging {
+  return [_scrollView isDragging];
+}
+
 - (BOOL)isZooming {
   return [_scrollView isZooming];
 }
@@ -135,6 +143,14 @@
 
 - (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
   [_scrollView setContentOffset:contentOffset animated:animated];
+}
+
+- (BOOL)scrollsToTop {
+  return [_scrollView scrollsToTop];
+}
+
+- (void)setScrollsToTop:(BOOL)scrollsToTop {
+  [_scrollView setScrollsToTop:scrollsToTop];
 }
 
 - (UIPanGestureRecognizer*)panGestureRecognizer {
@@ -203,6 +219,12 @@
 - (void)scrollViewDidZoom:(UIScrollView*)scrollView {
   DCHECK_EQ(_scrollView, scrollView);
   [_observers webViewScrollViewDidZoom:self];
+}
+
+- (void)scrollViewWillBeginZooming:(UIScrollView*)scrollView
+                          withView:(UIView*)view {
+  DCHECK_EQ(_scrollView, scrollView);
+  [_observers webViewScrollViewWillBeginZooming:self];
 }
 
 #pragma mark -

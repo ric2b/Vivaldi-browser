@@ -199,6 +199,8 @@ Position ApplyStyleCommand::EndPosition() {
 }
 
 void ApplyStyleCommand::DoApply(EditingState* editing_state) {
+  DCHECK(StartPosition().IsNotNull());
+  DCHECK(EndPosition().IsNotNull());
   switch (property_level_) {
     case kPropertyDefault: {
       // Apply the block-centric properties of the style.
@@ -531,7 +533,7 @@ void ApplyStyleCommand::CleanupUnstyledAppleStyleSpans(
   // cloned/split, the new node is always a sibling of it. Therefore, we scan
   // all the children of the dummy's parent
   Node* next;
-  for (Node* node = dummy_span_ancestor->FirstChild(); node; node = next) {
+  for (Node* node = dummy_span_ancestor->firstChild(); node; node = next) {
     next = node->nextSibling();
     if (IsSpanWithoutAttributesOrUnstyledStyleSpan(node)) {
       RemoveNodePreservingChildren(node, editing_state);
@@ -1105,10 +1107,10 @@ void ApplyStyleCommand::RemoveConflictingInlineStyleFromRun(
       // selection here but need a test.
       if (run_start == element)
         run_start = previous_sibling ? previous_sibling->nextSibling()
-                                     : parent->FirstChild();
+                                     : parent->firstChild();
       if (run_end == element)
         run_end = next_sibling ? next_sibling->previousSibling()
-                               : parent->LastChild();
+                               : parent->lastChild();
     }
   }
 }
@@ -1477,7 +1479,7 @@ void ApplyStyleCommand::RemoveInlineStyle(EditingStyle* style,
       Node* child_node = nullptr;
       if (IsStyledInlineElementToRemove(elem)) {
         style_to_push_down = EditingStyle::Create();
-        child_node = elem->FirstChild();
+        child_node = elem->firstChild();
       }
 
       RemoveInlineStyleFromElement(style, elem, editing_state, kRemoveIfNeeded,
@@ -1661,7 +1663,7 @@ bool ApplyStyleCommand::MergeStartWithPreviousIfIdentical(
       AreIdenticalElements(*start_node, *previous_sibling)) {
     Element* previous_element = ToElement(previous_sibling);
     Element* element = ToElement(start_node);
-    Node* start_child = element->FirstChild();
+    Node* start_child = element->firstChild();
     DCHECK(start_child);
     MergeIdenticalElements(previous_element, element, editing_state);
     if (editing_state->IsAborted())
@@ -1703,7 +1705,7 @@ bool ApplyStyleCommand::MergeEndWithNextIfIdentical(
   if (next_sibling && AreIdenticalElements(*end_node, *next_sibling)) {
     Element* next_element = ToElement(next_sibling);
     Element* element = ToElement(end_node);
-    Node* next_child = next_element->FirstChild();
+    Node* next_child = next_element->firstChild();
 
     MergeIdenticalElements(element, next_element, editing_state);
     if (editing_state->IsAborted())
@@ -2012,7 +2014,7 @@ void ApplyStyleCommand::JoinChildTextNodes(ContainerNode* node,
   Position new_end = end;
 
   HeapVector<Member<Text>> text_nodes;
-  for (Node* curr = node->FirstChild(); curr; curr = curr->nextSibling()) {
+  for (Node* curr = node->firstChild(); curr; curr = curr->nextSibling()) {
     if (!curr->IsTextNode())
       continue;
 

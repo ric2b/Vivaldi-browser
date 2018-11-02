@@ -18,13 +18,17 @@
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_impl_io_data.h"
-#include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/features.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/host_zoom_map.h"
 #include "extensions/features/features.h"
 
+#if !defined(OS_ANDROID)
+#include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
+#include "content/public/browser/host_zoom_map.h"
+#endif
+
+class MediaDeviceIDSalt;
 class PrefService;
 
 #if defined(OS_CHROMEOS)
@@ -73,8 +77,10 @@ class ProfileImpl : public Profile {
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // content::BrowserContext implementation:
+#if !defined(OS_ANDROID)
   std::unique_ptr<content::ZoomLevelDelegate> CreateZoomLevelDelegate(
       const base::FilePath& partition_path) override;
+#endif
   base::FilePath GetPath() const override;
   content::DownloadManagerDelegate* GetDownloadManagerDelegate() override;
   content::ResourceContext* GetResourceContext() override;
@@ -82,6 +88,8 @@ class ProfileImpl : public Profile {
   storage::SpecialStoragePolicy* GetSpecialStoragePolicy() override;
   content::PushMessagingService* GetPushMessagingService() override;
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
+  content::BrowsingDataRemoverDelegate* GetBrowsingDataRemoverDelegate()
+      override;
   content::PermissionManager* GetPermissionManager() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
   net::URLRequestContextGetter* CreateRequestContext(
@@ -97,6 +105,7 @@ class ProfileImpl : public Profile {
       const base::FilePath& partition_path,
       bool in_memory) override;
   void RegisterInProcessServices(StaticServiceMap* services) override;
+  std::string GetMediaDeviceIDSalt() override;
 
   // Profile implementation:
   scoped_refptr<base::SequencedTaskRunner> GetIOTaskRunner() override;
@@ -115,7 +124,9 @@ class ProfileImpl : public Profile {
   ExtensionSpecialStoragePolicy* GetExtensionSpecialStoragePolicy() override;
   PrefService* GetPrefs() override;
   const PrefService* GetPrefs() const override;
+#if !defined(OS_ANDROID)
   ChromeZoomLevelPrefs* GetZoomLevelPrefs() override;
+#endif
   PrefService* GetOffTheRecordPrefs() override;
   net::URLRequestContextGetter* GetRequestContext() override;
   net::URLRequestContextGetter* GetRequestContextForExtensions() override;
@@ -250,6 +261,11 @@ class ProfileImpl : public Profile {
 #endif
 
   std::unique_ptr<PrefProxyConfigTracker> pref_proxy_config_tracker_;
+
+  // TODO(mmenke):  This should be removed from the Profile, and use a
+  // BrowserContextKeyedService instead.
+  // See https://crbug.com/713733
+  scoped_refptr<MediaDeviceIDSalt> media_device_id_salt_;
 
   // STOP!!!! DO NOT ADD ANY MORE ITEMS HERE!!!!
   //

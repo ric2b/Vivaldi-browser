@@ -31,11 +31,11 @@
 #ifndef WebAXObject_h
 #define WebAXObject_h
 
-#include "../platform/WebCommon.h"
-#include "../platform/WebPoint.h"
-#include "../platform/WebPrivatePtr.h"
-#include "../platform/WebSize.h"
-#include "../platform/WebVector.h"
+#include "public/platform/WebCommon.h"
+#include "public/platform/WebPoint.h"
+#include "public/platform/WebPrivatePtr.h"
+#include "public/platform/WebSize.h"
+#include "public/platform/WebVector.h"
 #include "WebAXEnums.h"
 #include <memory>
 
@@ -43,7 +43,7 @@ class SkMatrix44;
 
 namespace blink {
 
-class AXObject;
+class AXObjectImpl;
 class ScopedAXObjectCache;
 class WebAXObject;
 class WebNode;
@@ -81,7 +81,7 @@ class WebScopedAXContext {
   std::unique_ptr<ScopedAXObjectCache> private_;
 };
 
-// A container for passing around a reference to AXObject.
+// A container for passing around a reference to AXObjectImpl.
 class WebAXObject {
  public:
   ~WebAXObject() { Reset(); }
@@ -127,8 +127,8 @@ class WebAXObject {
 
   BLINK_EXPORT bool IsAnchor() const;
   BLINK_EXPORT bool IsAriaReadOnly() const;
-  BLINK_EXPORT bool IsButtonStateMixed() const;
-  BLINK_EXPORT bool IsChecked() const;
+  BLINK_EXPORT WebAXCheckedState CheckedState() const;
+  BLINK_EXPORT bool IsCheckable() const;
   BLINK_EXPORT bool IsClickable() const;
   BLINK_EXPORT bool IsCollapsed() const;
   BLINK_EXPORT bool IsControl() const;
@@ -261,7 +261,7 @@ class WebAXObject {
                             WebVector<int>& ends) const;
 
   // Actions
-  BLINK_EXPORT WebAXSupportedAction Action() const;
+  BLINK_EXPORT WebAXDefaultActionVerb Action() const;
   BLINK_EXPORT bool CanDecrement() const;
   BLINK_EXPORT bool CanIncrement() const;
   BLINK_EXPORT bool CanPress() const;
@@ -353,13 +353,13 @@ class WebAXObject {
   BLINK_EXPORT void ScrollToGlobalPoint(const WebPoint&) const;
 
 #if BLINK_IMPLEMENTATION
-  WebAXObject(AXObject*);
-  WebAXObject& operator=(AXObject*);
-  operator AXObject*() const;
+  WebAXObject(AXObjectImpl*);
+  WebAXObject& operator=(AXObjectImpl*);
+  operator AXObjectImpl*() const;
 #endif
 
  private:
-  WebPrivatePtr<AXObject> private_;
+  WebPrivatePtr<AXObjectImpl> private_;
 };
 
 }  // namespace blink

@@ -61,8 +61,8 @@
 #include "media/media_features.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
 #include "third_party/WebKit/public/platform/Platform.h"
@@ -161,7 +161,7 @@ class MockGamepadProvider : public RendererGamepadProvider {
   }
 
   // RendererGamepadProvider implementation.
-  void SampleGamepads(blink::WebGamepads& gamepads) override {
+  void SampleGamepads(device::Gamepads& gamepads) override {
     controller_->SampleGamepads(gamepads);
   }
   void Start(blink::WebPlatformEventListener* listener) override {
@@ -252,10 +252,10 @@ WebURL RewriteAbsolutePathInCsswgTest(const std::string& utf8_url) {
 BlinkTestRunner::BlinkTestRunner(RenderView* render_view)
     : RenderViewObserver(render_view),
       RenderViewObserverTracker<BlinkTestRunner>(render_view),
+      test_config_(mojom::ShellTestConfiguration::New()),
       is_main_window_(false),
       focus_on_next_commit_(false),
-      leak_detector_(new LeakDetector(this)) {
-}
+      leak_detector_(new LeakDetector(this)) {}
 
 BlinkTestRunner::~BlinkTestRunner() {
 }
@@ -276,10 +276,6 @@ void BlinkTestRunner::SetGamepadProvider(
   std::unique_ptr<MockGamepadProvider> provider(
       new MockGamepadProvider(controller));
   SetMockGamepadProvider(std::move(provider));
-}
-
-void BlinkTestRunner::SetDeviceLightData(const double data) {
-  SetMockDeviceLightData(data);
 }
 
 void BlinkTestRunner::SetDeviceMotionData(const MotionData& data) {
@@ -403,6 +399,11 @@ void BlinkTestRunner::ApplyPreferences() {
   Send(new ShellViewHostMsg_OverridePreferences(routing_id(), prefs));
 }
 
+void BlinkTestRunner::SetPopupBlockingEnabled(bool block_popups) {
+  Send(
+      new ShellViewHostMsg_SetPopupBlockingEnabled(routing_id(), block_popups));
+}
+
 std::string BlinkTestRunner::makeURLErrorDescription(const WebURLError& error) {
   std::string domain = error.domain.Utf8();
   int code = error.reason;
@@ -462,10 +463,7 @@ void BlinkTestRunner::ShowDevTools(const std::string& settings,
 
 void BlinkTestRunner::CloseDevTools() {
   Send(new ShellViewHostMsg_CloseDevTools(routing_id()));
-  WebDevToolsAgent* agent =
-      render_view()->GetMainRenderFrame()->GetWebFrame()->DevToolsAgent();
-  if (agent)
-    agent->Detach();
+  render_view()->GetMainRenderFrame()->DetachDevToolsForTest();
 }
 
 void BlinkTestRunner::EvaluateInWebInspector(int call_id,
@@ -733,11 +731,13 @@ void BlinkTestRunner::DispatchBeforeInstallPromptEvent(
     const base::Callback<void(bool)>& callback) {
   app_banner_service_.reset(new test_runner::AppBannerService());
 
-  service_manager::InterfaceRegistry::TestApi test_api(
-      render_view()->GetMainRenderFrame()->GetInterfaceRegistry());
-  test_api.GetLocalInterface(
-      mojo::MakeRequest(&app_banner_service_->controller()));
-
+  service_manager::BinderRegistry* registry =
+      render_view()->GetMainRenderFrame()->GetInterfaceRegistry();
+  blink::mojom::AppBannerControllerRequest request =
+      mojo::MakeRequest(&app_banner_service_->controller());
+  registry->BindInterface(service_manager::BindSourceInfo(),
+                          blink::mojom::AppBannerController::Name_,
+                          request.PassMessagePipe());
   app_banner_service_->SendBannerPromptRequest(event_platforms, callback);
 }
 
@@ -750,13 +750,12 @@ void BlinkTestRunner::ResolveBeforeInstallPromptPromise(
 }
 
 blink::WebPlugin* BlinkTestRunner::CreatePluginPlaceholder(
-    blink::WebLocalFrame* frame, const blink::WebPluginParams& params) {
+    const blink::WebPluginParams& params) {
   if (params.mime_type != "application/x-plugin-placeholder-test")
     return nullptr;
 
-  plugins::PluginPlaceholder* placeholder =
-      new plugins::PluginPlaceholder(render_view()->GetMainRenderFrame(), frame,
-                                     params, "<div>Test content</div>");
+  plugins::PluginPlaceholder* placeholder = new plugins::PluginPlaceholder(
+      render_view()->GetMainRenderFrame(), params, "<div>Test content</div>");
   return placeholder->plugin();
 }
 
@@ -937,7 +936,6 @@ void BlinkTestRunner::OnPixelsDumpCompleted(const SkBitmap& snapshot) {
   DCHECK_NE(0, snapshot.info().width());
   DCHECK_NE(0, snapshot.info().height());
 
-  SkAutoLockPixels snapshot_lock(snapshot);
   // The snapshot arrives from the GPU process via shared memory. Because MSan
   // can't track initializedness across processes, we must assure it that the
   // pixels are in fact initialized.
@@ -1035,6 +1033,14 @@ void BlinkTestRunner::OnReset() {
 
 void BlinkTestRunner::OnTestFinishedInSecondaryRenderer() {
   DCHECK(is_main_window_ && render_view()->GetMainRenderFrame());
+
+  // Avoid a situation where TestFinished is called twice, because
+  // of a racey test finish in 2 secondary renderers.
+  test_runner::WebTestInterfaces* interfaces =
+      LayoutTestRenderThreadObserver::GetInstance()->test_interfaces();
+  if (!interfaces->TestIsRunning())
+    return;
+
   TestFinished();
 }
 

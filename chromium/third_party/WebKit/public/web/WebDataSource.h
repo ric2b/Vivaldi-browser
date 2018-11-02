@@ -33,8 +33,8 @@
 
 #include <memory>
 
-#include "../platform/WebCommon.h"
-#include "../platform/WebSourceLocation.h"
+#include "public/platform/WebCommon.h"
+#include "public/platform/WebSourceLocation.h"
 #include "WebNavigationType.h"
 #include "WebTextDirection.h"
 
@@ -48,7 +48,7 @@ class WebURLResponse;
 template <typename T>
 class WebVector;
 
-class WebDataSource {
+class BLINK_EXPORT WebDataSource {
  public:
   class ExtraData {
    public:

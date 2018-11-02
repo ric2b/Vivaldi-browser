@@ -4,6 +4,7 @@
 
 #include "android_webview/browser/aw_safe_browsing_ui_manager.h"
 
+#include "android_webview/browser/aw_safe_browsing_blocking_page.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
@@ -31,6 +32,19 @@ void AwSafeBrowsingUIManager::DisplayBlockingPage(
     return;
   }
   safe_browsing::BaseUIManager::DisplayBlockingPage(resource);
+}
+
+void AwSafeBrowsingUIManager::ShowBlockingPageForResource(
+    const UnsafeResource& resource) {
+  AwSafeBrowsingBlockingPage::ShowBlockingPage(this, resource);
+}
+
+int AwSafeBrowsingUIManager::GetErrorUiType(
+    const UnsafeResource& resource) const {
+  WebContents* web_contents = resource.web_contents_getter.Run();
+  UIManagerClient* client = UIManagerClient::FromWebContents(web_contents);
+  DCHECK(client);
+  return client->GetErrorUiType();
 }
 
 }  // namespace android_webview

@@ -78,7 +78,7 @@ class HashSet {
   HashSet(std::initializer_list<ValueType> elements);
   HashSet& operator=(std::initializer_list<ValueType> elements);
 
-  void Swap(HashSet& ref) { impl_.Swap(ref.impl_); }
+  void swap(HashSet& ref) { impl_.swap(ref.impl_); }
 
   unsigned size() const;
   unsigned Capacity() const;
@@ -91,7 +91,7 @@ class HashSet {
   iterator begin() const;
   iterator end() const;
 
-  iterator Find(ValuePeekInType) const;
+  iterator find(ValuePeekInType) const;
   bool Contains(ValuePeekInType) const;
 
   // An alternate version of find() that finds the object by hashing and
@@ -121,7 +121,7 @@ class HashSet {
 
   void erase(ValuePeekInType);
   void erase(iterator);
-  void Clear();
+  void clear();
   template <typename Collection>
   void RemoveAll(const Collection& to_be_removed) {
     WTF::RemoveAll(*this, to_be_removed);
@@ -214,9 +214,9 @@ inline typename HashSet<T, U, V, W>::iterator HashSet<T, U, V, W>::end() const {
 }
 
 template <typename T, typename U, typename V, typename W>
-inline typename HashSet<T, U, V, W>::iterator HashSet<T, U, V, W>::Find(
+inline typename HashSet<T, U, V, W>::iterator HashSet<T, U, V, W>::find(
     ValuePeekInType value) const {
-  return impl_.Find(value);
+  return impl_.find(value);
 }
 
 template <typename Value,
@@ -278,12 +278,12 @@ inline void HashSet<T, U, V, W>::erase(iterator it) {
 
 template <typename T, typename U, typename V, typename W>
 inline void HashSet<T, U, V, W>::erase(ValuePeekInType value) {
-  erase(Find(value));
+  erase(find(value));
 }
 
 template <typename T, typename U, typename V, typename W>
-inline void HashSet<T, U, V, W>::Clear() {
-  impl_.Clear();
+inline void HashSet<T, U, V, W>::clear() {
+  impl_.clear();
 }
 
 template <typename T, typename U, typename V, typename W>
@@ -299,7 +299,7 @@ inline auto HashSet<T, U, V, W>::Take(iterator it) -> ValueType {
 
 template <typename T, typename U, typename V, typename W>
 inline auto HashSet<T, U, V, W>::Take(ValuePeekInType value) -> ValueType {
-  return Take(Find(value));
+  return Take(find(value));
 }
 
 template <typename T, typename U, typename V, typename W>
@@ -314,7 +314,7 @@ inline void CopyToVector(const C& collection, W& vector) {
   {
     // Disallow GC across resize allocation, see crbug.com/568173
     typename W::GCForbiddenScope scope;
-    vector.Resize(collection.size());
+    vector.resize(collection.size());
   }
 
   iterator it = collection.begin();

@@ -43,9 +43,56 @@ bool CompareByWeight(const ShelfItem& a, const ShelfItem& b) {
 
 }  // namespace
 
-ShelfModel::ShelfModel() : next_id_(1) {}
+ShelfModel::ShelfModel() = default;
 
-ShelfModel::~ShelfModel() {}
+ShelfModel::~ShelfModel() = default;
+
+void ShelfModel::PinAppWithID(const std::string& app_id) {
+  const ShelfID shelf_id(app_id);
+
+  // If the app is already pinned, do nothing and return.
+  if (IsAppPinned(shelf_id.app_id))
+    return;
+
+  // Convert an existing item to be pinned, or create a new pinned item.
+  const int index = ItemIndexByID(shelf_id);
+  if (index >= 0) {
+    ShelfItem item = items_[index];
+    DCHECK_EQ(item.type, TYPE_APP);
+    DCHECK(!item.pinned_by_policy);
+    item.type = TYPE_PINNED_APP;
+    Set(index, item);
+  } else if (!shelf_id.IsNull()) {
+    ShelfItem item;
+    item.type = TYPE_PINNED_APP;
+    item.id = shelf_id;
+    Add(item);
+  }
+}
+
+bool ShelfModel::IsAppPinned(const std::string& app_id) {
+  const int index = ItemIndexByID(ShelfID(app_id));
+  return index >= 0 && (items_[index].type == TYPE_PINNED_APP ||
+                        items_[index].type == TYPE_BROWSER_SHORTCUT);
+}
+
+void ShelfModel::UnpinAppWithID(const std::string& app_id) {
+  // If the app is already not pinned, do nothing and return.
+  if (!IsAppPinned(app_id))
+    return;
+
+  // Remove the item if it is closed, or mark it as unpinned.
+  const int index = ItemIndexByID(ShelfID(app_id));
+  ShelfItem item = items_[index];
+  DCHECK_EQ(item.type, TYPE_PINNED_APP);
+  DCHECK(!item.pinned_by_policy);
+  if (item.status == STATUS_CLOSED) {
+    RemoveItemAt(index);
+  } else {
+    item.type = TYPE_APP;
+    Set(index, item);
+  }
+}
 
 void ShelfModel::DestroyItemDelegates() {
   // Some ShelfItemDelegates access this model in their destructors and hence
@@ -58,9 +105,11 @@ int ShelfModel::Add(const ShelfItem& item) {
 }
 
 int ShelfModel::AddAt(int index, const ShelfItem& item) {
+  // Items should have unique non-empty ids to avoid undefined model behavior.
+  DCHECK(!item.id.IsNull());
+  DCHECK_EQ(ItemIndexByID(item.id), -1);
   index = ValidateInsertionIndex(item.type, index);
   items_.insert(items_.begin() + index, item);
-  items_[index].id = next_id_++;
   for (auto& observer : observers_)
     observer.ShelfItemAdded(index);
   return index;
@@ -98,7 +147,7 @@ void ShelfModel::Set(int index, const ShelfItem& item) {
 
   ShelfItem old_item(items_[index]);
   items_[index] = item;
-  items_[index].id = old_item.id;
+  DCHECK(old_item.id == item.id);
   for (auto& observer : observers_)
     observer.ShelfItemChanged(index, old_item);
 
@@ -117,8 +166,8 @@ void ShelfModel::Set(int index, const ShelfItem& item) {
   }
 }
 
-int ShelfModel::ItemIndexByID(ShelfID id) const {
-  ShelfItems::const_iterator i = ItemByID(id);
+int ShelfModel::ItemIndexByID(const ShelfID& shelf_id) const {
+  ShelfItems::const_iterator i = ItemByID(shelf_id);
   return i == items_.end() ? -1 : static_cast<int>(i - items_.begin());
 }
 
@@ -130,9 +179,9 @@ int ShelfModel::GetItemIndexForType(ShelfItemType type) {
   return -1;
 }
 
-ShelfItems::const_iterator ShelfModel::ItemByID(ShelfID id) const {
+ShelfItems::const_iterator ShelfModel::ItemByID(const ShelfID& shelf_id) const {
   for (ShelfItems::const_iterator i = items_.begin(); i != items_.end(); ++i) {
-    if (i->id == id)
+    if (i->id == shelf_id)
       return i;
   }
   return items_.end();
@@ -155,17 +204,18 @@ int ShelfModel::FirstPanelIndex() const {
 }
 
 void ShelfModel::SetShelfItemDelegate(
-    ShelfID id,
+    const ShelfID& shelf_id,
     std::unique_ptr<ShelfItemDelegate> item_delegate) {
   if (item_delegate)
-    item_delegate->set_shelf_id(id);
+    item_delegate->set_shelf_id(shelf_id);
   // This assignment replaces any ShelfItemDelegate already registered for |id|.
-  id_to_item_delegate_map_[id] = std::move(item_delegate);
+  id_to_item_delegate_map_[shelf_id] = std::move(item_delegate);
 }
 
-ShelfItemDelegate* ShelfModel::GetShelfItemDelegate(ShelfID id) {
-  if (id_to_item_delegate_map_.find(id) != id_to_item_delegate_map_.end())
-    return id_to_item_delegate_map_[id].get();
+ShelfItemDelegate* ShelfModel::GetShelfItemDelegate(const ShelfID& shelf_id) {
+  auto it = id_to_item_delegate_map_.find(shelf_id);
+  if (it != id_to_item_delegate_map_.end())
+    return it->second.get();
   return nullptr;
 }
 

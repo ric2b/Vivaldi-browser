@@ -5,8 +5,6 @@
 #include "modules/background_fetch/BackgroundFetchManager.h"
 
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/V8ThrowException.h"
 #include "bindings/modules/v8/RequestOrUSVString.h"
 #include "bindings/modules/v8/RequestOrUSVStringOrRequestOrUSVStringSequence.h"
 #include "core/dom/DOMException.h"
@@ -16,6 +14,8 @@
 #include "modules/background_fetch/BackgroundFetchRegistration.h"
 #include "modules/fetch/Request.h"
 #include "modules/serviceworkers/ServiceWorkerRegistration.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8ThrowException.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerRequest.h"
 
 namespace blink {
@@ -128,7 +128,7 @@ Vector<WebServiceWorkerRequest> BackgroundFetchManager::CreateWebRequestVector(
       return Vector<WebServiceWorkerRequest>();
     }
 
-    web_requests.Resize(request_vector.size());
+    web_requests.resize(request_vector.size());
 
     for (size_t i = 0; i < request_vector.size(); ++i) {
       const RequestOrUSVString& request_or_url = request_vector[i];
@@ -151,7 +151,7 @@ Vector<WebServiceWorkerRequest> BackgroundFetchManager::CreateWebRequestVector(
     }
   } else if (requests.isRequest()) {
     DCHECK(requests.getAsRequest());
-    web_requests.Resize(1);
+    web_requests.resize(1);
     requests.getAsRequest()->PopulateWebServiceWorkerRequest(web_requests[0]);
   } else if (requests.isUSVString()) {
     Request* request = Request::Create(script_state, requests.getAsUSVString(),
@@ -160,7 +160,7 @@ Vector<WebServiceWorkerRequest> BackgroundFetchManager::CreateWebRequestVector(
       return Vector<WebServiceWorkerRequest>();
 
     DCHECK(request);
-    web_requests.Resize(1);
+    web_requests.resize(1);
     request->PopulateWebServiceWorkerRequest(web_requests[0]);
   } else {
     exception_state.ThrowTypeError(kNullRequestErrorMessage);

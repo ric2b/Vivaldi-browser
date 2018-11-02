@@ -25,11 +25,33 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
 
     this._stickToBottom = false;
     this._updateIsFromUser = false;
-    this._atBottom = true;
     this._lastScrollTop = 0;
     this._firstVisibleIsStriped = false;
+    this._isStriped = false;
 
     this.setRootNode(new DataGrid.ViewportDataGridNode());
+  }
+
+  /**
+   * @param {boolean} striped
+   * @override
+   */
+  setStriped(striped) {
+    this._isStriped = striped;
+    var startsWithOdd = true;
+    if (this._visibleNodes.length) {
+      var allChildren = this.rootNode().flatChildren();
+      startsWithOdd = !!(allChildren.indexOf(this._visibleNodes[0]));
+    }
+    this._updateStripesClass(startsWithOdd);
+  }
+
+  /**
+   * @param {boolean} startsWithOdd
+   */
+  _updateStripesClass(startsWithOdd) {
+    this.element.classList.toggle('striped-data-grid', !startsWithOdd && this._isStriped);
+    this.element.classList.toggle('striped-data-grid-starts-with-odd', startsWithOdd && this._isStriped);
   }
 
   /**
@@ -45,7 +67,7 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
    * @override
    */
   onResize() {
-    if (this._stickToBottom && this._atBottom)
+    if (this._stickToBottom)
       this._scrollContainer.scrollTop = this._scrollContainer.scrollHeight - this._scrollContainer.clientHeight;
     this.scheduleUpdate();
     super.onResize();
@@ -62,7 +84,7 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
    * @param {?Event} event
    */
   _onScroll(event) {
-    this._atBottom = this._scrollContainer.isScrolledToBottom();
+    this._stickToBottom = this._scrollContainer.isScrolledToBottom();
     if (this._lastScrollTop !== this._scrollContainer.scrollTop)
       this.scheduleUpdate(true);
   }
@@ -78,6 +100,8 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
    * @param {boolean=} isFromUser
    */
   scheduleUpdate(isFromUser) {
+    if (this._stickToBottom && isFromUser)
+      this._stickToBottom = this._scrollContainer.isScrolledToBottom();
     this._updateIsFromUser = this._updateIsFromUser || isFromUser;
     if (this._updateAnimationFrameId)
       return;
@@ -157,11 +181,10 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
     var scrollTop = this._scrollContainer.scrollTop;
     var currentScrollTop = scrollTop;
     var maxScrollTop = Math.max(0, this._contentHeight() - clientHeight);
-    if (!this._updateIsFromUser && this._stickToBottom && this._atBottom)
+    if (!this._updateIsFromUser && this._stickToBottom)
       scrollTop = maxScrollTop;
     this._updateIsFromUser = false;
     scrollTop = Math.min(maxScrollTop, scrollTop);
-    this._atBottom = scrollTop === maxScrollTop;
 
     var viewportState = this._calculateVisibleNodes(clientHeight, scrollTop);
     var visibleNodes = viewportState.visibleNodes;
@@ -172,7 +195,6 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
       if (!visibleNodesSet.has(oldNode) && oldNode.attached()) {
         var element = oldNode.existingElement();
         element.remove();
-        oldNode.wasDetached();
       }
     }
 
@@ -183,6 +205,7 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
     if (visibleNodes.length) {
       var nodes = this.rootNode().flatChildren();
       var index = nodes.indexOf(visibleNodes[0]);
+      this._updateStripesClass(!!(index % 2));
       if (index !== -1 && !!(index % 2) !== this._firstVisibleIsStriped)
         offset += 1;
     }
@@ -192,7 +215,6 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
     for (var i = 0; i < visibleNodes.length; ++i) {
       var node = visibleNodes[i];
       var element = node.element();
-      node.willAttach();
       node.setStriped((offset + i) % 2 === 0);
       if (element !== previousElement.nextSibling)
         tBody.insertBefore(element, previousElement.nextSibling);
@@ -230,7 +252,7 @@ DataGrid.ViewportDataGrid = class extends DataGrid.DataGrid {
     var scrollTop = this._scrollContainer.scrollTop;
     if (scrollTop > fromY) {
       scrollTop = fromY;
-      this._atBottom = false;
+      this._stickToBottom = false;
     } else if (scrollTop + this._scrollContainer.offsetHeight < toY) {
       scrollTop = toY - this._scrollContainer.offsetHeight;
     }
@@ -398,10 +420,8 @@ DataGrid.ViewportDataGridNode = class extends DataGrid.DataGridNode {
   }
 
   _unlink() {
-    if (this.attached()) {
+    if (this.attached())
       this.existingElement().remove();
-      this.wasDetached();
-    }
     this.resetNode();
   }
 
@@ -424,15 +444,10 @@ DataGrid.ViewportDataGridNode = class extends DataGrid.DataGridNode {
   expand() {
     if (this._expanded)
       return;
+    this.dataGrid._stickToBottom = false;
     this.clearFlatNodes();
     super.expand();
     this.dataGrid.scheduleUpdateStructure();
-  }
-
-  /**
-   * @protected
-   */
-  willAttach() {
   }
 
   /**

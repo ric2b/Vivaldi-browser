@@ -11,6 +11,7 @@
 #include "chrome/browser/thumbnails/thumbnail_service.h"
 #include "chrome/browser/thumbnails/thumbnail_service_factory.h"
 #include "chrome/common/url_constants.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
 #include "url/gurl.h"
 
@@ -56,18 +57,51 @@ void ThumbnailSource::StartDataRequest(
 
   scoped_refptr<base::RefCountedMemory> data;
   GURL url = FixUrlIfNeeded(page_url.spec());
-  if (url.is_valid() &&
-      thumbnail_service_->GetPageThumbnail(url, capture_thumbnails_,
-                                           &data)) {
+  if (url.is_valid() && thumbnail_service_->GetPageThumbnail(
+                                 url,
+                                 /*prefix_match=*/capture_thumbnails_, &data)) {
     // If a local thumbnail is available for the page's URL, provide it.
     callback.Run(data.get());
   } else if (fallback_thumbnail_url.is_valid()) {
+    net::NetworkTrafficAnnotationTag traffic_annotation =
+        net::DefineNetworkTrafficAnnotation("thumbnail_source", R"(
+      semantics {
+        sender: "Thumbnail Source"
+        description:
+          "Retrieves thumbnails for site suggestions based on the user's "
+          "synced browsing history, for use e.g. on the New Tab page."
+        trigger:
+          "Triggered when a thumbnail for a suggestion is required (e.g. on "
+          "the New Tab page), and no local thumbnail is available."
+        data: "The URL for which to retrieve a thumbnail."
+        destination: GOOGLE_OWNED_SERVICE
+      }
+      policy {
+        cookies_allowed: false
+        setting:
+          "Users can disable this feature by signing out of Chrome, or "
+          "disabling Sync or History Sync in Chrome settings under 'Advanced "
+          "sync settings...'. The feature is enabled by default."
+        chrome_policy {
+          SyncDisabled {
+            policy_options {mode: MANDATORY}
+            SyncDisabled: true
+          }
+        }
+        chrome_policy {
+          SigninAllowed {
+            policy_options {mode: MANDATORY}
+            SigninAllowed: false
+          }
+        }
+      })");
     // Otherwise, if a fallback thumbnail URL was provided, fetch it and
     // eventually return it.
     image_data_fetcher_.FetchImageData(
         fallback_thumbnail_url,
         base::Bind(&ThumbnailSource::SendFetchedUrlImage,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+                   weak_ptr_factory_.GetWeakPtr(), callback),
+        traffic_annotation);
   } else {
     callback.Run(nullptr);
   }
@@ -99,10 +133,15 @@ bool ThumbnailSource::AllowCaching() const {
 }
 
 bool ThumbnailSource::ShouldServiceRequest(
-    const net::URLRequest* request) const {
-  if (request->url().SchemeIs(chrome::kChromeSearchScheme))
-    return InstantIOContext::ShouldServiceRequest(request);
-  return URLDataSource::ShouldServiceRequest(request);
+    const GURL& url,
+    content::ResourceContext* resource_context,
+    int render_process_id) const {
+  if (url.SchemeIs(chrome::kChromeSearchScheme)) {
+    return InstantIOContext::ShouldServiceRequest(url, resource_context,
+                                                  render_process_id);
+  }
+  return URLDataSource::ShouldServiceRequest(url, resource_context,
+                                             render_process_id);
 }
 
 void ThumbnailSource::ExtractPageAndThumbnailUrls(

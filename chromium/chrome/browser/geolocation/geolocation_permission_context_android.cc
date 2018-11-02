@@ -80,13 +80,12 @@ void GeolocationPermissionContextAndroid::RegisterProfilePrefs(
   registry->RegisterInt64Pref(prefs::kLocationSettingsNextShowDefault, 0);
 }
 
-GeolocationPermissionContextAndroid::
-    GeolocationPermissionContextAndroid(Profile* profile)
+GeolocationPermissionContextAndroid::GeolocationPermissionContextAndroid(
+    Profile* profile)
     : GeolocationPermissionContext(profile),
       location_settings_(new LocationSettingsImpl()),
       permission_update_infobar_(nullptr),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 GeolocationPermissionContextAndroid::~GeolocationPermissionContextAndroid() {
 }
@@ -502,7 +501,7 @@ void GeolocationPermissionContextAndroid::FinishNotifyPermissionSet(
 
     // The tab helper can be null in tests.
     if (disclosure_helper)
-      disclosure_helper->MaybeShowDisclosure(requesting_origin);
+      disclosure_helper->MaybeShowDisclosureForAPIAccess(requesting_origin);
   }
 }
 

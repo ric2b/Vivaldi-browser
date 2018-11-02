@@ -67,7 +67,12 @@ class CORE_EXPORT UseCounter {
   enum Context {
     kDefaultContext,
     // Counters for SVGImages (lifetime independent from other pages).
-    kSVGImageContext
+    kSVGImageContext,
+    // Counters for extensions.
+    kExtensionContext,
+    // Context when counters should be disabled (eg, internal pages such as
+    // about, chrome-devtools, etc).
+    kDisabledContext
   };
 
   UseCounter(Context = kDefaultContext);
@@ -190,8 +195,6 @@ class CORE_EXPORT UseCounter {
     kInputTypePassword = 192,
     kInputTypePasswordMaxLength = 193,
     kPrefixedPageVisibility = 196,
-    // Inconsistent with the specification and other browsers.
-    kCSSStyleSheetInsertRuleOptionalArg = 198,
     kDocumentBeforeUnloadRegistered = 200,
     kDocumentBeforeUnloadFired = 201,
     kDocumentUnloadRegistered = 202,
@@ -434,8 +437,6 @@ class CORE_EXPORT UseCounter {
     // The above items are available in M40 branch.
 
     kSetReferrerPolicy = 593,
-    kMouseEventWhich = 595,
-    kUIEventWhich = 598,
     kTextWholeText = 599,
     kNotificationCloseEvent = 603,
     kStyleMedia = 606,
@@ -702,8 +703,8 @@ class CORE_EXPORT UseCounter {
     kBackspaceNavigatedBackAfterFormInteraction = 958,
     kCSPSourceWildcardWouldMatchExactHost = 959,
     kCredentialManagerGet = 960,
-    kCredentialManagerGetWithUI = 961,
-    kCredentialManagerGetWithoutUI = 962,
+    kCredentialManagerGetMediationOptional = 961,
+    kCredentialManagerGetMediationSilent = 962,
     kCredentialManagerStore = 963,
     kCredentialManagerRequireUserMediation = 964,
     // The above items are available in M47 branch.
@@ -899,10 +900,8 @@ class CORE_EXPORT UseCounter {
     kDocumentCreateEventTransitionEvent = 1183,
     kDocumentCreateEventWheelEvent = 1184,
     kDocumentCreateEventTrackEvent = 1186,
-    kDocumentCreateEventWebKitAnimationEvent = 1187,
     kDocumentCreateEventMutationEvents = 1188,
     kDocumentCreateEventSVGEvents = 1190,
-    kDocumentCreateEventWebKitTransitionEvent = 1191,
     kDocumentCreateEventDeviceMotionEvent = 1195,
     kDocumentCreateEventDeviceOrientationEvent = 1196,
     kDocumentCreateEventIDBVersionChangeEvent = 1201,
@@ -1112,12 +1111,12 @@ class CORE_EXPORT UseCounter {
     kSVGSMILBeginOrEndEventValue = 1455,
     kSVGSMILBeginOrEndSyncbaseValue = 1456,
     kSVGSMILElementInsertedAfterLoad = 1457,
-    kV8VisualViewport_ScrollLeft_AttributeGetter = 1458,
-    kV8VisualViewport_ScrollTop_AttributeGetter = 1459,
-    kV8VisualViewport_PageX_AttributeGetter = 1460,
-    kV8VisualViewport_PageY_AttributeGetter = 1461,
-    kV8VisualViewport_ClientWidth_AttributeGetter = 1462,
-    kV8VisualViewport_ClientHeight_AttributeGetter = 1463,
+    kV8VisualViewport_OffsetLeft_AttributeGetter = 1458,
+    kV8VisualViewport_OffsetTop_AttributeGetter = 1459,
+    kV8VisualViewport_PageLeft_AttributeGetter = 1460,
+    kV8VisualViewport_PageTop_AttributeGetter = 1461,
+    kV8VisualViewport_Width_AttributeGetter = 1462,
+    kV8VisualViewport_Height_AttributeGetter = 1463,
     kV8VisualViewport_Scale_AttributeGetter = 1464,
     kVisualViewportScrollFired = 1465,
     kVisualViewportResizeFired = 1466,
@@ -1232,7 +1231,6 @@ class CORE_EXPORT UseCounter {
     kDocumentCreateTouchTargetWrongType = 1610,
     kDocumentCreateTouchMoreThanSevenArguments = 1612,
     kLongTaskObserver = 1615,
-    kCSSMotionInEffect = 1616,
     kCSSOffsetInEffect = 1617,
     // The above items are available in M55 branch
 
@@ -1271,7 +1269,6 @@ class CORE_EXPORT UseCounter {
     kLoopbackEmbeddedInSecureContext = 1652,
     kLoopbackEmbeddedInNonSecureContext = 1653,
     kBlinkMacSystemFont = 1654,
-    kRTCConfigurationIceTransportsNone = 1655,
     kRTCIceServerURL = 1656,
     kRTCIceServerURLs = 1657,
     kOffscreenCanvasTransferToImageBitmap2D = 1658,
@@ -1279,7 +1276,6 @@ class CORE_EXPORT UseCounter {
     kOffscreenCanvasCommit2D = 1660,
     kOffscreenCanvasCommitWebGL = 1661,
     kRTCConfigurationIceTransportPolicy = 1662,
-    kRTCConfigurationIceTransportPolicyNone = 1663,
     kRTCConfigurationIceTransports = 1664,
     kDocumentFullscreenElementInV0Shadow = 1665,
     kScriptWithCSPBypassingSchemeParserInserted = 1666,
@@ -1312,8 +1308,6 @@ class CORE_EXPORT UseCounter {
 
     kCSSFlexibleBox = 1692,
     kCSSGridLayout = 1693,
-    kV8BarcodeDetector_Detect_Method = 1694,
-    kV8FaceDetector_Detect_Method = 1695,
     kFullscreenAllowedByOrientationChange = 1696,
     kServiceWorkerRespondToNavigationRequestWithRedirectedResponse = 1697,
     kV8AudioContext_Constructor = 1698,
@@ -1386,9 +1380,6 @@ class CORE_EXPORT UseCounter {
     kV8AssigmentExpressionLHSIsCallInStrict = 1765,
     kV8PromiseConstructorReturnedUndefined = 1766,
     kFormSubmittedWithUnclosedFormControl = 1767,
-    kDocumentCompleteURLHTTPContainingNewline = 1768,
-    kDocumentCompleteURLHTTPContainingNewlineAndLessThan = 1770,
-    kDocumentCompleteURLNonHTTPContainingNewline = 1771,
     kScrollbarUseVerticalScrollbarButton = 1777,
     kScrollbarUseVerticalScrollbarThumb = 1778,
     kScrollbarUseVerticalScrollbarTrack = 1779,
@@ -1415,7 +1406,6 @@ class CORE_EXPORT UseCounter {
     kCSSValueUserModifyReadOnly = 1798,
     kCSSValueUserModifyReadWrite = 1799,
     kCSSValueUserModifyReadWritePlaintextOnly = 1800,
-    kV8TextDetector_Detect_Method = 1801,
     kCSSValueOnDemand = 1802,
     kServiceWorkerNavigationPreload = 1803,
     kFullscreenRequestWithPendingElement = 1804,
@@ -1427,9 +1417,8 @@ class CORE_EXPORT UseCounter {
     kV8DeprecatedStorageQuota_QueryUsageAndQuota_Method = 1810,
     kV8DeprecatedStorageQuota_RequestQuota_Method = 1811,
     kV8FileReaderSync_Constructor = 1812,
-    kUncancellableTouchEventPreventDefaulted = 1813,
-    kUncancellableTouchEventDueToMainThreadResponsivenessPreventDefaulted =
-        1814,
+    kUncancelableTouchEventPreventDefaulted = 1813,
+    kUncancelableTouchEventDueToMainThreadResponsivenessPreventDefaulted = 1814,
     kV8HTMLVideoElement_Poster_AttributeGetter = 1815,
     kV8HTMLVideoElement_Poster_AttributeSetter = 1816,
     kNotificationPermissionRequestedIframe = 1817,
@@ -1443,7 +1432,6 @@ class CORE_EXPORT UseCounter {
     kFetchResponseConstructionWithStream = 1826,
     kLocationOrigin = 1827,
     kDocumentOrigin = 1828,
-    kSubtleCryptoOnlyStrictSecureContextCheckFailed = 1829,
     kCanvas2DFilter = 1830,
     kCanvas2DImageSmoothingQuality = 1831,
     kCanvasToBlob = 1832,
@@ -1457,6 +1445,8 @@ class CORE_EXPORT UseCounter {
     kHTMLEmbedElementGetter = 1840,
     kHTMLEmbedElementSetter = 1841,
     kTransformUsesBoxSizeOnSVG = 1842,
+    // The above items are available in M58 branch.
+
     kScrollByKeyboardArrowKeys = 1843,
     kScrollByKeyboardPageUpDownKeys = 1844,
     kScrollByKeyboardHomeEndKeys = 1845,
@@ -1526,7 +1516,6 @@ class CORE_EXPORT UseCounter {
     kWebkitCSSMatrixSetMatrixValue = 1912,
     kWebkitCSSMatrixConstructFromString = 1913,
     kCanRequestURLHTTPContainingNewline = 1914,
-    kCanRequestURLNonHTTPContainingNewline = 1915,
     kGetGamepads = 1916,
     kV8SVGPathElement_GetPathSegAtLength_Method = 1917,
     kMediaStreamConstraintsAudio = 1918,
@@ -1572,8 +1561,68 @@ class CORE_EXPORT UseCounter {
     kMediaStreamConstraintsGoogDAEchoCancellation = 1958,
     kMediaStreamConstraintsGoogNoiseReduction = 1959,
     kMediaStreamConstraintsGoogPowerLineFrequency = 1960,
+    // The above items are available in M59 branch.
+
     kViewportFixedPositionUnderFilter = 1961,
+    kRequestMIDIAccessWithSysExOption = 1962,
+    kRequestMIDIAccessIframeWithSysExOption = 1963,
+    kGamepadAxes = 1964,
+    kGamepadButtons = 1965,
     kVibrateWithoutUserGesture = 1966,
+    kDispatchMouseEventOnDisabledFormControl = 1967,
+    kElementNameDOMInvalidHTMLParserValid = 1968,
+    kElementNameDOMValidHTMLParserInvalid = 1969,
+    kGATTServerDisconnectedEvent = 1970,
+    kAnchorClickDispatchForNonConnectedNode = 1971,
+    kHTMLParseErrorNestedForm = 1972,
+    kFontShapingNotDefGlyphObserved = 1973,
+    kPostMessageOutgoingWouldBeBlockedByConnectSrc = 1974,
+    kPostMessageIncomingWouldBeBlockedByConnectSrc = 1975,
+    kPaymentRequestNetworkNameInSupportedMethods = 1976,
+    kCrossOriginPropertyAccess = 1977,
+    kCrossOriginPropertyAccessFromOpener = 1978,
+    kCredentialManagerCreate = 1979,
+    kWebDatabaseCreateDropFTS3Table = 1980,
+    kFieldEditInSecureContext = 1981,
+    kFieldEditInNonSecureContext = 1982,
+    kCredentialManagerCredentialRequestOptionsUnmediated = 1983,
+    kCredentialManagerGetMediationRequired = 1984,
+    kCredentialManagerIdName = 1985,
+    kCredentialManagerPasswordName = 1986,
+    kCredentialManagerAdditionalData = 1987,
+    kCredentialManagerCustomFetch = 1988,
+    kNetInfoRtt = 1989,
+    kNetInfoDownlink = 1990,
+    kShapeDetection_BarcodeDetectorConstructor = 1991,
+    kShapeDetection_FaceDetectorConstructor = 1992,
+    kShapeDetection_TextDetectorConstructor = 1993,
+    kCredentialManagerCredentialRequestOptionsOnlyUnmediated = 1994,
+    kInertAttribute = 1995,
+    kPluginInstanceAccessFromIsolatedWorld = 1996,
+    kPluginInstanceAccessFromMainWorld = 1997,
+    kRequestFullscreenForDialogElement = 1998,
+    kRequestFullscreenForDialogElementInTopLayer = 1999,
+    kShowModalForElementInFullscreenStack = 2000,
+    kThreeValuedPositionBackground = 2001,
+    kThreeValuedPositionBasicShape = 2002,
+    kThreeValuedPositionGradient = 2003,
+    kThreeValuedPositionObjectPosition = 2004,
+    kThreeValuedPositionPerspectiveOrigin = 2005,
+    kUnitlessZeroAngleCustomProperty = 2006,
+    kUnitlessZeroAngleFilter = 2007,
+    kUnitlessZeroAngleGradient = 2008,
+    kUnitlessZeroAngleOffsetRotate = 2009,
+    kUnitlessZeroAngleTransform = 2010,
+    kHTMLOListElementStartGetterReversedWithoutStartAttribute = 2011,
+    kCredentialManagerPreventSilentAccess = 2012,
+    kNetInfoEffectiveType = 2013,
+    kTableRowDirectionDifferentFromTable = 2015,
+    kTableSectionDirectionDifferentFromTable = 2016,
+    // The above items are available in M60 branch.
+
+    kBudgetAPIGetCost = 2021,
+    kBudgetAPIGetBudget = 2022,
+    // The above items were merged to the M60 branch.
 
     // Add new features immediately above this line. Don't change assigned
     // numbers of any item, and don't reuse removed slots.
@@ -1583,8 +1632,8 @@ class CORE_EXPORT UseCounter {
   };
 
   // An interface to observe UseCounter changes. Note that this is never
-  // notified when the counter is disabled by |m_muteCount| or
-  // |m_disableReporting|.
+  // notified when the counter is disabled by |m_muteCount| or when |m_context|
+  // is kDisabledContext.
   class Observer : public GarbageCollected<Observer> {
    public:
     // Notified when a feature is counted for the first time. This should return
@@ -1646,8 +1695,8 @@ class CORE_EXPORT UseCounter {
 
  private:
   // Notifies that a feature is newly counted to |m_observers|. This shouldn't
-  // be called when the counter is disabled by |m_muteCount| or
-  // |m_disableReporting|.
+  // be called when the counter is disabled by |m_muteCount| or when |m_context|
+  // if kDisabledContext.
   void NotifyFeatureCounted(Feature);
 
   EnumerationHistogram& FeaturesHistogram() const;
@@ -1657,10 +1706,8 @@ class CORE_EXPORT UseCounter {
   // If non-zero, ignore all 'count' calls completely.
   unsigned mute_count_;
 
-  // If true, disable reporting all histogram entries.
-  bool disable_reporting_;
-
-  // The scope represented by this UseCounter instance.
+  // The scope represented by this UseCounter instance, which must be fixed for
+  // the duration of a page but can change when a new page is loaded.
   Context context_;
 
   // Track what features/properties have been reported to the (non-legacy)

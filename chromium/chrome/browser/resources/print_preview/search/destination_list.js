@@ -84,7 +84,7 @@ cr.define('print_preview', function() {
      * @private
      */
     this.listItems_ = [];
-  };
+  }
 
   /**
    * Enumeration of event types dispatched by the destination list.
@@ -262,7 +262,7 @@ cr.define('print_preview', function() {
         this.renderDestinationsList_(this.destinations_);
       } else {
         var filteredDests = this.destinations_.filter(function(destination) {
-          return destination.matches(this.query_);
+          return destination.matches(assert(this.query_));
         }, this);
         this.renderDestinationsList_(filteredDests);
       }
@@ -306,15 +306,19 @@ cr.define('print_preview', function() {
       });
       // Update the existing items, add the new ones (preserve the focused one).
       var listEl = this.getChildElement('.destination-list > ul');
-      var focusedEl = listEl.querySelector(':focus');
+      // We need to use activeElement instead of :focus selector, which doesn't
+      // work in an inactive page. See crbug.com/723579.
+      var focusedEl = listEl.contains(document.activeElement) ?
+          document.activeElement : null;
       for (var i = 0; i < numItems; i++) {
-        var listItem = visibleListItems[destinations[i].id];
+        var destination = assert(destinations[i]);
+        var listItem = visibleListItems[destination.id];
         if (listItem) {
           // Destination ID is the same, but it can be registered to a different
           // user account, hence passing it to the item update.
-          this.updateListItem_(listEl, listItem, focusedEl, destinations[i]);
+          this.updateListItem_(listEl, listItem, focusedEl, destination);
         } else {
-          this.renderListItem_(listEl, destinations[i]);
+          this.renderListItem_(listEl, destination);
         }
       }
     },
@@ -331,7 +335,8 @@ cr.define('print_preview', function() {
 
       var itemEl = listItem.getElement();
       // Preserve focused inner element, if there's one.
-      var focusedInnerEl = focusedEl ? itemEl.querySelector(':focus') : null;
+      var focusedInnerEl = focusedEl && itemEl.contains(focusedEl) ?
+          focusedEl : null;
       if (focusedEl)
         itemEl.classList.add('moving');
       // Move it to the end of the list.
@@ -353,7 +358,7 @@ cr.define('print_preview', function() {
       var listItem = new print_preview.DestinationListItem(
           this.eventTarget_, destination, this.query_);
       this.addChild(listItem);
-      listItem.render(listEl);
+      listItem.render(assert(listEl));
       this.listItems_.push(listItem);
     },
 

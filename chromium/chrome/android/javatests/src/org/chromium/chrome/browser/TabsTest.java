@@ -1301,7 +1301,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
             @Override
             public void run() {
                 ContentViewCore view = getActivity().getActivityTab().getContentViewCore();
-                view.flingViewport(SystemClock.uptimeMillis(), 0, -2000);
+                view.flingViewport(SystemClock.uptimeMillis(), 0, -2000, false);
             }
         });
         ChromeTabUtils.closeCurrentTab(getInstrumentation(), getActivity());
@@ -1377,7 +1377,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
         assertEquals("Tab count is expected to be 0 after closing all the tabs",
                 0, initialTabCount);
 
-        ChromeTabUtils.clickNewTabButton(this, this);
+        ChromeTabUtils.clickNewTabButton(getInstrumentation(), getActivity());
 
         int newTabCount = getActivity().getCurrentTabModel().getCount();
         assertEquals("Tab count is expected to be 1 after clicking Newtab button",

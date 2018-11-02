@@ -51,7 +51,7 @@ void ContentPasswordManagerDriverFactory::CreateForWebContents(
 
   web_contents->SetUserData(
       kContentPasswordManagerDriverFactoryWebContentsUserDataKey,
-      new_factory.release());
+      std::move(new_factory));
 }
 
 ContentPasswordManagerDriverFactory::ContentPasswordManagerDriverFactory(
@@ -76,6 +76,7 @@ ContentPasswordManagerDriverFactory::FromWebContents(
 // static
 void ContentPasswordManagerDriverFactory::BindPasswordManagerDriver(
     content::RenderFrameHost* render_frame_host,
+    const service_manager::BindSourceInfo& source_info,
     autofill::mojom::PasswordManagerDriverRequest request) {
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host);
@@ -100,6 +101,7 @@ void ContentPasswordManagerDriverFactory::BindPasswordManagerDriver(
 // static
 void ContentPasswordManagerDriverFactory::BindSensitiveInputVisibilityService(
     content::RenderFrameHost* render_frame_host,
+    const service_manager::BindSourceInfo& source_info,
     blink::mojom::SensitiveInputVisibilityServiceRequest request) {
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host);

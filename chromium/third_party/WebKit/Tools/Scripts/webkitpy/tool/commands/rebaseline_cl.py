@@ -9,11 +9,11 @@ import logging
 import optparse
 
 from webkitpy.common.net.git_cl import GitCL
-from webkitpy.tool.commands.rebaseline import AbstractParallelRebaselineCommand, TestBaselineSet
+from webkitpy.tool.commands.rebaseline import AbstractParallelRebaselineCommand
+from webkitpy.tool.commands.rebaseline import TestBaselineSet
 from webkitpy.w3c.wpt_manifest import WPTManifest
 
 _log = logging.getLogger(__name__)
-
 
 class RebaselineCL(AbstractParallelRebaselineCommand):
     name = 'rebaseline-cl'
@@ -45,59 +45,37 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
 
     def execute(self, options, args, tool):
         self._tool = tool
-
-        # TODO(qyearsley): Move this call to somewhere else.
+        # TODO(qyearsley): Consider calling ensure_manifest in Command or WebKitPatch.
         WPTManifest.ensure_manifest(tool)
-
-        unstaged_baselines = self.unstaged_baselines()
-        if unstaged_baselines:
-            _log.error('Aborting: there are unstaged baselines:')
-            for path in unstaged_baselines:
-                _log.error('  %s', path)
+        if not self.check_ok_to_run():
             return 1
 
-        issue_number = self._get_issue_number()
-        if issue_number is None:
-            _log.error('No issue number for current branch.')
-            return 1
-        _log.debug('Issue number for current branch: %s', issue_number)
+        jobs = self.latest_try_jobs()
+        self._log_scheduled_jobs(jobs)
+        builders_with_no_jobs = self.builders_with_no_jobs(jobs)
 
-        builds = self.git_cl().latest_try_jobs(self._try_bots())
-
-        builders_with_pending_builds = self.builders_with_pending_builds(builds)
-        if builders_with_pending_builds:
-            _log.info('There are existing pending builds for:')
-            for builder in sorted(builders_with_pending_builds):
-                _log.info('  %s', builder)
-        builders_with_no_results = self.builders_with_no_results(builds)
-
-        if options.trigger_jobs and builders_with_no_results:
-            self.trigger_builds(builders_with_no_results)
-            _log.info('Please re-run webkit-patch rebaseline-cl once all pending try jobs have finished.')
+        if options.trigger_jobs and builders_with_no_jobs:
+            self.trigger_try_jobs(builders_with_no_jobs)
             return 1
 
-        if builders_with_no_results and not options.fill_missing:
-            _log.error('The following builders have no results:')
-            for builder in builders_with_no_results:
+        if not options.fill_missing and builders_with_no_jobs:
+            _log.error('The following builders have no jobs:')
+            for builder in builders_with_no_jobs:
                 _log.error('  %s', builder)
+            _log.error('Add --fill-missing to continue rebaselining anyway, '
+                       'filling in results for missing platforms.')
             return 1
 
-        _log.debug('Getting results for issue %d.', issue_number)
-        builds_to_results = self._fetch_results(builds)
-        if not options.fill_missing and len(builds_to_results) < len(builds):
+        jobs_to_results = self._fetch_results(jobs)
+        if not options.fill_missing and len(jobs_to_results) < len(jobs):
             return 1
 
-        test_baseline_set = TestBaselineSet(tool)
         if args:
-            for test in args:
-                for build in builds:
-                    if not builds_to_results.get(build):
-                        continue
-                    test_baseline_set.add(test, build)
+            test_baseline_set = self._make_test_baseline_set_for_tests(
+                args, jobs_to_results)
         else:
             test_baseline_set = self._make_test_baseline_set(
-                builds_to_results,
-                only_changed_tests=options.only_changed_tests)
+                jobs_to_results, options.only_changed_tests)
 
         if options.fill_missing:
             self.fill_in_missing_results(test_baseline_set)
@@ -107,6 +85,19 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         if not options.dry_run:
             self.rebaseline(options, test_baseline_set)
         return 0
+
+    def check_ok_to_run(self):
+        unstaged_baselines = self.unstaged_baselines()
+        if unstaged_baselines:
+            _log.error('Aborting: there are unstaged baselines:')
+            for path in unstaged_baselines:
+                _log.error('  %s', path)
+            return False
+        issue_number = self._get_issue_number()
+        if issue_number is None:
+            _log.error('No issue number for current branch.')
+            return False
+        return True
 
     def _get_issue_number(self):
         """Returns the current CL issue number, or None."""
@@ -119,19 +110,40 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         """Returns a GitCL instance. Can be overridden for tests."""
         return GitCL(self._tool)
 
-    def trigger_builds(self, builders):
+    def latest_try_jobs(self):
+        """Lists the latest try jobs for the relevant try bots.
+
+        This is a list of Build objects for jobs that have been triggered;
+        for try jobs that are scheduled but not started, build_number is None.
+        TODO(qyearsley): Also get and use information about the state of the
+        job (started, success, failure).
+        """
+        return self.git_cl().latest_try_jobs(self._try_bots())
+
+    def trigger_try_jobs(self, builders):
+        """Triggers try jobs for the given builders."""
         _log.info('Triggering try jobs for:')
         for builder in sorted(builders):
             _log.info('  %s', builder)
         self.git_cl().trigger_try_jobs(builders)
+        _log.info('Once all pending try jobs have finished, please re-run\n'
+                  'webkit-patch rebaseline-cl to fetch new baselines.')
 
-    def builders_with_no_results(self, builds):
-        """Returns the set of builders that don't have finished results."""
-        builders_with_no_builds = set(self._try_bots()) - {b.builder_name for b in builds}
-        return builders_with_no_builds | self.builders_with_pending_builds(builds)
+    def builders_with_no_jobs(self, builds):
+        """Returns the set of builders that don't have triggered builds."""
+        return set(self._try_bots()) - {b.builder_name for b in builds}
 
-    def builders_with_pending_builds(self, builds):
-        """Returns the set of builders that have pending builds."""
+    def _log_scheduled_jobs(self, builds):
+        builders = self._builders_with_scheduled_jobs(builds)
+        if not builders:
+            return
+        _log.info('There are scheduled (but not yet started) builds for:')
+        for builder in sorted(builders):
+            _log.info('  %s', builder)
+
+    def _builders_with_scheduled_jobs(self, builds):
+        """Returns the set of builders that have scheduled builds
+        that have not yet started."""
         return {b.builder_name for b in builds if b.build_number is None}
 
     def _try_bots(self):
@@ -162,10 +174,16 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             if layout_test_results is None:
                 _log.info('Failed to fetch results for %s', build)
                 _log.info('Results URL: %s/results.html', results_url)
-                _log.info('Retry job by running: git cl try -b %s', build.builder_name)
                 continue
             results[build] = layout_test_results
         return results
+
+    def _make_test_baseline_set_for_tests(self, tests, builds_to_results):
+        test_baseline_set = TestBaselineSet(self._tool)
+        for test in tests:
+            for build in builds_to_results:
+                test_baseline_set.add(test, build)
+        return test_baseline_set
 
     def _make_test_baseline_set(self, builds_to_results, only_changed_tests):
         """Returns a dict which lists the set of baselines to fetch.
@@ -215,7 +233,14 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         return tests
 
     def _fetch_tests_with_new_failures(self, build):
-        """For a given try job, lists tests that only occurred with the patch."""
+        """For a given try job, lists tests that only failed with the patch.
+
+        If a test failed only with the patch but not without, then that
+        indicates that the failure is actually related to the patch and
+        is not failing at HEAD.
+
+        If the list of new failures could not be obtained, this returns None.
+        """
         buildbot = self._tool.buildbot
         content = buildbot.fetch_retry_summary_json(build)
         if content is None:
@@ -228,14 +253,15 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             return None
 
     def fill_in_missing_results(self, test_baseline_set):
-        """Modifies test_baseline_set to guarantee that there are entries for
-        all ports for all tests to rebaseline.
+        """Adds entries, filling in results for missing jobs.
 
         For each test prefix, if there is an entry missing for some port,
         then an entry should be added for that port using a build that is
-        available. For example, if there's no entry for the port "win-win7",
-        then an entry might be added for "win-win7" using a build on
-        a Win10 builder which does have results.
+        available.
+
+        For example, if there's no entry for the port "win-win7", but there
+        is an entry for the "win-win10" port, then an entry might be added
+        for "win-win7" using the results from "win-win10".
         """
         all_ports = {self._tool.builders.port_name_for_builder_name(b) for b in self._try_bots()}
         for test_prefix in test_baseline_set.test_prefixes():
@@ -250,13 +276,26 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
                 test_baseline_set.add(test_prefix, build, port)
         return test_baseline_set
 
-    def _choose_fill_in_build(self, _, build_port_pairs):
+    def _choose_fill_in_build(self, target_port, build_port_pairs):
         """Returns a Build to use to supply results for the given port.
 
         Ideally, this should return a build for a similar port so that the
         results from the selected build may also be correct for the target port.
         """
-        # TODO(qyearsley): Decide what build to use for a given port
-        # in a more sophisticated way, such that a build with a
-        # "similar" port will be used when available.
-        return build_port_pairs[0][0]
+        # A full port name should normally always be of the form <os>-<version>;
+        # for example "win-win7", or "linux-trusty". For the test port used in
+        # unit tests, though, the full port name may be "test-<os>-<version>".
+        def os_name(port):
+            if '-' not in port:
+                return port
+            return port[:port.rfind('-')]
+
+        # If any Build exists with the same OS, use the first one.
+        target_os = os_name(target_port)
+        same_os_builds = sorted(b for b, p in build_port_pairs if os_name(p) == target_os)
+        if same_os_builds:
+            return same_os_builds[0]
+
+        # Otherwise, perhaps any build will do, for example if the results are
+        # the same on all platforms. In this case, just return the first build.
+        return sorted(build_port_pairs)[0][0]

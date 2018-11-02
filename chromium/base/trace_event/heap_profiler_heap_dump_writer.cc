@@ -16,9 +16,9 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/trace_event/heap_profiler_serialization_state.h"
 #include "base/trace_event/heap_profiler_stack_frame_deduplicator.h"
 #include "base/trace_event/heap_profiler_type_name_deduplicator.h"
-#include "base/trace_event/memory_dump_session_state.h"
 #include "base/trace_event/trace_config.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "base/trace_event/trace_log.h"
@@ -78,8 +78,7 @@ bool operator<(const Bucket& lhs, const Bucket& rhs) {
 // |is_broken_down_by_type_name| set depending on the property to group by.
 std::vector<Bucket> GetSubbuckets(const Bucket& bucket,
                                   BreakDownMode break_by) {
-  base::hash_map<const void*, Bucket> breakdown;
-
+  std::unordered_map<const void*, Bucket> breakdown;
 
   if (break_by == BreakDownMode::kByBacktrace) {
     for (const auto& context_and_metrics : bucket.metrics_by_context) {
@@ -241,7 +240,8 @@ void HeapDumpWriter::BreakDown(const Bucket& bucket) {
 }
 
 const std::set<Entry>& HeapDumpWriter::Summarize(
-    const hash_map<AllocationContext, AllocationMetrics>& metrics_by_context) {
+    const std::unordered_map<AllocationContext, AllocationMetrics>&
+        metrics_by_context) {
   // Start with one bucket that represents the entire heap. Iterate by
   // reference, because the allocation contexts are going to point to allocation
   // contexts stored in |metrics_by_context|.
@@ -309,12 +309,14 @@ std::unique_ptr<TracedValue> Serialize(const std::set<Entry>& entries) {
 }  // namespace internal
 
 std::unique_ptr<TracedValue> ExportHeapDump(
-    const hash_map<AllocationContext, AllocationMetrics>& metrics_by_context,
-    const MemoryDumpSessionState& session_state) {
+    const std::unordered_map<AllocationContext, AllocationMetrics>&
+        metrics_by_context,
+    const HeapProfilerSerializationState& heap_profiler_serialization_state) {
   internal::HeapDumpWriter writer(
-      session_state.stack_frame_deduplicator(),
-      session_state.type_name_deduplicator(),
-      session_state.heap_profiler_breakdown_threshold_bytes());
+      heap_profiler_serialization_state.stack_frame_deduplicator(),
+      heap_profiler_serialization_state.type_name_deduplicator(),
+      heap_profiler_serialization_state
+          .heap_profiler_breakdown_threshold_bytes());
   return Serialize(writer.Summarize(metrics_by_context));
 }
 

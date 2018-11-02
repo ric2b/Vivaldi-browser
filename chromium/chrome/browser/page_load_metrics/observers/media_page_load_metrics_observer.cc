@@ -24,17 +24,18 @@ MediaPageLoadMetricsObserver::MediaPageLoadMetricsObserver()
 MediaPageLoadMetricsObserver::~MediaPageLoadMetricsObserver() = default;
 
 void MediaPageLoadMetricsObserver::OnLoadedResource(
-    const page_load_metrics::ExtraRequestInfo& extra_request_info) {
-  if (extra_request_info.was_cached) {
-    cache_bytes_ += extra_request_info.raw_body_bytes;
+    const page_load_metrics::ExtraRequestCompleteInfo&
+        extra_request_complete_info) {
+  if (extra_request_complete_info.was_cached) {
+    cache_bytes_ += extra_request_complete_info.raw_body_bytes;
   } else {
-    network_bytes_ += extra_request_info.raw_body_bytes;
+    network_bytes_ += extra_request_complete_info.raw_body_bytes;
   }
 }
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 MediaPageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   // FlushMetricsOnAppEnterBackground is invoked on Android in cases where the
   // app is about to be backgrounded, as part of the Activity.onPause()
@@ -47,7 +48,7 @@ MediaPageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
 }
 
 void MediaPageLoadMetricsObserver::OnComplete(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   if (!played_media_)
     return;

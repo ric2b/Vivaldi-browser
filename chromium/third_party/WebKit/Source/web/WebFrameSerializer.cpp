@@ -38,6 +38,7 @@
 #include "core/frame/FrameSerializer.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/RemoteFrame.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/html/HTMLAllCollection.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -72,7 +73,6 @@
 #include "public/web/WebFrameSerializerCacheControlPolicy.h"
 #include "public/web/WebFrameSerializerClient.h"
 #include "web/WebFrameSerializerImpl.h"
-#include "web/WebLocalFrameImpl.h"
 #include "web/WebRemoteFrameImpl.h"
 
 namespace blink {
@@ -87,6 +87,7 @@ class MHTMLFrameSerializerDelegate final : public FrameSerializer::Delegate {
  public:
   explicit MHTMLFrameSerializerDelegate(
       WebFrameSerializer::MHTMLPartsGenerationDelegate&);
+  ~MHTMLFrameSerializerDelegate() override;
   bool ShouldIgnoreElement(const Element&) override;
   bool ShouldIgnoreAttribute(const Element&, const Attribute&) override;
   bool RewriteLink(const Element&, String& rewritten_link) override;
@@ -105,11 +106,20 @@ class MHTMLFrameSerializerDelegate final : public FrameSerializer::Delegate {
                                                 Vector<Attribute>*);
 
   WebFrameSerializer::MHTMLPartsGenerationDelegate& web_delegate_;
+  bool popup_overlays_skipped_;
 };
 
 MHTMLFrameSerializerDelegate::MHTMLFrameSerializerDelegate(
     WebFrameSerializer::MHTMLPartsGenerationDelegate& web_delegate)
-    : web_delegate_(web_delegate) {}
+    : web_delegate_(web_delegate), popup_overlays_skipped_(false) {}
+
+MHTMLFrameSerializerDelegate::~MHTMLFrameSerializerDelegate() {
+  if (web_delegate_.RemovePopupOverlay()) {
+    UMA_HISTOGRAM_BOOLEAN(
+        "PageSerialization.MhtmlGeneration.PopupOverlaySkipped",
+        popup_overlays_skipped_);
+  }
+}
 
 bool MHTMLFrameSerializerDelegate::ShouldIgnoreElement(const Element& element) {
   if (ShouldIgnoreHiddenElement(element))
@@ -170,6 +180,8 @@ bool MHTMLFrameSerializerDelegate::ShouldIgnorePopupOverlayElement(
   if (box->Style()->ZIndex() < kPopupOverlayZIndexThreshold)
     return false;
 
+  popup_overlays_skipped_ = true;
+
   return true;
 }
 
@@ -182,6 +194,13 @@ bool MHTMLFrameSerializerDelegate::ShouldIgnoreAttribute(
   // nicely with srcset.
   if (attribute.LocalName() == HTMLNames::srcsetAttr)
     return true;
+
+  // Do not save ping attribute since anyway the ping will be blocked from
+  // MHTML.
+  if (isHTMLAnchorElement(element) &&
+      attribute.LocalName() == HTMLNames::pingAttr) {
+    return true;
+  }
 
   // If srcdoc attribute for frame elements will be rewritten as src attribute
   // containing link instead of html contents, don't ignore the attribute.
@@ -311,22 +330,22 @@ void MHTMLFrameSerializerDelegate::GetCustomAttributesForFormControlElement(
 }
 
 bool CacheControlNoStoreHeaderPresent(
-    const WebLocalFrameImpl& web_local_frame_impl) {
+    const WebLocalFrameBase& web_local_frame) {
   const ResourceResponse& response =
-      web_local_frame_impl.DataSource()->GetResponse().ToResourceResponse();
+      web_local_frame.DataSource()->GetResponse().ToResourceResponse();
   if (response.CacheControlContainsNoStore())
     return true;
 
   const ResourceRequest& request =
-      web_local_frame_impl.DataSource()->GetRequest().ToResourceRequest();
+      web_local_frame.DataSource()->GetRequest().ToResourceRequest();
   return request.CacheControlContainsNoStore();
 }
 
 bool FrameShouldBeSerializedAsMHTML(
     WebLocalFrame* frame,
     WebFrameSerializerCacheControlPolicy cache_control_policy) {
-  WebLocalFrameImpl* web_local_frame_impl = ToWebLocalFrameImpl(frame);
-  DCHECK(web_local_frame_impl);
+  WebLocalFrameBase* web_local_frame = ToWebLocalFrameBase(frame);
+  DCHECK(web_local_frame);
 
   if (cache_control_policy == WebFrameSerializerCacheControlPolicy::kNone)
     return true;
@@ -341,7 +360,7 @@ bool FrameShouldBeSerializedAsMHTML(
   if (!need_to_check_no_store)
     return true;
 
-  return !CacheControlNoStoreHeaderPresent(*web_local_frame_impl);
+  return !CacheControlNoStoreHeaderPresent(*web_local_frame);
 }
 
 }  // namespace
@@ -357,10 +376,10 @@ WebThreadSafeData WebFrameSerializer::GenerateMHTMLHeader(
   if (!FrameShouldBeSerializedAsMHTML(frame, delegate->CacheControlPolicy()))
     return WebThreadSafeData();
 
-  WebLocalFrameImpl* web_local_frame_impl = ToWebLocalFrameImpl(frame);
-  DCHECK(web_local_frame_impl);
+  WebLocalFrameBase* web_local_frame = ToWebLocalFrameBase(frame);
+  DCHECK(web_local_frame);
 
-  Document* document = web_local_frame_impl->GetFrame()->GetDocument();
+  Document* document = web_local_frame->GetFrame()->GetDocument();
 
   RefPtr<RawData> buffer = RawData::Create();
   MHTMLArchive::GenerateMHTMLHeader(boundary, document->title(),
@@ -382,7 +401,7 @@ WebThreadSafeData WebFrameSerializer::GenerateMHTMLParts(
     return WebThreadSafeData();
 
   // Translate arguments from public to internal blink APIs.
-  LocalFrame* frame = ToWebLocalFrameImpl(web_frame)->GetFrame();
+  LocalFrame* frame = ToWebLocalFrameBase(web_frame)->GetFrame();
   MHTMLArchive::EncodingPolicy encoding_policy =
       web_delegate->UseBinaryEncoding()
           ? MHTMLArchive::EncodingPolicy::kUseBinaryEncoding

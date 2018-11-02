@@ -152,6 +152,40 @@ ui::LatencyComponentType MojoLatencyComponentTypeToUI(
   return ui::LATENCY_COMPONENT_TYPE_LAST;
 }
 
+ui::mojom::SourceEventType UISourceEventTypeToMojo(ui::SourceEventType type) {
+  switch (type) {
+    case ui::UNKNOWN:
+      return ui::mojom::SourceEventType::UNKNOWN;
+    case ui::WHEEL:
+      return ui::mojom::SourceEventType::WHEEL;
+    case ui::TOUCH:
+      return ui::mojom::SourceEventType::TOUCH;
+    case ui::KEY_PRESS:
+      return ui::mojom::SourceEventType::KEY_PRESS;
+    case ui::OTHER:
+      return ui::mojom::SourceEventType::OTHER;
+  }
+  NOTREACHED();
+  return ui::mojom::SourceEventType::UNKNOWN;
+}
+
+ui::SourceEventType MojoSourceEventTypeToUI(ui::mojom::SourceEventType type) {
+  switch (type) {
+    case ui::mojom::SourceEventType::UNKNOWN:
+      return ui::UNKNOWN;
+    case ui::mojom::SourceEventType::WHEEL:
+      return ui::WHEEL;
+    case ui::mojom::SourceEventType::TOUCH:
+      return ui::TOUCH;
+    case ui::mojom::SourceEventType::KEY_PRESS:
+      return ui::KEY_PRESS;
+    case ui::mojom::SourceEventType::OTHER:
+      return ui::OTHER;
+  }
+  NOTREACHED();
+  return ui::SourceEventType::UNKNOWN;
+}
+
 }  // namespace
 
 // static
@@ -237,33 +271,39 @@ StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::trace_name(
   return info.trace_name_;
 }
 
+// static
 const ui::LatencyInfo::LatencyMap&
 StructTraits<ui::mojom::LatencyInfoDataView,
              ui::LatencyInfo>::latency_components(const ui::LatencyInfo& info) {
   return info.latency_components();
 }
-InputCoordinateArray
-StructTraits<ui::mojom::LatencyInfoDataView,
-             ui::LatencyInfo>::input_coordinates(const ui::LatencyInfo& info) {
-  return {info.input_coordinates_size_, ui::LatencyInfo::kMaxInputCoordinates,
-          const_cast<gfx::PointF*>(info.input_coordinates_)};
-}
 
+// static
 int64_t StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::trace_id(
     const ui::LatencyInfo& info) {
   return info.trace_id();
 }
 
+// static
 bool StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::coalesced(
     const ui::LatencyInfo& info) {
   return info.coalesced();
 }
 
+// static
 bool StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::terminated(
     const ui::LatencyInfo& info) {
   return info.terminated();
 }
 
+// static
+ui::mojom::SourceEventType
+StructTraits<ui::mojom::LatencyInfoDataView,
+             ui::LatencyInfo>::source_event_type(const ui::LatencyInfo& info) {
+  return UISourceEventTypeToMojo(info.source_event_type());
+}
+
+// static
 bool StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::Read(
     ui::mojom::LatencyInfoDataView data,
     ui::LatencyInfo* out) {
@@ -283,17 +323,10 @@ bool StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::Read(
       return false;
   }
 
-  InputCoordinateArray input_coordinate_array = {
-      0, ui::LatencyInfo::kMaxInputCoordinates, out->input_coordinates_};
-  if (!data.ReadInputCoordinates(&input_coordinate_array))
-    return false;
-  // TODO(fsamuel): ui::LatencyInfo::input_coordinates_size_ should be a size_t.
-  out->input_coordinates_size_ =
-      static_cast<uint32_t>(input_coordinate_array.size);
-
   out->trace_id_ = data.trace_id();
   out->coalesced_ = data.coalesced();
   out->terminated_ = data.terminated();
+  out->source_event_type_ = MojoSourceEventTypeToUI(data.source_event_type());
   return true;
 }
 

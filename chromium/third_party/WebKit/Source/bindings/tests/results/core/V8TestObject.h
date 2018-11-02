@@ -21,7 +21,6 @@
 #include "bindings/core/v8/ElementSequenceOrByteStringDoubleOrStringRecord.h"
 #include "bindings/core/v8/GeneratedCodeHelper.h"
 #include "bindings/core/v8/NativeValueTraits.h"
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/StringOrArrayBufferOrArrayBufferView.h"
 #include "bindings/core/v8/StringOrDouble.h"
 #include "bindings/core/v8/StringOrStringSequence.h"
@@ -30,11 +29,12 @@
 #include "bindings/core/v8/TestInterfaceOrLong.h"
 #include "bindings/core/v8/ToV8ForCore.h"
 #include "bindings/core/v8/UnrestrictedDoubleOrString.h"
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8DOMWrapper.h"
-#include "bindings/core/v8/WrapperTypeInfo.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/tests/idls/core/TestObject.h"
 #include "core/CoreExport.h"
+#include "platform/bindings/ScriptWrappable.h"
+#include "platform/bindings/V8DOMWrapper.h"
+#include "platform/bindings/WrapperTypeInfo.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -363,6 +363,7 @@ class V8TestObject {
   CORE_EXPORT static void measuredLongAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void sameObjectAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void saveSameObjectAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void staticSaveSameObjectAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void unscopableLongAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void unscopableLongAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void unscopableOriginTrialEnabledLongAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
@@ -438,6 +439,8 @@ class V8TestObject {
   CORE_EXPORT static void voidMethodFloat32ArrayArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void voidMethodInt32ArrayArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void voidMethodUint8ArrayArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void voidMethodAllowSharedArrayBufferViewArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void voidMethodAllowSharedUint8ArrayArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void longArrayMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void stringArrayMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void testInterfaceEmptyArrayMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
@@ -617,7 +620,6 @@ class V8TestObject {
   CORE_EXPORT static void clearMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void keysMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void valuesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
-  CORE_EXPORT static void entriesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void forEachMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void hasMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void getMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);

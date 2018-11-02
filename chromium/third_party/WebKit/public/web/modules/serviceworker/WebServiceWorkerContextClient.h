@@ -35,10 +35,12 @@
 
 #include "public/platform/WebMessagePortChannel.h"
 #include "public/platform/WebURL.h"
+#include "public/platform/WebWorkerFetchContext.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerClientsClaimCallbacks.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerClientsInfo.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerEventResult.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerSkipWaitingCallbacks.h"
+#include "public/platform/modules/serviceworker/WebServiceWorkerStreamHandle.h"
 #include "public/web/WebDevToolsAgentClient.h"
 #include "v8/include/v8.h"
 
@@ -162,17 +164,28 @@ class WebServiceWorkerContextClient {
       WebServiceWorkerEventResult result,
       double event_dispatch_time) {}
 
-  // ServiceWorker specific methods. respondFetchEvent will be called after
+  // ServiceWorker specific methods. RespondToFetchEvent* will be called after
   // FetchEvent returns a response by the ServiceWorker's script context, and
-  // didHandleFetchEvent will be called after the end of FetchEvent's
+  // DidHandleFetchEvent will be called after the end of FetchEvent's
   // lifecycle. When no response is provided, the browser should fallback to
-  // native fetch. EventIDs are the same with the ids passed from
-  // dispatchFetchEvent respectively.
-  virtual void RespondToFetchEvent(int fetch_event_id,
-                                   double event_dispatch_time) {}
+  // native fetch. |fetch_event_id|s are the same with the ids passed from
+  // DispatchFetchEvent respectively.
+
+  // Used when respondWith() is not called. Tells the browser to fall back to
+  // native fetch.
+  virtual void RespondToFetchEventWithNoResponse(int fetch_event_id,
+                                                 double event_dispatch_time) {}
+  // Responds to the fetch event with |response|.
   virtual void RespondToFetchEvent(int fetch_event_id,
                                    const WebServiceWorkerResponse& response,
                                    double event_dispatch_time) {}
+  // Responds to the fetch event with |response|, where body is
+  // |body_as_stream|.
+  virtual void RespondToFetchEventWithResponseStream(
+      int fetch_event_id,
+      const WebServiceWorkerResponse& response,
+      WebServiceWorkerStreamHandle* body_as_stream,
+      double event_dispatch_time) {}
   virtual void RespondToPaymentRequestEvent(
       int event_id,
       const WebPaymentAppResponse& response,
@@ -225,18 +238,20 @@ class WebServiceWorkerContextClient {
                                             WebServiceWorkerEventResult result,
                                             double event_dispatch_time) {}
 
-  // Ownership of the returned object is transferred to the caller.
   // This is called on the main thread.
-  virtual WebServiceWorkerNetworkProvider*
-  CreateServiceWorkerNetworkProvider() {
+  virtual std::unique_ptr<WebServiceWorkerNetworkProvider>
+  CreateServiceWorkerNetworkProvider() = 0;
+
+  // Creates a WebWorkerFetchContext for a service worker. This is called on the
+  // main thread. This is used only when off-main-thread-fetch is enabled.
+  virtual std::unique_ptr<blink::WebWorkerFetchContext>
+  CreateServiceWorkerFetchContext() {
     return nullptr;
   }
 
-  // Ownership of the returned object is transferred to the caller.
   // This is called on the main thread.
-  virtual WebServiceWorkerProvider* CreateServiceWorkerProvider() {
-    return nullptr;
-  }
+  virtual std::unique_ptr<WebServiceWorkerProvider>
+  CreateServiceWorkerProvider() = 0;
 
   // Ownership of the passed callbacks is transferred to the callee, callee
   // should delete the callbacks after calling either onSuccess or onError.
@@ -300,6 +315,7 @@ class WebServiceWorkerContextClient {
   // Called when the worker wants to register subscopes to handle via foreign
   // fetch. Will only be called while an install event is in progress.
   virtual void RegisterForeignFetchScopes(
+      int install_event_id,
       const WebVector<WebURL>& sub_scopes,
       const WebVector<WebSecurityOrigin>& origins) = 0;
 };

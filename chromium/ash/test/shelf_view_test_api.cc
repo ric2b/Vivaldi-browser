@@ -131,27 +131,13 @@ ShelfTooltipManager* ShelfViewTestAPI::tooltip_manager() {
   return &shelf_view_->tooltip_;
 }
 
-gfx::Size ShelfViewTestAPI::GetPreferredSize() {
-  return shelf_view_->GetPreferredSize();
-}
-
 int ShelfViewTestAPI::GetMinimumDragDistance() const {
   return ShelfView::kMinimumDragDistance;
-}
-
-void ShelfViewTestAPI::ButtonPressed(views::Button* sender,
-                                     const ui::Event& event,
-                                     views::InkDrop* ink_drop) {
-  return shelf_view_->ButtonPressed(sender, event, ink_drop);
 }
 
 bool ShelfViewTestAPI::SameDragType(ShelfItemType typea,
                                     ShelfItemType typeb) const {
   return shelf_view_->SameDragType(typea, typeb);
-}
-
-void ShelfViewTestAPI::SetShelfDelegate(ShelfDelegate* delegate) {
-  shelf_view_->delegate_ = delegate;
 }
 
 gfx::Rect ShelfViewTestAPI::GetBoundsForDragInsertInScreen() {
@@ -162,8 +148,8 @@ bool ShelfViewTestAPI::IsRippedOffFromShelf() {
   return shelf_view_->dragged_off_shelf_;
 }
 
-bool ShelfViewTestAPI::DraggedItemFromOverflowToShelf() {
-  return shelf_view_->dragged_off_from_overflow_to_shelf_;
+bool ShelfViewTestAPI::DraggedItemToAnotherShelf() {
+  return shelf_view_->dragged_to_another_shelf_;
 }
 
 ShelfButtonPressedMetricTracker*

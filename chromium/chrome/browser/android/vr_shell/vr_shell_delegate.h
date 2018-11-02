@@ -50,6 +50,10 @@ class VrShellDelegate : public device::GvrDelegateProvider {
                            jdouble interval_seconds);
   void OnPause(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
   void OnResume(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void UpdateNonPresentingContext(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jlong context);
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
   device::GvrDeviceProvider* device_provider() { return device_provider_; }
@@ -68,6 +72,8 @@ class VrShellDelegate : public device::GvrDelegateProvider {
 
   void CreateNonPresentingDelegate();
 
+  void OnActivateDisplayHandled(bool will_not_present);
+
   std::unique_ptr<NonPresentingGvrDelegate> non_presenting_delegate_;
   base::android::ScopedJavaGlobalRef<jobject> j_vr_shell_delegate_;
   device::GvrDeviceProvider* device_provider_ = nullptr;
@@ -77,6 +83,8 @@ class VrShellDelegate : public device::GvrDelegateProvider {
   double interval_seconds_ = 0;
   device::mojom::VRSubmitFrameClientPtr submit_client_;
   bool pending_successful_present_request_ = false;
+
+  base::WeakPtrFactory<VrShellDelegate> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(VrShellDelegate);
 };

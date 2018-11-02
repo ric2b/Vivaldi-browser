@@ -347,6 +347,10 @@ class TestNavigationManagerThrottle : public NavigationThrottle {
         on_will_process_response_closure_(on_will_process_response_closure) {}
   ~TestNavigationManagerThrottle() override {}
 
+  const char* GetNameForLogging() override {
+    return "TestNavigationManagerThrottle";
+  }
+
  private:
   // NavigationThrottle:
   NavigationThrottle::ThrottleCheckResult WillStartRequest() override {
@@ -467,6 +471,18 @@ bool WaitForLoadStop(WebContents* web_contents) {
   return IsLastCommittedEntryOfPageType(web_contents, PAGE_TYPE_NORMAL);
 }
 
+void PrepContentsForBeforeUnloadTest(WebContents* web_contents) {
+  for (auto* frame : web_contents->GetAllFrames()) {
+    // JavaScript onbeforeunload dialogs are ignored unless the frame received a
+    // user gesture. Make sure the frames have user gestures.
+    frame->ExecuteJavaScriptWithUserGestureForTests(base::string16());
+
+    // Disable the hang monitor, otherwise there will be a race between the
+    // beforeunload dialog and the beforeunload hang timer.
+    frame->DisableBeforeUnloadHangMonitorForTesting();
+  }
+}
+
 bool IsLastCommittedEntryOfPageType(WebContents* web_contents,
                                     content::PageType page_type) {
   NavigationEntry* last_entry =
@@ -482,6 +498,12 @@ void CrashTab(WebContents* web_contents) {
       rph, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
   rph->Shutdown(0, false);
   watcher.Wait();
+}
+
+void SimulateUnresponsiveRenderer(WebContents* web_contents,
+                                  RenderWidgetHost* widget) {
+  static_cast<WebContentsImpl*>(web_contents)
+      ->RendererUnresponsive(RenderWidgetHostImpl::From(widget));
 }
 
 #if defined(USE_AURA)
@@ -931,8 +953,8 @@ RenderFrameHost* FrameMatchingPredicate(
   std::set<RenderFrameHost*> frame_set;
   web_contents->ForEachFrame(
       base::Bind(&AddToSetIfFrameMatchesPredicate, &frame_set, predicate));
-  DCHECK_EQ(1U, frame_set.size());
-  return *frame_set.begin();
+  EXPECT_EQ(1U, frame_set.size());
+  return frame_set.size() == 1 ? *frame_set.begin() : nullptr;
 }
 
 bool FrameMatchesName(const std::string& name, RenderFrameHost* frame) {
@@ -1912,6 +1934,24 @@ bool TestNavigationManager::ShouldMonitorNavigation(NavigationHandle* handle) {
   if (current_state_ != NavigationState::INITIAL)
     return false;
   return true;
+}
+
+NavigationHandleCommitObserver::NavigationHandleCommitObserver(
+    content::WebContents* web_contents,
+    const GURL& url)
+    : content::WebContentsObserver(web_contents),
+      url_(url),
+      has_committed_(false),
+      was_same_document_(false),
+      was_renderer_initiated_(false) {}
+
+void NavigationHandleCommitObserver::DidFinishNavigation(
+    content::NavigationHandle* handle) {
+  if (handle->GetURL() != url_)
+    return;
+  has_committed_ = true;
+  was_same_document_ = handle->IsSameDocument();
+  was_renderer_initiated_ = handle->IsRendererInitiated();
 }
 
 ConsoleObserverDelegate::ConsoleObserverDelegate(WebContents* web_contents,

@@ -15,12 +15,15 @@ namespace aura {
 class Window;
 }
 
+namespace gfx {
+class Point;
+}
+
 namespace ui {
 class Event;
 }
 
 namespace ash {
-
 namespace wm {
 
 // Utility functions for window activation.
@@ -67,6 +70,11 @@ ASH_EXPORT void SnapWindowToPixelBoundary(aura::Window* window);
 // installs the SnapToPixelLayoutManager.
 ASH_EXPORT void SetSnapsChildrenToPhysicalPixelBoundary(
     aura::Window* container);
+
+// Convenience for window->delegate()->GetNonClientComponent(location) that
+// returns HTNOWHERE if window->delegate() is null.
+ASH_EXPORT int GetNonClientComponent(aura::Window* window,
+                                     const gfx::Point& location);
 
 }  // namespace wm
 }  // namespace ash

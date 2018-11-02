@@ -218,7 +218,7 @@ void {{v8_class_or_partial}}::indexedPropertyDeleterCallback(uint32_t index, con
 static void namedPropertyGetter(const AtomicString& name, const v8::PropertyCallbackInfo<v8::Value>& info) {
   {% if getter.is_raises_exception %}
   const CString& nameInUtf8 = name.Utf8();
-  ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kGetterContext, "{{interface_name}}", nameInUtf8.Data());
+  ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kGetterContext, "{{interface_name}}", nameInUtf8.data());
   {% endif %}
   {% if getter.is_call_with_script_state %}
   ScriptState* scriptState = ScriptState::ForReceiverObject(info);
@@ -268,7 +268,7 @@ void {{v8_class_or_partial}}::namedPropertyGetterCallback(v8::Local<v8::Name> na
 static void namedPropertySetter(const AtomicString& name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
   {% if setter.has_exception_state %}
   const CString& nameInUtf8 = name.Utf8();
-  ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kSetterContext, "{{interface_name}}", nameInUtf8.Data());
+  ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kSetterContext, "{{interface_name}}", nameInUtf8.data());
   {% endif %}
   {% if setter.is_call_with_script_state %}
   ScriptState* scriptState = ScriptState::ForReceiverObject(info);
@@ -338,7 +338,7 @@ void {{v8_class_or_partial}}::namedPropertySetterCallback(v8::Local<v8::Name> na
 static void namedPropertyDeleter(const AtomicString& name, const v8::PropertyCallbackInfo<v8::Boolean>& info) {
   {% if deleter.is_raises_exception %}
   const CString& nameInUtf8 = name.Utf8();
-  ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kDeletionContext, "{{interface_name}}", nameInUtf8.Data());
+  ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kDeletionContext, "{{interface_name}}", nameInUtf8.data());
   {% endif %}
   {% if deleter.is_call_with_script_state %}
   ScriptState* scriptState = ScriptState::ForReceiverObject(info);
@@ -401,7 +401,7 @@ void {{v8_class_or_partial}}::namedPropertyDeleterCallback(v8::Local<v8::Name> n
    communicate property attributes. #}
 static void namedPropertyQuery(const AtomicString& name, const v8::PropertyCallbackInfo<v8::Integer>& info) {
   const CString& nameInUtf8 = name.Utf8();
-  ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kGetterContext, "{{interface_name}}", nameInUtf8.Data());
+  ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kGetterContext, "{{interface_name}}", nameInUtf8.data());
   {% if getter.is_call_with_script_state %}
   ScriptState* scriptState = ScriptState::ForReceiverObject(info);
   {% endif %}
@@ -629,7 +629,7 @@ static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
 {##############################################################################}
 {% block constructor_callback %}
-{% if constructors or has_custom_constructor or has_event_constructor or has_html_constructor %}
+{% if constructors or has_custom_constructor or has_html_constructor %}
 void {{v8_class}}::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
   {% if measure_as %}
   UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), UseCounter::k{{measure_as('Constructor')}});
@@ -678,10 +678,10 @@ static const V8DOMConfiguration::AttributeConfiguration {{method.name}}OriginSaf
 {% set getter_callback_for_main_world = '%sForMainWorld' % getter_callback %}
 {% set setter_callback_for_main_world = '%sForMainWorld' % setter_callback
        if not method.is_unforgeable else 'nullptr' %}
-    {"{{method.name}}", {{getter_callback_for_main_world}}, {{setter_callback_for_main_world}}, nullptr, &{{v8_class}}::wrapperTypeInfo, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}, V8DOMConfiguration::MainWorld},
-    {"{{method.name}}", {{getter_callback}}, {{setter_callback}}, nullptr, &{{v8_class}}::wrapperTypeInfo, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}, V8DOMConfiguration::NonMainWorlds}}
+    {"{{method.name}}", {{getter_callback_for_main_world}}, {{setter_callback_for_main_world}}, &{{v8_class}}::wrapperTypeInfo, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}, V8DOMConfiguration::MainWorld},
+    {"{{method.name}}", {{getter_callback}}, {{setter_callback}}, &{{v8_class}}::wrapperTypeInfo, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}, V8DOMConfiguration::NonMainWorlds}}
 {% else %}
-    {"{{method.name}}", {{getter_callback}}, {{setter_callback}}, nullptr, &{{v8_class}}::wrapperTypeInfo, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}, V8DOMConfiguration::kAllWorlds}
+    {"{{method.name}}", {{getter_callback}}, {{setter_callback}}, &{{v8_class}}::wrapperTypeInfo, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}, V8DOMConfiguration::kAllWorlds}
 {% endif %}
 };
 for (const auto& attributeConfig : {{method.name}}OriginSafeAttributeConfiguration)

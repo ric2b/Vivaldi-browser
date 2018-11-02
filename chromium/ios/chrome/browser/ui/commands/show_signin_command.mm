@@ -14,7 +14,9 @@
 @implementation ShowSigninCommand
 
 @synthesize operation = _operation;
-@synthesize signInAccessPoint = _signInAccessPoint;
+@synthesize identity = _identity;
+@synthesize accessPoint = _accessPoint;
+@synthesize promoAction = _promoAction;
 @synthesize callback = _callback;
 
 - (instancetype)initWithTag:(NSInteger)tag {
@@ -23,22 +25,39 @@
 }
 
 - (instancetype)initWithOperation:(AuthenticationOperation)operation
-                signInAccessPoint:(signin_metrics::AccessPoint)signInAccessPoint
+                         identity:(ChromeIdentity*)identity
+                      accessPoint:(signin_metrics::AccessPoint)accessPoint
+                      promoAction:(signin_metrics::PromoAction)promoAction
                          callback:
                              (ShowSigninCommandCompletionCallback)callback {
   if ((self = [super initWithTag:IDC_SHOW_SIGNIN_IOS])) {
+    DCHECK(operation == AUTHENTICATION_OPERATION_SIGNIN || identity == nil);
     _operation = operation;
-    _signInAccessPoint = signInAccessPoint;
+    _identity = identity;
+    _accessPoint = accessPoint;
+    _promoAction = promoAction;
     _callback = [callback copy];
   }
   return self;
 }
 
 - (instancetype)initWithOperation:(AuthenticationOperation)operation
-                signInAccessPoint:
-                    (signin_metrics::AccessPoint)signInAccessPoint {
+                      accessPoint:(signin_metrics::AccessPoint)accessPoint
+                      promoAction:(signin_metrics::PromoAction)promoAction {
   return [self initWithOperation:operation
-               signInAccessPoint:signInAccessPoint
+                        identity:nil
+                     accessPoint:accessPoint
+                     promoAction:promoAction
+                        callback:nil];
+}
+
+- (instancetype)initWithOperation:(AuthenticationOperation)operation
+                      accessPoint:(signin_metrics::AccessPoint)accessPoint {
+  return [self initWithOperation:operation
+                        identity:nil
+                     accessPoint:accessPoint
+                     promoAction:signin_metrics::PromoAction::
+                                     PROMO_ACTION_NO_SIGNIN_PROMO
                         callback:nil];
 }
 

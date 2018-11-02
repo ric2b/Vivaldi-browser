@@ -6,12 +6,13 @@
 
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
+#include "components/subresource_filter/content/browser/subresource_filter_safe_browsing_activation_throttle.h"
+#include "components/subresource_filter/core/common/activation_decision.h"
 #include "third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h"
 
 using subresource_filter::ContentSubresourceFilterDriverFactory;
-
-using ActivationDecision = subresource_filter::
-    ContentSubresourceFilterDriverFactory::ActivationDecision;
+using subresource_filter::SubresourceFilterSafeBrowsingActivationThrottle;
+using ActivationDecision = subresource_filter::ActivationDecision;
 
 namespace internal {
 
@@ -123,9 +124,8 @@ void LogActivationDecisionMetrics(content::NavigationHandle* navigation_handle,
       static_cast<int>(decision),
       static_cast<int>(ActivationDecision::ACTIVATION_DECISION_MAX));
 
-  if (ContentSubresourceFilterDriverFactory::NavigationIsPageReload(
-          navigation_handle->GetURL(), navigation_handle->GetReferrer(),
-          navigation_handle->GetPageTransition())) {
+  if (SubresourceFilterSafeBrowsingActivationThrottle::NavigationIsPageReload(
+          navigation_handle)) {
     UMA_HISTOGRAM_ENUMERATION(
         internal::kHistogramSubresourceFilterActivationDecisionReload,
         static_cast<int>(decision),
@@ -137,7 +137,7 @@ void LogActivationDecisionMetrics(content::NavigationHandle* navigation_handle,
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 SubresourceFilterMetricsObserver::FlushMetricsOnAppEnterBackground(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   // FlushMetricsOnAppEnterBackground is invoked on Android in cases where the
   // app is about to be backgrounded, as part of the Activity.onPause()
@@ -162,109 +162,117 @@ SubresourceFilterMetricsObserver::OnCommit(
 }
 
 void SubresourceFilterMetricsObserver::OnComplete(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   OnGoingAway(timing, info, base::TimeTicks());
 }
 
 void SubresourceFilterMetricsObserver::OnLoadedResource(
-    const page_load_metrics::ExtraRequestInfo& extra_request_info) {
-  if (extra_request_info.was_cached) {
+    const page_load_metrics::ExtraRequestCompleteInfo&
+        extra_request_complete_info) {
+  if (extra_request_complete_info.was_cached) {
     ++num_cache_resources_;
-    cache_bytes_ += extra_request_info.raw_body_bytes;
+    cache_bytes_ += extra_request_complete_info.raw_body_bytes;
   } else {
     ++num_network_resources_;
-    network_bytes_ += extra_request_info.raw_body_bytes;
+    network_bytes_ += extra_request_complete_info.raw_body_bytes;
   }
 }
 
 void SubresourceFilterMetricsObserver::OnParseStop(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   if (!subresource_filter_observed_)
     return;
 
-  if (!WasStartedInForegroundOptionalEventInForeground(timing.parse_stop, info))
+  if (!WasStartedInForegroundOptionalEventInForeground(
+          timing.parse_timing->parse_stop, info))
     return;
 
-  base::TimeDelta parse_duration =
-      timing.parse_stop.value() - timing.parse_start.value();
+  base::TimeDelta parse_duration = timing.parse_timing->parse_stop.value() -
+                                   timing.parse_timing->parse_start.value();
   PAGE_LOAD_HISTOGRAM(internal::kHistogramSubresourceFilterParseDuration,
                       parse_duration);
   PAGE_LOAD_HISTOGRAM(
       internal::kHistogramSubresourceFilterParseBlockedOnScriptLoad,
-      timing.parse_blocked_on_script_load_duration.value());
+      timing.parse_timing->parse_blocked_on_script_load_duration.value());
   PAGE_LOAD_HISTOGRAM(
       internal::
           kHistogramSubresourceFilterParseBlockedOnScriptLoadDocumentWrite,
-      timing.parse_blocked_on_script_load_from_document_write_duration.value());
+      timing.parse_timing
+          ->parse_blocked_on_script_load_from_document_write_duration.value());
   PAGE_LOAD_HISTOGRAM(
       internal::kHistogramSubresourceFilterParseBlockedOnScriptExecution,
-      timing.parse_blocked_on_script_execution_duration.value());
+      timing.parse_timing->parse_blocked_on_script_execution_duration.value());
   PAGE_LOAD_HISTOGRAM(
       internal::
           kHistogramSubresourceFilterParseBlockedOnScriptExecutionDocumentWrite,
-      timing.parse_blocked_on_script_execution_from_document_write_duration
+      timing.parse_timing
+          ->parse_blocked_on_script_execution_from_document_write_duration
           .value());
 }
 
-void SubresourceFilterMetricsObserver::OnFirstContentfulPaint(
-    const page_load_metrics::PageLoadTiming& timing,
+void SubresourceFilterMetricsObserver::OnFirstContentfulPaintInPage(
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   if (!subresource_filter_observed_)
     return;
 
   if (WasStartedInForegroundOptionalEventInForeground(
-          timing.first_contentful_paint, info)) {
+          timing.paint_timing->first_contentful_paint, info)) {
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramSubresourceFilterFirstContentfulPaint,
-        timing.first_contentful_paint.value());
+        timing.paint_timing->first_contentful_paint.value());
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramSubresourceFilterParseStartToFirstContentfulPaint,
-        timing.first_contentful_paint.value() - timing.parse_start.value());
+        timing.paint_timing->first_contentful_paint.value() -
+            timing.parse_timing->parse_start.value());
   }
 }
 
-void SubresourceFilterMetricsObserver::OnFirstMeaningfulPaint(
-    const page_load_metrics::PageLoadTiming& timing,
-    const page_load_metrics::PageLoadExtraInfo& info) {
+void SubresourceFilterMetricsObserver::
+    OnFirstMeaningfulPaintInMainFrameDocument(
+        const page_load_metrics::mojom::PageLoadTiming& timing,
+        const page_load_metrics::PageLoadExtraInfo& info) {
   if (!subresource_filter_observed_)
     return;
 
   if (WasStartedInForegroundOptionalEventInForeground(
-          timing.first_meaningful_paint, info)) {
+          timing.paint_timing->first_meaningful_paint, info)) {
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramSubresourceFilterFirstMeaningfulPaint,
-        timing.first_meaningful_paint.value());
+        timing.paint_timing->first_meaningful_paint.value());
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramSubresourceFilterParseStartToFirstMeaningfulPaint,
-        timing.first_meaningful_paint.value() - timing.parse_start.value());
+        timing.paint_timing->first_meaningful_paint.value() -
+            timing.parse_timing->parse_start.value());
   }
 }
 
 void SubresourceFilterMetricsObserver::OnDomContentLoadedEventStart(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   if (!subresource_filter_observed_)
     return;
 
   if (WasStartedInForegroundOptionalEventInForeground(
-          timing.dom_content_loaded_event_start, info)) {
-    PAGE_LOAD_HISTOGRAM(internal::kHistogramSubresourceFilterDomContentLoaded,
-                        timing.dom_content_loaded_event_start.value());
+          timing.document_timing->dom_content_loaded_event_start, info)) {
+    PAGE_LOAD_HISTOGRAM(
+        internal::kHistogramSubresourceFilterDomContentLoaded,
+        timing.document_timing->dom_content_loaded_event_start.value());
   }
 }
 
 void SubresourceFilterMetricsObserver::OnLoadEventStart(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   if (!subresource_filter_observed_)
     return;
 
-  if (WasStartedInForegroundOptionalEventInForeground(timing.load_event_start,
-                                                      info)) {
+  if (WasStartedInForegroundOptionalEventInForeground(
+          timing.document_timing->load_event_start, info)) {
     PAGE_LOAD_HISTOGRAM(internal::kHistogramSubresourceFilterLoad,
-                        timing.load_event_start.value());
+                        timing.document_timing->load_event_start.value());
   }
 }
 
@@ -290,7 +298,7 @@ void SubresourceFilterMetricsObserver::MediaStartedPlaying(
 }
 
 void SubresourceFilterMetricsObserver::OnGoingAway(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info,
     base::TimeTicks app_background_time) {
   if (!subresource_filter_observed_)
@@ -356,10 +364,12 @@ void SubresourceFilterMetricsObserver::OnGoingAway(
     PAGE_LOAD_LONG_HISTOGRAM(
         internal::kHistogramSubresourceFilterForegroundDuration,
         foreground_duration.value());
-    if (timing.first_paint && timing.first_paint < foreground_duration) {
+    if (timing.paint_timing->first_paint &&
+        timing.paint_timing->first_paint < foreground_duration) {
       PAGE_LOAD_LONG_HISTOGRAM(
           internal::kHistogramSubresourceFilterForegroundDurationAfterPaint,
-          foreground_duration.value() - timing.first_paint.value());
+          foreground_duration.value() -
+              timing.paint_timing->first_paint.value());
     }
   }
 }

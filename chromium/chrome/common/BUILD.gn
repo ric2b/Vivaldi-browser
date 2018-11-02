@@ -68,6 +68,7 @@ static_library("common") {
     "chrome_content_client.cc",
     "chrome_content_client.h",
     "chrome_content_client_constants.cc",
+    "chrome_isolated_world_ids.h",
     "chrome_result_codes.h",
     "chrome_utility_messages.h",
     "common_message_generator.cc",
@@ -108,7 +109,12 @@ static_library("common") {
     "multi_process_lock_win.cc",
     "origin_trials/chrome_origin_trial_policy.cc",
     "origin_trials/chrome_origin_trial_policy.h",
+    "page_load_metrics/page_load_metrics_constants.h",
     "page_load_metrics/page_load_metrics_messages.h",
+    "page_load_metrics/page_load_metrics_param_traits.cc",
+    "page_load_metrics/page_load_metrics_param_traits.h",
+    "page_load_metrics/page_load_metrics_util.cc",
+    "page_load_metrics/page_load_metrics_util.h",
     "page_load_metrics/page_load_timing.cc",
     "page_load_metrics/page_load_timing.h",
     "page_load_metrics/page_track_decider.cc",
@@ -118,6 +124,7 @@ static_library("common") {
     "pause_tabs_field_trial.h",
     "pref_names_util.cc",
     "pref_names_util.h",
+    "prerender_messages.h",
     "prerender_types.h",
     "profiling.cc",
     "profiling.h",
@@ -159,6 +166,7 @@ static_library("common") {
   public_deps = [
     ":features",
     ":mojo_bindings",
+    ":page_load_metrics_mojom",
     "//base:base",
     "//base:base_static",
     "//base:i18n",
@@ -166,6 +174,7 @@ static_library("common") {
     "//chrome:strings",
     "//chrome/app/theme:theme_resources",
     "//chrome/common:constants",
+    "//chrome/common/media_router/mojo:dial_utility_interfaces",
     "//chrome/common/net",
     "//chrome/common/safe_browsing:proto",
     "//chrome/installer/util:with_no_strings",
@@ -225,7 +234,7 @@ static_library("common") {
     "//third_party/libxml",
     "//third_party/re2",
     "//third_party/widevine/cdm:headers",
-    "//third_party/zlib:zip",
+    "//third_party/zlib/google:zip",
     "//ui/accessibility",
     "//ui/base",
     "//ui/gfx/ipc",
@@ -245,6 +254,7 @@ static_library("common") {
     sources += [
       "cast_messages.cc",
       "cast_messages.h",
+      "extensions/api/automation_api_constants.h",
       "extensions/api/commands/commands_handler.cc",
       "extensions/api/commands/commands_handler.h",
       "extensions/api/extension_action/action_info.cc",
@@ -435,6 +445,7 @@ static_library("common") {
       "importer/profile_import_process_param_traits.cc",
       "importer/profile_import_process_param_traits.h",
       "importer/profile_import_process_param_traits_macros.h",
+      "importer/pstore_declarations.h",
       "importer/safari_importer_utils.h",
       "importer/safari_importer_utils.mm",
     ]
@@ -497,6 +508,8 @@ static_library("common") {
 
     if (safe_browsing_mode == 1) {
       sources += [
+        "safe_browsing/archive_analyzer_results.cc",
+        "safe_browsing/archive_analyzer_results.h",
         "safe_browsing/binary_feature_extractor.cc",
         "safe_browsing/binary_feature_extractor.h",
         "safe_browsing/binary_feature_extractor_mac.cc",
@@ -517,8 +530,6 @@ static_library("common") {
         "safe_browsing/protobuf_message_write_macros.h",
         "safe_browsing/zip_analyzer.cc",
         "safe_browsing/zip_analyzer.h",
-        "safe_browsing/zip_analyzer_results.cc",
-        "safe_browsing/zip_analyzer_results.h",
       ]
 
       public_deps += [ "//ipc" ]
@@ -541,10 +552,6 @@ static_library("common") {
       "media/cdm_host_file_path.h",
     ]
     public_deps += [ "//chrome/common:version_header" ]
-  }
-
-  if (enable_media_router) {
-    public_deps += [ "//chrome/common/media_router:interfaces" ]
   }
 }
 
@@ -647,6 +654,8 @@ static_library("test_support") {
   visibility = [ "//chrome/test:*" ]
 
   sources = [
+    "page_load_metrics/test/page_load_metrics_test_util.cc",
+    "page_load_metrics/test/page_load_metrics_test_util.h",
     "search/mock_searchbox.cc",
     "search/mock_searchbox.h",
   ]
@@ -697,6 +706,7 @@ source_set("app_mode_app_support") {
 
 mojom("mojo_bindings") {
   sources = [
+    "cache_stats_recorder.mojom",
     "conflicts/module_event_sink_win.mojom",
     "file_patcher.mojom",
     "image_context_menu_renderer.mojom",
@@ -725,6 +735,9 @@ mojom("mojo_bindings") {
     "//ui/gfx/geometry/mojo",
     "//url/mojo:url_mojom_gurl",
   ]
+
+  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
+  use_once_callback = false
 }
 
 mojom("instant_mojom") {
@@ -735,5 +748,15 @@ mojom("instant_mojom") {
   public_deps = [
     "//mojo/common:common_custom_types",
     "//url/mojo:url_mojom_gurl",
+  ]
+}
+
+mojom("page_load_metrics_mojom") {
+  sources = [
+    "page_load_metrics/page_load_metrics.mojom",
+  ]
+
+  public_deps = [
+    "//mojo/common:common_custom_types",
   ]
 }

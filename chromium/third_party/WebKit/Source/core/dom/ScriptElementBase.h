@@ -51,6 +51,7 @@ class CORE_EXPORT ScriptElementBase : public GarbageCollectedMixin {
   virtual String ForAttributeValue() const = 0;
   virtual String IntegrityAttributeValue() const = 0;
   virtual String LanguageAttributeValue() const = 0;
+  virtual bool NomoduleAttributeValue() const = 0;
   virtual String SourceAttributeValue() const = 0;
   virtual String TypeAttributeValue() const = 0;
 
@@ -59,7 +60,7 @@ class CORE_EXPORT ScriptElementBase : public GarbageCollectedMixin {
   virtual bool HasSourceAttribute() const = 0;
   virtual bool IsConnected() const = 0;
   virtual bool HasChildren() const = 0;
-  virtual bool IsNonceableElement() const = 0;
+  virtual const AtomicString& GetNonceForElement() const = 0;
   virtual AtomicString InitiatorName() const = 0;
 
   virtual bool AllowInlineScriptForCSP(const AtomicString& nonce,
@@ -71,9 +72,6 @@ class CORE_EXPORT ScriptElementBase : public GarbageCollectedMixin {
 
   ScriptLoader* Loader() const { return loader_.Get(); }
 
-  AtomicString nonce() const { return nonce_; }
-  void setNonce(const String& nonce) { nonce_ = AtomicString(nonce); }
-
   DECLARE_VIRTUAL_TRACE();
 
  protected:
@@ -82,9 +80,6 @@ class CORE_EXPORT ScriptElementBase : public GarbageCollectedMixin {
                               bool created_during_document_write);
 
   Member<ScriptLoader> loader_;
-
- private:
-  AtomicString nonce_;
 };
 
 }  // namespace blink

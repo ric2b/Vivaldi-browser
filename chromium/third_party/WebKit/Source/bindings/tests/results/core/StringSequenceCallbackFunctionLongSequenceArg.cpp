@@ -15,10 +15,10 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/IDLTypes.h"
 #include "bindings/core/v8/NativeValueTraitsImpl.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ToV8ForCore.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/ExecutionContext.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/Assertions.h"
 
 namespace blink {
@@ -31,23 +31,23 @@ StringSequenceCallbackFunctionLongSequenceArg* StringSequenceCallbackFunctionLon
 }
 
 StringSequenceCallbackFunctionLongSequenceArg::StringSequenceCallbackFunctionLongSequenceArg(ScriptState* scriptState, v8::Local<v8::Function> callback)
-    : m_scriptState(scriptState),
-    m_callback(scriptState->GetIsolate(), this, callback) {
-  DCHECK(!m_callback.IsEmpty());
+    : script_state_(scriptState),
+    callback_(scriptState->GetIsolate(), this, callback) {
+  DCHECK(!callback_.IsEmpty());
 }
 
 DEFINE_TRACE_WRAPPERS(StringSequenceCallbackFunctionLongSequenceArg) {
-  visitor->TraceWrappers(m_callback.Cast<v8::Value>());
+  visitor->TraceWrappers(callback_.Cast<v8::Value>());
 }
 
 bool StringSequenceCallbackFunctionLongSequenceArg::call(ScriptWrappable* scriptWrappable, const Vector<int32_t>& arg, Vector<String>& returnValue) {
-  if (m_callback.IsEmpty())
+  if (callback_.IsEmpty())
     return false;
 
-  if (!m_scriptState->ContextIsValid())
+  if (!script_state_->ContextIsValid())
     return false;
 
-  ExecutionContext* context = ExecutionContext::From(m_scriptState.Get());
+  ExecutionContext* context = ExecutionContext::From(script_state_.Get());
   DCHECK(context);
   if (context->IsContextSuspended() || context->IsContextDestroyed())
     return false;
@@ -55,21 +55,21 @@ bool StringSequenceCallbackFunctionLongSequenceArg::call(ScriptWrappable* script
   // TODO(bashi): Make sure that using DummyExceptionStateForTesting is OK.
   // crbug.com/653769
   DummyExceptionStateForTesting exceptionState;
-  ScriptState::Scope scope(m_scriptState.Get());
-  v8::Isolate* isolate = m_scriptState->GetIsolate();
+  ScriptState::Scope scope(script_state_.Get());
+  v8::Isolate* isolate = script_state_->GetIsolate();
 
   v8::Local<v8::Value> thisValue = ToV8(
       scriptWrappable,
-      m_scriptState->GetContext()->Global(),
+      script_state_->GetContext()->Global(),
       isolate);
 
-  v8::Local<v8::Value> argArgument = ToV8(arg, m_scriptState->GetContext()->Global(), m_scriptState->GetIsolate());
+  v8::Local<v8::Value> argArgument = ToV8(arg, script_state_->GetContext()->Global(), script_state_->GetIsolate());
   v8::Local<v8::Value> argv[] = { argArgument };
   v8::TryCatch exceptionCatcher(isolate);
   exceptionCatcher.SetVerbose(true);
 
   v8::Local<v8::Value> v8ReturnValue;
-  if (!V8ScriptRunner::CallFunction(m_callback.NewLocal(isolate),
+  if (!V8ScriptRunner::CallFunction(callback_.NewLocal(isolate),
                                     context,
                                     thisValue,
                                     1,
@@ -78,7 +78,7 @@ bool StringSequenceCallbackFunctionLongSequenceArg::call(ScriptWrappable* script
     return false;
   }
 
-  Vector<String> cppValue = ToImplArray<Vector<String>>(v8ReturnValue, 0, m_scriptState->GetIsolate(), exceptionState);
+  Vector<String> cppValue = NativeValueTraits<IDLSequence<IDLString>>::NativeValue(script_state_->GetIsolate(), v8ReturnValue, exceptionState);
   if (exceptionState.HadException())
     return false;
   returnValue = cppValue;

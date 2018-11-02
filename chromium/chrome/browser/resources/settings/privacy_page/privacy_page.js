@@ -47,7 +47,9 @@ Polymer({
     /** @private */
     isGuest_: {
       type: Boolean,
-      value: function() { return loadTimeData.getBoolean('isGuest'); }
+      value: function() {
+        return loadTimeData.getBoolean('isGuest');
+      }
     },
 
 // <if expr="_google_chrome and not chromeos">
@@ -124,6 +126,7 @@ Polymer({
     'doNotTrackDialogIf.dom-change': 'onDoNotTrackDomChange_',
   },
 
+  /** @override */
   ready: function() {
     this.ContentSettingsTypes = settings.ContentSettingsTypes;
 
@@ -187,6 +190,11 @@ Polymer({
     this.showDoNotTrackDialog_ = false;
   },
 
+  /** @private */
+  onDoNotTrackDialogClosed_: function() {
+    cr.ui.focusWithoutInk(this.$.doNotTrack);
+  },
+
   /**
    * Handles the shared proxy confirmation dialog 'Confirm' button.
    * @private
@@ -242,13 +250,7 @@ Polymer({
   /** @private */
   onDialogClosed_: function() {
     settings.navigateToPreviousRoute();
-    this.$.clearBrowsingDataTrigger.focus();
-  },
-
-  /** @private */
-  onHelpTap_: function() {
-    window.open(
-        'https://support.google.com/chrome/?p=settings_manage_exceptions');
+    cr.ui.focusWithoutInk(assert(this.$.clearBrowsingDataTrigger));
   },
 
   /** @private */
@@ -324,14 +326,6 @@ Polymer({
         loadTimeData.getString('siteSettings') :
         loadTimeData.getString('contentSettings');
   },
-
-// <if expr="chromeos">
-  /** @private */
-  onAdobeFlashStorageClicked_: function() {
-    window.open('https://www.macromedia.com/support/' +
-        'documentation/en/flashplayer/help/settings_manager07.html');
-  },
-// </if>
 
   /** @private */
   getProtectedContentLabel_: function(value) {

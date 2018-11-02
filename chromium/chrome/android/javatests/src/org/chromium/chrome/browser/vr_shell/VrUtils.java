@@ -22,6 +22,7 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Class containing static functions and constants that are useful for VR
@@ -48,6 +49,23 @@ public class VrUtils {
     private static final int RESERVED = 456;
 
     /**
+     * Gets the VrShellDelegate instance on the UI thread, as otherwise the
+     * Choreographer obtained in VrShellDelegate's constructor is for the instrumentation
+     * thread instead of the UI thread.
+     * @return The browser's current VrShellDelegate instance
+     */
+    public static VrShellDelegate getVrShellDelegateInstance() {
+        final AtomicReference<VrShellDelegate> delegate = new AtomicReference<VrShellDelegate>();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                delegate.set(VrShellDelegate.getInstanceForTesting());
+            }
+        });
+        return delegate.get();
+    }
+
+    /**
      * Forces the browser into VR mode via a VrShellDelegate call.
      */
     public static void forceEnterVr() {
@@ -67,7 +85,8 @@ public class VrUtils {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                vrDelegate.shutdownVr(false /* isPausing */, false /* showTransition */);
+                vrDelegate.shutdownVr(true /* disableVrMode */, false /* canReenter */,
+                        true /* stayingInChrome */);
             }
         });
     }
@@ -101,7 +120,7 @@ public class VrUtils {
      * Simulates the NFC tag of the Daydream headset being scanned.
      * @param context The Context that the activity will be started from.
      */
-    public static void simNfc(Context context) {
+    public static void simNfcScan(Context context) {
         Intent nfcIntent = makeNfcIntent();
         try {
             context.startActivity(nfcIntent);
@@ -127,12 +146,13 @@ public class VrUtils {
     }
 
     /**
-     * Determines whether an InfoBar prompting the user to install/update VR
-     * Services is present.
+     * Determines is there is any InfoBar present in the given View hierarchy.
      * @param parentView The View to start the search in
      * @return Whether the InfoBar is present
      */
-    public static boolean isUpdateInstallInfoBarPresent(View parentView) {
+    public static boolean isInfoBarPresent(View parentView) {
+        // TODO(ymalik): This will return true if any infobar is present. Is it
+        // possible to determine the type of infobar present (e.g. Feedback)?
         // InfoBarContainer will be present regardless of whether an InfoBar
         // is actually there, but InfoBarLayout is only present if one is
         // currently showing.
@@ -141,7 +161,7 @@ public class VrUtils {
         } else if (parentView instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) parentView;
             for (int i = 0; i < group.getChildCount(); i++) {
-                if (isUpdateInstallInfoBarPresent(group.getChildAt(i))) return true;
+                if (isInfoBarPresent(group.getChildAt(i))) return true;
             }
         }
         return false;

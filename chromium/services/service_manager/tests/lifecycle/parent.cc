@@ -11,7 +11,6 @@
 #include "services/service_manager/public/c/main.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_runner.h"
@@ -24,12 +23,11 @@ void QuitLoop(base::RunLoop* loop) {
 }
 
 class Parent : public service_manager::Service,
-               public service_manager::InterfaceFactory<
-                   service_manager::test::mojom::Parent>,
                public service_manager::test::mojom::Parent {
  public:
   Parent() {
-    registry_.AddInterface<service_manager::test::mojom::Parent>(this);
+    registry_.AddInterface<service_manager::test::mojom::Parent>(
+        base::Bind(&Parent::Create, base::Unretained(this)));
   }
   ~Parent() override {
     parent_bindings_.CloseAllBindings();
@@ -37,16 +35,15 @@ class Parent : public service_manager::Service,
 
  private:
   // Service:
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(source_info.identity, interface_name,
+    registry_.BindInterface(source_info, interface_name,
                             std::move(interface_pipe));
   }
 
-  // InterfaceFactory<service_manager::test::mojom::Parent>:
-  void Create(const service_manager::Identity& remote_identity,
-              service_manager::test::mojom::ParentRequest request) override {
+  void Create(const service_manager::BindSourceInfo& source_info,
+              service_manager::test::mojom::ParentRequest request) {
     parent_bindings_.AddBinding(this, std::move(request));
   }
 

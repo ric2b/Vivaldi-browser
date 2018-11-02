@@ -26,6 +26,11 @@
     "dependencies": [ "permission:bookmarksPrivate" ],
     "contexts": [ "blessed_extension" ]
   },
+  "calendar": {
+    "vivaldi": true,
+    "dependencies": [ "permission:calendar" ],
+    "contexts": [ "blessed_extension" ]
+  },
   "devtoolsPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:devtoolsPrivate" ],

@@ -79,7 +79,6 @@
 #include "components/gcm_driver/gcm_channel_status_syncer.h"
 #include "components/metrics/metrics_service.h"
 #include "components/network_time/network_time_tracker.h"
-#include "components/ntp_snippets/bookmarks/bookmark_suggestions_provider.h"
 #include "components/ntp_snippets/content_suggestions_service.h"
 #include "components/ntp_snippets/remote/remote_suggestions_provider_impl.h"
 #include "components/ntp_snippets/remote/remote_suggestions_scheduler_impl.h"
@@ -90,6 +89,7 @@
 #include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager.h"
+#include "components/payments/core/payment_prefs.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/browser/url_blacklist_manager.h"
 #include "components/policy/core/common/policy_statistics_collector.h"
@@ -134,14 +134,12 @@
 #include "chrome/browser/extensions/extension_web_ui.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/signin/easy_unlock_service.h"
+#include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/webui/extensions/extension_settings_handler.h"
 #include "extensions/browser/api/audio/audio_api.h"
 #include "extensions/browser/api/runtime/runtime_api.h"
 #include "extensions/browser/extension_prefs.h"
-#if defined(ENABLE_MEDIA_ROUTER)
-#include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -191,6 +189,7 @@
 #include "chrome/browser/chromeos/file_system_provider/registry.h"
 #include "chrome/browser/chromeos/first_run/first_run.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_mode_detector.h"
+#include "chrome/browser/chromeos/login/quick_unlock/fingerprint_storage.h"
 #include "chrome/browser/chromeos/login/quick_unlock/pin_storage.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter.h"
@@ -228,7 +227,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chromeos/audio/audio_devices_pref_handler_impl.h"
 #include "chromeos/chromeos_switches.h"
-#include "chromeos/components/tether/initializer.h"
 #include "chromeos/network/proxy/proxy_config_handler.h"
 #include "chromeos/timezone/timezone_resolver.h"
 #include "components/invalidation/impl/invalidator_storage.h"
@@ -240,10 +238,6 @@
 
 #if defined(OS_CHROMEOS) && BUILDFLAG(ENABLE_APP_LIST)
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
-#endif
-
-#if defined(OS_CHROMEOS) || BUILDFLAG(ENABLE_EXTENSIONS)
-#include "components/cryptauth/cryptauth_service.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -332,9 +326,9 @@ void DeleteWebRTCIdentityStoreDBOnFileThread(
 
 void DeleteWebRTCIdentityStoreDB(const Profile& profile) {
   content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::FILE,
-      FROM_HERE,
-      base::Bind(&DeleteWebRTCIdentityStoreDBOnFileThread, profile.GetPath()),
+      content::BrowserThread::FILE, FROM_HERE,
+      base::BindOnce(&DeleteWebRTCIdentityStoreDBOnFileThread,
+                     profile.GetPath()),
       base::TimeDelta::FromSeconds(120));
 }
 
@@ -496,7 +490,6 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   MediaStreamDevicesController::RegisterProfilePrefs(registry);
   NetHttpSessionParamsObserver::RegisterProfilePrefs(registry);
   NotifierStateTracker::RegisterProfilePrefs(registry);
-  ntp_snippets::BookmarkSuggestionsProvider::RegisterProfilePrefs(registry);
   ntp_snippets::ContentSuggestionsService::RegisterProfilePrefs(registry);
   ntp_snippets::ForeignSessionsSuggestionsProvider::RegisterProfilePrefs(
       registry);
@@ -507,6 +500,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   ntp_tiles::MostVisitedSites::RegisterProfilePrefs(registry);
   password_bubble_experiment::RegisterPrefs(registry);
   password_manager::PasswordManager::RegisterProfilePrefs(registry);
+  payments::RegisterProfilePrefs(registry);
   PrefProxyConfigTrackerImpl::RegisterProfilePrefs(registry);
   PrefsTabHelper::RegisterProfilePrefs(registry);
   Profile::RegisterProfilePrefs(registry);
@@ -525,12 +519,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   policy::URLBlacklistManager::RegisterProfilePrefs(registry);
   certificate_transparency::CTPolicyManager::RegisterPrefs(registry);
 
-#if BUILDFLAG(ENABLE_EXTENSIONS) || defined(OS_CHROMEOS)
-  cryptauth::CryptAuthService::RegisterProfilePrefs(registry);
-#endif
-
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  EasyUnlockService::RegisterProfilePrefs(registry);
   ExtensionWebUI::RegisterProfilePrefs(registry);
   RegisterAnimationPolicyPrefs(registry);
   ToolbarActionsBar::RegisterProfilePrefs(registry);
@@ -617,6 +606,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   chromeos::file_system_provider::RegisterProfilePrefs(registry);
   chromeos::KeyPermissions::RegisterProfilePrefs(registry);
   chromeos::MultiProfileUserController::RegisterProfilePrefs(registry);
+  chromeos::quick_unlock::FingerprintStorage::RegisterProfilePrefs(registry);
   chromeos::quick_unlock::PinStorage::RegisterProfilePrefs(registry);
   chromeos::Preferences::RegisterProfilePrefs(registry);
   chromeos::PrintersManager::RegisterProfilePrefs(registry);
@@ -624,10 +614,6 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   chromeos::SAMLOfflineSigninLimiter::RegisterProfilePrefs(registry);
   chromeos::ServicesCustomizationDocument::RegisterProfilePrefs(registry);
   chromeos::system::InputDeviceSettings::RegisterProfilePrefs(registry);
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kEnableTether)) {
-    chromeos::tether::Initializer::RegisterProfilePrefs(registry);
-  }
   chromeos::UserImageSyncObserver::RegisterProfilePrefs(registry);
   extensions::EPKPChallengeUserKey::RegisterProfilePrefs(registry);
   flags_ui::PrefServiceFlagsStorage::RegisterProfilePrefs(registry);
@@ -657,7 +643,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 #endif
 
 #if defined(USE_ASH)
-  ash::launcher::RegisterChromeLauncherUserPrefs(registry);
+  RegisterChromeLauncherUserPrefs(registry);
 #endif
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
@@ -729,20 +715,6 @@ void MigrateObsoleteBrowserPrefs(Profile* profile, PrefService* local_state) {
 void MigrateObsoleteProfilePrefs(Profile* profile) {
   PrefService* profile_prefs = profile->GetPrefs();
 
-#if defined(OS_MACOSX)
-  // Migrate the value of kHideFullscreenToolbar to kShowFullscreenToolbar if
-  // it was set by the user. See crbug.com/590827.
-  // Added 03/2016.
-  const PrefService::Preference* hide_pref =
-      profile_prefs->FindPreference(prefs::kHideFullscreenToolbar);
-  if (!hide_pref->IsDefaultValue()) {
-    bool hide_pref_value =
-        profile_prefs->GetBoolean(prefs::kHideFullscreenToolbar);
-    profile_prefs->SetBoolean(prefs::kShowFullscreenToolbar, !hide_pref_value);
-    profile_prefs->ClearPref(prefs::kHideFullscreenToolbar);
-  }
-#endif
-
 #if BUILDFLAG(ENABLE_GOOGLE_NOW)
   // Added 3/2016.
   profile_prefs->ClearPref(kGoogleGeolocationAccessEnabled);
@@ -784,7 +756,6 @@ void MigrateObsoleteProfilePrefs(Profile* profile) {
   //  - MediaRouterUIBrowserTest.MigrateToolbarIconShownPref
   //  - MediaRouterUIBrowserTest.MigrateToolbarIconUnshownPref
   {
-#if defined(ENABLE_MEDIA_ROUTER)
     bool show_cast_icon = false;
     const base::DictionaryValue* action_migration_dict =
         profile_prefs->GetDictionary(kToolbarMigratedComponentActionStatus);
@@ -794,7 +765,6 @@ void MigrateObsoleteProfilePrefs(Profile* profile) {
             &show_cast_icon)) {
       profile_prefs->SetBoolean(prefs::kShowCastIconInToolbar, show_cast_icon);
     }
-#endif  // defined(ENABLE_MEDIA_ROUTER)
     profile_prefs->ClearPref(kToolbarMigratedComponentActionStatus);
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
@@ -830,7 +800,12 @@ std::set<PrefValueStore::PrefStoreType> ExpectedPrefStores() {
 
 std::set<PrefValueStore::PrefStoreType> InProcessPrefStores() {
   auto pref_stores = ExpectedPrefStores();
-  pref_stores.erase(PrefValueStore::DEFAULT_STORE);
+  // Until we have a distinction between owned and unowned prefs, we always have
+  // default values for all prefs locally. Since we already have the defaults it
+  // would be wasteful to request them from the service by connecting to the
+  // DEFAULT_STORE.
+  // TODO(sammc): Once we have this distinction, connect to the default pref
+  // store here (by erasing it from |pref_stores|).
   pref_stores.erase(PrefValueStore::USER_STORE);
   return pref_stores;
 }

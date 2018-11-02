@@ -26,7 +26,7 @@
 #include "bindings/core/v8/BindingSecurity.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptEventListener.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
@@ -162,6 +162,22 @@ void HTMLFrameElementBase::ParseAttribute(
   } else {
     HTMLFrameOwnerElement::ParseAttribute(params);
   }
+}
+
+RefPtr<SecurityOrigin> HTMLFrameElementBase::GetOriginForFeaturePolicy() const {
+  // Sandboxed frames have a unique origin.
+  if (GetSandboxFlags() & kSandboxOrigin)
+    return SecurityOrigin::CreateUnique();
+
+  // If the frame will inherit its origin from the owner, then use the owner's
+  // origin when constructing the container policy.
+  KURL url = GetDocument().CompleteURL(url_);
+  if (Document::ShouldInheritSecurityOriginFromOwner(url))
+    return GetDocument().GetSecurityOrigin();
+
+  // Other frames should use the origin defined by the absolute URL (this will
+  // be a unique origin for data: URLs)
+  return SecurityOrigin::Create(url);
 }
 
 void HTMLFrameElementBase::SetNameAndOpenURL() {

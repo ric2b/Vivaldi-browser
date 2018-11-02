@@ -4,13 +4,13 @@
 
 #include "components/previews/core/previews_experiments.h"
 
-#include <string>
-
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "components/previews/core/previews_features.h"
 
 namespace previews {
 
@@ -75,6 +75,15 @@ net::EffectiveConnectionType GetParamValueAsECT(
   return value;
 }
 
+bool IsIncludedInClientSidePreviewsExperimentsFieldTrial() {
+  // By convention, an experiment in the client-side previews study enables use
+  // of at least one client-side previews optimization if its name begins with
+  // "Enabled."
+  return base::StartsWith(
+      base::FieldTrialList::FindFullName(kClientSidePreviewsFieldTrial),
+      kEnabled, base::CompareCase::SENSITIVE);
+}
+
 }  // namespace
 
 namespace params {
@@ -128,7 +137,7 @@ base::TimeDelta OfflinePreviewFreshnessDuration() {
                          "offline_preview_freshness_duration_in_days", 7));
 }
 
-net::EffectiveConnectionType EffectiveConnectionTypeThresholdForOffline() {
+net::EffectiveConnectionType DefaultEffectiveConnectionTypeThreshold() {
   return GetParamValueAsECT(kClientSidePreviewsFieldTrial,
                             kEffectiveConnectionTypeThreshold,
                             net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G);
@@ -136,10 +145,11 @@ net::EffectiveConnectionType EffectiveConnectionTypeThresholdForOffline() {
 
 bool IsOfflinePreviewsEnabled() {
   //  Check if "show_offline_pages" is set to "true".
-  return IsIncludedInClientSidePreviewsExperimentsFieldTrial() &&
-         base::GetFieldTrialParamValue(kClientSidePreviewsFieldTrial,
-                                       kOfflinePagesSlowNetwork) ==
-             kExperimentEnabled;
+  return base::FeatureList::IsEnabled(features::kOfflinePreviews) ||
+         (IsIncludedInClientSidePreviewsExperimentsFieldTrial() &&
+          base::GetFieldTrialParamValue(kClientSidePreviewsFieldTrial,
+                                        kOfflinePagesSlowNetwork) ==
+              kExperimentEnabled);
 }
 
 int OfflinePreviewsVersion() {
@@ -147,9 +157,10 @@ int OfflinePreviewsVersion() {
 }
 
 bool IsClientLoFiEnabled() {
-  return base::StartsWith(
-      base::FieldTrialList::FindFullName(kClientLoFiExperimentName), kEnabled,
-      base::CompareCase::SENSITIVE);
+  return base::FeatureList::IsEnabled(features::kClientLoFi) ||
+         base::StartsWith(
+             base::FieldTrialList::FindFullName(kClientLoFiExperimentName),
+             kEnabled, base::CompareCase::SENSITIVE);
 }
 
 int ClientLoFiVersion() {
@@ -164,13 +175,20 @@ net::EffectiveConnectionType EffectiveConnectionTypeThresholdForClientLoFi() {
 
 }  // namespace params
 
-bool IsIncludedInClientSidePreviewsExperimentsFieldTrial() {
-  // By convention, an experiment in the client-side previews study enables use
-  // of at least one client-side previews optimization if its name begins with
-  // "Enabled."
-  return base::StartsWith(
-      base::FieldTrialList::FindFullName(kClientSidePreviewsFieldTrial),
-      kEnabled, base::CompareCase::SENSITIVE);
+std::string GetStringNameForType(PreviewsType type) {
+  switch (type) {
+    case PreviewsType::OFFLINE:
+      return "Offline";
+    case PreviewsType::LOFI:
+      return "LoFi";
+    case PreviewsType::LITE_PAGE:
+      return "LitePage";
+    case PreviewsType::NONE:
+    case PreviewsType::LAST:
+      break;
+  }
+  NOTREACHED();
+  return std::string();
 }
 
 }  // namespace previews

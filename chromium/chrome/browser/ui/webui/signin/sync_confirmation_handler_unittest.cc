@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/signin/sync_confirmation_handler.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/test/user_action_tester.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
@@ -34,8 +35,7 @@ const double kDefaultDialogHeight = 350.0;
 
 class TestingSyncConfirmationHandler : public SyncConfirmationHandler {
  public:
-  explicit TestingSyncConfirmationHandler(Browser* browser,
-                                          content::WebUI* web_ui)
+  TestingSyncConfirmationHandler(Browser* browser, content::WebUI* web_ui)
       : SyncConfirmationHandler(browser) {
     set_web_ui(web_ui);
   }
@@ -189,7 +189,7 @@ TEST_F(SyncConfirmationHandlerTest, TestSetImageIfPrimaryAccountReady) {
       "http://picture.example.com/picture.jpg");
 
   base::ListValue args;
-  args.Set(0, new base::Value(kDefaultDialogHeight));
+  args.Set(0, base::MakeUnique<base::Value>(kDefaultDialogHeight));
   handler()->HandleInitializedWithSize(&args);
   EXPECT_EQ(2U, web_ui()->call_data().size());
 
@@ -218,7 +218,7 @@ TEST_F(SyncConfirmationHandlerTest, TestSetImageIfPrimaryAccountReady) {
 
 TEST_F(SyncConfirmationHandlerTest, TestSetImageIfPrimaryAccountReadyLater) {
   base::ListValue args;
-  args.Set(0, new base::Value(kDefaultDialogHeight));
+  args.Set(0, base::MakeUnique<base::Value>(kDefaultDialogHeight));
   handler()->HandleInitializedWithSize(&args);
   EXPECT_EQ(2U, web_ui()->call_data().size());
 
@@ -270,7 +270,7 @@ TEST_F(SyncConfirmationHandlerTest, TestSetImageIfPrimaryAccountReadyLater) {
 TEST_F(SyncConfirmationHandlerTest,
        TestSetImageIgnoredIfSecondaryAccountUpdated) {
   base::ListValue args;
-  args.Set(0, new base::Value(kDefaultDialogHeight));
+  args.Set(0, base::MakeUnique<base::Value>(kDefaultDialogHeight));
   handler()->HandleInitializedWithSize(&args);
   EXPECT_EQ(2U, web_ui()->call_data().size());
 

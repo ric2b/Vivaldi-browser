@@ -65,7 +65,7 @@ AXMenuListOption* AXMenuListPopup::MenuListOptionAXObject(
   if (!isHTMLOptionElement(*element))
     return 0;
 
-  AXObject* object = AxObjectCache().GetOrCreate(element);
+  AXObjectImpl* object = AxObjectCache().GetOrCreate(element);
   if (!object || !object->IsMenuListOption())
     return 0;
 
@@ -124,24 +124,29 @@ void AXMenuListPopup::UpdateChildrenIfNecessary() {
     AddChildren();
 }
 
-void AXMenuListPopup::DidUpdateActiveOption(int option_index) {
+void AXMenuListPopup::DidUpdateActiveOption(int option_index,
+                                            bool fire_notifications) {
   UpdateChildrenIfNecessary();
 
+  int old_index = active_index_;
+  active_index_ = option_index;
+
+  if (!fire_notifications)
+    return;
+
   AXObjectCacheImpl& cache = AxObjectCache();
-  if (active_index_ != option_index && active_index_ >= 0 &&
-      active_index_ < static_cast<int>(children_.size())) {
-    AXObject* previous_child = children_[active_index_].Get();
+  if (old_index != option_index && old_index >= 0 &&
+      old_index < static_cast<int>(children_.size())) {
+    AXObjectImpl* previous_child = children_[old_index].Get();
     cache.PostNotification(previous_child,
                            AXObjectCacheImpl::kAXMenuListItemUnselected);
   }
 
   if (option_index >= 0 && option_index < static_cast<int>(children_.size())) {
-    AXObject* child = children_[option_index].Get();
+    AXObjectImpl* child = children_[option_index].Get();
     cache.PostNotification(this, AXObjectCacheImpl::kAXActiveDescendantChanged);
     cache.PostNotification(child, AXObjectCacheImpl::kAXMenuListItemSelected);
   }
-
-  active_index_ = option_index;
 }
 
 void AXMenuListPopup::DidHide() {
@@ -167,7 +172,7 @@ void AXMenuListPopup::DidShow() {
                            AXObjectCacheImpl::kAXFocusedUIElementChanged);
 }
 
-AXObject* AXMenuListPopup::ActiveDescendant() {
+AXObjectImpl* AXMenuListPopup::ActiveDescendant() {
   if (active_index_ < 0 || active_index_ >= static_cast<int>(Children().size()))
     return nullptr;
 

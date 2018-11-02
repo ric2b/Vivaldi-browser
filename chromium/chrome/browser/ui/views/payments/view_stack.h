@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PAYMENTS_VIEW_STACK_H_
 #define CHROME_BROWSER_UI_VIEWS_PAYMENTS_VIEW_STACK_H_
 
+#include <vector>
+
 #include "ui/views/view.h"
 #include "ui/views/animation/bounds_animator.h"
 #include "ui/views/animation/bounds_animator_observer.h"
@@ -33,11 +35,18 @@ class ViewStack : public views::BoundsAnimatorObserver,
   // it's properly deleted after the animation.
   void Pop();
 
+  // Removes |n| views from the stack but only animates the topmost one. The end
+  // result is an animation from the top-most view to the destination view.
+  void PopMany(int n);
+
+  size_t size() const;
+
   // views::View:
   // The children of this view must not be able to process events when the views
   // are being animated so this returns false when an animation is in progress.
   bool CanProcessEventsWithinSubtree() const override;
   void Layout() override;
+  void RequestFocus() override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(

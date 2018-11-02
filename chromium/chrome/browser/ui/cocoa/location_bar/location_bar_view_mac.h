@@ -69,6 +69,7 @@ class LocationBarViewMac : public LocationBar,
   void UpdateManagePasswordsIconAndBubble() override;
   void UpdateSaveCreditCardIcon() override;
   void UpdateBookmarkStarVisibility() override;
+  void UpdateZoomViewVisibility() override;
   void UpdateLocationBarVisibility(bool visible, bool animate) override;
   void SaveStateToContents(content::WebContents* contents) override;
   void Revert() override;
@@ -108,9 +109,12 @@ class LocationBarViewMac : public LocationBar,
   //  save credit card bubble to aim at.
   NSPoint GetSaveCreditCardBubblePoint() const;
 
-  // Get the point in window coordinates in the security icon at which the page
-  // info bubble aims.
+  // Get the point in window coordinates for the page info bubble anchor.
   NSPoint GetPageInfoBubblePoint() const;
+
+  // Get the point in window coordinates in the security icon at which infobar
+  // arrows should point.
+  NSPoint GetInfoBarAnchorPoint() const;
 
   // When any image decorations change, call this to ensure everything is
   // redrawn and laid out if necessary.
@@ -238,8 +242,9 @@ class LocationBarViewMac : public LocationBar,
   std::vector<LocationBarDecoration*> GetDecorations();
 
   // Updates |decoration|'s accessibility view's position to match the computed
-  // position the decoration will be drawn at.
-  void UpdateAccessibilityViewPosition(LocationBarDecoration* decoration);
+  // position the decoration will be drawn at, and update its enabled state
+  // based on whether |decoration| is accepting presses currently.
+  void UpdateAccessibilityView(LocationBarDecoration* decoration);
 
   std::unique_ptr<OmniboxViewMac> omnibox_view_;
 

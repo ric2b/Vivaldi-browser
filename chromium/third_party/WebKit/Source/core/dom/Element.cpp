@@ -27,13 +27,10 @@
 #include "core/dom/Element.h"
 
 #include <memory>
-#include "bindings/core/v8/DOMDataStore.h"
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8DOMActivityLogger.h"
-#include "bindings/core/v8/V8DOMWrapper.h"
-#include "bindings/core/v8/V8PerContextData.h"
 #include "core/CSSValueKeywords.h"
 #include "core/SVGNames.h"
 #include "core/XMLNames.h"
@@ -54,6 +51,7 @@
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Attr.h"
 #include "core/dom/CSSSelectorWatch.h"
+#include "core/dom/ClassList.h"
 #include "core/dom/ClientRect.h"
 #include "core/dom/ClientRectList.h"
 #include "core/dom/DatasetDOMStringMap.h"
@@ -102,7 +100,6 @@
 #include "core/frame/UseCounter.h"
 #include "core/frame/VisualViewport.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
-#include "core/html/ClassList.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLDocument.h"
@@ -138,6 +135,9 @@
 #include "core/svg/SVGTreeScopeResources.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/bindings/DOMDataStore.h"
+#include "platform/bindings/V8DOMWrapper.h"
+#include "platform/bindings/V8PerContextData.h"
 #include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/CompositorMutation.h"
 #include "platform/scroll/ScrollableArea.h"
@@ -430,8 +430,16 @@ AtomicString Element::LowercaseIfNecessary(const AtomicString& name) const {
                                                            : name;
 }
 
+const AtomicString& Element::nonce() const {
+  return HasRareData() ? GetElementRareData()->GetNonce() : g_empty_atom;
+}
+
+void Element::setNonce(const AtomicString& nonce) {
+  EnsureElementRareData().SetNonce(nonce);
+}
+
 void Element::scrollIntoView(bool align_to_top) {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
+  GetDocument().EnsurePaintLocationDataValidForNode(this);
 
   if (!GetLayoutObject())
     return;
@@ -456,7 +464,7 @@ void Element::scrollIntoView(bool align_to_top) {
 }
 
 void Element::scrollIntoViewIfNeeded(bool center_if_needed) {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
+  GetDocument().EnsurePaintLocationDataValidForNode(this);
 
   if (!GetLayoutObject())
     return;
@@ -643,7 +651,7 @@ void Element::CallApplyScroll(ScrollState& scroll_state) {
 }
 
 int Element::OffsetLeft() {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
+  GetDocument().EnsurePaintLocationDataValidForNode(this);
   if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
     return AdjustLayoutUnitForAbsoluteZoom(
                LayoutUnit(
@@ -654,7 +662,7 @@ int Element::OffsetLeft() {
 }
 
 int Element::OffsetTop() {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
+  GetDocument().EnsurePaintLocationDataValidForNode(this);
   if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
     return AdjustLayoutUnitForAbsoluteZoom(
                LayoutUnit(layout_object->PixelSnappedOffsetTop(OffsetParent())),
@@ -664,7 +672,7 @@ int Element::OffsetTop() {
 }
 
 int Element::OffsetWidth() {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
+  GetDocument().EnsurePaintLocationDataValidForNode(this);
   if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
     return AdjustLayoutUnitForAbsoluteZoom(
                LayoutUnit(
@@ -675,7 +683,7 @@ int Element::OffsetWidth() {
 }
 
 int Element::OffsetHeight() {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
+  GetDocument().EnsurePaintLocationDataValidForNode(this);
   if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
     return AdjustLayoutUnitForAbsoluteZoom(
                LayoutUnit(
@@ -1089,7 +1097,7 @@ bool Element::HasNonEmptyLayoutSize() const {
 }
 
 IntRect Element::BoundsInViewport() const {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+  GetDocument().EnsurePaintLocationDataValidForNode(this);
 
   FrameView* view = GetDocument().View();
   if (!view)
@@ -1132,7 +1140,7 @@ IntRect Element::VisibleBoundsInVisualViewport() const {
 }
 
 void Element::ClientQuads(Vector<FloatQuad>& quads) {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
+  GetDocument().EnsurePaintLocationDataValidForNode(this);
 
   LayoutObject* element_layout_object = GetLayoutObject();
   if (!element_layout_object)
@@ -1479,10 +1487,9 @@ bool Element::ShouldInvalidateDistributionWhenAttributeChanged(
     if (ClassStringHasClassName(new_class_string) ==
         ClassStringContent::kHasClasses) {
       const SpaceSplitString& old_classes = GetElementData()->ClassNames();
-      const SpaceSplitString new_classes(
-          new_class_string, GetDocument().InQuirksMode()
-                                ? SpaceSplitString::kShouldFoldCase
-                                : SpaceSplitString::kShouldNotFoldCase);
+      const SpaceSplitString new_classes(GetDocument().InQuirksMode()
+                                             ? new_class_string.LowerASCII()
+                                             : new_class_string);
       if (feature_set.CheckSelectorsForClassChange(old_classes, new_classes))
         return true;
     } else {
@@ -2016,7 +2023,7 @@ StyleRecalcChange Element::RecalcOwnStyle(StyleRecalcChange change) {
   }
 
   if (local_change == kReattach) {
-    GetDocument().AddNonAttachedStyle(*this, std::move(new_style));
+    SetNonAttachedStyle(std::move(new_style));
     SetNeedsReattachLayoutTree();
     return kReattach;
   }
@@ -2072,11 +2079,12 @@ void Element::RebuildLayoutTree(Text* next_text_sibling) {
 
   if (NeedsReattachLayoutTree()) {
     AttachContext reattach_context;
-    reattach_context.resolved_style = GetDocument().GetNonAttachedStyle(*this);
+    reattach_context.resolved_style = GetNonAttachedStyle();
     bool layout_object_will_change = NeedsAttach() || GetLayoutObject();
     ReattachLayoutTree(reattach_context);
     if (layout_object_will_change || GetLayoutObject())
       ReattachWhitespaceSiblingsIfNeeded(next_text_sibling);
+    SetNonAttachedStyle(nullptr);
   } else if (ChildNeedsReattachLayoutTree()) {
     DCHECK(!NeedsReattachLayoutTree());
     SelectorFilterParentScope filter_scope(*this);
@@ -2430,7 +2438,7 @@ void Element::ChildrenChanged(const ChildrenChange& change) {
 void Element::FinishParsingChildren() {
   SetIsFinishedParsingChildren(true);
   CheckForEmptyStyleChange();
-  CheckForSiblingStyleChanges(kFinishedParsingChildren, nullptr, LastChild(),
+  CheckForSiblingStyleChanges(kFinishedParsingChildren, nullptr, lastChild(),
                               nullptr);
 }
 
@@ -2954,7 +2962,7 @@ Node* Element::InsertAdjacent(const String& where,
   }
 
   if (DeprecatedEqualIgnoringCase(where, "afterBegin")) {
-    InsertBefore(new_child, FirstChild(), exception_state);
+    InsertBefore(new_child, firstChild(), exception_state);
     return exception_state.HadException() ? nullptr : new_child;
   }
 
@@ -3127,7 +3135,7 @@ String Element::TextFromChildren() {
   bool found_multiple_text_nodes = false;
   unsigned total_length = 0;
 
-  for (Node* child = FirstChild(); child; child = child->nextSibling()) {
+  for (Node* child = firstChild(); child; child = child->nextSibling()) {
     if (!child->IsTextNode())
       continue;
     Text* text = ToText(child);
@@ -3248,7 +3256,7 @@ const ComputedStyle* Element::EnsureComputedStyle(
                              PseudoStyleRequest::kForComputedStyle),
           element_style, layout_parent_style);
   DCHECK(result);
-  return element_style->AddCachedPseudoStyle(result.Release());
+  return element_style->AddCachedPseudoStyle(std::move(result));
 }
 
 const ComputedStyle* Element::NonLayoutObjectComputedStyle() const {
@@ -3430,7 +3438,7 @@ ComputedStyle* Element::PseudoStyle(const PseudoStyleRequest& request,
 
   RefPtr<ComputedStyle> result = GetUncachedPseudoStyle(request, parent_style);
   if (result)
-    return style->AddCachedPseudoStyle(result.Release());
+    return style->AddCachedPseudoStyle(std::move(result));
   return nullptr;
 }
 
@@ -3622,7 +3630,7 @@ void Element::SetContainsPersistentVideo(bool value) {
   // In some rare situations, when the persistent video has been removed from
   // the tree, part of the tree might still carry the flag.
   if (!value && Fullscreen::IsCurrentFullScreenElement(*this)) {
-    for (Node* node = FirstChild(); node;) {
+    for (Node* node = firstChild(); node;) {
       if (!node->IsElementNode() ||
           !ToElement(node)->ContainsPersistentVideo()) {
         node = node->nextSibling();
@@ -3992,6 +4000,9 @@ void Element::CloneAttributesFromElement(const Element& other) {
     AttributeChangedFromParserOrByCloning(
         attr.GetName(), attr.Value(), AttributeModificationReason::kByCloning);
   }
+
+  if (other.nonce() != g_null_atom)
+    setNonce(other.nonce());
 }
 
 void Element::CloneDataFromElement(const Element& other) {
@@ -4016,7 +4027,7 @@ void Element::SynchronizeStyleAttributeInternal() const {
   const StylePropertySet* inline_style = this->InlineStyle();
   const_cast<Element*>(this)->SetSynchronizedLazyAttribute(
       styleAttr,
-      inline_style ? AtomicString(inline_style->AsText()) : g_null_atom);
+      inline_style ? AtomicString(inline_style->AsText()) : g_empty_atom);
 }
 
 CSSStyleDeclaration* Element::style() {
@@ -4272,7 +4283,7 @@ void Element::LogAddElementIfIsolatedWorldAndInDocument(
   Vector<String, 2> argv;
   argv.push_back(element);
   argv.push_back(FastGetAttribute(attr1));
-  activity_logger->LogEvent("blinkAddElement", argv.size(), argv.Data());
+  activity_logger->LogEvent("blinkAddElement", argv.size(), argv.data());
 }
 
 void Element::LogAddElementIfIsolatedWorldAndInDocument(
@@ -4289,7 +4300,7 @@ void Element::LogAddElementIfIsolatedWorldAndInDocument(
   argv.push_back(element);
   argv.push_back(FastGetAttribute(attr1));
   argv.push_back(FastGetAttribute(attr2));
-  activity_logger->LogEvent("blinkAddElement", argv.size(), argv.Data());
+  activity_logger->LogEvent("blinkAddElement", argv.size(), argv.data());
 }
 
 void Element::LogAddElementIfIsolatedWorldAndInDocument(
@@ -4308,7 +4319,7 @@ void Element::LogAddElementIfIsolatedWorldAndInDocument(
   argv.push_back(FastGetAttribute(attr1));
   argv.push_back(FastGetAttribute(attr2));
   argv.push_back(FastGetAttribute(attr3));
-  activity_logger->LogEvent("blinkAddElement", argv.size(), argv.Data());
+  activity_logger->LogEvent("blinkAddElement", argv.size(), argv.data());
 }
 
 void Element::LogUpdateAttributeIfIsolatedWorldAndInDocument(
@@ -4325,7 +4336,7 @@ void Element::LogUpdateAttributeIfIsolatedWorldAndInDocument(
   argv.push_back(params.name.ToString());
   argv.push_back(params.old_value);
   argv.push_back(params.new_value);
-  activity_logger->LogEvent("blinkSetAttribute", argv.size(), argv.Data());
+  activity_logger->LogEvent("blinkSetAttribute", argv.size(), argv.data());
 }
 
 DEFINE_TRACE(Element) {

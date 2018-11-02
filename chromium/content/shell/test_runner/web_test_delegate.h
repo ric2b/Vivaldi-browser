@@ -63,9 +63,6 @@ class WebTestDelegate {
   virtual void SetGamepadProvider(GamepadController* controller) = 0;
 
   // Set data to return when registering via
-  // Platform::setDeviceLightListener().
-  virtual void SetDeviceLightData(const double data) = 0;
-  // Set data to return when registering via
   // Platform::setDeviceMotionListener().
   virtual void SetDeviceMotionData(const device::MotionData& data) = 0;
   // Set data to return when registering via
@@ -109,6 +106,7 @@ class WebTestDelegate {
   // Manages the settings to used for layout tests.
   virtual TestPreferences* Preferences() = 0;
   virtual void ApplyPreferences() = 0;
+  virtual void SetPopupBlockingEnabled(bool block_popups) = 0;
 
   // Enables or disables synchronous resize mode. When enabled, all
   // window-sizing machinery is
@@ -288,7 +286,6 @@ class WebTestDelegate {
       const std::string& platform) = 0;
 
   virtual blink::WebPlugin* CreatePluginPlaceholder(
-      blink::WebLocalFrame* frame,
       const blink::WebPluginParams& params) = 0;
 
   virtual float GetDeviceScaleFactor() const = 0;
@@ -304,6 +301,9 @@ class WebTestDelegate {
   // Indicates if the navigation was initiated by the browser or renderer.
   virtual bool IsNavigationInitiatedByRenderer(
       const blink::WebURLRequest& request) = 0;
+
+ protected:
+  virtual ~WebTestDelegate() {}
 };
 
 }  // namespace test_runner

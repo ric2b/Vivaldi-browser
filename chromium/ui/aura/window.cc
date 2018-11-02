@@ -18,6 +18,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "cc/output/compositor_frame_sink.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/cursor_client.h"
@@ -28,11 +29,11 @@
 #include "ui/aura/client/window_stacking_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
+#include "ui/aura/local/compositor_frame_sink_local.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_observer.h"
 #include "ui/aura/window_port.h"
-#include "ui/aura/window_port_local.h"
 #include "ui/aura/window_tracker.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/compositor/compositor.h"
@@ -46,12 +47,12 @@
 
 namespace aura {
 
-Window::Window(WindowDelegate* delegate, ui::wm::WindowType type)
+Window::Window(WindowDelegate* delegate, client::WindowType type)
     : Window(delegate, nullptr, type) {}
 
 Window::Window(WindowDelegate* delegate,
                std::unique_ptr<WindowPort> port,
-               ui::wm::WindowType type)
+               client::WindowType type)
     : port_owner_(std::move(port)),
       port_(port_owner_.get()),
       host_(nullptr),
@@ -148,7 +149,7 @@ void Window::Init(ui::LayerType layer_type) {
   Env::GetInstance()->NotifyWindowInitialized(this);
 }
 
-void Window::SetType(ui::wm::WindowType type) {
+void Window::SetType(client::WindowType type) {
   // Cannot change type after the window is initialized.
   DCHECK(!layer());
   type_ = type;
@@ -728,23 +729,11 @@ Window* Window::GetWindowForPoint(const gfx::Point& local_point,
                                   bool return_tightest,
                                   bool for_event_handling) {
   if (!IsVisible())
-    return NULL;
+    return nullptr;
 
   if ((for_event_handling && !HitTest(local_point)) ||
-      (!for_event_handling && !ContainsPoint(local_point)))
-    return NULL;
-
-  // Check if I should claim this event and not pass it to my children because
-  // the location is inside my hit test override area.  For details, see
-  // set_hit_test_bounds_override_inner().
-  if (for_event_handling && !hit_test_bounds_override_inner_.IsEmpty()) {
-    gfx::Rect inset_local_bounds(gfx::Point(), bounds().size());
-    inset_local_bounds.Inset(hit_test_bounds_override_inner_);
-    // We know we're inside the normal local bounds, so if we're outside the
-    // inset bounds we must be in the special hit test override area.
-    DCHECK(HitTest(local_point));
-    if (!inset_local_bounds.Contains(local_point))
-      return delegate_ ? this : NULL;
+      (!for_event_handling && !ContainsPoint(local_point))) {
+    return nullptr;
   }
 
   if (!return_tightest && delegate_)
@@ -758,13 +747,16 @@ Window* Window::GetWindowForPoint(const gfx::Point& local_point,
     if (for_event_handling) {
       if (child->ignore_events_)
         continue;
+
       // The client may not allow events to be processed by certain subtrees.
       client::EventClient* client = client::GetEventClient(GetRootWindow());
       if (client && !client->CanProcessEventsWithinSubtree(child))
         continue;
+
       if (delegate_ && !delegate_->ShouldDescendIntoChildForEventHandling(
-              child, local_point))
+                           child, local_point)) {
         continue;
+      }
     }
 
     gfx::Point point_in_child_coords(local_point);
@@ -776,7 +768,7 @@ Window* Window::GetWindowForPoint(const gfx::Point& local_point,
       return match;
   }
 
-  return delegate_ ? this : NULL;
+  return delegate_ ? this : nullptr;
 }
 
 void Window::RemoveChildImpl(Window* child, Window* new_parent) {
@@ -859,6 +851,7 @@ void Window::OnStackingChanged() {
 }
 
 void Window::NotifyRemovingFromRootWindow(Window* new_root) {
+  port_->OnWillRemoveWindowFromRootWindow();
   for (WindowObserver& observer : observers_)
     observer.OnWindowRemovingFromRootWindow(this, new_root);
   for (Window::Windows::const_iterator it = children_.begin();
@@ -868,6 +861,7 @@ void Window::NotifyRemovingFromRootWindow(Window* new_root) {
 }
 
 void Window::NotifyAddedToRootWindow() {
+  port_->OnWindowAddedToRootWindow();
   for (WindowObserver& observer : observers_)
     observer.OnWindowAddedToRootWindow(this);
   for (Window::Windows::const_iterator it = children_.begin();
@@ -995,6 +989,14 @@ bool Window::CleanupGestureState() {
     state_modified |= (*iter)->CleanupGestureState();
   }
   return state_modified;
+}
+
+std::unique_ptr<cc::CompositorFrameSink> Window::CreateCompositorFrameSink() {
+  return port_->CreateCompositorFrameSink();
+}
+
+cc::SurfaceId Window::GetSurfaceId() const {
+  return port_->GetSurfaceId();
 }
 
 void Window::OnPaintLayer(const ui::PaintContext& context) {

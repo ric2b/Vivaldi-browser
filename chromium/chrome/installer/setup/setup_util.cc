@@ -7,7 +7,9 @@
 #include "chrome/installer/setup/setup_util.h"
 
 #include <windows.h>
+
 #include <stddef.h>
+#include <wtsapi32.h>
 
 #include <tlhelp32.h>
 
@@ -17,12 +19,15 @@
 #include <limits>
 #include <set>
 #include <string>
+#include <utility>
 
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/cpu.h"
+#include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -341,7 +346,7 @@ base::Version* GetMaxVersionFromArchiveDir(const base::FilePath& chrome_path) {
         new base::Version(base::UTF16ToASCII(find_data.GetName().value())));
     if (found_version->IsValid() &&
         found_version->CompareTo(*max_version.get()) > 0) {
-      max_version.reset(found_version.release());
+      max_version = std::move(found_version);
       version_found = true;
     }
   }
@@ -688,6 +693,14 @@ bool IsChromeActivelyUsed(const InstallerState& installer_state) {
   return is_used;
 }
 
+int GetInstallAge(const InstallerState& installer_state) {
+  base::File::Info info;
+  if (!base::GetFileInfo(installer_state.target_path(), &info))
+    return -1;
+  base::TimeDelta age = base::Time::Now() - info.creation_time;
+  return age >= base::TimeDelta() ? age.InDays() : -1;
+}
+
 void RecordUnPackMetrics(UnPackStatus unpack_status,
                          int32_t status,
                          UnPackConsumer consumer) {
@@ -819,13 +832,38 @@ void DoLegacyCleanups(const InstallerState& installer_state,
 #endif
 }
 
+base::Time GetConsoleSessionStartTime() {
+  constexpr DWORD kInvalidSessionId = 0xFFFFFFFF;
+  DWORD console_session_id = ::WTSGetActiveConsoleSessionId();
+  if (console_session_id == kInvalidSessionId)
+    return base::Time();
+  wchar_t* buffer = nullptr;
+  DWORD buffer_size = 0;
+  if (!::WTSQuerySessionInformation(WTS_CURRENT_SERVER_HANDLE,
+                                    console_session_id, WTSSessionInfo, &buffer,
+                                    &buffer_size)) {
+    return base::Time();
+  }
+  base::ScopedClosureRunner wts_deleter(
+      base::Bind(&::WTSFreeMemory, base::Unretained(buffer)));
+
+  WTSINFO* wts_info = nullptr;
+  if (buffer_size < sizeof(*wts_info))
+    return base::Time();
+
+  wts_info = reinterpret_cast<WTSINFO*>(buffer);
+  FILETIME filetime = {wts_info->LogonTime.u.LowPart,
+                       wts_info->LogonTime.u.HighPart};
+  return base::Time::FromFileTime(filetime);
+}
+
 std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
     const base::FilePath& path) {
   std::vector<base::win::ScopedHandle> processes;
 
   if (path.empty())
     return processes;
-
+  VLOG(1) << "GetRunningProcessesForPath: path=" << path.value();
   PROCESSENTRY32 entry = {sizeof(PROCESSENTRY32)};
   base::win::ScopedHandle snapshot(
       CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
@@ -850,14 +888,14 @@ std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
     if (QueryFullProcessImageName(process.Get(), 0, process_image_name,
                                   &size) == FALSE)
       continue;
-
+    VLOG(1) << "GetRunningProcessesForPath: process_image_name=" << process_image_name;
     if (!base::FilePath::CompareEqualIgnoreCase(path.value(),
                                                 process_image_name))
       continue;
-
+ 
     processes.push_back(std::move(process));
   } while (Process32Next(snapshot.Get(), &entry) != FALSE);
-
+  VLOG(1) << "GetRunningProcessesForPath: processes.size()=" << processes.size();
   return processes;
 }
 

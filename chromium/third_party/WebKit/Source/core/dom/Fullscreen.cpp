@@ -29,6 +29,7 @@
 
 #include "core/dom/Fullscreen.h"
 
+#include "core/HTMLElementTypeHelpers.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/StyleEngine.h"
@@ -49,6 +50,7 @@
 #include "core/svg/SVGSVGElement.h"
 #include "platform/ScopedOrientationChangeIndicator.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/feature_policy/FeaturePolicy.h"
 
 namespace blink {
 
@@ -63,7 +65,7 @@ bool AllowedToUseFullscreen(const Frame* frame) {
   if (!frame)
     return false;
 
-  if (!RuntimeEnabledFeatures::featurePolicyEnabled()) {
+  if (!IsSupportedInFeaturePolicy(WebFeaturePolicyFeature::kFullscreen)) {
     // 2. If |document|'s browsing context is a top-level browsing context, then
     // return true.
     if (frame->IsMainFrame())
@@ -80,35 +82,9 @@ bool AllowedToUseFullscreen(const Frame* frame) {
     return false;
   }
 
-  // If Feature Policy is enabled, then we need this hack to support it, until
-  // we have proper support for <iframe allowfullscreen> in FP:
-
-  // 1. If FP, by itself, enables fullscreen in this document, then fullscreen
-  // is allowed.
-  if (frame->IsFeatureEnabled(WebFeaturePolicyFeature::kFullscreen)) {
-    return true;
-  }
-
-  // 2. Otherwise, if the embedding frame's document is allowed to use
-  // fullscreen (either through FP or otherwise), and either:
-  //   a) this is a same-origin embedded document, or
-  //   b) this document's iframe has the allowfullscreen attribute set,
-  // then fullscreen is allowed.
-  if (!frame->IsMainFrame()) {
-    if (AllowedToUseFullscreen(frame->Tree().Parent())) {
-      return (frame->Owner() && frame->Owner()->AllowFullscreen()) ||
-             frame->Tree()
-                 .Parent()
-                 ->GetSecurityContext()
-                 ->GetSecurityOrigin()
-                 ->IsSameSchemeHostPortAndSuborigin(
-                     frame->GetSecurityContext()->GetSecurityOrigin());
-    }
-  }
-
-  // Otherwise, fullscreen is not allowed. (If we reach here and this is the
-  // main frame, then fullscreen must have been disabled by FP.)
-  return false;
+  // 2. If Feature Policy is enabled, return the policy for "fullscreen"
+  // feature.
+  return frame->IsFeatureEnabled(WebFeaturePolicyFeature::kFullscreen);
 }
 
 bool AllowedToRequestFullscreen(Document& document) {
@@ -116,7 +92,7 @@ bool AllowedToRequestFullscreen(Document& document) {
   // true:
 
   //  The algorithm is triggered by a user activation.
-  if (UserGestureIndicator::UtilizeUserGesture())
+  if (UserGestureIndicator::ProcessingUserGesture())
     return true;
 
   //  The algorithm is triggered by a user generated orientation change.
@@ -333,6 +309,17 @@ Element* Fullscreen::CurrentFullScreenElementForBindingFrom(
   return document.AdjustedElement(*element);
 }
 
+bool Fullscreen::IsInFullscreenElementStack(const Element& element) {
+  const Fullscreen* found = FromIfExists(element.GetDocument());
+  if (!found)
+    return false;
+  for (size_t i = 0; i < found->fullscreen_element_stack_.size(); ++i) {
+    if (found->fullscreen_element_stack_[i].first.Get() == &element)
+      return true;
+  }
+  return false;
+}
+
 Fullscreen::Fullscreen(Document& document)
     : Supplement<Document>(document),
       ContextLifecycleObserver(&document),
@@ -352,13 +339,13 @@ inline Document* Fullscreen::GetDocument() {
 }
 
 void Fullscreen::ContextDestroyed(ExecutionContext*) {
-  event_queue_.Clear();
+  event_queue_.clear();
 
   if (full_screen_layout_object_)
     full_screen_layout_object_->Destroy();
 
   current_full_screen_element_ = nullptr;
-  fullscreen_element_stack_.Clear();
+  fullscreen_element_stack_.clear();
 }
 
 // https://fullscreen.spec.whatwg.org/#dom-element-requestfullscreen
@@ -404,6 +391,20 @@ void Fullscreen::RequestFullscreen(Element& element,
     // Note: MathML is not supported.
     if (!element.IsHTMLElement() && !isSVGSVGElement(element))
       break;
+
+    // TODO(foolip): In order to reinstate the hierarchy restrictions in the
+    // spec, something has to prevent dialog elements from moving within top
+    // layer. Either disallowing fullscreen for dialog elements entirely or just
+    // preventing dialog elements from simultaneously being fullscreen and modal
+    // are good candidates. See https://github.com/whatwg/fullscreen/pull/91
+    if (isHTMLDialogElement(element)) {
+      UseCounter::Count(document,
+                        UseCounter::kRequestFullscreenForDialogElement);
+      if (element.IsInTopLayer()) {
+        UseCounter::Count(
+            document, UseCounter::kRequestFullscreenForDialogElementInTopLayer);
+      }
+    }
 
     // The fullscreen element ready check for |element| returns true.
     if (!FullscreenElementReady(element))
@@ -849,7 +850,7 @@ void Fullscreen::ClearFullscreenElementStack() {
   if (fullscreen_element_stack_.IsEmpty())
     return;
 
-  fullscreen_element_stack_.Clear();
+  fullscreen_element_stack_.clear();
 
   SetNeedsPaintPropertyUpdate(GetDocument());
 }

@@ -29,7 +29,6 @@
 #include "extensions/common/feature_switch.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/base/dragdrop/drag_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/nine_image_painter_factory.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -169,9 +168,11 @@ void BrowserActionsContainer::AddViewForAction(
 
 void BrowserActionsContainer::RemoveViewForAction(
     ToolbarActionViewController* action) {
+  std::unique_ptr<ToolbarActionView> view;
   for (ToolbarActionViews::iterator iter = toolbar_action_views_.begin();
        iter != toolbar_action_views_.end(); ++iter) {
     if ((*iter)->view_controller() == action) {
+      std::swap(view, *iter);
       toolbar_action_views_.erase(iter);
       break;
     }
@@ -307,9 +308,9 @@ int BrowserActionsContainer::GetWidthForMaxWidth(int max_width) const {
   return preferred_width;
 }
 
-gfx::Size BrowserActionsContainer::GetPreferredSize() const {
+gfx::Size BrowserActionsContainer::CalculatePreferredSize() const {
   if (ShownInsideMenu())
-    return toolbar_actions_bar_->GetPreferredSize();
+    return toolbar_actions_bar_->GetFullSize();
 
   // If there are no actions to show, then don't show the container at all.
   if (toolbar_action_views_.empty())
@@ -317,9 +318,9 @@ gfx::Size BrowserActionsContainer::GetPreferredSize() const {
 
   // When resizing, preferred width is the starting width - resize amount.
   // Otherwise, use the normal preferred width.
-  int preferred_width = resize_starting_width_ == -1 ?
-      toolbar_actions_bar_->GetPreferredSize().width() :
-      resize_starting_width_ - resize_amount_;
+  int preferred_width = resize_starting_width_ == -1
+                            ? toolbar_actions_bar_->GetFullSize().width()
+                            : resize_starting_width_ - resize_amount_;
   // In either case, clamp it within the max/min bounds.
   preferred_width = std::min(
       std::max(toolbar_actions_bar_->GetMinimumWidth(), preferred_width),
@@ -522,10 +523,9 @@ void BrowserActionsContainer::WriteDragDataForView(View* sender,
   ToolbarActionViewController* view_controller = (*it)->view_controller();
   gfx::Size size(ToolbarActionsBar::IconWidth(false),
                  ToolbarActionsBar::IconHeight());
-  drag_utils::SetDragImageOnDataObject(
+  data->provider().SetDragImage(
       view_controller->GetIcon(GetCurrentWebContents(), size).AsImageSkia(),
-      press_pt.OffsetFromOrigin(),
-      data);
+      press_pt.OffsetFromOrigin());
   // Fill in the remaining info.
   BrowserActionDragData drag_data(view_controller->GetId(),
                                   it - toolbar_action_views_.cbegin());
@@ -632,11 +632,8 @@ void BrowserActionsContainer::OnPaint(gfx::Canvas* canvas) {
         ((space_before_drop_icon + kDropIndicatorWidth) / 2);
     const int row_height = ToolbarActionsBar::IconHeight();
     const int drop_indicator_y = row_height * drop_position_->row;
-    gfx::Rect indicator_bounds(drop_indicator_x,
-                               drop_indicator_y,
-                               kDropIndicatorWidth,
-                               row_height);
-    indicator_bounds.set_x(GetMirroredXForRect(indicator_bounds));
+    gfx::Rect indicator_bounds = GetMirroredRect(gfx::Rect(
+        drop_indicator_x, drop_indicator_y, kDropIndicatorWidth, row_height));
 
     // Color of the drop indicator.
     static const SkColor kDropIndicatorColor = SK_ColorBLACK;

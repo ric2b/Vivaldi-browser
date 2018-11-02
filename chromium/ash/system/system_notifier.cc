@@ -28,11 +28,11 @@ const char* kAlwaysShownSystemNotifierIds[] = {
 // |kAshSystemNotifiers| is the list of normal system notification sources for
 // ash events. These notifications can be hidden in some context.
 const char* kAshSystemNotifiers[] = {
-    kNotifierBluetooth, kNotifierDisplayResolutionChange, kNotifierDisk,
-    kNotifierLocale, kNotifierMultiProfileFirstRun, kNotifierNetwork,
-    kNotifierNetworkPortalDetector, kNotifierScreenshot, kNotifierScreenCapture,
-    kNotifierScreenShare, kNotifierSessionLengthTimeout,
-    kNotifierSupervisedUser, kNotifierWebUsb, kNotifierSms,
+    kNotifierBluetooth, kNotifierCapsLock, kNotifierDisplayResolutionChange,
+    kNotifierDisk, kNotifierLocale, kNotifierMultiProfileFirstRun,
+    kNotifierNetwork, kNotifierNetworkPortalDetector, kNotifierScreenshot,
+    kNotifierScreenCapture, kNotifierScreenShare, kNotifierSessionLengthTimeout,
+    kNotifierSms, kNotifierSupervisedUser, kNotifierWebUsb, kNotifierWifiToggle,
     // Note: Order doesn't matter here, so keep this in alphabetic order, don't
     // just add your stuff at the end!
     NULL};
@@ -54,6 +54,7 @@ bool MatchSystemNotifierId(const message_center::NotifierId& notifier_id,
 const char kNotifierAccessibility[] = "ash.accessibility";
 const char kNotifierBattery[] = "ash.battery";
 const char kNotifierBluetooth[] = "ash.bluetooth";
+const char kNotifierCapsLock[] = "ash.caps-lock";
 const char kNotifierDeprecatedAccelerator[] = "ash.accelerator-controller";
 const char kNotifierDisk[] = "ash.disk";
 const char kNotifierDisplay[] = "ash.display";
@@ -76,6 +77,7 @@ const char kNotifierSessionLengthTimeout[] = "ash.session-length-timeout";
 const char kNotifierSms[] = "ash.sms";
 const char kNotifierSupervisedUser[] = "ash.locally-managed-user";
 const char kNotifierWebUsb[] = "ash.webusb";
+const char kNotifierWifiToggle[] = "ash.wifi-toggle";
 
 bool ShouldAlwaysShowPopups(const message_center::NotifierId& notifier_id) {
   return MatchSystemNotifierId(notifier_id, kAlwaysShownSystemNotifierIds);

@@ -335,9 +335,11 @@ class TestFocusRules : public BaseFocusRules {
         CanFocusOrActivate(window) || window->Contains(focus_restriction_);
     return can_activate ? BaseFocusRules::CanActivateWindow(window) : false;
   }
-  bool CanFocusWindow(aura::Window* window) const override {
-    return CanFocusOrActivate(window) ?
-        BaseFocusRules::CanFocusWindow(window) : false;
+  bool CanFocusWindow(aura::Window* window,
+                      const ui::Event* event) const override {
+    return CanFocusOrActivate(window)
+               ? BaseFocusRules::CanFocusWindow(window, event)
+               : false;
   }
   aura::Window* GetActivatableWindow(aura::Window* window) const override {
     return BaseFocusRules::GetActivatableWindow(
@@ -841,7 +843,7 @@ class FocusControllerDirectTestBase : public FocusControllerTestBase {
     // Create a window, show it and then activate it.
     std::unique_ptr<aura::Window> window1 =
         base::MakeUnique<aura::Window>(nullptr);
-    window1->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+    window1->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window1->Init(ui::LAYER_TEXTURED);
     root_window()->AddChild(window1.get());
     window1->Show();
@@ -853,7 +855,7 @@ class FocusControllerDirectTestBase : public FocusControllerTestBase {
     // the active window but is placed on top of window stack.
     std::unique_ptr<aura::Window> window2 =
         base::MakeUnique<aura::Window>(nullptr);
-    window2->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+    window2->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window2->Init(ui::LAYER_TEXTURED);
     root_window()->AddChild(window2.get());
     window2->Show();

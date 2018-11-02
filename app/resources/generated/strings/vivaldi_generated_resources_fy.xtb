@@ -2,7 +2,6 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fy">
 <translation id="1018656279737460067">Ofbrutsen</translation>
-<translation id="1030173864176315846">Mei sukses <ph name="PAGE_NUMBER" /> siden printe nei <ph name="PRINTER_NAME" /></translation>
 <translation id="1031362278801463162">Foarbyld wurdt laden</translation>
 <translation id="1049795001945932310">&amp;Taal ynstellings</translation>
 <translation id="1056898198331236512">warskôging</translation>
@@ -15,7 +14,6 @@
 <translation id="1181037720776840403">Wiskje</translation>
 <translation id="1187722533808055681">Aktivearing fanút ynaktyf</translation>
 <translation id="119944043368869598">Alles wiskje</translation>
-<translation id="1218323606465324064"><ph name="PAGE_NUMBER" /> siden wurde no printe mei <ph name="PRINTER_NAME" /></translation>
 <translation id="1221825588892235038">Seleksje allinne</translation>
 <translation id="1244303850296295656">Tafoeging flater</translation>
 <translation id="1278049586634282054">Werjefte besjen:</translation>
@@ -36,7 +34,6 @@
 <translation id="1601560923496285236">Tapasse</translation>
 <translation id="1603914832182249871">(Privee)</translation>
 <translation id="1616206807336925449">Dizze tafoeging fereasket gjin spesjale foech.</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Triem descriptors</translation>
 <translation id="1635033183663317347">Ynstallearre troch dyn fersoarger.</translation>
 <translation id="1681120471812444678">Ynstelle foar it taheakjen fan printers…</translation>
@@ -50,7 +47,6 @@
 <translation id="1744108098763830590">eftergrûn side</translation>
 <translation id="176587472219019965">&amp;Nij finster</translation>
 <translation id="1769104665586091481">Keppeling iepenje yn nij &amp;finster</translation>
-<translation id="1789575671122666129">Pop-ups</translation>
 <translation id="1815083418640426271">Plakke as gewoane tekst</translation>
 <translation id="1828901632669367785">Printsje mei help fan systeemdialoochskerm...</translation>
 <translation id="1838288018605456492">Klik foar it opsetten</translation>
@@ -69,16 +65,13 @@
 <translation id="2076269580855484719">Dizze ynstekker ferbergje</translation>
 <translation id="2087822576218954668">Printsje: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">&amp;Ramt ferfarskje</translation>
-<translation id="2115291620696624944">Flater by it printsjen fan <ph name="PAGE_NUMBER" /> siden nei <ph name="PRINTER_NAME" /></translation>
 <translation id="2129825002735785149">Ynstekker fernije</translation>
-<translation id="2147827593068025794">Syngronisaasje op 'e eftergrûn</translation>
 <translation id="2148892889047469596">Cast ljepper</translation>
 <translation id="2150139952286079145">Bestimmings sykje</translation>
 <translation id="215753907730220065">Folslein skerm ferlitte</translation>
 <translation id="2177950615300672361">Privee ljepper: <ph name="TAB_NAME" /></translation>
 <translation id="218070003709087997">Brûk in getal om it tal te printsjen kopyen oan te jaan (1 oan 't 999).</translation>
 <translation id="2181927652428971824">Printsje nei Vivaldi dokuminten en oare cloud bestimmings. <ph name="BEGIN_LINK" />Ynlogge<ph name="END_LINK" /> om nei Google Cloud Print te printsjen.</translation>
-<translation id="2187317261103489799">Untdekke (standert)</translation>
 <translation id="219008588003277019">Native kliïnt module: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Knop ferbergje</translation>
 <translation id="2218515861914035131">Plakke as tekst sûnder opmaak</translation>
@@ -103,11 +96,9 @@
 <translation id="2439110203301358333">In oar programma op jo kompjûter hat in tafoeging taheakke dy de manier hoe't Vivaldi wurket feroarje kin.</translation>
 <translation id="2445081178310039857">Haad triemtafel fan tafoeging is fereaske.</translation>
 <translation id="2470702053775288986">Net stipe tafoegings útskeakele</translation>
-<translation id="2482878487686419369">Notifikaasjes</translation>
 <translation id="2498436043474441766">Printers taheakje</translation>
 <translation id="2501797496290880632">Typ in fluchtoets</translation>
 <translation id="2509495747794740764">De skaal moat in getal wêze tusken de 10 en 200.</translation>
-<translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> ynstallearje</translation>
 <translation id="253557089021624350">Tal keepalive-aktiviteiten</translation>
 <translation id="2550212893339833758">Wiksel ûnthâld</translation>
 <translation id="2580924999637585241">Totaal: <ph name="NUMBER_OF_SHEETS" />  <ph name="SHEETS_LABEL" /></translation>
@@ -145,7 +136,6 @@
 <translation id="3149510190863420837">Chrome Apps</translation>
 <translation id="3154429428035006212">Langer dan in moanne sûnder ferbining</translation>
 <translation id="3222066309010235055">Foar rendearje <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofoon</translation>
 <translation id="32279126412636473">Ferfarskje (⌘R)</translation>
 <translation id="3241680850019875542">Selektearje de haad triemtafel fan de tafoeging om yn te pakken. Foar it fernijen fan in tafoeging, selektearje jo de privee kaai triem om dit op 'e nij te brûken.</translation>
 <translation id="3280237271814976245">Bewarje &amp;as...</translation>
@@ -166,7 +156,6 @@
 <translation id="3360297538363969800">Printsjen is mislearre. Kontrolearje jo printer en besykje nochris.</translation>
 <translation id="3378572629723696641">Dizze tafoeging is mooglik beskeadige.</translation>
 <translation id="3396331542604645348">De selektearre printer is net beskikber of net goed ynstallearre. Kontrolearje jo printer of besykje nin oare printer te selektearjen.</translation>
-<translation id="3427092606871434483">Tastean (standert)</translation>
 <translation id="3435896845095436175">Ynskeakelje</translation>
 <translation id="3439970425423980614">PDF iepenje yn foarbyld werjefte</translation>
 <translation id="345693547134384690">&amp;Ofbylding yn nije ljepper iepenje</translation>
@@ -174,7 +163,6 @@
 <translation id="3468745736289470383">Diel jo skerm</translation>
 <translation id="3487007233252413104">Anonime funksje</translation>
 <translation id="3505030558724226696">Apparaat tagong ynlûke</translation>
-<translation id="3509527969829946096">Dizze opsje skeakelet de opsje foar Cast Streaming yn foar it kodearjen fan fideo streams mei platfoarm hardware.</translation>
 <translation id="3511307672085573050">K&amp;eppeling adres kopiearje</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;wol in printer diele &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; mei in groep fan dy: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. As jo dit akseptearje, kinne alle groepsleden nei de printer printsje.</translation>
 <translation id="3587482841069643663">Alles</translation>
@@ -188,7 +176,6 @@
 <translation id="3730639321086573427">Lokale bestimmings</translation>
 <translation id="3760460896538743390">Efter&amp;grûn side ynspektearje</translation>
 <translation id="3763401818161139108">Altyd útfiere op <ph name="ORIGIN" /></translation>
-<translation id="3789841737615482174">Ynstallearje</translation>
 <translation id="3798449238516105146">Ferzje</translation>
 <translation id="385051799172605136">Tebek</translation>
 <translation id="3855441664322950881">Tafoeging ynpakke</translation>
@@ -202,7 +189,6 @@
 <translation id="3925842537050977900">Fan plank los meitsje</translation>
 <translation id="3927932062596804919">Wegerje</translation>
 <translation id="3936390757709632190">Lûd &amp;iepenje yn nije ljepper</translation>
-<translation id="3936999098172113189">Wachtsje mei it printsjen fan <ph name="PAGE_NUMBER" /> siden mei <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Tebek</translation>
 <translation id="3948116654032448504">&amp;Sykje om ôfbylding mei <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3978267865113951599">(Ferûngelokke)</translation>
@@ -220,9 +206,7 @@
 <translation id="4100839878934973028">In oar programma op jo kompjûter hat in app taheakke dy de manier hoe't Vivaldi wurket feroarje kin.</translation>
 <translation id="411666854932687641">Privee ûnthâld</translation>
 <translation id="4130207949184424187">Dizze tafoeging hat feroare hokker side te sjen is as jo sykje fanút it adresfjild.</translation>
-<translation id="4130750466177569591">Ik gean akkoard</translation>
 <translation id="4131410914670010031">Swart en wyt</translation>
-<translation id="4165986682804962316">Webstee ynstellings</translation>
 <translation id="4176463684765177261">Utskeakele</translation>
 <translation id="4200983522494130825">Nije &amp;ljepper</translation>
 <translation id="420665587194630159">(Dizze tafoegings wurdt beheard en kin net wiske of útskeakele wurde.)</translation>
@@ -230,7 +214,6 @@
 <translation id="4240511609794012987">Dield ûnthâld</translation>
 <translation id="4256316378292851214">Fideo be&amp;warje as...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> Kb (<ph name="NUM_KILOBYTES_LIVE" /> Kb live)</translation>
-<translation id="4312866146174492540">Tsjinkeare (standert)</translation>
 <translation id="431291515148403474">It taheakjen fan jo printers oan Google Cloud Print jout jo de mooglikheid
         om oeral wei, oeral nei ta te printsjen. Diel jo printers mei wa jo kieze en 
         printsje nei har fanút Vivaldi, jo tillefoan, tablet, kompjûter of elts oar
@@ -264,14 +247,12 @@
 <translation id="4816492930507672669">Oanpasse oan side</translation>
 <translation id="4839303808932127586">&amp;Fideo bewarje as...</translation>
 <translation id="4850258771229959924">Yn ûntwikkelders ark besjen</translation>
-<translation id="4851858059374029925"><ph name="PLUGIN_NAME" /> ynstallearje? ynstallearje allinne tafoegings dy't jo fertrouwe.</translation>
 <translation id="488785315393301722">Details sjen litte</translation>
 <translation id="4911714727432509308">Gjin tafoegings ha fluchtoetsen tawiisd.</translation>
 <translation id="4912643508233590958">Aktivearring fanút sliep</translation>
 <translation id="4918086044614829423">Akseptearje</translation>
 <translation id="4927301649992043040">Tafoeging ynpakke</translation>
 <translation id="4927753642311223124">Neat te sjen hjir, gean fierder.</translation>
-<translation id="4957028442764970964">De printer wurdt opsetten.</translation>
 <translation id="4988526792673242964">Siden</translation>
 <translation id="49896407730300355">Linksom &amp;draaie</translation>
 <translation id="4989966318180235467">&amp;Eftergrûnside besjen</translation>
@@ -327,7 +308,6 @@
 <translation id="5746169159649715125">Bewarje as PDF</translation>
 <translation id="5759728514498647443">Dokuminten dy't jo stjoere nei <ph name="APP_NAME" /> om te printsjen, kinne lêzen  wurde troch <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Lûd be&amp;warje as...</translation>
-<translation id="5778550464785688721">Folsleine kontrôle foar MIDI apparaten</translation>
 <translation id="5780973441651030252">Proses prioriteit</translation>
 <translation id="5804241973901381774">Foech</translation>
 <translation id="5828633471261496623">Oan 't printsjen...</translation>
@@ -337,13 +317,11 @@
 <translation id="5849869942539715694">Tafoeging ynpakke...</translation>
 <translation id="5910363049092958439">Ofbylding &amp;bewarje as...</translation>
 <translation id="59174027418879706">Ynskeakele</translation>
-<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 yn brûkme} other {# yn brûkme}}</translation>
 <translation id="5956585768868398362">Is dit de syk side dy't jo ferwachte?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> piek)</translation>
 <translation id="5965661248935608907">It bestjoerd ek hokker side te sjen is as jo klikke op de Thús knop of sykje fanút it adresfjild.</translation>
 <translation id="6025215716629925253">Stack opspoare</translation>
 <translation id="6040143037577758943">Slute</translation>
-<translation id="6051028581720248124">Foar it printsjen nei FedEx Office, akseptearje jo harren <ph name="START_LINK" />betingsten foar it brûken<ph name="END_LINK" />.</translation>
 <translation id="6082651258230788217">Yn arkbalke sjen litte</translation>
 <translation id="6086814797483779854">Utfiere by klikke</translation>
 <translation id="6086846494333236931">Ynstallearre troch jo administrator</translation>
@@ -397,7 +375,6 @@
 <translation id="6812841287760418429">Feroarings behâlde</translation>
 <translation id="682123305478866682">Cast buroblêd</translation>
 <translation id="6841186874966388268">Flaters</translation>
-<translation id="6863910145616405334">Ynstekker net fûn</translation>
 <translation id="6886871292305414135">Keppeling yn nije &amp;ljepper iepenje</translation>
 <translation id="6900284862687837908">Eftergrûn app: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Triem tagong ynlûke</translation>
@@ -414,7 +391,6 @@
 <translation id="7006634003215061422">Marzje ûnder</translation>
 <translation id="7013485839273047434">Mear tafoegings taheakje</translation>
 <translation id="708060913198414444">Lûd adres k&amp;opiearje</translation>
-<translation id="7105578512429498960">Ynstallearje <ph name="PLUGIN_NAME" /> om dizze ynhâld wer te jaan</translation>
 <translation id="7144878232160441200">Nochris besykje</translation>
 <translation id="7175353351958621980">Laden fanôf:</translation>
 <translation id="7186088072322679094">Hâld yn arkbalke</translation>
@@ -483,7 +459,6 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="8004582292198964060">Sneuper</translation>
 <translation id="8023801379949507775">Tafoegings no fernije</translation>
 <translation id="8032244173881942855">Net mooglik Cast ljepper.</translation>
-<translation id="8037357227543935929">Freegje (standert)</translation>
 <translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">As ôfbylding printsje</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> Kb</translation>
@@ -507,7 +482,6 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="8523493869875972733">Feroarings behâlde</translation>
 <translation id="8523849605371521713">Taheakke troch belied</translation>
 <translation id="8546306075665861288">Lyts ûnthâld fan ôfbyldings</translation>
-<translation id="855705891482654011">Utpakte tafoegings lade</translation>
 <translation id="8569682776816196752">Gjin bestimmings fûn</translation>
 <translation id="8584280235376696778">Fideo &amp;iepenje yn nije ljepper</translation>
 <translation id="8605428685123651449">SQLite ûnthâld</translation>
@@ -522,7 +496,6 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="8719653885894320876"><ph name="PLUGIN_NAME" /> ynlaad mislearre</translation>
 <translation id="873545264931343897">As it fernijen fan <ph name="PLUGIN_NAME" /> foltôge is, ferfarskje de side om it te aktivearjen</translation>
 <translation id="8757090071857742562">Net mooglik foar Cast buroblêd. Kontrolearje as jo it skermke akseptearre ha om mei dielen fan jo skerm te begjinnen.</translation>
-<translation id="8763204422633679667">As de ynstallaasje <ph name="PLUGIN_NAME" /> foltôge is, ferfarskje de side om it te aktivearjen</translation>
 <translation id="8770406935328356739">Haad triemtafel fan tafoeging</translation>
 <translation id="8774934320277480003">Marzje boppe</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wol in printer diele&lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; mei dy.</translation>
@@ -547,7 +520,6 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="9027459031423301635">Keppeling iepenje yn nije &amp;ljepper</translation>
 <translation id="9056810968620647706">Gjin oerienkomsten fûn.</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> is tsjinkeard troch bedriuws belied</translation>
-<translation id="9145718805518496796">Tafoegings ynpakke...</translation>
 <translation id="9153341767479566106">Oare tafoegings dy't lade woenen:</translation>
 <translation id="9170848237812810038">&amp;Ungedien meitsje</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" is taheakke</translation>

@@ -10,6 +10,7 @@
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_fragment.h"
 #include "core/layout/ng/ng_fragment_builder.h"
+#include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_length_utils.h"
 #include "core/layout/ng/ng_physical_fragment.h"
 #include "core/style/ComputedStyle.h"
@@ -89,8 +90,8 @@ void NGOutOfFlowLayoutPart::Run() {
     }
     // Sweep any descendants that might have been added.
     // This happens when an absolute container has a fixed child.
-    out_of_flow_candidates.Clear();
-    out_of_flow_candidate_positions.Clear();
+    out_of_flow_candidates.clear();
+    out_of_flow_candidate_positions.clear();
     container_builder_->GetAndClearOutOfFlowDescendantCandidates(
         &out_of_flow_candidates, &out_of_flow_candidate_positions);
   }

@@ -38,25 +38,25 @@ bool IsAncestorOf(const PropertyNode* ancestor, const PropertyNode* child) {
   return child == ancestor;
 }
 
-const CompositorElementId PropertyTreeState::GetCompositorElementId() const {
-// The effect or transform nodes could have a compositor element id. The order
-// doesn't matter as the element id should be the same on all that have a
-// non-default CompositorElementId.
-#if DCHECK_IS_ON()
-  CompositorElementId expected_element_id;
-  if (CompositorElementId actual_element_id =
-          Effect()->GetCompositorElementId()) {
-    expected_element_id = actual_element_id;
-  }
-  if (CompositorElementId actual_element_id =
-          Transform()->GetCompositorElementId()) {
-    if (expected_element_id)
-      DCHECK_EQ(expected_element_id, actual_element_id);
-  }
-#endif
-  if (Effect()->GetCompositorElementId())
+const CompositorElementId PropertyTreeState::GetCompositorElementId(
+    const CompositorElementIdSet& element_ids) const {
+  // The effect or transform nodes could have a compositor element id. The order
+  // doesn't matter as the element id should be the same on all that have a
+  // non-default CompositorElementId.
+  //
+  // Note that PropertyTreeState acts as a context that accumulates state as we
+  // traverse the tree building layers. This means that we could see a
+  // compositor element id 'A' for a parent layer in conjunction with a
+  // compositor element id 'B' for a child layer. To preserve uniqueness of
+  // element ids, then, we check for presence in the |element_ids| set (which
+  // represents element ids already previously attached to a layer). This is an
+  // interim step while we pursue broader rework of animation subsystem noted in
+  // http://crbug.com/709137.
+  if (Effect()->GetCompositorElementId() &&
+      !element_ids.Contains(Effect()->GetCompositorElementId()))
     return Effect()->GetCompositorElementId();
-  if (Transform()->GetCompositorElementId())
+  if (Transform()->GetCompositorElementId() &&
+      !element_ids.Contains(Transform()->GetCompositorElementId()))
     return Transform()->GetCompositorElementId();
   return CompositorElementId();
 }
@@ -80,7 +80,12 @@ PropertyTreeState::InnermostNode PropertyTreeState::GetInnermostNode() const {
   bool clip_ancestor_of_effect =
       IsAncestorOf<ClipPaintPropertyNode>(clip_.Get(), effect_->OutputClip());
 
-  if (!effect_->IsRoot() && clip_ancestor_of_effect) {
+  if (!effect_->IsRoot() &&
+      (clip_ancestor_of_effect ||
+       // Effects that don't move pixels commute with all clips, so always apply
+       // them first when inside compatible transforms.
+       (!effect_->HasFilterThatMovesPixels() &&
+        !effect_transform_strict_ancestor_of_transform))) {
     return kEffect;
   }
   if (!clip_->IsRoot())
@@ -108,8 +113,9 @@ const PropertyTreeState* PropertyTreeStateIterator::Next() {
 #if DCHECK_IS_ON()
 
 String PropertyTreeState::ToTreeString() const {
-  return Transform()->ToTreeString() + "\n" + Clip()->ToTreeString() + "\n" +
-         Effect()->ToTreeString();
+  return "transform:\n" + (Transform() ? Transform()->ToTreeString() : "null") +
+         "\nclip:\n" + (Clip() ? Clip()->ToTreeString() : "null") +
+         "\neffect:\n" + (Effect() ? Effect()->ToTreeString() : "null");
 }
 
 #endif

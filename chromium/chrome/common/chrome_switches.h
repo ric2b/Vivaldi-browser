@@ -129,7 +129,6 @@ extern const char kEnablePrintPreviewRegisterPromos[];
 extern const char kEnableProfiling[];
 extern const char kEnablePushApiBackgroundMode[];
 extern const char kEnableQuic[];
-extern const char kEnableSaveAsMenuLabelExperiment[];
 extern const char kEnableSettingsWindow[];
 extern const char kEnableSiteEngagementEvictionPolicy[];
 extern const char kEnableSiteSettings[];
@@ -150,13 +149,15 @@ extern const char kFastStart[];
 extern const char kForceAndroidAppMode[];
 extern const char kForceAppMode[];
 extern const char kForceDesktopIOSPromotion[];
+extern const char kForceEffectiveConnectionType[];
+extern const char kForceEnableMetricsReporting[];
 extern const char kForceFirstRun[];
 extern const char kForceLocalNtp[];
 extern const char kForceVariationIds[];
-extern const char kHistoryEnableGroupByDomain[];
 extern const char kHomePage[];
 extern const char kHostResolverRetryAttempts[];
 extern const char kHostRules[];
+extern const char kIgnoreCertificateErrorsSPKIList[];
 extern const char kIgnoreUrlFetcherCertRequests[];
 extern const char kIncognito[];
 extern const char kInstallChromeApp[];
@@ -181,7 +182,6 @@ extern const char kNoProxyServer[];
 extern const char kNoServiceAutorun[];
 extern const char kNoStartupWindow[];
 extern const char kNoSupervisedUserAcknowledgmentCheck[];
-extern const char kNumPacThreads[];
 extern const char kOpenInNewWindow[];
 extern const char kOriginToForceQuicOn[];
 extern const char kOriginalProcessStartTime[];
@@ -207,15 +207,14 @@ extern const char kProfilingFlush[];
 extern const char kProxyAutoDetect[];
 extern const char kProxyBypassList[];
 extern const char kProxyPacUrl[];
-extern const char kProxyServer[];
 extern const char kQuicConnectionOptions[];
-extern const char kQuicHostWhitelist[];
 extern const char kQuicMaxPacketLength[];
 extern const char kQuicVersion[];
 extern const char kRemoteDebuggingTargets[];
 extern const char kRestoreLastSession[];
 extern const char kSavePageAsMHTML[];
 extern const char kShowAppList[];
+extern const char kShowCertLink[];
 extern const char kSilentDebuggerExtensionAPI[];
 extern const char kSilentLaunch[];
 extern const char kSimulateCriticalUpdate[];
@@ -263,8 +262,6 @@ extern const char kEnableHungRendererInfoBar[];
 extern const char kForceShowUpdateMenuBadge[];
 extern const char kForceShowUpdateMenuItem[];
 extern const char kForceShowUpdateMenuItemCustomSummary[];
-extern const char kForceShowUpdateMenuItemNewFeaturesSummary[];
-extern const char kForceShowUpdateMenuItemSummary[];
 extern const char kMarketUrlForTesting[];
 extern const char kNtpSwitchToExistingTab[];
 extern const char kProgressBarAnimation[];
@@ -275,8 +272,8 @@ extern const char kWebApkServerUrl[];
 
 #if defined(OS_CHROMEOS)
 extern const char kCroshCommand[];
+extern const char kDisableLoginScreenApps[];
 extern const char kDisableNativeCups[];
-extern const char kEnableLoginScreenApps[];
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(USE_ASH)
@@ -355,6 +352,11 @@ extern const char kEnableWaylandServer[];
 #if defined(OS_WIN) || defined(OS_LINUX)
 extern const char kDisableInputImeAPI[];
 extern const char kEnableInputImeAPI[];
+#endif
+
+#if defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_MACOSX) || \
+    defined(OS_WIN)
+extern const char kEnableNewAppMenuIcon[];
 #endif
 
 bool ExtensionsDisabled(const base::CommandLine& command_line);

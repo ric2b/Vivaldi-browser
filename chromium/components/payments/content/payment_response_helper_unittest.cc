@@ -15,62 +15,19 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
-#include "components/payments/content/payment_request.mojom.h"
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/core/autofill_payment_instrument.h"
-#include "components/payments/core/payment_request_delegate.h"
+#include "components/payments/core/test_payment_request_delegate.h"
+#include "components/payments/mojom/payment_request.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace payments {
-
-class FakePaymentRequestDelegate : public PaymentRequestDelegate {
- public:
-  FakePaymentRequestDelegate(
-      autofill::PersonalDataManager* personal_data_manager)
-      : personal_data_manager_(personal_data_manager), locale_("en-US") {}
-  void ShowDialog(PaymentRequest* request) override {}
-
-  void CloseDialog() override {}
-
-  void ShowErrorMessage() override {}
-
-  autofill::PersonalDataManager* GetPersonalDataManager() override {
-    return personal_data_manager_;
-  }
-
-  const std::string& GetApplicationLocale() const override { return locale_; }
-
-  bool IsIncognito() const override { return false; }
-
-  void DoFullCardRequest(
-      const autofill::CreditCard& credit_card,
-      base::WeakPtr<autofill::payments::FullCardRequest::ResultDelegate>
-          result_delegate) override {
-    result_delegate->OnFullCardRequestSucceeded(credit_card,
-                                                base::ASCIIToUTF16("123"));
-  }
-
-  std::unique_ptr<const ::i18n::addressinput::Source> GetAddressInputSource()
-      override {
-    return nullptr;
-  }
-
-  std::unique_ptr<::i18n::addressinput::Storage> GetAddressInputStorage()
-      override {
-    return nullptr;
-  }
-
- private:
-  autofill::PersonalDataManager* personal_data_manager_;
-  std::string locale_;
-  DISALLOW_COPY_AND_ASSIGN(FakePaymentRequestDelegate);
-};
 
 class PaymentResponseHelperTest : public testing::Test,
                                   public PaymentResponseHelper::Delegate {
  protected:
   PaymentResponseHelperTest()
-      : payment_request_delegate_(&test_personal_data_manager_),
+      : test_payment_request_delegate_(&test_personal_data_manager_),
         address_(autofill::test::GetFullProfile()),
         billing_addresses_({&address_}) {
     test_personal_data_manager_.AddTestingProfile(&address_);
@@ -81,7 +38,7 @@ class PaymentResponseHelperTest : public testing::Test,
     visa_card.set_use_count(5u);
     autofill_instrument_ = base::MakeUnique<AutofillPaymentInstrument>(
         "visa", visa_card, billing_addresses_, "en-US",
-        &payment_request_delegate_);
+        &test_payment_request_delegate_);
   }
   ~PaymentResponseHelperTest() override {}
 
@@ -131,12 +88,15 @@ class PaymentResponseHelperTest : public testing::Test,
   const mojom::PaymentResponsePtr& response() { return payment_response_; }
   autofill::AutofillProfile* test_address() { return &address_; }
   PaymentInstrument* test_instrument() { return autofill_instrument_.get(); }
+  PaymentRequestDelegate* test_payment_request_delegate() {
+    return &test_payment_request_delegate_;
+  }
 
  private:
   std::unique_ptr<PaymentRequestSpec> spec_;
   mojom::PaymentResponsePtr payment_response_;
   autofill::TestPersonalDataManager test_personal_data_manager_;
-  FakePaymentRequestDelegate payment_request_delegate_;
+  TestPaymentRequestDelegate test_payment_request_delegate_;
 
   // Test data.
   autofill::AutofillProfile address_;
@@ -149,11 +109,11 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_SupportedMethod) {
   // Default options (no shipping, no contact info).
   RecreateSpecWithOptions(mojom::PaymentOptions::New());
 
-  // TODO(mathp): Currently synchronous, when async will need a RunLoop.
   // "visa" is specified directly in the supportedMethods so it is returned
   // as the method name.
   PaymentResponseHelper helper("en-US", spec(), test_instrument(),
-                               test_address(), test_address(), this);
+                               test_payment_request_delegate(), test_address(),
+                               test_address(), this);
   EXPECT_EQ("visa", response()->method_name);
   EXPECT_EQ(
       "{\"billingAddress\":"
@@ -186,10 +146,10 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_BasicCard) {
                                     mojom::PaymentDetails::New(),
                                     std::move(method_data));
 
-  // TODO(mathp): Currently synchronous, when async will need a RunLoop.
   // "basic-card" is specified so it is returned as the method name.
   PaymentResponseHelper helper("en-US", spec(), test_instrument(),
-                               test_address(), test_address(), this);
+                               test_payment_request_delegate(), test_address(),
+                               test_address(), this);
   EXPECT_EQ("basic-card", response()->method_name);
   EXPECT_EQ(
       "{\"billingAddress\":"
@@ -226,7 +186,8 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_ShippingAddress) {
                                     GetMethodDataForVisa());
 
   PaymentResponseHelper helper("en-US", spec(), test_instrument(),
-                               test_address(), test_address(), this);
+                               test_payment_request_delegate(), test_address(),
+                               test_address(), this);
 
   // Check that all the expected values were set.
   EXPECT_EQ("US", response()->shipping_address->country);
@@ -254,7 +215,8 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_ContactDetails_All) {
   RecreateSpecWithOptions(std::move(options));
 
   PaymentResponseHelper helper("en-US", spec(), test_instrument(),
-                               test_address(), test_address(), this);
+                               test_payment_request_delegate(), test_address(),
+                               test_address(), this);
 
   // Check that all the expected values were set.
   EXPECT_EQ("John H. Doe", response()->payer_name.value());
@@ -271,7 +233,8 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_ContactDetails_Some) {
   RecreateSpecWithOptions(std::move(options));
 
   PaymentResponseHelper helper("en-US", spec(), test_instrument(),
-                               test_address(), test_address(), this);
+                               test_payment_request_delegate(), test_address(),
+                               test_address(), this);
 
   // Check that the name was set, but not the other values.
   EXPECT_EQ("John H. Doe", response()->payer_name.value());
@@ -291,7 +254,8 @@ TEST_F(PaymentResponseHelperTest,
   RecreateSpecWithOptions(std::move(options));
 
   PaymentResponseHelper helper("en-US", spec(), test_instrument(),
-                               test_address(), test_address(), this);
+                               test_payment_request_delegate(), test_address(),
+                               test_address(), this);
 
   // Check that the phone was formatted.
   EXPECT_EQ("+15151231234", response()->payer_phone.value());

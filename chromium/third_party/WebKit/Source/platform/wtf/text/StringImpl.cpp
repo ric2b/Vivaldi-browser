@@ -41,15 +41,6 @@
 #include <algorithm>
 #include <memory>
 
-#ifdef STRING_STATS
-#include "platform/wtf/DataLog.h"
-#include "platform/wtf/HashMap.h"
-#include "platform/wtf/HashSet.h"
-#include "platform/wtf/RefCounted.h"
-#include "platform/wtf/ThreadingPrimitives.h"
-#include <unistd.h>
-#endif
-
 using namespace std;
 
 namespace WTF {
@@ -67,231 +58,6 @@ static_assert(sizeof(StringImpl) <= 3 * sizeof(int),
               "StringImpl should stay small");
 #endif
 
-#ifdef STRING_STATS
-
-static Mutex& statsMutex() {
-  DEFINE_STATIC_LOCAL(Mutex, mutex, ());
-  return mutex;
-}
-
-static HashSet<void*>& liveStrings() {
-  // Notice that we can't use HashSet<StringImpl*> because then HashSet would
-  // dedup identical strings.
-  DEFINE_STATIC_LOCAL(HashSet<void*>, strings, ());
-  return strings;
-}
-
-void addStringForStats(StringImpl* string) {
-  MutexLocker locker(statsMutex());
-  liveStrings().add(string);
-}
-
-void removeStringForStats(StringImpl* string) {
-  MutexLocker locker(statsMutex());
-  liveStrings().remove(string);
-}
-
-static void fillWithSnippet(const StringImpl* string, Vector<char>& snippet) {
-  const unsigned kMaxSnippetLength = 64;
-  snippet.clear();
-
-  size_t expectedLength = std::min(string->length(), kMaxSnippetLength);
-  if (expectedLength == kMaxSnippetLength)
-    expectedLength += 3;  // For the "...".
-  ++expectedLength;       // For the terminating '\0'.
-  snippet.reserveCapacity(expectedLength);
-
-  size_t i;
-  for (i = 0; i < string->length() && i < kMaxSnippetLength; ++i) {
-    UChar c = (*string)[i];
-    if (IsASCIIPrintable(c))
-      snippet.append(c);
-    else
-      snippet.append('?');
-  }
-  if (i < string->length()) {
-    snippet.append('.');
-    snippet.append('.');
-    snippet.append('.');
-  }
-  snippet.append('\0');
-}
-
-static bool isUnnecessarilyWide(const StringImpl* string) {
-  if (string->is8Bit())
-    return false;
-  UChar c = 0;
-  for (unsigned i = 0; i < string->length(); ++i)
-    c |= (*string)[i] >> 8;
-  return !c;
-}
-
-class PerStringStats : public RefCounted<PerStringStats> {
- public:
-  static PassRefPtr<PerStringStats> create() {
-    return adoptRef(new PerStringStats);
-  }
-
-  void add(const StringImpl* string) {
-    ++m_numberOfCopies;
-    if (!m_length) {
-      m_length = string->length();
-      fillWithSnippet(string, m_snippet);
-    }
-    if (string->isAtomic())
-      ++m_numberOfAtomicCopies;
-    if (isUnnecessarilyWide(string))
-      m_unnecessarilyWide = true;
-  }
-
-  size_t totalCharacters() const { return m_numberOfCopies * m_length; }
-
-  void print() {
-    const char* status = "ok";
-    if (m_unnecessarilyWide)
-      status = "16";
-    dataLogF("%8u copies (%s) of length %8u %s\n", m_numberOfCopies, status,
-             m_length, m_snippet.data());
-  }
-
-  bool m_unnecessarilyWide;
-  unsigned m_numberOfCopies;
-  unsigned m_length;
-  unsigned m_numberOfAtomicCopies;
-  Vector<char> m_snippet;
-
- private:
-  PerStringStats()
-      : m_unnecessarilyWide(false),
-        m_numberOfCopies(0),
-        m_length(0),
-        m_numberOfAtomicCopies(0) {}
-};
-
-bool operator<(const RefPtr<PerStringStats>& a,
-               const RefPtr<PerStringStats>& b) {
-  if (a->m_unnecessarilyWide != b->m_unnecessarilyWide)
-    return !a->m_unnecessarilyWide && b->m_unnecessarilyWide;
-  if (a->totalCharacters() != b->totalCharacters())
-    return a->totalCharacters() < b->totalCharacters();
-  if (a->m_numberOfCopies != b->m_numberOfCopies)
-    return a->m_numberOfCopies < b->m_numberOfCopies;
-  if (a->m_length != b->m_length)
-    return a->m_length < b->m_length;
-  return a->m_numberOfAtomicCopies < b->m_numberOfAtomicCopies;
-}
-
-static void printLiveStringStats(void*) {
-  MutexLocker locker(statsMutex());
-  HashSet<void*>& strings = liveStrings();
-
-  HashMap<StringImpl*, RefPtr<PerStringStats>> stats;
-  for (HashSet<void*>::iterator iter = strings.begin(); iter != strings.end();
-       ++iter) {
-    StringImpl* string = static_cast<StringImpl*>(*iter);
-    HashMap<StringImpl*, RefPtr<PerStringStats>>::iterator entry =
-        stats.find(string);
-    RefPtr<PerStringStats> value =
-        entry == stats.end() ? RefPtr<PerStringStats>(PerStringStats::create())
-                             : entry->value;
-    value->add(string);
-    stats.set(string, value.release());
-  }
-
-  Vector<RefPtr<PerStringStats>> all;
-  for (HashMap<StringImpl*, RefPtr<PerStringStats>>::iterator iter =
-           stats.begin();
-       iter != stats.end(); ++iter)
-    all.append(iter->value);
-
-  std::sort(all.begin(), all.end());
-  std::reverse(all.begin(), all.end());
-  for (size_t i = 0; i < 20 && i < all.size(); ++i)
-    all[i]->print();
-}
-
-StringStats StringImpl::m_stringStats;
-
-unsigned StringStats::s_stringRemovesTillPrintStats =
-    StringStats::s_printStringStatsFrequency;
-
-void StringStats::removeString(StringImpl* string) {
-  unsigned length = string->length();
-  --m_totalNumberStrings;
-
-  if (string->is8Bit()) {
-    --m_number8BitStrings;
-    m_total8BitData -= length;
-  } else {
-    --m_number16BitStrings;
-    m_total16BitData -= length;
-  }
-
-  if (!--s_stringRemovesTillPrintStats) {
-    s_stringRemovesTillPrintStats = s_printStringStatsFrequency;
-    printStats();
-  }
-}
-
-void StringStats::printStats() {
-  dataLogF("String stats for process id %d:\n", getpid());
-
-  unsigned long long totalNumberCharacters = m_total8BitData + m_total16BitData;
-  double percent8Bit =
-      m_totalNumberStrings
-          ? ((double)m_number8BitStrings * 100) / (double)m_totalNumberStrings
-          : 0.0;
-  double average8bitLength =
-      m_number8BitStrings
-          ? (double)m_total8BitData / (double)m_number8BitStrings
-          : 0.0;
-  dataLogF(
-      "%8u (%5.2f%%) 8 bit        %12llu chars  %12llu bytes  avg length "
-      "%6.1f\n",
-      m_number8BitStrings, percent8Bit, m_total8BitData, m_total8BitData,
-      average8bitLength);
-
-  double percent16Bit =
-      m_totalNumberStrings
-          ? ((double)m_number16BitStrings * 100) / (double)m_totalNumberStrings
-          : 0.0;
-  double average16bitLength =
-      m_number16BitStrings
-          ? (double)m_total16BitData / (double)m_number16BitStrings
-          : 0.0;
-  dataLogF(
-      "%8u (%5.2f%%) 16 bit       %12llu chars  %12llu bytes  avg length "
-      "%6.1f\n",
-      m_number16BitStrings, percent16Bit, m_total16BitData,
-      m_total16BitData * 2, average16bitLength);
-
-  double averageLength =
-      m_totalNumberStrings
-          ? (double)totalNumberCharacters / (double)m_totalNumberStrings
-          : 0.0;
-  unsigned long long totalDataBytes = m_total8BitData + m_total16BitData * 2;
-  dataLogF(
-      "%8u Total                 %12llu chars  %12llu bytes  avg length "
-      "%6.1f\n",
-      m_totalNumberStrings, totalNumberCharacters, totalDataBytes,
-      averageLength);
-  unsigned long long totalSavedBytes = m_total8BitData;
-  double percentSavings = totalSavedBytes
-                              ? ((double)totalSavedBytes * 100) /
-                                    (double)(totalDataBytes + totalSavedBytes)
-                              : 0.0;
-  dataLogF("         Total savings %12llu bytes (%5.2f%%)\n", totalSavedBytes,
-           percentSavings);
-
-  unsigned totalOverhead = m_totalNumberStrings * sizeof(StringImpl);
-  double overheadPercent = (double)totalOverhead / (double)totalDataBytes * 100;
-  dataLogF("         StringImpl overheader: %8u (%5.2f%%)\n", totalOverhead,
-           overheadPercent);
-
-  internal::callOnMainThread(&printLiveStringStats, nullptr);
-}
-#endif
-
 void* StringImpl::operator new(size_t size) {
   DCHECK_EQ(size, sizeof(StringImpl));
   return Partitions::BufferMalloc(size, "WTF::StringImpl");
@@ -303,8 +69,6 @@ void StringImpl::operator delete(void* ptr) {
 
 inline StringImpl::~StringImpl() {
   DCHECK(!IsStatic());
-
-  STRING_STATS_REMOVE_STRING(this);
 
   if (IsAtomic())
     AtomicStringTable::Instance().Remove(this);
@@ -337,7 +101,7 @@ bool StringImpl::IsSafeToSendToAnotherThread() const {
 #if DCHECK_IS_ON()
 std::string StringImpl::AsciiForDebugging() const {
   CString ascii = String(IsolatedCopy()->Substring(0, 128)).Ascii();
-  return std::string(ascii.Data(), ascii.length());
+  return std::string(ascii.data(), ascii.length());
 }
 #endif
 
@@ -424,7 +188,7 @@ StringImpl* StringImpl::CreateStatic(const char* string,
   DCHECK(string);
   DCHECK(length);
 
-  StaticStringsTable::const_iterator it = StaticStrings().Find(hash);
+  StaticStringsTable::const_iterator it = StaticStrings().find(hash);
   if (it != StaticStrings().end()) {
     DCHECK(!memcmp(string, it->value + 1, length * sizeof(LChar)));
     return it->value;
@@ -433,9 +197,9 @@ StringImpl* StringImpl::CreateStatic(const char* string,
   // Allocate a single buffer large enough to contain the StringImpl
   // struct as well as the data which it contains. This removes one
   // heap allocation from this call.
-  RELEASE_ASSERT(length <=
-                 ((std::numeric_limits<unsigned>::max() - sizeof(StringImpl)) /
-                  sizeof(LChar)));
+  CHECK_LE(length,
+           ((std::numeric_limits<unsigned>::max() - sizeof(StringImpl)) /
+            sizeof(LChar)));
   size_t size = sizeof(StringImpl) + length * sizeof(LChar);
 
   WTF_INTERNAL_LEAK_SANITIZER_DISABLED_SCOPE;
@@ -510,7 +274,7 @@ PassRefPtr<StringImpl> StringImpl::Create(const LChar* string) {
   if (!string)
     return empty_;
   size_t length = strlen(reinterpret_cast<const char*>(string));
-  RELEASE_ASSERT(length <= numeric_limits<unsigned>::max());
+  CHECK_LE(length, numeric_limits<unsigned>::max());
   return Create(string, length);
 }
 
@@ -619,8 +383,7 @@ PassRefPtr<StringImpl> StringImpl::LowerASCII() {
   if (no_upper && !(ored & ~0x7F))
     return this;
 
-  RELEASE_ASSERT(length_ <=
-                 static_cast<unsigned>(numeric_limits<unsigned>::max()));
+  CHECK_LE(length_, static_cast<unsigned>(numeric_limits<unsigned>::max()));
   unsigned length = length_;
 
   UChar* data16;
@@ -678,8 +441,7 @@ PassRefPtr<StringImpl> StringImpl::LowerUnicode() {
   if (no_upper && !(ored & ~0x7F))
     return this;
 
-  RELEASE_ASSERT(length_ <=
-                 static_cast<unsigned>(numeric_limits<int32_t>::max()));
+  CHECK_LE(length_, static_cast<unsigned>(numeric_limits<int32_t>::max()));
   int32_t length = length_;
 
   if (!(ored & ~0x7F)) {
@@ -715,8 +477,7 @@ PassRefPtr<StringImpl> StringImpl::UpperUnicode() {
   // but in empirical testing, few actual calls to UpperUnicode() are no-ops, so
   // it wouldn't be worth the extra time for pre-scanning.
 
-  RELEASE_ASSERT(length_ <=
-                 static_cast<unsigned>(numeric_limits<int32_t>::max()));
+  CHECK_LE(length_, static_cast<unsigned>(numeric_limits<int32_t>::max()));
   int32_t length = length_;
 
   if (Is8Bit()) {
@@ -830,7 +591,8 @@ PassRefPtr<StringImpl> StringImpl::UpperASCII() {
 
 static inline bool LocaleIdMatchesLang(const AtomicString& locale_id,
                                        const StringView& lang) {
-  RELEASE_ASSERT(lang.length() >= 2 && lang.length() <= 3);
+  CHECK_GE(lang.length(), 2u);
+  CHECK_LE(lang.length(), 3u);
   if (!locale_id.Impl() || !locale_id.Impl()->StartsWithIgnoringCase(lang))
     return false;
   if (locale_id.Impl()->length() == lang.length())
@@ -941,8 +703,7 @@ PassRefPtr<StringImpl> StringImpl::Fill(UChar character) {
 }
 
 PassRefPtr<StringImpl> StringImpl::FoldCase() {
-  RELEASE_ASSERT(length_ <=
-                 static_cast<unsigned>(numeric_limits<int32_t>::max()));
+  CHECK_LE(length_, static_cast<unsigned>(numeric_limits<int32_t>::max()));
   int32_t length = length_;
 
   if (Is8Bit()) {
@@ -1761,8 +1522,8 @@ PassRefPtr<StringImpl> StringImpl::Replace(unsigned position,
   if (!length_to_replace && !length_to_insert)
     return this;
 
-  RELEASE_ASSERT((length() - length_to_replace) <
-                 (numeric_limits<unsigned>::max() - length_to_insert));
+  CHECK_LT((length() - length_to_replace),
+           (numeric_limits<unsigned>::max() - length_to_insert));
 
   if (Is8Bit() && (string.IsNull() || string.Is8Bit())) {
     LChar* data;
@@ -1832,13 +1593,12 @@ PassRefPtr<StringImpl> StringImpl::Replace(UChar pattern,
   if (!match_count)
     return this;
 
-  RELEASE_ASSERT(!rep_str_length ||
-                 match_count <=
-                     numeric_limits<unsigned>::max() / rep_str_length);
+  CHECK(!rep_str_length ||
+        match_count <= numeric_limits<unsigned>::max() / rep_str_length);
 
   unsigned replace_size = match_count * rep_str_length;
   unsigned new_size = length_ - match_count;
-  RELEASE_ASSERT(new_size < (numeric_limits<unsigned>::max() - replace_size));
+  CHECK_LT(new_size, (numeric_limits<unsigned>::max() - replace_size));
 
   new_size += replace_size;
 
@@ -1914,13 +1674,12 @@ PassRefPtr<StringImpl> StringImpl::Replace(UChar pattern,
   if (!match_count)
     return this;
 
-  RELEASE_ASSERT(!rep_str_length ||
-                 match_count <=
-                     numeric_limits<unsigned>::max() / rep_str_length);
+  CHECK(!rep_str_length ||
+        match_count <= numeric_limits<unsigned>::max() / rep_str_length);
 
   unsigned replace_size = match_count * rep_str_length;
   unsigned new_size = length_ - match_count;
-  RELEASE_ASSERT(new_size < (numeric_limits<unsigned>::max() - replace_size));
+  CHECK_LT(new_size, (numeric_limits<unsigned>::max() - replace_size));
 
   new_size += replace_size;
 
@@ -2003,12 +1762,11 @@ PassRefPtr<StringImpl> StringImpl::Replace(const StringView& pattern,
     return this;
 
   unsigned new_size = length_ - match_count * pattern_length;
-  RELEASE_ASSERT(!rep_str_length ||
-                 match_count <=
-                     numeric_limits<unsigned>::max() / rep_str_length);
+  CHECK(!rep_str_length ||
+        match_count <= numeric_limits<unsigned>::max() / rep_str_length);
 
-  RELEASE_ASSERT(new_size <= (numeric_limits<unsigned>::max() -
-                              match_count * rep_str_length));
+  CHECK_LE(new_size,
+           (numeric_limits<unsigned>::max() - match_count * rep_str_length));
 
   new_size += match_count * rep_str_length;
 

@@ -13,6 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_scheduler.h"
 #include "crypto/scoped_nss_types.h"
 #include "crypto/scoped_test_nss_db.h"
 #include "net/cert/nss_cert_database_chromeos.h"
@@ -37,6 +38,20 @@ bool IsCertInCertificateList(const net::X509Certificate* cert,
   return false;
 }
 
+size_t CountCertOccurencesInCertificateList(
+    const net::X509Certificate* cert,
+    const net::CertificateList& cert_list) {
+  size_t count = 0;
+  for (net::CertificateList::const_iterator it = cert_list.begin();
+       it != cert_list.end(); ++it) {
+    if (net::X509Certificate::IsSameOSCert((*it)->os_cert_handle(),
+                                           cert->os_cert_handle())) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 class TestNSSCertDatabase : public net::NSSCertDatabaseChromeOS {
  public:
   TestNSSCertDatabase(crypto::ScopedPK11Slot public_slot,
@@ -45,16 +60,31 @@ class TestNSSCertDatabase : public net::NSSCertDatabaseChromeOS {
                                 std::move(private_slot)) {}
   ~TestNSSCertDatabase() override {}
 
-  void NotifyOfCertAdded(const net::X509Certificate* cert) {
+  // Make this method visible in the public interface.
+  void NotifyObserversCertDBChanged() {
     NSSCertDatabaseChromeOS::NotifyObserversCertDBChanged();
   }
 };
+
+// Describes a client certificate along with a key, stored in
+// net::GetTestCertsDirectory().
+struct TestClientCertWithKey {
+  const char* cert_pem_filename;
+  const char* key_pk8_filename;
+};
+
+const TestClientCertWithKey TEST_CLIENT_CERT_1 = {"client_1.pem",
+                                                  "client_1.pk8"};
+const TestClientCertWithKey TEST_CLIENT_CERT_2 = {"client_2.pem",
+                                                  "client_2.pk8"};
 
 class CertLoaderTest : public testing::Test,
                        public CertLoader::Observer {
  public:
   CertLoaderTest()
-      : cert_loader_(nullptr), certificates_loaded_events_count_(0U) {}
+      : cert_loader_(nullptr),
+        scoped_task_scheduler_(&message_loop_),
+        certificates_loaded_events_count_(0U) {}
 
   ~CertLoaderTest() override {}
 
@@ -74,7 +104,18 @@ class CertLoaderTest : public testing::Test,
  protected:
   void StartCertLoaderWithPrimaryDB() {
     CreateCertDatabase(&primary_db_, &primary_certdb_);
-    cert_loader_->StartWithNSSDB(primary_certdb_.get());
+    cert_loader_->SetUserNSSDB(primary_certdb_.get());
+
+    base::RunLoop().RunUntilIdle();
+    GetAndResetCertificatesLoadedEventsCount();
+  }
+
+  // Starts the cert loader with a primary cert database which has access to the
+  // system token.
+  void StartCertLoaderWithPrimaryDBAndSystemToken() {
+    CreateCertDatabase(&primary_db_, &primary_certdb_);
+    AddSystemToken(primary_certdb_.get());
+    cert_loader_->SetUserNSSDB(primary_certdb_.get());
 
     base::RunLoop().RunUntilIdle();
     GetAndResetCertificatesLoadedEventsCount();
@@ -125,15 +166,43 @@ class CertLoaderTest : public testing::Test,
     ASSERT_TRUE(failed.empty());
   }
 
+  // Import a client cert described by |test_cert| and key into a PKCS11 slot.
+  // Then notify |database_to_notify| (which is presumably using that slot) that
+  // new certificates are available.
   scoped_refptr<net::X509Certificate> ImportClientCertAndKey(
-      TestNSSCertDatabase* database) {
+      TestNSSCertDatabase* database_to_notify,
+      PK11SlotInfo* slot_to_use,
+      const TestClientCertWithKey& test_cert) {
     // Import a client cert signed by that CA.
     scoped_refptr<net::X509Certificate> client_cert(
-        net::ImportClientCertAndKeyFromFile(net::GetTestCertsDirectory(),
-                                            "client_1.pem", "client_1.pk8",
-                                            database->GetPrivateSlot().get()));
-    database->NotifyOfCertAdded(client_cert.get());
+        net::ImportClientCertAndKeyFromFile(
+            net::GetTestCertsDirectory(), test_cert.cert_pem_filename,
+            test_cert.key_pk8_filename, slot_to_use));
+    database_to_notify->NotifyObserversCertDBChanged();
     return client_cert;
+  }
+
+  // Import |TEST_CLIENT_CERT_1| into a PKCS11 slot. Then notify
+  // |database_to_notify| (which is presumably using that slot) that new
+  // certificates are avialable.
+  scoped_refptr<net::X509Certificate> ImportClientCertAndKey(
+      TestNSSCertDatabase* database_to_notify,
+      PK11SlotInfo* slot_to_use) {
+    return ImportClientCertAndKey(database_to_notify, slot_to_use,
+                                  TEST_CLIENT_CERT_1);
+  }
+
+  // Import a client cert into |database|'s private slot.
+  scoped_refptr<net::X509Certificate> ImportClientCertAndKey(
+      TestNSSCertDatabase* database) {
+    return ImportClientCertAndKey(database, database->GetPrivateSlot().get());
+  }
+
+  // Adds the PKCS11 slot from |system_db_| to |certdb| as system slot.
+  void AddSystemToken(TestNSSCertDatabase* certdb) {
+    ASSERT_TRUE(system_db_.is_open());
+    certdb->SetSystemSlot(
+        crypto::ScopedPK11Slot(PK11_ReferenceSlot(system_db_.slot())));
   }
 
   CertLoader* cert_loader_;
@@ -144,34 +213,177 @@ class CertLoaderTest : public testing::Test,
   crypto::ScopedTestNSSDB primary_db_;
   std::unique_ptr<TestNSSCertDatabase> primary_certdb_;
 
+  // Additional NSS DB simulating the system token.
+  crypto::ScopedTestNSSDB system_db_;
+
+  // A NSSCertDatabase which only uses the system token (simulated by
+  // system_db_).
+  std::unique_ptr<TestNSSCertDatabase> system_certdb_;
+
   base::MessageLoop message_loop_;
 
  private:
+  base::test::ScopedTaskScheduler scoped_task_scheduler_;
   size_t certificates_loaded_events_count_;
 };
 
 }  // namespace
 
-TEST_F(CertLoaderTest, Basic) {
-  EXPECT_FALSE(cert_loader_->CertificatesLoading());
-  EXPECT_FALSE(cert_loader_->certificates_loaded());
+TEST_F(CertLoaderTest, BasicOnlyUserDB) {
+  EXPECT_FALSE(cert_loader_->initial_load_of_any_database_running());
+  EXPECT_FALSE(cert_loader_->initial_load_finished());
 
   CreateCertDatabase(&primary_db_, &primary_certdb_);
-  cert_loader_->StartWithNSSDB(primary_certdb_.get());
+  cert_loader_->SetUserNSSDB(primary_certdb_.get());
 
-  EXPECT_FALSE(cert_loader_->certificates_loaded());
-  EXPECT_TRUE(cert_loader_->CertificatesLoading());
-  EXPECT_TRUE(cert_loader_->cert_list().empty());
+  EXPECT_FALSE(cert_loader_->initial_load_finished());
+  EXPECT_TRUE(cert_loader_->initial_load_of_any_database_running());
+  EXPECT_TRUE(cert_loader_->all_certs().empty());
+  EXPECT_TRUE(cert_loader_->system_certs().empty());
 
   ASSERT_EQ(0U, GetAndResetCertificatesLoadedEventsCount());
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1U, GetAndResetCertificatesLoadedEventsCount());
 
-  EXPECT_TRUE(cert_loader_->certificates_loaded());
-  EXPECT_FALSE(cert_loader_->CertificatesLoading());
+  EXPECT_TRUE(cert_loader_->initial_load_finished());
+  EXPECT_FALSE(cert_loader_->initial_load_of_any_database_running());
 
   // Default CA cert roots should get loaded.
-  EXPECT_FALSE(cert_loader_->cert_list().empty());
+  EXPECT_FALSE(cert_loader_->all_certs().empty());
+  EXPECT_TRUE(cert_loader_->system_certs().empty());
+}
+
+TEST_F(CertLoaderTest, BasicOnlySystemDB) {
+  EXPECT_FALSE(cert_loader_->initial_load_of_any_database_running());
+  EXPECT_FALSE(cert_loader_->initial_load_finished());
+
+  CreateCertDatabase(&system_db_, &system_certdb_);
+  cert_loader_->SetSystemNSSDB(system_certdb_.get());
+
+  EXPECT_FALSE(cert_loader_->initial_load_finished());
+  EXPECT_TRUE(cert_loader_->initial_load_of_any_database_running());
+  EXPECT_TRUE(cert_loader_->all_certs().empty());
+
+  ASSERT_EQ(0U, GetAndResetCertificatesLoadedEventsCount());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1U, GetAndResetCertificatesLoadedEventsCount());
+
+  EXPECT_TRUE(cert_loader_->initial_load_finished());
+  EXPECT_FALSE(cert_loader_->initial_load_of_any_database_running());
+
+  // Default CA cert roots should get loaded.
+  EXPECT_FALSE(cert_loader_->all_certs().empty());
+}
+
+// Tests the CertLoader with a system DB and then with an additional user DB
+// which does not have access to the system token.
+TEST_F(CertLoaderTest, SystemAndUnaffiliatedUserDB) {
+  CreateCertDatabase(&system_db_, &system_certdb_);
+  scoped_refptr<net::X509Certificate> system_token_cert(ImportClientCertAndKey(
+      system_certdb_.get(), system_db_.slot(), TEST_CLIENT_CERT_1));
+
+  CreateCertDatabase(&primary_db_, &primary_certdb_);
+  scoped_refptr<net::X509Certificate> user_token_cert(ImportClientCertAndKey(
+      primary_certdb_.get(), primary_db_.slot(), TEST_CLIENT_CERT_2));
+
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(cert_loader_->initial_load_of_any_database_running());
+  EXPECT_FALSE(cert_loader_->initial_load_finished());
+
+  cert_loader_->SetSystemNSSDB(system_certdb_.get());
+
+  EXPECT_FALSE(cert_loader_->initial_load_finished());
+  EXPECT_TRUE(cert_loader_->initial_load_of_any_database_running());
+  EXPECT_TRUE(cert_loader_->all_certs().empty());
+  EXPECT_TRUE(cert_loader_->system_certs().empty());
+
+  ASSERT_EQ(0U, GetAndResetCertificatesLoadedEventsCount());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1U, GetAndResetCertificatesLoadedEventsCount());
+
+  EXPECT_TRUE(cert_loader_->initial_load_finished());
+  EXPECT_FALSE(cert_loader_->initial_load_of_any_database_running());
+
+  EXPECT_TRUE(IsCertInCertificateList(system_token_cert.get(),
+                                      cert_loader_->system_certs()));
+  EXPECT_TRUE(IsCertInCertificateList(system_token_cert.get(),
+                                      cert_loader_->all_certs()));
+
+  cert_loader_->SetUserNSSDB(primary_certdb_.get());
+
+  EXPECT_TRUE(cert_loader_->initial_load_finished());
+  EXPECT_TRUE(cert_loader_->initial_load_of_any_database_running());
+  EXPECT_FALSE(cert_loader_->all_certs().empty());
+  EXPECT_FALSE(cert_loader_->system_certs().empty());
+
+  ASSERT_EQ(0U, GetAndResetCertificatesLoadedEventsCount());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1U, GetAndResetCertificatesLoadedEventsCount());
+
+  EXPECT_TRUE(cert_loader_->initial_load_finished());
+  EXPECT_FALSE(cert_loader_->initial_load_of_any_database_running());
+
+  EXPECT_FALSE(IsCertInCertificateList(user_token_cert.get(),
+                                       cert_loader_->system_certs()));
+  EXPECT_TRUE(IsCertInCertificateList(user_token_cert.get(),
+                                      cert_loader_->all_certs()));
+}
+
+// Tests the CertLoader with a system DB and then with an additional user DB
+// which has access to the system token.
+TEST_F(CertLoaderTest, SystemAndAffiliatedUserDB) {
+  CreateCertDatabase(&system_db_, &system_certdb_);
+  scoped_refptr<net::X509Certificate> system_token_cert(ImportClientCertAndKey(
+      system_certdb_.get(), system_db_.slot(), TEST_CLIENT_CERT_1));
+
+  CreateCertDatabase(&primary_db_, &primary_certdb_);
+  scoped_refptr<net::X509Certificate> user_token_cert(ImportClientCertAndKey(
+      primary_certdb_.get(), primary_db_.slot(), TEST_CLIENT_CERT_2));
+
+  AddSystemToken(primary_certdb_.get());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(cert_loader_->initial_load_of_any_database_running());
+  EXPECT_FALSE(cert_loader_->initial_load_finished());
+
+  cert_loader_->SetSystemNSSDB(system_certdb_.get());
+
+  EXPECT_FALSE(cert_loader_->initial_load_finished());
+  EXPECT_TRUE(cert_loader_->initial_load_of_any_database_running());
+  EXPECT_TRUE(cert_loader_->all_certs().empty());
+  EXPECT_TRUE(cert_loader_->system_certs().empty());
+
+  ASSERT_EQ(0U, GetAndResetCertificatesLoadedEventsCount());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1U, GetAndResetCertificatesLoadedEventsCount());
+
+  EXPECT_TRUE(cert_loader_->initial_load_finished());
+  EXPECT_FALSE(cert_loader_->initial_load_of_any_database_running());
+
+  EXPECT_TRUE(IsCertInCertificateList(system_token_cert.get(),
+                                      cert_loader_->system_certs()));
+  EXPECT_TRUE(IsCertInCertificateList(system_token_cert.get(),
+                                      cert_loader_->all_certs()));
+
+  cert_loader_->SetUserNSSDB(primary_certdb_.get());
+
+  EXPECT_TRUE(cert_loader_->initial_load_finished());
+  EXPECT_TRUE(cert_loader_->initial_load_of_any_database_running());
+  EXPECT_FALSE(cert_loader_->all_certs().empty());
+  EXPECT_FALSE(cert_loader_->system_certs().empty());
+
+  ASSERT_EQ(0U, GetAndResetCertificatesLoadedEventsCount());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1U, GetAndResetCertificatesLoadedEventsCount());
+
+  EXPECT_TRUE(cert_loader_->initial_load_finished());
+  EXPECT_FALSE(cert_loader_->initial_load_of_any_database_running());
+
+  EXPECT_FALSE(IsCertInCertificateList(user_token_cert.get(),
+                                       cert_loader_->system_certs()));
+  EXPECT_EQ(1U, CountCertOccurencesInCertificateList(
+                    user_token_cert.get(), cert_loader_->all_certs()));
 }
 
 TEST_F(CertLoaderTest, CertLoaderUpdatesCertListOnNewCert) {
@@ -183,7 +395,7 @@ TEST_F(CertLoaderTest, CertLoaderUpdatesCertListOnNewCert) {
   // Certs are loaded asynchronously, so the new cert should not yet be in the
   // cert list.
   EXPECT_FALSE(
-      IsCertInCertificateList(certs[0].get(), cert_loader_->cert_list()));
+      IsCertInCertificateList(certs[0].get(), cert_loader_->all_certs()));
 
   ASSERT_EQ(0U, GetAndResetCertificatesLoadedEventsCount());
   base::RunLoop().RunUntilIdle();
@@ -191,7 +403,7 @@ TEST_F(CertLoaderTest, CertLoaderUpdatesCertListOnNewCert) {
 
   // The certificate list should be updated now, as the message loop's been run.
   EXPECT_TRUE(
-      IsCertInCertificateList(certs[0].get(), cert_loader_->cert_list()));
+      IsCertInCertificateList(certs[0].get(), cert_loader_->all_certs()));
 
   EXPECT_FALSE(cert_loader_->IsCertificateHardwareBacked(certs[0].get()));
 }
@@ -209,7 +421,7 @@ TEST_F(CertLoaderTest, CertLoaderNoUpdateOnSecondaryDbChanges) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_FALSE(
-      IsCertInCertificateList(certs[0].get(), cert_loader_->cert_list()));
+      IsCertInCertificateList(certs[0].get(), cert_loader_->all_certs()));
 }
 
 TEST_F(CertLoaderTest, ClientLoaderUpdateOnNewClientCert) {
@@ -222,7 +434,24 @@ TEST_F(CertLoaderTest, ClientLoaderUpdateOnNewClientCert) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1U, GetAndResetCertificatesLoadedEventsCount());
 
-  EXPECT_TRUE(IsCertInCertificateList(cert.get(), cert_loader_->cert_list()));
+  EXPECT_TRUE(IsCertInCertificateList(cert.get(), cert_loader_->all_certs()));
+}
+
+TEST_F(CertLoaderTest, ClientLoaderUpdateOnNewClientCertInSystemToken) {
+  StartCertLoaderWithPrimaryDBAndSystemToken();
+
+  EXPECT_TRUE(cert_loader_->system_certs().empty());
+  scoped_refptr<net::X509Certificate> cert(ImportClientCertAndKey(
+      primary_certdb_.get(), primary_certdb_->GetSystemSlot().get()));
+
+  ASSERT_EQ(0U, GetAndResetCertificatesLoadedEventsCount());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1U, GetAndResetCertificatesLoadedEventsCount());
+
+  EXPECT_TRUE(IsCertInCertificateList(cert.get(), cert_loader_->all_certs()));
+  EXPECT_EQ(1U, cert_loader_->system_certs().size());
+  EXPECT_TRUE(
+      IsCertInCertificateList(cert.get(), cert_loader_->system_certs()));
 }
 
 TEST_F(CertLoaderTest, CertLoaderNoUpdateOnNewClientCertInSecondaryDb) {
@@ -237,7 +466,7 @@ TEST_F(CertLoaderTest, CertLoaderNoUpdateOnNewClientCertInSecondaryDb) {
 
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_FALSE(IsCertInCertificateList(cert.get(), cert_loader_->cert_list()));
+  EXPECT_FALSE(IsCertInCertificateList(cert.get(), cert_loader_->all_certs()));
 }
 
 TEST_F(CertLoaderTest, UpdatedOnCertRemoval) {
@@ -249,7 +478,7 @@ TEST_F(CertLoaderTest, UpdatedOnCertRemoval) {
   base::RunLoop().RunUntilIdle();
 
   ASSERT_EQ(1U, GetAndResetCertificatesLoadedEventsCount());
-  ASSERT_TRUE(IsCertInCertificateList(cert.get(), cert_loader_->cert_list()));
+  ASSERT_TRUE(IsCertInCertificateList(cert.get(), cert_loader_->all_certs()));
 
   primary_certdb_->DeleteCertAndKey(cert.get());
 
@@ -257,7 +486,7 @@ TEST_F(CertLoaderTest, UpdatedOnCertRemoval) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1U, GetAndResetCertificatesLoadedEventsCount());
 
-  ASSERT_FALSE(IsCertInCertificateList(cert.get(), cert_loader_->cert_list()));
+  ASSERT_FALSE(IsCertInCertificateList(cert.get(), cert_loader_->all_certs()));
 }
 
 TEST_F(CertLoaderTest, UpdatedOnCACertTrustChange) {
@@ -269,7 +498,7 @@ TEST_F(CertLoaderTest, UpdatedOnCACertTrustChange) {
   base::RunLoop().RunUntilIdle();
   ASSERT_EQ(1U, GetAndResetCertificatesLoadedEventsCount());
   ASSERT_TRUE(
-      IsCertInCertificateList(certs[0].get(), cert_loader_->cert_list()));
+      IsCertInCertificateList(certs[0].get(), cert_loader_->all_certs()));
 
   // The value that should have been set by |ImportCACert|.
   ASSERT_EQ(net::NSSCertDatabase::TRUST_DEFAULT,

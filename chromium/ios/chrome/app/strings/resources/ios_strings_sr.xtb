@@ -53,7 +53,6 @@
 <translation id="1820259098641718022">Додато је на листу за читање</translation>
 <translation id="1876721852596493031">Шаљи подат. о кориш.</translation>
 <translation id="1886928167269928266">Одувек</translation>
-<translation id="1894451531427596130">Контролишите како ово функционише у <ph name="BEGIN_LINK" />Подешавањима<ph name="END_LINK" /></translation>
 <translation id="1911619930368729126">Отпреми у Google диск</translation>
 <translation id="1941314575388338491">Додирните двапут да бисте копирали.</translation>
 <translation id="1952728750904661634">Пријавите се помоћу налога којим се управља</translation>
@@ -97,6 +96,7 @@
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">Ресетуј подешавања Преводиоца</translation>
 <translation id="285960592395650245">Пробај поново преузимање</translation>
+<translation id="2870560284913253234">Сајт</translation>
 <translation id="2871695793448672541">Сакривена лозинка</translation>
 <translation id="2898963176829412617">Нови директоријум...</translation>
 <translation id="2903493209154104877">Адресе</translation>
@@ -109,7 +109,6 @@
 <translation id="2989805286512600854">Отвори у новој картици</translation>
 <translation id="3024255823539804759">Претходни дан</translation>
 <translation id="3037605927509011580">О, не!</translation>
-<translation id="3050311348724540835">URL <ph name="HISTORY_URL" /> није доступан. Да бисте приступили историји прегледања, изаберите „<ph name="SHOW_HISTORY" />“ у менију алатки.</translation>
 <translation id="3112556859945124369">Означи…</translation>
 <translation id="3151924044251363314">Само неко ко има приступну фразу може да чита шифроване податке. Приступна фраза се не шаље Google-у нити је он чува. Ако заборавите приступну фразу или желите да промените ово подешавање, треба да ресетујете синхронизацију. <ph name="BEGIN_LINK" />Сазнајте више<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">Означи све…</translation>
@@ -150,6 +149,7 @@
 <translation id="3638472932233958418">Унап. учитај веб-странице</translation>
 <translation id="3691593122358196899">Обележивач је додат у <ph name="FOLDER_TITLE" /></translation>
 <translation id="3738139272394829648">Додирни за претрагу</translation>
+<translation id="3742082982782149146">URL сајта је копиран.</translation>
 <translation id="3771033907050503522">Картице Без архивирања</translation>
 <translation id="3783017676699494206">Сачувај слику</translation>
 <translation id="3789841737615482174">Инсталирај</translation>
@@ -164,10 +164,12 @@
 <translation id="4038354071007134711">Ниједна апликација на овом уређају не може да отвори датотеку.</translation>
 <translation id="4049507953662678203">Проверите да ли сте повезани на мрежу и покушајте поново.</translation>
 <translation id="411254640334432676">Преузимање није успело.</translation>
+<translation id="4117350985506774529">Корисничко име је копирано.</translation>
 <translation id="4121993058175073134">За слање података нето извоза подесите налог е-поште у апликацији Подешавања.</translation>
 <translation id="4124987746317609294">Временски опсег</translation>
 <translation id="4172051516777682613">Увек прикажи</translation>
 <translation id="418156467088430727">Прикажи офлајн верзију на новој картици</translation>
+<translation id="4237682350741091554">Управљајте синхронизацијом и персонализацијом за Chrome у <ph name="BEGIN_LINK" />подешавањима<ph name="END_LINK" /></translation>
 <translation id="424315890655130736">Унесите приступну фразу</translation>
 <translation id="4272631900155121838">Да бисте скенирали QR кôд, омогућите камеру у подешавањима</translation>
 <translation id="4281844954008187215">Услови коришћења услуге</translation>
@@ -175,6 +177,7 @@
 <translation id="4359125752503270327">Ова страница ће се отворити у другој апликацији.</translation>
 <translation id="4378154925671717803">Телефон</translation>
 <translation id="441868831736628555">Обавештење о приватности</translation>
+<translation id="4508750114462689118">Затвори промоцију за пријављивање</translation>
 <translation id="4526249700380860531">Прегледајте сачуване лозинке и управљајте њима на <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Пробајте поново да се пријавите.</translation>
 <translation id="4620246317052452550">Прочитане странице</translation>
@@ -220,6 +223,7 @@
 
 Handoff треба да се омогући у одељку General (Опште) у менију Settings (Подешавања), а уређаји морају да користе исти iCloud налог.</translation>
 <translation id="5556459405103347317">Учитај поново</translation>
+<translation id="5619279135193775234">Mail</translation>
 <translation id="5626245204502895507">Тренутно није могуће преузети датотеку.</translation>
 <translation id="5659593005791499971">Имејл</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@ Handoff треба да се омогући у одељку General (Опште)
 <translation id="7136892417564438900">Камера је недоступна</translation>
 <translation id="7159472599653637159">Захтевај мобилни сајт</translation>
 <translation id="7167621057293532233">Типови података</translation>
+<translation id="7175593937868963913">Нови имејл</translation>
 <translation id="7189598951263744875">Дели...</translation>
 <translation id="7203585745079012652">Изговарај одговоре</translation>
 <translation id="722055596168483966">Персонализујте Google услуге</translation>
@@ -358,7 +363,6 @@ Handoff треба да се омогући у одељку General (Опште)
 <translation id="8205564605687841303">Откажи</translation>
 <translation id="8225985093977202398">Кеширане слике и датотеке</translation>
 <translation id="8261506727792406068">Избриши</translation>
-<translation id="8272194309885535896">Преузми слику</translation>
 <translation id="8272426682713568063">Кредитне картице</translation>
 <translation id="8281781826761538115">Подразумевано – <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">Контролишите како Google користи историју прегледања за персонализацију Претраге, огласа и других Google услуга</translation>

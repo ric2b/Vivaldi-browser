@@ -93,12 +93,11 @@ class CORE_EXPORT RootFrameViewport final
           kIgnorePlatformOverlayScrollbarSize) const override;
   ScrollResult UserScroll(ScrollGranularity, const FloatSize&) override;
   bool ScrollAnimatorEnabled() const override;
-  HostWindow* GetHostWindow() const override;
+  PlatformChromeClient* GetChromeClient() const override;
   void ServiceScrollAnimations(double) override;
   void UpdateCompositorScrollAnimations() override;
   void CancelProgrammaticScrollAnimation() override;
   ScrollBehavior ScrollBehaviorStyle() const override;
-  FrameViewBase* GetFrameViewBase() override;
   void ClearScrollableArea() override;
   LayoutBox* GetLayoutBox() const override;
   FloatQuad LocalToVisibleContentQuad(const FloatQuad&,
@@ -125,7 +124,7 @@ class CORE_EXPORT RootFrameViewport final
   void UpdateScrollAnimator();
 
   ScrollableArea& VisualViewport() const {
-    ASSERT(visual_viewport_);
+    DCHECK(visual_viewport_);
     return *visual_viewport_;
   }
 

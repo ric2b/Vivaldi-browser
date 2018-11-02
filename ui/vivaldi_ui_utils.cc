@@ -117,7 +117,6 @@ bool EncodeBitmap(const SkBitmap& screen_capture,
                   double scale,
                   int image_quality,
                   bool resize) {
-  SkAutoLockPixels screen_capture_lock(screen_capture);
   gfx::Size dst_size_pixels;
   if (size.width() && size.height()) {
     dst_size_pixels.SetSize(size.width(), size.height());
@@ -134,8 +133,6 @@ bool EncodeBitmap(const SkBitmap& screen_capture,
     bitmap = screen_capture;
   }
   bool encoded = false;
-
-  SkAutoLockPixels lock(bitmap);
 
   switch (image_format) {
     case extensions::api::extension_types::IMAGE_FORMAT_JPEG:
@@ -189,8 +186,10 @@ SkBitmap SmartCropAndSize(const SkBitmap& capture,
   // Note that GetClippedBitmap() does extractSubset() but it won't copy
   // the pixels, hence we check result size == clipped_bitmap size here.
   if (clipped_bitmap.width() == result.width() &&
-      clipped_bitmap.height() == result.height())
-    clipped_bitmap.copyTo(&result, kN32_SkColorType);
+      clipped_bitmap.height() == result.height()) {
+    clipped_bitmap.readPixels(result.info(), result.getPixels(),
+                              result.rowBytes(), 0, 0);
+  }
 #endif
   return result;
 }

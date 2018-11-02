@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/values.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
@@ -34,24 +35,25 @@
 
 namespace {
 
-const char kActivity[] = "activity";
-const char kIconResourceId[] = "icon_resource_id";
-const char kInstallTime[] = "install_time";
-const char kIntentUri[] = "intent_uri";
-const char kLastBackupAndroidId[] = "last_backup_android_id";
-const char kLastBackupTime[] = "last_backup_time";
-const char kLastLaunchTime[] = "lastlaunchtime";
-const char kLaunchable[] = "launchable";
-const char kName[] = "name";
-const char kNotificationsEnabled[] = "notifications_enabled";
-const char kOrientationLock[] = "orientation_lock";
-const char kPackageName[] = "package_name";
-const char kPackageVersion[] = "package_version";
-const char kSticky[] = "sticky";
-const char kShortcut[] = "shortcut";
-const char kShouldSync[] = "should_sync";
-const char kSystem[] = "system";
-const char kUninstalled[] = "uninstalled";
+constexpr char kActivity[] = "activity";
+constexpr char kIconResourceId[] = "icon_resource_id";
+constexpr char kInstallTime[] = "install_time";
+constexpr char kIntentUri[] = "intent_uri";
+constexpr char kInvalidatedIcons[] = "invalidated_icons";
+constexpr char kLastBackupAndroidId[] = "last_backup_android_id";
+constexpr char kLastBackupTime[] = "last_backup_time";
+constexpr char kLastLaunchTime[] = "lastlaunchtime";
+constexpr char kLaunchable[] = "launchable";
+constexpr char kName[] = "name";
+constexpr char kNotificationsEnabled[] = "notifications_enabled";
+constexpr char kOrientationLock[] = "orientation_lock";
+constexpr char kPackageName[] = "package_name";
+constexpr char kPackageVersion[] = "package_version";
+constexpr char kSticky[] = "sticky";
+constexpr char kShortcut[] = "shortcut";
+constexpr char kShouldSync[] = "should_sync";
+constexpr char kSystem[] = "system";
+constexpr char kUninstalled[] = "uninstalled";
 
 constexpr base::TimeDelta kDetectDefaultAppAvailabilityTimeout =
     base::TimeDelta::FromSeconds(15);
@@ -71,8 +73,8 @@ class ScopedArcPrefUpdate : public DictionaryPrefUpdate {
     base::DictionaryValue* dict = DictionaryPrefUpdate::Get();
     base::DictionaryValue* dict_item = nullptr;
     if (!dict->GetDictionaryWithoutPathExpansion(id_, &dict_item)) {
-      dict_item = new base::DictionaryValue();
-      dict->SetWithoutPathExpansion(id_, dict_item);
+      dict_item = dict->SetDictionaryWithoutPathExpansion(
+          id_, base::MakeUnique<base::DictionaryValue>());
     }
     return dict_item;
   }
@@ -113,9 +115,7 @@ class SetNotificationsEnabledDeferred {
   PrefService* const prefs_;
 };
 
-bool InstallIconFromFileThread(const std::string& app_id,
-                               ui::ScaleFactor scale_factor,
-                               const base::FilePath& icon_path,
+bool InstallIconFromFileThread(const base::FilePath& icon_path,
                                const std::vector<uint8_t>& content_png) {
   DCHECK(!content_png.empty());
 
@@ -127,9 +127,10 @@ bool InstallIconFromFileThread(const std::string& app_id,
   if (wrote != static_cast<int>(content_png.size())) {
     VLOG(2) << "Failed to write ARC icon file: " << icon_path.MaybeAsASCII()
             << ".";
-    if (!base::DeleteFile(icon_path, false))
+    if (!base::DeleteFile(icon_path, false)) {
       VLOG(2) << "Couldn't delete broken icon file" << icon_path.MaybeAsASCII()
               << ".";
+    }
     return false;
   }
 
@@ -208,6 +209,24 @@ base::FilePath ToIconPath(const base::FilePath& app_path,
   }
 }
 
+// Play Store app id was changed in the app launcher and now is unified with
+// shelf id. This renames legacy app info entry to the new id. This entry is in
+// local prefs and renaming won't affect other user's devices.
+// TODO(khmel): Remove this after few releases http://crbug.com/722675.
+void UpdatePlayStoreDictionary(PrefService* service) {
+  DictionaryPrefUpdate update(service, prefs::kArcApps);
+  base::DictionaryValue* dict = update.Get();
+  std::unique_ptr<base::Value> play_store_dictionary;
+  if (!dict->Remove(arc::kLegacyPlayStoreAppId, &play_store_dictionary))
+    return;
+  if (!dict->HasKey(arc::kPlayStoreAppId)) {
+    DCHECK_EQ(play_store_dictionary->type(), base::Value::Type::DICTIONARY);
+    dict->SetWithoutPathExpansion(arc::kPlayStoreAppId,
+                                  std::move(play_store_dictionary));
+    VLOG(1) << "Play Store dictionary was updated from the legacy entry";
+  }
+}
+
 }  // namespace
 
 // static
@@ -233,8 +252,14 @@ ArcAppListPrefs* ArcAppListPrefs::Get(content::BrowserContext* context) {
 // static
 std::string ArcAppListPrefs::GetAppId(const std::string& package_name,
                                       const std::string& activity) {
-  std::string input = package_name + "#" + activity;
-  return crx_file::id_util::GenerateId(input);
+  if (package_name == arc::kPlayStorePackage &&
+      activity == arc::kPlayStoreActivity) {
+    return arc::kPlayStoreAppId;
+  }
+  const std::string input = package_name + "#" + activity;
+  const std::string app_id = crx_file::id_util::GenerateId(input);
+  DCHECK_NE(app_id, arc::kLegacyPlayStoreAppId);
+  return app_id;
 }
 
 ArcAppListPrefs::ArcAppListPrefs(
@@ -257,6 +282,7 @@ ArcAppListPrefs::ArcAppListPrefs(
     return;
 
   DCHECK(arc::IsArcAllowedForProfile(profile));
+  UpdatePlayStoreDictionary(prefs_);
 
   const std::vector<std::string> existing_app_ids = GetAppIds();
   tracked_apps_.insert(existing_app_ids.begin(), existing_app_ids.end());
@@ -336,6 +362,8 @@ void ArcAppListPrefs::ClearIconRequestRecord() {
 
 void ArcAppListPrefs::RequestIcon(const std::string& app_id,
                                   ui::ScaleFactor scale_factor) {
+  DCHECK_NE(app_id, arc::kPlayStoreAppId);
+
   // ArcSessionManager can be terminated during test tear down, before callback
   // into this function.
   // TODO(victorhsieh): figure out the best way/place to handle this situation.
@@ -507,6 +535,7 @@ std::vector<std::string> ArcAppListPrefs::GetAppIdsNoArcEnabledCheck() const {
 
 std::unique_ptr<ArcAppListPrefs::AppInfo> ArcAppListPrefs::GetApp(
     const std::string& app_id) const {
+  DCHECK_NE(app_id, arc::kLegacyPlayStoreAppId);
   // Information for default app is available before ARC enabled.
   if ((!IsArcAlive() || !IsArcAndroidEnabledForProfile(profile_)) &&
       !default_apps_.HasApp(app_id))
@@ -564,6 +593,7 @@ std::unique_ptr<ArcAppListPrefs::AppInfo> ArcAppListPrefs::GetApp(
 }
 
 bool ArcAppListPrefs::IsRegistered(const std::string& app_id) const {
+  DCHECK_NE(app_id, arc::kLegacyPlayStoreAppId);
   if ((!IsArcAlive() || !IsArcAndroidEnabledForProfile(profile_)) &&
       !default_apps_.HasApp(app_id))
     return false;
@@ -634,7 +664,7 @@ void ArcAppListPrefs::NotifyRegisteredApps() {
   apps_restored_ = true;
 }
 
-void ArcAppListPrefs::RemoveAllApps() {
+void ArcAppListPrefs::RemoveAllAppsAndPackages() {
   std::vector<std::string> app_ids = GetAppIdsNoArcEnabledCheck();
   for (const auto& app_id : app_ids) {
     if (!default_apps_.HasApp(app_id)) {
@@ -647,6 +677,15 @@ void ArcAppListPrefs::RemoveAllApps() {
     }
   }
   DCHECK(ready_apps_.empty());
+
+  const std::vector<std::string> package_names_to_remove =
+      GetPackagesFromPrefs(false /* check_arc_alive */, true /* installed */);
+  for (const auto& package_name : package_names_to_remove) {
+    if (!default_apps_.HasPackage(package_name))
+      RemovePackageFromPrefs(prefs_, package_name);
+    for (auto& observer : observer_list_)
+      observer.OnPackageRemoved(package_name, false);
+  }
 }
 
 void ArcAppListPrefs::OnArcPlayStoreEnabledChanged(bool enabled) {
@@ -659,7 +698,7 @@ void ArcAppListPrefs::OnArcPlayStoreEnabledChanged(bool enabled) {
   if (enabled)
     NotifyRegisteredApps();
   else
-    RemoveAllApps();
+    RemoveAllAppsAndPackages();
 }
 
 void ArcAppListPrefs::SetDefaultAppsFilterLevel() {
@@ -684,7 +723,7 @@ void ArcAppListPrefs::OnDefaultAppsReady() {
   // Apply uninstalled packages now.
 
   const std::vector<std::string> uninstalled_package_names =
-      GetPackagesFromPrefs(false);
+      GetPackagesFromPrefs(false /* check_arc_alive */, false /* installed */);
   for (const auto& uninstalled_package_name : uninstalled_package_names)
     default_apps_.MaybeMarkPackageUninstalled(uninstalled_package_name, true);
 
@@ -772,19 +811,24 @@ void ArcAppListPrefs::OnInstanceClosed() {
   package_list_initial_refreshed_ = false;
 }
 
-void ArcAppListPrefs::MaybeAddNonLaunchableApp(
-    const base::Optional<std::string>& name,
-    const std::string& package_name,
-    const std::string& activity) {
+void ArcAppListPrefs::HandleTaskCreated(const base::Optional<std::string>& name,
+                                        const std::string& package_name,
+                                        const std::string& activity) {
   DCHECK(IsArcAndroidEnabledForProfile(profile_));
-  if (IsRegistered(GetAppId(package_name, activity)))
-    return;
-
-  AddAppAndShortcut(true /* app_ready */, name.has_value() ? *name : "",
-                    package_name, activity, std::string() /* intent_uri */,
-                    std::string() /* icon_resource_id */, false /* sticky */,
-                    false /* notifications_enabled */, false /* shortcut */,
-                    false /* launchable */, arc::mojom::OrientationLock::NONE);
+  const std::string app_id = GetAppId(package_name, activity);
+  if (IsRegistered(app_id)) {
+    SetLastLaunchTime(app_id, base::Time::Now());
+  } else {
+    // Create runtime app entry that is valid for the current user session. This
+    // entry is not shown in App Launcher and only required for shelf
+    // integration.
+    AddAppAndShortcut(true /* app_ready */, name.has_value() ? *name : "",
+                      package_name, activity, std::string() /* intent_uri */,
+                      std::string() /* icon_resource_id */, false /* sticky */,
+                      false /* notifications_enabled */, false /* shortcut */,
+                      false /* launchable */,
+                      arc::mojom::OrientationLock::NONE);
+  }
 }
 
 void ArcAppListPrefs::AddAppAndShortcut(
@@ -858,13 +902,14 @@ void ArcAppListPrefs::AddAppAndShortcut(
   }
 
   if (app_ready) {
+    int icon_update_mask = 0;
+    app_dict->GetInteger(kInvalidatedIcons, &icon_update_mask);
     auto pending_icons = request_icon_recorded_.find(app_id);
-    if (pending_icons != request_icon_recorded_.end()) {
-      for (uint32_t i = ui::SCALE_FACTOR_100P; i < ui::NUM_SCALE_FACTORS; ++i) {
-        if (pending_icons->second & (1 << i)) {
-          RequestIcon(app_id, static_cast<ui::ScaleFactor>(i));
-        }
-      }
+    if (pending_icons != request_icon_recorded_.end())
+      icon_update_mask |= pending_icons->second;
+    for (ui::ScaleFactor scale_factor : ui::GetSupportedScaleFactors()) {
+      if (icon_update_mask & (1 << scale_factor))
+        RequestIcon(app_id, scale_factor);
     }
 
     bool deferred_notifications_enabled;
@@ -905,8 +950,7 @@ void ArcAppListPrefs::RemoveApp(const std::string& app_id) {
 
   // Remove local data on file system.
   base::PostTaskWithTraits(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&DeleteAppFolderFromFileThread, app_path));
 }
 
@@ -914,6 +958,7 @@ void ArcAppListPrefs::AddOrUpdatePackagePrefs(
     PrefService* prefs, const arc::mojom::ArcPackageInfo& package) {
   DCHECK(IsArcAndroidEnabledForProfile(profile_));
   const std::string& package_name = package.package_name;
+
   default_apps_.MaybeMarkPackageUninstalled(package_name, false);
   if (package_name.empty()) {
     VLOG(2) << "Package name cannot be empty.";
@@ -935,7 +980,6 @@ void ArcAppListPrefs::AddOrUpdatePackagePrefs(
 
 void ArcAppListPrefs::RemovePackageFromPrefs(PrefService* prefs,
                                              const std::string& package_name) {
-  DCHECK(IsArcAndroidEnabledForProfile(profile_));
   default_apps_.MaybeMarkPackageUninstalled(package_name, true);
   if (!default_apps_.HasPackage(package_name)) {
     DictionaryPrefUpdate update(prefs, prefs::kArcPackages);
@@ -1015,13 +1059,6 @@ void ArcAppListPrefs::MaybeSetDefaultAppLoadingTimeout() {
   }
 }
 
-void ArcAppListPrefs::OnTaskOrientationLockRequested(
-    int32_t task_id,
-    const arc::mojom::OrientationLock orientation_lock) {
-  for (auto& observer : observer_list_)
-    observer.OnTaskOrientationLockRequested(task_id, orientation_lock);
-}
-
 void ArcAppListPrefs::AddApp(const arc::mojom::AppInfo& app_info) {
   if ((app_info.name.empty() || app_info.package_name.empty() ||
        app_info.activity.empty())) {
@@ -1057,8 +1094,23 @@ void ArcAppListPrefs::OnPackageAppListRefreshed(
   std::unordered_set<std::string> apps_to_remove =
       GetAppsForPackage(package_name);
   default_apps_.MaybeMarkPackageUninstalled(package_name, false);
+
+  int invalidated_icon_mask = 0;
+  for (ui::ScaleFactor scale_factor : ui::GetSupportedScaleFactors())
+    invalidated_icon_mask |= (1 << scale_factor);
+
   for (const auto& app : apps) {
-    apps_to_remove.erase(GetAppId(app->package_name, app->activity));
+    const std::string app_id = GetAppId(app->package_name, app->activity);
+    apps_to_remove.erase(app_id);
+
+    // Mark app icons as invalidated. Ignore Play Store app since we provide its
+    // icon in Chrome resources.
+    if (app_id != arc::kPlayStoreAppId) {
+      ScopedArcPrefUpdate update(prefs_, app_id, prefs::kArcApps);
+      base::DictionaryValue* app_dict = update.Get();
+      app_dict->SetInteger(kInvalidatedIcons, invalidated_icon_mask);
+    }
+
     AddApp(*app);
   }
 
@@ -1158,6 +1210,7 @@ std::unordered_set<std::string> ArcAppListPrefs::GetAppsAndShortcutsForPackage(
 }
 
 void ArcAppListPrefs::HandlePackageRemoved(const std::string& package_name) {
+  DCHECK(IsArcAndroidEnabledForProfile(profile_));
   const std::unordered_set<std::string> apps_to_remove =
       GetAppsAndShortcutsForPackage(package_name, true /* include_shortcuts */);
   for (const auto& app_id : apps_to_remove)
@@ -1170,7 +1223,7 @@ void ArcAppListPrefs::OnPackageRemoved(const std::string& package_name) {
   HandlePackageRemoved(package_name);
 
   for (auto& observer : observer_list_)
-    observer.OnPackageRemoved(package_name);
+    observer.OnPackageRemoved(package_name, true);
 }
 
 void ArcAppListPrefs::OnAppIcon(const std::string& package_name,
@@ -1210,7 +1263,7 @@ void ArcAppListPrefs::OnTaskCreated(int32_t task_id,
                                     const std::string& activity,
                                     const base::Optional<std::string>& name,
                                     const base::Optional<std::string>& intent) {
-  MaybeAddNonLaunchableApp(name, package_name, activity);
+  HandleTaskCreated(name, package_name, activity);
   for (auto& observer : observer_list_) {
     observer.OnTaskCreated(task_id,
                            package_name,
@@ -1219,9 +1272,24 @@ void ArcAppListPrefs::OnTaskCreated(int32_t task_id,
   }
 }
 
+void ArcAppListPrefs::OnTaskDescriptionUpdated(
+    int32_t task_id,
+    const std::string& label,
+    const std::vector<uint8_t>& icon_png_data) {
+  for (auto& observer : observer_list_)
+    observer.OnTaskDescriptionUpdated(task_id, label, icon_png_data);
+}
+
 void ArcAppListPrefs::OnTaskDestroyed(int32_t task_id) {
   for (auto& observer : observer_list_)
     observer.OnTaskDestroyed(task_id);
+}
+
+void ArcAppListPrefs::OnTaskOrientationLockRequested(
+    int32_t task_id,
+    const arc::mojom::OrientationLock orientation_lock) {
+  for (auto& observer : observer_list_)
+    observer.OnTaskOrientationLockRequested(task_id, orientation_lock);
 }
 
 void ArcAppListPrefs::OnTaskSetActive(int32_t task_id) {
@@ -1338,14 +1406,17 @@ void ArcAppListPrefs::OnPackageListRefreshed(
 }
 
 std::vector<std::string> ArcAppListPrefs::GetPackagesFromPrefs() const {
-  return GetPackagesFromPrefs(true);
+  return GetPackagesFromPrefs(true /* check_arc_alive */, true /* installed */);
 }
 
 std::vector<std::string> ArcAppListPrefs::GetPackagesFromPrefs(
+    bool check_arc_alive,
     bool installed) const {
   std::vector<std::string> packages;
-  if ((!IsArcAlive() || !IsArcAndroidEnabledForProfile(profile_)) && installed)
+  if (check_arc_alive &&
+      (!IsArcAlive() || !IsArcAndroidEnabledForProfile(profile_))) {
     return packages;
+  }
 
   const base::DictionaryValue* package_prefs =
       prefs_->GetDictionary(prefs::kArcPackages);
@@ -1387,12 +1458,10 @@ base::Time ArcAppListPrefs::GetInstallTime(const std::string& app_id) const {
 void ArcAppListPrefs::InstallIcon(const std::string& app_id,
                                   ui::ScaleFactor scale_factor,
                                   const std::vector<uint8_t>& content_png) {
-  base::FilePath icon_path = GetIconPath(app_id, scale_factor);
+  const base::FilePath icon_path = GetIconPath(app_id, scale_factor);
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
-      base::Bind(&InstallIconFromFileThread, app_id, scale_factor, icon_path,
-                 content_png),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      base::Bind(&InstallIconFromFileThread, icon_path, content_png),
       base::Bind(&ArcAppListPrefs::OnIconInstalled,
                  weak_ptr_factory_.GetWeakPtr(), app_id, scale_factor));
 }
@@ -1403,6 +1472,13 @@ void ArcAppListPrefs::OnIconInstalled(const std::string& app_id,
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!install_succeed)
     return;
+
+  ScopedArcPrefUpdate update(prefs_, app_id, prefs::kArcApps);
+  int invalidated_icon_mask = 0;
+  base::DictionaryValue* app_dict = update.Get();
+  app_dict->GetInteger(kInvalidatedIcons, &invalidated_icon_mask);
+  invalidated_icon_mask &= (~(1 << scale_factor));
+  app_dict->SetInteger(kInvalidatedIcons, invalidated_icon_mask);
 
   for (auto& observer : observer_list_)
     observer.OnAppIconUpdated(app_id, scale_factor);

@@ -126,9 +126,12 @@ void ProxyImpl::UpdateBrowserControlsStateOnImpl(
 }
 
 void ProxyImpl::InitializeCompositorFrameSinkOnImpl(
-    CompositorFrameSink* compositor_frame_sink) {
+    CompositorFrameSink* compositor_frame_sink,
+    base::WeakPtr<ProxyMain> proxy_main_frame_sink_bound_weak_ptr) {
   TRACE_EVENT0("cc", "ProxyImpl::InitializeCompositorFrameSinkOnImplThread");
   DCHECK(IsImplThread());
+
+  proxy_main_frame_sink_bound_weak_ptr_ = proxy_main_frame_sink_bound_weak_ptr;
 
   LayerTreeHostImpl* host_impl = layer_tree_host_impl_.get();
   bool success = host_impl->InitializeRenderer(compositor_frame_sink);
@@ -232,19 +235,26 @@ NOINLINE void ProxyImpl::DumpForBeginMainFrameHang() {
   DCHECK(IsImplThread());
   DCHECK(scheduler_);
 
-  char stack_string[20000] = "";
+  auto state = base::MakeUnique<base::trace_event::TracedValue>();
+
+  state->SetBoolean("commit_completion_waits_for_activation",
+                    commit_completion_waits_for_activation_);
+  state->SetBoolean("commit_completion_event", !!commit_completion_event_);
+  state->SetBoolean("activation_completion_event",
+                    !!activation_completion_event_);
+
+  state->BeginDictionary("scheduler_state");
+  scheduler_->AsValueInto(state.get());
+  state->EndDictionary();
+
+  state->BeginDictionary("tile_manager_state");
+  layer_tree_host_impl_->tile_manager()->ActivationStateAsValueInto(
+      state.get());
+  state->EndDictionary();
+
+  char stack_string[50000] = "";
   base::debug::Alias(&stack_string);
-
-  std::unique_ptr<base::trace_event::ConvertableToTraceFormat> scheduler_state =
-      scheduler_->AsValue();
-  strncat(stack_string, scheduler_state->ToString().c_str(),
-          arraysize(stack_string) - strlen(stack_string) - 1);
-
-  std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
-      tile_manager_state =
-          layer_tree_host_impl_->tile_manager()->ActivationStateAsValue();
-  strncat(stack_string, tile_manager_state->ToString().c_str(),
-          arraysize(stack_string) - strlen(stack_string) - 1);
+  strncpy(stack_string, state->ToString().c_str(), arraysize(stack_string) - 1);
 
   base::debug::DumpWithoutCrashing();
 }
@@ -307,7 +317,7 @@ void ProxyImpl::DidReceiveCompositorFrameAckOnImplThread() {
   scheduler_->DidReceiveCompositorFrameAck();
   MainThreadTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&ProxyMain::DidReceiveCompositorFrameAck,
-                                proxy_main_weak_ptr_));
+                                proxy_main_frame_sink_bound_weak_ptr_));
 }
 
 void ProxyImpl::OnCanDrawStateChanged(bool can_draw) {
@@ -473,6 +483,11 @@ void ProxyImpl::DidFinishImplFrame() {
   layer_tree_host_impl_->DidFinishImplFrame();
 }
 
+void ProxyImpl::DidNotProduceFrame(const BeginFrameAck& ack) {
+  DCHECK(IsImplThread());
+  layer_tree_host_impl_->DidNotProduceFrame(ack);
+}
+
 void ProxyImpl::ScheduledActionSendBeginMainFrame(const BeginFrameArgs& args) {
   DCHECK(IsImplThread());
   unsigned int begin_frame_id = nextBeginFrameId++;
@@ -600,6 +615,14 @@ void ProxyImpl::SendBeginMainFrameNotExpectedSoon() {
   MainThreadTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&ProxyMain::BeginMainFrameNotExpectedSoon,
                                 proxy_main_weak_ptr_));
+}
+
+void ProxyImpl::ScheduledActionBeginMainFrameNotExpectedUntil(
+    base::TimeTicks time) {
+  DCHECK(IsImplThread());
+  MainThreadTaskRunner()->PostTask(
+      FROM_HERE, base::Bind(&ProxyMain::BeginMainFrameNotExpectedUntil,
+                            proxy_main_weak_ptr_, time));
 }
 
 DrawResult ProxyImpl::DrawInternal(bool forced_draw) {

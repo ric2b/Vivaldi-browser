@@ -37,7 +37,7 @@ AudioRendererImpl::AudioRendererImpl(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     media::AudioRendererSink* sink,
     const CreateAudioDecodersCB& create_audio_decoders_cb,
-    const scoped_refptr<MediaLog>& media_log)
+    MediaLog* media_log)
     : task_runner_(task_runner),
       expecting_config_changes_(false),
       sink_(sink),
@@ -47,6 +47,7 @@ AudioRendererImpl::AudioRendererImpl(
       last_audio_memory_usage_(0),
       last_decoded_sample_rate_(0),
       last_decoded_channel_layout_(CHANNEL_LAYOUT_NONE),
+      is_encrypted_(false),
       playback_rate_(0.0),
       state_(kUninitialized),
       create_audio_decoders_cb_(create_audio_decoders_cb),
@@ -356,7 +357,7 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
   client_ = client;
 
   audio_buffer_stream_ = base::MakeUnique<AudioBufferStream>(
-      task_runner_, create_audio_decoders_cb_.Run(), media_log_);
+      task_runner_, create_audio_decoders_cb_, media_log_);
 
   audio_buffer_stream_->set_config_change_observer(base::Bind(
       &AudioRendererImpl::OnConfigChange, weak_factory_.GetWeakPtr()));
@@ -369,7 +370,8 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
   const AudioParameters& hw_params = output_device_info.output_params();
   expecting_config_changes_ = stream->SupportsConfigChanges();
   if (!expecting_config_changes_ || !hw_params.IsValid() ||
-      hw_params.format() == AudioParameters::AUDIO_FAKE) {
+      hw_params.format() == AudioParameters::AUDIO_FAKE ||
+      !sink_->IsOptimizedForHardwareParameters()) {
     // The actual buffer size is controlled via the size of the AudioBus
     // provided to Render(), but we should choose a value here based on hardware
     // parameters if possible since it affects the initial buffer size used by
@@ -454,6 +456,8 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
   last_decoded_channel_layout_ =
       stream->audio_decoder_config().channel_layout();
 
+  is_encrypted_ = stream->audio_decoder_config().is_encrypted();
+
   audio_clock_.reset(
       new AudioClock(base::TimeDelta(), audio_parameters_.sample_rate()));
 
@@ -492,7 +496,7 @@ void AudioRendererImpl::OnAudioBufferStreamInitialized(bool success) {
   // We're all good! Continue initializing the rest of the audio renderer
   // based on the decoder format.
   algorithm_.reset(new AudioRendererAlgorithm());
-  algorithm_->Initialize(audio_parameters_);
+  algorithm_->Initialize(audio_parameters_, is_encrypted_);
   ConfigureChannelMask();
 
   ChangeState_Locked(kFlushed);

@@ -8,6 +8,7 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/time/time.h"
 #include "chrome/browser/chromeos/printing/specifics_translation.h"
 #include "chromeos/printing/printer_configuration.h"
 #include "components/sync/protocol/printer_specifics.pb.h"
@@ -20,24 +21,30 @@ namespace {
 Printer::PpdReference SpecificsToPpd(
     const sync_pb::PrinterPPDReference& specifics) {
   Printer::PpdReference ref;
-  if (specifics.has_user_supplied_ppd_url()) {
+  if (specifics.autoconf()) {
+    ref.autoconf = specifics.autoconf();
+  } else if (specifics.has_user_supplied_ppd_url()) {
     ref.user_supplied_ppd_url = specifics.user_supplied_ppd_url();
-  }
-
-  if (specifics.has_effective_make_and_model()) {
+  } else if (specifics.has_effective_make_and_model()) {
     ref.effective_make_and_model = specifics.effective_make_and_model();
   }
 
   return ref;
 }
 
+// Overwrite fields in |specifics| with an appropriately filled field from
+// |ref|.  If |ref| is the default object, nothing will be changed in
+// |specifics|.
 void MergeReferenceToSpecifics(sync_pb::PrinterPPDReference* specifics,
                                const Printer::PpdReference& ref) {
-  if (!ref.user_supplied_ppd_url.empty()) {
+  if (ref.autoconf) {
+    specifics->Clear();
+    specifics->set_autoconf(ref.autoconf);
+  } else if (!ref.user_supplied_ppd_url.empty()) {
+    specifics->Clear();
     specifics->set_user_supplied_ppd_url(ref.user_supplied_ppd_url);
-  }
-
-  if (!ref.effective_make_and_model.empty()) {
+  } else if (!ref.effective_make_and_model.empty()) {
+    specifics->Clear();
     specifics->set_effective_make_and_model(ref.effective_make_and_model);
   }
 }
@@ -48,7 +55,8 @@ std::unique_ptr<Printer> SpecificsToPrinter(
     const sync_pb::PrinterSpecifics& specifics) {
   DCHECK(!specifics.id().empty());
 
-  auto printer = base::MakeUnique<Printer>(specifics.id());
+  auto printer = base::MakeUnique<Printer>(
+      specifics.id(), base::Time::FromJavaTime(specifics.updated_timestamp()));
   printer->set_display_name(specifics.display_name());
   printer->set_description(specifics.description());
   printer->set_manufacturer(specifics.manufacturer());

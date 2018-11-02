@@ -74,10 +74,7 @@ Polymer({
      * Dictionary defining page visibility.
      * @type {!GuestModePageVisibility}
      */
-    pageVisibility: {
-      type: Object,
-      value: function() { return {}; },
-    },
+    pageVisibility: Object,
 
     showAndroidApps: Boolean,
   },
@@ -196,7 +193,7 @@ Polymer({
    * @private
    */
   updateOverscrollForPage_: function() {
-    if (this.showPages_.about) {
+    if (this.showPages_.about || this.inSearchMode_) {
       // Set overscroll directly to remove any existing overscroll that
       // setOverscroll_ would otherwise preserve.
       this.overscroll_ = 0;
@@ -273,7 +270,7 @@ Polymer({
           this.toolbarSpinnerActive = false;
           this.inSearchMode_ = !result.wasClearSearch;
           this.showNoResultsFound_ =
-              this.inSearchMode_ && result.didFindMatches;
+              this.inSearchMode_ && !result.didFindMatches;
 
           if (this.inSearchMode_) {
             Polymer.IronA11yAnnouncer.requestAvailability();

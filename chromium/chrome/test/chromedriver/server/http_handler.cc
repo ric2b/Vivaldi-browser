@@ -17,6 +17,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -612,6 +613,15 @@ HttpHandler::HttpHandler(
                      "session/:sessionId/touch/pinch",
                      WrapToCommand("TouchPinch",
                                    base::Bind(&ExecuteTouchPinch))),
+      CommandMapping(kPost,
+                     "session/:sessionId/chromium/send_command",
+                     WrapToCommand("SendCommand",
+                                   base::Bind(&ExecuteSendCommand))),
+      CommandMapping(
+              kPost,
+              "session/:sessionId/chromium/send_command_and_get_result",
+              WrapToCommand("SendCommandAndGetResult",
+                  base::Bind(&ExecuteSendCommandAndGetResult))),
   };
   command_map_.reset(
       new CommandMap(commands, commands + arraysize(commands)));
@@ -754,7 +764,7 @@ std::unique_ptr<net::HttpServerResponseInfo> HttpHandler::PrepareLegacyResponse(
         base::SysInfo::OperatingSystemArchitecture().c_str()));
     std::unique_ptr<base::DictionaryValue> error(new base::DictionaryValue());
     error->SetString("message", full_status.message());
-    value.reset(error.release());
+    value = std::move(error);
   }
   if (!value)
     value = base::MakeUnique<base::Value>();

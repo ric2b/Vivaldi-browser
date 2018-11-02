@@ -6,7 +6,7 @@
 
 #include "core/css/CSSPropertyIDTemplates.h"
 #include "core/css/cssom/CSSKeywordValue.h"
-#include "wtf/HashMap.h"
+#include "platform/wtf/HashMap.h"
 
 namespace blink {
 
@@ -49,7 +49,7 @@ bool CSSOMKeywords::ValidKeywordForProperty(CSSPropertyID id,
     return true;
   }
 
-  const KeywordTable::iterator tableIterator = keywordTable().Find(id);
+  const KeywordTable::iterator tableIterator = keywordTable().find(id);
   if (tableIterator == keywordTable().end()) {
     return false;
   }

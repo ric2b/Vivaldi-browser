@@ -15,7 +15,7 @@ enum class ScreenlockState {
   INACTIVE,
   // Bluetooth is not on.
   NO_BLUETOOTH,
-  // The local device is in process of turning on Bluetooth.
+  // The local device is in process of connecting to the remote device.
   BLUETOOTH_CONNECTING,
   // No phones eligible to unlock the local device can be found.
   NO_PHONE,
@@ -34,18 +34,18 @@ enum class ScreenlockState {
   // signal strength is too low, i.e. the phone is roughly more than 30 feet
   // away, and therefore is not allowed to unlock the device.
   RSSI_TOO_LOW,
-  // A phone eligible to unlock the local device is found, but the local
-  // device's transmission power is too high, indicating that the phone is
-  // (probably) more than 1 foot away, and therefore is not allowed to unlock
-  // the device.
-  TX_POWER_TOO_HIGH,
   // A phone eligible to unlock the local device is found; but (a) the phone is
   // locked, and (b) the local device's transmission power is too high,
   // indicating that the phone is (probably) more than 1 foot away, and
   // therefore is not allowed to unlock the device.
-  PHONE_LOCKED_AND_TX_POWER_TOO_HIGH,
+  PHONE_LOCKED_AND_RSSI_TOO_LOW,
   // The local device can be unlocked using proximity-based authentication.
   AUTHENTICATED,
+  // The user must reauthenticate using their password because a sufficient time
+  // has elapsed since their last password entry.
+  PASSWORD_REAUTH,
+  // A password is required on the login screen.
+  PASSWORD_REQUIRED_FOR_LOGIN,
 };
 
 }  // namespace proximity_auth

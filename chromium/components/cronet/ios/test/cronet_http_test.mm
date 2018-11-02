@@ -21,6 +21,10 @@
 
 #include "url/gurl.h"
 
+@interface Cronet (ExposedForTesting)
++ (void)shutdownForTesting;
+@end
+
 @interface TestDelegate : NSObject<NSURLSessionDataDelegate,
                                    NSURLSessionDelegate,
                                    NSURLSessionTaskDelegate>
@@ -28,20 +32,23 @@
 // Completion semaphore for this TestDelegate. When the request this delegate is
 // attached to finishes (either successfully or with an error), this delegate
 // signals this semaphore.
-@property(assign, nonatomic) dispatch_semaphore_t semaphore;
-
-// Body of response received by the request this delegate is attached to.
-@property(retain, nonatomic) NSString* responseBody;
+@property(assign, atomic) dispatch_semaphore_t semaphore;
 
 // Error the request this delegate is attached to failed with, if any.
-@property(retain, nonatomic) NSError* error;
+@property(retain, atomic) NSError* error;
+
+// Contains total amount of received data.
+@property(readonly) long totalBytesReceived;
 
 @end
 
 @implementation TestDelegate
+
 @synthesize semaphore = _semaphore;
-@synthesize responseBody = _responseBody;
 @synthesize error = _error;
+@synthesize totalBytesReceived = _totalBytesReceived;
+
+NSMutableArray<NSData*>* _responseData;
 
 - (id)init {
   if (self = [super init]) {
@@ -58,8 +65,24 @@
 }
 
 - (void)reset {
-  _responseBody = nil;
+  [_responseData dealloc];
+  _responseData = nil;
   _error = nil;
+  _totalBytesReceived = 0;
+}
+
+- (NSString*)responseBody {
+  if (_responseData == nil) {
+    return nil;
+  }
+  NSMutableString* body = [NSMutableString string];
+  for (NSData* data in _responseData) {
+    [body appendString:[[NSString alloc] initWithData:data
+                                             encoding:NSUTF8StringEncoding]];
+  }
+  VLOG(3) << "responseBody size:" << [body length]
+          << " chunks:" << [_responseData count];
+  return body;
 }
 
 - (void)URLSession:(NSURLSession*)session
@@ -93,13 +116,11 @@
 - (void)URLSession:(NSURLSession*)session
           dataTask:(NSURLSessionDataTask*)dataTask
     didReceiveData:(NSData*)data {
-  NSString* stringData =
-      [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-  if (_responseBody == nil) {
-    _responseBody = stringData;
-  } else {
-    _responseBody = [_responseBody stringByAppendingString:stringData];
+  _totalBytesReceived += [data length];
+  if (_responseData == nil) {
+    _responseData = [[NSMutableArray alloc] init];
   }
+  [_responseData addObject:data];
 }
 
 - (void)URLSession:(NSURLSession*)session
@@ -130,7 +151,7 @@ class HttpTest : public ::testing::Test {
     [Cronet setRequestFilterBlock:^(NSURLRequest* request) {
       return YES;
     }];
-    StartCronetIfNecessary(grpc_support::GetQuicTestServerPort());
+    StartCronet(grpc_support::GetQuicTestServerPort());
     [Cronet registerHttpProtocolHandler];
     NSURLSessionConfiguration* config =
         [NSURLSessionConfiguration ephemeralSessionConfiguration];
@@ -147,6 +168,9 @@ class HttpTest : public ::testing::Test {
   void TearDown() override {
     grpc_support::ShutdownQuicTestServer();
     TestServer::Shutdown();
+
+    [Cronet stopNetLog];
+    [Cronet shutdownForTesting];
   }
 
   // Launches the supplied |task| and blocks until it completes, with a timeout
@@ -154,17 +178,48 @@ class HttpTest : public ::testing::Test {
   void StartDataTaskAndWaitForCompletion(NSURLSessionDataTask* task) {
     [delegate_ reset];
     [task resume];
-    int64_t deadline_ns = 1 * ns_in_second;
-    dispatch_semaphore_wait([delegate_ semaphore],
-                            dispatch_time(DISPATCH_TIME_NOW, deadline_ns));
+    int64_t deadline_ns = 20 * ns_in_second;
+    ASSERT_EQ(0, dispatch_semaphore_wait(
+                     [delegate_ semaphore],
+                     dispatch_time(DISPATCH_TIME_NOW, deadline_ns)));
   }
 
   base::scoped_nsobject<NSURLSession> session_;
   base::scoped_nsobject<TestDelegate> delegate_;
 };
 
+TEST_F(HttpTest, CreateSslKeyLogFile) {
+  // Shutdown Cronet so that it can be restarted with specific configuration
+  // (SSL key log file specified in experimental options) for this one test.
+  // This is necessary because SslKeyLogFile can only be set once, before any
+  // SSL Client Sockets are created.
+
+  [Cronet shutdownForTesting];
+
+  NSString* ssl_key_log_file = [Cronet getNetLogPathForFile:@"SSLKEYLOGFILE"];
+
+  // Ensure that the keylog file doesn't exist.
+  [[NSFileManager defaultManager] removeItemAtPath:ssl_key_log_file error:nil];
+
+  [Cronet setExperimentalOptions:
+              [NSString stringWithFormat:@"{\"ssl_key_log_file\":\"%@\"}",
+                                         ssl_key_log_file]];
+
+  StartCronet(grpc_support::GetQuicTestServerPort());
+
+  bool ssl_file_created =
+      [[NSFileManager defaultManager] fileExistsAtPath:ssl_key_log_file];
+
+  [[NSFileManager defaultManager] removeItemAtPath:ssl_key_log_file error:nil];
+
+  [Cronet shutdownForTesting];
+  [Cronet setExperimentalOptions:@""];
+
+  EXPECT_TRUE(ssl_file_created);
+}
+
 TEST_F(HttpTest, NSURLSessionReceivesData) {
-  NSURL* url = net::NSURLWithGURL(GURL(grpc_support::kTestServerUrl));
+  NSURL* url = net::NSURLWithGURL(GURL(grpc_support::kTestServerSimpleUrl));
   __block BOOL block_used = NO;
   NSURLSessionDataTask* task = [session_ dataTaskWithURL:url];
   [Cronet setRequestFilterBlock:^(NSURLRequest* request) {
@@ -175,18 +230,50 @@ TEST_F(HttpTest, NSURLSessionReceivesData) {
   StartDataTaskAndWaitForCompletion(task);
   EXPECT_TRUE(block_used);
   EXPECT_EQ(nil, [delegate_ error]);
-  EXPECT_STREQ(grpc_support::kHelloBodyValue,
+  EXPECT_STREQ(grpc_support::kSimpleBodyValue,
                base::SysNSStringToUTF8([delegate_ responseBody]).c_str());
+}
+
+TEST_F(HttpTest, NSURLSessionReceivesBigHttpDataLoop) {
+  int iterations = 50;
+  long size = 10 * 1024 * 1024;
+  LOG(INFO) << "Downloading " << size << " bytes " << iterations << " times.";
+  NSTimeInterval elapsed_avg = 0;
+  NSTimeInterval elapsed_max = 0;
+  NSURL* url = net::NSURLWithGURL(GURL(TestServer::PrepareBigDataURL(size)));
+  for (int i = 0; i < iterations; ++i) {
+    [delegate_ reset];
+    __block BOOL block_used = NO;
+    NSURLSessionDataTask* task = [session_ dataTaskWithURL:url];
+    [Cronet setRequestFilterBlock:^(NSURLRequest* request) {
+      block_used = YES;
+      EXPECT_EQ([request URL], url);
+      return YES;
+    }];
+    NSDate* start = [NSDate date];
+    StartDataTaskAndWaitForCompletion(task);
+    NSTimeInterval elapsed = -[start timeIntervalSinceNow];
+    elapsed_avg += elapsed;
+    if (elapsed > elapsed_max)
+      elapsed_max = elapsed;
+    EXPECT_TRUE(block_used);
+    EXPECT_EQ(nil, [delegate_ error]);
+    EXPECT_EQ(size, [delegate_ totalBytesReceived]);
+  }
+  // Release the response buffer.
+  TestServer::ReleaseBigDataURL();
+  LOG(INFO) << "Elapsed Average:" << elapsed_avg * 1000 / iterations
+            << "ms Max:" << elapsed_max * 1000 << "ms";
 }
 
 TEST_F(HttpTest, GetGlobalMetricsDeltas) {
   NSData* delta1 = [Cronet getGlobalMetricsDeltas];
 
-  NSURL* url = net::NSURLWithGURL(GURL(grpc_support::kTestServerUrl));
+  NSURL* url = net::NSURLWithGURL(GURL(grpc_support::kTestServerSimpleUrl));
   NSURLSessionDataTask* task = [session_ dataTaskWithURL:url];
   StartDataTaskAndWaitForCompletion(task);
   EXPECT_EQ(nil, [delegate_ error]);
-  EXPECT_STREQ(grpc_support::kHelloBodyValue,
+  EXPECT_STREQ(grpc_support::kSimpleBodyValue,
                base::SysNSStringToUTF8([delegate_ responseBody]).c_str());
 
   NSData* delta2 = [Cronet getGlobalMetricsDeltas];

@@ -189,6 +189,10 @@ void TranslateBubbleView::ButtonPressed(views::Button* sender,
   HandleButtonPressed(static_cast<ButtonID>(sender->id()));
 }
 
+views::View* TranslateBubbleView::GetInitiallyFocusedView() {
+  return GetCurrentView()->GetNextFocusableView();
+}
+
 bool TranslateBubbleView::ShouldShowCloseButton() const {
   return Use2016Q2UI();
 }
@@ -242,7 +246,7 @@ bool TranslateBubbleView::AcceleratorPressed(
   return BubbleDialogDelegateView::AcceleratorPressed(accelerator);
 }
 
-gfx::Size TranslateBubbleView::GetPreferredSize() const {
+gfx::Size TranslateBubbleView::CalculatePreferredSize() const {
   int width = 0;
   for (int i = 0; i < child_count(); i++) {
     const views::View* child = child_at(i);
@@ -277,11 +281,10 @@ void TranslateBubbleView::OnMenuButtonClicked(views::MenuButton* source,
         DenialMenuItem::NEVER_TRANSLATE_SITE,
         IDS_TRANSLATE_BUBBLE_NEVER_TRANSLATE_SITE);
 
-    denial_menu_runner_.reset(new views::MenuRunner(denial_menu_model_.get(),
-                                                    views::MenuRunner::ASYNC));
+    denial_menu_runner_.reset(
+        new views::MenuRunner(denial_menu_model_.get(), 0));
   }
   gfx::Rect screen_bounds = source->GetBoundsInScreen();
-  screen_bounds.Inset(source->GetInsets());
   denial_menu_runner_->RunMenuAt(source->GetWidget(), source, screen_bounds,
                                  views::MENU_ANCHOR_TOPRIGHT,
                                  ui::MENU_SOURCE_MOUSE);
@@ -363,7 +366,7 @@ TranslateBubbleView::TranslateBubbleView(
   translate_bubble_view_ = this;
   if (web_contents)  // web_contents can be null in unit_tests.
     mouse_handler_.reset(new WebContentMouseHandler(this, web_contents));
-  RecordDialogCreation(chrome::DialogIdentifier::TRANSLATE);
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::TRANSLATE);
 }
 
 views::View* TranslateBubbleView::GetCurrentView() const {
@@ -517,12 +520,20 @@ void TranslateBubbleView::UpdateChildVisibilities() {
     views::View* view = child_at(i);
     view->SetVisible(view == GetCurrentView());
   }
+  // BoxLayout only considers visible children, so ensure any newly visible
+  // child views are positioned correctly.
+  Layout();
 }
 
 views::View* TranslateBubbleView::CreateViewBeforeTranslate() {
   const int kQuestionWidth = 200;
+
   base::string16 original_language_name =
       model_->GetLanguageNameAt(model_->GetOriginalLanguageIndex());
+  if (original_language_name.empty()) {
+    original_language_name =
+        l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_UNKNOWN_LANGUAGE);
+  }
 
   views::View* view = new views::View();
   views::GridLayout* layout = new views::GridLayout(view);
@@ -620,7 +631,7 @@ views::View* TranslateBubbleView::CreateViewBeforeTranslate() {
     denial_menu_button_ = new views::MenuButton(
         l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_OPTIONS_MENU_BUTTON),
         this, true);
-    denial_menu_button_->SetStyle(views::Button::STYLE_BUTTON);
+    denial_menu_button_->SetStyleDeprecated(views::Button::STYLE_BUTTON);
     layout->AddView(denial_menu_button_);
   } else {
     std::vector<base::string16> items(
@@ -911,9 +922,9 @@ void TranslateBubbleView::SwitchView(
     return;
 
   model_->SetViewState(view_state);
-  UpdateChildVisibilities();
   if (view_state == TranslateBubbleModel::VIEW_STATE_ADVANCED)
     UpdateAdvancedView();
+  UpdateChildVisibilities();
   SizeToContents();
 }
 

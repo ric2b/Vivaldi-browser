@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics.h"
-#include "base/strings/stringprintf.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/browser/guest_view_manager_factory.h"
@@ -17,7 +17,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/render_view_host.h"
+#include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/result_codes.h"
@@ -32,6 +32,13 @@ using content::SiteInstance;
 using content::WebContents;
 
 namespace guest_view {
+
+namespace {
+
+// Static factory instance (always NULL for non-test).
+GuestViewManagerFactory* g_factory;
+
+}  // namespace
 
 // This observer observes the RenderProcessHosts of GuestView embedders, and
 // notifies the GuestViewManager when they are destroyed.
@@ -63,9 +70,6 @@ class GuestViewManager::EmbedderRenderProcessHostObserver
   int id_;
 };
 
-// static
-GuestViewManagerFactory* GuestViewManager::factory_ = nullptr;
-
 GuestViewManager::GuestViewManager(
     content::BrowserContext* context,
     std::unique_ptr<GuestViewManagerDelegate> delegate)
@@ -83,13 +87,14 @@ GuestViewManager* GuestViewManager::CreateWithDelegate(
     std::unique_ptr<GuestViewManagerDelegate> delegate) {
   GuestViewManager* guest_manager = FromBrowserContext(context);
   if (!guest_manager) {
-    if (factory_) {
+    if (g_factory) {
       guest_manager =
-          factory_->CreateGuestViewManager(context, std::move(delegate));
+          g_factory->CreateGuestViewManager(context, std::move(delegate));
     } else {
       guest_manager = new GuestViewManager(context, std::move(delegate));
     }
-    context->SetUserData(kGuestViewManagerKeyName, guest_manager);
+    context->SetUserData(kGuestViewManagerKeyName,
+                         base::WrapUnique(guest_manager));
   }
   return guest_manager;
 }
@@ -99,6 +104,12 @@ GuestViewManager* GuestViewManager::FromBrowserContext(
     BrowserContext* context) {
   return static_cast<GuestViewManager*>(context->GetUserData(
       kGuestViewManagerKeyName));
+}
+
+// static
+void GuestViewManager::set_factory_for_testing(
+    GuestViewManagerFactory* factory) {
+  g_factory = factory;
 }
 
 content::WebContents* GuestViewManager::GetGuestByInstanceIDSafely(
@@ -323,7 +334,7 @@ void GuestViewManager::CallViewDestructionCallbacks(int embedder_process_id,
 
   // If |view_instance_id| is guest_view::kInstanceIDNone, then all callbacks
   // for this embedder should be called.
-  if (view_instance_id == guest_view::kInstanceIDNone) {
+  if (view_instance_id == kInstanceIDNone) {
     // Call all callbacks for the embedder with ID |embedder_process_id|.
     for (auto& view_pair : callbacks_for_embedder) {
       Callbacks& callbacks_for_view = view_pair.second;
@@ -346,8 +357,7 @@ void GuestViewManager::CallViewDestructionCallbacks(int embedder_process_id,
 }
 
 void GuestViewManager::CallViewDestructionCallbacks(int embedder_process_id) {
-  CallViewDestructionCallbacks(embedder_process_id,
-                               guest_view::kInstanceIDNone);
+  CallViewDestructionCallbacks(embedder_process_id, kInstanceIDNone);
 }
 
 GuestViewBase* GuestViewManager::CreateGuestInternal(

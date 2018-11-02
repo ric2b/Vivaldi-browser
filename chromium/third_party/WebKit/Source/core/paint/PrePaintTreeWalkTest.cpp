@@ -94,7 +94,7 @@ TEST_P(PrePaintTreeWalkTest, PropertyTreesRebuiltWithBorderInvalidation) {
       "</style>"
       "<div id='transformed'></div>");
 
-  auto* transformed_element = GetDocument().GetElementById("transformed");
+  auto* transformed_element = GetDocument().getElementById("transformed");
   const auto* transformed_properties =
       transformed_element->GetLayoutObject()->PaintProperties();
   EXPECT_EQ(TransformationMatrix().Translate(100, 100),
@@ -135,7 +135,7 @@ TEST_P(PrePaintTreeWalkTest, PropertyTreesRebuiltWithCSSTransformInvalidation) {
       "</style>"
       "<div id='transformed' class='transformA'></div>");
 
-  auto* transformed_element = GetDocument().GetElementById("transformed");
+  auto* transformed_element = GetDocument().getElementById("transformed");
   const auto* transformed_properties =
       transformed_element->GetLayoutObject()->PaintProperties();
   EXPECT_EQ(TransformationMatrix().Translate(100, 100),
@@ -161,7 +161,7 @@ TEST_P(PrePaintTreeWalkTest, PropertyTreesRebuiltWithOpacityInvalidation) {
       "</style>"
       "<div id='transparent' class='opacityA'></div>");
 
-  auto* transparent_element = GetDocument().GetElementById("transparent");
+  auto* transparent_element = GetDocument().getElementById("transparent");
   const auto* transparent_properties =
       transparent_element->GetLayoutObject()->PaintProperties();
   EXPECT_EQ(0.9f, transparent_properties->Effect()->Opacity());
@@ -186,8 +186,8 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange) {
       "  </div>"
       "</div>");
 
-  auto* parent = GetDocument().GetElementById("parent");
-  auto* child = GetDocument().GetElementById("child");
+  auto* parent = GetDocument().getElementById("parent");
+  auto* child = GetDocument().getElementById("child");
   auto* child_paint_layer =
       ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
   EXPECT_FALSE(child_paint_layer->NeedsRepaint());
@@ -211,8 +211,8 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange2DTransform) {
       "  </div>"
       "</div>");
 
-  auto* parent = GetDocument().GetElementById("parent");
-  auto* child = GetDocument().GetElementById("child");
+  auto* parent = GetDocument().getElementById("parent");
+  auto* child = GetDocument().getElementById("child");
   auto* child_paint_layer =
       ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
   EXPECT_FALSE(child_paint_layer->NeedsRepaint());
@@ -237,8 +237,8 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosAbs) {
       "  </div>"
       "</div>");
 
-  auto* parent = GetDocument().GetElementById("parent");
-  auto* child = GetDocument().GetElementById("child");
+  auto* parent = GetDocument().getElementById("parent");
+  auto* child = GetDocument().getElementById("child");
   auto* child_paint_layer =
       ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
   EXPECT_FALSE(child_paint_layer->NeedsRepaint());
@@ -265,8 +265,8 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosFixed) {
       "  </div>"
       "</div>");
 
-  auto* parent = GetDocument().GetElementById("parent");
-  auto* child = GetDocument().GetElementById("child");
+  auto* parent = GetDocument().getElementById("parent");
+  auto* child = GetDocument().getElementById("child");
   auto* child_paint_layer =
       ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
   EXPECT_FALSE(child_paint_layer->NeedsRepaint());
@@ -278,6 +278,88 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosFixed) {
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
 
   EXPECT_TRUE(child_paint_layer->NeedsRepaint());
+}
+
+TEST_P(PrePaintTreeWalkTest, ClipRects) {
+  SetBodyInnerHTML(
+      "<div id='parent' style='isolation: isolate'>"
+      "  <div id='child' style='position: relative'>"
+      "    <div id='grandchild' style='isolation: isolate'>"
+      "      <div style='position: relative'></div>"
+      "    </div>"
+      "  </div>"
+      "</div>");
+
+  auto* parent = GetLayoutObjectByElementId("parent");
+  auto* child = GetLayoutObjectByElementId("child");
+  auto* grandchild = GetLayoutObjectByElementId("grandchild");
+
+  EXPECT_TRUE(
+      parent->GetMutableForPainting().FirstFragment()->PreviousClipRects());
+  EXPECT_FALSE(child->PaintProperties());
+  EXPECT_TRUE(
+      grandchild->GetMutableForPainting().FirstFragment()->PreviousClipRects());
+
+  PrePaintTreeWalk::ClearPreviousClipRectsForTesting(*grandchild);
+  GetDocument().View()->UpdateAllLifecyclePhases();
+  // Still no rects, because the walk early-outed at the LayoutView.
+  EXPECT_FALSE(
+      grandchild->GetMutableForPainting().FirstFragment()->PreviousClipRects());
+
+  grandchild->SetNeedsPaintPropertyUpdate();
+  GetDocument().View()->UpdateAllLifecyclePhases();
+  EXPECT_TRUE(
+      grandchild->GetMutableForPainting().FirstFragment()->PreviousClipRects());
+}
+
+TEST_P(PrePaintTreeWalkTest, VisualRectClipForceSubtree) {
+  SetBodyInnerHTML(
+      "<style>"
+      "  #parent { height: 75px; position: relative; width: 100px; }"
+      "</style>"
+      "<div id='parent' style='height: 100px;'>"
+      "  <div id='child' style='overflow: hidden; width: 100%; height: 100%; "
+      "      position: relative'>"
+      "    <div>"
+      "      <div id='grandchild' style='width: 50px; height: 200px; '>"
+      "      </div>"
+      "    </div>"
+      "  </div>"
+      "</div>");
+
+  auto* grandchild = GetLayoutObjectByElementId("grandchild");
+
+  GetDocument().getElementById("parent")->removeAttribute("style");
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  // In SPv2 mode, VisualRects are in the space of the containing transform
+  // node without applying any ancestor property nodes, including clip.
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+    EXPECT_EQ(200, grandchild->VisualRect().Height());
+  else
+    EXPECT_EQ(75, grandchild->VisualRect().Height());
+}
+
+TEST_P(PrePaintTreeWalkTest, ClipChangeHasRadius) {
+  SetBodyInnerHTML(
+      "<style>"
+      "  #target {"
+      "    position: absolute;"
+      "    z-index: 0;"
+      "    overflow: hidden;"
+      "    width: 50px;"
+      "    height: 50px;"
+      "  }"
+      "</style>"
+      "<div id='target'></div>");
+
+  auto* target = GetDocument().getElementById("target");
+  auto* target_object = ToLayoutBoxModelObject(target->GetLayoutObject());
+  target->setAttribute(HTMLNames::styleAttr, "border-radius: 5px");
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
+  EXPECT_TRUE(target_object->Layer()->NeedsRepaint());
+  // And should not trigger any assert failure.
+  GetDocument().View()->UpdateAllLifecyclePhases();
 }
 
 }  // namespace blink

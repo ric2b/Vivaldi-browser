@@ -20,8 +20,13 @@
 #include "ios/chrome/browser/ui/webui/popular_sites_internals_ui.h"
 #include "ios/chrome/browser/ui/webui/signin_internals_ui_ios.h"
 #include "ios/chrome/browser/ui/webui/sync_internals/sync_internals_ui.h"
+#include "ios/chrome/browser/ui/webui/terms_ui.h"
 #include "ios/chrome/browser/ui/webui/version_ui.h"
 #include "url/gurl.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 using web::WebUIIOS;
 using web::WebUIIOSController;
@@ -81,6 +86,8 @@ WebUIIOSFactoryFunction GetWebUIIOSFactoryFunction(WebUIIOS* web_ui,
     return &NewWebUIIOS<SignInInternalsUIIOS>;
   if (url_host == kChromeUISyncInternalsHost)
     return &NewWebUIIOS<SyncInternalsUI>;
+  if (url_host == kChromeUITermsHost)
+    return &NewWebUIIOSWithHost<TermsUI>;
   if (url_host == kChromeUIVersionHost)
     return &NewWebUIIOS<VersionUI>;
   if (url_host == kChromeUIFlagsHost)

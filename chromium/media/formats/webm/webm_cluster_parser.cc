@@ -45,7 +45,7 @@ WebMClusterParser::WebMClusterParser(
     const std::string& audio_encryption_key_id,
     const std::string& video_encryption_key_id,
     const AudioCodec audio_codec,
-    const scoped_refptr<MediaLog>& media_log)
+    MediaLog* media_log)
     : timecode_multiplier_(timecode_scale / 1000.0),
       ignored_tracks_(ignored_tracks),
       audio_encryption_key_id_(audio_encryption_key_id),
@@ -498,9 +498,8 @@ bool WebMClusterParser::OnBlock(bool is_simple_block,
 
   scoped_refptr<StreamParserBuffer> buffer;
   if (buffer_type != DemuxerStream::TEXT) {
-    // Every encrypted Block has a signal byte and IV prepended to it. Current
-    // encrypted WebM request for comments specification is here
-    // http://wiki.webmproject.org/encryption/webm-encryption-rfc
+    // Every encrypted Block has a signal byte and IV prepended to it.
+    // See: http://www.webmproject.org/docs/webm-encryption/
     std::unique_ptr<DecryptConfig> decrypt_config;
     int data_offset = 0;
     if (!encryption_key_id.empty() &&
@@ -509,6 +508,7 @@ bool WebMClusterParser::OnBlock(bool is_simple_block,
              reinterpret_cast<const uint8_t*>(encryption_key_id.data()),
              encryption_key_id.size(),
              &decrypt_config, &data_offset)) {
+      MEDIA_LOG(ERROR, media_log_) << "Failed to extract decrypt config.";
       return false;
     }
 
@@ -604,7 +604,7 @@ bool WebMClusterParser::OnBlock(bool is_simple_block,
 WebMClusterParser::Track::Track(int track_num,
                                 bool is_video,
                                 base::TimeDelta default_duration,
-                                const scoped_refptr<MediaLog>& media_log)
+                                MediaLog* media_log)
     : track_num_(track_num),
       is_video_(is_video),
       default_duration_(default_duration),

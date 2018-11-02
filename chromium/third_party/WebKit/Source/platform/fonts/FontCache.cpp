@@ -214,7 +214,7 @@ ShapeCache* FontCache::GetShapeCache(const FallbackListCompositeKey& key) {
     g_fallback_list_shaper_cache = new FallbackListShaperCache;
 
   FallbackListShaperCache::iterator it =
-      g_fallback_list_shaper_cache->Find(key);
+      g_fallback_list_shaper_cache->find(key);
   ShapeCache* result = nullptr;
   if (it == g_fallback_list_shaper_cache->end()) {
     result = new ShapeCache();
@@ -248,7 +248,7 @@ PassRefPtr<OpenTypeVerticalData> FontCache::GetVerticalData(
     const FontPlatformData& platform_data) {
   FontVerticalDataCache& font_vertical_data_cache =
       FontVerticalDataCacheInstance();
-  FontVerticalDataCache::iterator result = font_vertical_data_cache.Find(key);
+  FontVerticalDataCache::iterator result = font_vertical_data_cache.find(key);
   if (result != font_vertical_data_cache.end())
     return result.Get()->value;
 
@@ -323,7 +323,7 @@ String FontCache::FirstAvailableOrFirst(const String& families) {
   // only from grd/xtb and all ASCII, and b) at most only a few times per
   // setting change/script.
   return String::FromUTF8(
-      gfx::FontList::FirstAvailableOrFirst(families.Utf8().Data()).c_str());
+      gfx::FontList::FirstAvailableOrFirst(families.Utf8().data()).c_str());
 }
 
 SimpleFontData* FontCache::GetNonRetainedLastResortFallbackFont(
@@ -394,7 +394,7 @@ static inline void PurgeFallbackListShaperCache() {
          iter != g_fallback_list_shaper_cache->end(); ++iter) {
       items += iter->value->size();
     }
-    g_fallback_list_shaper_cache->Clear();
+    g_fallback_list_shaper_cache->clear();
   }
   DEFINE_STATIC_LOCAL(CustomCountHistogram, shape_cache_histogram,
                       ("Blink.Fonts.ShapeCache", 1, 1000000, 50));

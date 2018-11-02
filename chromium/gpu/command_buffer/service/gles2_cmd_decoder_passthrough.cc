@@ -78,7 +78,8 @@ GLES2DecoderPassthroughImpl::GLES2DecoderPassthroughImpl(ContextGroup* group)
       context_(),
       offscreen_(false),
       group_(group),
-      feature_info_(new FeatureInfo) {
+      feature_info_(new FeatureInfo),
+      weak_ptr_factory_(this) {
   DCHECK(group);
 }
 
@@ -145,12 +146,8 @@ GLES2Decoder::Error GLES2DecoderPassthroughImpl::DoCommands(
   return result;
 }
 
-const char* GLES2DecoderPassthroughImpl::GetCommandName(
-    unsigned int command_id) const {
-  if (command_id >= kFirstGLES2Command && command_id < kNumCommands) {
-    return gles2::GetCommandName(static_cast<CommandId>(command_id));
-  }
-  return GetCommonCommandName(static_cast<cmd::CommandId>(command_id));
+base::WeakPtr<GLES2Decoder> GLES2DecoderPassthroughImpl::AsWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 bool GLES2DecoderPassthroughImpl::Initialize(
@@ -359,6 +356,7 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
   caps.blend_equation_advanced_coherent =
       feature_info_->feature_flags().blend_equation_advanced_coherent;
   caps.texture_rg = feature_info_->feature_flags().ext_texture_rg;
+  caps.texture_norm16 = feature_info_->feature_flags().ext_texture_norm16;
   caps.texture_half_float_linear =
       feature_info_->feature_flags().enable_texture_half_float_linear;
   caps.image_ycbcr_422 =
@@ -371,14 +369,13 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
       feature_info_->feature_flags().ext_render_buffer_format_bgra8888;
   caps.occlusion_query_boolean =
       feature_info_->feature_flags().occlusion_query_boolean;
+  caps.timer_queries = feature_info_->feature_flags().ext_disjoint_timer_query;
+  caps.post_sub_buffer = surface_->SupportsPostSubBuffer();
+  caps.surfaceless = !offscreen_ && surface_->IsSurfaceless();
+  caps.flips_vertically = !offscreen_ && surface_->FlipsVertically();
 
   // TODO:
-  // caps.timer_queries
-  // caps.post_sub_buffer
   // caps.commit_overlay_planes
-  // caps.surfaceless
-  // caps.is_offscreen
-  // caps.flips_vertically
 
   return caps;
 }
@@ -389,7 +386,7 @@ void GLES2DecoderPassthroughImpl::RestoreState(const ContextState* prev_state) {
 
 void GLES2DecoderPassthroughImpl::RestoreActiveTexture() const {}
 
-void GLES2DecoderPassthroughImpl::RestoreAllTextureUnitBindings(
+void GLES2DecoderPassthroughImpl::RestoreAllTextureUnitAndSamplerBindings(
     const ContextState* prev_state) const {}
 
 void GLES2DecoderPassthroughImpl::RestoreActiveTextureUnitBinding(
@@ -455,6 +452,11 @@ gpu::gles2::QueryManager* GLES2DecoderPassthroughImpl::GetQueryManager() {
   return nullptr;
 }
 
+gpu::gles2::FramebufferManager*
+GLES2DecoderPassthroughImpl::GetFramebufferManager() {
+  return nullptr;
+}
+
 gpu::gles2::TransformFeedbackManager*
 GLES2DecoderPassthroughImpl::GetTransformFeedbackManager() {
   return nullptr;
@@ -495,11 +497,6 @@ bool GLES2DecoderPassthroughImpl::GetServiceTextureId(
     uint32_t* service_texture_id) {
   return resources_->texture_id_map.GetServiceID(client_texture_id,
                                                  service_texture_id);
-}
-
-gpu::error::ContextLostReason
-GLES2DecoderPassthroughImpl::GetContextLostReason() {
-  return error::kUnknown;
 }
 
 bool GLES2DecoderPassthroughImpl::ClearLevel(Texture* texture,
@@ -546,20 +543,6 @@ void GLES2DecoderPassthroughImpl::SetShaderCacheCallback(
     const ShaderCacheCallback& callback) {}
 
 void GLES2DecoderPassthroughImpl::WaitForReadPixels(base::Closure callback) {}
-
-uint32_t GLES2DecoderPassthroughImpl::GetTextureUploadCount() {
-  return 0;
-}
-
-base::TimeDelta GLES2DecoderPassthroughImpl::GetTotalTextureUploadTime() {
-  return base::TimeDelta();
-}
-
-base::TimeDelta GLES2DecoderPassthroughImpl::GetTotalProcessingCommandsTime() {
-  return base::TimeDelta();
-}
-
-void GLES2DecoderPassthroughImpl::AddProcessingCommandsTime(base::TimeDelta) {}
 
 bool GLES2DecoderPassthroughImpl::WasContextLost() const {
   return false;
@@ -777,7 +760,7 @@ bool GLES2DecoderPassthroughImpl::IsEmulatedQueryTarget(GLenum target) const {
 error::Error GLES2DecoderPassthroughImpl::ProcessQueries(bool did_finish) {
   while (!pending_queries_.empty()) {
     const PendingQuery& query = pending_queries_.front();
-    GLint result_available = GL_FALSE;
+    GLuint result_available = GL_FALSE;
     GLuint64 result = 0;
     switch (query.target) {
       case GL_COMMANDS_ISSUED_CHROMIUM:
@@ -808,11 +791,18 @@ error::Error GLES2DecoderPassthroughImpl::ProcessQueries(bool did_finish) {
         if (did_finish) {
           result_available = GL_TRUE;
         } else {
-          glGetQueryObjectiv(query.service_id, GL_QUERY_RESULT_AVAILABLE,
-                             &result_available);
+          glGetQueryObjectuiv(query.service_id, GL_QUERY_RESULT_AVAILABLE,
+                              &result_available);
         }
         if (result_available == GL_TRUE) {
-          glGetQueryObjectui64v(query.service_id, GL_QUERY_RESULT, &result);
+          if (feature_info_->feature_flags().ext_disjoint_timer_query) {
+            glGetQueryObjectui64v(query.service_id, GL_QUERY_RESULT, &result);
+          } else {
+            GLuint temp_result = 0;
+            glGetQueryObjectuiv(query.service_id, GL_QUERY_RESULT,
+                                &temp_result);
+            result = temp_result;
+          }
         }
         break;
     }
@@ -883,6 +873,34 @@ void GLES2DecoderPassthroughImpl::UpdateTextureBinding(GLenum target,
   if (cur_texture_unit != active_texture_unit_) {
     glActiveTexture(static_cast<GLenum>(GL_TEXTURE0 + active_texture_unit_));
   }
+}
+
+error::Error GLES2DecoderPassthroughImpl::BindTexImage2DCHROMIUMImpl(
+    GLenum target,
+    GLenum internalformat,
+    GLint imageId) {
+  if (target != GL_TEXTURE_2D) {
+    InsertError(GL_INVALID_ENUM, "Invalid target");
+    return error::kNoError;
+  }
+
+  gl::GLImage* image = image_manager_->LookupImage(imageId);
+  if (image == nullptr) {
+    InsertError(GL_INVALID_OPERATION, "No image found with the given ID");
+    return error::kNoError;
+  }
+
+  if (internalformat) {
+    if (!image->BindTexImageWithInternalformat(target, internalformat)) {
+      image->CopyTexImage(target);
+    }
+  } else {
+    if (!image->BindTexImage(target)) {
+      image->CopyTexImage(target);
+    }
+  }
+
+  return error::kNoError;
 }
 
 #define GLES2_CMD_OP(name)                                               \

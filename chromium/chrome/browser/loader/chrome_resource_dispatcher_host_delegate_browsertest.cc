@@ -21,8 +21,8 @@
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/test/scoped_command_line.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_browsertest.h"
 #include "chrome/browser/loader/chrome_navigation_data.h"
@@ -41,8 +41,8 @@
 #include "components/policy/core/common/policy_switches.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_header_helper.h"
+#include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
-#include "components/signin/core/common/signin_switches.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_data.h"
@@ -258,7 +258,7 @@ class ChromeResourceDispatcherHostDelegateBrowserTest :
     base::RunLoop run_loop;
     content::BrowserThread::PostTaskAndReply(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &TestDispatcherHostDelegate::GetTimesStandardThrottlesAddedForURL,
             base::Unretained(dispatcher_host_delegate_.get()), url, &count),
         run_loop.QuitClosure());
@@ -360,8 +360,8 @@ class MirrorMockURLRequestJob : public net::URLRequestMockHTTPJob {
     // Report the observed request headers on the UI thread.
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(report_on_ui_, request_->url().spec(),
-                   request_->extra_request_headers().ToString()));
+        base::BindOnce(report_on_ui_, request_->url().spec(),
+                       request_->extra_request_headers().ToString()));
 
     URLRequestMockHTTPJob::Start();
   }
@@ -390,9 +390,9 @@ class MirrorMockJobInterceptor : public net::URLRequestInterceptor {
       net::NetworkDelegate* network_delegate) const override {
     return new MirrorMockURLRequestJob(
         request, network_delegate, root_http_,
-        content::BrowserThread::GetBlockingPool()
-            ->GetTaskRunnerWithShutdownBehavior(
-                base::SequencedWorkerPool::SKIP_ON_SHUTDOWN),
+        base::CreateTaskRunnerWithTraits(
+            {base::MayBlock(), base::TaskPriority::BACKGROUND,
+             base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}),
         report_on_ui_);
   }
 
@@ -482,8 +482,8 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
                        MirrorRequestHeader) {
   // Enable account consistency so that mirror actually sets the
   // X-Chrome-Connected header in requests to Google.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kEnableAccountConsistency);
+  switches::EnableAccountConsistencyForTesting(
+      base::CommandLine::ForCurrentProcess());
 
   browser()->profile()->GetPrefs()->SetString(prefs::kGoogleServicesUsername,
                                               "user@gmail.com");
@@ -529,19 +529,20 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
               test_case.original_url);
       content::BrowserThread::PostTask(
           content::BrowserThread::IO, FROM_HERE,
-          base::Bind(&SetDelegateOnIO, dispatcher_host_delegate.get()));
+          base::BindOnce(&SetDelegateOnIO, dispatcher_host_delegate.get()));
     }
 
     // Set up mockup interceptors.
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&MirrorMockJobInterceptor::Register, test_case.original_url,
-                   root_http, report_request_headers));
+        base::BindOnce(&MirrorMockJobInterceptor::Register,
+                       test_case.original_url, root_http,
+                       report_request_headers));
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&MirrorMockJobInterceptor::Register,
-                   test_case.redirected_to_url, root_http,
-                   report_request_headers));
+        base::BindOnce(&MirrorMockJobInterceptor::Register,
+                       test_case.redirected_to_url, root_http,
+                       report_request_headers));
 
     // Navigate to first url.
     ui_test_utils::NavigateToURL(browser(), test_case.original_url);
@@ -549,19 +550,19 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
     // Cleanup before verifying the observed headers.
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&MirrorMockJobInterceptor::Unregister,
-                   test_case.original_url));
+        base::BindOnce(&MirrorMockJobInterceptor::Unregister,
+                       test_case.original_url));
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&MirrorMockJobInterceptor::Unregister,
-                   test_case.redirected_to_url));
+        base::BindOnce(&MirrorMockJobInterceptor::Unregister,
+                       test_case.redirected_to_url));
 
     // If delegate is changed, remove it.
     if (test_case.inject_header) {
       base::RunLoop run_loop;
       content::BrowserThread::PostTaskAndReply(
           content::BrowserThread::IO, FROM_HERE,
-          base::Bind(&SetDelegateOnIO, nullptr), run_loop.QuitClosure());
+          base::BindOnce(&SetDelegateOnIO, nullptr), run_loop.QuitClosure());
       run_loop.Run();
     }
 
@@ -571,7 +572,7 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
     content::BrowserThread::PostTaskAndReply(content::BrowserThread::IO,
                                              FROM_HERE,
                                              // Flush IO thread...
-                                             base::Bind(&base::DoNothing),
+                                             base::BindOnce(&base::DoNothing),
                                              // ... and UI thread.
                                              run_loop.QuitClosure());
     run_loop.Run();

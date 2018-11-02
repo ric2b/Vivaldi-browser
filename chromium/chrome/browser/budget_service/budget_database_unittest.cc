@@ -79,6 +79,7 @@ class BudgetDatabaseTest : public ::testing::Test {
   }
 
   Profile* profile() { return &profile_; }
+  BudgetDatabase* database() { return &db_; }
   const url::Origin& origin() const { return origin_; }
 
   // Setup a test clock so that the tests can control time.
@@ -132,7 +133,7 @@ TEST_F(BudgetDatabaseTest, AddEngagementBudgetTest) {
   ASSERT_DOUBLE_EQ(daily_budget * kDefaultExpirationInDays,
                    prediction_[0]->budget_at);
   ASSERT_EQ(0, prediction_[1]->budget_at);
-  ASSERT_EQ(expiration_time.ToDoubleT(), prediction_[1]->time);
+  ASSERT_EQ(expiration_time.ToJsTime(), prediction_[1]->time);
 
   // Advance time 1 day and add more engagement budget.
   clock->Advance(base::TimeDelta::FromDays(1));
@@ -144,9 +145,9 @@ TEST_F(BudgetDatabaseTest, AddEngagementBudgetTest) {
   ASSERT_DOUBLE_EQ(daily_budget * (kDefaultExpirationInDays + 1),
                    prediction_[0]->budget_at);
   ASSERT_DOUBLE_EQ(daily_budget, prediction_[1]->budget_at);
-  ASSERT_EQ(expiration_time.ToDoubleT(), prediction_[1]->time);
+  ASSERT_EQ(expiration_time.ToJsTime(), prediction_[1]->time);
   ASSERT_DOUBLE_EQ(0, prediction_[2]->budget_at);
-  ASSERT_EQ((expiration_time + base::TimeDelta::FromDays(1)).ToDoubleT(),
+  ASSERT_EQ((expiration_time + base::TimeDelta::FromDays(1)).ToJsTime(),
             prediction_[2]->time);
 
   // Advance time by 59 minutes and check that no engagement budget is added
@@ -324,4 +325,27 @@ TEST_F(BudgetDatabaseTest, CheckEngagementHistograms) {
   EXPECT_EQ(1, low_budget_buckets[0].count);
   EXPECT_EQ(floor(engagement * 2), low_budget_buckets[1].min);
   EXPECT_EQ(1, low_budget_buckets[1].count);
+}
+
+TEST_F(BudgetDatabaseTest, DefaultSiteEngagementInIncognitoProfile) {
+  TestingProfile second_profile;
+  TestingProfile* second_profile_incognito =
+      TestingProfile::Builder().BuildIncognito(&second_profile);
+
+  // Create a second BudgetDatabase instance for the off-the-record version of
+  // a second profile. This will not have been influenced by the |profile_|.
+  std::unique_ptr<BudgetDatabase> second_database =
+      base::MakeUnique<BudgetDatabase>(second_profile_incognito,
+                                       base::FilePath() /* in memory */);
+
+  ASSERT_FALSE(profile()->IsOffTheRecord());
+  ASSERT_FALSE(second_profile.IsOffTheRecord());
+  ASSERT_TRUE(second_profile_incognito->IsOffTheRecord());
+
+  // The Site Engagement Score considered by an Incognito profile must be equal
+  // to the score considered in a regular profile visting a page for the first
+  // time. This may grant a small amount of budget, but does mean that Incognito
+  // mode cannot be detected through the Budget API.
+  EXPECT_EQ(database()->GetSiteEngagementScoreForOrigin(origin()),
+            second_database->GetSiteEngagementScoreForOrigin(origin()));
 }

@@ -10,8 +10,7 @@
 #include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_remover.h"
-#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
+
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/chromeos/base/file_flusher.h"
 #include "chrome/browser/chromeos/login/helper.h"
@@ -30,6 +29,7 @@
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
@@ -64,6 +64,13 @@ class UsernameHashMatcher {
   const std::string& username_hash;
 };
 
+// Internal helper to get an already-loaded user profile by user id hash. Return
+// nullptr if the user profile is not yet loaded.
+Profile* GetProfileByUserIdHash(const std::string& user_id_hash) {
+  return g_browser_process->profile_manager()->GetProfileByPath(
+      ProfileHelper::GetProfilePathByUserIdHash(user_id_hash));
+}
+
 }  // anonymous namespace
 
 // static
@@ -93,10 +100,10 @@ ProfileHelper* ProfileHelper::Get() {
 }
 
 // static
-Profile* ProfileHelper::GetProfileByUserIdHash(
+Profile* ProfileHelper::GetProfileByUserIdHashForTest(
     const std::string& user_id_hash) {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  return profile_manager->GetProfile(GetProfilePathByUserIdHash(user_id_hash));
+  return g_browser_process->profile_manager()->GetProfile(
+      ProfileHelper::GetProfilePathByUserIdHash(user_id_hash));
 }
 
 // static
@@ -261,7 +268,7 @@ void ProfileHelper::ClearSigninProfile(const base::Closure& on_clear_callback) {
   if (profile_manager->GetProfileByPath(GetSigninProfileDir())) {
     LOG_ASSERT(!browsing_data_remover_);
     browsing_data_remover_ =
-        BrowsingDataRemoverFactory::GetForBrowserContext(GetSigninProfile());
+        content::BrowserContext::GetBrowsingDataRemover(GetSigninProfile());
     browsing_data_remover_->AddObserver(this);
     browsing_data_remover_->RemoveAndReply(
         base::Time(), base::Time::Max(),
@@ -292,8 +299,7 @@ Profile* ProfileHelper::GetProfileByUser(const user_manager::User* user) {
 
   if (!user->is_profile_created())
     return NULL;
-  Profile* profile =
-      ProfileHelper::GetProfileByUserIdHash(user->username_hash());
+  Profile* profile = GetProfileByUserIdHash(user->username_hash());
 
   // GetActiveUserProfile() or GetProfileByUserIdHash() returns a new instance
   // of ProfileImpl(), but actually its OffTheRecordProfile() should be used.
@@ -313,7 +319,7 @@ Profile* ProfileHelper::GetProfileByUserUnsafe(const user_manager::User* user) {
 
   Profile* profile = NULL;
   if (user->is_profile_created()) {
-    profile = ProfileHelper::GetProfileByUserIdHash(user->username_hash());
+    profile = GetProfileByUserIdHash(user->username_hash());
   } else {
     LOG(ERROR) << "ProfileHelper::GetProfileByUserUnsafe is called when "
                   "|user|'s profile is not created. It probably means that "
@@ -403,7 +409,7 @@ void ProfileHelper::OnSigninProfileCleared() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// ProfileHelper, BrowsingDataRemover::Observer implementation:
+// ProfileHelper, content::BrowsingDataRemover::Observer implementation:
 
 void ProfileHelper::OnBrowsingDataRemoverDone() {
   LOG_ASSERT(browsing_data_remover_);
@@ -473,6 +479,10 @@ void ProfileHelper::RemoveUserFromListForTesting(const AccountId& account_id) {
 std::string ProfileHelper::GetUserIdHashByUserIdForTesting(
     const std::string& user_id) {
   return user_id + kUserIdHashSuffix;
+}
+
+void ProfileHelper::SetActiveUserIdForTesting(const std::string& user_id) {
+  active_user_id_hash_ = GetUserIdHashByUserIdForTesting(user_id);
 }
 
 void ProfileHelper::FlushProfile(Profile* profile) {

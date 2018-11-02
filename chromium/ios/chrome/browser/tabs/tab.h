@@ -106,8 +106,14 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // Do not add new calls to this method.
 @property(nonatomic, readonly) const GURL& url;
 
+// Returns the URL of the last committed NavigationItem for this Tab.
+@property(nonatomic, readonly) const GURL& lastCommittedURL;
+
+// Returns the URL of the visible NavigationItem for this Tab.
+@property(nonatomic, readonly) const GURL& visibleURL;
+
 // The Passkit Dialog provider used to show the UI to download a passkit object.
-@property(nonatomic, assign) id<PassKitDialogProvider> passKitDialogProvider;
+@property(nonatomic, weak) id<PassKitDialogProvider> passKitDialogProvider;
 
 // The current title of the tab.
 @property(nonatomic, readonly) NSString* title;
@@ -127,27 +133,27 @@ extern NSString* const kProxyPassthroughHeaderValue;
 @property(nonatomic, readonly) web::WebState* webState;
 
 @property(nonatomic, readonly) CRWWebController* webController;
+
+// Handles saving and autofill of passwords.
 @property(nonatomic, readonly) PasswordController* passwordController;
 @property(nonatomic, readonly) BOOL canGoBack;
 @property(nonatomic, readonly) BOOL canGoForward;
-@property(nonatomic, assign) id<TabDelegate> delegate;
-@property(nonatomic, assign) id<TabHeadersDelegate> tabHeadersDelegate;
-@property(nonatomic, assign) id<TabSnapshottingDelegate>
-    tabSnapshottingDelegate;
+@property(nonatomic, weak) id<TabDelegate> delegate;
+@property(nonatomic, weak) id<TabHeadersDelegate> tabHeadersDelegate;
+@property(nonatomic, weak) id<TabSnapshottingDelegate> tabSnapshottingDelegate;
 @property(nonatomic, readonly) id<FindInPageControllerDelegate>
     findInPageControllerDelegate;
 
 // Whether or not desktop user agent is used for the currently visible page.
 @property(nonatomic, readonly) BOOL usesDesktopUserAgent;
 
-@property(nonatomic, assign) id<FullScreenControllerDelegate>
+@property(nonatomic, weak) id<FullScreenControllerDelegate>
     fullScreenControllerDelegate;
 @property(nonatomic, readonly)
     OverscrollActionsController* overscrollActionsController;
-@property(nonatomic, assign) id<OverscrollActionsControllerDelegate>
+@property(nonatomic, weak) id<OverscrollActionsControllerDelegate>
     overscrollActionsControllerDelegate;
-@property(nonatomic, assign) id<SnapshotOverlayProvider>
-    snapshotOverlayProvider;
+@property(nonatomic, weak) id<SnapshotOverlayProvider> snapshotOverlayProvider;
 
 // Delegate used to show HTTP Authentication dialogs.
 @property(nonatomic, weak) id<TabDialogDelegate> dialogDelegate;
@@ -220,10 +226,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // all callers and remove these methods.
 - (void)goBack;
 - (void)goForward;
-
-// Records the state (scroll position, form values, whatever can be
-// harvested) from the current page into the current session entry.
-- (void)recordStateInHistory;
 
 // Returns the timestamp of the last time the tab is visited.
 - (double)lastVisitedTimestamp;

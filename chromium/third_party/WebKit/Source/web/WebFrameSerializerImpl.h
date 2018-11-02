@@ -31,6 +31,7 @@
 #ifndef WebFrameSerializerImpl_h
 #define WebFrameSerializerImpl_h
 
+#include "platform/text/WebEntities.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/Vector.h"
@@ -41,7 +42,6 @@
 #include "public/platform/WebURL.h"
 #include "public/web/WebFrameSerializer.h"
 #include "public/web/WebFrameSerializerClient.h"
-#include "web/WebEntities.h"
 
 namespace WTF {
 class TextEncoding;
@@ -53,7 +53,7 @@ class Document;
 class Element;
 class Node;
 class WebLocalFrame;
-class WebLocalFrameImpl;
+class WebLocalFrameBase;
 
 // Responsible for serializing the specified frame into html
 // (replacing links with paths to local files).
@@ -81,7 +81,7 @@ class WebFrameSerializerImpl {
 
  private:
   // Specified frame which need to be serialized;
-  Member<WebLocalFrameImpl> specified_web_local_frame_impl_;
+  Member<WebLocalFrameBase> specified_web_local_frame_impl_;
   // Pointer of WebFrameSerializerClient
   WebFrameSerializerClient* client_;
   // Pointer of WebFrameSerializer::LinkRewritingDelegate

@@ -34,16 +34,16 @@ std::unique_ptr<LayerImpl> PaintedScrollbarLayer::CreateLayerImpl(
 
 scoped_refptr<PaintedScrollbarLayer> PaintedScrollbarLayer::Create(
     std::unique_ptr<Scrollbar> scrollbar,
-    int scroll_layer_id) {
+    ElementId scroll_element_id) {
   return make_scoped_refptr(
-      new PaintedScrollbarLayer(std::move(scrollbar), scroll_layer_id));
+      new PaintedScrollbarLayer(std::move(scrollbar), scroll_element_id));
 }
 
 PaintedScrollbarLayer::PaintedScrollbarLayer(
     std::unique_ptr<Scrollbar> scrollbar,
-    int scroll_layer_id)
+    ElementId scroll_element_id)
     : scrollbar_(std::move(scrollbar)),
-      scroll_layer_id_(scroll_layer_id),
+      scroll_element_id_(scroll_element_id),
       internal_contents_scale_(1.f),
       thumb_thickness_(scrollbar_->ThumbThickness()),
       thumb_length_(scrollbar_->ThumbLength()),
@@ -57,24 +57,20 @@ PaintedScrollbarLayer::PaintedScrollbarLayer(
 
 PaintedScrollbarLayer::~PaintedScrollbarLayer() {}
 
-int PaintedScrollbarLayer::ScrollLayerId() const {
-  return scroll_layer_id_;
+ElementId PaintedScrollbarLayer::scroll_element_id() const {
+  return scroll_element_id_;
 }
 
-void PaintedScrollbarLayer::SetScrollLayer(int layer_id) {
-  if (layer_id == scroll_layer_id_)
+void PaintedScrollbarLayer::SetScrollElementId(ElementId element_id) {
+  if (element_id == scroll_element_id_)
     return;
 
-  scroll_layer_id_ = layer_id;
+  scroll_element_id_ = element_id;
   SetNeedsFullTreeSync();
 }
 
 bool PaintedScrollbarLayer::OpacityCanAnimateOnImplThread() const {
   return scrollbar_->IsOverlay();
-}
-
-bool PaintedScrollbarLayer::AlwaysUseActiveTreeOpacity() const {
-  return true;
 }
 
 ScrollbarOrientation PaintedScrollbarLayer::orientation() const {
@@ -87,7 +83,7 @@ void PaintedScrollbarLayer::PushPropertiesTo(LayerImpl* layer) {
   PaintedScrollbarLayerImpl* scrollbar_layer =
       static_cast<PaintedScrollbarLayerImpl*>(layer);
 
-  scrollbar_layer->SetScrollLayerId(scroll_layer_id_);
+  scrollbar_layer->SetScrollElementId(scroll_element_id_);
   scrollbar_layer->set_internal_contents_scale_and_bounds(
       internal_contents_scale_, internal_content_bounds_);
 

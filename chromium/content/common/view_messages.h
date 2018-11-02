@@ -85,10 +85,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::WebPluginAction::Type,
                           blink::WebPluginAction::Type::kTypeLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebPopupType,
                           blink::WebPopupType::kWebPopupTypeLast)
-// TODO(dcheng): Update WebScreenOrientationType to have a "Last" enum member.
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(blink::WebScreenOrientationType,
                               blink::kWebScreenOrientationUndefined,
-                              blink::kWebScreenOrientationLandscapeSecondary)
+                              blink::WebScreenOrientationTypeLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebWorkerCreationError,
                           blink::kWebWorkerCreationErrorLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebTextDirection,
@@ -184,6 +183,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::ResizeParams)
   IPC_STRUCT_TRAITS_MEMBER(browser_controls_shrink_blink_size)
   IPC_STRUCT_TRAITS_MEMBER(top_controls_height)
   IPC_STRUCT_TRAITS_MEMBER(bottom_controls_height)
+  IPC_STRUCT_TRAITS_MEMBER(local_surface_id)
   IPC_STRUCT_TRAITS_MEMBER(visible_viewport_size)
   IPC_STRUCT_TRAITS_MEMBER(is_fullscreen_granted)
   IPC_STRUCT_TRAITS_MEMBER(display_mode)
@@ -316,6 +316,9 @@ IPC_STRUCT_BEGIN(ViewHostMsg_CreateWorker_Params)
   // The type (secure or nonsecure) of the context that created the worker.
   IPC_STRUCT_MEMBER(blink::WebSharedWorkerCreationContextType,
                     creation_context_type)
+
+  // Whether Data-Saver is enabled or not.
+  IPC_STRUCT_MEMBER(bool, data_saver_enabled)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(ViewHostMsg_CreateWorker_Reply)
@@ -811,8 +814,7 @@ IPC_MESSAGE_ROUTED2(ViewHostMsg_FrameSwapMessages,
 
 // Sent if the BeginFrame did not cause a SwapCompositorFrame (e.g. because no
 // updates were required or because it was aborted in the renderer).
-IPC_MESSAGE_ROUTED1(ViewHostMsg_BeginFrameDidNotSwap,
-                    cc::BeginFrameAck /* ack */)
+IPC_MESSAGE_ROUTED1(ViewHostMsg_DidNotProduceFrame, cc::BeginFrameAck /* ack */)
 
 // Send back a string to be recorded by UserMetrics.
 IPC_MESSAGE_CONTROL1(ViewHostMsg_UserMetricsRecordAction,
@@ -876,6 +878,13 @@ IPC_MESSAGE_ROUTED0(ViewHostMsg_DidFirstVisuallyNonEmptyPaint)
 
 // Sent in reply to ViewMsg_WaitForNextFrameForTests.
 IPC_MESSAGE_ROUTED0(ViewHostMsg_WaitForNextFrameForTests_ACK)
+
+// Acknowledges that a SelectWordAroundCaret completed with the specified
+// result and adjustments to the selection offsets.
+IPC_MESSAGE_ROUTED3(ViewHostMsg_SelectWordAroundCaretAck,
+                    bool /* did_select */,
+                    int /* start_adjust */,
+                    int /* end_adjust */)
 
 #if defined(OS_ANDROID)
 // Notifies that an unhandled tap has occurred at the specified x,y position

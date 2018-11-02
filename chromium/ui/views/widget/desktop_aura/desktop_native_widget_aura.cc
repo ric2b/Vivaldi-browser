@@ -185,7 +185,7 @@ class DesktopNativeWidgetAuraWindowParentingClient
                                  const gfx::Rect& bounds) override {
     bool is_fullscreen = window->GetProperty(aura::client::kShowStateKey) ==
         ui::SHOW_STATE_FULLSCREEN;
-    bool is_menu = window->type() == ui::wm::WINDOW_TYPE_MENU;
+    bool is_menu = window->type() == aura::client::WINDOW_TYPE_MENU;
 
     if (is_fullscreen || is_menu) {
       bool root_is_always_on_top = false;
@@ -393,12 +393,6 @@ gfx::NativeWindow DesktopNativeWidgetAura::GetNativeWindow() const {
   return content_window_;
 }
 
-void DesktopNativeWidgetAura::SetNativeWindowProperty(const char* name,
-                                                      void* value) {
-  if (content_window_)
-    content_window_->SetNativeWindowProperty(name, value);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // DesktopNativeWidgetAura, internal::NativeWidgetPrivate implementation:
 
@@ -602,6 +596,12 @@ void DesktopNativeWidgetAura::ReorderNativeViews() {
 void DesktopNativeWidgetAura::ViewRemoved(View* view) {
   DCHECK(drop_helper_.get() != NULL);
   drop_helper_->ResetTargetViewIfEquals(view);
+}
+
+void DesktopNativeWidgetAura::SetNativeWindowProperty(const char* name,
+                                                      void* value) {
+  if (content_window_)
+    content_window_->SetNativeWindowProperty(name, value);
 }
 
 void* DesktopNativeWidgetAura::GetNativeWindowProperty(const char* name) const {

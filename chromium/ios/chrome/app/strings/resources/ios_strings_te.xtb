@@ -53,7 +53,6 @@
 <translation id="1820259098641718022">పఠన జాబితాకు జోడించబడింది</translation>
 <translation id="1876721852596493031">వినియోగ డేటాను పంపు</translation>
 <translation id="1886928167269928266">ప్రారంభ సమయం</translation>
-<translation id="1894451531427596130"><ph name="BEGIN_LINK" />సెట్టింగ్‌ల<ph name="END_LINK" />లో ఇది పని చేసే విధానాన్ని నియంత్రించండి</translation>
 <translation id="1911619930368729126">Google డిస్క్‌కి అప్‌. చే.</translation>
 <translation id="1941314575388338491">కాపీ చేయడానికి రెండుసార్లు నొక్కండి.</translation>
 <translation id="1952728750904661634">నిర్వహిత ఖాతాతో సైన్ ఇన్ చేయండి</translation>
@@ -97,6 +96,7 @@
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">అనువాద సెట్టింగ్‌లను రీసెట్ చేయి</translation>
 <translation id="285960592395650245">డౌన్‌. మళ్లీ ప్రయత్నించు</translation>
+<translation id="2870560284913253234">సైట్</translation>
 <translation id="2871695793448672541">దాచబడింది, పాస్‌వర్డ్</translation>
 <translation id="2898963176829412617">కొత్త ఫోల్డర్…</translation>
 <translation id="2903493209154104877">చిరునామాలు</translation>
@@ -109,7 +109,6 @@
 <translation id="2989805286512600854">క్రొత్త టాబ్‌లో తెరువు</translation>
 <translation id="3024255823539804759">గత రోజు</translation>
 <translation id="3037605927509011580">ఆవ్, స్నాప్!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> అందుబాటులో లేదు. మీ బ్రౌజింగ్ చరిత్రను ప్రాప్యత చేయడానికి, సాధనాల మెనులో "<ph name="SHOW_HISTORY" />" ఎంచుకోండి.</translation>
 <translation id="3112556859945124369">గుర్తు పెట్టు…</translation>
 <translation id="3151924044251363314">మీ రహస్య పదబంధాన్ని కలిగి ఉన్నవారు మాత్రమే మీ గుప్తీకరించిన డేటాను చదవగలరు. రహస్య పదబంధం ఎవరికీ పంపబడదు లేదా Googleలో నిల్వ చేయబడదు. మీరు మీ రహస్య పదబంధాన్ని మర్చిపోతే లేదా ఈ సెట్టింగ్‌ను మార్చాలనుకుంటే, సమకాలీకరణను రీసెట్ చేయాల్సి ఉంటుంది. <ph name="BEGIN_LINK" />మరింత తెలుసుకోండి<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">అన్నీ గుర్తు పెట్టు…</translation>
@@ -150,6 +149,7 @@
 <translation id="3638472932233958418">వెబ్‌పేజీలను ముందే లోడ్ చేయి</translation>
 <translation id="3691593122358196899"><ph name="FOLDER_TITLE" />కి బుక్‌మార్క్ చేయబడింది</translation>
 <translation id="3738139272394829648">శోధించడానికి తాకండి</translation>
+<translation id="3742082982782149146">సైట్ URL కాపీ చేయబడింది.</translation>
 <translation id="3771033907050503522">అజ్ఞాత ట్యాబ్‌లు</translation>
 <translation id="3783017676699494206">చిత్రాన్ని సేవ్ చేయి</translation>
 <translation id="3789841737615482174">వ్యవస్థాపించు</translation>
@@ -164,10 +164,12 @@
 <translation id="4038354071007134711">ఈ పరికరంలోని అనువర్తనం ఏదీ ఫైల్‌ను తెరవలేదు.</translation>
 <translation id="4049507953662678203">మీకు నెట్‌వర్క్ కనెక్షన్ ఉందని నిర్ధారించుకుని, ఆపై మళ్లీ ప్రయత్నించండి.</translation>
 <translation id="411254640334432676">డౌన్‌లోడ్ చేయడం విఫలమైంది.</translation>
+<translation id="4117350985506774529">మీ వినియోగదారు పేరు కాపీ చేయబడింది.</translation>
 <translation id="4121993058175073134">నికర ఎగుమతి డేటాను పంపడానికి, దయచేసి సెట్టింగ్‌ల అనువర్తనంలో మీ ఇమెయిల్ ఖాతాను కాన్ఫిగర్ చేయండి.</translation>
 <translation id="4124987746317609294">సమయ పరిధి</translation>
 <translation id="4172051516777682613">ఎల్లప్పుడూ చూపు</translation>
 <translation id="418156467088430727">కొత్త ట్యాబ్‌లో ఆఫ్‌లైన్ సంస్కరణను వీక్షించండి</translation>
+<translation id="4237682350741091554"><ph name="BEGIN_LINK" />సెట్టింగ్‌లు<ph name="END_LINK" />లో Chrome సమకాలీకరణ మరియు వ్యక్తిగతీకరణను నిర్వహించండి</translation>
 <translation id="424315890655130736">రహస్య పదబంధాన్ని నమోదు చేయండి</translation>
 <translation id="4272631900155121838">QR కోడ్‌ను స్కాన్ చేయడానికి, సెట్టింగ్‌ల్లో కెమెరాను ప్రారంభించండి</translation>
 <translation id="4281844954008187215">సేవా నిబంధనలు</translation>
@@ -175,6 +177,7 @@
 <translation id="4359125752503270327">ఈ పేజీ మరొక అనువర్తనంలో తెరవబడుతుంది.</translation>
 <translation id="4378154925671717803">ఫోన్</translation>
 <translation id="441868831736628555">గోప్యతా నోటీసు</translation>
+<translation id="4508750114462689118">సైన్ ఇన్ ప్రోమోను మూసివేయండి</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" />లో సేవ్ చేసిన పాస్‌వర్డ్‌లను వీక్షించండి మరియు నిర్వహించండి</translation>
 <translation id="4536418791685807335">మళ్లీ సైన్ ఇన్ చేయడానికి ప్రయత్నించండి.</translation>
 <translation id="4620246317052452550">మీరు చదివిన పేజీలు</translation>
@@ -220,6 +223,7 @@
 
 హ్యాండ్‌ఆఫ్‌ను తప్పనిసరిగా సాధారణ సెట్టింగ్‌ల విభాగంలో కూడా ప్రారంభించాలి మరియు మీ పరికరాలు తప్పనిసరిగా ఒకే iCloud ఖాతాను ఉపయోగించాలి.</translation>
 <translation id="5556459405103347317">రీలోడ్</translation>
+<translation id="5619279135193775234">మెయిల్</translation>
 <translation id="5626245204502895507">ఫైల్‌ను ఈ సమయంలో డౌన్‌‌లోడ్ చేయడం సాధ్యపడలేదు.</translation>
 <translation id="5659593005791499971">ఇమెయిల్</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@
 <translation id="7136892417564438900">కెమెరా అందుబాటులో లేదు</translation>
 <translation id="7159472599653637159">మొబైల్ సైట్‌ని అభ్యర్థించు</translation>
 <translation id="7167621057293532233">డేటా రకాలు</translation>
+<translation id="7175593937868963913">ఇమెయిల్‌ను వ్రాయండి</translation>
 <translation id="7189598951263744875">భాగస్వామ్యం చేయి...</translation>
 <translation id="7203585745079012652">సమాధానాలను చదివి వినిపించు</translation>
 <translation id="722055596168483966">Google సేవలను వ్యక్తిగతీకరించండి</translation>
@@ -358,7 +363,6 @@
 <translation id="8205564605687841303">రద్దు చేయి</translation>
 <translation id="8225985093977202398">కాష్ చిత్రాలు, ఫైల్‌లు</translation>
 <translation id="8261506727792406068">తొలగించు</translation>
-<translation id="8272194309885535896">చిత్రాన్ని డౌన్‌లోడ్ చేయి</translation>
 <translation id="8272426682713568063">క్రెడిట్ కార్డ్‌లు</translation>
 <translation id="8281781826761538115">డిఫాల్ట్ - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">శోధన, ప్రకటనలు మరియు ఇతర Google సేవలను వ్యక్తిగతీకరించడం కోసం Google మీ బ్రౌజింగ్ చరిత్రను ఉపయోగించే విధానాన్ని నియంత్రించండి</translation>

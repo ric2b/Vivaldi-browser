@@ -29,14 +29,14 @@
 #include "core/dom/Element.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/spellcheck/SpellChecker.h"
+#include "core/exported/WebViewBase.h"
 #include "core/frame/LocalFrame.h"
 #include "core/page/Page.h"
 #include "public/web/WebSpellCheckClient.h"
-#include "web/WebViewImpl.h"
 
 namespace blink {
 
-SpellCheckerClientImpl::SpellCheckerClientImpl(WebViewImpl* webview)
+SpellCheckerClientImpl::SpellCheckerClientImpl(WebViewBase* webview)
     : web_view_(webview),
       spell_check_this_field_status_(kSpellCheckAutomatic) {}
 
@@ -87,7 +87,7 @@ void SpellCheckerClientImpl::ToggleSpellCheckingEnabled() {
            frame = frame->Tree().TraverseNext()) {
         if (!frame->IsLocalFrame())
           continue;
-        ToLocalFrame(frame)->GetDocument()->Markers().RemoveMarkers(
+        ToLocalFrame(frame)->GetDocument()->Markers().RemoveMarkersOfTypes(
             DocumentMarker::MisspellingMarkers());
       }
     }

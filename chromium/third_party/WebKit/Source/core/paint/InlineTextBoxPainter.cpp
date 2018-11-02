@@ -13,12 +13,16 @@
 #include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/layout/api/LineLayoutBox.h"
 #include "core/layout/line/InlineTextBox.h"
+#include "core/paint/AppliedDecorationPainter.h"
+#include "core/paint/DecorationInfo.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/TextPainter.h"
-#include "core/style/AppliedTextDecoration.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
+#include "platform/graphics/paint/PaintRecord.h"
+#include "platform/graphics/paint/PaintRecorder.h"
 #include "platform/wtf/Optional.h"
+#include "third_party/skia/include/effects/SkGradientShader.h"
 
 namespace blink {
 
@@ -34,41 +38,8 @@ std::pair<unsigned, unsigned> GetMarkerPaintOffsets(
       std::min(marker.EndOffset() - text_box.Start(), text_box.Len());
   return std::make_pair(start_offset, end_offset);
 }
-}
 
-enum class ResolvedUnderlinePosition { kRoman, kUnder, kOver };
-
-static ResolvedUnderlinePosition ResolveUnderlinePosition(
-    const ComputedStyle& style,
-    const InlineTextBox* inline_text_box) {
-  // |auto| should resolve to |under| to avoid drawing through glyphs in
-  // scripts where it would not be appropriate (e.g., ideographs.)
-  // However, this has performance implications. For now, we only work with
-  // vertical text.
-  switch (inline_text_box->Root().BaselineType()) {
-    default:
-      NOTREACHED();
-    // Fall though.
-    case kAlphabeticBaseline:
-      switch (style.GetTextUnderlinePosition()) {
-        default:
-          NOTREACHED();
-        // Fall though.
-        case kTextUnderlinePositionAuto:
-          return ResolvedUnderlinePosition::kRoman;
-        case kTextUnderlinePositionUnder:
-          return ResolvedUnderlinePosition::kUnder;
-      }
-      break;
-    case kIdeographicBaseline:
-      // Compute language-appropriate default underline position.
-      // https://drafts.csswg.org/css-text-decor-3/#default-stylesheet
-      UScriptCode script = style.GetFontDescription().GetScript();
-      if (script == USCRIPT_KATAKANA_OR_HIRAGANA || script == USCRIPT_HANGUL)
-        return ResolvedUnderlinePosition::kOver;
-      return ResolvedUnderlinePosition::kUnder;
-  }
-}
+}  // anonymous namespace
 
 static LineLayoutItem EnclosingUnderlineObject(
     const InlineTextBox* inline_text_box) {
@@ -81,7 +52,8 @@ static LineLayoutItem EnclosingUnderlineObject(
       return nullptr;
 
     const ComputedStyle& style_to_use = current.StyleRef(first_line);
-    if (style_to_use.GetTextDecoration() & kTextDecorationUnderline)
+    if (EnumHasFlags(style_to_use.GetTextDecoration(),
+                     TextDecoration::kUnderline))
       return current;
 
     current = current.Parent();
@@ -95,30 +67,30 @@ static LineLayoutItem EnclosingUnderlineObject(
   }
 }
 
-static int ComputeUnderlineOffsetForUnder(const ComputedStyle& style,
-                                          const InlineTextBox* inline_text_box,
-                                          bool is_overline = false) {
+static int ComputeUnderlineOffsetForUnder(
+    const ComputedStyle& style,
+    const InlineTextBox* inline_text_box,
+    LineLayoutItem decorating_box,
+    float text_decoration_thickness,
+    LineVerticalPositionType position_type) {
   const RootInlineBox& root = inline_text_box->Root();
-  LineLayoutItem decoration_object = EnclosingUnderlineObject(inline_text_box);
-  LayoutUnit offset;
-  if (style.IsFlippedLinesWritingMode()) {
-    LayoutUnit position = inline_text_box->LogicalTop();
-    offset =
-        position - root.MinLogicalTopForUnderline(decoration_object, position);
-  } else {
-    LayoutUnit position = inline_text_box->LogicalBottom();
-    offset = root.MaxLogicalBottomForUnderline(decoration_object, position) -
-             position;
-  }
-  if (is_overline)
-    return std::min(-offset, LayoutUnit()).ToInt();
-  return (inline_text_box->LogicalHeight() + std::max(offset, LayoutUnit()))
-      .ToInt();
-}
+  FontBaseline baseline_type = root.BaselineType();
+  LayoutUnit offset = inline_text_box->OffsetTo(position_type, baseline_type);
 
-static int ComputeOverlineOffset(const ComputedStyle& style,
-                                 const InlineTextBox* inline_text_box) {
-  return ComputeUnderlineOffsetForUnder(style, inline_text_box, true);
+  // Compute offset to the farthest position of the decorating box.
+  LayoutUnit logical_top = inline_text_box->LogicalTop();
+  LayoutUnit position = logical_top + offset;
+  LayoutUnit farthest = root.FarthestPositionForUnderline(
+      decorating_box, position_type, baseline_type, position);
+  // Round() looks more logical but Floor() produces better results in
+  // positive/negative offsets, in horizontal/vertical flows, on Win/Mac/Linux.
+  int offset_int = (farthest - logical_top).Floor();
+
+  // Gaps are not needed for TextTop because it generally has internal
+  // leadings.
+  if (position_type == LineVerticalPositionType::TextTop)
+    return offset_int;
+  return !IsLineOverSide(position_type) ? offset_int + 1 : offset_int - 1;
 }
 
 static int ComputeUnderlineOffsetForRoman(
@@ -147,6 +119,7 @@ static int ComputeUnderlineOffset(ResolvedUnderlinePosition underline_position,
                                   const ComputedStyle& style,
                                   const FontMetrics& font_metrics,
                                   const InlineTextBox* inline_text_box,
+                                  LineLayoutItem decorating_box,
                                   const float text_decoration_thickness) {
   switch (underline_position) {
     default:
@@ -158,290 +131,10 @@ static int ComputeUnderlineOffset(ResolvedUnderlinePosition underline_position,
     case ResolvedUnderlinePosition::kUnder:
       // Position underline at the under edge of the lowest element's
       // content box.
-      return ComputeUnderlineOffsetForUnder(style, inline_text_box);
+      return ComputeUnderlineOffsetForUnder(
+          style, inline_text_box, decorating_box, text_decoration_thickness,
+          LineVerticalPositionType::BottomOfEmHeight);
   }
-}
-
-static bool ShouldSetDecorationAntialias(
-    const Vector<AppliedTextDecoration>& decorations) {
-  for (const AppliedTextDecoration& decoration : decorations) {
-    TextDecorationStyle decoration_style = decoration.Style();
-    if (decoration_style == kTextDecorationStyleDotted ||
-        decoration_style == kTextDecorationStyleDashed)
-      return true;
-  }
-  return false;
-}
-
-static StrokeStyle TextDecorationStyleToStrokeStyle(
-    TextDecorationStyle decoration_style) {
-  StrokeStyle stroke_style = kSolidStroke;
-  switch (decoration_style) {
-    case kTextDecorationStyleSolid:
-      stroke_style = kSolidStroke;
-      break;
-    case kTextDecorationStyleDouble:
-      stroke_style = kDoubleStroke;
-      break;
-    case kTextDecorationStyleDotted:
-      stroke_style = kDottedStroke;
-      break;
-    case kTextDecorationStyleDashed:
-      stroke_style = kDashedStroke;
-      break;
-    case kTextDecorationStyleWavy:
-      stroke_style = kWavyStroke;
-      break;
-  }
-
-  return stroke_style;
-}
-
-static void AdjustStepToDecorationLength(float& step,
-                                         float& control_point_distance,
-                                         float length) {
-  DCHECK_GT(step, 0);
-
-  if (length <= 0)
-    return;
-
-  unsigned step_count = static_cast<unsigned>(length / step);
-
-  // Each Bezier curve starts at the same pixel that the previous one
-  // ended. We need to subtract (stepCount - 1) pixels when calculating the
-  // length covered to account for that.
-  float uncovered_length = length - (step_count * step - (step_count - 1));
-  float adjustment = uncovered_length / step_count;
-  step += adjustment;
-  control_point_distance += adjustment;
-}
-
-class AppliedDecorationPainter final {
-  STACK_ALLOCATED();
-
- public:
-  AppliedDecorationPainter(GraphicsContext& context,
-                           FloatPoint start_point,
-                           float width,
-                           const AppliedTextDecoration& decoration,
-                           float thickness,
-                           float double_offset,
-                           int wavy_offset_factor,
-                           bool antialias_decoration)
-      : context_(context),
-        start_point_(start_point),
-        width_(width),
-        decoration_(decoration),
-        thickness_(thickness),
-        double_offset_(double_offset),
-        wavy_offset_factor_(wavy_offset_factor),
-        should_antialias_(antialias_decoration){};
-
-  void Paint();
-  FloatRect DecorationBounds();
-
- private:
-  void StrokeWavyTextDecoration();
-
-  Path PrepareWavyStrokePath();
-  Path PrepareDottedDashedStrokePath();
-
-  GraphicsContext& context_;
-  FloatPoint start_point_;
-  float width_;
-  const AppliedTextDecoration& decoration_;
-  float thickness_;
-  const float double_offset_;
-  const int wavy_offset_factor_;
-  bool should_antialias_;
-};
-
-Path AppliedDecorationPainter::PrepareDottedDashedStrokePath() {
-  // These coordinate transforms need to match what's happening in
-  // GraphicsContext's drawLineForText and drawLine.
-  int y = floorf(start_point_.Y() + std::max<float>(thickness_ / 2.0f, 0.5f));
-  Path stroke_path;
-  FloatPoint rounded_start_point(start_point_.X(), y);
-  FloatPoint rounded_end_point(rounded_start_point + FloatPoint(width_, 0));
-  context_.AdjustLineToPixelBoundaries(rounded_start_point, rounded_end_point,
-                                       roundf(thickness_),
-                                       context_.GetStrokeStyle());
-  stroke_path.MoveTo(rounded_start_point);
-  stroke_path.AddLineTo(rounded_end_point);
-  return stroke_path;
-}
-
-FloatRect AppliedDecorationPainter::DecorationBounds() {
-  StrokeData stroke_data;
-  stroke_data.SetThickness(thickness_);
-
-  switch (decoration_.Style()) {
-    case kTextDecorationStyleDotted:
-    case kTextDecorationStyleDashed: {
-      stroke_data.SetStyle(
-          TextDecorationStyleToStrokeStyle(decoration_.Style()));
-      return PrepareDottedDashedStrokePath().StrokeBoundingRect(
-          stroke_data, Path::BoundsType::kExact);
-    }
-    case kTextDecorationStyleWavy:
-      return PrepareWavyStrokePath().StrokeBoundingRect(
-          stroke_data, Path::BoundsType::kExact);
-      break;
-    case kTextDecorationStyleDouble:
-      if (double_offset_ > 0) {
-        return FloatRect(start_point_.X(), start_point_.Y(), width_,
-                         double_offset_ + thickness_);
-      }
-      return FloatRect(start_point_.X(), start_point_.Y() + double_offset_,
-                       width_, -double_offset_ + thickness_);
-      break;
-    case kTextDecorationStyleSolid:
-      return FloatRect(start_point_.X(), start_point_.Y(), width_, thickness_);
-    default:
-      break;
-  }
-  NOTREACHED();
-  return FloatRect();
-}
-
-void AppliedDecorationPainter::Paint() {
-  context_.SetStrokeStyle(
-      TextDecorationStyleToStrokeStyle(decoration_.Style()));
-  context_.SetStrokeColor(decoration_.GetColor());
-
-  switch (decoration_.Style()) {
-    case kTextDecorationStyleWavy:
-      StrokeWavyTextDecoration();
-      break;
-    case kTextDecorationStyleDotted:
-    case kTextDecorationStyleDashed:
-      context_.SetShouldAntialias(should_antialias_);
-    // Fall through
-    default:
-      context_.DrawLineForText(start_point_, width_);
-
-      if (decoration_.Style() == kTextDecorationStyleDouble) {
-        context_.DrawLineForText(start_point_ + FloatPoint(0, double_offset_),
-                                 width_);
-      }
-  }
-}
-
-void AppliedDecorationPainter::StrokeWavyTextDecoration() {
-  context_.SetShouldAntialias(true);
-  context_.StrokePath(PrepareWavyStrokePath());
-}
-
-/*
- * Prepare a path for a cubic Bezier curve and repeat the same pattern long the
- * the decoration's axis.  The start point (p1), controlPoint1, controlPoint2
- * and end point (p2) of the Bezier curve form a diamond shape:
- *
- *                              step
- *                         |-----------|
- *
- *                   controlPoint1
- *                         +
- *
- *
- *                  . .
- *                .     .
- *              .         .
- * (x1, y1) p1 +           .            + p2 (x2, y2) - <--- Decoration's axis
- *                          .         .               |
- *                            .     .                 |
- *                              . .                   | controlPointDistance
- *                                                    |
- *                                                    |
- *                         +                          -
- *                   controlPoint2
- *
- *             |-----------|
- *                 step
- */
-Path AppliedDecorationPainter::PrepareWavyStrokePath() {
-  FloatPoint p1(start_point_ +
-                FloatPoint(0, double_offset_ * wavy_offset_factor_));
-  FloatPoint p2(start_point_ +
-                FloatPoint(width_, double_offset_ * wavy_offset_factor_));
-
-  context_.AdjustLineToPixelBoundaries(p1, p2, thickness_,
-                                       context_.GetStrokeStyle());
-
-  Path path;
-  path.MoveTo(p1);
-
-  // Distance between decoration's axis and Bezier curve's control points.
-  // The height of the curve is based on this distance. Use a minimum of 6
-  // pixels distance since
-  // the actual curve passes approximately at half of that distance, that is 3
-  // pixels.
-  // The minimum height of the curve is also approximately 3 pixels. Increases
-  // the curve's height
-  // as strockThickness increases to make the curve looks better.
-  float control_point_distance = 3 * std::max<float>(2, thickness_);
-
-  // Increment used to form the diamond shape between start point (p1), control
-  // points and end point (p2) along the axis of the decoration. Makes the
-  // curve wider as strockThickness increases to make the curve looks better.
-  float step = 2 * std::max<float>(2, thickness_);
-
-  bool is_vertical_line = (p1.X() == p2.X());
-
-  if (is_vertical_line) {
-    DCHECK(p1.X() == p2.X());
-
-    float x_axis = p1.X();
-    float y1;
-    float y2;
-
-    if (p1.Y() < p2.Y()) {
-      y1 = p1.Y();
-      y2 = p2.Y();
-    } else {
-      y1 = p2.Y();
-      y2 = p1.Y();
-    }
-
-    AdjustStepToDecorationLength(step, control_point_distance, y2 - y1);
-    FloatPoint control_point1(x_axis + control_point_distance, 0);
-    FloatPoint control_point2(x_axis - control_point_distance, 0);
-
-    for (float y = y1; y + 2 * step <= y2;) {
-      control_point1.SetY(y + step);
-      control_point2.SetY(y + step);
-      y += 2 * step;
-      path.AddBezierCurveTo(control_point1, control_point2,
-                            FloatPoint(x_axis, y));
-    }
-  } else {
-    DCHECK(p1.Y() == p2.Y());
-
-    float y_axis = p1.Y();
-    float x1;
-    float x2;
-
-    if (p1.X() < p2.X()) {
-      x1 = p1.X();
-      x2 = p2.X();
-    } else {
-      x1 = p2.X();
-      x2 = p1.X();
-    }
-
-    AdjustStepToDecorationLength(step, control_point_distance, x2 - x1);
-    FloatPoint control_point1(0, y_axis + control_point_distance);
-    FloatPoint control_point2(0, y_axis - control_point_distance);
-
-    for (float x = x1; x + 2 * step <= x2;) {
-      control_point1.SetX(x + step);
-      control_point2.SetX(x + step);
-      x += 2 * step;
-      path.AddBezierCurveTo(control_point1, control_point2,
-                            FloatPoint(x, y_axis));
-    }
-  }
-  return path;
 }
 
 static const int kMisspellingLineThickness = 3;
@@ -465,6 +158,102 @@ static bool PaintsCompositionMarkers(const LayoutObject& layout_object) {
                  .MarkersFor(layout_object.GetNode(),
                              DocumentMarker::kComposition)
                  .size() > 0;
+}
+
+static void PrepareContextForDecoration(
+    GraphicsContext& context,
+    GraphicsContextStateSaver& state_saver,
+    bool is_horizontal,
+    const TextPainterBase::Style& text_style,
+    const LayoutTextCombine* combined_text,
+    const LayoutRect& box_rect) {
+  TextPainterBase::UpdateGraphicsContext(context, text_style, is_horizontal,
+                                         state_saver);
+  if (combined_text) {
+    context.ConcatCTM(
+        TextPainterBase::Rotation(box_rect, TextPainterBase::kClockwise));
+  }
+}
+
+static void RestoreContextFromDecoration(GraphicsContext& context,
+                                         const LayoutTextCombine* combined_text,
+                                         const LayoutRect& box_rect) {
+  if (combined_text) {
+    context.ConcatCTM(TextPainterBase::Rotation(
+        box_rect, TextPainterBase::kCounterclockwise));
+  }
+}
+
+
+static void ComputeOriginAndWidthForBox(const InlineTextBox& box,
+                                        LayoutPoint& local_origin,
+                                        LayoutUnit& width) {
+  if (box.Truncation() != kCNoTruncation) {
+    bool ltr = box.IsLeftToRightDirection();
+    bool flow_is_ltr =
+        box.GetLineLayoutItem().Style()->IsLeftToRightDirection();
+    width = LayoutUnit(box.GetLineLayoutItem().Width(
+        ltr == flow_is_ltr ? box.Start() : box.Start() + box.Truncation(),
+        ltr == flow_is_ltr ? box.Truncation() : box.Len() - box.Truncation(),
+        box.TextPos(), flow_is_ltr ? TextDirection::kLtr : TextDirection::kRtl,
+        box.IsFirstLineStyle()));
+    if (!flow_is_ltr) {
+      local_origin.Move(box.LogicalWidth() - width, LayoutUnit());
+    }
+  }
+}
+
+static void PaintDecorationsExceptLineThrough(
+    TextPainter& text_painter,
+    bool& has_line_through_decoration,
+    const InlineTextBox& box,
+    const DecorationInfo& decoration_info,
+    const LineLayoutItem& decorating_box,
+    const PaintInfo& paint_info,
+    const Vector<AppliedTextDecoration>& decorations) {
+  GraphicsContext& context = paint_info.context;
+  GraphicsContextStateSaver state_saver(context);
+  context.SetStrokeThickness(decoration_info.thickness);
+
+  // text-underline-position may flip underline and overline.
+  ResolvedUnderlinePosition underline_position =
+      decoration_info.underline_position;
+  bool flip_underline_and_overline = false;
+  if (underline_position == ResolvedUnderlinePosition::kOver) {
+    flip_underline_and_overline = true;
+    underline_position = ResolvedUnderlinePosition::kUnder;
+  }
+
+  for (const AppliedTextDecoration& decoration : decorations) {
+    TextDecoration lines = decoration.Lines();
+    if (flip_underline_and_overline) {
+      lines ^= (TextDecoration::kUnderline | TextDecoration::kOverline);
+    }
+    if (EnumHasFlags(lines, TextDecoration::kUnderline) &&
+        decoration_info.font_data) {
+      const int underline_offset = ComputeUnderlineOffset(
+          underline_position, *decoration_info.style,
+          decoration_info.font_data->GetFontMetrics(), &box, decorating_box,
+          decoration_info.thickness);
+      text_painter.PaintDecorationUnderOrOverLine(
+          context, decoration_info, decoration, underline_offset,
+          decoration_info.double_offset);
+    }
+    if (EnumHasFlags(lines, TextDecoration::kOverline)) {
+      const int overline_offset = ComputeUnderlineOffsetForUnder(
+          *decoration_info.style, &box, decorating_box,
+          decoration_info.thickness,
+          flip_underline_and_overline ? LineVerticalPositionType::TopOfEmHeight
+                                      : LineVerticalPositionType::TextTop);
+      text_painter.PaintDecorationUnderOrOverLine(
+          context, decoration_info, decoration, overline_offset,
+          -decoration_info.double_offset);
+    }
+    // We could instead build a vector of the TextDecoration instances needing
+    // line-through but this is a rare case so better to avoid vector overhead.
+    has_line_through_decoration |=
+        EnumHasFlags(lines, TextDecoration::kLineThrough);
+  }
 }
 
 void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
@@ -581,14 +370,15 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
     } else {
       should_rotate = true;
       context.ConcatCTM(
-          TextPainter::Rotation(box_rect, TextPainter::kClockwise));
+          TextPainterBase::Rotation(box_rect, TextPainterBase::kClockwise));
     }
   }
 
   // Determine text colors.
-  TextPainter::Style text_style = TextPainter::TextPaintingStyle(
-      inline_text_box_.GetLineLayoutItem(), style_to_use, paint_info);
-  TextPainter::Style selection_style = TextPainter::SelectionPaintingStyle(
+  TextPainterBase::Style text_style = TextPainterBase::TextPaintingStyle(
+      inline_text_box_.GetLineLayoutItem().GetDocument(), style_to_use,
+      paint_info);
+  TextPainterBase::Style selection_style = TextPainter::SelectionPaintingStyle(
       inline_text_box_.GetLineLayoutItem(), have_selection, paint_info,
       text_style);
   bool paint_selected_text_only = (paint_info.phase == kPaintPhaseSelection);
@@ -622,8 +412,7 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
     }
   }
 
-  // 2. Now paint the foreground, including text and decorations like
-  // underline/overline (in quirks mode only).
+  // 2. Now paint the foreground, including text and decorations.
   int selection_start = 0;
   int selection_end = 0;
   if (paint_selected_text_only || paint_selected_text_separately)
@@ -669,6 +458,33 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
     text_painter.SetEllipsisOffset(inline_text_box_.Truncation());
 
   if (!paint_selected_text_only) {
+    // Paint text decorations except line-through.
+    DecorationInfo decoration_info;
+    bool has_line_through_decoration = false;
+    if (style_to_use.TextDecorationsInEffect() != TextDecoration::kNone &&
+        inline_text_box_.Truncation() != kCFullTruncation) {
+      LayoutPoint local_origin = LayoutPoint(box_origin);
+      LayoutUnit width = inline_text_box_.LogicalWidth();
+      ComputeOriginAndWidthForBox(inline_text_box_, local_origin, width);
+      const LineLayoutItem& decorating_box =
+          EnclosingUnderlineObject(&inline_text_box_);
+      const ComputedStyle* decorating_box_style =
+          decorating_box ? decorating_box.Style() : nullptr;
+      text_painter.ComputeDecorationInfo(decoration_info, box_origin,
+                                         local_origin, width,
+                                         inline_text_box_.Root().BaselineType(),
+                                         style_to_use, decorating_box_style);
+      GraphicsContextStateSaver state_saver(context, false);
+      PrepareContextForDecoration(context, state_saver,
+                                  inline_text_box_.IsHorizontal(), text_style,
+                                  combined_text, box_rect);
+      PaintDecorationsExceptLineThrough(
+          text_painter, has_line_through_decoration, inline_text_box_,
+          decoration_info, decorating_box, paint_info,
+          style_to_use.AppliedTextDecorations());
+      RestoreContextFromDecoration(context, combined_text, box_rect);
+    }
+
     int start_offset = 0;
     int end_offset = length;
     // Where the text and its flow have opposite directions then our offset into
@@ -685,6 +501,17 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
     }
 
     text_painter.Paint(start_offset, end_offset, length, text_style);
+
+    // Paint line-through decoration if needed.
+    if (has_line_through_decoration) {
+      GraphicsContextStateSaver state_saver(context, false);
+      PrepareContextForDecoration(context, state_saver,
+                                  inline_text_box_.IsHorizontal(), text_style,
+                                  combined_text, box_rect);
+      text_painter.PaintDecorationsOnlyLineThrough(
+          decoration_info, paint_info, style_to_use.AppliedTextDecorations());
+      RestoreContextFromDecoration(context, combined_text, box_rect);
+    }
   }
 
   if ((paint_selected_text_only || paint_selected_text_separately) &&
@@ -693,31 +520,14 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
     text_painter.Paint(selection_start, selection_end, length, selection_style);
   }
 
-  // Paint decorations
-  if (style_to_use.TextDecorationsInEffect() != kTextDecorationNone &&
-      !paint_selected_text_only) {
-    GraphicsContextStateSaver state_saver(context, false);
-
-    TextPainter::UpdateGraphicsContext(
-        context, text_style, inline_text_box_.IsHorizontal(), state_saver);
-
-    if (combined_text)
-      context.ConcatCTM(
-          TextPainter::Rotation(box_rect, TextPainter::kClockwise));
-    PaintDecorations(text_painter, paint_info, box_origin,
-                     style_to_use.AppliedTextDecorations());
-    if (combined_text)
-      context.ConcatCTM(
-          TextPainter::Rotation(box_rect, TextPainter::kCounterclockwise));
-  }
-
   if (paint_info.phase == kPaintPhaseForeground)
     PaintDocumentMarkers(paint_info, box_origin, style_to_use, font,
                          DocumentMarkerPaintPhase::kForeground);
 
-  if (should_rotate)
-    context.ConcatCTM(
-        TextPainter::Rotation(box_rect, TextPainter::kCounterclockwise));
+  if (should_rotate) {
+    context.ConcatCTM(TextPainterBase::Rotation(
+        box_rect, TextPainterBase::kCounterclockwise));
+  }
 }
 
 bool InlineTextBoxPainter::ShouldPaintTextBox(const PaintInfo& paint_info) {
@@ -887,23 +697,140 @@ void InlineTextBoxPainter::PaintDocumentMarkers(
           PaintCompositionUnderline(paint_info.context, box_origin, underline);
       } break;
       default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
   }
 }
 
-static GraphicsContext::DocumentMarkerLineStyle LineStyleForMarkerType(
-    DocumentMarker::MarkerType marker_type) {
-  switch (marker_type) {
-    case DocumentMarker::kSpelling:
-      return GraphicsContext::kDocumentMarkerSpellingLineStyle;
-    case DocumentMarker::kGrammar:
-      return GraphicsContext::kDocumentMarkerGrammarLineStyle;
-    default:
-      ASSERT_NOT_REACHED();
-      return GraphicsContext::kDocumentMarkerSpellingLineStyle;
-  }
+namespace {
+
+#if !OS(MACOSX)
+
+static const float kMarkerWidth = 4;
+static const float kMarkerHeight = 2;
+
+sk_sp<PaintRecord> RecordMarker(DocumentMarker::MarkerType marker_type) {
+  SkColor color = (marker_type == DocumentMarker::kGrammar)
+                      ? SkColorSetRGB(0xC0, 0xC0, 0xC0)
+                      : SK_ColorRED;
+
+  // Record the path equivalent to this legacy pattern:
+  //   X o   o X o   o X
+  //     o X o   o X o
+
+  // Adjust the phase such that f' == 0 is "pixel"-centered
+  // (for optimal rasterization at native rez).
+  SkPath path;
+  path.moveTo(kMarkerWidth * -3 / 8, kMarkerHeight * 3 / 4);
+  path.cubicTo(kMarkerWidth * -1 / 8, kMarkerHeight * 3 / 4,
+               kMarkerWidth * -1 / 8, kMarkerHeight * 1 / 4,
+               kMarkerWidth * 1 / 8, kMarkerHeight * 1 / 4);
+  path.cubicTo(kMarkerWidth * 3 / 8, kMarkerHeight * 1 / 4,
+               kMarkerWidth * 3 / 8, kMarkerHeight * 3 / 4,
+               kMarkerWidth * 5 / 8, kMarkerHeight * 3 / 4);
+  path.cubicTo(kMarkerWidth * 7 / 8, kMarkerHeight * 3 / 4,
+               kMarkerWidth * 7 / 8, kMarkerHeight * 1 / 4,
+               kMarkerWidth * 9 / 8, kMarkerHeight * 1 / 4);
+
+  PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setColor(color);
+  flags.setStyle(PaintFlags::kStroke_Style);
+  flags.setStrokeWidth(kMarkerHeight * 1 / 2);
+
+  PaintRecorder recorder;
+  recorder.beginRecording(kMarkerWidth, kMarkerHeight);
+  recorder.getRecordingCanvas()->drawPath(path, flags);
+
+  return recorder.finishRecordingAsPicture();
 }
+
+#else  // OS(MACOSX)
+
+static const float kMarkerWidth = 4;
+static const float kMarkerHeight = 3;
+
+sk_sp<PaintRecord> RecordMarker(DocumentMarker::MarkerType marker_type) {
+  SkColor color = (marker_type == DocumentMarker::kGrammar)
+                      ? SkColorSetRGB(0x6B, 0x6B, 0x6B)
+                      : SkColorSetRGB(0xFB, 0x2D, 0x1D);
+
+  // Match the artwork used by the Mac.
+  static const float kR = 1.5f;
+
+  // top->bottom translucent gradient.
+  const SkColor colors[2] = {
+      SkColorSetARGB(0x48,
+                     SkColorGetR(color),
+                     SkColorGetG(color),
+                     SkColorGetB(color)),
+      color
+  };
+  const SkPoint pts[2] = {
+      SkPoint::Make(0, 0),
+      SkPoint::Make(0, 2 * kR)
+  };
+
+  PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setColor(color);
+  flags.setShader(SkGradientShader::MakeLinear(
+      pts, colors, nullptr, ARRAY_SIZE(colors), SkShader::kClamp_TileMode));
+  PaintRecorder recorder;
+  recorder.beginRecording(kMarkerWidth, kMarkerHeight);
+  recorder.getRecordingCanvas()->drawCircle(kR, kR, kR, flags);
+
+  return recorder.finishRecordingAsPicture();
+}
+
+#endif  // OS(MACOSX)
+
+void DrawDocumentMarker(GraphicsContext& context,
+                        const FloatPoint& pt,
+                        float width,
+                        DocumentMarker::MarkerType marker_type,
+                        float zoom) {
+  DCHECK(marker_type == DocumentMarker::kSpelling ||
+         marker_type == DocumentMarker::kGrammar);
+
+  DEFINE_STATIC_LOCAL(PaintRecord*, spelling_marker,
+                      (RecordMarker(DocumentMarker::kSpelling).release()));
+  DEFINE_STATIC_LOCAL(PaintRecord*, grammar_marker,
+                      (RecordMarker(DocumentMarker::kGrammar).release()));
+  const auto& marker = marker_type == DocumentMarker::kSpelling
+                           ? spelling_marker
+                           : grammar_marker;
+
+  // Position already includes zoom and device scale factor.
+  SkScalar origin_x = WebCoreFloatToSkScalar(pt.X());
+  SkScalar origin_y = WebCoreFloatToSkScalar(pt.Y());
+
+#if OS(MACOSX)
+  // Make sure to draw only complete dots, and finish inside the marked text.
+  width -= fmodf(width, kMarkerWidth * zoom);
+#else
+  // Offset it vertically by 1 so that there's some space under the text.
+  origin_y += 1;
+#endif
+
+  const auto rect = SkRect::MakeWH(width, kMarkerHeight * zoom);
+  const auto local_matrix = SkMatrix::MakeScale(zoom, zoom);
+
+  PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setShader(WrapSkShader(MakePaintShaderRecord(
+      sk_ref_sp(marker), FloatRect(0, 0, kMarkerWidth, kMarkerHeight),
+      SkShader::kRepeat_TileMode, SkShader::kClamp_TileMode, &local_matrix)));
+
+  // Apply the origin translation as a global transform.  This ensures that the
+  // shader local matrix depends solely on zoom => Skia can reuse the same
+  // cached tile for all markers at a given zoom level.
+  GraphicsContextStateSaver saver(context);
+  context.Translate(origin_x, origin_y);
+  context.DrawRect(rect, flags);
+}
+
+}  // anonymous ns
 
 void InlineTextBoxPainter::PaintDocumentMarker(GraphicsContext& context,
                                                const LayoutPoint& box_origin,
@@ -988,11 +915,10 @@ void InlineTextBoxPainter::PaintDocumentMarker(GraphicsContext& context,
     // prevent a big gap.
     underline_offset = baseline + 2;
   }
-  context.DrawLineForDocumentMarker(
-      FloatPoint((box_origin.X() + start).ToFloat(),
-                 (box_origin.Y() + underline_offset).ToFloat()),
-      width.ToFloat(), LineStyleForMarkerType(marker.GetType()),
-      style.EffectiveZoom());
+  DrawDocumentMarker(context,
+                     FloatPoint((box_origin.X() + start).ToFloat(),
+                                (box_origin.Y() + underline_offset).ToFloat()),
+                     width.ToFloat(), marker.GetType(), style.EffectiveZoom());
 }
 
 template <InlineTextBoxPainter::PaintOptions options>
@@ -1107,135 +1033,6 @@ void InlineTextBoxPainter::ExpandToIncludeNewlineForSelection(
   rect.Expand(outsets);
 }
 
-void InlineTextBoxPainter::PaintDecorations(
-    TextPainter& text_painter,
-    const PaintInfo& paint_info,
-    const LayoutPoint& box_origin,
-    const Vector<AppliedTextDecoration>& decorations) {
-  if (inline_text_box_.Truncation() == kCFullTruncation)
-    return;
-
-  GraphicsContext& context = paint_info.context;
-  GraphicsContextStateSaver state_saver(context);
-
-  LayoutPoint local_origin(box_origin);
-
-  LayoutUnit width = inline_text_box_.LogicalWidth();
-  if (inline_text_box_.Truncation() != kCNoTruncation) {
-    bool ltr = inline_text_box_.IsLeftToRightDirection();
-    bool flow_is_ltr =
-        inline_text_box_.GetLineLayoutItem().Style()->IsLeftToRightDirection();
-    width = LayoutUnit(inline_text_box_.GetLineLayoutItem().Width(
-        ltr == flow_is_ltr
-            ? inline_text_box_.Start()
-            : inline_text_box_.Start() + inline_text_box_.Truncation(),
-        ltr == flow_is_ltr
-            ? inline_text_box_.Truncation()
-            : inline_text_box_.Len() - inline_text_box_.Truncation(),
-        inline_text_box_.TextPos(),
-        flow_is_ltr ? TextDirection::kLtr : TextDirection::kRtl,
-        inline_text_box_.IsFirstLineStyle()));
-    if (!flow_is_ltr)
-      local_origin.Move(inline_text_box_.LogicalWidth() - width, LayoutUnit());
-  }
-
-  LayoutObject& text_box_layout_object = InlineLayoutObject();
-
-  const ComputedStyle& style_to_use =
-      text_box_layout_object.StyleRef(inline_text_box_.IsFirstLineStyle());
-  const SimpleFontData* font_data = style_to_use.GetFont().PrimaryFont();
-  DCHECK(font_data);
-  float baseline = font_data ? font_data->GetFontMetrics().FloatAscent() : 0;
-
-  // Set the thick of the line to be 10% (or something else ?)of the computed
-  // font size and not less than 1px.  Using computedFontSize should take care
-  // of zoom as well.
-
-  // Update Underline thickness, in case we have Faulty Font Metrics calculating
-  // underline thickness by old method.
-  float text_decoration_thickness = 0.0;
-  int font_height_int = 0;
-  if (font_data) {
-    text_decoration_thickness =
-        font_data->GetFontMetrics().UnderlineThickness();
-    font_height_int = (int)(font_data->GetFontMetrics().FloatHeight() + 0.5);
-  }
-  if ((text_decoration_thickness == 0.f) ||
-      (text_decoration_thickness >= (font_height_int >> 1)))
-    text_decoration_thickness =
-        std::max(1.f, style_to_use.ComputedFontSize() / 10.f);
-
-  context.SetStrokeThickness(text_decoration_thickness);
-
-  bool antialias_decoration = ShouldSetDecorationAntialias(decorations);
-
-  // Offset between lines - always non-zero, so lines never cross each other.
-  float double_offset = text_decoration_thickness + 1.f;
-  bool skip_intercepts =
-      style_to_use.GetTextDecorationSkip() & kTextDecorationSkipInk;
-
-  // text-underline-position may flip underline and overline.
-  ResolvedUnderlinePosition underline_position =
-      ResolveUnderlinePosition(style_to_use, &inline_text_box_);
-  bool flip_underline_and_overline = false;
-  if (underline_position == ResolvedUnderlinePosition::kOver) {
-    flip_underline_and_overline = true;
-    underline_position = ResolvedUnderlinePosition::kUnder;
-  }
-
-  for (const AppliedTextDecoration& decoration : decorations) {
-    TextDecoration lines = decoration.Lines();
-    if (flip_underline_and_overline) {
-      lines = static_cast<TextDecoration>(
-          lines ^ (kTextDecorationUnderline | kTextDecorationOverline));
-    }
-    if ((lines & kTextDecorationUnderline) && font_data) {
-      const int underline_offset = ComputeUnderlineOffset(
-          underline_position, style_to_use, font_data->GetFontMetrics(),
-          &inline_text_box_, text_decoration_thickness);
-      AppliedDecorationPainter decoration_painter(
-          context, FloatPoint(local_origin) + FloatPoint(0, underline_offset),
-          width.ToFloat(), decoration, text_decoration_thickness, double_offset,
-          1, antialias_decoration);
-      if (skip_intercepts) {
-        text_painter.ClipDecorationsStripe(
-            -baseline + decoration_painter.DecorationBounds().Y() -
-                FloatPoint(local_origin).Y(),
-            decoration_painter.DecorationBounds().Height(),
-            text_decoration_thickness);
-      }
-      decoration_painter.Paint();
-    }
-    if (lines & kTextDecorationOverline) {
-      const int overline_offset =
-          ComputeOverlineOffset(style_to_use, &inline_text_box_);
-      AppliedDecorationPainter decoration_painter(
-          context, FloatPoint(local_origin) + FloatPoint(0, overline_offset),
-          width.ToFloat(), decoration, text_decoration_thickness,
-          -double_offset, 1, antialias_decoration);
-      if (skip_intercepts) {
-        text_painter.ClipDecorationsStripe(
-            -baseline + decoration_painter.DecorationBounds().Y() -
-                FloatPoint(local_origin).Y(),
-            decoration_painter.DecorationBounds().Height(),
-            text_decoration_thickness);
-      }
-      decoration_painter.Paint();
-    }
-    if (lines & kTextDecorationLineThrough) {
-      const float line_through_offset = 2 * baseline / 3;
-      AppliedDecorationPainter decoration_painter(
-          context,
-          FloatPoint(local_origin) + FloatPoint(0, line_through_offset),
-          width.ToFloat(), decoration, text_decoration_thickness, double_offset,
-          0, antialias_decoration);
-      // No skip: ink for line-through,
-      // compare https://github.com/w3c/csswg-drafts/issues/711
-      decoration_painter.Paint();
-    }
-  }
-}
-
 void InlineTextBoxPainter::PaintCompositionUnderline(
     GraphicsContext& context,
     const LayoutPoint& box_origin,
@@ -1345,7 +1142,7 @@ void InlineTextBoxPainter::PaintTextMatchMarkerForeground(
   if (!font_data)
     return;
 
-  TextPainter::Style text_style;
+  TextPainterBase::Style text_style;
   text_style.current_color = text_style.fill_color = text_style.stroke_color =
       text_style.emphasis_mark_color = text_color;
   text_style.stroke_width = style.TextStrokeWidth();

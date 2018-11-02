@@ -389,7 +389,6 @@ def origin_trial_enabled_function_name(definition_or_member):
     An exception is raised if OriginTrialEnabled is used in conjunction with any
     of the following (which must be mutually exclusive with origin trials):
       - RuntimeEnabled
-      - SecureContext
 
     The returned function checks if the IDL member should be enabled.
     Given extended attribute OriginTrialEnabled=FeatureName, return:
@@ -404,12 +403,6 @@ def origin_trial_enabled_function_name(definition_or_member):
     if is_origin_trial_enabled and 'RuntimeEnabled' in extended_attributes:
         raise Exception('[OriginTrialEnabled] and [RuntimeEnabled] must '
                         'not be specified on the same definition: %s'
-                        % definition_or_member.name)
-
-    if is_origin_trial_enabled and 'SecureContext' in extended_attributes:
-        raise Exception('[OriginTrialEnabled] and [SecureContext] must '
-                        'not be specified on the same definition '
-                        '(see https://crbug.com/695123 for workaround): %s'
                         % definition_or_member.name)
 
     if is_origin_trial_enabled:
@@ -430,7 +423,7 @@ def origin_trial_enabled_function_name(definition_or_member):
                         % definition_or_member.name)
 
     if is_feature_policy_enabled:
-        includes.add('bindings/core/v8/ScriptState.h')
+        includes.add('platform/bindings/ScriptState.h')
         includes.add('platform/feature_policy/FeaturePolicy.h')
 
         trial_name = extended_attributes['FeaturePolicy']
@@ -471,7 +464,7 @@ def on_instance(interface, member):
     """Returns True if the interface's member needs to be defined on every
     instance object.
 
-    The following members must be defiend on an instance object.
+    The following members must be defined on an instance object.
     - [Unforgeable] members
     - regular members of [Global] or [PrimaryGlobal] interfaces
     """

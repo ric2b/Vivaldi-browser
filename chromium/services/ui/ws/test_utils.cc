@@ -16,6 +16,7 @@
 #include "services/ui/ws/window_manager_access_policy.h"
 #include "services/ui/ws/window_manager_window_tree_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/gfx/geometry/dip_util.h"
 
 namespace ui {
@@ -28,7 +29,7 @@ namespace {
 class TestPlatformDisplay : public PlatformDisplay {
  public:
   explicit TestPlatformDisplay(const display::ViewportMetrics& metrics,
-                               mojom::CursorType* cursor_storage)
+                               ui::CursorData* cursor_storage)
       : metrics_(metrics), cursor_storage_(cursor_storage) {}
   ~TestPlatformDisplay() override {}
 
@@ -40,7 +41,7 @@ class TestPlatformDisplay : public PlatformDisplay {
   void SetTitle(const base::string16& title) override {}
   void SetCapture() override {}
   void ReleaseCapture() override {}
-  void SetCursorById(mojom::CursorType cursor) override {
+  void SetCursor(const ui::CursorData& cursor) override {
     *cursor_storage_ = cursor;
   }
   void UpdateTextInputState(const ui::TextInputState& state) override {}
@@ -56,7 +57,7 @@ class TestPlatformDisplay : public PlatformDisplay {
 
  private:
   display::ViewportMetrics metrics_;
-  mojom::CursorType* cursor_storage_;
+  ui::CursorData* cursor_storage_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPlatformDisplay);
 };
@@ -142,10 +143,14 @@ void TestScreenManager::Init(display::ScreenManagerDelegate* delegate) {
   display::Screen::SetScreenInstance(screen_.get());
 }
 
+display::ScreenBase* TestScreenManager::GetScreen() {
+  return screen_.get();
+}
+
 // TestPlatformDisplayFactory  -------------------------------------------------
 
 TestPlatformDisplayFactory::TestPlatformDisplayFactory(
-    mojom::CursorType* cursor_storage)
+    ui::CursorData* cursor_storage)
     : cursor_storage_(cursor_storage) {}
 
 TestPlatformDisplayFactory::~TestPlatformDisplayFactory() {}
@@ -221,7 +226,6 @@ void TestWindowManager::WmNewDisplayAdded(
     const display::Display& display,
     ui::mojom::WindowDataPtr root,
     bool drawn,
-    const cc::FrameSinkId& frame_sink_id,
     const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   display_added_count_++;
 }
@@ -301,10 +305,9 @@ void TestWindowTreeClient::OnEmbed(
     int64_t display_id,
     Id focused_window_id,
     bool drawn,
-    const cc::FrameSinkId& frame_sink_id,
     const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   // TODO(sky): add test coverage of |focused_window_id|.
-  tracker_.OnEmbed(client_id, std::move(root), drawn, frame_sink_id);
+  tracker_.OnEmbed(client_id, std::move(root), drawn);
 }
 
 void TestWindowTreeClient::OnEmbeddedAppDisconnected(uint32_t window) {
@@ -331,9 +334,8 @@ void TestWindowTreeClient::OnTopLevelCreated(
     mojom::WindowDataPtr data,
     int64_t display_id,
     bool drawn,
-    const cc::FrameSinkId& frame_sink_id,
     const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
-  tracker_.OnTopLevelCreated(change_id, std::move(data), drawn, frame_sink_id);
+  tracker_.OnTopLevelCreated(change_id, std::move(data), drawn);
 }
 
 void TestWindowTreeClient::OnWindowBoundsChanged(
@@ -419,10 +421,9 @@ void TestWindowTreeClient::OnWindowFocused(uint32_t focused_window_id) {
   tracker_.OnWindowFocused(focused_window_id);
 }
 
-void TestWindowTreeClient::OnWindowPredefinedCursorChanged(
-    uint32_t window_id,
-    mojom::CursorType cursor_id) {
-  tracker_.OnWindowPredefinedCursorChanged(window_id, cursor_id);
+void TestWindowTreeClient::OnWindowCursorChanged(uint32_t window_id,
+                                                 ui::CursorData cursor) {
+  tracker_.OnWindowCursorChanged(window_id, cursor);
 }
 
 void TestWindowTreeClient::OnWindowSurfaceChanged(
@@ -526,8 +527,7 @@ bool TestWindowServerDelegate::IsTestConfig() const {
 // WindowServerTestHelper  ---------------------------------------------------
 
 WindowServerTestHelper::WindowServerTestHelper()
-    : cursor_id_(mojom::CursorType::CURSOR_NULL),
-      platform_display_factory_(&cursor_id_) {
+    : cursor_(ui::CursorType::kNull), platform_display_factory_(&cursor_) {
   // Some tests create their own message loop, for example to add a task runner.
   if (!base::MessageLoop::current())
     message_loop_ = base::MakeUnique<base::MessageLoop>();
@@ -567,9 +567,8 @@ ServerWindow* WindowEventTargetingHelper::CreatePrimaryTree(
   EXPECT_TRUE(wm_tree->AddWindow(FirstRootId(wm_tree), embed_window_id));
   display_->root_window()->SetBounds(root_window_bounds, base::nullopt);
   mojom::WindowTreeClientPtr client;
-  mojom::WindowTreeClientRequest client_request(&client);
   ws_test_helper_.window_server_delegate()->last_client()->Bind(
-      std::move(client_request));
+      mojo::MakeRequest(&client));
   const uint32_t embed_flags = 0;
   wm_tree->Embed(embed_window_id, std::move(client), embed_flags);
   ServerWindow* embed_window = wm_tree->GetWindowByClientId(embed_window_id);

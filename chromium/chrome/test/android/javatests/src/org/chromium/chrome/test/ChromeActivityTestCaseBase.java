@@ -4,84 +4,32 @@
 
 package org.chromium.chrome.test;
 
-import android.app.Activity;
 import android.app.Instrumentation;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
 import android.os.AsyncTask;
-import android.os.Bundle;
-import android.provider.Browser;
-import android.test.InstrumentationTestRunner;
-import android.text.TextUtils;
 import android.view.View;
-import android.widget.ListView;
 
-import org.chromium.base.ActivityState;
-import org.chromium.base.ApplicationStatus;
-import org.chromium.base.ApplicationStatus.ActivityStateListener;
-import org.chromium.base.Log;
-import org.chromium.base.PerfTraceEvent;
-import org.chromium.base.ThreadUtils;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.BaseActivityInstrumentationTestCase;
-import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.PerfTest;
 import org.chromium.base.test.util.parameter.BaseParameter;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.DeferredStartupHandler;
-import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.infobar.InfoBar;
-import org.chromium.chrome.browser.ntp.NewTabPage;
-import org.chromium.chrome.browser.omnibox.AutocompleteController;
-import org.chromium.chrome.browser.omnibox.LocationBarLayout;
-import org.chromium.chrome.browser.omnibox.OmniboxResultsAdapter.OmniboxResultItem;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestion;
-import org.chromium.chrome.browser.omnibox.UrlBar;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.Preferences;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
-import org.chromium.chrome.browser.tabmodel.TabModelObserver;
+import org.chromium.chrome.test.ChromeActivityTestCommon.ChromeTestCommonCallback;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
-import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.chrome.test.util.MenuUtils;
-import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.parameters.AddFakeAccountToAppParameter;
 import org.chromium.chrome.test.util.parameters.AddFakeAccountToOsParameter;
 import org.chromium.chrome.test.util.parameters.AddGoogleAccountToOsParameter;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.JavaScriptUtils;
-import org.chromium.content.browser.test.util.RenderProcessLimit;
 import org.chromium.content.browser.test.util.TestTouchUtils;
 import org.chromium.content.browser.test.util.TouchCommon;
-import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.ui.base.PageTransition;
 
-import java.io.File;
-import java.lang.reflect.AnnotatedElement;
-import java.lang.reflect.Method;
-import java.util.Calendar;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Base class for all Chrome instrumentation tests.
@@ -89,71 +37,28 @@ import java.util.concurrent.atomic.AtomicReference;
  * See ChromeTabbedActivityTestBase.java for example.
  * @param <T> A {@link ChromeActivity} class
  */
-@CommandLineFlags.Add({
-        ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
         // Preconnect causes issues with the single-threaded Java test server.
         "--disable-features=NetworkPrediction"})
 public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
-        extends BaseActivityInstrumentationTestCase<T> {
-
-    private static final String TAG = "cr_CATestCaseBase";
-
-    // The number of ms to wait for the rendering activity to be started.
-    protected static final int ACTIVITY_START_TIMEOUT_MS = 1000;
-
-    private static final String PERF_ANNOTATION_FORMAT = "**PERFANNOTATION(%s):";
-
-    private static final String MEMORY_TRACE_GRAPH_SUFFIX = " - browser PSS";
-
-    private static final String PERF_OUTPUT_FILE = "PerfTestData.txt";
-
-    private static final long OMNIBOX_FIND_SUGGESTION_TIMEOUT_MS = 10 * 1000;
-
-    protected boolean mSkipClearAppData;
-    private Thread.UncaughtExceptionHandler mDefaultUncaughtExceptionHandler;
-    private Class<T> mChromeActivityClass;
+        extends BaseActivityInstrumentationTestCase<T> implements ChromeTestCommonCallback<T> {
+    private final ChromeActivityTestCommon<T> mTestCommon;
 
     public ChromeActivityTestCaseBase(Class<T> activityClass) {
         super(activityClass);
-        mChromeActivityClass = activityClass;
-    }
-
-    private class ChromeUncaughtExceptionHandler implements Thread.UncaughtExceptionHandler {
-        @Override
-        public void uncaughtException(Thread t, Throwable e) {
-            String stackTrace = android.util.Log.getStackTraceString(e);
-            if (e.getClass().getName().endsWith("StrictModeViolation")) {
-                stackTrace += "\nSearch logcat for \"StrictMode policy violation\" for full stack.";
-            }
-            Bundle resultsBundle = new Bundle();
-            resultsBundle.putString(InstrumentationTestRunner.REPORT_KEY_NAME_CLASS,
-                    getClass().getName());
-            resultsBundle.putString(InstrumentationTestRunner.REPORT_KEY_NAME_TEST, getName());
-            resultsBundle.putString(InstrumentationTestRunner.REPORT_KEY_STACK, stackTrace);
-            getInstrumentation().sendStatus(-1, resultsBundle);
-            mDefaultUncaughtExceptionHandler.uncaughtException(t, e);
-        }
+        mTestCommon = new ChromeActivityTestCommon<>(activityClass, this);
     }
 
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        mDefaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler();
-        Thread.setDefaultUncaughtExceptionHandler(new ChromeUncaughtExceptionHandler());
-        ApplicationTestUtils.setUp(getInstrumentation().getTargetContext(), !mSkipClearAppData);
-        setActivityInitialTouchMode(false);
-
-        // Preload Calendar so that it does not trigger ReadFromDisk Strict mode violations if
-        // called on the UI Thread. See https://crbug.com/705477 and https://crbug.com/577185
-        Calendar.getInstance();
-
+        mTestCommon.setUp();
         startMainActivity();
     }
 
     @Override
     protected void tearDown() throws Exception {
-        ApplicationTestUtils.tearDown(getInstrumentation().getTargetContext());
-        Thread.setDefaultUncaughtExceptionHandler(mDefaultUncaughtExceptionHandler);
+        mTestCommon.tearDown();
         super.tearDown();
     }
 
@@ -165,17 +70,18 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
     public abstract void startMainActivity() throws InterruptedException;
 
     /**
+     * Return the timeout limit for Chrome activty start in tests
+     */
+    protected static int getActivityStartTimeoutMs() {
+        return ChromeActivityTestCommon.ACTIVITY_START_TIMEOUT_MS;
+    }
+
+    /**
      * Matches testString against baseString.
      * Returns 0 if there is no match, 1 if an exact match and 2 if a fuzzy match.
      */
     protected static int matchUrl(String baseString, String testString) {
-        if (baseString.equals(testString)) {
-            return 1;
-        }
-        if (baseString.contains(testString)) {
-            return 2;
-        }
-        return 0;
+        return ChromeActivityTestCommon.matchUrl(baseString, testString);
     }
 
     /**
@@ -186,42 +92,12 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * and the activity's main looper has become idle.
      */
     protected void startActivityCompletely(Intent intent) {
-        final CallbackHelper activityCallback = new CallbackHelper();
-        final AtomicReference<T> activityRef = new AtomicReference<>();
-        ActivityStateListener stateListener = new ActivityStateListener() {
-            @SuppressWarnings("unchecked")
-            @Override
-            public void onActivityStateChange(Activity activity, int newState) {
-                if (newState == ActivityState.RESUMED) {
-                    if (!mChromeActivityClass.isAssignableFrom(activity.getClass())) {
-                        return;
-                    }
-
-                    activityRef.set((T) activity);
-                    activityCallback.notifyCalled();
-                    ApplicationStatus.unregisterActivityStateListener(this);
-                }
-            }
-        };
-        ApplicationStatus.registerStateListenerForAllActivities(stateListener);
-
-        try {
-            getInstrumentation().startActivitySync(intent);
-            activityCallback.waitForCallback("Activity did not start as expected", 0);
-            T activity = activityRef.get();
-            assertNotNull("Activity reference is null.", activity);
-            setActivity(activity);
-            Log.d(TAG, "startActivityCompletely <<");
-        } catch (InterruptedException | TimeoutException e) {
-            throw new RuntimeException(e);
-        } finally {
-            ApplicationStatus.unregisterActivityStateListener(stateListener);
-        }
+        mTestCommon.startActivityCompletely(intent);
     }
 
     /** Convenience function for {@link ApplicationTestUtils#clearAppData(Context)}. */
     protected void clearAppData() {
-        ApplicationTestUtils.clearAppData(getInstrumentation().getTargetContext());
+        mTestCommon.clearAppData();
     }
 
     /**
@@ -229,12 +105,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * etc. Network predictions are enabled by default.
      */
     protected void setNetworkPredictionEnabled(final boolean enabled) {
-        getInstrumentation().runOnMainSync(new Runnable() {
-            @Override
-            public void run() {
-                PrefServiceBridge.getInstance().setNetworkPredictionEnabled(enabled);
-            }
-        });
+        mTestCommon.setNetworkPredictionEnabled(enabled);
     }
 
     /**
@@ -245,7 +116,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * @param downTime (in ms)
      * @see TestTouchUtils
      */
-    protected void dragStart(float x, float y, long downTime) {
+    public void dragStart(float x, float y, long downTime) {
         TouchCommon.dragStart(getActivity(), x, y, downTime);
     }
 
@@ -261,8 +132,8 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * @param downTime (in ms)
      * @see TestTouchUtils
      */
-    protected void dragTo(float fromX, float toX, float fromY,
-            float toY, int stepCount, long downTime) {
+    public void dragTo(
+            float fromX, float toX, float fromY, float toY, int stepCount, long downTime) {
         TouchCommon.dragTo(getActivity(), fromX, toX, fromY, toY, stepCount, downTime);
     }
 
@@ -275,7 +146,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * @param downTime (in ms)
      * @see TestTouchUtils
      */
-    protected void dragEnd(float x, float y, long downTime) {
+    public void dragEnd(float x, float y, long downTime) {
         TouchCommon.dragEnd(getActivity(), x, y, downTime);
     }
 
@@ -302,15 +173,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * @param timeout how long to wait for tasks to complete
      */
     public void waitForAsyncTasks(long timeout) throws InterruptedException {
-        final Semaphore s = new Semaphore(0);
-        new AsyncTask<Void, Void, Void>() {
-            @Override
-            protected Void doInBackground(Void... arg0) {
-                s.release();
-                return null;
-            }
-        }.execute();
-        assertTrue(s.tryAcquire(timeout, TimeUnit.MILLISECONDS));
+        mTestCommon.waitForAsyncTasks(timeout);
     }
 
     /**
@@ -321,10 +184,9 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * @return FULL_PRERENDERED_PAGE_LOAD or PARTIAL_PRERENDERED_PAGE_LOAD if the page has been
      *         prerendered. DEFAULT_PAGE_LOAD if it had not.
      */
-    public int loadUrl(final String url, long secondsToWait)
+    public int loadUrl(String url, long secondsToWait)
             throws IllegalArgumentException, InterruptedException {
-        return loadUrlInTab(url, PageTransition.TYPED | PageTransition.FROM_ADDRESS_BAR,
-                getActivity().getActivityTab(), secondsToWait);
+        return mTestCommon.loadUrl(url, secondsToWait);
     }
 
     /**
@@ -334,9 +196,8 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * @return FULL_PRERENDERED_PAGE_LOAD or PARTIAL_PRERENDERED_PAGE_LOAD if the page has been
      *         prerendered. DEFAULT_PAGE_LOAD if it had not.
      */
-    public int loadUrl(final String url) throws IllegalArgumentException, InterruptedException {
-        return loadUrlInTab(url, PageTransition.TYPED | PageTransition.FROM_ADDRESS_BAR,
-                getActivity().getActivityTab());
+    public int loadUrl(String url) throws IllegalArgumentException, InterruptedException {
+        return mTestCommon.loadUrl(url);
     }
 
     /**
@@ -349,25 +210,9 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * @return               FULL_PRERENDERED_PAGE_LOAD or PARTIAL_PRERENDERED_PAGE_LOAD if the
      *                       page has been prerendered. DEFAULT_PAGE_LOAD if it had not.
      */
-    public int loadUrlInTab(final String url, final int pageTransition, final Tab tab,
-            long secondsToWait) throws InterruptedException {
-        assertNotNull("Cannot load the url in a null tab", tab);
-        final AtomicInteger result = new AtomicInteger();
-
-        ChromeTabUtils.waitForTabPageLoaded(tab, new Runnable() {
-            @Override
-            public void run() {
-                ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-                    @Override
-                    public void run() {
-                        result.set(tab.loadUrl(
-                                new LoadUrlParams(url, pageTransition)));
-                    }
-                });
-            }
-        }, secondsToWait);
-        getInstrumentation().waitForIdleSync();
-        return result.get();
+    public int loadUrlInTab(String url, int pageTransition, Tab tab, long secondsToWait)
+            throws InterruptedException {
+        return mTestCommon.loadUrlInTab(url, pageTransition, tab, secondsToWait);
     }
 
     /**
@@ -379,17 +224,16 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * @return               FULL_PRERENDERED_PAGE_LOAD or PARTIAL_PRERENDERED_PAGE_LOAD if the
      *                       page has been prerendered. DEFAULT_PAGE_LOAD if it had not.
      */
-    public int loadUrlInTab(final String url, final int pageTransition, final Tab tab)
-            throws InterruptedException {
-        return loadUrlInTab(url, pageTransition, tab, CallbackHelper.WAIT_TIMEOUT_SECONDS);
+    public int loadUrlInTab(String url, int pageTransition, Tab tab) throws InterruptedException {
+        return mTestCommon.loadUrlInTab(url, pageTransition, tab);
     }
 
     /**
      * Load a url in a new tab. The {@link Tab} will pretend to be created from a link.
      * @param url The url of the page to load.
      */
-    public Tab loadUrlInNewTab(final String url) throws InterruptedException {
-        return loadUrlInNewTab(url, false);
+    public Tab loadUrlInNewTab(String url) throws InterruptedException {
+        return mTestCommon.loadUrlInNewTab(url);
     }
 
     /**
@@ -399,21 +243,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      */
     public Tab loadUrlInNewTab(final String url, final boolean incognito)
             throws InterruptedException {
-        Tab tab = null;
-        try {
-            tab = ThreadUtils.runOnUiThreadBlocking(new Callable<Tab>() {
-                @Override
-                public Tab call() throws Exception {
-                    return getActivity().getTabCreator(incognito)
-                            .launchUrl(url, TabLaunchType.FROM_LINK);
-                }
-            });
-        } catch (ExecutionException e) {
-            fail("Failed to create new tab");
-        }
-        ChromeTabUtils.waitForTabPageLoaded(tab, url);
-        getInstrumentation().waitForIdleSync();
-        return tab;
+        return mTestCommon.loadUrlInNewTab(url, incognito);
     }
 
     /**
@@ -429,10 +259,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      */
     protected void startMainActivityWithURL(String url) throws InterruptedException {
         // Only launch Chrome.
-        Intent intent = new Intent(
-                TextUtils.isEmpty(url) ? Intent.ACTION_MAIN : Intent.ACTION_VIEW);
-        intent.addCategory(Intent.CATEGORY_LAUNCHER);
-        startMainActivityFromIntent(intent, url);
+        mTestCommon.startMainActivityWithURL(url);
     }
 
     /**
@@ -440,7 +267,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * This is faster and less flakyness-prone than starting on the NTP.
      */
     protected void startMainActivityOnBlankPage() throws InterruptedException {
-        startMainActivityWithURL("about:blank");
+        mTestCommon.startMainActivityOnBlankPage();
     }
 
     /**
@@ -449,11 +276,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      */
     protected void startMainActivityFromExternalApp(String url, String appId)
             throws InterruptedException {
-        Intent intent = new Intent(Intent.ACTION_VIEW);
-        if (appId != null) {
-            intent.putExtra(Browser.EXTRA_APPLICATION_ID, appId);
-        }
-        startMainActivityFromIntent(intent, url);
+        mTestCommon.startMainActivityFromExternalApp(url, appId);
     }
 
     /**
@@ -464,34 +287,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      */
     protected void startMainActivityFromIntent(Intent intent, String url)
             throws InterruptedException {
-        prepareUrlIntent(intent, url);
-
-        startActivityCompletely(intent);
-
-        CriteriaHelper.pollUiThread(new Criteria("Tab never selected/initialized.") {
-            @Override
-            public boolean isSatisfied() {
-                return getActivity().getActivityTab() != null;
-            }
-        });
-        Tab tab = getActivity().getActivityTab();
-
-        ChromeTabUtils.waitForTabPageLoaded(tab, (String) null);
-
-        if (tab != null && NewTabPage.isNTPUrl(tab.getUrl())) {
-            NewTabPageTestUtils.waitForNtpLoaded(tab);
-        }
-
-        CriteriaHelper.pollUiThread(new Criteria("Deferred startup never completed") {
-            @Override
-            public boolean isSatisfied() {
-                return DeferredStartupHandler.getInstance().isDeferredStartupCompleteForApp();
-            }
-        });
-
-        assertNotNull(tab);
-        assertNotNull(tab.getView());
-        getInstrumentation().waitForIdleSync();
+        mTestCommon.startMainActivityFromIntent(intent, url);
     }
 
     /**
@@ -500,25 +296,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * @param url the URL to be used (may be null)
      */
     protected Intent prepareUrlIntent(Intent intent, String url) {
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        intent.setComponent(new ComponentName(getInstrumentation().getTargetContext(),
-                ChromeLauncherActivity.class));
-
-        if (url != null) {
-            intent.setData(Uri.parse(url));
-        }
-
-        try {
-            Method method = getClass().getMethod(getName(), (Class[]) null);
-            if (((AnnotatedElement) method).isAnnotationPresent(RenderProcessLimit.class)) {
-                RenderProcessLimit limit = method.getAnnotation(RenderProcessLimit.class);
-                intent.putExtra(ChromeTabbedActivity.INTENT_EXTRA_TEST_RENDER_PROCESS_LIMIT,
-                        limit.value());
-            }
-        } catch (NoSuchMethodException ex) {
-            // Ignore exception.
-        }
-        return intent;
+        return mTestCommon.prepareUrlIntent(intent, url);
     }
 
     /**
@@ -526,46 +304,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * Returns when receiving the 'PAGE_LOAD_FINISHED' notification.
      */
     protected void newIncognitoTabFromMenu() throws InterruptedException {
-        Tab tab = null;
-
-        final CallbackHelper createdCallback = new CallbackHelper();
-        final CallbackHelper selectedCallback = new CallbackHelper();
-
-        TabModel incognitoTabModel = getActivity().getTabModelSelector().getModel(true);
-        TabModelObserver observer = new EmptyTabModelObserver() {
-            @Override
-            public void didAddTab(Tab tab, TabLaunchType type) {
-                createdCallback.notifyCalled();
-            }
-
-            @Override
-            public void didSelectTab(Tab tab, TabSelectionType type, int lastId) {
-                selectedCallback.notifyCalled();
-            }
-        };
-        incognitoTabModel.addObserver(observer);
-
-        MenuUtils.invokeCustomMenuActionSync(getInstrumentation(), getActivity(),
-                R.id.new_incognito_tab_menu_id);
-
-        try {
-            createdCallback.waitForCallback(0);
-        } catch (TimeoutException ex) {
-            fail("Never received tab created event");
-        }
-        try {
-            selectedCallback.waitForCallback(0);
-        } catch (TimeoutException ex) {
-            fail("Never received tab selected event");
-        }
-        incognitoTabModel.removeObserver(observer);
-
-        tab = getActivity().getActivityTab();
-
-        ChromeTabUtils.waitForTabPageLoaded(tab, (String) null);
-        NewTabPageTestUtils.waitForNtpLoaded(tab);
-        getInstrumentation().waitForIdleSync();
-        Log.d(TAG, "newIncognitoTabFromMenu <<");
+        mTestCommon.newIncognitoTabFromMenu();
     }
 
     /**
@@ -574,22 +313,14 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      */
     protected void newIncognitoTabsFromMenu(int n)
             throws InterruptedException {
-        while (n > 0) {
-            newIncognitoTabFromMenu();
-            --n;
-        }
+        mTestCommon.newIncognitoTabsFromMenu(n);
     }
 
     /**
      * @return The number of incognito tabs currently open.
      */
     protected int incognitoTabsCount() {
-        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Integer>() {
-            @Override
-            public Integer call() {
-                return getActivity().getTabModelSelector().getModel(true).getCount();
-            }
-        });
+        return mTestCommon.incognitoTabsCount();
     }
 
     /**
@@ -601,29 +332,8 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      *
      * @throws InterruptedException
      */
-    public void typeInOmnibox(final String text, final boolean oneCharAtATime)
-            throws InterruptedException {
-        final UrlBar urlBar = (UrlBar) getActivity().findViewById(R.id.url_bar);
-        assertNotNull(urlBar);
-
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                urlBar.requestFocus();
-                if (!oneCharAtATime) {
-                    urlBar.setText(text);
-                }
-            }
-        });
-
-        if (oneCharAtATime) {
-            final Instrumentation instrumentation = getInstrumentation();
-            for (int i = 0; i < text.length(); ++i) {
-                instrumentation.sendStringSync(text.substring(i, i + 1));
-                // Let's put some delay between key strokes to simulate a user pressing the keys.
-                Thread.sleep(20);
-            }
-        }
+    public void typeInOmnibox(String text, boolean oneCharAtATime) throws InterruptedException {
+        mTestCommon.typeInOmnibox(text, oneCharAtATime);
     }
 
     /**
@@ -638,95 +348,14 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      */
     protected OmniboxSuggestion findOmniboxSuggestion(String inputText, String displayText,
             String url, int type) throws InterruptedException {
-        long endTime = System.currentTimeMillis() + OMNIBOX_FIND_SUGGESTION_TIMEOUT_MS;
-
-        // Multiple suggestion events may occur before the one we're interested in is received.
-        final CallbackHelper onSuggestionsReceivedHelper = new CallbackHelper();
-        final LocationBarLayout locationBar =
-                (LocationBarLayout) getActivity().findViewById(R.id.location_bar);
-        locationBar.setAutocompleteController(new AutocompleteController(locationBar) {
-            @Override
-            public void onSuggestionsReceived(
-                    List<OmniboxSuggestion> suggestions,
-                    String inlineAutocompleteText,
-                    long currentNativeAutocompleteResult) {
-                super.onSuggestionsReceived(
-                        suggestions, inlineAutocompleteText, currentNativeAutocompleteResult);
-                onSuggestionsReceivedHelper.notifyCalled();
-            }
-        });
-
-        try {
-            typeInOmnibox(inputText, false);
-
-            while (true) {
-                try {
-                    int callbackCount = onSuggestionsReceivedHelper.getCallCount();
-                    onSuggestionsReceivedHelper.waitForCallback(
-                            callbackCount, 1,
-                            endTime - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
-                } catch (TimeoutException exception) {
-                    return null;
-                }
-
-                // Wait for suggestions to show up.
-                CriteriaHelper.pollInstrumentationThread(new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return ((LocationBarLayout) getActivity().findViewById(
-                                R.id.location_bar)).getSuggestionList() != null;
-                    }
-                }, 3000, 10);
-                final ListView suggestionListView = locationBar.getSuggestionList();
-                OmniboxResultItem popupItem = (OmniboxResultItem) suggestionListView
-                        .getItemAtPosition(0);
-                OmniboxSuggestion suggestion = popupItem.getSuggestion();
-                if (suggestionListView.getCount() == 1
-                        && suggestion.getDisplayText().equals(inputText)
-                        && !suggestion.getDisplayText().equals(displayText)) {
-                    // If there is only one suggestion and it's the same as inputText,
-                    // wait for other suggestions before looking for the one we want.
-                    CriteriaHelper.pollInstrumentationThread(new Criteria() {
-                        @Override
-                        public boolean isSatisfied() {
-                            return suggestionListView.getCount() > 1;
-                        }
-                    }, 3000, 10);
-                }
-                int count = suggestionListView.getCount();
-                for (int i = 0; i < count; i++) {
-                    popupItem = (OmniboxResultItem) suggestionListView.getItemAtPosition(i);
-                    suggestion = popupItem.getSuggestion();
-                    if (suggestion.getType() != type) {
-                        continue;
-                    }
-                    if (displayText != null && !suggestion.getDisplayText().equals(displayText)) {
-                        continue;
-                    }
-                    if (url != null && !suggestion.getUrl().equals(url)) {
-                        continue;
-                    }
-                    return suggestion;
-                }
-            }
-        } finally {
-            locationBar.setAutocompleteController(new AutocompleteController(locationBar));
-        }
+        return mTestCommon.findOmniboxSuggestion(inputText, displayText, url, type);
     }
 
     /**
      * Returns the infobars being displayed by the current tab, or null if they don't exist.
      */
     protected List<InfoBar> getInfoBars() {
-        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<List<InfoBar>>() {
-            @Override
-            public List<InfoBar> call() throws Exception {
-                Tab currentTab = getActivity().getActivityTab();
-                assertNotNull(currentTab);
-                assertNotNull(currentTab.getInfoBarContainer());
-                return currentTab.getInfoBarContainer().getInfoBarsForTesting();
-            }
-        });
+        return mTestCommon.getInfoBars();
     }
 
     /**
@@ -734,11 +363,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * Returns the activity that was started.
      */
     protected Preferences startPreferences(String fragmentName) {
-        Context context = getInstrumentation().getTargetContext();
-        Intent intent = PreferencesLauncher.createIntentForSettingsPage(context, fragmentName);
-        Activity activity = getInstrumentation().startActivitySync(intent);
-        assertTrue(activity instanceof Preferences);
-        return (Preferences) activity;
+        return mTestCommon.startPreferences(fragmentName);
     }
 
     /**
@@ -748,15 +373,14 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      */
     protected String runJavaScriptCodeInCurrentTab(String code) throws InterruptedException,
             TimeoutException {
-        return JavaScriptUtils.executeJavaScriptAndWaitForResult(
-                getActivity().getCurrentContentViewCore().getWebContents(), code);
+        return mTestCommon.runJavaScriptCodeInCurrentTab(code);
     }
 
     @Override
     protected void runTest() throws Throwable {
-        String perfTagAnalysisString = setupPotentialPerfTest();
+        String perfTagAnalysisString = mTestCommon.setupPotentialPerfTest();
         super.runTest();
-        endPerfTest(perfTagAnalysisString);
+        mTestCommon.endPerfTest(perfTagAnalysisString);
     }
 
     @Override
@@ -775,121 +399,17 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * Waits till the ContentViewCore receives the expected page scale factor
      * from the compositor and asserts that this happens.
      */
-    protected void assertWaitForPageScaleFactorMatch(final float expectedScale)
-            throws InterruptedException {
-        ApplicationTestUtils.assertWaitForPageScaleFactorMatch(getActivity(), expectedScale);
+    protected void assertWaitForPageScaleFactorMatch(float expectedScale) {
+        mTestCommon.assertWaitForPageScaleFactorMatch(expectedScale);
     }
 
-    /**
-     * This method creates a special string that tells the python test harness what
-     * trace calls to track for this particular test run.  It can support multiple trace calls for
-     * each test and will make a new graph entry for all of them.  It should be noted that this
-     * method eats all exceptions.  This is so that it can never be the cause of a test failure.
-     * We still need to call this method even if we know the test will not run (ie: willTestRun is
-     * false).  This is because this method lets the python test harness know not to expect any
-     * perf output in this case.  In the case that the autoTrace parameter is set for the current
-     * test method, this will also start the PerfTrace facility automatically.
-     *
-     * @param willTestRun Whether or not this test will actually be run.
-     * @return A specially formatted string that contains which JSON perf markers to look at. This
-     *         will be analyzed by the perf test harness.
-     */
-    @SuppressFBWarnings({
-            "REC_CATCH_EXCEPTION",
-            "RV_RETURN_VALUE_IGNORED_BAD_PRACTICE",
-            })
-    private String setupPotentialPerfTest() {
-        File perfFile = getInstrumentation().getTargetContext().getFileStreamPath(
-                PERF_OUTPUT_FILE);
-        perfFile.delete();
-        PerfTraceEvent.setOutputFile(perfFile);
-
-        String perfAnnotationString = "";
-
-        try {
-            Method method = getClass().getMethod(getName(), (Class[]) null);
-            PerfTest annotation = method.getAnnotation(PerfTest.class);
-            if (annotation != null) {
-                StringBuilder annotationData = new StringBuilder();
-                annotationData.append(String.format(PERF_ANNOTATION_FORMAT, method.getName()));
-
-                // Grab the minimum number of trace calls we will track (if names(),
-                // graphNames(), and graphValues() do not have the same number of elements, we
-                // will track as many as we can given the data available.
-                final int maxIndex = Math.min(annotation.traceNames().length, Math.min(
-                        annotation.graphNames().length, annotation.seriesNames().length));
-
-                List<String> allNames = new LinkedList<>();
-                for (int i = 0; i < maxIndex; ++i) {
-                    // Prune out all of ',' and ';' from the strings.  Replace them with '-'.
-                    String name = annotation.traceNames()[i].replaceAll("[,;]", "-");
-                    allNames.add(name);
-                    String graphName = annotation.graphNames()[i].replaceAll("[,;]", "-");
-                    String seriesName = annotation.seriesNames()[i].replaceAll("[,;]", "-");
-                    if (annotation.traceTiming()) {
-                        annotationData.append(name).append(",")
-                                .append(graphName).append(",")
-                                .append(seriesName).append(';');
-                    }
-
-                    // If memory tracing is enabled, add an additional graph for each one
-                    // defined to track timing perf that will track the corresponding memory
-                    // usage.
-                    // Keep the series name the same, but just append a memory identifying
-                    // prefix to the graph.
-                    if (annotation.traceMemory()) {
-                        String memName = PerfTraceEvent.makeMemoryTraceNameFromTimingName(name);
-                        String memGraphName = PerfTraceEvent.makeSafeTraceName(
-                                graphName, MEMORY_TRACE_GRAPH_SUFFIX);
-                        annotationData.append(memName).append(",")
-                                .append(memGraphName).append(",")
-                                .append(seriesName).append(';');
-                        allNames.add(memName);
-                    }
-                }
-                // We only record perf trace events for the names explicitly listed.
-                PerfTraceEvent.setFilter(allNames);
-
-                // Figure out if we should automatically start or stop the trace.
-                if (annotation.autoTrace()) {
-                    PerfTraceEvent.setEnabled(true);
-                }
-                PerfTraceEvent.setTimingTrackingEnabled(annotation.traceTiming());
-                PerfTraceEvent.setMemoryTrackingEnabled(annotation.traceMemory());
-
-                perfAnnotationString = annotationData.toString();
-            }
-        } catch (Exception ex) {
-            // Eat exception here.
-        }
-
-        return perfAnnotationString;
+    @Override
+    public String getTestName() {
+        return getName();
     }
 
-    /**
-     * This handles cleaning up the performance component of this test if it was a UI Perf test.
-     * This includes potentially shutting down PerfTraceEvent.  This method eats all exceptions so
-     * that it can never be the cause of a test failure.  The test harness will wait for
-     * {@code perfTagAnalysisString} to show up in the logcat before processing the JSON perf file,
-     * giving this method the chance to flush and dump the performance data before the harness reads
-     * it.
-     *
-     * @param perfTagAnalysisString A specially formatted string that tells the perf test harness
-     *                              which perf tags to analyze.
-     */
-    private void endPerfTest(String perfTagAnalysisString) {
-        try {
-            Method method = getClass().getMethod(getName(), (Class[]) null);
-            PerfTest annotation = method.getAnnotation(PerfTest.class);
-            if (annotation != null) {
-                if (PerfTraceEvent.enabled()) {
-                    PerfTraceEvent.setEnabled(false);
-                }
-
-                System.out.println(perfTagAnalysisString);
-            }
-        } catch (NoSuchMethodException ex) {
-            // Eat exception here.
-        }
+    @Override
+    public void setActivity(T t) {
+        super.setActivity(t);
     }
 }

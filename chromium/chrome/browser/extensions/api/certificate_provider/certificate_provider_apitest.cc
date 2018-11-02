@@ -72,15 +72,8 @@ void StoreString(std::string* result,
 void StoreDigest(std::vector<uint8_t>* digest,
                  const base::Closure& callback,
                  const base::Value* value) {
-  const base::Value* binary = nullptr;
-  const bool is_binary = value->GetAsBinary(&binary);
-  EXPECT_TRUE(is_binary) << "Unexpected value in StoreDigest";
-  if (is_binary) {
-    const uint8_t* const binary_begin =
-        reinterpret_cast<const uint8_t*>(binary->GetBuffer());
-    digest->assign(binary_begin, binary_begin + binary->GetSize());
-  }
-
+  ASSERT_TRUE(value->is_blob()) << "Unexpected value in StoreDigest";
+  digest->assign(value->GetBlob().begin(), value->GetBlob().end());
   callback.Run();
 }
 

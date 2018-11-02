@@ -8,6 +8,7 @@
 #include "base/callback.h"
 #include "base/strings/string16.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
+#include "components/previews/core/previews_experiments.h"
 
 namespace content {
 class WebContents;
@@ -19,14 +20,6 @@ class WebContents;
 // infobar.
 class PreviewsInfoBarDelegate : public ConfirmInfoBarDelegate {
  public:
-  // The type of the infobar. It controls the strings and what UMA data is
-  // recorded for the infobar.
-  enum PreviewsInfoBarType {
-    LOFI,      // Server-side image replacement.
-    LITE_PAGE, // Server-side page rewrite.
-    OFFLINE,   // Offline copy of the page.
-  };
-
   typedef base::Callback<void(bool opt_out)> OnDismissPreviewsInfobarCallback;
 
   // Actions on the previews infobar. This enum must remain synchronized with
@@ -37,6 +30,7 @@ class PreviewsInfoBarDelegate : public ConfirmInfoBarDelegate {
     INFOBAR_DISMISSED_BY_USER = 2,
     INFOBAR_DISMISSED_BY_NAVIGATION = 3,
     INFOBAR_DISMISSED_BY_RELOAD = 4,
+    INFOBAR_DISMISSED_BY_TAB_CLOSURE = 5,
     INFOBAR_INDEX_BOUNDARY
   };
 
@@ -46,14 +40,20 @@ class PreviewsInfoBarDelegate : public ConfirmInfoBarDelegate {
   // to InfoBarService.
   static void Create(
       content::WebContents* web_contents,
-      PreviewsInfoBarType infobar_type,
+      previews::PreviewsType previews_type,
       bool is_data_saver_user,
       const OnDismissPreviewsInfobarCallback& on_dismiss_callback);
+
+  // ConfirmInfoBarDelegate overrides:
+  base::string16 GetMessageText() const override;
+  base::string16 GetLinkText() const override;
+
+  base::string16 GetTimestampText() const;
 
  private:
   PreviewsInfoBarDelegate(
       content::WebContents* web_contents,
-      PreviewsInfoBarType infobar_type,
+      previews::PreviewsType previews_type,
       bool is_data_saver_user,
       const OnDismissPreviewsInfobarCallback& on_dismiss_callback);
 
@@ -62,12 +62,11 @@ class PreviewsInfoBarDelegate : public ConfirmInfoBarDelegate {
   int GetIconId() const override;
   bool ShouldExpire(const NavigationDetails& details) const override;
   void InfoBarDismissed() override;
-  base::string16 GetMessageText() const override;
   int GetButtons() const override;
-  base::string16 GetLinkText() const override;
   bool LinkClicked(WindowOpenDisposition disposition) override;
 
-  PreviewsInfoBarType infobar_type_;
+  previews::PreviewsType previews_type_;
+  mutable PreviewsInfoBarAction infobar_dismissed_action_;
 
   const base::string16 message_text_;
 

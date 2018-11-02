@@ -111,10 +111,9 @@ void CastCdm::UnregisterPlayer(int registration_id) {
   return cast_cdm_context_.get();
 }
 
-void CastCdm::OnSessionMessage(
-    const std::string& session_id,
-    const std::vector<uint8_t>& message,
-    ::media::ContentDecryptionModule::MessageType message_type) {
+void CastCdm::OnSessionMessage(const std::string& session_id,
+                               const std::vector<uint8_t>& message,
+                               ::media::CdmMessageType message_type) {
   session_message_cb_.Run(session_id, message_type, message);
 }
 
@@ -125,6 +124,22 @@ void CastCdm::OnSessionClosed(const std::string& session_id) {
 void CastCdm::OnSessionKeysChange(const std::string& session_id,
                                   bool newly_usable_keys,
                                   ::media::CdmKeysInfo keys_info) {
+  logging::LogMessage log_message(__FILE__, __LINE__, logging::LOG_INFO);
+  log_message.stream() << "keystatuseschange ";
+  int status_count[::media::CdmKeyInformation::KEY_STATUS_MAX] = {0};
+  for (const auto& key_info : keys_info) {
+    status_count[key_info->status]++;
+  }
+  for (int i = 0; i != ::media::CdmKeyInformation::KEY_STATUS_MAX; ++i) {
+    if (status_count[i] == 0)
+      continue;
+    log_message.stream()
+        << status_count[i] << " "
+        << ::media::CdmKeyInformation::KeyStatusToString(
+               static_cast<::media::CdmKeyInformation::KeyStatus>(i))
+        << " ";
+  }
+
   session_keys_change_cb_.Run(session_id, newly_usable_keys,
                               std::move(keys_info));
 
@@ -132,14 +147,17 @@ void CastCdm::OnSessionKeysChange(const std::string& session_id,
     player_tracker_impl_->NotifyNewKey();
 }
 
+void CastCdm::OnSessionExpirationUpdate(const std::string& session_id,
+                                        base::Time new_expiry_time) {
+  session_expiration_update_cb_.Run(session_id, new_expiry_time);
+}
+
 void CastCdm::KeyIdAndKeyPairsToInfo(const ::media::KeyIdAndKeyPairs& keys,
                                      ::media::CdmKeysInfo* keys_info) {
   DCHECK(keys_info);
   for (const std::pair<std::string, std::string>& key : keys) {
-    std::unique_ptr<::media::CdmKeyInformation> cdm_key_information(
-        new ::media::CdmKeyInformation(key.first,
-                                       ::media::CdmKeyInformation::USABLE, 0));
-    keys_info->push_back(cdm_key_information.release());
+    keys_info->push_back(base::MakeUnique<::media::CdmKeyInformation>(
+        key.first, ::media::CdmKeyInformation::USABLE, 0));
   }
 }
 

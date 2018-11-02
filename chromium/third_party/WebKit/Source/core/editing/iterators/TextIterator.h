@@ -134,18 +134,22 @@ class CORE_TEMPLATE_CLASS_EXPORT TextIteratorAlgorithm {
   bool ShouldRepresentNodeOffsetZero();
   bool ShouldEmitSpaceBeforeAndAfterNode(Node*);
   void RepresentNodeOffsetZero();
+
+  // Return true if the iteration progress should advance to |kHandledNode|
+  // after calling a |HandleXXX| function.
+  // TODO(xiaochengh): The meaning of the return values is unclear, and they do
+  // not always clearly control the iteration progress. Should consider removing
+  // the return values and control the iteration in a cleaner way.
   bool HandleTextNode();
+  bool HandlePreFormattedTextNode();
   bool HandleReplacedElement();
   bool HandleNonTextNode();
+
   void HandleTextBox();
   void HandleTextNodeFirstLetter(LayoutTextFragment*);
-  // Helper function during initialization. Returns true if the start position
-  // is in a text node with first-letter, in which case it also sets up related
-  // parameters. Returns false otherwise.
-  bool PrepareForFirstLetterInitialization();
-  bool HasNotAdvancedToStartPosition();
-  int AdjustedStartForFirstLetter(const Node&, const LayoutText&, int, int);
-  int AdjustedStartForRemainingText(const Node&, const LayoutText&, int, int);
+  bool ShouldHandleFirstLetter(const LayoutText&) const;
+  bool ShouldProceedToRemainingText() const;
+  void ProceedToRemainingText();
   void SpliceBuffer(UChar,
                     Node* text_node,
                     Node* offset_base_node,
@@ -255,11 +259,6 @@ class CORE_TEMPLATE_CLASS_EXPORT TextIteratorAlgorithm {
   // Used for use counter |InnerTextWithShadowTree| and
   // |SelectionToStringWithShadowTree|, we should not use other purpose.
   bool handle_shadow_root_;
-
-  // Used for adjusting the initialization and the output when the start
-  // container is a text node with :first-letter.
-  int first_letter_start_offset_;
-  int remaining_text_start_offset_;
 
   // Contains state of emitted text.
   TextIteratorTextState text_state_;

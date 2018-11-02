@@ -10,23 +10,30 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "content/browser/media/capture/desktop_capture_device_uma_types.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/desktop_capture.h"
 #include "content/public/browser/desktop_media_id.h"
 #include "content/public/common/content_switches.h"
-#include "device/power_save_blocker/power_save_blocker.h"
+#include "content/public/common/service_manager_connection.h"
+#include "device/wake_lock/public/interfaces/wake_lock_provider.mojom.h"
+#include "device/wake_lock/public/interfaces/wake_lock_service.mojom.h"
 #include "media/base/video_util.h"
 #include "media/capture/content/capture_resolution_chooser.h"
+#include "services/device/public/interfaces/constants.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "third_party/libyuv/include/libyuv/scale_argb.h"
 #include "third_party/webrtc/modules/desktop_capture/cropping_window_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_and_cursor_composer.h"
@@ -60,12 +67,17 @@ bool IsFrameUnpackedOrInverted(webrtc::DesktopFrame* frame) {
       frame->size().width() * webrtc::DesktopFrame::kBytesPerPixel;
 }
 
-}  // namespace
+std::unique_ptr<service_manager::Connector> GetServiceConnector() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-#if defined(OS_WIN)
-const base::Feature kDirectXCapturer{"DirectXCapturer",
-                                     base::FEATURE_ENABLED_BY_DEFAULT};
-#endif
+  service_manager::Connector* connector =
+      ServiceManagerConnection::GetForProcess()->GetConnector();
+
+  DCHECK(connector);
+  return connector->Clone();
+}
+
+}  // namespace
 
 class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
  public:
@@ -95,6 +107,8 @@ class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
 
   // Captures a single frame.
   void DoCapture();
+
+  void RequestWakeLock(std::unique_ptr<service_manager::Connector> connector);
 
   // Task runner used for capturing operations.
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
@@ -138,9 +152,11 @@ class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
 
   std::unique_ptr<webrtc::BasicDesktopFrame> black_frame_;
 
-  // TODO(jiayl): Remove power_save_blocker_ when there is an API to keep the
+  // TODO(jiayl): Remove wake_lock_ when there is an API to keep the
   // screen from sleeping for the drive-by web.
-  std::unique_ptr<device::PowerSaveBlocker> power_save_blocker_;
+  device::mojom::WakeLockServicePtr wake_lock_;
+
+  base::WeakPtrFactory<Core> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(Core);
 };
@@ -153,7 +169,8 @@ DesktopCaptureDevice::Core::Core(
       desktop_capturer_(std::move(capturer)),
       capture_in_progress_(false),
       first_capture_returned_(false),
-      capturer_type_(type) {}
+      capturer_type_(type),
+      weak_factory_(this) {}
 
 DesktopCaptureDevice::Core::~Core() {
   DCHECK(task_runner_->BelongsToCurrentThread());
@@ -179,11 +196,12 @@ void DesktopCaptureDevice::Core::AllocateAndStart(
       params.requested_format.frame_size,
       params.resolution_change_policy));
 
-  power_save_blocker_.reset(new device::PowerSaveBlocker(
-      device::PowerSaveBlocker::kPowerSaveBlockPreventDisplaySleep,
-      device::PowerSaveBlocker::kReasonOther, "DesktopCaptureDevice is running",
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)));
+  DCHECK(!wake_lock_);
+  // Gets a service_manager::Connector first, then request a wake lock.
+  BrowserThread::PostTaskAndReplyWithResult(
+      BrowserThread::UI, FROM_HERE, base::BindOnce(&GetServiceConnector),
+      base::BindOnce(&DesktopCaptureDevice::Core::RequestWakeLock,
+                     weak_factory_.GetWeakPtr()));
 
   desktop_capturer_->Start(this);
   // Assume it will be always started successfully for now.
@@ -362,23 +380,23 @@ void DesktopCaptureDevice::Core::DoCapture() {
   DCHECK(!capture_in_progress_);
 }
 
+void DesktopCaptureDevice::Core::RequestWakeLock(
+    std::unique_ptr<service_manager::Connector> connector) {
+  device::mojom::WakeLockProviderPtr wake_lock_provider;
+  connector->BindInterface(device::mojom::kServiceName,
+                           mojo::MakeRequest(&wake_lock_provider));
+  wake_lock_provider->GetWakeLockWithoutContext(
+      device::mojom::WakeLockType::PreventDisplaySleep,
+      device::mojom::WakeLockReason::ReasonOther, "Desktop capture is running",
+      mojo::MakeRequest(&wake_lock_));
+
+  wake_lock_->RequestWakeLock();
+}
+
 // static
 std::unique_ptr<media::VideoCaptureDevice> DesktopCaptureDevice::Create(
     const DesktopMediaID& source) {
-  webrtc::DesktopCaptureOptions options =
-      webrtc::DesktopCaptureOptions::CreateDefault();
-  // Leave desktop effects enabled during WebRTC captures.
-  options.set_disable_effects(false);
-
-#if defined(OS_WIN)
-  if (!base::FeatureList::IsEnabled(kDirectXCapturer)) {
-    options.set_allow_use_magnification_api(true);
-  } else {
-    options.set_allow_directx_capturer(true);
-    options.set_allow_use_magnification_api(false);
-  }
-#endif
-
+  auto options = CreateDesktopCaptureOptions();
   std::unique_ptr<webrtc::DesktopCapturer> capturer;
 
   switch (source.type) {
@@ -435,6 +453,7 @@ void DesktopCaptureDevice::AllocateAndStart(
 
 void DesktopCaptureDevice::StopAndDeAllocate() {
   if (core_) {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
     thread_.task_runner()->DeleteSoon(FROM_HERE, core_.release());
     thread_.Stop();
   }
@@ -446,10 +465,8 @@ void DesktopCaptureDevice::SetNotificationWindowId(
   if (!core_)
     return;
   thread_.task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(&Core::SetNotificationWindowId,
-                 base::Unretained(core_.get()),
-                 window_id));
+      FROM_HERE, base::Bind(&Core::SetNotificationWindowId,
+                            base::Unretained(core_.get()), window_id));
 }
 
 DesktopCaptureDevice::DesktopCaptureDevice(

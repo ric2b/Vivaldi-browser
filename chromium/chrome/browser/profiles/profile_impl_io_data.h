@@ -156,8 +156,12 @@ class ProfileImplIOData : public ProfileIOData {
   ProfileImplIOData();
   ~ProfileImplIOData() override;
 
+  std::unique_ptr<net::NetworkDelegate> ConfigureNetworkDelegate(
+      IOThread* io_thread,
+      std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate)
+      const override;
+
   void InitializeInternal(
-      std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate,
       ProfileParams* profile_params,
       content::ProtocolHandlerMap* protocol_handlers,
       content::URLRequestInterceptorScopedVector request_interceptors)
@@ -190,6 +194,9 @@ class ProfileImplIOData : public ProfileIOData {
       const StoragePartitionDescriptor& partition_descriptor) const override;
   chrome_browser_net::Predictor* GetPredictor() override;
 
+  std::unique_ptr<net::ReportingService> MaybeCreateReportingService(
+      net::URLRequestContext* url_request_context) const;
+
   // Deletes all network related data since |time|. It deletes transport
   // security state since |time| and also deletes HttpServerProperties data.
   // Works asynchronously, however if the |completion| callback is non-null,
@@ -209,8 +216,6 @@ class ProfileImplIOData : public ProfileIOData {
   mutable std::unique_ptr<chrome_browser_net::Predictor> predictor_;
 
   mutable std::unique_ptr<net::URLRequestContext> media_request_context_;
-
-  mutable std::unique_ptr<net::URLRequestJobFactory> extensions_job_factory_;
 
   // Owned by ChromeNetworkDelegate (which is owned by |network_delegate_|).
   mutable domain_reliability::DomainReliabilityMonitor*

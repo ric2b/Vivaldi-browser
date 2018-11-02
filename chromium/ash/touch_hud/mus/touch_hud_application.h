@@ -11,7 +11,6 @@
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
 
 namespace views {
@@ -22,10 +21,8 @@ class Widget;
 namespace ash {
 namespace touch_hud {
 
-class TouchHudApplication
-    : public service_manager::Service,
-      public mash::mojom::Launchable,
-      public service_manager::InterfaceFactory<mash::mojom::Launchable> {
+class TouchHudApplication : public service_manager::Service,
+                            public mash::mojom::Launchable {
  public:
   TouchHudApplication();
   ~TouchHudApplication() override;
@@ -33,16 +30,15 @@ class TouchHudApplication
  private:
   // service_manager::Service:
   void OnStart() override;
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
 
   // mojom::Launchable:
   void Launch(uint32_t what, mash::mojom::LaunchMode how) override;
 
-  // service_manager::InterfaceFactory<mojom::Launchable>:
-  void Create(const service_manager::Identity& remote_identity,
-              mash::mojom::LaunchableRequest request) override;
+  void Create(const service_manager::BindSourceInfo& source_info,
+              mash::mojom::LaunchableRequest request);
 
   service_manager::BinderRegistry registry_;
   mojo::Binding<mash::mojom::Launchable> binding_;

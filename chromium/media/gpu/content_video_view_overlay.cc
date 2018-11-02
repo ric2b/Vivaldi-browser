@@ -11,10 +11,9 @@
 
 namespace media {
 
-ContentVideoViewOverlay::ContentVideoViewOverlay(
-    int surface_id,
-    const AndroidOverlay::Config& config)
-    : surface_id_(surface_id), config_(config), weak_factory_(this) {
+ContentVideoViewOverlay::ContentVideoViewOverlay(int surface_id,
+                                                 AndroidOverlayConfig config)
+    : surface_id_(surface_id), config_(std::move(config)), weak_factory_(this) {
   if (ContentVideoViewOverlayAllocator::GetInstance()->AllocateSurface(this)) {
     // We have the surface -- post a callback to our OnSurfaceAvailable.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -29,9 +28,7 @@ ContentVideoViewOverlay::~ContentVideoViewOverlay() {
   ContentVideoViewOverlayAllocator::GetInstance()->DeallocateSurface(this);
 }
 
-void ContentVideoViewOverlay::ScheduleLayout(const gfx::Rect& rect) {
-  NOTIMPLEMENTED();
-}
+void ContentVideoViewOverlay::ScheduleLayout(const gfx::Rect& rect) {}
 
 const base::android::JavaRef<jobject>& ContentVideoViewOverlay::GetJavaSurface()
     const {
@@ -41,7 +38,7 @@ const base::android::JavaRef<jobject>& ContentVideoViewOverlay::GetJavaSurface()
 void ContentVideoViewOverlay::OnSurfaceAvailable(bool success) {
   if (!success) {
     // Notify that the surface won't be available.
-    config_.failed_cb.Run(this);
+    config_.is_failed(this);
     // |this| may be deleted.
     return;
   }
@@ -52,16 +49,16 @@ void ContentVideoViewOverlay::OnSurfaceAvailable(bool success) {
 
   // If no surface was returned, then fail instead.
   if (surface_.IsEmpty()) {
-    config_.failed_cb.Run(this);
+    config_.is_failed(this);
     // |this| may be deleted.
     return;
   }
 
-  config_.ready_cb.Run(this);
+  config_.is_ready(this);
 }
 
 void ContentVideoViewOverlay::OnSurfaceDestroyed() {
-  config_.destroyed_cb.Run(this);
+  RunSurfaceDestroyedCallbacks();
   // |this| may be deleted, or deletion might be posted elsewhere.
 }
 

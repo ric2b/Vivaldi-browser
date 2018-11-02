@@ -5,9 +5,9 @@
 #include "bindings/core/v8/DocumentWriteEvaluator.h"
 
 #include "bindings/core/v8/ScriptSourceCode.h"
-#include "bindings/core/v8/V8BindingMacros.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
 #include "core/frame/Location.h"
+#include "platform/bindings/V8BindingMacros.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/wtf/text/StringUTF8Adaptor.h"
 #include "v8/include/v8.h"
@@ -73,7 +73,7 @@ bool DocumentWriteEvaluator::EnsureEvaluationContext() {
   if (!persistent_context_.IsEmpty())
     return false;
   TRACE_EVENT0("blink", "DocumentWriteEvaluator::initializeEvaluationContext");
-  ASSERT(persistent_context_.IsEmpty());
+  DCHECK(persistent_context_.IsEmpty());
   v8::Isolate* isolate = V8PerIsolateData::MainThreadIsolate();
   v8::Isolate::Scope isolate_scope(isolate);
   v8::HandleScope handle_scope(isolate);

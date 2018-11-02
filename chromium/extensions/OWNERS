@@ -11,12 +11,10 @@
 #   chrome/utility/extensions/OWNERS
 
 rdevlin.cronin@chromium.org
-asargent@chromium.org
 benwells@chromium.org
 reillyg@chromium.org
 finnur@chromium.org
 lazyboy@chromium.org
-mek@chromium.org
 rockot@chromium.org
 
 # COMPONENT: Platform>Extensions

@@ -472,9 +472,9 @@ bool GpuMemoryBufferVideoFramePool::PoolImpl::OnMemoryDump(
         dump->AddScalar("free_size",
                         base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                         frame_resources->IsInUse() ? 0 : buffer_size_in_bytes);
-        base::trace_event::MemoryAllocatorDumpGuid shared_buffer_guid =
-            gfx::GetGpuMemoryBufferGUIDForTracing(tracing_process_id,
-                                                  buffer_id);
+        auto shared_buffer_guid =
+            plane_resource.gpu_memory_buffer->GetGUIDForTracing(
+                tracing_process_id);
         pmd->CreateSharedGlobalAllocatorDump(shared_buffer_guid);
         pmd->AddOwnershipEdge(dump->guid(), shared_buffer_guid, kImportance);
       }
@@ -678,6 +678,11 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB:
     case GpuVideoAcceleratorFactories::OutputFormat::UYVY:
       allow_overlay = true;
+      break;
+    case GpuVideoAcceleratorFactories::OutputFormat::NV12_DUAL_GMB:
+#if defined(OS_WIN)
+      allow_overlay = true;
+#endif
       break;
     default:
       break;

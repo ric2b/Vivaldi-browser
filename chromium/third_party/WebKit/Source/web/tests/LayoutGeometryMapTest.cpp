@@ -72,7 +72,7 @@ class LayoutGeometryMapTest
       return nullptr;
     LocalFrame* frame = iframe->GetFrame();
     Document* doc = frame->GetDocument();
-    Element* element = doc->GetElementById(element_id);
+    Element* element = doc->getElementById(element_id);
     if (!element)
       return nullptr;
     return element->GetLayoutBox();
@@ -80,12 +80,12 @@ class LayoutGeometryMapTest
 
   static Element* GetElement(WebView* web_view,
                              const WTF::AtomicString& element_id) {
-    WebViewImpl* web_view_impl = ToWebViewImpl(web_view);
+    WebViewBase* web_view_impl = static_cast<WebViewBase*>(web_view);
     if (!web_view_impl)
       return nullptr;
     LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
     Document* doc = frame->GetDocument();
-    return doc->GetElementById(element_id);
+    return doc->getElementById(element_id);
   }
 
   static LayoutBox* GetLayoutBox(WebView* web_view,
@@ -151,7 +151,8 @@ class LayoutGeometryMapTest
   static FloatRect AdjustForFrameScroll(WebView* web_view,
                                         const FloatRect& rect) {
     FloatRect result(rect);
-    LocalFrame* frame = ToWebViewImpl(web_view)->MainFrameImpl()->GetFrame();
+    LocalFrame* frame =
+        static_cast<WebViewBase*>(web_view)->MainFrameImpl()->GetFrame();
     LayoutView* layout_view = frame->GetDocument()->GetLayoutView();
     if (layout_view->HasOverflowClip())
       result.Move(layout_view->ScrolledContentOffset());

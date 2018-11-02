@@ -6,9 +6,12 @@
 #define SERVICES_SERVICE_MANAGER_PUBLIC_CPP_INTERFACE_PROVIDER_H_
 
 #include "base/bind.h"
+#include "services/service_manager/public/cpp/export.h"
 #include "services/service_manager/public/interfaces/interface_provider.mojom.h"
 
 namespace service_manager {
+
+struct BindSourceInfo;
 
 // Encapsulates a mojom::InterfaceProviderPtr implemented in a remote
 // application. Provides two main features:
@@ -17,7 +20,7 @@ namespace service_manager {
 //   requests for remote interfaces.
 // An instance of this class is used by the GetInterface() methods on
 // Connection.
-class InterfaceProvider {
+class SERVICE_MANAGER_PUBLIC_CPP_EXPORT InterfaceProvider {
  public:
   using ForwardCallback = base::Callback<void(const std::string&,
                                               mojo::ScopedMessagePipeHandle)>;
@@ -81,19 +84,23 @@ class InterfaceProvider {
                     mojo::ScopedMessagePipeHandle request_handle);
 
   // Returns a callback to GetInterface<Interface>(). This can be passed to
-  // InterfaceRegistry::AddInterface() to forward requests.
+  // BinderRegistry::AddInterface() to forward requests.
   template <typename Interface>
-  base::Callback<void(mojo::InterfaceRequest<Interface>)>
+  base::Callback<void(const BindSourceInfo&, mojo::InterfaceRequest<Interface>)>
   CreateInterfaceFactory() {
-    // InterfaceProvider::GetInterface() is overloaded, so static_cast to select
-    // the overload that takes an mojo::InterfaceRequest<Interface>.
-    return base::Bind(static_cast<void (InterfaceProvider::*)(
-                          mojo::InterfaceRequest<Interface>)>(
-                          &InterfaceProvider::GetInterface<Interface>),
-                      GetWeakPtr());
+    return base::Bind(
+        &InterfaceProvider::BindInterfaceRequestFromSource<Interface>,
+        GetWeakPtr());
   }
 
  private:
+  template <typename Interface>
+  void BindInterfaceRequestFromSource(
+      const BindSourceInfo& source_info,
+      mojo::InterfaceRequest<Interface> request) {
+    GetInterface<Interface>(std::move(request));
+  }
+
   void SetBinderForName(
       const std::string& name,
       const base::Callback<void(mojo::ScopedMessagePipeHandle)>& binder) {

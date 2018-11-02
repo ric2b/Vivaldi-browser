@@ -4,13 +4,13 @@
 
 #include "chrome/browser/thumbnails/thumbnail_tab_helper.h"
 
-#include "build/build_config.h"
-#include "chrome/browser/browser_process.h"
+#include "base/feature_list.h"
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/thumbnails/thumbnail_service.h"
 #include "chrome/browser/thumbnails/thumbnail_service_factory.h"
 #include "chrome/browser/thumbnails/thumbnailing_algorithm.h"
-#include "chrome/browser/thumbnails/thumbnailing_context.h"
+#include "chrome/common/chrome_features.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
@@ -18,14 +18,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "ui/gfx/color_utils.h"
-#include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/scrollbar_size.h"
-#include "ui/gfx/skbitmap_operations.h"
-
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#endif
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(ThumbnailTabHelper);
 
@@ -35,7 +28,7 @@ class SkBitmap;
 // --------
 // This class provides a service for updating thumbnails to be used in
 // "Most visited" section of the new tab page. The service can be started
-// by StartThumbnailing(). The current algorithm of the service is as
+// by UpdateThumbnailIfNecessary(). The current algorithm of the service is as
 // simple as follows:
 //
 //    When a renderer is about to be hidden (this usually occurs when the
@@ -43,17 +36,17 @@ class SkBitmap;
 //    thumbnail for the tab rendered by the renderer, if needed. The
 //    heuristics to judge whether or not to update the thumbnail is
 //    implemented in ShouldUpdateThumbnail().
+//    If features::kCaptureThumbnailOnLoadFinished is enabled, then a thumbnail
+//    may also be captured when a page load finishes (subject to the same
+//    heuristics).
 
-using content::RenderViewHost;
-using content::RenderWidgetHost;
-using content::WebContents;
-
-using thumbnails::ClipResult;
 using thumbnails::ThumbnailingContext;
 using thumbnails::ThumbnailingAlgorithm;
 
 ThumbnailTabHelper::ThumbnailTabHelper(content::WebContents* contents)
     : content::WebContentsObserver(contents),
+      capture_on_load_finished_(base::FeatureList::IsEnabled(
+          features::kCaptureThumbnailOnLoadFinished)),
       load_interrupted_(false),
       weak_factory_(this) {
   // Even though we deal in RenderWidgetHosts, we only care about its
@@ -62,23 +55,23 @@ ThumbnailTabHelper::ThumbnailTabHelper(content::WebContents* contents)
   // aren't views like select popups.
   registrar_.Add(this,
                  content::NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED,
-                 content::Source<WebContents>(contents));
+                 content::Source<content::WebContents>(contents));
 }
 
-ThumbnailTabHelper::~ThumbnailTabHelper() {
-}
+ThumbnailTabHelper::~ThumbnailTabHelper() = default;
 
 void ThumbnailTabHelper::Observe(int type,
                                  const content::NotificationSource& source,
                                  const content::NotificationDetails& details) {
   switch (type) {
     case content::NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED:
-      RenderViewHostCreated(content::Details<RenderViewHost>(details).ptr());
+      RenderViewHostCreated(
+          content::Details<content::RenderViewHost>(details).ptr());
       break;
 
     case content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED:
       if (!*content::Details<bool>(details).ptr())
-        WidgetHidden(content::Source<RenderWidgetHost>(source).ptr());
+        WidgetHidden(content::Source<content::RenderWidgetHost>(source).ptr());
       break;
 
     default:
@@ -90,16 +83,24 @@ void ThumbnailTabHelper::RenderViewDeleted(
     content::RenderViewHost* render_view_host) {
   bool registered = registrar_.IsRegistered(
       this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-      content::Source<RenderWidgetHost>(render_view_host->GetWidget()));
+      content::Source<content::RenderWidgetHost>(
+          render_view_host->GetWidget()));
   if (registered) {
-    registrar_.Remove(
-        this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-        content::Source<RenderWidgetHost>(render_view_host->GetWidget()));
+    registrar_.Remove(this,
+                      content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
+                      content::Source<content::RenderWidgetHost>(
+                          render_view_host->GetWidget()));
   }
 }
 
 void ThumbnailTabHelper::DidStartLoading() {
   load_interrupted_ = false;
+}
+
+void ThumbnailTabHelper::DidStopLoading() {
+  if (capture_on_load_finished_) {
+    UpdateThumbnailIfNecessary();
+  }
 }
 
 void ThumbnailTabHelper::NavigationStopped() {
@@ -118,12 +119,14 @@ void ThumbnailTabHelper::UpdateThumbnailIfNecessary() {
   // Destroying a WebContents may trigger it to be hidden, prompting a snapshot
   // which would be unwise to attempt <http://crbug.com/130097>. If the
   // WebContents is in the middle of destruction, do not risk it.
-  if (!web_contents() || web_contents()->IsBeingDestroyed())
+  if (!web_contents() || web_contents()->IsBeingDestroyed()) {
     return;
+  }
   // Skip if a pending entry exists. WidgetHidden can be called while navigating
   // pages and this is not a time when thumbnails should be generated.
-  if (web_contents()->GetController().GetPendingEntry())
+  if (web_contents()->GetController().GetPendingEntry()) {
     return;
+  }
   const GURL& url = web_contents()->GetURL();
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
@@ -143,7 +146,7 @@ void ThumbnailTabHelper::UpdateThumbnailIfNecessary() {
 void ThumbnailTabHelper::AsyncProcessThumbnail(
     scoped_refptr<thumbnails::ThumbnailService> thumbnail_service) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  RenderWidgetHost* render_widget_host =
+  content::RenderWidgetHost* render_widget_host =
       web_contents()->GetRenderViewHost()->GetWidget();
   content::RenderWidgetHostView* view = render_widget_host->GetView();
   if (!view || !view->IsSurfaceAvailableForCopy()) {
@@ -163,7 +166,7 @@ void ThumbnailTabHelper::AsyncProcessThumbnail(
     return;
   }
 
-  scoped_refptr<thumbnails::ThumbnailingAlgorithm> algorithm(
+  scoped_refptr<ThumbnailingAlgorithm> algorithm(
       thumbnail_service->GetThumbnailingAlgorithm());
 
   thumbnailing_context_ = new ThumbnailingContext(web_contents(),
@@ -178,6 +181,7 @@ void ThumbnailTabHelper::AsyncProcessThumbnail(
       scale_factor,
       &copy_rect,
       &thumbnailing_context_->requested_copy_size);
+  copy_from_surface_start_time_ = base::TimeTicks::Now();
   view->CopyFromSurface(copy_rect, thumbnailing_context_->requested_copy_size,
                         base::Bind(&ThumbnailTabHelper::ProcessCapturedBitmap,
                                    weak_factory_.GetWeakPtr(), algorithm),
@@ -185,12 +189,17 @@ void ThumbnailTabHelper::AsyncProcessThumbnail(
 }
 
 void ThumbnailTabHelper::ProcessCapturedBitmap(
-    scoped_refptr<thumbnails::ThumbnailingAlgorithm> algorithm,
+    scoped_refptr<ThumbnailingAlgorithm> algorithm,
     const SkBitmap& bitmap,
     content::ReadbackResponse response) {
+  base::TimeDelta copy_from_surface_time =
+      base::TimeTicks::Now() - copy_from_surface_start_time_;
+  UMA_HISTOGRAM_TIMES("Thumbnails.CopyFromSurfaceTime", copy_from_surface_time);
+
   if (response == content::READBACK_SUCCESS) {
     // On success, we must be on the UI thread.
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    process_bitmap_start_time_ = base::TimeTicks::Now();
     algorithm->ProcessBitmap(thumbnailing_context_,
                              base::Bind(&ThumbnailTabHelper::UpdateThumbnail,
                                         weak_factory_.GetWeakPtr()),
@@ -206,15 +215,13 @@ void ThumbnailTabHelper::ProcessCapturedBitmap(
   }
 }
 
-void ThumbnailTabHelper::CleanUpFromThumbnailGeneration() {
-  // Make a note that thumbnail generation is complete.
-  thumbnailing_context_ = nullptr;
-}
-
-void ThumbnailTabHelper::UpdateThumbnail(
-    const thumbnails::ThumbnailingContext& context,
-    const SkBitmap& thumbnail) {
+void ThumbnailTabHelper::UpdateThumbnail(const ThumbnailingContext& context,
+                                         const SkBitmap& thumbnail) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  base::TimeDelta process_bitmap_time =
+      base::TimeTicks::Now() - process_bitmap_start_time_;
+  UMA_HISTOGRAM_TIMES("Thumbnails.ProcessBitmapTime", process_bitmap_time);
+
   // Feed the constructed thumbnail to the thumbnail service.
   gfx::Image image = gfx::Image::CreateFrom1xBitmap(thumbnail);
   context.service->SetPageThumbnail(context, image);
@@ -224,6 +231,11 @@ void ThumbnailTabHelper::UpdateThumbnail(
   CleanUpFromThumbnailGeneration();
 }
 
+void ThumbnailTabHelper::CleanUpFromThumbnailGeneration() {
+  // Make a note that thumbnail generation is complete.
+  thumbnailing_context_ = nullptr;
+}
+
 void ThumbnailTabHelper::RenderViewHostCreated(
     content::RenderViewHost* renderer) {
   // NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED is really a new
@@ -231,13 +243,14 @@ void ThumbnailTabHelper::RenderViewHostCreated(
   // notifications of RenderViewHosts. So just be tolerant of re-registrations.
   bool registered = registrar_.IsRegistered(
       this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-      content::Source<RenderWidgetHost>(renderer->GetWidget()));
+      content::Source<content::RenderWidgetHost>(renderer->GetWidget()));
   if (!registered) {
-    registrar_.Add(this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-                   content::Source<RenderWidgetHost>(renderer->GetWidget()));
+    registrar_.Add(
+        this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
+        content::Source<content::RenderWidgetHost>(renderer->GetWidget()));
   }
 }
 
-void ThumbnailTabHelper::WidgetHidden(RenderWidgetHost* widget) {
+void ThumbnailTabHelper::WidgetHidden(content::RenderWidgetHost* widget) {
   UpdateThumbnailIfNecessary();
 }

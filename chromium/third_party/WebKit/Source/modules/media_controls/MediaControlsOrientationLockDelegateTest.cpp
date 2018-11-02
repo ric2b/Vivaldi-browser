@@ -56,7 +56,7 @@ class StubLocalFrameClient : public EmptyLocalFrameClient {
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
       WebMediaPlayerClient*) override {
-    return WTF::WrapUnique(new MockVideoWebMediaPlayer());
+    return WTF::MakeUnique<MockVideoWebMediaPlayer>();
   }
 };
 
@@ -188,8 +188,8 @@ class MediaControlsOrientationLockDelegateTest : public ::testing::Test {
   }
 
   bool DelegateWillUnlockFullscreen() const {
-    return MediaControls()
-        ->orientation_lock_delegate_->should_unlock_orientation_;
+    return MediaControls()->orientation_lock_delegate_->locked_orientation_ !=
+           kWebScreenOrientationLockDefault /* unlocked */;
   }
 
   WebScreenOrientationLockType ComputeOrientationLock() const {

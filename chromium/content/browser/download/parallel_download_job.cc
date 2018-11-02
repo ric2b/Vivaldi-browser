@@ -100,8 +100,8 @@ void ParallelDownloadJob::CancelRequestWithOffset(int64_t offset) {
   }
 
   auto it = workers_.find(offset);
-  if (it != workers_.end())
-    it->second->Cancel();
+  DCHECK(it != workers_.end());
+  it->second->Cancel();
 }
 
 void ParallelDownloadJob::BuildParallelRequestAfterDelay() {
@@ -209,6 +209,7 @@ void ParallelDownloadJob::CreateRequest(int64_t offset, int64_t length) {
       BrowserContext::GetStoragePartitionForSite(
           download_item_->GetBrowserContext(), download_item_->GetSiteUrl());
 
+  // The parallel requests only use GET method.
   std::unique_ptr<DownloadUrlParameters> download_params(
       new DownloadUrlParameters(download_item_->GetURL(),
                                 storage_partition->GetURLRequestContext()));

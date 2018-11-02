@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("infobars") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "infobar_view.h",
     "infobar_view.mm",
@@ -31,6 +32,7 @@ source_set("infobars") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "infobar_view_unittest.mm",

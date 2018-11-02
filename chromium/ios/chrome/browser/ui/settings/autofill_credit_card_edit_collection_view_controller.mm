@@ -43,8 +43,6 @@ using ::AutofillTypeFromAutofillUIType;
 NSString* const kAutofillCreditCardEditCollectionViewId =
     @"kAutofillCreditCardEditCollectionViewId";
 
-const CGFloat kCardTypeIconDimension = 30.0;
-
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierFields = kSectionIdentifierEnumZero,
   SectionIdentifierCopiedToChrome,
@@ -133,8 +131,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   // Update the cells.
   [self reconfigureCellsForItems:
             [self.collectionViewModel
-                itemsInSectionWithIdentifier:SectionIdentifierFields]
-         inSectionWithIdentifier:SectionIdentifierFields];
+                itemsInSectionWithIdentifier:SectionIdentifierFields]];
 }
 
 - (void)loadModel {
@@ -231,8 +228,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
                                                 withString:newText];
     item.cardTypeIcon = [self cardTypeIconFromCardNumber:updatedText];
     // Update the cell.
-    [self reconfigureCellsForItems:@[ item ]
-           inSectionWithIdentifier:SectionIdentifierFields];
+    [self reconfigureCellsForItems:@[ item ]];
   }
 
   return YES;
@@ -318,16 +314,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
 #pragma mark - Helper Methods
 
 - (UIImage*)cardTypeIconFromCardNumber:(NSString*)cardNumber {
-  const char* cardType = autofill::CreditCard::GetCreditCardType(
+  const char* network = autofill::CreditCard::GetCardNetwork(
       base::SysNSStringToUTF16(cardNumber));
-  if (cardType != autofill::kGenericCard) {
+  if (network != autofill::kGenericCard) {
     int resourceID =
-        autofill::data_util::GetPaymentRequestData(cardType).icon_resource_id;
-    // Resize and set the card type icon.
-    CGFloat dimension = kCardTypeIconDimension;
-    return ResizeImage(NativeImage(resourceID),
-                       CGSizeMake(dimension, dimension),
-                       ProjectionMode::kAspectFillNoClipping);
+        autofill::data_util::GetPaymentRequestData(network).icon_resource_id;
+    // Return the card issuer network icon.
+    return NativeImage(resourceID);
   } else {
     return nil;
   }

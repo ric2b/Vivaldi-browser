@@ -13,6 +13,7 @@
 #include "base/android/jni_string.h"
 #include "base/command_line.h"
 #include "base/format_macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/resource_mapper.h"
@@ -138,7 +139,7 @@ ScopedJavaLocalRef<jobject> CreateJavaCreditCardFromNative(
     JNIEnv* env,
     const CreditCard& card) {
   const data_util::PaymentRequestData& payment_request_data =
-      data_util::GetPaymentRequestData(card.type());
+      data_util::GetPaymentRequestData(card.network());
   return Java_CreditCard_create(
       env, ConvertUTF8ToJavaString(env, card.guid()),
       ConvertUTF8ToJavaString(env, card.origin()),
@@ -146,12 +147,12 @@ ScopedJavaLocalRef<jobject> CreateJavaCreditCardFromNative(
       card.record_type() == CreditCard::FULL_SERVER_CARD,
       ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_NAME_FULL)),
       ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_NUMBER)),
-      ConvertUTF16ToJavaString(env, card.TypeAndLastFourDigits()),
+      ConvertUTF16ToJavaString(env, card.NetworkAndLastFourDigits()),
       ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_EXP_MONTH)),
       ConvertUTF16ToJavaString(env,
                                card.GetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR)),
       ConvertUTF8ToJavaString(env,
-                              payment_request_data.basic_card_payment_type),
+                              payment_request_data.basic_card_issuer_network),
       ResourceMapper::MapFromChromiumId(payment_request_data.icon_resource_id),
       ConvertUTF8ToJavaString(env, card.billing_address_id()),
       ConvertUTF8ToJavaString(env, card.server_id()));
@@ -194,9 +195,10 @@ void PopulateNativeCreditCardFromJava(
       card->set_record_type(CreditCard::FULL_SERVER_CARD);
     } else {
       card->set_record_type(CreditCard::MASKED_SERVER_CARD);
-      card->SetTypeForMaskedCard(
-          data_util::GetCardTypeForBasicCardPaymentType(ConvertJavaStringToUTF8(
-              env, Java_CreditCard_getBasicCardPaymentType(env, jcard))));
+      card->SetNetworkForMaskedCard(
+          data_util::GetIssuerNetworkForBasicCardIssuerNetwork(
+              ConvertJavaStringToUTF8(
+                  env, Java_CreditCard_getBasicCardIssuerNetwork(env, jcard))));
     }
   }
 }
@@ -305,6 +307,13 @@ class AndroidAddressNormalizerDelegate
   DISALLOW_COPY_AND_ASSIGN(AndroidAddressNormalizerDelegate);
 };
 
+void OnSubKeysReceived(ScopedJavaGlobalRef<jobject> jdelegate,
+                       const std::vector<std::string>& sub_keys) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_GetSubKeysRequestDelegate_onSubKeysReceived(
+      env, jdelegate, base::android::ToJavaArrayOfStrings(env, sub_keys));
+}
+
 }  // namespace
 
 PersonalDataManagerAndroid::PersonalDataManagerAndroid(JNIEnv* env, jobject obj)
@@ -316,6 +325,11 @@ PersonalDataManagerAndroid::PersonalDataManagerAndroid(JNIEnv* env, jobject obj)
               new autofill::ChromeMetadataSource(
                   I18N_ADDRESS_VALIDATION_DATA_URL,
                   personal_data_manager_->GetURLRequestContextGetter())),
+          ValidationRulesStorageFactory::CreateStorage()),
+      subkey_requester_(
+          base::MakeUnique<autofill::ChromeMetadataSource>(
+              I18N_ADDRESS_VALIDATION_DATA_URL,
+              personal_data_manager_->GetURLRequestContextGetter()),
           ValidationRulesStorageFactory::CreateStorage()) {
   personal_data_manager_->AddObserver(this);
 }
@@ -533,7 +547,8 @@ void PersonalDataManagerAndroid::UpdateServerCardBillingAddress(
   personal_data_manager_->UpdateServerCardMetadata(card);
 }
 
-ScopedJavaLocalRef<jstring> PersonalDataManagerAndroid::GetBasicCardPaymentType(
+ScopedJavaLocalRef<jstring>
+PersonalDataManagerAndroid::GetBasicCardIssuerNetwork(
     JNIEnv* env,
     const JavaParamRef<jobject>& unused_obj,
     const JavaParamRef<jstring>& jcard_number,
@@ -544,10 +559,10 @@ ScopedJavaLocalRef<jstring> PersonalDataManagerAndroid::GetBasicCardPaymentType(
       !IsValidCreditCardNumber(card_number)) {
     return ConvertUTF8ToJavaString(env, "");
   }
-  return ConvertUTF8ToJavaString(env,
-                                 data_util::GetPaymentRequestData(
-                                     CreditCard::GetCreditCardType(card_number))
-                                     .basic_card_payment_type);
+  return ConvertUTF8ToJavaString(
+      env,
+      data_util::GetPaymentRequestData(CreditCard::GetCardNetwork(card_number))
+          .basic_card_issuer_network);
 }
 
 void PersonalDataManagerAndroid::AddServerCreditCardForTest(
@@ -591,10 +606,11 @@ void PersonalDataManagerAndroid::GetFullCardForPaymentRequest(
 
 void PersonalDataManagerAndroid::OnPersonalDataChanged() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  if (weak_java_obj_.get(env).is_null())
+  auto java_obj = weak_java_obj_.get(env);
+  if (java_obj.is_null())
     return;
 
-  Java_PersonalDataManager_personalDataChanged(env, weak_java_obj_.get(env));
+  Java_PersonalDataManager_personalDataChanged(env, java_obj);
 }
 
 // static
@@ -697,11 +713,19 @@ jlong PersonalDataManagerAndroid::GetCurrentDateForTesting(
   return base::Time::Now().ToTimeT();
 }
 
-void PersonalDataManagerAndroid::LoadRulesForRegion(
+void PersonalDataManagerAndroid::LoadRulesForAddressNormalization(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& unused_obj,
     const base::android::JavaParamRef<jstring>& jregion_code) {
   address_normalizer_.LoadRulesForRegion(
+      ConvertJavaStringToUTF8(env, jregion_code));
+}
+
+void PersonalDataManagerAndroid::LoadRulesForSubKeys(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& unused_obj,
+    const base::android::JavaParamRef<jstring>& jregion_code) {
+  subkey_requester_.LoadRulesForRegion(
       ConvertJavaStringToUTF8(env, jregion_code));
 }
 
@@ -738,6 +762,30 @@ jboolean PersonalDataManagerAndroid::HasCreditCards(
   return !personal_data_manager_->GetCreditCards().empty();
 }
 
+void PersonalDataManagerAndroid::StartRegionSubKeysRequest(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& unused_obj,
+    const JavaParamRef<jstring>& jregion_code,
+    jint jtimeout_seconds,
+    const JavaParamRef<jobject>& jdelegate) {
+  const std::string region_code = ConvertJavaStringToUTF8(env, jregion_code);
+
+  ScopedJavaGlobalRef<jobject> my_jdelegate;
+  my_jdelegate.Reset(env, jdelegate);
+
+  ::payments::SubKeyReceiverCallback cb = base::BindOnce(
+      &OnSubKeysReceived, ScopedJavaGlobalRef<jobject>(my_jdelegate));
+
+  subkey_requester_.StartRegionSubKeysRequest(region_code, jtimeout_seconds,
+                                              std::move(cb));
+}
+
+void PersonalDataManagerAndroid::CancelPendingGetSubKeys(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& unused_obj) {
+  subkey_requester_.CancelPendingGetSubKeys();
+}
+
 ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetProfileGUIDs(
     JNIEnv* env,
     const std::vector<AutofillProfile*>& profiles) {
@@ -756,11 +804,6 @@ ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetCreditCardGUIDs(
     guids.push_back(base::UTF8ToUTF16(credit_card->guid()));
 
   return base::android::ToJavaArrayOfStrings(env, guids);
-}
-
-bool PersonalDataManagerAndroid::AreRulesLoadedForRegion(
-    const std::string& region_code) {
-  return address_normalizer_.AreRulesLoadedForRegion(region_code);
 }
 
 ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetProfileLabels(

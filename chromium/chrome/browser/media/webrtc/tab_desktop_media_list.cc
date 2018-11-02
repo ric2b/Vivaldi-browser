@@ -5,7 +5,7 @@
 #include "chrome/browser/media/webrtc/tab_desktop_media_list.h"
 
 #include "base/hash.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -60,9 +60,8 @@ TabDesktopMediaList::TabDesktopMediaList()
     : DesktopMediaListBase(
           base::TimeDelta::FromMilliseconds(kDefaultUpdatePeriod)),
       weak_factory_(this) {
-  base::SequencedWorkerPool* worker_pool = BrowserThread::GetBlockingPool();
-  thumbnail_task_runner_ =
-      worker_pool->GetSequencedTaskRunner(worker_pool->GetSequenceToken());
+  thumbnail_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE});
 }
 
 TabDesktopMediaList::~TabDesktopMediaList() {}
@@ -153,7 +152,7 @@ void TabDesktopMediaList::Refresh() {
   // to the same sequenced task runner that CreateEnlargedFaviconImag()
   // is posted.
   thumbnail_task_runner_.get()->PostTaskAndReply(
-      FROM_HERE, base::Bind(&base::DoNothing),
-      base::Bind(&TabDesktopMediaList::ScheduleNextRefresh,
-                 weak_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&base::DoNothing),
+      base::BindOnce(&TabDesktopMediaList::ScheduleNextRefresh,
+                     weak_factory_.GetWeakPtr()));
 }

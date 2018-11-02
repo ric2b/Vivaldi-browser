@@ -43,7 +43,8 @@ def _FindParameterListParen(name):
           start_idx = idx + 21
           continue
         # Special case: skip "decltype (...)"
-        if name[idx - 1] != ' ':
+        # Special case: skip "{lambda(PaintOp*)#63}"
+        if name[idx - 1] != ' ' and name[idx - 7:idx] != '{lambda':
           return idx
       start_idx = idx + 1
       paren_balance_count += 1
@@ -85,20 +86,85 @@ def _FindReturnValueSpace(name, paren_idx):
   return space_idx
 
 
+def _StripTemplateArgs(name):
+  last_right_idx = None
+  while True:
+    last_right_idx = name.rfind('>', 0, last_right_idx)
+    if last_right_idx == -1:
+      return name
+    left_idx = _FindLastCharOutsideOfBrackets(name, '<', last_right_idx + 1)
+    if left_idx == -1:
+      return name
+    # Special case: std::operator<< <
+    if left_idx > 0 and name[left_idx - 1] == ' ':
+      left_idx -= 1
+    name = name[:left_idx] + name[last_right_idx + 1:]
+    last_right_idx = left_idx
+
+
+def _NormalizeTopLevelGccLambda(name, left_paren_idx):
+  # cc::{lambda(PaintOp*)#63}::_FUN() -> cc::$lambda#63()
+  left_brace_idx = name.index('{')
+  hash_idx = name.index('#', left_brace_idx + 1)
+  right_brace_idx = name.index('}', hash_idx + 1)
+  number = name[hash_idx + 1:right_brace_idx]
+  return '{}$lambda#{}{}'.format(
+      name[:left_brace_idx], number, name[left_paren_idx:])
+
+
+def _NormalizeTopLevelClangLambda(name, left_paren_idx):
+  # cc::$_21::__invoke() -> cc::$lambda#21()
+  dollar_idx = name.index('$')
+  colon_idx = name.index(':', dollar_idx + 1)
+  number = name[dollar_idx + 2:colon_idx]
+  return '{}$lambda#{}{}'.format(
+      name[:dollar_idx], number, name[left_paren_idx:])
+
+
 def Parse(name):
-  """Extracts a function name from a function signature.
+  """Strips return type and breaks function signature into parts.
 
   See unit tests for example signatures.
 
   Returns:
-    A tuple of (name_without_return_type, name_without_return_type_and_params).
+    A tuple of:
+    * name without return type (symbol.full_name),
+    * full_name without params (symbol.template_name),
+    * full_name without params and template args (symbol.name)
   """
   left_paren_idx = _FindParameterListParen(name)
 
+  full_name = name
   if left_paren_idx > 0:
     right_paren_idx = name.rindex(')')
     assert right_paren_idx > left_paren_idx
     space_idx = _FindReturnValueSpace(name, left_paren_idx)
-    return (name[space_idx + 1:],
-            name[space_idx + 1:left_paren_idx] + name[right_paren_idx + 1:])
-  return name, name
+    name_no_params = name[space_idx + 1:left_paren_idx]
+    # Special case for top-level lamdas.
+    if name_no_params.endswith('}::_FUN'):
+      # Don't use name_no_params in here since prior _idx will be off if
+      # there was a return value.
+      name = _NormalizeTopLevelGccLambda(name, left_paren_idx)
+      return Parse(name)
+    elif name_no_params.endswith('::__invoke') and '$' in name_no_params:
+      assert '$_' in name_no_params, 'Surprising lambda: ' + name
+      name = _NormalizeTopLevelClangLambda(name, left_paren_idx)
+      return Parse(name)
+
+    full_name = name[space_idx + 1:]
+    name = name_no_params + name[right_paren_idx + 1:]
+
+  template_name = name
+  name = _StripTemplateArgs(name)
+  return full_name, template_name, name
+
+
+# An odd place for this, but pylint doesn't want it as a static in models
+# (circular dependency), nor as an method on BaseSymbol
+# (attribute-defined-outside-init).
+def InternSameNames(symbol):
+  """Allow using "is" to compare names (and should help with RAM)."""
+  if symbol.template_name == symbol.full_name:
+    symbol.template_name = symbol.full_name
+  if symbol.name == symbol.template_name:
+    symbol.name = symbol.template_name

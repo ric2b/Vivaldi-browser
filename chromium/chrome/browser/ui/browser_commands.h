@@ -9,6 +9,7 @@
 
 #include "build/build_config.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "content/public/common/page_zoom.h"
 #include "printing/features/features.h"
@@ -89,6 +90,8 @@ void DuplicateTab(Browser* browser);
 bool CanDuplicateTab(const Browser* browser);
 content::WebContents* DuplicateTabAt(Browser* browser, int index);
 bool CanDuplicateTabAt(const Browser* browser, int index);
+void MuteTab(Browser* browser);
+void PinTab(Browser* browser);
 void ConvertPopupToTabbedBrowser(Browser* browser);
 void Exit();
 void BookmarkCurrentPageIgnoringExtensionOverrides(Browser* browser);
@@ -130,7 +133,7 @@ void FocusPreviousPane(Browser* browser);
 void ToggleDevToolsWindow(Browser* browser, DevToolsToggleAction action);
 bool CanOpenTaskManager();
 void OpenTaskManager(Browser* browser);
-void OpenFeedbackDialog(Browser* browser);
+void OpenFeedbackDialog(Browser* browser, FeedbackSource source);
 void ToggleBookmarkBar(Browser* browser);
 void ShowAppMenu(Browser* browser);
 void ShowAvatarMenu(Browser* browser);

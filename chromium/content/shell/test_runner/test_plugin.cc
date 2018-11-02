@@ -20,6 +20,7 @@
 #include "content/shell/test_runner/web_test_delegate.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "third_party/WebKit/public/platform/Platform.h"
+#include "third_party/WebKit/public/platform/WebCoalescedInputEvent.h"
 #include "third_party/WebKit/public/platform/WebCompositorSupport.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebGraphicsContext3DProvider.h"
@@ -30,7 +31,6 @@
 #include "third_party/WebKit/public/platform/WebTouchPoint.h"
 #include "third_party/WebKit/public/platform/WebTraceLocation.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebPluginParams.h"
 #include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
@@ -110,11 +110,9 @@ blink::WebPluginContainer::TouchEventRequestType ParseTouchEventRequestType(
 
 }  // namespace
 
-TestPlugin::TestPlugin(blink::WebFrame* frame,
-                       const blink::WebPluginParams& params,
+TestPlugin::TestPlugin(const blink::WebPluginParams& params,
                        WebTestDelegate* delegate)
-    : frame_(frame),
-      delegate_(delegate),
+    : delegate_(delegate),
       container_(nullptr),
       gl_(nullptr),
       color_texture_(0),
@@ -175,9 +173,9 @@ bool TestPlugin::Initialize(blink::WebPluginContainer* container) {
       1;  // We are creating a context through the WebGL APIs.
   blink::WebURL url = container->GetDocument().Url();
   blink::Platform::GraphicsInfo gl_info;
-  context_provider_ = base::WrapUnique(
+  context_provider_ =
       blink::Platform::Current()->CreateOffscreenGraphicsContext3DProvider(
-          attrs, url, nullptr, &gl_info));
+          attrs, url, nullptr, &gl_info);
   if (!context_provider_->BindToCurrentThread())
     context_provider_ = nullptr;
   gl_ = context_provider_ ? context_provider_->ContextGL() : nullptr;
@@ -212,7 +210,6 @@ void TestPlugin::Destroy() {
   context_provider_.reset();
 
   container_ = nullptr;
-  frame_ = nullptr;
 
   blink::Platform::Current()
       ->MainThread()
@@ -236,7 +233,6 @@ void TestPlugin::UpdateGeometry(
     const blink::WebRect& window_rect,
     const blink::WebRect& clip_rect,
     const blink::WebRect& unobscured_rect,
-    const blink::WebVector<blink::WebRect>& cut_outs_rects,
     bool is_visible) {
   if (clip_rect == rect_)
     return;
@@ -539,8 +535,9 @@ GLuint TestPlugin::LoadProgram(const std::string& vertex_source,
 }
 
 blink::WebInputEventResult TestPlugin::HandleInputEvent(
-    const blink::WebInputEvent& event,
+    const blink::WebCoalescedInputEvent& coalesced_event,
     blink::WebCursorInfo& info) {
+  const blink::WebInputEvent& event = coalesced_event.Event();
   const char* event_name = blink::WebInputEvent::GetName(event.GetType());
   if (!strcmp(event_name, "") || !strcmp(event_name, "Undefined"))
     event_name = "unknown";
@@ -587,10 +584,9 @@ bool TestPlugin::HandleDragStatusUpdate(
   return false;
 }
 
-TestPlugin* TestPlugin::create(blink::WebFrame* frame,
-                               const blink::WebPluginParams& params,
+TestPlugin* TestPlugin::Create(const blink::WebPluginParams& params,
                                WebTestDelegate* delegate) {
-  return new TestPlugin(frame, params, delegate);
+  return new TestPlugin(params, delegate);
 }
 
 const blink::WebString& TestPlugin::MimeType() {

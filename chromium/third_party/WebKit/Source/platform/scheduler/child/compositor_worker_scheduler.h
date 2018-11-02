@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef THIRD_PARTY_WEBKIT_PUBLIC_PLATFORM_SCHEDULER_CHILD_COMPOSITOR_WORKER_SCHEDULER_H_
-#define THIRD_PARTY_WEBKIT_PUBLIC_PLATFORM_SCHEDULER_CHILD_COMPOSITOR_WORKER_SCHEDULER_H_
+#ifndef THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_CHILD_COMPOSITOR_WORKER_SCHEDULER_H_
+#define THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_CHILD_COMPOSITOR_WORKER_SCHEDULER_H_
 
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
+#include "platform/PlatformExport.h"
 #include "platform/scheduler/child/worker_scheduler.h"
-#include "public/platform/WebCommon.h"
 #include "public/platform/scheduler/child/single_thread_idle_task_runner.h"
 
 namespace base {
@@ -17,18 +19,23 @@ class Thread;
 namespace blink {
 namespace scheduler {
 
-class BLINK_PLATFORM_EXPORT CompositorWorkerScheduler
+class SchedulerTqmDelegate;
+
+class PLATFORM_EXPORT CompositorWorkerScheduler
     : public WorkerScheduler,
       public SingleThreadIdleTaskRunner::Delegate {
  public:
-  explicit CompositorWorkerScheduler(base::Thread* thread);
+  CompositorWorkerScheduler(
+      base::Thread* thread,
+      scoped_refptr<SchedulerTqmDelegate> main_task_runner);
   ~CompositorWorkerScheduler() override;
 
   // WorkerScheduler:
   void Init() override;
+  scoped_refptr<TaskQueue> DefaultTaskQueue() override;
 
   // ChildScheduler:
-  scoped_refptr<TaskQueue> DefaultTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner() override;
   scoped_refptr<scheduler::SingleThreadIdleTaskRunner> IdleTaskRunner()
       override;
   bool ShouldYieldForHighPriorityWork() override;
@@ -53,4 +60,4 @@ class BLINK_PLATFORM_EXPORT CompositorWorkerScheduler
 }  // namespace scheduler
 }  // namespace blink
 
-#endif  // THIRD_PARTY_WEBKIT_PUBLIC_PLATFORM_SCHEDULER_CHILD_COMPOSITOR_WORKER_SCHEDULER_H_
+#endif  // THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_CHILD_COMPOSITOR_WORKER_SCHEDULER_H_

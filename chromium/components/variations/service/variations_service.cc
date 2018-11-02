@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <utility>
+#include <vector>
 
 #include "base/build_time.h"
 #include "base/command_line.h"
@@ -41,6 +42,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_status.h"
 #include "ui/base/device_form_factor.h"
@@ -335,9 +337,7 @@ bool VariationsService::CreateTrialsFromSeed(base::FeatureList* feature_list) {
       GetChannelForVariations(client_->GetChannel());
   UMA_HISTOGRAM_SPARSE_SLOWLY("Variations.UserChannel", channel);
 
-  const std::string latest_country =
-      local_state_->GetString(prefs::kVariationsCountry);
-
+  const std::string latest_country = GetLatestCountry();
   std::unique_ptr<const base::FieldTrial::EntropyProvider> low_entropy_provider(
       CreateLowEntropyProvider());
   // Note that passing |&ui_string_overrider_| via base::Unretained below is
@@ -531,8 +531,27 @@ void VariationsService::DoActualFetch() {
   if (pending_seed_request_)
     return;
 
-  pending_seed_request_ = net::URLFetcher::Create(0, variations_server_url_,
-                                                  net::URLFetcher::GET, this);
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("chrome_variations_service", R"(
+        semantics {
+          sender: "Chrome Variations Service"
+          description:
+            "Retrieves the list of Google Chrome's Variations from the server, "
+            "which will apply to the next Chrome session upon a restart."
+          trigger:
+            "Requests are made periodically while Google Chrome is running."
+          data: "The operating system name."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting: "This feature cannot be disabled by settings."
+          policy_exception_justification:
+            "Not implemented, considered not required."
+        })");
+  pending_seed_request_ =
+      net::URLFetcher::Create(0, variations_server_url_, net::URLFetcher::GET,
+                              this, traffic_annotation);
   data_use_measurement::DataUseUserData::AttachToFetcher(
       pending_seed_request_.get(),
       data_use_measurement::DataUseUserData::VARIATIONS);
@@ -760,8 +779,7 @@ void VariationsService::PerformSimulationWithVersion(
   variations::VariationsSeedSimulator seed_simulator(*default_provider,
                                                      *low_provider);
 
-  const std::string latest_country =
-      local_state_->GetString(prefs::kVariationsCountry);
+  const std::string latest_country = GetLatestCountry();
   const variations::VariationsSeedSimulator::Result result =
       seed_simulator.SimulateSeedStudies(
           *seed, client_->GetApplicationLocale(),
@@ -802,6 +820,12 @@ std::string VariationsService::LoadPermanentConsistencyCountry(
     const std::string& latest_country) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(version.IsValid());
+
+  const std::string override_country =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kVariationsOverrideCountry);
+  if (!override_country.empty())
+    return override_country;
 
   const base::ListValue* list_value =
       local_state_->GetList(prefs::kVariationsPermanentConsistencyCountry);
@@ -907,6 +931,15 @@ bool VariationsService::OverrideStoredPermanentCountry(
   base::Version version(version_info::GetVersionNumber());
   StorePermanentCountry(version, country_override);
   return true;
+}
+
+std::string VariationsService::GetLatestCountry() const {
+  const std::string override_country =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kVariationsOverrideCountry);
+  return !override_country.empty()
+             ? override_country
+             : local_state_->GetString(prefs::kVariationsCountry);
 }
 
 }  // namespace variations

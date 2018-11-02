@@ -81,7 +81,8 @@ development and testing purposes.
 Since the iOS build is a bit more complicated than a desktop build, we provide
 `ios/build/tools/setup-gn.py`, which will create four appropriately configured
 build directories under `out` for Release and Debug device and simulator
-builds, and generates an appropriate Xcode workspace as well.
+builds, and generates an appropriate Xcode workspace
+(`out/build/all.xcworkspace`) as well.
 
 You can customize the build by editing the file `$HOME/.setup-gn` (create it if
 it does not exist).  Look at `src/ios/build/tools/setup-gn.config` for
@@ -142,6 +143,7 @@ application extensions:
 -   `${prefix}.chrome.ios.herebedragons`
 -   `${prefix}.chrome.ios.herebedragons.ShareExtension`
 -   `${prefix}.chrome.ios.herebedragons.TodayExtension`
+-   `${prefix}.chrome.ios.herebedragons.SearchTodayExtension`
 
 All these certificates need to have the "App Groups"
 (`com.apple.security.application-groups`) capability enabled for
@@ -259,6 +261,8 @@ is open before checking out. This will increase your chances of success.
 
 ### Improving performance of `git status`
 
+#### Increase the vnode cache size
+
 `git status` is used frequently to determine the status of your checkout.  Due
 to the large number of files in Chromium's checkout, `git status` performance
 can be quite variable.  Increasing the system's vnode cache appears to help.
@@ -285,8 +289,22 @@ $ echo kern.maxvnodes=$((512*1024)) | sudo tee -a /etc/sysctl.conf
 
 Or edit the file directly.
 
-If `git --version` reports 2.6 or higher, the following may also improve
-performance of `git status`:
+#### Configure git to use an untracked cache
+
+If `git --version` reports 2.8 or higher, try running
+
+```shell
+$ git update-index --test-untracked-cache
+```
+
+If the output ends with `OK`, then the following may also improve performance of
+`git status`:
+
+```shell
+$ git config core.untrackedCache true
+```
+
+If `git --version` reports 2.6 or higher, but below 2.8, you can instead run
 
 ```shell
 $ git update-index --untracked-cache

@@ -20,8 +20,11 @@ class AwSafeBrowsingUIManager : public safe_browsing::BaseUIManager {
    public:
     static UIManagerClient* FromWebContents(content::WebContents* web_contents);
 
-    // Whether this web contents can show an interstitial
+    // Whether this web contents can show any sort of interstitial
     virtual bool CanShowInterstitial() = 0;
+
+    // Returns the appropriate BaseBlockingPage::ErrorUiType
+    virtual int GetErrorUiType() = 0;
   };
 
   // Construction needs to happen on the UI thread.
@@ -29,8 +32,13 @@ class AwSafeBrowsingUIManager : public safe_browsing::BaseUIManager {
 
   void DisplayBlockingPage(const UnsafeResource& resource) override;
 
+  // Gets the correct ErrorUiType for the web contents
+  int GetErrorUiType(const UnsafeResource& resource) const;
+
  protected:
   ~AwSafeBrowsingUIManager() override;
+
+  void ShowBlockingPageForResource(const UnsafeResource& resource) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(AwSafeBrowsingUIManager);

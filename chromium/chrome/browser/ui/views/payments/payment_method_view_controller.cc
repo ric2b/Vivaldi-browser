@@ -13,6 +13,7 @@
 #include "base/callback_forward.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
 #include "chrome/browser/ui/views/payments/payment_request_row_view.h"
@@ -25,6 +26,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/layout/box_layout.h"
@@ -43,6 +45,8 @@ enum class PaymentMethodViewControllerTags : int {
   // The tag for the button that triggers the "add card" flow. Starts at
   // |kFirstTagValue| not to conflict with tags common to all views.
   ADD_CREDIT_CARD_BUTTON = kFirstTagValue,
+  // This value is passed to inner views so they can use it as a starting tag.
+  MAX_TAG,
 };
 
 class PaymentMethodListItem : public payments::PaymentRequestItemList::Item {
@@ -56,16 +60,39 @@ class PaymentMethodListItem : public payments::PaymentRequestItemList::Item {
                         PaymentRequestItemList* list,
                         PaymentRequestDialogView* dialog,
                         bool selected)
-      : payments::PaymentRequestItemList::Item(spec, state, list, selected),
+      : payments::PaymentRequestItemList::Item(spec,
+                                               state,
+                                               list,
+                                               selected,
+                                               /*show_edit_button=*/true),
         instrument_(instrument),
         dialog_(dialog) {}
   ~PaymentMethodListItem() override {}
 
  private:
+  void ShowEditor() {
+    switch (instrument_->type()) {
+      case PaymentInstrument::Type::AUTOFILL:
+        // Since we are a list item, we only care about the on_edited callback.
+        dialog_->ShowCreditCardEditor(
+            BackNavigationType::kPaymentSheet,
+            static_cast<int>(PaymentMethodViewControllerTags::MAX_TAG),
+            /*on_edited=*/
+            base::BindOnce(&PaymentRequestState::SetSelectedInstrument,
+                           base::Unretained(state()), instrument_),
+            /*on_added=*/
+            base::OnceCallback<void(const autofill::CreditCard&)>(),
+            static_cast<AutofillPaymentInstrument*>(instrument_)
+                ->credit_card());
+        return;
+    }
+    NOTREACHED();
+  }
+
   // payments::PaymentRequestItemList::Item:
   std::unique_ptr<views::View> CreateExtraView() override {
     std::unique_ptr<views::ImageView> card_icon_view = CreateInstrumentIconView(
-        instrument_->icon_resource_id(), instrument_->label());
+        instrument_->icon_resource_id(), instrument_->GetLabel());
     card_icon_view->SetImageSize(gfx::Size(32, 20));
     return std::move(card_icon_view);
   }
@@ -82,11 +109,22 @@ class PaymentMethodListItem : public payments::PaymentRequestItemList::Item {
         views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
     card_info_container->SetLayoutManager(box_layout.release());
 
-    card_info_container->AddChildView(new views::Label(instrument_->label()));
-    card_info_container->AddChildView(
-        new views::Label(instrument_->sublabel()));
-    // TODO(anthonyvd): Add the "card is incomplete" label once the
-    // completedness logic is implemented.
+    base::string16 label = instrument_->GetLabel();
+    if (!label.empty())
+      card_info_container->AddChildView(new views::Label(label));
+    base::string16 sublabel = instrument_->GetSublabel();
+    if (!sublabel.empty())
+      card_info_container->AddChildView(new views::Label(sublabel));
+    if (!instrument_->IsCompleteForPayment()) {
+      std::unique_ptr<views::Label> missing_info_label =
+          base::MakeUnique<views::Label>(instrument_->GetMissingInfoLabel(),
+                                         CONTEXT_DEPRECATED_SMALL);
+      missing_info_label->SetEnabledColor(
+          missing_info_label->GetNativeTheme()->GetSystemColor(
+              ui::NativeTheme::kColorId_LinkEnabled));
+      card_info_container->AddChildView(missing_info_label.release());
+    }
+
     return card_info_container;
   }
 
@@ -97,28 +135,20 @@ class PaymentMethodListItem : public payments::PaymentRequestItemList::Item {
     }
   }
 
-  bool CanBeSelected() const override {
+  bool IsEnabled() override {
+    // All items are enabled.
+    return true;
+  }
+
+  bool CanBeSelected() override {
     // If an instrument can't be selected, PerformSelectionFallback is called,
     // where the instrument can be made complete.
     return instrument_->IsCompleteForPayment();
   }
 
-  void PerformSelectionFallback() override {
-    switch (instrument_->type()) {
-      case PaymentInstrument::Type::AUTOFILL:
-        // Since we are a list item, we only care about the on_edited callback.
-        dialog_->ShowCreditCardEditor(
-            /*on_edited=*/base::BindOnce(
-                &PaymentRequestState::SetSelectedInstrument,
-                base::Unretained(state()), instrument_),
-            /*on_added=*/
-            base::OnceCallback<void(const autofill::CreditCard&)>(),
-            static_cast<AutofillPaymentInstrument*>(instrument_)
-                ->credit_card());
-        return;
-    }
-    NOTREACHED();
-  }
+  void PerformSelectionFallback() override { ShowEditor(); }
+
+  void EditButtonPressed() override { ShowEditor(); }
 
   PaymentInstrument* instrument_;
   PaymentRequestDialogView* dialog_;
@@ -174,6 +204,7 @@ PaymentMethodViewController::CreateExtraFooterView() {
       PaymentMethodViewControllerTags::ADD_CREDIT_CARD_BUTTON));
   button->set_id(
       static_cast<int>(DialogViewID::PAYMENT_METHOD_ADD_CARD_BUTTON));
+  button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
   extra_view->AddChildView(button);
 
   return extra_view;
@@ -186,6 +217,8 @@ void PaymentMethodViewController::ButtonPressed(views::Button* sender,
         PaymentMethodViewControllerTags::ADD_CREDIT_CARD_BUTTON):
       // Only provide the |on_added| callback, in response to this button.
       dialog()->ShowCreditCardEditor(
+          BackNavigationType::kPaymentSheet,
+          static_cast<int>(PaymentMethodViewControllerTags::MAX_TAG),
           /*on_edited=*/base::OnceClosure(),
           /*on_added=*/
           base::BindOnce(&PaymentRequestState::AddAutofillPaymentInstrument,

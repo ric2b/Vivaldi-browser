@@ -221,6 +221,9 @@
   "RemoteAccessHostClientDomain": {
   },
 
+  "RemoteAccessHostClientDomainList": {
+  },
+
   "RemoteAccessHostFirewallTraversal": {
   },
 
@@ -228,6 +231,9 @@
   },
 
   "RemoteAccessHostDomain": {
+  },
+
+  "RemoteAccessHostDomainList": {
   },
 
   "RemoteAccessHostTalkGadgetPrefix": {
@@ -2752,6 +2758,14 @@
     ]
   },
 
+  "InstantTetheringAllowed": {
+    "os": ["chromeos"],
+    "test_policy": { "InstantTetheringAllowed": false },
+    "pref_mappings": [
+      { "pref": "tether.allowed" }
+    ]
+  },
+
   "----- Chrome OS device policies ---------------------------------------": {},
 
   "DevicePolicyRefreshRate": {
@@ -3062,6 +3076,21 @@
     "pref_mappings": [
       { "pref": "cros.device_wallpaper_image" }
     ]
+  },
+
+  "NetworkTimeQueriesEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "NetworkTimeQueriesEnabled": true },
+    "pref_mappings": [
+      { "pref": "network_time.network_time_queries_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "DeviceEcryptfsMigrationStrategy": {
+    "os": ["chromeos"],
+    "test_policy": { "DeviceEcryptfsMigrationStrategy": 1 }
   },
 
   "----- Chrome Frame policies -------------------------------------------": {},

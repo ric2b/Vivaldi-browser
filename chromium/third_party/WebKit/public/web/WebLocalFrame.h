@@ -34,6 +34,7 @@ class WebInputMethodController;
 class WebRange;
 class WebScriptExecutionCallback;
 class WebTextCheckClient;
+class WebURLLoader;
 enum class WebCachePolicy;
 enum class WebSandboxFlags;
 enum class WebTreeScopeType;
@@ -80,6 +81,8 @@ class WebLocalFrame : public WebFrame {
       blink::InterfaceRegistry*,
       WebRemoteFrame*,
       WebSandboxFlags);
+
+  // TODO(dcheng): Add a CreateChild() method.
 
   // Returns the WebFrame associated with the current V8 context. This
   // function can return 0 if the context is associated with a Document that
@@ -398,6 +401,8 @@ class WebLocalFrame : public WebFrame {
   virtual void EnableSpellChecking(bool) = 0;
   virtual bool IsSpellCheckingEnabled() const = 0;
   virtual void RemoveSpellingMarkers() = 0;
+  virtual void RemoveSpellingMarkersUnderWords(
+      const WebVector<WebString>& words) = 0;
 
   // Content Settings -------------------------------------------------------
 
@@ -546,7 +551,12 @@ class WebLocalFrame : public WebFrame {
   virtual base::SingleThreadTaskRunner* UnthrottledTaskRunner() = 0;
 
   // Returns the WebInputMethodController associated with this local frame.
-  virtual WebInputMethodController* GetInputMethodController() const = 0;
+  virtual WebInputMethodController* GetInputMethodController() = 0;
+
+  // Loading ------------------------------------------------------------------
+  // Creates and returns a loader. This function can be called only when this
+  // frame is attached to a document.
+  virtual std::unique_ptr<WebURLLoader> CreateURLLoader() = 0;
 
  protected:
   explicit WebLocalFrame(WebTreeScopeType scope) : WebFrame(scope) {}

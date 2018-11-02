@@ -98,6 +98,7 @@ Ben Noordhuis <ben@strongloop.com>
 Benjamin Dupont <bedupont@cisco.com>
 Benjamin Jemlich <pcgod99@gmail.com>
 Bernard Cafarelli <voyageur@gentoo.org>
+Bhagirathi Satpathy <bhagirathi.s@samsung.com>
 Bhanukrushana Rout <b.rout@samsung.com>
 Biljith Jayan <billy.jayan@samsung.com>
 Bobby Powers <bobbypowers@gmail.com>
@@ -146,6 +147,7 @@ Clemens Fruhwirth <clemens@endorphin.org>
 Clement Scheelfeldt Skau <clementskau@gmail.com>
 Clinton Staley <clintstaley@chromium.org>
 Clinton Staley <clintstaley@gmail.com>
+Connor Pearson <cjp822@gmail.com>
 Craig Schlenter <craig.schlenter@gmail.com>
 Csaba Osztrogonác <ossy.szeged@gmail.com>
 Daegyu Lee <na7jun8gi@gmail.com>
@@ -164,6 +166,7 @@ Daniel Platz <daplatz@googlemail.com>
 Daniel Shaulov <dshaulov@ptc.com>
 Daniel Trebbien <dtrebbien@gmail.com>
 Daniel Waxweiler <daniel.waxweiler@gmail.com>
+Dániel Bátyai <dbatyai@inf.u-szeged.hu>
 Darshini KN <kn.darshini@samsung.com>
 David Benjamin <davidben@mit.edu>
 David Erceg <erceg.david@gmail.com>
@@ -227,6 +230,7 @@ Frankie Dintino <fdintino@theatlantic.com>
 Franklin Ta <fta2012@gmail.com>
 Frédéric Jacob <frederic.jacob.78@gmail.com>
 Frédéric Wang <fred.wang@free.fr>
+Fu Junwei <junwei.fu@intel.com>
 Gaetano Mendola <mendola@gmail.com>
 Gajendra N <gajendra.n@samsung.com>
 Gajendra Singh <wxjg68@motorola.com>
@@ -333,6 +337,7 @@ Jesus Sanchez-Palencia <jesus.sanchez-palencia.fernandez.fil@intel.com>
 Jiadong Zhu <jiadong.zhu@linaro.org>
 Jiajia Qin <jiajia.qin@intel.com>
 Jianjun Zhu <jianjun.zhu@intel.com>
+Jianneng Zhong <muzuiget@gmail.com>
 Jiawei Shao <jiawei.shao@intel.com>
 Jie Chen <jie.a.chen@intel.com>
 Jihoon Chung <jihoon@gmail.com>
@@ -597,6 +602,7 @@ Raphael Kubo da Costa <raphael.kubo.da.costa@intel.com>
 Raveendra Karu <r.karu@samsung.com>
 Ravi Phaneendra Kasibhatla <r.kasibhatla@samsung.com>
 Ravi Phaneendra Kasibhatla <ravi.kasibhatla@motorola.com>
+Refael Ackermann <refack@gmail.com>
 Renata Hodovan <rhodovan.u-szeged@partner.samsung.com>
 Rene Bolldorf <rb@radix.io>
 Rene Ladan <r.c.ladan@gmail.com>
@@ -612,6 +618,7 @@ Robert Hogan <robhogan@gmail.com>
 Robert Nagy <robert.nagy@gmail.com>
 Robert Sesek <rsesek@bluestatic.org>
 Roland Takacs <rtakacs.u-szeged@partner.samsung.com>
+Romain Pokrzywka <romain.pokrzywka@gmail.com>
 Rosen Dash <nqk836@motorola.com>
 Rosen Dash <rosen.dash@gmail.com>
 ruben <chromium@hybridsource.org>
@@ -685,6 +692,7 @@ Soorya R <soorya.r@samsung.com>
 Soren Dreijer <dreijerbit@gmail.com>
 Srirama Chandra Sekhar Mogali <srirama.m@samsung.com>
 Stephen Searles <stephen.searles@gmail.com>
+Steve Sanders <steve@zanderz.com>
 Steven Pennington <spenn@engr.uvic.ca>
 Steven Roussey <sroussey@gmail.com>
 Subrahmanya Praveen Munukutla <sataya.m@samsung.com>
@@ -704,8 +712,10 @@ Suvanjan Mukherjee <suvanjanmukherjee@gmail.com>
 Swati Jaiswal <swa.jaiswal@samsung.com>
 Sylvain Zimmer <sylvinus@gmail.com>
 Sylvestre Ledru <sylvestre.ledru@gmail.com>
+Szabolcs David <davidsz@inf.u-szeged.hu>
 Szymon Piechowicz <szymonpiechowicz@o2.pl>
 Taehoon Lee <taylor.hoon@gmail.com>
+Takashi Fujita <tgfjt.mail@gmail.com>
 Takeshi Kurosawa <taken.spc@gmail.com>
 Tanay Chowdhury <tanay.c@samsung.com>
 Tanvir Rizvi <tanvir.rizvi@samsung.com>
@@ -727,6 +737,7 @@ Tom Harwood <tfh@skip.org>
 Torsten Kurbad <google@tk-webart.de>
 Tomas Popela <tomas.popela@gmail.com>
 Trevor Perrin <unsafe@trevp.net>
+Tripta Gupta <tripta.g@samsung.com>
 U. Artie Eoff <ullysses.a.eoff@intel.com>
 Umar Hansa <umar.hansa@gmail.com>
 Upendra Gowda <upendrag.gowda@gmail.com>
@@ -829,7 +840,10 @@ Debug Wang <debugwang@tencent.com>
 Zeqin Chen <talonchen@tencent.com>
 Yong Wang <ccyongwang@tencent.com>
 Charles Vaughn <cvaughn@gmail.com>
+Ernesto Mudu <ernesto.mudu@gmail.com>
+Zhifei Fang <facetothefate@gmail.com>
 
+ACCESS CO., LTD. <*@access-company.com>
 BlackBerry Limited <*@blackberry.com>
 Code Aurora Forum <*@codeaurora.org>
 Comodo CA Limited
@@ -855,3 +869,4 @@ Akamai Inc. <*@akamai.com>
 Impossible Dreams Network <*@impossibledreams.net>
 Facebook, Inc. <*@fb.com>
 Facebook, Inc. <*@oculus.com>
+Canonical Limited <*@canonical.com>

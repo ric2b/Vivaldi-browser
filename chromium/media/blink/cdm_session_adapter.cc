@@ -177,10 +177,9 @@ void CdmSessionAdapter::OnCdmCreated(
   cdm_created_result_.reset();
 }
 
-void CdmSessionAdapter::OnSessionMessage(
-    const std::string& session_id,
-    ContentDecryptionModule::MessageType message_type,
-    const std::vector<uint8_t>& message) {
+void CdmSessionAdapter::OnSessionMessage(const std::string& session_id,
+                                         CdmMessageType message_type,
+                                         const std::vector<uint8_t>& message) {
   WebContentDecryptionModuleSessionImpl* session = GetSession(session_id);
   DLOG_IF(WARNING, !session) << __func__ << " for unknown session "
                              << session_id;
@@ -199,8 +198,8 @@ void CdmSessionAdapter::OnSessionKeysChange(const std::string& session_id,
   if (session) {
     DVLOG(2) << __func__ << ": session_id = " << session_id;
     DVLOG(2) << "  - has_additional_usable_key = " << has_additional_usable_key;
-    for (const CdmKeyInformation* info : keys_info)
-      DVLOG(2) << "  - " << *info;
+    for (const auto& info : keys_info)
+      DVLOG(2) << "  - " << *(info.get());
 
     session->OnSessionKeysChange(has_additional_usable_key,
                                  std::move(keys_info));

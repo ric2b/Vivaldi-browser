@@ -7,8 +7,9 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_task_scheduler.h"
+#include "base/test/scoped_task_environment.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/bluetooth_uuid.h"
@@ -78,10 +79,8 @@ class BluetoothAdapterProfileBlueZTest : public testing::Test {
 
   void AdapterCallback(scoped_refptr<BluetoothAdapter> adapter) {
     adapter_ = adapter;
-    if (base::MessageLoop::current() &&
-        base::MessageLoop::current()->is_running()) {
+    if (base::RunLoop::IsRunningOnCurrentThread())
       base::MessageLoop::current()->QuitWhenIdle();
-    }
   }
 
   class FakeDelegate : public bluez::BluetoothProfileServiceProvider::Delegate {
@@ -150,7 +149,7 @@ class BluetoothAdapterProfileBlueZTest : public testing::Test {
   }
 
  protected:
-  base::test::ScopedTaskScheduler scoped_task_scheduler_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
 
   scoped_refptr<BluetoothAdapter> adapter_;
 

@@ -7,7 +7,6 @@
 #include "platform/graphics/LoggingCanvas.h"
 #include "platform/graphics/paint/DrawingDisplayItem.h"
 #include "platform/graphics/paint/PaintChunk.h"
-#include "third_party/skia/include/core/SkPictureAnalyzer.h"
 
 #ifndef NDEBUG
 #include "platform/wtf/text/WTFString.h"
@@ -87,14 +86,15 @@ std::unique_ptr<JSONArray> DisplayItemList::SubsequenceAsJSON(
         json->SetString(
             "clientDebugName",
             String::Format("clientDebugName: \"%s\"",
-                           display_item.Client().DebugName().Ascii().Data()));
+                           display_item.Client().DebugName().Ascii().data()));
       }
 #ifndef NDEBUG
       if ((options & kShowPaintRecords) && display_item.IsDrawing()) {
         const DrawingDisplayItem& item =
             static_cast<const DrawingDisplayItem&>(display_item);
         if (const PaintRecord* record = item.GetPaintRecord().get()) {
-          json->SetString("record", RecordAsDebugString(record));
+          json->SetString("record", RecordAsDebugString(
+                                        record, item.GetPaintRecordBounds()));
         }
       }
 #endif

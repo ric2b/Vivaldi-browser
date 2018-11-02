@@ -7,10 +7,10 @@
 
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMException.h"
 #include "modules/ModulesExport.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
 #include "public/platform/modules/presentation/WebPresentationReceiver.h"
@@ -52,6 +52,7 @@ class MODULES_EXPORT PresentationReceiver final
       const WebPresentationInfo&) override;
   void DidChangeConnectionState(WebPresentationConnectionState) override;
   void TerminateConnection() override;
+  void RemoveConnection(WebPresentationConnection*) override;
 
   void RegisterConnection(PresentationConnection*);
 

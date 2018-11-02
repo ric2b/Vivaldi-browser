@@ -16,6 +16,7 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
@@ -72,8 +73,8 @@ void ExecuteStubGetSession(int* count,
   std::unique_ptr<base::DictionaryValue> capabilities(
       new base::DictionaryValue());
 
-  capabilities->Set("capability1", new base::Value("test1"));
-  capabilities->Set("capability2", new base::Value("test2"));
+  capabilities->SetString("capability1", "test1");
+  capabilities->SetString("capability2", "test2");
 
   callback.Run(Status(kOk), std::move(capabilities), session_id, false);
 }

@@ -34,9 +34,11 @@ class Predictor;
 namespace content {
 class BrowserGpuChannelHostFactory;
 class BrowserGpuMemoryBufferManager;
+class BrowserMainLoop;
 class BrowserShutdownProfileDumper;
 class BrowserSurfaceViewManager;
 class BrowserTestBase;
+class CategorizedWorkerPool;
 class NestedMessagePumpAndroid;
 class ScopedAllowWaitForAndroidLayoutTests;
 class ScopedAllowWaitForDebugURL;
@@ -45,7 +47,6 @@ class SynchronousCompositor;
 class SynchronousCompositorBrowserFilter;
 class SynchronousCompositorHost;
 class TextInputClientMac;
-class CategorizedWorkerPool;
 }  // namespace content
 namespace dbus {
 class Bus;
@@ -99,6 +100,7 @@ class TaskTracker;
 
 class SequencedWorkerPool;
 class SimpleThread;
+class StackSamplingProfiler;
 class Thread;
 class ThreadTestHelper;
 
@@ -183,6 +185,8 @@ class BASE_EXPORT ThreadRestrictions {
   // BEGIN ALLOWED USAGE.
   friend class android_webview::AwFormDatabaseService;
   friend class android_webview::CookieManager;
+  friend class base::StackSamplingProfiler;
+  friend class content::BrowserMainLoop;
   friend class content::BrowserShutdownProfileDumper;
   friend class content::BrowserSurfaceViewManager;
   friend class content::BrowserTestBase;

@@ -31,8 +31,10 @@
 #ifndef WebNetworkStateNotifier_h
 #define WebNetworkStateNotifier_h
 
+#include "base/time/time.h"
 #include "public/platform/WebCommon.h"
 #include "public/platform/WebConnectionType.h"
+#include "public/platform/WebEffectiveConnectionType.h"
 
 namespace blink {
 
@@ -41,6 +43,11 @@ class WebNetworkStateNotifier {
   BLINK_PLATFORM_EXPORT static void SetOnLine(bool);
   BLINK_PLATFORM_EXPORT static void SetWebConnection(WebConnectionType,
                                                      double max_bandwidth_mbps);
+  BLINK_PLATFORM_EXPORT static void SetNetworkQuality(
+      WebEffectiveConnectionType,
+      base::TimeDelta http_rtt,
+      base::TimeDelta transport_rtt,
+      int downlink_throughput_kbps);
 
  private:
   WebNetworkStateNotifier();

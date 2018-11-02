@@ -13,6 +13,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/browser_side_navigation_policy.h"
@@ -29,14 +30,18 @@ class ExtensionResourceRequestPolicyTest : public ExtensionApiTest {
     command_line->AppendSwitch(
         extensions::switches::kAllowLegacyExtensionManifests);
   }
+
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
 };
 
 // Note, this mostly tests the logic of chrome/renderer/extensions/
 // extension_resource_request_policy.*, but we have it as a browser test so that
 // can make sure it works end-to-end.
 IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest, OriginPrivileges) {
-  host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(LoadExtensionWithFlags(test_data_dir_
       .AppendASCII("extension_resource_request_policy")
       .AppendASCII("extension"),
@@ -77,9 +82,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest, OriginPrivileges) {
   // A data URL. Data URLs should always be able to load chrome-extension://
   // resources.
   std::string file_source;
-  ASSERT_TRUE(base::ReadFileToString(
-      test_data_dir_.AppendASCII("extension_resource_request_policy")
-                    .AppendASCII("index.html"), &file_source));
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    ASSERT_TRUE(base::ReadFileToString(
+        test_data_dir_.AppendASCII("extension_resource_request_policy")
+            .AppendASCII("index.html"),
+        &file_source));
+  }
   ui_test_utils::NavigateToURL(browser(),
       GURL(std::string("data:text/html;charset=utf-8,") + file_source));
   ASSERT_TRUE(content::ExecuteScriptAndExtractString(
@@ -152,7 +161,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest, MAYBE_Video) {
 IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest,
                        MAYBE_WebAccessibleResources) {
   std::string result;
-  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(LoadExtension(test_data_dir_
       .AppendASCII("extension_resource_request_policy")
       .AppendASCII("web_accessible")));
@@ -226,7 +234,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest,
 IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest,
                        LinkToWebAccessibleResources) {
   std::string result;
-  ASSERT_TRUE(embedded_test_server()->Start());
   const extensions::Extension* extension = LoadExtension(
       test_data_dir_.AppendASCII("extension_resource_request_policy")
           .AppendASCII("web_accessible"));
@@ -290,7 +297,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest,
 IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest,
                        WebAccessibleResourcesWithCSP) {
   std::string result;
-  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(LoadExtension(test_data_dir_
       .AppendASCII("extension_resource_request_policy")
       .AppendASCII("web_accessible")));
@@ -319,7 +325,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest, Iframe) {
 
 IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest,
                        IframeNavigateToInaccessible) {
-  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("extension_resource_request_policy")
           .AppendASCII("some_accessible")));
@@ -345,11 +350,46 @@ IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest,
 
   // The iframe should not load |private_page|, which is not web-accessible.
   //
-  // TODO(alexmos): The failure mode differs on whether or not
-  // --isolate-extensions is used: if it is on, the request is canceled and we
-  // stay on public.html (see https://crbug.com/656752), and if it's off, the
-  // request is blocked in ExtensionNavigationThrottle, which loads an error
-  // page into the iframe.  This check handles both cases, but we should make
-  // the check stricter once --isolate-extensions is on by default.
+  // TODO(alexmos): Make this check stricter, as extensions are now fully
+  // isolated. The failure mode is that the request is canceled and we stay on
+  // public.html (see https://crbug.com/656752).
   EXPECT_NE("Private", content);
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest,
+                       IframeNavigateToInaccessibleViaServerRedirect) {
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Any valid extension that happens to have a web accessible resource.
+  const extensions::Extension* patsy = LoadExtension(
+      test_data_dir_.AppendASCII("extension_resource_request_policy")
+          .AppendASCII("some_accessible"));
+
+  // An extension with a non-webaccessible resource.
+  const extensions::Extension* target = LoadExtension(
+      test_data_dir_.AppendASCII("extension_resource_request_policy")
+          .AppendASCII("inaccessible"));
+
+  // Start with an http iframe.
+  ui_test_utils::NavigateToURL(browser(),
+                               embedded_test_server()->GetURL("/iframe.html"));
+
+  // Send it to a web accessible resource of a valid extension.
+  GURL patsy_url = patsy->GetResourceURL("public.html");
+  content::NavigateIframeToURL(web_contents, "test", patsy_url);
+
+  // Now send it to a NON-web-accessible resource of any other extension, via
+  // http redirect.
+  GURL target_url = target->GetResourceURL("inaccessible-iframe-contents.html");
+  GURL http_redirect_to_target_url =
+      embedded_test_server()->GetURL("/server-redirect?" + target_url.spec());
+  content::NavigateIframeToURL(web_contents, "test",
+                               http_redirect_to_target_url);
+
+  // That should not have been allowed.
+  EXPECT_NE(url::Origin(target_url).GetURL(),
+            ChildFrameAt(web_contents->GetMainFrame(), 0)
+                ->GetLastCommittedOrigin()
+                .GetURL());
 }

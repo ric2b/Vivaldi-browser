@@ -118,6 +118,8 @@ int GetTabIdForExtensions(const WebContents* web_contents) {
   return SessionTabHelper::IdForTab(web_contents);
 }
 
+ExtensionTabUtil::Delegate* g_delegate = nullptr;
+
 }  // namespace
 
 ExtensionTabUtil::OpenTabParams::OpenTabParams()
@@ -220,7 +222,8 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(
   // but this was the most glaring one while adding VB-235.
   if (!vivaldi::IsVivaldiApp(function->extension_id()) &&
       url.SchemeIs(kExtensionScheme) &&
-      !IncognitoInfo::IsSplitMode(function->extension()) &&
+      (!function->extension() ||
+       !IncognitoInfo::IsSplitMode(function->extension())) &&
       browser->profile()->IsOffTheRecord()) {
     Profile* profile = browser->profile()->GetOriginalProfile();
 
@@ -411,38 +414,41 @@ std::unique_ptr<api::tabs::Tab> ExtensionTabUtil::CreateTabObject(
   }
 
   bool is_loading = contents->IsLoading();
-  std::unique_ptr<api::tabs::Tab> tab_object(new api::tabs::Tab);
-  tab_object->id.reset(new int(GetTabIdForExtensions(contents)));
+  auto tab_object = base::MakeUnique<api::tabs::Tab>();
+  tab_object->id = base::MakeUnique<int>(GetTabIdForExtensions(contents));
   tab_object->index = tab_index;
   tab_object->window_id = window_id; // GetWindowIdOfTab(contents);
-  tab_object->status.reset(new std::string(GetTabStatusText(is_loading)));
+  tab_object->status =
+      base::MakeUnique<std::string>(GetTabStatusText(is_loading));
   tab_object->active = tab_strip && tab_index == tab_strip->active_index();
   tab_object->selected = tab_strip && tab_index == tab_strip->active_index();
   tab_object->highlighted = tab_strip && tab_strip->IsTabSelected(tab_index);
   tab_object->pinned = tab_strip && tab_strip->IsTabPinned(tab_index);
-  tab_object->audible.reset(new bool(contents->WasRecentlyAudible()));
+  tab_object->audible = base::MakeUnique<bool>(contents->WasRecentlyAudible());
   tab_object->discarded =
       g_browser_process->GetTabManager()->IsTabDiscarded(contents);
   tab_object->auto_discardable =
       g_browser_process->GetTabManager()->IsTabAutoDiscardable(contents);
   tab_object->muted_info = CreateMutedInfo(contents);
   tab_object->incognito = contents->GetBrowserContext()->IsOffTheRecord();
-  tab_object->width.reset(
-      new int(contents->GetContainerBounds().size().width()));
-  tab_object->height.reset(
-      new int(contents->GetContainerBounds().size().height()));
+  gfx::Size contents_size = contents->GetContainerBounds().size();
+  tab_object->width = base::MakeUnique<int>(contents_size.width());
+  tab_object->height = base::MakeUnique<int>(contents_size.height());
 
-  tab_object->url.reset(new std::string(contents->GetURL().spec()));
-  tab_object->title.reset(
-      new std::string(base::UTF16ToUTF8(contents->GetTitle())));
+  tab_object->url = base::MakeUnique<std::string>(contents->GetURL().spec());
+  tab_object->title =
+      base::MakeUnique<std::string>(base::UTF16ToUTF8(contents->GetTitle()));
   NavigationEntry* entry = contents->GetController().GetVisibleEntry();
-  if (entry && entry->GetFavicon().valid)
-    tab_object->fav_icon_url.reset(
-        new std::string(entry->GetFavicon().url.spec()));
+  if (entry && entry->GetFavicon().valid) {
+    tab_object->fav_icon_url =
+        base::MakeUnique<std::string>(entry->GetFavicon().url.spec());
+  }
   if (tab_strip) {
     WebContents* opener = tab_strip->GetOpenerOfWebContentsAt(tab_index);
-    if (opener)
-      tab_object->opener_tab_id.reset(new int(GetTabIdForExtensions(opener)));
+    if (opener) {
+      tab_object->opener_tab_id =
+          base::MakeUnique<int>(GetTabIdForExtensions(opener));
+    }
   }
 
   tab_object->ext_data.reset(new std::string(contents->GetExtData()));
@@ -482,6 +488,14 @@ std::unique_ptr<api::tabs::MutedInfo> ExtensionTabUtil::CreateMutedInfo(
 }
 
 // static
+void ExtensionTabUtil::SetPlatformDelegate(Delegate* delegate) {
+  // Allow setting it only once (also allow reset to nullptr, but then take
+  // special care to free it).
+  CHECK(!g_delegate || !delegate);
+  g_delegate = delegate;
+}
+
+// static
 void ExtensionTabUtil::ScrubTabForExtension(const Extension* extension,
                                             content::WebContents* contents,
                                             api::tabs::Tab* tab) {
@@ -508,6 +522,8 @@ void ExtensionTabUtil::ScrubTabForExtension(const Extension* extension,
     tab->title.reset();
     tab->fav_icon_url.reset();
   }
+  if (g_delegate)
+    g_delegate->ScrubTabForExtension(extension, contents, tab);
 }
 
 bool ExtensionTabUtil::GetTabStripModel(const WebContents* web_contents,

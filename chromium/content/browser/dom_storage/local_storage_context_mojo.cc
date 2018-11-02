@@ -6,6 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/leveldb/public/cpp/util.h"
 #include "components/leveldb/public/interfaces/leveldb.mojom.h"
@@ -19,6 +20,7 @@
 #include "services/file/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "sql/connection.h"
+#include "storage/browser/quota/special_storage_policy.h"
 #include "third_party/leveldatabase/env_chromium.h"
 
 namespace content {
@@ -66,6 +68,7 @@ std::vector<uint8_t> CreateMetaDataKey(const url::Origin& origin) {
 }
 
 void NoOpSuccess(bool success) {}
+void NoOpDatabaseError(leveldb::mojom::DatabaseError error) {}
 
 void MigrateStorageHelper(
     base::FilePath db_path,
@@ -88,6 +91,22 @@ void MigrateStorageHelper(
 void CallMigrationCalback(LevelDBWrapperImpl::ValueMapCallback callback,
                           std::unique_ptr<LevelDBWrapperImpl::ValueMap> data) {
   std::move(callback).Run(std::move(data));
+}
+
+void AddDeleteOriginOperations(
+    std::vector<leveldb::mojom::BatchedOperationPtr>* operations,
+    const url::Origin& origin) {
+  leveldb::mojom::BatchedOperationPtr item =
+      leveldb::mojom::BatchedOperation::New();
+  item->type = leveldb::mojom::BatchOperationType::DELETE_PREFIXED_KEY;
+  item->key = leveldb::StdStringToUint8Vector(kDataPrefix + origin.Serialize() +
+                                              kOriginSeparator);
+  operations->push_back(std::move(item));
+
+  item = leveldb::mojom::BatchedOperation::New();
+  item->type = leveldb::mojom::BatchOperationType::DELETE_KEY;
+  item->key = CreateMetaDataKey(origin);
+  operations->push_back(std::move(item));
 }
 
 }  // namespace
@@ -219,14 +238,14 @@ LocalStorageContextMojo::LocalStorageContextMojo(
     service_manager::Connector* connector,
     scoped_refptr<DOMStorageTaskRunner> task_runner,
     const base::FilePath& old_localstorage_path,
-    const base::FilePath& subdirectory)
-    : connector_(connector),
+    const base::FilePath& subdirectory,
+    scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy)
+    : connector_(connector ? connector->Clone() : nullptr),
       subdirectory_(subdirectory),
+      special_storage_policy_(std::move(special_storage_policy)),
       task_runner_(std::move(task_runner)),
       old_localstorage_path_(old_localstorage_path),
       weak_ptr_factory_(this) {}
-
-LocalStorageContextMojo::~LocalStorageContextMojo() {}
 
 void LocalStorageContextMojo::OpenLocalStorage(
     const url::Origin& origin,
@@ -250,11 +269,18 @@ void LocalStorageContextMojo::DeleteStorage(const url::Origin& origin) {
     return;
   }
 
-  LevelDBWrapperImpl* wrapper = GetOrCreateDBWrapper(origin);
-  // Renderer process expects |source| to always be two newline separated
-  // strings.
-  wrapper->DeleteAll("\n", base::Bind(&NoOpSuccess));
-  wrapper->ScheduleImmediateCommit();
+  auto found = level_db_wrappers_.find(origin);
+  if (found != level_db_wrappers_.end()) {
+    // Renderer process expects |source| to always be two newline separated
+    // strings.
+    found->second->level_db_wrapper()->DeleteAll("\n",
+                                                 base::Bind(&NoOpSuccess));
+    found->second->level_db_wrapper()->ScheduleImmediateCommit();
+  } else if (database_) {
+    std::vector<leveldb::mojom::BatchedOperationPtr> operations;
+    AddDeleteOriginOperations(&operations, origin);
+    database_->Write(std::move(operations), base::Bind(&NoOpDatabaseError));
+  }
 }
 
 void LocalStorageContextMojo::DeleteStorageForPhysicalOrigin(
@@ -272,6 +298,42 @@ void LocalStorageContextMojo::Flush() {
   }
   for (const auto& it : level_db_wrappers_)
     it.second->level_db_wrapper()->ScheduleImmediateCommit();
+}
+
+void LocalStorageContextMojo::ShutdownAndDelete() {
+  DCHECK_NE(connection_state_, CONNECTION_SHUTDOWN);
+
+  // Nothing to do if no connection to the database was ever finished.
+  if (connection_state_ != CONNECTION_FINISHED) {
+    connection_state_ = CONNECTION_SHUTDOWN;
+    OnShutdownComplete(leveldb::mojom::DatabaseError::OK);
+    return;
+  }
+
+  connection_state_ = CONNECTION_SHUTDOWN;
+
+  // Flush any uncommitted data.
+  for (const auto& it : level_db_wrappers_)
+    it.second->level_db_wrapper()->ScheduleImmediateCommit();
+
+  // Respect the content policy settings about what to
+  // keep and what to discard.
+  if (force_keep_session_state_) {
+    OnShutdownComplete(leveldb::mojom::DatabaseError::OK);
+    return;  // Keep everything.
+  }
+
+  bool has_session_only_origins =
+      special_storage_policy_.get() &&
+      special_storage_policy_->HasSessionOnlyOrigins();
+
+  if (has_session_only_origins) {
+    RetrieveStorageUsage(
+        base::BindOnce(&LocalStorageContextMojo::OnGotStorageUsageForShutdown,
+                       base::Unretained(this)));
+  } else {
+    OnShutdownComplete(leveldb::mojom::DatabaseError::OK);
+  }
 }
 
 void LocalStorageContextMojo::PurgeMemory() {
@@ -302,7 +364,13 @@ std::vector<uint8_t> LocalStorageContextMojo::MigrateString(
   return result;
 }
 
+LocalStorageContextMojo::~LocalStorageContextMojo() {
+  DCHECK_EQ(connection_state_, CONNECTION_SHUTDOWN);
+}
+
 void LocalStorageContextMojo::RunWhenConnected(base::OnceClosure callback) {
+  DCHECK_NE(connection_state_, CONNECTION_SHUTDOWN);
+
   // If we don't have a filesystem_connection_, we'll need to establish one.
   if (connection_state_ == NO_CONNECTION) {
     connection_state_ = CONNECTION_IN_PROGRESS;
@@ -582,6 +650,32 @@ void LocalStorageContextMojo::OnGotStorageUsageForDeletePhysicalOrigin(
       DeleteStorage(origin_candidate);
   }
   DeleteStorage(origin);
+}
+
+void LocalStorageContextMojo::OnGotStorageUsageForShutdown(
+    std::vector<LocalStorageUsageInfo> usage) {
+  std::vector<leveldb::mojom::BatchedOperationPtr> operations;
+  for (const auto& info : usage) {
+    if (special_storage_policy_->IsStorageProtected(info.origin))
+      continue;
+    if (!special_storage_policy_->IsStorageSessionOnly(info.origin))
+      continue;
+
+    AddDeleteOriginOperations(&operations, url::Origin(info.origin));
+  }
+
+  if (!operations.empty()) {
+    database_->Write(std::move(operations),
+                     base::Bind(&LocalStorageContextMojo::OnShutdownComplete,
+                                base::Unretained(this)));
+  } else {
+    OnShutdownComplete(leveldb::mojom::DatabaseError::OK);
+  }
+}
+
+void LocalStorageContextMojo::OnShutdownComplete(
+    leveldb::mojom::DatabaseError error) {
+  delete this;
 }
 
 }  // namespace content

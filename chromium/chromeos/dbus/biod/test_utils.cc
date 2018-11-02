@@ -34,12 +34,6 @@ void CopyDBusMethodCallStatus(DBusMethodCallStatus* dest_status,
   *dest_status = src_status;
 }
 
-void CopyBiometricType(biod::BiometricType* dest_type,
-                       biod::BiometricType src_type) {
-  CHECK(dest_type);
-  *dest_type = src_type;
-}
-
 TestBiodObserver::TestBiodObserver() {}
 
 TestBiodObserver::~TestBiodObserver() {}
@@ -64,7 +58,8 @@ void TestBiodObserver::ResetAllCounts() {
 void TestBiodObserver::BiodServiceRestarted() {}
 
 void TestBiodObserver::BiodEnrollScanDoneReceived(biod::ScanResult scan_result,
-                                                  bool is_complete) {
+                                                  bool is_complete,
+                                                  int percent_complete) {
   is_complete ? num_complete_enroll_scans_received_++
               : num_incomplete_enroll_scans_received_++;
 }

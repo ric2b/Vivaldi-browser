@@ -4,14 +4,29 @@
 
 import("//mojo/public/tools/bindings/mojom.gni")
 
-mojom("interfaces") {
+mojom("interfaces_internal") {
+  visibility = [ "//services/resource_coordinator/public/cpp:*" ]
+
   sources = [
-    "memory/constants.mojom",
-    "memory/memory_instrumentation.mojom",
+    "coordination_unit.mojom",
+    "coordination_unit_provider.mojom",
+    "events.mojom",
+    "memory_instrumentation/constants.mojom",
+    "memory_instrumentation/memory_instrumentation.mojom",
+    "service_constants.mojom",
     "tracing/tracing.mojom",
   ]
 
   public_deps = [
     "//mojo/common:common_custom_types",
   ]
+
+  component_output_prefix = "resource_coordinator_public_interfaces_internal"
+  export_class_attribute = "SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT"
+  export_define = "SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_IMPLEMENTATION=1"
+  export_header =
+      "services/resource_coordinator/public/cpp/resource_coordinator_export.h"
+
+  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
+  use_once_callback = false
 }

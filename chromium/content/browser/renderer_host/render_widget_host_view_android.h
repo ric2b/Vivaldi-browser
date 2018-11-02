@@ -21,10 +21,9 @@
 #include "cc/input/selection.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/scheduler/begin_frame_source.h"
+#include "components/viz/frame_sinks/frame_evictor.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/android/content_view_core_impl_observer.h"
-#include "content/browser/renderer_host/delegated_frame_evictor.h"
-#include "content/browser/renderer_host/ime_adapter_android.h"
 #include "content/browser/renderer_host/input/stylus_text_selector.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/text_input_manager.h"
@@ -49,9 +48,11 @@ struct DidOverscrollParams;
 
 namespace content {
 class ContentViewCoreImpl;
+class ImeAdapterAndroid;
 class OverscrollControllerAndroid;
 class RenderWidgetHost;
 class RenderWidgetHostImpl;
+class SelectionPopupController;
 class SynchronousCompositorHost;
 class SynchronousCompositorClient;
 struct NativeWebKeyboardEvent;
@@ -64,7 +65,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       public ui::GestureProviderClient,
       public ui::ViewClient,
       public ui::WindowAndroidObserver,
-      public DelegatedFrameEvictorClient,
+      public viz::FrameEvictorClient,
       public StylusTextSelectorClient,
       public ui::TouchSelectionControllerClient,
       public content::ContentViewCoreImplObserver,
@@ -77,6 +78,19 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   ~RenderWidgetHostViewAndroid() override;
 
   void Blur();
+
+  // Interface used to observe the destruction of a RenderWidgetHostViewAndroid.
+  class DestructionObserver {
+   public:
+    virtual void RenderWidgetHostViewDestroyed(
+        RenderWidgetHostViewAndroid* rwhva) = 0;
+
+   protected:
+    virtual ~DestructionObserver() {}
+  };
+
+  void AddDestructionObserver(DestructionObserver* connector);
+  void RemoveDestructionObserver(DestructionObserver* connector);
 
   // RenderWidgetHostView implementation.
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -134,7 +148,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       override;
   void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
-  void OnBeginFrameDidNotSwap(const cc::BeginFrameAck& ack) override;
+  void OnDidNotProduceFrame(const cc::BeginFrameAck& ack) override;
   void ClearCompositorFrame() override;
   void SetIsInVR(bool is_in_vr) override;
   bool IsInVR() const override;
@@ -171,6 +185,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
                     bool for_touch_handle) override;
   bool OnMouseEvent(const ui::MotionEventAndroid& m) override;
   bool OnMouseWheelEvent(const ui::MotionEventAndroid& event) override;
+  void OnPhysicalBackingSizeChanged() override;
 
   // ui::GestureProviderClient implementation.
   void OnGestureEvent(const ui::GestureEventData& gesture) override;
@@ -189,7 +204,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnAttachedToWindow() override;
   void OnDetachedFromWindow() override;
 
-  // DelegatedFrameEvictor implementation
+  // viz::FrameEvictor implementation
   void EvictDelegatedFrame() override;
 
   // StylusTextSelectorClient implementation.
@@ -228,14 +243,21 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void ResolveTapDisambiguation(double timestamp_seconds,
                                 gfx::Point tap_viewport_offset,
                                 bool is_long_press);
+  void set_ime_adapter(ImeAdapterAndroid* ime_adapter) {
+    ime_adapter_android_ = ime_adapter;
+  }
+  void set_selection_popup_controller(SelectionPopupController* controller) {
+    selection_popup_controller_ = controller;
+  }
+
+  base::WeakPtr<RenderWidgetHostViewAndroid> GetWeakPtrAndroid();
 
   bool OnTouchEvent(const ui::MotionEvent& event);
   bool OnTouchHandleEvent(const ui::MotionEvent& event);
+  int GetTouchHandleHeight();
   void ResetGestureDetection();
   void SetDoubleTapSupportEnabled(bool enabled);
   void SetMultiTouchZoomSupportEnabled(bool enabled);
-
-  long GetNativeImeAdapter();
 
   void WasResized();
 
@@ -246,6 +268,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void DismissTextHandles();
   void SetTextHandlesTemporarilyHidden(bool hidden);
   void OnShowUnhandledTapUIIfNeeded(int x_dip, int y_dip);
+  void OnSelectWordAroundCaretAck(bool did_select,
+                                  int start_adjust,
+                                  int end_adjust);
 
   void SynchronousFrameMetadata(cc::CompositorFrameMetadata frame_metadata);
 
@@ -271,7 +296,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnTextSelectionChanged(TextInputManager* text_input_manager,
                               RenderWidgetHostViewBase* updated_view) override;
 
-  ImeAdapterAndroid* ime_adapter_for_testing() { return &ime_adapter_android_; }
+  ImeAdapterAndroid* ime_adapter_for_testing() { return ime_adapter_android_; }
 
   // Exposed for tests.
   cc::SurfaceId SurfaceIdForTesting() const override;
@@ -346,7 +371,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // ContentViewCoreImpl is our interface to the view system.
   ContentViewCoreImpl* content_view_core_;
 
-  ImeAdapterAndroid ime_adapter_android_;
+  ImeAdapterAndroid* ime_adapter_android_;
+  SelectionPopupController* selection_popup_controller_;
 
   // The background color of the widget.
   SkColor background_color_;
@@ -378,7 +404,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   // Manages selection handle rendering and manipulation.
   // This will always be NULL if |content_view_core_| is NULL.
-  std::unique_ptr<ui::TouchSelectionController> selection_controller_;
+  std::unique_ptr<ui::TouchSelectionController> touch_selection_controller_;
 
   // Bounds to use if we have no backing ContentViewCore
   gfx::Rect default_bounds_;
@@ -388,7 +414,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   SynchronousCompositorClient* synchronous_compositor_client_;
 
-  std::unique_ptr<DelegatedFrameEvictor> frame_evictor_;
+  std::unique_ptr<viz::FrameEvictor> frame_evictor_;
 
   bool observing_root_window_;
 
@@ -400,6 +426,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
+
+  base::ObserverList<DestructionObserver> destruction_observers_;
 
   base::WeakPtrFactory<RenderWidgetHostViewAndroid> weak_ptr_factory_;
 

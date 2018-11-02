@@ -7,8 +7,9 @@
 /**
  * Creates a new OpenPDFParamsParser. This parses the open pdf parameters
  * passed in the url to set initial viewport settings for opening the pdf.
- * @param {Object} getNamedDestinationsFunction The function called to fetch
+ * @param {!Function} getNamedDestinationsFunction The function called to fetch
  *     the page number for a named destination.
+ * @constructor
  */
 function OpenPDFParamsParser(getNamedDestinationsFunction) {
   this.outstandingRequests_ = [];
@@ -21,7 +22,7 @@ OpenPDFParamsParser.prototype = {
    * Parse zoom parameter of open PDF parameters. If this
    * parameter is passed while opening PDF then PDF should be opened
    * at the specified zoom level.
-   * @param {number} zoom value.
+   * @param {string} paramValue zoom value.
    * @param {Object} viewportPosition to store zoom and position value.
    */
   parseZoomParam_: function(paramValue, viewportPosition) {
@@ -112,7 +113,7 @@ OpenPDFParamsParser.prototype = {
 
     if ('page' in paramsDictionary) {
       // |pageNumber| is 1-based, but goToPage() take a zero-based page number.
-      var pageNumber = parseInt(paramsDictionary['page']);
+      var pageNumber = parseInt(paramsDictionary['page'], 10);
       if (!isNaN(pageNumber) && pageNumber > 0)
         viewportPosition['page'] = pageNumber - 1;
     }

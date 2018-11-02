@@ -4,8 +4,9 @@
 
 #include "core/inspector/ThreadDebugger.h"
 
+#include <memory>
 #include "bindings/core/v8/SourceLocation.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8DOMException.h"
 #include "bindings/core/v8/V8DOMTokenList.h"
 #include "bindings/core/v8/V8Event.h"
@@ -23,9 +24,8 @@
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/V8InspectorString.h"
 #include "platform/ScriptForbiddenScope.h"
-#include "wtf/CurrentTime.h"
-#include "wtf/PtrUtil.h"
-#include <memory>
+#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -422,14 +422,14 @@ void ThreadDebugger::consoleTime(const v8_inspector::StringView& title) {
   // TODO(dgozman): we can save on a copy here if trace macro would take a
   // pointer with length.
   TRACE_EVENT_COPY_ASYNC_BEGIN0("blink.console",
-                                ToCoreString(title).Utf8().Data(), this);
+                                ToCoreString(title).Utf8().data(), this);
 }
 
 void ThreadDebugger::consoleTimeEnd(const v8_inspector::StringView& title) {
   // TODO(dgozman): we can save on a copy here if trace macro would take a
   // pointer with length.
   TRACE_EVENT_COPY_ASYNC_END0("blink.console",
-                              ToCoreString(title).Utf8().Data(), this);
+                              ToCoreString(title).Utf8().data(), this);
 }
 
 void ThreadDebugger::consoleTimeStamp(const v8_inspector::StringView& title) {

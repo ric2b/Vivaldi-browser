@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">જ્યારે તમે હોમ બટન ક્લિક કરો છો ત્યારે જે પૃષ્ઠ દર્શાવવામાં આવે છે તે આ એક્સટેન્શને બદલ્યું છે.</translation>
 <translation id="1588438908519853928">સામાન્ય</translation>
 <translation id="1616206807336925449">આ એક્સટેન્શનને કોઈ વિશિષ્ટ પરવાનગીઓની જરૂર નથી.</translation>
-<translation id="1620510694547887537">કૅમેરો</translation>
 <translation id="1635033183663317347">તમારા સંરક્ષક દ્વારા ઇન્સ્ટોલ કરાયું</translation>
 <translation id="1723824996674794290">&amp;નવી વિંડો</translation>
 <translation id="1729533290416704613">જ્યારે તમે ઑમ્નિબૉક્સ પરથી શોધ કરો ત્યારે કયું પૃષ્ઠ બતાવવામાં આવે તે તેનું પણ નિયંત્રણ કરે છે.</translation>
-<translation id="1789575671122666129">પૉપઅપ્સ</translation>
 <translation id="1850508293116537636">&amp;ઘડિયાળની દિશામાં ફેરવો</translation>
 <translation id="1859234291848436338">લેખનના દિશાનિર્દેશ</translation>
 <translation id="1901303067676059328">&amp;બધા પસંદ કરો</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">આ પ્લગિન છુપાવો </translation>
 <translation id="2087822576218954668">છાપો: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">પ્લગ-ઇન અપડેટ કરો</translation>
-<translation id="2147827593068025794">પૃષ્ઠભૂમિ સમન્વયન</translation>
 <translation id="215753907730220065">પૂર્ણ સ્ક્રીનથી બહાર નીકળો</translation>
 <translation id="2177950615300672361">છુપો ટેબ: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">શોધો (ડિફૉલ્ટ)</translation>
 <translation id="219008588003277019">મૂળ ક્લાયંટ મોડ્યુલ: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">સાદા ટેક્સ્ટ તરીકે પેસ્ટ કરો</translation>
 <translation id="2282146716419988068">GPU પ્રક્રિયા</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">તમારા કમ્પ્યુટર પરના બીજા પ્રોગ્રામે એક એક્સ્ટેંશન ઉમેર્યું જે Vivaldi કાર્ય કરે છે તે રીતને બદલી શકે છે.</translation>
 <translation id="2445081178310039857">એક્સ્ટેંશન રૂટ ડાયરેક્ટરી આવશ્યક છે.</translation>
 <translation id="2470702053775288986">અસમર્થિત એક્સ્ટેન્શન્સ અક્ષમ કર્યાં</translation>
-<translation id="2482878487686419369">સૂચનાઓ</translation>
 <translation id="2501797496290880632">એક શૉર્ટકટ લખો</translation>
-<translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> ઇન્સ્ટોલ કરો</translation>
 <translation id="2550212893339833758">સ્વૅપ કરેલ મેમરી</translation>
 <translation id="2662876636500006917">Vivaldi વેબ બજાર</translation>
 <translation id="2678063897982469759">ફરી સક્ષમ કરો</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">વપરાશકર્તા હેન્ડલ કરે છે</translation>
 <translation id="3222066309010235055">પ્રીરેન્ડર: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">માઇક્રોફોન</translation>
 <translation id="3241680850019875542">પૅક કરવા માટે એક્સ્ટેંશનની રૂટ ડાયરેક્ટરી પસંદ કરો. એક્સ્ટેંશનને અપડેટ કરવા માટે, ફરી ઉપયોગ કરવા ખાનગી કી ફાઇલ પણ પસંદ કરો.</translation>
 <translation id="3280237271814976245">આ &amp;રૂપમાં સાચવો...</translation>
 <translation id="3288047731229977326">વિકાસકર્તા મોડમાં ચાલી રહેલા એક્સટેન્શન્સ તમારા કમ્પ્યુટરને નુકસાન પહોંચાડી શકે છે. જો તમે વિકાસકર્તા નથી, તો તમે સુરક્ષિત રહેવા માટે વિકાસકર્તા મોડમાં ચાલી રહેલા આ એક્સ્ટેન્શન્સને અક્ષમ કરવા જોઈએ.</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">છબી સરનામું કૉ&amp;પિ કરો</translation>
 <translation id="335985608243443814">બ્રાઉઝ કરો...</translation>
 <translation id="3378572629723696641">આ એક્સ્ટેન્શન દૂષિત થયેલ હોઈ શકે છે.</translation>
-<translation id="3427092606871434483">મંજૂરી આપો (ડિફૉલ્ટ)</translation>
 <translation id="3435896845095436175">સક્ષમ કરો</translation>
 <translation id="345693547134384690">નવા ટૅબમાં &amp;છબી ખોલો</translation>
 <translation id="3467267818798281173">સૂચનો માટે Google ને પૂછો</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">છુ&amp;પી વિંડોમાં લિંક ખોલો</translation>
 <translation id="3678156199662914018">એક્સ્ટેંશન: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">લોડ કરી રહ્યું છે...</translation>
-<translation id="3789841737615482174">ઇન્સ્ટોલ કરો</translation>
 <translation id="3798449238516105146">સંસ્કરણ</translation>
 <translation id="3866249974567520381">વર્ણન</translation>
 <translation id="3905761538810670789">ઍપ્લિકેશન સુધારો</translation>
@@ -103,13 +94,11 @@
 <translation id="4096508467498758490">વિકાસકર્તા મોડ એક્સ્ટેન્શન્સ અક્ષમ કરો</translation>
 <translation id="4100839878934973028">તમારા કમ્પ્યુટર પરના બીજા પ્રોગ્રામે એક ઍપ્લિકેશન ઉમેરી જે Vivaldi કાર્ય કરે છે તે રીતને બદલી શકે છે.</translation>
 <translation id="4130207949184424187">જ્યારે તમે ઑમ્નિબૉક્સથી શોધ કરો છો ત્યારે જે પૃષ્ઠ દર્શાવવામાં આવે છે તે આ એક્સટેન્શને બદલ્યું છે.</translation>
-<translation id="4165986682804962316">સાઇટ સેટિંગ્સ</translation>
 <translation id="4176463684765177261">અક્ષમ કરેલું</translation>
 <translation id="4200983522494130825">નવું &amp;ટૅબ</translation>
 <translation id="420665587194630159">(આ એક્સ્ટેંશન પ્રબંધિત છે અને તેને દૂર અથવા અક્ષમ કરી શકાતું નથી)</translation>
 <translation id="4240511609794012987">શેર્ડ મેમરી</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K લાઇવ)</translation>
-<translation id="4312866146174492540">અવરોધિત કરો (ડિફૉલ્ટ)</translation>
 <translation id="4384652540891215547">એક્સટેન્શન સક્રિય કરો</translation>
 <translation id="4394049700291259645">અક્ષમ કરો</translation>
 <translation id="4423482519432579560">&amp;જોડણી તપાસો</translation>
@@ -122,7 +111,6 @@
 <translation id="4677772697204437347">GPU મેમરી</translation>
 <translation id="4711638718396952945">સેટિંગ્સ પુનઃસ્થાપિત કરો</translation>
 <translation id="4839303808932127586">વિડિઓને આ રૂપે સા&amp;ચવો...</translation>
-<translation id="4851858059374029925"><ph name="PLUGIN_NAME" /> ઇન્સ્ટૉલ કરીએ? તમને જેના પર વિશ્વાસ હોય તે જ પ્લગ-ઇન્સ ઇન્સ્ટૉલ કરો.</translation>
 <translation id="488785315393301722">વિગતો બતાવો</translation>
 <translation id="4911714727432509308">કોઈ એક્સટેન્શનને કીબોર્ડ શૉર્ટકટ્સ અસાઇન કરેલા નથી.</translation>
 <translation id="4927301649992043040">પૅક એક્સ્ટેંશન</translation>
@@ -153,12 +141,10 @@
 <translation id="5646376287012673985">સ્થાન</translation>
 <translation id="5715711091495208045">પ્લગિન બ્રોકર: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">ઑડિયો આ રૂપે સા&amp;ચવો...</translation>
-<translation id="5778550464785688721">MIDI ઉપકરણોનું પૂર્ણ નિયંત્રણ</translation>
 <translation id="5780973441651030252">પ્રાધાન્યતા પર પ્રક્રિયા કરો</translation>
 <translation id="5804241973901381774">પરવાનગીઓ</translation>
 <translation id="583281660410589416">અજ્ઞાત</translation>
 <translation id="59174027418879706">સક્ષમ</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 ઉપયોગમાં છે}one{# ઉપયોગમાં છે}other{# ઉપયોગમાં છે}}</translation>
 <translation id="5956585768868398362">શું આ તમારી અપેક્ષા મુજબનું શોધ પૃષ્ઠ છે?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> પિક)</translation>
 <translation id="5965661248935608907">જ્યારે તમે હોમ બટન ક્લિક કરો અથવા ઑમ્નિબૉક્સ પરથી શોધ કરો ત્યારે કયું પૃષ્ઠ બતાવવામાં આવે તે તેનું પણ નિયંત્રણ કરે છે.</translation>
@@ -187,14 +173,12 @@
 <translation id="6787839852456839824">કીબોર્ડ શોર્ટકટ્સ</translation>
 <translation id="6798954102094737107">પ્લગિન: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">ફેરફારો રાખો</translation>
-<translation id="6863910145616405334">પ્લગ-ઇન મળ્યું નથી</translation>
 <translation id="6886871292305414135">લિંક નવા &amp;ટૅબમાં ખોલો</translation>
 <translation id="6900284862687837908">પૃષ્ઠભૂમિ ઍપ્લિકેશન: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ફાઇલ ઍક્સેસને રદબાતલ કરો</translation>
 <translation id="6974053822202609517">જમણેથી ડાબે</translation>
 <translation id="7013485839273047434">વધુ એક્સ્ટેન્શન્સ મેળવો</translation>
 <translation id="708060913198414444">ઑડિઓ સરનામું કૉ&amp;પિ કરો</translation>
-<translation id="7105578512429498960">આ સામગ્રી પ્રદર્શિત કરવા માટે <ph name="PLUGIN_NAME" /> ને ઇન્સ્ટૉલ કરો</translation>
 <translation id="7144878232160441200">ફરી પ્રયાસ કરો</translation>
 <translation id="7206693748120342859"><ph name="PLUGIN_NAME" /> ડાઉનલોડ કરી રહ્યું છે...</translation>
 <translation id="7287143125007575591">ઍક્સેસ નિષેધ.</translation>
@@ -221,7 +205,6 @@
 <translation id="7982789257301363584">નેટવર્ક</translation>
 <translation id="7999229196265990314">નીચેની ફાઇલો બનાવાઈ: એક્સટેન્શન: <ph name="EXTENSION_FILE" />કી ફાઇલ: <ph name="KEY_FILE" />તમારી કી ફાઇલને સુરક્ષિત સ્થાન પર મૂકો. તમને તેની જરૂરિયાત તમારા એક્સટેન્શનના નવા સંસ્કરણ બનાવવા માટે પડશે.</translation>
 <translation id="8004582292198964060">બ્રાઉઝર</translation>
-<translation id="8037357227543935929">પૂછો (ડિફૉલ્ટ)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">&amp;ટેક્સ્ટ ફીલ્ડ્સની જોડણી તપાસો</translation>
 <translation id="8261378640211443080">આ એક્સટેન્શન <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> માં સૂચિબદ્ધ નથી અને તમારી જાણ વિના ઉમેરવામાં આવ્યું હોઈ શકે છે.</translation>
@@ -237,7 +220,6 @@
 <translation id="8664389313780386848">પૃષ્ઠ સ્રોત &amp;જુઓ</translation>
 <translation id="8719653885894320876"><ph name="PLUGIN_NAME" /> ડાઉનલોડ નિષ્ફળ થયું</translation>
 <translation id="873545264931343897">જ્યારે <ph name="PLUGIN_NAME" /> અપડેટ કરવાનું સમાપ્ત કરી લે, ત્યારે તેને સક્રિય કરવા માટે પૃષ્ઠને ફરીથી લોડ કરો</translation>
-<translation id="8763204422633679667">જ્યારે <ph name="PLUGIN_NAME" /> ઇન્સ્ટૉલ કરવાનું સમાપ્ત કરી લે, ત્યારે તેને સક્રિય કરવા માટે પૃષ્ઠને ફરીથી લોડ કરો</translation>
 <translation id="8798099450830957504">ડિફૉલ્ટ</translation>
 <translation id="8808478386290700967">વેબ બજાર</translation>
 <translation id="8859174528519900719">સબફ્રેમ: <ph name="SUBFRAME_SITE" /></translation>

@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 #include "third_party/WebKit/public/platform/modules/webshare/webshare.mojom.h"
 #include "third_party/WebKit/public/platform/site_engagement.mojom.h"
 
@@ -27,7 +28,8 @@ class ShareServiceImpl : public blink::mojom::ShareService {
   ShareServiceImpl();
   ~ShareServiceImpl() override;
 
-  static void Create(mojo::InterfaceRequest<ShareService> request);
+  static void Create(const service_manager::BindSourceInfo& source_info,
+                     mojo::InterfaceRequest<ShareService> request);
 
   // blink::mojom::ShareService overrides:
   void Share(const std::string& title,
@@ -57,7 +59,7 @@ class ShareServiceImpl : public blink::mojom::ShareService {
   // target, or is null if the user cancelled the share. Virtual for testing.
   virtual void ShowPickerDialog(
       const std::vector<std::pair<base::string16, GURL>>& targets,
-      const base::Callback<void(base::Optional<std::string>)>& callback);
+      chrome::WebShareTargetPickerCallback callback);
 
   // Opens a new tab and navigates to |target_url|.
   // Virtual for testing purposes.
@@ -88,7 +90,7 @@ class ShareServiceImpl : public blink::mojom::ShareService {
                       const std::string& text,
                       const GURL& share_url,
                       const ShareCallback& callback,
-                      base::Optional<std::string> result);
+                      const base::Optional<std::string>& result);
 
   base::WeakPtrFactory<ShareServiceImpl> weak_factory_;
 

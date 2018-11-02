@@ -61,7 +61,7 @@ class StyleFetchedImageSet final : public StyleImage,
   bool CanRender() const override;
   bool IsLoaded() const override;
   bool ErrorOccurred() const override;
-  LayoutSize ImageSize(const LayoutObject&,
+  LayoutSize ImageSize(const Document&,
                        float multiplier,
                        const LayoutSize& default_object_size) const override;
   bool ImageHasRelativeSize() const override;
@@ -69,10 +69,9 @@ class StyleFetchedImageSet final : public StyleImage,
   void AddClient(LayoutObject*) override;
   void RemoveClient(LayoutObject*) override;
   PassRefPtr<Image> GetImage(const LayoutObject&,
-                             const IntSize&,
-                             float) const override;
+                             const IntSize&) const override;
   float ImageScaleFactor() const override { return image_scale_factor_; }
-  bool KnownToBeOpaque(const LayoutObject&) const override;
+  bool KnownToBeOpaque(const Document&, const ComputedStyle&) const override;
   ImageResourceContent* CachedImage() const override;
 
   DECLARE_VIRTUAL_TRACE();

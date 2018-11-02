@@ -16,6 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/single_thread_task_runner.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/threading/thread_checker.h"
 #include "device/hid/hid_device_info.h"
 
@@ -41,22 +42,19 @@ class HidService {
     virtual void OnDeviceRemovedCleanup(scoped_refptr<HidDeviceInfo> info);
   };
 
-  typedef base::Callback<void(const std::vector<scoped_refptr<HidDeviceInfo>>&)>
-      GetDevicesCallback;
-  typedef base::Callback<void(scoped_refptr<HidConnection> connection)>
-      ConnectCallback;
+  using GetDevicesCallback =
+      base::Callback<void(const std::vector<scoped_refptr<HidDeviceInfo>>&)>;
+  using ConnectCallback =
+      base::Callback<void(scoped_refptr<HidConnection> connection)>;
 
-  // This function should be called on a thread with a MessageLoopForUI and be
-  // passed the task runner for a thread with a MessageLoopForIO.
-  static std::unique_ptr<HidService> Create(
-      scoped_refptr<base::SingleThreadTaskRunner> file_task_runner);
+  static constexpr base::TaskTraits kBlockingTaskTraits = {
+      base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+      base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN};
+
+  // This function should be called on a thread with a MessageLoopForUI.
+  static std::unique_ptr<HidService> Create();
 
   virtual ~HidService();
-
-  // Shuts down the HidService. Must be called before destroying the HidService
-  // when tasks can still be posted to the |file_task_runner| provided to
-  // Create().
-  virtual void Shutdown();
 
   // Enumerates available devices. The provided callback will always be posted
   // to the calling thread's task runner.
@@ -95,10 +93,6 @@ class HidService {
   bool enumeration_ready_ = false;
   std::vector<GetDevicesCallback> pending_enumerations_;
   base::ObserverList<Observer, true> observer_list_;
-
-#if DCHECK_IS_ON()
-  bool did_shutdown_ = false;
-#endif
 
   DISALLOW_COPY_AND_ASSIGN(HidService);
 };

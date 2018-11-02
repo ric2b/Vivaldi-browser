@@ -422,13 +422,21 @@ gfx::Rect View::GetBoundsInScreen() const {
 }
 
 gfx::Size View::GetPreferredSize() const {
-  if (layout_manager_.get())
-    return layout_manager_->GetPreferredSize(this);
-  return gfx::Size();
+  if (preferred_size_)
+    return *preferred_size_;
+  return CalculatePreferredSize();
 }
 
 int View::GetBaseline() const {
   return -1;
+}
+
+void View::SetPreferredSize(const gfx::Size& size) {
+  if (preferred_size_ && *preferred_size_ == size)
+    return;
+
+  preferred_size_ = size;
+  PreferredSizeChanged();
 }
 
 void View::SizeToPreferredSize() {
@@ -537,39 +545,16 @@ void View::SetPaintToLayer(ui::LayerType layer_type) {
   if (paint_to_layer_ && (layer()->type() == layer_type))
     return;
 
-  DestroyLayer();
+  DestroyLayerImpl(LayerChangeNotifyBehavior::DONT_NOTIFY);
   CreateLayer(layer_type);
   paint_to_layer_ = true;
+
+  // Notify the parent chain about the layer change.
+  NotifyParentsOfLayerChange();
 }
 
 void View::DestroyLayer() {
-  if (!paint_to_layer_)
-    return;
-
-  paint_to_layer_ = false;
-  if (!layer())
-    return;
-
-  ui::Layer* new_parent = layer()->parent();
-  std::vector<ui::Layer*> children = layer()->children();
-  for (size_t i = 0; i < children.size(); ++i) {
-    layer()->Remove(children[i]);
-    if (new_parent)
-      new_parent->Add(children[i]);
-  }
-
-  LayerOwner::DestroyLayer();
-
-  if (new_parent)
-    ReorderLayers();
-
-  UpdateChildLayerBounds(CalculateOffsetToAncestorWithLayer(NULL));
-
-  SchedulePaint();
-
-  Widget* widget = GetWidget();
-  if (widget)
-    widget->LayerTreeChanged();
+  DestroyLayerImpl(LayerChangeNotifyBehavior::NOTIFY);
 }
 
 std::unique_ptr<ui::Layer> View::RecreateLayer() {
@@ -596,9 +581,14 @@ int View::GetMirroredX() const {
   return parent_ ? parent_->GetMirroredXForRect(bounds_) : x();
 }
 
-int View::GetMirroredXForRect(const gfx::Rect& bounds) const {
-  return base::i18n::IsRTL() ?
-      (width() - bounds.x() - bounds.width()) : bounds.x();
+int View::GetMirroredXForRect(const gfx::Rect& rect) const {
+  return base::i18n::IsRTL() ? (width() - rect.x() - rect.width()) : rect.x();
+}
+
+gfx::Rect View::GetMirroredRect(const gfx::Rect& rect) const {
+  gfx::Rect mirrored_rect = rect;
+  mirrored_rect.set_x(GetMirroredXForRect(rect));
+  return mirrored_rect;
 }
 
 int View::GetMirroredXInView(int x) const {
@@ -1500,6 +1490,12 @@ bool View::HasObserver(const ViewObserver* observer) const {
 
 // Size and disposition --------------------------------------------------------
 
+gfx::Size View::CalculatePreferredSize() const {
+  if (layout_manager_.get())
+    return layout_manager_->GetPreferredSize(this);
+  return gfx::Size();
+}
+
 void View::OnBoundsChanged(const gfx::Rect& previous_bounds) {
 }
 
@@ -1552,19 +1548,15 @@ void View::OnPaint(gfx::Canvas* canvas) {
 }
 
 void View::OnPaintBackground(gfx::Canvas* canvas) {
-  if (background_.get()) {
-    TRACE_EVENT2("views", "View::OnPaintBackground",
-                 "width", canvas->sk_canvas()->getBaseLayerSize().width(),
-                 "height", canvas->sk_canvas()->getBaseLayerSize().height());
+  if (background_) {
+    TRACE_EVENT0("views", "View::OnPaintBackground");
     background_->Paint(canvas, this);
   }
 }
 
 void View::OnPaintBorder(gfx::Canvas* canvas) {
-  if (border_.get()) {
-    TRACE_EVENT2("views", "View::OnPaintBorder",
-                 "width", canvas->sk_canvas()->getBaseLayerSize().width(),
-                 "height", canvas->sk_canvas()->getBaseLayerSize().height());
+  if (border_) {
+    TRACE_EVENT0("views", "View::OnPaintBorder");
     border_->Paint(*this, canvas);
   }
 }
@@ -1629,6 +1621,49 @@ void View::UpdateChildLayerVisibility(bool ancestor_visible) {
     internal::ScopedChildrenLock lock(this);
     for (auto* child : children_)
       child->UpdateChildLayerVisibility(ancestor_visible && visible_);
+  }
+}
+
+void View::DestroyLayerImpl(LayerChangeNotifyBehavior notify_parents) {
+  if (!paint_to_layer_)
+    return;
+
+  paint_to_layer_ = false;
+  if (!layer())
+    return;
+
+  ui::Layer* new_parent = layer()->parent();
+  std::vector<ui::Layer*> children = layer()->children();
+  for (size_t i = 0; i < children.size(); ++i) {
+    layer()->Remove(children[i]);
+    if (new_parent)
+      new_parent->Add(children[i]);
+  }
+
+  LayerOwner::DestroyLayer();
+
+  if (new_parent)
+    ReorderLayers();
+
+  UpdateChildLayerBounds(CalculateOffsetToAncestorWithLayer(NULL));
+
+  SchedulePaint();
+
+  // Notify the parent chain about the layer change.
+  if (notify_parents == LayerChangeNotifyBehavior::NOTIFY)
+    NotifyParentsOfLayerChange();
+
+  Widget* widget = GetWidget();
+  if (widget)
+    widget->LayerTreeChanged();
+}
+
+void View::NotifyParentsOfLayerChange() {
+  // Notify the parent chain about the layer change.
+  View* view_parent = parent();
+  while (view_parent) {
+    view_parent->OnChildLayerChanged(this);
+    view_parent = view_parent->parent();
   }
 }
 
@@ -1699,6 +1734,8 @@ void View::ReorderChildLayers(ui::Layer* parent_layer) {
       child->ReorderChildLayers(parent_layer);
   }
 }
+
+void View::OnChildLayerChanged(View* child) {}
 
 // Input -----------------------------------------------------------------------
 
@@ -2118,6 +2155,8 @@ void View::PropagateNativeThemeChanged(const ui::NativeTheme* theme) {
       child->PropagateNativeThemeChanged(theme);
   }
   OnNativeThemeChanged(theme);
+  for (ViewObserver& observer : observers_)
+    observer.OnViewNativeThemeChanged(this);
 }
 
 // Size and disposition --------------------------------------------------------

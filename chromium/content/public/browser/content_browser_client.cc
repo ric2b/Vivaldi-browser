@@ -15,8 +15,10 @@
 #include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/common/sandbox_type.h"
+#include "media/audio/audio_manager.h"
 #include "media/base/cdm_factory.h"
 #include "media/media_features.h"
+#include "net/cert/x509_certificate.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
@@ -116,7 +118,7 @@ bool ContentBrowserClient::ShouldSwapBrowsingInstancesForNavigation(
   return false;
 }
 
-media::ScopedAudioManagerPtr ContentBrowserClient::CreateAudioManager(
+std::unique_ptr<media::AudioManager> ContentBrowserClient::CreateAudioManager(
     media::AudioLogFactory* audio_log_factory) {
   return nullptr;
 }
@@ -186,10 +188,6 @@ bool ContentBrowserClient::AllowSetCookie(const GURL& url,
   return true;
 }
 
-bool ContentBrowserClient::AllowSaveLocalState(ResourceContext* context) {
-  return true;
-}
-
 void ContentBrowserClient::AllowWorkerFileSystem(
     const GURL& url,
     ResourceContext* context,
@@ -205,14 +203,6 @@ bool ContentBrowserClient::AllowWorkerIndexedDB(
     const std::vector<std::pair<int, int> >& render_frames) {
   return true;
 }
-
-#if BUILDFLAG(ENABLE_WEBRTC)
-bool ContentBrowserClient::AllowWebRTCIdentityCache(const GURL& url,
-                                                    const GURL& first_party_url,
-                                                    ResourceContext* context) {
-  return true;
-}
-#endif  // BUILDFLAG(ENABLE_WEBRTC)
 
 ContentBrowserClient::AllowWebBluetoothResult
 ContentBrowserClient::AllowWebBluetooth(
@@ -238,9 +228,23 @@ void ContentBrowserClient::GetQuotaSettings(
   callback.Run(storage::GetNoQuotaSettings());
 }
 
+void ContentBrowserClient::AllowCertificateError(
+    WebContents* web_contents,
+    int cert_error,
+    const net::SSLInfo& ssl_info,
+    const GURL& request_url,
+    ResourceType resource_type,
+    bool overridable,
+    bool strict_enforcement,
+    bool expired_previous_decision,
+    const base::Callback<void(CertificateRequestResultType)>& callback) {
+  callback.Run(CERTIFICATE_REQUEST_RESULT_TYPE_DENY);
+}
+
 void ContentBrowserClient::SelectClientCertificate(
     WebContents* web_contents,
     net::SSLCertRequestInfo* cert_request_info,
+    net::CertificateList client_certs,
     std::unique_ptr<ClientCertificateDelegate> delegate) {}
 
 net::URLRequestContext* ContentBrowserClient::OverrideRequestContextForURL(
@@ -284,8 +288,7 @@ ContentBrowserClient::GetPlatformNotificationService() {
 }
 
 bool ContentBrowserClient::CanCreateWindow(
-    int opener_render_process_id,
-    int opener_render_frame_id,
+    RenderFrameHost* opener,
     const GURL& opener_url,
     const GURL& opener_top_level_frame_url,
     const GURL& source_origin,
@@ -297,7 +300,6 @@ bool ContentBrowserClient::CanCreateWindow(
     const blink::mojom::WindowFeatures& features,
     bool user_gesture,
     bool opener_suppressed,
-    ResourceContext* context,
     bool* no_javascript_access) {
   *no_javascript_access = false;
   return true;
@@ -383,6 +385,13 @@ std::string ContentBrowserClient::GetServiceUserIdForBrowserContext(
   return base::GenerateGUID();
 }
 
+bool ContentBrowserClient::BindAssociatedInterfaceRequestFromFrame(
+    RenderFrameHost* render_frame_host,
+    const std::string& interface_name,
+    mojo::ScopedInterfaceEndpointHandle* handle) {
+  return false;
+}
+
 ControllerPresentationServiceDelegate*
 ContentBrowserClient::GetControllerPresentationServiceDelegate(
     WebContents* web_contents) {
@@ -445,6 +454,10 @@ ContentBrowserClient::GetMemoryCoordinatorDelegate() {
 }
 
 ::rappor::RapporService* ContentBrowserClient::GetRapporService() {
+  return nullptr;
+}
+
+::ukm::UkmRecorder* ContentBrowserClient::GetUkmRecorder() {
   return nullptr;
 }
 

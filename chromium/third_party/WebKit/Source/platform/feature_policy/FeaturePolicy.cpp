@@ -12,49 +12,30 @@
 
 namespace blink {
 
-WebFeaturePolicyFeature GetWebFeaturePolicyFeature(const String& feature) {
-  if (feature == "fullscreen")
-    return WebFeaturePolicyFeature::kFullscreen;
-  if (feature == "payment")
-    return WebFeaturePolicyFeature::kPayment;
-  if (feature == "vibrate")
-    return WebFeaturePolicyFeature::kVibrate;
-  if (RuntimeEnabledFeatures::featurePolicyExperimentalFeaturesEnabled()) {
-    if (feature == "camera")
-      return WebFeaturePolicyFeature::kCamera;
-    if (feature == "eme")
-      return WebFeaturePolicyFeature::kEme;
-    if (feature == "microphone")
-      return WebFeaturePolicyFeature::kMicrophone;
-    if (feature == "speaker")
-      return WebFeaturePolicyFeature::kSpeaker;
-    if (feature == "cookie")
-      return WebFeaturePolicyFeature::kDocumentCookie;
-    if (feature == "domain")
-      return WebFeaturePolicyFeature::kDocumentDomain;
-    if (feature == "docwrite")
-      return WebFeaturePolicyFeature::kDocumentWrite;
-    if (feature == "geolocation")
-      return WebFeaturePolicyFeature::kGeolocation;
-    if (feature == "midi")
-      return WebFeaturePolicyFeature::kMidiFeature;
-    if (feature == "notifications")
-      return WebFeaturePolicyFeature::kNotifications;
-    if (feature == "push")
-      return WebFeaturePolicyFeature::kPush;
-    if (feature == "sync-script")
-      return WebFeaturePolicyFeature::kSyncScript;
-    if (feature == "sync-xhr")
-      return WebFeaturePolicyFeature::kSyncXHR;
-    if (feature == "webrtc")
-      return WebFeaturePolicyFeature::kWebRTC;
-  }
-  return WebFeaturePolicyFeature::kNotFound;
+namespace {
+
+void AddAllowFeatureToList(
+    WebFeaturePolicyFeature feature,
+    Vector<WebParsedFeaturePolicyDeclaration>& whitelists) {
+  WebParsedFeaturePolicyDeclaration whitelist;
+  whitelist.feature = feature;
+  whitelist.matches_all_origins = true;
+  whitelists.push_back(whitelist);
 }
+
+}  // namespace
 
 WebParsedFeaturePolicy ParseFeaturePolicy(const String& policy,
                                           RefPtr<SecurityOrigin> origin,
                                           Vector<String>* messages) {
+  return ParseFeaturePolicy(policy, origin, messages,
+                            GetDefaultFeatureNameMap());
+}
+
+WebParsedFeaturePolicy ParseFeaturePolicy(const String& policy,
+                                          RefPtr<SecurityOrigin> origin,
+                                          Vector<String>* messages,
+                                          const FeatureNameMap& feature_names) {
   Vector<WebParsedFeaturePolicyDeclaration> whitelists;
 
   // Use a reasonable parse depth limit; the actual maximum depth is only going
@@ -77,9 +58,9 @@ WebParsedFeaturePolicy ParseFeaturePolicy(const String& policy,
 
     for (size_t j = 0; j < item->size(); ++j) {
       JSONObject::Entry entry = item->at(j);
-      WebFeaturePolicyFeature feature = GetWebFeaturePolicyFeature(entry.first);
-      if (feature == WebFeaturePolicyFeature::kNotFound)
+      if (!feature_names.Contains(entry.first))
         continue;  // Unrecognized feature; skip
+      WebFeaturePolicyFeature feature = feature_names.at(entry.first);
       JSONArray* targets = JSONArray::Cast(entry.second);
       if (!targets) {
         if (messages)
@@ -93,7 +74,7 @@ WebParsedFeaturePolicy ParseFeaturePolicy(const String& policy,
       String target_string;
       for (size_t j = 0; j < targets->size(); ++j) {
         if (targets->at(j)->AsString(&target_string)) {
-          if (DeprecatedEqualIgnoringCase(target_string, "self")) {
+          if (EqualIgnoringASCIICase(target_string, "self")) {
             if (!origin->IsUnique())
               origins.push_back(origin);
           } else if (target_string == "*") {
@@ -116,19 +97,91 @@ WebParsedFeaturePolicy ParseFeaturePolicy(const String& policy,
   return whitelists;
 }
 
-// TODO(lunalu): also take information of allowfullscreen and
-// allowpaymentrequest into account when constructing the whitelist.
 WebParsedFeaturePolicy GetContainerPolicyFromAllowedFeatures(
     const WebVector<WebFeaturePolicyFeature>& features,
+    bool allowfullscreen,
+    bool allowpayment,
     RefPtr<SecurityOrigin> origin) {
   Vector<WebParsedFeaturePolicyDeclaration> whitelists;
+  bool override_payment = false;
+  bool override_fullscreen = false;
   for (const WebFeaturePolicyFeature feature : features) {
+    // Container policy should override "allowfullscreen" and
+    // "allowpaymentrequest" policies.
+    if (feature == WebFeaturePolicyFeature::kPayment)
+      override_payment = true;
+    if (feature == WebFeaturePolicyFeature::kFullscreen)
+      override_fullscreen = true;
+
     WebParsedFeaturePolicyDeclaration whitelist;
     whitelist.feature = feature;
     whitelist.origins = Vector<WebSecurityOrigin>(1UL, {origin});
     whitelists.push_back(whitelist);
   }
+  // If allowfullscreen attribute is present and no fullscreen policy is set,
+  // enable the feature for all origins; similarly for allowpaymentrequest.
+  if (allowpayment && !override_payment)
+    AddAllowFeatureToList(WebFeaturePolicyFeature::kPayment, whitelists);
+  if (allowfullscreen && !override_fullscreen)
+    AddAllowFeatureToList(WebFeaturePolicyFeature::kFullscreen, whitelists);
+
   return whitelists;
+}
+
+bool IsSupportedInFeaturePolicy(WebFeaturePolicyFeature feature) {
+  switch (feature) {
+    // TODO(lunalu): Re-enabled fullscreen in feature policy once tests have
+    // been updated.
+    // crbug.com/666761
+    case WebFeaturePolicyFeature::kFullscreen:
+      return false;
+    case WebFeaturePolicyFeature::kPayment:
+      return true;
+    case WebFeaturePolicyFeature::kVibrate:
+      return RuntimeEnabledFeatures::featurePolicyExperimentalFeaturesEnabled();
+    default:
+      return false;
+  }
+}
+
+const FeatureNameMap& GetDefaultFeatureNameMap() {
+  DEFINE_STATIC_LOCAL(FeatureNameMap, default_feature_name_map, ());
+  if (default_feature_name_map.IsEmpty()) {
+    default_feature_name_map.Set("fullscreen",
+                                 WebFeaturePolicyFeature::kFullscreen);
+    default_feature_name_map.Set("payment", WebFeaturePolicyFeature::kPayment);
+    default_feature_name_map.Set("usb", WebFeaturePolicyFeature::kUsb);
+    if (RuntimeEnabledFeatures::featurePolicyExperimentalFeaturesEnabled()) {
+      default_feature_name_map.Set("vibrate",
+                                   WebFeaturePolicyFeature::kVibrate);
+      default_feature_name_map.Set("camera", WebFeaturePolicyFeature::kCamera);
+      default_feature_name_map.Set("encrypted-media",
+                                   WebFeaturePolicyFeature::kEme);
+      default_feature_name_map.Set("microphone",
+                                   WebFeaturePolicyFeature::kMicrophone);
+      default_feature_name_map.Set("speaker",
+                                   WebFeaturePolicyFeature::kSpeaker);
+      default_feature_name_map.Set("cookie",
+                                   WebFeaturePolicyFeature::kDocumentCookie);
+      default_feature_name_map.Set("domain",
+                                   WebFeaturePolicyFeature::kDocumentDomain);
+      default_feature_name_map.Set("docwrite",
+                                   WebFeaturePolicyFeature::kDocumentWrite);
+      default_feature_name_map.Set("geolocation",
+                                   WebFeaturePolicyFeature::kGeolocation);
+      default_feature_name_map.Set("midi",
+                                   WebFeaturePolicyFeature::kMidiFeature);
+      default_feature_name_map.Set("notifications",
+                                   WebFeaturePolicyFeature::kNotifications);
+      default_feature_name_map.Set("push", WebFeaturePolicyFeature::kPush);
+      default_feature_name_map.Set("sync-script",
+                                   WebFeaturePolicyFeature::kSyncScript);
+      default_feature_name_map.Set("sync-xhr",
+                                   WebFeaturePolicyFeature::kSyncXHR);
+      default_feature_name_map.Set("webrtc", WebFeaturePolicyFeature::kWebRTC);
+    }
+  }
+  return default_feature_name_map;
 }
 
 }  // namespace blink

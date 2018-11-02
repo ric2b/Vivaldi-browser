@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
@@ -30,7 +31,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
@@ -41,6 +41,7 @@
 namespace {
 
 Profile* CreateTestingProfile(const std::string& profile_name) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   size_t starting_number_of_profiles = profile_manager->GetNumberOfProfiles();
 
@@ -59,6 +60,7 @@ Profile* CreateTestingProfile(const std::string& profile_name) {
 }
 
 Profile* CreateProfileOutsideUserDataDir() {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::FilePath path;
   if (!base::CreateNewTempDirectory(base::FilePath::StringType(), &path))
     NOTREACHED() << "Could not create directory at " << path.MaybeAsASCII();
@@ -73,6 +75,7 @@ Profile* CreateProfileOutsideUserDataDir() {
 // Set up the profiles to enable Lock. Takes as parameter a profile that will be
 // signed in, and also creates a supervised user (necessary for lock).
 void SetupProfilesForLock(Profile* signed_in) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   const char signed_in_email[] = "me@google.com";
 
   // Set up the |signed_in| profile.
@@ -94,21 +97,6 @@ void SetupProfilesForLock(Profile* signed_in) {
 
   // |signed_in| should now be lockable.
   EXPECT_TRUE(profiles::IsLockAvailable(signed_in));
-}
-
-views::View* FindWebView(views::View* view) {
-  std::queue<views::View*> queue;
-  queue.push(view);
-  while (!queue.empty()) {
-    views::View* current = queue.front();
-    queue.pop();
-    if (current->GetClassName() == views::WebView::kViewClassName)
-      return current;
-
-    for (int i = 0; i < current->child_count(); ++i)
-      queue.push(current->child_at(i));
-  }
-  return nullptr;
 }
 
 }  // namespace
@@ -135,9 +123,9 @@ class ProfileChooserViewExtensionsTest : public ExtensionBrowserTest {
 
     ProfileChooserView::close_on_deactivate_for_testing_ = false;
 
-    ui::MouseEvent e(ui::ET_MOUSE_RELEASED, gfx::Point(), gfx::Point(),
+    ui::MouseEvent e(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                      ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0);
-    button->OnMouseReleased(e);
+    button->OnMousePressed(e);
     base::RunLoop().RunUntilIdle();
     EXPECT_TRUE(ProfileChooserView::IsShowing());
 
@@ -152,7 +140,7 @@ class ProfileChooserViewExtensionsTest : public ExtensionBrowserTest {
   }
 
   void ClickProfileChooserViewLockButton() {
-    ui::MouseEvent e(ui::ET_MOUSE_RELEASED, gfx::Point(), gfx::Point(),
+    ui::MouseEvent e(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                      ui::EventTimeForNow(), 0, 0);
     ProfileChooserView::profile_bubble_->ButtonPressed(
         ProfileChooserView::profile_bubble_->lock_button_, e);
@@ -184,16 +172,6 @@ class ProfileChooserViewExtensionsTest : public ExtensionBrowserTest {
     return ProfileChooserView::profile_bubble_->signin_current_profile_button_;
   }
 
-  void ShowSigninView() {
-    DCHECK(!switches::UsePasswordSeparatedSigninFlow());
-    DCHECK(current_profile_bubble());
-    DCHECK(current_profile_bubble()->avatar_menu_);
-    current_profile_bubble()->ShowView(
-        profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN,
-        current_profile_bubble()->avatar_menu_.get());
-    base::RunLoop().RunUntilIdle();
-  }
-
  private:
   std::unique_ptr<content::WindowedNotificationObserver> window_close_observer_;
 
@@ -220,24 +198,6 @@ IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, SigninButtonHasFocus) {
   ASSERT_NO_FATAL_FAILURE(OpenProfileChooserView(browser()));
 
   EXPECT_TRUE(signin_current_profile_button()->HasFocus());
-}
-
-IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, ContentAreaHasFocus) {
-  // The ProfileChooserView doesn't handle sign in under the new password
-  // separated signin flow.
-  if (switches::UsePasswordSeparatedSigninFlow())
-    return;
-
-  ASSERT_TRUE(profiles::IsMultipleProfilesEnabled());
-
-  ASSERT_NO_FATAL_FAILURE(OpenProfileChooserView(browser()));
-
-  ShowSigninView();
-
-  ASSERT_TRUE(current_profile_bubble());
-  views::View* web_view = FindWebView(current_profile_bubble());
-  ASSERT_TRUE(web_view);
-  EXPECT_TRUE(web_view->HasFocus());
 }
 
 IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, ViewProfileUMA) {

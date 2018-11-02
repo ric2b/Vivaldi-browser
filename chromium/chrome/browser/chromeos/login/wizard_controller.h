@@ -39,6 +39,7 @@ class SharkConnectionListener;
 
 namespace chromeos {
 
+class AutoEnrollmentController;
 class ErrorScreen;
 struct Geoposition;
 class LoginDisplayHost;
@@ -83,6 +84,10 @@ class WizardController : public BaseScreenDelegate,
   // Skips any screens that may normally be shown after login (registration,
   // Terms of Service, user image selection).
   static void SkipPostLoginScreensForTesting();
+
+  // Returns true if OOBE is operating under the
+  // Zero-Touch Hands-Off Enrollment Flow.
+  static bool UsingHandsOffEnrollment();
 
   // Shows the first screen defined by |first_screen| or by default if the
   // parameter is empty.
@@ -223,6 +228,7 @@ class WizardController : public BaseScreenDelegate,
                               bool send_reports,
                               const std::string& keyboard_layout) override;
   void AddNetworkRequested(const std::string& onc_spec) override;
+  void RebootHostRequested() override;
 
   // Override from NetworkScreen::Delegate:
   void OnEnableDebuggingScreenRequested() override;
@@ -306,6 +312,11 @@ class WizardController : public BaseScreenDelegate,
   // attestation-based enrollment if appropriate.
   void StartEnrollmentScreen(bool force_interactive);
 
+  // Returns auto enrollment controller (lazily initializes one if it doesn't
+  // exist already).
+  AutoEnrollmentController* GetAutoEnrollmentController();
+
+  std::unique_ptr<AutoEnrollmentController> auto_enrollment_controller_;
   std::unique_ptr<ScreenManager> screen_manager_;
 
   // Whether to skip any screens that may normally be shown after login
@@ -380,10 +391,13 @@ class WizardController : public BaseScreenDelegate,
 
   FRIEND_TEST_ALL_PREFIXES(EnrollmentScreenTest, TestCancel);
   FRIEND_TEST_ALL_PREFIXES(WizardControllerFlowTest, Accelerators);
+  FRIEND_TEST_ALL_PREFIXES(WizardControllerDeviceStateTest,
+                           ControlFlowNoForcedReEnrollmentOnFirstBoot);
+  friend class WizardControllerBrokenLocalStateTest;
+  friend class WizardControllerDeviceStateTest;
   friend class WizardControllerFlowTest;
   friend class WizardControllerOobeResumeTest;
   friend class WizardInProcessBrowserTest;
-  friend class WizardControllerBrokenLocalStateTest;
 
   std::unique_ptr<AccessibilityStatusSubscription> accessibility_subscription_;
 

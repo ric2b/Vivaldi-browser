@@ -75,8 +75,8 @@ void GpuRootCompositorFrameSink::SetLocalSurfaceId(
   display_->SetLocalSurfaceId(local_surface_id, scale_factor);
 }
 
-void GpuRootCompositorFrameSink::EvictFrame() {
-  support_->EvictFrame();
+void GpuRootCompositorFrameSink::EvictCurrentSurface() {
+  support_->EvictCurrentSurface();
 }
 
 void GpuRootCompositorFrameSink::SetNeedsBeginFrame(bool needs_begin_frame) {
@@ -86,12 +86,15 @@ void GpuRootCompositorFrameSink::SetNeedsBeginFrame(bool needs_begin_frame) {
 void GpuRootCompositorFrameSink::SubmitCompositorFrame(
     const cc::LocalSurfaceId& local_surface_id,
     cc::CompositorFrame frame) {
-  support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+  if (!support_->SubmitCompositorFrame(local_surface_id, std::move(frame))) {
+    compositor_frame_sink_binding_.Close();
+    OnClientConnectionLost();
+  }
 }
 
-void GpuRootCompositorFrameSink::BeginFrameDidNotSwap(
+void GpuRootCompositorFrameSink::DidNotProduceFrame(
     const cc::BeginFrameAck& begin_frame_ack) {
-  support_->BeginFrameDidNotSwap(begin_frame_ack);
+  support_->DidNotProduceFrame(begin_frame_ack);
 }
 
 void GpuRootCompositorFrameSink::ClaimTemporaryReference(

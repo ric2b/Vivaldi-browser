@@ -14,20 +14,34 @@ class GestureDetector {
    * @param {!Element} element The element to monitor for touch gestures.
    */
   constructor(element) {
+    /** @private {!Element} */
     this.element_ = element;
 
     this.element_.addEventListener(
-        'touchstart', this.onTouchStart_.bind(this), { passive: false });
+        'touchstart',
+        /** @type {function(!Event)} */ (this.onTouchStart_.bind(this)),
+        { passive: true });
+
     this.element_.addEventListener(
-        'touchmove', this.onTouch_.bind(this), { passive: true });
+        'touchmove',
+        /** @type {function(!Event)} */ (this.onTouch_.bind(this)),
+        { passive: false });
     this.element_.addEventListener(
-        'touchend', this.onTouch_.bind(this), { passive: true });
+        'touchend',
+        /** @type {function(!Event)} */ (this.onTouch_.bind(this)),
+        { passive: true });
     this.element_.addEventListener(
-        'touchcancel', this.onTouch_.bind(this), { passive: true });
+        'touchcancel',
+        /** @type {function(!Event)} */ (this.onTouch_.bind(this)),
+        { passive: true });
 
     this.pinchStartEvent_ = null;
+    this.lastTouchTouchesCount_ = 0;
+
+    /** @private {?TouchEvent} */
     this.lastEvent_ = null;
 
+    /** @private {!Map<string, !Array<!Function>>} */
     this.listeners_ = new Map([
       ['pinchstart', []],
       ['pinchupdate', []],
@@ -38,12 +52,20 @@ class GestureDetector {
   /**
    * Add a |listener| to be notified of |type| events.
    * @param {string} type The event type to be notified for.
-   * @param {Function} listener The callback.
+   * @param {!Function} listener The callback.
    */
   addEventListener(type, listener) {
     if (this.listeners_.has(type)) {
       this.listeners_.get(type).push(listener);
     }
+  }
+
+  /**
+   * Returns true if the last touch start was a two finger touch.
+   * @return {boolean} True if the last touch start was a two finger touch.
+   */
+  wasTwoFingerTouch() {
+    return this.lastTouchTouchesCount_ == 2;
   }
 
   /**
@@ -64,17 +86,16 @@ class GestureDetector {
    * @param {!TouchEvent} event Touch event on the element.
    */
   onTouchStart_(event) {
-    // We must preventDefault if there is a two finger touch. By doing so
-    // native pinch-zoom does not interfere with our way of handling the event.
-    if (event.touches.length == 2) {
-      event.preventDefault();
-      this.pinchStartEvent_ = event;
-      this.lastEvent_ = event;
-      this.notify_({
-        type: 'pinchstart',
-        center: GestureDetector.center_(event)
-      });
-    }
+    this.lastTouchTouchesCount_ = event.touches.length;
+    if (!this.wasTwoFingerTouch())
+      return;
+
+    this.pinchStartEvent_ = event;
+    this.lastEvent_ = event;
+    this.notify_({
+      type: 'pinchstart',
+      center: GestureDetector.center_(event)
+    });
   }
 
   /**
@@ -86,12 +107,14 @@ class GestureDetector {
     if (!this.pinchStartEvent_)
       return;
 
+    let lastEvent = /** @type {!TouchEvent} */ (this.lastEvent_);
+
     // Check if the pinch ends with the current event.
     if (event.touches.length < 2 ||
-        this.lastEvent_.touches.length !== event.touches.length) {
+        lastEvent.touches.length !== event.touches.length) {
       let startScaleRatio = GestureDetector.pinchScaleRatio_(
-          this.lastEvent_, this.pinchStartEvent_);
-      let center = GestureDetector.center_(this.lastEvent_);
+          lastEvent, this.pinchStartEvent_);
+      let center = GestureDetector.center_(lastEvent);
       let endEvent = {
         type: 'pinchend',
         startScaleRatio: startScaleRatio,
@@ -103,7 +126,11 @@ class GestureDetector {
       return;
     }
 
-    let scaleRatio = GestureDetector.pinchScaleRatio_(event, this.lastEvent_);
+    // We must preventDefault two finger touchmoves. By doing so native
+    // pinch-zoom does not interfere with our way of handling the event.
+    event.preventDefault();
+
+    let scaleRatio = GestureDetector.pinchScaleRatio_(event, lastEvent);
     let startScaleRatio = GestureDetector.pinchScaleRatio_(
         event, this.pinchStartEvent_);
     let center = GestureDetector.center_(event);
@@ -161,4 +188,4 @@ class GestureDetector {
       y: (touch1.clientY + touch2.clientY) / 2
     };
   }
-};
+}

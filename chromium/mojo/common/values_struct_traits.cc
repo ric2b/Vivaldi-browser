@@ -2,8 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/memory/ptr_util.h"
 #include "mojo/common/values_struct_traits.h"
+
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "base/containers/flat_map.h"
+#include "base/memory/ptr_util.h"
 
 namespace mojo {
 
@@ -32,25 +38,26 @@ bool StructTraits<common::mojom::DictionaryValueDataView,
          std::unique_ptr<base::DictionaryValue>* value_out) {
   mojo::MapDataView<mojo::StringDataView, common::mojom::ValueDataView> view;
   data.GetValuesDataView(&view);
-  auto dictionary_value = base::MakeUnique<base::DictionaryValue>();
+  std::vector<base::Value::DictStorage::value_type> dict_storage;
+  dict_storage.reserve(view.size());
   for (size_t i = 0; i < view.size(); ++i) {
     base::StringPiece key;
     std::unique_ptr<base::Value> value;
     if (!view.keys().Read(i, &key) || !view.values().Read(i, &value))
       return false;
 
-    dictionary_value->SetWithoutPathExpansion(key, std::move(value));
+    dict_storage.emplace_back(key.as_string(), std::move(value));
   }
-  *value_out = std::move(dictionary_value);
+  *value_out = base::DictionaryValue::From(
+      base::MakeUnique<base::Value>(base::Value::DictStorage(
+          std::move(dict_storage), base::KEEP_LAST_OF_DUPES)));
   return true;
 }
 
 std::unique_ptr<base::DictionaryValue>
 CloneTraits<std::unique_ptr<base::DictionaryValue>, false>::Clone(
     const std::unique_ptr<base::DictionaryValue>& input) {
-  auto result = base::MakeUnique<base::DictionaryValue>();
-  result->MergeDictionary(input.get());
-  return result;
+  return input ? input->CreateDeepCopy() : nullptr;
 }
 
 bool UnionTraits<common::mojom::ValueDataView, std::unique_ptr<base::Value>>::
@@ -104,6 +111,12 @@ bool UnionTraits<common::mojom::ValueDataView, std::unique_ptr<base::Value>>::
     }
   }
   return false;
+}
+
+std::unique_ptr<base::Value>
+CloneTraits<std::unique_ptr<base::Value>, false>::Clone(
+    const std::unique_ptr<base::Value>& input) {
+  return input ? input->CreateDeepCopy() : nullptr;
 }
 
 }  // namespace mojo

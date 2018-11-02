@@ -9,7 +9,10 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "device/vr/vr_types.h"
+#include "base/memory/ref_counted.h"
+#include "chrome/browser/android/vr_shell/color_scheme.h"
+#include "chrome/browser/android/vr_shell/ui_elements/ui_element_debug_id.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 namespace base {
 class ListValue;
@@ -19,7 +22,7 @@ class TimeTicks;
 namespace vr_shell {
 
 class Animation;
-struct UiElement;
+class UiElement;
 
 class UiScene {
  public:
@@ -45,10 +48,10 @@ class UiScene {
   // Remove |animation_id| from element |element_id|.
   void RemoveAnimation(int element_id, int animation_id);
 
-  // Update the positions of all elements in the scene, according to active
-  // animations and time.  The units of time are arbitrary, but must match the
-  // unit used in animations.
-  void UpdateTransforms(const base::TimeTicks& current_time);
+  // Handles per-frame updates, giving each element the opportunity to update,
+  // if necessary (eg, for animations). NB: |current_time| is the shared,
+  // absolute begin frame time.
+  void OnBeginFrame(const base::TimeTicks& current_time);
 
   // Handle a batch of commands passed from the UI HTML.
   void HandleCommands(std::unique_ptr<base::ListValue> commands,
@@ -56,24 +59,42 @@ class UiScene {
 
   const std::vector<std::unique_ptr<UiElement>>& GetUiElements() const;
 
-  UiElement* GetUiElementById(int element_id);
+  UiElement* GetUiElementById(int element_id) const;
+  UiElement* GetUiElementByDebugId(UiElementDebugId debug_id) const;
 
   std::vector<const UiElement*> GetWorldElements() const;
+  std::vector<const UiElement*> GetOverlayElements() const;
   std::vector<const UiElement*> GetHeadLockedElements() const;
   bool HasVisibleHeadLockedElements() const;
 
-  const vr::Colorf& GetBackgroundColor() const;
+  void SetMode(ColorScheme::Mode mode);
+  ColorScheme::Mode mode() const;
+
+  SkColor GetWorldBackgroundColor() const;
+
+  void SetBackgroundDistance(float distance);
   float GetBackgroundDistance() const;
+
   bool GetWebVrRenderingEnabled() const;
+  void SetWebVrRenderingEnabled(bool enabled);
+
+  bool is_exiting() const { return is_exiting_; }
+  void set_is_exiting();
+
+  void OnGLInitialized();
 
  private:
+  void Animate(const base::TimeTicks& current_time);
   void ApplyRecursiveTransforms(UiElement* element);
 
   std::vector<std::unique_ptr<UiElement>> ui_elements_;
   UiElement* content_element_ = nullptr;
-  vr::Colorf background_color_ = {0.1f, 0.1f, 0.1f, 1.0f};
+  ColorScheme::Mode mode_ = ColorScheme::kModeNormal;
+
   float background_distance_ = 10.0f;
   bool webvr_rendering_enabled_ = true;
+  bool gl_initialized_ = false;
+  bool is_exiting_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(UiScene);
 };

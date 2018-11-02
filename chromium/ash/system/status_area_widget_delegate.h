@@ -14,13 +14,18 @@
 
 namespace ash {
 class FocusCycler;
+class Shelf;
 
 // The View for the status area widget.
 class ASH_EXPORT StatusAreaWidgetDelegate : public views::AccessiblePaneView,
                                             public views::WidgetDelegate {
  public:
-  StatusAreaWidgetDelegate();
+  explicit StatusAreaWidgetDelegate(Shelf* shelf);
   ~StatusAreaWidgetDelegate() override;
+
+  // Returns status area widget delegate from primary system tray if exists,
+  // otherwise nullptr.
+  static StatusAreaWidgetDelegate* GetPrimaryInstance();
 
   // Add a tray view to the widget (e.g. system tray, web notifications).
   void AddTray(views::View* tray);
@@ -31,7 +36,10 @@ class ASH_EXPORT StatusAreaWidgetDelegate : public views::AccessiblePaneView,
   // Sets the focus cycler.
   void SetFocusCyclerForTesting(const FocusCycler* focus_cycler);
 
-  void set_alignment(ShelfAlignment alignment) { alignment_ = alignment; }
+  // If |reverse|, indicates backward focusing, otherwise forward focusing.
+  // Returns true if status area widget delegate should focus out on the
+  // designated focusing direction, otherwise false.
+  bool ShouldFocusOut(bool reverse);
 
   // Overridden from views::AccessiblePaneView.
   View* GetDefaultFocusableChild() override;
@@ -47,6 +55,10 @@ class ASH_EXPORT StatusAreaWidgetDelegate : public views::AccessiblePaneView,
   bool CanActivate() const override;
   void DeleteDelegate() override;
 
+  void set_default_last_focusable_child(bool default_last_focusable_child) {
+    default_last_focusable_child_ = default_last_focusable_child;
+  }
+
  protected:
   // Overridden from views::View:
   void ChildPreferredSizeChanged(views::View* child) override;
@@ -60,10 +72,12 @@ class ASH_EXPORT StatusAreaWidgetDelegate : public views::AccessiblePaneView,
   // screen.
   void SetBorderOnChild(views::View* child, bool extend_border_to_edge);
 
+  Shelf* const shelf_;
   const FocusCycler* focus_cycler_for_testing_;
 
-  // TODO(jamescook): Get this from WmShelf.
-  ShelfAlignment alignment_;
+  // When true, the default focus of the status area widget is the last
+  // focusable child.
+  bool default_last_focusable_child_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(StatusAreaWidgetDelegate);
 };

@@ -78,6 +78,7 @@ chrome.networkingPrivate.NetworkType = {
   ALL: 'All',
   CELLULAR: 'Cellular',
   ETHERNET: 'Ethernet',
+  TETHER: 'Tether',
   VPN: 'VPN',
   WIRELESS: 'Wireless',
   WI_FI: 'WiFi',
@@ -294,6 +295,7 @@ chrome.networkingPrivate.ManagedCertificatePattern;
  * @typedef {{
  *   AnonymousIdentity: (string|undefined),
  *   ClientCertPattern: (!chrome.networkingPrivate.CertificatePattern|undefined),
+ *   ClientCertPKCS11Id: (string|undefined),
  *   ClientCertRef: (string|undefined),
  *   ClientCertType: (string|undefined),
  *   Identity: (string|undefined),
@@ -303,6 +305,7 @@ chrome.networkingPrivate.ManagedCertificatePattern;
  *   SaveCredentials: (boolean|undefined),
  *   ServerCAPEMs: (!Array<string>|undefined),
  *   ServerCARefs: (!Array<string>|undefined),
+ *   SubjectMatch: (string|undefined),
  *   UseProactiveKeyCaching: (boolean|undefined),
  *   UseSystemCAs: (boolean|undefined)
  * }}
@@ -314,6 +317,7 @@ chrome.networkingPrivate.EAPProperties;
  * @typedef {{
  *   AnonymousIdentity: (!chrome.networkingPrivate.ManagedDOMString|undefined),
  *   ClientCertPattern: (!chrome.networkingPrivate.ManagedCertificatePattern|undefined),
+ *   ClientCertPKCS11Id: (!chrome.networkingPrivate.ManagedDOMString|undefined),
  *   ClientCertRef: (!chrome.networkingPrivate.ManagedDOMString|undefined),
  *   ClientCertType: (!chrome.networkingPrivate.ManagedDOMString|undefined),
  *   Identity: (!chrome.networkingPrivate.ManagedDOMString|undefined),
@@ -323,6 +327,7 @@ chrome.networkingPrivate.EAPProperties;
  *   SaveCredentials: (!chrome.networkingPrivate.ManagedBoolean|undefined),
  *   ServerCAPEMs: (!chrome.networkingPrivate.ManagedDOMStringList|undefined),
  *   ServerCARefs: (!chrome.networkingPrivate.ManagedDOMStringList|undefined),
+ *   SubjectMatch: (!chrome.networkingPrivate.ManagedDOMString|undefined),
  *   UseProactiveKeyCaching: (!chrome.networkingPrivate.ManagedBoolean|undefined),
  *   UseSystemCAs: (!chrome.networkingPrivate.ManagedBoolean|undefined)
  * }}
@@ -764,6 +769,17 @@ chrome.networkingPrivate.EthernetStateProperties;
 
 /**
  * @typedef {{
+ *   BatteryPercentage: (number|undefined),
+ *   Carrier: (string|undefined),
+ *   HasConnectedToHost: boolean,
+ *   SignalStrength: (number|undefined)
+ * }}
+ * @see https://developer.chrome.com/extensions/networkingPrivate#type-TetherProperties
+ */
+chrome.networkingPrivate.TetherProperties;
+
+/**
+ * @typedef {{
  *   AutoConnect: (boolean|undefined),
  *   Host: (string|undefined),
  *   IPsec: (!chrome.networkingPrivate.IPSecProperties|undefined),
@@ -918,6 +934,7 @@ chrome.networkingPrivate.NetworkConfigProperties;
  *   StaticIPConfig: (!chrome.networkingPrivate.IPConfigProperties|undefined),
  *   SavedIPConfig: (!chrome.networkingPrivate.IPConfigProperties|undefined),
  *   Source: (string|undefined),
+ *   Tether: (!chrome.networkingPrivate.TetherProperties|undefined),
  *   Type: !chrome.networkingPrivate.NetworkType,
  *   VPN: (!chrome.networkingPrivate.VPNProperties|undefined),
  *   WiFi: (!chrome.networkingPrivate.WiFiProperties|undefined),
@@ -946,6 +963,7 @@ chrome.networkingPrivate.NetworkProperties;
  *   StaticIPConfig: (!chrome.networkingPrivate.ManagedIPConfigProperties|undefined),
  *   SavedIPConfig: (!chrome.networkingPrivate.IPConfigProperties|undefined),
  *   Source: (string|undefined),
+ *   Tether: (!chrome.networkingPrivate.TetherProperties|undefined),
  *   Type: !chrome.networkingPrivate.NetworkType,
  *   VPN: (!chrome.networkingPrivate.ManagedVPNProperties|undefined),
  *   WiFi: (!chrome.networkingPrivate.ManagedWiFiProperties|undefined),
@@ -966,6 +984,7 @@ chrome.networkingPrivate.ManagedProperties;
  *   Name: (string|undefined),
  *   Priority: (number|undefined),
  *   Source: (string|undefined),
+ *   Tether: (!chrome.networkingPrivate.TetherProperties|undefined),
  *   Type: !chrome.networkingPrivate.NetworkType,
  *   VPN: (!chrome.networkingPrivate.VPNStateProperties|undefined),
  *   WiFi: (!chrome.networkingPrivate.WiFiStateProperties|undefined),
@@ -1021,6 +1040,28 @@ chrome.networkingPrivate.NetworkFilter;
  * @see https://developer.chrome.com/extensions/networkingPrivate#type-GlobalPolicy
  */
 chrome.networkingPrivate.GlobalPolicy;
+
+/**
+ * @typedef {{
+ *   hash: string,
+ *   issuedBy: string,
+ *   issuedTo: string,
+ *   pem: (string|undefined),
+ *   PKCS11Id: (string|undefined),
+ *   hardwareBacked: boolean
+ * }}
+ * @see https://developer.chrome.com/extensions/networkingPrivate#type-Certificate
+ */
+chrome.networkingPrivate.Certificate;
+
+/**
+ * @typedef {{
+ *   serverCaCertificates: !Array<!chrome.networkingPrivate.Certificate>,
+ *   userCertificates: !Array<!chrome.networkingPrivate.Certificate>
+ * }}
+ * @see https://developer.chrome.com/extensions/networkingPrivate#type-CertificateLists
+ */
+chrome.networkingPrivate.CertificateLists;
 
 /**
  * Gets all the properties of the network with id networkGuid. Includes all
@@ -1314,6 +1355,13 @@ chrome.networkingPrivate.setCellularSimState = function(networkGuid, simState, c
 chrome.networkingPrivate.getGlobalPolicy = function(callback) {};
 
 /**
+ * Gets the lists of certificates available for network configuration.
+ * @param {function(!chrome.networkingPrivate.CertificateLists):void} callback
+ * @see https://developer.chrome.com/extensions/networkingPrivate#method-getCertificateLists
+ */
+chrome.networkingPrivate.getCertificateLists = function(callback) {};
+
+/**
  * Fired when the properties change on any of the networks.  Sends a list of
  * GUIDs for networks whose properties have changed.
  * @type {!ChromeEvent}
@@ -1344,3 +1392,10 @@ chrome.networkingPrivate.onDeviceStateListChanged;
  * @see https://developer.chrome.com/extensions/networkingPrivate#event-onPortalDetectionCompleted
  */
 chrome.networkingPrivate.onPortalDetectionCompleted;
+
+/**
+ * Fired when any certificate list has changed.
+ * @type {!ChromeEvent}
+ * @see https://developer.chrome.com/extensions/networkingPrivate#event-onCertificateListsChanged
+ */
+chrome.networkingPrivate.onCertificateListsChanged;

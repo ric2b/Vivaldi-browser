@@ -48,6 +48,7 @@ class Value;
 // See the file-level comment above for more information.
 class BASE_EXPORT Value {
  public:
+  using BlobStorage = std::vector<char>;
   using DictStorage = base::flat_map<std::string, std::unique_ptr<Value>>;
   using ListStorage = std::vector<Value>;
 
@@ -66,7 +67,7 @@ class BASE_EXPORT Value {
   // For situations where you want to keep ownership of your buffer, this
   // factory method creates a new BinaryValue by copying the contents of the
   // buffer that's passed in.
-  // DEPRECATED, use MakeUnique<Value>(const std::vector<char>&) instead.
+  // DEPRECATED, use MakeUnique<Value>(const BlobStorage&) instead.
   // TODO(crbug.com/646113): Delete this and migrate callsites.
   static std::unique_ptr<Value> CreateWithCopiedBuffer(const char* buffer,
                                                        size_t size);
@@ -92,8 +93,8 @@ class BASE_EXPORT Value {
   explicit Value(const string16& in_string);
   explicit Value(StringPiece in_string);
 
-  explicit Value(const std::vector<char>& in_blob);
-  explicit Value(std::vector<char>&& in_blob) noexcept;
+  explicit Value(const BlobStorage& in_blob);
+  explicit Value(BlobStorage&& in_blob) noexcept;
 
   explicit Value(DictStorage&& in_dict) noexcept;
 
@@ -131,13 +132,10 @@ class BASE_EXPORT Value {
   int GetInt() const;
   double GetDouble() const;  // Implicitly converts from int if necessary.
   const std::string& GetString() const;
-  const std::vector<char>& GetBlob() const;
+  const BlobStorage& GetBlob() const;
 
   ListStorage& GetList();
   const ListStorage& GetList() const;
-
-  size_t GetSize() const;         // DEPRECATED, use GetBlob().size() instead.
-  const char* GetBuffer() const;  // DEPRECATED, use GetBlob().data() instead.
 
   // These methods allow the convenient retrieval of the contents of the Value.
   // If the current object can be converted into the given type, the value is
@@ -150,7 +148,6 @@ class BASE_EXPORT Value {
   bool GetAsString(string16* out_value) const;
   bool GetAsString(const Value** out_value) const;
   bool GetAsString(StringPiece* out_value) const;
-  bool GetAsBinary(const Value** out_value) const;
   // ListValue::From is the equivalent for std::unique_ptr conversions.
   bool GetAsList(ListValue** out_value);
   bool GetAsList(const ListValue** out_value) const;
@@ -199,11 +196,8 @@ class BASE_EXPORT Value {
     int int_value_;
     double double_value_;
     ManualConstructor<std::string> string_value_;
-    ManualConstructor<std::vector<char>> binary_value_;
-    // For current gcc and clang sizeof(DictStorage) = 48, which would result
-    // in sizeof(Value) = 56 if DictStorage was stack allocated. Allocating it
-    // on the heap results in sizeof(Value) = 40 for all of gcc, clang and MSVC.
-    ManualConstructor<std::unique_ptr<DictStorage>> dict_ptr_;
+    ManualConstructor<BlobStorage> binary_value_;
+    ManualConstructor<DictStorage> dict_;
     ManualConstructor<ListStorage> list_;
   };
 
@@ -220,6 +214,9 @@ class BASE_EXPORT Value {
 // are |std::string|s and should be UTF-8 encoded.
 class BASE_EXPORT DictionaryValue : public Value {
  public:
+  using const_iterator = DictStorage::const_iterator;
+  using iterator = DictStorage::iterator;
+
   // Returns |value| if it is a dictionary, nullptr otherwise.
   static std::unique_ptr<DictionaryValue> From(std::unique_ptr<Value> value);
 
@@ -229,10 +226,10 @@ class BASE_EXPORT DictionaryValue : public Value {
   bool HasKey(StringPiece key) const;
 
   // Returns the number of Values in this dictionary.
-  size_t size() const { return (*dict_ptr_)->size(); }
+  size_t size() const { return dict_->size(); }
 
   // Returns whether the dictionary is empty.
-  bool empty() const { return (*dict_ptr_)->empty(); }
+  bool empty() const { return dict_->empty(); }
 
   // Clears any current contents of this dictionary.
   void Clear();
@@ -244,32 +241,39 @@ class BASE_EXPORT DictionaryValue : public Value {
   // If the key at any step of the way doesn't exist, or exists but isn't
   // a DictionaryValue, a new DictionaryValue will be created and attached
   // to the path in that location. |in_value| must be non-null.
-  void Set(StringPiece path, std::unique_ptr<Value> in_value);
+  // Returns a pointer to the inserted value.
+  Value* Set(StringPiece path, std::unique_ptr<Value> in_value);
   // Deprecated version of the above. TODO(estade): remove.
-  void Set(StringPiece path, Value* in_value);
+  Value* Set(StringPiece path, Value* in_value);
 
   // Convenience forms of Set().  These methods will replace any existing
   // value at that path, even if it has a different type.
-  void SetBoolean(StringPiece path, bool in_value);
-  void SetInteger(StringPiece path, int in_value);
-  void SetDouble(StringPiece path, double in_value);
-  void SetString(StringPiece path, StringPiece in_value);
-  void SetString(StringPiece path, const string16& in_value);
+  Value* SetBoolean(StringPiece path, bool in_value);
+  Value* SetInteger(StringPiece path, int in_value);
+  Value* SetDouble(StringPiece path, double in_value);
+  Value* SetString(StringPiece path, StringPiece in_value);
+  Value* SetString(StringPiece path, const string16& in_value);
+  DictionaryValue* SetDictionary(StringPiece path,
+                                 std::unique_ptr<DictionaryValue> in_value);
+  ListValue* SetList(StringPiece path, std::unique_ptr<ListValue> in_value);
 
   // Like Set(), but without special treatment of '.'.  This allows e.g. URLs to
   // be used as paths.
-  void SetWithoutPathExpansion(StringPiece key,
-                               std::unique_ptr<Value> in_value);
-  // Deprecated version of the above. TODO(estade): remove.
-  void SetWithoutPathExpansion(StringPiece key, Value* in_value);
+  Value* SetWithoutPathExpansion(StringPiece key,
+                                 std::unique_ptr<Value> in_value);
 
   // Convenience forms of SetWithoutPathExpansion().
-  void SetBooleanWithoutPathExpansion(StringPiece path, bool in_value);
-  void SetIntegerWithoutPathExpansion(StringPiece path, int in_value);
-  void SetDoubleWithoutPathExpansion(StringPiece path, double in_value);
-  void SetStringWithoutPathExpansion(StringPiece path, StringPiece in_value);
-  void SetStringWithoutPathExpansion(StringPiece path,
-                                     const string16& in_value);
+  Value* SetBooleanWithoutPathExpansion(StringPiece path, bool in_value);
+  Value* SetIntegerWithoutPathExpansion(StringPiece path, int in_value);
+  Value* SetDoubleWithoutPathExpansion(StringPiece path, double in_value);
+  Value* SetStringWithoutPathExpansion(StringPiece path, StringPiece in_value);
+  Value* SetStringWithoutPathExpansion(StringPiece path,
+                                       const string16& in_value);
+  DictionaryValue* SetDictionaryWithoutPathExpansion(
+      StringPiece path,
+      std::unique_ptr<DictionaryValue> in_value);
+  ListValue* SetListWithoutPathExpansion(StringPiece path,
+                                         std::unique_ptr<ListValue> in_value);
 
   // Gets the Value associated with the given path starting from this object.
   // A path has the form "<key>" or "<key>.<key>.[...]", where "." indexes
@@ -361,7 +365,7 @@ class BASE_EXPORT DictionaryValue : public Value {
     Iterator(const Iterator& other);
     ~Iterator();
 
-    bool IsAtEnd() const { return it_ == (*target_.dict_ptr_)->end(); }
+    bool IsAtEnd() const { return it_ == target_.dict_->end(); }
     void Advance() { ++it_; }
 
     const std::string& key() const { return it_->first; }
@@ -371,6 +375,13 @@ class BASE_EXPORT DictionaryValue : public Value {
     const DictionaryValue& target_;
     DictStorage::const_iterator it_;
   };
+
+  // Iteration.
+  iterator begin() { return dict_->begin(); }
+  iterator end() { return dict_->end(); }
+
+  const_iterator begin() const { return dict_->begin(); }
+  const_iterator end() const { return dict_->end(); }
 
   // DEPRECATED, use DictionaryValue's copy constructor instead.
   // TODO(crbug.com/646113): Delete this and migrate callsites.
@@ -389,6 +400,8 @@ class BASE_EXPORT ListValue : public Value {
   static std::unique_ptr<ListValue> From(std::unique_ptr<Value> value);
 
   ListValue();
+  explicit ListValue(const ListStorage& in_list);
+  explicit ListValue(ListStorage&& in_list) noexcept;
 
   // Clears the contents of this ListValue
   void Clear();
@@ -410,8 +423,6 @@ class BASE_EXPORT ListValue : public Value {
   // Values will be used to pad out the list.
   // Returns true if successful, or false if the index was negative or
   // the value is a null pointer.
-  bool Set(size_t index, Value* in_value);
-  // Preferred version of the above. TODO(estade): remove the above.
   bool Set(size_t index, std::unique_ptr<Value> in_value);
 
   // Gets the Value at the given index.  Modifies |out_value| (and returns true)
@@ -436,6 +447,8 @@ class BASE_EXPORT ListValue : public Value {
   bool GetBinary(size_t index, Value** out_value);
   bool GetDictionary(size_t index, const DictionaryValue** out_value) const;
   bool GetDictionary(size_t index, DictionaryValue** out_value);
+
+  using Value::GetList;
   bool GetList(size_t index, const ListValue** out_value) const;
   bool GetList(size_t index, ListValue** out_value);
 
@@ -459,10 +472,6 @@ class BASE_EXPORT ListValue : public Value {
 
   // Appends a Value to the end of the list.
   void Append(std::unique_ptr<Value> in_value);
-#if !defined(OS_LINUX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
-  // Deprecated version of the above. TODO(estade): remove.
-  void Append(Value* in_value);
-#endif
 
   // Convenience forms of Append.
   void AppendBoolean(bool in_value);

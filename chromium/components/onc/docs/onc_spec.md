@@ -230,6 +230,11 @@ Field **NetworkConfigurations** is an array of
       [Cellular](#Cellular-type)
     * Cellular settings.
 
+* **Tether**
+    * (required if **Type** is *Tether*, otherwise ignored) -
+      [Tether](#Tether-type)
+    * Tether settings.
+
 * **Type**
     * (required if **Remove** is *false*, otherwise ignored) - **string**
     * `Allowed values are` *Cellular*,
@@ -1037,9 +1042,19 @@ type exists to configure the authentication.
     * (required if **ClientCertType** is *Ref*, otherwise ignored) - **string**
     * Reference to client certificate stored in certificate section.
 
+* **ClientCertPKCS11Id**
+    * (required if **ClientCertType** is *PKCS11Id*, otherwise ignored) - 
+    * PKCS#11 identifier in the format slot:key_id.
+  
 * **ClientCertType**
-    * (optional) **string**
-    `Allowed values are` *Ref*, and *Pattern*.
+    * (optional) - **string**
+    * `Allowed values are` *Ref*, *Pattern*, *PKCS11Id* and *None*.
+    * *Ref* and *Pattern* indicate that the associated property should be used
+      to identify the client certificate.
+    * *PKCS11Id* is used when representing a certificate in a local store and is
+      only valid when describing a local configuration.
+    * *None* indicates that the server is configured to not require client
+      certificates.
 
 * **Identity**
     * (optional) - **string**
@@ -1052,20 +1067,15 @@ type exists to configure the authentication.
       expansions.
 
 * **Inner**
-    * (optional if **Outer** is
-        *EAP-FAST*, *EAP-TTLS*
-        or *PEAP*, otherwise ignored, defaults to *Automatic*) - **string**
-    * `Allowed values are` *Automatic*,
-        *MD5*, *MSCHAPv2*,
-        *EAP-MSCHAPv2*,
-        *PAP*, and *GTC*.
+    * (optional if **Outer** is *EAP-FAST*, *EAP-TTLS* or *PEAP*, otherwise
+        ignored, defaults to *Automatic*) - **string**
+    * `Allowed values are` *Automatic*, *MD5*, *MSCHAP*, *MSCHAPv2*, *PAP*,
+        *CHAP* and *GTC*.
     * For tunneling outer protocols.
 
 * **Outer**
     * (required) - **string**
-    * `Allowed values are` *LEAP*,
-        *EAP-AKA*, *EAP-FAST*,
-        *EAP-TLS*, *EAP-TTLS*,
+    * `Allowed values are` *LEAP*, *EAP-AKA*, *EAP-FAST*, *EAP-TLS*, *EAP-TTLS*,
         *EAP-SIM* and *PEAP*.
 
 * **Password**
@@ -1104,6 +1114,11 @@ type exists to configure the authentication.
       not check that the server certificate is signed by a specific CA.
       A verification using the system's CA certificates may still apply.
       See **UseSystemCAs** for this.
+
+* **SubjectMatch**
+    * (optional) - **string**
+    * WiFi only. A substring which a remote RADIUS service certificate subject
+      name must contain in order to connect.
 
 * **UseSystemCAs**
     * (optional, defaults to *true*) - **boolean**
@@ -1429,6 +1444,40 @@ ONC configuration of of **Cellular** networks is not yet supported.
       PIN becomes blocked, at which point a PUK provided by the carrier would
       be necessary to unlock the SIM (and **LockType**
       changes to *sim-puk*).
+
+
+## Tether Networks
+
+For Tether connections, **Type** must be set to *Tether* and the
+field **Tether** must be set to an object of type [Tether](#Tether-type).
+
+Used for representing a tether hotspot provided by an external device, e.g.
+a phone.
+
+### Tether type
+
+* **BatteryPercentage**
+    * (optional, read-only) - **integer**
+    * The battery percentage of the device providing the tether hotspot in the
+      range [0, 100].
+
+* **Carrier**
+    * (optional, read-only) - **string**
+    * The name of the cellular carrier when the hotspot is provided by a
+      cellular connection.
+
+* **HasConnectedToHost**
+    * (read-only) - **boolean**
+    * If *true*, the current device has already connected to a Tether network
+      created by the same external device which is providing this Tether
+      network.
+
+* **SignalStrength**
+    * (optional, read-only) - **integer**
+    * The current signal strength for the hotspot's connection in the range
+      [0, 100]. Note that this value refers to the strength of the signal
+      between the external device and its data provider, not the strength of the
+      signal between the current device and the external device.
 
 
 ## Bluetooth / WiFi Direct Networks

@@ -5,11 +5,11 @@
 #include "modules/notifications/NotificationManager.h"
 
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "modules/notifications/Notification.h"
 #include "modules/notifications/NotificationPermissionCallback.h"
 #include "modules/permissions/PermissionUtils.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Functional.h"
 #include "public/platform/InterfaceProvider.h"
@@ -53,9 +53,12 @@ mojom::blink::PermissionStatus NotificationManager::GetPermissionStatus(
   }
 
   mojom::blink::PermissionStatus permission_status;
-  const bool result = notification_service_->GetPermissionStatus(
-      execution_context->GetSecurityOrigin()->ToString(), &permission_status);
-  DCHECK(result);
+  if (!notification_service_->GetPermissionStatus(
+          execution_context->GetSecurityOrigin()->ToString(),
+          &permission_status)) {
+    NOTREACHED();
+    return mojom::blink::PermissionStatus::DENIED;
+  }
 
   return permission_status;
 }

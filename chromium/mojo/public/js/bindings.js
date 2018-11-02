@@ -53,7 +53,7 @@ define("mojo/public/js/bindings", [
   };
 
   InterfacePtrController.prototype.isBound = function() {
-    return this.router_ !== null || this.handle_ !== null;
+    return this.interfaceEndpointClient_ !== null || this.handle_ !== null;
   };
 
   // Although users could just discard the object, reset() closes the pipe
@@ -77,9 +77,11 @@ define("mojo/public/js/bindings", [
   };
 
   InterfacePtrController.prototype.resetWithReason = function(reason) {
-    this.configureProxyIfNecessary_();
-    this.interfaceEndpointClient_.close(reason);
-    this.interfaceEndpointClient_ = null;
+    if (this.isBound()) {
+      this.configureProxyIfNecessary_();
+      this.interfaceEndpointClient_.close(reason);
+      this.interfaceEndpointClient_ = null;
+    }
     this.reset();
   };
 
@@ -123,12 +125,11 @@ define("mojo/public/js/bindings", [
     if (!this.handle_)
       return;
 
-    this.router_ = new router.Router(this.handle_);
+    this.router_ = new router.Router(this.handle_, true);
     this.handle_ = null;
 
     this.interfaceEndpointClient_ = new InterfaceEndpointClient(
-        this.router_.createLocalEndpointHandle(types.kMasterInterfaceId),
-        this.router_);
+        this.router_.createLocalEndpointHandle(types.kMasterInterfaceId));
 
     this.interfaceEndpointClient_ .setPayloadValidators([
         this.interfaceType_.validateResponse]);
@@ -207,8 +208,8 @@ define("mojo/public/js/bindings", [
     this.stub_ = new this.interfaceType_.stubClass(this.impl_);
     this.interfaceEndpointClient_ = new InterfaceEndpointClient(
         this.router_.createLocalEndpointHandle(types.kMasterInterfaceId),
-        this.router_, this.interfaceType_.kVersion);
-    this.interfaceEndpointClient_.setIncomingReceiver(this.stub_);
+        this.stub_, this.interfaceType_.kVersion);
+
     this.interfaceEndpointClient_ .setPayloadValidators([
         this.interfaceType_.validateRequest]);
   };
@@ -235,8 +236,7 @@ define("mojo/public/js/bindings", [
     this.close();
   };
 
-  Binding.prototype.setConnectionErrorHandler
-      = function(callback) {
+  Binding.prototype.setConnectionErrorHandler = function(callback) {
     if (!this.isBound()) {
       throw new Error("Cannot set connection error handler if not bound.");
     }
@@ -259,14 +259,15 @@ define("mojo/public/js/bindings", [
 
   // ---------------------------------------------------------------------------
 
-  function BindingSetEntry(bindingSet, interfaceType, impl, requestOrHandle,
-                           bindingId) {
+  function BindingSetEntry(bindingSet, interfaceType, bindingType, impl,
+      requestOrHandle, bindingId) {
     this.bindingSet_ = bindingSet;
     this.bindingId_ = bindingId;
-    this.binding_ = new Binding(interfaceType, impl, requestOrHandle);
+    this.binding_ = new bindingType(interfaceType, impl,
+        requestOrHandle);
 
-    this.binding_.setConnectionErrorHandler(function() {
-      this.bindingSet_.onConnectionError(bindingId);
+    this.binding_.setConnectionErrorHandler(function(reason) {
+      this.bindingSet_.onConnectionError(bindingId, reason);
     }.bind(this));
   }
 
@@ -279,6 +280,7 @@ define("mojo/public/js/bindings", [
     this.nextBindingId_ = 0;
     this.bindings_ = new Map();
     this.errorHandler_ = null;
+    this.bindingType_ = Binding;
   }
 
   BindingSet.prototype.isEmpty = function() {
@@ -288,8 +290,8 @@ define("mojo/public/js/bindings", [
   BindingSet.prototype.addBinding = function(impl, requestOrHandle) {
     this.bindings_.set(
         this.nextBindingId_,
-        new BindingSetEntry(this, this.interfaceType_, impl, requestOrHandle,
-                            this.nextBindingId_));
+        new BindingSetEntry(this, this.interfaceType_, this.bindingType_, impl,
+            requestOrHandle, this.nextBindingId_));
     ++this.nextBindingId_;
   };
 
@@ -303,11 +305,11 @@ define("mojo/public/js/bindings", [
     this.errorHandler_ = callback;
   };
 
-  BindingSet.prototype.onConnectionError = function(bindingId) {
+  BindingSet.prototype.onConnectionError = function(bindingId, reason) {
     this.bindings_.delete(bindingId);
 
     if (this.errorHandler_)
-      this.errorHandler_();
+      this.errorHandler_(reason);
   };
 
   var exports = {};

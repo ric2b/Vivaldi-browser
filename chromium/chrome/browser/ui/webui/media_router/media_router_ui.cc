@@ -18,25 +18,26 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/router/create_presentation_connection_request.h"
-#include "chrome/browser/media/router/issue.h"
 #include "chrome/browser/media/router/issues_observer.h"
-#include "chrome/browser/media/router/media_route.h"
 #include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
-#include "chrome/browser/media/router/media_sink.h"
 #include "chrome/browser/media/router/media_sinks_observer.h"
-#include "chrome/browser/media/router/media_source.h"
-#include "chrome/browser/media/router/media_source_helper.h"
 #include "chrome/browser/media/router/mojo/media_router_mojo_impl.h"
 #include "chrome/browser/media/router/presentation_service_delegate_impl.h"
-#include "chrome/browser/media/router/route_request_result.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/webui/media_router/media_router_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/media_router/media_router_resources_provider.h"
 #include "chrome/browser/ui/webui/media_router/media_router_webui_message_handler.h"
+#include "chrome/common/chrome_features.h"
+#include "chrome/common/media_router/issue.h"
+#include "chrome/common/media_router/media_route.h"
+#include "chrome/common/media_router/media_sink.h"
+#include "chrome/common/media_router/media_source.h"
+#include "chrome/common/media_router/media_source_helper.h"
+#include "chrome/common/media_router/route_request_result.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -153,6 +154,26 @@ void MediaRouterUI::UIMediaRoutesObserver::OnRoutesUpdated(
   callback_.Run(routes, joinable_route_ids);
 }
 
+MediaRouterUI::UIMediaRouteControllerObserver::UIMediaRouteControllerObserver(
+    MediaRouterUI* ui,
+    scoped_refptr<MediaRouteController> controller)
+    : MediaRouteController::Observer(std::move(controller)), ui_(ui) {
+  if (controller_->current_media_status())
+    OnMediaStatusUpdated(controller_->current_media_status().value());
+}
+
+MediaRouterUI::UIMediaRouteControllerObserver::
+    ~UIMediaRouteControllerObserver() {}
+
+void MediaRouterUI::UIMediaRouteControllerObserver::OnMediaStatusUpdated(
+    const MediaStatus& status) {
+  ui_->UpdateMediaRouteStatus(status);
+}
+
+void MediaRouterUI::UIMediaRouteControllerObserver::OnControllerInvalidated() {
+  ui_->OnRouteControllerInvalidated();
+}
+
 MediaRouterUI::MediaRouterUI(content::WebUI* web_ui)
     : ConstrainedWebDialogUI(web_ui),
       ui_initialized_(false),
@@ -249,8 +270,10 @@ void MediaRouterUI::InitWithPresentationSessionRequest(
 
   create_session_request_ = std::move(create_session_request);
   presentation_service_delegate_ = delegate->GetWeakPtr();
+
   InitCommon(initiator);
-  OnDefaultPresentationChanged(create_session_request_->presentation_request());
+  OnDefaultPresentationChanged(
+      create_session_request_->presentation_request());
 }
 
 void MediaRouterUI::InitCommon(content::WebContents* initiator) {
@@ -259,6 +282,11 @@ void MediaRouterUI::InitCommon(content::WebContents* initiator) {
 
   TRACE_EVENT_NESTABLE_ASYNC_INSTANT1("media_router", "UI", initiator,
                                       "MediaRouterUI::InitCommon", this);
+
+  // Presentation requests from content must show the origin requesting
+  // presentation: crbug.com/704964
+  if (create_session_request_)
+    forced_cast_mode_ = MediaCastMode::DEFAULT;
 
   router_->OnUserGesture();
 
@@ -336,6 +364,12 @@ void MediaRouterUI::OnDefaultPresentationChanged(
 void MediaRouterUI::OnDefaultPresentationRemoved() {
   presentation_request_.reset();
   query_result_manager_->RemoveSourcesForCastMode(MediaCastMode::DEFAULT);
+
+  // This should not be set if the dialog was initiated with a default
+  // presentation request from the top level frame.  However, clear it just to
+  // be safe.
+  forced_cast_mode_ = base::nullopt;
+
   // Register for MediaRoute updates without a media source.
   routes_observer_.reset(new UIMediaRoutesObserver(
       router_, MediaSource::Id(),
@@ -347,7 +381,8 @@ void MediaRouterUI::UpdateCastModes() {
   // Gets updated cast modes from |query_result_manager_| and forwards it to UI.
   cast_modes_ = query_result_manager_->GetSupportedCastModes();
   if (ui_initialized_) {
-    handler_->UpdateCastModes(cast_modes_, GetPresentationRequestSourceName());
+    handler_->UpdateCastModes(cast_modes_, GetPresentationRequestSourceName(),
+                              forced_cast_mode());
   }
 }
 
@@ -758,6 +793,39 @@ void MediaRouterUI::OnUIInitialDataReceived() {
 
 void MediaRouterUI::UpdateMaxDialogHeight(int height) {
   handler_->UpdateMaxDialogHeight(height);
+}
+
+const MediaRouteController* MediaRouterUI::GetMediaRouteController() const {
+  return route_controller_observer_
+             ? route_controller_observer_->controller().get()
+             : nullptr;
+}
+
+void MediaRouterUI::OnMediaControllerUIAvailable(
+    const MediaRoute::Id& route_id) {
+  scoped_refptr<MediaRouteController> controller =
+      router_->GetRouteController(route_id);
+  if (!controller) {
+    DVLOG(1) << "Requested a route controller with an invalid route ID.";
+    return;
+  }
+  DVLOG_IF(1, route_controller_observer_)
+      << "Route controller observer unexpectedly exists.";
+  route_controller_observer_ =
+      base::MakeUnique<UIMediaRouteControllerObserver>(this, controller);
+}
+
+void MediaRouterUI::OnMediaControllerUIClosed() {
+  route_controller_observer_.reset();
+}
+
+void MediaRouterUI::OnRouteControllerInvalidated() {
+  route_controller_observer_.reset();
+  handler_->OnRouteControllerInvalidated();
+}
+
+void MediaRouterUI::UpdateMediaRouteStatus(const MediaStatus& status) {
+  handler_->UpdateMediaRouteStatus(status);
 }
 
 std::string MediaRouterUI::GetSerializedInitiatorOrigin() const {

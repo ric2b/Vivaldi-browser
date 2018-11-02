@@ -31,6 +31,18 @@ namespace cc {
 // Align with expected and actual output.
 const char* LayerTestCommon::quad_string = "    Quad: ";
 
+RenderSurfaceImpl* GetRenderSurface(LayerImpl* layer_impl) {
+  EffectTree& effect_tree =
+      layer_impl->layer_tree_impl()->property_trees()->effect_tree;
+
+  if (RenderSurfaceImpl* surface =
+          effect_tree.GetRenderSurface(layer_impl->effect_tree_index()))
+    return surface;
+
+  return effect_tree.GetRenderSurface(
+      effect_tree.Node(layer_impl->effect_tree_index())->target_id);
+}
+
 static bool CanRectFBeSafelyRoundedToRect(const gfx::RectF& r) {
   // Ensure that range of float values is not beyond integer range.
   if (!r.IsExpressibleAsRect())
@@ -161,9 +173,9 @@ LayerTestCommon::LayerImplTest::~LayerImplTest() {
 
 void LayerTestCommon::LayerImplTest::CalcDrawProps(
     const gfx::Size& viewport_size) {
-  LayerImplList layer_list;
+  RenderSurfaceList render_surface_list;
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
-      root_layer_for_testing(), viewport_size, &layer_list);
+      root_layer_for_testing(), viewport_size, &render_surface_list);
   LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 }
 

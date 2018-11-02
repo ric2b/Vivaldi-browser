@@ -109,7 +109,6 @@ enum WebAXRole {
   kWebAXRoleDialog,
   kWebAXRoleDirectory,
   kWebAXRoleDisclosureTriangle,
-  kWebAXRoleDiv,
   kWebAXRoleDocument,
   kWebAXRoleEmbeddedObject,
   kWebAXRoleFeed,
@@ -117,6 +116,7 @@ enum WebAXRole {
   kWebAXRoleFigure,
   kWebAXRoleFooter,
   kWebAXRoleForm,
+  kWebAXRoleGenericContainer,
   kWebAXRoleGrid,
   kWebAXRoleGroup,
   kWebAXRoleHeading,
@@ -228,7 +228,7 @@ enum WebAXState {
   kWebAXStateVisited,
 };
 
-enum class WebAXSupportedAction {
+enum class WebAXDefaultActionVerb {
   kNone = 0,
   kActivate,
   kCheck,
@@ -255,6 +255,12 @@ enum WebAXSortDirection {
   kWebAXSortDirectionAscending,
   kWebAXSortDirectionDescending,
   kWebAXSortDirectionOther
+};
+
+enum WebAXCheckedState {
+  WebAXCheckedFalse = 0,
+  WebAXCheckedTrue,
+  WebAXCheckedMixed
 };
 
 // Expanded State.
@@ -317,6 +323,7 @@ enum WebAXTextStyle {
 enum WebAXNameFrom {
   kWebAXNameFromUninitialized = -1,
   kWebAXNameFromAttribute = 0,
+  kWebAXNameFromAttributeExplicitlyEmpty,
   kWebAXNameFromCaption,
   kWebAXNameFromContents,
   kWebAXNameFromPlaceholder,

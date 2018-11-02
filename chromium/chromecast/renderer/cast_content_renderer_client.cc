@@ -28,8 +28,8 @@
 #include "media/base/media.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "third_party/WebKit/public/platform/WebColor.h"
+#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/web/WebFrameWidget.h"
-#include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/web/WebSettings.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
@@ -118,6 +118,15 @@ void CastContentRendererClient::AddSupportedKeySystems(
 bool CastContentRendererClient::IsSupportedAudioConfig(
     const ::media::AudioConfig& config) {
 #if defined(OS_ANDROID)
+  media::AudioCodec codec = media::ToCastAudioCodec(config.codec);
+
+  // No ATV device we know of has (E)AC3 decoder, so it relies on the audio sink
+  // device.
+  if (codec == media::kCodecEAC3)
+    return media::MediaCapabilities::HdmiSinkSupportsEAC3();
+  if (codec == media::kCodecAC3)
+    return media::MediaCapabilities::HdmiSinkSupportsAC3();
+
   // TODO(sanfin): Implement this for Android.
   return true;
 #else

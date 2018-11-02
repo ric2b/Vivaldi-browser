@@ -19,7 +19,8 @@ using base::android::AttachCurrentThread;
 
 namespace vr_shell {
 
-VrShellDelegate::VrShellDelegate(JNIEnv* env, jobject obj) {
+VrShellDelegate::VrShellDelegate(JNIEnv* env, jobject obj)
+    : weak_ptr_factory_(this) {
   DVLOG(1) << __FUNCTION__ << "=" << this;
   j_vr_shell_delegate_.Reset(env, obj);
 }
@@ -107,7 +108,9 @@ void VrShellDelegate::DisplayActivate(JNIEnv* env,
                                       const JavaParamRef<jobject>& obj) {
   if (device_provider_) {
     device_provider_->Device()->OnActivate(
-        device::mojom::VRDisplayEventReason::MOUNTED);
+        device::mojom::VRDisplayEventReason::MOUNTED,
+        base::Bind(&VrShellDelegate::OnActivateDisplayHandled,
+                   weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -137,6 +140,14 @@ void VrShellDelegate::OnResume(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   if (non_presenting_delegate_) {
     non_presenting_delegate_->Resume();
   }
+}
+
+void VrShellDelegate::UpdateNonPresentingContext(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jlong context) {
+  gvr_context* ctx = reinterpret_cast<gvr_context*>(context);
+  non_presenting_delegate_->UpdateContext(ctx);
 }
 
 void VrShellDelegate::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
@@ -188,7 +199,9 @@ void VrShellDelegate::ExitWebVRPresent() {
   // being used elsewhere.
   JNIEnv* env = AttachCurrentThread();
   if (Java_VrShellDelegate_exitWebVRPresent(env, j_vr_shell_delegate_.obj())) {
-    device_provider_->Device()->OnExitPresent();
+    if (device_provider_) {
+      device_provider_->Device()->OnExitPresent();
+    }
   }
 }
 
@@ -201,6 +214,14 @@ void VrShellDelegate::CreateNonPresentingDelegate() {
       base::MakeUnique<NonPresentingGvrDelegate>(context);
   non_presenting_delegate_->UpdateVSyncInterval(timebase_nanos_,
                                                 interval_seconds_);
+}
+
+void VrShellDelegate::OnActivateDisplayHandled(bool will_not_present) {
+  if (will_not_present) {
+    // WebVR page didn't request presentation in the vrdisplayactivate handler.
+    // Tell VrShell that we are in VR Browsing Mode.
+    ExitWebVRPresent();
+  }
 }
 
 device::GvrDelegate* VrShellDelegate::GetDelegate() {

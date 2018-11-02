@@ -5,7 +5,6 @@
 package org.chromium.chrome.test;
 
 import android.content.Context;
-import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 
@@ -13,6 +12,7 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.BaseChromiumInstrumentationTestRunner;
 import org.chromium.base.test.BaseTestResult;
 import org.chromium.base.test.util.DisableIfSkipCheck;
 import org.chromium.base.test.util.RestrictionSkipCheck;
@@ -21,7 +21,7 @@ import org.chromium.chrome.browser.vr_shell.VrClassesWrapper;
 import org.chromium.chrome.browser.vr_shell.VrDaydreamApi;
 import org.chromium.chrome.test.util.ChromeDisableIf;
 import org.chromium.chrome.test.util.ChromeRestriction;
-import org.chromium.content.browser.test.ContentInstrumentationTestRunner;
+import org.chromium.content.browser.test.ChildProcessAllocatorSettingsHook;
 import org.chromium.policy.test.annotations.Policies;
 import org.chromium.ui.base.DeviceFormFactor;
 
@@ -36,9 +36,7 @@ import java.util.concurrent.FutureTask;
  *  An Instrumentation test runner that optionally spawns a test HTTP server.
  *  The server's root directory is the device's external storage directory.
  */
-public class ChromeInstrumentationTestRunner extends ContentInstrumentationTestRunner {
-    private static final String TAG = "ChromeInstrumentationTestRunner";
-
+public class ChromeInstrumentationTestRunner extends BaseChromiumInstrumentationTestRunner {
     @Override
     public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
@@ -51,6 +49,7 @@ public class ChromeInstrumentationTestRunner extends ContentInstrumentationTestR
         result.addSkipCheck(new ChromeDisableIfSkipCheck(getTargetContext()));
 
         result.addPreTestHook(Policies.getRegistrationHook());
+        result.addPreTestHook(new ChildProcessAllocatorSettingsHook());
     }
 
     static class ChromeRestrictionSkipCheck extends RestrictionSkipCheck {
@@ -109,19 +108,14 @@ public class ChromeInstrumentationTestRunner extends ContentInstrumentationTestR
             }
         }
 
-        private boolean supportsWebVr() {
-            // WebVR support is tied to VR Services support, which is only on K+
-            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT;
-        }
-
         @Override
         protected boolean restrictionApplies(String restriction) {
             if (TextUtils.equals(restriction, ChromeRestriction.RESTRICTION_TYPE_PHONE)
-                    && DeviceFormFactor.isTablet(getTargetContext())) {
+                    && DeviceFormFactor.isTablet()) {
                 return true;
             }
             if (TextUtils.equals(restriction, ChromeRestriction.RESTRICTION_TYPE_TABLET)
-                    && !DeviceFormFactor.isTablet(getTargetContext())) {
+                    && !DeviceFormFactor.isTablet()) {
                 return true;
             }
             if (TextUtils.equals(
@@ -164,20 +158,6 @@ public class ChromeInstrumentationTestRunner extends ContentInstrumentationTestR
                     return true;
                 }
             }
-            if (TextUtils.equals(restriction, ChromeRestriction.RESTRICTION_TYPE_WEBVR_SUPPORTED)
-                    || TextUtils.equals(
-                               restriction, ChromeRestriction.RESTRICTION_TYPE_WEBVR_UNSUPPORTED)) {
-                boolean webvrSupported = supportsWebVr();
-                if (TextUtils.equals(
-                            restriction, ChromeRestriction.RESTRICTION_TYPE_WEBVR_SUPPORTED)
-                        && !webvrSupported) {
-                    return true;
-                } else if (TextUtils.equals(restriction,
-                                   ChromeRestriction.RESTRICTION_TYPE_WEBVR_UNSUPPORTED)
-                        && webvrSupported) {
-                    return true;
-                }
-            }
             return false;
         }
     }
@@ -191,12 +171,10 @@ public class ChromeInstrumentationTestRunner extends ContentInstrumentationTestR
 
         @Override
         protected boolean deviceTypeApplies(String type) {
-            if (TextUtils.equals(type, ChromeDisableIf.PHONE)
-                    && !DeviceFormFactor.isTablet(mTargetContext)) {
+            if (TextUtils.equals(type, ChromeDisableIf.PHONE) && !DeviceFormFactor.isTablet()) {
                 return true;
             }
-            if (TextUtils.equals(type, ChromeDisableIf.TABLET)
-                    && DeviceFormFactor.isTablet(mTargetContext)) {
+            if (TextUtils.equals(type, ChromeDisableIf.TABLET) && DeviceFormFactor.isTablet()) {
                 return true;
             }
             if (TextUtils.equals(type, ChromeDisableIf.LARGETABLET)

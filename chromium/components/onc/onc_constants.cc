@@ -59,6 +59,7 @@ const char kSourceUser[] = "User";
 const char kSourceUserPolicy[] = "UserPolicy";
 const char kSource[] = "Source";
 const char kStaticIPConfig[] = "StaticIPConfig";
+const char kTether[] = "Tether";
 const char kType[] = "Type";
 const char kVPN[] = "VPN";
 const char kWiFi[] = "WiFi";
@@ -66,6 +67,10 @@ const char kWimax[] = "WiMAX";
 
 std::string CellularProperty(const std::string& property) {
   return std::string(kCellular) + "." + property;
+}
+
+std::string TetherProperty(const std::string& property) {
+  return std::string(kTether) + "." + property;
 }
 
 std::string VpnProperty(const std::string& property) {
@@ -82,6 +87,7 @@ namespace network_type {
 const char kAllTypes[] = "All";
 const char kCellular[] = "Cellular";
 const char kEthernet[] = "Ethernet";
+const char kTether[] = "Tether";
 const char kVPN[] = "VPN";
 const char kWiFi[] = "WiFi";
 const char kWimax[] = "WiMAX";
@@ -188,6 +194,13 @@ const char kEAP[] = "EAP";
 const char k8021X[] = "8021X";
 }  // namespace ethernet
 
+namespace tether {
+const char kBatteryPercentage[] = "BatteryPercentage";
+const char kCarrier[] = "Carrier";
+const char kHasConnectedToHost[] = "HasConnectedToHost";
+const char kSignalStrength[] = "SignalStrength";
+}  // namespace tether
+
 namespace ipconfig {
 const char kGateway[] = "Gateway";
 const char kIPAddress[] = "IPAddress";
@@ -230,6 +243,7 @@ const char kSignalStrength[] = "SignalStrength";
 
 namespace client_cert {
 const char kClientCertPattern[] = "ClientCertPattern";
+const char kClientCertPKCS11Id[] = "ClientCertPKCS11Id";
 const char kClientCertRef[] = "ClientCertRef";
 const char kClientCertType[] = "ClientCertType";
 const char kClientCertTypeNone[] = "None";
@@ -243,6 +257,7 @@ const char kLocality[] = "Locality";
 const char kOrganization[] = "Organization";
 const char kOrganizationalUnit[] = "OrganizationalUnit";
 const char kPattern[] = "Pattern";
+const char kPKCS11Id[] = "PKCS11Id";
 const char kRef[] = "Ref";
 const char kSubject[] = "Subject";
 }  // namespace client_cert
@@ -286,6 +301,7 @@ const char kIdentity[] = "Identity";
 const char kInner[] = "Inner";
 const char kLEAP[] = "LEAP";
 const char kMD5[] = "MD5";
+const char kMSCHAP[] = "MSCHAP";
 const char kMSCHAPv2[] = "MSCHAPv2";
 const char kOuter[] = "Outer";
 const char kPAP[] = "PAP";
@@ -295,6 +311,7 @@ const char kSaveCredentials[] = "SaveCredentials";
 const char kServerCAPEMs[] = "ServerCAPEMs";
 const char kServerCARef[] = "ServerCARef";
 const char kServerCARefs[] = "ServerCARefs";
+const char kSubjectMatch[] = "SubjectMatch";
 const char kUseSystemCAs[] = "UseSystemCAs";
 const char kUseProactiveKeyCaching[] = "UseProactiveKeyCaching";
 }  // namespace eap

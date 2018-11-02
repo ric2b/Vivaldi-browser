@@ -53,7 +53,6 @@
 <translation id="1820259098641718022">વાંચન સૂચિમાં ઉમેર્યું</translation>
 <translation id="1876721852596493031">ઉપયોગ ડેટા મોકલો</translation>
 <translation id="1886928167269928266">શરૂઆતથી</translation>
-<translation id="1894451531427596130">આની કાર્ય કરવાની રીતને <ph name="BEGIN_LINK" />સેટિંગ્સ<ph name="END_LINK" />માં નિયંત્રિત કરો</translation>
 <translation id="1911619930368729126">Google ડ્રાઇવ પર અપલોડ કરો</translation>
 <translation id="1941314575388338491">કૉપિ કરવા માટે બે વાર ટૅપ કરો.</translation>
 <translation id="1952728750904661634">સંચાલિત એકાઉન્ટ સાથે સાઇન ઇન કરો</translation>
@@ -97,6 +96,7 @@
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">અનુવાદ સેટિંગ્સને ફરીથી સેટ કરો</translation>
 <translation id="285960592395650245">ડાઉનલોડનો ફરી પ્રયાસ કરો</translation>
+<translation id="2870560284913253234">સાઇટ</translation>
 <translation id="2871695793448672541">છુપાયેલ, પાસવર્ડ</translation>
 <translation id="2898963176829412617">નવું ફોલ્ડર…</translation>
 <translation id="2903493209154104877">સરનામાંઓ</translation>
@@ -109,7 +109,6 @@
 <translation id="2989805286512600854">નવા ટૅબમાં ખોલો</translation>
 <translation id="3024255823539804759">ગત દિવસ</translation>
 <translation id="3037605927509011580">અરર કંઇક ભુલ થઇ!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> ઉપલબ્ધ નથી. તમારા બ્રાઉઝિંગ ઇતિહાસને ઍક્સેસ કરવા માટે, સાધનો મેનૂમાંથી "<ph name="SHOW_HISTORY" />" પસંદ કરો.</translation>
 <translation id="3112556859945124369">ચિહ્નિત કરો…</translation>
 <translation id="3151924044251363314">માત્ર તમારા પાસફ્રેઝ સાથેની કોઈ વ્યક્તિ જ તમારા એન્ક્રિપ્ટ કરેલા ડેટાને વાંચી શકે છે. Google ને પાસફ્રેઝ મોકલવામાં આવતો નથી કે તેના દ્વારા સંગ્રહિત કરવામાં આવતો નથી. જો તમે તમારો પાસફ્રેઝ ભૂલી જાઓ અથવા આ સેટિંગ બદલવા માંગતા હોવ, તો તમારે સમન્વયનને ફરીથી સેટ કરવું પડશે. <ph name="BEGIN_LINK" />વધુ જાણો<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">તમામને આ રીતે ચિહ્નિત કરો…</translation>
@@ -150,6 +149,7 @@
 <translation id="3638472932233958418">વેબપૃષ્ઠો પહેલાથી લોડ કરો</translation>
 <translation id="3691593122358196899"><ph name="FOLDER_TITLE" /> પર બુકમાર્ક કર્યું</translation>
 <translation id="3738139272394829648">શોધવા માટે ટચ કરો</translation>
+<translation id="3742082982782149146">સાઇટ URL કૉપિ કરવામાં આવ્યું હતું.</translation>
 <translation id="3771033907050503522">છૂપા ટેબ્સ</translation>
 <translation id="3783017676699494206">છબી સાચવો</translation>
 <translation id="3789841737615482174">ઇન્સ્ટોલ કરો</translation>
@@ -164,10 +164,12 @@
 <translation id="4038354071007134711">આ ઉપકરણ પર કોઈ ઍપ્લિકેશન ફાઇલને ખોલી શકતી નથી.</translation>
 <translation id="4049507953662678203">તમારી પાસે નેટવર્ક કનેક્શન છે તેની ખાતરી કરો અને ફરીથી પ્રયાસ કરો.</translation>
 <translation id="411254640334432676">ડાઉનલોડ નિષ્ફળ થયું.</translation>
+<translation id="4117350985506774529">તમારું વપરાશકર્તાનામ કૉપિ કરવામાં આવ્યું હતું.</translation>
 <translation id="4121993058175073134">ચોખ્ખો-નિકાસ ડેટા મોકલવા માટે, કૃપા કરીને સેટિંગ્સ એપ્લિકેશનમાં તમારા ઇમેઇલ એકાઉન્ટને ગોઠવો.</translation>
 <translation id="4124987746317609294">સમય શ્રેણી</translation>
 <translation id="4172051516777682613">હંમેશા બતાવો</translation>
 <translation id="418156467088430727">ઑફલાઇન સંસ્કરણ નવા ટૅબમાં જુઓ</translation>
+<translation id="4237682350741091554">Chrome સમન્વયન અને વૈયક્તિકરણને <ph name="BEGIN_LINK" />સેટિંગ્સ<ph name="END_LINK" />માં સંચાલિત કરો</translation>
 <translation id="424315890655130736">પાસફ્રેઝ દાખલ કરો</translation>
 <translation id="4272631900155121838">QR કોડને સ્કેન કરવા માટે, સેટિંગ્સમાંથી કૅમેરો સક્ષમ કરો</translation>
 <translation id="4281844954008187215">સેવાની શરતો</translation>
@@ -175,6 +177,7 @@
 <translation id="4359125752503270327">આ પૃષ્ઠ બીજી અ‍ૅપ્લિકેશનમાં ખુલશે.</translation>
 <translation id="4378154925671717803">ફોન</translation>
 <translation id="441868831736628555">ગોપનીયતા સૂચના</translation>
+<translation id="4508750114462689118">સાઇન-ઇન પ્રોમો બંધ કરો</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> પર સાચવેલા પાસવર્ડ્સ જુઓ અને સંચાલિત કરો</translation>
 <translation id="4536418791685807335">ફરીથી સાઇન ઇન કરવાનો પ્રયાસ કરો.</translation>
 <translation id="4620246317052452550">તમે વાંચેલા પૃષ્ઠો</translation>
@@ -220,6 +223,7 @@
 
 સેટિંગ્સના સામાન્ય વિભાગમાં હેન્ડઓફ સક્ષમ હોવું પણ આવશ્યક છે અને તમારા ઉપકરણો, સમાન iCloud એકાઉન્ટનો ઉપયોગ કરતાં હોવા આવશ્યક છે.</translation>
 <translation id="5556459405103347317">ફરિથી લોડ કરો</translation>
+<translation id="5619279135193775234">મેઇલ</translation>
 <translation id="5626245204502895507">ફાઇલ આ સમયે ડાઉનલોડ કરી શકાઈ નથી.</translation>
 <translation id="5659593005791499971">ઇમેઇલ</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@
 <translation id="7136892417564438900">કૅમેરો અનુપલબ્ધ છે</translation>
 <translation id="7159472599653637159">મોબાઇલ સાઇટની વિનંતી કરો</translation>
 <translation id="7167621057293532233">ડેટા પ્રકાર</translation>
+<translation id="7175593937868963913">ઇમેઇલ કંપોઝ કરો</translation>
 <translation id="7189598951263744875">શેર કરો...</translation>
 <translation id="7203585745079012652">જવાબો પાછા બોલો</translation>
 <translation id="722055596168483966">Google સેવાઓને વ્યક્તિગત કરો</translation>
@@ -358,7 +363,6 @@
 <translation id="8205564605687841303">રદ કરો</translation>
 <translation id="8225985093977202398">કૅશ કરેલ છબીઓ અને ફાઇલો</translation>
 <translation id="8261506727792406068">કાઢી નાખો</translation>
-<translation id="8272194309885535896">છબી ડાઉનલોડ કરો</translation>
 <translation id="8272426682713568063">ક્રેડિટ કાર્ડ્સ</translation>
 <translation id="8281781826761538115">ડિફૉલ્ટ - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">શોધ, જાહેરાતો અને અન્ય Google સેવાઓને વ્યક્તિગત કરવા માટે Google, તમારા બ્રાઉઝિંગ ઇતિહાસનો ઉપયોગ કેવી રીતે કરે છે તે નિયંત્રિત કરો</translation>

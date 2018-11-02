@@ -78,7 +78,7 @@ void FontFaceCache::AddFontFace(CSSFontSelector* css_font_selector,
 
 void FontFaceCache::Remove(const StyleRuleFontFace* font_face_rule) {
   StyleRuleToFontFace::iterator it =
-      style_rule_to_font_face_.Find(font_face_rule);
+      style_rule_to_font_face_.find(font_face_rule);
   if (it != style_rule_to_font_face_.end()) {
     RemoveFontFace(it->value.Get(), true);
     style_rule_to_font_face_.erase(it);
@@ -87,13 +87,13 @@ void FontFaceCache::Remove(const StyleRuleFontFace* font_face_rule) {
 
 void FontFaceCache::RemoveFontFace(FontFace* font_face, bool css_connected) {
   FamilyToTraitsMap::iterator font_faces_iter =
-      font_faces_.Find(font_face->family());
+      font_faces_.find(font_face->family());
   if (font_faces_iter == font_faces_.end())
     return;
   TraitsMap* family_font_faces = font_faces_iter->value.Get();
 
   TraitsMap::iterator family_font_faces_iter =
-      family_font_faces->Find(font_face->Traits().Bitfield());
+      family_font_faces->find(font_face->Traits().Bitfield());
   if (family_font_faces_iter == family_font_faces->end())
     return;
   CSSSegmentedFontFace* segmented_font_face = family_font_faces_iter->value;
@@ -114,17 +114,17 @@ void FontFaceCache::RemoveFontFace(FontFace* font_face, bool css_connected) {
 void FontFaceCache::ClearCSSConnected() {
   for (const auto& item : style_rule_to_font_face_)
     RemoveFontFace(item.value.Get(), true);
-  style_rule_to_font_face_.Clear();
+  style_rule_to_font_face_.clear();
 }
 
 void FontFaceCache::ClearAll() {
   if (font_faces_.IsEmpty())
     return;
 
-  font_faces_.Clear();
-  fonts_.Clear();
-  style_rule_to_font_face_.Clear();
-  css_connected_font_faces_.Clear();
+  font_faces_.clear();
+  fonts_.clear();
+  style_rule_to_font_face_.clear();
+  css_connected_font_faces_.clear();
   IncrementVersion();
 }
 

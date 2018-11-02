@@ -344,6 +344,11 @@ void NotificationPlatformBridgeMac::GetDisplayed(
                             callback:callback];
 }
 
+void NotificationPlatformBridgeMac::SetReadyCallback(
+    NotificationBridgeReadyCallback callback) {
+  std::move(callback).Run(true);
+}
+
 // static
 void NotificationPlatformBridgeMac::ProcessNotificationResponse(
     NSDictionary* response) {
@@ -493,8 +498,7 @@ bool NotificationPlatformBridgeMac::VerifyNotificationData(
         initWithServiceName:
             [NSString
                 stringWithFormat:notification_constants::kAlertXPCServiceName,
-                                 [base::mac::FrameworkBundle()
-                                     bundleIdentifier]]]);
+                                 [base::mac::OuterBundle() bundleIdentifier]]]);
     xpcConnection_.get().remoteObjectInterface =
         [NSXPCInterface interfaceWithProtocol:@protocol(NotificationDelivery)];
 

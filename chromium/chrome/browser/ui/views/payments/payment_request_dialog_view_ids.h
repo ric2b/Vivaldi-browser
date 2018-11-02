@@ -29,19 +29,33 @@ enum class DialogViewID : int {
   CANCEL_BUTTON,
   BACK_BUTTON,
   CVC_PROMPT_CONFIRM_BUTTON,
+  ADD_BILLING_ADDRESS_BUTTON,
+  SAVE_ADDRESS_BUTTON,
+  EDIT_ITEM_BUTTON,
 
-  // The following are Label objects.
+  // The following are buttons that are displayed inline in the Payment Sheet
+  // sections when no option is selected or available.
+  PAYMENT_SHEET_CONTACT_INFO_SECTION_BUTTON,
+  PAYMENT_SHEET_PAYMENT_METHOD_SECTION_BUTTON,
+  PAYMENT_SHEET_SHIPPING_ADDRESS_SECTION_BUTTON,
+  PAYMENT_SHEET_SHIPPING_OPTION_SECTION_BUTTON,
+
+  // The following are StyledLabel objects.
   ORDER_SUMMARY_TOTAL_AMOUNT_LABEL,
+  ORDER_SUMMARY_TOTAL_CURRENCY_LABEL,
   ORDER_SUMMARY_LINE_ITEM_1,
   ORDER_SUMMARY_LINE_ITEM_2,
   ORDER_SUMMARY_LINE_ITEM_3,
+  // The following are Label objects.
   SHIPPING_OPTION_DESCRIPTION,
   SHIPPING_OPTION_AMOUNT,
+  SHIPPING_ADDRESS_OPTION_ERROR,
 
-  // Used in "three line labels" to annotate each Label of the grouping.
-  THREE_LINE_LABEL_LINE_1,
-  THREE_LINE_LABEL_LINE_2,
-  THREE_LINE_LABEL_LINE_3,
+  // Used in profile labels to annotate each line of the grouping.
+  PROFILE_LABEL_LINE_1,
+  PROFILE_LABEL_LINE_2,
+  PROFILE_LABEL_LINE_3,
+  PROFILE_LABEL_ERROR,
 
   // The following are views contained within the Payment Method Sheet.
   CONTACT_INFO_SHEET_LIST_VIEW,
@@ -52,12 +66,28 @@ enum class DialogViewID : int {
   // unique at the scope of the parent row.
   CHECKMARK_VIEW,
 
-  // Used to label the error labels with an offset, which gets added to
-  // the Autofill type value they represent (for tests).
-  ERROR_LABEL_OFFSET,
-
   // The CVC text field in the unmask sheet.
   CVC_PROMPT_TEXT_FIELD,
+  CVC_ERROR_LABEL,
+  CVC_MONTH,
+  CVC_YEAR,
+
+  // The following are the ids for the individual sheets.
+  CONTACT_INFO_EDITOR_SHEET,
+  CREDIT_CARD_EDITOR_SHEET,
+  CVC_UNMASK_SHEET,
+  SHIPPING_ADDRESS_EDITOR_SHEET,
+
+  // The combobox to choose a billing address to associate to a credit card.
+  CREDIT_CARD_BILLING_ADDRESS,
+
+  // NOTE: Keep these values last.
+  // Used to offset the IDs of input fields, which gets added to the Autofill
+  // type value they represent.
+  INPUT_FIELD_TYPE_OFFSET,
+  // Used to label the error labels with an offset, which gets added to
+  // the Autofill type value they represent.
+  ERROR_LABEL_OFFSET = INPUT_FIELD_TYPE_OFFSET + autofill::MAX_VALID_FIELD_TYPE,
 };
 
 }  // namespace payments

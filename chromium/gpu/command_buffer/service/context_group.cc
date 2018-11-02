@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "gpu/command_buffer/service/buffer_manager.h"
 #include "gpu/command_buffer/service/framebuffer_manager.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
@@ -21,6 +22,7 @@
 #include "gpu/command_buffer/service/progress_reporter.h"
 #include "gpu/command_buffer/service/renderbuffer_manager.h"
 #include "gpu/command_buffer/service/sampler_manager.h"
+#include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/command_buffer/service/shader_manager.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
@@ -69,7 +71,8 @@ ContextGroup::ContextGroup(
     bool bind_generates_resource,
     gpu::ImageFactory* image_factory,
     ProgressReporter* progress_reporter,
-    const GpuFeatureInfo& gpu_feature_info)
+    const GpuFeatureInfo& gpu_feature_info,
+    ServiceDiscardableManager* discardable_manager)
     : gpu_preferences_(gpu_preferences),
       mailbox_manager_(mailbox_manager),
       memory_tracker_(memory_tracker),
@@ -109,13 +112,14 @@ ContextGroup::ContextGroup(
       image_factory_(image_factory),
       passthrough_resources_(new PassthroughResources),
       progress_reporter_(progress_reporter),
-      gpu_feature_info_(gpu_feature_info) {
-  {
-    DCHECK(feature_info_);
-    if (!mailbox_manager_.get())
-      mailbox_manager_ = new MailboxManagerImpl;
-    transfer_buffer_manager_ = new TransferBufferManager(memory_tracker_.get());
-  }
+      gpu_feature_info_(gpu_feature_info),
+      discardable_manager_(discardable_manager) {
+  DCHECK(discardable_manager);
+  DCHECK(feature_info_);
+  if (!mailbox_manager_.get())
+    mailbox_manager_ = new MailboxManagerImpl;
+  transfer_buffer_manager_ =
+      base::MakeUnique<TransferBufferManager>(memory_tracker_.get());
 }
 
 bool ContextGroup::Initialize(GLES2Decoder* decoder,
@@ -135,7 +139,7 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
       return false;
     }
     // If we've already initialized the group just add the context.
-    decoders_.push_back(base::AsWeakPtr<GLES2Decoder>(decoder));
+    decoders_.push_back(decoder->AsWeakPtr());
     return true;
   }
 
@@ -147,8 +151,6 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
                 << "initialization failed.";
     return false;
   }
-
-  transfer_buffer_manager_->Initialize();
 
   const GLint kMinRenderbufferSize = 512;  // GL says 1 pixel!
   GLint max_renderbuffer_size = 0;
@@ -219,9 +221,6 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
 
   buffer_manager_.reset(
       new BufferManager(memory_tracker_.get(), feature_info_.get()));
-  framebuffer_manager_.reset(
-      new FramebufferManager(max_draw_buffers_, max_color_attachments_,
-                             framebuffer_completeness_cache_));
   renderbuffer_manager_.reset(new RenderbufferManager(
       memory_tracker_.get(), max_renderbuffer_size, max_samples,
       feature_info_.get()));
@@ -316,8 +315,7 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
       memory_tracker_.get(), feature_info_.get(), max_texture_size,
       max_cube_map_texture_size, max_rectangle_texture_size,
       max_3d_texture_size, max_array_texture_layers, bind_generates_resource_,
-      progress_reporter_));
-  texture_manager_->set_framebuffer_manager(framebuffer_manager_.get());
+      progress_reporter_, discardable_manager_));
 
   const GLint kMinTextureImageUnits = 8;
   const GLint kMinVertexTextureImageUnits = 0;
@@ -456,7 +454,7 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
     return false;
   }
 
-  decoders_.push_back(base::AsWeakPtr<GLES2Decoder>(decoder));
+  decoders_.push_back(decoder->AsWeakPtr());
   return true;
 }
 
@@ -507,14 +505,6 @@ void ContextGroup::Destroy(GLES2Decoder* decoder, bool have_context) {
     }
     buffer_manager_->Destroy();
     buffer_manager_.reset();
-    ReportProgress();
-  }
-
-  if (framebuffer_manager_ != NULL) {
-    framebuffer_manager_->Destroy(have_context);
-    if (texture_manager_)
-      texture_manager_->set_framebuffer_manager(NULL);
-    framebuffer_manager_.reset();
     ReportProgress();
   }
 

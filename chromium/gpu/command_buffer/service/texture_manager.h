@@ -27,8 +27,9 @@
 #include "ui/gl/gl_image.h"
 
 namespace gpu {
-namespace gles2 {
+class ServiceDiscardableManager;
 
+namespace gles2 {
 class GLES2Decoder;
 class GLStreamTextureImage;
 struct ContextState;
@@ -289,9 +290,7 @@ class GPU_EXPORT Texture final : public TextureBase {
     --framebuffer_attachment_count_;
   }
 
-  void SetImmutable(bool immutable) {
-    immutable_ = immutable;
-  }
+  void SetImmutable(bool immutable);
 
   bool IsImmutable() const {
     return immutable_;
@@ -324,6 +323,14 @@ class GPU_EXPORT Texture final : public TextureBase {
   void ApplyFormatWorkarounds(FeatureInfo* feature_info);
 
   bool EmulatingRGB();
+
+  // In GLES2 "texture complete" means it has all required mips for filtering
+  // down to a 1x1 pixel texture, they are in the correct order, they are all
+  // the same format.
+  bool texture_complete() const {
+    DCHECK(!completeness_dirty_);
+    return texture_complete_;
+  }
 
   static bool ColorRenderable(const FeatureInfo* feature_info,
                               GLenum internal_format,
@@ -418,16 +425,10 @@ class GPU_EXPORT Texture final : public TextureBase {
 
   void MarkLevelAsInternalWorkaround(GLenum target, GLint level);
 
-  // In GLES2 "texture complete" means it has all required mips for filtering
-  // down to a 1x1 pixel texture, they are in the correct order, they are all
-  // the same format.
-  bool texture_complete() const {
-    return texture_complete_;
-  }
-
   // In GLES2 "cube complete" means all 6 faces level 0 are defined, all the
   // same format, all the same dimensions and all width = height.
   bool cube_complete() const {
+    DCHECK(!completeness_dirty_);
     return cube_complete_;
   }
 
@@ -612,11 +613,12 @@ class GPU_EXPORT Texture final : public TextureBase {
   // Whether or not this texture is "texture complete"
   bool texture_complete_;
 
-  // Whether mip levels have changed and should be reverified.
-  bool texture_mips_dirty_;
-
   // Whether or not this texture is "cube complete"
   bool cube_complete_;
+
+  // Whether mip levels, base_level, or max_level have changed and
+  // texture_completeness_ and cube_completeness_ should be reverified.
+  bool completeness_dirty_;
 
   // Whether or not this texture is non-power-of-two
   bool npot_;
@@ -698,20 +700,7 @@ class GPU_EXPORT TextureRef : public base::RefCounted<TextureRef> {
 struct DecoderTextureState {
   // total_texture_upload_time automatically initialized to 0 in default
   // constructor.
-  explicit DecoderTextureState(const GpuDriverBugWorkarounds& workarounds)
-      : tex_image_failed(false),
-        texture_upload_count(0),
-        texsubimage_faster_than_teximage(
-            workarounds.texsubimage_faster_than_teximage),
-        force_cube_map_positive_x_allocation(
-            workarounds.force_cube_map_positive_x_allocation),
-        force_cube_complete(workarounds.force_cube_complete),
-        unpack_alignment_workaround_with_unpack_buffer(
-            workarounds.unpack_alignment_workaround_with_unpack_buffer),
-        unpack_overlapping_rows_separately_unpack_buffer(
-            workarounds.unpack_overlapping_rows_separately_unpack_buffer),
-        unpack_image_height_workaround_with_unpack_buffer(
-            workarounds.unpack_image_height_workaround_with_unpack_buffer) {}
+  explicit DecoderTextureState(const GpuDriverBugWorkarounds& workarounds);
 
   // This indicates all the following texSubImage*D calls that are part of the
   // failed texImage*D call should be ignored. The client calls have a lock
@@ -719,13 +708,10 @@ struct DecoderTextureState {
   // group.
   bool tex_image_failed;
 
-  // Command buffer stats.
-  int texture_upload_count;
-  base::TimeDelta total_texture_upload_time;
-
   bool texsubimage_faster_than_teximage;
   bool force_cube_map_positive_x_allocation;
   bool force_cube_complete;
+  bool force_int_or_srgb_cube_texture_complete;
   bool unpack_alignment_workaround_with_unpack_buffer;
   bool unpack_overlapping_rows_separately_unpack_buffer;
   bool unpack_image_height_workaround_with_unpack_buffer;
@@ -771,12 +757,12 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
                  GLsizei max_3d_texture_size,
                  GLsizei max_array_texture_layers,
                  bool use_default_textures,
-                 ProgressReporter* progress_reporter);
+                 ProgressReporter* progress_reporter,
+                 ServiceDiscardableManager* discardable_manager);
   ~TextureManager() override;
 
-  void set_framebuffer_manager(FramebufferManager* manager) {
-    framebuffer_manager_ = manager;
-  }
+  void AddFramebufferManager(FramebufferManager* framebuffer_manager);
+  void RemoveFramebufferManager(FramebufferManager* framebuffer_manager);
 
   // Init the texture manager.
   bool Initialize();
@@ -913,6 +899,12 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
 
   // Gets the texture info for the given texture.
   TextureRef* GetTexture(GLuint client_id) const;
+
+  // Takes the TextureRef for the given texture out of the texture manager.
+  scoped_refptr<TextureRef> TakeTexture(GLuint client_id);
+
+  // Returns a TextureRef to the texture manager.
+  void ReturnTexture(scoped_refptr<TextureRef> texture_ref);
 
   // Removes a texture info.
   void RemoveTexture(GLuint client_id);
@@ -1208,7 +1200,7 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
 
   scoped_refptr<FeatureInfo> feature_info_;
 
-  FramebufferManager* framebuffer_manager_;
+  std::vector<FramebufferManager*> framebuffer_managers_;
 
   // Info for each texture in the system.
   typedef base::hash_map<GLuint, scoped_refptr<TextureRef> > TextureMap;
@@ -1252,19 +1244,9 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
   // using in-process command buffer.
   ProgressReporter* progress_reporter_;
 
+  ServiceDiscardableManager* discardable_manager_;
+
   DISALLOW_COPY_AND_ASSIGN(TextureManager);
-};
-
-// This class records texture upload time when in scope.
-class ScopedTextureUploadTimer {
- public:
-  explicit ScopedTextureUploadTimer(DecoderTextureState* texture_state);
-  ~ScopedTextureUploadTimer();
-
- private:
-  DecoderTextureState* texture_state_;
-  base::TimeTicks begin_time_;
-  DISALLOW_COPY_AND_ASSIGN(ScopedTextureUploadTimer);
 };
 
 }  // namespace gles2

@@ -14,6 +14,7 @@
 #include "cc/layers/painted_scrollbar_layer.h"
 #include "cc/layers/scrollbar_layer_interface.h"
 #include "cc/layers/solid_color_scrollbar_layer.h"
+#include "cc/trees/element_id.h"
 
 using cc::PaintedOverlayScrollbarLayer;
 using cc::PaintedScrollbarLayer;
@@ -41,12 +42,12 @@ WebScrollbarLayerImpl::WebScrollbarLayerImpl(
                        base::MakeUnique<ScrollbarImpl>(std::move(scrollbar),
                                                        painter,
                                                        std::move(geometry)),
-                       cc::Layer::INVALID_ID))
+                       cc::ElementId()))
                  : new WebLayerImpl(PaintedScrollbarLayer::Create(
                        base::MakeUnique<ScrollbarImpl>(std::move(scrollbar),
                                                        painter,
                                                        std::move(geometry)),
-                       cc::Layer::INVALID_ID))) {}
+                       cc::ElementId()))) {}
 
 WebScrollbarLayerImpl::WebScrollbarLayerImpl(
     blink::WebScrollbar::Orientation orientation,
@@ -58,7 +59,7 @@ WebScrollbarLayerImpl::WebScrollbarLayerImpl(
                                            thumb_thickness,
                                            track_start,
                                            is_left_side_vertical_scrollbar,
-                                           cc::Layer::INVALID_ID))) {}
+                                           cc::ElementId()))) {}
 
 WebScrollbarLayerImpl::~WebScrollbarLayerImpl() {
 }
@@ -69,9 +70,13 @@ blink::WebLayer* WebScrollbarLayerImpl::Layer() {
 
 void WebScrollbarLayerImpl::SetScrollLayer(blink::WebLayer* layer) {
   cc::Layer* scroll_layer =
-      layer ? static_cast<WebLayerImpl*>(layer)->layer() : 0;
-  layer_->layer()->ToScrollbarLayer()->SetScrollLayer(
-      scroll_layer ? scroll_layer->id() : cc::Layer::INVALID_ID);
+      layer ? static_cast<WebLayerImpl*>(layer)->layer() : nullptr;
+  layer_->layer()->ToScrollbarLayer()->SetScrollElementId(
+      scroll_layer ? scroll_layer->element_id() : cc::ElementId());
+}
+
+void WebScrollbarLayerImpl::SetElementId(const cc::ElementId& element_id) {
+  layer_->SetElementId(element_id);
 }
 
 }  // namespace cc_blink

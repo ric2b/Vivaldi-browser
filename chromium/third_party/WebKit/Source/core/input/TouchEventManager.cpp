@@ -4,6 +4,7 @@
 
 #include "core/input/TouchEventManager.h"
 
+#include <memory>
 #include "core/dom/Document.h"
 #include "core/events/TouchEvent.h"
 #include "core/frame/Deprecation.h"
@@ -16,10 +17,10 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "platform/Histogram.h"
+#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/PtrUtil.h"
+#include "public/platform/WebCoalescedInputEvent.h"
 #include "public/platform/WebTouchEvent.h"
-#include "wtf/CurrentTime.h"
-#include "wtf/PtrUtil.h"
-#include <memory>
 
 namespace blink {
 
@@ -50,7 +51,7 @@ const AtomicString& TouchEventNameForTouchPointState(
     case WebTouchPoint::kStateStationary:
     // Fall through to default
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return g_empty_atom;
   }
 }
@@ -103,11 +104,11 @@ TouchEventManager::TouchEventManager(LocalFrame& frame) : frame_(frame) {
 
 void TouchEventManager::Clear() {
   touch_sequence_document_.Clear();
-  target_for_touch_id_.Clear();
-  region_for_touch_id_.Clear();
+  target_for_touch_id_.clear();
+  region_for_touch_id_.clear();
   touch_pressed_ = false;
   suppressing_touchmoves_within_slop_ = false;
-  current_touch_action_ = kTouchActionAuto;
+  current_touch_action_ = TouchAction::kTouchActionAuto;
 }
 
 DEFINE_TRACE(TouchEventManager) {
@@ -118,6 +119,7 @@ DEFINE_TRACE(TouchEventManager) {
 
 WebInputEventResult TouchEventManager::DispatchTouchEvents(
     const WebTouchEvent& event,
+    const Vector<WebTouchEvent>& coalesced_events,
     const HeapVector<TouchInfo>& touch_infos,
     bool all_touches_released) {
   // Build up the lists to use for the |touches|, |targetTouches| and
@@ -162,11 +164,11 @@ WebInputEventResult TouchEventManager::DispatchTouchEvents(
     // Ensure this target's touch list exists, even if it ends up empty, so
     // it can always be passed to TouchEvent::Create below.
     TargetTouchesHeapMap::iterator target_touches_iterator =
-        touches_by_target.Find(touch_info.touch_node.Get());
+        touches_by_target.find(touch_info.touch_node.Get());
     if (target_touches_iterator == touches_by_target.end()) {
       touches_by_target.Set(touch_info.touch_node.Get(), TouchList::Create());
       target_touches_iterator =
-          touches_by_target.Find(touch_info.touch_node.Get());
+          touches_by_target.find(touch_info.touch_node.Get());
     }
 
     // |touches| and |targetTouches| should only contain information about
@@ -197,10 +199,17 @@ WebInputEventResult TouchEventManager::DispatchTouchEvents(
 
   if (all_touches_released) {
     touch_sequence_document_.Clear();
-    current_touch_action_ = kTouchActionAuto;
+    current_touch_action_ = TouchAction::kTouchActionAuto;
   }
 
   WebInputEventResult event_result = WebInputEventResult::kNotHandled;
+  // First we construct the webcoalescedinputevent contains all the coalesced
+  // touch event.
+  std::vector<const WebInputEvent*> coalesced_touches;
+  for (size_t i = 0; i < coalesced_events.size(); ++i) {
+    coalesced_touches.push_back(&coalesced_events[i]);
+  }
+  WebCoalescedInputEvent coalesced_event(event, coalesced_touches);
 
   // Now iterate through the |changedTouches| list and |m_targets| within it,
   // sending TouchEvents to the targets as required.
@@ -213,7 +222,7 @@ WebInputEventResult TouchEventManager::DispatchTouchEvents(
     for (const auto& event_target : changed_touches[state].targets_) {
       EventTarget* touch_event_target = event_target;
       TouchEvent* touch_event = TouchEvent::Create(
-          event, touches, touches_by_target.at(touch_event_target),
+          coalesced_event, touches, touches_by_target.at(touch_event_target),
           changed_touches[state].touches_.Get(), event_name,
           touch_event_target->ToNode()->GetDocument().domWindow(),
           current_touch_action_);
@@ -354,10 +363,10 @@ void TouchEventManager::UpdateTargetAndRegionMapsForTouchStarts(
         // in the active sequence. This must be a single document to
         // ensure we don't leak Nodes between documents.
         touch_sequence_document_ = &(touch_info.touch_node->GetDocument());
-        ASSERT(touch_sequence_document_->GetFrame()->View());
+        DCHECK(touch_sequence_document_->GetFrame()->View());
       }
 
-      // Ideally we'd ASSERT(!m_targetForTouchID.contains(point.id())
+      // Ideally we'd DCHECK(!m_targetForTouchID.contains(point.id())
       // since we shouldn't get a touchstart for a touch that's already
       // down. However EventSender allows this to be violated and there's
       // some tests that take advantage of it. There may also be edge
@@ -369,7 +378,7 @@ void TouchEventManager::UpdateTargetAndRegionMapsForTouchStarts(
 
       TouchAction effective_touch_action =
           TouchActionUtil::ComputeEffectiveTouchAction(*touch_info.touch_node);
-      if (effective_touch_action != kTouchActionAuto) {
+      if (effective_touch_action != TouchAction::kTouchActionAuto) {
         frame_->GetPage()->GetChromeClient().SetTouchAction(
             frame_, effective_touch_action);
 
@@ -431,7 +440,7 @@ void TouchEventManager::SetAllPropertiesOfTouchInfos(
       touch_node = touch_sequence_document_;
       target_frame = touch_sequence_document_->GetFrame();
     }
-    ASSERT(target_frame);
+    DCHECK(target_frame);
 
     // pagePoint should always be in the target element's document coordinates.
     FloatPoint page_point =
@@ -464,7 +473,7 @@ bool TouchEventManager::ReHitTestTouchPointsIfNeeded(
       all_touches_released = false;
   }
   if (new_touch_sequence) {
-    // Ideally we'd ASSERT(!m_touchSequenceDocument) here since we should
+    // Ideally we'd DCHECK(!m_touchSequenceDocument) here since we should
     // have cleared the active document when we saw the last release. But we
     // have some tests that violate this, ClusterFuzz could trigger it, and
     // there may be cases where the browser doesn't reliably release all
@@ -472,7 +481,7 @@ bool TouchEventManager::ReHitTestTouchPointsIfNeeded(
     touch_sequence_document_.Clear();
   }
 
-  ASSERT(frame_->View());
+  DCHECK(frame_->View());
   if (touch_sequence_document_ &&
       (!touch_sequence_document_->GetFrame() ||
        !touch_sequence_document_->GetFrame()->View())) {
@@ -505,6 +514,7 @@ bool TouchEventManager::ReHitTestTouchPointsIfNeeded(
 
 WebInputEventResult TouchEventManager::HandleTouchEvent(
     const WebTouchEvent& event,
+    const Vector<WebTouchEvent>& coalesced_events,
     HeapVector<TouchInfo>& touch_infos) {
   if (!ReHitTestTouchPointsIfNeeded(event, touch_infos))
     return WebInputEventResult::kNotHandled;
@@ -517,7 +527,8 @@ WebInputEventResult TouchEventManager::HandleTouchEvent(
       all_touches_released = false;
   }
 
-  return DispatchTouchEvents(event, touch_infos, all_touches_released);
+  return DispatchTouchEvents(event, coalesced_events, touch_infos,
+                             all_touches_released);
 }
 
 bool TouchEventManager::IsAnyTouchActive() const {

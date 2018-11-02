@@ -9,10 +9,10 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
+#include "ash/test/workspace_controller_test_api.h"
 #include "ash/test/workspace_event_handler_test_helper.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/workspace_controller.h"
-#include "ash/wm/workspace_controller_test_helper.h"
 #include "ash/wm_window.h"
 #include "base/stl_util.h"
 #include "ui/aura/test/test_window_delegate.h"
@@ -57,7 +57,7 @@ class MultiWindowResizeControllerTest : public test::AshTestBase {
     WorkspaceController* wc =
         test::ShellTestApi(Shell::Get()).workspace_controller();
     WorkspaceEventHandler* event_handler =
-        WorkspaceControllerTestHelper(wc).GetEventHandler();
+        test::WorkspaceControllerTestApi(wc).GetEventHandler();
     resize_controller_ =
         WorkspaceEventHandlerTestHelper(event_handler).resize_controller();
   }
@@ -66,7 +66,7 @@ class MultiWindowResizeControllerTest : public test::AshTestBase {
   aura::Window* CreateTestWindow(aura::WindowDelegate* delegate,
                                  const gfx::Rect& bounds) {
     aura::Window* window = new aura::Window(delegate);
-    window->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+    window->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window->Init(ui::LAYER_TEXTURED);
     ParentWindowInPrimaryRootWindow(window);
     window->SetBounds(bounds);
@@ -85,12 +85,12 @@ class MultiWindowResizeControllerTest : public test::AshTestBase {
   bool HasTarget(aura::Window* window) {
     if (!resize_controller_->windows_.is_valid())
       return false;
-    WmWindow* wm_window = WmWindow::Get(window);
-    if ((resize_controller_->windows_.window1 == wm_window ||
-         resize_controller_->windows_.window2 == wm_window))
+    if (resize_controller_->windows_.window1 == window ||
+        resize_controller_->windows_.window2 == window) {
       return true;
+    }
     return base::ContainsValue(resize_controller_->windows_.other_windows,
-                               wm_window);
+                               window);
   }
 
   bool IsOverWindows(const gfx::Point& loc) {

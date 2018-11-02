@@ -11,6 +11,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/rand_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
@@ -587,6 +588,23 @@ std::unique_ptr<PacketPipe> WifiNetwork() {
   BuildPipe(&pipe, new Buffer(256 << 10, 20));
   BuildPipe(&pipe, new ConstantDelay(1E-3));
   BuildPipe(&pipe, new RandomSortedDelay(1E-3, 20E-3, 3));
+  BuildPipe(&pipe, new RandomDrop(0.005));
+  // This represents the buffer on the receiving device.
+  BuildPipe(&pipe, new Buffer(256 << 10, 20));
+  return pipe;
+}
+
+std::unique_ptr<PacketPipe> SlowNetwork() {
+  // This represents the buffer on the sender.
+  std::unique_ptr<PacketPipe> pipe;
+  BuildPipe(&pipe, new Buffer(256 << 10, 1.5));
+  BuildPipe(&pipe, new RandomDrop(0.005));
+  // This represents the buffer on the router.
+  BuildPipe(&pipe, new ConstantDelay(10E-3));
+  BuildPipe(&pipe, new RandomSortedDelay(10E-3, 20E-3, 3));
+  BuildPipe(&pipe, new Buffer(256 << 10, 20));
+  BuildPipe(&pipe, new ConstantDelay(10E-3));
+  BuildPipe(&pipe, new RandomSortedDelay(10E-3, 20E-3, 3));
   BuildPipe(&pipe, new RandomDrop(0.005));
   // This represents the buffer on the receiving device.
   BuildPipe(&pipe, new Buffer(256 << 10, 20));

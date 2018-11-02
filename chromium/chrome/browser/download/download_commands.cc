@@ -60,14 +60,13 @@ class ImageClipboardCopyManager : public ImageDecoder::ImageRequest {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
     content::BrowserThread::GetBlockingPool()->PostTask(
-        FROM_HERE,
-        base::Bind(&ImageClipboardCopyManager::StartDecoding,
-                   base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&ImageClipboardCopyManager::StartDecoding,
+                                  base::Unretained(this)));
   }
 
   void StartDecoding() {
     DCHECK(content::BrowserThread::GetBlockingPool()->
-        RunsTasksOnCurrentThread());
+        RunsTasksInCurrentSequence());
 
     // Re-check the filesize since the file may be modified after downloaded.
     int64_t filesize;

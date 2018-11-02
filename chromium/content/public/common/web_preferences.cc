@@ -76,7 +76,6 @@ WebPreferences::WebPreferences()
 #endif
       javascript_enabled(true),
       web_security_enabled(true),
-      javascript_can_open_windows_automatically(true),
       loads_images_automatically(true),
       images_enabled(true),
       plugins_enabled(true),
@@ -192,7 +191,6 @@ WebPreferences::WebPreferences()
       force_enable_zoom(false),
       fullscreen_supported(true),
       double_tap_to_zoom_enabled(true),
-      user_gesture_required_for_media_playback(true),
       support_deprecated_target_density_dpi(false),
       use_legacy_background_size_shorthand_behavior(false),
       wide_viewport_quirk(false),
@@ -209,10 +207,10 @@ WebPreferences::WebPreferences()
       progress_bar_completion(ProgressBarCompletion::LOAD_EVENT),
       spellcheck_enabled_by_default(true),
       video_fullscreen_orientation_lock_enabled(false),
+      video_rotate_to_fullscreen_enabled(false),
       video_fullscreen_detection_enabled(false),
       embedded_media_experience_enabled(false),
-#else  // defined(OS_ANDROID)
-      cross_origin_media_playback_requires_user_gesture(false),
+      page_popups_suppressed(false),
 #endif  // defined(OS_ANDROID)
 #if defined(OS_ANDROID)
       default_minimum_page_scale_factor(0.25f),
@@ -229,7 +227,12 @@ WebPreferences::WebPreferences()
       enable_instant_source_buffer_gc(false),
       presentation_receiver(false),
       media_controls_enabled(true),
-      do_not_update_selection_on_mutating_selection_range(false) {
+      do_not_update_selection_on_mutating_selection_range(false),
+#if defined(OS_ANDROID)
+      autoplay_policy(AutoplayPolicy::kUserGestureRequired) {
+#else
+      autoplay_policy(AutoplayPolicy::kNoUserGestureRequired) {
+#endif  // defined(OS_ANDROID)
   standard_font_family_map[kCommonScript] =
       base::ASCIIToUTF16("Times New Roman");
   fixed_font_family_map[kCommonScript] = base::ASCIIToUTF16("Courier New");

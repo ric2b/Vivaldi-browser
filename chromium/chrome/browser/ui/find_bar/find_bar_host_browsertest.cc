@@ -11,7 +11,6 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -29,8 +28,6 @@
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/md_history_ui.h"
-#include "chrome/common/chrome_features.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/find_in_page_observer.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -128,6 +125,12 @@ class FindInPageControllerTest : public InProcessBrowserTest {
     return find_bar->GetWidth();
   }
 
+  size_t GetFindBarAudibleAlertsForBrowser(Browser* browser) {
+    FindBarTesting* find_bar =
+        browser->GetFindBarController()->find_bar()->GetFindBarTesting();
+    return find_bar->GetAudibleAlertCount();
+  }
+
   void EnsureFindBoxOpenForBrowser(Browser* browser) {
     chrome::ShowFindBar(browser);
     gfx::Point position;
@@ -214,6 +217,8 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, FindInPageFrames) {
   int ordinal = 0;
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_EQ(0u, GetFindBarAudibleAlertsForBrowser(browser()));
+
   EXPECT_EQ(18, FindInPageASCII(web_contents, "g",
                                 kFwd, kIgnoreCase, &ordinal));
   EXPECT_EQ(1, ordinal);
@@ -232,9 +237,24 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, FindInPageFrames) {
   EXPECT_EQ(1, FindInPageASCII(web_contents, "google",
                                kFwd, kIgnoreCase, &ordinal));
   EXPECT_EQ(1, ordinal);
+  EXPECT_EQ(0u, GetFindBarAudibleAlertsForBrowser(browser()));
+
+  EXPECT_EQ(
+      0, FindInPageASCII(web_contents, "google!", kFwd, kIgnoreCase, &ordinal));
+  EXPECT_EQ(0, ordinal);
+  EXPECT_EQ(1u, GetFindBarAudibleAlertsForBrowser(browser()));
+
+  // Extend the search string one more.
+  EXPECT_EQ(0, FindInPageASCII(web_contents, "google!!", kFwd, kIgnoreCase,
+                               &ordinal));
+  EXPECT_EQ(0, ordinal);
+  EXPECT_EQ(2u, GetFindBarAudibleAlertsForBrowser(browser()));
+
+  // "Backspace" one, make sure there's no audible alert while backspacing.
   EXPECT_EQ(0, FindInPageASCII(web_contents, "google!",
                                kFwd, kIgnoreCase, &ordinal));
   EXPECT_EQ(0, ordinal);
+  EXPECT_EQ(2u, GetFindBarAudibleAlertsForBrowser(browser()));
 
   // Negative test (no matches should be found).
   EXPECT_EQ(0, FindInPageASCII(web_contents, "Non-existing string",
@@ -301,54 +321,33 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, FindInPageFormsTextAreas) {
   }
 }
 
-// Verify search for text within special URLs such as chrome:history,
-// chrome://downloads, data directory
-#if defined(OS_MACOSX) || defined(OS_WIN)
-// Disabled on Mac due to http://crbug.com/419987
-// Disabled on Win due to http://crbug.com/661013
-#define MAYBE_SearchWithinSpecialURL \
-        DISABLED_SearchWithinSpecialURL
-#else
-#define MAYBE_SearchWithinSpecialURL \
-        SearchWithinSpecialURL
-#endif
-IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, MAYBE_SearchWithinSpecialURL) {
-  // TODO(tsergeant): Get this test working on MD History, which loads very
-  // asynchronously and causes this test to fail.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(features::kMaterialDesignHistory);
+// This test removes a frame after a search comes up empty, then navigates to
+// a different page and verifies this doesn't cause any extraneous dings.
+IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, NoAudibleAlertOnFrameChange) {
+  // First we navigate to our frames page.
+  GURL url = GetURL(kFramePage);
+  ui_test_utils::NavigateToURL(browser(), url);
 
+  int ordinal = 0;
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_EQ(0u, GetFindBarAudibleAlertsForBrowser(browser()));
 
-  base::FilePath data_dir =
-      ui_test_utils::GetTestFilePath(base::FilePath(), base::FilePath());
-  ui_test_utils::NavigateToURL(browser(), net::FilePathToFileURL(data_dir));
-  EXPECT_EQ(1, FindInPageASCII(web_contents, "downloads",
-                               kFwd, kIgnoreCase, NULL));
+  // Search for a non-existant string.
+  EXPECT_EQ(
+      0, FindInPageASCII(web_contents, "google!", kFwd, kIgnoreCase, &ordinal));
+  EXPECT_EQ(0, ordinal);
+  EXPECT_EQ(1u, GetFindBarAudibleAlertsForBrowser(browser()));
 
-  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIHistoryURL));
+  // Remove the first frame of the page.
+  constexpr char kRemoveFrameScript[] =
+      "frame = document.getElementsByTagName(\"FRAME\")[0];\n"
+      "frame.parentElement.removeChild(frame);\n";
+  ASSERT_TRUE(content::ExecuteScript(web_contents, kRemoveFrameScript));
 
-  // The history page does an async request to the history service and then
-  // updates the renderer. So we make a query as well, and by the time it comes
-  // back we know the data is on its way to the renderer.
-  FlushHistoryService();
+  ui_test_utils::NavigateToURL(browser(), GetURL("specialchar.html"));
 
-  base::string16 query(data_dir.LossyDisplayName());
-  EXPECT_EQ(1,
-            ui_test_utils::FindInPage(web_contents, query,
-                                      kFwd, kIgnoreCase, NULL, NULL));
-
-  GURL download_url = ui_test_utils::GetTestUrl(
-      base::FilePath().AppendASCII("downloads"),
-      base::FilePath().AppendASCII("a_zip_file.zip"));
-  ui_test_utils::DownloadURL(browser(), download_url);
-
-  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIDownloadsURL));
-  FlushHistoryService();
-  ASSERT_TRUE(content::ExecuteScript(web_contents, "Polymer.dom.flush();"));
-  EXPECT_EQ(1, FindInPageASCII(web_contents, download_url.spec(),
-                               kFwd, kIgnoreCase, NULL));
+  EXPECT_EQ(1u, GetFindBarAudibleAlertsForBrowser(browser()));
 }
 
 // Verify search selection coordinates. The data file used is set-up such that
@@ -435,7 +434,10 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, FindLongString) {
       base::FilePath().AppendASCII("find_in_page"),
       base::FilePath().AppendASCII("LongFind.txt"));
   std::string query;
-  base::ReadFileToString(path, &query);
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ReadFileToString(path, &query);
+  }
   EXPECT_EQ(1, FindInPage16(web_contents, base::UTF8ToUTF16(query),
                             kFwd, kIgnoreCase, NULL));
 }
@@ -501,7 +503,10 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, FindWholeFileContent) {
   ui_test_utils::NavigateToURL(browser(), net::FilePathToFileURL(path));
 
   std::string query;
-  base::ReadFileToString(path, &query);
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ReadFileToString(path, &query);
+  }
   EXPECT_EQ(1, FindInPage16(web_contents, base::UTF8ToUTF16(query),
                             false, false, NULL));
 }

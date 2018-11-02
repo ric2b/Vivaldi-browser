@@ -27,14 +27,18 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_configurator.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_config_values.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_creator.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_features.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
+#include "components/previews/core/previews_decider.h"
 #include "components/variations/variations_associated_data.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
 #include "net/base/network_change_notifier.h"
 #include "net/log/net_log_source_type.h"
+#include "net/nqe/effective_connection_type.h"
 #include "net/proxy/proxy_server.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request.h"
@@ -244,12 +248,38 @@ class SecureProxyChecker : public net::URLFetcherDelegate {
 
   void CheckIfSecureProxyIsAllowed(const GURL& secure_proxy_check_url,
                                    FetcherResponseCallback fetcher_callback) {
-    fetcher_ = net::URLFetcher::Create(secure_proxy_check_url,
-                                       net::URLFetcher::GET, this);
+    net::NetworkTrafficAnnotationTag traffic_annotation =
+        net::DefineNetworkTrafficAnnotation(
+            "data_reduction_proxy_secure_proxy_check", R"(
+            semantics {
+              sender: "Data Reduction Proxy"
+              description:
+                "Sends a request to the Data Reduction Proxy server. Proceeds "
+                "with using a secure connection to the proxy only if the "
+                "response is not blocked or modified by an intermediary."
+              trigger:
+                "A request can be sent whenever the browser is determining how "
+                "to configure its connection to the data reduction proxy. This "
+                "happens on startup and network changes."
+              data: "A specific URL, not related to user data."
+              destination: GOOGLE_OWNED_SERVICE
+            }
+            policy {
+              cookies_allowed: false
+              setting:
+                "Users can control Data Saver on Android via the 'Data Saver' "
+                "setting. Data Saver is not available on iOS, and on desktop "
+                "it is enabled by installing the Data Saver extension."
+              policy_exception_justification: "Not implemented."
+            })");
+    fetcher_ = net::URLFetcher::Create(
+        secure_proxy_check_url, net::URLFetcher::GET, this, traffic_annotation);
     data_use_measurement::DataUseUserData::AttachToFetcher(
         fetcher_.get(),
         data_use_measurement::DataUseUserData::DATA_REDUCTION_PROXY);
-    fetcher_->SetLoadFlags(net::LOAD_DISABLE_CACHE | net::LOAD_BYPASS_PROXY);
+    fetcher_->SetLoadFlags(net::LOAD_DISABLE_CACHE | net::LOAD_BYPASS_PROXY |
+                           net::LOAD_DO_NOT_SEND_COOKIES |
+                           net::LOAD_DO_NOT_SAVE_COOKIES);
     fetcher_->SetRequestContext(url_request_context_getter_.get());
     // Configure max retries to be at most kMaxRetries times for 5xx errors.
     static const int kMaxRetries = 5;
@@ -298,17 +328,42 @@ class WarmupURLFetcher : public net::URLFetcherDelegate {
   void FetchWarmupURL() {
     UMA_HISTOGRAM_EXACT_LINEAR("DataReductionProxy.WarmupURL.FetchInitiated", 1,
                                2);
-
-    fetcher_ = net::URLFetcher::Create(params::GetWarmupURL(),
-                                       net::URLFetcher::GET, this);
+    net::NetworkTrafficAnnotationTag traffic_annotation =
+        net::DefineNetworkTrafficAnnotation("data_reduction_proxy_warmup", R"(
+          semantics {
+            sender: "Data Reduction Proxy"
+            description:
+              "Sends a request to the Data Reduction Proxy server to warm up "
+              "the connection to the proxy."
+            trigger:
+              "A network change while the data reduction proxy is enabled will "
+              "trigger this request."
+            data: "A specific URL, not related to user data."
+            destination: GOOGLE_OWNED_SERVICE
+          }
+          policy {
+            cookies_allowed: false
+            setting:
+              "Users can control Data Saver on Android via the 'Data Saver' "
+              "setting. Data Saver is not available on iOS, and on desktop it "
+              "is enabled by installing the Data Saver extension."
+            policy_exception_justification: "Not implemented."
+          })");
+    fetcher_ = net::URLFetcher::Create(
+        params::GetWarmupURL(), net::URLFetcher::GET, this, traffic_annotation);
     data_use_measurement::DataUseUserData::AttachToFetcher(
         fetcher_.get(),
         data_use_measurement::DataUseUserData::DATA_REDUCTION_PROXY);
+    // Do not disable cookies. This allows the warmup connection to be reused
+    // for fetching user initiated requests.
     fetcher_->SetLoadFlags(net::LOAD_BYPASS_CACHE);
     fetcher_->SetRequestContext(url_request_context_getter_.get());
-    // |fetcher| should not retry on 5xx errors.
+    // |fetcher| should not retry on 5xx errors. |fetcher_| should retry on
+    // network changes since the network stack may receive the connection change
+    // event later than |this|.
+    static const int kMaxRetries = 5;
     fetcher_->SetAutomaticallyRetryOn5xx(false);
-    fetcher_->SetAutomaticallyRetryOnNetworkChanges(0);
+    fetcher_->SetAutomaticallyRetryOnNetworkChanges(kMaxRetries);
     fetcher_->Start();
   }
 
@@ -951,17 +1006,18 @@ bool DataReductionProxyConfig::IsEffectiveConnectionTypeSlowerThanThreshold(
 }
 
 bool DataReductionProxyConfig::ShouldEnableLoFi(
-    const net::URLRequest& request) {
+    const net::URLRequest& request,
+    const previews::PreviewsDecider& previews_decider) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK((request.load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) != 0);
   DCHECK(!request.url().SchemeIsCryptographic());
 
-  net::NetworkQualityEstimator* network_quality_estimator;
-  network_quality_estimator =
-      request.context() ? request.context()->network_quality_estimator()
-                        : nullptr;
+  if (base::FeatureList::IsEnabled(
+          features::kDataReductionProxyDecidesTransform)) {
+    return ShouldAcceptServerLoFi(request, previews_decider);
+  }
 
-  bool enable_lofi = ShouldEnableLoFiInternal(network_quality_estimator);
+  bool enable_lofi = ShouldEnableLoFiInternal(request, previews_decider);
 
   if (params::IsLoFiSlowConnectionsOnlyViaFlags() ||
       params::IsIncludedInLoFiEnabledFieldTrial()) {
@@ -974,14 +1030,18 @@ bool DataReductionProxyConfig::ShouldEnableLoFi(
 }
 
 bool DataReductionProxyConfig::ShouldEnableLitePages(
-    const net::URLRequest& request) {
+    const net::URLRequest& request,
+    const previews::PreviewsDecider& previews_decider) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK((request.load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) != 0);
   DCHECK(!request.url().SchemeIsCryptographic());
 
-  return ShouldEnableLitePagesInternal(
-      request.context() ? request.context()->network_quality_estimator()
-                        : nullptr);
+  if (base::FeatureList::IsEnabled(
+          features::kDataReductionProxyDecidesTransform)) {
+    return ShouldAcceptLitePages(request, previews_decider);
+  }
+
+  return ShouldEnableLitePagesInternal(request, previews_decider);
 }
 
 bool DataReductionProxyConfig::enabled_by_user_and_reachable() const {
@@ -989,16 +1049,111 @@ bool DataReductionProxyConfig::enabled_by_user_and_reachable() const {
   return enabled_by_user_ && !unreachable_;
 }
 
-bool DataReductionProxyConfig::ShouldEnableLoFiInternal(
-    const net::NetworkQualityEstimator* network_quality_estimator) {
+bool DataReductionProxyConfig::IsBlackListedOrDisabled(
+    const net::URLRequest& request,
+    const previews::PreviewsDecider& previews_decider,
+    previews::PreviewsType previews_type) const {
+  // Make sure request is not locally blacklisted.
+  if (params::IsBlackListEnabledForServerPreviews()) {
+    // Pass in net::EFFECTIVE_CONNECTION_TYPE_4G as the thresold as network
+    // speed is checked in IsNetworkQualityProhibitivelySlow().
+    // TODO(ryansturm): Use the correct ECT value (or add new method to
+    // just check blacklist). crbug.com/720102
+    return !previews_decider.ShouldAllowPreviewAtECT(
+        request, previews_type, net::EFFECTIVE_CONNECTION_TYPE_4G);
+  } else {
+    // If Lo-Fi has been turned off, its status can't change. This Lo-Fi bit
+    // will be removed when Lo-Fi and Lite Pages are moved over to using the
+    // PreviewsBlackList.
+    return lofi_off_;
+  }
+}
+
+bool DataReductionProxyConfig::ShouldAcceptServerLoFi(
+    const net::URLRequest& request,
+    const previews::PreviewsDecider& previews_decider) const {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(base::FeatureList::IsEnabled(
+      features::kDataReductionProxyDecidesTransform));
+
+  if (IsBlackListedOrDisabled(request, previews_decider,
+                              previews::PreviewsType::LOFI)) {
+    return false;
+  }
+
+  if (params::IsLoFiAlwaysOnViaFlags()) {
+    return true;
+  }
+
+  if (params::IsLoFiCellularOnlyViaFlags()) {
+    return net::NetworkChangeNotifier::IsConnectionCellular(connection_type_);
+  }
+
+  if (params::IsLoFiSlowConnectionsOnlyViaFlags() ||
+      params::IsIncludedInLoFiEnabledFieldTrial()) {
+    // Accept Lo-Fi from the data reduction proxy (it will handle the effective
+    // connection type check).
+    return true;
+  }
+
+  return false;
+}
+
+bool DataReductionProxyConfig::ShouldAcceptLitePages(
+    const net::URLRequest& request,
+    const previews::PreviewsDecider& previews_decider) const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(base::FeatureList::IsEnabled(
+      features::kDataReductionProxyDecidesTransform));
+
+  if (IsBlackListedOrDisabled(request, previews_decider,
+                              previews::PreviewsType::LITE_PAGE)) {
+    return false;
+  }
+
+  if (params::IsLoFiAlwaysOnViaFlags() &&
+      params::AreLitePagesEnabledViaFlags()) {
+    return true;
+  }
+
+  if (params::IsLoFiCellularOnlyViaFlags() &&
+      params::AreLitePagesEnabledViaFlags()) {
+    return net::NetworkChangeNotifier::IsConnectionCellular(connection_type_);
+  }
+
+  if ((params::IsLoFiSlowConnectionsOnlyViaFlags() &&
+       params::AreLitePagesEnabledViaFlags()) ||
+      params::IsIncludedInLitePageFieldTrial()) {
+    // Accept LitePages from the data reduction proxy (it will handle the
+    // effective connection type check).
+    return true;
+  }
+
+  return false;
+}
+
+bool DataReductionProxyConfig::ShouldEnableLoFiInternal(
+    const net::URLRequest& request,
+    const previews::PreviewsDecider& previews_decider) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(!base::FeatureList::IsEnabled(
+      features::kDataReductionProxyDecidesTransform));
 
   last_query_ = GetTicksNow();
   network_quality_at_last_query_ = NETWORK_QUALITY_AT_LAST_QUERY_UNKNOWN;
 
-  // If Lo-Fi has been turned off, its status can't change.
-  if (lofi_off_)
+  // LitePages overrides Server Lo-Fi. No fallback to Lo-Fi supported
+  // on this code path (not using DataReductionProxyDecidesTransform feature).
+  // TODO(dougarnett): Delete this surrounding method and related code once the
+  // DataReductionProxyDecidesTransform feature is launched to stable [725645].
+  if (ShouldEnableLitePages(request, previews_decider)) {
     return false;
+  }
+
+  if (IsBlackListedOrDisabled(request, previews_decider,
+                              previews::PreviewsType::LOFI)) {
+    return false;
+  }
 
   if (params::IsLoFiAlwaysOnViaFlags())
     return true;
@@ -1007,27 +1162,31 @@ bool DataReductionProxyConfig::ShouldEnableLoFiInternal(
     return net::NetworkChangeNotifier::IsConnectionCellular(connection_type_);
   }
 
+  net::NetworkQualityEstimator* network_quality_estimator;
+  network_quality_estimator =
+      request.context() ? request.context()->network_quality_estimator()
+                        : nullptr;
+
   if (params::IsLoFiSlowConnectionsOnlyViaFlags() ||
       params::IsIncludedInLoFiEnabledFieldTrial() ||
       params::IsIncludedInLoFiControlFieldTrial()) {
     return IsNetworkQualityProhibitivelySlow(network_quality_estimator);
   }
 
-  // If Lo-Fi is not enabled through command line and the user is not in
-  // Lo-Fi field trials, set Lo-Fi to off.
-  lofi_off_ = true;
   return false;
 }
 
 bool DataReductionProxyConfig::ShouldEnableLitePagesInternal(
-    const net::NetworkQualityEstimator* network_quality_estimator) {
+    const net::URLRequest& request,
+    const previews::PreviewsDecider& previews_decider) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(!base::FeatureList::IsEnabled(
+      features::kDataReductionProxyDecidesTransform));
 
-  // If Lo-Fi has been turned off, its status can't change. This Lo-Fi bit will
-  // be removed when Lo-Fi and Lite Pages are moved over to using the Previews
-  // blacklist.
-  if (lofi_off_)
+  if (IsBlackListedOrDisabled(request, previews_decider,
+                              previews::PreviewsType::LITE_PAGE)) {
     return false;
+  }
 
   if (params::IsLoFiAlwaysOnViaFlags() && params::AreLitePagesEnabledViaFlags())
     return true;
@@ -1037,6 +1196,10 @@ bool DataReductionProxyConfig::ShouldEnableLitePagesInternal(
     return net::NetworkChangeNotifier::IsConnectionCellular(
         net::NetworkChangeNotifier::GetConnectionType());
   }
+  net::NetworkQualityEstimator* network_quality_estimator;
+  network_quality_estimator =
+      request.context() ? request.context()->network_quality_estimator()
+                        : nullptr;
 
   if ((params::IsLoFiSlowConnectionsOnlyViaFlags() &&
        params::AreLitePagesEnabledViaFlags()) ||

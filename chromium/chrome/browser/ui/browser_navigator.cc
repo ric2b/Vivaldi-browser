@@ -63,8 +63,10 @@ using content::WebContents;
 
 class BrowserNavigatorWebContentsAdoption {
  public:
-  static void AttachTabHelpers(content::WebContents* contents) {
-    TabHelpers::AttachTabHelpers(contents);
+  static void AttachTabHelpers(
+      content::WebContents* contents,
+      const base::Optional<WebContents::CreateParams>& create_params) {
+    TabHelpers::AttachTabHelpers(contents, create_params);
 
     // Make the tab show up in the task manager.
     task_manager::WebContentsTags::CreateForTabContents(contents);
@@ -358,7 +360,7 @@ content::WebContents* CreateTargetContents(const chrome::NavigateParams& params,
                                            const GURL& url) {
   WebContents::CreateParams create_params(
       params.browser->profile(),
-      params.source_site_instance
+      params.source_site_instance && !params.force_new_process_for_new_contents
           ? params.source_site_instance
           : tab_util::GetSiteInstanceForNewTab(params.browser->profile(), url));
   create_params.main_frame_name = params.frame_name;
@@ -383,7 +385,8 @@ content::WebContents* CreateTargetContents(const chrome::NavigateParams& params,
   // New tabs can have WebUI URLs that will make calls back to arbitrary
   // tab helpers, so the entire set of tab helpers needs to be set up
   // immediately.
-  BrowserNavigatorWebContentsAdoption::AttachTabHelpers(target_contents);
+  BrowserNavigatorWebContentsAdoption::AttachTabHelpers(target_contents,
+                                                        create_params);
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::TabHelper::FromWebContents(target_contents)->
       SetExtensionAppById(params.extension_app_id);

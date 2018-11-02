@@ -62,7 +62,7 @@ IPCDataSourceImpl::IPCDataSourceImpl(IPC::Sender* channel,
 IPCDataSourceImpl::~IPCDataSourceImpl() = default;
 
 void IPCDataSourceImpl::Suspend() {
-  DVLOG(1) << __FUNCTION__;
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 
   base::AutoLock auto_lock(lock_);
   suspended_ = true;
@@ -70,7 +70,7 @@ void IPCDataSourceImpl::Suspend() {
 }
 
 void IPCDataSourceImpl::Resume() {
-  DVLOG(1) << __FUNCTION__;
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 
   base::AutoLock auto_lock(lock_);
   suspended_ = false;
@@ -143,7 +143,8 @@ void IPCDataSourceImpl::OnBufferForRawDataReady(
     size_t buffer_size,
     base::SharedMemoryHandle handle) {
   if (read_operation_.get() == NULL) {
-    DLOG(ERROR) << "Received buffer while no read operation is in progress.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Received buffer while no read operation is in progress.";
     return;
   }
 
@@ -153,7 +154,8 @@ void IPCDataSourceImpl::OnBufferForRawDataReady(
   }
 
   if (base::saturated_cast<int>(buffer_size) < read_operation_->size()) {
-    DLOG(ERROR) << "Received buffer is too small.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Received buffer is too small.";
     ReadOperation::Finish(std::move(read_operation_), NULL, kReadError);
     return;
   }
@@ -183,7 +185,8 @@ void IPCDataSourceImpl::OnRawDataReady(int size) {
     }
 
     if (read_operation_.get() == NULL) {
-      DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Unexpected call to " << __FUNCTION__;
       return;
     }
 

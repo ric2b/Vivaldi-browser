@@ -201,9 +201,8 @@ void ChunkDemuxerStream::OnStartOfCodedFrameGroup(
   stream_->OnStartOfCodedFrameGroup(start_timestamp);
 }
 
-bool ChunkDemuxerStream::UpdateAudioConfig(
-    const AudioDecoderConfig& config,
-    const scoped_refptr<MediaLog>& media_log) {
+bool ChunkDemuxerStream::UpdateAudioConfig(const AudioDecoderConfig& config,
+                                           MediaLog* media_log) {
   DCHECK(config.IsValidConfig());
   DCHECK_EQ(type_, AUDIO);
   base::AutoLock auto_lock(lock_);
@@ -223,9 +222,8 @@ bool ChunkDemuxerStream::UpdateAudioConfig(
   return stream_->UpdateAudioConfig(config);
 }
 
-bool ChunkDemuxerStream::UpdateVideoConfig(
-    const VideoDecoderConfig& config,
-    const scoped_refptr<MediaLog>& media_log) {
+bool ChunkDemuxerStream::UpdateVideoConfig(const VideoDecoderConfig& config,
+                                           MediaLog* media_log) {
   DCHECK(config.IsValidConfig());
   DCHECK_EQ(type_, VIDEO);
   base::AutoLock auto_lock(lock_);
@@ -239,9 +237,8 @@ bool ChunkDemuxerStream::UpdateVideoConfig(
   return stream_->UpdateVideoConfig(config);
 }
 
-void ChunkDemuxerStream::UpdateTextConfig(
-    const TextTrackConfig& config,
-    const scoped_refptr<MediaLog>& media_log) {
+void ChunkDemuxerStream::UpdateTextConfig(const TextTrackConfig& config,
+                                          MediaLog* media_log) {
   DCHECK_EQ(type_, TEXT);
   base::AutoLock auto_lock(lock_);
   DCHECK(!stream_);
@@ -287,12 +284,16 @@ DemuxerStream::Liveness ChunkDemuxerStream::liveness() const {
 AudioDecoderConfig ChunkDemuxerStream::audio_decoder_config() {
   CHECK_EQ(type_, AUDIO);
   base::AutoLock auto_lock(lock_);
+  // Trying to track down crash. http://crbug.com/715761
+  CHECK(stream_);
   return stream_->GetCurrentAudioDecoderConfig();
 }
 
 VideoDecoderConfig ChunkDemuxerStream::video_decoder_config() {
   CHECK_EQ(type_, VIDEO);
   base::AutoLock auto_lock(lock_);
+  // Trying to track down crash. http://crbug.com/715761
+  CHECK(stream_);
   return stream_->GetCurrentVideoDecoderConfig();
 }
 
@@ -302,12 +303,12 @@ VideoRotation ChunkDemuxerStream::video_rotation() {
   return VIDEO_ROTATION_0;
 }
 
-bool ChunkDemuxerStream::enabled() const {
+bool ChunkDemuxerStream::IsEnabled() const {
   base::AutoLock auto_lock(lock_);
   return is_enabled_;
 }
 
-void ChunkDemuxerStream::set_enabled(bool enabled, base::TimeDelta timestamp) {
+void ChunkDemuxerStream::SetEnabled(bool enabled, base::TimeDelta timestamp) {
   base::AutoLock auto_lock(lock_);
 
   if (enabled == is_enabled_)
@@ -417,7 +418,7 @@ void ChunkDemuxerStream::CompletePendingReadIfPossible_Locked() {
 ChunkDemuxer::ChunkDemuxer(
     const base::Closure& open_cb,
     const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
-    const scoped_refptr<MediaLog>& media_log)
+    MediaLog* media_log)
     : state_(WAITING_FOR_INIT),
       cancel_next_seek_(false),
       host_(NULL),
@@ -513,26 +514,27 @@ std::vector<DemuxerStream*> ChunkDemuxer::GetAllStreams() {
   // MediaResource::GetFirstStream returns the enabled stream if there is one.
   // TODO(servolk): Revisit this after media track switching is supported.
   for (const auto& stream : audio_streams_) {
-    if (stream->enabled())
+    if (stream->IsEnabled())
       result.push_back(stream.get());
   }
   for (const auto& stream : video_streams_) {
-    if (stream->enabled())
+    if (stream->IsEnabled())
       result.push_back(stream.get());
   }
   // Put disabled streams at the end of the vector.
   for (const auto& stream : audio_streams_) {
-    if (!stream->enabled())
+    if (!stream->IsEnabled())
       result.push_back(stream.get());
   }
   for (const auto& stream : video_streams_) {
-    if (!stream->enabled())
+    if (!stream->IsEnabled())
       result.push_back(stream.get());
   }
   return result;
 }
 
 void ChunkDemuxer::SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) {
+  base::AutoLock auto_lock(lock_);
   DCHECK(!cb.is_null());
   for (const auto& stream : audio_streams_)
     stream->SetStreamStatusChangeCB(cb);
@@ -745,12 +747,12 @@ void ChunkDemuxer::OnEnabledAudioTracksChanged(
   for (const auto& stream : audio_streams_) {
     if (enabled_streams.find(stream.get()) == enabled_streams.end()) {
       DVLOG(1) << __func__ << ": disabling stream " << stream.get();
-      stream->set_enabled(false, curr_time);
+      stream->SetEnabled(false, curr_time);
     }
   }
   for (auto* stream : enabled_streams) {
     DVLOG(1) << __func__ << ": enabling stream " << stream;
-    stream->set_enabled(true, curr_time);
+    stream->SetEnabled(true, curr_time);
   }
 }
 
@@ -771,12 +773,12 @@ void ChunkDemuxer::OnSelectedVideoTrackChanged(
     if (stream.get() != selected_stream) {
       DVLOG(1) << __func__ << ": disabling stream " << stream.get();
       DCHECK_EQ(DemuxerStream::VIDEO, stream->type());
-      stream->set_enabled(false, curr_time);
+      stream->SetEnabled(false, curr_time);
     }
   }
   if (selected_stream) {
     DVLOG(1) << __func__ << ": enabling stream " << selected_stream;
-    selected_stream->set_enabled(true, curr_time);
+    selected_stream->SetEnabled(true, curr_time);
   }
 }
 
@@ -1243,7 +1245,7 @@ ChunkDemuxerStream* ChunkDemuxer::CreateDemuxerStream(
          track_id_to_demux_stream_map_.end());
   track_id_to_demux_stream_map_[media_track_id] = stream.get();
   id_to_streams_map_[source_id].push_back(stream.get());
-  stream->set_enabled(owning_vector->empty(), base::TimeDelta());
+  stream->SetEnabled(owning_vector->empty(), base::TimeDelta());
   owning_vector->push_back(std::move(stream));
   return owning_vector->back().get();
 }

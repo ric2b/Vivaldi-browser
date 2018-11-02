@@ -17,14 +17,15 @@
 #include <vector>
 
 #include "base/logging.h"
-#include "gpu/command_buffer/service/cmd_buffer_engine.h"
-#include "gpu/command_buffer/service/cmd_parser.h"
+#include "gpu/command_buffer/service/async_api_interface.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/program_cache.h"
 #include "gpu/command_buffer/service/shader_translator.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace gpu {
+
+class CommandBufferServiceBase;
 
 // Mocks an AsyncAPIInterface, using GMock.
 class AsyncAPIMock : public AsyncAPIInterface {
@@ -59,6 +60,9 @@ class AsyncAPIMock : public AsyncAPIInterface {
     volatile CommandBufferEntry* args_;
   };
 
+  void BeginDecoding() override {}
+  void EndDecoding() override {}
+
   MOCK_METHOD3(DoCommand,
                error::Error(unsigned int command,
                             unsigned int arg_count,
@@ -70,12 +74,13 @@ class AsyncAPIMock : public AsyncAPIInterface {
                             int num_entries,
                             int* entries_processed));
 
-  const char* GetCommandName(unsigned int command_id) const {
-    return "";
-  };
+  base::StringPiece GetLogPrefix() override { return "None"; }
 
   // Sets the engine, to forward SetToken commands to it.
-  void set_engine(CommandBufferEngine *engine) { engine_ = engine; }
+  void set_command_buffer_service(
+      CommandBufferServiceBase* command_buffer_service) {
+    command_buffer_service_ = command_buffer_service;
+  }
 
   // Forwards the SetToken commands to the engine.
   void SetToken(unsigned int command,
@@ -83,7 +88,7 @@ class AsyncAPIMock : public AsyncAPIInterface {
                 const volatile void* _args);
 
  private:
-  CommandBufferEngine *engine_;
+  CommandBufferServiceBase* command_buffer_service_;
 };
 
 namespace gles2 {
@@ -99,17 +104,16 @@ class MockShaderTranslator : public ShaderTranslatorInterface {
                     ShShaderOutput shader_output_language,
                     ShCompileOptions driver_bug_workarounds,
                     bool gl_shader_interm_output));
-  MOCK_CONST_METHOD10(Translate,
-                      bool(const std::string& shader_source,
-                           std::string* info_log,
-                           std::string* translated_source,
-                           int* shader_version,
-                           AttributeMap* attrib_map,
-                           UniformMap* uniform_map,
-                           VaryingMap* varying_map,
-                           InterfaceBlockMap* interface_block_map,
-                           OutputVariableList* output_variable_list,
-                           NameMap* name_map));
+  MOCK_CONST_METHOD9(Translate,
+                     bool(const std::string& shader_source,
+                          std::string* info_log,
+                          std::string* translated_source,
+                          int* shader_version,
+                          AttributeMap* attrib_map,
+                          UniformMap* uniform_map,
+                          VaryingMap* varying_map,
+                          InterfaceBlockMap* interface_block_map,
+                          OutputVariableList* output_variable_list));
   MOCK_CONST_METHOD0(
       GetStringForOptionsThatWouldAffectCompilation, std::string());
  private:

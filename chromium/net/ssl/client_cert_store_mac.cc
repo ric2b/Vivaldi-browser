@@ -22,6 +22,7 @@
 #include "crypto/mac_security_services_lock.h"
 #include "net/base/host_port_pair.h"
 #include "net/cert/x509_util.h"
+#include "net/cert/x509_util_ios_and_mac.h"
 #include "net/cert/x509_util_mac.h"
 
 using base::ScopedCFTypeRef;
@@ -236,9 +237,9 @@ ClientCertStoreMac::ClientCertStoreMac() {}
 
 ClientCertStoreMac::~ClientCertStoreMac() {}
 
-void ClientCertStoreMac::GetClientCerts(const SSLCertRequestInfo& request,
-                                         CertificateList* selected_certs,
-                                         const base::Closure& callback) {
+void ClientCertStoreMac::GetClientCerts(
+    const SSLCertRequestInfo& request,
+    const ClientCertListCallback& callback) {
   std::string server_domain = request.host_and_port.host();
 
   ScopedCFTypeRef<SecIdentityRef> preferred_identity;
@@ -270,8 +271,7 @@ void ClientCertStoreMac::GetClientCerts(const SSLCertRequestInfo& request,
     err = SecIdentitySearchCreate(NULL, CSSM_KEYUSE_SIGN, &search);
   }
   if (err) {
-    selected_certs->clear();
-    callback.Run();
+    callback.Run(CertificateList());
     return;
   }
   ScopedCFTypeRef<SecIdentitySearchRef> scoped_search(search);
@@ -311,14 +311,14 @@ void ClientCertStoreMac::GetClientCerts(const SSLCertRequestInfo& request,
 
   if (err != errSecItemNotFound) {
     OSSTATUS_LOG(ERROR, err) << "SecIdentitySearch error";
-    selected_certs->clear();
-    callback.Run();
+    callback.Run(CertificateList());
     return;
   }
 
+  CertificateList selected_certs;
   GetClientCertsImpl(preferred_cert, regular_certs, request, true,
-                     selected_certs);
-  callback.Run();
+                     &selected_certs);
+  callback.Run(std::move(selected_certs));
 }
 
 bool ClientCertStoreMac::SelectClientCertsForTesting(

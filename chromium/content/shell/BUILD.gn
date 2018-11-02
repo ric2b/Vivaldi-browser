@@ -170,8 +170,6 @@ static_library("content_shell_lib") {
     "renderer/layout_test/blink_test_helpers.h",
     "renderer/layout_test/blink_test_runner.cc",
     "renderer/layout_test/blink_test_runner.h",
-    "renderer/layout_test/interface_registry_js_wrapper.cc",
-    "renderer/layout_test/interface_registry_js_wrapper.h",
     "renderer/layout_test/layout_test_content_renderer_client.cc",
     "renderer/layout_test/layout_test_content_renderer_client.h",
     "renderer/layout_test/layout_test_render_frame_observer.cc",
@@ -200,16 +198,13 @@ static_library("content_shell_lib") {
     "//build/config/compiler:no_size_t_to_int_warning",
   ]
 
-  if (enable_mojo_media) {
-    configs += [ "//media/mojo/services:mojo_media_config" ]
-  }
-
   defines = [ "CONTENT_SHELL_VERSION=\"$content_shell_version\"" ]
 
   public_deps = [
     # This exposes all public content APIs.
     "//content/public/app:both",
     "//content/public/browser",
+    "//content/public/child",
     "//content/public/common",
     "//content/public/renderer",
     "//content/public/utility",
@@ -232,12 +227,14 @@ static_library("content_shell_lib") {
     "//content/app/resources",
     "//content/app/strings",
     "//content/gpu",
+    "//content/public/common:interfaces",
     "//content/public/common:service_names",
     "//content/shell/test_runner:test_runner",
     "//content/test:content_test_mojo_bindings",
     "//content/test:layouttest_support",
     "//content/test:test_support",
     "//device/bluetooth",
+    "//device/bluetooth:fake_bluetooth",
     "//device/bluetooth:mocks",
     "//device/geolocation",
     "//device/sensors/public/cpp:full",
@@ -245,9 +242,11 @@ static_library("content_shell_lib") {
     "//gpu",
     "//media",
     "//media/capture",
+    "//media/mojo:features",
     "//mojo/edk/js",
     "//net",
     "//net:net_resources",
+    "//net:test_support",
     "//ppapi/features",
     "//sandbox",
     "//services/service_manager/public/cpp",
@@ -331,7 +330,6 @@ static_library("content_shell_lib") {
 
   if (use_aura) {
     deps += [
-      "//services/navigation",
       "//ui/aura",
       "//ui/aura:test_support",
       "//ui/events",
@@ -486,7 +484,7 @@ if (is_android) {
     deps = [
       ":content_shell_framework_bundle_data",
       ":content_shell_resources_bundle_data",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
 
       # TODO(rsesek): Remove this after GYP is gone, since it only needs to
       # be here per the comment in blink_test_platform_support_mac.mm about
@@ -519,7 +517,7 @@ if (is_android) {
     deps = [
       ":content_shell_lib",
       ":pak",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
     ]
 
@@ -558,7 +556,7 @@ if (is_win) {
 
     deps = [
       "//base",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//components/crash/content/tools:crash_service",
     ]
@@ -592,7 +590,6 @@ if (is_mac) {
     sources = [
       "$root_out_dir/content_shell.pak",
       "resources/missingImage.png",
-      "resources/textAreaResizeCorner.png",
     ]
 
     public_deps = [
@@ -725,7 +722,7 @@ if (is_mac) {
     ]
     deps = [
       ":content_shell_framework+link",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
     ]
     ldflags = [
       # The helper is in Content Shell.app/Contents/Frameworks/Content Shell Helper.app/Contents/MacOS/

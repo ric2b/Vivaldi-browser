@@ -7,16 +7,19 @@ import("//testing/test.gni")
 
 static_library("arc") {
   sources = [
-    "notification/arc_custom_notification_item.cc",
-    "notification/arc_custom_notification_item.h",
     "notification/arc_custom_notification_view.cc",
     "notification/arc_custom_notification_view.h",
-    "notification/arc_notification_item.cc",
+    "notification/arc_notification_delegate.cc",
+    "notification/arc_notification_delegate.h",
     "notification/arc_notification_item.h",
+    "notification/arc_notification_item_impl.cc",
+    "notification/arc_notification_item_impl.h",
     "notification/arc_notification_manager.cc",
     "notification/arc_notification_manager.h",
     "notification/arc_notification_surface_manager.cc",
     "notification/arc_notification_surface_manager.h",
+    "notification/arc_notification_view.cc",
+    "notification/arc_notification_view.h",
   ]
 
   deps = [
@@ -27,6 +30,7 @@ static_library("arc") {
     "//components/signin/core/account_id",
     "//mojo/common:common_base",
     "//skia",
+    "//ui/accessibility",
     "//ui/aura",
     "//ui/base",
     "//ui/compositor",
@@ -45,6 +49,7 @@ test("ui_arc_unittests") {
   testonly = true
   sources = [
     "notification/arc_notification_manager_unittest.cc",
+    "notification/arc_notification_view_unittest.cc",
     "test/run_all_unittests.cc",
   ]
 
@@ -55,6 +60,13 @@ test("ui_arc_unittests") {
     "//components/arc:arc_test_support",
     "//mojo/edk/system",
     "//testing/gtest",
+    "//ui/base:test_support",
+    "//ui/base/ime",
+    "//ui/events",
+    "//ui/events:test_support",
+    "//ui/gl:test_support",
     "//ui/message_center:test_support",
+    "//ui/views",
+    "//ui/views:test_support",
   ]
 }

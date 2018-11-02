@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("util") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "CRUILabel+AttributeUtils.h",
     "CRUILabel+AttributeUtils.mm",
@@ -43,6 +44,7 @@ source_set("util") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "CRUILabel+AttributeUtils_unittest.mm",

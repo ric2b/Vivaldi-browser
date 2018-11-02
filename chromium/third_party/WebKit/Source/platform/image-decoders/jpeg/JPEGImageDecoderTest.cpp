@@ -140,7 +140,7 @@ TEST(JPEGImageDecoderTest, tooBig) {
 }
 
 // Tests that the JPEG decoder can downsample image whose width and height are
-// multiples of 8, to ensure we compute the correct decodedSize and pass correct
+// multiples of 8, to ensure we compute the correct DecodedSize and pass correct
 // parameters to libjpeg to output the image with the expected size.
 TEST(JPEGImageDecoderTest, downsampleImageSizeMultipleOf8) {
   const char* jpeg_file = "/LayoutTests/images/resources/lenna.jpg";  // 256x256
@@ -273,23 +273,23 @@ TEST(JPEGImageDecoderTest,
   TestByteByByteDecode(&CreateDecoder,
                        "/LayoutTests/images/resources/"
                        "small-square-with-colorspin-profile.jpg",
-                       1u, kCAnimationNone);
+                       1u, kAnimationNone);
 }
 
 TEST(JPEGImageDecoderTest, byteByByteProgressiveJPEG) {
   TestByteByByteDecode(&CreateDecoder,
                        "/LayoutTests/images/resources/bug106024.jpg", 1u,
-                       kCAnimationNone);
+                       kAnimationNone);
 }
 
 TEST(JPEGImageDecoderTest, byteByByteRGBJPEGWithAdobeMarkers) {
   TestByteByByteDecode(
       &CreateDecoder,
       "/LayoutTests/images/resources/rgb-jpeg-with-adobe-marker-only.jpg", 1u,
-      kCAnimationNone);
+      kAnimationNone);
 }
 
-// This test verifies that calling SharedBuffer::mergeSegmentsIntoBuffer() does
+// This test verifies that calling SharedBuffer::MergeSegmentsIntoBuffer() does
 // not break JPEG decoding at a critical point: in between a call to decode the
 // size (when JPEGImageDecoder stops while it may still have input data to
 // read) and a call to do a full decode.

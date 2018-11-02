@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/media/capture/cursor_renderer_aura.h"
+#include "device/wake_lock/public/interfaces/wake_lock_service.mojom.h"
 #include "media/capture/content/screen_capture_device_core.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
@@ -21,11 +22,7 @@ namespace cc {
 class CopyOutputResult;
 }  // namespace cc
 
-namespace device {
-class PowerSaveBlocker;
-}  // namespace device
-
-namespace display_compositor {
+namespace viz {
 class ReadbackYUVInterface;
 }
 
@@ -120,15 +117,14 @@ class AuraWindowCaptureMachine
   media::VideoCaptureParams capture_params_;
 
   // YUV readback pipeline.
-  std::unique_ptr<display_compositor::ReadbackYUVInterface>
-      yuv_readback_pipeline_;
+  std::unique_ptr<viz::ReadbackYUVInterface> yuv_readback_pipeline_;
 
   // Renders mouse cursor on frame.
   std::unique_ptr<content::CursorRendererAura> cursor_renderer_;
 
-  // TODO(jiayl): Remove power_save_blocker_ when there is an API to keep the
+  // TODO(jiayl): Remove wake_lock_ when there is an API to keep the
   // screen from sleeping for the drive-by web.
-  std::unique_ptr<device::PowerSaveBlocker> power_save_blocker_;
+  device::mojom::WakeLockServicePtr wake_lock_;
 
   // False while frame capture has been suspended. All other aspects of the
   // machine are maintained.

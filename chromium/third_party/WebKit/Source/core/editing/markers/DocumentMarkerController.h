@@ -40,18 +40,8 @@
 
 namespace blink {
 
+class DocumentMarkerList;
 class Node;
-class RenderedDocumentMarker;
-class Text;
-
-class MarkerRemoverPredicate final {
- public:
-  explicit MarkerRemoverPredicate(const Vector<String>& words);
-  bool operator()(const DocumentMarker&, const Text&) const;
-
- private:
-  Vector<String> words_;
-};
 
 class CORE_EXPORT DocumentMarkerController final
     : public GarbageCollected<DocumentMarkerController>,
@@ -63,13 +53,14 @@ class CORE_EXPORT DocumentMarkerController final
   explicit DocumentMarkerController(Document&);
 
   void Clear();
-  void AddMarker(const Position& start,
-                 const Position& end,
-                 DocumentMarker::MarkerType,
-                 const String& description = g_empty_string);
+  void AddSpellingMarker(const Position& start,
+                         const Position& end,
+                         const String& description = g_empty_string);
+  void AddGrammarMarker(const Position& start,
+                        const Position& end,
+                        const String& description = g_empty_string);
   void AddTextMatchMarker(const EphemeralRange&, DocumentMarker::MatchStatus);
-  void AddCompositionMarker(const Position& start,
-                            const Position& end,
+  void AddCompositionMarker(const EphemeralRange&,
                             Color underline_color,
                             bool thick,
                             Color background_color);
@@ -77,42 +68,35 @@ class CORE_EXPORT DocumentMarkerController final
   void MoveMarkers(Node* src_node, int length, Node* dst_node);
 
   void PrepareForDestruction();
-  void RemoveMarkers(
-      const EphemeralRange&,
-      DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
-  void RemoveMarkers(
-      Node*,
-      unsigned start_offset,
-      int length,
-      DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
-  void RemoveMarkers(
-      DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
-  void RemoveMarkers(
+  void RemoveMarkersInRange(const EphemeralRange&, DocumentMarker::MarkerTypes);
+  void RemoveMarkersOfTypes(DocumentMarker::MarkerTypes);
+  void RemoveMarkersForNode(
       Node*,
       DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
-  void RemoveMarkers(const MarkerRemoverPredicate& should_remove_marker);
+  void RemoveSpellingMarkersUnderWords(const Vector<String>& words);
   void RepaintMarkers(
       DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
   // Returns true if markers within a range are found.
-  bool SetMarkersActive(const EphemeralRange&, bool);
+  bool SetTextMatchMarkersActive(const EphemeralRange&, bool);
   // Returns true if markers within a range defined by a node, |startOffset| and
   // |endOffset| are found.
-  bool SetMarkersActive(Node*,
-                        unsigned start_offset,
-                        unsigned end_offset,
-                        bool);
+  bool SetTextMatchMarkersActive(Node*,
+                                 unsigned start_offset,
+                                 unsigned end_offset,
+                                 bool);
   bool HasMarkers(Node* node) const { return markers_.Contains(node); }
 
+  // Returns a marker of one of the specified types that includes the specified
+  // Position in its interior (not at an endpoint), if one exists.
+  DocumentMarker* MarkerAtPosition(const Position&,
+                                   DocumentMarker::MarkerTypes);
   DocumentMarkerVector MarkersFor(
       Node*,
       DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
-  DocumentMarkerVector MarkersInRange(const EphemeralRange&,
-                                      DocumentMarker::MarkerTypes);
   DocumentMarkerVector Markers();
-  Vector<IntRect> RenderedRectsForMarkers(DocumentMarker::MarkerType);
-  void UpdateMarkerRenderedRectIfNeeded(const Node&, RenderedDocumentMarker&);
-  void InvalidateRectsForAllMarkers();
-  void InvalidateRectsForMarkersInNode(const Node&);
+  Vector<IntRect> RenderedRectsForTextMatchMarkers();
+  void InvalidateRectsForAllTextMatchMarkers();
+  void InvalidateRectsForTextMatchMarkersInNode(const Node&);
 
   DECLARE_TRACE();
 
@@ -127,16 +111,24 @@ class CORE_EXPORT DocumentMarkerController final
                               unsigned new_length) final;
 
  private:
-  void AddMarker(Node*, const DocumentMarker&);
+  void AddMarker(Node*, DocumentMarker*);
+  void AddSpellCheckMarker(const Position& start,
+                           const Position& end,
+                           DocumentMarker::MarkerType,
+                           const String& description = g_empty_string);
 
-  using MarkerList = HeapVector<Member<RenderedDocumentMarker>>;
-  using MarkerLists =
-      HeapVector<Member<MarkerList>, DocumentMarker::kMarkerTypeIndexesCount>;
+  using MarkerLists = HeapVector<Member<DocumentMarkerList>,
+                                 DocumentMarker::kMarkerTypeIndexesCount>;
   using MarkerMap = HeapHashMap<WeakMember<const Node>, Member<MarkerLists>>;
-  void MergeOverlapping(MarkerList*, RenderedDocumentMarker*);
+  static Member<DocumentMarkerList>& ListForType(MarkerLists*,
+                                                 DocumentMarker::MarkerType);
   bool PossiblyHasMarkers(DocumentMarker::MarkerTypes);
   void RemoveMarkersFromList(MarkerMap::iterator, DocumentMarker::MarkerTypes);
   void RemoveMarkers(TextIterator&, DocumentMarker::MarkerTypes);
+  void RemoveMarkersInternal(Node*,
+                             unsigned start_offset,
+                             int length,
+                             DocumentMarker::MarkerTypes);
 
   MarkerMap markers_;
   // Provide a quick way to determine whether a particular marker type is absent

@@ -31,16 +31,16 @@
 #include "bindings/core/v8/RetainedDOMInfo.h"
 
 #include "bindings/core/v8/V8Node.h"
-#include "bindings/core/v8/WrapperTypeInfo.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/NodeTraversal.h"
+#include "platform/bindings/WrapperTypeInfo.h"
 
 namespace blink {
 
 v8::RetainedObjectInfo* RetainedDOMInfo::CreateRetainedDOMInfo(
     uint16_t class_id,
     v8::Local<v8::Value> wrapper) {
-  ASSERT(class_id == WrapperTypeInfo::kNodeClassId);
+  DCHECK_EQ(class_id, WrapperTypeInfo::kNodeClassId);
   if (!wrapper->IsObject())
     return 0;
   Node* node = V8Node::toImpl(wrapper.As<v8::Object>());
@@ -48,7 +48,7 @@ v8::RetainedObjectInfo* RetainedDOMInfo::CreateRetainedDOMInfo(
 }
 
 RetainedDOMInfo::RetainedDOMInfo(Node* root) : root_(root) {
-  ASSERT(root_);
+  DCHECK(root_);
 }
 
 RetainedDOMInfo::~RetainedDOMInfo() {}
@@ -58,7 +58,7 @@ void RetainedDOMInfo::Dispose() {
 }
 
 bool RetainedDOMInfo::IsEquivalent(v8::RetainedObjectInfo* other) {
-  ASSERT(other);
+  DCHECK(other);
   if (other == this)
     return true;
   if (strcmp(GetLabel(), other->GetLabel()))

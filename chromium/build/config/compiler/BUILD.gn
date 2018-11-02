@@ -6,7 +6,6 @@ import("//build/config/android/config.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/compiler/compiler.gni")
-import("//build/config/nacl/config.gni")
 import("//build/toolchain/cc_wrapper.gni")
 import("//build/toolchain/toolchain.gni")
 import("//build_overrides/build.gni")
@@ -19,6 +18,15 @@ if (current_cpu == "mipsel" || current_cpu == "mips64el") {
 }
 if (is_mac) {
   import("//build/config/mac/symbols.gni")
+}
+if (is_ios) {
+  import("//build/config/ios/ios_sdk.gni")
+}
+if (is_nacl) {
+  # To keep NaCl variables out of builds that don't include NaCl, all
+  # variables defined in nacl/config.gni referenced here should be protected by
+  # is_nacl conditions.
+  import("//build/config/nacl/config.gni")
 }
 
 declare_args() {
@@ -91,7 +99,9 @@ declare_args() {
   # branches)
   optimize_for_fuzzing = false
 
-  # Optimize symbol files for maximizing goma cache hit rate.
+  # Optimize symbol files for maximizing goma cache hit rate. This isn't
+  # on by default when goma is enabled because setting this to true may make
+  # it harder to debug binaries.
   strip_absolute_paths_from_debug_symbols = false
 }
 
@@ -116,7 +126,7 @@ if (gold_path == false) {
 
 if (use_debug_fission == "default") {
   use_debug_fission =
-      is_debug && !is_win && use_gold && linux_use_bundled_binutils &&
+      is_debug && !is_android && !is_win && use_gold && 
       (!use_cc_wrapper || cc_wrapper == "")
 }
 
@@ -161,8 +171,14 @@ config("compiler") {
     configs += [ "//build/config/linux:compiler" ]
   } else if (is_nacl) {
     configs += [ "//build/config/nacl:compiler" ]
-  } else if (is_ios || is_mac) {
+  } else if (is_mac) {
     configs += [ "//build/config/mac:compiler" ]
+  } else if (is_ios) {
+    configs += [ "//build/config/ios:compiler" ]
+  } else if (is_fuchsia) {
+    configs += [ "//build/config/fuchsia:compiler" ]
+  } else if (current_os == "aix") {
+    configs += [ "//build/config/aix:compiler" ]
   }
 
   # See the definitions below.
@@ -177,12 +193,6 @@ config("compiler") {
     # Common GCC compiler flags setup.
     # --------------------------------
     cflags += [ "-fno-strict-aliasing" ]  # See http://crbug.com/32204
-    cflags_cc += [
-      # Not exporting C++ inline functions can generally be applied anywhere
-      # so we do so here. Normal function visibility is controlled by
-      # //build/config/gcc:symbol_visibility_hidden.
-      "-fvisibility-inlines-hidden",
-    ]
 
     # Stack protection.
     if (is_mac) {
@@ -201,14 +211,16 @@ config("compiler") {
       # The x86 toolchain currently has problems with stack-protector.
       if (is_android && current_cpu == "x86") {
         cflags += [ "-fno-stack-protector" ]
-      } else {
+      } else if (current_os != "aix") {
+        # Not available on aix.
         cflags += [ "-fstack-protector" ]
       }
     }
 
     # Linker warnings.
     if (fatal_linker_warnings && !(is_chromeos && current_cpu == "arm") &&
-        !(is_android && use_order_profiling) && !is_mac && !is_ios) {
+        !(is_android && use_order_profiling) && !is_mac && !is_ios &&
+        current_os != "aix") {
       # TODO(jochen): Enable this on chromeos on arm. http://crbug.com/356580
       # TODO(lizeb,pasko): Fix link errors when linking with order_profiling=1
       # crbug.com/485542
@@ -305,7 +317,7 @@ config("compiler") {
 
   # Linux/Android common flags setup.
   # ---------------------------------
-  if (is_linux || is_android) {
+  if (is_linux || is_android || is_fuchsia) {
     if (use_pic) {
       cflags += [ "-fPIC" ]
       ldflags += [ "-fPIC" ]
@@ -392,20 +404,16 @@ config("compiler") {
 
   if (is_posix && (use_gold || (use_lld && !is_nacl)) && !using_sanitizer &&
       !(is_android && use_order_profiling)) {
-    # TODO(crbug.com/576197) - gcc on x86 platforms + gold + icf=all
-    # doesn't currently work on non-chromeos platforms.
-    # Additionally, on Android x86 --icf=safe seems to cause issues as well.
-    # Additionally, on cast Android x86, --icf=all causes issues.
-    if (is_android && current_cpu == "x86") {
-      ldflags += [ "-Wl,--icf=none" ]
-    } else if ((is_clang && !is_android) || is_chromeos ||
-               (current_cpu != "x86" && current_cpu != "x64")) {
-      # TODO(thakis): Remove `!is_android` above once our gold has been rolled
-      # with the fix for https://sourceware.org/bugzilla/show_bug.cgi?id=17704
-      # merged.  See also https://crbug.com/663886
+    # TODO(thakis): Remove `!is_android` below once NDK gold has been rolled
+    # with the fix for https://sourceware.org/bugzilla/show_bug.cgi?id=17704
+    # merged.  See also https://crbug.com/663886
+    # `linux_use_bundled_binutils` is to avoid breaking Linux distros which may
+    # still have a buggy gold.
+    # The bug only affects x86 and x64, so we can still use ICF when targeting
+    # other architectures.
+    if ((!is_android && linux_use_bundled_binutils) ||
+        !(current_cpu == "x86" || current_cpu == "x64")) {
       ldflags += [ "-Wl,--icf=all" ]
-    } else if (!is_android || is_clang) {
-      ldflags += [ "-Wl,--icf=safe" ]
     }
   }
 
@@ -437,7 +445,7 @@ config("compiler") {
 
   # C++11 compiler flags setup.
   # ---------------------------
-  if (is_linux || is_android || (is_nacl && is_clang)) {
+  if (is_linux || is_android || (is_nacl && is_clang) || current_os == "aix") {
     # gnu++11 instead of c++11 is needed because some code uses typeof() (a
     # GNU extension).
     # TODO(thakis): Eventually switch this to c++11 instead,
@@ -482,16 +490,8 @@ config("compiler") {
         ldflags += [ "-Wl,-plugin-opt,jobs=8" ]
       }
     } else {
-      # Note: ThinLTO does not currently have this feature implemented
-      # For Full LTO, it provides a measurable runtime speedup of Chrome.
-      cflags += [
-        "-flto",
-        "-fwhole-program-vtables",
-      ]
-      ldflags += [
-        "-flto",
-        "-fwhole-program-vtables",
-      ]
+      cflags += [ "-flto" ]
+      ldflags += [ "-flto" ]
 
       # Apply a lower LTO optimization level as the default is too slow.
       if (is_linux) {
@@ -505,17 +505,30 @@ config("compiler") {
       }
     }
 
+    cflags += [ "-fwhole-program-vtables" ]
+    ldflags += [ "-fwhole-program-vtables" ]
+
     # Work-around for http://openradar.appspot.com/20356002
     if (is_mac) {
       ldflags += [ "-Wl,-all_load" ]
     }
 
-    # Allows the linker to apply ICF to the LTO object file. Also, when
-    # targeting ARM, without this flag, LTO produces a .text section that is
-    # larger than the maximum call displacement, preventing the linker from
-    # relocating calls (http://llvm.org/PR22999).
+    # Allows the linker to apply --gc-sections and ICF to the LTO object file.
+    # Also, when targeting ARM, without this flag, LTO produces a .text section
+    # that is larger than the maximum call displacement, preventing the linker
+    # from relocating calls (http://llvm.org/PR22999).
     if (is_linux) {
-      ldflags += [ "-Wl,-plugin-opt,-function-sections" ]
+      if (use_lld) {
+        ldflags += [
+          "-Wl,-mllvm,-function-sections",
+          "-Wl,-mllvm,-data-sections",
+        ]
+      } else {
+        ldflags += [
+          "-Wl,-plugin-opt,-function-sections",
+          "-Wl,-plugin-opt,-data-sections",
+        ]
+      }
     }
   }
 
@@ -998,6 +1011,7 @@ config("default_warnings") {
         "-Wno-microsoft-enum-value",  # http://crbug.com/505296
         "-Wno-unknown-pragmas",  # http://crbug.com/505314
         "-Wno-microsoft-cast",  # http://crbug.com/550065
+        "-Wno-microsoft-enum-forward-reference",  # http://crbug.com/718880
       ]
     }
   } else {
@@ -1106,6 +1120,17 @@ config("default_warnings") {
         # TODO(thakis ): https://crbug.com/683349
         "-Wno-user-defined-warnings",
       ]
+    } else if (use_xcode_clang &&
+               (xcode_version == "0830" || xcode_version == "0831" ||
+                xcode_version == "0832")) {
+      # This is necessary to allow a progressive transition from using xcode 8 to 8.3. Remove when all bots are migrated to 8.3.
+      cflags += [
+        # TODO(thakis): https://crbug.com/604888
+        "-Wno-undefined-var-template",
+
+        # TODO(hans): https://crbug.com/637306
+        "-Wno-address-of-packed-member",
+      ]
     }
   }
 }
@@ -1141,7 +1166,9 @@ config("chromium_code") {
     ]
 
     if (!is_debug && !using_sanitizer &&
-        (!is_linux || !is_clang || is_official_build)) {
+        (!is_linux || !is_clang || is_official_build) &&
+        current_cpu != "s390x" && current_cpu != "s390" &&
+        current_cpu != "ppc64" && current_cpu != "ppc64") {
       # _FORTIFY_SOURCE isn't really supported by Clang now, see
       # http://llvm.org/bugs/show_bug.cgi?id=16821.
       # It seems to work fine with Ubuntu 12 headers though, so use it in
@@ -1197,13 +1224,6 @@ config("no_chromium_code") {
       # Lots of third-party libraries have unused variables. Instead of
       # suppressing them individually, we just blanket suppress them here.
       "-Wno-unused-variable",
-    ]
-  }
-
-  if (is_linux || is_android) {
-    cflags_cc += [
-      # Don't warn about hash_map in third-party code.
-      "-Wno-deprecated",
     ]
   }
 
@@ -1361,8 +1381,9 @@ if (is_win) {
       # Mac dead code stripping requires symbols.
       common_optimize_on_ldflags += [ "-Wl,-dead_strip" ]
     }
-  } else {
+  } else if (current_os != "aix") {
     # Non-Mac Posix flags.
+    # Aix does not support these.
 
     common_optimize_on_cflags += [
       # Don't emit the GCC version ident directives, they just end up in the
@@ -1422,8 +1443,10 @@ config("optimize") {
     # Favor size over speed, /O1 must be before the common flags. The GYP
     # build also specifies /Os and /GF but these are implied by /O1.
     cflags = [ "/O1" ] + common_optimize_on_cflags + [ "/Oi" ]
-  } else if (optimize_for_size) {
+  } else if (optimize_for_size && !is_nacl) {
     # Favor size over speed.
+    # TODO(crbug.com/718650): Fix -Os in PNaCl compiler and remove the is_nacl
+    # guard above.
     cflags = [ "-Os" ] + common_optimize_on_cflags
   } else {
     cflags = [ "-O2" ] + common_optimize_on_cflags
@@ -1437,8 +1460,10 @@ config("optimize_no_wpo") {
     # Favor size over speed, /O1 must be before the common flags. The GYP
     # build also specifies /Os and /GF but these are implied by /O1.
     cflags = [ "/O1" ] + common_optimize_on_cflags + [ "/Oi" ]
-  } else if (optimize_for_size) {
+  } else if (optimize_for_size && !is_nacl) {
     # Favor size over speed.
+    # TODO(crbug.com/718650): Fix -Os in PNaCl compiler and remove the is_nacl
+    # guard above.
     cflags = [ "-Os" ] + common_optimize_on_cflags
   } else if (optimize_for_fuzzing) {
     cflags = [ "-O1" ] + common_optimize_on_cflags
@@ -1470,7 +1495,7 @@ config("no_optimize") {
 # optimization and link-time code generation which is very expensive and should
 # be used sparingly.
 config("optimize_max") {
-  if (is_nacl_irt) {
+  if (is_nacl && is_nacl_irt) {
     # The NaCl IRT is a special case and always wants its own config.
     # Various components do:
     #   if (!is_debug) {
@@ -1511,7 +1536,7 @@ config("optimize_max") {
 
 # Turns down the optimization level to medium
 config("optimize_medium") {
-  if (is_nacl_irt) {
+  if (is_nacl && is_nacl_irt) {
     # The NaCl IRT is a special case and always wants its own config.
     # Various components do:
     #   if (!is_debug) {
@@ -1552,7 +1577,7 @@ config("optimize_medium") {
 # TODO(crbug.com/621335) - rework how all of these configs are related
 # so that we don't need this disclaimer.
 config("optimize_speed") {
-  if (is_nacl_irt) {
+  if (is_nacl && is_nacl_irt) {
     # The NaCl IRT is a special case and always wants its own config.
     # Various components do:
     #   if (!is_debug) {
@@ -1598,7 +1623,7 @@ config("optimize_fuzzing") {
 # The default optimization applied to all targets. This will be equivalent to
 # either "optimize" or "no_optimize", depending on the build flags.
 config("default_optimization") {
-  if (is_nacl_irt) {
+  if (is_nacl && is_nacl_irt) {
     # The NaCl IRT is a special case and always wants its own config.
     # It gets optimized the same way regardless of the type of build.
     configs = [ "//build/config/nacl:irt_optimize" ]

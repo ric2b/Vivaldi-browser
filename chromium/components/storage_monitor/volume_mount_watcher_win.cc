@@ -16,7 +16,6 @@
 #include <algorithm>
 
 #include "base/bind_helpers.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -24,7 +23,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
 #include "base/task_runner_util.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/time/time.h"
 #include "base/win/scoped_handle.h"
 #include "components/storage_monitor/media_storage_util.h"
@@ -39,21 +38,10 @@ namespace {
 
 const DWORD kMaxPathBufLen = MAX_PATH + 1;
 
-const char kDeviceInfoTaskRunnerName[] = "device-info-task-runner";
-
 enum DeviceType {
   FLOPPY,
   REMOVABLE,
   FIXED,
-};
-
-// Histogram values for recording frequencies of eject attempts and
-// outcomes.
-enum EjectWinLockOutcomes {
-  LOCK_ATTEMPT,
-  LOCK_TIMEOUT,
-  LOCK_TIMEOUT2,
-  NUM_LOCK_OUTCOMES,
 };
 
 // We are trying to figure out whether the drive is a fixed volume,
@@ -262,12 +250,7 @@ void EjectDeviceInThreadPool(
   // handle is closed, and this is done by the ScopedHandle above.
   BOOL locked = DeviceIoControl(volume_handle.Get(), FSCTL_LOCK_VOLUME,
                                 NULL, 0, NULL, 0, &bytes_returned, NULL);
-  UMA_HISTOGRAM_ENUMERATION("StorageMonitor.EjectWinLock",
-                            LOCK_ATTEMPT, NUM_LOCK_OUTCOMES);
   if (!locked) {
-    UMA_HISTOGRAM_ENUMERATION("StorageMonitor.EjectWinLock",
-                              iteration == 0 ? LOCK_TIMEOUT : LOCK_TIMEOUT2,
-                              NUM_LOCK_OUTCOMES);
     const int kNumLockRetries = 1;
     const base::TimeDelta kLockRetryInterval =
         base::TimeDelta::FromMilliseconds(500);
@@ -332,12 +315,11 @@ void EjectDeviceInThreadPool(
 }  // namespace
 
 VolumeMountWatcherWin::VolumeMountWatcherWin()
-    : notifications_(NULL), weak_factory_(this) {
-  base::SequencedWorkerPool* pool = content::BrowserThread::GetBlockingPool();
-  device_info_task_runner_ = pool->GetSequencedTaskRunnerWithShutdownBehavior(
-      pool->GetNamedSequenceToken(kDeviceInfoTaskRunnerName),
-      base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
-}
+    : device_info_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})),
+      notifications_(nullptr),
+      weak_factory_(this) {}
 
 // static
 base::FilePath VolumeMountWatcherWin::DriveNumberToFilePath(int drive_number) {

@@ -16,6 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
+#include "cc/output/renderer_settings.h"
 #include "cc/surfaces/frame_sink_id_allocator.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
@@ -48,11 +49,10 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   void CreateCompositorFrameSink(
       base::WeakPtr<ui::Compositor> compositor) override;
   scoped_refptr<cc::ContextProvider> SharedMainThreadContextProvider() override;
-  uint32_t GetImageTextureTarget(gfx::BufferFormat format,
-                                 gfx::BufferUsage usage) override;
-  bool DoesCreateTestContexts() override;
+  double GetRefreshRate() const override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
+  const cc::RendererSettings& GetRendererSettings() const override;
   void AddObserver(ui::ContextFactoryObserver* observer) override;
   void RemoveObserver(ui::ContextFactoryObserver* observer) override;
 
@@ -80,7 +80,7 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   ui::ContextFactoryPrivate* GetContextFactoryPrivate() override;
   cc::SurfaceManager* GetSurfaceManager() override;
   FrameSinkManagerHost* GetFrameSinkManagerHost() override;
-  display_compositor::GLHelper* GetGLHelper() override;
+  viz::GLHelper* GetGLHelper() override;
   void SetGpuChannelEstablishFactory(
       gpu::GpuChannelEstablishFactory* factory) override;
 #if defined(OS_MACOSX)
@@ -121,13 +121,15 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
       PerCompositorDataMap;
   PerCompositorDataMap per_compositor_data_;
 
+  const cc::RendererSettings renderer_settings_;
   scoped_refptr<ui::ContextProviderCommandBuffer> shared_main_thread_contexts_;
-  std::unique_ptr<display_compositor::GLHelper> gl_helper_;
+  std::unique_ptr<viz::GLHelper> gl_helper_;
   base::ObserverList<ui::ContextFactoryObserver> observer_list_;
   std::unique_ptr<cc::SingleThreadTaskGraphRunner> task_graph_runner_;
   scoped_refptr<ui::ContextProviderCommandBuffer>
       shared_worker_context_provider_;
 
+  bool disable_display_vsync_ = false;
   bool shared_vulkan_context_provider_initialized_ = false;
   scoped_refptr<cc::VulkanInProcessContextProvider>
       shared_vulkan_context_provider_;

@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/scoped_observer.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/net/net_export_helper.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/common/url_constants.h"
@@ -114,6 +116,7 @@ class NetExportMessageHandler
   void OnStartNetLog(const base::ListValue* list);
   void OnStopNetLog(const base::ListValue* list);
   void OnSendNetLog(const base::ListValue* list);
+  void OnShowFile(const base::ListValue* list);
 
   // ui::SelectFileDialog::Listener implementation.
   void FileSelected(const base::FilePath& path,
@@ -130,6 +133,9 @@ class NetExportMessageHandler
 
   // Send NetLog data via email.
   static void SendEmail(const base::FilePath& file_to_send);
+
+  // Reveal |path| in the shell on desktop platforms.
+  void ShowFileInShell(const base::FilePath& path);
 
   // chrome://net-export can be used on both mobile and desktop platforms.
   // On mobile a user cannot pick where their NetLog file is saved to.
@@ -212,6 +218,9 @@ void NetExportMessageHandler::RegisterMessages() {
       net_log::kSendNetLogHandler,
       base::Bind(&NetExportMessageHandler::OnSendNetLog,
                  base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      net_log::kShowFile,
+      base::Bind(&NetExportMessageHandler::OnShowFile, base::Unretained(this)));
 }
 
 // The net-export UI is not notified of state changes until this function runs.
@@ -281,6 +290,12 @@ void NetExportMessageHandler::OnSendNetLog(const base::ListValue* list) {
       base::Bind(&NetExportMessageHandler::SendEmail));
 }
 
+void NetExportMessageHandler::OnShowFile(const base::ListValue* list) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  file_writer_->GetFilePathToCompletedLog(
+      base::Bind(&NetExportMessageHandler::ShowFileInShell, AsWeakPtr()));
+}
+
 void NetExportMessageHandler::FileSelected(const base::FilePath& path,
                                            int index,
                                            void* params) {
@@ -321,6 +336,17 @@ void NetExportMessageHandler::SendEmail(const base::FilePath& file_to_send) {
       base::UTF8ToUTF16(body), base::UTF8ToUTF16(title),
       base::UTF8ToUTF16(file_to_attach));
 #endif
+}
+
+void NetExportMessageHandler::ShowFileInShell(const base::FilePath& path) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (path.empty())
+    return;
+
+  // (The |profile| parameter is relevant for Chrome OS)
+  Profile* profile = Profile::FromWebUI(web_ui());
+
+  platform_util::ShowItemInFolder(profile, path);
 }
 
 // static
@@ -371,9 +397,6 @@ NetExportMessageHandler::GetURLRequestContexts() const {
   context_getters.push_back(
       content::BrowserContext::GetDefaultStoragePartition(profile)
           ->GetMediaURLRequestContext());
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  context_getters.push_back(profile->GetRequestContextForExtensions());
-#endif
   context_getters.push_back(
       g_browser_process->io_thread()->system_url_request_context_getter());
   context_getters.push_back(

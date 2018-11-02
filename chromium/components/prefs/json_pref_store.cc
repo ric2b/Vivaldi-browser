@@ -143,13 +143,13 @@ scoped_refptr<base::SequencedTaskRunner> JsonPrefStore::GetTaskRunnerForFile(
 
 JsonPrefStore::JsonPrefStore(
     const base::FilePath& pref_filename,
-    const scoped_refptr<base::SequencedTaskRunner>& sequenced_task_runner,
+    scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner,
     std::unique_ptr<PrefFilter> pref_filter)
     : path_(pref_filename),
-      sequenced_task_runner_(sequenced_task_runner),
+      sequenced_task_runner_(std::move(sequenced_task_runner)),
       prefs_(new base::DictionaryValue()),
       read_only_(false),
-      writer_(pref_filename, sequenced_task_runner),
+      writer_(pref_filename, sequenced_task_runner_),
       pref_filter_(std::move(pref_filter)),
       initialized_(false),
       filtering_in_progress_(false),
@@ -463,7 +463,9 @@ bool JsonPrefStore::SerializeData(std::string* output) {
   // readable prefs for debugging purposes, you can dump your prefs into any
   // command-line or online JSON pretty printing tool.
   serializer.set_pretty_print(false);
-  return serializer.Serialize(*prefs_);
+  bool success = serializer.Serialize(*prefs_);
+  DCHECK(success);
+  return success;
 }
 
 void JsonPrefStore::FinalizeFileRead(

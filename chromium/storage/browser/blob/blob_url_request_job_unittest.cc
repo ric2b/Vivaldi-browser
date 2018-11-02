@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -25,6 +26,7 @@
 #include "net/http/http_byte_range.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_job_factory_impl.h"
@@ -262,7 +264,8 @@ class BlobURLRequestJobTest : public testing::Test {
   void TestRequest(const std::string& method,
                    const net::HttpRequestHeaders& extra_headers) {
     request_ = url_request_context_.CreateRequest(
-        GURL("blob:blah"), net::DEFAULT_PRIORITY, &url_request_delegate_);
+        GURL("blob:blah"), net::DEFAULT_PRIORITY, &url_request_delegate_,
+        TRAFFIC_ANNOTATION_FOR_TESTS);
     request_->set_method(method);
     if (!extra_headers.IsEmpty())
       request_->SetExtraRequestHeaders(extra_headers);

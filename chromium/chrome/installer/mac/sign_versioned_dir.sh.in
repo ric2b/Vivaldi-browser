@@ -23,29 +23,59 @@ export -n SHELLOPTS
 ME="$(basename "${0}")"
 readonly ME
 
+script_dir="$(dirname "${0}")"
+source "${script_dir}/variables.sh"
+
 codesign_display_and_verify() {
-  path=${1}
-  shift
+  args=("${@}")
+  path=${args[0]}
 
   # --verbose can go up to 6 for --display, but that just shows the hash of each
   # ordinary page in the executable, which is more noise than anything else.
   codesign --display --verbose=5 -r- "${path}"
-  codesign --verify --verbose=6 "${@}" "${path}"
+  codesign --verify --verbose=6 "${args[@]:1}" "${path}"
 }
 
-if [[ ${#} -ne 3 ]]; then
-  echo "usage: ${ME} app_path codesign_keychain codesign_id" >& 2
+if [[ ${#} -ne 3 && ${#} -ne 4 ]]; then
+  echo "usage: ${ME} app_path codesign_keychain codesign_id \
+[--development]" >& 2
   exit 1
 fi
 
 app_path="${1}"
 codesign_keychain="${2}"
 codesign_id="${3}"
+is_development=
 
-# Hack since GYP seems to remove duplicate arguments in actions
-if [ "$codesign_keychain" == "--same--" ]; then
-  codesign_keychain="${codesign_id}"
+if [[ ${#} == 4 && ${4} == "--development" ]]; then
+  is_development=1
 fi
+
+codesign_with_options() {
+  path=${1}
+  options=${2}
+  requirement_identifier=${3}
+
+  codesign_cmd=(
+    codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}"
+    "${path}"
+  )
+
+  if [[ "${requirement_identifier}" = "app_mode_loader" ]]; then
+    codesign_cmd+=( --identifier "${requirement_identifier}" )
+  fi
+
+  if [[ -n "${options}" ]]; then
+    codesign_cmd+=( --options "${options}" )
+  fi
+
+#  if [[ -z "${is_development}" ]]; then
+#    requirement="designated => identifier \"${requirement_identifier}\" \
+#${requirement_suffix}"
+#    codesign_cmd+=( -r="${requirement}" )
+#  fi
+  "${codesign_cmd[@]}"
+}
 
 versioned_dir="${app_path}/Contents/Versions/@VERSION@"
 
@@ -61,19 +91,12 @@ crashpad_handler="${framework}/Helpers/crashpad_handler"
 helper_app="${versioned_dir}/@MAC_PRODUCT_NAME@ Helper.app"
 app_mode_loader_app="${framework}/Resources/app_mode_loader.app"
 app_mode_loader="${app_mode_loader_app}/Contents/MacOS/app_mode_loader"
+widevine_plugin="${framework}/Libraries/WidevineCdm/_platform_specific/mac_x64/widevinecdmadapter.plugin"
 sparkle_framework="${app_path}/Contents/Frameworks/Sparkle.framework"
 
-requirement_suffix="\
-"
-
-enforcement_flags_app="restrict"
-enforcement_flags="${enforcement_flags_app},library"
-
-codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
-    "${crashpad_handler}" \
-    --options "${enforcement_flags}" \
-    -r="designated => identifier \"crashpad_handler\" \
-${requirement_suffix}"
+codesign_with_options "${crashpad_handler}" \
+                      "${enforcement_flags_helpers}" \
+                      "crashpad_handler"
 
 # The app mode loader bundle is modified dynamically at runtime. Just sign the
 # executable, which shouldn't change. In order to do this, the executable needs
@@ -82,42 +105,46 @@ ${requirement_suffix}"
 # verified in isolation or with --ignore-resources, it will.
 app_mode_loader_tmp="$(mktemp -t app_mode_loader)"
 cp "${app_mode_loader}" "${app_mode_loader_tmp}"
-codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
-    "${app_mode_loader_tmp}" \
-    --identifier app_mode_loader \
-    --options "${enforcement_flags}" \
-    -r="designated => identifier \"app_mode_loader\" \
-${requirement_suffix}"
+
+codesign_with_options "${app_mode_loader_tmp}" \
+                      "${enforcement_flags_helpers}" \
+                      "app_mode_loader"
+
 cp "${app_mode_loader_tmp}" "${app_mode_loader}"
 rm -f "${app_mode_loader_tmp}"
 
-codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
-    "${notification_service}" \
-    --options "${enforcement_flags}" \
-    -r="designated => identifier \"com.vivaldi.Vivaldi.framework.AlertNotificationService\" \
-${requirement_suffix}"
+codesign_with_options "${notification_service}" \
+                      "${enforcement_flags_helpers}" \
+                      "com.vivaldi.Vivaldi.framework.AlertNotificationService"
 
-# The framework is a dylib, so ${enforcement_flags} are meaningless.
-codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
-    "${framework}" \
-    -r="designated => identifier \"com.vivaldi.Vivaldi.framework\" \
-${requirement_suffix}"
+# Only sign widevine plugin if it is present in the bundle.
+# ${enforcement_flags*} are meaningless for dynamic libraries.
+if [[ -f "${widevine_plugin}" ]]; then
+  codesign_with_options "${widevine_plugin}" "" "widevinecdmadapter"
+fi
 
-codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
-    "${helper_app}" \
-     --options "${enforcement_flags_app}" \
-    -r="designated => identifier \"com.vivaldi.Vivaldi.helper\" \
-${requirement_suffix}"
+# The framework is a dylib, so ${enforcement_flags_helpers} are meaningless.
+codesign_with_options "${framework}" "" "com.vivaldi.Vivaldi.framework"
 
-codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
-    "${sparkle_framework}" \
-    -r="designated => identifier \"org.sparkle-project.Sparkle\" \
-${requirement_suffix}"
+codesign_with_options "${helper_app}" \
+                      "${enforcement_flags_app}" \
+                      "com.vivaldi.Vivaldi.helper"
+
+if [[ -f "${widevine_plugin}" ]]; then
+  codesign_display_and_verify "${widevine_plugin}"
+fi
+
+codesign_with_options "${sparkle_framework}" \
+                      "" \
+                      "org.sparkle-project.Sparkle"
 
 codesign_display_and_verify "${crashpad_handler}" --deep
 # Don't verify app_mode_loader independently because --ignore-resources is
 # unrecognized before 10.11 (bug 565859).
 # codesign_display_and_verify "${app_mode_loader}" --ignore-resources
 codesign_display_and_verify "${notification_service}" --deep
-codesign_display_and_verify "${framework}" --deep
+# The framework contains KeystoneRegistration.framework, which uses
+# custom resource rules, so use --no-strict to verify.
+codesign_display_and_verify "${framework}" --deep --no-strict
+codesign_display_and_verify "${framework}" #--strict
 codesign_display_and_verify "${helper_app}" --deep

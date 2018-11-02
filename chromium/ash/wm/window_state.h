@@ -13,11 +13,8 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "ui/aura/window_observer.h"
 #include "ui/base/ui_base_types.h"
-
-namespace aura {
-class Window;
-}
 
 namespace gfx {
 class Rect;
@@ -26,16 +23,25 @@ class Rect;
 namespace ash {
 class LockWindowState;
 class MaximizeModeWindowState;
-class WmWindow;
 
 namespace mojom {
 enum class WindowPinType;
 }
 
 namespace wm {
+class WindowState;
 class WindowStateDelegate;
 class WindowStateObserver;
 class WMEvent;
+
+// Returns the WindowState for the active window, null if there is no active
+// window.
+ASH_EXPORT WindowState* GetActiveWindowState();
+
+// Returns the WindowState for |window|. Creates WindowState if it doesn't
+// exist. The returned value is owned by |window| (you should not delete it).
+ASH_EXPORT WindowState* GetWindowState(aura::Window* window);
+ASH_EXPORT const WindowState* GetWindowState(const aura::Window* window);
 
 // WindowState manages and defines ash specific window state and
 // behavior. Ash specific per-window state (such as ones that controls
@@ -48,7 +54,7 @@ class WMEvent;
 // Prefer using this class instead of passing aura::Window* around in
 // ash code as this is often what you need to interact with, and
 // accessing the window using |window()| is cheap.
-class ASH_EXPORT WindowState {
+class ASH_EXPORT WindowState : public aura::WindowObserver {
  public:
   // A subclass of State class represents one of the window's states
   // that corresponds to WindowStateType in Ash environment, e.g.
@@ -82,10 +88,10 @@ class ASH_EXPORT WindowState {
   };
 
   // Call GetWindowState() to instantiate this class.
-  virtual ~WindowState();
+  ~WindowState() override;
 
-  WmWindow* window() { return window_; }
-  const WmWindow* window() const { return window_; }
+  aura::Window* window() { return window_; }
+  const aura::Window* window() const { return window_; }
 
   bool HasDelegate() const;
   void SetDelegate(std::unique_ptr<WindowStateDelegate> delegate);
@@ -144,7 +150,7 @@ class ASH_EXPORT WindowState {
 
   // Caches, then disables always on top state and then stacks |window_| below
   // |window_on_top| if a |window_| is currently in always on top state.
-  void DisableAlwaysOnTop(WmWindow* window_on_top);
+  void DisableAlwaysOnTop(aura::Window* window_on_top);
 
   // Restores always on top state that a window might have cached.
   void RestoreAlwaysOnTop();
@@ -317,22 +323,16 @@ class ASH_EXPORT WindowState {
   const DragDetails* drag_details() const { return drag_details_.get(); }
   DragDetails* drag_details() { return drag_details_.get(); }
 
-  // Called from the associated WmWindow once the show state changes.
-  void OnWindowShowStateChanged();
-
-  // Called from the associated WmWindow once the window pin type changes.
-  void OnWindowPinTypeChanged();
-
- protected:
-  explicit WindowState(WmWindow* window);
-
  private:
   friend class DefaultState;
   friend class ash::LockWindowState;
   friend class ash::MaximizeModeWindowState;
+  friend WindowState* GetWindowState(aura::Window*);
   FRIEND_TEST_ALL_PREFIXES(WindowAnimationsTest, CrossFadeToBounds);
   FRIEND_TEST_ALL_PREFIXES(WindowAnimationsTest,
                            CrossFadeToBoundsFromTransform);
+
+  explicit WindowState(aura::Window* window);
 
   WindowStateDelegate* delegate() { return delegate_.get(); }
 
@@ -375,8 +375,13 @@ class ASH_EXPORT WindowState {
   // a cross fade animation.
   void SetBoundsDirectCrossFade(const gfx::Rect& bounds);
 
+  // aura::WindowObserver:
+  void OnWindowPropertyChanged(aura::Window* window,
+                               const void* key,
+                               intptr_t old) override;
+
   // The owner of this window settings.
-  WmWindow* window_;
+  aura::Window* window_;
   std::unique_ptr<WindowStateDelegate> delegate_;
 
   bool window_position_managed_;

@@ -4,7 +4,6 @@
 
 #include "components/exo/wm_helper_ash.h"
 
-#include "ash/accessibility_delegate.h"
 #include "ash/public/cpp/config.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
@@ -13,7 +12,7 @@
 #include "base/memory/singleton.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/display/manager/display_manager.h"
-#include "ui/events/devices/device_data_manager.h"
+#include "ui/events/devices/input_device_manager.h"
 #include "ui/wm/public/activation_client.h"
 
 namespace exo {
@@ -31,10 +30,7 @@ WMHelperAsh::WMHelperAsh() {
   aura::client::FocusClient* focus_client =
       aura::client::GetFocusClient(ash::Shell::GetPrimaryRootWindow());
   focus_client->AddObserver(this);
-  // TODO(crbug.com/709225): Mushrome doesn't have a DeviceDataManager.
-  if (ash::ShellPort::Get()->GetAshConfig() != ash::Config::MUS)
-    ui::DeviceDataManager::GetInstance()->AddObserver(this);
-  ash::Shell::Get()->system_tray_notifier()->AddAccessibilityObserver(this);
+  ui::InputDeviceManager::GetInstance()->AddObserver(this);
 }
 
 WMHelperAsh::~WMHelperAsh() {
@@ -49,23 +45,18 @@ WMHelperAsh::~WMHelperAsh() {
     ash::Shell::Get()->cursor_manager()->RemoveObserver(this);
   ash::Shell::Get()->activation_client()->RemoveObserver(this);
   ash::Shell::Get()->RemoveShellObserver(this);
-  // TODO(crbug.com/709225): Mushrome doesn't have a DeviceDataManager.
-  if (ash::ShellPort::Get()->GetAshConfig() != ash::Config::MUS)
-    ui::DeviceDataManager::GetInstance()->RemoveObserver(this);
-  ash::Shell::Get()->system_tray_notifier()->RemoveAccessibilityObserver(this);
+  ui::InputDeviceManager::GetInstance()->RemoveObserver(this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // WMHelperAsh, private:
 
-const display::ManagedDisplayInfo WMHelperAsh::GetDisplayInfo(
+const display::ManagedDisplayInfo& WMHelperAsh::GetDisplayInfo(
     int64_t display_id) const {
   return ash::Shell::Get()->display_manager()->GetDisplayInfo(display_id);
 }
 
-aura::Window* WMHelperAsh::GetContainer(int container_id) {
-  // TODO(domlaskowski): Use target root window once multi-display support lands
-  // in ARC. See crbug.com/718627.
+aura::Window* WMHelperAsh::GetPrimaryDisplayContainer(int container_id) {
   return ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
                                   container_id);
 }
@@ -85,6 +76,15 @@ ui::CursorSetType WMHelperAsh::GetCursorSet() const {
   if (ash::ShellPort::Get()->GetAshConfig() == ash::Config::MUS)
     return ui::CURSOR_SET_NORMAL;
   return ash::Shell::Get()->cursor_manager()->GetCursorSet();
+}
+
+const display::Display& WMHelperAsh::GetCursorDisplay() const {
+  // TODO(crbug.com/631103): Mushrome doesn't have a cursor manager yet.
+  if (ash::ShellPort::Get()->GetAshConfig() == ash::Config::MUS) {
+    static const display::Display display;
+    return display;
+  }
+  return ash::Shell::Get()->cursor_manager()->GetDisplay();
 }
 
 void WMHelperAsh::AddPreTargetHandler(ui::EventHandler* handler) {
@@ -113,14 +113,6 @@ bool WMHelperAsh::IsMaximizeModeWindowManagerEnabled() const {
       ->IsMaximizeModeWindowManagerEnabled();
 }
 
-bool WMHelperAsh::IsSpokenFeedbackEnabled() const {
-  return ash::Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled();
-}
-
-void WMHelperAsh::PlayEarcon(int sound_key) const {
-  return ash::Shell::Get()->accessibility_delegate()->PlayEarcon(sound_key);
-}
-
 void WMHelperAsh::OnWindowActivated(
     aura::client::ActivationChangeObserver::ActivationReason reason,
     aura::Window* gained_active,
@@ -141,9 +133,8 @@ void WMHelperAsh::OnCursorSetChanged(ui::CursorSetType cursor_set) {
   NotifyCursorSetChanged(cursor_set);
 }
 
-void WMHelperAsh::OnAccessibilityModeChanged(
-    ash::AccessibilityNotificationVisibility notify) {
-  NotifyAccessibilityModeChanged();
+void WMHelperAsh::OnCursorDisplayChanged(const display::Display& display) {
+  NotifyCursorDisplayChanged(display);
 }
 
 void WMHelperAsh::OnMaximizeModeStarted() {

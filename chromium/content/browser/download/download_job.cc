@@ -46,7 +46,9 @@ bool DownloadJob::AddByteStream(std::unique_ptr<ByteStreamReader> stream_reader,
   return true;
 }
 
-void DownloadJob::CancelRequestWithOffset(int64_t offset) {}
+void DownloadJob::CancelRequestWithOffset(int64_t offset) {
+  NOTREACHED();
+}
 
 bool DownloadJob::IsParallelizable() const {
   return false;

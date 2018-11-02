@@ -28,13 +28,6 @@ aggregate_vector_icons("views_vector_icons") {
     "submenu_arrow.1x.icon",
     "submenu_arrow.icon",
   ]
-
-  if (is_mac) {
-    icons += [
-      "combobox_arrow_mac_enabled.icon",
-      "combobox_arrow_mac_disabled.icon",
-    ]
-  }
 }
 
 component("views") {
@@ -45,6 +38,7 @@ component("views") {
     "accessible_pane_view.h",
     "animation/bounds_animator.cc",
     "animation/bounds_animator.h",
+    "animation/bounds_animator_observer.h",
     "animation/flood_fill_ink_drop_ripple.cc",
     "animation/flood_fill_ink_drop_ripple.h",
     "animation/ink_drop.cc",
@@ -61,6 +55,7 @@ component("views") {
     "animation/ink_drop_impl.h",
     "animation/ink_drop_mask.cc",
     "animation/ink_drop_mask.h",
+    "animation/ink_drop_observer.h",
     "animation/ink_drop_painted_layer_delegates.cc",
     "animation/ink_drop_painted_layer_delegates.h",
     "animation/ink_drop_ripple.cc",
@@ -210,6 +205,7 @@ component("views") {
     "controls/native/native_view_host.h",
     "controls/native/native_view_host_mac.h",
     "controls/native/native_view_host_mac.mm",
+    "controls/native/native_view_host_wrapper.h",
     "controls/prefix_delegate.h",
     "controls/prefix_selector.cc",
     "controls/prefix_selector.h",
@@ -244,6 +240,7 @@ component("views") {
     "controls/tabbed_pane/tabbed_pane.cc",
     "controls/tabbed_pane/tabbed_pane.h",
     "controls/tabbed_pane/tabbed_pane_listener.h",
+    "controls/table/table_grouper.h",
     "controls/table/table_header.cc",
     "controls/table/table_header.h",
     "controls/table/table_utils.cc",
@@ -598,6 +595,7 @@ component("views") {
           "widget/desktop_aura/desktop_drag_drop_client_aurax11.h",
           "widget/desktop_aura/desktop_screen_x11.cc",
           "widget/desktop_aura/desktop_screen_x11.h",
+          "widget/desktop_aura/desktop_window_tree_host_observer_x11.h",
           "widget/desktop_aura/desktop_window_tree_host_x11.cc",
           "widget/desktop_aura/desktop_window_tree_host_x11.h",
           "widget/desktop_aura/x11_desktop_handler.cc",
@@ -633,12 +631,7 @@ component("views") {
           "widget/desktop_aura/desktop_window_tree_host_win.h",
         ]
       } else if (use_ozone) {
-        sources += [
-          "widget/desktop_aura/desktop_factory_ozone.cc",
-          "widget/desktop_aura/desktop_factory_ozone.h",
-          "widget/desktop_aura/desktop_screen_ozone.cc",
-          "widget/desktop_aura/desktop_window_tree_host_ozone.cc",
-        ]
+        sources += [ "widget/desktop_aura/desktop_window_tree_host_ozone.cc" ]
       }
       if (is_linux) {
         sources += [ "style/platform_style_linux.cc" ]
@@ -723,6 +716,8 @@ static_library("test_support_internal") {
     "test/slider_test_api.h",
     "test/test_layout_manager.cc",
     "test/test_layout_manager.h",
+    "test/test_layout_provider.cc",
+    "test/test_layout_provider.h",
     "test/test_platform_native_widget.h",
     "test/test_views.cc",
     "test/test_views.h",

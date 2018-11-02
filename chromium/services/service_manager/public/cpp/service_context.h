@@ -13,7 +13,9 @@
 #include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/core.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/export.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/service_manager/public/interfaces/service.mojom.h"
@@ -40,7 +42,7 @@ namespace service_manager {
 // command-line (in the form of a pipe token), from a mojom::ServiceFactory
 // call, or from some other embedded service-running facility defined by the
 // client.
-class ServiceContext : public mojom::Service {
+class SERVICE_MANAGER_PUBLIC_CPP_EXPORT ServiceContext : public mojom::Service {
  public:
   // Creates a new ServiceContext bound to |request|. This connection may be
   // used immediately to make outgoing connections via connector().
@@ -61,8 +63,7 @@ class ServiceContext : public mojom::Service {
   ~ServiceContext() override;
 
   Connector* connector() { return connector_.get(); }
-  const ServiceInfo& local_info() const { return local_info_; }
-  const Identity& identity() const { return local_info_.identity; }
+  const Identity& identity() const { return identity_; }
 
   // Specify a closure to be run when the Service calls QuitNow(), typically
   // in response to Service::OnServiceManagerConnectionLost().
@@ -105,17 +106,29 @@ class ServiceContext : public mojom::Service {
   // disconnection from the Service Manager.
   void QuitNow();
 
+  // Overrides the interface binder for |interface_name| of |service_name|.
+  // This is a process-wide override, meaning that |binder| can intercept
+  // requests against only those |service_name| service instances running in the
+  // same process with caller of this function.
+  static void SetGlobalBinderForTesting(
+      const std::string& service_name,
+      const std::string& interface_name,
+      const BinderRegistry::Binder& binder,
+      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner = nullptr);
+
+  // Clears all overridden interface binders for service |service_name| set via
+  // SetGlobalBinderForTesting().
+  static void ClearGlobalBindersForTesting(const std::string& service_name);
+
  private:
   friend class service_manager::Service;
 
   // mojom::Service:
-  void OnStart(const ServiceInfo& info,
-               const OnStartCallback& callback) override;
-  void OnBindInterface(
-      const ServiceInfo& source_info,
-      const std::string& interface_name,
-      mojo::ScopedMessagePipeHandle interface_pipe,
-      const OnBindInterfaceCallback& callback) override;
+  void OnStart(const Identity& info, const OnStartCallback& callback) override;
+  void OnBindInterface(const BindSourceInfo& source_info,
+                       const std::string& interface_name,
+                       mojo::ScopedMessagePipeHandle interface_pipe,
+                       const OnBindInterfaceCallback& callback) override;
 
   void OnConnectionError();
 
@@ -126,19 +139,11 @@ class ServiceContext : public mojom::Service {
   std::unique_ptr<service_manager::Service> service_;
   mojo::Binding<mojom::Service> binding_;
   std::unique_ptr<Connector> connector_;
-  service_manager::ServiceInfo local_info_;
+  service_manager::Identity identity_;
 
   // This instance's control interface to the service manager. Note that this
   // is unbound and therefore invalid until OnStart() is called.
   mojom::ServiceControlAssociatedPtr service_control_;
-
-  // The Service may call QuitNow() before SetConnectionLostClosure(), and the
-  // latter is expected to invoke the closure immediately in that case. This is
-  // used to track that condition.
-  //
-  // TODO(rockot): Figure out who depends on this behavior and make them stop.
-  // It's weird and shouldn't be necessary.
-  bool service_quit_ = false;
 
   // The closure to run when QuitNow() is invoked. May delete |this|.
   base::Closure quit_closure_;

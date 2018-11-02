@@ -52,7 +52,7 @@ TEST_F(JumpListFileUtilTest, DeleteDirectoryContent) {
 
   // Delete the directory content using DeleteDirectoryContent(). The file
   // should be deleted and the directory remains.
-  ASSERT_EQ(DeleteDirectoryContent(dir_path, kFileDeleteLimit), SUCCEED);
+  DeleteDirectoryContent(dir_path, kFileDeleteLimit);
   EXPECT_FALSE(PathExists(file_name));
   EXPECT_TRUE(DirectoryExists(dir_path));
 }
@@ -66,14 +66,14 @@ TEST_F(JumpListFileUtilTest, DeleteSubDirectory) {
   ASSERT_NO_FATAL_FAILURE(CreateDirectory(test_subdir));
 
   // Delete the directory using DeleteDirectory(), which should fail because
-  // a subdirectory exists.
-  ASSERT_EQ(DeleteDirectory(dir_path, kFileDeleteLimit),
-            FAIL_SUBDIRECTORY_EXISTS);
+  // a subdirectory exists. Therefore, both root directory and sub-directory
+  // should still exist.
+  DeleteDirectory(dir_path, kFileDeleteLimit);
   EXPECT_TRUE(DirectoryExists(dir_path));
   EXPECT_TRUE(DirectoryExists(test_subdir));
 
   // Delete the subdirectory alone should be working.
-  ASSERT_EQ(DeleteDirectory(test_subdir, kFileDeleteLimit), SUCCEED);
+  DeleteDirectory(test_subdir, kFileDeleteLimit);
   EXPECT_TRUE(DirectoryExists(dir_path));
   EXPECT_FALSE(DirectoryExists(test_subdir));
 }
@@ -92,11 +92,55 @@ TEST_F(JumpListFileUtilTest, DeleteMaxFilesAllowed) {
   // Delete the directory content using DeleteDirectoryContent().
   // Sine the maximum files allowed to delete is 1, only 1 out of the 2
   // files is deleted. Therefore, the directory is not empty yet.
-  ASSERT_EQ(DeleteDirectoryContent(dir_path, kFileDeleteLimitForTest), SUCCEED);
+  DeleteDirectoryContent(dir_path, kFileDeleteLimitForTest);
   EXPECT_FALSE(base::IsDirectoryEmpty(dir_path));
 
   // Delete another file, and now the directory is empty.
-  ASSERT_EQ(DeleteDirectoryContent(dir_path, kFileDeleteLimitForTest), SUCCEED);
+  DeleteDirectoryContent(dir_path, kFileDeleteLimitForTest);
   EXPECT_TRUE(base::IsDirectoryEmpty(dir_path));
   EXPECT_TRUE(DirectoryExists(dir_path));
+}
+
+TEST_F(JumpListFileUtilTest, FilesExceedLimitInDir) {
+  base::FilePath dir_path = temp_dir_path();
+
+  // Create 2 files.
+  base::FilePath file_name =
+      dir_path.Append(FILE_PATH_LITERAL("TestFile1.txt"));
+  ASSERT_NO_FATAL_FAILURE(CreateTextFile(file_name, kFileContent));
+
+  file_name = dir_path.Append(FILE_PATH_LITERAL("TestFile2.txt"));
+  ASSERT_NO_FATAL_FAILURE(CreateTextFile(file_name, kFileContent));
+
+  EXPECT_TRUE(FilesExceedLimitInDir(dir_path, 1));
+  EXPECT_FALSE(FilesExceedLimitInDir(dir_path, 2));
+
+  DeleteDirectory(dir_path, kFileDeleteLimit);
+}
+
+TEST_F(JumpListFileUtilTest, DeleteNonCachedFiles) {
+  base::FilePath dir_path = temp_dir_path();
+
+  base::flat_set<base::FilePath> cached_files;
+
+  // Create 1 file and cache its filename.
+  base::FilePath file_name =
+      dir_path.Append(FILE_PATH_LITERAL("TestFile1.txt"));
+  ASSERT_NO_FATAL_FAILURE(CreateTextFile(file_name, kFileContent));
+
+  cached_files.insert(file_name);
+
+  // Create another file but not cache its filename.
+  file_name = dir_path.Append(FILE_PATH_LITERAL("TestFile2.txt"));
+  ASSERT_NO_FATAL_FAILURE(CreateTextFile(file_name, kFileContent));
+
+  // The second file created will be deleted as its filename is not in the
+  // cache, while the first file remains.
+  DeleteNonCachedFiles(dir_path, cached_files);
+  EXPECT_FALSE(base::IsDirectoryEmpty(dir_path));
+
+  // Clear the set and delete again, and now the first file should be gone.
+  cached_files.clear();
+  DeleteNonCachedFiles(dir_path, cached_files);
+  EXPECT_TRUE(base::IsDirectoryEmpty(dir_path));
 }

@@ -32,6 +32,7 @@
 #define WebSharedWorkerClient_h
 
 #include "public/platform/WebMessagePortChannel.h"
+#include "public/platform/WebWorkerFetchContext.h"
 #include "public/web/WebDevToolsAgentClient.h"
 
 namespace blink {
@@ -66,7 +67,7 @@ class WebSharedWorkerClient {
 
   // Called on the main webkit thread in the worker process during
   // initialization.
-  virtual WebApplicationCacheHost* CreateApplicationCacheHost(
+  virtual std::unique_ptr<WebApplicationCacheHost> CreateApplicationCacheHost(
       WebApplicationCacheHostClient*) = 0;
 
   // Called on the main thread during initialization.
@@ -79,11 +80,8 @@ class WebSharedWorkerClient {
   }
 
   // Called on the main thread during initialization.
-  // Ownership of the returned object is transferred to the caller.
-  virtual WebServiceWorkerNetworkProvider*
-  CreateServiceWorkerNetworkProvider() {
-    return nullptr;
-  }
+  virtual std::unique_ptr<WebServiceWorkerNetworkProvider>
+  CreateServiceWorkerNetworkProvider() = 0;
 
   virtual void SendDevToolsMessage(int session_id,
                                    int call_id,
@@ -91,6 +89,14 @@ class WebSharedWorkerClient {
                                    const WebString& state) {}
   virtual WebDevToolsAgentClient::WebKitClientMessageLoop*
   CreateDevToolsMessageLoop() {
+    return nullptr;
+  }
+
+  // Returns a new WebWorkerFetchContext for the shared worker. Ownership of the
+  // returned object is transferred to the caller. This is used only when
+  // off-main-thread-fetch is enabled.
+  virtual std::unique_ptr<WebWorkerFetchContext> CreateWorkerFetchContext(
+      WebServiceWorkerNetworkProvider*) {
     return nullptr;
   }
 };

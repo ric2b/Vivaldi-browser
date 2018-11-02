@@ -302,7 +302,7 @@ AutofillManagerImpl.prototype = {
     /** @private */
     onAddressDialogClosed_: function() {
       this.showAddressDialog_ = false;
-      this.activeDialogAnchor_.focus();
+      cr.ui.focusWithoutInk(assert(this.activeDialogAnchor_));
       this.activeDialogAnchor_ = null;
     },
 
@@ -375,7 +375,7 @@ AutofillManagerImpl.prototype = {
     /** @private */
     onCreditCardDialogClosed_: function() {
       this.showCreditCardDialog_ = false;
-      this.activeDialogAnchor_.focus();
+      cr.ui.focusWithoutInk(assert(this.activeDialogAnchor_));
       this.activeDialogAnchor_ = null;
     },
 
@@ -386,7 +386,12 @@ AutofillManagerImpl.prototype = {
      */
     onMenuEditCreditCardTap_: function(e) {
       e.preventDefault();
-      this.showCreditCardDialog_ = true;
+
+      if (this.activeCreditCard.metadata.isLocal)
+        this.showCreditCardDialog_ = true;
+      else
+        this.onRemoteEditCreditCardTap_();
+
       this.$.creditCardSharedMenu.close();
     },
 
@@ -413,6 +418,16 @@ AutofillManagerImpl.prototype = {
       this.autofillManager_.clearCachedCreditCard(
           /** @type {string} */(this.activeCreditCard.guid));
       this.$.creditCardSharedMenu.close();
+    },
+
+    /**
+     * The 3-dot menu should not be shown if the card is entirely remote.
+     * @param {!chrome.autofillPrivate.AutofillMetadata} metadata
+     * @return {boolean}
+     * @private
+     */
+    showDots_: function(metadata) {
+      return !!(metadata.isLocal || metadata.isCached);
     },
 
     /**

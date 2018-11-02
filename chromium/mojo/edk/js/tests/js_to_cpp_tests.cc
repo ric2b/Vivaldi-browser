@@ -12,9 +12,9 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "gin/array_buffer.h"
 #include "gin/public/isolate_holder.h"
@@ -239,7 +239,9 @@ class CppSideConnection : public js_to_cpp::CppSide {
     mishandled_messages_ += 1;
   }
 
-  void BitFlipResponse(js_to_cpp::EchoArgsListPtr list) override {
+  void BitFlipResponse(
+      js_to_cpp::EchoArgsListPtr list,
+      js_to_cpp::ForTestingAssociatedPtrInfo not_used) override {
     mishandled_messages_ += 1;
   }
 
@@ -332,7 +334,9 @@ class BitFlipCppSideConnection : public CppSideConnection {
   // js_to_cpp::CppSide:
   void StartTest() override { js_side_->BitFlip(BuildSampleEchoArgs()); }
 
-  void BitFlipResponse(js_to_cpp::EchoArgsListPtr list) override {
+  void BitFlipResponse(
+      js_to_cpp::EchoArgsListPtr list,
+      js_to_cpp::ForTestingAssociatedPtrInfo not_used) override {
     CheckCorruptedEchoArgsList(list);
   }
 
@@ -414,7 +418,7 @@ class JsToCppTest : public testing::Test {
 
  private:
   base::ShadowingAtExitManager at_exit_;
-  base::MessageLoop loop;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::RunLoop run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(JsToCppTest);

@@ -129,8 +129,8 @@ void MHTMLArchive::GenerateMHTMLHeader(const String& boundary,
                                        const String& title,
                                        const String& mime_type,
                                        Vector<char>& output_buffer) {
-  ASSERT(!boundary.IsEmpty());
-  ASSERT(!mime_type.IsEmpty());
+  DCHECK(!boundary.IsEmpty());
+  DCHECK(!mime_type.IsEmpty());
 
   DateComponents now;
   now.SetMillisecondsSinceEpochForDateTime(CurrentTimeMS());
@@ -157,10 +157,10 @@ void MHTMLArchive::GenerateMHTMLHeader(const String& boundary,
 
   // We use utf8() below instead of ascii() as ascii() replaces CRLFs with ??
   // (we still only have put ASCII characters in it).
-  ASSERT(string_builder.ToString().ContainsOnlyASCII());
+  DCHECK(string_builder.ToString().ContainsOnlyASCII());
   CString ascii_string = string_builder.ToString().Utf8();
 
-  output_buffer.Append(ascii_string.Data(), ascii_string.length());
+  output_buffer.Append(ascii_string.data(), ascii_string.length());
 }
 
 void MHTMLArchive::GenerateMHTMLPart(const String& boundary,
@@ -168,8 +168,8 @@ void MHTMLArchive::GenerateMHTMLPart(const String& boundary,
                                      EncodingPolicy encoding_policy,
                                      const SerializedResource& resource,
                                      Vector<char>& output_buffer) {
-  ASSERT(!boundary.IsEmpty());
-  ASSERT(content_id.IsEmpty() || content_id[0] == '<');
+  DCHECK(!boundary.IsEmpty());
+  DCHECK(content_id.IsEmpty() || content_id[0] == '<');
 
   StringBuilder string_builder;
   string_builder.Append("--");
@@ -209,7 +209,7 @@ void MHTMLArchive::GenerateMHTMLPart(const String& boundary,
   string_builder.Append("\r\n");
 
   CString ascii_string = string_builder.ToString().Utf8();
-  output_buffer.Append(ascii_string.Data(), ascii_string.length());
+  output_buffer.Append(ascii_string.data(), ascii_string.length());
 
   if (!strcmp(content_encoding, kBinary)) {
     const char* data;
@@ -226,10 +226,10 @@ void MHTMLArchive::GenerateMHTMLPart(const String& boundary,
     Vector<char> encoded_data;
     if (!strcmp(content_encoding, kQuotedPrintable)) {
       QuotedPrintableEncode(data, data_length, encoded_data);
-      output_buffer.Append(encoded_data.Data(), encoded_data.size());
+      output_buffer.Append(encoded_data.data(), encoded_data.size());
       output_buffer.Append("\r\n", 2u);
     } else {
-      ASSERT(!strcmp(content_encoding, kBase64));
+      DCHECK(!strcmp(content_encoding, kBase64));
       // We are not specifying insertLFs = true below as it would cut the lines
       // with LFs and MHTML requires CRLFs.
       Base64Encode(data, data_length, encoded_data);
@@ -239,7 +239,7 @@ void MHTMLArchive::GenerateMHTMLPart(const String& boundary,
       do {
         size_t line_length =
             std::min(encoded_data_length - index, kMaximumLineLength);
-        output_buffer.Append(encoded_data.Data() + index, line_length);
+        output_buffer.Append(encoded_data.data() + index, line_length);
         output_buffer.Append("\r\n", 2u);
         index += kMaximumLineLength;
       } while (index < encoded_data_length);
@@ -249,9 +249,9 @@ void MHTMLArchive::GenerateMHTMLPart(const String& boundary,
 
 void MHTMLArchive::GenerateMHTMLFooterForTesting(const String& boundary,
                                                  Vector<char>& output_buffer) {
-  ASSERT(!boundary.IsEmpty());
+  DCHECK(!boundary.IsEmpty());
   CString ascii_string = String("--" + boundary + "--\r\n").Utf8();
-  output_buffer.Append(ascii_string.Data(), ascii_string.length());
+  output_buffer.Append(ascii_string.data(), ascii_string.length());
 }
 
 void MHTMLArchive::SetMainResource(ArchiveResource* main_resource) {

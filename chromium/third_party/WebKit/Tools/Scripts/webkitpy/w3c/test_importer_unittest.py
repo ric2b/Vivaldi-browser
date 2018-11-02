@@ -25,11 +25,11 @@ class TestImporterTest(LoggingTestCase):
         self.assertEqual(return_code, 0)
         self.assertLog([
             'INFO: Cloning repo: https://chromium.googlesource.com/external/w3c/web-platform-tests.git\n',
-            'INFO: Local path: /mock-checkout/third_party/WebKit/wpt\n',
+            'INFO: Local path: /mock-checkout/third_party/WebKit/LayoutTests/wpt\n',
             'INFO: There were exportable but not-yet-exported commits:\n',
             'INFO:   https://chromium.googlesource.com/chromium/src/+/deadbeef\n',
             'INFO: Aborting import to prevent clobbering these commits.\n',
-            'INFO: Deleting temp repo directory /mock-checkout/third_party/WebKit/wpt.\n',
+            'INFO: Deleting temp repo directory /mock-checkout/third_party/WebKit/LayoutTests/wpt.\n',
         ])
 
     def test_update_test_expectations(self):
@@ -79,9 +79,14 @@ class TestImporterTest(LoggingTestCase):
         description = importer._cl_description(directory_owners={})
         self.assertEqual(
             description,
-            ('Last commit message\n\n'
-             'TBR=qyearsley@chromium.org\n'
-             'NOEXPORT=true'))
+            'Last commit message\n\n'
+            'Background: https://chromium.googlesource.com/'
+            'chromium/src/+/master/docs/testing/web_platform_tests.md\n\n'
+            'Note to sheriffs: If this CL causes a small number of new layout\n'
+            'test failures, it may be easier to add lines to TestExpectations\n'
+            'rather than reverting.\n'
+            'TBR=qyearsley@chromium.org\n'
+            'NOEXPORT=true')
         self.assertEqual(host.executive.calls, [['git', 'log', '-1', '--format=%B']])
 
     def test_cl_description_with_environ_variables(self):
@@ -92,12 +97,9 @@ class TestImporterTest(LoggingTestCase):
         importer.host.environ['BUILDBOT_BUILDERNAME'] = 'b'
         importer.host.environ['BUILDBOT_BUILDNUMBER'] = '123'
         description = importer._cl_description(directory_owners={})
-        self.assertEqual(
-            description,
-            ('Last commit message\n'
-             'Build: https://build.chromium.org/p/my.master/builders/b/builds/123\n\n'
-             'TBR=qyearsley@chromium.org\n'
-             'NOEXPORT=true'))
+        self.assertIn(
+            'Build: https://build.chromium.org/p/my.master/builders/b/builds/123\n\n',
+            description)
         self.assertEqual(host.executive.calls, [['git', 'log', '-1', '--format=%B']])
 
     def test_cl_description_moves_noexport_tag(self):
@@ -105,11 +107,10 @@ class TestImporterTest(LoggingTestCase):
         host.executive = MockExecutive(output='Summary\n\nNOEXPORT=true\n\n')
         importer = TestImporter(host)
         description = importer._cl_description(directory_owners={})
-        self.assertEqual(
-            description,
-            ('Summary\n\n'
-             'TBR=qyearsley@chromium.org\n'
-             'NOEXPORT=true'))
+        self.assertIn(
+            'TBR=qyearsley@chromium.org\n'
+            'NOEXPORT=true',
+            description)
 
     def test_cl_description_with_directory_owners(self):
         host = MockHost()
@@ -119,17 +120,14 @@ class TestImporterTest(LoggingTestCase):
             ('someone@chromium.org',): ['external/wpt/foo', 'external/wpt/bar'],
             ('x@chromium.org', 'y@chromium.org'): ['external/wpt/baz'],
         })
-        self.assertEqual(
-            description,
-            ('Last commit message\n\n'
-             'Directory owners for changes in this CL:\n'
-             'someone@chromium.org:\n'
-             '  external/wpt/foo\n'
-             '  external/wpt/bar\n'
-             'x@chromium.org, y@chromium.org:\n'
-             '  external/wpt/baz\n\n'
-             'TBR=qyearsley@chromium.org\n'
-             'NOEXPORT=true'))
+        self.assertIn(
+            'Directory owners for changes in this CL:\n'
+            'someone@chromium.org:\n'
+            '  external/wpt/foo\n'
+            '  external/wpt/bar\n'
+            'x@chromium.org, y@chromium.org:\n'
+            '  external/wpt/baz\n\n',
+            description)
 
     def test_generate_manifest_successful_run(self):
         # This test doesn't test any aspect of the real manifest script, it just
@@ -162,7 +160,7 @@ class TestImporterTest(LoggingTestCase):
             '/mock-checkout/third_party/WebKit/LayoutTests/W3CImportExpectations',
             '## Owners: someone@chromium.org\n'
             '# external/wpt/foo [ Pass ]\n')
-        git = MockGit()
+        git = MockGit(filesystem=host.filesystem, executive=host.executive, platform=host.platform)
         git.changed_files = lambda: ['third_party/WebKit/LayoutTests/external/wpt/foo/x.html']
         host.git = lambda: git
         importer = TestImporter(host)

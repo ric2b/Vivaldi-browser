@@ -10,10 +10,15 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/values.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/doodle/pref_names.h"
+#include "components/image_fetcher/core/image_fetcher.h"
+#include "components/image_fetcher/core/request_metadata.h"
 #include "components/prefs/pref_registry.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
+#include "ui/gfx/image/image.h"
 
 namespace doodle {
 
@@ -25,6 +30,11 @@ const int64_t kMaxTimeToLiveSecs = 30 * 24 * 60 * 60;  // 30 days
 
 // The default value for DoodleService::min_refresh_interval_.
 const int64_t kDefaultMinRefreshIntervalSecs = 15 * 60;  // 15 minutes
+
+// The maximum number of bytes to allow in a doodle image. This limits the
+// downloaded data to an amount that real images are unlikely to exceed. It is a
+// safeguard against server-side errors.
+const int64_t kMaxImageDownloadBytes = 1024 * 1024;
 
 }  // namespace
 
@@ -43,7 +53,8 @@ DoodleService::DoodleService(
     std::unique_ptr<base::OneShotTimer> expiry_timer,
     std::unique_ptr<base::Clock> clock,
     std::unique_ptr<base::TickClock> tick_clock,
-    base::Optional<base::TimeDelta> override_min_refresh_interval)
+    base::Optional<base::TimeDelta> override_min_refresh_interval,
+    std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher)
     : pref_service_(pref_service),
       fetcher_(std::move(fetcher)),
       expiry_timer_(std::move(expiry_timer)),
@@ -52,12 +63,18 @@ DoodleService::DoodleService(
       min_refresh_interval_(
           override_min_refresh_interval.has_value()
               ? override_min_refresh_interval.value()
-              : base::TimeDelta::FromSeconds(kDefaultMinRefreshIntervalSecs)) {
+              : base::TimeDelta::FromSeconds(kDefaultMinRefreshIntervalSecs)),
+      image_fetcher_(std::move(image_fetcher)) {
   DCHECK(pref_service_);
   DCHECK(fetcher_);
   DCHECK(expiry_timer_);
   DCHECK(clock_);
   DCHECK(tick_clock_);
+  DCHECK(image_fetcher_);
+
+  image_fetcher_->SetImageDownloadLimit(kMaxImageDownloadBytes);
+  image_fetcher_->SetDataUseServiceName(
+      data_use_measurement::DataUseUserData::DOODLE);
 
   base::Time expiry_date = base::Time::FromInternalValue(
       pref_service_->GetInt64(prefs::kCachedConfigExpiry));
@@ -66,11 +83,59 @@ DoodleService::DoodleService(
   DoodleState state =
       config.has_value() ? DoodleState::AVAILABLE : DoodleState::NO_DOODLE;
   HandleNewConfig(state, expiry_date - clock_->Now(), config);
+
+  // If we don't have a cached doodle, immediately start a fetch, so that the
+  // first NTP will get it quicker.
+  if (state == DoodleState::NO_DOODLE) {
+    Refresh();
+  }
 }
 
 DoodleService::~DoodleService() = default;
 
 void DoodleService::Shutdown() {}
+
+void DoodleService::GetImage(const ImageCallback& callback) {
+  if (!cached_config_.has_value()) {
+    callback.Run(gfx::Image());
+    return;
+  }
+
+  // If there is a CTA image, that means the main image is animated. Show the
+  // non-animated CTA image first, and load the animated one only when the
+  // user requests it.
+  bool has_cta = cached_config_->large_cta_image.has_value();
+  const GURL& image_url = has_cta ? cached_config_->large_cta_image->url
+                                  : cached_config_->large_image.url;
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("doodle_service", R"(
+        semantics {
+          sender: "Doodle Service"
+          description:
+            "Downloads the Doodle image if Google is the configured search "
+            "provider."
+          trigger: "Displaying the new tab page on Android."
+          data: "None."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting:
+            "Choosing a non-Google search engine in Chromium settings under "
+            "'Search Engine' disables this feature."
+          chrome_policy {
+            DefaultSearchProviderEnabled {
+              policy_options {mode: MANDATORY}
+              DefaultSearchProviderEnabled: false
+            }
+          }
+        })");
+  image_fetcher_->StartOrQueueNetworkRequest(
+      image_url.spec(), image_url,
+      base::Bind(&DoodleService::ImageFetched, base::Unretained(this),
+                 callback),
+      traffic_annotation);
+}
 
 void DoodleService::AddObserver(Observer* observer) {
   observers_.AddObserver(observer);
@@ -81,14 +146,24 @@ void DoodleService::RemoveObserver(Observer* observer) {
 }
 
 void DoodleService::Refresh() {
+  // If we're already waiting for a fetch, don't start another one. The
+  // observers will get notified when the ongoing fetch returns.
+  if (fetcher_->IsFetchInProgress()) {
+    return;
+  }
+
   base::TimeTicks now_ticks = tick_clock_->NowTicks();
   // Check if we have passed the minimum refresh interval.
   base::TimeDelta time_since_fetch = now_ticks - last_successful_fetch_;
   if (time_since_fetch < min_refresh_interval_) {
     RecordDownloadMetrics(OUTCOME_REFRESH_INTERVAL_NOT_PASSED,
                           base::TimeDelta());
+    for (auto& observer : observers_) {
+      observer.OnDoodleConfigRevalidated(/*from_cache=*/true);
+    }
     return;
   }
+
   fetcher_->FetchDoodle(base::BindOnce(&DoodleService::DoodleFetched,
                                        base::Unretained(this), now_ticks));
 }
@@ -192,7 +267,6 @@ DoodleService::DownloadOutcome DoodleService::HandleNewConfig(
   DownloadOutcome outcome =
       DetermineDownloadOutcome(cached_config_, new_config, state, expired);
 
-  // If the config changed, update our cache and notify observers.
   // Note that this checks both for existence changes as well as changes of the
   // configs themselves.
   if (cached_config_ != new_config) {
@@ -200,6 +274,10 @@ DoodleService::DownloadOutcome DoodleService::HandleNewConfig(
 
     for (auto& observer : observers_) {
       observer.OnDoodleConfigUpdated(cached_config_);
+    }
+  } else {
+    for (auto& observer : observers_) {
+      observer.OnDoodleConfigRevalidated(/*from_cache=*/false);
     }
   }
 
@@ -237,6 +315,23 @@ void DoodleService::UpdateCachedConfig(
 void DoodleService::DoodleExpired() {
   DCHECK(cached_config_.has_value());
   HandleNewConfig(DoodleState::NO_DOODLE, base::TimeDelta(), base::nullopt);
+}
+
+void DoodleService::ImageFetched(
+    const ImageCallback& callback,
+    const std::string& id,
+    const gfx::Image& image,
+    const image_fetcher::RequestMetadata& metadata) {
+  if (image.IsEmpty()) {
+    DLOG(WARNING) << "Failed to download doodle image";
+  } else {
+    // TODO(treib): Rename this to "Doodle.*" after we've decided what to do
+    // about crbug.com/719513.
+    UMA_HISTOGRAM_BOOLEAN("NewTabPage.LogoImageDownloaded",
+                          metadata.from_http_cache);
+  }
+
+  callback.Run(image);
 }
 
 }  // namespace doodle

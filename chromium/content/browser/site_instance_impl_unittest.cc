@@ -14,6 +14,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
+#include "base/test/scoped_feature_list.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/browsing_instance.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -25,6 +26,7 @@
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
@@ -104,7 +106,7 @@ class SiteInstanceTest : public testing::Test {
     url::AddStandardScheme(kPrivilegedScheme, url::SCHEME_WITHOUT_PORT);
     url::AddStandardScheme(kChromeUIScheme, url::SCHEME_WITHOUT_PORT);
 
-    SiteInstanceImpl::set_render_process_host_factory(&rph_factory_);
+    RenderProcessHostImpl::set_render_process_host_factory(&rph_factory_);
   }
 
   void TearDown() override {
@@ -112,7 +114,7 @@ class SiteInstanceTest : public testing::Test {
     EXPECT_TRUE(RenderProcessHost::AllHostsIterator().IsAtEnd());
 
     SetBrowserClientForTesting(old_browser_client_);
-    SiteInstanceImpl::set_render_process_host_factory(nullptr);
+    RenderProcessHostImpl::set_render_process_host_factory(nullptr);
 
     // http://crbug.com/143565 found SiteInstanceTest leaking an
     // AppCacheDatabase. This happens because some part of the test indirectly
@@ -796,8 +798,8 @@ TEST_F(SiteInstanceTest, DefaultSubframeSiteInstance) {
   if (AreAllSitesIsolatedForTesting())
     return;  // --top-document-isolation is not possible.
 
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kTopDocumentIsolation);
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kTopDocumentIsolation);
 
   std::unique_ptr<TestBrowserContext> browser_context(new TestBrowserContext());
   scoped_refptr<SiteInstanceImpl> main_instance =

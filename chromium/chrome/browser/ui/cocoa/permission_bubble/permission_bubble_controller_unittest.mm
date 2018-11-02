@@ -39,7 +39,6 @@
 - (void)onBlock:(id)sender;
 - (void)onCustomize:(id)sender;
 - (void)onCheckboxChanged:(id)sender;
-+ (NSInteger)getFullscreenLeftOffset;
 @end
 
 @interface SplitBlockButton (ExposedForTesting)
@@ -93,6 +92,12 @@ class PermissionBubbleControllerTest : public CocoaProfileTest,
     owned_requests_.clear();
     CocoaProfileTest::TearDown();
   }
+
+  const std::vector<PermissionRequest*>& Requests() override {
+    return requests_;
+  }
+
+  const std::vector<bool>& AcceptStates() override { return accept_states_; }
 
   void AddRequest(const std::string& title) {
     std::unique_ptr<MockPermissionRequest> request =
@@ -193,9 +198,7 @@ TEST_F(PermissionBubbleControllerTest, PageIconDecorationActiveState) {
 }
 
 TEST_F(PermissionBubbleControllerTest, ShowSinglePermission) {
-  [controller_ showWithDelegate:this
-                    forRequests:requests_
-                   acceptStates:accept_states_];
+  [controller_ showWithDelegate:this];
 
   EXPECT_TRUE(FindTextFieldWithString(kPermissionA));
   EXPECT_TRUE(FindButtonWithTitle(IDS_PERMISSION_ALLOW));
@@ -211,9 +214,7 @@ TEST_F(PermissionBubbleControllerTest, ShowMultiplePermissions) {
   accept_states_.push_back(true);  // B
   accept_states_.push_back(true);  // C
 
-  [controller_ showWithDelegate:this
-                    forRequests:requests_
-                   acceptStates:accept_states_];
+  [controller_ showWithDelegate:this];
 
   EXPECT_TRUE(FindTextFieldWithString(kPermissionA));
   EXPECT_TRUE(FindTextFieldWithString(kPermissionB));
@@ -230,9 +231,7 @@ TEST_F(PermissionBubbleControllerTest, ShowMultiplePermissionsAllow) {
   accept_states_.push_back(true);  // A
   accept_states_.push_back(true);  // B
 
-  [controller_ showWithDelegate:this
-                    forRequests:requests_
-                   acceptStates:accept_states_];
+  [controller_ showWithDelegate:this];
 
   // Test that all menus have 'Allow' visible.
   EXPECT_TRUE(FindMenuButtonWithTitle(IDS_PERMISSION_ALLOW));
@@ -249,9 +248,7 @@ TEST_F(PermissionBubbleControllerTest, ShowMultiplePermissionsBlock) {
   accept_states_.push_back(false);  // A
   accept_states_.push_back(false);  // B
 
-  [controller_ showWithDelegate:this
-                    forRequests:requests_
-                   acceptStates:accept_states_];
+  [controller_ showWithDelegate:this];
 
   // Test that all menus have 'Block' visible.
   EXPECT_TRUE(FindMenuButtonWithTitle(IDS_PERMISSION_DENY));
@@ -270,9 +267,7 @@ TEST_F(PermissionBubbleControllerTest, ShowMultiplePermissionsMixed) {
   accept_states_.push_back(false);  // B
   accept_states_.push_back(true);   // C
 
-  [controller_ showWithDelegate:this
-                    forRequests:requests_
-                   acceptStates:accept_states_];
+  [controller_ showWithDelegate:this];
 
   // Test that both 'allow' and 'deny' are visible.
   EXPECT_TRUE(FindMenuButtonWithTitle(IDS_PERMISSION_DENY));
@@ -289,27 +284,21 @@ TEST_F(PermissionBubbleControllerTest, OK) {
   accept_states_.push_back(true);  // A
   accept_states_.push_back(true);  // B
 
-  [controller_ showWithDelegate:this
-                    forRequests:requests_
-                   acceptStates:accept_states_];
+  [controller_ showWithDelegate:this];
 
   EXPECT_CALL(*this, Accept()).Times(1);
   [FindButtonWithTitle(IDS_OK) performClick:nil];
 }
 
 TEST_F(PermissionBubbleControllerTest, Allow) {
-  [controller_ showWithDelegate:this
-                    forRequests:requests_
-                   acceptStates:accept_states_];
+  [controller_ showWithDelegate:this];
 
   EXPECT_CALL(*this, Accept()).Times(1);
   [FindButtonWithTitle(IDS_PERMISSION_ALLOW) performClick:nil];
 }
 
 TEST_F(PermissionBubbleControllerTest, Deny) {
-  [controller_ showWithDelegate:this
-                    forRequests:requests_
-                   acceptStates:accept_states_];
+  [controller_ showWithDelegate:this];
 
   EXPECT_CALL(*this, Deny()).Times(1);
   [FindButtonWithTitle(IDS_PERMISSION_DENY) performClick:nil];
@@ -321,9 +310,7 @@ TEST_F(PermissionBubbleControllerTest, ChangePermissionSelection) {
   accept_states_.push_back(true);   // A
   accept_states_.push_back(false);  // B
 
-  [controller_ showWithDelegate:this
-                    forRequests:requests_
-                   acceptStates:accept_states_];
+  [controller_ showWithDelegate:this];
 
   EXPECT_CALL(*this, ToggleAccept(0, false)).Times(1);
   EXPECT_CALL(*this, ToggleAccept(1, true)).Times(1);
@@ -334,9 +321,7 @@ TEST_F(PermissionBubbleControllerTest, ChangePermissionSelection) {
 }
 
 TEST_F(PermissionBubbleControllerTest, EscapeCloses) {
-  [controller_ showWithDelegate:this
-                    forRequests:requests_
-                   acceptStates:accept_states_];
+  [controller_ showWithDelegate:this];
 
   EXPECT_TRUE([[controller_ window] isVisible]);
   [[controller_ window]
@@ -346,9 +331,7 @@ TEST_F(PermissionBubbleControllerTest, EscapeCloses) {
 }
 
 TEST_F(PermissionBubbleControllerTest, EnterFullscreen) {
-  [controller_ showWithDelegate:this
-                    forRequests:requests_
-                   acceptStates:accept_states_];
+  [controller_ showWithDelegate:this];
 
   EXPECT_TRUE([[controller_ window] isVisible]);
 
@@ -361,9 +344,7 @@ TEST_F(PermissionBubbleControllerTest, EnterFullscreen) {
 }
 
 TEST_F(PermissionBubbleControllerTest, ExitFullscreen) {
-  [controller_ showWithDelegate:this
-                    forRequests:requests_
-                   acceptStates:accept_states_];
+  [controller_ showWithDelegate:this];
 
   EXPECT_TRUE([[controller_ window] isVisible]);
 
@@ -393,6 +374,9 @@ TEST_F(PermissionBubbleControllerTest, AnchorPositionWithLocationBar) {
 }
 
 TEST_F(PermissionBubbleControllerTest, AnchorPositionWithoutLocationBar) {
+  // See comment in bubble_anchor_helper.mm where this is defined.
+  const NSInteger kFullscreenLeftOffset = 40;
+
   base::mac::ScopedObjCClassSwizzler locationSwizzle(
       [PermissionBubbleController class], [MockBubbleNoLocationBar class],
       @selector(hasVisibleLocationBarForBrowser:));
@@ -402,9 +386,8 @@ TEST_F(PermissionBubbleControllerTest, AnchorPositionWithoutLocationBar) {
   // Expected anchor location will be top left when there's no location bar.
   NSWindow* window = browser()->window()->GetNativeWindow();
   NSRect frame = [[window contentView] frame];
-  NSPoint expected = NSMakePoint(
-      NSMinX(frame) + [PermissionBubbleController getFullscreenLeftOffset],
-      NSMaxY(frame));
+  NSPoint expected =
+      NSMakePoint(NSMinX(frame) + kFullscreenLeftOffset, NSMaxY(frame));
   expected = ui::ConvertPointFromWindowToScreen(window, expected);
   EXPECT_NSEQ(expected, anchor);
 }

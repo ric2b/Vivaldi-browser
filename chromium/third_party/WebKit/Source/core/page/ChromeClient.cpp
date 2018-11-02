@@ -29,6 +29,7 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/HitTestResult.h"
 #include "core/page/FrameTree.h"
+#include "core/page/Page.h"
 #include "core/page/ScopedPageSuspender.h"
 #include "core/page/WindowFeatures.h"
 #include "core/probe/CoreProbes.h"
@@ -40,7 +41,7 @@ namespace blink {
 
 DEFINE_TRACE(ChromeClient) {
   visitor->Trace(last_mouse_over_node_);
-  HostWindow::Trace(visitor);
+  PlatformChromeClient::Trace(visitor);
 }
 
 void ChromeClient::SetWindowRectWithAdjustment(const IntRect& pending_rect,
@@ -67,10 +68,11 @@ void ChromeClient::SetWindowRectWithAdjustment(const IntRect& pending_rect,
 }
 
 bool ChromeClient::CanOpenModalIfDuringPageDismissal(
-    Frame* main_frame,
+    Frame& main_frame,
     ChromeClient::DialogType dialog,
     const String& message) {
-  for (Frame* frame = main_frame; frame; frame = frame->Tree().TraverseNext()) {
+  for (Frame* frame = &main_frame; frame;
+       frame = frame->Tree().TraverseNext()) {
     if (!frame->IsLocalFrame())
       continue;
     LocalFrame& local_frame = ToLocalFrame(*frame);
@@ -111,7 +113,7 @@ static bool OpenJavaScriptDialog(LocalFrame* frame,
 bool ChromeClient::OpenBeforeUnloadConfirmPanel(const String& message,
                                                 LocalFrame* frame,
                                                 bool is_reload) {
-  ASSERT(frame);
+  DCHECK(frame);
   return OpenJavaScriptDialog(
       frame, message, ChromeClient::kHTMLDialog, [this, frame, is_reload]() {
         return OpenBeforeUnloadConfirmPanelDelegate(frame, is_reload);
@@ -120,7 +122,7 @@ bool ChromeClient::OpenBeforeUnloadConfirmPanel(const String& message,
 
 bool ChromeClient::OpenJavaScriptAlert(LocalFrame* frame,
                                        const String& message) {
-  ASSERT(frame);
+  DCHECK(frame);
   if (!CanOpenModalIfDuringPageDismissal(frame->Tree().Top(),
                                          ChromeClient::kAlertDialog, message))
     return false;
@@ -132,7 +134,7 @@ bool ChromeClient::OpenJavaScriptAlert(LocalFrame* frame,
 
 bool ChromeClient::OpenJavaScriptConfirm(LocalFrame* frame,
                                          const String& message) {
-  ASSERT(frame);
+  DCHECK(frame);
   if (!CanOpenModalIfDuringPageDismissal(frame->Tree().Top(),
                                          ChromeClient::kConfirmDialog, message))
     return false;
@@ -146,7 +148,7 @@ bool ChromeClient::OpenJavaScriptPrompt(LocalFrame* frame,
                                         const String& prompt,
                                         const String& default_value,
                                         String& result) {
-  ASSERT(frame);
+  DCHECK(frame);
   if (!CanOpenModalIfDuringPageDismissal(frame->Tree().Top(),
                                          ChromeClient::kPromptDialog, prompt))
     return false;
@@ -221,6 +223,11 @@ void ChromeClient::ClearToolTip(LocalFrame& frame) {
 }
 
 bool ChromeClient::Print(LocalFrame* frame) {
+  if (!CanOpenModalIfDuringPageDismissal(*frame->GetPage()->MainFrame(),
+                                         ChromeClient::kPrintDialog, "")) {
+    return false;
+  }
+
   if (frame->GetDocument()->IsSandboxed(kSandboxModals)) {
     UseCounter::Count(frame, UseCounter::kDialogInSandboxedContext);
     frame->Console().AddMessage(ConsoleMessage::Create(

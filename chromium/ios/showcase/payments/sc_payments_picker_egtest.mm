@@ -4,7 +4,7 @@
 
 #import <EarlGrey/EarlGrey.h>
 
-#import "ios/chrome/browser/payments/payment_request_picker_view_controller.h"
+#import "ios/chrome/browser/ui/payments/payment_request_picker_view_controller.h"
 #import "ios/showcase/test/showcase_eg_utils.h"
 #import "ios/showcase/test/showcase_test_case.h"
 
@@ -45,6 +45,20 @@ id<GREYMatcher> CancelButton() {
   return grey_allOf(grey_accessibilityLabel(@"Cancel"),
                     grey_accessibilityTrait(UIAccessibilityTraitButton),
                     grey_sufficientlyVisible(), nil);
+}
+
+// Returns the GREYMatcher for the UIAlertView's message displayed for a call
+// that notifies the delegate of a selection.
+id<GREYMatcher> UIAlertViewMessageForDelegateCallWithArgument(
+    NSString* argument) {
+  return grey_allOf(
+      grey_text(
+          [NSString stringWithFormat:
+                        @"paymentRequestPickerViewController:"
+                        @"kPaymentRequestPickerViewControllerAccessibilityID "
+                        @"didSelectRow:%@",
+                        argument]),
+      grey_sufficientlyVisible(), nil);
 }
 
 }  // namespace
@@ -292,6 +306,10 @@ id<GREYMatcher> CancelButton() {
       performAction:grey_tap()];
 
   // Confirm the delegate is informed.
+  [[EarlGrey
+      selectElementWithMatcher:UIAlertViewMessageForDelegateCallWithArgument(
+                                   @"Label: Canada, Value: CAN")]
+      assertWithMatcher:grey_notNil()];
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(
                                           @"protocol_alerter_done")]
       performAction:grey_tap()];
@@ -305,6 +323,10 @@ id<GREYMatcher> CancelButton() {
       performAction:grey_tap()];
 
   // Confirm the delegate is informed.
+  [[EarlGrey
+      selectElementWithMatcher:UIAlertViewMessageForDelegateCallWithArgument(
+                                   @"Label: Canada, Value: CAN")]
+      assertWithMatcher:grey_notNil()];
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(
                                           @"protocol_alerter_done")]
       performAction:grey_tap()];

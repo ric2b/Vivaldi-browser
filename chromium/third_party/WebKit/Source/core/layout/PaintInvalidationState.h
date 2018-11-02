@@ -20,6 +20,9 @@ class LayoutObject;
 class LayoutView;
 class PaintLayer;
 
+// This is deprecated by PaintInvalidator when SlimmingPaintInvalidation is
+// enabled.
+//
 // PaintInvalidationState is an optimization used during the paint
 // invalidation phase.
 //
@@ -62,25 +65,25 @@ class CORE_EXPORT PaintInvalidationState {
 
   bool ForcedSubtreeInvalidationCheckingWithinContainer() const {
     return forced_subtree_invalidation_flags_ &
-           PaintInvalidatorContext::kForcedSubtreeInvalidationChecking;
+           PaintInvalidatorContext::kSubtreeInvalidationChecking;
   }
   void SetForceSubtreeInvalidationCheckingWithinContainer() {
     forced_subtree_invalidation_flags_ |=
-        PaintInvalidatorContext::kForcedSubtreeInvalidationChecking;
+        PaintInvalidatorContext::kSubtreeInvalidationChecking;
   }
 
   bool ForcedSubtreeFullInvalidationWithinContainer() const {
     return forced_subtree_invalidation_flags_ &
-           PaintInvalidatorContext::kForcedSubtreeFullInvalidation;
+           PaintInvalidatorContext::kSubtreeFullInvalidation;
   }
 
   bool ForcedSubtreeInvalidationRectUpdateWithinContainerOnly() const {
     return forced_subtree_invalidation_flags_ ==
-           PaintInvalidatorContext::kForcedSubtreeVisualRectUpdate;
+           PaintInvalidatorContext::kSubtreeVisualRectUpdate;
   }
   void SetForceSubtreeInvalidationRectUpdateWithinContainer() {
     forced_subtree_invalidation_flags_ |=
-        PaintInvalidatorContext::kForcedSubtreeVisualRectUpdate;
+        PaintInvalidatorContext::kSubtreeVisualRectUpdate;
   }
 
   const LayoutBoxModelObject& PaintInvalidationContainer() const {
@@ -171,17 +174,6 @@ class CORE_EXPORT PaintInvalidationState {
 
 #if DCHECK_IS_ON()
   bool did_update_for_children_ = false;
-#endif
-
-#if DCHECK_IS_ON() && !defined(NDEBUG)
-// #define CHECK_FAST_PATH_SLOW_PATH_EQUALITY
-#endif
-
-#ifdef CHECK_FAST_PATH_SLOW_PATH_EQUALITY
-  void assertFastPathAndSlowPathRectsEqual(
-      const LayoutRect& fastPathRect,
-      const LayoutRect& slowPathRect) const;
-  bool m_canCheckFastPathSlowPathEquality;
 #endif
 };
 

@@ -53,8 +53,8 @@ void CollectAllOpportunities(const NGLayoutOpportunityTreeNode* node,
   CollectAllOpportunities(node->right.get(), opportunities);
 }
 
-// Creates layout opportunity from the provided space and the origin point.
-NGLayoutOpportunity CreateLayoutOpportunityFromConstraintSpace(
+// Creates layout opportunity from the provided size and the origin point.
+NGLayoutOpportunity CreateInitialOpportunity(
     const NGLogicalSize& size,
     const NGLogicalOffset& origin_point) {
   NGLayoutOpportunity opportunity;
@@ -257,45 +257,44 @@ bool CompareNGLayoutOpportunitesByStartPoint(const NGLayoutOpportunity& lhs,
   // TOP and LEFT are the same -> Sort by width
   return rhs.size.inline_size < lhs.size.inline_size;
 }
-
-NGExclusion ToLeaderExclusion(const NGLogicalOffset& origin_point,
-                              const NGLogicalOffset& leader_point) {
-  LayoutUnit inline_size =
-      leader_point.inline_offset - origin_point.inline_offset;
-  LayoutUnit block_size = leader_point.block_offset - origin_point.block_offset;
-
-  NGExclusion leader_exclusion;
-  leader_exclusion.rect.offset = origin_point;
-  leader_exclusion.rect.size = {inline_size, block_size};
-  return leader_exclusion;
-}
-
 }  // namespace
 
-NGLayoutOpportunityIterator::NGLayoutOpportunityIterator(
-    const NGConstraintSpace* space,
+NGLayoutOpportunity FindLayoutOpportunityForFragment(
+    const NGExclusions* exclusions,
     const NGLogicalSize& available_size,
-    const WTF::Optional<NGLogicalOffset>& opt_offset,
-    const WTF::Optional<NGLogicalOffset>& opt_leader_point)
-    : constraint_space_(space),
-      offset_(opt_offset ? opt_offset.value() : space->BfcOffset()) {
-  // TODO(chrome-layout-team): Combine exclusions that shadow each other.
-  auto& exclusions = constraint_space_->Exclusions();
+    const NGLogicalOffset& origin_point,
+    const NGBoxStrut& margins,
+    const NGLogicalSize& fragment_size) {
+  NGLayoutOpportunityIterator opportunity_iter(exclusions, available_size,
+                                               origin_point);
+  NGLayoutOpportunity opportunity;
+  NGLayoutOpportunity opportunity_candidate = opportunity_iter.Next();
+  while (!opportunity_candidate.IsEmpty()) {
+    opportunity = opportunity_candidate;
+    auto fragment_inline_size = fragment_size.inline_size + margins.InlineSum();
+    auto fragment_block_size = fragment_size.block_size + margins.BlockSum();
+    if (opportunity.size.inline_size >= fragment_inline_size &&
+        opportunity.size.block_size >= fragment_block_size)
+      break;
+    opportunity_candidate = opportunity_iter.Next();
+  }
+  return opportunity;
+}
+
+NGLayoutOpportunityIterator::NGLayoutOpportunityIterator(
+    const NGExclusions* exclusions,
+    const NGLogicalSize& available_size,
+    const NGLogicalOffset& offset)
+    : offset_(offset) {
+  DCHECK(exclusions);
   DCHECK(std::is_sorted(exclusions->storage.begin(), exclusions->storage.end(),
                         &CompareNGExclusionsByTopAsc))
       << "Exclusions are expected to be sorted by TOP";
 
   NGLayoutOpportunity initial_opportunity =
-      CreateLayoutOpportunityFromConstraintSpace(available_size, Offset());
+      CreateInitialOpportunity(available_size, Offset());
   opportunity_tree_root_.reset(
       new NGLayoutOpportunityTreeNode(initial_opportunity));
-
-  if (opt_leader_point) {
-    const NGExclusion leader_exclusion =
-        ToLeaderExclusion(Offset(), opt_leader_point.value());
-    InsertExclusion(MutableOpportunityTreeRoot(), &leader_exclusion,
-                    opportunities_);
-  }
 
   for (const auto& exclusion : exclusions->storage) {
     InsertExclusion(MutableOpportunityTreeRoot(), exclusion.get(),
@@ -321,7 +320,7 @@ void NGLayoutOpportunityIterator::ShowLayoutOpportunityTree() const {
   StringBuilder string_builder;
   string_builder.Append("\n.:: LayoutOpportunity Tree ::.\n\nRoot Node: ");
   AppendNodeToString(opportunity_tree_root_.get(), &string_builder);
-  fprintf(stderr, "%s\n", string_builder.ToString().Utf8().Data());
+  fprintf(stderr, "%s\n", string_builder.ToString().Utf8().data());
 }
 #endif
 

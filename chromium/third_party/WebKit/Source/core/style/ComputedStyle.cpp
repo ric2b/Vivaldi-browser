@@ -42,9 +42,9 @@
 #include "core/style/QuotesData.h"
 #include "core/style/ShadowList.h"
 #include "core/style/StyleImage.h"
-#include "core/style/StyleInheritedData.h"
 #include "core/style/StyleInheritedVariables.h"
 #include "core/style/StyleNonInheritedVariables.h"
+#include "core/style/StyleRay.h"
 #include "platform/LengthFunctions.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/Font.h"
@@ -72,13 +72,19 @@ ASSERT_SIZE(BorderValue, SameSizeAsBorderValue);
 // re-create the same structure for an accurate size comparison.
 struct SameSizeAsComputedStyle : public RefCounted<SameSizeAsComputedStyle> {
   struct ComputedStyleBase {
+    void* data_refs[6];
     unsigned bitfields_[4];
   } base_;
 
-  void* data_refs[7];
+  void* data_refs[1];
   void* own_ptrs[1];
   void* data_ref_svg_style;
 };
+
+// If this fails, the packing algorithm in make_computed_style_base.py has
+// failed to produce the optimal packed size. To fix, update the algorithm to
+// ensure that the buckets are placed so that each takes up at most 1 word.
+ASSERT_SIZE(ComputedStyleBase<ComputedStyle>, SameSizeAsComputedStyleBase);
 
 // If this assert fails, it means that size of ComputedStyle has changed. Please
 // check that you really *do* what to increase the size of ComputedStyle, then
@@ -92,6 +98,13 @@ PassRefPtr<ComputedStyle> ComputedStyle::Create() {
 
 PassRefPtr<ComputedStyle> ComputedStyle::CreateInitialStyle() {
   return AdoptRef(new ComputedStyle());
+}
+
+ComputedStyle& ComputedStyle::MutableInitialStyle() {
+  LEAK_SANITIZER_DISABLED_SCOPE;
+  DEFINE_STATIC_REF(ComputedStyle, initial_style,
+                    (ComputedStyle::CreateInitialStyle()));
+  return *initial_style;
 }
 
 void ComputedStyle::InvalidateInitialStyle() {
@@ -114,10 +127,6 @@ PassRefPtr<ComputedStyle> ComputedStyle::Clone(const ComputedStyle& other) {
 
 ALWAYS_INLINE ComputedStyle::ComputedStyle()
     : ComputedStyleBase(), RefCounted<ComputedStyle>() {
-  box_.Init();
-  visual_.Init();
-  background_.Init();
-  surround_.Init();
   rare_non_inherited_data_.Init();
   rare_non_inherited_data_.Access()->deprecated_flexible_box_.Init();
   rare_non_inherited_data_.Access()->flexible_box_.Init();
@@ -129,21 +138,13 @@ ALWAYS_INLINE ComputedStyle::ComputedStyle()
   rare_non_inherited_data_.Access()->grid_.Init();
   rare_non_inherited_data_.Access()->grid_item_.Init();
   rare_non_inherited_data_.Access()->scroll_snap_.Init();
-  rare_inherited_data_.Init();
-  style_inherited_data_.Init();
   svg_style_.Init();
 }
 
 ALWAYS_INLINE ComputedStyle::ComputedStyle(const ComputedStyle& o)
     : ComputedStyleBase(o),
       RefCounted<ComputedStyle>(),
-      box_(o.box_),
-      visual_(o.visual_),
-      background_(o.background_),
-      surround_(o.surround_),
       rare_non_inherited_data_(o.rare_non_inherited_data_),
-      rare_inherited_data_(o.rare_inherited_data_),
-      style_inherited_data_(o.style_inherited_data_),
       svg_style_(o.svg_style_) {}
 
 static StyleRecalcChange DiffPseudoStyles(const ComputedStyle& old_style,
@@ -316,27 +317,21 @@ ContentDistributionType ComputedStyle::ResolvedAlignContentDistribution(
 
 void ComputedStyle::InheritFrom(const ComputedStyle& inherit_parent,
                                 IsAtShadowBoundary is_at_shadow_boundary) {
+  EUserModify current_user_modify = UserModify();
+
   ComputedStyleBase::InheritFrom(inherit_parent, is_at_shadow_boundary);
+  if (svg_style_ != inherit_parent.svg_style_)
+    svg_style_.Access()->InheritFrom(inherit_parent.svg_style_.Get());
+
   if (is_at_shadow_boundary == kAtShadowBoundary) {
     // Even if surrounding content is user-editable, shadow DOM should act as a
     // single unit, and not necessarily be editable
-    EUserModify current_user_modify = UserModify();
-    rare_inherited_data_ = inherit_parent.rare_inherited_data_;
     SetUserModify(current_user_modify);
-  } else {
-    rare_inherited_data_ = inherit_parent.rare_inherited_data_;
   }
-  style_inherited_data_ = inherit_parent.style_inherited_data_;
-  if (svg_style_ != inherit_parent.svg_style_)
-    svg_style_.Access()->InheritFrom(inherit_parent.svg_style_.Get());
 }
 
 void ComputedStyle::CopyNonInheritedFromCached(const ComputedStyle& other) {
   ComputedStyleBase::CopyNonInheritedFromCached(other);
-  box_ = other.box_;
-  visual_ = other.visual_;
-  background_ = other.background_;
-  surround_ = other.surround_;
   rare_non_inherited_data_ = other.rare_non_inherited_data_;
 
   // The flags are copied one-by-one because they contain
@@ -344,10 +339,8 @@ void ComputedStyle::CopyNonInheritedFromCached(const ComputedStyle& other) {
   // See comments for each skipped flag below.
 
   // These are not generated in ComputedStyleBase
-  SetOriginalDisplay(other.OriginalDisplay());
-  SetVerticalAlign(other.VerticalAlign());
   SetHasViewportUnits(other.HasViewportUnits());
-  has_rem_units_ = other.HasRemUnits();
+  SetHasRemUnitsInternal(other.HasRemUnits());
 
   // Correctly set during selector matching:
   // m_styleType
@@ -425,7 +418,7 @@ ComputedStyle* ComputedStyle::GetCachedPseudoStyle(PseudoId pid) const {
 }
 
 ComputedStyle* ComputedStyle::AddCachedPseudoStyle(
-    PassRefPtr<ComputedStyle> pseudo) {
+    RefPtr<ComputedStyle> pseudo) {
   if (!pseudo)
     return 0;
 
@@ -436,7 +429,7 @@ ComputedStyle* ComputedStyle::AddCachedPseudoStyle(
   if (!cached_pseudo_styles_)
     cached_pseudo_styles_ = WTF::WrapUnique(new PseudoStyleCache);
 
-  cached_pseudo_styles_->push_back(pseudo);
+  cached_pseudo_styles_->push_back(std::move(pseudo));
 
   return result;
 }
@@ -466,9 +459,7 @@ bool ComputedStyle::IndependentInheritedEqual(
 bool ComputedStyle::NonIndependentInheritedEqual(
     const ComputedStyle& other) const {
   return ComputedStyleBase::NonIndependentInheritedEqual(other) &&
-         style_inherited_data_ == other.style_inherited_data_ &&
-         svg_style_->InheritedEqual(*other.svg_style_) &&
-         rare_inherited_data_ == other.rare_inherited_data_;
+         svg_style_->InheritedEqual(*other.svg_style_);
 }
 
 bool ComputedStyle::LoadingCustomFontsEqual(const ComputedStyle& other) const {
@@ -478,24 +469,14 @@ bool ComputedStyle::LoadingCustomFontsEqual(const ComputedStyle& other) const {
 bool ComputedStyle::NonInheritedEqual(const ComputedStyle& other) const {
   // compare everything except the pseudoStyle pointer
   return ComputedStyleBase::NonInheritedEqual(other) &&
-         OriginalDisplay() ==
-             other.OriginalDisplay() &&  // Not generated in ComputedStyleBase
-         VerticalAlign() ==
-             other.VerticalAlign() &&  // Not generated in ComputedStyleBase
-         box_ == other.box_ &&
-         visual_ == other.visual_ && background_ == other.background_ &&
-         surround_ == other.surround_ &&
          rare_non_inherited_data_ == other.rare_non_inherited_data_ &&
          svg_style_->NonInheritedEqual(*other.svg_style_);
 }
 
 bool ComputedStyle::InheritedDataShared(const ComputedStyle& other) const {
   // This is a fast check that only looks if the data structures are shared.
-  // TODO(sashab): Should ComputedStyleBase have an inheritedDataShared method?
-  return ComputedStyleBase::InheritedEqual(other) &&
-         style_inherited_data_.Get() == other.style_inherited_data_.Get() &&
-         svg_style_.Get() == other.svg_style_.Get() &&
-         rare_inherited_data_.Get() == other.rare_inherited_data_.Get();
+  return ComputedStyleBase::InheritedDataShared(other) &&
+         svg_style_.Get() == other.svg_style_.Get();
 }
 
 static bool DependenceOnContentHeightHasChanged(const ComputedStyle& a,
@@ -527,8 +508,7 @@ StyleDifference ComputedStyle::VisualInvalidationDiff(
   if (!diff.NeedsFullLayout() && DiffNeedsFullLayout(other))
     diff.SetNeedsFullLayout();
 
-  if (!diff.NeedsFullLayout() &&
-      surround_->margin_ != other.surround_->margin_) {
+  if (!diff.NeedsFullLayout() && !MarginEqual(other)) {
     // Relative-positioned elements collapse their margins so need a full
     // layout.
     if (HasOutOfFlowPosition())
@@ -576,24 +556,8 @@ StyleDifference ComputedStyle::VisualInvalidationDiff(
 bool ComputedStyle::ScrollAnchorDisablingPropertyChanged(
     const ComputedStyle& other,
     const StyleDifference& diff) const {
-  if (GetPosition() != other.GetPosition())
+  if (ComputedStyleBase::ScrollAnchorDisablingPropertyChanged(other))
     return true;
-
-  if (box_.Get() != other.box_.Get()) {
-    if (box_->Width() != other.box_->Width() ||
-        box_->MinWidth() != other.box_->MinWidth() ||
-        box_->MaxWidth() != other.box_->MaxWidth() ||
-        box_->Height() != other.box_->Height() ||
-        box_->MinHeight() != other.box_->MinHeight() ||
-        box_->MaxHeight() != other.box_->MaxHeight())
-      return true;
-  }
-
-  if (surround_.Get() != other.surround_.Get()) {
-    if (surround_->margin_ != other.surround_->margin_ || !OffsetEqual(other) ||
-        surround_->padding_ != other.surround_->padding_)
-      return true;
-  }
 
   if (diff.TransformChanged())
     return true;
@@ -610,18 +574,8 @@ bool ComputedStyle::DiffNeedsFullLayoutAndPaintInvalidation(
   // - or the layoutObject knows how to exactly invalidate paints caused by the
   //   layout change instead of forced full paint invalidation.
 
-  if (surround_.Get() != other.surround_.Get()) {
-    // If our border widths change, then we need to layout. Other changes to
-    // borders only necessitate a paint invalidation.
-    if (BorderLeftWidth() != other.BorderLeftWidth() ||
-        BorderTopWidth() != other.BorderTopWidth() ||
-        BorderBottomWidth() != other.BorderBottomWidth() ||
-        BorderRightWidth() != other.BorderRightWidth())
-      return true;
-
-    if (surround_->padding_ != other.surround_->padding_)
-      return true;
-  }
+  if (ComputedStyleBase::DiffNeedsFullLayoutAndPaintInvalidation(other))
+    return true;
 
   if (rare_non_inherited_data_.Get() != other.rare_non_inherited_data_.Get()) {
     if (rare_non_inherited_data_->appearance_ !=
@@ -638,8 +592,7 @@ bool ComputedStyle::DiffNeedsFullLayoutAndPaintInvalidation(
             other.rare_non_inherited_data_->shape_margin_ ||
         rare_non_inherited_data_->order_ !=
             other.rare_non_inherited_data_->order_ ||
-        rare_non_inherited_data_->HasFilters() !=
-            other.rare_non_inherited_data_->HasFilters())
+        HasFilters() != other.HasFilters())
       return true;
 
     if (rare_non_inherited_data_->grid_.Get() !=
@@ -685,8 +638,7 @@ bool ComputedStyle::DiffNeedsFullLayoutAndPaintInvalidation(
     // could trigger a change
     // in us being a stacking context.
     if (IsStackingContext() != other.IsStackingContext() &&
-        rare_non_inherited_data_->HasOpacity() !=
-            other.rare_non_inherited_data_->HasOpacity()) {
+        HasOpacity() != other.HasOpacity()) {
       // FIXME: We would like to use SimplifiedLayout here, but we can't quite
       // do that yet.  We need to make sure SimplifiedLayout can operate
       // correctly on LayoutInlines (we will need to add a
@@ -699,40 +651,42 @@ bool ComputedStyle::DiffNeedsFullLayoutAndPaintInvalidation(
   }
 
   if (rare_inherited_data_.Get() != other.rare_inherited_data_.Get()) {
-    if (rare_inherited_data_->highlight !=
-            other.rare_inherited_data_->highlight ||
-        rare_inherited_data_->indent != other.rare_inherited_data_->indent ||
+    if (rare_inherited_data_->highlight_ !=
+            other.rare_inherited_data_->highlight_ ||
+        rare_inherited_data_->text_indent_ !=
+            other.rare_inherited_data_->text_indent_ ||
         rare_inherited_data_->text_align_last_ !=
             other.rare_inherited_data_->text_align_last_ ||
         rare_inherited_data_->text_indent_line_ !=
             other.rare_inherited_data_->text_indent_line_ ||
         rare_inherited_data_->effective_zoom_ !=
             other.rare_inherited_data_->effective_zoom_ ||
-        rare_inherited_data_->word_break !=
-            other.rare_inherited_data_->word_break ||
-        rare_inherited_data_->overflow_wrap !=
-            other.rare_inherited_data_->overflow_wrap ||
-        rare_inherited_data_->line_break !=
-            other.rare_inherited_data_->line_break ||
-        rare_inherited_data_->text_security !=
-            other.rare_inherited_data_->text_security ||
-        rare_inherited_data_->hyphens != other.rare_inherited_data_->hyphens ||
-        rare_inherited_data_->hyphenation_limit_before !=
-            other.rare_inherited_data_->hyphenation_limit_before ||
-        rare_inherited_data_->hyphenation_limit_after !=
-            other.rare_inherited_data_->hyphenation_limit_after ||
-        rare_inherited_data_->hyphenation_string !=
-            other.rare_inherited_data_->hyphenation_string ||
+        rare_inherited_data_->word_break_ !=
+            other.rare_inherited_data_->word_break_ ||
+        rare_inherited_data_->overflow_wrap_ !=
+            other.rare_inherited_data_->overflow_wrap_ ||
+        rare_inherited_data_->line_break_ !=
+            other.rare_inherited_data_->line_break_ ||
+        rare_inherited_data_->text_security_ !=
+            other.rare_inherited_data_->text_security_ ||
+        rare_inherited_data_->hyphens_ !=
+            other.rare_inherited_data_->hyphens_ ||
+        rare_inherited_data_->hyphenation_limit_before_ !=
+            other.rare_inherited_data_->hyphenation_limit_before_ ||
+        rare_inherited_data_->hyphenation_limit_after_ !=
+            other.rare_inherited_data_->hyphenation_limit_after_ ||
+        rare_inherited_data_->hyphenation_string_ !=
+            other.rare_inherited_data_->hyphenation_string_ ||
         rare_inherited_data_->respect_image_orientation_ !=
             other.rare_inherited_data_->respect_image_orientation_ ||
         rare_inherited_data_->ruby_position_ !=
             other.rare_inherited_data_->ruby_position_ ||
-        rare_inherited_data_->text_emphasis_mark !=
-            other.rare_inherited_data_->text_emphasis_mark ||
-        rare_inherited_data_->text_emphasis_position !=
-            other.rare_inherited_data_->text_emphasis_position ||
-        rare_inherited_data_->text_emphasis_custom_mark !=
-            other.rare_inherited_data_->text_emphasis_custom_mark ||
+        rare_inherited_data_->text_emphasis_mark_ !=
+            other.rare_inherited_data_->text_emphasis_mark_ ||
+        rare_inherited_data_->text_emphasis_position_ !=
+            other.rare_inherited_data_->text_emphasis_position_ ||
+        rare_inherited_data_->text_emphasis_custom_mark_ !=
+            other.rare_inherited_data_->text_emphasis_custom_mark_ ||
         rare_inherited_data_->text_justify_ !=
             other.rare_inherited_data_->text_justify_ ||
         rare_inherited_data_->text_orientation_ !=
@@ -743,55 +697,14 @@ bool ComputedStyle::DiffNeedsFullLayoutAndPaintInvalidation(
             other.rare_inherited_data_->tab_size_ ||
         rare_inherited_data_->text_size_adjust_ !=
             other.rare_inherited_data_->text_size_adjust_ ||
-        rare_inherited_data_->list_style_image !=
-            other.rare_inherited_data_->list_style_image ||
+        rare_inherited_data_->list_style_image_ !=
+            other.rare_inherited_data_->list_style_image_ ||
         rare_inherited_data_->line_height_step_ !=
             other.rare_inherited_data_->line_height_step_ ||
-        rare_inherited_data_->text_stroke_width !=
-            other.rare_inherited_data_->text_stroke_width)
-      return true;
-
-    if (!rare_inherited_data_->ShadowDataEquivalent(
-            *other.rare_inherited_data_.Get()))
-      return true;
-
-    if (!rare_inherited_data_->QuotesDataEquivalent(
-            *other.rare_inherited_data_.Get()))
+        rare_inherited_data_->text_stroke_width_ !=
+            other.rare_inherited_data_->text_stroke_width_)
       return true;
   }
-
-  if (style_inherited_data_->text_autosizing_multiplier !=
-      other.style_inherited_data_->text_autosizing_multiplier)
-    return true;
-
-  if (style_inherited_data_->font.LoadingCustomFonts() !=
-      other.style_inherited_data_->font.LoadingCustomFonts())
-    return true;
-
-  if (style_inherited_data_.Get() != other.style_inherited_data_.Get()) {
-    if (style_inherited_data_->line_height !=
-            other.style_inherited_data_->line_height ||
-        style_inherited_data_->font != other.style_inherited_data_->font ||
-        style_inherited_data_->horizontal_border_spacing !=
-            other.style_inherited_data_->horizontal_border_spacing ||
-        style_inherited_data_->vertical_border_spacing !=
-            other.style_inherited_data_->vertical_border_spacing)
-      return true;
-  }
-
-  if (BoxDirection() != other.BoxDirection() ||
-      RtlOrdering() != other.RtlOrdering() ||
-      GetTextAlign() != other.GetTextAlign() ||
-      TextTransform() != other.TextTransform() ||
-      Direction() != other.Direction() || WhiteSpace() != other.WhiteSpace() ||
-      GetWritingMode() != other.GetWritingMode())
-    return true;
-
-  if (OverflowX() != other.OverflowX() || OverflowY() != other.OverflowY() ||
-      Clear() != other.Clear() || GetUnicodeBidi() != other.GetUnicodeBidi() ||
-      Floating() != other.Floating() ||
-      OriginalDisplay() != other.OriginalDisplay())
-    return true;
 
   if (IsDisplayTableType(Display())) {
     if (BorderCollapse() != other.BorderCollapse() ||
@@ -803,22 +716,22 @@ bool ComputedStyle::DiffNeedsFullLayoutAndPaintInvalidation(
     // In the collapsing border model, 'hidden' suppresses other borders, while
     // 'none' does not, so these style differences can be width differences.
     if ((BorderCollapse() == EBorderCollapse::kCollapse) &&
-        ((BorderTopStyle() == kBorderStyleHidden &&
-          other.BorderTopStyle() == kBorderStyleNone) ||
-         (BorderTopStyle() == kBorderStyleNone &&
-          other.BorderTopStyle() == kBorderStyleHidden) ||
-         (BorderBottomStyle() == kBorderStyleHidden &&
-          other.BorderBottomStyle() == kBorderStyleNone) ||
-         (BorderBottomStyle() == kBorderStyleNone &&
-          other.BorderBottomStyle() == kBorderStyleHidden) ||
-         (BorderLeftStyle() == kBorderStyleHidden &&
-          other.BorderLeftStyle() == kBorderStyleNone) ||
-         (BorderLeftStyle() == kBorderStyleNone &&
-          other.BorderLeftStyle() == kBorderStyleHidden) ||
-         (BorderRightStyle() == kBorderStyleHidden &&
-          other.BorderRightStyle() == kBorderStyleNone) ||
-         (BorderRightStyle() == kBorderStyleNone &&
-          other.BorderRightStyle() == kBorderStyleHidden)))
+        ((BorderTopStyle() == EBorderStyle::kHidden &&
+          other.BorderTopStyle() == EBorderStyle::kNone) ||
+         (BorderTopStyle() == EBorderStyle::kNone &&
+          other.BorderTopStyle() == EBorderStyle::kHidden) ||
+         (BorderBottomStyle() == EBorderStyle::kHidden &&
+          other.BorderBottomStyle() == EBorderStyle::kNone) ||
+         (BorderBottomStyle() == EBorderStyle::kNone &&
+          other.BorderBottomStyle() == EBorderStyle::kHidden) ||
+         (BorderLeftStyle() == EBorderStyle::kHidden &&
+          other.BorderLeftStyle() == EBorderStyle::kNone) ||
+         (BorderLeftStyle() == EBorderStyle::kNone &&
+          other.BorderLeftStyle() == EBorderStyle::kHidden) ||
+         (BorderRightStyle() == EBorderStyle::kHidden &&
+          other.BorderRightStyle() == EBorderStyle::kNone) ||
+         (BorderRightStyle() == EBorderStyle::kNone &&
+          other.BorderRightStyle() == EBorderStyle::kHidden)))
       return true;
   } else if (Display() == EDisplay::kListItem) {
     if (ListStyleType() != other.ListStyleType() ||
@@ -830,10 +743,6 @@ bool ComputedStyle::DiffNeedsFullLayoutAndPaintInvalidation(
       (other.Visibility() == EVisibility::kCollapse))
     return true;
 
-  if (HasPseudoStyle(kPseudoIdScrollbar) !=
-      other.HasPseudoStyle(kPseudoIdScrollbar))
-    return true;
-
   // Movement of non-static-positioned object is special cased in
   // ComputedStyle::VisualInvalidationDiff().
 
@@ -841,19 +750,12 @@ bool ComputedStyle::DiffNeedsFullLayoutAndPaintInvalidation(
 }
 
 bool ComputedStyle::DiffNeedsFullLayout(const ComputedStyle& other) const {
-  if (box_.Get() != other.box_.Get()) {
-    if (box_->Width() != other.box_->Width() ||
-        box_->MinWidth() != other.box_->MinWidth() ||
-        box_->MaxWidth() != other.box_->MaxWidth() ||
-        box_->Height() != other.box_->Height() ||
-        box_->MinHeight() != other.box_->MinHeight() ||
-        box_->MaxHeight() != other.box_->MaxHeight())
-      return true;
+  if (ComputedStyleBase::DiffNeedsFullLayout(other))
+    return true;
 
-    if (box_->VerticalAlign() != other.box_->VerticalAlign())
-      return true;
-
-    if (box_->BoxSizing() != other.box_->BoxSizing())
+  if (box_data_.Get() != other.box_data_.Get()) {
+    if (box_data_->vertical_align_length_ !=
+        other.box_data_->vertical_align_length_)
       return true;
   }
 
@@ -903,18 +805,18 @@ bool ComputedStyle::DiffNeedsPaintInvalidationSubtree(
 
 bool ComputedStyle::DiffNeedsPaintInvalidationObject(
     const ComputedStyle& other) const {
-  if (Visibility() != other.Visibility() ||
-      PrintColorAdjust() != other.PrintColorAdjust() ||
-      InsideLink() != other.InsideLink() ||
-      !surround_->border_.VisuallyEqual(other.surround_->border_) ||
-      *background_ != *other.background_)
+  if (ComputedStyleBase::DiffNeedsPaintInvalidationObject(other))
+    return true;
+
+  if (!BorderVisuallyEqual(other) || !RadiiEqual(other) ||
+      *background_data_ != *other.background_data_)
     return true;
 
   if (rare_inherited_data_.Get() != other.rare_inherited_data_.Get()) {
-    if (rare_inherited_data_->user_modify !=
-            other.rare_inherited_data_->user_modify ||
-        rare_inherited_data_->user_select !=
-            other.rare_inherited_data_->user_select ||
+    if (rare_inherited_data_->user_modify_ !=
+            other.rare_inherited_data_->user_modify_ ||
+        rare_inherited_data_->user_select_ !=
+            other.rare_inherited_data_->user_select_ ||
         rare_inherited_data_->image_rendering_ !=
             other.rare_inherited_data_->image_rendering_)
       return true;
@@ -979,7 +881,8 @@ bool ComputedStyle::DiffNeedsPaintInvalidationObjectForPaintImage(
     // TODO(ikilpatrick): remove IsInterpolableProperty check once
     // CSSPropertyEquality::PropertiesEqual correctly handles all properties.
     if (!CSSPropertyMetadata::IsInterpolableProperty(property_id) ||
-        !CSSPropertyEquality::PropertiesEqual(property_id, *this, other))
+        !CSSPropertyEquality::PropertiesEqual(PropertyHandle(property_id),
+                                              *this, other))
       return true;
   }
 
@@ -1000,7 +903,7 @@ bool ComputedStyle::DiffNeedsPaintInvalidationObjectForPaintImage(
 bool ComputedStyle::DiffNeedsVisualRectUpdate(
     const ComputedStyle& other) const {
   // Visual rect is empty if visibility is hidden.
-  if (Visibility() != other.Visibility())
+  if (ComputedStyleBase::DiffNeedsVisualRectUpdate(other))
     return true;
 
   // Need to update visual rect of the resizer.
@@ -1013,7 +916,7 @@ bool ComputedStyle::DiffNeedsVisualRectUpdate(
 void ComputedStyle::UpdatePropertySpecificDifferences(
     const ComputedStyle& other,
     StyleDifference& diff) const {
-  if (box_->ZIndex() != other.box_->ZIndex() ||
+  if (box_data_->z_index_ != other.box_data_->z_index_ ||
       IsStackingContext() != other.IsStackingContext())
     diff.SetZIndexChanged();
 
@@ -1028,85 +931,82 @@ void ComputedStyle::UpdatePropertySpecificDifferences(
         rare_non_inherited_data_->perspective_origin_ !=
             other.rare_non_inherited_data_->perspective_origin_)
       diff.SetTransformChanged();
+  }
 
+  if (rare_non_inherited_data_.Get() != other.rare_non_inherited_data_.Get()) {
     if (rare_non_inherited_data_->opacity !=
         other.rare_non_inherited_data_->opacity)
       diff.SetOpacityChanged();
+  }
 
-    if (rare_non_inherited_data_->filter_ !=
-        other.rare_non_inherited_data_->filter_)
+  if (rare_non_inherited_data_.Get() != other.rare_non_inherited_data_.Get()) {
+    if ((rare_non_inherited_data_->filter_ !=
+         other.rare_non_inherited_data_->filter_) ||
+        !rare_non_inherited_data_->ReflectionDataEquivalent(
+            *other.rare_non_inherited_data_.Get()))
       diff.SetFilterChanged();
+  }
 
+  if (rare_non_inherited_data_.Get() != other.rare_non_inherited_data_.Get()) {
     if (!rare_non_inherited_data_->ShadowDataEquivalent(
-            *other.rare_non_inherited_data_.Get()))
-      diff.SetNeedsRecomputeOverflow();
-
-    if (rare_non_inherited_data_->backdrop_filter_ !=
-        other.rare_non_inherited_data_->backdrop_filter_)
-      diff.SetBackdropFilterChanged();
-
-    if (!rare_non_inherited_data_->ReflectionDataEquivalent(
-            *other.rare_non_inherited_data_.Get()))
-      diff.SetFilterChanged();
-
-    if (!rare_non_inherited_data_->outline_.VisuallyEqual(
+            *other.rare_non_inherited_data_.Get()) ||
+        !rare_non_inherited_data_->outline_.VisuallyEqual(
             other.rare_non_inherited_data_->outline_))
       diff.SetNeedsRecomputeOverflow();
   }
 
-  if (!surround_->border_.VisualOverflowEqual(other.surround_->border_))
+  if (!BorderVisualOverflowEqual(other))
     diff.SetNeedsRecomputeOverflow();
 
+  if (rare_non_inherited_data_.Get() != other.rare_non_inherited_data_.Get()) {
+    if (rare_non_inherited_data_->backdrop_filter_ !=
+        other.rare_non_inherited_data_->backdrop_filter_)
+      diff.SetBackdropFilterChanged();
+  }
+
   if (!diff.NeedsFullPaintInvalidation()) {
-    if (style_inherited_data_->color != other.style_inherited_data_->color ||
-        style_inherited_data_->visited_link_color !=
-            other.style_inherited_data_->visited_link_color ||
-        has_simple_underline_ != other.has_simple_underline_ ||
-        visual_->text_decoration != other.visual_->text_decoration) {
-      diff.SetTextDecorationOrColorChanged();
-    } else if (rare_non_inherited_data_.Get() !=
-                   other.rare_non_inherited_data_.Get() &&
-               (rare_non_inherited_data_->text_decoration_style_ !=
-                    other.rare_non_inherited_data_->text_decoration_style_ ||
-                rare_non_inherited_data_->text_decoration_color_ !=
-                    other.rare_non_inherited_data_->text_decoration_color_ ||
-                rare_non_inherited_data_->visited_link_text_decoration_color_ !=
-                    other.rare_non_inherited_data_
-                        ->visited_link_text_decoration_color_)) {
-      diff.SetTextDecorationOrColorChanged();
-    } else if (rare_inherited_data_.Get() != other.rare_inherited_data_.Get() &&
-               (rare_inherited_data_->TextFillColor() !=
-                    other.rare_inherited_data_->TextFillColor() ||
-                rare_inherited_data_->TextStrokeColor() !=
-                    other.rare_inherited_data_->TextStrokeColor() ||
-                rare_inherited_data_->TextEmphasisColor() !=
-                    other.rare_inherited_data_->TextEmphasisColor() ||
-                rare_inherited_data_->VisitedLinkTextFillColor() !=
-                    other.rare_inherited_data_->VisitedLinkTextFillColor() ||
-                rare_inherited_data_->VisitedLinkTextStrokeColor() !=
-                    other.rare_inherited_data_->VisitedLinkTextStrokeColor() ||
-                rare_inherited_data_->VisitedLinkTextEmphasisColor() !=
-                    other.rare_inherited_data_
-                        ->VisitedLinkTextEmphasisColor() ||
-                rare_inherited_data_->text_emphasis_fill !=
-                    other.rare_inherited_data_->text_emphasis_fill ||
-                rare_inherited_data_->text_decoration_skip_ !=
-                    other.rare_inherited_data_->text_decoration_skip_ ||
-                rare_inherited_data_->applied_text_decorations !=
-                    other.rare_inherited_data_->applied_text_decorations ||
-                rare_inherited_data_->CaretColor() !=
-                    other.rare_inherited_data_->CaretColor() ||
-                rare_inherited_data_->VisitedLinkCaretColor() !=
-                    other.rare_inherited_data_->VisitedLinkCaretColor())) {
+    if ((inherited_data_->color_ != other.inherited_data_->color_ ||
+         inherited_data_->visited_link_color_ !=
+             other.inherited_data_->visited_link_color_ ||
+         HasSimpleUnderlineInternal() != other.HasSimpleUnderlineInternal() ||
+         visual_data_->text_decoration_ !=
+             other.visual_data_->text_decoration_) ||
+        (rare_non_inherited_data_.Get() !=
+             other.rare_non_inherited_data_.Get() &&
+         (rare_non_inherited_data_->text_decoration_style_ !=
+              other.rare_non_inherited_data_->text_decoration_style_ ||
+          rare_non_inherited_data_->text_decoration_color_ !=
+              other.rare_non_inherited_data_->text_decoration_color_ ||
+          rare_non_inherited_data_->visited_link_text_decoration_color_ !=
+              other.rare_non_inherited_data_
+                  ->visited_link_text_decoration_color_)) ||
+        (rare_inherited_data_.Get() != other.rare_inherited_data_.Get() &&
+         (TextFillColor() != other.TextFillColor() ||
+          TextStrokeColor() != other.TextStrokeColor() ||
+          TextEmphasisColor() != other.TextEmphasisColor() ||
+          VisitedLinkTextFillColor() != other.VisitedLinkTextFillColor() ||
+          VisitedLinkTextStrokeColor() != other.VisitedLinkTextStrokeColor() ||
+          VisitedLinkTextEmphasisColor() !=
+              other.VisitedLinkTextEmphasisColor() ||
+          rare_inherited_data_->text_emphasis_fill_ !=
+              other.rare_inherited_data_->text_emphasis_fill_ ||
+          rare_inherited_data_->text_underline_position_ !=
+              other.rare_inherited_data_->text_underline_position_ ||
+          rare_inherited_data_->text_decoration_skip_ !=
+              other.rare_inherited_data_->text_decoration_skip_ ||
+          rare_inherited_data_->applied_text_decorations_ !=
+              other.rare_inherited_data_->applied_text_decorations_ ||
+          CaretColor() != CaretColor() ||
+          VisitedLinkCaretColor() != other.VisitedLinkCaretColor()))) {
       diff.SetTextDecorationOrColorChanged();
     }
   }
 
-  bool has_clip = HasOutOfFlowPosition() && !visual_->has_auto_clip;
+  bool has_clip = HasOutOfFlowPosition() && !visual_data_->has_auto_clip_;
   bool other_has_clip =
-      other.HasOutOfFlowPosition() && !other.visual_->has_auto_clip;
+      other.HasOutOfFlowPosition() && !other.visual_data_->has_auto_clip_;
   if (has_clip != other_has_clip ||
-      (has_clip && visual_->clip != other.visual_->clip))
+      (has_clip && visual_data_->clip_ != other.visual_data_->clip_))
     diff.SetCSSClipChanged();
 }
 
@@ -1121,23 +1021,27 @@ void ComputedStyle::AddPaintImage(StyleImage* image) {
 void ComputedStyle::AddCursor(StyleImage* image,
                               bool hot_spot_specified,
                               const IntPoint& hot_spot) {
-  if (!rare_inherited_data_.Access()->cursor_data)
-    rare_inherited_data_.Access()->cursor_data = new CursorList;
-  rare_inherited_data_.Access()->cursor_data->push_back(
+  if (!rare_inherited_data_.Access()->cursor_data_)
+    rare_inherited_data_.Access()->cursor_data_ = new CursorList;
+  rare_inherited_data_.Access()->cursor_data_->push_back(
       CursorData(image, hot_spot_specified, hot_spot));
 }
 
 void ComputedStyle::SetCursorList(CursorList* other) {
-  rare_inherited_data_.Access()->cursor_data = other;
+  rare_inherited_data_.Access()->cursor_data_ = other;
 }
 
-void ComputedStyle::SetQuotes(PassRefPtr<QuotesData> q) {
-  rare_inherited_data_.Access()->quotes = std::move(q);
+void ComputedStyle::SetQuotes(RefPtr<QuotesData> q) {
+  rare_inherited_data_.Access()->quotes_ = std::move(q);
+}
+
+bool ComputedStyle::QuotesDataEquivalent(const ComputedStyle& other) const {
+  return DataEquivalent(Quotes(), other.Quotes());
 }
 
 void ComputedStyle::ClearCursorList() {
-  if (rare_inherited_data_->cursor_data)
-    rare_inherited_data_.Access()->cursor_data = nullptr;
+  if (rare_inherited_data_->cursor_data_)
+    rare_inherited_data_.Access()->cursor_data_ = nullptr;
 }
 
 static bool HasPropertyThatCreatesStackingContext(
@@ -1341,6 +1245,11 @@ void ComputedStyle::ApplyTransform(
   }
 }
 
+bool ComputedStyle::HasFilters() const {
+  return rare_non_inherited_data_->filter_.Get() &&
+         !rare_non_inherited_data_->filter_->operations_.IsEmpty();
+}
+
 void ComputedStyle::ApplyMotionPathTransform(
     float origin_x,
     float origin_y,
@@ -1354,21 +1263,32 @@ void ComputedStyle::ApplyMotionPathTransform(
   }
   const LengthPoint& position = OffsetPosition();
   const LengthPoint& anchor = OffsetAnchor();
-  const StylePath& motion_path = *motion_data.path_;
-  float path_length = motion_path.length();
-  float distance = FloatValueForLength(motion_data.distance_, path_length);
-  float computed_distance;
-  if (motion_path.IsClosed() && path_length > 0) {
-    computed_distance = fmod(distance, path_length);
-    if (computed_distance < 0)
-      computed_distance += path_length;
-  } else {
-    computed_distance = clampTo<float>(distance, 0, path_length);
-  }
 
   FloatPoint point;
   float angle;
-  motion_path.GetPath().PointAndNormalAtLength(computed_distance, point, angle);
+  if (motion_data.path_->GetType() == BasicShape::kStyleRayType) {
+    // TODO(ericwilligers): crbug.com/641245 Support <size> for ray paths.
+    float distance = FloatValueForLength(motion_data.distance_, 0);
+
+    angle = ToStyleRay(*motion_data.path_).Angle() - 90;
+    point.SetX(distance * cos(deg2rad(angle)));
+    point.SetY(distance * sin(deg2rad(angle)));
+  } else {
+    const StylePath& motion_path = ToStylePath(*motion_data.path_);
+    float path_length = motion_path.length();
+    float distance = FloatValueForLength(motion_data.distance_, path_length);
+    float computed_distance;
+    if (motion_path.IsClosed() && path_length > 0) {
+      computed_distance = fmod(distance, path_length);
+      if (computed_distance < 0)
+        computed_distance += path_length;
+    } else {
+      computed_distance = clampTo<float>(distance, 0, path_length);
+    }
+
+    motion_path.GetPath().PointAndNormalAtLength(computed_distance, point,
+                                                 angle);
+  }
 
   if (motion_data.rotation_.type == kOffsetRotationFixed)
     angle = 0;
@@ -1396,67 +1316,51 @@ void ComputedStyle::ApplyMotionPathTransform(
     transform.Translate(-origin_shift_x, -origin_shift_y);
 }
 
-void ComputedStyle::SetTextShadow(PassRefPtr<ShadowList> s) {
-  rare_inherited_data_.Access()->text_shadow = std::move(s);
+void ComputedStyle::SetTextShadow(RefPtr<ShadowList> s) {
+  rare_inherited_data_.Access()->text_shadow_ = std::move(s);
 }
 
-void ComputedStyle::SetBoxShadow(PassRefPtr<ShadowList> s) {
+bool ComputedStyle::TextShadowDataEquivalent(const ComputedStyle& other) const {
+  return DataEquivalent(TextShadow(), other.TextShadow());
+}
+
+void ComputedStyle::SetBoxShadow(RefPtr<ShadowList> s) {
   rare_non_inherited_data_.Access()->box_shadow_ = std::move(s);
 }
 
-static FloatRoundedRect::Radii CalcRadiiFor(const BorderData& border,
+static FloatRoundedRect::Radii CalcRadiiFor(const LengthSize& top_left,
+                                            const LengthSize& top_right,
+                                            const LengthSize& bottom_left,
+                                            const LengthSize& bottom_right,
                                             LayoutSize size) {
   return FloatRoundedRect::Radii(
       FloatSize(
-          FloatValueForLength(border.TopLeft().Width(), size.Width().ToFloat()),
-          FloatValueForLength(border.TopLeft().Height(),
-                              size.Height().ToFloat())),
-      FloatSize(FloatValueForLength(border.TopRight().Width(),
-                                    size.Width().ToFloat()),
-                FloatValueForLength(border.TopRight().Height(),
-                                    size.Height().ToFloat())),
-      FloatSize(FloatValueForLength(border.BottomLeft().Width(),
-                                    size.Width().ToFloat()),
-                FloatValueForLength(border.BottomLeft().Height(),
-                                    size.Height().ToFloat())),
-      FloatSize(FloatValueForLength(border.BottomRight().Width(),
-                                    size.Width().ToFloat()),
-                FloatValueForLength(border.BottomRight().Height(),
-                                    size.Height().ToFloat())));
+          FloatValueForLength(top_left.Width(), size.Width().ToFloat()),
+          FloatValueForLength(top_left.Height(), size.Height().ToFloat())),
+      FloatSize(
+          FloatValueForLength(top_right.Width(), size.Width().ToFloat()),
+          FloatValueForLength(top_right.Height(), size.Height().ToFloat())),
+      FloatSize(
+          FloatValueForLength(bottom_left.Width(), size.Width().ToFloat()),
+          FloatValueForLength(bottom_left.Height(), size.Height().ToFloat())),
+      FloatSize(
+          FloatValueForLength(bottom_right.Width(), size.Width().ToFloat()),
+          FloatValueForLength(bottom_right.Height(), size.Height().ToFloat())));
 }
 
 StyleImage* ComputedStyle::ListStyleImage() const {
-  return rare_inherited_data_->list_style_image.Get();
+  return rare_inherited_data_->list_style_image_.Get();
 }
 void ComputedStyle::SetListStyleImage(StyleImage* v) {
-  if (rare_inherited_data_->list_style_image != v)
-    rare_inherited_data_.Access()->list_style_image = v;
+  if (rare_inherited_data_->list_style_image_ != v)
+    rare_inherited_data_.Access()->list_style_image_ = v;
 }
 
 Color ComputedStyle::GetColor() const {
-  return style_inherited_data_->color;
-}
-Color ComputedStyle::VisitedLinkColor() const {
-  return style_inherited_data_->visited_link_color;
+  return ColorInternal();
 }
 void ComputedStyle::SetColor(const Color& v) {
-  SET_VAR(style_inherited_data_, color, v);
-}
-void ComputedStyle::SetVisitedLinkColor(const Color& v) {
-  SET_VAR(style_inherited_data_, visited_link_color, v);
-}
-
-short ComputedStyle::HorizontalBorderSpacing() const {
-  return style_inherited_data_->horizontal_border_spacing;
-}
-short ComputedStyle::VerticalBorderSpacing() const {
-  return style_inherited_data_->vertical_border_spacing;
-}
-void ComputedStyle::SetHorizontalBorderSpacing(short v) {
-  SET_VAR(style_inherited_data_, horizontal_border_spacing, v);
-}
-void ComputedStyle::SetVerticalBorderSpacing(short v) {
-  SET_VAR(style_inherited_data_, vertical_border_spacing, v);
+  SetColorInternal(v);
 }
 
 FloatRoundedRect ComputedStyle::GetRoundedBorderFor(
@@ -1465,8 +1369,9 @@ FloatRoundedRect ComputedStyle::GetRoundedBorderFor(
     bool include_logical_right_edge) const {
   FloatRoundedRect rounded_rect(PixelSnappedIntRect(border_rect));
   if (HasBorderRadius()) {
-    FloatRoundedRect::Radii radii =
-        CalcRadiiFor(surround_->border_, border_rect.Size());
+    FloatRoundedRect::Radii radii = CalcRadiiFor(
+        BorderTopLeftRadius(), BorderTopRightRadius(), BorderBottomLeftRadius(),
+        BorderBottomRightRadius(), border_rect.Size());
     rounded_rect.IncludeLogicalEdges(radii, IsHorizontalWritingMode(),
                                      include_logical_left_edge,
                                      include_logical_right_edge);
@@ -1584,15 +1489,36 @@ void ComputedStyle::ClearResetDirectives() {
     it->value.ClearReset();
 }
 
+AtomicString ComputedStyle::LocaleForLineBreakIterator() const {
+  LineBreakIteratorMode mode = LineBreakIteratorMode::kDefault;
+  switch (GetLineBreak()) {
+    case LineBreak::kAuto:
+    case LineBreak::kAfterWhiteSpace:
+      return Locale();
+    case LineBreak::kNormal:
+      mode = LineBreakIteratorMode::kNormal;
+      break;
+    case LineBreak::kStrict:
+      mode = LineBreakIteratorMode::kStrict;
+      break;
+    case LineBreak::kLoose:
+      mode = LineBreakIteratorMode::kLoose;
+      break;
+  }
+  if (const LayoutLocale* locale = GetFontDescription().Locale())
+    return locale->LocaleWithBreakKeyword(mode);
+  return Locale();
+}
+
 Hyphenation* ComputedStyle::GetHyphenation() const {
-  return GetHyphens() == kHyphensAuto
+  return GetHyphens() == Hyphens::kAuto
              ? GetFontDescription().LocaleOrDefault().GetHyphenation()
              : nullptr;
 }
 
 const AtomicString& ComputedStyle::HyphenString() const {
   const AtomicString& hyphenation_string =
-      rare_inherited_data_.Get()->hyphenation_string;
+      rare_inherited_data_.Get()->hyphenation_string_;
   if (!hyphenation_string.IsNull())
     return hyphenation_string;
 
@@ -1618,7 +1544,7 @@ const AtomicString& ComputedStyle::TextEmphasisMarkString() const {
                           (&kBulletCharacter, 1));
       DEFINE_STATIC_LOCAL(AtomicString, open_dot_string,
                           (&kWhiteBulletCharacter, 1));
-      return GetTextEmphasisFill() == kTextEmphasisFillFilled
+      return GetTextEmphasisFill() == TextEmphasisFill::kFilled
                  ? filled_dot_string
                  : open_dot_string;
     }
@@ -1627,7 +1553,7 @@ const AtomicString& ComputedStyle::TextEmphasisMarkString() const {
                           (&kBlackCircleCharacter, 1));
       DEFINE_STATIC_LOCAL(AtomicString, open_circle_string,
                           (&kWhiteCircleCharacter, 1));
-      return GetTextEmphasisFill() == kTextEmphasisFillFilled
+      return GetTextEmphasisFill() == TextEmphasisFill::kFilled
                  ? filled_circle_string
                  : open_circle_string;
     }
@@ -1636,7 +1562,7 @@ const AtomicString& ComputedStyle::TextEmphasisMarkString() const {
                           (&kFisheyeCharacter, 1));
       DEFINE_STATIC_LOCAL(AtomicString, open_double_circle_string,
                           (&kBullseyeCharacter, 1));
-      return GetTextEmphasisFill() == kTextEmphasisFillFilled
+      return GetTextEmphasisFill() == TextEmphasisFill::kFilled
                  ? filled_double_circle_string
                  : open_double_circle_string;
     }
@@ -1645,7 +1571,7 @@ const AtomicString& ComputedStyle::TextEmphasisMarkString() const {
                           (&kBlackUpPointingTriangleCharacter, 1));
       DEFINE_STATIC_LOCAL(AtomicString, open_triangle_string,
                           (&kWhiteUpPointingTriangleCharacter, 1));
-      return GetTextEmphasisFill() == kTextEmphasisFillFilled
+      return GetTextEmphasisFill() == TextEmphasisFill::kFilled
                  ? filled_triangle_string
                  : open_triangle_string;
     }
@@ -1654,7 +1580,7 @@ const AtomicString& ComputedStyle::TextEmphasisMarkString() const {
                           (&kSesameDotCharacter, 1));
       DEFINE_STATIC_LOCAL(AtomicString, open_sesame_string,
                           (&kWhiteSesameDotCharacter, 1));
-      return GetTextEmphasisFill() == kTextEmphasisFillFilled
+      return GetTextEmphasisFill() == TextEmphasisFill::kFilled
                  ? filled_sesame_string
                  : open_sesame_string;
     }
@@ -1681,10 +1607,10 @@ CSSTransitionData& ComputedStyle::AccessTransitions() {
 }
 
 const Font& ComputedStyle::GetFont() const {
-  return style_inherited_data_->font;
+  return FontInternal();
 }
 const FontDescription& ComputedStyle::GetFontDescription() const {
-  return style_inherited_data_->font.GetFontDescription();
+  return FontInternal().GetFontDescription();
 }
 float ComputedStyle::SpecifiedFontSize() const {
   return GetFontDescription().SpecifiedSize();
@@ -1712,28 +1638,28 @@ FontStretch ComputedStyle::GetFontStretch() const {
 }
 
 TextDecoration ComputedStyle::TextDecorationsInEffect() const {
-  if (has_simple_underline_)
-    return kTextDecorationUnderline;
-  if (!rare_inherited_data_->applied_text_decorations)
-    return kTextDecorationNone;
+  if (HasSimpleUnderlineInternal())
+    return TextDecoration::kUnderline;
+  if (!rare_inherited_data_->applied_text_decorations_)
+    return TextDecoration::kNone;
 
-  int decorations = 0;
+  TextDecoration decorations = TextDecoration::kNone;
 
   const Vector<AppliedTextDecoration>& applied = AppliedTextDecorations();
 
   for (size_t i = 0; i < applied.size(); ++i)
     decorations |= applied[i].Lines();
 
-  return static_cast<TextDecoration>(decorations);
+  return decorations;
 }
 
 const Vector<AppliedTextDecoration>& ComputedStyle::AppliedTextDecorations()
     const {
-  if (has_simple_underline_) {
+  if (HasSimpleUnderlineInternal()) {
     DEFINE_STATIC_LOCAL(
         Vector<AppliedTextDecoration>, underline,
         (1, AppliedTextDecoration(
-                kTextDecorationUnderline, kTextDecorationStyleSolid,
+                TextDecoration::kUnderline, kTextDecorationStyleSolid,
                 VisitedDependentColor(CSSPropertyTextDecorationColor))));
     // Since we only have one of these in memory, just update the color before
     // returning.
@@ -1741,16 +1667,16 @@ const Vector<AppliedTextDecoration>& ComputedStyle::AppliedTextDecorations()
         VisitedDependentColor(CSSPropertyTextDecorationColor));
     return underline;
   }
-  if (!rare_inherited_data_->applied_text_decorations) {
+  if (!rare_inherited_data_->applied_text_decorations_) {
     DEFINE_STATIC_LOCAL(Vector<AppliedTextDecoration>, empty, ());
     return empty;
   }
 
-  return rare_inherited_data_->applied_text_decorations->GetVector();
+  return rare_inherited_data_->applied_text_decorations_->GetVector();
 }
 
 StyleInheritedVariables* ComputedStyle::InheritedVariables() const {
-  return rare_inherited_data_->variables.Get();
+  return rare_inherited_data_->variables_.Get();
 }
 
 StyleNonInheritedVariables* ComputedStyle::NonInheritedVariables() const {
@@ -1759,7 +1685,7 @@ StyleNonInheritedVariables* ComputedStyle::NonInheritedVariables() const {
 
 StyleInheritedVariables& ComputedStyle::MutableInheritedVariables() {
   RefPtr<StyleInheritedVariables>& variables =
-      rare_inherited_data_.Access()->variables;
+      rare_inherited_data_.Access()->variables_;
   if (!variables)
     variables = StyleInheritedVariables::Create();
   else if (!variables->HasOneRef())
@@ -1777,29 +1703,28 @@ StyleNonInheritedVariables& ComputedStyle::MutableNonInheritedVariables() {
 
 void ComputedStyle::SetUnresolvedInheritedVariable(
     const AtomicString& name,
-    PassRefPtr<CSSVariableData> value) {
+    RefPtr<CSSVariableData> value) {
   DCHECK(value && value->NeedsVariableResolution());
   MutableInheritedVariables().SetVariable(name, std::move(value));
 }
 
 void ComputedStyle::SetUnresolvedNonInheritedVariable(
     const AtomicString& name,
-    PassRefPtr<CSSVariableData> value) {
+    RefPtr<CSSVariableData> value) {
   DCHECK(value && value->NeedsVariableResolution());
   MutableNonInheritedVariables().SetVariable(name, std::move(value));
 }
 
 void ComputedStyle::SetResolvedUnregisteredVariable(
     const AtomicString& name,
-    PassRefPtr<CSSVariableData> value) {
+    RefPtr<CSSVariableData> value) {
   DCHECK(value && !value->NeedsVariableResolution());
   MutableInheritedVariables().SetVariable(name, std::move(value));
 }
 
-void ComputedStyle::SetResolvedInheritedVariable(
-    const AtomicString& name,
-    PassRefPtr<CSSVariableData> value,
-    const CSSValue* parsed_value) {
+void ComputedStyle::SetResolvedInheritedVariable(const AtomicString& name,
+                                                 RefPtr<CSSVariableData> value,
+                                                 const CSSValue* parsed_value) {
   DCHECK(!!value == !!parsed_value);
   DCHECK(!(value && value->NeedsVariableResolution()));
 
@@ -1810,7 +1735,7 @@ void ComputedStyle::SetResolvedInheritedVariable(
 
 void ComputedStyle::SetResolvedNonInheritedVariable(
     const AtomicString& name,
-    PassRefPtr<CSSVariableData> value,
+    RefPtr<CSSVariableData> value,
     const CSSValue* parsed_value) {
   DCHECK(!!value == !!parsed_value);
   DCHECK(!(value && value->NeedsVariableResolution()));
@@ -1878,15 +1803,15 @@ float ComputedStyle::LetterSpacing() const {
 }
 
 bool ComputedStyle::SetFontDescription(const FontDescription& v) {
-  if (style_inherited_data_->font.GetFontDescription() != v) {
-    style_inherited_data_.Access()->font = Font(v);
+  if (FontInternal().GetFontDescription() != v) {
+    SetFontInternal(Font(v));
     return true;
   }
   return false;
 }
 
 void ComputedStyle::SetFont(const Font& font) {
-  style_inherited_data_.Access()->font = font;
+  SetFontInternal(font);
 }
 
 bool ComputedStyle::HasIdenticalAscentDescentAndLineGap(
@@ -1899,10 +1824,10 @@ bool ComputedStyle::HasIdenticalAscentDescentAndLineGap(
 }
 
 const Length& ComputedStyle::SpecifiedLineHeight() const {
-  return style_inherited_data_->line_height;
+  return LineHeightInternal();
 }
 Length ComputedStyle::LineHeight() const {
-  const Length& lh = style_inherited_data_->line_height;
+  const Length& lh = LineHeightInternal();
   // Unlike getFontDescription().computedSize() and hence fontSize(), this is
   // recalculated on demand as we only store the specified line height.
   // FIXME: Should consider scaling the fixed part of any calc expressions
@@ -1918,7 +1843,7 @@ Length ComputedStyle::LineHeight() const {
 }
 
 void ComputedStyle::SetLineHeight(const Length& specified_line_height) {
-  SET_VAR(style_inherited_data_, line_height, specified_line_height);
+  SetLineHeightInternal(specified_line_height);
 }
 
 int ComputedStyle::ComputedLineHeight() const {
@@ -1966,7 +1891,7 @@ void ComputedStyle::SetLetterSpacing(float letter_spacing) {
 }
 
 void ComputedStyle::SetTextAutosizingMultiplier(float multiplier) {
-  SET_VAR(style_inherited_data_, text_autosizing_multiplier, multiplier);
+  SetTextAutosizingMultiplierInternal(multiplier);
 
   float size = SpecifiedFontSize();
 
@@ -1992,7 +1917,7 @@ void ComputedStyle::SetTextAutosizingMultiplier(float multiplier) {
 void ComputedStyle::AddAppliedTextDecoration(
     const AppliedTextDecoration& decoration) {
   RefPtr<AppliedTextDecorationList>& list =
-      rare_inherited_data_.Access()->applied_text_decorations;
+      rare_inherited_data_.Access()->applied_text_decorations_;
 
   if (!list)
     list = AppliedTextDecorationList::Create();
@@ -2004,7 +1929,7 @@ void ComputedStyle::AddAppliedTextDecoration(
 
 void ComputedStyle::OverrideTextDecorationColors(Color override_color) {
   RefPtr<AppliedTextDecorationList>& list =
-      rare_inherited_data_.Access()->applied_text_decorations;
+      rare_inherited_data_.Access()->applied_text_decorations_;
   DCHECK(list);
   if (!list->HasOneRef())
     list = list->Copy();
@@ -2016,37 +1941,38 @@ void ComputedStyle::OverrideTextDecorationColors(Color override_color) {
 void ComputedStyle::ApplyTextDecorations(
     const Color& parent_text_decoration_color,
     bool override_existing_colors) {
-  if (GetTextDecoration() == kTextDecorationNone && !has_simple_underline_ &&
-      !rare_inherited_data_->applied_text_decorations)
+  if (GetTextDecoration() == TextDecoration::kNone &&
+      !HasSimpleUnderlineInternal() &&
+      !rare_inherited_data_->applied_text_decorations_)
     return;
 
   // If there are any color changes or decorations set by this element, stop
   // using m_hasSimpleUnderline.
   Color current_text_decoration_color =
       VisitedDependentColor(CSSPropertyTextDecorationColor);
-  if (has_simple_underline_ &&
-      (GetTextDecoration() != kTextDecorationNone ||
+  if (HasSimpleUnderlineInternal() &&
+      (GetTextDecoration() != TextDecoration::kNone ||
        current_text_decoration_color != parent_text_decoration_color)) {
-    has_simple_underline_ = false;
+    SetHasSimpleUnderlineInternal(false);
     AddAppliedTextDecoration(AppliedTextDecoration(
-        kTextDecorationUnderline, kTextDecorationStyleSolid,
+        TextDecoration::kUnderline, kTextDecorationStyleSolid,
         parent_text_decoration_color));
   }
   if (override_existing_colors &&
-      rare_inherited_data_->applied_text_decorations)
+      rare_inherited_data_->applied_text_decorations_)
     OverrideTextDecorationColors(current_text_decoration_color);
-  if (GetTextDecoration() == kTextDecorationNone)
+  if (GetTextDecoration() == TextDecoration::kNone)
     return;
-  DCHECK(!has_simple_underline_);
+  DCHECK(!HasSimpleUnderlineInternal());
   // To save memory, we don't use AppliedTextDecoration objects in the common
   // case of a single simple underline of currentColor.
   TextDecoration decoration_lines = GetTextDecoration();
   TextDecorationStyle decoration_style = GetTextDecorationStyle();
-  bool is_simple_underline = decoration_lines == kTextDecorationUnderline &&
+  bool is_simple_underline = decoration_lines == TextDecoration::kUnderline &&
                              decoration_style == kTextDecorationStyleSolid &&
                              TextDecorationColor().IsCurrentColor();
-  if (is_simple_underline && !rare_inherited_data_->applied_text_decorations) {
-    has_simple_underline_ = true;
+  if (is_simple_underline && !rare_inherited_data_->applied_text_decorations_) {
+    SetHasSimpleUnderlineInternal(true);
     return;
   }
 
@@ -2055,19 +1981,20 @@ void ComputedStyle::ApplyTextDecorations(
 }
 
 void ComputedStyle::ClearAppliedTextDecorations() {
-  has_simple_underline_ = false;
+  SetHasSimpleUnderlineInternal(false);
 
-  if (rare_inherited_data_->applied_text_decorations)
-    rare_inherited_data_.Access()->applied_text_decorations = nullptr;
+  if (rare_inherited_data_->applied_text_decorations_)
+    rare_inherited_data_.Access()->applied_text_decorations_ = nullptr;
 }
 
 void ComputedStyle::RestoreParentTextDecorations(
     const ComputedStyle& parent_style) {
-  has_simple_underline_ = parent_style.has_simple_underline_;
-  if (rare_inherited_data_->applied_text_decorations !=
-      parent_style.rare_inherited_data_->applied_text_decorations)
-    rare_inherited_data_.Access()->applied_text_decorations =
-        parent_style.rare_inherited_data_->applied_text_decorations;
+  SetHasSimpleUnderlineInternal(parent_style.HasSimpleUnderlineInternal());
+  if (rare_inherited_data_->applied_text_decorations_ !=
+      parent_style.rare_inherited_data_->applied_text_decorations_) {
+    rare_inherited_data_.Access()->applied_text_decorations_ =
+        parent_style.rare_inherited_data_->applied_text_decorations_;
+  }
 }
 
 void ComputedStyle::ClearMultiCol() {
@@ -2098,7 +2025,7 @@ StyleColor ComputedStyle::DecorationColorIncludingFallback(
 Color ComputedStyle::ColorIncludingFallback(int color_property,
                                             bool visited_link) const {
   StyleColor result(StyleColor::CurrentColor());
-  EBorderStyle border_style = kBorderStyleNone;
+  EBorderStyle border_style = EBorderStyle::kNone;
   switch (color_property) {
     case CSSPropertyBackgroundColor:
       result = visited_link ? VisitedLinkBackgroundColor() : BackgroundColor();
@@ -2174,10 +2101,10 @@ Color ComputedStyle::ColorIncludingFallback(int color_property,
 
   // FIXME: Treating styled borders with initial color differently causes
   // problems, see crbug.com/316559, crbug.com/276231
-  if (!visited_link &&
-      (border_style == kBorderStyleInset ||
-       border_style == kBorderStyleOutset ||
-       border_style == kBorderStyleRidge || border_style == kBorderStyleGroove))
+  if (!visited_link && (border_style == EBorderStyle::kInset ||
+                        border_style == EBorderStyle::kOutset ||
+                        border_style == EBorderStyle::kRidge ||
+                        border_style == EBorderStyle::kGroove))
     return Color(238, 238, 238);
   return visited_link ? VisitedLinkColor() : GetColor();
 }
@@ -2206,7 +2133,7 @@ Color ComputedStyle::VisitedDependentColor(int color_property) const {
                unvisited_color.Alpha());
 }
 
-const BorderValue& ComputedStyle::BorderBefore() const {
+BorderValue ComputedStyle::BorderBefore() const {
   switch (GetWritingMode()) {
     case WritingMode::kHorizontalTb:
       return BorderTop();
@@ -2219,7 +2146,7 @@ const BorderValue& ComputedStyle::BorderBefore() const {
   return BorderTop();
 }
 
-const BorderValue& ComputedStyle::BorderAfter() const {
+BorderValue ComputedStyle::BorderAfter() const {
   switch (GetWritingMode()) {
     case WritingMode::kHorizontalTb:
       return BorderBottom();
@@ -2232,13 +2159,13 @@ const BorderValue& ComputedStyle::BorderAfter() const {
   return BorderBottom();
 }
 
-const BorderValue& ComputedStyle::BorderStart() const {
+BorderValue ComputedStyle::BorderStart() const {
   if (IsHorizontalWritingMode())
     return IsLeftToRightDirection() ? BorderLeft() : BorderRight();
   return IsLeftToRightDirection() ? BorderTop() : BorderBottom();
 }
 
-const BorderValue& ComputedStyle::BorderEnd() const {
+BorderValue ComputedStyle::BorderEnd() const {
   if (IsHorizontalWritingMode())
     return IsLeftToRightDirection() ? BorderRight() : BorderLeft();
   return IsLeftToRightDirection() ? BorderBottom() : BorderTop();
@@ -2318,7 +2245,7 @@ void ComputedStyle::SetMarginEnd(const Length& margin) {
   }
 }
 
-void ComputedStyle::SetOffsetPath(PassRefPtr<StylePath> path) {
+void ComputedStyle::SetOffsetPath(RefPtr<BasicShape> path) {
   rare_non_inherited_data_.Access()->transform_.Access()->motion_.path_ =
       std::move(path);
 }
@@ -2353,7 +2280,7 @@ bool ComputedStyle::ColumnRuleEquivalent(
 
 TextEmphasisMark ComputedStyle::GetTextEmphasisMark() const {
   TextEmphasisMark mark =
-      static_cast<TextEmphasisMark>(rare_inherited_data_->text_emphasis_mark);
+      static_cast<TextEmphasisMark>(rare_inherited_data_->text_emphasis_mark_);
   if (mark != kTextEmphasisMarkAuto)
     return mark;
 
@@ -2390,33 +2317,33 @@ LayoutRectOutsets ComputedStyle::ImageOutsets(
 }
 
 void ComputedStyle::SetBorderImageSource(StyleImage* image) {
-  if (surround_->border_.image_.GetImage() == image)
+  if (BorderImage().GetImage() == image)
     return;
-  surround_.Access()->border_.image_.SetImage(image);
+  MutableBorderImageInternal().SetImage(image);
 }
 
 void ComputedStyle::SetBorderImageSlices(const LengthBox& slices) {
-  if (surround_->border_.image_.ImageSlices() == slices)
+  if (BorderImage().ImageSlices() == slices)
     return;
-  surround_.Access()->border_.image_.SetImageSlices(slices);
+  MutableBorderImageInternal().SetImageSlices(slices);
 }
 
 void ComputedStyle::SetBorderImageSlicesFill(bool fill) {
-  if (surround_->border_.image_.Fill() == fill)
+  if (BorderImage().Fill() == fill)
     return;
-  surround_.Access()->border_.image_.SetFill(fill);
+  MutableBorderImageInternal().SetFill(fill);
 }
 
 void ComputedStyle::SetBorderImageWidth(const BorderImageLengthBox& slices) {
-  if (surround_->border_.image_.BorderSlices() == slices)
+  if (BorderImage().BorderSlices() == slices)
     return;
-  surround_.Access()->border_.image_.SetBorderSlices(slices);
+  MutableBorderImageInternal().SetBorderSlices(slices);
 }
 
 void ComputedStyle::SetBorderImageOutset(const BorderImageLengthBox& outset) {
-  if (surround_->border_.image_.Outset() == outset)
+  if (BorderImage().Outset() == outset)
     return;
-  surround_.Access()->border_.image_.SetOutset(outset);
+  MutableBorderImageInternal().SetOutset(outset);
 }
 
 bool ComputedStyle::BorderObscuresBackground() const {

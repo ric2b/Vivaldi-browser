@@ -52,6 +52,29 @@ SDK.RuntimeModel = class extends SDK.SDKModel {
   }
 
   /**
+   * @param {string} code
+   * @return {string}
+   */
+  static wrapObjectLiteralExpressionIfNeeded(code) {
+    // Only parenthesize what appears to be an object literal.
+    if (!(/^\s*\{/.test(code) && /\}\s*$/.test(code)))
+      return code;
+
+    try {
+      // Check if the code can be interpreted as an expression.
+      Function('return ' + code + ';');
+
+      // No syntax error! Does it work parenthesized?
+      var wrappedCode = '(' + code + ')';
+      Function(wrappedCode);
+
+      return wrappedCode;
+    } catch (e) {
+      return code;
+    }
+  }
+
+  /**
    * @return {!SDK.DebuggerModel}
    */
   debuggerModel() {
@@ -224,22 +247,20 @@ SDK.RuntimeModel = class extends SDK.SDKModel {
    * @param {number} executionContextId
    * @param {function(!Protocol.Runtime.ScriptId=, ?Protocol.Runtime.ExceptionDetails=)=} callback
    */
-  compileScript(expression, sourceURL, persistScript, executionContextId, callback) {
-    this._agent.compileScript(expression, sourceURL, persistScript, executionContextId, innerCallback);
+  async compileScript(expression, sourceURL, persistScript, executionContextId, callback) {
+    var response = await this._agent.invoke_compileScript({
+      expression: expression,
+      sourceURL: sourceURL,
+      persistScript: persistScript,
+      executionContextId: executionContextId
+    });
 
-    /**
-     * @param {?Protocol.Error} error
-     * @param {!Protocol.Runtime.ScriptId=} scriptId
-     * @param {?Protocol.Runtime.ExceptionDetails=} exceptionDetails
-     */
-    function innerCallback(error, scriptId, exceptionDetails) {
-      if (error) {
-        console.error(error);
-        return;
-      }
-      if (callback)
-        callback(scriptId, exceptionDetails);
+    if (response[Protocol.Error]) {
+      console.error(response[Protocol.Error]);
+      return;
     }
+    if (callback)
+      callback(response.scriptId, response.exceptionDetails);
   }
 
   /**
@@ -253,7 +274,10 @@ SDK.RuntimeModel = class extends SDK.SDKModel {
    * @param {boolean=} awaitPromise
    * @param {function(?Protocol.Runtime.RemoteObject, ?Protocol.Runtime.ExceptionDetails=)=} callback
    */
-  runScript(
+  async runScript(
+      scriptId, executionContextId, objectGroup, silent, includeCommandLineAPI, returnByValue, generatePreview,
+      awaitPromise, callback) {
+    var response = await this._agent.invoke_runScript({
       scriptId,
       executionContextId,
       objectGroup,
@@ -261,25 +285,15 @@ SDK.RuntimeModel = class extends SDK.SDKModel {
       includeCommandLineAPI,
       returnByValue,
       generatePreview,
-      awaitPromise,
-      callback) {
-    this._agent.runScript(
-        scriptId, executionContextId, objectGroup, silent, includeCommandLineAPI, returnByValue, generatePreview,
-        awaitPromise, innerCallback);
+      awaitPromise
+    });
 
-    /**
-     * @param {?Protocol.Error} error
-     * @param {!Protocol.Runtime.RemoteObject} result
-     * @param {!Protocol.Runtime.ExceptionDetails=} exceptionDetails
-     */
-    function innerCallback(error, result, exceptionDetails) {
-      if (error) {
-        console.error(error);
-        return;
-      }
-      if (callback)
-        callback(result, exceptionDetails);
+    if (response[Protocol.Error]) {
+      console.error(response[Protocol.Error]);
+      return;
     }
+    if (callback)
+      callback(response.result, response.exceptionDetails);
   }
 
   /**
@@ -387,6 +401,27 @@ SDK.RuntimeModel = class extends SDK.SDKModel {
     var consoleAPICall =
         {type: type, args: args, executionContextId: executionContextId, timestamp: timestamp, stackTrace: stackTrace};
     this.dispatchEventToListeners(SDK.RuntimeModel.Events.ConsoleAPICalled, consoleAPICall);
+  }
+
+  /**
+   * @param {!Protocol.Runtime.ScriptId} scriptId
+   * @return {number}
+   */
+  executionContextIdForScriptId(scriptId) {
+    var script = this.debuggerModel().scriptForId(scriptId);
+    return script ? script.executionContextId : 0;
+  }
+
+  /**
+   * @param {!Protocol.Runtime.StackTrace} stackTrace
+   * @return {number}
+   */
+  executionContextForStackTrace(stackTrace) {
+    while (stackTrace && !stackTrace.callFrames.length)
+      stackTrace = stackTrace.parent;
+    if (!stackTrace || !stackTrace.callFrames.length)
+      return 0;
+    return this.executionContextIdForScriptId(stackTrace.callFrames[0].scriptId);
   }
 };
 
@@ -602,37 +637,32 @@ SDK.ExecutionContext = class {
    * @param {boolean} userGesture
    * @param {function(?SDK.RemoteObject, !Protocol.Runtime.ExceptionDetails=, string=)} callback
    */
-  _evaluateGlobal(
-      expression,
-      objectGroup,
-      includeCommandLineAPI,
-      silent,
-      returnByValue,
-      generatePreview,
-      userGesture,
-      callback) {
+  async _evaluateGlobal(
+      expression, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview, userGesture, callback) {
     if (!expression) {
       // There is no expression, so the completion should happen against global properties.
       expression = 'this';
     }
 
-    /**
-     * @this {SDK.ExecutionContext}
-     * @param {?Protocol.Error} error
-     * @param {!Protocol.Runtime.RemoteObject} result
-     * @param {!Protocol.Runtime.ExceptionDetails=} exceptionDetails
-     */
-    function evalCallback(error, result, exceptionDetails) {
-      if (error) {
-        console.error(error);
-        callback(null, undefined, error);
-        return;
-      }
-      callback(this.runtimeModel.createRemoteObject(result), exceptionDetails);
+    var response = await this.runtimeModel._agent.invoke_evaluate({
+      expression: expression,
+      objectGroup: objectGroup,
+      includeCommandLineAPI: includeCommandLineAPI,
+      silent: silent,
+      contextId: this.id,
+      returnByValue: returnByValue,
+      generatePreview: generatePreview,
+      userGesture: userGesture,
+      awaitPromise: false
+    });
+
+    var error = response[Protocol.Error];
+    if (error) {
+      console.error(error);
+      callback(null, undefined, error);
+      return;
     }
-    this.runtimeModel._agent.evaluate(
-        expression, objectGroup, includeCommandLineAPI, silent, this.id, returnByValue, generatePreview, userGesture,
-        false, evalCallback.bind(this));
+    callback(this.runtimeModel.createRemoteObject(response.result), response.exceptionDetails);
   }
 
   /**
@@ -665,217 +695,4 @@ SDK.ExecutionContext = class {
     var parsedUrl = this.origin.asParsedURL();
     this._label = parsedUrl ? parsedUrl.lastPathComponentWithFragment() : '';
   }
-};
-
-
-SDK.EventListener = class {
-  /**
-   * @param {!SDK.RuntimeModel} runtimeModel
-   * @param {!SDK.RemoteObject} eventTarget
-   * @param {string} type
-   * @param {boolean} useCapture
-   * @param {boolean} passive
-   * @param {boolean} once
-   * @param {?SDK.RemoteObject} handler
-   * @param {?SDK.RemoteObject} originalHandler
-   * @param {!SDK.DebuggerModel.Location} location
-   * @param {?SDK.RemoteObject} customRemoveFunction
-   * @param {!SDK.EventListener.Origin=} origin
-   */
-  constructor(
-      runtimeModel, eventTarget, type, useCapture, passive, once, handler, originalHandler, location,
-      customRemoveFunction, origin) {
-    this._runtimeModel = runtimeModel;
-    this._eventTarget = eventTarget;
-    this._type = type;
-    this._useCapture = useCapture;
-    this._passive = passive;
-    this._once = once;
-    this._handler = handler;
-    this._originalHandler = originalHandler || handler;
-    this._location = location;
-    var script = location.script();
-    this._sourceURL = script ? script.contentURL() : '';
-    this._customRemoveFunction = customRemoveFunction;
-    this._origin = origin || SDK.EventListener.Origin.Raw;
-  }
-
-  /**
-   * @return {!SDK.RuntimeModel}
-   */
-  runtimeModel() {
-    return this._runtimeModel;
-  }
-
-  /**
-   * @return {string}
-   */
-  type() {
-    return this._type;
-  }
-
-  /**
-   * @return {boolean}
-   */
-  useCapture() {
-    return this._useCapture;
-  }
-
-  /**
-   * @return {boolean}
-   */
-  passive() {
-    return this._passive;
-  }
-
-  /**
-   * @return {boolean}
-   */
-  once() {
-    return this._once;
-  }
-
-  /**
-   * @return {?SDK.RemoteObject}
-   */
-  handler() {
-    return this._handler;
-  }
-
-  /**
-   * @return {!SDK.DebuggerModel.Location}
-   */
-  location() {
-    return this._location;
-  }
-
-  /**
-   * @return {string}
-   */
-  sourceURL() {
-    return this._sourceURL;
-  }
-
-  /**
-   * @return {?SDK.RemoteObject}
-   */
-  originalHandler() {
-    return this._originalHandler;
-  }
-
-  /**
-   * @return {boolean}
-   */
-  canRemove() {
-    return !!this._customRemoveFunction || this._origin !== SDK.EventListener.Origin.FrameworkUser;
-  }
-
-  /**
-   * @return {!Promise<undefined>}
-   */
-  remove() {
-    if (!this.canRemove())
-      return Promise.resolve();
-
-    if (this._origin !== SDK.EventListener.Origin.FrameworkUser) {
-      /**
-       * @param {string} type
-       * @param {function()} listener
-       * @param {boolean} useCapture
-       * @this {Object}
-       * @suppressReceiverCheck
-       */
-      function removeListener(type, listener, useCapture) {
-        this.removeEventListener(type, listener, useCapture);
-        if (this['on' + type])
-          this['on' + type] = undefined;
-      }
-
-      return /** @type {!Promise<undefined>} */ (this._eventTarget.callFunctionPromise(removeListener, [
-        SDK.RemoteObject.toCallArgument(this._type), SDK.RemoteObject.toCallArgument(this._originalHandler),
-        SDK.RemoteObject.toCallArgument(this._useCapture)
-      ]));
-    }
-
-    return this._customRemoveFunction
-        .callFunctionPromise(
-            callCustomRemove,
-            [
-              SDK.RemoteObject.toCallArgument(this._type),
-              SDK.RemoteObject.toCallArgument(this._originalHandler),
-              SDK.RemoteObject.toCallArgument(this._useCapture),
-              SDK.RemoteObject.toCallArgument(this._passive),
-            ])
-        .then(() => undefined);
-
-    /**
-     * @param {string} type
-     * @param {function()} listener
-     * @param {boolean} useCapture
-     * @param {boolean} passive
-     * @this {Function}
-     * @suppressReceiverCheck
-     */
-    function callCustomRemove(type, listener, useCapture, passive) {
-      this.call(null, type, listener, useCapture, passive);
-    }
-  }
-
-  /**
-   * @return {boolean}
-   */
-  canTogglePassive() {
-    return this._origin !== SDK.EventListener.Origin.FrameworkUser;
-  }
-
-  /**
-   * @return {!Promise<undefined>}
-   */
-  togglePassive() {
-    return /** @type {!Promise<undefined>} */ (this._eventTarget.callFunctionPromise(callTogglePassive, [
-      SDK.RemoteObject.toCallArgument(this._type),
-      SDK.RemoteObject.toCallArgument(this._originalHandler),
-      SDK.RemoteObject.toCallArgument(this._useCapture),
-      SDK.RemoteObject.toCallArgument(this._passive),
-    ]));
-
-    /**
-     * @param {string} type
-     * @param {function()} listener
-     * @param {boolean} useCapture
-     * @param {boolean} passive
-     * @this {Object}
-     * @suppressReceiverCheck
-     */
-    function callTogglePassive(type, listener, useCapture, passive) {
-      this.removeEventListener(type, listener, {capture: useCapture});
-      this.addEventListener(type, listener, {capture: useCapture, passive: !passive});
-    }
-  }
-
-  /**
-   * @return {!SDK.EventListener.Origin}
-   */
-  origin() {
-    return this._origin;
-  }
-
-  markAsFramework() {
-    this._origin = SDK.EventListener.Origin.Framework;
-  }
-
-  /**
-   * @return {boolean}
-   */
-  isScrollBlockingType() {
-    return this._type === 'touchstart' || this._type === 'touchmove' || this._type === 'mousewheel' ||
-        this._type === 'wheel';
-  }
-};
-
-/** @enum {string} */
-SDK.EventListener.Origin = {
-  Raw: 'Raw',
-  Framework: 'Framework',
-  FrameworkUser: 'FrameworkUser'
 };

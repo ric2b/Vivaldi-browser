@@ -6,6 +6,7 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="2147651015520127414">Chrome је потврдио да је <ph name="ISSUER" /> издао сертификат овог веб-сајта.</translation>
 <translation id="2334084861041072223">Ауторска права <ph name="YEAR" />. Google Inc. Сва права задржана.</translation>
+<translation id="2342981853652716282">Пријавите се у Chrome да би вам обележивачи, лозинке и други садржај били доступни на свим уређајима.</translation>
 <translation id="2347208864470321755">Када је ова функција укључена, Chrome ће нудити да преведе странице написане на другим језицима помоћу Google преводиоца. <ph name="BEGIN_LINK" />Сазнајте више<ph name="END_LINK" /></translation>
 <translation id="2441696206556358796">Да бисте сачували слике, додирните Подешавања да бисте омогућили Chrome-у да користи слике</translation>
 <translation id="2576431527583832481">Chrome је управо постао бољи! Доступна је нова верзија.</translation>
@@ -16,8 +17,6 @@
 <translation id="3196546062792660320">Chrome вам штеди време тако што поставља налоге на веб. Можете да додајете или уклањате налоге у подешавањима.</translation>
 <translation id="3282568296779691940">Пријављивање у Chrome</translation>
 <translation id="3345341804167540816">Користите Chrome свуда</translation>
-<translation id="3531621179462011934">Да би вам подешавања била доступна на свим уређајима, пријавите се у Chrome.</translation>
-<translation id="3601960512121168237">Допада вам се Chrome? <ph name="BEGIN_LINK" />Преместите га на док<ph name="END_LINK" /></translation>
 <translation id="3678774398092457402">Да ли желите да Chrome сачува лозинку за овај сајт?</translation>
 <translation id="384394811301901750">Google Chrome тренутно не може да користи камеру</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
@@ -25,6 +24,7 @@
 <translation id="3988789688219830639">Google Chrome не може да приступа сликама или видео снимцима. Омогућите приступ у iOS Settings (Подешавања iOS-а) &gt; Privacy (Приватност) &gt; Photos (Слике).</translation>
 <translation id="4099578267706723511">Побољшајте Chrome слањем статистике коришћења и извештаја о отказивању Google-у.</translation>
 <translation id="415767770115540173">Побољшајте Google доживљај у Chrome-у на основу локације.</translation>
+<translation id="4248297594476034182">Да би вам картице биле доступне на свим уређајима, пријавите се у Chrome.</translation>
 <translation id="424864128008805179">Желите ли да се одјавите из Chrome-а?</translation>
 <translation id="4523886039239821078">Неки програмски додаци изазивају отказивање Chrome-а. Деинсталирајте:</translation>
 <translation id="4615174829807303908">Одјављујете се са налога којим управља <ph name="SIGNOUT_MANAGED_DOMAIN" />. То ће избрисати Chrome податке са овог уређаја, али ће подаци остати на Google налогу.</translation>
@@ -43,7 +43,6 @@
 <translation id="7172660552945675509">Савет: <ph name="BEGIN_LINK" />Преместите Chrome на док<ph name="END_LINK" /></translation>
 <translation id="7265369419224458312">Овде приступајте картицама које сте отворили на рачунару. Само отворите Chrome на рачунару, идите на мени и изаберите „Пријави ме у Chrome...“</translation>
 <translation id="728488472449859922">Укључите Google Chrome QR скенер</translation>
-<translation id="7311395200710390977">За бржи приступ <ph name="BEGIN_LINK" />преместите Chrome на док<ph name="END_LINK" /></translation>
 <translation id="7400722733683201933">О програму Google Chrome</translation>
 <translation id="7437998757836447326">Одјављивање из Chrome-а</translation>
 <translation id="756809126120519699">Chrome подаци су обрисани</translation>

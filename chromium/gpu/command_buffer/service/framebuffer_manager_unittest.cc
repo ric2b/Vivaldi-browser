@@ -11,6 +11,7 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder_mock.h"
 #include "gpu/command_buffer/service/gpu_service_test.h"
 #include "gpu/command_buffer/service/renderbuffer_manager.h"
+#include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/command_buffer/service/test_helper.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -44,7 +45,7 @@ class FramebufferManagerTest : public GpuServiceTest {
     texture_manager_.reset(new TextureManager(
         nullptr, feature_info_.get(), kMaxTextureSize, kMaxCubemapSize,
         kMaxRectangleTextureSize, kMax3DTextureSize, kMaxArrayTextureLayers,
-        kUseDefaultTextures, nullptr));
+        kUseDefaultTextures, nullptr, &discardable_manager_));
     renderbuffer_manager_.reset(new RenderbufferManager(nullptr,
                                                         kMaxRenderbufferSize,
                                                         kMaxSamples,
@@ -59,6 +60,7 @@ class FramebufferManagerTest : public GpuServiceTest {
  protected:
   FramebufferManager manager_;
   scoped_refptr<FeatureInfo> feature_info_;
+  ServiceDiscardableManager discardable_manager_;
   std::unique_ptr<TextureManager> texture_manager_;
   std::unique_ptr<RenderbufferManager> renderbuffer_manager_;
 };
@@ -121,7 +123,7 @@ class FramebufferInfoTestBase : public GpuServiceTest {
     texture_manager_.reset(new TextureManager(
         nullptr, feature_info_.get(), kMaxTextureSize, kMaxCubemapSize,
         kMaxRectangleTextureSize, kMax3DTextureSize, kMaxArrayTextureLayers,
-        kUseDefaultTextures, nullptr));
+        kUseDefaultTextures, nullptr, &discardable_manager_));
     renderbuffer_manager_.reset(new RenderbufferManager(nullptr,
                                                         kMaxRenderbufferSize,
                                                         kMaxSamples,
@@ -158,6 +160,7 @@ class FramebufferInfoTestBase : public GpuServiceTest {
   FramebufferManager manager_;
   Framebuffer* framebuffer_;
   scoped_refptr<FeatureInfo> feature_info_;
+  ServiceDiscardableManager discardable_manager_;
   std::unique_ptr<TextureManager> texture_manager_;
   std::unique_ptr<RenderbufferManager> renderbuffer_manager_;
   std::unique_ptr<MockErrorState> error_state_;
@@ -1646,7 +1649,43 @@ TEST_F(FramebufferInfoES3Test, ReadBuffer) {
   EXPECT_TRUE(framebuffer_->GetReadBufferAttachment());
 }
 
+TEST_F(FramebufferInfoES3Test, AttachNonLevel0Texture) {
+  const GLuint kTextureClientId = 33;
+  const GLuint kTextureServiceId = 333;
+  const GLint kBorder = 0;
+  const GLenum kType = GL_UNSIGNED_BYTE;
+  const GLsizei kWidth = 16;
+  const GLsizei kHeight = 32;
+  const GLint kLevel = 2;
+  const GLenum kInternalFormat = GL_RGBA8;
+  const GLenum kFormat = GL_RGBA;
+  const GLenum kTarget = GL_TEXTURE_2D;
+  const GLsizei kSamples = 0;
+
+  texture_manager_->CreateTexture(kTextureClientId, kTextureServiceId);
+  scoped_refptr<TextureRef> texture(
+      texture_manager_->GetTexture(kTextureClientId));
+  ASSERT_TRUE(texture.get());
+
+  texture_manager_->SetTarget(texture.get(), kTarget);
+  texture_manager_->SetLevelInfo(texture.get(), kTarget, kLevel,
+                                 kInternalFormat, kWidth, kHeight, 0, kBorder,
+                                 kFormat, kType, gfx::Rect());
+
+  framebuffer_->AttachTexture(GL_COLOR_ATTACHMENT0, texture.get(), kTarget,
+                              kLevel, kSamples);
+  EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT),
+            framebuffer_->IsPossiblyComplete(feature_info_.get()));
+
+  EXPECT_CALL(*gl_, TexParameteri(kTarget, GL_TEXTURE_BASE_LEVEL, kLevel))
+      .Times(1)
+      .RetiresOnSaturation();
+  texture_manager_->SetParameteri("FramebufferInfoTest.AttachNonLevel0Texturer",
+                                  error_state_.get(), texture.get(),
+                                  GL_TEXTURE_BASE_LEVEL, kLevel);
+  EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_COMPLETE),
+            framebuffer_->IsPossiblyComplete(feature_info_.get()));
+}
+
 }  // namespace gles2
 }  // namespace gpu
-
-

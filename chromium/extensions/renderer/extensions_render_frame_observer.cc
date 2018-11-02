@@ -12,7 +12,7 @@
 #include "content/public/renderer/render_view.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/stack_frame.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
@@ -90,6 +90,7 @@ ExtensionsRenderFrameObserver::~ExtensionsRenderFrameObserver() {
 }
 
 void ExtensionsRenderFrameObserver::BindAppWindowRequest(
+    const service_manager::BindSourceInfo& source_info,
     mojom::AppWindowRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }

@@ -7,6 +7,8 @@
 #include <cstddef>
 
 #include "base/logging.h"
+#include "chromeos/network/network_type_pattern.h"
+#include "chromeos/network/tether_constants.h"
 #include "components/onc/onc_constants.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -20,15 +22,17 @@ namespace {
 
 const FieldTranslationEntry eap_fields[] = {
     {::onc::eap::kAnonymousIdentity, shill::kEapAnonymousIdentityProperty},
+    // This field is converted during translation, see onc_translator_*.
+    // { ::onc::eap::kClientCertPKCS11Id, shill::kEapCertIdProperty },
     {::onc::eap::kIdentity, shill::kEapIdentityProperty},
     // This field is converted during translation, see onc_translator_*.
     // { ::onc::eap::kInner, shill::kEapPhase2AuthProperty },
-
     // This field is converted during translation, see onc_translator_*.
     // { ::onc::eap::kOuter, shill::kEapMethodProperty },
     {::onc::eap::kPassword, shill::kEapPasswordProperty},
     {::onc::eap::kSaveCredentials, shill::kSaveCredentialsProperty},
     {::onc::eap::kServerCAPEMs, shill::kEapCaCertPemProperty},
+    {::onc::eap::kSubjectMatch, shill::kEapSubjectMatchProperty},
     {::onc::eap::kUseSystemCAs, shill::kEapUseSystemCasProperty},
     {::onc::eap::kUseProactiveKeyCaching,
      shill::kEapUseProactiveKeyCachingProperty},
@@ -107,6 +111,13 @@ const FieldTranslationEntry vpn_fields[] = {
     // These fields are converted during translation, see onc_translator_*.
     // { ::onc::vpn::kHost, shill::kProviderHostProperty},
     // { ::onc::vpn::kType, shill::kProviderTypeProperty },
+    {NULL}};
+
+const FieldTranslationEntry tether_fields[] = {
+    {::onc::tether::kBatteryPercentage, kTetherBatteryPercentage},
+    {::onc::tether::kCarrier, kTetherCarrier},
+    {::onc::tether::kHasConnectedToHost, kTetherHasConnectedToHost},
+    {::onc::tether::kSignalStrength, kTetherSignalStrength},
     {NULL}};
 
 const FieldTranslationEntry wifi_fields[] = {
@@ -239,6 +250,8 @@ const OncValueTranslationEntry onc_value_translation_table[] = {
     {&kOpenVPNSignature, openvpn_fields},
     {&kVerifyX509Signature, verify_x509_fields},
     {&kVPNSignature, vpn_fields},
+    {&kTetherSignature, tether_fields},
+    {&kTetherWithStateSignature, tether_fields},
     {&kWiFiSignature, wifi_fields},
     {&kWiFiWithStateSignature, wifi_fields},
     {&kWiMAXSignature, wimax_fields},
@@ -283,6 +296,7 @@ const StringTranslationEntry kNetworkTypeTable[] = {
     {::onc::network_type::kWimax, shill::kTypeWimax},
     {::onc::network_type::kCellular, shill::kTypeCellular},
     {::onc::network_type::kVPN, shill::kTypeVPN},
+    {::onc::network_type::kTether, kTypeTether},
     {NULL}};
 
 const StringTranslationEntry kVPNTypeTable[] = {
@@ -308,17 +322,18 @@ const StringTranslationEntry kEAPOuterTable[] = {
 
 // Translation of the EAP.Inner field in case of EAP.Outer == PEAP
 const StringTranslationEntry kEAP_PEAP_InnerTable[] = {
+    {::onc::eap::kGTC, shill::kEapPhase2AuthPEAPGTC},
     {::onc::eap::kMD5, shill::kEapPhase2AuthPEAPMD5},
     {::onc::eap::kMSCHAPv2, shill::kEapPhase2AuthPEAPMSCHAPV2},
-    {::onc::eap::kGTC, shill::kEapPhase2AuthPEAPGTC},
     {NULL}};
 
 // Translation of the EAP.Inner field in case of EAP.Outer == TTLS
 const StringTranslationEntry kEAP_TTLS_InnerTable[] = {
+    {::onc::eap::kGTC, shill::kEapPhase2AuthTTLSGTC},
     {::onc::eap::kMD5, shill::kEapPhase2AuthTTLSMD5},
+    {::onc::eap::kMSCHAP, shill::kEapPhase2AuthTTLSMSCHAP},
     {::onc::eap::kMSCHAPv2, shill::kEapPhase2AuthTTLSMSCHAPV2},
     {::onc::eap::kPAP, shill::kEapPhase2AuthTTLSPAP},
-    {::onc::eap::kGTC, shill::kEapPhase2AuthTTLSGTC},
     {NULL}};
 
 const StringTranslationEntry kActivationStateTable[] = {

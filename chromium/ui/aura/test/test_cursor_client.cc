@@ -5,6 +5,7 @@
 #include "ui/aura/test/test_cursor_client.h"
 
 #include "ui/aura/client/cursor_client_observer.h"
+#include "ui/display/display.h"
 
 namespace aura {
 namespace test {
@@ -28,7 +29,7 @@ void TestCursorClient::SetCursor(gfx::NativeCursor cursor) {
 }
 
 gfx::NativeCursor TestCursorClient::GetCursor() const {
-  return ui::kCursorNull;
+  return ui::CursorType::kNull;
 }
 
 void TestCursorClient::ShowCursor() {
@@ -67,6 +68,11 @@ bool TestCursorClient::IsMouseEventsEnabled() const {
 }
 
 void TestCursorClient::SetDisplay(const display::Display& display) {}
+
+const display::Display& TestCursorClient::GetDisplay() const {
+  static const display::Display display;
+  return display;
+}
 
 void TestCursorClient::LockCursor() {
   cursor_lock_count_++;

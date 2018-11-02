@@ -31,6 +31,7 @@
 #include "public/web/WebNode.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/dom/AXObjectCacheBase.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
@@ -41,13 +42,12 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/events/Event.h"
+#include "core/exported/WebPluginContainerBase.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLElement.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutPart.h"
-#include "modules/accessibility/AXObject.h"
-#include "modules/accessibility/AXObjectCacheImpl.h"
-#include "platform/FrameViewBase.h"
+#include "modules/accessibility/AXObjectImpl.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebString.h"
 #include "public/web/WebAXObject.h"
@@ -55,10 +55,6 @@
 #include "public/web/WebDocument.h"
 #include "public/web/WebElement.h"
 #include "public/web/WebElementCollection.h"
-#include "public/web/WebPluginContainer.h"
-#include "web/LocalFrameClientImpl.h"
-#include "web/WebLocalFrameImpl.h"
-#include "web/WebPluginContainerImpl.h"
 
 namespace blink {
 
@@ -131,7 +127,7 @@ bool WebNode::IsContentEditable() const {
 }
 
 bool WebNode::IsInsideFocusableElementOrARIAWidget() const {
-  return AXObject::IsInsideFocusableElementOrARIAWidget(
+  return AXObjectImpl::IsInsideFocusableElementOrARIAWidget(
       *this->ConstUnwrap<Node>());
 }
 
@@ -177,31 +173,14 @@ bool WebNode::Focused() const {
   return private_->IsFocused();
 }
 
-WebPluginContainer* WebNode::PluginContainerFromNode(const Node* node) {
-  if (!node)
-    return nullptr;
-
-  if (!isHTMLObjectElement(node) && !isHTMLEmbedElement(node))
-    return nullptr;
-
-  LayoutObject* object = node->GetLayoutObject();
-  if (object && object->IsLayoutPart()) {
-    PluginView* plugin = ToLayoutPart(object)->Plugin();
-    if (plugin && plugin->IsPluginContainer())
-      return ToWebPluginContainerImpl(plugin);
-  }
-
-  return nullptr;
-}
-
 WebPluginContainer* WebNode::PluginContainer() const {
-  return PluginContainerFromNode(ConstUnwrap<Node>());
+  return private_->GetWebPluginContainerBase();
 }
 
 WebAXObject WebNode::AccessibilityObject() {
   WebDocument web_document = GetDocument();
   const Document* doc = GetDocument().ConstUnwrap<Document>();
-  AXObjectCacheImpl* cache = ToAXObjectCacheImpl(doc->ExistingAXObjectCache());
+  AXObjectCacheBase* cache = ToAXObjectCacheBase(doc->ExistingAXObjectCache());
   Node* node = Unwrap<Node>();
   return cache ? WebAXObject(cache->Get(node)) : WebAXObject();
 }

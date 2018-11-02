@@ -23,6 +23,7 @@
 
 #if defined(OS_WIN)
 #include <windows.h>
+#include <objbase.h>
 #include <wpcapi.h>
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -102,13 +103,13 @@ class PlatformParentalControlsValue {
   // is enabled.
   static bool IsParentalControlActivityLoggingOnImpl() {
     base::win::ScopedComPtr<IWindowsParentalControlsCore> parent_controls;
-    HRESULT hr = parent_controls.CreateInstance(
-        __uuidof(WindowsParentalControls));
+    HRESULT hr = ::CoCreateInstance(__uuidof(WindowsParentalControls), nullptr,
+                                    CLSCTX_ALL, IID_PPV_ARGS(&parent_controls));
     if (FAILED(hr))
       return false;
 
     base::win::ScopedComPtr<IWPCSettings> settings;
-    hr = parent_controls->GetUserSettings(nullptr, settings.Receive());
+    hr = parent_controls->GetUserSettings(nullptr, settings.GetAddressOf());
     if (FAILED(hr))
       return false;
 
@@ -201,8 +202,7 @@ void IncognitoModePrefs::InitializePlatformParentalControls() {
   // TODO(fdoray): This task uses COM. Add the WithCom() trait once supported.
   // crbug.com/662122
   base::PostTaskWithTraits(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::USER_VISIBLE),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(
           base::IgnoreResult(&PlatformParentalControlsValue::GetInstance)));
 }

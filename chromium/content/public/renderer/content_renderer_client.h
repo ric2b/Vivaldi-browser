@@ -34,6 +34,7 @@ class FilePath;
 
 namespace blink {
 class WebAudioDevice;
+class WebAudioLatencyHint;
 class WebClipboard;
 class WebFrame;
 class WebLocalFrame;
@@ -54,18 +55,10 @@ class WebURLRequest;
 class WebWorkerContentSettingsClientProxy;
 struct WebPluginParams;
 struct WebURLError;
-}
-
-namespace gfx {
-class ICCProfile;
-}
+}  // namespace blink
 
 namespace media {
 class KeySystemProperties;
-}
-
-namespace service_manager {
-class InterfaceRegistry;
 }
 
 namespace content {
@@ -100,7 +93,6 @@ class CONTENT_EXPORT ContentRendererClient {
   // returns false, the content layer will create the plugin.
   virtual bool OverrideCreatePlugin(
       RenderFrame* render_frame,
-      blink::WebLocalFrame* frame,
       const blink::WebPluginParams& params,
       blink::WebPlugin** plugin);
 
@@ -155,23 +147,24 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Allows the embedder to override creating a WebMediaStreamCenter. If it
   // returns NULL the content layer will create the stream center.
-  virtual blink::WebMediaStreamCenter* OverrideCreateWebMediaStreamCenter(
-      blink::WebMediaStreamCenterClient* client);
+  virtual std::unique_ptr<blink::WebMediaStreamCenter>
+  OverrideCreateWebMediaStreamCenter(blink::WebMediaStreamCenterClient* client);
 
   // Allows the embedder to override creating a WebRTCPeerConnectionHandler. If
   // it returns NULL the content layer will create the connection handler.
-  virtual blink::WebRTCPeerConnectionHandler*
+  virtual std::unique_ptr<blink::WebRTCPeerConnectionHandler>
   OverrideCreateWebRTCPeerConnectionHandler(
       blink::WebRTCPeerConnectionHandlerClient* client);
 
   // Allows the embedder to override creating a WebMIDIAccessor.  If it
   // returns NULL the content layer will create the MIDI accessor.
-  virtual blink::WebMIDIAccessor* OverrideCreateMIDIAccessor(
+  virtual std::unique_ptr<blink::WebMIDIAccessor> OverrideCreateMIDIAccessor(
       blink::WebMIDIAccessorClient* client);
 
   // Allows the embedder to override creating a WebAudioDevice.  If it
   // returns NULL the content layer will create the audio device.
-  virtual blink::WebAudioDevice* OverrideCreateAudioDevice();
+  virtual std::unique_ptr<blink::WebAudioDevice> OverrideCreateAudioDevice(
+      const blink::WebAudioLatencyHint& latency_hint);
 
   // Allows the embedder to override the blink::WebClipboard used. If it
   // returns NULL the content layer will handle clipboard interactions.
@@ -183,8 +176,8 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Allows the embedder to override the WebSpeechSynthesizer used.
   // If it returns NULL the content layer will provide an engine.
-  virtual blink::WebSpeechSynthesizer* OverrideSpeechSynthesizer(
-      blink::WebSpeechSynthesizerClient* client);
+  virtual std::unique_ptr<blink::WebSpeechSynthesizer>
+  OverrideSpeechSynthesizer(blink::WebSpeechSynthesizerClient* client);
 
   // Returns true if the renderer process should schedule the idle handler when
   // all widgets are hidden.
@@ -260,9 +253,6 @@ class CONTENT_EXPORT ContentRendererClient {
   // Allows an embedder to provide a MediaStreamRendererFactory.
   virtual std::unique_ptr<MediaStreamRendererFactory>
   CreateMediaStreamRendererFactory();
-
-  // Allows an embedder to provide a default image decode color space.
-  virtual std::unique_ptr<gfx::ICCProfile> GetImageDecodeColorProfile();
 
   // Allows embedder to register the key system(s) it supports by populating
   // |key_systems|.
@@ -360,11 +350,6 @@ class CONTENT_EXPORT ContentRendererClient {
   // from the worker thread.
   virtual void DidInitializeWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context) {}
-
-  // Allows the client to expose interfaces from the renderer process to the
-  // browser process via |registry|.
-  virtual void ExposeInterfacesToBrowser(
-      service_manager::InterfaceRegistry* interface_registry) {}
 
   // Overwrites the given URL to use an HTML5 embed if possible.
   // An empty URL is returned if the URL is not overriden.

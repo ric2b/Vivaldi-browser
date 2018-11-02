@@ -206,6 +206,23 @@ Status WebViewImpl::Reload(const Timeout* timeout) {
   return client_->SendCommandWithTimeout("Page.reload", params, timeout);
 }
 
+Status WebViewImpl::SendCommand(const std::string& cmd,
+                                const base::DictionaryValue& params) {
+  return client_->SendCommand(cmd, params);
+}
+
+Status WebViewImpl::SendCommandAndGetResult(
+        const std::string& cmd,
+        const base::DictionaryValue& params,
+        std::unique_ptr<base::Value>* value) {
+  std::unique_ptr<base::DictionaryValue> result;
+  Status status = client_->SendCommandAndGetResult(cmd, params, &result);
+  if (status.IsError())
+    return status;
+  *value = std::move(result);
+  return Status(kOk);
+}
+
 Status WebViewImpl::TraverseHistory(int delta, const Timeout* timeout) {
   base::DictionaryValue params;
   std::unique_ptr<base::DictionaryValue> result;
@@ -371,13 +388,13 @@ Status WebViewImpl::DispatchMouseEvents(const std::list<MouseEvent>& events,
 Status WebViewImpl::DispatchTouchEvent(const TouchEvent& event) {
   base::DictionaryValue params;
   params.SetString("type", GetAsString(event.type));
-  std::unique_ptr<base::ListValue> point_list(new base::ListValue);
-  std::unique_ptr<base::DictionaryValue> point(new base::DictionaryValue);
+  auto point = base::MakeUnique<base::DictionaryValue>();
   point->SetString("state", GetPointStateString(event.type));
   point->SetInteger("x", event.x);
   point->SetInteger("y", event.y);
-  point_list->Set(0, point.release());
-  params.Set("touchPoints", point_list.release());
+  auto point_list = base::MakeUnique<base::ListValue>();
+  point_list->Append(std::move(point));
+  params.Set("touchPoints", std::move(point_list));
   return client_->SendCommand("Input.dispatchTouchEvent", params);
 }
 
@@ -539,7 +556,7 @@ Status WebViewImpl::SetFileInputFiles(
     return Status(kUnknownError, "no node ID for file input");
   base::DictionaryValue params;
   params.SetInteger("nodeId", node_id);
-  params.Set("files", file_list.DeepCopy());
+  params.Set("files", base::MakeUnique<base::Value>(file_list));
   return client_->SendCommand("DOM.setFileInputFiles", params);
 }
 

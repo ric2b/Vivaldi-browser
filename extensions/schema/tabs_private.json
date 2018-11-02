@@ -27,6 +27,11 @@
             "type": "boolean",
             "optional": true,
             "description": "Enable plugins on this tab. Default is true."
+          },
+          "favIcon": {
+            "type": "string",
+            "optional": true,
+            "description": "data-url for the current icon."
           }
         }
       },
@@ -243,6 +248,43 @@
             "name": "posY",
             "type": "integer",
             "description": "Y position of the drop in screen coordinates."
+          }
+        ]
+      },
+      {
+        "name": "onSitePrefsChange",
+        "type": "function",
+        "description": "Fires when a |contentsettings| is changed.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0
+          }
+        ]
+      },
+      {
+        "name": "onPermissionAccessed",
+        "type": "function",
+        "description": "Fires when a |permission| is accessed.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0
+          },
+          {
+            "type": "string",
+            "name": "permission"
+          },
+          {
+            "type": "string",
+            "name": "origin"
+          },
+          {
+            "type": "string",
+            "description": "Current permission setting. 'allow', 'block', 'ask' or 'default'",
+            "name": "blocked"
           }
         ]
       }

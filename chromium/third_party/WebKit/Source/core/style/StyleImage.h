@@ -36,6 +36,8 @@ class IntSize;
 class LayoutObject;
 class LayoutSize;
 class SVGImage;
+class Document;
+class ComputedStyle;
 
 typedef void* WrappedImagePtr;
 
@@ -56,22 +58,21 @@ class CORE_EXPORT StyleImage : public GarbageCollectedFinalized<StyleImage> {
   // Note that the defaultObjectSize is assumed to be in the
   // effective zoom level given by multiplier, i.e. if multiplier is
   // the constant 1 the defaultObjectSize should be unzoomed.
-  virtual LayoutSize ImageSize(const LayoutObject&,
+  virtual LayoutSize ImageSize(const Document&,
                                float multiplier,
                                const LayoutSize& default_object_size) const = 0;
   virtual bool ImageHasRelativeSize() const = 0;
   virtual bool UsesImageContainerSize() const = 0;
   virtual void AddClient(LayoutObject*) = 0;
   virtual void RemoveClient(LayoutObject*) = 0;
-  // Note that the containerSize is assumed to be in the effective
-  // zoom level given by multiplier, i.e if the multiplier is the
-  // constant 1 the containerSize should be unzoomed.
+  // Note that the container_size is in the effective zoom level of
+  // the style that applies to the given LayoutObject, i.e if the zoom
+  // level is 1.0 the container_size should be unzoomed.
   virtual PassRefPtr<Image> GetImage(const LayoutObject&,
-                                     const IntSize& container_size,
-                                     float multiplier) const = 0;
+                                     const IntSize& container_size) const = 0;
   virtual WrappedImagePtr Data() const = 0;
   virtual float ImageScaleFactor() const { return 1; }
-  virtual bool KnownToBeOpaque(const LayoutObject&) const = 0;
+  virtual bool KnownToBeOpaque(const Document&, const ComputedStyle&) const = 0;
   virtual ImageResourceContent* CachedImage() const { return 0; }
 
   ALWAYS_INLINE bool IsImageResource() const { return is_image_resource_; }

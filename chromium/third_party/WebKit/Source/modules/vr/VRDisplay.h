@@ -130,7 +130,8 @@ class VRDisplay final : public EventTargetWithInlineData,
   void OnExitPresent() override;
   void OnBlur() override;
   void OnFocus() override;
-  void OnActivate(device::mojom::blink::VRDisplayEventReason) override;
+  void OnActivate(device::mojom::blink::VRDisplayEventReason,
+                  const OnActivateCallback& on_handled) override;
   void OnDeactivate(device::mojom::blink::VRDisplayEventReason) override;
 
   void OnVSync(device::mojom::blink::VRPosePtr,
@@ -145,6 +146,13 @@ class VRDisplay final : public EventTargetWithInlineData,
   ScriptedAnimationController& EnsureScriptedAnimationController(Document*);
   void ProcessScheduledAnimations(double timestamp);
   void ProcessScheduledWindowAnimations(double timestamp);
+
+  // In order to help the VR device with scheduling, never request a new VSync
+  // until the current frame is either submitted or abandoned. If vrDisplay.rAF
+  // is called earlier, defer the GetVSync until vrDisplay.submitFrame is
+  // called. If the rAF callback exits without submitting a frame, call it at
+  // that time.
+  void RequestVSync();
 
   Member<NavigatorVR> navigator_vr_;
   unsigned display_id_ = 0;
@@ -184,12 +192,14 @@ class VRDisplay final : public EventTargetWithInlineData,
   bool pending_vrdisplay_raf_ = false;
   bool pending_vsync_ = false;
   bool in_animation_frame_ = false;
+  bool did_submit_this_frame_ = false;
   bool in_display_activate_ = false;
   bool display_blurred_ = false;
   double timebase_ = -1;
   bool pending_previous_frame_render_ = false;
   bool pending_submit_frame_ = false;
   bool v_sync_connection_failed_ = false;
+  bool pending_present_request_ = false;
 
   device::mojom::blink::VRDisplayPtr display_;
 

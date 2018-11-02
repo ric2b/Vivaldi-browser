@@ -10,13 +10,21 @@
 namespace feature_engagement_tracker {
 
 // A feature for enabling a demonstration mode for In-Product Help.
-extern const base::Feature kIPHDemoMode;
+// This needs to be constexpr because of how it is used in
+// //chrome/browser/about_flags.cc.
+constexpr base::Feature kIPHDemoMode = {"IPH_DemoMode",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 // All the features declared below should also be declared in the Java
 // version: org.chromium.components.feature_engagement_tracker.FeatureConstants.
-
-// A dummy feature until real features start using the backend.
-extern const base::Feature kIPHDummyFeature;
+// These need to be constexpr, because they are used as
+// flags_ui::FeatureEntry::FeatureParams in feature_list.h.
+constexpr base::Feature kIPHDataSaverPreview = {
+    "IPH_DataSaverPreview", base::FEATURE_DISABLED_BY_DEFAULT};
+constexpr base::Feature kIPHDownloadPageFeature = {
+    "IPH_DownloadPage", base::FEATURE_DISABLED_BY_DEFAULT};
+constexpr base::Feature kIPHDownloadHomeFeature = {
+    "IPH_DownloadHome", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace feature_engagement_tracker
 

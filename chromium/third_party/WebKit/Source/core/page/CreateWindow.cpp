@@ -26,6 +26,7 @@
 
 #include "core/page/CreateWindow.h"
 
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/frame/FrameClient.h"
 #include "core/frame/LocalFrame.h"
@@ -82,7 +83,10 @@ static Frame* CreateNewWindow(LocalFrame& opener_frame,
   if (!page)
     return nullptr;
 
-  ASSERT(page->MainFrame());
+  if (page == old_page)
+    return &opener_frame.Tree().Top();
+
+  DCHECK(page->MainFrame());
   LocalFrame& frame = *ToLocalFrame(page->MainFrame());
 
   if (!EqualIgnoringASCIICase(request.FrameName(), "_blank"))
@@ -116,7 +120,7 @@ static Frame* CreateNewWindow(LocalFrame& opener_frame,
     frame.Loader().ForceSandboxFlags(
         opener_frame.GetSecurityContext()->GetSandboxFlags());
 
-  // This call may suspend the execution by running nested message loop.
+  // This call may suspend the execution by running nested run loop.
   probe::windowCreated(&opener_frame, &frame);
   created = true;
   return &frame;
@@ -129,11 +133,11 @@ static Frame* CreateWindowHelper(LocalFrame& opener_frame,
                                  const WindowFeatures& features,
                                  NavigationPolicy policy,
                                  bool& created) {
-  ASSERT(!features.dialog || request.FrameName().IsEmpty());
-  ASSERT(request.GetResourceRequest().RequestorOrigin() ||
+  DCHECK(!features.dialog || request.FrameName().IsEmpty());
+  DCHECK(request.GetResourceRequest().RequestorOrigin() ||
          opener_frame.GetDocument()->Url().IsEmpty());
-  ASSERT(request.GetResourceRequest().GetFrameType() ==
-         WebURLRequest::kFrameTypeAuxiliary);
+  DCHECK_EQ(request.GetResourceRequest().GetFrameType(),
+            WebURLRequest::kFrameTypeAuxiliary);
 
   created = false;
 
@@ -155,10 +159,6 @@ static Frame* CreateWindowHelper(LocalFrame& opener_frame,
               "frame whose 'allow-popups' permission is not set."));
       return nullptr;
     }
-
-    if (opener_frame.GetSettings() &&
-        !opener_frame.GetSettings()->GetSupportsMultipleWindows())
-      window = opener_frame.Tree().Top();
   }
 
   if (window) {
@@ -179,24 +179,24 @@ DOMWindow* CreateWindow(const String& url_string,
                         const WindowFeatures& window_features,
                         LocalDOMWindow& calling_window,
                         LocalFrame& first_frame,
-                        LocalFrame& opener_frame) {
+                        LocalFrame& opener_frame,
+                        ExceptionState& exception_state) {
   LocalFrame* active_frame = calling_window.GetFrame();
-  ASSERT(active_frame);
+  DCHECK(active_frame);
 
   KURL completed_url = url_string.IsEmpty()
                            ? KURL(kParsedURLString, g_empty_string)
                            : first_frame.GetDocument()->CompleteURL(url_string);
   if (!completed_url.IsEmpty() && !completed_url.IsValid()) {
     UseCounter::Count(active_frame, UseCounter::kWindowOpenWithInvalidURL);
-    // Don't expose client code to invalid URLs.
-    calling_window.PrintErrorMessage(
-        "Unable to open a window with invalid URL '" +
-        completed_url.GetString() + "'.\n");
+    exception_state.ThrowDOMException(
+        kSyntaxError, "Unable to open a window with invalid URL '" +
+                          completed_url.GetString() + "'.\n");
     return nullptr;
   }
 
-  FrameLoadRequest frame_request(calling_window.document(), completed_url,
-                                 frame_name);
+  FrameLoadRequest frame_request(calling_window.document(),
+                                 ResourceRequest(completed_url), frame_name);
   frame_request.SetShouldSetOpener(window_features.noopener ? kNeverSetOpener
                                                             : kMaybeSetOpener);
   frame_request.GetResourceRequest().SetFrameType(
@@ -243,7 +243,8 @@ DOMWindow* CreateWindow(const String& url_string,
   // causes the navigation to be flagged as a client redirect, which is
   // observable via the webNavigation extension api.
   if (created) {
-    FrameLoadRequest request(calling_window.document(), completed_url);
+    FrameLoadRequest request(calling_window.document(),
+                             ResourceRequest(completed_url));
     request.GetResourceRequest().SetHasUserGesture(has_user_gesture);
     new_frame->Navigate(request);
   } else if (!url_string.IsEmpty()) {
@@ -257,7 +258,7 @@ DOMWindow* CreateWindow(const String& url_string,
 void CreateWindowForRequest(const FrameLoadRequest& request,
                             LocalFrame& opener_frame,
                             NavigationPolicy policy) {
-  ASSERT(request.GetResourceRequest().RequestorOrigin() ||
+  DCHECK(request.GetResourceRequest().RequestorOrigin() ||
          (opener_frame.GetDocument() &&
           opener_frame.GetDocument()->Url().IsEmpty()));
 
@@ -267,9 +268,6 @@ void CreateWindowForRequest(const FrameLoadRequest& request,
 
   if (opener_frame.GetDocument() &&
       opener_frame.GetDocument()->IsSandboxed(kSandboxPopups))
-    return;
-
-  if (!LocalDOMWindow::AllowPopUp(opener_frame))
     return;
 
   if (policy == kNavigationPolicyCurrentTab)

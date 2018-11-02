@@ -18,7 +18,6 @@ ScrollbarLayerImplBase::ScrollbarLayerImplBase(
     bool is_left_side_vertical_scrollbar,
     bool is_overlay)
     : LayerImpl(tree_impl, id),
-      scroll_layer_id_(Layer::INVALID_ID),
       is_overlay_scrollbar_(is_overlay),
       thumb_thickness_scale_factor_(1.f),
       current_pos_(0.f),
@@ -36,21 +35,19 @@ void ScrollbarLayerImplBase::PushPropertiesTo(LayerImpl* layer) {
   LayerImpl::PushPropertiesTo(layer);
   DCHECK(layer->ToScrollbarLayer());
   layer->ToScrollbarLayer()->set_is_overlay_scrollbar(is_overlay_scrollbar_);
-  layer->ToScrollbarLayer()->SetScrollLayerId(ScrollLayerId());
+  layer->ToScrollbarLayer()->SetScrollElementId(scroll_element_id());
 }
 
 ScrollbarLayerImplBase* ScrollbarLayerImplBase::ToScrollbarLayer() {
   return this;
 }
 
-void ScrollbarLayerImplBase::SetScrollLayerId(int scroll_layer_id) {
-  if (scroll_layer_id_ == scroll_layer_id)
+void ScrollbarLayerImplBase::SetScrollElementId(ElementId scroll_element_id) {
+  if (scroll_element_id_ == scroll_element_id)
     return;
 
   layer_tree_impl()->UnregisterScrollbar(this);
-
-  scroll_layer_id_ = scroll_layer_id;
-
+  scroll_element_id_ = scroll_element_id;
   layer_tree_impl()->RegisterScrollbar(this);
 }
 
@@ -63,10 +60,18 @@ bool ScrollbarLayerImplBase::SetCurrentPos(float current_pos) {
 }
 
 bool ScrollbarLayerImplBase::CanScrollOrientation() const {
-  LayerImpl* scroll_layer = layer_tree_impl()->LayerById(scroll_layer_id_);
+  // TODO(pdr): Refactor this to not depend on layers by using the associated
+  // scroll node's user_scrollable values.
+  LayerImpl* scroll_layer =
+      layer_tree_impl()->LayerByElementId(scroll_element_id_);
   if (!scroll_layer)
     return false;
+
   return scroll_layer->user_scrollable(orientation()) &&
+         // Ensure clip_layer_length_ smaller than scroll_layer_length_ not
+         // caused by floating error.
+         !MathUtil::IsFloatNearlyTheSame(clip_layer_length_,
+                                         scroll_layer_length_) &&
          clip_layer_length_ < scroll_layer_length_;
 }
 
@@ -102,7 +107,8 @@ bool ScrollbarLayerImplBase::SetThumbThicknessScaleFactor(float factor) {
   return true;
 }
 
-gfx::Rect ScrollbarLayerImplBase::ComputeThumbQuadRect() const {
+gfx::Rect ScrollbarLayerImplBase::ComputeThumbQuadRectWithThumbThicknessScale(
+    float thumb_thickness_scale_factor) const {
   // Thumb extent is the length of the thumb in the scrolling direction, thumb
   // thickness is in the perpendicular direction. Here's an example of a
   // horizontal scrollbar - inputs are above the scrollbar, computed values
@@ -180,7 +186,7 @@ gfx::Rect ScrollbarLayerImplBase::ComputeThumbQuadRect() const {
   }
 
   float thumb_thickness_adjustment =
-      thumb_thickness * (1.f - thumb_thickness_scale_factor_);
+      thumb_thickness * (1.f - thumb_thickness_scale_factor);
 
   gfx::RectF thumb_rect;
   if (orientation_ == HORIZONTAL) {
@@ -201,6 +207,16 @@ gfx::Rect ScrollbarLayerImplBase::ComputeThumbQuadRect() const {
   return gfx::ToEnclosingRect(thumb_rect);
 }
 
+gfx::Rect ScrollbarLayerImplBase::ComputeExpandedThumbQuadRect() const {
+  DCHECK(is_overlay_scrollbar());
+  return ComputeThumbQuadRectWithThumbThicknessScale(1.f);
+}
+
+gfx::Rect ScrollbarLayerImplBase::ComputeThumbQuadRect() const {
+  return ComputeThumbQuadRectWithThumbThicknessScale(
+      thumb_thickness_scale_factor_);
+}
+
 void ScrollbarLayerImplBase::SetOverlayScrollbarLayerOpacityAnimated(
     float opacity) {
   DCHECK(is_overlay_scrollbar());
@@ -208,28 +224,21 @@ void ScrollbarLayerImplBase::SetOverlayScrollbarLayerOpacityAnimated(
     return;
 
   PropertyTrees* property_trees = layer_tree_impl()->property_trees();
-  int effect_node_index =
-      property_trees->effect_tree.FindNodeIndexFromOwningLayerId(id());
-  // If this method is called during LayerImpl::PushPropertiesTo, we may not yet
-  // have valid owning_layer_id_to_node_index entries in effect tree as property
-  // trees are pushed after layers during activation. We can skip updating
-  // opacity in that case as we are only registering a scrollbar and because
-  // opacity will be overwritten anyway when property trees are pushed.
-  if (effect_node_index == EffectTree::kInvalidNodeId ||
-      effect_node_index != effect_tree_index())
-    return;
 
   EffectNode* node = property_trees->effect_tree.Node(effect_tree_index());
   if (node->opacity == opacity)
     return;
-
-  layer_tree_impl()->AddToOpacityAnimationsMap(id(), opacity);
 
   node->opacity = opacity;
   node->effect_changed = true;
   property_trees->changed = true;
   property_trees->effect_tree.set_needs_update(true);
   layer_tree_impl()->set_needs_update_draw_properties();
+}
+
+LayerTreeSettings::ScrollbarAnimator
+ScrollbarLayerImplBase::GetScrollbarAnimator() const {
+  return layer_tree_impl()->settings().scrollbar_animator;
 }
 
 }  // namespace cc

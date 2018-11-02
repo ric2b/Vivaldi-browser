@@ -121,8 +121,8 @@ void WinAccessibilityEventMonitor::WaitForNextEvent(
   base::win::ScopedComPtr<IAccessible> acc_obj;
   base::win::ScopedVariant child_variant;
   CHECK(S_OK == AccessibleObjectFromEvent(
-      event_info.hwnd, event_info.obj_id, event_info.child_id,
-      acc_obj.Receive(), child_variant.Receive()));
+                    event_info.hwnd, event_info.obj_id, event_info.child_id,
+                    acc_obj.GetAddressOf(), child_variant.Receive()));
 
   base::win::ScopedVariant role_variant;
   if (S_OK == acc_obj->get_accRole(child_variant, role_variant.Receive()))
@@ -182,6 +182,10 @@ class NavigationAccessibilityTest : public InProcessBrowserTest {
   NavigationAccessibilityTest() {}
   ~NavigationAccessibilityTest() override {}
 
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+  }
+
   void SendKeyPress(ui::KeyboardCode key) {
     gfx::NativeWindow native_window = browser()->window()->GetNativeWindow();
     ASSERT_NO_FATAL_FAILURE(
@@ -209,7 +213,6 @@ IN_PROC_BROWSER_TEST_F(NavigationAccessibilityTest,
 
   chrome::ExecuteCommand(browser(), IDC_FOCUS_LOCATION);
 
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL main_url(embedded_test_server()->GetURL("/english_page.html"));
 

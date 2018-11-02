@@ -5,10 +5,10 @@
 #ifndef V8ScriptValueDeserializer_h
 #define V8ScriptValueDeserializer_h
 
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/SerializationTag.h"
-#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializationTag.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/CoreExport.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/RefPtr.h"
@@ -82,9 +82,6 @@ class GC_PLUGIN_IGNORE("https://crbug.com/644725") CORE_EXPORT
 
   // Message ports which were transferred in.
   const MessagePortArray* transferred_message_ports_ = nullptr;
-
-  // ImageBitmaps which were transferred in.
-  HeapVector<Member<ImageBitmap>> transferred_image_bitmaps_;
 
   // Blob info for blobs stored by index.
   const WebBlobInfoArray* blob_info_array_ = nullptr;

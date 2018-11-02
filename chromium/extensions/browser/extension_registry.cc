@@ -40,6 +40,15 @@ std::unique_ptr<ExtensionSet> ExtensionRegistry::GenerateInstalledExtensionsSet(
   return installed_extensions;
 }
 
+base::Version ExtensionRegistry::GetStoredVersion(const ExtensionId& id) const {
+  // TODO(lazyboy): Why not TERMINATED? https://crbug.com/724563.
+  int include_mask = ExtensionRegistry::ENABLED | ExtensionRegistry::DISABLED |
+                     ExtensionRegistry::BLACKLISTED |
+                     ExtensionRegistry::BLOCKED;
+  const Extension* registry_extension = GetExtensionById(id, include_mask);
+  return registry_extension ? *registry_extension->version() : base::Version();
+}
+
 void ExtensionRegistry::AddObserver(ExtensionRegistryObserver* observer) {
   observers_.AddObserver(observer);
 }
@@ -62,9 +71,8 @@ void ExtensionRegistry::TriggerOnReady(const Extension* extension) {
     observer.OnExtensionReady(browser_context_, extension);
 }
 
-void ExtensionRegistry::TriggerOnUnloaded(
-    const Extension* extension,
-    UnloadedExtensionInfo::Reason reason) {
+void ExtensionRegistry::TriggerOnUnloaded(const Extension* extension,
+                                          UnloadedExtensionReason reason) {
   CHECK(extension);
   DCHECK(!enabled_extensions_.Contains(extension->id()));
   for (auto& observer : observers_)

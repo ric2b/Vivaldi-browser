@@ -52,8 +52,10 @@ class AXMenuListOption final : public AXMockObject {
   Node* GetNode() const override { return element_; }
   void Detach() override;
   bool IsDetached() const override { return !element_; }
+  FrameView* DocumentFrameView() const override;
   AccessibilityRole RoleValue() const override;
   bool CanHaveChildren() const override { return false; }
+  AXObjectImpl* ComputeParent() const override;
 
   Element* ActionElement() const override;
   bool IsEnabled() const override;
@@ -62,7 +64,9 @@ class AXMenuListOption final : public AXMockObject {
   bool IsSelected() const override;
   void SetSelected(bool) override;
   bool CanSetSelectedAttribute() const override;
-  void GetRelativeBounds(AXObject** out_container,
+  bool CanSetFocusAttribute() const override;
+
+  void GetRelativeBounds(AXObjectImpl** out_container,
                          FloatRect& out_bounds_in_container,
                          SkMatrix44& out_container_transform) const override;
   String TextAlternative(bool recursive,
@@ -72,6 +76,7 @@ class AXMenuListOption final : public AXMockObject {
                          AXRelatedObjectVector*,
                          NameSources*) const override;
   bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const override;
+  HTMLSelectElement* ParentSelectNode() const;
 
   Member<HTMLOptionElement> element_;
 };

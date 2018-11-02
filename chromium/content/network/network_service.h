@@ -8,41 +8,40 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "content/common/url_loader_factory.mojom.h"
-#include "content/network/network_context.h"
-#include "mojo/public/cpp/bindings/strong_binding_set.h"
+#include "content/common/network_service.mojom.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
 
 namespace content {
 
-class NetworkService
-    : public service_manager::Service,
-      public service_manager::InterfaceFactory<mojom::URLLoaderFactory> {
+class NetworkService : public service_manager::Service,
+                       public mojom::NetworkService {
  public:
-  NetworkService();
+  explicit NetworkService(
+      std::unique_ptr<service_manager::BinderRegistry> registry);
   ~NetworkService() override;
 
-  static std::unique_ptr<service_manager::Service> CreateNetworkService();
-
  private:
+  class MojoNetLog;
+
   // service_manager::Service implementation.
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
 
-  // service_manager::InterfaceFactory<mojom::UrlLoaderFactory>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::URLLoaderFactoryRequest request) override;
+  void Create(const service_manager::BindSourceInfo& source_info,
+              mojom::NetworkServiceRequest request);
 
-  service_manager::BinderRegistry registry_;
+  // mojom::NetworkService implementation:
+  void CreateNetworkContext(mojom::NetworkContextRequest request,
+                            mojom::NetworkContextParamsPtr params) override;
 
-  NetworkContext context_;
+  std::unique_ptr<MojoNetLog> net_log_;
 
-  // Put it below |context_| so that |context_| outlives all the
-  // NetworkServiceURLLoaderFactoryImpl instances.
-  mojo::StrongBindingSet<mojom::URLLoaderFactory> loader_factory_bindings_;
+  std::unique_ptr<service_manager::BinderRegistry> registry_;
+
+  mojo::Binding<mojom::NetworkService> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkService);
 };

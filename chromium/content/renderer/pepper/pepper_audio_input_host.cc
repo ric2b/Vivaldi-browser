@@ -67,9 +67,7 @@ void PepperAudioInputHost::StreamCreated(
 }
 
 void PepperAudioInputHost::StreamCreationFailed() {
-  OnOpenComplete(PP_ERROR_FAILED,
-                 base::SharedMemory::NULLHandle(),
-                 0,
+  OnOpenComplete(PP_ERROR_FAILED, base::SharedMemoryHandle(), 0,
                  base::SyncSocket::kInvalidHandle);
 }
 
@@ -92,7 +90,6 @@ int32_t PepperAudioInputHost::OnOpen(ppapi::host::HostMessageContext* context,
       renderer_ppapi_host_->GetRenderFrameForInstance(pp_instance())->
           GetRoutingID(),
       device_id,
-      document_url,
       static_cast<int>(sample_rate),
       static_cast<int>(sample_frame_count),
       this);
@@ -144,7 +141,7 @@ void PepperAudioInputHost::OnOpenComplete(
   if (result == PP_OK) {
     IPC::PlatformFileForTransit temp_socket =
         IPC::InvalidPlatformFileForTransit();
-    base::SharedMemoryHandle temp_shmem = base::SharedMemory::NULLHandle();
+    base::SharedMemoryHandle temp_shmem;
     result = GetRemoteHandles(
         scoped_socket, scoped_shared_memory, &temp_socket, &temp_shmem);
 

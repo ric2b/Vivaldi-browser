@@ -53,7 +53,6 @@ Nogle websites kan f.eks. reagere på denne anmodning ved at vise dig annoncer, 
 <translation id="1820259098641718022">Føjet til læseliste</translation>
 <translation id="1876721852596493031">Send anvendelsesdata</translation>
 <translation id="1886928167269928266">Altid</translation>
-<translation id="1894451531427596130">Kontrollér, hvordan dette fungerer, i <ph name="BEGIN_LINK" />Indstillinger<ph name="END_LINK" /></translation>
 <translation id="1911619930368729126">Upload til Google Drev</translation>
 <translation id="1941314575388338491">Tryk to gange for at kopiere.</translation>
 <translation id="1952728750904661634">Log ind med en administreret konto</translation>
@@ -97,6 +96,7 @@ Nogle websites kan f.eks. reagere på denne anmodning ved at vise dig annoncer, 
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">Nulstil oversættelsesindstillinger</translation>
 <translation id="285960592395650245">Prøv at downloade igen</translation>
+<translation id="2870560284913253234">Website</translation>
 <translation id="2871695793448672541">Skjult, adgangskode</translation>
 <translation id="2898963176829412617">Ny mappe...</translation>
 <translation id="2903493209154104877">Adresser</translation>
@@ -109,7 +109,6 @@ Nogle websites kan f.eks. reagere på denne anmodning ved at vise dig annoncer, 
 <translation id="2989805286512600854">Åbn på ny fane</translation>
 <translation id="3024255823539804759">Seneste døgn</translation>
 <translation id="3037605927509011580">Øv, surt!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> er ikke tilgængelig. Vælg "<ph name="SHOW_HISTORY" />" i værktøjsmenuen for at åbne din browserhistorik.</translation>
 <translation id="3112556859945124369">Markér…</translation>
 <translation id="3151924044251363314">Det er kun personer med din adgangssætning, der kan læse dine krypterede data. Adgangssætningen sendes ikke til eller gemmes af Google. Hvis du glemmer din adgangssætning eller vil ændre denne indstilling, skal du nulstille synkroniseringen. <ph name="BEGIN_LINK" />Få flere oplysninger<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">Markér alle…</translation>
@@ -150,6 +149,7 @@ Tryk længe på din søgeterm for at vælge den og tilpasse den. Du kan afgræns
 <translation id="3638472932233958418">Forudindlæs websider</translation>
 <translation id="3691593122358196899">Bogmærket er gemt i <ph name="FOLDER_TITLE" /></translation>
 <translation id="3738139272394829648">Tryk for at søge</translation>
+<translation id="3742082982782149146">Webadressen blev kopieret.</translation>
 <translation id="3771033907050503522">Inkognitofaner</translation>
 <translation id="3783017676699494206">Gem billede</translation>
 <translation id="3789841737615482174">Installer</translation>
@@ -164,10 +164,12 @@ Tryk længe på din søgeterm for at vælge den og tilpasse den. Du kan afgræns
 <translation id="4038354071007134711">Ingen apps på denne enhed, der kan åbne filen.</translation>
 <translation id="4049507953662678203">Sørg for, at du har forbindelse til et netværk, og prøv igen.</translation>
 <translation id="411254640334432676">Download mislykkedes.</translation>
+<translation id="4117350985506774529">Dit brugernavn blev kopieret.</translation>
 <translation id="4121993058175073134">For at sende oplysninger om nettoeksporten skal du konfigurere din e-mailkonto i appen Indstillinger.</translation>
 <translation id="4124987746317609294">Tidsinterval</translation>
 <translation id="4172051516777682613">Vis altid</translation>
 <translation id="418156467088430727">Se offlineversion på en ny fane</translation>
+<translation id="4237682350741091554">Administrer Chrome-synkronisering og -tilpasning i <ph name="BEGIN_LINK" />Indstillinger<ph name="END_LINK" /></translation>
 <translation id="424315890655130736">Angiv adgangssætning</translation>
 <translation id="4272631900155121838">Aktivér kameraet i Indstillinger for at scanne en QR-kode</translation>
 <translation id="4281844954008187215">Servicevilkår</translation>
@@ -175,6 +177,7 @@ Tryk længe på din søgeterm for at vælge den og tilpasse den. Du kan afgræns
 <translation id="4359125752503270327">Denne side åbner i en anden app.</translation>
 <translation id="4378154925671717803">Telefon</translation>
 <translation id="441868831736628555">Erklæring om privatliv</translation>
+<translation id="4508750114462689118">Luk loginkampagne</translation>
 <translation id="4526249700380860531">Se og administrer gemte adgangskoder på <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Prøv at logge ind igen.</translation>
 <translation id="4620246317052452550">Sider, du har læst</translation>
@@ -220,6 +223,7 @@ Dine data er krypteret med din adgangssætning til synkronisering. Indtast den f
 
 Handoff skal være aktiveret i afsnittet Generelt i Indstillinger, og dine enheder skal benytte den samme iCloud-konto.</translation>
 <translation id="5556459405103347317">Genindlæs</translation>
+<translation id="5619279135193775234">E-mail</translation>
 <translation id="5626245204502895507">Filen kunne ikke downloades på nuværende tidspunkt.</translation>
 <translation id="5659593005791499971">E-mail</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@ Dine data blev krypteret med din adgangssætning til synkronisering d. <ph name=
 <translation id="7136892417564438900">Kameraet er ikke tilgængeligt</translation>
 <translation id="7159472599653637159">Anmod om mobilversion</translation>
 <translation id="7167621057293532233">Datatyper</translation>
+<translation id="7175593937868963913">Skriv mail</translation>
 <translation id="7189598951263744875">Del...</translation>
 <translation id="7203585745079012652">Giv talte svar</translation>
 <translation id="722055596168483966">Tilpas Google-tjenester</translation>
@@ -358,7 +363,6 @@ Dine data blev krypteret med din adgangssætning til synkronisering d. <ph name=
 <translation id="8205564605687841303">Annuller</translation>
 <translation id="8225985093977202398">Billeder og filer, der er gemt i cache</translation>
 <translation id="8261506727792406068">Slet</translation>
-<translation id="8272194309885535896">Download billede</translation>
 <translation id="8272426682713568063">Kreditkort</translation>
 <translation id="8281781826761538115">Standardsprog – <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">Kontrollér, hvordan Google bruger din browserhistorik til at personliggøre Søgning, annoncer og andre Google-tjenester</translation>

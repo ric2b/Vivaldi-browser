@@ -11,6 +11,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "device/power_save_blocker/power_save_blocker.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
@@ -89,7 +90,7 @@ class PowerAPI : public BrowserContextKeyedAPI,
   // Overridden from extensions::ExtensionRegistryObserver.
   void OnExtensionUnloaded(content::BrowserContext* browser_context,
                            const Extension* extension,
-                           UnloadedExtensionInfo::Reason reason) override;
+                           UnloadedExtensionReason reason) override;
 
  private:
   friend class BrowserContextKeyedAPIFactory<PowerAPI>;

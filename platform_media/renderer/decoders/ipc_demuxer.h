@@ -37,11 +37,12 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
              std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host,
              const std::string& content_type,
              const GURL& url,
-             const scoped_refptr<MediaLog>& media_log);
+             MediaLog* media_log);
   ~IPCDemuxer() override;
 
   // Checks if the content is supported by this demuxer.
   static bool CanPlayType(const std::string& content_type, const GURL& url);
+  static bool CanPlayType(const std::string& content_type);
 
   // Demuxer implementation.
   //
@@ -100,7 +101,7 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
   std::unique_ptr<IPCDemuxerStream> audio_stream_;
   std::unique_ptr<IPCDemuxerStream> video_stream_;
 
-  scoped_refptr<MediaLog> media_log_;
+  MediaLog* media_log_;
 
   base::WeakPtrFactory<IPCDemuxer> weak_ptr_factory_;
 

@@ -48,8 +48,8 @@ class AXSlider : public AXLayoutObject {
   AXSlider(LayoutObject*, AXObjectCacheImpl&);
 
  private:
-  HTMLInputElement* GetElement() const;
-  AXObject* ElementAccessibilityHitTest(const IntPoint&) const final;
+  HTMLInputElement* GetInputElement() const;
+  AXObjectImpl* ElementAccessibilityHitTest(const IntPoint&) const final;
 
   AccessibilityRole DetermineAccessibilityRole() final;
   bool IsSlider() const final { return true; }

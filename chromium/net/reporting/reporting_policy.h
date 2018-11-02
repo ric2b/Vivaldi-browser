@@ -18,6 +18,15 @@ struct NET_EXPORT ReportingPolicy {
   ReportingPolicy(const ReportingPolicy& other);
   ~ReportingPolicy();
 
+  // Maximum number of reports to queue before evicting the oldest.
+  size_t max_report_count;
+
+  // Maximum number of clients to remember before evicting least-recently-used.
+  size_t max_client_count;
+
+  // Minimum interval at which to attempt delivery of queued reports.
+  base::TimeDelta delivery_interval;
+
   // Backoff policy for failing endpoints.
   BackoffEntry::Policy endpoint_backoff_policy;
 
@@ -41,6 +50,14 @@ struct NET_EXPORT ReportingPolicy {
   // Maximum number of delivery attempts a report can have before being
   // discarded as failed.
   int max_report_attempts;
+
+  // Whether to clear reports when the network changes to avoid leaking browsing
+  // data between networks.
+  bool clear_reports_on_network_changes;
+
+  // Whether to clear clients when the network changes to avoid leaking browsing
+  // data between networks.
+  bool clear_clients_on_network_changes;
 };
 
 }  // namespace net

@@ -27,9 +27,10 @@ PasswordStoreDefault::~PasswordStoreDefault() {
 }
 
 bool PasswordStoreDefault::Init(
-    const syncer::SyncableService::StartSyncFlare& flare) {
+    const syncer::SyncableService::StartSyncFlare& flare,
+    PrefService* prefs) {
   ScheduleTask(base::Bind(&PasswordStoreDefault::InitOnDBThread, this));
-  return PasswordStore::Init(flare);
+  return PasswordStore::Init(flare, prefs);
 }
 
 void PasswordStoreDefault::ShutdownOnUIThread() {
@@ -179,6 +180,16 @@ PasswordStoreDefault::FillMatchingLogins(const FormDigest& form) {
   if (login_db_ && !login_db_->GetLogins(form, &matched_forms))
     return std::vector<std::unique_ptr<PasswordForm>>();
   return matched_forms;
+}
+
+std::vector<std::unique_ptr<PasswordForm>>
+PasswordStoreDefault::FillLoginsForSameOrganizationName(
+    const std::string& signon_realm) {
+  std::vector<std::unique_ptr<PasswordForm>> forms;
+  if (login_db_ &&
+      !login_db_->GetLoginsForSameOrganizationName(signon_realm, &forms))
+    return std::vector<std::unique_ptr<PasswordForm>>();
+  return forms;
 }
 
 bool PasswordStoreDefault::FillAutofillableLogins(

@@ -131,7 +131,7 @@ class ExtensionHost : public DeferredStartRenderHost,
                         const Extension* extension) override;
   void OnExtensionUnloaded(content::BrowserContext* browser_context,
                            const Extension* extension,
-                           UnloadedExtensionInfo::Reason reason) override;
+                           UnloadedExtensionReason reason) override;
 
   // ExtensionFunctionDispatcher::Delegate
   content::WebContents* GetAssociatedWebContents() const override;

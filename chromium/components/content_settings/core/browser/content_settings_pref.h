@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "components/content_settings/core/browser/content_settings_origin_identifier_value_map.h"
 #include "components/content_settings/core/browser/content_settings_provider.h"
@@ -22,8 +23,8 @@
 class PrefService;
 class PrefChangeRegistrar;
 
-namespace base {
-class DictionaryValue;
+namespace prefs {
+class DictionaryValueUpdate;
 }
 
 namespace content_settings {
@@ -54,7 +55,14 @@ class ContentSettingsPref {
   bool SetWebsiteSetting(const ContentSettingsPattern& primary_pattern,
                          const ContentSettingsPattern& secondary_pattern,
                          const ResourceIdentifier& resource_identifier,
+                         base::Time modified_time,
                          base::Value* value);
+
+  // Returns the |last_modified| date of a setting.
+  base::Time GetWebsiteSettingLastModified(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      const ResourceIdentifier& resource_identifier);
 
   void ClearPref();
 
@@ -77,14 +85,14 @@ class ContentSettingsPref {
   // value to the obsolete preference. When calling this function, |lock_|
   // should not be held, since this function will send out notifications of
   // preference changes.
-  void UpdatePref(
-      const ContentSettingsPattern& primary_pattern,
-      const ContentSettingsPattern& secondary_pattern,
-      const ResourceIdentifier& resource_identifier,
-      const base::Value* value);
+  void UpdatePref(const ContentSettingsPattern& primary_pattern,
+                  const ContentSettingsPattern& secondary_pattern,
+                  const ResourceIdentifier& resource_identifier,
+                  const base::Time last_modified,
+                  const base::Value* value);
 
   static void CanonicalizeContentSettingsExceptions(
-      base::DictionaryValue* all_settings_dictionary);
+      prefs::DictionaryValueUpdate* all_settings_dictionary);
 
   // In the debug mode, asserts that |lock_| is not held by this thread. It's
   // ok if some other thread holds |lock_|, as long as it will eventually

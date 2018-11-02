@@ -150,7 +150,7 @@ NetworkingPrivateLinux::~NetworkingPrivateLinux() {
 }
 
 void NetworkingPrivateLinux::AssertOnDBusThread() {
-  DCHECK(dbus_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(dbus_task_runner_->RunsTasksInCurrentSequence());
 }
 
 void NetworkingPrivateLinux::Initialize() {
@@ -591,6 +591,11 @@ NetworkingPrivateLinux::GetDeviceStateList() {
 
 std::unique_ptr<base::DictionaryValue>
 NetworkingPrivateLinux::GetGlobalPolicy() {
+  return base::MakeUnique<base::DictionaryValue>();
+}
+
+std::unique_ptr<base::DictionaryValue>
+NetworkingPrivateLinux ::GetCertificateLists() {
   return base::MakeUnique<base::DictionaryValue>();
 }
 

@@ -5,9 +5,9 @@
 #include "modules/fetch/DataConsumerHandleTestUtil.h"
 
 #include <memory>
-#include "bindings/core/v8/DOMWrapperWorld.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/PtrUtil.h"
-#include "public/platform/WebScheduler.h"
 
 namespace blink {
 
@@ -99,7 +99,8 @@ void DataConsumerHandleTestUtil::Thread::Shutdown() {
 class DataConsumerHandleTestUtil::ReplayingHandle::ReaderImpl final
     : public Reader {
  public:
-  ReaderImpl(PassRefPtr<Context> context, Client* client) : context_(context) {
+  ReaderImpl(PassRefPtr<Context> context, Client* client)
+      : context_(std::move(context)) {
     context_->AttachReader(client);
   }
   ~ReaderImpl() { context_->DetachReader(); }
@@ -168,7 +169,7 @@ DataConsumerHandleTestUtil::ReplayingHandle::Context::BeginRead(
     case Command::kData: {
       auto& body = command.Body();
       *available = body.size() - Offset();
-      *buffer = body.Data() + Offset();
+      *buffer = body.data() + Offset();
       result = kOk;
       break;
     }
@@ -282,7 +283,7 @@ void DataConsumerHandleTestUtil::HandleReader::DidGetReadable() {
   }
   std::unique_ptr<HandleReadResult> result =
       WTF::MakeUnique<HandleReadResult>(r, data_);
-  data_.Clear();
+  data_.clear();
   Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
       BLINK_FROM_HERE,
       WTF::Bind(&HandleReader::RunOnFinishedReading, WTF::Unretained(this),
@@ -322,7 +323,7 @@ void DataConsumerHandleTestUtil::HandleTwoPhaseReader::DidGetReadable() {
   }
   std::unique_ptr<HandleReadResult> result =
       WTF::MakeUnique<HandleReadResult>(r, data_);
-  data_.Clear();
+  data_.clear();
   Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
       BLINK_FROM_HERE,
       WTF::Bind(&HandleTwoPhaseReader::RunOnFinishedReading,

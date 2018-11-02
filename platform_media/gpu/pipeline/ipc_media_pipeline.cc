@@ -19,6 +19,7 @@
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "ipc/ipc_sender.h"
 #include "media/base/data_buffer.h"
+#include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_constants.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "ui/gl/gl_surface_egl.h"
@@ -34,12 +35,14 @@ static_assert(arraysize(kDecodedDataReadTraceEventNames) ==
 bool MakeDecoderContextCurrent(
     const base::WeakPtr<gpu::GpuCommandBufferStub>& command_buffer) {
   if (!command_buffer) {
-    DLOG(ERROR) << "Command buffer missing, can't make GL context current.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Command buffer missing, can't make GL context current.";
     return false;
   }
 
   if (!command_buffer->decoder()->MakeCurrent()) {
-    DLOG(ERROR) << "Failed to make GL context current.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to make GL context current.";
     return false;
   }
 
@@ -73,11 +76,12 @@ IPCMediaPipeline::~IPCMediaPipeline() {
 void IPCMediaPipeline::OnInitialize(int64_t data_source_size,
                                     bool is_data_source_streaming,
                                     const std::string& mime_type) {
-  DVLOG(1) << __FUNCTION__;
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (state_ != CONSTRUCTED) {
-    DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Unexpected call to " << __FUNCTION__;
     return;
   }
   state_ = BUSY;
@@ -112,9 +116,12 @@ void IPCMediaPipeline::Initialized(
     const media::PlatformMediaTimeInfo& time_info,
     const media::PlatformAudioConfig& audio_config,
     const media::PlatformVideoConfig& video_config) {
-  DVLOG(1) << __FUNCTION__ << "(" << success << ")";
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_EQ(state_, BUSY);
+
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " ( success = " << success << " )"
+          << Loggable(audio_config);
 
   has_media_type_[media::PLATFORM_MEDIA_AUDIO] = audio_config.is_valid();
   has_media_type_[media::PLATFORM_MEDIA_VIDEO] = video_config.is_valid();
@@ -132,7 +139,8 @@ void IPCMediaPipeline::OnBufferForDecodedDataReady(
     size_t buffer_size,
     base::SharedMemoryHandle handle) {
   if (!pending_output_buffers_[type]) {
-    DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Unexpected call to " << __FUNCTION__;
     DecodedDataReady(type, nullptr);
     return;
   }
@@ -190,6 +198,8 @@ void IPCMediaPipeline::DecodedDataReadyImpl(
   reply_params.type = type;
 
   if (buffer.get() == NULL) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " status : media::kError";
     reply_params.status = media::kError;
   } else if (buffer->end_of_stream()) {
     reply_params.status = media::kEOS;
@@ -225,10 +235,12 @@ void IPCMediaPipeline::DecodedDataReadyImpl(
 
 void IPCMediaPipeline::OnAudioConfigChanged(
     const media::PlatformAudioConfig& audio_config) {
-  DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_EQ(state_, DECODING);
   DCHECK(audio_config.is_valid());
+
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << Loggable(audio_config);
 
   channel_->Send(
       new MediaPipelineMsg_AudioConfigChanged(routing_id_, audio_config));
@@ -236,7 +248,7 @@ void IPCMediaPipeline::OnAudioConfigChanged(
 
 void IPCMediaPipeline::OnVideoConfigChanged(
     const media::PlatformVideoConfig& video_config) {
-  DVLOG(1) << __FUNCTION__;
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_EQ(state_, DECODING);
   DCHECK(video_config.is_valid());
@@ -257,7 +269,8 @@ void IPCMediaPipeline::OnSeek(base::TimeDelta time) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (state_ != DECODING) {
-    DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Unexpected call to " << __FUNCTION__;
     return;
   }
   state_ = BUSY;
@@ -277,7 +290,7 @@ void IPCMediaPipeline::SeekDone(bool success) {
 }
 
 void IPCMediaPipeline::OnStop() {
-  DVLOG(1) << __FUNCTION__;
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   media_pipeline_.reset();
@@ -319,11 +332,13 @@ void IPCMediaPipeline::OnReadDecodedData(media::PlatformMediaDataType type,
   TRACE_EVENT0("IPC_MEDIA", "IPCMediaPipeline::OnReadDecodedData");
 
   if (state_ != DECODING) {
-    DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Unexpected call to " << __FUNCTION__;
     return;
   }
   if (!has_media_type(type)) {
-    DLOG(ERROR) << "No data of given media type (" << type << ") to decode";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " No data of given media type (" << type << ") to decode";
     return;
   }
 
@@ -333,7 +348,8 @@ void IPCMediaPipeline::OnReadDecodedData(media::PlatformMediaDataType type,
   if (is_handling_accelerated_video_decode(type)) {
     uint32_t service_texture_id = 0;
     if (!ClientToServiceTextureId(client_texture_id, &service_texture_id)) {
-      DLOG(ERROR) << "Error while translating texture ID=" << client_texture_id;
+      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Error while translating texture ID=" << client_texture_id;
       DecodedTextureReady(client_texture_id, nullptr);
       return;
     }
@@ -372,13 +388,15 @@ bool IPCMediaPipeline::ClientToServiceTextureId(uint32_t client_texture_id,
   gpu::gles2::TextureRef* texture_ref =
       texture_manager->GetTexture(client_texture_id);
   if (!texture_ref) {
-    DLOG(ERROR) << "Failed to find texture ID";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to find texture ID";
     return false;
   }
 
   gpu::gles2::Texture* info = texture_ref->texture();
   if (info->target() != media::kPlatformMediaPipelineTextureTarget) {
-    DLOG(ERROR) << "Texture target mismatch";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Texture target mismatch";
     return false;
   }
 
@@ -390,7 +408,8 @@ bool IPCMediaPipeline::ClientToServiceTextureId(uint32_t client_texture_id,
 
   if (!command_decoder->GetServiceTextureId(client_texture_id,
                                             service_texture_id)) {
-    DLOG(ERROR) << "Failed to translate texture ID";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to translate texture ID";
     return false;
   }
 

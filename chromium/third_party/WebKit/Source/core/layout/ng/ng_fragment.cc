@@ -4,28 +4,37 @@
 
 #include "core/layout/ng/ng_fragment.h"
 
+#include "core/layout/ng/geometry/ng_logical_size.h"
+
 namespace blink {
 
 LayoutUnit NGFragment::InlineSize() const {
-  return writing_mode_ == kHorizontalTopBottom ? physical_fragment_->Width()
-                                               : physical_fragment_->Height();
+  return writing_mode_ == kHorizontalTopBottom
+             ? physical_fragment_->Size().width
+             : physical_fragment_->Size().height;
 }
 
 LayoutUnit NGFragment::BlockSize() const {
-  return writing_mode_ == kHorizontalTopBottom ? physical_fragment_->Height()
-                                               : physical_fragment_->Width();
+  return writing_mode_ == kHorizontalTopBottom
+             ? physical_fragment_->Size().height
+             : physical_fragment_->Size().width;
+}
+
+NGLogicalSize NGFragment::Size() const {
+  return physical_fragment_->Size().ConvertToLogical(
+      static_cast<NGWritingMode>(writing_mode_));
 }
 
 LayoutUnit NGFragment::InlineOffset() const {
   return writing_mode_ == kHorizontalTopBottom
-             ? physical_fragment_->LeftOffset()
-             : physical_fragment_->TopOffset();
+             ? physical_fragment_->Offset().left
+             : physical_fragment_->Offset().top;
 }
 
 LayoutUnit NGFragment::BlockOffset() const {
   return writing_mode_ == kHorizontalTopBottom
-             ? physical_fragment_->TopOffset()
-             : physical_fragment_->LeftOffset();
+             ? physical_fragment_->Offset().top
+             : physical_fragment_->Offset().left;
 }
 
 NGPhysicalFragment::NGFragmentType NGFragment::Type() const {

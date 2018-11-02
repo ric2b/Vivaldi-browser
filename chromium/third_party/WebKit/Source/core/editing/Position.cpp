@@ -554,6 +554,18 @@ PositionInFlatTree ToPositionInFlatTree(const Position& pos) {
 
   if (anchor->IsShadowRoot())
     return PositionInFlatTree(anchor->OwnerShadowHost(), pos.AnchorType());
+  if (pos.IsBeforeAnchor() || pos.IsAfterAnchor()) {
+    if (anchor->CanParticipateInFlatTree() &&
+        !FlatTreeTraversal::Parent(*anchor)) {
+      // For Before/AfterAnchor, if |anchor| doesn't have parent in the flat
+      // tree, there is no valid corresponding PositionInFlatTree.
+      // Since this function is a primitive function, we do not adjust |pos|
+      // to somewhere else in flat tree.
+      // Reached by unit test
+      // FrameSelectionTest.SelectInvalidPositionInFlatTreeDoesntCrash.
+      return PositionInFlatTree();
+    }
+  }
   // TODO(yosin): Once we have a test case for SLOT or active insertion point,
   // this function should handle it.
   return PositionInFlatTree(anchor, pos.AnchorType());
@@ -629,8 +641,8 @@ void PositionTemplate<Strategy>::ShowTreeForThis() const {
   if (!AnchorNode())
     return;
   LOG(INFO) << "\n"
-            << AnchorNode()->ToTreeStringForThis().Utf8().Data()
-            << ToAnchorTypeAndOffsetString().Utf8().Data();
+            << AnchorNode()->ToTreeStringForThis().Utf8().data()
+            << ToAnchorTypeAndOffsetString().Utf8().data();
 }
 
 template <typename Strategy>
@@ -638,8 +650,8 @@ void PositionTemplate<Strategy>::ShowTreeForThisInFlatTree() const {
   if (!AnchorNode())
     return;
   LOG(INFO) << "\n"
-            << AnchorNode()->ToFlatTreeStringForThis().Utf8().Data()
-            << ToAnchorTypeAndOffsetString().Utf8().Data();
+            << AnchorNode()->ToFlatTreeStringForThis().Utf8().data()
+            << ToAnchorTypeAndOffsetString().Utf8().data();
 }
 
 #endif
@@ -650,7 +662,7 @@ static std::ostream& PrintPosition(std::ostream& ostream,
   if (position.IsNull())
     return ostream << "null";
   return ostream << position.AnchorNode() << "@"
-                 << position.ToAnchorTypeAndOffsetString().Utf8().Data();
+                 << position.ToAnchorTypeAndOffsetString().Utf8().data();
 }
 
 std::ostream& operator<<(std::ostream& ostream,

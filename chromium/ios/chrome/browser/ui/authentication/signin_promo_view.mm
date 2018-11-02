@@ -5,9 +5,11 @@
 #import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
 
 #include "base/logging.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view_delegate.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
+#include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Buttons/src/MaterialButtons.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -32,13 +34,16 @@ const CGFloat kButtonHeight = 36;
 @implementation SigninPromoView {
   NSArray<NSLayoutConstraint*>* _coldStateConstraints;
   NSArray<NSLayoutConstraint*>* _warmStateConstraints;
+  signin_metrics::AccessPoint _accessPoint;
 }
 
+@synthesize delegate = _delegate;
 @synthesize mode = _mode;
 @synthesize imageView = _imageView;
 @synthesize textLabel = _textLabel;
 @synthesize primaryButton = _primaryButton;
 @synthesize secondaryButton = _secondaryButton;
+@synthesize closeButton = _closeButton;
 
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
@@ -58,12 +63,24 @@ const CGFloat kButtonHeight = 36;
     _primaryButton = [[MDCFlatButton alloc] init];
     _primaryButton.translatesAutoresizingMaskIntoConstraints = NO;
     _primaryButton.accessibilityIdentifier = @"signin_promo_primary_button";
+    _primaryButton.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    [_primaryButton addTarget:self
+                       action:@selector(onPrimaryButtonAction:)
+             forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_primaryButton];
 
     _secondaryButton = [[MDCFlatButton alloc] init];
     _secondaryButton.translatesAutoresizingMaskIntoConstraints = NO;
     _secondaryButton.accessibilityIdentifier = @"signin_promo_secondary_button";
+    [_secondaryButton addTarget:self
+                         action:@selector(onSecondaryButtonAction:)
+               forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_secondaryButton];
+
+    _closeButton = [[UIButton alloc] init];
+    _closeButton.translatesAutoresizingMaskIntoConstraints = NO;
+    _closeButton.accessibilityIdentifier = @"signin_promo_close_button";
+    [self addSubview:_closeButton];
 
     // Adding style.
     _imageView.contentMode = UIViewContentModeCenter;
@@ -82,6 +99,10 @@ const CGFloat kButtonHeight = 36;
 
     _secondaryButton.customTitleColor = [[MDCPalette cr_bluePalette] tint500];
     _secondaryButton.uppercaseTitle = NO;
+
+    [_closeButton setImage:[UIImage imageNamed:@"signin_promo_close_gray"]
+                  forState:UIControlStateNormal];
+    _closeButton.hidden = YES;
 
     // Adding constraints.
     NSDictionary* metrics = @{
@@ -112,6 +133,10 @@ const CGFloat kButtonHeight = 36;
     ];
     ApplyVisualConstraintsWithMetricsAndOptions(
         visualConstraints, views, metrics, NSLayoutFormatAlignAllCenterX);
+    NSArray* buttonVisualConstraints =
+        @[ @"H:[closeButton]-|", @"V:|-[closeButton]" ];
+    ApplyVisualConstraints(buttonVisualConstraints,
+                           @{ @"closeButton" : _closeButton });
 
     // Constraints for cold state mode.
     NSArray* coldStateVisualConstraints = @[
@@ -191,13 +216,34 @@ const CGFloat kButtonHeight = 36;
   [_secondaryButton sendActionsForControlEvents:UIControlEventTouchUpInside];
 }
 
+- (void)accessibilityCloseAction:(id)unused {
+  [_closeButton sendActionsForControlEvents:UIControlEventTouchUpInside];
+}
+
 - (CGFloat)horizontalPadding {
   return kHorizontalPadding;
+}
+
+- (void)onPrimaryButtonAction:(id)unused {
+  switch (_mode) {
+    case SigninPromoViewModeColdState:
+      [_delegate signinPromoViewDidTapSigninWithNewAccount:self];
+      break;
+    case SigninPromoViewModeWarmState:
+      [_delegate signinPromoViewDidTapSigninWithDefaultAccount:self];
+      break;
+  }
+}
+
+- (void)onSecondaryButtonAction:(id)unused {
+  [_delegate signinPromoViewDidTapSigninWithOtherAccount:self];
 }
 
 #pragma mark - NSObject(Accessibility)
 
 - (NSArray<UIAccessibilityCustomAction*>*)accessibilityCustomActions {
+  NSMutableArray* actions = [NSMutableArray array];
+
   NSString* primaryActionName =
       [_primaryButton titleForState:UIControlStateNormal];
   UIAccessibilityCustomAction* primaryCustomAction =
@@ -205,17 +251,31 @@ const CGFloat kButtonHeight = 36;
           initWithName:primaryActionName
                 target:self
               selector:@selector(accessibilityPrimaryAction:)];
-  if (_mode == SigninPromoViewModeColdState) {
-    return @[ primaryCustomAction ];
+  [actions addObject:primaryCustomAction];
+
+  if (_mode == SigninPromoViewModeWarmState) {
+    NSString* secondaryActionName =
+        [_secondaryButton titleForState:UIControlStateNormal];
+    UIAccessibilityCustomAction* secondaryCustomAction =
+        [[UIAccessibilityCustomAction alloc]
+            initWithName:secondaryActionName
+                  target:self
+                selector:@selector(accessibilitySecondaryAction:)];
+    [actions addObject:secondaryCustomAction];
   }
-  NSString* secondaryActionName =
-      [_secondaryButton titleForState:UIControlStateNormal];
-  UIAccessibilityCustomAction* secondaryCustomAction =
-      [[UIAccessibilityCustomAction alloc]
-          initWithName:secondaryActionName
-                target:self
-              selector:@selector(accessibilitySecondaryAction:)];
-  return @[ primaryCustomAction, secondaryCustomAction ];
+
+  if (!_closeButton.hidden) {
+    NSString* closeActionName =
+        l10n_util::GetNSString(IDS_IOS_SIGNIN_PROMO_CLOSE_ACCESSIBILITY);
+    UIAccessibilityCustomAction* closeCustomAction =
+        [[UIAccessibilityCustomAction alloc]
+            initWithName:closeActionName
+                  target:self
+                selector:@selector(accessibilityCloseAction:)];
+    [actions addObject:closeCustomAction];
+  }
+
+  return actions;
 }
 
 - (NSString*)accessibilityLabel {

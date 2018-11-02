@@ -56,7 +56,6 @@ class ChromeNativeAppWindowViews
   void GetWidgetHitTestMask(gfx::Path* mask) const override;
 
   // views::View implementation.
-  gfx::Size GetPreferredSize() const override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 
   // NativeAppWindow implementation.
@@ -80,7 +79,6 @@ class ChromeNativeAppWindowViews
   bool has_frame_color_;
   SkColor active_frame_color_;
   SkColor inactive_frame_color_;
-  gfx::Size preferred_size_;
 
   // The class that registers for keyboard shortcuts for extension commands.
   std::unique_ptr<ExtensionKeybindingRegistryViews>

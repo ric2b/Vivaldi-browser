@@ -23,6 +23,7 @@
 #include "content/common/resource_request_completion_status.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_context.h"
@@ -426,9 +427,10 @@ NetworkHandler::~NetworkHandler() {
 }
 
 // static
-NetworkHandler* NetworkHandler::FromSession(DevToolsSession* session) {
-  return static_cast<NetworkHandler*>(
-      session->GetHandlerByName(Network::Metainfo::domainName));
+std::vector<NetworkHandler*> NetworkHandler::ForAgentHost(
+    DevToolsAgentHostImpl* host) {
+  return DevToolsSession::HandlersForAgentHost<NetworkHandler>(
+      host, Network::Metainfo::domainName);
 }
 
 void NetworkHandler::Wire(UberDispatcher* dispatcher) {
@@ -453,8 +455,15 @@ Response NetworkHandler::Disable() {
 }
 
 Response NetworkHandler::ClearBrowserCache() {
-  if (host_)
-    GetContentClient()->browser()->ClearCache(host_);
+  if (host_) {
+    content::BrowsingDataRemover* remover =
+        content::BrowserContext::GetBrowsingDataRemover(
+            host_->GetSiteInstance()->GetProcess()->GetBrowserContext());
+    remover->Remove(base::Time(), base::Time::Max(),
+                    content::BrowsingDataRemover::DATA_TYPE_CACHE,
+                    content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
+  }
+
   return Response::OK();
 }
 
@@ -704,8 +713,9 @@ void NetworkHandler::NavigationPreloadCompleted(
         completion_status.error_code == net::Error::ERR_ABORTED);
   }
   frontend_->LoadingFinished(
-      request_id, base::TimeTicks::Now().ToInternalValue() /
-                      static_cast<double>(base::Time::kMicrosecondsPerSecond),
+      request_id,
+      completion_status.completion_time.ToInternalValue() /
+          static_cast<double>(base::Time::kMicrosecondsPerSecond),
       completion_status.encoded_data_length);
 }
 

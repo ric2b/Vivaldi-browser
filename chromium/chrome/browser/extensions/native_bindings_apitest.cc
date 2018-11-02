@@ -46,12 +46,16 @@ class NativeBindingsApiTest : public ExtensionApiTest {
     command_line->AppendSwitchASCII(switches::kNativeCrxBindings, "1");
   }
 
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
+  }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(NativeBindingsApiTest);
 };
 
 IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, SimpleEndToEndTest) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   embedded_test_server()->ServeFilesFromDirectory(test_data_dir_);
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("native_bindings/extension")) << message_;
@@ -59,18 +63,31 @@ IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, SimpleEndToEndTest) {
 
 // A simplistic app test for app-specific APIs.
 IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, SimpleAppTest) {
+  ExtensionTestMessageListener ready_listener("ready", true);
   ASSERT_TRUE(RunPlatformAppTest("native_bindings/platform_app")) << message_;
+  ASSERT_TRUE(ready_listener.WaitUntilSatisfied());
+
+  // On reply, the extension will try to close the app window and send a
+  // message.
+  ExtensionTestMessageListener close_listener(false);
+  ready_listener.Reply(std::string());
+  ASSERT_TRUE(close_listener.WaitUntilSatisfied());
+  EXPECT_EQ("success", close_listener.message());
 }
 
 // Tests the declarativeContent API and declarative events.
 IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, DeclarativeEvents) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   embedded_test_server()->ServeFilesFromDirectory(test_data_dir_);
   ASSERT_TRUE(StartEmbeddedTestServer());
-  // Load an extension and wait for it to be ready.
+  // Load an extension. On load, this extension will a) run a few simple tests
+  // using chrome.test.runTests() and b) set up rules for declarative events for
+  // a browser-driven test. Wait for both the tests to finish and the extension
+  // to be ready.
   ExtensionTestMessageListener listener("ready", false);
+  ResultCatcher catcher;
   const Extension* extension = LoadExtension(
       test_data_dir_.AppendASCII("native_bindings/declarative_content"));
+  ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
   ASSERT_TRUE(extension);
   ASSERT_TRUE(listener.WaitUntilSatisfied());
 
@@ -81,6 +98,7 @@ IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, DeclarativeEvents) {
       browser()->tab_strip_model()->GetActiveWebContents();
   int tab_id = SessionTabHelper::IdForTab(web_contents);
   EXPECT_FALSE(page_action->GetIsVisible(tab_id));
+  EXPECT_TRUE(page_action->GetDeclarativeIcon(tab_id).IsEmpty());
 
   // Navigating to example.com should show the page action.
   ui_test_utils::NavigateToURL(
@@ -88,11 +106,12 @@ IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, DeclarativeEvents) {
                      "example.com", "/native_bindings/simple.html"));
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(page_action->GetIsVisible(tab_id));
+  EXPECT_FALSE(page_action->GetDeclarativeIcon(tab_id).IsEmpty());
 
   // And the extension should be notified of the click.
   ExtensionTestMessageListener clicked_listener("clicked and removed", false);
   ExtensionActionAPI::Get(profile())->DispatchExtensionActionClicked(
-      *page_action, web_contents);
+      *page_action, web_contents, extension);
   ASSERT_TRUE(clicked_listener.WaitUntilSatisfied());
 }
 
@@ -127,7 +146,6 @@ IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, FileSystemApiGetDisplayPath) {
 // Tests the webRequest API, which requires IO thread requests and custom
 // events.
 IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, WebRequest) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   embedded_test_server()->ServeFilesFromDirectory(test_data_dir_);
   ASSERT_TRUE(StartEmbeddedTestServer());
   // Load an extension and wait for it to be ready.
@@ -190,6 +208,48 @@ IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, ContextMenusTest) {
   int command_id = ContextMenuMatcher::ConvertToExtensionsCustomCommandId(0);
   EXPECT_TRUE(menu->IsCommandIdEnabled(command_id));
   menu->ExecuteCommand(command_id, 0);
+  EXPECT_TRUE(listener.WaitUntilSatisfied());
+}
+
+// Tests that unchecked errors don't impede future calls.
+IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, ErrorsInCallbackTest) {
+  embedded_test_server()->ServeFilesFromDirectory(test_data_dir_);
+  ASSERT_TRUE(StartEmbeddedTestServer());
+
+  TestExtensionDir test_dir;
+  test_dir.WriteManifest(
+      R"({
+           "name": "Errors In Callback",
+           "manifest_version": 2,
+           "version": "0.1",
+           "permissions": ["contextMenus"],
+           "background": {
+             "scripts": ["background.js"]
+           }
+         })");
+  test_dir.WriteFile(
+      FILE_PATH_LITERAL("background.js"),
+      R"(chrome.tabs.query({}, function(tabs) {
+           chrome.tabs.executeScript(tabs[0].id, {code: 'x'}, function() {
+             // There's an error here (we don't have permission to access the
+             // host), but we don't check it so that it gets surfaced as an
+             // unchecked runtime.lastError.
+             // We should still be able to invoke other APIs and get correct
+             // callbacks.
+             chrome.tabs.query({}, function(tabs) {
+               chrome.tabs.query({}, function(tabs) {
+                 chrome.test.sendMessage('callback');
+               });
+             });
+           });
+         });)");
+
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL(
+                     "example.com", "/native_bindings/simple.html"));
+
+  ExtensionTestMessageListener listener("callback", false);
+  ASSERT_TRUE(LoadExtension(test_dir.UnpackedPath()));
   EXPECT_TRUE(listener.WaitUntilSatisfied());
 }
 

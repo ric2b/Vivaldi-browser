@@ -112,7 +112,6 @@ int MockCertVerifyProc::VerifyInternal(
 // needs to be known for some of the test expectations.
 enum CertVerifyProcType {
   CERT_VERIFY_PROC_NSS,
-  CERT_VERIFY_PROC_OPENSSL,
   CERT_VERIFY_PROC_ANDROID,
   CERT_VERIFY_PROC_IOS,
   CERT_VERIFY_PROC_MAC,
@@ -126,8 +125,6 @@ enum CertVerifyProcType {
 CertVerifyProcType GetDefaultCertVerifyProcType() {
 #if defined(USE_NSS_CERTS)
   return CERT_VERIFY_PROC_NSS;
-#elif defined(USE_OPENSSL_CERTS) && !defined(OS_ANDROID)
-  return CERT_VERIFY_PROC_OPENSSL;
 #elif defined(OS_ANDROID)
   return CERT_VERIFY_PROC_ANDROID;
 #elif defined(OS_IOS)
@@ -157,8 +154,6 @@ std::string VerifyProcTypeToName(
   switch (params.param) {
     case CERT_VERIFY_PROC_NSS:
       return "CertVerifyProcNSS";
-    case CERT_VERIFY_PROC_OPENSSL:
-      return "CertVerifyProcOpenSSL";
     case CERT_VERIFY_PROC_ANDROID:
       return "CertVerifyProcAndroid";
     case CERT_VERIFY_PROC_IOS:
@@ -400,6 +395,65 @@ TEST_P(CertVerifyProcInternalTest, DISABLED_PaypalNullCertParsing) {
 
   // TODO(crbug.com/649017): What expectations to use for the other verifiers?
 }
+
+#if BUILDFLAG(USE_BYTE_CERTS)
+// Tests the case where the target certificate is accepted by
+// X509CertificateBytes, but has errors that should cause verification to fail.
+TEST_P(CertVerifyProcInternalTest, InvalidTarget) {
+  base::FilePath certs_dir =
+      GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
+  scoped_refptr<X509Certificate> bad_cert =
+      ImportCertFromFile(certs_dir, "extensions_data_after_sequence.pem");
+  ASSERT_TRUE(bad_cert);
+
+  scoped_refptr<X509Certificate> ok_cert(
+      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem"));
+  ASSERT_TRUE(ok_cert);
+
+  scoped_refptr<X509Certificate> cert_with_bad_target(
+      X509Certificate::CreateFromHandle(bad_cert->os_cert_handle(),
+                                        {ok_cert->os_cert_handle()}));
+  ASSERT_TRUE(cert_with_bad_target);
+  EXPECT_EQ(1U, cert_with_bad_target->GetIntermediateCertificates().size());
+
+  int flags = 0;
+  CertVerifyResult verify_result;
+  int error = Verify(cert_with_bad_target.get(), "127.0.0.1", flags, NULL,
+                     CertificateList(), &verify_result);
+
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_INVALID);
+  EXPECT_THAT(error, IsError(ERR_CERT_INVALID));
+}
+
+// Tests the case where an intermediate certificate is accepted by
+// X509CertificateBytes, but has errors that should cause verification to fail.
+TEST_P(CertVerifyProcInternalTest, InvalidIntermediate) {
+  base::FilePath certs_dir =
+      GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
+  scoped_refptr<X509Certificate> bad_cert =
+      ImportCertFromFile(certs_dir, "extensions_data_after_sequence.pem");
+  ASSERT_TRUE(bad_cert);
+
+  scoped_refptr<X509Certificate> ok_cert(
+      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem"));
+  ASSERT_TRUE(ok_cert);
+
+  scoped_refptr<X509Certificate> cert_with_bad_intermediate(
+      X509Certificate::CreateFromHandle(ok_cert->os_cert_handle(),
+                                        {bad_cert->os_cert_handle()}));
+  ASSERT_TRUE(cert_with_bad_intermediate);
+  EXPECT_EQ(1U,
+            cert_with_bad_intermediate->GetIntermediateCertificates().size());
+
+  int flags = 0;
+  CertVerifyResult verify_result;
+  int error = Verify(cert_with_bad_intermediate.get(), "127.0.0.1", flags, NULL,
+                     CertificateList(), &verify_result);
+
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_INVALID);
+  EXPECT_THAT(error, IsError(ERR_CERT_INVALID));
+}
+#endif  // BUILDFLAG(USE_BYTE_CERTS)
 
 // A regression test for http://crbug.com/31497.
 TEST_P(CertVerifyProcInternalTest, IntermediateCARequireExplicitPolicy) {
@@ -1199,14 +1253,9 @@ TEST_P(CertVerifyProcInternalTest, PublicKeyHashes) {
 }
 
 // A regression test for http://crbug.com/70293.
-// The Key Usage extension in this RSA SSL server certificate does not have
-// the keyEncipherment bit.
-TEST_P(CertVerifyProcInternalTest, InvalidKeyUsage) {
-  if (verify_proc_type() == CERT_VERIFY_PROC_BUILTIN) {
-    LOG(INFO) << "TODO(crbug.com/649017): Skipping test as not yet implemented "
-                 "in builting verifier";
-    return;
-  }
+// The certificate in question has a key purpose of clientAuth, and also lacks
+// the required key usage for serverAuth.
+TEST_P(CertVerifyProcInternalTest, WrongKeyPurpose) {
   base::FilePath certs_dir = GetTestCertsDirectory();
 
   scoped_refptr<X509Certificate> server_cert =
@@ -1218,24 +1267,25 @@ TEST_P(CertVerifyProcInternalTest, InvalidKeyUsage) {
   int error = Verify(server_cert.get(), "jira.aquameta.com", flags, NULL,
                      CertificateList(), &verify_result);
 
-  // TODO(eroman): Change the test data so results are consistent across
-  //               verifiers.
-  if (verify_proc_type() == CERT_VERIFY_PROC_OPENSSL) {
-    // This certificate has two errors: "invalid key usage" and "untrusted CA".
-    // However, OpenSSL returns only one (the latter), and we can't detect
-    // the other errors.
-    EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
-  } else {
-    EXPECT_THAT(error, IsError(ERR_CERT_INVALID));
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_COMMON_NAME_INVALID);
+
+  // TODO(crbug.com/649017): Don't special-case builtin verifier.
+  if (verify_proc_type() != CERT_VERIFY_PROC_BUILTIN)
     EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_INVALID);
-  }
+
   // TODO(wtc): fix http://crbug.com/75520 to get all the certificate errors
   // from NSS.
   if (verify_proc_type() != CERT_VERIFY_PROC_NSS &&
-      verify_proc_type() != CERT_VERIFY_PROC_IOS &&
       verify_proc_type() != CERT_VERIFY_PROC_ANDROID) {
     // The certificate is issued by an unknown CA.
     EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_AUTHORITY_INVALID);
+  }
+
+  // TODO(crbug.com/649017): Don't special-case builtin verifier.
+  if (verify_proc_type() == CERT_VERIFY_PROC_BUILTIN) {
+    EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+  } else {
+    EXPECT_THAT(error, IsError(ERR_CERT_INVALID));
   }
 }
 

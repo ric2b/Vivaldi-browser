@@ -38,7 +38,7 @@ class PasswordCredentialTest : public ::testing::Test {
     GetDocument().documentElement()->setInnerHTML(b.ToString());
     GetDocument().View()->UpdateAllLifecyclePhases();
     HTMLFormElement* form =
-        toHTMLFormElement(GetDocument().GetElementById("theForm"));
+        toHTMLFormElement(GetDocument().getElementById("theForm"));
     EXPECT_NE(nullptr, form);
     return form;
   }
@@ -67,7 +67,7 @@ TEST_F(PasswordCredentialTest, CreateFromMultipartForm) {
   EXPECT_EQ("thePassword", credential->passwordName());
 
   EXPECT_EQ("musterman", credential->id());
-  EXPECT_EQ("sekrit", credential->Password());
+  EXPECT_EQ("sekrit", credential->password());
   EXPECT_EQ(KURL(kParsedURLString, "https://example.com/photo"),
             credential->iconURL());
   EXPECT_EQ("friendly name", credential->name());
@@ -102,7 +102,7 @@ TEST_F(PasswordCredentialTest, CreateFromURLEncodedForm) {
   EXPECT_EQ("thePassword", credential->passwordName());
 
   EXPECT_EQ("musterman", credential->id());
-  EXPECT_EQ("sekrit", credential->Password());
+  EXPECT_EQ("sekrit", credential->password());
   EXPECT_EQ(KURL(kParsedURLString, "https://example.com/photo"),
             credential->iconURL());
   EXPECT_EQ("friendly name", credential->name());

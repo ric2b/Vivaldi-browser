@@ -18,15 +18,18 @@ class ProprietaryMediaGpuChannel : public GpuChannel
 {
  public:
   // Takes ownership of the renderer process handle.
-  ProprietaryMediaGpuChannel(GpuChannelManager* gpu_channel_manager,
+  ProprietaryMediaGpuChannel(
+             GpuChannelManager* gpu_channel_manager,
+             Scheduler* scheduler,
              SyncPointManager* sync_point_manager,
              GpuWatchdogThread* watchdog,
-             gl::GLShareGroup* share_group,
-             gles2::MailboxManager* mailbox_manager,
-             PreemptionFlag* preempting_flag,
-             PreemptionFlag* preempted_flag,
-             base::SingleThreadTaskRunner* task_runner,
-             base::SingleThreadTaskRunner* io_task_runner,
+             scoped_refptr<gl::GLShareGroup> share_group,
+             scoped_refptr<gles2::MailboxManager> mailbox_manager,
+             ServiceDiscardableManager* discardable_manager,
+             scoped_refptr<PreemptionFlag> preempting_flag,
+             scoped_refptr<PreemptionFlag> preempted_flag,
+             scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+             scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
              int32_t client_id,
              uint64_t client_tracing_id,
              bool is_gpu_host);

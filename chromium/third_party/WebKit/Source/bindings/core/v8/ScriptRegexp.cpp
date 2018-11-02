@@ -28,10 +28,10 @@
 
 #include "bindings/core/v8/ScriptRegexp.h"
 
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8PerIsolateData.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
 #include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/V8PerIsolateData.h"
 
 namespace blink {
 
@@ -106,7 +106,7 @@ int ScriptRegexp::Match(const String& string,
   //
   // https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Global_Objects/RegExp/exec
 
-  ASSERT(!return_value.IsEmpty());
+  DCHECK(!return_value.IsEmpty());
   if (!return_value->IsArray())
     return -1;
 

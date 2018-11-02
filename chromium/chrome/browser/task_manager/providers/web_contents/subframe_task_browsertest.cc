@@ -5,13 +5,17 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/task_manager/mock_web_contents_task_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_view.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "net/dns/mock_host_resolver.h"
@@ -136,6 +140,65 @@ IN_PROC_BROWSER_TEST_F(SubframeTaskBrowserTest, TaskManagerShowsSubframeTasks) {
             simple_page_task->title());
 }
 
+// Allows listening to unresponsive task events.
+class HungWebContentsTaskManager : public MockWebContentsTaskManager {
+ public:
+  HungWebContentsTaskManager() : unresponsive_task_(nullptr) {}
+  void TaskUnresponsive(Task* task) override { unresponsive_task_ = task; }
+
+  Task* unresponsive_task() { return unresponsive_task_; }
+
+ private:
+  Task* unresponsive_task_;
+};
+
+// If sites are isolated, makes sure that subframe tasks can react to
+// unresponsive renderers.
+IN_PROC_BROWSER_TEST_F(SubframeTaskBrowserTest, TaskManagerHungSubframe) {
+  // This test only makes sense if we have subframe processes.
+  if (!content::AreAllSitesIsolatedForTesting())
+    return;
+
+  HungWebContentsTaskManager task_manager;
+  EXPECT_TRUE(task_manager.tasks().empty());
+  task_manager.StartObserving();
+
+  NavigateTo(kCrossSitePageUrl);
+
+  // We expect SubframeTasks for b.com and c.com, in either order.
+  ASSERT_EQ(3U, task_manager.tasks().size());
+  const Task* subframe_task_1 = task_manager.tasks()[1];
+  const Task* subframe_task_2 = task_manager.tasks()[2];
+
+  EXPECT_EQ(Task::RENDERER, subframe_task_1->GetType());
+  EXPECT_EQ(Task::RENDERER, subframe_task_2->GetType());
+
+  EXPECT_TRUE(base::StartsWith(subframe_task_1->title(),
+                               GetExpectedSubframeTitlePrefix(),
+                               base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_TRUE(base::StartsWith(subframe_task_2->title(),
+                               GetExpectedSubframeTitlePrefix(),
+                               base::CompareCase::INSENSITIVE_ASCII));
+
+  // Nothing should have hung yet.
+  EXPECT_EQ(nullptr, task_manager.unresponsive_task());
+
+  // Simulate a hang in one of the subframe processes.
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  std::vector<content::RenderFrameHost*> frames = web_contents->GetAllFrames();
+  content::RenderFrameHost* subframe1 = frames[1];
+  SimulateUnresponsiveRenderer(web_contents,
+                               subframe1->GetView()->GetRenderWidgetHost());
+
+  // Verify task_observer saw one of the two subframe tasks.  (There's a race,
+  // so it could be either one.)
+  Task* unresponsive_task = task_manager.unresponsive_task();
+  EXPECT_NE(nullptr, unresponsive_task);
+  EXPECT_TRUE(unresponsive_task == subframe_task_1 ||
+              unresponsive_task == subframe_task_2);
+}
+
 // A test for top document isolation and how subframes show up in the task
 // manager as SubframeTasks.
 class SubframeTaskTDIBrowserTest : public InProcessBrowserTest {
@@ -143,12 +206,8 @@ class SubframeTaskTDIBrowserTest : public InProcessBrowserTest {
   SubframeTaskTDIBrowserTest() {}
   ~SubframeTaskTDIBrowserTest() override {}
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    InProcessBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kTopDocumentIsolation);
-  }
-
   void SetUpOnMainThread() override {
+    scoped_feature_list_.InitAndEnableFeature(features::kTopDocumentIsolation);
     host_resolver()->AddRule("*", "127.0.0.1");
     ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
     content::SetupCrossSiteRedirector(embedded_test_server());
@@ -161,6 +220,8 @@ class SubframeTaskTDIBrowserTest : public InProcessBrowserTest {
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(SubframeTaskTDIBrowserTest);
 };
 

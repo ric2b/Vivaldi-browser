@@ -212,8 +212,7 @@ void StorageManagerHandler::UpdateSizeStat() {
   int64_t* total_size = new int64_t(0);
   int64_t* available_size = new int64_t(0);
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&GetSizeStatAsync, downloads_path, total_size, available_size),
       base::Bind(&StorageManagerHandler::OnGetSizeStat,
                  weak_ptr_factory_.GetWeakPtr(), base::Owned(total_size),
@@ -250,8 +249,7 @@ void StorageManagerHandler::UpdateDownloadsSize() {
       file_manager::util::GetDownloadsFolderForProfile(profile);
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&base::ComputeDirectorySize, downloads_path),
       base::Bind(&StorageManagerHandler::OnGetDownloadsSize,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -332,7 +330,7 @@ void StorageManagerHandler::UpdateBrowsingDataSize() {
                  weak_ptr_factory_.GetWeakPtr(), true));
 }
 
-void StorageManagerHandler::OnGetCacheSize(int64_t size, bool is_upper_limit) {
+void StorageManagerHandler::OnGetCacheSize(bool is_upper_limit, int64_t size) {
   DCHECK(!is_upper_limit);
   OnGetBrowsingDataSize(false, size);
 }

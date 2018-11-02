@@ -8,15 +8,13 @@
 #include "ash/metrics/pointer_metrics_recorder.h"
 #include "ash/public/cpp/shelf_item.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/session/session_controller.h"
 #include "ash/session/session_state_delegate.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_model.h"
 #include "ash/shelf/shelf_view.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm_window.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -79,34 +77,21 @@ ActiveWindowStateType GetActiveWindowState() {
 
 // Returns true if kiosk mode is active.
 bool IsKioskModeActive() {
-  return Shell::Get()->system_tray_delegate()->GetUserLoginStatus() ==
+  return Shell::Get()->session_controller()->login_status() ==
          LoginStatus::KIOSK_APP;
 }
 
 // Returns true if ARC kiosk mode is active.
 bool IsArcKioskModeActive() {
-  return Shell::Get()->system_tray_delegate()->GetUserLoginStatus() ==
+  return Shell::Get()->session_controller()->login_status() ==
          LoginStatus::ARC_KIOSK_APP;
 }
 
 // Returns true if there is an active user and their session isn't currently
 // locked.
 bool IsUserActive() {
-  switch (Shell::Get()->system_tray_delegate()->GetUserLoginStatus()) {
-    case LoginStatus::NOT_LOGGED_IN:
-    case LoginStatus::LOCKED:
-      return false;
-    case LoginStatus::USER:
-    case LoginStatus::OWNER:
-    case LoginStatus::GUEST:
-    case LoginStatus::PUBLIC:
-    case LoginStatus::SUPERVISED:
-    case LoginStatus::KIOSK_APP:
-    case LoginStatus::ARC_KIOSK_APP:
-      return true;
-  }
-  NOTREACHED();
-  return false;
+  SessionController* session = Shell::Get()->session_controller();
+  return session->IsActiveUserSessionStarted() && !session->IsScreenLocked();
 }
 
 // Array of window container ids that contain visible windows to be counted for
@@ -348,7 +333,7 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
     case UMA_STATUS_AREA_CHANGED_VOLUME_POPUP:
       RecordAction(UserMetricsAction("StatusArea_Volume_ChangedPopup"));
       break;
-    case UMA_STATUS_AREA_DETAILED_ACCESSABILITY:
+    case UMA_STATUS_AREA_DETAILED_ACCESSIBILITY:
       RecordAction(UserMetricsAction("StatusArea_Accessability_DetailedView"));
       break;
     case UMA_STATUS_AREA_DETAILED_AUDIO_VIEW:
@@ -560,6 +545,9 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
     case UMA_TRAY_LOCK_SCREEN:
       RecordAction(UserMetricsAction("Tray_LockScreen"));
       break;
+    case UMA_TRAY_NIGHT_LIGHT:
+      RecordAction(UserMetricsAction("Tray_NightLight"));
+      break;
     case UMA_TRAY_OVERVIEW:
       RecordAction(UserMetricsAction("Tray_Overview"));
       break;
@@ -636,7 +624,7 @@ void UserMetricsRecorder::OnShellShuttingDown() {
 }
 
 void UserMetricsRecorder::RecordPeriodicMetrics() {
-  WmShelf* shelf = WmShelf::ForWindow(ShellPort::Get()->GetPrimaryRootWindow());
+  Shelf* shelf = Shelf::ForWindow(Shell::GetPrimaryRootWindow());
   // TODO(bruthig): Investigating whether the check for |manager| is necessary
   // and add tests if it is.
   if (shelf) {

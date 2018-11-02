@@ -224,9 +224,10 @@ DiscardableSharedMemory::LockResult DiscardableSharedMemory::Lock(
 // Pin pages if supported.
 #if defined(OS_ANDROID)
   SharedMemoryHandle handle = shared_memory_.handle();
-  if (SharedMemory::IsHandleValid(handle)) {
-    if (ashmem_pin_region(
-            handle.fd, AlignToPageSize(sizeof(SharedState)) + offset, length)) {
+  if (handle.IsValid()) {
+    if (ashmem_pin_region(handle.GetHandle(),
+                          AlignToPageSize(sizeof(SharedState)) + offset,
+                          length)) {
       return PURGED;
     }
   }
@@ -251,9 +252,10 @@ void DiscardableSharedMemory::Unlock(size_t offset, size_t length) {
 // Unpin pages if supported.
 #if defined(OS_ANDROID)
   SharedMemoryHandle handle = shared_memory_.handle();
-  if (SharedMemory::IsHandleValid(handle)) {
-    if (ashmem_unpin_region(
-            handle.fd, AlignToPageSize(sizeof(SharedState)) + offset, length)) {
+  if (handle.IsValid()) {
+    if (ashmem_unpin_region(handle.GetHandle(),
+                            AlignToPageSize(sizeof(SharedState)) + offset,
+                            length)) {
       DPLOG(ERROR) << "ashmem_unpin_region() failed";
     }
   }
@@ -344,6 +346,11 @@ bool DiscardableSharedMemory::Purge(Time current_time) {
 // provide MADV_FREE which has the same result but memory is purged lazily.
 #if defined(OS_LINUX) || defined(OS_ANDROID)
 #define MADV_PURGE_ARGUMENT MADV_REMOVE
+#elif defined(OS_MACOSX)
+// MADV_FREE_REUSABLE is similar to MADV_FREE, but also marks the pages with the
+// reusable bit, which allows both Activity Monitor and memory-infra to
+// correctly track the pages.
+#define MADV_PURGE_ARGUMENT MADV_FREE_REUSABLE
 #else
 #define MADV_PURGE_ARGUMENT MADV_FREE
 #endif

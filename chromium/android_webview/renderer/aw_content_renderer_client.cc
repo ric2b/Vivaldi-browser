@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "android_webview/common/aw_resource.h"
 #include "android_webview/common/aw_switches.h"
 #include "android_webview/common/render_view_messages.h"
 #include "android_webview/common/url_constants.h"
@@ -32,6 +31,9 @@
 #include "components/supervised_user_error_page/supervised_user_error_page_android.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
 #include "components/web_restrictions/interfaces/web_restrictions.mojom.h"
+#include "content/public/child/child_thread.h"
+#include "content/public/common/service_manager_connection.h"
+#include "content/public/common/simple_connection_filter.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/navigation_state.h"
@@ -40,8 +42,8 @@
 #include "content/public/renderer/render_view.h"
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
@@ -73,8 +75,14 @@ void AwContentRendererClient::RenderThreadStarted() {
   thread->AddObserver(aw_render_thread_observer_.get());
 
   visited_link_slave_.reset(new visitedlink::VisitedLinkSlave);
-  thread->GetInterfaceRegistry()->AddInterface(
-      visited_link_slave_->GetBindCallback());
+
+  auto registry = base::MakeUnique<service_manager::BinderRegistry>();
+  registry->AddInterface(visited_link_slave_->GetBindCallback(),
+                         base::ThreadTaskRunnerHandle::Get());
+  content::ChildThread::Get()
+      ->GetServiceManagerConnection()
+      ->AddConnectionFilter(base::MakeUnique<content::SimpleConnectionFilter>(
+          std::move(registry)));
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   if (!spellcheck_) {

@@ -24,7 +24,6 @@
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/layer_position_constraint.h"
-#include "cc/layers/paint_properties.h"
 #include "cc/paint/paint_record.h"
 #include "cc/trees/element_id.h"
 #include "cc/trees/mutator_host_client.h"
@@ -97,6 +96,9 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void RequestCopyOfOutput(std::unique_ptr<CopyOutputRequest> request);
   bool HasCopyRequest() const { return !inputs_.copy_requests.empty(); }
 
+  void SetSubtreeHasCopyRequest(bool subtree_has_copy_request);
+  bool SubtreeHasCopyRequest() const;
+
   void TakeCopyRequests(
       std::vector<std::unique_ptr<CopyOutputRequest>>* requests);
 
@@ -126,8 +128,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   float opacity() const { return inputs_.opacity; }
   float EffectiveOpacity() const;
   virtual bool OpacityCanAnimateOnImplThread() const;
-
-  virtual bool AlwaysUseActiveTreeOpacity() const;
 
   void SetBlendMode(SkBlendMode blend_mode);
   SkBlendMode blend_mode() const { return inputs_.blend_mode; }
@@ -162,10 +162,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // scrollable and have a non-identity transform.
   void SetIsContainerForFixedPositionLayers(bool container);
   bool IsContainerForFixedPositionLayers() const;
-
-  gfx::Vector2dF FixedContainerSizeDelta() const {
-    return gfx::Vector2dF();
-  }
 
   void SetPositionConstraint(const LayerPositionConstraint& constraint);
   const LayerPositionConstraint& position_constraint() const {
@@ -304,9 +300,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   virtual bool DrawsContent() const;
 
   // This methods typically need to be overwritten by derived classes.
-  // TODO(chrishtr): Blink no longer resizes anything during paint. We can
-  // remove this.
-  virtual void SavePaintProperties();
   // Returns true iff anything was updated that needs to be committed.
   virtual bool Update();
   virtual void SetLayerMaskType(Layer::LayerMaskType type) {}
@@ -333,10 +326,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
   bool NeedsDisplayForTesting() const { return !inputs_.update_rect.IsEmpty(); }
   void ResetNeedsDisplayForTesting() { inputs_.update_rect = gfx::Rect(); }
-
-  const PaintProperties& paint_properties() const {
-    return paint_properties_;
-  }
 
   // Mark the layer as needing to push its properties to the LayerImpl during
   // commit.
@@ -401,8 +390,9 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
   void SetMayContainVideo(bool yes);
 
-  int num_copy_requests_in_target_subtree();
+  bool has_copy_requests_in_target_subtree();
 
+  // Stable identifier for clients. See comment in cc/trees/element_id.h.
   void SetElementId(ElementId id);
   ElementId element_id() const { return inputs_.element_id; }
 
@@ -480,10 +470,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void OnTransformAnimated(const gfx::Transform& transform);
   void OnScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset);
 
-  bool FilterIsAnimating() const;
-  bool TransformIsAnimating() const;
   bool ScrollOffsetAnimationWasInterrupted() const;
-  bool HasOnlyTranslationTransforms() const;
 
   void AddScrollChild(Layer* child);
   void RemoveScrollChild(Layer* child);
@@ -512,6 +499,12 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // This is set whenever a property changed on layer that affects whether this
   // layer should own a property tree node or not.
   void SetPropertyTreesNeedRebuild();
+
+  // Fast-path for |SetScrollOffset| and |SetScrollOffsetFromImplSide| to
+  // directly update scroll offset values in the property tree without needing a
+  // full property tree update. If property trees do not exist yet, ensures
+  // they are marked as needing to be rebuilt.
+  void UpdateScrollOffset(const gfx::ScrollOffset&);
 
   // Encapsulates all data, callbacks or interfaces received from the embedder.
   // TODO(khushalsagar): This is only valid when PropertyTrees are built
@@ -627,12 +620,12 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   bool may_contain_video_ : 1;
   bool is_scroll_clip_layer_ : 1;
   bool needs_show_scrollbars_ : 1;
+  // This value is valid only when LayerTreeHost::has_copy_request() is true
+  bool subtree_has_copy_request_ : 1;
   SkColor safe_opaque_background_color_;
   std::unique_ptr<std::set<Layer*>> scroll_children_;
 
   std::unique_ptr<std::set<Layer*>> clip_children_;
-
-  PaintProperties paint_properties_;
 
   // These all act like draw properties, so don't need push properties.
   gfx::Rect visible_layer_rect_;

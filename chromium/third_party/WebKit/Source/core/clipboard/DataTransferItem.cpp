@@ -30,16 +30,16 @@
 
 #include "core/clipboard/DataTransferItem.h"
 
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/clipboard/DataObjectItem.h"
 #include "core/clipboard/DataTransfer.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/StringCallback.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/probe/CoreProbes.h"
+#include "platform/wtf/StdLibExtras.h"
+#include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebTraceLocation.h"
-#include "wtf/StdLibExtras.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -59,7 +59,7 @@ String DataTransferItem::kind() const {
     case DataObjectItem::kFileKind:
       return kind_file;
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return String();
 }
 

@@ -8,6 +8,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/trace_event/trace_event.h"
@@ -79,11 +80,6 @@ int ChromeBrowserMainPartsAndroid::PreCreateThreads() {
             crash_dump_dir, kAndroidMinidumpDescriptor));
   }
 
-  // Auto-detect based on en-US whether locale .pak files are store uncompressed
-  // (monochrome) vs extracted (non-monochrome).
-  ui::SetLocalePaksStoredInApk(
-      !ui::GetPathForAndroidLocalePakWithinApk("en-US").empty());
-
   return ChromeBrowserMainParts::PreCreateThreads();
 }
 
@@ -144,8 +140,7 @@ void ChromeBrowserMainPartsAndroid::PostBrowserStart() {
   ChromeBrowserMainParts::PostBrowserStart();
 
   base::PostDelayedTaskWithTraits(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&ReportSeccompSupport), base::TimeDelta::FromMinutes(1));
 
   RegisterChromeJavaMojoInterfaces();

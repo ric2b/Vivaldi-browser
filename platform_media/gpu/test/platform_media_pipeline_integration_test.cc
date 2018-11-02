@@ -49,7 +49,8 @@ class PlatformMediaPipelineIntegrationTest
     if (base::win::GetVersion() >= base::win::VERSION_WIN7)
       return true;
 #endif
-    LOG(WARNING) << "Unsupported OS, skipping test";
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Unsupported OS, skipping test";
     return false;
   }
 };

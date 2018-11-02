@@ -15,6 +15,7 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/time/default_clock.h"
 #include "components/content_settings/core/browser/content_settings_pref.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
@@ -28,6 +29,8 @@
 #include "components/prefs/pref_registry.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "services/preferences/public/cpp/dictionary_value_update.h"
+#include "services/preferences/public/cpp/scoped_pref_update.h"
 
 namespace content_settings {
 
@@ -80,9 +83,13 @@ void PrefProvider::RegisterProfilePrefs(
 #endif  // !defined(OS_IOS)
 }
 
-PrefProvider::PrefProvider(PrefService* prefs, bool incognito)
+PrefProvider::PrefProvider(PrefService* prefs,
+                           bool incognito,
+                           bool store_last_modified)
     : prefs_(prefs),
-      is_incognito_(incognito) {
+      is_incognito_(incognito),
+      store_last_modified_(store_last_modified),
+      clock_(new base::DefaultClock) {
   DCHECK(prefs_);
   // Verify preferences version.
   if (!prefs_->HasPrefPath(prefs::kContentSettingsVersion)) {
@@ -150,9 +157,25 @@ bool PrefProvider::SetWebsiteSetting(
     return false;
   }
 
+  base::Time modified_time =
+      store_last_modified_ ? clock_->Now() : base::Time();
+
   return GetPref(content_type)
       ->SetWebsiteSetting(primary_pattern, secondary_pattern,
-                          resource_identifier, in_value);
+                          resource_identifier, modified_time, in_value);
+}
+
+base::Time PrefProvider::GetWebsiteSettingLastModified(
+    const ContentSettingsPattern& primary_pattern,
+    const ContentSettingsPattern& secondary_pattern,
+    ContentSettingsType content_type,
+    const ResourceIdentifier& resource_identifier) {
+  DCHECK(CalledOnValidThread());
+  DCHECK(prefs_);
+
+  return GetPref(content_type)
+      ->GetWebsiteSettingLastModified(primary_pattern, secondary_pattern,
+                                      resource_identifier);
 }
 
 void PrefProvider::ClearAllContentSettingsRules(
@@ -197,6 +220,8 @@ void PrefProvider::Notify(
 }
 
 void PrefProvider::DiscardObsoletePreferences() {
+  if (is_incognito_)
+    return;
   // These prefs were never stored on iOS/Android so they don't need to be
   // deleted.
 #if !defined(OS_IOS)
@@ -236,11 +261,11 @@ void PrefProvider::DiscardObsoletePreferences() {
     if (!prefs_->GetDictionary(info->pref_name()))
       continue;
 
-    DictionaryPrefUpdate update(prefs_, info->pref_name());
-    base::DictionaryValue* all_settings = update.Get();
+    prefs::ScopedDictionaryPrefUpdate update(prefs_, info->pref_name());
+    auto all_settings = update.Get();
     std::vector<std::string> values_to_clean;
-    for (base::DictionaryValue::Iterator i(*all_settings); !i.IsAtEnd();
-         i.Advance()) {
+    for (base::DictionaryValue::Iterator i(*all_settings->AsConstDictionary());
+         !i.IsAtEnd(); i.Advance()) {
       const base::DictionaryValue* pattern_settings = nullptr;
       bool is_dictionary = i.value().GetAsDictionary(&pattern_settings);
       DCHECK(is_dictionary);
@@ -249,13 +274,17 @@ void PrefProvider::DiscardObsoletePreferences() {
     }
 
     for (const std::string& key : values_to_clean) {
-      base::DictionaryValue* pattern_settings = nullptr;
+      std::unique_ptr<prefs::DictionaryValueUpdate> pattern_settings;
       all_settings->GetDictionaryWithoutPathExpansion(key, &pattern_settings);
       pattern_settings->RemoveWithoutPathExpansion(kObsoleteLastUsed, nullptr);
       if (pattern_settings->empty())
         all_settings->RemoveWithoutPathExpansion(key, nullptr);
     }
   }
+}
+
+void PrefProvider::SetClockForTesting(std::unique_ptr<base::Clock> clock) {
+  clock_ = std::move(clock);
 }
 
 }  // namespace content_settings

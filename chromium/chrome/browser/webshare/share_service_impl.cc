@@ -35,7 +35,9 @@ ShareServiceImpl::ShareServiceImpl() : weak_factory_(this) {}
 ShareServiceImpl::~ShareServiceImpl() = default;
 
 // static
-void ShareServiceImpl::Create(blink::mojom::ShareServiceRequest request) {
+void ShareServiceImpl::Create(
+    const service_manager::BindSourceInfo& source_info,
+    blink::mojom::ShareServiceRequest request) {
   mojo::MakeStrongBinding(base::MakeUnique<ShareServiceImpl>(),
                           std::move(request));
 }
@@ -104,10 +106,10 @@ bool ShareServiceImpl::ReplacePlaceholders(base::StringPiece url_template,
 
 void ShareServiceImpl::ShowPickerDialog(
     const std::vector<std::pair<base::string16, GURL>>& targets,
-    const base::Callback<void(base::Optional<std::string>)>& callback) {
-// TODO(mgiuca): Get the browser window as |parent_window|.
+    chrome::WebShareTargetPickerCallback callback) {
+  // TODO(mgiuca): Get the browser window as |parent_window|.
   chrome::ShowWebShareTargetPickerDialog(nullptr /* parent_window */, targets,
-                                         callback);
+                                         std::move(callback));
 }
 
 Browser* ShareServiceImpl::GetBrowser() {
@@ -186,9 +188,9 @@ void ShareServiceImpl::Share(const std::string& title,
 
   ShowPickerDialog(
       sufficiently_engaged_targets,
-      base::Bind(&ShareServiceImpl::OnPickerClosed, weak_factory_.GetWeakPtr(),
-                 base::Passed(&share_targets), title, text, share_url,
-                 callback));
+      base::BindOnce(&ShareServiceImpl::OnPickerClosed,
+                     weak_factory_.GetWeakPtr(), base::Passed(&share_targets),
+                     title, text, share_url, callback));
 }
 
 void ShareServiceImpl::OnPickerClosed(
@@ -197,7 +199,7 @@ void ShareServiceImpl::OnPickerClosed(
     const std::string& text,
     const GURL& share_url,
     const ShareCallback& callback,
-    base::Optional<std::string> result) {
+    const base::Optional<std::string>& result) {
   if (!result.has_value()) {
     callback.Run(blink::mojom::ShareError::CANCELED);
     return;

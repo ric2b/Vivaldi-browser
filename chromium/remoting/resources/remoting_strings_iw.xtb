@@ -64,10 +64,12 @@
 <translation id="225614027745146050">ברוכים הבאים</translation>
 <translation id="228809120910082333">‏אשר את החשבון ומספר ה-PIN שלך שמפורטים למטה, כדי לאפשר גישה באמצעות Chromoting.</translation>
 <translation id="2314101195544969792">לא הייתה פעילות ב-<ph name="APPLICATION_NAME" /> במשך זמן-מה. אתה תנותק בקרוב.</translation>
+<translation id="2317666076142640974">‏יש לך הזדמנות לקבל הצצה מקדימה אל <ph name="LINK_BEGIN" />אפליקציית האינטרנט 'שולחן העבודה המרוחק של Chrome'<ph name="LINK_END" />. נשמח לקבל ממך משוב.</translation>
 <translation id="2353140552984634198">‏תוכל לגשת למחשב זה באופן מאובטח באמצעות Chromoting.</translation>
 <translation id="2359808026110333948">המשך</translation>
 <translation id="2366718077645204424">לא ניתן להשיג את המארח. הסיבה לכך יכולה להיות תצורת הרשת שבה אתה משתמש.</translation>
 <translation id="2370754117186920852">המארח <ph name="OPTIONAL_OFFLINE_REASON" />  נראה לאחרונה במצב מקוון <ph name="RELATIVE_TIMESTAMP" />.</translation>
+<translation id="2405928220797050937">‏האפליקציה הזו כבר לא נתמכת. כדי לוודא שיש לך גישה לתכונות ולעדכוני האבטחה העדכניים ביותר, השתמש ב<ph name="LINK_BEGIN" />אפליקציית האינטרנט 'שולחן העבודה המרוחק של Chrome'<ph name="LINK_END" />.</translation>
 <translation id="2499160551253595098">‏עזור לנו לשפר את 'שולחן עבודה מרוחק של Chrome' בכך שתאפשר לנו לאסוף סטטיסטיקות שימוש ודוחות קריסה.</translation>
 <translation id="2512228156274966424">‏שים לב: על מנת לוודא שכל מקשי הקיצור זמינים, ניתן להגדיר את שולחן העבודה המרוחק של Chrome ל'פתח כחלון'.</translation>
 <translation id="2540992418118313681">האם ברצונך לשתף מחשב זה כך שמשתמש אחר יראה אותו וישלוט בו?</translation>
@@ -95,7 +97,6 @@
 <translation id="3194245623920924351">‏שולחן עבודה מרוחק של Chrome</translation>
 <translation id="3197730452537982411">שולחן עבודה מרוחק</translation>
 <translation id="3258789396564295715">‏תוכל לגשת למחשב זה באופן מאובטח באמצעות 'שולחן עבודה מרוחק של Chrome'.</translation>
-<translation id="327263477022142889">‏רוצה לעזור לשפר את שולחן העבודה המרוחק של Chrome‏? <ph name="LINK_BEGIN" />השב על הסקר.<ph name="LINK_END" /></translation>
 <translation id="3286521253923406898">‏בקר מארח Chromoting</translation>
 <translation id="332624996707057614">ערוך את שם המחשב</translation>
 <translation id="3339299787263251426">גש אל המחשב שלך באופן מאובטח דרך האינטרנט</translation>
@@ -111,6 +112,7 @@
 <translation id="3649256019230929621">מזער את החלון</translation>
 <translation id="369442766917958684">פועל במצב לא מקוון.</translation>
 <translation id="3695446226812920698">איך עושים זאת</translation>
+<translation id="3718805989288361841">‏אירעה שגיאה בהגדרות המדיניות לשולחן העבודה המרוחק של Chrome. פנה למנהל המערכת כדי לקבל עזרה.</translation>
 <translation id="3776024066357219166">‏הפעילות של 'שולחן עבודה מרוחק של Chrome' הסתיימה.</translation>
 <translation id="3785447812627779171">‏מארח
 Chromoting</translation>
@@ -137,7 +139,6 @@ Chromoting</translation>
 <translation id="4277463233460010382">‏מחשב זה מוגדר לאפשר ללקוח אחד או יותר להתחבר מבלי להזין PIN.</translation>
 <translation id="4277736576214464567">קוד הגישה אינו חוקי. נסה שוב.</translation>
 <translation id="4361728918881830843">‏כדי להפעיל חיבורים מרחוק למחשב אחר, התקן את 'שולחן עבודה מרוחק של Chrome' במחשב האחר ולחץ על '<ph name="BUTTON_NAME" />'.</translation>
-<translation id="4368630973089289038">‏רוצה לעזור לשפר את Chromoting‏? <ph name="LINK_BEGIN" />השב על הסקר.<ph name="LINK_END" /></translation>
 <translation id="4394049700291259645">השבת</translation>
 <translation id="4405930547258349619">ספריית ליבה</translation>
 <translation id="4430435636878359009">השבת חיבורים מרוחקים למחשב זה</translation>
@@ -232,6 +233,7 @@ Chromoting</translation>
 <translation id="6930242544192836755">משך החיבור</translation>
 <translation id="6939719207673461467">הצג/הסתר מקלדת.</translation>
 <translation id="6944854424004126054">שחזר חלון</translation>
+<translation id="6948905685698011662">‏שולחן העבודה המרוחק של Chrome זמין עכשיו באינטרנט. נסה את <ph name="LINK_BEGIN" />אפליקציית האינטרנט החינמית<ph name="LINK_END" />.</translation>
 <translation id="6963936880795878952">‏החיבורים למחשב המרוחק חסומים באופן זמני משום שמישהו ניסה להתחבר אליו עם PIN לא חוקי. נסה שוב מאוחר יותר.</translation>
 <translation id="6965382102122355670">אישור</translation>
 <translation id="6985691951107243942">האם אתה בטוח שברצונך להשבית את החיבורים המרוחקים אל <ph name="HOSTNAME" />? אם תשנה את דעתך, יהיה עליך להיכנס למחשב זה כדי להפעיל מחדש את החיבורים.</translation>
@@ -248,6 +250,7 @@ Chromoting</translation>
 <translation id="7401733114166276557">‏שולחן עבודה מרוחק של Chrome</translation>
 <translation id="7434397035092923453">נדחתה גישה עבור לקוח: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="7444276978508498879">לקוח שהתחבר: <ph name="CLIENT_USERNAME" />.</translation>
+<translation id="7589941250119944644">‏שולחן העבודה המרוחק של Chrome יהיה זמין מעכשיו באינטרנט. נסה את <ph name="LINK_BEGIN" />אפליקציית האינטרנט<ph name="LINK_END" /> - היא מהירה וחינמית, וכוללת את כל התכונות המוכרות.</translation>
 <translation id="7606912958770842224">הפעל חיבורים מרוחקים</translation>
 <translation id="7649070708921625228">עזרה</translation>
 <translation id="7658239707568436148">ביטול</translation>

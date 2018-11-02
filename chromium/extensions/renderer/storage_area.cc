@@ -150,27 +150,25 @@ StorageArea::~StorageArea() = default;
 
 // static
 v8::Local<v8::Object> StorageArea::CreateStorageArea(
-    v8::Local<v8::Context> context,
+    v8::Isolate* isolate,
     const std::string& property_name,
+    const base::ListValue* property_values,
     APIRequestHandler* request_handler,
     APIEventHandler* event_handler,
     APITypeReferenceMap* type_refs) {
-  v8::Context::Scope context_scope(context);
   v8::Local<v8::Object> object;
   if (property_name == "local") {
-    gin::Handle<LocalStorageArea> handle =
-        gin::CreateHandle(context->GetIsolate(),
-                          new LocalStorageArea(request_handler, type_refs));
+    gin::Handle<LocalStorageArea> handle = gin::CreateHandle(
+        isolate, new LocalStorageArea(request_handler, type_refs));
     object = handle.ToV8().As<v8::Object>();
   } else if (property_name == "sync") {
     gin::Handle<SyncStorageArea> handle = gin::CreateHandle(
-        context->GetIsolate(), new SyncStorageArea(request_handler, type_refs));
+        isolate, new SyncStorageArea(request_handler, type_refs));
     object = handle.ToV8().As<v8::Object>();
   } else {
     CHECK_EQ("managed", property_name);
-    gin::Handle<ManagedStorageArea> handle =
-        gin::CreateHandle(context->GetIsolate(),
-                          new ManagedStorageArea(request_handler, type_refs));
+    gin::Handle<ManagedStorageArea> handle = gin::CreateHandle(
+        isolate, new ManagedStorageArea(request_handler, type_refs));
     object = handle.ToV8().As<v8::Object>();
   }
   return object;
@@ -182,11 +180,7 @@ void StorageArea::HandleFunctionCall(const std::string& method_name,
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
 
-  std::vector<v8::Local<v8::Value>> argument_list;
-  if (arguments->Length() > 0) {
-    // Just copying handles should never fail.
-    CHECK(arguments->GetRemaining(&argument_list));
-  }
+  std::vector<v8::Local<v8::Value>> argument_list = arguments->GetAll();
 
   std::unique_ptr<base::ListValue> converted_arguments;
   v8::Local<v8::Function> callback;

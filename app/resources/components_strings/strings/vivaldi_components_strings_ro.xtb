@@ -3,23 +3,33 @@
 <translationbundle lang="ro">
 <translation id="1152921474424827756">Accesați o <ph name="BEGIN_LINK" />copie păstrată în memoria cache<ph name="END_LINK" /> a site-ului <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> a închis conexiunea în mod neașteptat.</translation>
+<translation id="1161325031994447685">Reconectarea la Wi-Fi</translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />Încercați să goliți cookie-urile<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Despre versiune</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> nu a trimis date.</translation>
-<translation id="1506687042165942984">Afișează o copie salvată (adică despre care se știe că este învechită) a acestei pagini.</translation>
+<translation id="1506687042165942984">Arată o copie salvată (adică despre care se știe că este învechită) a acestei pagini.</translation>
 <translation id="1559528461873125649">Nu există un astfel de fișier sau director</translation>
+<translation id="1640244768702815859">Încercați <ph name="BEGIN_LINK" />vizitarea paginii inițiale a site-ului<ph name="END_LINK" />.</translation>
 <translation id="1710259589646384581">Sistem de operare</translation>
+<translation id="1734878702283171397">Încearcați să contactați administratorul de sistem.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Încercați să rulați diagnosticul de rețea Windows<ph name="END_LINK" />.</translation>
 <translation id="194030505837763158">Accesați <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Ați dorit să scrieți <ph name="LINK" />?</translation>
+<translation id="2032962459168915086"><ph name="BEGIN_LINK" />Verificarea proxy-ul și firewall-ul<ph name="END_LINK" /></translation>
 <translation id="2166378884831602661">Acest site nu poate oferi o conexiune sigură</translation>
+<translation id="2230458221926704099">Remediați conexiunea folosind <ph name="BEGIN_LINK" />aplicația de diagnosticare<ph name="END_LINK" /></translation>
+<translation id="224482879335890159">Caută <ph name="LINK" /> pe Google</translation>
 <translation id="2292556288342944218">Accesul la internet este blocat</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> a trimis un răspuns nevalid.</translation>
-<translation id="2609632851001447353">Modificări</translation>
+<translation id="2609632851001447353">Variații</translation>
 <translation id="2650446666397867134">Accesul la fișier a fost refuzat</translation>
 <translation id="2705137772291741111">Copia salvată (în memoria cache) a acestui site nu a putut fi citită.</translation>
 <translation id="2784949926578158345">Conexiunea a fost resetată.</translation>
 <translation id="2909946352844186028">A fost detectată o schimbare a rețelei.</translation>
-<translation id="3005723025932146533">Afișați o copie salvată</translation>
-<translation id="3109728660330352905">Nu ești autorizat(ă) să vezi această pagină.</translation>
+<translation id="3005723025932146533">Arată copia salvată</translation>
+<translation id="3093245981617870298">Sunteți offline.</translation>
+<translation id="3109728660330352905">Nu aveți autorizare pentru a vizualiza această pagină.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Încercați să rulați diagnosticul de conectivitate<ph name="END_LINK" />.</translation>
 <translation id="3176929007561373547">Verifică setările de proxy sau contactează administratorul de rețea
       pentru a te asigura că serverul proxy funcționează. Dacă nu consideri că ar trebui
       să folosești un server proxy:
@@ -27,18 +37,26 @@
 <translation id="3422472998109090673">Momentan, <ph name="HOST_NAME" /> nu poate fi accesat.</translation>
 <translation id="3447661539832366887">Proprietarul acestui dispozitiv a dezactivat jocul cu dinozaurul.</translation>
 <translation id="3586931643579894722">Ascunde detaliile</translation>
-<translation id="3630155396527302611">Dacă este deja inclus ca program căruia i se permite să acceseze rețeaua, încearcă
-      să îl elimini din listă și să îl adaugi din nou.</translation>
+<translation id="3630155396527302611">Dacă este deja inclus ca program căruia i se permite să acceseze rețeaua, încercați
+      să îl eliminați din listă și să îl adăugați din nou.</translation>
 <translation id="3658742229777143148">Versiune</translation>
+<translation id="3717027428350673159"><ph name="BEGIN_LINK" />Verificarea configurării proxy-ului, firewall-ului și DNS-ului<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Dacă utilizați un server proxy...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> este blocat</translation>
 <translation id="4021036232240155012">DNS este serviciul de rețea care translatează numele unui site în adresa sa de internet.</translation>
+<translation id="4130226655945681476">Verificarea cablurilor de rețea, a modemului și a router-ului</translation>
+<translation id="4165986682804962316">Setări pentru site-uri</translation>
+<translation id="4203896806696719780"><ph name="BEGIN_LINK" />Verificarea configurării firewall-ului și antivirusului<ph name="END_LINK" /></translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Încercați să rulați diagnosticul de rețea<ph name="END_LINK" />.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> nu a acceptat certificatul de conectare sau un astfel de certificat nu a fost oferit.</translation>
+<translation id="4506599922270137252">Contactarea administratorului de sistem</translation>
 <translation id="4522570452068850558">Detalii</translation>
+<translation id="4558551763791394412">Încercați să dezactivați extensiile.</translation>
 <translation id="4708268264240856090">Conexiunea a fost întreruptă</translation>
 <translation id="4744603770635761495">Cale executabilă</translation>
 <translation id="4764776831041365478">Pagina web de la <ph name="URL" /> poate fi temporar nefuncțională sau a fost mutată definitiv la o nouă adresă web.</translation>
 <translation id="5023310440958281426">Consultați politicile administratorului</translation>
+<translation id="5070335125961472645"><ph name="BEGIN_LINK" />Verificarea adresei proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 de biți)</translation>
 <translation id="5431657950005405462">Fișierul nu a fost găsit</translation>
 <translation id="5452270690849572955">Această pagină de pe <ph name="HOST_NAME" /> nu poate fi găsită</translation>
@@ -47,34 +65,37 @@
     Contactează administratorul sistemului.</translation>
 <translation id="5510766032865166053">Este posibil să fi fost mutat sau șters.</translation>
 <translation id="5556459405103347317">Reîncarcă</translation>
+<translation id="5610142619324316209">Verificarea conexiunii</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> te-a redirecționat de prea multe ori.</translation>
-<translation id="5675650730144413517">Pagina nu funcționează</translation>
+<translation id="5675650730144413517">Această pagină nu funcționează</translation>
 <translation id="5869405914158311789">Acest site nu poate fi accesat</translation>
 <translation id="5990559369517809815">Solicitările trimise la server au fost blocate de o extensie.</translation>
 <translation id="6146055958333702838">Verifică toate cablurile și repornește routerele, modemurile sau alte
     dispozitive de rețea pe care le folosești.</translation>
-<translation id="6165508094623778733">Află mai multe</translation>
+<translation id="614940544461990577">Încercați:</translation>
+<translation id="6165508094623778733">Aflați mai multe</translation>
 <translation id="6203231073485539293">Verificați conexiunea la internet</translation>
-<translation id="6305205051461490394">Adresa <ph name="URL" /> <ph name="URL" /> nu poate fi accesată.</translation>
+<translation id="6305205051461490394"><ph name="URL" />  nu poate fi accesat.</translation>
 <translation id="6321917430147971392">Verificați setările DNS</translation>
-<translation id="6328639280570009161">Încercați să dezactivați anticiparea rețelei</translation>
+<translation id="6328639280570009161">Încercați să dezactivați predicția rețelei</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> a refuzat conexiunea.</translation>
+<translation id="6685834062052613830">Deconectați-vă și finalizați configurarea</translation>
 <translation id="6711464428925977395">A apărut o problemă la serverul proxy sau adresa nu este corectă.</translation>
-<translation id="6897140037006041989">User Agent</translation>
+<translation id="6897140037006041989">Agent utilizator</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> nu respectă standardele de securitate.</translation>
 <translation id="7353601530677266744">Linie de comandă</translation>
-<translation id="7419106976560586862">Calea profilului</translation>
+<translation id="7419106976560586862">Cale pentru profil</translation>
 <translation id="7518003948725431193">Nu a fost găsită nicio pagină web pentru adresa: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Pentru a fi afișată corespunzător, această pagină web necesită date pe care le-ați introdus anterior. Puteți trimite aceste date din nou, dar astfel veți repeta orice acțiuni realizate anterior de această pagină.</translation>
 <translation id="759889825892636187">Momentan, <ph name="HOST_NAME" /> nu poate procesa această solicitare.</translation>
 <translation id="7716424297397655342">Acest site nu poate fi încărcat din memoria cache</translation>
-<translation id="7758069387465995638">Este posibil ca firewallul sau software-ul antivirus să fi blocat conexiunea.</translation>
+<translation id="7758069387465995638">Este posibil ca firewall-ul sau software-ul antivirus să fi blocat conexiunea.</translation>
 <translation id="7951415247503192394">(32 de biți)</translation>
 <translation id="8134994873729925007"><ph name="BEGIN_ABBR" />Adresa DNS<ph name="END_ABBR" /> pentru serverul <ph name="HOST_NAME" /> nu a putut fi găsită.</translation>
 <translation id="8142868475871995937">Accesați &lt;strong&gt;vivaldi://policy&lt;/strong&gt; pentru a vedea adresele URL introduse pe lista neagră și alte politici impuse de către administratorul de sistem.</translation>
-<translation id="8149426793427495338">Computerul este inactiv.</translation>
+<translation id="8149426793427495338">Calculatorul a intrat în repaos.</translation>
 <translation id="8150722005171944719">Fișierul de la <ph name="URL" /> nu poate fi citit.  Este posibil să fi fost eliminat ori mutat sau ca permisiunile pentru fișiere să împiedice accesarea acestuia.</translation>
-<translation id="8225771182978767009">Persoana care a configurat computerul a ales să blocheze acest site.</translation>
+<translation id="8225771182978767009">Persoana care a configurat acest calculator a ales să blocheze acest site.</translation>
 <translation id="8289355894181816810">Dacă nu știți sigur ce înseamnă aceasta, contactați administratorul de rețea.</translation>
 <translation id="8332188693563227489">Accesul la <ph name="HOST_NAME" /> nu este permis</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> a răspuns prea târziu.</translation>

@@ -27,7 +27,6 @@
 #ifndef CanvasRenderingContext2D_h
 #define CanvasRenderingContext2D_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/canvas/CanvasRenderingContextFactory.h"
@@ -37,6 +36,7 @@
 #include "modules/canvas2d/BaseRenderingContext2D.h"
 #include "modules/canvas2d/CanvasRenderingContext2DSettings.h"
 #include "modules/canvas2d/CanvasRenderingContext2DState.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/heap/GarbageCollected.h"
 #include "platform/wtf/Vector.h"
@@ -91,6 +91,10 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   ~CanvasRenderingContext2D() override;
 
+  HTMLCanvasElement* canvas() const {
+    DCHECK(!host() || !host()->IsOffscreenCanvas());
+    return static_cast<HTMLCanvasElement*>(host());
+  }
   void SetCanvasGetContextResult(RenderingContext&) final;
 
   bool isContextLost() const override;
@@ -190,10 +194,6 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   PassRefPtr<Image> GetImage(AccelerationHint, SnapshotReason) const final;
 
-  bool IsAccelerationOptimalForCanvasContent() const;
-
-  void ResetUsageTracking();
-
   void FinalizeFrame() override { usage_counters_.num_frames_since_reset++; }
 
   bool IsPaintable() const final { return HasImageBuffer(); }
@@ -239,6 +239,11 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   CanvasRenderingContext::ContextType GetContextType() const override {
     return CanvasRenderingContext::kContext2d;
   }
+
+  CanvasColorSpace ColorSpace() const override;
+  String ColorSpaceAsString() const override;
+  CanvasPixelFormat PixelFormat() const override;
+
   bool Is2d() const override { return true; }
   bool IsComposited() const override;
   bool IsAccelerated() const override;
@@ -269,8 +274,8 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 DEFINE_TYPE_CASTS(CanvasRenderingContext2D,
                   CanvasRenderingContext,
                   context,
-                  context->Is2d() && context->canvas(),
-                  context.Is2d() && context.canvas());
+                  context->Is2d() && context->host(),
+                  context.Is2d() && context.host());
 
 }  // namespace blink
 

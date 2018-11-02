@@ -59,6 +59,17 @@ int64_t internal_display_id_ = -1;
 
 }  // namespace
 
+bool CompareDisplayIds(int64_t id1, int64_t id2) {
+  DCHECK_NE(id1, id2);
+  // Output index is stored in the first 8 bits. See GetDisplayIdFromEDID
+  // in edid_parser.cc.
+  int index_1 = id1 & 0xFF;
+  int index_2 = id2 & 0xFF;
+  DCHECK_NE(index_1, index_2) << id1 << " and " << id2;
+  return Display::IsInternalDisplayId(id1) ||
+         (index_1 < index_2 && !Display::IsInternalDisplayId(id2));
+}
+
 // static
 float Display::GetForcedDeviceScaleFactor() {
   if (g_forced_device_scale_factor < 0)
@@ -77,6 +88,15 @@ bool Display::HasForceDeviceScaleFactor() {
 void Display::ResetForceDeviceScaleFactorForTesting() {
   g_has_forced_device_scale_factor = -1;
   g_forced_device_scale_factor = -1.0;
+}
+
+// static
+void Display::SetForceDeviceScaleFactor(double dsf) {
+  // Reset any previously set values and unset the flag.
+  g_forced_device_scale_factor = -1.0;
+
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      switches::kForceDeviceScaleFactor, base::StringPrintf("%.2f", dsf));
 }
 
 Display::Display() : Display(kInvalidDisplayId) {}

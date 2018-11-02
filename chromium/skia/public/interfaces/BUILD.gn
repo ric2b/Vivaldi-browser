@@ -11,15 +11,6 @@ mojom("interfaces") {
   ]
 }
 
-mojom("mojo") {
-  sources = [
-    "bitmap_array.mojom",
-  ]
-  public_deps = [
-    ":interfaces",
-  ]
-}
-
 mojom("test_interfaces") {
   testonly = true
   sources = [
@@ -28,8 +19,10 @@ mojom("test_interfaces") {
 
   public_deps = [
     ":interfaces",
-    ":mojo",
   ]
+
+  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
+  use_once_callback = false
 }
 
 source_set("struct_traits") {

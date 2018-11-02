@@ -4,14 +4,14 @@
 
 #include <utility>
 
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_button.h"
 #include "ash/shelf/shelf_model.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_widget.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shelf_view_test_api.h"
-#include "ash/test/test_shelf_item_delegate.h"
+#include "base/strings/string_number_conversions.h"
 
 namespace ash {
 
@@ -48,6 +48,7 @@ TEST_F(ShelfTest, StatusReflection) {
 
   // Add a running app.
   ShelfItem item;
+  item.id = ShelfID("foo");
   item.type = TYPE_APP;
   item.status = STATUS_RUNNING;
   int index = shelf_model()->Add(item);
@@ -68,13 +69,10 @@ TEST_F(ShelfTest, CheckHoverAfterMenu) {
 
   // Add a running app.
   ShelfItem item;
+  item.id = ShelfID("foo");
   item.type = TYPE_APP;
   item.status = STATUS_RUNNING;
   int index = shelf_model()->Add(item);
-
-  shelf_model()->SetShelfItemDelegate(
-      shelf_model()->items()[index].id,
-      base::MakeUnique<test::TestShelfItemDelegate>(nullptr));
 
   ASSERT_EQ(++button_count, test_api()->GetButtonCount());
   ShelfButton* button = test_api()->GetButton(index);
@@ -88,26 +86,24 @@ TEST_F(ShelfTest, CheckHoverAfterMenu) {
 
 TEST_F(ShelfTest, ShowOverflowBubble) {
   ShelfWidget* shelf_widget = GetPrimaryShelf()->shelf_widget();
-  ShelfID first_item_id = shelf_model()->next_id();
 
   // Add app buttons until overflow occurs.
-  int items_added = 0;
+  ShelfItem item;
+  item.type = TYPE_APP;
+  item.status = STATUS_RUNNING;
   while (!test_api()->IsOverflowButtonVisible()) {
-    ShelfItem item;
-    item.type = TYPE_APP;
-    item.status = STATUS_RUNNING;
+    item.id = ShelfID(base::IntToString(shelf_model()->item_count()));
     shelf_model()->Add(item);
-
-    ++items_added;
-    ASSERT_LT(items_added, 10000);
+    ASSERT_LT(shelf_model()->item_count(), 10000);
   }
 
   // Shows overflow bubble.
   test_api()->ShowOverflowBubble();
   EXPECT_TRUE(shelf_widget->IsShowingOverflowBubble());
 
-  // Removes the first item in main shelf view.
-  shelf_model()->RemoveItemAt(shelf_model()->ItemIndexByID(first_item_id));
+  // Remove one of the first items in the main shelf view.
+  ASSERT_GT(shelf_model()->item_count(), 1);
+  shelf_model()->RemoveItemAt(1);
 
   // Waits for all transitions to finish and there should be no crash.
   test_api()->RunMessageLoopUntilAnimationsDone();

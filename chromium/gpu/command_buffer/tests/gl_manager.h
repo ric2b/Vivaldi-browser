@@ -32,11 +32,9 @@ class GLSurface;
 
 namespace gpu {
 
-class CommandBufferService;
-class CommandExecutor;
+class CommandBufferDirect;
 class ImageFactory;
-class SyncPointClientState;
-class SyncPointOrderData;
+class ServiceDiscardableManager;
 class SyncPointManager;
 class TransferBuffer;
 
@@ -105,7 +103,7 @@ class GLManager : private GpuControl {
     use_iosurface_memory_buffers_ = use_iosurface_memory_buffers;
   }
 
-  void SetCommandsPaused(bool paused) { pause_commands_ = paused; }
+  void SetCommandsPaused(bool paused);
 
   gles2::GLES2Decoder* decoder() const {
     return decoder_.get();
@@ -138,7 +136,8 @@ class GLManager : private GpuControl {
   void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
   CommandBufferId GetCommandBufferID() const override;
-  int32_t GetExtraCommandBufferData() const override;
+  int32_t GetStreamId() const override;
+  void FlushOrderingBarrierOnStream(int32_t stream_id) override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
   bool IsFenceSyncFlushed(uint64_t release) override;
@@ -148,35 +147,25 @@ class GLManager : private GpuControl {
                        const base::Closure& callback) override;
   void WaitSyncTokenHint(const gpu::SyncToken& sync_token) override;
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override;
+  void AddLatencyInfo(
+      const std::vector<ui::LatencyInfo>& latency_info) override;
 
  private:
-  void PumpCommands();
-  bool GetBufferChanged(int32_t transfer_buffer_id);
   void SetupBaseContext();
-  void OnFenceSyncRelease(uint64_t release);
-  bool OnWaitSyncToken(const SyncToken& sync_token);
 
   gpu::GpuPreferences gpu_preferences_;
 
-  SyncPointManager* sync_point_manager_ = nullptr;  // Non-owning.
-
-  scoped_refptr<SyncPointOrderData> sync_point_order_data_;
-  scoped_refptr<SyncPointClientState> sync_point_client_state_;
   scoped_refptr<gles2::MailboxManager> mailbox_manager_;
   scoped_refptr<gl::GLShareGroup> share_group_;
-  std::unique_ptr<CommandBufferService> command_buffer_;
+  std::unique_ptr<ServiceDiscardableManager> discardable_manager_;
+  std::unique_ptr<CommandBufferDirect> command_buffer_;
   std::unique_ptr<gles2::GLES2Decoder> decoder_;
-  std::unique_ptr<CommandExecutor> executor_;
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
   std::unique_ptr<gles2::GLES2CmdHelper> gles2_helper_;
   std::unique_ptr<TransferBuffer> transfer_buffer_;
   std::unique_ptr<gles2::GLES2Implementation> gles2_implementation_;
-  bool context_lost_allowed_ = false;
-  bool pause_commands_ = false;
-  uint32_t paused_order_num_ = 0;
 
-  const CommandBufferId command_buffer_id_;
   uint64_t next_fence_sync_release_ = 1;
 
   bool use_iosurface_memory_buffers_ = false;

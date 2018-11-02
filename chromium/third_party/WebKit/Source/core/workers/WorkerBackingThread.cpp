@@ -5,24 +5,20 @@
 #include "core/workers/WorkerBackingThread.h"
 
 #include <memory>
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/V8IdleTaskRunner.h"
 #include "bindings/core/v8/V8Initializer.h"
-#include "bindings/core/v8/V8PerIsolateData.h"
 #include "core/inspector/WorkerThreadDebugger.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/WebThreadSupportingGC.h"
+#include "platform/bindings/V8PerIsolateData.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebTraceLocation.h"
 
 namespace blink {
-
-#define DEFINE_STATIC_LOCAL_WITH_LOCK(type, name, arguments) \
-  ASSERT(IsolatesMutex().Locked());                          \
-  static type& name = *new type arguments
 
 static Mutex& IsolatesMutex() {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, new Mutex);
@@ -30,7 +26,10 @@ static Mutex& IsolatesMutex() {
 }
 
 static HashSet<v8::Isolate*>& Isolates() {
-  DEFINE_STATIC_LOCAL_WITH_LOCK(HashSet<v8::Isolate*>, isolates, ());
+#if DCHECK_IS_ON()
+  DCHECK(IsolatesMutex().Locked());
+#endif
+  static HashSet<v8::Isolate*>& isolates = *new HashSet<v8::Isolate*>();
   return isolates;
 }
 

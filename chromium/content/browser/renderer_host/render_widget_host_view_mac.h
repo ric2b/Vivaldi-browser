@@ -314,7 +314,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       override;
   void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
-  void OnBeginFrameDidNotSwap(const cc::BeginFrameAck& ack) override;
+  void OnDidNotProduceFrame(const cc::BeginFrameAck& ack) override;
   void ClearCompositorFrame() override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
@@ -487,6 +487,16 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // platform view for a guest).
   const TextInputManager::TextSelection* GetTextSelection();
 
+  // Get the focused view that should be used for retrieving the text selection.
+  RenderWidgetHostViewBase* GetFocusedViewForTextSelection();
+
+  // Returns the RenderWidgetHostDelegate corresponding to the currently focused
+  // RenderWidgetHost. It is different from |render_widget_host_->delegate()|
+  // when there are focused inner WebContentses on the page. Also, this method
+  // can return nullptr; for instance when |render_widget_host_| becomes nullptr
+  // in the destruction path of the WebContentsImpl.
+  RenderWidgetHostDelegate* GetFocusedRenderWidgetHostDelegate();
+
  private:
   friend class RenderWidgetHostViewMacTest;
 
@@ -505,9 +515,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   // Dispatches a TTS session.
   void SpeakText(const std::string& text);
-
-  // Get the focused view that should be used for retrieving the text selection.
-  RenderWidgetHostViewBase* GetFocusedViewForTextSelection();
 
   // Adds/Removes frame observer based on state.
   void UpdateNeedsBeginFramesInternal();
@@ -556,8 +563,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // Whether a request to flush input has been issued.
   bool needs_flush_input_;
 
-  // The background color of the web content.
-  SkColor background_color_;
+  // The background color of the web content. This color will be drawn when the
+  // web content is not able to draw in time.
+  SkColor background_color_ = SK_ColorTRANSPARENT;
+  SkColor last_frame_root_background_color_ = SK_ColorTRANSPARENT;
 
   // Factory used to safely scope delayed calls to ShutdownHost().
   base::WeakPtrFactory<RenderWidgetHostViewMac> weak_factory_;

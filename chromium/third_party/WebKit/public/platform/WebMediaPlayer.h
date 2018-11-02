@@ -180,34 +180,22 @@ class WebMediaPlayer {
 
   virtual void Paint(WebCanvas*, const WebRect&, cc::PaintFlags&) = 0;
 
-  // TODO(kbr): remove non-|target| version. crbug.com/349871
-  //
   // Do a GPU-GPU texture copy of the current video frame to |texture|,
   // reallocating |texture| at the appropriate size with given internal
   // format, format, and type if necessary. If the copy is impossible
   // or fails, it returns false.
   virtual bool CopyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface*,
-                                                 unsigned texture,
-                                                 unsigned internal_format,
-                                                 unsigned format,
-                                                 unsigned type,
-                                                 bool premultiply_alpha,
-                                                 bool flip_y) {
-    return false;
-  }
-
-  // Do a GPU-GPU textures copy. If the copy is impossible or fails, it returns
-  // false.
-  virtual bool CopyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface*,
                                                  unsigned target,
                                                  unsigned texture,
                                                  unsigned internal_format,
+                                                 unsigned format,
                                                  unsigned type,
                                                  int level,
                                                  bool premultiply_alpha,
                                                  bool flip_y) {
     return false;
   }
+
   // Copy sub video frame texture to |texture|. If the copy is impossible or
   // fails, it returns false.
   virtual bool CopyVideoSubTextureToPlatformTexture(gpu::gles2::GLES2Interface*,
@@ -226,13 +214,14 @@ class WebMediaPlayer {
   // The method is wrapping calls to glTexImage2D, glTexSubImage2D,
   // glTexImage3D and glTexSubImage3D and parameters have the same name and
   // meaning.
-  // Texture needs to be created and bound to active texture unit before this
-  // call. In addition, TexSubImage2D and TexSubImage3D require that previous
-  // TexImage2D and TexSubImage3D calls, respectivelly, defined the texture
-  // content.
+  // Texture |texture| needs to be created and bound to active texture unit
+  // before this call. In addition, TexSubImage2D and TexSubImage3D require that
+  // previous TexImage2D and TexSubImage3D calls, respectively, defined the
+  // texture content.
   virtual bool TexImageImpl(TexImageFunctionID function_id,
                             unsigned target,
                             gpu::gles2::GLES2Interface* gl,
+                            unsigned texture,
                             int level,
                             int internalformat,
                             unsigned format,
@@ -293,6 +282,13 @@ class WebMediaPlayer {
                                         double* timestamp) {
     return false;
   }
+
+  // Callback called whenever the media element may have received or last native
+  // controls. It might be called twice with the same value: the caller has to
+  // check if the value have changed if it only wants to handle this case.
+  // This method is not used to say express if the native controls are visible
+  // but if the element is using them.
+  virtual void OnHasNativeControlsChanged(bool) {}
 };
 
 }  // namespace blink

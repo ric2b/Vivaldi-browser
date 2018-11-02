@@ -84,8 +84,10 @@ void PresentationReceiver::DidChangeConnectionState(
   // connection state change.
   DCHECK(state == WebPresentationConnectionState::kTerminated);
 
-  for (auto connection : connection_list_->connections())
+  for (auto connection : connection_list_->connections()) {
+    connection->NotifyTargetConnection(state);
     connection->DidChangeState(state, false /* shouldDispatchEvent */);
+  }
 }
 
 void PresentationReceiver::TerminateConnection() {
@@ -97,6 +99,12 @@ void PresentationReceiver::TerminateConnection() {
     return;
 
   window->close(GetFrame()->GetDocument());
+}
+
+void PresentationReceiver::RemoveConnection(
+    WebPresentationConnection* connection) {
+  DCHECK(connection_list_);
+  connection_list_->RemoveConnection(connection);
 }
 
 void PresentationReceiver::RegisterConnection(

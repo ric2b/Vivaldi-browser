@@ -8,6 +8,8 @@
 #include "base/bind_helpers.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -17,7 +19,6 @@
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/grid_layout.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/window/dialog_client_view.h"
 
 #if defined(OS_WIN)
@@ -57,6 +58,8 @@ CreateChromeApplicationShortcutView::CreateChromeApplicationShortcutView(
       app, profile,
       base::Bind(&CreateChromeApplicationShortcutView::OnAppInfoLoaded,
                  weak_ptr_factory_.GetWeakPtr()));
+  chrome::RecordDialogCreation(
+      chrome::DialogIdentifier::CREATE_CHROME_APPLICATION_SHORTCUT);
 }
 
 CreateChromeApplicationShortcutView::~CreateChromeApplicationShortcutView() {}
@@ -75,8 +78,10 @@ void CreateChromeApplicationShortcutView::InitControls() {
   quick_launch_check_box_ = nullptr;
 
 #if defined(OS_WIN)
+  base::win::Version version = base::win::GetVersion();
   // Do not allow creating shortcuts on the Start Screen for Windows 8.
-  if (base::win::GetVersion() < base::win::VERSION_WIN8) {
+  if (version != base::win::VERSION_WIN8 &&
+      version != base::win::VERSION_WIN8_1) {
     menu_check_box_ = AddCheckbox(
         l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUTS_START_MENU_CHKBOX),
         profile_->GetPrefs()->GetBoolean(prefs::kWebAppCreateInAppsMenu));
@@ -86,10 +91,10 @@ void CreateChromeApplicationShortcutView::InitControls() {
   // that option from the dialog.
   if (base::win::CanPinShortcutToTaskbar()) {
     quick_launch_check_box_ = AddCheckbox(
-        (base::win::GetVersion() >= base::win::VERSION_WIN7) ?
-          l10n_util::GetStringUTF16(IDS_PIN_TO_TASKBAR_CHKBOX) :
-          l10n_util::GetStringUTF16(
-              IDS_CREATE_SHORTCUTS_QUICK_LAUNCH_BAR_CHKBOX),
+        (version >= base::win::VERSION_WIN7)
+            ? l10n_util::GetStringUTF16(IDS_PIN_TO_TASKBAR_CHKBOX)
+            : l10n_util::GetStringUTF16(
+                  IDS_CREATE_SHORTCUTS_QUICK_LAUNCH_BAR_CHKBOX),
         profile_->GetPrefs()->GetBoolean(prefs::kWebAppCreateInQuickLaunchBar));
   }
 #elif defined(OS_POSIX)
@@ -97,6 +102,8 @@ void CreateChromeApplicationShortcutView::InitControls() {
       l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUTS_MENU_CHKBOX),
       profile_->GetPrefs()->GetBoolean(prefs::kWebAppCreateInAppsMenu));
 #endif
+
+  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
   // Layout controls
   views::GridLayout* layout = views::GridLayout::CreatePanel(this);
@@ -108,31 +115,35 @@ void CreateChromeApplicationShortcutView::InitControls() {
 
   static const int kTableColumnSetId = 1;
   column_set = layout->AddColumnSet(kTableColumnSetId);
-  column_set->AddPaddingColumn(0, views::kCheckboxIndent);
+  column_set->AddPaddingColumn(
+      0, provider->GetDistanceMetric(DISTANCE_SUBSECTION_HORIZONTAL_INDENT));
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
                         100.0f, views::GridLayout::USE_PREF, 0, 0);
 
   layout->StartRow(0, kHeaderColumnSetId);
   layout->AddView(create_shortcuts_label_);
 
-  layout->AddPaddingRow(0, views::kLabelToControlVerticalSpacing);
+  layout->AddPaddingRow(0, provider->GetDistanceMetric(
+      views::DISTANCE_RELATED_CONTROL_VERTICAL));
   layout->StartRow(0, kTableColumnSetId);
   layout->AddView(desktop_check_box_);
 
+  const int vertical_spacing =
+      provider->GetDistanceMetric(DISTANCE_RELATED_CONTROL_VERTICAL_SMALL);
   if (menu_check_box_ != nullptr) {
-    layout->AddPaddingRow(0, views::kRelatedControlSmallVerticalSpacing);
+    layout->AddPaddingRow(0, vertical_spacing);
     layout->StartRow(0, kTableColumnSetId);
     layout->AddView(menu_check_box_);
   }
 
   if (quick_launch_check_box_ != nullptr) {
-    layout->AddPaddingRow(0, views::kRelatedControlSmallVerticalSpacing);
+    layout->AddPaddingRow(0, vertical_spacing);
     layout->StartRow(0, kTableColumnSetId);
     layout->AddView(quick_launch_check_box_);
   }
 }
 
-gfx::Size CreateChromeApplicationShortcutView::GetPreferredSize() const {
+gfx::Size CreateChromeApplicationShortcutView::CalculatePreferredSize() const {
   // TODO(evanm): should this use IDS_CREATE_SHORTCUTS_DIALOG_WIDTH_CHARS?
   static const int kDialogWidth = 360;
   int height = GetLayoutManager()->GetPreferredHeightForWidth(this,

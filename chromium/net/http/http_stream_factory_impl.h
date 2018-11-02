@@ -9,7 +9,6 @@
 
 #include <map>
 #include <set>
-#include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -22,7 +21,7 @@
 #include "net/log/net_log_source.h"
 #include "net/proxy/proxy_server.h"
 #include "net/socket/ssl_client_socket.h"
-#include "net/spdy/spdy_session_key.h"
+#include "net/spdy/chromium/spdy_session_key.h"
 
 namespace net {
 

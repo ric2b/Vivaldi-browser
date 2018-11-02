@@ -9,7 +9,6 @@
 #include "base/command_line.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
-#include "gpu/command_buffer/service/cmd_buffer_engine.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_unittest_base.h"
 #include "gpu/command_buffer/service/program_manager.h"
@@ -24,7 +23,7 @@ using ::testing::MatcherCast;
 using ::testing::Pointee;
 using ::testing::Return;
 using ::testing::SetArrayArgument;
-using ::testing::SetArgumentPointee;
+using ::testing::SetArgPointee;
 using ::testing::StrEq;
 
 namespace gpu {
@@ -124,9 +123,8 @@ void GLES2DecoderTestBase::SpecializedSetup<ValidateProgram, 0>(
   link_cmd.Init(client_program_id_);
   EXPECT_EQ(error::kNoError, ExecuteCmd(link_cmd));
 
-  EXPECT_CALL(*gl_,
-      GetProgramiv(kServiceProgramId, GL_INFO_LOG_LENGTH, _))
-      .WillOnce(SetArgumentPointee<2>(0))
+  EXPECT_CALL(*gl_, GetProgramiv(kServiceProgramId, GL_INFO_LOG_LENGTH, _))
+      .WillOnce(SetArgPointee<2>(0))
       .RetiresOnSaturation();
 };
 

@@ -94,6 +94,9 @@ Polymer({
     themeSublabel_: String,
 
     /** @private */
+    themeUrl_: String,
+
+    /** @private */
     useSystemTheme_: {
       type: Boolean,
       value: false,  // Can only be true on Linux, but value exists everywhere.
@@ -115,23 +118,22 @@ Polymer({
   /** @private {?settings.AppearanceBrowserProxy} */
   browserProxy_: null,
 
-  /** @private {string} */
-  themeUrl_: '',
-
   observers: [
     'defaultFontSizeChanged_(prefs.webkit.webprefs.default_font_size.value)',
     'themeChanged_(prefs.extensions.theme.id.value, useSystemTheme_)',
 
-    // <if expr="is_linux and not chromeos">
+// <if expr="is_linux and not chromeos">
     // NOTE: this pref only exists on Linux.
     'useSystemThemePrefChanged_(prefs.extensions.theme.use_system.value)',
-    // </if>
+// </if>
   ],
 
+  /** @override */
   created: function() {
     this.browserProxy_ = settings.AppearanceBrowserProxyImpl.getInstance();
   },
 
+  /** @override */
   ready: function() {
     this.$.defaultFontSize.menuOptions = this.fontSizeOptions_;
     // TODO(dschuyler): Look into adding a listener for the
@@ -187,12 +189,16 @@ Polymer({
         value - SIZE_DIFFERENCE_FIXED_STANDARD_);
   },
 
-  /** @private */
-  onThemesTap_: function() {
-    window.open(this.themeUrl_ || loadTimeData.getString('themesGalleryUrl'));
+  /**
+   * URL for either current theme or the theme gallery.
+   * @return {string}
+   * @private
+   */
+  getThemeHref_: function() {
+    return this.themeUrl_ || loadTimeData.getString('themesGalleryUrl');
   },
 
-  // <if expr="chromeos">
+// <if expr="chromeos">
   /**
    * ChromeOS only.
    * @private
@@ -200,14 +206,14 @@ Polymer({
   openWallpaperManager_: function() {
     this.browserProxy_.openWallpaperManager();
   },
-  // </if>
+// </if>
 
   /** @private */
   onUseDefaultTap_: function() {
     this.browserProxy_.useDefaultTheme();
   },
 
-  // <if expr="is_linux and not chromeos">
+// <if expr="is_linux and not chromeos">
   /**
    * @param {boolean} useSystemTheme
    * @private
@@ -252,7 +258,7 @@ Polymer({
   onUseSystemTap_: function() {
     this.browserProxy_.useSystemTheme();
   },
-  // </if>
+// </if>
 
   /**
    * @param {string} themeId
@@ -272,12 +278,12 @@ Polymer({
     }
 
     var i18nId;
-    // <if expr="is_linux and not chromeos">
+// <if expr="is_linux and not chromeos">
     i18nId = useSystemTheme ? 'systemTheme' : 'classicTheme';
-    // </if>
-    // <if expr="not is_linux or chromeos">
+// </if>
+// <if expr="not is_linux or chromeos">
     i18nId = 'chooseFromWebStore';
-    // </if>
+// </if>
     this.themeSublabel_ = this.i18n(i18nId);
     this.themeUrl_ = '';
   },

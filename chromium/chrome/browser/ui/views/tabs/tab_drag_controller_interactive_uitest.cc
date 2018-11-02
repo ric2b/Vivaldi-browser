@@ -16,6 +16,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -67,9 +68,7 @@
 #include "ash/test/immersive_fullscreen_controller_test_api.h"
 #include "ash/wm/root_window_finder.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm_window.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
 #include "ui/aura/client/screen_position_client.h"
@@ -125,8 +124,9 @@ class QuitDraggingObserver : public content::NotificationObserver {
 };
 
 void SetID(WebContents* web_contents, int id) {
-  web_contents->SetUserData(&kTabDragControllerInteractiveUITestUserDataKey,
-                            new TabDragControllerInteractiveUITestUserData(id));
+  web_contents->SetUserData(
+      &kTabDragControllerInteractiveUITestUserDataKey,
+      base::MakeUnique<TabDragControllerInteractiveUITestUserData>(id));
 }
 
 void ResetIDs(TabStripModel* model, int start) {
@@ -402,9 +402,8 @@ class DetachToBrowserTabDragControllerTest
     if (input_source() == INPUT_SOURCE_MOUSE)
       return;
 #if defined(OS_CHROMEOS)
-    event_generator_.reset(
-        new ui::test::EventGenerator(new ScreenEventGeneratorDelegate(
-            ash::WmWindow::GetAuraWindow(ash::wm::GetRootWindowAt(point)))));
+    event_generator_.reset(new ui::test::EventGenerator(
+        new ScreenEventGeneratorDelegate(ash::wm::GetRootWindowAt(point))));
 #endif
   }
 
@@ -640,7 +639,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
 
 namespace {
 
-// Invoked from the nested message loop.
+// Invoked from the nested run loop.
 void DragToSeparateWindowStep2(DetachToBrowserTabDragControllerTest* test,
                                TabStrip* not_attached_tab_strip,
                                TabStrip* target_tab_strip) {
@@ -804,7 +803,8 @@ class MaximizedBrowserWindowWaiter {
   bool CheckMaximized() {
     if (!window_->IsMaximized()) {
       base::MessageLoop::current()->task_runner()->PostTask(
-          FROM_HERE, base::Bind(
+          FROM_HERE,
+          base::BindOnce(
               base::IgnoreResult(&MaximizedBrowserWindowWaiter::CheckMaximized),
               base::Unretained(this)));
       return false;
@@ -1356,7 +1356,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest, MAYBE_DragAll) {
 
 namespace {
 
-// Invoked from the nested message loop.
+// Invoked from the nested run loop.
 void DragAllToSeparateWindowStep2(DetachToBrowserTabDragControllerTest* test,
                                   TabStrip* attached_tab_strip,
                                   TabStrip* target_tab_strip,
@@ -1428,7 +1428,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
 
 namespace {
 
-// Invoked from the nested message loop.
+// Invoked from the nested run loop.
 void DragAllToSeparateWindowAndCancelStep2(
     DetachToBrowserTabDragControllerTest* test,
     TabStrip* attached_tab_strip,
@@ -1620,7 +1620,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
 
 namespace {
 
-// Invoked from the nested message loop.
+// Invoked from the nested run loop.
 void CancelOnNewTabWhenDraggingStep2(
     DetachToBrowserTabDragControllerTest* test,
     const BrowserList* browser_list) {
@@ -1842,7 +1842,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserInSeparateDisplayTabDragControllerTest,
 
 namespace {
 
-// Invoked from the nested message loop.
+// Invoked from the nested run loop.
 void DragTabToWindowInSeparateDisplayStep2(
     DetachToBrowserTabDragControllerTest* test,
     TabStrip* not_attached_tab_strip,
@@ -2266,7 +2266,7 @@ class DetachToBrowserInSeparateDisplayAndCancelTabDragControllerTest
       DetachToBrowserInSeparateDisplayAndCancelTabDragControllerTest);
 };
 
-// Invoked from the nested message loop.
+// Invoked from the nested run loop.
 void CancelDragTabToWindowInSeparateDisplayStep3(
     TabStrip* tab_strip,
     const BrowserList* browser_list) {
@@ -2280,7 +2280,7 @@ void CancelDragTabToWindowInSeparateDisplayStep3(
   display_manager->AddRemoveDisplay();
 }
 
-// Invoked from the nested message loop.
+// Invoked from the nested run loop.
 void CancelDragTabToWindowInSeparateDisplayStep2(
     DetachToBrowserInSeparateDisplayAndCancelTabDragControllerTest* test,
     TabStrip* tab_strip,

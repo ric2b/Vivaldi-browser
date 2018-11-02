@@ -29,7 +29,7 @@
  */
 
 #include "bindings/core/v8/ScriptController.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/modules/v8/V8SQLError.h"
 #include "bindings/modules/v8/V8SQLStatementErrorCallback.h"
 #include "bindings/modules/v8/V8SQLTransaction.h"
@@ -40,21 +40,21 @@ namespace blink {
 
 bool V8SQLStatementErrorCallback::handleEvent(SQLTransaction* transaction,
                                               SQLError* error) {
-  v8::Isolate* isolate = m_scriptState->GetIsolate();
+  v8::Isolate* isolate = script_state_->GetIsolate();
   ExecutionContext* execution_context =
-      ExecutionContext::From(m_scriptState.Get());
+      ExecutionContext::From(script_state_.Get());
   if (!execution_context || execution_context->IsContextSuspended() ||
       execution_context->IsContextDestroyed())
     return true;
-  if (!m_scriptState->ContextIsValid())
+  if (!script_state_->ContextIsValid())
     return true;
-  ScriptState::Scope scope(m_scriptState.Get());
+  ScriptState::Scope scope(script_state_.Get());
 
   v8::Local<v8::Value> transaction_handle =
-      ToV8(transaction, m_scriptState->GetContext()->Global(), isolate);
+      ToV8(transaction, script_state_->GetContext()->Global(), isolate);
   v8::Local<v8::Value> error_handle =
-      ToV8(error, m_scriptState->GetContext()->Global(), isolate);
-  ASSERT(transaction_handle->IsObject());
+      ToV8(error, script_state_->GetContext()->Global(), isolate);
+  DCHECK(transaction_handle->IsObject());
 
   v8::Local<v8::Value> argv[] = {transaction_handle, error_handle};
 
@@ -69,9 +69,9 @@ bool V8SQLStatementErrorCallback::handleEvent(SQLTransaction* transaction,
   // statement, if any, or onto the next overall step otherwise. Otherwise,
   // the error callback did not return false, or there was no error callback.
   // Jump to the last step in the overall steps.
-  if (!V8ScriptRunner::CallFunction(m_callback.NewLocal(isolate),
-                                    ExecutionContext::From(m_scriptState.Get()),
-                                    m_scriptState->GetContext()->Global(),
+  if (!V8ScriptRunner::CallFunction(callback_.NewLocal(isolate),
+                                    ExecutionContext::From(script_state_.Get()),
+                                    script_state_->GetContext()->Global(),
                                     WTF_ARRAY_LENGTH(argv), argv, isolate)
            .ToLocal(&result))
     return true;

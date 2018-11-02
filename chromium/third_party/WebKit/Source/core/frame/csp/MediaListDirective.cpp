@@ -18,7 +18,7 @@ MediaListDirective::MediaListDirective(const String& name,
     : CSPDirective(name, value, policy) {
   Vector<UChar> characters;
   value.AppendTo(characters);
-  Parse(characters.Data(), characters.Data() + characters.size());
+  Parse(characters.data(), characters.data() + characters.size());
 }
 
 bool MediaListDirective::Allows(const String& type) const {
@@ -79,7 +79,7 @@ void MediaListDirective::Parse(const UChar* begin, const UChar* end) {
     }
     plugin_types_.insert(String(begin, position - begin));
 
-    ASSERT(position == end || IsASCIISpace(*position));
+    DCHECK(position == end || IsASCIISpace(*position));
   }
 }
 

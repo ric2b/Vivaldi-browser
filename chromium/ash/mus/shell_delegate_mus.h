@@ -33,17 +33,19 @@ class ShellDelegateMus : public ShellDelegate {
   void Exit() override;
   keyboard::KeyboardUI* CreateKeyboardUI() override;
   void OpenUrlFromArc(const GURL& url) override;
-  ShelfDelegate* CreateShelfDelegate(ShelfModel* model) override;
+  void ShelfInit() override;
+  void ShelfShutdown() override;
   SystemTrayDelegate* CreateSystemTrayDelegate() override;
   std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() override;
   SessionStateDelegate* CreateSessionStateDelegate() override;
   AccessibilityDelegate* CreateAccessibilityDelegate() override;
   std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() override;
-  ui::MenuModel* CreateContextMenu(WmShelf* wm_shelf,
+  ui::MenuModel* CreateContextMenu(Shelf* shelf,
                                    const ShelfItem* item) override;
   GPUSupport* CreateGPUSupport() override;
   base::string16 GetProductName() const override;
   gfx::Image GetDeprecatedAcceleratorImage() const override;
+  PrefService* GetActiveUserPrefService() const override;
   bool IsTouchscreenEnabledInPrefs(bool use_local_state) const override;
   void SetTouchscreenEnabledInPrefs(bool enabled,
                                     bool use_local_state) override;

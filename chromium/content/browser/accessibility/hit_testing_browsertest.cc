@@ -105,7 +105,6 @@ IN_PROC_BROWSER_TEST_F(AccessibilityHitTestingBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(AccessibilityHitTestingBrowserTest,
                        HitTestingInIframes) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 
   NavigateToURL(shell(), GURL(url::kAboutBlankURL));
@@ -137,7 +136,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityHitTestingBrowserTest,
   // (50, 305) -> div in first iframe
   hit_node = HitTestAndWaitForResult(gfx::Point(50, 305));
   ASSERT_TRUE(hit_node != NULL);
-  ASSERT_EQ(ui::AX_ROLE_DIV, hit_node->GetRole());
+  ASSERT_EQ(ui::AX_ROLE_GENERIC_CONTAINER, hit_node->GetRole());
 
   // (50, 350) -> "Ordinary Button"
   hit_node = HitTestAndWaitForResult(gfx::Point(50, 350));
@@ -154,19 +153,18 @@ IN_PROC_BROWSER_TEST_F(AccessibilityHitTestingBrowserTest,
   // (50, 505) -> div in second iframe
   hit_node = HitTestAndWaitForResult(gfx::Point(50, 505));
   ASSERT_TRUE(hit_node != NULL);
-  ASSERT_EQ(ui::AX_ROLE_DIV, hit_node->GetRole());
+  ASSERT_EQ(ui::AX_ROLE_GENERIC_CONTAINER, hit_node->GetRole());
 
   // (50, 505) -> div in second iframe
   // but with a different event
   hit_node =
       HitTestAndWaitForResultWithEvent(gfx::Point(50, 505), ui::AX_EVENT_ALERT);
   ASSERT_NE(hit_node, nullptr);
-  ASSERT_EQ(ui::AX_ROLE_DIV, hit_node->GetRole());
+  ASSERT_EQ(ui::AX_ROLE_GENERIC_CONTAINER, hit_node->GetRole());
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityHitTestingBrowserTest,
                        CachingAsyncHitTestingInIframes) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 
   NavigateToURL(shell(), GURL(url::kAboutBlankURL));
@@ -202,9 +200,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityHitTestingBrowserTest,
   // (50, 305) -> div in first iframe
   hit_node = CallCachingAsyncHitTest(gfx::Point(50, 305));
   ASSERT_TRUE(hit_node != NULL);
-  ASSERT_NE(ui::AX_ROLE_DIV, hit_node->GetRole());
+  ASSERT_NE(ui::AX_ROLE_GENERIC_CONTAINER, hit_node->GetRole());
   hit_node = CallCachingAsyncHitTest(gfx::Point(50, 305));
-  ASSERT_EQ(ui::AX_ROLE_DIV, hit_node->GetRole());
+  ASSERT_EQ(ui::AX_ROLE_GENERIC_CONTAINER, hit_node->GetRole());
 
   // (50, 350) -> "Ordinary Button"
   hit_node = CallCachingAsyncHitTest(gfx::Point(50, 350));
@@ -225,9 +223,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityHitTestingBrowserTest,
   // (50, 505) -> div in second iframe
   hit_node = CallCachingAsyncHitTest(gfx::Point(50, 505));
   ASSERT_TRUE(hit_node != NULL);
-  ASSERT_NE(ui::AX_ROLE_DIV, hit_node->GetRole());
+  ASSERT_NE(ui::AX_ROLE_GENERIC_CONTAINER, hit_node->GetRole());
   hit_node = CallCachingAsyncHitTest(gfx::Point(50, 505));
-  ASSERT_EQ(ui::AX_ROLE_DIV, hit_node->GetRole());
+  ASSERT_EQ(ui::AX_ROLE_GENERIC_CONTAINER, hit_node->GetRole());
 }
 
 }  // namespace content

@@ -14,7 +14,7 @@
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -123,10 +123,12 @@ class MockUrlRequestJobWithTiming : public net::URLRequestFileJob {
                               const base::FilePath& path,
                               const TimingDeltas& load_timing_deltas)
       : net::URLRequestFileJob(
-            request, network_delegate, path,
-            content::BrowserThread::GetBlockingPool()->
-                GetTaskRunnerWithShutdownBehavior(
-                    base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)),
+            request,
+            network_delegate,
+            path,
+            base::CreateTaskRunnerWithTraits(
+                {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                 base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
         load_timing_deltas_(load_timing_deltas),
         weak_factory_(this) {}
 
@@ -142,8 +144,9 @@ class MockUrlRequestJobWithTiming : public net::URLRequestFileJob {
     }
 
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, base::Bind(&MockUrlRequestJobWithTiming::DelayedStart,
-                              weak_factory_.GetWeakPtr()),
+        FROM_HERE,
+        base::BindOnce(&MockUrlRequestJobWithTiming::DelayedStart,
+                       weak_factory_.GetWeakPtr()),
         time_to_wait);
   }
 
@@ -293,16 +296,16 @@ class LoadTimingBrowserTest : public InProcessBrowserTest {
     TestInterceptor* test_interceptor =
         new TestInterceptor(path, load_timing_deltas);
     BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::Bind(&TestInterceptor::Register,
-                                       base::Unretained(test_interceptor)));
+                            base::BindOnce(&TestInterceptor::Register,
+                                           base::Unretained(test_interceptor)));
 
     // Navigate to the page.
     RunTestWithUrl(GURL(kTestUrl), navigation_deltas);
 
     // Once navigation is complete, unregister the protocol handler.
     BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::Bind(&TestInterceptor::Unregister,
-                                        base::Unretained(test_interceptor)));
+                            base::BindOnce(&TestInterceptor::Unregister,
+                                           base::Unretained(test_interceptor)));
   }
 
  private:

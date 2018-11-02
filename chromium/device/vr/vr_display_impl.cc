@@ -45,11 +45,12 @@ void VRDisplayImpl::OnFocus() {
   client_->OnFocus();
 }
 
-void VRDisplayImpl::OnActivate(mojom::VRDisplayEventReason reason) {
+void VRDisplayImpl::OnActivate(mojom::VRDisplayEventReason reason,
+                               const base::Callback<void(bool)>& on_handled) {
   VRDeviceManager* manager = VRDeviceManager::GetInstance();
   if (!manager->IsMostRecentlyListeningForActivate(service_))
     return;
-  client_->OnActivate(reason);
+  client_->OnActivate(reason, on_handled);
 }
 
 void VRDisplayImpl::OnDeactivate(mojom::VRDisplayEventReason reason) {
@@ -59,9 +60,7 @@ void VRDisplayImpl::OnDeactivate(mojom::VRDisplayEventReason reason) {
 void VRDisplayImpl::RequestPresent(bool secure_origin,
                                    mojom::VRSubmitFrameClientPtr submit_client,
                                    const RequestPresentCallback& callback) {
-  // TODO(mthiesse): Re-enable insecure origin support once webVR content
-  // warnings are fixed. crbug.com/704937
-  if (!device_->IsAccessAllowed(this) || !secure_origin) {
+  if (!device_->IsAccessAllowed(this)) {
     callback.Run(false);
     return;
   }
@@ -113,4 +112,5 @@ void VRDisplayImpl::GetVRVSyncProvider(mojom::VRVSyncProviderRequest request) {
   }
   device_->GetVRVSyncProvider(std::move(request));
 }
-}
+
+}  // namespace device

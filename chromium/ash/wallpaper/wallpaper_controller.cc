@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ash/ash_switches.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
@@ -17,7 +18,6 @@
 #include "ash/wallpaper/wallpaper_delegate.h"
 #include "ash/wallpaper/wallpaper_view.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
-#include "ash/wm_window.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -34,7 +34,10 @@ namespace ash {
 namespace {
 
 // How long to wait reloading the wallpaper after the display size has changed.
-const int kWallpaperReloadDelayMs = 100;
+constexpr int kWallpaperReloadDelayMs = 100;
+
+// How long to wait for resizing of the the wallpaper.
+constexpr int kCompositorLockTimeoutMs = 750;
 
 // Returns true if a color should be extracted from the wallpaper based on the
 // command kAshShelfColor line arg.
@@ -92,10 +95,10 @@ WallpaperController::WallpaperController(
       wallpaper_mode_(WALLPAPER_NONE),
       prominent_color_(kInvalidColor),
       wallpaper_reload_delay_(kWallpaperReloadDelayMs),
-      task_runner_(task_runner) {
+      task_runner_(task_runner),
+      scoped_session_observer_(this) {
   ShellPort::Get()->AddDisplayObserver(this);
   Shell::Get()->AddShellObserver(this);
-  Shell::Get()->session_controller()->AddSessionStateObserver(this);
 }
 
 WallpaperController::~WallpaperController() {
@@ -105,7 +108,6 @@ WallpaperController::~WallpaperController() {
     color_calculator_->RemoveObserver(this);
   ShellPort::Get()->RemoveDisplayObserver(this);
   Shell::Get()->RemoveShellObserver(this);
-  Shell::Get()->session_controller()->RemoveSessionStateObserver(this);
 }
 
 void WallpaperController::BindRequest(
@@ -169,26 +171,13 @@ void WallpaperController::CreateEmptyWallpaper() {
   InstallDesktopControllerForAllWindows();
 }
 
-bool WallpaperController::MoveToLockedContainer() {
-  if (locked_)
-    return false;
-  locked_ = true;
-  return ReparentWallpaper(GetWallpaperContainerId(true));
-}
-
-bool WallpaperController::MoveToUnlockedContainer() {
-  if (!locked_)
-    return false;
-  locked_ = false;
-  return ReparentWallpaper(GetWallpaperContainerId(false));
-}
-
 void WallpaperController::OnDisplayConfigurationChanged() {
   gfx::Size max_display_size = GetMaxDisplaySizeInNative();
   if (current_max_display_size_ != max_display_size) {
     current_max_display_size_ = max_display_size;
     if (wallpaper_mode_ == WALLPAPER_IMAGE && current_wallpaper_) {
       timer_.Stop();
+      GetInternalDisplayCompositorLock();
       timer_.Start(FROM_HERE,
                    base::TimeDelta::FromMilliseconds(wallpaper_reload_delay_),
                    base::Bind(&WallpaperController::UpdateWallpaper,
@@ -197,7 +186,7 @@ void WallpaperController::OnDisplayConfigurationChanged() {
   }
 }
 
-void WallpaperController::OnRootWindowAdded(WmWindow* root_window) {
+void WallpaperController::OnRootWindowAdded(aura::Window* root_window) {
   // The wallpaper hasn't been set yet.
   if (wallpaper_mode_ == WALLPAPER_NONE)
     return;
@@ -213,9 +202,14 @@ void WallpaperController::OnRootWindowAdded(WmWindow* root_window) {
   InstallDesktopController(root_window);
 }
 
-void WallpaperController::SessionStateChanged(
+void WallpaperController::OnSessionStateChanged(
     session_manager::SessionState state) {
   CalculateWallpaperColors();
+
+  if (state == session_manager::SessionState::ACTIVE)
+    MoveToUnlockedContainer();
+  else
+    MoveToLockedContainer();
 }
 
 // static
@@ -287,6 +281,7 @@ void WallpaperController::SetWallpaper(const SkBitmap& wallpaper,
 
 void WallpaperController::OnWallpaperResized() {
   CalculateWallpaperColors();
+  compositor_lock_.reset();
 }
 
 void WallpaperController::OnColorCalculationComplete() {
@@ -295,7 +290,7 @@ void WallpaperController::OnColorCalculationComplete() {
   SetProminentColor(color);
 }
 
-void WallpaperController::InstallDesktopController(WmWindow* root_window) {
+void WallpaperController::InstallDesktopController(aura::Window* root_window) {
   WallpaperWidgetController* component = nullptr;
   int container_id = GetWallpaperContainerId(locked_);
 
@@ -310,23 +305,22 @@ void WallpaperController::InstallDesktopController(WmWindow* root_window) {
       return;
   }
 
-  RootWindowController* controller = root_window->GetRootWindowController();
+  RootWindowController* controller =
+      RootWindowController::ForWindow(root_window);
   controller->SetAnimatingWallpaperWidgetController(
       new AnimatingWallpaperWidgetController(component));
   component->StartAnimating(controller);
 }
 
 void WallpaperController::InstallDesktopControllerForAllWindows() {
-  for (WmWindow* root : ShellPort::Get()->GetAllRootWindows())
+  for (aura::Window* root : Shell::GetAllRootWindows())
     InstallDesktopController(root);
   current_max_display_size_ = GetMaxDisplaySizeInNative();
 }
 
 bool WallpaperController::ReparentWallpaper(int container) {
   bool moved = false;
-  for (WmWindow* root_window : ShellPort::Get()->GetAllRootWindows()) {
-    RootWindowController* root_window_controller =
-        root_window->GetRootWindowController();
+  for (auto* root_window_controller : Shell::GetAllRootWindowControllers()) {
     // In the steady state (no animation playing) the wallpaper widget
     // controller exists in the RootWindowController.
     WallpaperWidgetController* wallpaper_widget_controller =
@@ -400,6 +394,40 @@ bool WallpaperController::ShouldCalculateColors() const {
          Shell::Get()->session_controller()->GetSessionState() ==
              session_manager::SessionState::ACTIVE &&
          !image.isNull();
+}
+
+bool WallpaperController::MoveToLockedContainer() {
+  if (locked_)
+    return false;
+
+  locked_ = true;
+  return ReparentWallpaper(GetWallpaperContainerId(true));
+}
+
+bool WallpaperController::MoveToUnlockedContainer() {
+  if (!locked_)
+    return false;
+
+  locked_ = false;
+  return ReparentWallpaper(GetWallpaperContainerId(false));
+}
+
+void WallpaperController::GetInternalDisplayCompositorLock() {
+  if (display::Display::HasInternalDisplay()) {
+    aura::Window* root_window =
+        Shell::Get()->window_tree_host_manager()->GetRootWindowForDisplayId(
+            display::Display::InternalDisplayId());
+    if (root_window) {
+      compositor_lock_ =
+          root_window->layer()->GetCompositor()->GetCompositorLock(
+              this,
+              base::TimeDelta::FromMilliseconds(kCompositorLockTimeoutMs));
+    }
+  }
+}
+
+void WallpaperController::CompositorLockTimedOut() {
+  compositor_lock_.reset();
 }
 
 }  // namespace ash

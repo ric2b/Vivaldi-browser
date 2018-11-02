@@ -193,9 +193,10 @@ HRESULT CreateGoogleUpdate3WebClass(
   if (FAILED(hresult))
     return hresult;
 
-  ConfigureProxyBlanket(class_factory.get());
+  ConfigureProxyBlanket(class_factory.Get());
 
-  return class_factory->CreateInstance(nullptr, IID_PPV_ARGS(google_update));
+  return class_factory->CreateInstance(
+      nullptr, IID_PPV_ARGS(google_update->GetAddressOf()));
 }
 
 // UpdateCheckDriver -----------------------------------------------------------
@@ -515,7 +516,7 @@ HRESULT UpdateCheckDriver::BeginUpdateCheckInternal(
       return hresult;
     }
 
-    ConfigureProxyBlanket(google_update_.get());
+    ConfigureProxyBlanket(google_update_.Get());
   }
 
   // The class was created, so all subsequent errors are reported as:
@@ -525,15 +526,15 @@ HRESULT UpdateCheckDriver::BeginUpdateCheckInternal(
   if (!app_bundle_) {
     base::win::ScopedComPtr<IAppBundleWeb> app_bundle;
     base::win::ScopedComPtr<IDispatch> dispatch;
-    hresult = google_update_->createAppBundleWeb(dispatch.Receive());
+    hresult = google_update_->createAppBundleWeb(dispatch.GetAddressOf());
     if (FAILED(hresult))
       return hresult;
-    hresult = dispatch.QueryInterface(app_bundle.Receive());
+    hresult = dispatch.CopyTo(app_bundle.GetAddressOf());
     if (FAILED(hresult))
       return hresult;
     dispatch.Reset();
 
-    ConfigureProxyBlanket(app_bundle.get());
+    ConfigureProxyBlanket(app_bundle.Get());
 
     if (!locale_.empty()) {
       // Ignore the result of this since, while setting the display language is
@@ -552,7 +553,7 @@ HRESULT UpdateCheckDriver::BeginUpdateCheckInternal(
       app_bundle->put_parentHWND(
           reinterpret_cast<ULONG_PTR>(elevation_window_));
     }
-    app_bundle_.swap(app_bundle);
+    app_bundle_.Swap(app_bundle);
   }
 
   // Get a reference to the Chrome app in the bundle.
@@ -570,20 +571,20 @@ HRESULT UpdateCheckDriver::BeginUpdateCheckInternal(
     // Move the IAppBundleWeb reference into a local now so that failures from
     // this point onward result in it being released.
     base::win::ScopedComPtr<IAppBundleWeb> app_bundle;
-    app_bundle.swap(app_bundle_);
-    hresult = app_bundle->get_appWeb(0, dispatch.Receive());
+    app_bundle.Swap(app_bundle_);
+    hresult = app_bundle->get_appWeb(0, dispatch.GetAddressOf());
     if (FAILED(hresult))
       return hresult;
     base::win::ScopedComPtr<IAppWeb> app;
-    hresult = dispatch.QueryInterface(app.Receive());
+    hresult = dispatch.CopyTo(app.GetAddressOf());
     if (FAILED(hresult))
       return hresult;
-    ConfigureProxyBlanket(app.get());
+    ConfigureProxyBlanket(app.Get());
     hresult = app_bundle->checkForUpdate();
     if (FAILED(hresult))
       return hresult;
-    app_bundle_.swap(app_bundle);
-    app_.swap(app);
+    app_bundle_.Swap(app_bundle);
+    app_.Swap(app);
   }
 
   return hresult;
@@ -594,13 +595,13 @@ bool UpdateCheckDriver::GetCurrentState(
     CurrentState* state_value,
     HRESULT* hresult) const {
   base::win::ScopedComPtr<IDispatch> dispatch;
-  *hresult = app_->get_currentState(dispatch.Receive());
+  *hresult = app_->get_currentState(dispatch.GetAddressOf());
   if (FAILED(*hresult))
     return false;
-  *hresult = dispatch.QueryInterface(current_state->Receive());
+  *hresult = dispatch.CopyTo(current_state->GetAddressOf());
   if (FAILED(*hresult))
     return false;
-  ConfigureProxyBlanket(current_state->get());
+  ConfigureProxyBlanket(current_state->Get());
   LONG value = 0;
   *hresult = (*current_state)->get_stateValue(&value);
   if (FAILED(*hresult))

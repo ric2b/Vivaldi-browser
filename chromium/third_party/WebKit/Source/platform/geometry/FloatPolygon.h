@@ -111,23 +111,25 @@ class PLATFORM_EXPORT FloatPolygonEdge final : public VertexPair {
 
  public:
   const FloatPoint& Vertex1() const override {
-    ASSERT(polygon_);
+    DCHECK(polygon_);
     return polygon_->VertexAt(vertex_index1_);
   }
 
   const FloatPoint& Vertex2() const override {
-    ASSERT(polygon_);
+    DCHECK(polygon_);
     return polygon_->VertexAt(vertex_index2_);
   }
 
   const FloatPolygonEdge& PreviousEdge() const {
-    ASSERT(polygon_ && polygon_->NumberOfEdges() > 1);
+    DCHECK(polygon_);
+    DCHECK_GT(polygon_->NumberOfEdges(), 1UL);
     return polygon_->EdgeAt((edge_index_ + polygon_->NumberOfEdges() - 1) %
                             polygon_->NumberOfEdges());
   }
 
   const FloatPolygonEdge& NextEdge() const {
-    ASSERT(polygon_ && polygon_->NumberOfEdges() > 1);
+    DCHECK(polygon_);
+    DCHECK_GT(polygon_->NumberOfEdges(), 1UL);
     return polygon_->EdgeAt((edge_index_ + 1) % polygon_->NumberOfEdges());
   }
 

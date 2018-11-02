@@ -225,7 +225,7 @@ class LocationBarView : public LocationBar,
   // views::View:
   bool HasFocus() const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
   void Layout() override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
 
@@ -253,7 +253,6 @@ class LocationBarView : public LocationBar,
 
   // Returns the thickness of any visible edge, in pixels.
   int GetHorizontalEdgeThickness() const;
-  int GetVerticalEdgeThickness() const;
 
   // Returns the total amount of space reserved above or below the content,
   // which is the vertical edge thickness plus the padding next to it.
@@ -300,16 +299,6 @@ class LocationBarView : public LocationBar,
   // Returns true if the location icon text should be animated.
   bool ShouldAnimateLocationIconTextVisibilityChange() const;
 
-  // Used to "reverse" the URL showing/hiding animations, since we use separate
-  // animations whose curves are not true inverses of each other.  Based on the
-  // current position of the omnibox, calculates what value the desired
-  // animation (|hide_url_animation_| if |hide| is true, |show_url_animation_|
-  // if it's false) should be set to in order to produce the same omnibox
-  // position.  This way we can stop the old animation, set the new animation to
-  // this value, and start it running, and the text will appear to reverse
-  // directions from its current location.
-  double GetValueForAnimation(bool hide) const;
-
   // LocationBar:
   void ShowFirstRunBubble() override;
   GURL GetDestinationURL() const override;
@@ -321,6 +310,7 @@ class LocationBarView : public LocationBar,
   void UpdateManagePasswordsIconAndBubble() override;
   void UpdateSaveCreditCardIcon() override;
   void UpdateBookmarkStarVisibility() override;
+  void UpdateZoomViewVisibility() override;
   void UpdateLocationBarVisibility(bool visible, bool animation) override;
   void SaveStateToContents(content::WebContents* contents) override;
   const OmniboxView* GetOmniboxView() const override;

@@ -34,6 +34,13 @@ const int kInvalidHandle = -1;
 const int kDummyHandleForForcedInvocation = -2;
 const double kForcedInvocationDeadlineSeconds = 10;
 
+Position CorrectedReferencePosition(const Position& position,
+                                    const Document& document) {
+  if (!position.IsConnected() || position.GetDocument() != document)
+    return Position();
+  return CreateVisiblePosition(position).DeepEquivalent();
+}
+
 }  // namespace
 
 IdleSpellCheckCallback::~IdleSpellCheckCallback() {}
@@ -103,7 +110,8 @@ void IdleSpellCheckCallback::SetNeedsInvocation() {
 }
 
 void IdleSpellCheckCallback::SetNeedsColdModeInvocation() {
-  if (!IsSpellCheckingEnabled()) {
+  if (!RuntimeEnabledFeatures::idleTimeColdModeSpellCheckingEnabled() ||
+      !IsSpellCheckingEnabled()) {
     Deactivate();
     return;
   }
@@ -121,6 +129,7 @@ void IdleSpellCheckCallback::SetNeedsColdModeInvocation() {
 }
 
 void IdleSpellCheckCallback::ColdModeTimerFired(TimerBase*) {
+  DCHECK(RuntimeEnabledFeatures::idleTimeColdModeSpellCheckingEnabled());
   DCHECK_EQ(State::kColdModeTimerStarted, state_);
 
   if (!IsSpellCheckingEnabled()) {
@@ -153,7 +162,13 @@ void IdleSpellCheckCallback::HotModeInvocation(IdleDeadline* deadline) {
         std::max(step->SequenceNumber(), last_processed_undo_step_sequence_);
     if (deadline->timeRemaining() == 0)
       break;
-    requester.CheckSpellingAt(step->EndingSelection().Extent());
+    // The reference position stored in undo stack can be invalid, disconnected
+    // or have been moved to another document, in which case it should be
+    // corrected.
+    const Position& stored_position = step->EndingSelection().Extent();
+    const Position& corrected_position =
+        CorrectedReferencePosition(stored_position, *GetFrame().GetDocument());
+    requester.CheckSpellingAt(corrected_position);
   }
 }
 
@@ -174,6 +189,7 @@ void IdleSpellCheckCallback::handleEvent(IdleDeadline* deadline) {
     HotModeInvocation(deadline);
     SetNeedsColdModeInvocation();
   } else if (state_ == State::kColdModeRequested) {
+    DCHECK(RuntimeEnabledFeatures::idleTimeColdModeSpellCheckingEnabled());
     state_ = State::kInColdModeInvocation;
     cold_mode_requester_->Invoke(deadline);
     if (cold_mode_requester_->FullDocumentChecked())

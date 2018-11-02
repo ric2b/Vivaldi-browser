@@ -13,13 +13,14 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
 #include "cc/surfaces/frame_sink_id.h"
-#include "cc/surfaces/framesink_manager.h"
+#include "cc/surfaces/frame_sink_manager.h"
 #include "cc/surfaces/surface_dependency_tracker.h"
 #include "cc/surfaces/surface_id.h"
 #include "cc/surfaces/surface_observer.h"
@@ -36,12 +37,11 @@
 namespace cc {
 class BeginFrameSource;
 class CompositorFrame;
+class FrameSinkManagerClient;
 class Surface;
-class SurfaceFactory;
-class SurfaceFactoryClient;
 
 namespace test {
-class CompositorFrameSinkSupportTest;
+class SurfaceSynchronizationTest;
 }
 
 class CC_SURFACES_EXPORT SurfaceManager {
@@ -59,17 +59,14 @@ class CC_SURFACES_EXPORT SurfaceManager {
   std::string SurfaceReferencesToString();
 #endif
 
-  void SetDependencyTracker(
-      std::unique_ptr<SurfaceDependencyTracker> dependency_tracker);
-  SurfaceDependencyTracker* dependency_tracker() {
-    return dependency_tracker_.get();
-  }
+  void SetDependencyTracker(SurfaceDependencyTracker* dependency_tracker);
+  SurfaceDependencyTracker* dependency_tracker() { return dependency_tracker_; }
 
   void RequestSurfaceResolution(Surface* pending_surface);
 
   std::unique_ptr<Surface> CreateSurface(
-      base::WeakPtr<SurfaceFactory> surface_factory,
-      const LocalSurfaceId& local_surface_id);
+      base::WeakPtr<CompositorFrameSinkSupport> compositor_frame_sink_support,
+      const SurfaceInfo& surface_info);
 
   // Destroy the Surface once a set of sequence numbers has been satisfied.
   void DestroySurface(std::unique_ptr<Surface> surface);
@@ -84,9 +81,22 @@ class CC_SURFACES_EXPORT SurfaceManager {
 
   bool SurfaceModified(const SurfaceId& surface_id);
 
-  // Called when a CompositorFrame is submitted to a SurfaceFactory for a given
-  // |surface_id| for the first time.
+  // Called when a CompositorFrame is submitted to a CompositorFrameSinkSupport
+  // for a given |surface_id| for the first time.
   void SurfaceCreated(const SurfaceInfo& surface_info);
+
+  // Called when a CompositorFrame within |surface| has activated.
+  void SurfaceActivated(Surface* surface);
+
+  // Called when the dependencies of a pending CompositorFrame within |surface|
+  // has changed.
+  void SurfaceDependenciesChanged(
+      Surface* surface,
+      const base::flat_set<SurfaceId>& added_dependencies,
+      const base::flat_set<SurfaceId>& removed_dependencies);
+
+  // Called when |surface| is being destroyed.
+  void SurfaceDiscarded(Surface* surface);
 
   // Require that the given sequence number must be satisfied (using
   // SatisfySequence) before the given surface can be destroyed.
@@ -103,23 +113,23 @@ class CC_SURFACES_EXPORT SurfaceManager {
   // possibly because a renderer process has crashed.
   void InvalidateFrameSinkId(const FrameSinkId& frame_sink_id);
 
-  // SurfaceFactoryClient, hierarchy, and BeginFrameSource can be registered
-  // and unregistered in any order with respect to each other.
+  // CompositorFrameSinkSupport, hierarchy, and BeginFrameSource can be
+  // registered and unregistered in any order with respect to each other.
   //
   // This happens in practice, e.g. the relationship to between ui::Compositor /
   // DelegatedFrameHost is known before ui::Compositor has a surface/client).
   // However, DelegatedFrameHost can register itself as a client before its
   // relationship with the ui::Compositor is known.
 
-  // Associates a SurfaceFactoryClient with the surface id frame_sink_id it
+  // Associates a FrameSinkManagerClient with the surface id frame_sink_id it
   // uses.
-  // SurfaceFactoryClient and surface namespaces/allocators have a 1:1 mapping.
-  // Caller guarantees the client is alive between register/unregister.
+  // FrameSinkManagerClient and surface namespaces/allocators have a 1:1
+  // mapping. Caller guarantees the client is alive between register/unregister.
   // Reregistering the same namespace when a previous client is active is not
   // valid.
-  void RegisterSurfaceFactoryClient(const FrameSinkId& frame_sink_id,
-                                    SurfaceFactoryClient* client);
-  void UnregisterSurfaceFactoryClient(const FrameSinkId& frame_sink_id);
+  void RegisterFrameSinkManagerClient(const FrameSinkId& frame_sink_id,
+                                      FrameSinkManagerClient* client);
+  void UnregisterFrameSinkManagerClient(const FrameSinkId& frame_sink_id);
 
   // Associates a |source| with a particular namespace.  That namespace and
   // any children of that namespace with valid clients can potentially use
@@ -127,6 +137,10 @@ class CC_SURFACES_EXPORT SurfaceManager {
   void RegisterBeginFrameSource(BeginFrameSource* source,
                                 const FrameSinkId& frame_sink_id);
   void UnregisterBeginFrameSource(BeginFrameSource* source);
+
+  // Returns a stable BeginFrameSource that forwards BeginFrames from the first
+  // available BeginFrameSource.
+  BeginFrameSource* GetPrimaryBeginFrameSource();
 
   // Register a relationship between two namespaces.  This relationship means
   // that surfaces from the child namespace will be displayed in the parent.
@@ -171,7 +185,7 @@ class CC_SURFACES_EXPORT SurfaceManager {
   }
 
  private:
-  friend class test::CompositorFrameSinkSupportTest;
+  friend class test::SurfaceSynchronizationTest;
   friend class SurfaceManagerRefTest;
 
   using SurfaceIdSet = std::unordered_set<SurfaceId, SurfaceIdHash>;
@@ -242,11 +256,11 @@ class CC_SURFACES_EXPORT SurfaceManager {
   // Tracks references from the child surface to parent surface. If there are
   // zero entries in the set for a SurfaceId then nothing is referencing the
   // surface and it can be garbage collected.
-  std::unordered_map<SurfaceId, SurfaceIdSet, SurfaceIdHash>
+  std::unordered_map<SurfaceId, base::flat_set<SurfaceId>, SurfaceIdHash>
       child_to_parent_refs_;
   // Tracks references from the parent surface to child surface. Is the inverse
   // of |child_to_parent_refs_|.
-  std::unordered_map<SurfaceId, SurfaceIdSet, SurfaceIdHash>
+  std::unordered_map<SurfaceId, base::flat_set<SurfaceId>, SurfaceIdHash>
       parent_to_child_refs_;
 
   // Root SurfaceId that references display root surfaces. There is no Surface
@@ -275,7 +289,7 @@ class CC_SURFACES_EXPORT SurfaceManager {
   std::unordered_map<FrameSinkId, std::vector<LocalSurfaceId>, FrameSinkIdHash>
       temporary_reference_ranges_;
 
-  std::unique_ptr<SurfaceDependencyTracker> dependency_tracker_;
+  SurfaceDependencyTracker* dependency_tracker_ = nullptr;
 
   base::WeakPtrFactory<SurfaceManager> weak_factory_;
 

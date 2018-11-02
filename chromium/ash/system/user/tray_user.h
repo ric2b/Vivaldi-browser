@@ -7,7 +7,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/session_types.h"
-#include "ash/session/session_state_observer.h"
+#include "ash/session/session_observer.h"
 #include "ash/system/tray/system_tray_item.h"
 #include "base/macros.h"
 
@@ -27,13 +27,11 @@ class RoundedImageView;
 class UserView;
 }
 
-class ASH_EXPORT TrayUser : public SystemTrayItem, public SessionStateObserver {
+// TrayUser shows user info for signed in users. There is only one instance for
+// all users --- non-active users are displayed in the dropdown in UserCard.
+class ASH_EXPORT TrayUser : public SystemTrayItem, public SessionObserver {
  public:
-  // The given |index| is the user index in a multi profile scenario. Index #0
-  // is the active user, the other indices are other logged in users (if there
-  // are any). Depending on the multi user mode, there will be either one (index
-  // #0) or all users be visible in the system tray.
-  TrayUser(SystemTray* system_tray, UserIndex index);
+  explicit TrayUser(SystemTray* system_tray);
   ~TrayUser() override;
 
   // Allows unit tests to see if the item was created.
@@ -67,22 +65,19 @@ class ASH_EXPORT TrayUser : public SystemTrayItem, public SessionStateObserver {
   void DestroyTrayView() override;
   void DestroyDefaultView() override;
   void UpdateAfterLoginStatusChange(LoginStatus status) override;
-  void UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) override;
+  void UpdateAfterShelfAlignmentChange() override;
 
-  // Overridden from SessionStateObserver.
-  void ActiveUserChanged(const AccountId& account_id) override;
-  void UserAddedToSession(const AccountId& account_id) override;
-  void UserSessionUpdated(const AccountId& account_id) override;
+  // Overridden from SessionObserver.
+  void OnActiveUserSessionChanged(const AccountId& account_id) override;
+  void OnUserSessionAdded(const AccountId& account_id) override;
+  void OnUserSessionUpdated(const AccountId& account_id) override;
 
   void UpdateAvatarImage(LoginStatus status);
 
   // Updates the layout of this item.
   void UpdateLayoutOfItem();
 
-  ScopedSessionStateObserver scoped_session_observer_;
-
-  // The user index to use.
-  const UserIndex user_index_;
+  ScopedSessionObserver scoped_session_observer_;
 
   tray::UserView* user_ = nullptr;
 

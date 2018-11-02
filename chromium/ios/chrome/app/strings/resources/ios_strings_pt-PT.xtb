@@ -53,7 +53,6 @@ Por exemplo, alguns Sites poderão mostrar anúncios que não sejam baseados nou
 <translation id="1820259098641718022">Adicionada à lista de leitura</translation>
 <translation id="1876721852596493031">Enviar Dados de Uso</translation>
 <translation id="1886928167269928266">Desde sempre</translation>
-<translation id="1894451531427596130">Controle esta funcionalidade nas <ph name="BEGIN_LINK" />Definições<ph name="END_LINK" /></translation>
 <translation id="1911619930368729126">Carregar p/ Google Drive</translation>
 <translation id="1941314575388338491">Toque duas vezes para copiar.</translation>
 <translation id="1952728750904661634">Iniciar sessão com uma conta gerida</translation>
@@ -97,6 +96,7 @@ Por exemplo, alguns Sites poderão mostrar anúncios que não sejam baseados nou
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">Repor def. de tradutor</translation>
 <translation id="285960592395650245">Repetir transferência</translation>
+<translation id="2870560284913253234">Site</translation>
 <translation id="2871695793448672541">Palavra-passe oculta</translation>
 <translation id="2898963176829412617">Nova pasta…</translation>
 <translation id="2903493209154104877">Endereços</translation>
@@ -109,7 +109,6 @@ Por exemplo, alguns Sites poderão mostrar anúncios que não sejam baseados nou
 <translation id="2989805286512600854">Abrir num Novo Separador</translation>
 <translation id="3024255823539804759">Dia anterior</translation>
 <translation id="3037605927509011580">Ah, bolas!!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> não está disponível. Para aceder ao histórico de navegação, selecione "<ph name="SHOW_HISTORY" />" no menu de ferramentas.</translation>
 <translation id="3112556859945124369">Marcar…</translation>
 <translation id="3151924044251363314">Apenas alguém que conheça a sua frase de acesso pode ler os seus dados encriptados. A frase de acesso não é enviada para a Google nem armazenada pela mesma. Se se esquecer da frase de acesso ou pretender alterar esta definição, tem de repor a sincronização. <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">Marcar tudo…</translation>
@@ -150,6 +149,7 @@ Para ajustar o termo de pesquisa, prima continuamente para selecionar. Para refi
 <translation id="3638472932233958418">Pré-carregar Páginas Web</translation>
 <translation id="3691593122358196899">Adicionado aos marcadores em <ph name="FOLDER_TITLE" /></translation>
 <translation id="3738139272394829648">Tocar para pesquisar</translation>
+<translation id="3742082982782149146">O URL do site foi copiado.</translation>
 <translation id="3771033907050503522">Sep. nav. anónima</translation>
 <translation id="3783017676699494206">Guardar Imagem</translation>
 <translation id="3789841737615482174">Instalar</translation>
@@ -164,10 +164,12 @@ Para ajustar o termo de pesquisa, prima continuamente para selecionar. Para refi
 <translation id="4038354071007134711">Nenhuma aplic. neste disp. pode abrir o ficheiro.</translation>
 <translation id="4049507953662678203">Certifique-se de que tem uma ligação de rede e tente novamente.</translation>
 <translation id="411254640334432676">A transferência falhou.</translation>
+<translation id="4117350985506774529">O seu nome de utilizador foi copiado.</translation>
 <translation id="4121993058175073134">P/enviar dados exp. da Int., config. a conta de email na ap. Definiç.</translation>
 <translation id="4124987746317609294">Intervalo de Tempo</translation>
 <translation id="4172051516777682613">Mostrar sempre</translation>
 <translation id="418156467088430727">Ver versão offline num novo separador</translation>
+<translation id="4237682350741091554">Gerir a Sincronização do Chrome e a personalização nas <ph name="BEGIN_LINK" />Definições<ph name="END_LINK" /></translation>
 <translation id="424315890655130736">Introduzir frase de acesso</translation>
 <translation id="4272631900155121838">Para ler um código QR, ative a câmara nas definições</translation>
 <translation id="4281844954008187215">Termos de Utilização</translation>
@@ -175,6 +177,7 @@ Para ajustar o termo de pesquisa, prima continuamente para selecionar. Para refi
 <translation id="4359125752503270327">Esta página abre noutra aplicação.</translation>
 <translation id="4378154925671717803">Telefone</translation>
 <translation id="441868831736628555">Aviso de Privacidade</translation>
+<translation id="4508750114462689118">Fechar a promoção de início de sessão</translation>
 <translation id="4526249700380860531">Ver e gerir as palavras-passe guardadas em <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Experimente iniciar sessão novamente.</translation>
 <translation id="4620246317052452550">Páginas lidas</translation>
@@ -220,6 +223,7 @@ Os dados estão encriptados com a sua frase de acesso de sincronização. Introd
 
 A Entrega também tem de estar ativada na secção Geral das Definições e os seus dispositivos têm de utilizar a mesma conta iCloud.</translation>
 <translation id="5556459405103347317">Recarregar</translation>
+<translation id="5619279135193775234">Correio</translation>
 <translation id="5626245204502895507">De momento não é possível transferir o ficheiro.</translation>
 <translation id="5659593005791499971">Email</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@ Os dados foram encriptados com a sua frase de acesso de sincronização em <ph n
 <translation id="7136892417564438900">A câmara não está disponível</translation>
 <translation id="7159472599653637159">Pedir site para dispositivos móveis</translation>
 <translation id="7167621057293532233">Tipos de dados</translation>
+<translation id="7175593937868963913">Compor email</translation>
 <translation id="7189598951263744875">Partilhar...</translation>
 <translation id="7203585745079012652">Ouvir Respostas</translation>
 <translation id="722055596168483966">Personalizar os serviços Google</translation>
@@ -358,7 +363,6 @@ Os dados foram encriptados com a sua frase de acesso de sincronização em <ph n
 <translation id="8205564605687841303">Cancelar</translation>
 <translation id="8225985093977202398">Imagens e ficheiros em cache</translation>
 <translation id="8261506727792406068">Eliminar</translation>
-<translation id="8272194309885535896">Transferir imagem</translation>
 <translation id="8272426682713568063">Cartões de crédito</translation>
 <translation id="8281781826761538115">Predefinição – <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">Controlar a forma como a Google utiliza o seu histórico de navegação para personalizar a Pesquisa Google, os anúncios e outros serviços Google</translation>

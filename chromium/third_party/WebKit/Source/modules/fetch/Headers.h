@@ -6,16 +6,18 @@
 #define Headers_h
 
 #include "bindings/core/v8/Iterable.h"
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/ModulesExport.h"
 #include "modules/fetch/FetchHeaderList.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/Forward.h"
 
 namespace blink {
 
-class ByteStringSequenceSequenceOrByteStringByteStringRecordOrHeaders;
+class ByteStringSequenceSequenceOrByteStringByteStringRecord;
 class ExceptionState;
+
+using HeadersInit = ByteStringSequenceSequenceOrByteStringByteStringRecord;
 
 // http://fetch.spec.whatwg.org/#headers-class
 class MODULES_EXPORT Headers final : public GarbageCollected<Headers>,
@@ -33,9 +35,7 @@ class MODULES_EXPORT Headers final : public GarbageCollected<Headers>,
   };
 
   static Headers* Create(ExceptionState&);
-  static Headers* Create(
-      const ByteStringSequenceSequenceOrByteStringByteStringRecordOrHeaders&,
-      ExceptionState&);
+  static Headers* Create(const HeadersInit&, ExceptionState&);
 
   // Shares the FetchHeaderList. Called when creating a Request or Response.
   static Headers* Create(FetchHeaderList*);
@@ -46,7 +46,6 @@ class MODULES_EXPORT Headers final : public GarbageCollected<Headers>,
   void append(const String& name, const String& value, ExceptionState&);
   void remove(const String& key, ExceptionState&);
   String get(const String& key, ExceptionState&);
-  Vector<String> getAll(const String& key, ExceptionState&);
   bool has(const String& key, ExceptionState&);
   void set(const String& key, const String& value, ExceptionState&);
 
@@ -55,8 +54,7 @@ class MODULES_EXPORT Headers final : public GarbageCollected<Headers>,
 
   // These methods should only be called when size() would return 0.
   void FillWith(const Headers*, ExceptionState&);
-  void FillWith(const Vector<Vector<String>>&, ExceptionState&);
-  void FillWith(const Vector<std::pair<String, String>>&, ExceptionState&);
+  void FillWith(const HeadersInit&, ExceptionState&);
 
   FetchHeaderList* HeaderList() const { return header_list_; }
   DECLARE_TRACE();
@@ -65,6 +63,10 @@ class MODULES_EXPORT Headers final : public GarbageCollected<Headers>,
   Headers();
   // Shares the FetchHeaderList. Called when creating a Request or Response.
   explicit Headers(FetchHeaderList*);
+
+  // These methods should only be called when size() would return 0.
+  void FillWith(const Vector<Vector<String>>&, ExceptionState&);
+  void FillWith(const Vector<std::pair<String, String>>&, ExceptionState&);
 
   Member<FetchHeaderList> header_list_;
   Guard guard_;

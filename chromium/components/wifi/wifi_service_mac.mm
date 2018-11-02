@@ -17,6 +17,7 @@
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
 #include "components/onc/onc_constants.h"
@@ -225,7 +226,7 @@ void WiFiServiceMac::SetProperties(
     existing_properties->MergeDictionary(properties.get());
   } else {
     network_properties_.SetWithoutPathExpansion(network_guid,
-                                                properties.release());
+                                                std::move(properties));
   }
 }
 
@@ -245,8 +246,7 @@ void WiFiServiceMac::CreateNetwork(
     *error = kErrorInvalidData;
     return;
   }
-  network_properties_.SetWithoutPathExpansion(guid,
-                                              properties.release());
+  network_properties_.SetWithoutPathExpansion(guid, std::move(properties));
   *network_guid = guid;
 }
 

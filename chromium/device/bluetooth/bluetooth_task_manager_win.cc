@@ -13,11 +13,10 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "device/bluetooth/bluetooth_classic_win.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_init_win.h"
@@ -26,8 +25,6 @@
 
 namespace {
 
-const int kNumThreadsInWorkerPool = 3;
-const char kBluetoothThreadName[] = "BluetoothPollingThreadWin";
 const int kMaxNumDeviceAddressChar = 127;
 const int kServiceDiscoveryResultBufferSize = 5000;
 
@@ -246,30 +243,26 @@ BluetoothUUID BluetoothTaskManagerWin::BluetoothLowEnergyUuidToBluetoothUuid(
 
 void BluetoothTaskManagerWin::AddObserver(Observer* observer) {
   DCHECK(observer);
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   observers_.AddObserver(observer);
 }
 
 void BluetoothTaskManagerWin::RemoveObserver(Observer* observer) {
   DCHECK(observer);
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   observers_.RemoveObserver(observer);
 }
 
 void BluetoothTaskManagerWin::Initialize() {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
-  worker_pool_ = new base::SequencedWorkerPool(
-      kNumThreadsInWorkerPool, kBluetoothThreadName,
-      base::TaskPriority::USER_VISIBLE);
-  InitializeWithBluetoothTaskRunner(
-      worker_pool_->GetSequencedTaskRunnerWithShutdownBehavior(
-          worker_pool_->GetSequenceToken(),
-          base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN));
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
+  InitializeWithBluetoothTaskRunner(base::CreateSequencedTaskRunnerWithTraits(
+      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}));
 }
 
 void BluetoothTaskManagerWin::InitializeWithBluetoothTaskRunner(
     scoped_refptr<base::SequencedTaskRunner> bluetooth_task_runner) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   bluetooth_task_runner_ = bluetooth_task_runner;
   bluetooth_task_runner_->PostTask(
       FROM_HERE,
@@ -277,7 +270,7 @@ void BluetoothTaskManagerWin::InitializeWithBluetoothTaskRunner(
 }
 
 void BluetoothTaskManagerWin::StartPolling() {
-  DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(bluetooth_task_runner_->RunsTasksInCurrentSequence());
 
   if (device::bluetooth_init_win::HasBluetoothStack()) {
     PollAdapter();
@@ -294,17 +287,11 @@ void BluetoothTaskManagerWin::StartPolling() {
   }
 }
 
-void BluetoothTaskManagerWin::Shutdown() {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
-  if (worker_pool_.get())
-    worker_pool_->Shutdown();
-}
-
 void BluetoothTaskManagerWin::PostSetPoweredBluetoothTask(
     bool powered,
     const base::Closure& callback,
     const BluetoothAdapter::ErrorCallback& error_callback) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   bluetooth_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&BluetoothTaskManagerWin::SetPowered,
@@ -315,14 +302,14 @@ void BluetoothTaskManagerWin::PostSetPoweredBluetoothTask(
 }
 
 void BluetoothTaskManagerWin::PostStartDiscoveryTask() {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   bluetooth_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&BluetoothTaskManagerWin::StartDiscovery, this));
 }
 
 void BluetoothTaskManagerWin::PostStopDiscoveryTask() {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   bluetooth_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&BluetoothTaskManagerWin::StopDiscovery, this));
@@ -361,32 +348,32 @@ void BluetoothTaskManagerWin::LogPollingError(const char* message,
 }
 
 void BluetoothTaskManagerWin::OnAdapterStateChanged(const AdapterState* state) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   for (auto& observer : observers_)
     observer.AdapterStateChanged(*state);
 }
 
 void BluetoothTaskManagerWin::OnDiscoveryStarted(bool success) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   for (auto& observer : observers_)
     observer.DiscoveryStarted(success);
 }
 
 void BluetoothTaskManagerWin::OnDiscoveryStopped() {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   for (auto& observer : observers_)
     observer.DiscoveryStopped();
 }
 
 void BluetoothTaskManagerWin::OnDevicesPolled(
     std::vector<std::unique_ptr<DeviceState>> devices) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   for (auto& observer : observers_)
     observer.DevicesPolled(devices);
 }
 
 void BluetoothTaskManagerWin::PollAdapter() {
-  DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(bluetooth_task_runner_->RunsTasksInCurrentSequence());
 
   // Skips updating the adapter info if the adapter is in discovery mode.
   if (!discovering_) {
@@ -415,7 +402,7 @@ void BluetoothTaskManagerWin::PollAdapter() {
 }
 
 void BluetoothTaskManagerWin::PostAdapterStateToUi() {
-  DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(bluetooth_task_runner_->RunsTasksInCurrentSequence());
   AdapterState* state = new AdapterState();
   GetAdapterState(adapter_handle_, state);
   ui_task_runner_->PostTask(
@@ -429,7 +416,7 @@ void BluetoothTaskManagerWin::SetPowered(
     bool powered,
     const base::Closure& callback,
     const BluetoothAdapter::ErrorCallback& error_callback) {
-  DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(bluetooth_task_runner_->RunsTasksInCurrentSequence());
   bool success = false;
   if (adapter_handle_) {
     if (!powered) {
@@ -449,7 +436,7 @@ void BluetoothTaskManagerWin::SetPowered(
 }
 
 void BluetoothTaskManagerWin::StartDiscovery() {
-  DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(bluetooth_task_runner_->RunsTasksInCurrentSequence());
   ui_task_runner_->PostTask(
       FROM_HERE, base::Bind(&BluetoothTaskManagerWin::OnDiscoveryStarted, this,
                             !!adapter_handle_));
@@ -461,7 +448,7 @@ void BluetoothTaskManagerWin::StartDiscovery() {
 }
 
 void BluetoothTaskManagerWin::StopDiscovery() {
-  DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(bluetooth_task_runner_->RunsTasksInCurrentSequence());
   discovering_ = false;
   ui_task_runner_->PostTask(
       FROM_HERE,
@@ -469,7 +456,7 @@ void BluetoothTaskManagerWin::StopDiscovery() {
 }
 
 void BluetoothTaskManagerWin::DiscoverDevices(int timeout_multiplier) {
-  DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(bluetooth_task_runner_->RunsTasksInCurrentSequence());
   if (!discovering_ || !adapter_handle_) {
     ui_task_runner_->PostTask(
         FROM_HERE,
@@ -603,7 +590,7 @@ bool BluetoothTaskManagerWin::SearchLowEnergyDevices(
 bool BluetoothTaskManagerWin::DiscoverServices(
     std::vector<std::unique_ptr<DeviceState>>* device_list,
     bool search_cached_services_only) {
-  DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(bluetooth_task_runner_->RunsTasksInCurrentSequence());
   net::EnsureWinsockInit();
   for (const auto& device : *device_list) {
     std::vector<std::unique_ptr<ServiceRecordState>>* service_record_states =
@@ -897,7 +884,7 @@ void BluetoothTaskManagerWin::RegisterGattCharacteristicValueChangedEvent(
     BTH_LE_GATT_DESCRIPTOR ccc_descriptor,
     const GattEventRegistrationCallback& callback,
     const GattCharacteristicValueChangedCallback& registered_callback) {
-  DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(bluetooth_task_runner_->RunsTasksInCurrentSequence());
   BLUETOOTH_GATT_EVENT_HANDLE win_event_handle = NULL;
 
   BLUETOOTH_GATT_VALUE_CHANGED_EVENT_REGISTRATION win_event_parameter;
@@ -945,7 +932,7 @@ void BluetoothTaskManagerWin::RegisterGattCharacteristicValueChangedEvent(
 
 void BluetoothTaskManagerWin::UnregisterGattCharacteristicValueChangedEvent(
     PVOID event_handle) {
-  DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(bluetooth_task_runner_->RunsTasksInCurrentSequence());
 
   base::AutoLock auto_lock(g_characteristic_value_changed_registrations_lock);
   CharacteristicValueChangedRegistrationMap::const_iterator it =
@@ -962,7 +949,7 @@ void BluetoothTaskManagerWin::PostGetGattIncludedCharacteristics(
     const BluetoothUUID& uuid,
     uint16_t attribute_handle,
     const GetGattIncludedCharacteristicsCallback& callback) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   bluetooth_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&BluetoothTaskManagerWin::GetGattIncludedCharacteristics, this,
@@ -973,7 +960,7 @@ void BluetoothTaskManagerWin::PostGetGattIncludedDescriptors(
     const base::FilePath& service_path,
     const PBTH_LE_GATT_CHARACTERISTIC characteristic,
     const GetGattIncludedDescriptorsCallback& callback) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   bluetooth_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&BluetoothTaskManagerWin::GetGattIncludedDescriptors, this,
@@ -984,7 +971,7 @@ void BluetoothTaskManagerWin::PostReadGattCharacteristicValue(
     const base::FilePath& service_path,
     const PBTH_LE_GATT_CHARACTERISTIC characteristic,
     const ReadGattCharacteristicValueCallback& callback) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   bluetooth_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&BluetoothTaskManagerWin::ReadGattCharacteristicValue, this,
@@ -996,7 +983,7 @@ void BluetoothTaskManagerWin::PostWriteGattCharacteristicValue(
     const PBTH_LE_GATT_CHARACTERISTIC characteristic,
     const std::vector<uint8_t>& new_value,
     const HResultCallback& callback) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   bluetooth_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&BluetoothTaskManagerWin::WriteGattCharacteristicValue, this,
@@ -1009,7 +996,7 @@ void BluetoothTaskManagerWin::PostRegisterGattCharacteristicValueChangedEvent(
     const PBTH_LE_GATT_DESCRIPTOR ccc_descriptor,
     const GattEventRegistrationCallback& callback,
     const GattCharacteristicValueChangedCallback& registered_callback) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   bluetooth_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(
@@ -1020,7 +1007,7 @@ void BluetoothTaskManagerWin::PostRegisterGattCharacteristicValueChangedEvent(
 
 void BluetoothTaskManagerWin::PostUnregisterGattCharacteristicValueChangedEvent(
     PVOID event_handle) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   bluetooth_task_runner_->PostTask(
       FROM_HERE, base::Bind(&BluetoothTaskManagerWin::
                                 UnregisterGattCharacteristicValueChangedEvent,

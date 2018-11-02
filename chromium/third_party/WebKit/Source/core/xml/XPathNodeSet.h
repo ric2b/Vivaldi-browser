@@ -52,11 +52,11 @@ class NodeSet final : public GarbageCollected<NodeSet> {
   void ReserveCapacity(size_t new_capacity) {
     nodes_.ReserveCapacity(new_capacity);
   }
-  void Clear() { nodes_.Clear(); }
+  void clear() { nodes_.clear(); }
   void Swap(NodeSet& other) {
     std::swap(is_sorted_, other.is_sorted_);
     std::swap(subtrees_are_disjoint_, other.subtrees_are_disjoint_);
-    nodes_.Swap(other.nodes_);
+    nodes_.swap(other.nodes_);
   }
 
   // NodeSet itself does not verify that nodes in it are unique.

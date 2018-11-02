@@ -130,6 +130,7 @@
             "type": "@UI.ActionDelegate",
             "actionId": "emulation.show-sensors",
             "title": "Sensors",
+            "condition": "!v8only",
             "className": "Emulation.SensorsView.ShowActionDelegate"
         },
         {
@@ -137,6 +138,7 @@
             "location": "drawer-view",
             "id": "sensors",
             "title": "Sensors",
+            "condition": "!v8only",
             "persistence": "closeable",
             "order": 100,
             "className": "Emulation.SensorsView",
@@ -154,12 +156,9 @@
         "AdvancedApp.js",
         "EmulatedDevices.js",
         "DevicesSettingsTab.js",
-        "DeviceOrientation.js",
-        "Geolocation.js",
         "InspectedPagePlaceholder.js",
         "MediaQueryInspector.js",
         "SensorsView.js",
-        "TouchModel.js",
         "DeviceModeModel.js",
         "DeviceModeToolbar.js",
         "DeviceModeView.js",

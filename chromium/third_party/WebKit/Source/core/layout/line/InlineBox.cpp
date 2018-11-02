@@ -39,10 +39,10 @@ class LayoutObject;
 
 struct SameSizeAsInlineBox : DisplayItemClient {
   virtual ~SameSizeAsInlineBox() {}
-  uint32_t bitfields;
   void* a[4];
   LayoutPoint b;
   LayoutUnit c;
+  uint32_t bitfields;
 #if DCHECK_IS_ON()
   bool f;
 #endif
@@ -132,7 +132,7 @@ void InlineBox::ShowBox(int printed_characters) const {
   for (; printed_characters < kShowTreeCharacterOffset; printed_characters++)
     fputc(' ', stderr);
   fprintf(stderr, "\t%s %p {pos=%g,%g size=%g,%g} baseline=%i/%i\n",
-          GetLineLayoutItem().DecoratedName().Ascii().Data(),
+          GetLineLayoutItem().DecoratedName().Ascii().data(),
           GetLineLayoutItem().DebugPointer(), X().ToFloat(), Y().ToFloat(),
           Width().ToFloat(), Height().ToFloat(),
           BaselinePosition(kAlphabeticBaseline),

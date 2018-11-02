@@ -21,10 +21,11 @@
 <translation id="1525508553941733066">SLUITEN</translation>
 <translation id="15373452373711364">Grote muisaanwijzer</translation>
 <translation id="1550523713251050646">Klik voor meer opties</translation>
-<translation id="1621499497873603021">Resterende tijd totdat de accu leeg is: <ph name="TIME_LEFT" /></translation>
+<translation id="1621499497873603021">Resterende tijd totdat de batterij leeg is: <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Chrome-apparaat</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> resterend</translation>
 <translation id="1698760176351776263">IPv6-adres: <ph name="ADDRESS" /></translation>
+<translation id="1734367976349034509">Dit apparaat wordt beheerd door een onderneming</translation>
 <translation id="1747827819627189109">Schermtoetsenbord ingeschakeld</translation>
 <translation id="1823873187264960516">Ethernet: <ph name="ADDRESS" /></translation>
 <translation id="1850504506766569011">Wifi is uitgeschakeld.</translation>
@@ -36,7 +37,9 @@
 <translation id="1942830294380034169">Overloopknop</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2049639323467105390">Dit apparaat wordt beheerd door <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Staand</translation>
+<translation id="207439088875642105">Dit is een account voor kinderen dat wordt beheerd door <ph name="FIRST_PARENT_EMAIL" /> en <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="2122028596993374965">Casten van <ph name="TAB_NAME" /> naar <ph name="RECEIVER_NAME" /> stopzetten</translation>
 <translation id="2127372758936585790">Laag-vermogen-lader</translation>
 <translation id="2144487987174258011">Start opnieuw op om Adobe Flash Player te updaten</translation>
@@ -44,6 +47,7 @@
 <translation id="225680501294068881">Zoeken naar apparaten...</translation>
 <translation id="2268130516524549846">Bluetooth uitgeschakeld</translation>
 <translation id="2268813581635650749">Alle gebruikers uitloggen</translation>
+<translation id="2292698582925480719">Weergaveschaal</translation>
 <translation id="2303600792989757991">Overzicht venster in-/uitschakelen</translation>
 <translation id="2352467521400612932">Stylusinstellingen</translation>
 <translation id="2354174487190027830"><ph name="NAME" /> activeren</translation>
@@ -70,7 +74,8 @@
 <translation id="2999742336789313416"><ph name="DISPLAY_NAME" /> is een openbare sessie die wordt beheerd door <ph name="DOMAIN" /></translation>
 <translation id="3000461861112256445">Monogeluid</translation>
 <translation id="3009178788565917040">Uitgang</translation>
-<translation id="3019353588588144572">Resterende tijd totdat de accu volledig is opgeladen: <ph name="TIME_REMAINING" /></translation>
+<translation id="3019353588588144572">Resterende tijd totdat de batterij volledig is opgeladen: <ph name="TIME_REMAINING" /></translation>
+<translation id="3047477924825107454">Dit is een account voor kinderen dat wordt beheerd door <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3050422059534974565">CAPS LOCK is ingeschakeld.
 Druk op Zoeken of Shift om te annuleren.</translation>
 <translation id="3077734595579995578">shift</translation>
@@ -91,7 +96,7 @@ Druk op Zoeken of Shift om te annuleren.</translation>
 <translation id="3510164367642747937">Muisaanwijzer markeren</translation>
 <translation id="3547954654003013442">Proxyinstellingen</translation>
 <translation id="3573179567135747900">Teruggaan naar '<ph name="FROM_LOCALE" />' (opnieuw starten vereist)</translation>
-<translation id="3595596368722241419">Accu is vol</translation>
+<translation id="3595596368722241419">Batterij is vol</translation>
 <translation id="3606978283550408104">Braillescherm gekoppeld.</translation>
 <translation id="3621202678540785336">Ingang</translation>
 <translation id="3625258641415618104">Screenshots uitgeschakeld</translation>
@@ -125,11 +130,12 @@ Druk op Zoeken of Shift om te annuleren.</translation>
 <translation id="4527045527269911712">Bluetooth-apparaat '<ph name="DEVICE_NAME" />' wil toestemming om te koppelen.</translation>
 <translation id="453661520163887813"><ph name="TIME" /> tot volledig opgeladen</translation>
 <translation id="4544944664594876241">De sneltoets om het scherm te vergrendelen is gewijzigd. Gebruik <ph name="NEW_SHORTCUT" /> in plaats van <ph name="OLD_SHORTCUT" />.</translation>
+<translation id="4659419629803378708">ChromeVox ingeschakeld</translation>
 <translation id="479989351350248267">zoeken</translation>
 <translation id="4804818685124855865">Verbinding verbreken</translation>
 <translation id="4849058404725798627">Object met toetsenbordfocus markeren</translation>
 <translation id="4872237917498892622">Alt+Zoeken of Shift</translation>
-<translation id="4895488851634969361">De accu is vol.</translation>
+<translation id="4895488851634969361">De batterij is vol.</translation>
 <translation id="4918086044614829423">Accepteren</translation>
 <translation id="4961318399572185831">Scherm casten</translation>
 <translation id="5011233892417813670">Chromebook</translation>
@@ -140,6 +146,7 @@ Druk op Zoeken of Shift om te annuleren.</translation>
 <translation id="523505283826916779">Toegankelijkheidsinstellingen</translation>
 <translation id="5313326810920013265">Bluetooth-instellingen</translation>
 <translation id="5331975486040154427">USB-C-apparaat (poort links aan de achterkant)</translation>
+<translation id="5397578532367286026">Het gebruik en de geschiedenis van deze gebruiker kunnen worden bekeken door de beheerder (<ph name="MANAGER_EMAIL" />) op chrome.com.</translation>
 <translation id="5430931332414098647">Instant-tethering</translation>
 <translation id="5431825016875453137">OpenVPN/L2TP</translation>
 <translation id="544691375626129091">Alle beschikbare gebruikers zijn al aan deze sessie toegevoegd.</translation>
@@ -147,6 +154,7 @@ Druk op Zoeken of Shift om te annuleren.</translation>
 <translation id="5548285847212963613">Met de extensie '<ph name="EXTENSION_NAME" />' kun je verbinding maken met dit netwerk.</translation>
 <translation id="5571066253365925590">Bluetooth ingeschakeld</translation>
 <translation id="5597451508971090205"><ph name="SHORT_WEEKDAY" />, <ph name="DATE" /></translation>
+<translation id="5600837773213129531">Druk op Ctrl + Alt + Z om gesproken feedback uit te schakelen.</translation>
 <translation id="5648021990716966815">Microfoonaansluiting</translation>
 <translation id="5744083938413354016">Tikken en slepen</translation>
 <translation id="5777841717266010279">Stoppen met scherm delen?</translation>
@@ -176,6 +184,7 @@ Druk op Zoeken of Shift om te annuleren.</translation>
 <translation id="6297287540776456956">Gebruik de stylus om een gebied te selecteren</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> is gedraaid naar <ph name="ROTATION" /></translation>
 <translation id="632744581670418035">Overlay voor toetsenbord</translation>
+<translation id="6395038768903208085">Modus voor metalagen</translation>
 <translation id="639644700271529076">CAPS LOCK is uitgeschakeld</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6452181791372256707">Weigeren</translation>
@@ -189,7 +198,7 @@ Druk op Zoeken of Shift om te annuleren.</translation>
 <translation id="6650933572246256093">Bluetooth-apparaat '<ph name="DEVICE_NAME" />' wil toestemming om te koppelen. Voer de volgende toegangscode in op dat apparaat: <ph name="PASSKEY" /></translation>
 <translation id="6700713906295497288">IME-menuknop</translation>
 <translation id="6713285437468012787">Bluetooth-apparaat '<ph name="DEVICE_NAME" />' is gekoppeld en is nu beschikbaar voor alle gebruikers. Je kunt deze koppeling verwijderen via 'Instellingen'.</translation>
-<translation id="6785414152754474415">De accu is <ph name="PERCENTAGE" />% vol en wordt opgeladen.</translation>
+<translation id="6785414152754474415">De batterij is <ph name="PERCENTAGE" />% vol en wordt opgeladen.</translation>
 <translation id="6803622936009808957">Kan schermen niet spiegelen, omdat er geen ondersteunde resoluties zijn gevonden. Het uitgebreide bureaublad is geactiveerd.</translation>
 <translation id="683971173229319003">Zoeken+L</translation>
 <translation id="6857811139397017780"><ph name="NETWORKSERVICE" /> activeren</translation>
@@ -201,8 +210,6 @@ Druk op Zoeken of Shift om te annuleren.</translation>
 <translation id="7052914147756339792">Achtergrond instellen...</translation>
 <translation id="7066646422045619941">Dit netwerk is uitgeschakeld door je beheerder.</translation>
 <translation id="7067196344162293536">Automatisch draaien</translation>
-<translation id="7097613348211027502">ChromeVox (gesproken feedback) is ingeschakeld.
-Druk op Ctrl+Alt+Z om uit te schakelen.</translation>
 <translation id="7098389117866926363">USB-C-apparaat (poort links aan de achterkant)</translation>
 <translation id="7129360219436193655">Laserpenmodus</translation>
 <translation id="714034171374937760">Chromebase</translation>
@@ -217,16 +224,20 @@ Druk op Alt+Zoeken of Shift om te annuleren.</translation>
 <translation id="742594950370306541">Camera is in gebruik.</translation>
 <translation id="743058460480092004">Camera en microfoon zijn in gebruik.</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
+<translation id="7526573455193969409">Netwerk kan worden bijgehouden</translation>
 <translation id="7536035074519304529">IP-adres: <ph name="ADDRESS" /></translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> ondersteunt <ph name="SPECIFIED_RESOLUTION" /> niet. De resolutie is gewijzigd in <ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7562368315689366235">Emoji-palet</translation>
+<translation id="7569509451529460200">Braille en ChromeVox zijn ingeschakeld</translation>
 <translation id="7581273696622423628">Enquête invullen</translation>
 <translation id="7593891976182323525">Zoeken of Shift</translation>
 <translation id="7649070708921625228">Help</translation>
 <translation id="7692480393933218409">De aangesloten USB-C-apparaten worden opgeladen</translation>
+<translation id="776344839111254542">Klik om updategegevens te bekijken</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> en <ph name="MINUTE" /></translation>
 <translation id="7823564328645135659">Na het synchroniseren met je instellingen, is de taal gewijzigd van '<ph name="FROM_LOCALE" />' in '<ph name="TO_LOCALE" />'.</translation>
 <translation id="7904094684485781019">De beheerder van dit account heeft toegang tot meerdere accounts niet toegestaan.</translation>
+<translation id="7951523953736115461">Nachtverlichting</translation>
 <translation id="7977927628060636163">Mobiele netwerken zoeken…</translation>
 <translation id="7982789257301363584">Netwerk</translation>
 <translation id="8000066093800657092">Geen netwerk</translation>
@@ -244,6 +255,7 @@ Druk op Alt+Zoeken of Shift om te annuleren.</translation>
 <translation id="8433186206711564395">Netwerkinstellingen</translation>
 <translation id="8433977262951327081">De sneltoets om de ballon van het menu met invoeropties op de plank weer te geven, is gewijzigd. Gebruik <ph name="NEW_SHORTCUT" /> in plaats van <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="8454013096329229812">Wifi is ingeschakeld.</translation>
+<translation id="847056008324733326">Instellingen voor weergaveschaal</translation>
 <translation id="8484916590211895857"><ph name="NAME" />: Opnieuw verbinding maken...</translation>
 <translation id="8517041960877371778">Je <ph name="DEVICE_TYPE" /> wordt mogelijk niet opgeladen terwijl deze is ingeschakeld.</translation>
 <translation id="8639760480004882931"><ph name="PERCENTAGE" /> resterend</translation>
@@ -255,7 +267,7 @@ Druk op Alt+Zoeken of Shift om te annuleren.</translation>
 <translation id="8850991929411075241">Zoeken+Esc</translation>
 <translation id="8878886163241303700">Uitgebreid scherm</translation>
 <translation id="8938800817013097409">USB-C-apparaat (poort rechts aan de achterkant)</translation>
-<translation id="8940956008527784070">Accu is bijna leeg (<ph name="PERCENTAGE" />%)</translation>
+<translation id="8940956008527784070">Batterij is bijna leeg (<ph name="PERCENTAGE" />%)</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9079731690316798640">Wifi: <ph name="ADDRESS" /></translation>
 <translation id="9080206825613744995">Microfoon wordt gebruikt.</translation>
@@ -263,7 +275,7 @@ Druk op Alt+Zoeken of Shift om te annuleren.</translation>
 <translation id="9091626656156419976">Display <ph name="DISPLAY_NAME" /> is verwijderd</translation>
 <translation id="9151726767154816831">Opnieuw opstarten en de functie Powerwash gebruiken om bij te werken</translation>
 <translation id="9194617393863864469">Een andere gebruiker inloggen...</translation>
-<translation id="9201131092683066720">De accu is <ph name="PERCENTAGE" />% vol.</translation>
+<translation id="9201131092683066720">De batterij is <ph name="PERCENTAGE" />% vol.</translation>
 <translation id="9210037371811586452">Samengestelde desktopmodus wordt gesloten</translation>
 <translation id="923686485342484400">Druk twee keer op Control+Shift+Q om uit te loggen.</translation>
 <translation id="939252827960237676">Kan screenshot niet opslaan</translation>

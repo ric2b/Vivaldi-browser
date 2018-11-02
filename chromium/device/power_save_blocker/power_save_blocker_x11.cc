@@ -27,6 +27,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/nix/xdg_util.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
@@ -216,7 +217,7 @@ void PowerSaveBlocker::Delegate::CleanUp() {
 }
 
 void PowerSaveBlocker::Delegate::InitOnUIThread() {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   base::AutoLock lock(lock_);
   api_ = SelectAPI();
 
@@ -239,7 +240,7 @@ bool PowerSaveBlocker::Delegate::ShouldBlock() const {
 }
 
 void PowerSaveBlocker::Delegate::ApplyBlock() {
-  DCHECK(blocking_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(blocking_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(!bus_);  // ApplyBlock() should only be called once.
   DCHECK(!block_inflight_);
 
@@ -319,7 +320,7 @@ void PowerSaveBlocker::Delegate::ApplyBlock() {
 }
 
 void PowerSaveBlocker::Delegate::ApplyBlockFinished(dbus::Response* response) {
-  DCHECK(blocking_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(blocking_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(bus_);
   DCHECK(block_inflight_);
   block_inflight_ = false;
@@ -345,7 +346,7 @@ void PowerSaveBlocker::Delegate::ApplyBlockFinished(dbus::Response* response) {
 }
 
 void PowerSaveBlocker::Delegate::RemoveBlock() {
-  DCHECK(blocking_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(blocking_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(bus_);  // RemoveBlock() should only be called once.
   DCHECK(!unblock_inflight_);
 
@@ -399,7 +400,7 @@ void PowerSaveBlocker::Delegate::RemoveBlock() {
 }
 
 void PowerSaveBlocker::Delegate::RemoveBlockFinished(dbus::Response* response) {
-  DCHECK(blocking_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(blocking_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(bus_);
   unblock_inflight_ = false;
 
@@ -414,7 +415,7 @@ void PowerSaveBlocker::Delegate::RemoveBlockFinished(dbus::Response* response) {
 }
 
 void PowerSaveBlocker::Delegate::XSSSuspendSet(bool suspend) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
 
   if (!XSSAvailable())
     return;
@@ -424,7 +425,7 @@ void PowerSaveBlocker::Delegate::XSSSuspendSet(bool suspend) {
 }
 
 bool PowerSaveBlocker::Delegate::DPMSEnabled() {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   XDisplay* display = gfx::GetXDisplay();
   BOOL enabled = false;
   int dummy;
@@ -436,7 +437,7 @@ bool PowerSaveBlocker::Delegate::DPMSEnabled() {
 }
 
 bool PowerSaveBlocker::Delegate::XSSAvailable() {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   // X Screen Saver isn't accessible in headless mode.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kHeadless))
     return false;
@@ -455,7 +456,7 @@ bool PowerSaveBlocker::Delegate::XSSAvailable() {
 }
 
 DBusAPI PowerSaveBlocker::Delegate::SelectAPI() {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   // Power saving APIs are not accessible in headless mode.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kHeadless))
     return NO_API;

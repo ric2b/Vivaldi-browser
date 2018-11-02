@@ -8,6 +8,7 @@ import("//build/config/features.gni")
 import("//vivaldi/app/deps_updates.gni")
 import("//vivaldi/base/deps_updates.gni")
 import("//vivaldi/browser/deps_updates.gni")
+import("//vivaldi/calendar/deps_updates.gni")
 import("//vivaldi/db/deps_updates.gni")
 import("//vivaldi/extensions/deps_updates.gni")
 import("//vivaldi/extraparts/deps_updates.gni")
@@ -27,10 +28,6 @@ post_process_target("//content/common:common") {
 
 post_process_target("//components/url_formatter:url_formatter") {
   deps += [ "//base:base_static" ]
-}
-
-post_process_template("//media:media_unittests") {
-  deps -= [ "//media/mojo:unit_tests" ]
 }
 
 post_process_target("//third_party/WebKit/public:all_blink") {
@@ -101,6 +98,7 @@ foreach(_target,
   post_process_template(_target) {
     deps += [
       "//vivaldi/extraparts",
+      "//vivaldi/calendar",
       "//vivaldi/notes",
       "//vivaldi/importer",
       "//vivaldi/sync:browser",

@@ -7,6 +7,7 @@
         "device:battery_monitor": [ "device::mojom::BatteryMonitor" ],
         "device:fingerprint": [ "device::mojom::Fingerprint" ],
         "device:generic_sensor": [ "device::mojom::SensorProvider" ],
+        "device:nfc": [ "device::mojom::NFCProvider" ],
         "device:power_monitor": [ "device::mojom::PowerMonitor" ],
         "device:screen_orientation": [ "device::mojom::ScreenOrientationListener" ],
         "device:sensors": [
@@ -17,7 +18,7 @@
         ],
         "device:time_zone_monitor": [ "device::mojom::TimeZoneMonitor" ],
         "device:vibration": [ "device::mojom::VibrationManager" ],
-        "device:wake_lock": [ "device::mojom::WakeLockContextProvider" ]
+        "device:wake_lock": [ "device::mojom::WakeLockProvider" ]
       },
       "requires": {
         "service_manager": [ "service_manager:all_users" ]

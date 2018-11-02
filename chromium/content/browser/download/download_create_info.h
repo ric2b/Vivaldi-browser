@@ -45,8 +45,11 @@ struct CONTENT_EXPORT DownloadCreateInfo {
   // redirection by the server for |url_chain|.
   const GURL& url() const;
 
-  // The ID of the download.
+  // The ID of the download. (Deprecated)
   uint32_t download_id;
+
+  // The unique identifier for the download.
+  std::string guid;
 
   // The chain of redirects that leading up to and including the final URL.
   std::vector<GURL> url_chain;
@@ -136,6 +139,9 @@ struct CONTENT_EXPORT DownloadCreateInfo {
 
   // The HTTP connection type.
   net::HttpResponseInfo::ConnectionInfo connection_info;
+
+  // The HTTP request method.
+  std::string method;
 
   // The file should be opened when the download is done.
   bool open_when_finished;

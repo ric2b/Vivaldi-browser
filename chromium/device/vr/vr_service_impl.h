@@ -15,6 +15,10 @@
 #include "device/vr/vr_service.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
+namespace service_manager {
+struct BindSourceInfo;
+}
+
 namespace device {
 
 // Browser process representation of a WebVR site session. Instantiated through
@@ -28,7 +32,8 @@ class VRServiceImpl : public mojom::VRService {
   DEVICE_VR_EXPORT ~VRServiceImpl() override;
 
   DEVICE_VR_EXPORT static void Create(
-      mojo::InterfaceRequest<mojom::VRService> request);
+      const service_manager::BindSourceInfo& source_info,
+      mojom::VRServiceRequest request);
 
   // mojom::VRService implementation
   // Adds this service to the VRDeviceManager.
@@ -55,6 +60,9 @@ class VRServiceImpl : public mojom::VRService {
   mojom::VRServiceClientPtr client_;
 
   bool listening_for_activate_;
+  bool in_set_client_;
+  unsigned connected_devices_;
+  unsigned handled_devices_;
 
   base::WeakPtrFactory<VRServiceImpl> weak_ptr_factory_;
 

@@ -92,8 +92,6 @@ def create_event_measure_whitelist(name):
             or name == 'TrackEvent'
             or name == 'TransitionEvent'
             or name == 'WebGLContextEvent'
-            or name == 'WebKitAnimationEvent'
-            or name == 'WebKitTransitionEvent'
             or name == 'WheelEvent')
 
 
@@ -103,8 +101,8 @@ def measure_name(name):
 
 class EventFactoryWriter(json5_generator.Writer):
     default_parameters = {
-        'ImplementedAs': None,
-        'RuntimeEnabled': None,
+        'ImplementedAs': {},
+        'RuntimeEnabled': {},
     }
     default_metadata = {
         'export': '',

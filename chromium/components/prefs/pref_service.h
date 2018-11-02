@@ -39,6 +39,10 @@ namespace base {
 class FilePath;
 }
 
+namespace prefs {
+class ScopedDictionaryPrefUpdate;
+}
+
 namespace subtle {
 class PrefMemberBase;
 class ScopedUserPrefUpdateBase;
@@ -58,6 +62,11 @@ class COMPONENTS_PREFS_EXPORT PrefService : public base::NonThreadSafe {
     INITIALIZATION_STATUS_SUCCESS,
     INITIALIZATION_STATUS_CREATED_NEW_PREF_STORE,
     INITIALIZATION_STATUS_ERROR
+  };
+
+  enum IncludeDefaults {
+    INCLUDE_DEFAULTS,
+    EXCLUDE_DEFAULTS,
   };
 
   // A helper class to store all the information associated with a preference.
@@ -250,23 +259,22 @@ class COMPONENTS_PREFS_EXPORT PrefService : public base::NonThreadSafe {
   // this checks if a value exists for the path.
   bool HasPrefPath(const std::string& path) const;
 
-  // Returns a dictionary with effective preference values.
-  std::unique_ptr<base::DictionaryValue> GetPreferenceValues() const;
+  // Issues a callback for every preference value. The preferences must not be
+  // mutated during iteration.
+  void IteratePreferenceValues(
+      base::RepeatingCallback<void(const std::string& key,
+                                   const base::Value& value)> callback) const;
 
-  // Returns a dictionary with effective preference values, omitting prefs that
-  // are at their default values.
-  std::unique_ptr<base::DictionaryValue> GetPreferenceValuesOmitDefaults()
-      const;
-
-  // Returns a dictionary with effective preference values. Contrary to
-  // GetPreferenceValues(), the paths of registered preferences are not split on
-  // '.' characters. If a registered preference stores a dictionary, however,
-  // the hierarchical structure inside the preference will be preserved.
-  // For example, if "foo.bar" is a registered preference, the result could look
-  // like this:
-  //   {"foo.bar": {"a": {"b": true}}}.
-  std::unique_ptr<base::DictionaryValue>
-  GetPreferenceValuesWithoutPathExpansion() const;
+  // Returns a dictionary with effective preference values. This is an expensive
+  // operation which does a deep copy. Use only if you really need the results
+  // in a base::Value (for example, for JSON serialization). Otherwise use
+  // IteratePreferenceValues above to avoid the copies.
+  //
+  // If INCLUDE_DEFAULTS is requested, preferences set to their default values
+  // will be included. Otherwise, these will be omitted from the returned
+  // dictionary.
+  std::unique_ptr<base::DictionaryValue> GetPreferenceValues(
+      IncludeDefaults include_defaults) const;
 
   bool ReadOnly() const;
 
@@ -327,6 +335,7 @@ class COMPONENTS_PREFS_EXPORT PrefService : public base::NonThreadSafe {
   // Give access to ReportUserPrefChanged() and GetMutableUserPref().
   friend class subtle::ScopedUserPrefUpdateBase;
   friend class PrefServiceTest_WriteablePrefStoreFlags_Test;
+  friend class prefs::ScopedDictionaryPrefUpdate;
 
   // Registration of pref change observers must be done using the
   // PrefChangeRegistrar, which is declared as a friend here to grant it
@@ -350,8 +359,12 @@ class COMPONENTS_PREFS_EXPORT PrefService : public base::NonThreadSafe {
   virtual void RemovePrefObserver(const std::string& path, PrefObserver* obs);
 
   // Sends notification of a changed preference. This needs to be called by
-  // a ScopedUserPrefUpdate if a DictionaryValue or ListValue is changed.
+  // a ScopedUserPrefUpdate or ScopedDictionaryPrefUpdate if a DictionaryValue
+  // or ListValue is changed.
   void ReportUserPrefChanged(const std::string& key);
+  void ReportUserPrefChanged(
+      const std::string& key,
+      std::set<std::vector<std::string>> path_components);
 
   // Sets the value for this pref path in the user pref store and informs the
   // PrefNotifier of the change.

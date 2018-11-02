@@ -85,13 +85,21 @@ void DelegatedFrameHostAndroid::SubmitCompositorFrame(
         cc::SurfaceId(frame_sink_id_, local_surface_id), 1.f, frame_size);
     has_transparent_background_ = root_pass->has_transparent_background;
 
-    support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+    bool result =
+        support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+    DCHECK(result);
+
     content_layer_ = CreateSurfaceLayer(surface_manager_, surface_info_,
                                         !has_transparent_background_);
     view_->GetLayer()->AddChild(content_layer_);
   } else {
     support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
   }
+}
+
+void DelegatedFrameHostAndroid::DidNotProduceFrame(
+    const cc::BeginFrameAck& ack) {
+  support_->DidNotProduceFrame(ack);
 }
 
 cc::FrameSinkId DelegatedFrameHostAndroid::GetFrameSinkId() const {
@@ -127,7 +135,7 @@ void DelegatedFrameHostAndroid::DestroyDelegatedContent() {
 
   content_layer_->RemoveFromParent();
   content_layer_ = nullptr;
-  support_->EvictFrame();
+  support_->EvictCurrentSurface();
   surface_info_ = cc::SurfaceInfo();
 }
 
@@ -181,12 +189,6 @@ void DelegatedFrameHostAndroid::WillDrawSurface(
 
 void DelegatedFrameHostAndroid::OnNeedsBeginFrames(bool needs_begin_frames) {
   support_->SetNeedsBeginFrame(needs_begin_frames);
-}
-
-void DelegatedFrameHostAndroid::OnDidFinishFrame(const cc::BeginFrameAck& ack) {
-  // If there was damage, SubmitCompositorFrame includes the ack.
-  if (!ack.has_damage)
-    support_->BeginFrameDidNotSwap(ack);
 }
 
 void DelegatedFrameHostAndroid::CreateNewCompositorFrameSinkSupport() {

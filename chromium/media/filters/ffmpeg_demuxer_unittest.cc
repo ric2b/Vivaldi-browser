@@ -14,6 +14,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -52,6 +53,40 @@ namespace media {
 MATCHER(IsEndOfStreamBuffer,
         std::string(negation ? "isn't" : "is") + " end of stream") {
   return arg->end_of_stream();
+}
+
+namespace {
+void OnStreamStatusChanged(base::WaitableEvent* event,
+                           DemuxerStream* stream,
+                           bool enabled,
+                           base::TimeDelta) {
+  event->Signal();
+}
+
+void CheckStreamStatusNotifications(MediaResource* media_resource,
+                                    FFmpegDemuxerStream* stream) {
+  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                            base::WaitableEvent::InitialState::NOT_SIGNALED);
+
+  ASSERT_TRUE(stream->IsEnabled());
+  media_resource->SetStreamStatusChangeCB(
+      base::Bind(&OnStreamStatusChanged, base::Unretained(&event)));
+
+  stream->SetEnabled(false, base::TimeDelta());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(event.IsSignaled());
+
+  event.Reset();
+  stream->SetEnabled(true, base::TimeDelta());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(event.IsSignaled());
+}
+
+void OnReadDone_ExpectEos(DemuxerStream::Status status,
+                          const scoped_refptr<DecoderBuffer>& buffer) {
+  EXPECT_EQ(status, DemuxerStream::kOk);
+  EXPECT_TRUE(buffer->end_of_stream());
+}
 }
 
 const uint8_t kEncryptedMediaInitData[] = {
@@ -108,7 +143,7 @@ class FFmpegDemuxerTest : public testing::Test {
 
     demuxer_.reset(new FFmpegDemuxer(
         base::ThreadTaskRunnerHandle::Get(), data_source_.get(),
-        encrypted_media_init_data_cb, tracks_updated_cb, new MediaLog()));
+        encrypted_media_init_data_cb, tracks_updated_cb, &media_log_));
   }
 
   DemuxerStream* GetStream(DemuxerStream::Type type) {
@@ -246,6 +281,7 @@ class FFmpegDemuxerTest : public testing::Test {
   // Fixture members.
 
   base::test::ScopedTaskScheduler task_scheduler_;
+  MediaLog media_log_;
   std::unique_ptr<FileDataSource> data_source_;
   std::unique_ptr<FFmpegDemuxer> demuxer_;
   StrictMock<MockDemuxerHost> host_;
@@ -558,20 +594,20 @@ TEST_F(FFmpegDemuxerTest, Seeking_PreferredStreamSelection) {
 
   // A disabled stream should be preferred only when there's no other viable
   // option among enabled streams.
-  audio->set_enabled(false, base::TimeDelta());
+  audio->SetEnabled(false, base::TimeDelta());
   EXPECT_EQ(video, preferred_seeking_stream(video_start_time));
   // Audio stream is preferred, even though it is disabled, since video stream
   // start time is higher than the seek target == audio_start_time in this case.
   EXPECT_EQ(audio, preferred_seeking_stream(audio_start_time));
 
-  audio->set_enabled(true, base::TimeDelta());
-  video->set_enabled(false, base::TimeDelta());
+  audio->SetEnabled(true, base::TimeDelta());
+  video->SetEnabled(false, base::TimeDelta());
   EXPECT_EQ(audio, preferred_seeking_stream(audio_start_time));
   EXPECT_EQ(audio, preferred_seeking_stream(video_start_time));
 
   // When both audio and video streams are disabled and there's no enabled
   // streams, then audio is preferred since it has lower start time.
-  audio->set_enabled(false, base::TimeDelta());
+  audio->SetEnabled(false, base::TimeDelta());
   EXPECT_EQ(audio, preferred_seeking_stream(audio_start_time));
   EXPECT_EQ(audio, preferred_seeking_stream(video_start_time));
 }
@@ -832,7 +868,7 @@ TEST_F(FFmpegDemuxerTest, Read_DiscardDisabledVideoStream) {
   auto bytes_read_with_video_enabled = data_source_->bytes_read_for_testing();
 
   static_cast<FFmpegDemuxerStream*>(GetStream(DemuxerStream::VIDEO))
-      ->set_enabled(false, base::TimeDelta());
+      ->SetEnabled(false, base::TimeDelta());
   data_source_->reset_bytes_read_for_testing();
   Seek(seek_target);
   GetStream(DemuxerStream::AUDIO)
@@ -1576,7 +1612,7 @@ TEST_F(FFmpegDemuxerTest, Seek_FallbackToDisabledVideoStream) {
 
   // Now pretend that video stream got disabled, e.g. due to current tab going
   // into background.
-  vstream->set_enabled(false, base::TimeDelta());
+  vstream->SetEnabled(false, base::TimeDelta());
   // Since there's no other enabled streams, the preferred seeking stream should
   // still be the video stream.
   EXPECT_EQ(vstream, preferred_seeking_stream(base::TimeDelta()));
@@ -1592,10 +1628,36 @@ TEST_F(FFmpegDemuxerTest, Seek_FallbackToDisabledAudioStream) {
   EXPECT_EQ(astream, preferred_seeking_stream(base::TimeDelta()));
 
   // Now pretend that audio stream got disabled.
-  astream->set_enabled(false, base::TimeDelta());
+  astream->SetEnabled(false, base::TimeDelta());
   // Since there's no other enabled streams, the preferred seeking stream should
   // still be the audio stream.
   EXPECT_EQ(astream, preferred_seeking_stream(base::TimeDelta()));
+}
+
+TEST_F(FFmpegDemuxerTest, StreamStatusNotifications) {
+  CreateDemuxer("bear-320x240.webm");
+  InitializeDemuxer();
+  FFmpegDemuxerStream* audio_stream =
+      static_cast<FFmpegDemuxerStream*>(GetStream(DemuxerStream::AUDIO));
+  EXPECT_NE(nullptr, audio_stream);
+  FFmpegDemuxerStream* video_stream =
+      static_cast<FFmpegDemuxerStream*>(GetStream(DemuxerStream::VIDEO));
+  EXPECT_NE(nullptr, video_stream);
+
+  // Verify stream status notifications delivery without pending read first.
+  CheckStreamStatusNotifications(demuxer_.get(), audio_stream);
+  CheckStreamStatusNotifications(demuxer_.get(), video_stream);
+
+  // Verify that stream notifications are delivered properly when stream status
+  // changes with a pending read. Call FlushBuffers before reading, to ensure
+  // there is no buffers ready to be returned by the Read right away, thus
+  // ensuring that status changes occur while an async read is pending.
+  audio_stream->FlushBuffers();
+  audio_stream->Read(base::Bind(&media::OnReadDone_ExpectEos));
+  CheckStreamStatusNotifications(demuxer_.get(), audio_stream);
+  video_stream->FlushBuffers();
+  video_stream->Read(base::Bind(&media::OnReadDone_ExpectEos));
+  CheckStreamStatusNotifications(demuxer_.get(), video_stream);
 }
 
 }  // namespace media

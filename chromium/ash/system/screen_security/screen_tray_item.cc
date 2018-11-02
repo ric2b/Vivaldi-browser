@@ -9,6 +9,7 @@
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/message_center/message_center.h"
 #include "ui/views/controls/button/label_button.h"
@@ -24,7 +25,7 @@ ScreenTrayView::ScreenTrayView(ScreenTrayItem* screen_tray_item)
     : TrayItemView(screen_tray_item), screen_tray_item_(screen_tray_item) {
   CreateImageView();
   image_view()->SetImage(
-      gfx::CreateVectorIcon(kSystemTrayScreenShareIcon, kTrayIconColor));
+      gfx::CreateVectorIcon(vector_icons::kScreenShareIcon, kTrayIconColor));
   Update();
 }
 
@@ -49,17 +50,16 @@ ScreenStatusView::ScreenStatusView(ScreenTrayItem* screen_tray_item,
   SetLayoutManager(new views::FillLayout);
   AddChildView(tri_view);
   tri_view->AddView(TriView::Container::START, icon_);
-  // TODO(bruthig): Multiline Labels don't lay out well with borders so we add
-  // the border to the Label's container instead. See https://crbug.com/678337 &
-  // https://crbug.com/682221.
-  tri_view->SetContainerBorder(
-      TriView::Container::CENTER,
-      views::CreateEmptyBorder(0, 0, 0, kTrayPopupLabelRightPadding));
   tri_view->AddView(TriView::Container::CENTER, label_);
   tri_view->AddView(TriView::Container::END, stop_button_);
+  // There should be |kTrayPopupButtonEndMargin| padding on both sides of the
+  // stop button. There is already |kTrayPopupLabelHorizontalPadding| padding on
+  // the right of the label.
   tri_view->SetContainerBorder(
       TriView::Container::END,
-      views::CreateEmptyBorder(0, 0, 0, kTrayPopupButtonEndMargin));
+      views::CreateEmptyBorder(
+          0, kTrayPopupButtonEndMargin - kTrayPopupLabelHorizontalPadding, 0,
+          kTrayPopupButtonEndMargin));
   if (screen_tray_item_)
     UpdateFromScreenTrayItem();
 }
@@ -81,9 +81,6 @@ void ScreenStatusView::CreateItems() {
   label_ = TrayPopupUtils::CreateDefaultLabel();
   label_->SetMultiLine(true);
   label_->SetText(label_text_);
-  // TODO(bruthig): Multiline Labels don't lay out well with borders.
-  // See https://crbug.com/678337 & https://crbug.com/682221.
-  label_->SetBorder(nullptr);
   TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
   style.SetupLabel(label_);
 

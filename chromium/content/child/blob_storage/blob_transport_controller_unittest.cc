@@ -45,7 +45,7 @@ namespace {
 
 class OtherThreadTestSimpleTaskRunner : public base::TestSimpleTaskRunner {
  public:
-  bool RunsTasksOnCurrentThread() const override { return false; }
+  bool RunsTasksInCurrentSequence() const override { return false; }
 
  protected:
   ~OtherThreadTestSimpleTaskRunner() override {}
@@ -300,7 +300,7 @@ TEST_F(BlobTransportControllerTest, SharedMemory) {
   memory.CreateAnonymous(11 + 6);
   base::SharedMemoryHandle handle =
       base::SharedMemory::DuplicateHandle(memory.handle());
-  CHECK(base::SharedMemory::NULLHandle() != handle);
+  CHECK(handle.IsValid());
   memory_handles.push_back(handle);
 
   OnMemoryRequest(holder, kBlobUUID, requests, &memory_handles, file_handles);

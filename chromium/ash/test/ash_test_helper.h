@@ -14,12 +14,13 @@
 #include "ash/test/test_session_controller_client.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/test/scoped_command_line.h"
 #include "ui/aura/test/mus/test_window_tree_client_setup.h"
 
 namespace aura {
 class Window;
 class WindowTreeClientPrivate;
-}  // namespace aura
+}
 
 namespace display {
 class Display;
@@ -33,7 +34,8 @@ class MashTestSuite;
 
 namespace ui {
 class ScopedAnimationDurationScaleMode;
-}  // namespace ui
+class InputDeviceClient;
+}
 
 namespace wm {
 class WMState;
@@ -107,6 +109,9 @@ class AshTestHelper {
   mus::WindowManagerApplication* window_manager_app() {
     return window_manager_app_.get();
   }
+  aura::TestWindowTreeClientSetup* window_tree_client_setup() {
+    return &window_tree_client_setup_;
+  }
 
   TestSessionControllerClient* test_session_controller_client() {
     return session_controller_client_.get();
@@ -115,6 +120,8 @@ class AshTestHelper {
       std::unique_ptr<TestSessionControllerClient> session_controller_client) {
     session_controller_client_ = std::move(session_controller_client);
   }
+
+  void reset_commandline() { command_line_.reset(); }
 
  private:
   // These TestSuites need to manipulate |config_|.
@@ -164,6 +171,10 @@ class AshTestHelper {
   int64_t next_display_id_ = 1;
 
   std::unique_ptr<TestSessionControllerClient> session_controller_client_;
+
+  std::unique_ptr<ui::InputDeviceClient> input_device_client_;
+
+  std::unique_ptr<base::test::ScopedCommandLine> command_line_;
 
   DISALLOW_COPY_AND_ASSIGN(AshTestHelper);
 };

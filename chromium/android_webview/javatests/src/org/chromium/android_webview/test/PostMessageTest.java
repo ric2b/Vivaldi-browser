@@ -177,12 +177,27 @@ public class PostMessageTest extends AwTestBase {
     @SmallTest
     @Feature({"AndroidWebView", "Android-PostMessage"})
     public void testPostMessageToMainFrame() throws Throwable {
+        verifyPostMessageToMainFrame(mWebServer.getBaseUrl());
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testPostMessageToMainFrameUsingWildcard() throws Throwable {
+        verifyPostMessageToMainFrame("*");
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testPostMessageToMainFrameUsingEmptyStringAsWildcard() throws Throwable {
+        verifyPostMessageToMainFrame("");
+    }
+
+    private void verifyPostMessageToMainFrame(final String targetOrigin) throws Throwable {
         loadPage(TEST_PAGE);
         runTestOnUiThread(new Runnable() {
             @Override
             public void run() {
-                mAwContents.postMessageToFrame(null, WEBVIEW_MESSAGE, mWebServer.getBaseUrl(),
-                        null);
+                mAwContents.postMessageToFrame(null, WEBVIEW_MESSAGE, targetOrigin, null);
             }
         });
         mMessageObject.waitForMessage();
@@ -677,8 +692,10 @@ public class PostMessageTest extends AwTestBase {
     // transferred to JS and full communication can happen on it.
     // Do this by sending a message to JS and let it echo'ing the message with
     // some text prepended to it.
-    @SmallTest
-    @Feature({"AndroidWebView", "Android-PostMessage"})
+    // Disabled because flaky, see crbug.com/715960.
+    // @SmallTest
+    // @Feature({"AndroidWebView", "Android-PostMessage"})
+    @DisabledTest
     public void testMessageChannelUsingPendingPort() throws Throwable {
         final ChannelContainer channelContainer = new ChannelContainer();
         loadPage(ECHO_PAGE);

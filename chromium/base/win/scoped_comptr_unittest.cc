@@ -26,12 +26,6 @@ struct Dummy {
   int releases;
 };
 
-extern const IID dummy_iid;
-const IID dummy_iid = {0x12345678u,
-                       0x1234u,
-                       0x5678u,
-                       {01, 23, 45, 67, 89, 01, 23, 45}};
-
 }  // namespace
 
 TEST(ScopedComPtrTest, ScopedComPtr) {
@@ -39,47 +33,24 @@ TEST(ScopedComPtrTest, ScopedComPtr) {
   EXPECT_TRUE(com_initializer.succeeded());
 
   ScopedComPtr<IUnknown> unk;
-  EXPECT_TRUE(SUCCEEDED(unk.CreateInstance(CLSID_ShellLink)));
+  EXPECT_TRUE(SUCCEEDED(::CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_ALL,
+                                           IID_PPV_ARGS(&unk))));
   ScopedComPtr<IUnknown> unk2;
   unk2.Attach(unk.Detach());
-  EXPECT_TRUE(unk.get() == NULL);
-  EXPECT_TRUE(unk2.get() != NULL);
+  EXPECT_TRUE(unk.Get() == NULL);
+  EXPECT_TRUE(unk2.Get() != NULL);
 
   ScopedComPtr<IMalloc> mem_alloc;
-  EXPECT_TRUE(SUCCEEDED(CoGetMalloc(1, mem_alloc.Receive())));
+  EXPECT_TRUE(SUCCEEDED(CoGetMalloc(1, mem_alloc.GetAddressOf())));
 
   ScopedComPtr<IUnknown> qi_test;
-  EXPECT_HRESULT_SUCCEEDED(mem_alloc.QueryInterface(IID_PPV_ARGS(&qi_test)));
-  EXPECT_TRUE(qi_test.get() != NULL);
-  qi_test.Reset();
-
-  // test ScopedComPtr& constructor
-  ScopedComPtr<IMalloc> copy1(mem_alloc);
-  EXPECT_TRUE(copy1.IsSameObject(mem_alloc.get()));
-  EXPECT_FALSE(copy1.IsSameObject(unk2.get()));  // unk2 is valid but different
-  EXPECT_FALSE(copy1.IsSameObject(unk.get()));  // unk is NULL
-
-  IMalloc* naked_copy = copy1.Detach();
-  copy1 = naked_copy;  // Test the =(T*) operator.
-  naked_copy->Release();
-
-  copy1.Reset();
-  EXPECT_FALSE(copy1.IsSameObject(unk2.get()));  // unk2 is valid, copy1 is not
-
-  // test Interface* constructor
-  ScopedComPtr<IMalloc> copy2(static_cast<IMalloc*>(mem_alloc.get()));
-  EXPECT_TRUE(copy2.IsSameObject(mem_alloc.get()));
-
-  EXPECT_TRUE(SUCCEEDED(unk.QueryFrom(mem_alloc.get())));
-  EXPECT_TRUE(unk.get() != NULL);
-  unk.Reset();
-  EXPECT_TRUE(unk.get() == NULL);
-  EXPECT_TRUE(unk.IsSameObject(copy1.get()));  // both are NULL
+  EXPECT_HRESULT_SUCCEEDED(mem_alloc.CopyTo(IID_PPV_ARGS(&qi_test)));
+  EXPECT_TRUE(qi_test.Get() != NULL);
 }
 
 TEST(ScopedComPtrTest, ScopedComPtrVector) {
   // Verify we don't get error C2558.
-  typedef ScopedComPtr<Dummy, &dummy_iid> Ptr;
+  typedef ScopedComPtr<Dummy> Ptr;
   std::vector<Ptr> bleh;
 
   std::unique_ptr<Dummy> p(new Dummy);
@@ -98,7 +69,7 @@ TEST(ScopedComPtrTest, ScopedComPtrVector) {
     bleh.push_back(p2);
     EXPECT_EQ(p->adds, 4);
     EXPECT_EQ(p->releases, 1);
-    EXPECT_EQ(bleh[0].get(), p.get());
+    EXPECT_EQ(bleh[0].Get(), p.get());
     bleh.pop_back();
     EXPECT_EQ(p->adds, 4);
     EXPECT_EQ(p->releases, 2);

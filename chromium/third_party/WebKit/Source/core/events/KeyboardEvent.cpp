@@ -22,14 +22,14 @@
 
 #include "core/events/KeyboardEvent.h"
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/editing/InputMethodController.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "platform/WindowsKeyboardCodes.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebInputEvent.h"
-#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -187,11 +187,11 @@ bool KeyboardEvent::IsKeyboardEvent() const {
   return true;
 }
 
-int KeyboardEvent::which() const {
+unsigned KeyboardEvent::which() const {
   // Netscape's "which" returns a virtual key code for keydown and keyup, and a
   // character code for keypress.  That's exactly what IE's "keyCode" returns.
   // So they are the same for keyboard events.
-  return keyCode();
+  return (unsigned)keyCode();
 }
 
 void KeyboardEvent::InitLocationModifiers(unsigned location) {

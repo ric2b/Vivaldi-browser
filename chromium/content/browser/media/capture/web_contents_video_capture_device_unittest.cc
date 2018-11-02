@@ -13,6 +13,7 @@
 #include "base/debug/debugger.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
@@ -300,7 +301,7 @@ class StubClient : public media::VideoCaptureDevice::Client {
         VideoFrame::WrapExternalSharedMemory(
             media::PIXEL_FORMAT_I420, format.frame_size, visible_rect,
             format.frame_size, buffer_access->data(),
-            buffer_access->mapped_size(), base::SharedMemory::NULLHandle(), 0u,
+            buffer_access->mapped_size(), base::SharedMemoryHandle(), 0u,
             base::TimeDelta());
     const gfx::Point center = visible_rect.CenterPoint();
     const int center_offset_y =
@@ -479,7 +480,7 @@ class WebContentsVideoCaptureDeviceTest : public testing::Test {
 
     scoped_refptr<SiteInstance> site_instance =
         SiteInstance::Create(browser_context_.get());
-    SiteInstanceImpl::set_render_process_host_factory(
+    RenderProcessHostImpl::set_render_process_host_factory(
         render_process_host_factory_.get());
     web_contents_.reset(
         TestWebContents::Create(browser_context_.get(), site_instance.get()));
@@ -507,7 +508,7 @@ class WebContentsVideoCaptureDeviceTest : public testing::Test {
 
     base::RunLoop().RunUntilIdle();
 
-    SiteInstanceImpl::set_render_process_host_factory(NULL);
+    RenderProcessHostImpl::set_render_process_host_factory(NULL);
     render_frame_host_factory_.reset();
     render_view_host_factory_.reset();
     render_process_host_factory_.reset();

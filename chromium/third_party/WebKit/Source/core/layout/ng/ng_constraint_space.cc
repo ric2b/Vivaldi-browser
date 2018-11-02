@@ -29,6 +29,7 @@ NGConstraintSpace::NGConstraintSpace(
     const NGMarginStrut& margin_strut,
     const NGLogicalOffset& bfc_offset,
     const std::shared_ptr<NGExclusions>& exclusions,
+    Vector<RefPtr<NGUnpositionedFloat>>& unpositioned_floats,
     const WTF::Optional<LayoutUnit>& clearance_offset)
     : available_size_(available_size),
       percentage_resolution_size_(percentage_resolution_size),
@@ -50,7 +51,9 @@ NGConstraintSpace::NGConstraintSpace(
       bfc_offset_(bfc_offset),
       exclusions_(exclusions),
       clearance_offset_(clearance_offset),
-      layout_opp_iter_(nullptr) {}
+      layout_opp_iter_(nullptr) {
+  unpositioned_floats_.swap(unpositioned_floats);
+}
 
 RefPtr<NGConstraintSpace> NGConstraintSpace::CreateFromLayoutObject(
     const LayoutBox& box) {
@@ -142,7 +145,7 @@ NGLayoutOpportunityIterator* NGConstraintSpace::LayoutOpportunityIterator(
 
   if (!layout_opp_iter_) {
     layout_opp_iter_ = WTF::MakeUnique<NGLayoutOpportunityIterator>(
-        this, AvailableSize(), iter_offset);
+        Exclusions().get(), AvailableSize(), iter_offset);
   }
   return layout_opp_iter_.get();
 }
@@ -151,13 +154,13 @@ String NGConstraintSpace::ToString() const {
   return String::Format(
       "Offset: %s,%s Size: %sx%s MarginStrut: %s"
       " Clearance: %s",
-      bfc_offset_.inline_offset.ToString().Ascii().Data(),
-      bfc_offset_.block_offset.ToString().Ascii().Data(),
-      AvailableSize().inline_size.ToString().Ascii().Data(),
-      AvailableSize().block_size.ToString().Ascii().Data(),
-      margin_strut_.ToString().Ascii().Data(),
+      bfc_offset_.inline_offset.ToString().Ascii().data(),
+      bfc_offset_.block_offset.ToString().Ascii().data(),
+      AvailableSize().inline_size.ToString().Ascii().data(),
+      AvailableSize().block_size.ToString().Ascii().data(),
+      margin_strut_.ToString().Ascii().data(),
       clearance_offset_.has_value()
-          ? clearance_offset_.value().ToString().Ascii().Data()
+          ? clearance_offset_.value().ToString().Ascii().data()
           : "none");
 }
 

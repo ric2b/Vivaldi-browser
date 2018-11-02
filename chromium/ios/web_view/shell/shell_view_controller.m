@@ -7,7 +7,7 @@
 #import <ChromeWebView/ChromeWebView.h>
 #import <MobileCoreServices/MobileCoreServices.h>
 
-#import "ios/web_view/shell/translate_controller.h"
+#import "ios/web_view/shell/shell_translation_delegate.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -27,25 +27,33 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
 @property(nonatomic, strong) UIView* containerView;
 // Text field used for navigating to URLs.
 @property(nonatomic, strong) UITextField* field;
+// Toolbar button to navigate backwards.
+@property(nonatomic, strong) UIButton* backButton;
+// Toolbar button to navigate forwards.
+@property(nonatomic, strong) UIButton* forwardButton;
 // Toolbar containing navigation buttons and |field|.
 @property(nonatomic, strong) UIToolbar* toolbar;
 // CWV view which renders the web page.
 @property(nonatomic, strong) CWVWebView* webView;
 // Handles the translation of the content displayed in |webView|.
-@property(nonatomic, strong) TranslateController* translateController;
+@property(nonatomic, strong) ShellTranslationDelegate* translationDelegate;
 
 - (void)back;
 - (void)forward;
 - (void)stopLoading;
+// Disconnects and release the |webView|.
+- (void)resetWebView;
 @end
 
 @implementation ShellViewController
 
+@synthesize backButton = _backButton;
 @synthesize containerView = _containerView;
 @synthesize field = _field;
+@synthesize forwardButton = _forwardButton;
 @synthesize toolbar = _toolbar;
 @synthesize webView = _webView;
-@synthesize translateController = _translateController;
+@synthesize translationDelegate = _translationDelegate;
 
 - (void)viewDidLoad {
   [super viewDidLoad];
@@ -93,29 +101,31 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
 
   // Set up the toolbar buttons.
   // Back.
-  UIButton* back = [UIButton buttonWithType:UIButtonTypeCustom];
-  [back setImage:[UIImage imageNamed:@"toolbar_back"]
-        forState:UIControlStateNormal];
-  [back setFrame:CGRectMake(0, 0, kButtonSize, kButtonSize)];
+  self.backButton = [UIButton buttonWithType:UIButtonTypeCustom];
+  [_backButton setImage:[UIImage imageNamed:@"toolbar_back"]
+               forState:UIControlStateNormal];
+  [_backButton setFrame:CGRectMake(0, 0, kButtonSize, kButtonSize)];
   UIEdgeInsets insets = UIEdgeInsetsMake(5, 5, 4, 4);
-  [back setImageEdgeInsets:insets];
-  [back setAutoresizingMask:UIViewAutoresizingFlexibleRightMargin];
-  [back addTarget:self
-                action:@selector(back)
-      forControlEvents:UIControlEventTouchUpInside];
-  [back setAccessibilityLabel:kWebViewShellBackButtonAccessibilityLabel];
+  [_backButton setImageEdgeInsets:insets];
+  [_backButton setAutoresizingMask:UIViewAutoresizingFlexibleRightMargin];
+  [_backButton addTarget:self
+                  action:@selector(back)
+        forControlEvents:UIControlEventTouchUpInside];
+  [_backButton setAccessibilityLabel:kWebViewShellBackButtonAccessibilityLabel];
 
   // Forward.
-  UIButton* forward = [UIButton buttonWithType:UIButtonTypeCustom];
-  [forward setImage:[UIImage imageNamed:@"toolbar_forward"]
-           forState:UIControlStateNormal];
-  [forward setFrame:CGRectMake(kButtonSize, 0, kButtonSize, kButtonSize)];
-  [forward setImageEdgeInsets:insets];
-  [forward setAutoresizingMask:UIViewAutoresizingFlexibleRightMargin];
-  [forward addTarget:self
-                action:@selector(forward)
-      forControlEvents:UIControlEventTouchUpInside];
-  [forward setAccessibilityLabel:kWebViewShellForwardButtonAccessibilityLabel];
+  self.forwardButton = [UIButton buttonWithType:UIButtonTypeCustom];
+  [_forwardButton setImage:[UIImage imageNamed:@"toolbar_forward"]
+                  forState:UIControlStateNormal];
+  [_forwardButton
+      setFrame:CGRectMake(kButtonSize, 0, kButtonSize, kButtonSize)];
+  [_forwardButton setImageEdgeInsets:insets];
+  [_forwardButton setAutoresizingMask:UIViewAutoresizingFlexibleRightMargin];
+  [_forwardButton addTarget:self
+                     action:@selector(forward)
+           forControlEvents:UIControlEventTouchUpInside];
+  [_forwardButton
+      setAccessibilityLabel:kWebViewShellForwardButtonAccessibilityLabel];
 
   // Stop.
   UIButton* stop = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -139,25 +149,52 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
                 action:@selector(showMenu)
       forControlEvents:UIControlEventTouchUpInside];
 
-  [_toolbar addSubview:back];
-  [_toolbar addSubview:forward];
+  [_toolbar addSubview:_backButton];
+  [_toolbar addSubview:_forwardButton];
   [_toolbar addSubview:stop];
   [_toolbar addSubview:menu];
   [_toolbar addSubview:_field];
 
-  self.webView = [CWV webViewWithFrame:[_containerView bounds]];
+  [CWVWebView setUserAgentProduct:@"Dummy/1.0"];
+
+  CWVWebViewConfiguration* configuration =
+      [CWVWebViewConfiguration defaultConfiguration];
+  self.webView = [[CWVWebView alloc] initWithFrame:[_containerView bounds]
+                                     configuration:configuration];
+  // Gives a restoration identifier so that state restoration works.
+  _webView.restorationIdentifier = @"webView";
   _webView.navigationDelegate = self;
   _webView.UIDelegate = self;
-  _translateController = [[TranslateController alloc] init];
-  _webView.translationDelegate = _translateController;
+  _translationDelegate = [[ShellTranslationDelegate alloc] init];
+  _webView.translationController.delegate = _translationDelegate;
 
   [_webView setAutoresizingMask:UIViewAutoresizingFlexibleWidth |
                                 UIViewAutoresizingFlexibleHeight];
   [_containerView addSubview:_webView];
 
+  [_webView addObserver:self
+             forKeyPath:@"canGoBack"
+                options:NSKeyValueObservingOptionNew
+                context:nil];
+  [_webView addObserver:self
+             forKeyPath:@"canGoForward"
+                options:NSKeyValueObservingOptionNew
+                context:nil];
+
   NSURLRequest* request = [NSURLRequest
       requestWithURL:[NSURL URLWithString:@"https://www.google.com/"]];
   [_webView loadRequest:request];
+}
+
+- (void)observeValueForKeyPath:(NSString*)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary<NSKeyValueChangeKey, id>*)change
+                       context:(void*)context {
+  if ([keyPath isEqualToString:@"canGoBack"]) {
+    _backButton.enabled = [_webView canGoBack];
+  } else if ([keyPath isEqualToString:@"canGoForward"]) {
+    _forwardButton.enabled = [_webView canGoForward];
+  }
 }
 
 - (UIBarPosition)positionForBar:(id<UIBarPositioning>)bar {
@@ -185,18 +222,46 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
 
 - (void)showMenu {
   UIAlertController* alertController = [UIAlertController
-      alertControllerWithTitle:@""
-                       message:@""
+      alertControllerWithTitle:nil
+                       message:nil
                 preferredStyle:UIAlertControllerStyleActionSheet];
+  [alertController
+      addAction:[UIAlertAction actionWithTitle:@"Cancel"
+                                         style:UIAlertActionStyleCancel
+                                       handler:nil]];
+
+  __weak ShellViewController* weakSelf = self;
 
   [alertController
       addAction:[UIAlertAction actionWithTitle:@"Reload"
                                          style:UIAlertActionStyleDefault
                                        handler:^(UIAlertAction* action) {
-                                         [_webView reload];
+                                         [weakSelf.webView reload];
+                                       }]];
+
+  // Removes the web view from the view hierarchy and releases it. For
+  // testing deallocation behavior, because there have been multiple crash bugs
+  // on deallocation of CWVWebView.
+  [alertController
+      addAction:[UIAlertAction actionWithTitle:@"Deallocate web view"
+                                         style:UIAlertActionStyleDefault
+                                       handler:^(UIAlertAction* action) {
+                                         [weakSelf resetWebView];
                                        }]];
 
   [self presentViewController:alertController animated:YES completion:nil];
+}
+
+- (void)resetWebView {
+  [_webView removeFromSuperview];
+  [_webView removeObserver:self forKeyPath:@"canGoBack"];
+  [_webView removeObserver:self forKeyPath:@"canGoForward"];
+  _webView = nil;
+}
+
+- (void)dealloc {
+  [_webView removeObserver:self forKeyPath:@"canGoBack"];
+  [_webView removeObserver:self forKeyPath:@"canGoForward"];
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField*)field {

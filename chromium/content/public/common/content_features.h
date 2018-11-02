@@ -16,18 +16,20 @@ namespace features {
 
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
-CONTENT_EXPORT extern const base::Feature kAccessibilityObjectModel;
+CONTENT_EXPORT extern const base::Feature
+    kAllowContentInitiatedDataUrlNavigations;
 CONTENT_EXPORT extern const base::Feature kAsmJsToWebAssembly;
 CONTENT_EXPORT extern const base::Feature kBlockCredentialedSubresources;
 CONTENT_EXPORT extern const base::Feature kBrotliEncoding;
 CONTENT_EXPORT extern const base::Feature kBrowserSideNavigation;
 CONTENT_EXPORT extern const base::Feature kCanvas2DImageChromium;
+CONTENT_EXPORT extern const base::Feature kCheckerImaging;
 CONTENT_EXPORT extern const base::Feature kCompositeOpaqueFixedPosition;
 CONTENT_EXPORT extern const base::Feature kCompositeOpaqueScrollers;
-CONTENT_EXPORT extern const base::Feature kCredentialManagementAPI;
 CONTENT_EXPORT extern const base::Feature kDocumentWriteEvaluator;
 CONTENT_EXPORT extern const base::Feature kExpensiveBackgroundTimerThrottling;
 CONTENT_EXPORT extern const base::Feature kFeaturePolicy;
+CONTENT_EXPORT extern const base::Feature kFetchKeepaliveTimeoutSetting;
 CONTENT_EXPORT extern const base::Feature kFilterSameOriginTinyPlugin;
 CONTENT_EXPORT extern const base::Feature kFontCacheScaling;
 CONTENT_EXPORT extern const base::Feature
@@ -35,6 +37,7 @@ CONTENT_EXPORT extern const base::Feature
 CONTENT_EXPORT extern const base::Feature kGamepadExtensions;
 CONTENT_EXPORT extern const base::Feature kGuestViewCrossProcessFrames;
 CONTENT_EXPORT extern const base::Feature kHeapCompaction;
+CONTENT_EXPORT extern const base::Feature kIdleTimeSpellChecking;
 CONTENT_EXPORT extern const base::Feature kLazyParseCSS;
 CONTENT_EXPORT extern const base::Feature kLoadingWithMojo;
 CONTENT_EXPORT extern const base::Feature kLocationHardReload;
@@ -54,20 +57,26 @@ CONTENT_EXPORT extern const base::Feature kPurgeAndSuspend;
 CONTENT_EXPORT extern const base::Feature kRafAlignedMouseInputEvents;
 CONTENT_EXPORT extern const base::Feature kRafAlignedTouchInputEvents;
 CONTENT_EXPORT extern const base::Feature kRenderingPipelineThrottling;
+CONTENT_EXPORT extern const base::Feature
+    kRequireSecureOriginsForPepperMediaRequests;
 CONTENT_EXPORT extern const base::Feature kScrollAnchoring;
 CONTENT_EXPORT extern const base::Feature kServiceWorkerNavigationPreload;
 CONTENT_EXPORT extern const base::Feature kSharedArrayBuffer;
 CONTENT_EXPORT extern const base::Feature kSlimmingPaintInvalidation;
 CONTENT_EXPORT extern const base::Feature kTimerThrottlingForHiddenFrames;
 CONTENT_EXPORT extern const base::Feature kTokenBinding;
+CONTENT_EXPORT extern const base::Feature kTopDocumentIsolation;
 CONTENT_EXPORT extern const base::Feature kTouchpadAndWheelScrollLatching;
 CONTENT_EXPORT extern const base::Feature kVibrateRequiresUserGesture;
 CONTENT_EXPORT extern const base::Feature kVrShell;
 CONTENT_EXPORT extern const base::Feature kWebAssembly;
+CONTENT_EXPORT extern const base::Feature kWebAssemblyStreaming;
+CONTENT_EXPORT extern const base::Feature kWebAssemblyTrapHandler;
 CONTENT_EXPORT extern const base::Feature kWebGLImageChromium;
 CONTENT_EXPORT extern const base::Feature kWebPayments;
 CONTENT_EXPORT extern const base::Feature kWebRtcEcdsaDefault;
 CONTENT_EXPORT extern const base::Feature kWebRtcHWH264Encoding;
+CONTENT_EXPORT extern const base::Feature kWebRtcHWVP8Encoding;
 CONTENT_EXPORT extern const base::Feature kWebRtcUseEchoCanceller3;
 CONTENT_EXPORT extern const base::Feature kWebRtcUseGpuMemoryBufferVideoFrames;
 CONTENT_EXPORT extern const base::Feature kWebUsb;
@@ -77,16 +86,11 @@ extern const base::Feature kSendBeaconThrowForBlobWithNonSimpleType;
 
 #if defined(OS_ANDROID)
 CONTENT_EXPORT extern const base::Feature kAndroidAutofillAccessibility;
-CONTENT_EXPORT extern const base::Feature kNativeAndroidHistoryManager;
 CONTENT_EXPORT extern const base::Feature kImeThread;
 CONTENT_EXPORT extern const base::Feature kSeccompSandboxAndroid;
 CONTENT_EXPORT extern const base::Feature kServiceWorkerPaymentApps;
+CONTENT_EXPORT extern const base::Feature kWebNfc;
 #endif  // defined(OS_ANDROID)
-
-#if !defined(OS_ANDROID)
-CONTENT_EXPORT extern const base::Feature
-    kCrossOriginMediaPlaybackRequiresUserGesture;
-#endif  // !defined(OS_ANDROID)
 
 #if defined(OS_WIN)
 CONTENT_EXPORT extern const base::Feature kWinSboxDisableExtensionPoints;

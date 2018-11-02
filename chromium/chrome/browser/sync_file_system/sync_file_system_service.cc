@@ -334,10 +334,8 @@ void SyncFileSystemService::GetFileSyncStatus(
   // It's possible to get an invalid FileEntry.
   if (!url.is_valid()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(callback,
-                   SYNC_FILE_ERROR_INVALID_URL,
-                   SYNC_FILE_STATUS_UNKNOWN));
+        FROM_HERE, base::BindOnce(callback, SYNC_FILE_ERROR_INVALID_URL,
+                                  SYNC_FILE_STATUS_UNKNOWN));
     return;
   }
 
@@ -667,8 +665,8 @@ void SyncFileSystemService::OnExtensionInstalled(
 void SyncFileSystemService::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
-    extensions::UnloadedExtensionInfo::Reason reason) {
-  if (reason != extensions::UnloadedExtensionInfo::REASON_DISABLE)
+    extensions::UnloadedExtensionReason reason) {
+  if (reason != extensions::UnloadedExtensionReason::DISABLE)
     return;
 
   GURL app_origin = Extension::GetBaseURLFromExtensionId(extension->id());

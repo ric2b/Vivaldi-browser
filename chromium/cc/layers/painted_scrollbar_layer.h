@@ -22,15 +22,14 @@ class CC_EXPORT PaintedScrollbarLayer : public ScrollbarLayerInterface,
 
   static scoped_refptr<PaintedScrollbarLayer> Create(
       std::unique_ptr<Scrollbar> scrollbar,
-      int scroll_layer_id);
+      ElementId element_id = ElementId());
 
   bool OpacityCanAnimateOnImplThread() const override;
-  bool AlwaysUseActiveTreeOpacity() const override;
   ScrollbarLayerInterface* ToScrollbarLayer() override;
 
   // ScrollbarLayerInterface
-  int ScrollLayerId() const override;
-  void SetScrollLayer(int layer_id) override;
+  ElementId scroll_element_id() const override;
+  void SetScrollElementId(ElementId element_id) override;
 
   ScrollbarOrientation orientation() const override;
 
@@ -45,7 +44,7 @@ class CC_EXPORT PaintedScrollbarLayer : public ScrollbarLayerInterface,
 
  protected:
   PaintedScrollbarLayer(std::unique_ptr<Scrollbar> scrollbar,
-                        int scroll_layer_id);
+                        ElementId scroll_element_id);
   ~PaintedScrollbarLayer() override;
 
   // For unit tests
@@ -76,7 +75,7 @@ class CC_EXPORT PaintedScrollbarLayer : public ScrollbarLayerInterface,
                                           ScrollbarPart part);
 
   std::unique_ptr<Scrollbar> scrollbar_;
-  int scroll_layer_id_;
+  ElementId scroll_element_id_;
 
   float internal_contents_scale_;
   gfx::Size internal_content_bounds_;

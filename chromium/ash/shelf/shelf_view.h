@@ -43,12 +43,11 @@ class DragImageView;
 class OverflowBubble;
 class OverflowButton;
 class ScopedRootWindowForNewWindows;
+class Shelf;
 class ShelfButton;
-class ShelfDelegate;
 class ShelfModel;
 struct ShelfItem;
 class ShelfWidget;
-class WmShelf;
 
 namespace test {
 class ShelfViewTestAPI;
@@ -70,13 +69,10 @@ class ASH_EXPORT ShelfView : public views::View,
                              public views::BoundsAnimatorObserver,
                              public app_list::ApplicationDragAndDropHost {
  public:
-  ShelfView(ShelfModel* model,
-            ShelfDelegate* delegate,
-            WmShelf* wm_shelf,
-            ShelfWidget* shelf_widget);
+  ShelfView(ShelfModel* model, Shelf* shelf, ShelfWidget* shelf_widget);
   ~ShelfView() override;
 
-  WmShelf* wm_shelf() const { return wm_shelf_; }
+  Shelf* shelf() const { return shelf_; }
   ShelfModel* model() const { return model_; }
 
   void Init();
@@ -86,10 +82,10 @@ class ASH_EXPORT ShelfView : public views::View,
   // Returns the ideal bounds of the specified item, or an empty rect if id
   // isn't know. If the item is in an overflow shelf, the overflow icon location
   // will be returned.
-  gfx::Rect GetIdealBoundsOfItemIcon(ShelfID id);
+  gfx::Rect GetIdealBoundsOfItemIcon(const ShelfID& id);
 
   // Repositions the icon for the specified item by the midpoint of the window.
-  void UpdatePanelIconPosition(ShelfID id, const gfx::Point& midpoint);
+  void UpdatePanelIconPosition(const ShelfID& id, const gfx::Point& midpoint);
 
   // Returns true if we're showing a menu.
   bool IsShowingMenu() const;
@@ -169,6 +165,12 @@ class ASH_EXPORT ShelfView : public views::View,
     return view_model_.get();
   }
 
+  // Return the main shelf. This will return nullptr if this is not called on
+  // the overflow shelf.
+  ShelfView* main_shelf() { return main_shelf_; }
+
+  const ShelfButton* drag_view() const { return drag_view_; }
+
  private:
   friend class ash::test::ShelfViewTestAPI;
 
@@ -228,6 +230,11 @@ class ASH_EXPORT ShelfView : public views::View,
   // Invoked when the mouse is dragged. Updates the models as appropriate.
   void ContinueDrag(const ui::LocatedEvent& event);
 
+  // Ends the drag on the other shelf. (ie if we are on main shelf, ends drag on
+  // the overflow shelf). Invoked when a shelf item is being dragged from one
+  // shelf to the other.
+  void EndDragOnOtherShelf(bool cancel);
+
   // Handles ripping off an item from the shelf. Returns true when the item got
   // removed.
   bool HandleRipOffDrag(const ui::LocatedEvent& event);
@@ -274,7 +281,7 @@ class ASH_EXPORT ShelfView : public views::View,
   void UpdateOverflowRange(ShelfView* overflow_view) const;
 
   // Overridden from views::View:
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   FocusTraversable* GetPaneFocusTraversable() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
@@ -345,14 +352,13 @@ class ASH_EXPORT ShelfView : public views::View,
   // launcher/shelf.
   int CalculateShelfDistance(const gfx::Point& coordinate) const;
 
+  bool CanPrepareForDrag(Pointer pointer, const ui::LocatedEvent& event);
+
   // The model; owned by Launcher.
   ShelfModel* model_;
 
-  // Delegate; owned by Launcher.
-  ShelfDelegate* delegate_;
-
   // The shelf controller; owned by RootWindowController.
-  WmShelf* wm_shelf_;
+  Shelf* shelf_;
 
   // The shelf widget for this view. For overflow bubbles, this is the widget
   // for the shelf, not for the bubble.
@@ -363,35 +369,35 @@ class ASH_EXPORT ShelfView : public views::View,
   std::unique_ptr<views::ViewModel> view_model_;
 
   // Index of first visible launcher item.
-  int first_visible_index_;
+  int first_visible_index_ = 0;
 
   // Last index of a launcher button that is visible
   // (does not go into overflow).
-  mutable int last_visible_index_;
+  mutable int last_visible_index_ = -1;
 
   std::unique_ptr<views::BoundsAnimator> bounds_animator_;
 
-  OverflowButton* overflow_button_;
+  OverflowButton* overflow_button_ = nullptr;
 
   std::unique_ptr<OverflowBubble> overflow_bubble_;
 
-  OverflowBubble* owner_overflow_bubble_;
+  OverflowBubble* owner_overflow_bubble_ = nullptr;
 
   ShelfTooltipManager tooltip_;
 
   // Pointer device that initiated the current drag operation. If there is no
   // current dragging operation, this is NONE.
-  Pointer drag_pointer_;
+  Pointer drag_pointer_ = NONE;
 
   // The view being dragged. This is set immediately when the mouse is pressed.
   // |dragging_| is set only if the mouse is dragged far enough.
-  ShelfButton* drag_view_;
+  ShelfButton* drag_view_ = nullptr;
 
   // Position of the mouse down event in |drag_view_|'s coordinates.
   gfx::Point drag_origin_;
 
   // Index |drag_view_| was initially at.
-  int start_drag_index_;
+  int start_drag_index_ = -1;
 
   // Used for the context menu of a particular item.
   ShelfID context_menu_id_;
@@ -406,25 +412,24 @@ class ASH_EXPORT ShelfView : public views::View,
       scoped_root_window_for_new_windows_;
 
   // True when an item being inserted or removed in the model cancels a drag.
-  bool cancelling_drag_model_changed_;
+  bool cancelling_drag_model_changed_ = false;
 
   // Index of the last hidden launcher item. If there are no hidden items this
   // will be equal to last_visible_index_ + 1.
-  mutable int last_hidden_index_;
+  mutable int last_hidden_index_ = 0;
 
   // The timestamp of the event which closed the last menu - or 0.
   base::TimeTicks closing_event_time_;
 
+  // The timestamp of the last shelf item touch press event.
+  base::TimeTicks touch_press_time_;
+
   // True if a drag and drop operation created/pinned the item in the launcher
   // and it needs to be deleted/unpinned again if the operation gets cancelled.
-  bool drag_and_drop_item_pinned_;
+  bool drag_and_drop_item_pinned_ = false;
 
-  // The ShelfItem which is currently used for a drag and a drop operation
-  // or 0 otherwise.
+  // The ShelfItem currently used for drag and drop; empty if none.
   ShelfID drag_and_drop_shelf_id_;
-
-  // The application ID of the application which we drag and drop.
-  std::string drag_and_drop_app_id_;
 
   // The original launcher item's size before the dragging operation.
   gfx::Size pre_drag_and_drop_size_;
@@ -437,31 +442,34 @@ class ASH_EXPORT ShelfView : public views::View,
   gfx::Vector2d drag_image_offset_;
 
   // The view which gets replaced by our drag icon proxy.
-  views::View* drag_replaced_view_;
+  views::View* drag_replaced_view_ = nullptr;
 
   // True when the icon was dragged off the shelf.
-  bool dragged_off_shelf_;
+  bool dragged_off_shelf_ = false;
+
+  // True when an item is dragged from one shelf to another (eg. overflow).
+  bool dragged_to_another_shelf_ = false;
 
   // The rip off view when a snap back operation is underway.
-  views::View* snap_back_from_rip_off_view_;
+  views::View* snap_back_from_rip_off_view_ = nullptr;
 
   // True when this ShelfView is used for Overflow Bubble.
-  bool overflow_mode_;
+  bool overflow_mode_ = false;
 
   // Holds a pointer to main ShelfView when a ShelfView is in overflow mode.
-  ShelfView* main_shelf_;
+  ShelfView* main_shelf_ = nullptr;
 
   // True when ripped item from overflow bubble is entered into Shelf.
-  bool dragged_off_from_overflow_to_shelf_;
+  bool dragged_off_from_overflow_to_shelf_ = false;
 
   // True if the event is a repost event from a event which has just closed the
   // menu of the same shelf item.
-  bool is_repost_event_on_same_item_;
+  bool is_repost_event_on_same_item_ = false;
 
   // Record the index for the last pressed shelf item. This variable is used to
   // check if a repost event occurs on the same shelf item as previous one. If
   // so, the repost event should be ignored.
-  int last_pressed_index_;
+  int last_pressed_index_ = -1;
 
   // Tracks UMA metrics based on shelf button press actions.
   ShelfButtonPressedMetricTracker shelf_button_pressed_metric_tracker_;

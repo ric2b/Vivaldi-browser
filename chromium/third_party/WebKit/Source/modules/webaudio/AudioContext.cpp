@@ -54,8 +54,12 @@ AudioContext* AudioContext::Create(Document& document,
   if (context_options.latencyHint().isAudioContextLatencyCategory()) {
     latency_hint = WebAudioLatencyHint(
         context_options.latencyHint().getAsAudioContextLatencyCategory());
+  } else if (context_options.latencyHint().isDouble()) {
+    // This should be the requested output latency in seconds, without taking
+    // into account double buffering (same as baseLatency).
+    latency_hint =
+        WebAudioLatencyHint(context_options.latencyHint().getAsDouble());
   }
-  // TODO: add support for latencyHint().isDouble()
 
   AudioContext* audio_context = new AudioContext(document, latency_hint);
   audio_context->SuspendIfNeeded();
@@ -87,7 +91,7 @@ AudioContext* AudioContext::Create(Document& document,
   ++g_hardware_context_count;
 #if DEBUG_AUDIONODE_REFERENCES
   fprintf(stderr, "[%16p]: AudioContext::AudioContext(): %u #%u\n",
-          audioContext, audioContext->m_contextId, s_hardwareContextCount);
+          audio_context, audio_context->context_id_, g_hardware_context_count);
 #endif
 
   DEFINE_STATIC_LOCAL(SparseHistogram, max_channel_count_histogram,
@@ -111,7 +115,7 @@ AudioContext::AudioContext(Document& document,
 AudioContext::~AudioContext() {
 #if DEBUG_AUDIONODE_REFERENCES
   fprintf(stderr, "[%16p]: AudioContext::~AudioContext(): %u\n", this,
-          m_contextId);
+          context_id_);
 #endif
 }
 
@@ -264,7 +268,7 @@ void AudioContext::StopRendering() {
 }
 
 double AudioContext::baseLatency() const {
-  return FramesPerBuffer() * 2 / static_cast<double>(sampleRate());
+  return FramesPerBuffer() / static_cast<double>(sampleRate());
 }
 
 }  // namespace blink

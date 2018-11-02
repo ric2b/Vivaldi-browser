@@ -638,18 +638,15 @@ class TextureLayerImplWithMailboxThreadedCallback : public LayerTreeTest {
   std::unique_ptr<TestCompositorFrameSink> CreateCompositorFrameSink(
       scoped_refptr<ContextProvider> compositor_context_provider,
       scoped_refptr<ContextProvider> worker_context_provider) override {
+    constexpr bool kDisableDisplayVsync = false;
     bool synchronous_composite =
         !HasImplThread() &&
         !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
-    // Allow relaim resources for this test so that mailboxes in the display
-    // will be returned inside the commit that replaces them.
-    bool force_disable_reclaim_resources = false;
     return base::MakeUnique<TestCompositorFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
         shared_bitmap_manager(), gpu_memory_buffer_manager(),
         layer_tree_host()->GetSettings().renderer_settings,
-        ImplThreadTaskRunner(), synchronous_composite,
-        force_disable_reclaim_resources);
+        ImplThreadTaskRunner(), synchronous_composite, kDisableDisplayVsync);
   }
 
   void AdvanceTestCase() {
@@ -1188,16 +1185,6 @@ class TextureLayerChangeInvisibleMailboxTest
   void MailboxReleased(const gpu::SyncToken& sync_token, bool lost_resource) {
     EXPECT_TRUE(sync_token.HasData());
     ++mailbox_returned_;
-    switch (mailbox_returned_) {
-      case 1:
-        break;
-      case 2:
-        EXPECT_EQ(commit_count_, 5);
-        EndTest();
-        break;
-      default:
-        NOTREACHED();
-    }
   }
 
   void SetupTree() override {
@@ -1227,7 +1214,7 @@ class TextureLayerChangeInvisibleMailboxTest
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
-  void DidCommitAndDrawFrame() override {
+  void DidReceiveCompositorFrameAck() override {
     ++commit_count_;
     switch (commit_count_) {
       case 1:
@@ -1262,6 +1249,8 @@ class TextureLayerChangeInvisibleMailboxTest
         texture_layer_->ClearClient();
         break;
       case 5:
+        EXPECT_EQ(2, mailbox_returned_);
+        EndTest();
         break;
       default:
         NOTREACHED();
@@ -1284,8 +1273,7 @@ class TextureLayerChangeInvisibleMailboxTest
   int commit_count_;
 };
 
-// Flaky when multi-threaded. crbug.com/702868
-SINGLE_THREAD_TEST_F(TextureLayerChangeInvisibleMailboxTest);
+SINGLE_AND_MULTI_THREAD_TEST_F(TextureLayerChangeInvisibleMailboxTest);
 
 // Test that TextureLayerImpl::ReleaseResources can be called which releases
 // the mailbox back to TextureLayerClient.

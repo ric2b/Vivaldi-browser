@@ -48,14 +48,16 @@ class TabRestorePageLoadMetricsObserverTest
   TabRestorePageLoadMetricsObserverTest() {}
 
   void ResetTest() {
+    page_load_metrics::InitPageLoadTimingForTest(&timing_);
     // Reset to the default testing state. Does not reset histogram state.
     timing_.navigation_start = base::Time::FromDoubleT(1);
     timing_.response_start = base::TimeDelta::FromSeconds(2);
-    timing_.parse_start = base::TimeDelta::FromSeconds(3);
-    timing_.first_contentful_paint = base::TimeDelta::FromSeconds(4);
-    timing_.first_image_paint = base::TimeDelta::FromSeconds(5);
-    timing_.first_text_paint = base::TimeDelta::FromSeconds(6);
-    timing_.load_event_start = base::TimeDelta::FromSeconds(7);
+    timing_.parse_timing->parse_start = base::TimeDelta::FromSeconds(3);
+    timing_.paint_timing->first_contentful_paint =
+        base::TimeDelta::FromSeconds(4);
+    timing_.paint_timing->first_image_paint = base::TimeDelta::FromSeconds(5);
+    timing_.paint_timing->first_text_paint = base::TimeDelta::FromSeconds(6);
+    timing_.document_timing->load_event_start = base::TimeDelta::FromSeconds(7);
     PopulateRequiredTimingFields(&timing_);
 
     network_bytes_ = 0;
@@ -68,23 +70,31 @@ class TabRestorePageLoadMetricsObserverTest
     SimulateTimingUpdate(timing_);
 
     // Prepare 4 resources of varying size and configurations.
-    page_load_metrics::ExtraRequestInfo resources[] = {
+    page_load_metrics::ExtraRequestCompleteInfo resources[] = {
         // Cached request.
-        {true /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+        {GURL(), -1 /* frame_tree_node_id */, true /*was_cached*/,
+         1024 * 40 /* raw_body_bytes */,
          0 /* original_network_content_length */,
-         nullptr /* data_reduction_proxy_data */},
+         nullptr /* data_reduction_proxy_data */,
+         content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
         // Uncached non-proxied request.
-        {false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+        {GURL(), -1 /* frame_tree_node_id */, false /*was_cached*/,
+         1024 * 40 /* raw_body_bytes */,
          1024 * 40 /* original_network_content_length */,
-         nullptr /* data_reduction_proxy_data */},
+         nullptr /* data_reduction_proxy_data */,
+         content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
         // Uncached proxied request with .1 compression ratio.
-        {false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+        {GURL(), -1 /* frame_tree_node_id */, false /*was_cached*/,
+         1024 * 40 /* raw_body_bytes */,
          1024 * 40 /* original_network_content_length */,
-         nullptr /* data_reduction_proxy_data */},
+         nullptr /* data_reduction_proxy_data */,
+         content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
         // Uncached proxied request with .5 compression ratio.
-        {false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+        {GURL(), -1 /* frame_tree_node_id */, false /*was_cached*/,
+         1024 * 40 /* raw_body_bytes */,
          1024 * 40 /* original_network_content_length */,
-         nullptr /* data_reduction_proxy_data */},
+         nullptr /* data_reduction_proxy_data */,
+         content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
     };
 
     for (const auto& request : resources) {
@@ -116,7 +126,7 @@ class TabRestorePageLoadMetricsObserverTest
 
  private:
   base::Optional<bool> is_restore_;
-  page_load_metrics::PageLoadTiming timing_;
+  page_load_metrics::mojom::PageLoadTiming timing_;
 
   DISALLOW_COPY_AND_ASSIGN(TabRestorePageLoadMetricsObserverTest);
 };

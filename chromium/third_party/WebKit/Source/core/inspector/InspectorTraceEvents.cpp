@@ -38,10 +38,10 @@
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/weborigin/KURL.h"
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/TextPosition.h"
 #include "v8/include/v8-profiler.h"
 #include "v8/include/v8.h"
-#include "wtf/Vector.h"
-#include "wtf/text/TextPosition.h"
 
 namespace blink {
 
@@ -315,7 +315,7 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
 #undef DEFINE_STRING_MAPPING
   }
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return "";
 }
 
@@ -501,7 +501,7 @@ std::unique_ptr<TracedValue>
 InspectorStyleRecalcInvalidationTrackingEvent::Data(
     Node* node,
     const StyleChangeReasonForTracing& reason) {
-  ASSERT(node);
+  DCHECK(node);
 
   std::unique_ptr<TracedValue> value = TracedValue::Create();
   value->SetString("frame", ToHexString(node->GetDocument().GetFrame()));
@@ -568,7 +568,7 @@ std::unique_ptr<TracedValue> InspectorLayoutEvent::EndData(
     CreateQuad(value.get(), "root", quads[0]);
     SetGeneratingNodeInfo(value.get(), root_for_this_layout, "rootNode");
   } else {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
   }
   return value;
 }
@@ -611,7 +611,7 @@ const char kScrollbarChanged[] = "Scrollbar changed";
 std::unique_ptr<TracedValue> InspectorLayoutInvalidationTrackingEvent::Data(
     const LayoutObject* layout_object,
     LayoutInvalidationReasonForTracing reason) {
-  ASSERT(layout_object);
+  DCHECK(layout_object);
   std::unique_ptr<TracedValue> value = TracedValue::Create();
   value->SetString("frame", ToHexString(layout_object->GetFrame()));
   SetGeneratingNodeInfo(value.get(), layout_object, "nodeId", "nodeName");
@@ -623,7 +623,7 @@ std::unique_ptr<TracedValue> InspectorLayoutInvalidationTrackingEvent::Data(
 std::unique_ptr<TracedValue> InspectorPaintInvalidationTrackingEvent::Data(
     const LayoutObject* layout_object,
     const LayoutObject& paint_container) {
-  ASSERT(layout_object);
+  DCHECK(layout_object);
   std::unique_ptr<TracedValue> value = TracedValue::Create();
   value->SetString("frame", ToHexString(layout_object->GetFrame()));
   SetGeneratingNodeInfo(value.get(), &paint_container, "paintId");
@@ -942,7 +942,7 @@ std::unique_ptr<TracedValue> FrameEventData(LocalFrame* frame) {
   std::unique_ptr<TracedValue> value = TracedValue::Create();
   bool is_main_frame = frame && frame->IsMainFrame();
   value->SetBoolean("isMainFrame", is_main_frame);
-  value->SetString("page", ToHexString(frame->LocalFrameRoot()));
+  value->SetString("page", ToHexString(&frame->LocalFrameRoot()));
   return value;
 }
 
@@ -1147,7 +1147,7 @@ std::unique_ptr<TracedValue> InspectorTracingStartedInFrame::Data(
     LocalFrame* frame) {
   std::unique_ptr<TracedValue> value = TracedValue::Create();
   value->SetString("sessionId", session_id);
-  value->SetString("page", ToHexString(frame->LocalFrameRoot()));
+  value->SetString("page", ToHexString(&frame->LocalFrameRoot()));
   value->BeginArray("frames");
   for (Frame* f = frame; f; f = f->Tree().TraverseNext(frame)) {
     if (!f->IsLocalFrame())

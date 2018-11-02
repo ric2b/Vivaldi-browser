@@ -11,33 +11,31 @@
 
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "components/payments/content/payment_request.mojom.h"
+#include "components/payments/content/payment_request_spec.h"
 #include "components/payments/content/payment_response_helper.h"
-
-namespace i18n {
-namespace addressinput {
-class Storage;
-class Source;
-}  // namespace addressinput
-}  // namespace i18n
+#include "components/payments/core/address_normalizer.h"
+#include "components/payments/core/payments_profile_comparator.h"
+#include "components/payments/mojom/payment_request.mojom.h"
 
 namespace autofill {
 class AutofillProfile;
 class CreditCard;
 class PersonalDataManager;
+class RegionDataLoader;
 }  // namespace autofill
 
 namespace payments {
 
 class PaymentInstrument;
 class PaymentRequestDelegate;
-class PaymentRequestSpec;
 
 // Keeps track of the information currently selected by the user and whether the
 // user is ready to pay. Uses information from the PaymentRequestSpec, which is
 // what the merchant has specified, as input into the "is ready to pay"
 // computation.
-class PaymentRequestState : public PaymentResponseHelper::Delegate {
+class PaymentRequestState : public PaymentResponseHelper::Delegate,
+                            public AddressNormalizer::Delegate,
+                            public PaymentRequestSpec::Observer {
  public:
   // Any class call add itself as Observer via AddObserver() and receive
   // notification about the state changing.
@@ -79,9 +77,27 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate {
   void OnPaymentResponseReady(
       mojom::PaymentResponsePtr payment_response) override;
 
+  // AddressNormalizer::Delegate
+  void OnAddressNormalized(
+      const autofill::AutofillProfile& normalized_profile) override;
+  void OnCouldNotNormalize(const autofill::AutofillProfile& profile) override;
+
+  // PaymentRequestSpec::Observer
+  void OnStartUpdating(PaymentRequestSpec::UpdateReason reason) override {}
+  void OnSpecUpdated() override;
+
   // Returns whether the user has at least one instrument that satisfies the
   // specified supported payment methods.
   bool CanMakePayment() const;
+
+  // Returns true if the payment methods that the merchant website have
+  // requested are supported. For example, may return true for "basic-card", but
+  // false for "https://bobpay.com".
+  bool AreRequestedMethodsSupported() const;
+
+  // Returns authenticated user email, or empty string.
+  std::string GetAuthenticatedEmail() const;
+
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
@@ -89,11 +105,19 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate {
   // |is_ready_to_pay|, which is inexpensive.
   void GeneratePaymentResponse();
 
+  // Record the use of the data models that were used in the Payment Request.
+  void RecordUseStats();
+
   // Gets the Autofill Profile representing the shipping address or contact
   // information currently selected for this PaymentRequest flow. Can return
   // null.
   autofill::AutofillProfile* selected_shipping_profile() const {
     return selected_shipping_profile_;
+  }
+  // If |spec()->selected_shipping_option_error()| is not empty, this contains
+  // the profile for which the error is about.
+  autofill::AutofillProfile* selected_shipping_option_error_profile() const {
+    return selected_shipping_option_error_profile_;
   }
   autofill::AutofillProfile* selected_contact_profile() const {
     return selected_contact_profile_;
@@ -124,6 +148,18 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate {
   void AddAutofillPaymentInstrument(bool selected,
                                     const autofill::CreditCard& card);
 
+  // Creates and adds an AutofillProfile as a shipping profile, which makes a
+  // copy of |profile|. |selected| indicates if the newly-created shipping
+  // profile should be selected, after which observers will be notified.
+  void AddAutofillShippingProfile(bool selected,
+                                  const autofill::AutofillProfile& profile);
+
+  // Creates and adds an AutofillProfile as a contact profile, which makes a
+  // copy of |profile|. |selected| indicates if the newly-created shipping
+  // profile should be selected, after which observers will be notified.
+  void AddAutofillContactProfile(bool selected,
+                                 const autofill::AutofillProfile& profile);
+
   // Setters to change the selected information. Will have the side effect of
   // recomputing "is ready to pay" and notify observers.
   void SetSelectedShippingOption(const std::string& shipping_option_id);
@@ -135,10 +171,17 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate {
 
   const std::string& GetApplicationLocale();
   autofill::PersonalDataManager* GetPersonalDataManager();
-  std::unique_ptr<const ::i18n::addressinput::Source> GetAddressInputSource();
-  std::unique_ptr<::i18n::addressinput::Storage> GetAddressInputStorage();
+  autofill::RegionDataLoader* GetRegionDataLoader();
 
   Delegate* delegate() { return delegate_; }
+
+  PaymentsProfileComparator* profile_comparator() {
+    return &profile_comparator_;
+  }
+
+  // Returns true if the payment app has been invoked and the payment response
+  // generation has begun. False otherwise.
+  bool IsPaymentAppInvoked() const;
 
  private:
   // Fetches the Autofill Profiles for this user from the PersonalDataManager,
@@ -167,6 +210,9 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate {
 
   bool is_ready_to_pay_;
 
+  // Whether the data is currently being validated by the merchant.
+  bool is_waiting_for_merchant_validation_;
+
   const std::string app_locale_;
 
   // Not owned. Never null. Both outlive this object.
@@ -175,6 +221,7 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate {
   autofill::PersonalDataManager* personal_data_manager_;
 
   autofill::AutofillProfile* selected_shipping_profile_;
+  autofill::AutofillProfile* selected_shipping_option_error_profile_;
   autofill::AutofillProfile* selected_contact_profile_;
   PaymentInstrument* selected_instrument_;
 
@@ -190,6 +237,8 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate {
   PaymentRequestDelegate* payment_request_delegate_;
 
   std::unique_ptr<PaymentResponseHelper> response_helper_;
+
+  PaymentsProfileComparator profile_comparator_;
 
   base::ObserverList<Observer> observers_;
 

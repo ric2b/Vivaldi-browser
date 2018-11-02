@@ -50,6 +50,7 @@ NetBenchmarking::~NetBenchmarking() {}
 // static
 void NetBenchmarking::Create(Profile* profile,
                              net::URLRequestContextGetter* request_context,
+                             const service_manager::BindSourceInfo& source_info,
                              chrome::mojom::NetBenchmarkingRequest request) {
   mojo::MakeStrongBinding(
       base::MakeUnique<NetBenchmarking>(profile, request_context),
@@ -102,5 +103,5 @@ void NetBenchmarking::ClearPredictorCache(
     const ClearPredictorCacheCallback& callback) {
   BrowserThread::PostTaskAndReply(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&ClearPredictorCacheOnUIThread, profile_), callback);
+      base::BindOnce(&ClearPredictorCacheOnUIThread, profile_), callback);
 }

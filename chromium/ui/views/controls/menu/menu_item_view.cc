@@ -171,13 +171,15 @@ void MenuItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
   switch (GetType()) {
     case SUBMENU:
-      node_data->AddStateFlag(ui::AX_STATE_HASPOPUP);
+      node_data->AddState(ui::AX_STATE_HASPOPUP);
       break;
     case CHECKBOX:
-    case RADIO:
-      if (GetDelegate()->IsItemChecked(GetCommand()))
-        node_data->AddStateFlag(ui::AX_STATE_CHECKED);
-      break;
+    case RADIO: {
+      const bool is_checked = GetDelegate()->IsItemChecked(GetCommand());
+      const ui::AXCheckedState checked_state =
+          is_checked ? ui::AX_CHECKED_STATE_TRUE : ui::AX_CHECKED_STATE_FALSE;
+      node_data->AddIntAttribute(ui::AX_ATTR_CHECKED_STATE, checked_state);
+    } break;
     case NORMAL:
     case SEPARATOR:
     case EMPTY:
@@ -408,7 +410,7 @@ void MenuItemView::OnPaint(gfx::Canvas* canvas) {
   PaintButton(canvas, PB_NORMAL);
 }
 
-gfx::Size MenuItemView::GetPreferredSize() const {
+gfx::Size MenuItemView::CalculatePreferredSize() const {
   const MenuItemDimensions& dimensions(GetDimensions());
   return gfx::Size(dimensions.standard_width + dimensions.children_width,
                    dimensions.height);

@@ -14,6 +14,8 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/threading/thread.h"
 #include "cc/base/switches.h"
 #include "components/discardable_memory/client/client_discardable_shared_memory_manager.h"
@@ -29,6 +31,7 @@
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/transient_window_client.h"
 #include "ui/aura/env.h"
+#include "ui/aura/env_input_state_controller.h"
 #include "ui/aura/mus/capture_synchronizer.h"
 #include "ui/aura/mus/drag_drop_controller_mus.h"
 #include "ui/aura/mus/focus_synchronizer.h"
@@ -44,8 +47,11 @@
 #include "ui/aura/mus/window_tree_client_observer.h"
 #include "ui/aura/mus/window_tree_client_test_observer.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
+#include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/aura/window_event_dispatcher.h"
+#include "ui/aura/window_port_for_shutdown.h"
 #include "ui/aura/window_tracker.h"
 #include "ui/base/layout.h"
 #include "ui/base/ui_base_types.h"
@@ -65,6 +71,10 @@
 namespace aura {
 namespace {
 
+// This serves to document the places that rely on bounds changes to the
+// root window being ignored.
+constexpr bool kRootWindowBoundsChangesAreIgnored = true;
+
 Id MakeTransportId(ClientSpecificId client_id, ClientSpecificId local_id) {
   return (client_id << 16) | local_id;
 }
@@ -80,16 +90,16 @@ struct WindowPortPropertyDataMus : public ui::PropertyData {
 
 // Handles acknowledgment of an input event, either immediately when a nested
 // message loop starts, or upon destruction.
-class EventAckHandler : public base::MessageLoop::NestingObserver {
+class EventAckHandler : public base::RunLoop::NestingObserver {
  public:
   explicit EventAckHandler(std::unique_ptr<EventResultCallback> ack_callback)
       : ack_callback_(std::move(ack_callback)) {
     DCHECK(ack_callback_);
-    base::MessageLoop::current()->AddNestingObserver(this);
+    base::RunLoop::AddNestingObserverOnCurrentThread(this);
   }
 
   ~EventAckHandler() override {
-    base::MessageLoop::current()->RemoveNestingObserver(this);
+    base::RunLoop::RemoveNestingObserverOnCurrentThread(this);
     if (ack_callback_) {
       ack_callback_->Run(handled_ ? ui::mojom::EventResult::HANDLED
                                   : ui::mojom::EventResult::UNHANDLED);
@@ -98,10 +108,10 @@ class EventAckHandler : public base::MessageLoop::NestingObserver {
 
   void set_handled(bool handled) { handled_ = handled; }
 
-  // base::MessageLoop::NestingObserver:
-  void OnBeginNestedMessageLoop() override {
-    // Acknowledge the event immediately if a nested message loop starts.
-    // Otherwise we appear unresponsive for the life of the nested message loop.
+  // base::RunLoop::NestingObserver:
+  void OnBeginNestedRunLoop() override {
+    // Acknowledge the event immediately if a nested run loop starts.
+    // Otherwise we appear unresponsive for the life of the nested run loop.
     if (ack_callback_) {
       ack_callback_->Run(ui::mojom::EventResult::HANDLED);
       ack_callback_.reset();
@@ -116,7 +126,7 @@ class EventAckHandler : public base::MessageLoop::NestingObserver {
 };
 
 WindowTreeHostMus* GetWindowTreeHostMus(Window* window) {
-  return static_cast<WindowTreeHostMus*>(window->GetRootWindow()->GetHost());
+  return WindowTreeHostMus::ForWindow(window);
 }
 
 WindowTreeHostMus* GetWindowTreeHostMus(WindowMus* window) {
@@ -252,9 +262,6 @@ WindowTreeClient::~WindowTreeClient() {
   for (WindowTreeClientObserver& observer : observers_)
     observer.OnWillDestroyClient(this);
 
-  // Clients should properly delete all of their windows before shutdown.
-  CHECK(windows_.empty());
-
   capture_synchronizer_.reset();
 
   client::GetTransientWindowClient()->RemoveObserver(this);
@@ -264,6 +271,18 @@ WindowTreeClient::~WindowTreeClient() {
       env->context_factory() == compositor_context_factory_.get()) {
     env->set_context_factory(initial_context_factory_);
   }
+
+  // Allow for windows to exist (and be created) after we are destroyed. This
+  // is necessary because of shutdown ordering (WindowTreeClient is destroyed
+  // before windows).
+  in_shutdown_ = true;
+  IdToWindowMap windows;
+  std::swap(windows, windows_);
+  for (auto& pair : windows)
+    WindowPortForShutdown::Install(pair.second->GetWindow());
+
+  env->WindowTreeClientDestroyed(this);
+  CHECK(windows_.empty());
 }
 
 void WindowTreeClient::ConnectViaWindowTreeFactory() {
@@ -297,14 +316,14 @@ void WindowTreeClient::SetCanFocus(Window* window, bool can_focus) {
   tree_->SetCanFocus(WindowMus::Get(window)->server_id(), can_focus);
 }
 
-void WindowTreeClient::SetPredefinedCursor(WindowMus* window,
-                                           ui::mojom::CursorType old_cursor,
-                                           ui::mojom::CursorType new_cursor) {
+void WindowTreeClient::SetCursor(WindowMus* window,
+                                 const ui::CursorData& old_cursor,
+                                 const ui::CursorData& new_cursor) {
   DCHECK(tree_);
 
   const uint32_t change_id = ScheduleInFlightChange(
-      base::MakeUnique<InFlightPredefinedCursorChange>(window, old_cursor));
-  tree_->SetPredefinedCursor(change_id, window->server_id(), new_cursor);
+      base::MakeUnique<InFlightCursorChange>(window, old_cursor));
+  tree_->SetCursor(change_id, window->server_id(), new_cursor);
 }
 
 void WindowTreeClient::SetWindowTextInputState(WindowMus* window,
@@ -460,14 +479,16 @@ std::unique_ptr<WindowTreeHostMus> WindowTreeClient::CreateWindowTreeHost(
     WindowMusType window_mus_type,
     const ui::mojom::WindowData& window_data,
     int64_t display_id,
-    const cc::FrameSinkId& frame_sink_id,
     const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   std::unique_ptr<WindowPortMus> window_port =
       CreateWindowPortMus(window_data, window_mus_type);
   roots_.insert(window_port.get());
+  WindowTreeHostMusInitParams init_params;
+  init_params.window_port = std::move(window_port);
+  init_params.window_tree_client = this;
+  init_params.display_id = display_id;
   std::unique_ptr<WindowTreeHostMus> window_tree_host =
-      base::MakeUnique<WindowTreeHostMus>(std::move(window_port), this,
-                                          display_id, frame_sink_id);
+      base::MakeUnique<WindowTreeHostMus>(std::move(init_params));
   window_tree_host->InitHost();
   SetLocalPropertiesFromServerProperties(
       WindowMus::Get(window_tree_host->window()), window_data);
@@ -478,6 +499,9 @@ std::unique_ptr<WindowTreeHostMus> WindowTreeClient::CreateWindowTreeHost(
   WindowMus* window = WindowMus::Get(window_tree_host->window());
 
   SetWindowBoundsFromServer(window, window_data.bounds, local_surface_id);
+  ui::Compositor* compositor =
+      window_tree_host->window()->GetHost()->compositor();
+  compositor->AddObserver(this);
   return window_tree_host;
 }
 
@@ -517,6 +541,7 @@ void WindowTreeClient::SetWindowTree(ui::mojom::WindowTreePtr window_tree_ptr) {
   if (window_manager_delegate_) {
     tree_ptr_->GetWindowManagerClient(
         MakeRequest(&window_manager_internal_client_));
+    window_manager_client_ = window_manager_internal_client_.get();
   }
 }
 
@@ -554,7 +579,6 @@ void WindowTreeClient::OnEmbedImpl(
     int64_t display_id,
     Id focused_window_id,
     bool drawn,
-    const cc::FrameSinkId& frame_sink_id,
     const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   // WARNING: this is only called if WindowTreeClient was created as the
   // result of an embedding.
@@ -562,9 +586,8 @@ void WindowTreeClient::OnEmbedImpl(
   WindowTreeConnectionEstablished(window_tree);
 
   DCHECK(roots_.empty());
-  std::unique_ptr<WindowTreeHostMus> window_tree_host =
-      CreateWindowTreeHost(WindowMusType::EMBED, *root_data, display_id,
-                           frame_sink_id, local_surface_id);
+  std::unique_ptr<WindowTreeHostMus> window_tree_host = CreateWindowTreeHost(
+      WindowMusType::EMBED, *root_data, display_id, local_surface_id);
 
   focus_synchronizer_->SetFocusFromServer(
       GetWindowByServerId(focused_window_id));
@@ -572,11 +595,26 @@ void WindowTreeClient::OnEmbedImpl(
   delegate_->OnEmbed(std::move(window_tree_host));
 }
 
+void WindowTreeClient::OnSetDisplayRootDone(
+    Id window_id,
+    const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
+  if (!enable_surface_synchronization_)
+    return;
+
+  // The only way SetDisplayRoot() should fail is if we've done something wrong.
+  CHECK(local_surface_id.has_value());
+  WindowMus* window = GetWindowByServerId(window_id);
+  if (!window)
+    return;  // Display was already deleted.
+
+  ui::Compositor* compositor = window->GetWindow()->GetHost()->compositor();
+  compositor->SetLocalSurfaceId(*local_surface_id);
+}
+
 WindowTreeHostMus* WindowTreeClient::WmNewDisplayAddedImpl(
     const display::Display& display,
     ui::mojom::WindowDataPtr root_data,
     bool parent_drawn,
-    const cc::FrameSinkId& frame_sink_id,
     const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   DCHECK(window_manager_delegate_);
 
@@ -585,8 +623,8 @@ WindowTreeHostMus* WindowTreeClient::WmNewDisplayAddedImpl(
   window_manager_delegate_->OnWmWillCreateDisplay(display);
 
   std::unique_ptr<WindowTreeHostMus> window_tree_host =
-      CreateWindowTreeHost(WindowMusType::DISPLAY, *root_data, display.id(),
-                           frame_sink_id, local_surface_id);
+      CreateWindowTreeHost(WindowMusType::DISPLAY_AUTOMATICALLY_CREATED,
+                           *root_data, display.id(), local_surface_id);
 
   WindowTreeHostMus* window_tree_host_ptr = window_tree_host.get();
   window_manager_delegate_->OnWmNewDisplay(std::move(window_tree_host),
@@ -616,8 +654,8 @@ void WindowTreeClient::SetWindowBoundsFromServer(
     GetWindowTreeHostMus(window)->SetBoundsFromServer(revert_bounds_in_pixels);
     if (enable_surface_synchronization_ && local_surface_id &&
         local_surface_id->is_valid()) {
-      window->GetWindow()->GetHost()->compositor()->SetLocalSurfaceId(
-          *local_surface_id);
+      ui::Compositor* compositor = window->GetWindow()->GetHost()->compositor();
+      compositor->SetLocalSurfaceId(*local_surface_id);
     }
     return;
   }
@@ -652,9 +690,11 @@ void WindowTreeClient::ScheduleInFlightBoundsChange(
       ScheduleInFlightChange(base::MakeUnique<InFlightBoundsChange>(
           this, window, old_bounds, window->GetLocalSurfaceId()));
   base::Optional<cc::LocalSurfaceId> local_surface_id;
-  if ((window->window_mus_type() == WindowMusType::TOP_LEVEL_IN_WM ||
-       window->window_mus_type() == WindowMusType::EMBED_IN_OWNER)) {
+  if (window->window_mus_type() == WindowMusType::TOP_LEVEL_IN_WM ||
+      window->window_mus_type() == WindowMusType::EMBED_IN_OWNER ||
+      window->window_mus_type() == WindowMusType::DISPLAY_MANUALLY_CREATED) {
     local_surface_id = window->GetOrAllocateLocalSurfaceId(new_bounds.size());
+    synchronizing_with_child_on_next_frame_ = true;
   }
   tree_->SetWindowBounds(change_id, window->server_id(), new_bounds,
                          local_surface_id);
@@ -688,14 +728,49 @@ void WindowTreeClient::OnWindowMusCreated(WindowMus* window) {
       base::MakeUnique<CrashInFlightChange>(window, ChangeType::NEW_WINDOW));
   tree_->NewWindow(change_id, window->server_id(),
                    std::move(transport_properties));
+  if (window->window_mus_type() == WindowMusType::DISPLAY_MANUALLY_CREATED) {
+    WindowTreeHostMus* window_tree_host = GetWindowTreeHostMus(window);
+    std::unique_ptr<DisplayInitParams> display_init_params =
+        window_tree_host->ReleaseDisplayInitParams();
+    DCHECK(display_init_params);
+    display::Display display;
+    if (display_init_params->display) {
+      display = *display_init_params->display;
+    } else {
+      const bool has_display =
+          display::Screen::GetScreen()->GetDisplayWithDisplayId(
+              window_tree_host->display_id(), &display);
+      DCHECK(has_display);
+    }
+    // As |window| is a root, changes to its bounds are ignored (it's assumed
+    // bounds changes are routed through OnWindowTreeHostBoundsWillChange()).
+    // But the display is created with an initial bounds, and we need to push
+    // that to the server.
+    DCHECK(kRootWindowBoundsChangesAreIgnored);
+    ScheduleInFlightBoundsChange(
+        window, gfx::Rect(),
+        gfx::Rect(
+            display_init_params->viewport_metrics.bounds_in_pixels.size()));
+
+    if (window_manager_client_) {
+      window_manager_client_->SetDisplayRoot(
+          display, display_init_params->viewport_metrics.Clone(),
+          display_init_params->is_primary_display, window->server_id(),
+          base::Bind(&WindowTreeClient::OnSetDisplayRootDone,
+                     base::Unretained(this), window->server_id()));
+    }
+  }
 }
 
 void WindowTreeClient::OnWindowMusDestroyed(WindowMus* window, Origin origin) {
   if (focus_synchronizer_->focused_window() == window)
     focus_synchronizer_->OnFocusedWindowDestroyed();
 
+  // If we're |in_shutdown_| there is no point in telling the server about the
+  // deletion. The connection to the server is about to be dropped and the
+  // server will take appropriate action.
   // TODO: decide how to deal with windows not owned by this client.
-  if (origin == Origin::CLIENT &&
+  if (!in_shutdown_ && origin == Origin::CLIENT &&
       (WasCreatedByThisClient(window) || IsRoot(window))) {
     const uint32_t change_id =
         ScheduleInFlightChange(base::MakeUnique<CrashInFlightChange>(
@@ -731,8 +806,10 @@ void WindowTreeClient::OnWindowMusBoundsChanged(WindowMus* window,
   // Changes to bounds of root windows are routed through
   // OnWindowTreeHostBoundsWillChange(). Any bounds that happen here are a side
   // effect of those and can be ignored.
-  if (IsRoot(window))
+  if (IsRoot(window)) {
+    DCHECK(kRootWindowBoundsChangesAreIgnored);
     return;
+  }
 
   float device_scale_factor = ScaleFactorForDisplay(window->GetWindow());
   ScheduleInFlightBoundsChange(
@@ -835,8 +912,8 @@ void WindowTreeClient::OnWindowMusPropertyChanged(
 
 void WindowTreeClient::OnWmMoveLoopCompleted(uint32_t change_id,
                                              bool completed) {
-  if (window_manager_internal_client_)
-    window_manager_internal_client_->WmResponse(change_id, completed);
+  if (window_manager_client_)
+    window_manager_client_->WmResponse(change_id, completed);
 
   if (change_id == current_wm_move_loop_change_) {
     current_wm_move_loop_change_ = 0;
@@ -919,7 +996,6 @@ void WindowTreeClient::OnEmbed(
     int64_t display_id,
     Id focused_window_id,
     bool drawn,
-    const cc::FrameSinkId& frame_sink_id,
     const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   DCHECK(!tree_ptr_);
   tree_ptr_ = std::move(tree);
@@ -929,10 +1005,11 @@ void WindowTreeClient::OnEmbed(
   if (window_manager_delegate_) {
     tree_ptr_->GetWindowManagerClient(
         MakeRequest(&window_manager_internal_client_));
+    window_manager_client_ = window_manager_internal_client_.get();
   }
 
   OnEmbedImpl(tree_ptr_.get(), client_id, std::move(root_data), display_id,
-              focused_window_id, drawn, frame_sink_id, local_surface_id);
+              focused_window_id, drawn, local_surface_id);
 }
 
 void WindowTreeClient::OnEmbeddedAppDisconnected(Id window_id) {
@@ -980,7 +1057,6 @@ void WindowTreeClient::OnTopLevelCreated(
     ui::mojom::WindowDataPtr data,
     int64_t display_id,
     bool drawn,
-    const cc::FrameSinkId& frame_sink_id,
     const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   // The server ack'd the top level window we created and supplied the state
   // of the window at the time the server created it. For properties we do not
@@ -1046,8 +1122,6 @@ void WindowTreeClient::OnTopLevelCreated(
 
   // Top level windows should not have a parent.
   DCHECK_EQ(0u, data->parent_id);
-
-  window->SetFrameSinkIdFromServer(frame_sink_id);
 }
 
 void WindowTreeClient::OnWindowBoundsChanged(
@@ -1224,18 +1298,6 @@ void WindowTreeClient::OnWindowInputEvent(uint32_t event_id,
 
   WindowMus* window = GetWindowByServerId(window_id);  // May be null.
 
-  if (event->IsKeyEvent()) {
-    DCHECK(!matches_pointer_watcher);  // PointerWatcher isn't for key events.
-    if (!window || !window->GetWindow()->GetHost()) {
-      tree_->OnWindowInputEventAck(event_id, ui::mojom::EventResult::UNHANDLED);
-      return;
-    }
-    InputMethodMus* input_method = GetWindowTreeHostMus(window)->input_method();
-    input_method->DispatchKeyEvent(event->AsKeyEvent(),
-                                   CreateEventResultCallback(event_id));
-    return;
-  }
-
   if (matches_pointer_watcher && has_pointer_watcher_) {
     DCHECK(event->IsPointerEvent());
     std::unique_ptr<ui::Event> event_in_dip(ui::Event::Clone(*event));
@@ -1244,10 +1306,29 @@ void WindowTreeClient::OnWindowInputEvent(uint32_t event_id,
                                       window ? window->GetWindow() : nullptr);
   }
 
-  // TODO: use |display_id| to find host and send there.
+  // If the window has already been deleted, use |event| to update event states
+  // kept in aura::Env.
   if (!window || !window->GetWindow()->GetHost()) {
+    EnvInputStateController* env_controller =
+        Env::GetInstance()->env_controller();
+    std::unique_ptr<ui::Event> mapped_event = MapEvent(*event.get());
+    if (mapped_event->IsMouseEvent()) {
+      env_controller->UpdateStateForMouseEvent(nullptr,
+                                               *mapped_event->AsMouseEvent());
+    } else if (mapped_event->IsTouchEvent()) {
+      env_controller->UpdateStateForTouchEvent(*mapped_event->AsTouchEvent());
+    }
     tree_->OnWindowInputEventAck(event_id, ui::mojom::EventResult::UNHANDLED);
     return;
+  }
+
+  if (event->IsKeyEvent()) {
+    InputMethodMus* input_method = GetWindowTreeHostMus(window)->input_method();
+    if (input_method) {
+      input_method->DispatchKeyEvent(event->AsKeyEvent(),
+                                     CreateEventResultCallback(event_id));
+      return;
+    }
   }
 
   EventAckHandler ack_handler(CreateEventResultCallback(event_id));
@@ -1283,18 +1364,17 @@ void WindowTreeClient::OnWindowFocused(Id focused_window_id) {
   focus_synchronizer_->SetFocusFromServer(focused_window);
 }
 
-void WindowTreeClient::OnWindowPredefinedCursorChanged(
-    Id window_id,
-    ui::mojom::CursorType cursor) {
+void WindowTreeClient::OnWindowCursorChanged(Id window_id,
+                                             ui::CursorData cursor) {
   WindowMus* window = GetWindowByServerId(window_id);
   if (!window)
     return;
 
-  InFlightPredefinedCursorChange new_change(window, cursor);
+  InFlightCursorChange new_change(window, cursor);
   if (ApplyServerChangeToExistingInFlightChange(new_change))
     return;
 
-  window->SetPredefinedCursorFromServer(cursor);
+  window->SetCursorFromServer(cursor);
 }
 
 void WindowTreeClient::OnWindowSurfaceChanged(
@@ -1420,18 +1500,29 @@ bool WindowTreeClient::WaitForInitialDisplays() {
   return valid_wait;
 }
 
+WindowTreeHostMusInitParams WindowTreeClient::CreateInitParamsForNewDisplay() {
+  WindowTreeHostMusInitParams init_params;
+  init_params.window_port = base::MakeUnique<WindowPortMus>(
+      this, WindowMusType::DISPLAY_MANUALLY_CREATED);
+  roots_.insert(init_params.window_port.get());
+  init_params.window_tree_client = this;
+  return init_params;
+}
+
 void WindowTreeClient::OnConnect(ClientSpecificId client_id) {
   client_id_ = client_id;
+  got_initial_displays_ = true;
+  if (window_manager_delegate_)
+    window_manager_delegate_->OnWmConnected();
 }
 
 void WindowTreeClient::WmNewDisplayAdded(
     const display::Display& display,
     ui::mojom::WindowDataPtr root_data,
     bool parent_drawn,
-    const cc::FrameSinkId& frame_sink_id,
     const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   WmNewDisplayAddedImpl(display, std::move(root_data), parent_drawn,
-                        frame_sink_id, local_surface_id);
+                        local_surface_id);
 }
 
 void WindowTreeClient::WmDisplayRemoved(int64_t display_id) {
@@ -1467,8 +1558,8 @@ void WindowTreeClient::WmSetBounds(uint32_t change_id,
   } else {
     DVLOG(1) << "Unknown window passed to WmSetBounds().";
   }
-  if (window_manager_internal_client_)
-    window_manager_internal_client_->WmSetBoundsResponse(change_id);
+  if (window_manager_client_)
+    window_manager_client_->WmSetBoundsResponse(change_id);
 }
 
 void WindowTreeClient::WmSetProperty(
@@ -1491,8 +1582,8 @@ void WindowTreeClient::WmSetProperty(
           window->GetWindow(), name, data.get());
     }
   }
-  if (window_manager_internal_client_)
-    window_manager_internal_client_->WmResponse(change_id, result);
+  if (window_manager_client_)
+    window_manager_client_->WmResponse(change_id, result);
 }
 
 void WindowTreeClient::WmSetModalType(Id window_id, ui::ModalType type) {
@@ -1525,13 +1616,13 @@ void WindowTreeClient::WmCreateTopLevelWindow(
   Window* window = window_manager_delegate_->OnWmCreateTopLevelWindow(
       window_type, &properties);
   if (!window) {
-    window_manager_internal_client_->OnWmCreatedTopLevelWindow(
-        change_id, kInvalidServerId);
+    window_manager_client_->OnWmCreatedTopLevelWindow(change_id,
+                                                      kInvalidServerId);
     return;
   }
   embedded_windows_[requesting_client_id].insert(window);
-  if (window_manager_internal_client_) {
-    window_manager_internal_client_->OnWmCreatedTopLevelWindow(
+  if (window_manager_client_) {
+    window_manager_client_->OnWmCreatedTopLevelWindow(
         change_id, WindowMus::Get(window)->server_id());
   }
 }
@@ -1633,16 +1724,16 @@ void WindowTreeClient::WmStackAbove(uint32_t wm_change_id, Id above_id,
   WindowMus* below_mus = GetWindowByServerId(below_id);
   if (!below_mus) {
     DVLOG(1) << "Attempt to stack at top invalid window " << below_id;
-    if (window_manager_internal_client_)
-      window_manager_internal_client_->WmResponse(wm_change_id, false);
+    if (window_manager_client_)
+      window_manager_client_->WmResponse(wm_change_id, false);
     return;
   }
 
   WindowMus* above_mus = GetWindowByServerId(above_id);
   if (!above_mus) {
     DVLOG(1) << "Attempt to stack at top invalid window " << above_id;
-    if (window_manager_internal_client_)
-      window_manager_internal_client_->WmResponse(wm_change_id, false);
+    if (window_manager_client_)
+      window_manager_client_->WmResponse(wm_change_id, false);
     return;
   }
 
@@ -1651,15 +1742,15 @@ void WindowTreeClient::WmStackAbove(uint32_t wm_change_id, Id above_id,
 
   if (above->parent() != below->parent()) {
     DVLOG(1) << "Windows do not share the same parent";
-    if (window_manager_internal_client_)
-      window_manager_internal_client_->WmResponse(wm_change_id, false);
+    if (window_manager_client_)
+      window_manager_client_->WmResponse(wm_change_id, false);
     return;
   }
 
   above->parent()->StackChildAbove(above, below);
 
-  if (window_manager_internal_client_)
-    window_manager_internal_client_->WmResponse(wm_change_id, true);
+  if (window_manager_client_)
+    window_manager_client_->WmResponse(wm_change_id, true);
 }
 
 void WindowTreeClient::WmStackAtTop(uint32_t wm_change_id, uint32_t window_id) {
@@ -1669,16 +1760,16 @@ void WindowTreeClient::WmStackAtTop(uint32_t wm_change_id, uint32_t window_id) {
   WindowMus* window = GetWindowByServerId(window_id);
   if (!window) {
     DVLOG(1) << "Attempt to stack at top invalid window " << window_id;
-    if (window_manager_internal_client_)
-      window_manager_internal_client_->WmResponse(wm_change_id, false);
+    if (window_manager_client_)
+      window_manager_client_->WmResponse(wm_change_id, false);
     return;
   }
 
   Window* parent = window->GetWindow()->parent();
   parent->StackChildAtTop(window->GetWindow());
 
-  if (window_manager_internal_client_)
-    window_manager_internal_client_->WmResponse(wm_change_id, true);
+  if (window_manager_client_)
+    window_manager_client_->WmResponse(wm_change_id, true);
 }
 
 void WindowTreeClient::OnAccelerator(uint32_t ack_id,
@@ -1688,77 +1779,94 @@ void WindowTreeClient::OnAccelerator(uint32_t ack_id,
   std::unordered_map<std::string, std::vector<uint8_t>> properties;
   const ui::mojom::EventResult result = window_manager_delegate_->OnAccelerator(
       accelerator_id, *event.get(), &properties);
-  if (ack_id && window_manager_internal_client_)
-    window_manager_internal_client_->OnAcceleratorAck(ack_id, result,
-                                                      properties);
+  if (ack_id && window_manager_client_)
+    window_manager_client_->OnAcceleratorAck(ack_id, result, properties);
 }
 
 void WindowTreeClient::SetFrameDecorationValues(
     ui::mojom::FrameDecorationValuesPtr values) {
-  if (window_manager_internal_client_) {
+  if (window_manager_client_) {
     normal_client_area_insets_ = values->normal_client_area_insets;
-    window_manager_internal_client_->WmSetFrameDecorationValues(
-        std::move(values));
+    window_manager_client_->WmSetFrameDecorationValues(std::move(values));
   }
 }
 
 void WindowTreeClient::SetNonClientCursor(Window* window,
-                                          ui::mojom::CursorType cursor_id) {
-  if (window_manager_internal_client_) {
-    window_manager_internal_client_->WmSetNonClientCursor(
-        WindowMus::Get(window)->server_id(), cursor_id);
+                                          const ui::CursorData& cursor) {
+  if (window_manager_client_) {
+    window_manager_client_->WmSetNonClientCursor(
+        WindowMus::Get(window)->server_id(), cursor);
   }
 }
 
 void WindowTreeClient::AddAccelerators(
     std::vector<ui::mojom::WmAcceleratorPtr> accelerators,
     const base::Callback<void(bool)>& callback) {
-  if (window_manager_internal_client_) {
-    window_manager_internal_client_->AddAccelerators(std::move(accelerators),
-                                                     callback);
+  if (window_manager_client_) {
+    window_manager_client_->AddAccelerators(std::move(accelerators), callback);
   }
 }
 
 void WindowTreeClient::RemoveAccelerator(uint32_t id) {
-  if (window_manager_internal_client_) {
-    window_manager_internal_client_->RemoveAccelerator(id);
+  if (window_manager_client_) {
+    window_manager_client_->RemoveAccelerator(id);
   }
 }
 
 void WindowTreeClient::AddActivationParent(Window* window) {
-  if (window_manager_internal_client_) {
-    window_manager_internal_client_->AddActivationParent(
+  if (window_manager_client_) {
+    window_manager_client_->AddActivationParent(
         WindowMus::Get(window)->server_id());
   }
 }
 
 void WindowTreeClient::RemoveActivationParent(Window* window) {
-  if (window_manager_internal_client_) {
-    window_manager_internal_client_->RemoveActivationParent(
+  if (window_manager_client_) {
+    window_manager_client_->RemoveActivationParent(
         WindowMus::Get(window)->server_id());
   }
 }
 
 void WindowTreeClient::ActivateNextWindow() {
-  if (window_manager_internal_client_)
-    window_manager_internal_client_->ActivateNextWindow();
+  if (window_manager_client_)
+    window_manager_client_->ActivateNextWindow();
 }
 
 void WindowTreeClient::SetExtendedHitArea(Window* window,
                                           const gfx::Insets& hit_area) {
-  if (window_manager_internal_client_) {
+  if (window_manager_client_) {
     float device_scale_factor = ScaleFactorForDisplay(window);
-    window_manager_internal_client_->SetExtendedHitArea(
+    window_manager_client_->SetExtendedHitArea(
         WindowMus::Get(window)->server_id(),
         gfx::ConvertInsetsToPixel(device_scale_factor, hit_area));
   }
 }
 
+void WindowTreeClient::LockCursor() {
+  if (window_manager_client_)
+    window_manager_client_->WmLockCursor();
+}
+
+void WindowTreeClient::UnlockCursor() {
+  if (window_manager_client_)
+    window_manager_client_->WmUnlockCursor();
+}
+
+void WindowTreeClient::SetCursorVisible(bool visible) {
+  if (window_manager_client_)
+    window_manager_client_->WmSetCursorVisible(visible);
+}
+
+void WindowTreeClient::SetGlobalOverrideCursor(
+    base::Optional<ui::CursorData> cursor) {
+  if (window_manager_client_)
+    window_manager_client_->WmSetGlobalOverrideCursor(std::move(cursor));
+}
+
 void WindowTreeClient::RequestClose(Window* window) {
   DCHECK(window);
-  if (window_manager_internal_client_)
-    window_manager_internal_client_->WmRequestClose(
-        WindowMus::Get(window)->server_id());
+  if (window_manager_client_)
+    window_manager_client_->WmRequestClose(WindowMus::Get(window)->server_id());
 }
 
 void WindowTreeClient::OnWindowTreeHostBoundsWillChange(
@@ -1967,6 +2075,39 @@ uint32_t WindowTreeClient::CreateChangeIdForCapture(WindowMus* window) {
 uint32_t WindowTreeClient::CreateChangeIdForFocus(WindowMus* window) {
   return ScheduleInFlightChange(base::MakeUnique<InFlightFocusChange>(
       this, focus_synchronizer_.get(), window));
+}
+
+void WindowTreeClient::OnCompositingDidCommit(ui::Compositor* compositor) {}
+
+void WindowTreeClient::OnCompositingStarted(ui::Compositor* compositor,
+                                            base::TimeTicks start_time) {
+  if (!synchronizing_with_child_on_next_frame_)
+    return;
+  synchronizing_with_child_on_next_frame_ = false;
+  WindowTreeHost* host =
+      WindowTreeHost::GetForAcceleratedWidget(compositor->widget());
+  // Unit tests have a null widget and thus may not have an associated
+  // WindowTreeHost.
+  if (host) {
+    host->dispatcher()->HoldPointerMoves();
+    holding_pointer_moves_ = true;
+  }
+}
+
+void WindowTreeClient::OnCompositingEnded(ui::Compositor* compositor) {
+  if (!holding_pointer_moves_)
+    return;
+  WindowTreeHost* host =
+      WindowTreeHost::GetForAcceleratedWidget(compositor->widget());
+  host->dispatcher()->ReleasePointerMoves();
+  holding_pointer_moves_ = false;
+}
+
+void WindowTreeClient::OnCompositingLockStateChanged(
+    ui::Compositor* compositor) {}
+
+void WindowTreeClient::OnCompositingShuttingDown(ui::Compositor* compositor) {
+  compositor->RemoveObserver(this);
 }
 
 }  // namespace aura

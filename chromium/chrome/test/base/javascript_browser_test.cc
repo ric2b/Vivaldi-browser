@@ -4,8 +4,10 @@
 
 #include "chrome/test/base/javascript_browser_test.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/public/browser/web_ui.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -65,6 +67,7 @@ void JavaScriptBrowserTest::SetUpOnMainThread() {
 // calls.
 void JavaScriptBrowserTest::BuildJavascriptLibraries(
     std::vector<base::string16>* libraries) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   ASSERT_TRUE(libraries != NULL);
   std::vector<base::FilePath>::iterator user_libraries_iterator;
   for (user_libraries_iterator = user_libraries_.begin();
@@ -104,17 +107,18 @@ void JavaScriptBrowserTest::BuildJavascriptLibraries(
 base::string16 JavaScriptBrowserTest::BuildRunTestJSCall(
     bool is_async,
     const std::string& function_name,
-    const ConstValueVector& test_func_args) {
-  ConstValueVector arguments;
-  base::Value* is_async_arg = new base::Value(is_async);
-  arguments.push_back(is_async_arg);
-  base::Value* function_name_arg = new base::Value(function_name);
-  arguments.push_back(function_name_arg);
-  base::ListValue* baked_argument_list = new base::ListValue();
-  ConstValueVector::const_iterator arguments_iterator;
-  for (auto* arg : test_func_args)
-    baked_argument_list->Append(arg->CreateDeepCopy());
-  arguments.push_back(baked_argument_list);
-  return content::WebUI::GetJavascriptCall(std::string("runTest"),
-                                           arguments.get());
+    std::vector<base::Value> test_func_args) {
+  std::vector<std::unique_ptr<base::Value>> arguments;
+  arguments.push_back(base::MakeUnique<base::Value>(is_async));
+  arguments.push_back(base::MakeUnique<base::Value>(function_name));
+  auto baked_argument_list = base::MakeUnique<base::ListValue>();
+  for (const auto& arg : test_func_args)
+    baked_argument_list->Append(arg.CreateDeepCopy());
+  arguments.push_back(std::move(baked_argument_list));
+
+  std::vector<const base::Value*> ptr_vector;
+  ptr_vector.reserve(arguments.size());
+  for (const auto& argument : arguments)
+    ptr_vector.push_back(argument.get());
+  return content::WebUI::GetJavascriptCall(std::string("runTest"), ptr_vector);
 }

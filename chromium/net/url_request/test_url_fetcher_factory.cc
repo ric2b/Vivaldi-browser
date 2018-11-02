@@ -21,6 +21,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/upload_data_stream.h"
 #include "net/http/http_response_headers.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_fetcher_impl.h"
 #include "net/url_request/url_fetcher_response_writer.h"
@@ -332,7 +333,8 @@ std::unique_ptr<URLFetcher> TestURLFetcherFactory::CreateURLFetcher(
     int id,
     const GURL& url,
     URLFetcher::RequestType request_type,
-    URLFetcherDelegate* d) {
+    URLFetcherDelegate* d,
+    NetworkTrafficAnnotationTag traffic_annotation) {
   TestURLFetcher* fetcher = new TestURLFetcher(id, url, d);
   if (remove_fetcher_on_delete_)
     fetcher->set_owner(this);
@@ -441,7 +443,8 @@ std::unique_ptr<URLFetcher> FakeURLFetcherFactory::CreateURLFetcher(
     int id,
     const GURL& url,
     URLFetcher::RequestType request_type,
-    URLFetcherDelegate* d) {
+    URLFetcherDelegate* d,
+    NetworkTrafficAnnotationTag traffic_annotation) {
   FakeResponseMap::const_iterator it = fake_responses_.find(url);
   if (it == fake_responses_.end()) {
     if (default_factory_ == NULL) {
@@ -449,7 +452,8 @@ std::unique_ptr<URLFetcher> FakeURLFetcherFactory::CreateURLFetcher(
       DLOG(ERROR) << "No baked response for URL: " << url.spec();
       return NULL;
     } else {
-      return default_factory_->CreateURLFetcher(id, url, request_type, d);
+      return default_factory_->CreateURLFetcher(id, url, request_type, d,
+                                                traffic_annotation);
     }
   }
 
@@ -484,8 +488,10 @@ std::unique_ptr<URLFetcher> URLFetcherImplFactory::CreateURLFetcher(
     int id,
     const GURL& url,
     URLFetcher::RequestType request_type,
-    URLFetcherDelegate* d) {
-  return std::unique_ptr<URLFetcher>(new URLFetcherImpl(url, request_type, d));
+    URLFetcherDelegate* d,
+    NetworkTrafficAnnotationTag traffic_annotation) {
+  return std::unique_ptr<URLFetcher>(
+      new URLFetcherImpl(url, request_type, d, traffic_annotation));
 }
 
 }  // namespace net

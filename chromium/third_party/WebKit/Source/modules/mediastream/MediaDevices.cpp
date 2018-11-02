@@ -6,7 +6,6 @@
 
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
@@ -19,6 +18,7 @@
 #include "modules/mediastream/NavigatorUserMediaErrorCallback.h"
 #include "modules/mediastream/NavigatorUserMediaSuccessCallback.h"
 #include "modules/mediastream/UserMediaController.h"
+#include "platform/bindings/ScriptState.h"
 
 namespace blink {
 
@@ -206,7 +206,7 @@ void MediaDevices::ScheduleDispatchEvent(Event* event) {
 
 void MediaDevices::DispatchScheduledEvent() {
   HeapVector<Member<Event>> events;
-  events.Swap(scheduled_events_);
+  events.swap(scheduled_events_);
 
   for (const auto& event : events)
     DispatchEvent(event);

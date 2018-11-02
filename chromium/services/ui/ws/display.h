@@ -72,8 +72,8 @@ class Display : public PlatformDisplayDelegate,
   void Init(const display::ViewportMetrics& metrics,
             std::unique_ptr<DisplayBinding> binding);
 
-  // Returns an ID for this display. In internal mode this the display::Display
-  // ID. In external mode this hasn't been defined yet.
+  // Returns the ID for this display. In internal mode this is the
+  // display::Display ID. In external mode this hasn't been defined yet.
   int64_t GetId() const;
 
   // Sets the display::Display corresponding to this ws::Display. This is only
@@ -149,7 +149,8 @@ class Display : public PlatformDisplayDelegate,
   // |display_root| being destroyed.
   void RemoveWindowManagerDisplayRoot(WindowManagerDisplayRoot* display_root);
 
-  void UpdateNativeCursor(mojom::CursorType cursor_id);
+  // Sets the native cursor to |cursor|.
+  void SetNativeCursor(const ui::CursorData& curosor);
 
   // mojom::WindowTreeHost:
   void SetSize(const gfx::Size& size) override;
@@ -166,6 +167,8 @@ class Display : public PlatformDisplayDelegate,
 
   using WindowManagerDisplayRootMap =
       std::map<UserId, WindowManagerDisplayRoot*>;
+
+  class CursorState;
 
   // Inits the necessary state once the display is ready.
   void InitWindowManagerDisplayRoots();
@@ -217,9 +220,6 @@ class Display : public PlatformDisplayDelegate,
   // In internal window mode this contains information about the display. In
   // external window mode this will be invalid.
   display::Display display_;
-
-  // The last cursor set. Used to track whether we need to change the cursor.
-  mojom::CursorType last_cursor_;
 
   ServerWindowTracker activation_parents_;
 

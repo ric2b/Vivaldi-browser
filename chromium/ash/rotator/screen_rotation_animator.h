@@ -14,13 +14,17 @@
 #include "base/observer_list.h"
 #include "ui/display/display.h"
 
+namespace aura {
+class Window;
+}  // namesapce aura
+
 namespace cc {
+class CopyOutputRequest;
 class CopyOutputResult;
 }  // namespace cc
 
 namespace ui {
 class AnimationMetricsReporter;
-class Layer;
 class LayerTreeOwner;
 }  // namespace ui
 
@@ -34,21 +38,18 @@ class ScreenRotationAnimatorObserver;
 // Utility to perform a screen rotation with an animation.
 class ASH_EXPORT ScreenRotationAnimator {
  public:
-  explicit ScreenRotationAnimator(int64_t display_id);
+  explicit ScreenRotationAnimator(aura::Window* root_window);
   virtual ~ScreenRotationAnimator();
 
-  // Rotates the display::Display specified by |display_id_| to the
-  // |new_rotation| orientation, for the given |source|. The rotation will also
-  // become active. Should only be called when |display_id_| references a valid
-  // display::Display. |screen_rotation_animator_observer_| will be notified
-  // when rotation is finished and there is no more pending rotation request.
-  // Otherwise, any ongoing animation will be stopped and progressed to the
-  // target position, followed by a new |Rotate()| call with the pending
+  // Rotates the display::Display specified by |display_id| of the |root_window|
+  // to the |new_rotation| orientation, for the given |source|. The rotation
+  // will also become active. |screen_rotation_animator_observer_| will be
+  // notified when rotation is finished and there is no more pending rotation
+  // request. Otherwise, any ongoing animation will be stopped and progressed to
+  // the target position, followed by a new |Rotate()| call with the pending
   // rotation request.
   void Rotate(display::Display::Rotation new_rotation,
               display::Display::RotationSource source);
-
-  int64_t display_id() const { return display_id_; }
 
   void AddScreenRotationAnimatorObserver(
       ScreenRotationAnimatorObserver* observer);
@@ -60,22 +61,40 @@ class ASH_EXPORT ScreenRotationAnimator {
   // notifies |screen_rotation_animator_observer_|.
   void ProcessAnimationQueue();
 
+  // True if the screen is in rotating state (not IDLE).
+  bool IsRotating() const;
+
+  // Returns the target (new) rotation. This will return the last requested
+  // orientation if |IsRotating()| is false.
+  display::Display::Rotation GetTargetRotation() const;
+
  protected:
   using CopyCallback =
       base::Callback<void(std::unique_ptr<cc::CopyOutputResult> result)>;
   struct ScreenRotationRequest {
     ScreenRotationRequest(int64_t id,
+                          int64_t display_id,
                           display::Display::Rotation to_rotation,
                           display::Display::RotationSource from_source)
-        : id(id), new_rotation(to_rotation), source(from_source) {}
+        : id(id),
+          display_id(display_id),
+          new_rotation(to_rotation),
+          source(from_source) {}
     int64_t id;
+    int64_t display_id;
+    display::Display::Rotation old_rotation;
     display::Display::Rotation new_rotation;
     display::Display::RotationSource source;
   };
 
   // This function can be overridden in unit test to test removing external
   // display.
-  virtual CopyCallback CreateAfterCopyCallback(
+  virtual CopyCallback CreateAfterCopyCallbackBeforeRotation(
+      std::unique_ptr<ScreenRotationRequest> rotation_request);
+
+  // This function can be overridden in unit test to test removing external
+  // display.
+  virtual CopyCallback CreateAfterCopyCallbackAfterRotation(
       std::unique_ptr<ScreenRotationRequest> rotation_request);
 
  private:
@@ -84,20 +103,45 @@ class ASH_EXPORT ScreenRotationAnimator {
   void StartRotationAnimation(
       std::unique_ptr<ScreenRotationRequest> rotation_request);
 
-  // This is an asynchronous call to request copy output of root layer.
-  void RequestCopyRootLayerAndAnimateRotation(
+  // The code path to start "slow animation". The difference between the "slow"
+  // and "smooth" animation, is that "slow animation" will recreate all the
+  // layers before rotation and use the recreated layers and rotated layers for
+  // cross-fading animation. This is slow by adding multiple layer animation
+  // elements. The "smooth animation" copies the layer output before and after
+  // rotation, and use them for cross-fading animation. The output copy layer
+  // flatten the layer hierarchy and makes the animation smooth.
+  void StartSlowAnimation(
       std::unique_ptr<ScreenRotationRequest> rotation_request);
 
-  // The callback in |RequestCopyRootLayerAndAnimateRotation()|.
-  void OnRootLayerCopiedBeforeRotation(
+  // A wrapper to call |display_manager| to set screen rotation and rotate the
+  // |old_layer_tree| to the |old_rotation|.
+  void SetRotation(int64_t display_id,
+                   display::Display::Rotation old_rotation,
+                   display::Display::Rotation new_rotation,
+                   display::Display::RotationSource source);
+
+  // This is an asynchronous call to request copy output of root layer.
+  void RequestCopyScreenRotationContainerLayer(
+      std::unique_ptr<cc::CopyOutputRequest> copy_output_request);
+
+  // The callback in |RequestCopyScreenRotationContainerLayer()| before screen
+  // rotation.
+  void OnScreenRotationContainerLayerCopiedBeforeRotation(
       std::unique_ptr<ScreenRotationRequest> rotation_request,
       std::unique_ptr<cc::CopyOutputResult> result);
 
-  // Recreates all |root_window| layers.
-  void CreateOldLayerTree();
+  // The callback in |RequestCopyScreenRotationContainerLayer()| after screen
+  // rotation.
+  void OnScreenRotationContainerLayerCopiedAfterRotation(
+      std::unique_ptr<ScreenRotationRequest> rotation_request,
+      std::unique_ptr<cc::CopyOutputResult> result);
 
-  // Requests a copy of |root_window| root layer output.
-  void CopyOldLayerTree(std::unique_ptr<cc::CopyOutputResult> result);
+  // Recreates all |root_window| layers and their layer tree owner.
+  void CreateOldLayerTreeForSlowAnimation();
+
+  // Creates a new layer and its layer tree owner from |CopyOutputResult|.
+  std::unique_ptr<ui::LayerTreeOwner> CopyLayerTree(
+      std::unique_ptr<cc::CopyOutputResult> result);
 
   // Note: Only call this function when the |old_layer_tree_owner_| is set up
   // properly.
@@ -108,12 +152,13 @@ class ASH_EXPORT ScreenRotationAnimator {
   // |rotation_degrees| arc.
   void AnimateRotation(std::unique_ptr<ScreenRotationRequest> rotation_request);
 
-  void set_disable_animation_timers_for_test(bool disable_timers);
+  void set_disable_animation_timers_for_test(bool disable_timers) {
+    disable_animation_timers_for_test_ = disable_timers;
+  }
 
   void StopAnimating();
 
-  // The id of the display to rotate.
-  int64_t display_id_;
+  aura::Window* root_window_;
 
   // For current slow rotation animation, there are two states |ROTATING| and
   // |IDLE|. For the smooth rotation animation, we need to send copy request
@@ -135,7 +180,11 @@ class ASH_EXPORT ScreenRotationAnimator {
   base::ObserverList<ScreenRotationAnimatorObserver>
       screen_rotation_animator_observers_;
   std::unique_ptr<ui::LayerTreeOwner> old_layer_tree_owner_;
+  std::unique_ptr<ui::LayerTreeOwner> new_layer_tree_owner_;
+  std::unique_ptr<ui::LayerTreeOwner> mask_layer_tree_owner_;
   std::unique_ptr<ScreenRotationRequest> last_pending_request_;
+  bool has_switch_ash_disable_smooth_screen_rotation_;
+  display::Display::Rotation target_rotation_ = display::Display::ROTATE_0;
   base::WeakPtrFactory<ScreenRotationAnimator> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenRotationAnimator);

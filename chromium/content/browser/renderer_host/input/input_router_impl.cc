@@ -23,7 +23,6 @@
 #include "content/common/content_constants_internal.h"
 #include "content/common/edit_command.h"
 #include "content/common/input/input_event_ack_state.h"
-#include "content/common/input/touch_action.h"
 #include "content/common/input/web_touch_event_traits.h"
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
@@ -85,7 +84,6 @@ InputRouterImpl::InputRouterImpl(IPC::Sender* sender,
       select_message_pending_(false),
       move_caret_pending_(false),
       current_ack_source_(ACK_SOURCE_NONE),
-      flush_requested_(false),
       active_renderer_fling_count_(0),
       touch_scroll_started_sent_(false),
       wheel_event_queue_(this,
@@ -206,9 +204,7 @@ void InputRouterImpl::SendTouchEvent(
 // TouchpadTapSuppressionController.
 void InputRouterImpl::SendMouseEventImmediately(
     const MouseEventWithLatencyInfo& mouse_event) {
-  if (mouse_event.event.GetType() == blink::WebInputEvent::kMouseMove)
-    mouse_move_queue_.push_back(mouse_event);
-
+  mouse_event_queue_.push_back(mouse_event);
   FilterAndSendWebInputEvent(mouse_event.event, mouse_event.latency);
 }
 
@@ -232,14 +228,9 @@ void InputRouterImpl::NotifySiteIsMobileOptimized(bool is_mobile_optimized) {
   touch_event_queue_->SetIsMobileOptimizedSite(is_mobile_optimized);
 }
 
-void InputRouterImpl::RequestNotificationWhenFlushed() {
-  flush_requested_ = true;
-  SignalFlushedIfNecessary();
-}
-
 bool InputRouterImpl::HasPendingEvents() const {
   return !touch_event_queue_->Empty() || !gesture_event_queue_.empty() ||
-         !key_queue_.empty() || !mouse_move_queue_.empty() ||
+         !key_queue_.empty() || !mouse_event_queue_.empty() ||
          wheel_event_queue_.has_pending() || select_message_pending_ ||
          move_caret_pending_ || active_renderer_fling_count_ > 0;
 }
@@ -501,7 +492,7 @@ void InputRouterImpl::OnHasTouchEventHandlers(bool has_handlers) {
   client_->OnHasTouchEventHandlers(has_handlers);
 }
 
-void InputRouterImpl::OnSetTouchAction(TouchAction touch_action) {
+void InputRouterImpl::OnSetTouchAction(cc::TouchAction touch_action) {
   // Synthetic touchstart events should get filtered out in RenderWidget.
   DCHECK(touch_event_queue_->IsPendingAckTouchStart());
   TRACE_EVENT1("input", "InputRouterImpl::OnSetTouchAction",
@@ -509,7 +500,7 @@ void InputRouterImpl::OnSetTouchAction(TouchAction touch_action) {
 
   touch_action_filter_.OnSetTouchAction(touch_action);
 
-  // TOUCH_ACTION_NONE should disable the touch ack timeout.
+  // kTouchActionNone should disable the touch ack timeout.
   UpdateTouchAckTimeoutEnabled();
 }
 
@@ -519,7 +510,6 @@ void InputRouterImpl::OnDidStopFlinging() {
   // renderer, not from any other consumers. Consequently, the GestureEventQueue
   // cannot use this bookkeeping for logic like tap suppression.
   --active_renderer_fling_count_;
-  SignalFlushedIfNecessary();
 
   client_->DidStopFlinging();
 }
@@ -556,8 +546,6 @@ void InputRouterImpl::ProcessInputEventAck(WebInputEvent::Type event_type,
   } else if (event_type != WebInputEvent::kUndefined) {
     ack_handler_->OnUnexpectedEventAck(InputAckHandler::BAD_ACK_MESSAGE);
   }
-
-  SignalFlushedIfNecessary();
 }
 
 void InputRouterImpl::ProcessKeyboardAck(blink::WebInputEvent::Type type,
@@ -586,15 +574,12 @@ void InputRouterImpl::ProcessKeyboardAck(blink::WebInputEvent::Type type,
 void InputRouterImpl::ProcessMouseAck(blink::WebInputEvent::Type type,
                                       InputEventAckState ack_result,
                                       const ui::LatencyInfo& latency) {
-  if (type != WebInputEvent::kMouseMove)
-    return;
-
-  if (mouse_move_queue_.empty()) {
+  if (mouse_event_queue_.empty()) {
     ack_handler_->OnUnexpectedEventAck(InputAckHandler::UNEXPECTED_ACK);
   } else {
-    MouseEventWithLatencyInfo front_item = mouse_move_queue_.front();
+    MouseEventWithLatencyInfo front_item = mouse_event_queue_.front();
     front_item.latency.AddNewLatencyFrom(latency);
-    mouse_move_queue_.pop_front();
+    mouse_event_queue_.pop_front();
     ack_handler_->OnMouseEventAck(front_item, ack_result);
   }
 }
@@ -625,23 +610,12 @@ void InputRouterImpl::ProcessTouchAck(InputEventAckState ack_result,
 }
 
 void InputRouterImpl::UpdateTouchAckTimeoutEnabled() {
-  // TOUCH_ACTION_NONE will prevent scrolling, in which case the timeout serves
+  // kTouchActionNone will prevent scrolling, in which case the timeout serves
   // little purpose. It's also a strong signal that touch handling is critical
   // to page functionality, so the timeout could do more harm than good.
   const bool touch_ack_timeout_enabled =
-      touch_action_filter_.allowed_touch_action() != TOUCH_ACTION_NONE;
+      touch_action_filter_.allowed_touch_action() != cc::kTouchActionNone;
   touch_event_queue_->SetAckTimeoutEnabled(touch_ack_timeout_enabled);
-}
-
-void InputRouterImpl::SignalFlushedIfNecessary() {
-  if (!flush_requested_)
-    return;
-
-  if (HasPendingEvents())
-    return;
-
-  flush_requested_ = false;
-  client_->DidFlush();
 }
 
 void InputRouterImpl::SetFrameTreeNodeId(int frameTreeNodeId) {

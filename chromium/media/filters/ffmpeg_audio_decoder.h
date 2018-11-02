@@ -34,7 +34,7 @@ class MEDIA_EXPORT FFmpegAudioDecoder : public AudioDecoder {
  public:
   FFmpegAudioDecoder(
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-      const scoped_refptr<MediaLog>& media_log);
+      MediaLog* media_log);
   ~FFmpegAudioDecoder() override;
 
   // AudioDecoder implementation.
@@ -91,12 +91,12 @@ class MEDIA_EXPORT FFmpegAudioDecoder : public AudioDecoder {
 
   // Handles (re-)initializing the decoder with a (new) config.
   // Returns true if initialization was successful.
-  bool ConfigureDecoder();
+  bool ConfigureDecoder(const AudioDecoderConfig& config);
 
   // Releases resources associated with |codec_context_| and |av_frame_|
   // and resets them to NULL.
   void ReleaseFFmpegResources();
-  void ResetTimestampState();
+  void ResetTimestampState(const AudioDecoderConfig& config);
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
@@ -115,7 +115,7 @@ class MEDIA_EXPORT FFmpegAudioDecoder : public AudioDecoder {
 
   std::unique_ptr<AudioDiscardHelper> discard_helper_;
 
-  scoped_refptr<MediaLog> media_log_;
+  MediaLog* media_log_;
 
   scoped_refptr<AudioBufferMemoryPool> pool_;
 

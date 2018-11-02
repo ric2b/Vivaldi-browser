@@ -37,6 +37,8 @@
 #include "core/layout/api/LayoutPartItem.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
+#include "core/layout/svg/LayoutSVGRoot.h"
+#include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/ViewPaintInvalidator.h"
@@ -127,8 +129,6 @@ bool LayoutView::HitTestNoLifecycleUpdate(HitTestResult& result) {
 
   DCHECK(!result.GetHitTestLocation().IsRectBasedTest() ||
          result.GetHitTestRequest().ListBased());
-
-  CommitPendingSelection();
 
   uint64_t dom_tree_version = GetDocument().DomTreeVersion();
   HitTestResult cache_result = result;
@@ -242,7 +242,7 @@ void LayoutView::SetShouldDoFullPaintInvalidationOnResizeIfNeeded(
                               Style()->BackgroundLayers())) ||
         (height_changed && MustInvalidateFillLayersPaintOnHeightChange(
                                Style()->BackgroundLayers())))
-      SetShouldDoFullPaintInvalidation(kPaintInvalidationBoundsChange);
+      SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kBackground);
   }
 }
 
@@ -280,6 +280,7 @@ void LayoutView::UpdateLayout() {
       !ShouldUsePrintingLayout() &&
       (!frame_view_ || LogicalWidth() != ViewLogicalWidthForBoxSizing() ||
        LogicalHeight() != ViewLogicalHeightForBoxSizing());
+
   if (relayout_children) {
     layout_scope.SetChildNeedsLayout(this);
     for (LayoutObject* child = FirstChild(); child;
@@ -443,14 +444,9 @@ void LayoutView::ComputeSelfHitTestRects(Vector<LayoutRect>& rects,
                              LayoutSize(GetFrameView()->ContentsSize())));
 }
 
-PaintInvalidationReason LayoutView::InvalidatePaintIfNeeded(
-    const PaintInvalidationState& paint_invalidation_state) {
-  return LayoutBlockFlow::InvalidatePaintIfNeeded(paint_invalidation_state);
-}
-
-PaintInvalidationReason LayoutView::InvalidatePaintIfNeeded(
+PaintInvalidationReason LayoutView::InvalidatePaint(
     const PaintInvalidatorContext& context) const {
-  return ViewPaintInvalidator(*this, context).InvalidatePaintIfNeeded();
+  return ViewPaintInvalidator(*this, context).InvalidatePaint();
 }
 
 void LayoutView::Paint(const PaintInfo& paint_info,
@@ -613,18 +609,10 @@ void LayoutView::ClearSelection() {
   frame_view_->GetFrame().Selection().ClearLayoutSelection();
 }
 
-bool LayoutView::HasPendingSelection() const {
-  return frame_view_->GetFrame().Selection().IsAppearanceDirty();
-}
-
 void LayoutView::CommitPendingSelection() {
   TRACE_EVENT0("blink", "LayoutView::commitPendingSelection");
-  frame_view_->GetFrame().Selection().CommitAppearanceIfNeeded(*this);
-}
-
-void LayoutView::SelectionStartEnd(int& start_pos, int& end_pos) {
-  frame_view_->GetFrame().Selection().LayoutSelectionStartEnd(start_pos,
-                                                              end_pos);
+  DCHECK(!NeedsLayout());
+  frame_view_->GetFrame().Selection().CommitAppearanceIfNeeded();
 }
 
 bool LayoutView::ShouldUsePrintingLayout() const {
@@ -654,6 +642,87 @@ LayoutRect LayoutView::OverflowClipRect(
     ExcludeScrollbars(rect, overlay_scrollbar_clip_behavior);
 
   return rect;
+}
+
+void LayoutView::CalculateScrollbarModes(ScrollbarMode& h_mode,
+                                         ScrollbarMode& v_mode) const {
+#define RETURN_SCROLLBAR_MODE(mode) \
+  {                                 \
+    h_mode = v_mode = mode;         \
+    return;                         \
+  }
+
+  LocalFrame* frame = GetFrame();
+  if (!frame)
+    RETURN_SCROLLBAR_MODE(kScrollbarAlwaysOff);
+
+  if (FrameOwner* owner = frame->Owner()) {
+    // Setting scrolling="no" on an iframe element disables scrolling.
+    if (owner->ScrollingMode() == kScrollbarAlwaysOff)
+      RETURN_SCROLLBAR_MODE(kScrollbarAlwaysOff);
+  }
+
+  Document& document = GetDocument();
+  if (Node* body = document.body()) {
+    // Framesets can't scroll.
+    if (isHTMLFrameSetElement(body) && body->GetLayoutObject())
+      RETURN_SCROLLBAR_MODE(kScrollbarAlwaysOff);
+  }
+
+  if (FrameView* frameView = GetFrameView()) {
+    // Scrollbars can be disabled by FrameView::setCanHaveScrollbars.
+    if (!frameView->CanHaveScrollbars())
+      RETURN_SCROLLBAR_MODE(kScrollbarAlwaysOff);
+  }
+
+  Element* viewportDefiningElement = document.ViewportDefiningElement();
+  if (!viewportDefiningElement)
+    RETURN_SCROLLBAR_MODE(kScrollbarAuto);
+
+  LayoutObject* viewport = viewportDefiningElement->GetLayoutObject();
+  if (!viewport)
+    RETURN_SCROLLBAR_MODE(kScrollbarAuto);
+
+  const ComputedStyle* style = viewport->Style();
+  if (!style)
+    RETURN_SCROLLBAR_MODE(kScrollbarAuto);
+
+  if (viewport->IsSVGRoot()) {
+    // Don't allow overflow to affect <img> and css backgrounds
+    if (ToLayoutSVGRoot(viewport)->IsEmbeddedThroughSVGImage())
+      RETURN_SCROLLBAR_MODE(kScrollbarAuto);
+
+    // FIXME: evaluate if we can allow overflow for these cases too.
+    // Overflow is always hidden when stand-alone SVG documents are embedded.
+    if (ToLayoutSVGRoot(viewport)
+            ->IsEmbeddedThroughFrameContainingSVGDocument())
+      RETURN_SCROLLBAR_MODE(kScrollbarAlwaysOff);
+  }
+
+  h_mode = v_mode = kScrollbarAuto;
+
+  EOverflow overflow_x = style->OverflowX();
+  EOverflow overflow_y = style->OverflowY();
+
+  bool shouldIgnoreOverflowHidden = false;
+  if (Settings* settings = document.GetSettings()) {
+    if (settings->GetIgnoreMainFrameOverflowHiddenQuirk() &&
+        frame->IsMainFrame())
+      shouldIgnoreOverflowHidden = true;
+  }
+  if (!shouldIgnoreOverflowHidden) {
+    if (overflow_x == EOverflow::kHidden)
+      h_mode = kScrollbarAlwaysOff;
+    if (overflow_y == EOverflow::kHidden)
+      v_mode = kScrollbarAlwaysOff;
+  }
+
+  if (overflow_x == EOverflow::kScroll)
+    h_mode = kScrollbarAlwaysOn;
+  if (overflow_y == EOverflow::kScroll)
+    v_mode = kScrollbarAlwaysOn;
+
+#undef RETURN_SCROLLBAR_MODE
 }
 
 IntRect LayoutView::DocumentRect() const {
@@ -714,6 +783,22 @@ LayoutUnit LayoutView::ViewLogicalHeightForPercentages() const {
 
 float LayoutView::ZoomFactor() const {
   return frame_view_->GetFrame().PageZoomFactor();
+}
+
+void LayoutView::UpdateAfterLayout() {
+  // Unlike every other layer, the root PaintLayer takes its size from the
+  // layout viewport size.  The call to AdjustViewSize() will update the
+  // frame's contents size, which will also update the page's minimum scale
+  // factor.  The call to ResizeAfterLayout() will calculate the layout viewport
+  // size based on the page minimum scale factor, and then update the FrameView
+  // with the new size.
+  if (HasOverflowClip())
+    GetScrollableArea()->ClampScrollOffsetAfterOverflowChange();
+  LocalFrame& frame = GetFrameView()->GetFrame();
+  if (!GetDocument().Printing())
+    GetFrameView()->AdjustViewSize();
+  frame.GetChromeClient().ResizeAfterLayout(&frame);
+  LayoutBlockFlow::UpdateAfterLayout();
 }
 
 void LayoutView::UpdateHitTestResult(HitTestResult& result,

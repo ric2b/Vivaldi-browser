@@ -11,6 +11,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/path_service.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/win/registry.h"
 #include "base/win/shortcut.h"
 #include "base/win/windows_version.h"
@@ -64,7 +65,7 @@ void StartPinShortcutToTaskbar(extensions::AppWindow* app_window) {
       app_window->extension_id());
   base::string16 app_name_wide;
   app_name_wide.assign(app_name.begin(), app_name.end());
-  content::BrowserThread::PostBlockingPoolTask(
+  base::PostTask(
       FROM_HERE, base::Bind(&VivaldiShortcutPinToTaskbar, app_name_wide));
 }
 }  // namespace vivaldi

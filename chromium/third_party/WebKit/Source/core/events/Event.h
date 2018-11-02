@@ -25,15 +25,15 @@
 #ifndef Event_h
 #define Event_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/DOMHighResTimeStamp.h"
 #include "core/dom/DOMTimeStamp.h"
 #include "core/events/EventInit.h"
 #include "core/events/EventPath.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Time.h"
-#include "wtf/text/AtomicString.h"
+#include "platform/wtf/Time.h"
+#include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
 
@@ -81,9 +81,6 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
 
   static Event* Create() { return new Event; }
 
-  // A factory for a simple event. The event doesn't bubble, and isn't
-  // cancelable.
-  // http://www.whatwg.org/specs/web-apps/current-work/multipage/webappapis.html#fire-a-simple-event
   static Event* Create(const AtomicString& type) {
     return new Event(type, false, false);
   }
@@ -261,7 +258,11 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
         bool can_bubble,
         bool cancelable,
         ComposedMode = ComposedMode::kScoped);
-  Event(const AtomicString& type, const EventInit&);
+  Event(const AtomicString& type,
+        const EventInit&,
+        TimeTicks platform_time_stamp);
+  Event(const AtomicString& type, const EventInit& init)
+      : Event(type, init, TimeTicks::Now()) {}
 
   virtual void ReceivedTarget();
 

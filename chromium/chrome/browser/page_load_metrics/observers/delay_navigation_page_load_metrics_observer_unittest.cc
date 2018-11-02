@@ -75,7 +75,7 @@ void InjectDelayNavigationThrottleWebContentsObserver::CreateForWebContents(
   if (!metrics) {
     metrics = new InjectDelayNavigationThrottleWebContentsObserver(
         web_contents, mock_time_task_runner);
-    web_contents->SetUserData(UserDataKey(), metrics);
+    web_contents->SetUserData(UserDataKey(), base::WrapUnique(metrics));
   }
 }
 
@@ -137,9 +137,10 @@ TEST_F(DelayNavigationPageLoadMetricsObserverTest, NoMetricsWithoutNavigation) {
 TEST_F(DelayNavigationPageLoadMetricsObserverTest, CommitWithPaint) {
   NavigateToDefaultUrlAndCommit();
 
-  page_load_metrics::PageLoadTiming timing;
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);
-  timing.first_paint = base::TimeDelta::FromMilliseconds(1);
+  timing.paint_timing->first_paint = base::TimeDelta::FromMilliseconds(1);
   PopulateRequiredTimingFields(&timing);
   SimulateTimingUpdate(timing);
 

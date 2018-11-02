@@ -81,7 +81,7 @@ static inline void CollectChildrenAndRemoveFromOldParent(
 }
 
 void ContainerNode::ParserTakeAllChildrenFrom(ContainerNode& old_parent) {
-  while (Node* child = old_parent.FirstChild()) {
+  while (Node* child = old_parent.firstChild()) {
     // Explicitly remove since appending can fail, but this loop shouldn't be
     // infinite.
     old_parent.ParserRemoveChild(*child);
@@ -98,7 +98,7 @@ bool ContainerNode::IsChildTypeAllowed(const Node& child) const {
   if (!child.IsDocumentFragment())
     return ChildTypeAllowed(child.getNodeType());
 
-  for (Node* node = ToDocumentFragment(child).FirstChild(); node;
+  for (Node* node = ToDocumentFragment(child).firstChild(); node;
        node = node->nextSibling()) {
     if (!ChildTypeAllowed(node->getNodeType()))
       return false;
@@ -213,11 +213,13 @@ bool ContainerNode::CollectChildrenAndRemoveFromOldParentWithCheck(
 }
 
 template <typename Functor>
-void ContainerNode::InsertNodeVector(const NodeVector& targets,
-                                     Node* next,
-                                     const Functor& mutator) {
+void ContainerNode::InsertNodeVector(
+    const NodeVector& targets,
+    Node* next,
+    const Functor& mutator,
+    NodeVector* post_insertion_notification_targets) {
+  DCHECK(post_insertion_notification_targets);
   probe::willInsertDOMNode(this);
-  NodeVector post_insertion_notification_targets;
   {
     EventDispatchForbiddenScope assert_no_event_dispatch;
     ScriptForbiddenScope forbid_script;
@@ -230,9 +232,15 @@ void ContainerNode::InsertNodeVector(const NodeVector& targets,
       if (GetDocument().ContainsV1ShadowTree())
         child.CheckSlotChangeAfterInserted();
       probe::didInsertDOMNode(&child);
-      NotifyNodeInsertedInternal(child, post_insertion_notification_targets);
+      NotifyNodeInsertedInternal(child, *post_insertion_notification_targets);
     }
   }
+}
+
+void ContainerNode::DidInsertNodeVector(
+    const NodeVector& targets,
+    Node* next,
+    const NodeVector& post_insertion_notification_targets) {
   Node* unchanged_previous =
       targets.size() > 0 ? targets[0]->previousSibling() : nullptr;
   for (const auto& target_node : targets) {
@@ -306,8 +314,13 @@ Node* ContainerNode::InsertBefore(Node* new_child,
           ref_child, nullptr, *new_child, targets, exception_state))
     return new_child;
 
-  ChildListMutationScope mutation(*this);
-  InsertNodeVector(targets, ref_child, AdoptAndInsertBefore());
+  NodeVector post_insertion_notification_targets;
+  {
+    ChildListMutationScope mutation(*this);
+    InsertNodeVector(targets, ref_child, AdoptAndInsertBefore(),
+                     &post_insertion_notification_targets);
+  }
+  DidInsertNodeVector(targets, ref_child, post_insertion_notification_targets);
   return new_child;
 }
 
@@ -327,11 +340,11 @@ void ContainerNode::InsertBeforeCommon(Node& next_child, Node& new_child) {
   DCHECK_NE(last_child_, prev);
   next_child.SetPreviousSibling(&new_child);
   if (prev) {
-    DCHECK_NE(FirstChild(), next_child);
+    DCHECK_NE(firstChild(), next_child);
     DCHECK_EQ(prev->nextSibling(), next_child);
     prev->SetNextSibling(&new_child);
   } else {
-    DCHECK(FirstChild() == next_child);
+    DCHECK(firstChild() == next_child);
     SetFirstChild(&new_child);
   }
   new_child.SetParentOrShadowHostNode(this);
@@ -412,48 +425,87 @@ Node* ContainerNode::ReplaceChild(Node* new_child,
     return nullptr;
   }
 
-  // Make sure replacing the old child with the new is OK.
+  // 1. If parent is not a Document, DocumentFragment, or Element node, throw a
+  // HierarchyRequestError.
+  // 2. If node is a host-including inclusive ancestor of parent, throw a
+  // HierarchyRequestError.
+  // 4. If node is not a DocumentFragment, DocumentType, Element, Text,
+  // ProcessingInstruction, or Comment node, throw a HierarchyRequestError.
+  // 5. If either node is a Text node and parent is a document, or node is a
+  // doctype and parent is not a document, throw a HierarchyRequestError.
+  // 6. If parent is a document, and any of the statements below, switched on
+  // node, are true, throw a HierarchyRequestError.
   if (!CheckAcceptChild(new_child, old_child, exception_state))
     return old_child;
 
-  // NotFoundError: Raised if oldChild is not a child of this node.
+  // 3. If child’s parent is not parent, then throw a NotFoundError.
   if (old_child->parentNode() != this) {
     exception_state.ThrowDOMException(
         kNotFoundError, "The node to be replaced is not a child of this node.");
     return nullptr;
   }
 
-  ChildListMutationScope mutation(*this);
   // 7. Let reference child be child’s next sibling.
   Node* next = old_child->nextSibling();
   // 8. If reference child is node, set it to node’s next sibling.
   if (next == new_child)
     next = new_child->nextSibling();
 
-  // TODO(tkent): According to the specification, we should remove |newChild|
-  // from its parent here, and create a separated mutation record for it.
-  // Refer to external/wpt/dom/nodes/MutationObserver-childList.html.
-
-  // 12. If child’s parent is not null, run these substeps:
-  //    1. Set removedNodes to a list solely containing child.
-  //    2. Remove child from its parent with the suppress observers flag set.
-  RemoveChild(old_child, exception_state);
-  if (exception_state.HadException())
-    return nullptr;
-
-  // Does this one more time because removeChild() fires a MutationEvent.
-  if (!CheckAcceptChild(new_child, old_child, exception_state))
-    return old_child;
+  // 10. Adopt node into parent’s node document.
+  // TODO(tkent): Actually we do only RemoveChild() as a part of 'adopt'
+  // operation.
+  // Though the following CollectChildrenAndRemoveFromOldParentWithCheck() also
+  // calls RemoveChild(), we'd like to call RemoveChild() here to make a
+  // separated MutationRecord.
+  if (ContainerNode* new_child_parent = new_child->parentNode()) {
+    new_child_parent->RemoveChild(new_child, exception_state);
+    if (exception_state.HadException())
+      return nullptr;
+  }
 
   NodeVector targets;
-  if (!CollectChildrenAndRemoveFromOldParentWithCheck(
-          next, old_child, *new_child, targets, exception_state))
-    return old_child;
+  NodeVector post_insertion_notification_targets;
+  {
+    // 9. Let previousSibling be child’s previous sibling.
+    // 11. Let removedNodes be the empty list.
+    // 15. Queue a mutation record of "childList" for target parent with
+    // addedNodes nodes, removedNodes removedNodes, nextSibling reference child,
+    // and previousSibling previousSibling.
+    ChildListMutationScope mutation(*this);
 
-  if (next)
-    InsertNodeVector(targets, next, AdoptAndInsertBefore());
-  else
-    InsertNodeVector(targets, nullptr, AdoptAndAppendChild());
+    // 12. If child’s parent is not null, run these substeps:
+    //    1. Set removedNodes to a list solely containing child.
+    //    2. Remove child from its parent with the suppress observers flag set.
+    if (ContainerNode* old_child_parent = old_child->parentNode()) {
+      old_child_parent->RemoveChild(old_child, exception_state);
+      if (exception_state.HadException())
+        return nullptr;
+    }
+
+    // Does this one more time because removeChild() fires a MutationEvent.
+    if (!CheckAcceptChild(new_child, old_child, exception_state))
+      return old_child;
+
+    // 13. Let nodes be node’s children if node is a DocumentFragment node, and
+    // a list containing solely node otherwise.
+    if (!CollectChildrenAndRemoveFromOldParentWithCheck(
+            next, old_child, *new_child, targets, exception_state))
+      return old_child;
+
+    // 10. Adopt node into parent’s node document.
+    // 14. Insert node into parent before reference child with the suppress
+    // observers flag set.
+    if (next) {
+      InsertNodeVector(targets, next, AdoptAndInsertBefore(),
+                       &post_insertion_notification_targets);
+    } else {
+      InsertNodeVector(targets, nullptr, AdoptAndAppendChild(),
+                       &post_insertion_notification_targets);
+    }
+  }
+  DidInsertNodeVector(targets, next, post_insertion_notification_targets);
+
+  // 16. Return child.
   return old_child;
 }
 
@@ -674,8 +726,13 @@ Node* ContainerNode::AppendChild(Node* new_child,
           nullptr, nullptr, *new_child, targets, exception_state))
     return new_child;
 
-  ChildListMutationScope mutation(*this);
-  InsertNodeVector(targets, nullptr, AdoptAndAppendChild());
+  NodeVector post_insertion_notification_targets;
+  {
+    ChildListMutationScope mutation(*this);
+    InsertNodeVector(targets, nullptr, AdoptAndAppendChild(),
+                     &post_insertion_notification_targets);
+  }
+  DidInsertNodeVector(targets, nullptr, post_insertion_notification_targets);
   return new_child;
 }
 
@@ -777,7 +834,7 @@ void ContainerNode::AttachLayoutTree(const AttachContext& context) {
   AttachContext children_context(context);
   children_context.resolved_style = nullptr;
 
-  for (Node* child = FirstChild(); child; child = child->nextSibling()) {
+  for (Node* child = firstChild(); child; child = child->nextSibling()) {
 #if DCHECK_IS_ON()
     DCHECK(child->NeedsAttach() ||
            ChildAttachedAllowedWhenAttachingChildren(this));
@@ -796,7 +853,7 @@ void ContainerNode::DetachLayoutTree(const AttachContext& context) {
   children_context.resolved_style = nullptr;
   children_context.clear_invalidation = true;
 
-  for (Node* child = FirstChild(); child; child = child->nextSibling())
+  for (Node* child = firstChild(); child; child = child->nextSibling())
     child->DetachLayoutTree(children_context);
 
   SetChildNeedsStyleRecalc();
@@ -817,7 +874,7 @@ void ContainerNode::ChildrenChanged(const ChildrenChange& change) {
 
 void ContainerNode::CloneChildNodes(ContainerNode* clone) {
   DummyExceptionStateForTesting exception_state;
-  for (Node* n = FirstChild(); n && !exception_state.HadException();
+  for (Node* n = firstChild(); n && !exception_state.HadException();
        n = n->nextSibling())
     clone->AppendChild(n->cloneNode(true), exception_state);
 }
@@ -1069,13 +1126,6 @@ void ContainerNode::SetFocused(bool received, WebFocusType focus_type) {
 
   FocusStateChanged();
 
-  UpdateDistribution();
-  for (ContainerNode* node = this; node;
-       node = FlatTreeTraversal::Parent(*node)) {
-    node->SetHasFocusWithin(received);
-    node->FocusWithinStateChanged();
-  }
-
   if (GetLayoutObject() || received)
     return;
 
@@ -1097,6 +1147,14 @@ void ContainerNode::SetFocused(bool received, WebFocusType focus_type) {
                         StyleChangeReasonForTracing::CreateWithExtraData(
                             StyleChangeReason::kPseudoClass,
                             StyleChangeExtraData::g_focus_within));
+  }
+}
+
+void ContainerNode::SetHasFocusWithinUpToAncestor(bool flag, Node* ancestor) {
+  for (ContainerNode* node = this; node && node != ancestor;
+       node = FlatTreeTraversal::Parent(*node)) {
+    node->SetHasFocusWithin(flag);
+    node->FocusWithinStateChanged();
   }
 }
 
@@ -1201,7 +1259,7 @@ HTMLCollection* ContainerNode::Children() {
 
 unsigned ContainerNode::CountChildren() const {
   unsigned count = 0;
-  for (Node* node = FirstChild(); node; node = node->nextSibling())
+  for (Node* node = firstChild(); node; node = node->nextSibling())
     count++;
   return count;
 }
@@ -1237,13 +1295,13 @@ static void DispatchChildInsertionEvents(Node& child) {
   Document* document = &child.GetDocument();
 
   if (c->parentNode() &&
-      document->HasListenerType(Document::DOMNODEINSERTED_LISTENER))
+      document->HasListenerType(Document::kDOMNodeInsertedListener))
     c->DispatchScopedEvent(MutationEvent::Create(
         EventTypeNames::DOMNodeInserted, true, c->parentNode()));
 
   // dispatch the DOMNodeInsertedIntoDocument event to all descendants
   if (c->isConnected() && document->HasListenerType(
-                              Document::DOMNODEINSERTEDINTODOCUMENT_LISTENER)) {
+                              Document::kDOMNodeInsertedIntoDocumentListener)) {
     for (; c; c = NodeTraversal::Next(*c, &child))
       c->DispatchScopedEvent(MutationEvent::Create(
           EventTypeNames::DOMNodeInsertedIntoDocument, false));
@@ -1267,7 +1325,7 @@ static void DispatchChildRemovalEvents(Node& child) {
 
   // Dispatch pre-removal mutation events.
   if (c->parentNode() &&
-      document->HasListenerType(Document::DOMNODEREMOVED_LISTENER)) {
+      document->HasListenerType(Document::kDOMNodeRemovedListener)) {
     NodeChildRemovalTracker scope(child);
     c->DispatchScopedEvent(MutationEvent::Create(EventTypeNames::DOMNodeRemoved,
                                                  true, c->parentNode()));
@@ -1275,7 +1333,7 @@ static void DispatchChildRemovalEvents(Node& child) {
 
   // Dispatch the DOMNodeRemovedFromDocument event to all descendants.
   if (c->isConnected() && document->HasListenerType(
-                              Document::DOMNODEREMOVEDFROMDOCUMENT_LISTENER)) {
+                              Document::kDOMNodeRemovedFromDocumentListener)) {
     NodeChildRemovalTracker scope(child);
     for (; c; c = NodeTraversal::Next(*c, &child))
       c->DispatchScopedEvent(MutationEvent::Create(
@@ -1302,7 +1360,7 @@ void ContainerNode::RecalcDescendantStyles(StyleRecalcChange change) {
   DCHECK(!NeedsStyleRecalc());
 
   StyleResolver& style_resolver = GetDocument().EnsureStyleResolver();
-  for (Node* child = LastChild(); child; child = child->previousSibling()) {
+  for (Node* child = lastChild(); child; child = child->previousSibling()) {
     if (child->IsTextNode()) {
       ToText(child)->RecalcTextStyle(change);
     } else if (child->IsElementNode()) {
@@ -1315,32 +1373,49 @@ void ContainerNode::RecalcDescendantStyles(StyleRecalcChange change) {
   }
 }
 
+void ContainerNode::RebuildLayoutTreeForChild(Node* child,
+                                              Text*& next_text_sibling) {
+  bool rebuild_child =
+      child->NeedsReattachLayoutTree() || child->ChildNeedsReattachLayoutTree();
+
+  if (child->IsTextNode()) {
+    Text* text_node = ToText(child);
+    if (rebuild_child)
+      text_node->RebuildTextLayoutTree(next_text_sibling);
+    next_text_sibling = text_node;
+    return;
+  }
+
+  if (!child->IsElementNode())
+    return;
+
+  Element* element = ToElement(child);
+  if (rebuild_child)
+    element->RebuildLayoutTree(next_text_sibling);
+  if (element->GetLayoutObject())
+    next_text_sibling = nullptr;
+}
+
 void ContainerNode::RebuildChildrenLayoutTrees(Text*& next_text_sibling) {
   DCHECK(!NeedsReattachLayoutTree());
+
+  if (IsActiveSlotOrActiveInsertionPoint()) {
+    if (isHTMLSlotElement(this))
+      toHTMLSlotElement(this)->RebuildDistributedChildrenLayoutTrees();
+    else
+      ToInsertionPoint(this)->RebuildDistributedChildrenLayoutTrees();
+  }
 
   // This loop is deliberately backwards because we use insertBefore in the
   // layout tree, and want to avoid a potentially n^2 loop to find the insertion
   // point while building the layout tree.  Having us start from the last child
   // and work our way back means in the common case, we'll find the insertion
   // point in O(1) time.  See crbug.com/288225
-  for (Node* child = LastChild(); child; child = child->previousSibling()) {
-    bool rebuild_child = child->NeedsReattachLayoutTree() ||
-                         child->ChildNeedsReattachLayoutTree();
-    if (child->IsTextNode()) {
-      Text* text_node = ToText(child);
-      if (rebuild_child)
-        text_node->RebuildTextLayoutTree(next_text_sibling);
-      next_text_sibling = text_node;
-    } else if (child->IsElementNode()) {
-      Element* element = ToElement(child);
-      if (rebuild_child)
-        element->RebuildLayoutTree(next_text_sibling);
-      if (element->GetLayoutObject())
-        next_text_sibling = nullptr;
-    }
-  }
-  // This is done in ContainerNode::attachLayoutTree but will never be cleared
-  // if we don't enter ContainerNode::attachLayoutTree so we do it here.
+  for (Node* child = lastChild(); child; child = child->previousSibling())
+    RebuildLayoutTreeForChild(child, next_text_sibling);
+
+  // This is done in ContainerNode::AttachLayoutTree but will never be cleared
+  // if we don't enter ContainerNode::AttachLayoutTree so we do it here.
   ClearChildNeedsStyleRecalc();
   ClearChildNeedsReattachLayoutTree();
 }
@@ -1439,23 +1514,24 @@ void ContainerNode::InvalidateNodeListCachesInAncestors(
   }
 }
 
-TagCollection* ContainerNode::getElementsByTagName(
-    const AtomicString& local_name) {
-  if (GetDocument().IsHTMLDocument())
+HTMLCollection* ContainerNode::getElementsByTagName(
+    const AtomicString& qualified_name) {
+  DCHECK(!qualified_name.IsNull());
+
+  if (GetDocument().IsHTMLDocument()) {
     return EnsureCachedCollection<HTMLTagCollection>(kHTMLTagCollectionType,
-                                                     local_name);
-  return EnsureCachedCollection<TagCollection>(kTagCollectionType, local_name);
+                                                     qualified_name);
+  }
+  return EnsureCachedCollection<TagCollection>(kTagCollectionType,
+                                               qualified_name);
 }
 
-TagCollection* ContainerNode::getElementsByTagNameNS(
+HTMLCollection* ContainerNode::getElementsByTagNameNS(
     const AtomicString& namespace_uri,
     const AtomicString& local_name) {
-  if (namespace_uri == g_star_atom)
-    return getElementsByTagName(local_name);
-
-  return EnsureCachedCollection<TagCollection>(
-      kTagCollectionType, namespace_uri.IsEmpty() ? g_null_atom : namespace_uri,
-      local_name);
+  return EnsureCachedCollection<TagCollectionNS>(
+      kTagCollectionNSType,
+      namespace_uri.IsEmpty() ? g_null_atom : namespace_uri, local_name);
 }
 
 // Takes an AtomicString in argument because it is common for elements to share
@@ -1487,7 +1563,7 @@ Element* ContainerNode::getElementById(const AtomicString& id) const {
   if (IsInTreeScope()) {
     // Fast path if we are in a tree scope: call getElementById() on tree scope
     // and check if the matching element is in our subtree.
-    Element* element = ContainingTreeScope().GetElementById(id);
+    Element* element = ContainingTreeScope().getElementById(id);
     if (!element)
       return nullptr;
     if (element->IsDescendantOf(this))

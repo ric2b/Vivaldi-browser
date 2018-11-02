@@ -120,6 +120,17 @@ PictureLayerImpl::~PictureLayerImpl() {
   layer_tree_impl()->UnregisterPictureLayerImpl(this);
 }
 
+void PictureLayerImpl::SetLayerMaskType(Layer::LayerMaskType mask_type) {
+  if (mask_type_ == mask_type)
+    return;
+  // It is expected that a layer can never change from being a mask to not being
+  // one and vice versa. Only changes that make mask layer single <-> multi are
+  // expected.
+  DCHECK(mask_type_ != Layer::LayerMaskType::NOT_MASK &&
+         mask_type != Layer::LayerMaskType::NOT_MASK);
+  mask_type_ = mask_type;
+}
+
 const char* PictureLayerImpl::LayerTypeAsString() const {
   return "cc::PictureLayerImpl";
 }
@@ -131,10 +142,10 @@ std::unique_ptr<LayerImpl> PictureLayerImpl::CreateLayerImpl(
 
 void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
   PictureLayerImpl* layer_impl = static_cast<PictureLayerImpl*>(base_layer);
-  DCHECK_EQ(layer_impl->mask_type_, mask_type_);
 
   LayerImpl::PushPropertiesTo(base_layer);
 
+  layer_impl->SetLayerMaskType(mask_type());
   // Twin relationships should never change once established.
   DCHECK(!twin_layer_ || twin_layer_ == layer_impl);
   DCHECK(!twin_layer_ || layer_impl->twin_layer_ == this);
@@ -215,8 +226,9 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
 
   if (current_draw_mode_ == DRAW_MODE_RESOURCELESS_SOFTWARE) {
     AppendDebugBorderQuad(
-        render_pass, shared_quad_state->quad_layer_bounds, shared_quad_state,
-        append_quads_data, DebugColors::DirectPictureBorderColor(),
+        render_pass, shared_quad_state->quad_layer_rect.size(),
+        shared_quad_state, append_quads_data,
+        DebugColors::DirectPictureBorderColor(),
         DebugColors::DirectPictureBorderWidth(device_scale_factor));
 
     gfx::Rect geometry_rect = shared_quad_state->visible_quad_layer_rect;
@@ -250,7 +262,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
     return;
   }
 
-  AppendDebugBorderQuad(render_pass, shared_quad_state->quad_layer_bounds,
+  AppendDebugBorderQuad(render_pass, shared_quad_state->quad_layer_rect.size(),
                         shared_quad_state, append_quads_data);
 
   if (ShowDebugBorders(DebugBorderType::LAYER)) {
@@ -365,7 +377,8 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
           float alpha =
               (SkColorGetA(draw_info.solid_color()) * (1.0f / 255.0f)) *
               shared_quad_state->opacity;
-          if (alpha >= std::numeric_limits<float>::epsilon()) {
+          if (mask_type_ == Layer::LayerMaskType::MULTI_TEXTURE_MASK ||
+              alpha >= std::numeric_limits<float>::epsilon()) {
             SolidColorDrawQuad* quad =
                 render_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
             quad->SetNew(shared_quad_state, geometry_rect,
@@ -731,10 +744,10 @@ const PictureLayerTiling* PictureLayerImpl::GetPendingOrActiveTwinTiling(
   const PictureLayerTiling* twin_tiling =
       twin_layer->tilings_->FindTilingWithScaleKey(
           tiling->contents_scale_key());
-  DCHECK(tiling->raster_transform().translation() == gfx::Vector2dF());
-  DCHECK(!twin_tiling ||
-         twin_tiling->raster_transform().translation() == gfx::Vector2dF());
-  return twin_tiling;
+  if (twin_tiling &&
+      twin_tiling->raster_transform() == tiling->raster_transform())
+    return twin_tiling;
+  return nullptr;
 }
 
 bool PictureLayerImpl::RequiresHighResToDraw() const {
@@ -838,8 +851,10 @@ gfx::Size PictureLayerImpl::CalculateTileSize(
   return gfx::Size(tile_width, tile_height);
 }
 
-void PictureLayerImpl::GetContentsResourceId(ResourceId* resource_id,
-                                             gfx::Size* resource_size) const {
+void PictureLayerImpl::GetContentsResourceId(
+    ResourceId* resource_id,
+    gfx::Size* resource_size,
+    gfx::SizeF* resource_uv_size) const {
   // The bounds and the pile size may differ if the pile wasn't updated (ie.
   // PictureLayer::Update didn't happen). In that case the pile will be empty.
   DCHECK(raster_source_->GetSize().IsEmpty() ||
@@ -872,6 +887,18 @@ void PictureLayerImpl::GetContentsResourceId(ResourceId* resource_id,
 
   *resource_id = draw_info.resource_id();
   *resource_size = draw_info.resource_size();
+  // |resource_uv_size| represents the range of UV coordinates that map to the
+  // content being drawn. Typically, we draw to the entire texture, so these
+  // coordinates are (1.0f, 1.0f). However, if we are rasterizing to an
+  // over-large texture, this size will be smaller, mapping to the subset of the
+  // texture being used.
+  gfx::SizeF requested_tile_size =
+      gfx::SizeF(iter->tiling()->tiling_data()->tiling_size());
+  DCHECK_LE(requested_tile_size.width(), draw_info.resource_size().width());
+  DCHECK_LE(requested_tile_size.height(), draw_info.resource_size().height());
+  *resource_uv_size = gfx::SizeF(
+      requested_tile_size.width() / draw_info.resource_size().width(),
+      requested_tile_size.height() / draw_info.resource_size().height());
 }
 
 void PictureLayerImpl::SetNearestNeighbor(bool nearest_neighbor) {
@@ -890,13 +917,13 @@ void PictureLayerImpl::SetUseTransformedRasterization(bool use) {
   NoteLayerPropertyChanged();
 }
 
-PictureLayerTiling* PictureLayerImpl::AddTiling(float contents_scale) {
+PictureLayerTiling* PictureLayerImpl::AddTiling(
+    const gfx::AxisTransform2d& contents_transform) {
   DCHECK(CanHaveTilings());
-  DCHECK_GE(contents_scale, MinimumContentsScale());
-  DCHECK_LE(contents_scale, MaximumContentsScale());
+  DCHECK_GE(contents_transform.scale(), MinimumContentsScale());
+  DCHECK_LE(contents_transform.scale(), MaximumContentsScale());
   DCHECK(raster_source_->HasRecordings());
-  return tilings_->AddTiling(
-      gfx::AxisTransform2d(contents_scale, gfx::Vector2dF()), raster_source_);
+  return tilings_->AddTiling(contents_transform, raster_source_);
 }
 
 void PictureLayerImpl::RemoveAllTilings() {
@@ -912,9 +939,21 @@ void PictureLayerImpl::AddTilingsForRasterScale() {
 
   PictureLayerTiling* high_res =
       tilings_->FindTilingWithScaleKey(raster_contents_scale_);
+  // Note: This function is always invoked when raster scale is recomputed,
+  // but not necessarily changed. This means raster translation update is also
+  // always done when there are significant changes that triggered raster scale
+  // recomputation.
+  gfx::Vector2dF raster_translation =
+      CalculateRasterTranslation(raster_contents_scale_);
+  if (high_res &&
+      high_res->raster_transform().translation() != raster_translation) {
+    tilings_->Remove(high_res);
+    high_res = nullptr;
+  }
   if (!high_res) {
     // We always need a high res tiling, so create one if it doesn't exist.
-    high_res = AddTiling(raster_contents_scale_);
+    high_res = AddTiling(
+        gfx::AxisTransform2d(raster_contents_scale_, raster_translation));
   } else if (high_res->may_contain_low_resolution_tiles()) {
     // If the tiling we find here was LOW_RESOLUTION previously, it may not be
     // fully rastered, so destroy the old tiles.
@@ -1011,7 +1050,8 @@ void PictureLayerImpl::AddLowResolutionTilingIfNeeded() {
   bool is_animating = draw_properties().screen_space_transform_is_animating;
   if (!is_pinching && !is_animating) {
     if (!low_res)
-      low_res = AddTiling(low_res_raster_contents_scale_);
+      low_res = AddTiling(gfx::AxisTransform2d(low_res_raster_contents_scale_,
+                                               gfx::Vector2dF()));
     low_res->set_resolution(LOW_RESOLUTION);
   }
 }
@@ -1175,6 +1215,34 @@ void PictureLayerImpl::CleanUpTilingsOnActiveLayer(
                            twin_set);
   DCHECK_GT(tilings_->num_tilings(), 0u);
   SanityCheckTilingState();
+}
+
+gfx::Vector2dF PictureLayerImpl::CalculateRasterTranslation(
+    float raster_scale) {
+  if (!use_transformed_rasterization_)
+    return gfx::Vector2dF();
+
+  DCHECK(!draw_properties().screen_space_transform_is_animating);
+  gfx::Transform draw_transform = DrawTransform();
+  DCHECK(draw_transform.IsScaleOrTranslation());
+
+  // It is only useful to align the content space to the target space if their
+  // relative pixel ratio is some small rational number. Currently we only
+  // align if the relative pixel ratio is 1:1.
+  // Good match if the maximum alignment error on a layer of size 10000px
+  // does not exceed 0.001px.
+  static constexpr float kErrorThreshold = 0.0000001f;
+  if (std::abs(draw_transform.matrix().getFloat(0, 0) - raster_scale) >
+          kErrorThreshold ||
+      std::abs(draw_transform.matrix().getFloat(1, 1) - raster_scale) >
+          kErrorThreshold)
+    return gfx::Vector2dF();
+
+  // Extract the fractional part of layer origin in the target space.
+  float origin_x = draw_transform.matrix().getFloat(0, 3);
+  float origin_y = draw_transform.matrix().getFloat(1, 3);
+  return gfx::Vector2dF(origin_x - floorf(origin_x),
+                        origin_y - floorf(origin_y));
 }
 
 float PictureLayerImpl::MinimumContentsScale() const {
@@ -1390,12 +1458,12 @@ bool PictureLayerImpl::IsOnActiveOrPendingTree() const {
 }
 
 bool PictureLayerImpl::HasValidTilePriorities() const {
-  return IsOnActiveOrPendingTree() &&
-         is_drawn_render_surface_layer_list_member();
+  return IsOnActiveOrPendingTree() && (contributes_to_drawn_render_surface() ||
+                                       raster_even_if_not_in_rsll());
 }
 
 void PictureLayerImpl::InvalidateRegionForImages(
-    const ImageIdFlatSet& images_to_invalidate) {
+    const PaintImageIdFlatSet& images_to_invalidate) {
   TRACE_EVENT_BEGIN0("cc", "PictureLayerImpl::InvalidateRegionForImages");
 
   InvalidationRegion image_invalidation;

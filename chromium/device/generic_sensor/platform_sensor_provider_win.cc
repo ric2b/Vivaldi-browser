@@ -4,6 +4,8 @@
 
 #include "device/generic_sensor/platform_sensor_provider_win.h"
 
+#include <objbase.h>
+
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/task_runner_util.h"
@@ -31,7 +33,7 @@ void PlatformSensorProviderWin::CreateSensorInternal(
     mojom::SensorType type,
     mojo::ScopedSharedBufferMapping mapping,
     const CreateSensorCallback& callback) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!StartSensorThread()) {
     callback.Run(nullptr);
     return;
@@ -50,7 +52,8 @@ bool PlatformSensorProviderWin::InitializeSensorManager() {
   if (sensor_manager_)
     return true;
 
-  HRESULT hr = sensor_manager_.CreateInstance(CLSID_SensorManager);
+  HRESULT hr = ::CoCreateInstance(CLSID_SensorManager, nullptr, CLSCTX_ALL,
+                                  IID_PPV_ARGS(&sensor_manager_));
   return SUCCEEDED(hr);
 }
 
@@ -81,7 +84,7 @@ void PlatformSensorProviderWin::SensorReaderCreated(
     mojo::ScopedSharedBufferMapping mapping,
     const CreateSensorCallback& callback,
     std::unique_ptr<PlatformSensorReaderWin> sensor_reader) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!sensor_reader) {
     callback.Run(nullptr);
     if (!HasSensors())

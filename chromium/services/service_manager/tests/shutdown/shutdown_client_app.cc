@@ -3,12 +3,12 @@
 // found in the LICENSE file.
 
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/c/main.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_runner.h"
@@ -16,29 +16,27 @@
 
 namespace service_manager {
 
-class ShutdownClientApp
-    : public Service,
-      public InterfaceFactory<mojom::ShutdownTestClientController>,
-      public mojom::ShutdownTestClientController,
-      public mojom::ShutdownTestClient {
+class ShutdownClientApp : public Service,
+                          public mojom::ShutdownTestClientController,
+                          public mojom::ShutdownTestClient {
  public:
   ShutdownClientApp() {
-    registry_.AddInterface<mojom::ShutdownTestClientController>(this);
+    registry_.AddInterface<mojom::ShutdownTestClientController>(
+        base::Bind(&ShutdownClientApp::Create, base::Unretained(this)));
   }
   ~ShutdownClientApp() override {}
 
  private:
   // service_manager::Service:
-  void OnBindInterface(const ServiceInfo& source_info,
+  void OnBindInterface(const BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(source_info.identity, interface_name,
+    registry_.BindInterface(source_info, interface_name,
                             std::move(interface_pipe));
   }
 
-  // InterfaceFactory<mojom::ShutdownTestClientController>:
-  void Create(const Identity& remote_identity,
-              mojom::ShutdownTestClientControllerRequest request) override {
+  void Create(const BindSourceInfo& create,
+              mojom::ShutdownTestClientControllerRequest request) {
     bindings_.AddBinding(this, std::move(request));
   }
 

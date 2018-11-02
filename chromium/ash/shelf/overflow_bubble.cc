@@ -6,8 +6,8 @@
 
 #include "ash/shelf/overflow_bubble_view.h"
 #include "ash/shelf/overflow_button.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_view.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell_port.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "ui/gfx/geometry/rect.h"
@@ -15,12 +15,12 @@
 
 namespace ash {
 
-OverflowBubble::OverflowBubble(WmShelf* wm_shelf)
-    : wm_shelf_(wm_shelf),
+OverflowBubble::OverflowBubble(Shelf* shelf)
+    : shelf_(shelf),
       bubble_(nullptr),
       overflow_button_(nullptr),
       shelf_view_(nullptr) {
-  DCHECK(wm_shelf_);
+  DCHECK(shelf_);
   ShellPort::Get()->AddPointerWatcher(this,
                                       views::PointerWatcherEventTypes::BASIC);
 }
@@ -37,7 +37,7 @@ void OverflowBubble::Show(OverflowButton* overflow_button,
 
   Hide();
 
-  bubble_ = new OverflowBubbleView(wm_shelf_);
+  bubble_ = new OverflowBubbleView(shelf_);
   bubble_->InitOverflowBubble(overflow_button, shelf_view);
   shelf_view_ = shelf_view;
   overflow_button_ = overflow_button;
@@ -66,12 +66,22 @@ void OverflowBubble::Hide() {
 
 void OverflowBubble::ProcessPressedEvent(
     const gfx::Point& event_location_in_screen) {
-  if (IsShowing() && !shelf_view_->IsShowingMenu() &&
-      !bubble_->GetBoundsInScreen().Contains(event_location_in_screen) &&
-      !overflow_button_->GetBoundsInScreen().Contains(
+  if (!IsShowing() || shelf_view_->IsShowingMenu() ||
+      bubble_->GetBoundsInScreen().Contains(event_location_in_screen) ||
+      overflow_button_->GetBoundsInScreen().Contains(
           event_location_in_screen)) {
-    Hide();
+    return;
   }
+
+  // Do not hide the shelf if one of the buttons on the main shelf was pressed,
+  // since the user might want to drag an item onto the overflow bubble.
+  // The button itself will close the overflow bubble on the release event.
+  if (shelf_view_->main_shelf()->GetVisibleItemsBoundsInScreen().Contains(
+          event_location_in_screen)) {
+    return;
+  }
+
+  Hide();
 }
 
 void OverflowBubble::OnPointerEventObserved(

@@ -6,24 +6,31 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <algorithm>
 #include <limits>
 #include <memory>
 #include <utility>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "base/lazy_instance.h"
+#include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
+#include "content/browser/browsing_data/browsing_data_remover_impl.h"
 #include "content/browser/download/download_manager_impl.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/push_messaging/push_messaging_router.h"
+#include "content/browser/service_manager/common_browser_interfaces.h"
 #include "content/browser/storage_partition_impl_map.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/public/browser/blob_handle.h"
@@ -71,6 +78,7 @@ class ServiceUserIdHolder : public base::SupportsUserData::Data {
 };
 
 // Key names on BrowserContext.
+const char kBrowsingDataRemoverKey[] = "browsing-data-remover";
 const char kDownloadManagerKeyName[] = "download_manager";
 const char kMojoWasInitialized[] = "mojo-was-initialized";
 const char kServiceManagerConnection[] = "service-manager-connection";
@@ -97,8 +105,11 @@ StoragePartitionImplMap* GetStoragePartitionMap(
       static_cast<StoragePartitionImplMap*>(
           browser_context->GetUserData(kStoragePartitionMapKeyName));
   if (!partition_map) {
-    partition_map = new StoragePartitionImplMap(browser_context);
-    browser_context->SetUserData(kStoragePartitionMapKeyName, partition_map);
+    auto partition_map_owned =
+        base::MakeUnique<StoragePartitionImplMap>(browser_context);
+    partition_map = partition_map_owned.get();
+    browser_context->SetUserData(kStoragePartitionMapKeyName,
+                                 std::move(partition_map_owned));
   }
   return partition_map;
 }
@@ -139,11 +150,12 @@ void ShutdownServiceWorkerContext(StoragePartition* partition) {
   wrapper->process_manager()->Shutdown();
 }
 
-void SetDownloadManager(BrowserContext* context,
-                        content::DownloadManager* download_manager) {
+void SetDownloadManager(
+    BrowserContext* context,
+    std::unique_ptr<content::DownloadManager> download_manager) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(download_manager);
-  context->SetUserData(kDownloadManagerKeyName, download_manager);
+  context->SetUserData(kDownloadManagerKeyName, std::move(download_manager));
 }
 
 class BrowserContextServiceManagerConnectionHolder
@@ -194,7 +206,7 @@ DownloadManager* BrowserContext::GetDownloadManager(
         new DownloadManagerImpl(
             GetContentClient()->browser()->GetNetLog(), context);
 
-    SetDownloadManager(context, download_manager);
+    SetDownloadManager(context, base::WrapUnique(download_manager));
     download_manager->SetDelegate(context->GetDownloadManagerDelegate());
   }
 
@@ -216,7 +228,8 @@ storage::ExternalMountPoints* BrowserContext::GetMountPoints(
         storage::ExternalMountPoints::CreateRefCounted();
     context->SetUserData(
         kMountPointsKey,
-        new UserDataAdapter<storage::ExternalMountPoints>(mount_points.get()));
+        base::MakeUnique<UserDataAdapter<storage::ExternalMountPoints>>(
+            mount_points.get()));
   }
 
   return UserDataAdapter<storage::ExternalMountPoints>::Get(context,
@@ -224,6 +237,22 @@ storage::ExternalMountPoints* BrowserContext::GetMountPoints(
 #else
   return NULL;
 #endif
+}
+
+// static
+content::BrowsingDataRemover* content::BrowserContext::GetBrowsingDataRemover(
+    BrowserContext* context) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  if (!context->GetUserData(kBrowsingDataRemoverKey)) {
+    std::unique_ptr<BrowsingDataRemoverImpl> remover =
+        base::MakeUnique<BrowsingDataRemoverImpl>(context);
+    remover->SetEmbedderDelegate(context->GetBrowsingDataRemoverDelegate());
+    context->SetUserData(kBrowsingDataRemoverKey, std::move(remover));
+  }
+
+  return static_cast<BrowsingDataRemoverImpl*>(
+      context->GetUserData(kBrowsingDataRemoverKey));
 }
 
 StoragePartition* BrowserContext::GetStoragePartition(
@@ -392,8 +421,8 @@ void BrowserContext::SaveSessionState(BrowserContext* browser_context) {
 
 void BrowserContext::SetDownloadManagerForTesting(
     BrowserContext* browser_context,
-    DownloadManager* download_manager) {
-  SetDownloadManager(browser_context, download_manager);
+    std::unique_ptr<content::DownloadManager> download_manager) {
+  SetDownloadManager(browser_context, std::move(download_manager));
 }
 
 // static
@@ -418,10 +447,10 @@ void BrowserContext::Initialize(
   RemoveBrowserContextFromUserIdMap(browser_context);
   g_user_id_to_context.Get()[new_id] = browser_context;
   browser_context->SetUserData(kServiceUserId,
-                               new ServiceUserIdHolder(new_id));
+                               base::MakeUnique<ServiceUserIdHolder>(new_id));
 
-  browser_context->SetUserData(kMojoWasInitialized,
-                               new base::SupportsUserData::Data);
+  browser_context->SetUserData(
+      kMojoWasInitialized, base::MakeUnique<base::SupportsUserData::Data>());
 
   ServiceManagerConnection* service_manager_connection =
       ServiceManagerConnection::GetForProcess();
@@ -430,7 +459,7 @@ void BrowserContext::Initialize(
     // Mojo or the global service manager connection.
 
     service_manager::mojom::ServicePtr service;
-    service_manager::mojom::ServiceRequest service_request(&service);
+    auto service_request = mojo::MakeRequest(&service);
 
     service_manager::mojom::PIDReceiverPtr pid_receiver;
     service_manager::Identity identity(mojom::kBrowserServiceName, new_id);
@@ -442,7 +471,8 @@ void BrowserContext::Initialize(
     BrowserContextServiceManagerConnectionHolder* connection_holder =
         new BrowserContextServiceManagerConnectionHolder(
             std::move(service_request));
-    browser_context->SetUserData(kServiceManagerConnection, connection_holder);
+    browser_context->SetUserData(kServiceManagerConnection,
+                                 base::WrapUnique(connection_holder));
 
     ServiceManagerConnection* connection =
         connection_holder->service_manager_connection();
@@ -452,10 +482,13 @@ void BrowserContext::Initialize(
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kMojoLocalStorage)) {
       ServiceInfo info;
-      info.factory =
-          base::Bind(&file::CreateFileService,
-                     BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
-                     BrowserThread::GetTaskRunnerForThread(BrowserThread::DB));
+      // TODO(mek): Use sequenced task runner rather than single thread task
+      // runner when mojo supports that (http://crbug.com/678155).
+      info.factory = base::Bind(
+          &file::CreateFileService,
+          base::CreateSingleThreadTaskRunnerWithTraits(
+              {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN}),
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::DB));
       connection->AddEmbeddedService(file::mojom::kServiceName, info);
     }
 
@@ -464,6 +497,8 @@ void BrowserContext::Initialize(
     for (const auto& entry : services) {
       connection->AddEmbeddedService(entry.first, entry.second);
     }
+
+    RegisterCommonBrowserInterfaces(connection);
     connection->Start();
   }
 }
@@ -505,6 +540,9 @@ ServiceManagerConnection* BrowserContext::GetServiceManagerConnectionFor(
                            : nullptr;
 }
 
+BrowserContext::BrowserContext()
+    : media_device_id_salt_(CreateRandomMediaDeviceIDSalt()) {}
+
 BrowserContext::~BrowserContext() {
   CHECK(GetUserData(kMojoWasInitialized))
       << "Attempting to destroy a BrowserContext that never called "
@@ -522,6 +560,22 @@ BrowserContext::~BrowserContext() {
 void BrowserContext::ShutdownStoragePartitions() {
   if (GetUserData(kStoragePartitionMapKeyName))
     RemoveUserData(kStoragePartitionMapKeyName);
+}
+
+std::string BrowserContext::GetMediaDeviceIDSalt() {
+  return media_device_id_salt_;
+}
+
+// static
+std::string BrowserContext::CreateRandomMediaDeviceIDSalt() {
+  std::string salt;
+  base::Base64Encode(base::RandBytesAsString(16), &salt);
+  DCHECK(!salt.empty());
+  return salt;
+}
+
+BrowsingDataRemoverDelegate* BrowserContext::GetBrowsingDataRemoverDelegate() {
+  return nullptr;
 }
 
 }  // namespace content

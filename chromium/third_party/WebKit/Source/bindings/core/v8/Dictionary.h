@@ -28,7 +28,7 @@
 
 #include "bindings/core/v8/DictionaryIterator.h"
 #include "bindings/core/v8/Nullable.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/CoreExport.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/Vector.h"
@@ -86,7 +86,7 @@ class CORE_EXPORT Dictionary final {
 
   v8::Isolate* GetIsolate() const { return isolate_; }
   v8::Local<v8::Context> V8Context() const {
-    ASSERT(isolate_);
+    DCHECK(isolate_);
     return isolate_->GetCurrentContext();
   }
 

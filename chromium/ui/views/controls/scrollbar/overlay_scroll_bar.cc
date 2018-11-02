@@ -38,6 +38,7 @@ OverlayScrollBar::Thumb::Thumb(OverlayScrollBar* scroll_bar)
 OverlayScrollBar::Thumb::~Thumb() {}
 
 void OverlayScrollBar::Thumb::Init() {
+  EnableCanvasFlippingForRTLUI(true);
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
   // Animate all changes to the layer except the first one.
@@ -45,7 +46,7 @@ void OverlayScrollBar::Thumb::Init() {
   layer()->SetAnimator(ui::LayerAnimator::CreateImplicitAnimator());
 }
 
-gfx::Size OverlayScrollBar::Thumb::GetPreferredSize() const {
+gfx::Size OverlayScrollBar::Thumb::CalculatePreferredSize() const {
   // The visual size of the thumb is kThumbThickness, but it slides back and
   // forth by kThumbHoverOffset. To make event targetting work well, expand the
   // width of the thumb such that it's always taking up the full width of the
@@ -107,9 +108,10 @@ void OverlayScrollBar::Thumb::OnBoundsChanged(
 void OverlayScrollBar::Thumb::OnStateChanged() {
   if (GetState() == CustomButton::STATE_NORMAL) {
     gfx::Transform translation;
+    const int direction = base::i18n::IsRTL() ? -1 : 1;
     translation.Translate(
-        gfx::Vector2d(IsHorizontal() ? 0 : kThumbHoverOffset,
-                      IsHorizontal() ? kThumbHoverOffset: 0));
+        gfx::Vector2d(IsHorizontal() ? 0 : direction * kThumbHoverOffset,
+                      IsHorizontal() ? kThumbHoverOffset : 0));
     layer()->SetTransform(translation);
     layer()->SetOpacity(ui::kOverlayScrollbarThumbNormalAlpha);
 

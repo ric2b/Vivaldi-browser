@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/mock_callback.h"
 #include "media/base/decoder_buffer.h"
@@ -31,12 +32,7 @@ class MojoDecoderBufferConverter {
  public:
   MojoDecoderBufferConverter(
       uint32_t data_pipe_capacity_bytes = kDefaultDataPipeCapacityBytes) {
-    MojoCreateDataPipeOptions options;
-    options.struct_size = sizeof(MojoCreateDataPipeOptions);
-    options.flags = MOJO_CREATE_DATA_PIPE_OPTIONS_FLAG_NONE;
-    options.element_num_bytes = 1;
-    options.capacity_num_bytes = data_pipe_capacity_bytes;
-    mojo::DataPipe data_pipe(options);
+    mojo::DataPipe data_pipe(data_pipe_capacity_bytes);
 
     writer = base::MakeUnique<MojoDecoderBufferWriter>(
         std::move(data_pipe.producer_handle));

@@ -7,6 +7,7 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "content/common/url_loader_factory.mojom.h"
 #include "content/network/net_adapters.h"
 #include "content/network/network_context.h"
 #include "content/public/common/referrer.h"
@@ -155,9 +156,11 @@ std::unique_ptr<net::UploadDataStream> CreateUploadDataStream(
 URLLoaderImpl::URLLoaderImpl(
     NetworkContext* context,
     mojom::URLLoaderAssociatedRequest url_loader_request,
+    int32_t options,
     const ResourceRequest& request,
     mojom::URLLoaderClientPtr url_loader_client)
     : context_(context),
+      options_(options),
       connected_(true),
       binding_(this, std::move(url_loader_request)),
       url_loader_client_(std::move(url_loader_client)),
@@ -186,8 +189,7 @@ URLLoaderImpl::URLLoaderImpl(
   if (request.request_body.get()) {
     scoped_refptr<base::SequencedTaskRunner> task_runner =
         base::CreateSequencedTaskRunnerWithTraits(
-            base::TaskTraits().MayBlock().WithPriority(
-                base::TaskPriority::USER_VISIBLE));
+            {base::MayBlock(), base::TaskPriority::USER_VISIBLE});
     url_request_->set_upload(
         CreateUploadDataStream(request.request_body.get(), task_runner.get()));
   }
@@ -237,17 +239,25 @@ void URLLoaderImpl::OnReceivedRedirect(net::URLRequest* url_request,
   url_loader_client_->OnReceiveRedirect(redirect_info, response->head);
 }
 
-void URLLoaderImpl::OnResponseStarted(net::URLRequest* url_request) {
+void URLLoaderImpl::OnResponseStarted(net::URLRequest* url_request,
+                                      int net_error) {
   DCHECK(url_request == url_request_.get());
 
+  if (net_error != net::OK) {
+    NotifyCompleted(net_error);
+    return;
+  }
   // TODO: Add support for optional MIME sniffing.
 
   scoped_refptr<ResourceResponse> response = new ResourceResponse();
   PopulateResourceResponse(url_request_.get(), response.get());
   response->head.encoded_data_length = url_request_->raw_header_size();
 
+  base::Optional<net::SSLInfo> ssl_info;
+  if (options_ & mojom::kURLLoadOptionSendSSLInfo)
+    ssl_info = url_request_->ssl_info();
   mojom::DownloadedTempFilePtr downloaded_file_ptr;
-  url_loader_client_->OnReceiveResponse(response->head,
+  url_loader_client_->OnReceiveResponse(response->head, ssl_info,
                                         std::move(downloaded_file_ptr));
 
   net::IOBufferWithSize* metadata = url_request->response_info().metadata.get();
@@ -258,15 +268,7 @@ void URLLoaderImpl::OnResponseStarted(net::URLRequest* url_request) {
         std::vector<uint8_t>(data, data + metadata->size()));
   }
 
-  MojoCreateDataPipeOptions options;
-  options.struct_size = sizeof(MojoCreateDataPipeOptions);
-  options.flags = MOJO_CREATE_DATA_PIPE_OPTIONS_FLAG_NONE;
-  options.element_num_bytes = 1;
-  options.capacity_num_bytes = kDefaultAllocationSize;
-  mojo::DataPipe data_pipe(options);
-
-  DCHECK(data_pipe.producer_handle.is_valid());
-  DCHECK(data_pipe.consumer_handle.is_valid());
+  mojo::DataPipe data_pipe(kDefaultAllocationSize);
 
   response_body_stream_ = std::move(data_pipe.producer_handle);
   response_body_consumer_handle_ = std::move(data_pipe.consumer_handle);

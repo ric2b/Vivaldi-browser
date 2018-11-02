@@ -33,7 +33,7 @@ ScriptModule ScriptModuleResolverImpl::Resolve(
            << ", referrer.hash=" << ScriptModuleHash::GetHash(referrer) << ")";
 
   // Step 1. Let referencing module script be referencingModule.[[HostDefined]].
-  const auto it = record_to_module_script_map_.Find(referrer);
+  const auto it = record_to_module_script_map_.find(referrer);
   CHECK_NE(it, record_to_module_script_map_.end())
       << "Failed to find referrer ModuleScript corresponding to the record";
   ModuleScript* referrer_module = it->value;
@@ -68,21 +68,17 @@ ScriptModule ScriptModuleResolverImpl::Resolve(
   // throw resolved module script's instantiation error.
   if (module_script->InstantiationState() ==
       ModuleInstantiationState::kErrored) {
-    // TODO(kouhei): Implement this path once
-    // https://codereview.chromium.org/2782403002/ landed.
-    NOTIMPLEMENTED();
+    ScriptValue error = modulator_->GetInstantiationError(module_script);
+    exception_state.RethrowV8Exception(error.V8Value());
     return ScriptModule();
   }
 
-  // Step 6. Assert: resolved module script's instantiation state is
-  // "instantiated" (and thus its module record is not null).
-  // TODO(kouhei): Enable below check once once
-  // https://codereview.chromium.org/2782403002/ landed.
-  // CHECK_EQ(moduleScript->instantiationState(),
-  // ModuleInstantiationState::Instantiated);
+  // Step 6. Assert: resolved module script's module record is not null.
+  ScriptModule record = module_script->Record();
+  CHECK(!record.IsNull());
 
   // Step 7. Return resolved module script's module record.
-  return module_script->Record();
+  return record;
 }
 
 DEFINE_TRACE(ScriptModuleResolverImpl) {

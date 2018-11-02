@@ -28,6 +28,7 @@
 #include "cc/surfaces/local_surface_id_allocator.h"
 #include "cc/surfaces/surface_manager.h"
 #include "content/common/android/sync_compositor_messages.h"
+#include "content/common/view_messages.h"
 #include "content/renderer/android/synchronous_compositor_filter.h"
 #include "content/renderer/android/synchronous_compositor_registry.h"
 #include "content/renderer/gpu/frame_swap_message_queue.h"
@@ -242,14 +243,6 @@ void SynchronousCompositorFrameSink::SubmitCompositorFrame(
     // the |frame| for the software path below.
     submit_frame.metadata = frame.metadata.Clone();
 
-    if (!root_local_surface_id_.is_valid()) {
-      root_local_surface_id_ = local_surface_id_allocator_->GenerateId();
-      child_local_surface_id_ = local_surface_id_allocator_->GenerateId();
-    }
-
-    display_->SetLocalSurfaceId(root_local_surface_id_,
-                                frame.metadata.device_scale_factor);
-
     // The layer compositor should be giving a frame that covers the
     // |sw_viewport_for_current_draw_| but at 0,0.
     gfx::Size child_size = sw_viewport_for_current_draw_.size();
@@ -260,6 +253,23 @@ void SynchronousCompositorFrameSink::SubmitCompositorFrame(
     gfx::Size display_size(sw_viewport_for_current_draw_.right(),
                            sw_viewport_for_current_draw_.bottom());
     display_->Resize(display_size);
+
+    if (!root_local_surface_id_.is_valid() || display_size_ != display_size ||
+        device_scale_factor_ != frame.metadata.device_scale_factor) {
+      root_local_surface_id_ = local_surface_id_allocator_->GenerateId();
+      display_size_ = display_size;
+      device_scale_factor_ = frame.metadata.device_scale_factor;
+    }
+
+    if (!child_local_surface_id_.is_valid() || child_size_ != child_size ||
+        device_scale_factor_ != frame.metadata.device_scale_factor) {
+      child_local_surface_id_ = local_surface_id_allocator_->GenerateId();
+      child_size_ = child_size;
+      device_scale_factor_ = frame.metadata.device_scale_factor;
+    }
+
+    display_->SetLocalSurfaceId(root_local_surface_id_,
+                                frame.metadata.device_scale_factor);
 
     // The offset for the child frame relative to the origin of the canvas being
     // drawn into.
@@ -274,6 +284,8 @@ void SynchronousCompositorFrameSink::SubmitCompositorFrame(
     // hardware frames in SurfacesInstance?)
     cc::CompositorFrame embed_frame;
     embed_frame.metadata.begin_frame_ack = frame.metadata.begin_frame_ack;
+    embed_frame.metadata.device_scale_factor =
+        frame.metadata.device_scale_factor;
     embed_frame.render_pass_list.push_back(cc::RenderPass::Create());
 
     // The embedding RenderPass covers the entire Display's area.
@@ -288,7 +300,7 @@ void SynchronousCompositorFrameSink::SubmitCompositorFrame(
     auto* surface_quad =
         embed_render_pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
     shared_quad_state->SetAll(
-        child_transform, child_size, gfx::Rect(child_size),
+        child_transform, gfx::Rect(child_size), gfx::Rect(child_size),
         gfx::Rect() /* clip_rect */, false /* is_clipped */, 1.f /* opacity */,
         SkBlendMode::kSrcOver, 0 /* sorting_context_id */);
     surface_quad->SetNew(
@@ -296,10 +308,12 @@ void SynchronousCompositorFrameSink::SubmitCompositorFrame(
         cc::SurfaceId(kChildFrameSinkId, child_local_surface_id_),
         cc::SurfaceDrawQuadType::PRIMARY, nullptr);
 
-    child_support_->SubmitCompositorFrame(child_local_surface_id_,
-                                          std::move(frame));
-    root_support_->SubmitCompositorFrame(root_local_surface_id_,
-                                         std::move(embed_frame));
+    bool result = child_support_->SubmitCompositorFrame(child_local_surface_id_,
+                                                        std::move(frame));
+    DCHECK(result);
+    result = root_support_->SubmitCompositorFrame(root_local_surface_id_,
+                                                  std::move(embed_frame));
+    DCHECK(result);
     display_->DrawAndSwap();
   } else {
     // For hardware draws we send the whole frame to the client so it can draw
@@ -311,6 +325,13 @@ void SynchronousCompositorFrameSink::SubmitCompositorFrame(
                                       std::move(submit_frame));
   DeliverMessages();
   did_submit_frame_ = true;
+}
+
+void SynchronousCompositorFrameSink::DidNotProduceFrame(
+    const cc::BeginFrameAck& ack) {
+  DCHECK(!ack.has_damage);
+  DCHECK_LE(cc::BeginFrameArgs::kStartingFrameNumber, ack.sequence_number);
+  Send(new ViewHostMsg_DidNotProduceFrame(routing_id_, ack));
 }
 
 void SynchronousCompositorFrameSink::CancelFallbackTick() {

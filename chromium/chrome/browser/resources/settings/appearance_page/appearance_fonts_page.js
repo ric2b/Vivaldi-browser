@@ -27,13 +27,7 @@
 
     properties: {
       /** @private */
-      advancedExtensionInstalled_: Boolean,
-
-      /** @private */
       advancedExtensionSublabel_: String,
-
-      /** @private */
-      advancedExtensionUrl_: String,
 
       /** @private {!DropdownMenuOptionList} */
       fontOptions_: Object,
@@ -75,6 +69,12 @@
 
     /** @private {?settings.FontsBrowserProxy} */
     browserProxy_: null,
+
+    /** @private {boolean} */
+    advancedExtensionInstalled_: false,
+
+    /** @private {?string} */
+    advancedExtensionUrl_: null,
 
     /** @override */
     created: function() {

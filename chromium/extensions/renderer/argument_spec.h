@@ -59,6 +59,10 @@ class ArgumentSpec {
                      std::unique_ptr<base::Value>* out_value,
                      std::string* error) const;
 
+  // Returns a type name for this argument. Note: This should only be used to
+  // surface errors to developers.
+  const std::string& GetTypeName() const;
+
   const std::string& name() const { return name_; }
   bool optional() const { return optional_; }
   ArgumentType type() const { return type_; }
@@ -113,14 +117,24 @@ class ArgumentSpec {
                           std::unique_ptr<base::Value>* out_value,
                           std::string* error) const;
 
+  // Returns an error message indicating the type of |value| does not match the
+  // expected type.
+  std::string GetInvalidTypeError(v8::Local<v8::Value> value) const;
+
   // The name of the argument.
   std::string name_;
 
   // The type of the argument.
-  ArgumentType type_;
+  ArgumentType type_ = ArgumentType::INTEGER;
+
+  // A readable type name for this argument, lazily initialized.
+  mutable std::string type_name_;
 
   // Whether or not the argument is required.
-  bool optional_;
+  bool optional_ = false;
+
+  // Whether to preserve null properties found in objects.
+  bool preserve_null_ = false;
 
   // The reference the argument points to, if any. Note that if this is set,
   // none of the following fields describing the argument will be.
@@ -131,8 +145,9 @@ class ArgumentSpec {
   // type in its prototype chain.
   base::Optional<std::string> instance_of_;
 
-  // A minimum, if any.
+  // A minimum and maximum for integer and double values, if any.
   base::Optional<int> minimum_;
+  base::Optional<int> maximum_;
 
   // A minimium length for strings or arrays.
   base::Optional<size_t> min_length_;

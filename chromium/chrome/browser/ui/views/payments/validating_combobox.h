@@ -24,6 +24,9 @@ class ValidatingCombobox : public views::Combobox,
   // Combobox:
   // The first validation will happen on blur.
   void OnBlur() override;
+  // Used to keep track of our own destruction.
+  void ViewHierarchyChanged(
+      const ViewHierarchyChangedDetails& details) override;
 
   // Called when the combobox contents is changed. May do validation.
   void OnContentsChanged();
@@ -31,13 +34,16 @@ class ValidatingCombobox : public views::Combobox,
   // ui::ComboboxModelObserver:
   void OnComboboxModelChanged(ui::ComboboxModel* model) override;
 
+  // Identifies whether the current content if valid or not.
+  bool IsValid();
+
  private:
   // Will call to the ValidationDelegate to validate the contents of the
   // combobox.
   void Validate();
 
   std::unique_ptr<ValidationDelegate> delegate_;
-  bool was_blurred_;
+  bool being_removed_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ValidatingCombobox);
 };

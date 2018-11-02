@@ -10,8 +10,11 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_store.h"
+
+class PrefService;
 
 namespace password_manager {
 
@@ -26,7 +29,8 @@ class PasswordStoreDefault : public PasswordStore {
       scoped_refptr<base::SingleThreadTaskRunner> db_thread_runner,
       std::unique_ptr<LoginDatabase> login_db);
 
-  bool Init(const syncer::SyncableService::StartSyncFlare& flare) override;
+  bool Init(const syncer::SyncableService::StartSyncFlare& flare,
+            PrefService* prefs) override;
 
   void ShutdownOnUIThread() override;
 
@@ -66,6 +70,8 @@ class PasswordStoreDefault : public PasswordStore {
       base::Time delete_end) override;
   std::vector<std::unique_ptr<autofill::PasswordForm>> FillMatchingLogins(
       const FormDigest& form) override;
+  std::vector<std::unique_ptr<autofill::PasswordForm>>
+  FillLoginsForSameOrganizationName(const std::string& signon_realm) override;
   bool FillAutofillableLogins(
       std::vector<std::unique_ptr<autofill::PasswordForm>>* forms) override;
   bool FillBlacklistLogins(

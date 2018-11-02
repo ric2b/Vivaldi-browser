@@ -53,7 +53,6 @@
 <translation id="1820259098641718022">वाचन सूचीमध्ये जोडले</translation>
 <translation id="1876721852596493031">वापरलेला डेटा पाठवा</translation>
 <translation id="1886928167269928266">सुरूवातीपासून</translation>
-<translation id="1894451531427596130">हे <ph name="BEGIN_LINK" />सेटिंग्ज<ph name="END_LINK" />मध्ये कसे कार्य करते ते नियंत्रित करा</translation>
 <translation id="1911619930368729126">Google ड्राइव्हवर अपलोड करा</translation>
 <translation id="1941314575388338491">कॉपी करण्‍यासाठी दोनदा टॅप करा.</translation>
 <translation id="1952728750904661634">व्यवस्थापित केलेल्या खात्यासह साइन इन करा</translation>
@@ -97,6 +96,7 @@
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">भाषांतर सेटिंग्‍ज रीसेट करा</translation>
 <translation id="285960592395650245">डाउनलोड करण्याचा पुन्हा प्रयत्न करा</translation>
+<translation id="2870560284913253234">साइट</translation>
 <translation id="2871695793448672541">लपलेला, संकेतशब्द</translation>
 <translation id="2898963176829412617">नवीन फोल्डर...</translation>
 <translation id="2903493209154104877">पत्ते</translation>
@@ -109,7 +109,6 @@
 <translation id="2989805286512600854">नवीन टॅबमध्ये उघडा</translation>
 <translation id="3024255823539804759">काल</translation>
 <translation id="3037605927509011580">च्चक!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> उपलब्ध नाही. आपल्या ब्राउझिंग इतिहासामध्ये प्रवेश करण्यासाठी, साधने मेनमधून "<ph name="SHOW_HISTORY" />" निवडा.</translation>
 <translation id="3112556859945124369">चिन्हांकित करा…</translation>
 <translation id="3151924044251363314">फक्त आपला सांकेतिक वाक्यांश असलेली एखादी व्यक्ती आपला कूटबद्ध डेटा वाचू शकते. सांकेतिक वाक्यांश Google कडे पाठविला किंवा त्याद्वारे संचयित केला जात नाही. आपण आपला सांकेतिक वाक्यांश विसरल्यास किंवा हे सेटिंग बदलू इच्छित असल्यास, आपल्याला संकालन रीसेट करावे लागेल. <ph name="BEGIN_LINK" />अधिक जाणून घ्या<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">सर्व चिन्हांकित करा…</translation>
@@ -150,6 +149,7 @@
 <translation id="3638472932233958418">वेबपृष्ठे प्रीलोड करा</translation>
 <translation id="3691593122358196899"><ph name="FOLDER_TITLE" /> मध्ये बुकमार्क केले</translation>
 <translation id="3738139272394829648">शोधण्यासाठी स्विच करा</translation>
+<translation id="3742082982782149146">साइट URL कॉपी करण्यात आली होती.</translation>
 <translation id="3771033907050503522">गुप्त टॅब</translation>
 <translation id="3783017676699494206">प्रतिमा जतन करा</translation>
 <translation id="3789841737615482174">स्थापना करा</translation>
@@ -164,10 +164,12 @@
 <translation id="4038354071007134711">या डिव्हाइसवरील कोणताही अनुप्रयोग फाईल उघडू शकत नाही.</translation>
 <translation id="4049507953662678203">आपल्याकडे नेटवर्क कनेक्शन आहे हे सुनिश्चित करा आणि पुन्हा प्रयत्न करा.</translation>
 <translation id="411254640334432676">डाउनलोड अयशस्वी.</translation>
+<translation id="4117350985506774529">तुमचे वापरकर्ता नाव कॉपी करण्यात आले होते.</translation>
 <translation id="4121993058175073134">निव्वळ-निर्यात डेटा पाठविण्यासाठी, कृपया सेटिंग्ज अॅप मध्ये आपले ईमेल खाते कॉन्फिगर करा.</translation>
 <translation id="4124987746317609294">वेळ श्रेणी</translation>
 <translation id="4172051516777682613">नेहमी दर्शवा</translation>
 <translation id="418156467088430727">नवीन टॅबमध्‍ये ऑफलाइन आवृत्ती पहा</translation>
+<translation id="4237682350741091554">Chrome सिंक आणि पर्सनलायझेशन <ph name="BEGIN_LINK" />सेटिंग्ज<ph name="END_LINK" /> मधून व्यवस्थापित करा.</translation>
 <translation id="424315890655130736">सांकेतिक वाक्यांश प्रविष्ट करा</translation>
 <translation id="4272631900155121838">QR कोड स्कॅन करण्‍यासाठी, सेटिंग्ज मधून कॅमेरा सक्षम करा</translation>
 <translation id="4281844954008187215">सेवा अटी</translation>
@@ -175,6 +177,7 @@
 <translation id="4359125752503270327">हे पृष्ठ दुसऱ्या अनुप्रयोगामध्ये उघडेल.</translation>
 <translation id="4378154925671717803">फोन</translation>
 <translation id="441868831736628555">गोपनीयता सूचना</translation>
+<translation id="4508750114462689118">साइन-इन प्रोमो बंद करा</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" />
 वर जतन केलेले संकेतशब्द पहा आणि व्यवस्थापित करा</translation>
 <translation id="4536418791685807335">पुन्हा साइन इन करण्याचा प्रयत्न करा.</translation>
@@ -221,6 +224,7 @@
 
 सेटिंग्जच्या सामान्य विभागामध्ये Handoff सक्षम केलेले असणे आवश्यक आहे आणि आपल्या डिव्हाइसेसने समान iCloud खाते वापरणे आवश्यक आहे.</translation>
 <translation id="5556459405103347317">रीलोड करा</translation>
+<translation id="5619279135193775234">मेल</translation>
 <translation id="5626245204502895507">यावेळी फाईल डाऊनलोड केली जाऊ शकली नाही.</translation>
 <translation id="5659593005791499971">ईमेल</translation>
 <translation id="5669528293118408608">www</translation>
@@ -311,6 +315,7 @@
 <translation id="7136892417564438900">कॅमेरा अनुपलब्ध आहे</translation>
 <translation id="7159472599653637159">मोबाइल साइटची विनंती करा</translation>
 <translation id="7167621057293532233">डेटा प्रकार</translation>
+<translation id="7175593937868963913">ईमेल तयार करा</translation>
 <translation id="7189598951263744875">सामयिक करा...</translation>
 <translation id="7203585745079012652">उत्तरे वाचून सांगा</translation>
 <translation id="722055596168483966">Google सेेव वैयक्तिकृत करा</translation>
@@ -359,7 +364,6 @@
 <translation id="8205564605687841303">रद्द करा</translation>
 <translation id="8225985093977202398">कॅश   प्रतिमा आणि फायली</translation>
 <translation id="8261506727792406068">हटवा</translation>
-<translation id="8272194309885535896">प्रतिमा डाउनलोड करा</translation>
 <translation id="8272426682713568063">क्रेडिट कार्ड</translation>
 <translation id="8281781826761538115">डीफॉल्ट - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">शोध, जाहिरात आणि इतर Google सेवा वैयक्तीकृत करण्यास Google आपल्या ब्राउझिंग इतिहासाचा कसा वापर करते ते नियंत्रित करा</translation>

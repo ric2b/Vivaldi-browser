@@ -206,7 +206,7 @@ cdm::KeyStatus ConvertKeyStatus(media::CdmKeyInformation::KeyStatus status) {
 // Shallow copy all the key information from |keys_info| into |keys_vector|.
 // |keys_vector| is only valid for the lifetime of |keys_info| because it
 // contains pointers into the latter.
-void ConvertCdmKeysInfo(const std::vector<media::CdmKeyInformation*>& keys_info,
+void ConvertCdmKeysInfo(const media::CdmKeysInfo& keys_info,
                         std::vector<cdm::KeyInformation>* keys_vector) {
   keys_vector->reserve(keys_info.size());
   for (const auto& key_info : keys_info) {
@@ -330,7 +330,8 @@ ClearKeyCdm::ClearKeyCdm(ClearKeyCdmHost* host,
           origin,
           base::Bind(&ClearKeyCdm::OnSessionMessage, base::Unretained(this)),
           base::Bind(&ClearKeyCdm::OnSessionClosed, base::Unretained(this)),
-          base::Bind(&ClearKeyCdm::OnSessionKeysChange,
+          base::Bind(&ClearKeyCdm::OnSessionKeysChange, base::Unretained(this)),
+          base::Bind(&ClearKeyCdm::OnSessionExpirationUpdate,
                      base::Unretained(this)))),
       host_(host),
       key_system_(key_system),
@@ -489,19 +490,8 @@ void ClearKeyCdm::RemoveSession(uint32_t promise_id,
   std::string web_session_str(session_id, session_id_length);
 
   // RemoveSession only allowed for the loadable session.
-  if (web_session_str == std::string(kLoadableSessionId)) {
+  if (web_session_str == std::string(kLoadableSessionId))
     web_session_str = session_id_for_emulated_loadsession_;
-  } else {
-    // TODO(jrummell): This should be a DCHECK once blink does the proper
-    // checks.
-    std::string message("Not supported for non-persistent sessions.");
-    host_->OnRejectPromise(promise_id,
-                           cdm::kInvalidAccessError,
-                           0,
-                           message.data(),
-                           message.length());
-    return;
-  }
 
   std::unique_ptr<media::SimpleCdmPromise> promise(
       new media::CdmCallbackPromise<>(
@@ -839,10 +829,9 @@ void ClearKeyCdm::LoadLoadableSession() {
       std::vector<uint8_t>(jwk_set.begin(), jwk_set.end()), std::move(promise));
 }
 
-void ClearKeyCdm::OnSessionMessage(
-    const std::string& session_id,
-    ContentDecryptionModule::MessageType message_type,
-    const std::vector<uint8_t>& message) {
+void ClearKeyCdm::OnSessionMessage(const std::string& session_id,
+                                   CdmMessageType message_type,
+                                   const std::vector<uint8_t>& message) {
   DVLOG(1) << "OnSessionMessage: " << message.size();
 
   // Ignore the message when we are waiting to update the loadable session.
@@ -879,7 +868,7 @@ void ClearKeyCdm::OnSessionKeysChange(const std::string& session_id,
   }
 
   std::vector<cdm::KeyInformation> keys_vector;
-  ConvertCdmKeysInfo(keys_info.get(), &keys_vector);
+  ConvertCdmKeysInfo(keys_info, &keys_vector);
   host_->OnSessionKeysChange(new_session_id.data(), new_session_id.length(),
                              has_additional_usable_key, keys_vector.data(),
                              keys_vector.size());
@@ -890,6 +879,15 @@ void ClearKeyCdm::OnSessionClosed(const std::string& session_id) {
   if (new_session_id == session_id_for_emulated_loadsession_)
     new_session_id = std::string(kLoadableSessionId);
   host_->OnSessionClosed(new_session_id.data(), new_session_id.length());
+}
+
+void ClearKeyCdm::OnSessionExpirationUpdate(const std::string& session_id,
+                                            base::Time new_expiry_time) {
+  std::string new_session_id = session_id;
+  if (new_session_id == session_id_for_emulated_loadsession_)
+    new_session_id = std::string(kLoadableSessionId);
+  host_->OnExpirationChange(new_session_id.data(), new_session_id.length(),
+                            new_expiry_time.ToDoubleT());
 }
 
 void ClearKeyCdm::OnSessionCreated(uint32_t promise_id,
@@ -945,7 +943,7 @@ void ClearKeyCdm::OnLoadSessionUpdated() {
     keys_info.swap(keys_info_for_emulated_loadsession_);
     has_received_keys_change_event_for_emulated_loadsession_ = false;
     DCHECK(!keys_vector.empty());
-    ConvertCdmKeysInfo(keys_info.get(), &keys_vector);
+    ConvertCdmKeysInfo(keys_info, &keys_vector);
     host_->OnSessionKeysChange(kLoadableSessionId, strlen(kLoadableSessionId),
                                !keys_vector.empty(), keys_vector.data(),
                                keys_vector.size());

@@ -43,8 +43,8 @@
 
 namespace blink {
 
+class WebCoalescedInputEvent;
 class WebDragData;
-class WebInputEvent;
 class WebPluginContainer;
 class WebURLResponse;
 struct WebCompositionUnderline;
@@ -111,14 +111,13 @@ class WebPlugin {
   virtual void UpdateGeometry(const WebRect& window_rect,
                               const WebRect& clip_rect,
                               const WebRect& unobscured_rect,
-                              const WebVector<WebRect>& cut_outs_rects,
                               bool is_visible) = 0;
 
   virtual void UpdateFocus(bool focused, WebFocusType) = 0;
 
   virtual void UpdateVisibility(bool) = 0;
 
-  virtual WebInputEventResult HandleInputEvent(const WebInputEvent&,
+  virtual WebInputEventResult HandleInputEvent(const WebCoalescedInputEvent&,
                                                WebCursorInfo&) = 0;
 
   virtual bool HandleDragStatusUpdate(WebDragStatus,
@@ -239,8 +238,13 @@ class WebPlugin {
   virtual bool CanRotateView() { return false; }
   // Rotates the plugin's view of its content.
   virtual void RotateView(RotationType type) {}
-
+  // Check whether a plugin can be interacted with. A positive return value
+  // means the plugin has not loaded and hence cannot be interacted with.
+  // The plugin could, however, load successfully later.
   virtual bool IsPlaceholder() { return true; }
+  // Check whether a plugin failed to load, with there being no possibility of
+  // it loading later.
+  virtual bool IsErrorPlaceholder() { return false; }
 
  protected:
   ~WebPlugin() {}

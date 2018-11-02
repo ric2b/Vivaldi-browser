@@ -12,9 +12,6 @@
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "chrome/browser/chromeos/certificate_provider/certificate_provider.h"
-#include "chrome/browser/chromeos/certificate_provider/certificate_provider_service.h"
-#include "chrome/browser/chromeos/certificate_provider/certificate_provider_service_factory.h"
 #include "chrome/browser/net/nss_context.h"
 #include "chrome/browser/ui/crypto_module_password_dialog_nss.h"
 #include "chrome/common/net/x509_certificate_model.h"
@@ -26,6 +23,15 @@
 #include "net/base/net_errors.h"
 #include "net/cert/x509_certificate.h"
 #include "ui/base/l10n/l10n_util.h"
+
+// TODO(wychen): ChromeOS headers should only be included when building
+//               ChromeOS, and the following headers should be guarded by
+//               #if defined(OS_CHROMEOS). However, the types are actually
+//               used, and it takes another CL to clean them up.
+//               Reference: crbug.com/720159
+#include "chrome/browser/chromeos/certificate_provider/certificate_provider.h"
+#include "chrome/browser/chromeos/certificate_provider/certificate_provider_service.h"
+#include "chrome/browser/chromeos/certificate_provider/certificate_provider_service_factory.h"
 
 using content::BrowserThread;
 
@@ -83,13 +89,10 @@ void CertificateManagerModel::Create(
 #endif
 
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&CertificateManagerModel::GetCertDBOnIOThread,
-                 browser_context->GetResourceContext(),
-                 observer,
-                 base::Passed(&extension_certificate_provider),
-                 callback));
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&CertificateManagerModel::GetCertDBOnIOThread,
+                     browser_context->GetResourceContext(), observer,
+                     base::Passed(&extension_certificate_provider), callback));
 }
 
 CertificateManagerModel::CertificateManagerModel(
@@ -300,15 +303,10 @@ void CertificateManagerModel::DidGetCertDBOnIOThread(
   is_tpm_available = crypto::IsTPMTokenEnabledForNSS();
 #endif
   BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&CertificateManagerModel::DidGetCertDBOnUIThread,
-                 cert_db,
-                 is_user_db_available,
-                 is_tpm_available,
-                 observer,
-                 base::Passed(&extension_certificate_provider),
-                 callback));
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&CertificateManagerModel::DidGetCertDBOnUIThread, cert_db,
+                     is_user_db_available, is_tpm_available, observer,
+                     base::Passed(&extension_certificate_provider), callback));
 }
 
 // static

@@ -108,11 +108,11 @@ Polymer({
 // <if expr="chromeos">
     CrOncStrings = {
       OncTypeCellular: loadTimeData.getString('OncTypeCellular'),
+      OncTypeTether: loadTimeData.getString('OncTypeTether'),
       OncTypeEthernet: loadTimeData.getString('OncTypeEthernet'),
       OncTypeVPN: loadTimeData.getString('OncTypeVPN'),
       OncTypeWiFi: loadTimeData.getString('OncTypeWiFi'),
       OncTypeWiMAX: loadTimeData.getString('OncTypeWiMAX'),
-      networkDisabled: loadTimeData.getString('networkDisabled'),
       networkListItemConnected:
           loadTimeData.getString('networkListItemConnected'),
       networkListItemConnecting:
@@ -248,7 +248,9 @@ Polymer({
 
     settings.navigateTo(
         settings.Route.BASIC,
-        query.length > 0 ? new URLSearchParams('search=' + query) : undefined,
+        query.length > 0 ?
+            new URLSearchParams('search=' + encodeURIComponent(query)) :
+            undefined,
         /* removeSearch */ true);
   },
 

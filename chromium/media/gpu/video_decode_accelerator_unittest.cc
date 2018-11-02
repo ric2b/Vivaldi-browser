@@ -38,6 +38,7 @@
 #include "base/macros.h"
 #include "base/md5.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -50,7 +51,7 @@
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/launcher/unit_test_launcher.h"
-#include "base/test/scoped_task_scheduler.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/test_suite.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -266,9 +267,7 @@ class VideoDecodeAcceleratorTestEnvironment : public ::testing::Environment {
 
   void SetUp() override {
     base::Thread::Options options;
-#if defined(OS_WIN)
     options.message_loop_type = base::MessageLoop::TYPE_UI;
-#endif
     rendering_thread_.StartWithOptions(options);
 
     base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
@@ -284,8 +283,15 @@ class VideoDecodeAcceleratorTestEnvironment : public ::testing::Environment {
     //
     // This also needs to be done in the test environment since this shouldn't
     // be initialized multiple times for the same Ozone platform.
-    gpu_helper_->Initialize(base::ThreadTaskRunnerHandle::Get(),
-                            GetRenderingTaskRunner());
+    gpu_helper_->Initialize(base::ThreadTaskRunnerHandle::Get());
+    // Flush the message loop for the current thread (UI) as the rendering
+    // thread will make calls to it during initialization.
+    {
+        base::MessageLoop::ScopedNestableTaskAllower nest_loop(
+            base::MessageLoop::current());
+        base::RunLoop flush_ui_loop;
+        flush_ui_loop.RunUntilIdle();
+    }
 #endif
   }
 
@@ -727,7 +733,8 @@ void GLRenderingVDAClient::ProvidePictureBuffers(
 
     PictureBuffer::TextureIds texture_ids(1, texture_id);
     buffers.push_back(PictureBuffer(picture_buffer_id, dimensions,
-                                    PictureBuffer::TextureIds(), texture_ids));
+                                    PictureBuffer::TextureIds(), texture_ids,
+                                    texture_target, pixel_format));
   }
   decoder_->AssignPictureBuffers(buffers);
 
@@ -1081,10 +1088,11 @@ void GLRenderingVDAClient::DecodeNextFragment() {
   base::SharedMemory shm;
   LOG_ASSERT(shm.CreateAndMapAnonymous(next_fragment_size));
   memcpy(shm.memory(), next_fragment_bytes.data(), next_fragment_size);
-  base::SharedMemoryHandle dup_handle;
-  bool result =
-      shm.ShareToProcess(base::GetCurrentProcessHandle(), &dup_handle);
-  LOG_ASSERT(result);
+  base::SharedMemoryHandle dup_handle = shm.handle().Duplicate();
+  LOG_ASSERT(dup_handle.IsValid());
+
+  // TODO(erikchen): This may leak the SharedMemoryHandle.
+  // https://crbug.com/640840.
   BitstreamBuffer bitstream_buffer(next_bitstream_buffer_id_, dup_handle,
                                    next_fragment_size);
   decode_start_time_[next_bitstream_buffer_id_] = base::TimeTicks::Now();
@@ -1817,12 +1825,11 @@ class VDATestSuite : public base::TestSuite {
     // which uses COM. We need the thread to be a UI thread.
     // On Ozone, the backend initializes the event system using a UI
     // thread.
-    base::MessageLoopForUI main_loop;
+    base::test::ScopedTaskEnvironment scoped_task_environment(
+        base::test::ScopedTaskEnvironment::MainThreadType::UI);
 #else
-    base::MessageLoop main_loop;
+    base::test::ScopedTaskEnvironment scoped_task_environment;
 #endif  // OS_WIN || USE_OZONE
-
-    base::test::ScopedTaskScheduler scoped_task_scheduler(&main_loop);
 
     media::g_env =
         reinterpret_cast<media::VideoDecodeAcceleratorTestEnvironment*>(

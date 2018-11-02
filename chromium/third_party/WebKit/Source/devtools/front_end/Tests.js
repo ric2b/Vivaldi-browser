@@ -612,19 +612,16 @@
 
   // Regression test for crbug.com/370035.
   TestSuite.prototype.testDeviceMetricsOverrides = function() {
-    const dumpPageMetrics = function() {
+    function dumpPageMetrics() {
       return JSON.stringify(
           {width: window.innerWidth, height: window.innerHeight, deviceScaleFactor: window.devicePixelRatio});
-    };
+    }
 
     var test = this;
 
-    function testOverrides(params, metrics, callback) {
-      SDK.targetManager.mainTarget().emulationAgent().invoke_setDeviceMetricsOverride(params, getMetrics);
-
-      function getMetrics() {
-        test.evaluateInConsole_('(' + dumpPageMetrics.toString() + ')()', checkMetrics);
-      }
+    async function testOverrides(params, metrics, callback) {
+      await SDK.targetManager.mainTarget().emulationAgent().invoke_setDeviceMetricsOverride(params);
+      test.evaluateInConsole_('(' + dumpPageMetrics.toString() + ')()', checkMetrics);
 
       function checkMetrics(consoleResult) {
         test.assertEquals(
@@ -706,15 +703,15 @@
 
     function step2() {
       testPreset(
-          NetworkConditions.NetworkConditionsSelector.presets[2],
-          ['online event: online = true', 'connection change event: type = cellular; downlinkMax = 0.244140625'],
-          step3);
+          NetworkConditions.NetworkConditionsSelector.presets[1],
+          ['online event: online = true', 'connection change event: type = cellular; downlinkMax = 0.390625'], step3);
     }
 
     function step3() {
       testPreset(
-          NetworkConditions.NetworkConditionsSelector.presets[8],
-          ['connection change event: type = wifi; downlinkMax = 30'], test.releaseControl.bind(test));
+          NetworkConditions.NetworkConditionsSelector.presets[2],
+          ['connection change event: type = cellular; downlinkMax = 1.4400000000000002'],
+          test.releaseControl.bind(test));
     }
   };
 
@@ -850,10 +847,10 @@
 
     function onExecutionContexts() {
       var consoleView = Console.ConsoleView.instance();
-      var options = consoleView._consoleContextSelector._selectElement.options;
+      var items = consoleView._consoleContextSelector._list._items;
       var values = [];
-      for (var i = 0; i < options.length; ++i)
-        values.push(options[i].value.trim());
+      for (var i = 0; i < items.length; ++i)
+        values.push(consoleView._consoleContextSelector._titleFor(items[i]));
       test.assertEquals('top', values[0]);
       test.assertEquals('Simple content script', values[1]);
       test.releaseControl();

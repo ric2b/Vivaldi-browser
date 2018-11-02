@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <atomic>
 #include <map>
 #include <string>
 #include <vector>
@@ -75,18 +76,19 @@ class BASE_EXPORT HistogramSnapshotManager {
   void PrepareSamples(const HistogramBase* histogram,
                       std::unique_ptr<HistogramSamples> samples);
 
-  // Try to detect and fix count inconsistency of logged samples.
-  void InspectLoggedSamplesInconsistency(
-      const HistogramSamples& new_snapshot,
-      HistogramSamples* logged_samples);
+  // |histogram_flattener_| handles the logistics of recording the histogram
+  // deltas.
+  HistogramFlattener* const histogram_flattener_;  // Weak.
 
   // For histograms, track what has been previously seen, indexed
   // by the hash of the histogram name.
   std::map<uint64_t, SampleInfo> known_histograms_;
 
-  // |histogram_flattener_| handles the logistics of recording the histogram
-  // deltas.
-  HistogramFlattener* histogram_flattener_;  // Weak.
+  // A flag indicating if a thread is currently doing an operation. This is
+  // used to check against concurrent access which is not supported. A Thread-
+  // Checker is not sufficient because it may be guarded by at outside lock
+  // (as is the case with cronet).
+  std::atomic<bool> is_active_;
 
   DISALLOW_COPY_AND_ASSIGN(HistogramSnapshotManager);
 };

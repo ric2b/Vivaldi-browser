@@ -26,7 +26,6 @@
 #include "modules/webaudio/OfflineAudioContext.h"
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
@@ -35,6 +34,7 @@
 #include "modules/webaudio/DeferredTaskHandler.h"
 #include "modules/webaudio/OfflineAudioCompletionEvent.h"
 #include "modules/webaudio/OfflineAudioDestinationNode.h"
+#include "platform/bindings/ScriptState.h"
 
 #include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
@@ -104,7 +104,7 @@ OfflineAudioContext* OfflineAudioContext::Create(
 
 #if DEBUG_AUDIONODE_REFERENCES
   fprintf(stderr, "[%16p]: OfflineAudioContext::OfflineAudioContext()\n",
-          audioContext);
+          audio_context);
 #endif
   DEFINE_STATIC_LOCAL(SparseHistogram, offline_context_channel_count_histogram,
                       ("WebAudio.OfflineAudioContext.ChannelCount"));
@@ -212,6 +212,7 @@ ScriptPromise OfflineAudioContext::startOfflineRendering(
   // Start rendering and return the promise.
   is_rendering_started_ = true;
   SetContextState(kRunning);
+  DestinationHandler().InitializeOfflineRenderThread();
   DestinationHandler().StartRendering();
 
   return complete_resolver_->Promise();
@@ -230,8 +231,8 @@ ScriptPromise OfflineAudioContext::suspendContext(ScriptState* script_state,
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   ScriptPromise promise = resolver->Promise();
 
-  // The render thread does not exist; reject the promise.
-  if (!DestinationHandler().OfflineRenderThread()) {
+  // If the rendering is finished, reject the promise.
+  if (ContextState() == AudioContextState::kClosed) {
     resolver->Reject(DOMException::Create(kInvalidStateError,
                                           "the rendering is already finished"));
     return promise;
@@ -420,7 +421,7 @@ void OfflineAudioContext::ResolveSuspendOnMainThread(size_t frame) {
     // |frame| must exist in the map.
     DCHECK(scheduled_suspends_.Contains(frame));
 
-    SuspendMap::iterator it = scheduled_suspends_.Find(frame);
+    SuspendMap::iterator it = scheduled_suspends_.find(frame);
     it->value->Resolve();
 
     scheduled_suspends_.erase(it);
@@ -441,7 +442,7 @@ void OfflineAudioContext::RejectPendingResolvers() {
         kInvalidStateError, "Audio context is going away"));
   }
 
-  scheduled_suspends_.Clear();
+  scheduled_suspends_.clear();
   DCHECK_EQ(resume_resolvers_.size(), 0u);
 
   RejectPendingDecodeAudioDataResolvers();

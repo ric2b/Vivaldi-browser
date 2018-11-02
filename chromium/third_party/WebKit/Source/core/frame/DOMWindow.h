@@ -5,11 +5,12 @@
 #ifndef DOMWindow_h
 #define DOMWindow_h
 
-#include "bindings/core/v8/Transferables.h"
+#include "bindings/core/v8/serialization/Transferables.h"
 #include "core/CoreExport.h"
 #include "core/events/EventTarget.h"
 #include "core/frame/DOMWindowBase64.h"
 #include "core/frame/Frame.h"
+#include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/Forward.h"
@@ -18,10 +19,12 @@ namespace blink {
 
 class Document;
 class InputDeviceCapabilitiesConstants;
-class Location;
 class LocalDOMWindow;
+class Location;
 class MessageEvent;
+class ScriptValue;
 class SerializedScriptValue;
+class WindowProxyManager;
 
 class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
                               public DOMWindowBase64 {
@@ -48,6 +51,8 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
 
   // GarbageCollectedFinalized overrides:
   DECLARE_VIRTUAL_TRACE();
+
+  DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
   virtual bool IsLocalDOMWindow() const = 0;
   virtual bool IsRemoteDOMWindow() const = 0;
@@ -82,10 +87,9 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   virtual void blur() = 0;
   void close(ExecutionContext*);
 
-  // FIXME: This handles both window[index] and window.frames[index]. However,
-  // the spec exposes window.frames[index] across origins but not
-  // window[index]...
-  DOMWindow* AnonymousIndexedGetter(uint32_t) const;
+  // Indexed properties
+  DOMWindow* AnonymousIndexedGetter(uint32_t index) const;
+  bool AnonymousIndexedSetter(uint32_t index, const ScriptValue&);
 
   void postMessage(PassRefPtr<SerializedScriptValue> message,
                    const MessagePortArray&,
@@ -121,8 +125,12 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
 
  private:
   Member<Frame> frame_;
+  // Unlike |frame_|, |window_proxy_manager_| is available even after the
+  // window's frame gets detached from the DOM, until the end of the lifetime
+  // of this object.
+  const Member<WindowProxyManager> window_proxy_manager_;
   Member<InputDeviceCapabilitiesConstants> input_capabilities_;
-  mutable Member<Location> location_;
+  mutable TraceWrapperMember<Location> location_;
 
   // Set to true when close() has been called. Needed for
   // |window.closed| determinism; having it return 'true'

@@ -8,6 +8,7 @@
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/Element.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/layout/LayoutObject.h"
 #include "platform/graphics/CompositorElementId.h"
 #include "platform/wtf/PtrUtil.h"
 
@@ -16,10 +17,10 @@ namespace blink {
 namespace {
 Element* ElementForId(int element_id) {
   Node* node = DOMNodeIds::NodeForId(element_id);
-  ASSERT(node);
+  DCHECK(node);
   if (!node)
     return nullptr;
-  ASSERT(node->IsElementNode());
+  DCHECK(node->IsElementNode());
   if (!node->IsElementNode())
     return nullptr;
   return static_cast<Element*>(node);
@@ -92,21 +93,19 @@ void ScrollState::ConsumeDeltaNative(double x, double y) {
     data_->delta_consumed_for_scroll_sequence = true;
 }
 
-Element* ScrollState::CurrentNativeScrollingElement() const {
-  uint64_t element_id = data_->current_native_scrolling_element().primaryId;
-  if (element_id == 0)
+Element* ScrollState::CurrentNativeScrollingElement() {
+  if (data_->current_native_scrolling_element() == CompositorElementId()) {
+    element_.Clear();
     return nullptr;
-  return ElementForId(element_id);
+  }
+  return element_;
 }
 
 void ScrollState::SetCurrentNativeScrollingElement(Element* element) {
-  data_->set_current_native_scrolling_element(CreateCompositorElementId(
-      DOMNodeIds::IdForNode(element), CompositorSubElementId::kScroll));
-}
-
-void ScrollState::SetCurrentNativeScrollingElementById(int element_id) {
-  data_->set_current_native_scrolling_element(
-      CreateCompositorElementId(element_id, CompositorSubElementId::kScroll));
+  element_ = element;
+  data_->set_current_native_scrolling_element(CompositorElementIdFromDOMNodeId(
+      DOMNodeIds::IdForNode(element),
+      CompositorElementIdNamespace::kScrollState));
 }
 
 }  // namespace blink

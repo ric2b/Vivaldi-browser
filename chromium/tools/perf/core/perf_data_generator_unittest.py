@@ -3,8 +3,14 @@
 # found in the LICENSE file.
 import unittest
 
+from core import perf_benchmark
 from core import perf_data_generator
 from core.perf_data_generator import BenchmarkMetadata
+
+from telemetry import benchmark
+from telemetry import decorators
+
+import mock
 
 
 class PerfDataGeneratorTest(unittest.TestCase):
@@ -30,12 +36,15 @@ class PerfDataGeneratorTest(unittest.TestCase):
         }
     }
     benchmarks = {
-        'benchmark_name_1': BenchmarkMetadata(None, None),
-        'benchmark_name_2': BenchmarkMetadata(None, None),
-        'benchmark_name_3': BenchmarkMetadata(None, None)
+        'benchmark_name_1': BenchmarkMetadata('foo@bar.com', None, False),
+        'benchmark_name_2': BenchmarkMetadata(None, None, False),
+        'benchmark_name_3': BenchmarkMetadata('neo@matrix.org', None, False)
     }
 
-    perf_data_generator.verify_all_tests_in_benchmark_csv(tests, benchmarks)
+    # Mock out content of unowned_benchmarks.txt
+    with mock.patch('__builtin__.open',
+                    mock.mock_open(read_data="benchmark_name_2")):
+      perf_data_generator.verify_all_tests_in_benchmark_csv(tests, benchmarks)
 
 
   def testVerifyAllTestsInBenchmarkCsvCatchesMismatchedTests(self):
@@ -48,8 +57,8 @@ class PerfDataGeneratorTest(unittest.TestCase):
         }
     }
     benchmarks = {
-        'benchmark_name_2': BenchmarkMetadata(None, None),
-        'benchmark_name_3': BenchmarkMetadata(None, None),
+        'benchmark_name_2': BenchmarkMetadata(None, None, False),
+        'benchmark_name_3': BenchmarkMetadata(None, None, False),
     }
 
     with self.assertRaises(AssertionError) as context:
@@ -62,7 +71,7 @@ class PerfDataGeneratorTest(unittest.TestCase):
   def testVerifyAllTestsInBenchmarkCsvFindsFakeTest(self):
     tests = {'Random fake test': {}}
     benchmarks = {
-        'benchmark_name_1': BenchmarkMetadata(None, None)
+        'benchmark_name_1': BenchmarkMetadata(None, None, False)
     }
 
     with self.assertRaises(AssertionError) as context:
@@ -80,7 +89,7 @@ class PerfDataGeneratorTest(unittest.TestCase):
         'swarming': {
           'ignore_task_failure': False,
           'dimension_sets': [{'os': 'SkyNet', 'id': 'T-850', 'pool': 'T-RIP'}],
-          'hard_timeout': 7200,
+          'hard_timeout': 10800,
           'can_use_on_swarming_builders': True,
           'expiration': 36000,
           'io_timeout': 3600,
@@ -102,7 +111,7 @@ class PerfDataGeneratorTest(unittest.TestCase):
         'swarming': {
           'ignore_task_failure': True,
           'dimension_sets': [{'os': 'SkyNet', 'id': 'T-850', 'pool': 'T-RIP'}],
-          'hard_timeout': 7200,
+          'hard_timeout': 10800,
           'can_use_on_swarming_builders': True,
           'expiration': 36000,
           'io_timeout': 3600,
@@ -111,3 +120,99 @@ class PerfDataGeneratorTest(unittest.TestCase):
         'isolate_name': 'telemetry_perf_tests',
       }
     self.assertEquals(test, expected_generated_test)
+
+  def testGenerateTelemetryTestsBlacklistedReferenceBuildTest(self):
+    class BlacklistedBenchmark(benchmark.Benchmark):
+      @classmethod
+      def Name(cls):
+        return 'blacklisted'
+
+    class NotBlacklistedBenchmark(benchmark.Benchmark):
+      @classmethod
+      def Name(cls):
+        return 'not_blacklisted'
+
+    swarming_dimensions = [
+        {'os': 'SkyNet', 'id': 'T-850', 'pool': 'T-RIP', 'device_ids': ['a']}
+    ]
+    test_config = {
+        'platform': 'android',
+        'swarming_dimensions': swarming_dimensions,
+    }
+    sharding_map = {'fake': {'blacklisted': 'a', 'not_blacklisted': 'a'}}
+    benchmarks = [BlacklistedBenchmark, NotBlacklistedBenchmark]
+    tests = perf_data_generator.generate_telemetry_tests(
+        'fake', test_config, benchmarks, sharding_map, ['blacklisted'])
+
+    generated_test_names = set(t['name'] for t in tests)
+    self.assertEquals(
+        generated_test_names,
+        {'blacklisted', 'not_blacklisted', 'not_blacklisted.reference'})
+
+  def testShouldBenchmarkBeScheduledNormal(self):
+    class bench(perf_benchmark.PerfBenchmark):
+      pass
+
+    self.assertEqual(
+        perf_data_generator.ShouldBenchmarkBeScheduled(bench(), 'win'),
+        True)
+
+  def testShouldBenchmarkBeScheduledDisabledAll(self):
+    @decorators.Disabled('all')
+    class bench(perf_benchmark.PerfBenchmark):
+      pass
+
+    self.assertEqual(
+        perf_data_generator.ShouldBenchmarkBeScheduled(bench(), 'win'),
+        False)
+
+  def testShouldBenchmarkBeScheduledOnDesktopMobileTest(self):
+    @decorators.Enabled('android')
+    class bench(perf_benchmark.PerfBenchmark):
+      pass
+
+    self.assertEqual(
+        perf_data_generator.ShouldBenchmarkBeScheduled(bench(), 'win'),
+        False)
+
+  def testShouldBenchmarkBeScheduledOnMobileMobileTest(self):
+    @decorators.Enabled('android')
+    class bench(perf_benchmark.PerfBenchmark):
+      pass
+
+    self.assertEqual(
+        perf_data_generator.ShouldBenchmarkBeScheduled(bench(), 'android'),
+        True)
+
+  def testShouldBenchmarkBeScheduledOnMobileMobileTestDisabled(self):
+    @decorators.Disabled('android')
+    class bench(perf_benchmark.PerfBenchmark):
+      pass
+
+    self.assertEqual(
+        perf_data_generator.ShouldBenchmarkBeScheduled(bench(), 'android'),
+        False)
+
+  def testRemoveBlacklistedTestsNoop(self):
+    tests = [{
+        'swarming': {
+            'dimension_sets': [{
+                'id': 'build1-b1',
+            }]
+        }
+    }]
+    self.assertEqual(
+        perf_data_generator.RemoveBlacklistedTests(tests, []), tests)
+
+  def testRemoveBlacklistedTestsShouldRemove(self):
+    tests = [{
+        'swarming': {
+            'dimension_sets': [{
+                'id': 'build1-b1',
+            }]
+        }
+    }]
+    self.assertEqual(
+        perf_data_generator.RemoveBlacklistedTests(tests, ['build1-b1']), [])
+
+

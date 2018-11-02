@@ -140,7 +140,7 @@ void InsertTextDuringCompositionWithEvents(
   if (!frame.GetDocument())
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited. see http://crbug.com/590369 for more details.
   frame.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -319,7 +319,7 @@ void InputMethodController::Clear() {
     composition_range_->setStart(&GetDocument(), 0);
     composition_range_->collapse(true);
   }
-  GetDocument().Markers().RemoveMarkers(DocumentMarker::kComposition);
+  GetDocument().Markers().RemoveMarkersOfTypes(DocumentMarker::kComposition);
 }
 
 void InputMethodController::ContextDestroyed(Document*) {
@@ -361,7 +361,7 @@ bool InputMethodController::FinishComposingText(
     Clear();
     DispatchCompositionEndEvent(GetFrame(), composing);
 
-    // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+    // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
     // needs to be audited. see http://crbug.com/590369 for more details.
     GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -465,9 +465,8 @@ void InputMethodController::AddCompositionUnderlines(
       continue;
 
     GetDocument().Markers().AddCompositionMarker(
-        ephemeral_line_range.StartPosition(),
-        ephemeral_line_range.EndPosition(), underline.GetColor(),
-        underline.Thick(), underline.BackgroundColor());
+        ephemeral_line_range, underline.GetColor(), underline.Thick(),
+        underline.BackgroundColor());
   }
 }
 
@@ -492,7 +491,7 @@ bool InputMethodController::ReplaceCompositionAndMoveCaret(
   if (!ReplaceComposition(text))
     return false;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited. see http://crbug.com/590369 for more details.
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -589,7 +588,7 @@ void InputMethodController::SetComposition(
   if (!target)
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited. see http://crbug.com/590369 for more details.
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -623,7 +622,7 @@ void InputMethodController::SetComposition(
                                      TypingCommand::kPreventSpellChecking);
     }
 
-    // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+    // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
     // needs to be audited. see http://crbug.com/590369 for more details.
     GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -654,7 +653,7 @@ void InputMethodController::SetComposition(
   if (!IsAvailable())
     return;
 
-  // TODO(yosin): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited. see http://crbug.com/590369 for more details.
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -681,7 +680,7 @@ void InputMethodController::SetComposition(
   if (base_node->GetLayoutObject())
     base_node->GetLayoutObject()->SetShouldDoFullPaintInvalidation();
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited. see http://crbug.com/590369 for more details.
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -690,8 +689,7 @@ void InputMethodController::SetComposition(
 
   if (underlines.IsEmpty()) {
     GetDocument().Markers().AddCompositionMarker(
-        composition_range_->StartPosition(), composition_range_->EndPosition(),
-        Color::kBlack, false,
+        EphemeralRange(composition_range_), Color::kBlack, false,
         LayoutTheme::GetTheme().PlatformDefaultCompositionBackgroundColor());
     return;
   }
@@ -803,9 +801,9 @@ bool InputMethodController::SetSelectionOffsets(
   if (range.IsNull())
     return false;
 
-  return GetFrame().Selection().SetSelectedRange(
-      range, VP_DEFAULT_AFFINITY, SelectionDirectionalMode::kNonDirectional,
-      options);
+  GetFrame().Selection().SetSelection(
+      SelectionInDOMTree::Builder().SetBaseAndExtent(range).Build(), options);
+  return true;
 }
 
 bool InputMethodController::SetEditableSelectionOffsets(
@@ -1043,7 +1041,7 @@ WebTextInputInfo InputMethodController::TextInputInfo() const {
   if (!GetFrame().GetEditor().CanEdit())
     return info;
 
-  // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  see http://crbug.com/590369 for more details.
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 

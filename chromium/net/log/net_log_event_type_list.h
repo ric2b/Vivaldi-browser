@@ -480,20 +480,9 @@ EVENT_TYPE(SSL_CLIENT_CERT_REQUESTED)
 // The SSL stack blocked on a private key operation. The following parameters
 // are attached to the event.
 //   {
-//     "type": <type of the key>,
 //     "hash": <hash function used>,
 //   }
 EVENT_TYPE(SSL_PRIVATE_KEY_OP)
-
-// The start/end of getting a domain-bound certificate and private key.
-//
-// The END event will contain the following parameters on failure:
-//
-//   {
-//     "net_error": <Net integer error code>,
-//   }
-// TODO(nharper): remove this event.
-EVENT_TYPE(SSL_GET_DOMAIN_BOUND_CERT)
 
 // The start/end of getting a Channel ID key.
 //
@@ -510,14 +499,6 @@ EVENT_TYPE(SSL_GET_DOMAIN_BOUND_CERT)
 //     "key": <Hex-encoded EC point of public key (uncompressed point format)>,
 //   }
 EVENT_TYPE(SSL_GET_CHANNEL_ID)
-
-// The SSL server requested a channel id.
-// TODO(nharper): Remove this event.
-EVENT_TYPE(SSL_CHANNEL_ID_REQUESTED)
-
-// A channel ID was provided to the SSL library to be sent to the SSL server.
-// TODO(nharper): Remove this event.
-EVENT_TYPE(SSL_CHANNEL_ID_PROVIDED)
 
 // A client certificate (or none) was provided to the SSL library to be sent
 // to the SSL server.
@@ -540,29 +521,6 @@ EVENT_TYPE(SSL_HANDSHAKE_ERROR)
 EVENT_TYPE(SSL_READ_ERROR)
 EVENT_TYPE(SSL_WRITE_ERROR)
 
-// An SSL connection needs to be retried with a lower protocol version because
-// the server may be intolerant of the protocol version we offered.
-// The following parameters are attached to the event:
-//   {
-//     "host_and_port": <String encoding the host and port>,
-//     "net_error": <Net integer error code>,
-//     "version_before": <SSL version before the fallback>,
-//     "version_after": <SSL version after the fallback>,
-//   }
-//
-// TODO(davidben): Remove this event and the corresponding log_view_painter.js
-// logic in M56.
-EVENT_TYPE(SSL_VERSION_FALLBACK)
-
-// An SSL connection needs to be retried with more cipher suites because the
-// server may require a deprecated cipher suite. The following parameters are
-// attached to the event:
-//   {
-//     "host_and_port": <String encoding the host and port>,
-//     "net_error": <Net integer error code>,
-//   }
-EVENT_TYPE(SSL_CIPHER_FALLBACK)
-
 // An SSL connection needs to be retried with a lower protocol version to detect
 // if the error was due to a middlebox interfering with the protocol version we
 // offered.
@@ -576,15 +534,23 @@ EVENT_TYPE(SSL_VERSION_INTERFERENCE_PROBE)
 // we merged the verification with the SSLHostInfo. (Note: now obsolete.)
 EVENT_TYPE(SSL_VERIFICATION_MERGED)
 
-// An SSL error occurred while calling an NSS function not directly related to
-// one of the above activities.  Can also be used when more information than
-// is provided by just an error code is needed:
+// An SSL connection sent or received an alert.
+// The following parameters are attached:
 //   {
-//     "function": <Name of the NSS function, as a string>,
-//     "param": <Most relevant parameter, if any>,
-//     "ssl_lib_error": <NSS library's integer code for the specific error type>
+//     "hex_encoded_bytes": <The exact bytes sent, as a hexadecimal string>
 //   }
-EVENT_TYPE(SSL_NSS_ERROR)
+EVENT_TYPE(SSL_ALERT_RECEIVED)
+EVENT_TYPE(SSL_ALERT_SENT)
+
+// An SSL connection sent or received a handshake message.
+// The following parameters are attached:
+//   {
+//     "type": <The type of the handshake message, as an integer>
+//     "hex_encoded_bytes": <The exact bytes sent, as a hexadecimal string. May
+//                           be elided in some cases>
+//   }
+EVENT_TYPE(SSL_HANDSHAKE_MESSAGE_RECEIVED)
+EVENT_TYPE(SSL_HANDSHAKE_MESSAGE_SENT)
 
 // The specified number of bytes were sent on the socket.  Depending on the
 // source of the event, may be logged either once the data is sent, or when it
@@ -1259,6 +1225,10 @@ EVENT_TYPE(HTTP_TRANSACTION_SET_PRIORITY)
 //   }
 EVENT_TYPE(HTTP_TRANSACTION_RESTART_AFTER_ERROR)
 
+// This event is sent when we try to restart a transaction after the initial
+// attempt failed with HTTP 421 Misdirected Requested.
+EVENT_TYPE(HTTP_TRANSACTION_RESTART_MISDIRECTED_REQUEST)
+
 // ------------------------------------------------------------------------
 // BidirectionalStream
 // ------------------------------------------------------------------------
@@ -1490,6 +1460,13 @@ EVENT_TYPE(HTTP2_SESSION_UPDATE_SEND_WINDOW)
 //   }
 EVENT_TYPE(HTTP2_SESSION_UPDATE_RECV_WINDOW)
 
+// This event indicates that an invalid response header has been received.
+//   {
+//     "header_name": <The header name>,
+//     "header_value": <The header value>,
+//   }
+EVENT_TYPE(HTTP2_SESSION_RECV_INVALID_HEADER)
+
 // Sending a data frame
 //   {
 //     "stream_id": <The stream ID for the window update>,
@@ -1669,9 +1646,6 @@ EVENT_TYPE(QUIC_STREAM_FACTORY_JOB)
 //                           attached>,
 //  }
 EVENT_TYPE(QUIC_STREAM_FACTORY_JOB_BOUND_TO_HTTP_STREAM_JOB)
-
-// Measures the time taken to load server information.
-EVENT_TYPE(QUIC_STREAM_FACTORY_JOB_LOAD_SERVER_INFO)
 
 // Measures the time taken to establish a QUIC connection.
 // The event parameters are:

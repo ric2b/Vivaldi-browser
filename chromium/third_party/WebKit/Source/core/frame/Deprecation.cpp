@@ -15,10 +15,12 @@
 namespace {
 
 enum Milestone {
-  M58,
   M59,
   M60,
   M61,
+  M62,
+  M63,
+  M64,
 };
 
 const char* milestoneString(Milestone milestone) {
@@ -26,17 +28,21 @@ const char* milestoneString(Milestone milestone) {
   // https://www.chromium.org/developers/calendar
 
   switch (milestone) {
-    case M58:
-      return "M58, around April 2017";
     case M59:
       return "M59, around June 2017";
     case M60:
       return "M60, around August 2017";
     case M61:
       return "M61, around September 2017";
+    case M62:
+      return "M62, around October 2017";
+    case M63:
+      return "M63, around December 2017";
+    case M64:
+      return "M64, around January 2018";
   }
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return nullptr;
 }
 
@@ -114,25 +120,10 @@ void Deprecation::WarnOnDeprecatedProperties(
 }
 
 String Deprecation::DeprecationMessage(CSSPropertyID unresolved_property) {
-  switch (unresolved_property) {
-    case CSSPropertyAliasMotionOffset:
-      return replacedWillBeRemoved("motion-offset", "offset-distance", M58,
-                                   "6390764217040896");
-    case CSSPropertyAliasMotionRotation:
-      return replacedWillBeRemoved("motion-rotation", "offset-rotate", M58,
-                                   "6390764217040896");
-    case CSSPropertyAliasMotionPath:
-      return replacedWillBeRemoved("motion-path", "offset-path", M58,
-                                   "6390764217040896");
-    case CSSPropertyMotion:
-      return replacedWillBeRemoved("motion", "offset", M58, "6390764217040896");
-    case CSSPropertyOffsetRotation:
-      return replacedWillBeRemoved("offset-rotation", "offset-rotate", M58,
-                                   "6390764217040896");
-
-    default:
-      return g_empty_string;
-  }
+  // TODO: Add a switch here when there are properties that we intend to
+  // deprecate.
+  // Returning an empty string for now.
+  return g_empty_string;
 }
 
 void Deprecation::CountDeprecation(const LocalFrame* frame,
@@ -145,7 +136,7 @@ void Deprecation::CountDeprecation(const LocalFrame* frame,
 
   if (!page->GetUseCounter().HasRecordedMeasurement(feature)) {
     page->GetUseCounter().RecordMeasurement(feature);
-    ASSERT(!DeprecationMessage(feature).IsEmpty());
+    DCHECK(!DeprecationMessage(feature).IsEmpty());
     ConsoleMessage* console_message =
         ConsoleMessage::Create(kDeprecationMessageSource, kWarningMessageLevel,
                                DeprecationMessage(feature));
@@ -176,9 +167,9 @@ void Deprecation::CountDeprecationCrossOriginIframe(
   // Check to see if the frame can script into the top level document.
   SecurityOrigin* security_origin =
       frame->GetSecurityContext()->GetSecurityOrigin();
-  Frame* top = frame->Tree().Top();
-  if (top && !security_origin->CanAccess(
-                 top->GetSecurityContext()->GetSecurityOrigin()))
+  Frame& top = frame->Tree().Top();
+  if (!security_origin->CanAccess(
+          top.GetSecurityContext()->GetSecurityOrigin()))
     CountDeprecation(frame, feature);
 }
 
@@ -201,11 +192,6 @@ String Deprecation::DeprecationMessage(UseCounter::Feature feature) {
 
     case UseCounter::kConsoleMarkTimeline:
       return replacedBy("'console.markTimeline'", "'console.timeStamp'");
-
-    case UseCounter::kCSSStyleSheetInsertRuleOptionalArg:
-      return "Calling CSSStyleSheet.insertRule() with one argument is "
-             "deprecated. Please pass the index argument as well: "
-             "insertRule(x, 0).";
 
     case UseCounter::kPrefixedVideoSupportsFullscreen:
       return replacedBy("'HTMLVideoElement.webkitSupportsFullscreen'",
@@ -369,29 +355,19 @@ String Deprecation::DeprecationMessage(UseCounter::Feature feature) {
              "details.";
 
     case UseCounter::kCSSDeepCombinator:
-      return String::Format(
-          "/deep/ combinator is deprecated and will be a no-op in %s. See "
-          "https://www.chromestatus.com/features/4964279606312960 for more "
-          "details.",
-          milestoneString(M60));
-
-    case UseCounter::kCSSSelectorPseudoShadow:
-      return willBeRemoved("::shadow pseudo-element", M60, "6750456638341120");
+      return "/deep/ combinator is no longer supported in CSS dynamic profile. "
+             "It is now effectively no-op, acting as if it were a descendant "
+             "combinator. You should consider to remove it. See "
+             "https://www.chromestatus.com/features/4964279606312960 for more "
+             "details.";
 
     case UseCounter::kVREyeParametersOffset:
       return replacedBy("VREyeParameters.offset",
                         "view matrices provided by VRFrameData");
 
-    case UseCounter::
-        kServiceWorkerRespondToNavigationRequestWithRedirectedResponse:
-      return String::Format(
-          "The service worker responded to the navigation request with a "
-          "redirected response. This will result in an error in %s.",
-          milestoneString(M59));
-
     case UseCounter::kCSSSelectorInternalMediaControlsOverlayCastButton:
       return willBeRemoved(
-          "-internal-media-controls-overlay-cast-button selector", M59,
+          "-internal-media-controls-overlay-cast-button selector", M61,
           "5714245488476160");
 
     case UseCounter::kSelectionAddRangeIntersect:
@@ -400,25 +376,13 @@ String Deprecation::DeprecationMessage(UseCounter::Feature feature) {
              "https://www.chromestatus.com/features/6680566019653632 for more "
              "details.";
 
-    case UseCounter::kSubtleCryptoOnlyStrictSecureContextCheckFailed:
-      return String::Format(
-          "Web Crypto API usage inside secure frames with non-secure ancestors "
-          "is deprecated. The API will no longer be exposed in these contexts "
-          "as of %s. See https://www.chromestatus.com/features/5030265697075200"
-          " for more details.",
-          milestoneString(M59));
-
     case UseCounter::kRtcpMuxPolicyNegotiate:
       return String::Format(
           "The rtcpMuxPolicy option is being considered for "
           "removal and may be removed no earlier than %s. If you depend on it, "
           "please see https://www.chromestatus.com/features/5654810086866944 "
           "for more details.",
-          milestoneString(M60));
-
-    case UseCounter::kV8IDBFactory_WebkitGetDatabaseNames_Method:
-      return willBeRemoved("indexedDB.webkitGetDatabaseNames()", M60,
-                           "5725741740195840");
+          milestoneString(M62));
 
     case UseCounter::kVibrateWithoutUserGesture:
       return willBeRemoved(
@@ -440,6 +404,44 @@ String Deprecation::DeprecationMessage(UseCounter::Feature feature) {
           "https://www.chromestatus.com/features/5735596811091968 for more "
           "details.",
           milestoneString(M60));
+
+    case UseCounter::kV8RTCPeerConnection_GetStreamById_Method:
+      return willBeRemoved("RTCPeerConnection.getStreamById()", M62,
+                           "5751819573657600");
+
+    case UseCounter::kV8SVGPathElement_GetPathSegAtLength_Method:
+      return willBeRemoved("SVGPathElement.getPathSegAtLength", M62,
+                           "5638783282184192");
+
+    case UseCounter::kCredentialManagerCredentialRequestOptionsUnmediated:
+      return replacedWillBeRemoved(
+          "The boolean flag CredentialRequestOptions.unmediated",
+          "the CredentialRequestOptions.mediation enum", M62,
+          "6076479909658624");
+
+    case UseCounter::kCredentialManagerIdName:
+    case UseCounter::kCredentialManagerPasswordName:
+    case UseCounter::kCredentialManagerAdditionalData:
+    case UseCounter::kCredentialManagerCustomFetch:
+      return String::Format(
+          "Passing 'PasswordCredential' objects into 'fetch(..., { "
+          "credentials: ... })' is deprecated, and will be removed in %s. See "
+          "https://www.chromestatus.com/features/5689327799500800 for more "
+          "details and https://www.chromium.org/developers/"
+          "recent-changes-credential-management-api for migration suggestions.",
+          milestoneString(M62));
+    case UseCounter::kPaymentRequestNetworkNameInSupportedMethods:
+      return replacedWillBeRemoved(
+          "Card issuer network (\"amex\", \"diners\", \"discover\", \"jcb\", "
+          "\"mastercard\", \"mir\", \"unionpay\", \"visa\") as payment method",
+          "payment method name \"basic-card\" with issuer network in the "
+          "\"supportedNetworks\" field",
+          M64, "5725727580225536");
+    case UseCounter::kCredentialManagerRequireUserMediation:
+      return replacedWillBeRemoved(
+          "The CredentialsContainer.requireUserMediation method",
+          "the CredentialsContainer.preventSilentAccess method", M62,
+          "4781762488041472");
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

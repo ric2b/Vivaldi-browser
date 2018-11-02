@@ -6,6 +6,7 @@
 #define ASH_PUBLIC_CPP_SHELF_TYPES_H_
 
 #include <cstdint>
+#include <string>
 
 #include "ash/public/cpp/ash_public_export.h"
 
@@ -89,11 +90,6 @@ enum ShelfAction {
   SHELF_ACTION_APP_LIST_SHOWN,
 };
 
-// Shelf IDs are sequential values assigned to shelf items by ShelfModel for
-// runtime use; they are not persisted across restarts of the ash environment.
-using ShelfID = uint32_t;
-const ShelfID kInvalidShelfID = 0u;
-
 // The type of a shelf item.
 enum ShelfItemType {
   // Represents a running app panel.
@@ -134,6 +130,39 @@ enum ShelfItemStatus {
   STATUS_ACTIVE,
   // A shelf item that needs user's attention.
   STATUS_ATTENTION,
+};
+
+// A unique shelf item id composed of an |app_id| and a |launch_id|.
+// |app_id| is the non-empty application id associated with a set of windows.
+// |launch_id| is passed on app launch, to support multiple shelf items per app.
+// As an example, a remote desktop client may want each remote application to
+// have its own icon.
+struct ASH_PUBLIC_EXPORT ShelfID {
+  explicit ShelfID(const std::string& app_id = std::string(),
+                   const std::string& launch_id = std::string());
+  ~ShelfID();
+
+  ShelfID(const ShelfID& other);
+  ShelfID(ShelfID&& other);
+  ShelfID& operator=(const ShelfID& other);
+  bool operator==(const ShelfID& other) const;
+  bool operator!=(const ShelfID& other) const;
+  bool operator<(const ShelfID& other) const;
+
+  // Returns true if both the application id and launch id are empty.
+  // This is often used to determine if the id is invalid.
+  bool IsNull() const;
+
+  // Functions to [de]serialize ids as a string for window property usage, etc.
+  // Serialization appends ids with a delimeter that must not be used in ids.
+  // Deserialization returns an empty/null/default id for a null string input.
+  std::string Serialize() const;
+  static ShelfID Deserialize(const std::string* string);
+
+  // The application id associated with a set of windows.
+  std::string app_id;
+  // An id passed on app launch, to support multiple shelf items per app.
+  std::string launch_id;
 };
 
 }  // namespace ash

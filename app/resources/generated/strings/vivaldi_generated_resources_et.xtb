@@ -25,7 +25,6 @@
 <translation id="1588438908519853928">Tavaline</translation>
 <translation id="159359590073980872">Kujutise vahemälu</translation>
 <translation id="1616206807336925449">Selle laienduse jaoks pole erilube vaja.</translation>
-<translation id="1620510694547887537">Kaamera</translation>
 <translation id="1627276047960621195">Faili deskriptorid</translation>
 <translation id="1635033183663317347">Selle installis teie järelevaataja.</translation>
 <translation id="1681120471812444678">Seadista printerite lisamiseks...</translation>
@@ -37,7 +36,6 @@
 <translation id="1731589410171062430">Kokku: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /> (<ph name="NUMBER_OF_PAGES" /> <ph name="PAGE_OR_PAGES_LABEL" />)</translation>
 <translation id="1744108098763830590">Uuri &amp;taustalehte</translation>
 <translation id="1769104665586091481">Ava link uues &amp;aknas</translation>
-<translation id="1789575671122666129">Hüpikaknad</translation>
 <translation id="1815083418640426271">Kleebib lihttekstina</translation>
 <translation id="1828901632669367785">Prindi süsteemidialoogi abil...</translation>
 <translation id="1846308012215045257">Pistikprogrammi <ph name="PLUGIN_NAME" /> käitamiseks paremklõpsake</translation>
@@ -55,12 +53,10 @@
 <translation id="2087822576218954668">Printimine: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Laadi &amp;raam uuesti</translation>
 <translation id="2129825002735785149">Pistikprogrammi värskendamine</translation>
-<translation id="2147827593068025794">Taustal sünkroonimine</translation>
 <translation id="2148892889047469596">Kaardi ülekanne</translation>
 <translation id="2150139952286079145">Otsi printereid</translation>
 <translation id="215753907730220065">Täisekraanilt väljumine</translation>
 <translation id="2177950615300672361">Privaatne kaart: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">Tuvastatakse (vaikimisi)</translation>
 <translation id="219008588003277019">Omakliendi moodul: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Aseta lihttekstina</translation>
 <translation id="2249605167705922988">nt 1-5, 8, 11-13</translation>
@@ -83,9 +79,7 @@
 <translation id="2439110203301358333">Teine programm teie arvutis lisas laienduse, mis võib muuta Vivaldi'i toimimist.</translation>
 <translation id="2445081178310039857">Laienduse juurkaust on nõutav.</translation>
 <translation id="2470702053775288986">Toetamata laiendused on keelatud</translation>
-<translation id="2482878487686419369">Märguanded</translation>
 <translation id="2501797496290880632">Sisestage otsetee</translation>
-<translation id="2509857212037838238">Pistikprogrammi <ph name="PLUGIN_NAME" /> installimine</translation>
 <translation id="2550212893339833758">Saalitud mälu</translation>
 <translation id="2580924999637585241">Kokku: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome’i veebipood</translation>
@@ -111,7 +105,6 @@
 <translation id="3124111068741548686">USER nimed</translation>
 <translation id="3129173833825111527">Vasakveeris</translation>
 <translation id="3222066309010235055">Eelrenderdus: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="32279126412636473">Laadi uuesti</translation>
 <translation id="3241680850019875542">Valige pakitava laienduse juurkaust. Laienduse värskendamiseks valige uuesti kasutamiseks ka privaatvõtme fail.</translation>
 <translation id="3280237271814976245">Salvesta &amp;nimega...</translation>
@@ -126,7 +119,6 @@
 <translation id="3347086966102161372">K&amp;opeeri pildi aadress</translation>
 <translation id="3378572629723696641">See laiendus võib olla rikutud.</translation>
 <translation id="3396331542604645348">Valitud printer kas pole saadaval või pole õigesti seadistatud. Kontrolli printerit või proovi mõnda teist printerit kasutada.</translation>
-<translation id="3427092606871434483">Lubatud (vaikimisi)</translation>
 <translation id="345693547134384690">Ava pilt uuel &amp;vahelehel</translation>
 <translation id="3467267818798281173">Vivaldilt soovituste küsimine</translation>
 <translation id="3505030558724226696">Tühista juurdepääs seadmele</translation>
@@ -138,7 +130,6 @@
 <translation id="3730639321086573427">Kohalikud</translation>
 <translation id="3760460896538743390">Uuri &amp;taustalehte</translation>
 <translation id="3763401818161139108">Avage <ph name="ORIGIN" /></translation>
-<translation id="3789841737615482174">Installi</translation>
 <translation id="3798449238516105146">Versioon</translation>
 <translation id="3855441664322950881">Laienduse pakkimine</translation>
 <translation id="3905761538810670789">Paranda rakendus</translation>
@@ -161,14 +152,12 @@
 <translation id="411666854932687641">Privaatmälu</translation>
 <translation id="4130207949184424187">See laiendus muutis seda, milline leht kuvatakse omnikastikeses otsingu tegemisel.</translation>
 <translation id="4131410914670010031">Mustvalge</translation>
-<translation id="4165986682804962316">Saidi seaded</translation>
 <translation id="4200983522494130825">Uus &amp;vaheleht</translation>
 <translation id="420665587194630159">(see on hallatud laiendus ja seda ei saa desinstallida või keelata)</translation>
 <translation id="4206944295053515692">Küsi Google'ilt soovitusi</translation>
 <translation id="4240511609794012987">Ühismälu</translation>
 <translation id="4256316378292851214">Sa&amp;lvesta video nimega ...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />kB (<ph name="NUM_KILOBYTES_LIVE" />kB reaalajas)</translation>
-<translation id="4312866146174492540">Blokeeritud (vaikimisi)</translation>
 <translation id="4348766275249686434">Vigade kogumine</translation>
 <translation id="4363771538994847871">Ühtegi ülekandekohta ei leitud. Kas vajad abi?</translation>
 <translation id="4384652540891215547">Aktiveeri laiendus</translation>
@@ -191,7 +180,6 @@
 <translation id="4726710629007580002">Sellest laiendusest sõltuvad järgmised laiendused:</translation>
 <translation id="4816492930507672669">Mahutatakse leheküljele</translation>
 <translation id="4839303808932127586">Sa&amp;lvesta video nimega...</translation>
-<translation id="4851858059374029925">Kas installida <ph name="PLUGIN_NAME" />? Installige vaid usaldusväärseid pistikprogramme.</translation>
 <translation id="4911714727432509308">Ühelegi laiendusele ei ole klaviatuuri otseteid määratud.</translation>
 <translation id="4912643508233590958">Jõuderežiimist äratamine</translation>
 <translation id="4927301649992043040">Laienduse pakkimine</translation>
@@ -228,11 +216,9 @@
 <translation id="5575473780076478375">Inkognito laiendus: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5623842676595125836">Madal</translation>
 <translation id="5627086634964711283">Lisaks juhib see seda, mis lehte kuvatakse avalehe nupul klõpsamisel.</translation>
-<translation id="5646376287012673985">Asukoht</translation>
 <translation id="5715711091495208045">Pistikprogrammi vahendaja: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">PDF-ina salvestamine</translation>
 <translation id="5764483294734785780">Sa&amp;lvesta heli nimega...</translation>
-<translation id="5778550464785688721">Täielik ligipääs MIDI-seadmetele</translation>
 <translation id="5780973441651030252">Protsessi prioriteet</translation>
 <translation id="5804241973901381774">Load</translation>
 <translation id="5828633471261496623">Printimine...</translation>
@@ -240,7 +226,6 @@
 <translation id="5848934677402291689">PDF-ina salvestamine käib...</translation>
 <translation id="5849869942539715694">Paki laiendus...</translation>
 <translation id="5910363049092958439">Sa&amp;lvesta pilt nimega...</translation>
-<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 kasutusel} other {# kasutusel}}</translation>
 <translation id="5956585768868398362">Kas see on otsinguleht, mida ootasite?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (tipp <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Lisaks juhib see seda, mis leht kuvatakse avalehe nupul klõpsamisel või omnikastikeses otsingu tegemisel.</translation>
@@ -280,7 +265,6 @@
 <translation id="6812841287760418429">Säilita muudatused</translation>
 <translation id="682123305478866682">Töölaua ülekanne</translation>
 <translation id="6841186874966388268">Viga</translation>
-<translation id="6863910145616405334">Pistikprogrammi ei leitud</translation>
 <translation id="6886871292305414135">Ava link uuel &amp;vahelehel</translation>
 <translation id="6900284862687837908">Taustarakendus: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Eemalda juurdepääs failile</translation>
@@ -291,7 +275,6 @@
 <translation id="7006634003215061422">Allveeris</translation>
 <translation id="7013485839273047434">Hangi rohkem laiendusi</translation>
 <translation id="708060913198414444">K&amp;opeeri heli aadress</translation>
-<translation id="7105578512429498960">Installige selle sisu kuvamiseks pistikprogramm <ph name="PLUGIN_NAME" /></translation>
 <translation id="7144878232160441200">Proovi uuesti</translation>
 <translation id="7206693748120342859">Pistikprogrammi <ph name="PLUGIN_NAME" /> allalaadimine ...</translation>
 <translation id="7287143125007575591">Juurdepääs on keelatud.</translation>
@@ -339,7 +322,6 @@ Võtmefail: <ph name="KEY_FILE" />
 Hoidke oma võtmefail kindlas kohas. Teil läheb seda oma laiendi uute versioonide loomiseks vaja.</translation>
 <translation id="8004582292198964060">Brauser</translation>
 <translation id="8023801379949507775">Värskenda laiendusi</translation>
-<translation id="8037357227543935929">Küsitakse (vaikimisi)</translation>
 <translation id="8069615408251337349">Google pilvprintimine</translation>
 <translation id="8071432093239591881">Prinditakse pildina</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
@@ -357,7 +339,6 @@ Hoidke oma võtmefail kindlas kohas. Teil läheb seda oma laiendi uute versiooni
 <translation id="8512476990829870887">Lõpeta toiming</translation>
 <translation id="8523493869875972733">Säilita muudatused</translation>
 <translation id="8546306075665861288">Piltide vahemälu</translation>
-<translation id="855705891482654011">Luba laiendus</translation>
 <translation id="8584280235376696778">&amp;Ava video uuel kaardil</translation>
 <translation id="8605428685123651449">SQLite'i mälu</translation>
 <translation id="8615618338313291042">Inkognito rakendus: <ph name="APP_NAME" /></translation>
@@ -367,7 +348,6 @@ Hoidke oma võtmefail kindlas kohas. Teil läheb seda oma laiendi uute versiooni
 <translation id="8714838604780058252">Taustapildid</translation>
 <translation id="8719653885894320876">Pistikprogrammi <ph name="PLUGIN_NAME" /> allalaadimine ebaõnnestus</translation>
 <translation id="873545264931343897">Kui pistikprogrammi <ph name="PLUGIN_NAME" /> värskendamine lõpetatakse, laadige leht selle aktiveerimiseks uuesti</translation>
-<translation id="8763204422633679667">Kui pistikprogrammi <ph name="PLUGIN_NAME" /> installimine lõpetatakse, laadige leht selle aktiveerimiseks uuesti</translation>
 <translation id="8770406935328356739">Laienduse juurkaust: </translation>
 <translation id="8774934320277480003">Ülaveeris</translation>
 <translation id="8808478386290700967">Veebipood</translation>
@@ -381,7 +361,6 @@ Hoidke oma võtmefail kindlas kohas. Teil läheb seda oma laiendi uute versiooni
 <translation id="8996526648899750015">Lisa konto...</translation>
 <translation id="9027459031423301635">Ava link uuel &amp;vahelehel</translation>
 <translation id="9088234649737575428">Pistikprogramm <ph name="PLUGIN_NAME" /> on ettevõtte reegliga keelatud</translation>
-<translation id="9145718805518496796">Laienduse pakkimine</translation>
 <translation id="9170848237812810038">&amp;Võta tagasi</translation>
 <translation id="9215293857209265904">Lisati „<ph name="EXTENSION_NAME" />”</translation>
 <translation id="9219103736887031265">Pildid</translation>

@@ -4,11 +4,10 @@
 
 #include "components/translate/core/browser/translate_download_manager.h"
 
-#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "components/prefs/pref_service.h"
-#include "components/translate/core/common/translate_pref_names.h"
+#include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/common/translate_switches.h"
 
 namespace translate {
@@ -25,33 +24,25 @@ TranslateDownloadManager::TranslateDownloadManager()
 TranslateDownloadManager::~TranslateDownloadManager() {}
 
 void TranslateDownloadManager::Shutdown() {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
   language_list_.reset();
   script_.reset();
   request_context_ = NULL;
 }
 
 // static
-void TranslateDownloadManager::RequestLanguageList() {
+void TranslateDownloadManager::RequestLanguageList(PrefService* prefs) {
+  // We don't want to do this when translate is disabled.
+  DCHECK(prefs != NULL);
+  if (!prefs->GetBoolean(prefs::kEnableTranslate))
+    return;
+
   TranslateLanguageList* language_list = GetInstance()->language_list();
   if (!language_list) {
     NOTREACHED();
     return;
   }
-
   language_list->RequestLanguageList();
-}
-
-// static
-void TranslateDownloadManager::RequestLanguageList(PrefService* prefs) {
-  // We don't want to do this when translate is disabled.
-  DCHECK(prefs != NULL);
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          translate::switches::kDisableTranslate) ||
-      !prefs->GetBoolean(prefs::kEnableTranslate)) {
-    return;
-  }
-
-  RequestLanguageList();
 }
 
 // static
@@ -100,17 +91,6 @@ bool TranslateDownloadManager::IsSupportedLanguage(
   return language_list->IsSupportedLanguage(language);
 }
 
-// static
-bool TranslateDownloadManager::IsAlphaLanguage(const std::string& language) {
-  TranslateLanguageList* language_list = GetInstance()->language_list();
-  if (!language_list) {
-    NOTREACHED();
-    return false;
-  }
-
-  return language_list->IsAlphaLanguage(language);
-}
-
 void TranslateDownloadManager::ClearTranslateScriptForTesting() {
   if (script_.get() == NULL) {
     NOTREACHED();
@@ -120,11 +100,13 @@ void TranslateDownloadManager::ClearTranslateScriptForTesting() {
 }
 
 void TranslateDownloadManager::ResetForTesting() {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
   language_list_.reset(new TranslateLanguageList);
   script_.reset(new TranslateScript);
 }
 
 void TranslateDownloadManager::SetTranslateScriptExpirationDelay(int delay_ms) {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
   if (script_.get() == NULL) {
     NOTREACHED();
     return;

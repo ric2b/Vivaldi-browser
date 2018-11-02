@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "ash/shelf/shelf_delegate.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -17,6 +16,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/arc/arc_auth_context.h"
 #include "chrome/browser/chromeos/arc/arc_auth_notification.h"
+#include "chrome/browser/chromeos/arc/arc_migration_guide_notification.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -213,25 +213,14 @@ void ArcSessionManager::OnSessionStopped(ArcStopReason reason,
     return;
   }
 
+  SetState(State::STOPPED);
+
   // TODO(crbug.com/625923): Use |reason| to report more detailed errors.
   if (arc_sign_in_timer_.IsRunning())
     OnProvisioningFinished(ProvisioningResult::ARC_STOPPED);
 
   for (auto& observer : observer_list_)
     observer.OnArcSessionStopped(reason);
-
-  // Transition to the ARC data remove state.
-  if (!profile_->GetPrefs()->GetBoolean(prefs::kArcDataRemoveRequested)) {
-    // TODO(crbug.com/665316): This is the workaround for the bug.
-    // If it is not necessary to remove the data, MaybeStartArcDataRemoval()
-    // synchronously calls MaybeReenableArc(), which causes unexpected
-    // ARC session stop. (Please see the bug for details).
-    SetState(State::REMOVING_DATA_DIR);
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&ArcSessionManager::MaybeReenableArc,
-                              weak_ptr_factory_.GetWeakPtr()));
-    return;
-  }
 
   MaybeStartArcDataRemoval();
 }
@@ -372,8 +361,7 @@ void ArcSessionManager::OnProvisioningFinished(ProvisioningResult result) {
     if (profile_->GetPrefs()->HasPrefPath(prefs::kArcSignedIn))
       profile_->GetPrefs()->SetBoolean(prefs::kArcSignedIn, false);
     ShutdownSession();
-    if (support_host_)
-      support_host_->ShowError(error, true);
+    ShowArcSupportHostError(error, true);
     return;
   }
 
@@ -391,8 +379,7 @@ void ArcSessionManager::OnProvisioningFinished(ProvisioningResult result) {
 
   // We'll delay shutting down the ARC instance in this case to allow people
   // to send feedback.
-  if (support_host_)
-    support_host_->ShowError(error, true /* = show send feedback button */);
+  ShowArcSupportHostError(error, true /* = show send feedback button */);
 }
 
 void ArcSessionManager::SetState(State state) {
@@ -587,13 +574,26 @@ void ArcSessionManager::RequestEnableImpl() {
   // there will be no one who is eligible to accept them.
   // If opt-in verification is disabled, skip negotiation, too. This is for
   // testing purpose.
-  if (prefs->GetBoolean(prefs::kArcSignedIn) || ShouldArcAlwaysStart() ||
-      IsArcKioskMode() || IsArcOptInVerificationDisabled()) {
+  const bool start_arc_directly = prefs->GetBoolean(prefs::kArcSignedIn) ||
+                                  ShouldArcAlwaysStart() || IsArcKioskMode() ||
+                                  IsArcOptInVerificationDisabled();
+
+  // When ARC is blocked because of filesystem compatibility, do not proceed
+  // to starting ARC nor follow further state transitions.
+  if (IsArcBlockedDueToIncompatibleFileSystem(profile_)) {
+    // If the next step was the ToS negotiation, show a notification instead.
+    // Otherwise, be silent now. Users are notified when clicking ARC app icons.
+    if (!start_arc_directly && !g_disable_ui_for_testing)
+      arc::ShowArcMigrationGuideNotification(profile_);
+    return;
+  }
+
+  if (start_arc_directly) {
     StartArc();
     // Check Android management in parallel.
     // Note: StartBackgroundAndroidManagementCheck() may call
     // OnBackgroundAndroidManagementChecked() synchronously (or
-    // asynchornously). In the callback, Google Play Store enabled preference
+    // asynchronously). In the callback, Google Play Store enabled preference
     // can be set to false if managed, and it triggers RequestDisable() via
     // ArcPlayStoreEnabledPreferenceHandler.
     // Thus, StartArc() should be called so that disabling should work even
@@ -626,7 +626,15 @@ void ArcSessionManager::RequestDisable() {
 void ArcSessionManager::RequestArcDataRemoval() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(profile_);
-  // TODO(hidehiko): DCHECK the previous state. This is called for three cases;
+
+  // The check if migration is allowed is done to make sure the data is not
+  // removed if the device had ARC enabled and became disabled as result of
+  // migration to ext4 policy.
+  // TODO(igorcov): Remove this check after migration. crbug.com/725493
+  if (!arc::IsArcMigrationAllowed())
+    return;
+
+  // TODO(hidehiko): DCHECK the previous state. This is called for four cases;
   // 1) Supporting managed user initial disabled case (Please see also
   //    ArcPlayStoreEnabledPreferenceHandler::Start() for details).
   // 2) Supporting enterprise triggered data removal.
@@ -665,10 +673,8 @@ void ArcSessionManager::MaybeStartTermsOfServiceNegotiation() {
     // If the user attempts to re-enable ARC while the ARC instance is still
     // running the user should not be able to continue until the ARC instance
     // has stopped.
-    if (support_host_) {
-      support_host_->ShowError(
-          ArcSupportHost::Error::SIGN_IN_SERVICE_UNAVAILABLE_ERROR, false);
-    }
+    ShowArcSupportHostError(
+        ArcSupportHost::Error::SIGN_IN_SERVICE_UNAVAILABLE_ERROR, false);
     UpdateOptInCancelUMA(OptInCancelReason::SESSION_BUSY);
     return;
   }
@@ -772,6 +778,9 @@ void ArcSessionManager::StartAndroidManagementCheck() {
     support_host_->ShowArcLoading();
   }
 
+  for (auto& observer : observer_list_)
+    observer.OnArcOptInManagementCheckStarted();
+
   android_management_checker_ = base::MakeUnique<ArcAndroidManagementChecker>(
       profile_, context_->token_service(), context_->account_id(),
       false /* retry_on_error */);
@@ -798,17 +807,13 @@ void ArcSessionManager::OnAndroidManagementChecked(
       StartArc();
       break;
     case policy::AndroidManagementClient::Result::MANAGED:
-      if (support_host_) {
-        support_host_->ShowError(
-            ArcSupportHost::Error::ANDROID_MANAGEMENT_REQUIRED_ERROR, false);
-      }
+      ShowArcSupportHostError(
+          ArcSupportHost::Error::ANDROID_MANAGEMENT_REQUIRED_ERROR, false);
       UpdateOptInCancelUMA(OptInCancelReason::ANDROID_MANAGEMENT_REQUIRED);
       break;
     case policy::AndroidManagementClient::Result::ERROR:
-      if (support_host_) {
-        support_host_->ShowError(
-            ArcSupportHost::Error::SERVER_COMMUNICATION_ERROR, true);
-      }
+      ShowArcSupportHostError(ArcSupportHost::Error::SERVER_COMMUNICATION_ERROR,
+                              true);
       UpdateOptInCancelUMA(OptInCancelReason::NETWORK_ERROR);
       break;
   }
@@ -885,9 +890,7 @@ void ArcSessionManager::MaybeStartArcDataRemoval() {
   DCHECK(profile_);
   // Data removal cannot run in parallel with ARC session.
   DCHECK(arc_session_runner_->IsStopped());
-
-  // TODO(hidehiko): DCHECK the previous state, when the state machine is
-  // fixed.
+  DCHECK_EQ(State::STOPPED, state_);
   SetState(State::REMOVING_DATA_DIR);
 
   // TODO(hidehiko): Extract the implementation of data removal, so that
@@ -1010,7 +1013,7 @@ void ArcSessionManager::OnRetryClicked() {
 
 void ArcSessionManager::OnSendFeedbackClicked() {
   DCHECK(support_host_);
-  chrome::OpenFeedbackDialog(nullptr);
+  chrome::OpenFeedbackDialog(nullptr, chrome::kFeedbackSourceArcApp);
 }
 
 void ArcSessionManager::SetArcSessionRunnerForTesting(
@@ -1027,6 +1030,15 @@ void ArcSessionManager::SetAttemptUserExitCallbackForTesting(
     const base::Closure& callback) {
   DCHECK(!callback.is_null());
   attempt_user_exit_callback_ = callback;
+}
+
+void ArcSessionManager::ShowArcSupportHostError(
+    ArcSupportHost::Error error,
+    bool should_show_send_feedback) {
+  if (support_host_)
+    support_host_->ShowError(error, should_show_send_feedback);
+  for (auto& observer : observer_list_)
+    observer.OnArcErrorShowRequested(error);
 }
 
 std::ostream& operator<<(std::ostream& os,

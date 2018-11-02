@@ -71,7 +71,8 @@ void ReloadLocaleResourcesOnIOThread(const std::string& new_locale) {
 void ReloadLocaleResources(const std::string& new_locale) {
   content::BrowserThread::PostTaskAndReply(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&ReloadLocaleResourcesOnIOThread, base::ConstRef(new_locale)),
+      base::BindOnce(&ReloadLocaleResourcesOnIOThread,
+                     base::ConstRef(new_locale)),
       base::MessageLoop::QuitWhenIdleClosure());
   content::RunMessageLoop();
 }
@@ -103,8 +104,8 @@ void WebUIBidiCheckerBrowserTest::SetUpInProcessBrowserTestFixture() {
 void WebUIBidiCheckerBrowserTest::RunBidiCheckerOnPage(
     const std::string& page_url, bool is_rtl) {
   ui_test_utils::NavigateToURL(browser(), GURL(page_url));
-  ASSERT_TRUE(RunJavascriptTest("runBidiChecker", new base::Value(page_url),
-                                new base::Value(is_rtl)));
+  ASSERT_TRUE(RunJavascriptTest("runBidiChecker", base::Value(page_url),
+                                base::Value(is_rtl)));
 }
 
 void DISABLED_WebUIBidiCheckerBrowserTestLTR::RunBidiCheckerOnPage(
@@ -143,7 +144,7 @@ void DISABLED_WebUIBidiCheckerBrowserTestRTL::TearDownOnMainThread() {
 // Tests
 
 //==============================
-// chrome://settings/history
+// chrome://history
 //==============================
 
 static void SetupHistoryPageTest(Browser* browser,
@@ -164,13 +165,13 @@ IN_PROC_BROWSER_TEST_F(DISABLED_WebUIBidiCheckerBrowserTestLTR,
   SetupHistoryPageTest(browser(),
                        "http://www.ynet.co.il",
                        "\xD7\x91\xD7\x93\xD7\x99\xD7\xA7\xD7\x94\x21");
-  RunBidiCheckerOnPage(chrome::kChromeUIHistoryFrameURL);
+  RunBidiCheckerOnPage(chrome::kChromeUIHistoryURL);
 }
 
 IN_PROC_BROWSER_TEST_F(DISABLED_WebUIBidiCheckerBrowserTestRTL,
                        TestHistoryPage) {
   SetupHistoryPageTest(browser(), "http://www.google.com", "Google");
-  RunBidiCheckerOnPage(chrome::kChromeUIHistoryFrameURL);
+  RunBidiCheckerOnPage(chrome::kChromeUIHistoryURL);
 }
 
 //==============================
@@ -722,18 +723,4 @@ IN_PROC_BROWSER_TEST_F(DISABLED_WebUIBidiCheckerBrowserTestLTR, TestHelpFrame) {
 
 IN_PROC_BROWSER_TEST_F(DISABLED_WebUIBidiCheckerBrowserTestRTL, TestHelpFrame) {
   RunBidiCheckerOnPage(chrome::kChromeUIHelpFrameURL);
-}
-
-//==============================
-// chrome://history-frame
-//==============================
-
-IN_PROC_BROWSER_TEST_F(DISABLED_WebUIBidiCheckerBrowserTestLTR,
-                       TestHistoryFrame) {
-  RunBidiCheckerOnPage(chrome::kChromeUIHistoryFrameURL);
-}
-
-IN_PROC_BROWSER_TEST_F(DISABLED_WebUIBidiCheckerBrowserTestRTL,
-                       TestHistoryFrame) {
-  RunBidiCheckerOnPage(chrome::kChromeUIHistoryFrameURL);
 }

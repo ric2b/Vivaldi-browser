@@ -70,7 +70,7 @@ void TemplateUrlServiceAndroid::SetUserSelectedDefaultSearchProvider(
 jint TemplateUrlServiceAndroid::GetDefaultSearchProviderIndex(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) const {
-  TemplateURL* default_search_provider =
+  const TemplateURL* default_search_provider =
       template_url_service_->GetDefaultSearchProvider();
   auto it = std::find(template_urls_.begin(), template_urls_.end(),
                       default_search_provider);
@@ -91,7 +91,7 @@ jint TemplateUrlServiceAndroid::GetTemplateUrlCount(
   return template_urls_.size();
 }
 
-jboolean TemplateUrlServiceAndroid::IsSearchProviderManaged(
+jboolean TemplateUrlServiceAndroid::IsDefaultSearchManaged(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   return template_url_service_->is_default_search_managed();
@@ -111,11 +111,21 @@ jboolean TemplateUrlServiceAndroid::IsSearchByImageAvailable(
 jboolean TemplateUrlServiceAndroid::IsDefaultSearchEngineGoogle(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  TemplateURL* default_search_provider =
+  const TemplateURL* default_search_provider =
       template_url_service_->GetDefaultSearchProvider();
   return default_search_provider &&
       default_search_provider->url_ref().HasGoogleBaseURLs(
           template_url_service_->search_terms_data());
+}
+
+jboolean
+TemplateUrlServiceAndroid::IsSearchResultsPageFromDefaultSearchProvider(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    const base::android::JavaParamRef<jstring>& jurl) {
+  GURL url(base::android::ConvertJavaStringToUTF8(env, jurl));
+  return template_url_service_->IsSearchResultsPageFromDefaultSearchProvider(
+      url);
 }
 
 base::android::ScopedJavaLocalRef<jobject>
@@ -133,12 +143,12 @@ TemplateUrlServiceAndroid::GetTemplateUrlAt(JNIEnv* env,
 void TemplateUrlServiceAndroid::OnTemplateURLServiceLoaded() {
   template_url_subscription_.reset();
   JNIEnv* env = base::android::AttachCurrentThread();
-  if (weak_java_obj_.get(env).is_null())
+  auto java_obj = weak_java_obj_.get(env);
+  if (java_obj.is_null())
     return;
   LoadTemplateURLs();
 
-  Java_TemplateUrlService_templateUrlServiceLoaded(env,
-                                                   weak_java_obj_.get(env));
+  Java_TemplateUrlService_templateUrlServiceLoaded(env, java_obj);
 }
 
 void TemplateUrlServiceAndroid::LoadTemplateURLs() {
@@ -158,7 +168,7 @@ void TemplateUrlServiceAndroid::LoadTemplateURLs() {
             });
 
   // Place any user-selected default engine next.
-  TemplateURL* dsp = template_url_service_->GetDefaultSearchProvider();
+  const TemplateURL* dsp = template_url_service_->GetDefaultSearchProvider();
   it = std::partition(it, template_urls_.end(),
                       [dsp](const TemplateURL* t_url) { return t_url == dsp; });
 
@@ -183,12 +193,12 @@ void TemplateUrlServiceAndroid::LoadTemplateURLs() {
 
 void TemplateUrlServiceAndroid::OnTemplateURLServiceChanged() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  if (weak_java_obj_.get(env).is_null())
+  auto java_obj = weak_java_obj_.get(env);
+  if (java_obj.is_null())
     return;
   LoadTemplateURLs();
 
-  Java_TemplateUrlService_onTemplateURLServiceChanged(env,
-                                                      weak_java_obj_.get(env));
+  Java_TemplateUrlService_onTemplateURLServiceChanged(env, java_obj);
 }
 
 base::android::ScopedJavaLocalRef<jstring>
@@ -238,7 +248,7 @@ TemplateUrlServiceAndroid::ReplaceSearchTermsInUrl(
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& jquery,
     const JavaParamRef<jstring>& jcurrent_url) {
-  TemplateURL* default_provider =
+  const TemplateURL* default_provider =
       template_url_service_->GetDefaultSearchProvider();
 
   base::string16 query(base::android::ConvertJavaStringToUTF16(env, jquery));
@@ -320,7 +330,7 @@ TemplateUrlServiceAndroid::AddSearchEngineForTesting(
       base::android::ConvertJavaStringToUTF16(env, jkeyword);
   data.SetShortName(keyword);
   data.SetKeyword(keyword);
-  data.SetURL("http://testurl");
+  data.SetURL("https://testurl.com/?searchstuff={searchTerms}");
   data.favicon_url = GURL("http://favicon.url");
   data.safe_for_autoreplace = true;
   data.input_encodings.push_back("UTF-8");
@@ -333,6 +343,7 @@ TemplateUrlServiceAndroid::AddSearchEngineForTesting(
       base::Time::Now() - base::TimeDelta::FromDays((int) age_in_days);
   TemplateURL* t_url =
       template_url_service_->Add(base::MakeUnique<TemplateURL>(data));
+  CHECK(t_url) << "Failed adding template url for: " << keyword;
   return base::android::ConvertUTF16ToJavaString(env, t_url->data().keyword());
 }
 

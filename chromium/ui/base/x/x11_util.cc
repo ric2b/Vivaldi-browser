@@ -319,12 +319,10 @@ XcursorImage* SkBitmapToXcursorImage(const SkBitmap* cursor_image,
   image->yhot = std::min(bitmap->height() - 1, hotspot_point.y());
 
   if (bitmap->width() && bitmap->height()) {
-    bitmap->lockPixels();
     // The |bitmap| contains ARGB image, so just copy it.
     memcpy(image->pixels,
            bitmap->getPixels(),
            bitmap->width() * bitmap->height() * 4);
-    bitmap->unlockPixels();
   }
 
   return image;
@@ -1373,8 +1371,6 @@ void LogErrorEventDescription(XDisplay* dpy,
       << " (" << request_str << ")";
 }
 
-#if !defined(OS_CHROMEOS)
-
 // static
 XVisualManager* XVisualManager::GetInstance() {
   return base::Singleton<XVisualManager>::get();
@@ -1387,7 +1383,7 @@ XVisualManager::XVisualManager()
       transparent_visual_id_(0),
       using_software_rendering_(false),
       have_gpu_argb_visual_(false) {
-  int visuals_len;
+  int visuals_len = 0;
   XVisualInfo visual_template;
   visual_template.screen = DefaultScreen(display_);
   gfx::XScopedPtr<XVisualInfo[]> visual_list(XGetVisualInfo(
@@ -1429,8 +1425,7 @@ void XVisualManager::ChooseVisualForWindow(bool want_argb_visual,
                                            int* depth,
                                            Colormap* colormap,
                                            bool* using_argb_visual) {
-  bool use_argb = want_argb_visual && using_compositing_wm_ &&
-                  (using_software_rendering_ || have_gpu_argb_visual_);
+  bool use_argb = want_argb_visual && ArgbVisualAvailable();
   VisualID visual_id = use_argb && transparent_visual_id_
                            ? transparent_visual_id_
                            : system_visual_id_;
@@ -1466,6 +1461,11 @@ bool XVisualManager::OnGPUInfoChanged(bool software_rendering,
   return true;
 }
 
+bool XVisualManager::ArgbVisualAvailable() const {
+  return using_compositing_wm_ &&
+         (using_software_rendering_ || have_gpu_argb_visual_);
+}
+
 XVisualManager::XVisualData::XVisualData(XVisualInfo visual_info)
     : visual_info(visual_info), colormap_(CopyFromParent) {}
 
@@ -1482,8 +1482,6 @@ Colormap XVisualManager::XVisualData::GetColormap() {
   }
   return colormap_;
 }
-
-#endif
 
 // ----------------------------------------------------------------------------
 // End of x11_util_internal.h

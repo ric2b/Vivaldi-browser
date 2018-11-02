@@ -12,11 +12,11 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/test/sequenced_worker_pool_owner.h"
-#include "components/update_client/component_patcher_operation.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/test/scoped_task_environment.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/update_client/component_unpacker.h"
 #include "components/update_client/test_configurator.h"
 #include "components/update_client/test_installer.h"
@@ -73,24 +73,25 @@ class ComponentUnpackerTest : public testing::Test {
  protected:
   void RunThreads();
 
-  base::MessageLoopForUI message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  const scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_ =
+      base::ThreadTaskRunnerHandle::Get();
   base::RunLoop runloop_;
   base::Closure quit_closure_;
 
-  std::unique_ptr<base::SequencedWorkerPoolOwner> worker_pool_;
   scoped_refptr<update_client::TestConfigurator> config_;
 
   ComponentUnpacker::Result result_;
 };
 
 ComponentUnpackerTest::ComponentUnpackerTest()
-    : worker_pool_(new base::SequencedWorkerPoolOwner(2, "test")) {
+    : scoped_task_environment_(
+          base::test::ScopedTaskEnvironment::MainThreadType::UI) {
   quit_closure_ = runloop_.QuitClosure();
 
-  auto pool = worker_pool_->pool();
   config_ = new TestConfigurator(
-      pool->GetSequencedTaskRunner(pool->GetSequenceToken()),
-      message_loop_.task_runner());
+      base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}),
+      base::ThreadTaskRunnerHandle::Get());
 }
 
 ComponentUnpackerTest::~ComponentUnpackerTest() {}
@@ -102,7 +103,7 @@ void ComponentUnpackerTest::RunThreads() {
 void ComponentUnpackerTest::UnpackComplete(
     const ComponentUnpacker::Result& result) {
   result_ = result;
-  message_loop_.task_runner()->PostTask(FROM_HERE, quit_closure_);
+  main_thread_task_runner_->PostTask(FROM_HERE, quit_closure_);
 }
 
 TEST_F(ComponentUnpackerTest, UnpackFullCrx) {
@@ -160,7 +161,7 @@ TEST_F(ComponentUnpackerTest, UnpackFileHashMismatch) {
                                         base::Unretained(this)));
   RunThreads();
 
-  EXPECT_EQ(UnpackerError::kInvalidId, result_.error);
+  EXPECT_EQ(UnpackerError::kInvalidFile, result_.error);
   EXPECT_EQ(0, result_.extended_error);
 
   EXPECT_TRUE(result_.unpack_path.empty());

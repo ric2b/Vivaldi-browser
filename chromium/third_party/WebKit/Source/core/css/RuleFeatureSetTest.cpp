@@ -439,7 +439,7 @@ TEST_F(RuleFeatureSetTest, contentPseudo) {
 
   EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch, CollectFeatures(".a .b"));
 
-  invalidation_lists.descendants.Clear();
+  invalidation_lists.descendants.clear();
   CollectInvalidationSetsForClass(invalidation_lists, "a");
   ExpectClassesInvalidation("b", "c", invalidation_lists.descendants);
 }
@@ -504,30 +504,6 @@ TEST_F(RuleFeatureSetTest, siblingRulesNthBeforeContentPseudo) {
 TEST_F(RuleFeatureSetTest, siblingRulesNthAfterContentPseudo) {
   EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch,
             CollectFeatures(".a ::content :nth-child(2)"));
-  ExpectSiblingRuleCount(1);
-}
-
-TEST_F(RuleFeatureSetTest, siblingRulesBeforeDeep) {
-  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch,
-            CollectFeatures("a + b /deep/ .c"));
-  ExpectSiblingRuleCount(1);
-}
-
-TEST_F(RuleFeatureSetTest, siblingRulesAfterDeep) {
-  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch,
-            CollectFeatures(".a /deep/ .b + .c"));
-  ExpectSiblingRuleCount(1);
-}
-
-TEST_F(RuleFeatureSetTest, siblingRulesBeforeShadow) {
-  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch,
-            CollectFeatures(".a + .b::shadow .c"));
-  ExpectSiblingRuleCount(1);
-}
-
-TEST_F(RuleFeatureSetTest, siblingRulesAfterShadow) {
-  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch,
-            CollectFeatures(".a ::shadow .b + .c"));
   ExpectSiblingRuleCount(1);
 }
 

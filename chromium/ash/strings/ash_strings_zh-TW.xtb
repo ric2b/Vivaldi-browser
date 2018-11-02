@@ -25,6 +25,7 @@
 <translation id="164969095109328410">Chrome 裝置</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> 後用盡</translation>
 <translation id="1698760176351776263">IPv6 位址：<ph name="ADDRESS" /></translation>
+<translation id="1734367976349034509">這個裝置受到企業管理</translation>
 <translation id="1747827819627189109">螢幕小鍵盤已啟用</translation>
 <translation id="1823873187264960516">乙太網路：<ph name="ADDRESS" /></translation>
 <translation id="1850504506766569011">Wi-Fi 已關閉。</translation>
@@ -36,7 +37,9 @@
 <translation id="1942830294380034169">溢位按鈕</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2049639323467105390">這個裝置由 <ph name="DOMAIN" /> 管理。</translation>
 <translation id="2050339315714019657">縱向</translation>
+<translation id="207439088875642105">這是由 <ph name="FIRST_PARENT_EMAIL" /> 和 <ph name="SECOND_PARENT_EMAIL" /> 所管理的兒童專用帳戶</translation>
 <translation id="2122028596993374965">停止將 <ph name="TAB_NAME" /> 投放到「<ph name="RECEIVER_NAME" />」</translation>
 <translation id="2127372758936585790">低功率充電器</translation>
 <translation id="2144487987174258011">重新啟動以便更新 Adobe Flash Player</translation>
@@ -44,6 +47,7 @@
 <translation id="225680501294068881">正在掃描裝置...</translation>
 <translation id="2268130516524549846">藍牙已停用</translation>
 <translation id="2268813581635650749">登出所有使用者</translation>
+<translation id="2292698582925480719">顯示比例</translation>
 <translation id="2303600792989757991">切換視窗總覽</translation>
 <translation id="2352467521400612932">觸控筆設定</translation>
 <translation id="2354174487190027830">正在啟用 <ph name="NAME" /></translation>
@@ -71,6 +75,7 @@
 <translation id="3000461861112256445">單聲道音訊</translation>
 <translation id="3009178788565917040">輸出</translation>
 <translation id="3019353588588144572">電池剩餘充電時間：<ph name="TIME_REMAINING" /></translation>
+<translation id="3047477924825107454">這是由 <ph name="MANAGER_EMAIL" /> 所管理的兒童專用帳戶</translation>
 <translation id="3050422059534974565">大寫鍵已啟用。
 按下搜尋鍵或 Shift 鍵即可取消。</translation>
 <translation id="3077734595579995578">Shift</translation>
@@ -125,6 +130,7 @@
 <translation id="4527045527269911712">藍牙裝置「<ph name="DEVICE_NAME" />」要求配對權限。</translation>
 <translation id="453661520163887813"><ph name="TIME" /> 後充飽</translation>
 <translation id="4544944664594876241">螢幕鎖定快速鍵已變更，請改用 <ph name="NEW_SHORTCUT" /> (停用 <ph name="OLD_SHORTCUT" />)。</translation>
+<translation id="4659419629803378708">ChromeVox 已啟用</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">中斷連線</translation>
 <translation id="4849058404725798627">醒目顯示鍵盤焦點所在物件</translation>
@@ -140,6 +146,7 @@
 <translation id="523505283826916779">協助工具設定</translation>
 <translation id="5313326810920013265">藍牙設定</translation>
 <translation id="5331975486040154427">USB-C 裝置 (左後方連接埠)</translation>
+<translation id="5397578532367286026">管理員 (<ph name="MANAGER_EMAIL" />) 可以在 chrome.com 瞭解這名使用者的使用情形和紀錄。</translation>
 <translation id="5430931332414098647">即時網路共用</translation>
 <translation id="5431825016875453137">OpenVPN/L2TP</translation>
 <translation id="544691375626129091">現有使用者已全部加入這個工作階段。</translation>
@@ -147,6 +154,7 @@
 <translation id="5548285847212963613">「<ph name="EXTENSION_NAME" />」擴充功能可協助連線至這個網路。</translation>
 <translation id="5571066253365925590">藍牙已啟用</translation>
 <translation id="5597451508971090205"><ph name="DATE" /><ph name="SHORT_WEEKDAY" /></translation>
+<translation id="5600837773213129531">按下 Ctrl + Alt + Z 鍵即可停用互動朗讀功能。</translation>
 <translation id="5648021990716966815">麥克風插孔</translation>
 <translation id="5744083938413354016">輕觸拖曳</translation>
 <translation id="5777841717266010279">停止共用螢幕？</translation>
@@ -176,6 +184,7 @@
 <translation id="6297287540776456956">使用觸控筆選取擷取範圍</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> 已旋轉到<ph name="ROTATION" /></translation>
 <translation id="632744581670418035">鍵盤自訂快速鍵</translation>
+<translation id="6395038768903208085">交疊互動模式</translation>
 <translation id="639644700271529076">大寫鍵已關閉</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6452181791372256707">拒絕</translation>
@@ -201,8 +210,6 @@
 <translation id="7052914147756339792">設定桌布...</translation>
 <translation id="7066646422045619941">您的管理員已停用這個網路。</translation>
 <translation id="7067196344162293536">自動旋轉</translation>
-<translation id="7097613348211027502">ChromeVox (互動朗讀) 已啟用。
-可按 Ctrl+Alt+Z 鍵停用。</translation>
 <translation id="7098389117866926363">USB-C 裝置 (背面左側連接埠)</translation>
 <translation id="7129360219436193655">雷射筆模式</translation>
 <translation id="714034171374937760">Chromebase</translation>
@@ -217,16 +224,20 @@
 <translation id="742594950370306541">攝影機正在使用中。</translation>
 <translation id="743058460480092004">攝影機和麥克風正在使用中。</translation>
 <translation id="7510334386202674593">Ctrl + Shift + L 鍵</translation>
+<translation id="7526573455193969409">網路可能會受到監控</translation>
 <translation id="7536035074519304529">IP 位址：<ph name="ADDRESS" /></translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> 不支援 <ph name="SPECIFIED_RESOLUTION" />，解析度已變更為 <ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7562368315689366235">表情符號面板</translation>
+<translation id="7569509451529460200">點字模式和 ChromeVox 已啟用</translation>
 <translation id="7581273696622423628">填寫問卷</translation>
 <translation id="7593891976182323525">搜尋鍵或 Shift 鍵</translation>
 <translation id="7649070708921625228">說明</translation>
 <translation id="7692480393933218409">正在為連接的 USB-C 裝置充電</translation>
+<translation id="776344839111254542">按一下即可查看更新詳細資料</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> 小時 <ph name="MINUTE" /> 分鐘</translation>
 <translation id="7823564328645135659">同步處理你的設定後，系統已將語言從「<ph name="FROM_LOCALE" />」變更為「<ph name="TO_LOCALE" />」。</translation>
 <translation id="7904094684485781019">這個帳戶的管理員已禁止多重登入。</translation>
+<translation id="7951523953736115461">夜燈</translation>
 <translation id="7977927628060636163">正在搜尋行動網路...</translation>
 <translation id="7982789257301363584">網路</translation>
 <translation id="8000066093800657092">沒有網路</translation>
@@ -244,6 +255,7 @@
 <translation id="8433186206711564395">網路設定</translation>
 <translation id="8433977262951327081">在檔案櫃中顯示輸入選項選單方塊的快速鍵已變更，請改用：<ph name="NEW_SHORTCUT" /> (停用 <ph name="OLD_SHORTCUT" />)。</translation>
 <translation id="8454013096329229812">Wi-Fi 已開啟。</translation>
+<translation id="847056008324733326">顯示比例設定</translation>
 <translation id="8484916590211895857"><ph name="NAME" />：正在重新連線...</translation>
 <translation id="8517041960877371778"><ph name="DEVICE_TYPE" /> 在開啟時可能無法充電。</translation>
 <translation id="8639760480004882931">剩餘電量：<ph name="PERCENTAGE" /></translation>

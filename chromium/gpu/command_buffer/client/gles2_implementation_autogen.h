@@ -996,6 +996,10 @@ void BindUniformLocationCHROMIUM(GLuint program,
 
 void BindTexImage2DCHROMIUM(GLenum target, GLint imageId) override;
 
+void BindTexImage2DWithInternalformatCHROMIUM(GLenum target,
+                                              GLenum internalformat,
+                                              GLint imageId) override;
+
 void ReleaseTexImage2DCHROMIUM(GLenum target, GLint imageId) override;
 
 void TraceBeginCHROMIUM(const char* category_name,
@@ -1066,7 +1070,8 @@ void ScheduleDCLayerSharedStateCHROMIUM(GLfloat opacity,
                                         GLint z_order,
                                         const GLfloat* transform) override;
 
-void ScheduleDCLayerCHROMIUM(GLuint contents_texture_id,
+void ScheduleDCLayerCHROMIUM(GLsizei num_textures,
+                             const GLuint* contents_texture_ids,
                              const GLfloat* contents_rect,
                              GLuint background_color,
                              GLuint edge_aa_mask,
@@ -1226,5 +1231,11 @@ void SetDrawRectangleCHROMIUM(GLint x,
                               GLint height) override;
 
 void SetEnableDCLayersCHROMIUM(GLboolean enabled) override;
+
+void InitializeDiscardableTextureCHROMIUM(GLuint texture_id) override;
+
+void UnlockDiscardableTextureCHROMIUM(GLuint texture_id) override;
+
+bool LockDiscardableTextureCHROMIUM(GLuint texture_id) override;
 
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_IMPLEMENTATION_AUTOGEN_H_

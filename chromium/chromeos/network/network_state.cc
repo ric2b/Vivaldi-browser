@@ -7,14 +7,17 @@
 #include <stddef.h>
 
 #include <memory>
+#include <utility>
 
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "chromeos/network/network_profile_handler.h"
 #include "chromeos/network/network_type_pattern.h"
 #include "chromeos/network/network_util.h"
 #include "chromeos/network/onc/onc_utils.h"
 #include "chromeos/network/shill_property_util.h"
+#include "chromeos/network/tether_constants.h"
 #include "components/device_event_log/device_event_log.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -198,6 +201,8 @@ bool NetworkState::PropertyChanged(const std::string& key,
 
     vpn_provider_type_ = vpn_provider_type;
     return true;
+  } else if (key == shill::kTetheringProperty) {
+    return GetStringValue(key, value, &tethering_state_);
   }
   return false;
 }
@@ -258,7 +263,18 @@ void NetworkState::GetStateProperties(base::DictionaryValue* dictionary) const {
           shill::kHostProperty, third_party_vpn_provider_extension_id_);
     }
     dictionary->SetWithoutPathExpansion(shill::kProviderProperty,
-                                        provider_property.release());
+                                        std::move(provider_property));
+  }
+
+  // Tether properties
+  if (NetworkTypePattern::Tether().MatchesType(type())) {
+    dictionary->SetIntegerWithoutPathExpansion(kTetherBatteryPercentage,
+                                               battery_percentage());
+    dictionary->SetStringWithoutPathExpansion(kTetherCarrier, carrier());
+    dictionary->SetBooleanWithoutPathExpansion(kTetherHasConnectedToHost,
+                                               tether_has_connected_to_host());
+    dictionary->SetIntegerWithoutPathExpansion(kTetherSignalStrength,
+                                               signal_strength());
   }
 
   // Wireless properties
@@ -348,6 +364,11 @@ std::string NetworkState::connection_state() const {
 void NetworkState::set_connection_state(const std::string connection_state) {
   last_connection_state_ = connection_state_;
   connection_state_ = connection_state;
+}
+
+bool NetworkState::IsUsingMobileData() const {
+  return type() == shill::kTypeCellular || type() == chromeos::kTypeTether ||
+         tethering_state() == shill::kTetheringConfirmedState;
 }
 
 bool NetworkState::IsDynamicWep() const {

@@ -20,6 +20,7 @@
 #include "build/build_config.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
+#include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "components/password_manager/core/browser/stub_credentials_filter.h"
@@ -38,11 +39,28 @@ using testing::IsEmpty;
 using testing::Pointee;
 using testing::Return;
 using testing::UnorderedElementsAre;
+using testing::UnorderedElementsAreArray;
 using testing::WithArg;
 
 namespace password_manager {
 
 namespace {
+
+constexpr const char kTestHttpURL[] = "http://example.in/";
+constexpr const char kTestHttpActionURL[] = "http://login.example.org/";
+
+constexpr const char kTestHttpsURL[] = "https://example.in/";
+constexpr const char kTestHttpsActionURL[] = "https://login.example.org/";
+
+constexpr const char kTestPSLMatchingHttpURL[] = "http://psl.example.in/";
+constexpr const char kTestPSLMatchingHttpsURL[] = "https://psl.example.in/";
+
+constexpr const char kTestHttpSameOrgNameURL[] = "http://sub.example.com/";
+constexpr const char kTestHttpsSameOrgNameURL[] = "https://sub.example.com/";
+
+constexpr const char kTestFederatedRealm[] =
+    "federation://example.in/accounts.google.com";
+constexpr const char kTestFederationURL[] = "https://accounts.google.com/";
 
 class MockConsumer : public FormFetcher::Consumer {
  public:
@@ -102,42 +120,46 @@ class FakePasswordManagerClient : public StubPasswordManagerClient {
   DISALLOW_COPY_AND_ASSIGN(FakePasswordManagerClient);
 };
 
+PasswordForm CreateHTMLForm(const char* origin_url,
+                            const char* username_value,
+                            const char* password_value) {
+  PasswordForm form;
+  form.scheme = PasswordForm::SCHEME_HTML;
+  form.origin = GURL(origin_url);
+  form.signon_realm = origin_url;
+  form.username_value = ASCIIToUTF16(username_value);
+  form.password_value = ASCIIToUTF16(password_value);
+  return form;
+}
+
 // Creates a dummy non-federated form with some basic arbitrary values.
 PasswordForm CreateNonFederated() {
-  PasswordForm form;
-  form.origin = GURL("https://example.in");
-  form.signon_realm = form.origin.spec();
-  form.action = GURL("https://login.example.org");
-  form.username_value = ASCIIToUTF16("user");
-  form.password_value = ASCIIToUTF16("password");
+  PasswordForm form = CreateHTMLForm(kTestHttpsURL, "user", "password");
+  form.action = GURL(kTestHttpsActionURL);
   return form;
 }
 
 // Creates a dummy non-federated HTTP form with some basic arbitrary values.
 PasswordForm CreateHTTPNonFederated() {
-  PasswordForm form;
-  form.origin = GURL("http://example.in");
-  form.signon_realm = form.origin.spec();
-  form.action = GURL("http://login.example.org");
-  form.username_value = ASCIIToUTF16("user");
-  form.password_value = ASCIIToUTF16("password");
+  PasswordForm form = CreateHTMLForm(kTestHttpURL, "user", "password");
+  form.action = GURL(kTestHttpActionURL);
   return form;
 }
 
 // Creates a dummy federated form with some basic arbitrary values.
 PasswordForm CreateFederated() {
   PasswordForm form = CreateNonFederated();
+  form.signon_realm = kTestFederatedRealm;
   form.password_value.clear();
-  form.federation_origin = url::Origin(GURL("https://accounts.google.com/"));
+  form.federation_origin = url::Origin(GURL(kTestFederationURL));
   return form;
 }
 
 // Creates an Android federated credential.
 PasswordForm CreateAndroidFederated() {
-  PasswordForm form = CreateFederated();
-  form.signon_realm = "android://hash@com.example.android/";
-  form.origin = GURL(form.signon_realm);
-  form.action = GURL();
+  PasswordForm form =
+      CreateHTMLForm("android://hash@com.example.android/", "user", "");
+  form.federation_origin = url::Origin(GURL(kTestFederationURL));
   form.is_affiliation_based_match = true;
   return form;
 }
@@ -152,6 +174,15 @@ std::vector<std::unique_ptr<PasswordForm>> MakeResults(
   return results;
 }
 
+std::vector<PasswordForm> PointeeValues(
+    const std::vector<const PasswordForm*> forms) {
+  std::vector<PasswordForm> result;
+  result.reserve(forms.size());
+  for (const PasswordForm* form : forms)
+    result.push_back(*form);
+  return result;
+}
+
 ACTION_P(GetAndAssignWeakPtr, ptr) {
   *ptr = arg0->GetWeakPtr();
 }
@@ -162,13 +193,14 @@ class FormFetcherImplTest : public testing::Test {
  public:
   FormFetcherImplTest()
       : form_digest_(PasswordForm::SCHEME_HTML,
-                     "http://accounts.google.com",
-                     GURL("http://accounts.google.com/a/LoginAuth")) {
+                     kTestHttpURL,
+                     GURL(kTestHttpURL)) {
     mock_store_ = new MockPasswordStore();
     client_.set_store(mock_store_.get());
 
     form_fetcher_ = base::MakeUnique<FormFetcherImpl>(
-        form_digest_, &client_, /* should_migrate_http_passwords */ false);
+        form_digest_, &client_, false /* should_migrate_http_passwords */,
+        false /* should_query_suppressed_https_forms */);
   }
 
   ~FormFetcherImplTest() override { mock_store_->ShutdownOnUIThread(); }
@@ -184,6 +216,55 @@ class FormFetcherImplTest : public testing::Test {
     form_fetcher_->Fetch();
     base::RunLoop().RunUntilIdle();
     testing::Mock::VerifyAndClearExpectations(mock_store_.get());
+  }
+
+  void RecreateFormFetcherWithQueryingSuppressedForms() {
+    form_fetcher_ = base::MakeUnique<FormFetcherImpl>(
+        form_digest_, &client_, false /* should_migrate_http_passwords */,
+        true /* should_query_suppressed_https_forms */);
+    EXPECT_CALL(consumer_, ProcessMatches(IsEmpty(), 0u));
+    form_fetcher_->AddConsumer(&consumer_);
+    testing::Mock::VerifyAndClearExpectations(&consumer_);
+  }
+
+  // Simulates a call to Fetch(), and supplies |simulated_matches| as the
+  // PasswordStore results. Expects that this will trigger the querying of
+  // suppressed forms by means of a GetLoginsForSameOrganizationName call
+  // being issued against the |expected_signon_realm|.
+  //
+  // Call CompleteQueryingSuppressedForms with the emitted |consumer_ptr|
+  // to complete the query.
+  void SimulateFetchAndExpectQueryingSuppressedForms(
+      const std::vector<PasswordForm>& simulated_get_logins_matches,
+      const std::string& expected_signon_realm,
+      base::WeakPtr<PasswordStoreConsumer>* consumer_ptr /* out */) {
+    ASSERT_EQ(FormFetcher::State::NOT_WAITING, form_fetcher_->GetState());
+
+    Fetch();
+
+    EXPECT_CALL(*mock_store_,
+                GetLoginsForSameOrganizationName(expected_signon_realm, _))
+        .WillOnce(::testing::WithArg<1>(GetAndAssignWeakPtr(consumer_ptr)));
+    const size_t num_matches = simulated_get_logins_matches.size();
+    EXPECT_CALL(consumer_, ProcessMatches(::testing::SizeIs(num_matches), 0u));
+
+    form_fetcher_->OnGetPasswordStoreResults(
+        MakeResults(simulated_get_logins_matches));
+
+    ASSERT_TRUE(testing::Mock::VerifyAndClearExpectations(&consumer_));
+    ASSERT_TRUE(testing::Mock::VerifyAndClearExpectations(mock_store_.get()));
+    ASSERT_EQ(FormFetcher::State::NOT_WAITING, form_fetcher_->GetState());
+    ASSERT_TRUE(*consumer_ptr);
+  }
+
+  void CompleteQueryingSuppressedForms(
+      const std::vector<PasswordForm>& simulated_suppressed_forms,
+      base::WeakPtr<PasswordStoreConsumer> consumer_ptr) {
+    ASSERT_TRUE(consumer_ptr);
+    ASSERT_EQ(FormFetcher::State::NOT_WAITING, form_fetcher_->GetState());
+    consumer_ptr->OnGetPasswordStoreResults(
+        MakeResults(simulated_suppressed_forms));
+    ASSERT_EQ(FormFetcher::State::NOT_WAITING, form_fetcher_->GetState());
   }
 
   base::MessageLoop message_loop_;  // Used by mock_store_.
@@ -399,7 +480,8 @@ TEST_F(FormFetcherImplTest, DoNotTryToMigrateHTTPPasswordsOnHTTPSites) {
   // A new form fetcher is created to be able to set the form digest and
   // migration flag.
   form_fetcher_ = base::MakeUnique<FormFetcherImpl>(
-      form_digest_, &client_, /* should_migrate_http_passwords */ true);
+      form_digest_, &client_, true /* should_migrate_http_passwords */,
+      false /* should_query_suppressed_https_forms */);
   EXPECT_CALL(consumer_, ProcessMatches(IsEmpty(), 0u));
   form_fetcher_->AddConsumer(&consumer_);
 
@@ -441,7 +523,8 @@ TEST_F(FormFetcherImplTest, TryToMigrateHTTPPasswordsOnHTTPSSites) {
   // A new form fetcher is created to be able to set the form digest and
   // migration flag.
   form_fetcher_ = base::MakeUnique<FormFetcherImpl>(
-      form_digest_, &client_, /* should_migrate_http_passwords */ true);
+      form_digest_, &client_, true /* should_migrate_http_passwords */,
+      false /* should_query_suppressed_https_forms */);
   EXPECT_CALL(consumer_, ProcessMatches(IsEmpty(), 0u));
   form_fetcher_->AddConsumer(&consumer_);
 
@@ -510,7 +593,8 @@ TEST_F(FormFetcherImplTest, StateIsWaitingDuringMigration) {
   // A new form fetcher is created to be able to set the form digest and
   // migration flag.
   form_fetcher_ = base::MakeUnique<FormFetcherImpl>(
-      form_digest_, &client_, /* should_migrate_http_passwords */ true);
+      form_digest_, &client_, true /* should_migrate_http_passwords */,
+      false /* should_query_suppressed_https_forms */);
 
   PasswordForm https_form = CreateNonFederated();
 
@@ -551,19 +635,229 @@ TEST_F(FormFetcherImplTest, StateIsWaitingDuringMigration) {
   EXPECT_EQ(FormFetcher::State::NOT_WAITING, form_fetcher_->GetState());
 }
 
+TEST_F(FormFetcherImplTest, SuppressedForms_QueriedForHTTPAndHTTPSOrigins) {
+  static const PasswordStore::FormDigest kObservedHTTPSFormDigest(
+      PasswordForm::SCHEME_HTML, kTestHttpsURL, GURL(kTestHttpsURL));
+
+  static const PasswordForm kFormHttpSameHost =
+      CreateHTMLForm(kTestHttpURL, "user_1", "pass_1");
+  static const PasswordForm kFormHttpsSameHost =
+      CreateHTMLForm(kTestHttpsURL, "user_2", "pass_2");
+  static const PasswordForm kFormHttpPSLMatchingHost =
+      CreateHTMLForm(kTestPSLMatchingHttpURL, "user_3", "pass_3");
+  static const PasswordForm kFormHttpsPSLMatchingHost =
+      CreateHTMLForm(kTestPSLMatchingHttpsURL, "user_4", "pass_4");
+  static const PasswordForm kFormHttpSameOrgNameHost =
+      CreateHTMLForm(kTestHttpSameOrgNameURL, "user_5", "pass_5");
+  static const PasswordForm kFormHttpsSameOrgNameHost =
+      CreateHTMLForm(kTestHttpsSameOrgNameURL, "user_6", "pass_6");
+
+  static const struct {
+    const char* observed_form_origin;
+    const char* observed_form_realm;
+    std::vector<PasswordForm> matching_forms;
+    std::vector<PasswordForm> all_suppressed_forms;
+    std::vector<PasswordForm> expected_suppressed_https_forms;
+    std::vector<PasswordForm> expected_suppressed_psl_forms;
+    std::vector<PasswordForm> expected_suppressed_same_org_name_forms;
+  } kTestCases[] = {
+      {kTestHttpURL,
+       kTestHttpURL,
+       {kFormHttpSameHost},
+       {kFormHttpsSameHost, kFormHttpPSLMatchingHost, kFormHttpsPSLMatchingHost,
+        kFormHttpSameOrgNameHost, kFormHttpsSameOrgNameHost},
+       {kFormHttpsSameHost},
+       {kFormHttpPSLMatchingHost},
+       {kFormHttpsPSLMatchingHost, kFormHttpSameOrgNameHost,
+        kFormHttpsSameOrgNameHost}},
+
+      {kTestHttpsURL,
+       kTestHttpsURL,
+       {kFormHttpsSameHost},
+       {kFormHttpSameHost, kFormHttpPSLMatchingHost, kFormHttpsPSLMatchingHost,
+        kFormHttpSameOrgNameHost, kFormHttpsSameOrgNameHost},
+       std::vector<PasswordForm>(),
+       {kFormHttpsPSLMatchingHost},
+       {kFormHttpPSLMatchingHost, kFormHttpSameOrgNameHost,
+        kFormHttpsSameOrgNameHost}},
+  };
+
+  for (const auto& test_case : kTestCases) {
+    SCOPED_TRACE(test_case.observed_form_origin);
+
+    form_digest_ = PasswordStore::FormDigest(
+        PasswordForm::SCHEME_HTML, test_case.observed_form_origin,
+        GURL(test_case.observed_form_origin));
+    RecreateFormFetcherWithQueryingSuppressedForms();
+
+    // The matching PasswordStore results coming in should trigger another
+    // GetLogins request to fetcht the suppressed forms.
+    base::WeakPtr<PasswordStoreConsumer> suppressed_form_fetcher_ptr = nullptr;
+    ASSERT_NO_FATAL_FAILURE(SimulateFetchAndExpectQueryingSuppressedForms(
+        test_case.matching_forms, test_case.observed_form_realm,
+        &suppressed_form_fetcher_ptr));
+
+    EXPECT_FALSE(form_fetcher_->DidCompleteQueryingSuppressedForms());
+    EXPECT_THAT(form_fetcher_->GetSuppressedHTTPSForms(), IsEmpty());
+
+    ASSERT_NO_FATAL_FAILURE(CompleteQueryingSuppressedForms(
+        test_case.all_suppressed_forms, suppressed_form_fetcher_ptr));
+
+    EXPECT_TRUE(form_fetcher_->DidCompleteQueryingSuppressedForms());
+    EXPECT_THAT(
+        PointeeValues(form_fetcher_->GetSuppressedHTTPSForms()),
+        UnorderedElementsAreArray(test_case.expected_suppressed_https_forms));
+    EXPECT_THAT(
+        PointeeValues(form_fetcher_->GetSuppressedPSLMatchingForms()),
+        UnorderedElementsAreArray(test_case.expected_suppressed_psl_forms));
+    EXPECT_THAT(
+        PointeeValues(form_fetcher_->GetSuppressedSameOrganizationNameForms()),
+        UnorderedElementsAreArray(
+            test_case.expected_suppressed_same_org_name_forms));
+  }
+}
+
+TEST_F(FormFetcherImplTest, SuppressedForms_RequeriedOnRefetch) {
+  RecreateFormFetcherWithQueryingSuppressedForms();
+
+  base::WeakPtr<PasswordStoreConsumer> https_form_fetcher_ptr = nullptr;
+  ASSERT_NO_FATAL_FAILURE(SimulateFetchAndExpectQueryingSuppressedForms(
+      std::vector<PasswordForm>(), kTestHttpURL, &https_form_fetcher_ptr));
+  ASSERT_NO_FATAL_FAILURE(CompleteQueryingSuppressedForms(
+      std::vector<PasswordForm>(), https_form_fetcher_ptr));
+
+  // Another call to Fetch() should refetch the list of suppressed credentials.
+  const PasswordForm suppressed_https_form = CreateNonFederated();
+  ASSERT_NO_FATAL_FAILURE(SimulateFetchAndExpectQueryingSuppressedForms(
+      std::vector<PasswordForm>(), kTestHttpURL, &https_form_fetcher_ptr));
+  ASSERT_NO_FATAL_FAILURE(CompleteQueryingSuppressedForms(
+      {suppressed_https_form}, https_form_fetcher_ptr));
+
+  EXPECT_THAT(form_fetcher_->GetSuppressedHTTPSForms(),
+              UnorderedElementsAre(Pointee(suppressed_https_form)));
+}
+
+TEST_F(FormFetcherImplTest, SuppressedForms_NeverWiped) {
+  RecreateFormFetcherWithQueryingSuppressedForms();
+
+  static const PasswordForm kFormHttpsSameHost =
+      CreateHTMLForm(kTestHttpsURL, "user_1", "pass_1");
+  static const PasswordForm kFormHttpPSLMatchingHost =
+      CreateHTMLForm(kTestPSLMatchingHttpURL, "user_2", "pass_2");
+  static const PasswordForm kFormHttpSameOrgNameHost =
+      CreateHTMLForm(kTestHttpSameOrgNameURL, "user_3", "pass_3");
+
+  base::WeakPtr<PasswordStoreConsumer> https_form_fetcher_ptr = nullptr;
+  ASSERT_NO_FATAL_FAILURE(SimulateFetchAndExpectQueryingSuppressedForms(
+      std::vector<PasswordForm>(), kTestHttpURL, &https_form_fetcher_ptr));
+  ASSERT_NO_FATAL_FAILURE(CompleteQueryingSuppressedForms(
+      {kFormHttpsSameHost, kFormHttpPSLMatchingHost, kFormHttpSameOrgNameHost},
+      https_form_fetcher_ptr));
+
+  // Ensure that calling Fetch() does not wipe (even temporarily) the previously
+  // fetched list of suppressed HTTPS credentials. Stale is better than nothing.
+  ASSERT_NO_FATAL_FAILURE(SimulateFetchAndExpectQueryingSuppressedForms(
+      std::vector<PasswordForm>(), kTestHttpURL, &https_form_fetcher_ptr));
+
+  EXPECT_TRUE(form_fetcher_->DidCompleteQueryingSuppressedForms());
+  EXPECT_THAT(form_fetcher_->GetSuppressedHTTPSForms(),
+              UnorderedElementsAre(Pointee(kFormHttpsSameHost)));
+  EXPECT_THAT(form_fetcher_->GetSuppressedPSLMatchingForms(),
+              UnorderedElementsAre(Pointee(kFormHttpPSLMatchingHost)));
+  EXPECT_THAT(form_fetcher_->GetSuppressedSameOrganizationNameForms(),
+              UnorderedElementsAre(Pointee(kFormHttpSameOrgNameHost)));
+}
+
+TEST_F(FormFetcherImplTest, SuppressedForms_FormFetcherDestroyedWhileQuerying) {
+  RecreateFormFetcherWithQueryingSuppressedForms();
+
+  base::WeakPtr<PasswordStoreConsumer> https_form_fetcher_ptr = nullptr;
+  ASSERT_NO_FATAL_FAILURE(SimulateFetchAndExpectQueryingSuppressedForms(
+      std::vector<PasswordForm>(), kTestHttpURL, &https_form_fetcher_ptr));
+
+  EXPECT_FALSE(form_fetcher_->DidCompleteQueryingSuppressedForms());
+
+  // Destroy FormFetcher while SuppressedHTTPSFormFetcher is busy.
+  form_fetcher_.reset();
+}
+
+// Exercise the scenario where querying the suppressed HTTPS logins takes so
+// long that in the meantime there is another call to Fetch(), which completes,
+// and triggers fetching HTTPS suppressed forms yet again. In this case, the
+// first SuppressedHTTPSFormFetcher is destroyed and its query cancelled.
+TEST_F(FormFetcherImplTest, SuppressedForms_SimultaneousQueries) {
+  RecreateFormFetcherWithQueryingSuppressedForms();
+
+  base::WeakPtr<PasswordStoreConsumer> https_form_fetcher_ptr1;
+  ASSERT_NO_FATAL_FAILURE(SimulateFetchAndExpectQueryingSuppressedForms(
+      std::vector<PasswordForm>(), kTestHttpURL, &https_form_fetcher_ptr1));
+
+  base::WeakPtr<PasswordStoreConsumer> https_form_fetcher_ptr2;
+  ASSERT_NO_FATAL_FAILURE(SimulateFetchAndExpectQueryingSuppressedForms(
+      std::vector<PasswordForm>(), kTestHttpURL, &https_form_fetcher_ptr2));
+
+  EXPECT_FALSE(form_fetcher_->DidCompleteQueryingSuppressedForms());
+  EXPECT_THAT(form_fetcher_->GetSuppressedHTTPSForms(), IsEmpty());
+  EXPECT_FALSE(https_form_fetcher_ptr1);
+  ASSERT_TRUE(https_form_fetcher_ptr2);
+
+  static const PasswordForm kFormHttpsSameHost =
+      CreateHTMLForm(kTestHttpsURL, "user_1", "pass_1");
+  static const PasswordForm kFormHttpPSLMatchingHost =
+      CreateHTMLForm(kTestPSLMatchingHttpURL, "user_2", "pass_2");
+  static const PasswordForm kFormHttpSameOrgNameHost =
+      CreateHTMLForm(kTestHttpSameOrgNameURL, "user_3", "pass_3");
+
+  ASSERT_NO_FATAL_FAILURE(CompleteQueryingSuppressedForms(
+      {kFormHttpsSameHost, kFormHttpPSLMatchingHost, kFormHttpSameOrgNameHost},
+      https_form_fetcher_ptr2));
+
+  EXPECT_TRUE(form_fetcher_->DidCompleteQueryingSuppressedForms());
+
+  EXPECT_TRUE(form_fetcher_->DidCompleteQueryingSuppressedForms());
+  EXPECT_THAT(form_fetcher_->GetSuppressedHTTPSForms(),
+              UnorderedElementsAre(Pointee(kFormHttpsSameHost)));
+  EXPECT_THAT(form_fetcher_->GetSuppressedPSLMatchingForms(),
+              UnorderedElementsAre(Pointee(kFormHttpPSLMatchingHost)));
+  EXPECT_THAT(form_fetcher_->GetSuppressedSameOrganizationNameForms(),
+              UnorderedElementsAre(Pointee(kFormHttpSameOrgNameHost)));
+}
+
+TEST_F(FormFetcherImplTest, SuppressedForms_NotQueriedForFederatedRealms) {
+  form_digest_ = PasswordStore::FormDigest(
+      PasswordForm::SCHEME_HTML, kTestFederatedRealm, GURL(kTestFederationURL));
+  RecreateFormFetcherWithQueryingSuppressedForms();
+  Fetch();
+
+  EXPECT_CALL(*mock_store_, GetLogins(_, _)).Times(0);
+  EXPECT_CALL(consumer_, ProcessMatches(IsEmpty(), 0u));
+
+  form_fetcher_->OnGetPasswordStoreResults(
+      MakeResults(std::vector<PasswordForm>()));
+
+  EXPECT_EQ(FormFetcher::State::NOT_WAITING, form_fetcher_->GetState());
+  EXPECT_FALSE(form_fetcher_->DidCompleteQueryingSuppressedForms());
+}
+
 // Cloning a FormFetcherImpl with empty results should result in an
 // instance with empty results.
 TEST_F(FormFetcherImplTest, Clone_EmptyResults) {
+  RecreateFormFetcherWithQueryingSuppressedForms();
   Fetch();
+  EXPECT_CALL(consumer_, ProcessMatches(IsEmpty(), 0u));
+  EXPECT_CALL(*mock_store_, GetLoginsForSameOrganizationName(_, _));
   form_fetcher_->OnGetPasswordStoreResults(
       std::vector<std::unique_ptr<PasswordForm>>());
+  ASSERT_TRUE(::testing::Mock::VerifyAndClearExpectations(mock_store_.get()));
 
   // Clone() should not cause re-fetching from PasswordStore.
   EXPECT_CALL(*mock_store_, GetLogins(_, _)).Times(0);
+  EXPECT_CALL(*mock_store_, GetLoginsForSameOrganizationName(_, _)).Times(0);
   auto clone = form_fetcher_->Clone();
   EXPECT_EQ(FormFetcher::State::NOT_WAITING, clone->GetState());
   EXPECT_THAT(clone->GetInteractionsStats(), IsEmpty());
   EXPECT_THAT(clone->GetFederatedMatches(), IsEmpty());
+  EXPECT_THAT(clone->GetSuppressedHTTPSForms(), IsEmpty());
   MockConsumer consumer;
   EXPECT_CALL(consumer, ProcessMatches(IsEmpty(), 0u));
   clone->AddConsumer(&consumer);
@@ -572,6 +866,7 @@ TEST_F(FormFetcherImplTest, Clone_EmptyResults) {
 // Cloning a FormFetcherImpl with non-empty results should result in an
 // instance with the same results.
 TEST_F(FormFetcherImplTest, Clone_NonEmptyResults) {
+  RecreateFormFetcherWithQueryingSuppressedForms();
   Fetch();
   PasswordForm non_federated = CreateNonFederated();
   PasswordForm federated = CreateFederated();
@@ -580,10 +875,15 @@ TEST_F(FormFetcherImplTest, Clone_NonEmptyResults) {
   results.push_back(base::MakeUnique<PasswordForm>(non_federated));
   results.push_back(base::MakeUnique<PasswordForm>(federated));
   results.push_back(base::MakeUnique<PasswordForm>(android_federated));
+
+  EXPECT_CALL(consumer_, ProcessMatches(::testing::SizeIs(1), 0u));
+  EXPECT_CALL(*mock_store_, GetLoginsForSameOrganizationName(_, _));
   form_fetcher_->OnGetPasswordStoreResults(std::move(results));
+  ASSERT_TRUE(::testing::Mock::VerifyAndClearExpectations(mock_store_.get()));
 
   // Clone() should not cause re-fetching from PasswordStore.
   EXPECT_CALL(*mock_store_, GetLogins(_, _)).Times(0);
+  EXPECT_CALL(*mock_store_, GetLoginsForSameOrganizationName(_, _)).Times(0);
   auto clone = form_fetcher_->Clone();
 
   // Additionally, destroy the original FormFetcher. This should not invalidate
@@ -613,6 +913,33 @@ TEST_F(FormFetcherImplTest, Clone_Stats) {
 
   auto clone = form_fetcher_->Clone();
   EXPECT_EQ(1u, clone->GetInteractionsStats().size());
+}
+
+// Cloning a FormFetcherImpl with some suppressed credentials should
+// result in an instance with the same suppressed credentials.
+TEST_F(FormFetcherImplTest, Clone_SuppressedCredentials) {
+  Fetch();
+  form_fetcher_->OnGetPasswordStoreResults(
+      std::vector<std::unique_ptr<PasswordForm>>());
+
+  static const PasswordForm kFormHttpsSameHost =
+      CreateHTMLForm(kTestHttpsURL, "user_1", "pass_1");
+  static const PasswordForm kFormHttpPSLMatchingHost =
+      CreateHTMLForm(kTestPSLMatchingHttpURL, "user_2", "pass_2");
+  static const PasswordForm kFormHttpSameOrgNameHost =
+      CreateHTMLForm(kTestHttpSameOrgNameURL, "user_3", "pass_3");
+
+  form_fetcher_->ProcessSuppressedForms(
+      MakeResults({kFormHttpsSameHost, kFormHttpPSLMatchingHost,
+                   kFormHttpSameOrgNameHost}));
+
+  auto clone = form_fetcher_->Clone();
+  EXPECT_THAT(PointeeValues(clone->GetSuppressedHTTPSForms()),
+              UnorderedElementsAre(kFormHttpsSameHost));
+  EXPECT_THAT(PointeeValues(clone->GetSuppressedPSLMatchingForms()),
+              UnorderedElementsAre(kFormHttpPSLMatchingHost));
+  EXPECT_THAT(PointeeValues(clone->GetSuppressedSameOrganizationNameForms()),
+              UnorderedElementsAre(kFormHttpSameOrgNameHost));
 }
 
 // Check that removing consumers stops them from receiving store updates.

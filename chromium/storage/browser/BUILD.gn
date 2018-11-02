@@ -216,13 +216,15 @@ executable("dump_file_system") {
   deps = [
     ":browser",
     "//base",
-    "//build/config/sanitizers:deps",
+    "//build/config:exe_and_shlib_deps",
     "//build/win:default_exe_manifest",
     "//storage/common",
   ]
 }
 
-test("storage_unittests") {
+source_set("unittests") {
+  testonly = true
+
   sources = [
     # This target is in the process of being populated. See
     # http://crbug.com/653751
@@ -236,20 +238,47 @@ test("storage_unittests") {
     "blob/blob_transport_request_builder_unittest.cc",
     "blob/blob_url_request_job_unittest.cc",
     "database/database_quota_client_unittest.cc",
+    "database/database_tracker_unittest.cc",
     "database/database_util_unittest.cc",
     "database/databases_table_unittest.cc",
+    "fileapi/copy_or_move_file_validator_unittest.cc",
+    "fileapi/copy_or_move_operation_delegate_unittest.cc",
+    "fileapi/dragged_file_util_unittest.cc",
     "fileapi/external_mount_points_unittest.cc",
+    "fileapi/file_system_context_unittest.cc",
+    "fileapi/file_system_dir_url_request_job_unittest.cc",
+    "fileapi/file_system_file_stream_reader_unittest.cc",
+    "fileapi/file_system_operation_impl_unittest.cc",
+    "fileapi/file_system_operation_impl_write_unittest.cc",
+    "fileapi/file_system_quota_client_unittest.cc",
+    "fileapi/file_system_url_request_job_unittest.cc",
     "fileapi/file_system_url_unittest.cc",
     "fileapi/file_system_usage_cache_unittest.cc",
+    "fileapi/file_writer_delegate_unittest.cc",
     "fileapi/isolated_context_unittest.cc",
     "fileapi/local_file_stream_reader_unittest.cc",
     "fileapi/local_file_stream_writer_unittest.cc",
+    "fileapi/local_file_util_unittest.cc",
     "fileapi/native_file_util_unittest.cc",
+    "fileapi/obfuscated_file_util_unittest.cc",
+    "fileapi/plugin_private_file_system_backend_unittest.cc",
     "fileapi/quota/quota_backend_impl_unittest.cc",
     "fileapi/quota/quota_reservation_manager_unittest.cc",
+    "fileapi/recursive_operation_delegate_unittest.cc",
+    "fileapi/sandbox_directory_database_unittest.cc",
+    "fileapi/sandbox_file_system_backend_delegate_unittest.cc",
+    "fileapi/sandbox_file_system_backend_unittest.cc",
     "fileapi/sandbox_isolated_origin_database_unittest.cc",
+    "fileapi/sandbox_origin_database_unittest.cc",
     "fileapi/sandbox_prioritized_origin_database_unittest.cc",
     "fileapi/timed_task_helper_unittest.cc",
+    "fileapi/transient_file_util_unittest.cc",
+    "quota/quota_database_unittest.cc",
+    "quota/quota_manager_unittest.cc",
+    "quota/quota_temporary_storage_evictor_unittest.cc",
+    "quota/storage_monitor_unittest.cc",
+    "quota/usage_tracker_unittest.cc",
+    "test/mock_quota_manager_unittest.cc",
   ]
 
   deps = [
@@ -270,8 +299,26 @@ static_library("test_support") {
   sources = [
     "test/async_file_test_helper.cc",
     "test/async_file_test_helper.h",
+    "test/fileapi_test_file_set.cc",
+    "test/fileapi_test_file_set.h",
+    "test/mock_blob_url_request_context.cc",
+    "test/mock_blob_url_request_context.h",
+    "test/mock_file_change_observer.cc",
+    "test/mock_file_change_observer.h",
+    "test/mock_file_update_observer.cc",
+    "test/mock_file_update_observer.h",
+    "test/mock_quota_manager.cc",
+    "test/mock_quota_manager.h",
+    "test/mock_quota_manager_proxy.cc",
+    "test/mock_quota_manager_proxy.h",
     "test/mock_special_storage_policy.cc",
     "test/mock_special_storage_policy.h",
+    "test/mock_storage_client.cc",
+    "test/mock_storage_client.h",
+    "test/sandbox_database_test_helper.cc",
+    "test/sandbox_database_test_helper.h",
+    "test/sandbox_file_system_test_helper.cc",
+    "test/sandbox_file_system_test_helper.h",
     "test/test_file_system_backend.cc",
     "test/test_file_system_backend.h",
     "test/test_file_system_context.cc",
@@ -285,5 +332,6 @@ static_library("test_support") {
     "//base/test:test_support",
     "//net:test_support",
     "//testing/gtest",
+    "//third_party/leveldatabase",
   ]
 }

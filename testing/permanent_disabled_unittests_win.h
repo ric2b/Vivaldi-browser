@@ -90,6 +90,12 @@ DISABLE(SRTFetcherTest, ReporterLogging_EnabledFirstRun)
 DISABLE(AutofillProfileComparatorTest, MergeAddressesMostUniqueTokens)
 DISABLE(NetworkMetricsProviderTest, EffectiveConnectionType)
 DISABLE(TimeTicks, WinRollover)
+DISABLE(ReportingCacheTest, EvictOldestReport)
+DISABLE(PaymentManagerTest, ClearPaymentInstruments)
+DISABLE(PaymentManagerTest, KeysOfPaymentInstruments)
+DISABLE(SubresourceFilterBrowserTest, ExpectPerformanceHistogramsAreRecorded)
+DISABLE(UpdateClientTest, TwoCrxUpdateDownloadTimeout)
+DISABLE(UpdateClientTest, TwoCrxUpdateNoUpdate)
 
 // Fails on tester, works on dev PC; assume it is the timing issue
 DISABLE(NotificationPermissionContextTest, TestDenyInIncognitoAfterDelay)

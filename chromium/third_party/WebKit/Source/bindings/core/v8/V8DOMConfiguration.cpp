@@ -28,8 +28,8 @@
 
 #include "bindings/core/v8/V8DOMConfiguration.h"
 
-#include "bindings/core/v8/V8ObjectConstructor.h"
-#include "bindings/core/v8/V8PerContextData.h"
+#include "platform/bindings/V8ObjectConstructor.h"
+#include "platform/bindings/V8PerContextData.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
@@ -73,14 +73,14 @@ void InstallAttributeInternal(
     instance_template->SetNativeDataProperty(
         name, getter, setter, data,
         static_cast<v8::PropertyAttribute>(attribute.attribute),
-        v8::Local<v8::AccessorSignature>(), v8::DEFAULT);
+        v8::Local<v8::AccessorSignature>());
   }
   if (attribute.property_location_configuration &
       V8DOMConfiguration::kOnPrototype) {
     prototype_template->SetNativeDataProperty(
         name, getter, setter, data,
         static_cast<v8::PropertyAttribute>(attribute.attribute),
-        v8::Local<v8::AccessorSignature>(), v8::DEFAULT);
+        v8::Local<v8::AccessorSignature>());
   }
   if (attribute.property_location_configuration &
       V8DOMConfiguration::kOnInterface)
@@ -91,41 +91,33 @@ void InstallAttributeInternal(
     v8::Isolate* isolate,
     v8::Local<v8::Object> instance,
     v8::Local<v8::Object> prototype,
-    const V8DOMConfiguration::AttributeConfiguration& attribute,
+    const V8DOMConfiguration::AttributeConfiguration& config,
     const DOMWrapperWorld& world) {
-  if (!WorldConfigurationApplies(attribute, world))
+  if (!WorldConfigurationApplies(config, world))
     return;
-  v8::Local<v8::Name> name = V8AtomicString(isolate, attribute.name);
 
-  // This method is only being used for installing interfaces which are
-  // enabled through origin trials. Assert here that it is being called with
-  // an attribute configuration for a constructor.
-  // TODO(iclelland): Relax this constraint and allow arbitrary data-type
-  // properties to be added here.
-  DCHECK_EQ(&V8ConstructorAttributeGetter, attribute.getter);
+  v8::Local<v8::Name> name = V8AtomicString(isolate, config.name);
+  v8::AccessorNameGetterCallback getter = config.getter;
+  v8::AccessorNameSetterCallback setter = config.setter;
+  v8::Local<v8::Value> data =
+      v8::External::New(isolate, const_cast<WrapperTypeInfo*>(config.data));
+  v8::PropertyAttribute attribute =
+      static_cast<v8::PropertyAttribute>(config.attribute);
+  unsigned location = config.property_location_configuration;
 
-  V8PerContextData* per_context_data =
-      V8PerContextData::From(isolate->GetCurrentContext());
-  v8::Local<v8::Function> data =
-      per_context_data->ConstructorForType(attribute.data);
-
-  DCHECK(attribute.property_location_configuration);
-  if (attribute.property_location_configuration &
-      V8DOMConfiguration::kOnInstance)
+  DCHECK(location);
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+  if (location & V8DOMConfiguration::kOnInstance) {
     instance
-        ->DefineOwnProperty(
-            isolate->GetCurrentContext(), name, data,
-            static_cast<v8::PropertyAttribute>(attribute.attribute))
+        ->SetNativeDataProperty(context, name, getter, setter, data, attribute)
         .ToChecked();
-  if (attribute.property_location_configuration &
-      V8DOMConfiguration::kOnPrototype)
+  }
+  if (location & V8DOMConfiguration::kOnPrototype) {
     prototype
-        ->DefineOwnProperty(
-            isolate->GetCurrentContext(), name, data,
-            static_cast<v8::PropertyAttribute>(attribute.attribute))
+        ->SetNativeDataProperty(context, name, getter, setter, data, attribute)
         .ToChecked();
-  if (attribute.property_location_configuration &
-      V8DOMConfiguration::kOnInterface)
+  }
+  if (location & V8DOMConfiguration::kOnInterface)
     NOTREACHED();
 }
 
@@ -262,13 +254,13 @@ void InstallAccessorInternal(
         V8DOMConfiguration::kOnInstance) {
       instance_or_template->SetAccessorProperty(
           name, getter, setter,
-          static_cast<v8::PropertyAttribute>(accessor.attribute), v8::DEFAULT);
+          static_cast<v8::PropertyAttribute>(accessor.attribute));
     }
     if (accessor.property_location_configuration &
         V8DOMConfiguration::kOnPrototype) {
       prototype_or_template->SetAccessorProperty(
           name, getter, setter,
-          static_cast<v8::PropertyAttribute>(accessor.attribute), v8::DEFAULT);
+          static_cast<v8::PropertyAttribute>(accessor.attribute));
     }
   }
   if (accessor.property_location_configuration &
@@ -286,7 +278,7 @@ void InstallAccessorInternal(
             1);
     interface_or_template->SetAccessorProperty(
         name, getter, setter,
-        static_cast<v8::PropertyAttribute>(accessor.attribute), v8::DEFAULT);
+        static_cast<v8::PropertyAttribute>(accessor.attribute));
   }
 }
 
@@ -341,6 +333,33 @@ void InstallConstantInternal(
 }
 
 template <class Configuration>
+void AddMethodToTemplate(v8::Isolate* isolate,
+                         v8::Local<v8::Template> v8_template,
+                         v8::Local<v8::FunctionTemplate> function_template,
+                         const Configuration& method) {
+  v8_template->Set(method.MethodName(isolate), function_template,
+                   static_cast<v8::PropertyAttribute>(method.attribute));
+}
+
+template <>
+void AddMethodToTemplate(
+    v8::Isolate* isolate,
+    v8::Local<v8::Template> v8_template,
+    v8::Local<v8::FunctionTemplate> function_template,
+    const V8DOMConfiguration::SymbolKeyedMethodConfiguration& method) {
+  // The order matters here: if the Symbol is added first, the Function object
+  // will have no associated name. For example, WebIDL states, among other
+  // things, that a pair iterator's @@iterator Function object's name must be
+  // set to "entries".
+  if (method.symbol_alias) {
+    v8_template->Set(V8AtomicString(isolate, method.symbol_alias),
+                     function_template);
+  }
+  v8_template->Set(method.MethodName(isolate), function_template,
+                   static_cast<v8::PropertyAttribute>(method.attribute));
+}
+
+template <class Configuration>
 void InstallMethodInternal(v8::Isolate* isolate,
                            v8::Local<v8::ObjectTemplate> instance_template,
                            v8::Local<v8::ObjectTemplate> prototype_template,
@@ -351,7 +370,6 @@ void InstallMethodInternal(v8::Isolate* isolate,
   if (!WorldConfigurationApplies(method, world))
     return;
 
-  v8::Local<v8::Name> name = method.MethodName(isolate);
   v8::FunctionCallback callback = method.callback;
   // Promise-returning functions need to return a reject promise when
   // an exception occurs.  This includes a case that the receiver object is not
@@ -372,15 +390,15 @@ void InstallMethodInternal(v8::Isolate* isolate,
     if (method.access_check_configuration == V8DOMConfiguration::kCheckAccess)
       function_template->SetAcceptAnyReceiver(false);
     if (method.property_location_configuration &
-        V8DOMConfiguration::kOnInstance)
-      instance_template->Set(
-          name, function_template,
-          static_cast<v8::PropertyAttribute>(method.attribute));
+        V8DOMConfiguration::kOnInstance) {
+      AddMethodToTemplate(isolate, instance_template, function_template,
+                          method);
+    }
     if (method.property_location_configuration &
-        V8DOMConfiguration::kOnPrototype)
-      prototype_template->Set(
-          name, function_template,
-          static_cast<v8::PropertyAttribute>(method.attribute));
+        V8DOMConfiguration::kOnPrototype) {
+      AddMethodToTemplate(isolate, prototype_template, function_template,
+                          method);
+    }
   }
   if (method.property_location_configuration &
       V8DOMConfiguration::kOnInterface) {
@@ -393,9 +411,7 @@ void InstallMethodInternal(v8::Isolate* isolate,
     function_template->RemovePrototype();
     // Similarly, there is no need to do an access check for static methods, as
     // there is no holder to check against.
-    interface_template->Set(
-        name, function_template,
-        static_cast<v8::PropertyAttribute>(method.attribute));
+    AddMethodToTemplate(isolate, interface_template, function_template, method);
   }
 }
 

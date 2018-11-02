@@ -115,8 +115,8 @@ class FullscreenButton : public ImageButton {
       : ImageButton(listener) { }
 
   // Overridden from ImageButton.
-  gfx::Size GetPreferredSize() const override {
-    gfx::Size pref = ImageButton::GetPreferredSize();
+  gfx::Size CalculatePreferredSize() const override {
+    gfx::Size pref = ImageButton::CalculatePreferredSize();
     if (border()) {
       gfx::Insets insets = border()->GetInsets();
       pref.Enlarge(insets.width(), insets.height());
@@ -154,8 +154,6 @@ class InMenuButtonBackground : public views::Background {
   // Overridden from views::Background.
   void Paint(gfx::Canvas* canvas, View* view) const override {
     CustomButton* button = CustomButton::AsCustomButton(view);
-    views::Button::ButtonState state =
-        button ? button->state() : views::Button::STATE_NORMAL;
     int h = view->height();
 
     // Draw leading border if desired.
@@ -165,32 +163,25 @@ class InMenuButtonBackground : public views::Background {
       // already, so we end up flipping exactly once.
       gfx::ScopedRTLFlipCanvas scoped_canvas(
           canvas, view->width(), !view->flip_canvas_on_paint_for_rtl_ui());
-      canvas->FillRect(gfx::Rect(0, 0, 1, h),
-                       BorderColor(view, views::Button::STATE_NORMAL));
-      bounds.Inset(gfx::Insets(0, 1, 0, 0));
+      ui::NativeTheme::ExtraParams params;
+      gfx::Rect separator_bounds =
+          gfx::Rect(0, 0, MenuConfig::instance().separator_thickness, h);
+      params.menu_separator.paint_rect = &separator_bounds;
+      params.menu_separator.type = ui::VERTICAL_SEPARATOR;
+      view->GetNativeTheme()->Paint(
+          canvas->sk_canvas(), ui::NativeTheme::kMenuPopupSeparator,
+          ui::NativeTheme::kNormal, separator_bounds, params);
+      bounds.Inset(
+          gfx::Insets(0, MenuConfig::instance().separator_thickness, 0, 0));
     }
 
     // Fill in background for state.
-    bounds.set_x(view->GetMirroredXForRect(bounds));
-    DrawBackground(canvas, view, bounds, state);
+    views::Button::ButtonState state =
+        button ? button->state() : views::Button::STATE_NORMAL;
+    DrawBackground(canvas, view, view->GetMirroredRect(bounds), state);
   }
 
  private:
-  static SkColor BorderColor(View* view, views::Button::ButtonState state) {
-    ui::NativeTheme* theme = view->GetNativeTheme();
-    switch (state) {
-      case views::Button::STATE_HOVERED:
-        return theme->GetSystemColor(
-            ui::NativeTheme::kColorId_HoverMenuButtonBorderColor);
-      case views::Button::STATE_PRESSED:
-        return theme->GetSystemColor(
-            ui::NativeTheme::kColorId_FocusedMenuButtonBorderColor);
-      default:
-        return theme->GetSystemColor(
-            ui::NativeTheme::kColorId_EnabledMenuButtonBorderColor);
-    }
-  }
-
   static SkColor BackgroundColor(const View* view,
                                  views::Button::ButtonState state) {
     const ui::NativeTheme* theme = view->GetNativeTheme();
@@ -265,7 +256,7 @@ class InMenuButton : public LabelButton {
     set_background(in_menu_background_);
     SetBorder(
         views::CreateEmptyBorder(0, kHorizontalPadding, 0, kHorizontalPadding));
-    SetFontList(MenuConfig::instance().font_list);
+    label()->SetFontList(MenuConfig::instance().font_list);
   }
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
@@ -395,7 +386,6 @@ class HoveredImageSource : public gfx::ImageSkiaSource {
     SkBitmap white;
     white.allocN32Pixels(bitmap.width(), bitmap.height());
     white.eraseARGB(0, 0, 0, 0);
-    bitmap.lockPixels();
     for (int y = 0; y < bitmap.height(); ++y) {
       uint32_t* image_row = bitmap.getAddr32(0, y);
       uint32_t* dst_row = white.getAddr32(0, y);
@@ -405,7 +395,6 @@ class HoveredImageSource : public gfx::ImageSkiaSource {
         dst_row[x] = (image_pixel & 0xFF000000) == 0x0 ? 0x0 : color_;
       }
     }
-    bitmap.unlockPixels();
     return gfx::ImageSkiaRep(white, scale);
   }
 
@@ -437,7 +426,7 @@ class AppMenu::CutCopyPasteView : public AppMenuView {
   }
 
   // Overridden from View.
-  gfx::Size GetPreferredSize() const override {
+  gfx::Size CalculatePreferredSize() const override {
     // Returned height doesn't matter as MenuItemView forces everything to the
     // height of the menuitemview.
     return gfx::Size(GetMaxChildViewPreferredWidth() * child_count(), 0);
@@ -542,7 +531,7 @@ class AppMenu::ZoomView : public AppMenuView {
   ~ZoomView() override {}
 
   // Overridden from View.
-  gfx::Size GetPreferredSize() const override {
+  gfx::Size CalculatePreferredSize() const override {
     // The increment/decrement button are forced to the same width.
     int button_width = std::max(increment_button_->GetPreferredSize().width(),
                                 decrement_button_->GetPreferredSize().width());
@@ -812,7 +801,7 @@ void AppMenu::Init(ui::MenuModel* model) {
                                // so we get the taller menu style.
   PopulateMenu(root_, model);
 
-  int32_t types = views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::ASYNC;
+  int32_t types = views::MenuRunner::HAS_MNEMONICS;
   if (for_drop()) {
     // We add NESTED_DRAG since currently the only operation to open the app
     // menu for is an extension action drag, which is controlled by the child
@@ -1045,8 +1034,7 @@ bool AppMenu::ShouldCloseOnDragComplete() {
   return false;
 }
 
-void AppMenu::OnMenuClosed(views::MenuItemView* menu,
-                           views::MenuRunner::RunResult result) {
+void AppMenu::OnMenuClosed(views::MenuItemView* menu) {
   if (bookmark_menu_delegate_.get()) {
     BookmarkModel* model =
         BookmarkModelFactory::GetForBrowserContext(browser_->profile());
@@ -1055,6 +1043,16 @@ void AppMenu::OnMenuClosed(views::MenuItemView* menu,
   }
   if (selected_menu_model_)
     selected_menu_model_->ActivatedAt(selected_index_);
+}
+
+bool AppMenu::ShouldExecuteCommandWithoutClosingMenu(int command_id,
+                                                     const ui::Event& event) {
+  if (IsRecentTabsCommand(command_id) && event.IsMouseEvent()) {
+    const auto disposition = ui::DispositionFromEventFlags(event.flags());
+    if (disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB)
+      return true;
+  }
+  return false;
 }
 
 void AppMenu::BookmarkModelChanged() {

@@ -43,6 +43,9 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   ~MockPasswordManagerClient() override = default;
 
   MOCK_CONST_METHOD0(GetLogManager, const LogManager*());
+#if defined(SAFE_BROWSING_DB_LOCAL)
+  MOCK_METHOD2(CheckSafeBrowsingReputation, void(const GURL&, const GURL&));
+#endif
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockPasswordManagerClient);
@@ -59,8 +62,8 @@ class FakePasswordAutofillAgent
   ~FakePasswordAutofillAgent() override {}
 
   void BindRequest(mojo::ScopedMessagePipeHandle handle) {
-    binding_.Bind(mojo::MakeRequest<autofill::mojom::PasswordAutofillAgent>(
-        std::move(handle)));
+    binding_.Bind(
+        autofill::mojom::PasswordAutofillAgentRequest(std::move(handle)));
   }
 
   bool called_set_logging_state() { return called_set_logging_state_; }
@@ -86,7 +89,7 @@ class FakePasswordAutofillAgent
       const autofill::FormsPredictionsMap& predictions) override {}
 
   void FindFocusedPasswordForm(
-      const FindFocusedPasswordFormCallback& callback) override {}
+      FindFocusedPasswordFormCallback callback) override {}
 
   // Records whether SetLoggingState() gets called.
   bool called_set_logging_state_;
@@ -424,6 +427,16 @@ TEST_F(ContentPasswordManagerDriverTest, ClearPasswordsOnAutofill) {
     driver->FillPasswordForm(fill_data);
   }
 }
+
+#if defined(SAFE_BROWSING_DB_LOCAL)
+TEST_F(ContentPasswordManagerDriverTest, CheckSafeBrowsingReputationCalled) {
+  std::unique_ptr<ContentPasswordManagerDriver> driver(
+      new ContentPasswordManagerDriver(main_rfh(), &password_manager_client_,
+                                       &autofill_client_));
+  EXPECT_CALL(password_manager_client_, CheckSafeBrowsingReputation(_, _));
+  driver->CheckSafeBrowsingReputation(GURL(), GURL());
+}
+#endif
 
 INSTANTIATE_TEST_CASE_P(,
                         ContentPasswordManagerDriverTest,

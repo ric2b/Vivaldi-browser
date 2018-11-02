@@ -7,6 +7,12 @@
   <message name="IDS_PAYMENTS_NAME_FIELD_IN_CONTACT_DETAILS" desc="The label for text input field containing the full name of a person. [CHAR-LIMIT=32]" formatter_data="android_java">
     Name
   </message>
+  <message name="IDS_PAYMENTS_PHONE_FIELD_IN_CONTACT_DETAILS" desc="The label for text input field containing a phone number. [CHAR-LIMIT=32]">
+    Phone number
+  </message>
+  <message name="IDS_PAYMENTS_EMAIL_FIELD_IN_CONTACT_DETAILS" desc="The label for text input field containing an email address. [CHAR-LIMIT=32]">
+    Email
+  </message>
   <message name="IDS_PAYMENTS_SAVE_CARD_TO_DEVICE_CHECKBOX" desc="The label for the checkbox that enables the user to save a credit card to their device, for example, on their phone." formatter_data="android_java">
     Save this card to this device
   </message>
@@ -91,6 +97,9 @@
   <message name="IDS_PAYMENTS_ADD_ADDRESS" desc="Text on a button that lets a user add new address." formatter_data="android_java">
     Add address
   </message>
+  <message name="IDS_PAYMENTS_EDIT_ADDRESS" desc="Text on a button that lets a user edit an existing address." formatter_data="android_java">
+    Edit address
+  </message>
   <message name="IDS_PAYMENTS_CHECKING_OPTION" desc="Text explaining that the option the user selected is being checked and verified." formatter_data="android_java">
     Checking
   </message>
@@ -100,11 +109,21 @@
   <message name="IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS" desc="Label of the section containing the link to go to the settings page for card and address options." formatter_data="android_java">
     You can manage cards and addresses in <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph>.
   </message>
-  <message name="IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS_SIGNED_IN" desc="Label of the section containing the origin description and the link to go to the settings page for card and address options. This label is used when the user is signed in." formatter_data="android_java">
-    Cards and addresses are from Chrome and your Google Account (<ph name="ACCOUNT_EMAIL">%1$s<ex>johndoe@gmail.com</ex></ph>). You can manage them in <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph>.
-  </message>
+  <if expr="is_android">
+    <message name="IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS_SIGNED_IN" desc="Label of the section containing the origin description and the link to go to the settings page for card and address options. This label is used when the user is signed in." formatter_data="android_java">
+      Cards and addresses are from Chrome and your Google Account (<ph name="ACCOUNT_EMAIL">%1$s<ex>johndoe@gmail.com</ex></ph>). You can manage them in <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph>.
+    </message>
+  </if>
+  <if expr="not is_android">
+    <message name="IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS_SIGNED_IN" desc="Label of the section containing the origin description and the link to go to the settings page for card and address options. This label is used when the user is signed in.">
+      Cards and addresses are from Chrome and your Google Account (<ph name="ACCOUNT_EMAIL">$1<ex>johndoe@gmail.com</ex></ph>). You can manage them in <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph>.
+    </message>
+  </if>
   <message name="IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS_SIGNED_OUT" desc="Label of the section containing the origin description and the link to go to the settings page for card and address options. This label is used when the user is not signed in." formatter_data="android_java">
     Cards and addresses are from Chrome. You can manage them in <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph>.
+  </message>
+  <message name="IDS_PAYMENTS_CANCEL_PAYMENT" desc="Label of the secondary button in payment request editors. Clicking that button closes the dialog and aborts the payment request completely">
+    Cancel Payment
   </message>
 
   <!-- Credit Card form -->
@@ -142,6 +161,9 @@
   <message name="IDS_PAYMENTS_VALIDATION_UNSUPPORTED_CREDIT_CARD_TYPE" desc="Message displayed to user when the credit card type (e.g visa, mastercard) is not supported for this transaction.">
     This type of card isn’t supported
   </message>
+  <message name="IDS_PAYMENTS_VALIDATION_ALREADY_USED_CREDIT_CARD_NUMBER" desc="Message displayed to user when the credit card number they have entered corresponds to an existing credit card number in their user profile.">
+    This card number is already used
+  </message>
   <message name="IDS_PAYMENTS_REQUIRED_FIELD_MESSAGE" desc="The text that informs the user that '*' character indicates an input field that is required. The '*' character should not be changed." formatter_data="android_java">
      * Field is required
   </message>
@@ -165,6 +187,9 @@
   </message>
   <message name="IDS_PAYMENTS_NAME_ON_CARD_REQUIRED" desc="The label to indicate the cardholder name (the name of the owner or “holder” of the credit card)  must be entered." formatter_data="android_java">
     Cardholder name required
+  </message>
+  <message name="IDS_PAYMENTS_CARD_BILLING_ADDRESS_REQUIRED" desc="The label to indicate the billing address of the credit card  must be entered." formatter_data="android_java">
+    Card billing address required
   </message>
   <message name="IDS_PAYMENTS_MORE_INFORMATION_REQUIRED" desc="The label to indicate more information is required for payment card or shipping address or contact info." formatter_data="android_java">
     More information required
@@ -198,14 +223,19 @@
   <message name="IDS_PAYMENT_REQUEST_ORDER_SUMMARY_SHEET_TOTAL_FORMAT" desc="The format specifier of the Total label in the Order Summary Sheet of the Payment Request dialog.">
     <ph name="CURRENCY_CODE">$1<ex>USD</ex></ph> <ph name="FORMATTED_TOTAL_AMOUNT">$2<ex>$ 12.34</ex></ph>
   </message>
-  <message name="IDS_PAYMENT_REQUEST_ORDER_SUMMARY_MORE_ITEMS" desc="The label in the Order Summary section of the Payment Sheet that indicates how many display items are hidden.">
-    <ph name="ITEM_COUNT">$1<ex>2</ex></ph> more items...
+  <message name="IDS_PAYMENT_REQUEST_ORDER_SUMMARY_MORE_ITEMS" desc="The label in the Order Summary section of the Payment Sheet that indicates how many display items are hidden. [ICU Syntax]">
+    {MORE_ITEMS, plural,
+      =1 {<ph name="ITEM_COUNT">#<ex>1</ex></ph> item}
+      other {<ph name="ITEM_COUNT">#<ex>2</ex></ph> items}}
   </message>
   <message name="IDS_PAYMENT_REQUEST_SHIPPING_SECTION_NAME" desc="The name of the Shipping Address section in the Payment Sheet of the Payment Request dialog.">
     Shipping address
   </message>
   <message name="IDS_PAYMENT_REQUEST_CONTACT_INFO_SECTION_NAME" desc="The name of the Contact Info section in the Payment Sheet of the Payment Request dialog.">
     Contact info
+  </message>
+  <message name="IDS_PAYMENT_REQUEST_ORDER_SUMMARY_MULTIPLE_CURRENCY_INDICATOR" desc="The label that indicates that there are multiple currencies among the display items">
+    Multiple
   </message>
 
   <!-- Shipping address in web payments API -->
@@ -277,6 +307,30 @@
   <if expr="is_android">
     <message name="IDS_EXTERNAL_PAYMENT_APP_LEAVE_INCOGNITO_WARNING" desc="Alert dialog text warning the user that incognito mode does not continue into external payment apps." formatter_data="android_java">
       Leaving incognito mode to pay via an external application. Continue?
+    </message>
+  </if>
+
+  <!-- Payment Request section preview strings. They are slightly different on desktop and android because the pluralization and formatting code behaves differently. -->
+  <if expr="not is_android">
+    <message name="IDS_PAYMENT_REQUEST_PAYMENT_METHODS_PREVIEW" desc="This is a snippet of a payment method a user has saved to Chrome, plus an indication of the number of additional payment methods the user has saved. Its function is to show the user has payment methods that can be used to complete a payment, and thus doesn't have to type the entire payment method. [ICU Syntax]">
+    {PAYMENT_METHOD, plural,
+       =1 {<ph name="PAYMENT_METHOD_PREVIEW">{1}<ex>VISA ....1234</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_PAYMENT_METHODS">{2}<ex>1</ex></ph> more}
+       other {<ph name="PAYMENT_METHOD_PREVIEW">{1}<ex>VISA ....1234</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_PAYMENT_METHODS">{2}<ex>2</ex></ph> more}}
+    </message>
+    <message name="IDS_PAYMENT_REQUEST_SHIPPING_ADDRESSES_PREVIEW" desc="This is a snippet of a shipping address a user has saved to Chrome, plus an indication of the number of additional shipping addresses the user has saved. Its function is to show the user has shipping addresses that can be used to complete a purchase, and thus doesn't have to type the entire address. [ICU Syntax]" formatter_data="android_java">
+    {SHIPPING_ADDRESS, plural,
+      =1 {<ph name="SHIPPING_ADDRESS_PREVIEW">{1}<ex>Jerry, 1253 Mcgill college</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES">{2}<ex>1</ex></ph> more}
+      other {<ph name="SHIPPING_ADDRESS_PREVIEW">{1}<ex>Jerry, 1253 Mcgill college</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES">{2}<ex>2</ex></ph> more}}
+    </message>
+    <message name="IDS_PAYMENT_REQUEST_SHIPPING_OPTIONS_PREVIEW" desc="This is a snippet of a shipping option a merchant supports, plus an indication of the number of additional shipping options the merchant supports. Its function is to show the user can choose different shipping options to complete a purchase. [ICU Syntax]">
+    {SHIPPING_OPTIONS, plural,
+       =1 {<ph name="SHIPPING_OPTION_PREVIEW">{1}<ex>standard shipping</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS">{2}<ex>1</ex></ph> more}
+       other {<ph name="SHIPPING_OPTION_PREVIEW">{1}<ex>standard shipping</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS">{2}<ex>2</ex></ph> more}}
+    </message>
+    <message name="IDS_PAYMENT_REQUEST_CONTACTS_PREVIEW" desc="This is a snippet of a contact a user has saved to Chrome, plus an indication of the number of additional contacts the user has saved. Its function is to show the user has contacts that can be used to complete a purchase, and thus doesn't have to type the entire contact info. [ICU Syntax]">
+     {CONTACT, plural,
+       =1 {<ph name="CONTACT_PREVIEW">{1}<ex>Jerry, 438-123-1922</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_CONTACTS">{2}<ex>1</ex></ph> more}
+       other {<ph name="CONTACT_PREVIEW">{1}<ex>Jerry, 438-123-1922</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_CONTACTS">{2}<ex>2</ex></ph> more}}
     </message>
   </if>
 </grit-part>

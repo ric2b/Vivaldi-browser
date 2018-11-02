@@ -32,6 +32,7 @@
 #include "ui/aura/mus/window_tree_client_delegate.h"
 #include "ui/aura/mus/window_tree_client_observer.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
+#include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/aura/test/aura_mus_test_base.h"
 #include "ui/aura/test/mus/test_window_tree.h"
 #include "ui/aura/test/mus/window_tree_client_private.h"
@@ -81,13 +82,13 @@ bool IsWindowHostVisible(Window* window) {
 
 // Register some test window properties for aura/mus conversion.
 void RegisterTestProperties(PropertyConverter* converter) {
-  converter->RegisterProperty(
+  converter->RegisterPrimitiveProperty(
       kTestPropertyKey1, kTestPropertyServerKey1,
       PropertyConverter::CreateAcceptAnyValueCallback());
-  converter->RegisterProperty(
+  converter->RegisterPrimitiveProperty(
       kTestPropertyKey2, kTestPropertyServerKey2,
       PropertyConverter::CreateAcceptAnyValueCallback());
-  converter->RegisterProperty(
+  converter->RegisterPrimitiveProperty(
       kTestPropertyKey3, kTestPropertyServerKey3,
       PropertyConverter::CreateAcceptAnyValueCallback());
 }
@@ -366,7 +367,7 @@ TEST_F(WindowTreeClientWmTest, OnWindowHierarchyChangedWithProperties) {
   Window* child = root_window()->children()[0];
   EXPECT_FALSE(child->TargetVisibility());
   EXPECT_EQ(server_test_property1_value, child->GetProperty(kTestPropertyKey1));
-  EXPECT_EQ(child->type(), ui::wm::WINDOW_TYPE_POPUP);
+  EXPECT_EQ(child->type(), client::WINDOW_TYPE_POPUP);
   EXPECT_EQ(ui::mojom::WindowType::BUBBLE,
             child->GetProperty(client::kWindowTypeKey));
 }
@@ -599,22 +600,22 @@ TEST_F(WindowTreeClientWmTest, SetRectProperty) {
 // Verifies property setting behavior for a std::string* property.
 TEST_F(WindowTreeClientWmTest, SetStringProperty) {
   std::string example = "123";
-  ASSERT_EQ(nullptr, root_window()->GetProperty(client::kAppIdKey));
-  root_window()->SetProperty(client::kAppIdKey, new std::string(example));
-  EXPECT_TRUE(root_window()->GetProperty(client::kAppIdKey));
+  ASSERT_NE(nullptr, root_window()->GetProperty(client::kNameKey));
+  root_window()->SetProperty(client::kNameKey, new std::string(example));
+  EXPECT_TRUE(root_window()->GetProperty(client::kNameKey));
   base::Optional<std::vector<uint8_t>> value =
       window_tree()->GetLastPropertyValue();
   ASSERT_TRUE(value.has_value());
   EXPECT_EQ(example, mojo::ConvertTo<std::string>(*value));
   ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
       WindowTreeChangeType::PROPERTY, true));
-  EXPECT_EQ(example, *root_window()->GetProperty(client::kAppIdKey));
+  EXPECT_EQ(example, *root_window()->GetProperty(client::kNameKey));
 
-  root_window()->SetProperty(client::kAppIdKey, new std::string());
-  EXPECT_EQ(std::string(), *root_window()->GetProperty(client::kAppIdKey));
+  root_window()->SetProperty(client::kNameKey, new std::string());
+  EXPECT_EQ(std::string(), *root_window()->GetProperty(client::kNameKey));
   ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
       WindowTreeChangeType::PROPERTY, false));
-  EXPECT_EQ(example, *root_window()->GetProperty(client::kAppIdKey));
+  EXPECT_EQ(example, *root_window()->GetProperty(client::kNameKey));
 }
 
 // Verifies visible is reverted if the server replied that the change failed.
@@ -664,6 +665,8 @@ class InputEventBasicTestWindowDelegate : public test::TestWindowDelegate {
   ~InputEventBasicTestWindowDelegate() override {}
 
   bool got_move() const { return got_move_; }
+  bool got_press() const { return got_press_; }
+  bool got_release() const { return got_release_; }
   bool was_acked() const { return was_acked_; }
   const gfx::Point& last_event_location() const { return last_event_location_; }
   void set_event_id(uint32_t event_id) { event_id_ = event_id; }
@@ -673,6 +676,20 @@ class InputEventBasicTestWindowDelegate : public test::TestWindowDelegate {
     was_acked_ = test_window_tree_->WasEventAcked(event_id_);
     if (event->type() == ui::ET_MOUSE_MOVED)
       got_move_ = true;
+    else if (event->type() == ui::ET_MOUSE_PRESSED)
+      got_press_ = true;
+    else if (event->type() == ui::ET_MOUSE_RELEASED)
+      got_release_ = true;
+    last_event_location_ = event->location();
+    event->SetHandled();
+  }
+
+  void OnTouchEvent(ui::TouchEvent* event) override {
+    was_acked_ = test_window_tree_->WasEventAcked(event_id_);
+    if (event->type() == ui::ET_TOUCH_PRESSED)
+      got_press_ = true;
+    else if (event->type() == ui::ET_TOUCH_RELEASED)
+      got_release_ = true;
     last_event_location_ = event->location();
     event->SetHandled();
   }
@@ -680,6 +697,8 @@ class InputEventBasicTestWindowDelegate : public test::TestWindowDelegate {
   void reset() {
     was_acked_ = false;
     got_move_ = false;
+    got_press_ = false;
+    got_release_ = false;
     last_event_location_ = gfx::Point();
     event_id_ = 0;
   }
@@ -688,6 +707,8 @@ class InputEventBasicTestWindowDelegate : public test::TestWindowDelegate {
   TestWindowTree* test_window_tree_;
   bool was_acked_ = false;
   bool got_move_ = false;
+  bool got_press_ = false;
+  bool got_release_ = false;
   gfx::Point last_event_location_;
   uint32_t event_id_ = 0;
 
@@ -696,7 +717,8 @@ class InputEventBasicTestWindowDelegate : public test::TestWindowDelegate {
 
 class InputEventBasicTestEventHandler : public ui::test::TestEventHandler {
  public:
-  InputEventBasicTestEventHandler() {}
+  explicit InputEventBasicTestEventHandler(Window* target_window)
+      : target_window_(target_window) {}
   ~InputEventBasicTestEventHandler() override {}
 
   bool got_move() const { return got_move_; }
@@ -705,10 +727,12 @@ class InputEventBasicTestEventHandler : public ui::test::TestEventHandler {
 
   // ui::test::TestEventHandler overrides.
   void OnMouseEvent(ui::MouseEvent* event) override {
-    if (event->type() == ui::ET_MOUSE_MOVED)
-      got_move_ = true;
-    last_event_location_ = event->location();
-    event->SetHandled();
+    if (event->target() == target_window_) {
+      if (event->type() == ui::ET_MOUSE_MOVED)
+        got_move_ = true;
+      last_event_location_ = event->location();
+      event->SetHandled();
+    }
   }
 
   void reset() {
@@ -718,6 +742,7 @@ class InputEventBasicTestEventHandler : public ui::test::TestEventHandler {
   }
 
  private:
+  Window* target_window_ = nullptr;
   bool got_move_ = false;
   gfx::Point last_event_location_;
   uint32_t event_id_ = 0;
@@ -729,8 +754,8 @@ class InputEventBasicTestEventHandler : public ui::test::TestEventHandler {
 
 TEST_F(WindowTreeClientClientTest, InputEventBasic) {
   InputEventBasicTestWindowDelegate window_delegate(window_tree());
-  WindowTreeHostMus window_tree_host(window_tree_client_impl(),
-                                     cc::FrameSinkId(1, 1));
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
   Window* top_level = window_tree_host.window();
   const gfx::Rect bounds(0, 0, 100, 100);
   window_tree_host.SetBoundsInPixels(bounds);
@@ -764,8 +789,8 @@ TEST_F(WindowTreeClientClientTest, InputEventBasic) {
 
 TEST_F(WindowTreeClientClientTest, InputEventPointerEvent) {
   InputEventBasicTestWindowDelegate window_delegate(window_tree());
-  WindowTreeHostMus window_tree_host(window_tree_client_impl(),
-                                     cc::FrameSinkId(1, 1));
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
   Window* top_level = window_tree_host.window();
   const gfx::Rect bounds(0, 0, 100, 100);
   window_tree_host.SetBoundsInPixels(bounds);
@@ -797,8 +822,8 @@ TEST_F(WindowTreeClientClientTest, InputEventPointerEvent) {
 }
 
 TEST_F(WindowTreeClientClientTest, InputEventFindTargetAndConversion) {
-  WindowTreeHostMus window_tree_host(window_tree_client_impl(),
-                                     cc::FrameSinkId(1, 1));
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
   Window* top_level = window_tree_host.window();
   const gfx::Rect bounds(0, 0, 100, 100);
   window_tree_host.SetBoundsInPixels(bounds);
@@ -865,7 +890,8 @@ TEST_F(WindowTreeClientClientTest, InputEventFindTargetAndConversion) {
 }
 
 TEST_F(WindowTreeClientClientTest, InputEventCustomWindowTargeter) {
-  WindowTreeHostMus window_tree_host(window_tree_client_impl());
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
   Window* top_level = window_tree_host.window();
   const gfx::Rect bounds(0, 0, 100, 100);
   window_tree_host.SetBoundsInPixels(bounds);
@@ -930,7 +956,8 @@ TEST_F(WindowTreeClientClientTest, InputEventCustomWindowTargeter) {
 
 TEST_F(WindowTreeClientClientTest, InputEventCaptureWindow) {
   std::unique_ptr<WindowTreeHostMus> window_tree_host =
-      base::MakeUnique<WindowTreeHostMus>(window_tree_client_impl());
+      base::MakeUnique<WindowTreeHostMus>(
+          CreateInitParamsForTopLevel(window_tree_client_impl()));
   Window* top_level = window_tree_host->window();
   const gfx::Rect bounds(0, 0, 100, 100);
   window_tree_host->SetBoundsInPixels(bounds);
@@ -1005,9 +1032,10 @@ TEST_F(WindowTreeClientClientTest, InputEventCaptureWindow) {
 }
 
 TEST_F(WindowTreeClientClientTest, InputEventRootWindow) {
-  WindowTreeHostMus window_tree_host(window_tree_client_impl());
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
   Window* top_level = window_tree_host.window();
-  InputEventBasicTestEventHandler root_handler;
+  InputEventBasicTestEventHandler root_handler(top_level);
   top_level->AddPreTargetHandler(&root_handler);
   const gfx::Rect bounds(0, 0, 100, 100);
   window_tree_host.SetBoundsInPixels(bounds);
@@ -1045,6 +1073,129 @@ TEST_F(WindowTreeClientClientTest, InputEventRootWindow) {
   EXPECT_EQ(gfx::Point(), child_delegate.last_event_location());
 }
 
+TEST_F(WindowTreeClientClientTest, InputMouseEventNoWindow) {
+  Env* env = Env::GetInstance();
+  InputEventBasicTestWindowDelegate window_delegate(window_tree());
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
+  Window* top_level = window_tree_host.window();
+  const gfx::Rect bounds(0, 0, 100, 100);
+  window_tree_host.SetBoundsInPixels(bounds);
+  window_tree_host.InitHost();
+  window_tree_host.Show();
+  EXPECT_EQ(bounds, top_level->bounds());
+  EXPECT_EQ(bounds, window_tree_host.GetBoundsInPixels());
+  Window child(&window_delegate);
+  child.Init(ui::LAYER_NOT_DRAWN);
+  top_level->AddChild(&child);
+  child.SetBounds(gfx::Rect(10, 10, 100, 100));
+  child.Show();
+
+  EXPECT_FALSE(window_delegate.got_press());
+  EXPECT_FALSE(env->IsMouseButtonDown());
+  EXPECT_FALSE(env->mouse_button_flags());
+  EXPECT_EQ(gfx::Point(), env->last_mouse_location());
+
+  const gfx::Point event_location(2, 3);
+  uint32_t event_id = 1;
+  window_delegate.set_event_id(event_id);
+  ui::PointerEvent pointer_event_down(
+      ui::ET_POINTER_DOWN, event_location, gfx::Point(),
+      ui::EF_LEFT_MOUSE_BUTTON, 0,
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE, 0),
+      ui::EventTimeForNow());
+  window_tree_client()->OnWindowInputEvent(
+      event_id, server_id(&child), window_tree_host.display_id(),
+      ui::Event::Clone(pointer_event_down), 0);
+  EXPECT_TRUE(window_tree()->WasEventAcked(event_id));
+  EXPECT_EQ(ui::mojom::EventResult::HANDLED,
+            window_tree()->GetEventResult(event_id));
+  EXPECT_TRUE(window_delegate.got_press());
+  EXPECT_TRUE(env->IsMouseButtonDown());
+  EXPECT_EQ(1024, env->mouse_button_flags());  // ui::EF_LEFT_MOUSE_BUTTON
+  EXPECT_EQ(event_location, env->last_mouse_location());
+  window_delegate.reset();
+
+  const gfx::Point event_location1(4, 5);
+  event_id = 2;
+  window_delegate.set_event_id(event_id);
+  ui::PointerEvent pointer_event_up(
+      ui::ET_POINTER_UP, event_location1, gfx::Point(),
+      ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON,
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE, 0),
+      ui::EventTimeForNow());
+  window_tree_client()->OnWindowInputEvent(
+      event_id, kInvalidServerId, window_tree_host.display_id(),
+      ui::Event::Clone(pointer_event_up), 0);
+  EXPECT_TRUE(window_tree()->WasEventAcked(event_id));
+  // WindowTreeClient::OnWindowInputEvent cannot find a target window with
+  // kInvalidServerId but should use the event to update event states kept in
+  // aura::Env, location shouldn't be updated.
+  EXPECT_EQ(ui::mojom::EventResult::UNHANDLED,
+            window_tree()->GetEventResult(event_id));
+  EXPECT_FALSE(window_delegate.got_release());
+  EXPECT_FALSE(env->IsMouseButtonDown());
+  EXPECT_FALSE(env->mouse_button_flags());
+  EXPECT_EQ(event_location, env->last_mouse_location());
+}
+
+TEST_F(WindowTreeClientClientTest, InputTouchEventNoWindow) {
+  Env* env = Env::GetInstance();
+  InputEventBasicTestWindowDelegate window_delegate(window_tree());
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
+  Window* top_level = window_tree_host.window();
+  const gfx::Rect bounds(0, 0, 100, 100);
+  window_tree_host.SetBoundsInPixels(bounds);
+  window_tree_host.InitHost();
+  window_tree_host.Show();
+  EXPECT_EQ(bounds, top_level->bounds());
+  EXPECT_EQ(bounds, window_tree_host.GetBoundsInPixels());
+  Window child(&window_delegate);
+  child.Init(ui::LAYER_NOT_DRAWN);
+  top_level->AddChild(&child);
+  child.SetBounds(gfx::Rect(10, 10, 100, 100));
+  child.Show();
+
+  EXPECT_FALSE(window_delegate.got_press());
+  EXPECT_FALSE(env->is_touch_down());
+
+  const gfx::Point event_location(2, 3);
+  uint32_t event_id = 1;
+  window_delegate.set_event_id(event_id);
+  ui::PointerEvent pointer_event_down(
+      ui::ET_POINTER_DOWN, event_location, gfx::Point(), 0, 0,
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0),
+      ui::EventTimeForNow());
+  window_tree_client()->OnWindowInputEvent(
+      event_id, server_id(&child), window_tree_host.display_id(),
+      ui::Event::Clone(pointer_event_down), 0);
+  EXPECT_TRUE(window_tree()->WasEventAcked(event_id));
+  EXPECT_EQ(ui::mojom::EventResult::HANDLED,
+            window_tree()->GetEventResult(event_id));
+  EXPECT_TRUE(window_delegate.got_press());
+  EXPECT_TRUE(env->is_touch_down());
+  window_delegate.reset();
+
+  event_id = 2;
+  window_delegate.set_event_id(event_id);
+  ui::PointerEvent pointer_event_up(
+      ui::ET_POINTER_UP, event_location, gfx::Point(), 0, 0,
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0),
+      ui::EventTimeForNow());
+  window_tree_client()->OnWindowInputEvent(
+      event_id, kInvalidServerId, window_tree_host.display_id(),
+      ui::Event::Clone(pointer_event_up), 0);
+  EXPECT_TRUE(window_tree()->WasEventAcked(event_id));
+  // WindowTreeClient::OnWindowInputEvent cannot find a target window with
+  // kInvalidServerId but should use the event to update event states kept in
+  // aura::Env.
+  EXPECT_EQ(ui::mojom::EventResult::UNHANDLED,
+            window_tree()->GetEventResult(event_id));
+  EXPECT_FALSE(window_delegate.got_release());
+  EXPECT_FALSE(env->is_touch_down());
+}
+
 class WindowTreeClientPointerObserverTest : public WindowTreeClientClientTest {
  public:
   WindowTreeClientPointerObserverTest() {}
@@ -1071,7 +1222,7 @@ class WindowTreeClientPointerObserverTest : public WindowTreeClientClientTest {
 // window tree.
 TEST_F(WindowTreeClientPointerObserverTest, OnPointerEventObserved) {
   std::unique_ptr<Window> top_level(base::MakeUnique<Window>(nullptr));
-  top_level->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+  top_level->SetType(client::WINDOW_TYPE_NORMAL);
   top_level->Init(ui::LAYER_NOT_DRAWN);
   top_level->SetBounds(gfx::Rect(0, 0, 100, 100));
   top_level->Show();
@@ -1112,11 +1263,14 @@ TEST_F(WindowTreeClientPointerObserverTest, OnPointerEventObserved) {
 // Tests pointer watchers triggered by events that hit this window tree.
 TEST_F(WindowTreeClientPointerObserverTest,
        OnWindowInputEventWithPointerWatcher) {
-  std::unique_ptr<Window> top_level(base::MakeUnique<Window>(nullptr));
-  top_level->SetType(ui::wm::WINDOW_TYPE_NORMAL);
-  top_level->Init(ui::LAYER_NOT_DRAWN);
-  top_level->SetBounds(gfx::Rect(0, 0, 100, 100));
-  top_level->Show();
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
+  Window* top_level = window_tree_host.window();
+  const gfx::Rect bounds(0, 0, 100, 100);
+  window_tree_host.SetBoundsInPixels(bounds);
+  window_tree_host.InitHost();
+  window_tree_host.Show();
+  EXPECT_EQ(bounds, top_level->bounds());
 
   // Start a pointer watcher for all events excluding move events.
   window_tree_client_impl()->StartPointerWatcher(false /* want_moves */);
@@ -1126,7 +1280,7 @@ TEST_F(WindowTreeClientPointerObserverTest,
       ui::ET_POINTER_DOWN, gfx::Point(), gfx::Point(), ui::EF_CONTROL_DOWN, 0,
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 1),
       base::TimeTicks::Now()));
-  window_tree_client()->OnWindowInputEvent(1, server_id(top_level.get()), 0,
+  window_tree_client()->OnWindowInputEvent(1, server_id(top_level), 0,
                                            std::move(pointer_event_down), true);
 
   // Delegate sensed the event.
@@ -1262,7 +1416,8 @@ TEST_F(WindowTreeClientClientTest, NewTopLevelWindow) {
   const size_t initial_root_count =
       window_tree_client_impl()->GetRoots().size();
   std::unique_ptr<WindowTreeHostMus> window_tree_host =
-      base::MakeUnique<WindowTreeHostMus>(window_tree_client_impl());
+      base::MakeUnique<WindowTreeHostMus>(
+          CreateInitParamsForTopLevel(window_tree_client_impl()));
   window_tree_host->InitHost();
   EXPECT_FALSE(window_tree_host->window()->TargetVisibility());
   aura::Window* top_level = window_tree_host->window();
@@ -1281,8 +1436,7 @@ TEST_F(WindowTreeClientClientTest, NewTopLevelWindow) {
   data->window_id = server_id(top_level);
   const int64_t display_id = 1;
   window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
-                                          display_id, false,
-                                          cc::FrameSinkId(1, 1), base::nullopt);
+                                          display_id, false, base::nullopt);
 
   EXPECT_FALSE(window_tree_host->window()->TargetVisibility());
 
@@ -1299,7 +1453,8 @@ TEST_F(WindowTreeClientClientTest, NewTopLevelWindow) {
 TEST_F(WindowTreeClientClientTest, NewTopLevelWindowGetsPropertiesFromData) {
   const size_t initial_root_count =
       window_tree_client_impl()->GetRoots().size();
-  WindowTreeHostMus window_tree_host(window_tree_client_impl());
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
   Window* top_level = window_tree_host.window();
   EXPECT_EQ(initial_root_count + 1,
             window_tree_client_impl()->GetRoots().size());
@@ -1322,8 +1477,7 @@ TEST_F(WindowTreeClientClientTest, NewTopLevelWindowGetsPropertiesFromData) {
   ASSERT_TRUE(window_tree()->GetAndRemoveFirstChangeOfType(
       WindowTreeChangeType::NEW_TOP_LEVEL, &change_id));
   window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
-                                          display_id, true,
-                                          cc::FrameSinkId(1, 1), base::nullopt);
+                                          display_id, true, base::nullopt);
   EXPECT_EQ(
       0u, window_tree()->GetChangeCountForType(WindowTreeChangeType::VISIBLE));
 
@@ -1338,7 +1492,8 @@ TEST_F(WindowTreeClientClientTest, NewTopLevelWindowGetsPropertiesFromData) {
 TEST_F(WindowTreeClientClientTest, NewWindowGetsAllChangesInFlight) {
   RegisterTestProperties(GetPropertyConverter());
 
-  WindowTreeHostMus window_tree_host(window_tree_client_impl());
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
   Window* top_level = window_tree_host.window();
   EXPECT_FALSE(top_level->TargetVisibility());
 
@@ -1375,7 +1530,7 @@ TEST_F(WindowTreeClientClientTest, NewWindowGetsAllChangesInFlight) {
       WindowTreeChangeType::NEW_TOP_LEVEL, &new_window_in_flight_change_id));
   window_tree_client()->OnTopLevelCreated(new_window_in_flight_change_id,
                                           std::move(data), display_id, true,
-                                          cc::FrameSinkId(1, 1), base::nullopt);
+                                          base::nullopt);
 
   // The only value that should take effect is the property for 'yy' as it was
   // not in flight.
@@ -1578,7 +1733,8 @@ TEST_F(WindowTreeClientClientTest,
   const size_t initial_root_count =
       window_tree_client_impl()->GetRoots().size();
   std::unique_ptr<WindowTreeHostMus> window_tree_host =
-      base::MakeUnique<WindowTreeHostMus>(window_tree_client_impl());
+      base::MakeUnique<WindowTreeHostMus>(
+          CreateInitParamsForTopLevel(window_tree_client_impl()));
   window_tree_host->InitHost();
   EXPECT_EQ(initial_root_count + 1,
             window_tree_client_impl()->GetRoots().size());
@@ -1598,8 +1754,7 @@ TEST_F(WindowTreeClientClientTest,
 
   const int64_t display_id = 1;
   window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
-                                          display_id, true,
-                                          cc::FrameSinkId(1, 1), base::nullopt);
+                                          display_id, true, base::nullopt);
   EXPECT_EQ(initial_root_count, window_tree_client_impl()->GetRoots().size());
 }
 
@@ -1614,14 +1769,13 @@ TEST_F(WindowTreeClientClientTest, NewTopLevelWindowGetsProperties) {
   const UnknownPropertyType kUnknownPropertyValue = 101;
   properties[kUnknownPropertyKey] =
       mojo::ConvertTo<std::vector<uint8_t>>(kUnknownPropertyValue);
-  std::unique_ptr<WindowTreeHostMus> window_tree_host =
-      base::MakeUnique<WindowTreeHostMus>(window_tree_client_impl(),
-                                          cc::FrameSinkId(1, 1), &properties);
-  window_tree_host->InitHost();
-  window_tree_host->window()->Show();
+  WindowTreeHostMus window_tree_host(CreateInitParamsForTopLevel(
+      window_tree_client_impl(), std::move(properties)));
+  window_tree_host.InitHost();
+  window_tree_host.window()->Show();
   // Verify the property made it to the window.
   EXPECT_EQ(property_value,
-            window_tree_host->window()->GetProperty(kTestPropertyKey1));
+            window_tree_host.window()->GetProperty(kTestPropertyKey1));
 
   // Get the id of the in flight change for creating the new top level window.
   uint32_t change_id;
@@ -1670,7 +1824,8 @@ class CloseWindowWindowTreeHostObserver : public aura::WindowTreeHostObserver {
 }  // namespace
 
 TEST_F(WindowTreeClientClientTest, CloseWindow) {
-  WindowTreeHostMus window_tree_host(window_tree_client_impl());
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
   window_tree_host.InitHost();
   CloseWindowWindowTreeHostObserver observer;
   window_tree_host.AddObserver(&observer);
@@ -1883,7 +2038,8 @@ TEST_F(WindowTreeClientClientTest, TwoWindowTreesRequestCapture) {
   // Creating a WindowTreeHost so we can have two root windows: top_level
   // and root_window().
   std::unique_ptr<WindowTreeHostMus> window_tree_host =
-      base::MakeUnique<WindowTreeHostMus>(window_tree_client_impl());
+      base::MakeUnique<WindowTreeHostMus>(
+          CreateInitParamsForTopLevel(window_tree_client_impl()));
   window_tree_host->InitHost();
   Window* top_level = window_tree_host->window();
   std::unique_ptr<client::DefaultCaptureClient> capture_client(
@@ -1904,8 +2060,7 @@ TEST_F(WindowTreeClientClientTest, TwoWindowTreesRequestCapture) {
   data->visible = true;
   const int64_t display_id = 1;
   window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
-                                          display_id, true,
-                                          cc::FrameSinkId(1, 1), base::nullopt);
+                                          display_id, true, base::nullopt);
   EXPECT_EQ(
       0u, window_tree()->GetChangeCountForType(WindowTreeChangeType::VISIBLE));
   EXPECT_TRUE(top_level->TargetVisibility());
@@ -2085,6 +2240,25 @@ TEST_F(WindowTreeClientWmTest, NewWindowTreeHostIsConfiguredCorrectly) {
   EXPECT_EQ(display.id(), window_tree_host->display_id());
 }
 
+TEST_F(WindowTreeClientWmTest, ManuallyCreateDisplay) {
+  const gfx::Rect bounds(1, 2, 101, 102);
+  std::unique_ptr<DisplayInitParams> display_params =
+      base::MakeUnique<DisplayInitParams>();
+  display_params->display = base::MakeUnique<display::Display>(201);
+  display_params->display->set_bounds(bounds);
+  display_params->viewport_metrics.bounds_in_pixels = bounds;
+  display_params->viewport_metrics.device_scale_factor = 1.0f;
+  display_params->viewport_metrics.ui_scale_factor = 1.0f;
+  WindowTreeHostMusInitParams init_params =
+      WindowTreeClientPrivate(window_tree_client_impl())
+          .CallCreateInitParamsForNewDisplay();
+  init_params.display_init_params = std::move(display_params);
+  WindowTreeHostMus window_tree_host(std::move(init_params));
+  window_tree_host.InitHost();
+  EXPECT_EQ(bounds, window_tree_host.GetBoundsInPixels());
+  EXPECT_EQ(gfx::Rect(bounds.size()), window_tree_host.window()->bounds());
+}
+
 TEST_F(WindowTreeClientWmTestHighDPI, SetBounds) {
   const gfx::Rect original_bounds(root_window()->bounds());
   const gfx::Rect new_bounds(gfx::Rect(0, 0, 100, 100));
@@ -2102,7 +2276,8 @@ TEST_F(WindowTreeClientWmTestHighDPI, SetBounds) {
 }
 
 TEST_F(WindowTreeClientClientTestHighDPI, NewTopLevelWindowBounds) {
-  WindowTreeHostMus window_tree_host(window_tree_client_impl());
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
   Window* top_level = window_tree_host.window();
   window_tree_host.InitHost();
 
@@ -2114,8 +2289,7 @@ TEST_F(WindowTreeClientClientTestHighDPI, NewTopLevelWindowBounds) {
   ASSERT_TRUE(window_tree()->GetAndRemoveFirstChangeOfType(
       WindowTreeChangeType::NEW_TOP_LEVEL, &change_id));
   window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
-                                          display_id, true,
-                                          cc::FrameSinkId(1, 1), base::nullopt);
+                                          display_id, true, base::nullopt);
 
   // aura::Window should operate in DIP and aura::WindowTreeHost should operate
   // in pixels.
@@ -2129,7 +2303,7 @@ TEST_F(WindowTreeClientClientTestHighDPI, PointerEventsInDip) {
   ASSERT_EQ(2.0f, primary_display.device_scale_factor());
 
   std::unique_ptr<Window> top_level(base::MakeUnique<Window>(nullptr));
-  top_level->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+  top_level->SetType(client::WINDOW_TYPE_NORMAL);
   top_level->Init(ui::LAYER_NOT_DRAWN);
   top_level->SetBounds(gfx::Rect(0, 0, 100, 100));
   top_level->Show();
@@ -2158,7 +2332,8 @@ TEST_F(WindowTreeClientClientTestHighDPI, PointerEventsInDip) {
 }
 
 TEST_F(WindowTreeClientClientTestHighDPI, InputEventsInDip) {
-  WindowTreeHostMus window_tree_host(window_tree_client_impl());
+  WindowTreeHostMus window_tree_host(
+      CreateInitParamsForTopLevel(window_tree_client_impl()));
   display::Screen* screen = display::Screen::GetScreen();
   display::Display display;
   ASSERT_TRUE(
@@ -2228,6 +2403,20 @@ TEST_F(WindowTreeClientClientTestHighDPI, InputEventsInDip) {
                                                event_location_in_dip.y() + 30);
   EXPECT_EQ(transformed_event_location_in_dip,
             window_delegate1.last_event_location());
+}
+
+using WindowTreeClientDestructionTest = test::AuraTestBaseMus;
+
+TEST_F(WindowTreeClientDestructionTest, Shutdown) {
+  // Windows should be able to outlive the WindowTreeClient.
+  aura::Window window(nullptr);
+  window.Init(ui::LAYER_NOT_DRAWN);
+  DeleteWindowTreeClient();
+
+  // And it should be possible to create Windows after the WindowTreeClient has
+  // been deleted.
+  aura::Window window2(nullptr);
+  window2.Init(ui::LAYER_NOT_DRAWN);
 }
 
 }  // namespace aura

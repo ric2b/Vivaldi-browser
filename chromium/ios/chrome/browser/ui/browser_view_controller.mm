@@ -65,7 +65,6 @@
 #import "ios/chrome/browser/native_app_launcher/native_app_navigation_controller.h"
 #import "ios/chrome/browser/open_url_util.h"
 #import "ios/chrome/browser/passwords/password_controller.h"
-#import "ios/chrome/browser/payments/payment_request_manager.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/reading_list/offline_url_utils.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
@@ -113,7 +112,6 @@
 #import "ios/chrome/browser/ui/elements/activity_overlay_coordinator.h"
 #import "ios/chrome/browser/ui/external_file_controller.h"
 #import "ios/chrome/browser/ui/external_file_remover.h"
-#include "ios/chrome/browser/ui/file_locations.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_controller_ios.h"
 #import "ios/chrome/browser/ui/first_run/welcome_to_chrome_view_controller.h"
 #import "ios/chrome/browser/ui/fullscreen_controller.h"
@@ -125,6 +123,7 @@
 #import "ios/chrome/browser/ui/omnibox/page_info_view_controller.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
 #import "ios/chrome/browser/ui/page_not_available_controller.h"
+#import "ios/chrome/browser/ui/payments/payment_request_manager.h"
 #import "ios/chrome/browser/ui/preload_controller.h"
 #import "ios/chrome/browser/ui/preload_controller_delegate.h"
 #import "ios/chrome/browser/ui/print/print_controller.h"
@@ -169,6 +168,7 @@
 #include "ios/public/provider/chrome/browser/voice/voice_search_controller.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_controller_delegate.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
+#import "ios/shared/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #include "ios/web/public/active_state_manager.h"
 #include "ios/web/public/navigation_item.h"
@@ -272,12 +272,8 @@ enum HeaderBehaviour {
 const CGFloat kIPadFindBarOverlap = 11;
 
 bool IsURLAllowedInIncognito(const GURL& url) {
-  // Most URLs are allowed in incognito; the following are exceptions.
-  if (!url.SchemeIs(kChromeUIScheme))
-    return true;
-  std::string url_host = url.host();
-  return url_host != kChromeUIHistoryHost &&
-         url_host != kChromeUIHistoryFrameHost;
+  // Most URLs are allowed in incognito; the following is an exception.
+  return !(url.SchemeIs(kChromeUIScheme) && url.host() == kChromeUIHistoryHost);
 }
 
 // Temporary key to use when storing native controllers vended to tabs before
@@ -399,6 +395,9 @@ NSString* const kNativeControllerTemporaryKey = @"NativeControllerTemporaryKey";
 
   // Handles presentation of JavaScript dialogs.
   std::unique_ptr<JavaScriptDialogPresenterImpl> _javaScriptDialogPresenter;
+
+  // Handles command dispatching.
+  CommandDispatcher* _dispatcher;
 
   // Keyboard commands provider.  It offloads most of the keyboard commands
   // management off of the BVC.
@@ -948,6 +947,14 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
     _nativeControllersForTabIDs = [NSMapTable strongToWeakObjectsMapTable];
     _dialogPresenter = [[DialogPresenter alloc] initWithDelegate:self
                                         presentingViewController:self];
+    _dispatcher = [[CommandDispatcher alloc] init];
+    [_dispatcher startDispatchingToTarget:self
+                              forProtocol:@protocol(UrlLoader)];
+    [_dispatcher startDispatchingToTarget:self
+                              forProtocol:@protocol(WebToolbarDelegate)];
+    [_dispatcher startDispatchingToTarget:self
+                              forSelector:@selector(chromeExecuteCommand:)];
+
     _javaScriptDialogPresenter.reset(
         new JavaScriptDialogPresenterImpl(_dialogPresenter));
     _webStateDelegate.reset(new web::WebStateDelegateBridge(self));
@@ -1716,6 +1723,8 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
   // The file remover needs the browser state, so needs to be destroyed now.
   _externalFileRemover = nil;
   _browserState = nullptr;
+  [_dispatcher stopDispatchingToTarget:self];
+  _dispatcher = nil;
 }
 
 - (void)installFakeStatusBar {
@@ -1762,6 +1771,8 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
       newWebToolbarControllerWithDelegate:self
                                 urlLoader:self
                           preloadProvider:_preloadController];
+  [_dispatcher startDispatchingToTarget:_toolbarController
+                            forProtocol:@protocol(OmniboxFocuser)];
   [_toolbarController setTabCount:[_model count]];
   if (_voiceSearchController)
     _voiceSearchController->SetDelegate(_toolbarController);
@@ -1978,7 +1989,6 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
   [_toolbarController dismissToolsMenuPopup];
   [self hidePageInfoPopupForView:nil];
   [_toolbarController dismissTabHistoryPopup];
-  [[_model currentTab] recordStateInHistory];
 }
 
 #pragma mark - Tap handling
@@ -2600,13 +2610,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
   if (isImage) {
     web::Referrer referrer([_model currentTab].url, params.referrer_policy);
     // Save Image.
-    if (experimental_flags::IsDownloadRenamingEnabled()) {
-      title = l10n_util::GetNSStringWithFixup(
-          IDS_IOS_CONTENT_CONTEXT_DOWNLOADIMAGE);
-    } else {
-      title =
-          l10n_util::GetNSStringWithFixup(IDS_IOS_CONTENT_CONTEXT_SAVEIMAGE);
-    }
+    title = l10n_util::GetNSStringWithFixup(IDS_IOS_CONTENT_CONTEXT_SAVEIMAGE);
     action = ^{
       Record(ACTION_SAVE_IMAGE, isImage, isLink);
       [weakSelf saveImageAtURL:imageUrl referrer:referrer];
@@ -2636,7 +2640,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
 
     TemplateURLService* service =
         ios::TemplateURLServiceFactory::GetForBrowserState(_browserState);
-    TemplateURL* defaultURL = service->GetDefaultSearchProvider();
+    const TemplateURL* defaultURL = service->GetDefaultSearchProvider();
     if (defaultURL && !defaultURL->image_url().empty() &&
         defaultURL->image_url_ref().IsValid(service->search_terms_data())) {
       title = l10n_util::GetNSStringF(IDS_IOS_CONTEXT_MENU_SEARCHWEBFORIMAGE,
@@ -3020,8 +3024,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
         url, ReadingListModelFactory::GetForBrowserState(_browserState));
   }
 
-  return host == kChromeUINewTabHost || host == kChromeUIBookmarksHost ||
-         host == kChromeUITermsHost;
+  return host == kChromeUINewTabHost || host == kChromeUIBookmarksHost;
 }
 
 - (id<CRWNativeContent>)controllerForURL:(const GURL&)url
@@ -3039,7 +3042,9 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
                                      browserState:_browserState
                                        colorCache:_dominantColorCache
                                webToolbarDelegate:self
-                                         tabModel:_model];
+                                         tabModel:_model
+                             parentViewController:self
+                                       dispatcher:_dispatcher];
     pageController.swipeRecognizerProvider = self.sideSwipeController;
 
     // Panel is always NTP for iPhone.
@@ -3062,18 +3067,6 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
     }
     [pageController selectPanel:panelType];
     nativeController = pageController;
-  } else if (url_host == kChromeUITermsHost) {
-    const std::string& filename = GetTermsOfServicePath();
-
-    StaticHtmlNativeContent* staticNativeController =
-        [[StaticHtmlNativeContent alloc]
-            initWithResourcePathResource:base::SysUTF8ToNSString(filename)
-                                  loader:self
-                            browserState:_browserState
-                                     url:GURL(kChromeUITermsURL)];
-    [self setOverScrollActionControllerToStaticNativeContent:
-              staticNativeController];
-    nativeController = staticNativeController;
   } else if (url_host == kChromeUIOfflineHost &&
              [self hasControllerForURL:url]) {
     StaticHtmlNativeContent* staticNativeController =
@@ -3093,17 +3086,16 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
           [[ExternalFileController alloc] initWithURL:url
                                          browserState:_browserState];
     }
+  } else if (url_host == kChromeUICrashHost) {
+    // There is no native controller for kChromeUICrashHost, it is instead
+    // handled as any other renderer crash by the SadTabTabHelper.
+    // nativeController must be set to nil to prevent defaulting to a
+    // PageNotAvailableController.
+    nativeController = nil;
   } else {
     DCHECK(![self hasControllerForURL:url]);
     // In any other case the PageNotAvailableController is returned.
     nativeController = [[PageNotAvailableController alloc] initWithUrl:url];
-    if (url_host == kChromeUIHistoryFrameHost) {
-      base::mac::ObjCCastStrict<PageNotAvailableController>(nativeController)
-          .descriptionText = l10n_util::GetNSStringFWithFixup(
-          IDS_IOS_HISTORY_URL_NOT_AVAILABLE,
-          base::UTF8ToUTF16(kChromeUIHistoryURL),
-          l10n_util::GetStringUTF16(IDS_HISTORY_SHOW_HISTORY));
-    }
   }
   // If a native controller is vended before its tab is added to the tab model,
   // use the temporary key and add it under the new tab's tabId in the
@@ -3200,7 +3192,8 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
 
   TemplateURLService* templateUrlService =
       ios::TemplateURLServiceFactory::GetForBrowserState(_browserState);
-  TemplateURL* defaultURL = templateUrlService->GetDefaultSearchProvider();
+  const TemplateURL* defaultURL =
+      templateUrlService->GetDefaultSearchProvider();
   DCHECK(!defaultURL->image_url().empty());
   DCHECK(defaultURL->image_url_ref().IsValid(
       templateUrlService->search_terms_data()));
@@ -3397,6 +3390,10 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
   DCHECK(_browserState);
   DCHECK(self.visible || self.dismissingModal);
 
+  // Record the time this menu was requested; to be stored in the configuration
+  // object.
+  NSDate* showToolsMenuPopupRequestDate = [NSDate date];
+
   // Dismiss the omnibox (if open).
   [_toolbarController cancelOmniboxEdit];
   // Dismiss the soft keyboard (if open).
@@ -3406,6 +3403,8 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
 
   ToolsMenuConfiguration* configuration =
       [[ToolsMenuConfiguration alloc] initWithDisplayView:[self view]];
+  configuration.requestStartTime =
+      showToolsMenuPopupRequestDate.timeIntervalSinceReferenceDate;
   if ([_model count] == 0)
     [configuration setNoOpenedTabs:YES];
 
@@ -3702,7 +3701,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
   }
 
   // NOTE: This check for the Crash Host URL is here to avoid the URL from
-  // ending up in the history causign the app to crash at every subsequent
+  // ending up in the history causing the app to crash at every subsequent
   // restart.
   if (url.host() == kChromeUIBrowserCrashHost) {
     [self induceBrowserCrash];
@@ -3725,7 +3724,6 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
         [newTab navigationManager]->CanPruneAllButLastCommittedItem();
 
     if (oldTab && newTab && canPruneItems) {
-      [oldTab recordStateInHistory];
       [newTab navigationManager]->CopyStateFromAndPrune(
           [oldTab navigationManager]);
       [[newTab nativeAppNavigationController]
@@ -4067,7 +4065,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
       [[_model currentTab] reloadWithUserAgentType:web::UserAgentType::DESKTOP];
       break;
     case IDC_REQUEST_MOBILE_SITE:
-      NOTREACHED();
+      [[_model currentTab] reloadWithUserAgentType:web::UserAgentType::MOBILE];
       break;
     case IDC_SHOW_TOOLS_MENU: {
       [self showToolsMenuPopup];
@@ -4357,7 +4355,12 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
 }
 
 - (void)updateFindBar:(BOOL)initialUpdate shouldFocus:(BOOL)shouldFocus {
-  DCHECK([_model currentTab]);
+  // TODO(crbug.com/731045): This early return temporarily replaces a DCHECK.
+  // For unknown reasons, this DCHECK sometimes was hit in the wild, resulting
+  // in a crash.
+  if (![_model currentTab]) {
+    return;
+  }
   auto* helper = FindTabHelper::FromWebState([_model currentTab].webState);
   if (helper && helper->IsFindUIActive()) {
     if (initialUpdate && !_isOffTheRecord) {
@@ -4978,8 +4981,12 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
 
 #pragma mark - PreloadControllerDelegate methods
 
-- (BOOL)shouldUseDesktopUserAgent {
+- (BOOL)preloadShouldUseDesktopUserAgent {
   return [_model currentTab].usesDesktopUserAgent;
+}
+
+- (BOOL)preloadHasNativeControllerForURL:(const GURL&)url {
+  return [self hasControllerForURL:url];
 }
 
 #pragma mark - BookmarkBridgeMethods

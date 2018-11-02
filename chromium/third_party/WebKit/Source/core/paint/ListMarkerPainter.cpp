@@ -35,7 +35,7 @@ static inline void PaintSymbol(GraphicsContext& context,
       context.FillRect(marker);
       break;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       break;
   }
 }
@@ -72,12 +72,10 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info,
   GraphicsContext& context = paint_info.context;
 
   if (layout_list_marker_.IsImage()) {
-    context.DrawImage(
-        layout_list_marker_.GetImage()
-            ->GetImage(layout_list_marker_, marker.Size(),
-                       layout_list_marker_.StyleRef().EffectiveZoom())
-            .Get(),
-        marker);
+    context.DrawImage(layout_list_marker_.GetImage()
+                          ->GetImage(layout_list_marker_, marker.Size())
+                          .Get(),
+                      marker);
     if (layout_list_marker_.GetSelectionState() != SelectionNone) {
       LayoutRect sel_rect = layout_list_marker_.LocalSelectionRect();
       sel_rect.MoveBy(box_origin);
@@ -96,8 +94,8 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info,
   Color color(layout_list_marker_.ResolveColor(CSSPropertyColor));
 
   if (BoxPainter::ShouldForceWhiteBackgroundForPrintEconomy(
-          layout_list_marker_.StyleRef(),
-          layout_list_marker_.ListItem()->GetDocument()))
+          layout_list_marker_.ListItem()->GetDocument(),
+          layout_list_marker_.StyleRef()))
     color = TextPainter::TextColorForWhiteBackground(color);
 
   // Apply the color to the list marker text.

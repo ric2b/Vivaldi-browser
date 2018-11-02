@@ -33,16 +33,18 @@ class APIBindingsSystem {
  public:
   using GetAPISchemaMethod =
       base::Callback<const base::DictionaryValue&(const std::string&)>;
-  using CustomTypeHandler =
-      base::Callback<v8::Local<v8::Object>(v8::Local<v8::Context> context,
-                                           const std::string& property_name,
-                                           APIRequestHandler* request_handler,
-                                           APIEventHandler* event_handler,
-                                           APITypeReferenceMap* type_refs)>;
+  using CustomTypeHandler = base::Callback<v8::Local<v8::Object>(
+      v8::Isolate* isolate,
+      const std::string& property_name,
+      const base::ListValue* property_values,
+      APIRequestHandler* request_handler,
+      APIEventHandler* event_handler,
+      APITypeReferenceMap* type_refs)>;
 
   APIBindingsSystem(const binding::RunJSFunction& call_js,
                     const binding::RunJSFunctionSync& call_js_sync,
                     const GetAPISchemaMethod& get_api_schema,
+                    const APIBinding::AvailabilityCallback& is_available,
                     const APIRequestHandler::SendRequestMethod& send_request,
                     const APIEventHandler::EventListenersChangedMethod&
                         event_listeners_changed,
@@ -53,8 +55,6 @@ class APIBindingsSystem {
   v8::Local<v8::Object> CreateAPIInstance(
       const std::string& api_name,
       v8::Local<v8::Context> context,
-      v8::Isolate* isolate,
-      const APIBinding::AvailabilityCallback& is_available,
       APIBindingHooks** hooks_out);
 
   // Responds to the request with the given |request_id|, calling the callback
@@ -101,9 +101,11 @@ class APIBindingsSystem {
   void InitializeType(const std::string& name);
 
   // Handles creating the type for the specified property.
-  v8::Local<v8::Object> CreateCustomType(v8::Local<v8::Context> context,
-                                         const std::string& type_name,
-                                         const std::string& property_name);
+  v8::Local<v8::Object> CreateCustomType(
+      v8::Isolate* isolate,
+      const std::string& type_name,
+      const std::string& property_name,
+      const base::ListValue* property_values);
 
   // The map of cached API reference types.
   APITypeReferenceMap type_reference_map_;
@@ -132,6 +134,8 @@ class APIBindingsSystem {
   // The method to retrieve the DictionaryValue describing a given extension
   // API. Curried in for testing purposes so we can use fake APIs.
   GetAPISchemaMethod get_api_schema_;
+
+  APIBinding::AvailabilityCallback is_available_;
 
   DISALLOW_COPY_AND_ASSIGN(APIBindingsSystem);
 };

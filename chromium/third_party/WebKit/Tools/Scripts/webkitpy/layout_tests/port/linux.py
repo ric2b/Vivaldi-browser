@@ -27,6 +27,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+import tempfile
 
 from webkitpy.layout_tests.breakpad.dump_reader_multipart import DumpReaderLinux
 from webkitpy.layout_tests.port import base
@@ -48,6 +49,8 @@ class LinuxPort(base.Port):
 
     BUILD_REQUIREMENTS_URL = 'https://chromium.googlesource.com/chromium/src/+/master/docs/linux_build_instructions.md'
 
+    XVFB_START_TIMEOUT = 5.0  # Wait up to 5 seconds for Xvfb to start.
+
     @classmethod
     def determine_full_port_name(cls, host, options, port_name):
         if port_name.endswith('linux'):
@@ -65,6 +68,10 @@ class LinuxPort(base.Port):
         if not self.get_option('disable_breakpad'):
             self._dump_reader = DumpReaderLinux(host, self._build_path())
         self._original_home = None
+        self._original_display = None
+        self._xvfb_process = None
+        self._xvfb_stdout = None
+        self._xvfb_stderr = None
 
     def additional_driver_flag(self):
         flags = super(LinuxPort, self).additional_driver_flag()
@@ -104,10 +111,12 @@ class LinuxPort(base.Port):
 
     def setup_test_run(self):
         super(LinuxPort, self).setup_test_run()
+        self._start_xvfb()
         self._setup_dummy_home_dir()
 
     def clean_up_test_run(self):
         super(LinuxPort, self).clean_up_test_run()
+        self._stop_xvfb(save_logs=False)
         self._clean_up_dummy_home_dir()
 
     #
@@ -141,6 +150,86 @@ class LinuxPort(base.Port):
         assert dummy_home != self._original_home
         self._filesystem.rmtree(dummy_home)
         self.host.environ['HOME'] = self._original_home
+
+    def _start_xvfb(self):
+        display = self._find_display()
+        if not display:
+            _log.critical('Failed to find a free display to start Xvfb.')
+            return
+
+        # Parts of Xvfb use a hard-coded "/tmp" for its temporary directory.
+        # This can cause a failure when those parts expect to hardlink against
+        # files that were created in "TEMPDIR" / "TMPDIR".
+        #
+        # See: https://crbug.com/715848
+        env = self.host.environ.copy()
+        if env.get('TMPDIR') and env['TMPDIR'] != '/tmp':
+            _log.info('Overriding TMPDIR to "/tmp" for Xvfb, was: %s', env['TMPDIR'])
+            env['TMPDIR'] = '/tmp'
+
+        _log.debug('Starting Xvfb with display "%s".', display)
+        self._xvfb_stdout = tempfile.NamedTemporaryFile(delete=False)
+        self._xvfb_stderr = tempfile.NamedTemporaryFile(delete=False)
+        self._xvfb_process = self.host.executive.popen(
+            ['Xvfb', display, '-screen', '0', '1280x800x24', '-ac', '-dpi', '96'],
+            stdout=self._xvfb_stdout, stderr=self._xvfb_stderr, env=env)
+
+        # By setting DISPLAY here, the individual worker processes will
+        # get the right DISPLAY. Note, if this environment could be passed
+        # when creating workers, then we wouldn't need to modify DISPLAY here.
+        self._original_display = self.host.environ.get('DISPLAY')
+        self.host.environ['DISPLAY'] = display
+
+        # Check that xvfb has started correctly via probing using xdpyinfo.
+        # While xvfb is running, the poll() method will return None;
+        # https://docs.python.org/2/library/subprocess.html#subprocess.Popen.poll
+        start_time = self.host.time()
+        while self.host.time() - start_time < self.XVFB_START_TIMEOUT or self._xvfb_process.poll() is not None:
+            # We don't explicitly set the display, as we want to check the
+            # environment value.
+            exit_code = self.host.executive.run_command(
+                ['xdpyinfo'], return_exit_code=True)
+            if exit_code == 0:
+                _log.debug('Successfully started Xvfb with display "%s".', display)
+                return
+            _log.warn('xdpyinfo check failed with exit code %s while starting Xvfb on "%s".', exit_code, display)
+            self.host.sleep(0.1)
+
+        retcode = self._xvfb_process.poll()
+        self._stop_xvfb(save_logs=True)
+        _log.critical('Failed to start Xvfb on display "%s" (xvfb retcode: %r).', display, retcode)
+
+    def _find_display(self):
+        """Tries to find a free X display, looping if necessary."""
+        # The "xvfb-run" command uses :99 by default.
+        for display_number in range(99, 120):
+            display = ':%d' % display_number
+            exit_code = self.host.executive.run_command(
+                ['xdpyinfo', '-display', display], return_exit_code=True)
+            if exit_code == 1:
+                return display
+        return None
+
+    def _stop_xvfb(self, save_logs):
+        if self._original_display:
+            self.host.environ['DISPLAY'] = self._original_display
+        if self._xvfb_stdout:
+            self._xvfb_stdout.close()
+        if self._xvfb_stderr:
+            self._xvfb_stderr.close()
+        if self._xvfb_process:
+            _log.debug('Killing Xvfb process pid %d.', self._xvfb_process.pid)
+            self._xvfb_process.kill()
+            self._xvfb_process.wait()
+        if save_logs and self._xvfb_stdout and self.host.filesystem.exists(self._xvfb_stdout.name):
+            for line in self.host.filesystem.read_text_file(self._xvfb_stdout.name).splitlines():
+                _log.warn('Xvfb stdout:  %s', line)
+            self.host.filesystem.remove(self._xvfb_stdout.name)
+        if save_logs and self._xvfb_stderr and self.host.filesystem.exists(self._xvfb_stderr.name):
+            for line in self.host.filesystem.read_text_file(self._xvfb_stderr.name).splitlines():
+                _log.warn('Xvfb stderr:  %s', line)
+            self.host.filesystem.remove(self._xvfb_stderr.name)
+        self._xvfb_stdout = self._xvfb_stderr = self._xvfb_process = None
 
     def _path_to_driver(self, target=None):
         binary_name = self.driver_name()

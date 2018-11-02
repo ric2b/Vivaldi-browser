@@ -28,7 +28,7 @@
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/ssl_client_socket.h"
-#include "net/spdy/spdy_session_key.h"
+#include "net/spdy/chromium/spdy_session_key.h"
 #include "net/ssl/ssl_config_service.h"
 
 namespace net {
@@ -84,7 +84,7 @@ class HttpStreamFactoryImpl::Job {
         const HttpResponseInfo& response_info,
         const SSLConfig& used_ssl_config,
         const ProxyInfo& used_proxy_info,
-        HttpStream* stream) = 0;
+        std::unique_ptr<HttpStream> stream) = 0;
 
     // Invoked when |job| raises failure for SSL Client Auth.
     virtual void OnNeedsClientAuth(Job* job,
@@ -251,6 +251,10 @@ class HttpStreamFactoryImpl::Job {
     return using_existing_quic_session_;
   }
 
+  // TODO(xunjieli): Added to investigate crbug.com/711721. Remove when no
+  // longer needed.
+  void LogHistograms() const;
+
  private:
   friend class HttpStreamFactoryImplJobPeer;
 
@@ -285,7 +289,9 @@ class HttpStreamFactoryImpl::Job {
     STATE_DRAIN_BODY_FOR_AUTH_RESTART,
     STATE_DRAIN_BODY_FOR_AUTH_RESTART_COMPLETE,
     STATE_DONE,
-    STATE_NONE
+    STATE_NONE,
+    // Used for UMA.
+    STATE_MAX,
   };
 
   void OnStreamReadyCallback();
@@ -299,11 +305,13 @@ class HttpStreamFactoryImpl::Job {
                                 HttpAuthController* auth_controller);
   void OnNeedsClientAuthCallback(SSLCertRequestInfo* cert_info);
   void OnHttpsProxyTunnelResponseCallback(const HttpResponseInfo& response_info,
-                                          HttpStream* stream);
+                                          std::unique_ptr<HttpStream> stream);
   void OnPreconnectsComplete();
 
   void OnIOComplete(int result);
-  int RunLoop(int result);
+  // RunLoop() finishes asynchronously and invokes one of the On* methods (see
+  // above) when done.
+  void RunLoop(int result);
   int DoLoop(int result);
   int StartInternal();
   int DoInitConnectionImpl();
@@ -405,6 +413,10 @@ class HttpStreamFactoryImpl::Job {
   CompletionCallback io_callback_;
   std::unique_ptr<ClientSocketHandle> connection_;
   HttpNetworkSession* const session_;
+
+  // |state_| is only used for LogHistograms().
+  State state_;
+
   State next_state_;
   ProxyService::PacRequest* pac_request_;
   SSLInfo ssl_info_;

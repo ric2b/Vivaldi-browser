@@ -20,10 +20,38 @@
       'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
+      'target_name': 'autocomplete_list',
+      'dependencies': [
+        'list',
+        'list_single_selection_model',
+        'position_util',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
       'target_name': 'command',
       'dependencies': [
         '../../compiled_resources2.gyp:cr',
         '../compiled_resources2.gyp:ui',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'context_menu_button',
+      'dependencies': [
+        'menu_button',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'context_menu_handler',
+      'dependencies': [
+         '../../compiled_resources2.gyp:cr',
+         '../compiled_resources2.gyp:event_target',
+         '../compiled_resources2.gyp:ui',
+         'menu',
+         'menu_button',
+         'position_util',
       ],
       'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
@@ -69,6 +97,21 @@
         '../../compiled_resources2.gyp:cr',
         '../../compiled_resources2.gyp:event_tracker',
         '../../compiled_resources2.gyp:util',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'focus_without_ink',
+      'dependencies': [
+        '../../compiled_resources2.gyp:cr',
+        '../compiled_resources2.gyp:ui',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'grid',
+      'dependencies': [
+        'list',
       ],
       'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
@@ -147,6 +190,13 @@
       'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
+      'target_name': 'node_utils',
+      'dependencies': [
+        '../../compiled_resources2.gyp:cr',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
       'target_name': 'overlay',
       'dependencies': [
         '../../compiled_resources2.gyp:cr',
@@ -177,6 +227,15 @@
         'table/compiled_resources2.gyp:table_column_model',
         'table/compiled_resources2.gyp:table_header',
         'table/compiled_resources2.gyp:table_list',
+      ],
+      'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'tree',
+      'dependencies': [
+        '../../compiled_resources2.gyp:cr',
+        '../../compiled_resources2.gyp:util',
+        '../compiled_resources2.gyp:ui',
       ],
       'includes': ['../../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },

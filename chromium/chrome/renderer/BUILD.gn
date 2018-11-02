@@ -21,6 +21,18 @@ grit("resources") {
     "renderer_resources_200_percent.pak",
     "renderer_resources_300_percent.pak",
   ]
+  grit_flags = [
+    "-E",
+    "mojom_root=" + rebase_path(root_gen_dir),
+  ]
+  deps = [
+    "//chrome/common/media_router/mojo:media_controller__generator",
+    "//chrome/common/media_router/mojo:media_router__generator",
+    "//mojo/common:common_custom_types__generator",
+    "//net/interfaces:interfaces__generator",
+    "//url/mojo:url_mojom_gurl__generator",
+    "//url/mojo:url_mojom_origin__generator",
+  ]
 }
 
 static_library("renderer") {
@@ -57,6 +69,7 @@ static_library("renderer") {
     "page_load_metrics/metrics_render_frame_observer.h",
     "page_load_metrics/page_timing_metrics_sender.cc",
     "page_load_metrics/page_timing_metrics_sender.h",
+    "page_load_metrics/page_timing_sender.h",
     "page_load_metrics/renderer_page_track_decider.cc",
     "page_load_metrics/renderer_page_track_decider.h",
     "plugins/non_loadable_plugin_placeholder.cc",
@@ -104,12 +117,10 @@ static_library("renderer") {
     "//components/data_reduction_proxy/core/common",
     "//components/dom_distiller/content/renderer",
     "//components/error_page/renderer",
-    "//components/guest_view/renderer",
     "//components/network_hints/renderer",
     "//components/omnibox/common",
     "//components/password_manager/content/renderer",
     "//components/plugins/renderer",
-    "//components/printing/renderer",
     "//components/rappor/public/interfaces",
     "//components/resources:components_resources",
     "//components/spellcheck:build_features",
@@ -129,6 +140,7 @@ static_library("renderer") {
     "//media",
     "//media:media_features",
     "//media/capture",
+    "//mojo/public/cpp/bindings",
     "//net",
     "//ppapi/features",
     "//printing/features",
@@ -229,6 +241,10 @@ static_library("renderer") {
     sources += [
       "extensions/app_bindings.cc",
       "extensions/app_bindings.h",
+      "extensions/app_bindings_core.cc",
+      "extensions/app_bindings_core.h",
+      "extensions/app_hooks_delegate.cc",
+      "extensions/app_hooks_delegate.h",
       "extensions/automation_internal_custom_bindings.cc",
       "extensions/automation_internal_custom_bindings.h",
       "extensions/chrome_extensions_dispatcher_delegate.cc",
@@ -301,6 +317,7 @@ static_library("renderer") {
       # TODO(hclam): See crbug.com/298380 for details.
       # We should isolate the APIs needed by the renderer.
       "//chrome/common/extensions/api",
+      "//components/guest_view/renderer",
       "//extensions:extensions_resources",
       "//extensions/renderer",
       "//media/cast:net",
@@ -336,8 +353,12 @@ static_library("renderer") {
   if (enable_spellcheck) {
     deps += [ "//components/spellcheck/renderer:renderer" ]
   }
+
   if (enable_basic_printing || enable_print_preview) {
-    deps += [ "//printing" ]
+    deps += [
+      "//components/printing/renderer",
+      "//printing",
+    ]
     sources += [
       "printing/chrome_print_web_view_helper_delegate.cc",
       "printing/chrome_print_web_view_helper_delegate.h",

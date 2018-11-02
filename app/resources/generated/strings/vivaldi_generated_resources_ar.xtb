@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">غيّرت هذه الإضافة الصفحة التي تظهر عند النقر على زر الصفحة الرئيسية.</translation>
 <translation id="1588438908519853928">عادي</translation>
 <translation id="1616206807336925449">لا تتطلب هذه الإضافة أذونات خاصة.</translation>
-<translation id="1620510694547887537">الكاميرا</translation>
 <translation id="1635033183663317347">تم التثبيت من قبل الوصيّ.</translation>
 <translation id="1723824996674794290">نافذة &amp;جديدة</translation>
 <translation id="1729533290416704613">كما أنها تتحكم في الصفحة التي تظهر عند إجراء بحث من المربع متعدد الاستخدامات.</translation>
-<translation id="1789575671122666129">النوافذ المنبثقة</translation>
 <translation id="1850508293116537636">تدوير &amp;في اتجاه عقارب الساعة</translation>
 <translation id="1859234291848436338">اتجاه الكتابة</translation>
 <translation id="1901303067676059328">تح&amp;ديد الكلّ</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">إخفاء هذا المكون الإضافي</translation>
 <translation id="2087822576218954668">الطباعة: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">تحديث المكوِّن الإضافي</translation>
-<translation id="2147827593068025794">مزامنة الخلفية</translation>
 <translation id="215753907730220065">إنهاء وضع ملء الشاشة</translation>
 <translation id="2177950615300672361">علامة تبويب التصفح المتخفي: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">اكتشاف (افتراضي)</translation>
 <translation id="219008588003277019">وحدة البرنامج العميل الأصلي: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">لصق كنص عادي</translation>
 <translation id="2282146716419988068">‏معالجة وحدة معالجة الرسومات (GPU)</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">‏أضاف برنامج آخر بجهاز الكمبيوتر إضافة قد تؤدي إلى تغيير طريقة عمل Vivaldi.</translation>
 <translation id="2445081178310039857">دليل الجذر للإضافة مطلوب.</translation>
 <translation id="2470702053775288986">تم تعطيل الإضافات غير المدعومة</translation>
-<translation id="2482878487686419369">الاشعارات</translation>
 <translation id="2501797496290880632">اكتب اختصارًا</translation>
-<translation id="2509857212037838238">تثبيت <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">ذاكرة مساحة التبديل</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">إعادة تمكين</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">وحدة المعالجة المركزية</translation>
 <translation id="3124111068741548686">معالجات المستخدم</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">الميكروفون</translation>
 <translation id="3241680850019875542">حدد الدليل الجذر للإضافة المراد إنشاء حزمة لها، ولتحديث إضافة، حدد أيضًا ملف المفتاح الخاص لإعادة استخدامه.</translation>
 <translation id="3280237271814976245">الحفظ &amp;باسم...</translation>
 <translation id="3288047731229977326">يمكن أن تؤدي الإضافات التي تعمل في وضع مطور البرامج إلى إلحاق الضرر بجهاز الكمبيوتر. إذا لم تكن مطور برامج، فيجب تعطيل هذه الإضافات التي تعمل في وضع مطور البرامج للبقاء في أمان.</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">&amp;نسخ عنوان الصورة</translation>
 <translation id="335985608243443814">تصفَّح...</translation>
 <translation id="3378572629723696641">قد تكون هذه الإضافة تالفة.</translation>
-<translation id="3427092606871434483">السماح (افتراضي)</translation>
 <translation id="3435896845095436175">تمكين الإضافات</translation>
 <translation id="345693547134384690">فتح &amp;الصورة في علامة تبويب جديدة</translation>
 <translation id="3467267818798281173">‏طلب اقتراحات Google</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">فتح الرّابط في نافذة للتصفّح المتخ&amp;فّي</translation>
 <translation id="3678156199662914018">الإضافة: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">جارٍ التحميل...</translation>
-<translation id="3789841737615482174">تثبيت</translation>
 <translation id="3798449238516105146">الإصدار</translation>
 <translation id="3866249974567520381">الوصف</translation>
 <translation id="3905761538810670789">إصلاح التطبيق</translation>
@@ -103,13 +94,11 @@
 <translation id="4096508467498758490">تعطيل إضافات وضع مطور البرامج</translation>
 <translation id="4100839878934973028">‏أضاف برنامج آخر بجهاز الكمبيوتر تطبيقًا قد يؤدي إلى تغيير طريقة عمل Vivaldi.</translation>
 <translation id="4130207949184424187">غيّرت هذه الإضافة الصفحة التي تظهر عند البحث في المربع متعدد الاستخدامات.</translation>
-<translation id="4165986682804962316">إعدادات الموقع</translation>
 <translation id="4176463684765177261">معطل</translation>
 <translation id="4200983522494130825">علا&amp;مة تبويب جديدة</translation>
 <translation id="420665587194630159">(هذه الإضافة مدارة ولا يمكن إزالتها أو تعطيلها).</translation>
 <translation id="4240511609794012987">الذاكرة المشتركة</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />كيلوبايت (<ph name="NUM_KILOBYTES_LIVE" />كيلوبايت مباشرة)</translation>
-<translation id="4312866146174492540">حظر (افتراضي)</translation>
 <translation id="4384652540891215547">تنشيط الإضافة</translation>
 <translation id="4394049700291259645">تعطيل</translation>
 <translation id="4423482519432579560">ال&amp;تدقيق الإملائي</translation>
@@ -122,7 +111,6 @@
 <translation id="4677772697204437347">ذاكرة وحدة معالج الرسومات</translation>
 <translation id="4711638718396952945">استعادة الإعدادات</translation>
 <translation id="4839303808932127586">حف&amp;ظ مقطع الفيديو باسم...</translation>
-<translation id="4851858059374029925">هل ترغب في تثبيت <ph name="PLUGIN_NAME" />؟ لا تثبِّت إلا المكوِّنات الإضافية التي تثق بها فقط.</translation>
 <translation id="488785315393301722">عرض التفاصيل</translation>
 <translation id="4911714727432509308">ليست هناك أية إضافات تم تعيين اختصارات لوحة مفاتيح لها.</translation>
 <translation id="4927301649992043040">إنشاء حزمة للإضافة</translation>
@@ -153,12 +141,10 @@
 <translation id="5646376287012673985">الموقع</translation>
 <translation id="5715711091495208045">وسيط المكوّن الإضافي: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">حف&amp;ظ ملف الصوت باسم...</translation>
-<translation id="5778550464785688721">‏التحكم الكامل في MIDI</translation>
 <translation id="5780973441651030252">أولوية المعالجة</translation>
 <translation id="5804241973901381774">الأذونات</translation>
 <translation id="583281660410589416">غير معروف</translation>
 <translation id="59174027418879706">تم التمكين</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 قيد الاستخدام}zero{# قيد الاستخدام}two{# قيد الاستخدام}few{# قيد الاستخدام}many{# قيد الاستخدام}other{# قيد الاستخدام}}</translation>
 <translation id="5956585768868398362">هل هذه هي صفحة البحث التي كنت تتوقع ظهورها؟</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> في الذروة)</translation>
 <translation id="5965661248935608907">كما أنها تتحكم في الصفحة التي تظهر عند النقر على زر الصفحة الرئيسية أو إجراء بحث من المربع متعدد الاستخدامات.</translation>
@@ -187,14 +173,12 @@
 <translation id="6787839852456839824">اختصارات لوحة المفاتيح</translation>
 <translation id="6798954102094737107">المكوّن الإضافي: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">الإبقاء على التغييرات</translation>
-<translation id="6863910145616405334">لم يتم العثور على المكوِّن الإضافي</translation>
 <translation id="6886871292305414135">فتح الرابط في &amp;علامة تبويب جديدة</translation>
 <translation id="6900284862687837908">تطبيق الخلفية: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">إلغاء الوصول إلى الملف</translation>
 <translation id="6974053822202609517">من اليمين لليسار</translation>
 <translation id="7013485839273047434">الحصول على مزيد من الإضافات</translation>
 <translation id="708060913198414444">ن&amp;سخ عنوان الصوت</translation>
-<translation id="7105578512429498960">تثبيت <ph name="PLUGIN_NAME" /> لعرض هذا المحتوى</translation>
 <translation id="7144878232160441200">إعادة المحاولة</translation>
 <translation id="7206693748120342859">جارٍ تنزيل <ph name="PLUGIN_NAME" />...</translation>
 <translation id="7287143125007575591">تم رفض الدخول</translation>
@@ -226,7 +210,6 @@
 
 احتفظ بملف المفتاح في مكان آمن، حيث ستحتاج إليه لإنشاء إصدارات جديدة من إضافتك.</translation>
 <translation id="8004582292198964060">المتصفّح</translation>
-<translation id="8037357227543935929">الطلب (افتراضي)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> ‏                 كيلوبايت</translation>
 <translation id="8188120771410500975">&amp;مراجعة حقول النص إملائيًا</translation>
 <translation id="8261378640211443080">هذه الإضافة غير مدرجة في <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> وربما تمت إضافتها بدون علمك.</translation>
@@ -242,7 +225,6 @@
 <translation id="8664389313780386848">عرض م&amp;صدر الصفحة</translation>
 <translation id="8719653885894320876">أخفق تنزيل <ph name="PLUGIN_NAME" /></translation>
 <translation id="873545264931343897">عند انتهاء <ph name="PLUGIN_NAME" /> من التحديث، أعد تحميل الصفحة لتنشيطها</translation>
-<translation id="8763204422633679667">عند الانتهاء من تثبيت <ph name="PLUGIN_NAME" />، أعد تحميل الصفحة لتنشيطها</translation>
 <translation id="8798099450830957504">الافتراضي</translation>
 <translation id="8808478386290700967">السوق الإلكتروني</translation>
 <translation id="8859174528519900719">هيكل سفلي: <ph name="SUBFRAME_SITE" /></translation>

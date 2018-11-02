@@ -16,6 +16,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/base/locale_util.h"
+#include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/login/enrollment/enrollment_screen.h"
 #include "chrome/browser/chromeos/login/enrollment/enterprise_enrollment_helper.h"
 #include "chrome/browser/chromeos/login/enrollment/mock_auto_enrollment_check_screen.h"
@@ -67,9 +68,11 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_service_factory.h"
 #include "components/prefs/testing_pref_store.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_fetcher_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -179,17 +182,6 @@ void QuitLoopOnAutoEnrollmentProgress(
     policy::AutoEnrollmentState actual_state) {
   if (expected_state == actual_state)
     loop->Quit();
-}
-
-void WaitForAutoEnrollmentState(policy::AutoEnrollmentState state) {
-  base::RunLoop loop;
-  AutoEnrollmentController* auto_enrollment_controller =
-      LoginDisplayHost::default_host()->GetAutoEnrollmentController();
-  std::unique_ptr<AutoEnrollmentController::ProgressCallbackList::Subscription>
-      progress_subscription(
-          auto_enrollment_controller->RegisterProgressCallback(
-              base::Bind(&QuitLoopOnAutoEnrollmentProgress, state, &loop)));
-  loop.Run();
 }
 
 }  // namespace
@@ -374,7 +366,8 @@ class WizardControllerTestURLFetcherFactory
       int id,
       const GURL& url,
       net::URLFetcher::RequestType request_type,
-      net::URLFetcherDelegate* d) override {
+      net::URLFetcherDelegate* d,
+      net::NetworkTrafficAnnotationTag traffic_annotation) override {
     if (base::StartsWith(
             url.spec(),
             SimpleGeolocationProvider::DefaultGeolocationProviderURL().spec(),
@@ -390,8 +383,8 @@ class WizardControllerTestURLFetcherFactory
           url, d, std::string(kTimezoneResponseBody), net::HTTP_OK,
           net::URLRequestStatus::SUCCESS));
     }
-    return net::TestURLFetcherFactory::CreateURLFetcher(
-        id, url, request_type, d);
+    return net::TestURLFetcherFactory::CreateURLFetcher(id, url, request_type,
+                                                        d, traffic_annotation);
   }
   ~WizardControllerTestURLFetcherFactory() override {}
 };
@@ -828,6 +821,18 @@ class WizardControllerDeviceStateTest : public WizardControllerFlowTest {
         system::kActivateDateKey, "2000-01");
   }
 
+  static void WaitForAutoEnrollmentState(policy::AutoEnrollmentState state) {
+    base::RunLoop loop;
+    std::unique_ptr<
+        AutoEnrollmentController::ProgressCallbackList::Subscription>
+        progress_subscription(
+            WizardController::default_controller()
+                ->GetAutoEnrollmentController()
+                ->RegisterProgressCallback(base::Bind(
+                    &QuitLoopOnAutoEnrollmentProgress, state, &loop)));
+    loop.Run();
+  }
+
   void SetUpCommandLine(base::CommandLine* command_line) override {
     WizardControllerFlowTest::SetUpCommandLine(command_line);
 
@@ -907,9 +912,10 @@ IN_PROC_BROWSER_TEST_F(WizardControllerDeviceStateTest,
 IN_PROC_BROWSER_TEST_F(WizardControllerDeviceStateTest,
                        ControlFlowNoForcedReEnrollmentOnFirstBoot) {
   fake_statistics_provider_.ClearMachineStatistic(system::kActivateDateKey);
-  EXPECT_NE(
-      policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT,
-      LoginDisplayHost::default_host()->GetAutoEnrollmentController()->state());
+  EXPECT_NE(policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT,
+            WizardController::default_controller()
+                ->GetAutoEnrollmentController()
+                ->state());
 
   CheckCurrentScreen(OobeScreen::SCREEN_OOBE_NETWORK);
   EXPECT_CALL(*mock_network_screen_, Hide()).Times(1);
@@ -932,9 +938,10 @@ IN_PROC_BROWSER_TEST_F(WizardControllerDeviceStateTest,
 
   CheckCurrentScreen(OobeScreen::SCREEN_AUTO_ENROLLMENT_CHECK);
   mock_auto_enrollment_check_screen_->RealShow();
-  EXPECT_EQ(
-      policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT,
-      LoginDisplayHost::default_host()->GetAutoEnrollmentController()->state());
+  EXPECT_EQ(policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT,
+            WizardController::default_controller()
+                ->GetAutoEnrollmentController()
+                ->state());
 }
 
 IN_PROC_BROWSER_TEST_F(WizardControllerDeviceStateTest,
@@ -1325,7 +1332,7 @@ IN_PROC_BROWSER_TEST_F(WizardControllerCellularFirstTest, CellularFirstFlow) {
   TestControlFlowMain();
 }
 
-// TODO(dzhioev): Add test emaulating device with wrong HWID.
+// TODO(dzhioev): Add test emulating device with wrong HWID.
 
 // TODO(nkostylev): Add test for WebUI accelerators http://crosbug.com/22571
 

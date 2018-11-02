@@ -21,9 +21,10 @@ VivaldiFrameObserver::VivaldiFrameObserver(content::WebContents* web_contents)
 
 VivaldiFrameObserver::~VivaldiFrameObserver() {}
 
-bool VivaldiFrameObserver::OnMessageReceived(const IPC::Message& message) {
+bool VivaldiFrameObserver::OnMessageReceived(const IPC::Message& message,
+                                             content::RenderFrameHost* render_frame_host) {
   bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(VivaldiFrameObserver, message)
+  IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(VivaldiFrameObserver, message, render_frame_host)
   IPC_MESSAGE_HANDLER(VivaldiMsg_DidUpdateFocusedElementInfo,
                       OnDidUpdateFocusedElementInfo)
   IPC_MESSAGE_UNHANDLED(handled = false)

@@ -29,6 +29,7 @@
 
 #include <memory>
 #include "bindings/core/v8/SourceLocation.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/ExecutionContextTask.h"
 #include "core/dom/SuspendableObject.h"
 #include "core/dom/TaskRunnerHelper.h"
@@ -125,7 +126,7 @@ void ExecutionContext::DispatchErrorEvent(ErrorEvent* error_event,
     return;
   for (ErrorEvent* e : pending_exceptions_)
     ExceptionThrown(e);
-  pending_exceptions_.Clear();
+  pending_exceptions_.clear();
 }
 
 bool ExecutionContext::DispatchErrorEventInternal(
@@ -189,10 +190,9 @@ bool ExecutionContext::IsWindowInteractionAllowed() const {
   return window_interaction_tokens_ > 0;
 }
 
-bool ExecutionContext::IsSecureContext(
-    const SecureContextCheck privilege_context_check) const {
+bool ExecutionContext::IsSecureContext() const {
   String unused_error_message;
-  return IsSecureContext(unused_error_message, privilege_context_check);
+  return IsSecureContext(unused_error_message);
 }
 
 String ExecutionContext::OutgoingReferrer() const {

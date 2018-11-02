@@ -298,10 +298,12 @@ void SVGUseElement::ClearResourceReference() {
   RemoveAllOutgoingReferences();
 }
 
-Element* SVGUseElement::ResolveTargetElement() {
+Element* SVGUseElement::ResolveTargetElement(ObserveBehavior observe_behavior) {
   if (element_identifier_.IsEmpty())
     return nullptr;
   if (element_identifier_is_local_) {
+    if (observe_behavior == kDontAddObserver)
+      return GetTreeScope().getElementById(element_identifier_);
     return ObserveTarget(target_id_observer_, GetTreeScope(),
                          element_identifier_,
                          WTF::Bind(&SVGUseElement::InvalidateShadowTree,
@@ -309,7 +311,7 @@ Element* SVGUseElement::ResolveTargetElement() {
   }
   if (!ResourceIsValid())
     return nullptr;
-  return resource_->GetDocument()->GetElementById(element_identifier_);
+  return resource_->GetDocument()->getElementById(element_identifier_);
 }
 
 void SVGUseElement::BuildPendingResource() {
@@ -321,7 +323,7 @@ void SVGUseElement::BuildPendingResource() {
   CancelShadowTreeRecreation();
   if (!isConnected())
     return;
-  Element* target = ResolveTargetElement();
+  Element* target = ResolveTargetElement(kAddObserver);
   // TODO(fs): Why would the Element not be "connected" at this point?
   if (target && target->isConnected() && target->IsSVGElement()) {
     BuildShadowAndInstanceTree(ToSVGElement(*target));
@@ -386,7 +388,7 @@ static inline void RemoveDisallowedElementsFromSubtree(SVGElement& subtree) {
 
 static void MoveChildrenToReplacementElement(ContainerNode& source_root,
                                              ContainerNode& destination_root) {
-  for (Node* child = source_root.FirstChild(); child;) {
+  for (Node* child = source_root.firstChild(); child;) {
     Node* next_child = child->nextSibling();
     destination_root.AppendChild(child);
     child = next_child;
@@ -465,7 +467,7 @@ void SVGUseElement::BuildShadowAndInstanceTree(SVGElement& target) {
 
   // If the instance root was a <use>, it could have been replaced now, so
   // reset |m_targetElementInstance|.
-  target_element_instance_ = ToSVGElementOrDie(shadow_root.FirstChild());
+  target_element_instance_ = ToSVGElementOrDie(shadow_root.firstChild());
   DCHECK_EQ(target_element_instance_->parentNode(), shadow_root);
 
   CloneNonMarkupEventListeners();
@@ -505,7 +507,7 @@ void SVGUseElement::ToClipPath(Path& path) const {
 
 SVGGraphicsElement* SVGUseElement::VisibleTargetGraphicsElementForClipping()
     const {
-  Node* n = UseShadowRoot().FirstChild();
+  Node* n = UseShadowRoot().firstChild();
   if (!n || !n->IsSVGElement())
     return nullptr;
 
@@ -554,11 +556,10 @@ void SVGUseElement::CloneNonMarkupEventListeners() {
   }
 }
 
-bool SVGUseElement::HasCycleUseReferencing(const SVGUseElement& use,
+bool SVGUseElement::HasCycleUseReferencing(SVGUseElement& use,
                                            const ContainerNode& target_instance,
                                            SVGElement*& new_target) const {
-  Element* target_element =
-      TargetElementFromIRIString(use.HrefString(), use.GetTreeScope());
+  Element* target_element = use.ResolveTargetElement(kDontAddObserver);
   new_target = 0;
   if (target_element && target_element->IsSVGElement())
     new_target = ToSVGElement(target_element);
@@ -676,11 +677,7 @@ bool SVGUseElement::SelfHasRelativeLengths() const {
 }
 
 FloatRect SVGUseElement::GetBBox() {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-
-  if (!GetLayoutObject())
-    return FloatRect();
-
+  DCHECK(GetLayoutObject());
   LayoutSVGTransformableContainer& transformable_container =
       ToLayoutSVGTransformableContainer(*GetLayoutObject());
   // Don't apply the additional translation if the oBB is invalid.

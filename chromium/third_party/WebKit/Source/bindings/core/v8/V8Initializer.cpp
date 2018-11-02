@@ -28,37 +28,35 @@
 #include <memory>
 
 #include "bindings/core/v8/BindingSecurity.h"
-#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/RejectedPromises.h"
 #include "bindings/core/v8/RetainedDOMInfo.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/UseCounterCallback.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8DOMException.h"
 #include "bindings/core/v8/V8ErrorEvent.h"
 #include "bindings/core/v8/V8ErrorHandler.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/V8IdleTaskRunner.h"
-#include "bindings/core/v8/V8Location.h"
-#include "bindings/core/v8/V8PerContextData.h"
-#include "bindings/core/v8/V8PrivateProperty.h"
-#include "bindings/core/v8/V8Window.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
-#include "core/frame/LocalFrame.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptWrappableVisitor.h"
+#include "platform/bindings/V8PerContextData.h"
+#include "platform/bindings/V8PrivateProperty.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/AccessControlStatus.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "platform/wtf/AddressSanitizer.h"
 #include "platform/wtf/Assertions.h"
@@ -67,33 +65,11 @@
 #include "platform/wtf/text/WTFString.h"
 #include "platform/wtf/typed_arrays/ArrayBufferContents.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 #include "v8/include/v8-debug.h"
 #include "v8/include/v8-profiler.h"
 
 namespace blink {
-
-static Frame* FindFrame(v8::Isolate* isolate,
-                        v8::Local<v8::Object> host,
-                        v8::Local<v8::Value> data) {
-  const WrapperTypeInfo* type = WrapperTypeInfo::Unwrap(data);
-
-  if (V8Window::wrapperTypeInfo.Equals(type)) {
-    v8::Local<v8::Object> window_wrapper =
-        V8Window::findInstanceInPrototypeChain(host, isolate);
-    if (window_wrapper.IsEmpty())
-      return 0;
-    return V8Window::toImpl(window_wrapper)->GetFrame();
-  }
-
-  if (V8Location::wrapperTypeInfo.Equals(type))
-    return V8Location::toImpl(host)->GetFrame();
-
-  // This function can handle only those types listed above.
-  ASSERT_NOT_REACHED();
-  return 0;
-}
 
 static void ReportFatalErrorInMainThread(const char* location,
                                          const char* message) {
@@ -157,7 +133,7 @@ const size_t kWasmWireBytesLimit = 1 << 12;
 
 void V8Initializer::MessageHandlerInMainThread(v8::Local<v8::Message> message,
                                                v8::Local<v8::Value> data) {
-  ASSERT(IsMainThread());
+  DCHECK(IsMainThread());
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
 
   if (isolate->GetEnteredContext().IsEmpty())
@@ -202,7 +178,7 @@ void V8Initializer::MessageHandlerInMainThread(v8::Local<v8::Message> message,
 namespace {
 
 static RejectedPromises& RejectedPromisesOnMainThread() {
-  ASSERT(IsMainThread());
+  DCHECK(IsMainThread());
   DEFINE_STATIC_LOCAL(RefPtr<RejectedPromises>, rejected_promises,
                       (RejectedPromises::Create()));
   return *rejected_promises;
@@ -222,7 +198,7 @@ static void PromiseRejectHandler(v8::PromiseRejectMessage data,
     return;
   }
 
-  ASSERT(data.GetEvent() == v8::kPromiseRejectWithNoHandler);
+  DCHECK_EQ(data.GetEvent(), v8::kPromiseRejectWithNoHandler);
 
   v8::Local<v8::Promise> promise = data.GetPromise();
   v8::Isolate* isolate = promise->GetIsolate();
@@ -232,7 +208,7 @@ static void PromiseRejectHandler(v8::PromiseRejectMessage data,
   if (V8DOMWrapper::IsWrapper(isolate, exception)) {
     // Try to get the stack & location from a wrapped exception object (e.g.
     // DOMException).
-    ASSERT(exception->IsObject());
+    DCHECK(exception->IsObject());
     auto private_error = V8PrivateProperty::GetDOMExceptionError(isolate);
     v8::Local<v8::Value> error =
         private_error.GetOrUndefined(exception.As<v8::Object>());
@@ -267,7 +243,7 @@ static void PromiseRejectHandler(v8::PromiseRejectMessage data,
 }
 
 static void PromiseRejectHandlerInMainThread(v8::PromiseRejectMessage data) {
-  ASSERT(IsMainThread());
+  DCHECK(IsMainThread());
 
   v8::Local<v8::Promise> promise = data.GetPromise();
 
@@ -300,23 +276,22 @@ static void PromiseRejectHandlerInWorker(v8::PromiseRejectMessage data) {
   if (!execution_context)
     return;
 
-  ASSERT(execution_context->IsWorkerGlobalScope());
+  DCHECK(execution_context->IsWorkerGlobalScope());
   WorkerOrWorkletScriptController* script_controller =
       ToWorkerGlobalScope(execution_context)->ScriptController();
-  ASSERT(script_controller);
+  DCHECK(script_controller);
 
   PromiseRejectHandler(data, *script_controller->GetRejectedPromises(),
                        script_state);
 }
 
-static void FailedAccessCheckCallbackInMainThread(v8::Local<v8::Object> host,
+static void FailedAccessCheckCallbackInMainThread(v8::Local<v8::Object> holder,
                                                   v8::AccessType type,
                                                   v8::Local<v8::Value> data) {
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
-  Frame* target = FindFrame(isolate, host, data);
   // FIXME: We should modify V8 to pass in more contextual information (context,
   // property, and object).
-  BindingSecurity::FailedAccessCheckFor(isolate, target);
+  BindingSecurity::FailedAccessCheckFor(v8::Isolate::GetCurrent(),
+                                        WrapperTypeInfo::Unwrap(data), holder);
 }
 
 static bool CodeGenerationCheckCallbackInMainThread(
@@ -447,7 +422,7 @@ static void AdjustAmountOfExternalAllocatedMemory(int64_t diff) {
 }
 
 void V8Initializer::InitializeMainThread() {
-  ASSERT(IsMainThread());
+  DCHECK(IsMainThread());
 
   WTF::ArrayBufferContents::Initialize(AdjustAmountOfExternalAllocatedMemory);
 
@@ -494,7 +469,7 @@ void V8Initializer::InitializeMainThread() {
     profiler->SetGetRetainerInfosCallback(&V8GCController::GetRetainerInfos);
   }
 
-  ASSERT(ThreadState::MainThreadState());
+  DCHECK(ThreadState::MainThreadState());
   ThreadState::MainThreadState()->RegisterTraceDOMWrappers(
       isolate, V8GCController::TraceDOMWrappers,
       ScriptWrappableVisitor::InvalidateDeadObjectsInMarkingDeque,

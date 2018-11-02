@@ -31,16 +31,16 @@
 #ifndef FileReader_h
 #define FileReader_h
 
-#include "bindings/core/v8/ActiveScriptWrappable.h"
+#include <memory>
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventTarget.h"
 #include "core/fileapi/FileError.h"
 #include "core/fileapi/FileReaderLoader.h"
 #include "core/fileapi/FileReaderLoaderClient.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
-#include <memory>
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 

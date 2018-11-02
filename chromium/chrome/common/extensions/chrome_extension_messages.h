@@ -58,6 +58,7 @@ IPC_STRUCT_TRAITS_BEGIN(ui::AXNodeData)
   IPC_STRUCT_TRAITS_MEMBER(id)
   IPC_STRUCT_TRAITS_MEMBER(role)
   IPC_STRUCT_TRAITS_MEMBER(state)
+  IPC_STRUCT_TRAITS_MEMBER(actions)
   IPC_STRUCT_TRAITS_MEMBER(location)
   IPC_STRUCT_TRAITS_MEMBER(transform)
   IPC_STRUCT_TRAITS_MEMBER(string_attributes)
@@ -100,9 +101,6 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_BEGIN(ExtensionMsg_AccessibilityEventParams)
   // ID of the accessibility tree that this event applies to.
   IPC_STRUCT_MEMBER(int, tree_id)
-
-  // The global offset of all coordinates in this accessibility tree.
-  IPC_STRUCT_MEMBER(gfx::Vector2d, location_offset)
 
   // The tree update.
   IPC_STRUCT_MEMBER(ui::AXTreeUpdate, update)

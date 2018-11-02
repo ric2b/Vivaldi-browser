@@ -80,10 +80,10 @@ DictionaryIterator Dictionary::GetIterator(
       !iterator_getter->IsFunction())
     return nullptr;
   v8::Local<v8::Value> iterator;
-  if (!V8Call(V8ScriptRunner::CallFunction(
-                  v8::Local<v8::Function>::Cast(iterator_getter),
-                  execution_context, dictionary_object_, 0, nullptr, isolate_),
-              iterator))
+  if (!V8ScriptRunner::CallFunction(
+           v8::Local<v8::Function>::Cast(iterator_getter), execution_context,
+           dictionary_object_, 0, nullptr, isolate_)
+           .ToLocal(&iterator))
     return nullptr;
   if (!iterator->IsObject())
     return nullptr;
@@ -96,8 +96,8 @@ bool Dictionary::Get(const StringView& key, Dictionary& value) const {
     return false;
 
   if (v8_value->IsObject()) {
-    ASSERT(isolate_);
-    ASSERT(isolate_ == v8::Isolate::GetCurrent());
+    DCHECK(isolate_);
+    DCHECK_EQ(isolate_, v8::Isolate::GetCurrent());
     // TODO(bashi,yukishiino): Should rethrow the exception.
     // http://crbug.com/666661
     DummyExceptionStateForTesting exception_state;

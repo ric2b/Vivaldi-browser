@@ -53,7 +53,6 @@ Bizonyos webhelyek például úgy válaszolhatnak a kérésre, hogy olyan hirdet
 <translation id="1820259098641718022">Hozzáadva az olvasási listához</translation>
 <translation id="1876721852596493031">Használati adatok küldése</translation>
 <translation id="1886928167269928266">Mindenkori</translation>
-<translation id="1894451531427596130">A működési mód szabályozása a <ph name="BEGIN_LINK" />Beállítások<ph name="END_LINK" /> oldalon</translation>
 <translation id="1911619930368729126">Feltöltés Google Drive-ba</translation>
 <translation id="1941314575388338491">A másoláshoz koppintson duplán.</translation>
 <translation id="1952728750904661634">Bejelentkezés felügyelt fiókkal</translation>
@@ -97,6 +96,7 @@ Bizonyos webhelyek például úgy válaszolhatnak a kérésre, hogy olyan hirdet
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">A Fordító beállításainak visszaállítása</translation>
 <translation id="285960592395650245">Letöltés újrapróbálása</translation>
+<translation id="2870560284913253234">Webhely</translation>
 <translation id="2871695793448672541">Jelszó (rejtett)</translation>
 <translation id="2898963176829412617">Új mappa...</translation>
 <translation id="2903493209154104877">Címek</translation>
@@ -109,7 +109,6 @@ Bizonyos webhelyek például úgy válaszolhatnak a kérésre, hogy olyan hirdet
 <translation id="2989805286512600854">Megnyitás új lapon</translation>
 <translation id="3024255823539804759">Elmúlt nap</translation>
 <translation id="3037605927509011580">A manóba!</translation>
-<translation id="3050311348724540835">A(z) <ph name="HISTORY_URL" /> nem áll rendelkezésre. A böngészési előzmények megnyitásához válassza az „<ph name="SHOW_HISTORY" />” lehetőséget az eszközök menüből.</translation>
 <translation id="3112556859945124369">Megjelölés…</translation>
 <translation id="3151924044251363314">Titkosított adatait csak az olvashatja el, aki rendelkezik összetett jelszavával. Az összetett jelszót a Google nem kapja meg, és nem is tárolja. Ha elfelejtette összetett jelszavát, vagy módosítaná ezt a beállítást, alaphelyzetbe kell állítania a szinkronizálást. <ph name="BEGIN_LINK" />További információ<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">Az összes megjelölése…</translation>
@@ -150,6 +149,7 @@ A keresési kifejezés módosításához hosszú nyomva tartással hajthat végr
 <translation id="3638472932233958418">Weboldalak előtöltése</translation>
 <translation id="3691593122358196899">Könyvjelzők közé téve itt: <ph name="FOLDER_TITLE" /></translation>
 <translation id="3738139272394829648">Érintéssel keresés</translation>
+<translation id="3742082982782149146">Sikerült a webhely URL-jének másolása.</translation>
 <translation id="3771033907050503522">Inkognitólapok</translation>
 <translation id="3783017676699494206">Kép mentése</translation>
 <translation id="3789841737615482174">Telepítés</translation>
@@ -164,10 +164,12 @@ A keresési kifejezés módosításához hosszú nyomva tartással hajthat végr
 <translation id="4038354071007134711">Nincs alkalmazás, amellyel megnyitható ez a fájl.</translation>
 <translation id="4049507953662678203">Győződjön meg róla, hogy rendelkezik hálózati kapcsolattal, majd próbálja újra.</translation>
 <translation id="411254640334432676">A letöltés sikertelen.</translation>
+<translation id="4117350985506774529">Sikerült a felhasználónév másolása.</translation>
 <translation id="4121993058175073134">Net-export adatok küldéséhez, kérjük, konfigurálja e-mail fiókját a Beállítások alkalmazásban.</translation>
 <translation id="4124987746317609294">Időintervallum</translation>
 <translation id="4172051516777682613">Mindig mutassa</translation>
 <translation id="418156467088430727">Offline verzió megtekintése új lapon</translation>
+<translation id="4237682350741091554">A Chrome-szinkronizálást és a személyre szabást a <ph name="BEGIN_LINK" />Beállításokban<ph name="END_LINK" /> kezelheti</translation>
 <translation id="424315890655130736">Összetett jelszó megadása</translation>
 <translation id="4272631900155121838">QR-kód beolvasásához engedélyezze a kamerát a beállítások között</translation>
 <translation id="4281844954008187215">Általános Szerződési Feltételek</translation>
@@ -175,6 +177,7 @@ A keresési kifejezés módosításához hosszú nyomva tartással hajthat végr
 <translation id="4359125752503270327">Az oldal egy másik alkalmazásban nyílik meg.</translation>
 <translation id="4378154925671717803">Telefon</translation>
 <translation id="441868831736628555">Adatvédelmi közlemény</translation>
+<translation id="4508750114462689118">Bejelentkezési promóció bezárása</translation>
 <translation id="4526249700380860531">A mentett jelszavak megtekintése és kezelése a <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> címen</translation>
 <translation id="4536418791685807335">Próbáljon meg újra bejelentkezni.</translation>
 <translation id="4620246317052452550">Elolvasva</translation>
@@ -220,6 +223,7 @@ Adatai az összetett szinkronizálási jelszavával vannak titkosítva. Írja be
 
 Az Átadást engedélyezni kell a Beállítások általános részében is, és az eszközöknek ugyanazt az iCloud-fiókot kell használniuk.</translation>
 <translation id="5556459405103347317">Újratöltés</translation>
+<translation id="5619279135193775234">Mail</translation>
 <translation id="5626245204502895507">A fájlt jelenleg nem lehet letölteni.</translation>
 <translation id="5659593005791499971">E-mail</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@ Adatainak titkosítása megtörtént összetett szinkronizálási jelszavával a
 <translation id="7136892417564438900">A kamera nem áll rendelkezésre</translation>
 <translation id="7159472599653637159">Mobilwebhely kérése</translation>
 <translation id="7167621057293532233">Adattípusok</translation>
+<translation id="7175593937868963913">Levélírás</translation>
 <translation id="7189598951263744875">Megosztás...</translation>
 <translation id="7203585745079012652">Mondja ki a válaszokat</translation>
 <translation id="722055596168483966">A Google-szolgáltatások személyre szabása</translation>
@@ -358,7 +363,6 @@ Adatainak titkosítása megtörtént összetett szinkronizálási jelszavával a
 <translation id="8205564605687841303">Mégse</translation>
 <translation id="8225985093977202398">A gyorsítótárban lévő képek és fájlok</translation>
 <translation id="8261506727792406068">Törlés</translation>
-<translation id="8272194309885535896">Kép letöltése</translation>
 <translation id="8272426682713568063">hitelkártyák
 </translation>
 <translation id="8281781826761538115">Alapértelmezett – <ph name="DEFAULT_LOCALE" /></translation>

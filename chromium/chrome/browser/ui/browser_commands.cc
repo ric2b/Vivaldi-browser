@@ -13,13 +13,12 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_remover.h"
-#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/dom_distiller/tab_utils.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/media/router/media_router_dialog_controller.h"  // nogncheck
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
@@ -72,6 +71,7 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
+#include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -116,9 +116,6 @@
 #include "components/rlz/rlz_tracker.h"  // nogncheck
 #endif
 
-#if defined(ENABLE_MEDIA_ROUTER)
-#include "chrome/browser/media/router/media_router_dialog_controller.h"  // nogncheck
-#endif
 
 #include "app/vivaldi_constants.h"
 #include "chrome/browser/memory/tab_manager.h"
@@ -760,6 +757,18 @@ bool CanDuplicateTabAt(const Browser* browser, int index) {
          contents->GetController().GetLastCommittedEntry();
 }
 
+void PinTab(Browser* browser) {
+  browser->tab_strip_model()->ExecuteContextMenuCommand(
+      browser->tab_strip_model()->active_index(),
+      TabStripModel::ContextMenuCommand::CommandTogglePinned);
+}
+
+void MuteTab(Browser* browser) {
+  browser->tab_strip_model()->ExecuteContextMenuCommand(
+      browser->tab_strip_model()->active_index(),
+      TabStripModel::ContextMenuCommand::CommandToggleTabAudioMuted);
+}
+
 void ConvertPopupToTabbedBrowser(Browser* browser) {
   base::RecordAction(UserMetricsAction("ShowAsTab"));
   TabStripModel* tab_strip = browser->tab_strip_model();
@@ -979,7 +988,6 @@ bool CanRouteMedia(Browser* browser) {
 }
 
 void RouteMedia(Browser* browser) {
-#if defined(ENABLE_MEDIA_ROUTER)
   DCHECK(CanRouteMedia(browser));
 
   media_router::MediaRouterDialogController* dialog_controller =
@@ -989,7 +997,6 @@ void RouteMedia(Browser* browser) {
     return;
 
   dialog_controller->ShowMediaRouterDialog();
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 }
 
 void EmailPageLocation(Browser* browser) {
@@ -1124,9 +1131,11 @@ void OpenTaskManager(Browser* browser) {
 #endif
 }
 
-void OpenFeedbackDialog(Browser* browser) {
+void OpenFeedbackDialog(Browser* browser, FeedbackSource source) {
   base::RecordAction(UserMetricsAction("Feedback"));
-  chrome::ShowFeedbackPage(browser, std::string(), std::string());
+  chrome::ShowFeedbackPage(browser, source,
+                           std::string() /* description_template */,
+                           std::string() /* category_tag */);
 }
 
 void ToggleBookmarkBar(Browser* browser) {
@@ -1209,11 +1218,11 @@ void ToggleFullscreenMode(Browser* browser) {
 }
 
 void ClearCache(Browser* browser) {
-  BrowsingDataRemover* remover =
-      BrowsingDataRemoverFactory::GetForBrowserContext(browser->profile());
+  content::BrowsingDataRemover* remover =
+      content::BrowserContext::GetBrowsingDataRemover(browser->profile());
   remover->Remove(base::Time(), base::Time::Max(),
-                  BrowsingDataRemover::DATA_TYPE_CACHE,
-                  BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
+                  content::BrowsingDataRemover::DATA_TYPE_CACHE,
+                  content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
   // BrowsingDataRemover takes care of deleting itself when done.
 }
 

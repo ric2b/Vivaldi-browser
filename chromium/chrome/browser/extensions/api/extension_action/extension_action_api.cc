@@ -205,7 +205,8 @@ void ExtensionActionAPI::NotifyChange(ExtensionAction* extension_action,
 
 void ExtensionActionAPI::DispatchExtensionActionClicked(
     const ExtensionAction& extension_action,
-    WebContents* web_contents) {
+    WebContents* web_contents,
+    const Extension* extension) {
   events::HistogramValue histogram_value = events::UNKNOWN;
   const char* event_name = NULL;
   switch (extension_action.action_type()) {
@@ -225,7 +226,8 @@ void ExtensionActionAPI::DispatchExtensionActionClicked(
 
   if (event_name) {
     std::unique_ptr<base::ListValue> args(new base::ListValue());
-    args->Append(ExtensionTabUtil::CreateTabObject(web_contents)->ToValue());
+    args->Append(
+        ExtensionTabUtil::CreateTabObject(web_contents, extension)->ToValue());
 
     DispatchEventToExtension(web_contents->GetBrowserContext(),
                              extension_action.extension_id(), histogram_value,
@@ -272,9 +274,8 @@ void ExtensionActionAPI::DispatchEventToExtension(
   if (!EventRouter::Get(context))
     return;
 
-  std::unique_ptr<Event> event(
-      new Event(histogram_value, event_name, std::move(event_args)));
-  event->restrict_to_browser_context = context;
+  auto event = base::MakeUnique<Event>(histogram_value, event_name,
+                                       std::move(event_args), context);
   event->user_gesture = EventRouter::USER_GESTURE_ENABLED;
   EventRouter::Get(context)
       ->DispatchEventToExtension(extension_id, std::move(event));
@@ -587,7 +588,7 @@ bool BrowserActionOpenPopupFunction::RunAsync() {
   // instance around until a notification is observed.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&BrowserActionOpenPopupFunction::OpenPopupTimedOut, this),
+      base::BindOnce(&BrowserActionOpenPopupFunction::OpenPopupTimedOut, this),
       base::TimeDelta::FromSeconds(10));
   return true;
 }

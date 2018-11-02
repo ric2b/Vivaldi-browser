@@ -17,8 +17,8 @@
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8Document.h"
 #include "bindings/core/v8/V8Node.h"
-#include "bindings/core/v8/V8ObjectConstructor.h"
 #include "core/dom/ExecutionContext.h"
+#include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
 
@@ -37,7 +37,7 @@ const WrapperTypeInfo V8TestInterface3::wrapperTypeInfo = { gin::kEmbedderBlink,
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestInterface3.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
-// bindings/core/v8/ScriptWrappable.h.
+// platform/bindings/ScriptWrappable.h.
 const WrapperTypeInfo& TestInterface3::wrapper_type_info_ = V8TestInterface3::wrapperTypeInfo;
 
 // not [ActiveScriptWrappable]
@@ -163,8 +163,11 @@ void V8TestInterface3::indexedPropertyDeleterCallback(uint32_t index, const v8::
 }
 
 static const V8DOMConfiguration::AccessorConfiguration V8TestInterface3Accessors[] = {
-    {"length", V8TestInterface3::lengthAttributeGetterCallback, nullptr, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds},
-    {"readonlyStringifierAttribute", V8TestInterface3::readonlyStringifierAttributeAttributeGetterCallback, nullptr, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds},
+      { "length", V8TestInterface3::lengthAttributeGetterCallback, nullptr, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
+    ,
+
+      { "readonlyStringifierAttribute", V8TestInterface3::readonlyStringifierAttributeAttributeGetterCallback, nullptr, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
+    ,
 };
 
 static const V8DOMConfiguration::MethodConfiguration V8TestInterface3Methods[] = {

@@ -136,8 +136,11 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
         Chromium
       </message>
       <if expr="is_win">
-        <message name="IDS_SXS_SHORTCUT_NAME" desc="The Chrome short cut name for SxS channel">
-          Chromium
+        <message name="IDS_SXS_SHORTCUT_NAME" desc="Unused in Chromium builds" translateable="false">
+        </message>
+        <message name="IDS_SHORTCUT_NAME_BETA" desc="Unused in Chromium builds" translateable="false">
+        </message>
+        <message name="IDS_SHORTCUT_NAME_DEV" desc="Unused in Chromium builds" translateable="false">
         </message>
         <message name="IDS_PRODUCT_DESCRIPTION" desc="Browser description">
           Chromium is a web browser that runs webpages and applications with lightning speed. It's fast, stable, and easy to use. Browse the web more safely with malware and phishing protection built into Chromium.
@@ -761,10 +764,25 @@ Signing in anyway will merge Chromium information like bookmarks, history, and o
         </message>
       </if>
 
-      <!-- SRT bubble messages -->
+      <!-- SRT bubble messages.
+           This string is for the old Chrome Cleanup version and should be
+           deleted as soon as all Chrome Cleanup UI is fully integrated into
+           Chrome. -->
       <if expr="is_win">
         <message name="IDS_SRT_BUBBLE_TITLE" desc="Text for the title of the software removal tool bubble view.">
             Chromium has detected unusual behavior
+        </message>
+      </if>
+
+      <!-- Chrome Cleanup prompt and web UI.
+           Note: these strings should only be used by Google Chrome, but
+                 omitting them brings up a hash collision error. -->
+      <if expr="is_win">
+        <message name="IDS_CHROME_CLEANUP_PROMPT_EXPLANATION" desc="Description in the Chrome Cleanup dialog that Chrome browser shows when unwanted software, like ad injectors or software that changes the user's settings without their knowledge, is found on the user's computer. Appears under the title asking 'Remove harmful software?' Actor is Chrome; we are asking, Do you want Chrome to remove harmful software? 'it' is harmful software. User has the option of clicking 'Remove' to proceed with a cleanup, or 'Details' to see more details. Preferrably, the translation for this string should have the same meaning as IDS_CHROME_CLEANUP_WEBUI_EXPLANATION.">
+          Chromium found harmful software on your computer. Chromium can remove it and restore your settings to make your browser work normally again.
+        </message>
+        <message name="IDS_CHROME_CLEANUP_WEBUI_EXPLANATION" desc="Description in the Chrome Cleanup web page that Chrome browser shows when unwanted software, like ad injectors or software that changes the user's settings without their knowledge, is found on the user's computer. Appears under the title asking 'Remove harmful software?' Actor is Chrome; we are asking, Do you want Chrome to remove harmful software? 'it' is harmful software. The user can click 'Remove' to proceed with a cleanup. Preferrably, the translation for this string should have the same meaning as IDS_CHROME_CLEANUP_PROMPT_EXPLANATION.">
+          Chromium found harmful software on your computer. Chromium can remove it and restore your settings to make your browser work normally again.
         </message>
       </if>
 
@@ -859,6 +877,12 @@ Signing in anyway will merge Chromium information like bookmarks, history, and o
       <message name="IDS_APP_SHORTCUTS_SUBDIR_NAME_CANARY" desc="Name for the Chrome Apps Start Menu folder name.">
         Chromium Apps
       </message>
+      <if expr="is_win">
+        <message name="IDS_APP_SHORTCUTS_SUBDIR_NAME_BETA" desc="Unused in Chromium builds" translateable="false">
+        </message>
+        <message name="IDS_APP_SHORTCUTS_SUBDIR_NAME_DEV" desc="Unused in Chromium builds" translateable="false">
+        </message>
+      </if>
 
       <!-- Chrome Conflicts bubble -->
       <if expr="is_win">
@@ -997,14 +1021,20 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
         <message name="IDS_INBOUND_MDNS_RULE_NAME" desc="The name of the firewall rule allowing inbound mDNS traffic.">
           Chromium (mDNS-In)
         </message>
-        <message name="IDS_INBOUND_MDNS_RULE_NAME_CANARY" desc="The name of the firewall rule allowing inbound mDNS traffic for canary.">
-          Chromium (mDNS-In)
+        <message name="IDS_INBOUND_MDNS_RULE_NAME_BETA" desc="Unused in Chromium builds" translateable="false">
+        </message>
+        <message name="IDS_INBOUND_MDNS_RULE_NAME_CANARY" desc="Unused in Chromium builds" translateable="false">
+        </message>
+        <message name="IDS_INBOUND_MDNS_RULE_NAME_DEV" desc="Unused in Chromium builds" translateable="false">
         </message>
         <message name="IDS_INBOUND_MDNS_RULE_DESCRIPTION" desc="The description of the firewall rule allowing inbound mDNS traffic.">
           Inbound rule for Chromium to allow mDNS traffic.
         </message>
-        <message name="IDS_INBOUND_MDNS_RULE_DESCRIPTION_CANARY" desc="The description of the firewall rule allowing inbound mDNS traffic canary.">
-          Inbound rule for Chromium to allow mDNS traffic.
+        <message name="IDS_INBOUND_MDNS_RULE_DESCRIPTION_BETA" desc="Unused in Chromium builds" translateable="false">
+        </message>
+        <message name="IDS_INBOUND_MDNS_RULE_DESCRIPTION_CANARY" desc="Unused in Chromium builds" translateable="false">
+        </message>
+        <message name="IDS_INBOUND_MDNS_RULE_DESCRIPTION_DEV" desc="Unused in Chromium builds" translateable="false">
         </message>
       </if>
 
@@ -1147,11 +1177,6 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
         You can help make Chromium safer and easier to use by automatically sending some system information and page content to Google to help detect dangerous apps and sites.
       </message>
 
-      <!-- Page Information Window -->
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_VERIFIED" desc="The text of the identity section when the page is secure and uses a valid certificate">
-        Chromium verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate.
-      </message>
-
       <!-- Desktop Capture -->
       <message name="IDS_DESKTOP_MEDIA_PICKER_SOURCE_TYPE_TAB" desc="Text for the button on the window picker dialog, clicking which takes one to tab sharing">
         Chromium Tab
@@ -1175,19 +1200,23 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
       <message name="IDS_PASSWORD_MANAGER_DESKTOP_TO_IOS_PROMO_TEXT_WITH_PHONE_NUMBER_V2" desc="Text for Chrome iOS Promotion appearing in the password bubble after a password is saved, this one mentioning explicitly that the SMS will be sent to the recovery phone number.">
         Install Chromium on your phone. We’ll send an SMS to your account recovery phone number: <ph name="PHONE_NUMBER">$1<ex>(650) 123-4567</ex></ph>
       </message>
+      <message name="IDS_FOOTNOTE_DESKTOP_TO_IOS_PROMO_LINK" desc="Text of the link to get Chrome on the iPhone from the Chrome iOS promotion displayed on the bottom of bubbles.">
+        get Chromium on your iPhone
+      </message>
+
       <!-- Runtime permission strings -->
       <if expr="is_android">
         <message name="IDS_INFOBAR_MISSING_CAMERA_PERMISSION_TEXT" desc="Text shown in an infobar when a website has requested access to the camera capabilities, but Chrome is missing the Android camera permission.">
-          Chromium needs camera access to share it with this site.
+          Chromium needs permission to access your camera for this site.
         </message>
         <message name="IDS_INFOBAR_MISSING_MICROPHONE_PERMISSION_TEXT" desc="Text shown in an infobar when a website has requested access to the microphone capabilities, but Chrome is missing the Android microphone permission.">
-          Chromium needs microphone access to share it with this site.
+          Chromium needs permission to access your microphone for this site.
+        </message>
+        <message name="IDS_INFOBAR_MISSING_MICROPHONE_CAMERA_PERMISSIONS_TEXT" desc="Text shown in an infobar when a website has requested access to the microphone and camera capabilities, but Chrome is missing the Android microphone and camera permissions.">
+          Chromium needs permission to access your camera and microphone for this site.
         </message>
         <message name="IDS_INFOBAR_MISSING_LOCATION_PERMISSION_TEXT" desc="Text shown in an infobar when a website has requested access to the location capabilities, but Chrome is missing the Android location permission.">
-          Chromium needs location access to share it with this site.
-        </message>
-        <message name="IDS_INFOBAR_MISSING_MULTIPLE_PERMISSIONS_TEXT" desc="Text shown in an infobar when a website has requested access to the multiple restricted capabilities (e.g. location, camera, microphone), but Chrome is missing the corresponding Android permissions.">
-          Chromium needs permissions access to share them with this site.
+          Chromium needs access to your location to share your location with this site.
         </message>
         <message name="IDS_MISSING_STORAGE_PERMISSION_DOWNLOAD_EDUCATION_TEXT" desc="Text shown educating the user that Chrome is missing the Android storage permission, which is required to download files.">
           Chromium needs storage access to download files.

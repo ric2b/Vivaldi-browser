@@ -33,19 +33,67 @@ namespace test {
 class MediaStreamDevicesControllerTestApi;
 }
 
-namespace internal {
-// Delegate showing permission prompts.
-class PermissionPromptDelegate {
+class MediaStreamDevicesController {
  public:
-  virtual void ShowPrompt(
-      bool user_gesture,
-      content::WebContents* web_contents,
-      std::unique_ptr<MediaStreamDevicesController> controller) = 0;
-};
-}
+  // This class is only needed until we unify the codepaths for permission
+  // requests. It can be removed once crbug.com/606138 is fixed.
+  class Request : public PermissionRequest {
+   public:
+    using PromptAnsweredCallback =
+        base::Callback<void(ContentSetting, bool /* persist */)>;
 
-class MediaStreamDevicesController : public PermissionRequest {
- public:
+    Request(Profile* profile,
+            bool is_asking_for_audio,
+            bool is_asking_for_video,
+            const GURL& security_origin,
+            PromptAnsweredCallback prompt_answered_callback);
+
+    ~Request() override;
+
+    bool IsAskingForAudio() const;
+    bool IsAskingForVideo() const;
+    base::string16 GetMessageText() const;
+
+    // PermissionRequest:
+    IconId GetIconId() const override;
+    base::string16 GetMessageTextFragment() const override;
+    GURL GetOrigin() const override;
+    void PermissionGranted() override;
+    void PermissionDenied() override;
+    void Cancelled() override;
+    void RequestFinished() override;
+    PermissionRequestType GetPermissionRequestType() const override;
+    bool ShouldShowPersistenceToggle() const override;
+
+   private:
+    Profile* profile_;
+
+    bool is_asking_for_audio_;
+    bool is_asking_for_video_;
+
+    GURL security_origin_;
+
+    PromptAnsweredCallback prompt_answered_callback_;
+
+    // Whether the prompt has been answered.
+    bool responded_;
+
+    DISALLOW_COPY_AND_ASSIGN(Request);
+  };
+
+  // This class is only needed interally and for tests. It can be removed once
+  // crbug.com/606138 is fixed. Delegate for showing permission prompts. It's
+  // only public because subclassing from a friend class doesn't work in gcc
+  // (see https://codereview.chromium.org/2768923003).
+  class PermissionPromptDelegate {
+   public:
+    virtual void ShowPrompt(
+        bool user_gesture,
+        content::WebContents* web_contents,
+        std::unique_ptr<MediaStreamDevicesController::Request> request) = 0;
+    virtual ~PermissionPromptDelegate() {}
+  };
+
   static void RequestPermissions(
       const content::MediaStreamRequest& request,
       const content::MediaResponseCallback& callback);
@@ -53,50 +101,43 @@ class MediaStreamDevicesController : public PermissionRequest {
   // Registers the prefs backing the audio and video policies.
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
-  ~MediaStreamDevicesController() override;
+  ~MediaStreamDevicesController();
 
   bool IsAskingForAudio() const;
   bool IsAskingForVideo() const;
-  base::string16 GetMessageText() const;
 
-  // Forces the permissions to be denied (without being persisted) regardless
-  // of what the previous state was.  If the user had previously allowed the
-  // site video or audio access, this ignores that and informs the site it was
-  // denied.
-  //
-  // This differs from PermissionGranted/PermissionDenied as they only operate
-  // on the permissions if they are in the ASK state.
-  void ForcePermissionDeniedTemporarily();
+  // Called when a permission prompt has been answered, with the |response| and
+  // whether the choice should be persisted.
+  // TODO(raymes): Remove this once crbug.com/606138 is fixed.
+  void PromptAnswered(ContentSetting response, bool persist);
 
-  bool ShouldShowPersistenceToggle() const override;
+  // Called when a permission prompt is answered through the PermissionManager.
+  void PromptAnsweredGroupedRequest(
+      const std::vector<ContentSetting>& responses);
 
-  // PermissionRequest:
-  IconId GetIconId() const override;
-  base::string16 GetMessageTextFragment() const override;
-  GURL GetOrigin() const override;
-  void PermissionGranted() override;
-  void PermissionDenied() override;
-  void Cancelled() override;
-  void RequestFinished() override;
-  PermissionRequestType GetPermissionRequestType() const override;
+#if defined(OS_ANDROID)
+  // Called when the Android OS-level prompt is answered.
+  void AndroidOSPromptAnswered(bool allowed);
+#endif  // defined(OS_ANDROID)
+
+  // Called when the request is finished and no prompt is required.
+  void RequestFinishedNoPrompt();
 
  private:
   friend class MediaStreamDevicesControllerTest;
   friend class test::MediaStreamDevicesControllerTestApi;
   friend class policy::MediaStreamDevicesControllerBrowserTest;
 
-  class MediaPermissionStatus;
   class PermissionPromptDelegateImpl;
 
   static void RequestPermissionsWithDelegate(
       const content::MediaStreamRequest& request,
       const content::MediaResponseCallback& callback,
-      internal::PermissionPromptDelegate* delegate);
+      PermissionPromptDelegate* delegate);
 
   MediaStreamDevicesController(content::WebContents* web_contents,
                                const content::MediaStreamRequest& request,
-                               const content::MediaResponseCallback& callback,
-                               const MediaPermissionStatus& initial_permission);
+                               const content::MediaResponseCallback& callback);
 
   bool IsAllowedForAudio() const;
   bool IsAllowedForVideo() const;
@@ -106,17 +147,8 @@ class MediaStreamDevicesController : public PermissionRequest {
   content::MediaStreamDevices GetDevices(ContentSetting audio_setting,
                                          ContentSetting video_setting);
 
-  // Runs |callback_| with the given audio/video permission settings. If neither
-  // |audio_setting| or |video_setting| is set to allow, |denial_reason| should
-  // be set to the error to be reported when running |callback_|.
-  void RunCallback(ContentSetting audio_setting,
-                   ContentSetting video_setting,
-                   content::MediaStreamRequestResult denial_reason);
-
-  // Store the permission to use media devices for the origin of the request.
-  // This is triggered when the user makes a decision.
-  void StorePermission(ContentSetting new_audio_setting,
-                       ContentSetting new_video_setting) const;
+  // Runs |callback_| with the current audio/video permission settings.
+  void RunCallback();
 
   // Called when the permission has been set to update the
   // TabSpecificContentSettings.
@@ -127,25 +159,17 @@ class MediaStreamDevicesController : public PermissionRequest {
   ContentSetting GetContentSetting(
       ContentSettingsType content_type,
       const content::MediaStreamRequest& request,
-      bool was_requested,
-      bool was_initially_blocked,
       content::MediaStreamRequestResult* denial_reason) const;
-
-  // Returns the content setting that should apply given an old content setting
-  // and a user decision that has been made. If a user isn't being asked for one
-  // of audio/video then we shouldn't change that setting, even if they accept
-  // the dialog.
-  ContentSetting GetNewSetting(ContentSettingsType content_type,
-                               ContentSetting old_setting,
-                               ContentSetting user_decision) const;
 
   // Returns true if clicking allow on the dialog should give access to the
   // requested devices.
   bool IsUserAcceptAllowed(ContentSettingsType content_type) const;
 
-  // The audio/video content settings BEFORE the user clicks accept/deny.
-  ContentSetting old_audio_setting_;
-  ContentSetting old_video_setting_;
+  // The current state of the audio/video content settings which may be updated
+  // through the lifetime of the request.
+  ContentSetting audio_setting_;
+  ContentSetting video_setting_;
+  content::MediaStreamRequestResult denial_reason_;
 
   content::WebContents* web_contents_;
 
@@ -166,7 +190,7 @@ class MediaStreamDevicesController : public PermissionRequest {
   // audio/video devices was granted or not.
   content::MediaResponseCallback callback_;
 
-  std::unique_ptr<internal::PermissionPromptDelegate> delegate_;
+  std::unique_ptr<PermissionPromptDelegate> delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaStreamDevicesController);
 };

@@ -5,14 +5,15 @@
 #include "chrome/browser/win/jumplist_updater.h"
 
 #include <windows.h>
+#include <objbase.h>
 #include <propkey.h>
 #include <shobjidl.h>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/win/win_util.h"
-#include "base/win/windows_version.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/common/content_switches.h"
 
@@ -23,12 +24,12 @@ namespace {
 // requires three items: the absolute path to an application, an argument
 // string, and a title string.
 bool AddShellLink(base::win::ScopedComPtr<IObjectCollection> collection,
-                  const std::wstring& application_path,
+                  const base::string16& application_path,
                   scoped_refptr<ShellLinkItem> item) {
   // Create an IShellLink object.
   base::win::ScopedComPtr<IShellLink> link;
-  HRESULT result = link.CreateInstance(CLSID_ShellLink, NULL,
-                                       CLSCTX_INPROC_SERVER);
+  HRESULT result = ::CoCreateInstance(
+      CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link));
   if (FAILED(result))
     return false;
 
@@ -43,7 +44,7 @@ bool AddShellLink(base::win::ScopedComPtr<IObjectCollection> collection,
   // arguments and set it as the arguments of this IShellLink object.
   // We also exit this function when this call fails because it isn't useful to
   // add a shortcut that cannot open the given page.
-  std::wstring arguments(item->GetArguments());
+  base::string16 arguments(item->GetArguments());
   if (!arguments.empty()) {
     result = link->SetArguments(arguments.c_str());
     if (FAILED(result))
@@ -62,19 +63,19 @@ bool AddShellLink(base::win::ScopedComPtr<IObjectCollection> collection,
   // shortcut which doesn't have titles.
   // So, we should use the IPropertyStore interface to set its title.
   base::win::ScopedComPtr<IPropertyStore> property_store;
-  result = link.QueryInterface(property_store.Receive());
+  result = link.CopyTo(property_store.GetAddressOf());
   if (FAILED(result))
     return false;
 
   if (!base::win::SetStringValueForPropertyStore(
-          property_store.get(),
+          property_store.Get(),
           PKEY_Title,
           item->title().c_str())) {
     return false;
   }
 
   // Add this IShellLink object to the given collection.
-  return SUCCEEDED(collection->AddObject(link.get()));
+  return SUCCEEDED(collection->AddObject(link.Get()));
 }
 
 }  // namespace
@@ -88,7 +89,7 @@ ShellLinkItem::ShellLinkItem()
 
 ShellLinkItem::~ShellLinkItem() {}
 
-std::wstring ShellLinkItem::GetArguments() const {
+base::string16 ShellLinkItem::GetArguments() const {
   return command_line_.GetArgumentsString();
 }
 
@@ -99,34 +100,34 @@ base::CommandLine* ShellLinkItem::GetCommandLine() {
 
 // JumpListUpdater
 
-JumpListUpdater::JumpListUpdater(const std::wstring& app_user_model_id)
-    : app_user_model_id_(app_user_model_id),
-      user_max_items_(0) {
-}
+JumpListUpdater::JumpListUpdater(const base::string16& app_user_model_id)
+    : app_user_model_id_(app_user_model_id), user_max_items_(0) {}
 
 JumpListUpdater::~JumpListUpdater() {
 }
 
 // static
 bool JumpListUpdater::IsEnabled() {
-  // JumpList is implemented only on Windows 7 or later.
   // Do not create custom JumpLists in tests. See http://crbug.com/389375.
-  return base::win::GetVersion() >= base::win::VERSION_WIN7 &&
-         !base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kTestType);
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kTestType);
 }
 
 bool JumpListUpdater::BeginUpdate() {
+  // TODO(chengx): Remove the UMA histogram after fixing http://crbug.com/40407.
+  SCOPED_UMA_HISTOGRAM_TIMER("WinJumplistUpdater.BeginUpdateDuration");
+
   // This instance is expected to be one-time-use only.
-  DCHECK(!destination_list_.get());
+  DCHECK(!destination_list_.Get());
 
   // Check preconditions.
   if (!JumpListUpdater::IsEnabled() || app_user_model_id_.empty())
     return false;
 
   // Create an ICustomDestinationList object and attach it to our application.
-  HRESULT result = destination_list_.CreateInstance(CLSID_DestinationList, NULL,
-                                                    CLSCTX_INPROC_SERVER);
+  HRESULT result =
+      ::CoCreateInstance(CLSID_DestinationList, NULL, CLSCTX_INPROC_SERVER,
+                         IID_PPV_ARGS(&destination_list_));
   if (FAILED(result))
     return false;
 
@@ -142,8 +143,7 @@ bool JumpListUpdater::BeginUpdate() {
   // removed list and prevent us from adding the same item.
   UINT max_slots;
   base::win::ScopedComPtr<IObjectArray> removed;
-  result = destination_list_->BeginList(&max_slots, __uuidof(*removed),
-                                        removed.ReceiveVoid());
+  result = destination_list_->BeginList(&max_slots, IID_PPV_ARGS(&removed));
   if (FAILED(result))
     return false;
 
@@ -153,7 +153,10 @@ bool JumpListUpdater::BeginUpdate() {
 }
 
 bool JumpListUpdater::CommitUpdate() {
-  if (!destination_list_.get())
+  // TODO(chengx): Remove the UMA histogram after fixing http://crbug.com/40407.
+  SCOPED_UMA_HISTOGRAM_TIMER("WinJumplistUpdater.CommitUpdateDuration");
+
+  if (!destination_list_.Get())
     return false;
 
   // Commit this transaction and send the updated JumpList to Windows.
@@ -161,7 +164,10 @@ bool JumpListUpdater::CommitUpdate() {
 }
 
 bool JumpListUpdater::AddTasks(const ShellLinkItemList& link_items) {
-  if (!destination_list_.get())
+  // TODO(chengx): Remove the UMA histogram after fixing http://crbug.com/40407.
+  SCOPED_UMA_HISTOGRAM_TIMER("WinJumplistUpdater.AddTasksDuration");
+
+  if (!destination_list_.Get())
     return false;
 
   // Retrieve the absolute path to "chrome.exe".
@@ -172,15 +178,17 @@ bool JumpListUpdater::AddTasks(const ShellLinkItemList& link_items) {
   // Create an EnumerableObjectCollection object to be added items of the
   // "Task" category.
   base::win::ScopedComPtr<IObjectCollection> collection;
-  HRESULT result = collection.CreateInstance(CLSID_EnumerableObjectCollection,
-                                             NULL, CLSCTX_INPROC_SERVER);
+  HRESULT result =
+      ::CoCreateInstance(CLSID_EnumerableObjectCollection, NULL,
+                         CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&collection));
   if (FAILED(result))
     return false;
 
   // Add items to the "Task" category.
   for (ShellLinkItemList::const_iterator it = link_items.begin();
        it != link_items.end(); ++it) {
-    AddShellLink(collection, application_path.value(), *it);
+    if (!AddShellLink(collection, application_path.value(), *it))
+      return false;
   }
 
   // We can now add the new list to the JumpList.
@@ -188,17 +196,20 @@ bool JumpListUpdater::AddTasks(const ShellLinkItemList& link_items) {
   // interface to retrieve each item in the list. So, we retrieve the
   // IObjectArray interface from the EnumerableObjectCollection object.
   base::win::ScopedComPtr<IObjectArray> object_array;
-  result = collection.QueryInterface(object_array.Receive());
+  result = collection.CopyTo(object_array.GetAddressOf());
   if (FAILED(result))
     return false;
 
-  return SUCCEEDED(destination_list_->AddUserTasks(object_array.get()));
+  return SUCCEEDED(destination_list_->AddUserTasks(object_array.Get()));
 }
 
-bool JumpListUpdater::AddCustomCategory(const std::wstring& category_name,
+bool JumpListUpdater::AddCustomCategory(const base::string16& category_name,
                                         const ShellLinkItemList& link_items,
                                         size_t max_items) {
- if (!destination_list_.get())
+  // TODO(chengx): Remove the UMA histogram after fixing http://crbug.com/40407.
+  SCOPED_UMA_HISTOGRAM_TIMER("WinJumplistUpdater.AddCustomCategoryDuration");
+
+  if (!destination_list_.Get())
     return false;
 
   // Retrieve the absolute path to "chrome.exe".
@@ -216,15 +227,16 @@ bool JumpListUpdater::AddCustomCategory(const std::wstring& category_name,
   // We once add the given items to this collection object and add this
   // collection to the JumpList.
   base::win::ScopedComPtr<IObjectCollection> collection;
-  HRESULT result = collection.CreateInstance(CLSID_EnumerableObjectCollection,
-                                             NULL, CLSCTX_INPROC_SERVER);
+  HRESULT result =
+      ::CoCreateInstance(CLSID_EnumerableObjectCollection, NULL,
+                         CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&collection));
   if (FAILED(result))
     return false;
 
   for (ShellLinkItemList::const_iterator item = link_items.begin();
        item != link_items.end() && max_items > 0; ++item, --max_items) {
-    scoped_refptr<ShellLinkItem> link(*item);
-    AddShellLink(collection, application_path.value(), link);
+    if (!AddShellLink(collection, application_path.value(), *item))
+      return false;
   }
 
   // We can now add the new list to the JumpList.
@@ -235,10 +247,10 @@ bool JumpListUpdater::AddCustomCategory(const std::wstring& category_name,
   // It seems the ICustomDestinationList::AppendCategory() function just
   // replaces all items in the given category with the ones in the new list.
   base::win::ScopedComPtr<IObjectArray> object_array;
-  result = collection.QueryInterface(object_array.Receive());
+  result = collection.CopyTo(object_array.GetAddressOf());
   if (FAILED(result))
     return false;
 
   return SUCCEEDED(destination_list_->AppendCategory(category_name.c_str(),
-                                                     object_array.get()));
+                                                     object_array.Get()));
 }

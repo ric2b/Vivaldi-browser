@@ -16,6 +16,7 @@
 #include "base/callback.h"
 #include "base/optional.h"
 #include "base/process/process_handle.h"
+#include "base/trace_event/process_memory_totals.h"
 
 namespace base {
 namespace trace_event {
@@ -28,7 +29,8 @@ enum class MemoryDumpType {
   PERIODIC_INTERVAL,     // Dumping memory at periodic intervals.
   EXPLICITLY_TRIGGERED,  // Non maskable dump request.
   PEAK_MEMORY_USAGE,     // Dumping memory at detected peak total memory usage.
-  LAST = PEAK_MEMORY_USAGE  // For IPC macros.
+  SUMMARY_ONLY,          // Calculate just the summary & don't add to the trace.
+  LAST = SUMMARY_ONLY
 };
 
 // Tells the MemoryDumpProvider(s) how much detailed their dumps should be.
@@ -82,6 +84,7 @@ struct MemoryDumpArgs {
 struct BASE_EXPORT MemoryDumpCallbackResult {
   struct OSMemDump {
     uint32_t resident_set_kb = 0;
+    ProcessMemoryTotals::PlatformPrivateFootprint platform_private_footprint;
   };
   struct ChromeMemDump {
     uint32_t malloc_total_kb = 0;

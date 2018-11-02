@@ -11,13 +11,13 @@
 #include "base/mac/bundle_locations.h"
 #include "base/macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/scoped_observer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/avatar_menu.h"
@@ -38,6 +38,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #import "chrome/browser/ui/cocoa/browser_window_utils.h"
@@ -64,7 +65,6 @@
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/browser/native_web_keyboard_event.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "google_apis/gaia/oauth2_token_service.h"
@@ -87,12 +87,12 @@
 #include "ui/gfx/text_elider.h"
 #include "ui/native_theme/common_theme.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/vector_icons/vector_icons.h"
 
 namespace {
 
 // Constants taken from the Windows/Views implementation at:
 // chrome/browser/ui/views/profile_chooser_view.cc
-const int kLargeImageSide = 88;
 const int kMdImageSide = 40;
 
 const CGFloat kFixedMenuWidth = 240.0;
@@ -104,7 +104,6 @@ const CGFloat kHorizontalSpacing = 16.0;
 const CGFloat kTitleFontSize = 15.0;
 const CGFloat kTextFontSize = 12.0;
 const CGFloat kProfileButtonHeight = 30;
-const int kBezelThickness = 3;  // Width of the bezel on an NSButton.
 const int kBlueButtonHeight = 30;
 const CGFloat kFocusRingLineWidth = 2;
 
@@ -157,7 +156,7 @@ NSTextField* BuildLabel(NSString* title,
       [[NSTextField alloc] initWithFrame:NSZeroRect]);
   [label setStringValue:title];
   [label setEditable:NO];
-  [label setAlignment:NSLeftTextAlignment];
+  [label setAlignment:NSNaturalTextAlignment];
   [label setBezeled:NO];
   [label setFont:[NSFont labelFontOfSize:kTextFontSize]];
   [label setDrawsBackground:NO];
@@ -324,16 +323,16 @@ void GaiaWebContentsDelegate::HandleKeyboardEvent(
 // Class that listens to changes to the OAuth2Tokens for the active profile,
 // changes to the avatar menu model or browser close notifications.
 class ActiveProfileObserverBridge : public AvatarMenuObserver,
-                                    public content::NotificationObserver,
+                                    public chrome::BrowserListObserver,
                                     public OAuth2TokenService::Observer {
  public:
   ActiveProfileObserverBridge(ProfileChooserController* controller,
                               Browser* browser)
       : controller_(controller),
         browser_(browser),
+        browser_list_observer_(this),
         token_observer_registered_(false) {
-    registrar_.Add(this, chrome::NOTIFICATION_BROWSER_CLOSING,
-                   content::NotificationService::AllSources());
+    browser_list_observer_.Add(BrowserList::GetInstance());
     if (!browser_->profile()->IsGuestSession())
       AddTokenServiceObserver();
   }
@@ -393,12 +392,9 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     }
   }
 
-  // content::NotificationObserver:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override {
-    DCHECK_EQ(chrome::NOTIFICATION_BROWSER_CLOSING, type);
-    if (browser_ == content::Source<Browser>(source).ptr()) {
+  // chrome::BrowserListObserver:
+  void OnBrowserClosing(Browser* browser) override {
+    if (browser_ == browser) {
       RemoveTokenServiceObserver();
       // Clean up the bubble's WebContents (used by the Gaia embedded view), to
       // make sure the guest profile doesn't have any dangling host renderers.
@@ -411,7 +407,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
 
   ProfileChooserController* controller_;  // Weak; owns this.
   Browser* browser_;  // Weak.
-  content::NotificationRegistrar registrar_;
+  ScopedObserver<BrowserList, BrowserListObserver> browser_list_observer_;
 
   // The observer can be removed both when closing the browser, and by just
   // closing the avatar bubble. However, in the case of closing the browser,
@@ -423,50 +419,50 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   DISALLOW_COPY_AND_ASSIGN(ActiveProfileObserverBridge);
 };
 
-// Custom button cell that adds a left padding before the button image, and
+// Custom button cell that adds a leading padding before the button image, and
 // a custom spacing between the button image and title.
 @interface CustomPaddingImageButtonCell : NSButtonCell {
  @private
-  // Padding added to the left margin of the button.
-  int leftMarginSpacing_;
+  // Padding added to the leading margin of the button.
+  int leadingMarginSpacing_;
   // Spacing between the cell image and title.
   int imageTitleSpacing_;
-  // Padding added to the right margin of the button.
-  int rightMarginSpacing_;
+  // Padding added to the traling margin of the button.
+  int trailingMarginSpacing_;
 }
 
-- (id)initWithLeftMarginSpacing:(int)leftMarginSpacing
-              imageTitleSpacing:(int)imageTitleSpacing;
+- (id)initWithLeadingMarginSpacing:(int)leadingMarginSpacing
+                 imageTitleSpacing:(int)imageTitleSpacing;
 
-- (void)setRightMarginSpacing:(int)rightMarginSpacing;
+- (void)setTrailingMarginSpacing:(int)trailingMarginSpacing;
 @end
 
 @implementation CustomPaddingImageButtonCell
-- (id)initWithLeftMarginSpacing:(int)leftMarginSpacing
-              imageTitleSpacing:(int)imageTitleSpacing {
+- (id)initWithLeadingMarginSpacing:(int)leadingMarginSpacing
+                 imageTitleSpacing:(int)imageTitleSpacing {
   if ((self = [super init])) {
-    leftMarginSpacing_ = leftMarginSpacing;
+    leadingMarginSpacing_ = leadingMarginSpacing;
     imageTitleSpacing_ = imageTitleSpacing;
   }
   return self;
 }
 
-- (void)setRightMarginSpacing:(int)rightMarginSpacing {
-  rightMarginSpacing_ = rightMarginSpacing;
+- (void)setTrailingMarginSpacing:(int)trailingMarginSpacing {
+  trailingMarginSpacing_ = trailingMarginSpacing;
 }
 
 - (NSRect)drawTitle:(NSAttributedString*)title
           withFrame:(NSRect)frame
              inView:(NSView*)controlView {
   NSRect marginRect;
-  NSDivideRect(frame, &marginRect, &frame, leftMarginSpacing_, NSMinXEdge);
-
-  // The title frame origin isn't aware of the left margin spacing added
+  NSDivideRect(frame, &marginRect, &frame, leadingMarginSpacing_,
+               cocoa_l10n_util::LeadingEdge());
+  // The title frame origin isn't aware of the leading margin spacing added
   // in -drawImage, so it must be added when drawing the title as well.
-  if ([self imagePosition] == NSImageLeft)
-    NSDivideRect(frame, &marginRect, &frame, imageTitleSpacing_, NSMinXEdge);
-
-  NSDivideRect(frame, &marginRect, &frame, rightMarginSpacing_, NSMaxXEdge);
+  NSDivideRect(frame, &marginRect, &frame, imageTitleSpacing_,
+               cocoa_l10n_util::LeadingEdge());
+  NSDivideRect(frame, &marginRect, &frame, trailingMarginSpacing_,
+               cocoa_l10n_util::TrailingEdge());
 
   return [super drawTitle:title withFrame:frame inView:controlView];
 }
@@ -474,16 +470,17 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
 - (void)drawImage:(NSImage*)image
         withFrame:(NSRect)frame
            inView:(NSView*)controlView {
-  if ([self imagePosition] == NSImageLeft)
-    frame.origin.x = leftMarginSpacing_;
+  if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout())
+    frame.origin.x -= leadingMarginSpacing_;
+  else
+    frame.origin.x = leadingMarginSpacing_;
   [super drawImage:image withFrame:frame inView:controlView];
 }
 
 - (NSSize)cellSize {
   NSSize buttonSize = [super cellSize];
-  buttonSize.width += leftMarginSpacing_;
-  if ([self imagePosition] == NSImageLeft)
-    buttonSize.width += imageTitleSpacing_;
+  buttonSize.width += leadingMarginSpacing_;
+  buttonSize.width += imageTitleSpacing_;
   return buttonSize;
 }
 
@@ -535,122 +532,6 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
 }
 @end
 
-// A custom image control that shows a "Change" button when moused over.
-@interface EditableProfilePhoto : HoverImageButton {
- @private
-  AvatarMenu* avatarMenu_;  // Weak; Owned by ProfileChooserController.
-  base::scoped_nsobject<TransparentBackgroundImageView> changePhotoImage_;
-  ProfileChooserController* controller_;
-}
-
-- (id)initWithFrame:(NSRect)frameRect
-         avatarMenu:(AvatarMenu*)avatarMenu
-        profileIcon:(const gfx::Image&)profileIcon
-     editingAllowed:(BOOL)editingAllowed
-     withController:(ProfileChooserController*)controller;
-
-// Called when the "Change" button is clicked.
-- (void)editPhoto:(id)sender;
-
-@end
-
-@implementation EditableProfilePhoto
-- (id)initWithFrame:(NSRect)frameRect
-         avatarMenu:(AvatarMenu*)avatarMenu
-        profileIcon:(const gfx::Image&)profileIcon
-     editingAllowed:(BOOL)editingAllowed
-     withController:(ProfileChooserController*)controller {
-  if ((self = [super initWithFrame:frameRect])) {
-    avatarMenu_ = avatarMenu;
-    controller_ = controller;
-
-    [self setBordered:NO];
-
-    base::scoped_nsobject<CustomCircleImageCell> cell(
-        [[CustomCircleImageCell alloc] init]);
-    [self setCell:cell.get()];
-
-    [self setDefaultImage:CreateProfileImage(profileIcon, kLargeImageSide,
-                                             profiles::SHAPE_SQUARE)];
-    [self setImagePosition:NSImageOnly];
-
-    if (editingAllowed) {
-      NSRect bounds = NSMakeRect(0, 0, kLargeImageSide, kLargeImageSide);
-      [self setTarget:self];
-      [self setAction:@selector(editPhoto:)];
-      changePhotoImage_.reset([[TransparentBackgroundImageView alloc]
-          initWithFrame:bounds]);
-      [changePhotoImage_ setImage:ui::ResourceBundle::GetSharedInstance().
-          GetNativeImageNamed(IDR_ICON_PROFILES_EDIT_CAMERA).AsNSImage()];
-      [self addSubview:changePhotoImage_];
-
-      // Hide the image until the button is hovered over.
-      [changePhotoImage_ setHidden:YES];
-    }
-
-    // Set the image cell's accessibility strings to be the same as the
-    // button's strings.
-    [[self cell] accessibilitySetOverrideValue:l10n_util::GetNSString(
-        editingAllowed ?
-        IDS_PROFILES_NEW_AVATAR_MENU_CHANGE_PHOTO_ACCESSIBLE_NAME :
-        IDS_PROFILES_NEW_AVATAR_MENU_PHOTO_ACCESSIBLE_NAME)
-                                  forAttribute:NSAccessibilityTitleAttribute];
-    [[self cell] accessibilitySetOverrideValue:
-        editingAllowed ? NSAccessibilityButtonRole : NSAccessibilityImageRole
-                                  forAttribute:NSAccessibilityRoleAttribute];
-    [[self cell] accessibilitySetOverrideValue:
-        NSAccessibilityRoleDescription(NSAccessibilityButtonRole, nil)
-            forAttribute:NSAccessibilityRoleDescriptionAttribute];
-
-    // The button and the cell should read the same thing.
-    [self accessibilitySetOverrideValue:l10n_util::GetNSString(
-        editingAllowed ?
-        IDS_PROFILES_NEW_AVATAR_MENU_CHANGE_PHOTO_ACCESSIBLE_NAME :
-        IDS_PROFILES_NEW_AVATAR_MENU_PHOTO_ACCESSIBLE_NAME)
-                                  forAttribute:NSAccessibilityTitleAttribute];
-    [self accessibilitySetOverrideValue:NSAccessibilityButtonRole
-                                  forAttribute:NSAccessibilityRoleAttribute];
-    [self accessibilitySetOverrideValue:
-        NSAccessibilityRoleDescription(NSAccessibilityButtonRole, nil)
-            forAttribute:NSAccessibilityRoleDescriptionAttribute];
-  }
-  return self;
-}
-
-- (void)editPhoto:(id)sender {
-  avatarMenu_->EditProfile(avatarMenu_->GetActiveProfileIndex());
-  [controller_
-      postActionPerformed:ProfileMetrics::PROFILE_DESKTOP_MENU_EDIT_IMAGE];
-}
-
-- (void)setHoverState:(HoverState)state {
-  [super setHoverState:state];
-  [changePhotoImage_ setHidden:([self hoverState] == kHoverStateNone)];
-}
-
-- (BOOL)canBecomeKeyView {
-  return false;
-}
-
-- (BOOL)accessibilityIsIgnored {
-  return NO;
-}
-
-- (NSArray*)accessibilityActionNames {
-  NSArray* parentActions = [super accessibilityActionNames];
-  return [parentActions arrayByAddingObject:NSAccessibilityPressAction];
-}
-
-- (void)accessibilityPerformAction:(NSString*)action {
-  if ([action isEqualToString:NSAccessibilityPressAction]) {
-    avatarMenu_->EditProfile(avatarMenu_->GetActiveProfileIndex());
-  }
-
-  [super accessibilityPerformAction:action];
-}
-
-@end
-
 // A custom view with a filled circular background.
 @interface BackgroundCircleView : NSView {
  @private
@@ -675,158 +556,6 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
 }
 @end
 
-// A custom text control that turns into a textfield for editing when clicked.
-@interface EditableProfileNameButton : HoverImageButton<NSTextFieldDelegate> {
- @private
-  base::scoped_nsobject<NSTextField> profileNameTextField_;
-  Profile* profile_;  // Weak.
-  ProfileChooserController* controller_;
-}
-
-- (id)initWithFrame:(NSRect)frameRect
-            profile:(Profile*)profile
-        profileName:(NSString*)profileName
-     editingAllowed:(BOOL)editingAllowed
-     withController:(ProfileChooserController*)controller;
-
-// Called when the button is clicked.
-- (void)showEditableView:(id)sender;
-
-// Called when enter is pressed in the text field.
-- (void)saveProfileName;
-
-@end
-
-@implementation EditableProfileNameButton
-- (id)initWithFrame:(NSRect)frameRect
-            profile:(Profile*)profile
-        profileName:(NSString*)profileName
-     editingAllowed:(BOOL)editingAllowed
-     withController:(ProfileChooserController*)controller {
-  if ((self = [super initWithFrame:frameRect])) {
-    profile_ = profile;
-    controller_ = controller;
-
-    CGFloat availableWidth = frameRect.size.width;
-    NSSize textSize = [profileName sizeWithAttributes:@{
-      NSFontAttributeName : [self font]
-    }];
-
-    if (editingAllowed) {
-      // Show an "edit" pencil icon when hovering over. In the default state,
-      // we need to create an empty placeholder of the correct size, so that
-      // the text doesn't jump around when the hovered icon appears.
-      ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
-      NSImage* hoverImage = rb->GetNativeImageNamed(
-          IDR_ICON_PROFILES_EDIT_HOVER).AsNSImage();
-
-      // In order to center the button title, we need to add a left padding of
-      // the same width as the pencil icon.
-      base::scoped_nsobject<CustomPaddingImageButtonCell> cell(
-          [[CustomPaddingImageButtonCell alloc]
-              initWithLeftMarginSpacing:[hoverImage size].width
-                      imageTitleSpacing:0]);
-      [self setCell:cell.get()];
-
-      NSImage* placeholder = [[NSImage alloc] initWithSize:[hoverImage size]];
-      [self setDefaultImage:placeholder];
-      [self setHoverImage:hoverImage];
-      [self setAlternateImage:
-          rb->GetNativeImageNamed(IDR_ICON_PROFILES_EDIT_PRESSED).AsNSImage()];
-      [self setImagePosition:NSImageRight];
-      [self setTarget:self];
-      [self setAction:@selector(showEditableView:)];
-
-      // We need to subtract the width of the bezel from the frame rect, so that
-      // the textfield can take the exact same space as the button.
-      frameRect.size.height -= 2 * kBezelThickness;
-      frameRect.origin = NSMakePoint(0, kBezelThickness);
-      profileNameTextField_.reset(
-          [[NSTextField alloc] initWithFrame:frameRect]);
-      [profileNameTextField_ setStringValue:profileName];
-      [profileNameTextField_ setFont:[NSFont labelFontOfSize:kTitleFontSize]];
-      [profileNameTextField_ setEditable:YES];
-      [profileNameTextField_ setDrawsBackground:YES];
-      [profileNameTextField_ setBezeled:YES];
-      [profileNameTextField_ setAlignment:NSCenterTextAlignment];
-      [[profileNameTextField_ cell] setWraps:NO];
-      [[profileNameTextField_ cell] setLineBreakMode:
-          NSLineBreakByTruncatingTail];
-      [[profileNameTextField_ cell] setUsesSingleLineMode:YES];
-      [self addSubview:profileNameTextField_];
-      [profileNameTextField_ setDelegate:self];
-
-      // Hide the textfield until the user clicks on the button.
-      [profileNameTextField_ setHidden:YES];
-
-      [[self cell] accessibilitySetOverrideValue:l10n_util::GetNSStringF(
-          IDS_PROFILES_NEW_AVATAR_MENU_EDIT_NAME_ACCESSIBLE_NAME,
-          base::SysNSStringToUTF16(profileName))
-                                    forAttribute:NSAccessibilityTitleAttribute];
-
-      // Recompute the available width for the name since the icon takes space.
-      availableWidth -= [hoverImage size].width * 2;
-      // The profileNameTextField_ might size the text differently.
-      textSize = [profileName sizeWithAttributes:@{
-        NSFontAttributeName : [profileNameTextField_ font]
-      }];
-    }
-
-    if (textSize.width > availableWidth)
-      [self setToolTip:profileName];
-
-    [[self cell] accessibilitySetOverrideValue:NSAccessibilityButtonRole
-                                  forAttribute:NSAccessibilityRoleAttribute];
-    [[self cell]
-        accessibilitySetOverrideValue:NSAccessibilityRoleDescription(
-                                          NSAccessibilityButtonRole, nil)
-                         forAttribute:NSAccessibilityRoleDescriptionAttribute];
-
-    [self setBordered:NO];
-    [self setFont:[NSFont labelFontOfSize:kTitleFontSize]];
-    [self setAlignment:NSCenterTextAlignment];
-    [[self cell] setLineBreakMode:NSLineBreakByTruncatingTail];
-    [self setTitle:profileName];
-  }
-  return self;
-}
-
-- (void)saveProfileName {
-  base::string16 newProfileName =
-      base::SysNSStringToUTF16([profileNameTextField_ stringValue]);
-
-  // Empty profile names are not allowed, and do nothing.
-  base::TrimWhitespace(newProfileName, base::TRIM_ALL, &newProfileName);
-  if (!newProfileName.empty()) {
-    profiles::UpdateProfileName(profile_, newProfileName);
-    [controller_
-        postActionPerformed:ProfileMetrics::PROFILE_DESKTOP_MENU_EDIT_NAME];
-    [profileNameTextField_ setHidden:YES];
-  }
-}
-
-- (void)showEditableView:(id)sender {
-  [profileNameTextField_ setHidden:NO];
-  [[self window] makeFirstResponder:profileNameTextField_];
-}
-
-- (BOOL)canBecomeKeyView {
-  return false;
-}
-
-- (BOOL)control:(NSControl*)control
-               textView:(NSTextView*)textView
-    doCommandBySelector:(SEL)commandSelector {
-  if (commandSelector == @selector(insertTab:) ||
-      commandSelector == @selector(insertNewline:)) {
-    [self saveProfileName];
-    return YES;
-  }
-  return NO;
-}
-
-@end
-
 // A custom button that allows for setting a background color when hovered over.
 @interface BackgroundColorHoverButton : HoverImageButton {
  @private
@@ -834,7 +563,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   base::scoped_nsobject<NSColor> hoverColor_;
 }
 
-- (void)setRightMarginSpacing:(int)rightMarginSpacing;
+- (void)setTrailingMarginSpacing:(int)trailingMarginSpacing;
 @end
 
 @implementation BackgroundColorHoverButton
@@ -853,8 +582,8 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
 
     base::scoped_nsobject<CustomPaddingImageButtonCell> cell(
         [[CustomPaddingImageButtonCell alloc]
-            initWithLeftMarginSpacing:kHorizontalSpacing
-                    imageTitleSpacing:imageTitleSpacing]);
+            initWithLeadingMarginSpacing:kHorizontalSpacing
+                       imageTitleSpacing:imageTitleSpacing]);
     [cell setLineBreakMode:NSLineBreakByTruncatingTail];
     [cell setHighlightsBy:NSNoCellMask];
     [self setCell:cell.get()];
@@ -862,8 +591,8 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   return self;
 }
 
-- (void)setRightMarginSpacing:(int)rightMarginSpacing {
-  [[self cell] setRightMarginSpacing:rightMarginSpacing];
+- (void)setTrailingMarginSpacing:(int)trailingMarginSpacing {
+  [[self cell] setTrailingMarginSpacing:trailingMarginSpacing];
 }
 
 - (void)drawRect:(NSRect)dirtyRect {
@@ -1858,6 +1587,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   base::scoped_nsobject<NSView> container(
       [[NSView alloc] initWithFrame:NSZeroRect]);
 
+  BOOL isRTL = cocoa_l10n_util::ShouldDoExperimentalRTLLayout();
   CGFloat xOffset = kHorizontalSpacing;
   CGFloat yOffset = 0.0;
   CGFloat cardYOffset = kRelatedControllVerticalSpacing;
@@ -1922,6 +1652,11 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
         NSMakeRect(xOffset + kMdImageSide - badgeSize + badgeSpacing,
                    cardYOffset + kMdImageSide - badgeSize + badgeSpacing,
                    badgeSize, badgeSize);
+    if (isRTL) {
+      badgeIconCircleFrame.origin.x = NSWidth([profileCard frame]) -
+                                      NSWidth(badgeIconCircleFrame) -
+                                      NSMinX(badgeIconCircleFrame);
+    }
     base::scoped_nsobject<BackgroundCircleView> badgeIconWithCircle([
         [BackgroundCircleView alloc] initWithFrame:badgeIconCircleFrame
                                      withFillColor:GetDialogBackgroundColor()]);
@@ -1941,9 +1676,8 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
 
     [profileCard addSubview:badgeIconWithCircle];
   }
-
-  // Profile name, left-aligned to the right of profile icon.
-  xOffset += kMdImageSide + kHorizontalSpacing;
+  if (!isRTL)
+    xOffset += kMdImageSide + kHorizontalSpacing;
   CGFloat fontSize = kTextFontSize + 1.0;
   NSString* profileNameNSString = base::SysUTF16ToNSString(profileNameString);
   NSTextField* profileName = BuildLabel(profileNameNSString, NSZeroPoint, nil);
@@ -1964,8 +1698,8 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
                           NSHeight([profileName frame]))];
   [profileCard addSubview:profileName];
 
-  // Username, left-aligned to the right of profile icon and below the profile
-  // name.
+  // Username, aligned to the leading edge of the  profile icon and
+  // below the profile name.
   if (item.signed_in && !switches::IsEnableAccountConsistency()) {
     // Adjust the y-position of profile name to leave space for username.
     cardYOffset += kMdImageSide / 2 - [profileName frame].size.height;
@@ -1975,7 +1709,11 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
         ElideEmail(base::UTF16ToUTF8(item.username), availableTextWidth);
     NSTextField* username = BuildLabel(
         elidedEmail, NSZeroPoint, skia::SkColorToSRGBNSColor(SK_ColorGRAY));
-    [username setFrameOrigin:NSMakePoint(xOffset, NSMaxY([profileName frame]))];
+    CGFloat usernameOffset =
+        isRTL ? NSMaxX([profileName frame]) - NSWidth([username frame])
+              : xOffset;
+    [username setFrameOrigin:NSMakePoint(usernameOffset,
+                                         NSMaxY([profileName frame]))];
     NSString* usernameNSString = base::SysUTF16ToNSString(item.username);
     if (![elidedEmail isEqualToString:usernameNSString]) {
       // Add the tooltip only if the user name is truncated.
@@ -2051,6 +1789,11 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     [signinButton sizeToFit];
     [signinButton setTarget:self];
     [signinButton setAction:@selector(showInlineSigninPage:)];
+    if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout()) {
+      NSRect buttonFrame = [signinButton frame];
+      buttonFrame.origin.x = NSWidth(rect) - NSWidth(buttonFrame);
+      [signinButton setFrame:buttonFrame];
+    }
     [container addSubview:signinButton];
 
     // Sign-in promo text.
@@ -2058,8 +1801,10 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
         l10n_util::GetNSString(IDS_PROFILES_SIGNIN_PROMO),
         NSMakePoint(0, NSMaxY([signinButton frame]) + kVerticalSpacing),
         nil);
-    if (kRightPadding >= 8)
+    if (kRightPadding >= 8 &&
+        !cocoa_l10n_util::ShouldDoExperimentalRTLLayout()) {
       rect.size.width += 8;  // Re-stretch a little bit to fit promo text.
+    }
     DCHECK(kRightPadding >= 8);
     [promo setFrameSize:NSMakeSize(rect.size.width, 0)];
     [GTMUILocalizerAndLayoutTweaker sizeToFitFixedWidthTextField:promo];
@@ -2119,7 +1864,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
               initWithFrame:rect
           imageTitleSpacing:imageTitleSpacing
             backgroundColor:GetDialogBackgroundColor()]);
-  [profileButton setRightMarginSpacing:kHorizontalSpacing];
+  [profileButton setTrailingMarginSpacing:kHorizontalSpacing];
 
   NSString* title = base::SysUTF16ToNSString(
       profiles::GetProfileSwitcherTextForItem(item));
@@ -2131,8 +1876,8 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   availableWidth = rect.size.width - kIconImageSide - imageTitleSpacing -
                    2 * kHorizontalSpacing;
 
-  [profileButton setImagePosition:NSImageLeft];
-  [profileButton setAlignment:NSLeftTextAlignment];
+  [profileButton setImagePosition:cocoa_l10n_util::LeadingCellImagePosition()];
+  [profileButton setAlignment:NSNaturalTextAlignment];
   [profileButton setBordered:NO];
   [profileButton setTag:itemIndex];
   [profileButton setTarget:self];
@@ -2169,6 +1914,14 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
                       frameOrigin:NSMakePoint(
             kHorizontalSpacing, kSmallVerticalSpacing)
                            action:@selector(addAccount:)];
+    if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout()) {
+      CGRect addAccountsButtonFrame = [addAccountsButton frame];
+      addAccountsButtonFrame.origin.x = NSMaxX(rect) -
+                                        NSWidth(addAccountsButtonFrame) -
+                                        NSMinX(addAccountsButtonFrame);
+      [addAccountsButton setFrame:addAccountsButtonFrame];
+    }
+
     [container addSubview:addAccountsButton];
     rect.origin.y += kAccountButtonHeight;
   }
@@ -2197,7 +1950,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
                        text:l10n_util::GetNSString(
                                 IDS_PROFILES_PROFILE_SIGNOUT_BUTTON)
                       image:NSImageFromImageSkia(gfx::CreateVectorIcon(
-                                kLockIcon, icon_size, gfx::kChromeIconGrey))
+                                ui::kLockIcon, icon_size, gfx::kChromeIconGrey))
                      action:@selector(lockProfile:)];
     [container addSubview:lockButton];
     viewRect.origin.y = NSMaxY([lockButton frame]);
@@ -2238,7 +1991,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   [container addSubview:manageUsersButton];
 
   // Create a guest profile button.
-  if (!isGuestSession_) {
+  if (!isGuestSession_ && !browser_->profile()->IsSupervised()) {
     PrefService* service = g_browser_process->local_state();
     DCHECK(service);
     if (service->GetBoolean(prefs::kBrowserGuestModeEnabled)) {
@@ -2522,7 +2275,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   [button setDefaultImage:image];
   [button setHoverImage:image];
   [button setPressedImage:image];
-  [button setImagePosition:NSImageLeft];
+  [button setImagePosition:cocoa_l10n_util::LeadingCellImagePosition()];
 
   return button;
 }
@@ -2543,7 +2296,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
             backgroundColor:GetDialogBackgroundColor()]);
 
   [button setTitle:text];
-  [button setAlignment:NSLeftTextAlignment];
+  [button setAlignment:NSNaturalTextAlignment];
   [button setBordered:NO];
   [button setTarget:self];
   [button setAction:action];
@@ -2597,11 +2350,11 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
                                       imageTitleSpacing:0
                                         backgroundColor:backgroundColor]);
   [button setTitle:ElideEmail(email, availableTextWidth)];
-  [button setAlignment:NSLeftTextAlignment];
+  [button setAlignment:NSNaturalTextAlignment];
   [button setBordered:NO];
   if (reauthRequired) {
     [button setDefaultImage:warningImage];
-    [button setImagePosition:NSImageLeft];
+    [button setImagePosition:cocoa_l10n_util::LeadingCellImagePosition()];
     [button setTarget:self];
     [button setAction:@selector(showAccountReauthenticationView:)];
     [button setTag:tag];
@@ -2611,7 +2364,8 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   if (!browser_->profile()->IsSupervised()) {
     NSRect buttonRect;
     NSDivideRect(rect, &buttonRect, &rect,
-        deleteImageWidth + kHorizontalSpacing, NSMaxXEdge);
+                 deleteImageWidth + kHorizontalSpacing,
+                 cocoa_l10n_util::TrailingEdge());
     buttonRect.origin.y = 0;
 
     base::scoped_nsobject<HoverImageButton> deleteButton(

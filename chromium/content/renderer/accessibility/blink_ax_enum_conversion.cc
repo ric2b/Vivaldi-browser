@@ -10,8 +10,6 @@ namespace content {
 
 uint32_t AXStateFromBlink(const blink::WebAXObject& o) {
   uint32_t state = 0;
-  if (o.IsChecked())
-    state |= (1 << ui::AX_STATE_CHECKED);
 
   blink::WebAXExpanded expanded = o.IsExpanded();
   if (expanded) {
@@ -152,8 +150,6 @@ ui::AXRole AXRoleFromBlink(blink::WebAXRole role) {
       return ui::AX_ROLE_DIRECTORY;
     case blink::kWebAXRoleDisclosureTriangle:
       return ui::AX_ROLE_DISCLOSURE_TRIANGLE;
-    case blink::kWebAXRoleDiv:
-      return ui::AX_ROLE_DIV;
     case blink::kWebAXRoleDocument:
       return ui::AX_ROLE_DOCUMENT;
     case blink::kWebAXRoleEmbeddedObject:
@@ -168,6 +164,8 @@ ui::AXRole AXRoleFromBlink(blink::WebAXRole role) {
       return ui::AX_ROLE_FOOTER;
     case blink::kWebAXRoleForm:
       return ui::AX_ROLE_FORM;
+    case blink::kWebAXRoleGenericContainer:
+      return ui::AX_ROLE_GENERIC_CONTAINER;
     case blink::kWebAXRoleGrid:
       return ui::AX_ROLE_GRID;
     case blink::kWebAXRoleGroup:
@@ -414,30 +412,30 @@ ui::AXEvent AXEventFromBlink(blink::WebAXEvent event) {
   }
 }
 
-ui::AXSupportedAction AXSupportedActionFromBlink(
-    blink::WebAXSupportedAction supported_action) {
-  switch (supported_action) {
-    case blink::WebAXSupportedAction::kNone:
-      return ui::AX_SUPPORTED_ACTION_NONE;
-    case blink::WebAXSupportedAction::kActivate:
-      return ui::AX_SUPPORTED_ACTION_ACTIVATE;
-    case blink::WebAXSupportedAction::kCheck:
-      return ui::AX_SUPPORTED_ACTION_CHECK;
-    case blink::WebAXSupportedAction::kClick:
-      return ui::AX_SUPPORTED_ACTION_CLICK;
-    case blink::WebAXSupportedAction::kJump:
-      return ui::AX_SUPPORTED_ACTION_JUMP;
-    case blink::WebAXSupportedAction::kOpen:
-      return ui::AX_SUPPORTED_ACTION_OPEN;
-    case blink::WebAXSupportedAction::kPress:
-      return ui::AX_SUPPORTED_ACTION_PRESS;
-    case blink::WebAXSupportedAction::kSelect:
-      return ui::AX_SUPPORTED_ACTION_SELECT;
-    case blink::WebAXSupportedAction::kUncheck:
-      return ui::AX_SUPPORTED_ACTION_UNCHECK;
+ui::AXDefaultActionVerb AXDefaultActionVerbFromBlink(
+    blink::WebAXDefaultActionVerb action_verb) {
+  switch (action_verb) {
+    case blink::WebAXDefaultActionVerb::kNone:
+      return ui::AX_DEFAULT_ACTION_VERB_NONE;
+    case blink::WebAXDefaultActionVerb::kActivate:
+      return ui::AX_DEFAULT_ACTION_VERB_ACTIVATE;
+    case blink::WebAXDefaultActionVerb::kCheck:
+      return ui::AX_DEFAULT_ACTION_VERB_CHECK;
+    case blink::WebAXDefaultActionVerb::kClick:
+      return ui::AX_DEFAULT_ACTION_VERB_CLICK;
+    case blink::WebAXDefaultActionVerb::kJump:
+      return ui::AX_DEFAULT_ACTION_VERB_JUMP;
+    case blink::WebAXDefaultActionVerb::kOpen:
+      return ui::AX_DEFAULT_ACTION_VERB_OPEN;
+    case blink::WebAXDefaultActionVerb::kPress:
+      return ui::AX_DEFAULT_ACTION_VERB_PRESS;
+    case blink::WebAXDefaultActionVerb::kSelect:
+      return ui::AX_DEFAULT_ACTION_VERB_SELECT;
+    case blink::WebAXDefaultActionVerb::kUncheck:
+      return ui::AX_DEFAULT_ACTION_VERB_UNCHECK;
   }
   NOTREACHED();
-  return ui::AX_SUPPORTED_ACTION_NONE;
+  return ui::AX_DEFAULT_ACTION_VERB_NONE;
 }
 
 ui::AXMarkerType AXMarkerTypeFromBlink(blink::WebAXMarkerType marker_type) {
@@ -527,6 +525,20 @@ ui::AXInvalidState AXInvalidStateFromBlink(
   return ui::AX_INVALID_STATE_NONE;
 }
 
+ui::AXCheckedState AXCheckedStateFromBlink(
+    blink::WebAXCheckedState checked_state) {
+  switch (checked_state) {
+    case blink::WebAXCheckedFalse:
+      return ui::AX_CHECKED_STATE_FALSE;
+    case blink::WebAXCheckedTrue:
+      return ui::AX_CHECKED_STATE_TRUE;
+    case blink::WebAXCheckedMixed:
+      return ui::AX_CHECKED_STATE_MIXED;
+  }
+  NOTREACHED();
+  return ui::AX_CHECKED_STATE_FALSE;
+}
+
 ui::AXSortDirection AXSortDirectionFromBlink(
     blink::WebAXSortDirection sort_direction) {
   switch (sort_direction) {
@@ -551,6 +563,8 @@ ui::AXNameFrom AXNameFromFromBlink(blink::WebAXNameFrom name_from) {
       return ui::AX_NAME_FROM_UNINITIALIZED;
     case blink::kWebAXNameFromAttribute:
       return ui::AX_NAME_FROM_ATTRIBUTE;
+    case blink::kWebAXNameFromAttributeExplicitlyEmpty:
+      return ui::AX_NAME_FROM_ATTRIBUTE_EXPLICITLY_EMPTY;
     case blink::kWebAXNameFromCaption:
       return ui::AX_NAME_FROM_RELATED_ELEMENT;
     case blink::kWebAXNameFromContents:

@@ -90,7 +90,7 @@ enum ImageSmoothingQuality {"low", "medium", "high"};
     void fillRect(unrestricted double x, unrestricted double y, unrestricted double width, unrestricted double height);
     void strokeRect(unrestricted double x, unrestricted double y, unrestricted double width, unrestricted double height);
 
-    // path API (see also CanvasPathMethods)
+    // path API (see also CanvasPath)
     void beginPath();
     void fill(optional CanvasFillRule winding);
     void fill(Path2D path, optional CanvasFillRule winding);
@@ -129,12 +129,16 @@ enum ImageSmoothingQuality {"low", "medium", "high"};
     [RaisesException] ImageData getImageData(long sx, long sy, long sw, long sh);
     [RaisesException] void putImageData(ImageData imagedata, long dx, long dy);
     [RaisesException] void putImageData(ImageData imagedata, long dx, long dy, long dirtyX, long dirtyY, long dirtyWidth, long dirtyHeight);
+    
+    // https://github.com/WICG/canvas-color-space/blob/master/CanvasColorSpaceProposal.md
+    [RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException] ImageData createImageData(unsigned long sw, unsigned long sh, ImageDataColorSettings imageDataColorSettings);
+    [RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException] ImageData createImageData(ImageDataArray data, unsigned long sw, unsigned long sh, optional ImageDataColorSettings imageDataColorSettings);
 
     // Context state
     // Should be merged with WebGL counterpart in CanvasRenderingContext, once no-longer experimental
     [RuntimeEnabled=ExperimentalCanvasFeatures] boolean isContextLost();
 
-    [MeasureAs=GetCanvas2DContextAttributes] CanvasRenderingContext2DSettings getContextAttributes();
+    [RuntimeEnabled=ExperimentalCanvasFeatures, MeasureAs=GetCanvas2DContextAttributes] CanvasRenderingContext2DSettings getContextAttributes();
 
     // FIXME: factor out to CanvasDrawingStyles
     // line caps/joins
@@ -156,4 +160,4 @@ enum ImageSmoothingQuality {"low", "medium", "high"};
 
 };
 
-CanvasRenderingContext2D implements CanvasPathMethods;
+CanvasRenderingContext2D implements CanvasPath;

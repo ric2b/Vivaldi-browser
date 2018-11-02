@@ -34,7 +34,6 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/SubtreeLayoutScope.h"
 #include "core/paint/TableRowPainter.h"
-#include "core/style/StyleInheritedData.h"
 
 namespace blink {
 
@@ -71,9 +70,8 @@ void LayoutTableRow::StyleDidChange(StyleDifference diff,
   if (!table)
     return;
 
-  if (!table->SelfNeedsLayout() && !table->NormalChildNeedsLayout() &&
-      old_style->Border() != Style()->Border())
-    table->InvalidateCollapsedBorders();
+  LayoutTableBoxComponent::InvalidateCollapsedBordersOnStyleChange(
+      *this, *table, diff, *old_style);
 
   if (LayoutTableBoxComponent::DoCellsHaveDirtyWidth(*this, *table, diff,
                                                      *old_style)) {
@@ -100,7 +98,7 @@ void LayoutTableRow::StyleDidChange(StyleDifference diff,
   }
 }
 
-const BorderValue& LayoutTableRow::BorderAdjoiningStartCell(
+BorderValue LayoutTableRow::BorderAdjoiningStartCell(
     const LayoutTableCell* cell) const {
 #if DCHECK_IS_ON()
   DCHECK(cell->IsFirstOrLastCellInRow());
@@ -110,7 +108,7 @@ const BorderValue& LayoutTableRow::BorderAdjoiningStartCell(
   return Style()->BorderStart();
 }
 
-const BorderValue& LayoutTableRow::BorderAdjoiningEndCell(
+BorderValue LayoutTableRow::BorderAdjoiningEndCell(
     const LayoutTableCell* cell) const {
 #if DCHECK_IS_ON()
   DCHECK(cell->IsFirstOrLastCellInRow());
@@ -172,7 +170,8 @@ void LayoutTableRow::AddChild(LayoutObject* child, LayoutObject* before_child) {
     // When borders collapse, adding a cell can affect the the width of
     // neighboring cells.
     LayoutTable* enclosing_table = Table();
-    if (enclosing_table && enclosing_table->CollapseBorders()) {
+    if (enclosing_table && enclosing_table->ShouldCollapseBorders()) {
+      enclosing_table->InvalidateCollapsedBorders();
       if (LayoutTableCell* previous_cell = cell->PreviousCell())
         previous_cell->SetNeedsLayoutAndPrefWidthsRecalc(
             LayoutInvalidationReason::kTableChanged);
@@ -303,23 +302,33 @@ void LayoutTableRow::AddOverflowFromCell(const LayoutTableCell* cell) {
     AddSelfVisualOverflow(cell_background_rect);
   }
 
-  // Should propagate cell's overflow to row if the cell has row span or has
-  // overflow.
-  if (cell->RowSpan() == 1 && !cell->HasOverflowModel())
-    return;
-
   // The cell and the row share the section's coordinate system. However
   // the visual overflow should be determined in the coordinate system of
   // the row, that's why we shift the rects by cell_row_offset below.
   LayoutSize cell_row_offset = cell->Location() - Location();
 
+  // Let the row's self visual overflow cover the cell's whole collapsed
+  // borders. This ensures correct raster invalidation on row border style
+  // change.
+  if (const auto* collapsed_borders = cell->GetCollapsedBorderValues()) {
+    LayoutRect collapsed_border_rect =
+        cell->RectForOverflowPropagation(collapsed_borders->LocalVisualRect());
+    collapsed_border_rect.Move(cell_row_offset);
+    AddSelfVisualOverflow(collapsed_border_rect);
+  }
+
+  // Should propagate cell's overflow to row if the cell has row span or has
+  // overflow.
+  if (cell->RowSpan() == 1 && !cell->HasOverflowModel())
+    return;
+
   LayoutRect cell_visual_overflow_rect =
-      cell->VisualOverflowRectForPropagation(StyleRef());
+      cell->VisualOverflowRectForPropagation();
   cell_visual_overflow_rect.Move(cell_row_offset);
   AddContentsVisualOverflow(cell_visual_overflow_rect);
 
   LayoutRect cell_layout_overflow_rect =
-      cell->LayoutOverflowRectForPropagation(StyleRef());
+      cell->LayoutOverflowRectForPropagation();
   cell_layout_overflow_rect.Move(cell_row_offset);
   AddLayoutOverflow(cell_layout_overflow_rect);
 }

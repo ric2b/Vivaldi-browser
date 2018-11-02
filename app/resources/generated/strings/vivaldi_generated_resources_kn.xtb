@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">ನೀವು ಮುಖಪುಟದ ಬಟನ್ ಕ್ಲಿಕ್ ಮಾಡಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು ಈ ವಿಸ್ತರಣೆಯು ಬದಲಾಯಿಸಿದೆ.</translation>
 <translation id="1588438908519853928">ಸಾಮಾನ್ಯ</translation>
 <translation id="1616206807336925449">ಈ ವಿಸ್ತರಣೆಗೆ ಯಾವುದೇ ವಿಶೇಷ ಅನುಮತಿಗಳ ಅಗತ್ಯವಿಲ್ಲ.</translation>
-<translation id="1620510694547887537">ಕ್ಯಾಮರಾ</translation>
 <translation id="1635033183663317347">ನಿಮ್ಮ ಮೇಲ್ವಿಚಾರಕರು ಸ್ಥಾಪಿಸಿದ್ದಾರೆ.</translation>
 <translation id="1723824996674794290">&amp;ಹೊಸ ವಿಂಡೋ</translation>
 <translation id="1729533290416704613">ಓಮ್ನಿಬಾಕ್ಸ್‌ನಿಂದ ನೀವು ಹುಡುಕಾಟ ನಡೆಸಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು ಕೂಡಾ ಇದು ನಿಯಂತ್ರಿಸುತ್ತದೆ.</translation>
-<translation id="1789575671122666129">ಪಾಪ್‌ಅಪ್‌ಗಳು</translation>
 <translation id="1850508293116537636">&amp;ಪ್ರದಕ್ಷಿಣೆಯಂತೆ ತಿರುಗಿಸಿ</translation>
 <translation id="1859234291848436338">ಬರವಣಿಗೆ ನಿರ್ದೇಶನ</translation>
 <translation id="1901303067676059328">&amp;ಎಲ್ಲ ಆಯ್ಕೆ ಮಾಡಿ</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">ಈ ಪ್ಲಗ್‌ಇನ್ ಅನ್ನು ಮರೆಮಾಡು</translation>
 <translation id="2087822576218954668">ಮುದ್ರಿಸು: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">ಪ್ಲಗಿನ್‌ ಅಪ್‌ಡೇಟ್‌ ಮಾಡಿ</translation>
-<translation id="2147827593068025794">ಹಿನ್ನೆಲೆ ಸಿಂಕ್</translation>
 <translation id="215753907730220065">ಪೂರ್ಣಪರದೆಯಿಂದ ನಿರ್ಗಮಿಸಿ</translation>
 <translation id="2177950615300672361">ಅದೃಶ್ಯ ಟ್ಯಾಬ್: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">ಪತ್ತೆ ಮಾಡಿ (ಡಿಫಾಲ್ಟ್)</translation>
 <translation id="219008588003277019">ಸ್ಥಳೀಯ ಕ್ಲೈಂಟ್ ಮಾಡ್ಯೂಲ್: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">ಸಾಮಾನ್ಯ ಪಠ್ಯವನ್ನಾಗಿ ಅಂಟಿಸು</translation>
 <translation id="2282146716419988068">GPU ಪ್ರಕ್ರಿಯೆ</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿನ ಮತ್ತೊಂದು ಪ್ರೋಗ್ರಾಂ Vivaldi ಕಾರ್ಯನಿರ್ವಹಿಸುವ ವಿಧಾನವನ್ನು ಬದಲಿಸಬಹುದಾದಂತಹ ವಿಸ್ತರಣೆಯನ್ನು ಸೇರಿಸಿದೆ.</translation>
 <translation id="2445081178310039857">ವಿಸ್ತರಣೆ ಮೂಲ ಡೈರೆಕ್ಟರಿ ಅಗತ್ಯವಿದೆ.</translation>
 <translation id="2470702053775288986">ಬೆಂಬಲವಿರದ ವಿಸ್ತರಣೆಗಳನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ</translation>
-<translation id="2482878487686419369">ಸೂಚನೆಗಳು</translation>
 <translation id="2501797496290880632">ಶಾರ್ಟ್‌‌ಕಟ್‌ ಅನ್ನು ಟೈಪ್ ಮಾಡಿ</translation>
-<translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> ಸ್ಥಾಪಿಸಿ</translation>
 <translation id="2550212893339833758">ಬದಲಾಯಿಸಿದ ಮೆಮೊರಿ</translation>
 <translation id="2662876636500006917">Vivaldi ವೆಬ್ ಪೇಟೆ</translation>
 <translation id="2678063897982469759">ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಿ</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">ಬಳಕೆದಾರರ ನಿರ್ವಹಣೆಗಳು</translation>
 <translation id="3222066309010235055">ಪ್ರೀರೆಂಡರ್: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">ಮೈಕ್ರೋಫೋನ್</translation>
 <translation id="3241680850019875542">ಪ್ಯಾಕ್ ಮಾಡಲು ವಿಸ್ತರಣೆಯ ಮೂಲ ಡೈರೆಕ್ಟರಿಯನ್ನು ಆಯ್ಕೆಮಾಡಿ. ವಿಸ್ತರಣೆಯನ್ನು ನವೀಕರಿಸಲು, ಮರುಬಳಸಲು ಖಾಸಗಿ ಕೀ ಫೈಲ್‌‌ ಅನ್ನು ಕೂಡ ಆಯ್ಕೆಮಾಡಿ.</translation>
 <translation id="3280237271814976245">&amp;ಇದರಂತೆ ಉಳಿಸು</translation>
 <translation id="3288047731229977326">ಡೆವಲಪರ್ ಮೋಡ್‌ನಲ್ಲಿ ಚಾಲನೆಯಾಗುವ ವಿಸ್ತರಣೆಗಳು ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ಗೆ ಹಾನಿಮಾಡಬಹುದು. ನೀವು ಡೆವಲಪರ್ ಆಗಿರದಿದ್ದರೇ, ಸುರಕ್ಷಿತವಾಗಿರಲು ಡೆವಲಪರ್ ಮೋಡ್‌ನಲ್ಲಿ ಈ ವಿಸ್ತರಣೆಗಳ ಚಾಲನೆಯನ್ನು ನೀವು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಬೇಕು.</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">ಚಿತ್ರದ ವಿಳಾಸ ನ&amp;ಕಲಿಸು</translation>
 <translation id="335985608243443814">ಬ್ರೌಸ್...</translation>
 <translation id="3378572629723696641">ಈ ವಿಸ್ತರಣೆಯು ದೋಷಪೂರಿತವಾಗಿರಬಹುದು.</translation>
-<translation id="3427092606871434483">ಅನುಮತಿಸು (ಡಿಫಾಲ್ಟ್)</translation>
 <translation id="3435896845095436175">ಸಕ್ರಿಯಗೊಳಿಸು</translation>
 <translation id="345693547134384690">ಹೊಸ ಟ್ಯಾಬ್‌ನಲ್ಲಿ &amp;ಇಮೇಜ್ ಅನ್ನು ತೆರೆಯಿರಿ</translation>
 <translation id="3467267818798281173">ಸಲಹೆಗಳಿಗಾಗಿ Google ಅನ್ನು ಕೇಳಿ</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">ಲಿಂಕ್‌ ಅನ್ನು ಅಜ್ಞಾ&amp;ತ ವಿಂಡೋದಲ್ಲಿ ತೆರೆಯಿರಿ</translation>
 <translation id="3678156199662914018">ವಿಸ್ತರಣೆ: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">ಲೋಡ್ ಆಗುತ್ತಿದೆ...</translation>
-<translation id="3789841737615482174">ಸ್ಥಾಪಿಸು</translation>
 <translation id="3798449238516105146">ಆವೃತ್ತಿ</translation>
 <translation id="3866249974567520381">ವಿವರಣೆ</translation>
 <translation id="3905761538810670789">ಅಪ್ಲಿಕೇಶನ್ ಸರಿಪಡಿಸು</translation>
@@ -103,13 +94,11 @@
 <translation id="4096508467498758490">ವಿಸ್ತರಣೆಗಳ ಡೆವೆಲಪರ್ ಮೋಡ್ ಅನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿ</translation>
 <translation id="4100839878934973028">ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿನ ಮತ್ತೊಂದು ಪ್ರೋಗ್ರಾಂ Vivaldi ಕಾರ್ಯನಿರ್ವಹಿಸುವ ವಿಧಾನವನ್ನು ಬದಲಿಸಬಹುದಾದಂತಹ ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ಸೇರಿಸಿದೆ.</translation>
 <translation id="4130207949184424187">ಆಮ್ನಿಬಾಕ್ಸ್‌ನಿಂದ ನೀವು ಹುಡುಕಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು ಈ ವಿಸ್ತರಣೆಯು ಬದಲಾಯಿಸಿದೆ.</translation>
-<translation id="4165986682804962316">ಸೈಟ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳು</translation>
 <translation id="4176463684765177261">ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ</translation>
 <translation id="4200983522494130825">ಹೊಸ &amp;ಟ್ಯಾಬ್</translation>
 <translation id="420665587194630159">(ಈ ವಿಸ್ತರಣೆಯನ್ನು ನಿರ್ವಹಿಸಲಾಗಿದೆ ಮತ್ತು ತೆಗೆದುಹಾಕಲಾಗುವುದಿಲ್ಲ ಅಥವಾ ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ)</translation>
 <translation id="4240511609794012987">ಹಂಚಿದ ಸ್ಮರಣೆ</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K ಲೈವ್)</translation>
-<translation id="4312866146174492540">ನಿರ್ಬಂಧಿಸು (ಡಿಫಾಲ್ಟ್)</translation>
 <translation id="4384652540891215547">ವಿಸ್ತರಣೆಯನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ</translation>
 <translation id="4394049700291259645">ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿ</translation>
 <translation id="4423482519432579560">&amp;ಕಾಗುಣಿತಪರೀಕ್ಷೆ</translation>
@@ -122,7 +111,6 @@
 <translation id="4677772697204437347">GPU ಮೆಮೊರಿ</translation>
 <translation id="4711638718396952945">ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪುನಃಸ್ಥಾಪಿಸು</translation>
 <translation id="4839303808932127586">ಇದರಂತೆ ವೀಡಿಯೊ ಉ&amp;ಳಿಸಿ...</translation>
-<translation id="4851858059374029925"><ph name="PLUGIN_NAME" /> ಸ್ಥಾಪಿಸುವುದೇ? ನೀವು ನಂಬುವಂತಹ ಪ್ಲಗಿನ್‌ಗಳನ್ನು ಮಾತ್ರ ಸ್ಥಾಪಿಸಿ.</translation>
 <translation id="488785315393301722">ವಿವರಗಳನ್ನು ತೋರಿಸಿ</translation>
 <translation id="4911714727432509308">ಯಾವುದೇ ವಿಸ್ತರಣೆಗಳು ನಿಯೋಜಿಸಲಾಗಿರುವ ಕೀಬೋರ್ಡ್ ಶಾರ್ಟ್‌‌ಕಟ್‌ಗಳನ್ನು ಹೊಂದಿಲ್ಲ.</translation>
 <translation id="4927301649992043040">ಪ್ಯಾಕ್ ವಿಸ್ತರಣೆ</translation>
@@ -153,12 +141,10 @@
 <translation id="5646376287012673985">ಸ್ಥಾನ</translation>
 <translation id="5715711091495208045">ಪ್ಲಗಿನ್ ಬ್ರೋಕರ್: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">ಇದರಂತೆ ಆಡಿಯೋ ಉ&amp;ಳಿಸಿ...</translation>
-<translation id="5778550464785688721">MIDI ಸಾಧನಗಳು ಸಂಪೂರ್ಣ ನಿಯಂತ್ರಣ</translation>
 <translation id="5780973441651030252">ಪ್ರಕ್ರಿಯೆಯ ಆದ್ಯತೆ</translation>
 <translation id="5804241973901381774">ಅನುಮತಿಗಳು</translation>
 <translation id="583281660410589416">ಅಪರಿಚಿತ</translation>
 <translation id="59174027418879706">ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 ಬಳಕೆಯಲ್ಲಿದೆ}one{# ಬಳಕೆಯಲ್ಲಿದೆ}other{# ಬಳಕೆಯಲ್ಲಿದೆ}}</translation>
 <translation id="5956585768868398362">ಇದು ನೀವು ನಿರೀಕ್ಷಿಸುತ್ತಿರುವ ಹುಡುಕಾಟ ಪುಟವೇ?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> ಪೀಕ್)</translation>
 <translation id="5965661248935608907">ನೀವು ಮುಖಪುಟ ಬಟನ್ ಕ್ಲಿಕ್ ಮಾಡಿದಾಗ ಅಥವಾ ಓಮ್ನಿಬಾಕ್ಸ್‌ನಿಂದ ಹುಡುಕಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು ಕೂಡಾ ಇದು ನಿಯಂತ್ರಿಸುತ್ತದೆ.</translation>
@@ -187,14 +173,12 @@
 <translation id="6787839852456839824">ಕೀಬೋರ್ಡ್ ಶಾರ್ಟ್‌ಕಟ್‌ಗಳು</translation>
 <translation id="6798954102094737107">ಪ್ಲಗಿನ್: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">ಬದಲಾವಣೆಗಳನ್ನು ಇರಿಸು</translation>
-<translation id="6863910145616405334">ಪ್ಲಗಿನ್ ಕಂಡುಬಂದಿಲ್ಲ</translation>
 <translation id="6886871292305414135">ಹೊಸ &amp;ಟ್ಯಾಬ್‌ನಲ್ಲಿ ಲಿಂಕ್ ತೆರೆಯಿರಿ</translation>
 <translation id="6900284862687837908">ಹಿನ್ನೆಲೆ ಅಪ್ಲಿಕೇಶನ್: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ಫೈಲ್ ಪ್ರವೇಶವನ್ನು ಹಿಂತೆಗೆದುಕೊಳ್ಳಿ</translation>
 <translation id="6974053822202609517">ಬಲದಿಂದ ಎಡಕ್ಕೆ</translation>
 <translation id="7013485839273047434">ಇನ್ನಷ್ಟು ವಿಸ್ತರಣೆಗಳನ್ನು ಪಡೆಯಿರಿ</translation>
 <translation id="708060913198414444">ಆಡಿಯೋ ವಿಳಾಸವನ್ನು ನ&amp;ಕಲಿಸಿ</translation>
-<translation id="7105578512429498960">ಈ ವಿಷಯವನ್ನು ಪ್ರದರ್ಶಿಸಲು <ph name="PLUGIN_NAME" /> ಸ್ಥಾಪಿಸಿ</translation>
 <translation id="7144878232160441200">ಮರುಪ್ರಯತ್ನಿಸಿ</translation>
 <translation id="7206693748120342859"><ph name="PLUGIN_NAME" /> ಅನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ...</translation>
 <translation id="7287143125007575591">ಪ್ರವೇಶ ನೀರಾಕರಿಸಲಾಗಿದೆ.</translation>
@@ -223,7 +207,6 @@
 
 ವಿಸ್ತರಣೆ: <ph name="EXTENSION_FILE" />             ಮುಖ್ಯ ಫೈಲ್: <ph name="KEY_FILE" />             ನಿಮ್ಮ ಮುಖ್ಯ ಫೈಲ್ ಅನ್ನು ಸುರಕ್ಷಿತ ಸ್ಥಳದಲ್ಲಿಡಿ. ನಿಮ್ಮ ವಿಸ್ತರಣೆಯ ಹೊಸ ಆವೃತ್ತಿಗಳನ್ನು ರಚಿಸುವ ಅಗತ್ಯತೆ ಇದೆ.</translation>
 <translation id="8004582292198964060">ಬ್ರೌಸರ್</translation>
-<translation id="8037357227543935929">ಕೇಳು (ಡಿಫಾಲ್ಟ್)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">&amp;ಪಠ್ಯ ಕ್ಷೇತ್ರಗಳ ಕಾಗುಣಿತ ಪರಿಶೀಲಿಸಿ</translation>
 <translation id="8261378640211443080">ಈ ವಿಸ್ತರಣೆಯನ್ನು <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ನಲ್ಲಿ ಪಟ್ಟಿ ಮಾಡಲಾಗಿಲ್ಲ ಮತ್ತು ಇದು ನಿಮಗೆ ಅರಿವಿಲ್ಲದಂತೆ ಸೇರಿಸಿರಬಹುದು.</translation>
@@ -239,7 +222,6 @@
 <translation id="8664389313780386848">ಫ್ರೇಮ್ ಮೂಲವನ್ನು &amp;ವೀಕ್ಷಿಸಿ</translation>
 <translation id="8719653885894320876"><ph name="PLUGIN_NAME" /> ಡೌನ್‌ಲೋಡ್ ವಿಫಲಗೊಂಡಿದೆ</translation>
 <translation id="873545264931343897"><ph name="PLUGIN_NAME" /> ಅಪ್‌‌ಡೇಟ್‌ ಮುಕ್ತಾಯಗೊಳಿಸುವಾಗ, ಅದನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು ಪುಟವನ್ನು ಮರುಲೋಡ್ ಮಾಡಿ</translation>
-<translation id="8763204422633679667"><ph name="PLUGIN_NAME" /> ಸ್ಥಾಪಿಸುವುದನ್ನು ಮುಕ್ತಾಯಗೊಳಿಸಿದಾಗ, ಅದನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು ಪುಟವನ್ನು ಮರುಲೋಡ್ ಮಾಡಿ</translation>
 <translation id="8798099450830957504">ಡಿಫಾಲ್ಟ್</translation>
 <translation id="8808478386290700967">ವೆಬ್‌ ಸ್ಟೋರ್‌</translation>
 <translation id="8859174528519900719">ಉಪಫ್ರೇಮ್‌: <ph name="SUBFRAME_SITE" /></translation>

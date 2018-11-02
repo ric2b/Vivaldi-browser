@@ -63,13 +63,13 @@ cr.define('print_preview', function() {
     /**
      * Convenience array that contains all of the margin controls.
      * @type {!Object<
-     *     !print_preview.ticket_items.CustomMargins.Orientation,
+     *     !print_preview.ticket_items.CustomMarginsOrientation,
      *     !print_preview.MarginControl>}
      * @private
      */
     this.controls_ = {};
-    for (var key in print_preview.ticket_items.CustomMargins.Orientation) {
-      var orientation = print_preview.ticket_items.CustomMargins.Orientation[
+    for (var key in print_preview.ticket_items.CustomMarginsOrientation) {
+      var orientation = print_preview.ticket_items.CustomMarginsOrientation[
           key];
       var control = new print_preview.MarginControl(orientation);
       this.controls_[orientation] = control;
@@ -108,7 +108,7 @@ cr.define('print_preview', function() {
      * @private
      */
     this.clippingSize_ = null;
-  };
+  }
 
   /**
    * CSS classes used by the custom margins component.
@@ -121,16 +121,16 @@ cr.define('print_preview', function() {
   };
 
   /**
-   * @param {!print_preview.ticket_items.CustomMargins.Orientation} orientation
+   * @param {!print_preview.ticket_items.CustomMarginsOrientation} orientation
    *     Orientation value to test.
    * @return {boolean} Whether the given orientation is TOP or BOTTOM.
    * @private
    */
   MarginControlContainer.isTopOrBottom_ = function(orientation) {
     return orientation ==
-        print_preview.ticket_items.CustomMargins.Orientation.TOP ||
+        print_preview.ticket_items.CustomMarginsOrientation.TOP ||
         orientation ==
-            print_preview.ticket_items.CustomMargins.Orientation.BOTTOM;
+            print_preview.ticket_items.CustomMarginsOrientation.BOTTOM;
   };
 
   MarginControlContainer.prototype = {
@@ -186,7 +186,7 @@ cr.define('print_preview', function() {
     /** Shows the margin controls if the need to be shown. */
     showMarginControlsIfNeeded: function() {
       if (this.marginsTypeTicketItem_.getValue() ==
-          print_preview.ticket_items.MarginsType.Value.CUSTOM) {
+          print_preview.ticket_items.MarginsTypeValue.CUSTOM) {
         this.setIsMarginControlsVisible_(true);
       }
     },
@@ -272,7 +272,7 @@ cr.define('print_preview', function() {
 
     /**
      * @param {string} value Value to parse to points. E.g. '3.40"' or '200mm'.
-     * @return {number} Value in points represented by the input value.
+     * @return {?number} Value in points represented by the input value.
      * @private
      */
     parseValueToPts_: function(value) {
@@ -369,9 +369,10 @@ cr.define('print_preview', function() {
     /**
      * Called when the mouse moves onto the component. Shows the margin
      * controls.
+     * @param {!Event} event Contains element mouse moved from.
      * @private
      */
-    onMouseOver_: function() {
+    onMouseOver_: function(event) {
       var fromElement = event.fromElement;
       while (fromElement != null) {
         if (fromElement == this.getElement()) {
@@ -381,7 +382,7 @@ cr.define('print_preview', function() {
       }
       if (this.marginsTypeTicketItem_.isCapabilityAvailable() &&
           this.marginsTypeTicketItem_.getValue() ==
-              print_preview.ticket_items.MarginsType.Value.CUSTOM) {
+              print_preview.ticket_items.MarginsTypeValue.CUSTOM) {
         this.setIsMarginControlsVisible_(true);
       }
     },
@@ -389,6 +390,7 @@ cr.define('print_preview', function() {
     /**
      * Called when the mouse moves off of the component. Hides the margin
      * controls.
+     * @param {!Event} event Contains element mouse moved to.
      * @private
      */
     onMouseOut_: function(event) {
@@ -429,7 +431,7 @@ cr.define('print_preview', function() {
       }
       this.updateClippingMask(this.clippingSize_);
       if (this.marginsTypeTicketItem_.getValue() !=
-          print_preview.ticket_items.MarginsType.Value.CUSTOM) {
+          print_preview.ticket_items.MarginsTypeValue.CUSTOM) {
         this.setIsMarginControlsVisible_(false);
       }
     },

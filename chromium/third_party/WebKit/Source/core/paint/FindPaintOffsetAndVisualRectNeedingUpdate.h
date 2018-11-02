@@ -25,11 +25,10 @@ namespace blink {
 
 class FindPaintOffsetNeedingUpdateScope {
  public:
-  FindPaintOffsetNeedingUpdateScope(
-      const LayoutObject& object,
-      const PaintPropertyTreeBuilderContext& context)
+  FindPaintOffsetNeedingUpdateScope(const LayoutObject& object,
+                                    bool& is_actually_needed)
       : object_(object),
-        context_(context),
+        is_actually_needed_(is_actually_needed),
         old_paint_offset_(object.PaintOffset()) {
     if (object.PaintProperties() &&
         object.PaintProperties()->PaintOffsetTranslation()) {
@@ -39,7 +38,7 @@ class FindPaintOffsetNeedingUpdateScope {
   }
 
   ~FindPaintOffsetNeedingUpdateScope() {
-    if (context_.is_actually_needed)
+    if (is_actually_needed_)
       return;
     DCHECK_OBJECT_PROPERTY_EQ(object_, &old_paint_offset_,
                               &object_.PaintOffset());
@@ -53,7 +52,7 @@ class FindPaintOffsetNeedingUpdateScope {
 
  private:
   const LayoutObject& object_;
-  const PaintPropertyTreeBuilderContext& context_;
+  const bool& is_actually_needed_;
   LayoutPoint old_paint_offset_;
   RefPtr<const TransformPaintPropertyNode> old_paint_offset_translation_;
 };
@@ -62,15 +61,15 @@ class FindVisualRectNeedingUpdateScopeBase {
  protected:
   FindVisualRectNeedingUpdateScopeBase(const LayoutObject& object,
                                        const PaintInvalidatorContext& context,
-                                       const LayoutRect& old_visual_rect)
+                                       const LayoutRect& old_visual_rect,
+                                       bool is_actually_needed)
       : object_(object),
         context_(context),
         old_visual_rect_(old_visual_rect),
         needed_visual_rect_update_(context.NeedsVisualRectUpdate(object)) {
     if (needed_visual_rect_update_) {
       DCHECK(!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled() ||
-             (context.tree_builder_context_ &&
-              context.tree_builder_context_->is_actually_needed));
+             is_actually_needed);
       return;
     }
     context.force_visual_rect_update_for_checking_ = true;
@@ -125,7 +124,11 @@ class FindVisualRectNeedingUpdateScope : FindVisualRectNeedingUpdateScopeBase {
                                    // Must be a reference to a rect that
                                    // outlives this scope.
                                    const LayoutRect& new_visual_rect)
-      : FindVisualRectNeedingUpdateScopeBase(object, context, old_visual_rect),
+      : FindVisualRectNeedingUpdateScopeBase(
+            object,
+            context,
+            old_visual_rect,
+            context.tree_builder_context_actually_needed_),
         new_visual_rect_ref_(new_visual_rect) {}
 
   ~FindVisualRectNeedingUpdateScope() { CheckVisualRect(new_visual_rect_ref_); }
@@ -139,10 +142,12 @@ class FindObjectVisualRectNeedingUpdateScope
     : FindVisualRectNeedingUpdateScopeBase {
  public:
   FindObjectVisualRectNeedingUpdateScope(const LayoutObject& object,
-                                         const PaintInvalidatorContext& context)
+                                         const PaintInvalidatorContext& context,
+                                         bool is_actually_needed)
       : FindVisualRectNeedingUpdateScopeBase(object,
                                              context,
-                                             object.VisualRect()),
+                                             object.VisualRect(),
+                                             is_actually_needed),
         old_location_(ObjectPaintInvalidator(object).LocationInBacking()) {}
 
   ~FindObjectVisualRectNeedingUpdateScope() {

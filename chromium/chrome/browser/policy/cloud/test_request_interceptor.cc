@@ -15,9 +15,8 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "content/public/browser/browser_thread.h"
 #include "net/base/net_errors.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_data_stream.h"
@@ -64,12 +63,10 @@ net::URLRequestJob* FileJobCallback(const base::FilePath& file_path,
                                     net::URLRequest* request,
                                     net::NetworkDelegate* network_delegate) {
   return new net::URLRequestMockHTTPJob(
-      request,
-      network_delegate,
-      file_path,
-      content::BrowserThread::GetBlockingPool()
-          ->GetTaskRunnerWithShutdownBehavior(
-              base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
+      request, network_delegate, file_path,
+      base::CreateTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
 }
 
 // Parses the upload data in |request| into |request_msg|, and validates the
@@ -212,7 +209,7 @@ TestRequestInterceptor::Delegate::~Delegate() {}
 net::URLRequestJob* TestRequestInterceptor::Delegate::MaybeInterceptRequest(
     net::URLRequest* request,
     net::NetworkDelegate* network_delegate) const {
-  CHECK(io_task_runner_->RunsTasksOnCurrentThread());
+  CHECK(io_task_runner_->RunsTasksInCurrentSequence());
 
   if (request->url().host_piece() != hostname_) {
     // Reject requests to other servers.
@@ -232,8 +229,8 @@ net::URLRequestJob* TestRequestInterceptor::Delegate::MaybeInterceptRequest(
         new std::vector<base::Closure>);
     callbacks->swap(request_serviced_callbacks_);
     io_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&Delegate::InvokeRequestServicedCallbacks,
-                              base::Passed(&callbacks)));
+        FROM_HERE, base::BindOnce(&Delegate::InvokeRequestServicedCallbacks,
+                                  base::Passed(&callbacks)));
   }
 
   JobCallback callback = pending_job_callbacks_.front();
@@ -243,19 +240,19 @@ net::URLRequestJob* TestRequestInterceptor::Delegate::MaybeInterceptRequest(
 
 void TestRequestInterceptor::Delegate::GetPendingSize(
     size_t* pending_size) const {
-  CHECK(io_task_runner_->RunsTasksOnCurrentThread());
+  CHECK(io_task_runner_->RunsTasksInCurrentSequence());
   *pending_size = pending_job_callbacks_.size();
 }
 
 void TestRequestInterceptor::Delegate::AddRequestServicedCallback(
     const base::Closure& callback) {
-  CHECK(io_task_runner_->RunsTasksOnCurrentThread());
+  CHECK(io_task_runner_->RunsTasksInCurrentSequence());
   request_serviced_callbacks_.push_back(callback);
 }
 
 void TestRequestInterceptor::Delegate::PushJobCallback(
     const JobCallback& callback) {
-  CHECK(io_task_runner_->RunsTasksOnCurrentThread());
+  CHECK(io_task_runner_->RunsTasksInCurrentSequence());
   pending_job_callbacks_.push(callback);
 }
 
@@ -344,12 +341,9 @@ void TestRequestInterceptor::PostToIOAndWait(const base::Closure& task) {
   io_task_runner_->PostTask(FROM_HERE, task);
   base::RunLoop run_loop;
   io_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(
-          base::IgnoreResult(&base::TaskRunner::PostTask),
-          base::ThreadTaskRunnerHandle::Get(),
-          FROM_HERE,
-          run_loop.QuitClosure()));
+      FROM_HERE, base::BindOnce(base::IgnoreResult(&base::TaskRunner::PostTask),
+                                base::ThreadTaskRunnerHandle::Get(), FROM_HERE,
+                                run_loop.QuitClosure()));
   run_loop.Run();
 }
 

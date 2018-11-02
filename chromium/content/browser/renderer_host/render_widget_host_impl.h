@@ -28,17 +28,20 @@
 #include "cc/ipc/mojo_compositor_frame_sink.mojom.h"
 #include "cc/resources/shared_bitmap.h"
 #include "cc/surfaces/frame_sink_id.h"
+#include "components/viz/display_compositor/host_shared_bitmap_manager.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/browser/renderer_host/input/input_ack_handler.h"
 #include "content/browser/renderer_host/input/input_router_client.h"
 #include "content/browser/renderer_host/input/render_widget_host_latency_tracker.h"
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
+#include "content/browser/renderer_host/input/synthetic_gesture_controller.h"
 #include "content/browser/renderer_host/input/touch_emulator_client.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/drag_event_source_info.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "content/common/input/synthetic_gesture_packet.h"
+#include "content/common/render_widget_surface_properties.h"
 #include "content/common/view_message_enums.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/common/page_zoom.h"
@@ -51,6 +54,10 @@
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/latency/latency_info.h"
+
+#if defined(OS_MACOSX)
+#include "device/wake_lock/public/interfaces/wake_lock_service.mojom.h"
+#endif
 
 class SkBitmap;
 struct FrameHostMsg_HittestData_Params;
@@ -66,12 +73,6 @@ struct WebCompositionUnderline;
 namespace cc {
 struct BeginFrameAck;
 }  // namespace cc
-
-#if defined(OS_MACOSX)
-namespace device {
-class PowerSaveBlocker;
-}  // namespace device
-#endif
 
 namespace gfx {
 class Image;
@@ -100,7 +101,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       public InputRouterClient,
       public InputAckHandler,
       public TouchEmulatorClient,
+      public NON_EXPORTED_BASE(SyntheticGestureController::Delegate),
       public NON_EXPORTED_BASE(cc::mojom::MojoCompositorFrameSink),
+      public NON_EXPORTED_BASE(viz::SharedBitmapAllocationObserver),
       public IPC::Listener {
  public:
   // |routing_id| must not be MSG_ROUTING_NONE.
@@ -304,7 +307,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Signals if this host has forwarded a GestureScrollBegin without yet having
   // forwarded a matching GestureScrollEnd/GestureFlingStart.
   bool is_in_touchscreen_gesture_scroll() const {
-    return is_in_touchscreen_gesture_scroll_;
+    return is_in_gesture_scroll_[blink::kWebGestureDeviceTouchscreen];
   }
 
 #if defined(OS_MACOSX)
@@ -345,23 +348,26 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // aura.
   void ForwardKeyboardEventWithCommands(
       const NativeWebKeyboardEvent& key_event,
+      const ui::LatencyInfo& latency,
       const std::vector<EditCommand>* commands,
       bool* update_event = nullptr);
 
   // Forwards the given message to the renderer. These are called by the view
   // when it has received a message.
+  void ForwardKeyboardEventWithLatencyInfo(
+      const NativeWebKeyboardEvent& key_event,
+      const ui::LatencyInfo& latency) override;
   void ForwardGestureEventWithLatencyInfo(
       const blink::WebGestureEvent& gesture_event,
-      const ui::LatencyInfo& ui_latency) override;
+      const ui::LatencyInfo& latency) override;
   virtual void ForwardTouchEventWithLatencyInfo(
       const blink::WebTouchEvent& touch_event,
-      const ui::LatencyInfo& ui_latency);  // Virtual for testing.
-  void ForwardMouseEventWithLatencyInfo(
-      const blink::WebMouseEvent& mouse_event,
-      const ui::LatencyInfo& ui_latency);
+      const ui::LatencyInfo& latency);  // Virtual for testing.
+  void ForwardMouseEventWithLatencyInfo(const blink::WebMouseEvent& mouse_event,
+                                        const ui::LatencyInfo& latency);
   virtual void ForwardWheelEventWithLatencyInfo(
       const blink::WebMouseWheelEvent& wheel_event,
-      const ui::LatencyInfo& ui_latency);  // Virtual for testing.
+      const ui::LatencyInfo& latency);  // Virtual for testing.
 
   // Enables/disables touch emulation using mouse event. See TouchEmulator.
   void SetTouchEventEmulationEnabled(
@@ -474,11 +480,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Update the renderer's cache of the screen rect of the view and window.
   void SendScreenRects();
 
-  // Called by the view in response to a flush request.
-  void FlushInput();
-
-  // Request a flush signal from the view.
-  void SetNeedsFlush();
+  void OnBeginFrame();
 
   // Indicates whether the renderer drives the RenderWidgetHosts's size or the
   // other way around.
@@ -580,12 +582,17 @@ class CONTENT_EXPORT RenderWidgetHostImpl
     return last_frame_metadata_;
   }
 
+  // SyntheticGestureController::Delegate:
+  void RequestBeginFrameForSynthesizedInput(
+      base::OnceClosure begin_frame_callback) override;
+  bool HasGestureStopped() override;
+
   // cc::mojom::MojoCompositorFrameSink implementation.
   void SetNeedsBeginFrame(bool needs_begin_frame) override;
   void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
-  void BeginFrameDidNotSwap(const cc::BeginFrameAck& ack) override;
-  void EvictFrame() override {}
+  void DidNotProduceFrame(const cc::BeginFrameAck& ack) override;
+  void EvictCurrentSurface() override {}
 
  protected:
   // ---------------------------------------------------------------------------
@@ -638,6 +645,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   void OnGpuSwapBuffersCompletedInternal(const ui::LatencyInfo& latency_info);
 
+
   // IPC message handlers
   void OnRenderProcessGone(int status, int error_code);
   void OnClose();
@@ -645,7 +653,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void OnRequestMove(const gfx::Rect& pos);
   void OnSetTooltipText(const base::string16& tooltip_text,
                         blink::WebTextDirection text_direction_hint);
-  void OnBeginFrameDidNotSwap(const cc::BeginFrameAck& ack);
   void OnUpdateRect(const ViewHostMsg_UpdateRect_Params& params);
   void OnQueueSyntheticGesture(const SyntheticGesturePacket& gesture_packet);
   void OnSetCursor(const WebCursor& cursor);
@@ -694,7 +701,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       blink::WebInputEvent::Type event_type) override;
   void DecrementInFlightEventCount(InputEventAckSource ack_source) override;
   void OnHasTouchEventHandlers(bool has_handlers) override;
-  void DidFlush() override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
   void DidStopFlinging() override;
 
@@ -756,6 +762,14 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Once both the frame and its swap messages arrive, we call this method to
   // process the messages. Virtual for tests.
   virtual void ProcessSwapMessages(std::vector<IPC::Message> messages);
+
+  // viz::SharedBitmapAllocationObserver implementation.
+  void DidAllocateSharedBitmap(
+      uint32_t last_shared_bitmap_sequence_number) override;
+
+#if defined(OS_MACOSX)
+  device::mojom::WakeLockService* GetWakeLockService();
+#endif
 
   // true if a renderer has once been valid. We use this flag to display a sad
   // tab only when we lose our renderer and not if a paint occurs during
@@ -884,9 +898,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // TODO(wjmaclean) Remove the code for supporting resending gesture events
   // when WebView transitions to OOPIF and BrowserPlugin is removed.
   // http://crbug.com/533069
-  bool is_in_touchpad_gesture_scroll_;
-  bool is_in_touchscreen_gesture_scroll_;
-
+  bool is_in_gesture_scroll_[blink::kWebGestureDeviceCount] = {false};
   bool is_in_touchpad_gesture_fling_;
 
   std::unique_ptr<SyntheticGestureController> synthetic_gesture_controller_;
@@ -956,15 +968,14 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   uint32_t last_received_content_source_id_ = 0;
 
 #if defined(OS_MACOSX)
-  std::unique_ptr<device::PowerSaveBlocker> power_save_blocker_;
+  device::mojom::WakeLockServicePtr wake_lock_;
 #endif
 
   // These information are used to verify that the renderer does not misbehave
-  // when it comes to allocating LocalSurfaceIds. If frame size or device scale
-  // factor change, a new LocalSurfaceId must be created.
+  // when it comes to allocating LocalSurfaceIds. If surface properties change,
+  // a new LocalSurfaceId must be created.
   cc::LocalSurfaceId last_local_surface_id_;
-  gfx::Size last_frame_size_;
-  float last_device_scale_factor_;
+  RenderWidgetSurfaceProperties last_surface_properties_;
 
   mojo::Binding<cc::mojom::MojoCompositorFrameSink>
       compositor_frame_sink_binding_;
@@ -979,6 +990,16 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // List of all swap messages that their corresponding frames have not arrived.
   // Sorted by frame token.
   std::queue<std::pair<uint32_t, std::vector<IPC::Message>>> queued_messages_;
+
+  // If a CompositorFrame is submitted that references SharedBitmaps that don't
+  // exist yet, we keep it here until they are available.
+  struct {
+    cc::LocalSurfaceId local_surface_id;
+    cc::CompositorFrame frame;
+    uint32_t max_shared_bitmap_sequence_number = 0;
+  } saved_frame_;
+
+  base::OnceClosure begin_frame_callback_;
 
   base::WeakPtrFactory<RenderWidgetHostImpl> weak_factory_;
 

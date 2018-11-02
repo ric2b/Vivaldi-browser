@@ -29,7 +29,8 @@ void UpdateTaskbarProgressBarForVivaldiWindows(int download_count,
 
   base::win::ScopedComPtr<ITaskbarList3> taskbar;
   HRESULT result =
-      taskbar.CreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER);
+      CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER,
+                       IID_PPV_ARGS(&taskbar));
   if (FAILED(result)) {
     return;
   }

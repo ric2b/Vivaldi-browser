@@ -30,13 +30,9 @@ cr.define('print_preview', function() {
   /**
    * An interface to the native Chromium printing system layer.
    * @constructor
-   * @extends {cr.EventTarget}
    */
   function NativeLayer() {
-    cr.EventTarget.call(this);
-
     // Bind global handlers
-    global.setInitialSettings = this.onSetInitialSettings_.bind(this);
     global.setUseCloudPrint = this.onSetUseCloudPrint_.bind(this);
     global.setPrinters = this.onSetPrinters_.bind(this);
     global.updateWithPrinterCapabilities =
@@ -79,6 +75,30 @@ cr.define('print_preview', function() {
         this.onProvisionalDestinationResolved_.bind(this);
     global.failedToResolveProvisionalPrinter =
         this.failedToResolveProvisionalDestination_.bind(this);
+
+    /** @private {!cr.EventTarget} */
+    this.eventTarget_ = new cr.EventTarget();
+  }
+
+  /** @private {?print_preview.NativeLayer} */
+  var currentInstance = null;
+
+  /**
+   * @return {!print_preview.NativeLayer} The singleton instance.
+   * Creates a new NativeLayer if the current instance is not set.
+   */
+  NativeLayer.getInstance = function() {
+    if (currentInstance == null)
+      currentInstance = new NativeLayer();
+    return assert(currentInstance);
+  };
+
+  /**
+   * @param {!print_preview.NativeLayer} instance The NativeLayer instance
+   *     to set for print preview construction.
+   */
+  NativeLayer.setInstance = function(instance) {
+    currentInstance = instance;
   };
 
   /**
@@ -96,7 +116,6 @@ cr.define('print_preview', function() {
     FILE_SELECTION_COMPLETE:
         'print_preview.NativeLayer.FILE_SELECTION_COMPLETE',
     GET_CAPABILITIES_FAIL: 'print_preview.NativeLayer.GET_CAPABILITIES_FAIL',
-    INITIAL_SETTINGS_SET: 'print_preview.NativeLayer.INITIAL_SETTINGS_SET',
     LOCAL_DESTINATIONS_SET: 'print_preview.NativeLayer.LOCAL_DESTINATIONS_SET',
     MANIPULATE_SETTINGS_FOR_TEST:
         'print_preview.NativeLayer.MANIPULATE_SETTINGS_FOR_TEST',
@@ -151,7 +170,10 @@ cr.define('print_preview', function() {
   NativeLayer.SERIALIZED_STATE_VERSION_ = 1;
 
   NativeLayer.prototype = {
-    __proto__: cr.EventTarget.prototype,
+    /** @return {!cr.EventTarget} The event target for the native layer.*/
+    getEventTarget: function() {
+      return this.eventTarget_;
+    },
 
     /**
      * Requests access token for cloud print requests.
@@ -161,9 +183,38 @@ cr.define('print_preview', function() {
       chrome.send('getAccessToken', [authType]);
     },
 
-    /** Gets the initial settings to initialize the print preview with. */
-    startGetInitialSettings: function() {
-      chrome.send('getInitialSettings');
+    /**
+     * Gets the initial settings to initialize the print preview with.
+     * @return {!Promise<!print_preview.NativeInitialSettings>}
+     */
+    getInitialSettings: function() {
+      return cr.sendWithPromise('getInitialSettings').then(
+          /**
+           * @param {!Object} initialSettings Object containing the raw
+           *     Print Preview settings.
+           */
+          function(initialSettings) {
+            var numberFormatSymbols =
+               print_preview.MeasurementSystem.parseNumberFormat(
+                   initialSettings['numberFormat']);
+            var unitType = print_preview.MeasurementSystemUnitType.IMPERIAL;
+            if (initialSettings['measurementSystem'] != null) {
+              unitType = initialSettings['measurementSystem'];
+            }
+            return new print_preview.NativeInitialSettings(
+                initialSettings['printAutomaticallyInKioskMode'] || false,
+                initialSettings['appKioskMode'] || false,
+                numberFormatSymbols[0] || ',',
+                numberFormatSymbols[1] || '.',
+                unitType,
+                initialSettings['previewModifiable'] || false,
+                initialSettings['initiatorTitle'] || '',
+                initialSettings['documentHasSelection'] || false,
+                initialSettings['shouldPrintSelectionOnly'] || false,
+                initialSettings['printerName'] || null,
+                initialSettings['appState'] || null,
+                initialSettings['defaultDestinationSelectionRules'] || null);
+          });
     },
 
     /**
@@ -273,14 +324,15 @@ cr.define('print_preview', function() {
      *   - PAGE_PREVIEW_READY
      *   - PREVIEW_GENERATION_DONE
      *   - PREVIEW_GENERATION_FAIL
-     * @param {print_preview.Destination} destination Destination to print to.
+     * @param {!print_preview.Destination} destination Destination to print to.
      * @param {!print_preview.PrintTicketStore} printTicketStore Used to get the
      *     state of the print ticket.
      * @param {!print_preview.DocumentInfo} documentInfo Document data model.
+     * @param {boolean} generateDraft Tell the renderer to re-render.
      * @param {number} requestId ID of the preview request.
      */
     startGetPreview: function(
-        destination, printTicketStore, documentInfo, requestId) {
+        destination, printTicketStore, documentInfo, generateDraft, requestId) {
       assert(printTicketStore.isTicketValidForPreview(),
              'Trying to generate preview when ticket is not valid');
 
@@ -294,28 +346,27 @@ cr.define('print_preview', function() {
         'isFirstRequest': requestId == 0,
         'requestID': requestId,
         'previewModifiable': documentInfo.isModifiable,
-        'printToPDF':
-            destination != null &&
-            destination.id ==
-                print_preview.Destination.GooglePromotedId.SAVE_AS_PDF,
-        'printWithCloudPrint': destination != null && !destination.isLocal,
-        'printWithPrivet': destination != null && destination.isPrivet,
-        'printWithExtension': destination != null && destination.isExtension,
-        'deviceName': destination == null ? 'foo' : destination.id,
-        'generateDraftData': documentInfo.isModifiable,
+        'generateDraftData': generateDraft,
         'fitToPageEnabled': printTicketStore.fitToPage.getValue(),
         'scaleFactor': printTicketStore.scaling.getValueAsNumber(),
         // NOTE: Even though the following fields don't directly relate to the
         // preview, they still need to be included.
+        // e.g. printing::PrintSettingsFromJobSettings() still checks for them.
+        'collate': true,
+        'copies': 1,
+        'deviceName': destination.id,
+        'dpiHorizontal': 'horizontal_dpi' in printTicketStore.dpi.getValue() ?
+           printTicketStore.dpi.getValue().horizontal_dpi : 0,
+        'dpiVertical': 'vertical_dpi' in printTicketStore.dpi.getValue() ?
+           printTicketStore.dpi.getValue().vertical_dpi : 0,
         'duplex': printTicketStore.duplex.getValue() ?
             NativeLayer.DuplexMode.LONG_EDGE : NativeLayer.DuplexMode.SIMPLEX,
-        'copies': 1,
-        'collate': true,
+        'printToPDF': destination.id ==
+                print_preview.Destination.GooglePromotedId.SAVE_AS_PDF,
+        'printWithCloudPrint': !destination.isLocal,
+        'printWithPrivet': destination.isPrivet,
+        'printWithExtension': destination.isExtension,
         'rasterizePDF': false,
-        'dpiHorizontal': "horizontal_dpi" in printTicketStore.dpi.getValue() ?
-           printTicketStore.dpi.getValue().horizontal_dpi : 0,
-        'dpiVertical': "vertical_dpi" in printTicketStore.dpi.getValue() ?
-           printTicketStore.dpi.getValue().vertical_dpi : 0,
         'shouldPrintBackgrounds': printTicketStore.cssBackground.getValue(),
         'shouldPrintSelectionOnly': printTicketStore.selectionOnly.getValue()
       };
@@ -327,10 +378,10 @@ cr.define('print_preview', function() {
 
       if (printTicketStore.marginsType.isCapabilityAvailable() &&
           printTicketStore.marginsType.getValue() ==
-              print_preview.ticket_items.MarginsType.Value.CUSTOM) {
+              print_preview.ticket_items.MarginsTypeValue.CUSTOM) {
         var customMargins = printTicketStore.customMargins.getValue();
         var orientationEnum =
-            print_preview.ticket_items.CustomMargins.Orientation;
+            print_preview.ticket_items.CustomMarginsOrientation;
         ticket['marginsCustom'] = {
           'marginTop': customMargins.get(orientationEnum.TOP),
           'marginRight': customMargins.get(orientationEnum.RIGHT),
@@ -342,8 +393,7 @@ cr.define('print_preview', function() {
       chrome.send(
           'getPreview',
           [JSON.stringify(ticket),
-           requestId > 0 ? documentInfo.pageCount : -1,
-           documentInfo.isModifiable]);
+           requestId > 0 ? documentInfo.pageCount : -1]);
     },
 
     /**
@@ -369,20 +419,18 @@ cr.define('print_preview', function() {
              'Implemented for Windows only');
 
       var ticket = {
-        'pageRange': printTicketStore.pageRange.getDocumentPageRanges(),
         'mediaSize': printTicketStore.mediaSize.getValue(),
         'pageCount': printTicketStore.pageRange.getPageNumberSet().size,
         'landscape': printTicketStore.landscape.getValue(),
         'color': this.getNativeColorModel_(destination, printTicketStore.color),
-        'headerFooterEnabled': printTicketStore.headerFooter.getValue(),
+        'headerFooterEnabled': false,  // Only used in print preview
         'marginsType': printTicketStore.marginsType.getValue(),
-        'generateDraftData': true, // TODO(rltoscano): What should this be?
         'duplex': printTicketStore.duplex.getValue() ?
             NativeLayer.DuplexMode.LONG_EDGE : NativeLayer.DuplexMode.SIMPLEX,
         'copies': printTicketStore.copies.getValueAsNumber(),
         'collate': printTicketStore.collate.getValue(),
         'shouldPrintBackgrounds': printTicketStore.cssBackground.getValue(),
-        'shouldPrintSelectionOnly': printTicketStore.selectionOnly.getValue(),
+        'shouldPrintSelectionOnly': false,  // Only used in print preview
         'previewModifiable': documentInfo.isModifiable,
         'printToPDF': destination.id ==
             print_preview.Destination.GooglePromotedId.SAVE_AS_PDF,
@@ -391,13 +439,11 @@ cr.define('print_preview', function() {
         'printWithExtension': destination.isExtension,
         'rasterizePDF': printTicketStore.rasterize.getValue(),
         'scaleFactor': printTicketStore.scaling.getValueAsNumber(),
-        'dpiHorizontal': "horizontal_dpi" in printTicketStore.dpi.getValue() ?
+        'dpiHorizontal': 'horizontal_dpi' in printTicketStore.dpi.getValue() ?
            printTicketStore.dpi.getValue().horizontal_dpi : 0,
-        'dpiVertical': "vertical_dpi" in printTicketStore.dpi.getValue() ?
+        'dpiVertical': 'vertical_dpi' in printTicketStore.dpi.getValue() ?
            printTicketStore.dpi.getValue().vertical_dpi : 0,
         'deviceName': destination.id,
-        'isFirstRequest': false,
-        'requestID': -1,
         'fitToPageEnabled': printTicketStore.fitToPage.getValue(),
         'pageWidth': documentInfo.pageSize.width,
         'pageHeight': documentInfo.pageSize.height,
@@ -413,10 +459,10 @@ cr.define('print_preview', function() {
 
       if (printTicketStore.marginsType.isCapabilityAvailable() &&
           printTicketStore.marginsType.isValueEqual(
-              print_preview.ticket_items.MarginsType.Value.CUSTOM)) {
+              print_preview.ticket_items.MarginsTypeValue.CUSTOM)) {
         var customMargins = printTicketStore.customMargins.getValue();
         var orientationEnum =
-            print_preview.ticket_items.CustomMargins.Orientation;
+            print_preview.ticket_items.CustomMarginsOrientation;
         ticket['marginsCustom'] = {
           'marginTop': customMargins.get(orientationEnum.TOP),
           'marginRight': customMargins.get(orientationEnum.RIGHT),
@@ -490,38 +536,6 @@ cr.define('print_preview', function() {
     },
 
     /**
-     * @param {!Object} initialSettings Object containing all initial settings.
-     */
-    onSetInitialSettings_: function(initialSettings) {
-      var numberFormatSymbols =
-          print_preview.MeasurementSystem.parseNumberFormat(
-              initialSettings['numberFormat']);
-      var unitType = print_preview.MeasurementSystem.UnitType.IMPERIAL;
-      if (initialSettings['measurementSystem'] != null) {
-        unitType = initialSettings['measurementSystem'];
-      }
-
-      var nativeInitialSettings = new print_preview.NativeInitialSettings(
-          initialSettings['printAutomaticallyInKioskMode'] || false,
-          initialSettings['appKioskMode'] || false,
-          numberFormatSymbols[0] || ',',
-          numberFormatSymbols[1] || '.',
-          unitType,
-          initialSettings['previewModifiable'] || false,
-          initialSettings['initiatorTitle'] || '',
-          initialSettings['documentHasSelection'] || false,
-          initialSettings['shouldPrintSelectionOnly'] || false,
-          initialSettings['printerName'] || null,
-          initialSettings['appState'] || null,
-          initialSettings['defaultDestinationSelectionRules'] || null);
-
-      var initialSettingsSetEvent = new Event(
-          NativeLayer.EventType.INITIAL_SETTINGS_SET);
-      initialSettingsSetEvent.initialSettings = nativeInitialSettings;
-      this.dispatchEvent(initialSettingsSetEvent);
-    },
-
-    /**
      * Turn on the integration of Cloud Print.
      * @param {{cloudPrintURL: string, appKioskMode: string}} settings
      *     cloudPrintUrl: The URL to use for cloud print servers.
@@ -532,7 +546,7 @@ cr.define('print_preview', function() {
           NativeLayer.EventType.CLOUD_PRINT_ENABLE);
       cloudPrintEnableEvent.baseCloudPrintUrl = settings['cloudPrintUrl'] || '';
       cloudPrintEnableEvent.appKioskMode = settings['appKioskMode'] || false;
-      this.dispatchEvent(cloudPrintEnableEvent);
+      this.eventTarget_.dispatchEvent(cloudPrintEnableEvent);
     },
 
     /**
@@ -545,7 +559,7 @@ cr.define('print_preview', function() {
       var localDestsSetEvent = new Event(
           NativeLayer.EventType.LOCAL_DESTINATIONS_SET);
       localDestsSetEvent.destinationInfos = printers;
-      this.dispatchEvent(localDestsSetEvent);
+      this.eventTarget_.dispatchEvent(localDestsSetEvent);
     },
 
     /**
@@ -555,9 +569,11 @@ cr.define('print_preview', function() {
      * @private
      */
     onUpdateWithPrinterCapabilities_: function(settingsInfo) {
+      assert(settingsInfo.capabilities,
+          'Capabilities update without capabilites');
       var capsSetEvent = new Event(NativeLayer.EventType.CAPABILITIES_SET);
       capsSetEvent.settingsInfo = settingsInfo;
-      this.dispatchEvent(capsSetEvent);
+      this.eventTarget_.dispatchEvent(capsSetEvent);
     },
 
     /**
@@ -571,8 +587,8 @@ cr.define('print_preview', function() {
           NativeLayer.EventType.GET_CAPABILITIES_FAIL);
       getCapsFailEvent.destinationId = destinationId;
       getCapsFailEvent.destinationOrigin =
-          print_preview.Destination.Origin.LOCAL;
-      this.dispatchEvent(getCapsFailEvent);
+          print_preview.DestinationOrigin.LOCAL;
+      this.eventTarget_.dispatchEvent(getCapsFailEvent);
     },
 
     /**
@@ -586,8 +602,8 @@ cr.define('print_preview', function() {
           NativeLayer.EventType.GET_CAPABILITIES_FAIL);
       getCapsFailEvent.destinationId = destinationId;
       getCapsFailEvent.destinationOrigin =
-          print_preview.Destination.Origin.PRIVET;
-      this.dispatchEvent(getCapsFailEvent);
+          print_preview.DestinationOrigin.PRIVET;
+      this.eventTarget_.dispatchEvent(getCapsFailEvent);
     },
 
     /**
@@ -601,13 +617,14 @@ cr.define('print_preview', function() {
           NativeLayer.EventType.GET_CAPABILITIES_FAIL);
       getCapsFailEvent.destinationId = destinationId;
       getCapsFailEvent.destinationOrigin =
-          print_preview.Destination.Origin.EXTENSION;
-      this.dispatchEvent(getCapsFailEvent);
+          print_preview.DestinationOrigin.EXTENSION;
+      this.eventTarget_.dispatchEvent(getCapsFailEvent);
     },
 
     /** Reloads the printer list. */
     onReloadPrintersList_: function() {
-      cr.dispatchSimpleEvent(this, NativeLayer.EventType.DESTINATIONS_RELOAD);
+      cr.dispatchSimpleEvent(this.eventTarget_,
+                             NativeLayer.EventType.DESTINATIONS_RELOAD);
     },
 
     /**
@@ -621,7 +638,7 @@ cr.define('print_preview', function() {
       var printToCloudEvent = new Event(
           NativeLayer.EventType.PRINT_TO_CLOUD);
       printToCloudEvent.data = data;
-      this.dispatchEvent(printToCloudEvent);
+      this.eventTarget_.dispatchEvent(printToCloudEvent);
     },
 
     /**
@@ -630,7 +647,8 @@ cr.define('print_preview', function() {
      * @private
      */
     onFileSelectionCancelled_: function() {
-      cr.dispatchSimpleEvent(this, NativeLayer.EventType.FILE_SELECTION_CANCEL);
+      cr.dispatchSimpleEvent(
+          this.eventTarget_, NativeLayer.EventType.FILE_SELECTION_CANCEL);
     },
 
     /**
@@ -642,7 +660,7 @@ cr.define('print_preview', function() {
       // If the file selection is completed and the dialog is not already closed
       // it means that a pending print to pdf request exists.
       cr.dispatchSimpleEvent(
-          this, NativeLayer.EventType.FILE_SELECTION_COMPLETE);
+          this.eventTarget_, NativeLayer.EventType.FILE_SELECTION_COMPLETE);
     },
 
     /**
@@ -652,7 +670,7 @@ cr.define('print_preview', function() {
      */
     onPrintPreviewFailed_: function() {
       cr.dispatchSimpleEvent(
-          this, NativeLayer.EventType.PREVIEW_GENERATION_FAIL);
+          this.eventTarget_, NativeLayer.EventType.PREVIEW_GENERATION_FAIL);
     },
 
     /**
@@ -661,7 +679,8 @@ cr.define('print_preview', function() {
      * @private
      */
     onInvalidPrinterSettings_: function() {
-      cr.dispatchSimpleEvent(this, NativeLayer.EventType.SETTINGS_INVALID);
+      cr.dispatchSimpleEvent(this.eventTarget_,
+                             NativeLayer.EventType.SETTINGS_INVALID);
     },
 
     /**
@@ -679,7 +698,7 @@ cr.define('print_preview', function() {
           NativeLayer.EventType.PAGE_LAYOUT_READY);
       pageLayoutChangeEvent.pageLayout = pageLayout;
       pageLayoutChangeEvent.hasCustomPageSizeStyle = hasCustomPageSizeStyle;
-      this.dispatchEvent(pageLayoutChangeEvent);
+      this.eventTarget_.dispatchEvent(pageLayoutChangeEvent);
     },
 
     /**
@@ -699,7 +718,7 @@ cr.define('print_preview', function() {
       pageCountChangeEvent.pageCount = pageCount;
       pageCountChangeEvent.previewResponseId = previewResponseId;
       pageCountChangeEvent.fitToPageScaling = fitToPageScaling;
-      this.dispatchEvent(pageCountChangeEvent);
+      this.eventTarget_.dispatchEvent(pageCountChangeEvent);
     },
 
     /**
@@ -718,7 +737,7 @@ cr.define('print_preview', function() {
       pagePreviewGenEvent.pageIndex = pageNumber;
       pagePreviewGenEvent.previewUid = previewUid;
       pagePreviewGenEvent.previewResponseId = previewResponseId;
-      this.dispatchEvent(pagePreviewGenEvent);
+      this.eventTarget_.dispatchEvent(pagePreviewGenEvent);
     },
 
     /**
@@ -732,7 +751,7 @@ cr.define('print_preview', function() {
           NativeLayer.EventType.ACCESS_TOKEN_READY);
       getAccessTokenEvent.authType = authType;
       getAccessTokenEvent.accessToken = accessToken;
-      this.dispatchEvent(getAccessTokenEvent);
+      this.eventTarget_.dispatchEvent(getAccessTokenEvent);
     },
 
     /**
@@ -749,7 +768,7 @@ cr.define('print_preview', function() {
           NativeLayer.EventType.PREVIEW_GENERATION_DONE);
       previewGenDoneEvent.previewUid = previewUid;
       previewGenDoneEvent.previewResponseId = previewResponseId;
-      this.dispatchEvent(previewGenDoneEvent);
+      this.eventTarget_.dispatchEvent(previewGenDoneEvent);
     },
 
     /**
@@ -764,7 +783,7 @@ cr.define('print_preview', function() {
       var printPresetOptionsEvent = new Event(
           NativeLayer.EventType.PRINT_PRESET_OPTIONS);
       printPresetOptionsEvent.optionsFromDocument = options;
-      this.dispatchEvent(printPresetOptionsEvent);
+      this.eventTarget_.dispatchEvent(printPresetOptionsEvent);
     },
 
     /**
@@ -776,7 +795,7 @@ cr.define('print_preview', function() {
       var privetPrinterChangedEvent =
             new Event(NativeLayer.EventType.PRIVET_PRINTER_CHANGED);
       privetPrinterChangedEvent.printer = printer;
-      this.dispatchEvent(privetPrinterChangedEvent);
+      this.eventTarget_.dispatchEvent(privetPrinterChangedEvent);
     },
 
     /**
@@ -789,7 +808,7 @@ cr.define('print_preview', function() {
             new Event(NativeLayer.EventType.PRIVET_CAPABILITIES_SET);
       privetCapabilitiesSetEvent.printer = printer;
       privetCapabilitiesSetEvent.capabilities = capabilities;
-      this.dispatchEvent(privetCapabilitiesSetEvent);
+      this.eventTarget_.dispatchEvent(privetCapabilitiesSetEvent);
     },
 
     /**
@@ -801,7 +820,7 @@ cr.define('print_preview', function() {
       var privetPrintFailedEvent =
             new Event(NativeLayer.EventType.PRIVET_PRINT_FAILED);
       privetPrintFailedEvent.httpError = http_error;
-      this.dispatchEvent(privetPrintFailedEvent);
+      this.eventTarget_.dispatchEvent(privetPrintFailedEvent);
     },
 
     /**
@@ -819,7 +838,7 @@ cr.define('print_preview', function() {
       var event = new Event(NativeLayer.EventType.EXTENSION_PRINTERS_ADDED);
       event.printers = printers;
       event.done = done;
-      this.dispatchEvent(event);
+      this.eventTarget_.dispatchEvent(event);
     },
 
     /**
@@ -833,7 +852,7 @@ cr.define('print_preview', function() {
       var event = new Event(NativeLayer.EventType.EXTENSION_CAPABILITIES_SET);
       event.printerId = printerId;
       event.capabilities = capabilities;
-      this.dispatchEvent(event);
+      this.eventTarget_.dispatchEvent(event);
     },
 
     /**
@@ -847,7 +866,7 @@ cr.define('print_preview', function() {
           NativeLayer.EventType.PROVISIONAL_DESTINATION_RESOLVED);
       evt.provisionalId = destinationId;
       evt.destination = null;
-      this.dispatchEvent(evt);
+      this.eventTarget_.dispatchEvent(evt);
     },
 
     /**
@@ -869,7 +888,7 @@ cr.define('print_preview', function() {
           NativeLayer.EventType.PROVISIONAL_DESTINATION_RESOLVED);
       evt.provisionalId = provisionalDestinationId;
       evt.destination = destinationInfo;
-      this.dispatchEvent(evt);
+      this.eventTarget_.dispatchEvent(evt);
     },
 
    /**
@@ -893,7 +912,7 @@ cr.define('print_preview', function() {
       var manipulateSettingsEvent =
           new Event(NativeLayer.EventType.MANIPULATE_SETTINGS_FOR_TEST);
       manipulateSettingsEvent.settings = settings;
-      this.dispatchEvent(manipulateSettingsEvent);
+      this.eventTarget_.dispatchEvent(manipulateSettingsEvent);
     },
 
     /**
@@ -924,7 +943,7 @@ cr.define('print_preview', function() {
    *     mode.
    * @param {string} thousandsDelimeter Character delimeter of thousands digits.
    * @param {string} decimalDelimeter Character delimeter of the decimal point.
-   * @param {!print_preview.MeasurementSystem.UnitType} unitType Unit type of
+   * @param {!print_preview.MeasurementSystemUnitType} unitType Unit type of
    *     local machine's measurement system.
    * @param {boolean} isDocumentModifiable Whether the document to print is
    *     modifiable.
@@ -956,89 +975,77 @@ cr.define('print_preview', function() {
 
     /**
      * Whether the print preview should be in auto-print mode.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     this.isInKioskAutoPrintMode_ = isInKioskAutoPrintMode;
 
     /**
      * Whether the print preview should switch to App Kiosk mode.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     this.isInAppKioskMode_ = isInAppKioskMode;
 
     /**
      * Character delimeter of thousands digits.
-     * @type {string}
-     * @private
+     * @private {string}
      */
     this.thousandsDelimeter_ = thousandsDelimeter;
 
     /**
      * Character delimeter of the decimal point.
-     * @type {string}
-     * @private
+     * @private {string}
      */
     this.decimalDelimeter_ = decimalDelimeter;
 
     /**
      * Unit type of local machine's measurement system.
-     * @type {string}
-     * @private
+     * @private {print_preview.MeasurementSystemUnitType}
      */
     this.unitType_ = unitType;
 
     /**
      * Whether the document to print is modifiable.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     this.isDocumentModifiable_ = isDocumentModifiable;
 
     /**
      * Title of the document.
-     * @type {string}
-     * @private
+     * @private {string}
      */
     this.documentTitle_ = documentTitle;
 
     /**
      * Whether the document has selection.
-     * @type {string}
-     * @private
+     * @private {boolean}
      */
     this.documentHasSelection_ = documentHasSelection;
 
     /**
      * Whether selection only should be printed.
-     * @type {string}
-     * @private
+     * @private {boolean}
      */
     this.selectionOnly_ = selectionOnly;
 
     /**
      * ID of the system default destination.
-     * @type {?string}
-     * @private
+     * @private {?string}
      */
     this.systemDefaultDestinationId_ = systemDefaultDestinationId;
 
     /**
      * Serialized app state.
-     * @type {?string}
-     * @private
+     * @private {?string}
      */
     this.serializedAppStateStr_ = serializedAppStateStr;
 
     /**
      * Serialized default destination selection rules.
-     * @type {?string}
-     * @private
+     * @private {?string}
      */
     this.serializedDefaultDestinationSelectionRulesStr_ =
         serializedDefaultDestinationSelectionRulesStr;
-  };
+  }
 
   NativeInitialSettings.prototype = {
     /**
@@ -1067,7 +1074,7 @@ cr.define('print_preview', function() {
     },
 
     /**
-     * @return {!print_preview.MeasurementSystem.UnitType} Unit type of local
+     * @return {!print_preview.MeasurementSystemUnitType} Unit type of local
      *     machine's measurement system.
      */
     get unitType() {

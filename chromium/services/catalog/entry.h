@@ -13,7 +13,6 @@
 #include "base/macros.h"
 #include "services/catalog/public/interfaces/catalog.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider_spec.h"
-#include "services/service_manager/public/interfaces/resolver.mojom.h"
 
 namespace base {
 class Value;
@@ -35,14 +34,14 @@ class Entry {
   bool operator==(const Entry& other) const;
 
   const std::string& name() const { return name_; }
-  void set_name(const std::string& name) { name_ = name; }
+  void set_name(std::string name) { name_ = std::move(name); }
 
   const base::FilePath& path() const { return path_; }
-  void set_path(const base::FilePath& path) { path_ = path; }
+  void set_path(base::FilePath path) { path_ = std::move(path); }
 
   const std::string& display_name() const { return display_name_; }
-  void set_display_name(const std::string& display_name) {
-    display_name_ = display_name;
+  void set_display_name(std::string display_name) {
+    display_name_ = std::move(display_name);
   }
 
   const Entry* parent() const { return parent_; }
@@ -52,19 +51,18 @@ class Entry {
     return children_;
   }
   std::vector<std::unique_ptr<Entry>>& children() { return children_; }
-  void set_children(std::vector<std::unique_ptr<Entry>>&& children) {
+  void set_children(std::vector<std::unique_ptr<Entry>> children) {
     children_ = std::move(children);
   }
 
-  void AddInterfaceProviderSpec(
-      const std::string& name,
-      const service_manager::InterfaceProviderSpec& spec);
+  void AddInterfaceProviderSpec(const std::string& name,
+                                service_manager::InterfaceProviderSpec spec);
   const service_manager::InterfaceProviderSpecMap&
       interface_provider_specs() const {
     return interface_provider_specs_;
   }
 
-  void AddRequiredFilePath(const std::string& name, const base::FilePath& path);
+  void AddRequiredFilePath(const std::string& name, base::FilePath path);
   const std::map<std::string, base::FilePath>& required_file_paths() const {
     return required_file_paths_;
   }
@@ -84,12 +82,6 @@ class Entry {
 }  // namespace catalog
 
 namespace mojo {
-template <>
-struct TypeConverter<service_manager::mojom::ResolveResultPtr,
-                     const catalog::Entry*> {
-  static service_manager::mojom::ResolveResultPtr Convert(
-      const catalog::Entry* input);
-};
 
 template<>
 struct TypeConverter<catalog::mojom::EntryPtr, catalog::Entry> {

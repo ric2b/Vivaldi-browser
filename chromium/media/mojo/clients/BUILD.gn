@@ -6,7 +6,7 @@
 source_set("clients") {
   visibility = [
     "//chromecast/*",
-    "//content/renderer",
+    "//content/renderer:*",
 
     # TODO(xhwang): Only allow //media/mojo:media_mojo_unittests
     "//media/mojo:*",
@@ -15,6 +15,11 @@ source_set("clients") {
     "//media/mojo/services:*",
 
     "//media/test/*",
+
+    "//content/gpu:*",
+
+    # TODO(liberato): can we avoid this?
+    "//content/test/*",
   ]
 
   sources = [
@@ -42,16 +47,13 @@ source_set("clients") {
     sources += [
       "mojo_android_overlay.cc",
       "mojo_android_overlay.h",
-      "mojo_android_overlay_factory.cc",
-      "mojo_android_overlay_factory.h",
     ]
   }
-
-  public_configs = [ "//media/mojo/services:mojo_media_config" ]
 
   public_deps = [
     "//base",
     "//media",
+    "//media/mojo:features",
     "//media/mojo/interfaces",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
@@ -65,6 +67,9 @@ source_set("clients") {
   ]
 
   if (is_android) {
-    deps += [ "//ui/gl:gl" ]
+    deps += [
+      "//gpu/ipc/common:common",
+      "//ui/gl:gl",
+    ]
   }
 }

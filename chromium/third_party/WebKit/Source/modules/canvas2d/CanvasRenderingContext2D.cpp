@@ -54,8 +54,8 @@
 #include "modules/canvas2d/HitRegion.h"
 #include "modules/canvas2d/Path2D.h"
 #include "platform/fonts/FontCache.h"
+#include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/DrawLooperBuilder.h"
-#include "platform/graphics/ExpensiveCanvasHeuristicParameters.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/StrokeData.h"
 #include "platform/graphics/paint/PaintCanvas.h"
@@ -115,7 +115,7 @@ CanvasRenderingContext2D::CanvasRenderingContext2D(
     HTMLCanvasElement* canvas,
     const CanvasContextCreationAttributes& attrs,
     Document& document)
-    : CanvasRenderingContext(canvas, nullptr, attrs),
+    : CanvasRenderingContext(canvas, attrs),
       context_lost_mode_(kNotLostContext),
       context_restorable_(true),
       try_restore_context_attempt_count_(0),
@@ -167,9 +167,9 @@ void CanvasRenderingContext2D::ValidateStateStack() const {
 }
 
 bool CanvasRenderingContext2D::IsAccelerated() const {
-  if (!canvas()->HasImageBuffer())
+  if (!HasImageBuffer())
     return false;
-  return canvas()->Buffer()->IsAccelerated();
+  return GetImageBuffer()->IsAccelerated();
 }
 
 bool CanvasRenderingContext2D::IsComposited() const {
@@ -192,7 +192,7 @@ void CanvasRenderingContext2D::LoseContext(LostContextMode lost_mode) {
     return;
   context_lost_mode_ = lost_mode;
   if (context_lost_mode_ == kSyntheticLostContext && canvas()) {
-    canvas()->DiscardImageBuffer();
+    host()->DiscardImageBuffer();
   }
   dispatch_context_lost_event_timer_.StartOneShot(0, BLINK_FROM_HERE);
 }
@@ -202,9 +202,9 @@ void CanvasRenderingContext2D::DidSetSurfaceSize() {
     return;
   // This code path is for restoring from an eviction
   // Restoring from surface failure is handled internally
-  DCHECK(context_lost_mode_ != kNotLostContext && !canvas()->HasImageBuffer());
+  DCHECK(context_lost_mode_ != kNotLostContext && !HasImageBuffer());
 
-  if (canvas()->Buffer()) {
+  if (GetImageBuffer()) {
     if (ContextLostRestoredEventsEnabled()) {
       dispatch_context_restored_event_timer_.StartOneShot(0, BLINK_FROM_HERE);
     } else {
@@ -250,16 +250,16 @@ void CanvasRenderingContext2D::TryRestoreContextEvent(TimerBase* timer) {
   }
 
   DCHECK(context_lost_mode_ == kRealLostContext);
-  if (canvas()->HasImageBuffer() && canvas()->Buffer()->RestoreSurface()) {
+  if (HasImageBuffer() && GetImageBuffer()->RestoreSurface()) {
     try_restore_context_event_timer_.Stop();
     DispatchContextRestoredEvent(nullptr);
   }
 
   if (++try_restore_context_attempt_count_ > kMaxTryRestoreContextAttempts) {
     // final attempt: allocate a brand new image buffer instead of restoring
-    canvas()->DiscardImageBuffer();
+    host()->DiscardImageBuffer();
     try_restore_context_event_timer_.Stop();
-    if (canvas()->Buffer())
+    if (GetImageBuffer())
       DispatchContextRestoredEvent(nullptr);
   }
 }
@@ -277,6 +277,18 @@ void CanvasRenderingContext2D::DispatchContextRestoredEvent(TimerBase*) {
 
 void CanvasRenderingContext2D::WillDrawImage(CanvasImageSource* source) const {
   canvas()->WillDrawImageTo2DContext(source);
+}
+
+CanvasColorSpace CanvasRenderingContext2D::ColorSpace() const {
+  return color_params().color_space();
+}
+
+String CanvasRenderingContext2D::ColorSpaceAsString() const {
+  return CanvasRenderingContext::ColorSpaceAsString();
+}
+
+CanvasPixelFormat CanvasRenderingContext2D::PixelFormat() const {
+  return color_params().pixel_format();
 }
 
 ColorBehavior CanvasRenderingContext2D::DrawImageColorBehavior() const {
@@ -354,9 +366,9 @@ void CanvasRenderingContext2D::DidDraw(const SkIRect& dirty_rect) {
   if (dirty_rect.isEmpty())
     return;
 
-  if (ExpensiveCanvasHeuristicParameters::kBlurredShadowsAreExpensive &&
+  if (CanvasHeuristicParameters::kBlurredShadowsAreExpensive &&
       GetState().ShouldDrawShadows() && GetState().ShadowBlur() > 0) {
-    ImageBuffer* buffer = canvas()->Buffer();
+    ImageBuffer* buffer = GetImageBuffer();
     if (buffer)
       buffer->SetHasExpensiveOp();
   }
@@ -365,11 +377,11 @@ void CanvasRenderingContext2D::DidDraw(const SkIRect& dirty_rect) {
 }
 
 bool CanvasRenderingContext2D::StateHasFilter() {
-  return GetState().HasFilter(canvas(), canvas()->size(), this);
+  return GetState().HasFilter(canvas(), canvas()->Size(), this);
 }
 
 sk_sp<SkImageFilter> CanvasRenderingContext2D::StateGetFilter() {
-  return GetState().GetFilter(canvas(), canvas()->size(), this);
+  return GetState().GetFilter(canvas(), canvas()->Size(), this);
 }
 
 void CanvasRenderingContext2D::SnapshotStateForFilter() {
@@ -464,7 +476,7 @@ void CanvasRenderingContext2D::setFont(const String& new_font) {
   const ComputedStyle* computed_style = canvas()->EnsureComputedStyle();
   if (computed_style) {
     HashMap<String, Font>::iterator i =
-        fonts_resolved_using_current_style_.Find(new_font);
+        fonts_resolved_using_current_style_.find(new_font);
     if (i != fonts_resolved_using_current_style_.end()) {
       DCHECK(font_lru_list_.Contains(new_font));
       font_lru_list_.erase(new_font);
@@ -531,8 +543,8 @@ void CanvasRenderingContext2D::DidProcessTask() {
 void CanvasRenderingContext2D::PruneLocalFontCache(size_t target_size) {
   if (target_size == 0) {
     // Short cut: LRU does not matter when evicting everything
-    font_lru_list_.Clear();
-    fonts_resolved_using_current_style_.Clear();
+    font_lru_list_.clear();
+    fonts_resolved_using_current_style_.clear();
     return;
   }
   while (font_lru_list_.size() > target_size) {
@@ -554,7 +566,7 @@ TreeScope* CanvasRenderingContext2D::GetTreeScope() {
 
 void CanvasRenderingContext2D::ClearFilterReferences() {
   filter_operations_.RemoveClient(this);
-  filter_operations_.Clear();
+  filter_operations_.clear();
 }
 
 void CanvasRenderingContext2D::UpdateFilterReferences(
@@ -574,27 +586,28 @@ void CanvasRenderingContext2D::ResourceElementChanged() {
 }
 
 bool CanvasRenderingContext2D::OriginClean() const {
-  return canvas()->OriginClean();
+  return host()->OriginClean();
 }
 
 void CanvasRenderingContext2D::SetOriginTainted() {
-  return canvas()->SetOriginTainted();
+  return host()->SetOriginTainted();
 }
 
 int CanvasRenderingContext2D::Width() const {
-  return canvas()->width();
+  return host()->Size().Width();
 }
 
 int CanvasRenderingContext2D::Height() const {
-  return canvas()->height();
+  return host()->Size().Height();
 }
 
 bool CanvasRenderingContext2D::HasImageBuffer() const {
-  return canvas()->HasImageBuffer();
+  return host()->GetImageBuffer();
 }
 
 ImageBuffer* CanvasRenderingContext2D::GetImageBuffer() const {
-  return canvas()->Buffer();
+  return const_cast<CanvasRenderingContextHost*>(host())
+      ->GetOrCreateImageBuffer();
 }
 
 PassRefPtr<Image> blink::CanvasRenderingContext2D::GetImage(
@@ -602,7 +615,7 @@ PassRefPtr<Image> blink::CanvasRenderingContext2D::GetImage(
     SnapshotReason reason) const {
   if (!HasImageBuffer())
     return nullptr;
-  return canvas()->Buffer()->NewImageSnapshot(hint, reason);
+  return GetImageBuffer()->NewImageSnapshot(hint, reason);
 }
 
 bool CanvasRenderingContext2D::ParseColorOrCurrentColor(
@@ -724,7 +737,6 @@ void CanvasRenderingContext2D::setDirection(const String& direction_string) {
 void CanvasRenderingContext2D::fillText(const String& text,
                                         double x,
                                         double y) {
-  TrackDrawCall(kFillText);
   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kFillPaintType);
 }
 
@@ -732,7 +744,6 @@ void CanvasRenderingContext2D::fillText(const String& text,
                                         double x,
                                         double y,
                                         double max_width) {
-  TrackDrawCall(kFillText);
   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kFillPaintType,
                    &max_width);
 }
@@ -740,7 +751,6 @@ void CanvasRenderingContext2D::fillText(const String& text,
 void CanvasRenderingContext2D::strokeText(const String& text,
                                           double x,
                                           double y) {
-  TrackDrawCall(kStrokeText);
   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType);
 }
 
@@ -748,7 +758,6 @@ void CanvasRenderingContext2D::strokeText(const String& text,
                                           double x,
                                           double y,
                                           double max_width) {
-  TrackDrawCall(kStrokeText);
   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType,
                    &max_width);
 }
@@ -840,7 +849,7 @@ void CanvasRenderingContext2D::DrawTextInternal(
   // anti-aliasing, which is expected when !creationAttributes().alpha(), so we
   // need to fall out of display list mode when drawing text to an opaque
   // canvas. crbug.com/583809
-  if (!CreationAttributes().alpha() && !IsComposited()) {
+  if (!IsComposited()) {
     canvas()->DisableDeferral(
         kDisableDeferralReasonSubPixelTextAntiAliasingSupport);
   }
@@ -967,8 +976,8 @@ float CanvasRenderingContext2D::GetFontBaseline(
 }
 
 void CanvasRenderingContext2D::SetIsHidden(bool hidden) {
-  if (canvas()->HasImageBuffer())
-    canvas()->Buffer()->SetIsHidden(hidden);
+  if (HasImageBuffer())
+    GetImageBuffer()->SetIsHidden(hidden);
   if (hidden) {
     PruneLocalFontCache(0);
   }
@@ -979,7 +988,7 @@ bool CanvasRenderingContext2D::IsTransformInvertible() const {
 }
 
 WebLayer* CanvasRenderingContext2D::PlatformLayer() const {
-  return canvas()->Buffer() ? canvas()->Buffer()->PlatformLayer() : 0;
+  return GetImageBuffer() ? GetImageBuffer()->PlatformLayer() : 0;
 }
 
 void CanvasRenderingContext2D::getContextAttributes(
@@ -987,7 +996,7 @@ void CanvasRenderingContext2D::getContextAttributes(
   settings.setAlpha(CreationAttributes().alpha());
   settings.setColorSpace(ColorSpaceAsString());
   settings.setPixelFormat(PixelFormatAsString());
-  settings.setLinearPixelMath(LinearPixelMath());
+  settings.setLinearPixelMath(color_params().LinearPixelMath());
 }
 
 void CanvasRenderingContext2D::drawFocusIfNeeded(Element* element) {
@@ -1149,38 +1158,6 @@ unsigned CanvasRenderingContext2D::HitRegionsCount() const {
     return hit_region_manager_->GetHitRegionsCount();
 
   return 0;
-}
-
-bool CanvasRenderingContext2D::IsAccelerationOptimalForCanvasContent() const {
-  // Heuristic to determine if the GPU accelerated rendering pipeline is optimal
-  // for performance based on past usage. It has a bias towards suggesting that
-  // the accelerated pipeline is optimal.
-
-  float accelerated_cost = EstimateRenderingCost(
-      ExpensiveCanvasHeuristicParameters::kAcceleratedModeIndex);
-
-  float recording_cost = EstimateRenderingCost(
-      ExpensiveCanvasHeuristicParameters::kRecordingModeIndex);
-
-  float cost_difference = accelerated_cost - recording_cost;
-  float percent_cost_reduction = cost_difference / accelerated_cost * 100.0;
-  float cost_difference_per_frame =
-      cost_difference / usage_counters_.num_frames_since_reset;
-
-  if (percent_cost_reduction >=
-          ExpensiveCanvasHeuristicParameters::
-              kMinPercentageImprovementToSuggestDisableAcceleration &&
-      cost_difference_per_frame >=
-          ExpensiveCanvasHeuristicParameters::
-              kMinCostPerFrameImprovementToSuggestDisableAcceleration) {
-    return false;
-  }
-  return true;
-}
-
-void CanvasRenderingContext2D::ResetUsageTracking() {
-  UsageCounters new_counters;
-  usage_counters_ = new_counters;
 }
 
 }  // namespace blink

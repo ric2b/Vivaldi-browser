@@ -39,6 +39,8 @@ class _SystemHealthSharedState(shared_page_state.SharedPageState):
   """
 
   def CanRunStory(self, story):
+    if self._finder_options.run_disabled_tests:
+      return True
     return story.CanRun(self.possible_browser)
 
 
@@ -83,6 +85,21 @@ class SystemHealthStory(page.Page):
         grouping_keys={'case': case, 'group': group},
         platform_specific=self.PLATFORM_SPECIFIC)
     self._take_memory_measurement = take_memory_measurement
+
+  @classmethod
+  def GetStoryDescription(cls):
+    if cls.__doc__:
+      return cls.__doc__
+    return cls.GenerateStoryDescription()
+
+  @classmethod
+  def GenerateStoryDescription(cls):
+    """ Subclasses of SystemHealthStory can override this to auto generate
+    their story description.
+    However, it's recommended to use the Python docstring to describe the user
+    stories instead and this should only be used for very repetitive cases.
+    """
+    return None
 
   @classmethod
   def CanRun(cls, possible_browser):

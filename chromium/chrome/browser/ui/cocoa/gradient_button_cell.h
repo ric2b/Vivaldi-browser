@@ -64,7 +64,6 @@ typedef enum {
   base::scoped_nsobject<NSGradient> gradient_;
   gradient_button_cell::PulseState pulseState_;
   CGFloat outerStrokeAlphaMult_;  // For pulsing.
-  base::scoped_nsobject<NSImage> overlayImage_;
 }
 
 // Turn off theming.  Temporary work-around.
@@ -90,6 +89,10 @@ typedef enum {
 - (NSBezierPath*)clipPathForFrame:(NSRect)cellFrame
                            inView:(NSView*)controlView;
 
+// Returns the amount by which the control frame is inset on all sides for
+// drawing.
+- (CGFloat)insetInView:(NSView*)controlView;
+
 // Turn on or off pulse sticking.  When turning off sticking, leave our pulse
 // state in the correct ending position for our isMouseInside_ property.  Public
 // since it's called from the bookmark bubble.
@@ -106,9 +109,6 @@ typedef enum {
 // Actually fetches current mouse position and does a hit test.
 - (BOOL)isMouseReallyInside;
 
-// Returns the offset of the start of the text in the cell.
-- (CGFloat)textStartXOffset;
-
 // Defines the top offset of text within the cell. Used by drawTitle and can
 // be overriden by objects that inherit this class for placement of text.
 - (int)verticalTextOffset;
@@ -121,10 +121,6 @@ typedef enum {
 - (BOOL)isMaterialDesignButtonType;
 
 @property(assign, nonatomic) CGFloat hoverAlpha;
-
-// An image that will be drawn after the normal content of the button cell,
-// overlaying it.  Never themed.
-@property(retain, nonatomic) NSImage* overlayImage;
 
 @end
 

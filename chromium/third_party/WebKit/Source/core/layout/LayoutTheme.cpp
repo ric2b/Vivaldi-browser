@@ -39,7 +39,6 @@
 #include "core/html/forms/SpinButtonElement.h"
 #include "core/html/forms/TextControlInnerElements.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/html/shadow/MediaControlElements.h"
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/layout/LayoutBox.h"
 #include "core/layout/LayoutThemeMobile.h"
@@ -51,6 +50,7 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/Theme.h"
 #include "platform/fonts/FontSelector.h"
+#include "platform/graphics/TouchAction.h"
 #include "platform/text/PlatformLocale.h"
 #include "platform/text/StringTruncator.h"
 #include "platform/wtf/text/StringBuilder.h"
@@ -160,9 +160,10 @@ void LayoutTheme::AdjustStyle(ComputedStyle& style, Element* e) {
 
         // Padding
         LengthBox padding_box = platform_theme_->ControlPadding(
-            part, style.GetFont().GetFontDescription(), style.Padding(),
+            part, style.GetFont().GetFontDescription(), style.PaddingTop(),
+            style.PaddingRight(), style.PaddingBottom(), style.PaddingLeft(),
             style.EffectiveZoom());
-        if (padding_box != style.Padding())
+        if (!style.PaddingEqual(padding_box))
           style.SetPadding(padding_box);
 
         // Whitespace
@@ -256,7 +257,7 @@ void LayoutTheme::AdjustStyle(ComputedStyle& style, Element* e) {
 String LayoutTheme::ExtraDefaultStyleSheet() {
   StringBuilder runtime_css;
   if (RuntimeEnabledFeatures::contextMenuEnabled())
-    runtime_css.Append("menu[type=\"popup\" i] { display: none; }");
+    runtime_css.Append("menu[type=\"context\" i] { display: none; }");
   return runtime_css.ToString();
 }
 
@@ -521,7 +522,7 @@ bool LayoutTheme::IsFocused(const LayoutObject& o) {
   LocalFrame* frame = document.GetFrame();
   return node == document.FocusedElement() && node->IsFocused() &&
          node->ShouldHaveFocusAppearance() && frame &&
-         frame->Selection().IsFocusedAndActive();
+         frame->Selection().FrameIsFocusedAndActive();
 }
 
 bool LayoutTheme::IsPressed(const LayoutObject& o) {
@@ -626,10 +627,10 @@ void LayoutTheme::AdjustSliderContainerStyle(ComputedStyle& style,
   if (e && (e->ShadowPseudoId() == "-webkit-media-slider-container" ||
             e->ShadowPseudoId() == "-webkit-slider-container")) {
     if (style.Appearance() == kSliderVerticalPart) {
-      style.SetTouchAction(kTouchActionPanX);
+      style.SetTouchAction(TouchAction::kTouchActionPanX);
       style.SetAppearance(kNoControlPart);
     } else {
-      style.SetTouchAction(kTouchActionPanY);
+      style.SetTouchAction(TouchAction::kTouchActionPanY);
       style.SetAppearance(kNoControlPart);
     }
   }

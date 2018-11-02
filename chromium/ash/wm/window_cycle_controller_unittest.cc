@@ -12,18 +12,16 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/scoped_root_window_for_new_windows.h"
 #include "ash/session/session_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shelf_view_test_api.h"
 #include "ash/test/test_app_list_view_presenter_impl.h"
 #include "ash/test/test_session_controller_client.h"
-#include "ash/test/test_shelf_delegate.h"
 #include "ash/test/test_shell_delegate.h"
 #include "ash/wm/window_cycle_list.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm_window.h"
@@ -74,7 +72,7 @@ class EventCounter : public ui::EventHandler {
 };
 
 bool IsWindowMinimized(aura::Window* window) {
-  return WmWindow::Get(window)->GetWindowState()->IsMinimized();
+  return wm::GetWindowState(window)->IsMinimized();
 }
 
 }  // namespace
@@ -101,14 +99,13 @@ class WindowCycleControllerTest : public test::AshTestBase {
   aura::Window* CreatePanelWindow() {
     gfx::Rect rect(100, 100);
     aura::Window* window = CreateTestWindowInShellWithDelegateAndType(
-        NULL, ui::wm::WINDOW_TYPE_PANEL, 0, rect);
-    test::TestShelfDelegate::instance()->AddShelfItem(WmWindow::Get(window));
+        NULL, aura::client::WINDOW_TYPE_PANEL, 0, rect);
     shelf_view_test_->RunMessageLoopUntilAnimationsDone();
     return window;
   }
 
   const aura::Window::Windows GetWindows(WindowCycleController* controller) {
-    return WmWindow::ToAuraWindows(controller->window_cycle_list()->windows());
+    return controller->window_cycle_list()->windows();
   }
 
   const views::Widget* GetWindowCycleListWidget() const {
@@ -411,8 +408,7 @@ TEST_F(WindowCycleControllerTest, AlwaysOnTopMultipleRootWindows) {
   EXPECT_EQ(root_windows[0], window1->GetRootWindow());
 
   // Move the active root window to the secondary root and create two windows.
-  ScopedRootWindowForNewWindows root_for_new_windows(
-      WmWindow::Get(root_windows[1]));
+  ScopedRootWindowForNewWindows root_for_new_windows(root_windows[1]);
   std::unique_ptr<Window> window2(CreateTestWindowInShellWithId(2));
   EXPECT_EQ(root_windows[1], window2->GetRootWindow());
 

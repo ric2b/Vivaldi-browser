@@ -9,6 +9,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ui/autofill/create_card_unmask_prompt_view.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/autofill/view_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
@@ -79,6 +80,7 @@ CardUnmaskPromptViews::CardUnmaskPromptViews(
       progress_label_(nullptr),
       overlay_animation_(this),
       weak_ptr_factory_(this) {
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::CARD_UNMASK);
 }
 
 CardUnmaskPromptViews::~CardUnmaskPromptViews() {
@@ -114,8 +116,9 @@ void CardUnmaskPromptViews::GotVerificationResult(
         IDS_AUTOFILL_CARD_UNMASK_VERIFICATION_SUCCESS));
     progress_throbber_->SetChecked(true);
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, base::Bind(&CardUnmaskPromptViews::ClosePrompt,
-                              weak_ptr_factory_.GetWeakPtr()),
+        FROM_HERE,
+        base::BindOnce(&CardUnmaskPromptViews::ClosePrompt,
+                       weak_ptr_factory_.GetWeakPtr()),
         controller_->GetSuccessMessageDuration());
   } else {
     // TODO(estade): it's somewhat jarring when the error comes back too
@@ -245,7 +248,7 @@ views::View* CardUnmaskPromptViews::CreateFootnoteView() {
   return storage_row_;
 }
 
-gfx::Size CardUnmaskPromptViews::GetPreferredSize() const {
+gfx::Size CardUnmaskPromptViews::CalculatePreferredSize() const {
   // Must hardcode a width so the label knows where to wrap.
   const int kWidth = 375;
   return gfx::Size(kWidth, GetHeightForWidth(kWidth));

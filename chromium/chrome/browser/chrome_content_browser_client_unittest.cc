@@ -19,7 +19,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/browsing_data/mock_browsing_data_remover_delegate.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -30,6 +29,7 @@
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
+#include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/storage_partition.h"
@@ -180,7 +180,7 @@ TEST_F(DisableWebRtcEncryptionFlagTest, StableChannel) {
 class BlinkSettingsFieldTrialTest : public testing::Test {
  public:
   static const char kParserFieldTrialName[];
-  static const char kIFrameFieldTrialName[];
+  static const char kPreloadScanningFieldTrialName[];
   static const char kFakeGroupName[];
   static const char kDefaultGroupName[];
 
@@ -237,8 +237,8 @@ class BlinkSettingsFieldTrialTest : public testing::Test {
 
 const char BlinkSettingsFieldTrialTest::kParserFieldTrialName[] =
     "BackgroundHtmlParserTokenLimits";
-const char BlinkSettingsFieldTrialTest::kIFrameFieldTrialName[] =
-    "LowPriorityIFrames";
+const char BlinkSettingsFieldTrialTest::kPreloadScanningFieldTrialName[] =
+    "HtmlPreloadScanning";
 const char BlinkSettingsFieldTrialTest::kFakeGroupName[] = "FakeGroup";
 const char BlinkSettingsFieldTrialTest::kDefaultGroupName[] = "Default";
 
@@ -275,7 +275,7 @@ TEST_F(BlinkSettingsFieldTrialTest, FieldTrialEnabled) {
 TEST_F(BlinkSettingsFieldTrialTest, MultipleFieldTrialsEnabled) {
   CreateFieldTrialWithParams(kParserFieldTrialName, kFakeGroupName,
                              "key1", "value1", "key2", "value2");
-  CreateFieldTrialWithParams(kIFrameFieldTrialName, kFakeGroupName,
+  CreateFieldTrialWithParams(kPreloadScanningFieldTrialName, kFakeGroupName,
                              "keyA", "valueA", "keyB", "valueB");
   AppendContentBrowserClientSwitches();
   EXPECT_TRUE(command_line().HasSwitch(switches::kBlinkSettings));
@@ -286,7 +286,7 @@ TEST_F(BlinkSettingsFieldTrialTest, MultipleFieldTrialsEnabled) {
 TEST_F(BlinkSettingsFieldTrialTest, MultipleFieldTrialsDuplicateKeys) {
   CreateFieldTrialWithParams(kParserFieldTrialName, kFakeGroupName,
                              "key1", "value1", "key2", "value2");
-  CreateFieldTrialWithParams(kIFrameFieldTrialName, kFakeGroupName,
+  CreateFieldTrialWithParams(kPreloadScanningFieldTrialName, kFakeGroupName,
                              "key2", "duplicate", "key3", "value3");
   AppendContentBrowserClientSwitches();
   EXPECT_TRUE(command_line().HasSwitch(switches::kBlinkSettings));
@@ -350,19 +350,14 @@ namespace {
 class ChromeContentBrowserClientClearSiteDataTest : public testing::Test {
  public:
   void SetUp() override {
-    BrowsingDataRemoverFactory::GetForBrowserContext(profile())
-        ->SetEmbedderDelegate(
-            base::MakeUnique<MockBrowsingDataRemoverDelegate>());
+    content::BrowserContext::GetBrowsingDataRemover(profile())
+        ->SetEmbedderDelegate(&mock_delegate_);
     run_loop_.reset(new base::RunLoop());
   }
 
   content::BrowserContext* profile() { return &profile_; }
 
-  MockBrowsingDataRemoverDelegate* delegate() {
-    return static_cast<MockBrowsingDataRemoverDelegate*>(
-        BrowsingDataRemoverFactory::GetForBrowserContext(profile())
-            ->GetEmbedderDelegate());
-  }
+  MockBrowsingDataRemoverDelegate* delegate() { return &mock_delegate_; }
 
   void OnClearingFinished() { run_loop_->Quit(); }
 
@@ -373,6 +368,7 @@ class ChromeContentBrowserClientClearSiteDataTest : public testing::Test {
 
  private:
   std::unique_ptr<base::RunLoop> run_loop_;
+  MockBrowsingDataRemoverDelegate mock_delegate_;
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
 };
@@ -392,30 +388,30 @@ TEST_F(ChromeContentBrowserClientClearSiteDataTest, Parameters) {
   } test_cases[] = {
       {false, false, false, 0},
       {true, false, false,
-       BrowsingDataRemover::DATA_TYPE_COOKIES |
-           BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
+       content::BrowsingDataRemover::DATA_TYPE_COOKIES |
+           content::BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
            ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PLUGIN_DATA},
-      {false, true, false, BrowsingDataRemover::DATA_TYPE_DOM_STORAGE},
-      {false, false, true, BrowsingDataRemover::DATA_TYPE_CACHE},
+      {false, true, false, content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE},
+      {false, false, true, content::BrowsingDataRemover::DATA_TYPE_CACHE},
       {true, true, false,
-       BrowsingDataRemover::DATA_TYPE_COOKIES |
-           BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
+       content::BrowsingDataRemover::DATA_TYPE_COOKIES |
+           content::BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
            ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PLUGIN_DATA |
-           BrowsingDataRemover::DATA_TYPE_DOM_STORAGE},
+           content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE},
       {true, false, true,
-       BrowsingDataRemover::DATA_TYPE_COOKIES |
-           BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
+       content::BrowsingDataRemover::DATA_TYPE_COOKIES |
+           content::BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
            ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PLUGIN_DATA |
-           BrowsingDataRemover::DATA_TYPE_CACHE},
+           content::BrowsingDataRemover::DATA_TYPE_CACHE},
       {false, true, true,
-       BrowsingDataRemover::DATA_TYPE_DOM_STORAGE |
-           BrowsingDataRemover::DATA_TYPE_CACHE},
+       content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE |
+           content::BrowsingDataRemover::DATA_TYPE_CACHE},
       {true, true, true,
-       BrowsingDataRemover::DATA_TYPE_COOKIES |
-           BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
+       content::BrowsingDataRemover::DATA_TYPE_COOKIES |
+           content::BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
            ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PLUGIN_DATA |
-           BrowsingDataRemover::DATA_TYPE_DOM_STORAGE |
-           BrowsingDataRemover::DATA_TYPE_CACHE},
+           content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE |
+           content::BrowsingDataRemover::DATA_TYPE_CACHE},
   };
 
   for (unsigned int i = 0; i < arraysize(test_cases); ++i) {
@@ -430,8 +426,8 @@ TEST_F(ChromeContentBrowserClientClearSiteDataTest, Parameters) {
     // calls. In the latter case, the removal mask will be split into two
     // parts - one for the origin deletion and one for the registrable domain.
     const int domain_scoped_types =
-        BrowsingDataRemover::DATA_TYPE_COOKIES |
-        BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
+        content::BrowsingDataRemover::DATA_TYPE_COOKIES |
+        content::BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
         ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PLUGIN_DATA;
     int registrable_domain_deletion_mask = test_case.mask & domain_scoped_types;
     int origin_deletion_mask = test_case.mask & ~domain_scoped_types;
@@ -513,8 +509,8 @@ TEST_F(ChromeContentBrowserClientClearSiteDataTest, RegistrableDomains) {
 
     delegate()->ExpectCall(
         base::Time(), base::Time::Max(),
-        BrowsingDataRemover::DATA_TYPE_COOKIES |
-            BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
+        content::BrowsingDataRemover::DATA_TYPE_COOKIES |
+            content::BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
             ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PLUGIN_DATA,
         ChromeBrowsingDataRemoverDelegate::ALL_ORIGIN_TYPES,
         *registrable_domain_filter_builder);
@@ -525,7 +521,7 @@ TEST_F(ChromeContentBrowserClientClearSiteDataTest, RegistrableDomains) {
     origin_filter_builder->AddOrigin(url::Origin(GURL(test_case.origin)));
 
     delegate()->ExpectCall(base::Time(), base::Time::Max(),
-                           BrowsingDataRemover::DATA_TYPE_CACHE,
+                           content::BrowsingDataRemover::DATA_TYPE_CACHE,
                            ChromeBrowsingDataRemoverDelegate::ALL_ORIGIN_TYPES,
                            *origin_filter_builder);
 

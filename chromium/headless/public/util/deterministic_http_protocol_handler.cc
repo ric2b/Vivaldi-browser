@@ -10,6 +10,7 @@
 #include "headless/public/util/deterministic_dispatcher.h"
 #include "headless/public/util/generic_url_request_job.h"
 #include "headless/public/util/http_url_fetcher.h"
+#include "net/http/http_response_headers.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 
@@ -32,7 +33,6 @@ class DeterministicHttpProtocolHandler::NopGenericURLRequestJobDelegate
   void OnResourceLoadComplete(
       const Request* request,
       const GURL& final_url,
-      int http_response_code,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
       const char* body,
       size_t body_size) override {}
@@ -45,6 +45,7 @@ DeterministicHttpProtocolHandler::DeterministicHttpProtocolHandler(
     DeterministicDispatcher* deterministic_dispatcher,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
     : deterministic_dispatcher_(deterministic_dispatcher),
+      headless_browser_context_(nullptr),
       io_task_runner_(io_task_runner),
       nop_delegate_(new NopGenericURLRequestJobDelegate()) {}
 
@@ -70,7 +71,7 @@ net::URLRequestJob* DeterministicHttpProtocolHandler::MaybeCreateJob(
   return new GenericURLRequestJob(
       request, network_delegate, deterministic_dispatcher_,
       base::MakeUnique<HttpURLFetcher>(url_request_context_.get()),
-      nop_delegate_.get());
+      nop_delegate_.get(), headless_browser_context_);
 }
 
 }  // namespace headless

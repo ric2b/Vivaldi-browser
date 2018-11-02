@@ -4,8 +4,6 @@
 
 #include "core/layout/ng/inline/ng_physical_line_box_fragment.h"
 
-#include "core/layout/ng/ng_floating_object.h"
-
 namespace blink {
 
 NGPhysicalLineBoxFragment::NGPhysicalLineBoxFragment(
@@ -18,7 +16,7 @@ NGPhysicalLineBoxFragment::NGPhysicalLineBoxFragment(
                          kFragmentLineBox,
                          std::move(break_token)),
       metrics_(metrics) {
-  children_.Swap(children);
+  children_.swap(children);
 }
 
 }  // namespace blink

@@ -25,6 +25,7 @@
 #include "ui/aura/window_tracker.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/ime/input_method.h"
 #include "ui/compositor/dip_util.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
@@ -91,8 +92,8 @@ WindowEventDispatcher::WindowEventDispatcher(WindowTreeHost* host)
       move_hold_count_(0),
       dispatching_held_event_(nullptr),
       observer_manager_(this),
-      env_controller_(new EnvInputStateController),
       event_targeter_(new WindowTargeter),
+      skip_ime_(false),
       repost_event_factory_(this),
       held_event_factory_(this) {
   ui::GestureRecognizer::Get()->AddGestureEventHelper(this);
@@ -230,7 +231,8 @@ void WindowEventDispatcher::OnHostLostMouseGrab() {
 
 void WindowEventDispatcher::OnCursorMovedToRootLocation(
     const gfx::Point& root_location) {
-  env_controller_->SetLastMouseLocation(window(), root_location);
+  Env::GetInstance()->env_controller()->SetLastMouseLocation(window(),
+                                                             root_location);
 
   // Synthesize a mouse move in case the cursor's location in root coordinates
   // changed but its position in WindowTreeHost coordinates did not.
@@ -277,7 +279,8 @@ ui::EventDispatchDetails WindowEventDispatcher::DispatchMouseEnterOrExit(
     Window* target,
     const ui::MouseEvent& event,
     ui::EventType type) {
-  env_controller_->UpdateStateForMouseEvent(window(), event);
+  Env::GetInstance()->env_controller()->UpdateStateForMouseEvent(window(),
+                                                                 event);
   if (!mouse_moved_handler_ || !mouse_moved_handler_->delegate() ||
       !window()->Contains(mouse_moved_handler_))
     return DispatchDetails();
@@ -518,6 +521,8 @@ ui::EventDispatchDetails WindowEventDispatcher::PreDispatchEvent(
     details = PreDispatchLocatedEvent(target_window, event->AsScrollEvent());
   } else if (event->IsTouchEvent()) {
     details = PreDispatchTouchEvent(target_window, event->AsTouchEvent());
+  } else if (event->IsKeyEvent()) {
+    details = PreDispatchKeyEvent(event->AsKeyEvent());
   }
   if (details.dispatcher_destroyed || details.target_destroyed)
     return details;
@@ -813,7 +818,8 @@ DispatchDetails WindowEventDispatcher::PreDispatchMouseEvent(
     return DispatchDetails();
   }
 
-  env_controller_->UpdateStateForMouseEvent(window(), *event);
+  Env::GetInstance()->env_controller()->UpdateStateForMouseEvent(window(),
+                                                                 *event);
 
   if (IsEventCandidateForHold(*event) && !dispatching_held_event_) {
     if (move_hold_count_) {
@@ -860,7 +866,7 @@ DispatchDetails WindowEventDispatcher::PreDispatchMouseEvent(
           return target_details;
         }
         // If the |mouse_moved_handler_| changes out from under us, assume a
-        // nested message loop ran and we don't need to do anything.
+        // nested run loop ran and we don't need to do anything.
         if (mouse_moved_handler_ != old_mouse_moved_handler) {
           event->SetHandled();
           return target_details;
@@ -909,7 +915,7 @@ DispatchDetails WindowEventDispatcher::PreDispatchTouchEvent(
     return DispatchDetails();
   }
 
-  env_controller_->UpdateStateForTouchEvent(*event);
+  Env::GetInstance()->env_controller()->UpdateStateForTouchEvent(*event);
 
   ui::TouchEvent orig_event(*event, target, window());
   if (!ui::GestureRecognizer::Get()->ProcessTouchEventPreDispatch(&orig_event,
@@ -925,6 +931,16 @@ DispatchDetails WindowEventDispatcher::PreDispatchTouchEvent(
   event->set_may_cause_scrolling(orig_event.may_cause_scrolling());
 
   return PreDispatchLocatedEvent(target, event);
+}
+
+ui::EventDispatchDetails WindowEventDispatcher::PreDispatchKeyEvent(
+    ui::KeyEvent* event) {
+  if (skip_ime_ || !host_->has_input_method() ||
+      (event->flags() & ui::EF_IS_SYNTHESIZED))
+    return ui::EventDispatchDetails();
+  host_->GetInputMethod()->DispatchKeyEvent(event);
+  event->StopPropagation();
+  return ui::EventDispatchDetails();
 }
 
 }  // namespace aura

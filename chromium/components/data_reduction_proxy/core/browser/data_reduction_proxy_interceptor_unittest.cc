@@ -25,6 +25,7 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_server.h"
 #include "components/data_reduction_proxy/proto/client_config.pb.h"
 #include "components/prefs/pref_service.h"
+#include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
@@ -32,6 +33,7 @@
 #include "net/proxy/proxy_server.h"
 #include "net/socket/socket_test_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context_storage.h"
 #include "net/url_request/url_request_intercepting_job_factory.h"
@@ -172,8 +174,9 @@ TEST_F(DataReductionProxyInterceptorTest, MAYBE_TestJobFactoryChaining) {
   Init(std::move(factory1));
 
   net::TestDelegate d;
-  std::unique_ptr<net::URLRequest> req(default_context_->CreateRequest(
-      GURL("http://foo"), net::DEFAULT_PRIORITY, &d));
+  std::unique_ptr<net::URLRequest> req(
+      default_context_->CreateRequest(GURL("http://foo"), net::DEFAULT_PRIORITY,
+                                      &d, TRAFFIC_ANNOTATION_FOR_TESTS));
 
   req->Start();
   base::RunLoop().Run();
@@ -262,7 +265,8 @@ TEST_F(DataReductionProxyInterceptorWithServerTest, TestBypass) {
   // DataReductionProxyProtocolTest.
   net::TestDelegate delegate;
   std::unique_ptr<net::URLRequest> request(context().CreateRequest(
-      direct().GetURL("/block10.html"), net::DEFAULT_PRIORITY, &delegate));
+      direct().GetURL("/block10.html"), net::DEFAULT_PRIORITY, &delegate,
+      TRAFFIC_ANNOTATION_FOR_TESTS));
   request->Start();
   EXPECT_TRUE(request->is_pending());
   base::RunLoop().Run();
@@ -274,7 +278,8 @@ TEST_F(DataReductionProxyInterceptorWithServerTest, TestBypass) {
 TEST_F(DataReductionProxyInterceptorWithServerTest, TestNoBypass) {
   net::TestDelegate delegate;
   std::unique_ptr<net::URLRequest> request(context().CreateRequest(
-      direct().GetURL("/noblock.html"), net::DEFAULT_PRIORITY, &delegate));
+      direct().GetURL("/noblock.html"), net::DEFAULT_PRIORITY, &delegate,
+      TRAFFIC_ANNOTATION_FOR_TESTS));
   request->Start();
   EXPECT_TRUE(request->is_pending());
   base::RunLoop().Run();
@@ -312,8 +317,8 @@ class DataReductionProxyInterceptorEndToEndTest : public testing::Test {
   // Creates a URLRequest using the test's TestURLRequestContext and executes
   // it. Returns the created URLRequest.
   std::unique_ptr<net::URLRequest> CreateAndExecuteRequest(const GURL& url) {
-    std::unique_ptr<net::URLRequest> request(
-        context_.CreateRequest(url, net::IDLE, &delegate_));
+    std::unique_ptr<net::URLRequest> request(context_.CreateRequest(
+        url, net::IDLE, &delegate_, TRAFFIC_ANNOTATION_FOR_TESTS));
     request->Start();
     drp_test_context_->RunUntilIdle();
     return request;
@@ -541,13 +546,7 @@ TEST_F(DataReductionProxyInterceptorEndToEndTest, RedirectWithBypassAndRetry) {
   EXPECT_EQ(std::vector<GURL>(1, GURL("http://foo.com")), request->url_chain());
 }
 
-// https://crbug.com/668197: Flaky on android_n5x_swarming_rel bot.
-#if defined(OS_ANDROID)
-#define MAYBE_RedirectChainToHttps DISABLED_RedirectChainToHttps
-#else
-#define MAYBE_RedirectChainToHttps RedirectChainToHttps
-#endif
-TEST_F(DataReductionProxyInterceptorEndToEndTest, MAYBE_RedirectChainToHttps) {
+TEST_F(DataReductionProxyInterceptorEndToEndTest, RedirectChainToHttps) {
   // First, a redirect is successfully received through the Data Reduction
   // Proxy. HSTS is forced for play.google.com and prebaked into Chrome, so
   // http://play.google.com will automatically be redirected to
@@ -579,6 +578,9 @@ TEST_F(DataReductionProxyInterceptorEndToEndTest, MAYBE_RedirectChainToHttps) {
 
   std::unique_ptr<net::URLRequest> request =
       CreateAndExecuteRequest(GURL("http://music.google.com"));
+  request->SetLoadFlags(net::LOAD_DISABLE_CACHE |
+                        net::LOAD_DO_NOT_SEND_COOKIES |
+                        net::LOAD_DO_NOT_SAVE_COOKIES);
   EXPECT_FALSE(delegate().request_failed());
   EXPECT_EQ(kBody, delegate().data_received());
 

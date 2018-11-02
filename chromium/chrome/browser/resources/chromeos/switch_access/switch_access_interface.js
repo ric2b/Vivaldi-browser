@@ -12,12 +12,12 @@ function SwitchAccessInterface() {
    * @type {SwitchAccessPrefs}
    */
   this.switchAccessPrefs = null;
-};
+}
 
 SwitchAccessInterface.prototype = {
   moveToNode: function(doNext) {},
 
-  doDefault: function() {},
+  selectCurrentNode: function() {},
 
   showOptionsPage: function() {},
 

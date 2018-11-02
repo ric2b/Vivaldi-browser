@@ -12,6 +12,7 @@
 #include "build/build_config.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
+#include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/media/audio_stream_monitor.h"
@@ -257,16 +258,16 @@ class WebContentsImplTest : public RenderViewHostImplTestHarness {
     RenderViewHostImplTestHarness::TearDown();
   }
 
-  bool has_audio_power_save_blocker() {
+  bool has_audio_wake_lock() {
     return contents()
         ->media_web_contents_observer()
-        ->has_audio_power_save_blocker_for_testing();
+        ->has_audio_wake_lock_for_testing();
   }
 
-  bool has_video_power_save_blocker() {
+  bool has_video_wake_lock() {
     return contents()
         ->media_web_contents_observer()
-        ->has_video_power_save_blocker_for_testing();
+        ->has_video_wake_lock_for_testing();
   }
 };
 
@@ -2168,6 +2169,52 @@ TEST_F(WebContentsImplTest, ShowInterstitialThenCloseAndShutdown) {
   EXPECT_TRUE(deleted);
 }
 
+// Test for https://crbug.com/730592, where deleting a WebContents while its
+// interstitial is navigating could lead to a crash.
+TEST_F(WebContentsImplTest, CreateInterstitialForClosingTab) {
+  // Navigate to a page.
+  GURL url1("http://www.google.com");
+  main_test_rfh()->NavigateAndCommitRendererInitiated(true, url1);
+  EXPECT_EQ(1, controller().GetEntryCount());
+
+  // Initiate a browser navigation that will trigger an interstitial.
+  controller().LoadURL(GURL("http://www.evil.com"), Referrer(),
+                       ui::PAGE_TRANSITION_TYPED, std::string());
+
+  // Show an interstitial.
+  TestInterstitialPage::InterstitialState state = TestInterstitialPage::INVALID;
+  bool deleted = false;
+  GURL url2("http://interstitial");
+  TestInterstitialPage* interstitial =
+      new TestInterstitialPage(contents(), true, url2, &state, &deleted);
+  TestInterstitialPageStateGuard state_guard(interstitial);
+  interstitial->Show();
+  TestRenderFrameHost* interstitial_rfh =
+      static_cast<TestRenderFrameHost*>(interstitial->GetMainFrame());
+  // The interstitial should not show until its navigation has committed.
+  EXPECT_FALSE(interstitial->is_showing());
+  EXPECT_FALSE(contents()->ShowingInterstitialPage());
+  EXPECT_EQ(nullptr, contents()->GetInterstitialPage());
+
+  // Close the tab before the interstitial commits.
+  DeleteContents();
+  EXPECT_EQ(TestInterstitialPage::CANCELED, state);
+
+  // The interstitial page triggers a DidStartNavigation after the tab is gone,
+  // but before the interstitial page itself is deleted.  This should not crash.
+  Navigator* interstitial_navigator =
+      interstitial_rfh->frame_tree_node()->navigator();
+  interstitial_navigator->DidStartProvisionalLoad(
+      interstitial_rfh, url2, std::vector<GURL>(), base::TimeTicks::Now());
+  EXPECT_FALSE(deleted);
+
+  // Simulate a commit in the interstitial page, which should also not crash.
+  interstitial_rfh->SimulateNavigationCommit(url2);
+
+  RunAllPendingInMessageLoop();
+  EXPECT_TRUE(deleted);
+}
+
 // Test that after Proceed is called and an interstitial is still shown, no more
 // commands get executed.
 TEST_F(WebContentsImplTest, ShowInterstitialProceedMultipleCommands) {
@@ -3214,15 +3261,15 @@ TEST_F(WebContentsImplTest, NoEarlyStop) {
   EXPECT_FALSE(contents()->IsLoading());
 }
 
-TEST_F(WebContentsImplTest, MediaPowerSaveBlocking) {
+TEST_F(WebContentsImplTest, MediaWakeLock) {
   // Verify that both negative and positive player ids don't blow up.
   const int kPlayerAudioVideoId = 15;
   const int kPlayerAudioOnlyId = -15;
   const int kPlayerVideoOnlyId = 30;
   const int kPlayerRemoteId = -30;
 
-  EXPECT_FALSE(has_audio_power_save_blocker());
-  EXPECT_FALSE(has_video_power_save_blocker());
+  EXPECT_FALSE(has_audio_wake_lock());
+  EXPECT_FALSE(has_video_wake_lock());
 
   TestRenderFrameHost* rfh = main_test_rfh();
   AudioStreamMonitor* monitor = contents()->audio_stream_monitor();
@@ -3230,100 +3277,100 @@ TEST_F(WebContentsImplTest, MediaPowerSaveBlocking) {
   // Ensure RenderFrame is initialized before simulating events coming from it.
   main_test_rfh()->InitializeRenderFrameIfNeeded();
 
-  // Send a fake audio stream monitor notification.  The audio power save
-  // blocker should be created.
+  // Send a fake audio stream monitor notification.  The audio wake lock
+  // should be created.
   monitor->set_was_recently_audible_for_testing(true);
   contents()->NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
-  EXPECT_TRUE(has_audio_power_save_blocker());
+  EXPECT_TRUE(has_audio_wake_lock());
 
   // Send another fake notification, this time when WasRecentlyAudible() will
-  // be false.  The power save blocker should be released.
+  // be false.  The wake lock should be released.
   monitor->set_was_recently_audible_for_testing(false);
   contents()->NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
-  EXPECT_FALSE(has_audio_power_save_blocker());
+  EXPECT_FALSE(has_audio_wake_lock());
 
-  // Start a player with both audio and video.  A video power save blocker
+  // Start a player with both audio and video.  A video wake lock
   // should be created.  If audio stream monitoring is available, an audio power
   // save blocker should be created too.
   rfh->OnMessageReceived(MediaPlayerDelegateHostMsg_OnMediaPlaying(
       0, kPlayerAudioVideoId, true, true, false,
       media::MediaContentType::Persistent));
-  EXPECT_TRUE(has_video_power_save_blocker());
-  EXPECT_FALSE(has_audio_power_save_blocker());
+  EXPECT_TRUE(has_video_wake_lock());
+  EXPECT_FALSE(has_audio_wake_lock());
 
-  // Upon hiding the video power save blocker should be released.
+  // Upon hiding the video wake lock should be released.
   contents()->WasHidden();
-  EXPECT_FALSE(has_video_power_save_blocker());
+  EXPECT_FALSE(has_video_wake_lock());
 
   // Start another player that only has video.  There should be no change in
-  // the power save blockers.  The notification should take into account the
+  // the wake locks.  The notification should take into account the
   // visibility state of the WebContents.
   rfh->OnMessageReceived(MediaPlayerDelegateHostMsg_OnMediaPlaying(
       0, kPlayerVideoOnlyId, true, false, false,
       media::MediaContentType::Persistent));
-  EXPECT_FALSE(has_video_power_save_blocker());
-  EXPECT_FALSE(has_audio_power_save_blocker());
+  EXPECT_FALSE(has_video_wake_lock());
+  EXPECT_FALSE(has_audio_wake_lock());
 
   // Showing the WebContents should result in the creation of the blocker.
   contents()->WasShown();
-  EXPECT_TRUE(has_video_power_save_blocker());
+  EXPECT_TRUE(has_video_wake_lock());
 
   // Start another player that only has audio.  There should be no change in
-  // the power save blockers.
+  // the wake locks.
   rfh->OnMessageReceived(MediaPlayerDelegateHostMsg_OnMediaPlaying(
       0, kPlayerAudioOnlyId, false, true, false,
       media::MediaContentType::Persistent));
-  EXPECT_TRUE(has_video_power_save_blocker());
-  EXPECT_FALSE(has_audio_power_save_blocker());
+  EXPECT_TRUE(has_video_wake_lock());
+  EXPECT_FALSE(has_audio_wake_lock());
 
   // Start a remote player. There should be no change in the power save
   // blockers.
   rfh->OnMessageReceived(MediaPlayerDelegateHostMsg_OnMediaPlaying(
       0, kPlayerRemoteId, true, true, true,
       media::MediaContentType::Persistent));
-  EXPECT_TRUE(has_video_power_save_blocker());
-  EXPECT_FALSE(has_audio_power_save_blocker());
+  EXPECT_TRUE(has_video_wake_lock());
+  EXPECT_FALSE(has_audio_wake_lock());
 
-  // Destroy the original audio video player.  Both power save blockers should
+  // Destroy the original audio video player.  Both wake locks should
   // remain.
   rfh->OnMessageReceived(
       MediaPlayerDelegateHostMsg_OnMediaPaused(0, kPlayerAudioVideoId, false));
-  EXPECT_TRUE(has_video_power_save_blocker());
-  EXPECT_FALSE(has_audio_power_save_blocker());
+  EXPECT_TRUE(has_video_wake_lock());
+  EXPECT_FALSE(has_audio_wake_lock());
 
-  // Destroy the audio only player.  The video power save blocker should remain.
+  // Destroy the audio only player.  The video wake lock should remain.
   rfh->OnMessageReceived(
       MediaPlayerDelegateHostMsg_OnMediaPaused(0, kPlayerAudioOnlyId, false));
-  EXPECT_TRUE(has_video_power_save_blocker());
-  EXPECT_FALSE(has_audio_power_save_blocker());
+  EXPECT_TRUE(has_video_wake_lock());
+  EXPECT_FALSE(has_audio_wake_lock());
 
-  // Destroy the video only player.  No power save blockers should remain.
+  // Destroy the video only player.  No wake locks should remain.
   rfh->OnMessageReceived(
       MediaPlayerDelegateHostMsg_OnMediaPaused(0, kPlayerVideoOnlyId, false));
-  EXPECT_FALSE(has_video_power_save_blocker());
-  EXPECT_FALSE(has_audio_power_save_blocker());
+  EXPECT_FALSE(has_video_wake_lock());
+  EXPECT_FALSE(has_audio_wake_lock());
 
-  // Destroy the remote player. No power save blockers should remain.
+  // Destroy the remote player. No wake locks should remain.
   rfh->OnMessageReceived(
       MediaPlayerDelegateHostMsg_OnMediaPaused(0, kPlayerRemoteId, false));
-  EXPECT_FALSE(has_video_power_save_blocker());
-  EXPECT_FALSE(has_audio_power_save_blocker());
+  EXPECT_FALSE(has_video_wake_lock());
+  EXPECT_FALSE(has_audio_wake_lock());
 
-  // Start a player with both audio and video.  A video power save blocker
+  // Start a player with both audio and video.  A video wake lock
   // should be created.  If audio stream monitoring is available, an audio power
   // save blocker should be created too.
   rfh->OnMessageReceived(MediaPlayerDelegateHostMsg_OnMediaPlaying(
       0, kPlayerAudioVideoId, true, true, false,
       media::MediaContentType::Persistent));
-  EXPECT_TRUE(has_video_power_save_blocker());
-  EXPECT_FALSE(has_audio_power_save_blocker());
+  EXPECT_TRUE(has_video_wake_lock());
+  EXPECT_FALSE(has_audio_wake_lock());
 
   // Crash the renderer.
   main_test_rfh()->GetProcess()->SimulateCrash();
 
-  // Verify that all the power save blockers have been released.
-  EXPECT_FALSE(has_video_power_save_blocker());
-  EXPECT_FALSE(has_audio_power_save_blocker());
+  // Verify that all the wake locks have been released.
+  EXPECT_FALSE(has_video_wake_lock());
+  EXPECT_FALSE(has_audio_wake_lock());
 }
 
 TEST_F(WebContentsImplTest, ThemeColorChangeDependingOnFirstVisiblePaint) {

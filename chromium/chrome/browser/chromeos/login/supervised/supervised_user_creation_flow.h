@@ -22,13 +22,15 @@ class SupervisedUserCreationFlow : public ExtendedUserFlow {
   explicit SupervisedUserCreationFlow(const AccountId& manager_id);
   ~SupervisedUserCreationFlow() override;
 
+  // UserFlow:
   bool CanLockScreen() override;
   bool CanStartArc() override;
-  bool ShouldShowSettings() override;
+  bool ShouldEnableSettings() override;
   bool ShouldShowNotificationTray() override;
   bool ShouldLaunchBrowser() override;
   bool ShouldSkipPostLoginScreens() override;
   bool SupportsEarlyRestartToApplyFlags() override;
+  bool AllowsNotificationBalloons() override;
   bool HandleLoginFailure(const AuthFailure& failure) override;
   void HandleLoginSuccess(const UserContext& context) override;
   bool HandlePasswordChangeDetected() override;

@@ -7,19 +7,38 @@
 #include <utility>
 
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/wm/maximize_mode/maximize_mode_window_manager.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/window_animation_types.h"
+#include "ash/wm/window_properties.h"
 #include "ash/wm/window_state_util.h"
 #include "ash/wm/wm_event.h"
-#include "ash/wm/wm_screen_util.h"
 #include "ash/wm_window.h"
+#include "ui/aura/window.h"
+#include "ui/aura/window_delegate.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace ash {
 namespace {
+
+// Sets the restore bounds and show state overrides. These values take
+// precedence over the restore bounds and restore show state (if set).
+// If |bounds_override| is empty the values are cleared.
+void SetWindowRestoreOverrides(aura::Window* window,
+                               const gfx::Rect& bounds_override,
+                               ui::WindowShowState window_state_override) {
+  if (bounds_override.IsEmpty()) {
+    window->ClearProperty(kRestoreShowStateOverrideKey);
+    window->ClearProperty(kRestoreBoundsOverrideKey);
+    return;
+  }
+  window->SetProperty(kRestoreShowStateOverrideKey, window_state_override);
+  window->SetProperty(kRestoreBoundsOverrideKey,
+                      new gfx::Rect(bounds_override));
+}
 
 // Returns the biggest possible size for a window which is about to be
 // maximized.
@@ -27,9 +46,12 @@ gfx::Size GetMaximumSizeOfWindow(wm::WindowState* window_state) {
   DCHECK(window_state->CanMaximize() || window_state->CanResize());
 
   gfx::Size workspace_size =
-      wm::GetMaximizedWindowBoundsInParent(window_state->window()).size();
+      ScreenUtil::GetMaximizedWindowBoundsInParent(window_state->window())
+          .size();
 
-  gfx::Size size = window_state->window()->GetMaximumSize();
+  gfx::Size size = window_state->window()->delegate()
+                       ? window_state->window()->delegate()->GetMaximumSize()
+                       : gfx::Size();
   if (size.IsEmpty())
     return workspace_size;
 
@@ -41,7 +63,7 @@ gfx::Size GetMaximumSizeOfWindow(wm::WindowState* window_state) {
 gfx::Rect GetCenteredBounds(const gfx::Rect& bounds_in_parent,
                             wm::WindowState* state_object) {
   gfx::Rect work_area_in_parent =
-      wm::GetDisplayWorkAreaBoundsInParent(state_object->window());
+      ScreenUtil::GetDisplayWorkAreaBoundsInParent(state_object->window());
   work_area_in_parent.ClampToCenteredSize(bounds_in_parent.size());
   return work_area_in_parent;
 }
@@ -49,7 +71,7 @@ gfx::Rect GetCenteredBounds(const gfx::Rect& bounds_in_parent,
 // Returns the maximized/full screen and/or centered bounds of a window.
 gfx::Rect GetBoundsInMaximizedMode(wm::WindowState* state_object) {
   if (state_object->IsFullscreen() || state_object->IsPinned())
-    return wm::GetDisplayBoundsInParent(state_object->window());
+    return ScreenUtil::GetDisplayBoundsInParent(state_object->window());
 
   gfx::Rect bounds_in_parent;
   // Make the window as big as possible.
@@ -62,7 +84,7 @@ gfx::Rect GetBoundsInMaximizedMode(wm::WindowState* state_object) {
     if (state_object->HasRestoreBounds())
       bounds_in_parent = state_object->GetRestoreBoundsInParent();
     else
-      bounds_in_parent = state_object->window()->GetBounds();
+      bounds_in_parent = state_object->window()->bounds();
   }
   return GetCenteredBounds(bounds_in_parent, state_object);
 }
@@ -83,19 +105,19 @@ gfx::Rect GetRestoreBounds(wm::WindowState* window_state) {
 void MaximizeModeWindowState::UpdateWindowPosition(
     wm::WindowState* window_state) {
   gfx::Rect bounds_in_parent = GetBoundsInMaximizedMode(window_state);
-  if (bounds_in_parent == window_state->window()->GetBounds())
+  if (bounds_in_parent == window_state->window()->bounds())
     return;
   window_state->SetBoundsDirect(bounds_in_parent);
 }
 
 MaximizeModeWindowState::MaximizeModeWindowState(
-    WmWindow* window,
+    aura::Window* window,
     MaximizeModeWindowManager* creator)
     : window_(window),
       creator_(creator),
-      current_state_type_(window->GetWindowState()->GetStateType()),
+      current_state_type_(wm::GetWindowState(window)->GetStateType()),
       defer_bounds_updates_(false) {
-  old_state_.reset(window_->GetWindowState()
+  old_state_.reset(wm::GetWindowState(window)
                        ->SetStateObject(std::unique_ptr<State>(this))
                        .release());
 }
@@ -116,7 +138,7 @@ void MaximizeModeWindowState::SetDeferBoundsUpdates(bool defer_bounds_updates) {
 
   defer_bounds_updates_ = defer_bounds_updates;
   if (!defer_bounds_updates_)
-    UpdateBounds(window_->GetWindowState(), true);
+    UpdateBounds(wm::GetWindowState(window_), true);
 }
 
 void MaximizeModeWindowState::OnWMEvent(wm::WindowState* window_state,
@@ -178,7 +200,7 @@ void MaximizeModeWindowState::OnWMEvent(wm::WindowState* window_state,
         gfx::Rect bounds_in_parent =
             (static_cast<const wm::SetBoundsEvent*>(event))->requested_bounds();
         bounds_in_parent = GetCenteredBounds(bounds_in_parent, window_state);
-        if (bounds_in_parent != window_state->window()->GetBounds()) {
+        if (bounds_in_parent != window_state->window()->bounds()) {
           if (window_state->window()->IsVisible())
             window_state->SetBoundsDirectAnimated(bounds_in_parent);
           else
@@ -220,8 +242,8 @@ void MaximizeModeWindowState::AttachState(
   if (!restore_bounds.IsEmpty()) {
     // We do not want to do a session restore to our window states. Therefore
     // we tell the window to use the current default states instead.
-    window_state->window()->SetRestoreOverrides(restore_bounds,
-                                                window_state->GetShowState());
+    SetWindowRestoreOverrides(window_state->window(), restore_bounds,
+                              window_state->GetShowState());
   }
 
   // Initialize the state to a good preset.
@@ -239,8 +261,8 @@ void MaximizeModeWindowState::AttachState(
 
 void MaximizeModeWindowState::DetachState(wm::WindowState* window_state) {
   // From now on, we can use the default session restore mechanism again.
-  window_state->window()->SetRestoreOverrides(gfx::Rect(),
-                                              ui::SHOW_STATE_NORMAL);
+  SetWindowRestoreOverrides(window_state->window(), gfx::Rect(),
+                            ui::SHOW_STATE_NORMAL);
   window_state->set_can_be_dragged(true);
 }
 
@@ -269,8 +291,8 @@ void MaximizeModeWindowState::UpdateWindow(wm::WindowState* window_state,
   window_state->NotifyPreStateTypeChange(old_state_type);
 
   if (target_state == wm::WINDOW_STATE_TYPE_MINIMIZED) {
-    window_state->window()->SetVisibilityAnimationType(
-        wm::WINDOW_VISIBILITY_ANIMATION_TYPE_MINIMIZE);
+    ::wm::SetWindowVisibilityAnimationType(
+        window_state->window(), wm::WINDOW_VISIBILITY_ANIMATION_TYPE_MINIMIZE);
     window_state->window()->Hide();
     if (window_state->IsActive())
       window_state->Deactivate();
@@ -288,9 +310,9 @@ void MaximizeModeWindowState::UpdateWindow(wm::WindowState* window_state,
         window_state->window());
   }
 
-  if ((window_state->window()->GetTargetVisibility() ||
+  if ((window_state->window()->layer()->GetTargetVisibility() ||
        old_state_type == wm::WINDOW_STATE_TYPE_MINIMIZED) &&
-      !window_state->window()->GetLayer()->visible()) {
+      !window_state->window()->layer()->visible()) {
     // The layer may be hidden if the window was previously minimized. Make
     // sure it's visible.
     window_state->window()->Show();
@@ -311,7 +333,7 @@ void MaximizeModeWindowState::UpdateBounds(wm::WindowState* window_state,
   // If we have a target bounds rectangle, we center it and set it
   // accordingly.
   if (!bounds_in_parent.IsEmpty() &&
-      bounds_in_parent != window_state->window()->GetBounds()) {
+      bounds_in_parent != window_state->window()->bounds()) {
     if (current_state_type_ == wm::WINDOW_STATE_TYPE_MINIMIZED ||
         !window_state->window()->IsVisible() || !animated) {
       window_state->SetBoundsDirect(bounds_in_parent);

@@ -42,30 +42,38 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestOrderSummaryViewControllerTest,
   // No address is selected.
   // Verify the expected amounts are shown ('Total', 'Pending Shipping Price'
   // and 'Subtotal', respectively).
-  EXPECT_EQ(base::ASCIIToUTF16("USD $5.00"),
-            GetStyledLabelText(DialogViewID::ORDER_SUMMARY_TOTAL_AMOUNT_LABEL));
-  EXPECT_EQ(base::ASCIIToUTF16("$0.00"),
-            GetStyledLabelText(DialogViewID::ORDER_SUMMARY_LINE_ITEM_1));
+  EXPECT_EQ(base::ASCIIToUTF16("USD"),
+            GetLabelText(DialogViewID::ORDER_SUMMARY_TOTAL_CURRENCY_LABEL));
   EXPECT_EQ(base::ASCIIToUTF16("$5.00"),
-            GetStyledLabelText(DialogViewID::ORDER_SUMMARY_LINE_ITEM_2));
+            GetLabelText(DialogViewID::ORDER_SUMMARY_TOTAL_AMOUNT_LABEL));
+  EXPECT_EQ(base::ASCIIToUTF16("$0.00"),
+            GetLabelText(DialogViewID::ORDER_SUMMARY_LINE_ITEM_1));
+  EXPECT_EQ(base::ASCIIToUTF16("$5.00"),
+            GetLabelText(DialogViewID::ORDER_SUMMARY_LINE_ITEM_2));
 
   // Go to the shipping address screen and select the first address (MI state).
   ClickOnBackArrow();
   OpenShippingAddressSectionScreen();
   ResetEventObserverForSequence(std::list<DialogEvent>{
-      DialogEvent::BACK_NAVIGATION, DialogEvent::SPEC_DONE_UPDATING});
+      DialogEvent::SPEC_DONE_UPDATING, DialogEvent::BACK_NAVIGATION});
   ClickOnChildInListViewAndWait(
       /* child_index=*/0, /*total_num_children=*/2,
-      DialogViewID::SHIPPING_ADDRESS_SHEET_LIST_VIEW);
+      DialogViewID::SHIPPING_ADDRESS_SHEET_LIST_VIEW,
+      /*wait_for_animation=*/false);
+  // Wait for the animation here explicitly, otherwise
+  // ClickOnChildInListViewAndWait tries to install an AnimationDelegate before
+  // the animation is kicked off (since that's triggered off of the spec being
+  // updated) and this hits a DCHECK.
+  WaitForAnimation();
 
   // Michigan address is selected and has standard shipping.
-  std::vector<base::string16> shipping_address_labels = GetThreeLineLabelValues(
+  std::vector<base::string16> shipping_address_labels = GetProfileLabelValues(
       DialogViewID::PAYMENT_SHEET_SHIPPING_ADDRESS_SECTION);
   EXPECT_EQ(base::ASCIIToUTF16("Jane A. Smith"), shipping_address_labels[0]);
   EXPECT_EQ(
       base::ASCIIToUTF16("ACME, 123 Main Street, Unit 1, Greensdale, MI 48838"),
       shipping_address_labels[1]);
-  EXPECT_EQ(base::ASCIIToUTF16("13105557889"), shipping_address_labels[2]);
+  EXPECT_EQ(base::ASCIIToUTF16("+1 310-555-7889"), shipping_address_labels[2]);
   std::vector<base::string16> shipping_option_labels =
       GetShippingOptionLabelValues(
           DialogViewID::PAYMENT_SHEET_SHIPPING_OPTION_SECTION);
@@ -78,30 +86,38 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestOrderSummaryViewControllerTest,
 
   // Verify the expected amounts are shown ('Total', 'Standard shipping in US'
   // and 'Subtotal', respectively).
-  EXPECT_EQ(base::ASCIIToUTF16("USD $10.00"),
-            GetStyledLabelText(DialogViewID::ORDER_SUMMARY_TOTAL_AMOUNT_LABEL));
+  EXPECT_EQ(base::ASCIIToUTF16("USD"),
+            GetLabelText(DialogViewID::ORDER_SUMMARY_TOTAL_CURRENCY_LABEL));
+  EXPECT_EQ(base::ASCIIToUTF16("$10.00"),
+            GetLabelText(DialogViewID::ORDER_SUMMARY_TOTAL_AMOUNT_LABEL));
   EXPECT_EQ(base::ASCIIToUTF16("$5.00"),
-            GetStyledLabelText(DialogViewID::ORDER_SUMMARY_LINE_ITEM_1));
+            GetLabelText(DialogViewID::ORDER_SUMMARY_LINE_ITEM_1));
   EXPECT_EQ(base::ASCIIToUTF16("$5.00"),
-            GetStyledLabelText(DialogViewID::ORDER_SUMMARY_LINE_ITEM_2));
+            GetLabelText(DialogViewID::ORDER_SUMMARY_LINE_ITEM_2));
 
   // Go to the shipping address screen and select the second address (CA state).
   ClickOnBackArrow();
   OpenShippingAddressSectionScreen();
   ResetEventObserverForSequence(std::list<DialogEvent>{
-      DialogEvent::BACK_NAVIGATION, DialogEvent::SPEC_DONE_UPDATING});
+      DialogEvent::SPEC_DONE_UPDATING, DialogEvent::BACK_NAVIGATION});
   ClickOnChildInListViewAndWait(
       /* child_index=*/1, /*total_num_children=*/2,
-      DialogViewID::SHIPPING_ADDRESS_SHEET_LIST_VIEW);
+      DialogViewID::SHIPPING_ADDRESS_SHEET_LIST_VIEW,
+      /*wait_for_animation=*/false);
+  // Wait for the animation here explicitly, otherwise
+  // ClickOnChildInListViewAndWait tries to install an AnimationDelegate before
+  // the animation is kicked off (since that's triggered off of the spec being
+  // updated) and this hits a DCHECK.
+  WaitForAnimation();
 
   // California address is selected and has free shipping.
-  shipping_address_labels = GetThreeLineLabelValues(
+  shipping_address_labels = GetProfileLabelValues(
       DialogViewID::PAYMENT_SHEET_SHIPPING_ADDRESS_SECTION);
   EXPECT_EQ(base::ASCIIToUTF16("John H. Doe"), shipping_address_labels[0]);
   EXPECT_EQ(base::ASCIIToUTF16(
                 "Underworld, 666 Erebus St., Apt 8, Elysium, CA 91111"),
             shipping_address_labels[1]);
-  EXPECT_EQ(base::ASCIIToUTF16("16502111111"), shipping_address_labels[2]);
+  EXPECT_EQ(base::ASCIIToUTF16("+1 650-211-1111"), shipping_address_labels[2]);
   shipping_option_labels = GetShippingOptionLabelValues(
       DialogViewID::PAYMENT_SHEET_SHIPPING_OPTION_SECTION);
   EXPECT_EQ(base::ASCIIToUTF16("Free shipping in California"),
@@ -113,12 +129,14 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestOrderSummaryViewControllerTest,
 
   // Verify the expected amounts are shown ('Total',
   // 'Free shipping in California' and 'Subtotal', respectively).
-  EXPECT_EQ(base::ASCIIToUTF16("USD $5.00"),
-            GetStyledLabelText(DialogViewID::ORDER_SUMMARY_TOTAL_AMOUNT_LABEL));
-  EXPECT_EQ(base::ASCIIToUTF16("$0.00"),
-            GetStyledLabelText(DialogViewID::ORDER_SUMMARY_LINE_ITEM_1));
+  EXPECT_EQ(base::ASCIIToUTF16("USD"),
+            GetLabelText(DialogViewID::ORDER_SUMMARY_TOTAL_CURRENCY_LABEL));
   EXPECT_EQ(base::ASCIIToUTF16("$5.00"),
-            GetStyledLabelText(DialogViewID::ORDER_SUMMARY_LINE_ITEM_2));
+            GetLabelText(DialogViewID::ORDER_SUMMARY_TOTAL_AMOUNT_LABEL));
+  EXPECT_EQ(base::ASCIIToUTF16("$0.00"),
+            GetLabelText(DialogViewID::ORDER_SUMMARY_LINE_ITEM_1));
+  EXPECT_EQ(base::ASCIIToUTF16("$5.00"),
+            GetLabelText(DialogViewID::ORDER_SUMMARY_LINE_ITEM_2));
 }
 
 }  // namespace payments

@@ -34,16 +34,19 @@
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/Editor.h"
+#include "core/editing/FindInPageCoordinates.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/editing/iterators/SearchBuffer.h"
 #include "core/editing/markers/DocumentMarker.h"
 #include "core/editing/markers/DocumentMarkerController.h"
+#include "core/exported/WebViewBase.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/TextAutosizer.h"
 #include "core/page/Page.h"
-#include "modules/accessibility/AXObject.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
+#include "modules/accessibility/AXObjectImpl.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/Timer.h"
 #include "platform/wtf/CurrentTime.h"
@@ -52,9 +55,6 @@
 #include "public/web/WebFindOptions.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebViewClient.h"
-#include "web/FindInPageCoordinates.h"
-#include "web/WebLocalFrameImpl.h"
-#include "web/WebViewImpl.h"
 
 namespace blink {
 
@@ -170,7 +170,7 @@ bool TextFinder::Find(int identifier,
     OwnerFrame().ViewImpl()->ZoomToFindInPageRect(
         OwnerFrame().GetFrameView()->ContentsToRootFrame(
             EnclosingIntRect(LayoutObject::AbsoluteBoundingBoxRectForRange(
-                active_match_.Get()))));
+                EphemeralRange(active_match_.Get())))));
   }
 
   bool was_active_frame = current_active_match_frame_;
@@ -232,7 +232,7 @@ void TextFinder::StopFindingAndClearSelection() {
   CancelPendingScopingEffort();
 
   // Remove all markers for matches found and turn off the highlighting.
-  OwnerFrame().GetFrame()->GetDocument()->Markers().RemoveMarkers(
+  OwnerFrame().GetFrame()->GetDocument()->Markers().RemoveMarkersOfTypes(
       DocumentMarker::kTextMatch);
   OwnerFrame().GetFrame()->GetEditor().SetMarkedTextMatchesAreHighlighted(
       false);
@@ -252,9 +252,10 @@ void TextFinder::ReportFindInPageResultToAccessibility(int identifier) {
   if (!ax_object_cache)
     return;
 
-  AXObject* start_object =
+  AXObjectImpl* start_object =
       ax_object_cache->Get(active_match_->startContainer());
-  AXObject* end_object = ax_object_cache->Get(active_match_->endContainer());
+  AXObjectImpl* end_object =
+      ax_object_cache->Get(active_match_->endContainer());
   if (!start_object || !end_object)
     return;
 
@@ -333,7 +334,7 @@ void TextFinder::ScopeStringMatches(int identifier,
       return;
   }
 
-  // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  see http://crbug.com/590369 for more details.
   search_start.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -522,7 +523,7 @@ void TextFinder::ClearFindMatchesCache() {
   if (!find_matches_cache_.IsEmpty())
     ++find_match_markers_version_;
 
-  find_matches_cache_.Clear();
+  find_matches_cache_.clear();
   find_match_rects_are_valid_ = false;
 }
 
@@ -539,7 +540,7 @@ void TextFinder::UpdateFindMatchRects() {
         !match.range_->startContainer()->isConnected())
       match.rect_ = FloatRect();
     else if (!find_match_rects_are_valid_)
-      match.rect_ = FindInPageRectFromRange(match.range_.Get());
+      match.rect_ = FindInPageRectFromRange(EphemeralRange(match.range_.Get()));
 
     if (match.rect_.IsEmpty())
       ++dead_matches;
@@ -555,7 +556,7 @@ void TextFinder::UpdateFindMatchRects() {
         filtered_matches.push_back(match);
     }
 
-    find_matches_cache_.Swap(filtered_matches);
+    find_matches_cache_.swap(filtered_matches);
   }
 
   // Invalidate the rects in child frames. Will be updated later during
@@ -563,7 +564,7 @@ void TextFinder::UpdateFindMatchRects() {
   if (!find_match_rects_are_valid_)
     for (WebFrame* child = OwnerFrame().FirstChild(); child;
          child = child->NextSibling())
-      ToWebLocalFrameImpl(child)
+      ToWebLocalFrameBase(child)
           ->EnsureTextFinder()
           .find_match_rects_are_valid_ = false;
 
@@ -574,7 +575,7 @@ WebFloatRect TextFinder::ActiveFindMatchRect() {
   if (!current_active_match_frame_ || !active_match_)
     return WebFloatRect();
 
-  return WebFloatRect(FindInPageRectFromRange(ActiveMatch()));
+  return WebFloatRect(FindInPageRectFromRange(EphemeralRange(ActiveMatch())));
 }
 
 void TextFinder::FindMatchRects(WebVector<WebFloatRect>& output_rects) {
@@ -653,8 +654,9 @@ int TextFinder::SelectFindMatch(unsigned index, WebRect* selection_rect) {
   }
 
   IntRect active_match_rect;
-  IntRect active_match_bounding_box = EnclosingIntRect(
-      LayoutObject::AbsoluteBoundingBoxRectForRange(active_match_.Get()));
+  IntRect active_match_bounding_box =
+      EnclosingIntRect(LayoutObject::AbsoluteBoundingBoxRectForRange(
+          EphemeralRange(active_match_.Get())));
 
   if (!active_match_bounding_box.IsEmpty()) {
     if (active_match_->FirstNode() &&
@@ -677,11 +679,11 @@ int TextFinder::SelectFindMatch(unsigned index, WebRect* selection_rect) {
   return active_match_index_ + 1;
 }
 
-TextFinder* TextFinder::Create(WebLocalFrameImpl& owner_frame) {
+TextFinder* TextFinder::Create(WebLocalFrameBase& owner_frame) {
   return new TextFinder(owner_frame);
 }
 
-TextFinder::TextFinder(WebLocalFrameImpl& owner_frame)
+TextFinder::TextFinder(WebLocalFrameBase& owner_frame)
     : owner_frame_(&owner_frame),
       current_active_match_frame_(false),
       active_match_index_(-1),
@@ -702,15 +704,20 @@ TextFinder::~TextFinder() {}
 bool TextFinder::SetMarkerActive(Range* range, bool active) {
   if (!range || range->collapsed())
     return false;
-  return OwnerFrame().GetFrame()->GetDocument()->Markers().SetMarkersActive(
-      EphemeralRange(range), active);
+  return OwnerFrame()
+      .GetFrame()
+      ->GetDocument()
+      ->Markers()
+      .SetTextMatchMarkersActive(EphemeralRange(range), active);
 }
 
 void TextFinder::UnmarkAllTextMatches() {
   LocalFrame* frame = OwnerFrame().GetFrame();
   if (frame && frame->GetPage() &&
-      frame->GetEditor().MarkedTextMatchesAreHighlighted())
-    frame->GetDocument()->Markers().RemoveMarkers(DocumentMarker::kTextMatch);
+      frame->GetEditor().MarkedTextMatchesAreHighlighted()) {
+    frame->GetDocument()->Markers().RemoveMarkersOfTypes(
+        DocumentMarker::kTextMatch);
+  }
 }
 
 bool TextFinder::ShouldScopeMatches(const String& search_text,

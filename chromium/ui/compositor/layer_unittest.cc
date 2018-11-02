@@ -733,6 +733,8 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   layer->SetTransform(transform);
   layer->SetColor(SK_ColorRED);
   layer->SetLayerInverted(true);
+  const float temperature = 0.8f;
+  layer->SetLayerTemperature(temperature);
 
   auto clone = layer->Clone();
 
@@ -741,6 +743,7 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   EXPECT_EQ(SK_ColorRED, clone->background_color());
   EXPECT_EQ(SK_ColorRED, clone->GetTargetColor());
   EXPECT_TRUE(clone->layer_inverted());
+  EXPECT_FLOAT_EQ(temperature, clone->GetTargetTemperature());
 
   layer->SetTransform(gfx::Transform());
   layer->SetColor(SK_ColorGREEN);
@@ -989,7 +992,7 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
   l1->SetShowSolidColorContent();
 }
 
-// Various visibile/drawn assertions.
+// Various visible/drawn assertions.
 TEST_F(LayerWithNullDelegateTest, Visibility) {
   std::unique_ptr<Layer> l1(new Layer(LAYER_TEXTURED));
   std::unique_ptr<Layer> l2(new Layer(LAYER_TEXTURED));
@@ -1116,16 +1119,18 @@ TEST_F(LayerWithNullDelegateTest, SetBoundsSchedulesPaint) {
   WaitForDraw();
 }
 
-static void EmptyReleaseCallback(const gpu::SyncToken& sync_token,
-                                 bool is_lost) {}
-
 // Checks that the damage rect for a TextureLayer is empty after a commit.
 TEST_F(LayerWithNullDelegateTest, EmptyDamagedRect) {
+  base::RunLoop run_loop;
+  cc::ReleaseCallback callback =
+      base::Bind([](base::RunLoop* run_loop, const gpu::SyncToken& sync_token,
+                    bool is_lost) { run_loop->Quit(); },
+                 base::Unretained(&run_loop));
+
   std::unique_ptr<Layer> root(CreateLayer(LAYER_SOLID_COLOR));
   cc::TextureMailbox mailbox(gpu::Mailbox::Generate(), gpu::SyncToken(),
                              GL_TEXTURE_2D);
-  root->SetTextureMailbox(mailbox, cc::SingleReleaseCallback::Create(
-                                       base::Bind(EmptyReleaseCallback)),
+  root->SetTextureMailbox(mailbox, cc::SingleReleaseCallback::Create(callback),
                           gfx::Size(10, 10));
   compositor()->SetRootLayer(root.get());
 
@@ -1139,9 +1144,14 @@ TEST_F(LayerWithNullDelegateTest, EmptyDamagedRect) {
   WaitForCommit();
   EXPECT_TRUE(root->damaged_region_for_testing().IsEmpty());
 
-  compositor()->SetRootLayer(nullptr);
-  root.reset();
-  WaitForCommit();
+  // The texture mailbox has a reference from an in-flight texture layer.
+  // We clear the texture mailbox from the root layer and draw a new frame
+  // to ensure that the texture mailbox is released.
+  root->SetShowSolidColorContent();
+  Draw();
+
+  // Wait for texture mailbox release to avoid DCHECKs.
+  run_loop.Run();
 }
 
 void ExpectRgba(int x, int y, SkColor expected_color, SkColor actual_color) {
@@ -1183,7 +1193,6 @@ TEST_F(LayerWithRealCompositorTest, DrawPixels) {
   ReadPixels(&bitmap, gfx::Rect(viewport_size));
   ASSERT_FALSE(bitmap.empty());
 
-  SkAutoLockPixels lock(bitmap);
   for (int x = 0; x < viewport_size.width(); x++) {
     for (int y = 0; y < viewport_size.height(); y++) {
       SkColor actual_color = bitmap.getColor(x, y);
@@ -1221,7 +1230,6 @@ TEST_F(LayerWithRealCompositorTest, DrawAlphaBlendedPixels) {
   ReadPixels(&bitmap, gfx::Rect(viewport_size));
   ASSERT_FALSE(bitmap.empty());
 
-  SkAutoLockPixels lock(bitmap);
   for (int x = 0; x < test_size; x++) {
     for (int y = 0; y < test_size; y++) {
       SkColor actual_color = bitmap.getColor(x, y);
@@ -1262,7 +1270,6 @@ TEST_F(LayerWithRealCompositorTest, DrawAlphaThresholdFilterPixels) {
   ReadPixels(&bitmap, gfx::Rect(viewport_size));
   ASSERT_FALSE(bitmap.empty());
 
-  SkAutoLockPixels lock(bitmap);
   for (int x = 0; x < test_size; x++) {
     for (int y = 0; y < test_size; y++) {
       SkColor actual_color = bitmap.getColor(x, y);
@@ -2212,7 +2219,8 @@ class TestMetricsReporter : public ui::AnimationMetricsReporter {
 
 // Starts an animation and tests that incrementing compositor frame count can
 // be used to report animation smoothness metrics.
-TEST_F(LayerWithRealCompositorTest, ReportMetrics) {
+// Flaky test crbug.com/709080
+TEST_F(LayerWithRealCompositorTest, DISABLED_ReportMetrics) {
   std::unique_ptr<Layer> root(CreateLayer(LAYER_SOLID_COLOR));
   GetCompositor()->SetRootLayer(root.get());
   LayerAnimator* animator = root->GetAnimator();
@@ -2225,7 +2233,7 @@ TEST_F(LayerWithRealCompositorTest, ReportMetrics) {
   animation_sequence->SetAnimationMetricsReporter(&reporter);
   animator->StartAnimation(animation_sequence);
   while (!reporter.report_called())
-    WaitForDraw();
+    WaitForSwap();
   ResetCompositor();
   // Even though most of the time 100% smooth animations are expected, on the
   // test bots this cannot be guaranteed. Therefore simply check that some

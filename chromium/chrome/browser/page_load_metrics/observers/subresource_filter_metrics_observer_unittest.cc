@@ -24,19 +24,24 @@ class SubresourceFilterMetricsObserverTest
                 .empty();
   }
 
-  void InitializePageLoadTiming(page_load_metrics::PageLoadTiming* timing) {
+  void InitializePageLoadTiming(
+      page_load_metrics::mojom::PageLoadTiming* timing) {
+    page_load_metrics::InitPageLoadTimingForTest(timing);
     timing->navigation_start = base::Time::FromDoubleT(1);
-    timing->parse_start = base::TimeDelta::FromMilliseconds(100);
-    timing->parse_stop = base::TimeDelta::FromMilliseconds(200);
-    timing->parse_blocked_on_script_load_duration =
+    timing->parse_timing->parse_start = base::TimeDelta::FromMilliseconds(100);
+    timing->parse_timing->parse_stop = base::TimeDelta::FromMilliseconds(200);
+    timing->parse_timing->parse_blocked_on_script_load_duration =
         base::TimeDelta::FromMilliseconds(10);
-    timing->parse_blocked_on_script_execution_duration =
+    timing->parse_timing->parse_blocked_on_script_execution_duration =
         base::TimeDelta::FromMilliseconds(20);
-    timing->first_contentful_paint = base::TimeDelta::FromMilliseconds(300);
-    timing->first_meaningful_paint = base::TimeDelta::FromMilliseconds(400);
-    timing->dom_content_loaded_event_start =
+    timing->paint_timing->first_contentful_paint =
+        base::TimeDelta::FromMilliseconds(300);
+    timing->paint_timing->first_meaningful_paint =
+        base::TimeDelta::FromMilliseconds(400);
+    timing->document_timing->dom_content_loaded_event_start =
         base::TimeDelta::FromMilliseconds(1200);
-    timing->load_event_start = base::TimeDelta::FromMilliseconds(1500);
+    timing->document_timing->load_event_start =
+        base::TimeDelta::FromMilliseconds(1500);
     PopulateRequiredTimingFields(timing);
   }
 };
@@ -45,7 +50,7 @@ TEST_F(SubresourceFilterMetricsObserverTest,
        NoMetricsForNonSubresourceFilteredNavigation) {
   NavigateAndCommit(GURL(kDefaultTestUrl));
 
-  page_load_metrics::PageLoadTiming timing;
+  page_load_metrics::mojom::PageLoadTiming timing;
   InitializePageLoadTiming(&timing);
   SimulateTimingUpdate(timing);
 
@@ -59,9 +64,9 @@ TEST_F(SubresourceFilterMetricsObserverTest,
 TEST_F(SubresourceFilterMetricsObserverTest, Basic) {
   NavigateAndCommit(GURL(kDefaultTestUrl));
 
-  page_load_metrics::PageLoadTiming timing;
+  page_load_metrics::mojom::PageLoadTiming timing;
   InitializePageLoadTiming(&timing);
-  page_load_metrics::PageLoadMetadata metadata;
+  page_load_metrics::mojom::PageLoadMetadata metadata;
   metadata.behavior_flags |=
       blink::WebLoadingBehaviorFlag::kWebLoadingBehaviorSubresourceFilterMatch;
   SimulateTimingAndMetadataUpdate(timing, metadata);
@@ -78,13 +83,14 @@ TEST_F(SubresourceFilterMetricsObserverTest, Basic) {
       internal::kHistogramSubresourceFilterFirstContentfulPaint, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramSubresourceFilterFirstContentfulPaint,
-      timing.first_contentful_paint.value().InMilliseconds(), 1);
+      timing.paint_timing->first_contentful_paint.value().InMilliseconds(), 1);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramSubresourceFilterParseStartToFirstContentfulPaint, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramSubresourceFilterParseStartToFirstContentfulPaint,
-      (timing.first_contentful_paint.value() - timing.parse_start.value())
+      (timing.paint_timing->first_contentful_paint.value() -
+       timing.parse_timing->parse_start.value())
           .InMilliseconds(),
       1);
 
@@ -92,13 +98,14 @@ TEST_F(SubresourceFilterMetricsObserverTest, Basic) {
       internal::kHistogramSubresourceFilterFirstMeaningfulPaint, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramSubresourceFilterFirstMeaningfulPaint,
-      timing.first_meaningful_paint.value().InMilliseconds(), 1);
+      timing.paint_timing->first_meaningful_paint.value().InMilliseconds(), 1);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramSubresourceFilterParseStartToFirstMeaningfulPaint, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramSubresourceFilterParseStartToFirstMeaningfulPaint,
-      (timing.first_meaningful_paint.value() - timing.parse_start.value())
+      (timing.paint_timing->first_meaningful_paint.value() -
+       timing.parse_timing->parse_start.value())
           .InMilliseconds(),
       1);
 
@@ -106,32 +113,38 @@ TEST_F(SubresourceFilterMetricsObserverTest, Basic) {
       internal::kHistogramSubresourceFilterDomContentLoaded, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramSubresourceFilterDomContentLoaded,
-      timing.dom_content_loaded_event_start.value().InMilliseconds(), 1);
+      timing.document_timing->dom_content_loaded_event_start.value()
+          .InMilliseconds(),
+      1);
 
   histogram_tester().ExpectTotalCount(internal::kHistogramSubresourceFilterLoad,
                                       1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramSubresourceFilterLoad,
-      timing.load_event_start.value().InMilliseconds(), 1);
+      timing.document_timing->load_event_start.value().InMilliseconds(), 1);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramSubresourceFilterParseDuration, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramSubresourceFilterParseDuration,
-      (timing.parse_stop.value() - timing.parse_start.value()).InMilliseconds(),
+      (timing.parse_timing->parse_stop.value() -
+       timing.parse_timing->parse_start.value())
+          .InMilliseconds(),
       1);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramSubresourceFilterParseBlockedOnScriptLoad, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramSubresourceFilterParseBlockedOnScriptLoad,
-      timing.parse_blocked_on_script_load_duration.value().InMilliseconds(), 1);
+      timing.parse_timing->parse_blocked_on_script_load_duration.value()
+          .InMilliseconds(),
+      1);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramSubresourceFilterParseBlockedOnScriptExecution, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramSubresourceFilterParseBlockedOnScriptExecution,
-      timing.parse_blocked_on_script_execution_duration.value()
+      timing.parse_timing->parse_blocked_on_script_execution_duration.value()
           .InMilliseconds(),
       1);
 
@@ -142,26 +155,31 @@ TEST_F(SubresourceFilterMetricsObserverTest, Basic) {
 TEST_F(SubresourceFilterMetricsObserverTest, Subresources) {
   NavigateAndCommit(GURL(kDefaultTestUrl));
 
-  SimulateLoadedResource({false /* was_cached */,
-                          1024 * 40 /* raw_body_bytes */,
-                          0 /* original_network_content_length */,
-                          nullptr /* data_reduction_proxy_data */});
+  SimulateLoadedResource(
+      {GURL(), -1 /* frame_tree_node_id */, false /* was_cached */,
+       1024 * 40 /* raw_body_bytes */, 0 /* original_network_content_length */,
+       nullptr /* data_reduction_proxy_data */,
+       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME});
 
-  page_load_metrics::PageLoadTiming timing;
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);
-  page_load_metrics::PageLoadMetadata metadata;
+  page_load_metrics::mojom::PageLoadMetadata metadata;
   metadata.behavior_flags |=
       blink::WebLoadingBehaviorFlag::kWebLoadingBehaviorSubresourceFilterMatch;
   SimulateTimingAndMetadataUpdate(timing, metadata);
 
-  SimulateLoadedResource({false /* was_cached */,
-                          1024 * 20 /* raw_body_bytes */,
-                          0 /* original_network_content_length */,
-                          nullptr /* data_reduction_proxy_data */});
+  SimulateLoadedResource(
+      {GURL(), -1 /* frame_tree_node_id */, false /* was_cached */,
+       1024 * 20 /* raw_body_bytes */, 0 /* original_network_content_length */,
+       nullptr /* data_reduction_proxy_data */,
+       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME});
 
-  SimulateLoadedResource({true /* was_cached */, 1024 * 10 /* raw_body_bytes */,
+  SimulateLoadedResource({GURL(), -1 /* frame_tree_node_id */,
+                          true /* was_cached */, 1024 * 10 /* raw_body_bytes */,
                           0 /* original_network_content_length */,
-                          nullptr /* data_reduction_proxy_data */});
+                          nullptr /* data_reduction_proxy_data */,
+                          content::ResourceType::RESOURCE_TYPE_MAIN_FRAME});
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramSubresourceFilterCount, 1);
@@ -237,26 +255,31 @@ TEST_F(SubresourceFilterMetricsObserverTest, SubresourcesWithMedia) {
 
   SimulateMediaPlayed();
 
-  SimulateLoadedResource({false /* was_cached */,
-                          1024 * 40 /* raw_body_bytes */,
-                          0 /* original_network_content_length */,
-                          nullptr /* data_reduction_proxy_data */});
+  SimulateLoadedResource(
+      {GURL(), -1 /* frame_tree_node_id */, false /* was_cached */,
+       1024 * 40 /* raw_body_bytes */, 0 /* original_network_content_length */,
+       nullptr /* data_reduction_proxy_data */,
+       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME});
 
-  page_load_metrics::PageLoadTiming timing;
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);
-  page_load_metrics::PageLoadMetadata metadata;
+  page_load_metrics::mojom::PageLoadMetadata metadata;
   metadata.behavior_flags |=
       blink::WebLoadingBehaviorFlag::kWebLoadingBehaviorSubresourceFilterMatch;
   SimulateTimingAndMetadataUpdate(timing, metadata);
 
-  SimulateLoadedResource({false /* was_cached */,
-                          1024 * 20 /* raw_body_bytes */,
-                          0 /* original_network_content_length */,
-                          nullptr /* data_reduction_proxy_data */});
+  SimulateLoadedResource(
+      {GURL(), -1 /* frame_tree_node_id */, false /* was_cached */,
+       1024 * 20 /* raw_body_bytes */, 0 /* original_network_content_length */,
+       nullptr /* data_reduction_proxy_data */,
+       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME});
 
-  SimulateLoadedResource({true /* was_cached */, 1024 * 10 /* raw_body_bytes */,
+  SimulateLoadedResource({GURL(), -1 /* frame_tree_node_id */,
+                          true /* was_cached */, 1024 * 10 /* raw_body_bytes */,
                           0 /* original_network_content_length */,
-                          nullptr /* data_reduction_proxy_data */});
+                          nullptr /* data_reduction_proxy_data */,
+                          content::ResourceType::RESOURCE_TYPE_MAIN_FRAME});
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramSubresourceFilterCount, 1);

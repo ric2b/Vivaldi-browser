@@ -23,17 +23,24 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/PendingScript.h"
+#include "core/dom/Script.h"
 #include "core/dom/ScriptRunner.h"
-#include "core/loader/resource/ScriptResource.h"
-#include "platform/loader/fetch/FetchParameters.h"
-#include "platform/loader/fetch/ResourceClient.h"
+#include "core/html/CrossOriginAttribute.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/wtf/text/TextPosition.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/WebURLRequest.h"
 
 namespace blink {
 
 class ScriptElementBase;
 class Script;
+
+class ResourceFetcher;
+class ScriptResource;
+
+class Modulator;
+class ModulePendingScriptTreeClient;
 
 class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
                                  public PendingScriptClient {
@@ -58,7 +65,10 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   static bool IsValidScriptTypeAndLanguage(
       const String& type_attribute_value,
       const String& language_attribute_value,
-      LegacyTypeSupport support_legacy_types);
+      LegacyTypeSupport support_legacy_types,
+      ScriptType& out_script_type);
+
+  static bool BlockForNoModule(ScriptType, bool nomodule);
 
   // https://html.spec.whatwg.org/#prepare-a-script
   bool PrepareScript(const TextPosition& script_start_position =
@@ -68,7 +78,7 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   String ScriptContent() const;
 
   // Creates a PendingScript for external script whose fetch is started in
-  // fetchScript().
+  // FetchClassicScript()/FetchModuleScriptTree().
   PendingScript* CreatePendingScript();
 
   // Returns false if and only if execution was blocked.
@@ -78,7 +88,8 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   // XML parser calls these
   void DispatchLoadEvent();
   void DispatchErrorEvent();
-  bool IsScriptTypeSupported(LegacyTypeSupport) const;
+  bool IsScriptTypeSupported(LegacyTypeSupport,
+                             ScriptType& out_script_type) const;
 
   bool HaveFiredLoadEvent() const { return have_fired_load_; }
   bool WillBeParserExecuted() const { return will_be_parser_executed_; }
@@ -94,6 +105,7 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   bool IsParserInserted() const { return parser_inserted_; }
   bool AlreadyStarted() const { return already_started_; }
   bool IsNonBlocking() const { return non_blocking_; }
+  ScriptType GetScriptType() const { return script_type_; }
 
   // Helper functions used by our parent classes.
   void DidNotifySubtreeInsertionsToDocument();
@@ -128,9 +140,26 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   bool IgnoresLoadRequest() const;
   bool IsScriptForEventSupported() const;
 
-  bool FetchScript(const String& source_url,
-                   const String& encoding,
-                   FetchParameters::DeferOption);
+  // FetchClassicScript corresponds to Step 21.6 of
+  // https://html.spec.whatwg.org/#prepare-a-script
+  // and must NOT be called from outside of PendingScript().
+  //
+  // https://html.spec.whatwg.org/#fetch-a-classic-script
+  bool FetchClassicScript(const KURL&,
+                          ResourceFetcher*,
+                          const String& nonce,
+                          const IntegrityMetadataSet&,
+                          ParserDisposition,
+                          CrossOriginAttributeValue,
+                          SecurityOrigin*,
+                          const String& encoding);
+  // https://html.spec.whatwg.org/#fetch-a-module-script-tree
+  void FetchModuleScriptTree(const KURL&,
+                             Modulator*,
+                             const String& nonce,
+                             ParserDisposition,
+                             WebURLRequest::FetchCredentialsMode);
+
   bool DoExecuteScript(const Script*);
 
   // Clears the connection to the PendingScript.
@@ -163,7 +192,8 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   bool ready_to_be_parser_executed_ = false;
 
   // https://html.spec.whatwg.org/#concept-script-type
-  // TODO(hiroshige): Implement "script's type".
+  // "It is determined when the script is prepared"
+  ScriptType script_type_ = ScriptType::kClassic;
 
   // https://html.spec.whatwg.org/#concept-script-external
   // "It is determined when the script is prepared"
@@ -195,6 +225,7 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   DocumentWriteIntervention document_write_intervention_;
 
   Member<PendingScript> pending_script_;
+  Member<ModulePendingScriptTreeClient> module_tree_client_;
 };
 
 }  // namespace blink

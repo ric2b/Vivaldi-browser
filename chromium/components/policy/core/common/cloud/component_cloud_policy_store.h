@@ -93,7 +93,7 @@ class POLICY_EXPORT ComponentCloudPolicyStore : public base::NonThreadSafe {
   // data was stored in the cache.
   bool Store(const PolicyNamespace& ns,
              const std::string& serialized_policy_proto,
-             std::unique_ptr<enterprise_management::PolicyData> policy_data,
+             const enterprise_management::PolicyData* policy_data,
              const std::string& secure_hash,
              const std::string& data);
 

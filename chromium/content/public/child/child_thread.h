@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/logging.h"
+#include "base/memory/ref_counted.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "ipc/ipc_sender.h"
@@ -17,12 +17,12 @@
 #endif
 
 namespace base {
+class SingleThreadTaskRunner;
 struct UserMetricsAction;
 }
 
 namespace service_manager {
 class Connector;
-class InterfaceRegistry;
 }
 
 namespace content {
@@ -71,13 +71,11 @@ class CONTENT_EXPORT ChildThread : public IPC::Sender {
   // service_manager::Connector can be obtained).
   virtual ServiceManagerConnection* GetServiceManagerConnection() = 0;
 
-  // Returns the InterfaceRegistry that this process uses to expose interfaces
-  // to the browser.
-  virtual service_manager::InterfaceRegistry* GetInterfaceRegistry() = 0;
-
   // Returns a connector that can be used to bind interfaces exposed by other
   // services.
   virtual service_manager::Connector* GetConnector() = 0;
+
+  virtual scoped_refptr<base::SingleThreadTaskRunner> GetIOTaskRunner() = 0;
 };
 
 }  // namespace content

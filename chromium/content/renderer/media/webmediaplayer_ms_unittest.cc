@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "content/public/renderer/media_stream_renderer_factory.h"
@@ -403,7 +404,7 @@ class WebMediaPlayerMSTest
             nullptr,
             this,
             &delegate_,
-            new media::MediaLog(),
+            base::MakeUnique<media::MediaLog>(),
             std::unique_ptr<MediaStreamRendererFactory>(render_factory_),
             message_loop_.task_runner(),
             message_loop_.task_runner(),
@@ -459,11 +460,11 @@ class WebMediaPlayerMSTest
   void RemotePlaybackStarted() override {}
   void OnBecamePersistentVideo(bool) override {}
   bool IsAutoplayingMuted() override { return false; }
-  void RequestReload(const blink::WebURL& newUrl) override {}
   bool HasSelectedVideoTrack() override { return false; }
   blink::WebMediaPlayer::TrackId GetSelectedVideoTrackId() override {
     return blink::WebMediaPlayer::TrackId();
   }
+  bool HasNativeControls() override { return false; }
 
   // Implementation of cc::VideoFrameProvider::Client
   void StopUsingProvider() override;

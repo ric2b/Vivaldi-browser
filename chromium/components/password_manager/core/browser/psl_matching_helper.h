@@ -36,6 +36,8 @@ enum class MatchResult {
 #if defined(UNIT_TEST)
 std::ostream& operator<<(std::ostream& out, MatchResult result);
 
+// These functions are used in production internally but exposed for testing.
+
 // Returns true iff |form_signon_realm| designates a federated credential for
 // |origin|. It doesn't check the port because |form_signon_realm| doesn't have
 // it.
@@ -73,6 +75,11 @@ bool IsPublicSuffixDomainMatch(const std::string& url1,
 // Two hosts are considered to belong to the same website when they share the
 // registry-controlled domain part.
 std::string GetRegistryControlledDomain(const GURL& signon_realm);
+
+// Returns the organization-identifying name of the host of |url|, that is, the
+// first domain name label below the effective TLD. Returns the empty string for
+// URLs where these concepts are ill-defined, as well as for invalid URLs.
+std::string GetOrganizationIdentifyingName(const GURL& url);
 
 }  // namespace password_manager
 

@@ -7,23 +7,22 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "remoting/host/host_status_observer.h"
 #include "remoting/host/it2me/it2me_confirmation_dialog.h"
 #include "remoting/host/it2me/it2me_confirmation_dialog_proxy.h"
+#include "remoting/protocol/port_range.h"
 #include "remoting/protocol/validating_authenticator.h"
 #include "remoting/signaling/xmpp_signal_strategy.h"
 
 namespace base {
 class DictionaryValue;
 }
-
-namespace policy {
-class PolicyService;
-}  // namespace policy
 
 namespace remoting {
 
@@ -32,7 +31,6 @@ class ChromotingHostContext;
 class DesktopEnvironmentFactory;
 class HostEventLogger;
 class HostStatusLogger;
-class PolicyWatcher;
 class RegisterSupportHostRequest;
 class RsaKeyPair;
 
@@ -64,7 +62,6 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
   };
 
   It2MeHost(std::unique_ptr<ChromotingHostContext> context,
-            std::unique_ptr<PolicyWatcher> policy_watcher,
             std::unique_ptr<It2MeConfirmationDialogFactory> dialog_factory_,
             base::WeakPtr<It2MeHost::Observer> observer,
             std::unique_ptr<SignalStrategy> signal_strategy,
@@ -93,15 +90,13 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
     SetState(state, error_message);
   }
 
-  // Updates the current policies based on |policies|.  Runs |done_callback| on
-  // the calling thread once the policies have been updated.
-  void SetPolicyForTesting(std::unique_ptr<base::DictionaryValue> policies,
-                           const base::Closure& done_callback);
-
   // Returns the callback used for validating the connection.  Do not run the
   // returned callback after this object has been destroyed.
   protocol::ValidatingAuthenticator::ValidationCallback
   GetValidationCallbackForTesting();
+
+  // Called when initial policies are read and when they change.
+  void OnPolicyUpdate(std::unique_ptr<base::DictionaryValue> policies);
 
  protected:
   friend class base::RefCountedThreadSafe<It2MeHost>;
@@ -112,6 +107,9 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
   base::WeakPtr<It2MeHost::Observer> observer() { return observer_; }
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(It2MeHostTest, HostUdpPortRangePolicy_ValidRange);
+  FRIEND_TEST_ALL_PREFIXES(It2MeHostTest, HostUdpPortRangePolicy_NoRange);
+
   // Updates state of the host. Can be called only on the network thread.
   void SetState(It2MeHostState state, const std::string& error_message);
 
@@ -134,16 +132,12 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
                            const base::TimeDelta& lifetime,
                            const std::string& error_message);
 
-  // Called when initial policies are read, and when they change.
-  void OnPolicyUpdate(std::unique_ptr<base::DictionaryValue> policies);
-
-  // Called when malformed policies are detected.
-  void OnPolicyError();
-
   // Handlers for NAT traversal and domain policies.
   void UpdateNatPolicy(bool nat_traversal_enabled);
-  void UpdateHostDomainPolicy(const std::string& host_domain);
-  void UpdateClientDomainPolicy(const std::string& client_domain);
+  void UpdateHostDomainListPolicy(std::vector<std::string> host_domain_list);
+  void UpdateClientDomainListPolicy(
+      std::vector<std::string> client_domain_list);
+  void UpdateHostUdpPortRangePolicy(const std::string& port_range_string);
 
   void DisconnectOnNetworkThread();
 
@@ -171,7 +165,6 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
   std::unique_ptr<ChromotingHost> host_;
   int failed_login_attempts_ = 0;
 
-  std::unique_ptr<PolicyWatcher> policy_watcher_;
   std::unique_ptr<It2MeConfirmationDialogFactory> confirmation_dialog_factory_;
   std::unique_ptr<It2MeConfirmationDialogProxy> confirmation_dialog_proxy_;
 
@@ -179,8 +172,11 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
   bool nat_traversal_enabled_ = false;
 
   // The client and host domain policy setting.
-  std::string required_client_domain_;
-  std::string required_host_domain_;
+  std::vector<std::string> required_client_domain_list_;
+  std::vector<std::string> required_host_domain_list_;
+
+  // The host port range policy setting.
+  PortRange udp_port_range_;
 
   // Tracks the JID of the remote user when in a connecting state.
   std::string connecting_jid_;
@@ -206,14 +202,8 @@ class It2MeHostFactory {
   It2MeHostFactory();
   virtual ~It2MeHostFactory();
 
-  // |policy_service| is used for creating the policy watcher for new
-  // instances of It2MeHost on ChromeOS.  The caller must ensure that
-  // |policy_service| is valid throughout the lifetime of each created It2MeHost
-  // object.  This is currently possible because |policy_service| is a global
-  // singleton available from the browser process.
   virtual scoped_refptr<It2MeHost> CreateIt2MeHost(
       std::unique_ptr<ChromotingHostContext> context,
-      policy::PolicyService* policy_service,
       base::WeakPtr<It2MeHost::Observer> observer,
       std::unique_ptr<SignalStrategy> signal_strategy,
       const std::string& username,

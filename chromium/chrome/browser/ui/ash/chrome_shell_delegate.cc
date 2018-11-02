@@ -44,7 +44,7 @@
 #include "chrome/browser/speech/tts_controller.h"
 #include "chrome/browser/sync/sync_error_notifier_factory_ash.h"
 #include "chrome/browser/ui/ash/chrome_keyboard_ui.h"
-#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_impl.h"
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/palette_delegate_chromeos.h"
@@ -86,8 +86,8 @@ void InitAfterFirstSessionStart() {
   // Restore focus after the user session is started.  It's needed because some
   // windows can be opened in background while login UI is still active because
   // we currently restore browser windows before login UI is deleted.
-  aura::Window::Windows mru_list = ash::WmWindow::ToAuraWindows(
-      ash::Shell::Get()->mru_window_tracker()->BuildMruWindowList());
+  aura::Window::Windows mru_list =
+      ash::Shell::Get()->mru_window_tracker()->BuildMruWindowList();
   if (!mru_list.empty())
     mru_list.front()->Focus();
 
@@ -389,13 +389,11 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
 
 }  // namespace
 
-ChromeShellDelegate::ChromeShellDelegate()
-    : shelf_delegate_(NULL) {
+ChromeShellDelegate::ChromeShellDelegate() {
   PlatformInit();
 }
 
-ChromeShellDelegate::~ChromeShellDelegate() {
-}
+ChromeShellDelegate::~ChromeShellDelegate() {}
 
 service_manager::Connector* ChromeShellDelegate::GetShellConnector() const {
   return content::ServiceManagerConnection::GetForProcess()->GetConnector();
@@ -499,30 +497,33 @@ void ChromeShellDelegate::OpenUrlFromArc(const GURL& url) {
       displayer.browser()->window()->GetNativeWindow());
 }
 
-ash::ShelfDelegate* ChromeShellDelegate::CreateShelfDelegate(
-    ash::ShelfModel* model) {
-  if (!shelf_delegate_) {
-    shelf_delegate_ = new ChromeLauncherControllerImpl(nullptr, model);
-    shelf_delegate_->Init();
+void ChromeShellDelegate::ShelfInit() {
+  if (!launcher_controller_) {
+    launcher_controller_ = base::MakeUnique<ChromeLauncherController>(
+        nullptr, ash::Shell::Get()->shelf_model());
+    launcher_controller_->Init();
   }
-  return shelf_delegate_;
+}
+
+void ChromeShellDelegate::ShelfShutdown() {
+  launcher_controller_.reset();
 }
 
 ui::MenuModel* ChromeShellDelegate::CreateContextMenu(
-    ash::WmShelf* wm_shelf,
+    ash::Shelf* shelf,
     const ash::ShelfItem* item) {
   // Don't show context menu for exclusive app runtime mode.
   if (chrome::IsRunningInAppMode())
     return nullptr;
 
-  // No context menu before |shelf_delegate_| is created. This is possible
-  // now because CreateShelfDelegate is called by session state change
-  // via mojo asynchronously. Context menu could be triggered when the
-  // mojo message is still in-fly and crashes.
-  if (!shelf_delegate_)
+  // No context menu before |launcher_controller_| is created. This is possible
+  // now because ShelfInit() is called by session state change via mojo
+  // asynchronously. Context menu could be triggered when the mojo message is
+  // still in-fly and crashes.
+  if (!launcher_controller_)
     return nullptr;
 
-  return LauncherContextMenu::Create(shelf_delegate_, item, wm_shelf);
+  return LauncherContextMenu::Create(launcher_controller_.get(), item, shelf);
 }
 
 ash::GPUSupport* ChromeShellDelegate::CreateGPUSupport() {
@@ -554,6 +555,17 @@ void ChromeShellDelegate::OpenKeyboardShortcutHelpPage() const {
 gfx::Image ChromeShellDelegate::GetDeprecatedAcceleratorImage() const {
   return ui::ResourceBundle::GetSharedInstance().GetImageNamed(
       IDR_BLUETOOTH_KEYBOARD);
+}
+
+PrefService* ChromeShellDelegate::GetActiveUserPrefService() const {
+  const user_manager::User* const user =
+      user_manager::UserManager::Get()->GetActiveUser();
+  if (!user)
+    return nullptr;
+
+  // The user's profile might not be ready yet, so we must check for that too.
+  Profile* profile = chromeos::ProfileHelper::Get()->GetProfileByUser(user);
+  return profile ? profile->GetPrefs() : nullptr;
 }
 
 bool ChromeShellDelegate::IsTouchscreenEnabledInPrefs(
@@ -618,8 +630,8 @@ void ChromeShellDelegate::Observe(int type,
       // Do not use chrome::NOTIFICATION_PROFILE_ADDED because the
       // profile is not fully initialized by user_manager.  Use
       // chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED instead.
-      if (shelf_delegate_)
-        shelf_delegate_->OnUserProfileReadyToSwitch(profile);
+      if (launcher_controller_)
+        launcher_controller_->OnUserProfileReadyToSwitch(profile);
       break;
     }
     case chrome::NOTIFICATION_SESSION_STARTED:

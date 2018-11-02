@@ -10,12 +10,14 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "chromecast/base/metrics/cast_metrics_test_helper.h"
 #include "chromecast/media/audio/cast_audio_manager.h"
 #include "chromecast/public/media/cast_decoder_buffer.h"
 #include "chromecast/public/media/media_pipeline_backend.h"
+#include "media/audio/test_audio_thread.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -174,14 +176,16 @@ class MockAudioSourceCallback
   // ::media::AudioOutputStream::AudioSourceCallback overrides.
   MOCK_METHOD4(OnMoreData,
                int(base::TimeDelta, base::TimeTicks, int, ::media::AudioBus*));
-  MOCK_METHOD1(OnError, void(::media::AudioOutputStream*));
+  MOCK_METHOD0(OnError, void());
 };
 
 class FakeAudioManager : public CastAudioManager {
  public:
-  explicit FakeAudioManager(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-      : CastAudioManager(task_runner, task_runner, nullptr, nullptr, nullptr),
+  FakeAudioManager()
+      : CastAudioManager(base::MakeUnique<::media::TestAudioThread>(),
+                         nullptr,
+                         nullptr,
+                         nullptr),
         media_pipeline_backend_(nullptr) {}
   ~FakeAudioManager() override {}
 
@@ -227,12 +231,10 @@ class CastAudioOutputStreamTest : public ::testing::Test {
  protected:
   void SetUp() override {
     metrics::InitializeMetricsHelperForTesting();
-    audio_manager_.reset(new FakeAudioManager(message_loop_.task_runner()));
+    audio_manager_ = base::MakeUnique<FakeAudioManager>();
   }
 
-  void TearDown() override {
-    audio_manager_.reset();
-  }
+  void TearDown() override { audio_manager_->Shutdown(); }
 
   ::media::AudioParameters GetAudioParams() {
     return ::media::AudioParameters(format_, channel_layout_, sample_rate_,
@@ -385,7 +387,7 @@ TEST_F(CastAudioOutputStreamTest, PushFrame) {
   ON_CALL(*source_callback, OnMoreData(_, _, _, _))
       .WillByDefault(Invoke(OnMoreData));
   // No error must be reported to source callback.
-  EXPECT_CALL(*source_callback, OnError(_)).Times(0);
+  EXPECT_CALL(*source_callback, OnError()).Times(0);
   stream->Start(source_callback.get());
   RunMessageLoopFor(2);
   stream->Stop();
@@ -420,7 +422,7 @@ TEST_F(CastAudioOutputStreamTest, DeviceBusy) {
   ON_CALL(*source_callback, OnMoreData(_, _, _, _))
       .WillByDefault(Invoke(OnMoreData));
   // No error must be reported to source callback.
-  EXPECT_CALL(*source_callback, OnError(_)).Times(0);
+  EXPECT_CALL(*source_callback, OnError()).Times(0);
   stream->Start(source_callback.get());
   RunMessageLoopFor(5);
   // Make sure that one frame was pushed.
@@ -453,7 +455,7 @@ TEST_F(CastAudioOutputStreamTest, DeviceError) {
   ON_CALL(*source_callback, OnMoreData(_, _, _, _))
       .WillByDefault(Invoke(OnMoreData));
   // AudioOutputStream must report error to source callback.
-  EXPECT_CALL(*source_callback, OnError(_));
+  EXPECT_CALL(*source_callback, OnError());
   stream->Start(source_callback.get());
   RunMessageLoopFor(2);
   // Make sure that AudioOutputStream attempted to push the initial frame.
@@ -477,7 +479,7 @@ TEST_F(CastAudioOutputStreamTest, DeviceAsyncError) {
   ON_CALL(*source_callback, OnMoreData(_, _, _, _))
       .WillByDefault(Invoke(OnMoreData));
   // AudioOutputStream must report error to source callback.
-  EXPECT_CALL(*source_callback, OnError(_));
+  EXPECT_CALL(*source_callback, OnError());
   stream->Start(source_callback.get());
   RunMessageLoopFor(5);
 

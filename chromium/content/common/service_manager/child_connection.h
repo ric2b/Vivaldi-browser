@@ -14,7 +14,7 @@
 #include "base/process/process_handle.h"
 #include "base/sequenced_task_runner.h"
 #include "content/common/content_export.h"
-#include "mojo/edk/embedder/pending_process_connection.h"
+#include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
 #include "services/service_manager/public/cpp/identity.h"
 #include "services/service_manager/public/interfaces/connector.mojom.h"
 
@@ -30,12 +30,12 @@ namespace content {
 class CONTENT_EXPORT ChildConnection {
  public:
   // Prepares a new child connection for a child process which will be
-  // identified to the service manager as |name|. |instance_id| must be unique
-  // among all child connections using the same |name|. |connector| is the
-  // connector to use to establish the connection.
-  ChildConnection(const std::string& name,
-                  const std::string& instance_id,
-                  mojo::edk::PendingProcessConnection* process_connection,
+  // identified to the service manager as |child_identity|. |child_identity|'s
+  // instance field must be unique among all child connections using the same
+  // service name. |connector| is the connector to use to establish the
+  // connection.
+  ChildConnection(const service_manager::Identity& child_identity,
+                  mojo::edk::OutgoingBrokerClientInvitation* invitation,
                   service_manager::Connector* connector,
                   scoped_refptr<base::SequencedTaskRunner> io_task_runner);
   ~ChildConnection();
@@ -50,8 +50,8 @@ class CONTENT_EXPORT ChildConnection {
   }
 
   // A token which must be passed to the child process via
-  // |switches::kPrimordialPipeToken| in order for the child to initialize its
-  // end of the Service Manager connection pipe.
+  // |service_manager::switches::kServicePipeToken| in order for the child to
+  // initialize its end of the Service Manager connection pipe.
   std::string service_token() const { return service_token_; }
 
   // Sets the child connection's process handle. This should be called as soon

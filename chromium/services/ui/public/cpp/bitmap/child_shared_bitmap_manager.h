@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
+#include "base/synchronization/lock.h"
 #include "cc/ipc/shared_bitmap_manager.mojom.h"
 #include "cc/resources/shared_bitmap_manager.h"
 #include "mojo/public/cpp/bindings/thread_safe_interface_ptr.h"
@@ -21,8 +22,7 @@ namespace ui {
 class ChildSharedBitmapManager : public cc::SharedBitmapManager {
  public:
   explicit ChildSharedBitmapManager(
-      const scoped_refptr<
-          cc::mojom::ThreadSafeSharedBitmapManagerAssociatedPtr>&
+      const scoped_refptr<cc::mojom::ThreadSafeSharedBitmapManagerPtr>&
           shared_bitmap_manager_ptr);
   ~ChildSharedBitmapManager() override;
 
@@ -37,11 +37,17 @@ class ChildSharedBitmapManager : public cc::SharedBitmapManager {
       base::SharedMemory* mem);
 
  private:
-  void NotifyAllocatedSharedBitmap(base::SharedMemory* memory,
-                                   const cc::SharedBitmapId& id);
+  uint32_t NotifyAllocatedSharedBitmap(base::SharedMemory* memory,
+                                       const cc::SharedBitmapId& id);
 
-  scoped_refptr<cc::mojom::ThreadSafeSharedBitmapManagerAssociatedPtr>
+  scoped_refptr<cc::mojom::ThreadSafeSharedBitmapManagerPtr>
       shared_bitmap_manager_ptr_;
+
+  base::Lock lock_;
+
+  // Each SharedBitmap allocated by this class is assigned a unique sequence
+  // number that is incremental.
+  uint32_t last_sequence_number_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(ChildSharedBitmapManager);
 };

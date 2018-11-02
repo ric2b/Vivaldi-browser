@@ -356,13 +356,13 @@ void CustomButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   Button::GetAccessibleNodeData(node_data);
   switch (state_) {
     case STATE_HOVERED:
-      node_data->AddStateFlag(ui::AX_STATE_HOVERED);
+      node_data->AddState(ui::AX_STATE_HOVERED);
       break;
     case STATE_PRESSED:
-      node_data->AddStateFlag(ui::AX_STATE_PRESSED);
+      node_data->AddState(ui::AX_STATE_PRESSED);
       break;
     case STATE_DISABLED:
-      node_data->AddStateFlag(ui::AX_STATE_DISABLED);
+      node_data->AddState(ui::AX_STATE_DISABLED);
       break;
     case STATE_NORMAL:
     case STATE_COUNT:
@@ -370,8 +370,8 @@ void CustomButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
       break;
   }
   if (enabled()) {
-    node_data->AddIntAttribute(ui::AX_ATTR_ACTION,
-                               ui::AX_SUPPORTED_ACTION_PRESS);
+    node_data->AddIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB,
+                               ui::AX_DEFAULT_ACTION_VERB_PRESS);
   }
 }
 
@@ -447,6 +447,10 @@ bool CustomButton::IsTriggerableEvent(const ui::Event& event) {
              (triggerable_event_flags_ & event.flags()) != 0);
 }
 
+bool CustomButton::ShouldUpdateInkDropOnClickCanceled() const {
+  return true;
+}
+
 bool CustomButton::ShouldEnterPushedState(const ui::Event& event) {
   return IsTriggerableEvent(event);
 }
@@ -487,12 +491,14 @@ void CustomButton::NotifyClick(const ui::Event& event) {
 }
 
 void CustomButton::OnClickCanceled(const ui::Event& event) {
-  if (GetInkDrop()->GetTargetInkDropState() ==
-          views::InkDropState::ACTION_PENDING ||
-      GetInkDrop()->GetTargetInkDropState() ==
-          views::InkDropState::ALTERNATE_ACTION_PENDING) {
-    AnimateInkDrop(views::InkDropState::HIDDEN,
-                   ui::LocatedEvent::FromIfValid(&event));
+  if (ShouldUpdateInkDropOnClickCanceled()) {
+    if (GetInkDrop()->GetTargetInkDropState() ==
+            views::InkDropState::ACTION_PENDING ||
+        GetInkDrop()->GetTargetInkDropState() ==
+            views::InkDropState::ALTERNATE_ACTION_PENDING) {
+      AnimateInkDrop(views::InkDropState::HIDDEN,
+                     ui::LocatedEvent::FromIfValid(&event));
+    }
   }
   Button::OnClickCanceled(event);
 }

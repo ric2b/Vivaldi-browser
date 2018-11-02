@@ -41,14 +41,11 @@ const char kQuicStoreServerConfigsInProperties[] =
     "store_server_configs_in_properties";
 const char kQuicMaxServerConfigsStoredInProperties[] =
     "max_server_configs_stored_in_properties";
-const char kQuicDelayTcpRace[] = "delay_tcp_race";
 const char kQuicIdleConnectionTimeoutSeconds[] =
     "idle_connection_timeout_seconds";
-const char kQuicHostWhitelist[] = "host_whitelist";
 const char kQuicCloseSessionsOnIpChange[] = "close_sessions_on_ip_change";
 const char kQuicMigrateSessionsOnNetworkChange[] =
     "migrate_sessions_on_network_change";
-const char kQuicPreferAes[] = "prefer_aes";
 const char kQuicUserAgentId[] = "user_agent_id";
 const char kQuicMigrateSessionsEarly[] = "migrate_sessions_early";
 const char kQuicDisableBidirectionalStreams[] =
@@ -162,27 +159,11 @@ std::unique_ptr<base::DictionaryValue> ParseAndSetExperimentalOptions(
             static_cast<size_t>(quic_max_server_configs_stored_in_properties));
       }
 
-      bool quic_delay_tcp_race = false;
-      if (quic_args->GetBoolean(kQuicDelayTcpRace, &quic_delay_tcp_race)) {
-        context_builder->set_quic_delay_tcp_race(quic_delay_tcp_race);
-      }
-
       int quic_idle_connection_timeout_seconds = 0;
       if (quic_args->GetInteger(kQuicIdleConnectionTimeoutSeconds,
                                 &quic_idle_connection_timeout_seconds)) {
         context_builder->set_quic_idle_connection_timeout_seconds(
             quic_idle_connection_timeout_seconds);
-      }
-
-      std::string quic_host_whitelist;
-      if (quic_args->GetString(kQuicHostWhitelist, &quic_host_whitelist)) {
-        std::unordered_set<std::string> hosts;
-        for (const std::string& host :
-             base::SplitString(quic_host_whitelist, ",", base::TRIM_WHITESPACE,
-                               base::SPLIT_WANT_ALL)) {
-          hosts.insert(host);
-        }
-        context_builder->set_quic_host_whitelist(hosts);
       }
 
       bool quic_close_sessions_on_ip_change = false;
@@ -197,11 +178,6 @@ std::unique_ptr<base::DictionaryValue> ParseAndSetExperimentalOptions(
                                 &quic_migrate_sessions_on_network_change)) {
         context_builder->set_quic_migrate_sessions_on_network_change(
             quic_migrate_sessions_on_network_change);
-      }
-
-      bool quic_prefer_aes = false;
-      if (quic_args->GetBoolean(kQuicPreferAes, &quic_prefer_aes)) {
-        context_builder->set_quic_prefer_aes(quic_prefer_aes);
       }
 
       std::string quic_user_agent_id;
@@ -356,16 +332,13 @@ URLRequestContextConfig::URLRequestContextConfig(
     const std::string& quic_user_agent_id,
     bool enable_spdy,
     bool enable_sdch,
+    bool enable_brotli,
     HttpCacheType http_cache,
     int http_cache_max_size,
     bool load_disable_cache,
     const std::string& storage_path,
     const std::string& user_agent,
     const std::string& experimental_options,
-    const std::string& data_reduction_proxy_key,
-    const std::string& data_reduction_primary_proxy,
-    const std::string& data_reduction_fallback_proxy,
-    const std::string& data_reduction_secure_proxy_check_url,
     std::unique_ptr<net::CertVerifier> mock_cert_verifier,
     bool enable_network_quality_estimator,
     bool bypass_public_key_pinning_for_local_trust_anchors,
@@ -374,17 +347,13 @@ URLRequestContextConfig::URLRequestContextConfig(
       quic_user_agent_id(quic_user_agent_id),
       enable_spdy(enable_spdy),
       enable_sdch(enable_sdch),
+      enable_brotli(enable_brotli),
       http_cache(http_cache),
       http_cache_max_size(http_cache_max_size),
       load_disable_cache(load_disable_cache),
       storage_path(storage_path),
       user_agent(user_agent),
       experimental_options(experimental_options),
-      data_reduction_proxy_key(data_reduction_proxy_key),
-      data_reduction_primary_proxy(data_reduction_primary_proxy),
-      data_reduction_fallback_proxy(data_reduction_fallback_proxy),
-      data_reduction_secure_proxy_check_url(
-          data_reduction_secure_proxy_check_url),
       mock_cert_verifier(std::move(mock_cert_verifier)),
       enable_network_quality_estimator(enable_network_quality_estimator),
       bypass_public_key_pinning_for_local_trust_anchors(
@@ -445,11 +414,9 @@ URLRequestContextConfigBuilder::~URLRequestContextConfigBuilder() {}
 std::unique_ptr<URLRequestContextConfig>
 URLRequestContextConfigBuilder::Build() {
   return base::MakeUnique<URLRequestContextConfig>(
-      enable_quic, quic_user_agent_id, enable_spdy, enable_sdch, http_cache,
-      http_cache_max_size, load_disable_cache, storage_path, user_agent,
-      experimental_options, data_reduction_proxy_key,
-      data_reduction_primary_proxy, data_reduction_fallback_proxy,
-      data_reduction_secure_proxy_check_url, std::move(mock_cert_verifier),
+      enable_quic, quic_user_agent_id, enable_spdy, enable_sdch, enable_brotli,
+      http_cache, http_cache_max_size, load_disable_cache, storage_path,
+      user_agent, experimental_options, std::move(mock_cert_verifier),
       enable_network_quality_estimator,
       bypass_public_key_pinning_for_local_trust_anchors, cert_verifier_data);
 }

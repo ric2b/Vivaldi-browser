@@ -7,6 +7,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/system/tray/tray_image_item.h"
+#include "ash/system/update/update_observer.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
@@ -26,7 +27,7 @@ enum class UpdateType;
 // The system update tray item. The tray icon stays visible once an update
 // notification is received. The icon only disappears after a reboot to apply
 // the update. Exported for test.
-class ASH_EXPORT TrayUpdate : public TrayImageItem {
+class ASH_EXPORT TrayUpdate : public TrayImageItem, public UpdateObserver {
  public:
   explicit TrayUpdate(SystemTray* system_tray);
   ~TrayUpdate() override;
@@ -37,6 +38,11 @@ class ASH_EXPORT TrayUpdate : public TrayImageItem {
   void ShowUpdateIcon(mojom::UpdateSeverity severity,
                       bool factory_reset_required,
                       mojom::UpdateType update_type);
+
+  // Shows an icon in the system tray indicating that a software update is
+  // available but user's agreement is required as current connection is
+  // cellular. Once shown the icon persists until reboot.
+  void ShowUpdateOverCellularAvailableIcon();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(TrayUpdateTest, VisibilityAfterUpdate);
@@ -49,6 +55,9 @@ class ASH_EXPORT TrayUpdate : public TrayImageItem {
   views::View* CreateDefaultView(LoginStatus status) override;
   void DestroyDefaultView() override;
 
+  // Overridden from UpdateObserver.
+  void OnUpdateOverCellularTargetSet(bool success) override;
+
   // Expose label information for testing.
   views::Label* GetLabelForTesting();
   UpdateView* update_view_;
@@ -60,6 +69,7 @@ class ASH_EXPORT TrayUpdate : public TrayImageItem {
   static mojom::UpdateSeverity severity_;
   static bool factory_reset_required_;
   static mojom::UpdateType update_type_;
+  static bool update_over_cellular_available_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayUpdate);
 };

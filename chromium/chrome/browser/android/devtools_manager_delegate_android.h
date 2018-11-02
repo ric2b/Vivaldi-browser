@@ -26,9 +26,8 @@ class DevToolsManagerDelegateAndroid :
   base::DictionaryValue* HandleCommand(
       content::DevToolsAgentHost* agent_host,
       base::DictionaryValue* command_dict) override;
-  std::string GetTargetType(content::RenderFrameHost* host) override;
-  bool DiscoverTargets(
-      const content::DevToolsAgentHost::DiscoveryCallback& callback) override;
+  std::string GetTargetType(content::WebContents* web_contents) override;
+  content::DevToolsAgentHost::List RemoteDebuggingTargets() override;
   scoped_refptr<content::DevToolsAgentHost> CreateNewTarget(
       const GURL& url) override;
   std::string GetDiscoveryPageHTML() override;

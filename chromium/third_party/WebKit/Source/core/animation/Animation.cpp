@@ -43,6 +43,7 @@
 #include "core/events/AnimationPlaybackEvent.h"
 #include "core/frame/UseCounter.h"
 #include "core/inspector/InspectorTraceEvents.h"
+#include "core/paint/PaintLayer.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
@@ -752,11 +753,19 @@ bool Animation::CanStartAnimationOnCompositor(
     if (!target_element)
       return false;
 
-    CompositorElementId target_element_id =
-        CreateCompositorElementId(DOMNodeIds::IdForNode(target_element),
-                                  CompositorSubElementId::kPrimary);
-    if (!composited_element_ids->Contains(target_element_id))
+    if (target_element->GetLayoutObject() &&
+        target_element->GetLayoutObject()->IsBoxModelObject() &&
+        target_element->GetLayoutObject()->HasLayer()) {
+      PaintLayer* paint_layer =
+          ToLayoutBoxModelObject(target_element->GetLayoutObject())->Layer();
+      CompositorElementId target_element_id =
+          CompositorElementIdFromPaintLayerId(
+              paint_layer->UniqueId(), CompositorElementIdNamespace::kPrimary);
+      if (!composited_element_ids->Contains(target_element_id))
+        return false;
+    } else {
       return false;
+    }
   }
 
   return Playing();
@@ -1038,9 +1047,11 @@ Animation::PlayStateUpdateScope::~PlayStateUpdateScope() {
     if (new_play_state == kIdle) {
       if (animation_->ready_promise_->GetState() ==
           AnimationPromise::kPending) {
-        animation_->ready_promise_->Reject(DOMException::Create(kAbortError));
+        animation_->RejectAndResetPromiseMaybeAsync(
+            animation_->ready_promise_.Get());
+      } else {
+        animation_->ready_promise_->Reset();
       }
-      animation_->ready_promise_->Reset();
       animation_->ResolvePromiseMaybeAsync(animation_->ready_promise_.Get());
     } else if (old_play_state == kPending) {
       animation_->ResolvePromiseMaybeAsync(animation_->ready_promise_.Get());
@@ -1055,10 +1066,11 @@ Animation::PlayStateUpdateScope::~PlayStateUpdateScope() {
     if (new_play_state == kIdle) {
       if (animation_->finished_promise_->GetState() ==
           AnimationPromise::kPending) {
-        animation_->finished_promise_->Reject(
-            DOMException::Create(kAbortError));
+        animation_->RejectAndResetPromiseMaybeAsync(
+            animation_->finished_promise_.Get());
+      } else {
+        animation_->finished_promise_->Reset();
       }
-      animation_->finished_promise_->Reset();
     } else if (new_play_state == kFinished) {
       animation_->ResolvePromiseMaybeAsync(animation_->finished_promise_.Get());
     } else if (old_play_state == kFinished) {
@@ -1147,6 +1159,22 @@ void Animation::ResolvePromiseMaybeAsync(AnimationPromise* promise) {
                              WrapPersistent(promise), WrapPersistent(this)));
   } else {
     promise->Resolve(this);
+  }
+}
+
+void Animation::RejectAndResetPromise(AnimationPromise* promise) {
+  promise->Reject(DOMException::Create(kAbortError));
+  promise->Reset();
+}
+
+void Animation::RejectAndResetPromiseMaybeAsync(AnimationPromise* promise) {
+  if (ScriptForbiddenScope::IsScriptForbidden()) {
+    TaskRunnerHelper::Get(TaskType::kDOMManipulation, GetExecutionContext())
+        ->PostTask(BLINK_FROM_HERE,
+                   WTF::Bind(&Animation::RejectAndResetPromise,
+                             WrapPersistent(this), WrapPersistent(promise)));
+  } else {
+    RejectAndResetPromise(promise);
   }
 }
 

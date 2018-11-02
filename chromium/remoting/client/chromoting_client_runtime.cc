@@ -28,7 +28,7 @@ ChromotingClientRuntime* ChromotingClientRuntime::GetInstance() {
 }
 
 ChromotingClientRuntime::ChromotingClientRuntime() {
-  base::TaskScheduler::CreateAndSetSimpleTaskScheduler("Remoting");
+  base::TaskScheduler::CreateAndStartWithDefaultParams("Remoting");
 
   if (!base::MessageLoop::current()) {
     VLOG(1) << "Starting main message loop";
@@ -84,7 +84,6 @@ ChromotingClientRuntime::~ChromotingClientRuntime() {
 void ChromotingClientRuntime::SetDelegate(
     ChromotingClientRuntime::Delegate* delegate) {
   delegate_ = delegate;
-  delegate_->RequestAuthTokenForLogger();
 }
 
 void ChromotingClientRuntime::CreateLogWriter() {

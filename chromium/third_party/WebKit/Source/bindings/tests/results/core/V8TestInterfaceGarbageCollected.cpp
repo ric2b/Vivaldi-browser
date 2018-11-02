@@ -14,14 +14,14 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/IDLTypes.h"
 #include "bindings/core/v8/NativeValueTraitsImpl.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8Iterator.h"
-#include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8TestInterfaceGarbageCollected.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
 
@@ -40,7 +40,7 @@ const WrapperTypeInfo V8TestInterfaceGarbageCollected::wrapperTypeInfo = { gin::
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestInterfaceGarbageCollected.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
-// bindings/core/v8/ScriptWrappable.h.
+// platform/bindings/ScriptWrappable.h.
 const WrapperTypeInfo& TestInterfaceGarbageCollected::wrapper_type_info_ = V8TestInterfaceGarbageCollected::wrapperTypeInfo;
 
 // not [ActiveScriptWrappable]
@@ -71,6 +71,8 @@ static void attr1AttributeSetter(v8::Local<v8::Value> v8Value, const v8::Functio
   ALLOW_UNUSED_LOCAL(isolate);
 
   v8::Local<v8::Object> holder = info.Holder();
+  ALLOW_UNUSED_LOCAL(holder);
+
   TestInterfaceGarbageCollected* impl = V8TestInterfaceGarbageCollected::toImpl(holder);
 
   ExceptionState exceptionState(isolate, ExceptionState::kSetterContext, "TestInterfaceGarbageCollected", "attr1");
@@ -122,20 +124,6 @@ static void keysMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   ScriptState* scriptState = ScriptState::ForReceiverObject(info);
 
   Iterator* result = impl->keysForBinding(scriptState, exceptionState);
-  if (exceptionState.HadException()) {
-    return;
-  }
-  V8SetReturnValue(info, result);
-}
-
-static void valuesMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kExecutionContext, "TestInterfaceGarbageCollected", "values");
-
-  TestInterfaceGarbageCollected* impl = V8TestInterfaceGarbageCollected::toImpl(info.Holder());
-
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
-
-  Iterator* result = impl->valuesForBinding(scriptState, exceptionState);
   if (exceptionState.HadException()) {
     return;
   }
@@ -325,10 +313,6 @@ void V8TestInterfaceGarbageCollected::keysMethodCallback(const v8::FunctionCallb
   TestInterfaceGarbageCollectedV8Internal::keysMethod(info);
 }
 
-void V8TestInterfaceGarbageCollected::valuesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterfaceGarbageCollectedV8Internal::valuesMethod(info);
-}
-
 void V8TestInterfaceGarbageCollected::entriesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
   TestInterfaceGarbageCollectedV8Internal::entriesMethod(info);
 }
@@ -358,14 +342,16 @@ void V8TestInterfaceGarbageCollected::iteratorMethodCallback(const v8::FunctionC
 }
 
 static const V8DOMConfiguration::AccessorConfiguration V8TestInterfaceGarbageCollectedAccessors[] = {
-    {"attr1", V8TestInterfaceGarbageCollected::attr1AttributeGetterCallback, V8TestInterfaceGarbageCollected::attr1AttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds},
-    {"size", V8TestInterfaceGarbageCollected::sizeAttributeGetterCallback, nullptr, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::DontEnum | v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds},
+      { "attr1", V8TestInterfaceGarbageCollected::attr1AttributeGetterCallback, V8TestInterfaceGarbageCollected::attr1AttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
+    ,
+
+      { "size", V8TestInterfaceGarbageCollected::sizeAttributeGetterCallback, nullptr, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::DontEnum | v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
+    ,
 };
 
 static const V8DOMConfiguration::MethodConfiguration V8TestInterfaceGarbageCollectedMethods[] = {
     {"func", V8TestInterfaceGarbageCollected::funcMethodCallback, 1, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
     {"keys", V8TestInterfaceGarbageCollected::keysMethodCallback, 0, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
-    {"values", V8TestInterfaceGarbageCollected::valuesMethodCallback, 0, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
     {"entries", V8TestInterfaceGarbageCollected::entriesMethodCallback, 0, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
     {"forEach", V8TestInterfaceGarbageCollected::forEachMethodCallback, 1, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
     {"has", V8TestInterfaceGarbageCollected::hasMethodCallback, 1, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
@@ -406,7 +392,7 @@ static void installV8TestInterfaceGarbageCollectedTemplate(v8::Isolate* isolate,
   V8DOMConfiguration::InstallMethods(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterfaceGarbageCollectedMethods, WTF_ARRAY_LENGTH(V8TestInterfaceGarbageCollectedMethods));
 
   // Iterator (@@iterator)
-  static const V8DOMConfiguration::SymbolKeyedMethodConfiguration symbolKeyedIteratorConfiguration = { v8::Symbol::GetIterator, V8TestInterfaceGarbageCollected::iteratorMethodCallback, 0, v8::DontEnum, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess };
+  static const V8DOMConfiguration::SymbolKeyedMethodConfiguration symbolKeyedIteratorConfiguration = { v8::Symbol::GetIterator, "values", V8TestInterfaceGarbageCollected::iteratorMethodCallback, 0, v8::DontEnum, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess };
   V8DOMConfiguration::InstallMethod(isolate, world, prototypeTemplate, signature, symbolKeyedIteratorConfiguration);
 }
 

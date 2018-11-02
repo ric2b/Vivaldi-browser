@@ -77,6 +77,7 @@ class SVGScriptElement final : public SVGElement,
   String ForAttributeValue() const { return String(); }
   String IntegrityAttributeValue() const { return String(); }
   String LanguageAttributeValue() const { return String(); }
+  bool NomoduleAttributeValue() const { return false; }
   String SourceAttributeValue() const override;
   String TypeAttributeValue() const override;
   String TextFromChildren() override;
@@ -84,7 +85,7 @@ class SVGScriptElement final : public SVGElement,
   bool HasSourceAttribute() const override;
   bool IsConnected() const override;
   bool HasChildren() const override;
-  bool IsNonceableElement() const;
+  const AtomicString& GetNonceForElement() const override;
   bool AllowInlineScriptForCSP(const AtomicString& nonce,
                                const WTF::OrdinalNumber&,
                                const String& script_content) override;

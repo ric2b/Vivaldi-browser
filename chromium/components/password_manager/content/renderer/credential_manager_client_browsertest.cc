@@ -8,20 +8,23 @@
 
 #include <memory>
 #include <tuple>
+#include <utility>
 
 #include "base/location.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "content/public/common/associated_interface_provider.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "content/public/test/render_view_test.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "mojo/public/cpp/bindings/associated_binding_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebCredential.h"
 #include "third_party/WebKit/public/platform/WebCredentialManagerClient.h"
 #include "third_party/WebKit/public/platform/WebCredentialManagerError.h"
+#include "third_party/WebKit/public/platform/WebCredentialMediationRequirement.h"
 #include "third_party/WebKit/public/platform/WebPasswordCredential.h"
 
 namespace password_manager {
@@ -37,41 +40,42 @@ class FakeCredentialManager : public mojom::CredentialManager {
   FakeCredentialManager() {}
   ~FakeCredentialManager() override {}
 
-  void BindRequest(mojom::CredentialManagerRequest request) {
+  void BindRequest(mojom::CredentialManagerAssociatedRequest request) {
     bindings_.AddBinding(this, std::move(request));
   }
 
  private:
   // mojom::CredentialManager methods:
   void Store(const CredentialInfo& credential,
-             const StoreCallback& callback) override {
-    callback.Run();
+             StoreCallback callback) override {
+    std::move(callback).Run();
   }
 
-  void RequireUserMediation(
-      const RequireUserMediationCallback& callback) override {
-    callback.Run();
+  void PreventSilentAccess(PreventSilentAccessCallback callback) override {
+    std::move(callback).Run();
   }
 
-  void Get(bool zero_click_only,
+  void Get(CredentialMediationRequirement mediation,
            bool include_passwords,
            const std::vector<GURL>& federations,
-           const GetCallback& callback) override {
+           GetCallback callback) override {
     const std::string& url = federations[0].spec();
 
     if (url == kTestCredentialPassword) {
       CredentialInfo info;
       info.type = CredentialType::CREDENTIAL_TYPE_PASSWORD;
-      callback.Run(mojom::CredentialManagerError::SUCCESS, info);
+      std::move(callback).Run(mojom::CredentialManagerError::SUCCESS, info);
     } else if (url == kTestCredentialEmpty) {
-      callback.Run(mojom::CredentialManagerError::SUCCESS, CredentialInfo());
+      std::move(callback).Run(mojom::CredentialManagerError::SUCCESS,
+                              CredentialInfo());
     } else if (url == kTestCredentialReject) {
-      callback.Run(mojom::CredentialManagerError::PASSWORDSTOREUNAVAILABLE,
-                   base::nullopt);
+      std::move(callback).Run(
+          mojom::CredentialManagerError::PASSWORDSTOREUNAVAILABLE,
+          base::nullopt);
     }
   }
 
-  mojo::BindingSet<mojom::CredentialManager> bindings_;
+  mojo::AssociatedBindingSet<mojom::CredentialManager> bindings_;
 };
 
 class CredentialManagerClientTest : public content::RenderViewTest {
@@ -84,10 +88,9 @@ class CredentialManagerClientTest : public content::RenderViewTest {
     content::RenderViewTest::SetUp();
     client_.reset(new CredentialManagerClient(view_));
 
-    service_manager::InterfaceProvider* remote_interfaces =
-        view_->GetMainRenderFrame()->GetRemoteInterfaces();
-    service_manager::InterfaceProvider::TestApi test_api(remote_interfaces);
-    test_api.SetBinderForName(
+    content::AssociatedInterfaceProvider* remote_interfaces =
+        view_->GetMainRenderFrame()->GetRemoteAssociatedInterfaces();
+    remote_interfaces->OverrideBinderForTesting(
         mojom::CredentialManager::Name_,
         base::Bind(&CredentialManagerClientTest::BindCredentialManager,
                    base::Unretained(this)));
@@ -104,9 +107,9 @@ class CredentialManagerClientTest : public content::RenderViewTest {
   bool callback_succeeded() const { return callback_succeeded_; }
   void set_callback_succeeded(bool state) { callback_succeeded_ = state; }
 
-  void BindCredentialManager(mojo::ScopedMessagePipeHandle handle) {
+  void BindCredentialManager(mojo::ScopedInterfaceEndpointHandle handle) {
     fake_cm_.BindRequest(
-        mojo::MakeRequest<mojom::CredentialManager>(std::move(handle)));
+        mojom::CredentialManagerAssociatedRequest(std::move(handle)));
   }
 
   std::unique_ptr<blink::WebPasswordCredential> credential_;
@@ -193,7 +196,7 @@ TEST_F(CredentialManagerClientTest, SendStore) {
 TEST_F(CredentialManagerClientTest, SendRequestUserMediation) {
   std::unique_ptr<TestNotificationCallbacks> callbacks(
       new TestNotificationCallbacks(this));
-  client_->DispatchRequireUserMediation(callbacks.release());
+  client_->DispatchPreventSilentAccess(callbacks.release());
 
   RunAllPendingTasks();
 
@@ -206,7 +209,8 @@ TEST_F(CredentialManagerClientTest, SendRequestCredential) {
       new TestRequestCallbacks(this));
   std::vector<GURL> federations;
   federations.push_back(GURL(kTestCredentialPassword));
-  client_->DispatchGet(false, true, federations, callbacks.release());
+  client_->DispatchGet(blink::WebCredentialMediationRequirement::kOptional,
+                       true, federations, callbacks.release());
 
   RunAllPendingTasks();
 
@@ -221,7 +225,8 @@ TEST_F(CredentialManagerClientTest, SendRequestCredentialEmpty) {
       new TestRequestCallbacks(this));
   std::vector<GURL> federations;
   federations.push_back(GURL(kTestCredentialEmpty));
-  client_->DispatchGet(false, true, federations, callbacks.release());
+  client_->DispatchGet(blink::WebCredentialMediationRequirement::kOptional,
+                       true, federations, callbacks.release());
 
   RunAllPendingTasks();
 
@@ -235,7 +240,8 @@ TEST_F(CredentialManagerClientTest, SendRequestCredentialReject) {
       new TestRequestCallbacks(this));
   std::vector<GURL> federations;
   federations.push_back(GURL(kTestCredentialReject));
-  client_->DispatchGet(false, true, federations, callbacks.release());
+  client_->DispatchGet(blink::WebCredentialMediationRequirement::kOptional,
+                       true, federations, callbacks.release());
 
   RunAllPendingTasks();
 

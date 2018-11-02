@@ -191,22 +191,23 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
     command_line->AppendSwitch(switches::kDisablePaymentRequest);
   }
 
-  // Populate command line flag for the Rename "Save Image" to "Download Image"
-  // experiment.
-  NSString* enableDownloadRenaming =
-      [defaults stringForKey:@"EnableDownloadRenaming"];
-  if ([enableDownloadRenaming isEqualToString:@"Enabled"]) {
-    command_line->AppendSwitch(switches::kEnableDownloadImageRenaming);
-  } else if ([enableDownloadRenaming isEqualToString:@"Disabled"]) {
-    command_line->AppendSwitch(switches::kDisableDownloadImageRenaming);
-  }
-
   // Populate command line flag for Suggestions UI display.
   NSString* enableSuggestions = [defaults stringForKey:@"EnableSuggestions"];
   if ([enableSuggestions isEqualToString:@"Enabled"]) {
     command_line->AppendSwitch(switches::kEnableSuggestionsUI);
   } else if ([enableSuggestions isEqualToString:@"Disabled"]) {
     command_line->AppendSwitch(switches::kDisableSuggestionsUI);
+  }
+
+  // Populate command line flag for fetching missing favicons for NTP tiles.
+  NSString* enableMostLikelyFaviconsFromServer =
+      [defaults stringForKey:@"EnableNtpMostLikelyFaviconsFromServer"];
+  if ([enableMostLikelyFaviconsFromServer isEqualToString:@"Enabled"]) {
+    command_line->AppendSwitch(
+        ntp_tiles::switches::kEnableNtpMostLikelyFaviconsFromServer);
+  } else if ([enableMostLikelyFaviconsFromServer isEqualToString:@"Disabled"]) {
+    command_line->AppendSwitch(
+        ntp_tiles::switches::kDisableNtpMostLikelyFaviconsFromServer);
   }
 
   // Freeform commandline flags.  These are added last, so that any flags added
@@ -239,6 +240,11 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
   } else if ([enableSigninPromo isEqualToString:@"Disabled"]) {
     command_line->AppendSwitch(switches::kDisableSigninPromo);
   }
+
+  // Populate command line flag for the request mobile site experiment from the
+  // configuration plist.
+  if ([defaults boolForKey:@"RequestMobileSiteDisabled"])
+    command_line->AppendSwitch(switches::kDisableRequestMobileSite);
 
   ios::GetChromeBrowserProvider()->AppendSwitchesFromExperimentalSettings(
       defaults, command_line);

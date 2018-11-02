@@ -19,6 +19,7 @@
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_commands_global_registry.h"
 #include "chrome/browser/extensions/extension_keybinding_registry.h"
+#include "chrome/browser/metrics/browser_window_histogram_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
@@ -444,6 +445,7 @@ class BrowserView : public BrowserWindow,
   void OnGestureEvent(ui::GestureEvent* event) override;
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
+  void PaintChildren(const ui::PaintContext& context) override;
   void ChildPreferredSizeChanged(View* child) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnThemeChanged() override;
@@ -469,6 +471,7 @@ class BrowserView : public BrowserWindow,
   gfx::Rect GetClientAreaBoundsInScreen() const override;
   bool IsImmersiveModeEnabled() override;
   gfx::Rect GetTopContainerBoundsInScreen() override;
+  void DestroyAnyExclusiveAccessBubble() override;
 
   // extension::ExtensionKeybindingRegistry::Delegate overrides
   extensions::ActiveTabPermissionGranter* GetActiveTabPermissionGranter()
@@ -717,6 +720,8 @@ class BrowserView : public BrowserWindow,
   // The class that registers for keyboard shortcuts for extension commands.
   std::unique_ptr<ExtensionKeybindingRegistryViews>
       extension_keybinding_registry_;
+
+  std::unique_ptr<BrowserWindowHistogramHelper> histogram_helper_;
 
   mutable base::WeakPtrFactory<BrowserView> activate_modal_dialog_factory_;
 

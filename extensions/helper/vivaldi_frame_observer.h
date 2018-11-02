@@ -8,6 +8,7 @@
 #include "content/browser/host_zoom_map_impl.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "content/public/browser/render_frame_host.h"
 
 namespace vivaldi {
 
@@ -28,7 +29,8 @@ class VivaldiFrameObserver
   explicit VivaldiFrameObserver(content::WebContents* contents);
   friend class content::WebContentsUserData<VivaldiFrameObserver>;
 
-  bool OnMessageReceived(const IPC::Message& message) override;
+  bool OnMessageReceived(const IPC::Message& message,
+                         content::RenderFrameHost* render_frame_host) override;
   void OnDidUpdateFocusedElementInfo(std::string tagname,
                                      std::string type,
                                      bool editable,

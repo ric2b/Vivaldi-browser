@@ -2,7 +2,6 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="en-GB">
 <translation id="1018656279737460067">Cancelled</translation>
-<translation id="1030173864176315846">Successfully printed <ph name="PAGE_NUMBER" /> pages to <ph name="PRINTER_NAME" /></translation>
 <translation id="1049795001945932310">&amp;Language settings</translation>
 <translation id="1056898198331236512">Warning</translation>
 <translation id="1084824384139382525">Copy link addr&amp;ess</translation>
@@ -13,17 +12,14 @@
 <translation id="1181037720776840403">Remove</translation>
 <translation id="1187722533808055681">Idle wake ups</translation>
 <translation id="119944043368869598">Clear all</translation>
-<translation id="1218323606465324064">Now printing <ph name="PAGE_NUMBER" /> pages to <ph name="PRINTER_NAME" /></translation>
 <translation id="1244303850296295656">Extension error</translation>
 <translation id="1368832886055348810">Left to Right</translation>
 <translation id="1546280085599573572">This extension has changed the page that is shown when you click the Home button.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1616206807336925449">This extension requires no special permissions.</translation>
-<translation id="1620510694547887537">Camera</translation>
 <translation id="1635033183663317347">Installed by your custodian.</translation>
 <translation id="1723824996674794290">&amp;New window</translation>
 <translation id="1729533290416704613">It also controls what page is shown when you search from the Omnibox.</translation>
-<translation id="1789575671122666129">Popups</translation>
 <translation id="1850508293116537636">Rotate &amp;clockwise</translation>
 <translation id="1859234291848436338">Writing Direction</translation>
 <translation id="1901303067676059328">Select &amp;all</translation>
@@ -31,13 +27,10 @@
 <translation id="1992397118740194946">Not set</translation>
 <translation id="2076269580855484719">Hide this plug-in</translation>
 <translation id="2087822576218954668">Print: <ph name="PRINT_NAME" /></translation>
-<translation id="2115291620696624944">Error printing <ph name="PAGE_NUMBER" /> pages to <ph name="PRINTER_NAME" /></translation>
 <translation id="2129825002735785149">Update plug-in</translation>
-<translation id="2147827593068025794">Background Sync</translation>
 <translation id="2148892889047469596">Cast tab</translation>
 <translation id="215753907730220065">Exit Full Screen</translation>
 <translation id="2177950615300672361">Incognito Tab: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">Detect (default)</translation>
 <translation id="219008588003277019">Native Client module: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Paste as plain text</translation>
 <translation id="2282146716419988068">GPU Process</translation>
@@ -52,9 +45,7 @@
 <translation id="2439110203301358333">Another programme on your computer added an extension that may change the way Vivaldi works.</translation>
 <translation id="2445081178310039857">Extension root directory is required.</translation>
 <translation id="2470702053775288986">Unsupported extensions disabled</translation>
-<translation id="2482878487686419369">Notifications</translation>
 <translation id="2501797496290880632">Type a shortcut</translation>
-<translation id="2509857212037838238">Install <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">Swapped memory</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Re-enable</translation>
@@ -73,7 +64,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">USER handles</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Microphone</translation>
 <translation id="3241680850019875542">Select the root directory of the extension to pack. To update an extension, also select the private key file to reuse.</translation>
 <translation id="3280237271814976245">Save &amp;as...</translation>
 <translation id="3288047731229977326">Extensions running in developer mode can harm your computer. If you're not a developer, you should disable these extensions running in developer mode to stay safe.</translation>
@@ -81,7 +71,6 @@
 <translation id="3347086966102161372">C&amp;opy image address</translation>
 <translation id="335985608243443814">Browse...</translation>
 <translation id="3378572629723696641">This extension may have been corrupted.</translation>
-<translation id="3427092606871434483">Allow (default)</translation>
 <translation id="3435896845095436175">Enable</translation>
 <translation id="345693547134384690">Open &amp;image in new tab</translation>
 <translation id="3467267818798281173">Ask Google for suggestions</translation>
@@ -89,7 +78,6 @@
 <translation id="3627588569887975815">Open link in inco&amp;gnito window</translation>
 <translation id="3678156199662914018">Extension: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">Loading...</translation>
-<translation id="3789841737615482174">Install</translation>
 <translation id="3798449238516105146">Version</translation>
 <translation id="3866249974567520381">Description</translation>
 <translation id="3905761538810670789">Repair app</translation>
@@ -98,7 +86,6 @@
 <translation id="3909791450649380159">Cu&amp;t</translation>
 <translation id="3927932062596804919">Deny</translation>
 <translation id="3936390757709632190">&amp;Open audio in new tab</translation>
-<translation id="3936999098172113189">Waiting to print <ph name="PAGE_NUMBER" /> pages to <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Back</translation>
 <translation id="3979395879372752341">New extension added (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -110,13 +97,11 @@
 <translation id="4096508467498758490">Disable developer mode extensions</translation>
 <translation id="4100839878934973028">Another programme on your computer added an app that may change the way Vivaldi works.</translation>
 <translation id="4130207949184424187">This extension has changed the page that is shown when you search from the Omnibox.</translation>
-<translation id="4165986682804962316">Site settings</translation>
 <translation id="4176463684765177261">Disabled</translation>
 <translation id="4200983522494130825">New &amp;tab</translation>
 <translation id="420665587194630159">(This extension is managed and cannot be removed or disabled.)</translation>
 <translation id="4240511609794012987">Shared memory</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K live)</translation>
-<translation id="4312866146174492540">Block (default)</translation>
 <translation id="4384652540891215547">Activate the extension</translation>
 <translation id="4394049700291259645">Disable</translation>
 <translation id="4423482519432579560">&amp;Spellcheck</translation>
@@ -129,7 +114,6 @@
 <translation id="4677772697204437347">GPU memory</translation>
 <translation id="4711638718396952945">Restore settings</translation>
 <translation id="4839303808932127586">Sa&amp;ve video as...</translation>
-<translation id="4851858059374029925">Install <ph name="PLUGIN_NAME" />? Only install plug-ins that you trust.</translation>
 <translation id="488785315393301722">Show Details</translation>
 <translation id="4911714727432509308">No extensions have keyboard shortcuts assigned.</translation>
 <translation id="4927301649992043040">Pack extension</translation>
@@ -160,12 +144,10 @@
 <translation id="5646376287012673985">Location</translation>
 <translation id="5715711091495208045">Plug-in Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">Sa&amp;ve audio as...</translation>
-<translation id="5778550464785688721">MIDI devices full control</translation>
 <translation id="5780973441651030252">Process priority</translation>
 <translation id="5804241973901381774">Permissions</translation>
 <translation id="583281660410589416">Unknown</translation>
 <translation id="59174027418879706">Enabled</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 in use}other{# in use}}</translation>
 <translation id="5956585768868398362">Is this the search page that you were expecting?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> peak)</translation>
 <translation id="5965661248935608907">It also controls what page is shown when you click the Home button or search from the Omnibox.</translation>
@@ -198,7 +180,6 @@
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Keep changes</translation>
 <translation id="682123305478866682">Cast desktop</translation>
-<translation id="6863910145616405334">Plug-in not found</translation>
 <translation id="6886871292305414135">Open link in new &amp;tab</translation>
 <translation id="6900284862687837908">Background App: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Revoke file access</translation>
@@ -206,7 +187,6 @@
 <translation id="6974053822202609517">Right to Left</translation>
 <translation id="7013485839273047434">Get more extensions</translation>
 <translation id="708060913198414444">C&amp;opy audio address</translation>
-<translation id="7105578512429498960">Install <ph name="PLUGIN_NAME" /> to display this content</translation>
 <translation id="7144878232160441200">Retry</translation>
 <translation id="7206693748120342859">Downloading <ph name="PLUGIN_NAME" />...</translation>
 <translation id="7287143125007575591">Access denied</translation>
@@ -239,7 +219,6 @@ Key File: <ph name="KEY_FILE" />
 
 Keep your key file in a safe place. You will need it to create new versions of your extension.</translation>
 <translation id="8004582292198964060">Browser</translation>
-<translation id="8037357227543935929">Ask (default)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">&amp;Check the spelling of text fields</translation>
 <translation id="8261378640211443080">This extension is not listed in the <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> and may have been added without your knowledge.</translation>
@@ -255,7 +234,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8664389313780386848">&amp;View page source</translation>
 <translation id="8719653885894320876"><ph name="PLUGIN_NAME" /> download failed</translation>
 <translation id="873545264931343897">When <ph name="PLUGIN_NAME" /> finishes updating, reload the page to activate it</translation>
-<translation id="8763204422633679667">When <ph name="PLUGIN_NAME" /> finishes installing, reload the page to activate it</translation>
 <translation id="8798099450830957504">Default</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8845001906332463065">Get help</translation>

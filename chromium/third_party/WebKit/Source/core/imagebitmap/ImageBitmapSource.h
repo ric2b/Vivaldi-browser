@@ -7,12 +7,12 @@
 
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/CoreExport.h"
 #include "core/dom/ExceptionCode.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/IntSize.h"
-#include "third_party/WebKit/Source/wtf/Optional.h"
+#include "platform/wtf/Optional.h"
 
 namespace blink {
 

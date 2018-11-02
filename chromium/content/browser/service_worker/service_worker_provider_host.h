@@ -12,6 +12,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -22,6 +23,7 @@
 #include "content/common/content_export.h"
 #include "content/common/service_worker/service_worker_provider_host_info.h"
 #include "content/common/service_worker/service_worker_types.h"
+#include "content/common/worker_url_loader_factory_provider.mojom.h"
 #include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
@@ -239,12 +241,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
 
   // Methods to support cross site navigations.
   std::unique_ptr<ServiceWorkerProviderHost> PrepareForCrossSiteTransfer();
-  void CompleteCrossSiteTransfer(
-      int new_process_id,
-      int new_frame_id,
-      int new_provider_id,
-      ServiceWorkerProviderType new_provider_type,
-      ServiceWorkerDispatcherHost* dispatcher_host);
+  void CompleteCrossSiteTransfer(ServiceWorkerProviderHost* provisional_host);
   ServiceWorkerDispatcherHost* dispatcher_host() const {
     return dispatcher_host_;
   }
@@ -284,6 +281,12 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // exceptional condition like it could no longer be read from the script
   // cache.
   void NotifyControllerLost();
+
+  // Binds the ServiceWorkerWorkerClient of a dedicated (or shared) worker to
+  // the parent frame's ServiceWorkerProviderHost. (This is used only when
+  // off-main-thread-fetch is enabled.)
+  void BindWorkerFetchContext(
+      mojom::ServiceWorkerWorkerClientAssociatedPtrInfo client_ptr_info);
 
  private:
   friend class ForeignFetchRequestHandlerTest;
@@ -361,6 +364,10 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
                               int frame_routing_id,
                               ServiceWorkerDispatcherHost* dispatcher_host);
 
+  // Clears the information of the ServiceWorkerWorkerClient of dedicated (or
+  // shared) worker, when the connection to the worker is disconnected.
+  void UnregisterWorkerFetchContext(mojom::ServiceWorkerWorkerClient*);
+
   std::string client_uuid_;
   int render_process_id_;
 
@@ -405,6 +412,12 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   bool allow_association_;
 
   std::vector<base::Closure> queued_events_;
+
+  // Keeps ServiceWorkerWorkerClient pointers of dedicated or shared workers
+  // which are associated with the ServiceWorkerProviderHost.
+  std::unordered_map<mojom::ServiceWorkerWorkerClient*,
+                     mojom::ServiceWorkerWorkerClientAssociatedPtr>
+      worker_clients_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerProviderHost);
 };

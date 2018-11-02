@@ -58,7 +58,7 @@ void ScriptPromiseResolver::KeepAliveWhilePending() {
 }
 
 void ScriptPromiseResolver::OnTimerFired(TimerBase*) {
-  ASSERT(state_ == kResolving || state_ == kRejecting);
+  DCHECK(state_ == kResolving || state_ == kRejecting);
   if (!GetScriptState()->ContextIsValid()) {
     Detach();
     return;
@@ -76,7 +76,7 @@ void ScriptPromiseResolver::ResolveOrRejectImmediately() {
     if (state_ == kResolving) {
       resolver_.Resolve(value_.NewLocal(script_state_->GetIsolate()));
     } else {
-      ASSERT(state_ == kRejecting);
+      DCHECK_EQ(state_, kRejecting);
       resolver_.Reject(value_.NewLocal(script_state_->GetIsolate()));
     }
   }

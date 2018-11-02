@@ -23,7 +23,9 @@
 #include "chrome/common/partial_circular_buffer.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
+#include "net/base/load_flags.h"
 #include "net/base/mime_util.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "third_party/zlib/zlib.h"
 
@@ -168,9 +170,9 @@ void WebRtcLogUploader::PrepareMultipartPostData(
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&WebRtcLogUploader::UploadCompressedLog,
-                 base::Unretained(this), upload_done_data,
-                 base::Passed(&post_data)));
+      base::BindOnce(&WebRtcLogUploader::UploadCompressedLog,
+                     base::Unretained(this), upload_done_data,
+                     base::Passed(&post_data)));
 }
 
 void WebRtcLogUploader::UploadStoredLog(
@@ -188,7 +190,7 @@ void WebRtcLogUploader::UploadStoredLog(
     DPLOG(WARNING) << "Could not read WebRTC log file.";
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(upload_data.callback, false, "", "Log doesn't exist."));
+        base::BindOnce(upload_data.callback, false, "", "Log doesn't exist."));
     return;
   }
 
@@ -274,19 +276,19 @@ void WebRtcLogUploader::LoggingStoppedDoStore(
   }
 
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(done_callback, true, ""));
+                          base::BindOnce(done_callback, true, ""));
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&WebRtcLogUploader::DecreaseLogCount, base::Unretained(this)));
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::BindOnce(&WebRtcLogUploader::DecreaseLogCount,
+                                         base::Unretained(this)));
 }
 
 void WebRtcLogUploader::StartShutdown() {
   DCHECK(create_thread_checker_.CalledOnValidThread());
 
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(&WebRtcLogUploader::ShutdownOnIOThread,
-                                     base::Unretained(this)));
+                          base::BindOnce(&WebRtcLogUploader::ShutdownOnIOThread,
+                                         base::Unretained(this)));
 }
 
 void WebRtcLogUploader::OnURLFetchComplete(
@@ -308,9 +310,9 @@ void WebRtcLogUploader::OnURLFetchComplete(
           WebRtcLogList::GetWebRtcLogListFileForDirectory(it->second.log_path);
       BrowserThread::PostTask(
           BrowserThread::FILE, FROM_HERE,
-          base::Bind(&WebRtcLogUploader::AddUploadedLogInfoToUploadListFile,
-                     base::Unretained(this), log_list_path,
-                     it->second.local_log_id, report_id));
+          base::BindOnce(&WebRtcLogUploader::AddUploadedLogInfoToUploadListFile,
+                         base::Unretained(this), log_list_path,
+                         it->second.local_log_id, report_id));
     }
     NotifyUploadDone(response_code, report_id, it->second);
     upload_done_data_.erase(it);
@@ -446,22 +448,53 @@ void WebRtcLogUploader::UploadCompressedLog(
   content_type.append("; boundary=");
   content_type.append(kMultipartBoundary);
 
-  std::unique_ptr<net::URLFetcher> url_fetcher(net::URLFetcher::Create(
-      GURL(chrome::kUploadURL), net::URLFetcher::POST, this));
+  // Create traffic annotation tag.
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("webrtc_log_upload", R"(
+        semantics {
+          sender: "Webrtc Log Uploader"
+          description: "Uploads WebRTC debug logs for Hangouts."
+          trigger:
+            "When a Hangouts extension or Hangouts services extension signals "
+            "to upload via the private WebRTC logging extension API."
+          data:
+            "WebRTC specific log entries, additional system information, and "
+            "RTP packet headers for incoming and outgoing WebRTC streams. "
+            "Audio or video data is never sent."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting:
+            "This feature can be disabled by unchecking 'Report additional "
+            "diagnostics to help improve Hangouts.' in Hangouts settings."
+          policy_exception_justification:
+            "Not implemented, it would be good to do so."
+        })");
+
+  std::unique_ptr<net::URLFetcher> url_fetcher(
+      net::URLFetcher::Create(GURL(chrome::kUploadURL), net::URLFetcher::POST,
+                              this, traffic_annotation));
   url_fetcher->SetUploadData(content_type, *post_data);
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-      base::Bind(&WebRtcLogUploader::SetRequestContextOnUIThread,
-          base::Unretained(this), base::Unretained(url_fetcher.release()),
-          upload_done_data));
+  url_fetcher->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
+                            net::LOAD_DO_NOT_SAVE_COOKIES);
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&WebRtcLogUploader::SetRequestContextOnUIThread,
+                     base::Unretained(this),
+                     base::Unretained(url_fetcher.release()),
+                     upload_done_data));
 }
 
 void WebRtcLogUploader::SetRequestContextOnUIThread(
     net::URLFetcher* url_fetcher, const WebRtcLogUploadDoneData& data) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   url_fetcher->SetRequestContext(g_browser_process->system_request_context());
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-      base::Bind(&WebRtcLogUploader::StartAndTrackRequestContext,
-                 base::Unretained(this), base::Unretained(url_fetcher), data));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&WebRtcLogUploader::StartAndTrackRequestContext,
+                     base::Unretained(this), base::Unretained(url_fetcher),
+                     data));
 }
 
 void WebRtcLogUploader::StartAndTrackRequestContext(
@@ -583,9 +616,10 @@ void WebRtcLogUploader::NotifyUploadDone(
     int response_code,
     const std::string& report_id,
     const WebRtcLogUploadDoneData& upload_done_data) {
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(&WebRtcLoggingHandlerHost::UploadLogDone,
-                                     upload_done_data.host));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&WebRtcLoggingHandlerHost::UploadLogDone,
+                     upload_done_data.host));
   if (!upload_done_data.callback.is_null()) {
     bool success = response_code == kHttpResponseOk;
     std::string error_message;
@@ -594,7 +628,7 @@ void WebRtcLogUploader::NotifyUploadDone(
                       base::IntToString(response_code);
     }
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::Bind(upload_done_data.callback, success,
-                                       report_id, error_message));
+                            base::BindOnce(upload_done_data.callback, success,
+                                           report_id, error_message));
   }
 }

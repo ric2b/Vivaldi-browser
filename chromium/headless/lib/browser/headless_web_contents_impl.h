@@ -10,6 +10,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "content/public/browser/devtools_agent_host_observer.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "headless/lib/browser/headless_window_tree_host.h"
@@ -35,6 +36,7 @@ class WebContentsObserverAdapter;
 class HEADLESS_EXPORT HeadlessWebContentsImpl
     : public HeadlessWebContents,
       public HeadlessDevToolsTarget,
+      public content::DevToolsAgentHostObserver,
       public content::RenderProcessHostObserver,
       public content::WebContentsObserver {
  public:
@@ -55,6 +57,10 @@ class HEADLESS_EXPORT HeadlessWebContentsImpl
   void RemoveObserver(Observer* observer) override;
   HeadlessDevToolsTarget* GetDevToolsTarget() override;
   HeadlessTabSocket* GetHeadlessTabSocket() const override;
+  std::string GetUntrustedDevToolsFrameIdForFrameTreeNodeId(
+      int process_id,
+      int frame_tree_node_id) const override;
+  int GetMainFrameRenderProcessId() const override;
 
   // HeadlessDevToolsTarget implementation:
   bool AttachClient(HeadlessDevToolsClient* client) override;
@@ -62,7 +68,13 @@ class HEADLESS_EXPORT HeadlessWebContentsImpl
   void DetachClient(HeadlessDevToolsClient* client) override;
   bool IsAttached() override;
 
-  // RenderProcessHostObserver implementation:
+  // content::DevToolsAgentHostObserver implementation:
+  void DevToolsAgentHostAttached(
+      content::DevToolsAgentHost* agent_host) override;
+  void DevToolsAgentHostDetached(
+      content::DevToolsAgentHost* agent_host) override;
+
+  // content::RenderProcessHostObserver implementation:
   void RenderProcessExited(content::RenderProcessHost* host,
                            base::TerminationStatus status,
                            int exit_code) override;
@@ -70,6 +82,7 @@ class HEADLESS_EXPORT HeadlessWebContentsImpl
 
   // content::WebContentsObserver implementation:
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
+  void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
 
   content::WebContents* web_contents() const;
   bool OpenURL(const GURL& url);
@@ -87,6 +100,13 @@ class HEADLESS_EXPORT HeadlessWebContentsImpl
   HeadlessWindowTreeHost* window_tree_host() const {
     return window_tree_host_.get();
   }
+  int window_id() const { return window_id_; }
+  void set_window_state(const std::string& state) {
+    DCHECK(state == "normal" || state == "minimized" || state == "maximized" ||
+           state == "fullscreen");
+    window_state_ = state;
+  }
+  const std::string& window_state() const { return window_state_; }
 
  private:
   // Takes ownership of |web_contents|.
@@ -99,12 +119,17 @@ class HEADLESS_EXPORT HeadlessWebContentsImpl
   class Delegate;
   std::unique_ptr<Delegate> web_contents_delegate_;
   std::unique_ptr<HeadlessWindowTreeHost> window_tree_host_;
+  int window_id_ = 0;
+  std::string window_state_;
   std::unique_ptr<content::WebContents> web_contents_;
   scoped_refptr<content::DevToolsAgentHost> agent_host_;
   std::list<MojoService> mojo_services_;
+  bool inject_mojo_services_into_isolated_world_;
   std::unique_ptr<HeadlessTabSocketImpl> headless_tab_socket_;
 
   HeadlessBrowserContextImpl* browser_context_;      // Not owned.
+  // TODO(alexclarke): With OOPIF there may be more than one renderer, we need
+  // to fix this. See crbug.com/715924
   content::RenderProcessHost* render_process_host_;  // Not owned.
 
   using ObserverMap =

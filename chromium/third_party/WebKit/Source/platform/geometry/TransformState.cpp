@@ -156,7 +156,7 @@ void TransformState::ApplyTransform(
 }
 
 void TransformState::Flatten(bool* was_clamped) {
-  ASSERT(!force_accumulating_transform_);
+  DCHECK(!force_accumulating_transform_);
   if (was_clamped)
     *was_clamped = false;
 
@@ -204,7 +204,8 @@ FloatQuad TransformState::MappedQuad(bool* was_clamped) const {
 }
 
 const TransformationMatrix& TransformState::AccumulatedTransform() const {
-  ASSERT(force_accumulating_transform_ && accumulating_transform_);
+  DCHECK(force_accumulating_transform_);
+  DCHECK(accumulating_transform_);
   return *accumulated_transform_;
 }
 

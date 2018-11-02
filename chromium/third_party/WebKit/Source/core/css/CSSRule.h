@@ -23,7 +23,8 @@
 #ifndef CSSRule_h
 #define CSSRule_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
+#include "core/CoreExport.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -49,9 +50,7 @@ class CORE_EXPORT CSSRule : public GarbageCollectedFinalized<CSSRule>,
     kFontFaceRule = 5,
     kPageRule = 6,
     kKeyframesRule = 7,
-    kWebkitKeyframesRule = kKeyframesRule,
     kKeyframeRule = 8,
-    kWebkitKeyframeRule = kKeyframeRule,
     kNamespaceRule = 10,
     kSupportsRule = 12,
     kViewportRule = 15,

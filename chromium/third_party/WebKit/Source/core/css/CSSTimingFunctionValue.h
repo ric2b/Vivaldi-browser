@@ -27,6 +27,7 @@
 #define CSSTimingFunctionValue_h
 
 #include "core/css/CSSValue.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/animation/TimingFunction.h"
 #include "platform/wtf/PassRefPtr.h"
 
@@ -105,6 +106,34 @@ class CSSStepsTimingFunctionValue : public CSSValue {
 
 DEFINE_CSS_VALUE_TYPE_CASTS(CSSStepsTimingFunctionValue,
                             IsStepsTimingFunctionValue());
+
+class CSSFramesTimingFunctionValue : public CSSValue {
+ public:
+  static CSSFramesTimingFunctionValue* Create(int frames) {
+    return new CSSFramesTimingFunctionValue(frames);
+  }
+
+  int NumberOfFrames() const { return frames_; }
+
+  String CustomCSSText() const;
+
+  bool Equals(const CSSFramesTimingFunctionValue&) const;
+
+  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
+    CSSValue::TraceAfterDispatch(visitor);
+  }
+
+ private:
+  CSSFramesTimingFunctionValue(int frames)
+      : CSSValue(kFramesTimingFunctionClass), frames_(frames) {
+    DCHECK(RuntimeEnabledFeatures::framesTimingFunctionEnabled());
+  }
+
+  int frames_;
+};
+
+DEFINE_CSS_VALUE_TYPE_CASTS(CSSFramesTimingFunctionValue,
+                            IsFramesTimingFunctionValue());
 
 }  // namespace blink
 

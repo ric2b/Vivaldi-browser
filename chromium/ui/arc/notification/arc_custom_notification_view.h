@@ -9,11 +9,11 @@
 #include <string>
 
 #include "base/macros.h"
-#include "ui/arc/notification/arc_custom_notification_item.h"
+#include "ui/arc/notification/arc_notification_content_view_delegate.h"
+#include "ui/arc/notification/arc_notification_item.h"
 #include "ui/arc/notification/arc_notification_surface_manager.h"
 #include "ui/aura/window_observer.h"
 #include "ui/gfx/animation/animation_delegate.h"
-#include "ui/message_center/views/custom_notification_content_view_delegate.h"
 #include "ui/message_center/views/padded_button.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/native/native_view_host.h"
@@ -26,6 +26,10 @@ namespace gfx {
 class LinearAnimation;
 }
 
+namespace ui {
+struct AXActionData;
+}
+
 namespace views {
 class FocusTraversable;
 class Widget;
@@ -33,18 +37,21 @@ class Widget;
 
 namespace arc {
 
+// ArcCustomNotificationView is a view to host NotificationSurface and show the
+// content in itself. This is implemented as a child of ArcNotificationView.
+// TODO(yoshiki): Rename this class to ArcNotificationContentsView.
 class ArcCustomNotificationView
     : public views::NativeViewHost,
       public views::ButtonListener,
       public aura::WindowObserver,
-      public ArcCustomNotificationItem::Observer,
+      public ArcNotificationItem::Observer,
       public ArcNotificationSurfaceManager::Observer,
       public gfx::AnimationDelegate {
  public:
-  explicit ArcCustomNotificationView(ArcCustomNotificationItem* item);
+  explicit ArcCustomNotificationView(ArcNotificationItem* item);
   ~ArcCustomNotificationView() override;
 
-  std::unique_ptr<message_center::CustomNotificationContentViewDelegate>
+  std::unique_ptr<ArcNotificationContentViewDelegate>
   CreateContentViewDelegate();
 
  private:
@@ -80,6 +87,7 @@ class ArcCustomNotificationView
   void ActivateToast();
   void StartControlButtonsColorAnimation();
   bool ShouldUpdateControlButtonsColor() const;
+  void UpdateAccessibleName();
 
   // views::NativeViewHost
   void ViewHierarchyChanged(
@@ -91,7 +99,8 @@ class ArcCustomNotificationView
   void OnFocus() override;
   void OnBlur() override;
   views::FocusTraversable* GetFocusTraversable() override;
-  bool OnMousePressed(const ui::MouseEvent& event) override;
+  bool HandleAccessibleAction(const ui::AXActionData& action) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // views::ButtonListener
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -102,7 +111,7 @@ class ArcCustomNotificationView
                              const gfx::Rect& new_bounds) override;
   void OnWindowDestroying(aura::Window* window) override;
 
-  // ArcCustomNotificationItem::Observer
+  // ArcNotificationItem::Observer
   void OnItemDestroying() override;
   void OnItemUpdated() override;
 
@@ -116,7 +125,7 @@ class ArcCustomNotificationView
 
   // If |item_| is null, we may be about to be destroyed. In this case,
   // we have to be careful about what we do.
-  ArcCustomNotificationItem* item_ = nullptr;
+  ArcNotificationItem* item_ = nullptr;
   exo::NotificationSurface* surface_ = nullptr;
 
   const std::string notification_key_;
@@ -146,6 +155,8 @@ class ArcCustomNotificationView
   bool in_layout_ = false;
 
   std::unique_ptr<gfx::LinearAnimation> control_button_color_animation_;
+
+  base::string16 accessible_name_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcCustomNotificationView);
 };

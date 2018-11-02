@@ -51,18 +51,18 @@ LayoutTextControlSingleLine::LayoutTextControlSingleLine(
 LayoutTextControlSingleLine::~LayoutTextControlSingleLine() {}
 
 inline Element* LayoutTextControlSingleLine::ContainerElement() const {
-  return InputElement()->UserAgentShadowRoot()->GetElementById(
+  return InputElement()->UserAgentShadowRoot()->getElementById(
       ShadowElementNames::TextFieldContainer());
 }
 
 inline Element* LayoutTextControlSingleLine::EditingViewPortElement() const {
-  return InputElement()->UserAgentShadowRoot()->GetElementById(
+  return InputElement()->UserAgentShadowRoot()->getElementById(
       ShadowElementNames::EditingViewPort());
 }
 
 inline HTMLElement* LayoutTextControlSingleLine::InnerSpinButtonElement()
     const {
-  return ToHTMLElement(InputElement()->UserAgentShadowRoot()->GetElementById(
+  return ToHTMLElement(InputElement()->UserAgentShadowRoot()->getElementById(
       ShadowElementNames::SpinButton()));
 }
 
@@ -218,7 +218,7 @@ void LayoutTextControlSingleLine::CapsLockStateMayHaveChanged() {
   if (LocalFrame* frame = GetDocument().GetFrame())
     should_draw_caps_lock_indicator =
         InputElement()->type() == InputTypeNames::password &&
-        frame->Selection().IsFocusedAndActive() &&
+        frame->Selection().FrameIsFocusedAndActive() &&
         GetDocument().FocusedElement() == GetNode() &&
         KeyboardEventManager::CurrentCapsLockState();
 
@@ -305,7 +305,7 @@ PassRefPtr<ComputedStyle> LayoutTextControlSingleLine::CreateInnerEditorStyle(
   AdjustInnerEditorStyle(*text_block_style);
 
   text_block_style->SetWhiteSpace(EWhiteSpace::kPre);
-  text_block_style->SetOverflowWrap(kNormalOverflowWrap);
+  text_block_style->SetOverflowWrap(EOverflowWrap::kNormal);
   text_block_style->SetTextOverflow(
       TextShouldBeTruncated() ? kTextOverflowEllipsis : kTextOverflowClip);
 
@@ -333,7 +333,7 @@ PassRefPtr<ComputedStyle> LayoutTextControlSingleLine::CreateInnerEditorStyle(
   text_block_style->SetUnique();
 
   if (InputElement()->ShouldRevealPassword())
-    text_block_style->SetTextSecurity(TSNONE);
+    text_block_style->SetTextSecurity(ETextSecurity::kNone);
 
   text_block_style->SetOverflowX(EOverflow::kScroll);
   // overflow-y:visible doesn't work because overflow-x:scroll makes a layer.

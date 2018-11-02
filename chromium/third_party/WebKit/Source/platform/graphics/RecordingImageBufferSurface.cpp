@@ -5,11 +5,13 @@
 #include "platform/graphics/RecordingImageBufferSurface.h"
 
 #include <memory>
+
 #include "platform/Histogram.h"
+#include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/CanvasMetrics.h"
-#include "platform/graphics/ExpensiveCanvasHeuristicParameters.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBuffer.h"
+#include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/paint/PaintRecorder.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/PtrUtil.h"
@@ -18,23 +20,18 @@ namespace blink {
 
 RecordingImageBufferSurface::RecordingImageBufferSurface(
     const IntSize& size,
-    std::unique_ptr<RecordingImageBufferFallbackSurfaceFactory>
-        fallback_factory,
+    AllowFallback allow_fallback,
     OpacityMode opacity_mode,
-    sk_sp<SkColorSpace> color_space,
-    SkColorType color_type)
-    : ImageBufferSurface(size,
-                         opacity_mode,
-                         std::move(color_space),
-                         color_type),
+    const CanvasColorParams& color_params)
+    : ImageBufferSurface(size, opacity_mode, color_params),
+      allow_fallback_(allow_fallback),
       image_buffer_(0),
       current_frame_pixel_count_(0),
       previous_frame_pixel_count_(0),
       frame_was_cleared_(true),
       did_record_draw_commands_in_current_frame_(false),
       current_frame_has_expensive_op_(false),
-      previous_frame_has_expensive_op_(false),
-      fallback_factory_(std::move(fallback_factory)) {
+      previous_frame_has_expensive_op_(false) {
   InitializeCurrentFrame();
 }
 
@@ -62,6 +59,7 @@ void RecordingImageBufferSurface::SetImageBuffer(ImageBuffer* image_buffer) {
     image_buffer_->ResetCanvas(current_frame_->getRecordingCanvas());
   }
   if (fallback_surface_) {
+    DCHECK(fallback_surface_->IsValid());
     fallback_surface_->SetImageBuffer(image_buffer);
   }
 }
@@ -72,18 +70,19 @@ bool RecordingImageBufferSurface::WritePixels(const SkImageInfo& orig_info,
                                               int x,
                                               int y) {
   if (!fallback_surface_) {
-    if (x <= 0 && y <= 0 && x + orig_info.width() >= size().Width() &&
-        y + orig_info.height() >= size().Height()) {
+    IntRect write_rect(x, y, orig_info.width(), orig_info.height());
+    if (write_rect.Contains(IntRect(IntPoint(), size())))
       WillOverwriteCanvas();
-    }
     FallBackToRasterCanvas(kFallbackReasonWritePixels);
+    if (!fallback_surface_->IsValid())
+      return false;
   }
   return fallback_surface_->WritePixels(orig_info, pixels, row_bytes, x, y);
 }
 
 void RecordingImageBufferSurface::FallBackToRasterCanvas(
     FallbackReason reason) {
-  DCHECK(fallback_factory_);
+  DCHECK(allow_fallback_ == kAllowFallback);
   CHECK(reason != kFallbackReasonUnknown);
 
   if (fallback_surface_) {
@@ -97,19 +96,23 @@ void RecordingImageBufferSurface::FallBackToRasterCanvas(
                                kFallbackReasonCount));
   canvas_fallback_histogram.Count(reason);
 
-  fallback_surface_ = fallback_factory_->CreateSurface(
-      size(), GetOpacityMode(), ColorSpace(), ColorType());
+  fallback_surface_ = WTF::WrapUnique(new UnacceleratedImageBufferSurface(
+      size(), GetOpacityMode(), kInitializeImagePixels, color_params()));
+  // If the fallback surface fails to be created, then early out.
+  if (!fallback_surface_->IsValid())
+    return;
+
   fallback_surface_->SetImageBuffer(image_buffer_);
 
   if (previous_frame_) {
-    fallback_surface_->Canvas()->PlaybackPaintRecord(previous_frame_);
+    fallback_surface_->Canvas()->drawPicture(previous_frame_);
     previous_frame_.reset();
   }
 
   if (current_frame_) {
     sk_sp<PaintRecord> record = current_frame_->finishRecordingAsPicture();
     if (record)
-      fallback_surface_->Canvas()->PlaybackPaintRecord(record);
+      fallback_surface_->Canvas()->drawPicture(record);
     current_frame_.reset();
   }
 
@@ -181,12 +184,16 @@ sk_sp<SkImage> RecordingImageBufferSurface::NewImageSnapshot(
     SnapshotReason reason) {
   if (!fallback_surface_)
     FallBackToRasterCanvas(SnapshotReasonToFallbackReason(reason));
+  if (!fallback_surface_->IsValid())
+    return nullptr;
   return fallback_surface_->NewImageSnapshot(hint, reason);
 }
 
 PaintCanvas* RecordingImageBufferSurface::Canvas() {
-  if (fallback_surface_)
+  if (fallback_surface_) {
+    DCHECK(fallback_surface_->IsValid());
     return fallback_surface_->Canvas();
+  }
 
   DCHECK(current_frame_->getRecordingCanvas());
   return current_frame_->getRecordingCanvas();
@@ -233,8 +240,6 @@ sk_sp<PaintRecord> RecordingImageBufferSurface::GetRecord() {
 
   FallbackReason fallback_reason = kFallbackReasonUnknown;
   bool can_use_record = FinalizeFrameInternal(&fallback_reason);
-
-  DCHECK(can_use_record || fallback_factory_);
 
   if (can_use_record) {
     return previous_frame_;
@@ -324,9 +329,9 @@ bool RecordingImageBufferSurface::FinalizeFrameInternal(
     return false;
   }
 
-  if (fallback_factory_ &&
+  if (allow_fallback_ == kAllowFallback &&
       current_frame_->getRecordingCanvas()->getSaveCount() - 1 >
-          ExpensiveCanvasHeuristicParameters::kExpensiveRecordingStackDepth) {
+          CanvasHeuristicParameters::kExpensiveRecordingStackDepth) {
     // (getSaveCount() decremented to account  for the intial recording canvas
     // save frame.)
     *fallback_reason = kFallbackReasonRunawayStateStack;
@@ -369,7 +374,7 @@ bool RecordingImageBufferSurface::IsExpensiveToPaint() {
 
     if (current_frame_pixel_count_ >=
         (size().Width() * size().Height() *
-         ExpensiveCanvasHeuristicParameters::kExpensiveOverdrawThreshold))
+         CanvasHeuristicParameters::kExpensiveOverdrawThreshold))
       return true;
 
     if (frame_was_cleared_)
@@ -382,7 +387,7 @@ bool RecordingImageBufferSurface::IsExpensiveToPaint() {
 
     if (previous_frame_pixel_count_ >=
         (size().Width() * size().Height() *
-         ExpensiveCanvasHeuristicParameters::kExpensiveOverdrawThreshold))
+         CanvasHeuristicParameters::kExpensiveOverdrawThreshold))
       return true;
   }
 

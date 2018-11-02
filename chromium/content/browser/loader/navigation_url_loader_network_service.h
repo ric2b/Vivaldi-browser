@@ -9,6 +9,7 @@
 #include "content/browser/loader/navigation_url_loader.h"
 #include "content/common/url_loader.mojom.h"
 #include "content/common/url_loader_factory.mojom.h"
+#include "content/public/browser/ssl_status.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/connector.h"
 
@@ -19,6 +20,7 @@ struct RedirectInfo;
 namespace content {
 
 class ResourceContext;
+class NavigationPostDataHandler;
 
 // This is an implementation of NavigationURLLoader used when
 // --enable-network-service is used.
@@ -42,13 +44,14 @@ class NavigationURLLoaderNetworkService : public NavigationURLLoader,
 
   // mojom::URLLoaderClient implementation:
   void OnReceiveResponse(const ResourceResponseHead& head,
+                         const base::Optional<net::SSLInfo>& ssl_info,
                          mojom::DownloadedTempFilePtr downloaded_file) override;
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          const ResourceResponseHead& head) override;
   void OnDataDownloaded(int64_t data_length, int64_t encoded_length) override;
   void OnUploadProgress(int64_t current_position,
                         int64_t total_size,
-                        const OnUploadProgressCallback& callback) override;
+                        OnUploadProgressCallback callback) override;
   void OnReceiveCachedMetadata(const std::vector<uint8_t>& data) override;
   void OnTransferSizeUpdated(int32_t transfer_size_diff) override;
   void OnStartLoadingResponseBody(
@@ -57,16 +60,13 @@ class NavigationURLLoaderNetworkService : public NavigationURLLoader,
       const ResourceRequestCompletionStatus& completion_status) override;
 
  private:
-  void ConnectURLLoaderFactory(
-      std::unique_ptr<service_manager::Connector> connector);
-
   NavigationURLLoaderDelegate* delegate_;
 
-  mojom::URLLoaderFactoryRequest url_loader_factory_request_;
-  mojom::URLLoaderFactoryPtr url_loader_factory_;
   mojo::Binding<mojom::URLLoaderClient> binding_;
+  std::unique_ptr<NavigationRequestInfo> request_info_;
   mojom::URLLoaderAssociatedPtr url_loader_associated_ptr_;
   scoped_refptr<ResourceResponse> response_;
+  SSLStatus ssl_status_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationURLLoaderNetworkService);
 };

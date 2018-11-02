@@ -32,9 +32,9 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/spellcheck/browser/pref_names.h"
-#include "components/translate/core/common/translate_pref_names.h"
+#include "components/translate/core/browser/translate_pref_names.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "extensions/browser/extension_pref_value_map.h"
@@ -446,9 +446,7 @@ void PreferenceAPIBase::SetExtensionControlledPref(
     ExtensionPrefs::ScopedDictionaryUpdate update(extension_prefs(),
                                                   extension_id,
                                                   scope_string);
-    base::DictionaryValue* preference = update.Get();
-    if (!preference)
-      preference = update.Create();
+    auto preference = update.Create();
     preference->SetWithoutPathExpansion(pref_key, value->CreateDeepCopy());
   }
   extension_pref_value_map()->SetExtensionPref(
@@ -468,7 +466,7 @@ void PreferenceAPIBase::RemoveExtensionControlledPref(
     ExtensionPrefs::ScopedDictionaryUpdate update(extension_prefs(),
                                                   extension_id,
                                                   scope_string);
-    base::DictionaryValue* preference = update.Get();
+    auto preference = update.Get();
     if (preference)
       preference->RemoveWithoutPathExpansion(pref_key, NULL);
   }

@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #import "base/mac/foundation_util.h"
-#import "base/mac/scoped_nsobject.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
@@ -26,6 +25,7 @@
 #import "ios/chrome/browser/metrics/tab_usage_recorder.h"
 #import "ios/chrome/browser/metrics/tab_usage_recorder_web_state_list_observer.h"
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
+#import "ios/chrome/browser/sessions/session_ios.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
 #import "ios/chrome/browser/sessions/session_window_ios.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
@@ -58,6 +58,10 @@
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/web_state_impl.h"
 #include "url/gurl.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 NSString* const kTabModelTabWillStartLoadingNotification =
     @"kTabModelTabWillStartLoadingNotification";
@@ -117,6 +121,19 @@ void CleanCertificatePolicyCache(
                  base::Unretained(web_state_list)));
 }
 
+// Factory of WebState for DeserializeWebStateList that wraps the method
+// web::WebState::CreateWithStorageSession and sets the WebState usage
+// enabled flag from |web_usage_enabled|.
+std::unique_ptr<web::WebState> CreateWebState(
+    BOOL web_usage_enabled,
+    web::WebState::CreateParams create_params,
+    CRWSessionStorage* session_storage) {
+  std::unique_ptr<web::WebState> web_state =
+      web::WebState::CreateWithStorageSession(create_params, session_storage);
+  web_state->SetWebUsageEnabled(web_usage_enabled);
+  return web_state;
+}
+
 }  // anonymous namespace
 
 @interface TabModelWebStateProxyFactory : NSObject<WebStateProxyFactory>
@@ -138,8 +155,7 @@ void CleanCertificatePolicyCache(
   std::unique_ptr<WebStateList> _webStateList;
 
   // Helper providing NSFastEnumeration implementation over the WebStateList.
-  base::scoped_nsobject<WebStateListFastEnumerationHelper>
-      _fastEnumerationHelper;
+  std::unique_ptr<WebStateListFastEnumerationHelper> _fastEnumerationHelper;
 
   // WebStateListObservers reacting to modifications of the model (may send
   // notification, translate and forward events, update metrics, ...).
@@ -147,8 +163,7 @@ void CleanCertificatePolicyCache(
 
   // Strong references to id<WebStateListObserving> wrapped by non-owning
   // WebStateListObserverBridges.
-  base::scoped_nsobject<NSArray<id<WebStateListObserving>>>
-      _retainedWebStateListObservers;
+  NSArray<id<WebStateListObserving>>* _retainedWebStateListObservers;
 
   // The delegate for sync.
   std::unique_ptr<TabModelSyncedWindowDelegate> _syncedWindowDelegate;
@@ -161,20 +176,16 @@ void CleanCertificatePolicyCache(
   // Backs up property with the same name.
   const SessionID _sessionID;
   // Saves session's state.
-  base::scoped_nsobject<SessionServiceIOS> _sessionService;
+  SessionServiceIOS* _sessionService;
   // List of TabModelObservers.
-  base::scoped_nsobject<TabModelObservers> _observers;
+  TabModelObservers* _observers;
 
   // Used to ensure thread-safety of the certificate policy management code.
   base::CancelableTaskTracker _clearPoliciesTaskTracker;
 }
 
 // Session window for the contents of the tab model.
-@property(nonatomic, readonly) SessionWindowIOS* windowForSavingSession;
-
-// Helper method that posts a notification with the given name with |tab|
-// in the userInfo dictionary under the kTabModelTabKey.
-- (void)postNotificationName:(NSString*)notificationName withTab:(Tab*)tab;
+@property(nonatomic, readonly) SessionIOS* sessionForSaving;
 
 // Helper method to restore a saved session and control if the state should
 // be persisted or not. Used to implement the public -restoreSessionWindow:
@@ -188,43 +199,16 @@ void CleanCertificatePolicyCache(
 
 @synthesize browserState = _browserState;
 @synthesize sessionID = _sessionID;
-@synthesize webUsageEnabled = webUsageEnabled_;
+@synthesize webUsageEnabled = _webUsageEnabled;
 
 #pragma mark - Overriden
 
 - (void)dealloc {
-  // Make sure the tabs do clean after themselves. It is important for
-  // removeObserver: to be called first otherwise a lot of unecessary work will
-  // happen on -closeAllTabs.
-  DCHECK([_observers empty]);
-
   // browserStateDestroyed should always have been called before destruction.
   DCHECK(!_browserState);
 
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
-
-  // Clear weak pointer to WebStateListMetricsObserver before destroying it.
-  _webStateListMetricsObserver = nullptr;
-
-  // Close all tabs. Do this in an @autoreleasepool as WebStateList observers
-  // will be notified (they are unregistered later). As some of them may be
-  // implemented in Objective-C and unregister themselves in their -dealloc
-  // method, ensure they -autorelease introduced by ARC are processed before
-  // the WebStateList destructor is called.
-  @autoreleasepool {
-    [self closeAllTabs];
-  }
-
-  // Unregister all observers after closing all the tabs as some of them are
-  // required to properly clean up the Tabs.
-  for (const auto& webStateListObserver : _webStateListObservers)
-    _webStateList->RemoveObserver(webStateListObserver.get());
-  _webStateListObservers.clear();
-  _retainedWebStateListObservers.reset();
-
-  _clearPoliciesTaskTracker.TryCancelAll();
-
-  [super dealloc];
+  // Make sure the observers do clean after themselves.
+  DCHECK([_observers empty]);
 }
 
 #pragma mark - Public methods
@@ -269,15 +253,15 @@ void CleanCertificatePolicyCache(
                        sessionService:(SessionServiceIOS*)service
                          browserState:(ios::ChromeBrowserState*)browserState {
   if ((self = [super init])) {
-    _observers.reset([[TabModelObservers observers] retain]);
+    _observers = [TabModelObservers observers];
 
     _webStateListDelegate =
         base::MakeUnique<TabModelWebStateListDelegate>(self);
     _webStateList = base::MakeUnique<WebStateList>(_webStateListDelegate.get());
 
-    _fastEnumerationHelper.reset([[WebStateListFastEnumerationHelper alloc]
-        initWithWebStateList:_webStateList.get()
-                proxyFactory:[[TabModelWebStateProxyFactory alloc] init]]);
+    _fastEnumerationHelper =
+        base::MakeUnique<WebStateListFastEnumerationHelper>(
+            _webStateList.get(), [[TabModelWebStateProxyFactory alloc] init]);
 
     _browserState = browserState;
     DCHECK(_browserState);
@@ -289,21 +273,21 @@ void CleanCertificatePolicyCache(
       // Set up the usage recorder before tabs are created.
       _tabUsageRecorder = base::MakeUnique<TabUsageRecorder>(self);
     }
-    _syncedWindowDelegate =
-        base::MakeUnique<TabModelSyncedWindowDelegate>(self);
+    _syncedWindowDelegate = base::MakeUnique<TabModelSyncedWindowDelegate>(
+        _webStateList.get(), _sessionID);
 
     // There must be a valid session service defined to consume session windows.
     DCHECK(service);
-    _sessionService.reset([service retain]);
+    _sessionService = service;
 
-    base::scoped_nsobject<NSMutableArray<id<WebStateListObserving>>>
-        retainedWebStateListObservers([[NSMutableArray alloc] init]);
+    NSMutableArray<id<WebStateListObserving>>* retainedWebStateListObservers =
+        [[NSMutableArray alloc] init];
 
-    base::scoped_nsobject<TabModelClosingWebStateObserver>
-        tabModelClosingWebStateObserver([[TabModelClosingWebStateObserver alloc]
-            initWithTabModel:self
-              restoreService:IOSChromeTabRestoreServiceFactory::
-                                 GetForBrowserState(_browserState)]);
+    TabModelClosingWebStateObserver* tabModelClosingWebStateObserver = [
+        [TabModelClosingWebStateObserver alloc]
+        initWithTabModel:self
+          restoreService:IOSChromeTabRestoreServiceFactory::GetForBrowserState(
+                             _browserState)];
     [retainedWebStateListObservers addObject:tabModelClosingWebStateObserver];
 
     _webStateListObservers.push_back(
@@ -320,17 +304,16 @@ void CleanCertificatePolicyCache(
     }
     _webStateListObservers.push_back(base::MakeUnique<TabParentingObserver>());
 
-    base::scoped_nsobject<TabModelSelectedTabObserver>
-        tabModelSelectedTabObserver(
-            [[TabModelSelectedTabObserver alloc] initWithTabModel:self]);
+    TabModelSelectedTabObserver* tabModelSelectedTabObserver =
+        [[TabModelSelectedTabObserver alloc] initWithTabModel:self];
     [retainedWebStateListObservers addObject:tabModelSelectedTabObserver];
     _webStateListObservers.push_back(
         base::MakeUnique<WebStateListObserverBridge>(
             tabModelSelectedTabObserver));
 
-    base::scoped_nsobject<TabModelObserversBridge> tabModelObserversBridge(
+    TabModelObserversBridge* tabModelObserversBridge =
         [[TabModelObserversBridge alloc] initWithTabModel:self
-                                        tabModelObservers:_observers.get()]);
+                                        tabModelObservers:_observers];
     [retainedWebStateListObservers addObject:tabModelObserversBridge];
     _webStateListObservers.push_back(
         base::MakeUnique<WebStateListObserverBridge>(tabModelObserversBridge));
@@ -342,7 +325,7 @@ void CleanCertificatePolicyCache(
 
     for (const auto& webStateListObserver : _webStateListObservers)
       _webStateList->AddObserver(webStateListObserver.get());
-    _retainedWebStateListObservers.reset([retainedWebStateListObservers copy]);
+    _retainedWebStateListObservers = [retainedWebStateListObservers copy];
 
     if (window) {
       DCHECK([_observers empty]);
@@ -393,9 +376,9 @@ void CleanCertificatePolicyCache(
     return;
   NSString* statePath =
       base::SysUTF8ToNSString(_browserState->GetStatePath().AsUTF8Unsafe());
-  [_sessionService saveSessionWindow:self.windowForSavingSession
-                           directory:statePath
-                         immediately:immediately];
+  [_sessionService saveSession:self.sessionForSaving
+                     directory:statePath
+                   immediately:immediately];
 }
 
 - (Tab*)tabAtIndex:(NSUInteger)index {
@@ -501,7 +484,7 @@ void CleanCertificatePolicyCache(
   Tab* tab = LegacyTabHelper::GetTabForWebState(webStatePtr);
   DCHECK(tab);
 
-  webStatePtr->SetWebUsageEnabled(webUsageEnabled_ ? true : false);
+  webStatePtr->SetWebUsageEnabled(_webUsageEnabled ? true : false);
 
   if (!inBackground && _tabUsageRecorder)
     _tabUsageRecorder->TabCreatedForSelection(tab);
@@ -510,7 +493,7 @@ void CleanCertificatePolicyCache(
 
   // Force the page to start loading even if it's in the background.
   // TODO(crbug.com/705819): Remove this call.
-  if (webUsageEnabled_)
+  if (_webUsageEnabled)
     webStatePtr->GetView();
 
   NSDictionary* userInfo = @{
@@ -590,12 +573,12 @@ void CleanCertificatePolicyCache(
 }
 
 - (void)setWebUsageEnabled:(BOOL)webUsageEnabled {
-  if (webUsageEnabled_ == webUsageEnabled)
+  if (_webUsageEnabled == webUsageEnabled)
     return;
-  webUsageEnabled_ = webUsageEnabled;
+  _webUsageEnabled = webUsageEnabled;
   for (int index = 0; index < _webStateList->count(); ++index) {
     web::WebState* webState = _webStateList->GetWebStateAt(index);
-    webState->SetWebUsageEnabled(webUsageEnabled_ ? true : false);
+    webState->SetWebUsageEnabled(_webUsageEnabled ? true : false);
   }
 }
 
@@ -636,11 +619,33 @@ void CleanCertificatePolicyCache(
 
 // NOTE: This can be called multiple times, so must be robust against that.
 - (void)browserStateDestroyed {
+  if (!_browserState)
+    return;
+
   [[NSNotificationCenter defaultCenter] removeObserver:self];
-  if (_browserState) {
-    UnregisterTabModelFromChromeBrowserState(_browserState, self);
-  }
+  UnregisterTabModelFromChromeBrowserState(_browserState, self);
   _browserState = nullptr;
+
+  // Clear weak pointer to WebStateListMetricsObserver before destroying it.
+  _webStateListMetricsObserver = nullptr;
+
+  // Close all tabs. Do this in an @autoreleasepool as WebStateList observers
+  // will be notified (they are unregistered later). As some of them may be
+  // implemented in Objective-C and unregister themselves in their -dealloc
+  // method, ensure they -autorelease introduced by ARC are processed before
+  // the WebStateList destructor is called.
+  @autoreleasepool {
+    [self closeAllTabs];
+  }
+
+  // Unregister all observers after closing all the tabs as some of them are
+  // required to properly clean up the Tabs.
+  for (const auto& webStateListObserver : _webStateListObservers)
+    _webStateList->RemoveObserver(webStateListObserver.get());
+  _webStateListObservers.clear();
+  _retainedWebStateListObservers = nil;
+
+  _clearPoliciesTaskTracker.TryCancelAll();
 }
 
 - (void)navigationCommittedInTab:(Tab*)tab
@@ -670,11 +675,12 @@ void CleanCertificatePolicyCache(
 #pragma mark - NSFastEnumeration
 
 - (NSUInteger)countByEnumeratingWithState:(NSFastEnumerationState*)state
-                                  objects:(id*)objects
+                                  objects:(id __unsafe_unretained*)objects
                                     count:(NSUInteger)count {
-  return [_fastEnumerationHelper countByEnumeratingWithState:state
-                                                     objects:objects
-                                                       count:count];
+  return [_fastEnumerationHelper->GetFastEnumeration()
+      countByEnumeratingWithState:state
+                          objects:objects
+                            count:count];
 }
 
 #pragma mark - TabUsageRecorderDelegate
@@ -690,28 +696,13 @@ void CleanCertificatePolicyCache(
 
 #pragma mark - Private methods
 
-- (SessionWindowIOS*)windowForSavingSession {
-  // Background tabs will already have their state preserved, but not the
-  // fg tab. Do it now.
-  [self.currentTab recordStateInHistory];
-
+- (SessionIOS*)sessionForSaving {
   // Build the array of sessions. Copy the session objects as the saving will
   // be done on a separate thread.
   // TODO(crbug.com/661986): This could get expensive especially since this
   // window may never be saved (if another call comes in before the delay).
-  return SerializeWebStateList(_webStateList.get());
-}
-
-- (void)postNotificationName:(NSString*)notificationName withTab:(Tab*)tab {
-  // A scoped_nsobject is used rather than an NSDictionary with static
-  // initializer dictionaryWithObject, because that approach adds the dictionary
-  // to the autorelease pool, which in turn holds Tab alive longer than
-  // necessary.
-  base::scoped_nsobject<NSDictionary> userInfo(
-      [[NSDictionary alloc] initWithObjectsAndKeys:tab, kTabModelTabKey, nil]);
-  [[NSNotificationCenter defaultCenter] postNotificationName:notificationName
-                                                      object:self
-                                                    userInfo:userInfo];
+  return [[SessionIOS alloc]
+      initWithWindows:@[ SerializeWebStateList(_webStateList.get()) ]];
 }
 
 - (BOOL)restoreSessionWindow:(SessionWindowIOS*)window
@@ -725,14 +716,10 @@ void CleanCertificatePolicyCache(
   int oldCount = _webStateList->count();
   DCHECK_GE(oldCount, 0);
 
-  if (persistState && self.currentTab)
-    [self.currentTab recordStateInHistory];
-
   web::WebState::CreateParams createParams(_browserState);
   DeserializeWebStateList(
-      _webStateList.get(), window, webUsageEnabled_,
-      base::BindRepeating(&web::WebState::CreateWithStorageSession,
-                          createParams));
+      _webStateList.get(), window,
+      base::BindRepeating(&CreateWebState, _webUsageEnabled, createParams));
 
   DCHECK_GT(_webStateList->count(), oldCount);
   int restoredCount = _webStateList->count() - oldCount;
@@ -741,14 +728,14 @@ void CleanCertificatePolicyCache(
   scoped_refptr<web::CertificatePolicyCache> policyCache =
       web::BrowserState::GetCertificatePolicyCache(_browserState);
 
-  base::scoped_nsobject<NSMutableArray<Tab*>> restoredTabs(
-      [[NSMutableArray alloc] initWithCapacity:window.sessions.count]);
+  NSMutableArray<Tab*>* restoredTabs =
+      [[NSMutableArray alloc] initWithCapacity:window.sessions.count];
 
   for (int index = oldCount; index < _webStateList->count(); ++index) {
     web::WebState* webState = _webStateList->GetWebStateAt(index);
     Tab* tab = LegacyTabHelper::GetTabForWebState(webState);
 
-    webState->SetWebUsageEnabled(webUsageEnabled_ ? true : false);
+    webState->SetWebUsageEnabled(_webUsageEnabled ? true : false);
     tab.webController.usePlaceholderOverlay = YES;
 
     // Restore the CertificatePolicyCache (note that webState is invalid after
@@ -768,7 +755,7 @@ void CleanCertificatePolicyCache(
     }
   }
   if (_tabUsageRecorder)
-    _tabUsageRecorder->InitialRestoredTabs(self.currentTab, restoredTabs.get());
+    _tabUsageRecorder->InitialRestoredTabs(self.currentTab, restoredTabs);
   return closedNTPTab;
 }
 
@@ -776,7 +763,7 @@ void CleanCertificatePolicyCache(
 
 // Called when UIApplicationWillResignActiveNotification is received.
 - (void)willResignActive:(NSNotification*)notify {
-  if (webUsageEnabled_ && self.currentTab) {
+  if (_webUsageEnabled && self.currentTab) {
     [[SnapshotCache sharedInstance]
         willBeSavedGreyWhenBackgrounding:self.currentTab.tabId];
   }
@@ -803,7 +790,7 @@ void CleanCertificatePolicyCache(
   [self saveSessionImmediately:YES];
 
   // Write out a grey version of the current website to disk.
-  if (webUsageEnabled_ && self.currentTab) {
+  if (_webUsageEnabled && self.currentTab) {
     [[SnapshotCache sharedInstance]
         saveGreyInBackgroundForSessionID:self.currentTab.tabId];
   }

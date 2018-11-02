@@ -34,9 +34,10 @@
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/SourceLocation.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
+#include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalFrame.h"
@@ -51,7 +52,7 @@ ScheduledAction* ScheduledAction::Create(ScriptState* script_state,
                                          ExecutionContext* target,
                                          const ScriptValue& handler,
                                          const Vector<ScriptValue>& arguments) {
-  ASSERT(handler.IsFunction());
+  DCHECK(handler.IsFunction());
   if (!script_state->World().IsWorkerWorld()) {
     if (!BindingSecurity::ShouldAllowAccessToFrame(
             EnteredDOMWindow(script_state->GetIsolate()),
@@ -114,7 +115,7 @@ ScheduledAction::ScheduledAction(ScriptState* script_state,
                                  const ScriptValue& function,
                                  const Vector<ScriptValue>& arguments)
     : script_state_(script_state), info_(script_state->GetIsolate()) {
-  ASSERT(function.IsFunction());
+  DCHECK(function.IsFunction());
   function_.Set(script_state->GetIsolate(),
                 v8::Local<v8::Function>::Cast(function.V8Value()));
   info_.ReserveCapacity(arguments.size());
@@ -153,7 +154,7 @@ void ScheduledAction::Execute(LocalFrame* frame) {
     CreateLocalHandlesForArgs(&info);
     V8ScriptRunner::CallFunction(
         function, frame->GetDocument(), script_state_->GetContext()->Global(),
-        info.size(), info.Data(), script_state_->GetIsolate());
+        info.size(), info.data(), script_state_->GetIsolate());
   } else {
     DVLOG(1) << "ScheduledAction::execute " << this
              << ": executing from source";
@@ -166,7 +167,7 @@ void ScheduledAction::Execute(LocalFrame* frame) {
 }
 
 void ScheduledAction::Execute(WorkerGlobalScope* worker) {
-  ASSERT(worker->GetThread()->IsCurrentThread());
+  DCHECK(worker->GetThread()->IsCurrentThread());
 
   if (!script_state_->ContextIsValid()) {
     DVLOG(1) << "ScheduledAction::execute " << this << ": context is empty";
@@ -188,7 +189,7 @@ void ScheduledAction::Execute(WorkerGlobalScope* worker) {
     CreateLocalHandlesForArgs(&info);
     V8ScriptRunner::CallFunction(
         function, worker, script_state_->GetContext()->Global(), info.size(),
-        info.Data(), script_state_->GetIsolate());
+        info.data(), script_state_->GetIsolate());
   } else {
     worker->ScriptController()->Evaluate(ScriptSourceCode(code_));
   }

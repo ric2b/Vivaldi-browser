@@ -385,8 +385,6 @@ const char kWebKitMinimumFontSize[] = "webkit.webprefs.minimum_font_size";
 const char kWebKitMinimumLogicalFontSize[] =
     "webkit.webprefs.minimum_logical_font_size";
 const char kWebKitJavascriptEnabled[] = "webkit.webprefs.javascript_enabled";
-const char kWebKitJavascriptCanOpenWindowsAutomatically[] =
-    "webkit.webprefs.javascript_can_open_windows_automatically";
 const char kWebKitLoadsImagesAutomatically[] =
     "webkit.webprefs.loads_images_automatically";
 const char kWebKitPluginsEnabled[] = "webkit.webprefs.plugins_enabled";
@@ -444,9 +442,6 @@ const char kConfirmToQuitEnabled[] = "browser.confirm_to_quit";
 // in fullscreen. Mac only.
 const char kShowFullscreenToolbar[] = "browser.show_fullscreen_toolbar";
 
-// TODO(spqchan): Remove this, see crbug.com/590827.
-// This is being migrated to kShowFullscreenToolbar.
-const char kHideFullscreenToolbar[] = "browser.hide_fullscreen_toolbar";
 #endif
 
 // Boolean which specifies whether we should ask the user if we should download
@@ -706,6 +701,12 @@ const char kLaunchPaletteOnEjectEvent[] =
 // indicates that the user hasn't selected an app yet.
 const char kNoteTakingAppId[] = "settings.note_taking_app_id";
 
+// A boolean pref indicating whether preferred note-taking app (see
+// |kNoteTakingAppId|) is allowed to handle note taking actions on the lock
+// screen.
+const char kNoteTakingAppEnabledOnLockScreen[] =
+    "settings.note_taking_app_enabled_on_lock_screen";
+
 // A boolean pref indicating whether user activity has been observed in the
 // current session already. The pref is used to restore information about user
 // activity after browser crashes.
@@ -936,6 +937,9 @@ const char kFingerprintUnlockFeatureNotificationShown[] =
 const char kQuickUnlockPinSalt[] = "quick_unlock.pin.salt";
 const char kQuickUnlockPinSecret[] = "quick_unlock.pin.secret";
 
+// An integer pref. Indicates the number of fingerprint records registered.
+const char kQuickUnlockFingerprintRecord[] = "quick_unlock.fingerprint.record";
+
 // An integer pref. Holds one of several values:
 // 0: Supported. Device is in supported state.
 // 1: Security Only. Device is in Security-Only update (after initial 5 years).
@@ -969,6 +973,12 @@ const char kPinUnlockWeakPinsAllowed[] = "pin_unlock_weak_pins_allowed";
 // Boolean pref indicating whether fingerprint unlock is enabled.
 const char kEnableQuickUnlockFingerprint[] =
     "settings.enable_quick_unlock_fingerprint";
+
+// Boolean pref indicating whether a user is allowed to use Tether.
+const char kInstantTetheringAllowed[] = "tether.allowed";
+
+// Boolean pref indicating whether a user has enabled Tether.
+const char kInstantTetheringEnabled[] = "tether.enabled";
 #endif  // defined(OS_CHROMEOS)
 
 // A boolean pref set to true if a Home button to open the Home pages should be
@@ -1111,6 +1121,7 @@ const char kContentSettingsPluginWhitelist[] =
     "profile.content_settings.plugin_whitelist";
 #endif
 
+#if !defined(OS_ANDROID)
 // Double that indicates the default zoom level.
 const char kPartitionDefaultZoomLevel[] = "partition.default_zoom_level";
 
@@ -1118,9 +1129,8 @@ const char kPartitionDefaultZoomLevel[] = "partition.default_zoom_level";
 // be displayed at the default zoom level.
 const char kPartitionPerHostZoomLevels[] = "partition.per_host_zoom_levels";
 
-#if !defined(OS_ANDROID)
 const char kPinnedTabs[] = "pinned_tabs";
-#endif
+#endif  // !defined(OS_ANDROID)
 
 // Preference to disable 3D APIs (WebGL, Pepper 3D).
 const char kDisable3DAPIs[] = "disable_3d_apis";
@@ -1905,6 +1915,11 @@ const char kOobeMdMode[] = "OobeMdModeEnabled";
 // and get enrolled into a domain automatically.
 const char kOobeControllerDetected[] = "OobeControllerDetected";
 
+// A 64-bit signed integer pref (encoded as a string) which stores the time
+// of the last OOBE-initiated update check not resulting in an update.
+const char kOobeTimeOfLastUpdateCheckWithoutUpdate[] =
+    "OobeTimeOfLastUpdateCheckWithoutUpdate";
+
 // A boolean pref for whether the Goodies promotion webpage has been displayed,
 // or otherwise disqualified for auto-display, on this device.
 const char kCanShowOobeGoodiesPage[] = "CanShowOobeGoodiesPage";
@@ -2002,7 +2017,6 @@ const char kSystemTimezoneAutomaticDetectionPolicy[] =
     "settings.resolve_device_timezone_by_geolocation_policy";
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(ENABLE_MEDIA_ROUTER)
 // Pref name for the policy controlling whether to enable Media Router.
 const char kEnableMediaRouter[] = "media_router.enable_media_router";
 #if !defined(OS_ANDROID)
@@ -2010,7 +2024,6 @@ const char kEnableMediaRouter[] = "media_router.enable_media_router";
 // shown in the toolbar/overflow menu.
 const char kShowCastIconInToolbar[] = "media_router.show_cast_icon_in_toolbar";
 #endif  // !defined(OS_ANDROID)
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 
 // *************** SERVICE PREFS ***************
 // These are attached to the service process.
@@ -2350,7 +2363,6 @@ const char kLatestVersionWhenClickedUpdateMenuItem[] =
     "omaha.latest_version_when_clicked_upate_menu_item";
 #endif
 
-#if defined(ENABLE_MEDIA_ROUTER)
 // Whether or not the user has explicitly set the cloud services preference
 // through the first run flow.
 const char kMediaRouterCloudServicesPrefSet[] =
@@ -2365,7 +2377,6 @@ const char kMediaRouterFirstRunFlowAcknowledged[] =
 // A list of website origins on which the user has chosen to use tab mirroring.
 const char kMediaRouterTabMirroringSources[] =
     "media_router.tab_mirroring_sources";
-#endif
 
 // The base64-encoded representation of the public key to use to validate origin
 // trial token signatures.
@@ -2425,8 +2436,14 @@ const char kSearchGeolocationPostDisclosureMetricsRecorded[] =
 #endif
 
 // A dictionary which stores whether location access is enabled for the current
-// default search engine, if it is the Google search engine.
-const char kGoogleDSEGeolocationSetting[] = "google_dse_geolocation_setting";
+// default search engine.
+const char kDSEGeolocationSetting[] = "dse_geolocation_setting";
+
+// A dictionary which stores whether location access is enabled for the current
+// default search engine, if it is the Google search engine. Deprecated
+// Google-only version of the above.
+const char kGoogleDSEGeolocationSettingDeprecated[] =
+    "google_dse_geolocation_setting";
 
 // A dictionary of manifest URLs of Web Share Targets to a dictionary containing
 // attributes of its share_target field found in its manifest. Each key in the

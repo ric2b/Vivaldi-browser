@@ -4,6 +4,8 @@
 
 #include "ui/gfx/win/direct_manipulation.h"
 
+#include <objbase.h>
+
 #include "base/win/windows_version.h"
 
 namespace gfx {
@@ -12,12 +14,11 @@ namespace win {
 // static
 std::unique_ptr<DirectManipulationHelper>
 DirectManipulationHelper::CreateInstance() {
-  std::unique_ptr<DirectManipulationHelper> instance;
-
-  if (base::win::GetVersion() >= base::win::VERSION_WIN10)
-    instance.reset(new DirectManipulationHelper);
-
-  return instance;
+  // TODO(dtapuska): Do not create a DirectManipulationHelper on any windows
+  // versions as it only causes issues. High Precision Touchpad events seem to
+  // always be sent to apps with recent Windows 10 versions. This class should
+  // eventually be removed. See crbug.com/647038.
+  return nullptr;
 }
 
 DirectManipulationHelper::DirectManipulationHelper() {}
@@ -33,25 +34,26 @@ void DirectManipulationHelper::Initialize(HWND window) {
   // TODO(ananta)
   // Remove the CHECK statements here and below and replace them with logs
   // when this code stabilizes.
-  HRESULT hr = manager_.CreateInstance(CLSID_DirectManipulationManager,
-    nullptr, CLSCTX_INPROC_SERVER);
+  HRESULT hr =
+      ::CoCreateInstance(CLSID_DirectManipulationManager, nullptr,
+                         CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&manager_));
   CHECK(SUCCEEDED(hr));
 
-  hr = compositor_.CreateInstance(CLSID_DCompManipulationCompositor,
-      nullptr, CLSCTX_INPROC_SERVER);
+  hr = ::CoCreateInstance(CLSID_DCompManipulationCompositor, nullptr,
+                          CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&compositor_));
   CHECK(SUCCEEDED(hr));
 
-  hr = manager_->GetUpdateManager(IID_PPV_ARGS(update_manager_.Receive()));
+  hr = manager_->GetUpdateManager(IID_PPV_ARGS(update_manager_.GetAddressOf()));
   CHECK(SUCCEEDED(hr));
 
-  hr = compositor_->SetUpdateManager(update_manager_.get());
+  hr = compositor_->SetUpdateManager(update_manager_.Get());
   CHECK(SUCCEEDED(hr));
 
-  hr = frame_info_.QueryFrom(compositor_.get());
+  hr = compositor_.CopyTo(frame_info_.GetAddressOf());
   CHECK(SUCCEEDED(hr));
 
-  hr = manager_->CreateViewport(frame_info_.get(), window,
-      IID_PPV_ARGS(view_port_outer_.Receive()));
+  hr = manager_->CreateViewport(frame_info_.Get(), window,
+                                IID_PPV_ARGS(view_port_outer_.GetAddressOf()));
   CHECK(SUCCEEDED(hr));
 
   //
@@ -75,11 +77,11 @@ void DirectManipulationHelper::SetBounds(const gfx::Rect& bounds) {
   base::win::ScopedComPtr<IDirectManipulationPrimaryContent>
       primary_content_outer;
   HRESULT hr = view_port_outer_->GetPrimaryContent(
-      IID_PPV_ARGS(primary_content_outer.Receive()));
+      IID_PPV_ARGS(primary_content_outer.GetAddressOf()));
   CHECK(SUCCEEDED(hr));
 
   base::win::ScopedComPtr<IDirectManipulationContent> content_outer;
-  hr = content_outer.QueryFrom(primary_content_outer.get());
+  hr = primary_content_outer.CopyTo(content_outer.GetAddressOf());
   CHECK(SUCCEEDED(hr));
 
   RECT rect = bounds.ToRECT();

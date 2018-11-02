@@ -37,6 +37,7 @@
 #include "core/loader/PingLoader.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/NetworkHints.h"
 #include "platform/weborigin/SecurityPolicy.h"
 
@@ -278,7 +279,7 @@ bool HTMLAnchorElement::HasRel(uint32_t relation) const {
 
 void HTMLAnchorElement::SetRel(const AtomicString& value) {
   link_relations_ = 0;
-  SpaceSplitString new_link_relations(value, SpaceSplitString::kShouldFoldCase);
+  SpaceSplitString new_link_relations(value.LowerASCII());
   // FIXME: Add link relations as they are implemented
   if (new_link_relations.Contains("noreferrer"))
     link_relations_ |= kRelationNoReferrer;
@@ -305,9 +306,13 @@ void HTMLAnchorElement::SendPings(const KURL& destination_url) const {
       !GetDocument().GetSettings()->GetHyperlinkAuditingEnabled())
     return;
 
+  // Pings should not be sent if MHTML page is loaded.
+  if (GetDocument().Fetcher()->Archive())
+    return;
+
   UseCounter::Count(GetDocument(), UseCounter::kHTMLAnchorElementPingAttribute);
 
-  SpaceSplitString ping_urls(ping_value, SpaceSplitString::kShouldNotFoldCase);
+  SpaceSplitString ping_urls(ping_value);
   for (unsigned i = 0; i < ping_urls.size(); i++)
     PingLoader::SendLinkAuditPing(GetDocument().GetFrame(),
                                   GetDocument().CompleteURL(ping_urls[i]),
@@ -320,6 +325,11 @@ void HTMLAnchorElement::HandleClick(Event* event) {
   LocalFrame* frame = GetDocument().GetFrame();
   if (!frame)
     return;
+
+  if (!isConnected()) {
+    UseCounter::Count(GetDocument(),
+                      UseCounter::kAnchorClickDispatchForNonConnectedNode);
+  }
 
   StringBuilder url;
   url.Append(StripLeadingAndTrailingHTMLSpaces(FastGetAttribute(hrefAttr)));
@@ -350,15 +360,11 @@ void HTMLAnchorElement::HandleClick(Event* event) {
 
   if (hasAttribute(downloadAttr)) {
     request.SetRequestContext(WebURLRequest::kRequestContextDownload);
-    bool is_same_origin =
-        completed_url.ProtocolIsData() ||
-        GetDocument().GetSecurityOrigin()->CanRequest(completed_url);
-    const AtomicString& suggested_name =
-        (is_same_origin ? FastGetAttribute(downloadAttr) : g_null_atom);
     request.SetRequestorOrigin(SecurityOrigin::Create(GetDocument().Url()));
 
     frame->Loader().Client()->LoadURLExternally(
-        request, kNavigationPolicyDownload, suggested_name, false);
+        request, kNavigationPolicyDownload, FastGetAttribute(downloadAttr),
+        false);
   } else {
     request.SetRequestContext(WebURLRequest::kRequestContextHyperlink);
     FrameLoadRequest frame_request(&GetDocument(), request,

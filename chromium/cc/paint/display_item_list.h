@@ -18,6 +18,7 @@
 #include "cc/base/rtree.h"
 #include "cc/paint/discardable_image_map.h"
 #include "cc/paint/display_item.h"
+#include "cc/paint/drawing_display_item.h"
 #include "cc/paint/image_id.h"
 #include "cc/paint/paint_export.h"
 #include "third_party/skia/include/core/SkPicture.h"
@@ -41,13 +42,8 @@ class CC_PAINT_EXPORT DisplayItemList
  public:
   DisplayItemList();
 
-  // TODO(trchen): Deprecated. Apply clip and scale on the canvas instead.
   void Raster(SkCanvas* canvas,
-              SkPicture::AbortCallback* callback,
-              const gfx::Rect& canvas_target_playback_rect,
-              float contents_scale) const;
-
-  void Raster(SkCanvas* canvas, SkPicture::AbortCallback* callback) const;
+              SkPicture::AbortCallback* callback = nullptr) const;
 
   // Because processing happens in these CreateAndAppend functions, all the set
   // up for the item should be done via the args, which is why the return type
@@ -119,7 +115,10 @@ class CC_PAINT_EXPORT DisplayItemList
     visual_rects_.push_back(visual_rect);
     GrowCurrentBeginItemVisualRect(visual_rect);
 
-    return AllocateAndConstruct<DisplayItemType>(std::forward<Args>(args)...);
+    const auto& item =
+        AllocateAndConstruct<DisplayItemType>(std::forward<Args>(args)...);
+    has_discardable_images_ |= item.picture->HasDiscardableImages();
+    return item;
   }
 
   // Called after all items are appended, to process the items and, if
@@ -131,7 +130,7 @@ class CC_PAINT_EXPORT DisplayItemList
   }
   bool IsSuitableForGpuRasterization() const;
 
-  int ApproximateOpCount() const;
+  size_t OpCount() const;
   size_t ApproximateMemoryUsage() const;
   bool ShouldBeAnalyzedForSolidColor() const;
 
@@ -142,7 +141,7 @@ class CC_PAINT_EXPORT DisplayItemList
                                   float contents_scale,
                                   const gfx::ColorSpace& target_color_space,
                                   std::vector<DrawImage>* images);
-  gfx::Rect GetRectForImage(ImageId image_id) const;
+  gfx::Rect GetRectForImage(PaintImage::Id image_id) const;
 
   void SetRetainVisualRectsForTesting(bool retain) {
     retain_visual_rects_ = retain;
@@ -159,6 +158,13 @@ class CC_PAINT_EXPORT DisplayItemList
   ContiguousContainer<DisplayItem>::const_iterator end() const {
     return items_.end();
   }
+
+  void GatherDiscardableImages(DiscardableImageStore* image_store) const;
+  const DiscardableImageMap& discardable_image_map_for_testing() const {
+    return image_map_;
+  }
+
+  bool has_discardable_images() const { return has_discardable_images_; }
 
  private:
   FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, AsValueWithNoItems);
@@ -177,7 +183,7 @@ class CC_PAINT_EXPORT DisplayItemList
   const DisplayItemType& AllocateAndConstruct(Args&&... args) {
     auto* item = &items_.AllocateAndConstruct<DisplayItemType>(
         std::forward<Args>(args)...);
-    approximate_op_count_ += item->ApproximateOpCount();
+    op_count_ += item->OpCount();
     return *item;
   }
 
@@ -193,11 +199,12 @@ class CC_PAINT_EXPORT DisplayItemList
   std::vector<gfx::Rect> visual_rects_;
   std::vector<size_t> begin_item_indices_;
 
-  int approximate_op_count_ = 0;
+  size_t op_count_ = 0u;
   bool all_items_are_suitable_for_gpu_rasterization_ = true;
   // For testing purposes only. Whether to keep visual rects across calls to
   // Finalize().
   bool retain_visual_rects_ = false;
+  bool has_discardable_images_ = false;
 
   friend class base::RefCountedThreadSafe<DisplayItemList>;
   FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, ApproximateMemoryUsage);

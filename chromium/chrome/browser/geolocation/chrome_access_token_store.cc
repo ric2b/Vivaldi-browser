@@ -47,10 +47,9 @@ class TokenLoadingJob : public base::RefCountedThreadSafe<TokenLoadingJob> {
 
   void Run() {
     BrowserThread::PostTaskAndReply(
-        BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&TokenLoadingJob::PerformWorkOnUIThread, this),
-        base::Bind(&TokenLoadingJob::RespondOnOriginatingThread, this));
+        BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&TokenLoadingJob::PerformWorkOnUIThread, this),
+        base::BindOnce(&TokenLoadingJob::RespondOnOriginatingThread, this));
   }
 
  private:
@@ -118,8 +117,8 @@ static void SetAccessTokenOnUIThread(const GURL& server_url,
   DictionaryPrefUpdate update(g_browser_process->local_state(),
                               prefs::kGeolocationAccessToken);
   base::DictionaryValue* access_token_dictionary = update.Get();
-  access_token_dictionary->SetWithoutPathExpansion(server_url.spec(),
-                                                   new base::Value(token));
+  access_token_dictionary->SetStringWithoutPathExpansion(server_url.spec(),
+                                                         token);
 }
 
 void ChromeAccessTokenStore::SaveAccessToken(
@@ -127,5 +126,5 @@ void ChromeAccessTokenStore::SaveAccessToken(
     const base::string16& access_token) {
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&SetAccessTokenOnUIThread, server_url, access_token));
+      base::BindOnce(&SetAccessTokenOnUIThread, server_url, access_token));
 }

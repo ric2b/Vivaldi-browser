@@ -64,10 +64,12 @@ Các máy tính từ xa có bàn phím không phải tiếng Anh-Mỹ có thể 
 <translation id="225614027745146050">Chào mừng</translation>
 <translation id="228809120910082333">Vui lòng xác nhận tài khoản và mã PIN của bạn bên dưới để cho phép truy cập theo kết nối từ xa trên Chrome.</translation>
 <translation id="2314101195544969792">Phiên <ph name="APPLICATION_NAME" /> của bạn đã không hoạt động một thời gian và sẽ sớm bị ngắt kết nối.</translation>
+<translation id="2317666076142640974">Hãy xem trước <ph name="LINK_BEGIN" />ứng dụng web Chrome Remote Desktop<ph name="LINK_END" /> mới. Chúng tôi rất mong nhận được ý kiến phản hồi của bạn.</translation>
 <translation id="2353140552984634198">Bạn có thể truy cập an toàn vào máy tính này bằng Kết nối từ xa trên Chrome.</translation>
 <translation id="2359808026110333948">Tiếp tục</translation>
 <translation id="2366718077645204424">Không thể kết nối với máy chủ. Điều này có thể do cấu hình của mạng bạn đang sử dụng.</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  Nhìn thấy trực tuyến lần cuối <ph name="RELATIVE_TIMESTAMP" />.</translation>
+<translation id="2405928220797050937">Ứng dụng này không được hỗ trợ nữa. Để đảm bảo bạn sẽ nhận được các tính năng và bản cập nhật bảo mật mới nhất, hãy sử dụng <ph name="LINK_BEGIN" />ứng dụng web Chrome Remote Desktop<ph name="LINK_END" />.</translation>
 <translation id="2499160551253595098">Giúp chúng tôi cải tiến Chrome Remote Desktop bằng cách cho phép chúng tôi thu thập số liệu thống kê sử dụng và báo cáo sự cố.</translation>
 <translation id="2512228156274966424">LƯU Ý: Nhằm đảm bảo rằng tất cả các phím tắt đều khả dụng, bạn có thể định cấu hình Chrome Remote Desktop để ‘Mở dưới dạng cửa sổ’.</translation>
 <translation id="2540992418118313681">Bạn có muốn chia sẻ máy tính này cho một người dùng khác xem và kiểm soát không?</translation>
@@ -95,7 +97,6 @@ Các máy tính từ xa có bàn phím không phải tiếng Anh-Mỹ có thể 
 <translation id="3194245623920924351">Chrome Remote Desktop</translation>
 <translation id="3197730452537982411">Máy tính từ xa</translation>
 <translation id="3258789396564295715">Bạn có thể truy cập an toàn vào máy tính này bằng Chrome Remote Desktop.</translation>
-<translation id="327263477022142889">Bạn muốn trợ giúp cải tiến ứng dụng Chrome Remote Desktop? Hãy <ph name="LINK_BEGIN" />tham gia khảo sát.<ph name="LINK_END" /></translation>
 <translation id="3286521253923406898">Trình điều khiển máy chủ kết nối từ xa trên Chrome</translation>
 <translation id="332624996707057614">Chỉnh sửa tên máy tính</translation>
 <translation id="3339299787263251426">Truy cập máy tính của bạn qua Internet một cách an toàn</translation>
@@ -111,6 +112,7 @@ Các máy tính từ xa có bàn phím không phải tiếng Anh-Mỹ có thể 
 <translation id="3649256019230929621">Thu nhỏ cửa sổ</translation>
 <translation id="369442766917958684">Ngoại tuyến.</translation>
 <translation id="3695446226812920698">Tìm hiểu cách thức</translation>
+<translation id="3718805989288361841">Đã xảy ra lỗi với cài đặt chính sách cho Chrome Remote Desktop. Hãy liên hệ với quản trị viên hệ thống của bạn để được hỗ trợ.</translation>
 <translation id="3776024066357219166">Phiên Chrome Remote Desktop của bạn đã kết thúc.</translation>
 <translation id="3785447812627779171">Máy chủ kết nối từ xa
 trên Chrome</translation>
@@ -137,7 +139,6 @@ trên Chrome</translation>
 <translation id="4277463233460010382">Máy tính này được định cấu hình để cho phép một hoặc nhiều ứng dụng khách kết nối mà không cần nhập mã PIN.</translation>
 <translation id="4277736576214464567">Mã truy cập không hợp lệ. Vui lòng thử lại.</translation>
 <translation id="4361728918881830843">Để bật kết nối từ xa với một máy tính khác, hãy cài đặt Chrome Remote Desktop trên máy tính đó và nhấp “<ph name="BUTTON_NAME" />”.</translation>
-<translation id="4368630973089289038">Bạn muốn trợ giúp cải tiến tính năng Kết nối từ xa trên Chrome? Hãy <ph name="LINK_BEGIN" />tham gia khảo sát.<ph name="LINK_END" /></translation>
 <translation id="4394049700291259645">Vô hiệu hóa</translation>
 <translation id="4405930547258349619">Thư viện trung tâm</translation>
 <translation id="4430435636878359009">Tắt kết nối từ xa với máy tính này</translation>
@@ -232,6 +233,7 @@ Remote Desktop</translation>
 <translation id="6930242544192836755">Thời lượng</translation>
 <translation id="6939719207673461467">Hiển thị / ẩn bàn phím.</translation>
 <translation id="6944854424004126054">Khôi phục cửa sổ</translation>
+<translation id="6948905685698011662">Chrome Remote Desktop hiện đã có trên web! Hãy xem <ph name="LINK_BEGIN" />ứng dụng web miễn phí<ph name="LINK_END" /> của chúng tôi.</translation>
 <translation id="6963936880795878952">Kết nối với máy tính từ xa tạm thời bị chặn vì ai đó đang cố gắng kết nối với máy tính đó bằng mã PIN không hợp lệ. Vui lòng thử lại sau.</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Bạn có chắc chắn muốn tắt kết nối từ xa với <ph name="HOSTNAME" /> không? Nếu bạn thay đổi ý định, bạn cần truy cập vào máy tính đó để bật lại kết nối.</translation>
@@ -248,6 +250,7 @@ Remote Desktop</translation>
 <translation id="7401733114166276557">Chrome Remote Desktop</translation>
 <translation id="7434397035092923453">Truy cập bị từ chối đối với ứng dụng khách: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="7444276978508498879">Ứng dụng khách đã kết nối: <ph name="CLIENT_USERNAME" />.</translation>
+<translation id="7589941250119944644">Chrome Remote Desktop đang chuyển sang một trang mới trên web. Hãy dùng thử <ph name="LINK_BEGIN" />ứng dụng web<ph name="LINK_END" /> của chúng tôi—nhanh chóng và miễn phí, với tất cả tính năng giống như trước.</translation>
 <translation id="7606912958770842224">Bật kết nối từ xa</translation>
 <translation id="7649070708921625228">Trợ giúp</translation>
 <translation id="7658239707568436148">Hủy</translation>

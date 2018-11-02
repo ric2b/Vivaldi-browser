@@ -1,3 +1,4 @@
+
 // Copyright 2013 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -544,14 +545,14 @@ TEST(StrongConnectorTest, Math) {
 
 class WeakMathCalculatorImpl : public math::Calculator {
  public:
-  WeakMathCalculatorImpl(ScopedMessagePipeHandle handle,
+  WeakMathCalculatorImpl(math::CalculatorRequest request,
                          bool* error_received,
                          bool* destroyed,
                          const base::Closure& closure)
       : error_received_(error_received),
         destroyed_(destroyed),
         closure_(closure),
-        binding_(this, std::move(handle)) {
+        binding_(this, std::move(request)) {
     binding_.set_connection_error_handler(
         base::Bind(&SetFlagAndRunClosure, error_received_, closure_));
   }
@@ -585,8 +586,9 @@ TEST(WeakConnectorTest, Math) {
   bool destroyed = false;
   MessagePipe pipe;
   base::RunLoop run_loop;
-  WeakMathCalculatorImpl impl(std::move(pipe.handle0), &error_received,
-                              &destroyed, run_loop.QuitClosure());
+  WeakMathCalculatorImpl impl(math::CalculatorRequest(std::move(pipe.handle0)),
+                              &error_received, &destroyed,
+                              run_loop.QuitClosure());
 
   math::CalculatorPtr calc;
   calc.Bind(InterfacePtrInfo<math::Calculator>(std::move(pipe.handle1), 0u));
@@ -704,15 +706,12 @@ class PingTestImpl : public sample::PingTest {
 
 // Tests that FuseProxy does what it's supposed to do.
 TEST_F(InterfacePtrTest, Fusion) {
-  sample::PingTestPtr proxy;
-  PingTestImpl impl(MakeRequest(&proxy));
+  sample::PingTestPtrInfo proxy_info;
+  PingTestImpl impl(MakeRequest(&proxy_info));
 
-  // Create another PingTest pipe.
+  // Create another PingTest pipe and fuse it to the one hanging off |impl|.
   sample::PingTestPtr ptr;
-  sample::PingTestRequest request(&ptr);
-
-  // Fuse the new pipe to the one hanging off |impl|.
-  EXPECT_TRUE(FuseInterface(std::move(request), proxy.PassInterface()));
+  EXPECT_TRUE(FuseInterface(mojo::MakeRequest(&ptr), std::move(proxy_info)));
 
   // Ping!
   bool called = false;
@@ -797,7 +796,7 @@ TEST_F(InterfacePtrTest, InterfaceRequestResetWithReason) {
 
 TEST_F(InterfacePtrTest, CallbackIsPassedInterfacePtr) {
   sample::PingTestPtr ptr;
-  sample::PingTestRequest request(&ptr);
+  auto request = mojo::MakeRequest(&ptr);
 
   base::RunLoop run_loop;
 
@@ -816,7 +815,7 @@ TEST_F(InterfacePtrTest, CallbackIsPassedInterfacePtr) {
 
 TEST_F(InterfacePtrTest, ConnectionErrorHandlerOwnsInterfacePtr) {
   sample::PingTestPtr* ptr = new sample::PingTestPtr;
-  sample::PingTestRequest request(ptr);
+  auto request = mojo::MakeRequest(ptr);
 
   base::RunLoop run_loop;
 
@@ -883,7 +882,7 @@ TEST_F(InterfacePtrTest, ThreadSafeInterfacePointerWithTaskRunner) {
       other_thread.message_loop()->task_runner();
 
   math::CalculatorPtr ptr;
-  math::CalculatorRequest request(&ptr);
+  auto request = mojo::MakeRequest(&ptr);
 
   // Create a ThreadSafeInterfacePtr that we'll bind from a different thread.
   scoped_refptr<math::ThreadSafeCalculatorPtr> thread_safe_ptr =

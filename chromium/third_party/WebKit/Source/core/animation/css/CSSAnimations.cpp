@@ -433,11 +433,11 @@ void CSSAnimations::SnapshotCompositorKeyframes(
 }
 
 void CSSAnimations::MaybeApplyPendingUpdate(Element* element) {
-  previous_active_interpolations_for_animations_.Clear();
+  previous_active_interpolations_for_animations_.clear();
   if (pending_update_.IsEmpty())
     return;
 
-  previous_active_interpolations_for_animations_.Swap(
+  previous_active_interpolations_for_animations_.swap(
       pending_update_.ActiveInterpolationsForAnimations());
 
   // FIXME: cancelling, pausing, unpausing animations all query
@@ -513,7 +513,7 @@ void CSSAnimations::MaybeApplyPendingUpdate(Element* element) {
     KeyframeEffectReadOnly* effect =
         ToKeyframeEffectReadOnly(animation->effect());
     if (effect->HasActiveAnimationsOnCompositor(property) &&
-        pending_update_.NewTransitions().Find(property) !=
+        pending_update_.NewTransitions().find(property) !=
             pending_update_.NewTransitions().end() &&
         !animation->Limited()) {
       retargeted_compositor_transitions.insert(
@@ -645,25 +645,25 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
     return;
   }
 
-  RefPtr<AnimatableValue> to = nullptr;
   const RunningTransition* interrupted_transition = nullptr;
   if (state.active_transitions) {
     TransitionMap::const_iterator active_transition_iter =
-        state.active_transitions->Find(property);
+        state.active_transitions->find(property);
     if (active_transition_iter != state.active_transitions->end()) {
       const RunningTransition* running_transition =
           &active_transition_iter->value;
-      to = CSSAnimatableValueFactory::Create(property, state.style);
-      const AnimatableValue* active_to = running_transition->to.Get();
-      if (to->Equals(active_to))
+      if (CSSPropertyEquality::PropertiesEqual(property, state.style,
+                                               *running_transition->to)) {
         return;
+      }
       state.update.CancelTransition(property);
       DCHECK(!state.animating_element->GetElementAnimations() ||
              !state.animating_element->GetElementAnimations()
                   ->IsAnimationStyleChange());
 
-      if (to->Equals(
-              running_transition->reversing_adjusted_start_value.Get())) {
+      if (CSSPropertyEquality::PropertiesEqual(
+              property, state.style,
+              *running_transition->reversing_adjusted_start_value)) {
         interrupted_transition = running_transition;
       }
     }
@@ -671,22 +671,16 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
 
   const PropertyRegistry* registry =
       state.animating_element->GetDocument().GetPropertyRegistry();
-
   if (property.IsCSSCustomProperty()) {
-    if (!registry || !registry->Registration(property.CustomPropertyName()) ||
-        CSSPropertyEquality::RegisteredCustomPropertiesEqual(
-            property.CustomPropertyName(), state.old_style, state.style)) {
+    if (!registry || !registry->Registration(property.CustomPropertyName())) {
       return;
     }
-  } else if (CSSPropertyEquality::PropertiesEqual(
-                 property.CssProperty(), state.old_style, state.style)) {
-    return;
   }
 
-  if (!to)
-    to = CSSAnimatableValueFactory::Create(property, state.style);
-  RefPtr<AnimatableValue> from =
-      CSSAnimatableValueFactory::Create(property, state.old_style);
+  if (CSSPropertyEquality::PropertiesEqual(property, state.old_style,
+                                           state.style)) {
+    return;
+  }
 
   CSSInterpolationTypesMap map(registry);
   InterpolationEnvironment old_environment(map, state.old_style);
@@ -730,7 +724,7 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
     return;
   }
 
-  AnimatableValue* reversing_adjusted_start_value = from.Get();
+  const ComputedStyle* reversing_adjusted_start_value = &state.old_style;
   double reversing_shortening_factor = 1;
   if (interrupted_transition) {
     const double interrupted_progress =
@@ -785,6 +779,10 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
   keyframes.push_back(end_keyframe);
 
   if (CompositorAnimations::IsCompositableProperty(property.CssProperty())) {
+    RefPtr<AnimatableValue> from = CSSAnimatableValueFactory::Create(
+        property.CssProperty(), state.old_style);
+    RefPtr<AnimatableValue> to =
+        CSSAnimatableValueFactory::Create(property.CssProperty(), state.style);
     delay_keyframe->SetCompositorValue(from);
     start_keyframe->SetCompositorValue(from);
     end_keyframe->SetCompositorValue(to);
@@ -792,7 +790,10 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
 
   TransitionKeyframeEffectModel* model =
       TransitionKeyframeEffectModel::Create(keyframes);
-  state.update.StartTransition(property, from.Get(), to.Get(),
+  if (!state.cloned_style) {
+    state.cloned_style = ComputedStyle::Clone(state.style);
+  }
+  state.update.StartTransition(property, &state.old_style, state.cloned_style,
                                reversing_adjusted_start_value,
                                reversing_shortening_factor,
                                *InertEffect::Create(model, timing, false, 0));
@@ -876,9 +877,8 @@ void CSSAnimations::CalculateTransitionUpdate(CSSAnimationUpdate& update,
   if (!animation_style_recalc && style.Display() != EDisplay::kNone &&
       layout_object && layout_object->Style() && transition_data) {
     TransitionUpdateState state = {
-        update,          animating_element,  *layout_object->Style(),
-        style,           active_transitions, listed_properties,
-        *transition_data};
+        update,  animating_element,  *layout_object->Style(), style,
+        nullptr, active_transitions, listed_properties,       *transition_data};
 
     for (size_t transition_index = 0;
          transition_index < transition_data->PropertyList().size();
@@ -930,8 +930,8 @@ void CSSAnimations::Cancel() {
     entry.value.animation->Update(kTimingUpdateOnDemand);
   }
 
-  running_animations_.Clear();
-  transitions_.Clear();
+  running_animations_.clear();
+  transitions_.clear();
   ClearPendingUpdate();
 }
 
@@ -1074,7 +1074,7 @@ void CSSAnimations::AnimationEventDelegate::MaybeDispatch(
 
 bool CSSAnimations::AnimationEventDelegate::RequiresIterationEvents(
     const AnimationEffectReadOnly& animation_node) {
-  return GetDocument().HasListenerType(Document::ANIMATIONITERATION_LISTENER);
+  return GetDocument().HasListenerType(Document::kAnimationIterationListener);
 }
 
 void CSSAnimations::AnimationEventDelegate::OnEventCondition(
@@ -1090,7 +1090,7 @@ void CSSAnimations::AnimationEventDelegate::OnEventCondition(
        previous_phase_ == AnimationEffectReadOnly::kPhaseBefore)) {
     const double start_delay = animation_node.SpecifiedTiming().start_delay;
     const double elapsed_time = start_delay < 0 ? -start_delay : 0;
-    MaybeDispatch(Document::ANIMATIONSTART_LISTENER,
+    MaybeDispatch(Document::kAnimationStartListener,
                   EventTypeNames::animationstart, elapsed_time);
   }
 
@@ -1105,13 +1105,13 @@ void CSSAnimations::AnimationEventDelegate::OnEventCondition(
     const double elapsed_time =
         animation_node.SpecifiedTiming().iteration_duration *
         (previous_iteration_ + 1);
-    MaybeDispatch(Document::ANIMATIONITERATION_LISTENER,
+    MaybeDispatch(Document::kAnimationIterationListener,
                   EventTypeNames::animationiteration, elapsed_time);
   }
 
   if (current_phase == AnimationEffectReadOnly::kPhaseAfter &&
       previous_phase_ != AnimationEffectReadOnly::kPhaseAfter)
-    MaybeDispatch(Document::ANIMATIONEND_LISTENER, EventTypeNames::animationend,
+    MaybeDispatch(Document::kAnimationEndListener, EventTypeNames::animationend,
                   animation_node.ActiveDurationInternal());
 
   previous_phase_ = current_phase;
@@ -1133,7 +1133,7 @@ void CSSAnimations::TransitionEventDelegate::OnEventCondition(
       animation_node.GetPhase();
   if (current_phase == AnimationEffectReadOnly::kPhaseAfter &&
       current_phase != previous_phase_ &&
-      GetDocument().HasListenerType(Document::TRANSITIONEND_LISTENER)) {
+      GetDocument().HasListenerType(Document::kTransitionEndListener)) {
     String property_name = property_.IsCSSCustomProperty()
                                ? property_.CustomPropertyName()
                                : getPropertyNameString(property_.CssProperty());

@@ -81,7 +81,6 @@ class ImageResource::ImageResourceInfoImpl final
   const ResourceResponse& GetResponse() const override {
     return resource_->GetResponse();
   }
-  ResourceStatus GetStatus() const override { return resource_->GetStatus(); }
   bool ShouldShowPlaceholder() const override {
     return resource_->ShouldShowPlaceholder();
   }
@@ -135,7 +134,8 @@ class ImageResource::ImageResourceFactory : public ResourceFactory {
   Resource* Create(const ResourceRequest& request,
                    const ResourceLoaderOptions& options,
                    const String&) const override {
-    return new ImageResource(request, options, ImageResourceContent::Create(),
+    return new ImageResource(request, options,
+                             ImageResourceContent::CreateNotStarted(),
                              fetch_params_->GetPlaceholderImageRequestType() ==
                                  FetchParameters::kAllowPlaceholder);
   }
@@ -182,9 +182,19 @@ bool ImageResource::CanReuse(const FetchParameters& params) const {
   return true;
 }
 
+bool ImageResource::CanUseCacheValidator() const {
+  // Disable revalidation while ImageResourceContent is still waiting for
+  // SVG load completion.
+  // TODO(hiroshige): Clean up revalidation-related dependencies.
+  if (!GetContent()->IsLoaded())
+    return false;
+
+  return Resource::CanUseCacheValidator();
+}
+
 ImageResource* ImageResource::Create(const ResourceRequest& request) {
   return new ImageResource(request, ResourceLoaderOptions(),
-                           ImageResourceContent::Create(), false);
+                           ImageResourceContent::CreateNotStarted(), false);
 }
 
 ImageResource::ImageResource(const ResourceRequest& resource_request,
@@ -333,11 +343,11 @@ void ImageResource::DecodeError(bool all_data_received) {
   if (!all_data_received && Loader()) {
     // Observers are notified via ImageResource::finish().
     // TODO(hiroshige): Do not call didFinishLoading() directly.
-    Loader()->DidFinishLoading(MonotonicallyIncreasingTime(), size, size);
+    Loader()->DidFinishLoading(MonotonicallyIncreasingTime(), size, size, size);
   } else {
     auto result = GetContent()->UpdateImage(
-        nullptr, ImageResourceContent::kClearImageAndNotifyObservers,
-        all_data_received);
+        nullptr, GetStatus(),
+        ImageResourceContent::kClearImageAndNotifyObservers, all_data_received);
     DCHECK_EQ(result, ImageResourceContent::UpdateImageResult::kNoDecodeError);
   }
 
@@ -347,6 +357,11 @@ void ImageResource::DecodeError(bool all_data_received) {
 void ImageResource::UpdateImageAndClearBuffer() {
   UpdateImage(Data(), ImageResourceContent::kClearAndUpdateImage, true);
   ClearData();
+}
+
+void ImageResource::NotifyStartLoad() {
+  CHECK_EQ(GetStatus(), ResourceStatus::kPending);
+  GetContent()->NotifyStartLoad();
 }
 
 void ImageResource::Finish(double load_finish_time) {
@@ -366,13 +381,13 @@ void ImageResource::Finish(double load_finish_time) {
   Resource::Finish(load_finish_time);
 }
 
-void ImageResource::GetError(const ResourceError& error) {
+void ImageResource::FinishAsError(const ResourceError& error) {
   if (multipart_parser_)
     multipart_parser_->Cancel();
   // TODO(hiroshige): Move setEncodedSize() call to Resource::error() if it
   // is really needed, or remove it otherwise.
   SetEncodedSize(0);
-  Resource::GetError(error);
+  Resource::FinishAsError(error);
   UpdateImage(nullptr, ImageResourceContent::kClearImageAndNotifyObservers,
               true);
 }
@@ -490,7 +505,20 @@ void ImageResource::ReloadIfLoFiOrPlaceholderImage(
 
   SetCachePolicyBypassingCache();
 
-  SetPreviewsStateNoTransform();
+  // The reloaded image should not use any previews transformations.
+  WebURLRequest::PreviewsState previews_state_for_reload =
+      WebURLRequest::kPreviewsNoTransform;
+
+  if (policy == kReloadIfNeeded && (GetResourceRequest().GetPreviewsState() &
+                                    WebURLRequest::kClientLoFiOn)) {
+    // If the image attempted to use Client LoFi, but encountered a decoding
+    // error and is being automatically reloaded, then also set the appropriate
+    // PreviewsState bit for that. This allows the embedder to count the
+    // bandwidth used for this reload against the data savings of the initial
+    // response.
+    previews_state_for_reload |= WebURLRequest::kClientLoFiAutoReload;
+  }
+  SetPreviewsState(previews_state_for_reload);
 
   if (placeholder_option_ != PlaceholderOption::kDoNotReloadPlaceholder)
     ClearRangeRequestHeader();
@@ -579,8 +607,9 @@ void ImageResource::UpdateImage(
     PassRefPtr<SharedBuffer> shared_buffer,
     ImageResourceContent::UpdateImageOption update_image_option,
     bool all_data_received) {
-  auto result = GetContent()->UpdateImage(
-      std::move(shared_buffer), update_image_option, all_data_received);
+  auto result =
+      GetContent()->UpdateImage(std::move(shared_buffer), GetStatus(),
+                                update_image_option, all_data_received);
   if (result == ImageResourceContent::UpdateImageResult::kShouldDecodeError) {
     // In case of decode error, we call imageNotifyFinished() iff we don't
     // initiate reloading:

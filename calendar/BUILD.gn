@@ -1,0 +1,39 @@
+# Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
+
+static_library("calendar") {
+  sources = [
+    "calendar_backend.cc",
+    "calendar_backend.h",
+    "calendar_backend_notifier.h",
+    "calendar_constants.cc",
+    "calendar_constants.h",
+    "calendar_database.cc",
+    "calendar_database.h",
+    "calendar_database_params.cc",
+    "calendar_database_params.h",
+    "calendar_model_loaded_observer.cc",
+    "calendar_model_loaded_observer.h",
+    "calendar_model_observer.h",
+    "calendar_service.cc",
+    "calendar_service.h",
+    "calendar_service_factory.cc",
+    "calendar_service_factory.h",
+    "calendar_types.cc",
+    "calendar_types.h",
+    "event_database.cc",
+    "event_database.h",
+  ]
+  deps = [
+    "//base:base",
+    "//chrome:strings",
+    "//components/keyed_service/core:core",
+    "//components/keyed_service/content:content",
+    "//content/public/browser",
+    "//vivaldi/app:vivaldi_native_resources",
+    "//vivaldi/app:vivaldi_unscaled_native_resources",
+  ]
+  public_deps = [
+    #"//components/sync/protocol",
+    #"//vivaldi/sync",
+  ]
+}

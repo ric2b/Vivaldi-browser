@@ -41,7 +41,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "content/public/browser/download_danger_type.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -335,7 +335,8 @@ void DownloadItemView::OnDownloadOpened(DownloadItem* download) {
   SetEnabled(false);
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&DownloadItemView::Reenable, weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&DownloadItemView::Reenable,
+                     weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(kDisabledOnOpenDuration));
 
   // Notify our parent.
@@ -379,7 +380,7 @@ void DownloadItemView::UpdateDropdownButton() {
       GetTextColor());
 }
 
-gfx::Size DownloadItemView::GetPreferredSize() const {
+gfx::Size DownloadItemView::CalculatePreferredSize() const {
   int width = 0;
   // We set the height to the height of two rows or text plus margins.
   int child_height = font_list_.GetBaseline() + kVerticalTextPadding +
@@ -487,9 +488,9 @@ void DownloadItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->SetName(accessible_name_);
   node_data->role = ui::AX_ROLE_BUTTON;
   if (model_.IsDangerous())
-    node_data->AddStateFlag(ui::AX_STATE_DISABLED);
+    node_data->AddState(ui::AX_STATE_DISABLED);
   else
-    node_data->AddStateFlag(ui::AX_STATE_HASPOPUP);
+    node_data->AddState(ui::AX_STATE_HASPOPUP);
 }
 
 void DownloadItemView::OnThemeChanged() {

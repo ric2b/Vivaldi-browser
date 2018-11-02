@@ -92,6 +92,8 @@ class WebAXObjectProxy : public gin::Wrappable<WebAXObjectProxy> {
   int SelectionStartLineNumber();
   int SelectionEndLineNumber();
 
+  bool IsAtomic();
+  bool IsBusy();
   bool IsEnabled();
   bool IsRequired();
   bool IsEditable();
@@ -101,6 +103,7 @@ class WebAXObjectProxy : public gin::Wrappable<WebAXObjectProxy> {
   bool IsModal();
   bool IsSelected();
   bool IsSelectable();
+  bool IsMultiLine();
   bool IsMultiSelectable();
   bool IsSelectedOptionActive();
   bool IsExpanded();
@@ -126,6 +129,7 @@ class WebAXObjectProxy : public gin::Wrappable<WebAXObjectProxy> {
   std::string Relevant();
   std::string RoleDescription();
   std::string Sort();
+  int HierarchicalLevel();
   int PosInSet();
   int SetSize();
   int ClickPointX();

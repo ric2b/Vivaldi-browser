@@ -32,7 +32,6 @@
 #define RTCPeerConnection_h
 
 #include <memory>
-#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/SuspendableObject.h"
 #include "modules/EventTargetModules.h"
@@ -41,6 +40,7 @@
 #include "modules/peerconnection/RTCIceCandidate.h"
 #include "platform/AsyncMethodRunner.h"
 #include "platform/WebFrameScheduler.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/heap/HeapAllocator.h"
 #include "public/platform/WebMediaConstraints.h"
 #include "public/platform/WebRTCPeerConnectionHandler.h"
@@ -53,10 +53,12 @@ class RTCAnswerOptions;
 class RTCConfiguration;
 class RTCDTMFSender;
 class RTCDataChannel;
+class RTCDataChannelInit;
 class RTCIceCandidateInitOrRTCIceCandidate;
 class RTCOfferOptions;
 class RTCPeerConnectionErrorCallback;
 class RTCRtpReceiver;
+class RTCRtpSender;
 class RTCSessionDescription;
 class RTCSessionDescriptionCallback;
 class RTCSessionDescriptionInit;
@@ -149,11 +151,12 @@ class RTCPeerConnection final : public EventTargetWithInlineData,
                          MediaStreamTrack* selector = nullptr);
   ScriptPromise getStats(ScriptState*);
 
+  HeapVector<Member<RTCRtpSender>> getSenders();
   HeapVector<Member<RTCRtpReceiver>> getReceivers();
 
   RTCDataChannel* createDataChannel(ScriptState*,
                                     String label,
-                                    const Dictionary& data_channel_dict,
+                                    const RTCDataChannelInit&,
                                     ExceptionState&);
 
   RTCDTMFSender* createDTMFSender(MediaStreamTrack*, ExceptionState&);
@@ -226,11 +229,13 @@ class RTCPeerConnection final : public EventTargetWithInlineData,
   void ScheduleDispatchEvent(Event*);
   void ScheduleDispatchEvent(Event*, std::unique_ptr<BoolFunction>);
   void DispatchScheduledEvent();
-  bool HasLocalStreamWithTrackId(const String& track_id);
+  MediaStreamTrack* GetLocalTrackById(const String& track_id) const;
   MediaStreamTrack* GetRemoteTrackById(const String& track_id) const;
-  // Receivers returned by the handler are in use by the peer connection, a
-  // receiver that is no longer in use is permanently inactive and does not need
-  // to be referenced anymore. Removes such receivers from |m_rtpReceivers|.
+  // Senders and receivers returned by the handler are in use by the peer
+  // connection, a sender or receiver that is no longer in use is permanently
+  // inactive and does not need to be referenced anymore. These methods removes
+  // such senders/receivers from |rtp_senders_|/|rtp_receivers_|.
+  void RemoveInactiveSenders();
   void RemoveInactiveReceivers();
 
   void ChangeSignalingState(WebRTCPeerConnectionHandlerClient::SignalingState);
@@ -258,6 +263,7 @@ class RTCPeerConnection final : public EventTargetWithInlineData,
   // relevant events. https://crbug.com/705901
   MediaStreamVector local_streams_;
   MediaStreamVector remote_streams_;
+  HeapHashMap<uintptr_t, Member<RTCRtpSender>> rtp_senders_;
   HeapHashMap<uintptr_t, Member<RTCRtpReceiver>> rtp_receivers_;
 
   std::unique_ptr<WebRTCPeerConnectionHandler> peer_handler_;

@@ -15,7 +15,7 @@ Polymer({
   properties: {
     /**
      * The type of networks to list.
-     * @type {chrome.networkingPrivate.NetworkType}
+     * @type {CrOnc.Type}
      */
     networkType: {
       type: String,
@@ -154,6 +154,11 @@ Polymer({
     // preferable to initiating a query for every known network at load time.
     this.networkingPrivate.getManagedProperties(
         this.selectedGuid_, function(properties) {
+          if (chrome.runtime.lastError || !properties) {
+            this.showAddPreferred_ = false;
+            this.showRemovePreferred_ = false;
+            return;
+          }
           var preferred = button.hasAttribute('preferred');
           if (this.isNetworkPolicyEnforced(properties.Priority)) {
             this.showAddPreferred_ = false;

@@ -42,12 +42,13 @@
 #include "core/timing/PerformanceLongTaskTiming.h"
 #include "core/timing/PerformanceObserver.h"
 #include "core/timing/PerformanceResourceTiming.h"
+#include "core/timing/PerformanceServerTiming.h"
 #include "core/timing/PerformanceUserTiming.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/loader/fetch/ResourceTimingInfo.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "wtf/CurrentTime.h"
+#include "platform/wtf/CurrentTime.h"
 
 namespace blink {
 
@@ -65,6 +66,7 @@ using PerformanceObserverVector = HeapVector<Member<PerformanceObserver>>;
 
 static const size_t kDefaultResourceTimingBufferSize = 150;
 static const size_t kDefaultFrameTimingBufferSize = 150;
+static const size_t kServerTimingBufferSize = 150;
 
 PerformanceBase::PerformanceBase(double time_origin,
                                  RefPtr<WebTaskRunner> task_runner)
@@ -105,6 +107,12 @@ PerformanceEntryVector PerformanceBase::getEntries() {
     entries.AppendVector(user_timing_->GetMeasures());
   }
 
+  entries.AppendVector(server_timing_buffer_);
+  if (first_paint_timing_)
+    entries.push_back(first_paint_timing_);
+  if (first_contentful_paint_timing_)
+    entries.push_back(first_contentful_paint_timing_);
+
   std::sort(entries.begin(), entries.end(),
             PerformanceEntry::StartTimeCompareLessThan);
   return entries;
@@ -143,11 +151,18 @@ PerformanceEntryVector PerformanceBase::getEntriesByType(
       if (user_timing_)
         entries.AppendVector(user_timing_->GetMeasures());
       break;
-    // Unsupported for Paint, LongTask, TaskAttribution.
+    case PerformanceEntry::kServer:
+      entries.AppendVector(server_timing_buffer_);
+      break;
+    case PerformanceEntry::kPaint:
+      if (first_paint_timing_)
+        entries.push_back(first_paint_timing_);
+      if (first_contentful_paint_timing_)
+        entries.push_back(first_contentful_paint_timing_);
+      break;
+    // Unsupported for LongTask, TaskAttribution.
     // Per the spec, these entries can only be accessed via
     // Performance Observer. No separate buffer is maintained.
-    case PerformanceEntry::kPaint:
-      break;
     case PerformanceEntry::kLongTask:
       break;
     case PerformanceEntry::kTaskAttribution:
@@ -201,13 +216,22 @@ PerformanceEntryVector PerformanceBase::getEntriesByName(
       entries.AppendVector(user_timing_->GetMeasures(name));
   }
 
+  if (entry_type.IsNull() || type == PerformanceEntry::kServer) {
+    // This is inefficient, but this buffer has a max size of
+    // 150 entries (controlled by kServerTimingBufferSize).
+    for (const auto& entry : server_timing_buffer_) {
+      if (entry->name() == name)
+        entries.push_back(entry);
+    }
+  }
+
   std::sort(entries.begin(), entries.end(),
             PerformanceEntry::StartTimeCompareLessThan);
   return entries;
 }
 
 void PerformanceBase::clearResourceTimings() {
-  resource_timing_buffer_.Clear();
+  resource_timing_buffer_.clear();
 }
 
 void PerformanceBase::setResourceTimingBufferSize(unsigned size) {
@@ -217,7 +241,7 @@ void PerformanceBase::setResourceTimingBufferSize(unsigned size) {
 }
 
 void PerformanceBase::clearFrameTimings() {
-  frame_timing_buffer_.Clear();
+  frame_timing_buffer_.clear();
 }
 
 void PerformanceBase::setFrameTimingBufferSize(unsigned size) {
@@ -282,6 +306,45 @@ bool PerformanceBase::AllowsTimingRedirect(
   return true;
 }
 
+void PerformanceBase::AddServerTiming(const ResourceResponse& response,
+                                      ShouldAddToBuffer shouldAddToBuffer) {
+  if (shouldAddToBuffer == ShouldAddToBuffer::Never &&
+      !HasObserverFor(PerformanceEntry::kServer)) {
+    return;
+  }
+
+  ExecutionContext* context = GetExecutionContext();
+  SecurityOrigin* securityOrigin = GetSecurityOrigin(context);
+  if (!securityOrigin) {
+    return;
+  }
+  bool allowTimingDetails = PassesTimingAllowCheck(
+      response, *securityOrigin,
+      response.HttpHeaderField(HTTPNames::Timing_Allow_Origin), context);
+
+  std::unique_ptr<ServerTimingHeaderVector> headers = ParseServerTimingHeader(
+      response.HttpHeaderField(HTTPNames::Server_Timing));
+  if ((*headers).size() == 0) {
+    return;
+  }
+
+  PerformanceEntryVector entries;
+  for (const auto& header : *headers) {
+    PerformanceEntry* entry = PerformanceServerTiming::create(
+        response.Url().GetString(), header->metric,
+        allowTimingDetails ? header->duration : 0.0,
+        allowTimingDetails ? header->description : "");
+    entries.push_back(*entry);
+  }
+
+  NotifyObserversOfEntries(entries);
+  if (shouldAddToBuffer == ShouldAddToBuffer::Always &&
+      server_timing_buffer_.size() + entries.size() <=
+          kServerTimingBufferSize) {
+    server_timing_buffer_.AppendVector(entries);
+  }
+}
+
 void PerformanceBase::AddResourceTiming(const ResourceTimingInfo& info) {
   if (IsResourceTimingBufferFull() &&
       !HasObserverFor(PerformanceEntry::kResource))
@@ -312,14 +375,14 @@ void PerformanceBase::AddResourceTiming(const ResourceTimingInfo& info) {
 
   if (!allow_redirect_details) {
     ResourceLoadTiming* final_timing = final_response.GetResourceLoadTiming();
-    ASSERT(final_timing);
+    DCHECK(final_timing);
     if (final_timing)
       start_time = final_timing->RequestTime();
   }
 
   ResourceLoadTiming* last_redirect_timing =
       redirect_chain.back().GetResourceLoadTiming();
-  ASSERT(last_redirect_timing);
+  DCHECK(last_redirect_timing);
   double last_redirect_end_time = last_redirect_timing->ReceiveHeadersEnd();
 
   PerformanceEntry* entry = PerformanceResourceTiming::Create(
@@ -351,8 +414,14 @@ void PerformanceBase::AddPaintTiming(PerformancePaintTiming::PaintType type,
                                      double start_time) {
   if (!RuntimeEnabledFeatures::performancePaintTimingEnabled())
     return;
+
   PerformanceEntry* entry = new PerformancePaintTiming(
       type, MonotonicTimeToDOMHighResTimeStamp(start_time));
+  // Always buffer First Paint & First Contentful Paint.
+  if (type == PerformancePaintTiming::PaintType::kFirstPaint)
+    first_paint_timing_ = entry;
+  else if (type == PerformancePaintTiming::PaintType::kFirstContentfulPaint)
+    first_contentful_paint_timing_ = entry;
   NotifyObserversOfEntry(*entry);
 }
 
@@ -433,7 +502,7 @@ void PerformanceBase::RegisterPerformanceObserver(
 
 void PerformanceBase::UnregisterPerformanceObserver(
     PerformanceObserver& old_observer) {
-  ASSERT(IsMainThread());
+  DCHECK(IsMainThread());
   // Deliver any pending observations on this observer before unregistering.
   if (active_observers_.Contains(&old_observer) &&
       !old_observer.ShouldBeSuspended()) {
@@ -460,6 +529,13 @@ void PerformanceBase::NotifyObserversOfEntry(PerformanceEntry& entry) {
   }
 }
 
+void PerformanceBase::NotifyObserversOfEntries(
+    PerformanceEntryVector& entries) {
+  for (const auto& entry : entries) {
+    NotifyObserversOfEntry(*entry.Get());
+  }
+}
+
 bool PerformanceBase::HasObserverFor(
     PerformanceEntry::EntryType filter_type) const {
   return observer_filter_options_ & filter_type;
@@ -473,7 +549,7 @@ void PerformanceBase::ActivateObserver(PerformanceObserver& observer) {
 }
 
 void PerformanceBase::ResumeSuspendedObservers() {
-  ASSERT(IsMainThread());
+  DCHECK(IsMainThread());
   if (suspended_observers_.IsEmpty())
     return;
 
@@ -488,7 +564,7 @@ void PerformanceBase::ResumeSuspendedObservers() {
 }
 
 void PerformanceBase::DeliverObservationsTimerFired(TimerBase*) {
-  ASSERT(IsMainThread());
+  DCHECK(IsMainThread());
   PerformanceObservers observers;
   active_observers_.Swap(observers);
   for (const auto& observer : observers) {
@@ -505,15 +581,17 @@ double PerformanceBase::ClampTimeResolution(double time_seconds) {
   return floor(time_seconds / kResolutionSeconds) * kResolutionSeconds;
 }
 
+// static
 DOMHighResTimeStamp PerformanceBase::MonotonicTimeToDOMHighResTimeStamp(
     double time_origin,
-    double monotonic_time) {
+    double monotonic_time,
+    bool allow_negative_value) {
   // Avoid exposing raw platform timestamps.
   if (!monotonic_time || !time_origin)
     return 0.0;
 
   double time_in_seconds = monotonic_time - time_origin;
-  if (time_in_seconds < 0)
+  if (time_in_seconds < 0 && !allow_negative_value)
     return 0.0;
   return ConvertSecondsToDOMHighResTimeStamp(
       ClampTimeResolution(time_in_seconds));
@@ -521,7 +599,8 @@ DOMHighResTimeStamp PerformanceBase::MonotonicTimeToDOMHighResTimeStamp(
 
 DOMHighResTimeStamp PerformanceBase::MonotonicTimeToDOMHighResTimeStamp(
     double monotonic_time) const {
-  return MonotonicTimeToDOMHighResTimeStamp(time_origin_, monotonic_time);
+  return MonotonicTimeToDOMHighResTimeStamp(time_origin_, monotonic_time,
+                                            false /* allow_negative_value */);
 }
 
 DOMHighResTimeStamp PerformanceBase::now() const {
@@ -533,6 +612,9 @@ DEFINE_TRACE(PerformanceBase) {
   visitor->Trace(resource_timing_buffer_);
   visitor->Trace(navigation_timing_);
   visitor->Trace(user_timing_);
+  visitor->Trace(server_timing_buffer_);
+  visitor->Trace(first_paint_timing_);
+  visitor->Trace(first_contentful_paint_timing_);
   visitor->Trace(observers_);
   visitor->Trace(active_observers_);
   visitor->Trace(suspended_observers_);

@@ -32,6 +32,25 @@ class PaintLayerPainterTest
       : ScopedRootLayerScrollingForTest(GetParam().root_layer_scrolling),
         PaintControllerPaintTestBase(GetParam().slimming_paint_v2) {}
 
+  void ExpectPaintedOutputInvisible(const char* element_name,
+                                    bool expected_value) {
+    // The optimization to skip painting for effectively-invisible content is
+    // limited to SPv1.
+    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+      return;
+
+    PaintLayer* target_layer =
+        ToLayoutBox(GetLayoutObjectByElementId(element_name))->Layer();
+    PaintLayerPaintingInfo painting_info(nullptr, LayoutRect(),
+                                         kGlobalPaintNormalPhase, LayoutSize());
+    bool invisible =
+        PaintLayerPainter(*target_layer).PaintedOutputInvisible(painting_info);
+    EXPECT_EQ(expected_value, invisible)
+        << "Failed painted output visibility [spv2_enabled="
+        << RuntimeEnabledFeatures::slimmingPaintV2Enabled()
+        << ", expected=" << expected_value << ", actual=" << invisible << "].";
+  }
+
  private:
   void SetUp() override {
     PaintControllerPaintTestBase::SetUp();
@@ -70,13 +89,13 @@ TEST_P(PaintLayerPainterTest, CachedSubsequence) {
   GetDocument().View()->UpdateAllLifecyclePhases();
 
   LayoutObject& container1 =
-      *GetDocument().GetElementById("container1")->GetLayoutObject();
+      *GetDocument().getElementById("container1")->GetLayoutObject();
   LayoutObject& content1 =
-      *GetDocument().GetElementById("content1")->GetLayoutObject();
+      *GetDocument().getElementById("content1")->GetLayoutObject();
   LayoutObject& container2 =
-      *GetDocument().GetElementById("container2")->GetLayoutObject();
+      *GetDocument().getElementById("container2")->GetLayoutObject();
   LayoutObject& content2 =
-      *GetDocument().GetElementById("content2")->GetLayoutObject();
+      *GetDocument().getElementById("content2")->GetLayoutObject();
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     EXPECT_DISPLAY_LIST(
@@ -126,79 +145,6 @@ TEST_P(PaintLayerPainterTest, CachedSubsequence) {
   }
 }
 
-TEST_P(PaintLayerPainterTest, CachedSubsequenceForSVGRoot) {
-  SetBodyInnerHTML(
-      "<svg id='svg' style='position: relative'>"
-      "  <rect id='rect' x='10' y='10' width='100' height='100' rx='15' "
-      "ry='15'/>"
-      "</svg>"
-      "<div id='div' style='position: relative; width: 50x; height: "
-      "50px'></div>");
-  GetDocument().View()->UpdateAllLifecyclePhases();
-
-  LayoutObject& svg = *GetDocument().GetElementById("svg")->GetLayoutObject();
-  LayoutObject& rect = *GetDocument().GetElementById("rect")->GetLayoutObject();
-  LayoutObject& div = *GetDocument().GetElementById("div")->GetLayoutObject();
-
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-    // SPv2 slips the clip box (see BoxClipper).
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 2,
-        TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-        TestDisplayItem(rect, kForegroundType));
-  } else {
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 6,
-        TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-        TestDisplayItem(svg, DisplayItem::kClipLayerForeground),
-        TestDisplayItem(svg, DisplayItem::kBeginTransform),
-        TestDisplayItem(rect, kForegroundType),
-        TestDisplayItem(svg, DisplayItem::kEndTransform),
-        TestDisplayItem(svg, DisplayItem::ClipTypeToEndClipType(
-                                 DisplayItem::kClipLayerForeground)));
-  }
-
-  // Change the color of the div. This should not invalidate the subsequence
-  // for the SVG root.
-  ToHTMLElement(div.GetNode())
-      ->setAttribute(HTMLNames::styleAttr,
-                     "position: relative; width: 50x; height: 50px; "
-                     "background-color: green");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
-  EXPECT_TRUE(PaintWithoutCommit());
-
-  // Reuse of SVG and document background. 2 fewer with SPv2 enabled because
-  // clip display items don't appear in SPv2 display lists.
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
-    EXPECT_EQ(2, NumCachedNewItems());
-  else
-    EXPECT_EQ(6, NumCachedNewItems());
-
-  Commit();
-
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 3,
-        TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-        TestDisplayItem(rect, kForegroundType),
-        TestDisplayItem(div, kBackgroundType));
-  } else {
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 7,
-        TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-        TestDisplayItem(svg, DisplayItem::kClipLayerForeground),
-        TestDisplayItem(svg, DisplayItem::kBeginTransform),
-        TestDisplayItem(rect, kForegroundType),
-        TestDisplayItem(svg, DisplayItem::kEndTransform),
-        TestDisplayItem(svg, DisplayItem::ClipTypeToEndClipType(
-                                 DisplayItem::kClipLayerForeground)),
-        TestDisplayItem(div, kBackgroundType),
-        TestDisplayItem(GetLayoutView(),
-                        DisplayItem::ClipTypeToEndClipType(
-                            DisplayItem::kClipFrameToVisibleContentRect)));
-  }
-}
-
 TEST_P(PaintLayerPainterTest, CachedSubsequenceOnInterestRectChange) {
   // TODO(wangxianzhu): SPv2 deals with interest rect differently, so disable
   // this test for SPv2 temporarily.
@@ -226,19 +172,19 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceOnInterestRectChange) {
   RootPaintController().InvalidateAll();
 
   LayoutObject& container1 =
-      *GetDocument().GetElementById("container1")->GetLayoutObject();
+      *GetDocument().getElementById("container1")->GetLayoutObject();
   LayoutObject& content1 =
-      *GetDocument().GetElementById("content1")->GetLayoutObject();
+      *GetDocument().getElementById("content1")->GetLayoutObject();
   LayoutObject& container2 =
-      *GetDocument().GetElementById("container2")->GetLayoutObject();
+      *GetDocument().getElementById("container2")->GetLayoutObject();
   LayoutObject& content2a =
-      *GetDocument().GetElementById("content2a")->GetLayoutObject();
+      *GetDocument().getElementById("content2a")->GetLayoutObject();
   LayoutObject& content2b =
-      *GetDocument().GetElementById("content2b")->GetLayoutObject();
+      *GetDocument().getElementById("content2b")->GetLayoutObject();
   LayoutObject& container3 =
-      *GetDocument().GetElementById("container3")->GetLayoutObject();
+      *GetDocument().getElementById("container3")->GetLayoutObject();
   LayoutObject& content3 =
-      *GetDocument().GetElementById("content3")->GetLayoutObject();
+      *GetDocument().getElementById("content3")->GetLayoutObject();
 
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   IntRect interest_rect(0, 0, 400, 300);
@@ -299,13 +245,13 @@ TEST_P(PaintLayerPainterTest,
   Paint(&interest_rect);
 
   LayoutObject& container1 =
-      *GetDocument().GetElementById("container1")->GetLayoutObject();
+      *GetDocument().getElementById("container1")->GetLayoutObject();
   LayoutObject& content1 =
-      *GetDocument().GetElementById("content1")->GetLayoutObject();
+      *GetDocument().getElementById("content1")->GetLayoutObject();
   LayoutObject& container2 =
-      *GetDocument().GetElementById("container2")->GetLayoutObject();
+      *GetDocument().getElementById("container2")->GetLayoutObject();
   LayoutObject& content2 =
-      *GetDocument().GetElementById("content2")->GetLayoutObject();
+      *GetDocument().getElementById("content2")->GetLayoutObject();
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     EXPECT_DISPLAY_LIST(
@@ -369,18 +315,18 @@ TEST_P(PaintLayerPainterTest, PaintPhaseOutline) {
       "  </div>"
       "</div>");
   LayoutObject& outline_div =
-      *GetDocument().GetElementById("outline")->GetLayoutObject();
+      *GetDocument().getElementById("outline")->GetLayoutObject();
   ToHTMLElement(outline_div.GetNode())
       ->setAttribute(HTMLNames::styleAttr, style_without_outline);
   GetDocument().View()->UpdateAllLifecyclePhases();
 
   LayoutBoxModelObject& self_painting_layer_object = *ToLayoutBoxModelObject(
-      GetDocument().GetElementById("self-painting-layer")->GetLayoutObject());
+      GetDocument().getElementById("self-painting-layer")->GetLayoutObject());
   PaintLayer& self_painting_layer = *self_painting_layer_object.Layer();
   ASSERT_TRUE(self_painting_layer.IsSelfPaintingLayer());
   PaintLayer& non_self_painting_layer =
       *ToLayoutBoxModelObject(GetDocument()
-                                  .GetElementById("non-self-painting-layer")
+                                  .getElementById("non-self-painting-layer")
                                   ->GetLayoutObject())
            ->Layer();
   ASSERT_FALSE(non_self_painting_layer.IsSelfPaintingLayer());
@@ -435,18 +381,18 @@ TEST_P(PaintLayerPainterTest, PaintPhaseFloat) {
       "  </div>"
       "</div>");
   LayoutObject& float_div =
-      *GetDocument().GetElementById("float")->GetLayoutObject();
+      *GetDocument().getElementById("float")->GetLayoutObject();
   ToHTMLElement(float_div.GetNode())
       ->setAttribute(HTMLNames::styleAttr, style_without_float);
   GetDocument().View()->UpdateAllLifecyclePhases();
 
   LayoutBoxModelObject& self_painting_layer_object = *ToLayoutBoxModelObject(
-      GetDocument().GetElementById("self-painting-layer")->GetLayoutObject());
+      GetDocument().getElementById("self-painting-layer")->GetLayoutObject());
   PaintLayer& self_painting_layer = *self_painting_layer_object.Layer();
   ASSERT_TRUE(self_painting_layer.IsSelfPaintingLayer());
   PaintLayer& non_self_painting_layer =
       *ToLayoutBoxModelObject(GetDocument()
-                                  .GetElementById("non-self-painting-layer")
+                                  .getElementById("non-self-painting-layer")
                                   ->GetLayoutObject())
            ->Layer();
   ASSERT_FALSE(non_self_painting_layer.IsSelfPaintingLayer());
@@ -488,19 +434,19 @@ TEST_P(PaintLayerPainterTest, PaintPhaseFloatUnderInlineLayer) {
   GetDocument().View()->UpdateAllLifecyclePhases();
 
   LayoutObject& float_div =
-      *GetDocument().GetElementById("float")->GetLayoutObject();
+      *GetDocument().getElementById("float")->GetLayoutObject();
   LayoutBoxModelObject& span = *ToLayoutBoxModelObject(
-      GetDocument().GetElementById("span")->GetLayoutObject());
+      GetDocument().getElementById("span")->GetLayoutObject());
   PaintLayer& span_layer = *span.Layer();
   ASSERT_TRUE(&span_layer == float_div.EnclosingLayer());
   ASSERT_FALSE(span_layer.NeedsPaintPhaseFloat());
   LayoutBoxModelObject& self_painting_layer_object = *ToLayoutBoxModelObject(
-      GetDocument().GetElementById("self-painting-layer")->GetLayoutObject());
+      GetDocument().getElementById("self-painting-layer")->GetLayoutObject());
   PaintLayer& self_painting_layer = *self_painting_layer_object.Layer();
   ASSERT_TRUE(self_painting_layer.IsSelfPaintingLayer());
   PaintLayer& non_self_painting_layer =
       *ToLayoutBoxModelObject(GetDocument()
-                                  .GetElementById("non-self-painting-layer")
+                                  .getElementById("non-self-painting-layer")
                                   ->GetLayoutObject())
            ->Layer();
   ASSERT_FALSE(non_self_painting_layer.IsSelfPaintingLayer());
@@ -526,18 +472,18 @@ TEST_P(PaintLayerPainterTest, PaintPhaseBlockBackground) {
       "  </div>"
       "</div>");
   LayoutObject& background_div =
-      *GetDocument().GetElementById("background")->GetLayoutObject();
+      *GetDocument().getElementById("background")->GetLayoutObject();
   ToHTMLElement(background_div.GetNode())
       ->setAttribute(HTMLNames::styleAttr, style_without_background);
   GetDocument().View()->UpdateAllLifecyclePhases();
 
   LayoutBoxModelObject& self_painting_layer_object = *ToLayoutBoxModelObject(
-      GetDocument().GetElementById("self-painting-layer")->GetLayoutObject());
+      GetDocument().getElementById("self-painting-layer")->GetLayoutObject());
   PaintLayer& self_painting_layer = *self_painting_layer_object.Layer();
   ASSERT_TRUE(self_painting_layer.IsSelfPaintingLayer());
   PaintLayer& non_self_painting_layer =
       *ToLayoutBoxModelObject(GetDocument()
-                                  .GetElementById("non-self-painting-layer")
+                                  .getElementById("non-self-painting-layer")
                                   ->GetLayoutObject())
            ->Layer();
   ASSERT_FALSE(non_self_painting_layer.IsSelfPaintingLayer());
@@ -592,7 +538,7 @@ TEST_P(PaintLayerPainterTest, PaintPhasesUpdateOnLayerRemoval) {
       "</div>");
 
   LayoutBoxModelObject& layer_div = *ToLayoutBoxModelObject(
-      GetDocument().GetElementById("layer")->GetLayoutObject());
+      GetDocument().getElementById("layer")->GetLayoutObject());
   PaintLayer& layer = *layer_div.Layer();
   ASSERT_TRUE(layer.IsSelfPaintingLayer());
   EXPECT_TRUE(layer.NeedsPaintPhaseDescendantOutlines());
@@ -627,7 +573,7 @@ TEST_P(PaintLayerPainterTest, PaintPhasesUpdateOnLayerAddition) {
       "</div>");
 
   LayoutBoxModelObject& layer_div = *ToLayoutBoxModelObject(
-      GetDocument().GetElementById("will-be-layer")->GetLayoutObject());
+      GetDocument().getElementById("will-be-layer")->GetLayoutObject());
   EXPECT_FALSE(layer_div.HasLayer());
 
   PaintLayer& html_layer =
@@ -660,7 +606,7 @@ TEST_P(PaintLayerPainterTest, PaintPhasesUpdateOnBecomingSelfPainting) {
       "</div>");
 
   LayoutBoxModelObject& layer_div = *ToLayoutBoxModelObject(
-      GetDocument().GetElementById("will-be-self-painting")->GetLayoutObject());
+      GetDocument().getElementById("will-be-self-painting")->GetLayoutObject());
   ASSERT_TRUE(layer_div.HasLayer());
   EXPECT_FALSE(layer_div.Layer()->IsSelfPaintingLayer());
 
@@ -694,7 +640,7 @@ TEST_P(PaintLayerPainterTest, PaintPhasesUpdateOnBecomingNonSelfPainting) {
 
   LayoutBoxModelObject& layer_div =
       *ToLayoutBoxModelObject(GetDocument()
-                                  .GetElementById("will-be-non-self-painting")
+                                  .getElementById("will-be-non-self-painting")
                                   ->GetLayoutObject());
   ASSERT_TRUE(layer_div.HasLayer());
   PaintLayer& layer = *layer_div.Layer();
@@ -772,52 +718,42 @@ TEST_P(PaintLayerPainterTest,
 TEST_P(PaintLayerPainterTest, DontPaintWithTinyOpacity) {
   SetBodyInnerHTML(
       "<div id='target' style='background: blue; opacity: 0.0001'></div>");
-  PaintLayer* target_layer =
-      ToLayoutBox(GetLayoutObjectByElementId("target"))->Layer();
-  PaintLayerPaintingInfo painting_info(nullptr, LayoutRect(),
-                                       kGlobalPaintNormalPhase, LayoutSize());
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-    EXPECT_FALSE(
-        PaintLayerPainter(*target_layer).PaintedOutputInvisible(painting_info));
-  } else {
-    EXPECT_TRUE(
-        PaintLayerPainter(*target_layer).PaintedOutputInvisible(painting_info));
-  }
+  ExpectPaintedOutputInvisible("target", true);
 }
 
-TEST_P(PaintLayerPainterTest, DontPaintWithTinyOpacityAndBackdropFilter) {
+TEST_P(PaintLayerPainterTest, DoPaintWithTinyOpacityAndWillChangeOpacity) {
+  SetBodyInnerHTML(
+      "<div id='target' style='background: blue; opacity: 0.0001; "
+      "will-change: opacity'></div>");
+  ExpectPaintedOutputInvisible("target", false);
+}
+
+TEST_P(PaintLayerPainterTest, DoPaintWithTinyOpacityAndBackdropFilter) {
   SetBodyInnerHTML(
       "<div id='target' style='background: blue; opacity: 0.0001;"
       "  backdrop-filter: blur(2px);'></div>");
-  PaintLayer* target_layer =
-      ToLayoutBox(GetLayoutObjectByElementId("target"))->Layer();
-  PaintLayerPaintingInfo painting_info(nullptr, LayoutRect(),
-                                       kGlobalPaintNormalPhase, LayoutSize());
-  EXPECT_FALSE(
-      PaintLayerPainter(*target_layer).PaintedOutputInvisible(painting_info));
+  ExpectPaintedOutputInvisible("target", false);
+}
+
+TEST_P(PaintLayerPainterTest,
+       DoPaintWithTinyOpacityAndBackdropFilterAndWillChangeOpacity) {
+  SetBodyInnerHTML(
+      "<div id='target' style='background: blue; opacity: 0.0001;"
+      "  backdrop-filter: blur(2px); will-change: opacity'></div>");
+  ExpectPaintedOutputInvisible("target", false);
 }
 
 TEST_P(PaintLayerPainterTest, DoPaintWithCompositedTinyOpacity) {
   SetBodyInnerHTML(
       "<div id='target' style='background: blue; opacity: 0.0001;"
       " will-change: transform'></div>");
-  PaintLayer* target_layer =
-      ToLayoutBox(GetLayoutObjectByElementId("target"))->Layer();
-  PaintLayerPaintingInfo painting_info(nullptr, LayoutRect(),
-                                       kGlobalPaintNormalPhase, LayoutSize());
-  EXPECT_FALSE(
-      PaintLayerPainter(*target_layer).PaintedOutputInvisible(painting_info));
+  ExpectPaintedOutputInvisible("target", false);
 }
 
 TEST_P(PaintLayerPainterTest, DoPaintWithNonTinyOpacity) {
   SetBodyInnerHTML(
       "<div id='target' style='background: blue; opacity: 0.1'></div>");
-  PaintLayer* target_layer =
-      ToLayoutBox(GetLayoutObjectByElementId("target"))->Layer();
-  PaintLayerPaintingInfo painting_info(nullptr, LayoutRect(),
-                                       kGlobalPaintNormalPhase, LayoutSize());
-  EXPECT_FALSE(
-      PaintLayerPainter(*target_layer).PaintedOutputInvisible(painting_info));
+  ExpectPaintedOutputInvisible("target", false);
 }
 
 TEST_P(PaintLayerPainterTest, DoPaintWithEffectAnimationZeroOpacity) {
@@ -835,15 +771,10 @@ TEST_P(PaintLayerPainterTest, DoPaintWithEffectAnimationZeroOpacity) {
       "} "
       "</style> "
       "<div id='target'></div>");
-  PaintLayer* target_layer =
-      ToLayoutBox(GetLayoutObjectByElementId("target"))->Layer();
-  PaintLayerPaintingInfo painting_info(nullptr, LayoutRect(),
-                                       kGlobalPaintNormalPhase, LayoutSize());
-  EXPECT_FALSE(
-      PaintLayerPainter(*target_layer).PaintedOutputInvisible(painting_info));
+  ExpectPaintedOutputInvisible("target", false);
 }
 
-TEST_P(PaintLayerPainterTest, DoNotPaintWithTransformAnimationZeroOpacity) {
+TEST_P(PaintLayerPainterTest, DoPaintWithTransformAnimationZeroOpacity) {
   SetBodyInnerHTML(
       "<style> "
       "div#target { "
@@ -857,17 +788,68 @@ TEST_P(PaintLayerPainterTest, DoNotPaintWithTransformAnimationZeroOpacity) {
       "} "
       "</style> "
       "<div id='target'>x</div></div>");
-  PaintLayer* target_layer =
-      ToLayoutBox(GetLayoutObjectByElementId("target"))->Layer();
-  PaintLayerPaintingInfo painting_info(nullptr, LayoutRect(),
-                                       kGlobalPaintNormalPhase, LayoutSize());
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-    EXPECT_TRUE(
-        PaintLayerPainter(*target_layer).PaintedOutputInvisible(painting_info));
-  } else {
-    EXPECT_FALSE(
-        PaintLayerPainter(*target_layer).PaintedOutputInvisible(painting_info));
-  }
+  ExpectPaintedOutputInvisible("target", false);
+}
+
+TEST_P(PaintLayerPainterTest,
+       DoPaintWithTransformAnimationZeroOpacityWillChangeOpacity) {
+  SetBodyInnerHTML(
+      "<style> "
+      "div#target { "
+      "  animation-name: example; "
+      "  animation-duration: 4s; "
+      "  opacity: 0.0; "
+      "  will-change: opacity; "
+      "} "
+      "@keyframes example { "
+      " from { transform: translate(0px, 0px); } "
+      " to { transform: translate(3em, 0px); } "
+      "} "
+      "</style> "
+      "<div id='target'>x</div></div>");
+  ExpectPaintedOutputInvisible("target", false);
+}
+
+TEST_P(PaintLayerPainterTest, DoPaintWithWillChangeOpacity) {
+  SetBodyInnerHTML(
+      "<style> "
+      "div { "
+      "  width: 100px; "
+      "  height: 100px; "
+      "  will-change: opacity;"
+      "}"
+      "</style> "
+      "<div id='target'></div>");
+  ExpectPaintedOutputInvisible("target", false);
+}
+
+TEST_P(PaintLayerPainterTest, DoPaintWithZeroOpacityAndWillChangeOpacity) {
+  SetBodyInnerHTML(
+      "<style> "
+      "div { "
+      "  width: 100px; "
+      "  height: 100px; "
+      "  opacity: 0; "
+      "  will-change: opacity;"
+      "}"
+      "</style> "
+      "<div id='target'></div>");
+  ExpectPaintedOutputInvisible("target", false);
+}
+
+TEST_P(PaintLayerPainterTest,
+       DoPaintWithNoContentAndZeroOpacityAndWillChangeOpacity) {
+  SetBodyInnerHTML(
+      "<style> "
+      "div { "
+      "  width: 100px; "
+      "  height: 100px; "
+      "  opacity: 0; "
+      "  will-change: opacity;"
+      "}"
+      "</style> "
+      "<div id='target'></div>");
+  ExpectPaintedOutputInvisible("target", false);
 }
 
 }  // namespace blink

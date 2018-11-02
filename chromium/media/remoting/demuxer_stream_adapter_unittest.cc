@@ -8,7 +8,9 @@
 #include <vector>
 
 #include "base/callback_helpers.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/demuxer_stream.h"
 #include "media/remoting/fake_media_resource.h"

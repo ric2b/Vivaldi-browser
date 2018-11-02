@@ -20,6 +20,7 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "net/test/url_request/url_request_failed_job.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/report_sender.h"
 #include "net/url_request/url_request_filter.h"
 #include "net/url_request/url_request_test_util.h"
@@ -36,15 +37,15 @@ const char kFailureHistogramName[] = "SSL.ExpectCTReportFailure2";
 class TestCertificateReportSender : public net::ReportSender {
  public:
   TestCertificateReportSender()
-      : ReportSender(nullptr, net::ReportSender::DO_NOT_SEND_COOKIES) {}
+      : ReportSender(nullptr, TRAFFIC_ANNOTATION_FOR_TESTS) {}
   ~TestCertificateReportSender() override {}
 
-  void Send(
-      const GURL& report_uri,
-      base::StringPiece content_type,
-      base::StringPiece serialized_report,
-      const base::Callback<void()>& success_callback,
-      const base::Callback<void(const GURL&, int)>& error_callback) override {
+  void Send(const GURL& report_uri,
+            base::StringPiece content_type,
+            base::StringPiece serialized_report,
+            const base::Callback<void()>& success_callback,
+            const base::Callback<void(const GURL&, int, int)>& error_callback)
+      override {
     latest_report_uri_ = report_uri;
     serialized_report.CopyToString(&latest_serialized_report_);
     content_type.CopyToString(&latest_content_type_);
@@ -325,7 +326,9 @@ class ChromeExpectCTReporterWaitTest : public ::testing::Test {
     base::RunLoop run_loop;
     network_delegate_.set_url_request_destroyed_callback(
         run_loop.QuitClosure());
-    reporter->OnExpectCTFailed(host_port, report_uri, ssl_info);
+    reporter->OnExpectCTFailed(host_port, report_uri, ssl_info.cert.get(),
+                               ssl_info.unverified_cert.get(),
+                               ssl_info.signed_certificate_timestamps);
     run_loop.Run();
   }
 
@@ -364,7 +367,9 @@ TEST(ChromeExpectCTReporterTest, FeatureDisabled) {
   net::HostPortPair host_port("example.test", 443);
   GURL report_uri("http://example-report.test");
 
-  reporter.OnExpectCTFailed(host_port, report_uri, ssl_info);
+  reporter.OnExpectCTFailed(host_port, report_uri, ssl_info.cert.get(),
+                            ssl_info.unverified_cert.get(),
+                            ssl_info.signed_certificate_timestamps);
   EXPECT_TRUE(sender->latest_report_uri().is_empty());
   EXPECT_TRUE(sender->latest_serialized_report().empty());
 
@@ -384,8 +389,8 @@ TEST(ChromeExpectCTReporterTest, EmptyReportURI) {
   EXPECT_TRUE(sender->latest_report_uri().is_empty());
   EXPECT_TRUE(sender->latest_serialized_report().empty());
 
-  reporter.OnExpectCTFailed(net::HostPortPair("example.test", 443), GURL(),
-                            net::SSLInfo());
+  reporter.OnExpectCTFailed(net::HostPortPair(), GURL(), nullptr, nullptr,
+                            net::SignedCertificateTimestampAndStatusList());
   EXPECT_TRUE(sender->latest_report_uri().is_empty());
   EXPECT_TRUE(sender->latest_serialized_report().empty());
 
@@ -483,7 +488,9 @@ TEST(ChromeExpectCTReporterTest, SendReport) {
   GURL report_uri("http://example-report.test");
 
   // Check that the report is sent and contains the correct information.
-  reporter.OnExpectCTFailed(host_port, report_uri, ssl_info);
+  reporter.OnExpectCTFailed(host_port, report_uri, ssl_info.cert.get(),
+                            ssl_info.unverified_cert.get(),
+                            ssl_info.signed_certificate_timestamps);
   EXPECT_EQ(report_uri, sender->latest_report_uri());
   EXPECT_FALSE(sender->latest_serialized_report().empty());
   EXPECT_EQ("application/json; charset=utf-8", sender->latest_content_type());

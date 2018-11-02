@@ -31,9 +31,9 @@
 #ifndef WebSharedWorker_h
 #define WebSharedWorker_h
 
-#include "../platform/WebAddressSpace.h"
-#include "../platform/WebCommon.h"
-#include "../platform/WebContentSecurityPolicy.h"
+#include "public/platform/WebAddressSpace.h"
+#include "public/platform/WebCommon.h"
+#include "public/platform/WebContentSecurityPolicy.h"
 
 namespace blink {
 
@@ -54,7 +54,8 @@ class WebSharedWorker {
                                   const WebString& name,
                                   const WebString& content_security_policy,
                                   WebContentSecurityPolicyType,
-                                  WebAddressSpace) = 0;
+                                  WebAddressSpace,
+                                  bool data_saver_enabled) = 0;
 
   // Sends a connect event to the SharedWorker context.
   virtual void Connect(std::unique_ptr<WebMessagePortChannel>) = 0;
@@ -68,7 +69,7 @@ class WebSharedWorker {
   virtual void ReattachDevTools(const WebString& host_id,
                                 int session_id,
                                 const WebString& saved_state) = 0;
-  virtual void DetachDevTools() = 0;
+  virtual void DetachDevTools(int session_id) = 0;
   virtual void DispatchDevToolsMessage(int session_id,
                                        int call_id,
                                        const WebString& method,

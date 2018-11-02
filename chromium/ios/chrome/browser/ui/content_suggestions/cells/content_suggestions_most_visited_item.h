@@ -6,34 +6,22 @@
 #define IOS_CHROME_BROWSER_UI_CONTENT_SUGGESTIONS_CELLS_CONTENT_SUGGESTIONS_MOST_VISITED_ITEM_H_
 
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
-#import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestion_identifier.h"
-#import "ios/third_party/material_components_ios/src/components/CollectionCells/src/MaterialCollectionCells.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/suggested_content.h"
 
-@class ContentSuggestionsMostVisited;
 @class FaviconAttributes;
+class GURL;
 
-// Item containing the Most Visited suggestions.
+// Item containing a Most Visited suggestion.
 @interface ContentSuggestionsMostVisitedItem
-    : CollectionViewItem<ContentSuggestionIdentification>
+    : CollectionViewItem<SuggestedContent>
 
-// Most Visited suggestions for this item.
-@property(nonatomic, copy, nonnull)
-    NSArray<ContentSuggestionsMostVisited*>* suggestions;
+// Attributes to configure the favicon view.
+@property(nonatomic, strong, nonnull) FaviconAttributes* attributes;
 
-@end
+// Text for the title and the accessibility label of the cell.
+@property(nonatomic, copy, nonnull) NSString* title;
 
-// Associated cell to display the Most Visited suggestions.
-// This cell displays the most visited suggestions on two rows, vertically
-// stacked. Each row is a horizontal stack of ContentSuggestionsTiles. The
-// number of tiles per row depends of the available width.
-@interface ContentSuggestionsMostVisitedCell : MDCCollectionViewCell
-
-// Sets the Most Visited suggestions of this cell.
-- (void)setSuggestions:
-    (nonnull NSArray<ContentSuggestionsMostVisited*>*)suggestions;
-
-// Returns the maximum number of tiles per line, limited to 4.
-- (NSUInteger)numberOfTilesPerLine;
+@property(nonatomic, assign) GURL URL;
 
 @end
 

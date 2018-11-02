@@ -31,10 +31,10 @@
 #ifndef WebSettings_h
 #define WebSettings_h
 
-#include "../platform/PointerProperties.h"
-#include "../platform/WebCommon.h"
-#include "../platform/WebSize.h"
-#include "../platform/WebViewportStyle.h"
+#include "public/platform/PointerProperties.h"
+#include "public/platform/WebCommon.h"
+#include "public/platform/WebSize.h"
+#include "public/platform/WebViewportStyle.h"
 #include <unicode/uscript.h>
 
 namespace blink {
@@ -113,6 +113,14 @@ class WebSettings {
     kForceAllTrue  // Force all values to be true even when specified.
   };
 
+  // Defines the autoplay policy to be used. Should match the enum class in
+  // web_preferences.h
+  enum class AutoplayPolicy {
+    kNoUserGestureRequired = 0,
+    kUserGestureRequired,
+    kUserGestureRequiredForCrossOrigin,
+  };
+
   // Sets value of a setting by its string identifier from Settings.in and
   // string representation of value. An enum's string representation is the
   // string representation of the integer value of the enum.
@@ -145,11 +153,11 @@ class WebSettings {
   virtual void SetAlwaysShowContextMenuOnTouch(bool) = 0;
   virtual void SetAntialiased2dCanvasEnabled(bool) = 0;
   virtual void SetAntialiasedClips2dCanvasEnabled(bool) = 0;
+  virtual void SetAutoplayPolicy(AutoplayPolicy) = 0;
   virtual void SetAutoZoomFocusedNodeToLegibleScale(bool) = 0;
   virtual void SetBrowserSideNavigationEnabled(bool) = 0;
   virtual void SetClobberUserAgentInitialScaleQuirk(bool) = 0;
   virtual void SetCookieEnabled(bool) = 0;
-  virtual void SetCrossOriginMediaPlaybackRequiresUserGesture(bool) = 0;
   virtual void SetNavigateOnDragDrop(bool) = 0;
   virtual void SetCursiveFontFamily(const WebString&,
                                     UScriptCode = USCRIPT_COMMON) = 0;
@@ -187,7 +195,6 @@ class WebSettings {
   virtual void SetInlineTextBoxAccessibilityEnabled(bool) = 0;
   virtual void SetInertVisualViewport(bool) = 0;
   virtual void SetJavaScriptCanAccessClipboard(bool) = 0;
-  virtual void SetJavaScriptCanOpenWindowsAutomatically(bool) = 0;
   virtual void SetJavaScriptEnabled(bool) = 0;
   virtual void SetLoadsImagesAutomatically(bool) = 0;
   virtual void SetLoadWithOverviewMode(bool) = 0;
@@ -197,10 +204,10 @@ class WebSettings {
   virtual void SetMainFrameClipsContent(bool) = 0;
   virtual void SetMainFrameResizesAreOrientationChanges(bool) = 0;
   virtual void SetMaxTouchPoints(int) = 0;
-  virtual void SetMediaPlaybackRequiresUserGesture(bool) = 0;
   virtual void SetMediaPlaybackGestureWhitelistScope(const WebString&) = 0;
   virtual void SetPresentationRequiresUserGesture(bool) = 0;
   virtual void SetEmbeddedMediaExperienceEnabled(bool) = 0;
+  virtual void SetPagePopupsSuppressed(bool) = 0;
   virtual void SetMinimumAccelerated2dCanvasSize(int) = 0;
   virtual void SetMinimumFontSize(int) = 0;
   virtual void SetMinimumLogicalFontSize(int) = 0;

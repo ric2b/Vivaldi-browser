@@ -154,7 +154,7 @@ RenderWidgetHostView* GetRenderWidgetHostViewToUse(
 @property(nonatomic, assign) NSRange selectedRange;
 @property(nonatomic, assign) NSRange markedRange;
 
-+ (BOOL)shouldAutohideCursorForEvent:(NSEvent*)event;
+- (BOOL)shouldAutohideCursorForEvent:(NSEvent*)event;
 - (id)initWithRenderWidgetHostViewMac:(RenderWidgetHostViewMac*)r;
 - (void)processedWheelEvent:(const blink::WebMouseWheelEvent&)event
                    consumed:(BOOL)consumed;
@@ -407,7 +407,7 @@ SkColor RenderWidgetHostViewMac::BrowserCompositorMacGetGutterColor(
 void RenderWidgetHostViewMac::BrowserCompositorMacSendBeginFrame(
     const cc::BeginFrameArgs& args) {
   needs_flush_input_ = false;
-  render_widget_host_->FlushInput();
+  render_widget_host_->OnBeginFrame();
   UpdateNeedsBeginFramesInternal();
   render_widget_host_->Send(
       new ViewMsg_BeginFrame(render_widget_host_->GetRoutingID(), args));
@@ -430,6 +430,12 @@ void RenderWidgetHostViewMac::AcceleratedWidgetGetVSyncParameters(
 }
 
 void RenderWidgetHostViewMac::AcceleratedWidgetSwapCompleted() {
+  // Set the background color for the root layer from the frame that just
+  // swapped. See RenderWidgetHostViewAura for more details. Note that this is
+  // done only after the swap has completed, so that the background is not set
+  // before the frame is up.
+  UpdateBackgroundColorFromRenderer(last_frame_root_background_color_);
+
   if (display_link_)
     display_link_->NotifyCurrentTime(base::TimeTicks::Now());
 }
@@ -446,7 +452,6 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget,
       is_guest_view_hack_(is_guest_view_hack),
       fullscreen_parent_host_view_(nullptr),
       needs_flush_input_(false),
-      background_color_(SK_ColorWHITE),
       weak_factory_(this) {
   // |cocoa_view_| owns us and we will be deleted when |cocoa_view_|
   // goes away.  Since we autorelease it, our caller must put
@@ -454,12 +459,7 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget,
   cocoa_view_ = [[[RenderWidgetHostViewCocoa alloc]
                   initWithRenderWidgetHostViewMac:this] autorelease];
 
-  // Paint this view host with |background_color_| when there is no content
-  // ready to draw.
   background_layer_.reset([[CALayer alloc] init]);
-  // Set the default color to be white. This is the wrong thing to do, but many
-  // UI components expect this view to be opaque.
-  [background_layer_ setBackgroundColor:CGColorGetConstantColor(kCGColorWhite)];
   [cocoa_view_ setLayer:background_layer_];
   [cocoa_view_ setWantsLayer:YES];
 
@@ -731,6 +731,13 @@ RenderWidgetHostViewBase*
   return is_guest_view_hack_ ? this : GetFocusedWidget()
                                           ? GetFocusedWidget()->GetView()
                                           : nullptr;
+}
+
+RenderWidgetHostDelegate*
+RenderWidgetHostViewMac::GetFocusedRenderWidgetHostDelegate() {
+  if (auto* focused_widget = GetFocusedWidget())
+    return focused_widget->delegate();
+  return render_widget_host_->delegate();
 }
 
 void RenderWidgetHostViewMac::UpdateBackingStoreProperties() {
@@ -1435,10 +1442,7 @@ void RenderWidgetHostViewMac::SubmitCompositorFrame(
     cc::CompositorFrame frame) {
   TRACE_EVENT0("browser", "RenderWidgetHostViewMac::OnSwapCompositorFrame");
 
-  // Override the compositor background color. See RenderWidgetHostViewAura
-  // for more details.
-  UpdateBackgroundColorFromRenderer(frame.metadata.root_background_color);
-
+  last_frame_root_background_color_ = frame.metadata.root_background_color;
   last_scroll_offset_ = frame.metadata.root_scroll_offset;
 
   page_at_minimum_scale_ =
@@ -1448,9 +1452,9 @@ void RenderWidgetHostViewMac::SubmitCompositorFrame(
   UpdateDisplayVSyncParameters();
 }
 
-void RenderWidgetHostViewMac::OnBeginFrameDidNotSwap(
+void RenderWidgetHostViewMac::OnDidNotProduceFrame(
     const cc::BeginFrameAck& ack) {
-  browser_compositor_->OnBeginFrameDidNotSwap(ack);
+  browser_compositor_->OnDidNotProduceFrame(ack);
 }
 
 void RenderWidgetHostViewMac::ClearCompositorFrame() {
@@ -1649,6 +1653,9 @@ void RenderWidgetHostViewMac::ShowDefinitionForSelection() {
 }
 
 void RenderWidgetHostViewMac::SetBackgroundColor(SkColor color) {
+  if (color == background_color_)
+    return;
+
   // The renderer will feed its color back to us with the first CompositorFrame.
   // We short-cut here to show a sensible color before that happens.
   UpdateBackgroundColorFromRenderer(color);
@@ -1665,7 +1672,7 @@ SkColor RenderWidgetHostViewMac::background_color() const {
 }
 
 void RenderWidgetHostViewMac::UpdateBackgroundColorFromRenderer(SkColor color) {
-  if (color == background_color())
+  if (color == background_color_)
     return;
   background_color_ = color;
 
@@ -1777,7 +1784,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
 
     renderWidgetHostView_.reset(r);
     canBeKeyView_ = YES;
-    opaque_ = YES;
+    opaque_ = NO;
     pinchHasReachedZoomThreshold_ = false;
     isStylusEnteringProximity_ = false;
 
@@ -2040,8 +2047,10 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   // |performKeyEquivalent:| is sent to all views of a window, not only down the
   // responder chain (cf. "Handling Key Equivalents" in
   // http://developer.apple.com/mac/library/documentation/Cocoa/Conceptual/EventOverview/HandlingKeyEvents/HandlingKeyEvents.html
-  // ). We only want to handle key equivalents if we're first responder.
-  if ([[self window] firstResponder] != self)
+  // ). A |performKeyEquivalent:| may also bubble up from a dialog child window
+  // to perform browser commands such as switching tabs. We only want to handle
+  // key equivalents if we're first responder in the keyWindow.
+  if (![[self window] isKeyWindow] || [[self window] firstResponder] != self)
     return NO;
 
   // If the event is reserved by the system, then do not pass it to web content.
@@ -2128,6 +2137,13 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   DCHECK(widgetHost);
 
   NativeWebKeyboardEvent event(theEvent);
+  ui::LatencyInfo latency_info;
+  if (event.GetType() == blink::WebInputEvent::kRawKeyDown ||
+      event.GetType() == blink::WebInputEvent::kChar) {
+    latency_info.set_source_event_type(ui::SourceEventType::KEY_PRESS);
+  }
+
+  latency_info.AddLatencyNumber(ui::INPUT_EVENT_LATENCY_UI_COMPONENT, 0, 0);
 
   // Force fullscreen windows to close on Escape so they won't keep the keyboard
   // grabbed or be stuck onscreen if the renderer is hanging.
@@ -2167,10 +2183,10 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
 
   // We only handle key down events and just simply forward other events.
   if ([theEvent type] != NSKeyDown) {
-    widgetHost->ForwardKeyboardEvent(event);
+    widgetHost->ForwardKeyboardEventWithLatencyInfo(event, latency_info);
 
     // Possibly autohide the cursor.
-    if ([RenderWidgetHostViewCocoa shouldAutohideCursorForEvent:theEvent])
+    if ([self shouldAutohideCursorForEvent:theEvent])
       [NSCursor setHiddenUntilMouseMoves:YES];
 
     return;
@@ -2222,7 +2238,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
     NativeWebKeyboardEvent fakeEvent = event;
     fakeEvent.windows_key_code = 0xE5;  // VKEY_PROCESSKEY
     fakeEvent.skip_in_browser = true;
-    widgetHost->ForwardKeyboardEvent(fakeEvent);
+    widgetHost->ForwardKeyboardEventWithLatencyInfo(fakeEvent, latency_info);
     // If this key event was handled by the input method, but
     // -doCommandBySelector: (invoked by the call to -interpretKeyEvents: above)
     // enqueued edit commands, then in order to let webkit handle them
@@ -2233,12 +2249,14 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
     if (hasEditCommands_ && !hasMarkedText_)
       delayEventUntilAfterImeCompostion = YES;
   } else {
-    widgetHost->ForwardKeyboardEventWithCommands(event, &editCommands_);
+    widgetHost->ForwardKeyboardEventWithCommands(event, latency_info,
+                                                 &editCommands_);
   }
 
-  // Calling ForwardKeyboardEvent() could have destroyed the widget. When the
-  // widget was destroyed, |renderWidgetHostView_->render_widget_host_| will
-  // be set to NULL. So we check it here and return immediately if it's NULL.
+  // Calling ForwardKeyboardEventWithCommands() could have destroyed the
+  // widget. When the widget was destroyed,
+  // |renderWidgetHostView_->render_widget_host_| will be set to NULL. So we
+  // check it here and return immediately if it's NULL.
   if (!renderWidgetHostView_->render_widget_host_)
     return;
 
@@ -2297,16 +2315,18 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
     NativeWebKeyboardEvent fakeEvent = event;
     fakeEvent.SetType(blink::WebInputEvent::kKeyUp);
     fakeEvent.skip_in_browser = true;
-    widgetHost->ForwardKeyboardEvent(fakeEvent);
+    widgetHost->ForwardKeyboardEventWithLatencyInfo(fakeEvent, latency_info);
     // Not checking |renderWidgetHostView_->render_widget_host_| here because
     // a key event with |skip_in_browser| == true won't be handled by browser,
     // thus it won't destroy the widget.
 
-    widgetHost->ForwardKeyboardEventWithCommands(event, &editCommands_);
+    widgetHost->ForwardKeyboardEventWithCommands(event, latency_info,
+                                                 &editCommands_);
 
-    // Calling ForwardKeyboardEvent() could have destroyed the widget. When the
-    // widget was destroyed, |renderWidgetHostView_->render_widget_host_| will
-    // be set to NULL. So we check it here and return immediately if it's NULL.
+    // Calling ForwardKeyboardEventWithCommands() could have destroyed the
+    // widget. When the widget was destroyed,
+    // |renderWidgetHostView_->render_widget_host_| will be set to NULL. So we
+    // check it here and return immediately if it's NULL.
     if (!renderWidgetHostView_->render_widget_host_)
       return;
   }
@@ -2321,7 +2341,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
       event.text[0] = textToBeInserted_[0];
       event.text[1] = 0;
       event.skip_in_browser = true;
-      widgetHost->ForwardKeyboardEvent(event);
+      widgetHost->ForwardKeyboardEventWithLatencyInfo(event, latency_info);
     } else if ((!textInserted || delayEventUntilAfterImeCompostion) &&
                event.text[0] != '\0' &&
                (([theEvent modifierFlags] & kCtrlCmdKeyMask) ||
@@ -2331,12 +2351,12 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
       // cases, unless the key event generated any other command.
       event.SetType(blink::WebInputEvent::kChar);
       event.skip_in_browser = true;
-      widgetHost->ForwardKeyboardEvent(event);
+      widgetHost->ForwardKeyboardEventWithLatencyInfo(event, latency_info);
     }
   }
 
   // Possibly autohide the cursor.
-  if ([RenderWidgetHostViewCocoa shouldAutohideCursorForEvent:theEvent])
+  if ([self shouldAutohideCursorForEvent:theEvent])
     [NSCursor setHiddenUntilMouseMoves:YES];
 }
 
@@ -2454,58 +2474,61 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
       NSPerformService(@"Look Up in Dictionary", pasteboard->get());
     return;
   }
-  dispatch_async(dispatch_get_main_queue(), ^{
-    NSPoint flippedBaselinePoint = {
-        baselinePoint.x, [view frame].size.height - baselinePoint.y,
-    };
-    [view showDefinitionForAttributedString:string
-                                    atPoint:flippedBaselinePoint];
-  });
+  NSPoint flippedBaselinePoint = {
+      baselinePoint.x, [view frame].size.height - baselinePoint.y,
+  };
+  [view showDefinitionForAttributedString:string atPoint:flippedBaselinePoint];
 }
 
 - (void)showLookUpDictionaryOverlayFromRange:(NSRange)range
                                   targetView:(NSView*)targetView {
-  RenderWidgetHostImpl* widgetHost = renderWidgetHostView_->render_widget_host_;
-  if (!widgetHost || !widgetHost->delegate())
+  content::RenderWidgetHostViewBase* focusedView =
+      renderWidgetHostView_->GetFocusedViewForTextSelection();
+  if (!focusedView)
     return;
-  if (vivaldi::IsVivaldiRunning()) {
-    // NOTE(espen@vivaldi.com): Do not use focused for guestviews. See
-    // RenderWidgetHostViewMac::GetFocusedViewForTextSelection()
-  } else {
-  widgetHost = widgetHost->delegate()->GetFocusedRenderWidgetHost(widgetHost);
-  }
 
+  RenderWidgetHostImpl* widgetHost =
+      RenderWidgetHostImpl::From(focusedView->GetRenderWidgetHost());
   if (!widgetHost)
     return;
 
-  // TODO(ekaramad): The position reported by the renderer is with respect to
-  // |widgetHost|'s coordinate space with y-axis inverted to conform to AppKit
-  // coordinate system. The point will need to be transformed into root view's
-  // coordinate system (RenderWidgetHostViewMac in this case). However, since
-  // the callback is invoked on IO thread it will require some thread hopping to
-  // do so. For this reason, for now, we accept this non-ideal way of fixing the
-  // point offset manually from the view bounds. This should be revisited when
-  // fixing issues in TextInputClientMac (https://crbug.com/643233).
-  gfx::Rect root_box = renderWidgetHostView_->GetViewBounds();
-  gfx::Rect view_box = widgetHost->GetView()->GetViewBounds();
-
+  int32_t targetWidgetProcessId = widgetHost->GetProcess()->GetID();
+  int32_t targetWidgetRoutingId = widgetHost->GetRoutingID();
   TextInputClientMac::GetInstance()->GetStringFromRange(
       widgetHost, range, ^(NSAttributedString* string, NSPoint baselinePoint) {
+        if (!content::RenderWidgetHost::FromID(targetWidgetProcessId,
+                                               targetWidgetRoutingId)) {
+          // By the time we get here |widgetHost| might have been destroyed.
+          // (See https://crbug.com/737032).
+          return;
+        }
+
+        if (auto* rwhv = widgetHost->GetView()) {
+          gfx::Point pointInRootView = rwhv->TransformPointToRootCoordSpace(
+              gfx::Point(baselinePoint.x, baselinePoint.y));
+          baselinePoint.x = pointInRootView.x();
+          baselinePoint.y = pointInRootView.y();
+        }
         if (vivaldi::IsVivaldiRunning()) {
-          // NOTE(espen@vivaldi.com):  The baseline calculation is different for
-          // guestviews.
-          gfx::Rect r = FlipNSRectToRectScreen([targetView window].frame);
+          // NOTE(espen@vivaldi.com): The baseline calculation differs somewhat
+          // for guestviews.
           int decorationHeight = static_cast<int>(
               NSHeight([targetView window].frame) -
               NSHeight([[targetView window].contentView frame]));
-          baselinePoint.x +=
-              view_box.origin().x() - [targetView window].frame.origin.x;
-          baselinePoint.y +=
-              view_box.origin().y() - r.origin().y() - decorationHeight;
-        } else {
-        baselinePoint.x += view_box.origin().x() - root_box.origin().x();
-        baselinePoint.y +=
-            root_box.bottom_left().y() - view_box.bottom_left().y();
+          gfx::Rect r = FlipNSRectToRectScreen([targetView window].frame);
+          RenderWidgetHostImpl* widgetHost =
+              renderWidgetHostView_->render_widget_host_;
+          if (widgetHost) {
+            gfx::Rect view_box = widgetHost->GetView()->GetViewBounds();
+            baselinePoint.x +=
+              // Offset into document area adjusting for JS ui.
+              (view_box.origin().x() - r.origin().x());
+            baselinePoint.y +=
+              // Offset into document area adjusting for JS ui.
+              (view_box.origin().y() - r.origin().y()) -
+              // Offset caused by window manager decoration (default off in V).
+              decorationHeight;
+          }
         }
         [self showLookUpDictionaryOverlayInternal:string
                                     baselinePoint:baselinePoint
@@ -2530,29 +2553,43 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   if (!widgetHost)
     return;
 
-  // TODO(ekaramad): The position reported by the renderer is with respect to
-  // |widgetHost|'s coordinate space with y-axis inverted to conform to AppKit
-  // coordinate system. The point will need to be transformed into root view's
-  // coordinate system (RenderWidgetHostViewMac in this case). However, since
-  // the callback is invoked on IO thread it will require some thread hopping to
-  // do so. For this reason, for now, we accept this non-ideal way of fixing the
-  // point offset manually from the view bounds. This should be revisited when
-  // fixing issues in TextInputClientMac (https://crbug.com/643233).
-  gfx::Rect root_box = renderWidgetHostView_->GetViewBounds();
-  gfx::Rect view_box = widgetHost->GetView()->GetViewBounds();
-
+  int32_t targetWidgetProcessId = widgetHost->GetProcess()->GetID();
+  int32_t targetWidgetRoutingId = widgetHost->GetRoutingID();
   TextInputClientMac::GetInstance()->GetStringAtPoint(
       widgetHost, transformedPoint,
       ^(NSAttributedString* string, NSPoint baselinePoint) {
-        baselinePoint.x += view_box.origin().x() - root_box.origin().x();
+        if (!content::RenderWidgetHost::FromID(targetWidgetProcessId,
+                                               targetWidgetRoutingId)) {
+          // By the time we get here |widgetHost| might have been destroyed.
+          // (See https://crbug.com/737032).
+          return;
+        }
+
+        if (auto* rwhv = widgetHost->GetView()) {
+          gfx::Point pointInRootView = rwhv->TransformPointToRootCoordSpace(
+              gfx::Point(baselinePoint.x, baselinePoint.y));
+          baselinePoint.x = pointInRootView.x();
+          baselinePoint.y = pointInRootView.y();
+        }
         if (vivaldi::IsVivaldiRunning()) {
-          // NOTE(espen@vivaldi.com):  The baseline calculation is different for
-          // guestviews.
-          baselinePoint.y +=
-            view_box.top_right().y() - root_box.top_right().y();
-        } else {
-        baselinePoint.y +=
-            root_box.bottom_left().y() - view_box.bottom_left().y();
+          // NOTE(espen@vivaldi.com): The baseline calculation differs somewhat
+          // for guestviews.
+          int decorationHeight = static_cast<int>(
+              NSHeight([self window].frame) -
+              NSHeight([[self window].contentView frame]));
+          gfx::Rect r = FlipNSRectToRectScreen([self window].frame);
+          if (widgetHost) {
+            gfx::Rect root_box = renderWidgetHostView_->GetViewBounds();
+            gfx::Rect view_box = widgetHost->GetView()->GetViewBounds();
+            baselinePoint.x +=
+              // Offset into document area adjusting for JS ui.
+              (view_box.origin().x() - r.origin().x());
+            baselinePoint.y +=
+              // Offset into document area adjusting for JS ui.
+              (view_box.top_right().y() - root_box.top_right().y()) -
+              // Offset caused by window manager decoration (default off in V).
+              decorationHeight;
+          }
         }
         [self showLookUpDictionaryOverlayInternal:string
                                     baselinePoint:baselinePoint
@@ -2911,9 +2948,13 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
 // Determine whether we should autohide the cursor (i.e., hide it until mouse
 // move) for the given event. Customize here to be more selective about which
 // key presses to autohide on.
-+ (BOOL)shouldAutohideCursorForEvent:(NSEvent*)event {
-  return ([event type] == NSKeyDown &&
-             !([event modifierFlags] & NSCommandKeyMask)) ? YES : NO;
+- (BOOL)shouldAutohideCursorForEvent:(NSEvent*)event {
+  return (renderWidgetHostView_->GetTextInputType() !=
+              ui::TEXT_INPUT_TYPE_NONE &&
+          [event type] == NSKeyDown &&
+          !([event modifierFlags] & NSCommandKeyMask))
+             ? YES
+             : NO;
 }
 
 - (NSArray *)accessibilityArrayAttributeValues:(NSString *)attribute
@@ -3438,17 +3479,17 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
 }
 
 - (void)cut:(id)sender {
-  content::RenderWidgetHostDelegate* render_widget_host_delegate =
-      renderWidgetHostView_->render_widget_host_->delegate();
-  if (render_widget_host_delegate)
-    render_widget_host_delegate->Cut();
+  if (auto* delegate =
+          renderWidgetHostView_->GetFocusedRenderWidgetHostDelegate()) {
+    delegate->Cut();
+  }
 }
 
 - (void)copy:(id)sender {
-  content::RenderWidgetHostDelegate* render_widget_host_delegate =
-      renderWidgetHostView_->render_widget_host_->delegate();
-  if (render_widget_host_delegate)
-    render_widget_host_delegate->Copy();
+  if (auto* delegate =
+          renderWidgetHostView_->GetFocusedRenderWidgetHostDelegate()) {
+    delegate->Copy();
+  }
 }
 
 - (void)copyToFindPboard:(id)sender {
@@ -3458,10 +3499,10 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
 }
 
 - (void)paste:(id)sender {
-  content::RenderWidgetHostDelegate* render_widget_host_delegate =
-      renderWidgetHostView_->render_widget_host_->delegate();
-  if (render_widget_host_delegate)
-    render_widget_host_delegate->Paste();
+  if (auto* delegate =
+          renderWidgetHostView_->GetFocusedRenderWidgetHostDelegate()) {
+    delegate->Paste();
+  }
 }
 
 - (void)pasteAndMatchStyle:(id)sender {
@@ -3478,10 +3519,10 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
   // menu handler, neither is true.
   // Explicitly call SelectAll() here to make sure the renderer returns
   // selection results.
-  content::RenderWidgetHostDelegate* render_widget_host_delegate =
-      renderWidgetHostView_->render_widget_host_->delegate();
-  if (render_widget_host_delegate)
-    render_widget_host_delegate->SelectAll();
+  if (auto* delegate =
+          renderWidgetHostView_->GetFocusedRenderWidgetHostDelegate()) {
+    delegate->SelectAll();
+  }
 }
 
 - (void)startSpeaking:(id)sender {

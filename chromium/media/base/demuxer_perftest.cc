@@ -9,10 +9,9 @@
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/test/scoped_task_scheduler.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -178,9 +177,10 @@ int StreamReader::GetNextStreamIndexToRead() {
 static void RunDemuxerBenchmark(const std::string& filename) {
   base::FilePath file_path(GetTestDataFilePath(filename));
   base::TimeDelta total_time;
+  MediaLog media_log_;
   for (int i = 0; i < kBenchmarkIterations; ++i) {
     // Setup.
-    base::test::ScopedTaskScheduler scoped_task_scheduler;
+    base::test::ScopedTaskEnvironment scoped_task_environment_;
     DemuxerHostImpl demuxer_host;
     FileDataSource data_source;
     ASSERT_TRUE(data_source.Initialize(file_path));
@@ -191,7 +191,7 @@ static void RunDemuxerBenchmark(const std::string& filename) {
         base::Bind(&OnMediaTracksUpdated);
     FFmpegDemuxer demuxer(base::ThreadTaskRunnerHandle::Get(), &data_source,
                           encrypted_media_init_data_cb, tracks_updated_cb,
-                          new MediaLog());
+                          &media_log_);
 
     {
       base::RunLoop run_loop;

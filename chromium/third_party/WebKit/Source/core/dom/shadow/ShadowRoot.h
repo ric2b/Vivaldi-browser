@@ -27,13 +27,13 @@
 #ifndef ShadowRoot_h
 #define ShadowRoot_h
 
-#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "core/CoreExport.h"
 #include "core/css/StyleSheetList.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/Element.h"
 #include "core/dom/TreeScope.h"
+#include "platform/bindings/ScriptWrappableVisitor.h"
 
 namespace blink {
 
@@ -64,7 +64,7 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
   // Disambiguate between Node and TreeScope hierarchies; TreeScope's
   // implementation is simpler.
   using TreeScope::GetDocument;
-  using TreeScope::GetElementById;
+  using TreeScope::getElementById;
 
   // Make protected methods from base class public here.
   using TreeScope::SetDocument;

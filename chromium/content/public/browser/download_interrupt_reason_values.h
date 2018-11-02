@@ -54,6 +54,9 @@ INTERRUPT_REASON(FILE_TOO_SHORT, 13)
 // The partial file didn't match the expected hash.
 INTERRUPT_REASON(FILE_HASH_MISMATCH, 14)
 
+// The source and the target of the download were the same.
+INTERRUPT_REASON(FILE_SAME_AS_SOURCE, 15)
+
 // Network errors.
 
 // Generic network failure.
@@ -112,6 +115,12 @@ INTERRUPT_REASON(SERVER_FORBIDDEN, 36)
 // Unexpected server response. This might indicate that the responding server
 // may not be the intended server.
 INTERRUPT_REASON(SERVER_UNREACHABLE, 37)
+
+// The server sent fewer bytes than the content-length header. It may indicate
+// that the connection was closed prematurely, or the Content-Length header was
+// invalid. The download is only interrupted if strong validators are present.
+// Otherwise, it is treated as finished.
+INTERRUPT_REASON(SERVER_CONTENT_LENGTH_MISMATCH, 38)
 
 // User input.
 

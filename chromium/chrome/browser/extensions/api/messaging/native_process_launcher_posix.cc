@@ -16,6 +16,9 @@
 #include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 
+#include "chrome/common/importer/importer_type.h"
+#include "importer/chrome_importer_utils.h"
+
 namespace extensions {
 
 namespace {
@@ -42,6 +45,15 @@ base::FilePath NativeProcessLauncher::FindManifest(
     result = FindManifestInDir(chrome::DIR_USER_NATIVE_MESSAGING, host_name);
   if (result.empty())
     result = FindManifestInDir(chrome::DIR_NATIVE_MESSAGING, host_name);
+  if (result.empty()) {
+    // NOTE(bjorgvin@vivaldi.com): add missing path from nativeMessaging API docs
+    base::FilePath path = GetProfileDir(importer::TYPE_CHROME);
+    path = path.Append(FILE_PATH_LITERAL("NativeMessagingHosts"));
+    path = path.Append(host_name + ".json");
+    if (base::PathExists(path)) {
+      result = path;
+    }
+  }
 
   if (result.empty())
     *error_message = "Can't find native messaging host " + host_name;

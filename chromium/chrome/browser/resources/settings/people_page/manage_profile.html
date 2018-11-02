@@ -1,5 +1,6 @@
-<link rel="import" href="chrome://resources/cr_elements/cr_profile_avatar_selector/cr_profile_avatar_selector.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/cr_elements/cr_profile_avatar_selector/cr_profile_avatar_selector.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
@@ -25,7 +26,7 @@
     </div>
     <template is="dom-if" if="[[isProfileShortcutSettingVisible_]]">
       <div class="settings-box first">
-        <div id="showShortcutLabel" class="flex">$i18n{showShortcutLabel}</div>
+        <div id="showShortcutLabel" class="start">$i18n{showShortcutLabel}</div>
         <paper-toggle-button id="hasShortcutToggle"
             checked="{{hasProfileShortcut_}}"
             on-change="onHasProfileShortcutChange_"

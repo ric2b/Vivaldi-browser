@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include "base/atomic_sequence_num.h"
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
@@ -67,8 +68,8 @@ int MakeRequestID() {
   // NOTE: The resource_dispatcher_host also needs probably unique
   // request_ids, so they count down from -2 (-1 is a special we're
   // screwed value), while the renderer process counts up.
-  static int next_request_id = 0;
-  return next_request_id++;
+  static base::StaticAtomicSequenceNumber sequence;
+  return sequence.GetNext();  // We start at zero.
 }
 
 void CheckSchemeForReferrerPolicy(const ResourceRequest& request) {
@@ -88,13 +89,12 @@ void CheckSchemeForReferrerPolicy(const ResourceRequest& request) {
 
 ResourceDispatcher::ResourceDispatcher(
     IPC::Sender* sender,
-    scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner)
+    scoped_refptr<base::SingleThreadTaskRunner> thread_task_runner)
     : message_sender_(sender),
       delegate_(NULL),
       io_timestamp_(base::TimeTicks()),
-      main_thread_task_runner_(main_thread_task_runner),
-      weak_factory_(this) {
-}
+      thread_task_runner_(thread_task_runner),
+      weak_factory_(this) {}
 
 ResourceDispatcher::~ResourceDispatcher() {
 }
@@ -375,7 +375,8 @@ void ResourceDispatcher::OnRequestComplete(
                            request_complete_data.exists_in_cache,
                            renderer_completion_time,
                            request_complete_data.encoded_data_length,
-                           request_complete_data.encoded_body_length);
+                           request_complete_data.encoded_body_length,
+                           request_complete_data.decoded_body_length);
 }
 
 bool ResourceDispatcher::RemovePendingRequest(int request_id) {
@@ -401,7 +402,7 @@ bool ResourceDispatcher::RemovePendingRequest(int request_id) {
   // Always delete the pending_request asyncly so that cancelling the request
   // doesn't delete the request context info while its response is still being
   // handled.
-  main_thread_task_runner_->DeleteSoon(FROM_HERE, it->second.release());
+  thread_task_runner_->DeleteSoon(FROM_HERE, it->second.release());
   pending_requests_.erase(it);
 
   if (release_downloaded_file) {
@@ -470,7 +471,7 @@ void ResourceDispatcher::SetDefersLoading(int request_id, bool value) {
 
     FollowPendingRedirect(request_id, request_info);
 
-    main_thread_task_runner_->PostTask(
+    thread_task_runner_->PostTask(
         FROM_HERE, base::Bind(&ResourceDispatcher::FlushDeferredMessages,
                               weak_factory_.GetWeakPtr(), request_id));
   }
@@ -639,7 +640,7 @@ int ResourceDispatcher::StartAsync(
   }
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-      loading_task_runner ? loading_task_runner : main_thread_task_runner_;
+      loading_task_runner ? loading_task_runner : thread_task_runner_;
 
   if (consumer_handle.is_valid()) {
     pending_requests_[request_id]->url_loader_client =
@@ -655,15 +656,15 @@ int ResourceDispatcher::StartAsync(
 
   if (ipc_type == blink::WebURLRequest::LoadingIPCType::kMojo) {
     scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-        loading_task_runner ? loading_task_runner : main_thread_task_runner_;
+        loading_task_runner ? loading_task_runner : thread_task_runner_;
     std::unique_ptr<URLLoaderClientImpl> client(
         new URLLoaderClientImpl(request_id, this, std::move(task_runner)));
     mojom::URLLoaderAssociatedPtr url_loader;
     mojom::URLLoaderClientPtr client_ptr;
     client->Bind(&client_ptr);
-    url_loader_factory->CreateLoaderAndStart(MakeRequest(&url_loader),
-                                             routing_id, request_id, *request,
-                                             std::move(client_ptr));
+    url_loader_factory->CreateLoaderAndStart(
+        MakeRequest(&url_loader), routing_id, request_id,
+        mojom::kURLLoadOptionNone, *request, std::move(client_ptr));
     pending_requests_[request_id]->url_loader = std::move(url_loader);
     pending_requests_[request_id]->url_loader_client = std::move(client);
   } else {
@@ -767,7 +768,7 @@ void ResourceDispatcher::ContinueForNavigation(
   // the request. ResourceResponseHead can be empty here because we
   // pull the StreamOverride's one in
   // WebURLLoaderImpl::Context::OnReceivedResponse.
-  client_ptr->OnReceiveResponse(ResourceResponseHead(),
+  client_ptr->OnReceiveResponse(ResourceResponseHead(), base::nullopt,
                                 mojom::DownloadedTempFilePtr());
   // Start streaming now.
   client_ptr->OnStartLoadingResponseBody(std::move(consumer_handle));
@@ -781,6 +782,7 @@ void ResourceDispatcher::ContinueForNavigation(
   completion_status.completion_time = base::TimeTicks::Now();
   completion_status.encoded_data_length = -1;
   completion_status.encoded_body_length = -1;
+  completion_status.decoded_body_length = -1;
   client_ptr->OnComplete(completion_status);
 }
 

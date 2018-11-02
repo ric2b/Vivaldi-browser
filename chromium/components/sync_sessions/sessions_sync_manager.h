@@ -30,6 +30,7 @@
 #include "components/sync_sessions/revisit/page_revisit_broadcaster.h"
 #include "components/sync_sessions/synced_session.h"
 #include "components/sync_sessions/synced_session_tracker.h"
+#include "components/sync_sessions/task_tracker.h"
 
 namespace syncer {
 class LocalDeviceInfoProvider;
@@ -119,7 +120,7 @@ class SessionsSyncManager : public syncer::SyncableService,
  private:
   friend class extensions::ExtensionSessionsTest;
   friend class SessionsSyncManagerTest;
-  FRIEND_TEST_ALL_PREFIXES(SessionsSyncManagerTest, PopulateSessionHeader);
+  FRIEND_TEST_ALL_PREFIXES(SessionsSyncManagerTest, PopulateSyncedSession);
   FRIEND_TEST_ALL_PREFIXES(SessionsSyncManagerTest, PopulateSessionWindow);
   FRIEND_TEST_ALL_PREFIXES(SessionsSyncManagerTest, ValidTabs);
   FRIEND_TEST_ALL_PREFIXES(SessionsSyncManagerTest, SetSessionTabFromDelegate);
@@ -187,14 +188,15 @@ class SessionsSyncManager : public syncer::SyncableService,
 
   // Used to populate a session header from the session specifics header
   // provided.
-  static void PopulateSessionHeaderFromSpecifics(
+  void PopulateSyncedSessionFromSpecifics(
+      const std::string& session_tag,
       const sync_pb::SessionHeader& header_specifics,
       base::Time mtime,
-      SyncedSession* session_header);
+      SyncedSession* synced_session);
 
-  // Builds |session_window| from the session specifics window
+  // Builds |synced_session_window| from the session specifics window
   // provided and updates the SessionTracker with foreign session data created.
-  void BuildSyncedSessionFromSpecifics(
+  void PopulateSyncedSessionWindowFromSpecifics(
       const std::string& session_tag,
       const sync_pb::SessionWindow& specifics,
       base::Time mtime,
@@ -234,6 +236,11 @@ class SessionsSyncManager : public syncer::SyncableService,
   void LocalTabDelegateToSpecifics(const SyncedTabDelegate& tab_delegate,
                                    sync_pb::SessionSpecifics* specifics);
 
+  // Updates task tracker with current navigation of |tab_delegate|, and fills
+  // TabNavigation's task id related fields in |specifics|.
+  void TrackTasks(SyncedTabDelegate* const tab_delegate,
+                  sync_pb::SessionSpecifics* specifics);
+
   // It's possible that when we associate windows, tabs aren't all loaded
   // into memory yet (e.g on android) and we don't have a WebContents. In this
   // case we can't do a full association, but we still want to update tab IDs
@@ -245,6 +252,12 @@ class SessionsSyncManager : public syncer::SyncableService,
       SessionID::id_type new_tab_id,
       SessionID::id_type new_window_id,
       syncer::SyncChangeList* change_output);
+
+  // Appends an ACTION_UPDATE for a sync tab entity onto |change_output| to
+  // reflect the contents of |tab|, given the tab node id |sync_id|.
+  void AppendChangeForExistingTab(int sync_id,
+                                  const sessions::SessionTab& tab,
+                                  syncer::SyncChangeList* change_output);
 
   // Stops and re-starts syncing to rebuild association mappings. Returns true
   // when re-starting succeeds.
@@ -318,6 +331,10 @@ class SessionsSyncManager : public syncer::SyncableService,
 
   // Callback to inform sync that a sync data refresh is requested.
   base::Closure datatype_refresh_callback_;
+
+  // Tracks Chrome Tasks, which associates navigations, with tab and navigation
+  // changes of current session.
+  std::unique_ptr<TaskTracker> task_tracker_;
 
   DISALLOW_COPY_AND_ASSIGN(SessionsSyncManager);
 };

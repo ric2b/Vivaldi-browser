@@ -12,6 +12,7 @@
 
 #include "base/callback.h"
 #include "base/callback_list.h"
+#include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -77,6 +78,16 @@ class SuggestionsServiceImpl : public SuggestionsService,
   bool UndoBlacklistURL(const GURL& url) override;
   void ClearBlacklist() override;
 
+  base::TimeDelta blacklist_delay_for_testing() const {
+    return scheduling_delay_;
+  }
+  void set_blacklist_delay_for_testing(base::TimeDelta delay) {
+    scheduling_delay_ = delay;
+  }
+  bool has_pending_request_for_testing() const {
+    return !!pending_request_.get();
+  }
+
   // Determines which URL a blacklist request was for, irrespective of the
   // request's status. Returns false if |request| is not a blacklist request.
   static bool GetBlacklistedUrl(const net::URLFetcher& request, GURL* url);
@@ -85,23 +96,27 @@ class SuggestionsServiceImpl : public SuggestionsService,
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
  private:
-  friend class SuggestionsServiceTest;
-  FRIEND_TEST_ALL_PREFIXES(SuggestionsServiceTest, FetchSuggestionsData);
-  FRIEND_TEST_ALL_PREFIXES(SuggestionsServiceTest,
-                           FetchSuggestionsDataSyncDisabled);
-  FRIEND_TEST_ALL_PREFIXES(SuggestionsServiceTest,
-                           FetchSuggestionsDataNoAccessToken);
-  FRIEND_TEST_ALL_PREFIXES(SuggestionsServiceTest,
-                           IssueRequestIfNoneOngoingError);
-  FRIEND_TEST_ALL_PREFIXES(SuggestionsServiceTest,
-                           IssueRequestIfNoneOngoingResponseNotOK);
-  FRIEND_TEST_ALL_PREFIXES(SuggestionsServiceTest, BlacklistURL);
-  FRIEND_TEST_ALL_PREFIXES(SuggestionsServiceTest, BlacklistURLRequestFails);
-  FRIEND_TEST_ALL_PREFIXES(SuggestionsServiceTest, ClearBlacklist);
-  FRIEND_TEST_ALL_PREFIXES(SuggestionsServiceTest, UndoBlacklistURL);
-  FRIEND_TEST_ALL_PREFIXES(SuggestionsServiceTest, GetBlacklistedUrl);
-  FRIEND_TEST_ALL_PREFIXES(SuggestionsServiceTest, UpdateBlacklistDelay);
-  FRIEND_TEST_ALL_PREFIXES(SuggestionsServiceTest, CheckDefaultTimeStamps);
+  // Establishes the different sync states that matter to SuggestionsService.
+  enum SyncState {
+    // State: Sync service is not initialized, yet not disabled. History sync
+    //     state is unknown (since not initialized).
+    // Behavior: Do not issue server requests, but serve from cache if
+    //     available.
+    NOT_INITIALIZED_ENABLED,
+
+    // State: Sync service is initialized, sync is enabled and history sync is
+    //     enabled.
+    // Behavior: Update suggestions from the server on FetchSuggestionsData().
+    INITIALIZED_ENABLED_HISTORY,
+
+    // State: Sync service is disabled or history sync is disabled.
+    // Behavior: Do not issue server requests. Clear the cache. Serve empty
+    //     suggestions.
+    SYNC_OR_HISTORY_SYNC_DISABLED,
+  };
+
+  // The action that should be taken as the result of a RefreshSyncState call.
+  enum RefreshAction { NO_ACTION, FETCH_SUGGESTIONS, CLEAR_SUGGESTIONS };
 
   // Helpers to build the various suggestions URLs. These are static members
   // rather than local functions in the .cc file to make them accessible to
@@ -110,6 +125,13 @@ class SuggestionsServiceImpl : public SuggestionsService,
   static std::string BuildSuggestionsBlacklistURLPrefix();
   static GURL BuildSuggestionsBlacklistURL(const GURL& candidate_url);
   static GURL BuildSuggestionsBlacklistClearURL();
+
+  // Computes the appropriate SyncState from |sync_service_|.
+  SyncState ComputeSyncState() const;
+
+  // Re-computes |sync_state_| from the sync service. Returns the action that
+  // should be taken in response.
+  RefreshAction RefreshSyncState() WARN_UNUSED_RESULT;
 
   // syncer::SyncServiceObserver implementation.
   void OnStateChanged(syncer::SyncService* sync) override;
@@ -159,10 +181,6 @@ class SuggestionsServiceImpl : public SuggestionsService,
   // Adds extra data to suggestions profile.
   void PopulateExtraData(SuggestionsProfile* suggestions);
 
-  // Test seams.
-  base::TimeDelta blacklist_delay() const { return scheduling_delay_; }
-  void set_blacklist_delay(base::TimeDelta delay) { scheduling_delay_ = delay; }
-
   base::ThreadChecker thread_checker_;
 
   SigninManagerBase* signin_manager_;
@@ -171,6 +189,8 @@ class SuggestionsServiceImpl : public SuggestionsService,
   syncer::SyncService* sync_service_;
   ScopedObserver<syncer::SyncService, syncer::SyncServiceObserver>
       sync_service_observer_;
+
+  SyncState sync_state_;
 
   net::URLRequestContextGetter* url_request_context_;
 

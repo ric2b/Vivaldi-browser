@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/field_trial.h"
@@ -56,6 +57,7 @@
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
@@ -65,7 +67,7 @@
 #include "net/base/url_util.h"
 #include "third_party/re2/src/re2/re2.h"
 
-#if defined(SAFE_BROWSING_DB_LOCAL) || defined(SAFE_BROWSING_DB_REMOTE)
+#if defined(SAFE_BROWSING_DB_LOCAL)
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "components/safe_browsing/password_protection/password_protection_service.h"
@@ -153,9 +155,9 @@ void ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
   if (FromWebContents(contents))
     return;
 
-  contents->SetUserData(
-      UserDataKey(),
-      new ChromePasswordManagerClient(contents, autofill_client));
+  contents->SetUserData(UserDataKey(),
+                        base::WrapUnique(new ChromePasswordManagerClient(
+                            contents, autofill_client)));
 }
 
 ChromePasswordManagerClient::ChromePasswordManagerClient(
@@ -385,6 +387,7 @@ void ChromePasswordManagerClient::NotifyStorePasswordCalled() {
   // If a site stores a credential the autofill password manager shouldn't kick
   // in.
   password_manager_.DropFormManagers();
+  was_store_ever_called_ = true;
 }
 
 void ChromePasswordManagerClient::AutomaticPasswordSave(
@@ -425,15 +428,42 @@ ChromePasswordManagerClient::GetPasswordProtectionService() const {
   }
   return nullptr;
 }
+
+void ChromePasswordManagerClient::CheckSafeBrowsingReputation(
+    const GURL& form_action,
+    const GURL& frame_url) {
+  safe_browsing::PasswordProtectionService* pps =
+      GetPasswordProtectionService();
+  if (pps) {
+    pps->MaybeStartPasswordFieldOnFocusRequest(
+        web_contents(), GetMainFrameURL(), form_action, frame_url);
+  }
+}
+
+void ChromePasswordManagerClient::CheckProtectedPasswordEntry(
+    const std::string& password_saved_domain) {
+  safe_browsing::PasswordProtectionService* pps =
+      GetPasswordProtectionService();
+  if (pps) {
+    pps->MaybeStartProtectedPasswordEntryRequest(
+        web_contents(), GetMainFrameURL(), password_saved_domain);
+  }
+}
 #endif
 
-// TODO(crbug.com/706392): Fix password reuse detection for Android.
-#if !defined(OS_ANDROID)
 void ChromePasswordManagerClient::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame() || !navigation_handle->HasCommitted())
     return;
 
+  // From this point on, the CredentialManagerImpl will service API calls in the
+  // context of the new WebContents::GetLastCommittedURL, which may very well be
+  // cross-origin. Disconnect existing client, and drop pending requests.
+  if (!navigation_handle->IsSameDocument())
+    credential_manager_impl_.DisconnectBinding();
+
+// TODO(crbug.com/706392): Fix password reuse detection for Android.
+#if !defined(OS_ANDROID)
   password_reuse_detection_manager_.DidNavigateMainFrame(GetMainFrameURL());
   // After some navigations RenderViewHost persists and just adding the observer
   // will cause multiple call of OnInputEvent. Since Widget API doesn't allow to
@@ -442,8 +472,10 @@ void ChromePasswordManagerClient::DidFinishNavigation(
   web_contents()->GetRenderViewHost()->GetWidget()->RemoveInputEventObserver(
       this);
   web_contents()->GetRenderViewHost()->GetWidget()->AddInputEventObserver(this);
+#endif
 }
 
+#if !defined(OS_ANDROID)
 void ChromePasswordManagerClient::OnInputEvent(
     const blink::WebInputEvent& event) {
   if (event.GetType() != blink::WebInputEvent::kChar)
@@ -684,11 +716,20 @@ const password_manager::LogManager* ChromePasswordManagerClient::GetLogManager()
 
 // static
 void ChromePasswordManagerClient::BindCredentialManager(
-    content::RenderFrameHost* render_frame_host,
-    password_manager::mojom::CredentialManagerRequest request) {
+    password_manager::mojom::CredentialManagerAssociatedRequest request,
+    content::RenderFrameHost* render_frame_host) {
+  // Only valid for the main frame.
+  if (render_frame_host->GetParent())
+    return;
+
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host);
   DCHECK(web_contents);
+
+  // Only valid for the currently committed RenderFrameHost, and not, e.g. old
+  // zombie RFH's being swapped out following cross-origin navigations.
+  if (web_contents->GetMainFrame() != render_frame_host)
+    return;
 
   ChromePasswordManagerClient* instance =
       ChromePasswordManagerClient::FromWebContents(web_contents);

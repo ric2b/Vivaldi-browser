@@ -88,9 +88,9 @@ void InspectorHistory::AppendPerformedAction(Action* action) {
     history_[after_last_action_index_ - 1]->Merge(action);
     if (history_[after_last_action_index_ - 1]->IsNoop())
       --after_last_action_index_;
-    history_.Resize(after_last_action_index_);
+    history_.resize(after_last_action_index_);
   } else {
-    history_.Resize(after_last_action_index_);
+    history_.resize(after_last_action_index_);
     history_.push_back(action);
     ++after_last_action_index_;
   }
@@ -139,7 +139,7 @@ bool InspectorHistory::Redo(ExceptionState& exception_state) {
 
 void InspectorHistory::Reset() {
   after_last_action_index_ = 0;
-  history_.Clear();
+  history_.clear();
 }
 
 DEFINE_TRACE(InspectorHistory) {

@@ -78,7 +78,7 @@ void HTMLImportChild::DidFinish() {
 
 void HTMLImportChild::DidFinishLoading() {
   StateWillChange();
-  if (GetDocument() && GetDocument()->StyleSheets().length() > 0)
+  if (GetDocument() && GetDocument()->GetStyleEngine().HasStyleSheets())
     UseCounter::Count(Root()->GetDocument(),
                       UseCounter::kHTMLImportsHasStyleSheets);
   V0CustomElement::DidFinishLoadingImport(*(Root()->GetDocument()));
@@ -186,7 +186,7 @@ void HTMLImportChild::ShowThis() {
   HTMLImport::ShowThis();
   fprintf(stderr, " loader=%p first=%d, step=%p sync=%s url=%s", loader_.Get(),
           is_first, custom_element_microtask_step_.Get(), IsSync() ? "Y" : "N",
-          Url().GetString().Utf8().Data());
+          Url().GetString().Utf8().data());
 }
 #endif
 

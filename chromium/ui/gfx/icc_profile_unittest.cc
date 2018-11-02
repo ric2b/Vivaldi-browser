@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/gfx/icc_profile.h"
 #include "base/logging.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/color_space.h"
-#include "ui/gfx/icc_profile.h"
+#include "ui/gfx/skia_color_space_util.h"
 #include "ui/gfx/test/icc_profiles.h"
 
 namespace gfx {
@@ -22,10 +23,17 @@ TEST(ICCProfile, Conversions) {
 }
 
 TEST(ICCProfile, SRGB) {
+  ICCProfile icc_profile = ICCProfileForTestingSRGB();
   ColorSpace color_space = ColorSpace::CreateSRGB();
   sk_sp<SkColorSpace> sk_color_space = SkColorSpace::MakeSRGB();
 
-  // These should be the same pointer, not just equal.
+  // The ICC profile parser should note that this is SRGB.
+  EXPECT_EQ(icc_profile.GetColorSpace().ToSkColorSpace().get(),
+            sk_color_space.get());
+  // The parametric generating code should recognize that this is SRGB.
+  EXPECT_EQ(icc_profile.GetParametricColorSpace().ToSkColorSpace().get(),
+            sk_color_space.get());
+  // The generated color space should recognize that this is SRGB.
   EXPECT_EQ(color_space.ToSkColorSpace().get(), sk_color_space.get());
 }
 
@@ -129,6 +137,23 @@ TEST(ICCProfile, GarbageData) {
   EXPECT_FALSE(default_ctor_profile.IsValid());
   EXPECT_FALSE(default_ctor_profile.GetColorSpace().IsValid());
   EXPECT_FALSE(default_ctor_profile.GetParametricColorSpace().IsValid());
+}
+
+TEST(ICCProfile, GenericRGB) {
+  ColorSpace icc_profile = ICCProfileForTestingGenericRGB().GetColorSpace();
+  ColorSpace color_space(ColorSpace::PrimaryID::APPLE_GENERIC_RGB,
+                         ColorSpace::TransferID::GAMMA18);
+
+  SkMatrix44 icc_profile_matrix;
+  SkMatrix44 color_space_matrix;
+
+  icc_profile.GetPrimaryMatrix(&icc_profile_matrix);
+  color_space.GetPrimaryMatrix(&color_space_matrix);
+
+  SkMatrix44 eye;
+  icc_profile_matrix.invert(&eye);
+  eye.postConcat(color_space_matrix);
+  EXPECT_TRUE(SkMatrixIsApproximatelyIdentity(eye));
 }
 
 }  // namespace gfx

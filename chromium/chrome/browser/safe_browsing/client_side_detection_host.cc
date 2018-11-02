@@ -21,10 +21,10 @@
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
 #include "components/safe_browsing/csd.pb.h"
 #include "components/safe_browsing_db/database_manager.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -133,10 +133,9 @@ class ClientSideDetectionHost::ShouldClassifyUrlRequest
     // uses the SafeBrowsing service class.
     if (ShouldClassifyForPhishing() || ShouldClassifyForMalware()) {
       BrowserThread::PostTask(
-          BrowserThread::IO,
-          FROM_HERE,
-          base::Bind(&ShouldClassifyUrlRequest::CheckSafeBrowsingDatabase,
-                     this, url_));
+          BrowserThread::IO, FROM_HERE,
+          base::BindOnce(&ShouldClassifyUrlRequest::CheckSafeBrowsingDatabase,
+                         this, url_));
     }
   }
 
@@ -233,12 +232,9 @@ class ClientSideDetectionHost::ShouldClassifyUrlRequest
       }
     }
     BrowserThread::PostTask(
-        BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&ShouldClassifyUrlRequest::CheckCache,
-                   this,
-                   phishing_reason,
-                   malware_reason));
+        BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&ShouldClassifyUrlRequest::CheckCache, this,
+                       phishing_reason, malware_reason));
   }
 
   void CheckCache(PreClassificationCheckFailures phishing_reason,

@@ -10,6 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "components/payments/content/payment_request.h"
 #include "components/payments/core/payment_request_delegate.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(payments::PaymentRequestWebContentsManager);
@@ -28,22 +29,47 @@ PaymentRequestWebContentsManager::GetOrCreateForWebContents(
 }
 
 void PaymentRequestWebContentsManager::CreatePaymentRequest(
+    content::RenderFrameHost* render_frame_host,
     content::WebContents* web_contents,
     std::unique_ptr<PaymentRequestDelegate> delegate,
     mojo::InterfaceRequest<payments::mojom::PaymentRequest> request,
     PaymentRequest::ObserverForTest* observer_for_testing) {
   auto new_request = base::MakeUnique<PaymentRequest>(
-      web_contents, std::move(delegate), this, std::move(request),
-      observer_for_testing);
+      render_frame_host, web_contents, std::move(delegate), this,
+      std::move(request), observer_for_testing);
   PaymentRequest* request_ptr = new_request.get();
   payment_requests_.insert(std::make_pair(request_ptr, std::move(new_request)));
 }
 
+void PaymentRequestWebContentsManager::DidStartNavigation(
+    content::NavigationHandle* navigation_handle) {
+  for (auto& it : payment_requests_) {
+    // Since the PaymentRequest dialog blocks the content of the page, the user
+    // cannot click on a link to navigate away. Therefore, if the navigation
+    // is initiated in the renderer, it does not come from the user.
+    it.second->DidStartNavigation(!navigation_handle->IsRendererInitiated());
+  }
+}
+
 void PaymentRequestWebContentsManager::DestroyRequest(PaymentRequest* request) {
+  if (request == showing_)
+    showing_ = nullptr;
   payment_requests_.erase(request);
 }
 
+bool PaymentRequestWebContentsManager::CanShow(PaymentRequest* request) {
+  DCHECK(request);
+  DCHECK(payment_requests_.find(request) != payment_requests_.end());
+  if (!showing_) {
+    showing_ = request;
+    return true;
+  } else {
+    return false;
+  }
+}
+
 PaymentRequestWebContentsManager::PaymentRequestWebContentsManager(
-    content::WebContents* web_contents) {}
+    content::WebContents* web_contents)
+    : content::WebContentsObserver(web_contents), showing_(nullptr) {}
 
 }  // namespace payments

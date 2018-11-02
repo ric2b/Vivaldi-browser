@@ -6,6 +6,7 @@
 
 #include <ks.h>
 #include <ksmedia.h>
+#include <objbase.h>
 
 #include <algorithm>
 #include <list>
@@ -25,10 +26,10 @@ using base::win::ScopedVariant;
 namespace media {
 
 #if DCHECK_IS_ON()
-#define DLOG_IF_FAILED_WITH_HRESULT(message, hr)                        \
-  {                                                                     \
-    DLOG_IF(ERROR, FAILED(hr)) << (message) << ": "                     \
-                               << logging::SystemErrorCodeToString(hr); \
+#define DLOG_IF_FAILED_WITH_HRESULT(message, hr)                      \
+  {                                                                   \
+    DLOG_IF(ERROR, FAILED(hr))                                        \
+        << (message) << ": " << logging::SystemErrorCodeToString(hr); \
   }
 #else
 #define DLOG_IF_FAILED_WITH_HRESULT(message, hr) \
@@ -40,7 +41,7 @@ bool PinMatchesCategory(IPin* pin, REFGUID category) {
   DCHECK(pin);
   bool found = false;
   ScopedComPtr<IKsPropertySet> ks_property;
-  HRESULT hr = ks_property.QueryFrom(pin);
+  HRESULT hr = pin->QueryInterface(IID_PPV_ARGS(&ks_property));
   if (SUCCEEDED(hr)) {
     GUID pin_category;
     DWORD return_value;
@@ -61,6 +62,45 @@ bool PinMatchesMajorType(IPin* pin, REFGUID major_type) {
   return SUCCEEDED(hr) && connection_media_type.majortype == major_type;
 }
 
+// Retrieves the control range and value using the provided getters, and
+// optionally returns the associated supported and current mode.
+template <typename RangeGetter, typename ValueGetter>
+mojom::RangePtr RetrieveControlRangeAndCurrent(
+    RangeGetter range_getter,
+    ValueGetter value_getter,
+    std::vector<mojom::MeteringMode>* supported_modes = nullptr,
+    mojom::MeteringMode* current_mode = nullptr) {
+  auto control_range = mojom::Range::New();
+  long min, max, step, default_value, flags;
+  HRESULT hr = range_getter(&min, &max, &step, &default_value, &flags);
+  DLOG_IF_FAILED_WITH_HRESULT("Control range reading failed", hr);
+  if (SUCCEEDED(hr)) {
+    control_range->min = min;
+    control_range->max = max;
+    control_range->step = step;
+    if (supported_modes != nullptr) {
+      if (flags && CameraControl_Flags_Auto)
+        supported_modes->push_back(mojom::MeteringMode::CONTINUOUS);
+      if (flags && CameraControl_Flags_Manual)
+        supported_modes->push_back(mojom::MeteringMode::MANUAL);
+    }
+  }
+  long current;
+  hr = value_getter(&current, &flags);
+  DLOG_IF_FAILED_WITH_HRESULT("Control value reading failed", hr);
+  if (SUCCEEDED(hr)) {
+    control_range->current = current;
+    if (current_mode != nullptr) {
+      if (flags && CameraControl_Flags_Auto)
+        *current_mode = mojom::MeteringMode::CONTINUOUS;
+      else if (flags && CameraControl_Flags_Manual)
+        *current_mode = mojom::MeteringMode::MANUAL;
+    }
+  }
+
+  return control_range;
+}
+
 // Finds and creates a DirectShow Video Capture filter matching the |device_id|.
 // static
 HRESULT VideoCaptureDeviceWin::GetDeviceFilter(const std::string& device_id,
@@ -68,14 +108,14 @@ HRESULT VideoCaptureDeviceWin::GetDeviceFilter(const std::string& device_id,
   DCHECK(filter);
 
   ScopedComPtr<ICreateDevEnum> dev_enum;
-  HRESULT hr =
-      dev_enum.CreateInstance(CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC);
+  HRESULT hr = ::CoCreateInstance(CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC,
+                                  IID_PPV_ARGS(&dev_enum));
   if (FAILED(hr))
     return hr;
 
   ScopedComPtr<IEnumMoniker> enum_moniker;
   hr = dev_enum->CreateClassEnumerator(CLSID_VideoInputDeviceCategory,
-                                       enum_moniker.Receive(), 0);
+                                       enum_moniker.GetAddressOf(), 0);
   // CreateClassEnumerator returns S_FALSE on some Windows OS
   // when no camera exist. Therefore the FAILED macro can't be used.
   if (hr != S_OK)
@@ -83,17 +123,17 @@ HRESULT VideoCaptureDeviceWin::GetDeviceFilter(const std::string& device_id,
 
   ScopedComPtr<IBaseFilter> capture_filter;
   for (ScopedComPtr<IMoniker> moniker;
-       enum_moniker->Next(1, moniker.Receive(), NULL) == S_OK;
+       enum_moniker->Next(1, moniker.GetAddressOf(), NULL) == S_OK;
        moniker.Reset()) {
     ScopedComPtr<IPropertyBag> prop_bag;
-    hr = moniker->BindToStorage(0, 0, IID_IPropertyBag, prop_bag.ReceiveVoid());
+    hr = moniker->BindToStorage(0, 0, IID_PPV_ARGS(&prop_bag));
     if (FAILED(hr))
       continue;
 
     // Find |device_id| via DevicePath, Description or FriendlyName, whichever
     // is available first and is a VT_BSTR (i.e. String) type.
-    static const wchar_t* kPropertyNames[] = {
-        L"DevicePath", L"Description", L"FriendlyName"};
+    static const wchar_t* kPropertyNames[] = {L"DevicePath", L"Description",
+                                              L"FriendlyName"};
 
     ScopedVariant name;
     for (const auto* property_name : kPropertyNames) {
@@ -106,8 +146,7 @@ HRESULT VideoCaptureDeviceWin::GetDeviceFilter(const std::string& device_id,
       const std::string device_path(base::SysWideToUTF8(V_BSTR(name.ptr())));
       if (device_path.compare(device_id) == 0) {
         // We have found the requested device
-        hr = moniker->BindToObject(0, 0, IID_IBaseFilter,
-                                   capture_filter.ReceiveVoid());
+        hr = moniker->BindToObject(0, 0, IID_PPV_ARGS(&capture_filter));
         DLOG_IF(ERROR, FAILED(hr)) << "Failed to bind camera filter: "
                                    << logging::SystemErrorCodeToString(hr);
         break;
@@ -131,32 +170,31 @@ ScopedComPtr<IPin> VideoCaptureDeviceWin::GetPin(IBaseFilter* filter,
                                                  REFGUID major_type) {
   ScopedComPtr<IPin> pin;
   ScopedComPtr<IEnumPins> pin_enum;
-  HRESULT hr = filter->EnumPins(pin_enum.Receive());
-  if (pin_enum.get() == NULL)
+  HRESULT hr = filter->EnumPins(pin_enum.GetAddressOf());
+  if (pin_enum.Get() == NULL)
     return pin;
 
   // Get first unconnected pin.
   hr = pin_enum->Reset();  // set to first pin
-  while ((hr = pin_enum->Next(1, pin.Receive(), NULL)) == S_OK) {
+  while ((hr = pin_enum->Next(1, pin.GetAddressOf(), NULL)) == S_OK) {
     PIN_DIRECTION this_pin_dir = static_cast<PIN_DIRECTION>(-1);
     hr = pin->QueryDirection(&this_pin_dir);
     if (pin_dir == this_pin_dir) {
-      if ((category == GUID_NULL || PinMatchesCategory(pin.get(), category)) &&
+      if ((category == GUID_NULL || PinMatchesCategory(pin.Get(), category)) &&
           (major_type == GUID_NULL ||
-           PinMatchesMajorType(pin.get(), major_type))) {
+           PinMatchesMajorType(pin.Get(), major_type))) {
         return pin;
       }
     }
     pin.Reset();
   }
 
-  DCHECK(!pin.get());
+  DCHECK(!pin.Get());
   return pin;
 }
 
 // static
-VideoPixelFormat
-VideoCaptureDeviceWin::TranslateMediaSubtypeToPixelFormat(
+VideoPixelFormat VideoCaptureDeviceWin::TranslateMediaSubtypeToPixelFormat(
     const GUID& sub_type) {
   static struct {
     const GUID& sub_type;
@@ -227,42 +265,44 @@ void VideoCaptureDeviceWin::ScopedMediaType::DeleteMediaType(
 
 VideoCaptureDeviceWin::VideoCaptureDeviceWin(
     const VideoCaptureDeviceDescriptor& device_descriptor)
-    : device_descriptor_(device_descriptor), state_(kIdle) {
+    : device_descriptor_(device_descriptor),
+      state_(kIdle),
+      white_balance_mode_manual_(false),
+      exposure_mode_manual_(false) {
   // TODO(mcasas): Check that CoInitializeEx() has been called with the
   // appropriate Apartment model, i.e., Single Threaded.
 }
 
 VideoCaptureDeviceWin::~VideoCaptureDeviceWin() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (media_control_.get())
+  if (media_control_.Get())
     media_control_->Stop();
 
-  if (graph_builder_.get()) {
+  if (graph_builder_.Get()) {
     if (sink_filter_.get()) {
       graph_builder_->RemoveFilter(sink_filter_.get());
       sink_filter_ = NULL;
     }
 
-    if (capture_filter_.get())
-      graph_builder_->RemoveFilter(capture_filter_.get());
+    if (capture_filter_.Get())
+      graph_builder_->RemoveFilter(capture_filter_.Get());
   }
 
-  if (capture_graph_builder_.get())
+  if (capture_graph_builder_.Get())
     capture_graph_builder_.Reset();
 }
 
 bool VideoCaptureDeviceWin::Init() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  HRESULT hr;
-
-  hr = GetDeviceFilter(device_descriptor_.device_id, capture_filter_.Receive());
+  HRESULT hr = GetDeviceFilter(device_descriptor_.device_id,
+                               capture_filter_.GetAddressOf());
   DLOG_IF_FAILED_WITH_HRESULT("Failed to create capture filter", hr);
-  if (!capture_filter_.get())
+  if (!capture_filter_.Get())
     return false;
 
-  output_capture_pin_ = GetPin(capture_filter_.get(), PINDIR_OUTPUT,
+  output_capture_pin_ = GetPin(capture_filter_.Get(), PINDIR_OUTPUT,
                                PIN_CATEGORY_CAPTURE, GUID_NULL);
-  if (!output_capture_pin_.get()) {
+  if (!output_capture_pin_.Get()) {
     DLOG(ERROR) << "Failed to get capture output pin";
     return false;
   }
@@ -276,30 +316,30 @@ bool VideoCaptureDeviceWin::Init() {
 
   input_sink_pin_ = sink_filter_->GetPin(0);
 
-  hr = graph_builder_.CreateInstance(CLSID_FilterGraph, NULL,
-                                     CLSCTX_INPROC_SERVER);
+  hr = ::CoCreateInstance(CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
+                          IID_PPV_ARGS(&graph_builder_));
   DLOG_IF_FAILED_WITH_HRESULT("Failed to create capture filter", hr);
   if (FAILED(hr))
     return false;
 
-  hr = capture_graph_builder_.CreateInstance(CLSID_CaptureGraphBuilder2, NULL,
-                                             CLSCTX_INPROC);
+  hr = ::CoCreateInstance(CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC,
+                          IID_PPV_ARGS(&capture_graph_builder_));
   DLOG_IF_FAILED_WITH_HRESULT("Failed to create the Capture Graph Builder", hr);
   if (FAILED(hr))
     return false;
 
-  hr = capture_graph_builder_->SetFiltergraph(graph_builder_.get());
+  hr = capture_graph_builder_->SetFiltergraph(graph_builder_.Get());
   DLOG_IF_FAILED_WITH_HRESULT("Failed to give graph to capture graph builder",
                               hr);
   if (FAILED(hr))
     return false;
 
-  hr = graph_builder_.QueryInterface(media_control_.Receive());
+  hr = graph_builder_.CopyTo(media_control_.GetAddressOf());
   DLOG_IF_FAILED_WITH_HRESULT("Failed to create media control builder", hr);
   if (FAILED(hr))
     return false;
 
-  hr = graph_builder_->AddFilter(capture_filter_.get(), NULL);
+  hr = graph_builder_->AddFilter(capture_filter_.Get(), NULL);
   DLOG_IF_FAILED_WITH_HRESULT("Failed to add the capture device to the graph",
                               hr);
   if (FAILED(hr))
@@ -318,12 +358,12 @@ bool VideoCaptureDeviceWin::Init() {
   base::win::ScopedComPtr<IAMStreamConfig> stream_config;
 
   hr = capture_graph_builder_->FindInterface(
-      &PIN_CATEGORY_CAPTURE, &MEDIATYPE_Interleaved, capture_filter_.get(),
-      IID_IAMStreamConfig, (void**)stream_config.Receive());
+      &PIN_CATEGORY_CAPTURE, &MEDIATYPE_Interleaved, capture_filter_.Get(),
+      IID_IAMStreamConfig, (void**)stream_config.GetAddressOf());
   if (FAILED(hr)) {
     hr = capture_graph_builder_->FindInterface(
-        &PIN_CATEGORY_CAPTURE, &MEDIATYPE_Video, capture_filter_.get(),
-        IID_IAMStreamConfig, (void**)stream_config.Receive());
+        &PIN_CATEGORY_CAPTURE, &MEDIATYPE_Video, capture_filter_.Get(),
+        IID_IAMStreamConfig, (void**)stream_config.GetAddressOf());
     DLOG_IF_FAILED_WITH_HRESULT("Failed to find CapFilter:IAMStreamConfig", hr);
   }
 
@@ -350,7 +390,7 @@ void VideoCaptureDeviceWin::AllocateAndStart(
                found_capability.supported_format.frame_rate);
 
   ScopedComPtr<IAMStreamConfig> stream_config;
-  HRESULT hr = output_capture_pin_.QueryInterface(stream_config.Receive());
+  HRESULT hr = output_capture_pin_.CopyTo(stream_config.GetAddressOf());
   if (FAILED(hr)) {
     SetErrorState(FROM_HERE, "Can't get the Capture format settings", hr);
     return;
@@ -391,17 +431,18 @@ void VideoCaptureDeviceWin::AllocateAndStart(
     SetErrorState(FROM_HERE, "Failed to set capture device output format", hr);
     return;
   }
+  capture_format_ = found_capability.supported_format;
 
   SetAntiFlickerInCaptureFilter(params);
 
   if (media_type->subtype == kMediaSubTypeHDYC) {
     // HDYC pixel format, used by the DeckLink capture card, needs an AVI
     // decompressor filter after source, let |graph_builder_| add it.
-    hr = graph_builder_->Connect(output_capture_pin_.get(),
-                                 input_sink_pin_.get());
+    hr = graph_builder_->Connect(output_capture_pin_.Get(),
+                                 input_sink_pin_.Get());
   } else {
-    hr = graph_builder_->ConnectDirect(output_capture_pin_.get(),
-                                       input_sink_pin_.get(), NULL);
+    hr = graph_builder_->ConnectDirect(output_capture_pin_.Get(),
+                                       input_sink_pin_.Get(), NULL);
   }
 
   if (FAILED(hr)) {
@@ -437,8 +478,8 @@ void VideoCaptureDeviceWin::StopAndDeAllocate() {
     return;
   }
 
-  graph_builder_->Disconnect(output_capture_pin_.get());
-  graph_builder_->Disconnect(input_sink_pin_.get());
+  graph_builder_->Disconnect(output_capture_pin_.Get());
+  graph_builder_->Disconnect(input_sink_pin_.Get());
 
   client_.reset();
   state_ = kIdle;
@@ -451,6 +492,231 @@ void VideoCaptureDeviceWin::TakePhoto(TakePhotoCallback callback) {
   // way, however, is not widespread and proves too cumbersome, so we just grab
   // the next captured frame instead.
   take_photo_callbacks_.push(std::move(callback));
+}
+
+void VideoCaptureDeviceWin::GetPhotoCapabilities(
+    GetPhotoCapabilitiesCallback callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  if (!camera_control_ || !video_control_) {
+    if (!InitializeVideoAndCameraControls())
+      return;
+  }
+
+  auto photo_capabilities = mojom::PhotoCapabilities::New();
+
+  photo_capabilities->exposure_compensation = RetrieveControlRangeAndCurrent(
+      [this](auto... args) {
+        return this->camera_control_->getRange_Exposure(args...);
+      },
+      [this](auto... args) {
+        return this->camera_control_->get_Exposure(args...);
+      },
+      &photo_capabilities->supported_exposure_modes,
+      &photo_capabilities->current_exposure_mode);
+
+  photo_capabilities->color_temperature = RetrieveControlRangeAndCurrent(
+      [this](auto... args) {
+        return this->video_control_->getRange_WhiteBalance(args...);
+      },
+      [this](auto... args) {
+        return this->video_control_->get_WhiteBalance(args...);
+      },
+      &photo_capabilities->supported_white_balance_modes,
+      &photo_capabilities->current_white_balance_mode);
+
+  // Ignore the returned Focus control range and status.
+  RetrieveControlRangeAndCurrent(
+      [this](auto... args) {
+        return this->camera_control_->getRange_Focus(args...);
+      },
+      [this](auto... args) {
+        return this->camera_control_->get_Focus(args...);
+      },
+      &photo_capabilities->supported_focus_modes,
+      &photo_capabilities->current_focus_mode);
+
+  photo_capabilities->iso = mojom::Range::New();
+
+  photo_capabilities->brightness = RetrieveControlRangeAndCurrent(
+      [this](auto... args) {
+        return this->video_control_->getRange_Brightness(args...);
+      },
+      [this](auto... args) {
+        return this->video_control_->get_Brightness(args...);
+      });
+  photo_capabilities->contrast = RetrieveControlRangeAndCurrent(
+      [this](auto... args) {
+        return this->video_control_->getRange_Contrast(args...);
+      },
+      [this](auto... args) {
+        return this->video_control_->get_Contrast(args...);
+      });
+  photo_capabilities->saturation = RetrieveControlRangeAndCurrent(
+      [this](auto... args) {
+        return this->video_control_->getRange_Saturation(args...);
+      },
+      [this](auto... args) {
+        return this->video_control_->get_Saturation(args...);
+      });
+  photo_capabilities->sharpness = RetrieveControlRangeAndCurrent(
+      [this](auto... args) {
+        return this->video_control_->getRange_Sharpness(args...);
+      },
+      [this](auto... args) {
+        return this->video_control_->get_Sharpness(args...);
+      });
+
+  photo_capabilities->zoom = RetrieveControlRangeAndCurrent(
+      [this](auto... args) {
+        return this->camera_control_->getRange_Zoom(args...);
+      },
+      [this](auto... args) {
+        return this->camera_control_->get_Zoom(args...);
+      });
+
+  photo_capabilities->red_eye_reduction = mojom::RedEyeReduction::NEVER;
+  photo_capabilities->height = mojom::Range::New(
+      capture_format_.frame_size.height(), capture_format_.frame_size.height(),
+      capture_format_.frame_size.height(), 0 /* step */);
+  photo_capabilities->width = mojom::Range::New(
+      capture_format_.frame_size.width(), capture_format_.frame_size.width(),
+      capture_format_.frame_size.width(), 0 /* step */);
+  photo_capabilities->torch = false;
+
+  callback.Run(std::move(photo_capabilities));
+}
+
+void VideoCaptureDeviceWin::SetPhotoOptions(
+    mojom::PhotoSettingsPtr settings,
+    VideoCaptureDevice::SetPhotoOptionsCallback callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  if (!camera_control_ || !video_control_) {
+    if (!InitializeVideoAndCameraControls())
+      return;
+  }
+
+  HRESULT hr;
+
+  if (settings->has_zoom) {
+    hr = camera_control_->put_Zoom(settings->zoom, CameraControl_Flags_Manual);
+    DLOG_IF_FAILED_WITH_HRESULT("Zoom config failed", hr);
+    if (FAILED(hr))
+      return;
+  }
+
+  if (settings->has_white_balance_mode) {
+    if (settings->white_balance_mode == mojom::MeteringMode::CONTINUOUS) {
+      hr = video_control_->put_WhiteBalance(0L, VideoProcAmp_Flags_Auto);
+      DLOG_IF_FAILED_WITH_HRESULT("Auto white balance config failed", hr);
+      if (FAILED(hr))
+        return;
+
+      white_balance_mode_manual_ = false;
+    } else {
+      white_balance_mode_manual_ = true;
+    }
+  }
+  if (white_balance_mode_manual_ && settings->has_color_temperature) {
+    hr = video_control_->put_WhiteBalance(settings->color_temperature,
+                                          CameraControl_Flags_Manual);
+    DLOG_IF_FAILED_WITH_HRESULT("Color temperature config failed", hr);
+    if (FAILED(hr))
+      return;
+  }
+
+  if (settings->has_exposure_mode) {
+    if (settings->exposure_mode == mojom::MeteringMode::CONTINUOUS) {
+      hr = camera_control_->put_Exposure(0L, VideoProcAmp_Flags_Auto);
+      DLOG_IF_FAILED_WITH_HRESULT("Auto exposure config failed", hr);
+      if (FAILED(hr))
+        return;
+
+      exposure_mode_manual_ = false;
+    } else {
+      exposure_mode_manual_ = true;
+    }
+  }
+  if (exposure_mode_manual_ && settings->has_exposure_compensation) {
+    hr = camera_control_->put_Exposure(settings->exposure_compensation,
+                                       CameraControl_Flags_Manual);
+    DLOG_IF_FAILED_WITH_HRESULT("Exposure Compensation config failed", hr);
+    if (FAILED(hr))
+      return;
+  }
+
+  if (settings->has_brightness) {
+    hr = video_control_->put_Brightness(settings->brightness,
+                                        CameraControl_Flags_Manual);
+    DLOG_IF_FAILED_WITH_HRESULT("Brightness config failed", hr);
+    if (FAILED(hr))
+      return;
+  }
+  if (settings->has_contrast) {
+    hr = video_control_->put_Contrast(settings->contrast,
+                                      CameraControl_Flags_Manual);
+    DLOG_IF_FAILED_WITH_HRESULT("Contrast config failed", hr);
+    if (FAILED(hr))
+      return;
+  }
+  if (settings->has_saturation) {
+    hr = video_control_->put_Saturation(settings->saturation,
+                                        CameraControl_Flags_Manual);
+    DLOG_IF_FAILED_WITH_HRESULT("Saturation config failed", hr);
+    if (FAILED(hr))
+      return;
+  }
+  if (settings->has_sharpness) {
+    hr = video_control_->put_Sharpness(settings->sharpness,
+                                       CameraControl_Flags_Manual);
+    DLOG_IF_FAILED_WITH_HRESULT("Sharpness config failed", hr);
+    if (FAILED(hr))
+      return;
+  }
+
+  callback.Run(true);
+}
+
+bool VideoCaptureDeviceWin::InitializeVideoAndCameraControls() {
+  base::win::ScopedComPtr<IKsTopologyInfo> info;
+  HRESULT hr = capture_filter_.CopyTo(info.GetAddressOf());
+  if (FAILED(hr)) {
+    SetErrorState(FROM_HERE, "Failed to obtain the topology info.", hr);
+    return false;
+  }
+
+  DWORD num_nodes = 0;
+  hr = info->get_NumNodes(&num_nodes);
+  if (FAILED(hr)) {
+    SetErrorState(FROM_HERE, "Failed to obtain the number of nodes.", hr);
+    return false;
+  }
+
+  // Every UVC camera is expected to have a single ICameraControl and a single
+  // IVideoProcAmp nodes, and both are needed; ignore any unlikely later ones.
+  GUID node_type;
+  for (size_t i = 0; i < num_nodes; i++) {
+    info->get_NodeType(i, &node_type);
+    if (IsEqualGUID(node_type, KSNODETYPE_VIDEO_CAMERA_TERMINAL)) {
+      hr = info->CreateNodeInstance(i, IID_PPV_ARGS(&camera_control_));
+      if (SUCCEEDED(hr))
+        break;
+      SetErrorState(FROM_HERE, "Failed to retrieve the ICameraControl.", hr);
+      return false;
+    }
+  }
+  for (size_t i = 0; i < num_nodes; i++) {
+    info->get_NodeType(i, &node_type);
+    if (IsEqualGUID(node_type, KSNODETYPE_VIDEO_PROCESSING)) {
+      hr = info->CreateNodeInstance(i, IID_PPV_ARGS(&video_control_));
+      if (SUCCEEDED(hr))
+        break;
+      SetErrorState(FROM_HERE, "Failed to retrieve the IVideoProcAmp.", hr);
+      return false;
+    }
+  }
+  return camera_control_ && video_control_;
 }
 
 // Implements SinkFilterObserver::SinkFilterObserver.
@@ -482,7 +748,7 @@ void VideoCaptureDeviceWin::FrameReceived(const uint8_t* buffer,
 bool VideoCaptureDeviceWin::CreateCapabilityMap() {
   DCHECK(thread_checker_.CalledOnValidThread());
   ScopedComPtr<IAMStreamConfig> stream_config;
-  HRESULT hr = output_capture_pin_.QueryInterface(stream_config.Receive());
+  HRESULT hr = output_capture_pin_.CopyTo(stream_config.GetAddressOf());
   DLOG_IF_FAILED_WITH_HRESULT(
       "Failed to get IAMStreamConfig from capture device", hr);
   if (FAILED(hr))
@@ -490,7 +756,7 @@ bool VideoCaptureDeviceWin::CreateCapabilityMap() {
 
   // Get interface used for getting the frame rate.
   ScopedComPtr<IAMVideoControl> video_control;
-  hr = capture_filter_.QueryInterface(video_control.Receive());
+  hr = capture_filter_.CopyTo(video_control.GetAddressOf());
 
   int count = 0, size = 0;
   hr = stream_config->GetNumberOfCapabilities(&count, &size);
@@ -525,12 +791,12 @@ bool VideoCaptureDeviceWin::CreateCapabilityMap() {
       // Try to get a better |time_per_frame| from IAMVideoControl. If not, use
       // the value from VIDEOINFOHEADER.
       REFERENCE_TIME time_per_frame = h->AvgTimePerFrame;
-      if (video_control.get()) {
+      if (video_control.Get()) {
         ScopedCoMem<LONGLONG> max_fps;
         LONG list_size = 0;
         const SIZE size = {format.frame_size.width(),
                            format.frame_size.height()};
-        hr = video_control->GetFrameRateList(output_capture_pin_.get(),
+        hr = video_control->GetFrameRateList(output_capture_pin_.Get(),
                                              stream_index, size, &list_size,
                                              &max_fps);
         // Can't assume the first value will return the max fps.
@@ -566,7 +832,7 @@ void VideoCaptureDeviceWin::SetAntiFlickerInCaptureFilter(
   ScopedComPtr<IKsPropertySet> ks_propset;
   DWORD type_support = 0;
   HRESULT hr;
-  if (SUCCEEDED(hr = ks_propset.QueryFrom(capture_filter_.get())) &&
+  if (SUCCEEDED(hr = capture_filter_.CopyTo(ks_propset.GetAddressOf())) &&
       SUCCEEDED(hr = ks_propset->QuerySupported(
                     PROPSETID_VIDCAP_VIDEOPROCAMP,
                     KSPROPERTY_VIDEOPROCAMP_POWERLINE_FREQUENCY,

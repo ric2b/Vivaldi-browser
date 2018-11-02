@@ -568,8 +568,10 @@ void ClipboardWin::ReadHTML(ClipboardType type,
   offsets.push_back(end_index - html_start);
   markup->assign(base::UTF8ToUTF16AndAdjustOffsets(cf_html.data() + html_start,
                                                    &offsets));
-  *fragment_start = base::checked_cast<uint32_t>(offsets[0]);
-  *fragment_end = base::checked_cast<uint32_t>(offsets[1]);
+  // Ensure the Fragment points within the string; see https://crbug.com/607181.
+  size_t end = std::min(offsets[1], markup->length());
+  *fragment_start = base::checked_cast<uint32_t>(std::min(offsets[0], end));
+  *fragment_end = base::checked_cast<uint32_t>(end);
 }
 
 void ClipboardWin::ReadRTF(ClipboardType type, std::string* result) const {
@@ -808,11 +810,8 @@ void ClipboardWin::WriteBitmap(const SkBitmap& bitmap) {
       ::CreateDIBSection(dc, &bm_info, DIB_RGB_COLORS, &bits, NULL, 0);
 
   if (bits && source_hbitmap) {
-    {
-      SkAutoLockPixels bitmap_lock(bitmap);
-      // Copy the bitmap out of shared memory and into GDI
-      memcpy(bits, bitmap.getPixels(), bitmap.getSize());
-    }
+    // Copy the bitmap out of shared memory and into GDI
+    memcpy(bits, bitmap.getPixels(), bitmap.getSize());
 
     // Now we have an HBITMAP, we can write it to the clipboard
     WriteBitmapFromHandle(source_hbitmap,

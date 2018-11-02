@@ -299,7 +299,7 @@ bool ChromeAppDelegate::CheckMediaAccessPermission(
 
 int ChromeAppDelegate::PreferredIconSize() {
 #if defined(USE_ASH)
-  return ash::GetShelfConstant(ash::SHELF_SIZE);
+  return ash::kShelfSize;
 #else
   return extension_misc::EXTENSION_ICON_SMALL;
 #endif
@@ -339,8 +339,8 @@ void ChromeAppDelegate::OnHide() {
   // the window.
   content::BrowserThread::PostDelayedTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&ChromeAppDelegate::RelinquishKeepAliveAfterTimeout,
-                 weak_factory_.GetWeakPtr()),
+      base::BindOnce(&ChromeAppDelegate::RelinquishKeepAliveAfterTimeout,
+                     weak_factory_.GetWeakPtr()),
       base::TimeDelta::FromSeconds(kAppWindowFirstShowTimeoutSeconds));
 }
 

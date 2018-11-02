@@ -23,10 +23,13 @@
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/renderer_host/input/touch_selection_controller_client_child_frame.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
+#include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
+#include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/guest_mode.h"
@@ -35,6 +38,7 @@
 #include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
+#include "ui/touch_selection/touch_selection_controller.h"
 
 namespace content {
 
@@ -74,6 +78,21 @@ void RenderWidgetHostViewChildFrame::Init() {
   GetTextInputManager();
 }
 
+void RenderWidgetHostViewChildFrame::
+    DetachFromTouchSelectionClientManagerIfNecessary() {
+  if (!selection_controller_client_)
+    return;
+
+  auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
+  if (root_view) {
+    auto* manager = root_view->touch_selection_controller_client_manager();
+    if (manager)
+      manager->RemoveObserver(this);
+  }
+
+  selection_controller_client_.reset();
+}
+
 void RenderWidgetHostViewChildFrame::SetCrossProcessFrameConnector(
     CrossProcessFrameConnector* frame_connector) {
   if (frame_connector_ == frame_connector)
@@ -89,6 +108,7 @@ void RenderWidgetHostViewChildFrame::SetCrossProcessFrameConnector(
 
     // Unlocks the mouse if this RenderWidgetHostView holds the lock.
     UnlockMouse();
+    DetachFromTouchSelectionClientManagerIfNecessary();
   }
   frame_connector_ = frame_connector;
   if (frame_connector_) {
@@ -100,7 +120,36 @@ void RenderWidgetHostViewChildFrame::SetCrossProcessFrameConnector(
       GetSurfaceManager()->RegisterFrameSinkHierarchy(parent_frame_sink_id_,
                                                       frame_sink_id_);
     }
+
+    auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
+    if (root_view) {
+      // Make sure we're not using the zero-valued default for
+      // current_device_scale_factor_.
+      current_device_scale_factor_ = root_view->current_device_scale_factor();
+      if (current_device_scale_factor_ == 0.f)
+        current_device_scale_factor_ = 1.f;
+
+      auto* manager = root_view->touch_selection_controller_client_manager();
+      if (manager) {
+        // We will only have a manager on Aura (and eventually Android).
+        // TODO(wjmaclean): update this comment when TSE OOPIF support becomes
+        // available on Android.
+        selection_controller_client_ =
+            base::MakeUnique<TouchSelectionControllerClientChildFrame>(this,
+                                                                       manager);
+        manager->AddObserver(this);
+      }
+    }
   }
+}
+
+void RenderWidgetHostViewChildFrame::OnManagerWillDestroy(
+    TouchSelectionControllerClientManager* manager) {
+  // We get the manager via the observer callback instead of through the
+  // frame_connector_ since our connection to the root_view may disappear by
+  // the time this function is called, but before frame_connector_ is reset.
+  manager->RemoveObserver(this);
+  selection_controller_client_.reset();
 }
 
 void RenderWidgetHostViewChildFrame::InitAsChild(
@@ -183,6 +232,11 @@ gfx::Size RenderWidgetHostViewChildFrame::GetVisibleViewportSize() const {
   // to be a main frame.  This should be cleaned up eventually.
   bool is_guest = BrowserPluginGuest::IsGuest(RenderViewHostImpl::From(host_));
   if (frame_connector_ && !is_guest) {
+    // An auto-resize set by the top-level frame overrides what would be
+    // reported by embedding RenderWidgetHostViews.
+    if (host_->delegate() && !host_->delegate()->GetAutoResizeSize().IsEmpty())
+      return host_->delegate()->GetAutoResizeSize();
+
     RenderWidgetHostView* parent_view =
         frame_connector_->GetParentRenderWidgetHostView();
     // The parent_view can be null in unit tests when using a TestWebContents.
@@ -318,6 +372,7 @@ void RenderWidgetHostViewChildFrame::UnregisterFrameSinkId() {
   if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
     host_->delegate()->GetInputEventRouter()->RemoveFrameSinkIdOwner(
         frame_sink_id_);
+    DetachFromTouchSelectionClientManagerIfNecessary();
   }
 }
 
@@ -343,8 +398,10 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
     return;
   if ((event.GetType() == blink::WebInputEvent::kGestureScrollUpdate &&
        not_consumed) ||
-      event.GetType() == blink::WebInputEvent::kGestureScrollEnd)
+      event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
+      event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
     frame_connector_->BubbleScrollEvent(event);
+  }
 }
 
 void RenderWidgetHostViewChildFrame::DidReceiveCompositorFrameAck(
@@ -366,12 +423,19 @@ void RenderWidgetHostViewChildFrame::ProcessCompositorFrame(
   current_surface_size_ = frame.render_pass_list.back()->output_rect.size();
   current_surface_scale_factor_ = frame.metadata.device_scale_factor;
 
-  support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+  bool result =
+      support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+  DCHECK(result);
   has_frame_ = true;
 
   if (local_surface_id_ != local_surface_id || HasEmbedderChanged()) {
     local_surface_id_ = local_surface_id;
     SendSurfaceInfoToEmbedder();
+  }
+
+  if (selection_controller_client_) {
+    selection_controller_client_->UpdateSelectionBoundsIfNeeded(
+        frame.metadata.selection, current_device_scale_factor_);
   }
 
   ProcessFrameSwappedCallbacks();
@@ -407,9 +471,9 @@ void RenderWidgetHostViewChildFrame::SubmitCompositorFrame(
   ProcessCompositorFrame(local_surface_id, std::move(frame));
 }
 
-void RenderWidgetHostViewChildFrame::OnBeginFrameDidNotSwap(
+void RenderWidgetHostViewChildFrame::OnDidNotProduceFrame(
     const cc::BeginFrameAck& ack) {
-  support_->BeginFrameDidNotSwap(ack);
+  support_->DidNotProduceFrame(ack);
 }
 
 void RenderWidgetHostViewChildFrame::OnSurfaceChanged(
@@ -473,8 +537,9 @@ cc::FrameSinkId RenderWidgetHostViewChildFrame::GetFrameSinkId() {
 }
 
 void RenderWidgetHostViewChildFrame::ProcessKeyboardEvent(
-    const NativeWebKeyboardEvent& event) {
-  host_->ForwardKeyboardEvent(event);
+    const NativeWebKeyboardEvent& event,
+    const ui::LatencyInfo& latency) {
+  host_->ForwardKeyboardEventWithLatencyInfo(event, latency);
 }
 
 void RenderWidgetHostViewChildFrame::ProcessMouseEvent(
@@ -486,7 +551,11 @@ void RenderWidgetHostViewChildFrame::ProcessMouseEvent(
 void RenderWidgetHostViewChildFrame::ProcessMouseWheelEvent(
     const blink::WebMouseWheelEvent& event,
     const ui::LatencyInfo& latency) {
-  if (event.delta_x != 0 || event.delta_y != 0)
+  if (event.delta_x != 0 || event.delta_y != 0 ||
+      event.phase == blink::WebMouseWheelEvent::kPhaseEnded ||
+      event.phase == blink::WebMouseWheelEvent::kPhaseCancelled ||
+      event.momentum_phase == blink::WebMouseWheelEvent::kPhaseEnded ||
+      event.momentum_phase == blink::WebMouseWheelEvent::kPhaseCancelled)
     host_->ForwardWheelEventWithLatencyInfo(event, latency);
 }
 
@@ -550,6 +619,11 @@ bool RenderWidgetHostViewChildFrame::IsRenderWidgetHostViewChildFrame() {
   return true;
 }
 
+void RenderWidgetHostViewChildFrame::WillSendScreenRects() {
+  if (frame_connector_)
+    UpdateViewportIntersection(frame_connector_->viewport_intersection());
+}
+
 #if defined(OS_MACOSX)
 ui::AcceleratedWidgetMac*
 RenderWidgetHostViewChildFrame::GetAcceleratedWidgetMac() const {
@@ -560,6 +634,10 @@ void RenderWidgetHostViewChildFrame::SetActive(bool active) {
 }
 
 void RenderWidgetHostViewChildFrame::ShowDefinitionForSelection() {
+  if (frame_connector_) {
+    frame_connector_->GetRootRenderWidgetHostView()
+        ->ShowDefinitionForSelection();
+  }
 }
 
 bool RenderWidgetHostViewChildFrame::SupportsSpeech() const {
@@ -668,6 +746,10 @@ InputEventAckState RenderWidgetHostViewChildFrame::FilterInputEvent(
   return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
 }
 
+void RenderWidgetHostViewChildFrame::OnSetNeedsFlushInput() {
+  NOTIMPLEMENTED();
+}
+
 BrowserAccessibilityManager*
 RenderWidgetHostViewChildFrame::CreateBrowserAccessibilityManager(
     BrowserAccessibilityDelegate* delegate, bool for_root_frame) {
@@ -678,7 +760,7 @@ RenderWidgetHostViewChildFrame::CreateBrowserAccessibilityManager(
 void RenderWidgetHostViewChildFrame::ClearCompositorSurfaceIfNecessary() {
   if (!support_)
     return;
-  support_->EvictFrame();
+  support_->EvictCurrentSurface();
   has_frame_ = false;
 }
 
@@ -718,6 +800,42 @@ void RenderWidgetHostViewChildFrame::ResetCompositorFrameSinkSupport() {
 
 bool RenderWidgetHostViewChildFrame::HasEmbedderChanged() {
   return false;
+}
+
+bool RenderWidgetHostViewChildFrame::GetSelectionRange(
+    gfx::Range* range) const {
+  if (!text_input_manager_ || !GetFocusedWidget())
+    return false;
+
+  const TextInputManager::TextSelection* selection =
+      text_input_manager_->GetTextSelection(GetFocusedWidget()->GetView());
+  if (!selection)
+    return false;
+
+  range->set_start(selection->range().start());
+  range->set_end(selection->range().end());
+
+  return true;
+}
+
+ui::TextInputType RenderWidgetHostViewChildFrame::GetTextInputType() const {
+  if (!text_input_manager_)
+    return ui::TEXT_INPUT_TYPE_NONE;
+
+  if (text_input_manager_->GetTextInputState())
+    return text_input_manager_->GetTextInputState()->type;
+  return ui::TEXT_INPUT_TYPE_NONE;
+}
+
+gfx::Point RenderWidgetHostViewChildFrame::GetViewOriginInRoot() const {
+  if (frame_connector_) {
+    auto origin = GetViewBounds().origin() -
+                  frame_connector_->GetRootRenderWidgetHostView()
+                      ->GetViewBounds()
+                      .origin();
+    return gfx::Point(origin.x(), origin.y());
+  }
+  return gfx::Point();
 }
 
 }  // namespace content

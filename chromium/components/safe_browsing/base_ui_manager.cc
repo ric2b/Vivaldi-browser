@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/supports_user_data.h"
 #include "components/safe_browsing/base_blocking_page.h"
@@ -86,7 +87,7 @@ WhitelistUrlSet* GetOrCreateWhitelist(WebContents* web_contents) {
       static_cast<WhitelistUrlSet*>(web_contents->GetUserData(kWhitelistKey));
   if (!site_list) {
     site_list = new WhitelistUrlSet;
-    web_contents->SetUserData(kWhitelistKey, site_list);
+    web_contents->SetUserData(kWhitelistKey, base::WrapUnique(site_list));
   }
   return site_list;
 }
@@ -243,11 +244,12 @@ void BaseUIManager::ShowBlockingPageForResource(
   BaseBlockingPage::ShowBlockingPage(this, resource);
 }
 
-// A safebrowsing hit is sent after a blocking page for malware/phishing
-// or after the warning dialog for download urls, only for
-// UMA || extended_reporting users.
+// A SafeBrowsing hit is sent after a blocking page for malware/phishing
+// or after the warning dialog for download urls, only for extended_reporting
+// users who are not in incognito mode.
 void BaseUIManager::MaybeReportSafeBrowsingHit(
-    const HitReport& hit_report) {
+    const HitReport& hit_report,
+    const content::WebContents* web_contents) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return;
 }

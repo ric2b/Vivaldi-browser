@@ -117,7 +117,7 @@ void InspectorResourceContentLoader::Start() {
       resource_request = item->GenerateResourceRequest(
           WebCachePolicy::kReturnCacheDataDontLoad);
     } else {
-      resource_request = document->Url();
+      resource_request = ResourceRequest(document->Url());
       resource_request.SetCachePolicy(WebCachePolicy::kReturnCacheDataDontLoad);
     }
     resource_request.SetRequestContext(WebURLRequest::kRequestContextInternal);
@@ -185,7 +185,7 @@ void InspectorResourceContentLoader::Cancel(int client_id) {
 }
 
 InspectorResourceContentLoader::~InspectorResourceContentLoader() {
-  ASSERT(resources_.IsEmpty());
+  DCHECK(resources_.IsEmpty());
 }
 
 DEFINE_TRACE(InspectorResourceContentLoader) {
@@ -206,10 +206,10 @@ void InspectorResourceContentLoader::Dispose() {
 
 void InspectorResourceContentLoader::Stop() {
   HeapHashSet<Member<ResourceClient>> pending_resource_clients;
-  pending_resource_clients_.Swap(pending_resource_clients);
+  pending_resource_clients_.swap(pending_resource_clients);
   for (const auto& client : pending_resource_clients)
     client->loader_ = nullptr;
-  resources_.Clear();
+  resources_.clear();
   // Make sure all callbacks are called to prevent infinite waiting time.
   CheckDone();
   all_requests_started_ = false;
@@ -224,7 +224,7 @@ void InspectorResourceContentLoader::CheckDone() {
   if (!HasFinished())
     return;
   HashMap<int, Callbacks> callbacks;
-  callbacks.Swap(callbacks_);
+  callbacks.swap(callbacks_);
   for (const auto& key_value : callbacks) {
     for (const auto& callback : key_value.value)
       (*callback)();

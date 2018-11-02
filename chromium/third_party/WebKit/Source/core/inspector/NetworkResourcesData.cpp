@@ -100,8 +100,8 @@ DEFINE_TRACE(NetworkResourcesData::ResourceData) {
 
 void NetworkResourcesData::ResourceData::SetContent(const String& content,
                                                     bool base64_encoded) {
-  ASSERT(!HasData());
-  ASSERT(!HasContent());
+  DCHECK(!HasData());
+  DCHECK(!HasContent());
   content_ = content;
   base64_encoded_ = base64_encoded;
 }
@@ -109,13 +109,13 @@ void NetworkResourcesData::ResourceData::SetContent(const String& content,
 size_t NetworkResourcesData::ResourceData::RemoveContent() {
   size_t result = 0;
   if (HasData()) {
-    ASSERT(!HasContent());
+    DCHECK(!HasContent());
     result = data_buffer_->size();
     data_buffer_ = nullptr;
   }
 
   if (HasContent()) {
-    ASSERT(!HasData());
+    DCHECK(!HasData());
     result = content_.CharactersSizeInBytes();
     content_ = String();
   }
@@ -163,7 +163,7 @@ size_t NetworkResourcesData::ResourceData::DataLength() const {
 
 void NetworkResourcesData::ResourceData::AppendData(const char* data,
                                                     size_t data_length) {
-  ASSERT(!HasContent());
+  DCHECK(!HasContent());
   if (!data_buffer_)
     data_buffer_ = SharedBuffer::Create(data, data_length);
   else
@@ -381,7 +381,7 @@ void NetworkResourcesData::AddPendingEncodedDataLength(
 void NetworkResourcesData::Clear(const String& preserved_loader_id) {
   if (!request_id_to_resource_data_map_.size())
     return;
-  request_ids_deque_.Clear();
+  request_ids_deque_.clear();
   content_size_ = 0;
 
   ResourceDataMap preserved_map;
@@ -392,9 +392,9 @@ void NetworkResourcesData::Clear(const String& preserved_loader_id) {
         resource_data->LoaderId() == preserved_loader_id)
       preserved_map.Set(resource.key, resource.value);
   }
-  request_id_to_resource_data_map_.Swap(preserved_map);
+  request_id_to_resource_data_map_.swap(preserved_map);
 
-  reused_xhr_replay_data_request_ids_.Clear();
+  reused_xhr_replay_data_request_ids_.clear();
 }
 
 void NetworkResourcesData::SetResourcesDataSizeLimits(

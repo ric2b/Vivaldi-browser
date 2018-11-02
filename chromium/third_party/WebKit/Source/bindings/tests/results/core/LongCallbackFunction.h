@@ -14,9 +14,9 @@
 #define LongCallbackFunction_h
 
 #include "bindings/core/v8/NativeValueTraits.h"
-#include "bindings/core/v8/ScriptWrappable.h"
-#include "bindings/core/v8/TraceWrapperV8Reference.h"
 #include "core/CoreExport.h"
+#include "platform/bindings/ScriptWrappable.h"
+#include "platform/bindings/TraceWrapperV8Reference.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -36,14 +36,14 @@ class CORE_EXPORT LongCallbackFunction final : public GarbageCollectedFinalized<
   bool call(ScriptWrappable* scriptWrappable, int32_t num1, int32_t num2, int32_t& returnValue);
 
   v8::Local<v8::Function> v8Value(v8::Isolate* isolate) {
-    return m_callback.NewLocal(isolate);
+    return callback_.NewLocal(isolate);
   }
 
  private:
   LongCallbackFunction(ScriptState*, v8::Local<v8::Function>);
 
-  RefPtr<ScriptState> m_scriptState;
-  TraceWrapperV8Reference<v8::Function> m_callback;
+  RefPtr<ScriptState> script_state_;
+  TraceWrapperV8Reference<v8::Function> callback_;
 };
 
 template <>

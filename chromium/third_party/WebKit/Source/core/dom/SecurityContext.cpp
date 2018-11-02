@@ -105,17 +105,16 @@ void SecurityContext::InitializeFeaturePolicy(
     const WebParsedFeaturePolicy& parsed_header,
     const WebParsedFeaturePolicy& container_policy,
     const WebFeaturePolicy* parent_feature_policy) {
-  DCHECK(!feature_policy_);
   WebSecurityOrigin origin = WebSecurityOrigin(security_origin_);
-  feature_policy_.reset(Platform::Current()->CreateFeaturePolicy(
-      parent_feature_policy, container_policy, parsed_header, origin));
+  feature_policy_ = Platform::Current()->CreateFeaturePolicy(
+      parent_feature_policy, container_policy, parsed_header, origin);
 }
 
 void SecurityContext::UpdateFeaturePolicyOrigin() {
   if (!feature_policy_)
     return;
-  feature_policy_.reset(Platform::Current()->DuplicateFeaturePolicyWithOrigin(
-      *feature_policy_, WebSecurityOrigin(security_origin_)));
+  feature_policy_ = Platform::Current()->DuplicateFeaturePolicyWithOrigin(
+      *feature_policy_, WebSecurityOrigin(security_origin_));
 }
 
 }  // namespace blink

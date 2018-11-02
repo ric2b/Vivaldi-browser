@@ -3,66 +3,7 @@
 // found in the LICENSE file.
 
 cr.define('settings-languages', function() {
-  /**
-   * Data-binds two Polymer properties using the property-changed events and
-   * set/notifyPath API. Useful for testing components which would normally be
-   * used together.
-   * @param {!HTMLElement} el1
-   * @param {!HTMLElement} el2
-   * @param {string} property
-   */
-  function fakeDataBind(el1, el2, property) {
-    var forwardChange = function(el, event) {
-      if (event.detail.hasOwnProperty('path'))
-        el.notifyPath(event.detail.path, event.detail.value);
-      else
-        el.set(property, event.detail.value);
-    };
-    // Add the listeners symmetrically. Polymer will prevent recursion.
-    el1.addEventListener(property + '-changed', forwardChange.bind(null, el2));
-    el2.addEventListener(property + '-changed', forwardChange.bind(null, el1));
-  }
-
   suite('settings-languages', function() {
-    function getFakePrefs() {
-      var fakePrefs = [{
-        key: 'intl.app_locale',
-        type: chrome.settingsPrivate.PrefType.STRING,
-        value: 'en-US',
-      }, {
-        key: 'intl.accept_languages',
-        type: chrome.settingsPrivate.PrefType.STRING,
-        value: 'en-US,sw',
-      }, {
-        key: 'spellcheck.dictionaries',
-        type: chrome.settingsPrivate.PrefType.LIST,
-        value: ['en-US'],
-      }, {
-        key: 'translate_blocked_languages',
-        type: chrome.settingsPrivate.PrefType.LIST,
-        value: ['en-US'],
-      }];
-      if (cr.isChromeOS) {
-        fakePrefs.push({
-          key: 'settings.language.preferred_languages',
-          type: chrome.settingsPrivate.PrefType.STRING,
-          value: 'en-US,sw',
-        });
-        fakePrefs.push({
-          key: 'settings.language.preload_engines',
-          type: chrome.settingsPrivate.PrefType.STRING,
-          value: '_comp_ime_fgoepimhcoialccpbmpnnblemnepkkaoxkb:us::eng,' +
-                 '_comp_ime_fgoepimhcoialccpbmpnnblemnepkkaoxkb:us:dvorak:eng',
-        });
-        fakePrefs.push({
-          key: 'settings.language.enabled_extension_imes',
-          type: chrome.settingsPrivate.PrefType.STRING,
-          value: '',
-        });
-      }
-      return fakePrefs;
-    }
-
     /**
      * @param {!Array<string>} expected
      */
@@ -74,42 +15,45 @@ cr.define('settings-languages', function() {
       }
     }
 
+    /** @type {?settings.LanguagesBrowserProxy} */
+    var browserProxy = null;
+
     var languageHelper;
-    var languageSettingsPrivate;
 
     suiteSetup(function() {
       CrSettingsPrefs.deferInitialization = true;
+      PolymerTest.clearBody();
     });
 
     setup(function() {
       var settingsPrefs = document.createElement('settings-prefs');
-      var settingsPrivate = new settings.FakeSettingsPrivate(getFakePrefs());
+      var settingsPrivate =
+          new settings.FakeSettingsPrivate(settings.getFakeLanguagePrefs());
       settingsPrefs.initialize(settingsPrivate);
+      document.body.appendChild(settingsPrefs);
 
-      languageSettingsPrivate = new settings.FakeLanguageSettingsPrivate();
+      // Setup test browser proxy.
+      browserProxy = new settings.TestLanguagesBrowserProxy();
+      settings.LanguagesBrowserProxyImpl.instance_ = browserProxy;
+
+      // Setup fake languageSettingsPrivate API.
+      var languageSettingsPrivate = browserProxy.getLanguageSettingsPrivate();
       languageSettingsPrivate.setSettingsPrefs(settingsPrefs);
-      settings.languageSettingsPrivateApiForTest = languageSettingsPrivate;
-
-      var getProspectiveUILanguageCalled = false;
-      registerMessageCallback('getProspectiveUILanguage', null,
-          function(callbackId) {
-            assertFalse(getProspectiveUILanguageCalled);
-            getProspectiveUILanguageCalled = true;
-            cr.webUIResponse(callbackId, true, 'en-US');
-          });
 
       languageHelper = document.createElement('settings-languages');
 
       // Prefs would normally be data-bound to settings-languages.
-      fakeDataBind(settingsPrefs, languageHelper, 'prefs');
+      test_util.fakeDataBind(settingsPrefs, languageHelper, 'prefs');
 
+      document.body.appendChild(languageHelper);
       return languageHelper.whenReady().then(function() {
-        assertEquals(
-            cr.isChromeOS || cr.isWindows, getProspectiveUILanguageCalled);
+        if (cr.isChromeOS || cr.isWindows)
+          return browserProxy.whenCalled('getProspectiveUILanguage');
       });
     });
 
     test('languages model', function() {
+      var languageSettingsPrivate = browserProxy.getLanguageSettingsPrivate();
       for (var i = 0; i < languageSettingsPrivate.languages.length;
            i++) {
         assertEquals(languageSettingsPrivate.languages[i].code,

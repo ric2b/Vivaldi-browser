@@ -14,6 +14,7 @@
 #include "media/base/decoder_buffer.h"
 #include "media/base/media_util.h"
 #include "media/base/video_decoder_config.h"
+#include "platform_media/common/platform_logging_util.h"
 #include "platform_media/renderer/decoders/mac/core_audio_demuxer.h"
 
 namespace media {
@@ -140,7 +141,8 @@ CoreAudioDemuxerStream::CoreAudioDemuxerStream(
       NULL, kCFRunLoopCommonModes, 0, audio_queue_.InitializeInto());
 
   if (err) {
-    LOG(ERROR) << "AudioQueueNewOutput, error = " << StringFromAudioError(err);
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " AudioQueueNewOutput, error = " << StringFromAudioError(err);
     audio_queue_.reset();
     return;
   }
@@ -148,7 +150,8 @@ CoreAudioDemuxerStream::CoreAudioDemuxerStream(
   err = AudioQueueAllocateBuffer(audio_queue_, kAudioQueueBufSize,
                                  &audio_queue_buffer_);
   if (err) {
-    LOG(ERROR) << "AudioQueueAllocateBuffer, error = "
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " AudioQueueAllocateBuffer, error = "
                << StringFromAudioError(err);
     audio_queue_.reset();
   }
@@ -179,6 +182,9 @@ void CoreAudioDemuxerStream::InitializeAudioDecoderConfig() {
                            Unencrypted(),
                            base::TimeDelta(),
                            0);
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " New AudioDecoderConfig :"
+          << Loggable(audio_config_);
 }
 
 void CoreAudioDemuxerStream::Read(const ReadCB& read_cb) {
@@ -191,7 +197,8 @@ void CoreAudioDemuxerStream::Read(const ReadCB& read_cb) {
   }
 
   if (!is_enabled_) {
-    DVLOG(1) << "Read from disabled stream, returning EOS";
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Read from disabled stream, returning EOS";
     base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     return;
   }
@@ -213,7 +220,8 @@ void CoreAudioDemuxerStream::ReadCompleted(uint8_t* read_data, int read_size) {
       audio_file_stream_, read_size, read_data, flags);
   pending_seek_ = false;
   if (err != noErr) {
-    LOG(ERROR) << "AudioFileStreamParseBytes error: " << err;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " AudioFileStreamParseBytes error: " << err;
     base::ResetAndReturn(&read_cb_).Run(kAborted, NULL);
     return;
   }
@@ -314,7 +322,8 @@ OSStatus CoreAudioDemuxerStream::EnqueueBuffer() {
 
     err = AudioQueueSetOfflineRenderFormat(audio_queue_, &output_format_, &acl);
     if (err) {
-      LOG(ERROR) << "AudioQueueSetOfflineRenderFormat, error = "
+      LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " AudioQueueSetOfflineRenderFormat, error = "
                  << StringFromAudioError(err);
       return err;
     }
@@ -338,14 +347,16 @@ OSStatus CoreAudioDemuxerStream::EnqueueBuffer() {
     err = AudioQueueAllocateBuffer(
         audio_queue_, decoded_data_buffer_size_, &output_buffer_);
     if (err) {
-      LOG(ERROR) << "AudioQueueAllocateBuffer, error = "
+      LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " AudioQueueAllocateBuffer, error = "
                  << StringFromAudioError(err);
       return err;
     }
 
     err = AudioQueueStart(audio_queue_, NULL);
     if (err) {
-      LOG(ERROR) << "AudioQueueStart, error = " << StringFromAudioError(err);
+      LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " AudioQueueStart, error = " << StringFromAudioError(err);
       return err;
     }
 
@@ -353,7 +364,8 @@ OSStatus CoreAudioDemuxerStream::EnqueueBuffer() {
     err =
         AudioQueueOfflineRender(audio_queue_, &time_stamp_, output_buffer_, 0);
     if (err) {
-      LOG(ERROR) << "AudioQueueOfflineRender, error = "
+      LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " AudioQueueOfflineRender, error = "
                  << StringFromAudioError(err);
       return err;
     }
@@ -362,7 +374,8 @@ OSStatus CoreAudioDemuxerStream::EnqueueBuffer() {
   err = AudioQueueEnqueueBuffer(
         audio_queue_, fill_buf, packets_filled_, packet_descs_->data());
   if (err) {
-    LOG(ERROR) << "AudioQueueEnqueueBuffer, error = "
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " AudioQueueEnqueueBuffer, error = "
                << StringFromAudioError(err);
     return err;
   }
@@ -373,7 +386,8 @@ OSStatus CoreAudioDemuxerStream::EnqueueBuffer() {
       audio_queue_, &time_stamp_, output_buffer_, req_frames);
 
   if (err) {
-    LOG(ERROR) << "AudioQueueOfflineRender, error = "
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " AudioQueueOfflineRender, error = "
                << StringFromAudioError(err);
     return err;
   }

@@ -55,9 +55,7 @@ Console.ConsoleView = class extends UI.VBox {
     this._regexMatchRanges = [];
     this._filter = new Console.ConsoleViewFilter(this._updateMessageList.bind(this));
 
-    this._executionContextComboBox = new UI.ToolbarComboBox(null, 'console-context');
-    this._executionContextComboBox.setMaxWidth(80);
-    this._consoleContextSelector = new Console.ConsoleContextSelector(this._executionContextComboBox.selectElement());
+    this._consoleContextSelector = new Console.ConsoleContextSelector();
 
     this._filterStatusText = new UI.ToolbarText();
     this._filterStatusText.element.classList.add('dimmed');
@@ -70,10 +68,11 @@ Console.ConsoleView = class extends UI.VBox {
     toolbar.appendToolbarItem(UI.Toolbar.createActionButton(
         /** @type {!UI.Action }*/ (UI.actionRegistry.action('console.clear'))));
     toolbar.appendSeparator();
-    toolbar.appendToolbarItem(this._executionContextComboBox);
+    toolbar.appendToolbarItem(this._consoleContextSelector.toolbarItem());
     toolbar.appendSeparator();
     toolbar.appendToolbarItem(this._filter._textFilterUI);
-    toolbar.appendToolbarItem(this._filter._levelComboBox);
+    toolbar.appendToolbarItem(this._filter._levelMenuButton);
+    toolbar.appendToolbarItem(this._filter._levelMenuButtonArrow);
     toolbar.appendToolbarItem(this._progressToolbarItem);
     toolbar.appendSpacer();
     toolbar.appendToolbarItem(this._filterStatusText);
@@ -86,6 +85,13 @@ Console.ConsoleView = class extends UI.VBox {
     this._hideNetworkMessagesCheckbox = new UI.ToolbarSettingCheckbox(
         this._filter._hideNetworkMessagesSetting, this._filter._hideNetworkMessagesSetting.title(),
         Common.UIString('Hide network'));
+    var filterByExecutionContextCheckbox = new UI.ToolbarSettingCheckbox(
+        this._filter._filterByExecutionContextSetting,
+        Common.UIString('Only show messages from the current context (top, iframe, worker, extension)'),
+        Common.UIString('Selected context only'));
+    var filterConsoleAPICheckbox = new UI.ToolbarSettingCheckbox(
+        Common.moduleSetting('consoleAPIFilterEnabled'), Common.UIString('Only show messages from console API methods'),
+        Common.UIString('User messages only'));
     var monitoringXHREnabledSetting = Common.moduleSetting('monitoringXHREnabled');
     this._timestampsSetting = Common.moduleSetting('consoleTimestampsEnabled');
     this._consoleHistoryAutocompleteSetting = Common.moduleSetting('consoleHistoryAutocomplete');
@@ -98,7 +104,8 @@ Console.ConsoleView = class extends UI.VBox {
     settingsToolbarLeft.makeVertical();
     settingsToolbarLeft.appendToolbarItem(this._hideNetworkMessagesCheckbox);
     settingsToolbarLeft.appendToolbarItem(this._preserveLogCheckbox);
-    settingsToolbarLeft.appendToolbarItem(this._filter._filterByExecutionContextCheckbox);
+    settingsToolbarLeft.appendToolbarItem(filterByExecutionContextCheckbox);
+    settingsToolbarLeft.appendToolbarItem(filterConsoleAPICheckbox);
 
     var settingsToolbarRight = new UI.Toolbar('', settingsPane.element);
     settingsToolbarRight.makeVertical();
@@ -136,9 +143,9 @@ Console.ConsoleView = class extends UI.VBox {
     this._registerShortcuts();
 
     this._messagesElement.addEventListener('contextmenu', this._handleContextMenuEvent.bind(this), false);
-    monitoringXHREnabledSetting.addChangeListener(this._monitoringXHREnabledSettingChanged, this);
 
     this._linkifier = new Components.Linkifier();
+    this._badgePool = new ProductRegistry.BadgePool();
 
     /** @type {!Array.<!Console.ConsoleViewMessage>} */
     this._consoleMessages = [];
@@ -178,8 +185,6 @@ Console.ConsoleView = class extends UI.VBox {
     ConsoleModel.consoleModel.addEventListener(
         ConsoleModel.ConsoleModel.Events.CommandEvaluated, this._commandEvaluated, this);
     ConsoleModel.consoleModel.messages().forEach(this._addConsoleMessage, this);
-    if (this._consoleMessages.length)
-      this._viewport.invalidate();
   }
 
   /**
@@ -288,7 +293,7 @@ Console.ConsoleView = class extends UI.VBox {
 
   _executionContextChanged() {
     this._prompt.clearAutocomplete();
-    if (this._filter._filterByExecutionContextCheckbox.checked())
+    if (this._filter._filterByExecutionContextSetting.get())
       this._updateMessageList();
   }
 
@@ -502,14 +507,14 @@ Console.ConsoleView = class extends UI.VBox {
     var nestingLevel = this._currentGroup.nestingLevel();
     switch (message.type) {
       case ConsoleModel.ConsoleMessage.MessageType.Command:
-        return new Console.ConsoleCommand(message, this._linkifier, nestingLevel);
+        return new Console.ConsoleCommand(message, this._linkifier, this._badgePool, nestingLevel);
       case ConsoleModel.ConsoleMessage.MessageType.Result:
-        return new Console.ConsoleCommandResult(message, this._linkifier, nestingLevel);
+        return new Console.ConsoleCommandResult(message, this._linkifier, this._badgePool, nestingLevel);
       case ConsoleModel.ConsoleMessage.MessageType.StartGroupCollapsed:
       case ConsoleModel.ConsoleMessage.MessageType.StartGroup:
-        return new Console.ConsoleGroupViewMessage(message, this._linkifier, nestingLevel);
+        return new Console.ConsoleGroupViewMessage(message, this._linkifier, this._badgePool, nestingLevel);
       default:
-        return new Console.ConsoleViewMessage(message, this._linkifier, nestingLevel);
+        return new Console.ConsoleViewMessage(message, this._linkifier, this._badgePool, nestingLevel);
     }
   }
 
@@ -520,6 +525,7 @@ Console.ConsoleView = class extends UI.VBox {
     this._hidePromptSuggestBox();
     this._viewport.setStickToBottom(true);
     this._linkifier.reset();
+    this._badgePool.reset();
   }
 
   _handleContextMenuEvent(event) {
@@ -658,16 +664,6 @@ Console.ConsoleView = class extends UI.VBox {
     this._updateFilterStatus();
     this._searchableView.updateSearchMatchesCount(this._regexMatchRanges.length);
     this._viewport.invalidate();
-  }
-
-  /**
-   * @param {!Common.Event} event
-   */
-  _monitoringXHREnabledSettingChanged(event) {
-    var enabled = /** @type {boolean} */ (event.data);
-    SDK.targetManager.targets().forEach(function(target) {
-      target.networkAgent().setMonitoringXHREnabled(enabled);
-    });
   }
 
   /**
@@ -1009,33 +1005,110 @@ Console.ConsoleViewFilter = class {
    * @param {function()} filterChangedCallback
    */
   constructor(filterChangedCallback) {
-    this._filterByExecutionContextCheckbox = new UI.ToolbarCheckbox(
-        Common.UIString('Selected context only'),
-        Common.UIString('Only show messages from the current context (top, iframe, worker, extension)'),
-        filterChangedCallback);
     this._filterChanged = filterChangedCallback;
 
     this._messageURLFiltersSetting = Common.settings.createSetting('messageURLFilters', {});
-    this._messageLevelFiltersSetting =
-        Common.settings.createSetting('messageLevelFilters2', ConsoleModel.ConsoleMessage.MessageLevel.Info);
+    this._messageLevelFiltersSetting = Console.ConsoleViewFilter.levelFilterSetting();
+
     this._hideNetworkMessagesSetting = Common.moduleSetting('hideNetworkMessages');
+    this._filterByExecutionContextSetting = Common.moduleSetting('selectedContextFilterEnabled');
+    this._filterByConsoleAPISetting = Common.moduleSetting('consoleAPIFilterEnabled');
 
     this._messageURLFiltersSetting.addChangeListener(this._filterChanged);
     this._messageLevelFiltersSetting.addChangeListener(this._filterChanged);
     this._hideNetworkMessagesSetting.addChangeListener(this._filterChanged);
+    this._filterByExecutionContextSetting.addChangeListener(this._filterChanged);
+    this._filterByConsoleAPISetting.addChangeListener(this._filterChanged);
 
     this._textFilterUI = new UI.ToolbarInput(Common.UIString('Filter'), 0.2, 1, true);
     this._textFilterUI.addEventListener(UI.ToolbarInput.Event.TextChanged, this._textFilterChanged, this);
 
-    var levels = [
-      {value: ConsoleModel.ConsoleMessage.MessageLevel.Verbose, label: Common.UIString('Verbose')},
-      {value: ConsoleModel.ConsoleMessage.MessageLevel.Info, label: Common.UIString('Info'), default: true},
-      {value: ConsoleModel.ConsoleMessage.MessageLevel.Warning, label: Common.UIString('Warnings')},
-      {value: ConsoleModel.ConsoleMessage.MessageLevel.Error, label: Common.UIString('Errors')}
-    ];
+    this._levelLabels = {};
+    this._levelLabels[ConsoleModel.ConsoleMessage.MessageLevel.Verbose] = Common.UIString('Verbose');
+    this._levelLabels[ConsoleModel.ConsoleMessage.MessageLevel.Info] = Common.UIString('Info');
+    this._levelLabels[ConsoleModel.ConsoleMessage.MessageLevel.Warning] = Common.UIString('Warnings');
+    this._levelLabels[ConsoleModel.ConsoleMessage.MessageLevel.Error] = Common.UIString('Errors');
 
-    this._levelComboBox =
-        new UI.ToolbarSettingComboBox(levels, this._messageLevelFiltersSetting, Common.UIString('Level'));
+    this._levelMenuButton = new UI.ToolbarText('');
+    this._levelMenuButtonArrow = new UI.ToolbarItem(UI.Icon.create('smallicon-triangle-down'));
+    this._levelMenuButton.element.addEventListener('click', this._showLevelContextMenu.bind(this));
+    this._levelMenuButtonArrow.element.addEventListener('click', this._showLevelContextMenu.bind(this));
+
+    this._updateLevelMenuButtonText();
+    this._messageLevelFiltersSetting.addChangeListener(this._updateLevelMenuButtonText.bind(this));
+  }
+
+  /**
+   * @return {!Common.Setting}
+   */
+  static levelFilterSetting() {
+    return Common.settings.createSetting('messageLevelFilters', Console.ConsoleViewFilter.defaultLevelsFilterValue());
+  }
+
+  /**
+   * @return {!Object<string, boolean>}
+   */
+  static allLevelsFilterValue() {
+    var result = {};
+    for (var name of Object.values(ConsoleModel.ConsoleMessage.MessageLevel))
+      result[name] = true;
+    return result;
+  }
+
+  /**
+   * @return {!Object<string, boolean>}
+   */
+  static defaultLevelsFilterValue() {
+    var result = Console.ConsoleViewFilter.allLevelsFilterValue();
+    result[ConsoleModel.ConsoleMessage.MessageLevel.Verbose] = false;
+    return result;
+  }
+
+  _updateLevelMenuButtonText() {
+    var isAll = true;
+    var isDefault = true;
+    var allValue = Console.ConsoleViewFilter.allLevelsFilterValue();
+    var defaultValue = Console.ConsoleViewFilter.defaultLevelsFilterValue();
+
+    var text = null;
+    var levels = this._messageLevelFiltersSetting.get();
+    for (var name of Object.values(ConsoleModel.ConsoleMessage.MessageLevel)) {
+      isAll = isAll && levels[name] === allValue[name];
+      isDefault = isDefault && levels[name] === defaultValue[name];
+      if (levels[name])
+        text = text ? Common.UIString('Custom levels') : Common.UIString('%s only', this._levelLabels[name]);
+    }
+    if (isAll)
+      text = Common.UIString('All levels');
+    else if (isDefault)
+      text = Common.UIString('Default levels');
+    else
+      text = text || Common.UIString('Hide all');
+    this._levelMenuButton.setText(text);
+  }
+
+  /**
+   * @param {!Event} event
+   */
+  _showLevelContextMenu(event) {
+    var setting = this._messageLevelFiltersSetting;
+    var levels = setting.get();
+
+    var contextMenu = new UI.ContextMenu(event, true);
+    contextMenu.appendItem(
+        Common.UIString('Default'), () => setting.set(Console.ConsoleViewFilter.defaultLevelsFilterValue()));
+    contextMenu.appendSeparator();
+    for (var level in this._levelLabels)
+      contextMenu.appendCheckboxItem(this._levelLabels[level], toggleShowLevel.bind(null, level), levels[level]);
+    contextMenu.show();
+
+    /**
+     * @param {string} level
+     */
+    function toggleShowLevel(level) {
+      levels[level] = !levels[level];
+      setting.set(levels);
+    }
   }
 
   _textFilterChanged() {
@@ -1088,7 +1161,7 @@ Console.ConsoleViewFilter = class {
     var message = viewMessage.consoleMessage();
     var executionContext = UI.context.flavor(SDK.ExecutionContext);
 
-    if (this._filterByExecutionContextCheckbox.checked() && executionContext) {
+    if (this._filterByExecutionContextSetting.get() && executionContext) {
       if (message.runtimeModel() !== executionContext.runtimeModel)
         return false;
       if (message.executionContextId && message.executionContextId !== executionContext.id)
@@ -1109,9 +1182,8 @@ Console.ConsoleViewFilter = class {
     if (message.url && this._messageURLFiltersSetting.get()[message.url])
       return false;
 
-    var filterOrdinal = ConsoleModel.ConsoleMessage.MessageLevel.ordinal(
-        /** @type {!ConsoleModel.ConsoleMessage.MessageLevel} */ (this._messageLevelFiltersSetting.get()));
-    if (message.level && ConsoleModel.ConsoleMessage.MessageLevel.ordinal(message.level) < filterOrdinal)
+    var levels = this._messageLevelFiltersSetting.get();
+    if (!levels[message.level])
       return false;
 
     if (this._filterRegex) {
@@ -1122,13 +1194,18 @@ Console.ConsoleViewFilter = class {
         return false;
     }
 
+    if (this._filterByConsoleAPISetting.get() &&
+        message.source !== ConsoleModel.ConsoleMessage.MessageSource.ConsoleAPI)
+      return false;
+
     return true;
   }
 
   reset() {
     this._messageURLFiltersSetting.set({});
-    this._messageLevelFiltersSetting.set(ConsoleModel.ConsoleMessage.MessageLevel.Info);
-    this._filterByExecutionContextCheckbox.inputElement.checked = false;
+    this._messageLevelFiltersSetting.set(Console.ConsoleViewFilter.defaultLevelsFilterValue());
+    this._filterByExecutionContextSetting.set(false);
+    this._filterByConsoleAPISetting.set(false);
     this._hideNetworkMessagesSetting.set(false);
     this._textFilterUI.setValue('');
     this._textFilterChanged();
@@ -1142,10 +1219,11 @@ Console.ConsoleCommand = class extends Console.ConsoleViewMessage {
   /**
    * @param {!ConsoleModel.ConsoleMessage} message
    * @param {!Components.Linkifier} linkifier
+   * @param {!ProductRegistry.BadgePool} badgePool
    * @param {number} nestingLevel
    */
-  constructor(message, linkifier, nestingLevel) {
-    super(message, linkifier, nestingLevel);
+  constructor(message, linkifier, badgePool, nestingLevel) {
+    super(message, linkifier, badgePool, nestingLevel);
   }
 
   /**
@@ -1195,10 +1273,11 @@ Console.ConsoleCommandResult = class extends Console.ConsoleViewMessage {
   /**
    * @param {!ConsoleModel.ConsoleMessage} message
    * @param {!Components.Linkifier} linkifier
+   * @param {!ProductRegistry.BadgePool} badgePool
    * @param {number} nestingLevel
    */
-  constructor(message, linkifier, nestingLevel) {
-    super(message, linkifier, nestingLevel);
+  constructor(message, linkifier, badgePool, nestingLevel) {
+    super(message, linkifier, badgePool, nestingLevel);
   }
 
   /**

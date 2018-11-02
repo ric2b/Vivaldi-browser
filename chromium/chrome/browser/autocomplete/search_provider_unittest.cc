@@ -192,7 +192,7 @@ class SearchProviderTest : public testing::Test,
   // If we're waiting for the provider to finish, this exits the message loop.
   void OnProviderUpdate(bool updated_matches) override;
 
-  // Runs a nested message loop until provider_ is done. The message loop is
+  // Runs a nested run loop until provider_ is done. The message loop is
   // exited by way of OnProviderUpdate.
   void RunTillProviderDone();
 
@@ -330,8 +330,9 @@ void SearchProviderTest::RunTest(TestData* cases,
   ACMatches matches;
   for (int i = 0; i < num_cases; ++i) {
     AutocompleteInput input(cases[i].input, base::string16::npos, std::string(),
-                            GURL(), metrics::OmniboxEventProto::INVALID_SPEC,
-                            false, prefer_keyword, true, true, false,
+                            GURL(), base::string16(),
+                            metrics::OmniboxEventProto::INVALID_SPEC, false,
+                            prefer_keyword, true, true, false,
                             ChromeAutocompleteSchemeClassifier(&profile_));
     provider_->Start(input, false);
     matches = provider_->matches();
@@ -374,11 +375,11 @@ void SearchProviderTest::QueryForInput(const base::string16& text,
                                        bool prevent_inline_autocomplete,
                                        bool prefer_keyword) {
   // Start a query.
-  AutocompleteInput input(text, base::string16::npos, std::string(), GURL(),
-                          metrics::OmniboxEventProto::INVALID_SPEC,
-                          prevent_inline_autocomplete, prefer_keyword, true,
-                          true, false,
-                          ChromeAutocompleteSchemeClassifier(&profile_));
+  AutocompleteInput input(
+      text, base::string16::npos, std::string(), GURL(), base::string16(),
+      metrics::OmniboxEventProto::INVALID_SPEC, prevent_inline_autocomplete,
+      prefer_keyword, true, true, false,
+      ChromeAutocompleteSchemeClassifier(&profile_));
   provider_->Start(input, false);
 
   // RunUntilIdle so that the task scheduled by SearchProvider to create the
@@ -1008,8 +1009,8 @@ TEST_F(SearchProviderTest, KeywordOrderingAndDescriptions) {
       nullptr, AutocompleteProvider::TYPE_SEARCH);
   controller.Start(AutocompleteInput(
       ASCIIToUTF16("k t"), base::string16::npos, std::string(), GURL(),
-      metrics::OmniboxEventProto::INVALID_SPEC, false, false, true, true, false,
-      ChromeAutocompleteSchemeClassifier(&profile_)));
+      base::string16(), metrics::OmniboxEventProto::INVALID_SPEC, false, false,
+      true, true, false, ChromeAutocompleteSchemeClassifier(&profile_)));
   const AutocompleteResult& result = controller.result();
 
   // There should be three matches, one for the keyword history, one for
@@ -3250,7 +3251,7 @@ TEST_F(SearchProviderTest, CanSendURL) {
   // Not in field trial.
   ResetFieldTrialList();
   CreateFieldTrial(OmniboxFieldTrial::kZeroSuggestRule, false);
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_TRUE(SearchProvider::CanSendURL(
       GURL("http://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), &client));
@@ -3276,6 +3277,19 @@ TEST_F(SearchProviderTest, CanSendURL) {
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::INSTANT_NTP_WITH_OMNIBOX_AS_STARTING_FOCUS,
       SearchTermsData(), &client));
+
+  // Invalid page classification.
+  EXPECT_FALSE(SearchProvider::CanSendURL(
+      GURL("http://www.google.com/search"),
+      GURL("https://www.google.com/complete/search"), &google_template_url,
+      metrics::OmniboxEventProto::NTP, SearchTermsData(), &client));
+
+  // Invalid page classification.
+  EXPECT_FALSE(SearchProvider::CanSendURL(
+      GURL("http://www.google.com/search"),
+      GURL("https://www.google.com/complete/search"), &google_template_url,
+      metrics::OmniboxEventProto::OBSOLETE_INSTANT_NTP, SearchTermsData(),
+      &client));
 
   // HTTPS page URL on same domain as provider.
   EXPECT_TRUE(SearchProvider::CanSendURL(
@@ -3601,8 +3615,8 @@ TEST_F(SearchProviderTest, RemoveExtraAnswers) {
 TEST_F(SearchProviderTest, DoesNotProvideOnFocus) {
   AutocompleteInput input(
       base::ASCIIToUTF16("f"), base::string16::npos, std::string(), GURL(),
-      metrics::OmniboxEventProto::INVALID_SPEC, false, true, true, true, true,
-      ChromeAutocompleteSchemeClassifier(&profile_));
+      base::string16(), metrics::OmniboxEventProto::INVALID_SPEC, false, true,
+      true, true, true, ChromeAutocompleteSchemeClassifier(&profile_));
   provider_->Start(input, false);
   EXPECT_TRUE(provider_->matches().empty());
 }
@@ -3610,8 +3624,8 @@ TEST_F(SearchProviderTest, DoesNotProvideOnFocus) {
 TEST_F(SearchProviderTest, SendsWarmUpRequestOnFocus) {
   AutocompleteInput input(
       base::ASCIIToUTF16("f"), base::string16::npos, std::string(), GURL(),
-      metrics::OmniboxEventProto::INVALID_SPEC, false, true, true, true, true,
-      ChromeAutocompleteSchemeClassifier(&profile_));
+      base::string16(), metrics::OmniboxEventProto::INVALID_SPEC, false, true,
+      true, true, true, ChromeAutocompleteSchemeClassifier(&profile_));
 
   // First, verify that without the warm-up feature enabled, the provider
   // immediately terminates with no matches.

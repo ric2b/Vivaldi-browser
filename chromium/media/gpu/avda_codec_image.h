@@ -26,8 +26,7 @@ class MediaCodecBridge;
 class AVDACodecImage : public gpu::gles2::GLStreamTextureImage {
  public:
   AVDACodecImage(const scoped_refptr<AVDASharedState>& shared_state,
-                 MediaCodecBridge* codec,
-                 const base::WeakPtr<gpu::gles2::GLES2Decoder>& decoder);
+                 MediaCodecBridge* codec);
 
   // gl::GLImage implementation
   gfx::Size GetSize() override;
@@ -142,14 +141,15 @@ class AVDACodecImage : public gpu::gles2::GLStreamTextureImage {
   // May be null.
   MediaCodecBridge* media_codec_;
 
-  const base::WeakPtr<gpu::gles2::GLES2Decoder> decoder_;
-
   // Indicates if we're rendering to a SurfaceTexture or not. Set during the
   // call to SetBufferMetadata().
   bool has_surface_texture_;
 
   // The texture that we're attached to.
   gpu::gles2::Texture* texture_;
+
+  // Bounds that we last sent to our overlay.
+  gfx::Rect most_recent_bounds_;
 
   DISALLOW_COPY_AND_ASSIGN(AVDACodecImage);
 };

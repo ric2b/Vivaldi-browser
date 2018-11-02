@@ -107,7 +107,6 @@ HTMLInputElement::HTMLInputElement(Document& document, bool created_by_parser)
       has_non_empty_list_(false),
       state_restored_(false),
       parsing_in_progress_(created_by_parser),
-      value_attribute_was_updated_after_parsing_(false),
       can_receive_dropped_files_(false),
       should_reveal_password_(false),
       needs_to_update_view_value_(true),
@@ -722,7 +721,6 @@ void HTMLInputElement::ParseAttribute(
     }
     needs_to_update_view_value_ = true;
     SetNeedsValidityCheck();
-    value_attribute_was_updated_after_parsing_ = !parsing_in_progress_;
     input_type_->WarnIfValueIsInvalidAndElementIsVisible(value);
     input_type_->InRangeChanged();
     input_type_view_->ValueAttributeChanged();
@@ -1334,7 +1332,7 @@ static inline bool IsRFC2616TokenCharacter(UChar ch) {
 }
 
 static bool IsValidMIMEType(const String& type) {
-  size_t slash_position = type.Find('/');
+  size_t slash_position = type.find('/');
   if (slash_position == kNotFound || !slash_position ||
       slash_position == type.length() - 1)
     return false;
@@ -1551,7 +1549,7 @@ HTMLDataListElement* HTMLInputElement::DataList() const {
   if (!input_type_->ShouldRespectListAttribute())
     return nullptr;
 
-  Element* element = GetTreeScope().GetElementById(FastGetAttribute(listAttr));
+  Element* element = GetTreeScope().getElementById(FastGetAttribute(listAttr));
   if (!element)
     return nullptr;
   if (!isHTMLDataListElement(*element))
@@ -1679,6 +1677,19 @@ String HTMLInputElement::DefaultToolTip() const {
 
 bool HTMLInputElement::ShouldAppearIndeterminate() const {
   return input_type_->ShouldAppearIndeterminate();
+}
+
+CaptureFacingMode HTMLInputElement::capture() const {
+  const String capture = FastGetAttribute(captureAttr).LowerASCII();
+  if (capture == "user")
+    return CaptureFacingModeUser;
+
+  // |capture| is equivalent to 'environment' if unspecified.
+  return CaptureFacingModeEnvironment;
+}
+
+void HTMLInputElement::setCapture(const AtomicString& value) {
+  setAttribute(captureAttr, value);
 }
 
 bool HTMLInputElement::IsInRequiredRadioButtonGroup() {

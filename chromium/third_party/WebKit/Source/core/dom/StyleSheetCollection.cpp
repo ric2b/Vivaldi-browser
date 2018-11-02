@@ -36,21 +36,21 @@ namespace blink {
 StyleSheetCollection::StyleSheetCollection() {}
 
 void StyleSheetCollection::Dispose() {
-  style_sheets_for_style_sheet_list_.Clear();
-  active_author_style_sheets_.Clear();
+  style_sheets_for_style_sheet_list_.clear();
+  active_author_style_sheets_.clear();
 }
 
 void StyleSheetCollection::Swap(StyleSheetCollection& other) {
   ::blink::swap(style_sheets_for_style_sheet_list_,
                 other.style_sheets_for_style_sheet_list_, this, &other);
-  active_author_style_sheets_.Swap(other.active_author_style_sheets_);
+  active_author_style_sheets_.swap(other.active_author_style_sheets_);
+  sheet_list_dirty_ = false;
 }
 
 void StyleSheetCollection::SwapSheetsForSheetList(
     HeapVector<Member<StyleSheet>>& sheets) {
-  // Only called for collection of HTML Imports that never has active sheets.
-  DCHECK(active_author_style_sheets_.IsEmpty());
   ::blink::swap(style_sheets_for_style_sheet_list_, sheets, this);
+  sheet_list_dirty_ = false;
 }
 
 void StyleSheetCollection::AppendActiveStyleSheet(

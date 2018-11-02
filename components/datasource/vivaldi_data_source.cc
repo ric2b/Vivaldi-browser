@@ -116,6 +116,9 @@ bool VivaldiDataSource::AllowCaching() const {
 }
 
 bool VivaldiDataSource::ShouldServiceRequest(
-    const net::URLRequest* request) const {
-  return URLDataSource::ShouldServiceRequest(request);
+    const GURL& url,
+    content::ResourceContext* resource_context,
+    int render_process_id) const {
+  return URLDataSource::ShouldServiceRequest(url, resource_context,
+                                             render_process_id);
 }

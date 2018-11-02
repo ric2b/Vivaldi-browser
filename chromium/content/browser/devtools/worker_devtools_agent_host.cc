@@ -39,7 +39,7 @@ void WorkerDevToolsAgentHost::AttachSession(DevToolsSession* session) {
 
 void WorkerDevToolsAgentHost::DetachSession(int session_id) {
   if (RenderProcessHost* host = RenderProcessHost::FromID(worker_id_.first))
-    host->Send(new DevToolsAgentMsg_Detach(worker_id_.second));
+    host->Send(new DevToolsAgentMsg_Detach(worker_id_.second, session_id));
   OnAttachedStateChanged(false);
   if (state_ == WORKER_INSPECTED) {
     state_ = WORKER_UNINSPECTED;
@@ -123,7 +123,8 @@ void WorkerDevToolsAgentHost::WorkerDestroyed() {
   DCHECK_NE(WORKER_TERMINATED, state_);
   if (state_ == WORKER_INSPECTED) {
     DCHECK(IsAttached());
-    protocol::InspectorHandler::FromSession(session())->TargetCrashed();
+    for (auto* inspector : protocol::InspectorHandler::ForAgentHost(this))
+      inspector->TargetCrashed();
     DetachFromWorker();
   }
   state_ = WORKER_TERMINATED;

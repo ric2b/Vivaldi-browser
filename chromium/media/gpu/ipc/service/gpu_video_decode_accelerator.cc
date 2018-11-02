@@ -157,15 +157,18 @@ class GpuVideoDecodeAccelerator::MessageFilter : public IPC::MessageFilter {
 GpuVideoDecodeAccelerator::GpuVideoDecodeAccelerator(
     int32_t host_route_id,
     gpu::GpuCommandBufferStub* stub,
-    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner)
+    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
+    const AndroidOverlayMojoFactoryCB& overlay_factory_cb)
     : host_route_id_(host_route_id),
       stub_(stub),
       texture_target_(0),
+      pixel_format_(PIXEL_FORMAT_UNKNOWN),
       textures_per_buffer_(0),
       filter_removed_(base::WaitableEvent::ResetPolicy::MANUAL,
                       base::WaitableEvent::InitialState::NOT_SIGNALED),
       child_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       io_task_runner_(io_task_runner),
+      overlay_factory_cb_(overlay_factory_cb),
       weak_factory_for_io_(this) {
   DCHECK(stub_);
   stub_->AddDestructionObserver(this);
@@ -242,6 +245,7 @@ void GpuVideoDecodeAccelerator::ProvidePictureBuffers(
   texture_dimensions_ = dimensions;
   textures_per_buffer_ = textures_per_buffer;
   texture_target_ = texture_target;
+  pixel_format_ = format;
 }
 
 void GpuVideoDecodeAccelerator::DismissPictureBuffer(
@@ -359,7 +363,7 @@ bool GpuVideoDecodeAccelerator::Initialize(
   std::unique_ptr<GpuVideoDecodeAcceleratorFactory> vda_factory =
       GpuVideoDecodeAcceleratorFactory::CreateWithGLES2Decoder(
           get_gl_context_cb_, make_context_current_cb_, bind_image_cb_,
-          get_gles2_decoder_cb_);
+          get_gles2_decoder_cb_, overlay_factory_cb_);
 
   if (!vda_factory) {
     LOG(ERROR) << "Failed creating the VDA factory";
@@ -479,7 +483,8 @@ void GpuVideoDecodeAccelerator::OnAssignPictureBuffers(
     }
     textures.push_back(current_textures);
     buffers.push_back(PictureBuffer(buffer_ids[i], texture_dimensions_,
-                                    buffer_texture_ids, service_ids));
+                                    buffer_texture_ids, service_ids,
+                                    texture_target_, pixel_format_));
   }
   {
     DebugAutoLock auto_lock(debug_uncleared_textures_lock_);
@@ -505,9 +510,11 @@ void GpuVideoDecodeAccelerator::OnReset() {
   video_decode_accelerator_->Reset();
 }
 
-void GpuVideoDecodeAccelerator::OnSetSurface(int32_t surface_id) {
+void GpuVideoDecodeAccelerator::OnSetSurface(
+    int32_t surface_id,
+    const base::Optional<base::UnguessableToken>& routing_token) {
   DCHECK(video_decode_accelerator_);
-  video_decode_accelerator_->SetSurface(surface_id);
+  video_decode_accelerator_->SetSurface(surface_id, routing_token);
 }
 
 void GpuVideoDecodeAccelerator::OnDestroy() {

@@ -10,8 +10,10 @@
 #include "net/quic/core/spdy_utils.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_socket_address.h"
+#include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_client_promised_info_peer.h"
+#include "net/quic/test_tools/quic_spdy_session_peer.h"
 #include "net/test/gtest_util.h"
 #include "net/tools/quic/quic_client_session.h"
 
@@ -50,7 +52,7 @@ class MockQuicClientSession : public QuicClientSession {
   DISALLOW_COPY_AND_ASSIGN(MockQuicClientSession);
 };
 
-class QuicClientPromisedInfoTest : public ::testing::Test {
+class QuicClientPromisedInfoTest : public QuicTest {
  public:
   class StreamVisitor;
 
@@ -60,13 +62,15 @@ class QuicClientPromisedInfoTest : public ::testing::Test {
                                                        Perspective::IS_CLIENT)),
         session_(connection_, &push_promise_index_),
         body_("hello world"),
-        promise_id_(kServerDataStreamId1) {
+        promise_id_(kInvalidStreamId) {
     session_.Initialize();
 
     headers_[":status"] = "200";
     headers_["content-length"] = "11";
 
-    stream_.reset(new QuicSpdyClientStream(kClientDataStreamId1, &session_));
+    stream_.reset(new QuicSpdyClientStream(
+        QuicSpdySessionPeer::GetNthClientInitiatedStreamId(session_, 0),
+        &session_));
     stream_visitor_.reset(new StreamVisitor());
     stream_->set_visitor(stream_visitor_.get());
 
@@ -79,6 +83,8 @@ class QuicClientPromisedInfoTest : public ::testing::Test {
     promise_url_ = SpdyUtils::GetUrlFromHeaderBlock(push_promise_);
 
     client_request_ = push_promise_.Clone();
+    promise_id_ =
+        QuicSpdySessionPeer::GetNthServerInitiatedStreamId(session_, 0);
   }
 
   class StreamVisitor : public QuicSpdyClientStream::Visitor {

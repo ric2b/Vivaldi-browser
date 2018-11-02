@@ -213,8 +213,8 @@ PassRefPtr<StringImpl> AtomicStringTable::AddUTF8(const char* characters_start,
 
 void AtomicStringTable::Remove(StringImpl* string) {
   DCHECK(string->IsAtomic());
-  auto iterator = table_.Find(string);
-  RELEASE_ASSERT(iterator != table_.end());
+  auto iterator = table_.find(string);
+  CHECK_NE(iterator, table_.end());
   table_.erase(iterator);
 }
 

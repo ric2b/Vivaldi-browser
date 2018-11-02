@@ -11,13 +11,13 @@
 #include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/wallpaper/wallpaper_controller.h"
 #include "ash/wallpaper/wallpaper_delegate.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
@@ -38,7 +38,6 @@
 #include "chrome/browser/chromeos/language_preferences.h"
 #include "chrome/browser/chromeos/login/arc_kiosk_controller.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_app_launcher.h"
-#include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
@@ -101,6 +100,7 @@
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/events/devices/device_data_manager.h"
 #include "ui/events/event_handler.h"
 #include "ui/events/event_utils.h"
 #include "ui/gfx/geometry/rect.h"
@@ -383,16 +383,14 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& wallpaper_bounds)
 
   DBusThreadManager::Get()->GetSessionManagerClient()->AddObserver(this);
   CrasAudioHandler::Get()->AddAudioObserver(this);
-  if (keyboard::KeyboardController::GetInstance()) {
-    keyboard::KeyboardController::GetInstance()->AddObserver(this);
-    is_observing_keyboard_ = true;
-  }
 
-  if (!ash_util::IsRunningInMash())
-    ash::Shell::Get()->AddShellObserver(this);
-  else
-    NOTIMPLEMENTED();
   display::Screen::GetScreen()->AddObserver(this);
+
+  // TODO(crbug.com/747267): Add Mash case. Not strictly needed since callee in
+  // observer method is NOP in Mash, but good for symmetry and to avoid leaking
+  // implementation details about OobeUI.
+  if (!ash_util::IsRunningInMash())
+    ui::DeviceDataManager::GetInstance()->AddObserver(this);
 
   // We need to listen to CLOSE_ALL_BROWSERS_REQUEST but not APP_TERMINATING
   // because/ APP_TERMINATING will never be fired as long as this keeps
@@ -502,16 +500,13 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& wallpaper_bounds)
 LoginDisplayHostImpl::~LoginDisplayHostImpl() {
   DBusThreadManager::Get()->GetSessionManagerClient()->RemoveObserver(this);
   CrasAudioHandler::Get()->RemoveAudioObserver(this);
-  if (keyboard::KeyboardController::GetInstance() && is_observing_keyboard_) {
-    keyboard::KeyboardController::GetInstance()->RemoveObserver(this);
-    is_observing_keyboard_ = false;
-  }
-
-  if (!ash_util::IsRunningInMash())
-    ash::Shell::Get()->RemoveShellObserver(this);
-  else
-    NOTIMPLEMENTED();
   display::Screen::GetScreen()->RemoveObserver(this);
+
+  // TODO(crbug.com/747267): Add Mash case. Not strictly needed since callee in
+  // observer method is NOP in Mash, but good for symmetry and to avoid leaking
+  // implementation details about OobeUI.
+  if (!ash_util::IsRunningInMash())
+    ui::DeviceDataManager::GetInstance()->RemoveObserver(this);
 
   if (login_view_ && login_window_)
     login_window_->RemoveRemovalsObserver(this);
@@ -569,14 +564,6 @@ void LoginDisplayHostImpl::BeforeSessionStart() {
 void LoginDisplayHostImpl::Finalize(base::OnceClosure completion_callback) {
   DVLOG(1) << "Finalizing LoginDisplayHost. User session starting";
 
-  // When adding another user into the session, we defer the wallpaper's
-  // animation in order to prevent the flashing of the previous user's windows.
-  // See crbug.com/541864.
-  if (ash::ShellPort::HasInstance() &&
-      finalize_animation_type_ != ANIMATION_ADD_USER) {
-    ash::Shell::Get()->wallpaper_controller()->MoveToUnlockedContainer();
-  }
-
   completion_callbacks_.push_back(std::move(completion_callback));
 
   switch (finalize_animation_type_) {
@@ -599,15 +586,11 @@ void LoginDisplayHostImpl::Finalize(base::OnceClosure completion_callback) {
       // animation (which is done by UserSwitchAnimatorChromeOS) is finished.
       // This is to guarantee OnUserSwitchAnimationFinished() is called before
       // LoginDisplayHost deletes itself.
+      // See crbug.com/541864.
       break;
     default:
       break;
   }
-}
-
-void LoginDisplayHostImpl::OnCompleteLogin() {
-  if (auto_enrollment_controller_)
-    auto_enrollment_controller_->Cancel();
 }
 
 void LoginDisplayHostImpl::OpenProxySettings() {
@@ -620,12 +603,6 @@ void LoginDisplayHostImpl::SetStatusAreaVisible(bool visible) {
     status_area_saved_visibility_ = visible;
   else if (login_view_)
     login_view_->SetStatusAreaVisible(visible);
-}
-
-AutoEnrollmentController* LoginDisplayHostImpl::GetAutoEnrollmentController() {
-  if (!auto_enrollment_controller_)
-    auto_enrollment_controller_.reset(new AutoEnrollmentController());
-  return auto_enrollment_controller_.get();
 }
 
 void LoginDisplayHostImpl::StartWizard(OobeScreen first_screen) {
@@ -699,8 +676,6 @@ void LoginDisplayHostImpl::StartUserAdding(
         ash::Shell::GetPrimaryRootWindow(),
         ash::kShellWindowId_LockScreenContainersContainer);
     lock_container->layer()->SetOpacity(1.0);
-
-    ash::Shell::Get()->wallpaper_controller()->MoveToLockedContainer();
   } else {
     NOTIMPLEMENTED();
   }
@@ -786,11 +761,6 @@ void LoginDisplayHostImpl::StartSignInScreen(
   SetOobeProgressBarVisible(oobe_progress_bar_visible_);
   SetStatusAreaVisible(true);
   existing_user_controller_->Init(users);
-
-  // We might be here after a reboot that was triggered after OOBE was complete,
-  // so check for auto-enrollment again. This might catch a cached decision from
-  // a previous oobe flow, or might start a new check with the server.
-  GetAutoEnrollmentController()->Start();
 
   // Initiate mobile config load.
   MobileConfig::GetInstance();
@@ -960,13 +930,6 @@ void LoginDisplayHostImpl::Observe(
                       content::NotificationService::AllSources());
   } else if (type == chrome::NOTIFICATION_LOGIN_USER_CHANGED &&
              user_manager::UserManager::Get()->IsCurrentUserNew()) {
-    if (!ash_util::IsRunningInMash()) {
-      // For new user, move wallpaper to lock container so that windows created
-      // during the user image picker step are below it.
-      ash::Shell::Get()->wallpaper_controller()->MoveToLockedContainer();
-    } else {
-      NOTIMPLEMENTED();
-    }
     registrar_.Remove(this,
                       chrome::NOTIFICATION_LOGIN_USER_CHANGED,
                       content::NotificationService::AllSources());
@@ -1037,55 +1000,17 @@ void LoginDisplayHostImpl::OnActiveOutputNodeChanged() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, ash::ShellObserver:
-
-void LoginDisplayHostImpl::OnVirtualKeyboardStateChanged(
-    bool activated,
-    ash::WmWindow* root_window) {
-  if (keyboard::KeyboardController::GetInstance()) {
-    if (activated) {
-      if (!is_observing_keyboard_) {
-        keyboard::KeyboardController::GetInstance()->AddObserver(this);
-        is_observing_keyboard_ = true;
-      }
-    } else {
-      keyboard::KeyboardController::GetInstance()->RemoveObserver(this);
-      is_observing_keyboard_ = false;
-    }
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, keyboard::KeyboardControllerObserver:
-
-void LoginDisplayHostImpl::OnKeyboardBoundsChanging(
-    const gfx::Rect& new_bounds) {
-  if (new_bounds.IsEmpty()) {
-    // Keyboard has been hidden.
-    if (GetOobeUI())
-      GetOobeUI()->GetCoreOobeView()->ShowControlBar(true);
-  } else if (!new_bounds.IsEmpty()) {
-    // Keyboard has been shown.
-    if (GetOobeUI())
-      GetOobeUI()->GetCoreOobeView()->ShowControlBar(false);
-  }
-}
-
-void LoginDisplayHostImpl::OnKeyboardClosed() {}
-
-////////////////////////////////////////////////////////////////////////////////
 // LoginDisplayHostImpl, display::DisplayObserver:
 
 void LoginDisplayHostImpl::OnDisplayAdded(const display::Display& new_display) {
+  if (GetOobeUI())
+    GetOobeUI()->OnDisplayConfigurationChanged();
 }
-
-void LoginDisplayHostImpl::OnDisplayRemoved(
-    const display::Display& old_display) {}
 
 void LoginDisplayHostImpl::OnDisplayMetricsChanged(
     const display::Display& display,
     uint32_t changed_metrics) {
-  display::Display primary_display =
+  const display::Display primary_display =
       display::Screen::GetScreen()->GetPrimaryDisplay();
   if (display.id() != primary_display.id() ||
       !(changed_metrics & DISPLAY_METRIC_BOUNDS)) {
@@ -1096,7 +1021,17 @@ void LoginDisplayHostImpl::OnDisplayMetricsChanged(
     const gfx::Size& size = primary_display.size();
     GetOobeUI()->GetCoreOobeView()->SetClientAreaSize(size.width(),
                                                       size.height());
+
+    if (changed_metrics & DISPLAY_METRIC_PRIMARY)
+      GetOobeUI()->OnDisplayConfigurationChanged();
   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// LoginDisplayHostImpl, ui::InputDeviceEventObserver
+void LoginDisplayHostImpl::OnTouchscreenDeviceConfigurationChanged() {
+  if (GetOobeUI())
+    GetOobeUI()->OnDisplayConfigurationChanged();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1127,15 +1062,6 @@ void LoginDisplayHostImpl::ShutdownDisplayHost(bool post_quit_task) {
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
   if (post_quit_task)
     base::MessageLoop::current()->QuitWhenIdle();
-
-  if (ash::Shell::HasInstance() &&
-      finalize_animation_type_ == ANIMATION_ADD_USER) {
-    if (!ash_util::IsRunningInMash()) {
-      ash::Shell::Get()->wallpaper_controller()->MoveToUnlockedContainer();
-    } else {
-      NOTIMPLEMENTED();
-    }
-  }
 }
 
 void LoginDisplayHostImpl::ScheduleWorkspaceAnimation() {
@@ -1250,7 +1176,7 @@ void LoginDisplayHostImpl::InitLoginWindowAndView() {
     using ui::mojom::WindowManager;
     params.mus_properties[WindowManager::kContainerId_InitProperty] =
         mojo::ConvertTo<std::vector<uint8_t>>(
-            ash::kShellWindowId_LockScreenContainer);
+            static_cast<int32_t>(ash::kShellWindowId_LockScreenContainer));
   }
   login_window_ = new views::Widget;
   params.delegate = login_window_delegate_ =

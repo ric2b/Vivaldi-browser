@@ -247,9 +247,10 @@ class SequencedWorkerPoolTest
       const SchedulerWorkerPoolParams worker_pool_params(
           SchedulerWorkerPoolParams::StandbyThreadPolicy::LAZY,
           static_cast<int>(kNumWorkerThreads), TimeDelta::Max());
-      TaskScheduler::CreateAndSetDefaultTaskScheduler(
-          "SequencedWorkerPoolTest", {worker_pool_params, worker_pool_params,
-                                      worker_pool_params, worker_pool_params});
+      TaskScheduler::Create("SequencedWorkerPoolTest");
+      TaskScheduler::GetInstance()->Start(
+          {worker_pool_params, worker_pool_params, worker_pool_params,
+           worker_pool_params});
 
       // Unit tests run in an environment where SequencedWorkerPool is enabled
       // without redirection to TaskScheduler. For the current unit test,
@@ -990,9 +991,9 @@ TEST_P(SequencedWorkerPoolTest, FlushForTesting) {
 
   // Queue up a bunch of work, including  a long delayed task and
   // a task that produces additional tasks as an artifact.
-  pool()->PostDelayedWorkerTask(
-      FROM_HERE, base::BindOnce(&TestTracker::FastTask, tracker(), 0),
-      TimeDelta::FromMinutes(5));
+  pool()->PostDelayedTask(FROM_HERE,
+                          base::BindOnce(&TestTracker::FastTask, tracker(), 0),
+                          TimeDelta::FromMinutes(5));
   pool()->PostWorkerTask(FROM_HERE,
                          base::BindOnce(&TestTracker::SlowTask, tracker(), 0));
   const size_t kNumFastTasks = 20;

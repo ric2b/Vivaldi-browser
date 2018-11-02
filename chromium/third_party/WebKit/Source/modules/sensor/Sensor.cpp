@@ -18,6 +18,13 @@ using namespace device::mojom::blink;
 
 namespace blink {
 
+namespace {
+
+constexpr double kMinWaitingInterval =
+    1 / device::mojom::blink::SensorConfiguration::kMaxAllowedFrequency;
+
+}  // namespace
+
 Sensor::Sensor(ExecutionContext* execution_context,
                const SensorOptions& sensor_options,
                ExceptionState& exception_state,
@@ -25,8 +32,7 @@ Sensor::Sensor(ExecutionContext* execution_context,
     : ContextLifecycleObserver(execution_context),
       sensor_options_(sensor_options),
       type_(type),
-      state_(SensorState::kIdle),
-      last_update_timestamp_(0.0) {
+      state_(SensorState::kIdle) {
   // Check secure context.
   String error_message;
   if (!execution_context->IsSecureContext(error_message)) {
@@ -58,24 +64,10 @@ Sensor::Sensor(ExecutionContext* execution_context,
 Sensor::~Sensor() = default;
 
 void Sensor::start() {
-  if (state_ != Sensor::SensorState::kIdle)
-    return;
-
-  InitSensorProxyIfNeeded();
-  if (!sensor_proxy_) {
-    ReportError(kInvalidStateError,
-                "The Sensor is no longer associated to a frame.");
-    return;
-  }
-
-  last_update_timestamp_ = WTF::MonotonicallyIncreasingTime();
   StartListening();
 }
 
 void Sensor::stop() {
-  if (state_ == Sensor::SensorState::kIdle)
-    return;
-
   StopListening();
 }
 
@@ -103,7 +95,7 @@ DOMHighResTimeStamp Sensor::timestamp(ScriptState* script_state,
   is_null = false;
 
   return performance->MonotonicTimeToDOMHighResTimeStamp(
-      sensor_proxy_->Reading().timestamp);
+      sensor_proxy_->reading().timestamp);
 }
 
 DEFINE_TRACE(Sensor) {
@@ -147,7 +139,7 @@ double Sensor::ReadingValue(int index, bool& is_null) const {
 double Sensor::ReadingValueUnchecked(int index) const {
   DCHECK(sensor_proxy_);
   DCHECK(index >= 0 && index < device::SensorReading::kValuesCount);
-  return sensor_proxy_->Reading().values[index];
+  return sensor_proxy_->reading().values[index];
 }
 
 void Sensor::InitSensorProxyIfNeeded() {
@@ -166,59 +158,114 @@ void Sensor::InitSensorProxyIfNeeded() {
 }
 
 void Sensor::ContextDestroyed(ExecutionContext*) {
-  if (state_ == Sensor::SensorState::kActivated ||
-      state_ == Sensor::SensorState::kActivating)
-    StopListening();
+  StopListening();
 }
 
 void Sensor::OnSensorInitialized() {
   if (state_ != Sensor::SensorState::kActivating)
     return;
 
-  StartListening();
+  RequestAddConfiguration();
 }
 
-void Sensor::NotifySensorChanged(double timestamp) {
+void Sensor::OnSensorReadingChanged() {
   if (state_ != Sensor::SensorState::kActivated)
     return;
 
-  DCHECK_GT(configuration_->frequency, 0.0);
-  double period = 1 / configuration_->frequency;
+  // Return if reading update is already scheduled or the cached
+  // reading is up-to-date.
+  if (pending_reading_update_.IsActive())
+    return;
 
-  if (timestamp - last_update_timestamp_ >= period) {
-    last_update_timestamp_ = timestamp;
-    NotifySensorReadingChanged();
+  double elapsedTime = sensor_proxy_->reading().timestamp - reading_.timestamp;
+  DCHECK_GT(elapsedTime, 0.0);
+
+  DCHECK_GT(configuration_->frequency, 0.0);
+  double waitingTime = 1 / configuration_->frequency - elapsedTime;
+
+  // Negative or zero 'waitingTime' means that polling period has elapsed.
+  // We also avoid scheduling if the elapsed time is slightly behind the
+  // polling period.
+  auto sensor_reading_changed =
+      WTF::Bind(&Sensor::UpdateReading, WrapWeakPersistent(this));
+  if (waitingTime < kMinWaitingInterval) {
+    // Invoke JS callbacks in a different callchain to obviate
+    // possible modifications of SensorProxy::observers_ container
+    // while it is being iterated through.
+    pending_reading_update_ =
+        TaskRunnerHelper::Get(TaskType::kSensor, GetExecutionContext())
+            ->PostCancellableTask(BLINK_FROM_HERE,
+                                  std::move(sensor_reading_changed));
+  } else {
+    pending_reading_update_ =
+        TaskRunnerHelper::Get(TaskType::kSensor, GetExecutionContext())
+            ->PostDelayedCancellableTask(
+                BLINK_FROM_HERE, std::move(sensor_reading_changed),
+                WTF::TimeDelta::FromSecondsD(waitingTime));
   }
 }
 
 void Sensor::OnSensorError(ExceptionCode code,
                            const String& sanitized_message,
                            const String& unsanitized_message) {
-  ReportError(code, sanitized_message, unsanitized_message);
+  HandleError(code, sanitized_message, unsanitized_message);
 }
 
-void Sensor::OnStartRequestCompleted(bool result) {
+void Sensor::OnAddConfigurationRequestCompleted(bool result) {
   if (state_ != SensorState::kActivating)
     return;
 
   if (!result) {
-    ReportError(kNotReadableError, "start() call has failed.");
+    HandleError(kNotReadableError, "start() call has failed.");
     return;
   }
 
   UpdateState(Sensor::SensorState::kActivated);
+
+  if (GetExecutionContext()) {
+    TaskRunnerHelper::Get(TaskType::kSensor, GetExecutionContext())
+        ->PostTask(BLINK_FROM_HERE, WTF::Bind(&Sensor::NotifyOnActivate,
+                                              WrapWeakPersistent(this)));
+  }
 }
 
 void Sensor::StartListening() {
-  DCHECK(sensor_proxy_);
-  UpdateState(Sensor::SensorState::kActivating);
+  if (state_ != SensorState::kIdle)
+    return;
 
-  sensor_proxy_->AddObserver(this);
-  if (!sensor_proxy_->IsInitialized()) {
-    sensor_proxy_->Initialize();
+  InitSensorProxyIfNeeded();
+  if (!sensor_proxy_) {
+    HandleError(kInvalidStateError,
+                "The Sensor is no longer associated to a frame.");
     return;
   }
 
+  if (sensor_proxy_->IsInitialized())
+    RequestAddConfiguration();
+  else
+    sensor_proxy_->Initialize();
+
+  sensor_proxy_->AddObserver(this);
+  UpdateState(SensorState::kActivating);
+}
+
+void Sensor::StopListening() {
+  if (state_ == SensorState::kIdle)
+    return;
+
+  pending_reading_update_.Cancel();
+
+  DCHECK(sensor_proxy_);
+  if (sensor_proxy_->IsInitialized()) {
+    DCHECK(configuration_);
+    sensor_proxy_->RemoveConfiguration(configuration_->Clone());
+  }
+
+  sensor_proxy_->RemoveObserver(this);
+  UpdateState(Sensor::SensorState::kIdle);
+}
+
+void Sensor::RequestAddConfiguration() {
   if (!configuration_) {
     configuration_ = CreateSensorConfig();
     DCHECK(configuration_);
@@ -227,45 +274,22 @@ void Sensor::StartListening() {
                SensorConfiguration::kMaxAllowedFrequency);
   }
 
-  auto start_callback =
-      WTF::Bind(&Sensor::OnStartRequestCompleted, WrapWeakPersistent(this));
-  sensor_proxy_->AddConfiguration(configuration_->Clone(),
-                                  std::move(start_callback));
-}
-
-void Sensor::StopListening() {
   DCHECK(sensor_proxy_);
-  UpdateState(Sensor::SensorState::kIdle);
-
-  if (sensor_proxy_->IsInitialized()) {
-    DCHECK(configuration_);
-    sensor_proxy_->RemoveConfiguration(configuration_->Clone());
-  }
-  sensor_proxy_->RemoveObserver(this);
+  sensor_proxy_->AddConfiguration(
+      configuration_->Clone(),
+      WTF::Bind(&Sensor::OnAddConfigurationRequestCompleted,
+                WrapWeakPersistent(this)));
 }
 
 void Sensor::UpdateState(Sensor::SensorState new_state) {
-  if (new_state == state_)
-    return;
-
-  if (new_state == SensorState::kActivated && GetExecutionContext()) {
-    DCHECK_EQ(SensorState::kActivating, state_);
-    // The initial value for m_lastUpdateTimestamp is set to current time,
-    // so that the first reading update will be notified considering the given
-    // frequency hint.
-    last_update_timestamp_ = WTF::MonotonicallyIncreasingTime();
-    TaskRunnerHelper::Get(TaskType::kSensor, GetExecutionContext())
-        ->PostTask(BLINK_FROM_HERE, WTF::Bind(&Sensor::NotifyOnActivate,
-                                              WrapWeakPersistent(this)));
-  }
-
   state_ = new_state;
 }
 
-void Sensor::ReportError(ExceptionCode code,
+void Sensor::HandleError(ExceptionCode code,
                          const String& sanitized_message,
                          const String& unsanitized_message) {
-  UpdateState(SensorState::kIdle);
+  StopListening();
+
   if (GetExecutionContext()) {
     auto error =
         DOMException::Create(code, sanitized_message, unsanitized_message);
@@ -276,13 +300,9 @@ void Sensor::ReportError(ExceptionCode code,
   }
 }
 
-void Sensor::NotifySensorReadingChanged() {
-  DCHECK(sensor_proxy_);
-
-  if (sensor_proxy_->Reading().timestamp != stored_data_.timestamp) {
-    stored_data_ = sensor_proxy_->Reading();
-    DispatchEvent(Event::Create(EventTypeNames::change));
-  }
+void Sensor::UpdateReading() {
+  reading_ = sensor_proxy_->reading();
+  DispatchEvent(Event::Create(EventTypeNames::change));
 }
 
 void Sensor::NotifyOnActivate() {
@@ -298,7 +318,7 @@ bool Sensor::CanReturnReadings() const {
   if (!IsActivated())
     return false;
   DCHECK(sensor_proxy_);
-  return sensor_proxy_->Reading().timestamp != 0.0;
+  return sensor_proxy_->reading().timestamp != 0.0;
 }
 
 }  // namespace blink

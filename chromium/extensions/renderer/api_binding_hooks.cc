@@ -172,7 +172,7 @@ v8::Local<v8::Object> GetJSHookInterfaceObject(
         base::MakeUnique<APIHooksPerContextData>(context->GetIsolate());
     data = api_data.get();
     per_context_data->SetUserData(kExtensionAPIHooksPerContextKey,
-                                  api_data.release());
+                                  std::move(api_data));
   }
 
   auto iter = data->hook_interfaces.find(api_name);
@@ -198,6 +198,8 @@ APIBindingHooks::RequestResult::RequestResult(
     ResultCode code,
     v8::Local<v8::Function> custom_callback)
     : code(code), custom_callback(custom_callback) {}
+APIBindingHooks::RequestResult::RequestResult(std::string invocation_error)
+    : code(INVALID_INVOCATION), error(std::move(invocation_error)) {}
 APIBindingHooks::RequestResult::~RequestResult() {}
 APIBindingHooks::RequestResult::RequestResult(const RequestResult& other) =
     default;
@@ -207,12 +209,6 @@ APIBindingHooks::APIBindingHooks(const std::string& api_name,
     : api_name_(api_name), run_js_(run_js) {}
 APIBindingHooks::~APIBindingHooks() {}
 
-void APIBindingHooks::RegisterHandleRequest(const std::string& method_name,
-                                            const HandleRequestHook& hook) {
-  DCHECK(!hooks_used_) << "Hooks must be registered before the first use!";
-  request_hooks_[method_name] = hook;
-}
-
 APIBindingHooks::RequestResult APIBindingHooks::RunHooks(
     const std::string& method_name,
     v8::Local<v8::Context> context,
@@ -220,15 +216,11 @@ APIBindingHooks::RequestResult APIBindingHooks::RunHooks(
     std::vector<v8::Local<v8::Value>>* arguments,
     const APITypeReferenceMap& type_refs) {
   // Easy case: a native custom hook.
-  auto request_hooks_iter = request_hooks_.find(method_name);
-  if (request_hooks_iter != request_hooks_.end()) {
-    RequestResult result =
-        request_hooks_iter->second.Run(
-            signature, context, arguments, type_refs);
-    // Right now, it doesn't make sense to register a request handler that
-    // doesn't handle the request.
-    DCHECK_NE(RequestResult::NOT_HANDLED, result.code);
-    return result;
+  if (delegate_) {
+    RequestResult result = delegate_->HandleRequest(
+        method_name, signature, context, arguments, type_refs);
+    if (result.code != RequestResult::NOT_HANDLED)
+      return result;
   }
 
   // Harder case: looking up a custom hook registered on the context (since
@@ -282,7 +274,7 @@ APIBindingHooks::RequestResult APIBindingHooks::RunHooks(
       return RequestResult(RequestResult::THROWN);
     }
     if (!success)
-      return RequestResult(RequestResult::INVALID_INVOCATION);
+      return RequestResult(std::move(error));
     arguments->swap(parsed_v8_args);
   }
 
@@ -341,6 +333,14 @@ bool APIBindingHooks::CreateCustomEvent(v8::Local<v8::Context> context,
                                         v8::Local<v8::Value>* event_out) {
   return delegate_ &&
          delegate_->CreateCustomEvent(context, run_js_, event_name, event_out);
+}
+
+void APIBindingHooks::InitializeTemplate(
+    v8::Isolate* isolate,
+    v8::Local<v8::ObjectTemplate> object_template,
+    const APITypeReferenceMap& type_refs) {
+  if (delegate_)
+    delegate_->InitializeTemplate(isolate, object_template, type_refs);
 }
 
 void APIBindingHooks::SetDelegate(

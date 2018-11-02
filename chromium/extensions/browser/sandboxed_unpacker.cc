@@ -9,6 +9,8 @@
 
 #include <set>
 #include <tuple>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -17,10 +19,11 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "build/build_config.h"
-#include "components/crx_file/crx_file.h"
+#include "components/crx_file/crx_verifier.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -39,7 +42,6 @@
 
 using base::ASCIIToUTF16;
 using content::BrowserThread;
-using crx_file::CrxFile;
 
 // The following macro makes histograms that record the length of paths
 // in this file much easier to read.
@@ -233,7 +235,7 @@ SandboxedUnpacker::SandboxedUnpacker(
 }
 
 bool SandboxedUnpacker::CreateTempDirectory() {
-  CHECK(unpacker_io_task_runner_->RunsTasksOnCurrentThread());
+  CHECK(unpacker_io_task_runner_->RunsTasksInCurrentSequence());
 
   base::FilePath temp_dir;
   if (!FindWritableTempLocation(extensions_dir_, &temp_dir)) {
@@ -258,7 +260,7 @@ bool SandboxedUnpacker::CreateTempDirectory() {
 void SandboxedUnpacker::StartWithCrx(const CRXFileInfo& crx_info) {
   // We assume that we are started on the thread that the client wants us
   // to do file IO on.
-  CHECK(unpacker_io_task_runner_->RunsTasksOnCurrentThread());
+  CHECK(unpacker_io_task_runner_->RunsTasksInCurrentSequence());
 
   crx_unpack_start_time_ = base::TimeTicks::Now();
   std::string expected_hash;
@@ -445,7 +447,7 @@ void SandboxedUnpacker::UnpackDone(
 
 void SandboxedUnpacker::UnpackExtensionSucceeded(
     std::unique_ptr<base::DictionaryValue> manifest) {
-  CHECK(unpacker_io_task_runner_->RunsTasksOnCurrentThread());
+  CHECK(unpacker_io_task_runner_->RunsTasksInCurrentSequence());
 
   std::unique_ptr<base::DictionaryValue> final_manifest(
       RewriteManifestFile(*manifest));
@@ -492,7 +494,7 @@ void SandboxedUnpacker::UnpackExtensionSucceeded(
 }
 
 void SandboxedUnpacker::UnpackExtensionFailed(const base::string16& error) {
-  CHECK(unpacker_io_task_runner_->RunsTasksOnCurrentThread());
+  CHECK(unpacker_io_task_runner_->RunsTasksInCurrentSequence());
 
   ReportFailure(
       UNPACKER_CLIENT_FAILED,
@@ -541,6 +543,10 @@ base::string16 SandboxedUnpacker::FailureReasonToString16(
       return ASCIIToUTF16("CRX_SIGNATURE_VERIFICATION_INITIALIZATION_FAILED");
     case CRX_SIGNATURE_VERIFICATION_FAILED:
       return ASCIIToUTF16("CRX_SIGNATURE_VERIFICATION_FAILED");
+    case CRX_FILE_IS_DELTA_UPDATE:
+      return ASCIIToUTF16("CRX_FILE_IS_DELTA_UPDATE");
+    case CRX_EXPECTED_HASH_INVALID:
+      return ASCIIToUTF16("CRX_EXPECTED_HASH_INVALID");
 
     case ERROR_SERIALIZING_MANIFEST_JSON:
       return ASCIIToUTF16("ERROR_SERIALIZING_MANIFEST_JSON");
@@ -600,51 +606,47 @@ void SandboxedUnpacker::FailWithPackageError(FailureReason reason) {
 
 bool SandboxedUnpacker::ValidateSignature(const base::FilePath& crx_path,
                                           const std::string& expected_hash) {
-  CrxFile::ValidateError error = CrxFile::ValidateSignature(
-      crx_path, expected_hash, &public_key_, &extension_id_, nullptr);
+  std::vector<uint8_t> hash;
+  if (!expected_hash.empty()) {
+    if (!base::HexStringToBytes(expected_hash, &hash)) {
+      FailWithPackageError(CRX_EXPECTED_HASH_INVALID);
+      return false;
+    }
+  }
+  const crx_file::VerifierResult result = crx_file::Verify(
+      crx_path, crx_file::VerifierFormat::CRX2_OR_CRX3,
+      std::vector<std::vector<uint8_t>>(), hash, &public_key_, &extension_id_);
 
-  switch (error) {
-    case CrxFile::ValidateError::NONE: {
+  switch (result) {
+    case crx_file::VerifierResult::OK_FULL: {
       if (!expected_hash.empty())
         UMA_HISTOGRAM_BOOLEAN("Extensions.SandboxUnpackHashCheck", true);
       return true;
     }
-
-    case CrxFile::ValidateError::CRX_FILE_NOT_READABLE:
+    case crx_file::VerifierResult::OK_DELTA:
+      FailWithPackageError(CRX_FILE_IS_DELTA_UPDATE);
+      break;
+    case crx_file::VerifierResult::ERROR_FILE_NOT_READABLE:
       FailWithPackageError(CRX_FILE_NOT_READABLE);
       break;
-    case CrxFile::ValidateError::CRX_HEADER_INVALID:
+    case crx_file::VerifierResult::ERROR_HEADER_INVALID:
       FailWithPackageError(CRX_HEADER_INVALID);
       break;
-    case CrxFile::ValidateError::CRX_MAGIC_NUMBER_INVALID:
-      FailWithPackageError(CRX_MAGIC_NUMBER_INVALID);
-      break;
-    case CrxFile::ValidateError::CRX_VERSION_NUMBER_INVALID:
-      FailWithPackageError(CRX_VERSION_NUMBER_INVALID);
-      break;
-    case CrxFile::ValidateError::CRX_EXCESSIVELY_LARGE_KEY_OR_SIGNATURE:
-      FailWithPackageError(CRX_EXCESSIVELY_LARGE_KEY_OR_SIGNATURE);
-      break;
-    case CrxFile::ValidateError::CRX_ZERO_KEY_LENGTH:
-      FailWithPackageError(CRX_ZERO_KEY_LENGTH);
-      break;
-    case CrxFile::ValidateError::CRX_ZERO_SIGNATURE_LENGTH:
-      FailWithPackageError(CRX_ZERO_SIGNATURE_LENGTH);
-      break;
-    case CrxFile::ValidateError::CRX_PUBLIC_KEY_INVALID:
-      FailWithPackageError(CRX_PUBLIC_KEY_INVALID);
-      break;
-    case CrxFile::ValidateError::CRX_SIGNATURE_INVALID:
-      FailWithPackageError(CRX_SIGNATURE_INVALID);
-      break;
-    case CrxFile::ValidateError::
-        CRX_SIGNATURE_VERIFICATION_INITIALIZATION_FAILED:
+    case crx_file::VerifierResult::ERROR_SIGNATURE_INITIALIZATION_FAILED:
       FailWithPackageError(CRX_SIGNATURE_VERIFICATION_INITIALIZATION_FAILED);
       break;
-    case CrxFile::ValidateError::CRX_SIGNATURE_VERIFICATION_FAILED:
+    case crx_file::VerifierResult::ERROR_SIGNATURE_VERIFICATION_FAILED:
       FailWithPackageError(CRX_SIGNATURE_VERIFICATION_FAILED);
       break;
-    case CrxFile::ValidateError::CRX_HASH_VERIFICATION_FAILED:
+    case crx_file::VerifierResult::ERROR_EXPECTED_HASH_INVALID:
+      FailWithPackageError(CRX_EXPECTED_HASH_INVALID);
+      break;
+    case crx_file::VerifierResult::ERROR_REQUIRED_PROOF_MISSING:
+      // We should never get this result, as we do not call
+      // verifier.RequireKeyProof.
+      NOTREACHED();
+      break;
+    case crx_file::VerifierResult::ERROR_FILE_HASH_FAILED:
       // We should never get this result unless we had specifically asked for
       // verification of the crx file's hash.
       CHECK(!expected_hash.empty());
@@ -903,7 +905,7 @@ bool SandboxedUnpacker::RewriteCatalogFiles() {
 }
 
 void SandboxedUnpacker::Cleanup() {
-  DCHECK(unpacker_io_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(unpacker_io_task_runner_->RunsTasksInCurrentSequence());
   if (!temp_dir_.Delete()) {
     LOG(WARNING) << "Can not delete temp directory at "
                  << temp_dir_.GetPath().value();

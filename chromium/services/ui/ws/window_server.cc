@@ -31,6 +31,22 @@
 namespace ui {
 namespace ws {
 
+namespace {
+
+// Returns true if |window| is considered the active window manager for
+// |display|.
+bool IsWindowConsideredWindowManagerRoot(const Display* display,
+                                         const ServerWindow* window) {
+  if (!display)
+    return false;
+
+  const WindowManagerDisplayRoot* display_root =
+      display->GetActiveWindowManagerDisplayRoot();
+  return display_root && display_root->GetClientVisibleRoot() == window;
+}
+
+}  // namespace
+
 struct WindowServer::CurrentMoveLoopState {
   uint32_t change_id;
   ServerWindow* window;
@@ -105,7 +121,7 @@ WindowTree* WindowServer::EmbedAtWindow(
     tree->set_embedder_intercepts_events();
 
   mojom::WindowTreePtr window_tree_ptr;
-  mojom::WindowTreeRequest window_tree_request(&window_tree_ptr);
+  auto window_tree_request = mojo::MakeRequest(&window_tree_ptr);
   std::unique_ptr<WindowTreeBinding> binding =
       delegate_->CreateWindowTreeBinding(
           WindowServerDelegate::BindingType::EMBED, this, tree,
@@ -417,11 +433,10 @@ void WindowServer::ProcessWindowDeleted(ServerWindow* window) {
     pair.second->ProcessWindowDeleted(window, IsOperationSource(pair.first));
 }
 
-void WindowServer::ProcessWillChangeWindowPredefinedCursor(
-    ServerWindow* window,
-    mojom::CursorType cursor_id) {
+void WindowServer::ProcessWillChangeWindowCursor(ServerWindow* window,
+                                                 const ui::CursorData& cursor) {
   for (auto& pair : tree_map_) {
-    pair.second->ProcessCursorChanged(window, cursor_id,
+    pair.second->ProcessCursorChanged(window, cursor,
                                       IsOperationSource(pair.first));
   }
 }
@@ -584,7 +599,7 @@ void WindowServer::UpdateNativeCursorFromMouseLocation(ServerWindow* window) {
     EventDispatcher* event_dispatcher =
         display_root->window_manager_state()->event_dispatcher();
     event_dispatcher->UpdateCursorProviderByLastKnownLocation();
-    display_root->display()->UpdateNativeCursor(
+    display_root->window_manager_state()->cursor_state().SetCurrentWindowCursor(
         event_dispatcher->GetCurrentMouseCursor());
   }
 }
@@ -601,7 +616,7 @@ void WindowServer::UpdateNativeCursorIfOver(ServerWindow* window) {
     return;
 
   event_dispatcher->UpdateNonClientAreaForCurrentWindow();
-  display_root->display()->UpdateNativeCursor(
+  display_root->window_manager_state()->cursor_state().SetCurrentWindowCursor(
       event_dispatcher->GetCurrentMouseCursor());
 }
 
@@ -750,19 +765,19 @@ void WindowServer::OnWindowVisibilityChanged(ServerWindow* window) {
         window);
 }
 
-void WindowServer::OnWindowPredefinedCursorChanged(
-    ServerWindow* window,
-    mojom::CursorType cursor_id) {
+void WindowServer::OnWindowCursorChanged(ServerWindow* window,
+                                         const ui::CursorData& cursor) {
   if (in_destructor_)
     return;
 
-  ProcessWillChangeWindowPredefinedCursor(window, cursor_id);
+  ProcessWillChangeWindowCursor(window, cursor);
 
   UpdateNativeCursorIfOver(window);
 }
 
-void WindowServer::OnWindowNonClientCursorChanged(ServerWindow* window,
-                                                  mojom::CursorType cursor_id) {
+void WindowServer::OnWindowNonClientCursorChanged(
+    ServerWindow* window,
+    const ui::CursorData& cursor) {
   if (in_destructor_)
     return;
 
@@ -825,8 +840,8 @@ void WindowServer::OnSurfaceCreated(const cc::SurfaceInfo& surface_info) {
   if (!window_paint_callback_.is_null())
     window_paint_callback_.Run(window);
 
-  auto* display = display_manager_->GetDisplayContaining(window);
-  if (display && window == display->GetActiveRootWindow()) {
+  Display* display = display_manager_->GetDisplayContaining(window);
+  if (IsWindowConsideredWindowManagerRoot(display, window)) {
     // A new surface for a WindowManager root has been created. This is a
     // special case because ServerWindows created by the WindowServer are not
     // part of a WindowTree. Send the SurfaceId directly to FrameGenerator and

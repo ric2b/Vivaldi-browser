@@ -30,7 +30,7 @@
 #include "content/public/renderer/render_view.h"
 #include "extensions/common/constants.h"
 #include "printing/features/features.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/WebKit/public/platform/WebImage.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -203,13 +203,16 @@ void ChromeRenderFrameObserver::RequestThumbnailForContextNode(
   }
 
   SkBitmap bitmap;
-  if (thumbnail.colorType() == kN32_SkColorType)
+  if (thumbnail.colorType() == kN32_SkColorType) {
     bitmap = thumbnail;
-  else
-    thumbnail.copyTo(&bitmap, kN32_SkColorType);
+  } else {
+    SkImageInfo info = thumbnail.info().makeColorType(kN32_SkColorType);
+    if (bitmap.tryAllocPixels(info)) {
+      thumbnail.readPixels(info, bitmap.getPixels(), bitmap.rowBytes(), 0, 0);
+    }
+  }
 
   std::vector<uint8_t> thumbnail_data;
-  SkAutoLockPixels lock(bitmap);
   if (bitmap.getPixels()) {
     const int kDefaultQuality = 90;
     std::vector<unsigned char> data;
@@ -359,11 +362,13 @@ void ChromeRenderFrameObserver::OnDestruct() {
 }
 
 void ChromeRenderFrameObserver::OnImageContextMenuRendererRequest(
+    const service_manager::BindSourceInfo& source_info,
     chrome::mojom::ImageContextMenuRendererRequest request) {
   image_context_menu_renderer_bindings_.AddBinding(this, std::move(request));
 }
 
 void ChromeRenderFrameObserver::OnThumbnailCapturerRequest(
+    const service_manager::BindSourceInfo& source_info,
     chrome::mojom::ThumbnailCapturerRequest request) {
   thumbnail_capturer_bindings_.AddBinding(this, std::move(request));
 }

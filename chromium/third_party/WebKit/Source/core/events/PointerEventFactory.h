@@ -7,9 +7,9 @@
 
 #include "core/CoreExport.h"
 #include "core/events/PointerEvent.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/HashMap.h"
 #include "public/platform/WebPointerProperties.h"
-#include "wtf/Allocator.h"
-#include "wtf/HashMap.h"
 
 namespace blink {
 
@@ -35,14 +35,16 @@ class CORE_EXPORT PointerEventFactory {
                        LocalDOMWindow*);
 
   PointerEvent* Create(const WebTouchPoint&,
-                       const Vector<WebTouchPoint>&,
+                       const Vector<std::pair<WebTouchPoint, TimeTicks>>&,
                        WebInputEvent::Modifiers,
+                       TimeTicks event_platform_time_stamp,
                        LocalFrame*,
                        DOMWindow*);
 
   PointerEvent* CreatePointerCancelEvent(
       const int pointer_id,
-      const WebPointerProperties::PointerType);
+      const WebPointerProperties::PointerType,
+      TimeTicks platfrom_time_stamp);
 
   // For creating capture events (i.e got/lostpointercapture)
   PointerEvent* CreatePointerCaptureEvent(PointerEvent*, const AtomicString&);

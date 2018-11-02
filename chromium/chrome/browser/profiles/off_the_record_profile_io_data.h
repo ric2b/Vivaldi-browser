@@ -108,7 +108,6 @@ class OffTheRecordProfileIOData : public ProfileIOData {
   ~OffTheRecordProfileIOData() override;
 
   void InitializeInternal(
-      std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate,
       ProfileParams* profile_params,
       content::ProtocolHandlerMap* protocol_handlers,
       content::URLRequestInterceptorScopedVector request_interceptors)
@@ -141,8 +140,6 @@ class OffTheRecordProfileIOData : public ProfileIOData {
       const StoragePartitionDescriptor& partition_descriptor) const override;
 
   mutable std::unique_ptr<net::CookieStore> extensions_cookie_store_;
-
-  mutable std::unique_ptr<net::URLRequestJobFactory> extensions_job_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(OffTheRecordProfileIOData);
 };

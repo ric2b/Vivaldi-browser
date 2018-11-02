@@ -10,18 +10,17 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_state_delegate.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_observer.h"
 #include "ash/shell_port.h"
-#include "ash/test/ash_test.h"
+#include "ash/test/ash_test_base.h"
 #include "ash/wm/fullscreen_window_finder.h"
-#include "ash/wm/maximize_mode/workspace_backdrop_delegate.h"
 #include "ash/wm/window_state.h"
+#include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
-#include "ash/wm/wm_screen_util.h"
 #include "ash/wm/workspace/workspace_window_resizer.h"
 #include "ash/wm_window.h"
 #include "base/command_line.h"
@@ -40,22 +39,22 @@
 namespace ash {
 namespace {
 
-WorkspaceLayoutManager* GetWorkspaceLayoutManager(WmWindow* container) {
-  return static_cast<WorkspaceLayoutManager*>(container->GetLayoutManager());
+WorkspaceLayoutManager* GetWorkspaceLayoutManager(aura::Window* container) {
+  return static_cast<WorkspaceLayoutManager*>(container->layout_manager());
 }
 
 }  // namespace
 
-class WorkspaceLayoutManagerKeyboardTest : public AshTest {
+class WorkspaceLayoutManagerKeyboardTest2 : public test::AshTestBase {
  public:
-  WorkspaceLayoutManagerKeyboardTest() : layout_manager_(nullptr) {}
-  ~WorkspaceLayoutManagerKeyboardTest() override {}
+  WorkspaceLayoutManagerKeyboardTest2() : layout_manager_(nullptr) {}
+  ~WorkspaceLayoutManagerKeyboardTest2() override {}
 
   void SetUp() override {
-    AshTest::SetUp();
+    test::AshTestBase::SetUp();
     UpdateDisplay("800x600");
-    WmWindow* default_container =
-        ShellPort::Get()->GetPrimaryRootWindowController()->GetWmContainer(
+    aura::Window* default_container =
+        Shell::GetPrimaryRootWindowController()->GetContainer(
             kShellWindowId_DefaultContainer);
     layout_manager_ = GetWorkspaceLayoutManager(default_container);
   }
@@ -65,13 +64,14 @@ class WorkspaceLayoutManagerKeyboardTest : public AshTest {
     restore_work_area_insets_ =
         display::Screen::GetScreen()->GetPrimaryDisplay().GetWorkAreaInsets();
     ShellPort::Get()->SetDisplayWorkAreaInsets(
-        ShellPort::Get()->GetPrimaryRootWindow(),
+        WmWindow::Get(Shell::GetPrimaryRootWindow()),
         gfx::Insets(0, 0, keyboard_bounds_.height(), 0));
   }
 
   void HideKeyboard() {
     ShellPort::Get()->SetDisplayWorkAreaInsets(
-        ShellPort::Get()->GetPrimaryRootWindow(), restore_work_area_insets_);
+        WmWindow::Get(Shell::GetPrimaryRootWindow()),
+        restore_work_area_insets_);
     layout_manager_->OnKeyboardBoundsChanging(gfx::Rect());
   }
 
@@ -84,10 +84,13 @@ class WorkspaceLayoutManagerKeyboardTest : public AshTest {
                              work_area.width(), work_area.height() / 2);
   }
 
-  void EnableNewVKMode() {
+  void DisableNewVKMode() {
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-    if (!command_line->HasSwitch(::switches::kUseNewVirtualKeyboardBehavior))
-      command_line->AppendSwitch(::switches::kUseNewVirtualKeyboardBehavior);
+    if (!command_line->HasSwitch(
+            ::switches::kDisableNewVirtualKeyboardBehavior)) {
+      command_line->AppendSwitch(
+          ::switches::kDisableNewVirtualKeyboardBehavior);
+    }
   }
 
   const gfx::Rect& keyboard_bounds() const { return keyboard_bounds_; }
@@ -97,10 +100,13 @@ class WorkspaceLayoutManagerKeyboardTest : public AshTest {
   gfx::Rect keyboard_bounds_;
   WorkspaceLayoutManager* layout_manager_;
 
-  DISALLOW_COPY_AND_ASSIGN(WorkspaceLayoutManagerKeyboardTest);
+  DISALLOW_COPY_AND_ASSIGN(WorkspaceLayoutManagerKeyboardTest2);
 };
 
-TEST_F(WorkspaceLayoutManagerKeyboardTest, ChangeWorkAreaInNonStickyMode) {
+TEST_F(WorkspaceLayoutManagerKeyboardTest2, ChangeWorkAreaInNonStickyMode) {
+  // Append the flag to cause work area change in non-sticky mode.
+  DisableNewVKMode();
+
   keyboard::SetAccessibilityKeyboardEnabled(true);
   InitKeyboardBounds();
   Shell::Get()->CreateKeyboard();
@@ -112,48 +118,44 @@ TEST_F(WorkspaceLayoutManagerKeyboardTest, ChangeWorkAreaInNonStickyMode) {
 
   gfx::Rect orig_window_bounds(0, 100, work_area.width(),
                                work_area.height() - 100);
-  std::unique_ptr<WindowOwner> window_owner(
+  std::unique_ptr<aura::Window> window(
       CreateToplevelTestWindow(orig_window_bounds));
-  WmWindow* window = window_owner->window();
 
-  window->Activate();
-  EXPECT_EQ(orig_window_bounds, window->GetBounds());
+  wm::ActivateWindow(window.get());
+  EXPECT_EQ(orig_window_bounds, window->bounds());
 
   // Open keyboard in non-sticky mode.
   kb_controller->ShowKeyboard(false);
   kb_controller->ui()->GetKeyboardWindow()->SetBounds(
       keyboard::FullWidthKeyboardBoundsFromRootBounds(
-          ShellPort::Get()->GetPrimaryRootWindow()->GetBounds(), 100));
+          Shell::GetPrimaryRootWindow()->bounds(), 100));
 
   int shift =
       work_area.height() - kb_controller->GetContainerWindow()->bounds().y();
   gfx::Rect changed_window_bounds(orig_window_bounds);
   changed_window_bounds.Offset(0, -shift);
   // Window should be shifted up.
-  EXPECT_EQ(changed_window_bounds, window->GetBounds());
+  EXPECT_EQ(changed_window_bounds, window->bounds());
 
   kb_controller->HideKeyboard(
       keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
-  EXPECT_EQ(orig_window_bounds, window->GetBounds());
+  EXPECT_EQ(orig_window_bounds, window->bounds());
 
   // Open keyboard in sticky mode.
   kb_controller->ShowKeyboard(true);
 
   // Window should be shifted up.
-  EXPECT_EQ(changed_window_bounds, window->GetBounds());
+  EXPECT_EQ(changed_window_bounds, window->bounds());
 
   kb_controller->HideKeyboard(
       keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
-  EXPECT_EQ(orig_window_bounds, window->GetBounds());
+  EXPECT_EQ(orig_window_bounds, window->bounds());
 }
 
 // When kAshUseNewVKWindowBehavior flag enabled, do not change accessibility
 // keyboard work area in non-sticky mode.
-TEST_F(WorkspaceLayoutManagerKeyboardTest,
+TEST_F(WorkspaceLayoutManagerKeyboardTest2,
        IgnoreWorkAreaChangeinNonStickyMode) {
-  // Append flag to ignore work area change in non-sticky mode.
-  EnableNewVKMode();
-
   keyboard::SetAccessibilityKeyboardEnabled(true);
   InitKeyboardBounds();
   Shell::Get()->CreateKeyboard();
@@ -165,25 +167,24 @@ TEST_F(WorkspaceLayoutManagerKeyboardTest,
 
   gfx::Rect orig_window_bounds(0, 100, work_area.width(),
                                work_area.height() - 100);
-  std::unique_ptr<WindowOwner> window_owner(
+  std::unique_ptr<aura::Window> window(
       CreateToplevelTestWindow(orig_window_bounds));
-  WmWindow* window = window_owner->window();
 
-  window->Activate();
-  EXPECT_EQ(orig_window_bounds, window->GetBounds());
+  wm::ActivateWindow(window.get());
+  EXPECT_EQ(orig_window_bounds, window->bounds());
 
   // Open keyboard in non-sticky mode.
   kb_controller->ShowKeyboard(false);
   kb_controller->ui()->GetKeyboardWindow()->SetBounds(
       keyboard::FullWidthKeyboardBoundsFromRootBounds(
-          ShellPort::Get()->GetPrimaryRootWindow()->GetBounds(), 100));
+          Shell::GetPrimaryRootWindow()->bounds(), 100));
 
   // Window should not be shifted up.
-  EXPECT_EQ(orig_window_bounds, window->GetBounds());
+  EXPECT_EQ(orig_window_bounds, window->bounds());
 
   kb_controller->HideKeyboard(
       keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
-  EXPECT_EQ(orig_window_bounds, window->GetBounds());
+  EXPECT_EQ(orig_window_bounds, window->bounds());
 
   // Open keyboard in sticky mode.
   kb_controller->ShowKeyboard(true);
@@ -193,11 +194,11 @@ TEST_F(WorkspaceLayoutManagerKeyboardTest,
   gfx::Rect changed_window_bounds(orig_window_bounds);
   changed_window_bounds.Offset(0, -shift);
   // Window should be shifted up.
-  EXPECT_EQ(changed_window_bounds, window->GetBounds());
+  EXPECT_EQ(changed_window_bounds, window->bounds());
 
   kb_controller->HideKeyboard(
       keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
-  EXPECT_EQ(orig_window_bounds, window->GetBounds());
+  EXPECT_EQ(orig_window_bounds, window->bounds());
 }
 
 }  // namespace ash

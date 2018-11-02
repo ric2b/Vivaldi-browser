@@ -95,10 +95,10 @@ struct Serializer<AssociatedInterfaceRequestDataView<Base>,
                           SerializationContext* context) {
     if (input->is_valid()) {
       DCHECK_LT(input->value, context->associated_endpoint_handles.size());
-      output->Bind(
+      *output = AssociatedInterfaceRequest<T>(
           std::move(context->associated_endpoint_handles[input->value]));
     } else {
-      output->Bind(ScopedInterfaceEndpointHandle());
+      *output = AssociatedInterfaceRequest<T>();
     }
     return true;
   }
@@ -149,7 +149,8 @@ struct Serializer<InterfaceRequestDataView<Base>, InterfaceRequest<T>> {
   static bool Deserialize(Handle_Data* input,
                           InterfaceRequest<T>* output,
                           SerializationContext* context) {
-    output->Bind(context->handles.TakeHandleAs<MessagePipeHandle>(*input));
+    *output = InterfaceRequest<T>(
+        context->handles.TakeHandleAs<MessagePipeHandle>(*input));
     return true;
   }
 };

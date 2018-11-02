@@ -19,6 +19,7 @@
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/collected_cookies_infobar_delegate.h"
 #include "chrome/browser/ui/views/cookie_info_view.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
@@ -47,7 +48,6 @@
 #include "ui/views/controls/tree/tree_view.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/grid_layout.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -75,7 +75,7 @@ void StartNewButtonColumnSet(views::GridLayout* layout,
   const int button_padding =
       provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
   const int button_size_limit =
-      provider->GetDistanceMetric(DISTANCE_BUTTON_MAX_LINKABLE_WIDTH);
+      provider->GetDistanceMetric(views::DISTANCE_BUTTON_MAX_LINKABLE_WIDTH);
 
   views::ColumnSet* column_set = layout->AddColumnSet(column_layout_id);
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::CENTER, 0,
@@ -149,14 +149,15 @@ class InfobarView : public views::View {
         new views::BoxLayout(views::BoxLayout::kHorizontal,
                              kInfobarHorizontalPadding,
                              kInfobarVerticalPadding,
-                             views::kRelatedControlSmallHorizontalSpacing));
+                             ChromeLayoutProvider::Get()->GetDistanceMetric(
+                                DISTANCE_RELATED_CONTROL_HORIZONTAL_SMALL)));
     content_->AddChildView(info_image_);
     content_->AddChildView(label_);
     UpdateVisibility(false, CONTENT_SETTING_BLOCK, base::string16());
   }
 
   // views::View overrides.
-  gfx::Size GetPreferredSize() const override {
+  gfx::Size CalculatePreferredSize() const override {
     // Always return the preferred size, even if not currently visible. This
     // ensures that the layout manager always reserves space within the view
     // so it can be made visible when necessary. Otherwise, changing the
@@ -165,14 +166,17 @@ class InfobarView : public views::View {
 
     // Add space around the banner.
     gfx::Size size(content_->GetPreferredSize());
-    size.Enlarge(0, 2 * views::kRelatedControlVerticalSpacing);
+    size.Enlarge(0, 2 * ChromeLayoutProvider::Get()->GetDistanceMetric(
+        views::DISTANCE_RELATED_CONTROL_VERTICAL));
     return size;
   }
 
   void Layout() override {
+    ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+    const int vertical_spacing =
+        provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL);
     content_->SetBounds(
-        0, views::kRelatedControlVerticalSpacing,
-        width(), height() - views::kRelatedControlVerticalSpacing);
+        0, vertical_spacing, width(), height() - vertical_spacing);
   }
 
   void ViewHierarchyChanged(
@@ -212,6 +216,7 @@ CollectedCookiesViews::CollectedCookiesViews(content::WebContents* web_contents)
   registrar_.Add(this, chrome::NOTIFICATION_COLLECTED_COOKIES_SHOWN,
                  content::Source<TabSpecificContentSettings>(content_settings));
   constrained_window::ShowWebModalDialogViews(this, web_contents);
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::COLLECTED_COOKIES);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -290,13 +295,6 @@ gfx::Size CollectedCookiesViews::GetMinimumSize() const {
   return gfx::Size(0, View::GetMinimumSize().height());
 }
 
-gfx::Size CollectedCookiesViews::GetPreferredSize() const {
-  int preferred =
-      ChromeLayoutProvider::Get()->GetDialogPreferredWidth(DialogWidth::MEDIUM);
-  return gfx::Size(preferred ? preferred : View::GetPreferredSize().width(),
-                   View::GetPreferredSize().height());
-}
-
 void CollectedCookiesViews::ViewHierarchyChanged(
     const ViewHierarchyChangedDetails& details) {
   views::DialogDelegateView::ViewHierarchyChanged(details);
@@ -317,8 +315,10 @@ void CollectedCookiesViews::Init() {
 
   GridLayout* layout = new GridLayout(this);
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
-  if (provider->UseExtraDialogPadding())
-    layout->SetInsets(gfx::Insets(kTabbedPaneTopPadding, 0, 0, 0));
+  if (provider->UseExtraDialogPadding()) {
+    SetBorder(
+        views::CreateEmptyBorder(gfx::Insets(kTabbedPaneTopPadding, 0, 0, 0)));
+  }
   SetLayoutManager(layout);
 
   const int single_column_layout_id = 0;

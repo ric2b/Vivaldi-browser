@@ -99,11 +99,11 @@ TEST_F(CompositorMutableStateTest, MutableStateMutableProperties) {
 
   SetLayerPropertiesForTesting(layer);
 
-  int primary_id = 12;
-  root->SetElementId(
-      CreateCompositorElementId(primary_id, CompositorSubElementId::kPrimary));
-  layer->SetElementId(
-      CreateCompositorElementId(primary_id, CompositorSubElementId::kScroll));
+  uint64_t primary_id = 12;
+  root->SetElementId(CompositorElementIdFromDOMNodeId(
+      primary_id, CompositorElementIdNamespace::kPrimaryCompositorProxy));
+  layer->SetElementId(CompositorElementIdFromDOMNodeId(
+      primary_id, CompositorElementIdNamespace::kScrollCompositorProxy));
 
   root->SetMutableProperties(CompositorMutableProperty::kOpacity |
                              CompositorMutableProperty::kTransform);
@@ -140,7 +140,7 @@ TEST_F(CompositorMutableStateTest, MutableStateMutableProperties) {
   // The corresponding mutation should reflect the changed values.
   EXPECT_EQ(1ul, mutations.map.size());
 
-  const CompositorMutation& mutation = *mutations.map.Find(primary_id)->value;
+  const CompositorMutation& mutation = *mutations.map.find(primary_id)->value;
   EXPECT_TRUE(mutation.IsOpacityMutated());
   EXPECT_TRUE(mutation.IsTransformMutated());
   EXPECT_TRUE(mutation.IsScrollLeftMutated());

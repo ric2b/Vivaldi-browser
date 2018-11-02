@@ -36,11 +36,9 @@ MojoVideoDecoder::MojoVideoDecoder(
 
 MojoVideoDecoder::~MojoVideoDecoder() {
   DVLOG(1) << __func__;
-  Stop();
 }
 
 std::string MojoVideoDecoder::GetDisplayName() const {
-  // TODO(sandersd): Build the name including information from the remote end.
   return "MojoVideoDecoder";
 }
 
@@ -196,7 +194,7 @@ void MojoVideoDecoder::BindRemoteDecoder() {
 
   // TODO(sandersd): Does this need its own error handler?
   mojom::VideoDecoderClientAssociatedPtrInfo client_ptr_info;
-  client_binding_.Bind(&client_ptr_info);
+  client_binding_.Bind(mojo::MakeRequest(&client_ptr_info));
 
   // TODO(sandersd): Better buffer sizing.
   mojo::ScopedDataPipeConsumerHandle remote_consumer_handle;

@@ -55,6 +55,8 @@ class WebViewPlugin : public blink::WebPlugin,
 
     // Called when the unobscured rect of the plugin is updated.
     virtual void OnUnobscuredRectUpdate(const gfx::Rect& unobscured_rect) {}
+
+    virtual bool IsErrorPlaceholder() = 0;
   };
 
   // Convenience method to set up a new WebViewPlugin using |preferences|
@@ -84,6 +86,8 @@ class WebViewPlugin : public blink::WebPlugin,
 
   v8::Local<v8::Object> V8ScriptableObject(v8::Isolate* isolate) override;
 
+  bool IsErrorPlaceholder() override;
+
   void UpdateAllLifecyclePhases() override;
   void Paint(blink::WebCanvas* canvas, const blink::WebRect& rect) override;
 
@@ -91,14 +95,13 @@ class WebViewPlugin : public blink::WebPlugin,
   void UpdateGeometry(const blink::WebRect& window_rect,
                       const blink::WebRect& clip_rect,
                       const blink::WebRect& unobscured_rect,
-                      const blink::WebVector<blink::WebRect>& cut_outs_rects,
                       bool is_visible) override;
 
   void UpdateFocus(bool foucsed, blink::WebFocusType focus_type) override;
   void UpdateVisibility(bool) override {}
 
   blink::WebInputEventResult HandleInputEvent(
-      const blink::WebInputEvent& event,
+      const blink::WebCoalescedInputEvent& event,
       blink::WebCursorInfo& cursor_info) override;
 
   void DidReceiveResponse(const blink::WebURLResponse& response) override;
@@ -168,9 +171,11 @@ class WebViewPlugin : public blink::WebPlugin,
     void DidInvalidateRect(const blink::WebRect&) override;
     void DidChangeCursor(const blink::WebCursorInfo& cursor) override;
     void ScheduleAnimation() override;
+    std::unique_ptr<blink::WebURLLoader> CreateURLLoader() override;
 
     // WebFrameClient methods:
-    void DidClearWindowObject(blink::WebLocalFrame* frame) override;
+    void DidClearWindowObject() override;
+    void FrameDetached(blink::WebLocalFrame*, DetachType) override;
 
    private:
     WebViewPlugin* plugin_;

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium OS Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@
 #include <sstream>
 
 #include "request.h"
-#include "volume_archive_libarchive.h"
+#include "volume_archive_minizip.h"
 #include "volume_reader_javascript_stream.h"
 
 namespace {

@@ -68,6 +68,10 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 
+#if defined(GOOGLE_CHROME_BUILD)
+#include "base/feature_list.h"
+#endif
+
 #if defined(OS_CHROMEOS)
 #include "chromeos/chromeos_switches.h"
 #endif
@@ -129,6 +133,9 @@ void ZoomMenuModel::Build() {
 
 #if defined(GOOGLE_CHROME_BUILD)
 
+const base::Feature kIncludeBetaForumMenuItem{
+    "IncludeBetaForumMenuItem", base::FEATURE_DISABLED_BY_DEFAULT};
+
 class AppMenuModel::HelpMenuModel : public ui::SimpleMenuModel {
  public:
   HelpMenuModel(ui::SimpleMenuModel::Delegate* delegate,
@@ -146,6 +153,8 @@ class AppMenuModel::HelpMenuModel : public ui::SimpleMenuModel {
 #endif
     AddItem(IDC_ABOUT, l10n_util::GetStringUTF16(IDS_ABOUT));
     AddItemWithStringId(IDC_HELP_PAGE_VIA_MENU, help_string_id);
+    if (base::FeatureList::IsEnabled(kIncludeBetaForumMenuItem))
+      AddItem(IDC_SHOW_BETA_FORUM, l10n_util::GetStringUTF16(IDS_BETA_FORUM));
     if (browser_defaults::kShowHelpMenuItemIcon) {
       ui::ResourceBundle& rb = ResourceBundle::GetSharedInstance();
       SetIcon(GetIndexOfCommandId(IDC_HELP_PAGE_VIA_MENU),
@@ -176,13 +185,7 @@ ToolsMenuModel::~ToolsMenuModel() {}
 // - Developer tools.
 // - Option to enable profiling.
 void ToolsMenuModel::Build(Browser* browser) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableSaveAsMenuLabelExperiment) ||
-      base::FieldTrialList::FindFullName("SaveAsMenuText") == "download") {
-    AddItemWithStringId(IDC_SAVE_PAGE, IDS_DOWNLOAD_PAGE);
-  } else {
-    AddItemWithStringId(IDC_SAVE_PAGE, IDS_SAVE_PAGE);
-  }
+  AddItemWithStringId(IDC_SAVE_PAGE, IDS_SAVE_PAGE);
 
   if (extensions::util::IsNewBookmarkAppsEnabled()) {
     int string_id = IDS_ADD_TO_DESKTOP;
@@ -548,6 +551,11 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
       LogMenuAction(MENU_ACTION_HELP_PAGE_VIA_MENU);
       break;
   #if defined(GOOGLE_CHROME_BUILD)
+    case IDC_SHOW_BETA_FORUM:
+      if (!uma_action_recorded_)
+        UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.BetaForum", delta);
+      LogMenuAction(MENU_ACTION_BETA_FORUM);
+      break;
     case IDC_FEEDBACK:
       if (!uma_action_recorded_)
         UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.Feedback", delta);
@@ -720,10 +728,8 @@ void AppMenuModel::Build() {
   CreateZoomMenu();
   AddItemWithStringId(IDC_PRINT, IDS_PRINT);
 
-#if defined(ENABLE_MEDIA_ROUTER)
   if (media_router::MediaRouterEnabled(browser()->profile()))
     AddItemWithStringId(IDC_ROUTE_MEDIA, IDS_MEDIA_ROUTER_MENU_ITEM_TITLE);
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 
   AddItemWithStringId(IDC_FIND, IDS_FIND);
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(

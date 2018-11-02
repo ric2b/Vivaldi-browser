@@ -20,7 +20,7 @@ PerformanceObserver* PerformanceObserver::Create(
     ExecutionContext* execution_context,
     PerformanceBase* performance,
     PerformanceObserverCallback* callback) {
-  ASSERT(IsMainThread());
+  DCHECK(IsMainThread());
   return new PerformanceObserver(execution_context, performance, callback);
 }
 
@@ -65,12 +65,12 @@ void PerformanceObserver::disconnect() {
   if (performance_) {
     performance_->UnregisterPerformanceObserver(*this);
   }
-  performance_entries_.Clear();
+  performance_entries_.clear();
   is_registered_ = false;
 }
 
 void PerformanceObserver::EnqueuePerformanceEntry(PerformanceEntry& entry) {
-  ASSERT(IsMainThread());
+  DCHECK(IsMainThread());
   performance_entries_.push_back(&entry);
   if (performance_)
     performance_->ActivateObserver(*this);
@@ -81,13 +81,13 @@ bool PerformanceObserver::ShouldBeSuspended() const {
 }
 
 void PerformanceObserver::Deliver() {
-  ASSERT(!ShouldBeSuspended());
+  DCHECK(!ShouldBeSuspended());
 
   if (performance_entries_.IsEmpty())
     return;
 
   PerformanceEntryVector performance_entries;
-  performance_entries.Swap(performance_entries_);
+  performance_entries.swap(performance_entries_);
   PerformanceObserverEntryList* entry_list =
       new PerformanceObserverEntryList(performance_entries);
   callback_->call(this, entry_list, this);

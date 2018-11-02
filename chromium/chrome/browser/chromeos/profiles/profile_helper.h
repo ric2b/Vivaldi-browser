@@ -14,11 +14,10 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/browsing_data/browsing_data_remover.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_login_manager.h"
 #include "components/user_manager/user_manager.h"
+#include "content/public/browser/browsing_data_remover.h"
 
-class ArcActiveDirectoryEnrollmentTokenFetcherBrowserTest;
 class ArcAppTest;
 class SessionControllerClientTest;
 class Profile;
@@ -29,6 +28,10 @@ class FilePath;
 
 namespace extensions {
 class ExtensionGarbageCollectorChromeOSUnitTest;
+}
+
+namespace arc {
+class ArcActiveDirectoryEnrollmentTokenFetcherBrowserTest;
 }
 
 namespace ash {
@@ -61,7 +64,7 @@ class FileFlusher;
 //    GetActiveUserProfileDir()
 // 3. Get mapping from user_id_hash to Profile instance/profile path etc.
 class ProfileHelper
-    : public BrowsingDataRemover::Observer,
+    : public content::BrowsingDataRemover::Observer,
       public OAuth2LoginManager::Observer,
       public user_manager::UserManager::UserSessionStateObserver {
  public:
@@ -73,8 +76,13 @@ class ProfileHelper
   // knowledge in one place.
   static ProfileHelper* Get();
 
-  // Returns Profile instance that corresponds to |user_id_hash|.
-  static Profile* GetProfileByUserIdHash(const std::string& user_id_hash);
+  // Loads and returns Profile instance that corresponds to |user_id_hash| for
+  // test. It should not be used in production code because it could load a
+  // not-yet-loaded user profile and skip the user profile initialization code
+  // in UserSessionManager.
+  // See http://crbug.com/728683 and http://crbug.com/718734.
+  static Profile* GetProfileByUserIdHashForTest(
+      const std::string& user_id_hash);
 
   // Returns profile path that corresponds to a given |user_id_hash|.
   static base::FilePath GetProfilePathByUserIdHash(
@@ -147,6 +155,8 @@ class ProfileHelper
   static std::string GetUserIdHashByUserIdForTesting(
       const std::string& user_id);
 
+  void SetActiveUserIdForTesting(const std::string& user_id);
+
   // Flushes all files of |profile|.
   void FlushProfile(Profile* profile);
 
@@ -167,7 +177,7 @@ class ProfileHelper
   friend class ProfileListChromeOSTest;
   friend class SystemTrayDelegateChromeOSTest;
   friend class ash::test::MultiUserWindowManagerChromeOSTest;
-  friend class ::ArcActiveDirectoryEnrollmentTokenFetcherBrowserTest;
+  friend class arc::ArcActiveDirectoryEnrollmentTokenFetcherBrowserTest;
   friend class ::ArcAppTest;
   friend class ::SessionControllerClientTest;
   friend class ::test::BrowserFinderChromeOSTest;
@@ -216,7 +226,7 @@ class ProfileHelper
   base::Closure on_clear_profile_stage_finished_;
 
   // A currently running browsing data remover.
-  BrowsingDataRemover* browsing_data_remover_;
+  content::BrowsingDataRemover* browsing_data_remover_;
 
   // Used for testing by unit tests and FakeUserManager/MockUserManager.
   std::map<const user_manager::User*, Profile*> user_to_profile_for_testing_;

@@ -4,13 +4,14 @@
 
 #include "content/browser/renderer_host/offscreen_canvas_provider_impl.h"
 
-#include "content/browser/compositor/surface_utils.h"
-#include "content/browser/renderer_host/offscreen_canvas_compositor_frame_sink_manager.h"
+#include "base/bind.h"
 #include "content/browser/renderer_host/offscreen_canvas_surface_impl.h"
 
 namespace content {
 
-OffscreenCanvasProviderImpl::OffscreenCanvasProviderImpl() = default;
+OffscreenCanvasProviderImpl::OffscreenCanvasProviderImpl(
+    uint32_t renderer_client_id)
+    : renderer_client_id_(renderer_client_id) {}
 
 OffscreenCanvasProviderImpl::~OffscreenCanvasProviderImpl() = default;
 
@@ -22,26 +23,50 @@ void OffscreenCanvasProviderImpl::Add(
 void OffscreenCanvasProviderImpl::CreateOffscreenCanvasSurface(
     const cc::FrameSinkId& parent_frame_sink_id,
     const cc::FrameSinkId& frame_sink_id,
-    cc::mojom::FrameSinkManagerClientPtr client,
+    blink::mojom::OffscreenCanvasSurfaceClientPtr client,
     blink::mojom::OffscreenCanvasSurfaceRequest request) {
-  OffscreenCanvasSurfaceImpl::Create(parent_frame_sink_id, frame_sink_id,
-                                     std::move(client), std::move(request));
+  // TODO(kylechar): Kill the renderer too.
+  if (parent_frame_sink_id.client_id() != renderer_client_id_) {
+    DLOG(ERROR) << "Invalid parent client id " << parent_frame_sink_id;
+    return;
+  }
+  if (frame_sink_id.client_id() != renderer_client_id_) {
+    DLOG(ERROR) << "Invalid client id " << frame_sink_id;
+    return;
+  }
+
+  auto destroy_callback = base::BindOnce(
+      &OffscreenCanvasProviderImpl::DestroyOffscreenCanvasSurface,
+      base::Unretained(this), frame_sink_id);
+
+  canvas_map_[frame_sink_id] = base::MakeUnique<OffscreenCanvasSurfaceImpl>(
+      parent_frame_sink_id, frame_sink_id, std::move(client),
+      std::move(request), std::move(destroy_callback));
 }
 
 void OffscreenCanvasProviderImpl::CreateCompositorFrameSink(
     const cc::FrameSinkId& frame_sink_id,
     cc::mojom::MojoCompositorFrameSinkClientPtr client,
     cc::mojom::MojoCompositorFrameSinkRequest request) {
-  // TODO(kylechar): Add test for bad |frame_sink_id|.
-  auto* manager = OffscreenCanvasCompositorFrameSinkManager::GetInstance();
-  auto* surface_impl = manager->GetSurfaceInstance(frame_sink_id);
-  if (!surface_impl) {
+  // TODO(kylechar): Kill the renderer too.
+  if (frame_sink_id.client_id() != renderer_client_id_) {
+    DLOG(ERROR) << "Invalid client id " << frame_sink_id;
+    return;
+  }
+
+  auto iter = canvas_map_.find(frame_sink_id);
+  if (iter == canvas_map_.end()) {
     DLOG(ERROR) << "No OffscreenCanvasSurfaceImpl for " << frame_sink_id;
     return;
   }
 
-  surface_impl->CreateCompositorFrameSink(std::move(client),
+  iter->second->CreateCompositorFrameSink(std::move(client),
                                           std::move(request));
+}
+
+void OffscreenCanvasProviderImpl::DestroyOffscreenCanvasSurface(
+    cc::FrameSinkId frame_sink_id) {
+  canvas_map_.erase(frame_sink_id);
 }
 
 }  // namespace content

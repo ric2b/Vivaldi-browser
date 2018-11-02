@@ -298,8 +298,9 @@ base::CancelableTaskTracker::TaskId FileAccessProvider::StartRead(
   return tracker->PostTaskAndReply(
       BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get(),
       FROM_HERE,
-      base::Bind(&FileAccessProvider::DoRead, this, path, saved_errno, data),
-      base::Bind(callback, base::Owned(saved_errno), base::Owned(data)));
+      base::BindOnce(&FileAccessProvider::DoRead, this, path, saved_errno,
+                     data),
+      base::BindOnce(callback, base::Owned(saved_errno), base::Owned(data)));
 }
 
 base::CancelableTaskTracker::TaskId FileAccessProvider::StartWrite(
@@ -314,10 +315,11 @@ base::CancelableTaskTracker::TaskId FileAccessProvider::StartWrite(
   // Post task to file thread to write file.
   return tracker->PostTaskAndReply(
       BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get(),
-      FROM_HERE, base::Bind(&FileAccessProvider::DoWrite, this, path, data,
-                            saved_errno, bytes_written),
-      base::Bind(callback, base::Owned(saved_errno),
-                 base::Owned(bytes_written)));
+      FROM_HERE,
+      base::BindOnce(&FileAccessProvider::DoWrite, this, path, data,
+                     saved_errno, bytes_written),
+      base::BindOnce(callback, base::Owned(saved_errno),
+                     base::Owned(bytes_written)));
 }
 
 void FileAccessProvider::DoRead(const base::FilePath& path,
@@ -986,9 +988,8 @@ void CertificatesHandler::CertificateManagerModelReady() {
       certificate_manager_model_->is_user_db_available());
   base::Value tpm_available_value(
       certificate_manager_model_->is_tpm_available());
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value("certificates-model-ready"),
-                         user_db_available_value, tpm_available_value);
+  FireWebUIListener("certificates-model-ready", user_db_available_value,
+                    tpm_available_value);
   certificate_manager_model_->Refresh();
 }
 
@@ -1043,7 +1044,7 @@ void CertificatesHandler::PopulateTree(
       dict->SetString(kNameField, i->first);
 
       // Populate second level (certs).
-      base::ListValue* subnodes = new base::ListValue;
+      auto subnodes = base::MakeUnique<base::ListValue>();
       for (net::CertificateList::const_iterator org_cert_it = i->second.begin();
            org_cert_it != i->second.end(); ++org_cert_it) {
         std::unique_ptr<base::DictionaryValue> cert_dict(
@@ -1075,14 +1076,12 @@ void CertificatesHandler::PopulateTree(
       }
       std::sort(subnodes->begin(), subnodes->end(), comparator);
 
-      dict->Set(kSubnodesField, subnodes);
+      dict->Set(kSubnodesField, std::move(subnodes));
       nodes->Append(std::move(dict));
     }
     std::sort(nodes->begin(), nodes->end(), comparator);
 
-    CallJavascriptFunction("cr.webUIListenerCallback",
-                           base::Value("certificates-changed"),
-                           base::Value(tab_name), *nodes);
+    FireWebUIListener("certificates-changed", base::Value(tab_name), *nodes);
   }
 }
 

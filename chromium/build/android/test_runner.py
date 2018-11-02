@@ -19,6 +19,11 @@ import threading
 import traceback
 import unittest
 
+# Import _strptime before threaded code. datetime.datetime.strptime is
+# threadsafe except for the initial import of the _strptime module.
+# See http://crbug.com/724524 and https://bugs.python.org/issue7980.
+import _strptime  # pylint: disable=unused-import
+
 from pylib.constants import host_paths
 
 if host_paths.DEVIL_PATH not in sys.path:
@@ -84,12 +89,6 @@ def AddCommandLineOptions(parser):
       type=os.path.realpath,
       help='The relative filepath to a file containing '
            'command-line flags to set on the device')
-  # TODO(jbudorick): This is deprecated. Remove once clients have switched
-  # to passing command-line flags directly.
-  parser.add_argument(
-      '-a', '--test-arguments',
-      dest='test_arguments', default='',
-      help=argparse.SUPPRESS)
   parser.set_defaults(allow_unknown=True)
   parser.set_defaults(command_line_flags=None)
 
@@ -163,6 +162,10 @@ def AddCommonOptions(parser):
       '--flakiness-dashboard-server',
       dest='flakiness_dashboard_server',
       help=argparse.SUPPRESS)
+  parser.add_argument(
+      '--gs-results-bucket',
+      help='Google Storage bucket to upload results to.')
+
 
   parser.add_argument(
       '--output-directory',
@@ -379,13 +382,13 @@ def AddInstrumentationTestOptions(parser):
            'fails or the golden image is missing but to render'
            'the view and carry on.')
   parser.add_argument(
+      '--render-results-directory',
+      dest='render_results_dir',
+      help='Directory to pull render test result images off of the device to.')
+  parser.add_argument(
       '--runtime-deps-path',
       dest='runtime_deps_path', type=os.path.realpath,
       help='Runtime data dependency file from GN.')
-  parser.add_argument(
-      '--save-perf-json',
-      action='store_true',
-      help='Saves the JSON file for each UI Perf test.')
   parser.add_argument(
       '--screenshot-directory',
       dest='screenshot_dir', type=os.path.realpath,
@@ -428,9 +431,9 @@ def AddInstrumentationTestOptions(parser):
       type=float,
       help='Factor by which timeouts should be scaled.')
   parser.add_argument(
-      '-w', '--wait_debugger',
-      action='store_true', dest='wait_for_debugger',
-      help='Wait for debugger.')
+      '--ui-screenshot-directory',
+      dest='ui_screenshot_dir', type=os.path.realpath,
+      help='Destination for screenshots captured by the tests')
 
   # These arguments are suppressed from the help text because they should
   # only ever be specified by an intermediate script.
@@ -468,6 +471,21 @@ def AddJUnitTestOptions(parser):
       '-s', '--test-suite',
       dest='test_suite', required=True,
       help='JUnit test suite to run.')
+
+  # These arguments are for Android Robolectric tests.
+  parser.add_argument(
+      '--android-manifest-path',
+      help='Path to Android Manifest to configure Robolectric.')
+  parser.add_argument(
+      '--package-name',
+      help='Default app package name for Robolectric tests.')
+  parser.add_argument(
+      '--resource-zip',
+      action='append', dest='resource_zips', default=[],
+      help='Path to resource zips to configure Robolectric.')
+  parser.add_argument(
+      '--robolectric-runtime-deps-dir',
+      help='Path to runtime deps for Robolectric.')
 
 
 def AddLinkerTestOptions(parser):

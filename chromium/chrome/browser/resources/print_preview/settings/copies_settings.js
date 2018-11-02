@@ -51,7 +51,7 @@ cr.define('print_preview', function() {
      * @private
      */
     this.inputField_ = null;
-  };
+  }
 
   /**
    * Delay in milliseconds before processing the textfield.

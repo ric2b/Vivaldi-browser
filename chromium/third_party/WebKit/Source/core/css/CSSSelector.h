@@ -32,7 +32,7 @@
 namespace blink {
 class CSSSelectorList;
 
-// This class represents a selector for a StyleRule.
+// This class represents a simple selector for a StyleRule.
 
 // CSS selector representation is somewhat complicated and subtle. A
 // representative list of selectors is in CSSSelectorTest; run it in a debug
@@ -40,7 +40,7 @@ class CSSSelectorList;
 //
 // ** TagHistory() and Relation():
 //
-// Selectors are represented as a linked list of simple selectors (defined more
+// Selectors are represented as an array of simple selectors (defined more
 // or less according to
 // http://www.w3.org/TR/css3-selectors/#simple-selectors-dfn). The tagHistory()
 // method returns the next simple selector in the list. The relation() method
@@ -96,7 +96,7 @@ class CORE_EXPORT CSSSelector {
 
   ~CSSSelector();
 
-  String SelectorText(const String& right_side = "") const;
+  String SelectorText() const;
 
   bool operator==(const CSSSelector&) const;
 
@@ -284,7 +284,7 @@ class CORE_EXPORT CSSSelector {
   void SetSelectorList(std::unique_ptr<CSSSelectorList>);
 
   void SetNth(int a, int b);
-  bool MatchNth(int count) const;
+  bool MatchNth(unsigned count) const;
 
   bool IsAdjacentSelector() const {
     return relation_ == kDirectAdjacent || relation_ == kIndirectAdjacent;
@@ -368,6 +368,7 @@ class CORE_EXPORT CSSSelector {
 
   unsigned SpecificityForOneSelector() const;
   unsigned SpecificityForPage() const;
+  const CSSSelector* SerializeCompound(StringBuilder&) const;
 
   // Hide.
   CSSSelector& operator=(const CSSSelector&);
@@ -378,7 +379,7 @@ class CORE_EXPORT CSSSelector {
     }
     ~RareData();
 
-    bool MatchNth(int count);
+    bool MatchNth(unsigned count);
     int NthAValue() const { return bits_.nth_.a_; }
     int NthBValue() const { return bits_.nth_.b_; }
 

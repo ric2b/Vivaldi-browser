@@ -5,9 +5,7 @@
 #include "bindings/core/v8/SourceLocation.h"
 
 #include <memory>
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8BindingMacros.h"
-#include "bindings/core/v8/V8PerIsolateData.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ScriptableDocumentParser.h"
@@ -15,6 +13,8 @@
 #include "core/inspector/ThreadDebugger.h"
 #include "core/inspector/V8InspectorString.h"
 #include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/V8BindingMacros.h"
+#include "platform/bindings/V8PerIsolateData.h"
 #include "platform/instrumentation/tracing/TracedValue.h"
 #include "platform/wtf/PtrUtil.h"
 
@@ -95,10 +95,8 @@ std::unique_ptr<SourceLocation> SourceLocation::FromMessage(
 
   int line_number = 0;
   int column_number = 0;
-  if (V8Call(message->GetLineNumber(isolate->GetCurrentContext()),
-             line_number) &&
-      V8Call(message->GetStartColumn(isolate->GetCurrentContext()),
-             column_number))
+  if (message->GetLineNumber(isolate->GetCurrentContext()).To(&line_number) &&
+      message->GetStartColumn(isolate->GetCurrentContext()).To(&column_number))
     ++column_number;
 
   if ((!script_id || !line_number) && stack_trace && !stack_trace->isEmpty())

@@ -32,8 +32,8 @@
 #include "core/timing/PerformanceMeasure.h"
 #include "platform/Histogram.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/wtf/text/StringHash.h"
 #include "public/platform/Platform.h"
-#include "wtf/text/StringHash.h"
 
 namespace blink {
 
@@ -83,7 +83,7 @@ UserTiming::UserTiming(PerformanceBase& performance)
 
 static void InsertPerformanceEntry(PerformanceEntryMap& performance_entry_map,
                                    PerformanceEntry& entry) {
-  PerformanceEntryMap::iterator it = performance_entry_map.Find(entry.name());
+  PerformanceEntryMap::iterator it = performance_entry_map.find(entry.name());
   if (it != performance_entry_map.end()) {
     it->value.push_back(&entry);
   } else {
@@ -96,7 +96,7 @@ static void InsertPerformanceEntry(PerformanceEntryMap& performance_entry_map,
 static void ClearPeformanceEntries(PerformanceEntryMap& performance_entry_map,
                                    const String& name) {
   if (name.IsNull()) {
-    performance_entry_map.Clear();
+    performance_entry_map.clear();
     return;
   }
 
@@ -114,7 +114,7 @@ PerformanceEntry* UserTiming::Mark(const String& mark_name,
     return nullptr;
   }
 
-  TRACE_EVENT_COPY_MARK("blink.user_timing", mark_name.Utf8().Data());
+  TRACE_EVENT_COPY_MARK("blink.user_timing", mark_name.Utf8().data());
   double start_time = performance_->now();
   PerformanceEntry* entry = PerformanceMark::Create(mark_name, start_time);
   InsertPerformanceEntry(marks_map_, *entry);
@@ -184,11 +184,11 @@ PerformanceEntry* UserTiming::Measure(const String& measure_name,
   double end_time_monotonic = performance_->TimeOrigin() + end_time / 1000.0;
 
   TRACE_EVENT_COPY_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
-      "blink.user_timing", measure_name.Utf8().Data(),
+      "blink.user_timing", measure_name.Utf8().data(),
       WTF::StringHash::GetHash(measure_name),
       TraceEvent::ToTraceTimestamp(start_time_monotonic));
   TRACE_EVENT_COPY_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
-      "blink.user_timing", measure_name.Utf8().Data(),
+      "blink.user_timing", measure_name.Utf8().data(),
       WTF::StringHash::GetHash(measure_name),
       TraceEvent::ToTraceTimestamp(end_time_monotonic));
 
@@ -224,7 +224,7 @@ static PerformanceEntryVector GetEntrySequenceByName(
     const String& name) {
   PerformanceEntryVector entries;
 
-  PerformanceEntryMap::const_iterator it = performance_entry_map.Find(name);
+  PerformanceEntryMap::const_iterator it = performance_entry_map.find(name);
   if (it != performance_entry_map.end())
     entries.AppendVector(it->value);
 

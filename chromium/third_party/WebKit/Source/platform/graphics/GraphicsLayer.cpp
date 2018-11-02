@@ -125,7 +125,7 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
 GraphicsLayer::~GraphicsLayer() {
   for (size_t i = 0; i < link_highlights_.size(); ++i)
     link_highlights_[i]->ClearCurrentGraphicsLayer();
-  link_highlights_.Clear();
+  link_highlights_.clear();
 
 #if DCHECK_IS_ON()
   if (client_)
@@ -286,7 +286,7 @@ void GraphicsLayer::Paint(const IntRect* interest_rect,
           GetRasterInvalidationTrackingMap().Add(this);
       tracking.last_painted_record = std::move(record);
       tracking.last_interest_rect = previous_interest_rect_;
-      tracking.raster_invalidation_region_since_last_paint = Region();
+      tracking.invalidation_region_since_last_paint = Region();
     }
   }
 }
@@ -482,14 +482,14 @@ void GraphicsLayer::ResetTrackedRasterInvalidations() {
     return;
 
   if (RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled())
-    tracking->tracked_raster_invalidations.Clear();
+    tracking->invalidations.clear();
   else
     GetRasterInvalidationTrackingMap().Remove(this);
 }
 
 bool GraphicsLayer::HasTrackedRasterInvalidations() const {
   if (auto* tracking = GetRasterInvalidationTracking())
-    return !tracking->tracked_raster_invalidations.IsEmpty();
+    return !tracking->invalidations.IsEmpty();
   return false;
 }
 
@@ -513,7 +513,7 @@ void GraphicsLayer::TrackRasterInvalidation(const DisplayItemClient& client,
     info.client_debug_name = client.DebugName();
     info.rect = rect;
     info.reason = reason;
-    tracking.tracked_raster_invalidations.push_back(info);
+    tracking.invalidations.push_back(info);
   }
 
   if (RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled()) {
@@ -521,7 +521,7 @@ void GraphicsLayer::TrackRasterInvalidation(const DisplayItemClient& client,
     // invalidation rect.
     IntRect r = rect;
     r.Inflate(1);
-    tracking.raster_invalidation_region_since_last_paint.Unite(r);
+    tracking.invalidation_region_since_last_paint.Unite(r);
   }
 }
 
@@ -648,7 +648,7 @@ std::unique_ptr<JSONObject> GraphicsLayer::LayerAsJSONInternal(
 
   if (rendering_context3d_) {
     RenderingContextMap::const_iterator it =
-        rendering_context_map.Find(rendering_context3d_);
+        rendering_context_map.find(rendering_context3d_);
     int context_id = rendering_context_map.size() + 1;
     if (it == rendering_context_map.end())
       rendering_context_map.Set(rendering_context3d_, context_id);
@@ -1004,7 +1004,8 @@ void GraphicsLayer::SetIsRootForIsolatedGroup(bool isolated) {
 void GraphicsLayer::SetContentsNeedsDisplay() {
   if (WebLayer* contents_layer = ContentsLayerIfRegistered()) {
     contents_layer->Invalidate();
-    TrackRasterInvalidation(*this, contents_rect_, kPaintInvalidationFull);
+    TrackRasterInvalidation(*this, contents_rect_,
+                            PaintInvalidationReason::kFull);
   }
 }
 
@@ -1020,7 +1021,7 @@ void GraphicsLayer::SetNeedsDisplay() {
   GetPaintController().InvalidateAll();
 
   TrackRasterInvalidation(*this, IntRect(IntPoint(), ExpandedIntSize(size_)),
-                          kPaintInvalidationFull);
+                          PaintInvalidationReason::kFull);
 }
 
 DISABLE_CFI_PERF
@@ -1051,31 +1052,30 @@ void GraphicsLayer::SetContentsRect(const IntRect& rect) {
 void GraphicsLayer::SetContentsToImage(
     Image* image,
     RespectImageOrientationEnum respect_image_orientation) {
-  sk_sp<SkImage> sk_image = image ? image->ImageForCurrentFrame() : nullptr;
+  PaintImage paint_image;
+  if (image)
+    paint_image = image->PaintImageForCurrentFrame();
 
-  if (image && sk_image && image->IsBitmapImage()) {
-    if (respect_image_orientation == kRespectImageOrientation) {
-      ImageOrientation image_orientation =
-          ToBitmapImage(image)->CurrentFrameOrientation();
-      sk_image = DragImage::ResizeAndOrientImage(std::move(sk_image),
-                                                 image_orientation);
-    }
+  if (paint_image && image->IsBitmapImage() &&
+      respect_image_orientation == kRespectImageOrientation) {
+    ImageOrientation image_orientation =
+        ToBitmapImage(image)->CurrentFrameOrientation();
+    paint_image =
+        DragImage::ResizeAndOrientImage(paint_image, image_orientation);
   }
 
-  if (image && sk_image) {
+  if (paint_image) {
     if (!image_layer_) {
       image_layer_ =
           Platform::Current()->CompositorSupport()->CreateImageLayer();
       RegisterContentsLayer(image_layer_->Layer());
     }
-    image_layer_->SetImage(sk_image.get());
+    image_layer_->SetImage(std::move(paint_image));
     image_layer_->Layer()->SetOpaque(image->CurrentFrameKnownToBeOpaque());
     UpdateContentsRect();
-  } else {
-    if (image_layer_) {
-      UnregisterContentsLayer(image_layer_->Layer());
-      image_layer_.reset();
-    }
+  } else if (image_layer_) {
+    UnregisterContentsLayer(image_layer_->Layer());
+    image_layer_.reset();
   }
 
   SetContentsTo(image_layer_ ? image_layer_->Layer() : 0);
@@ -1207,6 +1207,11 @@ static bool PixelsDiffer(SkColor p1, SkColor p2) {
          PixelComponentsDiffer(SkColorGetB(p1), SkColorGetB(p2));
 }
 
+// This method is used to graphically verify any under invalidation when
+// RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled is being
+// used. It compares the last recording made by GraphicsLayer::Paint against
+// |new_record|, by rastering both into bitmaps. Any differences are colored
+// as dark red.
 void GraphicsLayer::CheckPaintUnderInvalidations(
     sk_sp<PaintRecord> new_record) {
   if (!DrawsContent())
@@ -1244,8 +1249,6 @@ void GraphicsLayer::CheckPaintUnderInvalidations(
     canvas.drawPicture(std::move(new_record));
   }
 
-  old_bitmap.lockPixels();
-  new_bitmap.lockPixels();
   int mismatching_pixels = 0;
   static const int kMaxMismatchesToReport = 50;
   for (int bitmap_y = 0; bitmap_y < rect.Height(); ++bitmap_y) {
@@ -1255,13 +1258,12 @@ void GraphicsLayer::CheckPaintUnderInvalidations(
       SkColor old_pixel = old_bitmap.getColor(bitmap_x, bitmap_y);
       SkColor new_pixel = new_bitmap.getColor(bitmap_x, bitmap_y);
       if (PixelsDiffer(old_pixel, new_pixel) &&
-          !tracking->raster_invalidation_region_since_last_paint.Contains(
+          !tracking->invalidation_region_since_last_paint.Contains(
               IntPoint(layer_x, layer_y))) {
         if (mismatching_pixels < kMaxMismatchesToReport) {
-          UnderPaintInvalidation under_paint_invalidation = {
-              layer_x, layer_y, old_pixel, new_pixel};
-          tracking->under_paint_invalidations.push_back(
-              under_paint_invalidation);
+          UnderRasterInvalidation under_invalidation = {layer_x, layer_y,
+                                                        old_pixel, new_pixel};
+          tracking->under_invalidations.push_back(under_invalidation);
           LOG(ERROR) << DebugName()
                      << " Uninvalidated old/new pixels mismatch at " << layer_x
                      << "," << layer_y << " old:" << std::hex << old_pixel
@@ -1277,8 +1279,6 @@ void GraphicsLayer::CheckPaintUnderInvalidations(
       }
     }
   }
-  old_bitmap.unlockPixels();
-  new_bitmap.unlockPixels();
 
   // Visualize under-invalidations by overlaying the new bitmap (containing red
   // pixels indicating under-invalidations, and transparent pixels otherwise)
@@ -1288,7 +1288,7 @@ void GraphicsLayer::CheckPaintUnderInvalidations(
   recorder.getRecordingCanvas()->drawBitmap(new_bitmap, rect.X(), rect.Y());
   sk_sp<PaintRecord> record = recorder.finishRecordingAsPicture();
   GetPaintController().AppendDebugDrawingAfterCommit(
-      *this, record, OffsetFromLayoutObjectWithSubpixelAccumulation());
+      *this, record, rect, OffsetFromLayoutObjectWithSubpixelAccumulation());
 }
 
 }  // namespace blink
@@ -1301,6 +1301,6 @@ void showGraphicsLayerTree(const blink::GraphicsLayer* layer) {
   }
 
   String output = layer->LayerTreeAsText(blink::kLayerTreeIncludesDebugInfo);
-  LOG(INFO) << output.Utf8().Data();
+  LOG(INFO) << output.Utf8().data();
 }
 #endif

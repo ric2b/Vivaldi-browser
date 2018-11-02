@@ -58,6 +58,7 @@ class ArcAppIcon {
   // when g_one_utility_thread_lock from in_process_utility_thread.cc gets
   // released in an acquired state which is crash condition in debug builds.
   static void DisableSafeDecodingForTesting();
+  static bool IsSafeDecodingDisabledForTesting();
 
  private:
   friend class ArcAppIconLoader;
@@ -90,13 +91,16 @@ class ArcAppIcon {
       const base::FilePath& path,
       const base::FilePath& default_app_path);
   void OnIconRead(std::unique_ptr<ArcAppIcon::ReadResult> read_result);
-  void Update(const gfx::ImageSkia* image);
+  void Update(ui::ScaleFactor scale_factor, const SkBitmap& bitmap);
   void DiscardDecodeRequest(DecodeRequest* request);
 
-  content::BrowserContext* context_;
-  std::string app_id_;
+  content::BrowserContext* const context_;
+  const std::string app_id_;
+  // Contains app id that is actually used to read an icon resource to support
+  // shelf group mapping to shortcut.
+  const std::string mapped_app_id_;
   const int resource_size_in_dip_;
-  Observer* observer_;
+  Observer* const observer_;
 
   Source* source_ = nullptr;  // Owned by ImageSkia storage.
   gfx::ImageSkia image_skia_;

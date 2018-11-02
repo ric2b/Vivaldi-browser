@@ -73,12 +73,12 @@ void InfoMap::AddExtension(const Extension* extension,
 }
 
 void InfoMap::RemoveExtension(const std::string& extension_id,
-                              const UnloadedExtensionInfo::Reason reason) {
+                              const UnloadedExtensionReason reason) {
   CheckOnValidThread();
   const Extension* extension = extensions_.GetByID(extension_id);
   extra_data_.erase(extension_id);  // we don't care about disabled extra data
-  bool was_uninstalled = (reason != UnloadedExtensionInfo::REASON_DISABLE &&
-                          reason != UnloadedExtensionInfo::REASON_TERMINATE);
+  bool was_uninstalled = (reason != UnloadedExtensionReason::DISABLE &&
+                          reason != UnloadedExtensionReason::TERMINATE);
   if (extension) {
     if (!was_uninstalled)
       disabled_extensions_.Insert(extension);
@@ -137,28 +137,6 @@ void InfoMap::UnregisterExtensionProcess(const std::string& extension_id,
 
 void InfoMap::UnregisterAllExtensionsInProcess(int process_id) {
   process_map_.RemoveAllFromProcess(process_id);
-}
-
-bool InfoMap::SecurityOriginHasAPIPermission(
-    const GURL& origin,
-    int process_id,
-    APIPermission::ID permission) const {
-  CheckOnValidThread();
-  if (origin.SchemeIs(kExtensionScheme)) {
-    const std::string& id = origin.host();
-    const Extension* extension = extensions_.GetByID(id);
-    return extension &&
-           extension->permissions_data()->HasAPIPermission(permission) &&
-           process_map_.Contains(id, process_id);
-  }
-  for (const auto& extension : extensions_) {
-    if (extension->web_extent().MatchesSecurityOrigin(origin) &&
-        extension->permissions_data()->HasAPIPermission(permission) &&
-        process_map_.Contains(extension->id(), process_id)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 // This function is security sensitive. Bugs could cause problems that break

@@ -5,12 +5,12 @@
 #ifndef BroadcastChannel_h
 #define BroadcastChannel_h
 
-#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventTarget.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "third_party/WebKit/public/platform/modules/broadcastchannel/broadcast_channel.mojom-blink.h"
+#include "public/platform/modules/broadcastchannel/broadcast_channel.mojom-blink.h"
 
 namespace blink {
 
@@ -37,6 +37,7 @@ class BroadcastChannel final : public EventTargetWithInlineData,
   void postMessage(const ScriptValue&, ExceptionState&);
   void close();
   DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(messageerror);
 
   // EventTarget:
   const AtomicString& InterfaceName() const override;

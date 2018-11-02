@@ -41,10 +41,10 @@
 #include "core/timing/PerformancePaintTiming.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
-#include "wtf/HashSet.h"
-#include "wtf/ListHashSet.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/Forward.h"
+#include "platform/wtf/HashSet.h"
+#include "platform/wtf/ListHashSet.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -76,7 +76,8 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
 
   static DOMHighResTimeStamp MonotonicTimeToDOMHighResTimeStamp(
       double time_origin,
-      double monotonic_time);
+      double monotonic_time,
+      bool allow_negative_value);
 
   // Translate given platform monotonic time in seconds into a high resolution
   // DOMHighResTimeStamp in milliseconds. The result timestamp is relative to
@@ -110,6 +111,12 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
                          const String& culprit_frame_name);
 
   void AddResourceTiming(const ResourceTimingInfo&);
+
+  enum class ShouldAddToBuffer {
+    Always,
+    Never,
+  };
+  void AddServerTiming(const ResourceResponse&, ShouldAddToBuffer);
 
   void NotifyNavigationTimingToObservers();
 
@@ -163,6 +170,7 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   void AddFrameTimingBuffer(PerformanceEntry&);
 
   void NotifyObserversOfEntry(PerformanceEntry&);
+  void NotifyObserversOfEntries(PerformanceEntryVector&);
   bool HasObserverFor(PerformanceEntry::EntryType) const;
 
   void DeliverObservationsTimerFired(TimerBase*);
@@ -171,8 +179,11 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   unsigned frame_timing_buffer_size_;
   PerformanceEntryVector resource_timing_buffer_;
   unsigned resource_timing_buffer_size_;
+  PerformanceEntryVector server_timing_buffer_;
   Member<PerformanceEntry> navigation_timing_;
   Member<UserTiming> user_timing_;
+  Member<PerformanceEntry> first_paint_timing_;
+  Member<PerformanceEntry> first_contentful_paint_timing_;
 
   double time_origin_;
 

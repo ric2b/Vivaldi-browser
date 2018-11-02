@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/gfx/animation/slide_animation.h"
@@ -153,7 +154,7 @@ void MessageListView::UpdateNotification(MessageView* view,
   DoUpdateIfPossible();
 }
 
-gfx::Size MessageListView::GetPreferredSize() const {
+gfx::Size MessageListView::CalculatePreferredSize() const {
   // Just returns the current size. All size change must be done in
   // |DoUpdateIfPossible()| with animation , because we don't want to change
   // the size in unexpected timing.
@@ -261,7 +262,7 @@ void MessageListView::ClearAllClosableNotifications(
       continue;
     if (gfx::IntersectRects(child->bounds(), visible_scroll_rect).IsEmpty())
       continue;
-    if (child->IsPinned())
+    if (child->pinned())
       continue;
     if (deleting_views_.find(child) != deleting_views_.end() ||
         deleted_when_done_.find(child) != deleted_when_done_.end()) {
@@ -364,14 +365,16 @@ void MessageListView::DoUpdateIfPossible() {
     return;
   }
 
-  int new_height = GetHeightForWidth(child_area.width() + GetInsets().width());
-  SetSize(gfx::Size(child_area.width() + GetInsets().width(), new_height));
-
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableMessageCenterAlwaysScrollUpUponNotificationRemoval))
     AnimateNotificationsBelowTarget();
   else
     AnimateNotifications();
+
+  // Should calculate and set new size after calling AnimateNotifications()
+  // because fixed_height_ may be updated in it.
+  int new_height = GetHeightForWidth(child_area.width() + GetInsets().width());
+  SetSize(gfx::Size(child_area.width() + GetInsets().width(), new_height));
 
   adding_views_.clear();
   deleting_views_.clear();
@@ -572,6 +575,9 @@ void MessageListView::AnimateClearingOneNotification() {
   gfx::Rect new_bounds = child->bounds();
   new_bounds.set_x(new_bounds.right() + kMarginBetweenItems);
   animator_.AnimateViewTo(child, new_bounds);
+
+  // Deleting the child after animation.
+  deleted_when_done_.insert(child);
 
   // Schedule to start sliding out next notification after a short delay.
   if (!clearing_all_views_.empty()) {

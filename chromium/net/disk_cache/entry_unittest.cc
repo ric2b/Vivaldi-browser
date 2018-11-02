@@ -12,6 +12,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/test/histogram_tester.h"
 #include "base/threading/platform_thread.h"
 #include "net/base/completion_callback.h"
 #include "net/base/io_buffer.h"
@@ -19,6 +20,7 @@
 #include "net/base/test_completion_callback.h"
 #include "net/disk_cache/blockfile/backend_impl.h"
 #include "net/disk_cache/blockfile/entry_impl.h"
+#include "net/disk_cache/cache_util.h"
 #include "net/disk_cache/disk_cache_test_base.h"
 #include "net/disk_cache/disk_cache_test_util.h"
 #include "net/disk_cache/memory/mem_entry_impl.h"
@@ -2663,6 +2665,7 @@ bool DiskCacheEntryTest::SimpleCacheMakeBadChecksumEntry(const std::string& key,
 
 // Tests that the simple cache can detect entries that have bad data.
 TEST_F(DiskCacheEntryTest, SimpleCacheBadChecksum) {
+  base::HistogramTester histogram_tester;
   SetSimpleCacheMode();
   InitCache();
 
@@ -2681,10 +2684,14 @@ TEST_F(DiskCacheEntryTest, SimpleCacheBadChecksum) {
   scoped_refptr<net::IOBuffer> read_buffer(new net::IOBuffer(kReadBufferSize));
   EXPECT_EQ(net::ERR_CACHE_CHECKSUM_MISMATCH,
             ReadData(entry, 1, 0, read_buffer.get(), kReadBufferSize));
+  histogram_tester.ExpectUniqueSample(
+      "SimpleCache.Http.ReadResult",
+      disk_cache::READ_RESULT_SYNC_CHECKSUM_FAILURE, 1);
 }
 
 // Tests that an entry that has had an IO error occur can still be Doomed().
 TEST_F(DiskCacheEntryTest, SimpleCacheErrorThenDoom) {
+  base::HistogramTester histogram_tester;
   SetSimpleCacheMode();
   InitCache();
 
@@ -2703,7 +2710,9 @@ TEST_F(DiskCacheEntryTest, SimpleCacheErrorThenDoom) {
   scoped_refptr<net::IOBuffer> read_buffer(new net::IOBuffer(kReadBufferSize));
   EXPECT_EQ(net::ERR_CACHE_CHECKSUM_MISMATCH,
             ReadData(entry, 1, 0, read_buffer.get(), kReadBufferSize));
-
+  histogram_tester.ExpectUniqueSample(
+      "SimpleCache.Http.ReadResult",
+      disk_cache::READ_RESULT_SYNC_CHECKSUM_FAILURE, 1);
   entry->Doom();  // Should not crash.
 }
 
@@ -4291,4 +4300,25 @@ TEST_F(DiskCacheEntryTest, SimpleCacheReadCorruptLength) {
   EXPECT_TRUE(
       disk_cache::simple_util::CorruptStream0LengthFromEntry(key, cache_path_));
   EXPECT_NE(net::OK, OpenEntry(key, &entry));
+}
+
+TEST_F(DiskCacheEntryTest, SimpleCacheCreateRecoverFromRmdir) {
+  // This test runs as APP_CACHE to make operations more synchronous.
+  // (in particular we want to see if create succeeded or not, so we don't
+  //  want an optimistic one).
+  SetCacheType(net::APP_CACHE);
+  SetSimpleCacheMode();
+  InitCache();
+
+  // Pretend someone deleted the cache dir. This shouldn't be too scary in
+  // the test since cache_path_ is set as:
+  //   CHECK(temp_dir_.CreateUniqueTempDir());
+  //   cache_path_ = temp_dir_.GetPath();
+  disk_cache::DeleteCache(cache_path_,
+                          true /* delete the dir, what we really want*/);
+
+  disk_cache::Entry* entry;
+  std::string key("a key");
+  ASSERT_THAT(CreateEntry(key, &entry), IsOk());
+  entry->Close();
 }

@@ -30,7 +30,7 @@ HTMLImportTreeRoot::~HTMLImportTreeRoot() {}
 void HTMLImportTreeRoot::Dispose() {
   for (const auto& import_child : imports_)
     import_child->Dispose();
-  imports_.Clear();
+  imports_.clear();
   document_ = nullptr;
   recalc_timer_.Stop();
 }
@@ -51,10 +51,8 @@ void HTMLImportTreeRoot::StateWillChange() {
 void HTMLImportTreeRoot::StateDidChange() {
   HTMLImport::StateDidChange();
 
-  if (!GetState().IsReady())
-    return;
-  if (LocalFrame* frame = document_->GetFrame())
-    frame->Loader().CheckCompleted();
+  if (GetState().IsReady())
+    document_->CheckCompleted();
 }
 
 void HTMLImportTreeRoot::ScheduleRecalcState() {

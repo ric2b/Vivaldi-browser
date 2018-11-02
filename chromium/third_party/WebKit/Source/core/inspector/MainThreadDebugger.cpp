@@ -33,10 +33,9 @@
 #include <memory>
 
 #include "bindings/core/v8/BindingSecurity.h"
-#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/SourceLocation.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8ErrorHandler.h"
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/V8Window.h"
@@ -65,17 +64,17 @@
 #include "core/xml/XPathEvaluator.h"
 #include "core/xml/XPathResult.h"
 #include "platform/UserGestureIndicator.h"
-#include "wtf/PtrUtil.h"
-#include "wtf/ThreadingPrimitives.h"
-#include "wtf/text/StringBuilder.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/ThreadingPrimitives.h"
+#include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 
 namespace {
 
-int FrameId(LocalFrame* frame) {
-  ASSERT(frame);
-  return WeakIdentifierMap<LocalFrame>::Identifier(frame);
+int FrameId(LocalFrame& frame) {
+  return WeakIdentifierMap<LocalFrame>::Identifier(&frame);
 }
 
 Mutex& CreationMutex() {
@@ -101,13 +100,13 @@ MainThreadDebugger::MainThreadDebugger(v8::Isolate* isolate)
       task_runner_(WTF::MakeUnique<InspectorTaskRunner>()),
       paused_(false) {
   MutexLocker locker(CreationMutex());
-  ASSERT(!instance_);
+  DCHECK(!instance_);
   instance_ = this;
 }
 
 MainThreadDebugger::~MainThreadDebugger() {
   MutexLocker locker(CreationMutex());
-  ASSERT(instance_ == this);
+  DCHECK_EQ(instance_, this);
   instance_ = nullptr;
 }
 
@@ -127,8 +126,8 @@ int MainThreadDebugger::ContextGroupId(ExecutionContext* context) {
 
 void MainThreadDebugger::SetClientMessageLoop(
     std::unique_ptr<ClientMessageLoop> client_message_loop) {
-  ASSERT(!client_message_loop_);
-  ASSERT(client_message_loop);
+  DCHECK(!client_message_loop_);
+  DCHECK(client_message_loop);
   client_message_loop_ = std::move(client_message_loop);
 }
 
@@ -141,7 +140,7 @@ void MainThreadDebugger::DidClearContextsForFrame(LocalFrame* frame) {
 void MainThreadDebugger::ContextCreated(ScriptState* script_state,
                                         LocalFrame* frame,
                                         SecurityOrigin* origin) {
-  ASSERT(IsMainThread());
+  DCHECK(IsMainThread());
   v8::HandleScope handles(script_state->GetIsolate());
   DOMWrapperWorld& world = script_state->World();
   StringBuilder aux_data_builder;
@@ -215,7 +214,7 @@ void MainThreadDebugger::ExceptionThrown(ExecutionContext* context,
 }
 
 int MainThreadDebugger::ContextGroupId(LocalFrame* frame) {
-  LocalFrame* local_frame_root = frame->LocalFrameRoot();
+  LocalFrame& local_frame_root = frame->LocalFrameRoot();
   return FrameId(local_frame_root);
 }
 
@@ -243,7 +242,7 @@ void MainThreadDebugger::runMessageLoopOnPause(int context_group_id) {
   // Do not pause in Context of detached frame.
   if (!paused_frame)
     return;
-  ASSERT(paused_frame == paused_frame->LocalFrameRoot());
+  DCHECK(paused_frame == paused_frame->LocalFrameRoot());
   paused_ = true;
 
   if (UserGestureToken* token = UserGestureIndicator::CurrentToken())
@@ -338,7 +337,7 @@ v8::MaybeLocal<v8::Value> MainThreadDebugger::memoryInfo(
     v8::Local<v8::Context> context) {
   ExecutionContext* execution_context = ToExecutionContext(context);
   DCHECK(execution_context);
-  ASSERT(execution_context->IsDocument());
+  DCHECK(execution_context->IsDocument());
   return ToV8(MemoryInfo::Create(), context->Global(), isolate);
 }
 

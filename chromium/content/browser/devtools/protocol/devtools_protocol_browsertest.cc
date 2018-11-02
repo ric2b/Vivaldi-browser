@@ -13,6 +13,7 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -146,6 +147,7 @@ class DevToolsProtocolTest : public ContentBrowserTest,
         net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
     expired_cert_ = net::ImportCertFromFile(net::GetTestCertsDirectory(),
                                             "expired_cert.pem");
+    host_resolver()->AddRule("*", "127.0.0.1");
   }
 
  protected:
@@ -579,9 +581,6 @@ bool MatchesBitmap(const SkBitmap& expected_bmp,
     return false;
   }
 
-  SkAutoLockPixels lock_actual_bmp(actual_bmp);
-  SkAutoLockPixels lock_expected_bmp(expected_bmp);
-
   DCHECK(gfx::SkIRectToRect(actual_bmp.bounds()).Contains(matching_mask));
 
   for (int x = matching_mask.x(); x < matching_mask.right(); ++x) {
@@ -946,7 +945,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, NavigationPreservesMessages) {
 }
 
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CrossSiteNoDetach) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   content::SetupCrossSiteRedirector(embedded_test_server());
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -960,6 +958,24 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CrossSiteNoDetach) {
   NavigateToURLBlockUntilNavigationsComplete(shell(), test_url2, 1);
 
   EXPECT_EQ(0u, notifications_.size());
+}
+
+IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CrossSiteCrash) {
+  set_agent_host_can_close();
+  content::SetupCrossSiteRedirector(embedded_test_server());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL test_url1 =
+      embedded_test_server()->GetURL("A.com", "/devtools/navigation.html");
+  NavigateToURLBlockUntilNavigationsComplete(shell(), test_url1, 1);
+  Attach();
+  CrashTab(shell()->web_contents());
+
+  GURL test_url2 =
+      embedded_test_server()->GetURL("B.com", "/devtools/navigation.html");
+  NavigateToURLBlockUntilNavigationsComplete(shell(), test_url2, 1);
+
+  // Should not crash at this point.
 }
 
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, ReconnectPreservesState) {
@@ -979,7 +995,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, ReconnectPreservesState) {
 }
 
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CrossSitePauseInBeforeUnload) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   content::SetupCrossSiteRedirector(embedded_test_server());
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -1001,7 +1016,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CrossSitePauseInBeforeUnload) {
 }
 
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, InspectDuringFrameSwap) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   content::SetupCrossSiteRedirector(embedded_test_server());
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -1190,6 +1204,30 @@ class NavigationFinishedObserver : public content::WebContentsObserver {
   int num_finished_;
   int num_to_wait_for_;
 };
+
+class LoadFinishedObserver : public content::WebContentsObserver {
+ public:
+  explicit LoadFinishedObserver(WebContents* web_contents)
+      : WebContentsObserver(web_contents), num_finished_(0) {}
+
+  ~LoadFinishedObserver() override {}
+
+  void DidStopLoading() override {
+    num_finished_++;
+    if (run_loop_.running())
+      run_loop_.Quit();
+  }
+
+  void WaitForLoadToFinish() {
+    if (num_finished_ == 0)
+      run_loop_.Run();
+  }
+
+ private:
+  int num_finished_;
+  base::RunLoop run_loop_;
+};
+
 }  // namespace
 
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, PageStopLoading) {
@@ -1205,8 +1243,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, PageStopLoading) {
   params->SetBoolean("enabled", true);
   SendCommand("Page.setControlNavigations", std::move(params), true);
 
-  NavigationFinishedObserver navigation_finished_observer(
-      shell()->web_contents());
+  LoadFinishedObserver load_finished_observer(shell()->web_contents());
 
   // The page will try to navigate twice, however since
   // Page.setControlNavigations is true, it'll wait for confirmation before
@@ -1219,7 +1256,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, PageStopLoading) {
   SendCommand("Page.stopLoading", nullptr);
 
   // Wait for the initial navigation to finish.
-  navigation_finished_observer.WaitForNavigationsToFinish(1);
+  load_finished_observer.WaitForLoadToFinish();
 }
 
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, ControlNavigationsMainFrame) {
@@ -1274,7 +1311,6 @@ class IsolatedDevToolsProtocolTest : public DevToolsProtocolTest {
 
 IN_PROC_BROWSER_TEST_F(IsolatedDevToolsProtocolTest,
                        ControlNavigationsChildFrames) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   content::SetupCrossSiteRedirector(embedded_test_server());
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -1367,18 +1403,17 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, VirtualTimeTest) {
   params->SetString("policy", "pause");
   SendCommand("Emulation.setVirtualTimePolicy", std::move(params), true);
 
-  // TODO(scheduler-dev): Revisit timing when we have strict ordering
-  // guarantees.
   params.reset(new base::DictionaryValue());
   params->SetString("expression",
-                    "setTimeout(function(){console.log('before')}, 1000);"
-                    "setTimeout(function(){console.log('after')}, 1002);");
+                    "setTimeout(function(){console.log('before')}, 999);"
+                    "setTimeout(function(){console.log('at')}, 1000);"
+                    "setTimeout(function(){console.log('after')}, 1001);");
   SendCommand("Runtime.evaluate", std::move(params), true);
 
   // Let virtual time advance for one second.
   params.reset(new base::DictionaryValue());
   params->SetString("policy", "advance");
-  params->SetInteger("budget", 1001);
+  params->SetInteger("budget", 1000);
   SendCommand("Emulation.setVirtualTimePolicy", std::move(params), true);
 
   WaitForNotification("Emulation.virtualTimeBudgetExpired");
@@ -1399,7 +1434,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, VirtualTimeTest) {
 
   WaitForNotification("Emulation.virtualTimeBudgetExpired");
 
-  EXPECT_THAT(console_messages_, ElementsAre("before", "done", "after"));
+  EXPECT_THAT(console_messages_, ElementsAre("before", "done", "at", "after"));
 }
 
 // Tests that the Security.showCertificateViewer command shows the
@@ -1678,7 +1713,6 @@ class SitePerProcessDevToolsProtocolTest : public DevToolsProtocolTest {
 
   void SetUpOnMainThread() override {
     DevToolsProtocolTest::SetUpOnMainThread();
-    host_resolver()->AddRule("*", "127.0.0.1");
     content::SetupCrossSiteRedirector(embedded_test_server());
     ASSERT_TRUE(embedded_test_server()->Start());
   }

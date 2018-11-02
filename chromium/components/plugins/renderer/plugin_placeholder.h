@@ -20,19 +20,16 @@ namespace plugins {
 class PluginPlaceholderBase : public content::RenderFrameObserver,
                               public WebViewPlugin::Delegate {
  public:
-  // |render_frame| and |frame| are weak pointers. If either one is going away,
-  // our |plugin_| will be destroyed as well and will notify us.
+  // |render_frame| is a weak pointer. If it is going away, our |plugin_| will
+  // be destroyed as well and will notify us.
   PluginPlaceholderBase(content::RenderFrame* render_frame,
-                        blink::WebLocalFrame* frame,
                         const blink::WebPluginParams& params,
                         const std::string& html_data);
-
   ~PluginPlaceholderBase() override;
 
   WebViewPlugin* plugin() { return plugin_; }
 
  protected:
-  blink::WebLocalFrame* GetFrame();
   const blink::WebPluginParams& GetPluginParams() const;
 
   // WebViewPlugin::Delegate methods:
@@ -40,11 +37,12 @@ class PluginPlaceholderBase : public content::RenderFrameObserver,
   void PluginDestroyed() override;
   v8::Local<v8::Object> GetV8ScriptableObject(
       v8::Isolate* isolate) const override;
+  bool IsErrorPlaceholder() override;
 
  protected:
   // Hide this placeholder.
   void HidePlugin();
-  bool hidden() { return hidden_; }
+  bool hidden() const { return hidden_; }
 
   // JavaScript callbacks:
   void HideCallback();
@@ -53,7 +51,6 @@ class PluginPlaceholderBase : public content::RenderFrameObserver,
   // RenderFrameObserver methods:
   void OnDestruct() override;
 
-  blink::WebLocalFrame* frame_;
   blink::WebPluginParams plugin_params_;
   WebViewPlugin* plugin_;
 
@@ -69,7 +66,6 @@ class PluginPlaceholder final : public PluginPlaceholderBase,
   static gin::WrapperInfo kWrapperInfo;
 
   PluginPlaceholder(content::RenderFrame* render_frame,
-                    blink::WebLocalFrame* frame,
                     const blink::WebPluginParams& params,
                     const std::string& html_data);
   ~PluginPlaceholder() override;

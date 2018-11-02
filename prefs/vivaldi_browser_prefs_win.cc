@@ -19,7 +19,8 @@ void RegisterPlatformPrefs(user_prefs::PrefRegistrySyncable* registry) {
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
   base::win::ScopedComPtr<IDesktopWallpaper> desktop_w;
-  HRESULT hr = desktop_w.CreateInstance(__uuidof(DesktopWallpaper));
+  HRESULT hr = CoCreateInstance(__uuidof(DesktopWallpaper), nullptr,
+                                  CLSCTX_ALL, IID_PPV_ARGS(&desktop_w));
 
   // If the interface can be instanciated we support desktop wallpapers.
   registry->RegisterBooleanPref(

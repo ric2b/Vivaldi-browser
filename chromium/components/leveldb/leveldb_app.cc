@@ -10,24 +10,23 @@
 namespace leveldb {
 
 LevelDBApp::LevelDBApp() : file_thread_("LevelDBFile") {
-  registry_.AddInterface<mojom::LevelDBService>(this);
+  registry_.AddInterface<mojom::LevelDBService>(
+      base::Bind(&LevelDBApp::Create, base::Unretained(this)));
 }
 
 LevelDBApp::~LevelDBApp() {}
 
-void LevelDBApp::OnStart() {
-  tracing_.Initialize(context()->connector(), context()->identity().name());
-}
+void LevelDBApp::OnStart() {}
 
 void LevelDBApp::OnBindInterface(
-    const service_manager::ServiceInfo& source_info,
+    const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(source_info.identity, interface_name,
+  registry_.BindInterface(source_info, interface_name,
                           std::move(interface_pipe));
 }
 
-void LevelDBApp::Create(const service_manager::Identity& remote_identity,
+void LevelDBApp::Create(const service_manager::BindSourceInfo& source_info,
                         leveldb::mojom::LevelDBServiceRequest request) {
   if (!service_) {
     if (!file_thread_.IsRunning())

@@ -12,6 +12,7 @@ import android.content.Intent;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -26,7 +27,7 @@ import org.chromium.chrome.browser.preferences.password.SavePasswordsPreferences
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.signin.AccountManagerHelper;
 import org.chromium.components.signin.test.util.AccountHolder;
-import org.chromium.components.signin.test.util.MockAccountManager;
+import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
 import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.components.sync.test.util.MockSyncContentResolverDelegate;
 import org.chromium.content.browser.test.NativeLibraryTestRule;
@@ -49,7 +50,7 @@ public class PasswordViewingTypeTest {
     private MockSyncContentResolverDelegate mSyncContentResolverDelegate;
     private String mAuthority;
     private Account mAccount;
-    private MockAccountManager mAccountManager;
+    private FakeAccountManagerDelegate mAccountManager;
 
     @Before
     public void setUp() throws Exception {
@@ -68,12 +69,17 @@ public class PasswordViewingTypeTest {
     }
 
     private void setupTestAccount(Context context) {
-        mAccountManager = new MockAccountManager(context, context);
+        mAccountManager = new FakeAccountManagerDelegate(context);
         AccountManagerHelper.overrideAccountManagerHelperForTests(context, mAccountManager);
         mAccount = AccountManagerHelper.createAccountFromName("account@example.com");
         AccountHolder.Builder accountHolder =
                 AccountHolder.builder(mAccount).password("password").alwaysAccept(true);
         mAccountManager.addAccountHolderExplicitly(accountHolder.build());
+    }
+
+    @After
+    public void tearDown() {
+        AccountManagerHelper.resetAccountManagerHelperForTests();
     }
 
     /**

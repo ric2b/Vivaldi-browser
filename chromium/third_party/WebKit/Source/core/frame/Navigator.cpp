@@ -75,6 +75,7 @@ bool Navigator::cookieEnabled() const {
 
 Vector<String> Navigator::languages() {
   Vector<String> languages;
+  languages_changed_ = false;
 
   if (!GetFrame() || !GetFrame()->GetPage()) {
     languages.push_back(DefaultLanguage());
@@ -92,7 +93,7 @@ Vector<String> Navigator::languages() {
     String& token = languages[i];
     token = token.StripWhiteSpace();
     if (token.length() >= 3 && token[2] == '_')
-      token.Replace(2, 1, "-");
+      token.replace(2, 1, "-");
   }
 
   return languages;

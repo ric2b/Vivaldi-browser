@@ -49,6 +49,7 @@
 #include "core/layout/line/InlineIterator.h"
 #include "core/layout/line/InlineTextBox.h"
 #include "core/layout/line/LineWidth.h"
+#include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/shapes/ShapeOutsideInfo.h"
 #include "core/paint/BlockFlowPaintInvalidator.h"
 #include "core/paint/PaintLayer.h"
@@ -256,7 +257,9 @@ LayoutBlockFlow::LayoutBlockFlow(ContainerNode* node) : LayoutBlock(node) {
 LayoutBlockFlow::~LayoutBlockFlow() {}
 
 LayoutBlockFlow* LayoutBlockFlow::CreateAnonymous(Document* document) {
-  LayoutBlockFlow* layout_block_flow = new LayoutBlockFlow(nullptr);
+  LayoutBlockFlow* layout_block_flow = RuntimeEnabledFeatures::layoutNGEnabled()
+                                           ? new LayoutNGBlockFlow(nullptr)
+                                           : new LayoutBlockFlow(nullptr);
   layout_block_flow->SetDocumentForAnonymous(document);
   return layout_block_flow;
 }
@@ -442,7 +445,7 @@ void LayoutBlockFlow::UpdateBlockLayout(bool relayout_children) {
       LayoutChildren(relayout_children, layout_scope);
     }
 
-    if (flow_thread && flow_thread->ColumnHeightsChanged()) {
+    if (flow_thread && !flow_thread->FinishLayout()) {
       SetChildNeedsLayout(kMarkOnlyThis);
       continue;
     }
@@ -483,8 +486,6 @@ void LayoutBlockFlow::UpdateBlockLayout(bool relayout_children) {
   ComputeOverflow(unconstrained_client_after_edge);
 
   descendants_with_floats_marked_for_layout_ = false;
-
-  UpdateLayerTransformAfterLayout();
 
   UpdateAfterLayout();
 
@@ -620,7 +621,7 @@ void LayoutBlockFlow::DetermineLogicalLeftPositionForChild(LayoutBox& child) {
   LayoutUnit start_position = BorderStart() + PaddingStart();
   LayoutUnit initial_start_position = start_position;
   if (ShouldPlaceBlockDirectionScrollbarOnLogicalLeft())
-    start_position -= VerticalScrollbarWidth();
+    start_position -= VerticalScrollbarWidthClampedToContentBox();
   LayoutUnit total_available_logical_width =
       BorderAndPaddingLogicalWidth() + AvailableLogicalWidth();
 
@@ -654,11 +655,13 @@ void LayoutBlockFlow::DetermineLogicalLeftPositionForChild(LayoutBox& child) {
 
 void LayoutBlockFlow::SetLogicalLeftForChild(LayoutBox& child,
                                              LayoutUnit logical_left) {
+  LayoutPoint new_location(child.Location());
   if (IsHorizontalWritingMode()) {
-    child.SetX(logical_left);
+    new_location.SetX(logical_left);
   } else {
-    child.SetY(logical_left);
+    new_location.SetY(logical_left);
   }
+  child.SetLocationAndUpdateOverflowControlsIfNeeded(new_location);
 }
 
 void LayoutBlockFlow::SetLogicalTopForChild(LayoutBox& child,
@@ -689,8 +692,9 @@ void LayoutBlockFlow::MarkDescendantsWithFloatsForLayoutIfNeeded(
   } else if (!child.AvoidsFloats() || child.ShrinkToAvoidFloats()) {
     // If an element might be affected by the presence of floats, then always
     // mark it for layout.
-    if (std::max(previous_float_logical_bottom, LowestFloatLogicalBottom()) >
-        new_logical_top)
+    LayoutUnit lowest_float =
+        std::max(previous_float_logical_bottom, LowestFloatLogicalBottom());
+    if (lowest_float > new_logical_top)
       mark_descendants_with_floats = true;
   }
 
@@ -2984,8 +2988,30 @@ void LayoutBlockFlow::AddChild(LayoutObject* new_child,
   // children as blocks.
   // So, if our children are currently inline and a block child has to be
   // inserted, we move all our inline children into anonymous block boxes.
-  bool child_is_block_level =
-      !new_child->IsInline() && !new_child->IsFloatingOrOutOfFlowPositioned();
+  bool child_is_block_level = !new_child->IsInline();
+
+  // ** LayoutNG **
+  // We want to use the block layout for out of flow positioned
+  // objects when they go in front of inline blocks or if they are just
+  // standalone objects.
+  // Example 1:
+  //   <div id="zero"><div id="oof"></div></div>
+  //   Legacy Layout: #oof is in inline context.
+  //   LayoutNG: #oof is in block context.
+  //
+  // Example 2:
+  //   <div id=container><oof></oof>Hello!</div>
+  //   Legacy Layout: oof is in inline context.
+  //   LayoutNG: oof is in block context.
+  //
+  // Example 3:
+  //   <div id=container>Hello!<oof></oof></div>
+  //   Legacy Layout: oof is in inline context.
+  //   LayoutNG: oof is in inline context.
+  bool layout_ng_enabled = RuntimeEnabledFeatures::layoutNGEnabled();
+  if (new_child->IsFloatingOrOutOfFlowPositioned())
+    child_is_block_level = layout_ng_enabled && !FirstChild();
+
   if (ChildrenInline()) {
     if (child_is_block_level) {
       // Wrap the inline content in anonymous blocks, to allow for the new block
@@ -3019,7 +3045,8 @@ void LayoutBlockFlow::AddChild(LayoutObject* new_child,
       LayoutBlockFlow* new_block = ToLayoutBlockFlow(CreateAnonymousBlock());
       LayoutBox::AddChild(new_block, before_child);
       // Reparent adjacent floating or out-of-flow siblings to the new box.
-      new_block->ReparentPrecedingFloatingOrOutOfFlowSiblings();
+      if (!layout_ng_enabled)
+        new_block->ReparentPrecedingFloatingOrOutOfFlowSiblings();
       new_block->AddChild(new_child);
       new_block->ReparentSubsequentFloatingOrOutOfFlowSiblings();
       return;
@@ -3715,6 +3742,7 @@ LayoutUnit LayoutBlockFlow::PositionAndLayoutFloat(
     }
   }
 
+  LayoutUnit old_logical_top = child.LogicalTop();
   if (child.NeedsLayout()) {
     if (is_paginated) {
       // Before we can lay out the float, we need to estimate a position for
@@ -3763,6 +3791,17 @@ LayoutUnit LayoutBlockFlow::PositionAndLayoutFloat(
   // fragmented, in order to remove pagination struts inside the child.
   MarkChildForPaginationRelayoutIfNeeded(child, layout_scope);
   child.LayoutIfNeeded();
+
+  // If negative margin pushes the child completely out of its old position
+  // mark for layout siblings that may have it in its float lists.
+  if (child.LogicalBottom() <= old_logical_top) {
+    LayoutObject* next = child.NextSibling();
+    if (next && next->IsLayoutBlockFlow()) {
+      LayoutBlockFlow* nextBlock = ToLayoutBlockFlow(next);
+      if (!nextBlock->AvoidsFloats() || nextBlock->ShrinkToAvoidFloats())
+        nextBlock->MarkAllDescendantsWithFloatsForLayout();
+    }
+  }
 
   if (is_paginated) {
     PaginatedContentWasLaidOut(child.LogicalBottom());
@@ -4112,21 +4151,23 @@ void LayoutBlockFlow::UpdateAncestorShouldPaintFloatingObject(
       break;
 
     FloatingObject& floating_object = **it;
-    if (!float_box_is_self_painting_layer) {
-      // This repeats the logic in addOverhangingFloats() about shouldPaint
-      // flag:
-      // - The nearest enclosing block in which the float doesn't overhang
-      //   paints the float;
-      // - Or even if the float overhangs, if the ancestor block has
-      //   self-painting layer, it paints the float.
-      if (ancestor_block->HasSelfPaintingLayer() ||
-          !ancestor_block->IsOverhangingFloat(floating_object)) {
-        floating_object.SetShouldPaint(true);
-        return;
-      }
-    } else {
-      floating_object.SetShouldPaint(false);
-    }
+    // This repeats the logic in addOverhangingFloats() about shouldPaint
+    // flag:
+    // - The nearest enclosing block in which the float doesn't overhang
+    //   paints the float;
+    // - Or even if the float overhangs, if the ancestor block has
+    //   self-painting layer, it paints the float.
+    LayoutBlockFlow* parent_block =
+        ToLayoutBlockFlow(floating_object.GetLayoutObject()->Parent());
+    bool is_overhanging_float =
+        parent_block && parent_block->IsOverhangingFloat(floating_object);
+    bool should_paint =
+        !float_box_is_self_painting_layer &&
+        (ancestor_block->HasSelfPaintingLayer() || !is_overhanging_float);
+    floating_object.SetShouldPaint(should_paint);
+
+    if (floating_object.ShouldPaint())
+      return;
   }
 }
 
@@ -4647,12 +4688,12 @@ void LayoutBlockFlow::AddOutlineRects(
         include_block_overflows);
 }
 
-PaintInvalidationReason LayoutBlockFlow::InvalidatePaintIfNeeded(
+PaintInvalidationReason LayoutBlockFlow::DeprecatedInvalidatePaint(
     const PaintInvalidationState& paint_invalidation_state) {
   if (ContainsFloats())
     paint_invalidation_state.PaintingLayer().SetNeedsPaintPhaseFloat();
 
-  return LayoutBlock::InvalidatePaintIfNeeded(paint_invalidation_state);
+  return LayoutBlock::DeprecatedInvalidatePaint(paint_invalidation_state);
 }
 
 void LayoutBlockFlow::InvalidateDisplayItemClients(

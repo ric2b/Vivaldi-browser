@@ -35,8 +35,6 @@
 #include "third_party/skia/include/ports/SkTypeface_mac.h"
 #endif
 
-using namespace std;
-
 namespace blink {
 
 FontPlatformData::FontPlatformData(WTF::HashTableDeletedValueType)
@@ -169,6 +167,8 @@ CTFontRef FontPlatformData::CtFont() const {
 };
 
 CGFontRef FontPlatformData::CgFont() const {
+  if (!CtFont())
+    return nullptr;
   return CTFontCopyGraphicsFont(CtFont(), 0);
 }
 #endif

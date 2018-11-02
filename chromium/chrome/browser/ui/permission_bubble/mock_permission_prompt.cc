@@ -13,12 +13,14 @@ MockPermissionPrompt::~MockPermissionPrompt() {
   Hide();
 }
 
-void MockPermissionPrompt::Show(const std::vector<PermissionRequest*>& requests,
-                                const std::vector<bool>& accept_state) {
+void MockPermissionPrompt::Show() {
   factory_->ShowView(this);
   factory_->show_count_++;
   factory_->requests_count_ = manager_->requests_.size();
-  factory_->total_requests_count_ += manager_->requests_.size();
+  for (const PermissionRequest* request : manager_->requests_) {
+    factory_->request_types_seen_.push_back(
+        request->GetPermissionRequestType());
+  }
   factory_->UpdateResponseType();
   is_visible_ = true;
 }
@@ -37,16 +39,16 @@ void MockPermissionPrompt::Hide() {
   is_visible_ = false;
 }
 
-bool MockPermissionPrompt::IsVisible() {
-  return is_visible_;
-}
-
 void MockPermissionPrompt::UpdateAnchorPosition() {}
 
 gfx::NativeWindow MockPermissionPrompt::GetNativeWindow() {
   // This class should only be used when the UI is not necessary.
   NOTREACHED();
   return nullptr;
+}
+
+bool MockPermissionPrompt::IsVisible() {
+  return is_visible_;
 }
 
 MockPermissionPrompt::MockPermissionPrompt(MockPermissionPromptFactory* factory,

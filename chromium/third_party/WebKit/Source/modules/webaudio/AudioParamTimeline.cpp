@@ -25,6 +25,7 @@
 
 #include "modules/webaudio/AudioParamTimeline.h"
 #include <algorithm>
+#include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "platform/audio/AudioUtilities.h"
@@ -206,7 +207,7 @@ AudioParamTimeline::ParamEvent::CreateSetValueCurveEvent(
     double time,
     double duration) {
   double curve_points = (curve.size() - 1) / duration;
-  float end_value = curve.Data()[curve.size() - 1];
+  float end_value = curve.data()[curve.size() - 1];
 
   return WTF::WrapUnique(new ParamEvent(ParamEvent::kSetValueCurve, time,
                                         duration, curve, curve_points,
@@ -378,8 +379,8 @@ AudioParamTimeline::ParamEvent::ParamEvent(ParamEvent::Type type,
       has_default_cancelled_value_(false) {
   DCHECK_EQ(type, ParamEvent::kSetValueCurve);
   unsigned curve_length = curve.size();
-  curve_.Resize(curve_length);
-  memcpy(curve_.Data(), curve.Data(), curve_length * sizeof(float));
+  curve_.resize(curve_length);
+  memcpy(curve_.data(), curve.data(), curve_length * sizeof(float));
 }
 
 // Create CancelValues event
@@ -506,7 +507,7 @@ void AudioParamTimeline::SetValueCurveAtTime(const Vector<float>& curve,
   // Insert a setValueAtTime event too to establish an event so that all
   // following events will process from the end of the curve instead of the
   // beginning.
-  InsertEvent(ParamEvent::CreateSetValueEvent(curve.Data()[curve.size() - 1],
+  InsertEvent(ParamEvent::CreateSetValueEvent(curve.data()[curve.size() - 1],
                                               time + duration),
               exception_state);
 }
@@ -697,7 +698,7 @@ void AudioParamTimeline::CancelAndHoldAtTime(double cancel_time,
         // the timeline.
         float end_value = ValueCurveAtTime(
             cancel_time, cancelled_event->Time(), cancelled_event->Duration(),
-            cancelled_event->Curve().Data(), cancelled_event->Curve().size());
+            cancelled_event->Curve().data(), cancelled_event->Curve().size());
 
         // Replace the existing SetValueCurve with this new one that is
         // identical except for the duration.
@@ -1127,7 +1128,7 @@ bool AudioParamTimeline::HandleAllEventsInThePast(double current_time,
     // value.
     FillWithDefault(values, default_value, number_of_values, 0);
     smoothed_value_ = default_value;
-    events_.Clear();
+    events_.clear();
     return true;
   }
 
@@ -1550,7 +1551,7 @@ std::tuple<size_t, float, unsigned> AudioParamTimeline::ProcessSetValueCurve(
   auto event = current_state.event;
 
   const Vector<float> curve = event->Curve();
-  const float* curve_data = curve.Data();
+  const float* curve_data = curve.data();
   unsigned number_of_curve_points = curve.size();
 
   float curve_end_value = event->CurveEndValue();

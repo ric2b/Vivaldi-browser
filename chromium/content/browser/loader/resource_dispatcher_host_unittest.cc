@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
+#include "base/message_loop/message_loop.h"
 #include "base/pickle.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -70,6 +71,7 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "net/test/url_request/url_request_failed_job.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_job.h"
@@ -750,7 +752,7 @@ class TestResourceDispatcherHostDelegate
       std::vector<std::unique_ptr<ResourceThrottle>>* throttles) override {
     if (user_data_) {
       const void* key = user_data_.get();
-      request->SetUserData(key, user_data_.release());
+      request->SetUserData(key, std::move(user_data_));
     }
 
     if (flags_ != NONE) {
@@ -1216,8 +1218,8 @@ void ResourceDispatcherHostTest::MakeWebContentsAssociatedDownloadRequest(
     const GURL& url) {
   net::URLRequestContext* request_context =
       browser_context_->GetResourceContext()->GetRequestContext();
-  std::unique_ptr<net::URLRequest> request(
-      request_context->CreateRequest(url, net::DEFAULT_PRIORITY, NULL));
+  std::unique_ptr<net::URLRequest> request(request_context->CreateRequest(
+      url, net::DEFAULT_PRIORITY, NULL, TRAFFIC_ANNOTATION_FOR_TESTS));
   DownloadManagerImpl::BeginDownloadRequest(
       std::move(request), Referrer(), browser_context_->GetResourceContext(),
       false,  // is_content_initiated
@@ -2211,7 +2213,8 @@ TEST_F(ResourceDispatcherHostTest, TestBlockedRequestsDontLeak) {
 TEST_F(ResourceDispatcherHostTest, CalculateApproximateMemoryCost) {
   net::URLRequestContext context;
   std::unique_ptr<net::URLRequest> req(context.CreateRequest(
-      GURL("http://www.google.com"), net::DEFAULT_PRIORITY, NULL));
+      GURL("http://www.google.com"), net::DEFAULT_PRIORITY, NULL,
+      TRAFFIC_ANNOTATION_FOR_TESTS));
   EXPECT_EQ(4425, ResourceDispatcherHostImpl::CalculateApproximateMemoryCost(
                       req.get()));
 
@@ -2557,6 +2560,9 @@ TEST_F(ResourceDispatcherHostTest, IgnoreCancelForDownloads) {
 }
 
 TEST_F(ResourceDispatcherHostTest, CancelRequestsForContext) {
+  if (IsBrowserSideNavigationEnabled())
+    return;
+
   EXPECT_EQ(0, host_.pending_requests());
   NavigationResourceThrottle::set_ui_checks_always_succeed_for_testing(true);
 
@@ -2575,76 +2581,34 @@ TEST_F(ResourceDispatcherHostTest, CancelRequestsForContext) {
 
   const GURL download_url = GURL("http://example.com/blah");
 
-  if (IsBrowserSideNavigationEnabled()) {
-    // Create a NavigationRequest.
-    TestNavigationURLLoaderDelegate delegate;
-    BeginNavigationParams begin_params(
-        std::string(), net::LOAD_NORMAL, false, false,
-        REQUEST_CONTEXT_TYPE_LOCATION,
-        blink::WebMixedContentContextType::kBlockable,
-        false,  // is_form_submission
-        url::Origin(download_url));
-    CommonNavigationParams common_params;
-    common_params.url = download_url;
-    std::unique_ptr<NavigationRequestInfo> request_info(
-        new NavigationRequestInfo(common_params, begin_params, download_url,
-                                  true, false, false, -1, false, false,
-                                  blink::kWebPageVisibilityStateVisible));
-    std::unique_ptr<NavigationURLLoader> loader = NavigationURLLoader::Create(
-        browser_context_->GetResourceContext(),
-        BrowserContext::GetDefaultStoragePartition(browser_context_.get()),
-        std::move(request_info), nullptr, nullptr, nullptr, &delegate);
+  MakeTestRequestWithResourceType(filter_.get(), render_view_id, request_id,
+                                  download_url, RESOURCE_TYPE_MAIN_FRAME);
 
-    // Wait until a response has been received and proceed with the response.
-    KickOffRequest();
+  // Return some data so that the request is identified as a download
+  // and the proper resource handlers are created.
+  EXPECT_TRUE(net::URLRequestTestJob::ProcessOnePendingMessage());
+  content::RunAllBlockingPoolTasksUntilIdle();
 
-    // Return some data so that the request is identified as a download
-    // and the proper resource handlers are created.
-    EXPECT_TRUE(net::URLRequestTestJob::ProcessOnePendingMessage());
-    content::RunAllBlockingPoolTasksUntilIdle();
+  // And now simulate a cancellation coming from the renderer.
+  ResourceHostMsg_CancelRequest msg(request_id);
+  OnMessageReceived(msg, filter_.get());
 
-    // The UI thread will be informed that the navigation failed with an error
-    // code of ERR_ABORTED because the navigation turns out to be a download.
-    // The navigation is aborted, but the request goes on as a download.
-    EXPECT_EQ(delegate.net_error(), net::ERR_ABORTED);
-    EXPECT_EQ(1, host_.pending_requests());
+  // Since the request had already started processing as a download,
+  // the cancellation above should have been ignored and the request
+  // should still be alive.
+  EXPECT_EQ(1, host_.pending_requests());
 
-    // In PlzNavigate, the renderer cannot cancel the request directly.
-    // However, cancelling by context should work.
-    host_.CancelRequestsForContext(browser_context_->GetResourceContext());
-    EXPECT_EQ(0, host_.pending_requests());
+  // Cancelling by other methods shouldn't work either.
+  host_.CancelRequestsForProcess(render_view_id);
+  EXPECT_EQ(1, host_.pending_requests());
 
-    content::RunAllBlockingPoolTasksUntilIdle();
-  } else {
-    MakeTestRequestWithResourceType(filter_.get(), render_view_id, request_id,
-                                    download_url, RESOURCE_TYPE_MAIN_FRAME);
+  // Cancelling by context should work.
+  host_.CancelRequestsForContext(filter_->resource_context());
+  EXPECT_EQ(0, host_.pending_requests());
 
-    // Return some data so that the request is identified as a download
-    // and the proper resource handlers are created.
-    EXPECT_TRUE(net::URLRequestTestJob::ProcessOnePendingMessage());
-    content::RunAllBlockingPoolTasksUntilIdle();
-
-    // And now simulate a cancellation coming from the renderer.
-    ResourceHostMsg_CancelRequest msg(request_id);
-    OnMessageReceived(msg, filter_.get());
-
-    // Since the request had already started processing as a download,
-    // the cancellation above should have been ignored and the request
-    // should still be alive.
-    EXPECT_EQ(1, host_.pending_requests());
-
-    // Cancelling by other methods shouldn't work either.
-    host_.CancelRequestsForProcess(render_view_id);
-    EXPECT_EQ(1, host_.pending_requests());
-
-    // Cancelling by context should work.
-    host_.CancelRequestsForContext(filter_->resource_context());
-    EXPECT_EQ(0, host_.pending_requests());
-
-    while (net::URLRequestTestJob::ProcessOnePendingMessage()) {
-    }
-    content::RunAllBlockingPoolTasksUntilIdle();
+  while (net::URLRequestTestJob::ProcessOnePendingMessage()) {
   }
+  content::RunAllBlockingPoolTasksUntilIdle();
 }
 
 TEST_F(ResourceDispatcherHostTest, CancelRequestsForContextDetached) {

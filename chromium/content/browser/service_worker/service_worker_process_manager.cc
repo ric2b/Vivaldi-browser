@@ -11,6 +11,7 @@
 
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
+#include "content/browser/site_instance_impl.h"
 #include "content/common/service_worker/embedded_worker_settings.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -77,11 +78,16 @@ void ServiceWorkerProcessManager::Shutdown() {
     browser_context_ = nullptr;
   }
 
-  for (std::map<int, ProcessInfo>::const_iterator it = instance_info_.begin();
-       it != instance_info_.end();
-       ++it) {
-    RenderProcessHost::FromID(it->second.process_id)
-        ->DecrementServiceWorkerRefCount();
+  // In single-process mode, Shutdown() is called when deleting the default
+  // browser context, which is itself destroyed after the RenderProcessHost,
+  // and RenderProcessHost::FromID() just returns a nullptr.
+  // The refcount decrement can be skipped anyway since there's only one process
+  if (!RenderProcessHost::run_renderer_in_process()) {
+    for (std::map<int, ProcessInfo>::const_iterator it = instance_info_.begin();
+         it != instance_info_.end(); ++it) {
+      RenderProcessHost::FromID(it->second.process_id)
+          ->DecrementServiceWorkerRefCount();
+    }
   }
   instance_info_.clear();
 }
@@ -210,9 +216,18 @@ void ServiceWorkerProcessManager::AllocateWorkerProcess(
     }
   }
 
-  // No existing processes available; start a new one.
-  scoped_refptr<SiteInstance> site_instance =
-      SiteInstance::CreateForURL(browser_context_, script_url);
+  // ServiceWorkerProcessManager does not know of any renderer processes that
+  // are available for |pattern|. Create a SiteInstance and ask for a renderer
+  // process. Attempt to reuse an existing process if possible.
+  // TODO(clamy): Update the process reuse mechanism above following the
+  // implementation of
+  // SiteInstanceImpl::ProcessReusePolicy::REUSE_PENDING_OR_COMMITTED_SITE.
+  scoped_refptr<SiteInstanceImpl> site_instance =
+      SiteInstanceImpl::CreateForURL(browser_context_, script_url);
+  if (can_use_existing_process) {
+    site_instance->set_process_reuse_policy(
+        SiteInstanceImpl::ProcessReusePolicy::REUSE_PENDING_OR_COMMITTED_SITE);
+  }
   RenderProcessHost* rph = site_instance->GetProcess();
 
   // This Init() call posts a task to the IO thread that adds the RPH's

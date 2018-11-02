@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/dom/DOMTypedArray.h"
 #include "core/dom/Document.h"
@@ -309,7 +309,7 @@ TEST(DOMWebSocketTest, isValidSubprotocolString) {
   size_t length = strlen(kValidCharacters);
   for (size_t i = 0; i < length; ++i) {
     String s;
-    s.Append(static_cast<UChar>(kValidCharacters[i]));
+    s.append(static_cast<UChar>(kValidCharacters[i]));
     EXPECT_TRUE(DOMWebSocket::IsValidSubprotocolString(s));
   }
   for (size_t i = 0; i < 256; ++i) {
@@ -318,7 +318,7 @@ TEST(DOMWebSocketTest, isValidSubprotocolString) {
       continue;
     }
     String s;
-    s.Append(static_cast<UChar>(i));
+    s.append(static_cast<UChar>(i));
     EXPECT_FALSE(DOMWebSocket::IsValidSubprotocolString(s));
   }
 }

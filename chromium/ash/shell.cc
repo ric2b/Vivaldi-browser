@@ -16,6 +16,7 @@
 #include "ash/accessibility_delegate.h"
 #include "ash/app_list/app_list_delegate_impl.h"
 #include "ash/ash_constants.h"
+#include "ash/ash_switches.h"
 #include "ash/aura/shell_port_classic.h"
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/cast_config_controller.h"
@@ -40,9 +41,9 @@
 #include "ash/frame/custom_frame_view_ash.h"
 #include "ash/gpu_support.h"
 #include "ash/high_contrast/high_contrast_controller.h"
-#include "ash/ime/input_method_event_handler.h"
 #include "ash/keyboard/keyboard_ui.h"
 #include "ash/laser/laser_pointer_controller.h"
+#include "ash/login/lock_screen_controller.h"
 #include "ash/login_status.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/magnifier/partial_magnification_controller.h"
@@ -54,11 +55,10 @@
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/session/session_state_delegate.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_controller.h"
-#include "ash/shelf/shelf_delegate.h"
 #include "ash/shelf/shelf_model.h"
 #include "ash/shelf/shelf_window_watcher.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell_delegate.h"
 #include "ash/shell_init_params.h"
 #include "ash/shell_observer.h"
@@ -74,6 +74,7 @@
 #include "ash/system/locale/locale_notification_controller.h"
 #include "ash/system/network/sms_observer.h"
 #include "ash/system/network/vpn_list.h"
+#include "ash/system/night_light/night_light_controller.h"
 #include "ash/system/power/power_event_observer.h"
 #include "ash/system/power/power_status.h"
 #include "ash/system/power/video_activity_notifier.h"
@@ -85,6 +86,7 @@
 #include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/touch/ash_touch_transform_controller.h"
+#include "ash/tray_action/tray_action.h"
 #include "ash/utility/screenshot_controller.h"
 #include "ash/virtual_keyboard_controller.h"
 #include "ash/wallpaper/wallpaper_controller.h"
@@ -100,7 +102,6 @@
 #include "ash/wm/maximize_mode/maximize_mode_window_manager.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overlay_event_filter.h"
-#include "ash/wm/overview/scoped_overview_animation_settings_factory_aura.h"
 #include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/power_button_controller.h"
 #include "ash/wm/resize_shadow_controller.h"
@@ -140,7 +141,9 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
+#include "ui/aura/mus/focus_synchronizer.h"
 #include "ui/aura/mus/user_activity_forwarder.h"
+#include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/ui_base_switches.h"
@@ -149,10 +152,13 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/display/display.h"
+#include "ui/display/manager/chromeos/default_touch_transform_setter.h"
 #include "ui/display/manager/chromeos/display_change_observer.h"
 #include "ui/display/manager/chromeos/display_configurator.h"
+#include "ui/display/manager/chromeos/touch_transform_setter.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
+#include "ui/display/types/native_display_delegate.h"
 #include "ui/events/event_target_iterator.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image_skia.h"
@@ -171,22 +177,14 @@
 #include "ui/wm/core/visibility_controller.h"
 #include "ui/wm/core/window_modality_controller.h"
 
-#if defined(USE_X11)
-#include "ui/display/manager/chromeos/x11/native_display_delegate_x11.h"
-#include "ui/gfx/x/x11_types.h"  // nogncheck
-#endif
-
-#if defined(USE_OZONE)
-#include "ui/display/types/native_display_delegate.h"
-#include "ui/ozone/public/ozone_platform.h"
-#endif
-
 namespace ash {
 
 namespace {
 
 using aura::Window;
 using views::Widget;
+
+bool g_is_browser_process_with_mash = false;
 
 // A Corewm VisibilityController subclass that calls the Ash animation routine
 // so we can pick up our extended animations. See ash/wm/window_animations.h.
@@ -233,6 +231,10 @@ Shell* Shell::CreateInstance(const ShellInitParams& init_params) {
 
 // static
 Shell* Shell::Get() {
+  CHECK(!g_is_browser_process_with_mash)  // Implies null |instance_|.
+      << "Ash is running in its own process so Shell::Get() will return null. "
+         "The browser process must use the mojo interfaces in //ash/public to "
+         "access ash. See ash/README.md for details.";
   CHECK(instance_);
   return instance_;
 }
@@ -266,25 +268,19 @@ Shell::RootWindowControllerList Shell::GetAllRootWindowControllers() {
 RootWindowController* Shell::GetRootWindowControllerWithDisplayId(
     int64_t display_id) {
   CHECK(HasInstance());
-  WmWindow* root_window =
+  aura::Window* root_window =
       instance_->shell_port_->GetRootWindowForDisplayId(display_id);
-  return root_window ? root_window->GetRootWindowController() : nullptr;
+  return GetRootWindowController(root_window);
 }
 
 // static
 aura::Window* Shell::GetPrimaryRootWindow() {
   CHECK(HasInstance());
-  return instance_->shell_port_->GetPrimaryRootWindow()->aura_window();
+  return instance_->shell_port_->GetPrimaryRootWindow();
 }
 
 // static
 aura::Window* Shell::GetRootWindowForNewWindows() {
-  CHECK(Shell::HasInstance());
-  return WmWindow::GetAuraWindow(Shell::GetWmRootWindowForNewWindows());
-}
-
-// static
-WmWindow* Shell::GetWmRootWindowForNewWindows() {
   CHECK(Shell::HasInstance());
   Shell* shell = Shell::Get();
   if (shell->scoped_root_window_for_new_windows_)
@@ -317,6 +313,24 @@ Config Shell::GetAshConfig() {
   return Get()->shell_port_->GetAshConfig();
 }
 
+// static
+bool Shell::ShouldUseIMEService() {
+  return Shell::GetAshConfig() == Config::MASH ||
+         (Shell::GetAshConfig() == Config::MUS &&
+          base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kUseIMEService));
+}
+
+// static
+void Shell::RegisterPrefs(PrefRegistrySimple* registry) {
+  NightLightController::RegisterPrefs(registry);
+}
+
+// static
+bool Shell::ShouldEnableSimplifiedDisplayManagement() {
+  return GetAshConfig() != Config::MASH;
+}
+
 views::NonClientFrameView* Shell::CreateDefaultNonClientFrameView(
     views::Widget* widget) {
   // Use translucent-style window frames for dialogs.
@@ -328,23 +342,31 @@ void Shell::SetDisplayWorkAreaInsets(Window* contains,
   shell_port_->SetDisplayWorkAreaInsets(WmWindow::Get(contains), insets);
 }
 
-void Shell::OnAppTerminating() {
-  for (auto& observer : shell_observers_)
-    observer.OnAppTerminating();
-}
-
 void Shell::OnCastingSessionStartedOrStopped(bool started) {
   for (auto& observer : shell_observers_)
     observer.OnCastingSessionStartedOrStopped(started);
 }
 
-void Shell::OnRootWindowAdded(WmWindow* root_window) {
+void Shell::OnRootWindowAdded(aura::Window* root_window) {
   for (auto& observer : shell_observers_)
     observer.OnRootWindowAdded(root_window);
 }
 
 void Shell::CreateKeyboard() {
-  InitKeyboard();
+  if (keyboard::IsKeyboardEnabled()) {
+    if (keyboard::KeyboardController::GetInstance()) {
+      RootWindowControllerList controllers = GetAllRootWindowControllers();
+      for (RootWindowControllerList::iterator iter = controllers.begin();
+           iter != controllers.end(); ++iter) {
+        (*iter)->DeactivateKeyboard(
+            keyboard::KeyboardController::GetInstance());
+      }
+    }
+    keyboard::KeyboardController::ResetInstance(
+        new keyboard::KeyboardController(shell_delegate_->CreateKeyboardUI(),
+                                         virtual_keyboard_controller_.get()));
+  }
+
   GetPrimaryRootWindowController()->ActivateKeyboard(
       keyboard::KeyboardController::GetInstance());
 }
@@ -369,6 +391,11 @@ bool Shell::ShouldSaveDisplaySettings() {
       resolution_notification_controller_->DoesNotificationTimeout());
 }
 
+NightLightController* Shell::night_light_controller() {
+  DCHECK(NightLightController::IsFeatureEnabled());
+  return night_light_controller_.get();
+}
+
 ShelfModel* Shell::shelf_model() {
   return shelf_controller_->model();
 }
@@ -380,6 +407,13 @@ aura::client::ActivationClient* Shell::activation_client() {
 void Shell::UpdateShelfVisibility() {
   for (WmWindow* root : shell_port_->GetAllRootWindows())
     root->GetRootWindowController()->GetShelf()->UpdateVisibilityState();
+}
+
+PrefService* Shell::GetActiveUserPrefService() const {
+  if (shell_port_->GetAshConfig() == Config::MASH)
+    return pref_service_.get();
+
+  return shell_delegate_->GetActiveUserPrefService();
 }
 
 WebNotificationTray* Shell::GetWebNotificationTray() {
@@ -407,16 +441,6 @@ void Shell::SetTouchHudProjectionEnabled(bool enabled) {
 
 FirstRunHelper* Shell::CreateFirstRunHelper() {
   return new FirstRunHelperImpl;
-}
-
-void Shell::CreateShelfView() {
-  // Must occur after SessionController creation and user login.
-  DCHECK(session_controller());
-  DCHECK_GT(session_controller()->NumberOfLoggedInUsers(), 0);
-  CreateShelfDelegate();
-
-  for (WmWindow* root_window : shell_port_->GetAllRootWindows())
-    root_window->GetRootWindowController()->CreateShelfView();
 }
 
 void Shell::SetLargeCursorSizeInDip(int large_cursor_size_in_dip) {
@@ -449,8 +473,9 @@ void Shell::RemoveShellObserver(ShellObserver* observer) {
 
 void Shell::ShowAppList() {
   // Show the app list on the default display for new windows.
-  app_list_->Show(
-      GetWmRootWindowForNewWindows()->GetDisplayNearestWindow().id());
+  app_list_->Show(display::Screen::GetScreen()
+                      ->GetDisplayNearestWindow(GetRootWindowForNewWindows())
+                      .id());
 }
 
 void Shell::DismissAppList() {
@@ -460,7 +485,9 @@ void Shell::DismissAppList() {
 void Shell::ToggleAppList() {
   // Toggle the app list on the default display for new windows.
   app_list_->ToggleAppList(
-      GetWmRootWindowForNewWindows()->GetDisplayNearestWindow().id());
+      display::Screen::GetScreen()
+          ->GetDisplayNearestWindow(GetRootWindowForNewWindows())
+          .id());
 }
 
 bool Shell::IsAppListVisible() const {
@@ -504,18 +531,18 @@ void Shell::NotifyOverviewModeEnded() {
 }
 
 void Shell::NotifyFullscreenStateChanged(bool is_fullscreen,
-                                         WmWindow* root_window) {
+                                         aura::Window* root_window) {
   for (auto& observer : shell_observers_)
     observer.OnFullscreenStateChanged(is_fullscreen, root_window);
 }
 
-void Shell::NotifyPinnedStateChanged(WmWindow* pinned_window) {
+void Shell::NotifyPinnedStateChanged(aura::Window* pinned_window) {
   for (auto& observer : shell_observers_)
     observer.OnPinnedStateChanged(pinned_window);
 }
 
 void Shell::NotifyVirtualKeyboardActivated(bool activated,
-                                           WmWindow* root_window) {
+                                           aura::Window* root_window) {
   for (auto& observer : shell_observers_)
     observer.OnVirtualKeyboardStateChanged(activated, root_window);
 }
@@ -535,6 +562,11 @@ void Shell::NotifyShelfAutoHideBehaviorChanged(WmWindow* root_window) {
     observer.OnShelfAutoHideBehaviorChanged(root_window);
 }
 
+// static
+void Shell::SetIsBrowserProcessWithMash() {
+  g_is_browser_process_with_mash = true;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Shell, private:
 
@@ -550,6 +582,7 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate,
           base::MakeUnique<KeyboardBrightnessController>()),
       locale_notification_controller_(
           base::MakeUnique<LocaleNotificationController>()),
+      lock_screen_controller_(base::MakeUnique<LockScreenController>()),
       media_controller_(base::MakeUnique<MediaController>()),
       new_window_controller_(base::MakeUnique<NewWindowController>()),
       session_controller_(base::MakeUnique<SessionController>()),
@@ -558,6 +591,7 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate,
       shutdown_controller_(base::MakeUnique<ShutdownController>()),
       system_tray_controller_(base::MakeUnique<SystemTrayController>()),
       system_tray_notifier_(base::MakeUnique<SystemTrayNotifier>()),
+      tray_action_(base::MakeUnique<TrayAction>()),
       vpn_list_(base::MakeUnique<VpnList>()),
       window_cycle_controller_(base::MakeUnique<WindowCycleController>()),
       window_selector_controller_(base::MakeUnique<WindowSelectorController>()),
@@ -571,9 +605,10 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate,
   // TODO(sky): better refactor cash/mash dependencies. Perhaps put all cash
   // state on ShellPortClassic. http://crbug.com/671246.
 
+  gpu_support_.reset(shell_delegate_->CreateGPUSupport());
+
   // Don't use Shell::GetAshConfig() as |instance_| has not yet been set.
   if (shell_port_->GetAshConfig() != Config::MASH) {
-    gpu_support_.reset(shell_delegate_->CreateGPUSupport());
     display_manager_.reset(ScreenAsh::CreateDisplayManager());
     window_tree_host_manager_.reset(new WindowTreeHostManager);
     user_metrics_recorder_.reset(new UserMetricsRecorder);
@@ -581,7 +616,7 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate,
 
   PowerStatus::Initialize();
 
-  session_controller_->AddSessionStateObserver(this);
+  session_controller_->AddObserver(this);
 }
 
 Shell::~Shell() {
@@ -602,10 +637,6 @@ Shell::~Shell() {
   // Please keep in same order as in Init() because it's easy to miss one.
   if (window_modality_controller_)
     window_modality_controller_.reset();
-  if (config != Config::MASH) {
-    RemovePreTargetHandler(
-        window_tree_host_manager_->input_method_event_handler());
-  }
 
   RemovePreTargetHandler(magnifier_key_scroll_handler_.get());
   magnifier_key_scroll_handler_.reset();
@@ -614,14 +645,16 @@ Shell::~Shell() {
   speech_feedback_handler_.reset();
 
   RemovePreTargetHandler(overlay_filter_.get());
+  overlay_filter_.reset();
+
   RemovePreTargetHandler(accelerator_filter_.get());
   RemovePreTargetHandler(event_transformation_handler_.get());
   RemovePreTargetHandler(toplevel_window_event_handler_.get());
   RemovePostTargetHandler(toplevel_window_event_handler_.get());
-  if (config != Config::MASH)
+  if (config != Config::MASH) {
     RemovePreTargetHandler(system_gesture_filter_.get());
-  if (config == Config::CLASSIC)
     RemovePreTargetHandler(mouse_cursor_filter_.get());
+  }
   RemovePreTargetHandler(modality_filter_.get());
 
   // TooltipController is deleted with the Shell so removing its references.
@@ -655,8 +688,8 @@ Shell::~Shell() {
   // Drag-and-drop must be canceled prior to close all windows.
   drag_drop_controller_.reset();
 
-// Controllers who have WindowObserver added must be deleted
-// before |window_tree_host_manager_| is deleted.
+  // Controllers who have WindowObserver added must be deleted
+  // before |window_tree_host_manager_| is deleted.
 
   // VideoActivityNotifier must be deleted before |video_detector_| is
   // deleted because it's observing video activity through
@@ -727,8 +760,9 @@ Shell::~Shell() {
   // shelf items in Chrome) so explicitly shutdown early.
   shelf_model()->DestroyItemDelegates();
 
-  // Must be destroyed before FocusController.
-  shelf_delegate_.reset();
+  // Notify the ShellDelegate that the shelf is shutting down.
+  // TODO(msw): Refine ChromeLauncherController lifetime management.
+  shell_delegate_->ShelfShutdown();
 
   // Removes itself as an observer of |pref_service_|.
   shelf_controller_.reset();
@@ -738,6 +772,11 @@ Shell::~Shell() {
   // Depends on |focus_controller_|, so must be destroyed before.
   window_tree_host_manager_.reset();
   focus_controller_->RemoveObserver(this);
+  if (config != Config::CLASSIC &&
+      window_tree_client_->focus_synchronizer()->active_focus_client() ==
+          focus_controller_.get()) {
+    window_tree_client_->focus_synchronizer()->SetSingletonFocusClient(nullptr);
+  }
   focus_controller_.reset();
   screen_position_controller_.reset();
 
@@ -760,8 +799,11 @@ Shell::~Shell() {
 
   // Needs to happen right before |instance_| is reset.
   shell_port_.reset();
-  session_controller_->RemoveSessionStateObserver(this);
+  session_controller_->RemoveObserver(this);
   wallpaper_delegate_.reset();
+  // NightLightController depeneds on the PrefService and must be destructed
+  // before it. crbug.com/724231.
+  night_light_controller_ = nullptr;
   pref_service_ = nullptr;
   shell_delegate_.reset();
 
@@ -772,15 +814,21 @@ Shell::~Shell() {
 void Shell::Init(const ShellInitParams& init_params) {
   const Config config = shell_port_->GetAshConfig();
 
+  if (NightLightController::IsFeatureEnabled()) {
+    night_light_controller_ =
+        base::MakeUnique<NightLightController>(session_controller_.get());
+  }
+
   blocking_pool_ = init_params.blocking_pool;
 
   wallpaper_delegate_ = shell_delegate_->CreateWallpaperDelegate();
 
   // Can be null in tests.
   if (config == Config::MASH && shell_delegate_->GetShellConnector()) {
+    auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
+    Shell::RegisterPrefs(pref_registry.get());
     prefs::ConnectToPrefService(
-        shell_delegate_->GetShellConnector(),
-        make_scoped_refptr(new PrefRegistrySimple()),
+        shell_delegate_->GetShellConnector(), std::move(pref_registry),
         std::vector<PrefValueStore::PrefStoreType>(),
         base::Bind(&Shell::OnPrefServiceInitialized, base::Unretained(this)),
         prefs::mojom::kForwarderServiceName);
@@ -818,8 +866,6 @@ void Shell::Init(const ShellInitParams& init_params) {
   if (config != Config::MASH)
     immersive_handler_factory_ = base::MakeUnique<ImmersiveHandlerFactoryAsh>();
 
-  scoped_overview_animation_settings_factory_.reset(
-      new ScopedOverviewAnimationSettingsFactoryAura);
   window_positioner_ = base::MakeUnique<WindowPositioner>();
 
   if (config == Config::CLASSIC) {
@@ -830,24 +876,20 @@ void Shell::Init(const ShellInitParams& init_params) {
   }
 
   shell_delegate_->PreInit();
-  bool display_initialized = true;
-  if (config == Config::CLASSIC) {
-    // TODO: decide if this needs to be made to work in Config::MUS.
-    // http://crbug.com/705595.
-    display_initialized = display_manager_->InitFromCommandLine();
-
+  // TODO(sky): remove MASH from here.
+  bool display_initialized =
+      (config == Config::MASH || display_manager_->InitFromCommandLine());
+  if (config == Config::MUS && !display_initialized) {
+    // Run display configuration off device in mus mode.
+    display_manager_->set_configure_displays(true);
+    display_configurator_->set_configure_display(true);
+  }
+  if (config != Config::MASH) {
+    // TODO(sky): should work in mash too.
     display_configuration_controller_.reset(new DisplayConfigurationController(
         display_manager_.get(), window_tree_host_manager_.get()));
-
-#if defined(USE_OZONE)
-    display_configurator_->Init(
-        ui::OzonePlatform::GetInstance()->CreateNativeDisplayDelegate(),
-        !gpu_support_->IsPanelFittingDisabled());
-#elif defined(USE_X11)
-    display_configurator_->Init(
-        base::MakeUnique<display::NativeDisplayDelegateX11>(),
-        !gpu_support_->IsPanelFittingDisabled());
-#endif
+    display_configurator_->Init(shell_port_->CreateNativeDisplayDelegate(),
+                                !gpu_support_->IsPanelFittingDisabled());
   }
 
   // The DBusThreadManager must outlive this Shell. See the DCHECK in ~Shell.
@@ -858,7 +900,10 @@ void Shell::Init(const ShellInitParams& init_params) {
   display_configurator_->AddObserver(projecting_observer_.get());
   AddShellObserver(projecting_observer_.get());
 
-  if (!display_initialized && chromeos::IsRunningAsSystemCompositor()) {
+  // TODO(sky): once simplified display management is enabled for mash
+  // config == Config::MUS should be config != Config::CLASSIC.
+  if (!display_initialized &&
+      (config == Config::MUS || chromeos::IsRunningAsSystemCompositor())) {
     display_change_observer_ = base::MakeUnique<display::DisplayChangeObserver>(
         display_configurator_.get(), display_manager_.get());
 
@@ -905,11 +950,15 @@ void Shell::Init(const ShellInitParams& init_params) {
   focus_controller_ =
       base::MakeUnique<::wm::FocusController>(new wm::AshFocusRules());
   focus_controller_->AddObserver(this);
+  if (config != Config::CLASSIC) {
+    window_tree_client_->focus_synchronizer()->SetSingletonFocusClient(
+        focus_controller_.get());
+  }
 
   screen_position_controller_.reset(new ScreenPositionController);
 
   shell_port_->CreatePrimaryHost();
-  root_window_for_new_windows_ = WmWindow::Get(GetPrimaryRootWindow());
+  root_window_for_new_windows_ = GetPrimaryRootWindow();
 
   if (config != Config::MASH) {
     resolution_notification_controller_.reset(
@@ -924,13 +973,6 @@ void Shell::Init(const ShellInitParams& init_params) {
   accelerator_controller_ = shell_port_->CreateAcceleratorController();
   maximize_mode_controller_ = base::MakeUnique<MaximizeModeController>();
 
-  if (config == Config::CLASSIC) {
-    // Not applicable to mus/mash as events are already routed to InputMethod
-    // first.
-    AddPreTargetHandler(
-        window_tree_host_manager_->input_method_event_handler());
-  }
-
   magnifier_key_scroll_handler_ = MagnifierKeyScroller::CreateHandler();
   AddPreTargetHandler(magnifier_key_scroll_handler_.get());
   speech_feedback_handler_ = SpokenFeedbackToggler::CreateHandler();
@@ -944,7 +986,6 @@ void Shell::Init(const ShellInitParams& init_params) {
 
   overlay_filter_.reset(new OverlayEventFilter);
   AddPreTargetHandler(overlay_filter_.get());
-  AddShellObserver(overlay_filter_.get());
 
   accelerator_filter_.reset(new ::wm::AcceleratorFilter(
       std::unique_ptr<::wm::AcceleratorDelegate>(new AcceleratorDelegate),
@@ -973,10 +1014,10 @@ void Shell::Init(const ShellInitParams& init_params) {
   power_button_controller_->OnDisplayModeChanged(
       display_configurator_->cached_displays());
 
-  AddShellObserver(lock_state_controller_.get());
-
+  // Forward user activity from the window server to |user_activity_detector_|.
   // The connector is unavailable in some tests.
-  if (config == Config::MASH && shell_delegate_->GetShellConnector()) {
+  if (aura::Env::GetInstance()->mode() == aura::Env::Mode::MUS &&
+      shell_delegate_->GetShellConnector()) {
     ui::mojom::UserActivityMonitorPtr user_activity_monitor;
     shell_delegate_->GetShellConnector()->BindInterface(ui::mojom::kServiceName,
                                                         &user_activity_monitor);
@@ -990,9 +1031,9 @@ void Shell::Init(const ShellInitParams& init_params) {
   // process mouse events prior to screenshot session.
   // See http://crbug.com/459214
   screenshot_controller_.reset(new ScreenshotController());
-  // TODO: evaluate if MouseCursorEventFilter needs to work for mus/mash.
+  // TODO: evaluate if MouseCursorEventFilter needs to work for mash.
   // http://crbug.com/706474.
-  if (config == Config::CLASSIC) {
+  if (config != Config::MASH) {
     mouse_cursor_filter_.reset(new MouseCursorEventFilter());
     PrependPreTargetHandler(mouse_cursor_filter_.get());
   }
@@ -1040,9 +1081,11 @@ void Shell::Init(const ShellInitParams& init_params) {
   // WindowTreeHostManager::InitDisplays()
   // since AshTouchTransformController listens on
   // WindowTreeHostManager::Observer::OnDisplaysInitialized().
-  if (config != Config::MASH) {
-    touch_transformer_controller_.reset(new AshTouchTransformController(
-        display_configurator_.get(), display_manager_.get()));
+  if (ShouldEnableSimplifiedDisplayManagement()) {
+    touch_transformer_controller_ =
+        base::MakeUnique<AshTouchTransformController>(
+            display_configurator_.get(), display_manager_.get(),
+            shell_port_->CreateTouchTransformDelegate());
   }
 
   keyboard_ui_ = shell_port_->CreateKeyboardUI();
@@ -1064,7 +1107,7 @@ void Shell::Init(const ShellInitParams& init_params) {
   if (cursor_manager_) {
     if (initially_hide_cursor_)
       cursor_manager_->HideCursor();
-    cursor_manager_->SetCursor(ui::kCursorPointer);
+    cursor_manager_->SetCursor(ui::CursorType::kPointer);
   }
 
   power_event_observer_.reset(new PowerEventObserver());
@@ -1090,22 +1133,6 @@ void Shell::Init(const ShellInitParams& init_params) {
 
   if (config != Config::MASH)
     user_metrics_recorder_->OnShellInitialized();
-}
-
-void Shell::InitKeyboard() {
-  if (keyboard::IsKeyboardEnabled()) {
-    if (keyboard::KeyboardController::GetInstance()) {
-      RootWindowControllerList controllers = GetAllRootWindowControllers();
-      for (RootWindowControllerList::iterator iter = controllers.begin();
-           iter != controllers.end(); ++iter) {
-        (*iter)->DeactivateKeyboard(
-            keyboard::KeyboardController::GetInstance());
-      }
-    }
-    keyboard::KeyboardController::ResetInstance(
-        new keyboard::KeyboardController(shell_delegate_->CreateKeyboardUI(),
-                                         virtual_keyboard_controller_.get()));
-  }
 }
 
 void Shell::InitRootWindow(aura::Window* root_window) {
@@ -1163,19 +1190,6 @@ void Shell::CloseAllRootWindowChildWindows() {
   }
 }
 
-void Shell::CreateShelfDelegate() {
-  // May be called multiple times as shelves are created and destroyed.
-  if (shelf_delegate_)
-    return;
-  // Must occur after SessionController creation and user login because
-  // Chrome's implementation of ShelfDelegate assumes it can get information
-  // about multi-profile login state.
-  DCHECK(session_controller());
-  DCHECK_GT(session_controller()->NumberOfLoggedInUsers(), 0);
-  shelf_delegate_.reset(shell_delegate_->CreateShelfDelegate(shelf_model()));
-  shelf_window_watcher_ = base::MakeUnique<ShelfWindowWatcher>(shelf_model());
-}
-
 bool Shell::CanWindowReceiveEvents(aura::Window* window) {
   RootWindowControllerList controllers = GetAllRootWindowControllers();
   for (RootWindowController* controller : controllers) {
@@ -1209,17 +1223,24 @@ void Shell::OnWindowActivated(
     aura::client::ActivationChangeObserver::ActivationReason reason,
     aura::Window* gained_active,
     aura::Window* lost_active) {
-  WmWindow* gained_active_wm = WmWindow::Get(gained_active);
-  if (gained_active_wm)
-    root_window_for_new_windows_ = gained_active_wm->GetRootWindow();
+  if (gained_active)
+    root_window_for_new_windows_ = gained_active->GetRootWindow();
 }
 
-void Shell::SessionStateChanged(session_manager::SessionState state) {
-  // Create the shelf when a session becomes active. It's safe to do this
+void Shell::OnSessionStateChanged(session_manager::SessionState state) {
+  // Initialize the shelf when a session becomes active. It's safe to do this
   // multiple times (e.g. initial login vs. multiprofile add session).
   if (state == session_manager::SessionState::ACTIVE) {
-    CreateShelfView();
-
+    InitializeShelf();
+  }
+  // Recreates keyboard on user profile change, to refresh keyboard
+  // extensions with the new profile and the extensions call proper IME.
+  // |LOGGED_IN_NOT_ACTIVE| is needed so that the virtual keyboard works on
+  // supervised user creation. crbug.com/712873
+  // |ACTIVE| is also needed for guest user workflow.
+  if ((state == session_manager::SessionState::LOGGED_IN_NOT_ACTIVE ||
+       state == session_manager::SessionState::ACTIVE) &&
+      keyboard::IsKeyboardEnabled()) {
     if (GetAshConfig() != Config::MASH) {
       // Recreate the keyboard after initial login and after multiprofile login.
       CreateKeyboard();
@@ -1227,19 +1248,11 @@ void Shell::SessionStateChanged(session_manager::SessionState state) {
   }
 }
 
-void Shell::LoginStatusChanged(LoginStatus login_status) {
+void Shell::OnLoginStatusChanged(LoginStatus login_status) {
   UpdateAfterLoginStatusChange(login_status);
-
-  // TODO(xiyuan): Update OnLoginStateChanged -> OnLoginStatusChanged.
-  for (auto& observer : shell_observers_)
-    observer.OnLoginStateChanged(login_status);
 }
 
-void Shell::LockStateChanged(bool locked) {
-  // TODO(xiyuan): Convert OnLockStateChanged() ShellObservers to
-  // SessionStateObservers.
-  for (auto& observer : shell_observers_)
-    observer.OnLockStateChanged(locked);
+void Shell::OnLockStateChanged(bool locked) {
 #ifndef NDEBUG
   // Make sure that there is no system modal in Lock layer when unlocked.
   if (!locked) {
@@ -1249,6 +1262,22 @@ void Shell::LockStateChanged(bool locked) {
       DCHECK(container->children().empty());
   }
 #endif
+}
+
+void Shell::InitializeShelf() {
+  // Must occur after SessionController creation and user login.
+  DCHECK(session_controller());
+  DCHECK_GT(session_controller()->NumberOfLoggedInUsers(), 0);
+
+  // Notify the ShellDelegate that the shelf is being initialized.
+  // TODO(msw): Refine ChromeLauncherController lifetime management.
+  shell_delegate_->ShelfInit();
+
+  if (!shelf_window_watcher_)
+    shelf_window_watcher_ = base::MakeUnique<ShelfWindowWatcher>(shelf_model());
+
+  for (RootWindowController* root : GetAllRootWindowControllers())
+    root->InitializeShelf();
 }
 
 void Shell::OnPrefServiceInitialized(

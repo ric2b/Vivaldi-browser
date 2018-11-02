@@ -13,18 +13,20 @@
 #include "ui/aura/window_observer.h"
 
 namespace ash {
-class WmWindow;
-class WorkspaceControllerTestHelper;
 class WorkspaceEventHandler;
 class WorkspaceLayoutManager;
-class WorkspaceLayoutManagerBackdropDelegate;
+class BackdropDelegate;
+
+namespace test {
+class WorkspaceControllerTestApi;
+}
 
 // WorkspaceController acts as a central place that ties together all the
 // various workspace pieces.
 class ASH_EXPORT WorkspaceController : public aura::WindowObserver {
  public:
   // Installs WorkspaceLayoutManager on |viewport|.
-  explicit WorkspaceController(WmWindow* viewport);
+  explicit WorkspaceController(aura::Window* viewport);
   ~WorkspaceController() override;
 
   // Returns the current window state.
@@ -35,18 +37,17 @@ class ASH_EXPORT WorkspaceController : public aura::WindowObserver {
 
   // Add a delegate which adds a backdrop behind the top window of the default
   // workspace.
-  void SetMaximizeBackdropDelegate(
-      std::unique_ptr<WorkspaceLayoutManagerBackdropDelegate> delegate);
+  void SetBackdropDelegate(std::unique_ptr<BackdropDelegate> delegate);
 
   WorkspaceLayoutManager* layout_manager() { return layout_manager_; }
 
  private:
-  friend class WorkspaceControllerTestHelper;
+  friend class test::WorkspaceControllerTestApi;
 
   // aura::WindowObserver:
   void OnWindowDestroying(aura::Window* window) override;
 
-  WmWindow* viewport_;
+  aura::Window* viewport_;
   std::unique_ptr<WorkspaceEventHandler> event_handler_;
 
   // Owned by |viewport_|.

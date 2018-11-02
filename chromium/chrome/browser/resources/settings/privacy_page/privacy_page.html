@@ -1,9 +1,11 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_vars_css.html">
+<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/html/cr/ui/focus_without_ink.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
@@ -41,6 +43,25 @@
       <settings-clear-browsing-data-dialog prefs="{{prefs}}"
           on-close="onDialogClosed_">
       </settings-clear-browsing-data-dialog>
+    </template>
+    <template id="doNotTrackDialogIf" is="dom-if"
+        if="[[showDoNotTrackDialog_]]" notify-dom-change>
+      <dialog is="cr-dialog" id="confirmDoNotTrackDialog"
+          close-text="$i18n{close}" on-cancel="onDoNotTrackDialogCancel_"
+          on-close="onDoNotTrackDialogClosed_">
+        <div class="title">$i18n{doNotTrackDialogTitle}</div>
+        <div class="body">$i18nRaw{doNotTrackDialogMessage}</div>
+        <div class="button-container">
+          <paper-button class="cancel-button"
+              on-tap="onDoNotTrackDialogCancel_">
+            $i18n{cancel}
+          </paper-button>
+          <paper-button class="action-button"
+              on-tap="onDoNotTrackDialogConfirm_">
+            $i18n{confirm}
+          </paper-button>
+        </div>
+      </dialog>
     </template>
     <settings-animated-pages id="pages" section="privacy"
         focus-config="[[focusConfig_]]">
@@ -111,24 +132,6 @@
 </if><!-- not chromeos -->
 </if><!-- _google_chrome -->
         <div class="settings-box">
-          <template id="doNotTrackDialogIf" is="dom-if"
-              if="[[showDoNotTrackDialog_]]" notify-dom-change>
-            <dialog is="cr-dialog" id="confirmDoNotTrackDialog"
-                close-text="$i18n{close}" on-cancel="onDoNotTrackDialogCancel_">
-              <div class="title">$i18n{doNotTrackDialogTitle}</div>
-              <div class="body">$i18nRaw{doNotTrackDialogMessage}</div>
-              <div class="button-container">
-                <paper-button class="cancel-button"
-                    on-tap="onDoNotTrackDialogCancel_">
-                  $i18n{cancel}
-                </paper-button>
-                <paper-button class="action-button"
-                    on-tap="onDoNotTrackDialogConfirm_">
-                  $i18n{confirm}
-                </paper-button>
-              </div>
-            </dialog>
-          </template>
           <settings-toggle-button id="doNotTrack" class="start"
               pref="{{prefs.enable_do_not_track}}" label="$i18n{doNotTrack}"
               on-settings-boolean-control-change="onDoNotTrackChange_"
@@ -378,12 +381,13 @@
               sub-option-secondary="$i18n{siteSettingsFlashAskBeforeSubtitle}">
           </category-default-setting>
 <if expr="chromeos">
-          <div actionable class="settings-box"
-              on-tap="onAdobeFlashStorageClicked_">
+          <a class="settings-box inherit-color no-outline" tabindex="-1"
+              target="_blank"
+              href="https://www.macromedia.com/support/documentation/en/flashplayer/help/settings_manager07.html">
             <div class="start">$i18n{adobeFlashStorage}</div>
             <button class="icon-external" is="paper-icon-button-light"
-                aria-label="$i18n{adobeFlashStorage}"></button>
-          </div>
+                actionable aria-label="$i18n{adobeFlashStorage}"></button>
+          </a>
 </if>
           <category-setting-exceptions
               category="{{ContentSettingsTypes.PLUGINS}}">
@@ -402,17 +406,20 @@
         </settings-subpage>
       </template>
       <template is="dom-if" if="[[enableSafeBrowsingSubresourceFilter_]]"
-        route-path="/content/subresourceFilter" no-search>
-        <settings-subpage page-title="$i18n{siteSettingsSubresourceFilter}">
-          <category-default-setting
-              category="{{ContentSettingsTypes.SUBRESOURCE_FILTER}}"
-              toggle-off-label="$i18n{siteSettingsSubresourceFilterAllow}"
-              toggle-on-label="$i18n{siteSettingsSubresourceFilterBlock}">
-          </category-default-setting>
-          <category-setting-exceptions
-              category="{{ContentSettingsTypes.SUBRESOURCE_FITER}}">
-          </category-setting-exceptions>
-        </settings-subpage>
+          no-search>
+        <template is="dom-if" route-path="/content/subresourceFilter" no-search>
+          <settings-subpage page-title="$i18n{siteSettingsSubresourceFilter}">
+            <category-default-setting
+                category="{{ContentSettingsTypes.SUBRESOURCE_FILTER}}"
+                toggle-off-label="$i18n{siteSettingsSubresourceFilterAllow}"
+                toggle-on-label="$i18n{siteSettingsSubresourceFilterBlock}">
+            </category-default-setting>
+            <category-setting-exceptions
+                category="{{ContentSettingsTypes.SUBRESOURCE_FILTER}}"
+                read-only-list>
+            </category-setting-exceptions>
+          </settings-subpage>
+       </template>
      </template>
      <template is="dom-if" route-path="/content/unsandboxedPlugins" no-search>
         <settings-subpage page-title="$i18n{siteSettingsUnsandboxedPlugins}">

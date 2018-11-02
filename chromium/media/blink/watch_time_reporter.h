@@ -5,6 +5,8 @@
 #ifndef MEDIA_BLINK_WATCH_TIME_REPORTER_H_
 #define MEDIA_BLINK_WATCH_TIME_REPORTER_H_
 
+#include <vector>
+
 #include "base/callback.h"
 #include "base/power_monitor/power_observer.h"
 #include "base/time/time.h"
@@ -66,7 +68,7 @@ class MEDIA_BLINK_EXPORT WatchTimeReporter : base::PowerObserver {
                     bool is_mse,
                     bool is_encrypted,
                     bool is_embedded_media_experience_enabled,
-                    scoped_refptr<MediaLog> media_log,
+                    MediaLog* media_log,
                     const gfx::Size& initial_video_size,
                     const GetMediaTimeCB& get_media_time_cb);
   ~WatchTimeReporter() override;
@@ -107,6 +109,16 @@ class MEDIA_BLINK_EXPORT WatchTimeReporter : base::PowerObserver {
   // recorded for playback.
   bool IsSizeLargeEnoughToReportWatchTime() const;
 
+  // Indicates a rebuffering event occurred during playback. When watch time is
+  // finalized the total watch time for a given category will be divided by the
+  // number of rebuffering events. Reset to zero after a finalize event.
+  void OnUnderflow();
+
+  // These methods are used to ensure that the watch time is reported relative
+  // to whether the media is using native controls.
+  void OnNativeControlsEnabled();
+  void OnNativeControlsDisabled();
+
   // Setup the reporting interval to be immediate to avoid spinning real time
   // within the unit test.
   void set_reporting_interval_for_testing() {
@@ -130,7 +142,7 @@ class MEDIA_BLINK_EXPORT WatchTimeReporter : base::PowerObserver {
                     bool is_mse,
                     bool is_encrypted,
                     bool is_embedded_media_experience_enabled,
-                    scoped_refptr<MediaLog> media_log,
+                    MediaLog* media_log,
                     const gfx::Size& initial_video_size,
                     const GetMediaTimeCB& get_media_time_cb,
                     bool is_background);
@@ -154,7 +166,7 @@ class MEDIA_BLINK_EXPORT WatchTimeReporter : base::PowerObserver {
   const bool is_mse_;
   const bool is_encrypted_;
   const bool is_embedded_media_experience_enabled_;
-  scoped_refptr<MediaLog> media_log_;
+  MediaLog* media_log_;
   const gfx::Size initial_video_size_;
   const GetMediaTimeCB get_media_time_cb_;
   const bool is_background_;
@@ -170,11 +182,15 @@ class MEDIA_BLINK_EXPORT WatchTimeReporter : base::PowerObserver {
   bool is_on_battery_power_ = false;
   bool is_playing_ = false;
   bool is_visible_ = true;
+  bool has_native_controls_ = false;
   double volume_ = 1.0;
+  int underflow_count_ = 0;
+  std::vector<base::TimeDelta> pending_underflow_events_;
 
   // The last media timestamp seen by UpdateWatchTime().
   base::TimeDelta last_media_timestamp_ = kNoTimestamp;
   base::TimeDelta last_media_power_timestamp_ = kNoTimestamp;
+  base::TimeDelta last_media_controls_timestamp_ = kNoTimestamp;
 
   // The starting and ending timestamps used for reporting watch time.
   base::TimeDelta start_timestamp_;
@@ -184,6 +200,11 @@ class MEDIA_BLINK_EXPORT WatchTimeReporter : base::PowerObserver {
   // battery or AC power is being used.
   base::TimeDelta start_timestamp_for_power_;
   base::TimeDelta end_timestamp_for_power_ = kNoTimestamp;
+
+  // Similar to the above but tracks watch time relative to whether or not
+  // native controls are being used.
+  base::TimeDelta start_timestamp_for_controls_;
+  base::TimeDelta end_timestamp_for_controls_ = kNoTimestamp;
 
   // Special case reporter for handling background video watch time. Configured
   // as an audio only WatchTimeReporter with |is_background_| set to true.

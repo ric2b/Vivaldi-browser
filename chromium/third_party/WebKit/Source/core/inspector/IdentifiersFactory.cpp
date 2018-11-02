@@ -29,9 +29,9 @@
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/loader/DocumentLoader.h"
+#include "platform/wtf/Assertions.h"
+#include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/Platform.h"
-#include "wtf/Assertions.h"
-#include "wtf/text/StringBuilder.h"
 
 namespace blink {
 
@@ -104,7 +104,7 @@ String IdentifiersFactory::AddProcessIdPrefixTo(int id) {
 
 // static
 int IdentifiersFactory::RemoveProcessIdPrefixFrom(const String& id, bool* ok) {
-  size_t dot_index = id.Find('.');
+  size_t dot_index = id.find('.');
 
   if (dot_index == kNotFound) {
     *ok = false;

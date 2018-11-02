@@ -52,9 +52,10 @@ class ClipboardMessageFilterTest : public ::testing::Test {
 
   void CallWriteImage(const gfx::Size& size,
                       base::SharedMemory* shared_memory) {
-    base::SharedMemoryHandle handle;
-    ASSERT_TRUE(shared_memory->GiveReadOnlyToProcess(
-        base::GetCurrentProcessHandle(), &handle));
+    base::SharedMemoryHandle handle = shared_memory->GetReadOnlyHandle();
+    shared_memory->Unmap();
+    shared_memory->Close();
+    ASSERT_TRUE(handle.IsValid());
     CallWriteImageDirectly(size, handle);
   }
 
@@ -103,7 +104,6 @@ TEST_F(ClipboardMessageFilterTest, SimpleImage) {
       ui::Clipboard::GetBitmapFormatType(), ui::CLIPBOARD_TYPE_COPY_PASTE));
 
   SkBitmap actual = clipboard()->ReadImage(ui::CLIPBOARD_TYPE_COPY_PASTE);
-  SkAutoLockPixels locked(actual);
   EXPECT_EQ(sizeof(bitmap_data), actual.getSize());
   EXPECT_EQ(0,
             memcmp(bitmap_data, actual.getAddr32(0, 0), sizeof(bitmap_data)));
@@ -124,7 +124,7 @@ TEST_F(ClipboardMessageFilterTest, ImageSizeOverflows32BitRowBytes) {
 }
 
 TEST_F(ClipboardMessageFilterTest, InvalidSharedMemoryHandle) {
-  CallWriteImageDirectly(gfx::Size(5, 5), base::SharedMemory::NULLHandle());
+  CallWriteImageDirectly(gfx::Size(5, 5), base::SharedMemoryHandle());
   uint64_t sequence_number =
       clipboard()->GetSequenceNumber(ui::CLIPBOARD_TYPE_COPY_PASTE);
   CallCommitWrite();

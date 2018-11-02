@@ -8,7 +8,9 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/resource_dispatcher.h"
 #include "content/common/resource_messages.h"
@@ -66,7 +68,8 @@ class TestRequestPeer : public RequestPeer {
                           bool stale_copy_in_cache,
                           const base::TimeTicks& completion_time,
                           int64_t total_transfer_size,
-                          int64_t encoded_body_size) override {
+                          int64_t encoded_body_size,
+                          int64_t decoded_body_size) override {
     EXPECT_FALSE(context_->complete);
     context_->complete = true;
     context_->error_code = error_code;

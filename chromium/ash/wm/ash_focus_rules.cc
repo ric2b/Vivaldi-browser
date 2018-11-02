@@ -11,9 +11,9 @@
 #include "ash/wm/focus_rules.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
-#include "ash/wm_window.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
+#include "ui/events/event.h"
 
 namespace ash {
 namespace wm {
@@ -33,19 +33,15 @@ bool BelongsToContainerWithEqualOrGreaterId(const aura::Window* window,
 ////////////////////////////////////////////////////////////////////////////////
 // AshFocusRules, public:
 
-AshFocusRules::AshFocusRules() {}
+AshFocusRules::AshFocusRules() = default;
 
-AshFocusRules::~AshFocusRules() {}
-
-bool AshFocusRules::IsWindowConsideredActivatable(aura::Window* window) const {
-  return ash::IsWindowConsideredActivatable(WmWindow::Get(window));
-}
+AshFocusRules::~AshFocusRules() = default;
 
 ////////////////////////////////////////////////////////////////////////////////
 // AshFocusRules, ::wm::FocusRules:
 
 bool AshFocusRules::IsToplevelWindow(aura::Window* window) const {
-  return ash::IsToplevelWindow(WmWindow::Get(window));
+  return ash::IsToplevelWindow(window);
 }
 
 bool AshFocusRules::SupportsChildActivation(aura::Window* window) const {
@@ -54,7 +50,7 @@ bool AshFocusRules::SupportsChildActivation(aura::Window* window) const {
 
 bool AshFocusRules::IsWindowConsideredVisibleForActivation(
     aura::Window* window) const {
-  return ash::IsWindowConsideredVisibleForActivation(WmWindow::Get(window));
+  return ash::IsWindowConsideredVisibleForActivation(window);
 }
 
 bool AshFocusRules::CanActivateWindow(aura::Window* window) const {
@@ -73,6 +69,19 @@ bool AshFocusRules::CanActivateWindow(aura::Window* window) const {
   return true;
 }
 
+bool AshFocusRules::CanFocusWindow(aura::Window* window,
+                                   const ui::Event* event) const {
+  if (!window)
+    return true;
+
+  if (event && (event->IsMouseEvent() || event->IsGestureEvent()) &&
+      !window->GetProperty(aura::client::kActivateOnPointerKey)) {
+    return false;
+  }
+
+  return BaseFocusRules::CanFocusWindow(window, event);
+}
+
 aura::Window* AshFocusRules::GetNextActivatableWindow(
     aura::Window* ignore) const {
   DCHECK(ignore);
@@ -81,9 +90,8 @@ aura::Window* AshFocusRules::GetNextActivatableWindow(
   // MRU windows is empty, then start from the container of the window that just
   // lost focus |ignore|.
   MruWindowTracker* mru = Shell::Get()->mru_window_tracker();
-  std::vector<WmWindow*> windows = mru->BuildMruWindowList();
-  aura::Window* starting_window =
-      windows.empty() ? ignore : WmWindow::GetAuraWindow(windows[0]);
+  aura::Window::Windows windows = mru->BuildMruWindowList();
+  aura::Window* starting_window = windows.empty() ? ignore : windows[0];
 
   // Look for windows to focus in |starting_window|'s container. If none are
   // found, we look in all the containers in front of |starting_window|'s
@@ -141,7 +149,7 @@ aura::Window* AshFocusRules::GetTopmostWindowToActivateInContainer(
         !window_state->IsMinimized())
       return *i;
   }
-  return NULL;
+  return nullptr;
 }
 
 }  // namespace wm

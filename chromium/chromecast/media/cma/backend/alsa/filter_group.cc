@@ -4,25 +4,30 @@
 
 #include "chromecast/media/cma/backend/alsa/filter_group.h"
 
+#include <algorithm>
+
 #include "base/memory/ptr_util.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "chromecast/media/cma/backend/alsa/post_processing_pipeline.h"
 #include "media/base/audio_bus.h"
+#include "media/base/audio_sample_types.h"
+#include "media/base/vector_math.h"
 
 namespace chromecast {
 namespace media {
-FilterGroup::FilterGroup(const std::unordered_set<std::string>& input_types,
-                         AudioContentType content_type,
-                         int num_channels,
-                         const base::ListValue* filter_list)
-    : input_types_(input_types),
-      content_type_(content_type),
-      num_channels_(num_channels),
+FilterGroup::FilterGroup(int num_channels,
+                         const std::string& name,
+                         const base::ListValue* filter_list,
+                         const std::unordered_set<std::string>& device_ids,
+                         const std::vector<FilterGroup*>& mixed_inputs)
+    : num_channels_(num_channels),
+      name_(name),
+      device_ids_(device_ids),
+      mixed_inputs_(mixed_inputs),
       output_samples_per_second_(0),
-      channels_(num_channels_),
       post_processing_pipeline_(
-          base::MakeUnique<PostProcessingPipeline>(filter_list,
-                                                   num_channels_)) {}
+          PostProcessingPipeline::Create(name_, filter_list, num_channels_)) {}
 
 FilterGroup::~FilterGroup() = default;
 
@@ -32,79 +37,97 @@ void FilterGroup::Initialize(int output_samples_per_second) {
 }
 
 bool FilterGroup::CanProcessInput(StreamMixerAlsa::InputQueue* input) {
-  return !(input_types_.find(input->device_id()) == input_types_.end());
+  return !(device_ids_.find(input->device_id()) == device_ids_.end());
 }
 
 void FilterGroup::AddActiveInput(StreamMixerAlsa::InputQueue* input) {
   active_inputs_.push_back(input);
 }
 
-std::vector<uint8_t>* FilterGroup::GetInterleaved() {
-  return &interleaved_;
-}
-
-bool FilterGroup::MixAndFilter(int chunk_size) {
+float FilterGroup::MixAndFilter(int chunk_size) {
   DCHECK_NE(output_samples_per_second_, 0);
-  if (active_inputs_.empty() && !post_processing_pipeline_->IsRinging()) {
-    return false;  // Output will be silence, no need to mix.
-  }
 
   ResizeBuffersIfNecessary(chunk_size);
 
+  float volume = 0.0f;
+
+  // Recursively mix inputs.
+  for (auto* filter_group : mixed_inputs_) {
+    volume = std::max(volume, filter_group->MixAndFilter(chunk_size));
+  }
+
+  // |volume| can only be 0 if no |mixed_inputs_| have data.
+  // This is true because FilterGroup can only return 0 if:
+  // a) It has no data and its PostProcessorPipeline is not ringing.
+  //    (early return, below) or
+  // b) The output volume is 0 and has NEVER been non-zero,
+  //    since FilterGroup will use last_volume_ if volume is 0.
+  //    In this case, there was never any data in the pipeline.
+  if (active_inputs_.empty() && volume == 0.0f &&
+      !post_processing_pipeline_->IsRinging()) {
+    if (frames_zeroed_ < chunk_size) {
+      // Ensure interleaved_ is zeros.
+      std::fill_n(interleaved(), chunk_size * num_channels_, 0);
+      frames_zeroed_ = chunk_size;
+    }
+    return 0.0f;  // Output will be silence, no need to mix.
+  }
+
+  frames_zeroed_ = 0;
+
+  // Mix InputQueues
   mixed_->ZeroFramesPartial(0, chunk_size);
   for (StreamMixerAlsa::InputQueue* input : active_inputs_) {
     input->GetResampledData(temp_.get(), chunk_size);
     for (int c = 0; c < num_channels_; ++c) {
-      DCHECK(channels_[c]);
       input->VolumeScaleAccumulate(c != 0, temp_->channel(c), chunk_size,
-                                   channels_[c]);
+                                   mixed_->channel(c));
+    }
+    volume = std::max(volume, input->EffectiveVolume());
+  }
+
+  mixed_->ToInterleaved<::media::FloatSampleTypeTraits<float>>(chunk_size,
+                                                               interleaved());
+
+  // Mix FilterGroups
+  for (FilterGroup* group : mixed_inputs_) {
+    if (group->last_volume() > 0.0f) {
+      ::media::vector_math::FMAC(group->interleaved(), 1.0f,
+                                 chunk_size * num_channels_, interleaved());
     }
   }
 
-  post_processing_pipeline_->ProcessFrames(channels_, chunk_size, volume_,
-                                           active_inputs_.empty());
-  mixed_->ToInterleaved(chunk_size, BytesPerOutputFormatSample(),
-                        interleaved_.data());
-  return true;
-}
+  bool is_silence = (volume == 0.0f);
 
-void FilterGroup::ClearInterleaved(int chunk_size) {
-  ResizeBuffersIfNecessary(chunk_size);
-  memset(interleaved_.data(), 0,
-         static_cast<size_t>(chunk_size) * num_channels_ *
-             BytesPerOutputFormatSample());
-}
-
-void FilterGroup::ResizeBuffersIfNecessary(int chunk_size) {
-  if (!mixed_ || mixed_->frames() < chunk_size) {
-    mixed_ = ::media::AudioBus::Create(num_channels_, chunk_size);
-    for (int c = 0; c < num_channels_; ++c) {
-      channels_[c] = mixed_->channel(c);
-    }
-  }
-  if (!temp_ || temp_->frames() < chunk_size) {
-    temp_ = ::media::AudioBus::Create(num_channels_, chunk_size);
+  // Allow paused streams to "ring out" at the last valid volume.
+  // If the stream volume is actually 0, this doesn't matter, since the
+  // data is 0's anyway.
+  if (!is_silence) {
+    last_volume_ = volume;
   }
 
-  size_t interleaved_size = static_cast<size_t>(chunk_size) * num_channels_ *
-                            BytesPerOutputFormatSample();
-
-  if (interleaved_.size() < interleaved_size) {
-    interleaved_.resize(interleaved_size);
-  }
+  delay_frames_ = post_processing_pipeline_->ProcessFrames(
+      interleaved(), chunk_size, last_volume_, is_silence);
+  return last_volume_;
 }
 
-int FilterGroup::BytesPerOutputFormatSample() {
-  return sizeof(int32_t);
+int64_t FilterGroup::GetRenderingDelayMicroseconds() {
+  return delay_frames_ * base::Time::kMicrosecondsPerSecond /
+         output_samples_per_second_;
 }
 
 void FilterGroup::ClearActiveInputs() {
   active_inputs_.clear();
 }
 
-void FilterGroup::DisablePostProcessingForTest() {
-  post_processing_pipeline_ =
-      base::MakeUnique<PostProcessingPipeline>(nullptr, num_channels_);
+void FilterGroup::ResizeBuffersIfNecessary(int chunk_size) {
+  if (!mixed_ || mixed_->frames() < chunk_size) {
+    mixed_ = ::media::AudioBus::Create(num_channels_, chunk_size);
+    temp_ = ::media::AudioBus::Create(num_channels_, chunk_size);
+    interleaved_.reset(static_cast<float*>(
+        base::AlignedAlloc(chunk_size * num_channels_ * sizeof(float),
+                           ::media::AudioBus::kChannelAlignment)));
+  }
 }
 
 }  // namespace media

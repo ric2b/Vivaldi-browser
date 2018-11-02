@@ -8,7 +8,9 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -84,8 +86,7 @@ class TaskQueueManagerPerfTest : public testing::Test {
     manager_ = base::MakeUnique<TaskQueueManager>(
         TaskQueueManagerDelegateForTest::Create(
             message_loop_->task_runner(),
-            base::WrapUnique(new base::DefaultTickClock())),
-        "fake.category", "fake.category", "fake.category.debug");
+            base::WrapUnique(new base::DefaultTickClock())));
     manager_->AddTaskTimeObserver(&test_task_time_observer_);
 
     virtual_time_domain_.reset(new PerfTestTimeDomain());

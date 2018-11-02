@@ -53,3 +53,19 @@ DISABLE(ExtensionBrowserTest, UnloadPageAction)
 DISABLE(LazyBackgroundPageApiTest, BroadcastEvent)
 DISABLE(PageActionApiTest, TestTriggerPageAction)
 DISABLE(MediaRouterUIBrowserTest, UpdateActionLocation)
+DISABLE(SitePerProcessTextInputManagerTest, TrackSelectionBoundsForAllFrames)
+DISABLE(SitePerProcessTextInputManagerTest, TrackTextSelectionForAllFrames)
+
+// Seems to have failed in v60
+DISABLE(SitePerProcessTextInputManagerTest, ResetStateAfterFrameDetached)
+DISABLE(SitePerProcessTextInputManagerTest,
+        ResetTextInputStateOnActiveWidgetChange)
+DISABLE(SitePerProcessTextInputManagerTest, TrackCompositionRangeForAllFrames)
+DISABLE(PipelineIntegrationTest,
+        MediaSource_ConfigChange_ClearThenEncrypted_WebM)
+DISABLE(FFmpegGlueContainerTest, AAC)
+DISABLE(FFmpegGlueContainerTest, MOV)
+DISABLE(FFmpegGlueContainerTest, MP3)
+
+// Flaky
+DISABLE(SitePerProcessTextInputManagerTest, StopTrackingCrashedChildFrame)

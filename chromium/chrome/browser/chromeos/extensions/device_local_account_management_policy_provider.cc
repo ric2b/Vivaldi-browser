@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -18,6 +19,8 @@
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/app_isolation_info.h"
+#include "extensions/common/permissions/api_permission.h"
+#include "extensions/common/permissions/permissions_info.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace chromeos {
@@ -36,11 +39,9 @@ const char* const kPublicSessionWhitelist[] = {
     "lfnfbcjdepjffcaiagkdmlmiipelnfbb",  // Citrix Receiver (branded)
     "mfaihdlpglflfgpfjcifdjdjcckigekc",  // ARC Runtime
     "ngjnkanfphagcaokhjecbgkboelgfcnf",  // Print button
-    "gbchcmhmhahfdphkhkmpfmihenigjmpp",  // Chrome Remote Desktop
     "cjanmonomjogheabiocdamfpknlpdehm",  // HP printer driver
     "ioofdkhojeeimmagbjbknkejkgbphdfl",  // RICOH Print for Chrome
     "pmnllmkmjilbojkpgplbdmckghmaocjh",  // Scan app by François Beaufort
-    "khpfeaanjngmcnplbdlpegiifgpfgdco",  // Smart Card Connector App
     "haeblkpifdemlfnkogkipmghfcbonief",  // Charismathics Smart Card Middleware
     "mpnkhdpphjiihmlmkcamhpogecnnfffa",  // Service NSW Kiosk Utility
 
@@ -59,7 +60,6 @@ const char* const kPublicSessionWhitelist[] = {
     "kgimkbnclbekdkabkpjhpakhhalfanda",  // Bejeweled demo
     "joodangkbfjnajiiifokapkpmhfnpleo",  // Calculator
     "fpgfohogebplgnamlafljlcidjedbdeb",  // Calendar demo
-    "hfhhnacclhffhdffklopdkcgdhifgngh",  // Camera
     "cdjikkcakjcdjemakobkmijmikhkegcj",  // Chrome Remote Desktop demo
     "jkoildpomkimndcphjpffmephmcmkfhn",  // Chromebook Demo App
     "lbhdhapagjhalobandnbdnmblnmocojh",  // Crackle demo
@@ -121,6 +121,44 @@ const char* const kPublicSessionWhitelist[] = {
     "ilnpadgckeacioehlommkaafedibdeob",  // Enterprise DeviceAttributes
     "oflckobdemeldmjddmlbaiaookhhcngo",  // Citrix Receiver QA version
     "ljacajndfccfgnfohlgkdphmbnpkjflk",  // Chrome Remote Desktop (Dev Build)
+
+    // Google Apps:
+    "mclkkofklkfljcocdinagocijmpgbhab",  // Google input tools
+    "gbkeegbaiigmenfmjfclcdgdpimamgkj",  // Office Editing Docs/Sheets/Slides
+    "aapbdbdomjkkjkaonfhkkikfgjllcleb",  // Google Translate
+    "mgijmajocgfcbeboacabfgobmjgjcoja",  // Google Dictionary
+    "mfhehppjhmmnlfbbopchdfldgimhfhfk",  // Google Classroom
+    "mkaakpdehdafacodkgkpghoibnmamcme",  // Google Drawings
+    "pnhechapfaindjhompbnflcldabbghjo",  // Secure Shell
+    "fcgckldmmjdbpdejkclmfnnnehhocbfp",  // Google Finance
+    "jhknlonaankphkkbnmjdlpehkinifeeg",  // Google Forms
+    "jndclpdbaamdhonoechobihbbiimdgai",  // Chromebook Recovery Utility
+    "aohghmighlieiainnegkcijnfilokake",  // Google Docs
+    "eemlkeanncmjljgehlbplemhmdmalhdc",  // Chrome Connectivity Diagnostics
+    "eoieeedlomnegifmaghhjnghhmcldobl",  // Google Apps Script
+    "ndjpildffkeodjdaeebdhnncfhopkajk",  // Network File Share for Chrome OS
+    "pfoeakahkgllhkommkfeehmkfcloagkl",  // Fusion Tables
+    "aapocclcgogkmnckokdopfmhonfmgoek",  // Google Slides
+    "khpfeaanjngmcnplbdlpegiifgpfgdco",  // Smart Card Connector
+    "hmjkmjkepdijhoojdojkdfohbdgmmhki",  // Google Keep - notes and lists
+    "felcaaldnbdncclmgdcncolpebgiejap",  // Google Sheets
+    "gbchcmhmhahfdphkhkmpfmihenigjmpp",  // Chrome Remote Desktop
+    "khkjfddibboofomnlkndfedpoccieiee",  // Study Kit
+    "becloognjehhioodmnimnehjcibkloed",  // Coding with Chrome
+    "hfhhnacclhffhdffklopdkcgdhifgngh",  // Camera
+    "adokjfanaflbkibffcbhihgihpgijcei",  // Share to Classroom
+    "heildphpnddilhkemkielfhnkaagiabh",  // Legacy Browser Support
+    "lpcaedmchfhocbbapmcbpinfpgnhiddi",  // Google Keep Chrome Extension
+    "ldipcbpaocekfooobnbcddclnhejkcpn",  // Google Scholar Button
+    "nnckehldicaciogcbchegobnafnjkcne",  // Google Tone
+    "pfmgfdlgomnbgkofeojodiodmgpgmkac",  // Data Saver
+    "djcfdncoelnlbldjfhinnjlhdjlikmph",  // High Contrast
+    "ipkjmjaledkapilfdigkgfmpekpfnkih",  // Color Enhancer
+    "kcnhkahnjcbndmmehfkdnkjomaanaooo",  // Google Voice
+    "nlbjncdgjeocebhnmkbbbdekmmmcbfjd",  // RSS Subscription Extension
+    "aoggjnmghgmcllfenalipjhmooomfdce",  // SAML SSO for Chrome Apps
+    "fhndealchbngfhdoncgcokameljahhog",  // Certificate Enrollment for Chrome OS
+    "npeicpdbkakmehahjeeohfdhnlpdklia",  // WebRTC Network Limiter
 };
 
 // List of manifest entries from https://developer.chrome.com/apps/manifest.
@@ -396,6 +434,7 @@ const char* const kSafePermissionStrings[] = {
 
     // PS UX can always be seen, this one doesn't go over it so it's fine.
     "app.window.alwaysOnTop",
+    "alwaysOnTopWindows",
 
     // Fullscreen is crippled in Public Sessions, maximizes instead, so both
     // fullscreen and overrideEsc are safe for use in PS. (The recommended
@@ -636,8 +675,8 @@ const char* const kSafePermissionStrings[] = {
     // request is made via chrome.tabCapture.capture call.
     "tabCapture",
 
-    // Privacy sensitive URL access.
-    // "tabs",
+    // The URL returned by chrome.tabs API is scrubbed down to the origin.
+    "tabs",
 
     // Privacy sensitive URL access.
     // "topSites",
@@ -650,6 +689,7 @@ const char* const kSafePermissionStrings[] = {
 
     // Excessive resource usage is not a risk.
     "unlimitedStorage",
+    "unlimited_storage",
 
     // Plugging the USB device is sufficient as consent gesture.
     "usb",
@@ -725,6 +765,17 @@ bool ArrayContains(const char* const (&char_array)[N],
   return ArrayContainsImpl(char_array, N, entry);
 }
 
+// Helper method used to log extension permissions UMA stats.
+void LogPermissionUmaStats(const std::string& permission_string) {
+  const auto* permission_info =
+      extensions::PermissionsInfo::GetInstance()->GetByName(permission_string);
+  // Not a permission.
+  if (!permission_info) return;
+
+  UMA_HISTOGRAM_SPARSE_SLOWLY("Enterprise.PublicSession.ExtensionPermissions",
+                              permission_info->id());
+}
+
 // Returns true for extensions that are considered safe for Public Sessions,
 // which among other things requires the manifest top-level entries to be
 // contained in the |kSafeManifestEntries| whitelist and all permissions to be
@@ -772,6 +823,8 @@ bool IsSafeForPublicSession(const extensions::Extension* extension) {
           }
           for (base::DictionaryValue::Iterator it3(*dict_value);
                !it3.IsAtEnd(); it3.Advance()) {
+            // Log permission (dictionary form).
+            LogPermissionUmaStats(it3.key());
             if (!ArrayContains(kSafePermissionDicts, it3.key())) {
               LOG(ERROR) << extension->id()
                          << " has non-whitelisted dict in permission list: "
@@ -790,6 +843,8 @@ bool IsSafeForPublicSession(const extensions::Extension* extension) {
           safe = false;
           continue;
         }
+        // Log permission (usual, string form).
+        LogPermissionUmaStats(permission_string);
         // Accept whitelisted permissions.
         if (ArrayContains(kSafePermissionStrings, permission_string)) {
           continue;
@@ -890,8 +945,8 @@ DeviceLocalAccountManagementPolicyProvider::
 
 // static
 bool DeviceLocalAccountManagementPolicyProvider::IsWhitelisted(
-    const extensions::Extension* extension) {
-  return ArrayContains(kPublicSessionWhitelist, extension->id());
+    const std::string& extension_id) {
+  return ArrayContains(kPublicSessionWhitelist, extension_id);
 }
 
 std::string DeviceLocalAccountManagementPolicyProvider::
@@ -921,7 +976,7 @@ bool DeviceLocalAccountManagementPolicyProvider::UserMayLoad(
 
     // Allow extension if its specific ID is whitelisted for use in public
     // sessions.
-    if (IsWhitelisted(extension)) {
+    if (IsWhitelisted(extension->id())) {
       return true;
     }
 

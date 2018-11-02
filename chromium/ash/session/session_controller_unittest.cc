@@ -12,7 +12,7 @@
 #include "ash/login_status.h"
 #include "ash/public/interfaces/session_controller.mojom.h"
 #include "ash/session/session_controller.h"
-#include "ash/session/session_state_observer.h"
+#include "ash/session/session_observer.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -24,21 +24,21 @@ using session_manager::SessionState;
 namespace ash {
 namespace {
 
-class TestSessionStateObserver : public SessionStateObserver {
+class TestSessionObserver : public SessionObserver {
  public:
-  TestSessionStateObserver() : active_account_id_(EmptyAccountId()) {}
-  ~TestSessionStateObserver() override {}
+  TestSessionObserver() : active_account_id_(EmptyAccountId()) {}
+  ~TestSessionObserver() override {}
 
-  // SessionStateObserver:
-  void ActiveUserChanged(const AccountId& account_id) override {
+  // SessionObserver:
+  void OnActiveUserSessionChanged(const AccountId& account_id) override {
     active_account_id_ = account_id;
   }
 
-  void UserAddedToSession(const AccountId& account_id) override {
+  void OnUserSessionAdded(const AccountId& account_id) override {
     user_session_account_ids_.push_back(account_id);
   }
 
-  void SessionStateChanged(SessionState state) override { state_ = state; }
+  void OnSessionStateChanged(SessionState state) override { state_ = state; }
 
   std::string GetUserSessionEmails() const {
     std::string emails;
@@ -59,7 +59,7 @@ class TestSessionStateObserver : public SessionStateObserver {
   AccountId active_account_id_;
   std::vector<AccountId> user_session_account_ids_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestSessionStateObserver);
+  DISALLOW_COPY_AND_ASSIGN(TestSessionObserver);
 };
 
 void FillDefaultSessionInfo(mojom::SessionInfo* info) {
@@ -77,12 +77,10 @@ class SessionControllerTest : public testing::Test {
   // testing::Test:
   void SetUp() override {
     controller_ = base::MakeUnique<SessionController>();
-    controller_->AddSessionStateObserver(&observer_);
+    controller_->AddObserver(&observer_);
   }
 
-  void TearDown() override {
-    controller_->RemoveSessionStateObserver(&observer_);
-  }
+  void TearDown() override { controller_->RemoveObserver(&observer_); }
 
   void SetSessionInfo(const mojom::SessionInfo& info) {
     mojom::SessionInfoPtr info_ptr = mojom::SessionInfo::New();
@@ -110,11 +108,11 @@ class SessionControllerTest : public testing::Test {
   }
 
   SessionController* controller() { return controller_.get(); }
-  const TestSessionStateObserver* observer() const { return &observer_; }
+  const TestSessionObserver* observer() const { return &observer_; }
 
  private:
   std::unique_ptr<SessionController> controller_;
-  TestSessionStateObserver observer_;
+  TestSessionObserver observer_;
 
   DISALLOW_COPY_AND_ASSIGN(SessionControllerTest);
 };
@@ -126,8 +124,6 @@ TEST_F(SessionControllerTest, SimpleSessionInfo) {
   SetSessionInfo(info);
   UpdateSession(1u, "user1@test.com");
 
-  EXPECT_EQ(session_manager::kMaxmiumNumberOfUserSessions,
-            controller()->GetMaximumNumberOfLoggedInUsers());
   EXPECT_TRUE(controller()->CanLockScreen());
   EXPECT_TRUE(controller()->ShouldLockScreenAutomatically());
 
@@ -348,6 +344,27 @@ TEST_F(SessionControllerTest, UserSessionUnblockedWithRunningUnlockAnimation) {
               controller()->IsUserSessionBlocked())
         << "Test case state=" << static_cast<int>(test_case.state);
   }
+}
+
+TEST_F(SessionControllerTest, IsUserSupervised) {
+  mojom::UserSessionPtr session = mojom::UserSession::New();
+  session->session_id = 1u;
+  session->type = user_manager::USER_TYPE_SUPERVISED;
+  controller()->UpdateUserSession(std::move(session));
+
+  EXPECT_TRUE(controller()->IsUserSupervised());
+}
+
+TEST_F(SessionControllerTest, IsUserChild) {
+  mojom::UserSessionPtr session = mojom::UserSession::New();
+  session->session_id = 1u;
+  session->type = user_manager::USER_TYPE_CHILD;
+  controller()->UpdateUserSession(std::move(session));
+
+  EXPECT_TRUE(controller()->IsUserChild());
+
+  // Child accounts are supervised.
+  EXPECT_TRUE(controller()->IsUserSupervised());
 }
 
 }  // namespace

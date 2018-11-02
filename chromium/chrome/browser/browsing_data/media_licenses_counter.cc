@@ -21,7 +21,7 @@ namespace {
 std::set<GURL> CountOriginsOnFileTaskRunner(
     storage::FileSystemContext* filesystem_context) {
   DCHECK(filesystem_context->default_file_task_runner()
-             ->RunsTasksOnCurrentThread());
+             ->RunsTasksInCurrentSequence());
 
   storage::FileSystemBackend* backend =
       filesystem_context->GetFileSystemBackend(
@@ -63,6 +63,8 @@ const char* MediaLicensesCounter::GetPrefName() const {
 
 void MediaLicensesCounter::Count() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  // Cancel existing requests.
+  weak_ptr_factory_.InvalidateWeakPtrs();
   scoped_refptr<storage::FileSystemContext> filesystem_context =
       make_scoped_refptr(
           content::BrowserContext::GetDefaultStoragePartition(profile_)

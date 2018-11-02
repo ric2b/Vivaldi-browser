@@ -6,7 +6,9 @@
 
 #include "ash/focus_cycler.h"
 #include "ash/shell.h"
+#include "ash/system/status_area_widget_delegate.h"
 #include "ash/system/tray/system_tray.h"
+#include "ash/system/tray/system_tray_notifier.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
@@ -54,6 +56,7 @@
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/keyboard/keyboard_controller.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 
@@ -111,6 +114,14 @@ const char WebUILoginView::kViewClassName[] =
 
 WebUILoginView::WebUILoginView(const WebViewSettings& settings)
     : settings_(settings) {
+  if (keyboard::KeyboardController::GetInstance())
+    keyboard::KeyboardController::GetInstance()->AddObserver(this);
+  // TODO(crbug.com/648733): OnVirtualKeyboardStateChanged not supported in mash
+  if (!ash_util::IsRunningInMash())
+    ash::Shell::Get()->AddShellObserver(this);
+  else
+    NOTIMPLEMENTED();
+
   registrar_.Add(this,
                  chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
                  content::NotificationService::AllSources());
@@ -165,15 +176,31 @@ WebUILoginView::WebUILoginView(const WebViewSettings& settings)
 
   for (AccelMap::iterator i(accel_map_.begin()); i != accel_map_.end(); ++i)
     AddAccelerator(i->first);
+
+  if (!ash_util::IsRunningInMash() &&
+      ash::Shell::Get()->HasPrimaryStatusArea()) {
+    ash::Shell::Get()->system_tray_notifier()->AddStatusAreaFocusObserver(this);
+  } else {
+    NOTIMPLEMENTED();
+  }
 }
 
 WebUILoginView::~WebUILoginView() {
   for (auto& observer : observer_list_)
     observer.OnHostDestroying();
 
+  // TODO(crbug.com/648733): OnVirtualKeyboardStateChanged not supported in mash
+  if (!ash_util::IsRunningInMash())
+    ash::Shell::Get()->RemoveShellObserver(this);
+  if (keyboard::KeyboardController::GetInstance())
+    keyboard::KeyboardController::GetInstance()->RemoveObserver(this);
+
   if (!ash_util::IsRunningInMash() &&
       ash::Shell::Get()->HasPrimaryStatusArea()) {
-    ash::Shell::Get()->GetPrimarySystemTray()->SetNextFocusableView(nullptr);
+    ash::Shell::Get()->system_tray_notifier()->RemoveStatusAreaFocusObserver(
+        this);
+    ash::StatusAreaWidgetDelegate::GetPrimaryInstance()
+        ->set_default_last_focusable_child(false);
   } else {
     NOTIMPLEMENTED();
   }
@@ -406,6 +433,42 @@ views::WebView* WebUILoginView::web_view() {
   return webui_login_.get();
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// ash::ShellObserver:
+
+void WebUILoginView::OnVirtualKeyboardStateChanged(bool activated,
+                                                   aura::Window* root_window) {
+  auto* keyboard_controller = keyboard::KeyboardController::GetInstance();
+  if (keyboard_controller) {
+    if (activated) {
+      if (!keyboard_controller->HasObserver(this))
+        keyboard_controller->AddObserver(this);
+    } else {
+      keyboard_controller->RemoveObserver(this);
+    }
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// keyboard::KeyboardControllerObserver:
+
+void WebUILoginView::OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) {
+  if (!GetOobeUI())
+    return;
+  CoreOobeView* view = GetOobeUI()->GetCoreOobeView();
+  if (new_bounds.IsEmpty()) {
+    // Keyboard has been hidden.
+    view->ShowControlBar(true);
+    view->SetVirtualKeyboardShown(false);
+  } else {
+    // Keyboard has been shown.
+    view->ShowControlBar(false);
+    view->SetVirtualKeyboardShown(true);
+  }
+}
+
+void WebUILoginView::OnKeyboardClosed() {}
+
 // WebUILoginView private: -----------------------------------------------------
 
 bool WebUILoginView::HandleContextMenu(
@@ -456,7 +519,8 @@ bool WebUILoginView::TakeFocus(content::WebContents* source, bool reverse) {
 
   ash::SystemTray* tray = ash::Shell::Get()->GetPrimarySystemTray();
   if (tray && tray->GetWidget()->IsVisible() && tray->visible()) {
-    tray->SetNextFocusableView(this);
+    ash::StatusAreaWidgetDelegate::GetPrimaryInstance()
+        ->set_default_last_focusable_child(reverse);
     ash::Shell::Get()->focus_cycler()->RotateFocus(
         reverse ? ash::FocusCycler::BACKWARD : ash::FocusCycler::FORWARD);
   } else {
@@ -488,9 +552,11 @@ bool WebUILoginView::PreHandleGestureEvent(
     content::WebContents* source,
     const blink::WebGestureEvent& event) {
   // Disable pinch zooming.
-  return event.GetType() == blink::WebGestureEvent::kGesturePinchBegin ||
-         event.GetType() == blink::WebGestureEvent::kGesturePinchUpdate ||
-         event.GetType() == blink::WebGestureEvent::kGesturePinchEnd;
+  return blink::WebInputEvent::IsPinchGestureEventType(event.GetType());
+}
+
+void WebUILoginView::OnFocusOut(bool reverse) {
+  AboutToRequestFocusFromTabTraversal(reverse);
 }
 
 void WebUILoginView::OnLoginPromptVisible() {

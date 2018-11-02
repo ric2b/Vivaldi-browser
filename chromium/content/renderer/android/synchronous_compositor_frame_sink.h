@@ -86,6 +86,7 @@ class SynchronousCompositorFrameSink
   bool BindToClient(cc::CompositorFrameSinkClient* sink_client) override;
   void DetachFromClient() override;
   void SubmitCompositorFrame(cc::CompositorFrame frame) override;
+  void DidNotProduceFrame(const cc::BeginFrameAck& ack) override;
   void Invalidate() override;
 
   // Partial SynchronousCompositor API implementation.
@@ -155,6 +156,9 @@ class SynchronousCompositorFrameSink
   std::unique_ptr<cc::LocalSurfaceIdAllocator> local_surface_id_allocator_;
   cc::LocalSurfaceId child_local_surface_id_;
   cc::LocalSurfaceId root_local_surface_id_;
+  gfx::Size child_size_;
+  gfx::Size display_size_;
+  float device_scale_factor_ = 0;
   // Uses surface_manager_.
   std::unique_ptr<cc::CompositorFrameSinkSupport> root_support_;
   // Uses surface_manager_.

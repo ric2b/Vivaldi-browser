@@ -27,10 +27,9 @@
 
 #include <inttypes.h>
 #include <memory>
-#include "bindings/core/v8/Microtask.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8PerIsolateData.h"
+#include "bindings/core/v8/V8BindingForCore.h"
+#include "core/dom/ClassicPendingScript.h"
 #include "core/dom/ClassicScript.h"
 #include "core/dom/DocumentParserTiming.h"
 #include "core/dom/Element.h"
@@ -46,9 +45,10 @@
 #include "core/loader/resource/ScriptResource.h"
 #include "platform/Histogram.h"
 #include "platform/WebFrameScheduler.h"
+#include "platform/bindings/Microtask.h"
+#include "platform/bindings/V8PerIsolateData.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/instrumentation/tracing/TracedValue.h"
-#include "platform/loader/fetch/MemoryCache.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -162,10 +162,7 @@ HTMLParserScriptRunner::HTMLParserScriptRunner(
   DCHECK(host_);
 }
 
-HTMLParserScriptRunner::~HTMLParserScriptRunner() {
-  // Verify that detach() has been called.
-  DCHECK(!document_);
-}
+HTMLParserScriptRunner::~HTMLParserScriptRunner() {}
 
 void HTMLParserScriptRunner::Detach() {
   if (!document_)
@@ -291,6 +288,7 @@ void FetchBlockedDocWriteScript(ScriptElementBase* element,
   DCHECK(script_loader);
   script_loader->SetFetchDocWrittenScriptDeferIdle();
   script_loader->PrepareScript(script_start_position);
+  CHECK_EQ(script_loader->GetScriptType(), ScriptType::kClassic);
 }
 
 void EmitWarningForDocWriteScripts(const String& url, Document& document) {
@@ -303,7 +301,6 @@ void EmitWarningForDocWriteScripts(const String& url, Document& document) {
       "connectivity.";
   document.AddConsoleMessage(
       ConsoleMessage::Create(kJSMessageSource, kWarningMessageLevel, message));
-  WTFLogAlways("%s", message.Utf8().Data());
 }
 
 void EmitErrorForDocWriteScripts(const String& url, Document& document) {
@@ -315,7 +312,6 @@ void EmitErrorForDocWriteScripts(const String& url, Document& document) {
       "network connectivity. ";
   document.AddConsoleMessage(
       ConsoleMessage::Create(kJSMessageSource, kErrorMessageLevel, message));
-  WTFLogAlways("%s", message.Utf8().Data());
 }
 
 void HTMLParserScriptRunner::PossiblyFetchBlockedDocWriteScript(
@@ -335,9 +331,12 @@ void HTMLParserScriptRunner::PossiblyFetchBlockedDocWriteScript(
   if (!script_loader || !script_loader->DisallowedFetchForDocWrittenScript())
     return;
 
+  // We don't allow document.write() and its intervention with module scripts.
+  CHECK_EQ(pending_script->GetScriptType(), ScriptType::kClassic);
+
   if (!pending_script->ErrorOccurred()) {
     EmitWarningForDocWriteScripts(
-        pending_script->GetResource()->Url().GetString(), *document_);
+        pending_script->UrlForClassicScript().GetString(), *document_);
     return;
   }
 
@@ -345,13 +344,13 @@ void HTMLParserScriptRunner::PossiblyFetchBlockedDocWriteScript(
   // ERR_CACHE_MISS but other errors are rare with
   // WebCachePolicy::ReturnCacheDataDontLoad.
 
-  EmitErrorForDocWriteScripts(pending_script->GetResource()->Url().GetString(),
+  EmitErrorForDocWriteScripts(pending_script->UrlForClassicScript().GetString(),
                               *document_);
   TextPosition starting_position = ParserBlockingScript()->StartingPosition();
   bool is_parser_inserted = script_loader->IsParserInserted();
   // Remove this resource entry from memory cache as the new request
   // should not join onto this existing entry.
-  GetMemoryCache()->Remove(pending_script->GetResource());
+  pending_script->RemoveFromMemoryCache();
   FetchBlockedDocWriteScript(element, is_parser_inserted, starting_position);
 }
 
@@ -363,7 +362,7 @@ void HTMLParserScriptRunner::PendingScriptFinished(
   // script execution to signal an abrupt stop (e.g., window.close().)
   //
   // The parser is unprepared to be told, and doesn't need to be.
-  if (IsExecutingScript() && pending_script->GetResource()->WasCanceled()) {
+  if (IsExecutingScript() && pending_script->WasCanceled()) {
     pending_script->Dispose();
 
     if (pending_script == ParserBlockingScript()) {
@@ -505,7 +504,7 @@ bool HTMLParserScriptRunner::ExecuteScriptsWaitingForParsing() {
   while (!scripts_to_execute_after_parsing_.IsEmpty()) {
     DCHECK(!IsExecutingScript());
     DCHECK(!HasParserBlockingScript());
-    DCHECK(scripts_to_execute_after_parsing_.front()->GetResource());
+    DCHECK(scripts_to_execute_after_parsing_.front()->IsExternal());
 
     // 1. "Spin the event loop until the first script in the list of scripts
     //     that will execute when the document has finished parsing
@@ -551,7 +550,7 @@ void HTMLParserScriptRunner::RequestParsingBlockingScript(Element* element) {
   if (!ParserBlockingScript())
     return;
 
-  DCHECK(ParserBlockingScript()->GetResource());
+  DCHECK(ParserBlockingScript()->IsExternal());
 
   // We only care about a load callback if resource is not already in the cache.
   // Callers will attempt to run the m_parserBlockingScript if possible before
@@ -574,7 +573,7 @@ void HTMLParserScriptRunner::RequestDeferredScript(Element* element) {
                                              ScriptStreamer::kDeferred);
   }
 
-  DCHECK(pending_script->GetResource());
+  DCHECK(pending_script->IsExternal());
 
   // "Add the element to the end of the list of scripts that will execute
   //  when the document has finished parsing associated with the Document
@@ -644,7 +643,7 @@ void HTMLParserScriptRunner::ProcessScriptElementInternal(
         //  (There can only be one such script per Document at a time.)"
         CHECK(!parser_blocking_script_);
         parser_blocking_script_ =
-            PendingScript::Create(element, script_start_position);
+            ClassicPendingScript::Create(element, script_start_position);
       } else {
         // 6th Clause of Step 23.
         // "Immediately execute the script block,

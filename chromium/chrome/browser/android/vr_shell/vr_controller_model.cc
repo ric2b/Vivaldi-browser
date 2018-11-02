@@ -4,12 +4,14 @@
 
 #include "chrome/browser/android/vr_shell/vr_controller_model.h"
 
-#include "base/files/file_path.h"
-#include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
-#include "base/path_service.h"
+#include "base/trace_event/trace_event.h"
 #include "chrome/browser/android/vr_shell/gltf_parser.h"
-#include "components/component_updater/component_updater_paths.h"
+#include "chrome/grit/browser_resources.h"
+#include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkRect.h"
+#include "third_party/skia/include/core/SkSurface.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/codec/png_codec.h"
 
 namespace vr_shell {
@@ -24,20 +26,30 @@ enum {
 constexpr char kPosition[] = "POSITION";
 constexpr char kTexCoord[] = "TEXCOORD_0";
 
-}  // namespace
+const int kTexturePatchesResources[] = {
+    -1, IDR_VR_SHELL_DDCONTROLLER_TOUCHPAD_PATCH,
+    IDR_VR_SHELL_DDCONTROLLER_APP_PATCH, IDR_VR_SHELL_DDCONTROLLER_SYSTEM_PATCH,
+};
+const gfx::Point kPatchesLocations[] = {{}, {5, 5}, {47, 165}, {47, 234}};
 
-constexpr char const VrControllerModel::kComponentName[];
-constexpr char const VrControllerModel::kDefaultVersion[];
-constexpr char const VrControllerModel::kModelsDirectory[];
-constexpr char const VrControllerModel::kModelFilename[];
-constexpr char const VrControllerModel::kTexturesDirectory[];
-constexpr char const* VrControllerModel::kTextureFilenames[];
+sk_sp<SkImage> LoadPng(int resource_id) {
+  base::StringPiece data =
+      ResourceBundle::GetSharedInstance().GetRawDataResource(resource_id);
+  SkBitmap bitmap;
+  bool decoded =
+      gfx::PNGCodec::Decode(reinterpret_cast<const unsigned char*>(data.data()),
+                            data.size(), &bitmap);
+  DCHECK(decoded);
+  DCHECK(bitmap.colorType() == kRGBA_8888_SkColorType);
+  return SkImage::MakeFromBitmap(bitmap);
+}
+
+}  // namespace
 
 VrControllerModel::VrControllerModel(
     std::unique_ptr<gltf::Asset> gltf_asset,
     std::vector<std::unique_ptr<gltf::Buffer>> buffers)
     : gltf_asset_(std::move(gltf_asset)),
-      texture_bitmaps_(State::STATE_COUNT),
       buffers_(std::move(buffers)) {}
 
 VrControllerModel::~VrControllerModel() = default;
@@ -92,15 +104,30 @@ const gltf::Accessor* VrControllerModel::TextureCoordinateAccessor() const {
   return Accessor(kTexCoord);
 }
 
-void VrControllerModel::SetTexture(int state,
-                                   std::unique_ptr<SkBitmap> bitmap) {
-  DCHECK(state >= 0 && state < STATE_COUNT);
-  texture_bitmaps_[state] = std::move(bitmap);
+void VrControllerModel::SetBaseTexture(sk_sp<SkImage> image) {
+  base_texture_ = image;
 }
 
-const SkBitmap* VrControllerModel::GetTexture(int state) const {
+void VrControllerModel::SetTexture(int state, sk_sp<SkImage> patch) {
   DCHECK(state >= 0 && state < STATE_COUNT);
-  return texture_bitmaps_[state].get();
+  if (!patch) {
+    textures_[state] = base_texture_;
+    return;
+  }
+  sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(
+      base_texture_->width(), base_texture_->height());
+  SkCanvas* canvas = surface->getCanvas();
+  canvas->drawImage(base_texture_, 0, 0);
+  SkPaint paint;
+  paint.setBlendMode(SkBlendMode::kSrc);
+  canvas->drawImage(patch, kPatchesLocations[state].x(),
+                    kPatchesLocations[state].y(), &paint);
+  textures_[state] = sk_sp<SkImage>(surface->makeImageSnapshot());
+}
+
+sk_sp<SkImage> VrControllerModel::GetTexture(int state) const {
+  DCHECK(state >= 0 && state < STATE_COUNT);
+  return textures_[state];
 }
 
 const char* VrControllerModel::Buffer() const {
@@ -118,48 +145,27 @@ const gltf::Accessor* VrControllerModel::Accessor(
   return it->second;
 }
 
-std::unique_ptr<VrControllerModel> VrControllerModel::LoadFromComponent() {
-  base::FilePath models_path;
-  PathService::Get(component_updater::DIR_COMPONENT_USER, &models_path);
-  models_path = models_path.Append(VrControllerModel::kComponentName)
-                    .Append(VrControllerModel::kDefaultVersion)
-                    .Append(VrControllerModel::kModelsDirectory);
-  auto model_path = models_path.Append(VrControllerModel::kModelFilename);
-
-  // No further action if model file is not present
-  if (!base::PathExists(model_path)) {
-    LOG(WARNING) << "Controller model files not found";
-    return nullptr;
-  }
-
-  GltfParser gltf_parser;
+std::unique_ptr<VrControllerModel> VrControllerModel::LoadFromResources() {
+  TRACE_EVENT0("gpu", "VrControllerModel::LoadFromResources");
   std::vector<std::unique_ptr<gltf::Buffer>> buffers;
-  auto asset = gltf_parser.Parse(model_path, &buffers);
-  if (!asset) {
-    LOG(ERROR) << "Failed to read controller model";
-    return nullptr;
-  }
+  auto model_data = ResourceBundle::GetSharedInstance().GetRawDataResource(
+      IDR_VR_SHELL_DDCONTROLLER_MODEL);
+  std::unique_ptr<gltf::Asset> asset =
+      BinaryGltfParser::Parse(model_data, &buffers);
+  DCHECK(asset);
 
   auto controller_model =
       base::MakeUnique<VrControllerModel>(std::move(asset), std::move(buffers));
-
-  auto textures_path =
-      models_path.Append(VrControllerModel::kTexturesDirectory);
+  sk_sp<SkImage> base_texture = LoadPng(IDR_VR_SHELL_DDCONTROLLER_IDLE_TEXTURE);
+  controller_model->SetBaseTexture(std::move(base_texture));
 
   for (int i = 0; i < VrControllerModel::STATE_COUNT; i++) {
-    auto texture_path =
-        textures_path.Append(VrControllerModel::kTextureFilenames[i]);
-    std::string data;
-    auto bitmap = base::MakeUnique<SkBitmap>();
-    if (!base::ReadFileToString(texture_path, &data) ||
-        !gfx::PNGCodec::Decode(
-            reinterpret_cast<const unsigned char*>(data.data()), data.size(),
-            bitmap.get()) ||
-        bitmap->colorType() != kRGBA_8888_SkColorType) {
-      LOG(ERROR) << "Failed to read controller texture";
-      return nullptr;
+    if (kTexturePatchesResources[i] == -1) {
+      controller_model->SetTexture(i, nullptr);
+    } else {
+      auto patch_image = LoadPng(kTexturePatchesResources[i]);
+      controller_model->SetTexture(i, patch_image);
     }
-    controller_model->SetTexture(i, std::move(bitmap));
   }
 
   return controller_model;

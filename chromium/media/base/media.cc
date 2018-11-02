@@ -57,22 +57,12 @@ class MediaInitializer {
   }
 #endif  // defined(OS_ANDROID)
 
-  void enable_new_vp9_codec_string_support() {
-    has_new_vp9_codec_string_support_ = true;
-  }
-
-  bool has_new_vp9_codec_string_support() {
-    return has_new_vp9_codec_string_support_;
-  }
-
  private:
   ~MediaInitializer() = delete;
 
 #if defined(OS_ANDROID)
   bool has_platform_decoder_support_ = false;
 #endif  // defined(OS_ANDROID)
-
-  bool has_new_vp9_codec_string_support_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(MediaInitializer);
 };
@@ -99,13 +89,5 @@ bool PlatformHasOpusSupport() {
   return base::android::BuildInfo::GetInstance()->sdk_int() >= 21;
 }
 #endif  // defined(OS_ANDROID)
-
-void EnableNewVp9CodecStringSupport() {
-  GetMediaInstance()->enable_new_vp9_codec_string_support();
-}
-
-bool HasNewVp9CodecStringSupport() {
-  return GetMediaInstance()->has_new_vp9_codec_string_support();
-}
 
 }  // namespace media

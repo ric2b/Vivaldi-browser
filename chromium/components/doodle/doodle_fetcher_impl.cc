@@ -87,29 +87,38 @@ void DoodleFetcherImpl::FetchDoodle(FinishedCallback callback) {
             "currently running Doodle."
           trigger:
             "Displaying the new tab page on Android."
-          data: "None."
+          data:
+            "The user's Google cookies. Used for example to show birthday "
+            "doodles at appropriate times."
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: true
+          cookies_store: "user"
           setting:
             "Choosing a non-Google search engine in Chromium settings under "
             "'Search Engine' will disable this feature."
-          policy_exception_justification:
-            "Not implemented, considered not useful as it does not upload any "
-            "data."
+          chrome_policy {
+            DefaultSearchProviderEnabled {
+              policy_options {mode: MANDATORY}
+              DefaultSearchProviderEnabled: false
+            }
+          }
         })");
   fetcher_ = URLFetcher::Create(
       BuildDoodleURL(GetGoogleBaseUrl(), gray_background_, override_url_),
       URLFetcher::GET, this, traffic_annotation);
   fetcher_->SetRequestContext(download_context_.get());
-  fetcher_->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
-                         net::LOAD_DO_NOT_SAVE_COOKIES |
-                         net::LOAD_DO_NOT_SEND_AUTH_DATA);
+  // TODO(treib): Use OAuth2 authentication instead of cookies. crbug.com/711314
+  fetcher_->SetLoadFlags(net::LOAD_DO_NOT_SEND_AUTH_DATA);
   fetcher_->SetAutomaticallyRetryOnNetworkChanges(1);
   data_use_measurement::DataUseUserData::AttachToFetcher(
       fetcher_.get(), data_use_measurement::DataUseUserData::DOODLE);
   fetcher_->Start();
+}
+
+bool DoodleFetcherImpl::IsFetchInProgress() const {
+  return !callbacks_.empty();
 }
 
 void DoodleFetcherImpl::OnURLFetchComplete(const URLFetcher* source) {

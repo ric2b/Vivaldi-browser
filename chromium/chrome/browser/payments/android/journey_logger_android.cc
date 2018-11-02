@@ -26,7 +26,7 @@ JourneyLoggerAndroid::JourneyLoggerAndroid(bool is_incognito,
                                            const std::string& url)
     : journey_logger_(is_incognito,
                       GURL(url),
-                      g_browser_process->ukm_service()) {}
+                      g_browser_process->ukm_recorder()) {}
 
 JourneyLoggerAndroid::~JourneyLoggerAndroid() {}
 
@@ -94,19 +94,55 @@ void JourneyLoggerAndroid::SetEventOccurred(
     const base::android::JavaParamRef<jobject>& jcaller,
     jint jevent) {
   DCHECK_GE(jevent, 0);
-  DCHECK_LT(jevent, JourneyLogger::Event::EVENT_MAX);
+  DCHECK_LT(jevent, JourneyLogger::Event::EVENT_ENUM_MAX);
   journey_logger_.SetEventOccurred(static_cast<JourneyLogger::Event>(jevent));
 }
 
-void JourneyLoggerAndroid::RecordJourneyStatsHistograms(
+void JourneyLoggerAndroid::SetSelectedPaymentMethod(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jcaller,
-    jint jcompletion_status) {
-  DCHECK_GE(jcompletion_status, 0);
-  DCHECK_LT(jcompletion_status,
-            JourneyLogger::CompletionStatus::COMPLETION_STATUS_MAX);
-  journey_logger_.RecordJourneyStatsHistograms(
-      static_cast<JourneyLogger::CompletionStatus>(jcompletion_status));
+    jint jpayment_method) {
+  DCHECK_GE(jpayment_method, 0);
+  DCHECK_LT(jpayment_method,
+            JourneyLogger::SelectedPaymentMethod::SELECTED_PAYMENT_METHOD_MAX);
+  journey_logger_.SetSelectedPaymentMethod(
+      static_cast<JourneyLogger::SelectedPaymentMethod>(jpayment_method));
+}
+
+void JourneyLoggerAndroid::SetRequestedInformation(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jcaller,
+    jboolean requested_shipping,
+    jboolean requested_email,
+    jboolean requested_phone,
+    jboolean requested_name) {
+  journey_logger_.SetRequestedInformation(requested_shipping, requested_email,
+                                          requested_phone, requested_name);
+}
+
+void JourneyLoggerAndroid::SetCompleted(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jcaller) {
+  journey_logger_.SetCompleted();
+}
+
+void JourneyLoggerAndroid::SetAborted(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jcaller,
+    jint jreason) {
+  DCHECK_GE(jreason, 0);
+  DCHECK_LT(jreason, JourneyLogger::AbortReason::ABORT_REASON_MAX);
+  journey_logger_.SetAborted(static_cast<JourneyLogger::AbortReason>(jreason));
+}
+
+void JourneyLoggerAndroid::SetNotShown(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jcaller,
+    jint jreason) {
+  DCHECK_GE(jreason, 0);
+  DCHECK_LT(jreason, JourneyLogger::NotShownReason::NOT_SHOWN_REASON_MAX);
+  journey_logger_.SetNotShown(
+      static_cast<JourneyLogger::NotShownReason>(jreason));
 }
 
 static jlong InitJourneyLoggerAndroid(

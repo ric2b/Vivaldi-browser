@@ -45,7 +45,7 @@ class RenderProcessHost;
 class Shell;
 
 #if defined(OS_ANDROID)
-// Android uses a nested message loop for running layout tests because the
+// Android uses a nested run loop for running layout tests because the
 // default message loop, provided by the system, does not offer a blocking
 // Run() method. The loop itself, implemented as NestedMessagePumpAndroid,
 // uses a base::WaitableEvent allowing it to sleep until more events arrive.
@@ -206,6 +206,7 @@ class BlinkTestController : public base::NonThreadSafe,
   void OnPrintMessageToStderr(const std::string& message);
   void OnPrintMessage(const std::string& message);
   void OnOverridePreferences(const WebPreferences& prefs);
+  void OnSetPopupBlockingEnabled(bool block_popups);
   void OnTestFinished();
   void OnClearDevToolsLocalStorage();
   void OnShowDevTools(const std::string& settings,

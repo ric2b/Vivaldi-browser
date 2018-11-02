@@ -72,12 +72,52 @@ define("mojo/public/js/router", [
     });
 
     this.setInterfaceIdNamespaceBit_ = setInterfaceIdNamespaceBit;
+    // |cachedMessageData| caches infomation about a message, so it can be
+    // processed later if a client is not yet attached to the target endpoint.
+    this.cachedMessageData = null;
     this.controlMessageHandler_ = new PipeControlMessageHandler(this);
     this.controlMessageProxy_ = new PipeControlMessageProxy(this.connector_);
-    this.nextInterfaceIdValue = 1;
+    this.nextInterfaceIdValue_ = 1;
     this.encounteredError_ = false;
     this.endpoints_ = new Map();
   }
+
+  Router.prototype.associateInterface = function(handleToSend) {
+    if (!handleToSend.pendingAssociation()) {
+      return types.kInvalidInterfaceId;
+    }
+
+    var id = 0;
+    do {
+      if (this.nextInterfaceIdValue_ >= types.kInterfaceIdNamespaceMask) {
+        this.nextInterfaceIdValue_ = 1;
+      }
+      id = this.nextInterfaceIdValue_++;
+      if (this.setInterfaceIdNamespaceBit_) {
+        id += types.kInterfaceIdNamespaceMask;
+      }
+    } while (this.endpoints_.has(id));
+
+    var endpoint = new InterfaceEndpoint(this, id);
+    this.endpoints_.set(id, endpoint);
+    if (this.encounteredError_) {
+      this.updateEndpointStateMayRemove(endpoint,
+          EndpointStateUpdateType.PEER_ENDPOINT_CLOSED);
+    }
+    endpoint.handleCreated = true;
+
+    if (!handleToSend.notifyAssociation(id, this)) {
+      // The peer handle of |handleToSend|, which is supposed to join this
+      // associated group, has been closed.
+      this.updateEndpointStateMayRemove(endpoint,
+          EndpointStateUpdateType.ENDPOINT_CLOSED);
+
+      pipeControlMessageproxy.notifyPeerEndpointClosed(id,
+          handleToSend.disconnectReason());
+    }
+
+    return id;
+  };
 
   Router.prototype.attachEndpointClient = function(
       interfaceEndpointHandle, interfaceEndpointClient) {
@@ -93,6 +133,32 @@ define("mojo/public/js/router", [
     if (endpoint.peerClosed) {
       timer.createOneShot(0,
           endpoint.client.notifyError.bind(endpoint.client));
+    }
+
+    if (this.cachedMessageData && interfaceEndpointHandle.id() ===
+        this.cachedMessageData.message.getInterfaceId()) {
+      timer.createOneShot(0, (function() {
+        if (!this.cachedMessageData) {
+          return;
+        }
+
+        var targetEndpoint = this.endpoints_.get(
+            this.cachedMessageData.message.getInterfaceId());
+        // Check that the target endpoint's client still exists.
+        if (targetEndpoint && targetEndpoint.client) {
+          var message = this.cachedMessageData.message;
+          var messageValidator = this.cachedMessageData.messageValidator;
+          this.cachedMessageData = null;
+          this.connector_.resumeIncomingMethodCallProcessing();
+          var ok = endpoint.client.handleIncomingMessage(message,
+              messageValidator);
+
+          // Handle invalid cached incoming message.
+          if (!validator.isTestingMode() && !ok) {
+            this.connector_.handleError(true, true);
+          }
+        }
+      }).bind(this));
     }
 
     return endpoint;
@@ -149,25 +215,26 @@ define("mojo/public/js/router", [
     var ok = false;
     if (err !== validator.validationError.NONE) {
       validator.reportValidationError(err);
-    } else if (controlMessageHandler.isPipeControlMessage(message)) {
-      ok = this.controlMessageHandler_.accept(message);
-    } else {
-      var interfaceId = message.getInterfaceId();
-      var endpoint = this.endpoints_.get(interfaceId);
-      if (!endpoint || endpoint.closed) {
-        return true;
-      }
+    } else if (message.deserializeAssociatedEndpointHandles(this)) {
+      if (controlMessageHandler.isPipeControlMessage(message)) {
+        ok = this.controlMessageHandler_.accept(message);
+      } else {
+        var interfaceId = message.getInterfaceId();
+        var endpoint = this.endpoints_.get(interfaceId);
+        if (!endpoint || endpoint.closed) {
+          return true;
+        }
 
-      if (!endpoint.client) {
-        // We need to wait until a client is attached in order to dispatch
-        // further messages.
-        return false;
+        if (!endpoint.client) {
+          // We need to wait until a client is attached in order to dispatch
+          // further messages.
+          this.cachedMessageData = {message: message,
+              messageValidator: messageValidator};
+          this.connector_.pauseIncomingMethodCallProcessing();
+          return true;
+        }
+        ok = endpoint.client.handleIncomingMessage(message, messageValidator);
       }
-      ok = endpoint.client.handleIncomingMessage_(message);
-    }
-
-    if (!ok) {
-      this.handleInvalidIncomingMessage_();
     }
     return ok;
   };
@@ -182,17 +249,6 @@ define("mojo/public/js/router", [
 
   Router.prototype.waitForNextMessageForTesting = function() {
     this.connector_.waitForNextMessageForTesting();
-  };
-
-  Router.prototype.handleInvalidIncomingMessage_ = function(message) {
-    if (!validator.isTestingMode()) {
-      // TODO(yzshen): Consider notifying the embedder.
-      // TODO(yzshen): This should also trigger connection error handler.
-      // Consider making accept() return a boolean and let the connector deal
-      // with this, as the C++ code does.
-      this.close();
-      return;
-    }
   };
 
   Router.prototype.onPeerAssociatedEndpointClosed = function(interfaceId,
@@ -248,6 +304,12 @@ define("mojo/public/js/router", [
 
     if (!types.isMasterInterfaceId(interfaceId) || reason) {
       this.controlMessageProxy_.notifyPeerEndpointClosed(interfaceId, reason);
+    }
+
+    if (this.cachedMessageData && interfaceId ===
+        this.cachedMessageData.message.getInterfaceId()) {
+      this.cachedMessageData = null;
+      this.connector_.resumeIncomingMethodCallProcessing();
     }
   };
 

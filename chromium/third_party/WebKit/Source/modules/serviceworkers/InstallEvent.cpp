@@ -4,10 +4,10 @@
 
 #include "modules/serviceworkers/InstallEvent.h"
 
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
+#include "platform/bindings/ScriptState.h"
 #include "public/platform/WebSecurityOrigin.h"
 
 namespace blink {
@@ -19,8 +19,9 @@ InstallEvent* InstallEvent::Create(const AtomicString& type,
 
 InstallEvent* InstallEvent::Create(const AtomicString& type,
                                    const ExtendableEventInit& event_init,
+                                   int event_id,
                                    WaitUntilObserver* observer) {
-  return new InstallEvent(type, event_init, observer);
+  return new InstallEvent(type, event_init, event_id, observer);
 }
 
 InstallEvent::~InstallEvent() {}
@@ -45,7 +46,7 @@ void InstallEvent::registerForeignFetch(ScriptState* script_state,
   // origins is used to represent the "*" case though.
   Vector<RefPtr<SecurityOrigin>> parsed_origins;
   if (origin_list.size() != 1 || origin_list[0] != "*") {
-    parsed_origins.Resize(origin_list.size());
+    parsed_origins.resize(origin_list.size());
     for (size_t i = 0; i < origin_list.size(); ++i) {
       parsed_origins[i] = SecurityOrigin::CreateFromString(origin_list[i]);
       // Invalid URLs will result in a unique origin. And in general
@@ -89,7 +90,7 @@ void InstallEvent::registerForeignFetch(ScriptState* script_state,
       return;
     }
   }
-  client->RegisterForeignFetchScopes(sub_scope_urls, parsed_origins);
+  client->RegisterForeignFetchScopes(event_id_, sub_scope_urls, parsed_origins);
 }
 
 const AtomicString& InstallEvent::InterfaceName() const {
@@ -98,11 +99,12 @@ const AtomicString& InstallEvent::InterfaceName() const {
 
 InstallEvent::InstallEvent(const AtomicString& type,
                            const ExtendableEventInit& initializer)
-    : ExtendableEvent(type, initializer) {}
+    : ExtendableEvent(type, initializer), event_id_(0) {}
 
 InstallEvent::InstallEvent(const AtomicString& type,
                            const ExtendableEventInit& initializer,
+                           int event_id,
                            WaitUntilObserver* observer)
-    : ExtendableEvent(type, initializer, observer) {}
+    : ExtendableEvent(type, initializer, observer), event_id_(event_id) {}
 
 }  // namespace blink

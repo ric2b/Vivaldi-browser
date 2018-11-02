@@ -9,10 +9,10 @@
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/test/sequenced_worker_pool_owner.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/platform_thread.h"
 #include "chrome/browser/ui/app_list/search/history_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -90,13 +90,13 @@ class StoreFlushWaiter {
 
 class SearchHistoryTest : public testing::Test {
  public:
-  SearchHistoryTest() {}
+  SearchHistoryTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
   ~SearchHistoryTest() override {}
 
   // testing::Test overrides:
   void SetUp() override {
-    worker_pool_owner_.reset(
-        new base::SequencedWorkerPoolOwner(2, "AppLauncherTest"));
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     CreateHistory();
   }
@@ -108,10 +108,9 @@ class SearchHistoryTest : public testing::Test {
     const char kStoreDataFileName[] = "app-launcher-test";
     const base::FilePath data_file =
         temp_dir_.GetPath().AppendASCII(kStoreDataFileName);
-    scoped_refptr<DictionaryDataStore> dictionary_data_store(
-        new DictionaryDataStore(data_file, worker_pool_owner_->pool().get()));
-    history_.reset(new History(scoped_refptr<HistoryDataStore>(
-        new HistoryDataStore(dictionary_data_store))));
+    history_.reset();
+    history_ = base::MakeUnique<History>(base::MakeRefCounted<HistoryDataStore>(
+        base::MakeRefCounted<DictionaryDataStore>(data_file)));
 
     // Replace |data_| with test params.
     history_->data_->RemoveObserver(history_.get());
@@ -144,9 +143,8 @@ class SearchHistoryTest : public testing::Test {
   }
 
  private:
-  base::MessageLoopForUI message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::ScopedTempDir temp_dir_;
-  std::unique_ptr<base::SequencedWorkerPoolOwner> worker_pool_owner_;
 
   std::unique_ptr<History> history_;
   std::unique_ptr<KnownResults> known_results_;

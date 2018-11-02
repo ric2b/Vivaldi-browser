@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PAYMENTS_PAYMENT_REQUEST_BROWSERTEST_BASE_H_
 #define CHROME_BROWSER_UI_VIEWS_PAYMENTS_PAYMENT_REQUEST_BROWSERTEST_BASE_H_
 
+#include <iosfwd>
 #include <list>
 #include <memory>
 #include <string>
@@ -20,10 +21,9 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "components/payments/content/payment_request.h"
-#include "components/payments/content/payment_request.mojom.h"
+#include "components/payments/mojom/payment_request.mojom.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "ui/views/widget/widget_observer.h"
 
 namespace autofill {
 class AutofillProfile;
@@ -34,8 +34,8 @@ namespace content {
 class WebContents;
 }  // namespace content
 
-namespace views {
-class Widget;
+namespace service_manager {
+struct BindSourceInfo;
 }
 
 namespace payments {
@@ -60,8 +60,31 @@ class PersonalDataLoadedObserverMock
 class PaymentRequestBrowserTestBase
     : public InProcessBrowserTest,
       public PaymentRequest::ObserverForTest,
-      public PaymentRequestDialogView::ObserverForTest,
-      public views::WidgetObserver {
+      public PaymentRequestDialogView::ObserverForTest {
+ public:
+  // Various events that can be waited on by the DialogEventObserver.
+  enum DialogEvent : int {
+    DIALOG_OPENED,
+    DIALOG_CLOSED,
+    ORDER_SUMMARY_OPENED,
+    PAYMENT_METHOD_OPENED,
+    SHIPPING_ADDRESS_SECTION_OPENED,
+    SHIPPING_OPTION_SECTION_OPENED,
+    CREDIT_CARD_EDITOR_OPENED,
+    SHIPPING_ADDRESS_EDITOR_OPENED,
+    CONTACT_INFO_EDITOR_OPENED,
+    BACK_NAVIGATION,
+    BACK_TO_PAYMENT_SHEET_NAVIGATION,
+    CONTACT_INFO_OPENED,
+    EDITOR_VIEW_UPDATED,
+    CAN_MAKE_PAYMENT_CALLED,
+    ERROR_MESSAGE_SHOWN,
+    SPEC_DONE_UPDATING,
+    CVC_PROMPT_SHOWN,
+    NOT_SUPPORTED_ERROR,
+    ABORT_CALLED,
+  };
+
  protected:
   // Test will open a browser window to |test_file_path| (relative to
   // chrome/test/data/payments).
@@ -71,10 +94,16 @@ class PaymentRequestBrowserTestBase
   void SetUpCommandLine(base::CommandLine* command_line) override;
   void SetUpOnMainThread() override;
 
-  void SetIncognitoForTesting();
+  void NavigateTo(const std::string& file_path);
+
+  void SetIncognito();
+  void SetInvalidSsl();
 
   // PaymentRequest::ObserverForTest:
   void OnCanMakePaymentCalled() override;
+  void OnNotSupportedError() override;
+  void OnConnectionTerminated() override;
+  void OnAbortCalled() override;
 
   // PaymentRequestDialogView::ObserverForTest:
   void OnDialogOpened() override;
@@ -84,22 +113,21 @@ class PaymentRequestBrowserTestBase
   void OnShippingOptionSectionOpened() override;
   void OnCreditCardEditorOpened() override;
   void OnShippingAddressEditorOpened() override;
+  void OnContactInfoEditorOpened() override;
   void OnBackNavigation() override;
+  void OnBackToPaymentSheetNavigation() override;
   void OnContactInfoOpened() override;
   void OnEditorViewUpdated() override;
   void OnErrorMessageShown() override;
   void OnSpecDoneUpdating() override;
   void OnCvcPromptShown() override;
 
-  // views::WidgetObserver
-  // Effective way to be warned of all dialog closures.
-  void OnWidgetDestroyed(views::Widget* widget) override;
-
   // Will call JavaScript to invoke the PaymentRequest dialog and verify that
   // it's open.
   void InvokePaymentRequestUI();
 
   // Will expect that all strings in |expected_strings| are present in output.
+  void ExpectBodyContains(const std::vector<std::string>& expected_strings);
   void ExpectBodyContains(const std::vector<base::string16>& expected_strings);
 
   // Utility functions that will click on Dialog views and wait for the
@@ -108,9 +136,12 @@ class PaymentRequestBrowserTestBase
   void OpenPaymentMethodScreen();
   void OpenShippingAddressSectionScreen();
   void OpenShippingOptionSectionScreen();
+  void OpenContactInfoScreen();
   void OpenCreditCardEditorScreen();
   void OpenShippingAddressEditorScreen();
+  void OpenContactInfoEditorScreen();
   void ClickOnBackArrow();
+  void ClickOnCancel();
 
   content::WebContents* GetActiveWebContents();
 
@@ -130,7 +161,8 @@ class PaymentRequestBrowserTestBase
 
   void CreatePaymentRequestForTest(
       content::WebContents* web_contents,
-      mojo::InterfaceRequest<payments::mojom::PaymentRequest> request);
+      const service_manager::BindSourceInfo& source_info,
+      payments::mojom::PaymentRequestRequest request);
 
   // Click on a view from within the dialog and waits for an observed event
   // to be observed.
@@ -140,9 +172,10 @@ class PaymentRequestBrowserTestBase
                                 bool wait_for_animation = true);
   void ClickOnChildInListViewAndWait(int child_index,
                                      int total_num_children,
-                                     DialogViewID list_view_id);
-  // Returns "three-line label" values under |parent_view|.
-  std::vector<base::string16> GetThreeLineLabelValues(
+                                     DialogViewID list_view_id,
+                                     bool wait_for_animation = true);
+  // Returns profile label values under |parent_view|.
+  std::vector<base::string16> GetProfileLabelValues(
       DialogViewID parent_view_id);
   // Returns the shipping option labels under |parent_view_id|.
   std::vector<base::string16> GetShippingOptionLabelValues(
@@ -159,6 +192,9 @@ class PaymentRequestBrowserTestBase
   base::string16 GetComboboxValue(autofill::ServerFieldType type);
   void SetComboboxValue(const base::string16& value,
                         autofill::ServerFieldType type);
+  // Special case for the billing address since the interesting value is not
+  // the visible one accessible directly on the base combobox model.
+  void SelectBillingAddress(const std::string& billing_address_id);
 
   // Whether the editor textfield/combobox for the given |type| is currently in
   // an invalid state.
@@ -170,8 +206,9 @@ class PaymentRequestBrowserTestBase
   // Sets proper animation delegates and waits for animation to finish.
   void WaitForAnimation();
 
-  // Returns the text of the StyledLabel with the specific |view_id| that is a
-  // child of the Payment Request dialog view.
+  // Returns the text of the Label or StyledLabel with the specific |view_id|
+  // that is a child of the Payment Request dialog view.
+  const base::string16& GetLabelText(DialogViewID view_id);
   const base::string16& GetStyledLabelText(DialogViewID view_id);
   // Returns the error label text associated with a given field |type|.
   const base::string16& GetErrorLabelForType(autofill::ServerFieldType type);
@@ -180,30 +217,9 @@ class PaymentRequestBrowserTestBase
 
   PaymentRequestDialogView* dialog_view() { return delegate_->dialog_view(); }
 
-  void SetAddressInputOverride(
-      TestChromePaymentRequestDelegate::AddressInputProvider*
-          address_input_provider) {
-    delegate_->SetAddressInputOverride(address_input_provider);
+  void SetRegionDataLoader(autofill::RegionDataLoader* region_data_loader) {
+    delegate_->SetRegionDataLoader(region_data_loader);
   }
-
-  // Various events that can be waited on by the DialogEventObserver.
-  enum DialogEvent : int {
-    DIALOG_OPENED,
-    DIALOG_CLOSED,
-    ORDER_SUMMARY_OPENED,
-    PAYMENT_METHOD_OPENED,
-    SHIPPING_ADDRESS_SECTION_OPENED,
-    SHIPPING_OPTION_SECTION_OPENED,
-    CREDIT_CARD_EDITOR_OPENED,
-    SHIPPING_ADDRESS_EDITOR_OPENED,
-    BACK_NAVIGATION,
-    CONTACT_INFO_OPENED,
-    EDITOR_VIEW_UPDATED,
-    CAN_MAKE_PAYMENT_CALLED,
-    ERROR_MESSAGE_SHOWN,
-    SPEC_DONE_UPDATING,
-    CVC_PROMPT_SHOWN,
-  };
 
   // DialogEventObserver is used to wait on specific events that may have
   // occured before the call to Wait(), or after, in which case a RunLoop is
@@ -249,11 +265,16 @@ class PaymentRequestBrowserTestBase
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
   // Weak, owned by the PaymentRequest object.
   TestChromePaymentRequestDelegate* delegate_;
-  bool incognito_for_testing_;
+  bool is_incognito_;
+  bool is_valid_ssl_;
 
   DISALLOW_COPY_AND_ASSIGN(PaymentRequestBrowserTestBase);
 };
 
 }  // namespace payments
+
+std::ostream& operator<<(
+    std::ostream& out,
+    payments::PaymentRequestBrowserTestBase::DialogEvent event);
 
 #endif  // CHROME_BROWSER_UI_VIEWS_PAYMENTS_PAYMENT_REQUEST_BROWSERTEST_BASE_H_

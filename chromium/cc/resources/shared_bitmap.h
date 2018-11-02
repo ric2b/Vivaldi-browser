@@ -22,13 +22,18 @@ GetSharedBitmapGUIDForTracing(const SharedBitmapId& bitmap_id);
 
 class CC_EXPORT SharedBitmap {
  public:
-  SharedBitmap(uint8_t* pixels, const SharedBitmapId& id);
+  SharedBitmap(uint8_t* pixels, const SharedBitmapId& id,
+               uint32_t sequence_number);
 
   virtual ~SharedBitmap();
 
   uint8_t* pixels() { return pixels_; }
 
   const SharedBitmapId& id() { return id_; }
+
+  // The sequence number that ClientSharedBitmapManager assigned to this
+  // SharedBitmap.
+  uint32_t sequence_number() const { return sequence_number_; }
 
   // Returns true if the size is valid and false otherwise.
   static bool SizeInBytes(const gfx::Size& size, size_t* size_in_bytes);
@@ -46,6 +51,7 @@ class CC_EXPORT SharedBitmap {
  private:
   uint8_t* pixels_;
   SharedBitmapId id_;
+  const uint32_t sequence_number_;
 
   DISALLOW_COPY_AND_ASSIGN(SharedBitmap);
 };

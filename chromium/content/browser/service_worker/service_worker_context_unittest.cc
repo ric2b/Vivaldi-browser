@@ -85,11 +85,13 @@ class RejectInstallTestHelper : public EmbeddedWorkerTestHelper {
  public:
   RejectInstallTestHelper() : EmbeddedWorkerTestHelper(base::FilePath()) {}
 
-  void OnInstallEvent(int embedded_worker_id,
-                      int request_id) override {
-    SimulateSend(new ServiceWorkerHostMsg_InstallEventFinished(
-        embedded_worker_id, request_id,
-        blink::kWebServiceWorkerEventResultRejected, true, base::Time::Now()));
+  void OnInstallEvent(
+      mojom::ServiceWorkerInstallEventMethodsAssociatedPtrInfo client,
+      mojom::ServiceWorkerEventDispatcher::DispatchInstallEventCallback
+          callback) override {
+    dispatched_events()->push_back(Event::Install);
+    std::move(callback).Run(SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED,
+                            true /* has_fetch_handler */, base::Time::Now());
   }
 };
 
@@ -98,11 +100,11 @@ class RejectActivateTestHelper : public EmbeddedWorkerTestHelper {
   RejectActivateTestHelper() : EmbeddedWorkerTestHelper(base::FilePath()) {}
 
   void OnActivateEvent(
-      const mojom::ServiceWorkerEventDispatcher::DispatchActivateEventCallback&
+      mojom::ServiceWorkerEventDispatcher::DispatchActivateEventCallback
           callback) override {
     dispatched_events()->push_back(Event::Activate);
-    callback.Run(SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED,
-                 base::Time::Now());
+    std::move(callback).Run(SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED,
+                            base::Time::Now());
   }
 };
 
@@ -176,18 +178,18 @@ class RecordableEmbeddedWorkerInstanceClient
   const std::vector<Message>& events() const { return events_; }
 
  protected:
-  void StartWorker(
-      const EmbeddedWorkerStartParams& params,
-      mojom::ServiceWorkerEventDispatcherRequest request) override {
+  void StartWorker(const EmbeddedWorkerStartParams& params,
+                   mojom::ServiceWorkerEventDispatcherRequest request,
+                   mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo
+                       instance_host) override {
     events_.push_back(Message::StartWorker);
     EmbeddedWorkerTestHelper::MockEmbeddedWorkerInstanceClient::StartWorker(
-        params, std::move(request));
+        params, std::move(request), std::move(instance_host));
   }
 
-  void StopWorker(const StopWorkerCallback& callback) override {
+  void StopWorker() override {
     events_.push_back(Message::StopWorker);
-    EmbeddedWorkerTestHelper::MockEmbeddedWorkerInstanceClient::StopWorker(
-        std::move(callback));
+    EmbeddedWorkerTestHelper::MockEmbeddedWorkerInstanceClient::StopWorker();
   }
 
   std::vector<Message> events_;
@@ -217,15 +219,14 @@ TEST_F(ServiceWorkerContextTest, Register) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
 
-  EXPECT_EQ(1UL, helper_->ipc_sink()->message_count());
-  ASSERT_EQ(1UL, helper_->dispatched_events()->size());
+  ASSERT_EQ(2UL, helper_->dispatched_events()->size());
   ASSERT_EQ(2UL, client->events().size());
   EXPECT_EQ(RecordableEmbeddedWorkerInstanceClient::Message::StartWorker,
             client->events()[0]);
-  EXPECT_TRUE(helper_->inner_ipc_sink()->GetUniqueMessageMatching(
-      ServiceWorkerMsg_InstallEvent::ID));
-  EXPECT_EQ(EmbeddedWorkerTestHelper::Event::Activate,
+  EXPECT_EQ(EmbeddedWorkerTestHelper::Event::Install,
             helper_->dispatched_events()->at(0));
+  EXPECT_EQ(EmbeddedWorkerTestHelper::Event::Activate,
+            helper_->dispatched_events()->at(1));
   EXPECT_EQ(RecordableEmbeddedWorkerInstanceClient::Message::StopWorker,
             client->events()[1]);
 
@@ -273,13 +274,12 @@ TEST_F(ServiceWorkerContextTest, Register_RejectInstall) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
 
-  EXPECT_EQ(1UL, helper_->ipc_sink()->message_count());
-  EXPECT_EQ(0UL, helper_->dispatched_events()->size());
+  ASSERT_EQ(1UL, helper_->dispatched_events()->size());
   ASSERT_EQ(2UL, client->events().size());
   EXPECT_EQ(RecordableEmbeddedWorkerInstanceClient::Message::StartWorker,
             client->events()[0]);
-  EXPECT_TRUE(helper_->inner_ipc_sink()->GetUniqueMessageMatching(
-      ServiceWorkerMsg_InstallEvent::ID));
+  EXPECT_EQ(EmbeddedWorkerTestHelper::Event::Install,
+            helper_->dispatched_events()->at(0));
   EXPECT_EQ(RecordableEmbeddedWorkerInstanceClient::Message::StopWorker,
             client->events()[1]);
 
@@ -324,15 +324,14 @@ TEST_F(ServiceWorkerContextTest, Register_RejectActivate) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
 
-  EXPECT_EQ(1UL, helper_->ipc_sink()->message_count());
-  ASSERT_EQ(1UL, helper_->dispatched_events()->size());
+  ASSERT_EQ(2UL, helper_->dispatched_events()->size());
   ASSERT_EQ(2UL, client->events().size());
   EXPECT_EQ(RecordableEmbeddedWorkerInstanceClient::Message::StartWorker,
             client->events()[0]);
-  EXPECT_TRUE(helper_->inner_ipc_sink()->GetUniqueMessageMatching(
-      ServiceWorkerMsg_InstallEvent::ID));
-  EXPECT_EQ(EmbeddedWorkerTestHelper::Event::Activate,
+  EXPECT_EQ(EmbeddedWorkerTestHelper::Event::Install,
             helper_->dispatched_events()->at(0));
+  EXPECT_EQ(EmbeddedWorkerTestHelper::Event::Activate,
+            helper_->dispatched_events()->at(1));
   EXPECT_EQ(RecordableEmbeddedWorkerInstanceClient::Message::StopWorker,
             client->events()[1]);
 

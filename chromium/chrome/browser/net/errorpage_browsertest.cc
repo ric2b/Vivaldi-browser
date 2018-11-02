@@ -17,12 +17,12 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_remover.h"
-#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/net/net_error_diagnostics_dialog.h"
 #include "chrome/browser/net/url_request_mock_util.h"
@@ -45,6 +45,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -93,11 +94,21 @@ namespace {
 // space handling may be weird.
 bool WARN_UNUSED_RESULT IsDisplayingText(Browser* browser,
                                          const std::string& text) {
-  std::string command = base::StringPrintf(
-      "var textContent = document.body.innerText;"
-      "var hasText = textContent.indexOf('%s') >= 0;"
-      "domAutomationController.send(hasText);",
-      text.c_str());
+  // clang-format off
+  std::string command = base::StringPrintf(R"(
+    function isNodeVisible(node) {
+      if (!node || node.classList.contains('hidden'))
+        return false;
+      if (!node.parentElement)
+        return true;
+      // Otherwise, we must check all parent nodes
+      return isNodeVisible(node.parentElement);
+    }
+    var node = document.evaluate("//*[contains(text(),'%s')]", document,
+      null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+    domAutomationController.send(isNodeVisible(node));
+  )", text.c_str());
+  // clang-format on
   bool result = false;
   EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
       browser->tab_strip_model()->GetActiveWebContents(), command, &result));
@@ -241,17 +252,17 @@ class LinkDoctorInterceptor : public net::URLRequestInterceptor {
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&LinkDoctorInterceptor::RequestCreated,
-                   weak_factory_.GetWeakPtr()));
+        base::BindOnce(&LinkDoctorInterceptor::RequestCreated,
+                       weak_factory_.GetWeakPtr()));
 
     base::FilePath root_http;
     PathService::Get(chrome::DIR_TEST_DATA, &root_http);
     return new net::URLRequestMockHTTPJob(
-        request,
-        network_delegate,
+        request, network_delegate,
         root_http.AppendASCII("mock-link-doctor.json"),
-        BrowserThread::GetBlockingPool()->GetTaskRunnerWithShutdownBehavior(
-            base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
+        base::CreateTaskRunnerWithTraits(
+            {base::MayBlock(), base::TaskPriority::BACKGROUND,
+             base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
   }
 
   void WaitForRequests(int requests_to_wait_for) {
@@ -449,9 +460,9 @@ class ErrorPageTest : public InProcessBrowserTest {
     UIThreadSearchTermsData search_terms_data(browser()->profile());
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&InstallMockInterceptors,
-                   GURL(search_terms_data.GoogleBaseURLValue()),
-                   base::Passed(&owned_interceptor)));
+        base::BindOnce(&InstallMockInterceptors,
+                       GURL(search_terms_data.GoogleBaseURLValue()),
+                       base::Passed(&owned_interceptor)));
   }
 
   // Returns a GURL that results in a DNS error.
@@ -541,6 +552,7 @@ void InterceptNetworkTransactions(net::URLRequestContextGetter* getter,
 // button to launch a network diagnostics tool.
 IN_PROC_BROWSER_TEST_F(ErrorPageTest, FileNotFound) {
   // Create an empty temp directory, to be sure there's no file in it.
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   GURL non_existent_file_url =
@@ -979,9 +991,9 @@ IN_PROC_BROWSER_TEST_F(ErrorPageTest, StaleCacheStatus) {
       browser()->profile()->GetRequestContext();
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&InterceptNetworkTransactions,
-                 base::RetainedRef(url_request_context_getter),
-                 net::ERR_FAILED));
+      base::BindOnce(&InterceptNetworkTransactions,
+                     base::RetainedRef(url_request_context_getter),
+                     net::ERR_FAILED));
 
   // With no navigation corrections to load, there's only one navigation.
   ui_test_utils::NavigateToURL(browser(), test_url);
@@ -1007,11 +1019,11 @@ IN_PROC_BROWSER_TEST_F(ErrorPageTest, StaleCacheStatus) {
 
   // Clear the cache and reload the same URL; confirm the error page is told
   // that there is no cached copy.
-  BrowsingDataRemover* remover =
-      BrowsingDataRemoverFactory::GetForBrowserContext(browser()->profile());
+  content::BrowsingDataRemover* remover =
+      content::BrowserContext::GetBrowsingDataRemover(browser()->profile());
   remover->Remove(base::Time(), base::Time::Max(),
-                  BrowsingDataRemover::DATA_TYPE_CACHE,
-                  BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
+                  content::BrowsingDataRemover::DATA_TYPE_CACHE,
+                  content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
   ui_test_utils::NavigateToURL(browser(), test_url);
   EXPECT_TRUE(ProbeStaleCopyValue(false));
   EXPECT_FALSE(IsDisplayingText(browser(), GetShowSavedButtonLabel()));
@@ -1061,10 +1073,9 @@ class ErrorPageAutoReloadTest : public InProcessBrowserTest {
     // Ownership of the interceptor is passed to an object the IO thread, but a
     // pointer is kept in the test fixture.  As soon as anything calls
     // URLRequestFilter::ClearHandlers(), |interceptor_| can become invalid.
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::Bind(&AddInterceptorForURL, url,
-                   base::Passed(&owned_interceptor)));
+    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                            base::BindOnce(&AddInterceptorForURL, url,
+                                           base::Passed(&owned_interceptor)));
   }
 
   void NavigateToURLAndWaitForTitle(const GURL& url,
@@ -1119,8 +1130,9 @@ IN_PROC_BROWSER_TEST_F(ErrorPageAutoReloadTest, ManualReloadNotSuppressed) {
   EXPECT_EQ(2, interceptor()->requests());
 
   ToggleHelpBox(browser());
-  EXPECT_TRUE(IsDisplayingText(browser(), l10n_util::GetStringUTF8(
-      IDS_ERRORPAGES_SUGGESTION_CHECK_CONNECTION_HEADER)));
+  EXPECT_TRUE(IsDisplayingText(
+      browser(), l10n_util::GetStringUTF8(
+                     IDS_ERRORPAGES_SUGGESTION_CHECK_CONNECTION_HEADER)));
 
   content::WebContents* web_contents =
     browser()->tab_strip_model()->GetActiveWebContents();
@@ -1128,8 +1140,9 @@ IN_PROC_BROWSER_TEST_F(ErrorPageAutoReloadTest, ManualReloadNotSuppressed) {
   web_contents->GetMainFrame()->ExecuteJavaScriptForTests(
       base::ASCIIToUTF16("document.getElementById('reload-button').click();"));
   nav_observer.Wait();
-  EXPECT_FALSE(IsDisplayingText(browser(), l10n_util::GetStringUTF8(
-      IDS_ERRORPAGES_SUGGESTION_CHECK_CONNECTION_HEADER)));
+  EXPECT_FALSE(IsDisplayingText(
+      browser(), l10n_util::GetStringUTF8(
+                     IDS_ERRORPAGES_SUGGESTION_CHECK_CONNECTION_HEADER)));
 }
 
 // Make sure that a same document navigation does not cause issues with the
@@ -1196,13 +1209,13 @@ class ErrorPageNavigationCorrectionsFailTest : public ErrorPageTest {
   void SetUpOnMainThread() override {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&ErrorPageNavigationCorrectionsFailTest::AddFilters));
+        base::BindOnce(&ErrorPageNavigationCorrectionsFailTest::AddFilters));
   }
 
   void TearDownOnMainThread() override {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&ErrorPageNavigationCorrectionsFailTest::RemoveFilters));
+        base::BindOnce(&ErrorPageNavigationCorrectionsFailTest::RemoveFilters));
   }
 
  private:
@@ -1261,9 +1274,9 @@ IN_PROC_BROWSER_TEST_F(ErrorPageNavigationCorrectionsFailTest,
       browser()->profile()->GetRequestContext();
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&InterceptNetworkTransactions,
-                 base::RetainedRef(url_request_context_getter),
-                 net::ERR_CONNECTION_FAILED));
+      base::BindOnce(&InterceptNetworkTransactions,
+                     base::RetainedRef(url_request_context_getter),
+                     net::ERR_CONNECTION_FAILED));
 
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
       browser(), test_url, 2);
@@ -1280,11 +1293,11 @@ IN_PROC_BROWSER_TEST_F(ErrorPageNavigationCorrectionsFailTest,
 
   // Clear the cache and reload the same URL; confirm the error page is told
   // that there is no cached copy.
-  BrowsingDataRemover* remover =
-      BrowsingDataRemoverFactory::GetForBrowserContext(browser()->profile());
+  content::BrowsingDataRemover* remover =
+      content::BrowserContext::GetBrowsingDataRemover(browser()->profile());
   remover->Remove(base::Time(), base::Time::Max(),
-                  BrowsingDataRemover::DATA_TYPE_CACHE,
-                  BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
+                  content::BrowsingDataRemover::DATA_TYPE_CACHE,
+                  content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
       browser(), test_url, 2);
   EXPECT_TRUE(ProbeStaleCopyValue(false));
@@ -1456,15 +1469,14 @@ class ErrorPageForIDNTest : public InProcessBrowserTest {
     // Clear AcceptLanguages to force punycode decoding.
     browser()->profile()->GetPrefs()->SetString(prefs::kAcceptLanguages,
                                                 std::string());
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::Bind(&ErrorPageForIDNTest::AddFilters));
+    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                            base::BindOnce(&ErrorPageForIDNTest::AddFilters));
   }
 
   void TearDownOnMainThread() override {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&ErrorPageForIDNTest::RemoveFilters));
+        base::BindOnce(&ErrorPageForIDNTest::RemoveFilters));
   }
 
  private:

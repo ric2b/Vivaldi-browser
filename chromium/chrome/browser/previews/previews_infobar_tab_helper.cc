@@ -29,11 +29,11 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
+#endif  // defined(OS_ANDROID)
 
 namespace {
 
-// Adds the preview navigation to the black list. This method is only used on
-// android currently.
+// Adds the preview navigation to the black list.
 void AddPreviewNavigationCallback(content::BrowserContext* browser_context,
                                   const GURL& url,
                                   previews::PreviewsType type,
@@ -47,8 +47,6 @@ void AddPreviewNavigationCallback(content::BrowserContext* browser_context,
 }
 
 }  // namespace
-
-#endif  // defined(OS_ANDROID)
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(PreviewsInfoBarTabHelper);
 
@@ -106,11 +104,11 @@ void PreviewsInfoBarTabHelper::DidFinishNavigation(
             DataReductionProxyChromeSettingsFactory::GetForBrowserContext(
                 web_contents()->GetBrowserContext());
     PreviewsInfoBarDelegate::Create(
-        web_contents(), PreviewsInfoBarDelegate::OFFLINE,
+        web_contents(), previews::PreviewsType::OFFLINE,
         data_reduction_proxy_settings &&
             data_reduction_proxy_settings->IsDataReductionProxyEnabled(),
         base::Bind(&AddPreviewNavigationCallback, browser_context_,
-                   navigation_handle->GetURL(),
+                   navigation_handle->GetRedirectChain()[0],
                    previews::PreviewsType::OFFLINE));
     // Don't try to show other infobars if this is an offline preview.
     return;
@@ -121,9 +119,11 @@ void PreviewsInfoBarTabHelper::DidFinishNavigation(
       navigation_handle->GetResponseHeaders();
   if (headers && data_reduction_proxy::IsLitePagePreview(*headers)) {
     PreviewsInfoBarDelegate::Create(
-        web_contents(), PreviewsInfoBarDelegate::LITE_PAGE,
+        web_contents(), previews::PreviewsType::LITE_PAGE,
         true /* is_data_saver_user */,
-        PreviewsInfoBarDelegate::OnDismissPreviewsInfobarCallback());
+        base::Bind(&AddPreviewNavigationCallback, browser_context_,
+                   navigation_handle->GetRedirectChain()[0],
+                   previews::PreviewsType::LITE_PAGE));
   }
 }
 

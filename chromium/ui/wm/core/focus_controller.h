@@ -55,7 +55,7 @@ class WM_EXPORT FocusController : public aura::client::ActivationClient,
       aura::client::ActivationChangeObserver* observer) override;
   void ActivateWindow(aura::Window* window) override;
   void DeactivateWindow(aura::Window* window) override;
-  aura::Window* GetActiveWindow() override;
+  const aura::Window* GetActiveWindow() const override;
   aura::Window* GetActivatableWindow(aura::Window* window) override;
   aura::Window* GetToplevelWindow(aura::Window* window) override;
   bool CanActivateWindow(aura::Window* window) const override;
@@ -116,7 +116,8 @@ class WM_EXPORT FocusController : public aura::client::ActivationClient,
   // Called when an attempt is made to focus or activate a window via an input
   // event targeted at that window. Rules determine the best focusable window
   // for the input window.
-  void WindowFocusedFromInputEvent(aura::Window* window);
+  void WindowFocusedFromInputEvent(aura::Window* window,
+                                   const ui::Event* event);
 
   aura::Window* active_window_;
   aura::Window* focused_window_;

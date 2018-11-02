@@ -5,7 +5,7 @@
 suite('drag and drop', function() {
   var app;
   var list;
-  var sidebar;
+  var rootFolderNode;
   var store;
   var dndManager;
   var draggedIds;
@@ -18,16 +18,7 @@ suite('drag and drop', function() {
   };
 
   function getFolderNode(id) {
-    var nodes = [sidebar];
-    var node;
-    while (nodes.length) {
-      node = nodes.pop();
-      if (node.itemId == id)
-        return node;
-
-      node.root.querySelectorAll('bookmarks-folder-node')
-          .forEach((x) => {nodes.unshift(x)});
-    }
+    return findFolderNode(rootFolderNode, id);
   }
 
   function getListItem(id) {
@@ -107,9 +98,9 @@ suite('drag and drop', function() {
     app = document.createElement('bookmarks-app');
     replaceBody(app);
     list = app.$$('bookmarks-list');
-    sidebar = app.$$('bookmarks-sidebar');
+    rootFolderNode = app.$$('bookmarks-folder-node');
     dndManager = app.dndManager_;
-    dndManager.dropIndicator_.disableTimeoutForTesting();
+    dndManager.disableTimeoutsForTesting();
     Polymer.dom.flush();
   });
 
@@ -158,7 +149,6 @@ suite('drag and drop', function() {
     assertEquals(
         DropPosition.NONE,
         dndManager.calculateValidDropPositions_(dragElement));
-    dispatchDragEvent('dragleave', dragTarget);
     dispatchDragEvent('dragover', dragElement);
 
     assertDragStyle(dragTarget, DRAG_STYLE.NONE);
@@ -479,5 +469,25 @@ suite('drag and drop', function() {
     assertEquals(
         DropPosition.NONE, dndManager.calculateValidDropPositions_(dragTarget));
     assertDragStyle(dragTarget, DRAG_STYLE.NONE);
+  });
+
+  test('drag item selects/deselects items', function() {
+    store.setReducersEnabled(true);
+
+    store.data.selection.items = new Set(['13', '15']);
+    store.notifyObservers();
+
+    // Dragging an item not in the selection selects the dragged item and
+    // deselects the previous selection.
+    var dragElement = getListItem('14');
+    dispatchDragEvent('dragstart', dragElement);
+    assertDeepEquals(['14'], normalizeSet(store.data.selection.items));
+    dispatchDragEvent('dragend', dragElement);
+
+    // Dragging a folder node deselects any selected items in the bookmark list.
+    dragElement = getFolderNode('15');
+    dispatchDragEvent('dragstart', dragElement);
+    assertDeepEquals([], normalizeSet(store.data.selection.items));
+    dispatchDragEvent('dragend', dragElement);
   });
 });

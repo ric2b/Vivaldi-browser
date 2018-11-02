@@ -132,7 +132,7 @@ void FileInputType::HandleDOMActivateEvent(Event* event) {
   if (GetElement().IsDisabledFormControl())
     return;
 
-  if (!UserGestureIndicator::UtilizeUserGesture())
+  if (!UserGestureIndicator::ProcessingUserGesture())
     return;
 
   if (ChromeClient* chrome_client = this->GetChromeClient()) {
@@ -199,7 +199,7 @@ void FileInputType::SetValue(const String&,
   if (!value_changed)
     return;
 
-  file_list_->Clear();
+  file_list_->clear();
   GetElement().SetNeedsStyleRecalc(
       kSubtreeStyleChange,
       StyleChangeReasonForTracing::Create(StyleChangeReason::kControlValue));
@@ -275,7 +275,7 @@ void FileInputType::CreateShadowSubtree() {
 void FileInputType::DisabledAttributeChanged() {
   DCHECK(GetElement().Shadow());
   if (Element* button =
-          ToElementOrDie(GetElement().UserAgentShadowRoot()->FirstChild()))
+          ToElementOrDie(GetElement().UserAgentShadowRoot()->firstChild()))
     button->SetBooleanAttribute(disabledAttr,
                                 GetElement().IsDisabledFormControl());
 }
@@ -283,7 +283,7 @@ void FileInputType::DisabledAttributeChanged() {
 void FileInputType::MultipleAttributeChanged() {
   DCHECK(GetElement().Shadow());
   if (Element* button =
-          ToElementOrDie(GetElement().UserAgentShadowRoot()->FirstChild()))
+          ToElementOrDie(GetElement().UserAgentShadowRoot()->firstChild()))
     button->setAttribute(
         valueAttr,
         AtomicString(GetLocale().QueryString(

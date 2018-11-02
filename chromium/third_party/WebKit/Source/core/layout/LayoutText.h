@@ -99,17 +99,12 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 
   void AbsoluteRects(Vector<IntRect>&,
                      const LayoutPoint& accumulated_offset) const final;
-  void AbsoluteRectsForRange(Vector<IntRect>&,
-                             unsigned start_offset = 0,
-                             unsigned end_offset = INT_MAX,
-                             bool use_selection_height = false);
 
   void AbsoluteQuads(Vector<FloatQuad>&,
                      MapCoordinatesFlags mode = 0) const final;
   void AbsoluteQuadsForRange(Vector<FloatQuad>&,
                              unsigned start_offset = 0,
-                             unsigned end_offset = INT_MAX,
-                             bool use_selection_height = false);
+                             unsigned end_offset = INT_MAX) const;
   FloatRect LocalBoundingBoxRectForAccessibility() const final;
 
   enum ClippingOption { kNoClipping, kClipToEllipsis };
@@ -209,7 +204,9 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 
   bool ContainsReversedText() const { return contains_reversed_text_; }
 
-  bool IsSecure() const { return Style()->TextSecurity() != TSNONE; }
+  bool IsSecure() const {
+    return Style()->TextSecurity() != ETextSecurity::kNone;
+  }
   void MomentarilyRevealLastTypedCharacter(
       unsigned last_typed_character_offset);
 
@@ -287,8 +284,6 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 
   LayoutRect LocalVisualRect() const override;
 
-  void CheckConsistency() const;
-
   // We put the bitfield first to minimize padding on 64-bit.
 
   // Whether or not we can be broken into multiple lines.
@@ -353,16 +348,11 @@ inline float LayoutText::HyphenWidth(const Font& font,
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutText, IsText());
 
-#if !DCHECK_IS_ON()
-inline void LayoutText::CheckConsistency() const {}
-#endif
-
 inline LayoutText* Text::GetLayoutObject() const {
   return ToLayoutText(CharacterData::GetLayoutObject());
 }
 
 void ApplyTextTransform(const ComputedStyle*, String&, UChar);
-AtomicString LocaleForLineBreakIterator(const ComputedStyle&);
 
 }  // namespace blink
 

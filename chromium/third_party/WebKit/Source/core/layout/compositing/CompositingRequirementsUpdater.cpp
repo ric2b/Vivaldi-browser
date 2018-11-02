@@ -166,6 +166,7 @@ static bool RequiresCompositingOrSquashing(CompositingReasons reasons) {
 }
 
 static CompositingReasons SubtreeReasonsForCompositing(
+    const CompositingReasonFinder& compositing_reason_finder,
     PaintLayer* layer,
     bool has_composited_descendants,
     bool has3d_transformed_descendants) {
@@ -190,9 +191,18 @@ static CompositingReasons SubtreeReasonsForCompositing(
     if (layer->GetLayoutObject().HasClipRelatedProperty())
       subtree_reasons |= kCompositingReasonClipsCompositingDescendants;
 
-    if (layer->GetLayoutObject().Style()->GetPosition() == EPosition::kFixed)
+    // We ignore LCD text here because we are required to composite
+    // scroll-dependant fixed position elements with composited descendants for
+    // correctness - even if we lose LCD.
+    //
+    // TODO(smcgruer): Only composite fixed if needed (http://crbug.com/742213)
+    const bool ignore_lcd_text = true;
+    if (layer->GetLayoutObject().Style()->GetPosition() == EPosition::kFixed ||
+        compositing_reason_finder.RequiresCompositingForScrollDependentPosition(
+            layer, ignore_lcd_text)) {
       subtree_reasons |=
-          kCompositingReasonPositionFixedWithCompositedDescendants;
+          kCompositingReasonPositionFixedOrStickyWithCompositedDescendants;
+    }
   }
 
   // A layer with preserve-3d or perspective only needs to be composited if
@@ -265,9 +275,19 @@ void CompositingRequirementsUpdater::UpdateRecursive(
                                                 false) &
        kCompositingReasonOverflowScrollingTouch);
 
+  // We have to promote the sticky element to work around the bug
+  // (https://crbug.com/698358) of not being able to invalidate the ancestor
+  // after updating the sticky layer position.
+  // TODO(yigu): We should check if we have already lost lcd text. This
+  // would require tracking if we think the current compositing ancestor
+  // layer meets the requirements (i.e. opaque, integer transform, etc).
+  const bool moves_with_respect_to_compositing_ancestor =
+      layer->SticksToScroller() &&
+      !current_recursion_data.compositing_ancestor_->IsRootLayer();
   // TODO(chrishtr): use |hasCompositedScrollingAncestor| instead.
   const bool ignore_lcd_text =
-      current_recursion_data.has_composited_scrolling_ancestor_;
+      current_recursion_data.has_composited_scrolling_ancestor_ ||
+      moves_with_respect_to_compositing_ancestor;
   direct_reasons |=
       compositing_reason_finder_.DirectReasons(layer, ignore_lcd_text);
 
@@ -497,7 +517,8 @@ void CompositingRequirementsUpdater::UpdateRecursive(
     // descendant layers.
     CompositingReasons subtree_compositing_reasons =
         SubtreeReasonsForCompositing(
-            layer, child_recursion_data.subtree_is_compositing_,
+            compositing_reason_finder_, layer,
+            child_recursion_data.subtree_is_compositing_,
             any_descendant_has3d_transform);
     reasons_to_composite |= subtree_compositing_reasons;
     if (!will_be_composited_or_squashed && can_be_composited &&

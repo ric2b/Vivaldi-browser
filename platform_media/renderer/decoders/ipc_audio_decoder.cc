@@ -20,6 +20,7 @@
 #include "platform_media/common/platform_mime_util.h"
 #include "media/base/sample_format.h"
 #include "media/filters/ffmpeg_glue.h"
+#include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "platform_media/renderer/pipeline/protocol_sniffer.h"
 
@@ -237,6 +238,9 @@ void IPCAudioDecoder::OnInitialized(
     const PlatformAudioConfig& audio_config,
     const PlatformVideoConfig& /* video_config */) {
   DCHECK(g_media_task_runner->RunsTasksOnCurrentThread());
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << Loggable(audio_config);
 
   if (success && audio_config.is_valid()) {
     channels_ = audio_config.channel_count;

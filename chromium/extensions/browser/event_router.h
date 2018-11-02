@@ -5,14 +5,13 @@
 #ifndef EXTENSIONS_BROWSER_EVENT_ROUTER_H_
 #define EXTENSIONS_BROWSER_EVENT_ROUTER_H_
 
-#include <map>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
@@ -73,6 +72,9 @@ class EventRouter : public KeyedService,
     virtual void OnListenerAdded(const EventListenerInfo& details) {}
     // Called when a listener is removed.
     virtual void OnListenerRemoved(const EventListenerInfo& details) {}
+
+   protected:
+    virtual ~Observer() {}
   };
 
   // Gets the EventRouter for |browser_context|.
@@ -127,8 +129,7 @@ class EventRouter : public KeyedService,
   // Registers an observer to be notified when an event listener for
   // |event_name| is added or removed. There can currently be only one observer
   // for each distinct |event_name|.
-  void RegisterObserver(Observer* observer,
-                        const std::string& event_name);
+  void RegisterObserver(Observer* observer, const std::string& event_name);
 
   // Unregisters an observer from all events.
   void UnregisterObserver(Observer* observer);
@@ -158,17 +159,12 @@ class EventRouter : public KeyedService,
                                    bool remove_lazy_listener);
 
   // Returns true if there is at least one listener for the given event.
-  bool HasEventListener(const std::string& event_name);
+  bool HasEventListener(const std::string& event_name) const;
 
   // Returns true if the extension is listening to the given event.
+  // (virtual for testing only.)
   virtual bool ExtensionHasEventListener(const std::string& extension_id,
-                                         const std::string& event_name);
-
-  // Return or set the list of events for which the given extension has
-  // registered.
-  std::set<std::string> GetRegisteredEvents(const std::string& extension_id);
-  void SetRegisteredEvents(const std::string& extension_id,
-                           const std::set<std::string>& events);
+                                         const std::string& event_name) const;
 
   // Broadcasts an event to every listener registered for that event.
   virtual void BroadcastEvent(std::unique_ptr<Event> event);
@@ -188,6 +184,16 @@ class EventRouter : public KeyedService,
   void OnEventAck(content::BrowserContext* context,
                   const std::string& extension_id);
 
+  // Returns whether or not the given extension has any registered events.
+  bool HasRegisteredEvents(const ExtensionId& extension_id) const {
+    return !GetRegisteredEvents(extension_id).empty();
+  }
+
+  // Clears registered events for testing purposes.
+  void ClearRegisteredEventsForTest(const ExtensionId& extension_id) {
+    SetRegisteredEvents(extension_id, std::set<std::string>());
+  }
+
   // Reports UMA for an event dispatched to |extension| with histogram value
   // |histogram_value|. Must be called on the UI thread.
   //
@@ -200,14 +206,6 @@ class EventRouter : public KeyedService,
  private:
   friend class EventRouterFilterTest;
   friend class EventRouterTest;
-
-  // The extension and process that contains the event listener for a given
-  // event.
-  struct ListenerProcess;
-
-  // A map between an event name and a set of extensions that are listening
-  // to that event.
-  typedef std::map<std::string, std::set<ListenerProcess> > ListenerMap;
 
   // An identifier for an event dispatch that is used to prevent double dispatch
   // due to race conditions between the direct and lazy dispatch paths.
@@ -225,6 +223,13 @@ class EventRouter : public KeyedService,
       UserGestureState user_gesture,
       const extensions::EventFilteringInfo& info);
 
+  // Returns or sets the list of events for which the given extension has
+  // registered.
+  std::set<std::string> GetRegisteredEvents(
+      const std::string& extension_id) const;
+  void SetRegisteredEvents(const std::string& extension_id,
+                           const std::set<std::string>& events);
+
   void Observe(int type,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
@@ -233,14 +238,7 @@ class EventRouter : public KeyedService,
                          const Extension* extension) override;
   void OnExtensionUnloaded(content::BrowserContext* browser_context,
                            const Extension* extension,
-                           UnloadedExtensionInfo::Reason reason) override;
-
-  // Returns true if the given listener map contains a event listeners for
-  // the given event. If |extension_id| is non-empty, we also check that that
-  // extension is one of the listeners.
-  bool HasEventListenerImpl(const ListenerMap& listeners,
-                            const std::string& extension_id,
-                            const std::string& event_name);
+                           UnloadedExtensionReason reason) override;
 
   // Shared by all event dispatch methods. If |restrict_to_extension_id| is
   // empty, the event is broadcast.  An event that just came off the pending
@@ -326,11 +324,11 @@ class EventRouter : public KeyedService,
                            int exit_code) override;
   void RenderProcessHostDestroyed(content::RenderProcessHost* host) override;
 
-  content::BrowserContext* browser_context_;
+  content::BrowserContext* const browser_context_;
 
   // The ExtensionPrefs associated with |browser_context_|. May be NULL in
   // tests.
-  ExtensionPrefs* extension_prefs_;
+  ExtensionPrefs* const extension_prefs_;
 
   content::NotificationRegistrar registrar_;
 
@@ -340,7 +338,7 @@ class EventRouter : public KeyedService,
   EventListenerMap listeners_;
 
   // Map from base event name to observer.
-  typedef base::hash_map<std::string, Observer*> ObserverMap;
+  using ObserverMap = std::unordered_map<std::string, Observer*>;
   ObserverMap observers_;
 
   std::set<content::RenderProcessHost*> observed_process_set_;
@@ -351,27 +349,27 @@ class EventRouter : public KeyedService,
 struct Event {
   // This callback should return true if the event should be dispatched to the
   // given context and extension, and false otherwise.
-  typedef base::Callback<bool(content::BrowserContext*,
-                              const Extension*,
-                              Event*,
-                              const base::DictionaryValue*)>
-      WillDispatchCallback;
+  using WillDispatchCallback =
+      base::Callback<bool(content::BrowserContext*,
+                          const Extension*,
+                          Event*,
+                          const base::DictionaryValue*)>;
 
   // The identifier for the event, for histograms. In most cases this
   // correlates 1:1 with |event_name|, in some cases events will generate
   // their own names, but they cannot generate their own identifier.
-  events::HistogramValue histogram_value;
+  const events::HistogramValue histogram_value;
 
   // The event to dispatch.
-  std::string event_name;
+  const std::string event_name;
 
   // Arguments to send to the event listener.
   std::unique_ptr<base::ListValue> event_args;
 
-  // If non-NULL, then the event will not be sent to other BrowserContexts
+  // If non-null, then the event will not be sent to other BrowserContexts
   // unless the extension has permission (e.g. incognito tab update -> normal
   // tab only works if extension is allowed incognito access).
-  content::BrowserContext* restrict_to_browser_context;
+  content::BrowserContext* const restrict_to_browser_context;
 
   // If not empty, the event is only sent to extensions with host permissions
   // for this url.
@@ -393,6 +391,11 @@ struct Event {
   // this event to be dispatched to non-extension processes, like WebUI.
   WillDispatchCallback will_dispatch_callback;
 
+  // TODO(lazyboy): This sets |restrict_to_browser_context| to nullptr, this
+  // will dispatch the event to unrelated profiles, not just incognito. Audit
+  // and limit usages of this constructor and introduce "include incognito"
+  // option to a constructor version for clients that need to disptach events to
+  // related browser_contexts. See https://crbug.com/726022.
   Event(events::HistogramValue histogram_value,
         const std::string& event_name,
         std::unique_ptr<base::ListValue> event_args);
@@ -428,7 +431,7 @@ struct EventListenerInfo {
 
   const std::string extension_id;
   const GURL listener_url;
-  content::BrowserContext* browser_context;
+  content::BrowserContext* const browser_context;
 };
 
 }  // namespace extensions

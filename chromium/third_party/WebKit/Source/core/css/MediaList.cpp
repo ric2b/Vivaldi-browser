@@ -66,12 +66,11 @@ RefPtr<MediaQuerySet> MediaQuerySet::Create(const String& media_string) {
 
 bool MediaQuerySet::Set(const String& media_string) {
   RefPtr<MediaQuerySet> result = Create(media_string);
-#if DCHECK_IS_ON()
+  // TODO(keishi) Changed DCHECK to CHECK for crbug.com/699269 diagnosis
   for (const auto& query : result->queries_) {
-    DCHECK(query);
+    CHECK(query);
   }
-#endif
-  queries_.Swap(result->queries_);
+  queries_.swap(result->queries_);
   return true;
 }
 
@@ -86,7 +85,8 @@ bool MediaQuerySet::Add(const String& query_string) {
     return true;
 
   std::unique_ptr<MediaQuery> new_query = std::move(result->queries_[0]);
-  DCHECK(new_query);
+  // TODO(keishi) Changed DCHECK to CHECK for crbug.com/699269 diagnosis
+  CHECK(new_query);
 
   // If comparing with any of the media queries in the collection of media
   // queries returns true terminate these steps.
@@ -111,7 +111,8 @@ bool MediaQuerySet::Remove(const String& query_string_to_remove) {
     return true;
 
   std::unique_ptr<MediaQuery> new_query = std::move(result->queries_[0]);
-  DCHECK(new_query);
+  // TODO(keishi) Changed DCHECK to CHECK for crbug.com/699269 diagnosis
+  CHECK(new_query);
 
   // Remove any media query from the collection of media queries for which
   // comparing with the media query returns true.
@@ -129,7 +130,8 @@ bool MediaQuerySet::Remove(const String& query_string_to_remove) {
 }
 
 void MediaQuerySet::AddMediaQuery(std::unique_ptr<MediaQuery> media_query) {
-  DCHECK(media_query);
+  // TODO(keishi) Changed DCHECK to CHECK for crbug.com/699269 diagnosis
+  CHECK(media_query);
   queries_.push_back(std::move(media_query));
 }
 
@@ -206,12 +208,11 @@ void MediaList::appendMedium(const String& medium,
 }
 
 void MediaList::Reattach(RefPtr<MediaQuerySet> media_queries) {
-  DCHECK(media_queries);
-#if DCHECK_IS_ON
-  for (const auto& query : mediaQueries->QueryVector) {
-    DCHECK(query);
+  // TODO(keishi) Changed DCHECK to CHECK for crbug.com/699269 diagnosis
+  CHECK(media_queries);
+  for (const auto& query : media_queries->QueryVector()) {
+    CHECK(query);
   }
-#endif
   media_queries_ = media_queries;
 }
 

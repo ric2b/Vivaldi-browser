@@ -476,8 +476,8 @@ class FilesCopyRequest : public DriveApiDataRequest<FileResource> {
 
 // This class performs the request for fetching TeamDrive list.
 // The result may contain only first part of the result. The remaining result
-// should be able to be fetched by ContinueGetFileListRequest defined below,
-// or by TeamDriveListRequest with setting page token.
+// should be able to be fetched by another request using this class, by
+// setting the next_page_token from previous call, to page_token.
 // This request is mapped to
 // https://developers.google.com/drive/v2/teamdrives/
 class TeamDriveListRequest : public DriveApiDataRequest<TeamDriveList> {
@@ -690,6 +690,11 @@ class ChangesListRequest : public DriveApiDataRequest<ChangeList> {
     start_change_id_ = start_change_id;
   }
 
+  const std::string& team_drive_id() const { return team_drive_id_; }
+  void set_team_drive_id(const std::string& team_drive_id) {
+    team_drive_id_ = team_drive_id;
+  }
+
  protected:
   // Overridden from DriveApiDataRequest.
   GURL GetURLInternal() const override;
@@ -700,6 +705,7 @@ class ChangesListRequest : public DriveApiDataRequest<ChangeList> {
   int max_results_;
   std::string page_token_;
   int64_t start_change_id_;
+  std::string team_drive_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ChangesListRequest);
 };

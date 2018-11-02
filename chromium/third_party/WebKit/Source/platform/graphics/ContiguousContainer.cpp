@@ -96,7 +96,7 @@ size_t ContiguousContainerBase::UsedCapacityInBytes() const {
 
 size_t ContiguousContainerBase::MemoryUsageInBytes() const {
   return sizeof(*this) + CapacityInBytes() +
-         elements_.Capacity() * sizeof(elements_[0]);
+         elements_.capacity() * sizeof(elements_[0]);
 }
 
 void ContiguousContainerBase::ReserveInitialCapacity(size_t buffer_size,
@@ -146,14 +146,14 @@ void ContiguousContainerBase::RemoveLast() {
 }
 
 void ContiguousContainerBase::Clear() {
-  elements_.Clear();
-  buffers_.Clear();
+  elements_.clear();
+  buffers_.clear();
   end_index_ = 0;
 }
 
 void ContiguousContainerBase::Swap(ContiguousContainerBase& other) {
-  elements_.Swap(other.elements_);
-  buffers_.Swap(other.buffers_);
+  elements_.swap(other.elements_);
+  buffers_.swap(other.buffers_);
   std::swap(end_index_, other.end_index_);
   std::swap(max_object_size_, other.max_object_size_);
 }

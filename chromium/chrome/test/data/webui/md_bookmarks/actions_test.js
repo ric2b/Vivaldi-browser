@@ -26,11 +26,16 @@ suite('selectItem', function() {
   });
 
   test('can select single item', function() {
-    action = bookmarks.actions.selectItem('2', true, false, store.data);
+    action = bookmarks.actions.selectItem('2', store.data, {
+      clear: false,
+      range: false,
+      toggle: false,
+    });
     var expected = {
       name: 'select-items',
       items: ['2'],
-      add: true,
+      clear: false,
+      toggle: false,
       anchor: '2',
     };
     assertDeepEquals(expected, action);
@@ -38,10 +43,15 @@ suite('selectItem', function() {
 
   test('can shift-select in regular list', function() {
     store.data.selection.anchor = '2';
-    action = bookmarks.actions.selectItem('4', false, true, store.data);
+    action = bookmarks.actions.selectItem('4', store.data, {
+      clear: true,
+      range: true,
+      toggle: false,
+    });
 
     assertDeepEquals(['2', '8', '4'], action.items);
-    assertDeepEquals('4', action.anchor);
+    // Shift-selection doesn't change anchor.
+    assertDeepEquals('2', action.anchor);
   });
 
   test('can shift-select in search results', function() {
@@ -53,7 +63,11 @@ suite('selectItem', function() {
     };
     store.data.selection.anchor = '8';
 
-    action = bookmarks.actions.selectItem('4', false, true, store.data);
+    action = bookmarks.actions.selectItem('4', store.data, {
+      clear: true,
+      range: true,
+      toggle: false,
+    });
 
     assertDeepEquals(['4', '8'], action.items);
   });
@@ -62,15 +76,42 @@ suite('selectItem', function() {
     // Anchor hasn't been set yet.
     store.data.selection.anchor = null;
 
-    action = bookmarks.actions.selectItem('4', true, true, store.data);
+    action = bookmarks.actions.selectItem('4', store.data, {
+      clear: false,
+      range: true,
+      toggle: false,
+    });
     assertEquals('4', action.anchor);
     assertDeepEquals(['4'], action.items);
 
     // Anchor set to an item which doesn't exist.
     store.data.selection.anchor = '42';
 
-    action = bookmarks.actions.selectItem('8', true, true, store.data);
+    action = bookmarks.actions.selectItem('8', store.data, {
+      clear: false,
+      range: true,
+      toggle: false,
+    });
     assertEquals('8', action.anchor);
     assertDeepEquals(['8'], action.items);
   });
+});
+
+test('selectFolder prevents selecting invalid nodes', function() {
+  var nodes = testTree(createFolder('1', [
+    createItem('2'),
+  ]));
+
+  var action = bookmarks.actions.selectFolder(ROOT_NODE_ID, nodes);
+  assertEquals(null, action);
+
+  action = bookmarks.actions.selectFolder('2', nodes);
+  assertEquals(null, action);
+
+  action = bookmarks.actions.selectFolder('42', nodes);
+  assertEquals(null, action);
+
+  action = bookmarks.actions.selectFolder('1', nodes);
+  assertEquals('select-folder', action.name);
+  assertEquals('1', action.id);
 });

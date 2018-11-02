@@ -28,6 +28,7 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/Fullscreen.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/events/Event.h"
 #include "core/frame/FrameView.h"
@@ -47,7 +48,7 @@ static void SetFocusForDialog(HTMLDialogElement* dialog) {
 
   // TODO(kochi): How to find focusable element inside Shadow DOM is not
   // currently specified.  This may change at any time.
-  // See crbug/383230 and https://github.com/whatwg/html/issue/2393 .
+  // See crbug/383230 and https://github.com/whatwg/html/issues/2393 .
   for (Node* node = FlatTreeTraversal::FirstChild(*dialog); node; node = next) {
     next = isHTMLDialogElement(*node)
                ? FlatTreeTraversal::NextSkippingChildren(*node, dialog)
@@ -165,6 +166,12 @@ void HTMLDialogElement::showModal(ExceptionState& exception_state) {
     exception_state.ThrowDOMException(kInvalidStateError,
                                       "The element is not in a Document.");
     return;
+  }
+
+  // See comment in |Fullscreen::RequestFullscreen|.
+  if (Fullscreen::IsInFullscreenElementStack(*this)) {
+    UseCounter::Count(GetDocument(),
+                      UseCounter::kShowModalForElementInFullscreenStack);
   }
 
   GetDocument().AddToTopLayer(this);

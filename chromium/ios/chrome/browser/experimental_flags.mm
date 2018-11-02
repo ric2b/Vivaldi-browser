@@ -33,7 +33,6 @@ NSString* const kEnableAlertOnBackgroundUpload =
 NSString* const kEnableNewClearBrowsingDataUI = @"EnableNewClearBrowsingDataUI";
 NSString* const kEnableStartupCrash = @"EnableStartupCrash";
 NSString* const kEnableViewCopyPasswords = @"EnableViewCopyPasswords";
-NSString* const kExternalAppPromptDisabled = @"ExternalAppPromptDisabled";
 NSString* const kFirstRunForceEnabled = @"FirstRunForceEnabled";
 NSString* const kForceResetContextualSearch = @"ForceResetContextualSearch";
 NSString* const kGaiaEnvironment = @"GAIAEnvironment";
@@ -43,9 +42,6 @@ NSString* const kMDMIntegrationDisabled = @"MDMIntegrationDisabled";
 NSString* const kOriginServerHost = @"AlternateOriginServerHost";
 NSString* const kSafariVCSignInDisabled = @"SafariVCSignInDisabled";
 NSString* const kWhatsNewPromoStatus = @"WhatsNewPromoStatus";
-
-const base::Feature kIOSDownloadImageRenaming{
-    "IOSDownloadImageRenaming", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace
 
@@ -73,8 +69,16 @@ std::string GetOriginServerHost() {
 }
 
 WhatsNewPromoStatus GetWhatsNewPromoStatus() {
-  NSInteger status = [[NSUserDefaults standardUserDefaults]
-      integerForKey:kWhatsNewPromoStatus];
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  NSInteger status = [defaults integerForKey:kWhatsNewPromoStatus];
+  // If |status| is set to a value greater than or equal to the count of items
+  // defined in WhatsNewPromoStatus, set it to |WHATS_NEW_DEFAULT| and correct
+  // the value in NSUserDefaults. This error case can happen when a user
+  // upgrades to a version with fewer Whats New Promo settings.
+  if (status >= static_cast<NSInteger>(WHATS_NEW_PROMO_STATUS_COUNT)) {
+    status = static_cast<NSInteger>(WHATS_NEW_DEFAULT);
+    [defaults setInteger:status forKey:kWhatsNewPromoStatus];
+  }
   return static_cast<WhatsNewPromoStatus>(status);
 }
 
@@ -92,24 +96,6 @@ bool IsAutoReloadEnabled() {
     return false;
   return base::StartsWith(group_name, "Enabled",
                           base::CompareCase::INSENSITIVE_ASCII);
-}
-
-bool IsDownloadRenamingEnabled() {
-  // Check if the experimental flag is forced on or off.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kEnableDownloadImageRenaming)) {
-    return true;
-  } else if (command_line->HasSwitch(switches::kDisableDownloadImageRenaming)) {
-    return false;
-  }
-
-  // Check if the finch experiment is turned on.
-  return base::FeatureList::IsEnabled(kIOSDownloadImageRenaming);
-}
-
-bool IsExternalApplicationPromptEnabled() {
-  return ![[NSUserDefaults standardUserDefaults]
-      boolForKey:kExternalAppPromptDisabled];
 }
 
 bool IsForceResetContextualSearchEnabled() {
@@ -219,6 +205,11 @@ bool IsReaderModeEnabled() {
       switches::kEnableReaderModeToolbarIcon);
 }
 
+bool IsRequestMobileSiteEnabled() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  return !command_line->HasSwitch(switches::kDisableRequestMobileSite);
+}
+
 bool IsSafariVCSignInEnabled() {
   return ![[NSUserDefaults standardUserDefaults]
       boolForKey:kSafariVCSignInDisabled];
@@ -274,6 +265,11 @@ bool IsSigninPromoEnabled() {
   std::string group_name = base::FieldTrialList::FindFullName("IOSSigninPromo");
   return base::StartsWith(group_name, "Enabled",
                           base::CompareCase::INSENSITIVE_ASCII);
+}
+
+bool IsNativeAppLauncherEnabled() {
+  return [[NSUserDefaults standardUserDefaults]
+      boolForKey:@"NativeAppLauncherEnabled"];
 }
 
 }  // namespace experimental_flags

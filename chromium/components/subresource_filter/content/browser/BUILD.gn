@@ -16,11 +16,20 @@ static_library("browser") {
     "content_subresource_filter_driver_factory.h",
     "content_subresource_filter_throttle_manager.cc",
     "content_subresource_filter_throttle_manager.h",
+    "page_load_statistics.cc",
+    "page_load_statistics.h",
     "subframe_navigation_filtering_throttle.cc",
     "subframe_navigation_filtering_throttle.h",
     "subresource_filter_client.h",
+    "subresource_filter_observer.h",
+    "subresource_filter_observer_manager.cc",
+    "subresource_filter_observer_manager.h",
     "subresource_filter_safe_browsing_activation_throttle.cc",
     "subresource_filter_safe_browsing_activation_throttle.h",
+    "subresource_filter_safe_browsing_client.cc",
+    "subresource_filter_safe_browsing_client.h",
+    "subresource_filter_safe_browsing_client_request.cc",
+    "subresource_filter_safe_browsing_client_request.h",
     "verified_ruleset_dealer.cc",
     "verified_ruleset_dealer.h",
   ]
@@ -48,12 +57,19 @@ static_library("test_support") {
   sources = [
     "async_document_subresource_filter_test_utils.cc",
     "async_document_subresource_filter_test_utils.h",
+    "fake_safe_browsing_database_manager.cc",
+    "fake_safe_browsing_database_manager.h",
   ]
   deps = [
     ":browser",
     "//base/test:test_support",
     "//components/subresource_filter/core/common",
+    "//content/public/browser",
     "//testing/gtest:gtest",
+    "//url",
+  ]
+  public_deps = [
+    "//components/safe_browsing_db:test_database_manager",
   ]
 }
 
@@ -63,7 +79,6 @@ source_set("unit_tests") {
     "activation_state_computing_navigation_throttle_unittest.cc",
     "async_document_subresource_filter_unittest.cc",
     "content_ruleset_service_unittest.cc",
-    "content_subresource_filter_driver_factory_unittest.cc",
     "content_subresource_filter_throttle_manager_unittest.cc",
     "subframe_navigation_filtering_throttle_unittest.cc",
     "subresource_filter_safe_browsing_activation_throttle_unittest.cc",
@@ -73,7 +88,6 @@ source_set("unit_tests") {
     ":browser",
     ":test_support",
     "//base/test:test_support",
-    "//components/safe_browsing_db:test_database_manager",
     "//components/safe_browsing_db:util",
     "//components/subresource_filter/content/common",
     "//components/subresource_filter/core/browser",

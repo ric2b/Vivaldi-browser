@@ -8,7 +8,6 @@
 #include "core/CoreExport.h"
 #include "core/layout/LayoutBox.h"
 #include "core/layout/ng/ng_layout_input_node.h"
-#include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_physical_box_fragment.h"
 #include "platform/heap/Handle.h"
 
@@ -34,7 +33,7 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   RefPtr<NGLayoutResult> Layout(NGConstraintSpace* constraint_space,
                                 NGBreakToken* break_token = nullptr) override;
   NGLayoutInputNode* NextSibling() override;
-  LayoutObject* GetLayoutObject() override;
+  LayoutObject* GetLayoutObject() const override;
 
   // Computes the value of min-content and max-content for this box.
   // If the underlying layout algorithm's ComputeMinMaxContentSize returns
@@ -60,11 +59,12 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
 
   // Save static position for legacy AbsPos layout.
   void SaveStaticOffsetForLegacy(const NGLogicalOffset&);
+
+  bool CanUseNewLayout() const;
+
+  String ToString() const override;
+
  private:
-
-  bool CanUseNewLayout();
-  bool HasInlineChildren();
-
   // After we run the layout algorithm, this function copies back the geometry
   // data to the layout box.
   void CopyFragmentDataToLayoutBox(const NGConstraintSpace&, NGLayoutResult*);

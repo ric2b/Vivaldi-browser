@@ -6,9 +6,11 @@
 
 #include <utility>
 
+#include "base/feature_list.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/off_the_record_profile_impl.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_features.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/sync_preferences/pref_service_syncable.h"
@@ -74,10 +76,13 @@ scoped_refptr<RefcountedKeyedService>
     GetForProfile(profile->GetOriginalProfile());
   }
 
+  bool store_last_modified = base::FeatureList::IsEnabled(features::kTabsInCbd);
+
   scoped_refptr<HostContentSettingsMap> settings_map(new HostContentSettingsMap(
       profile->GetPrefs(),
       profile->GetProfileType() == Profile::INCOGNITO_PROFILE,
-      profile->GetProfileType() == Profile::GUEST_PROFILE));
+      profile->GetProfileType() == Profile::GUEST_PROFILE,
+      store_last_modified));
 
   sync_preferences::PrefServiceSyncable* pref_service =
       PrefServiceSyncableFromProfile(profile);
@@ -88,12 +93,9 @@ scoped_refptr<RefcountedKeyedService>
   }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  ExtensionService *ext_service =
-      extensions::ExtensionSystem::Get(profile)->extension_service();
-  // This may be null in testing or when the extenion_service hasn't been
-  // initialized, in which case it will be registered then.
-  if (ext_service)
-    ext_service->RegisterContentSettings(settings_map.get());
+  // These must be registered before before the HostSettings are passed over to
+  // the IOThread.  Simplest to do this on construction.
+  ExtensionService::RegisterContentSettings(settings_map.get(), profile);
 #endif // BUILDFLAG(ENABLE_EXTENSIONS)
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   SupervisedUserSettingsService* supervised_service =

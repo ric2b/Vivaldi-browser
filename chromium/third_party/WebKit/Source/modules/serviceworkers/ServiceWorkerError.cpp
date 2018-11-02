@@ -34,6 +34,7 @@
 #include "bindings/core/v8/ToV8ForCore.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
+#include "platform/bindings/V8ThrowException.h"
 
 using blink::WebServiceWorkerError;
 
@@ -78,7 +79,7 @@ ExceptionParams GetExceptionParams(const WebServiceWorkerError& web_error) {
                              web_error.message);
     case WebServiceWorkerError::kErrorTypeNavigation:
       // ErrorTypeNavigation should have bailed out before calling this.
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return ExceptionParams(kUnknownError);
     case WebServiceWorkerError::kErrorTypeNetwork:
       return ExceptionParams(kNetworkError,
@@ -108,10 +109,10 @@ ExceptionParams GetExceptionParams(const WebServiceWorkerError& web_error) {
                              web_error.message);
     case WebServiceWorkerError::kErrorTypeType:
       // ErrorTypeType should have been handled before reaching this point.
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return ExceptionParams(kUnknownError);
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return ExceptionParams(kUnknownError);
 }
 
@@ -121,7 +122,7 @@ ExceptionParams GetExceptionParams(const WebServiceWorkerError& web_error) {
 DOMException* ServiceWorkerError::Take(ScriptPromiseResolver*,
                                        const WebServiceWorkerError& web_error) {
   ExceptionParams params = GetExceptionParams(web_error);
-  ASSERT(params.code != kUnknownError);
+  DCHECK_NE(params.code, kUnknownError);
   return DOMException::Create(params.code, params.message);
 }
 

@@ -49,7 +49,7 @@ void CSSImageGeneratorValue::AddClient(const LayoutObject* layout_object,
   if (!size.IsEmpty())
     sizes_.insert(size);
 
-  LayoutObjectSizeCountMap::iterator it = clients_.Find(layout_object);
+  LayoutObjectSizeCountMap::iterator it = clients_.find(layout_object);
   if (it == clients_.end()) {
     clients_.insert(layout_object, SizeAndCount(size, 1));
   } else {
@@ -66,7 +66,7 @@ CSSImageGeneratorValue* CSSImageGeneratorValue::ValueWithURLsMadeAbsolute() {
 
 void CSSImageGeneratorValue::RemoveClient(const LayoutObject* layout_object) {
   DCHECK(layout_object);
-  LayoutObjectSizeCountMap::iterator it = clients_.Find(layout_object);
+  LayoutObjectSizeCountMap::iterator it = clients_.find(layout_object);
   SECURITY_DCHECK(it != clients_.end());
 
   IntSize removed_image_size;
@@ -89,7 +89,7 @@ void CSSImageGeneratorValue::RemoveClient(const LayoutObject* layout_object) {
 
 Image* CSSImageGeneratorValue::GetImage(const LayoutObject* layout_object,
                                         const IntSize& size) {
-  LayoutObjectSizeCountMap::iterator it = clients_.Find(layout_object);
+  LayoutObjectSizeCountMap::iterator it = clients_.find(layout_object);
   if (it != clients_.end()) {
     SizeAndCount& size_count = it->value;
     IntSize old_size = size_count.size;
@@ -114,15 +114,14 @@ void CSSImageGeneratorValue::PutImage(const IntSize& size,
 
 PassRefPtr<Image> CSSImageGeneratorValue::GetImage(
     const LayoutObject& layout_object,
-    const IntSize& size,
-    float zoom) {
+    const IntSize& size) {
   switch (GetClassType()) {
     case kCrossfadeClass:
       return ToCSSCrossfadeValue(this)->GetImage(layout_object, size);
     case kLinearGradientClass:
       return ToCSSLinearGradientValue(this)->GetImage(layout_object, size);
     case kPaintClass:
-      return ToCSSPaintValue(this)->GetImage(layout_object, size, zoom);
+      return ToCSSPaintValue(this)->GetImage(layout_object, size);
     case kRadialGradientClass:
       return ToCSSRadialGradientValue(this)->GetImage(layout_object, size);
     case kConicGradientClass:
@@ -152,20 +151,20 @@ bool CSSImageGeneratorValue::IsFixedSize() const {
 }
 
 IntSize CSSImageGeneratorValue::FixedSize(
-    const LayoutObject& layout_object,
+    const Document& document,
     const FloatSize& default_object_size) {
   switch (GetClassType()) {
     case kCrossfadeClass:
-      return ToCSSCrossfadeValue(this)->FixedSize(layout_object,
+      return ToCSSCrossfadeValue(this)->FixedSize(document,
                                                   default_object_size);
     case kLinearGradientClass:
-      return ToCSSLinearGradientValue(this)->FixedSize(layout_object);
+      return ToCSSLinearGradientValue(this)->FixedSize(document);
     case kPaintClass:
-      return ToCSSPaintValue(this)->FixedSize(layout_object);
+      return ToCSSPaintValue(this)->FixedSize(document);
     case kRadialGradientClass:
-      return ToCSSRadialGradientValue(this)->FixedSize(layout_object);
+      return ToCSSRadialGradientValue(this)->FixedSize(document);
     case kConicGradientClass:
-      return ToCSSConicGradientValue(this)->FixedSize(layout_object);
+      return ToCSSConicGradientValue(this)->FixedSize(document);
     default:
       NOTREACHED();
   }
@@ -190,19 +189,19 @@ bool CSSImageGeneratorValue::IsPending() const {
   return false;
 }
 
-bool CSSImageGeneratorValue::KnownToBeOpaque(
-    const LayoutObject& layout_object) const {
+bool CSSImageGeneratorValue::KnownToBeOpaque(const Document& document,
+                                             const ComputedStyle& style) const {
   switch (GetClassType()) {
     case kCrossfadeClass:
-      return ToCSSCrossfadeValue(this)->KnownToBeOpaque(layout_object);
+      return ToCSSCrossfadeValue(this)->KnownToBeOpaque(document, style);
     case kLinearGradientClass:
-      return ToCSSLinearGradientValue(this)->KnownToBeOpaque(layout_object);
+      return ToCSSLinearGradientValue(this)->KnownToBeOpaque(document, style);
     case kPaintClass:
-      return ToCSSPaintValue(this)->KnownToBeOpaque(layout_object);
+      return ToCSSPaintValue(this)->KnownToBeOpaque(document, style);
     case kRadialGradientClass:
-      return ToCSSRadialGradientValue(this)->KnownToBeOpaque(layout_object);
+      return ToCSSRadialGradientValue(this)->KnownToBeOpaque(document, style);
     case kConicGradientClass:
-      return ToCSSConicGradientValue(this)->KnownToBeOpaque(layout_object);
+      return ToCSSConicGradientValue(this)->KnownToBeOpaque(document, style);
     default:
       NOTREACHED();
   }

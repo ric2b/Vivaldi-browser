@@ -18,6 +18,8 @@
 #include "headless/grit/headless_lib_resources.h"
 #include "headless/lib/browser/headless_browser_context_options.h"
 #include "headless/lib/browser/headless_browser_impl.h"
+#include "headless/lib/browser/headless_browser_main_parts.h"
+#include "headless/lib/browser/headless_net_log.h"
 #include "headless/lib/browser/headless_permission_manager.h"
 #include "headless/lib/browser/headless_url_request_context_getter.h"
 #include "headless/public/util/black_hole_protocol_handler.h"
@@ -26,10 +28,6 @@
 #include "ui/base/resource/resource_bundle.h"
 
 namespace headless {
-
-namespace {
-const char kHeadlessMojomProtocol[] = "headless-mojom";
-}
 
 // Contains net::URLRequestContextGetter required for resource loading.
 // Must be destructed on the IO thread as per content::ResourceContext
@@ -144,6 +142,32 @@ HeadlessBrowserContextImpl::GetAllWebContents() {
   return result;
 }
 
+void HeadlessBrowserContextImpl::SetFrameTreeNodeId(int render_process_id,
+                                                    int render_frame_routing_id,
+                                                    int frame_tree_node_id) {
+  base::AutoLock lock(frame_tree_node_map_lock_);
+  frame_tree_node_map_[std::make_pair(
+      render_process_id, render_frame_routing_id)] = frame_tree_node_id;
+}
+
+void HeadlessBrowserContextImpl::RemoveFrameTreeNode(
+    int render_process_id,
+    int render_frame_routing_id) {
+  base::AutoLock lock(frame_tree_node_map_lock_);
+  frame_tree_node_map_.erase(
+      std::make_pair(render_process_id, render_frame_routing_id));
+}
+
+int HeadlessBrowserContextImpl::GetFrameTreeNodeId(int render_process_id,
+                                                   int render_frame_id) const {
+  base::AutoLock lock(frame_tree_node_map_lock_);
+  const auto& find_it = frame_tree_node_map_.find(
+      std::make_pair(render_process_id, render_frame_id));
+  if (find_it == frame_tree_node_map_.end())
+    return -1;
+  return find_it->second;
+}
+
 void HeadlessBrowserContextImpl::Close() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   browser_->DestroyBrowserContext(this);
@@ -223,7 +247,8 @@ net::URLRequestContextGetter* HeadlessBrowserContextImpl::CreateRequestContext(
           content::BrowserThread::GetTaskRunnerForThread(
               content::BrowserThread::FILE),
           protocol_handlers, context_options_->TakeProtocolHandlers(),
-          std::move(request_interceptors), context_options_.get()));
+          std::move(request_interceptors), context_options_.get(),
+          browser_->browser_main_parts()->net_log()));
   resource_context_->set_url_request_context_getter(url_request_context_getter);
   return url_request_context_getter.get();
 }
@@ -360,14 +385,6 @@ HeadlessBrowserContext::Builder::SetIncognitoMode(bool incognito_mode) {
 }
 
 HeadlessBrowserContext::Builder&
-HeadlessBrowserContext::Builder::AddJsMojoBindings(
-    const std::string& mojom_name,
-    const std::string& js_bindings) {
-  mojo_bindings_.emplace_back(mojom_name, js_bindings);
-  return *this;
-}
-
-HeadlessBrowserContext::Builder&
 HeadlessBrowserContext::Builder::AddTabSocketMojoBindings() {
   std::string js_bindings =
       ui::ResourceBundle::GetSharedInstance()
@@ -393,19 +410,6 @@ HeadlessBrowserContext::Builder::SetOverrideWebPreferencesCallback(
 
 HeadlessBrowserContext* HeadlessBrowserContext::Builder::Build() {
   if (!mojo_bindings_.empty()) {
-    std::unique_ptr<InMemoryProtocolHandler> headless_mojom_protocol_handler(
-        new InMemoryProtocolHandler());
-    for (const MojoBindings& binding : mojo_bindings_) {
-      headless_mojom_protocol_handler->InsertResponse(
-          binding.mojom_name,
-          InMemoryProtocolHandler::Response(binding.js_bindings,
-                                            "application/javascript"));
-    }
-    DCHECK(options_->protocol_handlers_.find(kHeadlessMojomProtocol) ==
-           options_->protocol_handlers_.end());
-    options_->protocol_handlers_[kHeadlessMojomProtocol] =
-        std::move(headless_mojom_protocol_handler);
-
     // Unless you know what you're doing it's unsafe to allow http/https for a
     // context with mojo bindings.
     if (!enable_http_and_https_if_mojo_used_) {

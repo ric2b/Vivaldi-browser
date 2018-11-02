@@ -322,6 +322,16 @@ void ComponentLoader::AddGalleryExtension() {
 #endif
 }
 
+void ComponentLoader::AddZipArchiverExtension() {
+#if defined(OS_CHROMEOS)
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kEnableZipArchiverOnFileManager)) {
+    Add(IDR_ZIP_ARCHIVER_MANIFEST,
+        base::FilePath(FILE_PATH_LITERAL("zip_archiver")));
+  }
+#endif  // defined(OS_CHROMEOS)
+}
+
 void ComponentLoader::AddWebstoreWidgetExtension() {
 #if defined(OS_CHROMEOS)
   AddWithNameAndDescription(
@@ -372,6 +382,9 @@ void ComponentLoader::AddNetworkSpeechSynthesisExtension() {
 void ComponentLoader::AddVivaldiApp() {
   Add(VIVALDI_MAINFEST_JS,
       base::FilePath(FILE_PATH_LITERAL("vivaldi")));
+  // Make sure that Vivaldi can access the extension preferences. See
+  // <URL://https://developer.chrome.com/extensions/types#ChromeSetting>.
+  ExtensionPrefs::Get(this->profile_)->RegisterVivaldiForExtPrefs();
 }
 
 #if defined(OS_CHROMEOS)
@@ -580,6 +593,7 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
     AddAudioPlayerExtension();
     AddFileManagerExtension();
     AddGalleryExtension();
+    AddZipArchiverExtension();
     AddWebstoreWidgetExtension();
 
     AddHangoutServicesExtension();

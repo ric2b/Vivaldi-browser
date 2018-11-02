@@ -23,6 +23,11 @@
 #include "base/numerics/safe_conversions.h"
 #include "build/build_config.h"
 
+#if defined(OS_IOS)
+#include <time.h>
+#include "base/ios/ios_util.h"
+#endif
+
 namespace {
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
@@ -52,8 +57,20 @@ int64_t MachAbsoluteTimeToTicks(uint64_t mach_absolute_time) {
 }
 #endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
+// Returns monotonically growing number of ticks in microseconds since some
+// unspecified starting point.
 int64_t ComputeCurrentTicks() {
 #if defined(OS_IOS)
+  // iOS 10 supports clock_gettime(CLOCK_MONOTONIC, ...), which is
+  // around 15 times faster than sysctl() call. Use it if possible;
+  // otherwise, fall back to sysctl().
+  if (base::ios::IsRunningOnIOS10OrLater()) {
+    struct timespec tp;
+    if (clock_gettime(CLOCK_MONOTONIC, &tp) == 0) {
+      return (int64_t)tp.tv_sec * 1000000 + tp.tv_nsec / 1000;
+    }
+  }
+
   // On iOS mach_absolute_time stops while the device is sleeping. Instead use
   // now - KERN_BOOTTIME to get a time difference that is not impacted by clock
   // changes. KERN_BOOTTIME will be updated by the system whenever the system
@@ -118,25 +135,6 @@ namespace base {
 
 // Time -----------------------------------------------------------------------
 
-// Core Foundation uses a double second count since 2001-01-01 00:00:00 UTC.
-// The UNIX epoch is 1970-01-01 00:00:00 UTC.
-// Windows uses a Gregorian epoch of 1601.  We need to match this internally
-// so that our time representations match across all platforms.  See bug 14734.
-//   irb(main):010:0> Time.at(0).getutc()
-//   => Thu Jan 01 00:00:00 UTC 1970
-//   irb(main):011:0> Time.at(-11644473600).getutc()
-//   => Mon Jan 01 00:00:00 UTC 1601
-static const int64_t kWindowsEpochDeltaSeconds = INT64_C(11644473600);
-
-// static
-const int64_t Time::kWindowsEpochDeltaMicroseconds =
-    kWindowsEpochDeltaSeconds * Time::kMicrosecondsPerSecond;
-
-// Some functions in time.cc use time_t directly, so we provide an offset
-// to convert from time_t (Unix epoch) and internal (Windows epoch).
-// static
-const int64_t Time::kTimeTToMicrosecondsOffset = kWindowsEpochDeltaMicroseconds;
-
 // static
 Time Time::Now() {
   return FromCFAbsoluteTime(CFAbsoluteTimeGetCurrent());
@@ -152,7 +150,7 @@ Time Time::FromCFAbsoluteTime(CFAbsoluteTime t) {
     return Max();
   return Time(static_cast<int64_t>((t + kCFAbsoluteTimeIntervalSince1970) *
                                    kMicrosecondsPerSecond) +
-              kWindowsEpochDeltaMicroseconds);
+              kTimeTToMicrosecondsOffset);
 }
 
 CFAbsoluteTime Time::ToCFAbsoluteTime() const {
@@ -162,8 +160,9 @@ CFAbsoluteTime Time::ToCFAbsoluteTime() const {
     return 0;  // Consider 0 as a null Time.
   if (is_max())
     return std::numeric_limits<CFAbsoluteTime>::infinity();
-  return (static_cast<CFAbsoluteTime>(us_ - kWindowsEpochDeltaMicroseconds) /
-      kMicrosecondsPerSecond) - kCFAbsoluteTimeIntervalSince1970;
+  return (static_cast<CFAbsoluteTime>(us_ - kTimeTToMicrosecondsOffset) /
+          kMicrosecondsPerSecond) -
+         kCFAbsoluteTimeIntervalSince1970;
 }
 
 // static
@@ -194,7 +193,7 @@ bool Time::FromExploded(bool is_local, const Exploded& exploded, Time* time) {
   // microseconds and then cast to int64. If
   // it cannot be suited to int64, then fail to avoid overflows.
   double microseconds =
-      (seconds * kMicrosecondsPerSecond) + kWindowsEpochDeltaMicroseconds;
+      (seconds * kMicrosecondsPerSecond) + kTimeTToMicrosecondsOffset;
   if (microseconds > std::numeric_limits<int64_t>::max() ||
       microseconds < std::numeric_limits<int64_t>::min()) {
     *time = Time(0);
@@ -228,8 +227,8 @@ void Time::Explode(bool is_local, Exploded* exploded) const {
   int64_t microsecond = us_ % kMicrosecondsPerSecond;
   if (microsecond < 0)
     microsecond += kMicrosecondsPerSecond;
-  CFAbsoluteTime seconds = ((us_ - microsecond) / kMicrosecondsPerSecond) -
-                           kWindowsEpochDeltaSeconds -
+  CFAbsoluteTime seconds = ((us_ - microsecond - kTimeTToMicrosecondsOffset) /
+                            kMicrosecondsPerSecond) -
                            kCFAbsoluteTimeIntervalSince1970;
 
   base::ScopedCFTypeRef<CFTimeZoneRef> time_zone(

@@ -6,6 +6,7 @@
 
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_client.h"
+#include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/aura/window.h"
 #include "ui/display/display.h"
 
@@ -30,7 +31,7 @@ void WindowTreeClientPrivate::OnEmbed(ui::mojom::WindowTree* window_tree) {
   const Id focused_window_id = 0;
   tree_client_impl_->OnEmbedImpl(window_tree, 1, std::move(root_data),
                                  display_id, focused_window_id, true,
-                                 cc::FrameSinkId(1, 1), base::nullopt);
+                                 base::nullopt);
 }
 
 WindowTreeHostMus* WindowTreeClientPrivate::CallWmNewDisplayAdded(
@@ -48,9 +49,8 @@ WindowTreeHostMus* WindowTreeClientPrivate::CallWmNewDisplayAdded(
     const display::Display& display,
     ui::mojom::WindowDataPtr root_data,
     bool parent_drawn) {
-  return tree_client_impl_->WmNewDisplayAddedImpl(
-      display, std::move(root_data), parent_drawn, cc::FrameSinkId(1, 1),
-      base::nullopt);
+  return tree_client_impl_->WmNewDisplayAddedImpl(display, std::move(root_data),
+                                                  parent_drawn, base::nullopt);
 }
 
 void WindowTreeClientPrivate::CallOnWindowInputEvent(
@@ -81,11 +81,26 @@ void WindowTreeClientPrivate::CallOnCaptureChanged(Window* new_capture,
       old_capture ? WindowPortMus::Get(old_capture)->server_id() : 0);
 }
 
+void WindowTreeClientPrivate::CallOnConnect() {
+  const ClientSpecificId client_id = 1;
+  tree_client_impl_->OnConnect(client_id);
+}
+
+WindowTreeHostMusInitParams
+WindowTreeClientPrivate::CallCreateInitParamsForNewDisplay() {
+  return tree_client_impl_->CreateInitParamsForNewDisplay();
+}
+
 void WindowTreeClientPrivate::SetTreeAndClientId(
     ui::mojom::WindowTree* window_tree,
     ClientSpecificId client_id) {
   tree_client_impl_->WindowTreeConnectionEstablished(window_tree);
   tree_client_impl_->client_id_ = client_id;
+}
+
+void WindowTreeClientPrivate::SetWindowManagerClient(
+    ui::mojom::WindowManagerClient* client) {
+  tree_client_impl_->window_manager_client_ = client;
 }
 
 bool WindowTreeClientPrivate::HasPointerWatcher() {

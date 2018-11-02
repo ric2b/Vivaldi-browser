@@ -27,7 +27,11 @@ class PaymentRequestErrorMessageTest : public PaymentRequestBrowserTestBase {
 
 // Testing the use of the complete('fail') JS API and the error message.
 IN_PROC_BROWSER_TEST_F(PaymentRequestErrorMessageTest, CompleteFail) {
-  AddCreditCard(autofill::test::GetCreditCard());  // Visa
+  autofill::AutofillProfile billing_profile(autofill::test::GetFullProfile());
+  AddAutofillProfile(billing_profile);
+  autofill::CreditCard card(autofill::test::GetCreditCard());  // Visa
+  card.set_billing_address_id(billing_profile.guid());
+  AddCreditCard(card);
   InvokePaymentRequestUI();
 
   // We are ready to pay.
@@ -39,6 +43,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestErrorMessageTest, CompleteFail) {
 
   ResetEventObserver(DialogEvent::ERROR_MESSAGE_SHOWN);
   ClickOnDialogViewAndWait(DialogViewID::CVC_PROMPT_CONFIRM_BUTTON);
+  EXPECT_FALSE(dialog_view()->throbber_overlay_for_testing()->visible());
 
   // The user can only close the dialog at this point.
   ResetEventObserver(DialogEvent::DIALOG_CLOSED);

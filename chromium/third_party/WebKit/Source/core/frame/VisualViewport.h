@@ -181,7 +181,7 @@ class CORE_EXPORT VisualViewport final
   IntPoint RootFrameToViewport(const IntPoint&) const;
 
   // ScrollableArea implementation
-  HostWindow* GetHostWindow() const override;
+  PlatformChromeClient* GetChromeClient() const override;
   bool ShouldUseIntegerScrollOffset() const override;
   void SetScrollOffset(const ScrollOffset&,
                        ScrollType,
@@ -209,7 +209,7 @@ class CORE_EXPORT VisualViewport final
   GraphicsLayer* LayerForScrolling() const override;
   GraphicsLayer* LayerForHorizontalScrollbar() const override;
   GraphicsLayer* LayerForVerticalScrollbar() const override;
-  FrameViewBase* GetFrameViewBase() override;
+  bool ScheduleAnimation() override;
   CompositorAnimationHost* GetCompositorAnimationHost() const override;
   CompositorAnimationTimeline* GetCompositorAnimationTimeline() const override;
   IntRect VisibleContentRect(
@@ -217,11 +217,11 @@ class CORE_EXPORT VisualViewport final
   RefPtr<WebTaskRunner> GetTimerTaskRunner() const final;
 
   // Visual Viewport API implementation.
-  double ScrollLeft();
-  double ScrollTop();
-  double ClientWidth();
-  double ClientHeight();
-  double PageScale();
+  double OffsetLeft() const;
+  double OffsetTop() const;
+  double Width() const;
+  double Height() const;
+  double ScaleForVisualViewport() const;
 
   // Used for gathering data on user pinch-zoom statistics.
   void UserDidChangeScale();
@@ -239,14 +239,14 @@ class CORE_EXPORT VisualViewport final
 
   bool VisualViewportSuppliesScrollbars() const;
 
-  void UpdateStyleAndLayoutIgnorePendingStylesheets();
+  void UpdateStyleAndLayoutIgnorePendingStylesheets() const;
 
   void EnqueueScrollEvent();
   void EnqueueResizeEvent();
 
   // GraphicsLayerClient implementation.
   bool NeedsRepaint(const GraphicsLayer&) const {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return true;
   }
   IntRect ComputeInterestRect(const GraphicsLayer*, const IntRect&) const;

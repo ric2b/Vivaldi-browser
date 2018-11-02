@@ -16,8 +16,10 @@ const char kDisableSigninPromo[] = "disable-signin-promo";
 // Disables sending signin scoped device id to LSO with refresh token request.
 const char kDisableSigninScopedDeviceId[] = "disable-signin-scoped-device-id";
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 // Enables consistent identity features.
 const char kEnableAccountConsistency[] = "enable-account-consistency";
+#endif
 
 // Enables sending EnableRefreshTokenAnnotationRequest.
 extern const char kEnableRefreshTokenAnnotationRequest[] =
@@ -28,11 +30,5 @@ const char kEnableSigninPromo[] = "enable-signin-promo";
 
 // Enables multiple account versions of chrome.identity APIs.
 const char kExtensionsMultiAccount[] = "extensions-multi-account";
-
-// Enables or disables the new password separated sign in flow in a tab modal
-// dialog.
-const base::Feature kUsePasswordSeparatedSigninFlow {
-  "UsePasswordSeparatedSigninFlow", base::FEATURE_ENABLED_BY_DEFAULT
-};
 
 }  // namespace switches

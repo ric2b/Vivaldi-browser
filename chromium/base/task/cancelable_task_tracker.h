@@ -29,7 +29,8 @@
 // 2. It's safe to destroy a CancelableTaskTracker while there are outstanding
 //    tasks. This is commonly used to cancel all outstanding tasks.
 //
-// 3. Both task and reply are deleted on the originating sequence.
+// 3. The task is deleted on the target sequence, and the reply are deleted on
+//    the originating sequence.
 //
 // 4. IsCanceledCallback can be run or deleted on any sequence.
 #ifndef BASE_TASK_CANCELABLE_TASK_TRACKER_H_
@@ -42,7 +43,7 @@
 #include "base/base_export.h"
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/containers/hash_tables.h"
+#include "base/containers/small_map.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/post_task_and_reply_with_result_internal.h"
@@ -63,34 +64,50 @@ class BASE_EXPORT CancelableTaskTracker {
   typedef int64_t TaskId;
   static const TaskId kBadTaskId;
 
-  typedef base::Callback<bool()> IsCanceledCallback;
+  typedef Callback<bool()> IsCanceledCallback;
 
   CancelableTaskTracker();
 
   // Cancels all tracked tasks.
   ~CancelableTaskTracker();
 
-  TaskId PostTask(base::TaskRunner* task_runner,
+  TaskId PostTask(TaskRunner* task_runner,
                   const tracked_objects::Location& from_here,
-                  const base::Closure& task);
+                  OnceClosure task);
 
-  TaskId PostTaskAndReply(base::TaskRunner* task_runner,
+  TaskId PostTaskAndReply(TaskRunner* task_runner,
                           const tracked_objects::Location& from_here,
-                          base::Closure task,
-                          base::Closure reply);
+                          OnceClosure task,
+                          OnceClosure reply);
 
   template <typename TaskReturnType, typename ReplyArgType>
-  TaskId PostTaskAndReplyWithResult(base::TaskRunner* task_runner,
+  TaskId PostTaskAndReplyWithResult(TaskRunner* task_runner,
                                     const tracked_objects::Location& from_here,
-                                    base::Callback<TaskReturnType()> task,
-                                    base::Callback<void(ReplyArgType)> reply) {
+                                    OnceCallback<TaskReturnType()> task,
+                                    OnceCallback<void(ReplyArgType)> reply) {
     TaskReturnType* result = new TaskReturnType();
     return PostTaskAndReply(
         task_runner, from_here,
-        base::Bind(&base::internal::ReturnAsParamAdapter<TaskReturnType>,
-                   std::move(task), base::Unretained(result)),
-        base::Bind(&base::internal::ReplyAdapter<TaskReturnType, ReplyArgType>,
-                   std::move(reply), base::Owned(result)));
+        BindOnce(&internal::ReturnAsParamAdapter<TaskReturnType>,
+                 std::move(task), Unretained(result)),
+        BindOnce(&internal::ReplyAdapter<TaskReturnType, ReplyArgType>,
+                 std::move(reply), Owned(result)));
+  }
+
+  // Callback version of PostTaskWithTraitsAndReplyWithResult above.
+  // Though RepeatingCallback is convertible to OnceCallback, we need this since
+  // we can not use template deduction and object conversion at once on the
+  // overload resolution.
+  // TODO(tzik): Update all callers of the Callback version to use OnceCallback.
+  template <typename TaskReturnType, typename ReplyArgType>
+  TaskId PostTaskAndReplyWithResult(TaskRunner* task_runner,
+                                    const tracked_objects::Location& from_here,
+                                    Callback<TaskReturnType()> task,
+                                    Callback<void(ReplyArgType)> reply) {
+    return PostTaskAndReplyWithResult(
+        task_runner, from_here,
+        static_cast<OnceCallback<TaskReturnType()>>(std::move(task)),
+        static_cast<OnceCallback<void(ReplyArgType)>>(std::move(reply)));
   }
 
   // Creates a tracked TaskId and an associated IsCanceledCallback. Client can
@@ -122,15 +139,19 @@ class BASE_EXPORT CancelableTaskTracker {
   bool HasTrackedTasks() const;
 
  private:
-  void Track(TaskId id, base::CancellationFlag* flag);
+  void Track(TaskId id, CancellationFlag* flag);
   void Untrack(TaskId id);
 
-  base::hash_map<TaskId, base::CancellationFlag*> task_flags_;
+  // Typically the number of tasks are 0-2 and occationally 3-4. But since
+  // this is a general API that could be used in unexpected ways, use a
+  // small_map instead of a flat_map to avoid falling over if there are many
+  // tasks.
+  small_map<std::map<TaskId, CancellationFlag*>, 4> task_flags_;
 
   TaskId next_id_;
   SequenceChecker sequence_checker_;
 
-  base::WeakPtrFactory<CancelableTaskTracker> weak_factory_;
+  WeakPtrFactory<CancelableTaskTracker> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(CancelableTaskTracker);
 };

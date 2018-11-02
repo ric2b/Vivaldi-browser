@@ -26,6 +26,7 @@
 #include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/profiler/scoped_tracker.h"
@@ -51,7 +52,6 @@
 #include "content/browser/loader/navigation_resource_throttle.h"
 #include "content/browser/loader/navigation_url_loader_impl_core.h"
 #include "content/browser/loader/null_resource_controller.h"
-#include "content/browser/loader/power_save_block_resource_throttle.h"
 #include "content/browser/loader/redirect_to_file_resource_handler.h"
 #include "content/browser/loader/resource_loader.h"
 #include "content/browser/loader/resource_message_filter.h"
@@ -62,6 +62,7 @@
 #include "content/browser/loader/sync_resource_handler.h"
 #include "content/browser/loader/throttling_resource_handler.h"
 #include "content/browser/loader/upload_data_stream_builder.h"
+#include "content/browser/loader/wake_lock_resource_throttle.h"
 #include "content/browser/resource_context_impl.h"
 #include "content/browser/service_worker/foreign_fetch_request_handler.h"
 #include "content/browser/service_worker/link_header_support.h"
@@ -105,6 +106,7 @@
 #include "net/log/net_log_with_source.h"
 #include "net/ssl/client_cert_store.h"
 #include "net/ssl/ssl_cert_request_info.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_job_factory.h"
@@ -127,6 +129,35 @@ using SyncLoadResultCallback =
 
 // ----------------------------------------------------------------------------
 
+namespace {
+
+constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
+    net::DefineNetworkTrafficAnnotation("resource_dispather_host", R"(
+        semantics {
+          sender: "Resource Dispatcher Host"
+          description:
+            "Navigation-initiated request or renderer process initiated "
+            "request, which includes all resources for normal page loads, "
+            "chrome URLs, resources for installed extensions, as well as "
+            "downloads."
+          trigger:
+            "Navigating to a URL or downloading a file.  A webpage, "
+            "ServiceWorker, chrome:// page, or extension may also initiate "
+            "requests in the background."
+          data: "Anything the initiator wants to send."
+          destination: OTHER
+        }
+        policy {
+          cookies_allowed: true
+          cookies_store: "user or per-app cookie store"
+          setting: "These requests cannot be disabled."
+          policy_exception_justification:
+            "Not implemented. Without these requests, Chrome will be unable to "
+            "load any webpage."
+        })");
+
+}  // namespace
+
 namespace content {
 
 namespace {
@@ -137,7 +168,7 @@ static ResourceDispatcherHostImpl* g_resource_dispatcher_host;
 const int kUpdateLoadStatesIntervalMsec = 250;
 
 // Maximum byte "cost" of all the outstanding requests for a renderer.
-// See delcaration of |max_outstanding_requests_cost_per_process_| for details.
+// See declaration of |max_outstanding_requests_cost_per_process_| for details.
 // This bound is 25MB, which allows for around 6000 outstanding requests.
 const int kMaxOutstandingRequestsCostPerProcess = 26214400;
 
@@ -265,33 +296,6 @@ bool IsValidatedSCT(
   return sct_status.status == net::ct::SCT_STATUS_OK;
 }
 
-storage::BlobStorageContext* GetBlobStorageContext(
-    ChromeBlobStorageContext* blob_storage_context) {
-  if (!blob_storage_context)
-    return NULL;
-  return blob_storage_context->context();
-}
-
-void AttachRequestBodyBlobDataHandles(
-    ResourceRequestBodyImpl* body,
-    storage::BlobStorageContext* blob_context) {
-  DCHECK(blob_context);
-  for (size_t i = 0; i < body->elements()->size(); ++i) {
-    const ResourceRequestBodyImpl::Element& element = (*body->elements())[i];
-    if (element.type() != ResourceRequestBodyImpl::Element::TYPE_BLOB)
-      continue;
-    std::unique_ptr<storage::BlobDataHandle> handle =
-        blob_context->GetBlobDataFromUUID(element.blob_uuid());
-    DCHECK(handle);
-    if (!handle)
-      continue;
-    // Ensure the blob and any attached shareable files survive until
-    // upload completion. The |body| takes ownership of |handle|.
-    const void* key = handle.get();
-    body->SetUserData(key, handle.release());
-  }
-}
-
 // Returns the PreviewsState after requesting it from the delegate. The
 // PreviewsState is a bitmask of potentially several Previews optimizations.
 PreviewsState GetPreviewsState(PreviewsState previews_state,
@@ -350,6 +354,8 @@ ResourceDispatcherHostImpl::ResourceDispatcherHostImpl(
           max_num_in_flight_requests_ * kMaxRequestsPerProcessRatio)),
       max_outstanding_requests_cost_per_process_(
           kMaxOutstandingRequestsCostPerProcess),
+      largest_outstanding_request_count_seen_(0),
+      largest_outstanding_request_per_process_count_seen_(0),
       delegate_(nullptr),
       loader_delegate_(nullptr),
       allow_cross_origin_auth_prompt_(false),
@@ -549,8 +555,8 @@ ResourceDispatcherHostImpl::MaybeInterceptAsStream(
   StreamContext* stream_context =
       GetStreamContextForResourceContext(info->GetContext());
 
-  std::unique_ptr<StreamResourceHandler> handler(
-      new StreamResourceHandler(request, stream_context->registry(), origin));
+  std::unique_ptr<StreamResourceHandler> handler(new StreamResourceHandler(
+      request, stream_context->registry(), origin, false));
 
   info->set_is_stream(true);
   std::unique_ptr<StreamInfo> stream_info(new StreamInfo);
@@ -1149,31 +1155,35 @@ void ResourceDispatcherHostImpl::BeginRequest(
                                request_id, std::move(url_loader_client));
     return;
   }
-  // Check if we have a registered interceptor for the headers passed in. If
-  // yes then we need to mark the current request as pending and wait for the
-  // interceptor to invoke the callback with a status code indicating whether
-  // the request needs to be aborted or continued.
-  for (net::HttpRequestHeaders::Iterator it(headers); it.GetNext();) {
-    HeaderInterceptorMap::iterator index =
-        http_header_interceptor_map_.find(it.name());
-    if (index != http_header_interceptor_map_.end()) {
-      HeaderInterceptorInfo& interceptor_info = index->second;
 
-      bool call_interceptor = true;
-      if (!interceptor_info.starts_with.empty()) {
-        call_interceptor =
-            base::StartsWith(it.value(), interceptor_info.starts_with,
-                             base::CompareCase::INSENSITIVE_ASCII);
-      }
-      if (call_interceptor) {
-        interceptor_info.interceptor.Run(
-            it.name(), it.value(), child_id, resource_context,
-            base::Bind(&ResourceDispatcherHostImpl::ContinuePendingBeginRequest,
-                       base::Unretained(this), requester_info, request_id,
-                       request_data, sync_result_handler, route_id, headers,
-                       base::Passed(std::move(mojo_request)),
-                       base::Passed(std::move(url_loader_client))));
-        return;
+  if (!is_navigation_stream_request) {
+    // Check if we have a registered interceptor for the headers passed in. If
+    // yes then we need to mark the current request as pending and wait for the
+    // interceptor to invoke the callback with a status code indicating whether
+    // the request needs to be aborted or continued.
+    for (net::HttpRequestHeaders::Iterator it(headers); it.GetNext();) {
+      HeaderInterceptorMap::iterator index =
+          http_header_interceptor_map_.find(it.name());
+      if (index != http_header_interceptor_map_.end()) {
+        HeaderInterceptorInfo& interceptor_info = index->second;
+
+        bool call_interceptor = true;
+        if (!interceptor_info.starts_with.empty()) {
+          call_interceptor =
+              base::StartsWith(it.value(), interceptor_info.starts_with,
+                               base::CompareCase::INSENSITIVE_ASCII);
+        }
+        if (call_interceptor) {
+          interceptor_info.interceptor.Run(
+              it.name(), it.value(), child_id, resource_context,
+              base::Bind(
+                  &ResourceDispatcherHostImpl::ContinuePendingBeginRequest,
+                  base::Unretained(this), requester_info, request_id,
+                  request_data, sync_result_handler, route_id, headers,
+                  base::Passed(std::move(mojo_request)),
+                  base::Passed(std::move(url_loader_client))));
+          return;
+        }
       }
     }
   }
@@ -1208,7 +1218,12 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
     return;
   }
   int child_id = requester_info->child_id();
-
+  storage::BlobStorageContext* blob_context = nullptr;
+  bool allow_download = false;
+  bool do_not_prompt_for_login = false;
+  bool report_raw_headers = false;
+  bool is_sync_load = !!sync_result_handler;
+  int load_flags = BuildLoadFlagsForRequest(request_data, is_sync_load);
   bool is_navigation_stream_request =
       IsBrowserSideNavigationEnabled() &&
       IsResourceTypeFrame(request_data.resource_type);
@@ -1232,131 +1247,130 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
   std::unique_ptr<net::URLRequest> new_request = request_context->CreateRequest(
       is_navigation_stream_request ? request_data.resource_body_stream_url
                                    : request_data.url,
-      request_data.priority, nullptr);
+      request_data.priority, nullptr, kTrafficAnnotation);
 
-  // Log that this request is a service worker navigation preload request here,
-  // since navigation preload machinery has no access to netlog.
-  // TODO(falken): Figure out how mojom::URLLoaderClient can
-  // access the request's netlog.
-  if (requester_info->IsNavigationPreload()) {
-    new_request->net_log().AddEvent(
-        net::NetLogEventType::SERVICE_WORKER_NAVIGATION_PRELOAD_REQUEST);
-  }
-
-  // PlzNavigate: Always set the method to GET when gaining access to the
-  // stream that contains the response body of a navigation. Otherwise the data
-  // that was already fetched by the browser will not be transmitted to the
-  // renderer.
-  if (is_navigation_stream_request)
+  if (is_navigation_stream_request) {
+    // PlzNavigate: Always set the method to GET when gaining access to the
+    // stream that contains the response body of a navigation. Otherwise the
+    // data that was already fetched by the browser will not be transmitted to
+    // the renderer.
     new_request->set_method("GET");
-  else
+  } else {
+    // Log that this request is a service worker navigation preload request
+    // here, since navigation preload machinery has no access to netlog.
+    // TODO(falken): Figure out how mojom::URLLoaderClient can
+    // access the request's netlog.
+    if (requester_info->IsNavigationPreload()) {
+      new_request->net_log().AddEvent(
+          net::NetLogEventType::SERVICE_WORKER_NAVIGATION_PRELOAD_REQUEST);
+    }
+
     new_request->set_method(request_data.method);
 
-  new_request->set_first_party_for_cookies(
-      request_data.first_party_for_cookies);
+    new_request->set_first_party_for_cookies(
+        request_data.first_party_for_cookies);
 
-  // The initiator should normally be present, unless this is a navigation in a
-  // top-level frame. It may be null for some top-level navigations (eg:
-  // browser-initiated ones).
-  DCHECK(request_data.request_initiator.has_value() ||
-         request_data.resource_type == RESOURCE_TYPE_MAIN_FRAME);
-  new_request->set_initiator(request_data.request_initiator);
+    // The initiator should normally be present, unless this is a navigation in
+    // a top-level frame. It may be null for some top-level navigations (eg:
+    // browser-initiated ones).
+    DCHECK(request_data.request_initiator.has_value() ||
+           request_data.resource_type == RESOURCE_TYPE_MAIN_FRAME);
+    new_request->set_initiator(request_data.request_initiator);
 
-  if (request_data.originated_from_service_worker) {
-    new_request->SetUserData(URLRequestServiceWorkerData::kUserDataKey,
-                             new URLRequestServiceWorkerData());
-  }
+    if (request_data.originated_from_service_worker) {
+      new_request->SetUserData(URLRequestServiceWorkerData::kUserDataKey,
+                               base::MakeUnique<URLRequestServiceWorkerData>());
+    }
 
-  // If the request is a MAIN_FRAME request, the first-party URL gets updated on
-  // redirects.
-  if (request_data.resource_type == RESOURCE_TYPE_MAIN_FRAME) {
-    new_request->set_first_party_url_policy(
-        net::URLRequest::UPDATE_FIRST_PARTY_URL_ON_REDIRECT);
-  }
+    // If the request is a MAIN_FRAME request, the first-party URL gets updated
+    // on redirects.
+    if (request_data.resource_type == RESOURCE_TYPE_MAIN_FRAME) {
+      new_request->set_first_party_url_policy(
+          net::URLRequest::UPDATE_FIRST_PARTY_URL_ON_REDIRECT);
+    }
 
-  // For PlzNavigate, this request has already been made and the referrer was
-  // checked previously. So don't set the referrer for this stream request, or
-  // else it will fail for SSL redirects since net/ will think the blob:https
-  // for the stream is not a secure scheme (specifically, in the call to
-  // ComputeReferrerForRedirect).
-  if (!is_navigation_stream_request) {
+    // For PlzNavigate, this request has already been made and the referrer was
+    // checked previously. So don't set the referrer for this stream request, or
+    // else it will fail for SSL redirects since net/ will think the blob:https
+    // for the stream is not a secure scheme (specifically, in the call to
+    // ComputeReferrerForRedirect).
     const Referrer referrer(
         request_data.referrer, request_data.referrer_policy);
     Referrer::SetReferrerForRequest(new_request.get(), referrer);
-  }
 
-  new_request->SetExtraRequestHeaders(headers);
+    new_request->SetExtraRequestHeaders(headers);
 
-  storage::BlobStorageContext* blob_context =
-      GetBlobStorageContext(requester_info->blob_storage_context());
-  // Resolve elements from request_body and prepare upload data.
-  if (request_data.request_body.get()) {
-    // |blob_context| could be null when the request is from the plugins because
-    // ResourceMessageFilters created in PluginProcessHost don't have the blob
-    // context.
-    if (blob_context) {
-      // Attaches the BlobDataHandles to request_body not to free the blobs and
-      // any attached shareable files until upload completion. These data will
-      // be used in UploadDataStream and ServiceWorkerURLRequestJob.
-      AttachRequestBodyBlobDataHandles(
-          request_data.request_body.get(),
-          blob_context);
+    blob_context =
+        GetBlobStorageContext(requester_info->blob_storage_context());
+    // Resolve elements from request_body and prepare upload data.
+    if (request_data.request_body.get()) {
+      // |blob_context| could be null when the request is from the plugins
+      // because ResourceMessageFilters created in PluginProcessHost don't have
+      // the blob context.
+      if (blob_context) {
+        // Attaches the BlobDataHandles to request_body not to free the blobs
+        // and any attached shareable files until upload completion. These data
+        // will be used in UploadDataStream and ServiceWorkerURLRequestJob.
+        AttachRequestBodyBlobDataHandles(request_data.request_body.get(),
+                                         resource_context);
+      }
+      new_request->set_upload(UploadDataStreamBuilder::Build(
+          request_data.request_body.get(), blob_context,
+          requester_info->file_system_context(),
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get()));
     }
-    new_request->set_upload(UploadDataStreamBuilder::Build(
-        request_data.request_body.get(), blob_context,
-        requester_info->file_system_context(),
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get()));
+
+    allow_download = request_data.allow_download &&
+                     IsResourceTypeFrame(request_data.resource_type);
+    do_not_prompt_for_login = request_data.do_not_prompt_for_login;
+
+    // Raw headers are sensitive, as they include Cookie/Set-Cookie, so only
+    // allow requesting them if requester has ReadRawCookies permission.
+    ChildProcessSecurityPolicyImpl* policy =
+        ChildProcessSecurityPolicyImpl::GetInstance();
+    report_raw_headers = request_data.report_raw_headers;
+    if (report_raw_headers && !policy->CanReadRawCookies(child_id) &&
+        !requester_info->IsNavigationPreload()) {
+      // For navigation preload, the child_id is -1 so CanReadRawCookies would
+      // return false. But |report_raw_headers| of the navigation preload
+      // request was copied from the original request, so this check has already
+      // been carried out.
+      // TODO: crbug.com/523063 can we call bad_message::ReceivedBadMessage
+      // here?
+      VLOG(1) << "Denied unauthorized request for raw headers";
+      report_raw_headers = false;
+    }
+
+    if (request_data.resource_type == RESOURCE_TYPE_PREFETCH ||
+        request_data.resource_type == RESOURCE_TYPE_FAVICON) {
+      do_not_prompt_for_login = true;
+    }
+    if (request_data.resource_type == RESOURCE_TYPE_IMAGE &&
+        HTTP_AUTH_RELATION_BLOCKED_CROSS ==
+            HttpAuthRelationTypeOf(request_data.url,
+                                   request_data.first_party_for_cookies)) {
+      // Prevent third-party image content from prompting for login, as this
+      // is often a scam to extract credentials for another domain from the
+      // user. Only block image loads, as the attack applies largely to the
+      // "src" property of the <img> tag. It is common for web properties to
+      // allow untrusted values for <img src>; this is considered a fair thing
+      // for an HTML sanitizer to do. Conversely, any HTML sanitizer that didn't
+      // filter sources for <script>, <link>, <embed>, <object>, <iframe> tags
+      // would be considered vulnerable in and of itself.
+      do_not_prompt_for_login = true;
+      load_flags |= net::LOAD_DO_NOT_USE_EMBEDDED_IDENTITY;
+    }
+
+    // Sync loads should have maximum priority and should be the only
+    // requets that have the ignore limits flag set.
+    if (is_sync_load) {
+      DCHECK_EQ(request_data.priority, net::MAXIMUM_PRIORITY);
+      DCHECK_NE(load_flags & net::LOAD_IGNORE_LIMITS, 0);
+    } else {
+      DCHECK_EQ(load_flags & net::LOAD_IGNORE_LIMITS, 0);
+    }
   }
 
-  bool allow_download = request_data.allow_download &&
-      IsResourceTypeFrame(request_data.resource_type);
-  bool do_not_prompt_for_login = request_data.do_not_prompt_for_login;
-  bool is_sync_load = !!sync_result_handler;
-
-  // Raw headers are sensitive, as they include Cookie/Set-Cookie, so only
-  // allow requesting them if requester has ReadRawCookies permission.
-  ChildProcessSecurityPolicyImpl* policy =
-      ChildProcessSecurityPolicyImpl::GetInstance();
-  bool report_raw_headers = request_data.report_raw_headers;
-  if (report_raw_headers && !policy->CanReadRawCookies(child_id) &&
-      !requester_info->IsNavigationPreload()) {
-    // For navigation preload, the child_id is -1 so CanReadRawCookies would
-    // return false. But |report_raw_headers| of the navigation preload request
-    // was copied from the original request, so this check has already been
-    // carried out.
-    // TODO: crbug.com/523063 can we call bad_message::ReceivedBadMessage here?
-    VLOG(1) << "Denied unauthorized request for raw headers";
-    report_raw_headers = false;
-  }
-  int load_flags = BuildLoadFlagsForRequest(request_data, is_sync_load);
-  if (request_data.resource_type == RESOURCE_TYPE_PREFETCH ||
-      request_data.resource_type == RESOURCE_TYPE_FAVICON) {
-    do_not_prompt_for_login = true;
-  }
-  if (request_data.resource_type == RESOURCE_TYPE_IMAGE &&
-      HTTP_AUTH_RELATION_BLOCKED_CROSS ==
-          HttpAuthRelationTypeOf(request_data.url,
-                                 request_data.first_party_for_cookies)) {
-    // Prevent third-party image content from prompting for login, as this
-    // is often a scam to extract credentials for another domain from the user.
-    // Only block image loads, as the attack applies largely to the "src"
-    // property of the <img> tag. It is common for web properties to allow
-    // untrusted values for <img src>; this is considered a fair thing for an
-    // HTML sanitizer to do. Conversely, any HTML sanitizer that didn't
-    // filter sources for <script>, <link>, <embed>, <object>, <iframe> tags
-    // would be considered vulnerable in and of itself.
-    do_not_prompt_for_login = true;
-    load_flags |= net::LOAD_DO_NOT_USE_EMBEDDED_IDENTITY;
-  }
-
-  // Sync loads should have maximum priority and should be the only
-  // requets that have the ignore limits flag set.
-  if (is_sync_load) {
-    DCHECK_EQ(request_data.priority, net::MAXIMUM_PRIORITY);
-    DCHECK_NE(load_flags & net::LOAD_IGNORE_LIMITS, 0);
-  } else {
-    DCHECK_EQ(load_flags & net::LOAD_IGNORE_LIMITS, 0);
-  }
   new_request->SetLoadFlags(load_flags);
 
   // Make extra info and read footer (contains request ID).
@@ -1390,38 +1404,48 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
                                ->GetBlobDataFromPublicURL(new_request->url()));
   }
 
-  // Initialize the service worker handler for the request. We don't use
-  // ServiceWorker for synchronous loads to avoid renderer deadlocks.
-  const ServiceWorkerMode service_worker_mode =
-      is_sync_load ? ServiceWorkerMode::NONE : request_data.service_worker_mode;
-  ServiceWorkerRequestHandler::InitializeHandler(
-      new_request.get(), requester_info->service_worker_context(), blob_context,
-      child_id, request_data.service_worker_provider_id,
-      service_worker_mode != ServiceWorkerMode::ALL,
-      request_data.fetch_request_mode, request_data.fetch_credentials_mode,
-      request_data.fetch_redirect_mode, request_data.resource_type,
-      request_data.fetch_request_context_type, request_data.fetch_frame_type,
-      request_data.request_body);
+  std::unique_ptr<ResourceHandler> handler;
+  if (is_navigation_stream_request) {
+    // PlzNavigate: do not add ResourceThrottles for main resource requests from
+    // the renderer.  Decisions about the navigation should have been done in
+    // the initial request.
+    handler = CreateBaseResourceHandler(
+        new_request.get(), std::move(mojo_request),
+        std::move(url_loader_client), request_data.resource_type);
+  } else {
+    // Initialize the service worker handler for the request. We don't use
+    // ServiceWorker for synchronous loads to avoid renderer deadlocks.
+    const ServiceWorkerMode service_worker_mode =
+        is_sync_load ? ServiceWorkerMode::NONE
+                     : request_data.service_worker_mode;
+    ServiceWorkerRequestHandler::InitializeHandler(
+        new_request.get(), requester_info->service_worker_context(),
+        blob_context, child_id, request_data.service_worker_provider_id,
+        service_worker_mode != ServiceWorkerMode::ALL,
+        request_data.fetch_request_mode, request_data.fetch_credentials_mode,
+        request_data.fetch_redirect_mode, request_data.resource_type,
+        request_data.fetch_request_context_type, request_data.fetch_frame_type,
+        request_data.request_body);
 
-  ForeignFetchRequestHandler::InitializeHandler(
-      new_request.get(), requester_info->service_worker_context(), blob_context,
-      child_id, request_data.service_worker_provider_id, service_worker_mode,
-      request_data.fetch_request_mode, request_data.fetch_credentials_mode,
-      request_data.fetch_redirect_mode, request_data.resource_type,
-      request_data.fetch_request_context_type, request_data.fetch_frame_type,
-      request_data.request_body, request_data.initiated_in_secure_context);
+    ForeignFetchRequestHandler::InitializeHandler(
+        new_request.get(), requester_info->service_worker_context(),
+        blob_context, child_id, request_data.service_worker_provider_id,
+        service_worker_mode, request_data.fetch_request_mode,
+        request_data.fetch_credentials_mode, request_data.fetch_redirect_mode,
+        request_data.resource_type, request_data.fetch_request_context_type,
+        request_data.fetch_frame_type, request_data.request_body,
+        request_data.initiated_in_secure_context);
 
-  // Have the appcache associate its extra info with the request.
-  AppCacheInterceptor::SetExtraRequestInfo(
-      new_request.get(), requester_info->appcache_service(), child_id,
-      request_data.appcache_host_id, request_data.resource_type,
-      request_data.should_reset_appcache);
-
-  std::unique_ptr<ResourceHandler> handler(CreateResourceHandler(
-      requester_info.get(), new_request.get(), request_data,
-      sync_result_handler, route_id, child_id, resource_context,
-      std::move(mojo_request), std::move(url_loader_client)));
-
+    // Have the appcache associate its extra info with the request.
+    AppCacheInterceptor::SetExtraRequestInfo(
+        new_request.get(), requester_info->appcache_service(), child_id,
+        request_data.appcache_host_id, request_data.resource_type,
+        request_data.should_reset_appcache);
+    handler = CreateResourceHandler(
+        requester_info.get(), new_request.get(), request_data,
+        sync_result_handler, route_id, child_id, resource_context,
+        std::move(mojo_request), std::move(url_loader_client));
+  }
   if (handler)
     BeginRequestInternal(std::move(new_request), std::move(handler));
 }
@@ -1457,14 +1481,9 @@ ResourceDispatcherHostImpl::CreateResourceHandler(
     DCHECK(!url_loader_client);
     handler.reset(new SyncResourceHandler(request, sync_result_handler, this));
   } else {
-    if (mojo_request.is_pending()) {
-      handler.reset(new MojoAsyncResourceHandler(request, this,
-                                                 std::move(mojo_request),
-                                                 std::move(url_loader_client),
-                                                 request_data.resource_type));
-    } else {
-      handler.reset(new AsyncResourceHandler(request, this));
-    }
+    handler = CreateBaseResourceHandler(request, std::move(mojo_request),
+                                        std::move(url_loader_client),
+                                        request_data.resource_type);
 
     // The RedirectToFileResourceHandler depends on being next in the chain.
     if (request_data.download_to_file) {
@@ -1479,23 +1498,22 @@ ResourceDispatcherHostImpl::CreateResourceHandler(
   if (!sync_result_handler &&
       (start_detached ||
        IsDetachableResourceType(request_data.resource_type))) {
+    auto timeout =
+        base::TimeDelta::FromMilliseconds(kDefaultDetachableCancelDelayMs);
+    int timeout_set_by_finch_in_sec = base::GetFieldTrialParamByFeatureAsInt(
+        features::kFetchKeepaliveTimeoutSetting, "timeout_in_sec", 0);
+    // Adopt only "reasonable" values.
+    if (timeout_set_by_finch_in_sec > 0 &&
+        timeout_set_by_finch_in_sec < 60 * 60) {
+      timeout = base::TimeDelta::FromSeconds(timeout_set_by_finch_in_sec);
+    }
+
     std::unique_ptr<DetachableResourceHandler> detachable_handler =
-        base::MakeUnique<DetachableResourceHandler>(
-            request,
-            base::TimeDelta::FromMilliseconds(kDefaultDetachableCancelDelayMs),
-            std::move(handler));
+        base::MakeUnique<DetachableResourceHandler>(request, timeout,
+                                                    std::move(handler));
     if (start_detached)
       detachable_handler->Detach();
     handler = std::move(detachable_handler);
-  }
-
-  // PlzNavigate: do not add ResourceThrottles for main resource requests from
-  // the renderer.  Decisions about the navigation should have been done in the
-  // initial request.
-  if (IsBrowserSideNavigationEnabled() &&
-      IsResourceTypeFrame(request_data.resource_type)) {
-    DCHECK(request->url().SchemeIs(url::kBlobScheme));
-    return handler;
   }
 
   return AddStandardHandlers(request, request_data.resource_type,
@@ -1503,7 +1521,24 @@ ResourceDispatcherHostImpl::CreateResourceHandler(
                              request_data.fetch_request_context_type,
                              request_data.fetch_mixed_content_context_type,
                              requester_info->appcache_service(), child_id,
-                             route_id, std::move(handler));
+                             route_id, std::move(handler), nullptr, nullptr);
+}
+
+std::unique_ptr<ResourceHandler>
+ResourceDispatcherHostImpl::CreateBaseResourceHandler(
+    net::URLRequest* request,
+    mojom::URLLoaderAssociatedRequest mojo_request,
+    mojom::URLLoaderClientPtr url_loader_client,
+    ResourceType resource_type) {
+  std::unique_ptr<ResourceHandler> handler;
+  if (mojo_request.is_pending()) {
+    handler.reset(new MojoAsyncResourceHandler(
+        request, this, std::move(mojo_request), std::move(url_loader_client),
+        resource_type));
+  } else {
+    handler.reset(new AsyncResourceHandler(request, this));
+  }
+  return handler;
 }
 
 std::unique_ptr<ResourceHandler>
@@ -1516,7 +1551,9 @@ ResourceDispatcherHostImpl::AddStandardHandlers(
     AppCacheService* appcache_service,
     int child_id,
     int route_id,
-    std::unique_ptr<ResourceHandler> handler) {
+    std::unique_ptr<ResourceHandler> handler,
+    NavigationURLLoaderImplCore* navigation_loader_core,
+    std::unique_ptr<StreamHandle> stream_handle) {
   // The InterceptingResourceHandler will replace its next handler with an
   // appropriate one based on the MIME type of the response if needed. It
   // should be placed at the end of the chain, just before |handler|.
@@ -1528,7 +1565,7 @@ ResourceDispatcherHostImpl::AddStandardHandlers(
 
   // Add a NavigationResourceThrottle for navigations.
   // PlzNavigate: the throttle is unnecessary as communication with the UI
-  // thread is handled by the NavigationURLloader.
+  // thread is handled by the NavigationResourceHandler below.
   if (!IsBrowserSideNavigationEnabled() && IsResourceTypeFrame(resource_type)) {
     throttles.push_back(base::MakeUnique<NavigationResourceThrottle>(
         request, delegate_, fetch_request_context_type,
@@ -1544,10 +1581,9 @@ ResourceDispatcherHostImpl::AddStandardHandlers(
   }
 
   if (request->has_upload()) {
-    // Block power save while uploading data.
-    throttles.push_back(base::MakeUnique<PowerSaveBlockResourceThrottle>(
-        request->url().host(), main_thread_task_runner_,
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)));
+    // Request wake lock while uploading data.
+    throttles.push_back(
+        base::MakeUnique<WakeLockResourceThrottle>(request->url().host()));
   }
 
   // TODO(ricea): Stop looking this up so much.
@@ -1571,6 +1607,19 @@ ResourceDispatcherHostImpl::AddStandardHandlers(
   // Add the post mime sniffing throttles.
   handler.reset(new ThrottlingResourceHandler(
       std::move(handler), request, std::move(post_mime_sniffing_throttles)));
+
+  if (IsBrowserSideNavigationEnabled() && IsResourceTypeFrame(resource_type)) {
+    DCHECK(navigation_loader_core);
+    DCHECK(stream_handle);
+    // PlzNavigate
+    // Add a NavigationResourceHandler that will control the flow of navigation.
+    handler.reset(new NavigationResourceHandler(
+        request, std::move(handler), navigation_loader_core, delegate(),
+        std::move(stream_handle)));
+  } else {
+    DCHECK(!navigation_loader_core);
+    DCHECK(!stream_handle);
+  }
 
   PluginService* plugin_service = nullptr;
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -1713,13 +1762,6 @@ void ResourceDispatcherHostImpl::MarkAsTransferredNavigation(
     const GlobalRequestID& id,
     const base::Closure& on_transfer_complete_callback) {
   GetLoader(id)->MarkAsTransferring(on_transfer_complete_callback);
-}
-
-void ResourceDispatcherHostImpl::CancelTransferringNavigation(
-    const GlobalRequestID& id) {
-  // Request should still exist and be in the middle of a transfer.
-  DCHECK(IsTransferredNavigation(id));
-  RemovePendingRequest(id.child_id, id.request_id);
 }
 
 void ResourceDispatcherHostImpl::ResumeDeferredNavigation(
@@ -1911,6 +1953,21 @@ ResourceDispatcherHostImpl::IncrementOutstandingRequestsCount(
   DCHECK_GE(stats.num_requests, 0);
   UpdateOutstandingRequestsStats(*info, stats);
 
+  if (num_in_flight_requests_ > largest_outstanding_request_count_seen_) {
+    largest_outstanding_request_count_seen_ = num_in_flight_requests_;
+    UMA_HISTOGRAM_COUNTS_1M(
+        "Net.ResourceDispatcherHost.OutstandingRequests.Total",
+        largest_outstanding_request_count_seen_);
+  }
+
+  if (stats.num_requests >
+      largest_outstanding_request_per_process_count_seen_) {
+    largest_outstanding_request_per_process_count_seen_ = stats.num_requests;
+    UMA_HISTOGRAM_COUNTS_1M(
+        "Net.ResourceDispatcherHost.OutstandingRequests.PerProcess",
+        largest_outstanding_request_per_process_count_seen_);
+  }
+
   return stats;
 }
 
@@ -1936,6 +1993,7 @@ void ResourceDispatcherHostImpl::FinishedWithResourcesForRequest(
 void ResourceDispatcherHostImpl::BeginNavigationRequest(
     ResourceContext* resource_context,
     net::URLRequestContext* request_context,
+    storage::FileSystemContext* upload_file_system_context,
     const NavigationRequestInfo& info,
     std::unique_ptr<NavigationUIData> navigation_ui_data,
     NavigationURLLoaderImplCore* loader,
@@ -1990,7 +2048,7 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
 
   std::unique_ptr<net::URLRequest> new_request;
   new_request = request_context->CreateRequest(
-      info.common_params.url, net::HIGHEST, nullptr);
+      info.common_params.url, net::HIGHEST, nullptr, kTrafficAnnotation);
 
   new_request->set_method(info.common_params.method);
   new_request->set_first_party_for_cookies(
@@ -2016,13 +2074,9 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
   // Resolve elements from request_body and prepare upload data.
   ResourceRequestBodyImpl* body = info.common_params.post_data.get();
   if (body) {
-    AttachRequestBodyBlobDataHandles(body, blob_context);
-    // TODO(davidben): The FileSystemContext is null here. In the case where
-    // another renderer requested this navigation, this should be the same
-    // FileSystemContext passed into ShouldServiceRequest.
+    AttachRequestBodyBlobDataHandles(body, resource_context);
     new_request->set_upload(UploadDataStreamBuilder::Build(
-        body, blob_context,
-        nullptr,  // file_system_context
+        body, blob_context, upload_file_system_context,
         BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get()));
   }
 
@@ -2091,8 +2145,19 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
         new_request.get(), appcache_handle_core->host(), resource_type, false);
   }
 
+  StreamContext* stream_context =
+      GetStreamContextForResourceContext(resource_context);
+  // Note: the stream should be created with immediate mode set to true to
+  // ensure that data read will be flushed to the reader as soon as it's
+  // available. Otherwise, we risk delaying transmitting the body of the
+  // resource to the renderer, which will delay parsing accordingly.
   std::unique_ptr<ResourceHandler> handler(
-      new NavigationResourceHandler(new_request.get(), loader, delegate()));
+      new StreamResourceHandler(new_request.get(), stream_context->registry(),
+                                new_request->url().GetOrigin(), true));
+  std::unique_ptr<StreamHandle> stream_handle =
+      static_cast<StreamResourceHandler*>(handler.get())
+          ->stream()
+          ->CreateHandle();
 
   // TODO(davidben): Fix the dependency on child_id/route_id. Those are used
   // by the ResourceScheduler. currently it's a no-op.
@@ -2104,7 +2169,7 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
                            : nullptr,
       -1,  // child_id
       -1,  // route_id
-      std::move(handler));
+      std::move(handler), loader, std::move(stream_handle));
 
   BeginRequestInternal(std::move(new_request), std::move(handler));
 }
@@ -2567,9 +2632,17 @@ bool ResourceDispatcherHostImpl::ShouldServiceRequest(
     ResourceContext* resource_context) {
   ChildProcessSecurityPolicyImpl* policy =
       ChildProcessSecurityPolicyImpl::GetInstance();
-
+  bool is_navigation_stream_request =
+      IsBrowserSideNavigationEnabled() &&
+      IsResourceTypeFrame(request_data.resource_type);
   // Check if the renderer is permitted to request the requested URL.
-  if (!policy->CanRequestURL(child_id, request_data.url)) {
+  // PlzNavigate: no need to check the URL here. The browser already picked the
+  // right renderer to send the request to. The original URL isn't used, as the
+  // renderer is fetching the stream URL. Checking the original URL doesn't work
+  // in case of redirects across schemes, since the original URL might not be
+  // granted to the final URL's renderer.
+  if (!is_navigation_stream_request &&
+      !policy->CanRequestURL(child_id, request_data.url)) {
     VLOG(1) << "Denied unauthorized request for "
             << request_data.url.possibly_invalid_spec();
     return false;

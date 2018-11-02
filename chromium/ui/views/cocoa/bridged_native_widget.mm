@@ -13,6 +13,7 @@
 #include "base/mac/mac_util.h"
 #import "base/mac/sdk_forward_declarations.h"
 #include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #import "ui/base/cocoa/constrained_window/constrained_window_animation.h"
@@ -118,7 +119,8 @@ float GetDeviceScaleFactorFromView(NSView* view) {
 bool PositionWindowInScreenCoordinates(views::Widget* widget,
                                        views::Widget::InitParams::Type type) {
   // Replicate the logic in desktop_aura/desktop_screen_position_client.cc.
-  if (views::GetAuraWindowTypeForWidgetType(type) == ui::wm::WINDOW_TYPE_POPUP)
+  if (views::GetAuraWindowTypeForWidgetType(type) ==
+      aura::client::WINDOW_TYPE_POPUP)
     return true;
 
   return widget && widget->is_top_level();

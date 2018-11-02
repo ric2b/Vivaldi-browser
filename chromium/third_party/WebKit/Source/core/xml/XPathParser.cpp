@@ -96,7 +96,7 @@ static bool IsAxisName(const String& name, Step::Axis& type) {
   if (axis_names.IsEmpty())
     SetUpAxisNamesMap(axis_names);
 
-  AxisNamesMap::iterator it = axis_names.Find(name);
+  AxisNamesMap::iterator it = axis_names.find(name);
   if (it == axis_names.end())
     return false;
   type = it->value;
@@ -454,7 +454,7 @@ int Parser::Lex(void* data) {
 bool Parser::ExpandQName(const String& q_name,
                          AtomicString& local_name,
                          AtomicString& namespace_uri) {
-  size_t colon = q_name.Find(':');
+  size_t colon = q_name.find(':');
   if (colon != kNotFound) {
     if (!resolver_)
       return false;
@@ -482,7 +482,7 @@ Expression* Parser::ParseStatement(const String& statement,
   current_parser_ = old_parser;
 
   if (parse_error) {
-    strings_.Clear();
+    strings_.clear();
 
     top_expr_ = nullptr;
 

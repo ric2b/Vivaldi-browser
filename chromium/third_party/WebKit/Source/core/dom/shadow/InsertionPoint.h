@@ -58,6 +58,7 @@ class CORE_EXPORT InsertionPoint : public HTMLElement {
 
   void AttachLayoutTree(const AttachContext& = AttachContext()) override;
   void DetachLayoutTree(const AttachContext& = AttachContext()) override;
+  void RebuildDistributedChildrenLayoutTrees();
 
   size_t DistributedNodesSize() const { return distributed_nodes_.size(); }
   Node* DistributedNodeAt(size_t index) const {
@@ -110,14 +111,14 @@ inline bool IsActiveShadowInsertionPoint(const Node& node) {
 inline ElementShadow* ShadowWhereNodeCanBeDistributedForV0(const Node& node) {
   Node* parent = node.parentNode();
   if (!parent)
-    return 0;
+    return nullptr;
   if (parent->IsShadowRoot() && !ToShadowRoot(parent)->IsYoungest())
     return node.OwnerShadowHost()->Shadow();
   if (IsActiveInsertionPoint(*parent))
     return node.OwnerShadowHost()->Shadow();
   if (parent->IsElementNode())
     return ToElement(parent)->Shadow();
-  return 0;
+  return nullptr;
 }
 
 const InsertionPoint* ResolveReprojection(const Node*);

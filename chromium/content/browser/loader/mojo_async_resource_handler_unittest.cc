@@ -26,6 +26,7 @@
 #include "content/browser/loader/test_url_loader_client.h"
 #include "content/common/resource_request_completion_status.h"
 #include "content/common/url_loader.mojom.h"
+#include "content/common/url_loader_factory.mojom.h"
 #include "content/public/browser/appcache_service.h"
 #include "content/public/browser/navigation_data.h"
 #include "content/public/browser/resource_context.h"
@@ -49,6 +50,7 @@
 #include "net/http/http_util.h"
 #include "net/ssl/client_cert_store.h"
 #include "net/test/url_request/url_request_mock_data_job.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_status.h"
@@ -292,6 +294,7 @@ class TestURLLoaderFactory final : public mojom::URLLoaderFactory {
   void CreateLoaderAndStart(mojom::URLLoaderAssociatedRequest request,
                             int32_t routing_id,
                             int32_t request_id,
+                            uint32_t options,
                             const ResourceRequest& url_request,
                             mojom::URLLoaderClientPtr client_ptr) override {
     loader_request_ = std::move(request);
@@ -307,7 +310,7 @@ class TestURLLoaderFactory final : public mojom::URLLoaderFactory {
   void SyncLoad(int32_t routing_id,
                 int32_t request_id,
                 const ResourceRequest& url_request,
-                const SyncLoadCallback& callback) override {
+                SyncLoadCallback callback) override {
     NOTREACHED();
   }
 
@@ -332,7 +335,8 @@ class MojoAsyncResourceHandlerTestBase {
     net::URLRequestContext* request_context =
         browser_context_->GetResourceContext()->GetRequestContext();
     request_ = request_context->CreateRequest(
-        GURL("http://foo/"), net::DEFAULT_PRIORITY, &url_request_delegate_);
+        GURL("http://foo/"), net::DEFAULT_PRIORITY, &url_request_delegate_,
+        TRAFFIC_ANNOTATION_FOR_TESTS);
     request_->set_upload(std::move(upload_stream));
     ResourceRequestInfo::AllocateForTesting(
         request_.get(),                          // request
@@ -354,7 +358,8 @@ class MojoAsyncResourceHandlerTestBase {
                                 mojo::MakeRequest(&url_loader_factory_));
 
     url_loader_factory_->CreateLoaderAndStart(
-        mojo::MakeRequest(&url_loader_proxy_), kRouteId, kRequestId, request,
+        mojo::MakeRequest(&url_loader_proxy_), kRouteId, kRequestId,
+        mojom::kURLLoadOptionNone, request,
         url_loader_client_.CreateInterfacePtr());
 
     url_loader_factory_.FlushForTesting();

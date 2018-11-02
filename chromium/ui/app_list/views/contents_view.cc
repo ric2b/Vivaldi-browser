@@ -22,17 +22,51 @@
 #include "ui/app_list/views/search_result_tile_item_list_view.h"
 #include "ui/app_list/views/start_page_view.h"
 #include "ui/events/event.h"
-#include "ui/resources/grit/ui_resources.h"
+#include "ui/views/layout/box_layout.h"
 #include "ui/views/view_model.h"
 #include "ui/views/widget/widget.h"
 
 namespace app_list {
 
+namespace {
+
+// Container of the search answer view.
+class SearchAnswerContainerView : public views::View {
+ public:
+  explicit SearchAnswerContainerView(views::View* search_results_page_view)
+      : search_results_page_view_(search_results_page_view) {
+    views::BoxLayout* answer_container_layout =
+        new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
+    answer_container_layout->set_main_axis_alignment(
+        views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
+    SetLayoutManager(answer_container_layout);
+  }
+
+  // views::View overrides:
+  void ChildPreferredSizeChanged(View* child) override {
+    if (visible())
+      search_results_page_view_->Layout();
+  }
+
+  const char* GetClassName() const override {
+    return "SearchAnswerContainerView";
+  }
+
+ private:
+  views::View* const search_results_page_view_;
+
+  DISALLOW_COPY_AND_ASSIGN(SearchAnswerContainerView);
+};
+
+}  // namespace
+
 ContentsView::ContentsView(AppListMainView* app_list_main_view)
-    : apps_container_view_(nullptr),
+    : model_(nullptr),
+      apps_container_view_(nullptr),
       search_results_page_view_(nullptr),
       start_page_view_(nullptr),
       custom_page_view_(nullptr),
+      search_answer_container_view_(nullptr),
       app_list_main_view_(app_list_main_view),
       page_before_search_(0) {
   pagination_model_.SetTransitionDurations(kPageTransitionDurationInMs,
@@ -42,10 +76,13 @@ ContentsView::ContentsView(AppListMainView* app_list_main_view)
 
 ContentsView::~ContentsView() {
   pagination_model_.RemoveObserver(this);
+  if (model_)
+    model_->RemoveObserver(this);
 }
 
 void ContentsView::Init(AppListModel* model) {
   DCHECK(model);
+  model_ = model;
 
   AppListViewDelegate* view_delegate = app_list_main_view_->view_delegate();
 
@@ -66,6 +103,15 @@ void ContentsView::Init(AppListModel* model) {
 
   // Search results UI.
   search_results_page_view_ = new SearchResultPageView();
+
+  // Search answer container UI.
+  search_answer_container_view_ =
+      new SearchAnswerContainerView(search_results_page_view_);
+  search_answer_container_view_->SetVisible(false);
+  views::View* search_answer_view = view_delegate->GetSearchAnswerWebView();
+  if (search_answer_view)
+    search_answer_container_view_->AddChildView(search_answer_view);
+  search_results_page_view_->AddChildView(search_answer_container_view_);
 
   AppListModel::SearchResults* results = view_delegate->GetModel()->results();
   search_results_page_view_->AddSearchResultContainerView(
@@ -96,6 +142,8 @@ void ContentsView::Init(AppListModel* model) {
   pagination_model_.SelectPage(initial_page_index, false);
 
   ActivePageChanged();
+
+  model_->AddObserver(this);
 }
 
 void ContentsView::CancelDrag() {
@@ -402,7 +450,7 @@ gfx::Size ContentsView::GetDefaultContentsSize() const {
   return apps_container_view_->GetPreferredSize();
 }
 
-gfx::Size ContentsView::GetPreferredSize() const {
+gfx::Size ContentsView::CalculatePreferredSize() const {
   gfx::Rect search_box_bounds = GetDefaultSearchBoxBounds();
   gfx::Rect default_contents_bounds = GetDefaultContentsBounds();
   gfx::Vector2d bottom_right =
@@ -454,6 +502,10 @@ bool ContentsView::OnKeyPressed(const ui::KeyEvent& event) {
   return handled;
 }
 
+const char* ContentsView::GetClassName() const {
+  return "ContentsView";
+}
+
 void ContentsView::TotalPagesChanged() {
 }
 
@@ -470,6 +522,14 @@ void ContentsView::TransitionStarted() {
 
 void ContentsView::TransitionChanged() {
   UpdatePageBounds();
+}
+
+void ContentsView::OnSearchAnswerAvailableChanged(bool has_answer) {
+  if (has_answer == search_answer_container_view_->visible())
+    return;
+
+  search_answer_container_view_->SetVisible(has_answer);
+  search_results_page_view_->Layout();
 }
 
 }  // namespace app_list

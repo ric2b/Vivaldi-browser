@@ -2,6 +2,8 @@ include_rules = [
   # Allow inclusion of specific components that we depend on.
   # See comment in content/DEPS for which components are allowed.
   "+components/discardable_memory/client",
+  "+components/metrics",
+  "+components/metrics:single_sample_metrics",
   "+components/payments",
   "+components/scheduler",
   "+components/url_formatter",
@@ -12,6 +14,7 @@ include_rules = [
   "+content/public/renderer",
   "+content/child",
   "+device/base/synchronization",
+  "+device/gamepad/public/cpp",
   "+device/gamepad/public/interfaces",
   "+device/screen_orientation/public/interfaces",
   "+device/sensors/public",

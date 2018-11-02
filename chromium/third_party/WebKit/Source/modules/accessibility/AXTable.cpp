@@ -28,6 +28,7 @@
 
 #include "modules/accessibility/AXTable.h"
 
+#include "core/dom/AccessibleNode.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/html/HTMLCollection.h"
@@ -355,8 +356,8 @@ bool AXTable::IsTableExposableThroughAccessibility() const {
 
 void AXTable::ClearChildren() {
   AXLayoutObject::ClearChildren();
-  rows_.Clear();
-  columns_.Clear();
+  rows_.clear();
+  columns_.clear();
 
   if (header_container_) {
     header_container_->DetachFromParent();
@@ -387,7 +388,7 @@ void AXTable::AddChildren() {
   // Add caption
   if (HTMLTableCaptionElement* caption =
           toHTMLTableElement(table_node)->caption()) {
-    AXObject* caption_object = ax_cache.GetOrCreate(caption);
+    AXObjectImpl* caption_object = ax_cache.GetOrCreate(caption);
     if (caption_object && !caption_object->AccessibilityIsIgnored())
       children_.push_back(caption_object);
   }
@@ -401,14 +402,14 @@ void AXTable::AddChildren() {
 
   LayoutTableSection* initial_table_section = table_section;
   while (table_section) {
-    HeapHashSet<Member<AXObject>> appended_rows;
+    HeapHashSet<Member<AXObjectImpl>> appended_rows;
     unsigned num_rows = table_section->NumRows();
     for (unsigned row_index = 0; row_index < num_rows; ++row_index) {
       LayoutTableRow* layout_row = table_section->RowLayoutObjectAt(row_index);
       if (!layout_row)
         continue;
 
-      AXObject* row_object = ax_cache.GetOrCreate(layout_row);
+      AXObjectImpl* row_object = ax_cache.GetOrCreate(layout_row);
       if (!row_object || !row_object->IsTableRow())
         continue;
 
@@ -439,13 +440,13 @@ void AXTable::AddChildren() {
       children_.push_back(column);
   }
 
-  AXObject* header_container_object = HeaderContainer();
+  AXObjectImpl* header_container_object = HeaderContainer();
   if (header_container_object &&
       !header_container_object->AccessibilityIsIgnored())
     children_.push_back(header_container_object);
 }
 
-AXObject* AXTable::HeaderContainer() {
+AXObjectImpl* AXTable::HeaderContainer() {
   if (header_container_)
     return header_container_.Get();
 
@@ -457,13 +458,13 @@ AXObject* AXTable::HeaderContainer() {
   return header_container_.Get();
 }
 
-const AXObject::AXObjectVector& AXTable::Columns() {
+const AXObjectImpl::AXObjectVector& AXTable::Columns() {
   UpdateChildrenIfNecessary();
 
   return columns_;
 }
 
-const AXObject::AXObjectVector& AXTable::Rows() {
+const AXObjectImpl::AXObjectVector& AXTable::Rows() {
   UpdateChildrenIfNecessary();
 
   return rows_;
@@ -476,7 +477,7 @@ void AXTable::ColumnHeaders(AXObjectVector& headers) {
   UpdateChildrenIfNecessary();
   unsigned column_count = columns_.size();
   for (unsigned c = 0; c < column_count; c++) {
-    AXObject* column = columns_[c].Get();
+    AXObjectImpl* column = columns_[c].Get();
     if (column->IsTableCol())
       ToAXTableColumn(column)->HeaderObjectsForColumn(headers);
   }
@@ -489,47 +490,43 @@ void AXTable::RowHeaders(AXObjectVector& headers) {
   UpdateChildrenIfNecessary();
   unsigned row_count = rows_.size();
   for (unsigned r = 0; r < row_count; r++) {
-    AXObject* row = rows_[r].Get();
+    AXObjectImpl* row = rows_[r].Get();
     if (row->IsTableRow())
       ToAXTableRow(rows_[r].Get())->HeaderObjectsForRow(headers);
   }
 }
 
 int AXTable::AriaColumnCount() {
-  if (!HasAttribute(aria_colcountAttr))
+  int32_t col_count;
+  if (!HasAOMPropertyOrARIAAttribute(AOMIntProperty::kColCount, col_count))
     return 0;
 
-  const AtomicString& col_count_value = GetAttribute(aria_colcountAttr);
-  int col_count_int = col_count_value.ToInt();
-
-  if (col_count_int > (int)ColumnCount())
-    return col_count_int;
+  if (col_count > static_cast<int>(ColumnCount()))
+    return col_count;
 
   // Spec says that if all of the columns are present in the DOM, it
   // is not necessary to set this attribute as the user agent can
   // automatically calculate the total number of columns.
   // It returns 0 in order not to set this attribute.
-  if (col_count_int == (int)ColumnCount() || col_count_int != -1)
+  if (col_count == static_cast<int>(ColumnCount()) || col_count != -1)
     return 0;
 
   return -1;
 }
 
 int AXTable::AriaRowCount() {
-  if (!HasAttribute(aria_rowcountAttr))
+  int32_t row_count;
+  if (!HasAOMPropertyOrARIAAttribute(AOMIntProperty::kRowCount, row_count))
     return 0;
 
-  const AtomicString& row_count_value = GetAttribute(aria_rowcountAttr);
-  int row_count_int = row_count_value.ToInt();
-
-  if (row_count_int > (int)RowCount())
-    return row_count_int;
+  if (row_count > static_cast<int>(RowCount()))
+    return row_count;
 
   // Spec says that if all of the rows are present in the DOM, it is
   // not necessary to set this attribute as the user agent can
   // automatically calculate the total number of rows.
   // It returns 0 in order not to set this attribute.
-  if (row_count_int == (int)RowCount() || row_count_int != -1)
+  if (row_count == (int)RowCount() || row_count != -1)
     return 0;
 
   // In the spec, -1 explicitly means an unknown number of rows.
@@ -565,7 +562,7 @@ AXTableCell* AXTable::CellForColumnAndRow(unsigned column, unsigned row) {
              std::min(static_cast<unsigned>(children.size()), column + 1);
          col_index_counter > 0; --col_index_counter) {
       unsigned col_index = col_index_counter - 1;
-      AXObject* child = children[col_index].Get();
+      AXObjectImpl* child = children[col_index].Get();
 
       if (!child->IsTableCell())
         continue;

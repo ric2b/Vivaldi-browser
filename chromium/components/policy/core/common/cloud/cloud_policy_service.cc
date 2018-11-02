@@ -113,11 +113,8 @@ void CloudPolicyService::OnStoreLoaded(CloudPolicyStore* store) {
 
   // Timestamp.
   base::Time policy_timestamp;
-  if (policy && policy->has_timestamp()) {
-    policy_timestamp =
-        base::Time::UnixEpoch() +
-        base::TimeDelta::FromMilliseconds(policy->timestamp());
-  }
+  if (policy && policy->has_timestamp())
+    policy_timestamp = base::Time::FromJavaTime(policy->timestamp());
   client_->set_last_policy_timestamp(policy_timestamp);
 
   // Public key version.
@@ -125,12 +122,6 @@ void CloudPolicyService::OnStoreLoaded(CloudPolicyStore* store) {
     client_->set_public_key_version(policy->public_key_version());
   else
     client_->clear_public_key_version();
-
-  // Whether to submit the machine ID.
-  bool submit_machine_id = false;
-  if (policy && policy->has_valid_serial_number_missing())
-    submit_machine_id = policy->valid_serial_number_missing();
-  client_->set_submit_machine_id(submit_machine_id);
 
   // Finally, set up registration if necessary.
   if (policy && policy->has_request_token() && policy->has_device_id() &&

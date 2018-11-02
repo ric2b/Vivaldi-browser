@@ -352,24 +352,25 @@ gfx::Vector2dF StickyPositionOffset(TransformTree* tree, TransformNode* node) {
     return gfx::Vector2dF();
   StickyPositionNodeData* sticky_data = tree->StickyPositionData(node->id);
   const LayerStickyPositionConstraint& constraint = sticky_data->constraints;
+  auto& property_trees = *tree->property_trees();
   ScrollNode* scroll_node =
-      tree->property_trees()->scroll_tree.Node(sticky_data->scroll_ancestor);
-  gfx::ScrollOffset scroll_offset =
-      tree->property_trees()->scroll_tree.current_scroll_offset(
-          scroll_node->owning_layer_id);
+      property_trees.scroll_tree.Node(sticky_data->scroll_ancestor);
+  TransformNode* transform_node =
+      property_trees.transform_tree.Node(scroll_node->transform_id);
+  const auto& scroll_offset = transform_node->scroll_offset;
+  DCHECK(property_trees.scroll_tree.current_scroll_offset(
+             scroll_node->owning_layer_id) == scroll_offset);
   gfx::PointF scroll_position(scroll_offset.x(), scroll_offset.y());
-  TransformNode* scroll_ancestor_transform_node =
-      tree->Node(scroll_node->transform_id);
-  if (scroll_ancestor_transform_node->scrolls) {
+  if (transform_node->scrolls) {
     // The scroll position does not include snapping which shifts the scroll
     // offset to align to a pixel boundary, we need to manually include it here.
     // In this case, snapping is caused by a scroll.
-    scroll_position -= scroll_ancestor_transform_node->snap_amount;
+    scroll_position -= transform_node->snap_amount;
   }
 
   gfx::RectF clip(
       scroll_position,
-      gfx::SizeF(tree->property_trees()->scroll_tree.scroll_clip_layer_bounds(
+      gfx::SizeF(property_trees.scroll_tree.scroll_clip_layer_bounds(
           scroll_node->id)));
   gfx::Vector2dF layer_offset(sticky_data->main_thread_offset);
 
@@ -824,7 +825,8 @@ void EffectTree::UpdateBackfaceVisibility(EffectNode* node,
   if (parent_node && parent_node->hidden_by_backface_visibility) {
     node->hidden_by_backface_visibility = true;
     return;
-  } else if (node->double_sided) {
+  }
+  if (node->double_sided) {
     node->hidden_by_backface_visibility = false;
     return;
   }
@@ -852,11 +854,19 @@ void EffectTree::UpdateSurfaceContentsScale(EffectNode* effect_node) {
   bool use_transform_for_contents_scale =
       property_trees()->can_adjust_raster_scales ||
       effect_node->has_copy_request;
+  const gfx::Vector2dF old_scale = effect_node->surface_contents_scale;
   effect_node->surface_contents_scale =
       use_transform_for_contents_scale
           ? MathUtil::ComputeTransform2dScaleComponents(
                 transform_tree.ToScreen(transform_node->id), layer_scale_factor)
           : gfx::Vector2dF(layer_scale_factor, layer_scale_factor);
+
+  // If surface contents scale changes, draw transforms are no longer valid.
+  // Invalidates the draw transform cache and updates the clip for the surface.
+  if (old_scale != effect_node->surface_contents_scale) {
+    property_trees()->clip_tree.set_needs_update(true);
+    property_trees()->UpdateTransformTreeUpdateNumber();
+  }
 }
 
 EffectNode* EffectTree::FindNodeFromElementId(ElementId id) {
@@ -870,11 +880,6 @@ EffectNode* EffectTree::FindNodeFromElementId(ElementId id) {
 bool EffectTree::OnOpacityAnimated(ElementId id, float opacity) {
   EffectNode* node = FindNodeFromElementId(id);
   DCHECK(node);
-  // TODO(crbug.com/706766): Avoid crash. Need more investigation for what is
-  // calling this without setting element id.
-  if (!node)
-    return false;
-
   if (node->opacity == opacity)
     return false;
   node->opacity = opacity;
@@ -888,11 +893,6 @@ bool EffectTree::OnFilterAnimated(ElementId id,
                                   const FilterOperations& filters) {
   EffectNode* node = FindNodeFromElementId(id);
   DCHECK(node);
-  // TODO(crbug.com/706766): Avoid crash. Need more investigation for what is
-  // calling this without setting element id.
-  if (!node)
-    return false;
-
   if (node->filters == filters)
     return false;
   node->filters = filters;
@@ -986,8 +986,9 @@ bool EffectTree::HasCopyRequests() const {
 
 void EffectTree::ClearCopyRequests() {
   for (auto& node : nodes()) {
-    node.num_copy_requests_in_subtree = 0;
+    node.subtree_has_copy_request = false;
     node.has_copy_request = false;
+    node.closest_ancestor_with_copy_request_id = EffectTree::kInvalidNodeId;
   }
 
   // Any copy requests that are still left will be aborted (sending an empty
@@ -996,33 +997,29 @@ void EffectTree::ClearCopyRequests() {
   set_needs_update(true);
 }
 
-int EffectTree::ClosestAncestorWithCopyRequest(int id) const {
-  DCHECK_GE(id, EffectTree::kRootNodeId);
-  const EffectNode* node = Node(id);
-  while (node->id > EffectTree::kContentsRootNodeId) {
-    if (node->has_copy_request)
-      return node->id;
-
-    node = parent(node);
+int EffectTree::LowestCommonAncestorWithRenderSurface(int id_1,
+                                                      int id_2) const {
+  DCHECK(GetRenderSurface(id_1));
+  DCHECK(GetRenderSurface(id_2));
+  while (id_1 != id_2) {
+    if (id_1 < id_2)
+      id_2 = Node(id_2)->target_id;
+    else
+      id_1 = Node(id_1)->target_id;
   }
 
-  if (node->has_copy_request)
-    return node->id;
-  else
-    return EffectTree::kInvalidNodeId;
+  return id_1;
 }
 
 void EffectTree::AddMaskLayerId(int id) {
   mask_layer_ids_.push_back(id);
 }
 
-void EffectTree::UpdateRenderSurfaces(LayerTreeImpl* layer_tree_impl,
-                                      bool non_root_surfaces_enabled) {
+void EffectTree::UpdateRenderSurfaces(LayerTreeImpl* layer_tree_impl) {
   for (int id = kContentsRootNodeId; id < static_cast<int>(size()); ++id) {
     EffectNode* effect_node = Node(id);
     bool needs_render_surface =
-        id == kContentsRootNodeId ||
-        (non_root_surfaces_enabled && effect_node->has_render_surface);
+        id == kContentsRootNodeId || effect_node->has_render_surface;
     if (needs_render_surface == !!render_surfaces_[id])
       continue;
 
@@ -1211,6 +1208,14 @@ void ScrollTree::CopyCompleteTreeState(const ScrollTree& other) {
 }
 #endif
 
+ScrollNode* ScrollTree::FindNodeFromElementId(ElementId id) {
+  auto iterator = property_trees()->element_id_to_scroll_node_index.find(id);
+  if (iterator == property_trees()->element_id_to_scroll_node_index.end())
+    return nullptr;
+
+  return Node(iterator->second);
+}
+
 void ScrollTree::clear() {
   PropertyTree<ScrollNode>::clear();
 
@@ -1349,11 +1354,9 @@ SyncedScrollOffset* ScrollTree::GetOrCreateSyncedScrollOffset(int layer_id) {
 const SyncedScrollOffset* ScrollTree::GetSyncedScrollOffset(
     int layer_id) const {
   DCHECK(!property_trees()->is_main_thread);
-  if (layer_id_to_synced_scroll_offset_map_.find(layer_id) ==
-      layer_id_to_synced_scroll_offset_map_.end()) {
-    return nullptr;
-  }
-  return layer_id_to_synced_scroll_offset_map_.at(layer_id).get();
+  auto it = layer_id_to_synced_scroll_offset_map_.find(layer_id);
+  return it != layer_id_to_synced_scroll_offset_map_.end() ? it->second.get()
+                                                           : nullptr;
 }
 
 const gfx::ScrollOffset ScrollTree::current_scroll_offset(int layer_id) const {
@@ -1606,7 +1609,6 @@ PropertyTreesCachedData::~PropertyTreesCachedData() {}
 
 PropertyTrees::PropertyTrees()
     : needs_rebuild(true),
-      non_root_surfaces_enabled(true),
       can_adjust_raster_scales(true),
       changed(false),
       full_tree_damaged(false),
@@ -1631,13 +1633,10 @@ bool PropertyTrees::operator==(const PropertyTrees& other) const {
              other.element_id_to_scroll_node_index &&
          element_id_to_transform_node_index ==
              other.element_id_to_transform_node_index &&
-         always_use_active_tree_opacity_effect_ids ==
-             other.always_use_active_tree_opacity_effect_ids &&
          needs_rebuild == other.needs_rebuild && changed == other.changed &&
          full_tree_damaged == other.full_tree_damaged &&
          is_main_thread == other.is_main_thread &&
          is_active == other.is_active &&
-         non_root_surfaces_enabled == other.non_root_surfaces_enabled &&
          can_adjust_raster_scales == other.can_adjust_raster_scales &&
          sequence_number == other.sequence_number;
 }
@@ -1647,15 +1646,12 @@ PropertyTrees& PropertyTrees::operator=(const PropertyTrees& from) {
   effect_tree = from.effect_tree;
   clip_tree = from.clip_tree;
   scroll_tree = from.scroll_tree;
-  always_use_active_tree_opacity_effect_ids =
-      from.always_use_active_tree_opacity_effect_ids;
   element_id_to_effect_node_index = from.element_id_to_effect_node_index;
   element_id_to_scroll_node_index = from.element_id_to_scroll_node_index;
   element_id_to_transform_node_index = from.element_id_to_transform_node_index;
   needs_rebuild = from.needs_rebuild;
   changed = from.changed;
   full_tree_damaged = from.full_tree_damaged;
-  non_root_surfaces_enabled = from.non_root_surfaces_enabled;
   can_adjust_raster_scales = from.can_adjust_raster_scales;
   sequence_number = from.sequence_number;
   is_main_thread = from.is_main_thread;
@@ -1682,12 +1678,10 @@ void PropertyTrees::clear() {
   element_id_to_effect_node_index.clear();
   element_id_to_scroll_node_index.clear();
   element_id_to_transform_node_index.clear();
-  always_use_active_tree_opacity_effect_ids.clear();
 
   needs_rebuild = true;
   full_tree_damaged = false;
   changed = false;
-  non_root_surfaces_enabled = true;
   can_adjust_raster_scales = true;
   sequence_number++;
 
@@ -1727,22 +1721,6 @@ void PropertyTrees::SetOuterViewportContainerBoundsDelta(
 void PropertyTrees::SetInnerViewportScrollBoundsDelta(
     gfx::Vector2dF bounds_delta) {
   inner_viewport_scroll_bounds_delta_ = bounds_delta;
-}
-
-void PropertyTrees::PushOpacityIfNeeded(PropertyTrees* target_tree) {
-  for (int id : target_tree->always_use_active_tree_opacity_effect_ids) {
-    if (const EffectNode* source_effect_node =
-            effect_tree.FindNodeFromOwningLayerId(id)) {
-      EffectNode* target_effect_node =
-          target_tree->effect_tree.UpdateNodeFromOwningLayerId(id);
-      float source_opacity = source_effect_node->opacity;
-      float target_opacity = target_effect_node->opacity;
-      if (source_opacity == target_opacity)
-        continue;
-      target_effect_node->opacity = source_opacity;
-      target_tree->effect_tree.set_needs_update(true);
-    }
-  }
 }
 
 void PropertyTrees::RemoveIdFromIdToIndexMaps(int id) {

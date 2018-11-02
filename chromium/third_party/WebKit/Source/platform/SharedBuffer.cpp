@@ -67,7 +67,7 @@ SharedBuffer::~SharedBuffer() {
 
 PassRefPtr<SharedBuffer> SharedBuffer::AdoptVector(Vector<char>& vector) {
   RefPtr<SharedBuffer> buffer = Create();
-  buffer->buffer_.Swap(vector);
+  buffer->buffer_.swap(vector);
   buffer->size_ = buffer->buffer_.size();
   return buffer.Release();
 }
@@ -78,7 +78,7 @@ size_t SharedBuffer::size() const {
 
 const char* SharedBuffer::Data() const {
   MergeSegmentsIntoBuffer();
-  return buffer_.Data();
+  return buffer_.data();
 }
 
 void SharedBuffer::Append(PassRefPtr<SharedBuffer> data) {
@@ -94,7 +94,7 @@ void SharedBuffer::AppendInternal(const char* data, size_t length) {
   if (!length)
     return;
 
-  ASSERT(size_ >= buffer_.size());
+  DCHECK_GE(size_, buffer_.size());
   size_t position_in_segment = OffsetInSegment(size_ - buffer_.size());
   size_ += length;
 
@@ -128,23 +128,23 @@ void SharedBuffer::AppendInternal(const char* data, size_t length) {
 }
 
 void SharedBuffer::Append(const Vector<char>& data) {
-  Append(data.Data(), data.size());
+  Append(data.data(), data.size());
 }
 
 void SharedBuffer::Clear() {
   for (size_t i = 0; i < segments_.size(); ++i)
     FreeSegment(segments_[i]);
 
-  segments_.Clear();
+  segments_.clear();
   size_ = 0;
-  buffer_.Clear();
+  buffer_.clear();
 }
 
 PassRefPtr<SharedBuffer> SharedBuffer::Copy() const {
   RefPtr<SharedBuffer> clone(AdoptRef(new SharedBuffer));
   clone->size_ = size_;
   clone->buffer_.ReserveInitialCapacity(size_);
-  clone->buffer_.Append(buffer_.Data(), buffer_.size());
+  clone->buffer_.Append(buffer_.data(), buffer_.size());
   if (!segments_.IsEmpty()) {
     const char* segment = 0;
     size_t position = buffer_.size();
@@ -152,7 +152,7 @@ PassRefPtr<SharedBuffer> SharedBuffer::Copy() const {
       clone->buffer_.Append(segment, segment_size);
       position += segment_size;
     }
-    ASSERT(position == clone->size());
+    DCHECK_EQ(position, clone->size());
   }
   return clone.Release();
 }
@@ -168,7 +168,7 @@ void SharedBuffer::MergeSegmentsIntoBuffer() const {
       bytes_left -= bytes_to_copy;
       FreeSegment(segments_[i]);
     }
-    segments_.Clear();
+    segments_.clear();
   }
 }
 
@@ -183,7 +183,7 @@ size_t SharedBuffer::GetSomeDataInternal(const char*& some_data,
   SECURITY_DCHECK(position < size_);
   size_t consecutive_size = buffer_.size();
   if (position < consecutive_size) {
-    some_data = buffer_.Data() + position;
+    some_data = buffer_.data() + position;
     return consecutive_size - position;
   }
 
@@ -200,7 +200,7 @@ size_t SharedBuffer::GetSomeDataInternal(const char*& some_data,
     return segment == segments - 1 ? segmented_size - position
                                    : kSegmentSize - position_in_segment;
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return 0;
 }
 
@@ -240,7 +240,7 @@ sk_sp<SkData> SharedBuffer::GetAsSkData() const {
   }
 
   if (position != buffer_length) {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     // Don't return the incomplete SkData.
     return nullptr;
   }

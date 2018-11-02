@@ -11,14 +11,7 @@
 
 namespace media_router {
 namespace {
-
 const char kInstanceId[] = "instance123";
-
-void ExpectEqualStrings(const std::string& expected,
-                        const std::string& actual) {
-  EXPECT_EQ(expected, actual);
-}
-
 }  // namespace
 
 MockMediaRouteProvider::MockMediaRouteProvider() {}
@@ -28,6 +21,42 @@ MockMediaRouteProvider::~MockMediaRouteProvider() {}
 MockEventPageTracker::MockEventPageTracker() {}
 
 MockEventPageTracker::~MockEventPageTracker() {}
+
+MockMediaController::MockMediaController() : binding_(this) {}
+
+MockMediaController::~MockMediaController() {}
+
+RegisterMediaRouteProviderHandler::RegisterMediaRouteProviderHandler() {}
+
+RegisterMediaRouteProviderHandler::~RegisterMediaRouteProviderHandler() {}
+
+void MockMediaController::Bind(mojom::MediaControllerRequest request) {
+  binding_.Bind(std::move(request));
+}
+
+mojom::MediaControllerPtr MockMediaController::BindInterfacePtr() {
+  return binding_.CreateInterfacePtrAndBind();
+}
+
+void MockMediaController::CloseBinding() {
+  binding_.Close();
+}
+
+MockMediaRouteController::MockMediaRouteController(
+    const MediaRoute::Id& route_id,
+    mojom::MediaControllerPtr mojo_media_controller,
+    MediaRouter* media_router)
+    : MediaRouteController(route_id,
+                           std::move(mojo_media_controller),
+                           media_router) {}
+
+MockMediaRouteController::~MockMediaRouteController() {}
+
+MockMediaRouteControllerObserver::MockMediaRouteControllerObserver(
+    scoped_refptr<MediaRouteController> controller)
+    : MediaRouteController::Observer(controller) {}
+
+MockMediaRouteControllerObserver::~MockMediaRouteControllerObserver() {}
 
 MediaRouterMojoTest::MediaRouterMojoTest()
     : mock_media_router_(new MediaRouterMojoImpl(&mock_event_page_tracker_)) {
@@ -48,9 +77,11 @@ void MediaRouterMojoTest::ConnectProviderManagerService() {
   mojom::MediaRouteProviderPtr mojo_media_router;
   binding_.reset(new mojo::Binding<mojom::MediaRouteProvider>(
       &mock_media_route_provider_, mojo::MakeRequest(&mojo_media_router)));
+  EXPECT_CALL(provide_handler_, InvokeInternal(kInstanceId, testing::_));
   media_router_proxy_->RegisterMediaRouteProvider(
       std::move(mojo_media_router),
-      base::Bind(&ExpectEqualStrings, kInstanceId));
+      base::Bind(&RegisterMediaRouteProviderHandler::Invoke,
+                 base::Unretained(&provide_handler_)));
 }
 
 void MediaRouterMojoTest::SetUp() {

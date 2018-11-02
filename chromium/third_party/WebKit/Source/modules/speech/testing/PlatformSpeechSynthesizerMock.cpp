@@ -51,14 +51,14 @@ PlatformSpeechSynthesizerMock::PlatformSpeechSynthesizerMock(
 PlatformSpeechSynthesizerMock::~PlatformSpeechSynthesizerMock() {}
 
 void PlatformSpeechSynthesizerMock::SpeakingErrorOccurred(TimerBase*) {
-  ASSERT(current_utterance_);
+  DCHECK(current_utterance_);
 
   Client()->SpeakingErrorOccurred(current_utterance_);
   SpeakNext();
 }
 
 void PlatformSpeechSynthesizerMock::SpeakingFinished(TimerBase*) {
-  ASSERT(current_utterance_);
+  DCHECK(current_utterance_);
   Client()->DidFinishSpeaking(current_utterance_);
   SpeakNext();
 }
@@ -76,7 +76,7 @@ void PlatformSpeechSynthesizerMock::SpeakNext() {
 }
 
 void PlatformSpeechSynthesizerMock::InitializeVoiceList() {
-  voice_list_.Clear();
+  voice_list_.clear();
   voice_list_.push_back(PlatformSpeechSynthesisVoice::Create(
       String("mock.voice.bruce"), String("bruce"), String("en-US"), true,
       true));
@@ -99,7 +99,7 @@ void PlatformSpeechSynthesizerMock::Speak(
 }
 
 void PlatformSpeechSynthesizerMock::SpeakNow() {
-  ASSERT(current_utterance_);
+  DCHECK(current_utterance_);
   Client()->DidStartSpeaking(current_utterance_);
 
   // Fire a fake word and then sentence boundary event.
@@ -117,7 +117,7 @@ void PlatformSpeechSynthesizerMock::Cancel() {
     return;
 
   // Per spec, removes all queued utterances.
-  queued_utterances_.Clear();
+  queued_utterances_.clear();
 
   speaking_finished_timer_.Stop();
   speaking_error_occurred_timer_.StartOneShot(.1, BLINK_FROM_HERE);

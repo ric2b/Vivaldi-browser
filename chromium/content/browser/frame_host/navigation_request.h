@@ -10,6 +10,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/loader/navigation_url_loader_delegate.h"
 #include "content/common/content_export.h"
@@ -82,6 +83,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
       PreviewsState previews_state,
       bool is_same_document_history_load,
       bool is_history_navigation_in_new_child,
+      const scoped_refptr<ResourceRequestBodyImpl>& post_body,
       const base::TimeTicks& navigation_start,
       NavigationControllerImpl* controller);
 
@@ -92,10 +94,12 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // threading subtleties.
   static std::unique_ptr<NavigationRequest> CreateRendererInitiated(
       FrameTreeNode* frame_tree_node,
+      NavigationEntryImpl* entry,
       const CommonNavigationParams& common_params,
       const BeginNavigationParams& begin_params,
       int current_history_list_offset,
-      int current_history_list_length);
+      int current_history_list_length,
+      bool override_user_agent);
 
   ~NavigationRequest() override;
 
@@ -108,6 +112,11 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
 
   const RequestNavigationParams& request_params() const {
     return request_params_;
+  }
+
+  // Updates the navigation start time.
+  void set_navigation_start_time(const base::TimeTicks& time) {
+    common_params_.navigation_start = time;
   }
 
   NavigationURLLoader* loader_for_testing() const { return loader_.get(); }
@@ -134,11 +143,6 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
 
   bool may_transfer() const { return may_transfer_; }
 
-  void SetWaitingForRendererResponse() {
-    DCHECK(state_ == NOT_STARTED);
-    state_ = WAITING_FOR_RENDERER_RESPONSE;
-  }
-
   AssociatedSiteInstanceType associated_site_instance_type() const {
     return associated_site_instance_type_;
   }
@@ -150,9 +154,11 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
     return navigation_handle_.get();
   }
 
+  void SetWaitingForRendererResponse();
+
   // Creates a NavigationHandle. This should be called after any previous
   // NavigationRequest for the FrameTreeNode has been destroyed.
-  void CreateNavigationHandle(int pending_nav_entry_id);
+  void CreateNavigationHandle();
 
   // Transfers the ownership of the NavigationHandle to |render_frame_host|.
   // This should be called when the navigation is ready to commit, because the
@@ -166,6 +172,8 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
       const base::Closure& closure) {
     on_start_checks_complete_closure_ = closure;
   }
+
+  int nav_entry_id() const { return nav_entry_id_; }
 
  private:
   NavigationRequest(FrameTreeNode* frame_tree_node,
@@ -231,6 +239,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   RestoreType restore_type_;
   bool is_view_source_;
   int bindings_;
+  int nav_entry_id_ = 0;
 
   // Whether the navigation should be sent to a renderer a process. This is
   // true, except for 204/205 responses and downloads.
@@ -258,6 +267,8 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   mojo::ScopedDataPipeConsumerHandle handle_;
 
   base::Closure on_start_checks_complete_closure_;
+
+  base::WeakPtrFactory<NavigationRequest> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationRequest);
 };

@@ -308,28 +308,6 @@
             "RoutingPrefix": 123
         } ],
     },
-    "network-with-client-cert-pattern": {
-        "GUID": "guid",
-        "Type": "WiFi",
-        "Name": "name",
-        "WiFi": {
-            "SSID": "ssid",
-            "Security": "WPA-EAP",
-            "EAP": {
-                "Outer": "EAP-TLS",
-                "Identity": "abc ${LOGIN_ID}@my.domain.com",
-                "ClientCertType": "Pattern",
-                "ClientCertPattern": {
-                    "IssuerCARef": [
-                        "{58ac1967-a0e7-49e9-be68-123abc}"
-                    ],
-                    "EnrollmentURI": [
-                        "chrome-extension://delkjfjibodjclmdijflfnimdmgdagfk/generate-cert.html"
-                    ]
-                }
-            }
-        }
-    },
     "ipsec-with-psk-and-cacert": {
       "AuthenticationType": "PSK",
       "IKEVersion": 1,
@@ -397,6 +375,90 @@
             "Type": "unknown type"
           }
         }
+      }
+    },
+    "tether-missing-battery-percentage": {
+      "GUID": "guid",
+      "Name": "name",
+      "Type": "Tether",
+      "Tether": {
+        "Carrier": "Project Fi",
+        "HasConnectedToHost": true,
+        "SignalStrength": 75
+      }
+    },
+    "tether-negative-battery": {
+      "GUID": "guid",
+      "Name": "name",
+      "Type": "Tether",
+      "Tether": {
+        "BatteryPercentage": -1,
+        "Carrier": "Project Fi",
+        "HasConnectedToHost": true,
+        "SignalStrength": 75
+      }
+    },
+    "tether-battery-over-100": {
+      "GUID": "guid",
+      "Name": "name",
+      "Type": "Tether",
+      "Tether": {
+        "BatteryPercentage": 101,
+        "Carrier": "Project Fi",
+        "HasConnectedToHost": true,
+        "SignalStrength": 75
+      }
+    },
+    "tether-missing-carrier": {
+      "GUID": "guid",
+      "Name": "name",
+      "Type": "Tether",
+      "Tether": {
+        "BatteryPercentage": 85,
+        "HasConnectedToHost": true,
+        "SignalStrength": 75
+      }
+    },
+    "tether-missing-has-connected-to-host": {
+      "GUID": "guid",
+      "Name": "name",
+      "Type": "Tether",
+      "Tether": {
+        "BatteryPercentage": 85,
+        "Carrier": "Project Fi",
+        "SignalStrength": 101
+      }
+    },
+    "tether-missing-signal-strength": {
+      "GUID": "guid",
+      "Name": "name",
+      "Type": "Tether",
+      "Tether": {
+        "BatteryPercentage": 85,
+        "Carrier": "Project Fi",
+        "HasConnectedToHost": true,
+      }
+    },
+    "tether-negative-signal-strength": {
+      "GUID": "guid",
+      "Name": "name",
+      "Type": "Tether",
+      "Tether": {
+        "BatteryPercentage": 85,
+        "Carrier": "Project Fi",
+        "HasConnectedToHost": true,
+        "SignalStrength": -1
+      }
+    },
+    "tether-signal-strength-over-100": {
+      "GUID": "guid",
+      "Name": "name",
+      "Type": "Tether",
+      "Tether": {
+        "BatteryPercentage": 85,
+        "Carrier": "Project Fi",
+        "HasConnectedToHost": true,
+        "SignalStrength": 101
       }
     },
     "third-party-vpn-missing-extension-id": {
@@ -471,27 +533,6 @@
             }
           }
         ]
-    },
-    "toplevel-server-and-ca-cert-dropped": {
-      "Type": "UnencryptedConfiguration",
-      "Certificates":
-      [ { "GUID": "3",
-          "PKCS12": "abc" ,
-          "Type": "Client" } ]
-    },
-    "toplevel-with-server-and-ca-cert": {
-      "Type": "UnencryptedConfiguration",
-      "Certificates":
-      [ { "TrustBits": ["Web"],
-          "GUID": "1",
-          "Type": "Authority",
-          "X509": "abc" },
-        { "GUID": "2",
-          "Type": "Server",
-          "X509": "abc" },
-        { "GUID": "3",
-          "PKCS12": "abc" ,
-          "Type": "Client" } ]
     },
     "toplevel-with-repaired-networks": {
       "NetworkConfigurations":

@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/default_clock.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "device/bluetooth/bluetooth_adapter.h"
@@ -25,7 +26,9 @@ class RemoteBeaconSeedFetcher;
 
 namespace chromeos {
 
+class ManagedNetworkConfigurationHandler;
 class NetworkConnect;
+class NetworkConnectionHandler;
 class NetworkStateHandler;
 
 namespace tether {
@@ -33,13 +36,20 @@ namespace tether {
 class ActiveHost;
 class ActiveHostNetworkStateUpdater;
 class BleConnectionManager;
+class NetworkConnectionHandlerTetherDelegate;
 class DeviceIdTetherNetworkGuidMap;
+class HostScanCache;
 class HostScanner;
+class HostScanScheduler;
 class HostScanDevicePrioritizer;
 class LocalDeviceDataProvider;
+class NetworkConfigurationRemover;
 class NotificationPresenter;
 class TetherConnector;
+class TetherDisconnector;
 class TetherHostFetcher;
+class TetherHostResponseRecorder;
+class TetherNetworkDisconnectionHandler;
 class WifiHotspotConnector;
 
 // Initializes the Tether Chrome OS component.
@@ -52,7 +62,9 @@ class Initializer : public OAuth2TokenService::Observer {
       PrefService* pref_service,
       ProfileOAuth2TokenService* token_service,
       NetworkStateHandler* network_state_handler,
-      NetworkConnect* network_connect);
+      ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
+      NetworkConnect* network_connect,
+      NetworkConnectionHandler* network_connection_handler);
 
   // Shuts down the tether feature, destroying all internal classes. This should
   // be called before the dependencies passed to Init() are destroyed.
@@ -65,12 +77,15 @@ class Initializer : public OAuth2TokenService::Observer {
 
   static Initializer* instance_;
 
-  Initializer(cryptauth::CryptAuthService* cryptauth_service,
-              std::unique_ptr<NotificationPresenter> notification_presenter,
-              PrefService* pref_service,
-              ProfileOAuth2TokenService* token_service,
-              NetworkStateHandler* network_state_handler,
-              NetworkConnect* network_connect);
+  Initializer(
+      cryptauth::CryptAuthService* cryptauth_service,
+      std::unique_ptr<NotificationPresenter> notification_presenter,
+      PrefService* pref_service,
+      ProfileOAuth2TokenService* token_service,
+      NetworkStateHandler* network_state_handler,
+      ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
+      NetworkConnect* network_connect,
+      NetworkConnectionHandler* network_connection_handler);
   ~Initializer() override;
 
   // OAuth2TokenService::Observer:
@@ -89,7 +104,9 @@ class Initializer : public OAuth2TokenService::Observer {
   PrefService* pref_service_;
   ProfileOAuth2TokenService* token_service_;
   NetworkStateHandler* network_state_handler_;
+  ManagedNetworkConfigurationHandler* managed_network_configuration_handler_;
   NetworkConnect* network_connect_;
+  NetworkConnectionHandler* network_connection_handler_;
 
   // Declare new objects in the order that they will be created during
   // initialization to ensure that they are destroyed in the correct order. This
@@ -99,6 +116,7 @@ class Initializer : public OAuth2TokenService::Observer {
   std::unique_ptr<cryptauth::RemoteBeaconSeedFetcher>
       remote_beacon_seed_fetcher_;
   std::unique_ptr<BleConnectionManager> ble_connection_manager_;
+  std::unique_ptr<TetherHostResponseRecorder> tether_host_response_recorder_;
   std::unique_ptr<HostScanDevicePrioritizer> host_scan_device_prioritizer_;
   std::unique_ptr<WifiHotspotConnector> wifi_hotspot_connector_;
   std::unique_ptr<ActiveHost> active_host_;
@@ -107,7 +125,16 @@ class Initializer : public OAuth2TokenService::Observer {
   std::unique_ptr<DeviceIdTetherNetworkGuidMap>
       device_id_tether_network_guid_map_;
   std::unique_ptr<TetherConnector> tether_connector_;
+  std::unique_ptr<TetherDisconnector> tether_disconnector_;
+  std::unique_ptr<NetworkConfigurationRemover> network_configuration_remover_;
+  std::unique_ptr<NetworkConnectionHandlerTetherDelegate>
+      network_connection_handler_tether_delegate_;
+  std::unique_ptr<TetherNetworkDisconnectionHandler>
+      tether_network_disconnection_handler_;
+  std::unique_ptr<HostScanCache> host_scan_cache_;
+  std::unique_ptr<base::DefaultClock> clock_;
   std::unique_ptr<HostScanner> host_scanner_;
+  std::unique_ptr<HostScanScheduler> host_scan_scheduler_;
 
   base::WeakPtrFactory<Initializer> weak_ptr_factory_;
 

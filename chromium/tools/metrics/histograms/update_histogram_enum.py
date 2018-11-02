@@ -19,9 +19,10 @@ import diff_util
 import path_util
 
 import print_style
+import histogram_paths
 
 
-HISTOGRAMS_PATH = path_util.GetHistogramsFile()
+ENUMS_PATH = histogram_paths.ENUMS_XML
 
 
 class UserError(Exception):
@@ -33,18 +34,37 @@ class UserError(Exception):
     return self.args[0]
 
 
+class DuplicatedValue(Exception):
+  """Exception raised for duplicated enum values.
+
+  Attributes:
+      first_label: First enum label that shares the duplicated enum value.
+      second_label: Second enum label that shares the duplicated enum value.
+  """
+  def __init__(self, first_label, second_label):
+    self.first_label = first_label
+    self.second_label = second_label
+
+
 def Log(message):
   logging.info(message)
 
 
-def ReadHistogramValues(filename, start_marker, end_marker):
-  """Returns a dictionary of enum values and a pair of labels that have the same
-     enum values, read from a C++ file.
+def ReadHistogramValues(filename, start_marker, end_marker, strip_k_prefix):
+  """Creates a dictionary of enum values, read from a C++ file.
 
   Args:
       filename: The unix-style path (relative to src/) of the file to open.
       start_marker: A regex that signifies the start of the enum values.
       end_marker: A regex that signifies the end of the enum values.
+      strip_k_prefix: Set to True if enum values are declared as kFoo and the
+          'k' should be stripped.
+
+  Returns:
+      A boolean indicating wheather the histograms.xml file would be changed.
+
+  Raises:
+      DuplicatedValue: An error when two enum labels share the same value.
   """
   # Read the file as a list of lines
   with open(path_util.GetInputFile(filename)) as f:
@@ -52,40 +72,48 @@ def ReadHistogramValues(filename, start_marker, end_marker):
 
   START_REGEX = re.compile(start_marker)
   ITEM_REGEX = re.compile(r'^(\w+)')
-  ITEM_REGEX_WITH_INIT = re.compile(r'(\w+)\s*=\s*(\d+)')
+  ITEM_REGEX_WITH_INIT = re.compile(r'(\w+)\s*=\s*(\d*)')
+  WRAPPED_INIT = re.compile(r'(\d+)')
   END_REGEX = re.compile(end_marker)
 
-  # Locate the enum definition and collect all entries in it
-  inside_enum = False # We haven't found the enum definition yet
+  iterator = iter(content)
+  # Find the start of the enum
+  for line in iterator:
+    if START_REGEX.match(line.strip()):
+      break
+
+  enum_value = 0
   result = {}
-  for line in content:
+  for line in iterator:
     line = line.strip()
-    if inside_enum:
-      # Exit condition: we reached last enum value
-      if END_REGEX.match(line):
-        inside_enum = False
+    # Exit condition: we reached last enum value
+    if END_REGEX.match(line):
+      break
+    # Inside enum: generate new xml entry
+    m = ITEM_REGEX_WITH_INIT.match(line)
+    if m:
+      label = m.group(1)
+      if m.group(2):
+        enum_value = int(m.group(2))
       else:
-        # Inside enum: generate new xml entry
-        m = ITEM_REGEX_WITH_INIT.match(line)
-        if m:
-          enum_value = int(m.group(2))
-          label = m.group(1)
-        else:
-          m = ITEM_REGEX.match(line)
-          if m:
-            label = m.group(1)
-          else:
-            continue
-        # If two enum labels have the same value
-        if enum_value in result:
-          return result, (result[enum_value], label)
-        result[enum_value] = label
-        enum_value += 1
+        # Enum name is so long that the value wrapped to the next line
+        next_line = next(iterator).strip()
+        enum_value = int(WRAPPED_INIT.match(next_line).group(1))
     else:
-      if START_REGEX.match(line):
-        inside_enum = True
-        enum_value = 0
-  return result, None
+      m = ITEM_REGEX.match(line)
+      if m:
+        label = m.group(1)
+      else:
+        continue
+    if strip_k_prefix:
+      assert label.startswith('k'), "Enum " + label + " should start with 'k'."
+      label = label[1:]
+    # If two enum labels have the same value
+    if enum_value in result:
+      raise DuplicatedValue(result[enum_value], label)
+    result[enum_value] = label
+    enum_value += 1
+  return result
 
 
 def CreateEnumItemNode(document, value, label):
@@ -152,12 +180,12 @@ def UpdateHistogramDefinitions(histogram_enum_name, source_enum_values,
 
 def _GetOldAndUpdatedXml(histogram_enum_name, source_enum_values,
                          source_enum_path):
-  """Reads old histogram from |histogram_enum_name| from |HISTOGRAMS_PATH|, and
+  """Reads old histogram from |histogram_enum_name| from |ENUMS_PATH|, and
   calculates new histogram from |source_enum_values| from |source_enum_path|,
   and returns both in XML format.
   """
-  Log('Reading existing histograms from "{0}".'.format(HISTOGRAMS_PATH))
-  with open(HISTOGRAMS_PATH, 'rb') as f:
+  Log('Reading existing histograms from "{0}".'.format(ENUMS_PATH))
+  with open(ENUMS_PATH, 'rb') as f:
     histograms_doc = minidom.parse(f)
     f.seek(0)
     xml = f.read()
@@ -170,28 +198,45 @@ def _GetOldAndUpdatedXml(histogram_enum_name, source_enum_values,
   return (xml, new_xml)
 
 
-def HistogramNeedsUpdate(histogram_enum_name, source_enum_path, start_marker,
-                         end_marker):
-  """Reads a C++ enum from a .h file and does a dry run of updating
-  histograms.xml to match. Returns true if the histograms.xml file would be
-  changed.
+def CheckPresubmitErrors(histogram_enum_name, update_script_name,
+                         source_enum_path, start_marker,
+                         end_marker, strip_k_prefix = False):
+  """Reads a C++ enum from a .h file and checks for presubmit violations:
+  1. Failure to update histograms.xml to match
+  2. Introduction of duplicate values.
 
   Args:
       histogram_enum_name: The name of the XML <enum> attribute to update.
+      update_script_name: The name of an update script to run to update the UMA
+          mappings for the enum.
       source_enum_path: A unix-style path, relative to src/, giving
           the C++ header file from which to read the enum.
       start_marker: A regular expression that matches the start of the C++ enum.
       end_marker: A regular expression that matches the end of the C++ enum.
+      strip_k_prefix: Set to True if enum values are declared as kFoo and the
+          'k' should be stripped.
+
+  Returns:
+      A string with presubmit failure description, or None (if no failures).
   """
   Log('Reading histogram enum definition from "{0}".'.format(source_enum_path))
-  source_enum_values, duplicated_values = ReadHistogramValues(
-      source_enum_path, start_marker, end_marker)
-  if duplicated_values:
-    return False, duplicated_values
+  try:
+    source_enum_values = ReadHistogramValues(
+        source_enum_path, start_marker, end_marker, strip_k_prefix)
+  except DuplicatedValue as duplicated_values:
+    return ('%s enum has been updated and there exist '
+            'duplicated values between (%s) and (%s)' %
+            (histogram_enum_name, duplicated_values.first_label,
+             duplicated_values.second_label))
 
   (xml, new_xml) = _GetOldAndUpdatedXml(histogram_enum_name, source_enum_values,
                                         source_enum_path)
-  return xml != new_xml, None
+  if xml != new_xml:
+    return ('%s enum has been updated and the UMA mapping needs to be '
+            'regenerated. Please run %s in src/tools/metrics/histograms/ to '
+            'update the mapping.' % (histogram_enum_name, update_script_name))
+
+  return None
 
 
 def UpdateHistogramFromDict(histogram_enum_name, source_enum_values,
@@ -208,14 +253,14 @@ def UpdateHistogramFromDict(histogram_enum_name, source_enum_values,
     Log('Cancelled.')
     return
 
-  with open(HISTOGRAMS_PATH, 'wb') as f:
+  with open(ENUMS_PATH, 'wb') as f:
     f.write(new_xml)
 
   Log('Done.')
 
 
 def UpdateHistogramEnum(histogram_enum_name, source_enum_path,
-                        start_marker, end_marker):
+                        start_marker, end_marker, strip_k_prefix = False):
   """Reads a C++ enum from a .h file and updates histograms.xml to match.
 
   Args:
@@ -224,11 +269,13 @@ def UpdateHistogramEnum(histogram_enum_name, source_enum_path,
           the C++ header file from which to read the enum.
       start_marker: A regular expression that matches the start of the C++ enum.
       end_marker: A regular expression that matches the end of the C++ enum.
+      strip_k_prefix: Set to True if enum values are declared as kFoo and the
+          'k' should be stripped.
   """
 
   Log('Reading histogram enum definition from "{0}".'.format(source_enum_path))
-  source_enum_values, ignored = ReadHistogramValues(source_enum_path,
-      start_marker, end_marker)
+  source_enum_values = ReadHistogramValues(source_enum_path,
+      start_marker, end_marker, strip_k_prefix)
 
   UpdateHistogramFromDict(histogram_enum_name, source_enum_values,
       source_enum_path)

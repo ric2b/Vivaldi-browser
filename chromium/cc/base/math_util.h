@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "cc/base/base_export.h"
 #include "ui/gfx/geometry/box_f.h"
 #include "ui/gfx/geometry/point3_f.h"
@@ -219,6 +220,10 @@ class CC_BASE_EXPORT MathUtil {
 
   static gfx::Vector2dF ComputeTransform2dScaleComponents(const gfx::Transform&,
                                                           float fallbackValue);
+  // Returns an approximate max scale value of the transform even if it has
+  // perspective. Prefer to use ComputeTransform2dScaleComponents if there is no
+  // perspective, since it can produce more accurate results.
+  static float ComputeApproximateMaxScale(const gfx::Transform& transform);
 
   // Makes a rect that has the same relationship to input_outer_rect as
   // scale_inner_rect has to scale_outer_rect. scale_inner_rect should be
@@ -296,7 +301,7 @@ class CC_BASE_EXPORT MathUtil {
   // Returns vector that y axis (0,1,0) transforms to under given transform.
   static gfx::Vector3dF GetYAxis(const gfx::Transform& transform);
 
-  static bool IsNearlyTheSameForTesting(float left, float right);
+  static bool IsFloatNearlyTheSame(float left, float right);
   static bool IsNearlyTheSameForTesting(const gfx::PointF& l,
                                         const gfx::PointF& r);
   static bool IsNearlyTheSameForTesting(const gfx::Point3F& l,
@@ -321,7 +326,7 @@ class CC_BASE_EXPORT ScopedSubnormalFloatDisabler {
   ~ScopedSubnormalFloatDisabler();
 
  private:
-#ifdef __SSE__
+#if defined(ARCH_CPU_X86_FAMILY)
   unsigned int orig_state_;
 #endif
   DISALLOW_COPY_AND_ASSIGN(ScopedSubnormalFloatDisabler);

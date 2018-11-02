@@ -27,19 +27,18 @@ class MenuRunnerImplInterface {
       int32_t run_types,
       const base::Closure& on_menu_closed_callback);
 
-  // Returns true if we're in a nested message loop running the menu.
+  // Returns true if we're in a nested run loop running the menu.
   virtual bool IsRunning() const = 0;
 
   // See description above class for details.
   virtual void Release() = 0;
 
   // Runs the menu. See MenuRunner::RunMenuAt for more details.
-  virtual MenuRunner::RunResult RunMenuAt(Widget* parent,
-                                          MenuButton* button,
-                                          const gfx::Rect& bounds,
-                                          MenuAnchorPosition anchor,
-                                          int32_t run_types)
-      WARN_UNUSED_RESULT = 0;
+  virtual void RunMenuAt(Widget* parent,
+                         MenuButton* button,
+                         const gfx::Rect& bounds,
+                         MenuAnchorPosition anchor,
+                         int32_t run_types) = 0;
 
   // Hides and cancels the menu.
   virtual void Cancel() = 0;

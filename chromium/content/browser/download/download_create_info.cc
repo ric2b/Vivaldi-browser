@@ -29,6 +29,7 @@ DownloadCreateInfo::DownloadCreateInfo(
       request_net_log(net_log),
       accept_range(false),
       connection_info(net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN),
+      method("GET"),
       open_when_finished(open_when_done) {}
 
 DownloadCreateInfo::DownloadCreateInfo()

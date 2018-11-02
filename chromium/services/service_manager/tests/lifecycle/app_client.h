@@ -11,7 +11,6 @@
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_runner.h"
 #include "services/service_manager/public/interfaces/service.mojom.h"
@@ -21,7 +20,6 @@ namespace service_manager {
 namespace test {
 
 class AppClient : public Service,
-                  public InterfaceFactory<mojom::LifecycleControl>,
                   public mojom::LifecycleControl {
  public:
   AppClient();
@@ -30,14 +28,13 @@ class AppClient : public Service,
   void set_runner(ServiceRunner* runner) { runner_ = runner; }
 
   // Service:
-  void OnBindInterface(const ServiceInfo& source_info,
+  void OnBindInterface(const BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
   bool OnServiceManagerConnectionLost() override;
 
-  // InterfaceFactory<LifecycleControl>:
-  void Create(const Identity& remote_identity,
-              mojom::LifecycleControlRequest request) override;
+  void Create(const BindSourceInfo& source_info,
+              mojom::LifecycleControlRequest request);
 
   // LifecycleControl:
   void Ping(const PingCallback& callback) override;

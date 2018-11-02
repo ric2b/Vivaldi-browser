@@ -15,6 +15,8 @@ Timeline.TimelineDetailsView = class extends UI.VBox {
     this.element.classList.add('timeline-details');
 
     this._detailsLinkifier = new Components.Linkifier();
+    this._badgePool = new ProductRegistry.BadgePool();
+    this._badgePool.setShowTitles(true);
 
     this._tabbedPane = new UI.TabbedPane();
     this._tabbedPane.show(this.element);
@@ -112,22 +114,18 @@ Timeline.TimelineDetailsView = class extends UI.VBox {
    */
   setSelection(selection) {
     this._detailsLinkifier.reset();
+    this._badgePool.reset();
     this._selection = selection;
     switch (this._selection.type()) {
       case Timeline.TimelineSelection.Type.TraceEvent:
         var event = /** @type {!SDK.TracingModel.Event} */ (this._selection.object());
-        Timeline.TimelineUIUtils.buildTraceEventDetails(
-            event, this._model.timelineModel(), this._detailsLinkifier, true)
-                .then(fragment => this._appendDetailsTabsForTraceEventAndShowDetails(event, fragment));
+        Timeline.TimelineUIUtils
+            .buildTraceEventDetails(event, this._model.timelineModel(), this._detailsLinkifier, this._badgePool, true)
+            .then(fragment => this._appendDetailsTabsForTraceEventAndShowDetails(event, fragment));
         break;
       case Timeline.TimelineSelection.Type.Frame:
         var frame = /** @type {!TimelineModel.TimelineFrame} */ (this._selection.object());
-        var screenshotTime = frame.idle ?
-            frame.startTime :
-            frame.endTime;  // For idle frames, look at the state at the beginning of the frame.
-        var filmStripFrame = this._model.filmStripModel().frameByTimestamp(screenshotTime);
-        if (filmStripFrame && filmStripFrame.timestamp - frame.endTime > 10)
-          filmStripFrame = null;
+        var filmStripFrame = this._model.filmStripModelFrame(frame);
         this._setContent(Timeline.TimelineUIUtils.generateDetailsContentForFrame(frame, filmStripFrame));
         if (frame.layerTree) {
           var layersView = this._layersView();
@@ -139,7 +137,7 @@ Timeline.TimelineDetailsView = class extends UI.VBox {
       case Timeline.TimelineSelection.Type.NetworkRequest:
         var request = /** @type {!TimelineModel.TimelineModel.NetworkRequest} */ (this._selection.object());
         Timeline.TimelineUIUtils
-            .buildNetworkRequestDetails(request, this._model.timelineModel(), this._detailsLinkifier)
+            .buildNetworkRequestDetails(request, this._model.timelineModel(), this._detailsLinkifier, this._badgePool)
             .then(this._setContent.bind(this));
         break;
       case Timeline.TimelineSelection.Type.Range:
@@ -209,11 +207,11 @@ Timeline.TimelineDetailsView = class extends UI.VBox {
    * @param {!SDK.TracingModel.Event} event
    */
   _showEventInPaintProfiler(event) {
-    const target = SDK.targetManager.mainTarget();
-    if (!target)
+    const paintProfilerModel = SDK.targetManager.models(SDK.PaintProfilerModel)[0];
+    if (!paintProfilerModel)
       return;
     const paintProfilerView = this._paintProfilerView();
-    const hasProfileData = paintProfilerView.setEvent(target, event);
+    const hasProfileData = paintProfilerView.setEvent(paintProfilerModel, event);
     if (!hasProfileData)
       return;
     if (this._tabbedPane.hasTab(Timeline.TimelineDetailsView.Tab.PaintProfiler))

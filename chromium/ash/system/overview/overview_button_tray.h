@@ -6,7 +6,7 @@
 #define ASH_SYSTEM_OVERVIEW_OVERVIEW_BUTTON_TRAY_H_
 
 #include "ash/ash_export.h"
-#include "ash/session/session_state_observer.h"
+#include "ash/session/session_observer.h"
 #include "ash/shell_observer.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "base/macros.h"
@@ -23,10 +23,10 @@ namespace ash {
 // This tray will only be visible while in this state. This tray does not
 // provide any bubble view windows.
 class ASH_EXPORT OverviewButtonTray : public TrayBackgroundView,
-                                      public SessionStateObserver,
+                                      public SessionObserver,
                                       public ShellObserver {
  public:
-  explicit OverviewButtonTray(WmShelf* wm_shelf);
+  explicit OverviewButtonTray(Shelf* shelf);
   ~OverviewButtonTray() override;
 
   // Updates the tray's visibility based on the LoginStatus and the current
@@ -36,8 +36,8 @@ class ASH_EXPORT OverviewButtonTray : public TrayBackgroundView,
   // ActionableView:
   bool PerformAction(const ui::Event& event) override;
 
-  // SessionStateObserver:
-  void SessionStateChanged(session_manager::SessionState state) override;
+  // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
 
   // ShellObserver:
   void OnMaximizeModeStarted() override;
@@ -49,14 +49,9 @@ class ASH_EXPORT OverviewButtonTray : public TrayBackgroundView,
   void ClickedOutsideBubble() override;
   base::string16 GetAccessibleNameForTray() override;
   void HideBubbleWithView(const views::TrayBubbleView* bubble_view) override;
-  void SetShelfAlignment(ShelfAlignment alignment) override;
 
  private:
   friend class OverviewButtonTrayTest;
-
-  // Creates a new border for the icon. The padding is determined based on the
-  // alignment of the shelf.
-  void SetIconBorderForShelfAlignment();
 
   // Sets the icon to visible if maximize mode is enabled and
   // WindowSelectorController::CanSelect.
@@ -64,6 +59,8 @@ class ASH_EXPORT OverviewButtonTray : public TrayBackgroundView,
 
   // Weak pointer, will be parented by TrayContainer for its lifetime.
   views::ImageView* icon_;
+
+  ScopedSessionObserver scoped_session_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(OverviewButtonTray);
 };

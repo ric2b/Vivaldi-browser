@@ -46,14 +46,15 @@
 #include "cc/surfaces/frame_sink_id_allocator.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
-#include "components/display_compositor/compositor_overlay_candidate_validator_android.h"
-#include "components/display_compositor/gl_helper.h"
-#include "components/display_compositor/host_shared_bitmap_manager.h"
+#include "components/viz/display_compositor/compositor_overlay_candidate_validator_android.h"
+#include "components/viz/display_compositor/gl_helper.h"
+#include "components/viz/display_compositor/host_shared_bitmap_manager.h"
 #include "content/browser/compositor/frame_sink_manager_host.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/common/gpu_stream_constants.h"
 #include "content/public/browser/android/compositor.h"
 #include "content/public/browser/android/compositor_client.h"
 #include "content/public/common/content_switches.h"
@@ -95,7 +96,9 @@ class SingleThreadTaskGraphRunner : public cc::SingleThreadTaskGraphRunner {
 };
 
 struct CompositorDependencies {
-  CompositorDependencies() : frame_sink_id_allocator(kDefaultClientId) {}
+  CompositorDependencies() : frame_sink_id_allocator(kDefaultClientId) {
+    frame_sink_manager_host.ConnectToFrameSinkManager();
+  }
 
   SingleThreadTaskGraphRunner task_graph_runner;
   FrameSinkManagerHost frame_sink_manager_host;
@@ -169,7 +172,7 @@ gpu::gles2::ContextCreationAttribHelper GetCompositorContextAttributes(
 
   if (has_transparent_background) {
     attributes.alpha_size = 8;
-  } else if (base::SysInfo::IsLowEndDevice()) {
+  } else if (base::SysInfo::AmountOfPhysicalMemoryMB() <= 512) {
     // In this case we prefer to use RGB565 format instead of RGBA8888 if
     // possible.
     // TODO(danakj): GpuCommandBufferStub constructor checks for alpha == 0 in
@@ -201,12 +204,15 @@ void CreateContextProviderAfterGpuChannelEstablished(
   if (!gpu_channel_host)
     callback.Run(nullptr);
 
+  int32_t stream_id = kGpuStreamIdDefault;
+  gpu::SchedulingPriority stream_priority = kGpuStreamPriorityUI;
+
   constexpr bool automatic_flushes = false;
   constexpr bool support_locking = false;
+
   scoped_refptr<ui::ContextProviderCommandBuffer> context_provider =
       new ui::ContextProviderCommandBuffer(
-          std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
-          gpu::GpuStreamPriority::NORMAL, handle,
+          std::move(gpu_channel_host), stream_id, stream_priority, handle,
           GURL(std::string("chrome://gpu/Compositor::CreateContextProvider")),
           automatic_flushes, support_locking, shared_memory_limits, attributes,
           nullptr /* shared_context */,
@@ -222,8 +228,7 @@ class AndroidOutputSurface : public cc::OutputSurface {
       : cc::OutputSurface(std::move(context_provider)),
         swap_buffers_callback_(std::move(swap_buffers_callback)),
         overlay_candidate_validator_(
-            new display_compositor::
-                CompositorOverlayCandidateValidatorAndroid()),
+            new viz::CompositorOverlayCandidateValidatorAndroid()),
         weak_ptr_factory_(this) {
     capabilities_.max_frames_pending = kMaxDisplaySwapBuffers;
   }
@@ -484,8 +489,6 @@ void CompositorImpl::SetSurface(jobject surface) {
     tracker->RemoveSurface(surface_handle_);
     ANativeWindow_release(window_);
     window_ = NULL;
-
-    tracker->UnregisterViewSurface(surface_handle_);
     surface_handle_ = gpu::kNullSurfaceHandle;
   }
 
@@ -501,9 +504,9 @@ void CompositorImpl::SetSurface(jobject surface) {
   if (window) {
     window_ = window;
     ANativeWindow_acquire(window);
-    surface_handle_ = tracker->AddSurfaceForNativeWidget(window);
     // Register first, SetVisible() might create a CompositorFrameSink.
-    tracker->RegisterViewSurface(surface_handle_, surface);
+    surface_handle_ = tracker->AddSurfaceForNativeWidget(
+        gpu::GpuSurfaceTracker::SurfaceRecord(window, surface));
     SetVisible(true);
     ANativeWindow_release(window);
   }
@@ -719,13 +722,18 @@ void CompositorImpl::OnGpuChannelEstablished(
 
   DCHECK(window_);
   DCHECK_NE(surface_handle_, gpu::kNullSurfaceHandle);
+
+  int32_t stream_id = kGpuStreamIdDefault;
+  gpu::SchedulingPriority stream_priority = kGpuStreamPriorityUI;
+
   constexpr bool support_locking = false;
   constexpr bool automatic_flushes = false;
+
   ui::ContextProviderCommandBuffer* shared_context = nullptr;
   scoped_refptr<ui::ContextProviderCommandBuffer> context_provider =
       new ui::ContextProviderCommandBuffer(
-          std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
-          gpu::GpuStreamPriority::NORMAL, surface_handle_,
+          std::move(gpu_channel_host), stream_id, stream_priority,
+          surface_handle_,
           GURL(std::string("chrome://gpu/CompositorImpl::") +
                std::string("CompositorContextProvider")),
           automatic_flushes, support_locking,
@@ -770,7 +778,7 @@ void CompositorImpl::InitializeDisplay(
       task_runner, display_output_surface->capabilities().max_frames_pending));
 
   display_.reset(new cc::Display(
-      display_compositor::HostSharedBitmapManager::current(),
+      viz::HostSharedBitmapManager::current(),
       BrowserGpuMemoryBufferManager::current(),
       host_->GetSettings().renderer_settings, frame_sink_id_,
       root_window_->GetBeginFrameSource(), std::move(display_output_surface),
@@ -785,7 +793,7 @@ void CompositorImpl::InitializeDisplay(
           : base::MakeUnique<cc::DirectCompositorFrameSink>(
                 frame_sink_id_, manager, display_.get(), context_provider,
                 nullptr, BrowserGpuMemoryBufferManager::current(),
-                display_compositor::HostSharedBitmapManager::current());
+                viz::HostSharedBitmapManager::current());
 
   display_->SetVisible(true);
   display_->Resize(size_);

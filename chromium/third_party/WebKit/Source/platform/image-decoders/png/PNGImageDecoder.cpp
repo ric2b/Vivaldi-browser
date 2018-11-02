@@ -47,10 +47,10 @@ PNGImageDecoder::PNGImageDecoder(AlphaOption alpha_option,
     : ImageDecoder(alpha_option, color_behavior, max_decoded_bytes),
       offset_(offset),
       current_frame_(0),
-      // It would be logical to default to cAnimationNone, but BitmapImage uses
+      // It would be logical to default to kAnimationNone, but BitmapImage uses
       // that as a signal to never check again, meaning the actual count will
       // never be respected.
-      repetition_count_(kCAnimationLoopOnce),
+      repetition_count_(kAnimationLoopOnce),
       has_alpha_channel_(false),
       current_buffer_saw_alpha_(false) {}
 
@@ -122,7 +122,7 @@ void PNGImageDecoder::SetRepetitionCount(int repetition_count) {
 }
 
 int PNGImageDecoder::RepetitionCount() const {
-  return Failed() ? kCAnimationLoopOnce : repetition_count_;
+  return Failed() ? kAnimationLoopOnce : repetition_count_;
 }
 
 void PNGImageDecoder::InitializeNewFrame(size_t index) {
@@ -393,35 +393,35 @@ void PNGImageDecoder::RowAvailable(unsigned char* row_buffer,
       if (buffer.PremultiplyAlpha()) {
         for (auto *dst_pixel = dst_row; dst_pixel < dst_row + width;
              dst_pixel++, src_ptr += 4) {
-          buffer.SetRGBAPremultiply(dst_pixel, src_ptr[0], src_ptr[1],
-                                    src_ptr[2], src_ptr[3]);
+          ImageFrame::SetRGBAPremultiply(dst_pixel, src_ptr[0], src_ptr[1],
+                                         src_ptr[2], src_ptr[3]);
           alpha_mask &= src_ptr[3];
         }
       } else {
         for (auto *dst_pixel = dst_row; dst_pixel < dst_row + width;
              dst_pixel++, src_ptr += 4) {
-          buffer.SetRGBARaw(dst_pixel, src_ptr[0], src_ptr[1], src_ptr[2],
-                            src_ptr[3]);
+          ImageFrame::SetRGBARaw(dst_pixel, src_ptr[0], src_ptr[1], src_ptr[2],
+                                 src_ptr[3]);
           alpha_mask &= src_ptr[3];
         }
       }
     } else {
       // Now, the blend method is ImageFrame::BlendAtopPreviousFrame. Since the
-      // frame data of the previous frame is copied at initFrameBuffer, we can
-      // blend the pixel of this frame, stored in |srcPtr|, over the previous
-      // pixel stored in |dstPixel|.
+      // frame data of the previous frame is copied at InitFrameBuffer, we can
+      // blend the pixel of this frame, stored in |src_ptr|, over the previous
+      // pixel stored in |dst_pixel|.
       if (buffer.PremultiplyAlpha()) {
         for (auto *dst_pixel = dst_row; dst_pixel < dst_row + width;
              dst_pixel++, src_ptr += 4) {
-          buffer.BlendRGBAPremultiplied(dst_pixel, src_ptr[0], src_ptr[1],
-                                        src_ptr[2], src_ptr[3]);
+          ImageFrame::BlendRGBAPremultiplied(dst_pixel, src_ptr[0], src_ptr[1],
+                                             src_ptr[2], src_ptr[3]);
           alpha_mask &= src_ptr[3];
         }
       } else {
         for (auto *dst_pixel = dst_row; dst_pixel < dst_row + width;
              dst_pixel++, src_ptr += 4) {
-          buffer.BlendRGBARaw(dst_pixel, src_ptr[0], src_ptr[1], src_ptr[2],
-                              src_ptr[3]);
+          ImageFrame::BlendRGBARaw(dst_pixel, src_ptr[0], src_ptr[1],
+                                   src_ptr[2], src_ptr[3]);
           alpha_mask &= src_ptr[3];
         }
       }
@@ -433,7 +433,8 @@ void PNGImageDecoder::RowAvailable(unsigned char* row_buffer,
   } else {
     for (auto *dst_pixel = dst_row; dst_pixel < dst_row + width;
          src_ptr += 3, ++dst_pixel) {
-      buffer.SetRGBARaw(dst_pixel, src_ptr[0], src_ptr[1], src_ptr[2], 255);
+      ImageFrame::SetRGBARaw(dst_pixel, src_ptr[0], src_ptr[1], src_ptr[2],
+                             255);
     }
 
     // We'll apply the color space xform to opaque pixels after they have been
@@ -474,7 +475,7 @@ bool PNGImageDecoder::FrameIsCompleteAtIndex(size_t index) const {
   DCHECK(!Failed() && reader_);
 
   // For non-animated images, return whether the status of the frame is
-  // ImageFrame::FrameComplete with ImageDecoder::frameIsCompleteAtIndex.
+  // ImageFrame::FrameComplete with ImageDecoder::FrameIsCompleteAtIndex.
   // This matches the behavior of WEBPImageDecoder.
   if (reader_->ParseCompleted() && reader_->FrameCount() == 1)
     return ImageDecoder::FrameIsCompleteAtIndex(index);

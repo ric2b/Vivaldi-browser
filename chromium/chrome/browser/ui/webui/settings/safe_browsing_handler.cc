@@ -8,7 +8,7 @@
 #include "base/bind_helpers.h"
 #include "base/values.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "content/public/browser/web_ui.h"
 
 namespace settings {
@@ -64,9 +64,7 @@ void SafeBrowsingHandler::OnPrefChanged(const std::string& pref_name) {
          pref_name == prefs::kSafeBrowsingScoutReportingEnabled);
 
   base::Value is_enabled(safe_browsing::IsExtendedReportingEnabled(*prefs_));
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value("safe-browsing-extended-reporting-change"),
-                         is_enabled);
+  FireWebUIListener("safe-browsing-extended-reporting-change", is_enabled);
 }
 
 }  // namespace settings

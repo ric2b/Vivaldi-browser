@@ -47,6 +47,7 @@ Network.NetworkLogView = class extends UI.VBox {
     this._networkResourceTypeFiltersSetting = Common.settings.createSetting('networkResourceTypeFilters', {});
 
     this._filterBar = filterBar;
+    this._rawRowHeight = 0;
     this._progressBarContainer = progressBarContainer;
     this._networkLogLargeRowsSetting = networkLogLargeRowsSetting;
     this._networkLogLargeRowsSetting.addChangeListener(updateRowHeight.bind(this), this);
@@ -57,15 +58,13 @@ Network.NetworkLogView = class extends UI.VBox {
     this._durationCalculator = new Network.NetworkTransferDurationCalculator();
     this._calculator = this._timeCalculator;
 
-    /** @type {?Network.NetworkGroupLookupInterface} */
-    this._activeGroupLookup = null;
-
     /**
      * @this {Network.NetworkLogView}
      */
     function updateRowHeight() {
       /** @type {number} */
-      this._rowHeight = !!this._networkLogLargeRowsSetting.get() ? 41 : 21;
+      this._rawRowHeight = !!this._networkLogLargeRowsSetting.get() ? 41 : 21;
+      this._updateRowHeight();
     }
     updateRowHeight.call(this);
 
@@ -74,11 +73,6 @@ Network.NetworkLogView = class extends UI.VBox {
 
     /** @type {!Map.<string, !Network.NetworkRequestNode>} */
     this._nodesByRequestId = new Map();
-    /** @type {!Map<*, !Network.NetworkGroupNode>} */
-    this._nodeGroups = new Map();
-    /** @type {!Set<!Network.NetworkRowDecorator>} */
-    this._rowDecorators = new Set();
-
     /** @type {!Object.<string, boolean>} */
     this._staleRequestIds = {};
     /** @type {number} */
@@ -98,13 +92,19 @@ Network.NetworkLogView = class extends UI.VBox {
     this._currentMatchedRequestNode = null;
     this._currentMatchedRequestIndex = -1;
 
-    /** @type {!Components.Linkifier} */
     this.linkifier = new Components.Linkifier();
+    this.badgePool = new ProductRegistry.BadgePool();
 
     this._recording = false;
-    this._preserveLog = false;
 
     this._headerHeight = 0;
+
+    /** @type {!Map<string, !Network.GroupLookupInterface>} */
+    this._groupLookups = new Map();
+    this._groupLookups.set('Frame', new Network.NetworkFrameGrouper(this));
+
+    /** @type {?Network.GroupLookupInterface} */
+    this._activeGroupLookup = null;
 
     this._addFilters();
     this._resetSuggestionBuilder();
@@ -120,6 +120,14 @@ Network.NetworkLogView = class extends UI.VBox {
         SDK.NetworkManager, SDK.NetworkManager.Events.RequestUpdated, this._onRequestUpdated, this);
     SDK.targetManager.addModelListener(
         SDK.NetworkManager, SDK.NetworkManager.Events.RequestFinished, this._onRequestUpdated, this);
+
+    this._updateGroupByFrame();
+    Common.moduleSetting('network.group-by-frame').addChangeListener(() => this._updateGroupByFrame());
+  }
+
+  _updateGroupByFrame() {
+    var value = Common.moduleSetting('network.group-by-frame').get();
+    this._setGrouping(value ? 'Frame' : null);
   }
 
   /**
@@ -352,19 +360,18 @@ Network.NetworkLogView = class extends UI.VBox {
   }
 
   /**
-   * @param {?Network.NetworkGroupLookupInterface} grouping
+   * @param {?string} groupKey
    */
-  setGrouping(grouping) {
-    this._activeGroupLookup = grouping;
-    this._nodeGroups.clear();
+  _setGrouping(groupKey) {
+    var groupLookup = groupKey ? this._groupLookups.get(groupKey) || null : null;
+    this._activeGroupLookup = groupLookup;
+    if (groupLookup)
+      groupLookup.reset();
     this._invalidateAllItems();
   }
 
-  /**
-   * @return {!Set<!Network.NetworkRowDecorator>}
-   */
-  rowDecorators() {
-    return this._rowDecorators;
+  _updateRowHeight() {
+    this._rowHeight = Math.floor(this._rawRowHeight * window.devicePixelRatio) / window.devicePixelRatio;
   }
 
   /**
@@ -388,13 +395,6 @@ Network.NetworkLogView = class extends UI.VBox {
   setRecording(recording) {
     this._recording = recording;
     this._updateSummaryBar();
-  }
-
-  /**
-   * @param {boolean} preserveLog
-   */
-  setPreserveLog(preserveLog) {
-    this._preserveLog = preserveLog;
   }
 
   /**
@@ -498,12 +498,6 @@ Network.NetworkLogView = class extends UI.VBox {
     this.element.id = 'network-container';
     this._setupDataGrid();
 
-    self.runtime.allInstances(Network.NetworkRowDecorator).then(instances => {
-      for (var instance of instances)
-        this._rowDecorators.add(instance);
-      this._invalidateAllItems(true);
-    });
-
     this._columns.show(this.element);
 
     this._summaryBarElement = this.element.createChild('div', 'network-summary-bar');
@@ -576,6 +570,13 @@ Network.NetworkLogView = class extends UI.VBox {
     var node = (this._dataGrid.dataGridNodeFromNode(/** @type {!Node} */ (event.target)));
     var highlightInitiatorChain = event.shiftKey;
     this._setHoveredNode(node, highlightInitiatorChain);
+  }
+
+  /**
+   * @return {?Network.NetworkNode}
+   */
+  hoveredNode() {
+    return this._hoveredNode;
   }
 
   /**
@@ -795,6 +796,13 @@ Network.NetworkLogView = class extends UI.VBox {
   }
 
   /**
+   * @override
+   */
+  onResize() {
+    this._updateRowHeight();
+  }
+
+  /**
    * @return {!Array<!Network.NetworkNode>}
    */
   flatNodesList() {
@@ -837,10 +845,10 @@ Network.NetworkLogView = class extends UI.VBox {
       var request = node.request();
       this._timeCalculator.updateBoundaries(request);
       this._durationCalculator.updateBoundaries(request);
-      if (node[Network.NetworkLogView._isFilteredOutSymbol] === isFilteredOut)
+      var newParent = this._parentNodeForInsert(node);
+      if (node[Network.NetworkLogView._isFilteredOutSymbol] === isFilteredOut && node.parent === newParent)
         continue;
       node[Network.NetworkLogView._isFilteredOutSymbol] = isFilteredOut;
-      var newParent = this._parentNodeForInsert(node);
       var removeFromParent = node.parent && (isFilteredOut || node.parent !== newParent);
       if (removeFromParent) {
         var parent = node.parent;
@@ -893,17 +901,10 @@ Network.NetworkLogView = class extends UI.VBox {
     if (!this._activeGroupLookup)
       return this._dataGrid.rootNode();
 
-    var groupKey = this._activeGroupLookup.groupForRequest(node.request());
-    if (!groupKey)
+    var groupNode = this._activeGroupLookup.groupNodeForRequest(node.request());
+    if (!groupNode)
       return this._dataGrid.rootNode();
-
-    var group = this._nodeGroups.get(groupKey);
-    if (group)
-      return group;
-    group = new Network.NetworkGroupNode(this, this._activeGroupLookup.groupName(groupKey));
-    group.setColumnExtensions(this._columns.columnExtensions());
-    this._nodeGroups.set(groupKey, group);
-    return group;
+    return groupNode;
   }
 
   reset() {
@@ -919,12 +920,11 @@ Network.NetworkLogView = class extends UI.VBox {
     this._calculator.reset();
 
     this._timeCalculator.setWindow(null);
+    this.linkifier.reset();
+    this.badgePool.reset();
 
-    var nodes = this._nodesByRequestId.valuesArray();
-    for (var i = 0; i < nodes.length; ++i)
-      nodes[i].dispose();
-
-    this._nodeGroups.clear();
+    if (this._activeGroupLookup)
+      this._activeGroupLookup.reset();
     this._nodesByRequestId.clear();
     this._staleRequestIds = {};
     this._resetSuggestionBuilder();
@@ -932,10 +932,9 @@ Network.NetworkLogView = class extends UI.VBox {
     this._mainRequestLoadTime = -1;
     this._mainRequestDOMContentLoadedTime = -1;
 
-    if (this._dataGrid) {
-      this._dataGrid.rootNode().removeChildren();
-      this._updateSummaryBar();
-    }
+    this._dataGrid.rootNode().removeChildren();
+    this._updateSummaryBar();
+    this._dataGrid.setStickToBottom(true);
   }
 
   /**
@@ -963,7 +962,6 @@ Network.NetworkLogView = class extends UI.VBox {
    */
   _appendRequest(request) {
     var node = new Network.NetworkRequestNode(this, request);
-    node.setColumnExtensions(this._columns.columnExtensions());
     node[Network.NetworkLogView._isFilteredOutSymbol] = true;
     node[Network.NetworkLogView._isMatchingSearchQuerySymbol] = false;
 
@@ -1064,7 +1062,7 @@ Network.NetworkLogView = class extends UI.VBox {
         requestsToPick.push(request);
     }
 
-    if (!this._preserveLog) {
+    if (!Common.moduleSetting('network.preserve-log').get()) {
       this.reset();
       for (var i = 0; i < requestsToPick.length; ++i)
         this._appendRequest(requestsToPick[i]);
@@ -1820,30 +1818,14 @@ Network.NetworkLogView.Filter;
 /**
  * @interface
  */
-Network.NetworkGroupLookupInterface = function() {};
+Network.GroupLookupInterface = function() {};
 
-Network.NetworkGroupLookupInterface.prototype = {
+Network.GroupLookupInterface.prototype = {
   /**
    * @param {!SDK.NetworkRequest} request
-   * @return {?*}
+   * @return {?Network.NetworkGroupNode}
    */
-  groupForRequest(request) {},
+  groupNodeForRequest: function(request) {},
 
-  /**
-   * @param {!*} key
-   * @return {string}
-   */
-  groupName(key) {}
-};
-
-/**
- * @interface
- */
-Network.NetworkRowDecorator = function() {};
-
-Network.NetworkRowDecorator.prototype = {
-  /**
-   * @param {!Network.NetworkNode} node
-   */
-  decorate(node) {}
+  reset: function() {}
 };

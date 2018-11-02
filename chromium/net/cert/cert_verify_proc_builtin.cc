@@ -7,11 +7,6 @@
 #include <string>
 #include <vector>
 
-#if defined(USE_NSS_CERTS)
-#include <cert.h>
-#include <pk11pub.h>
-#endif
-
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/sha1.h"
@@ -27,19 +22,11 @@
 #include "net/cert/internal/parsed_certificate.h"
 #include "net/cert/internal/path_builder.h"
 #include "net/cert/internal/signature_policy.h"
-#include "net/cert/internal/trust_store_collection.h"
-#include "net/cert/internal/trust_store_in_memory.h"
+#include "net/cert/internal/system_trust_store.h"
 #include "net/cert/internal/verify_certificate_chain.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
 #include "net/der/encode_values.h"
-
-#if defined(USE_NSS_CERTS)
-#include "crypto/nss_util.h"
-#include "net/cert/internal/cert_issuer_source_nss.h"
-#include "net/cert/internal/trust_store_nss.h"
-#include "net/cert/scoped_nss_types.h"
-#endif
 
 namespace net {
 
@@ -102,129 +89,6 @@ void AddIntermediatesToIssuerSource(X509Certificate* x509_cert,
   }
 }
 
-// The SystemTrustStore interface augments the TrustStore interface with some
-// additional functionality:
-//
-//  * Determine if a trust anchor was one of the known roots
-//  * Determine if a trust anchor was one of the "extra" ones that
-//    was specified during verification.
-//
-// Implementations of SystemTrustStore create an effective trust
-// store that is the composition of:
-//
-//  (1) System trust store
-//  (2) |additional_trust_anchors|.
-//  (3) Test certificates (if they are separate from system trust store)
-class SystemTrustStore {
- public:
-  virtual ~SystemTrustStore() {}
-
-  virtual TrustStore* GetTrustStore() = 0;
-
-  // TODO(eroman): Can this be exposed through the TrustStore
-  //               interface instead?
-  virtual CertIssuerSource* GetCertIssuerSource() = 0;
-
-  // IsKnownRoot returns true if the given trust anchor is a standard one (as
-  // opposed to a user-installed root)
-  virtual bool IsKnownRoot(
-      const scoped_refptr<TrustAnchor>& trust_anchor) const = 0;
-
-  virtual bool IsAdditionalTrustAnchor(
-      const scoped_refptr<TrustAnchor>& trust_anchor) const = 0;
-};
-
-#if defined(USE_NSS_CERTS)
-class SystemTrustStoreNSS : public SystemTrustStore {
- public:
-  explicit SystemTrustStoreNSS(const CertificateList& additional_trust_anchors)
-      : trust_store_nss_(trustSSL) {
-    CertErrors errors;
-
-    trust_store_.AddTrustStore(&additional_trust_store_);
-    for (const auto& x509_cert : additional_trust_anchors) {
-      scoped_refptr<ParsedCertificate> cert =
-          ParseCertificateFromOSHandle(x509_cert->os_cert_handle(), &errors);
-      if (cert) {
-        additional_trust_store_.AddTrustAnchor(
-            TrustAnchor::CreateFromCertificateNoConstraints(std::move(cert)));
-      }
-      // TODO(eroman): Surface parsing errors of additional trust anchor.
-    }
-
-    trust_store_.AddTrustStore(&trust_store_nss_);
-  }
-
-  TrustStore* GetTrustStore() override { return &trust_store_; }
-
-  CertIssuerSource* GetCertIssuerSource() override {
-    return &cert_issuer_source_nss_;
-  }
-
-  // IsKnownRoot returns true if the given trust anchor is a standard one (as
-  // opposed to a user-installed root)
-  bool IsKnownRoot(
-      const scoped_refptr<TrustAnchor>& trust_anchor) const override {
-    // TODO(eroman): Based on how the TrustAnchors are created by this
-    // integration, there will always be an associated certificate. However this
-    // contradicts the API for TrustAnchor that states it is optional.
-    DCHECK(trust_anchor->cert());
-
-    // TODO(eroman): The overall approach of IsKnownRoot() is inefficient -- it
-    // requires searching for the trust anchor by DER in NSS, however path
-    // building already had a handle to it.
-    SECItem der_cert;
-    der_cert.data =
-        const_cast<uint8_t*>(trust_anchor->cert()->der_cert().UnsafeData());
-    der_cert.len = trust_anchor->cert()->der_cert().Length();
-    der_cert.type = siDERCertBuffer;
-    ScopedCERTCertificate nss_cert(
-        CERT_FindCertByDERCert(CERT_GetDefaultCertDB(), &der_cert));
-    if (!nss_cert)
-      return false;
-
-    return IsKnownRoot(nss_cert.get());
-  }
-
-  bool IsAdditionalTrustAnchor(
-      const scoped_refptr<TrustAnchor>& trust_anchor) const override {
-    return additional_trust_store_.Contains(trust_anchor.get());
-  }
-
- private:
-  // TODO(eroman): This function was copied verbatim from
-  // cert_verify_proc_nss.cc
-  //
-  // IsKnownRoot returns true if the given certificate is one that we believe
-  // is a standard (as opposed to user-installed) root.
-  bool IsKnownRoot(CERTCertificate* root) const {
-    if (!root || !root->slot)
-      return false;
-
-    // This magic name is taken from
-    // http://bonsai.mozilla.org/cvsblame.cgi?file=mozilla/security/nss/lib/ckfw/builtins/constants.c&rev=1.13&mark=86,89#79
-    return 0 == strcmp(PK11_GetSlotName(root->slot), "NSS Builtin Objects");
-  }
-
-  TrustStoreCollection trust_store_;
-  TrustStoreInMemory additional_trust_store_;
-
-  TrustStoreNSS trust_store_nss_;
-  CertIssuerSourceNSS cert_issuer_source_nss_;
-};
-#endif
-
-std::unique_ptr<SystemTrustStore> CreateSystemTrustStore(
-    const CertificateList& additional_trust_anchors) {
-#if defined(USE_NSS_CERTS)
-  return base::MakeUnique<SystemTrustStoreNSS>(additional_trust_anchors);
-#else
-  // TODO(crbug.com/649017): Integrate with other system trust stores.
-  NOTIMPLEMENTED();
-  return nullptr;
-#endif
-}
-
 // Appends the SHA1 and SHA256 hashes of |spki_bytes| to |*hashes|.
 void AppendPublicKeyHashes(const der::Input& spki_bytes,
                            HashValueVector* hashes) {
@@ -239,15 +103,12 @@ void AppendPublicKeyHashes(const der::Input& spki_bytes,
   hashes->push_back(sha256);
 }
 
-// Appends the SubjectPublicKeyInfo hashes for all certificates (and trust
-// anchor) in |partial_path| to |*hashes|.
+// Appends the SubjectPublicKeyInfo hashes for all certificates in
+// |partial_path| to |*hashes|.
 void AppendPublicKeyHashes(const CertPathBuilder::ResultPath& partial_path,
                            HashValueVector* hashes) {
   for (const scoped_refptr<ParsedCertificate>& cert : partial_path.path.certs)
     AppendPublicKeyHashes(cert->tbs().spki_tlv, hashes);
-
-  if (partial_path.path.trust_anchor)
-    AppendPublicKeyHashes(partial_path.path.trust_anchor->spki(), hashes);
 }
 
 // Sets the bits on |cert_status| for all the errors present in |errors| (the
@@ -295,12 +156,6 @@ scoped_refptr<X509Certificate> CreateVerifiedCertChain(
   for (size_t i = 1; i < path.path.certs.size(); ++i)
     intermediates.push_back(CreateOSCertHandle(path.path.certs[i]));
 
-  if (path.path.trust_anchor) {
-    // TODO(eroman): This assumes that TrustAnchor::cert() cannot be null,
-    //               which disagrees with the documentation.
-    intermediates.push_back(CreateOSCertHandle(path.path.trust_anchor->cert()));
-  }
-
   scoped_refptr<X509Certificate> result = X509Certificate::CreateFromHandle(
       target_cert->os_cert_handle(), intermediates);
   // |target_cert| was already successfully parsed, so this should never fail.
@@ -335,8 +190,16 @@ void DoVerify(X509Certificate* input_cert,
     return;
   }
 
-  std::unique_ptr<SystemTrustStore> trust_store =
-      CreateSystemTrustStore(additional_trust_anchors);
+  std::unique_ptr<SystemTrustStore> ssl_trust_store =
+      CreateSslSystemTrustStore();
+
+  for (const auto& x509_cert : additional_trust_anchors) {
+    scoped_refptr<ParsedCertificate> cert = ParseCertificateFromOSHandle(
+        x509_cert->os_cert_handle(), &parsing_errors);
+    if (cert)
+      ssl_trust_store->AddTrustAnchor(cert);
+    // TODO(eroman): Surface parsing errors of additional trust anchor.
+  }
 
   // TODO(eroman): The path building code in this file enforces its idea of weak
   // keys, and separately cert_verify_proc.cc also checks the chains with its
@@ -358,13 +221,9 @@ void DoVerify(X509Certificate* input_cert,
 
   // Initialize the path builder.
   CertPathBuilder::Result result;
-  CertPathBuilder path_builder(target, trust_store->GetTrustStore(),
+  CertPathBuilder path_builder(target, ssl_trust_store->GetTrustStore(),
                                &signature_policy, verification_time,
                                KeyPurpose::SERVER_AUTH, &result);
-
-  // Allow the path builder to discover intermediates from the trust store.
-  if (trust_store->GetCertIssuerSource())
-    path_builder.AddCertIssuerSource(trust_store->GetCertIssuerSource());
 
   // Allow the path builder to discover the explicitly provided intermediates in
   // |input_cert|.
@@ -390,16 +249,13 @@ void DoVerify(X509Certificate* input_cert,
   const CertPathBuilder::ResultPath& partial_path =
       *result.paths[result.best_result_index].get();
 
-  if (partial_path.path.trust_anchor) {
+  const ParsedCertificate* trusted_cert = partial_path.path.GetTrustedCert();
+  if (trusted_cert) {
     verify_result->is_issued_by_known_root =
-        trust_store->IsKnownRoot(partial_path.path.trust_anchor);
+        ssl_trust_store->IsKnownRoot(trusted_cert);
 
     verify_result->is_issued_by_additional_trust_anchor =
-        trust_store->IsAdditionalTrustAnchor(partial_path.path.trust_anchor);
-  } else {
-    // TODO(eroman): This shouldn't be necessary -- partial_path.errors should
-    // contain an error if it didn't chain to trust anchor.
-    verify_result->cert_status |= CERT_STATUS_AUTHORITY_INVALID;
+        ssl_trust_store->IsAdditionalTrustAnchor(trusted_cert);
   }
 
   verify_result->verified_cert =

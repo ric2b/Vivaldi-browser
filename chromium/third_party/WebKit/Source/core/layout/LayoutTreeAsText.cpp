@@ -67,34 +67,34 @@ using namespace HTMLNames;
 
 static void PrintBorderStyle(TextStream& ts, const EBorderStyle border_style) {
   switch (border_style) {
-    case kBorderStyleNone:
+    case EBorderStyle::kNone:
       ts << "none";
       break;
-    case kBorderStyleHidden:
+    case EBorderStyle::kHidden:
       ts << "hidden";
       break;
-    case kBorderStyleInset:
+    case EBorderStyle::kInset:
       ts << "inset";
       break;
-    case kBorderStyleGroove:
+    case EBorderStyle::kGroove:
       ts << "groove";
       break;
-    case kBorderStyleRidge:
+    case EBorderStyle::kRidge:
       ts << "ridge";
       break;
-    case kBorderStyleOutset:
+    case EBorderStyle::kOutset:
       ts << "outset";
       break;
-    case kBorderStyleDotted:
+    case EBorderStyle::kDotted:
       ts << "dotted";
       break;
-    case kBorderStyleDashed:
+    case EBorderStyle::kDashed:
       ts << "dashed";
       break;
-    case kBorderStyleSolid:
+    case EBorderStyle::kSolid:
       ts << "solid";
       break;
-    case kBorderStyleDouble:
+    case EBorderStyle::kDouble:
       ts << "double";
       break;
   }
@@ -821,13 +821,13 @@ String ExternalRepresentation(LocalFrame* frame,
   bool is_text_printing_mode = !!(behavior & kLayoutAsTextPrintingMode);
   if (is_text_printing_mode) {
     FloatSize size(ToLayoutBox(layout_object)->Size());
-    print_context.begin(size.Width(), size.Height());
+    print_context.BeginPrintMode(size.Width(), size.Height());
   }
 
   String representation = ExternalRepresentation(ToLayoutBox(layout_object),
                                                  behavior, marked_layer);
   if (is_text_printing_mode)
-    print_context.end();
+    print_context.EndPrintMode();
   return representation;
 }
 

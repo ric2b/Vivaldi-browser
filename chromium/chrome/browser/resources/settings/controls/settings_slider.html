@@ -1,4 +1,5 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_behavior.html">
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-slider/paper-slider.html">
@@ -7,11 +8,15 @@
   <template>
     <style>
       :host {
+        --calculated-paper-slider-height: var(--paper-slider-height, 2px);
+        /* Counteract the margin on #sliderContainer in paper-slider.html. */
+        -webkit-margin-end:
+            calc(-15px - var(--calculated-paper-slider-height) / 2);
         display: inline-flex;
       }
 
       cr-policy-pref-indicator {
-        -webkit-margin-start: var(--settings-control-spacing);
+        -webkit-margin-start: var(--settings-controlled-by-spacing);
         align-self: center;
       }
 

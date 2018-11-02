@@ -41,12 +41,8 @@ namespace blink {
 
 ImageBufferSurface::ImageBufferSurface(const IntSize& size,
                                        OpacityMode opacity_mode,
-                                       sk_sp<SkColorSpace> color_space,
-                                       SkColorType color_type)
-    : opacity_mode_(opacity_mode),
-      size_(size),
-      color_space_(color_space),
-      color_type_(color_type) {
+                                       const CanvasColorParams& color_params)
+    : opacity_mode_(opacity_mode), size_(size), color_params_(color_params) {
   SetIsHidden(false);
 }
 
@@ -85,14 +81,6 @@ void ImageBufferSurface::Draw(GraphicsContext& context,
 
 void ImageBufferSurface::Flush(FlushReason) {
   Canvas()->flush();
-}
-
-bool ImageBufferSurface::WritePixels(const SkImageInfo& orig_info,
-                                     const void* pixels,
-                                     size_t row_bytes,
-                                     int x,
-                                     int y) {
-  return Canvas()->writePixels(orig_info, pixels, row_bytes, x, y);
 }
 
 }  // namespace blink

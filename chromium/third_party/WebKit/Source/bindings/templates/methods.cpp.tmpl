@@ -137,14 +137,16 @@ if (UNLIKELY(numArgsPassed <= {{argument.index}})) {
 }
 {% endif %}
 {% if argument.is_callback_interface %}
-{# FIXME: remove EventListener special case #}
+{# FIXME: remove EventListener/NodeFilter special case. crbug.com/630986 #}
 {% if argument.idl_type == 'EventListener' %}
 {% if method.name == 'RemoveEventListener' or method.name == 'RemoveListener' %}
 {{argument.name}} = V8EventListenerHelper::GetEventListener(ScriptState::Current(info.GetIsolate()), info[{{argument.index}}], false, kListenerFindOnly);
 {% else %}{# method.name == 'AddEventListener' #}
 {{argument.name}} = V8EventListenerHelper::GetEventListener(ScriptState::Current(info.GetIsolate()), info[{{argument.index}}], false, kListenerFindOrCreate);
 {% endif %}{# method.name #}
-{% else %}{# argument.idl_type == 'EventListener' #}
+{% elif argument.idl_type == 'NodeFilter' %}
+{{argument.name}} = V8NodeFilterCondition::CreateOrNull(info[{{argument.index}}], ScriptState::Current(info.GetIsolate()));
+{% else %}{# argument.idl_type == 'EventListener'/'NodeFilter #}
 {# Callback functions must be functions:
    http://www.w3.org/TR/WebIDL/#es-callback-function #}
 {% if argument.is_optional %}
@@ -164,7 +166,7 @@ if (info.Length() <= {{argument.index}} || !{% if argument.is_nullable %}(info[{
 }
 {{argument.name}} = {% if argument.is_nullable %}info[{{argument.index}}]->IsNull() ? nullptr : {% endif %}V8{{argument.idl_type}}::Create(v8::Local<v8::Function>::Cast(info[{{argument.index}}]), ScriptState::Current(info.GetIsolate()));
 {% endif %}{# argument.is_optional #}
-{% endif %}{# argument.idl_type == 'EventListener' #}
+{% endif %}{# argument.idl_type == 'EventListener'/'NodeFilter' #}
 {% elif argument.is_callback_function %}
 if ({% if argument.is_nullable %}!IsUndefinedOrNull(info[{{argument.index}}]) && {% endif %}!(info[{{argument.index}}]->IsObject() && v8::Local<v8::Object>::Cast(info[{{argument.index}}])->IsCallable())) {
   {{throw_argument_error(method, argument, "The callback provided as parameter %(index)d is not a function.")}}
@@ -447,10 +449,9 @@ static void postMessageImpl(const char* interfaceName, {{cpp_class}}* instance, 
     // Clear references to array buffers and image bitmaps from transferables
     // so that the serializer can consider the array buffers as
     // non-transferable and serialize them into the message.
-    ArrayBufferArray transferableArrayBuffers = transferables.array_buffers;
-    transferables.array_buffers.Clear();
+    ArrayBufferArray transferableArrayBuffers = SerializedScriptValue::ExtractNonSharedArrayBuffers(transferables);
     ImageBitmapArray transferableImageBitmaps = transferables.image_bitmaps;
-    transferables.image_bitmaps.Clear();
+    transferables.image_bitmaps.clear();
     SerializedScriptValue::SerializeOptions options;
     options.transferables = &transferables;
     message = SerializedScriptValue::Serialize(info.GetIsolate(), info[0], options, exceptionState);
@@ -496,7 +497,7 @@ void {{v8_class_or_partial}}::{{method.name}}MethodCallback{{world_suffix}}(cons
   if (contextData && contextData->ActivityLogger()) {
     ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kExecutionContext, "{{interface_name}}", "{{method.name}}");
     Vector<v8::Local<v8::Value>> loggerArgs = ToImplArguments<Vector<v8::Local<v8::Value>>>(info, 0, exceptionState);
-    contextData->ActivityLogger()->LogMethod("{{interface_name}}.{{method.name}}", info.Length(), loggerArgs.Data());
+    contextData->ActivityLogger()->LogMethod("{{interface_name}}.{{method.name}}", info.Length(), loggerArgs.data());
   }
   {% endif %}
   {% if method.is_ce_reactions %}
@@ -635,8 +636,7 @@ for (const auto& methodConfig : {{method.name}}MethodConfiguration)
 
 {######################################}
 {% macro install_conditionally_enabled_methods() %}
-{% if methods | conditionally_exposed(is_partial) %}
-{% for method in methods | conditionally_exposed(is_partial) %}
+{% for method in conditionally_enabled_methods %}
 {% filter secure_context(method.overloads.secure_context_test_all
                          if method.overloads else
                          method.secure_context_test) %}
@@ -655,5 +655,4 @@ for (const auto& methodConfig : {{method.name}}MethodConfiguration)
 {% endfilter %}{# exposed() #}
 {% endfilter %}{# secure_context() #}
 {% endfor %}
-{% endif %}
 {%- endmacro %}

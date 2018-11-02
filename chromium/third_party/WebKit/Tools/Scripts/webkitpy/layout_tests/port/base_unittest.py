@@ -372,6 +372,10 @@ class PortTest(unittest.TestCase):
         self.assertEqual(port.reference_files('external/wpt/html/dom/elements/global-attributes/dir_auto-EN-L.html'),
                          [('==', port.layout_tests_dir() +
                            '/external/wpt/html/dom/elements/global-attributes/dir_auto-EN-L-ref.html')])
+        self.assertEqual(port.reference_files('virtual/layout_ng/' +
+                                              'external/wpt/html/dom/elements/global-attributes/dir_auto-EN-L.html'),
+                         [('==', port.layout_tests_dir() +
+                           '/external/wpt/html/dom/elements/global-attributes/dir_auto-EN-L-ref.html')])
 
     def test_operating_system(self):
         self.assertEqual('mac', self.make_port().operating_system())
@@ -381,6 +385,22 @@ class PortTest(unittest.TestCase):
         self.assertTrue(port.http_server_supports_ipv6())
         port.host.platform.os_name = 'win'
         self.assertFalse(port.http_server_supports_ipv6())
+
+    def test_http_server_requires_http_protocol_options_unsafe(self):
+        port = self.make_port(executive=MockExecutive(stderr=(
+            "Invalid command 'INTENTIONAL_SYNTAX_ERROR', perhaps misspelled or"
+            " defined by a module not included in the server configuration\n")))
+        port.path_to_apache = lambda: '/usr/sbin/httpd'
+        self.assertTrue(
+            port.http_server_requires_http_protocol_options_unsafe())
+
+    def test_http_server_doesnt_require_http_protocol_options_unsafe(self):
+        port = self.make_port(executive=MockExecutive(stderr=(
+            "Invalid command 'HttpProtocolOptions', perhaps misspelled or"
+            " defined by a module not included in the server configuration\n")))
+        port.path_to_apache = lambda: '/usr/sbin/httpd'
+        self.assertFalse(
+            port.http_server_requires_http_protocol_options_unsafe())
 
     def test_check_httpd_success(self):
         port = self.make_port(executive=MockExecutive())
@@ -478,6 +498,17 @@ class PortTest(unittest.TestCase):
 
         # If this call returns successfully, we found and loaded the LayoutTests/VirtualTestSuites.
         _ = port.virtual_test_suites()
+
+    def test_duplicate_virtual_test_suite_in_file(self):
+        port = self.make_port()
+        port.host.filesystem.write_text_file(
+            port.host.filesystem.join(port.layout_tests_dir(), 'VirtualTestSuites'),
+            '['
+            '{"prefix": "bar", "base": "fast/bar", "args": ["--bar"]},'
+            '{"prefix": "bar", "base": "fast/bar", "args": ["--bar"]}'
+            ']')
+
+        self.assertRaises(ValueError, port.virtual_test_suites)
 
     def test_virtual_test_suite_file_is_not_json(self):
         port = self.make_port()

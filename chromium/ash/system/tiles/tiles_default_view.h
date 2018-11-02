@@ -6,7 +6,6 @@
 #define ASH_SYSTEM_TILES_TILES_DEFAULT_VIEW_H_
 
 #include "ash/ash_export.h"
-#include "ash/login_status.h"
 #include "base/macros.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/view.h"
@@ -16,6 +15,7 @@ class CustomButton;
 }
 
 namespace ash {
+class NightLightToggleButton;
 class SystemTrayItem;
 
 // The container view for the tiles in the bottom row of the system menu
@@ -23,7 +23,7 @@ class SystemTrayItem;
 class ASH_EXPORT TilesDefaultView : public views::View,
                                     public views::ButtonListener {
  public:
-  TilesDefaultView(SystemTrayItem* owner, LoginStatus login);
+  explicit TilesDefaultView(SystemTrayItem* owner);
   ~TilesDefaultView() override;
 
   // Sets the layout manager and child views of |this|.
@@ -43,13 +43,13 @@ class ASH_EXPORT TilesDefaultView : public views::View,
   friend class TrayTilesTest;
 
   SystemTrayItem* owner_;
-  LoginStatus login_;
 
   // Pointers to the child buttons of |this|. Note that some buttons may not
   // exist (depending on the user's current login status, for instance), in
   // which case the corresponding pointer will be null.
   views::CustomButton* settings_button_;
   views::CustomButton* help_button_;
+  NightLightToggleButton* night_light_button_;
   views::CustomButton* lock_button_;
   views::CustomButton* power_button_;
 

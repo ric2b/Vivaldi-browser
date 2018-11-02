@@ -5,20 +5,6 @@
 <dom-module id="settings-shared">
   <template>
     <style include="cr-shared-style">
-      /* Included here so we don't have to include "iron-positioning" in every
-       * stylesheet. See crbug.com/498405. */
-      [hidden] {
-        display: none !important;
-      }
-
-      :host-context([dir=rtl]) button[is='paper-icon-button-light'] {
-        transform: scaleX(-1);  /* Flip on the X axis (aka mirror). */
-      }
-
-      :host-context([dir=rtl]) paper-icon-button[icon='settings:arrow-back'] {
-        transform: scaleX(-1);  /* Flip on the X axis (aka mirror). */
-      }
-
       /* Use <h2> as the "sub-header" mentioned in the UX design docs. */
       h2 {
         align-items: center;
@@ -32,12 +18,49 @@
         padding-top: 24px;
       }
 
+      iron-icon {
+        flex-shrink: 0;  /* Prevent distortion of icons in cramped UI. */
+      }
+
       iron-icon[icon='cr:check'],
       iron-icon[icon='settings:done'] {
        --iron-icon-fill-color: var(--google-green-500);
       }
 
+      paper-icon-button {
+        -webkit-margin-end: var(--cr-icon-ripple-margin);
+        -webkit-margin-start: 16px;
+        color: var(--paper-grey-600);
+        flex-shrink: 0;
+      }
+
+      .separator + button[is='paper-icon-button-light'],
+      .separator + paper-icon-button {
+        -webkit-margin-start: var(--cr-icon-ripple-margin));
+      }
+
+      .list-item paper-icon-button {
+        /* Workaround iron-list cutting off ripples on paper-icon-buttons.
+         * TODO(dschuyler): Can the end margin be done differently to allow for
+         * ripples to look like they are overlapping the margin. */
+        -webkit-margin-end: 0;
+      }
+
+      /* See notes in .primary-button.
+       * TODO(dschuyler): Remove unnecessary .secondary-button references. */
       paper-button {
+        --paper-button: {
+          -webkit-padding-end: var(--settings-button-edge-spacing);
+          -webkit-padding-start: var(--settings-button-edge-spacing);
+          color: var(--paper-grey-600);
+          font-weight: 500;
+          min-width: 1em;  /* A tighter fit than 5.14em for short buttons. */
+          text-decoration: none;
+        };
+        --paper-button-flat-keyboard-focus: {
+          background: rgba(0, 0, 0, .12);
+        };
+        flex-shrink: 0;
         height: 36px;
         margin: 0;
       }
@@ -46,43 +69,69 @@
         background-color: var(--paper-grey-300);
       }
 
+      /* If a button is at the end of the row, shift it to overlap the end of
+       * the row. */
+      .settings-box paper-button:last-of-type {
+        -webkit-margin-end: calc(var(--settings-button-edge-spacing) * -1);
+      }
+
+      /* Special case for buttons inside of toggle-buttons. */
+      .settings-box settings-toggle-button paper-button:last-of-type {
+        -webkit-margin-end: 16px;
+      }
+
+      /* Space out multiple buttons in the same row. */
+      .settings-box paper-button + paper-button {
+        -webkit-margin-start: 16px;
+      }
+
+      /* Adjust the margin between the separator and the first button. */
+      .settings-box .separator + paper-button {
+        -webkit-margin-start: calc(var(--settings-button-edge-spacing) * -1);
+      }
+
+      /* There are two settings button styles, .primary-button and normal
+       * buttons. The primary is the action button (e.g. "edit", "delete")
+       * while the normal (secondary-button) is often a "Cancel" button. */
+      .primary-button {
+        --paper-button: {
+          -webkit-padding-end: var(--settings-button-edge-spacing);
+          -webkit-padding-start: var(--settings-button-edge-spacing);
+          font-weight: 500;
+          text-align: start;
+        };
+        --paper-button-flat-keyboard-focus: {
+          background: rgba(51, 103, 214, .12);  /* --google-blue-700 */
+        };
+        color: var(--google-blue-500);
+      }
+
+      .primary-button[disabled] {
+        background: none;
+        color: var(--paper-grey-600);
+      }
+
       paper-toggle-button {
         @apply(--settings-actionable);
         height: var(--settings-row-min-height);
-        width: 31px;
+        width: 36px;
       }
 
       span ~ a {
         -webkit-margin-start: 4px;
       }
 
-      .primary-button,
-      .tertiary-button,
       a[href] {
         color: var(--google-blue-700);
-      }
-
-      .primary-button,
-      .tertiary-button {
-        --paper-button-flat-keyboard-focus: {
-          background: rgba(51, 103, 214, .12);  /* --google-blue-700 */
-        };
       }
 
       a[href] {
         text-decoration: none;
       }
 
-      /* There are three main button styles, .primary-button, .secondary-button,
-       * and .tertiary-button. The primary is the action button (e.g. "edit",
-       * "delete") while the secondary is often a "Cancel" button. A tertiary
-       * button may be used to get more information or similar, that we expect
-       * most users will not need. */
-      .primary-button {
-        --paper-button: {
-          font-weight: 500;
-          text-align: start;
-        };
+      /* For elements that are simple out-links but don't look like anchors. */
+      .inherit-color {
+        color: inherit !important;
       }
 
       .primary-toggle {
@@ -94,42 +143,17 @@
         color: var(--google-blue-500);
       }
 
-      /* See notes in .primary-button. */
-      .secondary-button {
-        --paper-button: {
-          color: var(--paper-grey-600);
-          font-weight: 500;
-          min-width: 1em;  /* A tighter fit than 5.14em for short buttons. */
-          text-decoration: none;
-        };
-        --paper-button-flat-keyboard-focus: {
-          background: rgba(0, 0, 0, .12);
-        };
-      }
-
-      /* See notes in .primary-button. */
-      .tertiary-button {
-        --paper-button: {
-          font-weight: 400;
-          text-decoration: none;
-        };
-      }
-
-      .settings-box .primary-button,
-      .settings-box .secondary-button,
-      .settings-box .secondary-button {
-        -webkit-margin-end: -12px;
-        -webkit-margin-start: -12px;
-        -webkit-padding-end: 12px;
-        -webkit-padding-start: 12px;
-      }
-
       paper-checkbox {
         --paper-checkbox-checked-color: var(--google-blue-500);
-        --paper-checkbox-label-spacing: var(--settings-control-spacing);
+        --paper-checkbox-label-spacing: var(--settings-control-label-spacing);
         --paper-checkbox-size: var(--checkbox-size);
         --paper-checkbox-unchecked-color: var(--paper-grey-600);
         -webkit-margin-start: var(--checkbox-margin-start);
+      }
+
+      paper-input {
+        /* Fix issue with focus animation making labels wiggle. */
+        transform: translate3d(0, 0, 0);
       }
 
       controlled-radio-button,
@@ -214,10 +238,6 @@
         opacity: var(--settings-disabled-opacity);
       }
 
-      .list-item > paper-icon-item {
-        padding: 0;
-      }
-
       /* This button has no ink ripple. */
       .list-button[is='action-link'] {
         align-items: center;
@@ -225,12 +245,6 @@
         flex: 1;
         font-weight: 500;
         min-height: inherit;
-      }
-
-      .fixed-height-list {
-        max-height: calc((var(--settings-row-min-height) +
-                          var(--settings-separator-height)) * 6);
-        overflow-y: auto;
       }
 
       /* A row with two lines of text. Often the lower line will be .secondary.
@@ -313,29 +327,23 @@
         flex: auto;
       }
 
-      .no-outline,
-      [scrollable] .no-outline {
-        background: none;
-        outline: none;
-      }
-
-      /* The secondary-action wraps a clickable sub-area of a .settings-box.
-       * An example is the |sign out| button on the People settings.
-       * Here is an example with and without a secondary action box:
-       *
-       *  +-------------------------------------------------------+
-       *  | Main action area .settings-box    | .secondary-action |
-       *  +-------------------------------------------------------+
-       *  | Another setting-box without a secondary-action        |
-       *  +-------------------------------------------------------+ */
-      :-webkit-any(.settings-box, .list-item) .secondary-action {
-        -webkit-border-start: var(--settings-separator-line);
-        -webkit-margin-start: 20px;
-        -webkit-padding-start: 20px;
+      /* For grouping elements with common flex options. */
+      .settings-row {
         align-items: center;
         display: flex;
-        flex-shrink: 0;
-        height: var(--settings-row-min-height);
+        flex-direction: row;
+        max-width: 100%;
+        min-width: 0;  /* Workaround for text elision in sub-elements. */
+      }
+
+      /* Expand to fill-up available space. */
+      .settings-row.wide {
+        flex: 1;
+      }
+
+      .no-outline {
+        background: none;
+        outline: none;
       }
 
       /* Helper for a list frame to automatically avoid the separator line. */
@@ -343,11 +351,29 @@
         border-top: var(--settings-separator-line);
       }
 
+      /* The separator a vertical line like a horizontal rule <hr> tag, but goes
+       * the other way. An example is near the |sign out| button on the People
+       * settings. */
+      :-webkit-any(.settings-box, .list-item) .separator {
+        -webkit-border-start: var(--settings-separator-line);
+        -webkit-margin-end: var(--settings-box-row-padding);
+        -webkit-margin-start: var(--settings-box-row-padding);
+        flex-shrink: 0;
+        --settings-separator-gaps: 9px;
+        height: calc(var(--settings-row-min-height) -
+            var(--settings-separator-gaps));
+      }
+
+      :-webkit-any(.settings-box, .list-item).two-line .separator {
+        height: calc(var(--settings-row-two-line-min-height) -
+            2 * var(--settings-separator-gaps));
+      }
+
       .settings-checkbox-spacer {
         -webkit-margin-start: calc(
             var(--checkbox-margin-start) +
             var(--checkbox-size) +
-            var(--settings-control-spacing));
+            var(--settings-control-label-spacing));
       }
 
       .favicon-image {

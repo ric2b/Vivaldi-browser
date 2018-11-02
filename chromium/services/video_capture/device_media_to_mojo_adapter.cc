@@ -11,55 +11,92 @@
 #include "media/capture/video/video_capture_jpeg_decoder.h"
 #include "services/video_capture/receiver_mojo_to_media_adapter.h"
 
+namespace {
+
+// The maximum number of video frame buffers in-flight at any one time.
+// If all buffers are still in use by consumers when new frames are produced
+// those frames get dropped.
+static const int kMaxBufferCount = 3;
+}
+
 namespace video_capture {
 
 DeviceMediaToMojoAdapter::DeviceMediaToMojoAdapter(
+    std::unique_ptr<service_manager::ServiceContextRef> service_ref,
     std::unique_ptr<media::VideoCaptureDevice> device,
     const media::VideoCaptureJpegDecoderFactoryCB&
         jpeg_decoder_factory_callback)
-    : device_(std::move(device)),
+    : service_ref_(std::move(service_ref)),
+      device_(std::move(device)),
       jpeg_decoder_factory_callback_(jpeg_decoder_factory_callback),
-      device_running_(false) {}
+      device_started_(false) {}
 
 DeviceMediaToMojoAdapter::~DeviceMediaToMojoAdapter() {
-  Stop();
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (device_started_)
+    device_->StopAndDeAllocate();
 }
 
-void DeviceMediaToMojoAdapter::Start(const CaptureSettings& requested_settings,
-                                     mojom::ReceiverPtr receiver) {
-  media::VideoCaptureParams params;
-  requested_settings.ConvertToMediaVideoCaptureParams(&params);
+void DeviceMediaToMojoAdapter::Start(
+    const media::VideoCaptureParams& requested_settings,
+    mojom::ReceiverPtr receiver) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   receiver.set_connection_error_handler(
       base::Bind(&DeviceMediaToMojoAdapter::OnClientConnectionErrorOrClose,
                  base::Unretained(this)));
 
-  auto media_receiver =
+  auto receiver_adapter =
       base::MakeUnique<ReceiverMojoToMediaAdapter>(std::move(receiver));
+  // We must hold on something that allows us to unsubscribe from
+  // receiver.set_connection_error_handler() when we stop the device. Otherwise,
+  // we may receive a corresponding callback after having been destroyed.
+  // This happens when the deletion of |receiver| is delayed (scheduled to a
+  // task runner) when we release |device_|, as is the case when using
+  // ReceiverOnTaskRunner.
+  receiver_adapter_ptr_ = receiver_adapter.get();
+  auto media_receiver = base::MakeUnique<ReceiverOnTaskRunner>(
+      std::move(receiver_adapter), base::ThreadTaskRunnerHandle::Get());
 
   // Create a dedicated buffer pool for the device usage session.
-  const int kMaxBufferCount = 2;
   auto buffer_tracker_factory =
       base::MakeUnique<media::VideoCaptureBufferTrackerFactoryImpl>();
   scoped_refptr<media::VideoCaptureBufferPool> buffer_pool(
       new media::VideoCaptureBufferPoolImpl(std::move(buffer_tracker_factory),
-                                            kMaxBufferCount));
+                                            max_buffer_pool_buffer_count()));
 
   auto device_client = base::MakeUnique<media::VideoCaptureDeviceClient>(
       std::move(media_receiver), buffer_pool, jpeg_decoder_factory_callback_);
 
-  device_->AllocateAndStart(params, std::move(device_client));
-  device_running_ = true;
+  device_->AllocateAndStart(requested_settings, std::move(device_client));
+  device_started_ = true;
+}
+
+void DeviceMediaToMojoAdapter::OnReceiverReportingUtilization(
+    int32_t frame_feedback_id,
+    double utilization) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  device_->OnUtilizationReport(frame_feedback_id, utilization);
 }
 
 void DeviceMediaToMojoAdapter::Stop() {
-  if (device_running_ == false)
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (device_started_ == false)
     return;
+  device_started_ = false;
+  // Unsubscribe from connection error callbacks.
+  receiver_adapter_ptr_->ResetConnectionErrorHandler();
+  receiver_adapter_ptr_ = nullptr;
   device_->StopAndDeAllocate();
-  device_running_ = false;
 }
 
 void DeviceMediaToMojoAdapter::OnClientConnectionErrorOrClose() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   Stop();
+}
+
+// static
+int DeviceMediaToMojoAdapter::max_buffer_pool_buffer_count() {
+  return kMaxBufferCount;
 }
 
 }  // namespace video_capture

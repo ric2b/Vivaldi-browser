@@ -9,10 +9,6 @@
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "cc/base/switches.h"
-#include "content/renderer/gpu/render_widget_compositor.h"
-#include "content/renderer/render_frame_impl.h"
-#include "content/renderer/render_view_impl.h"
-#include "content/renderer/render_widget.h"
 #include "services/ui/public/cpp/client_compositor_frame_sink.h"
 
 namespace content {
@@ -57,7 +53,7 @@ void RendererWindowTreeClient::RequestCompositorFrameSink(
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     const CompositorFrameSinkCallback& callback) {
   DCHECK(pending_compositor_frame_sink_callback_.is_null());
-  if (frame_sink_id_.is_valid()) {
+  if (tree_) {
     RequestCompositorFrameSinkInternal(std::move(context_provider),
                                        gpu_memory_buffer_manager, callback);
     return;
@@ -70,9 +66,6 @@ void RendererWindowTreeClient::RequestCompositorFrameSink(
 
 RendererWindowTreeClient::RendererWindowTreeClient(int routing_id)
     : routing_id_(routing_id), binding_(this) {
-  enable_surface_synchronization_ =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          cc::switches::kEnableSurfaceSynchronization);
 }
 
 RendererWindowTreeClient::~RendererWindowTreeClient() {
@@ -83,24 +76,22 @@ void RendererWindowTreeClient::RequestCompositorFrameSinkInternal(
     scoped_refptr<cc::ContextProvider> context_provider,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     const CompositorFrameSinkCallback& callback) {
-  std::unique_ptr<ui::ClientCompositorFrameSinkBinding> frame_sink_binding;
-  auto frame_sink = ui::ClientCompositorFrameSink::Create(
-      frame_sink_id_, std::move(context_provider), gpu_memory_buffer_manager,
-      &frame_sink_binding);
-  tree_->AttachCompositorFrameSink(
-      root_window_id_, frame_sink_binding->TakeFrameSinkRequest(),
-      mojo::MakeProxy(frame_sink_binding->TakeFrameSinkClient()));
+  cc::mojom::MojoCompositorFrameSinkPtrInfo sink_info;
+  cc::mojom::MojoCompositorFrameSinkRequest sink_request =
+      mojo::MakeRequest(&sink_info);
+  cc::mojom::MojoCompositorFrameSinkClientPtr client;
+  cc::mojom::MojoCompositorFrameSinkClientRequest client_request =
+      mojo::MakeRequest(&client);
+  bool enable_surface_synchronization =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          cc::switches::kEnableSurfaceSynchronization);
+  auto frame_sink = base::MakeUnique<ui::ClientCompositorFrameSink>(
+      std::move(context_provider), gpu_memory_buffer_manager,
+      std::move(sink_info), std::move(client_request),
+      enable_surface_synchronization);
+  tree_->AttachCompositorFrameSink(root_window_id_, std::move(sink_request),
+                                   std::move(client));
   callback.Run(std::move(frame_sink));
-}
-
-RenderWidget* RendererWindowTreeClient::GetRenderWidgetFromRoutingId(
-    int routing_id) {
-  RenderFrameImpl* render_frame = RenderFrameImpl::FromRoutingID(routing_id);
-  RenderViewImpl* render_view = RenderViewImpl::FromRoutingID(routing_id);
-  if (!render_frame && !render_view)
-    return nullptr;
-  return render_frame ? render_frame->GetRenderWidget()
-                      : render_view->GetWidget();
 }
 
 void RendererWindowTreeClient::DestroySelf() {
@@ -114,9 +105,7 @@ void RendererWindowTreeClient::OnEmbed(
     int64_t display_id,
     ui::Id focused_window_id,
     bool drawn,
-    const cc::FrameSinkId& frame_sink_id,
     const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
-  frame_sink_id_ = frame_sink_id;
   root_window_id_ = root->window_id;
   tree_ = std::move(tree);
   if (!pending_compositor_frame_sink_callback_.is_null()) {
@@ -126,10 +115,6 @@ void RendererWindowTreeClient::OnEmbed(
     pending_context_provider_ = nullptr;
     pending_gpu_memory_buffer_manager_ = nullptr;
     pending_compositor_frame_sink_callback_.Reset();
-  }
-  if (local_surface_id) {
-    // TODO(fsamuel): Update the RenderWidgetCompositor's LocalSurfaceId.
-    current_local_surface_id_ = *local_surface_id;
   }
 }
 
@@ -157,7 +142,6 @@ void RendererWindowTreeClient::OnTopLevelCreated(
     ui::mojom::WindowDataPtr data,
     int64_t display_id,
     bool drawn,
-    const cc::FrameSinkId& frame_sink_id,
     const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
   NOTREACHED();
 }
@@ -167,15 +151,6 @@ void RendererWindowTreeClient::OnWindowBoundsChanged(
     const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds,
     const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
-  if (!enable_surface_synchronization_ || !local_surface_id)
-    return;
-  current_local_surface_id_ = *local_surface_id;
-  RenderWidget* widget = GetRenderWidgetFromRoutingId(routing_id_);
-  if (!widget)
-    return;
-  // TODO(fsamuel): This isn't quite correct. The resize arrives from the
-  // browser and so it might not synchronize with the LocalSurfaceId.
-  widget->compositor()->SetLocalSurfaceId(*local_surface_id);
 }
 
 void RendererWindowTreeClient::OnClientAreaChanged(
@@ -242,9 +217,8 @@ void RendererWindowTreeClient::OnPointerEventObserved(
 
 void RendererWindowTreeClient::OnWindowFocused(ui::Id focused_window_id) {}
 
-void RendererWindowTreeClient::OnWindowPredefinedCursorChanged(
-    ui::Id window_id,
-    ui::mojom::CursorType cursor) {}
+void RendererWindowTreeClient::OnWindowCursorChanged(ui::Id window_id,
+                                                     ui::CursorData cursor) {}
 
 void RendererWindowTreeClient::OnWindowSurfaceChanged(
     ui::Id window_id,

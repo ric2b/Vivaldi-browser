@@ -7,10 +7,10 @@
 
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/ScriptWrappable.h"
-#include "components/payments/content/payment_request.mojom-blink.h"
+#include "components/payments/mojom/payment_request.mojom-blink.h"
 #include "modules/ModulesExport.h"
 #include "modules/payments/PaymentCurrencyAmount.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/text/WTFString.h"
@@ -30,11 +30,13 @@ class MODULES_EXPORT PaymentResponse final
 
  public:
   PaymentResponse(payments::mojom::blink::PaymentResponsePtr,
-                  PaymentCompleter*);
+                  PaymentCompleter*,
+                  const String& requestId);
   virtual ~PaymentResponse();
 
   ScriptValue toJSONForBinding(ScriptState*) const;
 
+  const String& requestId() const { return requestId_; }
   const String& methodName() const { return method_name_; }
   ScriptValue details(ScriptState*, ExceptionState&) const;
   PaymentAddress* shippingAddress() const { return shipping_address_.Get(); }
@@ -48,6 +50,7 @@ class MODULES_EXPORT PaymentResponse final
   DECLARE_TRACE();
 
  private:
+  String requestId_;
   String method_name_;
   String stringified_details_;
   Member<PaymentAddress> shipping_address_;

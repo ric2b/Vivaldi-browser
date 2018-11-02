@@ -25,9 +25,7 @@ class CompositorFrameMetadata;
 }
 
 #if defined(OS_ANDROID)
-namespace device {
-class PowerSaveBlocker;
-}  // namespace device
+#include "device/wake_lock/public/interfaces/wake_lock_service.mojom.h"
 #endif
 
 namespace content {
@@ -46,6 +44,8 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
       private WebContentsObserver {
  public:
   static void AddAllAgentHosts(DevToolsAgentHost::List* result);
+  static scoped_refptr<DevToolsAgentHost> GetOrCreateFor(
+      FrameTreeNode* frame_tree_node);
 
   static void OnCancelPendingNavigation(RenderFrameHost* pending,
                                         RenderFrameHost* current);
@@ -66,8 +66,6 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   static void SignalSynchronousSwapCompositorFrame(
       RenderFrameHost* frame_host,
       cc::CompositorFrameMetadata frame_metadata);
-
-  bool HasRenderFrameHost(RenderFrameHost* host);
 
   FrameTreeNode* frame_tree_node() { return frame_tree_node_; }
 
@@ -90,14 +88,8 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 
  private:
   friend class DevToolsAgentHost;
-  explicit RenderFrameDevToolsAgentHost(RenderFrameHostImpl*);
+  explicit RenderFrameDevToolsAgentHost(FrameTreeNode*);
   ~RenderFrameDevToolsAgentHost() override;
-
-  static scoped_refptr<DevToolsAgentHost> GetOrCreateFor(
-      RenderFrameHostImpl* host);
-  static void AppendAgentHostForFrameIfApplicable(
-      DevToolsAgentHost::List* result,
-      RenderFrameHost* host);
 
   // DevToolsAgentHostImpl overrides.
   void AttachSession(DevToolsSession* session) override;
@@ -152,7 +144,9 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 
   bool CheckConsistency();
 
-  void CreatePowerSaveBlocker();
+#if defined(OS_ANDROID)
+  device::mojom::WakeLockService* GetWakeLockService();
+#endif
 
   void SynchronousSwapCompositorFrame(
       cc::CompositorFrameMetadata frame_metadata);
@@ -167,7 +161,7 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 
   std::unique_ptr<DevToolsFrameTraceRecorder> frame_trace_recorder_;
 #if defined(OS_ANDROID)
-  std::unique_ptr<device::PowerSaveBlocker> power_save_blocker_;
+  device::mojom::WakeLockServicePtr wake_lock_;
 #endif
   RenderFrameHostImpl* handlers_frame_host_;
   bool current_frame_crashed_;

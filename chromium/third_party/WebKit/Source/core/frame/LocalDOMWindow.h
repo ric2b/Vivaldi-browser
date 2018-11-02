@@ -27,12 +27,12 @@
 #ifndef LocalDOMWindow_h
 #define LocalDOMWindow_h
 
-#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
 #include "core/events/EventTarget.h"
 #include "core/frame/DOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "platform/Supplementable.h"
+#include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "platform/wtf/Assertions.h"
@@ -54,6 +54,7 @@ class DOMVisualViewport;
 class DOMWindowEventQueue;
 class Element;
 class EventQueue;
+class ExceptionState;
 class External;
 class FrameConsole;
 class FrameRequestCallback;
@@ -145,7 +146,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   double pageXOffset() const { return scrollX(); }
   double pageYOffset() const { return scrollY(); }
 
-  DOMVisualViewport* visualViewport();
+  DOMVisualViewport* view();
 
   const AtomicString& name() const;
   void setName(const AtomicString&);
@@ -263,16 +264,14 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   unsigned PendingUnloadEventListeners() const;
 
-  bool AllowPopUp();  // Call on first window, not target window.
-  static bool AllowPopUp(LocalFrame& first_frame);
-
   Element* frameElement() const;
 
   DOMWindow* open(const String& url_string,
                   const AtomicString& frame_name,
                   const String& window_features_string,
                   LocalDOMWindow* calling_window,
-                  LocalDOMWindow* entered_window);
+                  LocalDOMWindow* entered_window,
+                  ExceptionState&);
 
   FrameConsole* GetFrameConsole() const;
 
@@ -316,6 +315,9 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   FloatSize GetViewportSize(IncludeScrollbarsInRect) const;
 
+  void SetHasLoadEventFired() { has_load_event_fired_ = true; }
+  bool HasLoadEventFired() { return has_load_event_fired_; }
+
  protected:
   // EventTarget overrides.
   void AddedEventListener(const AtomicString& event_type,
@@ -342,10 +344,11 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void ClearDocument();
 
   Member<Document> document_;
-  Member<DOMVisualViewport> visual_viewport_;
+  Member<DOMVisualViewport> view_;
   TaskRunnerTimer<LocalDOMWindow> unused_preloads_timer_;
 
   bool should_print_when_finished_loading_;
+  bool has_load_event_fired_ = false;
 
   mutable Member<Screen> screen_;
   mutable Member<History> history_;

@@ -53,7 +53,6 @@ Na przykład niektóre strony mogą na nie zareagować, wyświetlając reklamy b
 <translation id="1820259098641718022">Dodano do listy Do przeczytania</translation>
 <translation id="1876721852596493031">Wysyłaj dane na temat użytkowania</translation>
 <translation id="1886928167269928266">Od początku</translation>
-<translation id="1894451531427596130">Określ działanie w <ph name="BEGIN_LINK" />Ustawieniach<ph name="END_LINK" /></translation>
 <translation id="1911619930368729126">Prześlij na Dysk Google</translation>
 <translation id="1941314575388338491">Kliknij dwukrotnie, by skopiować.</translation>
 <translation id="1952728750904661634">Zaloguj się na konto zarządzane</translation>
@@ -61,7 +60,7 @@ Na przykład niektóre strony mogą na nie zareagować, wyświetlając reklamy b
 <translation id="1989112275319619282">Przeglądaj</translation>
 <translation id="2068952045031577364">Ostatni tydzień</translation>
 <translation id="2079545284768500474">Cofnij</translation>
-<translation id="209018056901015185">Pobierz witrynę dla komputera</translation>
+<translation id="209018056901015185">Wersja na komputer</translation>
 <translation id="2103075008456228677">Otwórz history.google.com</translation>
 <translation id="2116625576999540962">Przeniesione elementy: <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /></translation>
 <translation id="2149973817440762519">Edytuj zakładkę</translation>
@@ -97,6 +96,7 @@ Na przykład niektóre strony mogą na nie zareagować, wyświetlając reklamy b
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">Zresetuj ustawienia tłumaczenia</translation>
 <translation id="285960592395650245">Ponów pobieranie</translation>
+<translation id="2870560284913253234">Witryna</translation>
 <translation id="2871695793448672541">Ukryte, hasło</translation>
 <translation id="2898963176829412617">Nowy folder…</translation>
 <translation id="2903493209154104877">Adresy</translation>
@@ -109,7 +109,6 @@ Na przykład niektóre strony mogą na nie zareagować, wyświetlając reklamy b
 <translation id="2989805286512600854">Otwórz w nowej karcie</translation>
 <translation id="3024255823539804759">Ostatni dzień</translation>
 <translation id="3037605927509011580">Kurza twarz!</translation>
-<translation id="3050311348724540835">Adres <ph name="HISTORY_URL" /> jest niedostępny. Aby uzyskać dostęp do historii przeglądania, wybierz „<ph name="SHOW_HISTORY" />” z menu narzędzi.</translation>
 <translation id="3112556859945124369">Oznacz…</translation>
 <translation id="3151924044251363314">Twoje zaszyfrowane dane może odczytać tylko ktoś znający hasło. Google nie otrzyma Twojego hasła ani nie będzie go przechowywać. Jeśli je zapomnisz lub zechcesz zmienić to ustawienie, musisz zresetować synchronizację. <ph name="BEGIN_LINK" />Więcej informacji<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">Oznacz wszystko…</translation>
@@ -150,6 +149,7 @@ Aby dostosować wyszukiwane hasło, naciśnij je i przytrzymaj, by je zaznaczyć
 <translation id="3638472932233958418">Wstępne wczytywanie stron</translation>
 <translation id="3691593122358196899">Utworzono zakładkę w folderze <ph name="FOLDER_TITLE" /></translation>
 <translation id="3738139272394829648">Dotknij, by wyszukać</translation>
+<translation id="3742082982782149146">URL witryny został skopiowany.</translation>
 <translation id="3771033907050503522">Karty incognito</translation>
 <translation id="3783017676699494206">Zapisz obraz</translation>
 <translation id="3789841737615482174">Zainstaluj</translation>
@@ -164,10 +164,12 @@ Aby dostosować wyszukiwane hasło, naciśnij je i przytrzymaj, by je zaznaczyć
 <translation id="4038354071007134711">Nie masz aplikacji, która może otworzyć ten plik.</translation>
 <translation id="4049507953662678203">Upewnij się, że masz połączenie z siecią, i spróbuj ponownie.</translation>
 <translation id="411254640334432676">Błąd pobierania.</translation>
+<translation id="4117350985506774529">Twoja nazwa użytkownika została skopiowana.</translation>
 <translation id="4121993058175073134">Aby wysłać dane net-export, skonfiguruj konto e-mail w aplikacji Ustawienia.</translation>
 <translation id="4124987746317609294">Zakres czasowy</translation>
 <translation id="4172051516777682613">Zawsze pokazuj</translation>
 <translation id="418156467088430727">Wyświetl wersję offline w nowej karcie</translation>
+<translation id="4237682350741091554">Zarządzaj synchronizacją Chrome i personalizacją w <ph name="BEGIN_LINK" />Ustawieniach<ph name="END_LINK" /></translation>
 <translation id="424315890655130736">Wpisz hasło</translation>
 <translation id="4272631900155121838">Aby zeskanować kod QR, włącz aparat w ustawieniach</translation>
 <translation id="4281844954008187215">Warunki korzystania z usługi</translation>
@@ -175,6 +177,7 @@ Aby dostosować wyszukiwane hasło, naciśnij je i przytrzymaj, by je zaznaczyć
 <translation id="4359125752503270327">Strona zostanie otwarta w innej aplikacji.</translation>
 <translation id="4378154925671717803">Telefon</translation>
 <translation id="441868831736628555">Informacje na temat ochrony prywatności</translation>
+<translation id="4508750114462689118">Zamknij okno zachęcające do logowania</translation>
 <translation id="4526249700380860531">Wyświetlaj zapisane hasła i zarządzaj nimi na <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Spróbuj zalogować się jeszcze raz.</translation>
 <translation id="4620246317052452550">Przeczytane strony</translation>
@@ -220,6 +223,7 @@ Dane zostały zaszyfrowane z użyciem Twojego hasła synchronizacji. Wpisz je, 
 
 Funkcja Handoff musi być też włączona w sekcji Ogólne w Ustawieniach, a urządzenie musi używać tego samego konta iCloud.</translation>
 <translation id="5556459405103347317">Odśwież</translation>
+<translation id="5619279135193775234">Mail</translation>
 <translation id="5626245204502895507">Nie udało się pobrać teraz tego pliku.</translation>
 <translation id="5659593005791499971">E-mail</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@ Twoje dane zostały zaszyfrowane z użyciem hasła synchronizacji w dniu <ph n
 <translation id="7136892417564438900">Aparat jest niedostępny</translation>
 <translation id="7159472599653637159">Żądaj strony mobilnej</translation>
 <translation id="7167621057293532233">Typy danych</translation>
+<translation id="7175593937868963913">Napisz e-maila</translation>
 <translation id="7189598951263744875">Udostępnij...</translation>
 <translation id="7203585745079012652">Odczytuj odpowiedzi</translation>
 <translation id="722055596168483966">Dostosowywanie usług Google</translation>
@@ -358,7 +363,6 @@ Twoje dane zostały zaszyfrowane z użyciem hasła synchronizacji w dniu <ph n
 <translation id="8205564605687841303">Anuluj</translation>
 <translation id="8225985093977202398">Obrazy i pliki w pamięci podręcznej</translation>
 <translation id="8261506727792406068">Usuń</translation>
-<translation id="8272194309885535896">Pobierz obraz</translation>
 <translation id="8272426682713568063">Karty kredytowe</translation>
 <translation id="8281781826761538115">Domyślny – <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">Określ, jak Google może korzystać z Twojej historii przeglądania, by dostosowywać wyniki wyszukiwania, reklamy i działanie innych usług</translation>

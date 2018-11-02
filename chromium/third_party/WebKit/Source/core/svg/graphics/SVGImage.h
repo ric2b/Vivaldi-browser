@@ -68,6 +68,7 @@ class CORE_EXPORT SVGImage final : public Image {
   bool IsSVGImage() const override { return true; }
   IntSize Size() const override { return intrinsic_size_; }
 
+  void CheckLoaded() const;
   bool CurrentFrameHasSingleSecurityOrigin() const override;
 
   void StartAnimation(CatchUpAnimation = kCatchUp) override;
@@ -154,7 +155,7 @@ class CORE_EXPORT SVGImage final : public Image {
   // Paints the current frame. If a PaintCanvas is passed, paints into that
   // canvas and returns nullptr.
   // Otherwise returns a pointer to the new PaintRecord.
-  sk_sp<PaintRecord> PaintRecordForCurrentFrame(const FloatRect& bounds,
+  sk_sp<PaintRecord> PaintRecordForCurrentFrame(const IntRect& bounds,
                                                 const KURL&,
                                                 PaintCanvas* = nullptr);
 
@@ -183,6 +184,12 @@ class CORE_EXPORT SVGImage final : public Image {
   void ScheduleTimelineRewind();
   void FlushPendingTimelineRewind();
 
+  Page* GetPageForTesting() { return page_; }
+  void LoadCompleted();
+  void NotifyAsyncLoadCompleted();
+
+  class SVGImageLocalFrameClient;
+
   Persistent<SVGImageChromeClient> chrome_client_;
   Persistent<Page> page_;
   std::unique_ptr<PaintController> paint_controller_;
@@ -194,6 +201,18 @@ class CORE_EXPORT SVGImage final : public Image {
   // the "concrete object size". For more, see: SVGImageForContainer.h
   IntSize intrinsic_size_;
   bool has_pending_timeline_rewind_;
+
+  enum LoadState {
+    kDataChangedNotStarted,
+    kInDataChanged,
+    kWaitingForAsyncLoadCompletion,
+    kLoadCompleted,
+  };
+
+  LoadState load_state_ = kDataChangedNotStarted;
+
+  Persistent<SVGImageLocalFrameClient> frame_client_;
+  FRIEND_TEST_ALL_PREFIXES(SVGImageTest, SupportsSubsequenceCaching);
 };
 
 DEFINE_IMAGE_TYPE_CASTS(SVGImage);

@@ -45,7 +45,9 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
   void Flush(int32_t put_offset) override;
   void OrderingBarrier(int32_t put_offset) override;
   State WaitForTokenInRange(int32_t start, int32_t end) override;
-  State WaitForGetOffsetInRange(int32_t start, int32_t end) override;
+  State WaitForGetOffsetInRange(uint32_t set_get_buffer_count,
+                                int32_t start,
+                                int32_t end) override;
   void SetGetBuffer(int32_t transfer_buffer_id) override;
   scoped_refptr<gpu::Buffer> CreateTransferBuffer(size_t size,
                                                   int32_t* id) override;
@@ -64,6 +66,8 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
   void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
   gpu::CommandBufferId GetCommandBufferID() const override;
+  int32_t GetStreamId() const override;
+  void FlushOrderingBarrierOnStream(int32_t stream_id) override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
   bool IsFenceSyncFlushed(uint64_t release) override;
@@ -73,7 +77,8 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
                        const base::Closure& callback) override;
   void WaitSyncTokenHint(const gpu::SyncToken& sync_token) override;
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override;
-  int32_t GetExtraCommandBufferData() const override;
+  void AddLatencyInfo(
+      const std::vector<ui::LatencyInfo>& latency_info) override;
 
  private:
   bool Send(IPC::Message* msg);

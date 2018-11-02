@@ -141,7 +141,7 @@ locale.  The strings in this file are specific to iOS.
         Ok, Got it
       </message>
       <message name="IDS_IOS_ACCOUNT_CONSISTENCY_CONFIRMATION_OPEN_SETTINGS" desc="Description of how to configure sync and Google services on the sign-in confirmation screen. [Length: unlimited]">
-        Control how this works in <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph>
+        Manage Chrome Sync and personalization in <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph>
       </message>
       <message name="IDS_IOS_ACCOUNT_CONSISTENCY_CONFIRMATION_SCROLL_BUTTON" desc="Title of the button to scroll the confirmation screen when it is too small to show everything at once. [Length: 20m] [iOS only]">
         More
@@ -543,9 +543,6 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_CONTENT_CONTEXT_SAVEIMAGE" desc="The name of the Save Image As command in the content area context menu">
         Save Image
       </message>
-      <message name="IDS_IOS_CONTENT_CONTEXT_DOWNLOADIMAGE" desc="The name of the Download Image command in the content area context menu">
-        Download Image
-      </message>
       <message name="IDS_IOS_CONTENT_SUGGESTIONS_DELETE" desc="The name of the Delete command in the Content Suggestions articles context menu">
         Delete
       </message>
@@ -676,9 +673,6 @@ To adjust your search term, long press to select. To refine your search, slide t
       </message>
       <message name="IDS_IOS_HISTORY_SYNC_LEARN_MORE_URL" translateable="false">
         https://support.google.com/chrome/?p=sync_history&amp;hl=[GRITLANGCODE]
-      </message>
-      <message name="IDS_IOS_HISTORY_URL_NOT_AVAILABLE" desc="The text displayed when a user navigates to the history URL to redirect them to accessing history via the tools menu.">
-        <ph name="HISTORY_URL">$1<ex>chrome://history-frame</ex></ph> is not available. To access your browsing history, select "<ph name="SHOW_HISTORY">$2<ex>History</ex></ph>" from the tools menu.
       </message>
       <message name="IDS_IOS_HTTP_LOGIN_DIALOG_PASSWORD_PLACEHOLDER" desc="The placeholder text for the password on the http login dialog [Length: 20em] [iOS only]">
         Password
@@ -1110,6 +1104,12 @@ Handoff must also be enabled in the General section of Settings, and your device
       <message name="IDS_IOS_SEARCH_ENGINE_SETTING_TITLE" desc="The title for Search Engine selection setting [iOS only]">
         Search Engine
       </message>
+      <message name="IDS_IOS_SETTINGS_SITE_COPY_BUTTON" desc="Button that the user can press to copy the site to clipboard. [Length: 12em]">
+        Copy
+      </message>
+      <message name="IDS_IOS_SETTINGS_USERNAME_COPY_BUTTON" desc="Button that the user can press to copy the username to clipboard. [Length: 12em]">
+        Copy
+      </message>
       <message name="IDS_IOS_SETTINGS_PASSWORD_COPY_BUTTON" desc="Button that the user can press to copy the password to clipboard. [Length: 12em]">
         Copy
       </message>
@@ -1130,6 +1130,12 @@ Handoff must also be enabled in the General section of Settings, and your device
       </message>
       <message name="IDS_IOS_SETTINGS_PASSWORD_SHOW_BUTTON" desc="Button that the user can press in order to have the password displayed in plain text. [Length: 12em]">
         Show
+      </message>
+      <message name="IDS_IOS_SETTINGS_SITE_WAS_COPIED_MESSAGE" desc="Confirmation that the site URL of a saved credential was copied. This is shown alone in an infobar at the bottom of the screen. [Length: 40em]">
+        The site URL was copied.
+      </message>
+      <message name="IDS_IOS_SETTINGS_USERNAME_WAS_COPIED_MESSAGE" desc="Confirmation that the username was copied. This is shown alone in an infobar at the bottom of the screen. [Length: 40em]">
+        Your username was copied.
       </message>
       <message name="IDS_IOS_SETTINGS_PASSWORD_WAS_COPIED_MESSAGE" desc="Confirmation that the password was copied. This is shown alone in an infobar at the bottom of the screen after the user successfully reauthenticates with Touch ID or PIN. [Length: 40em]">
         Your password was copied.
@@ -1193,6 +1199,9 @@ Handoff must also be enabled in the General section of Settings, and your device
       </message>
       <message name="IDS_IOS_SHOW_PASSWORD_VIEW_PASSWORD" desc="Label indicating that the text displayed below is a password. [Length: 20em] [iOS only]">
         Password
+      </message>
+      <message name="IDS_IOS_SHOW_PASSWORD_VIEW_SITE" desc="Label indicating that the text displayed below is the site on which the associated password was saved. The password is displayed in the same view, but under a diferent label. [Length: 20em] [iOS only]">
+        Site
       </message>
       <message name="IDS_IOS_SHOW_PASSWORD_VIEW_USERNAME" desc="Label indicating that the text displayed below is the username to which a saved password corresponds. The password is displayed in the same view, but under a diferent label. [Length: 20em] [iOS only]">
         Username
@@ -1503,6 +1512,15 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       </message>
       <message name="IDS_IOS_SIGNIN_PROMO_NOT" desc="Button that the user can press if they are not the profile that Chrome found (opposite of 'Continue as Joe Doe').">
         Not <ph name="EMAIL">$1<ex>john.doe@example.com</ex>?</ph>
+      </message>
+      <message name="IDS_IOS_SIGNIN_PROMO_CLOSE_ACCESSIBILITY" desc="Accessibility label to describe the close button action in the sign-in promo element.">
+        Close sign-in promo
+      </message>
+      <message name="IDS_IOS_SYSTEM_MAIL_APP" desc="Name of iOS system-provided Mail app. Note that this is not consistently translated for all locales, e.g. it is still 'Mail' (in English) for French locale, but is translated to '邮件' for Chinese locale. [Length: 10em]">
+        Mail
+      </message>
+      <message name="IDS_IOS_COMPOSE_EMAIL_SETTING" desc="Title for the view and option to select a handler for mailto: URLs. [Length: 20em]">
+        Compose Email
       </message>
     </messages>
   </release>

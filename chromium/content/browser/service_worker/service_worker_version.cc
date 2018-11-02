@@ -369,7 +369,8 @@ ServiceWorkerVersionInfo ServiceWorkerVersion::GetInfo() {
     info.clients.insert(std::make_pair(
         host->client_uuid(),
         ServiceWorkerVersionInfo::ClientInfo(
-            host->process_id(), host->route_id(), host->provider_type())));
+            host->process_id(), host->route_id(), host->web_contents_getter(),
+            host->provider_type())));
   }
   if (!main_script_http_info_)
     return info;
@@ -628,26 +629,6 @@ void ServiceWorkerVersion::RunAfterStartWorker(
   StartWorker(purpose,
               base::Bind(&RunTaskAfterStartWorker, weak_factory_.GetWeakPtr(),
                          error_callback, task));
-}
-
-void ServiceWorkerVersion::DispatchEvent(const std::vector<int>& request_ids,
-                                         const IPC::Message& message) {
-  DCHECK_EQ(EmbeddedWorkerStatus::RUNNING, running_status());
-
-  const ServiceWorkerStatusCode status = embedded_worker_->SendMessage(message);
-
-  for (int request_id : request_ids) {
-    PendingRequest* request = pending_requests_.Lookup(request_id);
-    DCHECK(request) << "Invalid request id";
-    DCHECK(!request->is_dispatched)
-        << "Request already dispatched an IPC event";
-    if (status != SERVICE_WORKER_OK) {
-      RunSoon(base::Bind(request->error_callback, status));
-      pending_requests_.Remove(request_id);
-    } else {
-      request->is_dispatched = true;
-    }
-  }
 }
 
 void ServiceWorkerVersion::AddControllee(
@@ -961,8 +942,6 @@ bool ServiceWorkerVersion::OnMessageReceived(const IPC::Message& message) {
                         OnSkipWaiting)
     IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_ClaimClients,
                         OnClaimClients)
-    IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_RegisterForeignFetchScopes,
-                        OnRegisterForeignFetchScopes)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -1337,7 +1316,7 @@ void ServiceWorkerVersion::OnPongFromWorker() {
   ping_controller_->OnPongReceived();
 }
 
-void ServiceWorkerVersion::OnRegisterForeignFetchScopes(
+void ServiceWorkerVersion::RegisterForeignFetchScopes(
     const std::vector<GURL>& sub_scopes,
     const std::vector<url::Origin>& origins) {
   DCHECK(status() == INSTALLING || status() == REDUNDANT) << status();

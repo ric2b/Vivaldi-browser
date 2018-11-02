@@ -9,6 +9,7 @@
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -131,7 +132,7 @@ int StartHostMain(int argc, char** argv) {
   settings.logging_dest = logging::LOG_TO_SYSTEM_DEBUG_LOG;
   logging::InitLogging(settings);
 
-  base::TaskScheduler::CreateAndSetSimpleTaskScheduler("RemotingHostSetup");
+  base::TaskScheduler::CreateAndStartWithDefaultParams("RemotingHostSetup");
 
   std::string host_name = command_line->GetSwitchValueASCII("name");
   std::string host_pin = command_line->GetSwitchValueASCII("pin");

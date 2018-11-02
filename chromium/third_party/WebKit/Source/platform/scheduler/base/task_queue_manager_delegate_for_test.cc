@@ -43,8 +43,8 @@ bool TaskQueueManagerDelegateForTest::PostNonNestableDelayedTask(
                                                   delay);
 }
 
-bool TaskQueueManagerDelegateForTest::RunsTasksOnCurrentThread() const {
-  return task_runner_->RunsTasksOnCurrentThread();
+bool TaskQueueManagerDelegateForTest::RunsTasksInCurrentSequence() const {
+  return task_runner_->RunsTasksInCurrentSequence();
 }
 
 bool TaskQueueManagerDelegateForTest::IsNested() const {
@@ -52,10 +52,10 @@ bool TaskQueueManagerDelegateForTest::IsNested() const {
 }
 
 void TaskQueueManagerDelegateForTest::AddNestingObserver(
-    base::MessageLoop::NestingObserver* observer) {}
+    base::RunLoop::NestingObserver* observer) {}
 
 void TaskQueueManagerDelegateForTest::RemoveNestingObserver(
-    base::MessageLoop::NestingObserver* observer) {}
+    base::RunLoop::NestingObserver* observer) {}
 
 base::TimeTicks TaskQueueManagerDelegateForTest::NowTicks() {
   return time_source_->NowTicks();

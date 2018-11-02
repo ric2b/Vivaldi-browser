@@ -22,6 +22,7 @@
 #include "base/task_runner_util.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -32,7 +33,7 @@
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/named_platform_handle.h"
 #include "mojo/edk/embedder/named_platform_handle_utils.h"
-#include "mojo/edk/embedder/pending_process_connection.h"
+#include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/platform_channel_utils_posix.h"
 #include "mojo/edk/embedder/platform_handle_vector.h"
@@ -218,7 +219,8 @@ class ArcSessionImpl : public ArcSession,
 
   // DBus callback for StartArcInstance().
   void OnInstanceStarted(mojo::edk::ScopedPlatformHandle socket_fd,
-                         StartArcInstanceResult result);
+                         StartArcInstanceResult result,
+                         const std::string& container_instance_id);
 
   // Synchronously accepts a connection on |socket_fd| and then processes the
   // connected socket's file descriptor.
@@ -231,7 +233,8 @@ class ArcSessionImpl : public ArcSession,
   void StopArcInstance();
 
   // chromeos::SessionManagerClient::Observer:
-  void ArcInstanceStopped(bool clean) override;
+  void ArcInstanceStopped(bool clean,
+                          const std::string& container_instance_id) override;
 
   // Completes the termination procedure.
   void OnStopped(ArcStopReason reason);
@@ -251,6 +254,10 @@ class ArcSessionImpl : public ArcSession,
 
   // When Stop() is called, this flag is set.
   bool stop_requested_ = false;
+
+  // Container instance id passed from session_manager.
+  // Should be available only after OnInstanceStarted().
+  std::string container_instance_id_;
 
   // In CONNECTING_MOJO state, this is set to the write side of the pipe
   // to notify cancelling of the procedure.
@@ -365,26 +372,26 @@ void ArcSessionImpl::OnSocketCreated(
   bool disable_boot_completed_broadcast =
       !base::FeatureList::IsEnabled(arc::kBootCompletedBroadcastFeature);
 
+  // We only enable /vendor/priv-app when voice interaction is enabled because
+  // voice interaction service apk would be bundled in this location.
+  bool enable_vendor_privileged =
+      chromeos::switches::IsVoiceInteractionEnabled();
+
   chromeos::SessionManagerClient* session_manager_client =
       chromeos::DBusThreadManager::Get()->GetSessionManagerClient();
   session_manager_client->StartArcInstance(
-      cryptohome_id, disable_boot_completed_broadcast,
+      cryptohome_id, disable_boot_completed_broadcast, enable_vendor_privileged,
       base::Bind(&ArcSessionImpl::OnInstanceStarted, weak_factory_.GetWeakPtr(),
                  base::Passed(&socket_fd)));
 }
 
 void ArcSessionImpl::OnInstanceStarted(
     mojo::edk::ScopedPlatformHandle socket_fd,
-    StartArcInstanceResult result) {
+    StartArcInstanceResult result,
+    const std::string& container_instance_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (state_ == State::STOPPED) {
-    // This is the case that error is notified via DBus before the
-    // OnInstanceStarted() callback is invoked. The stopping procedure has
-    // been run, so do nothing.
-    return;
-  }
-
   DCHECK_EQ(state_, State::STARTING_INSTANCE);
+  container_instance_id_ = container_instance_id;
 
   if (stop_requested_) {
     if (result == StartArcInstanceResult::SUCCESS) {
@@ -441,16 +448,19 @@ mojo::ScopedMessagePipeHandle ArcSessionImpl::ConnectMojo(
   // Hardcode pid 0 since it is unused in mojo.
   const base::ProcessHandle kUnusedChildProcessHandle = 0;
   mojo::edk::PlatformChannelPair channel_pair;
-  mojo::edk::PendingProcessConnection process;
-  process.Connect(kUnusedChildProcessHandle,
-                  mojo::edk::ConnectionParams(channel_pair.PassServerHandle()));
+  mojo::edk::OutgoingBrokerClientInvitation invitation;
+
+  std::string token = mojo::edk::GenerateRandomToken();
+  mojo::ScopedMessagePipeHandle pipe = invitation.AttachMessagePipe(token);
+
+  invitation.Send(
+      kUnusedChildProcessHandle,
+      mojo::edk::ConnectionParams(mojo::edk::TransportProtocol::kLegacy,
+                                  channel_pair.PassServerHandle()));
 
   mojo::edk::ScopedPlatformHandleVectorPtr handles(
       new mojo::edk::PlatformHandleVector{
           channel_pair.PassClientHandle().release()});
-
-  std::string token;
-  mojo::ScopedMessagePipeHandle pipe = process.CreateMessagePipe(&token);
 
   // We need to send the length of the message as a single byte, so make sure it
   // fits.
@@ -472,14 +482,6 @@ mojo::ScopedMessagePipeHandle ArcSessionImpl::ConnectMojo(
 void ArcSessionImpl::OnMojoConnected(
     mojo::ScopedMessagePipeHandle server_pipe) {
   DCHECK(thread_checker_.CalledOnValidThread());
-
-  if (state_ == State::STOPPED) {
-    // This is the case that error is notified via DBus before the
-    // OnMojoConnected() callback is invoked. The stopping procedure has
-    // been run, so do nothing.
-    return;
-  }
-
   DCHECK_EQ(state_, State::CONNECTING_MOJO);
   accept_cancel_pipe_.reset();
 
@@ -567,10 +569,21 @@ void ArcSessionImpl::StopArcInstance() {
       base::Bind(&DoNothingInstanceStopped));
 }
 
-void ArcSessionImpl::ArcInstanceStopped(bool clean) {
+void ArcSessionImpl::ArcInstanceStopped(
+    bool clean,
+    const std::string& container_instance_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
   VLOG(1) << "Notified that ARC instance is stopped "
           << (clean ? "cleanly" : "uncleanly");
+
+  if (container_instance_id != container_instance_id_) {
+    VLOG(1) << "Container instance id mismatch. Do nothing."
+            << container_instance_id << " vs " << container_instance_id_;
+    return;
+  }
+
+  // Release |container_instance_id_| to avoid duplicate invocation situation.
+  container_instance_id_.clear();
 
   // In case that crash happens during before the Mojo channel is connected,
   // unlock the BlockingPool thread.

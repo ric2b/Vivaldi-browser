@@ -375,14 +375,12 @@ class GLRenderer::SyncQuery {
 GLRenderer::GLRenderer(const RendererSettings* settings,
                        OutputSurface* output_surface,
                        ResourceProvider* resource_provider,
-                       TextureMailboxDeleter* texture_mailbox_deleter,
-                       int highp_threshold_min)
+                       TextureMailboxDeleter* texture_mailbox_deleter)
     : DirectRenderer(settings, output_surface, resource_provider),
       shared_geometry_quad_(QuadVertexRect()),
       gl_(output_surface->context_provider()->ContextGL()),
       context_support_(output_surface->context_provider()->ContextSupport()),
       texture_mailbox_deleter_(texture_mailbox_deleter),
-      highp_threshold_min_(highp_threshold_min),
       gl_composited_texture_quad_border_(
           settings->gl_composited_texture_quad_border),
       bound_geometry_(NO_BINDING),
@@ -677,6 +675,9 @@ static sk_sp<SkImage> ApplyImageFilter(
     return nullptr;
   }
 
+  // Big filters can sometimes fallback to CPU. Therefore, we need
+  // to disable subnormal floats for performance and security reasons.
+  ScopedSubnormalFloatDisabler disabler;
   SkMatrix local_matrix;
   local_matrix.setTranslate(origin.x(), origin.y());
   local_matrix.postScale(scale.x(), scale.y());
@@ -946,6 +947,9 @@ sk_sp<SkImage> GLRenderer::ApplyBackgroundFilters(
     return nullptr;
   }
 
+  // Big filters can sometimes fallback to CPU. Therefore, we need
+  // to disable subnormal floats for performance and security reasons.
+  ScopedSubnormalFloatDisabler disabler;
   SkMatrix local_matrix;
   local_matrix.setScale(quad->filters_scale.x(), quad->filters_scale.y());
 
@@ -1000,7 +1004,7 @@ const TileDrawQuad* GLRenderer::CanPassBeDrawnDirectly(const RenderPass* pass) {
       quad->rect != pass->output_rect)
     return nullptr;
   // The quad is expected to be the entire layer so that AA edges are correct.
-  if (gfx::Rect(quad->shared_quad_state->quad_layer_bounds) != quad->rect)
+  if (quad->shared_quad_state->quad_layer_rect != quad->rect)
     return nullptr;
   if (quad->material != DrawQuad::TILED_CONTENT)
     return nullptr;
@@ -1102,8 +1106,11 @@ bool GLRenderer::InitializeRPDQParameters(
                            static_cast<float>(dst_rect.width()),
                            static_cast<float>(dst_rect.height()));
   gfx::Transform quad_rect_matrix;
+  gfx::Rect quad_layer_rect(quad->shared_quad_state->quad_layer_rect);
+  if (params->filters)
+    quad_layer_rect = params->filters->MapRect(quad_layer_rect, local_matrix);
   QuadRectTransform(&quad_rect_matrix, params->quad_to_target_transform,
-                    params->dst_rect);
+                    gfx::RectF(quad_layer_rect));
   params->contents_device_transform =
       params->window_matrix * params->projection_matrix * quad_rect_matrix;
   params->contents_device_transform.FlattenTo2d();
@@ -1112,10 +1119,10 @@ bool GLRenderer::InitializeRPDQParameters(
   if (!params->contents_device_transform.IsInvertible())
     return false;
 
+  // TODO(sunxd): unify the anti-aliasing logic of RPDQ and TileDrawQuad.
   params->surface_quad = SharedGeometryQuad();
-
   gfx::QuadF device_layer_quad;
-  if (settings_->allow_antialiasing) {
+  if (settings_->allow_antialiasing && quad->IsEdge()) {
     bool clipped = false;
     device_layer_quad = MathUtil::MapQuad(params->contents_device_transform,
                                           params->surface_quad, &clipped);
@@ -1305,7 +1312,7 @@ void GLRenderer::UpdateRPDQBlendMode(DrawRenderPassDrawQuadParams* params) {
 
 void GLRenderer::ChooseRPDQProgram(DrawRenderPassDrawQuadParams* params) {
   TexCoordPrecision tex_coord_precision = TexCoordPrecisionRequired(
-      gl_, &highp_threshold_cache_, highp_threshold_min_,
+      gl_, &highp_threshold_cache_, settings_->highp_threshold_min,
       params->quad->shared_quad_state->visible_quad_layer_rect.bottom_right());
 
   BlendMode shader_blend_mode =
@@ -1481,10 +1488,10 @@ bool is_bottom(const gfx::QuadF* clip_region, const DrawQuad* quad) {
     return true;
 
   return std::abs(clip_region->p3().y() -
-                  quad->shared_quad_state->quad_layer_bounds.height()) <
+                  quad->shared_quad_state->quad_layer_rect.height()) <
              kAntiAliasingEpsilon &&
          std::abs(clip_region->p4().y() -
-                  quad->shared_quad_state->quad_layer_bounds.height()) <
+                  quad->shared_quad_state->quad_layer_rect.height()) <
              kAntiAliasingEpsilon;
 }
 
@@ -1505,10 +1512,10 @@ bool is_right(const gfx::QuadF* clip_region, const DrawQuad* quad) {
     return true;
 
   return std::abs(clip_region->p2().x() -
-                  quad->shared_quad_state->quad_layer_bounds.width()) <
+                  quad->shared_quad_state->quad_layer_rect.width()) <
              kAntiAliasingEpsilon &&
          std::abs(clip_region->p3().x() -
-                  quad->shared_quad_state->quad_layer_bounds.width()) <
+                  quad->shared_quad_state->quad_layer_rect.width()) <
              kAntiAliasingEpsilon;
 }
 }  // anonymous namespace
@@ -1890,7 +1897,8 @@ void GLRenderer::DrawContentQuadAA(const ContentDrawQuadBase* quad,
   float vertex_tex_scale_y = tile_rect.height() / clamp_geom_rect.height();
 
   TexCoordPrecision tex_coord_precision = TexCoordPrecisionRequired(
-      gl_, &highp_threshold_cache_, highp_threshold_min_, quad->texture_size);
+      gl_, &highp_threshold_cache_, settings_->highp_threshold_min,
+      quad->texture_size);
 
   auto local_quad = gfx::QuadF(gfx::RectF(tile_rect));
   float edge[24];
@@ -1991,7 +1999,8 @@ void GLRenderer::DrawContentQuadNoAA(const ContentDrawQuadBase* quad,
   }
 
   TexCoordPrecision tex_coord_precision = TexCoordPrecisionRequired(
-      gl_, &highp_threshold_cache_, highp_threshold_min_, quad->texture_size);
+      gl_, &highp_threshold_cache_, settings_->highp_threshold_min,
+      quad->texture_size);
 
   SetUseProgram(
       ProgramKey::Tile(tex_coord_precision, sampler, NO_AA,
@@ -2051,7 +2060,7 @@ void GLRenderer::DrawYUVVideoQuad(const YUVVideoDrawQuad* quad,
   SetBlendEnabled(quad->ShouldDrawWithBlending());
 
   TexCoordPrecision tex_coord_precision = TexCoordPrecisionRequired(
-      gl_, &highp_threshold_cache_, highp_threshold_min_,
+      gl_, &highp_threshold_cache_, settings_->highp_threshold_min,
       quad->shared_quad_state->visible_quad_layer_rect.bottom_right());
   YUVAlphaTextureMode alpha_texture_mode = quad->a_plane_resource_id()
                                                ? YUV_HAS_ALPHA_TEXTURE
@@ -2222,7 +2231,7 @@ void GLRenderer::DrawStreamVideoQuad(const StreamVideoDrawQuad* quad,
              .egl_image_external);
 
   TexCoordPrecision tex_coord_precision = TexCoordPrecisionRequired(
-      gl_, &highp_threshold_cache_, highp_threshold_min_,
+      gl_, &highp_threshold_cache_, settings_->highp_threshold_min,
       quad->shared_quad_state->visible_quad_layer_rect.bottom_right());
 
   ResourceProvider::ScopedReadLockGL lock(resource_provider_,
@@ -2360,7 +2369,7 @@ void GLRenderer::EnqueueTextureQuad(const TextureDrawQuad* quad,
   }
 
   TexCoordPrecision tex_coord_precision = TexCoordPrecisionRequired(
-      gl_, &highp_threshold_cache_, highp_threshold_min_,
+      gl_, &highp_threshold_cache_, settings_->highp_threshold_min,
       quad->shared_quad_state->visible_quad_layer_rect.bottom_right());
 
   ResourceProvider::ScopedReadLockGL lock(resource_provider_,
@@ -2830,7 +2839,6 @@ void GLRenderer::FinishedReadback(unsigned source_buffer,
     if (src_pixels) {
       bitmap.reset(new SkBitmap);
       bitmap->allocN32Pixels(size.width(), size.height());
-      std::unique_ptr<SkAutoLockPixels> lock(new SkAutoLockPixels(*bitmap));
       uint8_t* dest_pixels = static_cast<uint8_t*>(bitmap->getPixels());
 
       size_t row_bytes = size.width() * 4;
@@ -3230,15 +3238,19 @@ void GLRenderer::ScheduleDCLayers() {
        current_frame()->dc_layer_overlay_list) {
     DCHECK(!dc_layer_overlay.rpdq);
 
-    unsigned texture_id = 0;
+    int i = 0;
+    unsigned texture_ids[DrawQuad::Resources::kMaxResourceIdCount] = {};
+    int ids_to_send = 0;
+
     for (const auto& contents_resource_id : dc_layer_overlay.resources) {
       if (contents_resource_id) {
         pending_overlay_resources_.push_back(
             base::MakeUnique<ResourceProvider::ScopedReadLockGL>(
                 resource_provider_, contents_resource_id));
-        if (!texture_id)
-          texture_id = pending_overlay_resources_.back()->texture_id();
+        texture_ids[i] = pending_overlay_resources_.back()->texture_id();
+        ids_to_send = i + 1;
       }
+      i++;
     }
     GLfloat contents_rect[4] = {
         dc_layer_overlay.contents_rect.x(), dc_layer_overlay.contents_rect.y(),
@@ -3266,9 +3278,10 @@ void GLRenderer::ScheduleDCLayers() {
           dc_layer_overlay.shared_state->opacity, is_clipped, clip_rect,
           z_order, transform);
     }
-    gl_->ScheduleDCLayerCHROMIUM(
-        texture_id, contents_rect, dc_layer_overlay.background_color,
-        dc_layer_overlay.edge_aa_mask, bounds_rect, filter);
+    gl_->ScheduleDCLayerCHROMIUM(ids_to_send, texture_ids, contents_rect,
+                                 dc_layer_overlay.background_color,
+                                 dc_layer_overlay.edge_aa_mask, bounds_rect,
+                                 filter);
   }
 
   // Take the number of copied render passes in this frame, and use 3 times that
@@ -3450,7 +3463,8 @@ void GLRenderer::ScheduleRenderPassDrawQuad(
   if (!overlay_resource_pool_) {
     overlay_resource_pool_ = ResourcePool::CreateForGpuMemoryBufferResources(
         resource_provider_, base::ThreadTaskRunnerHandle::Get().get(),
-        gfx::BufferUsage::SCANOUT, base::TimeDelta::FromSeconds(3));
+        gfx::BufferUsage::SCANOUT, base::TimeDelta::FromSeconds(3),
+        settings_->disallow_non_exact_resource_reuse);
   }
 
   Resource* resource = nullptr;

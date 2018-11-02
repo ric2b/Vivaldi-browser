@@ -30,10 +30,10 @@
 #ifndef StyleSheetCollection_h
 #define StyleSheetCollection_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
-#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
 #include "core/css/ActiveStyleSheets.h"
+#include "platform/bindings/ScriptWrappable.h"
+#include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Vector.h"
@@ -65,6 +65,7 @@ class CORE_EXPORT StyleSheetCollection
   void SwapSheetsForSheetList(HeapVector<Member<StyleSheet>>&);
   void AppendActiveStyleSheet(const ActiveStyleSheet&);
   void AppendSheetForList(StyleSheet*);
+  void MarkSheetListDirty() { sheet_list_dirty_ = true; }
 
   DECLARE_VIRTUAL_TRACE();
   DECLARE_VIRTUAL_TRACE_WRAPPERS();
@@ -76,6 +77,7 @@ class CORE_EXPORT StyleSheetCollection
 
   HeapVector<TraceWrapperMember<StyleSheet>> style_sheets_for_style_sheet_list_;
   ActiveStyleSheetVector active_author_style_sheets_;
+  bool sheet_list_dirty_ = true;
 };
 
 }  // namespace blink

@@ -7,8 +7,16 @@
 #include <algorithm>
 
 #include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_reuse_detector_consumer.h"
 #include "components/password_manager/core/browser/psl_matching_helper.h"
+#include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/prefs/pref_service.h"
+#include "google_apis/gaia/gaia_auth_util.h"
+#include "google_apis/gaia/gaia_urls.h"
+#include "url/origin.h"
+
+using url::Origin;
 
 namespace password_manager {
 
@@ -35,7 +43,8 @@ bool ReverseStringLess::operator()(const base::string16& lhs,
                                       rhs.rend());
 }
 
-PasswordReuseDetector::PasswordReuseDetector() {}
+PasswordReuseDetector::PasswordReuseDetector(PrefService* prefs)
+    : prefs_(prefs) {}
 
 PasswordReuseDetector::~PasswordReuseDetector() {}
 
@@ -62,20 +71,69 @@ void PasswordReuseDetector::CheckReuse(
   if (input.size() < kMinPasswordLengthToCheck)
     return;
 
+  if (CheckSyncPasswordReuse(input, domain, consumer))
+    return;
+
+  if (CheckSavedPasswordReuse(input, domain, consumer))
+    return;
+}
+
+bool PasswordReuseDetector::CheckSyncPasswordReuse(
+    const base::string16& input,
+    const std::string& domain,
+    PasswordReuseDetectorConsumer* consumer) {
+  if (!sync_password_hash_.has_value())
+    return false;
+
+  const Origin gaia_origin(GaiaUrls::GetInstance()->gaia_url().GetOrigin());
+  if (Origin(GURL(domain)).IsSameOriginWith(gaia_origin))
+    return false;
+
+  // Check that some suffix of |input| has the same hash as the sync password.
+  for (size_t i = 0; i + kMinPasswordLengthToCheck <= input.size(); ++i) {
+    base::StringPiece16 input_suffix(input.c_str() + i, input.size() - i);
+    if (password_manager_util::Calculate37BitsOfSHA256Hash(input_suffix) ==
+        sync_password_hash_.value()) {
+      consumer->OnReuseFound(input_suffix.as_string(), gaia_origin.host(), 1,
+                             0);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool PasswordReuseDetector::CheckSavedPasswordReuse(
+    const base::string16& input,
+    const std::string& domain,
+    PasswordReuseDetectorConsumer* consumer) {
   const std::string registry_controlled_domain =
       GetRegistryControlledDomain(GURL(domain));
   auto passwords_iterator = FindSavedPassword(input);
   if (passwords_iterator == passwords_.end())
-    return;
+    return false;
 
   const std::set<std::string>& domains = passwords_iterator->second;
   DCHECK(!domains.empty());
   if (domains.find(registry_controlled_domain) == domains.end()) {
     // Return only one domain.
-    const std::string& saved_domain = *domains.begin();
-    consumer->OnReuseFound(passwords_iterator->first, saved_domain,
+    const std::string& legitimate_domain = *domains.begin();
+    consumer->OnReuseFound(passwords_iterator->first, legitimate_domain,
                            saved_passwords_, domains.size());
-    return;
+    return true;
+  }
+
+  return false;
+}
+
+void PasswordReuseDetector::SaveSyncPasswordHash(
+    const base::string16& password) {
+  sync_password_hash_ =
+      password_manager_util::Calculate37BitsOfSHA256Hash(password);
+  if (prefs_) {
+    // TODO(crbug.com/657041) Implement encrypting and saving of
+    // |sync_password_hash_| into preference kSyncPasswordHash.
+    prefs_->SetString(prefs::kSyncPasswordHash, std::string());
   }
 }
 

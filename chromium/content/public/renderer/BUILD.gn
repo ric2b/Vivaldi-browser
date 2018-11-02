@@ -59,6 +59,7 @@ target(link_target_type, "renderer_sources") {
     "render_view_observer.h",
     "render_view_observer_tracker.h",
     "render_view_visitor.h",
+    "renderer_gamepad_provider.h",
     "renderer_ppapi_host.h",
     "resource_fetcher.h",
     "seccomp_sandbox_status_android.h",
@@ -70,12 +71,15 @@ target(link_target_type, "renderer_sources") {
 
   configs += [ "//content:content_implementation" ]
 
+  public_deps = [
+    "//media",
+  ]
+
   deps = [
     "//content/public/child:child_sources",
     "//content/public/common:common_sources",
     "//content/renderer",
     "//gin",
-    "//media",
     "//media/capture",
     "//media/gpu/ipc/client",
     "//net",

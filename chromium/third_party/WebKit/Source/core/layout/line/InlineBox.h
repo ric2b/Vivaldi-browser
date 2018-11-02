@@ -39,6 +39,27 @@ class RootInlineBox;
 
 enum MarkLineBoxes { kMarkLineBoxesDirty, kDontMarkLineBoxes };
 
+enum class LineVerticalPositionType {
+  // TextTop and TextBottom are the top/bottom of the content area.
+  // This is where 'vertical-align: text-top/text-bottom' aligns to.
+  // This is explicitly undefined in CSS2.
+  // https://drafts.csswg.org/css2/visudet.html#inline-non-replaced
+  TextTop,
+  TextBottom,
+  // Em height as being discussed in Font Metrics API.
+  // https://drafts.css-houdini.org/font-metrics-api-1/#fontmetrics
+  TopOfEmHeight,
+  BottomOfEmHeight
+};
+
+// Returns whether the position type is CSS "line-over"; i.e., ascender side
+// or "top" side of a line box.
+// https://drafts.csswg.org/css-writing-modes-3/#line-over
+static inline bool IsLineOverSide(LineVerticalPositionType type) {
+  return type == LineVerticalPositionType::TextTop ||
+         type == LineVerticalPositionType::TopOfEmHeight;
+}
+
 // InlineBox represents a rectangle that occurs on a line.  It corresponds to
 // some LayoutObject (i.e., it represents a portion of that LayoutObject).
 class CORE_EXPORT InlineBox : public DisplayItemClient {
@@ -63,13 +84,13 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
             InlineBox* next,
             InlineBox* prev,
             InlineFlowBox* parent)
-      : bitfields_(first_line, constructed, dirty, extracted, is_horizontal),
-        next_(next),
+      : next_(next),
         prev_(prev),
         parent_(parent),
         line_layout_item_(item),
         location_(top_left),
-        logical_width_(logical_width) {}
+        logical_width_(logical_width),
+        bitfields_(first_line, constructed, dirty, extracted, is_horizontal) {}
 
   virtual ~InlineBox();
 
@@ -386,13 +407,13 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
   // invalidation.
   void SetShouldDoFullPaintInvalidationRecursively();
 
-#define ADD_BOOLEAN_BITFIELD(name, Name) \
- private:                                \
-  unsigned m_##name : 1;                 \
-                                         \
- public:                                 \
-  bool name() const { return m_##name; } \
-  void Set##Name(bool name) { m_##name = name; }
+#define ADD_BOOLEAN_BITFIELD(field_name_, MethodNameBase) \
+ private:                                                 \
+  unsigned field_name_ : 1;                               \
+                                                          \
+ public:                                                  \
+  bool MethodNameBase() const { return field_name_; }     \
+  void Set##MethodNameBase(bool new_value) { field_name_ = new_value; }
 
   class InlineBoxBitfields {
     DISALLOW_NEW();
@@ -403,26 +424,26 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
                        bool dirty = false,
                        bool extracted = false,
                        bool is_horizontal = true)
-        : m_FirstLine(first_line),
-          m_Constructed(constructed),
+        : first_line_(first_line),
+          constructed_(constructed),
           bidi_embedding_level_(0),
-          m_Dirty(dirty),
-          m_Extracted(extracted),
-          m_HasVirtualLogicalHeight(false),
-          m_IsHorizontal(is_horizontal),
-          m_EndsWithBreak(false),
-          m_HasSelectedChildrenOrCanHaveLeadingExpansion(false),
-          m_KnownToHaveNoOverflow(true),
-          m_HasEllipsisBoxOrHyphen(false),
-          m_DirOverride(false),
-          m_IsText(false),
+          dirty_(dirty),
+          extracted_(extracted),
+          has_virtual_logical_height_(false),
+          is_horizontal_(is_horizontal),
+          ends_with_break_(false),
+          has_selected_children_or_can_have_leading_expansion_(false),
+          known_to_have_no_overflow_(true),
+          has_ellipsis_box_or_hyphen_(false),
+          dir_override_(false),
+          is_text_(false),
           expansion_(0) {}
 
     // Some of these bits are actually for subclasses and moved here to compact
     // the structures.
     // for this class
-    ADD_BOOLEAN_BITFIELD(FirstLine, FirstLine);
-    ADD_BOOLEAN_BITFIELD(Constructed, Constructed);
+    ADD_BOOLEAN_BITFIELD(first_line_, FirstLine);
+    ADD_BOOLEAN_BITFIELD(constructed_, Constructed);
 
    private:
     // The maximium bidi level is 62:
@@ -435,30 +456,30 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
       bidi_embedding_level_ = bidi_embedding_level;
     }
 
-    ADD_BOOLEAN_BITFIELD(Dirty, Dirty);
-    ADD_BOOLEAN_BITFIELD(Extracted, Extracted);
-    ADD_BOOLEAN_BITFIELD(HasVirtualLogicalHeight, HasVirtualLogicalHeight);
-    ADD_BOOLEAN_BITFIELD(IsHorizontal, IsHorizontal);
+    ADD_BOOLEAN_BITFIELD(dirty_, Dirty);
+    ADD_BOOLEAN_BITFIELD(extracted_, Extracted);
+    ADD_BOOLEAN_BITFIELD(has_virtual_logical_height_, HasVirtualLogicalHeight);
+    ADD_BOOLEAN_BITFIELD(is_horizontal_, IsHorizontal);
     // for RootInlineBox
-    ADD_BOOLEAN_BITFIELD(EndsWithBreak,
+    ADD_BOOLEAN_BITFIELD(ends_with_break_,
                          EndsWithBreak);  // Whether the line ends with a <br>.
     // shared between RootInlineBox and InlineTextBox
-    ADD_BOOLEAN_BITFIELD(HasSelectedChildrenOrCanHaveLeadingExpansion,
+    ADD_BOOLEAN_BITFIELD(has_selected_children_or_can_have_leading_expansion_,
                          HasSelectedChildrenOrCanHaveLeadingExpansion);
 
     // This boolean will never be set if there is potential for overflow, but it
     // will be eagerly cleared in the opposite case. As such, it's a
     // conservative tracking of the absence of overflow.
     //
-    // For whether we have overflow, callers should use m_overflow on
+    // For whether we have overflow, callers should use |overflow_| on
     // InlineFlowBox.
-    ADD_BOOLEAN_BITFIELD(KnownToHaveNoOverflow, KnownToHaveNoOverflow);
-    ADD_BOOLEAN_BITFIELD(HasEllipsisBoxOrHyphen, HasEllipsisBoxOrHyphen);
+    ADD_BOOLEAN_BITFIELD(known_to_have_no_overflow_, KnownToHaveNoOverflow);
+    ADD_BOOLEAN_BITFIELD(has_ellipsis_box_or_hyphen_, HasEllipsisBoxOrHyphen);
     // for InlineTextBox
-    ADD_BOOLEAN_BITFIELD(DirOverride, DirOverride);
+    ADD_BOOLEAN_BITFIELD(dir_override_, DirOverride);
     // Whether or not this object represents text with a non-zero height.
     // Includes non-image list markers, text boxes.
-    ADD_BOOLEAN_BITFIELD(IsText, IsText);
+    ADD_BOOLEAN_BITFIELD(is_text_, IsText);
 
    private:
     unsigned expansion_ : 12;  // for justified text
@@ -471,8 +492,6 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
 
  private:
   void SetLineLayoutItemShouldDoFullPaintInvalidationIfNeeded();
-
-  InlineBoxBitfields bitfields_;
 
   InlineBox* next_;  // The next element on the same line as us.
   InlineBox* prev_;  // The previous element on the same line as us.
@@ -520,6 +539,8 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
   LayoutUnit logical_width_;
 
  private:
+  InlineBoxBitfields bitfields_;
+
 #if DCHECK_IS_ON()
   bool has_bad_parent_ = false;
 #endif

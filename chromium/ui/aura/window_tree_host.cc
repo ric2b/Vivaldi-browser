@@ -194,7 +194,15 @@ void WindowTreeHost::SetSharedInputMethod(ui::InputMethod* input_method) {
 
 ui::EventDispatchDetails WindowTreeHost::DispatchKeyEventPostIME(
     ui::KeyEvent* event) {
-  return SendEventToSink(event);
+  // If dispatch to IME is already disabled we shouldn't reach here.
+  DCHECK(!dispatcher_->should_skip_ime());
+  dispatcher_->set_skip_ime(true);
+  // We should bypass event rewriters here as they've been tried before.
+  ui::EventDispatchDetails dispatch_details =
+      event_sink()->OnEventFromSource(event);
+  if (!dispatch_details.dispatcher_destroyed)
+    dispatcher_->set_skip_ime(false);
+  return dispatch_details;
 }
 
 void WindowTreeHost::Show() {
@@ -220,7 +228,7 @@ WindowTreeHost::WindowTreeHost() : WindowTreeHost(nullptr) {}
 
 WindowTreeHost::WindowTreeHost(std::unique_ptr<WindowPort> window_port)
     : window_(new Window(nullptr, std::move(window_port))),
-      last_cursor_(ui::kCursorNull),
+      last_cursor_(ui::CursorType::kNull),
       input_method_(nullptr),
       owned_input_method_(false) {}
 

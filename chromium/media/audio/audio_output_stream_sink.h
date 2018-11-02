@@ -41,6 +41,7 @@ class MEDIA_EXPORT AudioOutputStreamSink
   void Play() override;
   bool SetVolume(double volume) override;
   OutputDeviceInfo GetOutputDeviceInfo() override;
+  bool IsOptimizedForHardwareParameters() override;
   bool CurrentThreadIsRenderingThread() override;
 
   // AudioSourceCallback implementation.
@@ -48,7 +49,7 @@ class MEDIA_EXPORT AudioOutputStreamSink
                  base::TimeTicks delay_timestamp,
                  int prior_frames_skipped,
                  AudioBus* dest) override;
-  void OnError(AudioOutputStream* stream) override;
+  void OnError() override;
 
  private:
   ~AudioOutputStreamSink() override;

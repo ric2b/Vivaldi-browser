@@ -5,7 +5,6 @@
 #include "net/cert/x509_util_android.h"
 
 #include "base/android/build_info.h"
-#include "base/android/context_utils.h"
 #include "base/metrics/histogram_macros.h"
 #include "jni/X509Util_jni.h"
 #include "net/cert/cert_database.h"
@@ -33,4 +32,4 @@ bool RegisterX509Util(JNIEnv* env) {
   return RegisterNativesImpl(env);
 }
 
-}  // net namespace
+}  // namespace net

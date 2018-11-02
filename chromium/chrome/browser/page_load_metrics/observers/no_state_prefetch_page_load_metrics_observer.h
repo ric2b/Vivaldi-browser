@@ -17,12 +17,24 @@ namespace prerender {
 class PrerenderManager;
 }
 
-// Observer recording metrics related to NoStatePrefetch.
+// Observer responsible for recording First Contentful Paint metrics related to
+// NoStatePrefetch.
+//
+// This observer should be attached to all WebContents instances that are _not_
+// being prerendered. For prerendered page loads, analagous metrics are recorded
+// via |PrerenderPageLoadMetricsObserver|. This allows to compare FCP metrics
+// between three mechanisms: Prerender, NoStatePrefetch, Noop.
+//
+// To record the histograms the knowledge of this class is combined with
+// information from |PrerenderManager|:
+//   * the kind of prefetch, i.e.: prerender::Origin
+//   * whether the load was eligible for prefetch/prerender (also how long ago)
 class NoStatePrefetchPageLoadMetricsObserver
     : public page_load_metrics::PageLoadMetricsObserver {
  public:
   // Returns a NoStatePrefetchPageLoadMetricsObserver, or nullptr if it is not
-  // needed.
+  // needed. Note: can return nullptr at startup, which is believed to be
+  // happening rarely.
   static std::unique_ptr<NoStatePrefetchPageLoadMetricsObserver> CreateIfNeeded(
       content::WebContents* web_contents);
 
@@ -33,11 +45,11 @@ class NoStatePrefetchPageLoadMetricsObserver
  private:
   // page_load_metrics::PageLoadMetricsObserver:
   ObservePolicy OnCommit(content::NavigationHandle* navigation_handle) override;
-  void OnFirstContentfulPaint(
-      const page_load_metrics::PageLoadTiming& timing,
+  void OnFirstContentfulPaintInPage(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
   ObservePolicy OnHidden(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
 
   bool is_no_store_;  // True if the main resource has a "no-store" HTTP header.

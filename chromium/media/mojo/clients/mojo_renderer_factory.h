@@ -36,7 +36,8 @@ class MojoRendererFactory : public RendererFactory {
       const scoped_refptr<base::TaskRunner>& worker_task_runner,
       AudioRendererSink* audio_renderer_sink,
       VideoRendererSink* video_renderer_sink,
-      const RequestSurfaceCB& request_surface_cb) final;
+      const RequestOverlayInfoCB& request_overlay_info_cb,
+      bool use_platform_media_pipeline = false) final;
 
  private:
   GetGpuFactoriesCB get_gpu_factories_cb_;

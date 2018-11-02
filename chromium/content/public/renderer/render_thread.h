@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/memory/shared_memory.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/single_thread_task_runner.h"
 #include "content/common/content_export.h"
 #include "content/public/child/child_thread.h"
 #include "ipc/ipc_channel_proxy.h"
@@ -52,7 +53,6 @@ class CONTENT_EXPORT RenderThread : virtual public ChildThread {
   virtual IPC::SyncChannel* GetChannel() = 0;
   virtual std::string GetLocale() = 0;
   virtual IPC::SyncMessageFilter* GetSyncMessageFilter() = 0;
-  virtual scoped_refptr<base::SingleThreadTaskRunner> GetIOTaskRunner() = 0;
 
   // Called to add or remove a listener for a particular message routing ID.
   // These methods normally get delegated to a MessageRouter.

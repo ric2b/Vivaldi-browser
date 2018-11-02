@@ -23,12 +23,22 @@ interface SystemTray {
   // Otherwise sets 12 hour time formatting.
   SetUse24HourClock(bool use_24_hour);
 
+  // Creates or updates an item in the system tray menu with information about
+  // enterprise management. The item appears if |enterprise_domain| is not empty
+  // or |active_directory_managed| is true.
+  SetEnterpriseDomain(string enterprise_domain, bool active_directory_managed);
+
   // Shows an icon in the system tray indicating that a software update is
   // available. Once shown the icon persists until reboot. |severity| and
   // |factory_reset_required| are used to set the icon, color, and tooltip.
   ShowUpdateIcon(UpdateSeverity severity,
                  bool factory_reset_required,
                  UpdateType update_type);
+
+  // Shows an icon in the system tray indicating that a software update is
+  // available but user's agreement is required as current connection is
+  // cellular. Once shown the icon persists until reboot.
+  ShowUpdateOverCellularAvailableIcon();
 };
 
 // Allows ash system tray to control a client (e.g. Chrome browser). Requests
@@ -67,13 +77,17 @@ interface SystemTrayClient {
   // Shows settings related to input methods.
   ShowIMESettings();
 
-  // Shows help.
+  // Shows the about chrome OS page and checks for updates after the page is
+  // loaded.
+  ShowAboutChromeOS();
+
+  // Shows the Chromebook help app.
   ShowHelp();
 
-  // Show accessibility help.
+  // Shows accessibility help.
   ShowAccessibilityHelp();
 
-  // Show the settings related to accessibility.
+  // Shows the settings related to accessibility.
   ShowAccessibilitySettings();
 
   // Shows the help center article for the stylus tool palette.
@@ -85,7 +99,8 @@ interface SystemTrayClient {
   // Shows information about public account mode.
   ShowPublicAccountInfo();
 
-  // TODO(crbug.com/647412): ShowEnterpriseInfo();
+  // Shows information about enterprise enrolled devices.
+  ShowEnterpriseInfo();
 
   // Shows UI to configure or activate the network specified by |network_id|,
   // which may include showing payment or captive portal UI when appropriate.

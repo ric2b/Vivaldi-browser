@@ -7,6 +7,8 @@
 #include <utility>
 
 #include "ash/ash_constants.h"
+#include "ash/public/cpp/shelf_types.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "ash/shell.h"
 #include "ash/wallpaper/wallpaper_controller.h"
@@ -18,12 +20,12 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
+#include "base/sequenced_task_runner.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/threading/worker_pool.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
@@ -33,10 +35,12 @@
 #include "chrome/browser/chromeos/extensions/wallpaper_manager_util.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/users/avatar/user_image_loader.h"
+#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_window_state_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/image_decoder.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -488,6 +492,15 @@ void WallpaperManager::InitializeWallpaper() {
 }
 
 void WallpaperManager::Open() {
+  if (wallpaper_manager_util::ShouldUseAndroidWallpapersApp(
+          ProfileHelper::Get()->GetProfileByUser(
+              user_manager::UserManager::Get()->GetActiveUser())) &&
+      !ash_util::IsRunningInMash()) {
+    // Window activation watch to minimize all inactive windows is only needed
+    // by Android Wallpaper app. Legacy Chrome OS Wallpaper Picker app does that
+    // via extension API.
+    activation_client_observer_.Add(ash::Shell::Get()->activation_client());
+  }
   wallpaper_manager_util::OpenWallpaperManager();
 }
 
@@ -858,10 +871,40 @@ void WallpaperManager::UpdateWallpaper(bool clear_cache) {
   WallpaperManagerBase::UpdateWallpaper(clear_cache);
 }
 
+void WallpaperManager::OnWindowActivated(ActivationReason reason,
+                                         aura::Window* gained_active,
+                                         aura::Window* lost_active) {
+  if (!gained_active)
+    return;
+
+  const std::string arc_wallpapers_app_id = ArcAppListPrefs::GetAppId(
+      wallpaper_manager_util::kAndroidWallpapersAppPackage,
+      wallpaper_manager_util::kAndroidWallpapersAppActivity);
+  ash::ShelfID shelf_id =
+      ash::ShelfID::Deserialize(gained_active->GetProperty(ash::kShelfIDKey));
+  if (shelf_id.app_id == arc_wallpapers_app_id) {
+    chromeos::WallpaperWindowStateManager::MinimizeInactiveWindows(
+        user_manager::UserManager::Get()->GetActiveUser()->username_hash());
+    DCHECK(!ash_util::IsRunningInMash() && ash::Shell::Get());
+    activation_client_observer_.Remove(ash::Shell::Get()->activation_client());
+    window_observer_.Add(gained_active);
+  }
+}
+
+void WallpaperManager::OnWindowDestroying(aura::Window* window) {
+  window_observer_.Remove(window);
+  chromeos::WallpaperWindowStateManager::RestoreWindows(
+      user_manager::UserManager::Get()->GetActiveUser()->username_hash());
+}
+
 // WallpaperManager, private: --------------------------------------------------
 
 WallpaperManager::WallpaperManager()
-    : binding_(this), pending_inactive_(nullptr), weak_factory_(this) {
+    : binding_(this),
+      pending_inactive_(nullptr),
+      activation_client_observer_(this),
+      window_observer_(this),
+      weak_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   wallpaper::WallpaperManagerBase::SetPathIds(
       chrome::DIR_USER_DATA, chrome::DIR_CHROMEOS_WALLPAPERS,
@@ -962,7 +1005,7 @@ void WallpaperManager::OnDeviceWallpaperExists(const AccountId& account_id,
                                                bool exist) {
   if (exist) {
     base::PostTaskWithTraitsAndReplyWithResult(
-        FROM_HERE, base::TaskTraits().MayBlock(),
+        FROM_HERE, {base::MayBlock()},
         base::Bind(&CheckDeviceWallpaperMatchHash, GetDeviceWallpaperFilePath(),
                    hash),
         base::Bind(&WallpaperManager::OnCheckDeviceWallpaperMatchHash,
@@ -990,7 +1033,7 @@ void WallpaperManager::OnDeviceWallpaperDownloaded(const AccountId& account_id,
   }
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock(),
+      FROM_HERE, {base::MayBlock()},
       base::Bind(&CheckDeviceWallpaperMatchHash, GetDeviceWallpaperFilePath(),
                  hash),
       base::Bind(&WallpaperManager::OnCheckDeviceWallpaperMatchHash,
@@ -1286,7 +1329,7 @@ bool WallpaperManager::SetDeviceWallpaperIfApplicable(
     // Check if the device wallpaper exists and matches the hash. If so, use it
     // directly. Otherwise download it first.
     base::PostTaskWithTraitsAndReplyWithResult(
-        FROM_HERE, base::TaskTraits().MayBlock(),
+        FROM_HERE, {base::MayBlock()},
         base::Bind(&base::PathExists, GetDeviceWallpaperFilePath()),
         base::Bind(&WallpaperManager::OnDeviceWallpaperExists,
                    weak_factory_.GetWeakPtr(), account_id, url, hash));

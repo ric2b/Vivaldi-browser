@@ -47,7 +47,7 @@ void SpeechSynthesis::SetPlatformSynthesizer(
 }
 
 void SpeechSynthesis::VoicesDidChange() {
-  voice_list_.Clear();
+  voice_list_.clear();
   if (GetExecutionContext())
     DispatchEvent(Event::Create(EventTypeNames::voiceschanged));
 }
@@ -86,7 +86,7 @@ bool SpeechSynthesis::paused() const {
 
 void SpeechSynthesis::StartSpeakingImmediately() {
   SpeechSynthesisUtterance* utterance = CurrentSpeechUtterance();
-  ASSERT(utterance);
+  DCHECK(utterance);
 
   utterance->SetStartTime(MonotonicallyIncreasingTime());
   is_paused_ = false;
@@ -94,7 +94,7 @@ void SpeechSynthesis::StartSpeakingImmediately() {
 }
 
 void SpeechSynthesis::speak(SpeechSynthesisUtterance* utterance) {
-  ASSERT(utterance);
+  DCHECK(utterance);
 
   utterance_queue_.push_back(utterance);
 
@@ -107,7 +107,7 @@ void SpeechSynthesis::cancel() {
   // Remove all the items from the utterance queue. The platform
   // may still have references to some of these utterances and may
   // fire events on them asynchronously.
-  utterance_queue_.Clear();
+  utterance_queue_.clear();
   platform_speech_synthesizer_->Cancel();
 }
 
@@ -138,7 +138,7 @@ void SpeechSynthesis::FireEvent(const AtomicString& type,
 void SpeechSynthesis::HandleSpeakingCompleted(
     SpeechSynthesisUtterance* utterance,
     bool error_occurred) {
-  ASSERT(utterance);
+  DCHECK(utterance);
 
   bool should_start_speaking = false;
   // If the utterance that completed was the one we're currently speaking,
@@ -179,7 +179,7 @@ void SpeechSynthesis::BoundaryEventOccurred(
                 char_index, sentence_boundary_string);
       break;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
   }
 }
 

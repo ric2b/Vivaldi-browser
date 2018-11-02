@@ -280,6 +280,21 @@ Timeline.TimelineUIUtils = class {
 
   /**
    * @param {!SDK.TracingModel.Event} event
+   * @return {?string}
+   */
+  static eventURL(event) {
+    var data = event.args['data'] || event.args['beginData'];
+    var url = data && data.url;
+    if (url)
+      return url;
+    var stackTrace = data && data['stackTrace'];
+    var frame =
+        stackTrace && stackTrace.length && stackTrace[0] || TimelineModel.TimelineData.forEvent(event).topFrame();
+    return frame && frame.url || null;
+  }
+
+  /**
+   * @param {!SDK.TracingModel.Event} event
    * @return {!{title: string, category: !Timeline.TimelineCategory}}
    */
   static eventStyle(event) {
@@ -312,9 +327,38 @@ Timeline.TimelineUIUtils = class {
     if (event.name === TimelineModel.TimelineModel.RecordType.JSFrame) {
       var frame = event.args['data'];
       if (Timeline.TimelineUIUtils.isUserFrame(frame))
-        return Timeline.TimelineUIUtils.colorForURL(frame.url);
+        return Timeline.TimelineUIUtils.colorForId(frame.url);
     }
     return Timeline.TimelineUIUtils.eventStyle(event).category.color;
+  }
+
+  /**
+   * @param {!ProductRegistry.Registry} productRegistry
+   * @param {!TimelineModel.TimelineModel} model
+   * @param {!Map<string, string>} urlToColorCache
+   * @param {!SDK.TracingModel.Event} event
+   * @return {string}
+   */
+  static eventColorByProduct(productRegistry, model, urlToColorCache, event) {
+    var url = Timeline.TimelineUIUtils.eventURL(event) || '';
+    var color = urlToColorCache.get(url);
+    if (color)
+      return color;
+    var defaultColor = '#f2ecdc';
+    var parsedURL = url.asParsedURL();
+    if (!parsedURL)
+      return defaultColor;
+    var name = productRegistry && productRegistry.nameForUrl(parsedURL);
+    if (!name) {
+      name = parsedURL.host;
+      var rootFrames = model.rootFrames();
+      if (rootFrames.some(pageFrame => new Common.ParsedURL(pageFrame.url).host === name))
+        color = defaultColor;
+    }
+    if (!color)
+      color = name ? ProductRegistry.BadgePool.colorForEntryName(name) : defaultColor;
+    urlToColorCache.set(url, color);
+    return color;
   }
 
   /**
@@ -683,56 +727,43 @@ Timeline.TimelineUIUtils = class {
    * @param {!SDK.TracingModel.Event} event
    * @param {!TimelineModel.TimelineModel} model
    * @param {!Components.Linkifier} linkifier
+   * @param {!ProductRegistry.BadgePool} badgePool
    * @param {boolean} detailed
    * @return {!Promise<!DocumentFragment>}
    */
-  static async buildTraceEventDetails(event, model, linkifier, detailed) {
+  static async buildTraceEventDetails(event, model, linkifier, badgePool, detailed) {
     var maybeTarget = model.targetByEvent(event);
-    if (!maybeTarget) {
-      return Timeline.TimelineUIUtils._buildTraceEventDetailsSynchronously(
-          event, model, linkifier, detailed, null);
-    }
+    /** @type {?Map<number, ?SDK.DOMNode>} */
+    var relatedNodesMap = null;
+    if (maybeTarget) {
+      var target = /** @type {!SDK.Target} */ (maybeTarget);
+      if (typeof event[Timeline.TimelineUIUtils._previewElementSymbol] === 'undefined') {
+        var previewElement = null;
+        var url = TimelineModel.TimelineData.forEvent(event).url;
+        if (url)
+          previewElement = await Components.DOMPresentationUtils.buildImagePreviewContents(target, url, false);
+        else if (TimelineModel.TimelineData.forEvent(event).picture)
+          previewElement = await Timeline.TimelineUIUtils.buildPicturePreviewContent(event, target);
+        event[Timeline.TimelineUIUtils._previewElementSymbol] = previewElement;
+      }
 
-    var target = /** @type {!SDK.Target} */ (maybeTarget);
-    if (typeof event[Timeline.TimelineUIUtils._previewElementSymbol] === 'undefined') {
-      var previewElement = null;
-      var url = TimelineModel.TimelineData.forEvent(event).url;
-      if (url)
-        previewElement = await Components.DOMPresentationUtils.buildImagePreviewContents(target, url, false);
-      else if (TimelineModel.TimelineData.forEvent(event).picture)
-        previewElement = await Timeline.TimelineUIUtils.buildPicturePreviewContent(event, target);
-      event[Timeline.TimelineUIUtils._previewElementSymbol] = previewElement;
-    }
-
-    var nodeIdsToResolve = new Set();
-    var timelineData = TimelineModel.TimelineData.forEvent(event);
-    if (timelineData.backendNodeId)
-      nodeIdsToResolve.add(timelineData.backendNodeId);
-    var invalidationTrackingEvents = TimelineModel.InvalidationTracker.invalidationEventsFor(event);
-    if (invalidationTrackingEvents)
-      Timeline.TimelineUIUtils._collectInvalidationNodeIds(nodeIdsToResolve, invalidationTrackingEvents);
-    var relatedNodes = null;
-    if (nodeIdsToResolve.size) {
-      var domModel = target.model(SDK.DOMModel);
-      if (domModel) {
-        relatedNodes = await new Promise(fulfill =>
-            domModel.pushNodesByBackendIdsToFrontend(nodeIdsToResolve, fulfill));
+      /** @type {!Set<number>} */
+      var nodeIdsToResolve = new Set();
+      var timelineData = TimelineModel.TimelineData.forEvent(event);
+      if (timelineData.backendNodeId)
+        nodeIdsToResolve.add(timelineData.backendNodeId);
+      var invalidationTrackingEvents = TimelineModel.InvalidationTracker.invalidationEventsFor(event);
+      if (invalidationTrackingEvents)
+        Timeline.TimelineUIUtils._collectInvalidationNodeIds(nodeIdsToResolve, invalidationTrackingEvents);
+      if (nodeIdsToResolve.size) {
+        var domModel = target.model(SDK.DOMModel);
+        if (domModel) {
+          relatedNodesMap =
+              await new Promise(fulfill => domModel.pushNodesByBackendIdsToFrontend(nodeIdsToResolve, fulfill));
+        }
       }
     }
 
-    return Timeline.TimelineUIUtils._buildTraceEventDetailsSynchronously(
-          event, model, linkifier, detailed, relatedNodes);
-  }
-
-  /**
-   * @param {!SDK.TracingModel.Event} event
-   * @param {!TimelineModel.TimelineModel} model
-   * @param {!Components.Linkifier} linkifier
-   * @param {boolean} detailed
-   * @param {?Map<number, ?SDK.DOMNode>} relatedNodesMap
-   * @return {!DocumentFragment}
-   */
-  static _buildTraceEventDetailsSynchronously(event, model, linkifier, detailed, relatedNodesMap) {
     var recordTypes = TimelineModel.TimelineModel.RecordType;
     // This message may vary per event.name;
     var relatedNodeLabel;
@@ -744,6 +775,7 @@ Timeline.TimelineUIUtils = class {
     var eventData = event.args['data'];
     var timelineData = TimelineModel.TimelineData.forEvent(event);
     var initiator = timelineData.initiator();
+    var url = null;
 
     if (timelineData.warning)
       contentHelper.appendWarningRow(event);
@@ -751,8 +783,8 @@ Timeline.TimelineUIUtils = class {
       contentHelper.appendWarningRow(event, TimelineModel.TimelineModel.WarningType.V8Deopt);
 
     if (detailed) {
-      contentHelper.appendTextRow(Common.UIString('Self Time'), Number.millisToString(event.selfTime, true));
       contentHelper.appendTextRow(Common.UIString('Total Time'), Number.millisToString(event.duration || 0, true));
+      contentHelper.appendTextRow(Common.UIString('Self Time'), Number.millisToString(event.selfTime, true));
     }
 
     switch (event.name) {
@@ -785,7 +817,7 @@ Timeline.TimelineUIUtils = class {
       case recordTypes.ResourceReceiveResponse:
       case recordTypes.ResourceReceivedData:
       case recordTypes.ResourceFinish:
-        var url = timelineData.url;
+        url = timelineData.url;
         if (url)
           contentHelper.appendElementRow(Common.UIString('Resource'), Components.Linkifier.linkifyURL(url));
         if (eventData['requestMethod'])
@@ -809,7 +841,7 @@ Timeline.TimelineUIUtils = class {
         break;
       case recordTypes.CompileScript:
       case recordTypes.EvaluateScript:
-        var url = eventData && eventData['url'];
+        url = eventData && eventData['url'];
         if (url) {
           contentHelper.appendLocationRow(
               Common.UIString('Script'), url, eventData['lineNumber'], eventData['columnNumber']);
@@ -834,13 +866,12 @@ Timeline.TimelineUIUtils = class {
       case recordTypes.ResizeImage:
       case recordTypes.DrawLazyPixelRef:
         relatedNodeLabel = Common.UIString('Owner Element');
-        if (timelineData.url) {
-          contentHelper.appendElementRow(
-              Common.UIString('Image URL'), Components.Linkifier.linkifyURL(timelineData.url));
-        }
+        url = timelineData.url;
+        if (url)
+          contentHelper.appendElementRow(Common.UIString('Image URL'), Components.Linkifier.linkifyURL(url));
         break;
       case recordTypes.ParseAuthorStyleSheet:
-        var url = eventData['styleSheetUrl'];
+        url = eventData['styleSheetUrl'];
         if (url)
           contentHelper.appendElementRow(Common.UIString('Stylesheet URL'), Components.Linkifier.linkifyURL(url));
         break;
@@ -879,9 +910,9 @@ Timeline.TimelineUIUtils = class {
         break;
       case recordTypes.ParseHTML:
         var beginData = event.args['beginData'];
-        var url = beginData['url'];
         var startLine = beginData['startLine'] - 1;
         var endLine = event.args['endData'] ? event.args['endData']['endLine'] - 1 : undefined;
+        url = beginData['url'];
         if (url)
           contentHelper.appendLocationRange(Common.UIString('Range'), url, startLine, endLine);
         break;
@@ -907,6 +938,9 @@ Timeline.TimelineUIUtils = class {
           contentHelper.appendElementRow(Common.UIString('Details'), detailsNode);
         break;
     }
+
+    Timeline.TimelineUIUtils._maybeAppendProductToDetails(
+        contentHelper, badgePool, url || eventData && eventData['url']);
 
     if (timelineData.timeWaitingForMainThread) {
       contentHelper.appendTextRow(
@@ -940,6 +974,17 @@ Timeline.TimelineUIUtils = class {
     }
 
     return contentHelper.fragment;
+  }
+
+  /**
+   * @param {!Timeline.TimelineDetailsContentHelper} contentHelper
+   * @param {!ProductRegistry.BadgePool} badgePool
+   * @param {?string} url
+   */
+  static _maybeAppendProductToDetails(contentHelper, badgePool, url) {
+    var parsedURL = url ? url.asParsedURL() : null;
+    if (parsedURL)
+      contentHelper.appendElementRow('', badgePool.badgeForURL(parsedURL));
   }
 
   /**
@@ -1079,9 +1124,10 @@ Timeline.TimelineUIUtils = class {
    * @param {!TimelineModel.TimelineModel.NetworkRequest} request
    * @param {!TimelineModel.TimelineModel} model
    * @param {!Components.Linkifier} linkifier
+   * @param {!ProductRegistry.BadgePool} badgePool
    * @return {!Promise<!DocumentFragment>}
    */
-  static buildNetworkRequestDetails(request, model, linkifier) {
+  static async buildNetworkRequestDetails(request, model, linkifier, badgePool) {
     const target = model.targetByEvent(request.children[0]);
     const contentHelper = new Timeline.TimelineDetailsContentHelper(target, linkifier);
     const category = Timeline.TimelineUIUtils.networkRequestCategory(request);
@@ -1091,6 +1137,7 @@ Timeline.TimelineUIUtils = class {
     const duration = request.endTime - (request.startTime || -Infinity);
     if (request.url)
       contentHelper.appendElementRow(Common.UIString('URL'), Components.Linkifier.linkifyURL(request.url));
+    Timeline.TimelineUIUtils._maybeAppendProductToDetails(contentHelper, badgePool, request.url);
     if (isFinite(duration))
       contentHelper.appendTextRow(Common.UIString('Duration'), Number.millisToString(duration, true));
     if (request.requestMethod)
@@ -1131,37 +1178,13 @@ Timeline.TimelineUIUtils = class {
       }
     }
 
-    /**
-     * @param {function(?Element)} fulfill
-     */
-    function action(fulfill) {
-      Components.DOMPresentationUtils
-          .buildImagePreviewContents(
-              /** @type {!SDK.Target} */ (target), request.url, false)
-          .then(saveImage);
-      /**
-       * @param {?Element} element
-       */
-      function saveImage(element) {
-        request.previewElement = element;
-        fulfill(request.previewElement);
-      }
+    if (!request.previewElement && request.url && target) {
+      request.previewElement =
+          await Components.DOMPresentationUtils.buildImagePreviewContents(target, request.url, false);
     }
-    var previewPromise;
     if (request.previewElement)
-      previewPromise = Promise.resolve(request.previewElement);
-    else
-      previewPromise = request.url && target ? new Promise(action) : Promise.resolve(null);
-    /**
-     * @param {?Element} element
-     * @return {!DocumentFragment}
-     */
-    function appendPreview(element) {
-      if (element)
-        contentHelper.appendElementRow(Common.UIString('Preview'), request.previewElement);
-      return contentHelper.fragment;
-    }
-    return previewPromise.then(appendPreview);
+      contentHelper.appendElementRow(Common.UIString('Preview'), request.previewElement);
+    return contentHelper.fragment;
   }
 
   /**
@@ -1215,8 +1238,8 @@ Timeline.TimelineUIUtils = class {
 
     var initiator = TimelineModel.TimelineData.forEvent(event).initiator();
     // Indirect causes.
-    if (TimelineModel.InvalidationTracker.invalidationEventsFor(event) &&
-        target) {  // Full invalidation tracking (experimental).
+    if (TimelineModel.InvalidationTracker.invalidationEventsFor(event) && target) {
+      // Full invalidation tracking (experimental).
       contentHelper.addSection(Common.UIString('Invalidations'));
       Timeline.TimelineUIUtils._generateInvalidations(event, target, relatedNodesMap, contentHelper);
     } else if (initiator) {  // Partial invalidation tracking.
@@ -1569,29 +1592,22 @@ Timeline.TimelineUIUtils = class {
 
     var duration = Timeline.TimelineUIUtils.frameDuration(frame);
     contentHelper.appendElementRow(Common.UIString('Duration'), duration, frame.hasWarnings());
-    if (filmStripFrame) {
-      var filmStripPreview = createElementWithClass('img', 'timeline-filmstrip-preview');
-      filmStripFrame.imageDataPromise().then(onGotImageData.bind(null, filmStripPreview));
-      contentHelper.appendElementRow('', filmStripPreview);
-      filmStripPreview.addEventListener('click', frameClicked.bind(null, filmStripFrame), false);
-    }
     var durationInMillis = frame.endTime - frame.startTime;
     contentHelper.appendTextRow(Common.UIString('FPS'), Math.floor(1000 / durationInMillis));
     contentHelper.appendTextRow(Common.UIString('CPU time'), Number.millisToString(frame.cpuTime, true));
+    if (filmStripFrame) {
+      var filmStripPreview = createElementWithClass('div', 'timeline-filmstrip-preview');
+      filmStripFrame.imageDataPromise()
+          .then(data => UI.loadImageFromData(data))
+          .then(image => image && filmStripPreview.appendChild(image));
+      contentHelper.appendElementRow('', filmStripPreview);
+      filmStripPreview.addEventListener('click', frameClicked.bind(null, filmStripFrame), false);
+    }
 
     if (frame.layerTree) {
       contentHelper.appendElementRow(
           Common.UIString('Layer tree'),
           Components.Linkifier.linkifyRevealable(frame.layerTree, Common.UIString('show')));
-    }
-
-    /**
-     * @param {!Element} image
-     * @param {?string} data
-     */
-    function onGotImageData(image, data) {
-      if (data)
-        image.src = 'data:image/jpg;base64,' + data;
     }
 
     /**
@@ -1755,15 +1771,16 @@ Timeline.TimelineUIUtils = class {
   }
 
   /**
-   * @param {string} url
+   * @param {string} id
    * @return {string}
    */
-  static colorForURL(url) {
-    if (!Timeline.TimelineUIUtils.colorForURL._colorGenerator) {
-      Timeline.TimelineUIUtils.colorForURL._colorGenerator =
-          new PerfUI.FlameChart.ColorGenerator({min: 30, max: 330}, {min: 50, max: 80, count: 3}, 85);
+  static colorForId(id) {
+    if (!Timeline.TimelineUIUtils.colorForId._colorGenerator) {
+      Timeline.TimelineUIUtils.colorForId._colorGenerator =
+          new Common.Color.Generator({min: 30, max: 330}, {min: 50, max: 80, count: 3}, 85);
+      Timeline.TimelineUIUtils.colorForId._colorGenerator.setColorForID('', '#f2ecdc');
     }
-    return Timeline.TimelineUIUtils.colorForURL._colorGenerator.colorForID(url);
+    return Timeline.TimelineUIUtils.colorForId._colorGenerator.colorForID(id);
   }
 
   /**

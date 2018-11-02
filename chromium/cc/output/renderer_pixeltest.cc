@@ -62,7 +62,7 @@ SharedQuadState* CreateTestSharedQuadState(
     gfx::Transform quad_to_target_transform,
     const gfx::Rect& rect,
     RenderPass* render_pass) {
-  const gfx::Size layer_bounds = rect.size();
+  const gfx::Rect layer_rect = rect;
   const gfx::Rect visible_layer_rect = rect;
   const gfx::Rect clip_rect = rect;
   const bool is_clipped = false;
@@ -70,9 +70,9 @@ SharedQuadState* CreateTestSharedQuadState(
   const SkBlendMode blend_mode = SkBlendMode::kSrcOver;
   int sorting_context_id = 0;
   SharedQuadState* shared_state = render_pass->CreateAndAppendSharedQuadState();
-  shared_state->SetAll(quad_to_target_transform, layer_bounds,
-                       visible_layer_rect, clip_rect, is_clipped, opacity,
-                       blend_mode, sorting_context_id);
+  shared_state->SetAll(quad_to_target_transform, layer_rect, visible_layer_rect,
+                       clip_rect, is_clipped, opacity, blend_mode,
+                       sorting_context_id);
   return shared_state;
 }
 
@@ -81,16 +81,16 @@ SharedQuadState* CreateTestSharedQuadStateClipped(
     const gfx::Rect& rect,
     const gfx::Rect& clip_rect,
     RenderPass* render_pass) {
-  const gfx::Size layer_bounds = rect.size();
+  const gfx::Rect layer_rect = rect;
   const gfx::Rect visible_layer_rect = clip_rect;
   const bool is_clipped = true;
   const float opacity = 1.0f;
   const SkBlendMode blend_mode = SkBlendMode::kSrcOver;
   int sorting_context_id = 0;
   SharedQuadState* shared_state = render_pass->CreateAndAppendSharedQuadState();
-  shared_state->SetAll(quad_to_target_transform, layer_bounds,
-                       visible_layer_rect, clip_rect, is_clipped, opacity,
-                       blend_mode, sorting_context_id);
+  shared_state->SetAll(quad_to_target_transform, layer_rect, visible_layer_rect,
+                       clip_rect, is_clipped, opacity, blend_mode,
+                       sorting_context_id);
   return shared_state;
 }
 
@@ -1983,12 +1983,10 @@ TYPED_TEST(RendererPixelTest, RenderPassAndMaskWithPartialQuad) {
   ResourceId mask_resource_id = this->resource_provider_->CreateResource(
       mask_rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
       gfx::ColorSpace());
-  {
-    SkAutoLockPixels lock(bitmap);
-    this->resource_provider_->CopyToResource(
-        mask_resource_id, reinterpret_cast<uint8_t*>(bitmap.getPixels()),
-        mask_rect.size());
-  }
+
+  this->resource_provider_->CopyToResource(
+      mask_resource_id, reinterpret_cast<uint8_t*>(bitmap.getPixels()),
+      mask_rect.size());
 
   // This RenderPassDrawQuad does not include the full |viewport_rect| which is
   // the size of the child render pass.
@@ -2078,12 +2076,10 @@ TYPED_TEST(RendererPixelTest, RenderPassAndMaskWithPartialQuad2) {
   ResourceId mask_resource_id = this->resource_provider_->CreateResource(
       mask_rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
       gfx::ColorSpace());
-  {
-    SkAutoLockPixels lock(bitmap);
-    this->resource_provider_->CopyToResource(
-        mask_resource_id, reinterpret_cast<uint8_t*>(bitmap.getPixels()),
-        mask_rect.size());
-  }
+
+  this->resource_provider_->CopyToResource(
+      mask_resource_id, reinterpret_cast<uint8_t*>(bitmap.getPixels()),
+      mask_rect.size());
 
   // This RenderPassDrawQuad does not include the full |viewport_rect| which is
   // the size of the child render pass.
@@ -2806,25 +2802,19 @@ TYPED_TEST(RendererPixelTest, TileDrawQuadNearestNeighbor) {
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(2, 2);
-  {
-    SkAutoLockPixels lock(bitmap);
-    SkCanvas canvas(bitmap);
-    draw_point_color(&canvas, 0, 0, SK_ColorGREEN);
-    draw_point_color(&canvas, 0, 1, SK_ColorBLUE);
-    draw_point_color(&canvas, 1, 0, SK_ColorBLUE);
-    draw_point_color(&canvas, 1, 1, SK_ColorGREEN);
-  }
+  SkCanvas canvas(bitmap);
+  draw_point_color(&canvas, 0, 0, SK_ColorGREEN);
+  draw_point_color(&canvas, 0, 1, SK_ColorBLUE);
+  draw_point_color(&canvas, 1, 0, SK_ColorBLUE);
+  draw_point_color(&canvas, 1, 1, SK_ColorGREEN);
 
   gfx::Size tile_size(2, 2);
   ResourceId resource = this->resource_provider_->CreateResource(
       tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
       gfx::ColorSpace());
 
-  {
-    SkAutoLockPixels lock(bitmap);
-    this->resource_provider_->CopyToResource(
-        resource, static_cast<uint8_t*>(bitmap.getPixels()), tile_size);
-  }
+  this->resource_provider_->CopyToResource(
+      resource, static_cast<uint8_t*>(bitmap.getPixels()), tile_size);
 
   int id = 1;
   gfx::Transform transform_to_root;
@@ -2857,25 +2847,19 @@ TYPED_TEST(SoftwareRendererPixelTest, TextureDrawQuadNearestNeighbor) {
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(2, 2);
-  {
-    SkAutoLockPixels lock(bitmap);
-    SkCanvas canvas(bitmap);
-    draw_point_color(&canvas, 0, 0, SK_ColorGREEN);
-    draw_point_color(&canvas, 0, 1, SK_ColorBLUE);
-    draw_point_color(&canvas, 1, 0, SK_ColorBLUE);
-    draw_point_color(&canvas, 1, 1, SK_ColorGREEN);
-  }
+  SkCanvas canvas(bitmap);
+  draw_point_color(&canvas, 0, 0, SK_ColorGREEN);
+  draw_point_color(&canvas, 0, 1, SK_ColorBLUE);
+  draw_point_color(&canvas, 1, 0, SK_ColorBLUE);
+  draw_point_color(&canvas, 1, 1, SK_ColorGREEN);
 
   gfx::Size tile_size(2, 2);
   ResourceId resource = this->resource_provider_->CreateResource(
       tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
       gfx::ColorSpace());
 
-  {
-    SkAutoLockPixels lock(bitmap);
-    this->resource_provider_->CopyToResource(
-        resource, static_cast<uint8_t*>(bitmap.getPixels()), tile_size);
-  }
+  this->resource_provider_->CopyToResource(
+      resource, static_cast<uint8_t*>(bitmap.getPixels()), tile_size);
 
   int id = 1;
   gfx::Transform transform_to_root;
@@ -2910,7 +2894,6 @@ TYPED_TEST(SoftwareRendererPixelTest, TextureDrawQuadLinear) {
   SkBitmap bitmap;
   bitmap.allocN32Pixels(2, 2);
   {
-    SkAutoLockPixels lock(bitmap);
     SkCanvas canvas(bitmap);
     draw_point_color(&canvas, 0, 0, SK_ColorGREEN);
     draw_point_color(&canvas, 0, 1, SK_ColorBLUE);
@@ -2923,11 +2906,8 @@ TYPED_TEST(SoftwareRendererPixelTest, TextureDrawQuadLinear) {
       tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
       gfx::ColorSpace());
 
-  {
-    SkAutoLockPixels lock(bitmap);
-    this->resource_provider_->CopyToResource(
-        resource, static_cast<uint8_t*>(bitmap.getPixels()), tile_size);
-  }
+  this->resource_provider_->CopyToResource(
+      resource, static_cast<uint8_t*>(bitmap.getPixels()), tile_size);
 
   int id = 1;
   gfx::Transform transform_to_root;
@@ -3286,12 +3266,10 @@ TEST_F(GLRendererPixelTest, TextureQuadBatching) {
   ResourceId resource = this->resource_provider_->CreateResource(
       mask_rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
       gfx::ColorSpace());
-  {
-    SkAutoLockPixels lock(bitmap);
-    this->resource_provider_->CopyToResource(
-        resource, reinterpret_cast<uint8_t*>(bitmap.getPixels()),
-        mask_rect.size());
-  }
+
+  this->resource_provider_->CopyToResource(
+      resource, reinterpret_cast<uint8_t*>(bitmap.getPixels()),
+      mask_rect.size());
 
   // Arbitrary dividing lengths to divide up the resource into 16 quads.
   int widths[] = {

@@ -179,15 +179,13 @@ are declared in build/common.gypi.
       <!-- Bookmarks specific strings -->
       <part file="bookmarks_strings.grdp" />
 
-      <!-- ChromeOS-specific strings -->
+      <!-- Chrome-OS-specific strings -->
       <if expr="chromeos">
         <part file="chromeos_strings.grdp" />
       </if>
 
       <!-- Media Router specific strings -->
-      <if expr="enable_media_router">
-        <part file="media_router_strings.grdp" />
-      </if>
+      <part file="media_router_strings.grdp" />
 
       <!-- Settings specific strings -->
       <if expr="not is_android">
@@ -223,134 +221,6 @@ are declared in build/common.gypi.
         </message>
       </if>
 
-      <!-- Page Info UI -->
-      <message name="IDS_PAGE_INFO_TITLE" desc="Title for Page Info dialog.">
-        Manage sites
-      </message>
-      <message name="IDS_PAGE_INFO_INFOBAR_TEXT" desc="The string shown in the infobar after the user has changed site permissions settings, reminding them to reload the page in order for the new settings to take effect.">
-        New site permissions settings will take effect after reloading the page.
-      </message>
-      <message name="IDS_PAGE_INFO_INFOBAR_BUTTON" desc="The string used in the infobar button allowing the user to reload the page directly from the infobar.">
-        Reload
-      </message>
-      <message name="IDS_PAGE_INFO_BUTTON_TEXT_ALLOWED_BY_USER" desc="The Website Settings popup contains several buttons for opening dropdown menus and changing site permissions. This is the text of such a button if the permission controlled by the button was explicitly set to allow by the user.">
-        Allow
-      </message>
-      <message name="IDS_PAGE_INFO_BUTTON_TEXT_BLOCKED_BY_USER" desc="The Website Settings popup contains several buttons for opening dropdown menus and changing site permissions. This is the text of such a button if the permission controlled by the button was explicitly set to block by the user.">
-        Block
-      </message>
-      <message name="IDS_PAGE_INFO_BUTTON_TEXT_ASK_BY_USER" desc="The Website Settings popup contains several buttons for opening dropdown menus and changing site permissions. This is the text of such a button if the permission controlled by the button was explicitly set to ask by the user.">
-        Ask
-      </message>
-      <message name="IDS_PAGE_INFO_BUTTON_TEXT_DETECT_IMPORTANT_CONTENT_BY_USER" desc="The Website Settings popup contains several buttons for opening dropdown menus and changing site permissions. This is the text of such a button if the permission controlled by the button was explicitly set to detect important content by the user.">
-        Detect
-      </message>
-      <message name="IDS_PAGE_INFO_BUTTON_TEXT_ALLOWED_BY_DEFAULT" desc="The Website Settings popup contains several buttons for opening dropdown menus and changing site permissions. This is the text of such a button if the permission controlled by the button is set to the default setting and the default settings is allow.">
-        Allow (default)
-      </message>
-      <message name="IDS_PAGE_INFO_BUTTON_TEXT_BLOCKED_BY_DEFAULT" desc="The Website Settings popup contains several buttons for opening dropdown menus and changing site permissions. This is the text of such a button if the permission controlled by the button is set to the default setting and the default settings is block.">
-        Block (default)
-      </message>
-      <message name="IDS_PAGE_INFO_BUTTON_TEXT_ASK_BY_DEFAULT" desc="The Website Settings popup contains several buttons for opening dropdown menus and changing site permissions. This is the text of such a button if the permission controlled by the button is set to the default setting and the default settings is ask.">
-        Ask (default)
-      </message>
-      <message name="IDS_PAGE_INFO_BUTTON_TEXT_DETECT_IMPORTANT_CONTENT_BY_DEFAULT" desc="The Website Settings popup contains several buttons for opening dropdown menus and changing site permissions. This is the text of such a button if the permission controlled by the button is set to the default setting and the default settings is detect important content.">
-        Detect (default)
-      </message>
-      <message name="IDS_PAGE_INFO_USB_DEVICE_LABEL" desc="The label used to describe a USB device that the user has granted the site permission to access.">
-        <ph name="DEVICE_NAME">$1<ex>Android Phone</ex></ph>
-      </message>
-      <message name="IDS_PAGE_INFO_DELETE_USB_DEVICE" desc="The tooltip displayed when hovering over the button that will remove permission to access a USB device that the user previously granted to the site.">
-        Revoke access
-      </message>
-      <message name="IDS_PAGE_INFO_TITLE_SITE_PERMISSIONS" desc="Title of the permissions section of the page info popup.">
-        Permissions
-      </message>
-      <message name="IDS_PAGE_INFO_TITLE_SITE_DATA" desc="Title of the site data section of the page info popup.">
-        Cookies
-      </message>
-      <message name="IDS_PAGE_INFO_PERMISSION_ALLOW" desc="The label used in the permissions dropdowns for the option that grants a permissions.">
-        allow
-      </message>
-      <message name="IDS_PAGE_INFO_PERMISSION_BLOCK" desc="The label used in the permissions dropdowns for the option that denies a permissions. ">
-        block
-      </message>
-      <message name="IDS_PAGE_INFO_PERMISSION_ASK" desc="The label used in the permissions dropdowns for the option that makes the browser asks for permission. ">
-        ask
-      </message>
-      <message name="IDS_PAGE_INFO_PERMISSION_SET_BY_POLICY" desc="The label used underneath a permission listed in the Website Settings popup if the permission was explicitly set by the user's enterprise policy.">
-        Controlled by enterprise policy
-      </message>
-      <message name="IDS_PAGE_INFO_PERMISSION_SET_BY_EXTENSION" desc="The label used underneath a permission listed in the Website Settings popup if the permission was explicitly set by one of the user's extensions.">
-        Controlled by an extension
-      </message>
-      <message name="IDS_PAGE_INFO_PERMISSION_AUTOMATICALLY_BLOCKED" desc="The label used underneath a permission listed in the Website Settings popup if the permission was blocked by Chrome on behalf of the user.">
-        Automatically blocked
-      </message>
-      <message name="IDS_PAGE_INFO_TYPE_AUTOPLAY" desc="The label used for the autoplay permission controls in the Website Settings popup.">
-        Autoplay
-      </message>
-      <message name="IDS_PAGE_INFO_TYPE_BACKGROUND_SYNC" desc="The label used for the background sync permission controls in the Website Settings popup.">
-        Background Sync
-      </message>
-      <message name="IDS_PAGE_INFO_TYPE_IMAGES" desc="The label used for images permission controls in the Website Settings popup.">
-        Images
-      </message>
-      <message name="IDS_PAGE_INFO_TYPE_JAVASCRIPT" desc="The label used for JavaScript permission controls in the Website Settings popup.">
-        JavaScript
-      </message>
-      <message name="IDS_PAGE_INFO_TYPE_POPUPS" desc="The label used for popups permission controls in the Website Settings popup.">
-        Popups
-      </message>
-      <message name="IDS_PAGE_INFO_TYPE_FLASH" desc="The label used for Flash permissions in the Website Settings popup.">
-        Flash
-      </message>
-      <message name="IDS_PAGE_INFO_TYPE_LOCATION" desc="The label used for location permission controls in the Website Settings popup.">
-        Location
-      </message>
-      <message name="IDS_PAGE_INFO_TYPE_NOTIFICATIONS" desc="The label used for notifications permission controls in the Website Settings popup.">
-        Notifications
-      </message>
-      <message name="IDS_PAGE_INFO_TYPE_MIC" desc="The label used for the microphone permission controls in the Website Settings popup.">
-        Microphone
-      </message>
-      <message name="IDS_PAGE_INFO_TYPE_CAMERA" desc="The label used for the camera permission controls in the Website Settings popup.">
-        Camera
-      </message>
-      <message name="IDS_PAGE_INFO_TYPE_MIDI_SYSEX" desc="The label used for MIDI system exclusive message permission controls in the Website Settings popup.">
-        MIDI devices full control
-      </message>
-      <message name="IDS_PAGE_INFO_INSECURE_WEBVR_CONTENT_TRANSIENT" desc="Text that is displayed temporarily as a large toast on first entering a WebVR page over non-secure transport.">
-        Your connection to this site is not private. To exit VR mode at any time, remove headset and press back.
-      </message>
-      <message name="IDS_PAGE_INFO_INSECURE_WEBVR_CONTENT_PERMANENT" desc="Text that is displayed in a small permanent notification on a WebVR page loaded over non-secure transport. (Should be short, does not need to be a complete sentence.)">
-        Not secure
-      </message>
-      <message name="IDS_PAGE_INFO_NUM_COOKIES" desc="The label of the counts for allowed cookies that are in use on the page.">
-        {NUM_COOKIES, plural, =1 {1 in use} other {# in use}}
-      </message>
-      <message name="IDS_PAGE_INFO_MENU_ITEM_DEFAULT_ALLOW" desc="The text of the menu item of a permissions menu on the Page Info UI that resets the setting to the default setting which is allow.">
-        Use global default (Allow)
-      </message>
-      <message name="IDS_PAGE_INFO_MENU_ITEM_DEFAULT_BLOCK" desc="The text of the menu item of a permissions menu on the Page Info UI that resets the setting to the default setting which is block.">
-        Use global default (Block)
-      </message>
-      <message name="IDS_PAGE_INFO_MENU_ITEM_DEFAULT_ASK" desc="The text of the menu item of a permissions menu on the Page Info UI that reset the setting to the default setting which is ask.">
-        Use global default (Ask)
-      </message>
-      <message name="IDS_PAGE_INFO_MENU_ITEM_DEFAULT_DETECT_IMPORTANT_CONTENT" desc="The text of the menu item of a permissions menu on the Page Info UI that reset the setting to the default setting which is detect important content.">
-        Use global default (Detect)
-      </message>
-      <message name="IDS_PAGE_INFO_MENU_ITEM_ALLOW" desc="The text of the menu item of a permissions menu on the Page Info UI that sets the setting to allow.">
-        Always allow on this site
-      </message>
-      <message name="IDS_PAGE_INFO_MENU_ITEM_BLOCK" desc="The text of the menu item of a permissions menu on the Page Info UI that sets the setting to allow.">
-        Always block on this site
-      </message>
-      <message name="IDS_PAGE_INFO_MENU_ITEM_DETECT_IMPORTANT_CONTENT" desc="The text of the menu item of a permissions menu on the Page Info UI that sets the setting to detect important content.">
-        Always detect important content on this site
-      </message>
-
       <message name="IDS_PERMISSIONS_BUBBLE_PERSIST_TEXT" desc="The label for the checkbox used to allow users to optionally persist a permission request decision">
         Remember my decision
       </message>
@@ -370,7 +240,7 @@ are declared in build/common.gypi.
       <!-- Runtime permission infobar strings -->
       <if expr="is_android">
         <message name="IDS_INFOBAR_UPDATE_PERMISSIONS_BUTTON_TEXT" desc="Button text shown when Chrome does not have the necessary permission required to complete the requested tasks (e.g. a website has request location information, but Chrome is missing that Android permission)." formatter_data="android_java">
-          Update permissions
+          Continue
         </message>
       </if>
 
@@ -463,9 +333,6 @@ are declared in build/common.gypi.
         <message name="IDS_CONTENT_CONTEXT_INSPECTELEMENT" desc="The name of the Inspect Element command in the content area context menu">
           I&amp;nspect
         </message>
-        <message name="IDS_CONTENT_CONTEXT_DOWNLOADPAGE" desc="The name of the Download Page command in the content area context menu">
-          &amp;Download...
-        </message>
         <if expr="is_macosx">
             <message name="IDS_CONTENT_CONTEXT_LOOK_UP" desc="The name of the 'Look Up “string”' item in the content area context menu. To translate, launch /Applications/TextEdit.app in an appropriately localized version of OS X, right-click on the text entry area and use the translation from there.">
               Look Up “<ph name="LOOKUP_STRING">$1<ex>orthogonal</ex></ph>”
@@ -538,9 +405,6 @@ are declared in build/common.gypi.
           <message name="IDS_CONTENT_CONTEXT_SAVELINKAS" desc="The name of the Save Link As command in the content area context menu">
             Save lin&amp;k as...
           </message>
-          <message name="IDS_CONTENT_CONTEXT_DOWNLOADLINK" desc="The name of the Download Link As command in the content area context menu">
-            &amp;Download link...
-          </message>
           <message name="IDS_CONTENT_CONTEXT_COPYLINKLOCATION" desc="The name of the Copy Link Location command in the content area context menu">
             Copy link addr&amp;ess
           </message>
@@ -555,9 +419,6 @@ are declared in build/common.gypi.
 
           <message name="IDS_CONTENT_CONTEXT_SAVEIMAGEAS" desc="The name of the Save Image As command in the content area context menu">
             Sa&amp;ve image as...
-          </message>
-          <message name="IDS_CONTENT_CONTEXT_DOWNLOADIMAGE" desc="The name of the Download Image command in the content area context menu">
-            &amp;Download image...
           </message>
           <message name="IDS_CONTENT_CONTEXT_COPYIMAGELOCATION" desc="The name of the Copy Image Location command in the content area context menu">
             C&amp;opy image address
@@ -591,9 +452,6 @@ are declared in build/common.gypi.
           <message name="IDS_CONTENT_CONTEXT_SAVEVIDEOAS" desc="The name of the Save Video As command in the content area context menu">
             Sa&amp;ve video as...
           </message>
-          <message name="IDS_CONTENT_CONTEXT_DOWNLOADVIDEO" desc="The name of the Download Video command in the content area context menu">
-            &amp;Download video...
-          </message>
           <message name="IDS_CONTENT_CONTEXT_COPYVIDEOLOCATION" desc="The name of the Copy Video Location command in the content area context menu">
             C&amp;opy video address
           </message>
@@ -603,9 +461,6 @@ are declared in build/common.gypi.
 
           <message name="IDS_CONTENT_CONTEXT_SAVEAUDIOAS" desc="The name of the Save Audio As command in the content area context menu">
             Sa&amp;ve audio as...
-          </message>
-          <message name="IDS_CONTENT_CONTEXT_DOWNLOADAUDIO" desc="The name of the Download Audio command in the content area context menu">
-            &amp;Download audio...
           </message>
           <message name="IDS_CONTENT_CONTEXT_COPYAUDIOLOCATION" desc="The name of the Copy Audio Location command in the content area context menu">
             C&amp;opy audio address
@@ -745,9 +600,6 @@ are declared in build/common.gypi.
           <message name="IDS_CONTENT_CONTEXT_SAVELINKAS" desc="In Title Case: The name of the Save Link As command in the content area context menu">
             Save Lin&amp;k As...
           </message>
-          <message name="IDS_CONTENT_CONTEXT_DOWNLOADLINK" desc="In Title Case: The name of the Download Link command in the content area context menu">
-            &amp;Download Link...
-          </message>
           <message name="IDS_CONTENT_CONTEXT_COPYLINKLOCATION" desc="In Title Case: The name of the Copy Link Location command in the content area context menu">
             Copy Link Addr&amp;ess
           </message>
@@ -762,9 +614,6 @@ are declared in build/common.gypi.
 
           <message name="IDS_CONTENT_CONTEXT_SAVEIMAGEAS" desc="In Title Case: The name of the Save Image As command in the content area context menu">
             Sa&amp;ve Image As...
-          </message>
-          <message name="IDS_CONTENT_CONTEXT_DOWNLOADIMAGE" desc="In Title Case: The name of the Download Image command in the content area context menu">
-            &amp;Download Image...
           </message>
           <message name="IDS_CONTENT_CONTEXT_COPYIMAGELOCATION" desc="In Title Case: The name of the Copy Image Location command in the content area context menu">
             C&amp;opy Image Address
@@ -798,9 +647,6 @@ are declared in build/common.gypi.
           <message name="IDS_CONTENT_CONTEXT_SAVEVIDEOAS" desc="In Title Case: The name of the Save Video As command in the content area context menu">
            Sa&amp;ve Video As...
           </message>
-          <message name="IDS_CONTENT_CONTEXT_DOWNLOADVIDEO" desc="In Title Case: The name of the Download Video As command in the content area context menu">
-           &amp;Download Video...
-          </message>
           <message name="IDS_CONTENT_CONTEXT_COPYVIDEOLOCATION" desc="In Title Case: The name of the Copy Video Location command in the content area context menu">
             C&amp;opy Video Address
           </message>
@@ -810,9 +656,6 @@ are declared in build/common.gypi.
 
           <message name="IDS_CONTENT_CONTEXT_SAVEAUDIOAS" desc="In Title Case: The name of the Save Audio As command in the content area context menu">
             Sa&amp;ve Audio As...
-          </message>
-          <message name="IDS_CONTENT_CONTEXT_DOWNLOADAUDIO" desc="In Title Case: The name of the Download Audio command in the content area context menu">
-            &amp;Download Audio...
           </message>
           <message name="IDS_CONTENT_CONTEXT_COPYAUDIOLOCATION" desc="In Title Case: The name of the Copy Audio Location command in the content area context menu">
             C&amp;opy Audio Address
@@ -988,9 +831,6 @@ Subsequent notifications, windows and dialogs may be split between desktops.
           <message name="IDS_SAVE_PAGE" desc="The text label of the Save Page As menu item">
             Save page &amp;as...
           </message>
-          <message name="IDS_DOWNLOAD_PAGE" desc="The text label of the Download Page menu item">
-            &amp;Download page...
-          </message>
           <message name="IDS_DISTILL_PAGE" desc="The text label of the 'Distill page' menu item">
             Distill page
           </message>
@@ -1055,9 +895,6 @@ Subsequent notifications, windows and dialogs may be split between desktops.
           </message>
           <message name="IDS_SAVE_PAGE" desc="In Title Case: The text label of the Save Page As menu item">
             Save Page &amp;As...
-          </message>
-          <message name="IDS_DOWNLOAD_PAGE" desc="In Title Case: The text label of the Download Page menu item">
-           &amp;Download Page...
           </message>
           <message name="IDS_DISTILL_PAGE" desc="The text label of the 'Distill Page' menu item">
             Distill Page
@@ -1212,6 +1049,9 @@ Subsequent notifications, windows and dialogs may be split between desktops.
         <message name="IDS_HELP_PAGE" desc="The text label of the Help Center menu item">
           H&amp;elp center
         </message>
+        <message name="IDS_BETA_FORUM" desc="The text label of the menu item that takes the user to the forum for Beta Chrome.">
+          Beta forum
+        </message>
         <message name="IDS_GET_HELP" desc="The text label of the Get Help menu item">
           Get H&amp;elp
         </message>
@@ -1246,6 +1086,9 @@ Subsequent notifications, windows and dialogs may be split between desktops.
         </message>
         <message name="IDS_HELP_PAGE" desc="The text label of the Help Center menu item">
           H&amp;elp Center
+        </message>
+        <message name="IDS_BETA_FORUM" desc="The text label of the menu item that takes the user to the forum for Beta Chrome.">
+          Beta Forum
         </message>
         <message name="IDS_GET_HELP" desc="The text label of the Get Help menu item">
           Get H&amp;elp
@@ -1393,6 +1236,14 @@ Subsequent notifications, windows and dialogs may be split between desktops.
                desc="Download page message: The download was blocked due to security policy on this machine.">
         Security settings on your computer blocked this file.
       </message>
+      <message name="IDS_DOWNLOAD_INTERRUPTED_STATUS_CONTENT_LENGTH_MISMATCH"
+               desc="The download is incomplete as not all the data are received.">
+        File incomplete
+      </message>
+      <message name="IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_CONTENT_LENGTH_MISMATCH"
+               desc="Download page message: Reveived fewer bytes than expected and the download was incomplete.">
+        Destination file was incomplete due to a connection issue.
+      </message>
       <message name="IDS_DOWNLOAD_INTERRUPTED_STATUS_SECURITY_CHECK_FAILED"
                desc="The security check performed on this download failed unexpectedly">
         Virus scan failed
@@ -1402,12 +1253,20 @@ Subsequent notifications, windows and dialogs may be split between desktops.
         Anti-virus software failed unexpectedly while scanning this file.
       </message>
       <message name="IDS_DOWNLOAD_INTERRUPTED_STATUS_FILE_TOO_SHORT"
-              desc="A download resumption was attempted, but the file didn't exist or wasn't as large as expected">
-       File truncated
+               desc="A download resumption was attempted, but the file didn't exist or wasn't as large as expected">
+        File truncated
       </message>
       <message name="IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_FILE_TOO_SHORT"
-              desc="Download page message: A download resumption was attempted, but the file didn't exist or wasn't as large as expected">
-       Destination file was truncated or removed since last download.
+               desc="Download page message: A download resumption was attempted, but the file didn't exist or wasn't as large as expected">
+        Destination file was truncated or removed since last download.
+      </message>
+      <message name="IDS_DOWNLOAD_INTERRUPTED_STATUS_FILE_SAME_AS_SOURCE"
+               desc="The source and the target of the download file were the same. I.e. the user attempted to download the file onto itself.">
+        Already downloaded
+      </message>
+      <message name="IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_FILE_SAME_AS_SOURCE"
+               desc="Download page message: The source and the target of the download were the same.">
+        The file already exists in your download folder.
       </message>
       <message name="IDS_DOWNLOAD_INTERRUPTED_STATUS_NETWORK_TIMEOUT"
                desc="Network Timeout.">
@@ -1921,6 +1780,11 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
 
       <!-- Touch Bar-->
       <if expr="is_macosx">
+        <message name="IDS_CUSTOMIZE_TOUCH_BAR"
+                 desc="Menu item text for customizing the Touch Bar.">
+          Customize Touch Bar
+        </message>
+
         <message name="IDS_TOUCH_BAR_GOOGLE_SEARCH"
                    desc="Text for the search button in the touch bar when Google is the default search provider. Pressing the button will bring focus to the omnibox.">
           Search or type URL
@@ -1929,12 +1793,34 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
                    desc="Text for the search button in the touch bar when Google is not the default search provider. Pressing the button will bring focus to the omnibox. $1 is the name of the search provider)">
           Search <ph name="SEARCH_ENGINE">$1<ex>Bing</ex></ph>
         </message>
-
         <message name="IDS_TOOLTIP_TOUCH_BAR_BACK" desc="The tooltip for the touch bar back button.">
         Touch to go back.
         </message>
         <message name="IDS_TOOLTIP_TOUCH_BAR_FORWARD" desc="The tooltip for the touch bar forward button.">
         Touch to go forward.
+        </message>
+        <message name="IDS_TOUCH_BAR_BACK_FORWARD_CUSTOMIZATION_LABEL"
+                   desc="Customization label for the back and forward buttons in the touch bar.">
+          Back/Forward
+        </message>
+        <message name="IDS_TOUCH_BAR_STOP_RELOAD_CUSTOMIZATION_LABEL"
+                   desc="Customization label for the stop or reload button in the touch bar.">
+          Stop/Reload
+        </message>
+        <message name="IDS_TOUCH_BAR_HOME_CUSTOMIZATION_LABEL"
+                   desc="Customization label for the home button in the touch bar.">
+          Home
+        </message>
+        <message name="IDS_TOUCH_BAR_BOOKMARK_CUSTOMIZATION_LABEL"
+                   desc="Customization label for the bookmark button in the touch bar.">
+          Bookmark
+        </message>
+        <message name="IDS_TOUCH_BAR_NEW_TAB_CUSTOMIZATION_LABEL"
+                   desc="Customization label for the new tab button in the touch bar.">
+          New Tab
+        </message>
+        <message name="IDS_TOUCH_BAR_EXIT_FULLSCREEN" desc="Text for the exit fullscreen button in the touch bar.">
+        Exit Full Screen
         </message>
       </if>
 
@@ -2369,11 +2255,6 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
       </message>
       <message name="IDS_BLOCKED_PLUGINS_LOAD_ALL" desc="Button to load all blocked plugins on a page, displayed in bubble when a page tries to display plugins.">
         Run all plugins this time
-      </message>
-
-      <!-- Administrator-provided certificate notifications -->
-      <message name="IDS_CERT_POLICY_PROVIDED_CERT_MESSAGE" desc="Text that is displayed in the Website Settings popup when using an administrator-provided certificate">
-        You have accessed content using an administrator-provided certificate. Data you provide to <ph name="DOMAIN">$1<ex>www.google.com</ex></ph> can be intercepted by your administrator.
       </message>
 
       <!-- Win certificate selector dialog strings.  -->
@@ -3483,8 +3364,8 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
         </message>
       </if>
       <if expr="enable_extensions">
-        <message name="IDS_UTILITY_PROCESS_IMAGE_WRITER_NAME" desc="The name of the utility process used for writing ChromeOS system images.">
-          ChromeOS System Image Writer
+        <message name="IDS_UTILITY_PROCESS_IMAGE_WRITER_NAME" desc="The name of the utility process used for writing Chrome OS system images.">
+          Chrome OS System Image Writer
         </message>
         <message name="IDS_UTILITY_PROCESS_MEDIA_FILE_CHECKER_NAME" desc="The name of the utility process used for checking media files.">
           Media File Checker
@@ -3501,11 +3382,9 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
           PWG Raster Convertor
         </message>
       </if>
-      <if expr="enable_media_router">
-        <message name="IDS_UTILITY_PROCESS_DIAL_DEVICE_DESCRIPTION_PARSER_NAME" desc="The name of the utility process used for parsing device description xml.">
-          Dial Device Description Parser
-        </message>
-      </if>
+      <message name="IDS_UTILITY_PROCESS_DIAL_DEVICE_DESCRIPTION_PARSER_NAME" desc="The name of the utility process used for parsing XML of uPnP device descriptions of DIAL devices.">
+        DIAL Device Description Parser
+      </message>
 
       <!-- Theme preview info bar -->
       <message name="IDS_THEME_INSTALL_INFOBAR_LABEL" desc="Text displayed on an infobar when a theme has been installed.">
@@ -3517,13 +3396,10 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
 
       <!-- Extension/App disabled notification -->
       <message name="IDS_EXTENSION_DISABLED_ERROR_LABEL" desc="Text displayed when an extension was disabled due to a new upgrade requiring an explicit permission check from the user.">
-        The newest version of the extension "<ph name="EXTENSION_NAME">$1<ex>Flashblock</ex></ph>" requires more permissions, so it has been disabled.
-      </message>
-      <message name="IDS_APP_DISABLED_ERROR_LABEL" desc="Text displayed when an app was disabled due to a new upgrade requiring an explicit permission check from the user.">
-        The newest version of the app "<ph name="APP_NAME">$1<ex>Pandora</ex></ph>" requires more permissions, so it has been disabled.
+        To re-enable it, accept the new permissions:
       </message>
       <message name="IDS_EXTENSION_DISABLED_ERROR_TITLE" desc="Title of the notification that an extension or app was disabled due to a new upgrade requiring an explicit permission check from the user.">
-        <ph name="EXTENSION_NAME">$1<ex>Adblock</ex></ph> requires new permissions
+        <ph name="EXTENSION_NAME">$1<ex>Adblock</ex></ph> is disabled
       </message>
       <message name="IDS_EXTENSION_IS_BLACKLISTED" desc="Text displayed in an infobar when an extension is blacklisted and prevented from being installed.">
         Google has flagged "<ph name="EXTENSION_NAME">$1<ex>Google Talk</ex></ph>" as malicious and installation has been prevented.
@@ -4145,7 +4021,7 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
           </message>
         </if>
         <if expr="chromeos">
-          <message name="IDS_EXTENSION_INSTALLED_MANAGE_INFO" desc="Text displayed in the InfoBubble with instructions on how to find the chrome://extensions/ management page on ChromeOS">
+          <message name="IDS_EXTENSION_INSTALLED_MANAGE_INFO" desc="Text displayed in the InfoBubble with instructions on how to find the chrome://extensions/ management page on Chrome OS">
             Manage your extensions by clicking Extensions in the "More tools" menu.
           </message>
         </if>
@@ -4700,6 +4576,9 @@ Keep your key file in a safe place. You will need it to create new versions of y
       </message>
       <message name="IDS_EXTENSION_PROMPT_PERMISSIONS_BUTTON" desc="Text for the allow button on the extension permissions prompt">
         Allow
+      </message>
+      <message name="IDS_EXTENSION_PROMPT_PERMISSIONS_ACCEPT_BUTTON" desc="Text for the accept permissions button on the extension permissions prompt">
+        Accept permissions
       </message>
       <message name="IDS_EXTENSION_PROMPT_PERMISSIONS_ABORT_BUTTON" desc="Text for the deny button on the extension permissions prompt">
         Deny
@@ -5569,21 +5448,9 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_TOOLTIP_ZOOM_EXTENSION_ICON" desc="The tooltip for the extension icon in the zoom bubble">
         This page was zoomed by the "<ph name="NAME">$1<ex>Google Cast</ex></ph>" extension
       </message>
-      <if expr="not use_titlecase">
-        <message name="IDS_ZOOM_SET_DEFAULT" desc="The text label of a button which, when clicked, returns the page to default zoom">
-          Reset to default
-        </message>
-      </if>
-      <if expr="use_titlecase">
-        <message name="IDS_ZOOM_SET_DEFAULT" desc="In Title Case: The text label of a button which, when clicked, returns the page to default zoom">
-          Reset to Default
-        </message>
-      </if>
-      <if expr="is_macosx">
-        <message name="IDS_ZOOM_SET_DEFAULT_SHORT" desc="In Title Case: The short text label of a button which, when clicked, returns the page to default zoom">
-          Reset
-        </message>
-      </if>
+      <message name="IDS_ZOOM_SET_DEFAULT" desc="The text label of a button which, when clicked, returns the page to default zoom">
+        Reset
+      </message>
 
       <!--Accessible name/action strings-->
       <message name="IDS_ACCESSIBLE_INCOGNITO_WINDOW_TITLE_FORMAT" desc="The format for the accessible title of an incognito window">
@@ -5637,6 +5504,9 @@ the Bookmarks menu.">
       </message>
       <message name="IDS_ACCNAME_CLOSE_TAB" desc="The accessible name for the button that is used to close a specific tab.">
         Close <ph name="TAB_NAME">$1<ex>Google Search</ex></ph>
+      </message>
+      <message name="IDS_ACCNAME_ZOOM_SET_DEFAULT" desc="The accessible description of the Reset button in the Zoom bubble.">
+        Reset to default zoom level
       </message>
 
       <!-- Browser Hung Plugin Detector -->
@@ -5866,10 +5736,16 @@ the Bookmarks menu.">
           <message name="IDS_FEEDBACK_REPORT_PAGE_TITLE" desc="Label showing the title of the page that will be reported">
             Tell Us What's Happening
           </message>
+          <message name="IDS_FEEDBACK_REPORT_PAGE_TITLE_SAD_TAB_FLOW" desc="Label showing the title of the feedback app window when the crash report has been requested from the 'Aw, Snap!' page">
+            Describe What You Were Doing When The Tab Crashed
+          </message>
         </if>
         <if expr="not use_titlecase">
           <message name="IDS_FEEDBACK_REPORT_PAGE_TITLE" desc="Label showing the title of the page that will be reported">
             Tell us what's happening
+          </message>
+          <message name="IDS_FEEDBACK_REPORT_PAGE_TITLE_SAD_TAB_FLOW" desc="Label showing the title of the feedback app window when the crash report has been requested from the 'Aw, Snap!' page">
+            Describe what you were doing when the tab crashed
           </message>
         </if>
         <message name="IDS_FEEDBACK_MINIMIZE_BUTTON_LABEL" desc="Label of the app minimize button.">
@@ -6485,7 +6361,10 @@ I don't think this site should be blocked!
         Report an issue
       </message>
 
-      <!-- SRT bubble messages -->
+      <!-- SRT bubble messages.
+           These strings are for the old Chrome Cleanup version and should be
+           deleted as soon as all Chrome Cleanup UI is fully integrated into
+           Chrome. -->
       <message name="IDS_SRT_BUBBLE_DOWNLOAD_BUTTON_TEXT" desc="Download button of the Chrome Cleanup Tool bubble">
         Get the Chrome Cleanup Tool
       </message>
@@ -6509,6 +6388,49 @@ I don't think this site should be blocked!
       <if expr="not use_titlecase">
         <message name="IDS_SRT_MENU_ITEM" desc="Text for the Chrome menu option to be shown when unusual behavior was detected.">
           Unusual behavior detected
+        </message>
+      </if>
+
+      <!-- Chrome Cleanup prompt and web UI -->
+      <if expr="is_win">
+        <message name="IDS_CHROME_CLEANUP_PROMPT_DETAILS_BUTTON_LABEL" desc="The button in the Chrome Cleanup dialog that lets users see more details, such as what files will be deleted from their computer. Chrome browser shows the dialog when unwanted software, like ad injectors or software that changes the user's settings without their knowledge, is found on the user's computer. Noun; verb 'See' is omitted.">
+          Details
+        </message>
+        <message name="IDS_CHROME_CLEANUP_PROMPT_REMOVE_BUTTON_LABEL" desc="A button in the Chrome Cleanup dialog. When clicked, Chrome will begin to remove unwanted software and restore browser settings to default values. Appears next to a 'Cancel' button and a 'Details' button that opens a page that shows which unwanted software will be deleted. 'Remove' is imperative.">
+          Remove
+        </message>
+        <message name="IDS_CHROME_CLEANUP_PROMPT_TITLE" desc="Title of the Chrome Cleanup dialog. Chrome browser shows the dialog when unwanted software, like ad injectors or software that changes the user's settings without their knowledge, is found on the user's computer. Appears above a description of what the cleanup dialog does, along with a 'Remove', 'Cancel', and 'Details' button. 'Remove' is imperative, asking the user, do you want Chrome to remove harmful software?">
+          Remove harmful software?
+        </message>
+        <message name="IDS_CHROME_CLEANUP_WEBUI_DONE_BUTTON_LABEL" desc="A button on the web page for Chrome Cleanup. Clicking this button causes the card on the settings page to be dismissed.">
+          Done
+        </message>
+        <message name="IDS_CHROME_CLEANUP_WEBUI_FOOTER_POWERED_BY" desc="Branding footer on the web page for Chrome Cleanup. COMPANY_NAME is the name of a technology service that Chrome uses to remove harmful software from the user's computer. It is not necessary to translate 'powered by' literally; use an appropriate word for your language to convey the meaning of 'uses'. A similar use in other Google products is 'Powered by Google Translate.'">
+          Powered by <ph name="COMPANY_NAME">$1<ex>Google</ex></ph>
+        </message>
+        <message name="IDS_CHROME_CLEANUP_WEBUI_LINK_SHOW_FILES" desc="A link, appearing on the Chrome Cleanup web page, that user can click to show the files that will be removed. Imperative.">
+          Show files to be removed
+        </message>
+        <message name="IDS_CHROME_CLEANUP_WEBUI_REMOVE_BUTTON_LABEL" desc="Button on the Chrome Cleanup web page. Allows users to start a cleanup of unwanted software on their computer and restore browser settings to default values. 'Remove' is imperative.">
+          Remove
+        </message>
+        <message name="IDS_CHROME_CLEANUP_WEBUI_RESTART_BUTTON_LABEL" desc="Button on the web page for Chrome Cleanup. Clicking this button causes the user's computer to turn off (shut down) and turn back on again. Imperative. ">
+          Restart computer
+        </message>
+        <message name="IDS_CHROME_CLEANUP_WEBUI_TITLE_ERROR_CANT_REMOVE" desc="An error message, appearing on the Chrome Cleanup web page, that Chrome tried to clean up unwanted software, as requested by the user, but was unsuccessful. Omits subject, i.e. Chrome can't remove harmful software.">
+          Can't remove harmful software
+        </message>
+        <message name="IDS_CHROME_CLEANUP_WEBUI_TITLE_REMOVE" desc="Title of the Chrome Cleanup web page. Chrome browser shows the webpage when unwanted software, like ad injectors or software that changes the user's settings without their knowledge, is found on the user's computer. Appears above a description of what the cleanup does. 'Remove' is imperative.">
+          Remove harmful software
+        </message>
+        <message name="IDS_CHROME_CLEANUP_WEBUI_TITLE_REMOVED" desc="A confirmation, appearing on the Chrome Cleanup web page, that the cleanup of unwanted software is finished. Omits 'was', i.e. Harmful software was removed. Appears next to a Done button, which lets user dismiss the confirmation.">
+          Harmful software removed
+        </message>
+        <message name="IDS_CHROME_CLEANUP_WEBUI_TITLE_REMOVING" desc="A status message, appearing on the Chrome cleanup web page, that the cleanup of unwanted software initiated by the user is in progress. Omits subject, i.e. 'Chrome is removing harmful software.' If appropriate for your language, include ellipsis to show that the operation is in progress.">
+          Removing harmful software...
+        </message>
+        <message name="IDS_CHROME_CLEANUP_WEBUI_TITLE_RESTART" desc="A status message, appearing on the Chrome Cleanup web page, that the cleanup of unwanted software initiated by the user was performed but isn't finished. User must take additional action to finish the cleanup. 'Restart' is imperative. Short for 'To finish removing harmful software...'">
+          To finish, restart your computer
         </message>
       </if>
 
@@ -6840,12 +6762,6 @@ I don't think this site should be blocked!
         <message name="IDS_PRINT_PREVIEW_OFFLINE" desc="Shown when printer is currently offline.">
           Currently offline
         </message>
-        <message name="IDS_PRINT_PREVIEW_FEDEX_TOS" desc="Terms-of-service for using the FedEx Office printer.">
-          By printing to FedEx Office, you accept their <ph name="START_LINK">$1</ph>terms of use<ph name="END_LINK">$2</ph>.
-        </message>
-        <message name="IDS_PRINT_PREVIEW_TOS_CHECKBOX_LABEL" desc="Label of the terms-of-service agreement checkbox.">
-          I agree
-        </message>
         <message name="IDS_PRINT_PREVIEW_NO_DESTS_PROMO_TITLE" desc="Title of promotion shown when user has no Google Cloud Print printers.">
           Add Printers
         </message>
@@ -7103,36 +7019,6 @@ I don't think this site should be blocked!
         </message>
       </if>
 
-      <!-- Page Information Window -->
-      <if expr="is_android">
-        <message name="IDS_PAGEINFO_RESET_INVALID_CERTIFICATE_DECISIONS_BUTTON" desc="Text of button in the page info that resets allow/deny decisions of invalid certificates, which will start showing security warnings for the page again.">
-          Stop using an invalid certificate
-        </message>
-      </if>
-      <if expr="not is_android">
-        <message name="IDS_PAGEINFO_RESET_INVALID_CERTIFICATE_DECISIONS_BUTTON" desc="Text of button in the page info that resets allow/deny decisions of invalid certificates, which will start showing security warnings for the page again.">
-          Re-enable warnings
-        </message>
-      </if>
-      <message name="IDS_PAGE_INFO_COOKIES" desc="The label for the Cookies setting in the Page Information Window.">
-        Cookies
-      </message>
-      <message name="IDS_PAGE_INFO_SITE_SETTINGS_LINK" desc="This is the text of the link pointing to Chrome's Site Settings page. This appears at the bottom of the Permissions pane of the Page Information Window.">
-        Site settings
-      </message>
-
-      <message name="IDS_PAGEINFO_ADDRESS" desc="Locality as reported in the EV identity text.">
-        <ph name="CITY">$1<ex>Mountain View</ex></ph>, <ph name="STATE">$2<ex>California</ex></ph> <ph name="COUNTRY">$3<ex>USA</ex></ph>
-      </message>
-
-      <message name="IDS_PAGEINFO_PARTIAL_ADDRESS" desc="Locality with missing state as reported in the EV identity text.">
-        <ph name="CITY">$1<ex>Mountain View</ex></ph>, <ph name="COUNTRY">$2<ex>US</ex></ph>
-      </message>
-
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_VERIFIED" desc="The text of the identity section when the page is secured with a valid EV cert.">
-        The identity of <ph name="ORGANIZATION">$1<ex>Google</ex></ph> at <ph name="LOCALITY">$2<ex>Mountain View, CA US</ex></ph> has been verified by <ph name="ISSUER">$3<ex>VeriSign</ex></ph>.
-      </message>
-
       <!-- Screen Capture strings -->
       <message name="IDS_MEDIA_SCREEN_CAPTURE_CONFIRMATION_TITLE" desc="Title for the prompt shown when screen capturing is requrested by an app.">
         <ph name="APP_NAME">$1<ex>html5rocks.com</ex></ph> Screen Sharing Request
@@ -7290,7 +7176,7 @@ I don't think this site should be blocked!
         Learn more
       </message>
       <message name="IDS_CRASHED_TAB_FEEDBACK_MESSAGE" desc="The text to auto-populate the feedback page with. The triple single quotes are needed to preserve the line break.">
-        Tab crashed feedback.
+        Help our engineers investigate and fix this crash. List exact steps if you can. No detail is too small!
 '''
       </message>
       <message name="IDS_CRASHED_TAB_FEEDBACK_LINK" desc="The text for the feedback link on the crashed tab page.">
@@ -7646,6 +7532,7 @@ I don't think this site should be blocked!
         <message name="IDS_OPTIONS_PASSWORDS_AUTOLOGIN" desc="The label of the 'autologinEnabled' checkbox">
           Offer to sign in to Google sites automatically with this account
         </message>
+        <!-- TODO(718146) Move autofill strings to autofill_strings.grd -->
         <message name="IDS_OPTIONS_AUTOFILL_ENABLE" desc="The label of the 'Ask me to enable Autofill' radio button">
           Enable Autofill to fill out web forms in a single click.
         </message>
@@ -7715,6 +7602,12 @@ I don't think this site should be blocked!
         </message>
         <message name="IDS_AUTOFILL_FIELD_LABEL_EXPIRATION_YEAR" desc="The label of the Expiration date entry.">
           Expiration year
+        </message>
+        <message name="IDS_AUTOFILL_FIELD_LABEL_BILLING_ADDRESS" desc="The label of the Billing Address chooser.">
+          Billing address
+        </message>
+        <message name="IDS_AUTOFILL_BUTTON_LABEL_ADD_BILLING_ADDRESS" desc="The label of the button to add a new billing address.">
+          Add billing address
         </message>
 
         <!-- Extension settings -->
@@ -9244,10 +9137,13 @@ I don't think this site should be blocked!
       <message name="IDS_PROFILE_ERROR_DIALOG_CHECKBOX" desc="The label of the checkbox on the profile error dialog asking the user whether to send a feedback report or not">
         Send feedback to help us fix this issue.
       </message>
-      <message name="IDS_PROFILE_ERROR_FEEDBACK_DESCRIPTION" desc="The prepopulated text filled in the feedback report reporting a profile error">
+      <message name="IDS_PROFILE_ERROR_FEEDBACK_DESCRIPTION" desc="The prepopulated text filled in the feedback report reporting a profile error. The triple single quotes are needed to preserve the line break.">
 Tell us what happened exactly before you got the profile error message:
-
-****DO NOT CHANGE BELOW THIS LINE****
+'''
+      </message>
+      <message name="IDS_PROFILE_ERROR_FEEDBACK_DIAGNOSTICS_LINE" desc="The prepopulated text filled in the feedback report reporting a profile error, above any diagnostics information. The triple single quotes are needed to preserve the line break.">
+****Please do not change below this line****
+'''
       </message>
       <message name="IDS_COULDNT_STARTUP_PROFILE_ERROR" desc="Error displayed when Chrome cannot start because profiles were not opened correctly.">
         Cannot start Chrome because something went wrong when opening your profile. Try to restart Chrome.
@@ -9542,6 +9438,15 @@ Tell us what happened exactly before you got the profile error message:
         <if expr="chromeos">
           <message name="IDS_SYNC_RELOGIN_LINK_LABEL" desc="The text to display on in the hyperlink when the user needs to sign out and sign in again to use sync on Chrome OS.">
             Sign out
+          </message>
+          <message name="IDS_ACTIVE_DIRECTORY_PASSWORD_EXPIRED" desc="The text to display on the hyperlink when the user needs to sign out and sign in again to change their password.">
+            Your password has expired. Please sign out then sign in again to change it.
+          </message>
+          <message name="IDS_ACTIVE_DIRECTORY_PASSWORD_CHANGED" desc="The text to display on the hyperlink when the user needs to sign out and sign in again to update local password to cryptohome.">
+            Your password has been changed on the server. Please sign out then sign in again.
+          </message>
+          <message name="IDS_ACTIVE_DIRECTORY_REFRESH_AUTH_TOKEN" desc="The text to display on the hyperlink when the user needs to sign out and sign in again to get authentication token.">
+            Failed to get authentication token. Please sign out then sign in again to try again.
           </message>
         </if>
         <message name="IDS_OPTIONS_CUSTOMIZE_SYNC_BUTTON_LABEL" desc="The text to display on the button to customize which data types the user is syncing.">
@@ -9850,6 +9755,9 @@ Tell us what happened exactly before you got the profile error message:
             Language Settings
           </message>
         </if>
+        <message name="IDS_TRANSLATE_BUBBLE_UNKNOWN_LANGUAGE" desc="Text to show for the translate bubble link label when the page source language cannot be determined. Used in place of a language name, so should be capitalized as such (e.g. &quot;Unknown&quot; for English, &quot;sconosciuto&quot; for Italian)" meaning="Noun to use in place of a language name in part of a translate bubble message.">
+          Unknown
+        </message>
       </if>
 
       <!-- Web and message center notifications -->
@@ -10181,6 +10089,15 @@ Tell us what happened exactly before you got the profile error message:
         <message name="IDS_ALL_WINDOWS_FRONT_MAC" desc="The Mac menu item for bring all to front the window menu.">
           Bring All to Front
         </message>
+        <message name="IDS_DUPLICATE_TAB_MAC" desc="The Mac menu item for duplicating the selected tab(s).">
+          Duplicate Tab
+        </message>
+        <message name="IDS_MUTE_TAB_MAC" desc="The Mac menu item for muting the selected tab(s).">
+          Mute Tab
+        </message>
+        <message name="IDS_PIN_TAB_MAC" desc="The Mac menu item for pinning the selected tab(s).">
+          Pin Tab
+        </message>
         <!-- Help menu -->
         <message name="IDS_FEEDBACK_MAC" desc="The Mac menu item to report a bug in the Help menu.">
           Report an Issue...
@@ -10402,7 +10319,7 @@ Tell us what happened exactly before you got the profile error message:
           Know your unique device identifier
         </message>
         <message name="IDS_PROTECTED_MEDIA_IDENTIFIER_INFOBAR_QUESTION" desc="Question asked on the infobar whenever URL wants to access protected media identifier. It shows the origin of the URL.">
-          <ph name="URL">$1<ex>https://www.youtube.com</ex></ph> wants to uniquely identify your device to play premium content.
+          <ph name="URL">$1<ex>https://www.youtube.com</ex></ph> wants to uniquely identify your device to play protected content.
         </message>
       </if>
 
@@ -10442,6 +10359,9 @@ Tell us what happened exactly before you got the profile error message:
 
       <message name="IDS_MANAGE_PASSWORDS_AUTO_SIGNIN_TITLE" desc="The title of the auto-signin toast.">
         Signing in as <ph name="username">$1<ex>chef@google.com</ex></ph>
+      </message>
+      <message name="IDS_MANAGE_PASSWORDS_AUTO_SIGNIN_TITLE_MD" desc="The title of the auto-signin toast in Material Design mode.">
+        Signing in as
       </message>
       <message name="IDS_AUTO_SIGNIN_FIRST_RUN_TITLE_MANY_DEVICES" desc="The title of the dialog during the autosign-in first run experience for the Chrome syncing users.">
         Sign in easily across devices
@@ -10899,6 +10819,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
             <message name="IDS_CREATE_LEGACY_SUPERVISED_USER_MENU_LABEL" desc="Text shown on a menu option that creates a legacy supervised user.">
               Add Supervised User
             </message>
+            <message name="IDS_SCREEN_LOCK_UNLOCK_USER_BUTTON" desc="Text shown on unlock user button on lock screen.">
+              Unlock
+            </message>
           </if>
           <message name="IDS_SCREEN_LOCK_SIGN_OUT">
             Sign out
@@ -10923,6 +10846,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
             <message name="IDS_CREATE_LEGACY_SUPERVISED_USER_MENU_LABEL" desc="Text shown on a menu option that creates a legacy supervised user.">
               Add supervised user
             </message>
+            <message name="IDS_SCREEN_LOCK_UNLOCK_USER_BUTTON" desc="Text shown on unlock user button on lock screen.">
+              Unlock
+            </message>
           </if>
           <message name="IDS_SCREEN_LOCK_SIGN_OUT">
             Sign out
@@ -10933,8 +10859,8 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
             Launch app
           </message>
         </if>
-        <message name="IDS_GO_INCOGNITO_BUTTON" desc="Text shown on Chrome OS sign-in screen button that launches guest session. Should be short.">
-          Browse as Guest
+        <message name="IDS_BROWSE_AS_GUEST_BUTTON" desc="Text shown on Chrome OS sign-in screen button that launches guest session. Should be short.">
+          Browse as guest
         </message>
         <message name="IDS_MORE_OPTIONS_BUTTON" desc="Text read but not shown on the [...] button on login screen">
           More Options
@@ -11790,12 +11716,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         To keep your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> safe, Smart Lock for Chromebook requires a screen lock on your phone.
       </message>
       <message name="IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_RSSI_TOO_LOW" desc="Tooltip for an icon on a user's lock screen pod shown by Easy Unlock when a phone eligible to unlock the Chromebook is detected, but it's not in the Chromebook's proximity (> 30 feet away).">
-        Can’t find your phone. Make sure it’s within arm’s reach.
-      </message>
-      <message name="IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_TX_POWER_TOO_HIGH" desc="Tooltip for an icon on a user's lock screen pod shown by Easy Unlock when a phone eligible to unlock the Chromebook is detected, but it's not in the Chromebook's proximity (> 1 foot away).">
         Bring your phone closer to your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> to enter.
       </message>
-      <message name="IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_PHONE_LOCKED_AND_TX_POWER_TOO_HIGH" desc="Tooltip for an icon on a user's lock screen pod shown by Easy Unlock when a phone eligible to unlock the Chromebook is detected, but it's both (a) locked and (b) not in the Chromebook's proximity (> 1 foot away).">
+      <message name="IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_PHONE_LOCKED_AND_RSSI_TOO_LOW" desc="Tooltip for an icon on a user's lock screen pod shown by Easy Unlock when a phone eligible to unlock the Chromebook is detected, but it's both (a) locked and (b) not in the Chromebook's proximity (> 1 foot away).">
         Unlock your phone and bring it closer to your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> to enter.
       </message>
       <message name="IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_INITIAL_AUTHENTICATED" desc="Tooltip text shown on lock screen when a phone eligible to unlock the Chromebook via Easy Unlock is detected and authenticated for the first time.">
@@ -11803,6 +11726,12 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       </message>
       <message name="IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_HARDLOCK_INSTRUCTIONS" desc="Tooltip for an icon on user's lock screen pod shown by Easy Unlock when a phone eligible to unlock the Chromebook is detected and authenticated. The tooltip shows instructions for hard-locking the Chromebook.">
         If you click this icon, you will manually lock this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>. Next time, you’ll need to type your password to enter.
+      </message>
+      <message name="IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_PASSWORD_REAUTH" desc="Tooltip for an icon on user's lock screen pod shown by EasyUnlock when the user must enter their password instead of using EasyUnlock, because too much time has passed since their last password entry.">
+        Smart Lock requires you to type your password at least once every 20 hours.
+      </message>
+      <message name="IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_PASSWORD_REQUIRED_FOR_LOGIN" desc="Tooltip for an icon on user's lock screen pod shown by EasyUnlock when a password is required to login to the Chromebook.">
+        Smart Lock requires you to type your password for your initial sign in. Afterwards, you will be able to use your phone to unlock your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
       </message>
       <message name="IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_UNSUPPORTED_ANDROID_VERSION" desc="Tooltip for the icon on user's lock screen pod shown by Easy Unlock when a phone set up to unlock the Chromebook is detected, but has an unsupported Android version. The user is asked to update the phone.">
         Please update your phone to a newer version of Android to unlock this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
@@ -11829,7 +11758,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         Finding your phone
       </message>
       <!-- Device types -->
-      <message name="IDS_EASY_UNLOCK_GENERIC_DEVICE_TYPE" desc="String for an unknown device type. Currently used to cover all non-ChromeOS devices.">
+      <message name="IDS_EASY_UNLOCK_GENERIC_DEVICE_TYPE" desc="String for an unknown device type. Currently used to cover all non-Chrome-OS devices.">
         Chrome device
       </message>
 
@@ -11936,7 +11865,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         Processing...
       </message>
 
-      <message name="IDS_CAPTIVE_PORTAL_AUTHORIZATION_DIALOG_NAME" desc="Name of the modal Web dialog (displayed in the title) displaying captive portal login page on ChromeOS.">
+      <message name="IDS_CAPTIVE_PORTAL_AUTHORIZATION_DIALOG_NAME" desc="Name of the modal Web dialog (displayed in the title) displaying captive portal login page on Chrome OS.">
         Captive Portal Authorization
       </message>
 
@@ -12233,23 +12162,6 @@ read aloud to screenreader users to announce that a completion is available.">
       </message>
     </if>
 
-    <!-- Payment Request -->
-    <message name="IDS_PAYMENT_REQUEST_PAYMENT_SHEET_TITLE" desc=" The title on top of the desktop Payment Request Payment Sheet screen">
-      Your payment
-    </message>
-
-    <message name="IDS_PAYMENT_REQUEST_ORDER_SUMMARY_TITLE" desc="The title on top of the desktop Payment Request Order Summary screen">
-      Order summary
-    </message>
-
-    <message name="IDS_PAYMENT_REQUEST_CREDIT_CARD_EDITOR_ADD_TITLE" desc="The title on the top of the dialog for adding a new credit card.">
-      Add a card
-    </message>
-
-    <message name="IDS_PAYMENT_REQUEST_ADDRESS_EDITOR_ADD_TITLE" desc="The title on the top of the dialog for adding a new address.">
-      Add address
-    </message>
-
     <!-- Safe Browsing Subresource Filter UI strings. -->
     <if expr="use_titlecase">
       <message name="IDS_FILTERED_DECEPTIVE_CONTENT_PROMPT_RELOAD" desc="In Title Case: Button which reloads the page in order to also show content that was previously blocked.">
@@ -12275,13 +12187,13 @@ read aloud to screenreader users to announce that a completion is available.">
       Chrome has blocked parts of this site to protect you from potentially deceptive content.
     </message>
 
-    <message name="IDS_SUBRESOURCE_FILTER_HEADER" desc="Header for the subresource filter setting on the Content Settings dialog.">
+    <message name="IDS_SUBRESOURCE_FILTER_HEADER" desc="Header for the subresource filter setting on the Content Settings dialog." translateable="false">
        Subresource Filter
     </message>
-    <message name="IDS_SUBRESOURCE_FILTER_ALLOW_RADIO" desc="A radio button on the Content Settings dialog to allow subresource filter use.">
+    <message name="IDS_SUBRESOURCE_FILTER_ALLOW_RADIO" desc="A radio button on the Content Settings dialog to allow subresource filter use." translateable="false">
       Allow the Subresource Filter to perform filtering
     </message>
-    <message name="IDS_SUBRESOURCE_FILTER_BLOCK_RADIO" desc="A radio button on the Content Settings dialog to block subresource filter use on all sites.">
+    <message name="IDS_SUBRESOURCE_FILTER_BLOCK_RADIO" desc="A radio button on the Content Settings dialog to block subresource filter use on all sites." translateable="false">
       Do not allow Subresource Filter to perform filtering
     </message>
     <if expr="is_win">
@@ -12302,6 +12214,40 @@ read aloud to screenreader users to announce that a completion is available.">
         Sign in
       </message>
       <message name="IDS_WELCOME_DECLINE_BUTTON" desc="A button on the welcome page which declines the offer to sign in to Chrome.">
+        No thanks
+      </message>
+    </if>
+
+    <!-- Windows 10 toast strings -->
+    <if expr="is_win">
+      <message name="IDS_WIN10_TOAST_BROWSE_FAST" desc="Toast message variant: browse fast.">
+        Browse fast with Google Chrome
+      </message>
+      <message name="IDS_WIN10_TOAST_BROWSE_SAFELY" desc="Toast message variant: browse safely.">
+        Browse safely with Google Chrome
+      </message>
+      <message name="IDS_WIN10_TOAST_BROWSE_SMART" desc="Toast message variant: browse smart.">
+        Browse smart with Chrome
+      </message>
+      <message name="IDS_WIN10_TOAST_SWITCH_FAST" desc="Toast message variant: switch to a fast browser.">
+        Switch to a fast browser
+      </message>
+      <message name="IDS_WIN10_TOAST_SWITCH_SMART" desc="Toast message variant: switch to a smart browser.">
+        Switch to a smart browser
+      </message>
+      <message name="IDS_WIN10_TOAST_SWITCH_SECURE" desc="Toast message variant: switch to a secure browser.">
+        Switch to a secure browser
+      </message>
+      <message name="IDS_WIN10_TOAST_SWITCH_SMART_AND_SECURE" desc="Toast message variant: switch to a smart and secure browser.">
+        Switch to a smart and secure browser
+      </message>
+      <message name="IDS_WIN10_TOAST_RECOMMENDATION" desc="Toast header label noting Google recommends Chrome.">
+        Google recommends Chrome
+      </message>
+      <message name="IDS_WIN10_TOAST_OPEN_CHROME" desc="The label on the button to dismiss the toast and launch Chrome.">
+        Open Chrome
+      </message>
+      <message name="IDS_WIN10_TOAST_NO_THANKS" desc="The label on the button to dismiss the toast without launching Chrome.">
         No thanks
       </message>
     </if>
@@ -12336,11 +12282,8 @@ read aloud to screenreader users to announce that a completion is available.">
 
     <!-- Consistent omnibox geolocation -->
     <if expr="is_android">
-        <message name="IDS_SEARCH_GEOLOCATION_DISCLOSURE_INFOBAR_CONTROL_TEXT" desc="Text to put in the infobar disclosing Google Search's usage of location. The message contains a link to a settings page. The link text is a separate string in the translation console and appears here as a placeholder text. This version of the text is old but is being kept to allow us to compare performance of the new text.">
-          Google uses your location to provide a better local experience. You can change this in <ph name="SETTINGS_LINK">$1<ex>Link to Settings page</ex></ph>.
-        </message>
-        <message name="IDS_SEARCH_GEOLOCATION_DISCLOSURE_INFOBAR_TEXT" desc="Text to put in the infobar disclosing Google Search's usage of location. The message contains a link to a settings page. The link text is a separate string in the translation console and appears here as a placeholder text.">
-          Google uses your location to give you local content. You can change this in <ph name="SETTINGS_LINK">$1<ex>Link to Settings page</ex></ph>.
+        <message name="IDS_SEARCH_GEOLOCATION_DISCLOSURE_INFOBAR_TEXT" desc="Text to put in the infobar disclosing the default search engine's usage of location. The message contains a link to a settings page. The link text is a separate string in the translation console and appears here as a placeholder text.">
+          <ph name="SEARCH_ENGINE_NAME">$1<ex>Google</ex></ph> uses your location to give you local content. You can change this in <ph name="SETTINGS_LINK">$2<ex>Settings</ex></ph>.
         </message>
         <message name="IDS_SEARCH_GEOLOCATION_DISCLOSURE_INFOBAR_SETTINGS_LINK_TEXT" desc="Text to put in the link to the Settings page in the search geolocation disclosure UI.">
           Settings
@@ -12360,6 +12303,22 @@ read aloud to screenreader users to announce that a completion is available.">
     <message name="IDS_CONTROLLED_BY_AUTOMATION" desc="Message shown when the browser session is being controlled by an automated test.">
       Chrome is being controlled by automated test software.
     </message>
+
+    <!-- Media capture notification strings -->
+    <if expr="is_android">
+      <message name="IDS_VIDEO_CALL_NOTIFICATION_TEXT_2" desc="Text to be shown as a notification when a WebRTC video call is in progress." formatter_data="android_java">
+        Accessing video input
+      </message>
+      <message name="IDS_AUDIO_CALL_NOTIFICATION_TEXT_2" desc="Text to be shown as a notification when a WebRTC audio call is in progress" formatter_data="android_java">
+        Accessing audio input
+      </message>
+      <message name="IDS_VIDEO_AUDIO_CALL_NOTIFICATION_TEXT_2" desc="Text to be shown as a notification when a WebRTC video and audio call is in progress" formatter_data="android_java">
+        Accessing audio and video input
+      </message>
+      <message name="IDS_SCREEN_CAPTURE_NOTIFICATION_TEXT_2" desc="Text to be shown as a notification when screen capture is in progress.">
+        Sharing screen
+      </message>
+    </if>
   </messages>
  </release>
 </grit>

@@ -153,9 +153,7 @@ void ProfileInfoHandler::PushProfileStatsCount(
   // PushProfileStatsCount gets invoked multiple times as each stat becomes
   // available. Therefore, webUIListenerCallback mechanism is used instead of
   // the Promise callback approach.
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value(kProfileStatsCountReadyEventName),
-                         base::Value(count));
+  FireWebUIListener(kProfileStatsCountReadyEventName, base::Value(count));
 }
 #endif
 
@@ -172,9 +170,7 @@ void ProfileInfoHandler::HandleGetProfileManagesSupervisedUsers(
 }
 
 void ProfileInfoHandler::PushProfileInfo() {
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value(kProfileInfoChangedEventName),
-                         *GetAccountNameAndIcon());
+  FireWebUIListener(kProfileInfoChangedEventName, *GetAccountNameAndIcon());
 }
 
 void ProfileInfoHandler::PushProfileManagesSupervisedUsersStatus() {
@@ -209,7 +205,7 @@ ProfileInfoHandler::GetAccountNameAndIcon() const {
     // TODO(crbug.com/710660): return chrome://theme/IDR_PROFILE_AVATAR_*
     // and update theme_source.cc to get high res avatar icons. This does less
     // work here, sends less over IPC, and is more stable with returned results.
-    constexpr int kAvatarIconSize = 40;
+    int kAvatarIconSize = 40.f * web_ui()->GetDeviceScaleFactor();
     gfx::Image icon = profiles::GetSizedAvatarIcon(
         entry->GetAvatarIcon(), true, kAvatarIconSize, kAvatarIconSize);
     icon_url = webui::GetBitmapDataUrl(icon.AsBitmap());

@@ -9,7 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "services/ui/display/screen_manager.h"
-#include "services/ui/ws/display_client_compositor_frame_sink.h"
+#include "services/ui/public/interfaces/cursor/cursor_struct_traits.h"
 #include "services/ui/ws/server_window.h"
 #include "ui/base/cursor/image_cursors.h"
 #include "ui/display/display.h"
@@ -25,6 +25,7 @@
 #elif defined(OS_ANDROID)
 #include "ui/platform_window/android/platform_window_android.h"
 #elif defined(USE_OZONE)
+#include "ui/ozone/public/cursor_factory_ozone.h"
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
@@ -99,18 +100,43 @@ void PlatformDisplayDefault::ReleaseCapture() {
   platform_window_->ReleaseCapture();
 }
 
-void PlatformDisplayDefault::SetCursorById(mojom::CursorType cursor_id) {
+void PlatformDisplayDefault::SetCursor(const ui::CursorData& cursor_data) {
   if (!image_cursors_)
     return;
 
-  // TODO(erg): This still isn't sufficient, and will only use native cursors
-  // that chrome would use, not custom image cursors. For that, we should
-  // delegate to the window manager to load images from resource packs.
+  ui::Cursor native_cursor(cursor_data.cursor_type());
+
+#if defined(USE_OZONE)
+  if (cursor_data.cursor_type() != ui::CursorType::kCustom) {
+    image_cursors_->SetPlatformCursor(&native_cursor);
+  } else {
+    // In Ozone builds, we have an interface available which turns bitmap data
+    // into platform cursors.
+    ui::CursorFactoryOzone* cursor_factory =
+        delegate_->GetOzonePlatform()->GetCursorFactoryOzone();
+    native_cursor.SetPlatformCursor(cursor_factory->CreateAnimatedCursor(
+        cursor_data.cursor_frames(), cursor_data.hotspot_in_pixels(),
+        cursor_data.frame_delay().InMilliseconds(),
+        cursor_data.scale_factor()));
+  }
+#else
+  // Outside of ozone builds, there isn't a single interface for creating
+  // PlatformCursors. The closest thing to one is in //content/ instead of
+  // //ui/ which means we can't use it from here. For now, just don't handle
+  // custom image cursors.
   //
-  // We probably also need to deal with different DPIs.
-  ui::Cursor cursor(static_cast<int32_t>(cursor_id));
-  image_cursors_->SetPlatformCursor(&cursor);
-  platform_window_->SetCursor(cursor.platform());
+  // TODO(erg): Once blink speaks directly to mus, make blink perform its own
+  // cursor management on its own mus windows so we can remove Webcursor from
+  // //content/ and do this in way that's safe cross-platform, instead of as an
+  // ozone-specific hack.
+  if (cursor_data.cursor_type() == ui::CursorType::kCustom) {
+    NOTIMPLEMENTED() << "No custom cursor support on non-ozone yet.";
+    native_cursor = ui::Cursor(ui::CursorType::kPointer);
+  }
+  image_cursors_->SetPlatformCursor(&native_cursor);
+#endif
+
+  platform_window_->SetCursor(native_cursor.platform());
 }
 
 void PlatformDisplayDefault::UpdateTextInputState(
@@ -235,13 +261,13 @@ void PlatformDisplayDefault::OnAcceleratedWidgetAvailable(
       std::move(compositor_frame_sink_client),
       mojo::MakeRequest(&display_private));
 
-  auto display_client_compositor_frame_sink =
-      base::MakeUnique<DisplayClientCompositorFrameSink>(
-          root_window_->frame_sink_id(), std::move(compositor_frame_sink),
-          std::move(display_private),
-          std::move(compositor_frame_sink_client_request));
-  frame_generator_ = base::MakeUnique<FrameGenerator>(
-      std::move(display_client_compositor_frame_sink));
+  frame_generator_ = base::MakeUnique<FrameGenerator>();
+  auto frame_sink_client_binding =
+      base::MakeUnique<CompositorFrameSinkClientBinding>(
+          frame_generator_.get(),
+          std::move(compositor_frame_sink_client_request),
+          std::move(compositor_frame_sink), std::move(display_private));
+  frame_generator_->Bind(std::move(frame_sink_client_binding));
   frame_generator_->OnWindowSizeChanged(root_window_->bounds().size());
   frame_generator_->SetDeviceScaleFactor(metrics_.device_scale_factor);
 }

@@ -33,16 +33,21 @@
 #include <memory>
 
 #include "core/dom/DocumentUserGestureToken.h"
+#include "core/editing/CompositionUnderlineVectorBuilder.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/InputMethodController.h"
 #include "core/editing/PlainTextRange.h"
+#include "core/events/WebInputEventConversion.h"
+#include "core/exported/WebPluginContainerBase.h"
+#include "core/exported/WebViewBase.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLTextAreaElement.h"
+#include "core/input/ContextMenuAllowedScope.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutViewItem.h"
@@ -63,17 +68,12 @@
 #include "public/web/WebRange.h"
 #include "public/web/WebWidgetClient.h"
 #include "web/AnimationWorkletProxyClientImpl.h"
-#include "web/CompositionUnderlineVectorBuilder.h"
 #include "web/CompositorMutatorImpl.h"
 #include "web/CompositorWorkerProxyClientImpl.h"
-#include "web/ContextMenuAllowedScope.h"
-#include "web/InspectorOverlay.h"
-#include "web/PageOverlay.h"
 #include "web/WebDevToolsAgentImpl.h"
-#include "web/WebInputEventConversion.h"
 #include "web/WebInputMethodControllerImpl.h"
 #include "web/WebLocalFrameImpl.h"
-#include "web/WebPluginContainerImpl.h"
+#include "web/WebPagePopupImpl.h"
 #include "web/WebRemoteFrameImpl.h"
 #include "web/WebViewFrameWidget.h"
 
@@ -92,7 +92,7 @@ WebFrameWidget* WebFrameWidget::Create(WebWidgetClient* client,
                                        WebView* web_view,
                                        WebLocalFrame* main_frame) {
   DCHECK(client) << "A valid WebWidgetClient must be supplied.";
-  return new WebViewFrameWidget(*client, ToWebViewImpl(*web_view),
+  return new WebViewFrameWidget(*client, static_cast<WebViewBase&>(*web_view),
                                 ToWebLocalFrameImpl(*main_frame));
 }
 
@@ -250,13 +250,8 @@ void WebFrameWidgetImpl::UpdateAllLifecyclePhases() {
   if (!local_root_)
     return;
 
-  if (InspectorOverlay* overlay = GetInspectorOverlay()) {
-    overlay->UpdateAllLifecyclePhases();
-    // TODO(chrishtr): integrate paint into the overlay's lifecycle.
-    if (overlay->GetPageOverlay() &&
-        overlay->GetPageOverlay()->GetGraphicsLayer())
-      overlay->GetPageOverlay()->GetGraphicsLayer()->Paint(nullptr);
-  }
+  if (WebDevToolsAgentImpl* devtools = local_root_->DevToolsAgentImpl())
+    devtools->PaintOverlay();
   PageWidgetDelegate::UpdateAllLifecyclePhases(*GetPage(),
                                                *local_root_->GetFrame());
   UpdateLayerTreeBackgroundColor();
@@ -362,9 +357,11 @@ WebInputEventResult WebFrameWidgetImpl::HandleInputEvent(
   if (!GetPage())
     return WebInputEventResult::kNotHandled;
 
-  if (InspectorOverlay* overlay = GetInspectorOverlay()) {
-    if (overlay->HandleInputEvent(input_event))
-      return WebInputEventResult::kHandledSuppressed;
+  if (local_root_) {
+    if (WebDevToolsAgentImpl* devtools = local_root_->DevToolsAgentImpl()) {
+      if (devtools->HandleInputEvent(input_event))
+        return WebInputEventResult::kHandledSuppressed;
+    }
   }
 
   // Report the event to be NOT processed by WebKit, so that the browser can
@@ -543,7 +540,7 @@ void WebFrameWidgetImpl::SetFocus(bool enable) {
     if (focused_frame) {
       // Finish an ongoing composition to delete the composition node.
       if (focused_frame->GetInputMethodController().HasComposition()) {
-        // TODO(xiaochengh): The use of
+        // TODO(editing-dev): The use of
         // updateStyleAndLayoutIgnorePendingStylesheets needs to be audited.
         // See http://crbug.com/590369 for more details.
         focused_frame->GetDocument()
@@ -573,7 +570,7 @@ WebRange WebFrameWidgetImpl::CompositionRange() {
       focused->Selection().RootEditableElementOrDocumentElement();
   DCHECK(editable);
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   editable->GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -597,18 +594,18 @@ bool WebFrameWidgetImpl::SelectionBounds(WebRect& anchor,
   if (!local_frame)
     return false;
 
-  FrameSelection& selection = local_frame->Selection();
-  if (selection.ComputeVisibleSelectionInDOMTreeDeprecated().IsNone())
-    return false;
-
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   local_frame->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   DocumentLifecycle::DisallowTransitionScope disallow_transition(
       local_frame->GetDocument()->Lifecycle());
 
-  if (selection.ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret()) {
+  FrameSelection& selection = local_frame->Selection();
+  if (selection.ComputeVisibleSelectionInDOMTree().IsNone())
+    return false;
+
+  if (selection.ComputeVisibleSelectionInDOMTree().IsCaret()) {
     anchor = focus = selection.AbsoluteCaretBounds();
   } else {
     const EphemeralRange selected_range =
@@ -643,7 +640,7 @@ bool WebFrameWidgetImpl::SelectionTextDirection(WebTextDirection& start,
   if (!frame)
     return false;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   frame->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -681,7 +678,7 @@ WebRange WebFrameWidgetImpl::CaretOrSelectionRange() {
   if (!focused)
     return WebRange();
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   focused->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -771,8 +768,8 @@ void WebFrameWidgetImpl::SetRemoteViewportIntersection(
   // Remote viewports are only applicable to local frames with remote ancestors.
   DCHECK(local_root_->Parent() && local_root_->Parent()->IsWebRemoteFrame());
 
-  if (local_root_->GetFrameView()) {
-    local_root_->GetFrameView()->SetViewportIntersectionFromParent(
+  if (local_root_->GetFrame()) {
+    local_root_->GetFrame()->SetViewportIntersectionFromParent(
         viewport_intersection);
   }
 }
@@ -786,6 +783,16 @@ void WebFrameWidgetImpl::HandleMouseLeave(LocalFrame& main_frame,
 
 void WebFrameWidgetImpl::HandleMouseDown(LocalFrame& main_frame,
                                          const WebMouseEvent& event) {
+  WebViewBase* view_impl = View();
+  // If there is a popup open, close it as the user is clicking on the page
+  // (outside of the popup). We also save it so we can prevent a click on an
+  // element from immediately reopening the same popup.
+  RefPtr<WebPagePopupImpl> page_popup;
+  if (event.button == WebMouseEvent::Button::kLeft) {
+    page_popup = ToWebPagePopupImpl(view_impl->GetPagePopup());
+    view_impl->HidePopups();
+  }
+
   // Take capture on a mouse down on a plugin so we can send it mouse events.
   // If the hit node is a plugin but a scrollbar is over it don't start mouse
   // capture because it will interfere with the scrollbar receiving events.
@@ -809,6 +816,14 @@ void WebFrameWidgetImpl::HandleMouseDown(LocalFrame& main_frame,
   if (event.button == WebMouseEvent::Button::kLeft && mouse_capture_node_)
     mouse_capture_gesture_token_ =
         main_frame.GetEventHandler().TakeLastMouseDownGestureToken();
+
+  if (view_impl->GetPagePopup() && page_popup &&
+      ToWebPagePopupImpl(view_impl->GetPagePopup())
+          ->HasSamePopupClient(page_popup.Get())) {
+    // That click triggered a page popup that is the same as the one we just
+    // closed.  It needs to be closed.
+    view_impl->HidePopups();
+  }
 
   // Dispatch the contextmenu event regardless of if the click was swallowed.
   if (!GetPage()->GetSettings().GetShowContextMenuOnMouseUp()) {
@@ -873,6 +888,7 @@ void WebFrameWidgetImpl::HandleMouseUp(LocalFrame& main_frame,
 WebInputEventResult WebFrameWidgetImpl::HandleMouseWheel(
     LocalFrame& main_frame,
     const WebMouseWheelEvent& event) {
+  View()->HidePopups();
   return PageWidgetEventHandler::HandleMouseWheel(main_frame, event);
 }
 
@@ -881,6 +897,8 @@ WebInputEventResult WebFrameWidgetImpl::HandleGestureEvent(
   DCHECK(client_);
   WebInputEventResult event_result = WebInputEventResult::kNotHandled;
   bool event_cancelled = false;
+
+  WebViewBase* view_impl = View();
   switch (event.GetType()) {
     case WebInputEvent::kGestureScrollBegin:
     case WebInputEvent::kGestureScrollEnd:
@@ -888,8 +906,18 @@ WebInputEventResult WebFrameWidgetImpl::HandleGestureEvent(
     case WebInputEvent::kGestureTap:
     case WebInputEvent::kGestureTapUnconfirmed:
     case WebInputEvent::kGestureTapDown:
-    case WebInputEvent::kGestureShowPress:
+      // Touch pinch zoom and scroll on the page (outside of a popup) must hide
+      // the popup. In case of a touch scroll or pinch zoom, this function is
+      // called with GestureTapDown rather than a GSB/GSU/GSE or GPB/GPU/GPE.
+      // When we close a popup because of a GestureTapDown, we also save it so
+      // we can prevent the following GestureTap from immediately reopening the
+      // same popup.
+      view_impl->SetLastHiddenPagePopup(
+          ToWebPagePopupImpl(view_impl->GetPagePopup()));
+      View()->HidePopups();
     case WebInputEvent::kGestureTapCancel:
+      View()->SetLastHiddenPagePopup(nullptr);
+    case WebInputEvent::kGestureShowPress:
     case WebInputEvent::kGestureDoubleTap:
     case WebInputEvent::kGestureTwoFingerTap:
     case WebInputEvent::kGestureLongPress:
@@ -1162,28 +1190,11 @@ HitTestResult WebFrameWidgetImpl::HitTestResultForRootFramePos(
   return result;
 }
 
-InspectorOverlay* WebFrameWidgetImpl::GetInspectorOverlay() {
-  if (!local_root_)
-    return nullptr;
-  if (WebDevToolsAgentImpl* devtools = local_root_->DevToolsAgentImpl())
-    return devtools->Overlay();
-  return nullptr;
-}
-
 LocalFrame* WebFrameWidgetImpl::FocusedLocalFrameInWidget() const {
   LocalFrame* frame = GetPage()->GetFocusController().FocusedFrame();
   return (frame && frame->LocalFrameRoot() == local_root_->GetFrame())
              ? frame
              : nullptr;
-}
-
-WebPlugin* WebFrameWidgetImpl::FocusedPluginIfInputMethodSupported(
-    LocalFrame* frame) const {
-  WebPluginContainerImpl* container =
-      WebLocalFrameImpl::CurrentPluginContainer(frame);
-  if (container && container->SupportsInputMethod())
-    return container->Plugin();
-  return nullptr;
 }
 
 LocalFrame* WebFrameWidgetImpl::FocusedLocalFrameAvailableForIme() const {

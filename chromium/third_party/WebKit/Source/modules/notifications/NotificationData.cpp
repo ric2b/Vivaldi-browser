@@ -5,8 +5,8 @@
 #include "modules/notifications/NotificationData.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/SerializedScriptValue.h"
-#include "bindings/core/v8/SerializedScriptValueFactory.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValueFactory.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/notifications/Notification.h"
 #include "modules/notifications/NotificationOptions.h"
@@ -86,10 +86,11 @@ WebNotificationData CreateWebNotificationData(
     const ScriptValue& data = options.data();
     v8::Isolate* isolate = data.GetIsolate();
     DCHECK(isolate->InContext());
+    SerializedScriptValue::SerializeOptions options;
+    options.for_storage = SerializedScriptValue::kForStorage;
     RefPtr<SerializedScriptValue> serialized_script_value =
-        SerializedScriptValue::Serialize(
-            isolate, data.V8Value(), SerializedScriptValue::SerializeOptions(),
-            exception_state);
+        SerializedScriptValue::Serialize(isolate, data.V8Value(), options,
+                                         exception_state);
     if (exception_state.HadException())
       return WebNotificationData();
 

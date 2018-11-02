@@ -21,12 +21,13 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/field_trial.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -109,6 +110,7 @@
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/translate/core/browser/translate_download_manager.h"
+#include "components/ukm/ukm_service.h"
 #include "components/update_client/update_query_params.h"
 #include "components/web_resource/web_resource_pref_names.h"
 #include "content/public/browser/browser_thread.h"
@@ -326,9 +328,6 @@ void BrowserProcessImpl::StartTearDown() {
   remote_debugging_server_.reset();
   devtools_auto_opener_.reset();
 
-  // ChromeDeviceClient must be shutdown when the FILE thread is still alive.
-  device_client_->Shutdown();
-
   // Need to clear profiles (download managers) before the io_thread_.
   {
     TRACE_EVENT0("shutdown",
@@ -449,8 +448,8 @@ void RundownTaskCounter::Post(base::SequencedTaskRunner* task_runner) {
 
   // The task must be non-nestable to guarantee that it runs after all tasks
   // currently scheduled on |task_runner| have completed.
-  task_runner->PostNonNestableTask(FROM_HERE,
-      base::Bind(&RundownTaskCounter::Decrement, this));
+  task_runner->PostNonNestableTask(
+      FROM_HERE, base::BindOnce(&RundownTaskCounter::Decrement, this));
 }
 
 void RundownTaskCounter::Decrement() {
@@ -538,7 +537,7 @@ void BrowserProcessImpl::EndSession() {
   for (auto& profile_writer_runner : profile_writer_runners)
     profile_write_rundown_counter->Post(profile_writer_runner.get());
   profile_write_rundown_counter->TimedWaitUntil(end_time);
-#else
+#elif !defined(OS_MACOSX)
   NOTIMPLEMENTED();
 #endif
 }
@@ -565,7 +564,7 @@ rappor::RapporServiceImpl* BrowserProcessImpl::rappor_service() {
   return GetMetricsServicesManager()->GetRapporServiceImpl();
 }
 
-ukm::UkmService* BrowserProcessImpl::ukm_service() {
+ukm::UkmRecorder* BrowserProcessImpl::ukm_recorder() {
   DCHECK(CalledOnValidThread());
   return GetMetricsServicesManager()->GetUkmService();
 }
@@ -1081,18 +1080,10 @@ void BrowserProcessImpl::CreateLocalState() {
 
 void BrowserProcessImpl::PreCreateThreads() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  // Register the chrome-extension scheme to reflect the extension process
-  // model. Controlled by a field trial, so we can't do this earlier.
-  base::FieldTrialList::FindFullName("SiteIsolationExtensions");
-  if (extensions::IsIsolateExtensionsEnabled()) {
-    // chrome-extension:// URLs are safe to request anywhere, but may only
-    // commit (including in iframes) in extension processes.
-    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
-        extensions::kExtensionScheme, true);
-  } else {
-    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
-        extensions::kExtensionScheme);
-  }
+  // chrome-extension:// URLs are safe to request anywhere, but may only
+  // commit (including in iframes) in extension processes.
+  ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
+      extensions::kExtensionScheme, true);
 #endif
 
   io_thread_.reset(
@@ -1235,12 +1226,10 @@ void BrowserProcessImpl::CreateSubresourceFilterRulesetService() {
     return;
   }
 
-  base::SequencedWorkerPool* blocking_pool =
-      content::BrowserThread::GetBlockingPool();
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
-      blocking_pool->GetSequencedTaskRunnerWithShutdownBehavior(
-          blocking_pool->GetSequenceToken(),
-          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
 
   base::FilePath user_data_dir;
   PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
@@ -1268,12 +1257,10 @@ void BrowserProcessImpl::CreateGCMDriver() {
 #else
   base::FilePath store_path;
   CHECK(PathService::Get(chrome::DIR_GLOBAL_GCM_STORE, &store_path));
-  base::SequencedWorkerPool* worker_pool =
-      content::BrowserThread::GetBlockingPool();
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
-      worker_pool->GetSequencedTaskRunnerWithShutdownBehavior(
-          worker_pool->GetSequenceToken(),
-          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
 
   gcm_driver_ = gcm::CreateGCMDriverDesktop(
       base::WrapUnique(new gcm::GCMClientFactory), local_state(), store_path,
@@ -1322,7 +1309,7 @@ void BrowserProcessImpl::ApplyMetricsReportingPolicy() {
 #if !defined(OS_ANDROID)
   CHECK(BrowserThread::PostTask(
       BrowserThread::FILE, FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           base::IgnoreResult(&GoogleUpdateSettings::SetCollectStatsConsent),
           ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled())));
 #endif
@@ -1355,7 +1342,7 @@ void BrowserProcessImpl::Unpin() {
   shutting_down_ = true;
 #if BUILDFLAG(ENABLE_PRINTING)
   // Wait for the pending print jobs to finish. Don't do this later, since
-  // this might cause a nested message loop to run, and we don't want pending
+  // this might cause a nested run loop to run, and we don't want pending
   // tasks to run once teardown has started.
   print_job_manager_->Shutdown();
 #endif
@@ -1368,7 +1355,7 @@ void BrowserProcessImpl::Unpin() {
   __lsan_do_leak_check();
 #endif
 
-  CHECK(base::MessageLoop::current()->is_running());
+  CHECK(base::RunLoop::IsRunningOnCurrentThread());
 
 #if defined(OS_MACOSX)
   base::ThreadTaskRunnerHandle::Get()->PostTask(

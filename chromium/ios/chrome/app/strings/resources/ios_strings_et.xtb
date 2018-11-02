@@ -53,7 +53,6 @@ Näiteks võivad mõned veebisaidid päringule reageerida nii, et näitavad teil
 <translation id="1820259098641718022">Lisati lugemisloendisse</translation>
 <translation id="1876721852596493031">Kasutusandm. saatm.</translation>
 <translation id="1886928167269928266">Alates algusest</translation>
-<translation id="1894451531427596130">Juhtige seda jaotises <ph name="BEGIN_LINK" />Seaded<ph name="END_LINK" /></translation>
 <translation id="1911619930368729126">Laadi üles Google Drive'i</translation>
 <translation id="1941314575388338491">Kopeerimiseks topeltpuudutage.</translation>
 <translation id="1952728750904661634">Sisselogimine hallatud kontoga</translation>
@@ -97,6 +96,7 @@ Näiteks võivad mõned veebisaidid päringule reageerida nii, et näitavad teil
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">Tõlkimisseadete lähtestamine</translation>
 <translation id="285960592395650245">Proovi veel alla laadida</translation>
+<translation id="2870560284913253234">Sait</translation>
 <translation id="2871695793448672541">Peidetud, parool</translation>
 <translation id="2898963176829412617">Uus kaust ...</translation>
 <translation id="2903493209154104877">Aadressid</translation>
@@ -109,7 +109,6 @@ Näiteks võivad mõned veebisaidid päringule reageerida nii, et näitavad teil
 <translation id="2989805286512600854">Ava uuel vahelehel</translation>
 <translation id="3024255823539804759">Viimane päev</translation>
 <translation id="3037605927509011580">Ups, ebaõnn!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> ei ole saadaval. Sirvimisajaloole juurdepääsemiseks tehke tööriistamenüüs valik „<ph name="SHOW_HISTORY" />”.</translation>
 <translation id="3112556859945124369">Märgi …</translation>
 <translation id="3151924044251363314">Teie krüpteeritud andmeid saavad lugeda vaid need, kes teavad teie parooli – seda ei saadeta Google'ile ja Google ei talleta seda. Kui unustate parooli või soovite seda seadet muuta, tuleb teil sünkroonimine lähtestada. <ph name="BEGIN_LINK" />Lisateave<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">Märgi kõik …</translation>
@@ -150,6 +149,7 @@ Otsingutermini korrigeerimiseks vajutage valimiseks pikalt. Otsingu täpsustamis
 <translation id="3638472932233958418">Lehtede eellaadimine</translation>
 <translation id="3691593122358196899">Lisatud järjehoidjana kausta <ph name="FOLDER_TITLE" /></translation>
 <translation id="3738139272394829648">Puudutage otsimiseks</translation>
+<translation id="3742082982782149146">Saidi URL kopeeriti.</translation>
 <translation id="3771033907050503522">Inkogn. vahelehed</translation>
 <translation id="3783017676699494206">Salvesta kujutis</translation>
 <translation id="3789841737615482174">Installi</translation>
@@ -164,10 +164,12 @@ Otsingutermini korrigeerimiseks vajutage valimiseks pikalt. Otsingu täpsustamis
 <translation id="4038354071007134711">Seadme ükski rakendus ei saa seda faili avada.</translation>
 <translation id="4049507953662678203">Veenduge, et oleksite võrguga ühendatud, ja proovige uuesti.</translation>
 <translation id="411254640334432676">Allalaadimine ebaõnnestus.</translation>
+<translation id="4117350985506774529">Teie kasutajanimi kopeeriti.</translation>
 <translation id="4121993058175073134">Netiekspordi andmete saatmiseks seadistage meilikonto rakenduses Seaded.</translation>
 <translation id="4124987746317609294">Ajavahemik</translation>
 <translation id="4172051516777682613">Kuva alati</translation>
 <translation id="418156467088430727">Kuva uuel vahelehel võrguühenduseta versioon</translation>
+<translation id="4237682350741091554">Chrome'i sünkroonimist ja isikupärastamist saate hallata jaotises <ph name="BEGIN_LINK" />Seaded<ph name="END_LINK" /></translation>
 <translation id="424315890655130736">Sisestage parool</translation>
 <translation id="4272631900155121838">QR-koodi skannimiseks lubage seadetes kaamera</translation>
 <translation id="4281844954008187215">Teenusetingimused</translation>
@@ -175,6 +177,7 @@ Otsingutermini korrigeerimiseks vajutage valimiseks pikalt. Otsingu täpsustamis
 <translation id="4359125752503270327">See leht avatakse teises rakenduses.</translation>
 <translation id="4378154925671717803">Telefon</translation>
 <translation id="441868831736628555">Privaatsusteatis</translation>
+<translation id="4508750114462689118">Sule sisselogimisviip</translation>
 <translation id="4526249700380860531">Vaadake ja hallake salvestatud paroole saidil <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Proovige uuesti sisse logida.</translation>
 <translation id="4620246317052452550">Teie loetud lehed</translation>
@@ -220,6 +223,7 @@ Teie andmed on krüpteeritud teie sünkroonimisparooliga. Sisestage see sünkroo
 
 Handoff peab olema lubatud seadete jaotises General ja seadmed peavad kasutama sama iCloudi kontot.</translation>
 <translation id="5556459405103347317">Laadi uuesti</translation>
+<translation id="5619279135193775234">E-post</translation>
 <translation id="5626245204502895507">Faili ei õnnestunud praegu alla laadida.</translation>
 <translation id="5659593005791499971">Meil</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@ Teie andmed krüpteeriti <ph name="TIME" /> teie sünkroonimisparooliga. Sisesta
 <translation id="7136892417564438900">Kaamera pole saadaval</translation>
 <translation id="7159472599653637159">Taotle mobiilisaiti</translation>
 <translation id="7167621057293532233">Andmetüübid</translation>
+<translation id="7175593937868963913">Meili koostamine</translation>
 <translation id="7189598951263744875">Jaga ...</translation>
 <translation id="7203585745079012652">Vastuste esitamine</translation>
 <translation id="722055596168483966">Google'i teenuste isikupärastamine</translation>
@@ -358,7 +363,6 @@ Teie andmed krüpteeriti <ph name="TIME" /> teie sünkroonimisparooliga. Sisesta
 <translation id="8205564605687841303">Tühista</translation>
 <translation id="8225985093977202398">Vahem. salv. kujut. ja failid</translation>
 <translation id="8261506727792406068">Kustuta</translation>
-<translation id="8272194309885535896">Laadi kujutis alla</translation>
 <translation id="8272426682713568063">Krediitkaardid</translation>
 <translation id="8281781826761538115">Vaikimisi – <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">Juhtige seda, kuidas Google kasutab teie sirvimisajalugu otsingu, reklaamide ja muude Google'i teenuste isikupärastamiseks</translation>

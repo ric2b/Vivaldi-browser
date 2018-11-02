@@ -6,11 +6,14 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -66,8 +69,8 @@ ACTION_P(EnterPendingDecoderInitStateAction, test) {
 
 class AudioRendererImplTest : public ::testing::Test, public RendererClient {
  public:
-  ScopedVector<AudioDecoder> CreateAudioDecoderForTest() {
-    MockAudioDecoder* decoder = new MockAudioDecoder();
+  std::vector<std::unique_ptr<AudioDecoder>> CreateAudioDecoderForTest() {
+    auto decoder = base::MakeUnique<MockAudioDecoder>();
     if (!enter_pending_decoder_init_) {
       EXPECT_CALL(*decoder, Initialize(_, _, _, _))
           .WillOnce(DoAll(SaveArg<3>(&output_cb_),
@@ -80,8 +83,8 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
         .WillRepeatedly(Invoke(this, &AudioRendererImplTest::DecodeDecoder));
     EXPECT_CALL(*decoder, Reset(_))
         .WillRepeatedly(Invoke(this, &AudioRendererImplTest::ResetDecoder));
-    ScopedVector<AudioDecoder> decoders;
-    decoders.push_back(decoder);
+    std::vector<std::unique_ptr<AudioDecoder>> decoders;
+    decoders.push_back(std::move(decoder));
     return decoders;
   }
 
@@ -114,7 +117,7 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
         message_loop_.task_runner(), sink_.get(),
         base::Bind(&AudioRendererImplTest::CreateAudioDecoderForTest,
                    base::Unretained(this)),
-        new MediaLog()));
+        &media_log_));
     renderer_->tick_clock_.reset(tick_clock_);
     tick_clock_->Advance(base::TimeDelta::FromSeconds(1));
   }
@@ -141,7 +144,7 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
         message_loop_.task_runner(), sink_.get(),
         base::Bind(&AudioRendererImplTest::CreateAudioDecoderForTest,
                    base::Unretained(this)),
-        new MediaLog()));
+        &media_log_));
     testing::Mock::VerifyAndClearExpectations(&demuxer_stream_);
     ConfigureDemuxerStream(false);
   }
@@ -155,7 +158,7 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
         message_loop_.task_runner(), sink_.get(),
         base::Bind(&AudioRendererImplTest::CreateAudioDecoderForTest,
                    base::Unretained(this)),
-        new MediaLog()));
+        &media_log_));
     testing::Mock::VerifyAndClearExpectations(&demuxer_stream_);
     ConfigureDemuxerStream(true);
   }
@@ -448,6 +451,7 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
   // Fixture members.
   AudioParameters hardware_params_;
   base::MessageLoop message_loop_;
+  MediaLog media_log_;
   std::unique_ptr<AudioRendererImpl> renderer_;
   scoped_refptr<FakeAudioRendererSink> sink_;
   base::SimpleTestTickClock* tick_clock_;

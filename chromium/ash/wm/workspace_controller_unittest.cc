@@ -9,17 +9,15 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screen_util.h"
 #include "ash/session/session_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
-#include "ash/test/test_shelf_delegate.h"
 #include "ash/wm/panels/panel_layout_manager.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/workspace_window_resizer.h"
@@ -86,7 +84,7 @@ class WorkspaceControllerTest : public test::AshTestBase {
   aura::Window* CreateTestWindowUnparented() {
     aura::Window* window = new aura::Window(NULL);
     window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
-    window->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+    window->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window->Init(ui::LAYER_TEXTURED);
     return window;
   }
@@ -94,7 +92,7 @@ class WorkspaceControllerTest : public test::AshTestBase {
   aura::Window* CreateTestWindow() {
     aura::Window* window = new aura::Window(NULL);
     window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
-    window->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+    window->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window->Init(ui::LAYER_TEXTURED);
     ParentWindowInPrimaryRootWindow(window);
     return window;
@@ -118,10 +116,8 @@ class WorkspaceControllerTest : public test::AshTestBase {
   aura::Window* CreateTestPanel(aura::WindowDelegate* delegate,
                                 const gfx::Rect& bounds) {
     aura::Window* window = CreateTestWindowInShellWithDelegateAndType(
-        delegate, ui::wm::WINDOW_TYPE_PANEL, 0, bounds);
-    WmWindow* wm_window = WmWindow::Get(window);
-    test::TestShelfDelegate::instance()->AddShelfItem(wm_window);
-    PanelLayoutManager::Get(wm_window)->Relayout();
+        delegate, aura::client::WINDOW_TYPE_PANEL, 0, bounds);
+    PanelLayoutManager::Get(window)->Relayout();
     return window;
   }
 
@@ -364,7 +360,7 @@ TEST_F(WorkspaceControllerTest, ShelfStateUpdated) {
 
   std::unique_ptr<Window> w1(CreateTestWindow());
   const gfx::Rect w1_bounds(0, 1, 101, 102);
-  WmShelf* shelf = GetPrimaryShelf();
+  Shelf* shelf = GetPrimaryShelf();
   shelf->SetAutoHideBehavior(ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
   const gfx::Rect touches_shelf_bounds(
       0, shelf_layout_manager()->GetIdealBounds().y() - 10, 101, 102);
@@ -664,7 +660,7 @@ class DontCrashOnChangeAndActivateDelegate
 // . show the window and during the bounds change activate it.
 TEST_F(WorkspaceControllerTest, DontCrashOnChangeAndActivate) {
   // Force the shelf
-  WmShelf* shelf = GetPrimaryShelf();
+  Shelf* shelf = GetPrimaryShelf();
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
 
   DontCrashOnChangeAndActivateDelegate delegate;
@@ -1053,7 +1049,7 @@ TEST_F(WorkspaceControllerTest, TestRestoreToUserModifiedBounds) {
 
   // A user moved the window.
   std::unique_ptr<WindowResizer> resizer(
-      CreateWindowResizer(WmWindow::Get(window1.get()), gfx::Point(), HTCAPTION,
+      CreateWindowResizer(window1.get(), gfx::Point(), HTCAPTION,
                           aura::client::WINDOW_MOVE_SOURCE_MOUSE)
           .release());
   gfx::Point location = resizer->GetInitialLocation();
@@ -1244,7 +1240,7 @@ TEST_F(WorkspaceControllerTest, AnimatedNormToMaxToNormRepositionsRemaining) {
 // (corresponds to the status bubble).
 TEST_F(WorkspaceControllerTest, VerifyLayerOrdering) {
   std::unique_ptr<Window> browser(aura::test::CreateTestWindowWithDelegate(
-      NULL, ui::wm::WINDOW_TYPE_NORMAL, gfx::Rect(5, 6, 7, 8), NULL));
+      NULL, aura::client::WINDOW_TYPE_NORMAL, gfx::Rect(5, 6, 7, 8), NULL));
   browser->SetName("browser");
   ParentWindowInPrimaryRootWindow(browser.get());
   browser->Show();
@@ -1256,14 +1252,14 @@ TEST_F(WorkspaceControllerTest, VerifyLayerOrdering) {
       aura::test::TestWindowDelegate::CreateSelfDestroyingDelegate();
   status_bubble_delegate->set_can_focus(false);
   Window* status_bubble = aura::test::CreateTestWindowWithDelegate(
-      status_bubble_delegate, ui::wm::WINDOW_TYPE_POPUP, gfx::Rect(5, 6, 7, 8),
-      NULL);
+      status_bubble_delegate, aura::client::WINDOW_TYPE_POPUP,
+      gfx::Rect(5, 6, 7, 8), NULL);
   ::wm::AddTransientChild(browser.get(), status_bubble);
   ParentWindowInPrimaryRootWindow(status_bubble);
   status_bubble->SetName("status_bubble");
 
   std::unique_ptr<Window> app(aura::test::CreateTestWindowWithDelegate(
-      NULL, ui::wm::WINDOW_TYPE_NORMAL, gfx::Rect(5, 6, 7, 8), NULL));
+      NULL, aura::client::WINDOW_TYPE_NORMAL, gfx::Rect(5, 6, 7, 8), NULL));
   app->SetName("app");
   ParentWindowInPrimaryRootWindow(app.get());
 
@@ -1362,7 +1358,8 @@ TEST_F(WorkspaceControllerTest, DragWindowOverlapShelf) {
   aura::test::TestWindowDelegate delegate;
   delegate.set_window_component(HTCAPTION);
   std::unique_ptr<Window> w1(aura::test::CreateTestWindowWithDelegate(
-      &delegate, ui::wm::WINDOW_TYPE_NORMAL, gfx::Rect(5, 5, 100, 50), NULL));
+      &delegate, aura::client::WINDOW_TYPE_NORMAL, gfx::Rect(5, 5, 100, 50),
+      NULL));
   ParentWindowInPrimaryRootWindow(w1.get());
 
   GetPrimaryShelf()->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
@@ -1391,10 +1388,11 @@ TEST_F(WorkspaceControllerTest, DragWindowKeepsShelfAutohidden) {
   aura::test::TestWindowDelegate delegate;
   delegate.set_window_component(HTCAPTION);
   std::unique_ptr<Window> w1(aura::test::CreateTestWindowWithDelegate(
-      &delegate, ui::wm::WINDOW_TYPE_NORMAL, gfx::Rect(5, 5, 100, 50), NULL));
+      &delegate, aura::client::WINDOW_TYPE_NORMAL, gfx::Rect(5, 5, 100, 50),
+      NULL));
   ParentWindowInPrimaryRootWindow(w1.get());
 
-  WmShelf* shelf = GetPrimaryShelf();
+  Shelf* shelf = GetPrimaryShelf();
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 

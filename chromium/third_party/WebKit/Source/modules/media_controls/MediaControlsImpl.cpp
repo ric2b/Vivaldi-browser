@@ -29,6 +29,10 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ClientRect.h"
 #include "core/dom/Fullscreen.h"
+#include "core/dom/MutationCallback.h"
+#include "core/dom/MutationObserver.h"
+#include "core/dom/MutationObserverInit.h"
+#include "core/dom/MutationRecord.h"
 #include "core/dom/ResizeObserver.h"
 #include "core/dom/ResizeObserverCallback.h"
 #include "core/dom/ResizeObserverEntry.h"
@@ -45,12 +49,27 @@
 #include "core/layout/LayoutTheme.h"
 #include "modules/media_controls/MediaControlsMediaEventListener.h"
 #include "modules/media_controls/MediaControlsOrientationLockDelegate.h"
+#include "modules/media_controls/MediaControlsRotateToFullscreenDelegate.h"
 #include "modules/media_controls/MediaControlsWindowEventListener.h"
+#include "modules/media_controls/elements/MediaControlCastButtonElement.h"
 #include "modules/media_controls/elements/MediaControlCurrentTimeDisplayElement.h"
+#include "modules/media_controls/elements/MediaControlDownloadButtonElement.h"
+#include "modules/media_controls/elements/MediaControlFullscreenButtonElement.h"
 #include "modules/media_controls/elements/MediaControlMuteButtonElement.h"
+#include "modules/media_controls/elements/MediaControlOverflowMenuButtonElement.h"
+#include "modules/media_controls/elements/MediaControlOverflowMenuListElement.h"
 #include "modules/media_controls/elements/MediaControlOverlayEnclosureElement.h"
+#include "modules/media_controls/elements/MediaControlOverlayPlayButtonElement.h"
+#include "modules/media_controls/elements/MediaControlPanelElement.h"
 #include "modules/media_controls/elements/MediaControlPanelEnclosureElement.h"
+#include "modules/media_controls/elements/MediaControlPlayButtonElement.h"
 #include "modules/media_controls/elements/MediaControlRemainingTimeDisplayElement.h"
+#include "modules/media_controls/elements/MediaControlTextTrackListElement.h"
+#include "modules/media_controls/elements/MediaControlTimelineElement.h"
+#include "modules/media_controls/elements/MediaControlToggleClosedCaptionsButtonElement.h"
+#include "modules/media_controls/elements/MediaControlVolumeSliderElement.h"
+#include "modules/remoteplayback/HTMLMediaElementRemotePlayback.h"
+#include "modules/remoteplayback/RemotePlayback.h"
 #include "platform/EventDispatchForbiddenScope.h"
 
 namespace blink {
@@ -120,7 +139,9 @@ bool ShouldShowCastButton(HTMLMediaElement& media_element) {
     return false;
   }
 
-  return media_element.HasRemoteRoutes();
+  RemotePlayback* remote =
+      HTMLMediaElementRemotePlayback::remote(media_element);
+  return remote && remote->RemotePlaybackAvailable();
 }
 
 bool PreferHiddenVolumeControls(const Document& document) {
@@ -181,6 +202,57 @@ class MediaControlsImpl::MediaControlsResizeObserverCallback final
   Member<MediaControlsImpl> controls_;
 };
 
+// Observes changes to the HTMLMediaElement attributes that affect controls.
+// Currently only observes the disableRemotePlayback attribute.
+class MediaControlsImpl::MediaElementMutationCallback
+    : public MutationCallback {
+ public:
+  explicit MediaElementMutationCallback(MediaControlsImpl* controls)
+      : controls_(controls) {
+    observer_ = MutationObserver::Create(this);
+    Vector<String> filter;
+    filter.push_back(HTMLNames::disableremoteplaybackAttr.ToString());
+    MutationObserverInit init;
+    init.setAttributeOldValue(true);
+    init.setAttributes(true);
+    init.setAttributeFilter(filter);
+    observer_->observe(&controls_->MediaElement(), init, ASSERT_NO_EXCEPTION);
+  }
+
+  DEFINE_INLINE_VIRTUAL_TRACE() {
+    visitor->Trace(controls_);
+    visitor->Trace(observer_);
+    MutationCallback::Trace(visitor);
+  }
+
+  void Disconnect() { observer_->disconnect(); }
+
+ private:
+  void Call(const HeapVector<Member<MutationRecord>>& records,
+            MutationObserver*) override {
+    for (const auto& record : records) {
+      if (record->type() != "attributes")
+        continue;
+
+      const Element& element = *ToElement(record->target());
+      if (record->oldValue() == element.getAttribute(record->attributeName()))
+        continue;
+
+      DCHECK_EQ(HTMLNames::disableremoteplaybackAttr.ToString(),
+                record->attributeName());
+      controls_->RefreshCastButtonVisibility();
+      return;
+    }
+  }
+
+  ExecutionContext* GetExecutionContext() const override {
+    return &controls_->GetDocument();
+  }
+
+  Member<MediaControlsImpl> controls_;
+  Member<MutationObserver> observer_;
+};
+
 MediaControls* MediaControlsImpl::Factory::Create(
     HTMLMediaElement& media_element,
     ShadowRoot& shadow_root) {
@@ -213,6 +285,7 @@ MediaControlsImpl::MediaControlsImpl(HTMLMediaElement& media_element)
           WTF::Bind(&MediaControlsImpl::HideAllMenus,
                     WrapWeakPersistent(this)))),
       orientation_lock_delegate_(nullptr),
+      rotate_to_fullscreen_delegate_(nullptr),
       hide_media_controls_timer_(
           TaskRunnerHelper::Get(TaskType::kUnspecedTimer,
                                 &media_element.GetDocument()),
@@ -240,11 +313,18 @@ MediaControlsImpl* MediaControlsImpl::Create(HTMLMediaElement& media_element,
   controls->InitializeControls();
   controls->Reset();
 
-  // Initialize the orientation lock when going fullscreen feature.
   if (RuntimeEnabledFeatures::videoFullscreenOrientationLockEnabled() &&
       media_element.IsHTMLVideoElement()) {
+    // Initialize the orientation lock when going fullscreen feature.
     controls->orientation_lock_delegate_ =
         new MediaControlsOrientationLockDelegate(
+            toHTMLVideoElement(media_element));
+  }
+  if (RuntimeEnabledFeatures::videoRotateToFullscreenEnabled() &&
+      media_element.IsHTMLVideoElement()) {
+    // Initialize the rotate-to-fullscreen feature.
+    controls->rotate_to_fullscreen_delegate_ =
+        new MediaControlsRotateToFullscreenDelegate(
             toHTMLVideoElement(media_element));
   }
 
@@ -302,16 +382,12 @@ void MediaControlsImpl::InitializeControls() {
   overlay_enclosure_ = new MediaControlOverlayEnclosureElement(*this);
 
   if (RuntimeEnabledFeatures::mediaControlsOverlayPlayButtonEnabled()) {
-    MediaControlOverlayPlayButtonElement* overlay_play_button =
-        MediaControlOverlayPlayButtonElement::Create(*this);
-    overlay_play_button_ = overlay_play_button;
-    overlay_enclosure_->AppendChild(overlay_play_button);
+    overlay_play_button_ = new MediaControlOverlayPlayButtonElement(*this);
+    overlay_enclosure_->AppendChild(overlay_play_button_);
   }
 
-  MediaControlCastButtonElement* overlay_cast_button =
-      MediaControlCastButtonElement::Create(*this, true);
-  overlay_cast_button_ = overlay_cast_button;
-  overlay_enclosure_->AppendChild(overlay_cast_button);
+  overlay_cast_button_ = new MediaControlCastButtonElement(*this, true);
+  overlay_enclosure_->AppendChild(overlay_cast_button_);
 
   AppendChild(overlay_enclosure_);
 
@@ -319,92 +395,72 @@ void MediaControlsImpl::InitializeControls() {
   // controls correctly.
   enclosure_ = new MediaControlPanelEnclosureElement(*this);
 
-  MediaControlPanelElement* panel = MediaControlPanelElement::Create(*this);
+  panel_ = new MediaControlPanelElement(*this);
 
-  MediaControlPlayButtonElement* play_button =
-      MediaControlPlayButtonElement::Create(*this);
-  play_button_ = play_button;
-  panel->AppendChild(play_button);
+  play_button_ = new MediaControlPlayButtonElement(*this);
+  panel_->AppendChild(play_button_);
 
   current_time_display_ = new MediaControlCurrentTimeDisplayElement(*this);
   current_time_display_->SetIsWanted(true);
-  panel->AppendChild(current_time_display_);
+  panel_->AppendChild(current_time_display_);
 
   duration_display_ = new MediaControlRemainingTimeDisplayElement(*this);
-  panel->AppendChild(duration_display_);
+  panel_->AppendChild(duration_display_);
 
-  MediaControlTimelineElement* timeline =
-      MediaControlTimelineElement::Create(*this);
-  timeline_ = timeline;
-  panel->AppendChild(timeline);
+  timeline_ = new MediaControlTimelineElement(*this);
+  panel_->AppendChild(timeline_);
 
   mute_button_ = new MediaControlMuteButtonElement(*this);
-  panel->AppendChild(mute_button_);
+  panel_->AppendChild(mute_button_);
 
-  MediaControlVolumeSliderElement* slider =
-      MediaControlVolumeSliderElement::Create(*this);
-  volume_slider_ = slider;
-  panel->AppendChild(slider);
+  volume_slider_ = new MediaControlVolumeSliderElement(*this);
+  panel_->AppendChild(volume_slider_);
   if (PreferHiddenVolumeControls(GetDocument()))
     volume_slider_->SetIsWanted(false);
 
-  MediaControlFullscreenButtonElement* fullscreen_button =
-      MediaControlFullscreenButtonElement::Create(*this);
-  fullscreen_button_ = fullscreen_button;
-  panel->AppendChild(fullscreen_button);
+  fullscreen_button_ = new MediaControlFullscreenButtonElement(*this);
+  panel_->AppendChild(fullscreen_button_);
 
-  MediaControlDownloadButtonElement* download_button =
-      MediaControlDownloadButtonElement::Create(*this);
-  download_button_ = download_button;
-  panel->AppendChild(download_button);
+  download_button_ = new MediaControlDownloadButtonElement(*this);
+  panel_->AppendChild(download_button_);
 
-  MediaControlCastButtonElement* cast_button =
-      MediaControlCastButtonElement::Create(*this, false);
-  cast_button_ = cast_button;
-  panel->AppendChild(cast_button);
+  cast_button_ = new MediaControlCastButtonElement(*this, false);
+  panel_->AppendChild(cast_button_);
 
-  MediaControlToggleClosedCaptionsButtonElement* toggle_closed_captions_button =
-      MediaControlToggleClosedCaptionsButtonElement::Create(*this);
-  toggle_closed_captions_button_ = toggle_closed_captions_button;
-  panel->AppendChild(toggle_closed_captions_button);
+  toggle_closed_captions_button_ =
+      new MediaControlToggleClosedCaptionsButtonElement(*this);
+  panel_->AppendChild(toggle_closed_captions_button_);
 
-  panel_ = panel;
-  enclosure_->AppendChild(panel);
+  enclosure_->AppendChild(panel_);
 
   AppendChild(enclosure_);
 
-  MediaControlTextTrackListElement* text_track_list =
-      MediaControlTextTrackListElement::Create(*this);
-  text_track_list_ = text_track_list;
-  AppendChild(text_track_list);
+  text_track_list_ = new MediaControlTextTrackListElement(*this);
+  AppendChild(text_track_list_);
 
-  MediaControlOverflowMenuButtonElement* overflow_menu =
-      MediaControlOverflowMenuButtonElement::Create(*this);
-  overflow_menu_ = overflow_menu;
-  panel->AppendChild(overflow_menu);
+  overflow_menu_ = new MediaControlOverflowMenuButtonElement(*this);
+  panel_->AppendChild(overflow_menu_);
 
-  MediaControlOverflowMenuListElement* overflow_list =
-      MediaControlOverflowMenuListElement::Create(*this);
-  overflow_list_ = overflow_list;
-  AppendChild(overflow_list);
+  overflow_list_ = new MediaControlOverflowMenuListElement(*this);
+  AppendChild(overflow_list_);
 
   // The order in which we append elements to the overflow list is significant
   // because it determines how the elements show up in the overflow menu
   // relative to each other.  The first item appended appears at the top of the
   // overflow menu.
   overflow_list_->AppendChild(play_button_->CreateOverflowElement(
-      *this, MediaControlPlayButtonElement::Create(*this)));
+      *this, new MediaControlPlayButtonElement(*this)));
   overflow_list_->AppendChild(fullscreen_button_->CreateOverflowElement(
-      *this, MediaControlFullscreenButtonElement::Create(*this)));
+      *this, new MediaControlFullscreenButtonElement(*this)));
   overflow_list_->AppendChild(download_button_->CreateOverflowElement(
-      *this, MediaControlDownloadButtonElement::Create(*this)));
+      *this, new MediaControlDownloadButtonElement(*this)));
   overflow_list_->AppendChild(mute_button_->CreateOverflowElement(
       *this, new MediaControlMuteButtonElement(*this)));
   overflow_list_->AppendChild(cast_button_->CreateOverflowElement(
-      *this, MediaControlCastButtonElement::Create(*this, false)));
+      *this, new MediaControlCastButtonElement(*this, false)));
   overflow_list_->AppendChild(
       toggle_closed_captions_button_->CreateOverflowElement(
-          *this, MediaControlToggleClosedCaptionsButtonElement::Create(*this)));
+          *this, new MediaControlToggleClosedCaptionsButtonElement(*this)));
 }
 
 Node::InsertionNotificationRequest MediaControlsImpl::InsertedInto(
@@ -420,6 +476,8 @@ Node::InsertionNotificationRequest MediaControlsImpl::InsertedInto(
   media_event_listener_->Attach();
   if (orientation_lock_delegate_)
     orientation_lock_delegate_->Attach();
+  if (rotate_to_fullscreen_delegate_)
+    rotate_to_fullscreen_delegate_->Attach();
 
   if (!resize_observer_) {
     resize_observer_ =
@@ -428,6 +486,9 @@ Node::InsertionNotificationRequest MediaControlsImpl::InsertedInto(
     HTMLMediaElement& html_media_element = MediaElement();
     resize_observer_->observe(&html_media_element);
   }
+
+  if (!element_mutation_callback_)
+    element_mutation_callback_ = new MediaElementMutationCallback(this);
 
   return HTMLDivElement::InsertedInto(root);
 }
@@ -442,10 +503,17 @@ void MediaControlsImpl::RemovedFrom(ContainerNode*) {
   media_event_listener_->Detach();
   if (orientation_lock_delegate_)
     orientation_lock_delegate_->Detach();
+  if (rotate_to_fullscreen_delegate_)
+    rotate_to_fullscreen_delegate_->Detach();
 
   if (resize_observer_) {
     resize_observer_->disconnect();
     resize_observer_.Clear();
+  }
+
+  if (element_mutation_callback_) {
+    element_mutation_callback_->Disconnect();
+    element_mutation_callback_.Clear();
   }
 }
 
@@ -502,12 +570,14 @@ LayoutObject* MediaControlsImpl::ContainerLayoutObject() {
   return GetLayoutObject();
 }
 
-void MediaControlsImpl::Show() {
-  MakeOpaque();
+void MediaControlsImpl::MaybeShow() {
   panel_->SetIsWanted(true);
   panel_->SetIsDisplayed(true);
   if (overlay_play_button_)
     overlay_play_button_->UpdateDisplayType();
+  // Only make the controls visible if they won't get hidden by OnTimeUpdate.
+  if (MediaElement().paused() || !ShouldHideMediaControls())
+    MakeOpaque();
 }
 
 void MediaControlsImpl::Hide() {
@@ -532,11 +602,15 @@ void MediaControlsImpl::MakeTransparent() {
 bool MediaControlsImpl::ShouldHideMediaControls(unsigned behavior_flags) const {
   // Never hide for a media element without visual representation.
   if (!MediaElement().IsHTMLVideoElement() || !MediaElement().HasVideo() ||
-      MediaElement().IsPlayingRemotely() ||
       toHTMLVideoElement(MediaElement()).GetMediaRemotingStatus() ==
           HTMLVideoElement::MediaRemotingStatus::kStarted) {
     return false;
   }
+
+  RemotePlayback* remote =
+      HTMLMediaElementRemotePlayback::remote(MediaElement());
+  if (remote && remote->GetState() != WebRemotePlaybackState::kDisconnected)
+    return false;
 
   // Keep the controls visible as long as the timer is running.
   const bool ignore_wait_for_timer = behavior_flags & kIgnoreWaitForTimer;
@@ -576,6 +650,10 @@ void MediaControlsImpl::UpdatePlayState() {
   if (overlay_play_button_)
     overlay_play_button_->UpdateDisplayType();
   play_button_->UpdateDisplayType();
+}
+
+HTMLDivElement* MediaControlsImpl::PanelElement() {
+  return panel_;
 }
 
 void MediaControlsImpl::BeginScrubbing() {
@@ -673,8 +751,9 @@ void MediaControlsImpl::RefreshCastButtonVisibilityWithoutUpdate() {
 
 void MediaControlsImpl::ShowOverlayCastButtonIfNeeded() {
   if (MediaElement().ShouldShowControls() ||
-      !ShouldShowCastButton(MediaElement()))
+      !ShouldShowCastButton(MediaElement())) {
     return;
+  }
 
   overlay_cast_button_->TryShowOverlay();
   ResetHideMediaControlsTimer();
@@ -688,14 +767,9 @@ void MediaControlsImpl::ExitFullscreen() {
   Fullscreen::ExitFullscreen(GetDocument());
 }
 
-void MediaControlsImpl::StartedCasting() {
-  cast_button_->SetIsPlayingRemotely(true);
-  overlay_cast_button_->SetIsPlayingRemotely(true);
-}
-
-void MediaControlsImpl::StoppedCasting() {
-  cast_button_->SetIsPlayingRemotely(false);
-  overlay_cast_button_->SetIsPlayingRemotely(false);
+void MediaControlsImpl::RemotePlaybackStateChanged() {
+  cast_button_->UpdateDisplayType();
+  overlay_cast_button_->UpdateDisplayType();
 }
 
 void MediaControlsImpl::DefaultEventHandler(Event* event) {
@@ -837,8 +911,8 @@ void MediaControlsImpl::OnFocusIn() {
   if (!MediaElement().ShouldShowControls())
     return;
 
-  Show();
   ResetHideMediaControlsTimer();
+  MaybeShow();
 }
 
 void MediaControlsImpl::OnTimeUpdate() {
@@ -1119,6 +1193,7 @@ void MediaControlsImpl::HideAllMenus() {
 }
 
 DEFINE_TRACE(MediaControlsImpl) {
+  visitor->Trace(element_mutation_callback_);
   visitor->Trace(resize_observer_);
   visitor->Trace(panel_);
   visitor->Trace(overlay_play_button_);
@@ -1141,6 +1216,7 @@ DEFINE_TRACE(MediaControlsImpl) {
   visitor->Trace(media_event_listener_);
   visitor->Trace(window_event_listener_);
   visitor->Trace(orientation_lock_delegate_);
+  visitor->Trace(rotate_to_fullscreen_delegate_);
   MediaControls::Trace(visitor);
   HTMLDivElement::Trace(visitor);
 }

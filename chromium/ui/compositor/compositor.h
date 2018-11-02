@@ -149,19 +149,17 @@ class COMPOSITOR_EXPORT ContextFactory {
   // Destroys per-compositor data.
   virtual void RemoveCompositor(Compositor* compositor) = 0;
 
-  // When true, the factory uses test contexts that do not do real GL
-  // operations.
-  virtual bool DoesCreateTestContexts() = 0;
-
-  // Returns the OpenGL target to use for image textures.
-  virtual uint32_t GetImageTextureTarget(gfx::BufferFormat format,
-                                         gfx::BufferUsage usage) = 0;
+  // Returns refresh rate. Tests may return higher values.
+  virtual double GetRefreshRate() const = 0;
 
   // Gets the GPU memory buffer manager.
   virtual gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
 
   // Gets the task graph runner.
   virtual cc::TaskGraphRunner* GetTaskGraphRunner() = 0;
+
+  // Gets the renderer settings.
+  virtual const cc::RendererSettings& GetRendererSettings() const = 0;
 
   virtual void AddObserver(ContextFactoryObserver* observer) = 0;
 
@@ -326,6 +324,7 @@ class COMPOSITOR_EXPORT Compositor
   void DidBeginMainFrame() override {}
   void BeginMainFrame(const cc::BeginFrameArgs& args) override;
   void BeginMainFrameNotExpectedSoon() override;
+  void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override;
   void UpdateLayerTreeHost() override;
   void ApplyViewportDeltas(const gfx::Vector2dF& inner_delta,
                            const gfx::Vector2dF& outer_delta,
@@ -355,7 +354,6 @@ class COMPOSITOR_EXPORT Compositor
 
   const cc::LayerTreeDebugState& GetLayerTreeDebugState() const;
   void SetLayerTreeDebugState(const cc::LayerTreeDebugState& debug_state);
-  const cc::RendererSettings& GetRendererSettings() const;
 
   LayerAnimatorCollection* layer_animator_collection() {
     return &layer_animator_collection_;
@@ -364,6 +362,10 @@ class COMPOSITOR_EXPORT Compositor
   const cc::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
   int activated_frame_count() const { return activated_frame_count_; }
   float refresh_rate() const { return refresh_rate_; }
+
+  void set_allow_locks_to_extend_timeout(bool allowed) {
+    allow_locks_to_extend_timeout_ = allowed;
+  }
 
  private:
   friend class base::RefCounted<Compositor>;
@@ -417,6 +419,11 @@ class COMPOSITOR_EXPORT Compositor
 
   gfx::ColorSpace output_color_space_;
   gfx::ColorSpace blending_color_space_;
+
+  // The estimated time that the locks will timeout.
+  base::TimeTicks scheduled_timeout_;
+  // If true, the |scheduled_timeout_| might be recalculated and extended.
+  bool allow_locks_to_extend_timeout_;
 
   base::WeakPtrFactory<Compositor> weak_ptr_factory_;
   base::WeakPtrFactory<Compositor> lock_timeout_weak_ptr_factory_;

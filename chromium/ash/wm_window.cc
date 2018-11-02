@@ -5,22 +5,17 @@
 #include "ash/wm_window.h"
 
 #include "ash/ash_constants.h"
-#include "ash/aura/aura_layout_manager_adapter.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/resize_handle_window_targeter.h"
-#include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/widget_finder.h"
 #include "ash/wm/window_animations.h"
-#include "ash/wm/window_mirror_view.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm_layout_manager.h"
 #include "ash/wm_transient_window_observer.h"
 #include "base/memory/ptr_util.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
@@ -44,6 +39,7 @@
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
+#include "ui/wm/core/ime_util_chromeos.h"
 #include "ui/wm/core/transient_window_manager.h"
 #include "ui/wm/core/visibility_controller.h"
 #include "ui/wm/core/window_util.h"
@@ -51,50 +47,17 @@
 DECLARE_UI_CLASS_PROPERTY_TYPE(ash::WmWindow*);
 
 namespace ash {
-
+namespace {
 DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(WmWindow, kWmWindowKey, nullptr);
 
 static_assert(aura::Window::kInitialId == kShellWindowId_Invalid,
               "ids must match");
 
-namespace {
-
-// A tentative class to set the bounds on the window.
-// TODO(oshima): Once all logic is cleaned up, move this to the real layout
-// manager with proper friendship.
-class BoundsSetter : public aura::LayoutManager {
- public:
-  BoundsSetter() {}
-  ~BoundsSetter() override {}
-
-  // aura::LayoutManager overrides:
-  void OnWindowResized() override {}
-  void OnWindowAddedToLayout(aura::Window* child) override {}
-  void OnWillRemoveWindowFromLayout(aura::Window* child) override {}
-  void OnWindowRemovedFromLayout(aura::Window* child) override {}
-  void OnChildWindowVisibilityChanged(aura::Window* child,
-                                      bool visible) override {}
-  void SetChildBounds(aura::Window* child,
-                      const gfx::Rect& requested_bounds) override {}
-
-  void SetBounds(aura::Window* window, const gfx::Rect& bounds) {
-    SetChildBoundsDirect(window, bounds);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(BoundsSetter);
-};
-
 }  // namespace
-
-// static
-bool WmWindow::default_use_empty_minimum_size_for_testing_ = false;
 
 WmWindow::~WmWindow() {
   if (added_transient_observer_)
     ::wm::TransientWindowManager::Get(window_)->RemoveObserver(this);
-
-  window_->RemoveObserver(this);
 }
 
 // static
@@ -155,7 +118,7 @@ RootWindowController* WmWindow::GetRootWindowController() {
   return root ? RootWindowController::ForWindow(root) : nullptr;
 }
 
-ui::wm::WindowType WmWindow::GetType() const {
+aura::client::WindowType WmWindow::GetType() const {
   return window_->type();
 }
 
@@ -188,9 +151,7 @@ bool WmWindow::HasNonClientArea() {
 }
 
 int WmWindow::GetNonClientComponent(const gfx::Point& location) {
-  return window_->delegate()
-             ? window_->delegate()->GetNonClientComponent(location)
-             : HTNOWHERE;
+  return wm::GetNonClientComponent(window_, location);
 }
 
 gfx::Point WmWindow::ConvertPointToTarget(const WmWindow* target,
@@ -225,9 +186,8 @@ gfx::Rect WmWindow::ConvertRectFromScreen(const gfx::Rect& rect) const {
 }
 
 gfx::Size WmWindow::GetMinimumSize() const {
-  return window_->delegate() && !use_empty_minimum_size_for_testing_
-             ? window_->delegate()->GetMinimumSize()
-             : gfx::Size();
+  return window_->delegate() ? window_->delegate()->GetMinimumSize()
+                             : gfx::Size();
 }
 
 gfx::Size WmWindow::GetMaximumSize() const {
@@ -309,23 +269,6 @@ bool WmWindow::MoveToEventRoot(const ui::Event& event) {
   return ash::wm::MoveWindowToEventRoot(window_, event);
 }
 
-void WmWindow::SetLayoutManager(
-    std::unique_ptr<WmLayoutManager> layout_manager) {
-  // See ~AuraLayoutManagerAdapter for why SetLayoutManager(nullptr) is called.
-  window_->SetLayoutManager(nullptr);
-  if (!layout_manager)
-    return;
-
-  // |window_| takes ownership of AuraLayoutManagerAdapter.
-  window_->SetLayoutManager(
-      new AuraLayoutManagerAdapter(window_, std::move(layout_manager)));
-}
-
-WmLayoutManager* WmWindow::GetLayoutManager() {
-  AuraLayoutManagerAdapter* adapter = AuraLayoutManagerAdapter::Get(window_);
-  return adapter ? adapter->wm_layout_manager() : nullptr;
-}
-
 void WmWindow::SetVisibilityChangesAnimated() {
   ::wm::SetWindowVisibilityChangesAnimated(window_);
 }
@@ -376,50 +319,6 @@ void WmWindow::SetBoundsWithTransitionDelay(const gfx::Rect& bounds,
   window_->SetBounds(bounds);
 }
 
-void WmWindow::SetBoundsDirect(const gfx::Rect& bounds) {
-  BoundsSetter().SetBounds(window_, bounds);
-  wm::SnapWindowToPixelBoundary(window_);
-}
-
-void WmWindow::SetBoundsDirectAnimated(const gfx::Rect& bounds) {
-  const int kBoundsChangeSlideDurationMs = 120;
-
-  ui::Layer* layer = window_->layer();
-  ui::ScopedLayerAnimationSettings slide_settings(layer->GetAnimator());
-  slide_settings.SetPreemptionStrategy(
-      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
-  slide_settings.SetTransitionDuration(
-      base::TimeDelta::FromMilliseconds(kBoundsChangeSlideDurationMs));
-  SetBoundsDirect(bounds);
-}
-
-void WmWindow::SetBoundsDirectCrossFade(const gfx::Rect& bounds) {
-  const gfx::Rect old_bounds = window_->bounds();
-
-  // Create fresh layers for the window and all its children to paint into.
-  // Takes ownership of the old layer and all its children, which will be
-  // cleaned up after the animation completes.
-  // Specify |set_bounds| to true here to keep the old bounds in the child
-  // windows of |window|.
-  std::unique_ptr<ui::LayerTreeOwner> old_layer_owner =
-      ::wm::RecreateLayers(window_);
-  ui::Layer* old_layer = old_layer_owner->root();
-  DCHECK(old_layer);
-  ui::Layer* new_layer = window_->layer();
-
-  // Resize the window to the new size, which will force a layout and paint.
-  SetBoundsDirect(bounds);
-
-  // Ensure the higher-resolution layer is on top.
-  bool old_on_top = (old_bounds.width() > bounds.width());
-  if (old_on_top)
-    old_layer->parent()->StackBelow(new_layer, old_layer);
-  else
-    old_layer->parent()->StackAbove(new_layer, old_layer);
-
-  CrossFadeAnimation(window_, std::move(old_layer_owner), gfx::Tween::EASE_OUT);
-}
-
 void WmWindow::SetBoundsInScreen(const gfx::Rect& bounds_in_screen,
                                  const display::Display& dst_display) {
   window_->SetBoundsInScreen(bounds_in_screen, dst_display);
@@ -439,6 +338,7 @@ gfx::Rect WmWindow::GetTargetBounds() {
 
 void WmWindow::ClearRestoreBounds() {
   window_->ClearProperty(aura::client::kRestoreBoundsKey);
+  window_->ClearProperty(::wm::kVirtualKeyboardRestoreBoundsKey);
 }
 
 void WmWindow::SetRestoreBoundsInScreen(const gfx::Rect& bounds) {
@@ -463,31 +363,11 @@ ui::WindowShowState WmWindow::GetShowState() const {
   return window_->GetProperty(aura::client::kShowStateKey);
 }
 
-void WmWindow::SetPreMinimizedShowState(ui::WindowShowState show_state) {
-  window_->SetProperty(aura::client::kPreMinimizedShowStateKey, show_state);
-}
-
-ui::WindowShowState WmWindow::GetPreMinimizedShowState() const {
-  return window_->GetProperty(aura::client::kPreMinimizedShowStateKey);
-}
-
 void WmWindow::SetPreFullscreenShowState(ui::WindowShowState show_state) {
   // We should never store the ui::SHOW_STATE_MINIMIZED as the show state before
   // fullscreen.
   DCHECK_NE(show_state, ui::SHOW_STATE_MINIMIZED);
   window_->SetProperty(aura::client::kPreFullscreenShowStateKey, show_state);
-}
-
-void WmWindow::SetRestoreOverrides(const gfx::Rect& bounds_override,
-                                   ui::WindowShowState window_state_override) {
-  if (bounds_override.IsEmpty()) {
-    window_->ClearProperty(kRestoreShowStateOverrideKey);
-    window_->ClearProperty(kRestoreBoundsOverrideKey);
-    return;
-  }
-  window_->SetProperty(kRestoreShowStateOverrideKey, window_state_override);
-  window_->SetProperty(kRestoreBoundsOverrideKey,
-                       new gfx::Rect(bounds_override));
 }
 
 void WmWindow::SetLockedToRoot(bool value) {
@@ -630,28 +510,6 @@ WmWindow* WmWindow::GetChildByShellWindowId(int id) {
   return Get(window_->GetChildById(id));
 }
 
-void WmWindow::ShowResizeShadow(int component) {
-  if (Shell::GetAshConfig() == Config::MASH) {
-    // TODO: http://crbug.com/640773.
-    return;
-  }
-  ResizeShadowController* resize_shadow_controller =
-      Shell::Get()->resize_shadow_controller();
-  if (resize_shadow_controller)
-    resize_shadow_controller->ShowShadow(window_, component);
-}
-
-void WmWindow::HideResizeShadow() {
-  if (Shell::GetAshConfig() == Config::MASH) {
-    // TODO: http://crbug.com/640773.
-    return;
-  }
-  ResizeShadowController* resize_shadow_controller =
-      Shell::Get()->resize_shadow_controller();
-  if (resize_shadow_controller)
-    resize_shadow_controller->HideShadow(window_);
-}
-
 void WmWindow::InstallResizeHandleWindowTargeter(
     ImmersiveFullscreenController* immersive_fullscreen_controller) {
   window_->SetEventTargeter(base::MakeUnique<ResizeHandleWindowTargeter>(
@@ -689,10 +547,6 @@ void WmWindow::SetChildrenUseExtendedHitRegion() {
       window_, mouse_extend, touch_extend));
 }
 
-std::unique_ptr<views::View> WmWindow::CreateViewWithRecreatedLayers() {
-  return base::MakeUnique<wm::WindowMirrorView>(this);
-}
-
 void WmWindow::AddTransientWindowObserver(WmTransientWindowObserver* observer) {
   if (!added_transient_observer_) {
     added_transient_observer_ = true;
@@ -723,30 +577,8 @@ void WmWindow::RemoveLimitedPreTargetHandler(ui::EventHandler* handler) {
   window_->RemovePreTargetHandler(handler);
 }
 
-WmWindow::WmWindow(aura::Window* window)
-    : window_(window),
-      use_empty_minimum_size_for_testing_(
-          default_use_empty_minimum_size_for_testing_) {
-  window_->AddObserver(this);
+WmWindow::WmWindow(aura::Window* window) : window_(window) {
   window_->SetProperty(kWmWindowKey, this);
-}
-
-void WmWindow::OnWindowPropertyChanged(aura::Window* window,
-                                       const void* key,
-                                       intptr_t old) {
-  if (key == aura::client::kShowStateKey) {
-    ash::wm::GetWindowState(window_)->OnWindowShowStateChanged();
-    return;
-  }
-  if (key == aura::client::kImmersiveFullscreenKey) {
-    bool enable = window_->GetProperty(aura::client::kImmersiveFullscreenKey);
-    GetWindowState()->set_in_immersive_fullscreen(enable);
-    return;
-  }
-  if (key == kWindowPinTypeKey) {
-    ash::wm::GetWindowState(window_)->OnWindowPinTypeChanged();
-    return;
-  }
 }
 
 void WmWindow::OnTransientChildAdded(aura::Window* window,

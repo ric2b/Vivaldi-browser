@@ -6,8 +6,10 @@
 
 #include "base/logging.h"
 #include "base/mac/scoped_nsobject.h"
+#include "chrome/browser/ui/cocoa/l10n_util.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
 #include "skia/ext/skia_utils_mac.h"
+#import "ui/base/cocoa/nsview_additions.h"
 #import "ui/base/cocoa/tracking_area.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/font.h"
@@ -16,10 +18,11 @@
 
 namespace {
 
-// Color values for the bubble decoration divider.
-const CGFloat kDividerAlpha = 38.0;
-const CGFloat kDividerGrayScale = 0.0;
-const CGFloat kDividerIncognitoGrayScale = 1.0;
+// Layout and color values for the vertical divider.
+const CGFloat kDividerHeight = 16.0;
+const CGFloat kDividerPadding = 6.0;  // Between the divider and label.
+const CGFloat kDividerGray = 0xFFA6A6A6;
+const CGFloat kDividerGrayIncognito = 0xFFCCCCCC;
 
 // Color values for the hover and pressed background.
 const SkColor kHoverBackgroundColor = 0x14000000;
@@ -38,6 +41,7 @@ const CGFloat kBackgroundFrameYInset = 2.0;
 // VoiceOver.
 @interface DecorationAccessibilityView : NSButton {
   LocationBarDecoration* owner_;  // weak
+  NSRect apparentFrame_;
 }
 
 // NSView:
@@ -49,6 +53,8 @@ const CGFloat kBackgroundFrameYInset = 2.0;
 
 // This method is called when this DecorationAccessibilityView is activated.
 - (void)actionDidHappen;
+
+- (void)setApparentFrame:(NSRect)r;
 @end
 
 @implementation DecorationAccessibilityView
@@ -60,6 +66,7 @@ const CGFloat kBackgroundFrameYInset = 2.0;
     self->owner_ = owner;
     [self setAction:@selector(actionDidHappen)];
     [self setTarget:self];
+    self->apparentFrame_ = NSZeroRect;
   }
   return self;
 }
@@ -67,11 +74,7 @@ const CGFloat kBackgroundFrameYInset = 2.0;
 - (BOOL)acceptsFirstResponder {
   // This NSView is only focusable if the owning LocationBarDecoration can
   // accept mouse presses.
-  // TODO(ellyjones): Once the key view loop order in ToolbarController is fixed
-  // up properly (which will require some redesign of
-  // LocationBarViewMac::GetDecorationAccessibilityViews()), this method should
-  // honor |owner_->AcceptsMousePress()|. See https://crbug.com/623883.
-  return NO;
+  return owner_->AcceptsMousePress() ? YES : NO;
 }
 
 - (void)drawRect:(NSRect)dirtyRect {
@@ -88,7 +91,24 @@ const CGFloat kBackgroundFrameYInset = 2.0;
 }
 
 - (NSString*)accessibilityLabel {
-  return owner_->GetToolTip();
+  NSString* label = owner_->GetAccessibilityLabel();
+  return label ? label : owner_->GetToolTip();
+}
+
+- (void)setApparentFrame:(NSRect)r {
+  apparentFrame_ = r;
+}
+
+// The focus ring (and all other visuals) should be positioned using the
+// apparent frame, not the real frame, because of the hack in
+// LocationBarViewMac::UpdateAccessibilityView().
+- (void)drawFocusRingMask {
+  NSRectFill([self focusRingMaskBounds]);
+}
+
+- (NSRect)focusRingMaskBounds {
+  return owner_->GetRealFocusRingBounds(
+      [[self superview] convertRect:apparentFrame_ toView:self]);
 }
 
 @end
@@ -124,7 +144,7 @@ const CGFloat kBackgroundFrameYInset = 2.0;
 @end
 
 const CGFloat LocationBarDecoration::kOmittedWidth = 0.0;
-const SkColor LocationBarDecoration::kMaterialDarkModeTextColor = 0xCCFFFFFF;
+const SkColor LocationBarDecoration::kMaterialDarkModeTextColor = SK_ColorWHITE;
 
 LocationBarDecoration::LocationBarDecoration() {
   accessibility_view_.reset(
@@ -141,6 +161,10 @@ void LocationBarDecoration::OnAccessibilityViewAction() {
 
 LocationBarDecoration::~LocationBarDecoration() {
   [accessibility_view_.get() removeFromSuperview];
+}
+
+CGFloat LocationBarDecoration::DividerPadding() const {
+  return kDividerPadding;
 }
 
 bool LocationBarDecoration::IsVisible() const {
@@ -160,6 +184,16 @@ CGFloat LocationBarDecoration::GetWidthForSpace(CGFloat width) {
 
 NSRect LocationBarDecoration::GetBackgroundFrame(NSRect frame) {
   return NSInsetRect(frame, 0.0, kBackgroundFrameYInset);
+}
+
+void LocationBarDecoration::UpdateAccessibilityView(NSRect apparent_frame) {
+  auto v = static_cast<DecorationAccessibilityView*>(accessibility_view_);
+  [accessibility_view_ setEnabled:AcceptsMousePress()];
+  [v setApparentFrame:apparent_frame];
+}
+
+NSRect LocationBarDecoration::GetRealFocusRingBounds(NSRect bounds) const {
+  return bounds;
 }
 
 void LocationBarDecoration::DrawInFrame(NSRect frame, NSView* control_view) {
@@ -194,6 +228,10 @@ void LocationBarDecoration::DrawWithBackgroundInFrame(NSRect frame,
 }
 
 NSString* LocationBarDecoration::GetToolTip() {
+  return nil;
+}
+
+NSString* LocationBarDecoration::GetAccessibilityLabel() {
   return nil;
 }
 
@@ -376,12 +414,55 @@ SkColor LocationBarDecoration::GetMaterialIconColor(
   return location_bar_is_dark ? SK_ColorWHITE : gfx::kChromeIconGrey;
 }
 
-NSColor* LocationBarDecoration::GetDividerColor(
-    bool location_bar_is_dark) const {
-  CGFloat gray_scale =
-      location_bar_is_dark ? kDividerIncognitoGrayScale : kDividerGrayScale;
-  return
-      [NSColor colorWithCalibratedWhite:gray_scale alpha:kDividerAlpha / 255.0];
+void LocationBarDecoration::DrawDivider(NSView* control_view,
+                                        NSRect decoration_frame,
+                                        CGFloat alpha) const {
+  if (alpha == 0.0) {
+    return;
+  }
+
+  NSBezierPath* line = [NSBezierPath bezierPath];
+
+  CGFloat line_width = [control_view cr_lineWidth];
+  [line setLineWidth:line_width];
+
+  const BOOL is_rtl = cocoa_l10n_util::ShouldDoExperimentalRTLLayout();
+  NSPoint divider_origin = NSZeroPoint;
+  divider_origin.x = is_rtl ? NSMinX(decoration_frame) + DividerPadding()
+                            : NSMaxX(decoration_frame) - DividerPadding();
+  // Screen pixels lay between integral coordinates in user space. If you
+  // draw a line from (16, 16) to (16, 32), Core Graphics maps that line to
+  // the pixels that lay along x=16.5. In order to achieve a line that
+  // appears to lay along x=16, CG will perform dithering. To get a crisp
+  // line, you have to specify x=16.5, so translating by 1/2 the 1-pixel
+  // line width creates the crisp line we want. We subtract to better center
+  // the line between the label and URL.
+  divider_origin.x -= line_width / 2.;
+  CGFloat divider_y_frame_offset =
+      (NSHeight(decoration_frame) - kDividerHeight) / 2.0;
+  divider_origin.y = NSMinY(decoration_frame) + divider_y_frame_offset;
+  // Adjust the divider origin by 1/2 a point to visually center the
+  // divider vertically on Retina.
+  if (line_width < 1) {
+    divider_origin.y -= 0.5;
+  }
+  [line moveToPoint:divider_origin];
+  [line relativeLineToPoint:NSMakePoint(0, kDividerHeight)];
+
+  NSColor* divider_color = nil;
+  bool location_bar_is_dark =
+      [[control_view window] inIncognitoModeWithSystemTheme];
+  if (location_bar_is_dark) {
+    divider_color = skia::SkColorToSRGBNSColor(kDividerGrayIncognito);
+  } else {
+    divider_color = skia::SkColorToSRGBNSColor(kDividerGray);
+  }
+
+  if (alpha < 1) {
+    divider_color = [divider_color colorWithAlphaComponent:alpha];
+  }
+  [divider_color set];
+  [line stroke];
 }
 
 const gfx::VectorIcon* LocationBarDecoration::GetMaterialVectorIcon() const {

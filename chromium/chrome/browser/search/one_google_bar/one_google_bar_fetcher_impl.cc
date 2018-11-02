@@ -8,15 +8,16 @@
 #include <utility>
 
 #include "base/callback.h"
-#include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_data.h"
 #include "chrome/common/chrome_content_client.h"
+#include "chrome/common/chrome_features.h"
 #include "components/google/core/browser/google_url_tracker.h"
 #include "components/safe_json/safe_json_parser.h"
 #include "components/signin/core/browser/access_token_fetcher.h"
@@ -26,6 +27,7 @@
 #include "google_apis/google_api_keys.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
 
@@ -35,7 +37,7 @@ const char kApiUrl[] = "https://onegoogle-pa.googleapis.com/v1/getbar";
 
 const char kApiKeyFormat[] = "?key=%s";
 
-const char kApiScope[] = "https://www.googleapis.com/auth/onegoogle.readonly";
+const char kApiScope[] = "https://www.googleapis.com/auth/onegoogle.api";
 const char kAuthorizationRequestHeaderFormat[] = "Bearer %s";
 
 const char kResponsePreamble[] = ")]}'";
@@ -191,11 +193,12 @@ void OneGoogleBarFetcherImpl::AuthenticatedURLFetcher::Start() {
 
 GURL OneGoogleBarFetcherImpl::AuthenticatedURLFetcher::GetApiUrl(
     bool use_oauth) const {
-  std::string api_url(kApiUrl);
-  // TODO(treib): Attach to feature instead of cmdline.
-  base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  if (cmdline->HasSwitch("one-google-api-url"))
-    api_url = cmdline->GetSwitchValueASCII("one-google-api-url");
+  std::string api_url = base::GetFieldTrialParamValueByFeature(
+      features::kOneGoogleBarOnLocalNtp, "one-google-api-url");
+  if (api_url.empty()) {
+    api_url = kApiUrl;
+  }
+
   // Append the API key only for unauthenticated requests.
   if (!use_oauth) {
     api_url +=
@@ -207,10 +210,11 @@ GURL OneGoogleBarFetcherImpl::AuthenticatedURLFetcher::GetApiUrl(
 
 std::string OneGoogleBarFetcherImpl::AuthenticatedURLFetcher::GetRequestBody()
     const {
-  // TODO(treib): Attach to feature instead of cmdline.
-  base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  if (cmdline->HasSwitch("one-google-bar-options"))
-    return cmdline->GetSwitchValueASCII("one-google-bar-options");
+  std::string override_options = base::GetFieldTrialParamValueByFeature(
+      features::kOneGoogleBarOnLocalNtp, "one-google-bar-options");
+  if (!override_options.empty()) {
+    return override_options;
+  }
 
   base::DictionaryValue dict;
   dict.SetInteger("subproduct", 243);
@@ -265,7 +269,31 @@ void OneGoogleBarFetcherImpl::AuthenticatedURLFetcher::GotAccessToken(
 
   bool use_oauth = !access_token.empty();
   GURL url = GetApiUrl(use_oauth);
-  url_fetcher_ = net::URLFetcher::Create(0, url, net::URLFetcher::POST, this);
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("one_google_bar_service", R"(
+        semantics {
+          sender: "One Google Bar Service"
+          description: "Downloads the 'One Google' bar."
+          trigger:
+            "Displaying the new tab page on Desktop, if Google is the "
+            "configured search provider."
+          data: "Credentials if user is signed in."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting:
+            "Users can control this feature via selecting a non-Google default "
+            "search engine in Chrome settings under 'Search Engine'."
+          chrome_policy {
+            DefaultSearchProviderEnabled {
+              policy_options {mode: MANDATORY}
+              DefaultSearchProviderEnabled: false
+            }
+          }
+        })");
+  url_fetcher_ = net::URLFetcher::Create(0, url, net::URLFetcher::POST, this,
+                                         traffic_annotation);
   url_fetcher_->SetRequestContext(request_context_);
 
   url_fetcher_->SetLoadFlags(net::LOAD_DO_NOT_SEND_AUTH_DATA |
@@ -303,8 +331,9 @@ void OneGoogleBarFetcherImpl::Fetch(OneGoogleCallback callback) {
 
 void OneGoogleBarFetcherImpl::IssueRequestIfNoneOngoing() {
   // If there is an ongoing request, let it complete.
-  if (pending_request_.get())
+  if (pending_request_.get()) {
     return;
+  }
 
   pending_request_ = base::MakeUnique<AuthenticatedURLFetcher>(
       signin_manager_, token_service_, request_context_,

@@ -7,13 +7,13 @@
 
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "platform/scheduler/base/task_queue_manager_delegate.h"
 
 namespace blink {
 namespace scheduler {
 
-class BLINK_PLATFORM_EXPORT SchedulerTqmDelegate
-    : public TaskQueueManagerDelegate {
+class PLATFORM_EXPORT SchedulerTqmDelegate : public TaskQueueManagerDelegate {
  public:
   SchedulerTqmDelegate() {}
 

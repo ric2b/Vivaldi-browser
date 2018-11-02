@@ -68,6 +68,10 @@ struct DataReductionProxyInfo {
 // Gets the header used for data reduction proxy requests and responses.
 const char* chrome_proxy_header();
 
+// Gets the chrome-proxy-ect request header that includes the effective
+// connection type.
+const char* chrome_proxy_ect_header();
+
 // Gets the ChromeProxyAcceptTransform header name.
 const char* chrome_proxy_accept_transform_header();
 
@@ -94,9 +98,9 @@ const char* identity_directive();
 // preview requests and responses.
 const char* chrome_proxy_lite_page_directive();
 
-// Gets the Chrome-Proxy directive used by data reduction proxy lite page
-// preview experiment to ignore the blacklist.
-const char* chrome_proxy_lite_page_ignore_blacklist_directive();
+// Gets the Chrome-Proxy experiment ("exp") value to force a lite page preview
+// for requests that accept lite pages.
+const char* chrome_proxy_force_lite_page_experiment();
 
 // Requests a transformation only if the server determines that the page is
 // otherwise heavy (i.e., the associated page load ordinarily requires the

@@ -14,6 +14,8 @@
 #include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/ref_counted_memory.h"
+#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -23,10 +25,12 @@
 #include "build/build_config.h"
 #include "content/browser/devtools/devtools_http_handler.h"
 #include "content/browser/devtools/devtools_manager.h"
+#include "content/browser/devtools/grit/devtools_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_external_agent_proxy_delegate.h"
 #include "content/public/browser/devtools_manager_delegate.h"
 #include "content/public/browser/devtools_socket_factory.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/user_agent.h"
 #include "net/base/escape.h"
@@ -37,6 +41,7 @@
 #include "net/server/http_server_request_info.h"
 #include "net/server/http_server_response_info.h"
 #include "net/socket/server_socket.h"
+#include "third_party/brotli/include/brotli/decode.h"
 #include "v8/include/v8-version-string.h"
 
 #if defined(OS_ANDROID)
@@ -534,11 +539,17 @@ void DevToolsHttpHandler::OnJsonRequest(
     return;
   }
 
+  if (command == "protocol") {
+    DecompressAndSendJsonProtocol(connection_id);
+    return;
+  }
+
   if (command == "list") {
-    DevToolsAgentHost::DiscoverAllHosts(
-        base::Bind(&DevToolsHttpHandler::RespondToJsonList,
-                   weak_factory_.GetWeakPtr(), connection_id,
-                   info.headers["host"]));
+    DevToolsManager* manager = DevToolsManager::GetInstance();
+    DevToolsAgentHost::List list =
+        manager->delegate() ? manager->delegate()->RemoteDebuggingTargets()
+                            : DevToolsAgentHost::GetOrCreateAll();
+    RespondToJsonList(connection_id, info.headers["host"], std::move(list));
     return;
   }
 
@@ -561,13 +572,12 @@ void DevToolsHttpHandler::OnJsonRequest(
     std::unique_ptr<base::DictionaryValue> dictionary(
         SerializeDescriptor(agent_host, host));
     SendJson(connection_id, net::HTTP_OK, dictionary.get(), std::string());
-    const std::string target_id = agent_host->GetId();
-    agent_host_map_[target_id] = agent_host;
     return;
   }
 
   if (command == "activate" || command == "close") {
-    scoped_refptr<DevToolsAgentHost> agent_host = GetAgentHost(target_id);
+    scoped_refptr<DevToolsAgentHost> agent_host =
+        DevToolsAgentHost::GetForId(target_id);
     if (!agent_host) {
       SendJson(connection_id,
                net::HTTP_NOT_FOUND,
@@ -607,25 +617,57 @@ void DevToolsHttpHandler::OnJsonRequest(
   return;
 }
 
+void DevToolsHttpHandler::DecompressAndSendJsonProtocol(int connection_id) {
+  scoped_refptr<base::RefCountedMemory> raw_bytes =
+      GetContentClient()->GetDataResourceBytes(COMPRESSED_PROTOCOL_JSON);
+  const uint8_t* next_encoded_byte = raw_bytes->front();
+  size_t input_size_remaining = raw_bytes->size();
+  BrotliDecoderState* decoder = BrotliDecoderCreateInstance(
+      nullptr /* no custom allocator */, nullptr /* no custom deallocator */,
+      nullptr /* no custom memory handle */);
+  CHECK(!!decoder);
+  std::vector<std::string> decoded_parts;
+  size_t decompressed_size = 0;
+  while (!BrotliDecoderIsFinished(decoder)) {
+    size_t output_size_remaining = 0;
+    CHECK(BrotliDecoderDecompressStream(
+              decoder, &input_size_remaining, &next_encoded_byte,
+              &output_size_remaining, nullptr,
+              nullptr) != BROTLI_DECODER_RESULT_ERROR);
+    const uint8_t* output_buffer =
+        BrotliDecoderTakeOutput(decoder, &output_size_remaining);
+    decoded_parts.emplace_back(reinterpret_cast<const char*>(output_buffer),
+                               output_size_remaining);
+    decompressed_size += output_size_remaining;
+  }
+  BrotliDecoderDestroyInstance(decoder);
+
+  // Ideally we'd use a StringBuilder here but there isn't one in base/.
+  std::string json_protocol;
+  json_protocol.reserve(decompressed_size);
+  for (const std::string& part : decoded_parts) {
+    json_protocol.append(part);
+  }
+
+  net::HttpServerResponseInfo response(net::HTTP_OK);
+  response.SetBody(json_protocol, "application/json; charset=UTF-8");
+
+  thread_->task_runner()->PostTask(
+      FROM_HERE,
+      base::Bind(&ServerWrapper::SendResponse,
+                 base::Unretained(server_wrapper_), connection_id, response));
+}
+
 void DevToolsHttpHandler::RespondToJsonList(
     int connection_id,
     const std::string& host,
     DevToolsAgentHost::List hosts) {
   DevToolsAgentHost::List agent_hosts = std::move(hosts);
   std::sort(agent_hosts.begin(), agent_hosts.end(), TimeComparator);
-  agent_host_map_.clear();
   base::ListValue list_value;
-  for (auto& agent_host : agent_hosts) {
-    agent_host_map_[agent_host->GetId()] = agent_host;
+  for (auto& agent_host : agent_hosts)
     list_value.Append(SerializeDescriptor(agent_host, host));
-  }
   SendJson(connection_id, net::HTTP_OK, &list_value, std::string());
-}
-
-scoped_refptr<DevToolsAgentHost> DevToolsHttpHandler::GetAgentHost(
-    const std::string& target_id) {
-  DescriptorMap::const_iterator it = agent_host_map_.find(target_id);
-  return it != agent_host_map_.end() ? it->second : nullptr;
 }
 
 void DevToolsHttpHandler::OnDiscoveryPageRequest(int connection_id) {
@@ -668,7 +710,8 @@ void DevToolsHttpHandler::OnWebSocketRequest(
   }
 
   std::string target_id = request.path.substr(strlen(kPageUrlPrefix));
-  scoped_refptr<DevToolsAgentHost> agent = GetAgentHost(target_id);
+  scoped_refptr<DevToolsAgentHost> agent =
+      DevToolsAgentHost::GetForId(target_id);
   if (!agent) {
     Send500(connection_id, "No such target id: " + target_id);
     return;

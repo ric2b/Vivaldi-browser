@@ -19,6 +19,7 @@
 #include "media/base/data_source.h"
 #include "media/base/decoder_buffer.h"
 #include "platform_media/renderer/decoders/pass_through_decoder_texture.h"
+#include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_constants.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
@@ -46,7 +47,8 @@ void HandleConfigChange(const ConfigType& new_config,
   params->type = type;
 
   if (!new_config.is_valid()) {
-    DLOG(ERROR) << "Invalid configuration received";
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " Invalid configuration received";
     params->status = media::kError;
     return;
   }
@@ -131,7 +133,8 @@ IPCMediaPipelineHostImpl::PictureBufferManager::ProvidePictureBuffer(
   std::vector<gpu::Mailbox> texture_mailboxes;
   if (!factories_->CreateTextures(1, size, &texture_ids, &texture_mailboxes,
                                   media::kPlatformMediaPipelineTextureTarget)) {
-    DLOG(ERROR) << "Failed to create texture.";
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                << " Failed to create texture.";
     return NULL;
   }
   DCHECK_EQ(texture_ids.size(), 1U);
@@ -148,7 +151,8 @@ IPCMediaPipelineHostImpl::PictureBufferManager::CreateWrappedTexture(
   DCHECK(picture_buffer_in_use_);
 
   if (picture_buffer_in_use_->texture_id != texture_id) {
-    DLOG(ERROR) << "Unexpected texture id " << texture_id;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " Unexpected texture id " << texture_id;
     return NULL;
   }
 
@@ -298,8 +302,9 @@ IPCMediaPipelineHostImpl::~IPCMediaPipelineHostImpl() {
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (is_connected()) {
-    DLOG(ERROR) << "Object was not brought down properly. Missing "
-                   "MediaPipelineMsg_Stopped?";
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " Object was not brought down properly. Missing "
+               << " MediaPipelineMsg_Stopped?";
   }
 }
 
@@ -338,12 +343,20 @@ void IPCMediaPipelineHostImpl::OnInitialized(
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (init_callback_.is_null()) {
-    DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " Unexpected call to " << __FUNCTION__;
     return;
   }
 
   if (audio_config.is_valid()) {
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Audio Config Acceptable : "
+            << Loggable(audio_config);
     audio_config_ = audio_config;
+  } else {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Audio Config is not Valid "
+                 << Loggable(audio_config);
   }
 
   if (video_config.is_valid()) {
@@ -352,6 +365,9 @@ void IPCMediaPipelineHostImpl::OnInitialized(
         media::PlatformMediaDecodingMode::HARDWARE) {
       picture_buffer_manager_.reset(new PictureBufferManager(factories_));
     }
+  } else {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Video Config is not Valid ";
   }
 
   success = success && bitrate >= 0;
@@ -371,7 +387,7 @@ void IPCMediaPipelineHostImpl::OnRequestBufferForRawData(
         channel_->ShareToGpuProcess(shared_raw_data_->handle())));
   } else {
     channel_->Send(new MediaPipelineMsg_BufferForRawDataReady(
-        routing_id_, 0, base::SharedMemory::NULLHandle()));
+        routing_id_, 0, base::SharedMemoryHandle()));
   }
 }
 
@@ -381,7 +397,8 @@ void IPCMediaPipelineHostImpl::OnRequestBufferForDecodedData(
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (!is_read_in_progress(type)) {
-    DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " Unexpected call to " << __FUNCTION__;
     return;
   }
 
@@ -393,7 +410,7 @@ void IPCMediaPipelineHostImpl::OnRequestBufferForDecodedData(
         channel_->ShareToGpuProcess(shared_decoded_data_[type]->handle())));
   } else {
     channel_->Send(new MediaPipelineMsg_BufferForDecodedDataReady(
-        routing_id_, type, 0, base::SharedMemory::NULLHandle()));
+        routing_id_, type, 0, base::SharedMemoryHandle()));
   }
 }
 
@@ -417,9 +434,14 @@ void IPCMediaPipelineHostImpl::OnSought(bool success) {
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (seek_callback_.is_null()) {
-    DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " Unexpected call to " << __FUNCTION__;
     return;
   }
+
+  LOG_IF(WARNING, !success)
+      << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+      << " PIPELINE_ERROR_ABORT";
 
   base::ResetAndReturn(&seek_callback_)
       .Run(success ? media::PIPELINE_OK : media::PIPELINE_ERROR_ABORT);
@@ -460,6 +482,8 @@ void IPCMediaPipelineHostImpl::ReadDecodedData(
     const IPCPictureBuffer* picture_buffer =
         picture_buffer_manager_->ProvidePictureBuffer(video_config_.coded_size);
     if (!picture_buffer) {
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Aborted";
       read_cb.Run(DemuxerStream::kAborted, NULL);
       return;
     }
@@ -481,7 +505,8 @@ void IPCMediaPipelineHostImpl::OnReadRawData(int64_t position, int size) {
   TRACE_EVENT_ASYNC_BEGIN0("IPC_MEDIA", "ReadRawData", this);
 
   if (!shared_raw_data_->IsSufficient(size)) {
-    DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " Unexpected call to " << __FUNCTION__;
     channel_->Send(new MediaPipelineMsg_RawDataReady(
         routing_id_, media::DataSource::kReadError));
     TRACE_EVENT_ASYNC_END0("IPC_MEDIA", "ReadRawData", this);
@@ -546,7 +571,8 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
          picture_buffer_manager_);
 
   if (!is_read_in_progress(params.type)) {
-    DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " Unexpected call to " << __FUNCTION__;
     return;
   }
 
@@ -558,8 +584,9 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
             wrapped_texture = picture_buffer_manager_->CreateWrappedTexture(
                 params.client_texture_id);
         if (!wrapped_texture) {
-          DLOG(ERROR) << "Received invalid picture buffer id "
-                      << params.client_texture_id;
+          LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                     << " Received invalid picture buffer id "
+                     << params.client_texture_id;
           base::ResetAndReturn(&decoded_data_read_callbacks_[params.type])
               .Run(DemuxerStream::kOk, new media::DecoderBuffer(0));
           return;
@@ -570,10 +597,10 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
         buffer->set_wrapped_texture(std::move(wrapped_texture));
       } else {
         if (!shared_decoded_data_[params.type]->IsSufficient(params.size)) {
-          DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+          LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                     << " Unexpected call to " << __FUNCTION__;
           return;
         }
-
         buffer = media::DecoderBuffer::CopyFrom(
             shared_decoded_data_[params.type]->memory(), params.size);
       }
@@ -623,14 +650,20 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
 
 void IPCMediaPipelineHostImpl::OnAudioConfigChanged(
     const media::PlatformAudioConfig& new_audio_config) {
-  DVLOG(1) << __FUNCTION__;
-
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (!is_read_in_progress(media::PLATFORM_MEDIA_AUDIO)) {
-    DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " Unexpected call to " << __FUNCTION__;
     return;
   }
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Previous Config "
+          << Loggable(audio_config_);
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " New Config "
+          << Loggable(new_audio_config);
 
   MediaPipelineMsg_DecodedDataReady_Params params;
   HandleConfigChange<media::PLATFORM_MEDIA_AUDIO>(new_audio_config,
@@ -640,20 +673,26 @@ void IPCMediaPipelineHostImpl::OnAudioConfigChanged(
 
 void IPCMediaPipelineHostImpl::OnVideoConfigChanged(
     const media::PlatformVideoConfig& new_video_config) {
-  DVLOG(1) << __FUNCTION__;
-
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (!is_read_in_progress(media::PLATFORM_MEDIA_VIDEO)) {
-    DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " Unexpected call to " << __FUNCTION__;
     return;
   }
 
   MediaPipelineMsg_DecodedDataReady_Params params;
   if (new_video_config.decoding_mode != video_config_.decoding_mode) {
-    DLOG(ERROR) << "New video config tries to change decoding mode.";
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " New video config tries to change decoding mode.";
     params.status = media::kError;
   } else {
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Previous Config "
+            << Loggable(video_config_);
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " New Config "
+            << Loggable(new_video_config);
     HandleConfigChange<media::PLATFORM_MEDIA_VIDEO>(new_video_config,
                                                     &video_config_, &params);
   }

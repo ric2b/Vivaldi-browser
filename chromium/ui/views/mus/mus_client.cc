@@ -6,6 +6,8 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/public/cpp/gpu/gpu.h"
@@ -19,6 +21,7 @@
 #include "ui/aura/mus/property_converter.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
+#include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/views/mus/aura_init.h"
@@ -32,6 +35,10 @@
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/shadow_types.h"
 #include "ui/wm/core/wm_state.h"
+
+#if defined(USE_OZONE)
+#include "ui/base/cursor/ozone/cursor_data_factory_ozone.h"
+#endif
 
 // Widget::InitParams::Type must match that of ui::mojom::WindowType.
 #define WINDOW_TYPES_MATCH(NAME)                                      \
@@ -67,6 +74,16 @@ MusClient::MusClient(service_manager::Connector* connector,
   DCHECK(aura::Env::GetInstance());
   instance_ = this;
 
+#if defined(USE_OZONE)
+  // If we're in a mus client, we aren't going to have all of ozone initialized
+  // even though we're in an ozone build. All the hard coded USE_OZONE ifdefs
+  // that handle cursor code expect that there will be a CursorFactoryOzone
+  // instance. Partially initialize the ozone cursor internals here, like we
+  // partially initialize other ozone subsystems in
+  // ChromeBrowserMainExtraPartsViews.
+  cursor_factory_ozone_ = base::MakeUnique<ui::CursorDataFactoryOzone>();
+#endif
+
   if (!io_task_runner) {
     io_thread_ = base::MakeUnique<base::Thread>("IOThread");
     base::Thread::Options thread_options(base::MessageLoop::TYPE_IO, 0);
@@ -77,7 +94,7 @@ MusClient::MusClient(service_manager::Connector* connector,
 
   // TODO(msw): Avoid this... use some default value? Allow clients to extend?
   property_converter_ = base::MakeUnique<aura::PropertyConverter>();
-  property_converter_->RegisterProperty(
+  property_converter_->RegisterPrimitiveProperty(
       wm::kShadowElevationKey,
       ui::mojom::WindowManager::kShadowElevation_Property,
       base::Bind(&wm::IsValidShadowElevation));
@@ -259,8 +276,12 @@ std::unique_ptr<DesktopWindowTreeHost> MusClient::CreateDesktopWindowTreeHost(
     DesktopNativeWidgetAura* desktop_native_widget_aura) {
   std::map<std::string, std::vector<uint8_t>> mus_properties =
       ConfigurePropertiesFromParams(init_params);
+  aura::WindowTreeHostMusInitParams window_tree_host_init_params =
+      aura::CreateInitParamsForTopLevel(MusClient::Get()->window_tree_client(),
+                                        std::move(mus_properties));
   return base::MakeUnique<DesktopWindowTreeHostMus>(
-      delegate, desktop_native_widget_aura, cc::FrameSinkId(), &mus_properties);
+      std::move(window_tree_host_init_params), delegate,
+      desktop_native_widget_aura);
 }
 
 void MusClient::OnEmbed(

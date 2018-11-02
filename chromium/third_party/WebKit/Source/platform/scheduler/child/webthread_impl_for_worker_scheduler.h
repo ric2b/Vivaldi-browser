@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef THIRD_PARTY_WEBKIT_PUBLIC_PLATFORM_SCHEDULER_CHILD_WEBTHREAD_IMPL_FOR_WORKER_SCHEDULER_H_
-#define THIRD_PARTY_WEBKIT_PUBLIC_PLATFORM_SCHEDULER_CHILD_WEBTHREAD_IMPL_FOR_WORKER_SCHEDULER_H_
+#ifndef THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_CHILD_WEBTHREAD_IMPL_FOR_WORKER_SCHEDULER_H_
+#define THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_CHILD_WEBTHREAD_IMPL_FOR_WORKER_SCHEDULER_H_
 
+#include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
 #include "public/platform/WebPrivatePtr.h"
 #include "public/platform/scheduler/child/webthread_base.h"
@@ -26,7 +27,7 @@ class WebSchedulerImpl;
 class WebTaskRunnerImpl;
 class WorkerScheduler;
 
-class BLINK_PLATFORM_EXPORT WebThreadImplForWorkerScheduler
+class PLATFORM_EXPORT WebThreadImplForWorkerScheduler
     : public WebThreadBase,
       public base::MessageLoop::DestructionObserver {
  public:
@@ -48,8 +49,15 @@ class BLINK_PLATFORM_EXPORT WebThreadImplForWorkerScheduler
   // base::MessageLoop::DestructionObserver implementation.
   void WillDestroyCurrentMessageLoop() override;
 
+  scheduler::WorkerScheduler* GetWorkerScheduler() {
+    return worker_scheduler_.get();
+  }
+
  protected:
   base::Thread* GetThread() const { return thread_.get(); }
+  SchedulerTqmDelegate* task_runner_delegate() const {
+    return task_runner_delegate_.get();
+  }
 
  private:
   virtual std::unique_ptr<scheduler::WorkerScheduler> CreateWorkerScheduler();
@@ -66,7 +74,7 @@ class BLINK_PLATFORM_EXPORT WebThreadImplForWorkerScheduler
   std::unique_ptr<scheduler::WorkerScheduler> worker_scheduler_;
   std::unique_ptr<scheduler::WebSchedulerImpl> web_scheduler_;
   scoped_refptr<base::SingleThreadTaskRunner> thread_task_runner_;
-  scoped_refptr<TaskQueue> task_runner_;
+  scoped_refptr<TaskQueue> task_queue_;
   scoped_refptr<scheduler::SingleThreadIdleTaskRunner> idle_task_runner_;
   scoped_refptr<SchedulerTqmDelegate> task_runner_delegate_;
   WebPrivatePtr<WebTaskRunnerImpl> web_task_runner_;
@@ -75,4 +83,4 @@ class BLINK_PLATFORM_EXPORT WebThreadImplForWorkerScheduler
 }  // namespace scheduler
 }  // namespace blink
 
-#endif  // THIRD_PARTY_WEBKIT_PUBLIC_PLATFORM_SCHEDULER_CHILD_WEBTHREAD_IMPL_FOR_WORKER_SCHEDULER_H_
+#endif  // THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_CHILD_WEBTHREAD_IMPL_FOR_WORKER_SCHEDULER_H_

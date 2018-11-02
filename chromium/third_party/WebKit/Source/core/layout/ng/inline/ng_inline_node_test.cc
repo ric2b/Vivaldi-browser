@@ -12,6 +12,7 @@
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_fragment_builder.h"
+#include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_physical_box_fragment.h"
 #include "core/style/ComputedStyle.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -22,34 +23,34 @@ class NGInlineNodeForTest : public NGInlineNode {
  public:
   using NGInlineNode::NGInlineNode;
 
-  String& Text() { return text_content_; }
-  Vector<NGLayoutInlineItem>& Items() { return items_; }
+  String& Text() { return MutableData().text_content_; }
+  Vector<NGInlineItem>& Items() { return MutableData().items_; }
 
   void Append(const String& text,
               const ComputedStyle* style = nullptr,
               LayoutObject* layout_object = nullptr) {
-    unsigned start = text_content_.length();
-    text_content_.Append(text);
-    items_.push_back(NGLayoutInlineItem(NGLayoutInlineItem::kText, start,
-                                        start + text.length(), style,
-                                        layout_object));
+    unsigned start = Data().text_content_.length();
+    MutableData().text_content_.append(text);
+    MutableData().items_.push_back(NGInlineItem(NGInlineItem::kText, start,
+                                                start + text.length(), style,
+                                                layout_object));
   }
 
   void Append(UChar character) {
-    text_content_.Append(character);
-    unsigned end = text_content_.length();
-    items_.push_back(NGLayoutInlineItem(NGLayoutInlineItem::kBidiControl,
-                                        end - 1, end, nullptr));
-    is_bidi_enabled_ = true;
+    MutableData().text_content_.append(character);
+    unsigned end = Data().text_content_.length();
+    MutableData().items_.push_back(
+        NGInlineItem(NGInlineItem::kBidiControl, end - 1, end, nullptr));
+    MutableData().is_bidi_enabled_ = true;
   }
 
   void ClearText() {
-    text_content_ = String();
-    items_.Clear();
+    MutableData().text_content_ = String();
+    MutableData().items_.clear();
   }
 
   void SegmentText() {
-    is_bidi_enabled_ = true;
+    MutableData().is_bidi_enabled_ = true;
     NGInlineNode::SegmentText();
   }
 
@@ -61,13 +62,19 @@ class NGInlineNodeTest : public RenderingTest {
  protected:
   void SetUp() override {
     RenderingTest::SetUp();
+    RuntimeEnabledFeatures::setLayoutNGEnabled(true);
     style_ = ComputedStyle::Create();
     style_->GetFont().Update(nullptr);
   }
 
+  void TearDown() override {
+    RuntimeEnabledFeatures::setLayoutNGEnabled(false);
+    RenderingTest::TearDown();
+  }
+
   void SetupHtml(const char* id, String html) {
     SetBodyInnerHTML(html);
-    layout_block_flow_ = ToLayoutBlockFlow(GetLayoutObjectByElementId(id));
+    layout_block_flow_ = ToLayoutNGBlockFlow(GetLayoutObjectByElementId(id));
     layout_object_ = layout_block_flow_->FirstChild();
     style_ = layout_object_->Style();
   }
@@ -104,18 +111,18 @@ class NGInlineNodeTest : public RenderingTest {
   }
 
   RefPtr<const ComputedStyle> style_;
-  LayoutBlockFlow* layout_block_flow_ = nullptr;
+  LayoutNGBlockFlow* layout_block_flow_ = nullptr;
   LayoutObject* layout_object_ = nullptr;
   FontCachePurgePreventer purge_preventer_;
 };
 
 #define TEST_ITEM_TYPE_OFFSET(item, type, start, end) \
-  EXPECT_EQ(NGLayoutInlineItem::type, item.Type());   \
+  EXPECT_EQ(NGInlineItem::type, item.Type());         \
   EXPECT_EQ(start, item.StartOffset());               \
   EXPECT_EQ(end, item.EndOffset())
 
 #define TEST_ITEM_TYPE_OFFSET_LEVEL(item, type, start, end, level) \
-  EXPECT_EQ(NGLayoutInlineItem::type, item.Type());                \
+  EXPECT_EQ(NGInlineItem::type, item.Type());                      \
   EXPECT_EQ(start, item.StartOffset());                            \
   EXPECT_EQ(end, item.EndOffset());                                \
   EXPECT_EQ(level, item.BidiLevel())
@@ -129,13 +136,25 @@ TEST_F(NGInlineNodeTest, CollectInlinesText) {
   SetupHtml("t", "<div id=t>Hello <span>inline</span> world.</div>");
   NGInlineNodeForTest* node = CreateInlineNode();
   node->CollectInlines(layout_object_, layout_block_flow_);
-  Vector<NGLayoutInlineItem>& items = node->Items();
+  Vector<NGInlineItem>& items = node->Items();
   TEST_ITEM_TYPE_OFFSET(items[0], kText, 0u, 6u);
   TEST_ITEM_TYPE_OFFSET(items[1], kOpenTag, 6u, 6u);
   TEST_ITEM_TYPE_OFFSET(items[2], kText, 6u, 12u);
   TEST_ITEM_TYPE_OFFSET(items[3], kCloseTag, 12u, 12u);
   TEST_ITEM_TYPE_OFFSET(items[4], kText, 12u, 19u);
   EXPECT_EQ(5u, items.size());
+}
+
+TEST_F(NGInlineNodeTest, CollectInlinesBR) {
+  SetupHtml("t", u"<div id=t>Hello<br>World</div>");
+  NGInlineNodeForTest* node = CreateInlineNode();
+  node->CollectInlines(layout_object_, layout_block_flow_);
+  EXPECT_EQ("Hello\nWorld", node->Text());
+  Vector<NGInlineItem>& items = node->Items();
+  TEST_ITEM_TYPE_OFFSET(items[0], kText, 0u, 5u);
+  TEST_ITEM_TYPE_OFFSET(items[1], kControl, 5u, 6u);
+  TEST_ITEM_TYPE_OFFSET(items[2], kText, 6u, 11u);
+  EXPECT_EQ(3u, items.size());
 }
 
 TEST_F(NGInlineNodeTest, CollectInlinesRtlText) {
@@ -145,7 +164,7 @@ TEST_F(NGInlineNodeTest, CollectInlinesRtlText) {
   EXPECT_TRUE(node->IsBidiEnabled());
   node->SegmentText();
   EXPECT_TRUE(node->IsBidiEnabled());
-  Vector<NGLayoutInlineItem>& items = node->Items();
+  Vector<NGInlineItem>& items = node->Items();
   TEST_ITEM_TYPE_OFFSET_LEVEL(items[0], kText, 0u, 2u, 1u);
   TEST_ITEM_TYPE_OFFSET_LEVEL(items[1], kOpenTag, 2u, 2u, 1u);
   TEST_ITEM_TYPE_OFFSET_LEVEL(items[2], kText, 2u, 3u, 1u);
@@ -161,7 +180,7 @@ TEST_F(NGInlineNodeTest, CollectInlinesMixedText) {
   EXPECT_TRUE(node->IsBidiEnabled());
   node->SegmentText();
   EXPECT_TRUE(node->IsBidiEnabled());
-  Vector<NGLayoutInlineItem>& items = node->Items();
+  Vector<NGInlineItem>& items = node->Items();
   TEST_ITEM_TYPE_OFFSET_LEVEL(items[0], kText, 0u, 7u, 0u);
   TEST_ITEM_TYPE_OFFSET_LEVEL(items[1], kText, 7u, 9u, 1u);
   TEST_ITEM_TYPE_OFFSET_LEVEL(items[2], kOpenTag, 9u, 9u, 1u);
@@ -177,7 +196,7 @@ TEST_F(NGInlineNodeTest, CollectInlinesMixedTextEndWithON) {
   EXPECT_TRUE(node->IsBidiEnabled());
   node->SegmentText();
   EXPECT_TRUE(node->IsBidiEnabled());
-  Vector<NGLayoutInlineItem>& items = node->Items();
+  Vector<NGInlineItem>& items = node->Items();
   TEST_ITEM_TYPE_OFFSET_LEVEL(items[0], kText, 0u, 7u, 0u);
   TEST_ITEM_TYPE_OFFSET_LEVEL(items[1], kText, 7u, 9u, 1u);
   TEST_ITEM_TYPE_OFFSET_LEVEL(items[2], kOpenTag, 9u, 9u, 1u);
@@ -191,7 +210,7 @@ TEST_F(NGInlineNodeTest, SegmentASCII) {
   NGInlineNodeForTest* node = CreateInlineNode();
   node->Append("Hello");
   node->SegmentText();
-  Vector<NGLayoutInlineItem>& items = node->Items();
+  Vector<NGInlineItem>& items = node->Items();
   ASSERT_EQ(1u, items.size());
   TEST_ITEM_OFFSET_DIR(items[0], 0u, 5u, TextDirection::kLtr);
 }
@@ -201,7 +220,7 @@ TEST_F(NGInlineNodeTest, SegmentHebrew) {
   node->Append(u"\u05E2\u05D1\u05E8\u05D9\u05EA");
   node->SegmentText();
   ASSERT_EQ(1u, node->Items().size());
-  Vector<NGLayoutInlineItem>& items = node->Items();
+  Vector<NGInlineItem>& items = node->Items();
   ASSERT_EQ(1u, items.size());
   TEST_ITEM_OFFSET_DIR(items[0], 0u, 5u, TextDirection::kRtl);
 }
@@ -211,7 +230,7 @@ TEST_F(NGInlineNodeTest, SegmentSplit1To2) {
   node->Append(u"Hello \u05E2\u05D1\u05E8\u05D9\u05EA");
   node->SegmentText();
   ASSERT_EQ(2u, node->Items().size());
-  Vector<NGLayoutInlineItem>& items = node->Items();
+  Vector<NGInlineItem>& items = node->Items();
   ASSERT_EQ(2u, items.size());
   TEST_ITEM_OFFSET_DIR(items[0], 0u, 6u, TextDirection::kLtr);
   TEST_ITEM_OFFSET_DIR(items[1], 6u, 11u, TextDirection::kRtl);
@@ -223,7 +242,7 @@ TEST_F(NGInlineNodeTest, SegmentSplit3To4) {
   node->Append(u"lo \u05E2");
   node->Append(u"\u05D1\u05E8\u05D9\u05EA");
   node->SegmentText();
-  Vector<NGLayoutInlineItem>& items = node->Items();
+  Vector<NGInlineItem>& items = node->Items();
   ASSERT_EQ(4u, items.size());
   TEST_ITEM_OFFSET_DIR(items[0], 0u, 3u, TextDirection::kLtr);
   TEST_ITEM_OFFSET_DIR(items[1], 3u, 6u, TextDirection::kLtr);
@@ -238,7 +257,7 @@ TEST_F(NGInlineNodeTest, SegmentBidiOverride) {
   node->Append("ABC");
   node->Append(kPopDirectionalFormattingCharacter);
   node->SegmentText();
-  Vector<NGLayoutInlineItem>& items = node->Items();
+  Vector<NGInlineItem>& items = node->Items();
   ASSERT_EQ(4u, items.size());
   TEST_ITEM_OFFSET_DIR(items[0], 0u, 6u, TextDirection::kLtr);
   TEST_ITEM_OFFSET_DIR(items[1], 6u, 7u, TextDirection::kRtl);
@@ -265,7 +284,7 @@ static NGInlineNodeForTest* CreateBidiIsolateNode(NGInlineNodeForTest* node,
 TEST_F(NGInlineNodeTest, SegmentBidiIsolate) {
   NGInlineNodeForTest* node =
       CreateBidiIsolateNode(CreateInlineNode(), style_.Get(), layout_object_);
-  Vector<NGLayoutInlineItem>& items = node->Items();
+  Vector<NGInlineItem>& items = node->Items();
   ASSERT_EQ(9u, items.size());
   TEST_ITEM_OFFSET_DIR(items[0], 0u, 6u, TextDirection::kLtr);
   TEST_ITEM_OFFSET_DIR(items[1], 6u, 7u, TextDirection::kLtr);
@@ -307,13 +326,11 @@ TEST_F(NGInlineNodeTest, CreateLineBidiIsolate) {
 TEST_F(NGInlineNodeTest, MinMaxContentSize) {
   UseLayoutObjectAndAhem();
   NGInlineNodeForTest* node = CreateInlineNode();
-  node->Append("AB CDE", style_.Get(), layout_object_);
+  node->Append("AB CDEF", style_.Get(), layout_object_);
   node->ShapeText();
   MinMaxContentSize sizes = node->ComputeMinMaxContentSize();
-  // TODO(kojii): min_content should be 20, but is 30 until
-  // NGInlineLayoutAlgorithm implements trailing spaces correctly.
-  EXPECT_EQ(30, sizes.min_content);
-  EXPECT_EQ(60, sizes.max_content);
+  EXPECT_EQ(40, sizes.min_content);
+  EXPECT_EQ(70, sizes.max_content);
 }
 
 TEST_F(NGInlineNodeTest, MinMaxContentSizeElementBoundary) {
@@ -325,9 +342,7 @@ TEST_F(NGInlineNodeTest, MinMaxContentSizeElementBoundary) {
   MinMaxContentSize sizes = node->ComputeMinMaxContentSize();
   // |min_content| should be the width of "BC" because there is an element
   // boundary between "B" and "C" but no break opportunities.
-  // TODO(kojii): min_content should be 20, but is 30 until
-  // NGInlineLayoutAlgorithm implements trailing spaces correctly.
-  EXPECT_EQ(30, sizes.min_content);
+  EXPECT_EQ(20, sizes.min_content);
   EXPECT_EQ(60, sizes.max_content);
 }
 

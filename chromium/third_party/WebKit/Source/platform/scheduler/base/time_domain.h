@@ -34,7 +34,7 @@ class TaskQueueManager;
 // Note the TimeDomain only knows about the first wake-up per queue, it's the
 // responsibility of TaskQueueImpl to keep the time domain up to date if this
 // changes.
-class BLINK_PLATFORM_EXPORT TimeDomain {
+class PLATFORM_EXPORT TimeDomain {
  public:
   TimeDomain();
   virtual ~TimeDomain();
@@ -135,8 +135,8 @@ class BLINK_PLATFORM_EXPORT TimeDomain {
       DCHECK(queue->heap_handle().IsValid());
       queue->set_heap_handle(HeapHandle());
 
-      DCHECK_NE(queue->scheduled_time_domain_wake_up(), base::TimeTicks());
-      queue->set_scheduled_time_domain_wake_up(base::TimeTicks());
+      DCHECK(queue->scheduled_time_domain_wake_up());
+      queue->SetScheduledTimeDomainWakeUp(base::nullopt);
     }
   };
 

@@ -2651,6 +2651,16 @@ void BindTexImage2DCHROMIUM(GLenum target, GLint imageId) {
   }
 }
 
+void BindTexImage2DWithInternalformatCHROMIUM(GLenum target,
+                                              GLenum internalformat,
+                                              GLint imageId) {
+  gles2::cmds::BindTexImage2DWithInternalformatCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::BindTexImage2DWithInternalformatCHROMIUM>();
+  if (c) {
+    c->Init(target, internalformat, imageId);
+  }
+}
+
 void ReleaseTexImage2DCHROMIUM(GLenum target, GLint imageId) {
   gles2::cmds::ReleaseTexImage2DCHROMIUM* c =
       GetCmdSpace<gles2::cmds::ReleaseTexImage2DCHROMIUM>();
@@ -2826,7 +2836,7 @@ void ScheduleDCLayerSharedStateCHROMIUM(GLfloat opacity,
   }
 }
 
-void ScheduleDCLayerCHROMIUM(GLuint contents_texture_id,
+void ScheduleDCLayerCHROMIUM(GLsizei num_textures,
                              GLuint background_color,
                              GLuint edge_aa_mask,
                              GLuint filter,
@@ -2835,7 +2845,7 @@ void ScheduleDCLayerCHROMIUM(GLuint contents_texture_id,
   gles2::cmds::ScheduleDCLayerCHROMIUM* c =
       GetCmdSpace<gles2::cmds::ScheduleDCLayerCHROMIUM>();
   if (c) {
-    c->Init(contents_texture_id, background_color, edge_aa_mask, filter, shm_id,
+    c->Init(num_textures, background_color, edge_aa_mask, filter, shm_id,
             shm_offset);
   }
 }
@@ -3235,6 +3245,32 @@ void SetEnableDCLayersCHROMIUM(GLboolean enabled) {
       GetCmdSpace<gles2::cmds::SetEnableDCLayersCHROMIUM>();
   if (c) {
     c->Init(enabled);
+  }
+}
+
+void InitializeDiscardableTextureCHROMIUM(GLuint texture_id,
+                                          uint32_t shm_id,
+                                          uint32_t shm_offset) {
+  gles2::cmds::InitializeDiscardableTextureCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::InitializeDiscardableTextureCHROMIUM>();
+  if (c) {
+    c->Init(texture_id, shm_id, shm_offset);
+  }
+}
+
+void UnlockDiscardableTextureCHROMIUM(GLuint texture_id) {
+  gles2::cmds::UnlockDiscardableTextureCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::UnlockDiscardableTextureCHROMIUM>();
+  if (c) {
+    c->Init(texture_id);
+  }
+}
+
+void LockDiscardableTextureCHROMIUM(GLuint texture_id) {
+  gles2::cmds::LockDiscardableTextureCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::LockDiscardableTextureCHROMIUM>();
+  if (c) {
+    c->Init(texture_id);
   }
 }
 

@@ -5,6 +5,7 @@
 #include "core/loader/DocumentLoader.h"
 
 #include <queue>
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/page/Page.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -13,7 +14,6 @@
 #include "public/platform/WebURLLoaderClient.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
 
 namespace blink {
@@ -35,7 +35,7 @@ class DocumentLoaderTest : public ::testing::Test {
         ->UnregisterAllURLsAndClearMemoryCache();
   }
 
-  WebLocalFrameImpl* MainFrame() {
+  WebLocalFrameBase* MainFrame() {
     return web_view_helper_.WebView()->MainFrameImpl();
   }
 
@@ -170,7 +170,7 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy) {
 }
 
 TEST_F(DocumentLoaderTest, isCommittedButEmpty) {
-  WebViewImpl* web_view_impl =
+  WebViewBase* web_view_impl =
       web_view_helper_.InitializeAndLoad("about:blank", true);
   EXPECT_TRUE(ToLocalFrame(web_view_impl->GetPage()->MainFrame())
                   ->Loader()

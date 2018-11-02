@@ -1415,6 +1415,13 @@ void GL_APIENTRY GLES2BindUniformLocationCHROMIUM(GLuint program,
 void GL_APIENTRY GLES2BindTexImage2DCHROMIUM(GLenum target, GLint imageId) {
   gles2::GetGLContext()->BindTexImage2DCHROMIUM(target, imageId);
 }
+void GL_APIENTRY
+GLES2BindTexImage2DWithInternalformatCHROMIUM(GLenum target,
+                                              GLenum internalformat,
+                                              GLint imageId) {
+  gles2::GetGLContext()->BindTexImage2DWithInternalformatCHROMIUM(
+      target, internalformat, imageId);
+}
 void GL_APIENTRY GLES2ReleaseTexImage2DCHROMIUM(GLenum target, GLint imageId) {
   gles2::GetGLContext()->ReleaseTexImage2DCHROMIUM(target, imageId);
 }
@@ -1516,15 +1523,17 @@ GLES2ScheduleDCLayerSharedStateCHROMIUM(GLfloat opacity,
   gles2::GetGLContext()->ScheduleDCLayerSharedStateCHROMIUM(
       opacity, is_clipped, clip_rect, z_order, transform);
 }
-void GL_APIENTRY GLES2ScheduleDCLayerCHROMIUM(GLuint contents_texture_id,
-                                              const GLfloat* contents_rect,
-                                              GLuint background_color,
-                                              GLuint edge_aa_mask,
-                                              const GLfloat* bounds_rect,
-                                              GLuint filter) {
+void GL_APIENTRY
+GLES2ScheduleDCLayerCHROMIUM(GLsizei num_textures,
+                             const GLuint* contents_texture_ids,
+                             const GLfloat* contents_rect,
+                             GLuint background_color,
+                             GLuint edge_aa_mask,
+                             const GLfloat* bounds_rect,
+                             GLuint filter) {
   gles2::GetGLContext()->ScheduleDCLayerCHROMIUM(
-      contents_texture_id, contents_rect, background_color, edge_aa_mask,
-      bounds_rect, filter);
+      num_textures, contents_texture_ids, contents_rect, background_color,
+      edge_aa_mask, bounds_rect, filter);
 }
 void GL_APIENTRY GLES2MatrixLoadfCHROMIUM(GLenum matrixMode, const GLfloat* m) {
   gles2::GetGLContext()->MatrixLoadfCHROMIUM(matrixMode, m);
@@ -1747,6 +1756,15 @@ void GL_APIENTRY GLES2SetDrawRectangleCHROMIUM(GLint x,
 }
 void GL_APIENTRY GLES2SetEnableDCLayersCHROMIUM(GLboolean enabled) {
   gles2::GetGLContext()->SetEnableDCLayersCHROMIUM(enabled);
+}
+void GL_APIENTRY GLES2InitializeDiscardableTextureCHROMIUM(GLuint texture_id) {
+  gles2::GetGLContext()->InitializeDiscardableTextureCHROMIUM(texture_id);
+}
+void GL_APIENTRY GLES2UnlockDiscardableTextureCHROMIUM(GLuint texture_id) {
+  gles2::GetGLContext()->UnlockDiscardableTextureCHROMIUM(texture_id);
+}
+bool GL_APIENTRY GLES2LockDiscardableTextureCHROMIUM(GLuint texture_id) {
+  return gles2::GetGLContext()->LockDiscardableTextureCHROMIUM(texture_id);
 }
 
 namespace gles2 {
@@ -2819,6 +2837,11 @@ extern const NameToFunc g_gles2_function_table[] = {
         reinterpret_cast<GLES2FunctionPointer>(glBindTexImage2DCHROMIUM),
     },
     {
+        "glBindTexImage2DWithInternalformatCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glBindTexImage2DWithInternalformatCHROMIUM),
+    },
+    {
         "glReleaseTexImage2DCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(glReleaseTexImage2DCHROMIUM),
     },
@@ -3066,6 +3089,21 @@ extern const NameToFunc g_gles2_function_table[] = {
     {
         "glSetEnableDCLayersCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(glSetEnableDCLayersCHROMIUM),
+    },
+    {
+        "glInitializeDiscardableTextureCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glInitializeDiscardableTextureCHROMIUM),
+    },
+    {
+        "glUnlockDiscardableTextureCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glUnlockDiscardableTextureCHROMIUM),
+    },
+    {
+        "glLockDiscardableTextureCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glLockDiscardableTextureCHROMIUM),
     },
     {
         NULL, NULL,

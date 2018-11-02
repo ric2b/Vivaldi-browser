@@ -27,12 +27,11 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_remover.h"
-#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
-#include "chrome/browser/browsing_data/browsing_data_remover_test_util.h"
+
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -41,7 +40,6 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/net/prediction_options.h"
-#include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
 #include "chrome/browser/page_load_metrics/observers/prerender_page_load_metrics_observer.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor.h"
@@ -72,6 +70,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/page_load_metrics/test/page_load_metrics_test_util.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -87,6 +86,7 @@
 #include "components/variations/entropy_provider.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_message_filter.h"
+#include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -102,6 +102,7 @@
 #include "content/public/common/resource_request_body.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/browsing_data_remover_test_util.h"
 #include "content/public/test/ppapi_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -237,12 +238,12 @@ std::string CreateServerRedirect(const std::string& dest_url) {
 
 // Clears the specified data using BrowsingDataRemover.
 void ClearBrowsingData(Browser* browser, int remove_mask) {
-  BrowsingDataRemover* remover =
-      BrowsingDataRemoverFactory::GetForBrowserContext(browser->profile());
-  BrowsingDataRemoverCompletionObserver observer(remover);
-  remover->RemoveAndReply(base::Time(), base::Time::Max(), remove_mask,
-                          BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
-                          &observer);
+  content::BrowsingDataRemover* remover =
+      content::BrowserContext::GetBrowsingDataRemover(browser->profile());
+  content::BrowsingDataRemoverCompletionObserver observer(remover);
+  remover->RemoveAndReply(
+      base::Time(), base::Time::Max(), remove_mask,
+      content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB, &observer);
   observer.BlockUntilCompletion();
   // BrowsingDataRemover deletes itself.
 }
@@ -314,8 +315,8 @@ class ChannelDestructionWatcher {
     ~DestructionMessageFilter() override {
       content::BrowserThread::PostTask(
           content::BrowserThread::UI, FROM_HERE,
-          base::Bind(&ChannelDestructionWatcher::OnChannelDestroyed,
-                     base::Unretained(watcher_)));
+          base::BindOnce(&ChannelDestructionWatcher::OnChannelDestroyed,
+                         base::Unretained(watcher_)));
     }
 
     bool OnMessageReceived(const IPC::Message& message) override {
@@ -597,6 +598,11 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
     test_utils::PrerenderInProcessBrowserTest::SetUpOnMainThread();
     prerender::PrerenderManager::SetMode(
         prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
+    const testing::TestInfo* const test_info =
+        testing::UnitTest::GetInstance()->current_test_info();
+    // This one test fails with the host resolver redirecting all hosts.
+    if (std::string(test_info->name()) != "PrerenderServerRedirectInIframe")
+      host_resolver()->AddRule("*", "127.0.0.1");
   }
 
   void SetUpInProcessBrowserTestFixture() override {
@@ -826,7 +832,7 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
   // Returns length of |prerender_manager_|'s history, or SIZE_MAX on failure.
   size_t GetHistoryLength() const {
     std::unique_ptr<base::DictionaryValue> prerender_dict =
-        GetPrerenderManager()->GetAsValue();
+        GetPrerenderManager()->CopyAsValue();
     if (!prerender_dict)
       return std::numeric_limits<size_t>::max();
     base::ListValue* history_list;
@@ -837,7 +843,6 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
 
   void SetLoaderHostOverride(const std::string& host) {
     loader_host_override_ = host;
-    host_resolver()->AddRule(host, "127.0.0.1");
   }
 
   void set_loader_path(const std::string& path) {
@@ -850,7 +855,6 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
 
   GURL GetCrossDomainTestUrl(const std::string& path) {
     static const std::string secondary_domain = "www.foo.com";
-    host_resolver()->AddRule(secondary_domain, "127.0.0.1");
     std::string url_str(base::StringPrintf(
         "http://%s:%d/%s", secondary_domain.c_str(),
         embedded_test_server()->host_port_pair().port(), path.c_str()));
@@ -2252,10 +2256,8 @@ class TestClientCertStore : public net::ClientCertStore {
 
   // net::ClientCertStore:
   void GetClientCerts(const net::SSLCertRequestInfo& cert_request_info,
-                      net::CertificateList* selected_certs,
-                      const base::Closure& callback) override {
-    *selected_certs = certs_;
-    callback.Run();
+                      const ClientCertListCallback& callback) override {
+    callback.Run(certs_);
   }
 
  private:
@@ -2462,8 +2464,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderUnload) {
   RequestCounter unload_counter;
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&CreateCountingInterceptorOnIO,
-                 unload_url, empty_file, unload_counter.AsWeakPtr()));
+      base::BindOnce(&CreateCountingInterceptorOnIO, unload_url, empty_file,
+                     unload_counter.AsWeakPtr()));
 
   set_loader_path("/prerender/prerender_loader_with_unload.html");
   PrerenderTestURL("/prerender/prerender_page.html", FINAL_STATUS_USED, 1);
@@ -2484,8 +2486,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderBeforeUnload) {
   RequestCounter request_counter;
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&CreateCountingInterceptorOnIO,
-                 beforeunload_url, empty_file, request_counter.AsWeakPtr()));
+      base::BindOnce(&CreateCountingInterceptorOnIO, beforeunload_url,
+                     empty_file, request_counter.AsWeakPtr()));
 
   set_loader_path("/prerender/prerender_loader_with_beforeunload.html");
   PrerenderTestURL("/prerender/prerender_page.html", FINAL_STATUS_USED, 1);
@@ -2533,7 +2535,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderClearCache) {
       PrerenderTestURL("/prerender/prerender_page.html",
                        FINAL_STATUS_CACHE_OR_HISTORY_CLEARED, 1);
 
-  ClearBrowsingData(current_browser(), BrowsingDataRemover::DATA_TYPE_CACHE);
+  ClearBrowsingData(current_browser(),
+                    content::BrowsingDataRemover::DATA_TYPE_CACHE);
   prerender->WaitForStop();
 
   // Make sure prerender history was not cleared.  Not a vital behavior, but
@@ -3003,7 +3006,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
   base::FilePath file(GetTestPath("prerender_page.html"));
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&CreateMockInterceptorOnIO, webstore_url, file));
+      base::BindOnce(&CreateMockInterceptorOnIO, webstore_url, file));
 
   PrerenderTestURL(CreateClientRedirect(webstore_url.spec()),
                    FINAL_STATUS_OPEN_URL, 1);
@@ -3196,8 +3199,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderPing) {
   RequestCounter ping_counter;
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&CreateCountingInterceptorOnIO,
-                 kPingURL, empty_file, ping_counter.AsWeakPtr()));
+      base::BindOnce(&CreateCountingInterceptorOnIO, kPingURL, empty_file,
+                     ping_counter.AsWeakPtr()));
 
   PrerenderTestURL("/prerender/prerender_page.html", FINAL_STATUS_USED, 1);
   OpenDestURLViaClickPing(kPingURL);
@@ -3260,10 +3263,13 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, HttpPost) {
 // Manager API. The page should be killed.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, AutosigninInPrerenderer) {
   // Set up a credential in the password store.
-  PasswordStoreFactory::GetInstance()->SetTestingFactory(
-      current_browser()->profile(),
-      password_manager::BuildPasswordStore<
-          content::BrowserContext, password_manager::TestPasswordStore>);
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    PasswordStoreFactory::GetInstance()->SetTestingFactory(
+        current_browser()->profile(),
+        password_manager::BuildPasswordStore<
+            content::BrowserContext, password_manager::TestPasswordStore>);
+  }
   scoped_refptr<password_manager::TestPasswordStore> password_store =
       static_cast<password_manager::TestPasswordStore*>(
           PasswordStoreFactory::GetForProfile(
@@ -3288,8 +3294,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, AutosigninInPrerenderer) {
   RequestCounter done_counter;
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&CreateCountingInterceptorOnIO,
-                 done_url, empty_file, done_counter.AsWeakPtr()));
+      base::BindOnce(&CreateCountingInterceptorOnIO, done_url, empty_file,
+                     done_counter.AsWeakPtr()));
   // Loading may finish or be interrupted. The final result is important only.
   DisableLoadEventCheck();
   // TestPrenderContents is always created before the Autosignin JS can run, so
@@ -3304,13 +3310,9 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, AutosigninInPrerenderer) {
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, ResourcePriority) {
   GURL before_swap_url = embedded_test_server()->GetURL(kPrefetchJpeg);
   GURL after_swap_url = embedded_test_server()->GetURL("/prerender/image.png");
-  base::StringPairs replacement_text;
-  replacement_text.push_back(
-      std::make_pair("REPLACE_WITH_IMAGE_URL", before_swap_url.spec()));
-  std::string replacement_path;
-  net::test_server::GetFilePathWithReplacements(
-      "/prerender/prerender_with_image.html", replacement_text,
-      &replacement_path);
+  GURL main_page_url =
+      GetURLWithReplacement("/prerender/prerender_with_image.html",
+                            "REPLACE_WITH_IMAGE_URL", kPrefetchJpeg);
 
   // Setup request interceptors for subresources.
   auto get_priority_lambda = [](net::RequestPriority* out_priority,
@@ -3329,7 +3331,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, ResourcePriority) {
       base::Bind(get_priority_lambda, base::Unretained(&after_swap_priority)));
 
   // Start the prerender.
-  PrerenderTestURL(replacement_path, FINAL_STATUS_USED, 1);
+  PrerenderTestURL(main_page_url, FINAL_STATUS_USED, 1);
 
   // Check priority before swap.
   before_swap_counter.WaitForCount(1);
@@ -3354,13 +3356,9 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, ResourcePriority) {
 // after the swap.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, ResourcePriorityOverlappingSwap) {
   GURL image_url = embedded_test_server()->GetURL(kPrefetchJpeg);
-  base::StringPairs replacement_text;
-  replacement_text.push_back(
-      std::make_pair("REPLACE_WITH_IMAGE_URL", image_url.spec()));
-  std::string replacement_path;
-  net::test_server::GetFilePathWithReplacements(
-      "/prerender/prerender_with_image.html", replacement_text,
-      &replacement_path);
+  GURL main_page_url =
+      GetURLWithReplacement("/prerender/prerender_with_image.html",
+                            "REPLACE_WITH_IMAGE_URL", kPrefetchJpeg);
 
   // Setup request interceptors for subresources.
   net::URLRequest* url_request = nullptr;
@@ -3373,7 +3371,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, ResourcePriorityOverlappingSwap) {
       *out_request = request;
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             [](net::RequestPriority priority,
                net::RequestPriority* out_priority, base::Closure closure) {
               *out_priority = priority;
@@ -3391,7 +3389,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, ResourcePriorityOverlappingSwap) {
   DisableLoadEventCheck();
   DisableJavascriptCalls();
   // Start the prerender.
-  PrerenderTestURL(replacement_path, FINAL_STATUS_USED, 0);
+  PrerenderTestURL(main_page_url, FINAL_STATUS_USED, 0);
 
 // Check priority before swap.
 #if defined(OS_ANDROID)
@@ -3416,8 +3414,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, ResourcePriorityOverlappingSwap) {
     base::RunLoop loop;
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(io_lambda, nullptr, base::Unretained(&priority),
-                   loop.QuitClosure(), base::Unretained(url_request)));
+        base::BindOnce(io_lambda, nullptr, base::Unretained(&priority),
+                       loop.QuitClosure(), base::Unretained(url_request)));
     loop.Run();
   } while (priority <= net::IDLE);
   EXPECT_GT(priority, net::IDLE);
@@ -3436,12 +3434,14 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, FirstContentfulPaintTimingSimple) {
                                             GetActiveWebContents());
   observer.SetNavigationStartTicksForTesting(load_start);
 
-  page_load_metrics::PageLoadTiming timing;
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);  // Non-null time.
-  timing.first_contentful_paint = base::TimeDelta::FromMilliseconds(2654);
-  page_load_metrics::PageLoadMetricsObserverTestHarness::
-      PopulateRequiredTimingFields(&timing);
-  observer.OnFirstContentfulPaint(timing, GenericPageLoadExtraInfo(dest_url()));
+  timing.paint_timing->first_contentful_paint =
+      base::TimeDelta::FromMilliseconds(2654);
+  PopulateRequiredTimingFields(&timing);
+  observer.OnFirstContentfulPaintInPage(timing,
+                                        GenericPageLoadExtraInfo(dest_url()));
 
   histogram_tester().ExpectTotalCount(
       "Prerender.websame_PrefetchTTFCP.Warm.Cacheable.Visible", 1);
@@ -3476,12 +3476,14 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, FirstContentfulPaintTimingReuse) {
                                             GetActiveWebContents());
   observer.SetNavigationStartTicksForTesting(load_start);
 
-  page_load_metrics::PageLoadTiming timing;
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);  // Non-null time.
-  timing.first_contentful_paint = base::TimeDelta::FromMilliseconds(2361);
-  page_load_metrics::PageLoadMetricsObserverTestHarness::
-      PopulateRequiredTimingFields(&timing);
-  observer.OnFirstContentfulPaint(timing, GenericPageLoadExtraInfo(dest_url()));
+  timing.paint_timing->first_contentful_paint =
+      base::TimeDelta::FromMilliseconds(2361);
+  PopulateRequiredTimingFields(&timing);
+  observer.OnFirstContentfulPaintInPage(timing,
+                                        GenericPageLoadExtraInfo(dest_url()));
 
   histogram_tester().ExpectTotalCount(
       "Prerender.websame_PrefetchTTFCP.Warm.Cacheable.Visible", 1);
@@ -3516,12 +3518,14 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
                                             GetActiveWebContents());
   observer.SetNavigationStartTicksForTesting(load_start);
 
-  page_load_metrics::PageLoadTiming timing;
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);  // Non-null time.
-  timing.first_contentful_paint = base::TimeDelta::FromMilliseconds(2361);
-  page_load_metrics::PageLoadMetricsObserverTestHarness::
-      PopulateRequiredTimingFields(&timing);
-  observer.OnFirstContentfulPaint(timing, GenericPageLoadExtraInfo(dest_url()));
+  timing.paint_timing->first_contentful_paint =
+      base::TimeDelta::FromMilliseconds(2361);
+  PopulateRequiredTimingFields(&timing);
+  observer.OnFirstContentfulPaintInPage(timing,
+                                        GenericPageLoadExtraInfo(dest_url()));
 
   histogram_tester().ExpectTotalCount(
       "Prerender.websame_PrefetchTTFCP.Warm.Cacheable.Visible", 1);
@@ -3558,12 +3562,14 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
                                             GetActiveWebContents());
   observer.SetNavigationStartTicksForTesting(clock->NowTicks());
 
-  page_load_metrics::PageLoadTiming timing;
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);  // Non-null time.
-  timing.first_contentful_paint = base::TimeDelta::FromMilliseconds(2362);
-  page_load_metrics::PageLoadMetricsObserverTestHarness::
-      PopulateRequiredTimingFields(&timing);
-  observer.OnFirstContentfulPaint(timing, GenericPageLoadExtraInfo(dest_url()));
+  timing.paint_timing->first_contentful_paint =
+      base::TimeDelta::FromMilliseconds(2362);
+  PopulateRequiredTimingFields(&timing);
+  observer.OnFirstContentfulPaintInPage(timing,
+                                        GenericPageLoadExtraInfo(dest_url()));
 
   histogram_tester().ExpectTotalCount(
       "Prerender.none_PrefetchTTFCP.Warm.Cacheable.Visible", 0);
@@ -3606,13 +3612,15 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
                                             GetActiveWebContents());
   observer.SetNavigationStartTicksForTesting(load_start);
 
-  page_load_metrics::PageLoadTiming timing;
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);  // Non-null time.
   // The FCP time should end up on the edge of the bucket.
-  timing.first_contentful_paint = base::TimeDelta::FromMilliseconds(2654);
-  page_load_metrics::PageLoadMetricsObserverTestHarness::
-      PopulateRequiredTimingFields(&timing);
-  observer.OnFirstContentfulPaint(timing, GenericPageLoadExtraInfo(dest_url()));
+  timing.paint_timing->first_contentful_paint =
+      base::TimeDelta::FromMilliseconds(2654);
+  PopulateRequiredTimingFields(&timing);
+  observer.OnFirstContentfulPaintInPage(timing,
+                                        GenericPageLoadExtraInfo(dest_url()));
 
   histogram_tester().ExpectTotalCount(
       "Prerender.websame_PrefetchTTFCP.Warm.Cacheable.Visible", 1);
@@ -3634,15 +3642,17 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, FirstContentfulPaintHidden) {
   observer.SetNavigationStartTicksForTesting(load_start);
 
   EXPECT_EQ(page_load_metrics::PageLoadMetricsObserver::CONTINUE_OBSERVING,
-            observer.OnHidden(page_load_metrics::PageLoadTiming(),
+            observer.OnHidden(page_load_metrics::mojom::PageLoadTiming(),
                               GenericPageLoadExtraInfo(dest_url())));
 
-  page_load_metrics::PageLoadTiming timing;
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);  // Non-null time.
-  timing.first_contentful_paint = base::TimeDelta::FromMilliseconds(2654);
-  page_load_metrics::PageLoadMetricsObserverTestHarness::
-      PopulateRequiredTimingFields(&timing);
-  observer.OnFirstContentfulPaint(timing, GenericPageLoadExtraInfo(dest_url()));
+  timing.paint_timing->first_contentful_paint =
+      base::TimeDelta::FromMilliseconds(2654);
+  PopulateRequiredTimingFields(&timing);
+  observer.OnFirstContentfulPaintInPage(timing,
+                                        GenericPageLoadExtraInfo(dest_url()));
 
   histogram_tester().ExpectTotalCount(
       "Prerender.websame_PrefetchTTFCP.Warm.Cacheable.Hidden", 1);
@@ -3678,15 +3688,17 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
   observer.SetNavigationStartTicksForTesting(clock->NowTicks());
 
   EXPECT_EQ(page_load_metrics::PageLoadMetricsObserver::CONTINUE_OBSERVING,
-            observer.OnHidden(page_load_metrics::PageLoadTiming(),
+            observer.OnHidden(page_load_metrics::mojom::PageLoadTiming(),
                               GenericPageLoadExtraInfo(dest_url())));
 
-  page_load_metrics::PageLoadTiming timing;
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);  // Non-null time.
-  timing.first_contentful_paint = base::TimeDelta::FromMilliseconds(2362);
-  page_load_metrics::PageLoadMetricsObserverTestHarness::
-      PopulateRequiredTimingFields(&timing);
-  observer.OnFirstContentfulPaint(timing, GenericPageLoadExtraInfo(dest_url()));
+  timing.paint_timing->first_contentful_paint =
+      base::TimeDelta::FromMilliseconds(2362);
+  PopulateRequiredTimingFields(&timing);
+  observer.OnFirstContentfulPaintInPage(timing,
+                                        GenericPageLoadExtraInfo(dest_url()));
 
   histogram_tester().ExpectTotalCount(
       "Prerender.none_PrefetchTTFCP.Warm.Cacheable.Hidden", 0);

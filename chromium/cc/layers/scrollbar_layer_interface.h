@@ -13,8 +13,8 @@ namespace cc {
 
 class CC_EXPORT ScrollbarLayerInterface {
  public:
-  virtual int ScrollLayerId() const = 0;
-  virtual void SetScrollLayer(int layer_id) = 0;
+  virtual ElementId scroll_element_id() const = 0;
+  virtual void SetScrollElementId(ElementId element_id) = 0;
 
   virtual ScrollbarOrientation orientation() const = 0;
 

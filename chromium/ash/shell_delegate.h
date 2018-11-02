@@ -13,6 +13,7 @@
 #include "base/strings/string16.h"
 
 class GURL;
+class PrefService;
 
 namespace gfx {
 class Image;
@@ -36,12 +37,10 @@ class AccessibilityDelegate;
 class GPUSupport;
 class PaletteDelegate;
 class SessionStateDelegate;
-class ShelfDelegate;
-class ShelfModel;
-class SystemTrayDelegate;
+class Shelf;
 struct ShelfItem;
+class SystemTrayDelegate;
 class WallpaperDelegate;
-class WmShelf;
 class WmWindow;
 
 // Delegate of the Shell.
@@ -89,8 +88,10 @@ class ASH_EXPORT ShellDelegate {
   // Opens the |url| in a new browser tab.
   virtual void OpenUrlFromArc(const GURL& url) = 0;
 
-  // Creates a new ShelfDelegate. Shell takes ownership of the returned value.
-  virtual ShelfDelegate* CreateShelfDelegate(ShelfModel* model) = 0;
+  // Functions called when the shelf is initialized and shut down.
+  // TODO(msw): Refine ChromeLauncherController lifetime management.
+  virtual void ShelfInit() = 0;
+  virtual void ShelfShutdown() = 0;
 
   // Creates a system-tray delegate. Shell takes ownership of the delegate.
   virtual SystemTrayDelegate* CreateSystemTrayDelegate() = 0;
@@ -106,9 +107,9 @@ class ASH_EXPORT ShellDelegate {
 
   virtual std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() = 0;
 
-  // Creates a menu model for the |wm_shelf| and optional shelf |item|.
+  // Creates a menu model for the |shelf| and optional shelf |item|.
   // If |item| is null, this creates a context menu for the wallpaper or shelf.
-  virtual ui::MenuModel* CreateContextMenu(WmShelf* wm_shelf,
+  virtual ui::MenuModel* CreateContextMenu(Shelf* shelf,
                                            const ShelfItem* item) = 0;
 
   // Creates a GPU support object. Shell takes ownership of the object.
@@ -120,6 +121,8 @@ class ASH_EXPORT ShellDelegate {
   virtual void OpenKeyboardShortcutHelpPage() const {}
 
   virtual gfx::Image GetDeprecatedAcceleratorImage() const = 0;
+
+  virtual PrefService* GetActiveUserPrefService() const = 0;
 
   // If |use_local_state| is true, returns the touchscreen status from local
   // state, otherwise from user prefs.

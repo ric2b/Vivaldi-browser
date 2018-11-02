@@ -15,6 +15,7 @@
 #include "platform_media/common/pipeline_stats.h"
 #include "platform_media/renderer/decoders/ipc_demuxer_stream.h"
 #include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
+#include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "net/base/mime_util.h"
 #include "url/gurl.h"
@@ -28,6 +29,9 @@ static const char* const kIPCMediaPipelineSupportedMimeTypes[] = {
     "audio/3gpp",      "audio/3gpp2", "video/3gpp",  "video/3gpp2",
 #if defined(OS_MACOSX)
     "video/quicktime",
+#endif
+#if defined(OS_WIN)
+    "video/mpeg4",
 #endif
 };
 
@@ -55,7 +59,7 @@ IPCDemuxer::IPCDemuxer(
     std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host,
     const std::string& content_type,
     const GURL& url,
-    const scoped_refptr<MediaLog>& media_log)
+    MediaLog* media_log)
     : task_runner_(task_runner),
       host_(NULL),
       data_source_(data_source),
@@ -82,6 +86,11 @@ IPCDemuxer::~IPCDemuxer() {
 // static
 bool IPCDemuxer::CanPlayType(const std::string& content_type, const GURL& url) {
   const std::string mime_type = MimeTypeFromContentTypeOrURL(content_type, url);
+  return IPCDemuxer::CanPlayType(mime_type);
+}
+
+//static
+bool IPCDemuxer::CanPlayType(const std::string& mime_type) {
   for (const char* supported_mime_type : kIPCMediaPipelineSupportedMimeTypes)
     if (mime_type == supported_mime_type)
       return true;
@@ -126,6 +135,8 @@ void IPCDemuxer::Seek(base::TimeDelta time, const PipelineStatusCB& status_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   if (stopping_) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " PIPELINE_ERROR_ABORT";
     status_cb.Run(PIPELINE_ERROR_ABORT);
     return;
   }
@@ -207,8 +218,9 @@ void IPCDemuxer::OnEnabledAudioTracksChanged(
   if (track_ids.size() > 0) {
     enabled = true;
   }
-  DVLOG(1) << __func__ << ": " << (enabled ? "enabling" : "disabling")
-           << " audio stream";
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " : " << (enabled ? "enabling" : "disabling")
+          << " audio stream";
   audio_stream->set_enabled(enabled, currTime);
 }
 
@@ -222,8 +234,9 @@ void IPCDemuxer::OnSelectedVideoTrackChanged(
   if (track_id) {
     enabled = true;
   }
-  DVLOG(1) << __func__ << ": " << (enabled ? "enabling" : "disabling")
-           << " video stream";
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " : " << (enabled ? "enabling" : "disabling")
+          << " video stream";
   video_stream->set_enabled(enabled, currTime);
 }
 
@@ -244,37 +257,55 @@ void IPCDemuxer::OnInitialized(const PipelineStatusCB& callback,
   pipeline_stats::ReportStartResult(success, video_decoding_mode);
 
   if (stopping_) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " PIPELINE_ERROR_ABORT";
     callback.Run(PIPELINE_ERROR_ABORT);
     return;
   }
 
   if (!success) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " PIPELINE_ERROR_ABORT";
     callback.Run(PIPELINE_ERROR_INITIALIZATION_FAILED);
     return;
   }
 
   if (audio_config.is_valid()) {
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << Loggable(audio_config);
     audio_stream_.reset(new IPCDemuxerStream(DemuxerStream::AUDIO,
                                              ipc_media_pipeline_host_.get()));
     pipeline_stats::AddStream(audio_stream_.get(),
                               PlatformMediaDecodingMode::SOFTWARE);
+  } else {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Audio Config is not Valid ";
   }
 
   if (video_config.is_valid()) {
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << Loggable(video_config);
     video_stream_.reset(new IPCDemuxerStream(DemuxerStream::VIDEO,
                                              ipc_media_pipeline_host_.get()));
     pipeline_stats::AddStream(video_stream_.get(), video_config.decoding_mode);
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_LINUX)
     // |decoding_mode| might be misleading on OS X, because the platform
     // decoder may or may not use HW acceleration internally.
     const char* mode =
         video_config.decoding_mode == PlatformMediaDecodingMode::HARDWARE
             ? "hardware"
             : "software";
-    MEDIA_LOG(INFO, media_log_) << GetDisplayName() << ": using " << mode
+    MEDIA_LOG(INFO, media_log_) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                                << " " << GetDisplayName() << ": using " << mode
                                 << " video decoding";
+#else
+    MEDIA_LOG(INFO, media_log_) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                                << " " << GetDisplayName();
 #endif
+  } else {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Video Config is not Valid ";
   }
 
   host_->SetDuration(time_info.duration);

@@ -32,6 +32,7 @@
 /cardboard-java/src
 /catapult
 /ced/src
+/checkstyle/*.jar
 /chromeos_login_manager
 /chromeos_text_input
 /chromite
@@ -57,6 +58,7 @@
 /flatbuffers/src
 /fontconfig/src
 /freetype/src
+/fuchsia-sdk
 /gestures/gestures
 /gles2_conform
 /glslang/src
@@ -65,7 +67,9 @@
 /google_appengine_cloudstorage
 /google_toolbox_for_mac/src
 /googlemac
+/googletest/src
 /gvr-android-sdk/common_library.aar
+/gvr-android-sdk/test-libraries/controller_test_api.aar
 /gvr-android-sdk/libgvr_shim_static_arm.a
 /gvr-android-sdk/libgvr_shim_static_arm64.a
 /gvr-android-sdk/src

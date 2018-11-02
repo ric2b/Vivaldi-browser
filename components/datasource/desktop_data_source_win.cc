@@ -22,7 +22,8 @@ bool DesktopWallpaperDataClassHandlerWin::GetData(
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   base::win::ScopedComPtr<IDesktopWallpaper> desktop_w;
-  HRESULT hr = desktop_w.CreateInstance(__uuidof(DesktopWallpaper));
+  HRESULT hr = CoCreateInstance(__uuidof(DesktopWallpaper), nullptr,
+                                CLSCTX_ALL, IID_PPV_ARGS(&desktop_w));
   if (FAILED(hr)) {
     return false;
   }

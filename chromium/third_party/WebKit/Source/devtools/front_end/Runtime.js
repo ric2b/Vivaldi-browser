@@ -574,10 +574,7 @@ var Runtime = class {
     constructorFunction[Runtime._instanceSymbol] = instance;
     return instance;
   }
-}
-
-;
-
+};
 
 /**
  * @type {!Object.<string, string>}
@@ -587,7 +584,6 @@ Runtime._queryParamsObject = {
 };
 
 Runtime._instanceSymbol = Symbol('instance');
-Runtime._extensionSymbol = Symbol('extension');
 
 /**
  * @type {!Object.<string, string>}

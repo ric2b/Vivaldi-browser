@@ -69,6 +69,12 @@ TEST(CSSSelectorParserTest, ValidANPlusB) {
       {"+n/**/- 48", 1, -48},
       {"-n + 81", -1, 81},
       {"-N - 88", -1, -88},
+
+      {"3091970736n + 1", std::numeric_limits<int>::max(), 1},
+      {"-3091970736n + 1", std::numeric_limits<int>::min(), 1},
+      // B is calculated as +ve first, then negated.
+      {"N- 3091970736", 1, -std::numeric_limits<int>::max()},
+      {"N+ 3091970736", 1, std::numeric_limits<int>::max()},
   };
 
   for (auto test_case : test_cases) {
@@ -79,8 +85,8 @@ TEST(CSSSelectorParserTest, ValidANPlusB) {
     CSSParserTokenRange range = tokenizer.TokenRange();
     bool passed = CSSSelectorParser::ConsumeANPlusB(range, ab);
     EXPECT_TRUE(passed);
-    EXPECT_EQ(ab.first, test_case.a);
-    EXPECT_EQ(ab.second, test_case.b);
+    EXPECT_EQ(test_case.a, ab.first);
+    EXPECT_EQ(test_case.b, ab.second);
   }
 }
 
@@ -105,9 +111,7 @@ TEST(CSSSelectorParserTest, InvalidANPlusB) {
 }
 
 TEST(CSSSelectorParserTest, ShadowDomPseudoInCompound) {
-  const char* test_cases[][2] = {{"::shadow", "::shadow"},
-                                 {".a::shadow", ".a::shadow"},
-                                 {"::content", "::content"},
+  const char* test_cases[][2] = {{"::content", "::content"},
                                  {".a::content", ".a::content"},
                                  {"::content.a", "::content.a"},
                                  {"::content.a.b", "::content.a.b"},
@@ -120,23 +124,19 @@ TEST(CSSSelectorParserTest, ShadowDomPseudoInCompound) {
     CSSParserTokenRange range = tokenizer.TokenRange();
     CSSSelectorList list = CSSSelectorParser::ParseSelector(
         range, CSSParserContext::Create(kHTMLStandardMode), nullptr);
-    EXPECT_STREQ(test_case[1], list.SelectorsText().Ascii().Data());
+    EXPECT_STREQ(test_case[1], list.SelectorsText().Ascii().data());
   }
 }
 
 TEST(CSSSelectorParserTest, PseudoElementsInCompoundLists) {
   const char* test_cases[] = {":not(::before)",
                               ":not(::content)",
-                              ":not(::shadow)",
                               ":host(::before)",
                               ":host(::content)",
-                              ":host(::shadow)",
                               ":host-context(::before)",
                               ":host-context(::content)",
-                              ":host-context(::shadow)",
                               ":-webkit-any(::after, ::before)",
-                              ":-webkit-any(::content, span)",
-                              ":-webkit-any(div, ::shadow)"};
+                              ":-webkit-any(::content, span)"};
 
   for (auto test_case : test_cases) {
     CSSTokenizer tokenizer(test_case);
@@ -201,9 +201,7 @@ TEST(CSSSelectorParserTest, WorkaroundForInvalidCustomPseudoInUAStyle) {
 }
 
 TEST(CSSSelectorParserTest, ValidPseudoElementInNonRightmostCompound) {
-  const char* test_cases[] = {"::content *", "::shadow *",
-                              "::content div::before",
-                              "::shadow ::first-letter"};
+  const char* test_cases[] = {"::content *", "::content div::before"};
 
   for (auto test_case : test_cases) {
     CSSTokenizer tokenizer(test_case);
@@ -247,18 +245,14 @@ TEST(CSSSelectorParserTest, SerializedUniversal) {
   const char* test_cases[][2] = {
       {"*::-webkit-volume-slider", "::-webkit-volume-slider"},
       {"*::cue(i)", "::cue(i)"},
-      {"*::shadow", "::shadow"},
       {"*:host-context(.x)", "*:host-context(.x)"},
       {"*:host", "*:host"},
       {"|*::-webkit-volume-slider", "|*::-webkit-volume-slider"},
       {"|*::cue(i)", "|*::cue(i)"},
-      {"|*::shadow", "|*::shadow"},
       {"*|*::-webkit-volume-slider", "::-webkit-volume-slider"},
       {"*|*::cue(i)", "::cue(i)"},
-      {"*|*::shadow", "::shadow"},
       {"ns|*::-webkit-volume-slider", "ns|*::-webkit-volume-slider"},
-      {"ns|*::cue(i)", "ns|*::cue(i)"},
-      {"ns|*::shadow", "ns|*::shadow"}};
+      {"ns|*::cue(i)", "ns|*::cue(i)"}};
 
   CSSParserContext* context = CSSParserContext::Create(kHTMLStandardMode);
   StyleSheetContents* sheet = StyleSheetContents::Create(context);
@@ -271,7 +265,7 @@ TEST(CSSSelectorParserTest, SerializedUniversal) {
     CSSSelectorList list =
         CSSSelectorParser::ParseSelector(range, context, sheet);
     EXPECT_TRUE(list.IsValid());
-    EXPECT_STREQ(test_case[1], list.SelectorsText().Ascii().Data());
+    EXPECT_STREQ(test_case[1], list.SelectorsText().Ascii().data());
   }
 }
 
@@ -327,7 +321,7 @@ TEST(CSSSelectorParserTest, ShadowPiercingCombinatorInStaticProfile) {
     CSSSelectorList list =
         CSSSelectorParser::ParseSelector(range, context, sheet);
     EXPECT_TRUE(list.IsValid());
-    EXPECT_STREQ(test_case[1], list.SelectorsText().Ascii().Data());
+    EXPECT_STREQ(test_case[1], list.SelectorsText().Ascii().data());
   }
 }
 

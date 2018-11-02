@@ -64,7 +64,7 @@ class MEDIA_EXPORT AudioRendererImpl
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       AudioRendererSink* sink,
       const CreateAudioDecodersCB& create_audio_decoders_cb,
-      const scoped_refptr<MediaLog>& media_log);
+      MediaLog* media_log);
   ~AudioRendererImpl() override;
 
   // TimeSource implementation.
@@ -217,9 +217,9 @@ class MEDIA_EXPORT AudioRendererImpl
 
   std::unique_ptr<AudioBufferStream> audio_buffer_stream_;
 
-  scoped_refptr<MediaLog> media_log_;
+  MediaLog* media_log_;
 
-  // Cached copy of hardware params from |sink_|.
+  // Cached copy of audio params that the renderer is initialized with.
   AudioParameters audio_parameters_;
 
   RendererClient* client_;
@@ -244,6 +244,9 @@ class MEDIA_EXPORT AudioRendererImpl
   // Similar to |last_decoded_sample_rate_|, used to configure the channel mask
   // given to the |algorithm_| for efficient playback rate changes.
   ChannelLayout last_decoded_channel_layout_;
+
+  // Whether the stream is possibly encrypted.
+  bool is_encrypted_;
 
   // After Initialize() has completed, all variables below must be accessed
   // under |lock_|. ------------------------------------------------------------

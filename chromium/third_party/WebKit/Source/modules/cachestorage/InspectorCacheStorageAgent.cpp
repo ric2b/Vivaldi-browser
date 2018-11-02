@@ -49,15 +49,15 @@ namespace {
 
 String BuildCacheId(const String& security_origin, const String& cache_name) {
   String id(security_origin);
-  id.Append('|');
-  id.Append(cache_name);
+  id.append('|');
+  id.append(cache_name);
   return id;
 }
 
 Response ParseCacheId(const String& id,
                       String* security_origin,
                       String* cache_name) {
-  size_t pipe = id.Find('|');
+  size_t pipe = id.find('|');
   if (pipe == WTF::kNotFound)
     return Response::Error("Invalid cache id.");
   *security_origin = id.Substring(0, pipe);
@@ -75,8 +75,8 @@ Response AssertCacheStorage(
   if (!sec_origin->IsPotentiallyTrustworthy())
     return Response::Error(sec_origin->IsPotentiallyTrustworthyErrorMessage());
 
-  std::unique_ptr<WebServiceWorkerCacheStorage> cache = WTF::WrapUnique(
-      Platform::Current()->CacheStorage(WebSecurityOrigin(sec_origin)));
+  std::unique_ptr<WebServiceWorkerCacheStorage> cache =
+      Platform::Current()->CreateCacheStorage(WebSecurityOrigin(sec_origin));
   if (!cache)
     return Response::Error("Could not find cache storage.");
   result = std::move(cache);
@@ -145,7 +145,7 @@ class RequestCacheNames
   void OnError(WebServiceWorkerCacheError error) override {
     callback_->sendFailure(Response::Error(
         String::Format("Error requesting cache names: %s",
-                       ServiceWorkerCacheErrorString(error).Data())));
+                       ServiceWorkerCacheErrorString(error).data())));
   }
 
  private:
@@ -181,7 +181,7 @@ class ResponsesAccumulator : public RefCounted<ResponsesAccumulator> {
 
   void AddRequestResponsePair(const WebServiceWorkerRequest& request,
                               const WebServiceWorkerResponse& response) {
-    ASSERT(num_responses_left_ > 0);
+    DCHECK_GT(num_responses_left_, 0);
     RequestResponse& request_response =
         responses_.at(responses_.size() - num_responses_left_);
     request_response.request = request.Url().GetString();
@@ -241,8 +241,8 @@ class GetCacheResponsesForRequestData
   void OnError(WebServiceWorkerCacheError error) override {
     accumulator_->SendFailure(Response::Error(
         String::Format("Error requesting responses for cache  %s: %s",
-                       params_.cache_name.Utf8().Data(),
-                       ServiceWorkerCacheErrorString(error).Data())));
+                       params_.cache_name.Utf8().data(),
+                       ServiceWorkerCacheErrorString(error).data())));
   }
 
  private:
@@ -287,8 +287,8 @@ class GetCacheKeysForRequestData
   void OnError(WebServiceWorkerCacheError error) override {
     callback_->sendFailure(Response::Error(
         String::Format("Error requesting requests for cache %s: %s",
-                       params_.cache_name.Utf8().Data(),
-                       ServiceWorkerCacheErrorString(error).Data())));
+                       params_.cache_name.Utf8().data(),
+                       ServiceWorkerCacheErrorString(error).data())));
   }
 
  private:
@@ -317,8 +317,8 @@ class GetCacheForRequestData
 
   void OnError(WebServiceWorkerCacheError error) override {
     callback_->sendFailure(Response::Error(String::Format(
-        "Error requesting cache %s: %s", params_.cache_name.Utf8().Data(),
-        ServiceWorkerCacheErrorString(error).Data())));
+        "Error requesting cache %s: %s", params_.cache_name.Utf8().data(),
+        ServiceWorkerCacheErrorString(error).data())));
   }
 
  private:
@@ -339,7 +339,7 @@ class DeleteCache : public WebServiceWorkerCacheStorage::CacheStorageCallbacks {
   void OnError(WebServiceWorkerCacheError error) override {
     callback_->sendFailure(Response::Error(
         String::Format("Error requesting cache names: %s",
-                       ServiceWorkerCacheErrorString(error).Data())));
+                       ServiceWorkerCacheErrorString(error).data())));
   }
 
  private:
@@ -359,7 +359,7 @@ class DeleteCacheEntry : public WebServiceWorkerCache::CacheBatchCallbacks {
   void OnError(WebServiceWorkerCacheError error) override {
     callback_->sendFailure(Response::Error(
         String::Format("Error requesting cache names: %s",
-                       ServiceWorkerCacheErrorString(error).Data())));
+                       ServiceWorkerCacheErrorString(error).data())));
   }
 
  private:
@@ -394,8 +394,8 @@ class GetCacheForDeleteEntry
 
   void OnError(WebServiceWorkerCacheError error) override {
     callback_->sendFailure(Response::Error(String::Format(
-        "Error requesting cache %s: %s", cache_name_.Utf8().Data(),
-        ServiceWorkerCacheErrorString(error).Data())));
+        "Error requesting cache %s: %s", cache_name_.Utf8().data(),
+        ServiceWorkerCacheErrorString(error).data())));
   }
 
  private:

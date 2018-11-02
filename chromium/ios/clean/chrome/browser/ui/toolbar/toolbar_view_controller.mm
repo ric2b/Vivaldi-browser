@@ -5,23 +5,18 @@
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_view_controller.h"
 
 #import "base/mac/foundation_util.h"
-#import "ios/clean/chrome/browser/ui/actions/tab_grid_actions.h"
 #import "ios/clean/chrome/browser/ui/actions/tab_strip_actions.h"
 #import "ios/clean/chrome/browser/ui/commands/navigation_commands.h"
+#import "ios/clean/chrome/browser/ui/commands/tab_grid_commands.h"
 #import "ios/clean/chrome/browser/ui/commands/tools_menu_commands.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_button+factory.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_component_options.h"
+#import "ios/clean/chrome/browser/ui/toolbar/toolbar_constants.h"
+#import "ios/third_party/material_components_ios/src/components/ProgressView/src/MaterialProgressView.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-namespace {
-// Stackview Vertical Margin.
-CGFloat kVerticalMargin = 5.0f;
-// Stackview Horizontal Margin.
-CGFloat kHorizontalMargin = 8.0f;
-}  // namespace
 
 @interface ToolbarViewController ()
 @property(nonatomic, strong) UIView* locationBarContainer;
@@ -34,6 +29,7 @@ CGFloat kHorizontalMargin = 8.0f;
 @property(nonatomic, strong) ToolbarButton* shareButton;
 @property(nonatomic, strong) ToolbarButton* reloadButton;
 @property(nonatomic, strong) ToolbarButton* stopButton;
+@property(nonatomic, strong) MDCProgressView* progressBar;
 @end
 
 @implementation ToolbarViewController
@@ -49,38 +45,50 @@ CGFloat kHorizontalMargin = 8.0f;
 @synthesize shareButton = _shareButton;
 @synthesize reloadButton = _reloadButton;
 @synthesize stopButton = _stopButton;
+@synthesize progressBar = _progressBar;
 
 - (instancetype)init {
   self = [super init];
   if (self) {
     [self setUpToolbarButtons];
     [self setUpLocationBarContainer];
+    [self setUpProgressBar];
   }
   return self;
 }
 
-- (void)viewDidLoad {
-  self.view.backgroundColor = [UIColor lightGrayColor];
+#pragma mark - View lifecyle
 
+- (void)viewDidLoad {
+  self.view.backgroundColor =
+      [UIColor colorWithWhite:kToolbarBackgroundBrightness alpha:1.0];
   [self addChildViewController:self.locationBarViewController
                      toSubview:self.locationBarContainer];
+  [self setUpToolbarStackView];
+  [self.view addSubview:self.stackView];
+  [self.view addSubview:self.progressBar];
+  [self setConstraints];
+}
 
-  // Stack view to contain toolbar items.
+#pragma mark - View Setup
+
+// Sets up the StackView that contains toolbar navigation items.
+- (void)setUpToolbarStackView {
   self.stackView = [[UIStackView alloc] initWithArrangedSubviews:@[
     self.backButton, self.forwardButton, self.reloadButton, self.stopButton,
     self.locationBarContainer, self.shareButton, self.tabSwitchStripButton,
     self.tabSwitchGridButton, self.toolsMenuButton
   ]];
-  [self updateAllButtonsVisibility];
   self.stackView.translatesAutoresizingMaskIntoConstraints = NO;
-  self.stackView.spacing = 16.0;
+  self.stackView.spacing = kStackViewSpacing;
   self.stackView.distribution = UIStackViewDistributionFill;
-  [self.view addSubview:self.stackView];
+  [self updateAllButtonsVisibility];
+}
 
-  // Set constraints.
+- (void)setConstraints {
   [self.view setAutoresizingMask:UIViewAutoresizingFlexibleWidth |
                                  UIViewAutoresizingFlexibleHeight];
-  [NSLayoutConstraint activateConstraints:@[
+  NSArray* constraints = @[
     [self.stackView.topAnchor constraintEqualToAnchor:self.view.topAnchor
                                              constant:kVerticalMargin],
     [self.stackView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor
@@ -91,16 +99,42 @@ CGFloat kHorizontalMargin = 8.0f;
     [self.stackView.trailingAnchor
         constraintEqualToAnchor:self.view.trailingAnchor
                        constant:-kHorizontalMargin],
-  ]];
+    [self.progressBar.leadingAnchor
+        constraintEqualToAnchor:self.view.leadingAnchor],
+    [self.progressBar.trailingAnchor
+        constraintEqualToAnchor:self.view.trailingAnchor],
+    [self.progressBar.bottomAnchor
+        constraintEqualToAnchor:self.view.bottomAnchor],
+    [self.progressBar.heightAnchor
+        constraintEqualToConstant:kProgressBarHeight],
+  ];
+
+  // Set the constraints priority to UILayoutPriorityDefaultHigh so these are
+  // not broken when the views are hidden or the VC's view size is 0.
+  [self activateConstraints:constraints
+               withPriority:UILayoutPriorityDefaultHigh];
+}
+
+- (void)viewWillTransitionToSize:(CGSize)size
+       withTransitionCoordinator:
+           (id<UIViewControllerTransitionCoordinator>)coordinator {
+  // We need to dismiss the ToolsMenu everytime the Toolbar frame changes
+  // (e.g. Size changes, rotation changes, etc.)
+  [self.dispatcher closeToolsMenu];
 }
 
 #pragma mark - Components Setup
 
 - (void)setUpToolbarButtons {
+  NSMutableArray* buttonConstraints = [[NSMutableArray alloc] init];
+
   // Back button.
   self.backButton = [ToolbarButton backToolbarButton];
   self.backButton.visibilityMask = ToolbarComponentVisibilityCompactWidth |
                                    ToolbarComponentVisibilityRegularWidth;
+  [buttonConstraints
+      addObject:[self.backButton.widthAnchor
+                    constraintEqualToConstant:kToolbarButtonWidth]];
   [self.backButton addTarget:self
                       action:@selector(goBack:)
             forControlEvents:UIControlEventTouchUpInside];
@@ -110,6 +144,9 @@ CGFloat kHorizontalMargin = 8.0f;
   self.forwardButton.visibilityMask =
       ToolbarComponentVisibilityCompactWidthOnlyWhenEnabled |
       ToolbarComponentVisibilityRegularWidth;
+  [buttonConstraints
+      addObject:[self.forwardButton.widthAnchor
+                    constraintEqualToConstant:kToolbarButtonWidth]];
   [self.forwardButton addTarget:self
                          action:@selector(goForward:)
                forControlEvents:UIControlEventTouchUpInside];
@@ -119,6 +156,9 @@ CGFloat kHorizontalMargin = 8.0f;
   self.tabSwitchStripButton.visibilityMask =
       ToolbarComponentVisibilityCompactWidth |
       ToolbarComponentVisibilityRegularWidth;
+  [buttonConstraints
+      addObject:[self.tabSwitchStripButton.widthAnchor
+                    constraintEqualToConstant:kToolbarButtonWidth]];
   [self.tabSwitchStripButton addTarget:nil
                                 action:@selector(showTabStrip:)
                       forControlEvents:UIControlEventTouchUpInside];
@@ -128,7 +168,10 @@ CGFloat kHorizontalMargin = 8.0f;
   self.tabSwitchGridButton.visibilityMask =
       ToolbarComponentVisibilityCompactWidth |
       ToolbarComponentVisibilityRegularWidth;
-  [self.tabSwitchGridButton addTarget:nil
+  [buttonConstraints
+      addObject:[self.tabSwitchGridButton.widthAnchor
+                    constraintEqualToConstant:kToolbarButtonWidth]];
+  [self.tabSwitchGridButton addTarget:self
                                action:@selector(showTabGrid:)
                      forControlEvents:UIControlEventTouchUpInside];
   self.tabSwitchGridButton.hiddenInCurrentState = YES;
@@ -137,6 +180,9 @@ CGFloat kHorizontalMargin = 8.0f;
   self.toolsMenuButton = [ToolbarButton toolsMenuToolbarButton];
   self.toolsMenuButton.visibilityMask = ToolbarComponentVisibilityCompactWidth |
                                         ToolbarComponentVisibilityRegularWidth;
+  [buttonConstraints
+      addObject:[self.toolsMenuButton.widthAnchor
+                    constraintEqualToConstant:kToolbarButtonWidth]];
   [self.toolsMenuButton addTarget:self
                            action:@selector(showToolsMenu:)
                  forControlEvents:UIControlEventTouchUpInside];
@@ -144,6 +190,9 @@ CGFloat kHorizontalMargin = 8.0f;
   // Share button.
   self.shareButton = [ToolbarButton shareToolbarButton];
   self.shareButton.visibilityMask = ToolbarComponentVisibilityRegularWidth;
+  [buttonConstraints
+      addObject:[self.shareButton.widthAnchor
+                    constraintEqualToConstant:kToolbarButtonWidth]];
   [self.shareButton addTarget:self
                        action:@selector(showShareMenu:)
              forControlEvents:UIControlEventTouchUpInside];
@@ -151,6 +200,9 @@ CGFloat kHorizontalMargin = 8.0f;
   // Reload button.
   self.reloadButton = [ToolbarButton reloadToolbarButton];
   self.reloadButton.visibilityMask = ToolbarComponentVisibilityRegularWidth;
+  [buttonConstraints
+      addObject:[self.reloadButton.widthAnchor
+                    constraintEqualToConstant:kToolbarButtonWidth]];
   [self.reloadButton addTarget:self
                         action:@selector(reload:)
               forControlEvents:UIControlEventTouchUpInside];
@@ -158,19 +210,42 @@ CGFloat kHorizontalMargin = 8.0f;
   // Stop button.
   self.stopButton = [ToolbarButton stopToolbarButton];
   self.stopButton.visibilityMask = ToolbarComponentVisibilityRegularWidth;
+  [buttonConstraints
+      addObject:[self.stopButton.widthAnchor
+                    constraintEqualToConstant:kToolbarButtonWidth]];
   [self.stopButton addTarget:self
                       action:@selector(stop:)
             forControlEvents:UIControlEventTouchUpInside];
+
+  // // Set the buttons constraints priority to UILayoutPriorityDefaultHigh so
+  // these are not broken when being hidden by the StackView.
+  [self activateConstraints:buttonConstraints
+               withPriority:UILayoutPriorityDefaultHigh];
 }
 
 - (void)setUpLocationBarContainer {
   UIView* locationBarContainer = [[UIView alloc] initWithFrame:CGRectZero];
   locationBarContainer.translatesAutoresizingMaskIntoConstraints = NO;
   locationBarContainer.backgroundColor = [UIColor whiteColor];
+  locationBarContainer.layer.borderWidth = kLocationBarBorderWidth;
+  locationBarContainer.layer.borderColor =
+      [UIColor colorWithWhite:kLocationBarBorderColorBrightness alpha:1.0]
+          .CGColor;
+  locationBarContainer.layer.shadowRadius = kLocationBarShadowRadius;
+  locationBarContainer.layer.shadowOpacity = kLocationBarShadowOpacity;
+  locationBarContainer.layer.shadowOffset = CGSizeMake(0.0f, 0.5f);
+
   [locationBarContainer
       setContentHuggingPriority:UILayoutPriorityDefaultLow
                         forAxis:UILayoutConstraintAxisHorizontal];
   self.locationBarContainer = locationBarContainer;
+}
+
+- (void)setUpProgressBar {
+  MDCProgressView* progressBar = [[MDCProgressView alloc] init];
+  progressBar.translatesAutoresizingMaskIntoConstraints = NO;
+  progressBar.hidden = YES;
+  self.progressBar = progressBar;
 }
 
 #pragma mark - View Controller Containment
@@ -226,9 +301,6 @@ CGFloat kHorizontalMargin = 8.0f;
 
 #pragma mark - ToolbarWebStateConsumer
 
-- (void)setCurrentPageText:(NSString*)text {
-}
-
 - (void)setCanGoForward:(BOOL)canGoForward {
   self.forwardButton.enabled = canGoForward;
   // Update the visibility since the Forward button will be hidden on
@@ -243,7 +315,12 @@ CGFloat kHorizontalMargin = 8.0f;
 - (void)setIsLoading:(BOOL)isLoading {
   self.reloadButton.hiddenInCurrentState = isLoading;
   self.stopButton.hiddenInCurrentState = !isLoading;
+  [self.progressBar setHidden:!isLoading animated:YES completion:nil];
   [self updateAllButtonsVisibility];
+}
+
+- (void)setLoadingProgress:(double)progress {
+  [self.progressBar setProgress:progress animated:YES completion:nil];
 }
 
 #pragma mark - ZoomTransitionDelegate
@@ -283,6 +360,10 @@ CGFloat kHorizontalMargin = 8.0f;
   [self.dispatcher reloadPage];
 }
 
+- (void)showTabGrid:(id)sender {
+  [self.dispatcher showTabGrid];
+}
+
 #pragma mark - TabStripEvents
 
 - (void)tabStripDidShow:(id)sender {
@@ -307,6 +388,15 @@ CGFloat kHorizontalMargin = 8.0f;
       [button setHiddenForCurrentStateAndSizeClass];
     }
   }
+}
+
+// Sets the priority for an array of constraints and activates them.
+- (void)activateConstraints:(NSArray*)constraintsArray
+               withPriority:(UILayoutPriority)priority {
+  for (NSLayoutConstraint* constraint in constraintsArray) {
+    constraint.priority = priority;
+  }
+  [NSLayoutConstraint activateConstraints:constraintsArray];
 }
 
 @end

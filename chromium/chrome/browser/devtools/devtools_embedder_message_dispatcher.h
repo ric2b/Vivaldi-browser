@@ -62,6 +62,7 @@ class DevToolsEmbedderMessageDispatcher {
                               const std::string& file_system_path,
                               const std::string& query) = 0;
     virtual void SetWhitelistedShortcuts(const std::string& message) = 0;
+    virtual void SetEyeDropperActive(bool active) = 0;
     virtual void ShowCertificateViewer(const std::string& cert_chain) = 0;
     virtual void ZoomIn() = 0;
     virtual void ZoomOut() = 0;
@@ -70,7 +71,9 @@ class DevToolsEmbedderMessageDispatcher {
     virtual void SetDevicesDiscoveryConfig(
         bool discover_usb_devices,
         bool port_forwarding_enabled,
-        const std::string& port_forwarding_config) = 0;
+        const std::string& port_forwarding_config,
+        bool network_discovery_enabled,
+        const std::string& network_discovery_config) = 0;
     virtual void PerformActionOnRemotePage(const std::string& page_id,
                                            const std::string& action) = 0;
     virtual void OpenRemotePage(const std::string& browser_id,

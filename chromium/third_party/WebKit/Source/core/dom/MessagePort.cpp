@@ -28,16 +28,16 @@
 
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/SerializedScriptValue.h"
-#include "bindings/core/v8/SerializedScriptValueFactory.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValueFactory.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/MessageEvent.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "platform/CrossThreadFunctional.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/Atomics.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/AtomicString.h"
@@ -51,9 +51,8 @@ MessagePort* MessagePort::Create(ExecutionContext& execution_context) {
 
 MessagePort::MessagePort(ExecutionContext& execution_context)
     : ContextLifecycleObserver(&execution_context),
-      pending_dispatch_task_(0),
-      started_(false),
-      closed_(false) {}
+      task_runner_(TaskRunnerHelper::Get(TaskType::kPostedMessage,
+                                         &execution_context)) {}
 
 MessagePort::~MessagePort() {
   DCHECK(!started_ || !IsEntangled());
@@ -122,13 +121,9 @@ void MessagePort::MessageAvailable() {
   if (AtomicTestAndSetToOne(&pending_dispatch_task_))
     return;
 
-  DCHECK(GetExecutionContext());
-  // TODO(tzik): Use ParentThreadTaskRunners instead of ExecutionContext here to
-  // avoid touching foreign thread GCed object.
-  GetExecutionContext()->PostTask(
-      TaskType::kPostedMessage, BLINK_FROM_HERE,
-      CreateCrossThreadTask(&MessagePort::DispatchMessages,
-                            WrapCrossThreadWeakPersistent(this)));
+  task_runner_->PostTask(BLINK_FROM_HERE,
+                         CrossThreadBind(&MessagePort::DispatchMessages,
+                                         WrapCrossThreadWeakPersistent(this)));
 }
 
 void MessagePort::start() {
@@ -172,7 +167,7 @@ static bool TryGetMessageFrom(WebMessagePortChannel& web_channel,
     return false;
 
   if (web_channels.size()) {
-    channels.Resize(web_channels.size());
+    channels.resize(web_channels.size());
     for (size_t i = 0; i < web_channels.size(); ++i)
       channels[i] = std::move(web_channels[i]);
   }

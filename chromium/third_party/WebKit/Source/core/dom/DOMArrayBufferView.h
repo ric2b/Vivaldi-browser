@@ -5,10 +5,10 @@
 #ifndef DOMArrayBufferView_h
 #define DOMArrayBufferView_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMSharedArrayBuffer.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/typed_arrays/ArrayBufferView.h"
 
 namespace blink {
@@ -68,6 +68,10 @@ class CORE_EXPORT DOMArrayBufferView
   unsigned TypeSize() const { return View()->TypeSize(); }
   void SetNeuterable(bool flag) { return View()->SetNeuterable(flag); }
   bool IsShared() const { return View()->IsShared(); }
+
+  void* BaseAddressMaybeShared() const {
+    return View()->BaseAddressMaybeShared();
+  }
 
   v8::Local<v8::Object> Wrap(v8::Isolate*,
                              v8::Local<v8::Object> creation_context) override {

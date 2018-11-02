@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "components/payments/content/payment_manifest_parser.mojom.h"
+#include "components/payments/mojom/payment_manifest_parser.mojom.h"
 #include "components/webdata/common/web_database.h"
 #include "components/webdata/common/web_database_table.h"
 
@@ -21,6 +21,8 @@ namespace payments {
 // web_app_manifest_section The table stores the contents in
 //                          WebAppManifestSection.
 //
+//  expire_date             The data expire date in seconds from 1601-01-01
+//                          00:00:00 UTC.
 //  id                      The package name of the app.
 //  min_version             Minimum version number of the app.
 //  fingerprints            The result of SHA256(signing certificate bytes) for
@@ -40,13 +42,18 @@ class WebAppManifestSectionTable : public WebDatabaseTable {
   bool IsSyncable() override;
   bool MigrateToVersion(int version, bool* update_compatible_version) override;
 
-  // Adds the web app |*manifest|. Note that the previous web app manifest will
-  // be deleted.
-  bool AddWebAppManifest(mojom::WebAppManifestSection* manifest);
+  // Remove expired data.
+  void RemoveExpiredData();
 
-  // Gets manifest of the |web_app|. Returns nullptr if no manifest exists for
-  // the |web_app|.
-  mojom::WebAppManifestSectionPtr GetWebAppManifest(const std::string& web_app);
+  // Adds the web app |manifest|. Note that the previous web app manifest will
+  // be deleted.
+  bool AddWebAppManifest(
+      const std::vector<mojom::WebAppManifestSectionPtr>& manifest);
+
+  // Gets manifest of the |web_app|. Returns empty vector if no manifest exists
+  // for the |web_app|.
+  std::vector<mojom::WebAppManifestSectionPtr> GetWebAppManifest(
+      const std::string& web_app);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WebAppManifestSectionTable);

@@ -64,10 +64,12 @@ Untuk informasi tentang privasi, lihat Kebijakan Privasi Google (http://goo.gl/S
 <translation id="225614027745146050">Selamat Datang</translation>
 <translation id="228809120910082333">Konfirmasi akun dan PIN Anda di bawah guna mengizinkan akses oleh Chromoting.</translation>
 <translation id="2314101195544969792">Sesi <ph name="APPLICATION_NAME" /> Anda tidak aktif untuk sementara waktu dan akan diputuskan sementara.</translation>
+<translation id="2317666076142640974">Coba <ph name="LINK_BEGIN" />aplikasi web Chrome Desktop Jarak Jauh<ph name="LINK_END" /> yang baru. Kami ingin mendengar masukan Anda.</translation>
 <translation id="2353140552984634198">Anda dapat mengakses komputer ini dengan aman menggunakan Chromoting.</translation>
 <translation id="2359808026110333948">Lanjut</translation>
 <translation id="2366718077645204424">Tidak dapat menjangkau inang. Ini mungkin karena konfigurasi jaringan yang Anda gunakan.</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  Terakhir terlihat online <ph name="RELATIVE_TIMESTAMP" />.</translation>
+<translation id="2405928220797050937">Aplikasi ini tidak lagi didukung. Untuk memastikan Anda mendapatkan update fitur dan keamanan terbaru, gunakan <ph name="LINK_BEGIN" />aplikasi web Chrome Desktop Jarak Jauh<ph name="LINK_END" />.</translation>
 <translation id="2499160551253595098">Bantu kami meningkatkan Chrome Desktop Jarak Jauh dengan mengizinkan kami mengumpulkan statistik penggunaan dan laporan kerusakan.</translation>
 <translation id="2512228156274966424">CATATAN: Untuk memastikan bahwa semua pintasan keyboard tersedia, Anda dapat mengonfigurasi Chrome Desktop Jarak Jauh menjadi ‘Buka sebagai jendela’.</translation>
 <translation id="2540992418118313681">Ingin membagikan komputer ini agar dapat dilihat dan dikontrol oleh pengguna lain?</translation>
@@ -95,7 +97,6 @@ Untuk informasi tentang privasi, lihat Kebijakan Privasi Google (http://goo.gl/S
 <translation id="3194245623920924351">Chrome Desktop Jarak Jauh</translation>
 <translation id="3197730452537982411">Desktop Jarak Jauh</translation>
 <translation id="3258789396564295715">Mungkin Anda dapat mengakses komputer ini dengan aman menggunakan Chrome Desktop Jarak Jauh.</translation>
-<translation id="327263477022142889">Ingin membantu meningkatkan Desktop Jarak Jauh Chrome? <ph name="LINK_BEGIN" />Isi survei ini.<ph name="LINK_END" /></translation>
 <translation id="3286521253923406898">Pengontrol Host Chromoting</translation>
 <translation id="332624996707057614">Edit nama komputer</translation>
 <translation id="3339299787263251426">Mengakses komputer melalui internet dengan aman</translation>
@@ -111,6 +112,7 @@ Untuk informasi tentang privasi, lihat Kebijakan Privasi Google (http://goo.gl/S
 <translation id="3649256019230929621">Meminimalkan jendela</translation>
 <translation id="369442766917958684">Offline.</translation>
 <translation id="3695446226812920698">Pelajari caranya</translation>
+<translation id="3718805989288361841">Terjadi error pada setelan kebijakan untuk Chrome Desktop Jarak Jauh. Hubungi administrator sistem untuk mendapatkan bantuan.</translation>
 <translation id="3776024066357219166">Sesi Chrome Desktop Jarak Jauh Anda telah berakhir.</translation>
 <translation id="3785447812627779171">Host
 Chromoting</translation>
@@ -137,7 +139,6 @@ Chromoting</translation>
 <translation id="4277463233460010382">Komputer ini dikonfigurasi untuk mengizinkan satu atau beberapa klien terhubung tanpa memasukkan PIN</translation>
 <translation id="4277736576214464567">Kode akses tidak valid. Harap coba lagi.</translation>
 <translation id="4361728918881830843">Untuk mengaktifkan sambungan jarak jauh ke komputer yang berbeda, instal Chrome Desktop Jarak Jauh di komputer tersebut, lalu klik “<ph name="BUTTON_NAME" />”.</translation>
-<translation id="4368630973089289038">Ingin membantu meningkatkan Chromoting? <ph name="LINK_BEGIN" />Isi survei ini.<ph name="LINK_END" /></translation>
 <translation id="4394049700291259645">Nonaktifkan</translation>
 <translation id="4405930547258349619">Pustaka Inti</translation>
 <translation id="4430435636878359009">Nonaktifkan sambungan jarak jauh ke komputer ini</translation>
@@ -232,6 +233,7 @@ Desktop Jarak Jauh</translation>
 <translation id="6930242544192836755">Durasi</translation>
 <translation id="6939719207673461467">Tunjukkan/sembunyikan keyboard.</translation>
 <translation id="6944854424004126054">Pulihkan jendela</translation>
+<translation id="6948905685698011662">Chrome Desktop Jarak Jauh kini tersedia di web. Temukan <ph name="LINK_BEGIN" />aplikasi web gratis<ph name="LINK_END" /> kami.</translation>
 <translation id="6963936880795878952">Sambungan ke komputer jarak jauh diblokir untuk sementara karena seseorang mencoba untuk menyambungkannya dengan PIN yang tidak valid. Coba lagi nanti.</translation>
 <translation id="6965382102122355670">Oke</translation>
 <translation id="6985691951107243942">Yakin ingin menonaktifkan sambungan jarak jauh dengan <ph name="HOSTNAME" />? Jika Anda berubah pikiran, Anda harus mengunjungi komputer tersebut untuk mengaktifkan kembali sambungan.</translation>
@@ -248,6 +250,7 @@ Desktop Jarak Jauh</translation>
 <translation id="7401733114166276557">Chrome Desktop Jarak Jauh</translation>
 <translation id="7434397035092923453">Akses ditolak untuk klien: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="7444276978508498879">Klien tersambung: <ph name="CLIENT_USERNAME" />.</translation>
+<translation id="7589941250119944644">Chrome Desktop Jarak Jauh kini dapat diakses di web. Coba <ph name="LINK_BEGIN" />aplikasi web<ph name="LINK_END" /> versi baru ini—cepat dan gratis, dengan fitur yang sama seperti sebelumnya.</translation>
 <translation id="7606912958770842224">Aktifkan sambungan jarak jauh</translation>
 <translation id="7649070708921625228">Bantuan</translation>
 <translation id="7658239707568436148">Batal</translation>

@@ -137,14 +137,16 @@ PlatformThreadId PlatformThread::CurrentId() {
   return syscall(__NR_gettid);
 #elif defined(OS_ANDROID)
   return gettid();
-#elif defined(OS_SOLARIS) || defined(OS_QNX)
+#elif defined(OS_SOLARIS) || defined(OS_QNX) || defined(OS_FUCHSIA)
   return pthread_self();
 #elif defined(OS_NACL) && defined(__GLIBC__)
   return pthread_self();
 #elif defined(OS_NACL) && !defined(__GLIBC__)
   // Pointers are 32-bits in NaCl.
   return reinterpret_cast<int32_t>(pthread_self());
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) && defined(OS_AIX)
+  return pthread_self();
+#elif defined(OS_POSIX) && !defined(OS_AIX)
   return reinterpret_cast<int64_t>(pthread_self());
 #endif
 }

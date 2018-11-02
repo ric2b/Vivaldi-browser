@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -31,7 +32,9 @@ namespace views {
 ////////////////////////////////////////////////////////////////////////////////
 // DialogDelegate:
 
-DialogDelegate::DialogDelegate() : supports_custom_frame_(true) {}
+DialogDelegate::DialogDelegate() : supports_custom_frame_(true) {
+  UMA_HISTOGRAM_BOOLEAN("Dialog.DialogDelegate.Create", true);
+}
 
 DialogDelegate::~DialogDelegate() {}
 
@@ -127,6 +130,10 @@ void DialogDelegate::UpdateButton(LabelButton* button, ui::DialogButton type) {
     is_default = false;
   }
   button->SetIsDefault(is_default);
+}
+
+bool DialogDelegate::ShouldSnapFrameWidth() const {
+  return GetDialogButtons() != ui::DIALOG_BUTTON_NONE;
 }
 
 int DialogDelegate::GetDialogButtons() const {
@@ -236,6 +243,7 @@ ui::AXRole DialogDelegate::GetAccessibleWindowRole() const {
 DialogDelegateView::DialogDelegateView() {
   // A WidgetDelegate should be deleted on DeleteDelegate.
   set_owned_by_client();
+  UMA_HISTOGRAM_BOOLEAN("Dialog.DialogDelegateView.Create", true);
 }
 
 DialogDelegateView::~DialogDelegateView() {}

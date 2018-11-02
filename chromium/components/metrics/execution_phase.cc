@@ -4,11 +4,15 @@
 
 #include "components/metrics/execution_phase.h"
 
-#include "components/browser_watcher/stability_data_names.h"
-#include "components/browser_watcher/stability_debugging.h"
+#include "build/build_config.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+
+#if defined(OS_WIN)
+#include "components/browser_watcher/stability_data_names.h"
+#include "components/browser_watcher/stability_debugging.h"
+#endif  // defined(OS_WIN)
 
 namespace metrics {
 
@@ -34,9 +38,11 @@ void ExecutionPhaseManager::SetExecutionPhase(ExecutionPhase execution_phase) {
   execution_phase_ = execution_phase;
   local_state_->SetInteger(prefs::kStabilityExecutionPhase,
                            static_cast<int>(execution_phase_));
+#if defined(OS_WIN)
   browser_watcher::SetStabilityDataInt(
       browser_watcher::kStabilityExecutionPhase,
       static_cast<int>(execution_phase_));
+#endif  // defined(OS_WIN)
 }
 
 ExecutionPhase ExecutionPhaseManager::GetExecutionPhase() {

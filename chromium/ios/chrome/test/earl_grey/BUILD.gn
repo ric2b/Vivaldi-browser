@@ -27,7 +27,6 @@ chrome_ios_eg_test("ios_chrome_integration_egtests") {
     "//ios/chrome/browser/device_sharing:eg_tests",
     "//ios/chrome/browser/metrics:eg_tests",
     "//ios/chrome/browser/net:eg_tests",
-    "//ios/chrome/browser/translate:eg_tests",
   ]
 }
 
@@ -100,6 +99,7 @@ chrome_ios_eg_test("ios_chrome_multitasking_egtests") {
 }
 
 chrome_ios_eg_test("ios_chrome_device_check_egtests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "device_check_egtest.mm",
   ]
@@ -125,6 +125,7 @@ chrome_ios_eg_test("ios_chrome_flaky_egtests") {
 }
 
 chrome_ios_eg_test("ios_chrome_smoke_egtests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "smoke_egtest.mm",
   ]
@@ -139,6 +140,8 @@ chrome_ios_eg_test("ios_chrome_smoke_egtests") {
 chrome_ios_eg_test("ios_chrome_external_url_egtests") {
   deps = [
     "//ios/chrome/browser/metrics:external_url_eg_tests",
+    "//ios/chrome/browser/translate:external_url_eg_tests",
+    "//ios/chrome/browser/ui:external_url_eg_tests",
   ]
 }
 
@@ -171,6 +174,7 @@ source_set("test_support") {
     "//ios/chrome/browser/ui/collection_view/cells",
     "//ios/chrome/browser/ui/commands:commands",
     "//ios/chrome/browser/ui/omnibox:omnibox_internal",
+    "//ios/chrome/browser/ui/settings:settings",
     "//ios/chrome/browser/ui/static_content",
     "//ios/chrome/browser/ui/toolbar",
     "//ios/chrome/browser/ui/tools_menu",
@@ -199,6 +203,7 @@ source_set("test_support") {
 }
 
 source_set("hooks") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "eg_tests_hook.mm",

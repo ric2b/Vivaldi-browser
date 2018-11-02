@@ -264,7 +264,7 @@ void AddToHomescreenDataFetcher::FetchFavicon() {
   // TODO(dfalcantara): Try combining with the new BookmarksHandler once its
   //                    rewrite is further along.
   std::vector<int> icon_types{
-      favicon_base::FAVICON,
+      favicon_base::WEB_MANIFEST_ICON, favicon_base::FAVICON,
       favicon_base::TOUCH_PRECOMPOSED_ICON | favicon_base::TOUCH_ICON};
 
   favicon::FaviconService* favicon_service =
@@ -297,7 +297,7 @@ void AddToHomescreenDataFetcher::OnFaviconFetched(
 
 SkBitmap AddToHomescreenDataFetcher::CreateLauncherIconFromFaviconInBackground(
     const favicon_base::FaviconRawBitmapResult& bitmap_result) {
-  DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
+  base::ThreadRestrictions::AssertIOAllowed();
 
   SkBitmap raw_icon;
   if (bitmap_result.is_valid()) {
@@ -321,7 +321,7 @@ void AddToHomescreenDataFetcher::CreateLauncherIcon(const SkBitmap& raw_icon) {
 
 SkBitmap AddToHomescreenDataFetcher::CreateLauncherIconInBackground(
     const SkBitmap& raw_icon) {
-  DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
+  base::ThreadRestrictions::AssertIOAllowed();
 
   SkBitmap primary_icon;
   bool is_generated = false;

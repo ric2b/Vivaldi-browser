@@ -4,6 +4,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
@@ -42,8 +43,8 @@ class CheckWaiter {
     if (callback_.Run() != expected_ &&
         base::Time::NowFromSystemTime() < timeout_) {
       base::MessageLoop::current()->task_runner()->PostTask(
-          FROM_HERE, base::Bind(base::IgnoreResult(&CheckWaiter::Check),
-                                base::Unretained(this)));
+          FROM_HERE, base::BindOnce(base::IgnoreResult(&CheckWaiter::Check),
+                                    base::Unretained(this)));
       return false;
     }
 

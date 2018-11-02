@@ -5,8 +5,12 @@
 #include "components/offline_items_collection/core/android/offline_content_aggregator_bridge.h"
 
 #include "base/android/jni_string.h"
+#include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "components/offline_items_collection/core/android/offline_item_bridge.h"
+#include "components/offline_items_collection/core/android/offline_item_visuals_bridge.h"
 #include "components/offline_items_collection/core/offline_item.h"
+#include "components/offline_items_collection/core/throttled_offline_content_provider.h"
 #include "jni/OfflineContentAggregatorBridge_jni.h"
 
 using base::android::AttachCurrentThread;
@@ -14,6 +18,7 @@ using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
+using base::android::ScopedJavaGlobalRef;
 
 namespace offline_items_collection {
 namespace android {
@@ -28,6 +33,16 @@ ContentId CreateContentId(JNIEnv* env,
                    ConvertJavaStringToUTF8(env, j_id));
 }
 
+void GetVisualsForItemHelperCallback(ScopedJavaGlobalRef<jobject> j_callback,
+                                     const ContentId& id,
+                                     const OfflineItemVisuals* visuals) {
+  JNIEnv* env = AttachCurrentThread();
+  Java_OfflineContentAggregatorBridge_onVisualsAvailable(
+      env, j_callback.obj(), ConvertUTF8ToJavaString(env, id.name_space),
+      ConvertUTF8ToJavaString(env, id.id),
+      OfflineItemVisualsBridge::CreateOfflineItemVisuals(env, visuals));
+}
+
 }  // namespace
 
 // static.
@@ -40,8 +55,9 @@ base::android::ScopedJavaLocalRef<jobject>
 OfflineContentAggregatorBridge::GetBridgeForOfflineContentAggregator(
     OfflineContentAggregator* aggregator) {
   if (!aggregator->GetUserData(kOfflineContentAggregatorBridgeUserDataKey)) {
-    aggregator->SetUserData(kOfflineContentAggregatorBridgeUserDataKey,
-                            new OfflineContentAggregatorBridge(aggregator));
+    aggregator->SetUserData(
+        kOfflineContentAggregatorBridgeUserDataKey,
+        base::WrapUnique(new OfflineContentAggregatorBridge(aggregator)));
   }
   OfflineContentAggregatorBridge* bridge =
       static_cast<OfflineContentAggregatorBridge*>(
@@ -52,18 +68,18 @@ OfflineContentAggregatorBridge::GetBridgeForOfflineContentAggregator(
 
 OfflineContentAggregatorBridge::OfflineContentAggregatorBridge(
     OfflineContentAggregator* aggregator)
-    : aggregator_(aggregator) {
+    : provider_(base::MakeUnique<ThrottledOfflineContentProvider>(aggregator)) {
   JNIEnv* env = AttachCurrentThread();
   java_ref_.Reset(Java_OfflineContentAggregatorBridge_create(
       env, reinterpret_cast<intptr_t>(this)));
 
-  aggregator_->AddObserver(this);
+  provider_->AddObserver(this);
 }
 
 OfflineContentAggregatorBridge::~OfflineContentAggregatorBridge() {
   // TODO(dtrainor): Do not need to unregister because in the destructor of the
   // base class of OfflineContentAggregator.  Is |observers_| already dead?
-  aggregator_->RemoveObserver(this);
+  provider_->RemoveObserver(this);
 
   Java_OfflineContentAggregatorBridge_onNativeDestroyed(AttachCurrentThread(),
                                                         java_ref_.obj());
@@ -72,7 +88,7 @@ OfflineContentAggregatorBridge::~OfflineContentAggregatorBridge() {
 jboolean OfflineContentAggregatorBridge::AreItemsAvailable(
     JNIEnv* env,
     const JavaParamRef<jobject>& jobj) {
-  return aggregator_->AreItemsAvailable();
+  return provider_->AreItemsAvailable();
 }
 
 void OfflineContentAggregatorBridge::OpenItem(
@@ -80,7 +96,7 @@ void OfflineContentAggregatorBridge::OpenItem(
     const JavaParamRef<jobject>& jobj,
     const JavaParamRef<jstring>& j_namespace,
     const JavaParamRef<jstring>& j_id) {
-  aggregator_->OpenItem(CreateContentId(env, j_namespace, j_id));
+  provider_->OpenItem(CreateContentId(env, j_namespace, j_id));
 }
 
 void OfflineContentAggregatorBridge::RemoveItem(
@@ -88,7 +104,7 @@ void OfflineContentAggregatorBridge::RemoveItem(
     const JavaParamRef<jobject>& jobj,
     const JavaParamRef<jstring>& j_namespace,
     const JavaParamRef<jstring>& j_id) {
-  aggregator_->RemoveItem(CreateContentId(env, j_namespace, j_id));
+  provider_->RemoveItem(CreateContentId(env, j_namespace, j_id));
 }
 
 void OfflineContentAggregatorBridge::CancelDownload(
@@ -96,7 +112,7 @@ void OfflineContentAggregatorBridge::CancelDownload(
     const JavaParamRef<jobject>& jobj,
     const JavaParamRef<jstring>& j_namespace,
     const JavaParamRef<jstring>& j_id) {
-  aggregator_->CancelDownload(CreateContentId(env, j_namespace, j_id));
+  provider_->CancelDownload(CreateContentId(env, j_namespace, j_id));
 }
 
 void OfflineContentAggregatorBridge::PauseDownload(
@@ -104,7 +120,7 @@ void OfflineContentAggregatorBridge::PauseDownload(
     const JavaParamRef<jobject>& jobj,
     const JavaParamRef<jstring>& j_namespace,
     const JavaParamRef<jstring>& j_guid) {
-  aggregator_->PauseDownload(CreateContentId(env, j_namespace, j_guid));
+  provider_->PauseDownload(CreateContentId(env, j_namespace, j_guid));
 }
 
 void OfflineContentAggregatorBridge::ResumeDownload(
@@ -112,7 +128,7 @@ void OfflineContentAggregatorBridge::ResumeDownload(
     const JavaParamRef<jobject>& jobj,
     const JavaParamRef<jstring>& j_namespace,
     const JavaParamRef<jstring>& j_id) {
-  aggregator_->ResumeDownload(CreateContentId(env, j_namespace, j_id));
+  provider_->ResumeDownload(CreateContentId(env, j_namespace, j_id));
 }
 
 ScopedJavaLocalRef<jobject> OfflineContentAggregatorBridge::GetItemById(
@@ -121,7 +137,7 @@ ScopedJavaLocalRef<jobject> OfflineContentAggregatorBridge::GetItemById(
     const JavaParamRef<jstring>& j_namespace,
     const JavaParamRef<jstring>& j_id) {
   const OfflineItem* item =
-      aggregator_->GetItemById(CreateContentId(env, j_namespace, j_id));
+      provider_->GetItemById(CreateContentId(env, j_namespace, j_id));
 
   return OfflineItemBridge::CreateOfflineItem(env, item);
 }
@@ -130,7 +146,19 @@ ScopedJavaLocalRef<jobject> OfflineContentAggregatorBridge::GetAllItems(
     JNIEnv* env,
     const JavaParamRef<jobject>& jobj) {
   return OfflineItemBridge::CreateOfflineItemList(env,
-                                                  aggregator_->GetAllItems());
+                                                  provider_->GetAllItems());
+}
+
+void OfflineContentAggregatorBridge::GetVisualsForItem(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jobj,
+    const JavaParamRef<jstring>& j_namespace,
+    const JavaParamRef<jstring>& j_id,
+    const JavaParamRef<jobject>& j_callback) {
+  provider_->GetVisualsForItem(
+      CreateContentId(env, j_namespace, j_id),
+      base::Bind(&GetVisualsForItemHelperCallback,
+                 ScopedJavaGlobalRef<jobject>(env, j_callback)));
 }
 
 void OfflineContentAggregatorBridge::OnItemsAvailable(

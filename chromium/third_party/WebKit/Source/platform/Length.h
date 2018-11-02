@@ -72,22 +72,22 @@ class PLATFORM_EXPORT Length {
 
   Length(LengthType t)
       : int_value_(0), quirk_(false), type_(t), is_float_(false) {
-    ASSERT(t != kCalculated);
+    DCHECK_NE(t, kCalculated);
   }
 
   Length(int v, LengthType t, bool q = false)
       : int_value_(v), quirk_(q), type_(t), is_float_(false) {
-    ASSERT(t != kCalculated);
+    DCHECK_NE(t, kCalculated);
   }
 
   Length(LayoutUnit v, LengthType t, bool q = false)
       : float_value_(v.ToFloat()), quirk_(q), type_(t), is_float_(true) {
-    ASSERT(t != kCalculated);
+    DCHECK_NE(t, kCalculated);
   }
 
   Length(float v, LengthType t, bool q = false)
       : float_value_(v), quirk_(q), type_(t), is_float_(true) {
-    ASSERT(t != kCalculated);
+    DCHECK_NE(t, kCalculated);
   }
 
   Length(double v, LengthType t, bool q = false)
@@ -126,7 +126,7 @@ class PLATFORM_EXPORT Length {
 
   const Length& operator*=(float v) {
     if (IsCalculated()) {
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return *this;
     }
 
@@ -141,25 +141,25 @@ class PLATFORM_EXPORT Length {
   // FIXME: Make this private (if possible) or at least rename it
   // (http://crbug.com/432707).
   inline float Value() const {
-    ASSERT(!IsCalculated());
+    DCHECK(!IsCalculated());
     return GetFloatValue();
   }
 
   int IntValue() const {
     if (IsCalculated()) {
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return 0;
     }
     return GetIntValue();
   }
 
   float Pixels() const {
-    ASSERT(GetType() == kFixed);
+    DCHECK_EQ(GetType(), kFixed);
     return GetFloatValue();
   }
 
   float Percent() const {
-    ASSERT(GetType() == kPercent);
+    DCHECK_EQ(GetType(), kPercent);
     return GetFloatValue();
   }
 
@@ -180,7 +180,7 @@ class PLATFORM_EXPORT Length {
 
   void SetValue(int value) {
     if (IsCalculated()) {
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return;
     }
     SetValue(kFixed, value);
@@ -207,7 +207,7 @@ class PLATFORM_EXPORT Length {
   // functions it's impossible to determine the sign or zero-ness. We assume all
   // calc values are positive and non-zero for now.
   bool IsZero() const {
-    ASSERT(!IsMaxSizeNone());
+    DCHECK(!IsMaxSizeNone());
     if (IsCalculated())
       return false;
 
@@ -252,7 +252,8 @@ class PLATFORM_EXPORT Length {
   }
 
   Length Blend(const Length& from, double progress, ValueRange range) const {
-    ASSERT(IsSpecified() && from.IsSpecified());
+    DCHECK(IsSpecified());
+    DCHECK(from.IsSpecified());
 
     if (progress == 0.0)
       return from;
@@ -280,7 +281,7 @@ class PLATFORM_EXPORT Length {
   }
 
   float GetFloatValue() const {
-    ASSERT(!IsMaxSizeNone());
+    DCHECK(!IsMaxSizeNone());
     return is_float_ ? float_value_ : int_value_;
   }
   float NonNanCalculatedValue(LayoutUnit max_value) const;
@@ -291,14 +292,14 @@ class PLATFORM_EXPORT Length {
 
  private:
   int GetIntValue() const {
-    ASSERT(!IsMaxSizeNone());
+    DCHECK(!IsMaxSizeNone());
     return is_float_ ? static_cast<int>(float_value_) : int_value_;
   }
 
   Length BlendMixedTypes(const Length& from, double progress, ValueRange) const;
 
   int CalculationHandle() const {
-    ASSERT(IsCalculated());
+    DCHECK(IsCalculated());
     return GetIntValue();
   }
   void IncrementCalculatedRef() const;

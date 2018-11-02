@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "content/common/content_export.h"
 #include "third_party/WebKit/public/platform/WebFeaturePolicy.h"
@@ -102,6 +103,9 @@ struct CONTENT_EXPORT ParsedFeaturePolicyDeclaration {
 
 using ParsedFeaturePolicyHeader = std::vector<ParsedFeaturePolicyDeclaration>;
 
+bool CONTENT_EXPORT operator==(const ParsedFeaturePolicyDeclaration& lhs,
+                               const ParsedFeaturePolicyDeclaration& rhs);
+
 class CONTENT_EXPORT FeaturePolicy : public blink::WebFeaturePolicy {
  public:
   // Represents a collection of origins which make up a whitelist in a feature
@@ -174,6 +178,8 @@ class CONTENT_EXPORT FeaturePolicy : public blink::WebFeaturePolicy {
 
  private:
   friend class FeaturePolicyTest;
+  FRIEND_TEST_ALL_PREFIXES(NavigatorTestWithBrowserSideNavigation,
+                           FeaturePolicyNewChild);
 
   explicit FeaturePolicy(url::Origin origin);
   FeaturePolicy(url::Origin origin, const FeatureList& feature_list);

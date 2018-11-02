@@ -7,9 +7,10 @@
 
 #include <memory>
 
+#import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "ios/web/public/web_state/navigation_context.h"
+#import "ios/web/public/web_state/navigation_context.h"
 #include "url/gurl.h"
 
 namespace web {
@@ -18,43 +19,48 @@ namespace web {
 class NavigationContextImpl : public NavigationContext {
  public:
   // Creates navigation context for sucessful navigation to a different page.
-  static std::unique_ptr<NavigationContext> CreateNavigationContext(
+  // Response headers will ne null.
+  static std::unique_ptr<NavigationContextImpl> CreateNavigationContext(
       WebState* web_state,
       const GURL& url,
-      const scoped_refptr<net::HttpResponseHeaders>& response_headers);
+      ui::PageTransition page_transition);
 
-  // Creates navigation context for sucessful same page navigation.
-  static std::unique_ptr<NavigationContext> CreateSameDocumentNavigationContext(
-      WebState* web_state,
-      const GURL& url);
-
-  // Creates navigation context for the error page navigation.
-  static std::unique_ptr<NavigationContext> CreateErrorPageNavigationContext(
-      WebState* web_state,
-      const GURL& url,
-      const scoped_refptr<net::HttpResponseHeaders>& response_headers);
+#ifndef NDEBUG
+  // Returns human readable description of this object.
+  NSString* GetDescription() const;
+#endif  // NDEBUG
 
   // NavigationContext overrides:
   WebState* GetWebState() override;
   const GURL& GetUrl() const override;
+  ui::PageTransition GetPageTransition() const override;
   bool IsSameDocument() const override;
-  bool IsErrorPage() const override;
+  NSError* GetError() const override;
   net::HttpResponseHeaders* GetResponseHeaders() const override;
+  ~NavigationContextImpl() override;
+
+  // Setters for navigation context data members.
+  void SetIsSameDocument(bool is_same_document);
+  void SetError(NSError* error);
+  void SetResponseHeaders(
+      const scoped_refptr<net::HttpResponseHeaders>& response_headers);
+
+  // Optional unique id of the navigation item associated with this navigaiton.
+  int GetNavigationItemUniqueID() const;
+  void SetNavigationItemUniqueID(int unique_id);
 
  private:
-  NavigationContextImpl(
-      WebState* web_state,
-      const GURL& url,
-      bool is_same_page,
-      bool is_error_page,
-      const scoped_refptr<net::HttpResponseHeaders>& response_headers);
-  ~NavigationContextImpl() override;
+  NavigationContextImpl(WebState* web_state,
+                        const GURL& url,
+                        ui::PageTransition page_transition);
 
   WebState* web_state_ = nullptr;
   GURL url_;
+  ui::PageTransition page_transition_;
   bool is_same_document_ = false;
-  bool is_error_page_ = false;
+  base::scoped_nsobject<NSError> error_;
   scoped_refptr<net::HttpResponseHeaders> response_headers_;
+  int navigation_item_unique_id_ = -1;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationContextImpl);
 };

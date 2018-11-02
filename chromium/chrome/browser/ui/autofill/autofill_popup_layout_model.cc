@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/browser/ui/autofill/popup_constants.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
+#include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/browser/suggestion.h"
 #include "components/autofill/core/common/autofill_util.h"
@@ -49,19 +50,22 @@ const struct {
   const char* name;
   int id;
 } kDataResources[] = {
-    {"americanExpressCC", IDR_AUTOFILL_CC_AMEX},
-    {"dinersCC", IDR_AUTOFILL_CC_GENERIC},
-    {"discoverCC", IDR_AUTOFILL_CC_DISCOVER},
-    {"genericCC", IDR_AUTOFILL_CC_GENERIC},
-    {"jcbCC", IDR_AUTOFILL_CC_GENERIC},
-    {"masterCardCC", IDR_AUTOFILL_CC_MASTERCARD},
-    {"mirCC", IDR_AUTOFILL_CC_MIR},
-    {"visaCC", IDR_AUTOFILL_CC_VISA},
+    {autofill::kAmericanExpressCard, IDR_AUTOFILL_CC_AMEX},
+    {autofill::kDinersCard, IDR_AUTOFILL_CC_DINERS},
+    {autofill::kDiscoverCard, IDR_AUTOFILL_CC_DISCOVER},
+    {autofill::kEloCard, IDR_AUTOFILL_CC_ELO},
+    {autofill::kGenericCard, IDR_AUTOFILL_CC_GENERIC},
+    {autofill::kJCBCard, IDR_AUTOFILL_CC_JCB},
+    {autofill::kMasterCard, IDR_AUTOFILL_CC_MASTERCARD},
+    {autofill::kMirCard, IDR_AUTOFILL_CC_MIR},
+    {autofill::kUnionPay, IDR_AUTOFILL_CC_UNIONPAY},
+    {autofill::kVisaCard, IDR_AUTOFILL_CC_VISA},
 #if defined(OS_ANDROID)
     {"httpWarning", IDR_AUTOFILL_HTTP_WARNING},
     {"httpsInvalid", IDR_AUTOFILL_HTTPS_INVALID_WARNING},
     {"scanCreditCardIcon", IDR_AUTOFILL_CC_SCAN_NEW},
     {"settings", IDR_AUTOFILL_SETTINGS},
+    {"create", IDR_AUTOFILL_CREATE},
 #endif
 };
 
@@ -170,6 +174,7 @@ const gfx::FontList& AutofillPopupLayoutModel::GetValueFontListForRow(
     case POPUP_ITEM_ID_CLEAR_FORM:
     case POPUP_ITEM_ID_CREDIT_CARD_SIGNIN_PROMO:
     case POPUP_ITEM_ID_AUTOFILL_OPTIONS:
+    case POPUP_ITEM_ID_CREATE_HINT:
     case POPUP_ITEM_ID_SCAN_CREDIT_CARD:
     case POPUP_ITEM_ID_SEPARATOR:
     case POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE:

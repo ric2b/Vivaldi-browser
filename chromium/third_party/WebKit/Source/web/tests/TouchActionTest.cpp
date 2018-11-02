@@ -34,6 +34,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/exported/WebViewBase.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLIFrameElement.h"
@@ -41,21 +42,20 @@
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutTreeAsText.h"
 #include "core/layout/api/LayoutViewItem.h"
+#include "platform/graphics/TouchAction.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebCoalescedInputEvent.h"
 #include "public/platform/WebTouchEvent.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebHitTestResult.h"
-#include "public/web/WebTouchAction.h"
 #include "public/web/WebView.h"
 #include "public/web/WebViewClient.h"
 #include "public/web/WebWidgetClient.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "web/WebFrameImplBase.h"
-#include "web/WebViewImpl.h"
 #include "web/tests/FrameTestHelpers.h"
 
 using blink::testing::RunPendingTasks;
@@ -66,10 +66,10 @@ class TouchActionTrackingWebWidgetClient
     : public FrameTestHelpers::TestWebWidgetClient {
  public:
   TouchActionTrackingWebWidgetClient()
-      : action_set_count_(0), action_(kWebTouchActionAuto) {}
+      : action_set_count_(0), action_(TouchAction::kTouchActionAuto) {}
 
   // WebWidgetClient methods
-  void SetTouchAction(WebTouchAction touch_action) override {
+  void SetTouchAction(TouchAction touch_action) override {
     action_set_count_++;
     action_ = touch_action;
   }
@@ -77,16 +77,16 @@ class TouchActionTrackingWebWidgetClient
   // Local methods
   void Reset() {
     action_set_count_ = 0;
-    action_ = kWebTouchActionAuto;
+    action_ = TouchAction::kTouchActionAuto;
   }
 
   int TouchActionSetCount() { return action_set_count_; }
 
-  WebTouchAction LastTouchAction() { return action_; }
+  TouchAction LastTouchAction() { return action_; }
 
  private:
   int action_set_count_;
-  WebTouchAction action_;
+  TouchAction action_;
 };
 
 const int kKfakeTouchId = 7;
@@ -129,7 +129,7 @@ void TouchActionTest::RunTouchActionTest(std::string file) {
   TouchActionTrackingWebWidgetClient client;
 
   // runTouchActionTest() loads a document in a frame, setting up a
-  // nested message loop. Should any Oilpan GC happen while it is in
+  // nested run loop. Should any Oilpan GC happen while it is in
   // effect, the implicit assumption that we're outside any event
   // loop (=> there being no pointers on the stack needing scanning)
   // when that GC strikes will no longer hold.
@@ -247,14 +247,14 @@ void TouchActionTest::RunTestOnTree(
 
     std::string failure_context("Test case: ");
     if (element->HasID()) {
-      failure_context.append(element->GetIdAttribute().Ascii().Data());
-    } else if (element->FirstChild()) {
+      failure_context.append(element->GetIdAttribute().Ascii().data());
+    } else if (element->firstChild()) {
       failure_context.append("\"");
-      failure_context.append(element->FirstChild()
+      failure_context.append(element->firstChild()
                                  ->textContent(false)
                                  .StripWhiteSpace()
                                  .Ascii()
-                                 .Data());
+                                 .data());
       failure_context.append("\"");
     } else {
       failure_context += "<missing ID>";
@@ -300,8 +300,8 @@ void TouchActionTest::RunTestOnTree(
                      << ").";
       std::string failure_context_pos = context_stream.str();
 
-      LocalFrame* main_frame = static_cast<LocalFrame*>(
-          web_view->MainFrame()->ToImplBase()->GetFrame());
+      LocalFrame* main_frame =
+          ToLocalFrame(WebFrame::ToCoreFrame(*web_view->MainFrame()));
       FrameView* main_frame_view = main_frame->View();
       IntRect visible_rect = WindowClipRect(*main_frame_view);
       ASSERT_TRUE(visible_rect.Contains(window_point))
@@ -325,12 +325,12 @@ void TouchActionTest::RunTestOnTree(
                  .StripWhiteSpace()
                  .Left(80)
                  .Ascii()
-                 .Data()
+                 .data()
           << "\"" << std::endl
           << "Document render tree:" << std::endl
           << ExternalRepresentation(root->GetDocument().GetFrame())
                  .Utf8()
-                 .Data();
+                 .data();
 
       // Now send the touch event and check any touch action result.
       SendTouchEvent(web_view, WebInputEvent::kTouchStart, window_point);
@@ -339,30 +339,31 @@ void TouchActionTest::RunTestOnTree(
       if (expected_action == "auto") {
         // Auto is the default - no action set.
         EXPECT_EQ(0, client.TouchActionSetCount()) << failure_context_pos;
-        EXPECT_EQ(kWebTouchActionAuto, client.LastTouchAction())
+        EXPECT_EQ(TouchAction::kTouchActionAuto, client.LastTouchAction())
             << failure_context_pos;
       } else {
         // Should have received exactly one touch action.
         EXPECT_EQ(1, client.TouchActionSetCount()) << failure_context_pos;
         if (client.TouchActionSetCount()) {
           if (expected_action == "none") {
-            EXPECT_EQ(kWebTouchActionNone, client.LastTouchAction())
+            EXPECT_EQ(TouchAction::kTouchActionNone, client.LastTouchAction())
                 << failure_context_pos;
           } else if (expected_action == "pan-x") {
-            EXPECT_EQ(kWebTouchActionPanX, client.LastTouchAction())
+            EXPECT_EQ(TouchAction::kTouchActionPanX, client.LastTouchAction())
                 << failure_context_pos;
           } else if (expected_action == "pan-y") {
-            EXPECT_EQ(kWebTouchActionPanY, client.LastTouchAction())
+            EXPECT_EQ(TouchAction::kTouchActionPanY, client.LastTouchAction())
                 << failure_context_pos;
           } else if (expected_action == "pan-x-y") {
-            EXPECT_EQ((kWebTouchActionPan), client.LastTouchAction())
+            EXPECT_EQ((TouchAction::kTouchActionPan), client.LastTouchAction())
                 << failure_context_pos;
           } else if (expected_action == "manipulation") {
-            EXPECT_EQ((kWebTouchActionManipulation), client.LastTouchAction())
+            EXPECT_EQ((TouchAction::kTouchActionManipulation),
+                      client.LastTouchAction())
                 << failure_context_pos;
           } else {
             FAIL() << "Unrecognized expected-action \""
-                   << expected_action.Ascii().Data() << "\" "
+                   << expected_action.Ascii().data() << "\" "
                    << failure_context_pos;
           }
         }

@@ -30,7 +30,7 @@
           </div>
         </template>
         <template is="dom-if" if="[[!isEnoughBattery]]">
-          <div class="footer layout vertical">
+          <div class="footer layout vertical" aria-live="polite">
             <div class="warning">
               [[computeBatteryWarningLabel_(batteryPercent)]]
             </div>
@@ -51,7 +51,7 @@
               <div>$i18n{migrationButtonSkip}</div>
             </oobe-text-button>
             <oobe-text-button inverse on-tap="onUpgrade_"
-                disabled="[[isMigrationAccepted]]">
+                disabled="[[!isEnoughBattery]]">
               <div>$i18n{migrationButtonUpdate}</div>
             </oobe-text-button>
           </div>
@@ -70,7 +70,7 @@
               indeterminate="[[isProgressIndeterminate_(progress)]]">
           </paper-progress>
           <template is="dom-if" if="[[!isProgressIndeterminate_(progress)]]">
-            <div>[[computeProgressLabel_(progress)]]</div>
+            <div aria-live="polite">[[computeProgressLabel_(progress)]]</div>
           </template>
         </div>
       </oobe-dialog>
@@ -90,7 +90,7 @@
             <div>$i18n{migrationButtonReportAnIssue}</div>
           </oobe-text-button>
 </if>
-          <oobe-text-button inverse on-tap="onRestart_">
+          <oobe-text-button inverse on-tap="onRestartOnFailure_">
             <div>$i18n{migrationButtonRestart}</div>
           </oobe-text-button>
         </div>
@@ -103,7 +103,7 @@
           <h1 class="title">$i18n{migrationReadyTitle}</h1>
           <div class="subtitle">$i18n{migrationReadyDescription}</div>
         </div>
-        <div class="footer layout vertical">
+        <div class="footer layout vertical" aria-live="polite">
           <div class="warning">$i18n{migrationNospaceWarningLabel}</div>
           <div>$i18n{migrationAskFreeSpaceMessage}</div>
           <div>[[computeAvailableSpaceLabel_(availableSpaceInString)]]</div>
@@ -117,7 +117,7 @@
             </oobe-text-button>
           </template>
           <template is="dom-if" if="[[isResuming]]">
-            <oobe-text-button inverse on-tap="onRestart_">
+            <oobe-text-button inverse on-tap="onRestartOnLowStorage_">
               <div>$i18n{migrationButtonRestart}</div>
             </oobe-text-button>
           </template>

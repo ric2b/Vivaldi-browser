@@ -13,8 +13,6 @@
 #include "cc/surfaces/compositor_frame_sink_support_client.h"
 #include "cc/surfaces/display_client.h"
 #include "cc/surfaces/local_surface_id_allocator.h"
-#include "cc/surfaces/surface_factory.h"
-#include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surfaces_export.h"
 
 namespace cc {
@@ -51,7 +49,7 @@ class CC_SURFACES_EXPORT DirectCompositorFrameSink
   bool BindToClient(CompositorFrameSinkClient* client) override;
   void DetachFromClient() override;
   void SubmitCompositorFrame(CompositorFrame frame) override;
-  void ForceReclaimResources() override;
+  void DidNotProduceFrame(const BeginFrameAck& ack) override;
 
   // DisplayClient implementation.
   void DisplayOutputSurfaceLost() override;
@@ -73,17 +71,17 @@ class CC_SURFACES_EXPORT DirectCompositorFrameSink
 
   // ExternalBeginFrameSourceClient implementation:
   void OnNeedsBeginFrames(bool needs_begin_frame) override;
-  void OnDidFinishFrame(const BeginFrameAck& ack) override;
 
   // This class is only meant to be used on a single thread.
   base::ThreadChecker thread_checker_;
 
   const FrameSinkId frame_sink_id_;
-  LocalSurfaceId delegated_local_surface_id_;
+  LocalSurfaceId local_surface_id_;
   SurfaceManager* surface_manager_;
   LocalSurfaceIdAllocator local_surface_id_allocator_;
   Display* display_;
   gfx::Size last_swap_frame_size_;
+  float device_scale_factor_ = 1.f;
   bool is_lost_ = false;
   std::unique_ptr<ExternalBeginFrameSource> begin_frame_source_;
 

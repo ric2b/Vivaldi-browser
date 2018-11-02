@@ -13,10 +13,11 @@ import("//third_party/WebKit/Source/modules/modules_idl_files.gni")
 
 visibility = [ "//third_party/WebKit/Source/*" ]
 
-if (!is_component_build && is_win && is_official_build) {
+if (!is_component_build && is_win) {
   # This target as a static library (for non-component builds) is >2GB for
-  # official builds on Windows. This causes linking fail. As a workaround,
-  # force using a split static library for this configuration.
+  # official builds and some goma builds on Windows. This causes linking to
+  # fail. As a workaround, force using a split static library for these
+  # configurations.
   modules_target_type = "split_static_library"
 } else {
   modules_target_type = "component"
@@ -27,8 +28,8 @@ config("modules_implementation") {
 
   if (is_chromecast) {
     defines += [
-      "BLINK_MSLOG=VLOG(2)",
-      "BLINK_SBLOG=VLOG(2)",
+      "BLINK_MSLOG=LOG(INFO)",
+      "BLINK_SBLOG=LOG(INFO)",
     ]
   }
 }
@@ -111,13 +112,13 @@ target(modules_target_type, "modules") {
     "//third_party/WebKit/Source/modules/credentialmanager",
     "//third_party/WebKit/Source/modules/crypto",
     "//third_party/WebKit/Source/modules/csspaint",
-    "//third_party/WebKit/Source/modules/device_light",
     "//third_party/WebKit/Source/modules/device_orientation",
     "//third_party/WebKit/Source/modules/document_metadata",
     "//third_party/WebKit/Source/modules/donottrack",
     "//third_party/WebKit/Source/modules/encoding",
     "//third_party/WebKit/Source/modules/encryptedmedia",
     "//third_party/WebKit/Source/modules/eventsource",
+    "//third_party/WebKit/Source/modules/exported",
     "//third_party/WebKit/Source/modules/fetch",
     "//third_party/WebKit/Source/modules/filesystem",
     "//third_party/WebKit/Source/modules/gamepad",
@@ -127,6 +128,7 @@ target(modules_target_type, "modules") {
     "//third_party/WebKit/Source/modules/indexeddb",
     "//third_party/WebKit/Source/modules/installation",
     "//third_party/WebKit/Source/modules/installedapp",
+    "//third_party/WebKit/Source/modules/keyboard_lock",
     "//third_party/WebKit/Source/modules/media_capabilities",
     "//third_party/WebKit/Source/modules/media_controls",
     "//third_party/WebKit/Source/modules/mediacapturefromelement",
@@ -244,7 +246,6 @@ source_set("unit_tests") {
     "canvas/HTMLCanvasElementModuleTest.cpp",
     "canvas2d/CanvasRenderingContext2DAPITest.cpp",
     "canvas2d/CanvasRenderingContext2DTest.cpp",
-    "canvas2d/CanvasRenderingContext2DUsageTrackingTest.cpp",
     "compositorworker/AnimationWorkletThreadTest.cpp",
     "compositorworker/CompositorWorkerThreadTest.cpp",
     "credentialmanager/CredentialsContainerTest.cpp",
@@ -262,8 +263,10 @@ source_set("unit_tests") {
     "fetch/DataConsumerHandleTestUtil.cpp",
     "fetch/DataConsumerHandleTestUtil.h",
     "fetch/FetchDataLoaderTest.cpp",
+    "fetch/FetchHeaderListTest.cpp",
     "fetch/FetchResponseDataTest.cpp",
     "fetch/FormDataBytesConsumerTest.cpp",
+    "fetch/MultipartParserTest.cpp",
     "fetch/ReadableStreamBytesConsumerTest.cpp",
     "fetch/RequestTest.cpp",
     "fetch/ResponseTest.cpp",
@@ -271,10 +274,12 @@ source_set("unit_tests") {
     "indexeddb/IDBKeyPathTest.cpp",
     "indexeddb/IDBRequestTest.cpp",
     "indexeddb/IDBTransactionTest.cpp",
+    "indexeddb/IDBValueWrappingTest.cpp",
     "indexeddb/MockWebIDBDatabase.cpp",
     "indexeddb/MockWebIDBDatabase.h",
     "media_controls/MediaControlsImplTest.cpp",
     "media_controls/MediaControlsOrientationLockDelegateTest.cpp",
+    "media_controls/MediaControlsRotateToFullscreenDelegateTest.cpp",
     "mediastream/MediaConstraintsTest.cpp",
     "notifications/NotificationDataTest.cpp",
     "notifications/NotificationImageLoaderTest.cpp",
@@ -323,12 +328,12 @@ source_set("unit_tests") {
   deps = [
     ":modules",
     ":modules_testing",
-    "//components/payments/content:mojom_blink",
+    "//components/payments/mojom:mojom_blink",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/WebKit/Source/core",
-    "//third_party/WebKit/Source/wtf",
+    "//third_party/WebKit/Source/platform/wtf",
     "//v8",
   ]
 }

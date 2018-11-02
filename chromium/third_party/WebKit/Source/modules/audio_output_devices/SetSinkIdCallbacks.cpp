@@ -26,7 +26,7 @@ DOMException* ToException(WebSetSinkIdError error) {
       return DOMException::Create(kNotSupportedError,
                                   "Operation not supported");
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return DOMException::Create(kAbortError, "Invalid error code");
   }
 }
@@ -37,7 +37,7 @@ SetSinkIdCallbacks::SetSinkIdCallbacks(ScriptPromiseResolver* resolver,
                                        HTMLMediaElement& element,
                                        const String& sink_id)
     : resolver_(resolver), element_(element), sink_id_(sink_id) {
-  ASSERT(resolver_);
+  DCHECK(resolver_);
 }
 
 SetSinkIdCallbacks::~SetSinkIdCallbacks() {}

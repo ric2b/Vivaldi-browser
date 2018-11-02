@@ -237,14 +237,26 @@ class PLATFORM_EXPORT GraphicsContext {
                 SkClipOp = SkClipOp::kIntersect);
 
   void DrawText(const Font&, const TextRunPaintInfo&, const FloatPoint&);
+  void DrawText(const Font&, const TextFragmentPaintInfo&, const FloatPoint&);
+
   void DrawText(const Font&,
                 const TextRunPaintInfo&,
                 const FloatPoint&,
                 const PaintFlags&);
+  void DrawText(const Font&,
+                const TextFragmentPaintInfo&,
+                const FloatPoint&,
+                const PaintFlags&);
+
   void DrawEmphasisMarks(const Font&,
                          const TextRunPaintInfo&,
                          const AtomicString& mark,
                          const FloatPoint&);
+  void DrawEmphasisMarks(const Font&,
+                         const TextFragmentPaintInfo&,
+                         const AtomicString& mark,
+                         const FloatPoint&);
+
   void DrawBidiText(
       const Font&,
       const TextRunPaintInfo&,
@@ -259,14 +271,6 @@ class PLATFORM_EXPORT GraphicsContext {
                             int to = -1);
 
   void DrawLineForText(const FloatPoint&, float width);
-  enum DocumentMarkerLineStyle {
-    kDocumentMarkerSpellingLineStyle,
-    kDocumentMarkerGrammarLineStyle
-  };
-  void DrawLineForDocumentMarker(const FloatPoint&,
-                                 float width,
-                                 DocumentMarkerLineStyle,
-                                 float zoom);
 
   // beginLayer()/endLayer() behave like save()/restore() for CTM and clip
   // states. Apply SkBlendMode when the layer is composited on the backdrop
@@ -369,6 +373,21 @@ class PLATFORM_EXPORT GraphicsContext {
     RealizePaintSave();
     return paint_state_;
   }
+
+  template <typename TextPaintInfo>
+  void DrawTextInternal(const Font&,
+                        const TextPaintInfo&,
+                        const FloatPoint&,
+                        const PaintFlags&);
+
+  template <typename TextPaintInfo>
+  void DrawTextInternal(const Font&, const TextPaintInfo&, const FloatPoint&);
+
+  template <typename TextPaintInfo>
+  void DrawEmphasisMarksInternal(const Font&,
+                                 const TextPaintInfo&,
+                                 const AtomicString& mark,
+                                 const FloatPoint&);
 
   template <typename DrawTextFunc>
   void DrawTextPasses(const DrawTextFunc&);

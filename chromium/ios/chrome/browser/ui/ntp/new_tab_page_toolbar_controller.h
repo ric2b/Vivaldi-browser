@@ -7,6 +7,8 @@
 
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
 
+@protocol GoogleLandingDataSource;
+@protocol UrlLoader;
 @protocol OmniboxFocuser;
 @protocol WebToolbarDelegate;
 
@@ -18,8 +20,16 @@
 
 // Designated initializer. The underlying ToolbarController is initialized with
 // ToolbarControllerStyleLightMode.
-- (instancetype)initWithToolbarDelegate:(id<WebToolbarDelegate>)delegate
-                                focuser:(id<OmniboxFocuser>)focuser;
+- (instancetype)init;
+
+@property(nonatomic, assign) id<UrlLoader, OmniboxFocuser, WebToolbarDelegate>
+    dispatcher;
+
+// |YES| if the toolbar can show the forward arrow.
+- (void)setCanGoForward:(BOOL)canGoForward;
+
+// |YES| if the toolbar can show the back arrow.
+- (void)setCanGoBack:(BOOL)canGoBack;
 
 @end
 

@@ -34,10 +34,8 @@
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/SerializedScriptValue.h"
-#include "bindings/core/v8/SerializedScriptValueFactory.h"
-#include "bindings/core/v8/V8ThrowException.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValueFactory.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
@@ -55,6 +53,8 @@
 #include "modules/serviceworkers/ServiceWorkerError.h"
 #include "modules/serviceworkers/ServiceWorkerRegistration.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8ThrowException.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "platform/wtf/PtrUtil.h"
@@ -111,7 +111,7 @@ class ServiceWorkerContainer::GetRegistrationForReadyCallback
 
   void OnSuccess(
       std::unique_ptr<WebServiceWorkerRegistration::Handle> handle) override {
-    ASSERT(ready_->GetState() == ReadyProperty::kPending);
+    DCHECK_EQ(ready_->GetState(), ReadyProperty::kPending);
 
     if (ready_->GetExecutionContext() &&
         !ready_->GetExecutionContext()->IsContextDestroyed()) {
@@ -132,7 +132,7 @@ ServiceWorkerContainer* ServiceWorkerContainer::Create(
 }
 
 ServiceWorkerContainer::~ServiceWorkerContainer() {
-  ASSERT(!provider_);
+  DCHECK(!provider_);
 }
 
 void ServiceWorkerContainer::ContextDestroyed(ExecutionContext*) {

@@ -72,7 +72,7 @@ class ContentVerifier : public base::RefCountedThreadSafe<ContentVerifier>,
                          const Extension* extension) override;
   void OnExtensionUnloaded(content::BrowserContext* browser_context,
                            const Extension* extension,
-                           UnloadedExtensionInfo::Reason reason) override;
+                           UnloadedExtensionReason reason) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ContentVerifier);
@@ -87,7 +87,7 @@ class ContentVerifier : public base::RefCountedThreadSafe<ContentVerifier>,
       const std::set<base::FilePath>& hash_mismatch_unix_paths);
 
   void OnFetchCompleteHelper(const std::string& extension_id,
-                             bool shouldVerifyAnyPathsResult);
+                             bool should_verify_any_paths_result);
 
   // Returns true if any of the paths in |relative_unix_paths| *should* have
   // their contents verified. (Some files get transcoded during the install

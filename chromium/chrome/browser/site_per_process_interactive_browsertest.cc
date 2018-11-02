@@ -30,6 +30,7 @@
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
@@ -52,6 +53,30 @@ namespace autofill {
 class AutofillPopupDelegate;
 struct Suggestion;
 }
+
+namespace {
+
+// Counts and returns the number of RenderWidgetHosts in the browser process.
+size_t GetNumberOfRenderWidgetHosts() {
+  std::unique_ptr<content::RenderWidgetHostIterator> all_widgets =
+      content::RenderWidgetHost::GetRenderWidgetHosts();
+  size_t count = 0;
+  while (auto* widget = all_widgets->GetNextHost())
+    count++;
+  return count;
+}
+
+// Waits and polls the current number of RenderWidgetHosts and stops when the
+// number reaches |target_count|.
+void WaitForRenderWidgetHostCount(size_t target_count) {
+  while (GetNumberOfRenderWidgetHosts() != target_count) {
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
+    run_loop.Run();
+  }
+}
+}  // namespace
 
 class SitePerProcessInteractiveBrowserTest : public InProcessBrowserTest {
  public:
@@ -302,11 +327,12 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
   EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
 }
 
-// TODO(https://crbug.com/702330): Enable this test.
+#if (defined(OS_LINUX) && !defined(USE_OZONE)) || defined(OS_WIN)
 // Ensures that renderers know to advance focus to sibling frames and parent
 // frames in the presence of mouse click initiated focus changes.
+// Verifies against regression of https://crbug.com/702330
 IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
-                       DISABLED_TabAndMouseFocusNavigation) {
+                       TabAndMouseFocusNavigation) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b,c)"));
   ui_test_utils::NavigateToURL(browser(), main_url);
@@ -319,6 +345,10 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
   ASSERT_NE(nullptr, child1);
   content::RenderFrameHost* child2 = ChildFrameAt(main_frame, 1);
   ASSERT_NE(nullptr, child2);
+
+  // Needed to avoid flakiness with --enable-browser-side-navigation.
+  content::WaitForChildFrameSurfaceReady(child1);
+  content::WaitForChildFrameSurfaceReady(child2);
 
   // Assign a name to each frame.  This will be sent along in test messages
   // from focus events.
@@ -336,8 +366,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
   // iframe: 55,18;55,67
   std::string script =
       "function onFocus(e) {"
-      "  console.log(window.name+'-focused-'+ e.target.id);"
       "  domAutomationController.setAutomationId(0);"
+      "  console.log(window.name + '-focused-' + e.target.id);"
       "  domAutomationController.send(window.name + '-focused-' + e.target.id);"
       "}"
       ""
@@ -351,7 +381,13 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
       "  return Math.floor(rect.left) +','+"
       "         Math.floor(rect.top);"
       "}"
+      "function onClick(e) {"
+      " console.log('Click event ' + window.name + ' at: ' + e.x + ', ' + e.y "
+      "             + ' screen: ' + e.screenX + ', ' + e.screenY);"
+      "}"
       ""
+      "window.addEventListener('click', onClick);"
+      "console.log(document.location.origin);"
       "document.styleSheets[0].insertRule('input {width:100%;margin:0;}', 1);"
       "document.styleSheets[0].insertRule('h2 {margin:0;}', 1);"
       "var input1 = document.createElement('input');"
@@ -411,6 +447,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
     std::string reply;
     SimulateKeyPress(web_contents, ui::DomKey::TAB, ui::DomCode::TAB,
                      ui::VKEY_TAB, false, reverse /* shift */, false, false);
+    LOG(INFO) << "Press tab";
     EXPECT_TRUE(msg_queue.WaitForMessage(&reply));
     return reply;
   };
@@ -425,6 +462,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
         ui_controls::SendMouseClick(ui_controls::LEFT);
 
         std::string reply;
+        LOG(INFO) << "Click element";
         EXPECT_TRUE(msg_queue.WaitForMessage(&reply));
         return reply;
       };
@@ -433,47 +471,59 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
   EXPECT_EQ("\"root-focused-input1\"",
             click_element_and_wait_for_message(main_frame_input_coords[0]));
   EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
+  auto frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child1);
   EXPECT_EQ("\"child1-focused-input1\"",
             click_element_and_wait_for_message(child1_input_coords[0]));
-  EXPECT_EQ(child1, web_contents->GetFocusedFrame());
+  frame_focused->Wait();
+  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(main_frame);
   EXPECT_EQ("\"root-focused-input1\"", press_tab_and_wait_for_message(true));
-  EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
+  frame_focused->Wait();
 
   // Tab from child2 forward to root.
   EXPECT_EQ("\"root-focused-input2\"",
             click_element_and_wait_for_message(main_frame_input_coords[1]));
   EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
+  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child2);
   EXPECT_EQ("\"child2-focused-input2\"",
             click_element_and_wait_for_message(child2_input_coords[1]));
-  EXPECT_EQ(child2, web_contents->GetFocusedFrame());
+  frame_focused->Wait();
+  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(main_frame);
   EXPECT_EQ("\"root-focused-input2\"", press_tab_and_wait_for_message(false));
-  EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
+  frame_focused->Wait();
 
   // Tab forward from child1 to child2.
+  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child2);
   EXPECT_EQ("\"child2-focused-input1\"",
             click_element_and_wait_for_message(child2_input_coords[0]));
-  EXPECT_EQ(child2, web_contents->GetFocusedFrame());
+  frame_focused->Wait();
+  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child1);
   EXPECT_EQ("\"child1-focused-input2\"",
             click_element_and_wait_for_message(child1_input_coords[1]));
-  EXPECT_EQ(child1, web_contents->GetFocusedFrame());
+  frame_focused->Wait();
+  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child2);
   EXPECT_EQ("\"child2-focused-input1\"", press_tab_and_wait_for_message(false));
-  EXPECT_EQ(child2, web_contents->GetFocusedFrame());
+  frame_focused->Wait();
 
   // Tab backward from child2 to child1.
+  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child1);
   EXPECT_EQ("\"child1-focused-input2\"",
             click_element_and_wait_for_message(child1_input_coords[1]));
-  EXPECT_EQ(child1, web_contents->GetFocusedFrame());
+  frame_focused->Wait();
+  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child2);
   EXPECT_EQ("\"child2-focused-input1\"",
             click_element_and_wait_for_message(child2_input_coords[0]));
-  EXPECT_EQ(child2, web_contents->GetFocusedFrame());
+  frame_focused->Wait();
+  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child1);
   EXPECT_EQ("\"child1-focused-input2\"", press_tab_and_wait_for_message(true));
-  EXPECT_EQ(child1, web_contents->GetFocusedFrame());
+  // EXPECT_EQ(child1, web_contents->GetFocusedFrame());
+  frame_focused->Wait();
 
   // Ensure there are no pending focus events after tabbing.
   EXPECT_EQ("\"root-focused-input1\"",
             click_element_and_wait_for_message(main_frame_input_coords[0]))
       << "Unexpected extra focus events.";
 }
+#endif
 
 namespace {
 
@@ -529,16 +579,6 @@ bool ElementHasFullscreenAncestorStyle(content::RenderFrameHost* host,
       element_id.c_str());
   EXPECT_TRUE(ExecuteScriptAndExtractBool(host, script, &has_style));
   return has_style;
-}
-
-// Set the allowFullscreen attribute on the <iframe> element identified by
-// |frame_id|.
-void SetAllowFullscreenForFrame(content::RenderFrameHost* host,
-                                const std::string& frame_id) {
-  EXPECT_TRUE(ExecuteScript(
-      host, base::StringPrintf(
-                "document.getElementById('%s').allowFullscreen = true;",
-                frame_id.c_str())));
 }
 
 // Add a listener that will send back a message whenever the (prefixed)
@@ -695,8 +735,10 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
 // paths on the Blink side.
 void SitePerProcessInteractiveBrowserTest::FullscreenElementInABA(
     FullscreenExitMethod exit_method) {
-  GURL main_url(embedded_test_server()->GetURL(
-      "a.com", "/cross_site_iframe_factory.html?a(b(a))"));
+  GURL main_url(embedded_test_server()->GetURL("a.com",
+                                               "/cross_site_iframe_factory."
+                                               "html?a(b{allowfullscreen}(a{"
+                                               "allowfullscreen}))"));
   ui_test_utils::NavigateToURL(browser(), main_url);
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -712,10 +754,6 @@ void SitePerProcessInteractiveBrowserTest::FullscreenElementInABA(
   observer.Wait();
   EXPECT_EQ(embedded_test_server()->GetURL("a.com", "/fullscreen_frame.html"),
             grandchild->GetLastCommittedURL());
-
-  // Add allowFullscreen attribute to both <iframe> elements.
-  SetAllowFullscreenForFrame(main_frame, "child-0");
-  SetAllowFullscreenForFrame(child, "child-0");
 
   // Make fullscreenchange events in all three frames send a message.
   AddFullscreenChangeListener(main_frame, "main_frame");
@@ -832,8 +870,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
 // fullscreen exit path.
 IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
                        FullscreenElementInMultipleSubframes) {
+  // Allow fullscreen in all iframes descending to |c_middle|.
   GURL main_url(embedded_test_server()->GetURL(
-      "a.com", "/cross_site_iframe_factory.html?a(a(b,b(c(c))))"));
+      "a.com",
+      "/cross_site_iframe_factory.html?a(a{allowfullscreen}(b,b{"
+      "allowfullscreen}(c{allowfullscreen}(c{allowfullscreen}))))"));
   ui_test_utils::NavigateToURL(browser(), main_url);
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -844,13 +885,6 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
   content::RenderFrameHost* b_second = ChildFrameAt(a_bottom, 1);
   content::RenderFrameHost* c_top = ChildFrameAt(b_second, 0);
   content::RenderFrameHost* c_middle = ChildFrameAt(c_top, 0);
-
-  // Allow fullscreen in all iframes descending to |c_middle|.  This relies on
-  // IDs that cross_site_iframe_factory assigns to child frames.
-  SetAllowFullscreenForFrame(a_top, "child-0");
-  SetAllowFullscreenForFrame(a_bottom, "child-1");
-  SetAllowFullscreenForFrame(b_second, "child-0");
-  SetAllowFullscreenForFrame(c_top, "child-0");
 
   // Navigate |c_middle| to a page that has a fullscreenable <div> and another
   // frame.
@@ -1338,4 +1372,89 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessAutofillTest,
       << focus_observer.focused_node_bounds_in_screen().ToString()
       << "' but AutofillClient is reporting '" << bounds_origin.ToString()
       << "'";
+}
+
+// This test verifies that when clicking outside the bounds of a date picker
+// associated with an <input> inside an OOPIF, the RenderWidgetHostImpl
+// corresponding to the WebPagePopup is destroyed (see
+// https://crbug.com/671732).
+IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
+                       ShowAndHideDatePopupInOOPIFMultipleTimes) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+  ui_test_utils::NavigateToURL(browser(), main_url);
+  content::RenderFrameHost* child_frame = ChildFrameAt(
+      browser()->tab_strip_model()->GetActiveWebContents()->GetMainFrame(), 0);
+
+  // Add <input type='date'> to the child frame. Adjust the positions that we
+  // know where to click to dismiss the popup.
+  ASSERT_TRUE(ExecuteScript(
+      child_frame,
+      "var input = document.createElement('input');"
+      "input.type = 'date';"
+      "input.value = '2008-09-02';"
+      "document.body.appendChild(input);"
+      "input.style = 'position: fixed; left: 0px; top: 10px; border: none;' +"
+      "              'width: 120px; height: 20px;';"));
+
+  // Cache current date value for a sanity check later.
+  std::string cached_date;
+  ASSERT_TRUE(ExecuteScriptAndExtractString(
+      child_frame, "window.domAutomationController.send(input.value);",
+      &cached_date));
+
+  // We use this to determine whether a new RenderWidgetHost is created or an
+  // old one is removed.
+  size_t default_widget_count = GetNumberOfRenderWidgetHosts();
+
+  // Repeatedly invoke the date picker and then click outside the bounds of the
+  // widget to dismiss it and each time verify that a new RenderWidgetHost is
+  // added when showing the date picker and a RenderWidgetHost is destroyed when
+  // it is dismissed.
+  for (size_t tries = 0; tries < 3U; tries++) {
+    // Focus the <input>.
+    ASSERT_TRUE(
+        ExecuteScript(child_frame, "document.querySelector('input').focus();"));
+
+    // Alt + Down seems to be working fine on all platforms.
+    ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_DOWN, false,
+                                                false, true, false));
+
+    // We should get one more widget on the screen.
+    WaitForRenderWidgetHostCount(default_widget_count + 1U);
+
+    content::RenderWidgetHost* child_widget_host =
+        child_frame->GetView()->GetRenderWidgetHost();
+
+    // Now simulate a click outside the bounds of the popup.
+    blink::WebMouseEvent event;
+    // Click a little bit to the right and top of the <input>.
+    event.SetPositionInWidget(130, 10);
+    event.button = blink::WebMouseEvent::Button::kLeft;
+
+    // Send a mouse down event.
+    event.SetType(blink::WebInputEvent::kMouseDown);
+    child_widget_host->ForwardMouseEvent(event);
+
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
+    run_loop.Run();
+
+    // Now send a mouse up event.
+    event.SetType(blink::WebMouseEvent::kMouseUp);
+    child_widget_host->ForwardMouseEvent(event);
+
+    // Wait until the popup disappears and we go back to the normal
+    // RenderWidgetHost count.
+    WaitForRenderWidgetHostCount(default_widget_count);
+  }
+
+  // To make sure we never clicked into the date picker, get current date value
+  // and make sure it matches the cached value.
+  std::string date;
+  ASSERT_TRUE(ExecuteScriptAndExtractString(
+      child_frame, "window.domAutomationController.send(input.value);", &date));
+  EXPECT_EQ(cached_date, date) << "Cached date was '" << cached_date
+                               << "' but current date is '" << date << "'.";
 }

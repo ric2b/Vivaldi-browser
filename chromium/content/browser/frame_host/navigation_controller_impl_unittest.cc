@@ -76,8 +76,6 @@ bool DoImagesMatch(const gfx::Image& a, const gfx::Image& b) {
       a_bitmap.height() != b_bitmap.height()) {
     return false;
   }
-  SkAutoLockPixels a_bitmap_lock(a_bitmap);
-  SkAutoLockPixels b_bitmap_lock(b_bitmap);
   return memcmp(a_bitmap.getPixels(),
                 b_bitmap.getPixels(),
                 a_bitmap.getSize()) == 0;
@@ -309,13 +307,13 @@ class LoadCommittedDetailsObserver : public WebContentsObserver {
   explicit LoadCommittedDetailsObserver(WebContents* web_contents)
       : WebContentsObserver(web_contents),
         navigation_type_(NAVIGATION_TYPE_UNKNOWN),
-        is_in_page_(false),
+        is_same_document_(false),
         is_main_frame_(false),
         did_replace_entry_(false) {}
 
   NavigationType navigation_type() { return navigation_type_; }
   const GURL& previous_url() { return previous_url_; }
-  bool is_in_page() { return is_in_page_; }
+  bool is_same_document() { return is_same_document_; }
   bool is_main_frame() { return is_main_frame_; }
   bool did_replace_entry() { return did_replace_entry_; }
 
@@ -327,14 +325,14 @@ class LoadCommittedDetailsObserver : public WebContentsObserver {
     navigation_type_ = static_cast<NavigationHandleImpl*>(navigation_handle)
                            ->navigation_type();
     previous_url_ = navigation_handle->GetPreviousURL();
-    is_in_page_ = navigation_handle->IsSameDocument();
+    is_same_document_ = navigation_handle->IsSameDocument();
     is_main_frame_ = navigation_handle->IsInMainFrame();
     did_replace_entry_ = navigation_handle->DidReplaceEntry();
   }
 
   NavigationType navigation_type_;
   GURL previous_url_;
-  bool is_in_page_;
+  bool is_same_document_;
   bool is_main_frame_;
   bool did_replace_entry_;
 };
@@ -2231,7 +2229,7 @@ TEST_F(NavigationControllerTest, NewSubframe) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
       std::string(), unique_name, blink::WebSandboxFlags::kNone,
-      FrameOwnerProperties());
+      ParsedFeaturePolicyHeader(), FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL subframe_url("http://foo1/subframe");
@@ -2277,7 +2275,7 @@ TEST_F(NavigationControllerTest, NewSubframe) {
   EXPECT_EQ(1U, navigation_entry_committed_counter_);
   navigation_entry_committed_counter_ = 0;
   EXPECT_EQ(url1, observer.previous_url());
-  EXPECT_FALSE(observer.is_in_page());
+  EXPECT_FALSE(observer.is_same_document());
   EXPECT_FALSE(observer.is_main_frame());
 
   // The new entry should be appended.
@@ -2311,7 +2309,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
       std::string(), unique_name0, blink::WebSandboxFlags::kNone,
-      FrameOwnerProperties());
+      ParsedFeaturePolicyHeader(), FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL url2("http://foo/2");
@@ -2355,7 +2353,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
       std::string(), unique_name1, blink::WebSandboxFlags::kNone,
-      FrameOwnerProperties());
+      ParsedFeaturePolicyHeader(), FrameOwnerProperties());
   TestRenderFrameHost* subframe2 = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(1)->current_frame_host());
   const GURL url3("http://foo/3");
@@ -2399,7 +2397,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   subframe->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
       std::string(), unique_name2, blink::WebSandboxFlags::kNone,
-      FrameOwnerProperties());
+      ParsedFeaturePolicyHeader(), FrameOwnerProperties());
   TestRenderFrameHost* subframe3 =
       static_cast<TestRenderFrameHost*>(contents()
                                             ->GetFrameTree()
@@ -2463,7 +2461,7 @@ TEST_F(NavigationControllerTest, BackSubframe) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
       std::string(), unique_name, blink::WebSandboxFlags::kNone,
-      FrameOwnerProperties());
+      ParsedFeaturePolicyHeader(), FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL subframe_url("http://foo1/subframe");
@@ -2623,7 +2621,7 @@ TEST_F(NavigationControllerTest, LinkClick) {
   EXPECT_FALSE(controller.CanGoForward());
 }
 
-TEST_F(NavigationControllerTest, InPage) {
+TEST_F(NavigationControllerTest, SameDocument) {
   NavigationControllerImpl& controller = controller_impl();
   TestNotificationTracker notifications;
   RegisterForAllNavNotifications(&notifications, &controller);
@@ -2658,7 +2656,7 @@ TEST_F(NavigationControllerTest, InPage) {
   NavigationEntry* entry1 = controller.GetLastCommittedEntry();
   EXPECT_EQ(1U, navigation_entry_committed_counter_);
   navigation_entry_committed_counter_ = 0;
-  EXPECT_TRUE(observer.is_in_page());
+  EXPECT_TRUE(observer.is_same_document());
   EXPECT_TRUE(observer.did_replace_entry());
   EXPECT_EQ(1, controller.GetEntryCount());
 
@@ -2683,7 +2681,7 @@ TEST_F(NavigationControllerTest, InPage) {
   NavigationEntry* entry2 = controller.GetLastCommittedEntry();
   EXPECT_EQ(1U, navigation_entry_committed_counter_);
   navigation_entry_committed_counter_ = 0;
-  EXPECT_TRUE(observer.is_in_page());
+  EXPECT_TRUE(observer.is_same_document());
   EXPECT_FALSE(observer.did_replace_entry());
   EXPECT_EQ(2, controller.GetEntryCount());
 
@@ -2695,7 +2693,7 @@ TEST_F(NavigationControllerTest, InPage) {
   main_test_rfh()->SendNavigateWithParams(&back_params);
   EXPECT_EQ(1U, navigation_entry_committed_counter_);
   navigation_entry_committed_counter_ = 0;
-  EXPECT_TRUE(observer.is_in_page());
+  EXPECT_TRUE(observer.is_same_document());
   EXPECT_EQ(2, controller.GetEntryCount());
   EXPECT_EQ(0, controller.GetCurrentEntryIndex());
   EXPECT_EQ(back_params.url, controller.GetVisibleEntry()->GetURL());
@@ -2708,7 +2706,7 @@ TEST_F(NavigationControllerTest, InPage) {
   main_test_rfh()->SendNavigateWithParams(&forward_params);
   EXPECT_EQ(1U, navigation_entry_committed_counter_);
   navigation_entry_committed_counter_ = 0;
-  EXPECT_TRUE(observer.is_in_page());
+  EXPECT_TRUE(observer.is_same_document());
   EXPECT_EQ(2, controller.GetEntryCount());
   EXPECT_EQ(1, controller.GetCurrentEntryIndex());
   EXPECT_EQ(forward_params.url,
@@ -2725,7 +2723,8 @@ TEST_F(NavigationControllerTest, InPage) {
   EXPECT_EQ(forward_params.url,
             controller.GetVisibleEntry()->GetURL());
 
-  // Finally, navigate to an unrelated URL to make sure in_page is not sticky.
+  // Finally, navigate to an unrelated URL to make sure same_document is not
+  // sticky.
   const GURL url3("http://bar");
   params.nav_entry_id = 0;
   params.did_create_new_entry = true;
@@ -2740,12 +2739,12 @@ TEST_F(NavigationControllerTest, InPage) {
   main_test_rfh()->SendNavigateWithParams(&params);
   EXPECT_EQ(1U, navigation_entry_committed_counter_);
   navigation_entry_committed_counter_ = 0;
-  EXPECT_FALSE(observer.is_in_page());
+  EXPECT_FALSE(observer.is_same_document());
   EXPECT_EQ(3, controller.GetEntryCount());
   EXPECT_EQ(2, controller.GetCurrentEntryIndex());
 }
 
-TEST_F(NavigationControllerTest, InPage_Replace) {
+TEST_F(NavigationControllerTest, SameDocument_Replace) {
   NavigationControllerImpl& controller = controller_impl();
   TestNotificationTracker notifications;
   RegisterForAllNavNotifications(&notifications, &controller);
@@ -2774,7 +2773,7 @@ TEST_F(NavigationControllerTest, InPage_Replace) {
   main_test_rfh()->SendNavigateWithParams(&params);
   EXPECT_EQ(1U, navigation_entry_committed_counter_);
   navigation_entry_committed_counter_ = 0;
-  EXPECT_TRUE(observer.is_in_page());
+  EXPECT_TRUE(observer.is_same_document());
   EXPECT_TRUE(observer.did_replace_entry());
   EXPECT_EQ(1, controller.GetEntryCount());
 }
@@ -2826,7 +2825,7 @@ TEST_F(NavigationControllerTest, ClientRedirectAfterInPageNavigation) {
     main_test_rfh()->SendNavigateWithParams(&params);
     EXPECT_EQ(1U, navigation_entry_committed_counter_);
     navigation_entry_committed_counter_ = 0;
-    EXPECT_TRUE(observer.is_in_page());
+    EXPECT_TRUE(observer.is_same_document());
     EXPECT_TRUE(observer.did_replace_entry());
     EXPECT_EQ(2, controller.GetEntryCount());
   }
@@ -2853,7 +2852,7 @@ TEST_F(NavigationControllerTest, ClientRedirectAfterInPageNavigation) {
     main_test_rfh()->SendNavigateWithParams(&params);
     EXPECT_EQ(1U, navigation_entry_committed_counter_);
     navigation_entry_committed_counter_ = 0;
-    EXPECT_FALSE(observer.is_in_page());
+    EXPECT_FALSE(observer.is_same_document());
     EXPECT_EQ(3, controller.GetEntryCount());
   }
 
@@ -3917,7 +3916,7 @@ TEST_F(NavigationControllerTest, SameSubframe) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
       std::string(), unique_name, blink::WebSandboxFlags::kNone,
-      FrameOwnerProperties());
+      ParsedFeaturePolicyHeader(), FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL subframe_url("http://www.google.com/#");
@@ -4092,7 +4091,7 @@ TEST_F(NavigationControllerTest, SubframeWhilePending) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
       std::string(), unique_name, blink::WebSandboxFlags::kNone,
-      FrameOwnerProperties());
+      ParsedFeaturePolicyHeader(), FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL url1_sub("http://foo/subframe");
@@ -5142,7 +5141,7 @@ TEST_F(NavigationControllerTest, UnreachableURLGivesErrorPage) {
     main_test_rfh()->SendNavigateWithParams(&params);
     EXPECT_EQ(PAGE_TYPE_ERROR,
               controller_impl().GetLastCommittedEntry()->GetPageType());
-    EXPECT_TRUE(observer.is_in_page());
+    EXPECT_TRUE(observer.is_same_document());
   }
 }
 
@@ -5288,6 +5287,84 @@ TEST_F(NavigationControllerTest, MultipleNavigationsAndReload) {
   main_test_rfh()->SimulateNavigationCommit(url_2);
   main_test_rfh()->SimulateNavigationCommit(url_1);
   main_test_rfh()->SimulateNavigationCommit(url_1);
+}
+
+// Test to ensure that the pending entry index is updated when a transient entry
+// is inserted or removed.
+TEST_F(NavigationControllerTest, PendingEntryIndexUpdatedWithTransient) {
+  NavigationControllerImpl& controller = controller_impl();
+  const GURL url_0("http://foo/0");
+  const GURL url_1("http://foo/1");
+  const GURL url_transient_1("http://foo/transient_1");
+  const GURL url_transient_2("http://foo/transient_2");
+
+  NavigateAndCommit(url_0);
+  NavigateAndCommit(url_1);
+  controller.GoBack();
+  contents()->CommitPendingNavigation();
+  controller.GoForward();
+
+  // Check the state before the insertion of the transient entry.
+  // entries[0] = url_0  <- last committed entry.
+  // entries[1] = url_1  <- pending entry.
+  ASSERT_EQ(2, controller.GetEntryCount());
+  EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
+  EXPECT_EQ(1, controller.GetPendingEntryIndex());
+  EXPECT_EQ(controller.GetEntryAtIndex(1), controller.GetPendingEntry());
+  EXPECT_EQ(url_0, controller.GetEntryAtIndex(0)->GetURL());
+  EXPECT_EQ(url_1, controller.GetEntryAtIndex(1)->GetURL());
+
+  // Insert a transient entry before the pending one. It should increase the
+  // pending entry index by one (1 -> 2).
+  std::unique_ptr<NavigationEntry> transient_entry_1(new NavigationEntryImpl);
+  transient_entry_1->SetURL(url_transient_1);
+  controller.SetTransientEntry(std::move(transient_entry_1));
+
+  // Check the state after the insertion of the transient entry.
+  // entries[0] = url_0           <- last committed entry
+  // entries[1] = url_transient_1 <- transient entry
+  // entries[2] = url_1           <- pending entry
+  ASSERT_EQ(3, controller.GetEntryCount());
+  EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
+  EXPECT_EQ(2, controller.GetPendingEntryIndex());
+  EXPECT_EQ(controller.GetEntryAtIndex(1), controller.GetTransientEntry());
+  EXPECT_EQ(controller.GetEntryAtIndex(2), controller.GetPendingEntry());
+  EXPECT_EQ(url_0, controller.GetEntryAtIndex(0)->GetURL());
+  EXPECT_EQ(url_transient_1, controller.GetEntryAtIndex(1)->GetURL());
+  EXPECT_EQ(url_1, controller.GetEntryAtIndex(2)->GetURL());
+
+  // Insert another transient entry. It should replace the previous one and this
+  // time the pending entry index should retain its value (i.e. 2).
+  std::unique_ptr<NavigationEntry> transient_entry_2(new NavigationEntryImpl);
+  transient_entry_2->SetURL(url_transient_2);
+  controller.SetTransientEntry(std::move(transient_entry_2));
+
+  // Check the state after the second insertion of a transient entry.
+  // entries[0] = url_0           <- last committed entry
+  // entries[1] = url_transient_2 <- transient entry
+  // entries[2] = url_1           <- pending entry
+  ASSERT_EQ(3, controller.GetEntryCount());
+  EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
+  EXPECT_EQ(2, controller.GetPendingEntryIndex());
+  EXPECT_EQ(controller.GetEntryAtIndex(1), controller.GetTransientEntry());
+  EXPECT_EQ(controller.GetEntryAtIndex(2), controller.GetPendingEntry());
+  EXPECT_EQ(url_0, controller.GetEntryAtIndex(0)->GetURL());
+  EXPECT_EQ(url_transient_2, controller.GetEntryAtIndex(1)->GetURL());
+  EXPECT_EQ(url_1, controller.GetEntryAtIndex(2)->GetURL());
+
+  // Commit the pending entry.
+  contents()->CommitPendingNavigation();
+
+  // Check the final state.
+  // entries[0] = url_0
+  // entries[1] = url_1  <- last committed entry
+  ASSERT_EQ(2, controller.GetEntryCount());
+  EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
+  EXPECT_EQ(-1, controller.GetPendingEntryIndex());
+  EXPECT_EQ(nullptr, controller.GetPendingEntry());
+  EXPECT_EQ(nullptr, controller.GetTransientEntry());
+  EXPECT_EQ(url_0, controller.GetEntryAtIndex(0)->GetURL());
+  EXPECT_EQ(url_1, controller.GetEntryAtIndex(1)->GetURL());
 }
 
 }  // namespace content

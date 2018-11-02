@@ -183,7 +183,7 @@ static bool WithinHTMLDateLimits(int year,
 }
 
 bool DateComponents::AddDay(int day_diff) {
-  ASSERT(month_day_);
+  DCHECK(month_day_);
 
   int day = month_day_ + day_diff;
   if (day > MaxDayOfMonth(year_, month_)) {
@@ -237,7 +237,7 @@ bool DateComponents::AddDay(int day_diff) {
 bool DateComponents::AddMinute(int minute) {
   // This function is used to adjust timezone offset. So m_year, m_month,
   // m_monthDay have values between the lower and higher limits.
-  ASSERT(WithinHTMLDateLimits(year_, month_, month_day_));
+  DCHECK(WithinHTMLDateLimits(year_, month_, month_day_));
 
   int carry;
   // minute can be negative or greater than 59.
@@ -249,7 +249,8 @@ bool DateComponents::AddMinute(int minute) {
     carry = (59 - minute) / 60;
     minute += carry * 60;
     carry = -carry;
-    ASSERT(minute >= 0 && minute <= 59);
+    DCHECK_GE(minute, 0);
+    DCHECK_LE(minute, 59);
   } else {
     if (!WithinHTMLDateLimits(year_, month_, month_day_, hour_, minute, second_,
                               millisecond_))
@@ -266,7 +267,8 @@ bool DateComponents::AddMinute(int minute) {
     carry = (23 - hour) / 24;
     hour += carry * 24;
     carry = -carry;
-    ASSERT(hour >= 0 && hour <= 23);
+    DCHECK_GE(hour, 0);
+    DCHECK_LE(hour, 23);
   } else {
     if (!WithinHTMLDateLimits(year_, month_, month_day_, hour, minute, second_,
                               millisecond_))
@@ -493,7 +495,8 @@ static inline double PositiveFmod(double value, double divider) {
 }
 
 void DateComponents::SetMillisecondsSinceMidnightInternal(double ms_in_day) {
-  ASSERT(ms_in_day >= 0 && ms_in_day < kMsPerDay);
+  DCHECK_GE(ms_in_day, 0);
+  DCHECK_LT(ms_in_day, kMsPerDay);
   millisecond_ = static_cast<int>(fmod(ms_in_day, kMsPerSecond));
   double value = std::floor(ms_in_day / kMsPerSecond);
   second_ = static_cast<int>(fmod(value, kSecondsPerMinute));
@@ -639,7 +642,7 @@ bool DateComponents::SetWeek(int year, int week_number) {
 }
 
 double DateComponents::MillisecondsSinceEpochForTime() const {
-  ASSERT(type_ == kTime || type_ == kDateTime || type_ == kDateTimeLocal);
+  DCHECK(type_ == kTime || type_ == kDateTime || type_ == kDateTimeLocal);
   return ((hour_ * kMinutesPerHour + minute_) * kSecondsPerMinute + second_) *
              kMsPerSecond +
          millisecond_;
@@ -664,17 +667,17 @@ double DateComponents::MillisecondsSinceEpoch() const {
     case kInvalid:
       break;
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return InvalidMilliseconds();
 }
 
 double DateComponents::MonthsSinceEpoch() const {
-  ASSERT(type_ == kMonth);
+  DCHECK_EQ(type_, kMonth);
   return (year_ - 1970) * 12 + month_;
 }
 
 String DateComponents::ToStringForTime(SecondFormat format) const {
-  ASSERT(type_ == kDateTime || type_ == kDateTimeLocal || type_ == kTime);
+  DCHECK(type_ == kDateTime || type_ == kDateTimeLocal || type_ == kTime);
   SecondFormat effective_format = format;
   if (millisecond_)
     effective_format = kMillisecond;
@@ -683,7 +686,7 @@ String DateComponents::ToStringForTime(SecondFormat format) const {
 
   switch (effective_format) {
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
     // Fallback to None.
     case kNone:
       return String::Format("%02d:%02d", hour_, minute_);
@@ -714,7 +717,7 @@ String DateComponents::ToString(SecondFormat format) const {
     case kInvalid:
       break;
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return String("(Invalid DateComponents)");
 }
 

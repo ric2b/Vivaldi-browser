@@ -99,6 +99,7 @@ class SmoothnessToughPathRenderingCases(_Smoothness):
 
 
 @benchmark.Disabled('android')  # crbug.com/526901
+@benchmark.Disabled('linux')  # crbug.com/715607
 @benchmark.Owner(emails=['junov@chromium.org'])
 class SmoothnessToughCanvasCases(_Smoothness):
   """Measures frame rate and a variety of other statistics.
@@ -176,7 +177,6 @@ class SmoothnessKeyMobileSites(_Smoothness):
 @benchmark.Disabled('mac')  # crbug.com/563615
 @benchmark.Owner(emails=['alancutter@chromium.org'])
 class SmoothnessToughAnimationCases(_Smoothness):
-  test = smoothness.SmoothnessWithRestart
   page_set = page_sets.ToughAnimationCasesPageSet
 
   @classmethod
@@ -542,3 +542,21 @@ class SmoothnessToughWebGLAdCases(_Smoothness):
   @classmethod
   def ShouldDisable(cls, possible_browser):
     return cls.IsSvelte(possible_browser)  # http://crbug.com/574485
+
+
+@benchmark.Disabled('reference')  # crbug.com/549428
+@benchmark.Owner(emails=['skyostil@chromium.org', 'brianderson@chromium.org'])
+class SmoothnessToughSchedulingCases(_Smoothness):
+  """Measures rendering statistics while interacting with pages that have
+  challenging scheduling properties.
+
+  https://docs.google.com/a/chromium.org/document/d/
+      17yhE5Po9By0sCdM1yZT3LiUECaUr_94rQt9j-4tOQIM/view"""
+  page_set = page_sets.ToughSchedulingCasesPageSet
+
+  @classmethod
+  def Name(cls):
+    # This should be smoothness.tough_scheduling_cases but since the benchmark
+    # has been named this way for long time, we keep the name as-is to avoid
+    # data migration.
+    return 'scheduler.tough_scheduling_cases'

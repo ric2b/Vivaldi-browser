@@ -11,10 +11,13 @@ source_set("public") {
   sources = [
     "feature_constants.h",
     "feature_engagement_tracker.h",
+    "feature_list.cc",
+    "feature_list.h",
   ]
 
   deps = [
     "//base",
+    "//components/flags_ui",
     "//components/keyed_service/core",
   ]
 
@@ -26,6 +29,7 @@ source_set("public") {
 if (is_android) {
   android_library("public_java") {
     java_files = [
+      "android/java/src/org/chromium/components/feature_engagement_tracker/EventConstants.java",
       "android/java/src/org/chromium/components/feature_engagement_tracker/FeatureConstants.java",
       "android/java/src/org/chromium/components/feature_engagement_tracker/FeatureEngagementTracker.java",
     ]

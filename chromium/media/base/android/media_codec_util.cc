@@ -41,6 +41,7 @@ const char kOpusMimeType[] = "audio/opus";
 const char kVorbisMimeType[] = "audio/vorbis";
 const char kAc3MimeType[] = "audio/ac3";
 const char kEac3MimeType[] = "audio/eac3";
+const char kBitstreamAudioMimeType[] = "audio/raw";
 const char kAvcMimeType[] = "video/avc";
 const char kHevcMimeType[] = "video/hevc";
 const char kVp8MimeType[] = "video/x-vnd.on2.vp8";
@@ -98,6 +99,9 @@ static bool IsEncoderSupportedByDevice(const std::string& android_mime_type) {
 
 // static
 std::string MediaCodecUtil::CodecToAndroidMimeType(AudioCodec codec) {
+  if (IsPassthroughAudioFormat(codec))
+    return kBitstreamAudioMimeType;
+
   switch (codec) {
     case kCodecMP3:
       return kMp3MimeType;
@@ -360,13 +364,19 @@ bool MediaCodecUtil::IsSetOutputSurfaceSupported() {
 }
 
 // static
+bool MediaCodecUtil::IsPassthroughAudioFormat(AudioCodec codec) {
+  return codec == kCodecAC3 || codec == kCodecEAC3;
+}
+
+// static
 bool MediaCodecUtil::CodecNeedsFlushWorkaround(MediaCodecBridge* codec) {
   int sdk_int = base::android::BuildInfo::GetInstance()->sdk_int();
   std::string codec_name = codec->GetName();
-  return sdk_int < 18 ||
-         (sdk_int == 18 && ("OMX.SEC.avc.dec" == codec_name ||
-                            "OMX.SEC.avc.dec.secure" == codec_name)) ||
-         (sdk_int == 19 &&
+  return sdk_int < SDK_VERSION_JELLY_BEAN_MR2 ||
+         (sdk_int == SDK_VERSION_JELLY_BEAN_MR2 &&
+          ("OMX.SEC.avc.dec" == codec_name ||
+           "OMX.SEC.avc.dec.secure" == codec_name)) ||
+         (sdk_int == SDK_VERSION_KITKAT &&
           base::StartsWith(base::android::BuildInfo::GetInstance()->model(),
                            "SM-G800", base::CompareCase::INSENSITIVE_ASCII) &&
           ("OMX.Exynos.avc.dec" == codec_name ||

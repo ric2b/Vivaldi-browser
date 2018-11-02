@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/child/appcache/appcache_dispatcher.h"
 #include "content/child/appcache/web_application_cache_host_impl.h"
@@ -18,12 +19,17 @@
 #include "content/child/shared_worker_devtools_agent.h"
 #include "content/child/webmessageportchannel_impl.h"
 #include "content/common/worker_messages.h"
+#include "content/common/worker_url_loader_factory_provider.mojom.h"
 #include "content/public/common/appcache_info.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/origin_util.h"
 #include "content/renderer/devtools/devtools_agent.h"
 #include "content/renderer/render_thread_impl.h"
+#include "content/renderer/renderer_blink_platform_impl.h"
+#include "content/renderer/service_worker/worker_fetch_context_impl.h"
 #include "content/renderer/shared_worker/embedded_shared_worker_content_settings_client_proxy.h"
 #include "ipc/ipc_message_macros.h"
+#include "third_party/WebKit/public/platform/InterfaceProvider.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
@@ -101,6 +107,8 @@ class WebServiceWorkerNetworkProviderImpl
     return provider_->IsControlledByServiceWorker();
   }
 
+  int GetProviderID() const override { return provider_->provider_id(); }
+
   int64_t ServiceWorkerID() override {
     if (provider_->context()->controller())
       return provider_->context()->controller()->version_id();
@@ -121,7 +129,8 @@ EmbeddedSharedWorkerStub::EmbeddedSharedWorkerStub(
     blink::WebContentSecurityPolicyType security_policy_type,
     blink::WebAddressSpace creation_address_space,
     bool pause_on_start,
-    int route_id)
+    int route_id,
+    bool data_saver_enabled)
     : route_id_(route_id), name_(name), url_(url) {
   RenderThreadImpl::current()->AddEmbeddedWorkerRoute(route_id_, this);
   impl_ = blink::WebSharedWorker::Create(this);
@@ -135,7 +144,7 @@ EmbeddedSharedWorkerStub::EmbeddedSharedWorkerStub(
   impl_->StartWorkerContext(
       url, blink::WebString::FromUTF16(name_),
       blink::WebString::FromUTF16(content_security_policy),
-      security_policy_type, creation_address_space);
+      security_policy_type, creation_address_space, data_saver_enabled);
 }
 
 EmbeddedSharedWorkerStub::~EmbeddedSharedWorkerStub() {
@@ -209,11 +218,13 @@ EmbeddedSharedWorkerStub::NotificationPresenter() {
   return NULL;
 }
 
-blink::WebApplicationCacheHost*
+std::unique_ptr<blink::WebApplicationCacheHost>
 EmbeddedSharedWorkerStub::CreateApplicationCacheHost(
     blink::WebApplicationCacheHostClient* client) {
-  app_cache_host_ = new SharedWorkerWebApplicationCacheHostImpl(client);
-  return app_cache_host_;
+  std::unique_ptr<WebApplicationCacheHostImpl> host =
+      base::MakeUnique<SharedWorkerWebApplicationCacheHostImpl>(client);
+  app_cache_host_ = host.get();
+  return std::move(host);
 }
 
 blink::WebWorkerContentSettingsClientProxy*
@@ -224,7 +235,7 @@ EmbeddedSharedWorkerStub::CreateWorkerContentSettingsClientProxy(
       ChildThreadImpl::current()->thread_safe_sender());
 }
 
-blink::WebServiceWorkerNetworkProvider*
+std::unique_ptr<blink::WebServiceWorkerNetworkProvider>
 EmbeddedSharedWorkerStub::CreateServiceWorkerNetworkProvider() {
   // Create a content::ServiceWorkerNetworkProvider for this data source so
   // we can observe its requests.
@@ -234,8 +245,8 @@ EmbeddedSharedWorkerStub::CreateServiceWorkerNetworkProvider() {
           true /* is_parent_frame_secure */));
 
   // Blink is responsible for deleting the returned object.
-  return new WebServiceWorkerNetworkProviderImpl(std::move(provider),
-                                                 IsOriginSecure(url_));
+  return base::MakeUnique<WebServiceWorkerNetworkProviderImpl>(
+      std::move(provider), IsOriginSecure(url_));
 }
 
 void EmbeddedSharedWorkerStub::SendDevToolsMessage(
@@ -250,6 +261,38 @@ void EmbeddedSharedWorkerStub::SendDevToolsMessage(
 blink::WebDevToolsAgentClient::WebKitClientMessageLoop*
 EmbeddedSharedWorkerStub::CreateDevToolsMessageLoop() {
   return DevToolsAgent::createMessageLoopWrapper();
+}
+
+std::unique_ptr<blink::WebWorkerFetchContext>
+EmbeddedSharedWorkerStub::CreateWorkerFetchContext(
+    blink::WebServiceWorkerNetworkProvider* web_network_provider) {
+  DCHECK(base::FeatureList::IsEnabled(features::kOffMainThreadFetch));
+  mojom::WorkerURLLoaderFactoryProviderPtr worker_url_loader_factory_provider;
+  RenderThreadImpl::current()
+      ->blink_platform_impl()
+      ->GetInterfaceProvider()
+      ->GetInterface(mojo::MakeRequest(&worker_url_loader_factory_provider));
+  std::unique_ptr<WorkerFetchContextImpl> worker_fetch_context =
+      base::MakeUnique<WorkerFetchContextImpl>(
+          worker_url_loader_factory_provider.PassInterface());
+  // TODO(horo): To get the correct first_party_to_cookies for the shared
+  // worker, we need to check the all documents bounded by the shared worker.
+  // (crbug.com/723553)
+  // https://tools.ietf.org/html/draft-west-first-party-cookies-07#section-2.1.2
+  worker_fetch_context->set_first_party_for_cookies(url_);
+  // TODO(horo): Currently we treat the worker context as secure if the origin
+  // of the shared worker script url is secure. But according to the spec, if
+  // the creation context is not secure, we should treat the worker as
+  // non-secure. crbug.com/723575
+  // https://w3c.github.io/webappsec-secure-contexts/#examples-shared-workers
+  worker_fetch_context->set_is_secure_context(IsOriginSecure(url_));
+  if (web_network_provider) {
+    worker_fetch_context->set_service_worker_provider_id(
+        web_network_provider->GetProviderID());
+    worker_fetch_context->set_is_controlled_by_service_worker(
+        web_network_provider->IsControlledByServiceWorker());
+  }
+  return std::move(worker_fetch_context);
 }
 
 void EmbeddedSharedWorkerStub::Shutdown() {

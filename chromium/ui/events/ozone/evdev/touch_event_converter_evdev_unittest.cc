@@ -16,6 +16,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
@@ -152,6 +153,12 @@ class MockDeviceEventDispatcherEvdev : public DeviceEventDispatcherEvdev {
       const std::vector<InputDevice>& devices) override {}
   void DispatchDeviceListsComplete() override {}
   void DispatchStylusStateChanged(StylusState stylus_state) override {}
+
+  // Dispatch Gamepad Event.
+  void DispatchGamepadEvent(const GamepadEvent& event) override {}
+
+  void DispatchGamepadDevicesUpdated(
+      const std::vector<InputDevice>& devices) override {}
 
  private:
   base::Callback<void(const GenericEventParams& params)> callback_;

@@ -6,9 +6,11 @@
 
 #include <vector>
 
+#include "bindings/core/v8/IDLTypes.h"
+#include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/Document.h"
 #include "core/layout/LayoutTestHelper.h"
 #include "platform/testing/TestingPlatformSupport.h"
@@ -23,7 +25,9 @@ namespace blink {
 
 namespace {
 
-const double kThreshold = 0.000001;
+// The resolution of performance.now is 5us, so the threshold for time
+// comparison is 6us to account for rounding errors.
+const double kThreshold = 0.006;
 
 class DOMTimerTest : public RenderingTest {
  public:
@@ -31,7 +35,7 @@ class DOMTimerTest : public RenderingTest {
       platform_;
 
   // Expected time between each iterator for setInterval(..., 1) or nested
-  // setTimeout(..., 1) are 1, 1, 1, 1, 4, 4, ... as a minumum clamp of 4m
+  // setTimeout(..., 1) are 1, 1, 1, 1, 4, 4, ... as a minimum clamp of 4ms
   // is applied from the 5th iteration onwards.
   const std::vector<Matcher<double>> kExpectedTimings = {
       DoubleNear(1., kThreshold), DoubleNear(1., kThreshold),
@@ -44,9 +48,6 @@ class DOMTimerTest : public RenderingTest {
     // Advance timer manually as RenderingTest expects the time to be non-zero.
     platform_->AdvanceClockSeconds(1.);
     RenderingTest::SetUp();
-    // Advance timer again as otherwise the time between the first call to
-    // setInterval and it running will be off by 5us.
-    platform_->AdvanceClockSeconds(1);
     GetDocument().GetSettings()->SetScriptEnabled(true);
   }
 
@@ -60,8 +61,8 @@ class DOMTimerTest : public RenderingTest {
   Vector<double> ToDoubleArray(v8::Local<v8::Value> value,
                                v8::HandleScope& scope) {
     NonThrowableExceptionState exception_state;
-    return ToImplArray<Vector<double>>(value, 0, scope.GetIsolate(),
-                                       exception_state);
+    return NativeValueTraits<IDLSequence<IDLDouble>>::NativeValue(
+        scope.GetIsolate(), value, exception_state);
   }
 
   double ToDoubleValue(v8::Local<v8::Value> value, v8::HandleScope& scope) {
@@ -83,7 +84,6 @@ const char* const kSetTimeout0ScriptText =
     "function setTimeoutCallback() {"
     "  var current = performance.now();"
     "  elapsed = current - last;"
-    "  times.push(elapsed);"
     "}"
     "setTimeout(setTimeoutCallback, 0);";
 

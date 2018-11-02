@@ -76,7 +76,7 @@ inline char* string_as_array(std::string* str) {
   return str->empty() ? NULL : &*str->begin();
 }
 
-// Test to see if a set, map, hash_set or hash_map contains a particular key.
+// Test to see if a set or map contains a particular key.
 // Returns true if the key is in the collection.
 template <typename Collection, typename Key>
 bool ContainsKey(const Collection& collection, const Key& key) {
@@ -87,8 +87,8 @@ bool ContainsKey(const Collection& collection, const Key& key) {
 // Returns true if the value is in the collection.
 template <typename Collection, typename Value>
 bool ContainsValue(const Collection& collection, const Value& value) {
-  return std::find(collection.begin(), collection.end(), value) !=
-      collection.end();
+  return std::find(std::begin(collection), std::end(collection), value) !=
+         std::end(collection);
 }
 
 // Returns true if the container is sorted.

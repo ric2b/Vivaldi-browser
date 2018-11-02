@@ -61,7 +61,8 @@ void InputHandlerWrapper::WillShutdown() {
   input_handler_manager_->RemoveInputHandler(routing_id_);
 }
 
-blink::WebGestureCurve* InputHandlerWrapper::CreateFlingAnimationCurve(
+std::unique_ptr<blink::WebGestureCurve>
+InputHandlerWrapper::CreateFlingAnimationCurve(
     blink::WebGestureDevice deviceSource,
     const blink::WebFloatPoint& velocity,
     const blink::WebSize& cumulative_scroll) {
@@ -88,6 +89,24 @@ void InputHandlerWrapper::DidStopFlinging() {
 
 void InputHandlerWrapper::DidAnimateForInput() {
   input_handler_manager_->DidAnimateForInput();
+}
+
+void InputHandlerWrapper::GenerateScrollBeginAndSendToMainThread(
+    const blink::WebGestureEvent& update_event) {
+  DCHECK_EQ(update_event.GetType(), blink::WebInputEvent::kGestureScrollUpdate);
+  blink::WebGestureEvent scroll_begin(update_event);
+  scroll_begin.SetType(blink::WebInputEvent::kGestureScrollBegin);
+  scroll_begin.data.scroll_begin.inertial_phase =
+      update_event.data.scroll_update.inertial_phase;
+  scroll_begin.data.scroll_begin.delta_x_hint =
+      update_event.data.scroll_update.delta_x;
+  scroll_begin.data.scroll_begin.delta_y_hint =
+      update_event.data.scroll_update.delta_y;
+  scroll_begin.data.scroll_begin.delta_hint_units =
+      update_event.data.scroll_update.delta_units;
+
+  DispatchNonBlockingEventToMainThread(
+      ui::WebInputEventTraits::Clone(scroll_begin), ui::LatencyInfo());
 }
 
 }  // namespace content

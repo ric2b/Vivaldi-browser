@@ -34,10 +34,10 @@
 #include "core/clipboard/Pasteboard.h"
 #include "platform/clipboard/ClipboardMimeTypes.h"
 #include "platform/clipboard/ClipboardUtilities.h"
+#include "platform/wtf/HashSet.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebClipboard.h"
 #include "public/platform/WebDragData.h"
-#include "wtf/HashSet.h"
 
 namespace blink {
 
@@ -57,7 +57,9 @@ DataObject* DataObject::CreateFromPasteboard(PasteMode paste_mode) {
       continue;
     data_object->item_list_.push_back(
         DataObjectItem::CreateFromPasteboard(type, sequence_number));
-    ASSERT(types_seen.insert(type).is_new_entry);
+#if DCHECK_IS_ON()
+    DCHECK(types_seen.insert(type).is_new_entry);
+#endif
   }
   return data_object;
 }
@@ -88,10 +90,14 @@ void DataObject::DeleteItem(unsigned long index) {
   if (index >= length())
     return;
   item_list_.erase(index);
+  NotifyItemListChanged();
 }
 
 void DataObject::ClearAll() {
-  item_list_.Clear();
+  if (item_list_.IsEmpty())
+    return;
+  item_list_.clear();
+  NotifyItemListChanged();
 }
 
 DataObjectItem* DataObject::Add(const String& data, const String& type) {
@@ -126,6 +132,7 @@ void DataObject::ClearData(const String& type) {
         item_list_[i]->GetType() == type) {
       // Per the spec, type must be unique among all items of kind 'string'.
       item_list_.erase(i);
+      NotifyItemListChanged();
       return;
     }
   }
@@ -142,7 +149,9 @@ Vector<String> DataObject::Types() const {
       case DataObjectItem::kStringKind:
         // Per the spec, type must be unique among all items of kind 'string'.
         results.push_back(item->GetType());
-        ASSERT(types_seen.insert(item->GetType()).is_new_entry);
+#if DCHECK_IS_ON()
+        DCHECK(types_seen.insert(item->GetType()).is_new_entry);
+#endif
         break;
       case DataObjectItem::kFileKind:
         contains_files = true;
@@ -151,7 +160,9 @@ Vector<String> DataObject::Types() const {
   }
   if (contains_files) {
     results.push_back(kMimeTypeFiles);
-    ASSERT(types_seen.insert(kMimeTypeFiles).is_new_entry);
+#if DCHECK_IS_ON()
+    DCHECK(types_seen.insert(kMimeTypeFiles).is_new_entry);
+#endif
   }
   return results;
 }
@@ -168,7 +179,7 @@ String DataObject::GetData(const String& type) const {
 void DataObject::SetData(const String& type, const String& data) {
   ClearData(type);
   if (!Add(data, type))
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
 }
 
 void DataObject::UrlAndTitle(String& url, String* title) const {
@@ -242,7 +253,7 @@ DataObjectItem* DataObject::FindStringItem(const String& type) const {
 }
 
 bool DataObject::InternalAddStringItem(DataObjectItem* item) {
-  ASSERT(item->Kind() == DataObjectItem::kStringKind);
+  DCHECK_EQ(item->Kind(), DataObjectItem::kStringKind);
   for (size_t i = 0; i < item_list_.size(); ++i) {
     if (item_list_[i]->Kind() == DataObjectItem::kStringKind &&
         item_list_[i]->GetType() == item->GetType())
@@ -250,16 +261,29 @@ bool DataObject::InternalAddStringItem(DataObjectItem* item) {
   }
 
   item_list_.push_back(item);
+  NotifyItemListChanged();
   return true;
 }
 
 void DataObject::InternalAddFileItem(DataObjectItem* item) {
-  ASSERT(item->Kind() == DataObjectItem::kFileKind);
+  DCHECK_EQ(item->Kind(), DataObjectItem::kFileKind);
   item_list_.push_back(item);
+  NotifyItemListChanged();
+}
+
+void DataObject::AddObserver(Observer* observer) {
+  DCHECK(!observers_.Contains(observer));
+  observers_.insert(observer);
+}
+
+void DataObject::NotifyItemListChanged() const {
+  for (const auto& observer : observers_)
+    observer->OnItemListChanged();
 }
 
 DEFINE_TRACE(DataObject) {
   visitor->Trace(item_list_);
+  visitor->Trace(observers_);
   Supplementable<DataObject>::Trace(visitor);
 }
 
@@ -355,13 +379,13 @@ WebDragData DataObject::ToWebDragData() {
             item.string_data = file->name();
           }
         } else {
-          ASSERT_NOT_REACHED();
+          NOTREACHED();
         }
       } else {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
       }
     } else {
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
     }
     item_list[i] = item;
   }

@@ -352,7 +352,7 @@ void DriveInternalsWebUIHandler::OnGetAppList(
   base::DictionaryValue app_list;
   app_list.SetString("etag", parsed_app_list->etag());
 
-  base::ListValue* items = new base::ListValue();
+  auto items = base::MakeUnique<base::ListValue>();
   for (size_t i = 0; i < parsed_app_list->items().size(); ++i) {
     const google_apis::AppResource* app = parsed_app_list->items()[i].get();
     auto app_data = base::MakeUnique<base::DictionaryValue>();
@@ -363,7 +363,7 @@ void DriveInternalsWebUIHandler::OnGetAppList(
 
     items->Append(std::move(app_data));
   }
-  app_list.Set("items", items);
+  app_list.Set("items", std::move(items));
 
   web_ui()->CallJavascriptFunctionUnsafe("updateAppList", app_list);
 }
@@ -671,8 +671,7 @@ void DriveInternalsWebUIHandler::UpdateGCacheContentsSection() {
   base::ListValue* gcache_contents = new base::ListValue;
   base::DictionaryValue* gcache_summary = new base::DictionaryValue;
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::USER_VISIBLE),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&GetGCacheContents, root_path, gcache_contents,
                  gcache_summary),
       base::Bind(&DriveInternalsWebUIHandler::OnGetGCacheContents,
@@ -711,8 +710,7 @@ void DriveInternalsWebUIHandler::UpdateLocalStorageUsageSection() {
   if (PathService::Get(base::DIR_HOME, &home_path)) {
     base::DictionaryValue* local_storage_summary = new base::DictionaryValue;
     base::PostTaskWithTraitsAndReply(
-        FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                       base::TaskPriority::USER_VISIBLE),
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
         base::Bind(&GetFreeDiskSpace, home_path, local_storage_summary),
         base::Bind(&DriveInternalsWebUIHandler::OnGetFreeDiskSpace,
                    weak_ptr_factory_.GetWeakPtr(),

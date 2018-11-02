@@ -4,7 +4,7 @@
 
 #include "bindings/core/v8/WindowProxyManager.h"
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
+#include "platform/bindings/DOMWrapperWorld.h"
 
 namespace blink {
 
@@ -76,7 +76,7 @@ WindowProxy* WindowProxyManager::WindowProxyMaybeUninitialized(
   if (world.IsMainWorld()) {
     window_proxy = window_proxy_.Get();
   } else {
-    IsolatedWorldMap::iterator iter = isolated_worlds_.Find(world.GetWorldId());
+    IsolatedWorldMap::iterator iter = isolated_worlds_.find(world.GetWorldId());
     if (iter != isolated_worlds_.end()) {
       window_proxy = iter->value.Get();
     } else {

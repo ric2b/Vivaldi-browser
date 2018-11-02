@@ -76,13 +76,12 @@ void SafeBrowsingNavigationObserver::MaybeCreateForWebContents(
     return;
 
   if (safe_browsing::SafeBrowsingNavigationObserverManager::IsEnabledAndReady(
-        Profile::FromBrowserContext(web_contents->GetBrowserContext()))) {
+          Profile::FromBrowserContext(web_contents->GetBrowserContext()))) {
     web_contents->SetUserData(
         kWebContentsUserDataKey,
-        new SafeBrowsingNavigationObserver(
-            web_contents,
-            g_browser_process->safe_browsing_service()
-                ->navigation_observer_manager()));
+        base::MakeUnique<SafeBrowsingNavigationObserver>(
+            web_contents, g_browser_process->safe_browsing_service()
+                              ->navigation_observer_manager()));
   }
 }
 
@@ -144,9 +143,11 @@ void SafeBrowsingNavigationObserver::DidStartNavigation(
   // incorrect when another frame is targeting this frame. Need to refine this
   // logic after the true initiator details are added to NavigationHandle
   // (https://crbug.com/651895).
+  int current_process_id =
+      navigation_handle->GetStartingSiteInstance()->GetProcess()->GetID();
   content::RenderFrameHost* current_frame_host =
       navigation_handle->GetWebContents()->FindFrameByFrameTreeNodeId(
-          nav_event->frame_id);
+          nav_event->frame_id, current_process_id);
   // For browser initiated navigation (e.g. from address bar or bookmark), we
   // don't fill the source_url to prevent attributing navigation to the last
   // committed navigation.

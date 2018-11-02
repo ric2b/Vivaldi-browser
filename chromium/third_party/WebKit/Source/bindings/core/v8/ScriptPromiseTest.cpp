@@ -30,9 +30,11 @@
 
 #include "bindings/core/v8/ScriptPromise.h"
 
+#include "bindings/core/v8/IDLTypes.h"
+#include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/ScriptFunction.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
@@ -59,7 +61,7 @@ class Function : public ScriptFunction {
       : ScriptFunction(script_state), output_(output) {}
 
   ScriptValue Call(ScriptValue value) override {
-    ASSERT(!value.IsEmpty());
+    DCHECK(!value.IsEmpty());
     *output_ = value;
     return value;
   }
@@ -90,8 +92,8 @@ String ToString(v8::Local<v8::Context> context, const ScriptValue& value) {
 
 Vector<String> ToStringArray(v8::Isolate* isolate, const ScriptValue& value) {
   NonThrowableExceptionState exception_state;
-  return ToImplArray<Vector<String>>(value.V8Value(), 0, isolate,
-                                     exception_state);
+  return NativeValueTraits<IDLSequence<IDLString>>::NativeValue(
+      isolate, value.V8Value(), exception_state);
 }
 
 TEST(ScriptPromiseTest, constructFromNonPromise) {

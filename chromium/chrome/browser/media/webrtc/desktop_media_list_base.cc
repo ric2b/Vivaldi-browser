@@ -128,19 +128,16 @@ void DesktopMediaListBase::UpdateSourceThumbnail(DesktopMediaID id,
 }
 
 void DesktopMediaListBase::ScheduleNextRefresh() {
-  BrowserThread::PostDelayedTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&DesktopMediaListBase::Refresh, weak_factory_.GetWeakPtr()),
-      update_period_);
+  BrowserThread::PostDelayedTask(BrowserThread::UI, FROM_HERE,
+                                 base::BindOnce(&DesktopMediaListBase::Refresh,
+                                                weak_factory_.GetWeakPtr()),
+                                 update_period_);
 }
 
 // static
 uint32_t DesktopMediaListBase::GetImageHash(const gfx::Image& image) {
   SkBitmap bitmap = image.AsBitmap();
-  bitmap.lockPixels();
   uint32_t value =
       base::Hash(reinterpret_cast<char*>(bitmap.getPixels()), bitmap.getSize());
-  bitmap.unlockPixels();
-
   return value;
 }

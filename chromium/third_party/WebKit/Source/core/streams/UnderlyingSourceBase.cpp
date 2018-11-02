@@ -5,9 +5,9 @@
 #include "core/streams/UnderlyingSourceBase.h"
 
 #include "bindings/core/v8/ScriptPromise.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/streams/ReadableStreamController.h"
+#include "platform/bindings/ScriptState.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -16,7 +16,7 @@ ScriptPromise UnderlyingSourceBase::startWrapper(ScriptState* script_state,
                                                  ScriptValue js_controller) {
   // Cannot call start twice (e.g., cannot use the same UnderlyingSourceBase to
   // construct multiple streams).
-  ASSERT(!controller_);
+  DCHECK(!controller_);
 
   controller_ = new ReadableStreamController(js_controller);
 

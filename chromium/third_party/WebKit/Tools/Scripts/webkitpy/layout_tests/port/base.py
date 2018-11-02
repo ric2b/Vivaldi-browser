@@ -46,9 +46,9 @@ from webkitpy.common import exit_codes
 from webkitpy.common import find_files
 from webkitpy.common import read_checksum_from_png
 from webkitpy.common.memoized import memoized
+from webkitpy.common.path_finder import PathFinder
 from webkitpy.common.system.executive import ScriptError
 from webkitpy.common.system.path import abspath_to_uri
-from webkitpy.common.webkit_finder import WebKitFinder
 from webkitpy.layout_tests.layout_package.bot_test_expectations import BotTestExpectationsFactory
 from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.models.test_configuration import TestConfiguration
@@ -167,7 +167,7 @@ class Port(object):
         self.host = host
         self._executive = host.executive
         self._filesystem = host.filesystem
-        self._webkit_finder = WebKitFinder(host.filesystem)
+        self._path_finder = PathFinder(host.filesystem)
 
         self._http_server = None
         self._websocket_server = None
@@ -178,7 +178,7 @@ class Port(object):
         self._dump_reader = None
 
         # FIXME: prettypatch.py knows this path; it should not be copied here.
-        self._pretty_patch_path = self.path_from_webkit_base('Tools', 'Scripts', 'webkitruby', 'PrettyPatch', 'prettify.rb')
+        self._pretty_patch_path = self._path_finder.path_from_tools_scripts('webkitruby', 'PrettyPatch', 'prettify.rb')
         self._pretty_patch_available = None
 
         if not hasattr(options, 'configuration') or not options.configuration:
@@ -357,6 +357,8 @@ class Port(object):
         def error_handler(script_error):
             local_error.exit_code = script_error.exit_code
 
+        if self.host.platform.is_linux():
+            _log.debug('DISPLAY = %s', self.host.environ.get('DISPLAY', ''))
         output = self._executive.run_command(cmd, error_handler=error_handler)
         if local_error.exit_code:
             _log.error('System dependencies check failed.')
@@ -664,6 +666,9 @@ class Port(object):
             return reftest_list
 
         # Try to extract information from MANIFEST.json.
+        match = re.match(r'virtual/[^/]+/', test_name)
+        if match:
+            test_name = test_name[match.end(0):]
         match = re.match(r'external/wpt/(.*)', test_name)
         if not match:
             return []
@@ -866,27 +871,18 @@ class Port(object):
         self._filesystem.write_binary_file(baseline_path, data)
 
     # TODO(qyearsley): Update callers to create a finder and call it instead
-    # of these next five routines (which should be protected).
-    def webkit_base(self):
-        return self._webkit_finder.webkit_base()
-
-    def path_from_webkit_base(self, *comps):
-        return self._webkit_finder.path_from_webkit_base(*comps)
-
+    # of these next two routines (which should be protected).
     def path_from_chromium_base(self, *comps):
-        return self._webkit_finder.path_from_chromium_base(*comps)
+        return self._path_finder.path_from_chromium_base(*comps)
 
-    def path_to_script(self, script_name):
-        return self._webkit_finder.path_to_script(script_name)
+    def perf_tests_dir(self):
+        return self._path_finder.perf_tests_dir()
 
     def layout_tests_dir(self):
         custom_layout_tests_dir = self.get_option('layout_tests_directory')
         if custom_layout_tests_dir:
             return custom_layout_tests_dir
-        return self._webkit_finder.layout_tests_dir()
-
-    def perf_tests_dir(self):
-        return self._webkit_finder.perf_tests_dir()
+        return self._path_finder.layout_tests_dir()
 
     def skipped_layout_tests(self, _):
         # TODO(qyearsley): Remove this method.
@@ -992,7 +988,7 @@ class Port(object):
 
         Ports may legitimately return absolute paths here if no relative path
         makes sense.
-        TODO(qyearsley): De-duplicate this and WebKitFinder.layout_test_name.
+        TODO(qyearsley): De-duplicate this and PathFinder.layout_test_name.
         """
         # Ports that run on windows need to override this method to deal with
         # filenames with backslashes in them.
@@ -1026,7 +1022,7 @@ class Port(object):
         return self._build_path('resources', 'inspector')
 
     def apache_config_directory(self):
-        return self.path_from_webkit_base('Tools', 'Scripts', 'apache_config')
+        return self._path_finder.path_from_tools_scripts('apache_config')
 
     def default_results_directory(self):
         """Returns the absolute path to the default place to store the test results."""
@@ -1164,6 +1160,22 @@ class Port(object):
         if self._wpt_server:
             self._wpt_server.stop()
             self._wpt_server = None
+
+    def http_server_requires_http_protocol_options_unsafe(self):
+        httpd_path = self.path_to_apache()
+        intentional_syntax_error = 'INTENTIONAL_SYNTAX_ERROR'
+        cmd = [httpd_path,
+               '-C', 'HttpProtocolOptions Unsafe',
+               '-C', intentional_syntax_error]
+        env = self.setup_environ_for_server()
+
+        def error_handler(err):
+            pass
+        output = self._executive.run_command(cmd, env=env,
+                                             error_handler=error_handler)
+        # If apache complains about the intentional error, it apparently
+        # accepted the HttpProtocolOptions directive, and we should add it.
+        return intentional_syntax_error in output
 
     def http_server_supports_ipv6(self):
         # Apache < 2.4 on win32 does not support IPv6.
@@ -1376,7 +1388,13 @@ class Port(object):
 
     def _apache_version(self):
         config = self._executive.run_command([self.path_to_apache(), '-v'])
-        return re.sub(r'(?:.|\n)*Server version: Apache/(\d+\.\d+)(?:.|\n)*', r'\1', config)
+        # Log version including patch level.
+        _log.debug('Found apache version %s', re.sub(
+            r'(?:.|\n)*Server version: Apache/(\d+\.\d+(?:\.\d+)?)(?:.|\n)*',
+            r'\1', config))
+        return re.sub(
+            r'(?:.|\n)*Server version: Apache/(\d+\.\d+)(?:.|\n)*',
+            r'\1', config)
 
     def _apache_config_file_name_for_platform(self):
         if self.host.platform.is_linux():
@@ -1478,7 +1496,12 @@ class Port(object):
             assert self._filesystem.exists(path_to_virtual_test_suites), 'LayoutTests/VirtualTestSuites not found'
             try:
                 test_suite_json = json.loads(self._filesystem.read_text_file(path_to_virtual_test_suites))
-                self._virtual_test_suites = [VirtualTestSuite(**d) for d in test_suite_json]
+                self._virtual_test_suites = []
+                for json_config in test_suite_json:
+                    vts = VirtualTestSuite(**json_config)
+                    if vts in self._virtual_test_suites:
+                        raise ValueError('LayoutTests/VirtualTestSuites contains duplicate definition: %r' % json_config)
+                    self._virtual_test_suites.append(vts)
             except ValueError as error:
                 raise ValueError('LayoutTests/VirtualTestSuites is not a valid JSON file: %s' % error)
         return self._virtual_test_suites
@@ -1613,6 +1636,13 @@ class VirtualTestSuite(object):
 
     def __repr__(self):
         return "VirtualTestSuite('%s', '%s', %s, %s)" % (self.name, self.base, self.args, self.reference_args)
+
+    def __eq__(self, other):
+        return (
+            self.name == other.name and
+            self.base == other.base and
+            self.args == other.args and
+            self.reference_args == other.reference_args)
 
 
 class PhysicalTestSuite(object):

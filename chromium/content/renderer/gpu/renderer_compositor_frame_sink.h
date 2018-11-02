@@ -24,6 +24,7 @@
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/local_surface_id.h"
 #include "cc/surfaces/local_surface_id_allocator.h"
+#include "content/common/render_widget_surface_properties.h"
 #include "content/renderer/gpu/compositor_forwarding_message_filter.h"
 #include "ipc/ipc_sync_message_filter.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -57,12 +58,16 @@ class RendererCompositorFrameSink
       scoped_refptr<cc::ContextProvider> worker_context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       cc::SharedBitmapManager* shared_bitmap_manager,
+      cc::mojom::MojoCompositorFrameSinkPtrInfo sink_info,
+      cc::mojom::MojoCompositorFrameSinkClientRequest sink_client_request,
       scoped_refptr<FrameSwapMessageQueue> swap_frame_message_queue);
   RendererCompositorFrameSink(
       int32_t routing_id,
       std::unique_ptr<cc::SyntheticBeginFrameSource>
           synthetic_begin_frame_source,
       scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider,
+      cc::mojom::MojoCompositorFrameSinkPtrInfo sink_info,
+      cc::mojom::MojoCompositorFrameSinkClientRequest sink_client_request,
       scoped_refptr<FrameSwapMessageQueue> swap_frame_message_queue);
   ~RendererCompositorFrameSink() override;
 
@@ -70,6 +75,7 @@ class RendererCompositorFrameSink
   bool BindToClient(cc::CompositorFrameSinkClient* client) override;
   void DetachFromClient() override;
   void SubmitCompositorFrame(cc::CompositorFrame frame) override;
+  void DidNotProduceFrame(const cc::BeginFrameAck& ack) override;
 
  private:
   class RendererCompositorFrameSinkProxy
@@ -95,9 +101,6 @@ class RendererCompositorFrameSink
   void OnMessageReceived(const IPC::Message& message);
   void OnBeginFrameIPC(const cc::BeginFrameArgs& args);
 
-  bool ShouldAllocateNewLocalSurfaceId(const cc::CompositorFrame& frame);
-  void UpdateFrameData(const cc::CompositorFrame& frame);
-
   // cc::mojom::MojoCompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
       const cc::ReturnedResourceArray& resources) override;
@@ -106,9 +109,6 @@ class RendererCompositorFrameSink
 
   // cc::ExternalBeginFrameSourceClient implementation.
   void OnNeedsBeginFrames(bool need_begin_frames) override;
-  void OnDidFinishFrame(const cc::BeginFrameAck& ack) override;
-
-  void EstablishMojoConnection();
 
   scoped_refptr<CompositorForwardingMessageFilter>
       compositor_frame_sink_filter_;
@@ -123,27 +123,14 @@ class RendererCompositorFrameSink
 
   cc::LocalSurfaceId local_surface_id_;
   cc::LocalSurfaceIdAllocator id_allocator_;
-  struct {
-    gfx::Size frame_size;
-    float device_scale_factor;
-#ifdef OS_ANDROID
-    float top_controls_height;
-    float top_controls_shown_ratio;
-    float bottom_controls_height;
-    float bottom_controls_shown_ratio;
-    cc::Selection<gfx::SelectionBound> viewport_selection;
-    bool has_transparent_background;
-#endif
-  } current_frame_data_;
+  RenderWidgetSurfaceProperties current_surface_properties_;
 
   base::ThreadChecker thread_checker_;
 
   cc::mojom::MojoCompositorFrameSinkPtr sink_;
-  cc::mojom::MojoCompositorFrameSinkPtrInfo sink_ptr_info_;
+  cc::mojom::MojoCompositorFrameSinkPtrInfo sink_info_;
   cc::mojom::MojoCompositorFrameSinkClientRequest sink_client_request_;
   mojo::Binding<cc::mojom::MojoCompositorFrameSinkClient> sink_client_binding_;
-
-  bool bound_ = false;
 };
 
 }  // namespace content

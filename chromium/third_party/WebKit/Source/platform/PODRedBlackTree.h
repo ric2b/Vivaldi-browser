@@ -138,7 +138,7 @@ class PODRedBlackTree {
   // Constructs a new red-black tree, allocating temporary objects
   // from the given PODArena.
   explicit PODRedBlackTree(PassRefPtr<PODFreeListArena<Node>> arena)
-      : arena_(arena),
+      : arena_(std::move(arena)),
         root_(0),
         needs_full_ordering_comparisons_(false)
 #ifndef NDEBUG
@@ -171,14 +171,14 @@ class PODRedBlackTree {
   }
 
   void Add(const T& data) {
-    ASSERT(IsInitialized());
+    DCHECK(IsInitialized());
     Node* node = arena_->template AllocateObject<T>(data);
     InsertNode(node);
   }
 
   // Returns true if the datum was found in the tree.
   bool Remove(const T& data) {
-    ASSERT(IsInitialized());
+    DCHECK(IsInitialized());
     Node* node = TreeSearch(data);
     if (node) {
       DeleteNode(node);
@@ -188,19 +188,19 @@ class PODRedBlackTree {
   }
 
   bool Contains(const T& data) const {
-    ASSERT(IsInitialized());
+    DCHECK(IsInitialized());
     return TreeSearch(data);
   }
 
   void VisitInorder(Visitor* visitor) const {
-    ASSERT(IsInitialized());
+    DCHECK(IsInitialized());
     if (!root_)
       return;
     VisitInorderImpl(root_, visitor);
   }
 
   int size() const {
-    ASSERT(IsInitialized());
+    DCHECK(IsInitialized());
     Counter counter;
     VisitInorder(&counter);
     return counter.Count();
@@ -212,7 +212,7 @@ class PODRedBlackTree {
   }
 
   virtual bool CheckInvariants() const {
-    ASSERT(IsInitialized());
+    DCHECK(IsInitialized());
     int black_count;
     return CheckInvariantsFromNode(root_, &black_count);
   }
@@ -544,7 +544,7 @@ class PODRedBlackTree {
         // the code; it comes about from the properties of the
         // red-black tree.
         Node* w = x_parent->Right();
-        ASSERT(w);  // x's sibling should not be null.
+        DCHECK(w);  // x's sibling should not be null.
         if (w->GetColor() == kRed) {
           // Case 1
           w->SetColor(kBlack);
@@ -584,7 +584,7 @@ class PODRedBlackTree {
         // the code; it comes about from the properties of the
         // red-black tree.
         Node* w = x_parent->Left();
-        ASSERT(w);  // x's sibling should not be null.
+        DCHECK(w);  // x's sibling should not be null.
         if (w->GetColor() == kRed) {
           // Case 1
           w->SetColor(kBlack);

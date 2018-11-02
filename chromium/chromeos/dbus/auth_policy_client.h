@@ -9,7 +9,7 @@
 
 #include "base/callback.h"
 #include "chromeos/chromeos_export.h"
-#include "chromeos/dbus/authpolicy/active_directory_account_data.pb.h"
+#include "chromeos/dbus/authpolicy/active_directory_info.pb.h"
 #include "chromeos/dbus/dbus_client.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -22,11 +22,12 @@ namespace chromeos {
 // initializes the DBusThreadManager instance.
 class CHROMEOS_EXPORT AuthPolicyClient : public DBusClient {
  public:
-  // |user_id| is a unique id for the users. Using objectGUID from Active
-  // Directory server.
   using AuthCallback = base::OnceCallback<void(
       authpolicy::ErrorType error,
-      const authpolicy::ActiveDirectoryAccountData& account_data)>;
+      const authpolicy::ActiveDirectoryAccountInfo& account_info)>;
+  using GetUserStatusCallback = base::OnceCallback<void(
+      authpolicy::ErrorType error,
+      const authpolicy::ActiveDirectoryUserStatus& user_status)>;
   using JoinCallback = base::OnceCallback<void(authpolicy::ErrorType error)>;
   using RefreshPolicyCallback = base::OnceCallback<void(bool success)>;
 
@@ -49,12 +50,21 @@ class CHROMEOS_EXPORT AuthPolicyClient : public DBusClient {
                             JoinCallback callback) = 0;
 
   // Calls AuthenticateUser. It runs "kinit <user_principal_name> .. " which
-  // does kerberos authentication against Active Directory server.
-  // |password_fd| is similar to the one in the JoinAdDomain.
-  // |callback| is called after getting (or failing to get) D-BUS response.
+  // does kerberos authentication against Active Directory server. If
+  // |object_guid| is not empty authpolicy service first does ldap search by
+  // that |object_guid| for samAccountName and uses it for kinit. |password_fd|
+  // is similar to the one in the JoinAdDomain. |callback| is called after
+  // getting (or failing to get) D-BUS response.
   virtual void AuthenticateUser(const std::string& user_principal_name,
+                                const std::string& object_guid,
                                 int password_fd,
                                 AuthCallback callback) = 0;
+
+  // Calls GetUserStatus. If Active Directory server is online it fetches
+  // ActiveDirectoryUserStatus for the user specified by |object_guid|.
+  // |callback| is called after getting (or failing to get) D-Bus response.
+  virtual void GetUserStatus(const std::string& object_guid,
+                             GetUserStatusCallback callback) = 0;
 
   // Calls RefreshDevicePolicy - handle policy for the device.
   // Fetch GPO files from Active directory server, parse it, encode it into

@@ -72,10 +72,11 @@ HTMLOptionElement* HTMLOptionElement::CreateForJSConstructor(
     ExceptionState& exception_state) {
   HTMLOptionElement* element = new HTMLOptionElement(document);
   element->EnsureUserAgentShadowRoot();
-  element->AppendChild(Text::Create(document, data.IsNull() ? "" : data),
-                       exception_state);
-  if (exception_state.HadException())
-    return nullptr;
+  if (!data.IsEmpty()) {
+    element->AppendChild(Text::Create(document, data), exception_state);
+    if (exception_state.HadException())
+      return nullptr;
+  }
 
   if (!value.IsNull())
     element->setValue(value);
@@ -148,7 +149,7 @@ void HTMLOptionElement::setText(const String& text,
   int old_selected_index = select_is_menu_list ? select->selectedIndex() : -1;
 
   if (HasOneTextChild()) {
-    ToText(FirstChild())->setData(text);
+    ToText(firstChild())->setData(text);
   } else {
     RemoveChildren();
     AppendChild(Text::Create(GetDocument(), text), exception_state);
@@ -374,7 +375,7 @@ void HTMLOptionElement::RemovedFrom(ContainerNode* insertion_point) {
 
 String HTMLOptionElement::CollectOptionInnerText() const {
   StringBuilder text;
-  for (Node* node = FirstChild(); node;) {
+  for (Node* node = firstChild(); node;) {
     if (node->IsTextNode())
       text.Append(node->nodeValue());
     // Text nodes inside script elements are not part of the option text.

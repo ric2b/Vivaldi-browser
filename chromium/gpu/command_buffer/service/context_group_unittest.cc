@@ -11,6 +11,7 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder_mock.h"
 #include "gpu/command_buffer/service/gpu_service_test.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
+#include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/command_buffer/service/test_helper.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -25,7 +26,7 @@ using ::testing::Not;
 using ::testing::Pointee;
 using ::testing::Return;
 using ::testing::SetArrayArgument;
-using ::testing::SetArgumentPointee;
+using ::testing::SetArgPointee;
 using ::testing::StrEq;
 
 namespace gpu {
@@ -42,12 +43,14 @@ class ContextGroupTest : public GpuServiceTest {
     GpuServiceTest::SetUp();
     decoder_.reset(new MockGLES2Decoder());
     scoped_refptr<FeatureInfo> feature_info = new FeatureInfo;
-    group_ = scoped_refptr<ContextGroup>(new ContextGroup(
-        gpu_preferences_, NULL, NULL, NULL, NULL, feature_info,
-        kBindGeneratesResource, nullptr, nullptr, GpuFeatureInfo()));
+    group_ = scoped_refptr<ContextGroup>(
+        new ContextGroup(gpu_preferences_, NULL, NULL, NULL, NULL, feature_info,
+                         kBindGeneratesResource, nullptr, nullptr,
+                         GpuFeatureInfo(), &discardable_manager_));
   }
 
   GpuPreferences gpu_preferences_;
+  ServiceDiscardableManager discardable_manager_;
   std::unique_ptr<MockGLES2Decoder> decoder_;
   scoped_refptr<ContextGroup> group_;
 };
@@ -62,7 +65,6 @@ TEST_F(ContextGroupTest, Basic) {
   EXPECT_EQ(0u, group_->max_varying_vectors());
   EXPECT_EQ(0u, group_->max_vertex_uniform_vectors());
   EXPECT_TRUE(group_->buffer_manager() == NULL);
-  EXPECT_TRUE(group_->framebuffer_manager() == NULL);
   EXPECT_TRUE(group_->renderbuffer_manager() == NULL);
   EXPECT_TRUE(group_->texture_manager() == NULL);
   EXPECT_TRUE(group_->program_manager() == NULL);
@@ -90,7 +92,6 @@ TEST_F(ContextGroupTest, InitializeNoExtensions) {
   EXPECT_EQ(static_cast<uint32_t>(TestHelper::kMaxVertexUniformVectors),
             group_->max_vertex_uniform_vectors());
   EXPECT_TRUE(group_->buffer_manager() != NULL);
-  EXPECT_TRUE(group_->framebuffer_manager() != NULL);
   EXPECT_TRUE(group_->renderbuffer_manager() != NULL);
   EXPECT_TRUE(group_->texture_manager() != NULL);
   EXPECT_TRUE(group_->program_manager() != NULL);
@@ -98,7 +99,6 @@ TEST_F(ContextGroupTest, InitializeNoExtensions) {
 
   group_->Destroy(decoder_.get(), false);
   EXPECT_TRUE(group_->buffer_manager() == NULL);
-  EXPECT_TRUE(group_->framebuffer_manager() == NULL);
   EXPECT_TRUE(group_->renderbuffer_manager() == NULL);
   EXPECT_TRUE(group_->texture_manager() == NULL);
   EXPECT_TRUE(group_->program_manager() == NULL);
@@ -122,7 +122,6 @@ TEST_F(ContextGroupTest, MultipleContexts) {
                                  DisallowedFeatures()));
 
   EXPECT_TRUE(group_->buffer_manager() != NULL);
-  EXPECT_TRUE(group_->framebuffer_manager() != NULL);
   EXPECT_TRUE(group_->renderbuffer_manager() != NULL);
   EXPECT_TRUE(group_->texture_manager() != NULL);
   EXPECT_TRUE(group_->program_manager() != NULL);
@@ -131,7 +130,6 @@ TEST_F(ContextGroupTest, MultipleContexts) {
   group_->Destroy(decoder_.get(), false);
 
   EXPECT_TRUE(group_->buffer_manager() != NULL);
-  EXPECT_TRUE(group_->framebuffer_manager() != NULL);
   EXPECT_TRUE(group_->renderbuffer_manager() != NULL);
   EXPECT_TRUE(group_->texture_manager() != NULL);
   EXPECT_TRUE(group_->program_manager() != NULL);
@@ -140,7 +138,6 @@ TEST_F(ContextGroupTest, MultipleContexts) {
   group_->Destroy(decoder2_.get(), false);
 
   EXPECT_TRUE(group_->buffer_manager() == NULL);
-  EXPECT_TRUE(group_->framebuffer_manager() == NULL);
   EXPECT_TRUE(group_->renderbuffer_manager() == NULL);
   EXPECT_TRUE(group_->texture_manager() == NULL);
   EXPECT_TRUE(group_->program_manager() == NULL);

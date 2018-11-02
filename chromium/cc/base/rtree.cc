@@ -23,11 +23,8 @@ RTree::Node* RTree::AllocateNodeAtLevel(int level) {
   // We don't allow reallocations, since that would invalidate references to
   // existing nodes, so verify that capacity > size.
   DCHECK_GT(nodes_.capacity(), nodes_.size());
-  nodes_.emplace_back();
-  Node& node = nodes_.back();
-  node.num_children = 0;
-  node.level = level;
-  return &node;
+  nodes_.emplace_back(level);
+  return &nodes_.back();
 }
 
 RTree::Branch RTree::BuildRecursive(std::vector<Branch>* branches, int level) {
@@ -112,9 +109,11 @@ RTree::Branch RTree::BuildRecursive(std::vector<Branch>* branches, int level) {
   return BuildRecursive(branches, level + 1);
 }
 
-void RTree::Search(const gfx::Rect& query, std::vector<size_t>* results) const {
+std::vector<size_t> RTree::Search(const gfx::Rect& query) const {
+  std::vector<size_t> results;
   if (num_data_elements_ > 0 && query.Intersects(root_.bounds))
-    SearchRecursive(root_.subtree, query, results);
+    SearchRecursive(root_.subtree, query, &results);
+  return results;
 }
 
 void RTree::SearchRecursive(Node* node,

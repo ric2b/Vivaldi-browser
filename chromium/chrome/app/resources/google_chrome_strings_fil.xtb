@@ -3,7 +3,6 @@
 <translationbundle lang="fil">
 <translation id="1001534784610492198">Na-corrupt o hindi wasto ang installer archive. Paki-download muli ang Google Chrome.</translation>
 <translation id="1035334672863811645">mag-sign in sa Chrome</translation>
-<translation id="1061441684050139317">Kailangan ng Chrome ng access sa mikropono upang maibahagi ito sa site na ito.</translation>
 <translation id="1065672644894730302">Hindi mabasa ang iyong mga kagustuhan.
 
 Maaaring hindi available ang ilang tampok at hindi mase-save ang mga pagbabago sa mga kagustuhan.</translation>
@@ -14,6 +13,7 @@ Maaaring hindi available ang ilang tampok at hindi mase-save ang mga pagbabago s
 <translation id="127345590676626841">Awtomatikong nag-a-update ang Chrome upang palagi kang may pinakabagong bersyon. Kapag nakumpleto ang pag-download na ito, magre-restart ang Chrome at makakapagpatuloy ka na.</translation>
 <translation id="1302523850133262269">Mangyaring maghintay habang ini-install ng Chrome ang mga pinakabagong update sa system.</translation>
 <translation id="1350930993895295930">Nakakita ang Chrome ng hindi karaniwang gawi</translation>
+<translation id="137466361146087520">Google Chrome Beta</translation>
 <translation id="1393853151966637042">Humingi ng tulong sa paggamit ng Chrome</translation>
 <translation id="1399397803214730675">Mayroon nang mas bagong bersyon ng Google Chrome ang computer na ito. Kung hindi gumagana ang software, mangyaring i-uninstall ang Google Chrome at subukang muli.</translation>
 <translation id="1434626383986940139">Chrome Canary Apps</translation>
@@ -38,13 +38,13 @@ Maaaring hindi available ang ilang tampok at hindi mase-save ang mga pagbabago s
 <translation id="1773601347087397504">Kumuha ng tulong sa paggamit ng Chrome OS</translation>
 <translation id="1795405610103747296">I-install ang Chrome sa iyong telepono. Magpapadala kami ng SMS sa telepono mo: <ph name="PHONE_NUMBER" /></translation>
 <translation id="1818142563254268765">Hindi ma-update ng Chrome ang sarili nito patungo sa pinakabagong bersyon, kaya napapalampas mo ang mahuhusay na bagong feature at pag-aayos sa seguridad. Kailangan mong i-update ang Chrome.</translation>
+<translation id="1874309113135274312">Google Chrome Beta (mDNS-In)</translation>
 <translation id="1877026089748256423">Luma na ang Chrome</translation>
 <translation id="2063848847527508675">Kailangang ma-restart ang Chrome OS upang mailapat ang update.</translation>
 <translation id="2077129598763517140">Gamitin ang pagpapabilis ng hardware kapag available</translation>
 <translation id="2084710999043359739">Idagdag sa Chrome</translation>
 <translation id="2120620239521071941">Magde-delete ito ng <ph name="ITEMS_COUNT" /> (na) item sa device na ito. Upang makuha ang iyong data sa ibang pagkakataon, mag-sign in sa Chrome bilang <ph name="USER_EMAIL" />.</translation>
 <translation id="2123055963409958220">Tulungang pahusayin ang Chrome sa pamamagitan ng pag-ulat sa <ph name="BEGIN_LINK" />mga kasalukuyang setting<ph name="END_LINK" /></translation>
-<translation id="2147651015520127414">Na-verify ng Chrome na ang <ph name="ISSUER" /> ang nagbigay sa certificate ng website na ito.</translation>
 <translation id="216054706567564023">I-install ang Chrome sa telepono mo. Magpapadala kami ng SMS sa iyong numero ng telepono para sa pag-recover ng account.</translation>
 <translation id="2246246234298806438">Hindi maipapakita ng Google Chrome ang preview sa pag-print kapag nawawala ang built-in na PDF viewer.</translation>
 <translation id="2252923619938421629">Tumulong na mapahusay ang Google Chrome sa pamamagitan ng pag-uulat ng mga kasalukuyang setting</translation>
@@ -58,6 +58,7 @@ Maaaring hindi available ang ilang tampok at hindi mase-save ang mga pagbabago s
 
 Kapag nag-sign in ka pa rin, isasama sa <ph name="ACCOUNT_EMAIL_NEW" /> ang impormasyon sa Chrome gaya ng mga bookmark, kasaysayan, at iba pang mga setting.</translation>
 <translation id="2397416548179033562">Ipakita ang menu ng Chrome</translation>
+<translation id="2416359993254398973">Kailangan ng Chrome ng pahintulot na i-access ang iyong camera para sa site na ito.</translation>
 <translation id="2429317896000329049">Hindi mai-sync ng Google Chrome ang iyong data dahil hindi available ang Pag-sync para sa iyong domain.</translation>
 <translation id="2446511512801740068">Luma na ang Chrome dahil matagal na itong hindi muling nailunsad. Available ang isang update at ilalapat ito sa sandaling muli mo itong inilunsad.</translation>
 <translation id="2485422356828889247">I-uninstall</translation>
@@ -112,9 +113,10 @@ Pakitingnan ang iyong email sa <ph name="ACCOUNT_EMAIL" /> para sa mga karagdaga
 <translation id="4053720452172726777">I-customize at kontrolin ang Google Chrome</translation>
 <translation id="4147555960264124640">Nagsa-sign in ka gamit ang isang pinamamahalaang account at nagbibigay sa administrator nito ng kontrol sa iyong profile sa Google Chrome. Permanenteng mauugnay ang iyong data sa Chrome, gaya ng iyong apps, mga bookmark, kasaysayan, password, at iba pang setting sa <ph name="USER_NAME" />. Matatanggal mo ang data na ito sa Google Accounts Dashboard, ngunit hindi mo maiuugnay ang data na ito sa isa pang account. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">Nabigo ang installer sa pag-uncompress ng archive. Paki-download muli ang Google Chrome.</translation>
-<translation id="423410644998903704">Kailangan ng Chrome ng access sa pahintulot upang maibahagi ang mga ito sa site na ito.</translation>
 <translation id="4251615635259297716">I-link ang iyong data sa Chrome sa account na ito</translation>
+<translation id="4251625577313994583">kunin ang Chrome sa iyong iPhone</translation>
 <translation id="4309555186815777032">(kinakailangang <ph name="BEGIN_BUTTON" />i-restart<ph name="END_BUTTON" /> ang Chrome)</translation>
+<translation id="4328355335528187361">Google Chrome Dev (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="437002079035561265">Hindi na makakatanggap ng mga update sa Google Chrome ang computer na ito dahil hindi na sinusuportahan ang Linux system na ito.</translation>
 <translation id="4407807842708586359">Google Chrome OS</translation>
@@ -138,6 +140,7 @@ Pakitingnan ang iyong email sa <ph name="ACCOUNT_EMAIL" /> para sa mga karagdaga
 <translation id="4921569541910214635">Magbabahagi ng computer? Ngayon, maaari mong i-set up ang Chrome sa paraang gusto mo.</translation>
 <translation id="4953650215774548573">Itakda ang Google Chrome bilang iyong default na browser</translation>
 <translation id="495931528404527476">Sa Chrome</translation>
+<translation id="4965682129423310439">May nakitang mapaminsalang software ang Chrome sa iyong computer. Maaari itong alisin ng Chrome at i-restore ang mga setting mo upang mapaganang muli nang normal ang iyong browser.</translation>
 <translation id="4987308747895123092">Pakisara ang lahat ng window ng Google Chrome (kasama ang mga nasa mode na Windows 8) at subukang muli.</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="5028489144783860647">Hindi mai-sync ng Google Chrome ang iyong data. Paki-update ang iyong passphrase sa Pag-sync.</translation>
@@ -163,6 +166,7 @@ Hindi magawang bawiin ng Google Chrome ang iyong mga setting.</translation>
 <translation id="556024056938947818">Sinusubukan ng Google Chrome na magpakita ng mga password.</translation>
 <translation id="5563479599352954471">Maghanap sa isang pagpindot lang</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
+<translation id="557283862590186398">Kailangan ng Chrome ng pahintulot na i-access ang iyong mikropono para sa site na ito.</translation>
 <translation id="5620765574781326016">Matuto tungkol sa mga paksa sa mga website nang hindi umaalis sa page.</translation>
 <translation id="565744775970812598">Maaaring mapanganib ang <ph name="FILE_NAME" />, kaya na-block ito ng Chrome.</translation>
 <translation id="568643307450491754">Hanapin ang iyong mga bookmark sa Chrome menu o sa bookmarks bar.</translation>
@@ -177,7 +181,6 @@ Hindi magawang bawiin ng Google Chrome ang iyong mga setting.</translation>
 <translation id="5931853610562009806">Sa Mac, maaaring ma-save ang mga password sa iyong Keychain at ma-access o ma-sync ng ibang mga user ng Chrome na nagbabahagi ng OS X account na ito.</translation>
 <translation id="5940385492829620908">Makikita dito ang iyong web, mga bookmark at iba pang mga bagay-bagay sa Chrome.</translation>
 <translation id="5941830788786076944">Gawin ang Google Chrome na default browser</translation>
-<translation id="6012342843556706400">Kailangan ng Chrome ng access sa lokasyon upang maibahagi ito sa site na ito.</translation>
 <translation id="6014844626092547096">Naka-sign in ka na ngayon sa Chrome! Na-disable ng iyong administrator ang pag-sync.</translation>
 <translation id="6070348360322141662">Para sa karagdagang seguridad, ie-encrypt ng Google Chrome ang iyong data</translation>
 <translation id="6113794647360055231">Mas mahusay na ang Chrome</translation>
@@ -185,9 +188,11 @@ Hindi magawang bawiin ng Google Chrome ang iyong mga setting.</translation>
 <translation id="61852838583753520">I-update ang &amp;Chrome OS</translation>
 <translation id="6235018212288296708">Inbound na panuntunan para sa Google Chrome upang payagan ang trapiko ng mDNS.</translation>
 <translation id="6236285698028833233">Huminto na sa pag-update ang Google Chrome at hindi na nito sinusuportahan ang bersyong ito ng iyong operating system.</translation>
+<translation id="6291089322031436445">Mga Chrome Dev App</translation>
 <translation id="6291549208091401781">Naka-install na ang Google Chrome para sa lahat ng user sa iyong computer.</translation>
 <translation id="6338556085225130112">Ina-update ang Google Chrome</translation>
 <translation id="6368958679917195344">Ginagawang posible ang Chrome OS ng karagdagang <ph name="BEGIN_LINK_CROS_OSS" />open source na software<ph name="END_LINK_CROS_OSS" />.</translation>
+<translation id="6393863479814692971">Kailangan ng Chrome ng pahintulot na i-access ang iyong camera at mikropono para sa site na ito.</translation>
 <translation id="6400076122676892962">Malapit nang hindi makatanggap ang computer na ito ng mga update sa Google Chrome dahil hindi na susuportahan ang Mac OS X 10.6, 10.7 at 10.8.</translation>
 <translation id="6410540444482791104">Makakatulong kang gawing mas ligtas at madaling gamitin ang Chrome sa pamamagitan ng awtomatikong pagpapadala ng ilang impormasyon ng system at content ng page sa Google upang makatulong na tumukoy ng mga mapanganib na app at site.</translation>
 <translation id="6470176598693778404">Hindi na makakatanggap ang computer na ito ng mga update sa Google Chrome dahil hindi na sinusuportahan ang Mac OS X 10.6, 10.7 at 10.8.</translation>
@@ -198,10 +203,13 @@ Hindi magawang bawiin ng Google Chrome ang iyong mga setting.</translation>
 <translation id="6626317981028933585">Nakalulungkot, ang iyong mga setting ng Mozilla Firefox ay hindi magagamit habang tumatakbo ang browser. Upang mai-import ang mga setting sa Google Chrome, i-save ang iyong ginagawa at isara ang lahat ng mga window ng Firefox. Pagkatapos i-click ang Ipagpatuloy.</translation>
 <translation id="6634887557811630702">Napapanahon ang Google Chrome.</translation>
 <translation id="6676384891291319759">I-access ang Internet</translation>
+<translation id="6697947395630195233">Kailangan ng Chrome ng access sa iyong lokasyon upang ibahagi ang lokasyon mo sa site na ito.</translation>
 <translation id="6757767188268205357">Huwag akong istorbohin</translation>
 <translation id="683440813066116847">Inbound na panuntunan para sa Google Chrome Canary upang payagan ang trapiko ng mDNS.</translation>
 <translation id="686561893457936865">Dalhin ang Chrome kahit saan</translation>
 <translation id="6883876366448858277">ipapadala ang isang salita at ang konteksto nito sa Google Search, at magbibigay ng mga pagpapakahulugan, larawan at iba pang mga resulta ng paghahanap.</translation>
+<translation id="6885412569789873916">Mga Chrome Beta App</translation>
+<translation id="6967962315388095737">Inbound na panuntunan para sa Google Chrome Beta upang payagan ang trapiko ng mDNS.</translation>
 <translation id="6970811910055250180">Ina-update ang iyong device...</translation>
 <translation id="6982337800632491844">Kinakailangan ng <ph name="DOMAIN" /> na basahin mo at tanggapin ang sumusunod na Mga Tuntunin ng Serbisyo bago gamitin ang device na ito. Hindi pinapalawak, binabago o nililimitahan ng mga tuntuning ito ang Mga Tuntunin ng Google Chrome OS.</translation>
 <translation id="6989339256997917931">Na-update na ang Google Chrome, ngunit hindi mo pa ito ginamit sa huling 30 araw.</translation>
@@ -228,6 +236,7 @@ Hindi magawang bawiin ng Google Chrome ang iyong mga setting.</translation>
 <translation id="7473891865547856676">Hindi, Salamat</translation>
 <translation id="7494905215383356681">Mga lisensya ng open source ng Chrome</translation>
 <translation id="7520096660192498279">{NUM_ITEMS,plural, =1{Permanente itong magde-delete ng kahit $1 item sa device na ito. Upang makuha ang iyong data sa ibang pagkakataon, mag-sign in sa Chrome bilang $2.}one{Permanente itong magde-delete ng hindi bababa sa $1 item sa device na ito. Upang makuha ang iyong data sa ibang pagkakataon, mag-sign in sa Chrome bilang $2.}other{Permanente itong magde-delete ng hindi bababa sa $1 na item sa device na ito. Upang makuha ang iyong data sa ibang pagkakataon, mag-sign in sa Chrome bilang $2.}}</translation>
+<translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7552219221109926349">Ipakita ang Chrome OS sa wikang ito</translation>
 <translation id="7592736734348559088">Hindi mai-sync ng Google Chrome ang iyong data dahil hindi napapanahon ang mga detalye sa pag-sign in ng iyong account.</translation>
 <translation id="7626032353295482388">Maligayang pagdating sa Chrome</translation>
@@ -235,7 +244,6 @@ Hindi magawang bawiin ng Google Chrome ang iyong mga setting.</translation>
 <translation id="7761834446675418963">I-click ang iyong pangalan upang buksan ang Chrome at simulan ang pagba-browse.</translation>
 <translation id="7781002470561365167">May magagamit na bagong bersyon ng Google Chrome.</translation>
 <translation id="7787950393032327779">Mukhang ginagamit ang profile ng iba pang proseso ng Google Chrome (<ph name="PROCESS_ID" />) sa iba pang computer (<ph name="HOST_NAME" />).  Ni-lock ng Chrome ang profile upang hindi ito ma-corrupt.  Kung nakakatiyak ka na walang ibang mga proseso ang gumagamit sa profile na ito, maaari mong i-unlock ang profile at ilunsad muli ang Chrome.</translation>
-<translation id="7788788617745289808">Kailangan ng Chrome ng access sa camera upang maibahagi ito sa site na ito.</translation>
 <translation id="7808348361785373670">Alisin sa Chrome...</translation>
 <translation id="7825851276765848807">Nabigo ang pag-install dahil sa hindi natukoy na error. Paki-download muli ang Google Chrome.</translation>
 <translation id="7855730255114109580">Napapanahon ang Google Chrome</translation>
@@ -260,6 +268,7 @@ Hindi magawang bawiin ng Google Chrome ang iyong mga setting.</translation>
 <translation id="8439301513305169426">Ise-save ng Chrome ang password na ito sa <ph name="SAVED_PASSWORD_LINK" />. Hindi mo ito kailangang tandaan.</translation>
 <translation id="8455999171311319804">Opsyonal: Tulungang mas pahusayin ang Chrome OS sa pamamagitan ng awtomatikong pagpapadala ng data ng diagnostic at paggamit sa Google.</translation>
 <translation id="8478823064122749032">I-install ang Chrome sa telepono mo. Magpapadala kami ng SMS sa iyong numero ng telepono para sa pag-recover ng account: <ph name="PHONE_NUMBER" /></translation>
+<translation id="8521348052903287641">Inbound na panuntunan para sa Google Chrome Dev upang payagan ang trapiko ng mDNS.</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8547799825197623713">Canary ng App Launcher ng Chrome</translation>
 <translation id="8556340503434111824">May available na bagong bersyon ng Google Chrome, at mas mabilis ito kaysa sa dati.</translation>

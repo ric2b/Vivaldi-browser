@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <memory>
+#include "net/http/http_util.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
@@ -150,16 +151,11 @@ CrossOriginAccessControl::AccessStatus CrossOriginAccessControl::CheckAccess(
     const ResourceResponse& response,
     StoredCredentials include_credentials,
     const SecurityOrigin* security_origin) {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(
-      AtomicString, allow_origin_header_name,
-      (new AtomicString("access-control-allow-origin")));
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(
-      AtomicString, allow_credentials_header_name,
-      (new AtomicString("access-control-allow-credentials")));
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(
-      AtomicString, allow_suborigin_header_name,
-      (new AtomicString("access-control-allow-suborigin")));
-
+  static const char allow_origin_header_name[] = "access-control-allow-origin";
+  static const char allow_credentials_header_name[] =
+      "access-control-allow-credentials";
+  static const char allow_suborigin_header_name[] =
+      "access-control-allow-suborigin";
   int status_code = response.HttpStatusCode();
   if (!status_code)
     return kInvalidResponse;
@@ -181,7 +177,7 @@ CrossOriginAccessControl::AccessStatus CrossOriginAccessControl::CheckAccess(
     }
   }
 
-  if (allow_origin_header_value == g_star_atom) {
+  if (allow_origin_header_value == "*") {
     // A wildcard Access-Control-Allow-Origin can not be used if credentials are
     // to be sent, even with Access-Control-Allow-Credentials set to true.
     if (include_credentials == kDoNotAllowStoredCredentials)
@@ -395,16 +391,88 @@ void CrossOriginAccessControl::PreflightErrorString(
   }
 }
 
+// A parser for the value of the Access-Control-Expose-Headers header.
+class HTTPHeaderNameListParser {
+  STACK_ALLOCATED();
+
+ public:
+  explicit HTTPHeaderNameListParser(const String& value)
+      : value_(value), pos_(0) {}
+
+  // Tries parsing |value_| expecting it to be conforming to the #field-name
+  // ABNF rule defined in RFC 7230. Returns with the field-name entries stored
+  // in |output| when successful. Otherwise, returns with |output| kept empty.
+  //
+  // |output| must be empty.
+  void Parse(HTTPHeaderSet& output) {
+    DCHECK(output.IsEmpty());
+
+    while (true) {
+      ConsumeSpaces();
+
+      size_t token_start = pos_;
+      ConsumeTokenChars();
+      size_t token_size = pos_ - token_start;
+      if (token_size == 0) {
+        output.clear();
+        return;
+      }
+      output.insert(value_.Substring(token_start, token_size));
+
+      ConsumeSpaces();
+
+      if (pos_ == value_.length()) {
+        return;
+      }
+
+      if (value_[pos_] == ',') {
+        ++pos_;
+      } else {
+        output.clear();
+        return;
+      }
+    }
+  }
+
+ private:
+  // Consumes zero or more spaces (SP and HTAB) from value_.
+  void ConsumeSpaces() {
+    while (true) {
+      if (pos_ == value_.length()) {
+        return;
+      }
+
+      UChar c = value_[pos_];
+      if (c != ' ' && c != '\t') {
+        return;
+      }
+      ++pos_;
+    }
+  }
+
+  // Consumes zero or more tchars from value_.
+  void ConsumeTokenChars() {
+    while (true) {
+      if (pos_ == value_.length()) {
+        return;
+      }
+
+      UChar c = value_[pos_];
+      if (c > 0x7F || !net::HttpUtil::IsTokenChar(c)) {
+        return;
+      }
+      ++pos_;
+    }
+  }
+
+  const String& value_;
+  size_t pos_;
+};
+
 void ParseAccessControlExposeHeadersAllowList(const String& header_value,
                                               HTTPHeaderSet& header_set) {
-  Vector<String> headers;
-  header_value.Split(',', false, headers);
-  for (unsigned header_count = 0; header_count < headers.size();
-       header_count++) {
-    String stripped_header = headers[header_count].StripWhiteSpace();
-    if (!stripped_header.IsEmpty())
-      header_set.insert(stripped_header);
-  }
+  HTTPHeaderNameListParser parser(header_value);
+  parser.Parse(header_set);
 }
 
 void ExtractCorsExposedHeaderNamesList(const ResourceResponse& response,

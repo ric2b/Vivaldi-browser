@@ -12,12 +12,12 @@
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
+#include "cc/output/compositor_frame_sink.h"
 #include "cc/quads/render_pass.h"
 #include "cc/quads/shared_quad_state.h"
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/resources/single_release_callback.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
 #include "cc/surfaces/sequence_surface_reference_factory.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
@@ -26,6 +26,7 @@
 #include "components/exo/surface_delegate.h"
 #include "components/exo/surface_observer.h"
 #include "third_party/khronos/GLES2/gl2.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_targeter.h"
@@ -51,6 +52,10 @@ namespace {
 // A property key containing the surface that is associated with
 // window. If unset, no surface is associated with window.
 DEFINE_UI_CLASS_PROPERTY_KEY(Surface*, kSurfaceKey, nullptr);
+
+// A property key to store whether the surface should only consume
+// stylus input events.
+DEFINE_UI_CLASS_PROPERTY_KEY(bool, kStylusOnlyKey, false);
 
 // Helper function that returns an iterator to the first entry in |list|
 // with |key|.
@@ -108,7 +113,9 @@ class CustomWindowDelegate : public aura::WindowDelegate {
   bool CanFocus() override { return true; }
   void OnCaptureLost() override {}
   void OnPaint(const ui::PaintContext& context) override {}
-  void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
+  void OnDeviceScaleFactorChanged(float device_scale_factor) override {
+    surface_->SetDeviceScaleFactor(device_scale_factor);
+  }
   void OnWindowDestroying(aura::Window* window) override {}
   void OnWindowDestroyed(aura::Window* window) override { delete this; }
   void OnWindowTargetVisibilityChanged(bool visible) override {}
@@ -164,21 +171,8 @@ class CustomWindowTargeter : public aura::WindowTargeter {
 // request a CompositorFrameSink from the aura::Window. Setting up the
 // BeginFrame hierarchy should be an internal implementation detail of aura or
 // mus in aura-mus.
-Surface::Surface()
-    : window_(new aura::Window(new CustomWindowDelegate(this))),
-      frame_sink_id_(aura::Env::GetInstance()
-                         ->context_factory_private()
-                         ->AllocateFrameSinkId()) {
-  compositor_frame_sink_holder_ = new CompositorFrameSinkHolder(
-      this, frame_sink_id_,
-      aura::Env::GetInstance()->context_factory_private()->GetSurfaceManager());
-  // TODO(samans): exo::Surface should not be using
-  // DirectSurfaceReferenceFactory (crbug.com/688573).
-  surface_reference_factory_ = aura::Env::GetInstance()
-                                   ->context_factory_private()
-                                   ->GetSurfaceManager()
-                                   ->reference_factory();
-  window_->SetType(ui::wm::WINDOW_TYPE_CONTROL);
+Surface::Surface() : window_(new aura::Window(new CustomWindowDelegate(this))) {
+  window_->SetType(aura::client::WINDOW_TYPE_CONTROL);
   window_->SetName("ExoSurface");
   window_->SetProperty(kSurfaceKey, this);
   window_->Init(ui::LAYER_SOLID_COLOR);
@@ -186,6 +180,8 @@ Surface::Surface()
   window_->set_owned_by_parent(false);
   window_->AddObserver(this);
   aura::Env::GetInstance()->context_factory()->AddObserver(this);
+  compositor_frame_sink_holder_ = base::MakeUnique<CompositorFrameSinkHolder>(
+      this, window_->CreateCompositorFrameSink());
 }
 
 Surface::~Surface() {
@@ -216,8 +212,6 @@ Surface::~Surface() {
   // that they have been cancelled.
   for (const auto& presentation_callback : swapped_presentation_callbacks_)
     presentation_callback.Run(base::TimeTicks(), base::TimeDelta());
-
-  compositor_frame_sink_holder_->GetCompositorFrameSink()->EvictFrame();
 }
 
 // static
@@ -226,7 +220,7 @@ Surface* Surface::AsSurface(const aura::Window* window) {
 }
 
 cc::SurfaceId Surface::GetSurfaceId() const {
-  return cc::SurfaceId(frame_sink_id_, local_surface_id_);
+  return window_->GetSurfaceId();
 }
 
 void Surface::Attach(Buffer* buffer) {
@@ -405,6 +399,10 @@ void Surface::SetAlpha(float alpha) {
   pending_state_.alpha = alpha;
 }
 
+void Surface::SetDeviceScaleFactor(float device_scale_factor) {
+  device_scale_factor_ = device_scale_factor;
+}
+
 void Surface::Commit() {
   TRACE_EVENT0("exo", "Surface::Commit");
 
@@ -433,9 +431,14 @@ void Surface::Commit() {
     CommitSurfaceHierarchy();
   }
 
-  if (begin_frame_source_ && current_begin_frame_ack_.sequence_number !=
-                                 cc::BeginFrameArgs::kInvalidFrameNumber) {
-    begin_frame_source_->DidFinishFrame(this, current_begin_frame_ack_);
+  if (current_begin_frame_ack_.sequence_number !=
+      cc::BeginFrameArgs::kInvalidFrameNumber) {
+    if (begin_frame_source_)
+      begin_frame_source_->DidFinishFrame(this, current_begin_frame_ack_);
+    if (!current_begin_frame_ack_.has_damage) {
+      compositor_frame_sink_holder_->GetCompositorFrameSink()
+          ->DidNotProduceFrame(current_begin_frame_ack_);
+    }
     current_begin_frame_ack_.sequence_number =
         cc::BeginFrameArgs::kInvalidFrameNumber;
   }
@@ -458,12 +461,6 @@ void Surface::CommitSurfaceHierarchy() {
     UpdateResource(true);
   }
 
-  cc::LocalSurfaceId old_local_surface_id = local_surface_id_;
-  if (needs_commit_to_new_surface_ || !local_surface_id_.is_valid()) {
-    needs_commit_to_new_surface_ = false;
-    local_surface_id_ = id_allocator_.GenerateId();
-  }
-
   // Move pending frame callbacks to the end of frame_callbacks_.
   frame_callbacks_.splice(frame_callbacks_.end(), pending_frame_callbacks_);
 
@@ -473,18 +470,8 @@ void Surface::CommitSurfaceHierarchy() {
 
   UpdateSurface(false);
 
-  if (old_local_surface_id != local_surface_id_) {
-    float contents_surface_to_layer_scale = 1.0;
-    // The bounds must be updated before switching to the new surface, because
-    // the layer may be mirrored, in which case a surface change causes the
-    // mirror layer to update its surface using the latest bounds.
-    window_->layer()->SetBounds(
-        gfx::Rect(window_->layer()->bounds().origin(), content_size_));
-    cc::SurfaceId surface_id(frame_sink_id_, local_surface_id_);
-    window_->layer()->SetShowPrimarySurface(
-        cc::SurfaceInfo(surface_id, contents_surface_to_layer_scale,
-                        content_size_),
-        surface_reference_factory_);
+  if (needs_commit_to_new_surface_) {
+    needs_commit_to_new_surface_ = false;
     window_->layer()->SetFillsBoundsOpaquely(
         !current_resource_has_alpha_ ||
         state_.blend_mode == SkBlendMode::kSrc ||
@@ -494,7 +481,6 @@ void Surface::CommitSurfaceHierarchy() {
 
   // Reset damage.
   pending_damage_.setEmpty();
-
   DCHECK(!current_resource_.id ||
          compositor_frame_sink_holder_->HasReleaseCallbackForResource(
              current_resource_.id));
@@ -571,10 +557,10 @@ gfx::NativeCursor Surface::GetCursor() {
   // important. Return the first non-null cursor.
   for (auto* cursor_provider : cursor_providers_) {
     gfx::NativeCursor cursor = cursor_provider->GetCursor();
-    if (cursor != ui::kCursorNull)
+    if (cursor != ui::CursorType::kNull)
       return cursor;
   }
-  return ui::kCursorNull;
+  return ui::CursorType::kNull;
 }
 
 void Surface::SetSurfaceDelegate(SurfaceDelegate* delegate) {
@@ -653,13 +639,20 @@ void Surface::CheckIfSurfaceHierarchyNeedsCommitToNewSurfaces() {
     SetSurfaceHierarchyNeedsCommitToNewSurfaces();
 }
 
+bool Surface::IsStylusOnly() {
+  return window_->GetProperty(kStylusOnlyKey);
+}
+
+void Surface::SetStylusOnly() {
+  window_->SetProperty(kStylusOnlyKey, true);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ui::ContextFactoryObserver overrides:
 
 void Surface::OnLostResources() {
-  if (!local_surface_id_.is_valid())
+  if (!window_->GetSurfaceId().is_valid())
     return;
-
   UpdateResource(false);
   UpdateSurface(true);
 }
@@ -668,13 +661,11 @@ void Surface::OnLostResources() {
 // aura::WindowObserver overrides:
 
 void Surface::OnWindowAddedToRootWindow(aura::Window* window) {
-  window->layer()->GetCompositor()->AddFrameSink(frame_sink_id_);
   window->layer()->GetCompositor()->vsync_manager()->AddObserver(this);
 }
 
 void Surface::OnWindowRemovingFromRootWindow(aura::Window* window,
                                              aura::Window* new_root) {
-  window->layer()->GetCompositor()->RemoveFrameSink(frame_sink_id_);
   window->layer()->GetCompositor()->vsync_manager()->RemoveObserver(this);
 }
 
@@ -833,7 +824,7 @@ void Surface::UpdateSurface(bool full_damage) {
   gfx::Rect quad_rect = output_rect;
   cc::SharedQuadState* quad_state =
       render_pass->CreateAndAppendSharedQuadState();
-  quad_state->quad_layer_bounds = contents_surface_size;
+  quad_state->quad_layer_rect = gfx::Rect(contents_surface_size);
   quad_state->visible_quad_layer_rect = quad_rect;
   quad_state->opacity = state_.alpha;
 
@@ -847,6 +838,7 @@ void Surface::UpdateSurface(bool full_damage) {
     current_begin_frame_ack_.has_damage = true;
   }
   frame.metadata.begin_frame_ack = current_begin_frame_ack_;
+  frame.metadata.device_scale_factor = device_scale_factor_;
 
   if (current_resource_.id) {
     // Texture quad is only needed if buffer is not fully transparent.
@@ -879,7 +871,7 @@ void Surface::UpdateSurface(bool full_damage) {
 
   frame.render_pass_list.push_back(std::move(render_pass));
   compositor_frame_sink_holder_->GetCompositorFrameSink()
-      ->SubmitCompositorFrame(local_surface_id_, std::move(frame));
+      ->SubmitCompositorFrame(std::move(frame));
 }
 
 }  // namespace exo

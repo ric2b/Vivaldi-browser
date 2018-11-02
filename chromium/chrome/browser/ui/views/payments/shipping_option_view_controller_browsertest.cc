@@ -26,7 +26,7 @@ class PaymentRequestShippingOptionViewControllerTest
 };
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestShippingOptionViewControllerTest,
-                       OrderSummaryReflectsShippingOption) {
+                       SelectingVariousShippingOptions) {
   // In MI state, shipping is $5.00.
   autofill::AutofillProfile michigan = autofill::test::GetFullProfile2();
   michigan.set_use_count(100U);
@@ -40,25 +40,42 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestShippingOptionViewControllerTest,
   InvokePaymentRequestUI();
 
   // There is no shipping option section, because no address has been selected.
+  PaymentRequest* request = GetPaymentRequests(GetActiveWebContents()).front();
+  EXPECT_EQ(2U, request->state()->shipping_profiles().size());
+  EXPECT_EQ(nullptr, request->state()->selected_shipping_profile());
   EXPECT_EQ(nullptr, dialog_view()->GetViewByID(static_cast<int>(
                          DialogViewID::PAYMENT_SHEET_SHIPPING_OPTION_SECTION)));
+  EXPECT_EQ(nullptr,
+            dialog_view()->GetViewByID(static_cast<int>(
+                DialogViewID::PAYMENT_SHEET_SHIPPING_OPTION_SECTION_BUTTON)));
 
   // Go to the shipping address screen and select the first address (MI state).
   OpenShippingAddressSectionScreen();
+  // There is no error at the top of this screen, because no address has been
+  // selected yet.
+  EXPECT_EQ(nullptr, dialog_view()->GetViewByID(static_cast<int>(
+                         DialogViewID::SHIPPING_ADDRESS_OPTION_ERROR)));
+
   ResetEventObserverForSequence(std::list<DialogEvent>{
-      DialogEvent::BACK_NAVIGATION, DialogEvent::SPEC_DONE_UPDATING});
+      DialogEvent::SPEC_DONE_UPDATING, DialogEvent::BACK_NAVIGATION});
   ClickOnChildInListViewAndWait(
       /* child_index=*/0, /*total_num_children=*/2,
-      DialogViewID::SHIPPING_ADDRESS_SHEET_LIST_VIEW);
+      DialogViewID::SHIPPING_ADDRESS_SHEET_LIST_VIEW,
+      /*wait_for_animation=*/false);
+  // Wait for the animation here explicitly, otherwise
+  // ClickOnChildInListViewAndWait tries to install an AnimationDelegate before
+  // the animation is kicked off (since that's triggered off of the spec being
+  // updated) and this hits a DCHECK.
+  WaitForAnimation();
 
   // Michigan address is selected and has standard shipping.
-  std::vector<base::string16> shipping_address_labels = GetThreeLineLabelValues(
+  std::vector<base::string16> shipping_address_labels = GetProfileLabelValues(
       DialogViewID::PAYMENT_SHEET_SHIPPING_ADDRESS_SECTION);
   EXPECT_EQ(base::ASCIIToUTF16("Jane A. Smith"), shipping_address_labels[0]);
   EXPECT_EQ(
       base::ASCIIToUTF16("ACME, 123 Main Street, Unit 1, Greensdale, MI 48838"),
       shipping_address_labels[1]);
-  EXPECT_EQ(base::ASCIIToUTF16("13105557889"), shipping_address_labels[2]);
+  EXPECT_EQ(base::ASCIIToUTF16("+1 310-555-7889"), shipping_address_labels[2]);
 
   // The shipping option section exists, and the shipping option is shown.
   std::vector<base::string16> shipping_option_labels =
@@ -70,16 +87,28 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestShippingOptionViewControllerTest,
 
   // Go to the shipping address screen and select the second address (Canada).
   OpenShippingAddressSectionScreen();
-  ResetEventObserverForSequence(std::list<DialogEvent>{
-      DialogEvent::BACK_NAVIGATION, DialogEvent::SPEC_DONE_UPDATING});
+  ResetEventObserver(DialogEvent::SPEC_DONE_UPDATING);
   ClickOnChildInListViewAndWait(
       /* child_index=*/1, /*total_num_children=*/2,
-      DialogViewID::SHIPPING_ADDRESS_SHEET_LIST_VIEW);
+      DialogViewID::SHIPPING_ADDRESS_SHEET_LIST_VIEW, false);
 
-  // There is no longer shipping option section, because no shipping options are
-  // available for Canada.
+  // Now no address is selected.
+  EXPECT_EQ(nullptr, request->state()->selected_shipping_profile());
+  EXPECT_EQ(request->state()->shipping_profiles().back(),
+            request->state()->selected_shipping_option_error_profile());
+
+  // The address selector has this error.
+  EXPECT_EQ(base::ASCIIToUTF16("We do not ship to this address"),
+            GetLabelText(DialogViewID::SHIPPING_ADDRESS_OPTION_ERROR));
+
+  // There is no a longer shipping option section, because no shipping options
+  // are available for Canada.
   EXPECT_EQ(nullptr, dialog_view()->GetViewByID(static_cast<int>(
                          DialogViewID::PAYMENT_SHEET_SHIPPING_OPTION_SECTION)));
+  EXPECT_EQ(nullptr,
+            dialog_view()->GetViewByID(static_cast<int>(
+                DialogViewID::PAYMENT_SHEET_SHIPPING_OPTION_SECTION_BUTTON)));
+
 }
 
 }  // namespace payments

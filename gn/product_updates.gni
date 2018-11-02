@@ -45,12 +45,6 @@ post_process_template(
   output = "$root_build_dir/$vivaldi_version_full.manifest"
 }
 
-if (is_linux) {
-  post_process_action("//chrome/installer/linux:linux_packages_all") {
-    visibility += [ "//vivaldi:All" ]
-  }
-}
-
 if (is_win) {
   _platform_suffix = ""
   if (target_cpu == "x64") {

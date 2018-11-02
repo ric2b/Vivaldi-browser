@@ -9,6 +9,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/media_browsertest.h"
 #include "chrome/browser/media/test_license_server.h"
@@ -82,12 +83,8 @@ const char kWebMVP9VideoOnly[] = "video/webm; codecs=\"vp9\"";
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 const char kMP4AudioOnly[] = "audio/mp4; codecs=\"mp4a.40.2\"";
 const char kMP4VideoOnly[] = "video/mp4; codecs=\"avc1.4D000C\"";
-
-// NOTE: This string originally signalled the SMPTEST2084 EOTF, but is now
-// signalling BT709. At this time 2084 is only allowed when run with
-// --enable-hdr, and thats not really the focus of this test.
-// TODO(kqyang): update content to not use HDR transfer.
-const char kMP4VideoVp9Only[] = "video/mp4; codecs=\"vp09.00.10.08.01.01.01\"";
+const char kMP4VideoVp9Only[] =
+    "video/mp4; codecs=\"vp09.00.10.08.01.02.02.02.00\"";
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
 // Sessions to load.
@@ -221,7 +218,10 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
     if (!config)
       return;
     license_server_.reset(new TestLicenseServer(std::move(config)));
-    EXPECT_TRUE(license_server_->Start());
+    {
+      base::ThreadRestrictions::ScopedAllowIO allow_io;
+      EXPECT_TRUE(license_server_->Start());
+    }
     query_params->push_back(
         std::make_pair("licenseServerURL", license_server_->GetServerURL()));
   }
@@ -267,9 +267,7 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(
-        switches::kDisableGestureRequirementForMediaPlayback);
-    command_line->AppendSwitch(switches::kEnableVp9InMp4);
+    command_line->AppendSwitch(switches::kIgnoreAutoplayRestrictionsForTests);
   }
 
 #if BUILDFLAG(ENABLE_PEPPER_CDMS)

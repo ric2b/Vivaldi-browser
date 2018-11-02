@@ -53,13 +53,13 @@ MATCHER_P(HasTimestampMatcher, ms, "") {
 
 class VideoRendererImplTest : public testing::Test {
  public:
-  ScopedVector<VideoDecoder> CreateVideoDecodersForTest() {
+  std::vector<std::unique_ptr<VideoDecoder>> CreateVideoDecodersForTest() {
     decoder_ = new NiceMock<MockVideoDecoder>();
-    ScopedVector<VideoDecoder> decoders;
-    decoders.push_back(decoder_);
-    EXPECT_CALL(*decoder_, Initialize(_, _, _, _, _))
-        .WillOnce(DoAll(SaveArg<4>(&output_cb_),
-                        RunCallback<3>(expect_init_success_)));
+    std::vector<std::unique_ptr<VideoDecoder>> decoders;
+    decoders.push_back(base::WrapUnique(decoder_));
+    ON_CALL(*decoder_, Initialize(_, _, _, _, _))
+        .WillByDefault(DoAll(SaveArg<4>(&output_cb_),
+                             RunCallback<3>(expect_init_success_)));
     // Monitor decodes from the decoder.
     ON_CALL(*decoder_, Decode(_, _))
         .WillByDefault(Invoke(this, &VideoRendererImplTest::DecodeRequested));
@@ -85,7 +85,7 @@ class VideoRendererImplTest : public testing::Test {
                    base::Unretained(this)),
         true,
         nullptr,  // gpu_factories
-        new MediaLog()));
+        &media_log_));
     renderer_->SetTickClockForTesting(
         std::unique_ptr<base::TickClock>(tick_clock_));
     null_video_sink_->set_tick_clock_for_testing(tick_clock_);
@@ -439,6 +439,9 @@ class VideoRendererImplTest : public testing::Test {
   }
 
  protected:
+  base::MessageLoop message_loop_;
+  MediaLog media_log_;
+
   // Fixture members.
   std::unique_ptr<VideoRendererImpl> renderer_;
   base::SimpleTestTickClock* tick_clock_;  // Owned by |renderer_|.
@@ -458,8 +461,6 @@ class VideoRendererImplTest : public testing::Test {
   std::unique_ptr<NullVideoSink> null_video_sink_;
 
   WallClockTimeSource time_source_;
-
-  base::MessageLoop message_loop_;
 
  private:
   void DecodeRequested(const scoped_refptr<DecoderBuffer>& buffer,

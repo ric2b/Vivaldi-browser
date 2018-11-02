@@ -906,9 +906,14 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
                     hdlg, IDOK,
                     TXT_BTN_ACCEPT_AND_UPDATE);  // TODO(jarle) localize
                 ShowWindow(GetDlgItem(hdlg, IDC_STATIC_WARN), SW_SHOW);
-                this_->install_type_ = installed_type;
-                ComboBox_SetCurSel(GetDlgItem(hdlg, IDC_COMBO_INSTALLTYPES),
-                                   this_->install_type_);
+
+                // If not standalone install selected, override current.
+                if (this_->install_type_ != INSTALL_STANDALONE) {
+                  this_->install_type_ = installed_type;
+                  ComboBox_SetCurSel(GetDlgItem(hdlg, IDC_COMBO_INSTALLTYPES),
+                                        this_->install_type_);
+                }
+
                 this_->UpdateRegisterCheckboxVisibility();
               } else {
                 this_->is_upgrade_ = false;

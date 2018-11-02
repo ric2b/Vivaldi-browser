@@ -13,10 +13,10 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -43,10 +43,10 @@ ACTION_P(CheckStatus, expected_status) {
 class CloudPolicyValidatorTest : public testing::Test {
  public:
   CloudPolicyValidatorTest()
-      : timestamp_(base::Time::UnixEpoch() +
-                   base::TimeDelta::FromMilliseconds(
-                       PolicyBuilder::kFakeTimestamp)),
-        timestamp_option_(CloudPolicyValidatorBase::TIMESTAMP_FULLY_VALIDATED),
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI),
+        timestamp_(base::Time::FromJavaTime(PolicyBuilder::kFakeTimestamp)),
+        timestamp_option_(CloudPolicyValidatorBase::TIMESTAMP_VALIDATED),
         dm_token_option_(CloudPolicyValidatorBase::DM_TOKEN_REQUIRED),
         device_id_option_(CloudPolicyValidatorBase::DEVICE_ID_REQUIRED),
         allow_key_rotation_(true),
@@ -72,7 +72,8 @@ class CloudPolicyValidatorTest : public testing::Test {
     // Run validation and check the result.
     EXPECT_CALL(*this, ValidationCompletion(validator.get())).WillOnce(
         check_action);
-    validator.release()->StartValidation(
+    UserCloudPolicyValidator::StartValidation(
+        std::move(validator),
         base::Bind(&CloudPolicyValidatorTest::ValidationCompletion,
                    base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
@@ -84,10 +85,10 @@ class CloudPolicyValidatorTest : public testing::Test {
     std::string public_key = PolicyBuilder::GetPublicTestKeyAsString();
     EXPECT_FALSE(public_key.empty());
 
-    UserCloudPolicyValidator* validator = UserCloudPolicyValidator::Create(
-        std::move(policy_response), base::ThreadTaskRunnerHandle::Get());
-    validator->ValidateTimestamp(timestamp_, timestamp_,
-                                 timestamp_option_);
+    std::unique_ptr<UserCloudPolicyValidator> validator =
+        UserCloudPolicyValidator::Create(std::move(policy_response),
+                                         base::ThreadTaskRunnerHandle::Get());
+    validator->ValidateTimestamp(timestamp_, timestamp_option_);
     validator->ValidateUsername(PolicyBuilder::kFakeUsername, true);
     if (!owning_domain_.empty())
       validator->ValidateDomain(owning_domain_);
@@ -104,7 +105,7 @@ class CloudPolicyValidatorTest : public testing::Test {
     } else {
       validator->ValidateSignature(public_key);
     }
-    return base::WrapUnique(validator);
+    return validator;
   }
 
 
@@ -118,7 +119,7 @@ class CloudPolicyValidatorTest : public testing::Test {
               validator->payload()->SerializeAsString());
   }
 
-  base::MessageLoopForUI loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::Time timestamp_;
   CloudPolicyValidatorBase::ValidateTimestampOption timestamp_option_;
   CloudPolicyValidatorBase::ValidateDMTokenOption dm_token_option_;
@@ -176,6 +177,14 @@ TEST_F(CloudPolicyValidatorTest, SuccessfulRunValidationWithNoDeviceId) {
   Validate(Invoke(this, &CloudPolicyValidatorTest::CheckSuccessfulValidation));
 }
 
+TEST_F(CloudPolicyValidatorTest,
+       SuccessfulRunValidationWithTimestampFromTheFuture) {
+  base::Time timestamp(timestamp_ + base::TimeDelta::FromHours(3));
+  policy_.policy_data().set_timestamp(
+      (timestamp - base::Time::UnixEpoch()).InMilliseconds());
+  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_OK));
+}
+
 TEST_F(CloudPolicyValidatorTest, UsernameCanonicalization) {
   policy_.policy_data().set_username(
       base::ToUpperASCII(PolicyBuilder::kFakeUsername));
@@ -205,25 +214,8 @@ TEST_F(CloudPolicyValidatorTest, IgnoreMissingTimestamp) {
 
 TEST_F(CloudPolicyValidatorTest, ErrorOldTimestamp) {
   base::Time timestamp(timestamp_ - base::TimeDelta::FromMinutes(5));
-  policy_.policy_data().set_timestamp(
-      (timestamp - base::Time::UnixEpoch()).InMilliseconds());
+  policy_.policy_data().set_timestamp(timestamp.ToJavaTime());
   Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_BAD_TIMESTAMP));
-}
-
-TEST_F(CloudPolicyValidatorTest, ErrorTimestampFromTheFuture) {
-  base::Time timestamp(timestamp_ + base::TimeDelta::FromHours(3));
-  policy_.policy_data().set_timestamp(
-      (timestamp - base::Time::UnixEpoch()).InMilliseconds());
-  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_BAD_TIMESTAMP));
-}
-
-TEST_F(CloudPolicyValidatorTest, IgnoreErrorTimestampFromTheFuture) {
-  base::Time timestamp(timestamp_ + base::TimeDelta::FromMinutes(5));
-  timestamp_option_ =
-      CloudPolicyValidatorBase::TIMESTAMP_NOT_BEFORE;
-  policy_.policy_data().set_timestamp(
-      (timestamp - base::Time::UnixEpoch()).InMilliseconds());
-  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_OK));
 }
 
 TEST_F(CloudPolicyValidatorTest, ErrorNoDMToken) {

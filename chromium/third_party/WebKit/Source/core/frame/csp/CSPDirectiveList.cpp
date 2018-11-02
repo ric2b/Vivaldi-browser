@@ -36,7 +36,7 @@ String GetSha256String(const String& content) {
     return "sha256-...";
   }
 
-  return "sha256-" + Base64Encode(reinterpret_cast<char*>(digest.Data()),
+  return "sha256-" + Base64Encode(reinterpret_cast<char*>(digest.data()),
                                   digest.size(), kBase64DoNotInsertLFs);
 }
 
@@ -66,7 +66,7 @@ bool ParseBase64Digest(String base64, DigestValue& hash) {
     return false;
   if (hash_vector.IsEmpty() || hash_vector.size() > kMaxDigestSize)
     return false;
-  hash.Append(reinterpret_cast<uint8_t*>(hash_vector.Data()),
+  hash.Append(reinterpret_cast<uint8_t*>(hash_vector.data()),
               hash_vector.size());
   return true;
 }
@@ -931,7 +931,7 @@ bool CSPDirectiveList::AllowDynamicWorker() const {
 }
 
 const String& CSPDirectiveList::PluginTypesText() const {
-  ASSERT(HasPluginTypes());
+  DCHECK(HasPluginTypes());
   return plugin_types_->GetText();
 }
 
@@ -958,11 +958,11 @@ void CSPDirectiveList::Parse(const UChar* begin, const UChar* end) {
 
     String name, value;
     if (ParseDirective(directive_begin, position, name, value)) {
-      ASSERT(!name.IsEmpty());
+      DCHECK(!name.IsEmpty());
       AddDirective(name, value);
     }
 
-    ASSERT(position == end || *position == ';');
+    DCHECK(position == end || *position == ';');
     skipExactly<UChar>(position, end, ';');
   }
 }
@@ -975,8 +975,8 @@ bool CSPDirectiveList::ParseDirective(const UChar* begin,
                                       const UChar* end,
                                       String& name,
                                       String& value) {
-  ASSERT(name.IsEmpty());
-  ASSERT(value.IsEmpty());
+  DCHECK(name.IsEmpty());
+  DCHECK(value.IsEmpty());
 
   const UChar* position = begin;
   skipWhile<UChar, IsASCIISpace>(position, end);
@@ -1038,7 +1038,7 @@ void CSPDirectiveList::ParseRequireSRIFor(const String& name,
   Vector<UChar> characters;
   value.AppendTo(characters);
 
-  const UChar* position = characters.Data();
+  const UChar* position = characters.data();
   const UChar* end = position + characters.size();
 
   while (position < end) {
@@ -1049,9 +1049,9 @@ void CSPDirectiveList::ParseRequireSRIFor(const String& name,
 
     if (token_begin < position) {
       String token = String(token_begin, position - token_begin);
-      if (DeprecatedEqualIgnoringCase(token, "script")) {
+      if (EqualIgnoringASCIICase(token, "script")) {
         require_sri_for_ |= RequireSRIForToken::kScript;
-      } else if (DeprecatedEqualIgnoringCase(token, "style")) {
+      } else if (EqualIgnoringASCIICase(token, "style")) {
         require_sri_for_ |= RequireSRIForToken::kStyle;
       } else {
         if (number_of_token_errors)
@@ -1097,7 +1097,7 @@ void CSPDirectiveList::ParseReportURI(const String& name, const String& value) {
   Vector<UChar> characters;
   value.AppendTo(characters);
 
-  const UChar* position = characters.Data();
+  const UChar* position = characters.data();
   const UChar* end = position + characters.size();
 
   while (position < end) {
@@ -1152,8 +1152,8 @@ void CSPDirectiveList::ApplySandboxPolicy(const String& name,
   }
   has_sandbox_policy_ = true;
   String invalid_tokens;
-  SpaceSplitString policy_tokens(AtomicString(sandbox_policy),
-                                 SpaceSplitString::kShouldNotFoldCase);
+  SpaceSplitString policy_tokens =
+      SpaceSplitString(AtomicString(sandbox_policy));
   policy_->EnforceSandboxFlags(
       ParseSandboxPolicy(policy_tokens, invalid_tokens));
   if (!invalid_tokens.IsNull())
@@ -1209,7 +1209,7 @@ void CSPDirectiveList::EnableInsecureRequestsUpgrade(const String& name,
 }
 
 void CSPDirectiveList::AddDirective(const String& name, const String& value) {
-  ASSERT(!name.IsEmpty());
+  DCHECK(!name.IsEmpty());
 
   ContentSecurityPolicy::DirectiveType type =
       ContentSecurityPolicy::GetDirectiveType(name);

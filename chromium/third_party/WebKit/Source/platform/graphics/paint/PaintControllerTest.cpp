@@ -78,7 +78,7 @@ class TestDisplayItem final : public DisplayItem {
   String trace = String::Format("%d: ", (int)i) +            \
                  "Expected: " + (expected).AsDebugString() + \
                  " Actual: " + (actual).AsDebugString();     \
-  SCOPED_TRACE(trace.Utf8().Data());
+  SCOPED_TRACE(trace.Utf8().data());
 #else
 #define TRACE_DISPLAY_ITEMS(i, expected, actual)
 #endif
@@ -1776,7 +1776,8 @@ TEST_P(PaintControllerTest, PartialSkipCache) {
 
   // Content's cache is invalid because it has display items skipped cache.
   EXPECT_FALSE(GetPaintController().ClientCacheIsValid(content));
-  EXPECT_EQ(kPaintInvalidationFull, content.GetPaintInvalidationReason());
+  EXPECT_EQ(PaintInvalidationReason::kFull,
+            content.GetPaintInvalidationReason());
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     GetPaintController().UpdateCurrentPaintChunkProperties(
@@ -2056,6 +2057,49 @@ TEST_F(PaintControllerTestBase,
   }
 }
 
+TEST_F(PaintControllerTestBase, BeginAndEndFrame) {
+  class FakeFrame {};
+
+  // PaintController should have one null frame in the stack since beginning.
+  GetPaintController().SetFirstPainted();
+  FrameFirstPaint result = GetPaintController().EndFrame(nullptr);
+  EXPECT_TRUE(result.first_painted);
+  EXPECT_FALSE(result.text_painted);
+  EXPECT_FALSE(result.image_painted);
+  // Readd the null frame.
+  GetPaintController().BeginFrame(nullptr);
+
+  std::unique_ptr<FakeFrame> frame1(new FakeFrame);
+  GetPaintController().BeginFrame(frame1.get());
+  GetPaintController().SetFirstPainted();
+  GetPaintController().SetTextPainted();
+  GetPaintController().SetImagePainted();
+
+  result = GetPaintController().EndFrame(frame1.get());
+  EXPECT_TRUE(result.first_painted);
+  EXPECT_TRUE(result.text_painted);
+  EXPECT_TRUE(result.image_painted);
+
+  std::unique_ptr<FakeFrame> frame2(new FakeFrame);
+  GetPaintController().BeginFrame(frame2.get());
+  GetPaintController().SetFirstPainted();
+
+  std::unique_ptr<FakeFrame> frame3(new FakeFrame);
+  GetPaintController().BeginFrame(frame3.get());
+  GetPaintController().SetTextPainted();
+  GetPaintController().SetImagePainted();
+
+  result = GetPaintController().EndFrame(frame3.get());
+  EXPECT_FALSE(result.first_painted);
+  EXPECT_TRUE(result.text_painted);
+  EXPECT_TRUE(result.image_painted);
+
+  result = GetPaintController().EndFrame(frame2.get());
+  EXPECT_TRUE(result.first_painted);
+  EXPECT_FALSE(result.text_painted);
+  EXPECT_FALSE(result.image_painted);
+}
+
 // Death tests don't work properly on Android.
 #if defined(GTEST_HAS_DEATH_TEST) && !OS(ANDROID)
 
@@ -2273,44 +2317,10 @@ class PaintControllerUnderInvalidationTest
     DisplayItemClient::EndShouldKeepAliveAllClients();
 #endif
   }
-
-  void TestFoldCompositingDrawingInSubsequence() {
-    FakeDisplayItemClient container("container");
-    FakeDisplayItemClient content("content");
-    GraphicsContext context(GetPaintController());
-
-    {
-      SubsequenceRecorder subsequence(context, container);
-      CompositingRecorder compositing(context, content, SkBlendMode::kSrc, 0.5);
-      DrawRect(context, content, kBackgroundDrawingType,
-               FloatRect(100, 100, 300, 300));
-    }
-    GetPaintController().CommitNewDisplayItems();
-    EXPECT_EQ(
-        1u,
-        GetPaintController().GetPaintArtifact().GetDisplayItemList().size());
-
-    {
-      EXPECT_FALSE(SubsequenceRecorder::UseCachedSubsequenceIfPossible(
-          context, container));
-      SubsequenceRecorder subsequence(context, container);
-      CompositingRecorder compositing(context, content, SkBlendMode::kSrc, 0.5);
-      DrawRect(context, content, kBackgroundDrawingType,
-               FloatRect(100, 100, 300, 300));
-    }
-    GetPaintController().CommitNewDisplayItems();
-    EXPECT_EQ(
-        1u,
-        GetPaintController().GetPaintArtifact().GetDisplayItemList().size());
-
-#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
-    DisplayItemClient::EndShouldKeepAliveAllClients();
-#endif
-  }
 };
 
 TEST_F(PaintControllerUnderInvalidationTest, ChangeDrawing) {
-  EXPECT_DEATH(TestChangeDrawing(), "under-invalidation: display item changed");
+  EXPECT_DEATH(TestChangeDrawing(), "");
 }
 
 TEST_F(PaintControllerUnderInvalidationTest, MoreDrawing) {
@@ -2331,29 +2341,22 @@ TEST_F(PaintControllerUnderInvalidationTest, NoopPairsInSubsequence) {
 }
 
 TEST_F(PaintControllerUnderInvalidationTest, ChangeDrawingInSubsequence) {
-  EXPECT_DEATH(TestChangeDrawingInSubsequence(),
-               "\"\\(In cached subsequence of first\\)\" under-invalidation: "
-               "display item changed");
+  EXPECT_DEATH(TestChangeDrawingInSubsequence(), "");
 }
 
 TEST_F(PaintControllerUnderInvalidationTest, MoreDrawingInSubsequence) {
-  EXPECT_DEATH(TestMoreDrawingInSubsequence(),
-               "Check failed: false. Can't find cached display item");
+  EXPECT_DEATH(TestMoreDrawingInSubsequence(), "");
 }
 
 TEST_F(PaintControllerUnderInvalidationTest, LessDrawingInSubsequence) {
   // We allow invalidated display item clients as long as they would produce the
   // same display items. The cases of changed display items are tested by other
   // test cases.
-  EXPECT_DEATH(TestLessDrawingInSubsequence(),
-               "\"\\(In cached subsequence of first\\)\" under-invalidation: "
-               "new subsequence wrong length");
+  EXPECT_DEATH(TestLessDrawingInSubsequence(), "");
 }
 
 TEST_F(PaintControllerUnderInvalidationTest, ChangeNonCacheableInSubsequence) {
-  EXPECT_DEATH(TestChangeNonCacheableInSubsequence(),
-               "\"\\(In cached subsequence of container\\)\" "
-               "under-invalidation: display item changed");
+  EXPECT_DEATH(TestChangeNonCacheableInSubsequence(), "");
 }
 
 TEST_F(PaintControllerUnderInvalidationTest, InvalidationInSubsequence) {
@@ -2361,11 +2364,6 @@ TEST_F(PaintControllerUnderInvalidationTest, InvalidationInSubsequence) {
   // same display items. The cases of changed display items are tested by other
   // test cases.
   TestInvalidationInSubsequence();
-}
-
-TEST_F(PaintControllerUnderInvalidationTest,
-       FoldCompositingDrawingInSubsequence) {
-  TestFoldCompositingDrawingInSubsequence();
 }
 
 #endif  // defined(GTEST_HAS_DEATH_TEST) && !OS(ANDROID)

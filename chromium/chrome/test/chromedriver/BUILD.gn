@@ -184,7 +184,7 @@ source_set("automation_client_lib") {
     "//net",
     "//third_party/WebKit/public:features",
     "//third_party/zlib:minizip",
-    "//third_party/zlib:zip",
+    "//third_party/zlib/google:zip",
     "//ui/accessibility:ax_gen",
     "//ui/base",
     "//ui/gfx",
@@ -224,6 +224,8 @@ source_set("lib") {
     "capabilities.h",
     "chrome/browser_info.cc",
     "chrome/browser_info.h",
+    "chrome/scoped_temp_dir_with_retry.cc",
+    "chrome/scoped_temp_dir_with_retry.h",
     "chrome_launcher.cc",
     "chrome_launcher.h",
     "command.h",
@@ -232,6 +234,8 @@ source_set("lib") {
     "command_listener_proxy.h",
     "commands.cc",
     "commands.h",
+    "devtools_events_logger.cc",
+    "devtools_events_logger.h",
     "element_commands.cc",
     "element_commands.h",
     "element_util.cc",
@@ -313,7 +317,7 @@ executable("chromedriver") {
 
   deps = [
     ":lib",
-    "//build/config/sanitizers:deps",
+    "//build/config:exe_and_shlib_deps",
     "//build/win:default_exe_manifest",
   ]
 }

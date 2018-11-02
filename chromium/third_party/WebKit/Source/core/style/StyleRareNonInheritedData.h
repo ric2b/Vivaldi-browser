@@ -42,6 +42,7 @@
 #include "core/style/StyleScrollSnapData.h"
 #include "core/style/StyleSelfAlignmentData.h"
 #include "platform/LengthPoint.h"
+#include "platform/graphics/TouchAction.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
 #include "platform/wtf/Vector.h"
@@ -103,9 +104,6 @@ class CORE_EXPORT StyleRareNonInheritedData
   bool TransitionDataEquivalent(const StyleRareNonInheritedData&) const;
   bool ShapeOutsideDataEquivalent(const StyleRareNonInheritedData&) const;
   bool ClipPathDataEquivalent(const StyleRareNonInheritedData&) const;
-  bool HasFilters() const;
-  bool HasBackdropFilters() const;
-  bool HasOpacity() const { return opacity < 1; }
 
   float opacity;  // Whether or not we're transparent.
 

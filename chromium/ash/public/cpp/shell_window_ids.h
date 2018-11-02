@@ -14,128 +14,138 @@
 
 namespace ash {
 
-// Used to indicate no shell window id.
-const int32_t kShellWindowId_Invalid = -1;
+enum ShellWindowId {
+  // Used to indicate no shell window id.
+  kShellWindowId_Invalid = -1,
 
-// A higher-level container that holds all of the containers stacked below
-// kShellWindowId_LockScreenContainer.  Only used by PowerButtonController for
-// animating lower-level containers.
-const int32_t kShellWindowId_NonLockScreenContainersContainer = 0;
+  // The screen rotation container in between root window and its children, used
+  // for screen rotation animation.
+  kShellWindowId_ScreenRotationContainer = 0,
 
-// A higher-level container that holds containers that hold lock-screen
-// windows.  Only used by PowerButtonController for animating lower-level
-// containers.
-const int32_t kShellWindowId_LockScreenContainersContainer = 1;
+  // A higher-level container that holds all of the containers stacked below
+  // kShellWindowId_LockScreenContainer.  Only used by PowerButtonController for
+  // animating lower-level containers.
+  kShellWindowId_NonLockScreenContainersContainer,
 
-// A higher-level container that holds containers that hold lock-screen-related
-// windows (which we want to display while the screen is locked; effectively
-// containers stacked above kShellWindowId_LockSystemModalContainer).  Only used
-// by PowerButtonController for animating lower-level containers.
-const int32_t kShellWindowId_LockScreenRelatedContainersContainer = 2;
+  // A higher-level container that holds containers that hold lock-screen
+  // windows.  Only used by PowerButtonController for animating lower-level
+  // containers.
+  kShellWindowId_LockScreenContainersContainer,
 
-// A container used for windows of WINDOW_TYPE_CONTROL that have no parent.
-// This container is not visible.
-const int32_t kShellWindowId_UnparentedControlContainer = 3;
+  // A higher-level container that holds containers that hold
+  // lock-screen-related
+  // windows (which we want to display while the screen is locked, effectively
+  // containers stacked above kShellWindowId_LockSystemModalContainer).  Only
+  // used by PowerButtonController for animating lower-level containers.
+  kShellWindowId_LockScreenRelatedContainersContainer,
 
-// The wallpaper (desktop background) window.
-const int32_t kShellWindowId_WallpaperContainer = 4;
+  // A container used for windows of WINDOW_TYPE_CONTROL that have no parent.
+  // This container is not visible.
+  kShellWindowId_UnparentedControlContainer,
 
-// The virtual keyboard container.
-// NOTE: this is lazily created.
-const int32_t kShellWindowId_VirtualKeyboardContainer = 5;
+  // The wallpaper (desktop background) window.
+  kShellWindowId_WallpaperContainer,
 
-// The container for standard top-level windows.
-const int32_t kShellWindowId_DefaultContainer = 6;
+  // The virtual keyboard container.
+  // NOTE: this is lazily created.
+  kShellWindowId_VirtualKeyboardContainer,
 
-// The container for top-level windows with the 'always-on-top' flag set.
-const int32_t kShellWindowId_AlwaysOnTopContainer = 7;
+  // The container for standard top-level windows.
+  kShellWindowId_DefaultContainer,
 
-// The container for the shelf.
-const int32_t kShellWindowId_ShelfContainer = 8;
+  // The container for top-level windows with the 'always-on-top' flag set.
+  kShellWindowId_AlwaysOnTopContainer,
 
-// The container for bubbles which float over the shelf.
-const int32_t kShellWindowId_ShelfBubbleContainer = 9;
+  // The container for the shelf.
+  kShellWindowId_ShelfContainer,
 
-// The container for panel windows.
-const int32_t kShellWindowId_PanelContainer = 10;
+  // The container for bubbles which float over the shelf.
+  kShellWindowId_ShelfBubbleContainer,
 
-// The container for the app list.
-const int32_t kShellWindowId_AppListContainer = 11;
+  // The container for panel windows.
+  kShellWindowId_PanelContainer,
 
-// The container for user-specific modal windows.
-const int32_t kShellWindowId_SystemModalContainer = 12;
+  // The container for the app list.
+  kShellWindowId_AppListContainer,
 
-// The container for the lock screen wallpaper (lock screen background).
-const int32_t kShellWindowId_LockScreenWallpaperContainer = 13;
+  // The container for user-specific modal windows.
+  kShellWindowId_SystemModalContainer,
 
-// The container for the lock screen.
-const int32_t kShellWindowId_LockScreenContainer = 14;
+  // The container for the lock screen wallpaper (lock screen background).
+  kShellWindowId_LockScreenWallpaperContainer,
 
-// The container for the lock screen modal windows.
-const int32_t kShellWindowId_LockSystemModalContainer = 15;
+  // The container for the lock screen.
+  kShellWindowId_LockScreenContainer,
 
-// The container for the status area.
-const int32_t kShellWindowId_StatusContainer = 16;
+  // The container for the lock screen modal windows.
+  kShellWindowId_LockSystemModalContainer,
 
-// A parent container that holds the virtual keyboard container and ime windows
-// if any. This is to ensure that the virtual keyboard or ime window is stacked
-// above most containers but below the mouse cursor and the power off animation.
-const int32_t kShellWindowId_ImeWindowParentContainer = 17;
+  // The container for the status area.
+  kShellWindowId_StatusContainer,
 
-// The container for menus.
-const int32_t kShellWindowId_MenuContainer = 18;
+  // A parent container that holds the virtual keyboard container and ime
+  // windows if any. This is to ensure that the virtual keyboard or ime window
+  // is stacked above most containers but below the mouse cursor and the power
+  // off animation.
+  kShellWindowId_ImeWindowParentContainer,
 
-// The container for drag/drop images and tooltips.
-const int32_t kShellWindowId_DragImageAndTooltipContainer = 19;
+  // The container for menus.
+  kShellWindowId_MenuContainer,
 
-// The container for bubbles briefly overlaid onscreen to show settings changes
-// (volume, brightness, input method bubbles, etc.).
-const int32_t kShellWindowId_SettingBubbleContainer = 20;
+  // The container for drag/drop images and tooltips.
+  kShellWindowId_DragImageAndTooltipContainer,
 
-// The container for special components overlaid onscreen, such as the
-// region selector for partial screenshots.
-const int32_t kShellWindowId_OverlayContainer = 21;
+  // The container for bubbles briefly overlaid onscreen to show settings
+  // changes (volume, brightness, input method bubbles, etc.).
+  kShellWindowId_SettingBubbleContainer,
 
-// ID of the window created by PhantomWindowController or DragWindowController.
-const int32_t kShellWindowId_PhantomWindow = 22;
+  // The container for special components overlaid onscreen, such as the
+  // region selector for partial screenshots.
+  kShellWindowId_OverlayContainer,
 
-// The container for mouse cursor.
-const int32_t kShellWindowId_MouseCursorContainer = 23;
+  // ID of the window created by PhantomWindowController or
+  // DragWindowController.
+  kShellWindowId_PhantomWindow,
 
-// The topmost container, used for power off animation.
-const int32_t kShellWindowId_PowerButtonAnimationContainer = 24;
+  // The container for mouse cursor.
+  kShellWindowId_MouseCursorContainer,
 
-const int32_t kShellWindowId_Min = 0;
-const int32_t kShellWindowId_Max = kShellWindowId_PowerButtonAnimationContainer;
+  // The topmost container, used for power off animation.
+  kShellWindowId_PowerButtonAnimationContainer,
+
+  kShellWindowId_Min = kShellWindowId_ScreenRotationContainer,
+  kShellWindowId_Max = kShellWindowId_PowerButtonAnimationContainer,
+};
 
 // A list of all the above valid container IDs. Add any new ID to this list.
 // This list is needed to validate we have no duplicate IDs.
 const int32_t kAllShellContainerIds[] = {
-  kShellWindowId_NonLockScreenContainersContainer,
-  kShellWindowId_LockScreenContainersContainer,
-  kShellWindowId_LockScreenRelatedContainersContainer,
-  kShellWindowId_UnparentedControlContainer,
-  kShellWindowId_WallpaperContainer,
-  kShellWindowId_VirtualKeyboardContainer,
-  kShellWindowId_DefaultContainer,
-  kShellWindowId_AlwaysOnTopContainer,
-  kShellWindowId_ShelfContainer,
-  kShellWindowId_ShelfBubbleContainer,
-  kShellWindowId_PanelContainer,
-  kShellWindowId_AppListContainer,
-  kShellWindowId_SystemModalContainer,
-  kShellWindowId_LockScreenWallpaperContainer,
-  kShellWindowId_LockScreenContainer,
-  kShellWindowId_LockSystemModalContainer,
-  kShellWindowId_StatusContainer,
-  kShellWindowId_ImeWindowParentContainer,
-  kShellWindowId_MenuContainer,
-  kShellWindowId_DragImageAndTooltipContainer,
-  kShellWindowId_SettingBubbleContainer,
-  kShellWindowId_OverlayContainer,
-  kShellWindowId_PhantomWindow,
-  kShellWindowId_MouseCursorContainer,
-  kShellWindowId_PowerButtonAnimationContainer,
+    kShellWindowId_ScreenRotationContainer,
+    kShellWindowId_NonLockScreenContainersContainer,
+    kShellWindowId_LockScreenContainersContainer,
+    kShellWindowId_LockScreenRelatedContainersContainer,
+    kShellWindowId_UnparentedControlContainer,
+    kShellWindowId_WallpaperContainer,
+    kShellWindowId_VirtualKeyboardContainer,
+    kShellWindowId_DefaultContainer,
+    kShellWindowId_AlwaysOnTopContainer,
+    kShellWindowId_ShelfContainer,
+    kShellWindowId_ShelfBubbleContainer,
+    kShellWindowId_PanelContainer,
+    kShellWindowId_AppListContainer,
+    kShellWindowId_SystemModalContainer,
+    kShellWindowId_LockScreenWallpaperContainer,
+    kShellWindowId_LockScreenContainer,
+    kShellWindowId_LockSystemModalContainer,
+    kShellWindowId_StatusContainer,
+    kShellWindowId_ImeWindowParentContainer,
+    kShellWindowId_MenuContainer,
+    kShellWindowId_DragImageAndTooltipContainer,
+    kShellWindowId_SettingBubbleContainer,
+    kShellWindowId_OverlayContainer,
+    kShellWindowId_PhantomWindow,
+    kShellWindowId_MouseCursorContainer,
+    kShellWindowId_PowerButtonAnimationContainer,
 };
 
 // These are the list of container ids of containers which may contain windows

@@ -15,7 +15,7 @@ namespace ash {
 class TrayNetworkStateObserver;
 
 namespace tray {
-class NetworkDetailedView;
+class VPNListView;
 class VpnDefaultView;
 }
 
@@ -26,21 +26,17 @@ class TrayVPN : public SystemTrayItem,
   ~TrayVPN() override;
 
   // SystemTrayItem
-  views::View* CreateTrayView(LoginStatus status) override;
   views::View* CreateDefaultView(LoginStatus status) override;
   views::View* CreateDetailedView(LoginStatus status) override;
-  void DestroyTrayView() override;
   void DestroyDefaultView() override;
   void DestroyDetailedView() override;
-  void UpdateAfterLoginStatusChange(LoginStatus status) override;
-  void UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) override;
 
   // TrayNetworkStateObserver::Delegate
   void NetworkStateChanged() override;
 
  private:
   tray::VpnDefaultView* default_;
-  tray::NetworkDetailedView* detailed_;
+  tray::VPNListView* detailed_;
   std::unique_ptr<TrayNetworkStateObserver> network_state_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayVPN);

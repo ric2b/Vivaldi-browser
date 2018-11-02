@@ -9,6 +9,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -292,6 +293,8 @@ TEST_F(RenderWidgetCompositorFrameSinkTest, FailOnceBind) {
   RunTest(false, 1, 1, 0);
 }
 
+// Android doesn't support fallback frame sinks. (crbug.com/721102)
+#ifndef OS_ANDROID
 TEST_F(RenderWidgetCompositorFrameSinkTest, FallbackSuccessNull) {
   RunTest(true,
           RenderWidgetCompositor::COMPOSITOR_FRAME_SINK_RETRIES_BEFORE_FALLBACK,
@@ -310,6 +313,7 @@ TEST_F(RenderWidgetCompositorFrameSinkTest, FallbackSuccessNormalSuccess) {
           RenderWidgetCompositor::COMPOSITOR_FRAME_SINK_RETRIES_BEFORE_FALLBACK,
           1, 1);
 }
+#endif
 
 }  // namespace
 }  // namespace content

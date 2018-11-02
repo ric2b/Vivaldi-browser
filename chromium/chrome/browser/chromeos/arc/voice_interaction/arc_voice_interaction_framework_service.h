@@ -42,12 +42,25 @@ class ArcVoiceInteractionFrameworkService
   void CaptureFocusedWindow(
       const CaptureFocusedWindowCallback& callback) override;
   void CaptureFullscreen(const CaptureFullscreenCallback& callback) override;
+  void OnMetalayerClosed() override;
+  void SetMetalayerEnabled(bool enabled) override;
 
-  // Whether enable-voice-interaction switch is present.
-  static bool IsVoiceInteractionEnabled();
+  bool IsMetalayerSupported();
+  void ShowMetalayer(const base::Closure& closed);
+  void HideMetalayer();
+
+  // Start the voice interaction session through mojom call.
+  void StartVoiceInteractionSession();
+
+  // For supporting ArcServiceManager::GetService<T>().
+  static const char kArcServiceName[];
 
  private:
+  void SetMetalayerVisibility(bool visible);
+
   mojo::Binding<mojom::VoiceInteractionFrameworkHost> binding_;
+  base::Closure metalayer_closed_callback_;
+  bool metalayer_enabled_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ArcVoiceInteractionFrameworkService);
 };

@@ -62,7 +62,7 @@ void FrameRequestCallbackCollection::ExecuteCallbacks(
   // First, generate a list of callbacks to consider.  Callbacks registered from
   // this point on are considered only for the "next" frame, not this one.
   DCHECK(callbacks_to_invoke_.IsEmpty());
-  callbacks_to_invoke_.Swap(callbacks_);
+  callbacks_to_invoke_.swap(callbacks_);
 
   for (const auto& callback : callbacks_to_invoke_) {
     if (!callback->cancelled_) {
@@ -78,7 +78,7 @@ void FrameRequestCallbackCollection::ExecuteCallbacks(
     }
   }
 
-  callbacks_to_invoke_.Clear();
+  callbacks_to_invoke_.clear();
 }
 
 DEFINE_TRACE(FrameRequestCallbackCollection) {

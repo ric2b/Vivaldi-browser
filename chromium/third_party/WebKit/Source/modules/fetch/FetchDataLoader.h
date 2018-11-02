@@ -8,6 +8,7 @@
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/streams/Stream.h"
 #include "modules/ModulesExport.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "platform/blob/BlobData.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
@@ -15,6 +16,7 @@
 namespace blink {
 
 class BytesConsumer;
+class FormData;
 
 // FetchDataLoader subclasses
 // 1. take a BytesConsumer,
@@ -40,10 +42,11 @@ class MODULES_EXPORT FetchDataLoader
     virtual void DidFetchDataLoadedArrayBuffer(DOMArrayBuffer*) {
       NOTREACHED();
     }
+    virtual void DidFetchDataLoadedFormData(FormData*) { NOTREACHED(); }
     virtual void DidFetchDataLoadedString(const String&) { NOTREACHED(); }
     // This is called after all data are read from |handle| and written
-    // to |outStream|, and |outStream| is closed or aborted.
-    virtual void DidFetchDataLoadedStream() { NOTREACHED(); }
+    // to |out_data_pipe|, and |out_data_pipe| is closed or aborted.
+    virtual void DidFetchDataLoadedDataPipe() { NOTREACHED(); }
 
     // This function is called when a "custom" FetchDataLoader (none of the
     // ones listed above) finishes loading.
@@ -56,8 +59,13 @@ class MODULES_EXPORT FetchDataLoader
 
   static FetchDataLoader* CreateLoaderAsBlobHandle(const String& mime_type);
   static FetchDataLoader* CreateLoaderAsArrayBuffer();
+  static FetchDataLoader* CreateLoaderAsFailure();
+  static FetchDataLoader* CreateLoaderAsFormData(
+      const String& multipart_boundary);
   static FetchDataLoader* CreateLoaderAsString();
-  static FetchDataLoader* CreateLoaderAsStream(Stream*);
+  static FetchDataLoader* CreateLoaderAsDataPipe(
+      mojo::ScopedDataPipeProducerHandle out_data_pipe);
+
   virtual ~FetchDataLoader() {}
 
   // |consumer| must not have a client when called.

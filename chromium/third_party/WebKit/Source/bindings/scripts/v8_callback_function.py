@@ -12,16 +12,16 @@ import v8_utilities  # pylint: disable=W0403
 
 CALLBACK_FUNCTION_H_INCLUDES = frozenset([
     'bindings/core/v8/NativeValueTraits.h',
-    'bindings/core/v8/ScriptWrappable.h',
-    'bindings/core/v8/TraceWrapperV8Reference.h',
+    'platform/bindings/ScriptWrappable.h',
+    'platform/bindings/TraceWrapperV8Reference.h',
     'platform/heap/Handle.h',
     'platform/wtf/text/WTFString.h',
 ])
 CALLBACK_FUNCTION_CPP_INCLUDES = frozenset([
     'bindings/core/v8/ExceptionState.h',
-    'bindings/core/v8/ScriptState.h',
+    'platform/bindings/ScriptState.h',
     'bindings/core/v8/ToV8ForCore.h',
-    'bindings/core/v8/V8Binding.h',
+    'bindings/core/v8/V8BindingForCore.h',
     'core/dom/ExecutionContext.h',
     'platform/wtf/Assertions.h',
 ])
@@ -32,11 +32,10 @@ def callback_function_context(callback_function):
     includes.update(CALLBACK_FUNCTION_CPP_INCLUDES)
     idl_type = callback_function.idl_type
     idl_type_str = str(idl_type)
-    forward_declarations = []
+
     for argument in callback_function.arguments:
-        if argument.idl_type.is_interface_type:
-            forward_declarations.append(argument.idl_type)
-        argument.idl_type.add_includes_for_type(callback_function.extended_attributes)
+        argument.idl_type.add_includes_for_type(
+            callback_function.extended_attributes)
 
     context = {
         # While both |callback_function_name| and |cpp_class| are identical at
@@ -46,7 +45,7 @@ def callback_function_context(callback_function):
         'callback_function_name': callback_function.name,
         'cpp_class': callback_function.name,
         'cpp_includes': sorted(includes),
-        'forward_declarations': sorted(forward_declarations),
+        'forward_declarations': sorted(forward_declarations(callback_function)),
         'header_includes': sorted(CALLBACK_FUNCTION_H_INCLUDES),
         'idl_type': idl_type_str,
     }
@@ -57,7 +56,7 @@ def callback_function_context(callback_function):
             'return_value': idl_type.v8_value_to_local_cpp_value(
                 callback_function.extended_attributes,
                 'v8ReturnValue', 'cppValue',
-                isolate='m_scriptState->GetIsolate()',
+                isolate='script_state_->GetIsolate()',
                 bailout_return_value='false'),
         })
 
@@ -65,13 +64,29 @@ def callback_function_context(callback_function):
     return context
 
 
+def forward_declarations(callback_function):
+    def find_interface_name(idl_type):
+        if idl_type.is_interface_type:
+            return idl_type.implemented_as
+        elif idl_type.is_array_or_sequence_type:
+            return find_interface_name(idl_type.element_type)
+        return None
+
+    declarations = []
+    for argument in callback_function.arguments:
+        name = find_interface_name(argument.idl_type)
+        if name:
+            declarations.append(name)
+    return declarations
+
+
 def arguments_context(arguments, return_cpp_type):
     def argument_context(argument):
         return {
             'argument_name': '%sArgument' % argument.name,
             'cpp_value_to_v8_value': argument.idl_type.cpp_value_to_v8_value(
-                argument.name, isolate='m_scriptState->GetIsolate()',
-                creation_context='m_scriptState->GetContext()->Global()'),
+                argument.name, isolate='script_state_->GetIsolate()',
+                creation_context='script_state_->GetContext()->Global()'),
         }
 
     argument_declarations = [

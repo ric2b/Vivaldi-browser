@@ -129,6 +129,7 @@ OrientationSensor::OrientationSensor(ExecutionContext* execution_context,
 
 void OrientationSensor::OnSensorReadingChanged() {
   reading_dirty_ = true;
+  Sensor::OnSensorReadingChanged();
 }
 
 DEFINE_TRACE(OrientationSensor) {

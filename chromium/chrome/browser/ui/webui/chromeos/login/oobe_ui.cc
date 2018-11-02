@@ -51,6 +51,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/network_dropdown_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
+#include "chrome/browser/ui/webui/chromeos/login/oobe_display_chooser.h"
 #include "chrome/browser/ui/webui/chromeos/login/reset_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/supervised_user_creation_screen_handler.h"
@@ -78,6 +79,9 @@
 #include "content/public/common/content_switches.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/display/display.h"
+#include "ui/events/devices/input_device.h"
+#include "ui/events/devices/input_device_manager.h"
 
 namespace chromeos {
 
@@ -124,6 +128,8 @@ const char kProductLogoPath[] = "product-logo.png";
 content::WebUIDataSource* CreateOobeUIDataSource(
     const base::DictionaryValue& localized_strings,
     const std::string& display_type) {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIOobeHost);
   source->AddLocalizedStrings(localized_strings);
@@ -136,20 +142,35 @@ content::WebUIDataSource* CreateOobeUIDataSource(
                             IDR_CUSTOM_ELEMENTS_OOBE_HTML);
     source->AddResourcePath(kCustomElementsJSPath, IDR_CUSTOM_ELEMENTS_OOBE_JS);
   } else if (display_type == OobeUI::kLockDisplay) {
-    source->SetDefaultResource(IDR_LOCK_HTML);
-    source->AddResourcePath(kLockJSPath, IDR_LOCK_JS);
+    if (command_line->HasSwitch(chromeos::switches::kShowNonViewMdLogin)) {
+      source->SetDefaultResource(IDR_MD_LOCK_HTML);
+      source->AddResourcePath(kLockJSPath, IDR_MD_LOCK_JS);
+      source->AddResourcePath(kCustomElementsPinKeyboardHTMLPath,
+                              IDR_MD_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML);
+      source->AddResourcePath(kCustomElementsPinKeyboardJSPath,
+                              IDR_MD_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS);
+    } else {
+      source->SetDefaultResource(IDR_LOCK_HTML);
+      source->AddResourcePath(kLockJSPath, IDR_LOCK_JS);
+      source->AddResourcePath(kCustomElementsPinKeyboardHTMLPath,
+                              IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML);
+      source->AddResourcePath(kCustomElementsPinKeyboardJSPath,
+                              IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS);
+    }
     source->AddResourcePath(kCustomElementsHTMLPath,
                             IDR_CUSTOM_ELEMENTS_LOCK_HTML);
     source->AddResourcePath(kCustomElementsJSPath, IDR_CUSTOM_ELEMENTS_LOCK_JS);
-    source->AddResourcePath(kCustomElementsPinKeyboardHTMLPath,
-                            IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML);
-    source->AddResourcePath(kCustomElementsPinKeyboardJSPath,
-                            IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS);
     source->AddResourcePath(kCustomElementsUserPodHTMLPath,
                             IDR_CUSTOM_ELEMENTS_USER_POD_HTML);
   } else {
-    source->SetDefaultResource(IDR_LOGIN_HTML);
-    source->AddResourcePath(kLoginJSPath, IDR_LOGIN_JS);
+    if (command_line->HasSwitch(chromeos::switches::kShowMdLogin) ||
+        command_line->HasSwitch(chromeos::switches::kShowNonViewMdLogin)) {
+      source->SetDefaultResource(IDR_MD_LOGIN_HTML);
+      source->AddResourcePath(kLoginJSPath, IDR_MD_LOGIN_JS);
+    } else {
+      source->SetDefaultResource(IDR_LOGIN_HTML);
+      source->AddResourcePath(kLoginJSPath, IDR_LOGIN_JS);
+    }
     source->AddResourcePath(kCustomElementsHTMLPath,
                             IDR_CUSTOM_ELEMENTS_LOGIN_HTML);
     source->AddResourcePath(kCustomElementsJSPath,
@@ -181,7 +202,6 @@ content::WebUIDataSource* CreateOobeUIDataSource(
   source->AddResourcePath(kEnrollmentJSPath, IDR_OOBE_ENROLLMENT_JS);
 
   // Only add a filter when runing as test.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   const bool is_running_test = command_line->HasSwitch(::switches::kTestName) ||
                                command_line->HasSwitch(::switches::kTestType);
   if (is_running_test)
@@ -199,6 +219,14 @@ std::string GetDisplayType(const GURL& url) {
     return OobeUI::kLoginDisplay;
   }
   return path;
+}
+
+bool IsRemoraRequisitioned() {
+  policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
+      g_browser_process->platform_part()
+          ->browser_policy_connector_chromeos()
+          ->GetDeviceCloudPolicyManager();
+  return policy_manager && policy_manager->IsRemoraRequisition();
 }
 
 }  // namespace
@@ -331,6 +359,11 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
   // TabHelper is required for OOBE webui to make webview working on it.
   content::WebContents* contents = web_ui->GetWebContents();
   extensions::TabHelper::CreateForWebContents(contents);
+
+  // TODO(felixe): Display iteration and primary display selection not supported
+  // in Mash. See http://crbug.com/720917.
+  if (!ash_util::IsRunningInMash() && IsRemoraRequisitioned())
+    oobe_display_chooser_ = base::MakeUnique<OobeDisplayChooser>();
 }
 
 OobeUI::~OobeUI() {
@@ -554,6 +587,9 @@ bool OobeUI::IsJSReady(const base::Closure& display_is_ready_callback) {
 
 void OobeUI::ShowOobeUI(bool show) {
   core_handler_->ShowOobeUI(show);
+
+  if (show && oobe_display_chooser_)
+    oobe_display_chooser_->TryToPlaceUiOnTouchDisplay();
 }
 
 void OobeUI::ShowSigninScreen(const LoginScreenContext& context,
@@ -600,6 +636,11 @@ void OobeUI::UpdateLocalizedStringsIfNeeded() {
   base::DictionaryValue localized_strings;
   GetLocalizedStrings(&localized_strings);
   static_cast<CoreOobeView*>(core_handler_)->ReloadContent(localized_strings);
+}
+
+void OobeUI::OnDisplayConfigurationChanged() {
+  if (oobe_display_chooser_)
+    oobe_display_chooser_->TryToPlaceUiOnTouchDisplay();
 }
 
 }  // namespace chromeos

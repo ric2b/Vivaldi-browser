@@ -396,6 +396,13 @@ void TemplateURLService::AddMatchingDomainKeywords(
 
 TemplateURL* TemplateURLService::GetTemplateURLForKeyword(
     const base::string16& keyword) {
+  return const_cast<TemplateURL*>(
+      static_cast<const TemplateURLService*>(this)->
+          GetTemplateURLForKeyword(keyword));
+}
+
+const TemplateURL* TemplateURLService::GetTemplateURLForKeyword(
+    const base::string16& keyword) const {
   KeywordToTURLAndMeaningfulLength::const_iterator elem(
       keyword_to_turl_and_length_.find(keyword));
   if (elem != keyword_to_turl_and_length_.end())
@@ -408,6 +415,13 @@ TemplateURL* TemplateURLService::GetTemplateURLForKeyword(
 
 TemplateURL* TemplateURLService::GetTemplateURLForGUID(
     const std::string& sync_guid) {
+return const_cast<TemplateURL*>(
+      static_cast<const TemplateURLService*>(this)->
+          GetTemplateURLForGUID(sync_guid));
+}
+
+const TemplateURL* TemplateURLService::GetTemplateURLForGUID(
+    const std::string& sync_guid) const {
   GUIDToTURL::const_iterator elem(guid_to_turl_.find(sync_guid));
   if (elem != guid_to_turl_.end())
     return elem->second;
@@ -419,6 +433,13 @@ TemplateURL* TemplateURLService::GetTemplateURLForGUID(
 
 TemplateURL* TemplateURLService::GetTemplateURLForHost(
     const std::string& host) {
+  return const_cast<TemplateURL*>(
+      static_cast<const TemplateURLService*>(this)->
+          GetTemplateURLForHost(host));
+}
+
+const TemplateURL* TemplateURLService::GetTemplateURLForHost(
+    const std::string& host) const {
   if (loaded_)
     return provider_map_->GetTemplateURLForHost(host);
   TemplateURL* initial_dsp = initial_default_search_provider_.get();
@@ -431,6 +452,13 @@ TemplateURL* TemplateURLService::GetTemplateURLForHost(
 
 TemplateURL* TemplateURLService::Add(
     std::unique_ptr<TemplateURL> template_url) {
+  DCHECK(template_url);
+  DCHECK(
+      !IsCreatedByExtension(template_url.get()) ||
+      (!FindTemplateURLForExtension(template_url->extension_info_->extension_id,
+                                    template_url->type()) &&
+       template_url->id() == kInvalidTemplateURLID));
+
   KeywordWebDataService::BatchModeScoper scoper(web_data_service_.get());
   TemplateURL* template_url_ptr = AddNoNotify(std::move(template_url), true);
   if (template_url_ptr)
@@ -449,21 +477,6 @@ TemplateURL* TemplateURLService::AddWithOverrides(
   template_url->data_.SetShortName(short_name);
   template_url->data_.SetKeyword(keyword);
   template_url->SetURL(url);
-  return Add(std::move(template_url));
-}
-
-TemplateURL* TemplateURLService::AddExtensionControlledTURL(
-    std::unique_ptr<TemplateURL> template_url,
-    std::unique_ptr<TemplateURL::AssociatedExtensionInfo> info) {
-  DCHECK(template_url);
-  DCHECK_EQ(kInvalidTemplateURLID, template_url->id());
-  DCHECK(info);
-  DCHECK_NE(TemplateURL::NORMAL, template_url->type());
-  DCHECK(
-      !FindTemplateURLForExtension(info->extension_id, template_url->type()));
-
-  template_url->extension_info_.swap(info);
-
   return Add(std::move(template_url));
 }
 
@@ -534,12 +547,9 @@ void TemplateURLService::RegisterOmniboxKeyword(
   data.SetShortName(base::UTF8ToUTF16(extension_name));
   data.SetKeyword(base::UTF8ToUTF16(keyword));
   data.SetURL(template_url_string);
-  std::unique_ptr<TemplateURL::AssociatedExtensionInfo> info(
-      new TemplateURL::AssociatedExtensionInfo(extension_id));
-  info->install_time = extension_install_time;
-  AddExtensionControlledTURL(
-      base::MakeUnique<TemplateURL>(data, TemplateURL::OMNIBOX_API_EXTENSION),
-      std::move(info));
+  Add(base::MakeUnique<TemplateURL>(data, TemplateURL::OMNIBOX_API_EXTENSION,
+                                    extension_id, extension_install_time,
+                                    false));
 }
 
 TemplateURLService::TemplateURLVector TemplateURLService::GetTemplateURLs() {
@@ -602,11 +612,6 @@ void TemplateURLService::SetUserSelectedDefaultSearchProvider(
     else
       default_search_manager_.ClearUserSelectedDefaultSearchEngine();
   }
-}
-
-TemplateURL* TemplateURLService::GetDefaultSearchProvider() {
-  return const_cast<TemplateURL*>(
-      static_cast<const TemplateURLService*>(this)->GetDefaultSearchProvider());
 }
 
 const TemplateURL* TemplateURLService::GetDefaultSearchProvider() const {
@@ -851,10 +856,7 @@ void TemplateURLService::OnWebDataServiceRequestDone(
 base::string16 TemplateURLService::GetKeywordShortName(
     const base::string16& keyword,
     bool* is_omnibox_api_extension_keyword) const {
-  // TODO(jeffschiller): Make GetTemplateURLForKeyword const and remove the
-  // const_cast.
-  const TemplateURL* template_url =
-      const_cast<TemplateURLService*>(this)->GetTemplateURLForKeyword(keyword);
+  const TemplateURL* template_url = GetTemplateURLForKeyword(keyword);
 
   // TODO(sky): Once LocationBarView adds a listener to the TemplateURLService
   // to track changes to the model, this should become a DCHECK.
@@ -1264,7 +1266,7 @@ TemplateURLService::CreateTemplateURLFromTemplateURLAndSyncData(
     TemplateURLServiceClient* client,
     PrefService* prefs,
     const SearchTermsData& search_terms_data,
-    TemplateURL* existing_turl,
+    const TemplateURL* existing_turl,
     const syncer::SyncData& sync_data,
     syncer::SyncChangeList* change_list) {
   DCHECK(change_list);
@@ -1921,7 +1923,7 @@ bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
     // mainly so we can hold ownership until we get to the point where the list
     // of keywords from Web Data is the owner of everything including the
     // default.
-    bool changed = TemplateURL::MatchesData(
+    bool changed = !TemplateURL::MatchesData(
         initial_default_search_provider_.get(), data, search_terms_data());
     TemplateURL::Type initial_engine_type =
         (source == DefaultSearchManager::FROM_EXTENSION)
@@ -1985,11 +1987,8 @@ bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
       // (1) Tests that initialize the TemplateURLService in peculiar ways.
       // (2) If the user deleted the pre-populated default and we subsequently
       // lost their user-selected value.
-      std::unique_ptr<TemplateURL> new_dse_ptr =
-          base::MakeUnique<TemplateURL>(*data);
-      TemplateURL* new_dse = new_dse_ptr.get();
-      if (AddNoNotify(std::move(new_dse_ptr), true))
-        default_search_provider_ = new_dse;
+      default_search_provider_ =
+          AddNoNotify(base::MakeUnique<TemplateURL>(*data), true);
     }
   } else if (source == DefaultSearchManager::FROM_USER) {
     default_search_provider_ = GetTemplateURLForGUID(data->sync_guid);
@@ -2002,11 +2001,8 @@ bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
       UpdateNoNotify(default_search_provider_, TemplateURL(new_data));
     } else {
       new_data.id = kInvalidTemplateURLID;
-      std::unique_ptr<TemplateURL> new_dse_ptr =
-          base::MakeUnique<TemplateURL>(new_data);
-      TemplateURL* new_dse = new_dse_ptr.get();
-      if (AddNoNotify(std::move(new_dse_ptr), true))
-        default_search_provider_ = new_dse;
+      default_search_provider_ =
+          AddNoNotify(base::MakeUnique<TemplateURL>(new_data), true);
     }
     if (default_search_provider_ && prefs_) {
       prefs_->SetString(prefs::kSyncedDefaultSearchProviderGUID,
@@ -2237,10 +2233,7 @@ bool TemplateURLService::IsLocalTemplateURLBetter(
     const TemplateURL* local_turl,
     const TemplateURL* sync_turl,
     bool prefer_local_default) const {
-  // TODO(jeffschiller): Make GetTemplateURLForKeyword const and remove the
-  // const_cast.
-  DCHECK(const_cast<TemplateURLService*>(this)->GetTemplateURLForGUID(
-          local_turl->sync_guid()));
+  DCHECK(GetTemplateURLForGUID(local_turl->sync_guid()));
   return local_turl->last_modified() > sync_turl->last_modified() ||
          local_turl->created_by_policy() ||
          (prefer_local_default && local_turl == GetDefaultSearchProvider());
@@ -2418,7 +2411,7 @@ void TemplateURLService::OnSyncedDefaultSearchProviderGUIDChanged() {
     return;
   }
 
-  TemplateURL* turl = GetTemplateURLForGUID(new_guid);
+  const TemplateURL* turl = GetTemplateURLForGUID(new_guid);
   if (turl)
     default_search_manager_.SetUserSelectedDefaultSearchEngine(turl->data());
 }

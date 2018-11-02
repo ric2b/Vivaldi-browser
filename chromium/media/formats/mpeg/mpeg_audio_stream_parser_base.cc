@@ -54,6 +54,7 @@ MPEGAudioStreamParserBase::MPEGAudioStreamParserBase(uint32_t start_code_mask,
                                                      AudioCodec audio_codec,
                                                      int codec_delay)
     : state_(UNINITIALIZED),
+      media_log_(nullptr),
       in_media_segment_(false),
       start_code_mask_(start_code_mask),
       audio_codec_(audio_codec),
@@ -69,7 +70,7 @@ void MPEGAudioStreamParserBase::Init(
     const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
     const NewMediaSegmentCB& new_segment_cb,
     const EndMediaSegmentCB& end_of_segment_cb,
-    const scoped_refptr<MediaLog>& media_log) {
+    MediaLog* media_log) {
   DVLOG(1) << __func__;
   DCHECK_EQ(state_, UNINITIALIZED);
   init_cb_ = init_cb;

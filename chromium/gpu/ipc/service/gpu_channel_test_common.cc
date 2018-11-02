@@ -79,11 +79,12 @@ GpuChannelTestCommon::GpuChannelTestCommon()
           new GpuChannelManager(GpuPreferences(),
                                 GpuDriverBugWorkarounds(),
                                 channel_manager_delegate_.get(),
-                                nullptr /* watchdog */,
+                                nullptr, /* watchdog */
                                 task_runner_.get(),
                                 io_task_runner_.get(),
+                                nullptr, /* scheduler */
                                 sync_point_manager_.get(),
-                                nullptr /* gpu_memory_buffer_factory */,
+                                nullptr, /* gpu_memory_buffer_factory */
                                 GpuFeatureInfo(),
                                 GpuProcessActivityFlags())) {
   // We need GL bindings to actually initialize command buffers.
@@ -126,7 +127,7 @@ void GpuChannelTestCommon::HandleMessage(GpuChannel* channel,
   msg->set_unblock(false);
 
   // Message filter gets message first on IO thread.
-  channel->filter()->OnMessageReceived(*msg);
+  channel->HandleMessageForTesting(*msg);
 
   // Run the HandleMessage task posted to the main thread.
   task_runner()->RunPendingTasks();
@@ -156,9 +157,7 @@ void GpuChannelTestCommon::HandleMessage(GpuChannel* channel,
 base::SharedMemoryHandle GpuChannelTestCommon::GetSharedHandle() {
   base::SharedMemory shared_memory;
   shared_memory.CreateAnonymous(10);
-  base::SharedMemoryHandle shmem_handle;
-  shared_memory.ShareToProcess(base::GetCurrentProcessHandle(), &shmem_handle);
-  return shmem_handle;
+  return shared_memory.handle().Duplicate();
 }
 
 }  // namespace gpu

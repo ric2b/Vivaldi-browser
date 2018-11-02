@@ -13,8 +13,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
-#include "chrome/browser/ui/webui/ntp/ntp_user_data_logger.h"
-#include "chrome/common/search/ntp_logging_events.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 
@@ -32,6 +30,10 @@ void MetricsHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "metricsHandler:recordInHistogram",
       base::Bind(&MetricsHandler::HandleRecordInHistogram,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "metricsHandler:recordBooleanHistogram",
+      base::Bind(&MetricsHandler::HandleRecordBooleanHistogram,
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "metricsHandler:recordTime",
@@ -78,6 +80,19 @@ void MetricsHandler::HandleRecordInHistogram(const base::ListValue* args) {
           histogram_name, 1, int_boundary_value, bucket_count + 1,
           base::HistogramBase::kUmaTargetedHistogramFlag);
   counter->Add(int_value);
+}
+
+void MetricsHandler::HandleRecordBooleanHistogram(const base::ListValue* args) {
+  std::string histogram_name;
+  bool value;
+  if (!args->GetString(0, &histogram_name) || !args->GetBoolean(1, &value)) {
+    NOTREACHED();
+    return;
+  }
+
+  base::HistogramBase* counter = base::BooleanHistogram::FactoryGet(
+      histogram_name, base::HistogramBase::kUmaTargetedHistogramFlag);
+  counter->AddBoolean(value);
 }
 
 void MetricsHandler::HandleRecordTime(const base::ListValue* args) {

@@ -6,6 +6,7 @@
 
 #include "platform_media/gpu/pipeline/win/wmf_media_pipeline.h"
 
+#include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_constants.h"
 #include "platform_media/common/platform_mime_util.h"
 #include "platform_media/common/win/mf_util.h"
@@ -353,7 +354,8 @@ WMFMediaPipeline::DXVAPictureBuffer::Create(
   dxva_picture_buffer->decoding_surface_ =
       eglCreatePbufferSurface(egl_display, egl_config, attrib_list);
   if (!dxva_picture_buffer->decoding_surface_) {
-    DLOG(ERROR) << "Failed to create surface";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to create surface";
     return nullptr;
   }
 
@@ -365,7 +367,8 @@ WMFMediaPipeline::DXVAPictureBuffer::Create(
       EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE, &share_handle);
 
   if (!share_handle || ret != EGL_TRUE) {
-    DLOG(ERROR) << "Failed to query ANGLE surface pointer";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to query ANGLE surface pointer";
     return nullptr;
   }
 
@@ -373,11 +376,12 @@ WMFMediaPipeline::DXVAPictureBuffer::Create(
       dxva_picture_buffer->texture_size_.width(),
       dxva_picture_buffer->texture_size_.height(), 1, D3DUSAGE_RENDERTARGET,
       dxva_picture_buffer->use_rgb_ ? D3DFMT_X8R8G8B8 : D3DFMT_A8R8G8B8,
-      D3DPOOL_DEFAULT, dxva_picture_buffer->decoding_texture_.Receive(),
+      D3DPOOL_DEFAULT, dxva_picture_buffer->decoding_texture_.GetAddressOf(),
       &share_handle);
 
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create texture";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to create texture";
     return nullptr;
   }
 
@@ -393,7 +397,8 @@ bool WMFMediaPipeline::DXVAPictureBuffer::Fill(
   D3DSURFACE_DESC surface_desc;
   HRESULT hr = source_surface->GetDesc(&surface_desc);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to get surface description";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to get surface description";
     return false;
   }
 
@@ -402,7 +407,8 @@ bool WMFMediaPipeline::DXVAPictureBuffer::Fill(
       D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, surface_desc.Format,
       use_rgb_ ? D3DFMT_X8R8G8B8 : D3DFMT_A8R8G8B8);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Device does not support format converision";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Device does not support format converision";
     return false;
   }
 
@@ -415,16 +421,18 @@ bool WMFMediaPipeline::DXVAPictureBuffer::Fill(
                   GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
   base::win::ScopedComPtr<IDirect3DSurface9> d3d_surface;
-  hr = decoding_texture_->GetSurfaceLevel(0, d3d_surface.Receive());
+  hr = decoding_texture_->GetSurfaceLevel(0, d3d_surface.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to get surface from texture";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to get surface from texture";
     return false;
   }
 
   hr = direct3d_context.device->StretchRect(
-      source_surface, NULL, d3d_surface.get(), NULL, D3DTEXF_NONE);
+      source_surface, NULL, d3d_surface.Get(), NULL, D3DTEXF_NONE);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Colorspace conversion via StretchRect failed";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Colorspace conversion via StretchRect failed";
     return false;
   }
 
@@ -432,7 +440,8 @@ bool WMFMediaPipeline::DXVAPictureBuffer::Fill(
   // the texture. Flush it once here though.
   hr = direct3d_context.query->Issue(D3DISSUE_END);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to issue END";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to issue END";
     return false;
   }
 
@@ -474,9 +483,10 @@ void WMFMediaPipeline::DXVAPictureBuffer::Reuse() {
 }
 
 bool WMFMediaPipeline::Direct3DContext::Initialize() {
-  HRESULT hr = Direct3DCreate9Ex(D3D_SDK_VERSION, d3d9.Receive());
+  HRESULT hr = Direct3DCreate9Ex(D3D_SDK_VERSION, d3d9.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Direct3DCreate9Ex failed";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Direct3DCreate9Ex failed";
     return false;
   }
 
@@ -494,34 +504,39 @@ bool WMFMediaPipeline::Direct3DContext::Initialize() {
                             ::GetShellWindow(),
                             D3DCREATE_FPU_PRESERVE | D3DCREATE_MULTITHREADED |
                                 D3DCREATE_MIXED_VERTEXPROCESSING,
-                            &present_params, NULL, device.Receive());
+                            &present_params, NULL, device.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create D3D device";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to create D3D device";
     return false;
   }
 
   hr = DXVA2CreateDirect3DDeviceManager9(&dev_manager_reset_token,
-                                         device_manager.Receive());
+                                         device_manager.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "DXVA2CreateDirect3DDeviceManager9 failed";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " DXVA2CreateDirect3DDeviceManager9 failed";
     return false;
   }
 
-  hr = device_manager->ResetDevice(device.get(), dev_manager_reset_token);
+  hr = device_manager->ResetDevice(device.Get(), dev_manager_reset_token);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to reset device";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to reset device";
     return false;
   }
 
-  hr = device->CreateQuery(D3DQUERYTYPE_EVENT, query.Receive());
+  hr = device->CreateQuery(D3DQUERYTYPE_EVENT, query.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create D3D device query";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to create D3D device query";
     return false;
   }
   // Ensure query API works.
   hr = query->Issue(D3DISSUE_END);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to issue END test query";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to issue END test query";
     return false;
   }
 
@@ -605,7 +620,7 @@ WMFMediaPipeline::InitializationResult WMFMediaPipeline::CreateSourceReader(
     const scoped_refptr<WMFByteStream>& byte_stream,
     const base::win::ScopedComPtr<IMFAttributes>& attributes,
     media::PlatformMediaDecodingMode preferred_decoding_mode) {
-  DVLOG(1) << __FUNCTION__;
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
   DCHECK(attributes);
 
   if (preferred_decoding_mode == media::PlatformMediaDecodingMode::HARDWARE) {
@@ -617,9 +632,10 @@ WMFMediaPipeline::InitializationResult WMFMediaPipeline::CreateSourceReader(
   // Fall back to SW SourceReader.
   InitializationResult result;
   const HRESULT hr = MFCreateSourceReaderFromByteStream(
-      byte_stream.get(), attributes.get(), result.source_reader.Receive());
+      byte_stream.get(), attributes.Get(), result.source_reader.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create source reader.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to create source reader.";
     // We use (result.source_reader != NULL) as status.
     result.source_reader.Reset();
   }
@@ -632,42 +648,47 @@ bool WMFMediaPipeline::CreateDXVASourceReader(
     const scoped_refptr<WMFByteStream>& byte_stream,
     const base::win::ScopedComPtr<IMFAttributes>& attributes,
     InitializationResult* result) {
-  DVLOG(1) << __FUNCTION__;
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
   DCHECK(attributes);
 
   if (!result->direct3d_context.Initialize())
     return false;
 
   base::win::ScopedComPtr<IMFAttributes> attributes_hw;
-  HRESULT hr = MFCreateAttributes(attributes_hw.Receive(), 1);
+  HRESULT hr = MFCreateAttributes(attributes_hw.GetAddressOf(), 1);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create source reader attributes.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to create source reader attributes.";
     return false;
   }
 
-  hr = attributes->CopyAllItems(attributes_hw.get());
+  hr = attributes->CopyAllItems(attributes_hw.Get());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create source reader attributes.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to create source reader attributes.";
     return false;
   }
 
   hr = attributes_hw->SetUnknown(MF_SOURCE_READER_D3D_MANAGER,
-                                 result->direct3d_context.device_manager.get());
+                                 result->direct3d_context.device_manager.Get());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to set d3d device manager attribute.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to set d3d device manager attribute.";
     return false;
   }
 
   hr = attributes_hw->SetUINT32(MF_SOURCE_READER_DISABLE_DXVA, FALSE);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to set DXVA attribute.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to set DXVA attribute.";
     return false;
   }
 
   hr = MFCreateSourceReaderFromByteStream(
-      byte_stream.get(), attributes_hw.get(), result->source_reader.Receive());
+      byte_stream.get(), attributes_hw.Get(), result->source_reader.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create source reader with DXVA support.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to create source reader with DXVA support.";
     return false;
   }
 
@@ -684,7 +705,7 @@ bool WMFMediaPipeline::CreateDXVASourceReader(
 void WMFMediaPipeline::Initialize(const std::string& mime_type,
                                   const InitializeCB& initialize_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!source_reader_.get());
+  DCHECK(!source_reader_.Get());
   DCHECK(data_source_);
 
   // For diagnostics, the attempted video decoding mode is at least as
@@ -713,7 +734,8 @@ bool WMFMediaPipeline::InitializeImpl(const std::string& mime_type,
                                     "evr.dll"));
 
   if (!has_platform_support || !get_stride_function_) {
-    DVLOG(1) << "Can't access required media libraries in the system";
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Can't access required media libraries in the system";
     return false;
   }
 
@@ -721,14 +743,16 @@ bool WMFMediaPipeline::InitializeImpl(const std::string& mime_type,
 
   base::win::ScopedComPtr<IMFAttributes> source_reader_attributes;
   if (!CreateSourceReaderCallbackAndAttributes(&source_reader_attributes)) {
-    DVLOG(1) << "Failed to create source reader attributes";
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Failed to create source reader attributes";
     return false;
   }
 
   byte_stream_ = new WMFByteStream(data_source_);
   if (FAILED(byte_stream_->Initialize(
           std::wstring(mime_type.begin(), mime_type.end()).c_str()))) {
-    DVLOG(1) << "Failed to create byte stream.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to create byte stream.";
     return false;
   }
 
@@ -738,8 +762,11 @@ bool WMFMediaPipeline::InitializeImpl(const std::string& mime_type,
   // read some data (using our |byte_stream_|) and blocks current thread. As
   // we want WMFByteStream::OnReadSample to run on |media_pipeline-thread| we
   // need to move SourceReader creation to separate thread to avoid deadlock.
-  if (!source_reader_creation_thread_.Start())
+  if (!source_reader_creation_thread_.Start()) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Failed to start source reader creation thread";
     return false;
+  }
 
   return base::PostTaskAndReplyWithResult(
       source_reader_creation_thread_.task_runner().get(), FROM_HERE,
@@ -752,7 +779,6 @@ bool WMFMediaPipeline::InitializeImpl(const std::string& mime_type,
 void WMFMediaPipeline::FinalizeInitialization(
     const InitializeCB& initialize_cb,
     const InitializationResult& result) {
-  DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   source_reader_creation_thread_.Stop();
@@ -766,6 +792,8 @@ void WMFMediaPipeline::FinalizeInitialization(
   video_config_.decoding_mode = result.video_decoding_mode;
 
   if (!result.source_reader) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " No source reader";
     initialize_cb.Run(false, bitrate, time_info, audio_config, video_config_);
     return;
   }
@@ -775,12 +803,15 @@ void WMFMediaPipeline::FinalizeInitialization(
   source_reader_output_video_format_ = result.source_reader_output_video_format;
 
   if (!RetrieveStreamIndices()) {
-    DVLOG(1) << "Failed to find streams";
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Failed to find streams";
     initialize_cb.Run(false, bitrate, time_info, audio_config, video_config_);
     return;
   }
 
   if (!ConfigureSourceReader()) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Failed configure source reader";
     initialize_cb.Run(false, bitrate, time_info, audio_config, video_config_);
     return;
   }
@@ -790,6 +821,8 @@ void WMFMediaPipeline::FinalizeInitialization(
 
   if (HasMediaStream(media::PLATFORM_MEDIA_AUDIO)) {
     if (!GetAudioDecoderConfig(&audio_config)) {
+      LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                   << " Failed to get Audio Decoder Config";
       initialize_cb.Run(false, bitrate, time_info, audio_config, video_config_);
       return;
     }
@@ -797,10 +830,19 @@ void WMFMediaPipeline::FinalizeInitialization(
 
   if (HasMediaStream(media::PLATFORM_MEDIA_VIDEO)) {
     if (!GetVideoDecoderConfig(&video_config_)) {
+      LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                   << " Failed to get Video Decoder Config";
       initialize_cb.Run(false, bitrate, time_info, audio_config, video_config_);
       return;
     }
   }
+
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " FinalizeInitialization successful with PlatformAudioConfig :"
+          << Loggable(audio_config);
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " FinalizeInitialization successful with PlatformVideoConfig :"
+          << Loggable(video_config_);
 
   initialize_cb.Run(true, bitrate, time_info, audio_config, video_config_);
 }
@@ -808,7 +850,7 @@ void WMFMediaPipeline::FinalizeInitialization(
 void WMFMediaPipeline::ReadAudioData(const ReadDataCB& read_audio_data_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(read_audio_data_cb_.is_null());
-  DCHECK(source_reader_.get());
+  DCHECK(source_reader_.Get());
 
   // We might have some data ready to send.
   if (pending_decoded_data_[media::PLATFORM_MEDIA_AUDIO]) {
@@ -823,7 +865,8 @@ void WMFMediaPipeline::ReadAudioData(const ReadDataCB& read_audio_data_cb) {
       source_reader_->ReadSample(stream_indices_[media::PLATFORM_MEDIA_AUDIO],
                                  0, nullptr, nullptr, nullptr, nullptr);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to read audio sample";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to read audio sample";
     read_audio_data_cb.Run(nullptr);
     return;
   }
@@ -846,15 +889,19 @@ void WMFMediaPipeline::ReadVideoData(const ReadDataCB& read_video_data_cb,
 
   if (video_config_.decoding_mode ==
       media::PlatformMediaDecodingMode::HARDWARE) {
+
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Call GetDXVAPictureBuffer with texture id " << texture_id;
     current_dxva_picture_buffer_ = GetDXVAPictureBuffer(texture_id);
     if (!current_dxva_picture_buffer_) {
-      DLOG(ERROR) << "Failed to create DXVAPictureBuffer.";
+      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Failed to create DXVAPictureBuffer.";
       read_video_data_cb.Run(nullptr);
       return;
     }
   }
 
-  DCHECK(source_reader_.get());
+  DCHECK(source_reader_.Get());
 
   // Read the next sample using asynchronous mode.
   // http://msdn.microsoft.com/en-us/library/windows/desktop/gg583871(v=vs.85).aspx
@@ -862,7 +909,8 @@ void WMFMediaPipeline::ReadVideoData(const ReadDataCB& read_video_data_cb,
       source_reader_->ReadSample(stream_indices_[media::PLATFORM_MEDIA_VIDEO],
                                  0, nullptr, nullptr, nullptr, nullptr);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to read video sample";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to read video sample";
     read_video_data_cb.Run(nullptr);
     return;
   }
@@ -893,7 +941,7 @@ void WMFMediaPipeline::OnReadSample(
   switch (status) {
     case media::kOk:
       DCHECK(sample);
-      data_buffer = CreateDataBuffer(sample.get(), media_type);
+      data_buffer = CreateDataBuffer(sample.Get(), media_type);
       break;
 
     case media::kEOS:
@@ -901,6 +949,8 @@ void WMFMediaPipeline::OnReadSample(
       break;
 
     case media::kError:
+      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " status media::kError";
       break;
 
     case media::kConfigChanged: {
@@ -908,17 +958,21 @@ void WMFMediaPipeline::OnReadSample(
       // that configuration has changed. We need to buffer the sample and
       // send it during next read operation.
       pending_decoded_data_[media_type] =
-          CreateDataBuffer(sample.get(), media_type);
+          CreateDataBuffer(sample.Get(), media_type);
 
       if (media_type == media::PLATFORM_MEDIA_AUDIO) {
         media::PlatformAudioConfig audio_config;
         if (GetAudioDecoderConfig(&audio_config)) {
+          VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                  << Loggable(audio_config);
           read_audio_data_cb_.Reset();
           audio_config_changed_cb_.Run(audio_config);
           return;
         }
 
-        DLOG(ERROR) << "Error while getting decoder audio configuration.";
+        LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                   << " Error while getting decoder audio configuration"
+                   << " changing status to media::kError";
         status = media::kError;
         break;
       } else if (media_type == media::PLATFORM_MEDIA_VIDEO) {
@@ -930,7 +984,9 @@ void WMFMediaPipeline::OnReadSample(
           return;
         }
 
-        DLOG(ERROR) << "Error while getting decoder video configuration.";
+        LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                   << " Error while getting decoder video configuration"
+                   << " changing status to media::kError";
         status = media::kError;
         break;
       }
@@ -951,9 +1007,10 @@ scoped_refptr<media::DataBuffer> WMFMediaPipeline::CreateDataBufferFromMemory(
     IMFSample* sample) {
   // Get a pointer to the IMFMediaBuffer in the sample.
   base::win::ScopedComPtr<IMFMediaBuffer> output_buffer;
-  HRESULT hr = sample->ConvertToContiguousBuffer(output_buffer.Receive());
+  HRESULT hr = sample->ConvertToContiguousBuffer(output_buffer.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to get pointer to data in sample.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to get pointer to data in sample.";
     return nullptr;
   }
 
@@ -962,7 +1019,8 @@ scoped_refptr<media::DataBuffer> WMFMediaPipeline::CreateDataBufferFromMemory(
   DWORD data_size = 0;
   hr = output_buffer->Lock(&data, NULL, &data_size);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to lock buffer.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to lock buffer.";
     return nullptr;
   }
   scoped_refptr<media::DataBuffer> data_buffer =
@@ -983,23 +1041,25 @@ scoped_refptr<media::DataBuffer> WMFMediaPipeline::CreateDataBufferFromTexture(
     return nullptr;
 
   base::win::ScopedComPtr<IMFMediaBuffer> output_buffer;
-  HRESULT hr = sample->GetBufferByIndex(0, output_buffer.Receive());
+  HRESULT hr = sample->GetBufferByIndex(0, output_buffer.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to get buffer from output sample.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to get buffer from output sample.";
     return nullptr;
   }
 
   base::win::ScopedComPtr<IDirect3DSurface9> surface;
-  hr = MFGetService(output_buffer.get(), MR_BUFFER_SERVICE,
-                    IID_PPV_ARGS(surface.Receive()));
+  hr = MFGetService(output_buffer.Get(), MR_BUFFER_SERVICE,
+                    IID_PPV_ARGS(surface.GetAddressOf()));
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to get D3D surface from output sample.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to get D3D surface from output sample.";
     return nullptr;
   }
 
   // TODO(ggacek): verify surface size matches texture in buffer.
   if (!current_dxva_picture_buffer_->Fill(*(direct3d_context_.get()),
-                                          surface.get())) {
+                                          surface.Get())) {
     return nullptr;
   }
 
@@ -1092,7 +1152,7 @@ void WMFMediaPipeline::SetNoMediaStream(media::PlatformMediaDataType type) {
 bool WMFMediaPipeline::GetAudioDecoderConfig(
     media::PlatformAudioConfig* audio_config) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.get());
+  DCHECK(source_reader_.Get());
 
   // In case of some audio streams SourceReader might not get everything
   // right just from examining the stream (i.e. during initialization), so some
@@ -1104,29 +1164,34 @@ bool WMFMediaPipeline::GetAudioDecoderConfig(
 
   base::win::ScopedComPtr<IMFMediaType> media_type;
   HRESULT hr = source_reader_->GetCurrentMediaType(
-      stream_indices_[media::PLATFORM_MEDIA_AUDIO], media_type.Receive());
+      stream_indices_[media::PLATFORM_MEDIA_AUDIO], media_type.GetAddressOf());
   if (FAILED(hr) || !media_type) {
-    DLOG(ERROR) << "Failed to obtain audio media type.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to obtain audio media type.";
     return false;
   }
 
   audio_config->channel_count =
-      MFGetAttributeUINT32(media_type.get(), MF_MT_AUDIO_NUM_CHANNELS, 0);
+      MFGetAttributeUINT32(media_type.Get(), MF_MT_AUDIO_NUM_CHANNELS, 0);
   if (audio_config->channel_count == 0) {
     audio_config->channel_count = NumberOfSetBits(
-        MFGetAttributeUINT32(media_type.get(), MF_MT_AUDIO_CHANNEL_MASK, 0));
+        MFGetAttributeUINT32(media_type.Get(), MF_MT_AUDIO_CHANNEL_MASK, 0));
   }
 
   audio_timestamp_calculator_->SetChannelCount(audio_config->channel_count);
 
   audio_timestamp_calculator_->SetBytesPerSample(
-      MFGetAttributeUINT32(media_type.get(), MF_MT_AUDIO_BITS_PER_SAMPLE, 16) /
+      MFGetAttributeUINT32(media_type.Get(), MF_MT_AUDIO_BITS_PER_SAMPLE, 16) /
       8);
 
   audio_config->samples_per_second =
-      MFGetAttributeUINT32(media_type.get(), MF_MT_AUDIO_SAMPLES_PER_SECOND, 0);
+      MFGetAttributeUINT32(media_type.Get(), MF_MT_AUDIO_SAMPLES_PER_SECOND, 0);
   audio_timestamp_calculator_->SetSamplesPerSecond(
       audio_config->samples_per_second);
+
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " Created a PlatformAudioConfig from IMFMediaType attributes :"
+          << Loggable(*audio_config);
 
   return true;
 }
@@ -1134,7 +1199,7 @@ bool WMFMediaPipeline::GetAudioDecoderConfig(
 bool WMFMediaPipeline::GetVideoDecoderConfig(
     media::PlatformVideoConfig* video_config) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.get());
+  DCHECK(source_reader_.Get());
 
   // In case of some video streams SourceReader might not get everything
   // right just from examining the stream (i.e. during initialization), so some
@@ -1144,18 +1209,20 @@ bool WMFMediaPipeline::GetVideoDecoderConfig(
 
   base::win::ScopedComPtr<IMFMediaType> media_type;
   HRESULT hr = source_reader_->GetCurrentMediaType(
-      stream_indices_[media::PLATFORM_MEDIA_VIDEO], media_type.Receive());
+      stream_indices_[media::PLATFORM_MEDIA_VIDEO], media_type.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to obtain video media type.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to obtain video media type.";
     return false;
   }
 
   uint32_t frame_width = 0;
   uint32_t frame_height = 0;
-  hr = MFGetAttributeSize(media_type.get(), MF_MT_FRAME_SIZE, &frame_width,
+  hr = MFGetAttributeSize(media_type.Get(), MF_MT_FRAME_SIZE, &frame_width,
                           &frame_height);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to obtain width and height.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to obtain width and height.";
     return false;
   }
 
@@ -1168,7 +1235,7 @@ bool WMFMediaPipeline::GetVideoDecoderConfig(
 
   MFVideoArea video_area;
   uint32_t pan_scan_enabled =
-      MFGetAttributeUINT32(media_type.get(), MF_MT_PAN_SCAN_ENABLED, FALSE);
+      MFGetAttributeUINT32(media_type.Get(), MF_MT_PAN_SCAN_ENABLED, FALSE);
   if (pan_scan_enabled) {
     hr = media_type->GetBlob(MF_MT_PAN_SCAN_APERTURE,
                              reinterpret_cast<uint8_t*>(&video_area),
@@ -1210,10 +1277,11 @@ bool WMFMediaPipeline::GetVideoDecoderConfig(
 
   uint32_t aspect_numerator = 0;
   uint32_t aspect_denominator = 0;
-  hr = MFGetAttributeRatio(media_type.get(), MF_MT_PIXEL_ASPECT_RATIO,
+  hr = MFGetAttributeRatio(media_type.Get(), MF_MT_PIXEL_ASPECT_RATIO,
                            &aspect_numerator, &aspect_denominator);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to obtain pixel aspect ratio.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to obtain pixel aspect ratio.";
     return false;
   }
 
@@ -1260,7 +1328,7 @@ bool WMFMediaPipeline::GetVideoDecoderConfig(
   video_config->planes[media::VideoFrame::kUPlane].size =
       rows * video_config->planes[media::VideoFrame::kUPlane].stride;
 
-  switch (MFGetAttributeUINT32(media_type.get(), MF_MT_VIDEO_ROTATION,
+  switch (MFGetAttributeUINT32(media_type.Get(), MF_MT_VIDEO_ROTATION,
                                MFVideoRotationFormat_0)) {
     case MFVideoRotationFormat_90:
       video_config->rotation = media::VIDEO_ROTATION_90;
@@ -1285,13 +1353,13 @@ bool WMFMediaPipeline::GetVideoDecoderConfig(
 bool WMFMediaPipeline::CreateSourceReaderCallbackAndAttributes(
     base::win::ScopedComPtr<IMFAttributes>* attributes) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!source_reader_callback_.get());
+  DCHECK(!source_reader_callback_.Get());
 
   source_reader_callback_ =
       new SourceReaderCallback(media::BindToCurrentLoop(base::Bind(
           &WMFMediaPipeline::OnReadSample, weak_ptr_factory_.GetWeakPtr())));
 
-  HRESULT hr = MFCreateAttributes((*attributes).Receive(), 1);
+  HRESULT hr = MFCreateAttributes((*attributes).GetAddressOf(), 1);
   if (FAILED(hr)) {
     source_reader_callback_.Reset();
     return false;
@@ -1299,7 +1367,7 @@ bool WMFMediaPipeline::CreateSourceReaderCallbackAndAttributes(
 
   hr = (*attributes)
            ->SetUnknown(MF_SOURCE_READER_ASYNC_CALLBACK,
-                        source_reader_callback_.get());
+                        source_reader_callback_.Get());
   if (FAILED(hr))
     return false;
 
@@ -1308,7 +1376,7 @@ bool WMFMediaPipeline::CreateSourceReaderCallbackAndAttributes(
 
 bool WMFMediaPipeline::RetrieveStreamIndices() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.get());
+  DCHECK(source_reader_.Get());
 
   DWORD stream_index = 0;
   HRESULT hr = S_OK;
@@ -1317,7 +1385,7 @@ bool WMFMediaPipeline::RetrieveStreamIndices() {
            HasMediaStream(media::PLATFORM_MEDIA_VIDEO))) {
     base::win::ScopedComPtr<IMFMediaType> media_type;
     hr = source_reader_->GetNativeMediaType(
-        stream_index, 0, media_type.Receive());
+        stream_index, 0, media_type.GetAddressOf());
 
     if (hr == MF_E_INVALIDSTREAMNUMBER)
       break;  // No more streams.
@@ -1346,7 +1414,7 @@ bool WMFMediaPipeline::RetrieveStreamIndices() {
 
 bool WMFMediaPipeline::ConfigureStream(DWORD stream_index) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.get());
+  DCHECK(source_reader_.Get());
   DCHECK(stream_index == stream_indices_[media::PLATFORM_MEDIA_AUDIO] ||
          stream_index == stream_indices_[media::PLATFORM_MEDIA_VIDEO]);
   bool is_video = stream_index == stream_indices_[media::PLATFORM_MEDIA_VIDEO];
@@ -1355,25 +1423,28 @@ bool WMFMediaPipeline::ConfigureStream(DWORD stream_index) {
     base::win::ScopedComPtr<IMFMediaType> input_video_type;
     HRESULT hr = source_reader_->GetCurrentMediaType(
         stream_indices_[media::PLATFORM_MEDIA_VIDEO],
-        input_video_type.Receive());
+        input_video_type.GetAddressOf());
     if (FAILED(hr)) {
-      DVLOG(1) << "Failed to obtain video media type. No video track?";
+      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Failed to obtain video media type. No video track?";
       return false;
     }
     input_video_type->GetGUID(MF_MT_SUBTYPE, &input_video_subtype_guid_);
   }
 
   base::win::ScopedComPtr<IMFMediaType> new_current_media_type;
-  HRESULT hr = MFCreateMediaType(new_current_media_type.Receive());
+  HRESULT hr = MFCreateMediaType(new_current_media_type.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create media type.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to create media type.";
     return false;
   }
 
   hr = new_current_media_type->SetGUID(
       MF_MT_MAJOR_TYPE, is_video ? MFMediaType_Video : MFMediaType_Audio);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to set media major type.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to set media major type.";
     return false;
   }
 
@@ -1381,15 +1452,17 @@ bool WMFMediaPipeline::ConfigureStream(DWORD stream_index) {
       MF_MT_SUBTYPE,
       is_video ? source_reader_output_video_format_ : MFAudioFormat_Float);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to set media subtype.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to set media subtype.";
     return false;
   }
 
   hr = source_reader_->SetCurrentMediaType(
-      stream_index, NULL, new_current_media_type.get());
+      stream_index, NULL, new_current_media_type.Get());
   if (FAILED(hr)) {
-    DVLOG(1) << "Failed to set media type. No "
-             << (is_video ? "video" : "audio") << " track?";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to set media type. No "
+               << (is_video ? "video" : "audio") << " track?";
     return false;
   }
 
@@ -1398,9 +1471,10 @@ bool WMFMediaPipeline::ConfigureStream(DWORD stream_index) {
   // needed -- e.g., when decoding is requested.  Since this figuring-out
   // process can fail, let's force it now by calling GetCurrentMediaType().
   base::win::ScopedComPtr<IMFMediaType> media_type;
-  hr = source_reader_->GetCurrentMediaType(stream_index, media_type.Receive());
+  hr = source_reader_->GetCurrentMediaType(stream_index, media_type.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to obtain media type.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to obtain media type.";
     return false;
   }
 
@@ -1409,7 +1483,7 @@ bool WMFMediaPipeline::ConfigureStream(DWORD stream_index) {
 
 bool WMFMediaPipeline::ConfigureSourceReader() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.get());
+  DCHECK(source_reader_.Get());
 
   static const media::PlatformMediaDataType media_types[] = {
       media::PLATFORM_MEDIA_AUDIO, media::PLATFORM_MEDIA_VIDEO};
@@ -1431,7 +1505,7 @@ bool WMFMediaPipeline::ConfigureSourceReader() {
 
 base::TimeDelta WMFMediaPipeline::GetDuration() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.get());
+  DCHECK(source_reader_.Get());
 
   AutoPropVariant var;
 
@@ -1448,7 +1522,8 @@ base::TimeDelta WMFMediaPipeline::GetDuration() {
   int64_t duration_int64 = 0;
   hr = var.ToInt64(&duration_int64);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to obtain media duration.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to obtain media duration.";
     return media::kInfiniteDuration;
   }
   // Have to divide duration64 by ten to convert from
@@ -1458,7 +1533,7 @@ base::TimeDelta WMFMediaPipeline::GetDuration() {
 
 int WMFMediaPipeline::GetBitrate(base::TimeDelta duration) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.get());
+  DCHECK(source_reader_.Get());
   DCHECK_GT(duration.InMicroseconds(), 0);
 
   AutoPropVariant var;
@@ -1495,7 +1570,8 @@ int WMFMediaPipeline::GetBitrate(base::TimeDelta duration) {
       if (SUCCEEDED(hr))
         return (8000000.0 * file_size_in_bytes) / duration.InMicroseconds();
     }
-    DLOG(ERROR) << "Failed to obtain media bitrate.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to obtain media bitrate.";
   }
 
   return bitrate;
@@ -1503,21 +1579,23 @@ int WMFMediaPipeline::GetBitrate(base::TimeDelta duration) {
 
 bool WMFMediaPipeline::GetStride(int* stride) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.get());
+  DCHECK(source_reader_.Get());
 
   base::win::ScopedComPtr<IMFMediaType> media_type;
   HRESULT hr = source_reader_->GetCurrentMediaType(
-      stream_indices_[media::PLATFORM_MEDIA_VIDEO], media_type.Receive());
+      stream_indices_[media::PLATFORM_MEDIA_VIDEO], media_type.GetAddressOf());
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to obtain media type.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to obtain media type.";
     return false;
   }
 
   UINT32 width = 0;
   UINT32 height = 0;
-  hr = MFGetAttributeSize(media_type.get(), MF_MT_FRAME_SIZE, &width, &height);
+  hr = MFGetAttributeSize(media_type.Get(), MF_MT_FRAME_SIZE, &width, &height);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to obtain width and height.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to obtain width and height.";
     return false;
   }
 
@@ -1525,7 +1603,8 @@ bool WMFMediaPipeline::GetStride(int* stride) {
   hr = get_stride_function_(source_reader_output_video_format_.Data1, width,
                             &stride_long);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to obtain stride.";
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " Failed to obtain stride.";
     return false;
   }
 
@@ -1551,7 +1630,7 @@ WMFMediaPipeline::DXVAPictureBuffer* WMFMediaPipeline::GetDXVAPictureBuffer(
 
   std::unique_ptr<DXVAPictureBuffer> new_dxva_picture_buffer =
       DXVAPictureBuffer::Create(texture_id, video_config_.coded_size,
-                                egl_config_, direct3d_context_->device.get());
+                                egl_config_, direct3d_context_->device.Get());
   if (!new_dxva_picture_buffer.get())
     return nullptr;
 

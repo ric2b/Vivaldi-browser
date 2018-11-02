@@ -117,7 +117,7 @@ CSSSyntaxDescriptor::CSSSyntaxDescriptor(String input) {
     }
 
     if (!success) {
-      syntax_components_.Clear();
+      syntax_components_.clear();
       return;
     }
 
@@ -128,7 +128,7 @@ CSSSyntaxDescriptor::CSSSyntaxDescriptor(String input) {
   } while (ConsumeCharacterAndWhitespace(input, '|', offset));
 
   if (offset != input.length())
-    syntax_components_.Clear();
+    syntax_components_.clear();
 }
 
 const CSSValue* ConsumeSingleType(const CSSSyntaxComponent& syntax,
@@ -163,7 +163,8 @@ const CSSValue* ConsumeSingleType(const CSSSyntaxComponent& syntax,
     case CSSSyntaxType::kInteger:
       return ConsumeInteger(range);
     case CSSSyntaxType::kAngle:
-      return ConsumeAngle(range);
+      return ConsumeAngle(range, *context,
+                          UseCounter::kUnitlessZeroAngleCustomProperty);
     case CSSSyntaxType::kTime:
       return ConsumeTime(range, ValueRange::kValueRangeAll);
     case CSSSyntaxType::kResolution:
@@ -203,7 +204,7 @@ const CSSValue* CSSSyntaxDescriptor::Parse(CSSParserTokenRange range,
                                            bool is_animation_tainted) const {
   if (IsTokenStream()) {
     return CSSVariableParser::ParseRegisteredPropertyValue(
-        range, false, is_animation_tainted);
+        range, *context, false, is_animation_tainted);
   }
   range.ConsumeWhitespace();
   for (const CSSSyntaxComponent& component : syntax_components_) {
@@ -211,7 +212,7 @@ const CSSValue* CSSSyntaxDescriptor::Parse(CSSParserTokenRange range,
             ConsumeSyntaxComponent(component, range, context))
       return result;
   }
-  return CSSVariableParser::ParseRegisteredPropertyValue(range, true,
+  return CSSVariableParser::ParseRegisteredPropertyValue(range, *context, true,
                                                          is_animation_tainted);
 }
 

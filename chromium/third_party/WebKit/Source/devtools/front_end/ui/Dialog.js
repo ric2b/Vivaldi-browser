@@ -35,8 +35,9 @@ UI.Dialog = class extends UI.GlassPane {
     this.contentElement.tabIndex = 0;
     this.contentElement.addEventListener('focus', () => this.widget().focus(), false);
     this.contentElement.addEventListener('keydown', this._onKeyDown.bind(this), false);
-    this.setBlockPointerEvents(true);
-    this.setSetOutsideClickCallback(event => {
+    this.widget().setDefaultFocusedElement(this.contentElement);
+    this.setPointerEventsBehavior(UI.GlassPane.PointerEventsBehavior.BlockedByGlassPane);
+    this.setOutsideClickCallback(event => {
       this.hide();
       event.consume(true);
     });
@@ -44,6 +45,7 @@ UI.Dialog = class extends UI.GlassPane {
     this._tabIndexMap = new Map();
     /** @type {?UI.WidgetFocusRestorer} */
     this._focusRestorer = null;
+    this._closeOnEscape = true;
   }
 
   /**
@@ -76,6 +78,13 @@ UI.Dialog = class extends UI.GlassPane {
     super.hide();
     this._restoreTabIndexOnElements();
     delete UI.Dialog._instance;
+  }
+
+  /**
+   * @param {boolean} close
+   */
+  setCloseOnEscape(close) {
+    this._closeOnEscape = close;
   }
 
   addCloseButton() {
@@ -111,7 +120,7 @@ UI.Dialog = class extends UI.GlassPane {
    * @param {!Event} event
    */
   _onKeyDown(event) {
-    if (event.keyCode === UI.KeyboardShortcut.Keys.Esc.code) {
+    if (this._closeOnEscape && event.keyCode === UI.KeyboardShortcut.Keys.Esc.code) {
       event.consume(true);
       this.hide();
     }

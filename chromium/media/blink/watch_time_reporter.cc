@@ -5,6 +5,7 @@
 #include "media/blink/watch_time_reporter.h"
 
 #include "base/power_monitor/power_monitor.h"
+#include "media/base/watch_time_keys.h"
 
 namespace media {
 
@@ -27,7 +28,7 @@ WatchTimeReporter::WatchTimeReporter(bool has_audio,
                                      bool is_mse,
                                      bool is_encrypted,
                                      bool is_embedded_media_experience_enabled,
-                                     scoped_refptr<MediaLog> media_log,
+                                     MediaLog* media_log,
                                      const gfx::Size& initial_video_size,
                                      const GetMediaTimeCB& get_media_time_cb)
     : WatchTimeReporter(has_audio,
@@ -35,7 +36,7 @@ WatchTimeReporter::WatchTimeReporter(bool has_audio,
                         is_mse,
                         is_encrypted,
                         is_embedded_media_experience_enabled,
-                        std::move(media_log),
+                        media_log,
                         initial_video_size,
                         get_media_time_cb,
                         false) {}
@@ -45,7 +46,7 @@ WatchTimeReporter::WatchTimeReporter(bool has_audio,
                                      bool is_mse,
                                      bool is_encrypted,
                                      bool is_embedded_media_experience_enabled,
-                                     scoped_refptr<MediaLog> media_log,
+                                     MediaLog* media_log,
                                      const gfx::Size& initial_video_size,
                                      const GetMediaTimeCB& get_media_time_cb,
                                      bool is_background)
@@ -55,7 +56,7 @@ WatchTimeReporter::WatchTimeReporter(bool has_audio,
       is_encrypted_(is_encrypted),
       is_embedded_media_experience_enabled_(
           is_embedded_media_experience_enabled),
-      media_log_(std::move(media_log)),
+      media_log_(media_log),
       initial_video_size_(initial_video_size),
       get_media_time_cb_(get_media_time_cb),
       is_background_(is_background) {
@@ -167,6 +168,48 @@ bool WatchTimeReporter::IsSizeLargeEnoughToReportWatchTime() const {
          initial_video_size_.width() >= kMinimumVideoSize.width();
 }
 
+void WatchTimeReporter::OnUnderflow() {
+  if (!reporting_timer_.IsRunning())
+    return;
+
+  // In the event of a pending finalize, we don't want to count underflow events
+  // that occurred after the finalize time. Yet if the finalize is canceled we
+  // want to ensure they are all recorded.
+  pending_underflow_events_.push_back(get_media_time_cb_.Run());
+}
+
+void WatchTimeReporter::OnNativeControlsEnabled() {
+  if (!reporting_timer_.IsRunning()) {
+    has_native_controls_ = true;
+    return;
+  }
+
+  if (end_timestamp_for_controls_ != kNoTimestamp) {
+    end_timestamp_for_controls_ = kNoTimestamp;
+    return;
+  }
+
+  end_timestamp_for_controls_ = get_media_time_cb_.Run();
+  reporting_timer_.Start(FROM_HERE, reporting_interval_, this,
+                         &WatchTimeReporter::UpdateWatchTime);
+}
+
+void WatchTimeReporter::OnNativeControlsDisabled() {
+  if (!reporting_timer_.IsRunning()) {
+    has_native_controls_ = false;
+    return;
+  }
+
+  if (end_timestamp_for_controls_ != kNoTimestamp) {
+    end_timestamp_for_controls_ = kNoTimestamp;
+    return;
+  }
+
+  end_timestamp_for_controls_ = get_media_time_cb_.Run();
+  reporting_timer_.Start(FROM_HERE, reporting_interval_, this,
+                         &WatchTimeReporter::UpdateWatchTime);
+}
+
 void WatchTimeReporter::OnPowerStateChange(bool on_battery_power) {
   if (!reporting_timer_.IsRunning())
     return;
@@ -216,10 +259,12 @@ void WatchTimeReporter::MaybeStartReportingTimer(
   if (reporting_timer_.IsRunning())
     return;
 
+  underflow_count_ = 0;
   last_media_timestamp_ = last_media_power_timestamp_ =
-      end_timestamp_for_power_ = kNoTimestamp;
+      last_media_controls_timestamp_ = end_timestamp_for_power_ = kNoTimestamp;
   is_on_battery_power_ = IsOnBatteryPower();
-  start_timestamp_ = start_timestamp_for_power_ = start_timestamp;
+  start_timestamp_ = start_timestamp_for_power_ =
+      start_timestamp_for_controls_ = start_timestamp;
   reporting_timer_.Start(FROM_HERE, reporting_interval_, this,
                          &WatchTimeReporter::UpdateWatchTime);
 }
@@ -250,6 +295,8 @@ void WatchTimeReporter::UpdateWatchTime() {
 
   const bool is_finalizing = end_timestamp_ != kNoTimestamp;
   const bool is_power_change_pending = end_timestamp_for_power_ != kNoTimestamp;
+  const bool is_controls_change_pending =
+      end_timestamp_for_controls_ != kNoTimestamp;
 
   // If we're finalizing the log, use the media time value at the time of
   // finalization.
@@ -260,14 +307,22 @@ void WatchTimeReporter::UpdateWatchTime() {
   std::unique_ptr<MediaLogEvent> log_event =
       media_log_->CreateEvent(MediaLogEvent::Type::WATCH_TIME_UPDATE);
 
-#define RECORD_WATCH_TIME(key, value)                                         \
-  do {                                                                        \
-    log_event->params.SetDoubleWithoutPathExpansion(                          \
-        has_video_                                                            \
-            ? MediaLog::kWatchTimeAudioVideo##key                             \
-            : (is_background_ ? MediaLog::kWatchTimeAudioVideoBackground##key \
-                              : MediaLog::kWatchTimeAudio##key),              \
-        value.InSecondsF());                                                  \
+#define RECORD_WATCH_TIME(key, value)                                      \
+  do {                                                                     \
+    log_event->params.SetDoubleWithoutPathExpansion(                       \
+        has_video_ ? kWatchTimeAudioVideo##key                             \
+                   : (is_background_ ? kWatchTimeAudioVideoBackground##key \
+                                     : kWatchTimeAudio##key),              \
+        value.InSecondsF());                                               \
+  } while (0)
+
+#define RECORD_CONTROLS_WATCH_TIME(key, value)                         \
+  do {                                                                 \
+    if (is_background_)                                                \
+      break;                                                           \
+    log_event->params.SetDoubleWithoutPathExpansion(                   \
+        has_video_ ? kWatchTimeAudioVideo##key : kWatchTimeAudio##key, \
+        value.InSecondsF());                                           \
   } while (0)
 
   // Only report watch time after some minimum amount has elapsed. Don't update
@@ -313,14 +368,53 @@ void WatchTimeReporter::UpdateWatchTime() {
         RECORD_WATCH_TIME(Ac, elapsed_power);
     }
   }
+
+  // Similar to the block above for controls.
+  if (last_media_controls_timestamp_ != current_timestamp) {
+    last_media_controls_timestamp_ = is_controls_change_pending
+                                         ? end_timestamp_for_controls_
+                                         : current_timestamp;
+
+    const base::TimeDelta elapsed_controls =
+        last_media_controls_timestamp_ - start_timestamp_for_controls_;
+
+    if (elapsed_controls >= kMinimumElapsedWatchTime) {
+      if (has_native_controls_)
+        RECORD_CONTROLS_WATCH_TIME(NativeControlsOn, elapsed_controls);
+      else
+        RECORD_CONTROLS_WATCH_TIME(NativeControlsOff, elapsed_controls);
+    }
+  }
 #undef RECORD_WATCH_TIME
+#undef RECORD_CONTROLS_WATCH_TIME
+
+  // Pass along any underflow events which have occurred since the last report.
+  if (!pending_underflow_events_.empty()) {
+    if (!is_finalizing) {
+      // The maximum value here per period is ~5 events, so int cast is okay.
+      underflow_count_ += static_cast<int>(pending_underflow_events_.size());
+    } else {
+      // Only count underflow events prior to finalize.
+      for (auto& ts : pending_underflow_events_) {
+        if (ts <= end_timestamp_)
+          underflow_count_++;
+      }
+    }
+
+    log_event->params.SetInteger(kWatchTimeUnderflowCount, underflow_count_);
+    pending_underflow_events_.clear();
+  }
 
   // Always send finalize, even if we don't currently have any data, it's
   // harmless to send since nothing will be logged if we've already finalized.
-  if (is_finalizing)
-    log_event->params.SetBoolean(MediaLog::kWatchTimeFinalize, true);
-  else if (is_power_change_pending)
-    log_event->params.SetBoolean(MediaLog::kWatchTimeFinalizePower, true);
+  if (is_finalizing) {
+    log_event->params.SetBoolean(kWatchTimeFinalize, true);
+  } else {
+    if (is_power_change_pending)
+      log_event->params.SetBoolean(kWatchTimeFinalizePower, true);
+    if (is_controls_change_pending)
+      log_event->params.SetBoolean(kWatchTimeFinalizeControls, true);
+  }
 
   if (!log_event->params.empty())
     media_log_->AddEvent(std::move(log_event));
@@ -334,9 +428,17 @@ void WatchTimeReporter::UpdateWatchTime() {
     end_timestamp_for_power_ = kNoTimestamp;
   }
 
+  if (is_controls_change_pending) {
+    has_native_controls_ = !has_native_controls_;
+
+    start_timestamp_for_controls_ = end_timestamp_for_controls_;
+    end_timestamp_for_controls_ = kNoTimestamp;
+  }
+
   // Stop the timer if this is supposed to be our last tick.
   if (is_finalizing) {
     end_timestamp_ = kNoTimestamp;
+    underflow_count_ = 0;
     reporting_timer_.Stop();
   }
 }

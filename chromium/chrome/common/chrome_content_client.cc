@@ -71,7 +71,6 @@
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/common/extensions/extension_process_policy.h"
 #include "extensions/common/features/feature_util.h"
 #endif
 
@@ -752,13 +751,17 @@ bool ChromeContentClient::IsSupplementarySiteIsolationModeEnabled() {
     return false;
   }
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  return extensions::IsIsolateExtensionsEnabled();
+  return true;
 #else
   return false;
 #endif
 }
 
 content::OriginTrialPolicy* ChromeContentClient::GetOriginTrialPolicy() {
+  // Prevent initialization race (see crbug.com/721144). There may be a
+  // race when the policy is needed for worker startup (which happens on a
+  // separate worker thread).
+  base::AutoLock auto_lock(origin_trial_policy_lock_);
   if (!origin_trial_policy_)
     origin_trial_policy_ = base::MakeUnique<ChromeOriginTrialPolicy>();
   return origin_trial_policy_.get();

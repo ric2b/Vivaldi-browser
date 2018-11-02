@@ -133,15 +133,14 @@ class IPC_EXPORT Channel : public Sender {
     static void BindAssociatedInterfaceRequest(
         const AssociatedInterfaceFactory<Interface>& factory,
         mojo::ScopedInterfaceEndpointHandle handle) {
-      mojo::AssociatedInterfaceRequest<Interface> request;
-      request.Bind(std::move(handle));
-      factory.Run(std::move(request));
+      factory.Run(
+          mojo::AssociatedInterfaceRequest<Interface>(std::move(handle)));
     }
   };
 
   // The maximum message size in bytes. Attempting to receive a message of this
   // size or bigger results in a channel error.
-  static const size_t kMaximumMessageSize = 128 * 1024 * 1024;
+  static const size_t kMaximumMessageSize = 256 * 1024 * 1024;
 
   // Amount of data to read at once from the pipe.
   static const size_t kReadBufferSize = 4 * 1024;

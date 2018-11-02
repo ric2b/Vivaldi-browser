@@ -15,7 +15,7 @@
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/NativeValueTraits.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
 
@@ -33,9 +33,9 @@ class MODULES_EXPORT BooleanOrString final {
   static BooleanOrString fromBoolean(bool);
 
   bool isString() const { return m_type == SpecificTypeString; }
-  String getAsString() const;
-  void setString(String);
-  static BooleanOrString fromString(String);
+  const String& getAsString() const;
+  void setString(const String&);
+  static BooleanOrString fromString(const String&);
 
   BooleanOrString(const BooleanOrString&);
   ~BooleanOrString();

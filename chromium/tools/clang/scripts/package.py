@@ -26,6 +26,8 @@ LLVM_BOOTSTRAP_INSTALL_DIR = os.path.join(THIRD_PARTY_DIR,
 LLVM_BUILD_DIR = os.path.join(THIRD_PARTY_DIR, 'llvm-build')
 LLVM_RELEASE_DIR = os.path.join(LLVM_BUILD_DIR, 'Release+Asserts')
 LLVM_LTO_GOLD_PLUGIN_DIR = os.path.join(THIRD_PARTY_DIR, 'llvm-lto-gold-plugin')
+BINUTILS_LIB_DIR = os.path.join(THIRD_PARTY_DIR, 'binutils', 'Linux_x64',
+                                'Release', 'lib')
 STAMP_FILE = os.path.join(LLVM_BUILD_DIR, 'cr_build_revision')
 
 
@@ -322,6 +324,12 @@ def main():
     shutil.copytree(os.path.join(LLVM_BOOTSTRAP_INSTALL_DIR, 'include', 'c++'),
                     os.path.join(pdir, 'include', 'c++'))
 
+  # Copy tcmalloc from the binutils package.
+  # FIXME: We should eventually be building our own copy.
+  if sys.platform.startswith('linux'):
+    shutil.copy(os.path.join(BINUTILS_LIB_DIR, 'libtcmalloc_minimal.so.4'),
+                os.path.join(pdir, 'lib'))
+
   # Copy buildlog over.
   shutil.copy('buildlog.txt', pdir)
 
@@ -356,6 +364,18 @@ def main():
     tar.add(os.path.join(objdumpdir, 'bin'), arcname='bin',
             filter=PrintTarProgress)
   MaybeUpload(args, objdumpdir, platform)
+
+  # Zip up the translation_unit tool.
+  translation_unit_dir = 'translation_unit-' + stamp
+  shutil.rmtree(translation_unit_dir, ignore_errors=True)
+  os.makedirs(os.path.join(translation_unit_dir, 'bin'))
+  shutil.copy(os.path.join(LLVM_RELEASE_DIR, 'bin', 'translation_unit' +
+                           exe_ext),
+              os.path.join(translation_unit_dir, 'bin'))
+  with tarfile.open(translation_unit_dir + '.tgz', 'w:gz') as tar:
+    tar.add(os.path.join(translation_unit_dir, 'bin'), arcname='bin',
+            filter=PrintTarProgress)
+  MaybeUpload(args, translation_unit_dir, platform)
 
   if sys.platform == 'win32' and args.upload:
     UploadPDBToSymbolServer()

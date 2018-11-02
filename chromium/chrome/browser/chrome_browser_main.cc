@@ -23,12 +23,14 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/profiler/stack_sampling_profiler.h"
 #include "base/run_loop.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -200,14 +202,13 @@
 
 #if defined(OS_WIN)
 #include "base/trace_event/trace_event_etw_export_win.h"
-#include "base/win/registry.h"
 #include "base/win/win_util.h"
 #include "chrome/browser/chrome_browser_main_win.h"
 #include "chrome/browser/component_updater/sw_reporter_installer_win.h"
 #include "chrome/browser/downgrade/user_data_downgrade.h"
-#include "chrome/browser/first_run/try_chrome_dialog_view.h"
 #include "chrome/browser/first_run/upgrade_util_win.h"
 #include "chrome/browser/ui/network_profile_bubble.h"
+#include "chrome/browser/ui/views/try_chrome_dialog_view.h"
 #include "chrome/browser/win/browser_util.h"
 #include "chrome/browser/win/chrome_select_file_dialog_factory.h"
 #include "chrome/install_static/install_util.h"
@@ -427,11 +428,11 @@ Profile* CreatePrimaryProfile(const content::MainFunctionParams& parameters,
   Profile* profile = nullptr;
 #if defined(OS_CHROMEOS) || defined(OS_ANDROID)
   // On ChromeOS and Android the ProfileManager will use the same path as the
-  // one we got passed. GetActiveUserProfile will therefore use the correct path
+  // one we got passed. CreateInitialProfile will therefore use the correct path
   // automatically.
   DCHECK_EQ(user_data_dir.value(),
             g_browser_process->profile_manager()->user_data_dir().value());
-  profile = ProfileManager::GetActiveUserProfile();
+  profile = ProfileManager::CreateInitialProfile();
 
   // TODO(port): fix this. See comments near the definition of |user_data_dir|.
   // It is better to CHECK-fail here than it is to silently exit because of
@@ -767,16 +768,6 @@ void ChromeBrowserMainParts::SetupFieldTrials() {
   metrics::DesktopSessionDurationTracker::Initialize();
 #endif
   metrics::RendererUptimeTracker::Initialize();
-
-#if defined(OS_WIN)
-  // Cleanup the PreRead field trial registry key.
-  // TODO(fdoray): Remove this when M56 hits stable.
-  const base::string16 pre_read_field_trial_registry_path =
-      install_static::GetRegistryPath() + L"\\PreReadFieldTrial";
-  base::win::RegKey(HKEY_CURRENT_USER,
-                    pre_read_field_trial_registry_path.c_str(), KEY_SET_VALUE)
-      .DeleteKey(L"");
-#endif  // defined(OS_WIN)
 }
 
 void ChromeBrowserMainParts::SetupMetrics() {
@@ -824,8 +815,8 @@ void ChromeBrowserMainParts::StartMetricsRecording() {
 
 void ChromeBrowserMainParts::RecordBrowserStartupTime() {
   // Don't record any metrics if UI was displayed before this point e.g.
-  // warning dialogs.
-  if (startup_metric_utils::WasNonBrowserUIDisplayed())
+  // warning dialogs or browser was started in background mode.
+  if (startup_metric_utils::WasMainWindowStartupInterrupted())
     return;
 
   bool is_first_run = false;
@@ -1411,9 +1402,8 @@ void ChromeBrowserMainParts::PostBrowserStart() {
   // Set up a task to delete old WebRTC log files for all profiles. Use a delay
   // to reduce the impact on startup time.
   BrowserThread::PostDelayedTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&WebRtcLogUtil::DeleteOldWebRtcLogFilesForAllProfiles),
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&WebRtcLogUtil::DeleteOldWebRtcLogFilesForAllProfiles),
       base::TimeDelta::FromMinutes(1));
 #endif  // BUILDFLAG(ENABLE_WEBRTC)
 
@@ -1422,8 +1412,8 @@ void ChromeBrowserMainParts::PostBrowserStart() {
     web_usb_detector_.reset(new WebUsbDetector());
     BrowserThread::PostAfterStartupTask(
         FROM_HERE, BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
-        base::Bind(&WebUsbDetector::Initialize,
-                   base::Unretained(web_usb_detector_.get())));
+        base::BindOnce(&WebUsbDetector::Initialize,
+                       base::Unretained(web_usb_detector_.get())));
   }
 #endif
 
@@ -1460,11 +1450,9 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
       "LightSpeed", "EarlyInitStartup").empty()) {
     // Try to compute this early on another thread so that we don't spend time
     // during profile load initializing the extensions APIs.
-    BrowserThread::PostTask(
-        BrowserThread::FILE_USER_BLOCKING,
-        FROM_HERE,
-        base::Bind(
-            base::IgnoreResult(&extensions::FeatureProvider::GetAPIFeatures)));
+    BrowserThread::PostTask(BrowserThread::FILE_USER_BLOCKING, FROM_HERE,
+                            base::BindOnce(base::IgnoreResult(
+                                &extensions::FeatureProvider::GetAPIFeatures)));
   }
 #endif
 
@@ -1726,7 +1714,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // notification to the user.
   if (NetworkProfileBubble::ShouldCheckNetworkProfile(profile_)) {
     base::PostTaskWithTraits(
-        FROM_HERE, base::TaskTraits().MayBlock(),
+        FROM_HERE, {base::MayBlock()},
         base::Bind(&NetworkProfileBubble::CheckNetworkProfile,
                    profile_->GetPath()));
   }
@@ -1830,10 +1818,8 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 #endif  // defined(OS_ANDROID)
 
 #if !defined(DISABLE_NACL)
-  BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(nacl::NaClProcessHost::EarlyStartup));
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::BindOnce(nacl::NaClProcessHost::EarlyStartup));
 #endif  // !defined(DISABLE_NACL)
 
   // Make sure initial prefs are recorded

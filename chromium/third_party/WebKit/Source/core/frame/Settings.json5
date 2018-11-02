@@ -123,10 +123,6 @@
       initial: true,
     },
     {
-      name: "javaScriptCanOpenWindowsAutomatically",
-      initial: false,
-    },
-    {
       name: "supportsMultipleWindows",
       initial: true,
     },
@@ -216,18 +212,8 @@
     },
 
     {
-      name: "mediaPlaybackRequiresUserGesture",
-      initial: false,
-    },
-    {
       name: "mediaPlaybackGestureWhitelistScope",
       type: "String",
-    },
-
-    // This flags overrides mediaPlaybackRequiresUserGesture
-    {
-      name: "crossOriginMediaPlaybackRequiresUserGesture",
-      initial: false,
     },
 
     {
@@ -237,6 +223,17 @@
 
     {
       name: "embeddedMediaExperienceEnabled",
+      initial: false,
+    },
+
+    // This is used when page popups should not be presented at all from time
+    // to time in the life of a renderer. This is different than the runtime
+    // enabled feature to enable page popups which remains fixed for the
+    // lifetime of a render and semantically means that an alternative UI
+    // should be shown. An example of when this might be used is in an
+    // embedder than cannot render these popups (in VR mode, say).
+    {
+      name: "pagePopupsSuppressed",
       initial: false,
     },
 
@@ -806,11 +803,6 @@
     },
 
     {
-      name: "lowPriorityIframes",
-      initial: false,
-    },
-
-    {
       name: "progressBarCompletion",
       initial: "ProgressBarCompletion::kLoadEvent",
       type: "ProgressBarCompletion",
@@ -940,6 +932,13 @@
     {
       name: "doNotUpdateSelectionOnMutatingSelectionRange",
       initial: false,
+    },
+
+    // Defines the autoplay policy to use.
+    {
+      name: "autoplayPolicy",
+      type: "AutoplayPolicy::Type",
+      initial: "AutoplayPolicy::Type::kNoUserGestureRequired",
     },
   ],
 }

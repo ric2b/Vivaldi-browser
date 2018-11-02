@@ -39,6 +39,7 @@
 namespace offline_pages {
 
 namespace {
+const char kOriginalTabNamespace[] = "original_tab_testing_namespace";
 const char kTestClientNamespace[] = "default";
 const char kUserRequestedNamespace[] = "download";
 const GURL kTestUrl("http://example.com");
@@ -117,6 +118,9 @@ class OfflinePageModelImplTest
   // Fast-forwards virtual time by |delta|, causing tasks with a remaining
   // delay less than or equal to |delta| to be executed.
   void FastForwardBy(base::TimeDelta delta);
+  // Runs tasks and moves time forward until no tasks remain in the queue.
+  void FastForwardUntilNoTasksRemain();
+
   void ResetResults();
 
   OfflinePageTestStore* GetStore();
@@ -224,6 +228,14 @@ OfflinePageModelImplTest::~OfflinePageModelImplTest() {}
 void OfflinePageModelImplTest::SetUp() {
   ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
   model_ = BuildModel(BuildStore());
+  model_->GetPolicyController()->AddPolicyForTest(
+      kOriginalTabNamespace,
+      OfflinePageClientPolicyBuilder(
+          kOriginalTabNamespace,
+          offline_pages::LifetimePolicy::LifetimeType::TEMPORARY,
+          kUnlimitedPages, kUnlimitedPages)
+          .SetIsOnlyShownInOriginalTab(true));
+
   model_->AddObserver(this);
   PumpLoop();
 }
@@ -311,6 +323,10 @@ void OfflinePageModelImplTest::PumpLoop() {
 
 void OfflinePageModelImplTest::FastForwardBy(base::TimeDelta delta) {
   task_runner_->FastForwardBy(delta);
+}
+
+void OfflinePageModelImplTest::FastForwardUntilNoTasksRemain() {
+  task_runner_->FastForwardUntilNoTasksRemain();
 }
 
 void OfflinePageModelImplTest::ResetResults() {
@@ -661,6 +677,7 @@ TEST_F(OfflinePageModelImplTest, SavePageOnBackground) {
   save_page_params.url = kTestUrl;
   save_page_params.client_id = kTestClientId1;
   save_page_params.is_background = true;
+  save_page_params.use_page_problem_detectors = false;
   SavePageWithParamsAsync(save_page_params, std::move(archiver));
   EXPECT_TRUE(archiver_ptr->create_archive_called());
   // |remove_popup_overlay| should be turned on on background mode.
@@ -1033,9 +1050,7 @@ TEST_F(OfflinePageModelImplTest, CheckPagesExistOffline) {
   SavePage(kTestUrl, kTestClientId1);
   SavePage(kTestUrl2, kTestClientId2);
 
-  // TODO(dewittj): Remove the "Last N" restriction in favor of a better query
-  // interface.  See https://crbug.com/622763 for information.
-  const ClientId last_n_client_id(kLastNNamespace, "1234");
+  const ClientId last_n_client_id(kOriginalTabNamespace, "1234");
   SavePage(kTestUrl3, last_n_client_id);
 
   std::set<GURL> input;
@@ -1222,38 +1237,40 @@ TEST_F(OfflinePageModelImplTest, NewTabPageNamespace) {
                                   static_cast<int>(SavePageResult::SUCCESS), 1);
 }
 
-TEST_F(OfflinePageModelImplTest, StoreResetSuccessful) {
+TEST_F(OfflinePageModelImplTest, StoreLoadFailurePersists) {
+  // Initial database load is successful. Only takes 1 attempt.
+  EXPECT_EQ(1, GetStore()->initialize_attempts_count());
+  histograms().ExpectUniqueSample("OfflinePages.Model.FinalLoadSuccessful",
+                                  true, 1);
+  histograms().ExpectUniqueSample("OfflinePages.Model.InitAttemptsSpent", 1, 1);
+
   GetStore()->set_test_scenario(
       OfflinePageTestStore::TestScenario::LOAD_FAILED_RESET_SUCCESS);
   ResetModel();
+  // Skip all the retries with delays.
+  FastForwardUntilNoTasksRemain();
+  // All available attempts were spent.
+  EXPECT_EQ(3, GetStore()->initialize_attempts_count());
+
+  // Should record failure to load.
+  histograms().ExpectBucketCount("OfflinePages.Model.FinalLoadSuccessful",
+                                 false, 1);
+  // Should show the previous count since no attempts are recorded for failure.
+  // In case of failure, all attempts are assumed spent.
+  histograms().ExpectUniqueSample("OfflinePages.Model.InitAttemptsSpent", 1, 1);
 
   const std::vector<OfflinePageItem>& offline_pages = GetAllPages();
 
+  // Model will 'load' but the store underneath it is not functional and
+  // will silently fail all sql operations.
   EXPECT_TRUE(model()->is_loaded());
-  EXPECT_EQ(StoreState::LOADED, GetStore()->state());
+  EXPECT_EQ(StoreState::FAILED_LOADING, GetStore()->state());
   EXPECT_EQ(0UL, offline_pages.size());
 
+  // The pages can still be saved, they will not be persisted to disk.
+  // Verify no crashes and error code returned.
   std::pair<SavePageResult, int64_t> result =
       SavePage(kTestUrl, ClientId(kDownloadNamespace, "123"));
-
-  EXPECT_EQ(SavePageResult::SUCCESS, result.first);
-}
-
-TEST_F(OfflinePageModelImplTest, StoreResetFailed) {
-  GetStore()->set_test_scenario(
-      OfflinePageTestStore::TestScenario::LOAD_FAILED_RESET_FAILED);
-  ResetModel();
-
-  const std::vector<OfflinePageItem>& offline_pages = GetAllPages();
-
-  EXPECT_TRUE(model()->is_loaded());
-  EXPECT_EQ(StoreState::FAILED_RESET, GetStore()->state());
-  EXPECT_EQ(0UL, offline_pages.size());
-
-  ResetResults();
-  std::pair<SavePageResult, int64_t> result =
-      SavePage(kTestUrl, ClientId(kDownloadNamespace, "123"));
-
   EXPECT_EQ(SavePageResult::STORE_FAILURE, result.first);
 }
 

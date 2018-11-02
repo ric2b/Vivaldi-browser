@@ -200,6 +200,7 @@ static DocumentFragment* DocumentFragmentFromDragData(
 bool DragController::DragIsMove(FrameSelection& selection,
                                 DragData* drag_data) {
   return document_under_mouse_ == drag_initiator_ &&
+         selection.SelectionHasFocus() &&
          selection.ComputeVisibleSelectionInDOMTreeDeprecated()
              .IsContentEditable() &&
          selection.ComputeVisibleSelectionInDOMTreeDeprecated().IsRange() &&
@@ -373,7 +374,7 @@ bool DragController::TryDocumentDrag(DragData* drag_data,
         TryDHTMLDrag(drag_data, drag_session.operation, local_root);
     // Do not continue if m_documentUnderMouse has been reset by tryDHTMLDrag.
     // tryDHTMLDrag fires dragenter event. The event listener that listens
-    // to this event may create a nested message loop (open a modal dialog),
+    // to this event may create a nested run loop (open a modal dialog),
     // which could process dragleave event and reset m_documentUnderMouse in
     // dragExited.
     if (!document_under_mouse_)
@@ -554,13 +555,13 @@ bool DragController::ConcludeEditDrag(DragData* drag_data) {
 
   // TODO(paulmeyer): Isn't |m_page->dragController()| the same as |this|?
   if (!page_->GetDragController().CanProcessDrag(
-          drag_data, *inner_frame->LocalFrameRoot())) {
+          drag_data, inner_frame->LocalFrameRoot())) {
     page_->GetDragCaret().Clear();
     return false;
   }
 
   if (page_->GetDragCaret().HasCaret()) {
-    // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+    // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
     // needs to be audited.  See http://crbug.com/590369 for more details.
     page_->GetDragCaret()
         .CaretPosition()
@@ -1212,8 +1213,7 @@ void DragController::DoSystemDrag(DragImage* image,
   did_initiate_drag_ = true;
   drag_initiator_ = frame->GetDocument();
 
-  LocalFrame* main_frame = frame->LocalFrameRoot();
-  FrameView* main_frame_view = main_frame->View();
+  FrameView* main_frame_view = frame->LocalFrameRoot().View();
   IntPoint adjusted_drag_location = main_frame_view->RootFrameToContents(
       frame->View()->ContentsToRootFrame(drag_location));
   IntPoint adjusted_event_pos = main_frame_view->RootFrameToContents(

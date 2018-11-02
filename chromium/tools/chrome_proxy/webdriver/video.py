@@ -7,8 +7,11 @@ import time
 import common
 from common import TestDriver
 from common import IntegrationTest
-from common import NotAndroid
+from common import ParseFlags
+from decorators import NotAndroid
+from decorators import Slow
 
+from selenium.webdriver.common.by import By
 
 class Video(IntegrationTest):
 
@@ -47,7 +50,7 @@ class Video(IntegrationTest):
 
   # Check the compressed video has the same frame count, width, height, and
   # duration as uncompressed.
-  @NotAndroid
+  @Slow
   def testVideoMetrics(self):
     expected = {
       'duration': 3.124,
@@ -57,7 +60,8 @@ class Video(IntegrationTest):
     }
     with TestDriver() as t:
       t.AddChromeArg('--enable-spdy-proxy-auth')
-      t.LoadURL('http://check.googlezip.net/cacheable/video/buck_bunny_tiny.html')
+      t.LoadURL(
+          'http://check.googlezip.net/cacheable/video/buck_bunny_tiny.html')
       # Check request was proxied and we got a compressed video back.
       for response in t.GetHTTPResponses():
         self.assertHasChromeProxyViaHeader(response)
@@ -65,8 +69,11 @@ class Video(IntegrationTest):
             and 'video' in response.response_headers['content-type']):
           self.assertEqual('video/webm',
             response.response_headers['content-type'])
-      t.ExecuteJavascriptStatement(
-        'document.querySelectorAll("video")[0].play()')
+      if ParseFlags().android:
+        t.FindElement(By.TAG_NAME, "video").click()
+      else:
+        t.ExecuteJavascriptStatement(
+          'document.querySelectorAll("video")[0].play()')
       # Wait for the video to finish playing, plus some headroom.
       time.sleep(5)
       # Check each metric against its expected value.
@@ -77,13 +84,76 @@ class Video(IntegrationTest):
           "metric doesn't match expected! Metric=%s Expected=%f Actual=%f"
           % (metric, expected[metric], actual), places=None, delta=0.001)
 
-  # Check the frames of a compressed video.
+  # Check that the compressed video can be seeked. Use a slow network to ensure
+  # the entire video isn't downloaded before we have a chance to seek.
+  #
+  # This test cannot run on android because of control_network_connection=True.
+  # That option is used to reduce flakes that might happen on fast networks,
+  # where the video is completely downloaded before a seeking request can be
+  # sent. The test can be manually simulated by the following steps: set network
+  # emulation in DevTools on Android (via device inspector), load a video, pause
+  # the video, then seek and verify the seek continues to play the video.
+  @Slow
   @NotAndroid
+  def testVideoSeeking(self):
+    with TestDriver(control_network_connection=True) as t:
+      t.SetNetworkConnection("3G")
+      t.AddChromeArg('--enable-spdy-proxy-auth')
+      t.LoadURL(
+          'http://check.googlezip.net/cacheable/video/'+
+          'buck_bunny_640x360_24fps.html')
+      # Play, pause, seek to 1s before the end, play again.
+      t.ExecuteJavascript(
+        '''
+        window.testDone = false;
+        const v = document.getElementsByTagName("video")[0];
+        let first = true;
+        v.onplaying = function() {
+          if (first) {
+            v.pause();
+            first = false;
+          } else {
+            window.testDone = true;
+          }
+        };
+        v.onpause = function() {
+          if (v.currentTime < v.duration) {
+            v.currentTime = v.duration-1;
+            v.play();
+          }
+        };
+        v.play();
+        ''')
+      t.WaitForJavascriptExpression('window.testDone', 10)
+      # Check request was proxied and we got a compressed video back.
+      # We expect to make multiple requests for the video: ensure they
+      # all have the same ETag.
+      video_etag = None
+      num_partial_requests = 0
+      for response in t.GetHTTPResponses():
+        self.assertHasChromeProxyViaHeader(response)
+        rh = response.response_headers
+        if ('content-type' in rh and 'video' in rh['content-type']):
+          self.assertTrue('etag' in rh),
+          self.assertEqual('video/webm', rh['content-type'])
+          if video_etag == None:
+            video_etag = rh['etag']
+          else:
+            self.assertEqual(video_etag, rh['etag'])
+          if ('range' in response.request_headers and
+              response.request_headers['range'] != 'bytes=0-'):
+            num_partial_requests += 1
+      # Also make sure that we had at least one partial Range request.
+      self.assertGreaterEqual(num_partial_requests, 1)
+
+  # Check the frames of a compressed video.
+  @Slow
   def testVideoFrames(self):
     self.instrumentedVideoTest('http://check.googlezip.net/cacheable/video/buck_bunny_640x360_24fps_video.html')
 
   # Check the audio volume of a compressed video.
   @NotAndroid
+  @Slow
   def testVideoAudio(self):
     self.instrumentedVideoTest('http://check.googlezip.net/cacheable/video/buck_bunny_640x360_24fps_audio.html')
 
@@ -115,7 +185,10 @@ class Video(IntegrationTest):
       if attempts >= max_attempts:
         self.fail('Could not get a compressed video after %d tries' % attempts)
       t.ExecuteJavascriptStatement('test.ready = true')
-      wait_time = int(t.ExecuteJavascriptStatement('test.waitTime'))
+      waitTimeQuery = 'test.waitTime'
+      if ParseFlags().android:
+        waitTimeQuery = 'test.androidWaitTime'
+      wait_time = int(t.ExecuteJavascriptStatement(waitTimeQuery))
       t.WaitForJavascriptExpression('test.metrics.complete', wait_time)
       metrics = t.ExecuteJavascriptStatement('test.metrics')
       if not metrics['complete']:
@@ -124,11 +197,13 @@ class Video(IntegrationTest):
         raise Exception('Test failed!')
 
   # Make sure YouTube autoplays.
-  @NotAndroid
   def testYoutube(self):
     with TestDriver() as t:
       t.AddChromeArg('--enable-spdy-proxy-auth')
       t.LoadURL('http://data-saver-test.appspot.com/youtube')
+      if ParseFlags().android:
+        # Video won't auto play on Android, so give it a click.
+        t.FindElement(By.ID, 'player').click()
       t.WaitForJavascriptExpression(
         'window.playerState == YT.PlayerState.PLAYING', 30)
       for response in t.GetHTTPResponses():

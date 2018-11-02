@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_feature_list.h"
@@ -293,7 +294,7 @@ class ProfilePrefStoreManagerTest : public testing::TestWithParam<bool>,
       base::RunLoop run_loop;
       JsonPrefStore::GetTaskRunnerForFile(profile_dir_.GetPath(),
                                           worker_pool_->pool().get())
-          ->PostTaskAndReply(FROM_HERE, base::Bind(&base::DoNothing),
+          ->PostTaskAndReply(FROM_HERE, base::BindOnce(&base::DoNothing),
                              run_loop.QuitClosure());
       run_loop.Run();
 
@@ -328,7 +329,7 @@ class ProfilePrefStoreManagerTest : public testing::TestWithParam<bool>,
     base::RunLoop run_loop;
     JsonPrefStore::GetTaskRunnerForFile(profile_dir_.GetPath(),
                                         worker_pool_->pool().get())
-        ->PostTaskAndReply(FROM_HERE, base::Bind(&base::DoNothing),
+        ->PostTaskAndReply(FROM_HERE, base::BindOnce(&base::DoNothing),
                            run_loop.QuitClosure());
     run_loop.Run();
   }
@@ -409,10 +410,10 @@ class ProfilePrefStoreManagerTest : public testing::TestWithParam<bool>,
 
   void BindInterface(const std::string& interface_name,
                      mojo::ScopedMessagePipeHandle handle) {
-    service_manager::ServiceInfo source(
+    service_manager::BindSourceInfo source(
         service_manager::Identity(content::mojom::kBrowserServiceName,
                                   service_manager::mojom::kRootUserID),
-        service_manager::InterfaceProviderSpecMap());
+        service_manager::CapabilitySet());
     static_cast<service_manager::mojom::Service*>(pref_service_context_.get())
         ->OnBindInterface(source, interface_name, std::move(handle),
                           base::Bind(&base::DoNothing));

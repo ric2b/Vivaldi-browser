@@ -31,12 +31,12 @@
 #include <algorithm>
 #include <limits>
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/AddressSanitizer.h"
 #include "platform/wtf/Atomics.h"
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/HashSet.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebScheduler.h"
 
 namespace blink {
 
@@ -48,7 +48,7 @@ TimerBase::TimerBase(RefPtr<WebTaskRunner> web_task_runner)
       thread_(CurrentThread()),
 #endif
       weak_ptr_factory_(this) {
-  ASSERT(web_task_runner_);
+  DCHECK(web_task_runner_);
 }
 
 TimerBase::~TimerBase() {
@@ -78,7 +78,7 @@ void TimerBase::Stop() {
 }
 
 double TimerBase::NextFireInterval() const {
-  ASSERT(IsActive());
+  DCHECK(IsActive());
   double current = TimerMonotonicallyIncreasingTime();
   if (next_fire_time_ < current)
     return 0;
@@ -137,11 +137,10 @@ void TimerBase::SetNextFireTime(double now, double delay) {
     // Cancel any previously posted task.
     weak_ptr_factory_.RevokeAll();
 
-    double delay_ms = 1000.0 * (new_time - now);
-    TimerTaskRunner()->PostDelayedTask(
+    TimerTaskRunner()->ToSingleThreadTaskRunner()->PostDelayedTask(
         location_,
         base::Bind(&TimerBase::RunInternal, weak_ptr_factory_.CreateWeakPtr()),
-        delay_ms);
+        TimeDelta::FromSecondsD(delay));
   }
 }
 

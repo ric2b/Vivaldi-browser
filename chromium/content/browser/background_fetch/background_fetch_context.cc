@@ -171,28 +171,33 @@ void BackgroundFetchContext::DidCompleteJob(
       controller->registration_id();
 
   DCHECK_GT(active_fetches_.count(registration_id), 0u);
-
-  // TODO(peter): Fire `backgroundfetchabort` if the |controller|'s state is
-  // ABORTED, which does not require a sequence of the settled fetches.
-
-  // The `backgroundfetched` and/or `backgroundfetchfail` event will only be
-  // invoked for Background Fetch jobs which have been completed.
-  if (controller->state() != BackgroundFetchJobController::State::COMPLETED) {
-    DeleteRegistration(registration_id,
-                       std::vector<std::unique_ptr<BlobHandle>>());
-    return;
+  switch (controller->state()) {
+    case BackgroundFetchJobController::State::ABORTED:
+      event_dispatcher_->DispatchBackgroundFetchAbortEvent(
+          registration_id,
+          base::Bind(&BackgroundFetchContext::DeleteRegistration, this,
+                     registration_id,
+                     std::vector<std::unique_ptr<BlobHandle>>()));
+      return;
+    case BackgroundFetchJobController::State::COMPLETED:
+      data_manager_->GetSettledFetchesForRegistration(
+          registration_id,
+          base::BindOnce(&BackgroundFetchContext::DidGetSettledFetches, this,
+                         registration_id));
+      return;
+    case BackgroundFetchJobController::State::INITIALIZED:
+    case BackgroundFetchJobController::State::FETCHING:
+      // These cases should not happen. Fall through to the NOTREACHED() below.
+      break;
   }
 
-  // Get the sequence of settled fetches from the data manager.
-  data_manager_->GetSettledFetchesForRegistration(
-      registration_id,
-      base::BindOnce(&BackgroundFetchContext::DidGetSettledFetches, this,
-                     registration_id));
+  NOTREACHED();
 }
 
 void BackgroundFetchContext::DidGetSettledFetches(
     const BackgroundFetchRegistrationId& registration_id,
     blink::mojom::BackgroundFetchError error,
+    bool background_fetch_succeeded,
     std::vector<BackgroundFetchSettledFetch> settled_fetches,
     std::vector<std::unique_ptr<BlobHandle>> blob_handles) {
   if (error != blink::mojom::BackgroundFetchError::NONE) {
@@ -200,14 +205,20 @@ void BackgroundFetchContext::DidGetSettledFetches(
     return;
   }
 
-  // TODO(peter): Distinguish between the `backgroundfetched` and
-  // `backgroundfetchfail` events based on the status code of all fetches. We
-  // don't populate that field yet, so always assume it's successful for now.
-
-  event_dispatcher_->DispatchBackgroundFetchedEvent(
-      registration_id, std::move(settled_fetches),
-      base::Bind(&BackgroundFetchContext::DeleteRegistration, this,
-                 registration_id, std::move(blob_handles)));
+  // The `backgroundfetched` event will be invoked when all requests in the
+  // registration have completed successfully. In all other cases, the
+  // `backgroundfetchfail` event will be invoked instead.
+  if (background_fetch_succeeded) {
+    event_dispatcher_->DispatchBackgroundFetchedEvent(
+        registration_id, std::move(settled_fetches),
+        base::Bind(&BackgroundFetchContext::DeleteRegistration, this,
+                   registration_id, std::move(blob_handles)));
+  } else {
+    event_dispatcher_->DispatchBackgroundFetchFailEvent(
+        registration_id, std::move(settled_fetches),
+        base::Bind(&BackgroundFetchContext::DeleteRegistration, this,
+                   registration_id, std::move(blob_handles)));
+  }
 }
 
 void BackgroundFetchContext::DeleteRegistration(

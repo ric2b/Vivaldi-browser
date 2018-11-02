@@ -16,6 +16,9 @@ def PostUploadHook(cl, change, output_api):
   to the regular CQ try bots. This test suite is too large to run
   against all Chromium commits, but should be run against changes
   likely to affect these tests.
+
+  When adding/removing tests here, ensure that both gpu/PRESUBMIT.py and
+  ui/gl/PRESUBMIT.py are updated.
   """
   return output_api.EnsureCQIncludeTrybotsAreAdded(
     cl,

@@ -117,8 +117,12 @@ const char kCloudPrintJobTitle[]            = "cloud-print-job-title";
 // print job. Defaults to null if unspecified.
 const char kCloudPrintPrintTicket[]         = "cloud-print-print-ticket";
 
-// Causes the process to run as a cloud print service process.
-const char kCloudPrintServiceProcess[]      = "cloud-print-service";
+// The process type value which causes a process to run as a cloud print service
+// process.
+//
+// DO NOT CHANGE THIS VALUE. Cloud printing relies on an external binary
+// launching Chrome with this process type.
+const char kCloudPrintServiceProcess[]      = "service";
 
 // Setup cloud print proxy for provided printers. This does not start
 // service or register proxy for autostart.
@@ -321,8 +325,8 @@ const char kEnableBookmarkUndo[]            = "enable-bookmark-undo";
 const char kEnableClearBrowsingDataCounters[] =
     "enable-clear-browsing-data-counters";
 
-// This applies only when the process type is "cloud-print-service". Enables the
-// Cloud Print Proxy component within the service process.
+// This applies only when the process type is "service". Enables the Cloud Print
+// Proxy component within the service process.
 const char kEnableCloudPrintProxy[]         = "enable-cloud-print-proxy";
 
 // Enable device discovery notifications.
@@ -405,9 +409,6 @@ const char kEnablePushApiBackgroundMode[] = "enable-push-api-background-mode";
 // Enables the QUIC protocol.  This is a temporary testing flag.
 const char kEnableQuic[] = "enable-quic";
 
-// Switches 'Save as...' context and app menu labels to 'Download...'.
-const char kEnableSaveAsMenuLabelExperiment[] = "saveas-menu-label";
-
 // Enable settings in a separate browser window per profile
 // (see SettingsWindowEnabled() below).
 const char kEnableSettingsWindow[]           = "enable-settings-window";
@@ -483,6 +484,13 @@ const char kForceAppMode[]                  = "force-app-mode";
 // is triggered.
 const char kForceDesktopIOSPromotion[] = "force-desktop-ios-promotion";
 
+// Forces Network Quality Estimator (NQE) to return a specific effective
+// connection type.
+const char kForceEffectiveConnectionType[] = "force-effective-connection-type";
+
+// Forces metrics reporting to be enabled.
+const char kForceEnableMetricsReporting[] = "force-enable-metrics-reporting";
+
 // Displays the First Run experience when the browser is started, regardless of
 // whether or not it's actually the First Run (this overrides kNoFirstRun).
 const char kForceFirstRun[]                 = "force-first-run";
@@ -494,9 +502,6 @@ const char kForceLocalNtp[]                 = "force-local-ntp";
 // header, specified as a 64-bit encoded list of numeric experiment ids. Ids
 // prefixed with the character "t" will be treated as Trigger Variation Ids.
 const char kForceVariationIds[]             = "force-variation-ids";
-
-// Enables grouping websites by domain and filtering them by period.
-const char kHistoryEnableGroupByDomain[]    = "enable-grouped-history";
 
 // Specifies which page will be displayed in newly-opened tabs. We need this
 // for testing purposes so that the UI tests don't depend on what comes up for
@@ -523,6 +528,19 @@ const char kHostResolverRetryAttempts[]     = "host-resolver-retry-attempts";
 // connect and host resolver in a direct connection, and the CONNECT in an http
 // proxy connection, and the endpoint host in a SOCKS proxy connection).
 const char kHostRules[]                     = "host-rules";
+
+// A set of public key hashes for which to ignore certificate-related errors.
+//
+// If the certificate chain presented by the server does not validate, and one
+// or more certificates have public key hashes that match a key from this list,
+// the error is ignored.
+//
+// The switch value must a be a comma-separated list of Base64-encoded SHA-256
+// SPKI Fingerprints (RFC 7469, Section 2.4).
+//
+// This switch has no effect unless --user-data-dir is also present.
+const char kIgnoreCertificateErrorsSPKIList[] =
+    "ignore-certificate-errors-spki-list";
 
 // Causes net::URLFetchers to ignore requests for SSL client certificates,
 // causing them to attempt an unauthenticated SSL/TLS session. This is intended
@@ -629,10 +647,6 @@ const char kNoStartupWindow[]               = "no-startup-window";
 const char kNoSupervisedUserAcknowledgmentCheck[]  =
     "no-managed-user-acknowledgment-check";
 
-// Specifies the maximum number of threads to use for running the Proxy
-// Autoconfig (PAC) script.
-const char kNumPacThreads[]                 = "num-pac-threads";
-
 // Launches URL in new browser window.
 const char kOpenInNewWindow[]               = "new-window";
 
@@ -727,17 +741,9 @@ const char kProxyBypassList[]               = "proxy-bypass-list";
 // Uses the pac script at the given URL
 const char kProxyPacUrl[]                   = "proxy-pac-url";
 
-// Uses a specified proxy server, overrides system settings. This switch only
-// affects HTTP and HTTPS requests. ARC-apps use only HTTP proxy server with the
-// highest priority.
-const char kProxyServer[]                   = "proxy-server";
-
 // Specifies a comma separated list of QUIC connection options to send to
 // the server.
 const char kQuicConnectionOptions[] = "quic-connection-options";
-
-// Specifies a comma separated list of hosts to whitelist QUIC for.
-const char kQuicHostWhitelist[] = "quic-host-whitelist";
 
 // Specifies the maximum length for a QUIC packet.
 const char kQuicMaxPacketLength[] = "quic-max-packet-length";
@@ -749,7 +755,10 @@ const char kQuicVersion[] = "quic-version";
 const char kRemoteDebuggingTargets[] = "remote-debugging-targets";
 
 // Indicates the last session should be restored on startup. This overrides the
-// preferences value.
+// preferences value. Note that this does not force automatic session restore
+// following a crash, so as to prevent a crash loop. This switch is used to
+// implement support for OS-specific "continue where you left off" functionality
+// on OS X and Windows.
 const char kRestoreLastSession[]            = "restore-last-session";
 
 // Disable saving pages as HTML-only, disable saving pages as HTML Complete
@@ -759,6 +768,9 @@ const char kSavePageAsMHTML[]               = "save-page-as-mhtml";
 
 // If true the app list will be shown.
 const char kShowAppList[]                   = "show-app-list";
+
+// If true the Certificate link will be shown in Page Info for HTTPS pages.
+const char kShowCertLink[] = "show-cert-link";
 
 // Does not show an infobar when an extension attaches to a page using
 // chrome.debugger page. Required to attach to extension background pages.
@@ -907,13 +919,6 @@ const char kForceShowUpdateMenuItem[] = "force-show-update-menu-item";
 // Forces a custom summary to be displayed below the update menu item.
 const char kForceShowUpdateMenuItemCustomSummary[] = "custom_summary";
 
-// Forces the new features summary to be displayed below the update menu item.
-const char kForceShowUpdateMenuItemNewFeaturesSummary[] =
-    "use_new_features_summary";
-
-// Forces a summary to be displayed below the update menu item.
-const char kForceShowUpdateMenuItemSummary[] = "show_summary";
-
 // Sets the market URL for Chrome for use in testing.
 const char kMarketUrlForTesting[] = "market-url-for-testing";
 
@@ -937,11 +942,12 @@ const char kWebApkServerUrl[] = "webapk-server-url";
 // Custom crosh command.
 const char kCroshCommand[] = "crosh-command";
 
+// Disables apps on the login screen. By default, they are allowed and can be
+// installed through policy.
+const char kDisableLoginScreenApps[] = "disable-login-screen-apps";
+
 // Disables native cups integration
 const char kDisableNativeCups[] = "disable-native-cups";
-
-// Enables apps on the login screen.
-const char kEnableLoginScreenApps[] = "enable-login-screen-apps";
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(USE_ASH)
@@ -1147,6 +1153,11 @@ const char kEnableWaylandServer[] = "enable-wayland-server";
 #if defined(OS_WIN) || defined(OS_LINUX)
 extern const char kDisableInputImeAPI[] = "disable-input-ime-api";
 extern const char kEnableInputImeAPI[] = "enable-input-ime-api";
+#endif
+
+#if defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_MACOSX) || \
+    defined(OS_WIN)
+extern const char kEnableNewAppMenuIcon[] = "enable-new-app-menu-icon";
 #endif
 
 bool ExtensionsDisabled(const base::CommandLine& command_line) {

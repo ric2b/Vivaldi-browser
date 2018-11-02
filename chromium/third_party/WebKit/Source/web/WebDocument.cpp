@@ -31,7 +31,6 @@
 #include "public/web/WebDocument.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8ElementRegistrationOptions.h"
 #include "core/css/StyleSheetContents.h"
@@ -42,6 +41,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/StyleEngine.h"
 #include "core/events/Event.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/html/HTMLAllCollection.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLCollection.h"
@@ -53,8 +53,8 @@
 #include "core/layout/api/LayoutAPIShim.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/loader/DocumentLoader.h"
-#include "modules/accessibility/AXObject.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "public/platform/WebDistillability.h"
@@ -65,7 +65,6 @@
 #include "public/web/WebElementCollection.h"
 #include "public/web/WebFormElement.h"
 #include "v8/include/v8.h"
-#include "web/WebLocalFrameImpl.h"
 
 namespace blink {
 
@@ -106,7 +105,7 @@ WebURL WebDocument::OpenSearchDescriptionURL() const {
 }
 
 WebLocalFrame* WebDocument::GetFrame() const {
-  return WebLocalFrameImpl::FromFrame(ConstUnwrap<Document>()->GetFrame());
+  return WebLocalFrameBase::FromFrame(ConstUnwrap<Document>()->GetFrame());
 }
 
 bool WebDocument::IsHTMLDocument() const {
@@ -175,7 +174,7 @@ WebURL WebDocument::CompleteURL(const WebString& partial_url) const {
 }
 
 WebElement WebDocument::GetElementById(const WebString& id) const {
-  return WebElement(ConstUnwrap<Document>()->GetElementById(id));
+  return WebElement(ConstUnwrap<Document>()->getElementById(id));
 }
 
 WebElement WebDocument::FocusedElement() const {

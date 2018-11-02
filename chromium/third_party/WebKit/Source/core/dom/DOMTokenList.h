@@ -25,8 +25,9 @@
 #ifndef DOMTokenList_h
 #define DOMTokenList_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
+#include "core/CoreExport.h"
 #include "core/dom/SpaceSplitString.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/AtomicString.h"
@@ -59,7 +60,7 @@ class CORE_EXPORT DOMTokenList : public GarbageCollectedFinalized<DOMTokenList>,
   virtual unsigned length() const { return tokens_.size(); }
   virtual const AtomicString item(unsigned index) const;
 
-  bool contains(const AtomicString&, ExceptionState&) const;
+  bool contains(const AtomicString&) const;
   virtual void add(const Vector<String>&, ExceptionState&);
   void add(const AtomicString&, ExceptionState&);
   virtual void remove(const Vector<String>&, ExceptionState&);
@@ -88,10 +89,12 @@ class CORE_EXPORT DOMTokenList : public GarbageCollectedFinalized<DOMTokenList>,
   bool ValidateToken(const String&, ExceptionState&) const;
   bool ValidateTokens(const Vector<String>&, ExceptionState&) const;
   virtual bool ValidateTokenValue(const AtomicString&, ExceptionState&) const;
-  static AtomicString AddToken(const AtomicString&, const AtomicString&);
-  static AtomicString AddTokens(const AtomicString&, const Vector<String>&);
-  static AtomicString RemoveToken(const AtomicString&, const AtomicString&);
-  static AtomicString RemoveTokens(const AtomicString&, const Vector<String>&);
+  AtomicString AddToken(const AtomicString&);
+  AtomicString AddTokens(const Vector<String>&);
+  AtomicString RemoveToken(const AtomicString&);
+  AtomicString RemoveTokens(const Vector<String>&);
+  virtual SpaceSplitString& MutableSet() { return tokens_; }
+  static AtomicString SerializeSet(const SpaceSplitString&);
 
  private:
   SpaceSplitString tokens_;

@@ -49,7 +49,7 @@ TEST(FPSMeter, AccurateFPSWithManyFrames) {
   EXPECT_FALSE(meter.CanComputeFPS());
   EXPECT_FLOAT_EQ(0.0, meter.GetFPS());
 
-  for (int i = 0; i < 5; ++i) {
+  for (size_t i = 0; i < 2 * meter.GetNumFrameTimes(); ++i) {
     now += frame_time;
     meter.AddFrame(now);
     EXPECT_TRUE(meter.CanComputeFPS());
@@ -75,6 +75,39 @@ TEST(FPSMeter, AccurateFPSWithHigherFramerate) {
     EXPECT_TRUE(meter.CanComputeFPS());
     EXPECT_NEAR(1.0 / frame_time.InSecondsF(), meter.GetFPS(), kTolerance);
   }
+}
+
+TEST(SlidingAverage, Basics) {
+  SlidingAverage meter(5);
+
+  // No values yet
+  EXPECT_EQ(42, meter.GetAverageOrDefault(42));
+  EXPECT_EQ(0, meter.GetAverage());
+
+  meter.AddSample(100);
+  EXPECT_EQ(100, meter.GetAverageOrDefault(42));
+  EXPECT_EQ(100, meter.GetAverage());
+
+  meter.AddSample(200);
+  EXPECT_EQ(150, meter.GetAverage());
+
+  meter.AddSample(10);
+  EXPECT_EQ(103, meter.GetAverage());
+
+  meter.AddSample(10);
+  EXPECT_EQ(80, meter.GetAverage());
+
+  meter.AddSample(10);
+  EXPECT_EQ(66, meter.GetAverage());
+
+  meter.AddSample(10);
+  EXPECT_EQ(48, meter.GetAverage());
+
+  meter.AddSample(10);
+  EXPECT_EQ(10, meter.GetAverage());
+
+  meter.AddSample(110);
+  EXPECT_EQ(30, meter.GetAverage());
 }
 
 }  // namespace vr_shell

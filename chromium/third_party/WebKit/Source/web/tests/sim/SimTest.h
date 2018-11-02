@@ -15,8 +15,8 @@
 
 namespace blink {
 
-class WebViewImpl;
-class WebLocalFrameImpl;
+class WebViewBase;
+class WebLocalFrameBase;
 class Document;
 class LocalDOMWindow;
 
@@ -25,13 +25,18 @@ class SimTest : public ::testing::Test {
   SimTest();
   ~SimTest() override;
 
+  void SetUp() override;
+
   void LoadURL(const String& url);
 
+  // WebView is created after SetUp to allow test to customize
+  // web runtime features.
+  // These methods should be accessed inside test body after a call to SetUp.
   LocalDOMWindow& Window();
   SimPage& Page();
   Document& GetDocument();
-  WebViewImpl& WebView();
-  WebLocalFrameImpl& MainFrame();
+  WebViewBase& WebView();
+  WebLocalFrameBase& MainFrame();
   const SimWebViewClient& WebViewClient() const;
   SimCompositor& Compositor();
 

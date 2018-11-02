@@ -133,8 +133,6 @@ static_library("extensions") {
     "api/declarative_content/content_action.h",
     "api/declarative_content/content_condition.cc",
     "api/declarative_content/content_condition.h",
-    "api/declarative_content/content_constants.cc",
-    "api/declarative_content/content_constants.h",
     "api/declarative_content/content_predicate.cc",
     "api/declarative_content/content_predicate.h",
     "api/declarative_content/content_predicate_evaluator.cc",
@@ -321,6 +319,8 @@ static_library("extensions") {
     "api/passwords_private/passwords_private_event_router.h",
     "api/passwords_private/passwords_private_event_router_factory.cc",
     "api/passwords_private/passwords_private_event_router_factory.h",
+    "api/passwords_private/passwords_private_utils.cc",
+    "api/passwords_private/passwords_private_utils.h",
     "api/permissions/permissions_api.cc",
     "api/permissions/permissions_api.h",
     "api/permissions/permissions_api_helpers.cc",
@@ -466,6 +466,15 @@ static_library("extensions") {
     "browser_context_keyed_service_factories.h",
     "browser_extension_window_controller.cc",
     "browser_extension_window_controller.h",
+    "chrome_app_icon.cc",
+    "chrome_app_icon.h",
+    "chrome_app_icon_delegate.h",
+    "chrome_app_icon_loader.cc",
+    "chrome_app_icon_loader.h",
+    "chrome_app_icon_service.cc",
+    "chrome_app_icon_service.h",
+    "chrome_app_icon_service_factory.cc",
+    "chrome_app_icon_service_factory.h",
     "chrome_app_sorting.cc",
     "chrome_app_sorting.h",
     "chrome_component_extension_resource_manager.cc",
@@ -539,8 +548,6 @@ static_library("extensions") {
     "extension_action_runner.h",
     "extension_action_storage_manager.cc",
     "extension_action_storage_manager.h",
-    "extension_app_icon_loader.cc",
-    "extension_app_icon_loader.h",
     "extension_assets_manager.cc",
     "extension_assets_manager.h",
     "extension_assets_manager_chromeos.cc",
@@ -581,8 +588,6 @@ static_library("extensions") {
     "extension_install_prompt.h",
     "extension_install_prompt_show_params.cc",
     "extension_install_prompt_show_params.h",
-    "extension_install_ui_util.cc",
-    "extension_install_ui_util.h",
     "extension_keybinding_registry.cc",
     "extension_keybinding_registry.h",
     "extension_management.cc",
@@ -813,6 +818,7 @@ static_library("extensions") {
     "//chrome/app/theme:theme_resources",
     "//chrome/app/vector_icons",
     "//chrome/browser/devtools",
+    "//chrome/browser/media/router",
     "//chrome/browser/media/router/discovery",
     "//chrome/common",
     "//chrome/common/extensions/api:api_registration",
@@ -848,13 +854,12 @@ static_library("extensions") {
     "//components/policy/core/browser",
     "//components/pref_registry",
     "//components/proximity_auth",
-    "//components/proximity_auth/ble",
     "//components/proximity_auth/logging",
     "//components/proxy_config",
     "//components/rappor",
     "//components/resources",
+    "//components/safe_browsing/common:safe_browsing_prefs",
     "//components/safe_browsing_db:database_manager",
-    "//components/safe_browsing_db:safe_browsing_prefs",
     "//components/safe_json",
     "//components/search_engines",
     "//components/sessions",
@@ -918,10 +923,6 @@ static_library("extensions") {
     "//url",
   ]
 
-  if (enable_media_router) {
-    deps += [ "//chrome/browser/media/router" ]
-  }
-
   if (!is_chromeos) {
     sources += [ "chrome_kiosk_delegate.cc" ]
   }
@@ -936,8 +937,6 @@ static_library("extensions") {
       "api/enterprise_platform_keys/enterprise_platform_keys_api.h",
       "api/enterprise_platform_keys_private/enterprise_platform_keys_private_api.cc",
       "api/enterprise_platform_keys_private/enterprise_platform_keys_private_api.h",
-      "api/file_system/request_file_system_dialog_view.cc",
-      "api/file_system/request_file_system_dialog_view.h",
       "api/file_system/request_file_system_notification.cc",
       "api/file_system/request_file_system_notification.h",
       "api/input_ime/input_ime_api.cc",
@@ -993,6 +992,7 @@ static_library("extensions") {
       "//components/constrained_window",
       "//components/drive",
       "//components/user_manager",
+      "//remoting/base",
       "//remoting/host",
       "//remoting/host/it2me:common",
       "//third_party/protobuf:protobuf_lite",
@@ -1130,12 +1130,6 @@ static_library("extensions") {
 
   if (enable_service_discovery) {
     sources += [
-      "api/mdns/dns_sd_delegate.cc",
-      "api/mdns/dns_sd_delegate.h",
-      "api/mdns/dns_sd_device_lister.cc",
-      "api/mdns/dns_sd_device_lister.h",
-      "api/mdns/dns_sd_registry.cc",
-      "api/mdns/dns_sd_registry.h",
       "api/mdns/mdns_api.cc",
       "api/mdns/mdns_api.h",
     ]
@@ -1157,11 +1151,10 @@ static_library("extensions") {
   }
 
   if (use_ash) {
-    sources += [
-      "api/tabs/ash_panel_contents.cc",
-      "api/tabs/ash_panel_contents.h",
+    deps += [
+      "//ash",
+      "//ash/public/cpp:ash_public_cpp",
     ]
-    deps += [ "//ash" ]
   }
 
   if (use_aura) {

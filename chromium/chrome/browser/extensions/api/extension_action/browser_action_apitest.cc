@@ -8,6 +8,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/browser_action_test_util.h"
@@ -71,6 +72,7 @@ void ExecuteExtensionAction(Browser* browser, const Extension* extension) {
 
 std::unique_ptr<base::ScopedTempDir> CreateAndSetDownloadsDirectory(
     PrefService* pref_service) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   std::unique_ptr<base::ScopedTempDir> dir(new base::ScopedTempDir);
 
   if (!dir->CreateUniqueTempDir())
@@ -120,6 +122,11 @@ class BrowserActionApiTest : public ExtensionApiTest {
  public:
   BrowserActionApiTest() {}
   ~BrowserActionApiTest() override {}
+
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
+  }
 
  protected:
   BrowserActionTestUtil* GetBrowserActionsBar() {
@@ -728,11 +735,10 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, TestTriggerBrowserAction) {
   EXPECT_EQ(result, "red");
 }
 
-// Test that a browser action popup with a web iframe works correctly. This
-// primarily targets --isolate-extensions and --site-per-process modes, where
-// the iframe runs in a separate process.  See https://crbug.com/546267.
+// Test that a browser action popup with a web iframe works correctly. The
+// iframe is expected to run in a separate process.
+// See https://crbug.com/546267.
 IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionPopupWithIframe) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(LoadExtension(
@@ -831,7 +837,6 @@ class NavigatingExtensionPopupBrowserTest : public BrowserActionApiTest {
   void SetUpOnMainThread() override {
     BrowserActionApiTest::SetUpOnMainThread();
 
-    host_resolver()->AddRule("*", "127.0.0.1");
     ASSERT_TRUE(embedded_test_server()->Start());
 
     // Load an extension with a pop-up.
@@ -948,31 +953,12 @@ class NavigatingExtensionPopupBrowserTest : public BrowserActionApiTest {
 IN_PROC_BROWSER_TEST_F(NavigatingExtensionPopupBrowserTest, Webpage) {
   GURL web_url(embedded_test_server()->GetURL("foo.com", "/title1.html"));
 
-  // With and without --isolate-extension the GET request will be blocked in
-  // ExtensionViewHost::OpenURLFromTab (which silently drops navigations with
-  // CURRENT_TAB disposition).
+  // The GET request will be blocked in ExtensionViewHost::OpenURLFromTab
+  // (which silently drops navigations with CURRENT_TAB disposition).
   TestPopupNavigationViaGet(web_url, EXPECTING_NAVIGATION_FAILURE);
 
   // POST requests don't go through ExtensionViewHost::OpenURLFromTab.
-  //
-  // Without --isolate-extensions, there is no process transfer to isolate
-  // extensions into separate processes and therefore
-  // 1) navigating a popup extension to a webpage will succeed (because
-  //    ExtensionViewHost::ShouldTransferNavigation won't get called when there
-  //    is no transfer),
-  // 2) the webpage will stay in the same renderer process.
-  // This behavior is okay without --isolate-extensions (where webpages and
-  // extensions can coexist in the same process in other scenarios) - therefore
-  // no test verification is needed in this case.
-  //
-  // With --isolate-extensions the navigation should be blocked by
-  // ExtensionViewHost::ShouldTransferNavigation.  Test verification is
-  // important in --isolate-extensions mode, because this mode is all about
-  // isolating extensions and webpages into separate processes and therefore we
-  // need to ensure the behavior described above doesn't occur (i.e. that
-  // instead the webpage navigation in an extension popup fails).
-  if (extensions::IsIsolateExtensionsEnabled())
-    TestPopupNavigationViaPost(web_url, EXPECTING_NAVIGATION_FAILURE);
+  TestPopupNavigationViaPost(web_url, EXPECTING_NAVIGATION_FAILURE);
 }
 
 // Tests that an extension pop-up can be navigated to another page
@@ -1012,6 +998,7 @@ IN_PROC_BROWSER_TEST_F(NavigatingExtensionPopupBrowserTest, DownloadViaPost) {
   // Override the default downloads directory, so that the test can cleanup
   // after itself.  This section is based on CreateAndSetDownloadsDirectory
   // method defined in a few other source files with tests.
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   std::unique_ptr<base::ScopedTempDir> downloads_directory =
       CreateAndSetDownloadsDirectory(browser()->profile()->GetPrefs());
   ASSERT_TRUE(downloads_directory);

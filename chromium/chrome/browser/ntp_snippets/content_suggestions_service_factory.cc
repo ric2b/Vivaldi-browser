@@ -10,7 +10,8 @@
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/sequenced_task_runner.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/time/default_clock.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -63,12 +64,13 @@
 #include "chrome/browser/android/ntp/ntp_snippets_launcher.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/android/offline_pages/request_coordinator_factory.h"
+#include "chrome/browser/download/download_core_service.h"
+#include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_history.h"
-#include "chrome/browser/download/download_service.h"
-#include "chrome/browser/download/download_service_factory.h"
 #include "chrome/browser/ntp_snippets/download_suggestions_provider.h"
 #include "components/ntp_snippets/offline_pages/recent_tab_suggestions_provider.h"
 #include "components/ntp_snippets/physical_web_pages/physical_web_page_suggestions_provider.h"
+#include "components/offline_pages/content/suggested_articles_observer.h"
 #include "components/offline_pages/core/background/request_coordinator.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/offline_page_model.h"
@@ -163,10 +165,9 @@ void RegisterDownloadsProvider(OfflinePageModel* offline_page_model,
 #endif  // OS_ANDROID
 
 void RegisterBookmarkProvider(BookmarkModel* bookmark_model,
-                              ContentSuggestionsService* service,
-                              PrefService* pref_service) {
-  auto provider = base::MakeUnique<BookmarkSuggestionsProvider>(
-      service, bookmark_model, pref_service);
+                              ContentSuggestionsService* service) {
+  auto provider =
+      base::MakeUnique<BookmarkSuggestionsProvider>(service, bookmark_model);
   service->RegisterProvider(std::move(provider));
 }
 
@@ -203,10 +204,9 @@ void RegisterArticleProvider(SigninManagerBase* signin_manager,
   base::FilePath database_dir(
       profile->GetPath().Append(ntp_snippets::kDatabaseFolder));
   scoped_refptr<base::SequencedTaskRunner> task_runner =
-      BrowserThread::GetBlockingPool()
-          ->GetSequencedTaskRunnerWithShutdownBehavior(
-              base::SequencedWorkerPool::GetSequenceToken(),
-              base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
   std::string api_key;
   // The API is private. If we don't have the official API key, don't even try.
   if (google_apis::IsGoogleChromeAPIKeyUsed()) {
@@ -335,27 +335,9 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
 #if defined(OS_ANDROID)
   OfflinePageModel* offline_page_model =
       OfflinePageModelFactory::GetForBrowserContext(profile);
-  RequestCoordinator* request_coordinator =
-      RequestCoordinatorFactory::GetForBrowserContext(profile);
-  DownloadManager* download_manager =
-      content::BrowserContext::GetDownloadManager(profile);
-  DownloadService* download_service =
-      DownloadServiceFactory::GetForBrowserContext(profile);
-  DownloadHistory* download_history = download_service->GetDownloadHistory();
-  PhysicalWebDataSource* physical_web_data_source =
-      g_browser_process->GetPhysicalWebDataSource();
-#endif  // OS_ANDROID
-  BookmarkModel* bookmark_model =
-      BookmarkModelFactory::GetForBrowserContext(profile);
-  OAuth2TokenService* token_service =
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
-  SyncService* sync_service =
-      ProfileSyncServiceFactory::GetSyncServiceForBrowserContext(profile);
-  LanguageModel* language_model =
-      LanguageModelFactory::GetInstance()->GetForBrowserContext(profile);
-
-#if defined(OS_ANDROID)
   if (IsRecentTabProviderEnabled()) {
+    RequestCoordinator* request_coordinator =
+        RequestCoordinatorFactory::GetForBrowserContext(profile);
     RegisterRecentTabProvider(offline_page_model, request_coordinator, service,
                               pref_service);
   }
@@ -368,27 +350,44 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
       base::FeatureList::IsEnabled(
           features::kOfflinePageDownloadSuggestionsFeature);
   if (show_asset_downloads || show_offline_page_downloads) {
+    DownloadManager* download_manager =
+        content::BrowserContext::GetDownloadManager(profile);
+    DownloadCoreService* download_core_service =
+        DownloadCoreServiceFactory::GetForBrowserContext(profile);
+    DownloadHistory* download_history =
+        download_core_service->GetDownloadHistory();
     RegisterDownloadsProvider(
         show_offline_page_downloads ? offline_page_model : nullptr,
         show_asset_downloads ? download_manager : nullptr, download_history,
         service, pref_service);
   }
+
+  offline_pages::SuggestedArticlesObserver::ObserveContentSuggestionsService(
+      profile, service);
 #endif  // OS_ANDROID
 
   // |bookmark_model| can be null in tests.
+  BookmarkModel* bookmark_model =
+      BookmarkModelFactory::GetForBrowserContext(profile);
   if (base::FeatureList::IsEnabled(ntp_snippets::kBookmarkSuggestionsFeature) &&
       bookmark_model && !IsChromeHomeEnabled()) {
-    RegisterBookmarkProvider(bookmark_model, service, pref_service);
+    RegisterBookmarkProvider(bookmark_model, service);
   }
 
 #if defined(OS_ANDROID)
   if (IsPhysicalWebPageProviderEnabled()) {
+    PhysicalWebDataSource* physical_web_data_source =
+        g_browser_process->GetPhysicalWebDataSource();
     RegisterPhysicalWebPageProvider(service, physical_web_data_source,
                                     pref_service);
   }
 #endif  // OS_ANDROID
 
   if (base::FeatureList::IsEnabled(ntp_snippets::kArticleSuggestionsFeature)) {
+    OAuth2TokenService* token_service =
+        ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
+    LanguageModel* language_model =
+        LanguageModelFactory::GetInstance()->GetForBrowserContext(profile);
     RegisterArticleProvider(signin_manager, token_service, service,
                             language_model, user_classifier_raw, pref_service,
                             profile);
@@ -396,6 +395,8 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
 
   if (base::FeatureList::IsEnabled(
           ntp_snippets::kForeignSessionsSuggestionsFeature)) {
+    SyncService* sync_service =
+        ProfileSyncServiceFactory::GetSyncServiceForBrowserContext(profile);
     RegisterForeignSessionsProvider(sync_service, service, pref_service);
   }
 

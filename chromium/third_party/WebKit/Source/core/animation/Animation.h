@@ -32,7 +32,6 @@
 #define Animation_h
 
 #include <memory>
-#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
@@ -44,6 +43,7 @@
 #include "core/events/EventTarget.h"
 #include "platform/animation/CompositorAnimationDelegate.h"
 #include "platform/animation/CompositorAnimationPlayerClient.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/graphics/CompositorElementId.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/RefPtr.h"
@@ -238,6 +238,8 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
                                                  Member<Animation>,
                                                  Member<DOMException>>;
   void ResolvePromiseMaybeAsync(AnimationPromise*);
+  void RejectAndResetPromise(AnimationPromise*);
+  void RejectAndResetPromiseMaybeAsync(AnimationPromise*);
 
   String id_;
 

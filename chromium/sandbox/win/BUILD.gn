@@ -30,6 +30,8 @@ static_library("sandbox") {
     "src/handle_closer.h",
     "src/handle_closer_agent.cc",
     "src/handle_closer_agent.h",
+    "src/heap_helper.cc",
+    "src/heap_helper.h",
     "src/interception.cc",
     "src/interception.h",
     "src/interception_agent.cc",
@@ -218,7 +220,7 @@ executable("cfi_unittest_exe") {
   ]
   deps = [
     "//base",
-    "//build/config/sanitizers:deps",
+    "//build/config:exe_and_shlib_deps",
     "//build/win:default_exe_manifest",
   ]
 }
@@ -314,6 +316,7 @@ shared_library("pocdll") {
     "sandbox_poc/pocdll/handles.cc",
     "sandbox_poc/pocdll/invasive.cc",
     "sandbox_poc/pocdll/network.cc",
+    "sandbox_poc/pocdll/ntundoc.h",
     "sandbox_poc/pocdll/pocdll.cc",
     "sandbox_poc/pocdll/processes_and_threads.cc",
     "sandbox_poc/pocdll/registry.cc",
@@ -324,6 +327,6 @@ shared_library("pocdll") {
   defines = [ "POCDLL_EXPORTS" ]
 
   deps = [
-    "//build/config/sanitizers:deps",
+    "//build/config:exe_and_shlib_deps",
   ]
 }

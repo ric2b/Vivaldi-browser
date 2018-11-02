@@ -56,7 +56,7 @@ IPC_STRUCT_BEGIN(GPUCreateCommandBufferConfig)
   IPC_STRUCT_MEMBER(gpu::SurfaceHandle, surface_handle)
   IPC_STRUCT_MEMBER(int32_t, share_group_id)
   IPC_STRUCT_MEMBER(int32_t, stream_id)
-  IPC_STRUCT_MEMBER(gpu::GpuStreamPriority, stream_priority)
+  IPC_STRUCT_MEMBER(gpu::SchedulingPriority, stream_priority)
   IPC_STRUCT_MEMBER(gpu::gles2::ContextCreationAttribHelper, attribs)
   IPC_STRUCT_MEMBER(GURL, active_url)
 IPC_STRUCT_END()
@@ -145,8 +145,7 @@ IPC_MESSAGE_ROUTED0(GpuStreamTextureMsg_FrameAvailable)
 // a single OpenGL context.
 
 // Sets the shared memory buffer used for commands.
-IPC_SYNC_MESSAGE_ROUTED1_0(GpuCommandBufferMsg_SetGetBuffer,
-                           int32_t /* shm_id */)
+IPC_MESSAGE_ROUTED1(GpuCommandBufferMsg_SetGetBuffer, int32_t /* shm_id */)
 
 // Takes the front buffer into a mailbox. This allows another context to draw
 // the output of this context.
@@ -166,7 +165,8 @@ IPC_SYNC_MESSAGE_ROUTED2_1(GpuCommandBufferMsg_WaitForTokenInRange,
                            gpu::CommandBuffer::State /* state */)
 
 // Wait until the get offset is in a specific range, inclusive.
-IPC_SYNC_MESSAGE_ROUTED2_1(GpuCommandBufferMsg_WaitForGetOffsetInRange,
+IPC_SYNC_MESSAGE_ROUTED3_1(GpuCommandBufferMsg_WaitForGetOffsetInRange,
+                           uint32_t /* set_get_buffer_count */,
                            int32_t /* start */,
                            int32_t /* end */,
                            gpu::CommandBuffer::State /* state */)

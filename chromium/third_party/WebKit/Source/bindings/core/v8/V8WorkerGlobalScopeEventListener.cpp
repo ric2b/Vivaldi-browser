@@ -30,8 +30,7 @@
 
 #include "bindings/core/v8/V8WorkerGlobalScopeEventListener.h"
 
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8DOMWrapper.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8Event.h"
 #include "bindings/core/v8/V8EventTarget.h"
 #include "bindings/core/v8/V8GCController.h"
@@ -41,6 +40,7 @@
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/probe/CoreProbes.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "platform/bindings/V8DOMWrapper.h"
 
 namespace blink {
 
@@ -73,7 +73,7 @@ v8::Local<v8::Value> V8WorkerGlobalScopeEventListener::CallListenerFunction(
     ScriptState* script_state,
     v8::Local<v8::Value> js_event,
     Event* event) {
-  ASSERT(!js_event.IsEmpty());
+  DCHECK(!js_event.IsEmpty());
   v8::Local<v8::Function> handler_function = GetListenerFunction(script_state);
   v8::Local<v8::Object> receiver = GetReceiverObject(script_state, event);
   if (handler_function.IsEmpty() || receiver.IsEmpty())

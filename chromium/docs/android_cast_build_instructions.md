@@ -234,8 +234,8 @@ the WebView shell is essentially a standalone unbundled app).
 As drawback, the shell runs in non-production rendering mode only.
 
 ```shell
-ninja -C out/Release android_webview_apk
-build/android/adb_install_apk.py out/Release/apks/AndroidWebView.apk
+ninja -C out/Release webview_instrumentation_apk
+build/android/adb_install_apk.py out/Release/apks/WebViewInstrumentation.apk
 ```
 
 If, instead, you want to build the complete Android WebView framework component and test the effect of your chromium changes in other Android app using the WebView, you should follow the [Android AOSP + chromium WebView instructions](https://www.chromium.org/developers/how-tos/build-instructions-android-webview)
@@ -285,12 +285,12 @@ build/android/adb_gdb_chrome_public
 build/android/adb_gdb_android_webview_shell http://example.com
 ```
 
-See [Debugging Chromium on Android](https://www.chromium.org/developers/how-tos/debugging-on-android)
+See [Android Debugging Instructions](android_debugging_instructions.md)
 for more on debugging, including how to debug Java code.
 
 ### Testing
 
-For information on running tests, see [android\_test\_instructions.md](https://chromium.googlesource.com/chromium/src/+/master/docs/android_test_instructions.md).
+For information on running tests, see [Android Test Instructions](android_test_instructions.md).
 
 ### Faster Edit/Deploy (GN only)
 

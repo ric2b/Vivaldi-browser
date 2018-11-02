@@ -23,13 +23,14 @@
 #include "base/optional.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "chrome/browser/media/router/issue.h"
 #include "chrome/browser/media/router/issue_manager.h"
 #include "chrome/browser/media/router/media_router_base.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
-#include "chrome/browser/media/router/mojo/media_router.mojom.h"
-#include "chrome/browser/media/router/route_request_result.h"
+#include "chrome/common/media_router/issue.h"
+#include "chrome/common/media_router/mojo/media_router.mojom.h"
+#include "chrome/common/media_router/route_request_result.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 
 namespace content {
 class BrowserContext;
@@ -61,10 +62,10 @@ class MediaRouterMojoImpl : public MediaRouterBase,
   //     suspension state.
   // |context|: The BrowserContext which owns the extension process.
   // |request|: The Mojo connection request used for binding.
-  static void BindToRequest(
-      const extensions::Extension* extension,
-      content::BrowserContext* context,
-      mojo::InterfaceRequest<mojom::MediaRouter> request);
+  static void BindToRequest(const extensions::Extension* extension,
+                            content::BrowserContext* context,
+                            const service_manager::BindSourceInfo& source_info,
+                            mojom::MediaRouterRequest request);
 
   // MediaRouter implementation.
   // Execution of the requests is delegated to the Do* methods, which can be
@@ -111,6 +112,8 @@ class MediaRouterMojoImpl : public MediaRouterBase,
       const MediaSinkSearchResponseCallback& sink_callback) override;
   void ProvideSinks(const std::string& provider_name,
                     const std::vector<MediaSinkInternal>& sinks) override;
+  scoped_refptr<MediaRouteController> GetRouteController(
+      const MediaRoute::Id& route_id) override;
 
   const std::string& media_route_provider_extension_id() const {
     return media_route_provider_extension_id_;
@@ -144,6 +147,15 @@ class MediaRouterMojoImpl : public MediaRouterBase,
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
                            RouteMessagesMultipleObservers);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest, HandleIssue);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest, GetRouteController);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
+                           GetRouteControllerMultipleTimes);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
+                           GetRouteControllerAfterInvalidation);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
+                           GetRouteControllerAfterRouteInvalidation);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
+                           FailToCreateRouteController);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoExtensionTest,
                            DeferredBindingAndSuspension);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoExtensionTest,
@@ -213,11 +225,11 @@ class MediaRouterMojoImpl : public MediaRouterBase,
       const extensions::Extension& extension);
 
   // Enqueues a closure for later execution by ExecutePendingRequests().
-  void EnqueueTask(const base::Closure& closure);
+  void EnqueueTask(base::OnceClosure closure);
 
   // Runs a closure if the extension monitored by |extension_monitor_| is
   // active, or defers it for later execution if the extension is suspended.
-  void RunOrDefer(const base::Closure& request);
+  void RunOrDefer(base::OnceClosure request);
 
   // Dispatches the Mojo requests queued in |pending_requests_|.
   void ExecutePendingRequests();
@@ -235,6 +247,8 @@ class MediaRouterMojoImpl : public MediaRouterBase,
   void UnregisterIssuesObserver(IssuesObserver* observer) override;
   void RegisterRouteMessageObserver(RouteMessageObserver* observer) override;
   void UnregisterRouteMessageObserver(RouteMessageObserver* observer) override;
+  void DetachRouteController(const MediaRoute::Id& route_id,
+                             MediaRouteController* controller) override;
 
   // Notifies |observer| of any existing cached routes, if it is still
   // registered.
@@ -284,6 +298,10 @@ class MediaRouterMojoImpl : public MediaRouterBase,
       const std::string& search_input,
       const std::string& domain,
       const MediaSinkSearchResponseCallback& sink_callback);
+  void DoCreateMediaRouteController(
+      const MediaRoute::Id& route_id,
+      mojom::MediaControllerRequest mojo_media_controller_request,
+      mojom::MediaStatusObserverPtr mojo_observer);
 
   void DoProvideSinks(const std::string& provider_name,
                       const std::vector<MediaSinkInternal>& sinks);
@@ -388,9 +406,16 @@ class MediaRouterMojoImpl : public MediaRouterBase,
   void UpdateMediaSinks(const MediaSource::Id& source_id);
   void DoUpdateMediaSinks(const MediaSource::Id& source_id);
 
+  // Invalidates and removes controllers from |route_controllers_| whose media
+  // routes do not appear in |routes|.
+  void RemoveInvalidRouteControllers(const std::vector<MediaRoute>& routes);
+
+  // Callback called by MRP's CreateMediaRouteController().
+  void OnMediaControllerCreated(const MediaRoute::Id& route_id, bool success);
+
   // Pending requests queued to be executed once component extension
   // becomes ready.
-  std::deque<base::Closure> pending_requests_;
+  std::deque<base::OnceClosure> pending_requests_;
 
   std::unordered_map<MediaSource::Id, std::unique_ptr<MediaSinksQuery>>
       sinks_queries_;
@@ -440,6 +465,10 @@ class MediaRouterMojoImpl : public MediaRouterBase,
   // A flag to ensure that we record the provider version once, during the
   // initial event page wakeup attempt.
   bool provider_version_was_recorded_ = false;
+
+  // Stores route controllers that can be used to send media commands to the
+  // extension.
+  std::unordered_map<MediaRoute::Id, MediaRouteController*> route_controllers_;
 
 #if defined(OS_WIN)
   // A pair of flags to ensure that mDNS discovery is only enabled on Windows

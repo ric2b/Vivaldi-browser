@@ -38,6 +38,7 @@
 #include "chromeos/network/policy_util.h"
 #include "chromeos/network/prohibited_technologies_handler.h"
 #include "chromeos/network/shill_property_util.h"
+#include "chromeos/network/tether_constants.h"
 #include "components/onc/onc_constants.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -85,6 +86,13 @@ const base::DictionaryValue* GetByGUID(const GuidToPolicyMap& policies,
   if (it == policies.end())
     return NULL;
   return it->second.get();
+}
+
+bool IsTetherShillDictionary(const base::DictionaryValue& dict) {
+  std::string network_type;
+  return dict.GetStringWithoutPathExpansion(shill::kTypeProperty,
+                                            &network_type) &&
+         network_type == kTypeTether;
 }
 
 }  // namespace
@@ -143,13 +151,17 @@ void ManagedNetworkConfigurationHandlerImpl::SendManagedProperties(
                                                   &profile_path);
   const NetworkProfile* profile =
       network_profile_handler_->GetProfileForPath(profile_path);
-  if (!profile)
+  if (!profile && !IsTetherShillDictionary(*shill_properties)) {
+    // Tether networks are not expected to have an associated profile; only
+    // log an error if the provided properties do not correspond to a
+    // Tether network.
     NET_LOG_ERROR("No profile for service: " + profile_path, service_path);
+  }
 
   std::unique_ptr<NetworkUIData> ui_data =
       shill_property_util::GetUIDataFromProperties(*shill_properties);
 
-  const base::DictionaryValue* user_settings = NULL;
+  const base::DictionaryValue* user_settings = nullptr;
 
   if (ui_data && profile) {
     user_settings = ui_data->user_settings();
@@ -172,8 +184,8 @@ void ManagedNetworkConfigurationHandlerImpl::SendManagedProperties(
                                           &onc::kNetworkWithStateSignature,
                                           network_state));
 
-  const base::DictionaryValue* network_policy = NULL;
-  const base::DictionaryValue* global_policy = NULL;
+  const base::DictionaryValue* network_policy = nullptr;
+  const base::DictionaryValue* global_policy = nullptr;
   if (profile) {
     const Policies* policies = GetPoliciesForProfile(*profile);
     if (!policies) {
@@ -718,7 +730,8 @@ ManagedNetworkConfigurationHandlerImpl::GetGlobalConfigFromPolicy(
 const base::DictionaryValue*
 ManagedNetworkConfigurationHandlerImpl::FindPolicyByGuidAndProfile(
     const std::string& guid,
-    const std::string& profile_path) const {
+    const std::string& profile_path,
+    ::onc::ONCSource* onc_source) const {
   const NetworkProfile* profile =
       network_profile_handler_->GetProfileForPath(profile_path);
   if (!profile) {
@@ -730,7 +743,13 @@ ManagedNetworkConfigurationHandlerImpl::FindPolicyByGuidAndProfile(
   if (!policies)
     return NULL;
 
-  return GetByGUID(policies->per_network_config, guid);
+  const base::DictionaryValue* policy =
+      GetByGUID(policies->per_network_config, guid);
+  if (policy && onc_source) {
+    *onc_source = (profile->userhash.empty() ? ::onc::ONC_SOURCE_DEVICE_POLICY
+                                             : ::onc::ONC_SOURCE_USER_POLICY);
+  }
+  return policy;
 }
 
 const ManagedNetworkConfigurationHandlerImpl::Policies*
@@ -819,12 +838,13 @@ void ManagedNetworkConfigurationHandlerImpl::GetDeviceStateProperties(
   }
 
   // Convert IPConfig dictionary to a ListValue.
-  base::ListValue* ip_configs = new base::ListValue;
+  auto ip_configs = base::MakeUnique<base::ListValue>();
   for (base::DictionaryValue::Iterator iter(device_state->ip_configs());
        !iter.IsAtEnd(); iter.Advance()) {
     ip_configs->Append(iter.value().CreateDeepCopy());
   }
-  properties->SetWithoutPathExpansion(shill::kIPConfigsProperty, ip_configs);
+  properties->SetWithoutPathExpansion(shill::kIPConfigsProperty,
+                                      std::move(ip_configs));
 }
 
 void ManagedNetworkConfigurationHandlerImpl::GetPropertiesCallback(
@@ -897,7 +917,7 @@ void ManagedNetworkConfigurationHandlerImpl::GetDevicePropertiesSuccess(
     const base::DictionaryValue& device_properties) {
   // Create a "Device" dictionary in |network_properties|.
   network_properties->SetWithoutPathExpansion(
-      shill::kDeviceProperty, device_properties.DeepCopy());
+      shill::kDeviceProperty, base::MakeUnique<base::Value>(device_properties));
   send_callback.Run(service_path, std::move(network_properties));
 }
 

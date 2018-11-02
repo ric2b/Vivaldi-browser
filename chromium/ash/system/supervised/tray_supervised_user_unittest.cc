@@ -5,18 +5,27 @@
 #include "ash/system/supervised/tray_supervised_user.h"
 
 #include "ash/login_status.h"
-#include "ash/test/ash_test.h"
+#include "ash/session/session_controller.h"
+#include "ash/shell.h"
+#include "ash/system/tray/label_tray_view.h"
+#include "ash/system/tray/system_tray.h"
+#include "ash/test/ash_test_base.h"
+#include "ash/test/test_session_controller_client.h"
 #include "ash/test/test_system_tray_delegate.h"
+#include "base/memory/ptr_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notification_list.h"
 #include "ui/message_center/notification_types.h"
+#include "ui/views/view.h"
 
 using message_center::NotificationList;
 
 namespace ash {
 
-class TraySupervisedUserTest : public AshTest {
+// Tests handle creating their own sessions.
+class TraySupervisedUserTest : public test::NoSessionAshTestBase {
  public:
   TraySupervisedUserTest() {}
   ~TraySupervisedUserTest() override {}
@@ -40,37 +49,81 @@ message_center::Notification* TraySupervisedUserTest::GetPopup() {
   return NULL;
 }
 
-class TraySupervisedUserInitialTest : public TraySupervisedUserTest {
- public:
-  // Set the initial login status to supervised-user before AshTest::SetUp()
-  // constructs the system tray.
-  TraySupervisedUserInitialTest()
-      : scoped_initial_login_status_(LoginStatus::SUPERVISED) {}
-  ~TraySupervisedUserInitialTest() override {}
-
- private:
-  test::ScopedInitialLoginStatus scoped_initial_login_status_;
-
-  DISALLOW_COPY_AND_ASSIGN(TraySupervisedUserInitialTest);
-};
-
+// Verifies that when a supervised user logs in that a warning notification is
+// shown and ash does not crash.
 TEST_F(TraySupervisedUserTest, SupervisedUserHasNotification) {
-  test::TestSystemTrayDelegate* delegate = GetSystemTrayDelegate();
-  delegate->SetLoginStatus(LoginStatus::SUPERVISED);
+  SessionController* session = Shell::Get()->session_controller();
+  ASSERT_EQ(LoginStatus::NOT_LOGGED_IN, session->login_status());
+  ASSERT_FALSE(session->IsActiveUserSessionStarted());
 
+  // Simulate a supervised user logging in.
+  test::TestSessionControllerClient* client = GetSessionControllerClient();
+  client->Reset();
+  client->AddUserSession("child@test.com", user_manager::USER_TYPE_SUPERVISED);
+  client->SetSessionState(session_manager::SessionState::ACTIVE);
+
+  // No notification because custodian email not available yet.
   message_center::Notification* notification = GetPopup();
-  ASSERT_NE(static_cast<message_center::Notification*>(NULL), notification);
+  EXPECT_FALSE(notification);
+
+  // Update the user session with the custodian data (which happens after the
+  // profile loads).
+  mojom::UserSessionPtr user_session = session->GetUserSession(0)->Clone();
+  user_session->custodian_email = "parent1@test.com";
+  session->UpdateUserSession(std::move(user_session));
+
+  // Notification is shown.
+  notification = GetPopup();
+  ASSERT_TRUE(notification);
   EXPECT_EQ(static_cast<int>(message_center::SYSTEM_PRIORITY),
             notification->rich_notification_data().priority);
+  EXPECT_EQ(
+      "Usage and history of this user can be reviewed by the manager "
+      "(parent1@test.com) on chrome.com.",
+      UTF16ToUTF8(notification->message()));
+
+  // Update the user session with new custodian data.
+  user_session = session->GetUserSession(0)->Clone();
+  user_session->custodian_email = "parent2@test.com";
+  session->UpdateUserSession(std::move(user_session));
+
+  // Notification is shown with updated message.
+  notification = GetPopup();
+  ASSERT_TRUE(notification);
+  EXPECT_EQ(
+      "Usage and history of this user can be reviewed by the manager "
+      "(parent2@test.com) on chrome.com.",
+      UTF16ToUTF8(notification->message()));
 }
 
-TEST_F(TraySupervisedUserInitialTest, SupervisedUserNoCrash) {
-  // Initial login status is already SUPERVISED, which should create
-  // the notification and should not cause crashes.
-  message_center::Notification* notification = GetPopup();
-  ASSERT_NE(static_cast<message_center::Notification*>(NULL), notification);
-  EXPECT_EQ(static_cast<int>(message_center::SYSTEM_PRIORITY),
-            notification->rich_notification_data().priority);
+// Verifies an item is created for a supervised user.
+TEST_F(TraySupervisedUserTest, CreateDefaultView) {
+  TraySupervisedUser* tray =
+      GetPrimarySystemTray()->GetTraySupervisedUserForTesting();
+  SessionController* session = Shell::Get()->session_controller();
+  ASSERT_FALSE(session->IsActiveUserSessionStarted());
+
+  // Before login there is no supervised user item.
+  const LoginStatus unused = LoginStatus::NOT_LOGGED_IN;
+  EXPECT_FALSE(tray->CreateDefaultView(unused));
+
+  // Simulate a supervised user logging in.
+  test::TestSessionControllerClient* client = GetSessionControllerClient();
+  client->Reset();
+  client->AddUserSession("child@test.com", user_manager::USER_TYPE_SUPERVISED);
+  client->SetSessionState(session_manager::SessionState::ACTIVE);
+  mojom::UserSessionPtr user_session = session->GetUserSession(0)->Clone();
+  user_session->custodian_email = "parent@test.com";
+  session->UpdateUserSession(std::move(user_session));
+
+  // Now there is a supervised user item.
+  std::unique_ptr<views::View> view =
+      base::WrapUnique(tray->CreateDefaultView(unused));
+  ASSERT_TRUE(view);
+  EXPECT_EQ(
+      "Usage and history of this user can be reviewed by the manager "
+      "(parent@test.com) on chrome.com.",
+      UTF16ToUTF8(static_cast<LabelTrayView*>(view.get())->message()));
 }
 
 }  // namespace ash

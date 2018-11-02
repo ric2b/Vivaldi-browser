@@ -10,19 +10,26 @@
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_export.h"
-#include "cc/paint/paint_record.h"
+#include "cc/paint/paint_image.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 
 namespace cc {
 
 class DisplayItemList;
 class PaintFlags;
+class PaintOpBuffer;
+
+using PaintRecord = PaintOpBuffer;
 
 class CC_PAINT_EXPORT PaintCanvas {
  public:
+  PaintCanvas() {}
   virtual ~PaintCanvas() {}
 
   virtual SkMetaData& getMetaData() = 0;
+
+  // TODO(enne): this only appears to mostly be used to determine if this is
+  // recording or not, so could be simplified or removed.
   virtual SkImageInfo imageInfo() const = 0;
 
   // TODO(enne): It would be nice to get rid of flush() entirely, as it
@@ -33,15 +40,9 @@ class CC_PAINT_EXPORT PaintCanvas {
   // both recording and gpu work.
   virtual void flush() = 0;
 
-  virtual SkISize getBaseLayerSize() const = 0;
-  virtual bool writePixels(const SkImageInfo& info,
-                           const void* pixels,
-                           size_t row_bytes,
-                           int x,
-                           int y) = 0;
   virtual int save() = 0;
   virtual int saveLayer(const SkRect* bounds, const PaintFlags* flags) = 0;
-  virtual int saveLayerAlpha(const SkRect* bounds, U8CPU alpha) = 0;
+  virtual int saveLayerAlpha(const SkRect* bounds, uint8_t alpha) = 0;
 
   virtual void restore() = 0;
   virtual int getSaveCount() const = 0;
@@ -92,6 +93,8 @@ class CC_PAINT_EXPORT PaintCanvas {
   virtual bool getDeviceClipBounds(SkIRect* bounds) const = 0;
   virtual void drawColor(SkColor color, SkBlendMode mode) = 0;
   void drawColor(SkColor color) { drawColor(color, SkBlendMode::kSrcOver); }
+
+  // TODO(enne): This is a synonym for drawColor with kSrc.  Remove it.
   virtual void clear(SkColor color) = 0;
 
   virtual void drawLine(SkScalar x0,
@@ -120,11 +123,11 @@ class CC_PAINT_EXPORT PaintCanvas {
                              SkScalar ry,
                              const PaintFlags& flags) = 0;
   virtual void drawPath(const SkPath& path, const PaintFlags& flags) = 0;
-  virtual void drawImage(sk_sp<const SkImage> image,
+  virtual void drawImage(const PaintImage& image,
                          SkScalar left,
                          SkScalar top,
                          const PaintFlags* flags) = 0;
-  void drawImage(sk_sp<const SkImage> image, SkScalar left, SkScalar top) {
+  void drawImage(const PaintImage& image, SkScalar left, SkScalar top) {
     drawImage(image, left, top, nullptr);
   }
 
@@ -133,7 +136,7 @@ class CC_PAINT_EXPORT PaintCanvas {
     kFast_SrcRectConstraint = SkCanvas::kFast_SrcRectConstraint,
   };
 
-  virtual void drawImageRect(sk_sp<const SkImage> image,
+  virtual void drawImageRect(const PaintImage& image,
                              const SkRect& src,
                              const SkRect& dst,
                              const PaintFlags* flags,
@@ -163,17 +166,13 @@ class CC_PAINT_EXPORT PaintCanvas {
   virtual void drawDisplayItemList(
       scoped_refptr<DisplayItemList> display_item_list) = 0;
 
+  // Unlike SkCanvas::drawPicture, this only plays back the PaintRecord and does
+  // not add an additional clip.  This is closer to SkPicture::playback.
   virtual void drawPicture(sk_sp<const PaintRecord> record) = 0;
 
   virtual bool isClipEmpty() const = 0;
   virtual bool isClipRect() const = 0;
   virtual const SkMatrix& getTotalMatrix() const = 0;
-
-  // For GraphicsContextCanvas only.  Maybe this could be rewritten?
-  virtual void temporary_internal_describeTopLayer(SkMatrix* matrix,
-                                                   SkIRect* clip_bounds) = 0;
-
-  virtual bool ToPixmap(SkPixmap* output) = 0;
 
   enum class AnnotationType {
     URL,
@@ -184,14 +183,8 @@ class CC_PAINT_EXPORT PaintCanvas {
                         const SkRect& rect,
                         sk_sp<SkData> data) = 0;
 
-  // TODO(enne): maybe this should live on PaintRecord, but that's not
-  // possible when PaintRecord is a typedef.
-  virtual void PlaybackPaintRecord(sk_sp<const PaintRecord> record) = 0;
-
- protected:
-  friend class PaintSurface;
-  friend class PaintRecorder;
-  friend CC_PAINT_EXPORT bool ToPixmap(PaintCanvas* canvas, SkPixmap* output);
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PaintCanvas);
 };
 
 class CC_PAINT_EXPORT PaintCanvasAutoRestore {
@@ -222,14 +215,6 @@ class CC_PAINT_EXPORT PaintCanvasAutoRestore {
   PaintCanvas* canvas_ = nullptr;
   int save_count_ = 0;
 };
-
-// TODO(enne): Move all these functions into PaintCanvas.  These are only
-// separate now to make the transition to concrete types easier by keeping
-// the base PaintCanvas type equivalent to the SkCanvas interface and
-// all these helper functions potentially operating on both.
-
-// PaintCanvas equivalent of skia::GetWritablePixels.
-CC_PAINT_EXPORT bool ToPixmap(PaintCanvas* canvas, SkPixmap* output);
 
 // Following routines are used in print preview workflow to mark the
 // preview metafile.

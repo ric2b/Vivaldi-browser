@@ -45,17 +45,18 @@ class VivaldiSyncManager : public ProfileSyncService,
                 std::string account_id);
   bool SetEncryptionPassword(const std::string& password);
 
-  void ClearSyncData(base::Closure callback);
+  void ClearSyncData();
 
   void Logout();
+  void SetupComplete();
   void PollServer();
   void ConfigureTypes(bool sync_everything, syncer::ModelTypeSet chosen_types);
 
   void NotifyLoginDone();
-  void NotifySyncConfigured();
   void NotifySyncStarted();
   void NotifySyncCompleted();
   void NotifySyncEngineInitFailed();
+  void NotifyLogoutDone();
   void NotifyAccessTokenRequested();
   void NotifyEncryptionPasswordRequested();
 
@@ -65,6 +66,8 @@ class VivaldiSyncManager : public ProfileSyncService,
   static bool IsSyncEnabled() { return true; }
 
   void OnSyncCycleCompleted(const syncer::SyncCycleSnapshot& snapshot) override;
+  void OnConfigureDone(
+      const syncer::DataTypeManager::ConfigureResult& result) override;
 
   void VivaldiTokenSuccess();
 
@@ -79,10 +82,10 @@ class VivaldiSyncManager : public ProfileSyncService,
 
  private:
   void RequestAccessToken() override;
+  void ShutdownImpl(syncer::ShutdownReason reason) override;
+
   void VivaldiDoTokenSuccess();
   void SetupConfiguration();
-
-  void OnSyncDataCleared(base::Closure callback);
 
   std::string vivaldi_access_token_;
   std::string password_;

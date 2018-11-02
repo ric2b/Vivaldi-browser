@@ -89,7 +89,7 @@ VTTParser::VTTParser(VTTParserClient* client, Document& document)
 
 void VTTParser::GetNewCues(HeapVector<Member<TextTrackCue>>& output_cues) {
   DCHECK(output_cues.IsEmpty());
-  output_cues.Swap(cue_list_);
+  output_cues.swap(cue_list_);
 }
 
 void VTTParser::ParseBytes(const char* data, size_t length) {
@@ -104,7 +104,7 @@ void VTTParser::Flush() {
   line_reader_.SetEndOfStream();
   Parse();
   FlushPendingCue();
-  region_map_.Clear();
+  region_map_.clear();
 }
 
 void VTTParser::Parse() {
@@ -219,7 +219,7 @@ void VTTParser::CollectMetadataHeader(const String& line) {
   // Step 12.4 If line contains the character ":" (A U+003A COLON), then set
   // metadata's name to the substring of line before the first ":" character and
   // metadata's value to the substring after this character.
-  size_t colon_position = line.Find(':');
+  size_t colon_position = line.find(':');
   if (colon_position == kNotFound)
     return;
 
@@ -347,7 +347,7 @@ DocumentFragment* VTTTreeBuilder::BuildFromString(const String& cue_text) {
   current_node_ = fragment;
 
   VTTTokenizer tokenizer(cue_text);
-  language_stack_.Clear();
+  language_stack_.clear();
 
   while (tokenizer.NextToken(token_))
     ConstructTreeFromToken(GetDocument());

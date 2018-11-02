@@ -7,7 +7,6 @@
 #include <memory>
 #include <string>
 
-#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -19,7 +18,6 @@
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
-using base::android::GetApplicationContext;
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ToJavaIntArray;
@@ -48,6 +46,8 @@ int SBThreatTypeToJavaThreatType(const SBThreatType& sb_threat_type) {
       return safe_browsing::JAVA_THREAT_TYPE_SOCIAL_ENGINEERING;
     case SB_THREAT_TYPE_URL_MALWARE:
       return safe_browsing::JAVA_THREAT_TYPE_POTENTIALLY_HARMFUL_APPLICATION;
+    case SB_THREAT_TYPE_URL_UNWANTED:
+      return safe_browsing::JAVA_THREAT_TYPE_UNWANTED_SOFTWARE;
     default:
       NOTREACHED();
       return 0;
@@ -121,7 +121,7 @@ void OnUrlCheckDone(JNIEnv* env,
     ReportUmaResult(
         ParseJsonFromGMSCore(metadata_str, &worst_threat, &threat_metadata));
     if (worst_threat != SB_THREAT_TYPE_SAFE) {
-      DVLOG(1) << "Check " << callback_id << " marked as UNSAFE";
+      DVLOG(1) << "Check " << callback_id << " was a MATCH";
     }
 
     RunCallbackOnIOThread(*callback, worst_threat, threat_metadata);
@@ -140,8 +140,7 @@ bool SafeBrowsingApiHandlerBridge::CheckApiIsSupported() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!checked_api_support_) {
     DVLOG(1) << "Checking API support.";
-    j_api_handler_ = Java_SafeBrowsingApiBridge_create(AttachCurrentThread(),
-                                                       GetApplicationContext());
+    j_api_handler_ = Java_SafeBrowsingApiBridge_create(AttachCurrentThread());
     checked_api_support_ = true;
   }
   return j_api_handler_.obj() != nullptr;
@@ -169,10 +168,7 @@ void SafeBrowsingApiHandlerBridge::StartURLCheck(
 
   // Default threat types, to support upstream code that doesn't yet set them.
   std::vector<SBThreatType> local_threat_types(threat_types);
-  if (local_threat_types.empty()) {
-    local_threat_types.push_back(SB_THREAT_TYPE_URL_PHISHING);
-    local_threat_types.push_back(SB_THREAT_TYPE_URL_MALWARE);
-  }
+  DCHECK(!local_threat_types.empty());
 
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_url = ConvertUTF8ToJavaString(env, url.spec());

@@ -65,7 +65,7 @@ class DidStartNavigationObserver : public content::WebContentsObserver {
         message_loop_runner_(new content::MessageLoopRunner) {}
   ~DidStartNavigationObserver() override {}
 
-  // Runs a nested message loop and blocks until the full load has
+  // Runs a nested run loop and blocks until the full load has
   // completed.
   void Wait() { message_loop_runner_->Run(); }
 
@@ -189,6 +189,131 @@ IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest, TestViewFrameSource) {
             new_web_contents->GetTitle());
 }
 
+// Tests that verify that ctrl-click results 1) open up in a new renderer
+// process (https://crbug.com/23815) and 2) are in a new browsing instance (e.g.
+// cannot find the opener's window by name - https://crbug.com/658386).
+class CtrlClickShouldEndUpInNewProcessTest
+    : public ChromeNavigationBrowserTest {
+ protected:
+  // Simulates ctrl-clicking an anchor with the given id in |main_contents|.
+  // Verifies that the new contents are in a separate process and separate
+  // browsing instance from |main_contents|.  Returns contents of the newly
+  // opened tab.
+  content::WebContents* SimulateCtrlClick(content::WebContents* main_contents,
+                                          const char* id_of_anchor_to_click) {
+    // Ctrl-click the anchor/link in the page.
+    content::WebContents* new_contents = nullptr;
+    {
+      content::WebContentsAddedObserver new_tab_observer;
+#if defined(OS_MACOSX)
+      const char* new_tab_click_script_template =
+          "simulateClick(\"%s\", { metaKey: true });";
+#else
+      const char* new_tab_click_script_template =
+          "simulateClick(\"%s\", { ctrlKey: true });";
+#endif
+      std::string new_tab_click_script = base::StringPrintf(
+          new_tab_click_script_template, id_of_anchor_to_click);
+      EXPECT_TRUE(ExecuteScript(main_contents, new_tab_click_script));
+
+      // Wait for a new tab to appear (the whole point of this test).
+      new_contents = new_tab_observer.GetWebContents();
+    }
+
+    // Verify that the new tab has the right contents and is in the right, new
+    // place in the tab strip.
+    EXPECT_TRUE(WaitForLoadStop(new_contents));
+    int last_tab_index = browser()->tab_strip_model()->count() - 1;
+    EXPECT_LT(1, browser()->tab_strip_model()->count());  // More than 1 tab?
+    EXPECT_EQ(new_contents,
+              browser()->tab_strip_model()->GetWebContentsAt(last_tab_index));
+    GURL expected_url(embedded_test_server()->GetURL("/title1.html"));
+    EXPECT_EQ(expected_url, new_contents->GetLastCommittedURL());
+
+    // Verify that the new tab is in a different process, SiteInstance and
+    // BrowsingInstance from the old contents.
+    EXPECT_NE(main_contents->GetMainFrame()->GetProcess(),
+              new_contents->GetMainFrame()->GetProcess());
+    EXPECT_NE(main_contents->GetMainFrame()->GetSiteInstance(),
+              new_contents->GetMainFrame()->GetSiteInstance());
+    EXPECT_FALSE(main_contents->GetSiteInstance()->IsRelatedSiteInstance(
+        new_contents->GetSiteInstance()));
+
+    // Verify that the new BrowsingInstance can't see windows from the old one.
+    {
+      // Double-check that main_contents has expected window.name set.
+      // This is a sanity check of test setup; this is not a product test.
+      std::string name_of_main_contents_window;
+      EXPECT_TRUE(ExecuteScriptAndExtractString(
+          main_contents, "window.domAutomationController.send(window.name)",
+          &name_of_main_contents_window));
+      EXPECT_EQ("main_contents", name_of_main_contents_window);
+
+      // Verify that the new contents doesn't have a window.opener set.
+      bool window_opener_cast_to_bool = true;
+      EXPECT_TRUE(ExecuteScriptAndExtractBool(
+          new_contents, "window.domAutomationController.send(!!window.opener)",
+          &window_opener_cast_to_bool));
+      EXPECT_FALSE(window_opener_cast_to_bool);
+
+      // Verify that the new contents cannot find the old contents via
+      // window.open. (i.e. window.open should open a new window, rather than
+      // returning a reference to main_contents / old window).
+      std::string location_of_opened_window;
+      EXPECT_TRUE(ExecuteScriptAndExtractString(
+          new_contents,
+          "w = window.open('', 'main_contents');"
+          "window.domAutomationController.send(w.location.href);",
+          &location_of_opened_window));
+      EXPECT_EQ(url::kAboutBlankURL, location_of_opened_window);
+    }
+
+    return new_contents;
+  }
+
+  void TestCtrlClick(const char* id_of_anchor_to_click) {
+    // Navigate to the test page.
+    GURL main_url(embedded_test_server()->GetURL(
+        "/frame_tree/anchor_to_same_site_location.html"));
+    ui_test_utils::NavigateToURL(browser(), main_url);
+
+    // Verify that there is only 1 active tab (with the right contents
+    // committed).
+    EXPECT_EQ(0, browser()->tab_strip_model()->active_index());
+    content::WebContents* main_contents =
+        browser()->tab_strip_model()->GetWebContentsAt(0);
+    EXPECT_EQ(main_url, main_contents->GetLastCommittedURL());
+
+    // Test what happens after ctrl-click.  SimulateCtrlClick will verify
+    // that |new_contents1| is in a separate process and browsing instance
+    // from |main_contents|.
+    content::WebContents* new_contents1 =
+        SimulateCtrlClick(main_contents, id_of_anchor_to_click);
+
+    // Test that each subsequent ctrl-click also gets a new process.
+    content::WebContents* new_contents2 =
+        SimulateCtrlClick(main_contents, id_of_anchor_to_click);
+    EXPECT_NE(new_contents1->GetMainFrame()->GetProcess(),
+              new_contents2->GetMainFrame()->GetProcess());
+    EXPECT_NE(new_contents1->GetMainFrame()->GetSiteInstance(),
+              new_contents2->GetMainFrame()->GetSiteInstance());
+    EXPECT_FALSE(new_contents1->GetSiteInstance()->IsRelatedSiteInstance(
+        new_contents2->GetSiteInstance()));
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(CtrlClickShouldEndUpInNewProcessTest, NoTarget) {
+  TestCtrlClick("test-anchor-no-target");
+}
+
+IN_PROC_BROWSER_TEST_F(CtrlClickShouldEndUpInNewProcessTest, BlankTarget) {
+  TestCtrlClick("test-anchor-with-blank-target");
+}
+
+IN_PROC_BROWSER_TEST_F(CtrlClickShouldEndUpInNewProcessTest, SubframeTarget) {
+  TestCtrlClick("test-anchor-with-subframe-target");
+}
+
 class ChromeNavigationPortMappedBrowserTest : public InProcessBrowserTest {
  public:
   ChromeNavigationPortMappedBrowserTest() {}
@@ -256,4 +381,58 @@ IN_PROC_BROWSER_TEST_F(ChromeNavigationPortMappedBrowserTest,
   // Note: Before the bug was fixed, the URL was the new_tab_url with a scheme
   // prepended and one less ":" character after the host.
   EXPECT_EQ(GURL(), new_web_contents->GetLastCommittedURL());
+}
+
+// A test performing two simultaneous navigations, to ensure code in chrome/,
+// such as tab helpers, can handle those cases.
+// This test starts a browser-initiated cross-process navigation, which is
+// delayed. At the same time, the renderer does a synchronous navigation
+// through pushState, which will create a separate navigation and associated
+// NavigationHandle. Afterwards, the original cross-process navigation is
+// resumed and confirmed to properly commit.
+IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
+                       SlowCrossProcessNavigationWithPushState) {
+  const GURL kURL1 = embedded_test_server()->GetURL("/title1.html");
+  const GURL kPushStateURL =
+      embedded_test_server()->GetURL("/title1.html#fragment");
+  const GURL kURL2 = embedded_test_server()->GetURL("/title2.html");
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Navigate to the initial page.
+  ui_test_utils::NavigateToURL(browser(), kURL1);
+
+  // Start navigating to the second page.
+  content::TestNavigationManager manager(web_contents, kURL2);
+  content::NavigationHandleCommitObserver navigation_observer(web_contents,
+                                                              kURL2);
+  web_contents->GetController().LoadURL(
+      kURL2, content::Referrer(), ui::PAGE_TRANSITION_LINK, std::string());
+  EXPECT_TRUE(manager.WaitForRequestStart());
+
+  // The current page does a PushState.
+  content::NavigationHandleCommitObserver push_state_observer(web_contents,
+                                                              kPushStateURL);
+  std::string push_state =
+      "history.pushState({}, \"title 1\", \"" + kPushStateURL.spec() + "\");";
+  EXPECT_TRUE(ExecuteScript(web_contents, push_state));
+  content::NavigationEntry* last_committed =
+      web_contents->GetController().GetLastCommittedEntry();
+  EXPECT_TRUE(last_committed);
+  EXPECT_EQ(kPushStateURL, last_committed->GetURL());
+
+  EXPECT_TRUE(push_state_observer.has_committed());
+  EXPECT_TRUE(push_state_observer.was_same_document());
+  EXPECT_TRUE(push_state_observer.was_renderer_initiated());
+
+  // Let the navigation finish. It should commit successfully.
+  manager.WaitForNavigationFinished();
+  last_committed = web_contents->GetController().GetLastCommittedEntry();
+  EXPECT_TRUE(last_committed);
+  EXPECT_EQ(kURL2, last_committed->GetURL());
+
+  EXPECT_TRUE(navigation_observer.has_committed());
+  EXPECT_FALSE(navigation_observer.was_same_document());
+  EXPECT_FALSE(navigation_observer.was_renderer_initiated());
 }

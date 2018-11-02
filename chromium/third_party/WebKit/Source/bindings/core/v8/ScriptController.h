@@ -31,10 +31,10 @@
 #ifndef ScriptController_h
 #define ScriptController_h
 
-#include "bindings/core/v8/SharedPersistent.h"
 #include "bindings/core/v8/WindowProxyManager.h"
 #include "core/CoreExport.h"
 #include "core/dom/ExecutionContext.h"
+#include "platform/bindings/SharedPersistent.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/AccessControlStatus.h"
 #include "platform/loader/fetch/CrossOriginAccessControl.h"
@@ -50,13 +50,14 @@ class DOMWrapperWorld;
 class Element;
 class KURL;
 class LocalFrame;
-class PluginView;
 class ScriptSourceCode;
 class SecurityOrigin;
 
 typedef WTF::Vector<v8::Extension*> V8Extensions;
 
-
+// This class exposes methods to run script in a frame (in the main world and
+// in isolated worlds). An instance can be obtained by using
+// LocalFrame::GetScriptController().
 class CORE_EXPORT ScriptController final
     : public GarbageCollected<ScriptController> {
   WTF_MAKE_NONCOPYABLE(ScriptController);
@@ -110,14 +111,16 @@ class CORE_EXPORT ScriptController final
   // Returns true if argument is a JavaScript URL.
   bool ExecuteScriptIfJavaScriptURL(const KURL&, Element*);
 
+  // Creates a new isolated world for DevTools with the given human readable
+  // |world_name| and returns it's id or DOMWrapperWorld::kInvalidWorldId on
+  // failure.
+  int CreateNewDInspectorIsolatedWorld(const String& world_name);
+
   // Returns true if the current world is isolated, and has its own Content
   // Security Policy. In this case, the policy of the main world should be
   // ignored when evaluating resources injected into the DOM.
   bool ShouldBypassMainWorldCSP();
 
-  PassRefPtr<SharedPersistent<v8::Object>> CreatePluginWrapper(PluginView&);
-
-  void EnableEval();
   void DisableEval(const String& error_message);
 
   TextPosition EventHandlerPosition() const;
@@ -144,6 +147,7 @@ class CORE_EXPORT ScriptController final
   v8::Isolate* GetIsolate() const {
     return window_proxy_manager_->GetIsolate();
   }
+  void EnableEval();
 
   v8::Local<v8::Value> EvaluateScriptInMainWorld(const ScriptSourceCode&,
                                                  AccessControlStatus,

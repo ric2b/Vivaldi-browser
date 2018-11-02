@@ -1,4 +1,7 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/html/cr/ui/focus_without_ink.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_action_menu/cr_action_menu.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_indicator.html">
@@ -17,18 +20,13 @@
 
 <dom-module id="site-list">
   <template>
-    <style include="settings-shared">
-      paper-icon-button {
-        left: 8px;
-        right: 8px;
-      }
-
+    <style include="settings-shared iron-flex">
       .selectable {
         -webkit-user-select: text;
       }
     </style>
     <div id="category">
-      <div class="settings-box first" hidden$="[[allSites]]">
+      <div class="settings-box first">
         <h2 class="start">[[categoryHeader]]</h2>
         <paper-button id="addSite"
             class="secondary-button header-aligned-button"
@@ -66,17 +64,27 @@
       </div>
       <div class="list-frame menu-content vertical-list" id="listContainer">
         <template is="dom-repeat" items="[[sites]]">
-          <div class="list-item" actionable$="[[enableSiteSettings_]]"
-              on-tap="onOriginTap_">
-            <div class="favicon-image"
-                style$="[[computeSiteIcon(item.origin)]]">
-            </div>
-            <div class="middle no-min-width">
-              <div class="selectable text-elide">[[item.displayName]]</div>
+          <div class="list-item">
+            <div class="settings-row wide"
+                actionable$="[[enableSiteSettings_]]" on-tap="onOriginTap_">
+              <div class="favicon-image"
+                  style$="[[computeSiteIcon(item.origin)]]">
+              </div>
+              <div class="middle no-min-width">
+                <div class="selectable text-elide">[[item.displayName]]</div>
 
-              <!-- This div must not contain extra whitespace. -->
-              <div class="selectable secondary text-elide" id="siteDescription"
-                  >[[computeSiteDescription_(item)]]</div>
+                <!-- This div must not contain extra whitespace. -->
+                <div class="selectable secondary text-elide"
+                    id="siteDescription">[[computeSiteDescription_(item)]]</div>
+              </div>
+              <template is="dom-if" if="[[enableSiteSettings_]]">
+                <div on-tap="onOriginTap_" actionable>
+                  <button class="subpage-arrow" is="paper-icon-button-light"
+                      aria-label$="[[item.displayName]]"
+                      aria-describedby="siteDescription"></button>
+                </div>
+                <div class="separator"></div>
+              </template>
             </div>
             <template is="dom-if" if="[[item.controlledBy]]">
               <cr-policy-pref-indicator pref="[[item]]"
@@ -85,21 +93,14 @@
             </template>
 
             <paper-icon-button id="resetSite" icon="cr:delete"
-                hidden="[[isResetButtonHidden_(
-                    item.enforcement, readOnlyList)]]"
-                on-tap="onResetButtonTap_" alt="$i18n{siteSettingsActionReset}">
+                hidden="[[shouldHideResetButton_(item, readOnlyList)]]"
+                on-tap="onResetButtonTap_"
+                alt="$i18n{siteSettingsActionReset}">
             </paper-icon-button>
             <paper-icon-button id="actionMenuButton" icon="cr:more-vert"
-                hidden="[[isActionMenuHidden_(item.enforcement, readOnlyList)]]"
+                hidden="[[shouldHideActionMenu_(item, readOnlyList)]]"
                 on-tap="onShowActionMenuTap_" title="$i18n{moreActions}">
             </paper-icon-button>
-            <template is="dom-if" if="[[enableSiteSettings_]]">
-              <div on-tap="onOriginTap_" actionable>
-                <button class="subpage-arrow" is="paper-icon-button-light"
-                    aria-label$="[[item.displayName]]"
-                    aria-describedby="siteDescription"></button>
-              </div>
-            </template>
           </div>
         </template>
       </div>

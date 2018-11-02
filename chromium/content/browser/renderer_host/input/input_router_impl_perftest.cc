@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "content/browser/renderer_host/input/input_ack_handler.h"
 #include "content/browser/renderer_host/input/input_router_client.h"
 #include "content/browser/renderer_host/input/input_router_impl.h"
@@ -89,7 +90,6 @@ class NullInputRouterClient : public InputRouterClient {
       blink::WebInputEvent::Type event_type) override {}
   void DecrementInFlightEventCount(InputEventAckSource ack_source) override {}
   void OnHasTouchEventHandlers(bool has_handlers) override {}
-  void DidFlush() override {}
   void DidOverscroll(const ui::DidOverscrollParams& params) override {}
   void DidStopFlinging() override {}
   void ForwardGestureEventWithLatencyInfo(
@@ -217,7 +217,10 @@ bool ShouldBlockEventStream(const blink::WebInputEvent& event) {
 
 class InputRouterImplPerfTest : public testing::Test {
  public:
-  InputRouterImplPerfTest() : last_input_id_(0) {}
+  InputRouterImplPerfTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI),
+        last_input_id_(0) {}
   ~InputRouterImplPerfTest() override {}
 
  protected:
@@ -348,12 +351,12 @@ class InputRouterImplPerfTest : public testing::Test {
   }
 
  private:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   int64_t last_input_id_;
   std::unique_ptr<NullIPCSender> sender_;
   std::unique_ptr<NullInputRouterClient> client_;
   std::unique_ptr<NullInputAckHandler> ack_handler_;
   std::unique_ptr<InputRouterImpl> input_router_;
-  base::MessageLoopForUI message_loop_;
 };
 
 const size_t kDefaultSteps(100);

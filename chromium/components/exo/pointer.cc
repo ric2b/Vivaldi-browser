@@ -4,6 +4,8 @@
 
 #include "components/exo/pointer.h"
 
+#include <utility>
+
 #include "ash/public/cpp/shell_window_ids.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
@@ -14,6 +16,7 @@
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
+#include "ui/base/cursor/cursor_util.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/display/screen.h"
@@ -32,7 +35,13 @@
 namespace exo {
 namespace {
 
+// TODO(oshima): Some accessibility features, including large cursors, disable
+// hardware cursors. Ash does not support compositing for custom cursors, so it
+// replaces them with the default cursor. As a result, this scale has no effect
+// for now. See crbug.com/708378.
 const float kLargeCursorScale = 2.8f;
+
+const double kLocatedEventEpsilonSquared = 1.0 / (2000.0 * 2000.0);
 
 // Synthesized events typically lack floating point precision so to avoid
 // generating mouse event jitter we consider the location of these events
@@ -41,7 +50,25 @@ bool SameLocation(const ui::LocatedEvent* event, const gfx::PointF& location) {
   if (event->flags() & ui::EF_IS_SYNTHESIZED)
     return event->location() == gfx::ToFlooredPoint(location);
 
-  return event->location_f() == location;
+  // In general, it is good practice to compare floats using an epsilon.
+  // In particular, the mouse location_f() could differ between the
+  // MOUSE_PRESSED and MOUSE_RELEASED events. At MOUSE_RELEASED, it will have a
+  // targeter() already cached, while at MOUSE_PRESSED, it will have to
+  // calculate it passing through all the hierarchy of windows, and that could
+  // generate rounding error. std::numeric_limits<float>::epsilon() is not big
+  // enough to catch this rounding error.
+  gfx::Vector2dF offset = event->location_f() - location;
+  return offset.LengthSquared() < (2 * kLocatedEventEpsilonSquared);
+}
+
+display::ManagedDisplayInfo GetCaptureDisplayInfo() {
+  display::ManagedDisplayInfo capture_info;
+  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
+    const auto& info = WMHelper::GetInstance()->GetDisplayInfo(display.id());
+    if (info.device_scale_factor() >= capture_info.device_scale_factor())
+      capture_info = info;
+  }
+  return capture_info;
 }
 
 }  // namespace
@@ -51,12 +78,15 @@ bool SameLocation(const ui::LocatedEvent* event, const gfx::PointF& location) {
 
 Pointer::Pointer(PointerDelegate* delegate)
     : delegate_(delegate),
-      cursor_(ui::kCursorNull),
+      cursor_(ui::CursorType::kNull),
+      capture_scale_(GetCaptureDisplayInfo().device_scale_factor()),
+      capture_ratio_(GetCaptureDisplayInfo().GetDensityRatio()),
       cursor_capture_source_id_(base::UnguessableToken::Create()),
       cursor_capture_weak_ptr_factory_(this) {
   auto* helper = WMHelper::GetInstance();
   helper->AddPreTargetHandler(this);
   helper->AddCursorObserver(this);
+  helper->AddDisplayConfigurationObserver(this);
 }
 
 Pointer::~Pointer() {
@@ -68,6 +98,7 @@ Pointer::~Pointer() {
     focus_->UnregisterCursorProvider(this);
   }
   auto* helper = WMHelper::GetInstance();
+  helper->RemoveDisplayConfigurationObserver(this);
   helper->RemoveCursorObserver(this);
   helper->RemovePreTargetHandler(this);
 }
@@ -87,44 +118,27 @@ void Pointer::SetCursor(Surface* surface, const gfx::Point& hotspot) {
       DLOG(ERROR) << "Surface has already been assigned a role";
       return;
     }
-    if (surface_) {
-      surface_->window()->SetTransform(gfx::Transform());
-      if (surface_->window()->parent())
-        surface_->window()->parent()->RemoveChild(surface_->window());
-      surface_->SetSurfaceDelegate(nullptr);
-      surface_->RemoveSurfaceObserver(this);
-    }
-    surface_ = surface;
-    if (surface_) {
-      surface_->SetSurfaceDelegate(this);
-      surface_->AddSurfaceObserver(this);
-      // Note: Surface window needs to be added to the tree so we can take a
-      // snapshot. Where in the tree is not important but we might as well use
-      // the cursor container.
-      WMHelper::GetInstance()
-          ->GetContainer(ash::kShellWindowId_MouseCursorContainer)
-          ->AddChild(surface_->window());
-    }
+    UpdatePointerSurface(surface);
     cursor_changed = true;
   }
 
-  // Update hotspot.
-  if (hotspot != hotspot_) {
-    hotspot_ = hotspot;
+  if (hotspot != hotspot_)
     cursor_changed = true;
-  }
 
   // Early out if cursor did not change.
-  if (!cursor_changed)
+  if (!cursor_changed) {
+    // Cursor scale or rotation may have changed.
+    UpdateCursor();
     return;
+  }
 
   // If |surface_| is set then asynchronously capture a snapshot of cursor,
   // otherwise cancel pending capture and immediately set the cursor to "none".
   if (surface_) {
-    CaptureCursor();
+    CaptureCursor(hotspot);
   } else {
+    cursor_bitmap_.reset();
     cursor_capture_weak_ptr_factory_.InvalidateWeakPtrs();
-    cursor_ = ui::kCursorNone;
     UpdateCursor();
   }
 }
@@ -150,7 +164,7 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
       // response to each OnPointerEnter() call.
       focus_->UnregisterCursorProvider(this);
       focus_ = nullptr;
-      cursor_ = ui::kCursorNull;
+      cursor_ = ui::CursorType::kNull;
       cursor_capture_weak_ptr_factory_.InvalidateWeakPtrs();
     }
     // Second generate an enter event if focus moved to a new target.
@@ -240,7 +254,6 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
   }
 
   last_event_type_ = event->type();
-  UpdateCursorScale();
 }
 
 void Pointer::OnScrollEvent(ui::ScrollEvent* event) {
@@ -252,7 +265,22 @@ void Pointer::OnScrollEvent(ui::ScrollEvent* event) {
 
 void Pointer::OnCursorSetChanged(ui::CursorSetType cursor_set) {
   if (focus_)
-    UpdateCursorScale();
+    UpdateCursor();
+}
+
+void Pointer::OnCursorDisplayChanged(const display::Display& display) {
+  if (focus_)
+    UpdateCursor();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// WMHelper::DisplayConfigurationObserver overrides:
+
+void Pointer::OnDisplayConfigurationChanged() {
+  UpdatePointerSurface(surface_);
+  auto info = GetCaptureDisplayInfo();
+  capture_scale_ = info.device_scale_factor();
+  capture_ratio_ = info.GetDensityRatio();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -264,7 +292,7 @@ void Pointer::OnSurfaceCommit() {
 
   // Capture new cursor to reflect result of commit.
   if (focus_)
-    CaptureCursor();
+    CaptureCursor(hotspot_);
 }
 
 bool Pointer::IsSurfaceSynchronized() const {
@@ -296,62 +324,46 @@ Surface* Pointer::GetEffectiveTargetForEvent(ui::Event* event) const {
   return delegate_->CanAcceptPointerEventsForSurface(target) ? target : nullptr;
 }
 
-void Pointer::UpdateCursorScale() {
-  DCHECK(focus_);
-
-  display::Screen* screen = display::Screen::GetScreen();
-  WMHelper* helper = WMHelper::GetInstance();
-
-  // Update cursor scale if the effective UI scale has changed.
-  display::Display display = screen->GetDisplayNearestWindow(focus_->window());
-  float scale = helper->GetDisplayInfo(display.id()).GetEffectiveUIScale();
-
-  if (display::Display::HasInternalDisplay()) {
-    float primary_device_scale_factor =
-        screen->GetPrimaryDisplay().device_scale_factor();
-    // The size of the cursor surface is the quotient of its physical size and
-    // the DSF of the primary display. The physical size is proportional to the
-    // DSF of the internal display. For external displays (and the internal
-    // display when secondary to a display with a different DSF), scale the
-    // cursor so its physical size matches with the single display case.
-    if (!display.IsInternal() ||
-        display.device_scale_factor() != primary_device_scale_factor) {
-      scale *= primary_device_scale_factor /
-               helper->GetDisplayInfo(display::Display::InternalDisplayId())
-                   .device_scale_factor();
-    }
+void Pointer::UpdatePointerSurface(Surface* surface) {
+  if (surface_) {
+    surface_->window()->SetTransform(gfx::Transform());
+    if (surface_->window()->parent())
+      surface_->window()->parent()->RemoveChild(surface_->window());
+    surface_->SetSurfaceDelegate(nullptr);
+    surface_->RemoveSurfaceObserver(this);
   }
-
-  if (helper->GetCursorSet() == ui::CURSOR_SET_LARGE)
-    scale *= kLargeCursorScale;
-
-  if (scale != cursor_scale_) {
-    cursor_scale_ = scale;
-    if (surface_)
-      CaptureCursor();
+  surface_ = surface;
+  if (surface_) {
+    surface_->SetSurfaceDelegate(this);
+    surface_->AddSurfaceObserver(this);
+    // Note: Surface window needs to be added to the tree so we can take a
+    // snapshot. Where in the tree is not important but we might as well use
+    // the cursor container.
+    WMHelper::GetInstance()
+        ->GetPrimaryDisplayContainer(ash::kShellWindowId_MouseCursorContainer)
+        ->AddChild(surface_->window());
   }
 }
 
-void Pointer::CaptureCursor() {
+void Pointer::CaptureCursor(const gfx::Point& hotspot) {
   DCHECK(surface_);
   DCHECK(focus_);
 
-  // Set UI scale before submitting capture request.
-  surface_->window()->layer()->SetTransform(
-      gfx::GetScaleTransform(gfx::Point(), cursor_scale_));
-
-  float primary_device_scale_factor =
-      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor();
+  // Surface size is in DIPs, while layer size is in pseudo-DIP units that
+  // depend on the DSF of the display mode. Scale the layer to capture the
+  // surface at a constant pixel size, regardless of the primary display's
+  // UI scale and display mode DSF.
+  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
+  auto* helper = WMHelper::GetInstance();
+  float scale = helper->GetDisplayInfo(display.id()).GetEffectiveUIScale() *
+                capture_scale_ / display.device_scale_factor();
+  surface_->window()->SetTransform(gfx::GetScaleTransform(gfx::Point(), scale));
 
   std::unique_ptr<cc::CopyOutputRequest> request =
       cc::CopyOutputRequest::CreateBitmapRequest(
           base::Bind(&Pointer::OnCursorCaptured,
-                     cursor_capture_weak_ptr_factory_.GetWeakPtr(),
-                     gfx::ScaleToFlooredPoint(
-                         hotspot_,
-                         // |hotspot_| is in surface coordinate space so apply
-                         // both device scale and UI scale.
-                         cursor_scale_ * primary_device_scale_factor)));
+                     cursor_capture_weak_ptr_factory_.GetWeakPtr(), hotspot));
+
   request->set_source(cursor_capture_source_id_);
   surface_->window()->layer()->RequestCopyOfOutput(std::move(request));
 }
@@ -361,28 +373,12 @@ void Pointer::OnCursorCaptured(const gfx::Point& hotspot,
   if (!focus_)
     return;
 
-  cursor_ = ui::kCursorNone;
-  if (!result->IsEmpty()) {
+  if (result->IsEmpty()) {
+    cursor_bitmap_.reset();
+  } else {
     DCHECK(result->HasBitmap());
-    std::unique_ptr<SkBitmap> bitmap = result->TakeBitmap();
-
-    ui::PlatformCursor platform_cursor;
-#if defined(USE_OZONE)
-    // TODO(reveman): Add interface for creating cursors from GpuMemoryBuffers
-    // and use that here instead of the current bitmap API. crbug.com/686600
-    platform_cursor = ui::CursorFactoryOzone::GetInstance()->CreateImageCursor(
-        *bitmap.get(), hotspot);
-#elif defined(USE_X11)
-    XcursorImage* image = ui::SkBitmapToXcursorImage(bitmap.get(), hotspot);
-    platform_cursor = ui::CreateReffedCustomXCursor(image);
-#endif
-    cursor_ = ui::kCursorCustom;
-    cursor_.SetPlatformCursor(platform_cursor);
-#if defined(USE_OZONE)
-    ui::CursorFactoryOzone::GetInstance()->UnrefImageCursor(platform_cursor);
-#elif defined(USE_X11)
-    ui::UnrefCustomXCursor(platform_cursor);
-#endif
+    cursor_bitmap_ = *result->TakeBitmap();
+    hotspot_ = hotspot;
   }
 
   UpdateCursor();
@@ -390,6 +386,42 @@ void Pointer::OnCursorCaptured(const gfx::Point& hotspot,
 
 void Pointer::UpdateCursor() {
   DCHECK(focus_);
+
+  if (cursor_bitmap_.drawsNothing()) {
+    cursor_ = ui::CursorType::kNone;
+  } else {
+    SkBitmap bitmap = cursor_bitmap_;
+    gfx::Point hotspot = gfx::ScaleToFlooredPoint(hotspot_, capture_ratio_);
+
+    auto* helper = WMHelper::GetInstance();
+    const display::Display& display = helper->GetCursorDisplay();
+    float scale =
+        helper->GetDisplayInfo(display.id()).GetDensityRatio() / capture_ratio_;
+
+    if (helper->GetCursorSet() == ui::CURSOR_SET_LARGE)
+      scale *= kLargeCursorScale;
+
+    ui::ScaleAndRotateCursorBitmapAndHotpoint(scale, display.rotation(),
+                                              &bitmap, &hotspot);
+
+    ui::PlatformCursor platform_cursor;
+#if defined(USE_OZONE)
+    // TODO(reveman): Add interface for creating cursors from GpuMemoryBuffers
+    // and use that here instead of the current bitmap API. crbug.com/686600
+    platform_cursor = ui::CursorFactoryOzone::GetInstance()->CreateImageCursor(
+        bitmap, hotspot, 0);
+#elif defined(USE_X11)
+    XcursorImage* image = ui::SkBitmapToXcursorImage(&bitmap, hotspot);
+    platform_cursor = ui::CreateReffedCustomXCursor(image);
+#endif
+    cursor_ = ui::CursorType::kCustom;
+    cursor_.SetPlatformCursor(platform_cursor);
+#if defined(USE_OZONE)
+    ui::CursorFactoryOzone::GetInstance()->UnrefImageCursor(platform_cursor);
+#elif defined(USE_X11)
+    ui::UnrefCustomXCursor(platform_cursor);
+#endif
+  }
 
   aura::Window* root_window = focus_->window()->GetRootWindow();
   if (!root_window)

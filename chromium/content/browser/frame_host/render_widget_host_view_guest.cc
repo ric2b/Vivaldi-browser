@@ -13,7 +13,6 @@
 #include "base/message_loop/message_loop.h"
 #include "build/build_config.h"
 #include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_manager.h"
 #include "cc/surfaces/surface_sequence.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
@@ -45,7 +44,7 @@
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
-#include "components/display_compositor/gl_helper.h"
+#include "components/viz/display_compositor/gl_helper.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
@@ -577,6 +576,10 @@ void RenderWidgetHostViewGuest::MaybeSendSyntheticTapGesture(
   }
 }
 
+void RenderWidgetHostViewGuest::OnSetNeedsFlushInput() {
+  NOTIMPLEMENTED();
+}
+
 void RenderWidgetHostViewGuest::WheelEventAck(
     const blink::WebMouseWheelEvent& event,
     InputEventAckState ack_result) {
@@ -751,7 +754,7 @@ void RenderWidgetHostViewGuest::DidCopyOutput(
   bool succeeded = true;
 
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  display_compositor::GLHelper* gl_helper = factory->GetGLHelper();
+  viz::GLHelper* gl_helper = factory->GetGLHelper();
   if (!gl_helper) {
     callback.Run(gfx::Rect(), false);
   }
@@ -774,7 +777,7 @@ void RenderWidgetHostViewGuest::DidCopyOutput(
     succeeded = false;
   }
 
-  std::unique_ptr<display_compositor::ReadbackYUVInterface>
+  std::unique_ptr<viz::ReadbackYUVInterface>
       yuv_readback_pipeline_;
 
   gfx::Rect result_rect(result->size());
@@ -783,7 +786,7 @@ void RenderWidgetHostViewGuest::DidCopyOutput(
       yuv_readback_pipeline_->scaler()->SrcSubrect() != result_rect ||
       yuv_readback_pipeline_->scaler()->DstSize() != region_in_frame.size()) {
     yuv_readback_pipeline_.reset(gl_helper->CreateReadbackPipelineYUV(
-        display_compositor::GLHelper::SCALER_QUALITY_GOOD, result_rect.size(),
+        viz::GLHelper::SCALER_QUALITY_GOOD, result_rect.size(),
         result_rect, region_in_frame.size(), true, true));
   }
 
@@ -818,7 +821,7 @@ void RenderWidgetHostViewGuest::ReadBackDone(
   capture_frame_cb.Run(result);
 
   gpu::SyncToken sync_token;
-  display_compositor::GLHelper* gl_helper =
+  viz::GLHelper* gl_helper =
       ImageTransportFactory::GetInstance()->GetGLHelper();
   gl_helper->GenerateSyncToken(&sync_token);
   if (release_callback) {

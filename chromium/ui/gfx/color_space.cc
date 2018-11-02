@@ -17,142 +17,6 @@
 
 namespace gfx {
 
-// static
-ColorSpace ColorSpace::CreateVideo(int video_primary,
-                                   int video_transfer,
-                                   int video_matrix,
-                                   RangeID range_id) {
-  // TODO(hubbe): Use more context to decide how to handle UNSPECIFIED values.
-  ColorSpace result;
-  switch (video_primary) {
-    default:
-    case 0:  // RESERVED0
-    case 1:  // BT709
-    case 2:  // UNSPECIFIED
-    case 3:  // RESERVED
-      result.primaries_ = PrimaryID::BT709;
-      break;
-    case 4:  // BT470M
-      result.primaries_ = PrimaryID::BT470M;
-      break;
-    case 5:  // BT470BG
-      result.primaries_ = PrimaryID::BT470BG;
-      break;
-    case 6:  // SMPTE170M
-      result.primaries_ = PrimaryID::SMPTE170M;
-      break;
-    case 7:  // SMPTE240M
-      result.primaries_ = PrimaryID::SMPTE240M;
-      break;
-    case 8:  // FILM
-      result.primaries_ = PrimaryID::FILM;
-      break;
-    case 9:  // BT2020
-      result.primaries_ = PrimaryID::BT2020;
-      break;
-    case 10:  // SMPTEST428_1
-      result.primaries_ = PrimaryID::SMPTEST428_1;
-      break;
-    case 11:  // SMPTEST431_2
-      result.primaries_ = PrimaryID::SMPTEST431_2;
-      break;
-    case 12:  // SMPTEST432_1
-      result.primaries_ = PrimaryID::SMPTEST432_1;
-      break;
-  }
-  switch (video_transfer) {
-    default:
-    case 0:  // RESERVED0
-    case 1:  // BT709
-    case 2:  // UNSPECIFIED
-    case 3:  // RESERVED
-      result.transfer_ = TransferID::BT709;
-      break;
-    case 4:  // GAMMA22
-      result.transfer_ = TransferID::GAMMA22;
-      break;
-    case 5:  // GAMMA28
-      result.transfer_ = TransferID::GAMMA28;
-      break;
-    case 6:  // SMPTE170M
-      result.transfer_ = TransferID::SMPTE170M;
-      break;
-    case 7:  // SMPTE240M
-      result.transfer_ = TransferID::SMPTE240M;
-      break;
-    case 8:  // LINEAR
-      result.transfer_ = TransferID::LINEAR;
-      break;
-    case 9:  // LOG
-      result.transfer_ = TransferID::LOG;
-      break;
-    case 10:  // LOG_SQRT
-      result.transfer_ = TransferID::LOG_SQRT;
-      break;
-    case 11:  // IEC61966_2_4
-      result.transfer_ = TransferID::IEC61966_2_4;
-      break;
-    case 12:  // BT1361_ECG
-      result.transfer_ = TransferID::BT1361_ECG;
-      break;
-    case 13:  // IEC61966_2_1
-      result.transfer_ = TransferID::IEC61966_2_1;
-      break;
-    case 14:  // BT2020_10
-      result.transfer_ = TransferID::BT2020_10;
-      break;
-    case 15:  // BT2020_12
-      result.transfer_ = TransferID::BT2020_12;
-      break;
-    case 16:  // SMPTEST2084
-      result.transfer_ = TransferID::SMPTEST2084;
-      break;
-    case 17:  // SMPTEST428_1
-      result.transfer_ = TransferID::SMPTEST428_1;
-      break;
-    case 18:  // ARIB_STD_B67
-      result.transfer_ = TransferID::ARIB_STD_B67;
-      break;
-  }
-  switch (video_matrix) {
-    case 0:  // RGB
-      result.matrix_ = MatrixID::RGB;
-      break;
-    default:
-    case 1:  // BT709
-    case 2:  // UNSPECIFIED
-    case 3:  // RESERVED
-      result.matrix_ = MatrixID::BT709;
-      break;
-    case 4:  // FCC
-      result.matrix_ = MatrixID::FCC;
-      break;
-    case 5:  // BT470BG
-      result.matrix_ = MatrixID::BT470BG;
-      break;
-    case 6:  // SMPTE170M
-      result.matrix_ = MatrixID::SMPTE170M;
-      break;
-    case 7:  // SMPTE240M
-      result.matrix_ = MatrixID::SMPTE240M;
-      break;
-    case 8:  // YCOCG
-      result.matrix_ = MatrixID::YCOCG;
-      break;
-    case 9:  // BT2020_NCL
-      result.matrix_ = MatrixID::BT2020_NCL;
-      break;
-    case 10:  // BT2020_CL
-      result.matrix_ = MatrixID::BT2020_CL;
-      break;
-    case 11:  // YDZDX
-      result.matrix_ = MatrixID::YDZDX;
-      break;
-  }
-  result.range_ = range_id;
-  return result;
-}
-
 ColorSpace::ColorSpace() {}
 
 ColorSpace::ColorSpace(PrimaryID primaries,
@@ -427,25 +291,57 @@ sk_sp<SkColorSpace> ColorSpace::ToSkColorSpace() const {
       return SkColorSpace::MakeSRGBLinear();
   }
 
+  // Prefer to used the named gamma and gamut, if possible.
+  bool has_named_gamma = true;
+  SkColorSpace::RenderTargetGamma named_gamma =
+      SkColorSpace::kSRGB_RenderTargetGamma;
+  switch (transfer_) {
+    case TransferID::IEC61966_2_1:
+      break;
+    case TransferID::LINEAR:
+    case TransferID::LINEAR_HDR:
+      named_gamma = SkColorSpace::kLinear_RenderTargetGamma;
+      break;
+    default:
+      has_named_gamma = false;
+      break;
+  }
+  bool has_named_gamut = true;
+  SkColorSpace::Gamut named_gamut = SkColorSpace::kSRGB_Gamut;
+  switch (primaries_) {
+    case PrimaryID::BT709:
+      break;
+    case PrimaryID::ADOBE_RGB:
+      named_gamut = SkColorSpace::kAdobeRGB_Gamut;
+      break;
+    case PrimaryID::SMPTEST432_1:
+      named_gamut = SkColorSpace::kDCIP3_D65_Gamut;
+      break;
+    case PrimaryID::BT2020:
+      named_gamut = SkColorSpace::kRec2020_Gamut;
+      break;
+    default:
+      has_named_gamut = false;
+      break;
+  }
+  if (has_named_gamut && has_named_gamma)
+    return SkColorSpace::MakeRGB(named_gamma, named_gamut);
+
+  // Use named gamma with custom primaries, if possible.
   SkMatrix44 to_xyz_d50;
   GetPrimaryMatrix(&to_xyz_d50);
+  if (has_named_gamma)
+    return SkColorSpace::MakeRGB(named_gamma, to_xyz_d50);
 
-  // Use the named sRGB and linear transfer functions.
-  if (transfer_ == TransferID::IEC61966_2_1) {
-    return SkColorSpace::MakeRGB(SkColorSpace::kSRGB_RenderTargetGamma,
-                                 to_xyz_d50);
-  }
-  if (transfer_ == TransferID::LINEAR || transfer_ == TransferID::LINEAR_HDR) {
-    return SkColorSpace::MakeRGB(SkColorSpace::kLinear_RenderTargetGamma,
-                                 to_xyz_d50);
-  }
-
-  // Use the parametric transfer function if no other option is available.
+  // Use the parametric transfer function if there is no named transfer
+  // function.
   SkColorSpaceTransferFn fn;
   if (!GetTransferFunction(&fn)) {
     DLOG(ERROR) << "Failed to parameterize transfer function for SkColorSpace";
     return nullptr;
   }
+  if (has_named_gamut)
+    return SkColorSpace::MakeRGB(fn, named_gamut);
   return SkColorSpace::MakeRGB(fn, to_xyz_d50);
 }
 
@@ -544,6 +440,17 @@ void ColorSpace::GetPrimaryMatrix(SkMatrix44* to_XYZD50) const {
       primaries.fGY = 0.595f;
       primaries.fBX = 0.155f;
       primaries.fBY = 0.070f;
+      primaries.fWX = 0.3127f;
+      primaries.fWY = 0.3290f;
+      break;
+
+    case ColorSpace::PrimaryID::APPLE_GENERIC_RGB:
+      primaries.fRX = 0.63002f;
+      primaries.fRY = 0.34000f;
+      primaries.fGX = 0.29505f;
+      primaries.fGY = 0.60498f;
+      primaries.fBX = 0.15501f;
+      primaries.fBY = 0.07701f;
       primaries.fWX = 0.3127f;
       primaries.fWY = 0.3290f;
       break;
@@ -650,6 +557,9 @@ bool ColorSpace::GetTransferFunction(SkColorSpaceTransferFn* fn) const {
       return true;
     case ColorSpace::TransferID::LINEAR:
     case ColorSpace::TransferID::LINEAR_HDR:
+      return true;
+    case ColorSpace::TransferID::GAMMA18:
+      fn->fG = 1.801f;
       return true;
     case ColorSpace::TransferID::GAMMA22:
       fn->fG = 2.2f;

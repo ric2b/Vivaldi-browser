@@ -13,6 +13,8 @@ static_library("courgette_lib") {
     "assembly_program.h",
     "consecutive_range_visitor.h",
     "courgette.h",
+    "courgette_flow.cc",
+    "courgette_flow.h",
     "crc.cc",
     "crc.h",
     "difference_estimator.cc",
@@ -96,7 +98,7 @@ if (!is_ios) {
     deps = [
       ":courgette_lib",
       "//base",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
     ]
   }
@@ -109,7 +111,7 @@ if (!is_ios) {
     deps = [
       ":courgette_lib",
       "//base",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
     ]
   }

@@ -37,8 +37,9 @@ class PrerenderingOffliner : public Offliner {
   bool LoadAndSave(const SavePageRequest& request,
                    const CompletionCallback& completion_callback,
                    const ProgressCallback& progress_callback) override;
-  void Cancel(const CancelCallback& callback) override;
-  bool HandleTimeout(const SavePageRequest& request) override;
+  void TerminateLoadIfInProgress() override;
+  bool Cancel(const CancelCallback& callback) override;
+  bool HandleTimeout(int64_t request_id) override;
 
   // Allows a loader to be injected for testing. This may only be done once
   // and must be called before any of the Offliner interface methods are called.
@@ -80,8 +81,6 @@ class PrerenderingOffliner : public Offliner {
   // Listener function for changes to application background/foreground state.
   void OnApplicationStateChange(
       base::android::ApplicationState application_state);
-  void HandleApplicationStateChangeCancel(const SavePageRequest& request,
-                                          int64_t offline_id);
 
   // Not owned.
   content::BrowserContext* browser_context_;
@@ -99,6 +98,7 @@ class PrerenderingOffliner : public Offliner {
   CompletionCallback completion_callback_;
   ProgressCallback progress_callback_;
   bool is_low_end_device_;
+  bool saved_on_last_retry_;
   // ApplicationStatusListener to monitor if the Chrome moves to the foreground.
   std::unique_ptr<base::android::ApplicationStatusListener> app_listener_;
   base::WeakPtrFactory<PrerenderingOffliner> weak_ptr_factory_;

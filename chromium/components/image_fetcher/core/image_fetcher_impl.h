@@ -16,6 +16,7 @@
 #include "components/image_fetcher/core/image_data_fetcher.h"
 #include "components/image_fetcher/core/image_decoder.h"
 #include "components/image_fetcher/core/image_fetcher.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
@@ -30,7 +31,7 @@ class URLRequestContextGetter;
 namespace image_fetcher {
 
 // The standard (non-test) implementation of ImageFetcher.
-class ImageFetcherImpl : public image_fetcher::ImageFetcher {
+class ImageFetcherImpl : public ImageFetcher {
  public:
   ImageFetcherImpl(std::unique_ptr<ImageDecoder> image_decoder,
                    net::URLRequestContextGetter* url_request_context);
@@ -52,7 +53,8 @@ class ImageFetcherImpl : public image_fetcher::ImageFetcher {
   void StartOrQueueNetworkRequest(
       const std::string& id,
       const GURL& image_url,
-      const ImageFetcherCallback& callback) override;
+      const ImageFetcherCallback& callback,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation) override;
 
   ImageDecoder* GetImageDecoder() override;
 

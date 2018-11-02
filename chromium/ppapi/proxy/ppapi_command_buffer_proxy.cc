@@ -87,19 +87,22 @@ gpu::CommandBuffer::State PpapiCommandBufferProxy::WaitForTokenInRange(
 }
 
 gpu::CommandBuffer::State PpapiCommandBufferProxy::WaitForGetOffsetInRange(
+    uint32_t set_get_buffer_count,
     int32_t start,
     int32_t end) {
   TryUpdateState();
-  if (!InRange(start, end, last_state_.get_offset) &&
+  if (((set_get_buffer_count != last_state_.set_get_buffer_count) ||
+       !InRange(start, end, last_state_.get_offset)) &&
       last_state_.error == gpu::error::kNoError) {
     bool success = false;
     gpu::CommandBuffer::State state;
     if (Send(new PpapiHostMsg_PPBGraphics3D_WaitForGetOffsetInRange(
-            ppapi::API_ID_PPB_GRAPHICS_3D, resource_, start, end, &state,
-            &success)))
+            ppapi::API_ID_PPB_GRAPHICS_3D, resource_, set_get_buffer_count,
+            start, end, &state, &success)))
       UpdateState(state, success);
   }
-  DCHECK(InRange(start, end, last_state_.get_offset) ||
+  DCHECK(((set_get_buffer_count == last_state_.set_get_buffer_count) &&
+          InRange(start, end, last_state_.get_offset)) ||
          last_state_.error != gpu::error::kNoError);
   return last_state_;
 }
@@ -181,6 +184,14 @@ gpu::CommandBufferId PpapiCommandBufferProxy::GetCommandBufferID() const {
   return command_buffer_id_;
 }
 
+int32_t PpapiCommandBufferProxy::GetStreamId() const {
+  return 0;
+}
+
+void PpapiCommandBufferProxy::FlushOrderingBarrierOnStream(int32_t stream_id) {
+  // This is only relevant for out-of-process command buffers.
+}
+
 uint64_t PpapiCommandBufferProxy::GenerateFenceSyncRelease() {
   return next_fence_sync_release_++;
 }
@@ -224,9 +235,8 @@ bool PpapiCommandBufferProxy::CanWaitUnverifiedSyncToken(
   return false;
 }
 
-int32_t PpapiCommandBufferProxy::GetExtraCommandBufferData() const {
-  return 0;
-}
+void PpapiCommandBufferProxy::AddLatencyInfo(
+    const std::vector<ui::LatencyInfo>& latency_info) {}
 
 void PpapiCommandBufferProxy::SignalQuery(uint32_t query,
                                           const base::Closure& callback) {

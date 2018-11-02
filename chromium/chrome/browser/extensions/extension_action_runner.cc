@@ -120,7 +120,8 @@ ExtensionAction::ShowAction ExtensionActionRunner::RunAction(
     return ExtensionAction::ACTION_SHOW_POPUP;
 
   ExtensionActionAPI::Get(browser_context_)
-      ->DispatchExtensionActionClicked(*extension_action, web_contents());
+      ->DispatchExtensionActionClicked(*extension_action, web_contents(),
+                                       extension);
   return ExtensionAction::ACTION_NONE;
 }
 
@@ -355,7 +356,7 @@ void ExtensionActionRunner::ShowBlockedActionBubble(
     if (default_bubble_close_action_for_testing_) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE,
-          base::Bind(callback, *default_bubble_close_action_for_testing_));
+          base::BindOnce(callback, *default_bubble_close_action_for_testing_));
     } else {
       toolbar_actions_bar->ShowToolbarActionBubble(
           base::MakeUnique<BlockedActionBubbleDelegate>(callback,
@@ -419,7 +420,7 @@ void ExtensionActionRunner::DidFinishNavigation(
 void ExtensionActionRunner::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
-    UnloadedExtensionInfo::Reason reason) {
+    UnloadedExtensionReason reason) {
   PendingScriptMap::iterator iter = pending_scripts_.find(extension->id());
   if (iter != pending_scripts_.end()) {
     pending_scripts_.erase(iter);

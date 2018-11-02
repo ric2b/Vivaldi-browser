@@ -97,6 +97,9 @@ Layer::Layer()
       layer_brightness_(0.0f),
       layer_grayscale_(0.0f),
       layer_inverted_(false),
+      layer_temperature_(0.0f),
+      layer_blue_scale_(1.0f),
+      layer_green_scale_(1.0f),
       layer_mask_(NULL),
       layer_mask_back_link_(NULL),
       zoom_(1),
@@ -120,6 +123,9 @@ Layer::Layer(LayerType type)
       layer_brightness_(0.0f),
       layer_grayscale_(0.0f),
       layer_inverted_(false),
+      layer_temperature_(0.0f),
+      layer_blue_scale_(1.0f),
+      layer_green_scale_(1.0f),
       layer_mask_(NULL),
       layer_mask_back_link_(NULL),
       zoom_(1),
@@ -163,6 +169,7 @@ std::unique_ptr<Layer> Layer::Clone() const {
   clone->SetBackgroundZoom(zoom_, zoom_inset_);
 
   // Filters.
+  clone->SetLayerTemperature(GetTargetTemperature());
   clone->SetLayerSaturation(layer_saturation_);
   clone->SetLayerBrightness(GetTargetBrightness());
   clone->SetLayerGrayscale(GetTargetGrayscale());
@@ -372,6 +379,18 @@ float Layer::GetCombinedOpacity() const {
   return opacity;
 }
 
+void Layer::SetLayerTemperature(float value) {
+  GetAnimator()->SetTemperature(value);
+}
+
+float Layer::GetTargetTemperature() const {
+  if (animator_ &&
+      animator_->IsAnimatingProperty(LayerAnimationElement::TEMPERATURE)) {
+    return animator_->GetTargetTemperature();
+  }
+  return layer_temperature();
+}
+
 void Layer::SetBackgroundBlur(int blur_radius) {
   background_blur_radius_ = blur_radius;
 
@@ -457,6 +476,15 @@ void Layer::SetLayerFilters() {
   if (layer_grayscale_) {
     filters.Append(cc::FilterOperation::CreateGrayscaleFilter(
         layer_grayscale_));
+  }
+  if (layer_temperature_) {
+    float color_matrix[] = {
+        1.0f,               0.0f,              0.0f, 0.0f, 0.0f,
+        0.0f, layer_green_scale_,              0.0f, 0.0f, 0.0f,
+        0.0f,               0.0f, layer_blue_scale_, 0.0f, 0.0f,
+        0.0f,               0.0f,              0.0f, 1.0f, 0.0f
+    };
+    filters.Append(cc::FilterOperation::CreateColorMatrixFilter(color_matrix));
   }
   if (layer_inverted_)
     filters.Append(cc::FilterOperation::CreateInvertFilter(1.0));
@@ -598,7 +626,7 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
   cc_layer_->SetContentsOpaque(fills_bounds_opaquely_);
   cc_layer_->SetIsDrawable(type_ != LAYER_NOT_DRAWN);
   cc_layer_->SetHideLayerAndSubtree(!visible_);
-  cc_layer_->SetElementId(cc::ElementId(cc_layer_->id(), 0));
+  cc_layer_->SetElementId(cc::ElementId(cc_layer_->id()));
 
   SetLayerFilters();
   SetLayerBackgroundFilters();
@@ -1054,6 +1082,17 @@ void Layer::SetColorFromAnimation(SkColor color) {
   SetFillsBoundsOpaquely(SkColorGetA(color) == 0xFF);
 }
 
+void Layer::SetTemperatureFromAnimation(float temperature) {
+  layer_temperature_ = temperature;
+
+  // If we only tone down the blue scale, the screen will look very green so we
+  // also need to tone down the green, but with a less value compared to the
+  // blue scale to avoid making things look very red.
+  layer_blue_scale_ = 1.0f - temperature;
+  layer_green_scale_ = 1.0f - 0.3f * temperature;
+  SetLayerFilters();
+}
+
 void Layer::ScheduleDrawForAnimation() {
   ScheduleDraw();
 }
@@ -1088,6 +1127,10 @@ SkColor Layer::GetColorForAnimation() const {
   // been configured as LAYER_SOLID_COLOR.
   return solid_color_layer_.get() ?
       solid_color_layer_->background_color() : SK_ColorBLACK;
+}
+
+float Layer::GetTemperatureFromAnimation() const {
+  return layer_temperature_;
 }
 
 float Layer::GetDeviceScaleFactor() const {
@@ -1133,7 +1176,7 @@ void Layer::CreateCcLayer() {
   cc_layer_->SetContentsOpaque(true);
   cc_layer_->SetIsDrawable(type_ != LAYER_NOT_DRAWN);
   cc_layer_->SetLayerClient(this);
-  cc_layer_->SetElementId(cc::ElementId(cc_layer_->id(), 0));
+  cc_layer_->SetElementId(cc::ElementId(cc_layer_->id()));
   RecomputePosition();
 }
 

@@ -11,6 +11,12 @@
       "description": "Lets Vivaldi support docking devtools with the main window",
       "value": "true",
       "internal_value": "true"
+    },
+    "calendar": {
+      "friendly_name": "Calendar",
+      "description": "Enables Vivaldi Calendar",
+      "value": "false",
+      "internal_value": "true"
     }
   }
 }

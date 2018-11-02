@@ -26,12 +26,8 @@
 
 #include "core/dom/Node.h"
 
-#include "bindings/core/v8/DOMDataStore.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/Microtask.h"
 #include "bindings/core/v8/NodeOrString.h"
-#include "bindings/core/v8/ScriptWrappableVisitor.h"
-#include "bindings/core/v8/V8DOMWrapper.h"
 #include "core/HTMLNames.h"
 #include "core/MathMLNames.h"
 #include "core/css/CSSSelector.h"
@@ -88,18 +84,25 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLDialogElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLSlotElement.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutBox.h"
+#include "core/layout/LayoutPart.h"
 #include "core/page/ContextMenuController.h"
 #include "core/page/Page.h"
+#include "core/plugins/PluginView.h"
 #include "core/svg/SVGElement.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/InstanceCounters.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/bindings/DOMDataStore.h"
+#include "platform/bindings/Microtask.h"
+#include "platform/bindings/ScriptWrappableVisitor.h"
+#include "platform/bindings/V8DOMWrapper.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/instrumentation/tracing/TracedValue.h"
 #include "platform/wtf/HashSet.h"
@@ -347,8 +350,8 @@ NodeList* Node::childNodes() {
 Node* Node::PseudoAwarePreviousSibling() const {
   if (parentElement() && !previousSibling()) {
     Element* parent = parentElement();
-    if (IsAfterPseudoElement() && parent->LastChild())
-      return parent->LastChild();
+    if (IsAfterPseudoElement() && parent->lastChild())
+      return parent->lastChild();
     if (!IsBeforePseudoElement())
       return parent->GetPseudoElement(kPseudoIdBefore);
   }
@@ -359,7 +362,7 @@ Node* Node::PseudoAwareNextSibling() const {
   if (parentElement() && !nextSibling()) {
     Element* parent = parentElement();
     if (IsBeforePseudoElement() && parent->HasChildren())
-      return parent->FirstChild();
+      return parent->firstChild();
     if (!IsAfterPseudoElement())
       return parent->GetPseudoElement(kPseudoIdAfter);
   }
@@ -372,7 +375,7 @@ Node* Node::PseudoAwareFirstChild() const {
     Node* first = current_element->GetPseudoElement(kPseudoIdBefore);
     if (first)
       return first;
-    first = current_element->FirstChild();
+    first = current_element->firstChild();
     if (!first)
       first = current_element->GetPseudoElement(kPseudoIdAfter);
     return first;
@@ -387,7 +390,7 @@ Node* Node::PseudoAwareLastChild() const {
     Node* last = current_element->GetPseudoElement(kPseudoIdAfter);
     if (last)
       return last;
-    last = current_element->LastChild();
+    last = current_element->lastChild();
     if (!last)
       last = current_element->GetPseudoElement(kPseudoIdBefore);
     return last;
@@ -589,12 +592,12 @@ LayoutBox* Node::GetLayoutBox() const {
 }
 
 void Node::SetLayoutObject(LayoutObject* layout_object) {
-  NodeLayoutData* node_layout_data = HasRareData()
-                                         ? data_.rare_data_->GetNodeLayoutData()
-                                         : data_.node_layout_data_;
+  NodeRenderingData* node_layout_data =
+      HasRareData() ? data_.rare_data_->GetNodeRenderingData()
+                    : data_.node_layout_data_;
 
-  // Already pointing to a non empty NodeLayoutData so just set the pointer to
-  // the new LayoutObject.
+  // Already pointing to a non empty NodeRenderingData so just set the pointer
+  // to the new LayoutObject.
   if (!node_layout_data->IsSharedEmptyData()) {
     node_layout_data->SetLayoutObject(layout_object);
     return;
@@ -603,11 +606,37 @@ void Node::SetLayoutObject(LayoutObject* layout_object) {
   if (!layout_object)
     return;
 
-  // Swap the NodeLayoutData to point to a new NodeLayoutData instead of the
-  // static SharedEmptyData instance.
-  node_layout_data = new NodeLayoutData(layout_object);
+  // Swap the NodeRenderingData to point to a new NodeRenderingData instead of
+  // the static SharedEmptyData instance.
+  DCHECK(!node_layout_data->GetNonAttachedStyle());
+  node_layout_data = new NodeRenderingData(layout_object, nullptr);
   if (HasRareData())
-    data_.rare_data_->SetNodeLayoutData(node_layout_data);
+    data_.rare_data_->SetNodeRenderingData(node_layout_data);
+  else
+    data_.node_layout_data_ = node_layout_data;
+}
+
+void Node::SetNonAttachedStyle(RefPtr<ComputedStyle> non_attached_style) {
+  NodeRenderingData* node_layout_data =
+      HasRareData() ? data_.rare_data_->GetNodeRenderingData()
+                    : data_.node_layout_data_;
+
+  // Already pointing to a non empty NodeRenderingData so just set the pointer
+  // to the new LayoutObject.
+  if (!node_layout_data->IsSharedEmptyData()) {
+    node_layout_data->SetNonAttachedStyle(non_attached_style);
+    return;
+  }
+
+  if (!non_attached_style)
+    return;
+
+  // Swap the NodeRenderingData to point to a new NodeRenderingData instead of
+  // the static SharedEmptyData instance.
+  DCHECK(!node_layout_data->GetLayoutObject());
+  node_layout_data = new NodeRenderingData(nullptr, non_attached_style);
+  if (HasRareData())
+    data_.rare_data_->SetNodeRenderingData(node_layout_data);
   else
     data_.node_layout_data_ = node_layout_data;
 }
@@ -726,8 +755,9 @@ void Node::MarkAncestorsWithChildNeedsStyleInvalidation() {
 void Node::MarkAncestorsWithChildNeedsDistributionRecalc() {
   ScriptForbiddenScope forbid_script_during_raw_iteration;
   for (Node* node = this; node && !node->ChildNeedsDistributionRecalc();
-       node = node->ParentOrShadowHostNode())
+       node = node->ParentOrShadowHostNode()) {
     node->SetChildNeedsDistributionRecalc();
+  }
   GetDocument().ScheduleLayoutTreeUpdateIfNeeded();
 }
 
@@ -742,9 +772,27 @@ void Node::MarkAncestorsWithChildNeedsStyleRecalc() {
   GetDocument().ScheduleLayoutTreeUpdateIfNeeded();
 }
 
+static ContainerNode* GetReattachParent(Node& node) {
+  if (node.IsPseudoElement())
+    return node.ParentOrShadowHostNode();
+  if (node.IsChildOfV1ShadowHost()) {
+    if (HTMLSlotElement* slot = node.FinalDestinationSlot())
+      return slot;
+  }
+  if (node.IsInV0ShadowTree() || node.IsChildOfV0ShadowHost()) {
+    if (ShadowWhereNodeCanBeDistributedForV0(node)) {
+      if (InsertionPoint* insertion_point =
+              const_cast<InsertionPoint*>(ResolveReprojection(&node))) {
+        return insertion_point;
+      }
+    }
+  }
+  return node.ParentOrShadowHostNode();
+}
+
 void Node::MarkAncestorsWithChildNeedsReattachLayoutTree() {
-  for (ContainerNode* p = ParentOrShadowHostNode();
-       p && !p->ChildNeedsReattachLayoutTree(); p = p->ParentOrShadowHostNode())
+  for (ContainerNode* p = GetReattachParent(*this);
+       p && !p->ChildNeedsReattachLayoutTree(); p = GetReattachParent(*p))
     p->SetChildNeedsReattachLayoutTree();
 }
 
@@ -801,11 +849,27 @@ bool Node::ShouldHaveFocusAppearance() const {
 }
 
 bool Node::IsInert() const {
+  if (!isConnected() || !CanParticipateInFlatTree())
+    return true;
+
+  DCHECK(!ChildNeedsDistributionRecalc());
+
   const HTMLDialogElement* dialog = GetDocument().ActiveModalDialog();
   if (dialog && this != GetDocument() &&
-      (!CanParticipateInFlatTree() ||
-       !FlatTreeTraversal::ContainsIncludingPseudoElement(*dialog, *this)))
+      !FlatTreeTraversal::ContainsIncludingPseudoElement(*dialog, *this)) {
     return true;
+  }
+
+  if (RuntimeEnabledFeatures::inertAttributeEnabled()) {
+    const Element* element = this->IsElementNode()
+                                 ? ToElement(this)
+                                 : FlatTreeTraversal::ParentElement(*this);
+    while (element) {
+      if (element->hasAttribute(HTMLNames::inertAttr))
+        return true;
+      element = FlatTreeTraversal::ParentElement(*element);
+    }
+  }
   return GetDocument().LocalOwner() && GetDocument().LocalOwner()->IsInert();
 }
 
@@ -1002,7 +1066,8 @@ bool Node::CanStartSelection() const {
     // We allow selections to begin within an element that has
     // -webkit-user-select: none set, but if the element is draggable then
     // dragging should take priority over selection.
-    if (style.UserDrag() == DRAG_ELEMENT && style.UserSelect() == SELECT_NONE)
+    if (style.UserDrag() == DRAG_ELEMENT &&
+        style.UserSelect() == EUserSelect::kNone)
       return false;
   }
   ContainerNode* parent = FlatTreeTraversal::Parent(*this);
@@ -1356,7 +1421,7 @@ void Node::setTextContent(const String& text) {
       // See crbug.com/352836 also.
       // No need to do anything if the text is identical.
       if (container->HasOneTextChild() &&
-          ToText(container->FirstChild())->data() == text && !text.IsEmpty())
+          ToText(container->firstChild())->data() == text && !text.IsEmpty())
         return;
 
       ChildListMutationScope mutation(*this);
@@ -1518,11 +1583,10 @@ unsigned short Node::compareDocumentPosition(
 
   // There was no difference between the two parent chains, i.e., one was a
   // subset of the other.  The shorter chain is the ancestor.
-  return index1 < index2
-             ? kDocumentPositionFollowing | kDocumentPositionContainedBy |
-                   connection
-             : kDocumentPositionPreceding | kDocumentPositionContains |
-                   connection;
+  return index1 < index2 ? kDocumentPositionFollowing |
+                               kDocumentPositionContainedBy | connection
+                         : kDocumentPositionPreceding |
+                               kDocumentPositionContains | connection;
 }
 
 String Node::DebugName() const {
@@ -1561,22 +1625,22 @@ static void DumpAttributeDesc(const Node& node,
   const AtomicString& value = ToElement(node).getAttribute(name);
   if (value.IsEmpty())
     return;
-  ostream << ' ' << name.ToString().Utf8().Data() << '=' << value;
+  ostream << ' ' << name.ToString().Utf8().data() << '=' << value;
 }
 
 std::ostream& operator<<(std::ostream& ostream, const Node& node) {
   if (node.getNodeType() == Node::kProcessingInstructionNode)
-    return ostream << "?" << node.nodeName().Utf8().Data();
+    return ostream << "?" << node.nodeName().Utf8().data();
   if (node.IsShadowRoot()) {
     // nodeName of ShadowRoot is #document-fragment.  It's confused with
     // DocumentFragment.
     return ostream << "#shadow-root";
   }
   if (node.IsDocumentTypeNode())
-    return ostream << "DOCTYPE " << node.nodeName().Utf8().Data();
+    return ostream << "DOCTYPE " << node.nodeName().Utf8().data();
 
   // We avoid to print "" by utf8().data().
-  ostream << node.nodeName().Utf8().Data();
+  ostream << node.nodeName().Utf8().data();
   if (node.IsTextNode())
     return ostream << " " << node.nodeValue();
   DumpAttributeDesc(node, HTMLNames::idAttr, ostream);
@@ -1634,7 +1698,7 @@ void Node::PrintNodePathTo(std::ostream& stream) const {
 
     switch (node->getNodeType()) {
       case kElementNode: {
-        stream << "/" << node->nodeName().Utf8().Data();
+        stream << "/" << node->nodeName().Utf8().data();
 
         const Element* element = ToElement(node);
         const AtomicString& idattr = element->GetIdAttribute();
@@ -1648,12 +1712,12 @@ void Node::PrintNodePathTo(std::ostream& stream) const {
             }
           }
           if (has_id_attr)
-            stream << "[@id=\"" << idattr.Utf8().Data()
+            stream << "[@id=\"" << idattr.Utf8().data()
                    << "\" and position()=" << count << "]";
           else
             stream << "[" << count << "]";
         } else if (has_id_attr) {
-          stream << "[@id=\"" << idattr.Utf8().Data() << "\"]";
+          stream << "[@id=\"" << idattr.Utf8().data() << "\"]";
         }
         break;
       }
@@ -1661,7 +1725,7 @@ void Node::PrintNodePathTo(std::ostream& stream) const {
         stream << "/text()";
         break;
       case kAttributeNode:
-        stream << "/@" << node->nodeName().Utf8().Data();
+        stream << "/@" << node->nodeName().Utf8().data();
         break;
       default:
         break;
@@ -1792,7 +1856,7 @@ static void PrintSubTreeAcrossFrame(const Node* node,
                                     std::ostream& stream) {
   if (node == marked_node)
     stream << "*";
-  stream << indent.Utf8().Data() << *node << "\n";
+  stream << indent.Utf8().data() << *node << "\n";
   if (node->IsShadowRoot()) {
     if (ShadowRoot* younger_shadow_root =
             ToShadowRoot(node)->YoungerShadowRoot())
@@ -1866,11 +1930,11 @@ void Node::DidMoveToNewDocument(Document& old_document) {
         event_target_data->event_listener_map;
     if (!listener_map.IsEmpty()) {
       for (const auto& type : listener_map.EventTypes())
-        GetDocument().AddListenerTypeIfNeeded(type);
+        GetDocument().AddListenerTypeIfNeeded(type, *this);
     }
   }
 
-  old_document.Markers().RemoveMarkers(this);
+  old_document.Markers().RemoveMarkersForNode(this);
   if (GetDocument().GetPage() &&
       GetDocument().GetPage() != old_document.GetPage()) {
     GetDocument().GetPage()->GetEventHandlerRegistry().DidMoveIntoPage(*this);
@@ -1893,7 +1957,7 @@ void Node::DidMoveToNewDocument(Document& old_document) {
 void Node::AddedEventListener(const AtomicString& event_type,
                               RegisteredEventListener& registered_listener) {
   EventTarget::AddedEventListener(event_type, registered_listener);
-  GetDocument().AddListenerTypeIfNeeded(event_type);
+  GetDocument().AddListenerTypeIfNeeded(event_type, *this);
   if (Page* page = GetDocument().GetPage())
     page->GetEventHandlerRegistry().DidAddEventHandler(
         *this, event_type, registered_listener.Options());
@@ -2098,8 +2162,12 @@ void Node::HandleLocalEvents(Event& event) {
   if (!HasEventTargetData())
     return;
 
-  if (IsDisabledFormControl(this) && event.IsMouseEvent())
+  if (IsDisabledFormControl(this) && event.IsMouseEvent() &&
+      !RuntimeEnabledFeatures::sendMouseEventsDisabledFormControlsEnabled()) {
+    UseCounter::Count(GetDocument(),
+                      UseCounter::kDispatchMouseEventOnDisabledFormControl);
     return;
+  }
 
   FireEventListeners(&event);
 }
@@ -2121,7 +2189,7 @@ void Node::DispatchSubtreeModifiedEvent() {
   DCHECK(!EventDispatchForbiddenScope::IsEventDispatchForbidden());
 #endif
 
-  if (!GetDocument().HasListenerType(Document::DOMSUBTREEMODIFIED_LISTENER))
+  if (!GetDocument().HasListenerType(Document::kDOMSubtreeModifiedListener))
     return;
 
   DispatchScopedEvent(
@@ -2361,6 +2429,17 @@ HTMLSlotElement* Node::AssignedSlot() const {
   return nullptr;
 }
 
+HTMLSlotElement* Node::FinalDestinationSlot() const {
+  HTMLSlotElement* slot = AssignedSlot();
+  if (!slot)
+    return nullptr;
+  for (HTMLSlotElement* next = slot->AssignedSlot(); next;
+       next = next->AssignedSlot()) {
+    slot = next;
+  }
+  return slot;
+}
+
 HTMLSlotElement* Node::assignedSlotForBinding() {
   // assignedSlot doesn't need to call updateDistribution().
   if (ShadowRoot* root = V1ShadowRootOfParent()) {
@@ -2519,6 +2598,22 @@ void Node::CheckSlotChange(SlotChangeType slot_change_type) {
   }
 }
 
+WebPluginContainerBase* Node::GetWebPluginContainerBase() const {
+  if (!isHTMLObjectElement(this) && !isHTMLEmbedElement(this)) {
+    return nullptr;
+  }
+
+  LayoutObject* object = GetLayoutObject();
+  if (object && object->IsLayoutPart()) {
+    PluginView* plugin = ToLayoutPart(object)->Plugin();
+    if (plugin) {
+      return plugin->GetWebPluginContainerBase();
+    }
+  }
+
+  return nullptr;
+}
+
 DEFINE_TRACE(Node) {
   visitor->Trace(parent_or_shadow_host_node_);
   visitor->Trace(previous_);
@@ -2554,7 +2649,7 @@ void showNode(const blink::Node* node) {
 
 void showTree(const blink::Node* node) {
   if (node)
-    LOG(INFO) << "\n" << node->ToTreeStringForThis().Utf8().Data();
+    LOG(INFO) << "\n" << node->ToTreeStringForThis().Utf8().data();
   else
     LOG(INFO) << "Cannot showTree for <null>";
 }

@@ -40,6 +40,7 @@
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/Event.h"
 #include "core/frame/Settings.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLElement.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutObject.h"
@@ -261,7 +262,7 @@ void SVGElement::ClearWebAnimatedAttributes() {
       }
     });
   }
-  SvgRareData()->WebAnimatedAttributes().Clear();
+  SvgRareData()->WebAnimatedAttributes().clear();
 }
 
 void SVGElement::SetAnimatedAttribute(const QualifiedName& attribute,
@@ -407,6 +408,16 @@ Node::InsertionNotificationRequest SVGElement::InsertedInto(
   Element::InsertedInto(root_parent);
   UpdateRelativeLengthsInformation();
   BuildPendingResourcesIfNeeded();
+
+  if (hasAttribute(nonceAttr) && getAttribute(nonceAttr) != g_empty_atom) {
+    setNonce(getAttribute(nonceAttr));
+    if (RuntimeEnabledFeatures::hideNonceContentAttributeEnabled() &&
+        InActiveDocument() &&
+        GetDocument().GetContentSecurityPolicy()->HasHeaderDeliveredPolicy()) {
+      setAttribute(nonceAttr, g_empty_atom);
+    }
+  }
+
   return kInsertionDone;
 }
 
@@ -424,7 +435,7 @@ void SVGElement::RemovedFrom(ContainerNode* root_parent) {
       ToSVGElement(root_parent)->UpdateRelativeLengthsInformation(false, this);
     }
 
-    elements_with_relative_lengths_.Clear();
+    elements_with_relative_lengths_.clear();
   }
 
   SECURITY_DCHECK(!root_parent->IsSVGElement() ||
@@ -1136,7 +1147,7 @@ void SVGElement::InvalidateInstances() {
     }
   }
 
-  SvgRareData()->ElementInstances().Clear();
+  SvgRareData()->ElementInstances().clear();
 }
 
 void SVGElement::SetNeedsStyleRecalcForInstances(
@@ -1317,7 +1328,7 @@ void SVGElement::RemoveAllIncomingReferences() {
     DCHECK(source_element->HasSVGRareData());
     source_element->EnsureSVGRareData()->OutgoingReferences().erase(this);
   }
-  incoming_references.Clear();
+  incoming_references.clear();
 }
 
 void SVGElement::RemoveAllOutgoingReferences() {
@@ -1329,7 +1340,7 @@ void SVGElement::RemoveAllOutgoingReferences() {
     DCHECK(target_element->HasSVGRareData());
     target_element->EnsureSVGRareData()->IncomingReferences().erase(this);
   }
-  outgoing_references.Clear();
+  outgoing_references.clear();
 }
 
 DEFINE_TRACE(SVGElement) {

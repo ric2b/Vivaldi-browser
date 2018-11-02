@@ -30,6 +30,22 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>Title</key>
+			<string>Request Mobile Site</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Disable Request Mobile Site</string>
+			<key>Key</key>
+			<string>RequestMobileSiteDisabled</string>
+			<key>DefaultValue</key>
+			<false/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>Title</key>
 			<string>iPad Tab Strip</string>
 		</dict>
 		<dict>
@@ -179,28 +195,6 @@
 			<string>SafariVCSignInDisabled</string>
 			<key>DefaultValue</key>
 			<false/>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSMultiValueSpecifier</string>
-			<key>Title</key>
-			<string>Enable Download Image Renaming</string>
-			<key>Key</key>
-			<string>EnableDownloadRenaming</string>
-			<key>DefaultValue</key>
-			<string></string>
-			<key>Values</key>
-			<array>
-				<string></string>
-				<string>Enabled</string>
-				<string>Disabled</string>
-			</array>
-			<key>Titles</key>
-			<array>
-				<string>Default</string>
-				<string>Enabled</string>
-				<string>Disabled</string>
-			</array>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -366,15 +360,11 @@
 				<integer>0</integer>
 				<integer>1</integer>
 				<integer>2</integer>
-				<integer>3</integer>
-				<integer>4</integer>
 			</array>
 			<key>Titles</key>
 			<array>
 				<string>Default</string>
 				<string>App Rating Promo</string>
-				<string>Faster Access Move to Dock Promo</string>
-				<string>Love Chrome Move to Dock Promo</string>
 				<string>Tip Move to Dock Promo</string>
 			</array>
 		</dict>
@@ -399,16 +389,6 @@
 				<string>Disabled</string>
 				<string>Enabled</string>
 			</array>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSToggleSwitchSpecifier</string>
-			<key>Title</key>
-			<string>Disable External Application Prompt</string>
-			<key>Key</key>
-			<string>ExternalAppPromptDisabled</string>
-			<key>DefaultValue</key>
-			<false/>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -482,6 +462,16 @@
 		</dict>
 		<dict>
 			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Enable Native App Launcher</string>
+			<key>Key</key>
+			<string>NativeAppLauncherEnabled</string>
+			<key>DefaultValue</key>
+			<false/>
+		</dict>
+		<dict>
+			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
 			<string>Origin Server Host</string>
@@ -522,6 +512,12 @@
 		</dict>
 		<dict>
 			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>Title</key>
+			<string>Physical Web Settings</string>
+		</dict>
+		<dict>
+			<key>Type</key>
 			<string>PSMultiValueSpecifier</string>
 			<key>Title</key>
 			<string>Physical Web</string>
@@ -555,6 +551,34 @@
 			<string>Enable Payment Request</string>
 			<key>Key</key>
 			<string>EnablePaymentRequest</string>
+			<key>DefaultValue</key>
+			<string></string>
+			<key>Values</key>
+			<array>
+				<string></string>
+				<string>Enabled</string>
+				<string>Disabled</string>
+			</array>
+			<key>Titles</key>
+			<array>
+				<string>Default</string>
+				<string>Enabled</string>
+				<string>Disabled</string>
+			</array>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>Title</key>
+			<string>CSChromium</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Title</key>
+			<string>Enable Bottom Toolbar</string>
+			<key>Key</key>
+			<string>EnableBottomToolbar</string>
 			<key>DefaultValue</key>
 			<string></string>
 			<key>Values</key>
@@ -645,6 +669,28 @@
 			<string></string>
 			<key>AutocorrectionType</key>
 			<string>No</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Title</key>
+			<string>Download missing favicons for NTP Most Likely Tiles from Google</string>
+			<key>Key</key>
+			<string>EnableNtpMostLikelyFaviconsFromServer</string>
+			<key>DefaultValue</key>
+			<string></string>
+			<key>Values</key>
+			<array>
+				<string></string>
+				<string>Enabled</string>
+				<string>Disabled</string>
+			</array>
+			<key>Titles</key>
+			<array>
+				<string>Default</string>
+				<string>Enabled</string>
+				<string>Disabled</string>
+			</array>
 		</dict>
 	</array>
 </dict>

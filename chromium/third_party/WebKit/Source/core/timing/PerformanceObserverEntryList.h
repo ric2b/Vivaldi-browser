@@ -5,9 +5,9 @@
 #ifndef PerformanceObserverEntryList_h
 #define PerformanceObserverEntryList_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 

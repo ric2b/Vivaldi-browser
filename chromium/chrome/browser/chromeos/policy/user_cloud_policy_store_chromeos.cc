@@ -10,21 +10,21 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
-#include "chrome/browser/chromeos/policy/user_policy_token_loader.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/proto/cloud_policy.pb.h"
-#include "components/policy/proto/device_management_local.pb.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 
 using RetrievePolicyResponseType =
@@ -120,6 +120,7 @@ void UserCloudPolicyStoreChromeOS::LoadImmediately() {
   if (response_type == RetrievePolicyResponseType::SESSION_DOES_NOT_EXIST) {
     LOG(ERROR)
         << "Session manager claims that session doesn't exist; signing out";
+    base::debug::DumpWithoutCrashing();
     chrome::AttemptUserExit();
     return;
   }
@@ -164,7 +165,7 @@ void UserCloudPolicyStoreChromeOS::ValidatePolicyForStore(
 
   // Create and configure a validator.
   std::unique_ptr<UserCloudPolicyValidator> validator = CreateValidator(
-      std::move(policy), CloudPolicyValidatorBase::TIMESTAMP_FULLY_VALIDATED);
+      std::move(policy), CloudPolicyValidatorBase::TIMESTAMP_VALIDATED);
   validator->ValidateUsername(account_id_.GetUserEmail(), true);
   if (cached_policy_key_.empty()) {
     validator->ValidateInitialKey(ExtractDomain(account_id_.GetUserEmail()));
@@ -173,9 +174,9 @@ void UserCloudPolicyStoreChromeOS::ValidatePolicyForStore(
         cached_policy_key_, ExtractDomain(account_id_.GetUserEmail()));
   }
 
-  // Start validation. The Validator will delete itself once validation is
-  // complete.
-  validator.release()->StartValidation(
+  // Start validation.
+  UserCloudPolicyValidator::StartValidation(
+      std::move(validator),
       base::Bind(&UserCloudPolicyStoreChromeOS::OnPolicyToStoreValidated,
                  weak_factory_.GetWeakPtr()));
 }
@@ -235,6 +236,7 @@ void UserCloudPolicyStoreChromeOS::OnPolicyRetrieved(
   if (response_type == RetrievePolicyResponseType::SESSION_DOES_NOT_EXIST) {
     LOG(ERROR)
         << "Session manager claims that session doesn't exist; signing out";
+    base::debug::DumpWithoutCrashing();
     chrome::AttemptUserExit();
     return;
   }
@@ -269,12 +271,8 @@ void UserCloudPolicyStoreChromeOS::OnPolicyRetrieved(
 
 void UserCloudPolicyStoreChromeOS::ValidateRetrievedPolicy(
     std::unique_ptr<em::PolicyFetchResponse> policy) {
-  // Create and configure a validator for the loaded policy.
-  std::unique_ptr<UserCloudPolicyValidator> validator =
-      CreateValidatorForLoad(std::move(policy));
-  // Start validation. The Validator will delete itself once validation is
-  // complete.
-  validator.release()->StartValidation(
+  UserCloudPolicyValidator::StartValidation(
+      CreateValidatorForLoad(std::move(policy)),
       base::Bind(&UserCloudPolicyStoreChromeOS::OnRetrievedPolicyValidated,
                  weak_factory_.GetWeakPtr()));
 }
@@ -386,11 +384,10 @@ std::unique_ptr<UserCloudPolicyValidator>
 UserCloudPolicyStoreChromeOS::CreateValidatorForLoad(
     std::unique_ptr<em::PolicyFetchResponse> policy) {
   std::unique_ptr<UserCloudPolicyValidator> validator = CreateValidator(
-      std::move(policy), CloudPolicyValidatorBase::TIMESTAMP_NOT_BEFORE);
+      std::move(policy), CloudPolicyValidatorBase::TIMESTAMP_VALIDATED);
   if (is_active_directory_) {
     validator->ValidateTimestamp(
-        base::Time(), base::Time(),
-        CloudPolicyValidatorBase::TIMESTAMP_NOT_VALIDATED);
+        base::Time(), CloudPolicyValidatorBase::TIMESTAMP_NOT_VALIDATED);
     validator->ValidateDMToken(std::string(),
                                CloudPolicyValidatorBase::DM_TOKEN_NOT_REQUIRED);
     validator->ValidateDeviceId(

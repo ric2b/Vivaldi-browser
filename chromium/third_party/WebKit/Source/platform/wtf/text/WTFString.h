@@ -99,7 +99,7 @@ class WTF_EXPORT String {
   String(StringImpl* impl) : impl_(impl) {}
   String(PassRefPtr<StringImpl> impl) : impl_(std::move(impl)) {}
 
-  void Swap(String& o) { impl_.Swap(o.impl_); }
+  void swap(String& o) { impl_.Swap(o.impl_); }
 
   template <typename CharType>
   static String Adopt(StringBuffer<CharType>& buffer) {
@@ -165,14 +165,14 @@ class WTF_EXPORT String {
   static String NumberToStringFixedWidth(double, unsigned decimal_places);
 
   // Find characters.
-  size_t Find(UChar c, unsigned start = 0) const {
+  size_t find(UChar c, unsigned start = 0) const {
     return impl_ ? impl_->Find(c, start) : kNotFound;
   }
-  size_t Find(LChar c, unsigned start = 0) const {
+  size_t find(LChar c, unsigned start = 0) const {
     return impl_ ? impl_->Find(c, start) : kNotFound;
   }
-  size_t Find(char c, unsigned start = 0) const {
-    return Find(static_cast<LChar>(c), start);
+  size_t find(char c, unsigned start = 0) const {
+    return find(static_cast<LChar>(c), start);
   }
   size_t Find(CharacterMatchFunctionPtr match_function,
               unsigned start = 0) const {
@@ -201,7 +201,7 @@ class WTF_EXPORT String {
     return impl_ ? impl_->FindIgnoringASCIICase(value, start) : kNotFound;
   }
 
-  bool Contains(char c) const { return Find(c) != kNotFound; }
+  bool Contains(char c) const { return find(c) != kNotFound; }
   bool Contains(
       const StringView& value,
       TextCaseSensitivity case_sensitivity = kTextCaseSensitive) const {
@@ -239,10 +239,10 @@ class WTF_EXPORT String {
     return impl_ ? impl_->EndsWith(character) : false;
   }
 
-  void Append(const StringView&);
-  void Append(LChar);
-  void Append(char c) { Append(static_cast<LChar>(c)); }
-  void Append(UChar);
+  void append(const StringView&);
+  void append(LChar);
+  void append(char c) { append(static_cast<LChar>(c)); }
+  void append(UChar);
   void insert(const StringView&, unsigned pos);
 
   // TODO(esprehn): replace strangely both modifies this String *and* return a
@@ -262,7 +262,7 @@ class WTF_EXPORT String {
       impl_ = impl_->Replace(pattern, replacement);
     return *this;
   }
-  String& Replace(unsigned index,
+  String& replace(unsigned index,
                   unsigned length_to_replace,
                   const StringView& replacement) {
     if (impl_)
@@ -284,16 +284,18 @@ class WTF_EXPORT String {
   String Left(unsigned len) const { return Substring(0, len); }
   String Right(unsigned len) const { return Substring(length() - len, len); }
 
-  // Returns a lowercase/uppercase version of the string. These functions might
-  // convert non-ASCII characters to ASCII characters. For example,
-  // DeprecatedLower() for U+212A is 'k', DeprecatedUpper() for U+017F is 'S'.
-  // These functions are rarely used to implement web platform features. See
+  // Returns a lowercase version of the string. This function might convert
+  // non-ASCII characters to ASCII characters. For example, DeprecatedLower()
+  // for U+212A is 'k'.
+  // This function is rarely used to implement web platform features. See
   // crbug.com/627682.
-  // These functions are deprecated. We should use UpperASCII(), or introduce
-  // UpperUnicode(), and should introduce LowerASCII() or LowerUnicode().
+  // This function is deprecated. We should use LowerASCII() or introduce
+  // LowerUnicode().
   String DeprecatedLower() const;
-  String DeprecatedUpper() const;
 
+  // |locale_identifier| is case-insensitive, and accepts either of "aa_aa" or
+  // "aa-aa". Empty/null |locale_identifier| indicates locale-independent
+  // Unicode case conversion.
   String LowerUnicode(const AtomicString& locale_identifier) const;
   String UpperUnicode(const AtomicString& locale_identifier) const;
 
@@ -395,7 +397,7 @@ class WTF_EXPORT String {
   template <size_t inlineCapacity>
   static String Make8BitFrom16BitSource(
       const Vector<UChar, inlineCapacity>& buffer) {
-    return Make8BitFrom16BitSource(buffer.Data(), buffer.size());
+    return Make8BitFrom16BitSource(buffer.data(), buffer.size());
   }
 
   static String Make16BitFrom8BitSource(const LChar*, size_t);
@@ -486,14 +488,14 @@ inline bool EqualIgnoringNullity(const Vector<UChar, inlineCapacity>& a,
 }
 
 inline void swap(String& a, String& b) {
-  a.Swap(b);
+  a.swap(b);
 }
 
 // Definitions of string operations
 
 template <size_t inlineCapacity>
 String::String(const Vector<UChar, inlineCapacity>& vector)
-    : impl_(vector.size() ? StringImpl::Create(vector.Data(), vector.size())
+    : impl_(vector.size() ? StringImpl::Create(vector.data(), vector.size())
                           : StringImpl::empty_) {}
 
 template <>

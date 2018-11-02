@@ -101,7 +101,7 @@ def attribute_context(interface, attribute, interfaces):
         'SameObject' in attribute.extended_attributes and
         'SaveSameObject' in attribute.extended_attributes)
     if is_save_same_object:
-        includes.add('bindings/core/v8/V8PrivateProperty.h')
+        includes.add('platform/bindings/V8PrivateProperty.h')
 
     if (base_idl_type == 'EventHandler' and
             interface.name in ['Window', 'WorkerGlobalScope'] and
@@ -111,12 +111,12 @@ def attribute_context(interface, attribute, interfaces):
     cached_attribute_validation_method = extended_attributes.get('CachedAttribute')
     keep_alive_for_gc = is_keep_alive_for_gc(interface, attribute)
     if cached_attribute_validation_method or keep_alive_for_gc:
-        includes.add('bindings/core/v8/V8PrivateProperty.h')
+        includes.add('platform/bindings/V8PrivateProperty.h')
 
     # [CachedAccessor]
     is_cached_accessor = 'CachedAccessor' in extended_attributes
     if is_cached_accessor:
-        includes.add('bindings/core/v8/V8PrivateProperty.h')
+        includes.add('platform/bindings/V8PrivateProperty.h')
 
     context = {
         'activity_logging_world_list_for_getter': v8_utilities.activity_logging_world_list(attribute, 'Getter'),  # [ActivityLogging]
@@ -241,17 +241,18 @@ def filter_lazy_data_attributes(attributes):
     return [attribute for attribute in attributes if is_data_attribute(attribute) and is_lazy_data_attribute(attribute)]
 
 
-def filter_origin_trial_enabled(attributes):
-    return [attribute for attribute in attributes if
-            attribute['origin_trial_feature_name'] and
-            not attribute['exposed_test']]
-
-
 def filter_runtime_enabled(attributes):
     return [attribute for attribute in attributes if
             not (attribute['exposed_test'] or
                  attribute['secure_context_test']) and
             attribute['runtime_enabled_feature_name']]
+
+
+def filter_conditionally_enabled(attributes):
+    return [attribute for attribute in attributes if
+            attribute['exposed_test'] or
+            (attribute['secure_context_test'] and
+             not attribute['origin_trial_feature_name'])]
 
 
 ################################################################################
@@ -385,19 +386,20 @@ def is_keep_alive_for_gc(interface, attribute):
 
 def setter_context(interface, attribute, interfaces, context):
     if 'PutForwards' in attribute.extended_attributes:
-        # Use target interface and attribute in place of original interface and
-        # attribute from this point onwards.
+        # Make sure the target interface and attribute exist.
         target_interface_name = attribute.idl_type.base_type
         target_attribute_name = attribute.extended_attributes['PutForwards']
         interface = interfaces[target_interface_name]
         try:
-            attribute = next(candidate
-                             for candidate in interface.attributes
-                             if candidate.name == target_attribute_name)
+            next(candidate
+                 for candidate in interface.attributes
+                 if candidate.name == target_attribute_name)
         except StopIteration:
             raise Exception('[PutForward] target not found:\n'
                             'Attribute "%s" is not present in interface "%s"' %
                             (target_attribute_name, target_interface_name))
+        context['target_attribute_name'] = target_attribute_name
+        return
 
     if ('Replaceable' in attribute.extended_attributes):
         context['cpp_setter'] = (

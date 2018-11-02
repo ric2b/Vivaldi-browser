@@ -16,7 +16,7 @@
 #include "build/build_config.h"
 
 // Auto-generated for dlopen libva libraries
-#include "media/gpu/va_stubs.h"
+#include "media/gpu/vaapi/va_stubs.h"
 
 #include "media/gpu/vaapi_picture.h"
 #include "third_party/libyuv/include/libyuv.h"
@@ -32,14 +32,14 @@
 #include "ui/ozone/public/surface_factory_ozone.h"
 #endif  // USE_X11
 
-using media_gpu::kModuleVa;
+using media_gpu_vaapi::kModuleVa;
 #if defined(USE_X11)
-using media_gpu::kModuleVa_x11;
+using media_gpu_vaapi::kModuleVa_x11;
 #elif defined(USE_OZONE)
-using media_gpu::kModuleVa_drm;
+using media_gpu_vaapi::kModuleVa_drm;
 #endif  // USE_X11
-using media_gpu::InitializeStubs;
-using media_gpu::StubPathMap;
+using media_gpu_vaapi::InitializeStubs;
+using media_gpu_vaapi::StubPathMap;
 
 #define LOG_VA_ERROR_AND_REPORT(va_error, err_msg)                  \
   do {                                                              \
@@ -129,9 +129,10 @@ static const ProfileMap kProfileMap[] = {
     // H264PROFILE_HIGH*.
     {H264PROFILE_HIGH, VAProfileH264High},
     {VP8PROFILE_ANY, VAProfileVP8Version0_3},
-    // TODO(servolk): Need to add VP9 profiles 1,2,3 here after rolling
-    // third_party/libva to 1.7. crbug.com/598118
     {VP9PROFILE_PROFILE0, VAProfileVP9Profile0},
+    {VP9PROFILE_PROFILE1, VAProfileVP9Profile1},
+    {VP9PROFILE_PROFILE2, VAProfileVP9Profile2},
+    {VP9PROFILE_PROFILE3, VAProfileVP9Profile3},
 };
 
 static std::vector<VAConfigAttrib> GetRequiredAttribs(
@@ -1224,8 +1225,8 @@ bool VaapiWrapper::VADisplayState::Initialize() {
     DVLOG(1) << "VAAPI version: " << major_version_ << "." << minor_version_;
   }
 
-  if (VAAPIVersionLessThan(0, 34)) {
-    LOG(ERROR) << "VAAPI version < 0.34 is not supported.";
+  if (VAAPIVersionLessThan(0, 39)) {
+    LOG(ERROR) << "VAAPI version < 0.39 is not supported.";
     return false;
   }
   return true;

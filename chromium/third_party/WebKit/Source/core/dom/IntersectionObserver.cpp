@@ -207,7 +207,7 @@ IntersectionObserver::IntersectionObserver(
 }
 
 void IntersectionObserver::ClearWeakMembers(Visitor* visitor) {
-  if (ThreadHeap::IsHeapObjectAlive(root()))
+  if (RootIsImplicit() || (root() && ThreadHeap::IsHeapObjectAlive(root())))
     return;
   DummyExceptionStateForTesting exception_state;
   disconnect(exception_state);
@@ -280,14 +280,14 @@ void IntersectionObserver::ComputeIntersectionObservations() {
 void IntersectionObserver::disconnect(ExceptionState& exception_state) {
   for (auto& observation : observations_)
     observation->Disconnect();
-  observations_.Clear();
-  entries_.Clear();
+  observations_.clear();
+  entries_.clear();
 }
 
 HeapVector<Member<IntersectionObserverEntry>> IntersectionObserver::takeRecords(
     ExceptionState& exception_state) {
   HeapVector<Member<IntersectionObserverEntry>> entries;
-  entries.Swap(entries_);
+  entries.swap(entries_);
   return entries;
 }
 
@@ -331,7 +331,7 @@ void IntersectionObserver::Deliver() {
     return;
 
   HeapVector<Member<IntersectionObserverEntry>> entries;
-  entries.Swap(entries_);
+  entries.swap(entries_);
   callback_->HandleEvent(entries, *this);
 }
 

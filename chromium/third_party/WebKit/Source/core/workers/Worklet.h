@@ -6,21 +6,23 @@
 #define Worklet_h
 
 #include "bindings/core/v8/ScriptPromise.h"
-#include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
-#include "core/loader/WorkletScriptLoader.h"
+#include "core/workers/WorkletOptions.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "platform/loader/fetch/ResourceFetcher.h"
 
 namespace blink {
 
 class LocalFrame;
+class ScriptPromiseResolver;
 class WorkletGlobalScopeProxy;
 
+// This is the base implementation of Worklet interface defined in the spec:
+// https://drafts.css-houdini.org/worklets/#worklet
+// Although some worklets run off the main thread, this must be created and
+// destroyed on the main thread.
 class CORE_EXPORT Worklet : public GarbageCollectedFinalized<Worklet>,
-                            public WorkletScriptLoader::Client,
                             public ScriptWrappable,
                             public ContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
@@ -30,20 +32,14 @@ class CORE_EXPORT Worklet : public GarbageCollectedFinalized<Worklet>,
  public:
   virtual ~Worklet() = default;
 
-  virtual void Initialize() {}
-  virtual bool IsInitialized() const { return true; }
+  // Worklet.idl
+  // addModule() imports ES6 module scripts.
+  virtual ScriptPromise addModule(ScriptState*,
+                                  const String& module_url,
+                                  const WorkletOptions&);
 
+  // Returns a proxy to WorkletGlobalScope on the context thread.
   virtual WorkletGlobalScopeProxy* GetWorkletGlobalScopeProxy() const = 0;
-
-  // Worklet
-  ScriptPromise import(ScriptState*, const String& url);
-
-  // WorkletScriptLoader::Client
-  void NotifyWorkletScriptLoadingFinished(WorkletScriptLoader*,
-                                          const ScriptSourceCode&) final;
-
-  // ContextLifecycleObserver
-  void ContextDestroyed(ExecutionContext*) final;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -52,9 +48,9 @@ class CORE_EXPORT Worklet : public GarbageCollectedFinalized<Worklet>,
   explicit Worklet(LocalFrame*);
 
  private:
-  Member<LocalFrame> frame_;
-  HeapHashMap<Member<WorkletScriptLoader>, Member<ScriptPromiseResolver>>
-      loader_and_resolvers_;
+  virtual void FetchAndInvokeScript(const KURL& module_url_record,
+                                    const WorkletOptions&,
+                                    ScriptPromiseResolver*) = 0;
 };
 
 }  // namespace blink

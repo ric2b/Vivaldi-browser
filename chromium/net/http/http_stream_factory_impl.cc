@@ -24,8 +24,8 @@
 #include "net/http/transport_security_state.h"
 #include "net/proxy/proxy_info.h"
 #include "net/quic/core/quic_server_id.h"
-#include "net/spdy/bidirectional_stream_spdy_impl.h"
-#include "net/spdy/spdy_http_stream.h"
+#include "net/spdy/chromium/bidirectional_stream_spdy_impl.h"
+#include "net/spdy/chromium/spdy_http_stream.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
 #include "url/url_constants.h"
@@ -194,6 +194,8 @@ HttpStreamRequest* HttpStreamFactoryImpl::RequestStreamInternal(
 void HttpStreamFactoryImpl::PreconnectStreams(
     int num_streams,
     const HttpRequestInfo& request_info) {
+  DCHECK(request_info.url.is_valid());
+
   AddJobControllerCountToHistograms();
 
   SSLConfig server_ssl_config;
@@ -300,10 +302,8 @@ bool HttpStreamFactoryImpl::OnInitConnection(const JobController& controller,
     return false;
   }
 
-  if (!session_->params().restrict_to_one_preconnect_for_proxies ||
-      !ProxyServerSupportsPriorities(proxy_info)) {
+  if (!ProxyServerSupportsPriorities(proxy_info))
     return false;
-  }
 
   PreconnectingProxyServer preconnecting_proxy_server(proxy_info.proxy_server(),
                                                       privacy_mode);
@@ -312,7 +312,7 @@ bool HttpStreamFactoryImpl::OnInitConnection(const JobController& controller,
                         preconnecting_proxy_server)) {
     UMA_HISTOGRAM_EXACT_LINEAR("Net.PreconnectSkippedToProxyServers", 1, 2);
     // Skip preconnect to the proxy server since we are already preconnecting
-    // (probably via some other job).
+    // (probably via some other job). See crbug.com/682041 for details.
     return true;
   }
 
@@ -372,23 +372,40 @@ void HttpStreamFactoryImpl::AddJobControllerCountToHistograms() {
 
   int alt_job_count = 0;
   int main_job_count = 0;
-  int preconnect_controller_count = 0;
+  size_t num_controllers_with_request = 0;
+  size_t num_controllers_for_preconnect = 0;
   for (const auto& job_controller : job_controller_set_) {
     DCHECK(job_controller->HasPendingAltJob() ||
            job_controller->HasPendingMainJob());
+    // Additionally logs the states of the jobs if there are at least 500
+    // controllers, which suggests that there might be a leak.
+    if (job_controller_set_.size() >= 500)
+      job_controller->LogHistograms();
     // For a preconnect controller, it should have exactly the main job.
     if (job_controller->is_preconnect()) {
-      preconnect_controller_count++;
+      num_controllers_for_preconnect++;
       continue;
     }
     // For non-preconnects.
+    if (job_controller->HasPendingRequest())
+      num_controllers_with_request++;
     if (job_controller->HasPendingAltJob())
       alt_job_count++;
     if (job_controller->HasPendingMainJob())
       main_job_count++;
   }
-  UMA_HISTOGRAM_COUNTS_1M("Net.JobControllerSet.CountOfPreconnect",
-                          preconnect_controller_count);
+  UMA_HISTOGRAM_COUNTS_1M(
+      "Net.JobControllerSet.CountOfJobController.Preconnect",
+      num_controllers_for_preconnect);
+  UMA_HISTOGRAM_COUNTS_1M(
+      "Net.JobControllerSet.CountOfJobController.NonPreconnect.PendingRequest",
+      num_controllers_with_request);
+
+  UMA_HISTOGRAM_COUNTS_1M(
+      "Net.JobControllerSet.CountOfJobController.NonPreconnect.RequestGone",
+      job_controller_set_.size() - num_controllers_for_preconnect -
+          num_controllers_with_request);
+
   UMA_HISTOGRAM_COUNTS_1M("Net.JobControllerSet.CountOfNonPreconnectAltJob",
                           alt_job_count);
   UMA_HISTOGRAM_COUNTS_1M("Net.JobControllerSet.CountOfNonPreconnectMainJob",
@@ -406,11 +423,11 @@ void HttpStreamFactoryImpl::DumpMemoryStats(
       pmd->CreateAllocatorDump(name);
   size_t alt_job_count = 0;
   size_t main_job_count = 0;
-  size_t preconnect_controller_count = 0;
+  size_t num_controllers_for_preconnect = 0;
   for (const auto& it : job_controller_set_) {
     // For a preconnect controller, it should have exactly the main job.
     if (it->is_preconnect()) {
-      preconnect_controller_count++;
+      num_controllers_for_preconnect++;
       continue;
     }
     // For non-preconnects.
@@ -438,7 +455,7 @@ void HttpStreamFactoryImpl::DumpMemoryStats(
   // The number of preconnect controllers.
   factory_dump->AddScalar("preconnect_count",
                           base::trace_event::MemoryAllocatorDump::kUnitsObjects,
-                          preconnect_controller_count);
+                          num_controllers_for_preconnect);
 }
 
 }  // namespace net

@@ -41,7 +41,7 @@ class TestBlinkWebUnitTestSupport : public BlinkPlatformImpl {
   blink::WebFileUtilities* GetFileUtilities() override;
   blink::WebIDBFactory* IdbFactory() override;
 
-  blink::WebURLLoader* CreateURLLoader() override;
+  std::unique_ptr<blink::WebURLLoader> CreateURLLoader() override;
   blink::WebString UserAgent() override;
   blink::WebString QueryLocalizedString(
       blink::WebLocalizedString::Name name) override;
@@ -55,7 +55,7 @@ class TestBlinkWebUnitTestSupport : public BlinkPlatformImpl {
 
   blink::WebCompositorSupport* CompositorSupport() override;
 
-  blink::WebGestureCurve* CreateFlingAnimationCurve(
+  std::unique_ptr<blink::WebGestureCurve> CreateFlingAnimationCurve(
       blink::WebGestureDevice device_source,
       const blink::WebFloatPoint& velocity,
       const blink::WebSize& cumulative_scroll) override;
@@ -71,7 +71,8 @@ class TestBlinkWebUnitTestSupport : public BlinkPlatformImpl {
                      const blink::WebSecurityOrigin& mainFrameOrigin,
                      blink::WebPluginListBuilder* builder) override;
 
-  blink::WebRTCCertificateGenerator* CreateRTCCertificateGenerator() override;
+  std::unique_ptr<blink::WebRTCCertificateGenerator>
+  CreateRTCCertificateGenerator() override;
 
  private:
   MockWebBlobRegistryImpl blob_registry_;

@@ -309,9 +309,19 @@ void RenderWidgetHostInputEventRouter::RouteGestureEvent(
     RenderWidgetHostViewBase* root_view,
     blink::WebGestureEvent* event,
     const ui::LatencyInfo& latency) {
+  if (event->IsTargetViewport()) {
+    root_view->ProcessGestureEvent(*event, latency);
+    return;
+  }
+
   switch (event->source_device) {
     case blink::kWebGestureDeviceUninitialized:
+    case blink::kWebGestureDeviceCount:
       NOTREACHED() << "Uninitialized device type is not allowed";
+      break;
+    case blink::kWebGestureDeviceSyntheticAutoscroll:
+      NOTREACHED() << "Only target_viewport synthetic autoscrolls are "
+                      "currently supported";
       break;
     case blink::kWebGestureDeviceTouchpad:
       RouteTouchpadGestureEvent(root_view, event, latency);
@@ -564,7 +574,8 @@ void RenderWidgetHostInputEventRouter::BubbleScrollEvent(
   // including bubbling, based on GestureScrollBegin.
   DCHECK(target_view);
   DCHECK(event.GetType() == blink::WebInputEvent::kGestureScrollUpdate ||
-         event.GetType() == blink::WebInputEvent::kGestureScrollEnd);
+         event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
+         event.GetType() == blink::WebInputEvent::kGestureFlingStart);
   // DCHECK_XNOR the current and original bubble targets. Both should be set
   // if a bubbling gesture scroll is in progress.
   DCHECK(!first_bubbling_scroll_target_.target ==
@@ -578,7 +589,8 @@ void RenderWidgetHostInputEventRouter::BubbleScrollEvent(
   if (target_view == first_bubbling_scroll_target_.target) {
     bubbling_gesture_scroll_target_.target->ProcessGestureEvent(event,
                                                                 latency_info);
-    if (event.GetType() == blink::WebInputEvent::kGestureScrollEnd) {
+    if (event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
+        event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
       first_bubbling_scroll_target_.target = nullptr;
       bubbling_gesture_scroll_target_.target = nullptr;
     }

@@ -2,9 +2,15 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-source_set("frame_sinks") {
+component("frame_sinks") {
+  defines = [ "VIZ_IMPLEMENTATION" ]
+
   sources = [
     "display_provider.h",
+    "frame_eviction_manager.cc",
+    "frame_eviction_manager.h",
+    "frame_evictor.cc",
+    "frame_evictor.h",
     "gpu_compositor_frame_sink.cc",
     "gpu_compositor_frame_sink.h",
     "gpu_compositor_frame_sink_delegate.h",
@@ -19,7 +25,11 @@ source_set("frame_sinks") {
     "//cc",
     "//cc/ipc:interfaces",
     "//cc/surfaces",
-    "//components/display_compositor",
+    "//components/viz/display_compositor",
     "//gpu/ipc:command_buffer",
   ]
+
+  if (is_win) {
+    cflags = [ "/wd4267" ]  # conversion from 'size_t' to 'int' on x64 (crbug.com/633312)
+  }
 }

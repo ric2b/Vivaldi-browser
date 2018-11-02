@@ -87,8 +87,10 @@ CHROMEOS_EXPORT extern const char kEnableEncryptionMigration[];
 CHROMEOS_EXPORT extern const char kEnableExperimentalAccessibilityFeatures[];
 CHROMEOS_EXPORT extern const char kEnableExtensionAssetsSharing[];
 CHROMEOS_EXPORT extern const char kEnableFirstRunUITransitions[];
+CHROMEOS_EXPORT extern const char kEnableLockScreenApps[];
 CHROMEOS_EXPORT extern const char kEnableKioskMode[];
 CHROMEOS_EXPORT extern const char kEnableTether[];
+CHROMEOS_EXPORT extern const char kTetherStub[];
 CHROMEOS_EXPORT extern const char kDisableMdOobe[];
 CHROMEOS_EXPORT extern const char kEnableNetworkPortalNotification[];
 CHROMEOS_EXPORT extern const char kEnablePhysicalKeyboardAutocorrect[];
@@ -122,11 +124,15 @@ CHROMEOS_EXPORT extern const char kLoginProfile[];
 CHROMEOS_EXPORT extern const char kLoginUser[];
 CHROMEOS_EXPORT extern const char kMemoryPressureThresholds[];
 CHROMEOS_EXPORT extern const char kNaturalScrollDefault[];
+CHROMEOS_EXPORT extern const char kNeedArcMigrationPolicyCheck[];
+CHROMEOS_EXPORT extern const char kNetworkSettingsConfig[];
 CHROMEOS_EXPORT extern const char kNoteTakingAppIds[];
 CHROMEOS_EXPORT extern const char kOobeBootstrappingMaster[];
 CHROMEOS_EXPORT extern const char kOobeGuestSession[];
 CHROMEOS_EXPORT extern const char kOobeSkipPostLogin[];
 CHROMEOS_EXPORT extern const char kOobeTimerInterval[];
+CHROMEOS_EXPORT extern const char kShowMdLogin[];
+CHROMEOS_EXPORT extern const char kShowNonViewMdLogin[];
 CHROMEOS_EXPORT extern const char kPowerStub[];
 CHROMEOS_EXPORT extern const char kShillStub[];
 CHROMEOS_EXPORT extern const char kSmsTestMessages[];
@@ -154,6 +160,9 @@ CHROMEOS_EXPORT bool IsGaiaIdMigrationStarted();
 
 // Returns true if this is a Cellular First device.
 CHROMEOS_EXPORT bool IsCellularFirstDevice();
+
+// Returns true if voice interaction is enabled.
+CHROMEOS_EXPORT bool IsVoiceInteractionEnabled();
 
 }  // namespace switches
 }  // namespace chromeos

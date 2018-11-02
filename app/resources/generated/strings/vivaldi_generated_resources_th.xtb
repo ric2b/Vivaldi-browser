@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">ส่วนขยายนี้ได้เปลี่ยนหน้าที่จะแสดงเมื่อคุณคลิกปุ่มหน้าแรก</translation>
 <translation id="1588438908519853928">ปกติ</translation>
 <translation id="1616206807336925449">ส่วนขยายนี้ไม่จำเป็นต้องมีสิทธิ์พิเศษ</translation>
-<translation id="1620510694547887537">กล้องถ่ายรูป</translation>
 <translation id="1635033183663317347">ติดตั้งโดยผู้ดูแล</translation>
 <translation id="1723824996674794290">&amp;หน้าต่างใหม่</translation>
 <translation id="1729533290416704613">อีกทั้งยังควบคุมหน้าที่จะแสดงเมื่อคุณทำการค้นหาจากแถบอเนกประสงค์ด้วย</translation>
-<translation id="1789575671122666129">ป๊อปอัป</translation>
 <translation id="1850508293116537636">หมุน&amp;ตามเข็มนาฬิกา</translation>
 <translation id="1859234291848436338">การเขียนเส้นทาง</translation>
 <translation id="1901303067676059328">เลือก&amp;ทั้งหมด</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">ซ่อนปลั๊กอินนี้</translation>
 <translation id="2087822576218954668">พิมพ์: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">อัปเดตปลั๊กอิน</translation>
-<translation id="2147827593068025794">การซิงค์ในแบ็กกราวด์</translation>
 <translation id="215753907730220065">ออกจากการแสดงเต็มหน้าจอ</translation>
 <translation id="2177950615300672361">แท็บไม่ระบุตัวตน: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">ตรวจหา (ค่าเริ่มต้น)</translation>
 <translation id="219008588003277019">โมดูล Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">วางเป็นข้อความธรรมดา</translation>
 <translation id="2282146716419988068">การประมวลผลของ GPU</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">โปรแกรมอื่นในคอมพิวเตอร์ของคุณเพิ่มส่วนขยายที่อาจเปลี่ยนวิธีการทำงานของ Vivaldi</translation>
 <translation id="2445081178310039857">จำเป็นต้องระบุไดเรกทอรีหลักของส่วนขยาย</translation>
 <translation id="2470702053775288986">ปิดใช้ส่วนขยายที่ไม่สนับสนุนแล้ว</translation>
-<translation id="2482878487686419369">การแจ้งเตือน</translation>
 <translation id="2501797496290880632">พิมพ์แป้นพิมพ์ลัด</translation>
-<translation id="2509857212037838238">ติดตั้ง <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">หน่วยความจำสว็อป</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">เปิดการใช้งานอีกครั้ง</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">ผู้ใช้จัดการ</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">ไมโครโฟน</translation>
 <translation id="3241680850019875542">เลือกไดเรกทอรีหลักของส่วนขยายที่จะแพค หากคุณต้องการอัปเดตส่วนขยาย ให้เลือกไฟล์กุญแจส่วนตัวที่จะใช้ซ้ำด้วย</translation>
 <translation id="3280237271814976245">บันทึกใ&amp;ห้เป็น...</translation>
 <translation id="3288047731229977326">ส่วนขยายที่ทำงานอยู่ในโหมดนักพัฒนาซอฟต์แวร์อาจเป็นอันตรายต่อคอมพิวเตอร์ของคุณ หากคุณไม่ใช่นักพัฒนาซอฟต์แวร์ คุณควรปิดส่วนขยายที่ทำงานอยู่ในโหมดนักพัฒนาซอฟต์แวร์เพื่อรักษาความปลอดภัย</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">คัด&amp;ลอกที่อยู่รูปภาพ</translation>
 <translation id="335985608243443814">เรียกดู...</translation>
 <translation id="3378572629723696641">ส่วนขยายนี้อาจเสียหาย</translation>
-<translation id="3427092606871434483">อนุญาต (ค่าเริ่มต้น)</translation>
 <translation id="3435896845095436175">เปิดการใช้งาน</translation>
 <translation id="345693547134384690">เปิด&amp;รูปภาพในแท็บใหม่</translation>
 <translation id="3467267818798281173">ขอคำแนะนำจาก Google</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">เปิดลิงก์ในหน้าต่าง&amp;ที่ไม่เก็บในประวัติ</translation>
 <translation id="3678156199662914018">ส่วนขยาย: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">กำลังโหลด ...</translation>
-<translation id="3789841737615482174">ติดตั้ง</translation>
 <translation id="3798449238516105146">รุ่น</translation>
 <translation id="3866249974567520381">คำอธิบาย</translation>
 <translation id="3905761538810670789">ซ่อมแอป</translation>
@@ -103,13 +94,11 @@
 <translation id="4096508467498758490">ปิดส่วนขยายโหมดนักพัฒนาซอฟต์แวร์</translation>
 <translation id="4100839878934973028">โปรแกรมอื่นในคอมพิวเตอร์ของคุณเพิ่มแอปพลิเคชันที่อาจเปลี่ยนวิธีการทำงานของ Vivaldi</translation>
 <translation id="4130207949184424187">ส่วนขยายนี้ได้เปลี่ยนหน้าที่จะแสดงเมื่อคุณค้นหาจากแถบอเนกประสงค์</translation>
-<translation id="4165986682804962316">การตั้งค่าไซต์</translation>
 <translation id="4176463684765177261">ปิดการใช้งานแล้ว</translation>
 <translation id="4200983522494130825">แ&amp;ท็บใหม่</translation>
 <translation id="420665587194630159">(ส่วนขยายนี้ได้รับการจัดการแล้วและไม่สามารถลบหรือปิดใช้งานได้)</translation>
 <translation id="4240511609794012987">หน่วยความจำที่ใช้ร่วมกัน</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (แสดงอยู่ <ph name="NUM_KILOBYTES_LIVE" />K)</translation>
-<translation id="4312866146174492540">บล็อก (ค่าเริ่มต้น)</translation>
 <translation id="4384652540891215547">เปิดใช้งานส่วนขยาย</translation>
 <translation id="4394049700291259645">ปิดการใช้งาน</translation>
 <translation id="4423482519432579560">&amp;ตรวจการสะกด</translation>
@@ -122,7 +111,6 @@
 <translation id="4677772697204437347">หน่วยความจำ GPU</translation>
 <translation id="4711638718396952945">กู้คืนการตั้งค่า</translation>
 <translation id="4839303808932127586">บั&amp;นทึกวิดีโอเป็น...</translation>
-<translation id="4851858059374029925">ติดตั้ง <ph name="PLUGIN_NAME" /> ไหม โปรดติดตั้งเฉพาะปลั๊กอินที่คุณไว้ใจเท่านั้น</translation>
 <translation id="488785315393301722">แสดงรายละเอียด</translation>
 <translation id="4911714727432509308">ไม่มีส่วนขยา่ยใดที่มีการกำหนดแป้นพิมพ์ลัดให้</translation>
 <translation id="4927301649992043040">แพคส่วนขยาย</translation>
@@ -153,12 +141,10 @@
 <translation id="5646376287012673985">ตำแหน่ง</translation>
 <translation id="5715711091495208045">โบรกเกอร์ปลั๊กอิน: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">บั&amp;นทึกวิดีโอเป็น...</translation>
-<translation id="5778550464785688721">การควบคุมอุปกรณ์ MIDI เต็มรูปแบบ</translation>
 <translation id="5780973441651030252">ลำดับความสำคัญของกระบวนการ</translation>
 <translation id="5804241973901381774">การอนุญาต</translation>
 <translation id="583281660410589416">ไม่รู้จัก</translation>
 <translation id="59174027418879706">เปิดใช้งานแล้ว</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{ใช้งานอยู่ 1 รายการ}other{ใช้งานอยู่ # รายการ}}</translation>
 <translation id="5956585768868398362">นี่คือหน้าค้นหาที่คุณต้องการใช่ไหม</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (สูงสุด <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">อีกทั้งยังควบคุมหน้าที่จะแสดงเมื่อคุณคลิกปุ่ม "หน้าแรก" หรือทำการค้นหาจากแถบอเนกประสงค์</translation>
@@ -187,14 +173,12 @@
 <translation id="6787839852456839824">แป้นพิมพ์ลัด</translation>
 <translation id="6798954102094737107">ปลั๊กอิน: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">เก็บการเปลี่ยนแปลงไว้</translation>
-<translation id="6863910145616405334">ไม่พบปลั๊กอิน</translation>
 <translation id="6886871292305414135">เปิดลิงก์ในแ&amp;ท็บใหม่</translation>
 <translation id="6900284862687837908">แอปพื้นหลัง: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">เพิกถอนการเข้าถึงไฟล์</translation>
 <translation id="6974053822202609517">ขวาไปซ้าย</translation>
 <translation id="7013485839273047434">รับส่วนขยายเพิ่มเติม</translation>
 <translation id="708060913198414444">คัด&amp;ลอกที่อยู่ของเสียง</translation>
-<translation id="7105578512429498960">ติดตั้ง <ph name="PLUGIN_NAME" /> เพื่อแสดงเนื้อหานี้</translation>
 <translation id="7144878232160441200">ลองอีกครั้ง</translation>
 <translation id="7206693748120342859">กำลังดาวน์โหลด <ph name="PLUGIN_NAME" />...</translation>
 <translation id="7287143125007575591">ปฏิเสธการเข้าถึง</translation>
@@ -226,7 +210,6 @@
 
 รักษาไฟล์กุญแจของคุณไว้ในที่ปลอดภัย คุณจะต้องใช้ไฟล์นี้ในการสร้างส่วนขยายรุ่นใหม่</translation>
 <translation id="8004582292198964060">เบราว์เซอร์</translation>
-<translation id="8037357227543935929">ขอ (ค่าเริ่มต้น)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">&amp;ตรวจการสะกดคำในช่องข้อความ</translation>
 <translation id="8261378640211443080">ส่วนขยายนี้ไม่ได้ระบุไว้ใน <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> และอาจถูกเพิ่มเข้ามาโดยที่คุณไม่รู้ตัว</translation>
@@ -242,7 +225,6 @@
 <translation id="8664389313780386848">&amp;ดูรหัสต้นฉบับ</translation>
 <translation id="8719653885894320876">การดาวน์โหลด <ph name="PLUGIN_NAME" /> ล้มเหลว</translation>
 <translation id="873545264931343897">เมื่ออัปเดต <ph name="PLUGIN_NAME" /> เสร็จแล้ว ให้โหลดหน้าเว็บซ้ำเพื่อเปิดใช้งาน</translation>
-<translation id="8763204422633679667">เมื่อติดตั้ง <ph name="PLUGIN_NAME" /> เสร็จแล้ว ให้โหลดหน้าเว็บซ้ำเพื่อเปิดใช้งาน</translation>
 <translation id="8798099450830957504">ค่าเริ่มต้น</translation>
 <translation id="8808478386290700967">ร้านค้าบนเว็บ</translation>
 <translation id="8859174528519900719">เฟรมย่อย: <ph name="SUBFRAME_SITE" /></translation>

@@ -7,21 +7,24 @@
 #include <string>
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/aura/client/aura_constants.h"
+#include "ui/aura/window.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/default_style.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
-#include "ui/base/dragdrop/drag_utils.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/canvas_painter.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -48,6 +51,7 @@
 #include "ui/views/style/platform_style.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/coordinate_conversion.h"
 
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
@@ -58,6 +62,14 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/ime/linux/text_edit_command_auralinux.h"
 #include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
+#endif
+
+#if defined(USE_X11)
+#include "ui/base/x/x11_util_internal.h"  // nogncheck
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "ui/wm/core/ime_util_chromeos.h"
 #endif
 
 namespace views {
@@ -573,7 +585,7 @@ int Textfield::GetBaseline() const {
   return GetInsets().top() + GetRenderText()->GetBaseline();
 }
 
-gfx::Size Textfield::GetPreferredSize() const {
+gfx::Size Textfield::CalculatePreferredSize() const {
   const gfx::Insets& insets = GetInsets();
   return gfx::Size(GetFontList().GetExpectedTextWidth(default_width_in_chars_) +
                    insets.width(), GetFontList().GetHeight() + insets.height());
@@ -905,15 +917,15 @@ void Textfield::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_TEXT_FIELD;
   node_data->SetName(accessible_name_);
   if (enabled()) {
-    node_data->AddIntAttribute(ui::AX_ATTR_ACTION,
-                               ui::AX_SUPPORTED_ACTION_ACTIVATE);
+    node_data->AddIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB,
+                               ui::AX_DEFAULT_ACTION_VERB_ACTIVATE);
   }
   if (read_only())
-    node_data->AddStateFlag(ui::AX_STATE_READ_ONLY);
+    node_data->AddState(ui::AX_STATE_READ_ONLY);
   else
-    node_data->AddStateFlag(ui::AX_STATE_EDITABLE);
+    node_data->AddState(ui::AX_STATE_EDITABLE);
   if (text_input_type_ == ui::TEXT_INPUT_TYPE_PASSWORD) {
-    node_data->AddStateFlag(ui::AX_STATE_PROTECTED);
+    node_data->AddState(ui::AX_STATE_PROTECTED);
     node_data->SetValue(base::string16(text().size(), '*'));
   } else {
     node_data->SetValue(text());
@@ -1010,8 +1022,13 @@ void Textfield::OnFocus() {
 void Textfield::OnBlur() {
   gfx::RenderText* render_text = GetRenderText();
   render_text->set_focused(false);
-  if (GetInputMethod())
+  if (GetInputMethod()) {
     GetInputMethod()->DetachTextInputClient(this);
+#if defined(OS_CHROMEOS)
+    wm::RestoreWindowBoundsOnClientFocusLost(
+        GetNativeView()->GetToplevelWindow());
+#endif  // defined(OS_CHROMEOS)
+  }
   StopBlinkingCursor();
   cursor_view_.SetVisible(false);
 
@@ -1052,11 +1069,9 @@ void Textfield::ShowContextMenuForView(View* source,
                                        const gfx::Point& point,
                                        ui::MenuSourceType source_type) {
   UpdateContextMenu();
-  ignore_result(context_menu_runner_->RunMenuAt(GetWidget(),
-                                                NULL,
-                                                gfx::Rect(point, gfx::Size()),
-                                                MENU_ANCHOR_TOPLEFT,
-                                                source_type));
+  context_menu_runner_->RunMenuAt(GetWidget(), NULL,
+                                  gfx::Rect(point, gfx::Size()),
+                                  MENU_ANCHOR_TOPLEFT, source_type);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1080,17 +1095,17 @@ void Textfield::WriteDragDataForView(View* sender,
 
   SkBitmap bitmap;
   float raster_scale = ScaleFactorForDragFromWidget(GetWidget());
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  // Desktop Linux Aura does not yet support transparency in drag images.
-  SkColor color = GetBackgroundColor();
-#else
   SkColor color = SK_ColorTRANSPARENT;
+#if defined(USE_X11)
+  // Fallback on the background color if the system doesn't support compositing.
+  if (!ui::XVisualManager::GetInstance()->ArgbVisualAvailable())
+    color = GetBackgroundColor();
 #endif
   label.Paint(
       ui::CanvasPainter(&bitmap, label.size(), raster_scale, color).context());
   const gfx::Vector2d kOffset(-15, 0);
   gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, raster_scale));
-  drag_utils::SetDragImageOnDataObject(image, kOffset, data);
+  data->provider().SetDragImage(image, kOffset);
   if (controller_)
     controller_->OnWriteDragData(data);
 }
@@ -1484,7 +1499,12 @@ void Textfield::ExtendSelectionAndDelete(size_t before, size_t after) {
     DeleteRange(range);
 }
 
-void Textfield::EnsureCaretNotInRect(const gfx::Rect& rect) {}
+void Textfield::EnsureCaretNotInRect(const gfx::Rect& rect_in_screen) {
+#if defined(OS_CHROMEOS)
+  aura::Window* top_level_window = GetNativeView()->GetToplevelWindow();
+  wm::EnsureWindowNotInRect(top_level_window, rect_in_screen);
+#endif  // defined(OS_CHROMEOS)
+}
 
 bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
   base::string16 result;
@@ -1546,7 +1566,7 @@ bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
           ui::CLIPBOARD_TYPE_COPY_PASTE, &result);
       return editable && !result.empty();
     case ui::TextEditCommand::SELECT_ALL:
-      return !text().empty();
+      return !text().empty() && GetSelectedRange().length() != text().length();
     case ui::TextEditCommand::TRANSPOSE:
       return editable && !model_->HasSelection() &&
              !model_->HasCompositionText();
@@ -2039,10 +2059,9 @@ void Textfield::UpdateContextMenu() {
     if (controller_)
       controller_->UpdateContextMenu(context_menu_contents_.get());
   }
-  context_menu_runner_.reset(new MenuRunner(context_menu_contents_.get(),
-                                            MenuRunner::HAS_MNEMONICS |
-                                                MenuRunner::CONTEXT_MENU |
-                                                MenuRunner::ASYNC));
+  context_menu_runner_.reset(
+      new MenuRunner(context_menu_contents_.get(),
+                     MenuRunner::HAS_MNEMONICS | MenuRunner::CONTEXT_MENU));
 }
 
 bool Textfield::ImeEditingAllowed() const {

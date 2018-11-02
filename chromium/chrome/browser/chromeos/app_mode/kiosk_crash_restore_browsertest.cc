@@ -89,8 +89,6 @@ class KioskCrashRestoreTest : public InProcessBrowserTest {
   }
 
   void SetUpInProcessBrowserTestFixture() override {
-    host_resolver()->AddRule("*", "127.0.0.1");
-
     OverrideDevicePolicy();
   }
 
@@ -107,15 +105,15 @@ class KioskCrashRestoreTest : public InProcessBrowserTest {
     fake_cws_->SetUpdateCrx(test_app_id_, test_app_id_ + ".crx", "1.0.0");
   }
 
-  void RunTestOnMainThreadLoop() override {
+  void PreRunTestOnMainThread() override {
     termination_observer_.reset(new TerminationObserver());
-
-    InProcessBrowserTest::RunTestOnMainThreadLoop();
+    InProcessBrowserTest::PreRunTestOnMainThread();
   }
 
   void SetUpOnMainThread() override {
     extensions::browsertest_util::CreateAndInitializeLocalCache();
 
+    host_resolver()->AddRule("*", "127.0.0.1");
     embedded_test_server()->StartAcceptingConnections();
   }
 

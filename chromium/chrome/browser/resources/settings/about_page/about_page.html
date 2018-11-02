@@ -1,4 +1,5 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="about_page_browser_proxy.html">
 <link rel="import" href="../i18n_setup.html">
 <link rel="import" href="../icons.html">
@@ -19,6 +20,7 @@
 
 <if expr="chromeos">
 <link rel="import" href="detailed_build_info.html">
+<link rel="import" href="update_warning_dialog.html">
 <link rel="import" href="../settings_page/settings_subpage.html">
 </if>
 
@@ -124,8 +126,8 @@
                 </span>
                 <div class="secondary copyable">$i18n{aboutBrowserVersion}</div>
               </div>
-              <span id="buttonContainer" class="secondary-action"
-                  hidden="[[!showButtonContainer_]]">
+              <div class="separator" hidden="[[!showButtonContainer_]]"></div>
+              <span id="buttonContainer" hidden="[[!showButtonContainer_]]">
                 <paper-button id="relaunch" class="secondary-button"
                     hidden="[[!showRelaunch_]]" on-tap="onRelaunchTap_">
                   $i18n{aboutRelaunch}
@@ -189,28 +191,6 @@
               </button>
             </div>
 </if>
-            <div class="settings-box padded block copyable">
-              <div class="info-section">
-                <div class="secondary">$i18n{aboutProductTitle}</div>
-                <div class="secondary">$i18n{aboutProductCopyright}</div>
-              </div>
-
-              <div class="info-section">
-                <div class="secondary">$i18nRaw{aboutProductLicense}</div>
-<if expr="chromeos">
-                <div class="secondary">$i18nRaw{aboutProductOsLicense}</div>
-</if>
-              </div>
-<if expr="_google_chrome">
-              <div class="secondary">$i18nRaw{aboutProductTos}</div>
-</if>
-            </div>
-<if expr="chromeos">
-            <div class="settings-box padded block" id="regulatoryInfo"
-                hidden$="[[!shouldShowRegulatoryInfo_(regulatoryInfo_)]]">
-              <img src="[[regulatoryInfo_.url]]" alt="[[regulatoryInfo_.text]]">
-            </div>
-</if>
           </neon-animatable>
 <if expr="chromeos">
           <template is="dom-if" route-path="/help/details">
@@ -221,7 +201,39 @@
 </if>
         </settings-animated-pages>
       </settings-section>
+
+      <settings-section>
+        <div class="settings-box padded block copyable">
+          <div class="info-section">
+            <div class="secondary">$i18n{aboutProductTitle}</div>
+            <div class="secondary">$i18n{aboutProductCopyright}</div>
+          </div>
+
+          <div class="info-section">
+            <div class="secondary">$i18nRaw{aboutProductLicense}</div>
+<if expr="chromeos">
+            <div class="secondary">$i18nRaw{aboutProductOsLicense}</div>
+</if>
+          </div>
+<if expr="_google_chrome">
+          <div class="secondary">$i18nRaw{aboutProductTos}</div>
+</if>
+        </div>
+<if expr="chromeos">
+        <div class="settings-box padded block" id="regulatoryInfo"
+            hidden$="[[!shouldShowRegulatoryInfo_(regulatoryInfo_)]]">
+          <img src="[[regulatoryInfo_.url]]" alt="[[regulatoryInfo_.text]]">
+        </div>
+</if>
+      </settings-section>
     </div>
+<if expr="chromeos">
+    <template is="dom-if" if="[[showUpdateWarningDialog_]]" restamp>
+      <settings-update-warning-dialog update-info="[[updateInfo_]]"
+          on-close="onUpdateWarningDialogClose_">
+      </settings-update-warning-dialog>
+    </template>
+</if>
   </template>
   <script src="about_page.js"></script>
 </dom-module>

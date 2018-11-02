@@ -15,7 +15,7 @@ ElementIntersectionObserverData::ElementIntersectionObserverData() {}
 
 IntersectionObservation* ElementIntersectionObserverData::GetObservationFor(
     IntersectionObserver& observer) {
-  auto i = intersection_observations_.Find(&observer);
+  auto i = intersection_observations_.find(&observer);
   if (i == intersection_observations_.end())
     return nullptr;
   return i->value;
@@ -57,11 +57,6 @@ void ElementIntersectionObserverData::ActivateValidIntersectionObservers(
 
 void ElementIntersectionObserverData::DeactivateAllIntersectionObservers(
     Node& node) {
-  for (auto& observer : intersection_observers_) {
-    observer->TrackingDocument()
-        .EnsureIntersectionObserverController()
-        .AddTrackedObserver(*observer);
-  }
   node.GetDocument()
       .EnsureIntersectionObserverController()
       .RemoveTrackedObserversForRoot(node);

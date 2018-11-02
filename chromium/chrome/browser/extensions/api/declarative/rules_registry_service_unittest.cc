@@ -8,10 +8,10 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/test_browser_thread.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/api/declarative/test_rules_registry.h"
 #include "extensions/browser/api/declarative_webrequest/webrequest_constants.h"
 #include "extensions/common/extension.h"
@@ -44,9 +44,7 @@ namespace extensions {
 
 class RulesRegistryServiceTest : public testing::Test {
  public:
-  RulesRegistryServiceTest()
-      : ui_(content::BrowserThread::UI, &message_loop_),
-        io_(content::BrowserThread::IO, &message_loop_) {}
+  RulesRegistryServiceTest() = default;
 
   ~RulesRegistryServiceTest() override {}
 
@@ -56,9 +54,7 @@ class RulesRegistryServiceTest : public testing::Test {
   }
 
  protected:
-  base::MessageLoop message_loop_;
-  content::TestBrowserThread ui_;
-  content::TestBrowserThread io_;
+  content::TestBrowserThreadBundle test_browser_thread_bundle_;
 };
 
 TEST_F(RulesRegistryServiceTest, TestConstructionAndMultiThreading) {
@@ -82,23 +78,23 @@ TEST_F(RulesRegistryServiceTest, TestConstructionAndMultiThreading) {
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&InsertRule, registry_service.GetRulesRegistry(key, "ui"),
-                 "ui_task"));
+      base::BindOnce(&InsertRule, registry_service.GetRulesRegistry(key, "ui"),
+                     "ui_task"));
 
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&InsertRule, registry_service.GetRulesRegistry(key, "io"),
-                 "io_task"));
+      base::BindOnce(&InsertRule, registry_service.GetRulesRegistry(key, "io"),
+                     "io_task"));
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&VerifyNumberOfRules,
-                 registry_service.GetRulesRegistry(key, "ui"), 1));
+      base::BindOnce(&VerifyNumberOfRules,
+                     registry_service.GetRulesRegistry(key, "ui"), 1));
 
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&VerifyNumberOfRules,
-                 registry_service.GetRulesRegistry(key, "io"), 1));
+      base::BindOnce(&VerifyNumberOfRules,
+                     registry_service.GetRulesRegistry(key, "io"), 1));
 
   base::RunLoop().RunUntilIdle();
 
@@ -117,13 +113,13 @@ TEST_F(RulesRegistryServiceTest, TestConstructionAndMultiThreading) {
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&VerifyNumberOfRules,
-                 registry_service.GetRulesRegistry(key, "ui"), 0));
+      base::BindOnce(&VerifyNumberOfRules,
+                     registry_service.GetRulesRegistry(key, "ui"), 0));
 
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&VerifyNumberOfRules,
-                 registry_service.GetRulesRegistry(key, "io"), 0));
+      base::BindOnce(&VerifyNumberOfRules,
+                     registry_service.GetRulesRegistry(key, "io"), 0));
 
   base::RunLoop().RunUntilIdle();
 }

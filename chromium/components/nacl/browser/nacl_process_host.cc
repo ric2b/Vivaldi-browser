@@ -159,10 +159,6 @@ bool RunningOnWOW64() {
 
 namespace {
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX)
-content::ZygoteHandle g_nacl_zygote;
-#endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
-
 // NOTE: changes to this class need to be reviewed by the security team.
 class NaClSandboxedProcessLauncherDelegate
     : public content::SandboxedProcessLauncherDelegate {
@@ -185,7 +181,7 @@ class NaClSandboxedProcessLauncherDelegate
     }
   }
 #elif defined(OS_POSIX) && !defined(OS_MACOSX)
-  content::ZygoteHandle* GetZygote() override {
+  content::ZygoteHandle GetZygote() override {
     return content::GetGenericZygote();
   }
 #endif  // OS_WIN
@@ -332,14 +328,6 @@ void NaClProcessHost::EarlyStartup() {
   }
   NaClBrowser::GetDelegate()->SetDebugPatterns(nacl_debug_mask);
 }
-
-#if defined(OS_POSIX) && !defined(OS_MACOSX)
-// static
-void NaClProcessHost::EarlyZygoteLaunch() {
-  DCHECK(!g_nacl_zygote);
-  g_nacl_zygote = content::CreateZygote();
-}
-#endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
 
 void NaClProcessHost::Launch(
     NaClHostMessageFilter* nacl_host_message_filter,
@@ -563,7 +551,7 @@ bool NaClProcessHost::LaunchSelLdr() {
   if (RunningOnWOW64()) {
     if (!NaClBrokerService::GetInstance()->LaunchLoader(
             weak_factory_.GetWeakPtr(),
-            process_->GetServiceRequestChannelToken())) {
+            process_->TakeInProcessServiceRequest())) {
       SendErrorToRenderer("broker service did not launch process");
       return false;
     }
@@ -630,16 +618,16 @@ void NaClProcessHost::ReplyToRenderer(
   // Hereafter, we always send an IPC message with handles created above
   // which, on Windows, are not closable in this process.
   std::string error_message;
-  base::SharedMemoryHandle crash_info_shmem_renderer_handle;
-  if (!crash_info_shmem_.ShareToProcess(nacl_host_message_filter_->PeerHandle(),
-                                        &crash_info_shmem_renderer_handle)) {
+  base::SharedMemoryHandle crash_info_shmem_renderer_handle =
+      crash_info_shmem_.handle().Duplicate();
+  if (!crash_info_shmem_renderer_handle.IsValid()) {
     // On error, we do not send "IPC::ChannelHandle"s to the renderer process.
     // Note that some other FDs/handles still get sent to the renderer, but
     // will be closed there.
     ppapi_channel_handle.reset();
     trusted_channel_handle.reset();
     manifest_service_channel_handle.reset();
-    error_message = "ShareToProcess() failed";
+    error_message = "handle duplication failed";
   }
 
   const ChildProcessData& data = process_->GetData();
@@ -797,9 +785,9 @@ bool NaClProcessHost::StartNaClExecution() {
 #endif
   }
 
-  if (!crash_info_shmem_.ShareToProcess(process_->GetData().handle,
-                                        &params.crash_info_shmem_handle)) {
-    DLOG(ERROR) << "Failed to ShareToProcess() a shared memory buffer";
+  params.crash_info_shmem_handle = crash_info_shmem_.handle().Duplicate();
+  if (!params.crash_info_shmem_handle.IsValid()) {
+    DLOG(ERROR) << "Failed to duplicate a shared memory buffer";
     return false;
   }
 
@@ -831,9 +819,7 @@ bool NaClProcessHost::StartNaClExecution() {
       // compromised renderer to pass an arbitrary fd that could get loaded
       // into the plugin process.
       base::PostTaskWithTraitsAndReplyWithResult(
-          FROM_HERE,
-          base::TaskTraits().MayBlock().WithPriority(
-              base::TaskPriority::BACKGROUND),
+          FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
           base::Bind(OpenNaClReadExecImpl, file_path, true /* is_executable */),
           base::Bind(&NaClProcessHost::StartNaClFileResolved,
                      weak_factory_.GetWeakPtr(), params, file_path));
@@ -1049,9 +1035,7 @@ void NaClProcessHost::OnResolveFileToken(uint64_t file_token_lo,
 
   // Open the file.
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE,
-      base::TaskTraits().MayBlock().WithPriority(
-          base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(OpenNaClReadExecImpl, file_path, true /* is_executable */),
       base::Bind(&NaClProcessHost::FileResolved, weak_factory_.GetWeakPtr(),
                  file_token_lo, file_token_hi, file_path));

@@ -1,5 +1,6 @@
-<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="../controls/settings_slider.html">
@@ -24,7 +25,8 @@
         -webkit-margin-start: var(--settings-indent-width);
       }
 
-      h2 ~ .settings-box {
+      h2 ~ .settings-box,
+      iron-collapse .settings-box {
         -webkit-margin-end: var(--settings-box-row-padding);
         -webkit-margin-start: var(--settings-box-row-indent);
         -webkit-padding-end: 0;
@@ -41,32 +43,35 @@
     </div>
 
     <h2>$i18n{textToSpeechHeading}</h2>
-    <div class="settings-box first" actionable>
+    <div class="settings-box first">
       <settings-toggle-button class="start"
           pref="{{prefs.settings.accessibility}}"
           label="$i18n{chromeVoxLabel}">
-        <paper-icon-button icon="cr:settings_icon"
-            class="more-actions"
-            on-tap="onChromeVoxSettingsTap_"
-            hidden="[[!prefs.settings.accessibility.value]]"
-            aria-label="$i18n{chromeVoxOptionsLabel}"></paper-icon-button>
       </settings-toggle-button>
     </div>
-    <template is="dom-if" if="[[showExperimentalFeatures_]]">
-      <div class="settings-box block" actionable>
-        <settings-toggle-button
-            pref="{{prefs.settings.a11y.select_to_speak}}"
-            label="$i18n{selectToSpeakTitle}"
-            sub-label="$i18n{selectToSpeakDescription}">
-          <paper-icon-button icon="cr:settings_icon"
-              class="more-actions"
-              on-tap="onSelectToSpeakSettingsTap_"
-              hidden="[[!prefs.settings.a11y.select_to_speak.value]]"
-              aria-label="$i18n{selectToSpeakOptionsLabel}">
-          </paper-icon-button>
-        </settings-toggle-button>
+    <iron-collapse opened="[[prefs.settings.accessibility.value]]">
+      <div class="settings-box"
+          on-tap="onChromeVoxSettingsTap_" actionable>
+        <div class="start">$i18n{chromeVoxOptionsLabel}</div>
+        <button class="icon-external" is="paper-icon-button-light"
+            aria-label="$i18n{chromeVoxOptionsLabel}"></button>
       </div>
-    </template>
+    </iron-collapse>
+    <div class="settings-box block">
+      <settings-toggle-button
+          pref="{{prefs.settings.a11y.select_to_speak}}"
+          label="$i18n{selectToSpeakTitle}"
+          sub-label="$i18n{selectToSpeakDescription}">
+      </settings-toggle-button>
+    </div>
+    <iron-collapse opened="[[prefs.settings.a11y.select_to_speak.value]]">
+      <div class="settings-box"
+          on-tap="onSelectToSpeakSettingsTap_" actionable>
+        <div class="start">$i18n{selectToSpeakOptionsLabel}</div>
+        <button class="icon-external" is="paper-icon-button-light"
+            aria-label="$i18n{selectToSpeakOptionsLabel}"></button>
+      </div>
+    </iron-collapse>
 
     <h2>$i18n{displayHeading}</h2>
     <div class="settings-box block first">
@@ -169,17 +174,16 @@
           pref="{{prefs.settings.a11y.large_cursor_enabled}}"
           label="$i18n{largeMouseCursorLabel}">
       </settings-toggle-button>
-      <template is="dom-if" if="[[enableAdjustableLargeCursor_]]">
-        <div class="list-item sub-item"
-            hidden$="[[!prefs.settings.a11y.large_cursor_enabled.value]]">
-          <div class="start">$i18n{largeMouseCursorSizeLabel}</div>
-          <settings-slider
-             pref="{{prefs.settings.a11y.large_cursor_dip_size}}"
-             min="25" max="64" label-min="$i18n{largeMouseCursorSizeSmallLabel}"
-             label-max="$i18n{largeMouseCursorSizeLargeLabel}">
-          </settings-slider>
-        </div>
-      </template>
+      <div class="list-item sub-item"
+          hidden$="[[!prefs.settings.a11y.large_cursor_enabled.value]]">
+        <div class="start">$i18n{largeMouseCursorSizeLabel}</div>
+        <settings-slider
+           pref="{{prefs.settings.a11y.large_cursor_dip_size}}"
+           min="25" max="64"
+           label-min="$i18n{largeMouseCursorSizeDefaultLabel}"
+           label-max="$i18n{largeMouseCursorSizeLargeLabel}">
+        </settings-slider>
+      </div>
       <settings-toggle-button
           pref="{{prefs.settings.a11y.cursor_highlight}}"
           label="$i18n{cursorHighlightLabel}">
@@ -206,17 +210,19 @@
     </div>
 
     <template is="dom-if" if="[[!isGuest_]]">
-      <div class="settings-box two-line" on-tap="onMoreFeaturesTap_" actionable>
+      <a class="settings-box two-line inherit-color no-outline" tabindex="-1"
+          target="_blank"
+          href="https://chrome.google.com/webstore/category/collection/accessibility">
         <div class="start">
           $i18n{additionalFeaturesTitle}
           <div class="secondary" id="moreFeaturesSecondary">
             $i18n{a11yWebStore}
           </div>
         </div>
-        <button class="icon-external" is="paper-icon-button-light"
+        <button class="icon-external" is="paper-icon-button-light" actionable
             aria-label="$i18n{additionalFeaturesTitle}"
             aria-describedby="moreFeaturesSecondary"></button>
-      </div>
+      </a>
     </template>
   </template>
   <script src="manage_a11y_page.js"></script>

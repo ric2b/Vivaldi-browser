@@ -43,8 +43,8 @@
 #include "components/history/core/browser/history_constants.h"
 #include "components/history/core/browser/history_database_params.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/csd.pb.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
@@ -457,8 +457,9 @@ TEST_F(LastDownloadFinderTest, AddProfileAfterStarting) {
 
   // Post a task that will create a second profile once the main loop is run.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&LastDownloadFinderTest::CreateProfileWithDownload,
-                 base::Unretained(this)));
+      FROM_HERE,
+      base::BindOnce(&LastDownloadFinderTest::CreateProfileWithDownload,
+                     base::Unretained(this)));
 
   // Create a finder that we expect will find a download in the second profile.
   std::unique_ptr<LastDownloadFinder> finder(LastDownloadFinder::Create(

@@ -37,15 +37,13 @@
 #include "core/loader/FrameLoader.h"
 
 #include <memory>
-#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptController.h"
-#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/ViewportDescription.h"
-#include "core/editing/Editor.h"
 #include "core/events/GestureEvent.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
@@ -85,10 +83,12 @@
 #include "platform/PluginScriptForbiddenScope.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/network/NetworkUtils.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -139,6 +139,63 @@ static void CheckForLegacyProtocolInSubresource(
       document, UseCounter::kLegacyProtocolEmbeddedAsSubresource);
 }
 
+static NavigationPolicy MaybeCheckCSP(
+    const ResourceRequest& request,
+    NavigationType type,
+    LocalFrame* frame,
+    NavigationPolicy policy,
+    bool should_check_main_world_content_security_policy,
+    bool browser_side_navigation_enabled,
+    ContentSecurityPolicy::CheckHeaderType check_header_type) {
+  // If we're loading content into |frame| (NavigationPolicyCurrentTab), check
+  // against the parent's Content Security Policy and kill the load if that
+  // check fails, unless we should bypass the main world's CSP.
+  if (policy == kNavigationPolicyCurrentTab &&
+      should_check_main_world_content_security_policy &&
+      // TODO(arthursonzogni): 'frame-src' check is disabled on the
+      // renderer side with browser-side-navigation, but is enforced on the
+      // browser side. See http://crbug.com/692595 for understanding why it
+      // can't be enforced on both sides instead.
+      !browser_side_navigation_enabled) {
+    Frame* parent_frame = frame->Tree().Parent();
+    if (parent_frame) {
+      ContentSecurityPolicy* parent_policy =
+          parent_frame->GetSecurityContext()->GetContentSecurityPolicy();
+      if (!parent_policy->AllowFrameFromSource(
+              request.Url(), request.GetRedirectStatus(),
+              SecurityViolationReportingPolicy::kReport, check_header_type)) {
+        // Fire a load event, as timing attacks would otherwise reveal that the
+        // frame was blocked. This way, it looks like every other cross-origin
+        // page load.
+        frame->GetDocument()->EnforceSandboxFlags(kSandboxOrigin);
+        frame->Owner()->DispatchLoad();
+        return kNavigationPolicyIgnore;
+      }
+    }
+  }
+
+  bool is_form_submission = type == kNavigationTypeFormSubmitted ||
+                            type == kNavigationTypeFormResubmitted;
+  if (is_form_submission &&
+      // 'form-action' check in the frame that is navigating is disabled on the
+      // renderer side when PlzNavigate is enabled, but is enforced on the
+      // browser side instead.
+      // N.B. check in the frame that initiates the navigation stills occurs in
+      // blink and is not enforced on the browser-side.
+      // TODO(arthursonzogni) The 'form-action' check should be fully disabled
+      // in blink when browser side navigation is enabled, except when the form
+      // submission doesn't trigger a navigation(i.e. javascript urls). Please
+      // see https://crbug.com/701749
+      !browser_side_navigation_enabled &&
+      !frame->GetDocument()->GetContentSecurityPolicy()->AllowFormAction(
+          request.Url(), request.GetRedirectStatus(),
+          SecurityViolationReportingPolicy::kReport, check_header_type)) {
+    return kNavigationPolicyIgnore;
+  }
+
+  return policy;
+}
+
 ResourceRequest FrameLoader::ResourceRequestForReload(
     FrameLoadType frame_load_type,
     const KURL& override_url,
@@ -181,9 +238,6 @@ FrameLoader::FrameLoader(LocalFrame* frame)
     : frame_(frame),
       progress_tracker_(ProgressTracker::Create(frame)),
       in_stop_all_loaders_(false),
-      check_timer_(TaskRunnerHelper::Get(TaskType::kNetworking, frame),
-                   this,
-                   &FrameLoader::CheckTimerFired),
       forced_sandbox_flags_(kSandboxNone),
       dispatching_did_clear_window_object_in_main_world_(false),
       protect_provisional_loader_(false),
@@ -202,10 +256,10 @@ DEFINE_TRACE(FrameLoader) {
   visitor->Trace(progress_tracker_);
   visitor->Trace(document_loader_);
   visitor->Trace(provisional_document_loader_);
-  visitor->Trace(deferred_history_load_);
 }
 
 void FrameLoader::Init() {
+  ScriptForbiddenScope forbid_scripts;
   ResourceRequest initial_request(KURL(kParsedURLString, g_empty_string));
   initial_request.SetRequestContext(WebURLRequest::kRequestContextInternal);
   initial_request.SetFrameType(frame_->IsMainFrame()
@@ -218,14 +272,10 @@ void FrameLoader::Init() {
   frame_->GetDocument()->CancelParsing();
   state_machine_.AdvanceTo(
       FrameLoaderStateMachine::kDisplayingInitialEmptyDocument);
-  // Suppress finish notifications for inital empty documents, since they don't
+  // Suppress finish notifications for initial empty documents, since they don't
   // generate start notifications.
-  if (document_loader_)
-    document_loader_->SetSentDidFinishLoad();
-  // Self-suspend if created in an already suspended Page. Note that both
-  // startLoadingMainResource() and cancelParsing() may have already detached
-  // the frame, since they both fire JS events.
-  if (frame_->GetPage() && frame_->GetPage()->Suspended())
+  document_loader_->SetSentDidFinishLoad();
+  if (frame_->GetPage()->Suspended())
     SetDefersLoading(true);
   TakeObjectSnapshot();
 }
@@ -246,17 +296,8 @@ void FrameLoader::SetDefersLoading(bool defers) {
       document->ResumeScheduledTasks();
   }
 
-  if (!defers) {
-    if (deferred_history_load_) {
-      Load(FrameLoadRequest(nullptr, deferred_history_load_->request_),
-           deferred_history_load_->load_type_,
-           deferred_history_load_->item_.Get(),
-           deferred_history_load_->history_load_type_);
-      deferred_history_load_.Clear();
-    }
+  if (!defers)
     frame_->GetNavigationScheduler().StartTimer();
-    ScheduleCheckCompleted();
-  }
 }
 
 void FrameLoader::SaveScrollState() {
@@ -316,31 +357,6 @@ void FrameLoader::DidExplicitOpen() {
   frame_->GetNavigationScheduler().Cancel();
 }
 
-void FrameLoader::Clear() {
-  // clear() is called during (Local)Frame detachment or when reusing a
-  // FrameLoader by putting a new Document within it
-  // (DocumentLoader::ensureWriter().)
-  if (state_machine_.CreatingInitialEmptyDocument())
-    return;
-
-  frame_->GetEditor().Clear();
-  frame_->GetDocument()->RemoveFocusedElementOfSubtree(frame_->GetDocument());
-  frame_->GetEventHandler().Clear();
-  if (frame_->View())
-    frame_->View()->Clear();
-
-  frame_->GetScriptController().EnableEval();
-
-  frame_->GetNavigationScheduler().Cancel();
-
-  check_timer_.Stop();
-
-  if (state_machine_.IsDisplayingInitialEmptyDocument())
-    state_machine_.AdvanceTo(FrameLoaderStateMachine::kCommittedFirstRealLoad);
-
-  TakeObjectSnapshot();
-}
-
 // This is only called by ScriptController::executeScriptIfJavaScriptURL and
 // always contains the result of evaluating a javascript: url. This is the
 // <iframe src="javascript:'html'"> case.
@@ -369,7 +385,6 @@ void FrameLoader::ReplaceDocumentWhileExecutingJavaScriptURL(
   SubframeLoadingDisabler disabler(frame_->GetDocument());
   frame_->DetachChildren();
   frame_->GetDocument()->Shutdown();
-  Clear();
 
   // detachChildren() potentially detaches the frame from the document. The
   // loading cannot continue in that case.
@@ -396,7 +411,7 @@ void FrameLoader::FinishedParsing() {
         document_loader_ ? document_loader_->IsCommittedButEmpty() : true);
   }
 
-  CheckCompleted();
+  frame_->GetDocument()->CheckCompleted();
 
   if (!frame_->View())
     return;
@@ -408,15 +423,6 @@ void FrameLoader::FinishedParsing() {
                   kNavigationToDifferentDocument);
 }
 
-static bool AllDescendantsAreComplete(Frame* frame) {
-  for (Frame* child = frame->Tree().FirstChild(); child;
-       child = child->Tree().TraverseNext(frame)) {
-    if (child->IsLoading())
-      return false;
-  }
-  return true;
-}
-
 bool FrameLoader::AllAncestorsAreComplete() const {
   for (Frame* ancestor = frame_; ancestor;
        ancestor = ancestor->Tree().Parent()) {
@@ -426,96 +432,15 @@ bool FrameLoader::AllAncestorsAreComplete() const {
   return true;
 }
 
-static bool ShouldComplete(Document* document) {
-  if (!document->GetFrame())
-    return false;
-  if (document->Parsing() || document->IsInDOMContentLoaded())
-    return false;
-  if (!document->HaveImportsLoaded())
-    return false;
-  if (document->Fetcher()->BlockingRequestCount())
-    return false;
-  if (document->IsDelayingLoadEvent())
-    return false;
-  return AllDescendantsAreComplete(document->GetFrame());
-}
-
-static bool ShouldSendFinishNotification(LocalFrame* frame) {
-  // Don't send didFinishLoad more than once per DocumentLoader.
-  if (frame->Loader().GetDocumentLoader()->SentDidFinishLoad())
-    return false;
-
-  // We might have declined to run the load event due to an imminent
-  // content-initiated navigation.
-  if (!frame->GetDocument()->LoadEventFinished())
-    return false;
-
-  // An event might have restarted a child frame.
-  if (!AllDescendantsAreComplete(frame))
-    return false;
-
-  // Don't notify if the frame is being detached.
-  if (!frame->IsAttached())
-    return false;
-
-  return true;
-}
-
-static bool ShouldSendCompleteNotification(LocalFrame* frame) {
-  // FIXME: We might have already sent stop notifications and be re-completing.
-  if (!frame->IsLoading())
-    return false;
-  // Only send didStopLoading() if there are no navigations in progress at all,
-  // whether committed, provisional, or pending.
-  return frame->Loader().GetDocumentLoader()->SentDidFinishLoad() &&
-         !frame->Loader().HasProvisionalNavigation();
-}
-
-void FrameLoader::CheckCompleted() {
-  if (!ShouldComplete(frame_->GetDocument()))
+void FrameLoader::DidFinishNavigation() {
+  // We should have either finished the provisional or committed navigation if
+  // this is called. Only delcare the whole frame finished if neither is in
+  // progress.
+  DCHECK(document_loader_->SentDidFinishLoad() || !HasProvisionalNavigation());
+  if (!document_loader_->SentDidFinishLoad() || HasProvisionalNavigation())
     return;
 
-  if (Client()) {
-    Client()->RunScriptsAtDocumentIdle();
-
-    // Injected scripts may have disconnected this frame.
-    if (!Client())
-      return;
-
-    // Check again, because runScriptsAtDocumentIdle() may have delayed the load
-    // event.
-    if (!ShouldComplete(frame_->GetDocument()))
-      return;
-  }
-
-  // OK, completed.
-  frame_->GetDocument()->SetReadyState(Document::kComplete);
-  if (frame_->GetDocument()->LoadEventStillNeeded())
-    frame_->GetDocument()->ImplicitClose();
-
-  frame_->GetNavigationScheduler().StartTimer();
-
-  if (frame_->View())
-    frame_->View()->HandleLoadCompleted();
-
-  // The readystatechanged or load event may have disconnected this frame.
-  if (!frame_->Client())
-    return;
-
-  if (ShouldSendFinishNotification(frame_)) {
-    // Report mobile vs. desktop page statistics. This will only report on
-    // Android.
-    if (frame_->IsMainFrame())
-      frame_->GetDocument()->GetViewportDescription().ReportMobilePageStats(
-          frame_);
-    document_loader_->SetSentDidFinishLoad();
-    Client()->DispatchDidFinishLoad();
-    // Finishing the load can detach the frame when running layout tests.
-    if (!frame_->Client())
-      return;
-  }
-
-  if (ShouldSendCompleteNotification(frame_)) {
+  if (frame_->IsLoading()) {
     progress_tracker_->ProgressCompleted();
     // Retry restoring scroll offset since finishing loading disables content
     // size clamping.
@@ -527,20 +452,7 @@ void FrameLoader::CheckCompleted() {
 
   Frame* parent = frame_->Tree().Parent();
   if (parent && parent->IsLocalFrame())
-    ToLocalFrame(parent)->Loader().CheckCompleted();
-}
-
-void FrameLoader::CheckTimerFired(TimerBase*) {
-  if (Page* page = frame_->GetPage()) {
-    if (page->Suspended())
-      return;
-  }
-  CheckCompleted();
-}
-
-void FrameLoader::ScheduleCheckCompleted() {
-  if (!check_timer_.IsActive())
-    check_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    ToLocalFrame(parent)->GetDocument()->CheckCompleted();
 }
 
 Frame* FrameLoader::Opener() {
@@ -574,7 +486,7 @@ void FrameLoader::UpdateForSameDocumentNavigation(
     FrameLoadType type,
     Document* initiating_document) {
   TRACE_EVENT1("blink", "FrameLoader::updateForSameDocumentNavigation", "url",
-               new_url.GetString().Ascii().Data());
+               new_url.GetString().Ascii().data());
 
   // Generate start and stop notifications only when loader is completed so that
   // we don't fire them for fragment redirection that happens in window.onload
@@ -643,7 +555,7 @@ void FrameLoader::LoadInSameDocument(
 
   document_loader_->GetInitialScrollState().was_scrolled_by_user = false;
 
-  CheckCompleted();
+  frame_->GetDocument()->CheckCompleted();
 
   frame_->DomWindow()->StatePopped(state_object
                                        ? std::move(state_object)
@@ -744,7 +656,26 @@ bool FrameLoader::PrepareRequestForThisFrame(FrameLoadRequest& request) {
     return false;
 
   if (!request.OriginDocument()->GetSecurityOrigin()->CanDisplay(url)) {
-    ReportLocalLoadFailed(frame_, url.ElidedString());
+    request.OriginDocument()->AddConsoleMessage(ConsoleMessage::Create(
+        kSecurityMessageSource, kErrorMessageLevel,
+        "Not allowed to load local resource: " + url.ElidedString()));
+    return false;
+  }
+
+  // Block renderer-initiated loads of data URLs in the top frame. If the mime
+  // type of the data URL is supported, the URL will eventually be rendered, so
+  // block it here. Otherwise, the load might be handled by a plugin or end up
+  // as a download, so allow it to let the embedder figure out what to do with
+  // it.
+  if (frame_->IsMainFrame() &&
+      !request.GetResourceRequest().IsSameDocumentNavigation() &&
+      !frame_->Client()->AllowContentInitiatedDataUrlNavigations(
+          request.OriginDocument()->Url()) &&
+      url.ProtocolIsData() && NetworkUtils::IsDataURLMimeTypeSupported(url)) {
+    frame_->GetDocument()->AddConsoleMessage(ConsoleMessage::Create(
+        kSecurityMessageSource, kErrorMessageLevel,
+        "Not allowed to navigate top frame to data URL: " +
+            url.ElidedString()));
     return false;
   }
 
@@ -866,14 +797,6 @@ void FrameLoader::Load(const FrameLoadRequest& passed_request,
   if (in_stop_all_loaders_)
     return;
 
-  if (frame_->GetPage()->Suspended() &&
-      IsBackForwardLoadType(frame_load_type)) {
-    deferred_history_load_ = DeferredHistoryLoad::Create(
-        passed_request.GetResourceRequest(), history_item, frame_load_type,
-        history_load_type);
-    return;
-  }
-
   FrameLoadRequest request(passed_request);
   request.GetResourceRequest().SetHasUserGesture(
       UserGestureIndicator::ProcessingUserGesture());
@@ -912,12 +835,13 @@ void FrameLoader::Load(const FrameLoadRequest& passed_request,
     if (policy == kNavigationPolicyDownload) {
       Client()->LoadURLExternally(request.GetResourceRequest(),
                                   kNavigationPolicyDownload, String(), false);
-    } else {
+      return;  // Navigation/download will be handled by the client.
+    } else if (ShouldNavigateTargetFrame(policy)) {
       request.GetResourceRequest().SetFrameType(
           WebURLRequest::kFrameTypeAuxiliary);
       CreateWindowForRequest(request, *frame_, policy);
+      return;  // Navigation will be handled by the new frame/window.
     }
-    return;
   }
 
   if (!frame_->IsNavigationAllowed())
@@ -973,18 +897,8 @@ SubstituteData FrameLoader::DefaultSubstituteDataForURL(const KURL& url) {
   DCHECK(!srcdoc.IsNull());
   CString encoded_srcdoc = srcdoc.Utf8();
   return SubstituteData(
-      SharedBuffer::Create(encoded_srcdoc.Data(), encoded_srcdoc.length()),
+      SharedBuffer::Create(encoded_srcdoc.data(), encoded_srcdoc.length()),
       "text/html", "UTF-8", KURL());
-}
-
-void FrameLoader::ReportLocalLoadFailed(LocalFrame* frame, const String& url) {
-  DCHECK(!url.IsEmpty());
-  if (!frame)
-    return;
-
-  frame->GetDocument()->AddConsoleMessage(
-      ConsoleMessage::Create(kSecurityMessageSource, kErrorMessageLevel,
-                             "Not allowed to load local resource: " + url));
 }
 
 void FrameLoader::StopAllLoaders() {
@@ -1005,14 +919,12 @@ void FrameLoader::StopAllLoaders() {
       ToLocalFrame(child)->Loader().StopAllLoaders();
   }
 
-  frame_->GetDocument()->SuppressLoadEvent();
+  frame_->GetDocument()->CancelParsing();
   if (document_loader_)
     document_loader_->Fetcher()->StopFetching();
-  frame_->GetDocument()->CancelParsing();
   if (!protect_provisional_loader_)
     DetachDocumentLoader(provisional_document_loader_);
 
-  check_timer_.Stop();
   frame_->GetNavigationScheduler().Cancel();
 
   // It's possible that the above actions won't have stopped loading if load
@@ -1161,7 +1073,8 @@ void FrameLoader::RestoreScrollPositionAndViewStateForLoadType(
     FrameLoadType load_type) {
   FrameView* view = frame_->View();
   if (!view || !view->LayoutViewportScrollableArea() ||
-      !state_machine_.CommittedFirstRealDocumentLoad()) {
+      !state_machine_.CommittedFirstRealDocumentLoad() ||
+      !frame_->IsAttached()) {
     return;
   }
   if (!NeedsHistoryItemRestore(load_type))
@@ -1240,9 +1153,6 @@ void FrameLoader::Detach() {
   DetachDocumentLoader(document_loader_);
   DetachDocumentLoader(provisional_document_loader_);
 
-  Frame* parent = frame_->Tree().Parent();
-  if (parent && parent->IsLocalFrame())
-    ToLocalFrame(parent)->Loader().ScheduleCheckCompleted();
   if (progress_tracker_) {
     progress_tracker_->Dispose();
     progress_tracker_.Clear();
@@ -1255,6 +1165,7 @@ void FrameLoader::Detach() {
 void FrameLoader::DetachProvisionalDocumentLoader(DocumentLoader* loader) {
   DCHECK_EQ(loader, provisional_document_loader_);
   DetachDocumentLoader(provisional_document_loader_);
+  DidFinishNavigation();
 }
 
 bool FrameLoader::ShouldPerformFragmentNavigation(bool is_form_submission,
@@ -1356,6 +1267,7 @@ bool FrameLoader::ShouldClose(bool is_reload) {
 
 NavigationPolicy FrameLoader::ShouldContinueForNavigationPolicy(
     const ResourceRequest& request,
+    Document* origin_document,
     const SubstituteData& substitute_data,
     DocumentLoader* loader,
     ContentSecurityPolicyDisposition
@@ -1369,60 +1281,30 @@ NavigationPolicy FrameLoader::ShouldContinueForNavigationPolicy(
   if (request.Url().IsEmpty() || substitute_data.IsValid())
     return kNavigationPolicyCurrentTab;
 
-  Settings* settings = frame_->GetSettings();
-  bool browser_side_navigation_enabled =
-      settings && settings->GetBrowserSideNavigationEnabled();
-
-  // If we're loading content into |m_frame| (NavigationPolicyCurrentTab), check
-  // against the parent's Content Security Policy and kill the load if that
-  // check fails, unless we should bypass the main world's CSP.
-  if (policy == kNavigationPolicyCurrentTab &&
-      should_check_main_world_content_security_policy ==
-          kCheckContentSecurityPolicy &&
-      // TODO(arthursonzogni): 'frame-src' check is disabled on the
-      // renderer side with browser-side-navigation, but is enforced on the
-      // browser side. See http://crbug.com/692595 for understanding why it
-      // can't be enforced on both sides instead.
-      !browser_side_navigation_enabled) {
-    Frame* parent_frame = frame_->Tree().Parent();
-    if (parent_frame) {
-      ContentSecurityPolicy* parent_policy =
-          parent_frame->GetSecurityContext()->GetContentSecurityPolicy();
-      if (!parent_policy->AllowFrameFromSource(request.Url(),
-                                               request.GetRedirectStatus())) {
-        // Fire a load event, as timing attacks would otherwise reveal that the
-        // frame was blocked. This way, it looks like every other cross-origin
-        // page load.
-        frame_->GetDocument()->EnforceSandboxFlags(kSandboxOrigin);
-        frame_->Owner()->DispatchLoad();
-        return kNavigationPolicyIgnore;
-      }
-    }
+  // Check for non-escaped new lines in the url.
+  if (request.Url().PotentiallyDanglingMarkup() &&
+      request.Url().ProtocolIsInHTTPFamily()) {
+    Deprecation::CountDeprecation(
+        frame_, UseCounter::kCanRequestURLHTTPContainingNewline);
+    if (RuntimeEnabledFeatures::restrictCanRequestURLCharacterSetEnabled())
+      return kNavigationPolicyIgnore;
   }
 
-  bool is_form_submission = type == kNavigationTypeFormSubmitted ||
-                            type == kNavigationTypeFormResubmitted;
-  if (is_form_submission &&
-      // 'form-action' check in the frame that is navigating is disabled on the
-      // renderer side when PlzNavigate is enabled, but is enforced on the
-      // browser side instead.
-      // N.B. check in the frame that initiates the navigation stills occurs in
-      // blink and is not enforced on the browser-side.
-      // TODO(arthursonzogni) The 'form-action' check should be fully disabled
-      // in blink when browser side navigation is enabled, except when the form
-      // submission doesn't trigger a navigation(i.e. javascript urls). Please
-      // see https://crbug.com/701749
-      !browser_side_navigation_enabled &&
-      !frame_->GetDocument()->GetContentSecurityPolicy()->AllowFormAction(
-          request.Url(), request.GetRedirectStatus())) {
+  Settings* settings = frame_->GetSettings();
+  if (MaybeCheckCSP(request, type, frame_, policy,
+                    should_check_main_world_content_security_policy ==
+                        kCheckContentSecurityPolicy,
+                    settings && settings->GetBrowserSideNavigationEnabled(),
+                    ContentSecurityPolicy::CheckHeaderType::kCheckEnforce) ==
+      kNavigationPolicyIgnore) {
     return kNavigationPolicyIgnore;
   }
 
   bool replaces_current_history_item =
       frame_load_type == kFrameLoadTypeReplaceCurrentItem;
   policy = Client()->DecidePolicyForNavigation(
-      request, loader, type, policy, replaces_current_history_item,
-      is_client_redirect, form,
+      request, origin_document, loader, type, policy,
+      replaces_current_history_item, is_client_redirect, form,
       should_check_main_world_content_security_policy);
   if (policy == kNavigationPolicyCurrentTab ||
       policy == kNavigationPolicyIgnore ||
@@ -1431,12 +1313,39 @@ NavigationPolicy FrameLoader::ShouldContinueForNavigationPolicy(
     return policy;
   }
 
-  if (!LocalDOMWindow::AllowPopUp(*frame_) &&
-      !UserGestureIndicator::UtilizeUserGesture())
-    return kNavigationPolicyIgnore;
   Client()->LoadURLExternally(request, policy, String(),
                               replaces_current_history_item);
   return kNavigationPolicyIgnore;
+}
+
+NavigationPolicy FrameLoader::ShouldContinueForRedirectNavigationPolicy(
+    const ResourceRequest& request,
+    const SubstituteData& substitute_data,
+    DocumentLoader* loader,
+    ContentSecurityPolicyDisposition
+        should_check_main_world_content_security_policy,
+    NavigationType type,
+    NavigationPolicy policy,
+    FrameLoadType frame_load_type,
+    bool is_client_redirect,
+    HTMLFormElement* form) {
+  Settings* settings = frame_->GetSettings();
+  // Check report-only CSP policies, which are not checked by
+  // ShouldContinueForNavigationPolicy.
+  MaybeCheckCSP(request, type, frame_, policy,
+                should_check_main_world_content_security_policy ==
+                    kCheckContentSecurityPolicy,
+                settings && settings->GetBrowserSideNavigationEnabled(),
+                ContentSecurityPolicy::CheckHeaderType::kCheckReportOnly);
+
+  return ShouldContinueForNavigationPolicy(
+      request,
+      // |origin_document| is not set. It doesn't really matter here. It is
+      // useful for PlzNavigate (aka browser-side-navigation). It is used
+      // during the first navigation and not during redirects.
+      nullptr,  // origin_document
+      substitute_data, loader, should_check_main_world_content_security_policy,
+      type, policy, frame_load_type, is_client_redirect, form);
 }
 
 NavigationPolicy FrameLoader::CheckLoadCanStart(
@@ -1453,10 +1362,25 @@ NavigationPolicy FrameLoader::CheckLoadCanStart(
   // request.
   ResourceRequest& resource_request = frame_load_request.GetResourceRequest();
   RecordLatestRequiredCSP();
+  // Before modifying the request, check report-only CSP headers to give the
+  // site owner a chance to learn about requests that need to be modified.
+  //
+  // TODO(estark): this doesn't work with --enable-browser-side-navigation,
+  // wherein 'frame-src' is checked in the browser process. Figure out what to
+  // do; maybe with browser-side navigation the upgrade should be happening in
+  // the browser process too. See also https://crbug.com/692595
+  Settings* settings = frame_->GetSettings();
+  MaybeCheckCSP(
+      resource_request, navigation_type, frame_, navigation_policy,
+      frame_load_request.ShouldCheckMainWorldContentSecurityPolicy() ==
+          kCheckContentSecurityPolicy,
+      settings && settings->GetBrowserSideNavigationEnabled(),
+      ContentSecurityPolicy::CheckHeaderType::kCheckReportOnly);
   ModifyRequestForCSP(resource_request, nullptr);
 
   return ShouldContinueForNavigationPolicy(
-      resource_request, frame_load_request.GetSubstituteData(), nullptr,
+      resource_request, frame_load_request.OriginDocument(),
+      frame_load_request.GetSubstituteData(), nullptr,
       frame_load_request.ShouldCheckMainWorldContentSecurityPolicy(),
       navigation_type, navigation_policy, type,
       frame_load_request.ClientRedirect() ==
@@ -1520,7 +1444,6 @@ void FrameLoader::StartLoad(FrameLoadRequest& frame_load_request,
   if (!had_placeholder_client_document_loader ||
       navigation_policy == kNavigationPolicyHandledByClient) {
     frame_->GetNavigationScheduler().Cancel();
-    check_timer_.Stop();
   }
 
   if (frame_load_request.Form())
@@ -1668,8 +1591,7 @@ void FrameLoader::ModifyRequestForCSP(ResourceRequest& resource_request,
       !RequiredCSP().IsEmpty()) {
     // TODO(amalika): Strengthen this DCHECK that requiredCSP has proper format
     DCHECK(RequiredCSP().GetString().ContainsOnlyASCII());
-    resource_request.SetHTTPHeaderField(HTTPNames::Embedding_CSP,
-                                        RequiredCSP());
+    resource_request.SetHTTPHeaderField(HTTPNames::Required_CSP, RequiredCSP());
   }
 
   // Tack an 'Upgrade-Insecure-Requests' header to outgoing navigational

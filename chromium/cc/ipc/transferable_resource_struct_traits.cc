@@ -16,7 +16,8 @@ bool StructTraits<cc::mojom::TransferableResourceDataView,
     Read(cc::mojom::TransferableResourceDataView data,
          cc::TransferableResource* out) {
   if (!data.ReadSize(&out->size) ||
-      !data.ReadMailboxHolder(&out->mailbox_holder))
+      !data.ReadMailboxHolder(&out->mailbox_holder) ||
+      !data.ReadColorSpace(&out->color_space))
     return false;
   out->id = data.id();
   out->format = static_cast<cc::ResourceFormat>(data.format());
@@ -24,6 +25,7 @@ bool StructTraits<cc::mojom::TransferableResourceDataView,
   out->filter = data.filter();
   out->read_lock_fences_enabled = data.read_lock_fences_enabled();
   out->is_software = data.is_software();
+  out->shared_bitmap_sequence_number = data.shared_bitmap_sequence_number();
   out->is_overlay_candidate = data.is_overlay_candidate();
 #if defined(OS_ANDROID)
   out->is_backed_by_surface_texture = data.is_backed_by_surface_texture();

@@ -106,7 +106,8 @@ class ContentViewCoreImpl : public ContentViewCore,
                    jfloat y,
                    jfloat hintx,
                    jfloat hinty,
-                   jboolean target_viewport);
+                   jboolean target_viewport,
+                   jboolean from_gamepad);
   void ScrollEnd(JNIEnv* env,
                  const base::android::JavaParamRef<jobject>& obj,
                  jlong time_ms);
@@ -124,10 +125,12 @@ class ContentViewCoreImpl : public ContentViewCore,
                   jfloat y,
                   jfloat vx,
                   jfloat vy,
-                  jboolean target_viewport);
+                  jboolean target_viewport,
+                  jboolean from_gamepad);
   void FlingCancel(JNIEnv* env,
                    const base::android::JavaParamRef<jobject>& obj,
-                   jlong time_ms);
+                   jlong time_ms,
+                   jboolean from_gamepad);
   void DoubleTap(JNIEnv* env,
                  const base::android::JavaParamRef<jobject>& obj,
                  jlong time_ms,
@@ -171,8 +174,6 @@ class ContentViewCoreImpl : public ContentViewCore,
       const base::android::JavaParamRef<jobject>& obj,
       jboolean enabled);
 
-  long GetNativeImeAdapter(JNIEnv* env,
-                           const base::android::JavaParamRef<jobject>& obj);
   void SetFocus(JNIEnv* env,
                 const base::android::JavaParamRef<jobject>& obj,
                 jboolean focused);
@@ -254,39 +255,23 @@ class ContentViewCoreImpl : public ContentViewCore,
   // Hides a visible popup menu.
   void HideSelectPopupMenu();
 
-  // All sizes and offsets are in CSS pixels as cached by the renderer.
+  // All sizes and offsets are in CSS pixels (except |top_show_pix|)
+  // as cached by the renderer.
   void UpdateFrameInfo(const gfx::Vector2dF& scroll_offset,
                        float page_scale_factor,
                        const gfx::Vector2dF& page_scale_factor_limits,
                        const gfx::SizeF& content_size,
                        const gfx::SizeF& viewport_size,
-                       const float top_controls_height,
-                       const float top_controls_shown_ratio,
-                       bool is_mobile_optimized_hint,
-                       const gfx::SelectionBound& selection_start);
-
-  void ForceUpdateImeAdapter(long native_ime_adapter);
-  void UpdateImeAdapter(long native_ime_adapter,
-                        int text_input_type,
-                        int text_input_flags,
-                        int text_input_mode,
-                        const std::string& text,
-                        int selection_start,
-                        int selection_end,
-                        int composition_start,
-                        int composition_end,
-                        bool show_ime_if_needed,
-                        bool reply_to_request);
+                       const float content_offset,
+                       const float top_shown_pix,
+                       bool top_changed,
+                       bool is_mobile_optimized_hint);
 
   bool HasFocus();
   void RequestDisallowInterceptTouchEvent();
   void OnGestureEventAck(const blink::WebGestureEvent& event,
                          InputEventAckState ack_result);
   bool FilterInputEvent(const blink::WebInputEvent& event);
-  void OnSelectionChanged(const std::string& text);
-  void OnSelectionEvent(ui::SelectionEventType event,
-                        const gfx::PointF& selection_anchor,
-                        const gfx::RectF& selection_rect);
 
   // Shows the disambiguation popup
   // |rect_pixels|   --> window coordinates which |zoomed_bitmap| represents
@@ -307,8 +292,6 @@ class ContentViewCoreImpl : public ContentViewCore,
   // Returns the viewport size after accounting for the viewport offset.
   gfx::Size GetViewSize() const;
 
-  gfx::Size GetViewSizeWithOSKHidden() const;
-
   void SetAccessibilityEnabledInternal(bool enabled);
 
   bool IsFullscreenRequiredForOrientationLock() const;
@@ -317,7 +300,6 @@ class ContentViewCoreImpl : public ContentViewCore,
   // Methods called from native code
   // --------------------------------------------------------------------------
 
-  gfx::Size GetPhysicalBackingSize() const;
   gfx::Size GetViewportSizeDip() const;
   bool DoBrowserControlsShrinkBlinkSize() const;
   float GetTopControlsHeightDip() const;
@@ -329,6 +311,9 @@ class ContentViewCoreImpl : public ContentViewCore,
                                 const gfx::PointF& extent);
 
   void OnShowUnhandledTapUIIfNeeded(int x_dip, int y_dip);
+  void OnSelectWordAroundCaretAck(bool did_select,
+                                  int start_adjust,
+                                  int end_adjust);
   void OnTouchDown(const base::android::ScopedJavaLocalRef<jobject>& event);
 
   ui::ViewAndroid* GetViewAndroid() const;

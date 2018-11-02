@@ -4,8 +4,8 @@
 
 #include "net/http/bidirectional_stream.h"
 
-#include <memory>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
@@ -25,9 +25,9 @@
 #include "net/log/net_log_capture_mode.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source_type.h"
-#include "net/spdy/spdy_header_block.h"
-#include "net/spdy/spdy_http_utils.h"
-#include "net/spdy/spdy_log_util.h"
+#include "net/spdy/chromium/spdy_http_utils.h"
+#include "net/spdy/chromium/spdy_log_util.h"
+#include "net/spdy/core/spdy_header_block.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_config.h"
 #include "url/gurl.h"
@@ -39,7 +39,7 @@ namespace {
 std::unique_ptr<base::Value> NetLogHeadersCallback(
     const SpdyHeaderBlock* headers,
     NetLogCaptureMode capture_mode) {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  auto dict = base::MakeUnique<base::DictionaryValue>();
   dict->Set("headers", ElideSpdyHeaderBlockForNetLog(*headers, capture_mode));
   return std::move(dict);
 }
@@ -48,7 +48,7 @@ std::unique_ptr<base::Value> NetLogCallback(const GURL* url,
                                             const std::string* method,
                                             const HttpRequestHeaders* headers,
                                             NetLogCaptureMode capture_mode) {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  auto dict = base::MakeUnique<base::DictionaryValue>();
   dict->SetString("url", url->possibly_invalid_spec());
   dict->SetString("method", *method);
   std::string empty;
@@ -392,7 +392,7 @@ void BidirectionalStream::OnHttpsProxyTunnelResponse(
     const HttpResponseInfo& response_info,
     const SSLConfig& used_ssl_config,
     const ProxyInfo& used_proxy_info,
-    HttpStream* stream) {
+    std::unique_ptr<HttpStream> stream) {
   DCHECK(stream_request_);
 
   NotifyFailed(ERR_HTTPS_PROXY_TUNNEL_RESPONSE);

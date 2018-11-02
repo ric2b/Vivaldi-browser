@@ -13,9 +13,12 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 
 namespace device {
+namespace mojom {
+class UsbChooserService;
+class UsbDeviceManager;
+}
+
 namespace usb {
-class ChooserService;
-class DeviceManager;
 class PermissionProvider;
 }
 }
@@ -36,11 +39,11 @@ class UsbTabHelper : public content::WebContentsObserver,
 
   void CreateDeviceManager(
       content::RenderFrameHost* render_frame_host,
-      mojo::InterfaceRequest<device::usb::DeviceManager> request);
+      mojo::InterfaceRequest<device::mojom::UsbDeviceManager> request);
 
   void CreateChooserService(
       content::RenderFrameHost* render_frame_host,
-      mojo::InterfaceRequest<device::usb::ChooserService> request);
+      mojo::InterfaceRequest<device::mojom::UsbChooserService> request);
 
   void IncrementConnectionCount(content::RenderFrameHost* render_frame_host);
   void DecrementConnectionCount(content::RenderFrameHost* render_frame_host);
@@ -61,9 +64,12 @@ class UsbTabHelper : public content::WebContentsObserver,
 
   void GetChooserService(
       content::RenderFrameHost* render_frame_host,
-      mojo::InterfaceRequest<device::usb::ChooserService> request);
+      mojo::InterfaceRequest<device::mojom::UsbChooserService> request);
 
   void NotifyTabStateChanged() const;
+
+  bool AllowedByFeaturePolicy(
+      content::RenderFrameHost* render_frame_host) const;
 
   FrameUsbServicesMap frame_usb_services_;
 

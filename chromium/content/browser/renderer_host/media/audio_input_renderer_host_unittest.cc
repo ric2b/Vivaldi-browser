@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/media/capture/audio_mirroring_manager.h"
@@ -27,6 +28,7 @@
 #include "media/audio/audio_system_impl.h"
 #include "media/audio/fake_audio_log_factory.h"
 #include "media/audio/fake_audio_manager.h"
+#include "media/audio/test_audio_thread.h"
 #include "media/base/media_switches.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -165,15 +167,13 @@ class MockAudioInputController : public AudioInputController {
       AudioInputController::EventHandler* event_handler,
       media::UserInputMonitor* user_input_monitor,
       const media::AudioParameters& params,
-      StreamType type,
-      scoped_refptr<base::SingleThreadTaskRunner> file_task_runner)
+      StreamType type)
       : AudioInputController(std::move(task_runner),
                              event_handler,
                              writer,
                              user_input_monitor,
                              params,
-                             type,
-                             std::move(file_task_runner)) {
+                             type) {
     GetTaskRunnerForTesting()->PostTask(
         FROM_HERE,
         base::Bind(&AudioInputController::EventHandler::OnCreated,
@@ -237,9 +237,9 @@ class MockControllerFactory : public AudioInputController::Factory {
       media::UserInputMonitor* user_input_monitor,
       AudioInputController::StreamType type) override {
     ControllerCreated();
-    scoped_refptr<MockController> controller = new MockController(
-        task_runner, sync_writer, audio_manager, event_handler,
-        user_input_monitor, params, type, task_runner);
+    scoped_refptr<MockController> controller =
+        new MockController(task_runner, sync_writer, audio_manager,
+                           event_handler, user_input_monitor, params, type);
     controller_list_.push_back(controller);
     return controller.get();
   }
@@ -265,8 +265,7 @@ class AudioInputRendererHostTest : public testing::Test {
     flags->AppendSwitch(switches::kUseFakeUIForMediaStream);
 
     audio_manager_.reset(new media::FakeAudioManager(
-        base::ThreadTaskRunnerHandle::Get(),
-        base::ThreadTaskRunnerHandle::Get(), &log_factory_));
+        base::MakeUnique<media::TestAudioThread>(), &log_factory_));
     audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
     media_stream_manager_ =
         base::MakeUnique<MediaStreamManager>(audio_system_.get());
@@ -279,6 +278,8 @@ class AudioInputRendererHostTest : public testing::Test {
   ~AudioInputRendererHostTest() override {
     airh_->OnChannelClosing();
     base::RunLoop().RunUntilIdle();
+
+    audio_manager_->Shutdown();
   }
 
  protected:
@@ -316,7 +317,7 @@ class AudioInputRendererHostTest : public testing::Test {
   StrictMock<MockControllerFactory> controller_factory_;
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
   TestBrowserThreadBundle thread_bundle_;
-  media::ScopedAudioManagerPtr audio_manager_;
+  std::unique_ptr<media::AudioManager> audio_manager_;
   std::unique_ptr<media::AudioSystem> audio_system_;
   StrictMock<MockRenderer> renderer_;
   scoped_refptr<AudioInputRendererHost> airh_;

@@ -6,9 +6,12 @@
 
 #include <stddef.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/supports_user_data.h"
 #include "base/task_scheduler/post_task.h"
@@ -17,9 +20,9 @@
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/drive/write_on_cache_file.h"
+#include "chrome/browser/download/download_core_service.h"
+#include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_history.h"
-#include "chrome/browser/download/download_service.h"
-#include "chrome/browser/download/download_service_factory.h"
 #include "components/drive/chromeos/file_system_interface.h"
 #include "components/drive/drive.pb.h"
 #include "content/public/browser/browser_thread.h"
@@ -103,10 +106,10 @@ void MoveDownloadedFile(const base::FilePath& downloaded_file,
 
 // Used to implement CheckForFileExistence().
 void ContinueCheckingForFileExistence(
-    const content::CheckForFileExistenceCallback& callback,
+    content::CheckForFileExistenceCallback callback,
     FileError error,
     std::unique_ptr<ResourceEntry> entry) {
-  callback.Run(error == FILE_ERROR_OK);
+  std::move(callback).Run(error == FILE_ERROR_OK);
 }
 
 // Returns true if |download| is a Drive download created from data persisted
@@ -116,10 +119,11 @@ bool IsPersistedDriveDownload(const base::FilePath& drive_tmp_download_path,
   if (!drive_tmp_download_path.IsParent(download->GetTargetFilePath()))
     return false;
 
-  DownloadService* download_service =
-      DownloadServiceFactory::GetForBrowserContext(
+  DownloadCoreService* download_core_service =
+      DownloadCoreServiceFactory::GetForBrowserContext(
           download->GetBrowserContext());
-  DownloadHistory* download_history = download_service->GetDownloadHistory();
+  DownloadHistory* download_history =
+      download_core_service->GetDownloadHistory();
 
   return download_history && download_history->WasRestoredFromHistory(download);
 }
@@ -211,7 +215,8 @@ void DownloadHandler::SetDownloadParams(const base::FilePath& drive_path,
     return;
 
   if (util::IsUnderDriveMountPoint(drive_path)) {
-    download->SetUserData(&kDrivePathKey, new DriveUserData(drive_path));
+    download->SetUserData(&kDrivePathKey,
+                          base::MakeUnique<DriveUserData>(drive_path));
     download->SetDisplayName(drive_path.BaseName());
   } else if (IsDriveDownload(download)) {
     // This may have been previously set if the default download folder is
@@ -244,11 +249,11 @@ bool DownloadHandler::IsDriveDownload(const DownloadItem* download) {
 
 void DownloadHandler::CheckForFileExistence(
     const DownloadItem* download,
-    const content::CheckForFileExistenceCallback& callback) {
+    content::CheckForFileExistenceCallback callback) {
   file_system_->GetResourceEntry(
       util::ExtractDrivePath(GetTargetPath(download)),
       base::Bind(&ContinueCheckingForFileExistence,
-                 callback));
+                 base::Passed(std::move(callback))));
 }
 
 void DownloadHandler::SetFreeDiskSpaceDelayForTesting(
@@ -379,7 +384,7 @@ void DownloadHandler::OnCreateDirectory(
   DVLOG(1) << "OnCreateDirectory " << FileErrorToString(error);
   if (error == FILE_ERROR_OK) {
     base::PostTaskWithTraitsAndReplyWithResult(
-        FROM_HERE, base::TaskTraits().MayBlock(),
+        FROM_HERE, {base::MayBlock()},
         base::Bind(&GetDriveTempDownloadPath, drive_tmp_download_path_),
         callback);
   } else {

@@ -5,6 +5,7 @@
 #include "components/favicon/ios/web_favicon_driver.h"
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "components/favicon/core/favicon_url.h"
 #include "components/favicon/ios/favicon_url_util.h"
@@ -17,6 +18,10 @@
 #include "skia/ext/skia_utils_ios.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/image/image.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 DEFINE_WEB_STATE_USER_DATA_KEY(favicon::WebFaviconDriver);
 
@@ -39,9 +44,9 @@ void WebFaviconDriver::CreateForWebState(
   if (FromWebState(web_state))
     return;
 
-  web_state->SetUserData(UserDataKey(),
-                         new WebFaviconDriver(web_state, favicon_service,
-                                              history_service, bookmark_model));
+  web_state->SetUserData(UserDataKey(), base::WrapUnique(new WebFaviconDriver(
+                                            web_state, favicon_service,
+                                            history_service, bookmark_model)));
 }
 
 void WebFaviconDriver::FetchFavicon(const GURL& url) {
@@ -97,6 +102,11 @@ int WebFaviconDriver::DownloadImage(const GURL& url,
   return downloaded_image_count;
 }
 
+void WebFaviconDriver::DownloadManifest(const GURL& url,
+                                        ManifestDownloadCallback callback) {
+  NOTREACHED();
+}
+
 bool WebFaviconDriver::IsOffTheRecord() {
   DCHECK(web_state());
   return web_state()->GetBrowserState()->IsOffTheRecord();
@@ -136,7 +146,8 @@ WebFaviconDriver::~WebFaviconDriver() {
 void WebFaviconDriver::FaviconUrlUpdated(
     const std::vector<web::FaviconURL>& candidates) {
   DCHECK(!candidates.empty());
-  OnUpdateFaviconURL(GetActiveURL(), FaviconURLsFromWebFaviconURLs(candidates));
+  OnUpdateCandidates(GetActiveURL(), FaviconURLsFromWebFaviconURLs(candidates),
+                     GURL());
 }
 
 }  // namespace favicon

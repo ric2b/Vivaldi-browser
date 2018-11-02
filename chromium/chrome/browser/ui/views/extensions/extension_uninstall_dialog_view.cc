@@ -10,6 +10,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/native_window_tracker.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/grit/generated_resources.h"
@@ -171,8 +172,10 @@ ExtensionUninstallDialogDelegateView::ExtensionUninstallDialogDelegateView(
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   SetLayoutManager(new views::BoxLayout(
       views::BoxLayout::kHorizontal,
-      provider->GetDistanceMetric(DISTANCE_DIALOG_BUTTON_MARGIN),
-      provider->GetDistanceMetric(DISTANCE_PANEL_CONTENT_MARGIN),
+      provider->GetDistanceMetric(
+          views::DISTANCE_DIALOG_CONTENTS_HORIZONTAL_MARGIN),
+      provider->GetDistanceMetric(
+          views::DISTANCE_DIALOG_CONTENTS_VERTICAL_MARGIN),
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_HORIZONTAL)));
 
   icon_ = new views::ImageView();
@@ -188,6 +191,8 @@ ExtensionUninstallDialogDelegateView::ExtensionUninstallDialogDelegateView(
   heading_->SetAllowCharacterBreak(true);
   heading_->SizeToFit(kRightColumnWidth);
   AddChildView(heading_);
+
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::EXTENSION_UNINSTALL);
 }
 
 ExtensionUninstallDialogDelegateView::~ExtensionUninstallDialogDelegateView() {

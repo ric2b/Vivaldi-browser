@@ -19,6 +19,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/memory/singleton.h"
+#include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -452,12 +453,18 @@ bool UpdateNotifierManager::IsNotifierAlreadyRunning() {
 bool UpdateNotifierManager::IsNotifierEnabled() {
   base::FilePath update_notifier_path =
       base::CommandLine::ForCurrentProcess()->GetProgram();
+
+  base::string16 notifier_path_string(
+      L"\"" + update_notifier_path.value() + L"\"");
+
   base::string16 cmd;
   bool enabled =
       base::win::ReadCommandFromAutoRun(
           HKEY_CURRENT_USER, ::vivaldi::kUpdateNotifierAutorunName, &cmd) &&
-      base::FilePath::CompareEqualIgnoreCase(cmd,
-                                             update_notifier_path.value());
+              (base::FilePath::CompareEqualIgnoreCase(cmd,
+                  notifier_path_string) ||
+              base::FilePath::CompareEqualIgnoreCase(cmd,
+                  update_notifier_path.value()));
   return enabled;
 }
 

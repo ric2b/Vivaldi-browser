@@ -1,5 +1,5 @@
 {
-  "Condition": "$SUPPORTS_SXS",
+  "Condition": "'$BRAND' == 'Google Chrome'",
   "RegistryEntries": {
     "HKEY_CURRENT_USER\\$CHROME_UPDATE_REGISTRY_SUBKEY_SXS": {
       "exists": "optional",

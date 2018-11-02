@@ -7,6 +7,7 @@ package org.chromium.android_webview;
 import android.content.Context;
 import android.net.http.SslCertificate;
 import android.net.http.SslError;
+import android.os.Handler;
 import android.util.Log;
 import android.webkit.ValueCallback;
 
@@ -172,7 +173,7 @@ public class AwContentsClientBridge {
             return false;
         }
         final SslError sslError = SslUtil.sslErrorFromNetErrorCode(certError, cert, url);
-        ValueCallback<Boolean> callback = new ValueCallback<Boolean>() {
+        final ValueCallback<Boolean> callback = new ValueCallback<Boolean>() {
             @Override
             public void onReceiveValue(final Boolean value) {
                 ThreadUtils.runOnUiThread(new Runnable() {
@@ -183,7 +184,16 @@ public class AwContentsClientBridge {
                 });
             }
         };
-        mClient.onReceivedSslError(callback, sslError);
+        // Post the application callback back to the current thread to ensure the application
+        // callback is executed without any native code on the stack. This so that any exception
+        // thrown by the application callback won't have to be propagated through a native call
+        // stack.
+        new Handler().post(new Runnable() {
+            @Override
+            public void run() {
+                mClient.onReceivedSslError(callback, sslError);
+            }
+        });
         return true;
     }
 
@@ -231,27 +241,64 @@ public class AwContentsClientBridge {
     }
 
     @CalledByNative
-    private void handleJsAlert(String url, String message, int id) {
-        JsResultHandler handler = new JsResultHandler(this, id);
-        mClient.handleJsAlert(url, message, handler);
+    private void handleJsAlert(final String url, final String message, final int id) {
+        // Post the application callback back to the current thread to ensure the application
+        // callback is executed without any native code on the stack. This so that any exception
+        // thrown by the application callback won't have to be propagated through a native call
+        // stack.
+        new Handler().post(new Runnable() {
+            @Override
+            public void run() {
+                JsResultHandler handler = new JsResultHandler(AwContentsClientBridge.this, id);
+                mClient.handleJsAlert(url, message, handler);
+            }
+        });
     }
 
     @CalledByNative
-    private void handleJsConfirm(String url, String message, int id) {
-        JsResultHandler handler = new JsResultHandler(this, id);
-        mClient.handleJsConfirm(url, message, handler);
+    private void handleJsConfirm(final String url, final String message, final int id) {
+        // Post the application callback back to the current thread to ensure the application
+        // callback is executed without any native code on the stack. This so that any exception
+        // thrown by the application callback won't have to be propagated through a native call
+        // stack.
+        new Handler().post(new Runnable() {
+            @Override
+            public void run() {
+                JsResultHandler handler = new JsResultHandler(AwContentsClientBridge.this, id);
+                mClient.handleJsConfirm(url, message, handler);
+            }
+        });
     }
 
     @CalledByNative
-    private void handleJsPrompt(String url, String message, String defaultValue, int id) {
-        JsResultHandler handler = new JsResultHandler(this, id);
-        mClient.handleJsPrompt(url, message, defaultValue, handler);
+    private void handleJsPrompt(
+            final String url, final String message, final String defaultValue, final int id) {
+        // Post the application callback back to the current thread to ensure the application
+        // callback is executed without any native code on the stack. This so that any exception
+        // thrown by the application callback won't have to be propagated through a native call
+        // stack.
+        new Handler().post(new Runnable() {
+            @Override
+            public void run() {
+                JsResultHandler handler = new JsResultHandler(AwContentsClientBridge.this, id);
+                mClient.handleJsPrompt(url, message, defaultValue, handler);
+            }
+        });
     }
 
     @CalledByNative
-    private void handleJsBeforeUnload(String url, String message, int id) {
-        JsResultHandler handler = new JsResultHandler(this, id);
-        mClient.handleJsBeforeUnload(url, message, handler);
+    private void handleJsBeforeUnload(final String url, final String message, final int id) {
+        // Post the application callback back to the current thread to ensure the application
+        // callback is executed without any native code on the stack. This so that any exception
+        // thrown by the application callback won't have to be propagated through a native call
+        // stack.
+        new Handler().post(new Runnable() {
+            @Override
+            public void run() {
+                JsResultHandler handler = new JsResultHandler(AwContentsClientBridge.this, id);
+                mClient.handleJsBeforeUnload(url, message, handler);
+            }
+        });
     }
 
     @CalledByNative
@@ -272,7 +319,7 @@ public class AwContentsClientBridge {
             String url, boolean isMainFrame, boolean hasUserGesture, String method,
             String[] requestHeaderNames, String[] requestHeaderValues,
             // WebResourceError
-            int errorCode, String description) {
+            int errorCode, String description, boolean safebrowsingHit) {
         AwContentsClient.AwWebResourceRequest request = new AwContentsClient.AwWebResourceRequest();
         request.url = url;
         request.isMainFrame = isMainFrame;
@@ -290,7 +337,7 @@ public class AwContentsClientBridge {
         boolean isErrorUrl =
                 unreachableWebDataUrl != null && unreachableWebDataUrl.equals(request.url);
 
-        if (!isErrorUrl && error.errorCode != NetError.ERR_ABORTED) {
+        if ((!isErrorUrl && error.errorCode != NetError.ERR_ABORTED) || safebrowsingHit) {
             // NetError.ERR_ABORTED error code is generated for the following reasons:
             // - WebView.stopLoading is called;
             // - the navigation is intercepted by the embedder via shouldOverrideUrlLoading;
@@ -298,7 +345,11 @@ public class AwContentsClientBridge {
             //
             // Android WebView does not notify the embedder of these situations using
             // this error code with the WebViewClient.onReceivedError callback.
-            error.errorCode = ErrorCodeConversionHelper.convertErrorCode(error.errorCode);
+            if (safebrowsingHit) {
+                error.errorCode = ErrorCodeConversionHelper.ERROR_UNSAFE_RESOURCE;
+            } else {
+                error.errorCode = ErrorCodeConversionHelper.convertErrorCode(error.errorCode);
+            }
             mClient.getCallbackHelper().postOnReceivedError(request, error);
             if (request.isMainFrame) {
                 // Need to call onPageFinished after onReceivedError for backwards compatibility

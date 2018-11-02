@@ -11,10 +11,13 @@
 #include "base/memory/ptr_util.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
+#include "chrome/browser/ui/autofill/autofill_dialog_models.h"
 #include "chrome/browser/ui/views/payments/payment_request_sheet_controller.h"
 #include "components/autofill/core/browser/payments/full_card_request.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/risk_data_loader.h"
+#include "ui/views/controls/combobox/combobox_listener.h"
+#include "ui/views/controls/textfield/textfield_controller.h"
 
 namespace autofill {
 class AutofillClient;
@@ -38,7 +41,9 @@ class CvcUnmaskViewController
     : public PaymentRequestSheetController,
       public autofill::RiskDataLoader,
       public autofill::payments::PaymentsClientDelegate,
-      public autofill::payments::FullCardRequest::UIDelegate {
+      public autofill::payments::FullCardRequest::UIDelegate,
+      public views::ComboboxListener,
+      public views::TextfieldController {
  public:
   CvcUnmaskViewController(
       PaymentRequestSpec* spec,
@@ -58,8 +63,8 @@ class CvcUnmaskViewController
       autofill::AutofillClient::PaymentsRpcResult result,
       const base::string16& context_token,
       std::unique_ptr<base::DictionaryValue> legal_message) override;
-  void OnDidUploadCard(
-      autofill::AutofillClient::PaymentsRpcResult result) override;
+  void OnDidUploadCard(autofill::AutofillClient::PaymentsRpcResult result,
+                       const std::string& server_id) override;
 
   // autofill::RiskDataLoader:
   void LoadRiskData(
@@ -85,6 +90,24 @@ class CvcUnmaskViewController
   // active FullCardRequest.
   void CvcConfirmed();
 
+  // Display a label with the text |error|
+  void DisplayError(base::string16 error);
+
+  // Updates the enabled state of the pay button
+  void UpdatePayButtonState();
+
+  bool GetSheetId(DialogViewID* sheet_id) override;
+  views::View* GetFirstFocusedView() override;
+
+  // views::TextfieldController:
+  void ContentsChanged(views::Textfield* sender,
+                       const base::string16& new_contents) override;
+
+  // views::ComboboxListener:
+  void OnPerformAction(views::Combobox* combobox) override;
+
+  autofill::MonthComboboxModel month_combobox_model_;
+  autofill::YearComboboxModel year_combobox_model_;
   views::Textfield* cvc_field_;  // owned by the view hierarchy, outlives this.
   autofill::CreditCard credit_card_;
   content::WebContents* web_contents_;

@@ -10,10 +10,11 @@
 // It installs signal handlers to detect crashes.
 
 #include <android/log.h>
+#include <errno.h>
 #include <signal.h>
+#include <string.h>
 
 #include "base/android/base_jni_registrar.h"
-#include "base/android/context_utils.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/at_exit.h"

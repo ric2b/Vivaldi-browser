@@ -13,10 +13,11 @@ if (is_ios) {
   import("//build/config/ios/ios_sdk.gni")
 }
 
-# Contains the dependencies needed for sanitizers to link into executables and
-# shared_libraries. Unconditionally depend upon this target as it is empty if
-# |is_asan|, |is_lsan|, |is_tsan|, |is_msan| and |use_custom_libcxx| are false.
+# Contains the dependencies needed for sanitizers to link into
+# executables and shared_libraries. Unconditionally depend upon
+# "//build/config:exe_and_shlib_deps" to pull in this target.
 group("deps") {
+  visibility = [ "//build/config:exe_and_shlib_deps" ]
   public_deps = [
     ":deps_no_options",
   ]
@@ -277,12 +278,15 @@ config("common_sanitizer_flags") {
   cflags_cc = []
 
   # Sanitizers need line table info for stack traces. They don't need type info
-  # or variable info, so we can leave that out to speed up the build.
+  # or variable info, so we can leave that out to speed up the build (unless
+  # it's explicitly asked for by setting |sanitizer_keep_symbols| to true).
   if (using_sanitizer) {
     assert(is_clang, "sanitizers only supported with clang")
-    cflags += [
-      "-gline-tables-only",
+    if (!sanitizer_keep_symbols) {
+      cflags += [ "-gline-tables-only" ]
+    }
 
+    cflags += [
       # Column info in debug data confuses Visual Studio's debugger, so don't
       # use this by default.  However, clusterfuzz needs it for good attribution
       # of reports to CLs, so turn it on there.
@@ -315,9 +319,9 @@ config("asan_flags") {
   cflags = []
   if (is_asan) {
     cflags += [ "-fsanitize=address" ]
-    if (!is_mac && !is_win) {
+    if (!is_mac) {
       cflags += [ "-fsanitize-address-use-after-scope" ]
-    } else if (!is_win) {
+    } else {
       # https://crbug.com/708707
       cflags += [ "-fno-sanitize-address-use-after-scope" ]
     }

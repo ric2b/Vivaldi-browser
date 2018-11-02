@@ -217,9 +217,8 @@ class ImeObserverChromeOS : public ui::ImeObserver {
       }
     }
 
-    std::unique_ptr<extensions::Event> event(
-        new extensions::Event(histogram_value, event_name, std::move(args)));
-    event->restrict_to_browser_context = profile_;
+    auto event = base::MakeUnique<extensions::Event>(
+        histogram_value, event_name, std::move(args), profile_);
     extensions::EventRouter::Get(profile_)
         ->DispatchEventToExtension(extension_id_, std::move(event));
   }
@@ -627,7 +626,7 @@ void InputImeAPI::OnExtensionLoaded(content::BrowserContext* browser_context,
 
 void InputImeAPI::OnExtensionUnloaded(content::BrowserContext* browser_context,
                                       const Extension* extension,
-                                      UnloadedExtensionInfo::Reason reason) {
+                                      UnloadedExtensionReason reason) {
   const std::vector<InputComponentInfo>* input_components =
       InputComponents::GetInputComponents(extension);
   if (!input_components || input_components->empty())

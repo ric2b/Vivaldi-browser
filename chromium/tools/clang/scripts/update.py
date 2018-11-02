@@ -27,7 +27,7 @@ import zipfile
 # Do NOT CHANGE this if you don't know what you're doing -- see
 # https://chromium.googlesource.com/chromium/src/+/master/docs/updating_clang.md
 # Reverting problematic clang rolls is safe, though.
-CLANG_REVISION = '299960'
+CLANG_REVISION = '303369'
 
 use_head_revision = 'LLVM_FORCE_HEAD_REVISION' in os.environ
 if use_head_revision:
@@ -66,11 +66,10 @@ LLVM_BUILD_TOOLS_DIR = os.path.abspath(
     os.path.join(LLVM_DIR, '..', 'llvm-build-tools'))
 STAMP_FILE = os.path.normpath(
     os.path.join(LLVM_DIR, '..', 'llvm-build', 'cr_build_revision'))
-BINUTILS_DIR = os.path.join(THIRD_PARTY_DIR, 'binutils')
-BINUTILS_BIN_DIR = os.path.join(BINUTILS_DIR, BINUTILS_DIR,
-                                'Linux_x64', 'Release', 'bin')
-BFD_PLUGINS_DIR = os.path.join(BINUTILS_DIR, 'Linux_x64', 'Release',
-                               'lib', 'bfd-plugins')
+BINUTILS_DIR = os.path.join(THIRD_PARTY_DIR, 'binutils', 'Linux_x64', 'Release')
+BINUTILS_BIN_DIR = os.path.join(BINUTILS_DIR, 'bin')
+BINUTILS_LIB_DIR = os.path.join(BINUTILS_DIR, 'lib')
+BFD_PLUGINS_DIR = os.path.join(BINUTILS_LIB_DIR, 'bfd-plugins')
 VERSION = '5.0.0'
 ANDROID_NDK_DIR = os.path.join(
     CHROMIUM_DIR, 'third_party', 'android_tools', 'ndk')
@@ -87,6 +86,7 @@ if 'LLVM_REPO_URL' in os.environ:
 DIA_DLL = {
   '2013': 'msdia120.dll',
   '2015': 'msdia140.dll',
+  '2017': 'msdia140.dll',
 }
 
 
@@ -502,7 +502,7 @@ def UpdateClang(args):
 
   binutils_incdir = ''
   if sys.platform.startswith('linux'):
-    binutils_incdir = os.path.join(BINUTILS_DIR, 'Linux_x64/Release/include')
+    binutils_incdir = os.path.join(BINUTILS_DIR, 'include')
 
   if args.bootstrap:
     print 'Building bootstrap compiler'
@@ -564,6 +564,13 @@ def UpdateClang(args):
                 os.path.join(LLVM_BOOTSTRAP_INSTALL_DIR, 'lib', 'LLVMgold.so'),
                 os.path.join(BFD_PLUGINS_DIR, 'LLVMgold.so')])
 
+    # Link against binutils's copy of tcmalloc to speed up the linker by ~10%.
+    # In package.py we copy the .so into our package.
+    tcmalloc_ldflags = ['-L' + BINUTILS_LIB_DIR, '-ltcmalloc_minimal']
+    # Make sure that tblgen and the test suite can find tcmalloc.
+    os.environ['LD_LIBRARY_PATH'] = \
+        BINUTILS_LIB_DIR + os.pathsep + os.environ.get('LD_LIBRARY_PATH', '')
+
     lto_cflags = ['-flto=thin']
     lto_ldflags = ['-fuse-ld=lld']
     if args.gcc_toolchain:
@@ -576,7 +583,7 @@ def UpdateClang(args):
         '-DCMAKE_CXX_COMPILER=' + cxx,
         '-DCMAKE_C_FLAGS=' + ' '.join(lto_cflags),
         '-DCMAKE_CXX_FLAGS=' + ' '.join(lto_cflags),
-        '-DCMAKE_EXE_LINKER_FLAGS=' + ' '.join(lto_ldflags),
+        '-DCMAKE_EXE_LINKER_FLAGS=' + ' '.join(lto_ldflags + tcmalloc_ldflags),
         '-DCMAKE_SHARED_LINKER_FLAGS=' + ' '.join(lto_ldflags),
         '-DCMAKE_MODULE_LINKER_FLAGS=' + ' '.join(lto_ldflags)]
 
@@ -636,7 +643,8 @@ def UpdateClang(args):
   cc_args = base_cmake_args if sys.platform != 'win32' else cmake_args
   if cc is not None:  cc_args.append('-DCMAKE_C_COMPILER=' + cc)
   if cxx is not None: cc_args.append('-DCMAKE_CXX_COMPILER=' + cxx)
-  chrome_tools = list(set(['plugins', 'blink_gc_plugin'] + args.extra_tools))
+  default_tools = ['plugins', 'blink_gc_plugin', 'translation_unit']
+  chrome_tools = list(set(default_tools + args.extra_tools))
   cmake_args += base_cmake_args + [
       '-DLLVM_ENABLE_THREADS=OFF',
       '-DLLVM_BINUTILS_INCDIR=' + binutils_incdir,

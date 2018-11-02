@@ -243,8 +243,8 @@ class LinkedHashSet {
   const Value& back() const;
   void pop_back();
 
-  iterator Find(ValuePeekInType);
-  const_iterator Find(ValuePeekInType) const;
+  iterator find(ValuePeekInType);
+  const_iterator find(ValuePeekInType) const;
   bool Contains(ValuePeekInType) const;
 
   // An alternate version of find() that finds the object by hashing and
@@ -290,7 +290,7 @@ class LinkedHashSet {
 
   void erase(ValuePeekInType);
   void erase(iterator);
-  void Clear() { impl_.Clear(); }
+  void clear() { impl_.clear(); }
   template <typename Collection>
   void RemoveAll(const Collection& other) {
     WTF::RemoveAll(*this, other);
@@ -412,7 +412,7 @@ struct LinkedHashSetTranslator {
     location.value_ = std::forward<IncomingValueType>(key);
   }
 
-  // Empty (or deleted) slots have the m_next pointer set to null, but we
+  // Empty (or deleted) slots have the next_ pointer set to null, but we
   // don't do anything to the other fields, which may contain junk.
   // Therefore you can't compare a newly constructed empty value with a
   // slot and get the right answer.
@@ -434,7 +434,7 @@ struct LinkedHashSetTraits
   typedef LinkedHashSetNode<Value, Allocator> Node;
   typedef ValueTraitsArg ValueTraits;
 
-  // The slot is empty when the m_next field is zero so it's safe to zero
+  // The slot is empty when the next_ field is zero so it's safe to zero
   // the backing.
   static const bool kEmptyValueIsZero = true;
 
@@ -687,13 +687,13 @@ inline LinkedHashSet<T, U, V, W>& LinkedHashSet<T, U, V, W>::operator=(
 
 template <typename T, typename U, typename V, typename W>
 inline void LinkedHashSet<T, U, V, W>::Swap(LinkedHashSet& other) {
-  impl_.Swap(other.impl_);
+  impl_.swap(other.impl_);
   SwapAnchor(anchor_, other.anchor_);
 }
 
 template <typename T, typename U, typename V, typename Allocator>
 inline LinkedHashSet<T, U, V, Allocator>::~LinkedHashSet() {
-  // The destructor of m_anchor will implicitly be called here, which will
+  // The destructor of anchor_ will implicitly be called here, which will
   // unlink the anchor from the collection.
 }
 
@@ -706,7 +706,7 @@ inline T& LinkedHashSet<T, U, V, W>::front() {
 template <typename T, typename U, typename V, typename W>
 inline const T& LinkedHashSet<T, U, V, W>::front() const {
   DCHECK(!IsEmpty());
-  return FirstNode()->m_value;
+  return FirstNode()->value_;
 }
 
 template <typename T, typename U, typename V, typename W>
@@ -724,7 +724,7 @@ inline T& LinkedHashSet<T, U, V, W>::back() {
 template <typename T, typename U, typename V, typename W>
 inline const T& LinkedHashSet<T, U, V, W>::back() const {
   DCHECK(!IsEmpty());
-  return LastNode()->m_value;
+  return LastNode()->value_;
 }
 
 template <typename T, typename U, typename V, typename W>
@@ -735,7 +735,7 @@ inline void LinkedHashSet<T, U, V, W>::pop_back() {
 
 template <typename T, typename U, typename V, typename W>
 inline typename LinkedHashSet<T, U, V, W>::iterator
-LinkedHashSet<T, U, V, W>::Find(ValuePeekInType value) {
+LinkedHashSet<T, U, V, W>::find(ValuePeekInType value) {
   LinkedHashSet::Node* node =
       impl_.template Lookup<LinkedHashSet::NodeHashFunctions, ValuePeekInType>(
           value);
@@ -746,7 +746,7 @@ LinkedHashSet<T, U, V, W>::Find(ValuePeekInType value) {
 
 template <typename T, typename U, typename V, typename W>
 inline typename LinkedHashSet<T, U, V, W>::const_iterator
-LinkedHashSet<T, U, V, W>::Find(ValuePeekInType value) const {
+LinkedHashSet<T, U, V, W>::find(ValuePeekInType value) const {
   const LinkedHashSet::Node* node =
       impl_.template Lookup<LinkedHashSet::NodeHashFunctions, ValuePeekInType>(
           value);
@@ -861,7 +861,7 @@ template <typename IncomingValueType>
 typename LinkedHashSet<T, U, V, W>::AddResult
 LinkedHashSet<T, U, V, W>::InsertBefore(ValuePeekInType before_value,
                                         IncomingValueType&& new_value) {
-  return InsertBefore(Find(before_value),
+  return InsertBefore(find(before_value),
                       std::forward<IncomingValueType>(new_value));
 }
 
@@ -874,7 +874,7 @@ inline void LinkedHashSet<T, U, V, W>::erase(iterator it) {
 
 template <typename T, typename U, typename V, typename W>
 inline void LinkedHashSet<T, U, V, W>::erase(ValuePeekInType value) {
-  erase(Find(value));
+  erase(find(value));
 }
 
 inline void SwapAnchor(LinkedHashSetNodeBase& a, LinkedHashSetNodeBase& b) {

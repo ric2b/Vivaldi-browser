@@ -7,14 +7,15 @@
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
 #include "bindings/core/v8/V8ArrayBufferView.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8Blob.h"
 #include "bindings/core/v8/V8FormData.h"
 #include "bindings/core/v8/V8URLSearchParams.h"
-#include "bindings/modules/v8/ByteStringSequenceSequenceOrByteStringByteStringRecordOrHeaders.h"
 #include "bindings/modules/v8/V8PasswordCredential.h"
 #include "core/dom/URLSearchParams.h"
 #include "core/fileapi/Blob.h"
+#include "core/frame/Deprecation.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/FormData.h"
 #include "modules/fetch/BlobBytesConsumer.h"
 #include "modules/fetch/FormDataBytesConsumer.h"
@@ -107,20 +108,17 @@ RequestInit::RequestInit(ExecutionContext* context,
   v8::Isolate* isolate = ToIsolate(context);
 
   if (is_header_set) {
-    ByteStringSequenceSequenceOrByteStringByteStringRecordOrHeaders
-        headers_init;
-    V8ByteStringSequenceSequenceOrByteStringByteStringRecordOrHeaders::toImpl(
-        isolate, v8_headers, headers_init,
-        UnionTypeConversionMode::kNotNullable, exception_state);
-    if (exception_state.HadException())
-      return;
-    headers = Headers::Create(headers_init, exception_state);
+    V8ByteStringSequenceSequenceOrByteStringByteStringRecord::toImpl(
+        isolate, v8_headers, headers, UnionTypeConversionMode::kNotNullable,
+        exception_state);
     if (exception_state.HadException())
       return;
   }
 
   if (is_credential_set) {
     if (V8PasswordCredential::hasInstance(v8_credential, isolate)) {
+      Deprecation::CountDeprecation(context,
+                                    UseCounter::kCredentialManagerCustomFetch);
       // TODO(mkwst): According to the spec, we'd serialize this once we touch
       // the network. We're serializing it here, ahead of time, because lifetime
       // issues around ResourceRequest make it pretty difficult to pass a
@@ -159,7 +157,7 @@ RequestInit::RequestInit(ExecutionContext* context,
     // Here we handle formData->boundary() as a C-style string. See
     // FormDataEncoder::generateUniqueBoundaryString.
     content_type = AtomicString("multipart/form-data; boundary=") +
-                   form_data->Boundary().Data();
+                   form_data->Boundary().data();
     body = new FormDataBytesConsumer(context, form_data.Release());
   } else if (V8URLSearchParams::hasInstance(v8_body, isolate)) {
     RefPtr<EncodedFormData> form_data =

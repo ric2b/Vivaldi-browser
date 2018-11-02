@@ -4,6 +4,7 @@
 
 #include "chrome/utility/importer/ie_importer_win.h"
 
+#include <objbase.h>
 #include <ole2.h>
 #include <intshcut.h>
 #include <shlobj.h>
@@ -291,12 +292,13 @@ bool LoadInternetShortcut(
     const base::string16& file,
     base::win::ScopedComPtr<IUniformResourceLocator>* shortcut) {
   base::win::ScopedComPtr<IUniformResourceLocator> url_locator;
-  if (FAILED(url_locator.CreateInstance(CLSID_InternetShortcut, NULL,
-                                        CLSCTX_INPROC_SERVER)))
+  if (FAILED(::CoCreateInstance(CLSID_InternetShortcut, NULL,
+                                CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(&url_locator))))
     return false;
 
   base::win::ScopedComPtr<IPersistFile> persist_file;
-  if (FAILED(persist_file.QueryFrom(url_locator.get())))
+  if (FAILED(url_locator.CopyTo(persist_file.GetAddressOf())))
     return false;
 
   // Loads the Internet Shortcut from persistent storage.
@@ -318,12 +320,12 @@ GURL ReadURLFromInternetShortcut(IUniformResourceLocator* url_locator) {
 // Reads the URL of the favicon of the internet shortcut.
 GURL ReadFaviconURLFromInternetShortcut(IUniformResourceLocator* url_locator) {
   base::win::ScopedComPtr<IPropertySetStorage> property_set_storage;
-  if (FAILED(property_set_storage.QueryFrom(url_locator)))
+  if (FAILED(url_locator->QueryInterface(IID_PPV_ARGS(&property_set_storage))))
     return GURL();
 
   base::win::ScopedComPtr<IPropertyStorage> property_storage;
   if (FAILED(property_set_storage->Open(FMTID_Intshcut, STGM_READ,
-                                        property_storage.Receive()))) {
+                                        property_storage.GetAddressOf()))) {
     return GURL();
   }
 
@@ -508,12 +510,12 @@ void IEImporter::ImportHistory() {
   int total_schemes = arraysize(kSchemes);
 
   base::win::ScopedComPtr<IUrlHistoryStg2> url_history_stg2;
-  if (FAILED(url_history_stg2.CreateInstance(CLSID_CUrlHistory, NULL,
-                                             CLSCTX_INPROC_SERVER))) {
+  if (FAILED(::CoCreateInstance(CLSID_CUrlHistory, NULL, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(&url_history_stg2)))) {
     return;
   }
   base::win::ScopedComPtr<IEnumSTATURL> enum_url;
-  if (SUCCEEDED(url_history_stg2->EnumUrls(enum_url.Receive()))) {
+  if (SUCCEEDED(url_history_stg2->EnumUrls(enum_url.GetAddressOf()))) {
     std::vector<ImporterURLRow> rows;
     STATURL stat_url;
 
@@ -588,8 +590,8 @@ void IEImporter::ImportPasswordsIE6() {
     return;
   }
 
-  base::win::ScopedComPtr<IPStore, &IID_IPStore> pstore;
-  HRESULT result = PStoreCreateInstance(pstore.Receive(), 0, 0, 0);
+  base::win::ScopedComPtr<IPStore> pstore;
+  HRESULT result = PStoreCreateInstance(pstore.GetAddressOf(), 0, 0, 0);
   if (result != S_OK) {
     FreeLibrary(pstorec_dll);
     return;
@@ -598,9 +600,9 @@ void IEImporter::ImportPasswordsIE6() {
   std::vector<AutoCompleteInfo> ac_list;
 
   // Enumerates AutoComplete items in the protected database.
-  base::win::ScopedComPtr<IEnumPStoreItems, &IID_IEnumPStoreItems> item;
-  result = pstore->EnumItems(0, &AutocompleteGUID,
-                             &AutocompleteGUID, 0, item.Receive());
+  base::win::ScopedComPtr<IEnumPStoreItems> item;
+  result = pstore->EnumItems(0, &AutocompleteGUID, &AutocompleteGUID, 0,
+                             item.GetAddressOf());
   if (result != PST_E_OK) {
     pstore.Reset();
     FreeLibrary(pstorec_dll);
@@ -856,7 +858,7 @@ void IEImporter::ParseFavoritesFolder(
     base::win::ScopedComPtr<IUniformResourceLocator> url_locator;
     if (!LoadInternetShortcut(*it, &url_locator))
       continue;
-    GURL url = ReadURLFromInternetShortcut(url_locator.get());
+    GURL url = ReadURLFromInternetShortcut(url_locator.Get());
     if (!url.is_valid())
       continue;
     // Skip default bookmarks. go.microsoft.com redirects to
@@ -867,7 +869,7 @@ void IEImporter::ParseFavoritesFolder(
     if (url.host() == "go.microsoft.com")
       continue;
     // Read favicon.
-    UpdateFaviconMap(*it, url, url_locator.get(), &favicon_map);
+    UpdateFaviconMap(*it, url, url_locator.Get(), &favicon_map);
 
     // Make the relative path from the Favorites folder, without the basename.
     // ex. Suppose that the Favorites folder is C:\Users\Foo\Favorites.

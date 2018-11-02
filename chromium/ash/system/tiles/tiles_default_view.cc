@@ -11,10 +11,11 @@
 #include "ash/shell_port.h"
 #include "ash/shutdown_controller.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/night_light/night_light_controller.h"
+#include "ash/system/night_light/night_light_toggle_button.h"
 #include "ash/system/tray/system_menu_button.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_controller.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_item.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
@@ -28,6 +29,8 @@
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
 
+namespace ash {
+
 namespace {
 
 // The ISO-639 code for the Hebrew locale. The help icon asset is a '?' which is
@@ -36,17 +39,17 @@ const char kHebrewLocale[] = "he";
 
 }  // namespace
 
-namespace ash {
-
-TilesDefaultView::TilesDefaultView(SystemTrayItem* owner, LoginStatus login)
+TilesDefaultView::TilesDefaultView(SystemTrayItem* owner)
     : owner_(owner),
-      login_(login),
       settings_button_(nullptr),
       help_button_(nullptr),
+      night_light_button_(nullptr),
       lock_button_(nullptr),
-      power_button_(nullptr) {}
+      power_button_(nullptr) {
+  DCHECK(owner_);
+}
 
-TilesDefaultView::~TilesDefaultView() {}
+TilesDefaultView::~TilesDefaultView() = default;
 
 void TilesDefaultView::Init() {
   views::BoxLayout* box_layout =
@@ -60,14 +63,12 @@ void TilesDefaultView::Init() {
   // Show the buttons in this row as disabled if the user is at the login
   // screen, lock screen, or in a secondary account flow. The exception is
   // |power_button_| which is always shown as enabled.
-  const bool disable_buttons = !TrayPopupUtils::CanOpenWebUISettings(login_);
+  const bool can_show_web_ui = TrayPopupUtils::CanOpenWebUISettings();
 
   settings_button_ = new SystemMenuButton(
       this, TrayPopupInkDropStyle::HOST_CENTERED, kSystemMenuSettingsIcon,
       IDS_ASH_STATUS_TRAY_SETTINGS);
-  if (disable_buttons ||
-      !Shell::Get()->system_tray_delegate()->ShouldShowSettings())
-    settings_button_->SetEnabled(false);
+  settings_button_->SetEnabled(can_show_web_ui);
   AddChildView(settings_button_);
   AddChildView(TrayPopupUtils::CreateVerticalSeparator());
 
@@ -81,16 +82,22 @@ void TilesDefaultView::Init() {
     // flipping must be disabled. (crbug.com/475237)
     help_button_->EnableCanvasFlippingForRTLUI(false);
   }
-  if (disable_buttons)
-    help_button_->SetEnabled(false);
+  help_button_->SetEnabled(can_show_web_ui);
   AddChildView(help_button_);
   AddChildView(TrayPopupUtils::CreateVerticalSeparator());
+
+  if (NightLightController::IsFeatureEnabled()) {
+    night_light_button_ = new NightLightToggleButton(this);
+    night_light_button_->SetEnabled(can_show_web_ui);
+    AddChildView(night_light_button_);
+    AddChildView(TrayPopupUtils::CreateVerticalSeparator());
+  }
 
   lock_button_ =
       new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
                            kSystemMenuLockIcon, IDS_ASH_STATUS_TRAY_LOCK);
-  if (disable_buttons || !Shell::Get()->session_controller()->CanLockScreen())
-    lock_button_->SetEnabled(false);
+  lock_button_->SetEnabled(can_show_web_ui &&
+                           Shell::Get()->session_controller()->CanLockScreen());
 
   AddChildView(lock_button_);
   AddChildView(TrayPopupUtils::CreateVerticalSeparator());
@@ -115,6 +122,11 @@ void TilesDefaultView::ButtonPressed(views::Button* sender,
   } else if (sender == help_button_) {
     ShellPort::Get()->RecordUserMetricsAction(UMA_TRAY_HELP);
     Shell::Get()->system_tray_controller()->ShowHelp();
+  } else if (NightLightController::IsFeatureEnabled() &&
+             sender == night_light_button_) {
+    ShellPort::Get()->RecordUserMetricsAction(UMA_TRAY_NIGHT_LIGHT);
+    Shell::Get()->night_light_controller()->Toggle();
+    night_light_button_->Update();
   } else if (sender == lock_button_) {
     ShellPort::Get()->RecordUserMetricsAction(UMA_TRAY_LOCK_SCREEN);
     chromeos::DBusThreadManager::Get()
@@ -124,8 +136,6 @@ void TilesDefaultView::ButtonPressed(views::Button* sender,
     ShellPort::Get()->RecordUserMetricsAction(UMA_TRAY_SHUT_DOWN);
     Shell::Get()->lock_state_controller()->RequestShutdown();
   }
-
-  owner_->system_tray()->CloseSystemBubble();
 }
 
 views::View* TilesDefaultView::GetHelpButtonView() const {

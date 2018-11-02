@@ -85,9 +85,6 @@ class DevToolsHttpHandler {
                      DevToolsSocketFactory* socket_factory,
                      std::unique_ptr<net::IPEndPoint> ip_address);
 
-  scoped_refptr<DevToolsAgentHost> GetAgentHost(
-      const std::string& target_id);
-
   void SendJson(int connection_id,
                 net::HttpStatusCode status_code,
                 base::Value* value,
@@ -100,6 +97,8 @@ class DevToolsHttpHandler {
                const std::string& message);
   void AcceptWebSocket(int connection_id,
                        const net::HttpServerRequestInfo& request);
+
+  void DecompressAndSendJsonProtocol(int connection_id);
 
   // Returns the front end url without the host at the beginning.
   std::string GetFrontendURLInternal(const std::string& target_id,
@@ -121,9 +120,6 @@ class DevToolsHttpHandler {
   ConnectionToClientMap connection_to_client_;
   DevToolsManagerDelegate* delegate_;
   DevToolsSocketFactory* socket_factory_;
-  using DescriptorMap =
-      std::map<std::string, scoped_refptr<DevToolsAgentHost>>;
-  DescriptorMap agent_host_map_;
   base::WeakPtrFactory<DevToolsHttpHandler> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DevToolsHttpHandler);

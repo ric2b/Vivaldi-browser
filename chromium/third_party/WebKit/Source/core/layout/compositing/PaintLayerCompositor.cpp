@@ -184,12 +184,16 @@ static LayoutVideo* FindFullscreenVideoLayoutObject(Document& document) {
   return ToLayoutVideo(layout_object);
 }
 
-void PaintLayerCompositor::UpdateIfNeededRecursive() {
+void PaintLayerCompositor::UpdateIfNeededRecursive(
+    DocumentLifecycle::LifecycleState target_state) {
   SCOPED_BLINK_UMA_HISTOGRAM_TIMER("Blink.Compositing.UpdateTime");
-  UpdateIfNeededRecursiveInternal();
+  UpdateIfNeededRecursiveInternal(target_state);
 }
 
-void PaintLayerCompositor::UpdateIfNeededRecursiveInternal() {
+void PaintLayerCompositor::UpdateIfNeededRecursiveInternal(
+    DocumentLifecycle::LifecycleState target_state) {
+  DCHECK(target_state >= DocumentLifecycle::kCompositingInputsClean);
+
   FrameView* view = layout_view_.GetFrameView();
   if (view->ShouldThrottleRendering())
     return;
@@ -205,10 +209,11 @@ void PaintLayerCompositor::UpdateIfNeededRecursiveInternal() {
     // the middle of frame detach.
     // TODO(bbudge) Remove this check when trusted Pepper plugins are gone.
     if (local_frame->GetDocument()->IsActive() &&
-        !local_frame->ContentLayoutItem().IsNull())
+        !local_frame->ContentLayoutItem().IsNull()) {
       local_frame->ContentLayoutItem()
           .Compositor()
-          ->UpdateIfNeededRecursiveInternal();
+          ->UpdateIfNeededRecursiveInternal(target_state);
+    }
   }
 
   TRACE_EVENT0("blink", "PaintLayerCompositor::updateIfNeededRecursive");
@@ -226,9 +231,11 @@ void PaintLayerCompositor::UpdateIfNeededRecursiveInternal() {
 
   layout_view_.CommitPendingSelection();
 
-  Lifecycle().AdvanceTo(DocumentLifecycle::kInCompositingUpdate);
-  UpdateIfNeeded();
-  Lifecycle().AdvanceTo(DocumentLifecycle::kCompositingClean);
+  UpdateIfNeeded(target_state);
+  DCHECK(Lifecycle().GetState() == DocumentLifecycle::kCompositingInputsClean ||
+         Lifecycle().GetState() == DocumentLifecycle::kCompositingClean);
+  if (target_state == DocumentLifecycle::kCompositingInputsClean)
+    return;
 
   Optional<CompositorElementIdSet> composited_element_ids;
   DocumentAnimations::UpdateAnimations(layout_view_.GetDocument(),
@@ -371,17 +378,36 @@ GraphicsLayer* PaintLayerCompositor::ParentForContentLayers() const {
   return IsMainFrame() ? GetVisualViewport().ScrollLayer() : nullptr;
 }
 
-void PaintLayerCompositor::UpdateIfNeeded() {
+void PaintLayerCompositor::UpdateIfNeeded(
+    DocumentLifecycle::LifecycleState target_state) {
+  DCHECK(target_state >= DocumentLifecycle::kCompositingInputsClean);
+
+  Lifecycle().AdvanceTo(DocumentLifecycle::kInCompositingUpdate);
+
+  if (pending_update_type_ < kCompositingUpdateAfterCompositingInputChange &&
+      target_state == DocumentLifecycle::kCompositingInputsClean) {
+    // The compositing inputs are already clean and that is our target state.
+    // Early-exit here without clearing the pending update type since we haven't
+    // handled e.g. geometry updates.
+    Lifecycle().AdvanceTo(DocumentLifecycle::kCompositingInputsClean);
+    return;
+  }
+
   CompositingUpdateType update_type = pending_update_type_;
   pending_update_type_ = kCompositingUpdateNone;
 
   if (!HasAcceleratedCompositing()) {
     UpdateWithoutAcceleratedCompositing(update_type);
+    Lifecycle().AdvanceTo(
+        std::min(DocumentLifecycle::kCompositingClean, target_state));
     return;
   }
 
-  if (update_type == kCompositingUpdateNone)
+  if (update_type == kCompositingUpdateNone) {
+    Lifecycle().AdvanceTo(
+        std::min(DocumentLifecycle::kCompositingClean, target_state));
     return;
+  }
 
   PaintLayer* update_root = RootLayer();
 
@@ -395,6 +421,16 @@ void PaintLayerCompositor::UpdateIfNeeded() {
     CompositingInputsUpdater::AssertNeedsCompositingInputsUpdateBitsCleared(
         update_root);
 #endif
+
+    // In the case where we only want to make compositing inputs clean, we
+    // early-exit here. Because we have not handled the other implications of
+    // |pending_update_type_| > kCompositingUpdateNone, we must restore the
+    // pending update type for a future call.
+    if (target_state == DocumentLifecycle::kCompositingInputsClean) {
+      pending_update_type_ = update_type;
+      Lifecycle().AdvanceTo(DocumentLifecycle::kCompositingInputsClean);
+      return;
+    }
 
     CompositingRequirementsUpdater(layout_view_, compositing_reason_finder_)
         .Update(update_root);
@@ -490,6 +526,8 @@ void PaintLayerCompositor::UpdateIfNeeded() {
   // Inform the inspector that the layer tree has changed.
   if (IsMainFrame())
     probe::layerTreeDidChange(layout_view_.GetFrame());
+
+  Lifecycle().AdvanceTo(DocumentLifecycle::kCompositingClean);
 }
 
 static void RestartAnimationOnCompositor(const LayoutObject& layout_object) {
@@ -933,7 +971,7 @@ void PaintLayerCompositor::PaintContents(const GraphicsLayer* graphics_layer,
   DrawingRecorder drawing_recorder(context, *graphics_layer,
                                    DisplayItem::kScrollbarCompositedScrollbar,
                                    layer_bounds);
-  context.Canvas()->PlaybackPaintRecord(builder.EndRecording());
+  context.Canvas()->drawPicture(builder.EndRecording());
 }
 
 Scrollbar* PaintLayerCompositor::GraphicsLayerToScrollbar(
@@ -1127,13 +1165,6 @@ void PaintLayerCompositor::EnsureRootLayer() {
     root_content_layer_->SetPosition(FloatPoint());
     root_content_layer_->SetOwnerNodeId(
         DOMNodeIds::IdForNode(layout_view_.GetNode()));
-
-    // FIXME: with rootLayerScrolls, we probably don't even need
-    // m_rootContentLayer?
-    if (!RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
-      // Need to clip to prevent transformed content showing outside this frame
-      root_content_layer_->SetMasksToBounds(true);
-    }
   }
 
   if (should_create_own_layers && !overflow_controls_host_layer_) {
@@ -1159,9 +1190,9 @@ void PaintLayerCompositor::EnsureRootLayer() {
     // In RLS mode, LayoutView scrolling contents layer gets this element ID (in
     // CompositedLayerMapping::updateElementIdAndCompositorMutableProperties).
     if (!RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
-      scroll_layer_->SetElementId(CreateCompositorElementId(
+      scroll_layer_->SetElementId(CompositorElementIdFromDOMNodeId(
           DOMNodeIds::IdForNode(&layout_view_.GetDocument()),
-          CompositorSubElementId::kScroll));
+          CompositorElementIdNamespace::kRootScroll));
     }
 
     // Hook them up

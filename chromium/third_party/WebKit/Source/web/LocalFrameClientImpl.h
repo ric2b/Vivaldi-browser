@@ -43,17 +43,17 @@
 namespace blink {
 
 class WebDevToolsAgentImpl;
-class WebLocalFrameImpl;
+class WebLocalFrameBase;
 
 class LocalFrameClientImpl final : public LocalFrameClient {
  public:
-  static LocalFrameClientImpl* Create(WebLocalFrameImpl*);
+  static LocalFrameClientImpl* Create(WebLocalFrameBase*);
 
   ~LocalFrameClientImpl() override;
 
   DECLARE_VIRTUAL_TRACE();
 
-  WebLocalFrameImpl* GetWebFrame() const { return web_frame_.Get(); }
+  WebLocalFrameBase* GetWebFrame() const { return web_frame_.Get(); }
 
   // LocalFrameClient ----------------------------------------------
 
@@ -107,6 +107,7 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   void DispatchDidChangeThemeColor() override;
   NavigationPolicy DecidePolicyForNavigation(
       const ResourceRequest&,
+      Document* origin_document,
       DocumentLoader*,
       NavigationType,
       NavigationPolicy,
@@ -169,12 +170,16 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   void DidChangeScrollOffset() override;
   void DidUpdateCurrentHistoryItem() override;
 
+  bool AllowContentInitiatedDataUrlNavigations(const KURL&) override;
+
   WebCookieJar* CookieJar() const override;
   void FrameFocused() const override;
   void DidChangeName(const String&) override;
   void DidEnforceInsecureRequestPolicy(WebInsecureRequestPolicy) override;
   void DidUpdateToUniqueOrigin() override;
-  void DidChangeSandboxFlags(Frame* child_frame, SandboxFlags) override;
+  void DidChangeFramePolicy(Frame* child_frame,
+                            SandboxFlags,
+                            const WebParsedFeaturePolicy&) override;
   void DidSetFeaturePolicyHeader(
       const WebParsedFeaturePolicy& parsed_header) override;
   void DidAddContentSecurityPolicies(
@@ -210,26 +215,32 @@ class LocalFrameClientImpl final : public LocalFrameClient {
 
   WebEffectiveConnectionType GetEffectiveConnectionType() override;
 
+  bool ShouldUseClientLoFiForRequest(const ResourceRequest&) override;
+
   KURL OverrideFlashEmbedWithHTML(const KURL&) override;
 
   void SetHasReceivedUserGesture(bool received_previously) override;
+
+  void SetDevToolsFrameId(const String& devtools_frame_id) override;
 
   void AbortClientNavigation() override;
 
   TextCheckerClient& GetTextCheckerClient() const override;
 
+  std::unique_ptr<WebURLLoader> CreateURLLoader() override;
+
   // VB-6063:
   void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) override;
 
  private:
-  explicit LocalFrameClientImpl(WebLocalFrameImpl*);
+  explicit LocalFrameClientImpl(WebLocalFrameBase*);
 
   bool IsLocalFrameClientImpl() const override { return true; }
   WebDevToolsAgentImpl* DevToolsAgent();
 
   // The WebFrame that owns this object and manages its lifetime. Therefore,
   // the web frame object is guaranteed to exist.
-  Member<WebLocalFrameImpl> web_frame_;
+  Member<WebLocalFrameBase> web_frame_;
 
   String user_agent_;
 };

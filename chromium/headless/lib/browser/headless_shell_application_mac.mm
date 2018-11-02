@@ -9,9 +9,12 @@
 @implementation HeadlessShellCrApplication
 
 - (BOOL)isHandlingSendEvent {
-  // The CrAppProtocol must return true if [NSApplication sendEvent:] is
-  // currently on the stack. seee |CrAppProtocol| in |MessagePumpMac|.
-  return true;
+  // Since headless mode is non-interactive, always return false.
+  return false;
+}
+
+// This method is required to allow handling some input events on Mac OS.
+- (void)setHandlingSendEvent:(BOOL)handlingSendEvent {
 }
 
 @end

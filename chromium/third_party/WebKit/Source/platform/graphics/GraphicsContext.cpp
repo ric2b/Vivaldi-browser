@@ -30,9 +30,9 @@
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/FloatRoundedRect.h"
 #include "platform/geometry/IntRect.h"
-#include "platform/graphics/ColorSpace.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 #include "platform/graphics/ImageBuffer.h"
+#include "platform/graphics/InterpolationSpace.h"
 #include "platform/graphics/Path.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/graphics/paint/PaintRecord.h"
@@ -47,7 +47,6 @@
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
-#include "third_party/skia/include/effects/SkGradientShader.h"
 #include "third_party/skia/include/effects/SkLumaColorFilter.h"
 #include "third_party/skia/include/effects/SkPictureImageFilter.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
@@ -299,7 +298,7 @@ sk_sp<PaintRecord> GraphicsContext::EndRecording() {
 }
 
 void GraphicsContext::DrawRecord(sk_sp<const PaintRecord> record) {
-  if (ContextDisabled() || !record || record->cullRect().isEmpty())
+  if (ContextDisabled() || !record || !record->size())
     return;
 
   DCHECK(canvas_);
@@ -323,7 +322,7 @@ void GraphicsContext::CompositeRecord(sk_sp<PaintRecord> record,
   transform.setRectToRect(source_bounds, sk_bounds, SkMatrix::kFill_ScaleToFit);
   canvas_->concat(transform);
   flags.setImageFilter(SkPictureImageFilter::MakeForLocalSpace(
-      ToSkPicture(record), source_bounds,
+      ToSkPicture(record, source_bounds), source_bounds,
       static_cast<SkFilterQuality>(ImageInterpolationQuality())));
   canvas_->saveLayer(&source_bounds, &flags);
   canvas_->restore();
@@ -541,138 +540,6 @@ void GraphicsContext::DrawLine(const IntPoint& point1, const IntPoint& point2) {
   canvas_->drawLine(p1.X(), p1.Y(), p2.X(), p2.Y(), flags);
 }
 
-namespace {
-
-#if !OS(MACOSX)
-
-sk_sp<PaintRecord> RecordMarker(
-    GraphicsContext::DocumentMarkerLineStyle style) {
-  SkColor color = (style == GraphicsContext::kDocumentMarkerGrammarLineStyle)
-                      ? SkColorSetRGB(0xC0, 0xC0, 0xC0)
-                      : SK_ColorRED;
-
-  // Record the path equivalent to this legacy pattern:
-  //   X o   o X o   o X
-  //     o X o   o X o
-
-  static const float kW = 4;
-  static const float kH = 2;
-
-  // Adjust the phase such that f' == 0 is "pixel"-centered
-  // (for optimal rasterization at native rez).
-  SkPath path;
-  path.moveTo(kW * -3 / 8, kH * 3 / 4);
-  path.cubicTo(kW * -1 / 8, kH * 3 / 4,
-               kW * -1 / 8, kH * 1 / 4,
-               kW *  1 / 8, kH * 1 / 4);
-  path.cubicTo(kW * 3 / 8, kH * 1 / 4,
-               kW * 3 / 8, kH * 3 / 4,
-               kW * 5 / 8, kH * 3 / 4);
-  path.cubicTo(kW * 7 / 8, kH * 3 / 4,
-               kW * 7 / 8, kH * 1 / 4,
-               kW * 9 / 8, kH * 1 / 4);
-
-  PaintFlags flags;
-  flags.setAntiAlias(true);
-  flags.setColor(color);
-  flags.setStyle(PaintFlags::kStroke_Style);
-  flags.setStrokeWidth(kH * 1 / 2);
-
-  PaintRecorder recorder;
-  recorder.beginRecording(kW, kH);
-  recorder.getRecordingCanvas()->drawPath(path, flags);
-
-  return recorder.finishRecordingAsPicture();
-}
-
-#else  // OS(MACOSX)
-
-sk_sp<PaintRecord> RecordMarker(
-    GraphicsContext::DocumentMarkerLineStyle style) {
-  SkColor color = (style == GraphicsContext::kDocumentMarkerGrammarLineStyle)
-                      ? SkColorSetRGB(0x6B, 0x6B, 0x6B)
-                      : SkColorSetRGB(0xFB, 0x2D, 0x1D);
-
-  // Match the artwork used by the Mac.
-  static const float kW = 4;
-  static const float kH = 3;
-  static const float kR = 1.5f;
-
-  // top->bottom translucent gradient.
-  const SkColor colors[2] = {
-      SkColorSetARGB(0x48,
-                     SkColorGetR(color),
-                     SkColorGetG(color),
-                     SkColorGetB(color)),
-      color
-  };
-  const SkPoint pts[2] = {
-      SkPoint::Make(0, 0),
-      SkPoint::Make(0, 2 * kR)
-  };
-
-  PaintFlags flags;
-  flags.setAntiAlias(true);
-  flags.setColor(color);
-  flags.setShader(SkGradientShader::MakeLinear(
-      pts, colors, nullptr, ARRAY_SIZE(colors), SkShader::kClamp_TileMode));
-  PaintRecorder recorder;
-  recorder.beginRecording(kW, kH);
-  recorder.getRecordingCanvas()->drawCircle(kR, kR, kR, flags);
-
-  return recorder.finishRecordingAsPicture();
-}
-
-#endif  // OS(MACOSX)
-
-}  // anonymous ns
-
-void GraphicsContext::DrawLineForDocumentMarker(const FloatPoint& pt,
-                                                float width,
-                                                DocumentMarkerLineStyle style,
-                                                float zoom) {
-  if (ContextDisabled())
-    return;
-
-  DEFINE_STATIC_LOCAL(
-      PaintRecord*, spelling_marker,
-      (RecordMarker(kDocumentMarkerSpellingLineStyle).release()));
-  DEFINE_STATIC_LOCAL(
-      PaintRecord*, grammar_marker,
-      (RecordMarker(kDocumentMarkerGrammarLineStyle).release()));
-  const auto& marker = style == kDocumentMarkerSpellingLineStyle
-                           ? spelling_marker
-                           : grammar_marker;
-
-  // Position already includes zoom and device scale factor.
-  SkScalar origin_x = WebCoreFloatToSkScalar(pt.X());
-  SkScalar origin_y = WebCoreFloatToSkScalar(pt.Y());
-
-#if OS(MACOSX)
-  // Make sure to draw only complete dots, and finish inside the marked text.
-  width -= fmodf(width, marker->cullRect().width() * zoom);
-#else
-  // Offset it vertically by 1 so that there's some space under the text.
-  origin_y += 1;
-#endif
-
-  const auto rect = SkRect::MakeWH(width, marker->cullRect().height() * zoom);
-  const auto local_matrix = SkMatrix::MakeScale(zoom, zoom);
-
-  PaintFlags flags;
-  flags.setAntiAlias(true);
-  flags.setShader(WrapSkShader(MakePaintShaderRecord(
-      sk_ref_sp(marker), SkShader::kRepeat_TileMode, SkShader::kClamp_TileMode,
-      &local_matrix, nullptr)));
-
-  // Apply the origin translation as a global transform.  This ensures that the
-  // shader local matrix depends solely on zoom => Skia can reuse the same
-  // cached tile for all markers at a given zoom level.
-  PaintCanvasAutoRestore acr(canvas_, true);
-  canvas_->translate(origin_x, origin_y);
-  canvas_->drawRect(rect, flags);
-}
-
 void GraphicsContext::DrawLineForText(const FloatPoint& pt, float width) {
   if (ContextDisabled())
     return;
@@ -739,15 +606,30 @@ void GraphicsContext::DrawRect(const IntRect& rect) {
   }
 }
 
-void GraphicsContext::DrawText(const Font& font,
-                               const TextRunPaintInfo& run_info,
-                               const FloatPoint& point,
-                               const PaintFlags& flags) {
+template <typename TextPaintInfo>
+void GraphicsContext::DrawTextInternal(const Font& font,
+                                       const TextPaintInfo& text_info,
+                                       const FloatPoint& point,
+                                       const PaintFlags& flags) {
   if (ContextDisabled())
     return;
 
-  if (font.DrawText(canvas_, run_info, point, device_scale_factor_, flags))
+  if (font.DrawText(canvas_, text_info, point, device_scale_factor_, flags))
     paint_controller_.SetTextPainted();
+}
+
+void GraphicsContext::DrawText(const Font& font,
+                               const TextRunPaintInfo& text_info,
+                               const FloatPoint& point,
+                               const PaintFlags& flags) {
+  DrawTextInternal(font, text_info, point, flags);
+}
+
+void GraphicsContext::DrawText(const Font& font,
+                               const TextFragmentPaintInfo& text_info,
+                               const FloatPoint& point,
+                               const PaintFlags& flags) {
+  DrawTextInternal(font, text_info, point, flags);
 }
 
 template <typename DrawTextFunc>
@@ -769,30 +651,58 @@ void GraphicsContext::DrawTextPasses(const DrawTextFunc& draw_text) {
   }
 }
 
-void GraphicsContext::DrawText(const Font& font,
-                               const TextRunPaintInfo& run_info,
-                               const FloatPoint& point) {
+template <typename TextPaintInfo>
+void GraphicsContext::DrawTextInternal(const Font& font,
+                                       const TextPaintInfo& text_info,
+                                       const FloatPoint& point) {
   if (ContextDisabled())
     return;
 
-  DrawTextPasses([&font, &run_info, &point, this](const PaintFlags& flags) {
-    if (font.DrawText(canvas_, run_info, point, device_scale_factor_, flags))
+  DrawTextPasses([&font, &text_info, &point, this](const PaintFlags& flags) {
+    if (font.DrawText(canvas_, text_info, point, device_scale_factor_, flags))
       paint_controller_.SetTextPainted();
   });
 }
 
-void GraphicsContext::DrawEmphasisMarks(const Font& font,
-                                        const TextRunPaintInfo& run_info,
-                                        const AtomicString& mark,
-                                        const FloatPoint& point) {
+void GraphicsContext::DrawText(const Font& font,
+                               const TextRunPaintInfo& text_info,
+                               const FloatPoint& point) {
+  DrawTextInternal(font, text_info, point);
+}
+
+void GraphicsContext::DrawText(const Font& font,
+                               const TextFragmentPaintInfo& text_info,
+                               const FloatPoint& point) {
+  DrawTextInternal(font, text_info, point);
+}
+
+template <typename TextPaintInfo>
+void GraphicsContext::DrawEmphasisMarksInternal(const Font& font,
+                                                const TextPaintInfo& text_info,
+                                                const AtomicString& mark,
+                                                const FloatPoint& point) {
   if (ContextDisabled())
     return;
 
   DrawTextPasses(
-      [&font, &run_info, &mark, &point, this](const PaintFlags& flags) {
-        font.DrawEmphasisMarks(canvas_, run_info, mark, point,
+      [&font, &text_info, &mark, &point, this](const PaintFlags& flags) {
+        font.DrawEmphasisMarks(canvas_, text_info, mark, point,
                                device_scale_factor_, flags);
       });
+}
+
+void GraphicsContext::DrawEmphasisMarks(const Font& font,
+                                        const TextRunPaintInfo& text_info,
+                                        const AtomicString& mark,
+                                        const FloatPoint& point) {
+  DrawEmphasisMarksInternal(font, text_info, mark, point);
+}
+
+void GraphicsContext::DrawEmphasisMarks(const Font& font,
+                                        const TextFragmentPaintInfo& text_info,
+                                        const AtomicString& mark,
+                                        const FloatPoint& point) {
+  DrawEmphasisMarksInternal(font, text_info, mark, point);
 }
 
 void GraphicsContext::DrawBidiText(
@@ -1270,7 +1180,7 @@ void GraphicsContext::SetURLForRect(const KURL& link,
     return;
   DCHECK(canvas_);
 
-  sk_sp<SkData> url(SkData::MakeWithCString(link.GetString().Utf8().Data()));
+  sk_sp<SkData> url(SkData::MakeWithCString(link.GetString().Utf8().data()));
   canvas_->Annotate(PaintCanvas::AnnotationType::URL, dest_rect,
                     std::move(url));
 }
@@ -1281,7 +1191,7 @@ void GraphicsContext::SetURLFragmentForRect(const String& dest_name,
     return;
   DCHECK(canvas_);
 
-  sk_sp<SkData> sk_dest_name(SkData::MakeWithCString(dest_name.Utf8().Data()));
+  sk_sp<SkData> sk_dest_name(SkData::MakeWithCString(dest_name.Utf8().data()));
   canvas_->Annotate(PaintCanvas::AnnotationType::LINK_TO_DESTINATION, rect,
                     std::move(sk_dest_name));
 }
@@ -1293,7 +1203,7 @@ void GraphicsContext::SetURLDestinationLocation(const String& name,
   DCHECK(canvas_);
 
   SkRect rect = SkRect::MakeXYWH(location.X(), location.Y(), 0, 0);
-  sk_sp<SkData> sk_name(SkData::MakeWithCString(name.Utf8().Data()));
+  sk_sp<SkData> sk_name(SkData::MakeWithCString(name.Utf8().data()));
   canvas_->Annotate(PaintCanvas::AnnotationType::NAMED_DESTINATION, rect,
                     std::move(sk_name));
 }
@@ -1352,11 +1262,11 @@ sk_sp<SkColorFilter> GraphicsContext::WebCoreColorFilterToSkiaColorFilter(
     case kColorFilterLuminanceToAlpha:
       return SkLumaColorFilter::Make();
     case kColorFilterLinearRGBToSRGB:
-      return ColorSpaceUtilities::CreateColorSpaceFilter(kColorSpaceLinearRGB,
-                                                         kColorSpaceDeviceRGB);
+      return InterpolationSpaceUtilities::CreateInterpolationSpaceFilter(
+          kInterpolationSpaceLinear, kInterpolationSpaceSRGB);
     case kColorFilterSRGBToLinearRGB:
-      return ColorSpaceUtilities::CreateColorSpaceFilter(kColorSpaceDeviceRGB,
-                                                         kColorSpaceLinearRGB);
+      return InterpolationSpaceUtilities::CreateInterpolationSpaceFilter(
+          kInterpolationSpaceSRGB, kInterpolationSpaceLinear);
     case kColorFilterNone:
       break;
     default:

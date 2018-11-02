@@ -5,20 +5,20 @@
 import collections
 import re
 
+from webkitpy.common.path_finder import PathFinder
 from webkitpy.common.system.filesystem import FileSystem
-from webkitpy.common.webkit_finder import WebKitFinder
 
 
 class DirectoryOwnersExtractor(object):
 
     def __init__(self, filesystem=None):
         self.filesystem = filesystem or FileSystem
-        self.finder = WebKitFinder(filesystem)
+        self.finder = PathFinder(filesystem)
         self.owner_map = None
 
     def read_owner_map(self):
         """Reads the W3CImportExpectations file and returns a map of directories to owners."""
-        input_path = self.finder.path_from_webkit_base('LayoutTests', 'W3CImportExpectations')
+        input_path = self.finder.path_from_layout_tests('W3CImportExpectations')
         input_contents = self.filesystem.read_text_file(input_path)
         self.owner_map = self.lines_to_owner_map(input_contents.splitlines())
 
@@ -30,6 +30,8 @@ class DirectoryOwnersExtractor(object):
             if owners:
                 current_owners = owners
             directory = self.extract_directory(line)
+            if not owners and not directory:
+                current_owners = []
             if current_owners and directory:
                 owner_map[directory] = current_owners
         return owner_map

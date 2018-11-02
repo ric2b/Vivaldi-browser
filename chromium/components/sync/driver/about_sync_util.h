@@ -9,8 +9,6 @@
 
 #include "components/version_info/version_info.h"
 
-class SigninManagerBase;
-
 namespace base {
 class DictionaryValue;
 }
@@ -38,6 +36,7 @@ extern const char kSyncLogJS[];
 extern const char kSyncNodeBrowserJS[];
 extern const char kSyncSearchJS[];
 extern const char kTypesJS[];
+extern const char kUserEventsJS[];
 
 // Message handlers.
 // Must match the constants used in the resource files.
@@ -48,6 +47,9 @@ extern const char kRegisterForEvents[];
 extern const char kRegisterForPerTypeCounters[];
 extern const char kRequestListOfTypes[];
 extern const char kRequestUpdatedAboutInfo[];
+extern const char kRequestUserEventsVisibility[];
+extern const char kUserEventsVisibilityCallback[];
+extern const char kWriteUserEvent[];
 
 // Other strings.
 // Must match the constants used in the resource files.
@@ -68,7 +70,6 @@ extern const char kUpdate[];
 // Note that |service| may be null.
 std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
     SyncService* service,
-    SigninManagerBase* signin,
     version_info::Channel channel);
 
 }  // namespace sync_ui_util

@@ -32,7 +32,6 @@
 
 #include <algorithm>
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/Microtask.h"
 #include "core/dom/MutationCallback.h"
 #include "core/dom/MutationObserverInit.h"
 #include "core/dom/MutationObserverRegistration.h"
@@ -40,6 +39,7 @@
 #include "core/dom/Node.h"
 #include "core/html/HTMLSlotElement.h"
 #include "core/probe/CoreProbes.h"
+#include "platform/bindings/Microtask.h"
 
 namespace blink {
 
@@ -143,7 +143,7 @@ MutationRecordVector MutationObserver::takeRecords() {
 
 void MutationObserver::disconnect() {
   CancelInspectorAsyncTasks();
-  records_.Clear();
+  records_.clear();
   MutationObserverRegistrationSet registrations(registrations_);
   for (auto& registration : registrations) {
     // The registration may be already unregistered while iteration.
@@ -206,7 +206,7 @@ void MutationObserver::CleanSlotChangeList(Document& document) {
     if (slot->GetDocument() != document)
       kept.push_back(slot);
   }
-  ActiveSlotChangeList().Swap(kept);
+  ActiveSlotChangeList().swap(kept);
 }
 
 static void ActivateObserver(MutationObserver* observer) {
@@ -292,10 +292,10 @@ void MutationObserver::DeliverMutations() {
 
   MutationObserverVector observers;
   CopyToVector(ActiveMutationObservers(), observers);
-  ActiveMutationObservers().Clear();
+  ActiveMutationObservers().clear();
 
   SlotChangeList slots;
-  slots.Swap(ActiveSlotChangeList());
+  slots.swap(ActiveSlotChangeList());
   for (const auto& slot : slots)
     slot->ClearSlotChangeEventEnqueued();
 

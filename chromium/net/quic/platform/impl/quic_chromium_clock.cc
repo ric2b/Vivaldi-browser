@@ -4,10 +4,14 @@
 
 #include "net/quic/platform/impl/quic_chromium_clock.h"
 
+#include "base/memory/singleton.h"
 #include "base/time/time.h"
 
 namespace net {
 
+QuicChromiumClock* QuicChromiumClock::GetInstance() {
+  return base::Singleton<QuicChromiumClock>::get();
+}
 QuicChromiumClock::QuicChromiumClock() {}
 
 QuicChromiumClock::~QuicChromiumClock() {}
@@ -19,12 +23,17 @@ QuicTime QuicChromiumClock::ApproximateNow() const {
 }
 
 QuicTime QuicChromiumClock::Now() const {
-  return QuicTime(base::TimeTicks::Now());
+  int64_t ticks = (base::TimeTicks::Now() - base::TimeTicks()).InMicroseconds();
+  DCHECK_GE(ticks, 0);
+  return CreateTimeFromMicroseconds(ticks);
 }
 
 QuicWallTime QuicChromiumClock::WallNow() const {
-  return QuicWallTime::FromUNIXMicroseconds(base::Time::Now().ToJavaTime() *
-                                            1000);
+  const base::TimeDelta time_since_unix_epoch =
+      base::Time::Now() - base::Time::UnixEpoch();
+  int64_t time_since_unix_epoch_micro = time_since_unix_epoch.InMicroseconds();
+  DCHECK_GE(time_since_unix_epoch_micro, 0);
+  return QuicWallTime::FromUNIXMicroseconds(time_since_unix_epoch_micro);
 }
 
 }  // namespace net

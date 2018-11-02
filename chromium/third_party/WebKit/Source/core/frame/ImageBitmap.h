@@ -6,12 +6,12 @@
 #define ImageBitmap_h
 
 #include <memory>
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
-#include "core/html/HTMLImageElement.h"
 #include "core/html/canvas/CanvasImageSource.h"
+#include "core/html/canvas/ImageElementBase.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/imagebitmap/ImageBitmapSource.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageBuffer.h"
@@ -21,6 +21,7 @@
 #include "third_party/skia/include/core/SkRefCnt.h"
 
 namespace blink {
+class Document;
 class HTMLCanvasElement;
 class HTMLVideoElement;
 class ImageData;
@@ -48,7 +49,7 @@ class CORE_EXPORT ImageBitmap final
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static ImageBitmap* Create(HTMLImageElement*,
+  static ImageBitmap* Create(ImageElementBase*,
                              Optional<IntRect>,
                              Document*,
                              const ImageBitmapOptions& = ImageBitmapOptions());
@@ -116,7 +117,7 @@ class CORE_EXPORT ImageBitmap final
   PassRefPtr<Image> GetSourceImageForCanvas(SourceImageStatus*,
                                             AccelerationHint,
                                             SnapshotReason,
-                                            const FloatSize&) const override;
+                                            const FloatSize&) override;
   bool WouldTaintOrigin(SecurityOrigin*) const override {
     return !image_->OriginClean();
   }
@@ -138,7 +139,7 @@ class CORE_EXPORT ImageBitmap final
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  ImageBitmap(HTMLImageElement*,
+  ImageBitmap(ImageElementBase*,
               Optional<IntRect>,
               Document*,
               const ImageBitmapOptions&);

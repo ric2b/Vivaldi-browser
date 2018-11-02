@@ -37,8 +37,7 @@ Checkbox::Checkbox(const base::string16& label)
 
   if (UseMd()) {
     set_request_focus_on_press(false);
-    SetInkDropMode(PlatformStyle::kUseRipples ? InkDropMode::ON
-                                              : InkDropMode::OFF);
+    SetInkDropMode(InkDropMode::ON);
     set_has_ink_drop_action_on_click(true);
   } else {
     std::unique_ptr<LabelButtonBorder> button_border(new LabelButtonBorder());
@@ -87,7 +86,7 @@ Checkbox::Checkbox(const base::string16& label)
   }
 
   // Limit the checkbox height to match the legacy appearance.
-  const gfx::Size preferred_size(LabelButton::GetPreferredSize());
+  const gfx::Size preferred_size(LabelButton::CalculatePreferredSize());
   SetMinSize(gfx::Size(0, preferred_size.height() + 4));
 }
 
@@ -111,15 +110,16 @@ const char* Checkbox::GetClassName() const {
 void Checkbox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   LabelButton::GetAccessibleNodeData(node_data);
   node_data->role = ui::AX_ROLE_CHECK_BOX;
-  if (checked())
-    node_data->AddStateFlag(ui::AX_STATE_CHECKED);
+  const ui::AXCheckedState checked_state =
+      checked() ? ui::AX_CHECKED_STATE_TRUE : ui::AX_CHECKED_STATE_FALSE;
+  node_data->AddIntAttribute(ui::AX_ATTR_CHECKED_STATE, checked_state);
   if (enabled()) {
     if (checked()) {
-      node_data->AddIntAttribute(ui::AX_ATTR_ACTION,
-                                 ui::AX_SUPPORTED_ACTION_UNCHECK);
+      node_data->AddIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB,
+                                 ui::AX_DEFAULT_ACTION_VERB_UNCHECK);
     } else {
-      node_data->AddIntAttribute(ui::AX_ATTR_ACTION,
-                                 ui::AX_SUPPORTED_ACTION_CHECK);
+      node_data->AddIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB,
+                                 ui::AX_DEFAULT_ACTION_VERB_CHECK);
     }
   }
 }

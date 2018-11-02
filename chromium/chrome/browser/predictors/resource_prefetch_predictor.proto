@@ -57,6 +57,7 @@ message ResourceData {
   optional Priority priority = 7;
   optional bool has_validators = 8;
   optional bool always_revalidate = 9;
+  optional bool before_first_contentful_paint = 10;
 }
 
 // Represents a collection of subresources associated with URL or host.
@@ -67,17 +68,17 @@ message PrefetchData {
   repeated ResourceData resources = 3;
 }
 
+// Represents a single redirect chain endpoint.
+message RedirectStat {
+  // Represents the host for RedirectData in a host-based table.
+  optional string url = 1;
+  optional uint32 number_of_hits = 2;
+  optional uint32 number_of_misses = 3;
+  optional uint32 consecutive_misses = 4;
+}
+
 // Represents a mapping from URL or host to a list of redirect endpoints.
 message RedirectData {
-  // Represents a single redirect chain endpoint.
-  message RedirectStat {
-    // Represents the host for RedirectData in a host-based table.
-    optional string url = 1;
-    optional uint32 number_of_hits = 2;
-    optional uint32 number_of_misses = 3;
-    optional uint32 consecutive_misses = 4;
-  }
-
   // Main frame URL or host.
   optional string primary_key = 1;
   optional uint64 last_visit_time = 2;

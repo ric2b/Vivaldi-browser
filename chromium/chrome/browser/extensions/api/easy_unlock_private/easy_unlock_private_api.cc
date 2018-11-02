@@ -14,6 +14,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
@@ -36,8 +37,7 @@
 #include "components/cryptauth/proto/cryptauth_api.pb.h"
 #include "components/cryptauth/remote_device.h"
 #include "components/cryptauth/secure_message_delegate.h"
-#include "components/proximity_auth/ble/bluetooth_low_energy_connection.h"
-#include "components/proximity_auth/ble/bluetooth_low_energy_connection_finder.h"
+#include "components/proximity_auth/bluetooth_low_energy_setup_connection_finder.h"
 #include "components/proximity_auth/bluetooth_util.h"
 #include "components/proximity_auth/logging/logging.h"
 #include "components/proximity_auth/proximity_auth_client.h"
@@ -45,7 +45,6 @@
 #include "components/proximity_auth/screenlock_state.h"
 #include "components/proximity_auth/switches.h"
 #include "components/signin/core/account_id/account_id.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -101,11 +100,11 @@ ScreenlockState ToScreenlockState(easy_unlock_private::State state) {
     case easy_unlock_private::STATE_PHONE_UNSUPPORTED:
       return ScreenlockState::PHONE_UNSUPPORTED;
     case easy_unlock_private::STATE_RSSI_TOO_LOW:
-      return ScreenlockState::RSSI_TOO_LOW;
     case easy_unlock_private::STATE_TX_POWER_TOO_HIGH:
-      return ScreenlockState::TX_POWER_TOO_HIGH;
+      // Note: TX Power is deprecated, so we merge it with the RSSI state.
+      return ScreenlockState::RSSI_TOO_LOW;
     case easy_unlock_private::STATE_PHONE_LOCKED_AND_TX_POWER_TOO_HIGH:
-      return ScreenlockState::PHONE_LOCKED_AND_TX_POWER_TOO_HIGH;
+      return ScreenlockState::PHONE_LOCKED_AND_RSSI_TOO_LOW;
     case easy_unlock_private::STATE_AUTHENTICATED:
       return ScreenlockState::AUTHENTICATED;
     default:
@@ -491,9 +490,9 @@ bool EasyUnlockPrivateSeekBluetoothDeviceByAddressFunction::RunAsync() {
       base::Bind(
           &EasyUnlockPrivateSeekBluetoothDeviceByAddressFunction::OnSeekFailure,
           this),
-      content::BrowserThread::GetBlockingPool()
-          ->GetTaskRunnerWithShutdownBehavior(
-              base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN)
+      base::CreateTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
           .get());
   return true;
 }
@@ -1084,10 +1083,9 @@ bool EasyUnlockPrivateFindSetupConnectionFunction::RunAsync() {
   // Creates a BLE connection finder to look for any device advertising
   // |params->setup_service_uuid|.
   connection_finder_.reset(
-      new proximity_auth::BluetoothLowEnergyConnectionFinder(
-          cryptauth::RemoteDevice(), params->setup_service_uuid,
-          proximity_auth::BluetoothLowEnergyConnectionFinder::FIND_ANY_DEVICE,
-          nullptr, cryptauth::BluetoothThrottlerImpl::GetInstance(), 3));
+      new proximity_auth::BluetoothLowEnergySetupConnectionFinder(
+          params->setup_service_uuid,
+          cryptauth::BluetoothThrottlerImpl::GetInstance()));
 
   connection_finder_->Find(base::Bind(
       &EasyUnlockPrivateFindSetupConnectionFunction::OnConnectionFound, this));

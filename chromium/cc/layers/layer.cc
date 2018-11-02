@@ -93,6 +93,7 @@ Layer::Layer()
       may_contain_video_(false),
       is_scroll_clip_layer_(false),
       needs_show_scrollbars_(false),
+      subtree_has_copy_request_(false),
       safe_opaque_background_color_(0),
       num_unclipped_descendants_(0) {}
 
@@ -123,7 +124,8 @@ void Layer::SetLayerTreeHost(LayerTreeHost* host) {
     layer_tree_host_->property_trees()->RemoveIdFromIdToIndexMaps(id());
     layer_tree_host_->property_trees()->needs_rebuild = true;
     layer_tree_host_->UnregisterLayer(this);
-    if (inputs_.element_id) {
+    if (!layer_tree_host_->GetSettings().use_layer_lists &&
+        inputs_.element_id) {
       layer_tree_host_->UnregisterElement(inputs_.element_id,
                                           ElementListType::ACTIVE, this);
     }
@@ -131,7 +133,7 @@ void Layer::SetLayerTreeHost(LayerTreeHost* host) {
   if (host) {
     host->property_trees()->needs_rebuild = true;
     host->RegisterLayer(this);
-    if (inputs_.element_id) {
+    if (!host->GetSettings().use_layer_lists && inputs_.element_id) {
       host->RegisterElement(inputs_.element_id, ElementListType::ACTIVE, this);
     }
   }
@@ -149,12 +151,10 @@ void Layer::SetLayerTreeHost(LayerTreeHost* host) {
   if (inputs_.mask_layer.get())
     inputs_.mask_layer->SetLayerTreeHost(host);
 
-  const bool has_any_animation =
-      layer_tree_host_ ? GetMutatorHost()->HasAnyAnimation(element_id())
-                       : false;
-
-  if (host && has_any_animation)
+  if (host && !host->GetSettings().use_layer_lists &&
+      GetMutatorHost()->HasAnyAnimation(element_id())) {
     host->SetNeedsCommit();
+  }
 }
 
 void Layer::SetNeedsCommit() {
@@ -362,6 +362,20 @@ void Layer::RequestCopyOfOutput(std::unique_ptr<CopyOutputRequest> request) {
   SetSubtreePropertyChanged();
   SetPropertyTreesNeedRebuild();
   SetNeedsCommit();
+  if (layer_tree_host_)
+    layer_tree_host_->SetHasCopyRequest(true);
+}
+
+void Layer::SetSubtreeHasCopyRequest(bool subtree_has_copy_request) {
+  subtree_has_copy_request_ = subtree_has_copy_request;
+}
+
+bool Layer::SubtreeHasCopyRequest() const {
+  DCHECK(layer_tree_host_);
+  // When the copy request is pushed to effect tree, we reset layer tree host's
+  // has_copy_request but do not clear subtree_has_copy_request on individual
+  // layers.
+  return layer_tree_host_->has_copy_request() && subtree_has_copy_request_;
 }
 
 void Layer::SetBackgroundColor(SkColor background_color) {
@@ -494,10 +508,6 @@ float Layer::EffectiveOpacity() const {
 }
 
 bool Layer::OpacityCanAnimateOnImplThread() const {
-  return false;
-}
-
-bool Layer::AlwaysUseActiveTreeOpacity() const {
   return false;
 }
 
@@ -684,11 +694,6 @@ bool Layer::ScrollOffsetAnimationWasInterrupted() const {
   return GetMutatorHost()->ScrollOffsetAnimationWasInterrupted(element_id());
 }
 
-bool Layer::HasOnlyTranslationTransforms() const {
-  return GetMutatorHost()->HasOnlyTranslationTransforms(
-      element_id(), GetElementTypeForAnimation());
-}
-
 void Layer::SetScrollParent(Layer* parent) {
   DCHECK(IsPropertyChangeAllowed());
   if (inputs_.scroll_parent == parent)
@@ -761,17 +766,7 @@ void Layer::SetScrollOffset(const gfx::ScrollOffset& scroll_offset) {
   if (!layer_tree_host_)
     return;
 
-  PropertyTrees* property_trees = layer_tree_host_->property_trees();
-  if (scroll_tree_index() != ScrollTree::kInvalidNodeId && scrollable())
-    property_trees->scroll_tree.SetScrollOffset(id(), scroll_offset);
-
-  if (TransformNode* transform_node =
-          property_trees->transform_tree.UpdateNodeFromOwningLayerId(id())) {
-    DCHECK_EQ(transform_tree_index(), transform_node->id);
-    transform_node->scroll_offset = CurrentScrollOffset();
-    transform_node->needs_local_transform_update = true;
-    property_trees->transform_tree.set_needs_update(true);
-  }
+  UpdateScrollOffset(scroll_offset);
 
   SetNeedsCommit();
 }
@@ -787,23 +782,35 @@ void Layer::SetScrollOffsetFromImplSide(
   inputs_.scroll_offset = scroll_offset;
   SetNeedsPushProperties();
 
-  PropertyTrees* property_trees = layer_tree_host_->property_trees();
-  if (scroll_tree_index() != ScrollTree::kInvalidNodeId && scrollable())
-    property_trees->scroll_tree.SetScrollOffset(id(), scroll_offset);
-
-  if (TransformNode* transform_node =
-          property_trees->transform_tree.UpdateNodeFromOwningLayerId(id())) {
-    DCHECK_EQ(transform_tree_index(), transform_node->id);
-    transform_node->scroll_offset = CurrentScrollOffset();
-    transform_node->needs_local_transform_update = true;
-    property_trees->transform_tree.set_needs_update(true);
-  }
+  UpdateScrollOffset(scroll_offset);
 
   if (!inputs_.did_scroll_callback.is_null())
     inputs_.did_scroll_callback.Run(scroll_offset);
 
   // The callback could potentially change the layer structure:
   // "this" may have been destroyed during the process.
+}
+
+void Layer::UpdateScrollOffset(const gfx::ScrollOffset& scroll_offset) {
+  DCHECK(scrollable());
+  if (scroll_tree_index() == ScrollTree::kInvalidNodeId) {
+    // Ensure the property trees just have not been built yet but are marked for
+    // being built which will set the correct scroll offset values.
+    DCHECK(layer_tree_host_->property_trees()->needs_rebuild);
+    return;
+  }
+
+  // If a scroll node exists, it should have an associated transform node.
+  DCHECK(transform_tree_index() != TransformTree::kInvalidNodeId);
+
+  auto& property_trees = *layer_tree_host_->property_trees();
+  property_trees.scroll_tree.SetScrollOffset(id(), scroll_offset);
+  auto* transform_node =
+      property_trees.transform_tree.Node(transform_tree_index());
+  DCHECK_EQ(transform_tree_index(), transform_node->id);
+  transform_node->scroll_offset = CurrentScrollOffset();
+  transform_node->needs_local_transform_update = true;
+  property_trees.transform_tree.set_needs_update(true);
 }
 
 void Layer::SetScrollClipLayerId(int clip_layer_id) {
@@ -1124,15 +1131,12 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   TRACE_EVENT0("cc", "Layer::PushPropertiesTo");
   DCHECK(layer_tree_host_);
 
-  // If we did not SavePaintProperties() for the layer this frame, then push the
-  // real property values, not the paint property values.
-  bool use_paint_properties = paint_properties_.source_frame_number ==
-                              layer_tree_host_->SourceFrameNumber();
-
+  // The ElementId should be set first because other setters depend on it such
+  // as LayerImpl::SetScrollClipLayer.
+  layer->SetElementId(inputs_.element_id);
   layer->SetBackgroundColor(inputs_.background_color);
   layer->SetSafeOpaqueBackgroundColor(safe_opaque_background_color_);
-  layer->SetBounds(use_paint_properties ? paint_properties_.bounds
-                                        : inputs_.bounds);
+  layer->SetBounds(inputs_.bounds);
 
 #if defined(NDEBUG)
   if (frame_viewer_instrumentation::IsTracingLayerTreeSnapshots())
@@ -1169,8 +1173,11 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   layer->SetScrollClipLayer(inputs_.scroll_clip_layer_id);
   layer->set_user_scrollable_horizontal(inputs_.user_scrollable_horizontal);
   layer->set_user_scrollable_vertical(inputs_.user_scrollable_vertical);
-  layer->SetElementId(inputs_.element_id);
   layer->SetMutableProperties(inputs_.mutable_properties);
+
+  // The property trees must be safe to access because they will be used below
+  // to call |SetScrollOffsetClobberActiveValue|.
+  DCHECK(layer->layer_tree_impl()->lifecycle().AllowsPropertyTreeAccess());
 
   // When a scroll offset animation is interrupted the new scroll position on
   // the pending tree will clobber any impl-side scrolling occuring on the
@@ -1254,20 +1261,8 @@ int Layer::NumDescendantsThatDrawContent() const {
   return num_descendants_that_draw_content_;
 }
 
-void Layer::SavePaintProperties() {
-  DCHECK(layer_tree_host_);
-
-  // TODO(reveman): Save all layer properties that we depend on not
-  // changing until PushProperties() has been called. crbug.com/231016
-  paint_properties_.bounds = inputs_.bounds;
-  paint_properties_.source_frame_number = layer_tree_host_->SourceFrameNumber();
-}
-
 bool Layer::Update() {
   DCHECK(layer_tree_host_);
-  DCHECK_EQ(layer_tree_host_->SourceFrameNumber(),
-            paint_properties_.source_frame_number)
-      << "SavePaintProperties must be called for any layer that is painted.";
   return false;
 }
 
@@ -1305,16 +1300,6 @@ void Layer::SetMayContainVideo(bool yes) {
 void Layer::SetScrollbarsHiddenFromImplSide(bool hidden) {
   if (inputs_.client)
     inputs_.client->didChangeScrollbarsHidden(hidden);
-}
-
-bool Layer::FilterIsAnimating() const {
-  return GetMutatorHost()->IsAnimatingFilterProperty(
-      element_id(), GetElementTypeForAnimation());
-}
-
-bool Layer::TransformIsAnimating() const {
-  return GetMutatorHost()->IsAnimatingTransformProperty(
-      element_id(), GetElementTypeForAnimation());
 }
 
 gfx::ScrollOffset Layer::ScrollOffsetForAnimation() const {
@@ -1436,10 +1421,10 @@ void Layer::SetMutableProperties(uint32_t properties) {
   SetNeedsCommit();
 }
 
-int Layer::num_copy_requests_in_target_subtree() {
+bool Layer::has_copy_requests_in_target_subtree() {
   return layer_tree_host_->property_trees()
       ->effect_tree.Node(effect_tree_index())
-      ->num_copy_requests_in_subtree;
+      ->subtree_has_copy_request;
 }
 
 gfx::Transform Layer::ScreenSpaceTransform() const {

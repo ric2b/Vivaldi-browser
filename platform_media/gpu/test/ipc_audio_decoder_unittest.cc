@@ -46,8 +46,9 @@ class IPCAudioDecoderTest : public testing::Test {
 
   bool Initialize(const std::string& filename) {
     if (!media::IPCAudioDecoder::IsAvailable()) {
-      LOG(INFO)
-          << "IPCAudioDecoder not available on this platform, skipping test";
+      LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                << " IPCAudioDecoder not available on this platform"
+                << " skipping test";
       return false;
     }
 

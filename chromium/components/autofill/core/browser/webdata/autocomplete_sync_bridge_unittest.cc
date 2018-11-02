@@ -50,6 +50,7 @@ using syncer::ModelError;
 using syncer::ModelType;
 using syncer::ModelTypeChangeProcessor;
 using syncer::ModelTypeSyncBridge;
+using syncer::RecordingModelTypeChangeProcessor;
 
 namespace autofill {
 
@@ -140,11 +141,10 @@ class AutocompleteSyncBridgeTest : public testing::Test {
   }
   ~AutocompleteSyncBridgeTest() override {}
 
-  void ResetBridge() {
+  void ResetBridge(bool expect_error = false) {
     bridge_.reset(new AutocompleteSyncBridge(
-        &backend_,
-        base::Bind(&AutocompleteSyncBridgeTest::CreateModelTypeChangeProcessor,
-                   base::Unretained(this))));
+        &backend_, RecordingModelTypeChangeProcessor::FactoryForBridgeTest(
+                       &processor_, expect_error)));
   }
 
   void SaveSpecificsToTable(
@@ -246,12 +246,12 @@ class AutocompleteSyncBridgeTest : public testing::Test {
                                   int position = 0) {
     const std::string storage_key = GetStorageKey(specifics);
     auto recorded_specifics_iterator =
-        processor()->put_multimap().find(storage_key);
+        processor().put_multimap().find(storage_key);
 
-    EXPECT_NE(processor()->put_multimap().end(), recorded_specifics_iterator);
+    EXPECT_NE(processor().put_multimap().end(), recorded_specifics_iterator);
     while (position > 0) {
       recorded_specifics_iterator++;
-      EXPECT_NE(processor()->put_multimap().end(), recorded_specifics_iterator);
+      EXPECT_NE(processor().put_multimap().end(), recorded_specifics_iterator);
       position--;
     }
 
@@ -262,20 +262,13 @@ class AutocompleteSyncBridgeTest : public testing::Test {
 
   AutocompleteSyncBridge* bridge() { return bridge_.get(); }
 
-  syncer::RecordingModelTypeChangeProcessor* processor() { return processor_; }
+  const RecordingModelTypeChangeProcessor& processor() { return *processor_; }
 
   AutofillTable* table() { return &table_; }
 
- private:
-  std::unique_ptr<syncer::ModelTypeChangeProcessor>
-  CreateModelTypeChangeProcessor(syncer::ModelType type,
-                                 syncer::ModelTypeSyncBridge* bridge) {
-    auto processor =
-        base::MakeUnique<syncer::RecordingModelTypeChangeProcessor>();
-    processor_ = processor.get();
-    return std::move(processor);
-  }
+  FakeAutofillBackend* backend() { return &backend_; }
 
+ private:
   ScopedTempDir temp_dir_;
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   FakeAutofillBackend backend_;
@@ -284,7 +277,7 @@ class AutocompleteSyncBridgeTest : public testing::Test {
   std::unique_ptr<AutocompleteSyncBridge> bridge_;
   // A non-owning pointer to the processor given to the bridge. Will be null
   // before being given to the bridge, to make ownership easier.
-  syncer::RecordingModelTypeChangeProcessor* processor_ = nullptr;
+  RecordingModelTypeChangeProcessor* processor_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(AutocompleteSyncBridgeTest);
 };
@@ -541,7 +534,7 @@ TEST_F(AutocompleteSyncBridgeTest, LocalEntriesAdded) {
       {AutofillChange(AutofillChange::ADD, added_entry1.key()),
        AutofillChange(AutofillChange::ADD, added_entry2.key())});
 
-  EXPECT_EQ(2u, processor()->put_multimap().size());
+  EXPECT_EQ(2u, processor().put_multimap().size());
 
   VerifyProcessorRecordedPut(added_specifics1);
   VerifyProcessorRecordedPut(added_specifics2);
@@ -555,7 +548,7 @@ TEST_F(AutocompleteSyncBridgeTest, LocalEntryAddedThenUpdated) {
   bridge()->AutofillEntriesChanged(
       {AutofillChange(AutofillChange::ADD, added_entry.key())});
 
-  EXPECT_EQ(1u, processor()->put_multimap().size());
+  EXPECT_EQ(1u, processor().put_multimap().size());
 
   VerifyProcessorRecordedPut(added_specifics);
 
@@ -577,16 +570,15 @@ TEST_F(AutocompleteSyncBridgeTest, LocalEntryDeleted) {
   bridge()->AutofillEntriesChanged(
       {AutofillChange(AutofillChange::REMOVE, deleted_entry.key())});
 
-  EXPECT_EQ(1u, processor()->delete_set().size());
-  EXPECT_NE(processor()->delete_set().end(),
-            processor()->delete_set().find(storage_key));
+  EXPECT_EQ(1u, processor().delete_set().size());
+  EXPECT_NE(processor().delete_set().end(),
+            processor().delete_set().find(storage_key));
 }
 
 TEST_F(AutocompleteSyncBridgeTest, LoadMetadataCalled) {
-  EXPECT_NE(nullptr, processor()->metadata());
-  EXPECT_FALSE(
-      processor()->metadata()->GetModelTypeState().initial_sync_done());
-  EXPECT_EQ(0u, processor()->metadata()->TakeAllMetadata().size());
+  EXPECT_NE(nullptr, processor().metadata());
+  EXPECT_FALSE(processor().metadata()->GetModelTypeState().initial_sync_done());
+  EXPECT_EQ(0u, processor().metadata()->TakeAllMetadata().size());
 
   ModelTypeState model_type_state;
   model_type_state.set_initial_sync_done(true);
@@ -597,17 +589,23 @@ TEST_F(AutocompleteSyncBridgeTest, LoadMetadataCalled) {
 
   ResetBridge();
 
-  EXPECT_NE(nullptr, processor()->metadata());
-  EXPECT_TRUE(processor()->metadata()->GetModelTypeState().initial_sync_done());
-  EXPECT_EQ(1u, processor()->metadata()->TakeAllMetadata().size());
+  EXPECT_NE(nullptr, processor().metadata());
+  EXPECT_TRUE(processor().metadata()->GetModelTypeState().initial_sync_done());
+  EXPECT_EQ(1u, processor().metadata()->TakeAllMetadata().size());
+}
+
+TEST_F(AutocompleteSyncBridgeTest, LoadMetadataReportsErrorForMissingDB) {
+  backend()->SetWebDatabase(nullptr);
+  // The processor's destructor will verify that an error has occured.
+  ResetBridge(/*expect_error=*/true);
 }
 
 TEST_F(AutocompleteSyncBridgeTest, MergeSyncDataEmpty) {
   VerifyMerge(std::vector<AutofillSpecifics>());
 
   VerifyAllData(std::vector<AutofillSpecifics>());
-  EXPECT_EQ(0u, processor()->delete_set().size());
-  EXPECT_EQ(0u, processor()->put_multimap().size());
+  EXPECT_EQ(0u, processor().delete_set().size());
+  EXPECT_EQ(0u, processor().put_multimap().size());
 }
 
 TEST_F(AutocompleteSyncBridgeTest, MergeSyncDataRemoteOnly) {
@@ -617,8 +615,8 @@ TEST_F(AutocompleteSyncBridgeTest, MergeSyncDataRemoteOnly) {
   VerifyMerge({specifics1, specifics2});
 
   VerifyAllData({specifics1, specifics2});
-  EXPECT_EQ(0u, processor()->delete_set().size());
-  EXPECT_EQ(0u, processor()->put_multimap().size());
+  EXPECT_EQ(0u, processor().delete_set().size());
+  EXPECT_EQ(0u, processor().put_multimap().size());
 }
 
 TEST_F(AutocompleteSyncBridgeTest, MergeSyncDataLocalOnly) {
@@ -630,10 +628,10 @@ TEST_F(AutocompleteSyncBridgeTest, MergeSyncDataLocalOnly) {
   VerifyMerge(std::vector<AutofillSpecifics>());
 
   VerifyAllData({specifics1, specifics2});
-  EXPECT_EQ(2u, processor()->put_multimap().size());
+  EXPECT_EQ(2u, processor().put_multimap().size());
   VerifyProcessorRecordedPut(specifics1);
   VerifyProcessorRecordedPut(specifics2);
-  EXPECT_EQ(0u, processor()->delete_set().size());
+  EXPECT_EQ(0u, processor().delete_set().size());
 }
 
 TEST_F(AutocompleteSyncBridgeTest, MergeSyncDataAllMerged) {
@@ -660,12 +658,12 @@ TEST_F(AutocompleteSyncBridgeTest, MergeSyncDataAllMerged) {
   VerifyMerge({remote1, remote2, remote3, remote4, remote5, remote6});
 
   VerifyAllData({merged1, merged2, merged3, merged4, merged5, merged6});
-  EXPECT_EQ(4u, processor()->put_multimap().size());
+  EXPECT_EQ(4u, processor().put_multimap().size());
   VerifyProcessorRecordedPut(merged3);
   VerifyProcessorRecordedPut(merged4);
   VerifyProcessorRecordedPut(merged5);
   VerifyProcessorRecordedPut(merged6);
-  EXPECT_EQ(0u, processor()->delete_set().size());
+  EXPECT_EQ(0u, processor().delete_set().size());
 }
 
 TEST_F(AutocompleteSyncBridgeTest, MergeSyncDataMixed) {
@@ -681,10 +679,10 @@ TEST_F(AutocompleteSyncBridgeTest, MergeSyncDataMixed) {
   VerifyMerge({remote2, specifics3, remote4});
 
   VerifyAllData({local1, remote2, specifics3, merged4});
-  EXPECT_EQ(2u, processor()->put_multimap().size());
+  EXPECT_EQ(2u, processor().put_multimap().size());
   VerifyProcessorRecordedPut(local1);
   VerifyProcessorRecordedPut(merged4);
-  EXPECT_EQ(0u, processor()->delete_set().size());
+  EXPECT_EQ(0u, processor().delete_set().size());
 }
 
 }  // namespace autofill

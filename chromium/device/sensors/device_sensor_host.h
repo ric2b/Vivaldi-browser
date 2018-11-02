@@ -8,7 +8,6 @@
 #include "base/macros.h"
 #include "base/memory/shared_memory.h"
 #include "device/sensors/device_sensors_consts.h"
-#include "device/sensors/public/interfaces/light.mojom.h"
 #include "device/sensors/public/interfaces/motion.mojom.h"
 #include "device/sensors/public/interfaces/orientation.mojom.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
@@ -28,7 +27,7 @@ class DeviceSensorHost : NON_EXPORTED_BASE(public MojoInterface) {
   DeviceSensorHost();
 
   void StartPolling(
-      const typename MojoInterface::StartPollingCallback& callback) override;
+      typename MojoInterface::StartPollingCallback callback) override;
   void StopPolling() override;
 
   bool is_started_;
@@ -38,8 +37,6 @@ class DeviceSensorHost : NON_EXPORTED_BASE(public MojoInterface) {
   DISALLOW_COPY_AND_ASSIGN(DeviceSensorHost);
 };
 
-using DeviceLightHost =
-    DeviceSensorHost<device::mojom::LightSensor, CONSUMER_TYPE_LIGHT>;
 using DeviceMotionHost =
     DeviceSensorHost<device::mojom::MotionSensor, CONSUMER_TYPE_MOTION>;
 using DeviceOrientationHost = DeviceSensorHost<device::mojom::OrientationSensor,

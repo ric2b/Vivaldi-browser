@@ -25,7 +25,6 @@ class CC_EXPORT RendererSettings {
   bool partial_swap_enabled = false;
   bool finish_rendering_on_resize = false;
   bool should_clear_root_render_pass = true;
-  bool disable_display_vsync = false;
   bool release_overlay_resources_after_gpu_query = false;
   bool gl_composited_texture_quad_border = false;
   bool show_overdraw_feedback = false;
@@ -37,6 +36,11 @@ class CC_EXPORT RendererSettings {
   bool use_gpu_memory_buffer_resources = false;
   ResourceFormat preferred_tile_format;
   BufferToTextureTargetMap buffer_to_texture_target_map;
+
+  // Determines whether we disallow non-exact matches when finding resources
+  // in ResourcePool. Only used for layout or pixel tests, as non-deterministic
+  // resource sizes can lead to floating point error and noise in these tests.
+  bool disallow_non_exact_resource_reuse = false;
 };
 
 }  // namespace cc

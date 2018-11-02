@@ -105,6 +105,8 @@ class SearchBoxImageButton : public views::ImageButton {
       canvas->FillRect(gfx::Rect(size()), kSelectedColor);
   }
 
+  const char* GetClassName() const override { return "SearchBoxImageButton"; }
+
   bool selected_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchBoxImageButton);
@@ -122,6 +124,7 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
       contents_view_(NULL),
       focused_view_(FOCUS_SEARCH_BOX) {
   SetLayoutManager(new views::FillLayout);
+  SetPreferredSize(gfx::Size(kPreferredWidth, kPreferredHeight));
   AddChildView(content_container_);
 
   SetShadow(GetShadowForZHeight(2));
@@ -284,10 +287,6 @@ void SearchBoxView::SetBackButtonLabel(bool folder) {
   back_button_->SetTooltipText(back_button_label);
 }
 
-gfx::Size SearchBoxView::GetPreferredSize() const {
-  return gfx::Size(kPreferredWidth, kPreferredHeight);
-}
-
 bool SearchBoxView::OnMouseWheel(const ui::MouseWheelEvent& event) {
   if (contents_view_)
     return contents_view_->OnMouseWheel(event);
@@ -301,10 +300,14 @@ void SearchBoxView::OnEnabledChanged() {
     speech_button_->SetEnabled(enabled());
 }
 
+const char* SearchBoxView::GetClassName() const {
+  return "SearchBoxView";
+}
+
 void SearchBoxView::UpdateModel() {
   // Temporarily remove from observer to ignore notifications caused by us.
   model_->search_box()->RemoveObserver(this);
-  model_->search_box()->SetText(search_box_->text());
+  model_->search_box()->Update(search_box_->text(), false);
   model_->search_box()->SetSelectionModel(search_box_->GetSelectionModel());
   model_->search_box()->AddObserver(this);
 }
@@ -422,7 +425,7 @@ void SearchBoxView::SelectionModelChanged() {
   search_box_->SelectSelectionModel(model_->search_box()->selection_model());
 }
 
-void SearchBoxView::TextChanged() {
+void SearchBoxView::Update() {
   search_box_->SetText(model_->search_box()->text());
   NotifyQueryChanged();
 }

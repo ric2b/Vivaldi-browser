@@ -5,7 +5,6 @@
 #include "core/mojo/MojoHandle.h"
 
 #include "bindings/core/v8/ArrayBufferOrArrayBufferView.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/ExecutionContext.h"
@@ -20,6 +19,7 @@
 #include "core/mojo/MojoWatcher.h"
 #include "core/mojo/MojoWriteDataOptions.h"
 #include "core/mojo/MojoWriteDataResult.h"
+#include "platform/bindings/ScriptState.h"
 
 // Mojo messages typically do not contain many handles. In fact most
 // messages do not contain any handle. An inline capacity of 4 should avoid
@@ -68,7 +68,7 @@ MojoResult MojoHandle::writeMessage(
   }
 
   return MojoWriteMessage(handle_->value(), bytes, num_bytes,
-                          raw_handles.Data(), raw_handles.size(),
+                          raw_handles.data(), raw_handles.size(),
                           MOJO_WRITE_MESSAGE_FLAG_NONE);
 }
 
@@ -91,7 +91,7 @@ void MojoHandle::readMessage(const MojoReadMessageFlags& flags_dict,
   CHECK(buffer);
   Vector<::MojoHandle, kHandleVectorInlineCapacity> raw_handles(num_handles);
   result = MojoReadMessage(handle_->value(), buffer->Data(), &num_bytes,
-                           raw_handles.Data(), &num_handles, flags);
+                           raw_handles.data(), &num_handles, flags);
 
   HeapVector<Member<MojoHandle>> handles(num_handles);
   for (size_t i = 0; i < num_handles; ++i) {

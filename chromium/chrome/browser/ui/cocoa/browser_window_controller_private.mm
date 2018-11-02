@@ -669,6 +669,8 @@ willPositionSheet:(NSWindow*)sheet
   [[tabStripController_ activeTabContentsController]
       updateFullscreenWidgetFrame];
 
+  [self invalidateTouchBar];
+
   [self showFullscreenExitBubbleIfNecessary];
   browser_->WindowFullscreenStateChanged();
 
@@ -726,6 +728,8 @@ willPositionSheet:(NSWindow*)sheet
   [self.chromeContentView setAutoresizesSubviews:YES];
 
   [self resetCustomAppKitFullscreenVariables];
+
+  [self invalidateTouchBar];
 
   // Ensures that the permission bubble shows up properly at the front.
   PermissionRequestManager* manager = [self permissionRequestManager];
@@ -809,11 +813,11 @@ willPositionSheet:(NSWindow*)sheet
       setShouldSuppressTopInfoBarTip:![self hasToolbar]];
 }
 
-- (NSInteger)pageInfoBubblePointY {
+- (NSInteger)infoBarAnchorPointY {
   LocationBarViewMac* locationBarView = [self locationBarBridge];
 
   // The point, in window coordinates.
-  NSPoint iconBottom = locationBarView->GetPageInfoBubblePoint();
+  NSPoint iconBottom = locationBarView->GetInfoBarAnchorPoint();
 
   // The toolbar, in window coordinates.
   NSView* toolbar = [toolbarController_ view];
@@ -895,7 +899,7 @@ willPositionSheet:(NSWindow*)sheet
       NSHeight([[bookmarkBarController_ view] bounds])];
 
   [layout setInfoBarHeight:[infoBarContainerController_ heightOfInfoBars]];
-  [layout setPageInfoBubblePointY:[self pageInfoBubblePointY]];
+  [layout setInfoBarAnchorPointY:[self infoBarAnchorPointY]];
 
   [layout setHasDownloadShelf:(downloadShelfController_.get() != nil)];
   [layout setDownloadShelfHeight:
@@ -919,7 +923,7 @@ willPositionSheet:(NSWindow*)sheet
   [infoBarContainerController_
       setMaxTopArrowHeight:output.infoBarMaxTopArrowHeight];
   [infoBarContainerController_
-      setInfobarArrowX:[self locationBarBridge]->GetPageInfoBubblePoint().x];
+      setInfobarArrowX:[self locationBarBridge]->GetInfoBarAnchorPoint().x];
 
   [[downloadShelfController_ view] setFrame:output.downloadShelfFrame];
 
@@ -1011,6 +1015,21 @@ willPositionSheet:(NSWindow*)sheet
     return;
   }
 
+  // Removing the location bar from the window causes it to resign first
+  // responder. Remember the location bar's focus state in order to restore
+  // it before returning.
+  BOOL locationBarHadFocus = [toolbarController_ locationBarHasFocus];
+  FullscreenToolbarVisibilityLockController* visibilityLockController = nil;
+  if (locationBarHadFocus) {
+    // The location bar, by being focused, has a visibility lock on the toolbar,
+    // and the location bar's removal from the view hierarchy will allow the
+    // toolbar to hide. Create a temporary visibility lock on the toolbar for
+    // the duration of the view hierarchy change.
+    visibilityLockController = [self fullscreenToolbarVisibilityLockController];
+    [visibilityLockController lockToolbarVisibilityForOwner:self
+                                              withAnimation:NO];
+  }
+
   // Remove all subviews that aren't the tabContentArea.
   for (NSView* view in [[[self.chromeContentView subviews] copy] autorelease]) {
     if (view != tabContentArea)
@@ -1032,6 +1051,14 @@ willPositionSheet:(NSWindow*)sheet
     [self.chromeContentView addSubview:view
                             positioned:NSWindowAbove
                             relativeTo:nil];
+  }
+
+  // Restore the location bar's focus state and remove the temporary visibility
+  // lock.
+  if (locationBarHadFocus) {
+    [self focusLocationBar:YES];
+    [visibilityLockController releaseToolbarVisibilityForOwner:self
+                                                 withAnimation:NO];
   }
 }
 

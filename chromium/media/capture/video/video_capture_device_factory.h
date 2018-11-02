@@ -6,6 +6,7 @@
 #define MEDIA_CAPTURE_VIDEO_VIDEO_CAPTURE_DEVICE_FACTORY_H_
 
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "media/capture/video/video_capture_device.h"
 
@@ -13,7 +14,7 @@ namespace media {
 
 // VideoCaptureDeviceFactory is the base class for creation of video capture
 // devices in the different platforms. VCDFs are created by MediaStreamManager
-// on IO thread and plugged into VideoCaptureManager, who owns and operates them
+// on UI thread and plugged into VideoCaptureManager, who owns and operates them
 // in Device Thread (a.k.a. Audio Thread).
 // Typical operation is to first call GetDeviceDescriptors() to obtain
 // information about available devices. The obtained descriptors can then be

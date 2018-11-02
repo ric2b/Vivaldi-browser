@@ -6,9 +6,9 @@
 
 #include <memory>
 #include "platform/heap/SafePoint.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/Threading.h"
-#include "public/platform/WebScheduler.h"
 
 namespace blink {
 
@@ -33,7 +33,7 @@ WebThreadSupportingGC::WebThreadSupportingGC(const char* name,
 #endif
   if (!thread_) {
     // If |thread| is not given, create a new one and own it.
-    owning_thread_ = WTF::WrapUnique(Platform::Current()->CreateThread(name));
+    owning_thread_ = Platform::Current()->CreateThread(name);
     thread_ = owning_thread_.get();
   }
 }

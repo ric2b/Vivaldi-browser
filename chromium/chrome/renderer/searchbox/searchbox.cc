@@ -63,10 +63,6 @@ const char* GetIconTypeUrlHost(SearchBox::ImageSourceType type) {
   switch (type) {
     case SearchBox::FAVICON:
       return "favicon";
-    case SearchBox::LARGE_ICON:
-      return "large-icon";
-    case SearchBox::FALLBACK_ICON:
-      return "fallback-icon";
     case SearchBox::THUMB:
       return "thumb";
     default:
@@ -83,16 +79,7 @@ int GetImagePathStartOfPageURL(SearchBox::ImageSourceType type,
   switch (type) {
     case SearchBox::FAVICON: {
       chrome::ParsedFaviconPath parsed;
-      return chrome::ParseFaviconPath(
-          path, favicon_base::FAVICON, &parsed) ? parsed.path_index : -1;
-    }
-    case SearchBox::LARGE_ICON: {
-      LargeIconUrlParser parser;
-      return parser.Parse(path) ? parser.path_index() : -1;
-    }
-    case SearchBox::FALLBACK_ICON: {
-      chrome::ParsedFallbackIconPath parser;
-      return parser.Parse(path) ? parser.path_index() : -1;
+      return chrome::ParseFaviconPath(path, &parsed) ? parsed.path_index : -1;
     }
     case SearchBox::THUMB: {
       return 0;
@@ -242,13 +229,12 @@ SearchBox::SearchBox(content::RenderFrame* render_frame)
       is_input_in_progress_(false),
       is_key_capture_enabled_(false),
       most_visited_items_cache_(kMaxInstantMostVisitedItemCacheSize),
-      query_(),
       binding_(this) {
   // Connect to the embedded search interface in the browser.
   chrome::mojom::EmbeddedSearchConnectorAssociatedPtr connector;
   render_frame->GetRemoteAssociatedInterfaces()->GetInterface(&connector);
   chrome::mojom::SearchBoxAssociatedPtrInfo search_box;
-  binding_.Bind(&search_box);
+  binding_.Bind(mojo::MakeRequest(&search_box));
   connector->Connect(mojo::MakeRequest(&instant_service_),
                      std::move(search_box));
 }
@@ -305,7 +291,7 @@ bool SearchBox::GenerateImageURLFromTransientURL(const GURL& transient_url,
 
 void SearchBox::GetMostVisitedItems(
     std::vector<InstantMostVisitedItemIDPair>* items) const {
-  return most_visited_items_cache_.GetCurrentItems(items);
+  most_visited_items_cache_.GetCurrentItems(items);
 }
 
 bool SearchBox::GetMostVisitedItemWithID(
@@ -355,13 +341,6 @@ void SearchBox::ChromeIdentityCheckResult(const base::string16& identity,
                                           bool identity_match) {
   extensions_v8::SearchBoxExtension::DispatchChromeIdentityCheckResult(
       render_frame()->GetWebFrame(), identity, identity_match);
-}
-
-void SearchBox::DetermineIfPageSupportsInstant() {
-  bool result = extensions_v8::SearchBoxExtension::PageSupportsInstant(
-      render_frame()->GetWebFrame());
-  DVLOG(1) << render_frame() << " PageSupportsInstant: " << result;
-  instant_service_->InstantSupportDetermined(page_seq_no_, result);
 }
 
 void SearchBox::FocusChanged(OmniboxFocusState new_focus_state,
@@ -432,15 +411,12 @@ void SearchBox::SetSuggestionToPrefetch(const InstantSuggestion& suggestion) {
       render_frame()->GetWebFrame());
 }
 
-void SearchBox::Submit(const base::string16& query,
-                       const EmbeddedSearchRequestParams& params) {
-  query_ = query;
+void SearchBox::Submit(const EmbeddedSearchRequestParams& params) {
   embedded_search_request_params_ = params;
   DVLOG(1) << render_frame() << " Submit";
   extensions_v8::SearchBoxExtension::DispatchSubmit(
       render_frame()->GetWebFrame());
-  if (!query.empty())
-    Reset();
+  Reset();
 }
 
 void SearchBox::ThemeChanged(const ThemeBackgroundInfo& theme_info) {
@@ -463,7 +439,6 @@ void SearchBox::Bind(chrome::mojom::SearchBoxAssociatedRequest request) {
 }
 
 void SearchBox::Reset() {
-  query_.clear();
   embedded_search_request_params_ = EmbeddedSearchRequestParams();
   suggestion_ = InstantSuggestion();
   is_focused_ = false;

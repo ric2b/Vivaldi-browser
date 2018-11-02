@@ -297,9 +297,9 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   // Favicon -------------------------------------------------------------------
 
-  void GetFavicons(
-      const std::vector<GURL>& icon_urls,
-      int icon_types,
+  void GetFavicon(
+      const GURL& icon_url,
+      favicon_base::IconType icon_type,
       const std::vector<int>& desired_sizes,
       std::vector<favicon_base::FaviconRawBitmapResult>* bitmap_results);
 
@@ -322,8 +322,8 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   void UpdateFaviconMappingsAndFetch(
       const GURL& page_url,
-      const std::vector<GURL>& icon_urls,
-      int icon_types,
+      const GURL& icon_url,
+      favicon_base::IconType icon_type,
       const std::vector<int>& desired_sizes,
       std::vector<favicon_base::FaviconRawBitmapResult>* bitmap_results);
 
@@ -465,10 +465,9 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   // The user data allows the clients to associate data with this object.
   // Multiple user data values can be stored under different keys.
-  // This object will TAKE OWNERSHIP of the given data pointer, and will
-  // delete the object if it is changed or the object is destroyed.
   base::SupportsUserData::Data* GetUserData(const void* key) const;
-  void SetUserData(const void* key, base::SupportsUserData::Data* data);
+  void SetUserData(const void* key,
+                   std::unique_ptr<base::SupportsUserData::Data> data);
 
   // Testing -------------------------------------------------------------------
 
@@ -696,18 +695,14 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
                        const std::vector<SkBitmap>& bitmaps,
                        bool bitmaps_are_expired);
 
-  // Used by both UpdateFaviconMappingsAndFetch and GetFavicons.
-  // If |page_url| is non-null, the icon urls for |page_url| (and all
-  // redirects) are set to the subset of |icon_urls| for which icons are
-  // already stored in the database.
-  // If |page_url| is non-null, |icon_types| can be multiple icon types
-  // only if |icon_types| == TOUCH_ICON | TOUCH_PRECOMPOSED_ICON.
-  // If multiple icon types are specified, |page_url| will be mapped to the
-  // icon URLs of the largest type available in the database.
+  // Used by both UpdateFaviconMappingsAndFetch() and GetFavicon().
+  // If |page_url| is non-null and there is a favicon stored in the database
+  // for |icon_url|, a mapping is added to the database from |page_url| (and all
+  // redirects) to |icon_url|.
   void UpdateFaviconMappingsAndFetchImpl(
       const GURL* page_url,
-      const std::vector<GURL>& icon_urls,
-      int icon_types,
+      const GURL& icon_url,
+      favicon_base::IconType icon_type,
       const std::vector<int>& desired_sizes,
       std::vector<favicon_base::FaviconRawBitmapResult>* results);
 

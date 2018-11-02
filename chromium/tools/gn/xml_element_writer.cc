@@ -64,8 +64,7 @@ std::unique_ptr<XmlElementWriter> XmlElementWriter::SubElement(
     const std::string& tag,
     const XmlAttributes& attributes) {
   StartContent(true);
-  return base::WrapUnique(
-      new XmlElementWriter(out_, tag, attributes, indent_ + 2));
+  return base::MakeUnique<XmlElementWriter>(out_, tag, attributes, indent_ + 2);
 }
 
 std::ostream& XmlElementWriter::StartContent(bool start_new_line) {
@@ -80,4 +79,36 @@ std::ostream& XmlElementWriter::StartContent(bool start_new_line) {
   }
 
   return out_;
+}
+
+std::string XmlEscape(const std::string& value) {
+  std::string result;
+  for (char c : value) {
+    switch (c) {
+      case '\n':
+        result += "&#10;";
+        break;
+      case '\r':
+        result += "&#13;";
+        break;
+      case '\t':
+        result += "&#9;";
+        break;
+      case '"':
+        result += "&quot;";
+        break;
+      case '<':
+        result += "&lt;";
+        break;
+      case '>':
+        result += "&gt;";
+        break;
+      case '&':
+        result += "&amp;";
+        break;
+      default:
+        result += c;
+    }
+  }
+  return result;
 }

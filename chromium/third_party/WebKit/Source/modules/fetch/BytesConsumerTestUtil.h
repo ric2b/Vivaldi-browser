@@ -59,6 +59,7 @@ class BytesConsumerTestUtil {
     MOCK_METHOD1(DidFetchDataLoadedBlobHandleMock,
                  void(RefPtr<BlobDataHandle>));
     MOCK_METHOD1(DidFetchDataLoadedArrayBufferMock, void(DOMArrayBuffer*));
+    MOCK_METHOD1(DidFetchDataLoadedFormDataMock, void(FormData*));
     MOCK_METHOD1(DidFetchDataLoadedString, void(const String&));
     MOCK_METHOD0(DidFetchDataLoadStream, void());
     MOCK_METHOD0(DidFetchDataLoadFailed, void());
@@ -69,7 +70,10 @@ class BytesConsumerTestUtil {
     // In mock methods we use RefPtr<> rather than PassRefPtr<>.
     void DidFetchDataLoadedBlobHandle(
         PassRefPtr<BlobDataHandle> blob_data_handle) override {
-      DidFetchDataLoadedBlobHandleMock(blob_data_handle);
+      DidFetchDataLoadedBlobHandleMock(std::move(blob_data_handle));
+    }
+    void DidFetchDataLoadedFormData(FormData* FormData) override {
+      DidFetchDataLoadedFormDataMock(FormData);
     }
   };
 

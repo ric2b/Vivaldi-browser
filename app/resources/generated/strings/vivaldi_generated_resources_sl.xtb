@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">Zaradi te razširitve se je spremenila stran, ki je prikazana, ko kliknete gumb za začetno stran.</translation>
 <translation id="1588438908519853928">Običajen</translation>
 <translation id="1616206807336925449">Za to razširitev so potrebna posebna dovoljenja.</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1635033183663317347">Namestil skrbnik</translation>
 <translation id="1723824996674794290">&amp;Novo okno</translation>
 <translation id="1729533290416704613">Določa tudi, katera stran je prikazana, ko iščete v naslovni vrstici.</translation>
-<translation id="1789575671122666129">Pojavna okna</translation>
 <translation id="1850508293116537636">&amp;Zasukaj v smeri urinega kazalca</translation>
 <translation id="1859234291848436338">Smer pisanja</translation>
 <translation id="1901303067676059328">Izberi &amp;vse</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">Skrij vtičnik</translation>
 <translation id="2087822576218954668">Tiskanje: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">Posodobitev vtičnika</translation>
-<translation id="2147827593068025794">Sinhroniziranje v ozadju</translation>
 <translation id="215753907730220065">Izhod iz celozaslonskega načina</translation>
 <translation id="2177950615300672361">Zavihek za način brez beleženja zgodovine: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">Zaznava (privzeto)</translation>
 <translation id="219008588003277019">Modul »Native Client«: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Prilepi kot navadno besedilo</translation>
 <translation id="2282146716419988068">Proces GPU</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">Drug program v računalniku je dodal razširitev, ki lahko spremeni način delovanja Chroma.</translation>
 <translation id="2445081178310039857">Potreben je korenski imenik razširitve.</translation>
 <translation id="2470702053775288986">Nepodprte razširitve onemogočene</translation>
-<translation id="2482878487686419369">Obvestila</translation>
 <translation id="2501797496290880632">Vnesite bližnjico</translation>
-<translation id="2509857212037838238">Namestitev vtičnika <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">Zamenjan pomnilnik</translation>
 <translation id="2662876636500006917">Spletna trgovina Vivaldi</translation>
 <translation id="2678063897982469759">Znova omogoči</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">CPE</translation>
 <translation id="3124111068741548686">Kode za dostop uporabnika USER</translation>
 <translation id="3222066309010235055">Vnaprejšnje upodabljanje: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Izberite korenski imenik razširitve, ki jo želite zapakirati. Če želite posodobiti razširitev, izberite tudi datoteko z zasebnim ključem, ki jo želite znova uporabiti.</translation>
 <translation id="3280237271814976245">Shrani &amp;kot ...</translation>
 <translation id="3288047731229977326">Razširitve, ki se izvajajo v razvijalskem načinu, lahko škodijo vašemu računalniku. Če niste razvijalec, zaradi varnosti onemogočite razširitve, ki se izvajajo v razvijalskem načinu.</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">Kopiraj naslov slike</translation>
 <translation id="335985608243443814">Prebrskaj ...</translation>
 <translation id="3378572629723696641">Ta razširitev je morda poškodovana.</translation>
-<translation id="3427092606871434483">Dovoli (privzeto)</translation>
 <translation id="3435896845095436175">Omogoči</translation>
 <translation id="345693547134384690">Odpri &amp;sliko v novem zavihku</translation>
 <translation id="3467267818798281173">Vprašaj Google za predloge</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">Odpri povezavo v oknu brez bele&amp;ženja zgodovine</translation>
 <translation id="3678156199662914018">Razširitev: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">Nalaganje ...</translation>
-<translation id="3789841737615482174">Namesti</translation>
 <translation id="3798449238516105146">Različica</translation>
 <translation id="3866249974567520381">Opis</translation>
 <translation id="3905761538810670789">Popravi aplikacijo</translation>
@@ -103,13 +94,11 @@
 <translation id="4096508467498758490">Onemogočanje razširitev za razvijalski način</translation>
 <translation id="4100839878934973028">Drug program v računalniku je dodal aplikacijo, ki lahko spremeni način delovanja Chroma.</translation>
 <translation id="4130207949184424187">Zaradi te razširitve se je spremenila stran, ki je prikazana, ko iščete v naslovni vrstici.</translation>
-<translation id="4165986682804962316">Nastavitve spletnega mesta</translation>
 <translation id="4176463684765177261">Onemogočeno</translation>
 <translation id="4200983522494130825">Nov &amp;zavihek</translation>
 <translation id="420665587194630159">(ta razširitev je upravljana in je ni mogoče odstraniti ali onemogočiti)</translation>
 <translation id="4240511609794012987">Pomnilnik v skupni rabi</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (<ph name="NUM_KILOBYTES_LIVE" /> KB dejavno)</translation>
-<translation id="4312866146174492540">Blokira (privzeto)</translation>
 <translation id="4384652540891215547">Aktivirajte razširitev</translation>
 <translation id="4394049700291259645">Onemogoči</translation>
 <translation id="4423482519432579560">&amp;Črkovalnik</translation>
@@ -122,7 +111,6 @@
 <translation id="4677772697204437347">Pomnilnik GPE</translation>
 <translation id="4711638718396952945">Obnovi nastavitve</translation>
 <translation id="4839303808932127586">Shr&amp;ani videoposnetek kot ...</translation>
-<translation id="4851858059374029925">Ali želite namestiti <ph name="PLUGIN_NAME" />? Namestite samo vtičnike, ki jim zaupate.</translation>
 <translation id="488785315393301722">Pokaži podrobnosti</translation>
 <translation id="4911714727432509308">Nobena razširitev nima dodeljenih bližnjičnih tipk.</translation>
 <translation id="4927301649992043040">Zapakiraj razširitev</translation>
@@ -153,12 +141,10 @@
 <translation id="5646376287012673985">Lokacija</translation>
 <translation id="5715711091495208045">Posrednik za vtičnik: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">Shr&amp;ani zvočni posnetek kot ...</translation>
-<translation id="5778550464785688721">Popolni nadzor naprav MIDI</translation>
 <translation id="5780973441651030252">Prednost postopkov</translation>
 <translation id="5804241973901381774">Dovoljenja</translation>
 <translation id="583281660410589416">Neznano</translation>
 <translation id="59174027418879706">Omogočena</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 v uporabi}one{# v uporabi}two{# v uporabi}few{# v uporabi}other{# v uporabi}}</translation>
 <translation id="5956585768868398362">Ali je to iskalna stran, ki ste jo pričakovali?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (največ <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Določa tudi, katera stran je prikazana, ko kliknete gumb za domačo stran ali iščete v naslovni vrstici.</translation>
@@ -187,14 +173,12 @@
 <translation id="6787839852456839824">Bližnjične tipke</translation>
 <translation id="6798954102094737107">Vtičnik: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Ohrani spremembe</translation>
-<translation id="6863910145616405334">Ni vtičnika</translation>
 <translation id="6886871292305414135">Odpri povezavo v novem &amp;zavihku</translation>
 <translation id="6900284862687837908">Aplikacija v ozadju: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Preklic dostopa do datotek</translation>
 <translation id="6974053822202609517">Od desne proti levi</translation>
 <translation id="7013485839273047434">Več razširitev</translation>
 <translation id="708060913198414444">Kopiraj naslov zvoka</translation>
-<translation id="7105578512429498960">Namestite vtičnik <ph name="PLUGIN_NAME" />, če želite prikazati to vsebino</translation>
 <translation id="7144878232160441200">Poskusi znova</translation>
 <translation id="7206693748120342859">Prenos vtičnika <ph name="PLUGIN_NAME" /> ...</translation>
 <translation id="7287143125007575591">Dostop zavrnjen.</translation>
@@ -226,7 +210,6 @@ Datoteka s ključem: <ph name="KEY_FILE" />
 
 Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih različic razširitev.</translation>
 <translation id="8004582292198964060">Brskalnik</translation>
-<translation id="8037357227543935929">Zahteva (privzeto)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8188120771410500975">&amp;Preveri črkovanje besedilnih polj</translation>
 <translation id="8261378640211443080">Ta razširitev ni navedena v storitvi <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> in je bila morda dodana brez vaše vednosti.</translation>
@@ -242,7 +225,6 @@ Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih r
 <translation id="8664389313780386848">&amp;Ogled vira strani</translation>
 <translation id="8719653885894320876">Prenos vtičnika <ph name="PLUGIN_NAME" /> ni uspel</translation>
 <translation id="873545264931343897">Po posodobitvi vtičnika <ph name="PLUGIN_NAME" /> znova naložite stran, če ga želite aktivirati</translation>
-<translation id="8763204422633679667">Po namestitvi vtičnika <ph name="PLUGIN_NAME" /> znova naložite stran, če ga želite aktivirati</translation>
 <translation id="8798099450830957504">Privzeto</translation>
 <translation id="8808478386290700967">Spletna trgovina</translation>
 <translation id="8859174528519900719">Podokvir: <ph name="SUBFRAME_SITE" /></translation>

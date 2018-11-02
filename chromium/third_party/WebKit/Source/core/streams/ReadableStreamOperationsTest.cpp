@@ -6,16 +6,16 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptFunction.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
-#include "bindings/core/v8/V8BindingMacros.h"
 #include "bindings/core/v8/V8IteratorResultValue.h"
-#include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/Document.h"
 #include "core/streams/ReadableStreamController.h"
 #include "core/streams/UnderlyingSourceBase.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8BindingMacros.h"
+#include "platform/bindings/V8ThrowException.h"
 #include "platform/heap/Handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "v8/include/v8.h"
@@ -48,15 +48,15 @@ class Iteration final : public GarbageCollectedFinalized<Iteration> {
   Iteration() : is_set_(false), is_done_(false), is_valid_(true) {}
 
   void Set(ScriptValue v) {
-    ASSERT(!v.IsEmpty());
+    DCHECK(!v.IsEmpty());
     is_set_ = true;
     v8::TryCatch block(v.GetScriptState()->GetIsolate());
     v8::Local<v8::Value> value;
     v8::Local<v8::Value> item = v.V8Value();
     if (!item->IsObject() ||
-        !V8Call(V8UnpackIteratorResult(v.GetScriptState(),
-                                       item.As<v8::Object>(), &is_done_),
-                value)) {
+        !V8UnpackIteratorResult(v.GetScriptState(), item.As<v8::Object>(),
+                                &is_done_)
+             .ToLocal(&value)) {
       is_valid_ = false;
       return;
     }
@@ -134,13 +134,13 @@ ScriptValue Eval(V8TestingScope* scope, const char* s) {
   v8::Local<v8::Script> script;
   v8::MicrotasksScope microtasks(scope->GetIsolate(),
                                  v8::MicrotasksScope::kDoNotRunMicrotasks);
-  if (!V8Call(v8::String::NewFromUtf8(scope->GetIsolate(), s,
-                                      v8::NewStringType::kNormal),
-              source)) {
+  if (!v8::String::NewFromUtf8(scope->GetIsolate(), s,
+                               v8::NewStringType::kNormal)
+           .ToLocal(&source)) {
     ADD_FAILURE();
     return ScriptValue();
   }
-  if (!V8Call(v8::Script::Compile(scope->GetContext(), source), script)) {
+  if (!v8::Script::Compile(scope->GetContext(), source).ToLocal(&script)) {
     ADD_FAILURE() << "Compilation fails";
     return ScriptValue();
   }
@@ -154,7 +154,7 @@ ScriptValue EvalWithPrintingError(V8TestingScope* scope, const char* s) {
     ADD_FAILURE() << ToCoreString(
                          block.Exception()->ToString(scope->GetIsolate()))
                          .Utf8()
-                         .Data();
+                         .data();
     block.ReThrow();
   }
   return r;

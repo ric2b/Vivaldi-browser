@@ -1417,7 +1417,8 @@ class LayerTreeHostScrollTestLayerStructureChange
 
   virtual void DidScroll(Layer* layer) {
     if (scroll_destroy_whole_tree_) {
-      layer_tree_host()->RegisterViewportLayers(NULL, NULL, NULL, NULL);
+      layer_tree_host()->RegisterViewportLayers(
+          LayerTreeHost::ViewportLayers());
       layer_tree_host()->SetRootLayer(NULL);
       EndTest();
       return;
@@ -2130,6 +2131,25 @@ class LayerTreeHostScrollTestImplSideInvalidation
   void DidInvalidateContentOnImplSide(LayerTreeHostImpl* host_impl) override {
     invalidated_on_impl_thread_ = true;
     SignalCompletionIfPossible();
+  }
+
+  void WillNotifyReadyToActivateOnThread(
+      LayerTreeHostImpl* host_impl) override {
+    // Ensure that the scroll-offsets on the TransformTree are consistent with
+    // the synced scroll offsets, for the pending tree.
+    if (!host_impl->pending_tree())
+      return;
+
+    LayerImpl* scroll_layer =
+        host_impl->pending_tree()->OuterViewportScrollLayer();
+    gfx::ScrollOffset scroll_offset = scroll_layer->CurrentScrollOffset();
+    int transform_index = scroll_layer->transform_tree_index();
+    gfx::ScrollOffset transform_tree_scroll_offset =
+        host_impl->pending_tree()
+            ->property_trees()
+            ->transform_tree.Node(transform_index)
+            ->scroll_offset;
+    EXPECT_EQ(scroll_offset, transform_tree_scroll_offset);
   }
 
   void SignalCompletionIfPossible() {

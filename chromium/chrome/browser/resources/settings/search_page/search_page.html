@@ -1,7 +1,8 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_indicator.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/md_select_css.html">
-<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
@@ -95,8 +96,9 @@
                            hotwordInfo_.alwaysOn)]]"
                 on-change="onHotwordSearchEnableChange_">
             </settings-toggle-button>
-            <div class="secondary-action"
+            <div class="settings-row"
                 hidden$="[[!getShowHotwordSearchRetrain_(hotwordInfo_.*)]]">
+              <div class="separator"></div>
               <paper-button on-tap="onRetrainTap_" class="secondary-button">
                 $i18n{searchOkGoogleRetrain}
               </paper-button>
@@ -113,8 +115,9 @@
           </template>
 
           <template is="dom-if" if="[[hotwordInfo_.historyEnabled]]">
-            <div class="settings-box two-line continuation indented"
-                on-tap="onManageAudioHistoryTap_" actionable>
+            <a class="settings-box two-line continuation indented inherit-color
+                no-outline" tabindex="-1" target="_blank"
+                href="$i18n{manageAudioHistoryUrl}">
               <div class="start">
                 [[i18n('searchOkGoogleAudioHistoryLabel',
                        hotwordInfo_.userName)]]
@@ -122,11 +125,12 @@
                   $i18n{searchOkGoogleAudioHistorySubtext}
                 </div>
               </div>
-              <button class="icon-external" is="paper-icon-button-light"
+              <button actionable class="icon-external"
+                  is="paper-icon-button-light"
                   aria-label$="[[i18n('searchOkGoogleAudioHistoryLabel',
                                       hotwordInfo_.userName)]]"
                   aria-describedby="audioHistorySecondary"></button>
-            </div>
+            </a>
           </template>
         </template>
 

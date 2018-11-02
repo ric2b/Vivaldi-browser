@@ -57,7 +57,7 @@ bool HostIsIPAddress(const String& host) {
   url::CanonHostInfo host_info;
   url::Component host_component(0,
                                 static_cast<int>(url.Host().Utf8().length()));
-  url::CanonicalizeIPAddress(url.Host().Utf8().Data(), host_component,
+  url::CanonicalizeIPAddress(url.Host().Utf8().data(), host_component,
                              &ignored_output, &host_info);
   return host_info.IsIPAddress();
 }
@@ -83,7 +83,7 @@ OriginAccessEntry::OriginAccessEntry(const String& protocol,
       host_(host),
       subdomain_settings_(subdomain_setting),
       host_is_public_suffix_(false) {
-  ASSERT(subdomain_setting >= kAllowSubdomains ||
+  DCHECK(subdomain_setting >= kAllowSubdomains ||
          subdomain_setting <= kDisallowSubdomains);
 
   host_is_ip_address_ = blink::HostIsIPAddress(host);

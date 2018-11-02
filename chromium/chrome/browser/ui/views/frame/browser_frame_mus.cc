@@ -12,6 +12,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
+#include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/views/mus/desktop_window_tree_host_mus.h"
 #include "ui/views/mus/mus_client.h"
 #include "ui/views/mus/window_manager_frame_values.h"
@@ -40,16 +41,17 @@ views::Widget::InitParams BrowserFrameMus::GetWidgetParams() {
   // Indicates mash shouldn't handle immersive, rather we will.
   properties[ui::mojom::WindowManager::kDisableImmersive_InitProperty] =
       mojo::ConvertTo<std::vector<uint8_t>>(true);
-  properties[ui::mojom::WindowManager::kAppID_Property] =
-      mojo::ConvertTo<std::vector<uint8_t>>(chrome_app_id);
 #if defined(OS_CHROMEOS)
   properties[ash::mojom::kAshWindowStyle_InitProperty] =
       mojo::ConvertTo<std::vector<uint8_t>>(
           static_cast<int32_t>(ash::mojom::WindowStyle::BROWSER));
 #endif
+  aura::WindowTreeHostMusInitParams window_tree_host_init_params =
+      aura::CreateInitParamsForTopLevel(
+          views::MusClient::Get()->window_tree_client(), std::move(properties));
   std::unique_ptr<views::DesktopWindowTreeHostMus> desktop_window_tree_host =
       base::MakeUnique<views::DesktopWindowTreeHostMus>(
-          browser_frame_, this, cc::FrameSinkId(), &properties);
+          std::move(window_tree_host_init_params), browser_frame_, this);
   // BrowserNonClientFrameViewMus::OnBoundsChanged() takes care of updating
   // the insets.
   desktop_window_tree_host->set_auto_update_client_area(false);

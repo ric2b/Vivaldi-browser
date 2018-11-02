@@ -4,8 +4,8 @@
 
 #include "extensions/browser/updater/update_client_config.h"
 
-#include "base/threading/sequenced_worker_pool.h"
-#include "content/public/browser/browser_thread.h"
+#include "base/sequenced_task_runner.h"
+#include "base/task_scheduler/post_task.h"
 
 namespace extensions {
 
@@ -13,10 +13,9 @@ UpdateClientConfig::UpdateClientConfig() {}
 
 scoped_refptr<base::SequencedTaskRunner>
 UpdateClientConfig::GetSequencedTaskRunner() const {
-  return content::BrowserThread::GetBlockingPool()
-      ->GetSequencedTaskRunnerWithShutdownBehavior(
-          base::SequencedWorkerPool::GetSequenceToken(),
-          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
+  return base::CreateSequencedTaskRunnerWithTraits(
+      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
 UpdateClientConfig::~UpdateClientConfig() {}

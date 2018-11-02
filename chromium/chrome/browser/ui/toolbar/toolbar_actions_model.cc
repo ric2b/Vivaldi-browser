@@ -270,7 +270,7 @@ void ToolbarActionsModel::OnExtensionLoaded(
 void ToolbarActionsModel::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const extensions::Extension* extension,
-    extensions::UnloadedExtensionInfo::Reason reason) {
+    extensions::UnloadedExtensionReason reason) {
   bool was_visible_and_has_overflow =
       IsActionVisible(extension->id()) && !all_icons_visible();
   RemoveExtension(extension);
@@ -278,7 +278,7 @@ void ToolbarActionsModel::OnExtensionUnloaded(
   // extensions, and this extension is being uninstalled, we reduce the visible
   // count so that we don't pop out a previously-hidden extension.
   if (was_visible_and_has_overflow &&
-      reason == extensions::UnloadedExtensionInfo::REASON_UNINSTALL)
+      reason == extensions::UnloadedExtensionReason::UNINSTALL)
     SetVisibleIconCount(visible_icon_count() - 1);
 }
 
@@ -835,8 +835,8 @@ void ToolbarActionsModel::OnActionToolbarPrefChange() {
     // Need to update pref because we have extra icons. But can't call
     // UpdatePrefs() directly within observation closure.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&ToolbarActionsModel::UpdatePrefs,
-                              weak_ptr_factory_.GetWeakPtr()));
+        FROM_HERE, base::BindOnce(&ToolbarActionsModel::UpdatePrefs,
+                                  weak_ptr_factory_.GetWeakPtr()));
   }
 }
 

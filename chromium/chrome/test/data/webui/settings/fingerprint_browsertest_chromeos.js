@@ -16,6 +16,8 @@ var TestFingerprintBrowserProxy = function() {
     'getEnrollmentLabel',
     'removeEnrollment',
     'changeEnrollmentLabel',
+    'startAuthentication',
+    'endCurrentAuthentication',
   ]);
 
   /** @private {!Array<string>} */
@@ -27,7 +29,7 @@ TestFingerprintBrowserProxy.prototype = {
 
   /** @ param {!Array<string>} fingerprints */
   setFingerprints: function(fingerprints) {
-    this.fingerprintsList_ = fingerprints;
+    this.fingerprintsList_ = fingerprints.slice();
   },
 
   /**
@@ -47,7 +49,7 @@ TestFingerprintBrowserProxy.prototype = {
   getFingerprintsList: function() {
     this.methodCalled('getFingerprintsList');
     /** @type {settings.FingerprintInfo} */
-    var fingerprintInfo = {fingerprintsList: this.fingerprintsList_,
+    var fingerprintInfo = {fingerprintsList: this.fingerprintsList_.slice(),
         isMaxed: this.fingerprintsList_.length >= 5};
     return Promise.resolve(fingerprintInfo);
   },
@@ -85,6 +87,17 @@ TestFingerprintBrowserProxy.prototype = {
   changeEnrollmentLabel: function(index, newLabel) {
     this.fingerprintsList_[index] = newLabel;
     this.methodCalled('changeEnrollmentLabel', index, newLabel);
+    return Promise.resolve(true);
+  },
+
+  /** @override */
+  startAuthentication: function () {
+    this.methodCalled('startAuthentication');
+  },
+
+  /** @override */
+  endCurrentAuthentication: function() {
+    this.methodCalled('endCurrentAuthentication');
   },
 };
 
@@ -124,8 +137,11 @@ suite('settings-fingerprint-list', function() {
     dialog = fingerprintList.$.setupFingerprint;
     addAnotherButton = dialog.$.addAnotherButton;
     Polymer.dom.flush();
-    return browserProxy.whenCalled('getFingerprintsList').then(function() {
+    return Promise.all([
+        browserProxy.whenCalled('startAuthentication'),
+        browserProxy.whenCalled('getFingerprintsList')]).then(function() {
       assertEquals(0, fingerprintList.fingerprints_.length);
+      browserProxy.resetResolver('getFingerprintsList');
     });
   });
 
@@ -158,10 +174,14 @@ suite('settings-fingerprint-list', function() {
       // Verify that by tapping the continue button we should exit the dialog
       // and the fingerprint list should have one fingerprint registered.
       MockInteractions.tap(dialog.$.closeButton);
-      return browserProxy.whenCalled('getFingerprintsList').then(
+      return PolymerTest.flushTasks().then(function() {
+        Promise.all([
+             browserProxy.whenCalled('startAuthentication'),
+             browserProxy.whenCalled('getFingerprintsList')]).then(
           function() {
             assertEquals(1, fingerprintList.fingerprints_.length);
           });
+      });
     });
   });
 
@@ -171,25 +191,33 @@ suite('settings-fingerprint-list', function() {
     assertFalse(dialog.$.dialog.open);
     MockInteractions.tap(fingerprintList.$$('.action-button'));
     return browserProxy.whenCalled('startEnroll').then(function() {
+      browserProxy.resetResolver('startEnroll');
+
       assertTrue(dialog.$.dialog.open);
       assertEquals(0, dialog.receivedScanCount_);
       assertFalse(isVisible(addAnotherButton));
       browserProxy.scanReceived(settings.FingerprintResultType.SUCCESS, true);
       assertEquals(settings.FingerprintSetupStep.READY, dialog.step_);
 
-      // Once the first fingerprint is enrolled, verify that enrolling the
-      // second fingerprint without closing the dialog works as expected.
-      return browserProxy.whenCalled('getFingerprintsList');
-    }).then(function() {
-      assertEquals(1, fingerprintList.fingerprints_.length);
       assertTrue(dialog.$.dialog.open);
       assertTrue(isVisible(addAnotherButton));
       MockInteractions.tap(addAnotherButton);
-      return browserProxy.whenCalled('startEnroll');
+
+      // Once the first fingerprint is enrolled, verify that enrolling the
+      // second fingerprint without closing the dialog works as expected.
+      return Promise.all([
+          browserProxy.whenCalled('startEnroll'),
+          browserProxy.whenCalled('getFingerprintsList')]);
     }).then(function() {
+      browserProxy.resetResolver('getFingerprintsList');
+
       assertTrue(dialog.$.dialog.open);
       assertFalse(isVisible(addAnotherButton));
       browserProxy.scanReceived(settings.FingerprintResultType.SUCCESS, true);
+
+      // Verify that by tapping the continue button we should exit the dialog
+      // and the fingerprint list should have two fingerprints registered.
+      MockInteractions.tap(dialog.$.closeButton);
       return browserProxy.whenCalled('getFingerprintsList');
     }).then(function() {
        assertEquals(2, fingerprintList.fingerprints_.length);
@@ -210,7 +238,9 @@ suite('settings-fingerprint-list', function() {
       // Verify that by tapping the exit button we should exit the dialog
       // and the fingerprint list should have zero fingerprints registered.
       MockInteractions.tap(dialog.$.closeButton);
-      return browserProxy.whenCalled('cancelCurrentEnroll');
+      return Promise.all([
+          browserProxy.whenCalled('cancelCurrentEnroll'),
+          browserProxy.whenCalled('startAuthentication')]);
     }).then(function() {
       assertEquals(0, fingerprintList.fingerprints_.length);
     });
@@ -221,6 +251,7 @@ suite('settings-fingerprint-list', function() {
     fingerprintList.updateFingerprintsList_();
 
     return browserProxy.whenCalled('getFingerprintsList').then(function() {
+      browserProxy.resetResolver('getFingerprintsList');
       assertEquals(2, fingerprintList.fingerprints_.length);
       fingerprintList.onFingerprintDeleteTapped_(createFakeEvent(0));
 
@@ -244,7 +275,10 @@ suite('settings-fingerprint-list', function() {
       // label gets changed as expected.
       fingerprintList.onFingerprintLabelChanged_(
           createFakeEvent(0, 'New Label 1'));
-      return browserProxy.whenCalled('changeEnrollmentLabel');
+
+      return Promise.all([
+          browserProxy.whenCalled('changeEnrollmentLabel'),
+          browserProxy.whenCalled('getFingerprintsList')]);
     }).then(function() {
       assertEquals('New Label 1', fingerprintList.fingerprints_[0]);
     });
@@ -257,6 +291,7 @@ suite('settings-fingerprint-list', function() {
     // Verify that new fingerprints cannot be added when there are already five
     // registered fingerprints.
     return browserProxy.whenCalled('getFingerprintsList').then(function() {
+      browserProxy.resetResolver('getFingerprintsList');
       assertEquals(5, fingerprintList.fingerprints_.length);
       assertTrue(fingerprintList.$$('.action-button').disabled);
       fingerprintList.onFingerprintDeleteTapped_(createFakeEvent(0));

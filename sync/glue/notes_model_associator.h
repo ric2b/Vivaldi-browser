@@ -52,7 +52,7 @@ namespace vivaldi {
 // * Methods to get a notes node for a given sync node and vice versa.
 // * Persisting model associations and loading them back.
 class NotesModelAssociator
-    : public syncer::PerDataTypeAssociatorInterface<Notes_Node, int64_t> {
+    : public syncer::AssociatorInterface {
  public:
   static syncer::ModelType model_type() { return syncer::NOTES; }
   NotesModelAssociator(Notes_Model* notes_model,
@@ -84,25 +84,25 @@ class NotesModelAssociator
   // Returns sync id for the given notes node id.
   // Returns syncer::kInvalidId if the sync node is not found for the given
   // notes node id.
-  int64_t GetSyncIdFromChromeId(const int64_t& node_id) override;
+  int64_t GetSyncIdFromChromeId(const int64_t& node_id);
 
   // Returns the notes node for the given sync id.
   // Returns NULL if no notes node is found for the given sync id.
-  const Notes_Node* GetChromeNodeFromSyncId(int64_t sync_id) override;
+  const Notes_Node* GetChromeNodeFromSyncId(int64_t sync_id);
 
   // Initializes the given sync node from the given notes node id.
   // Returns false if no sync node was found for the given notes node id or
   // if the initialization of sync node fails.
   bool InitSyncNodeFromChromeId(const int64_t& node_id,
-                                syncer::BaseNode* sync_node) override;
+                                syncer::BaseNode* sync_node);
 
   void AddAssociation(const Notes_Node* node, int64_t sync_id);
 
   // Associates the given notes node with the given sync id.
   void Associate(const Notes_Node* node,
-                 const syncer::BaseNode& sync_node) override;
+                 const syncer::BaseNode& sync_node);
   // Remove the association that corresponds to the given sync id.
-  void Disassociate(int64_t sync_id) override;
+  void Disassociate(int64_t sync_id);
 
   void AbortAssociation() override {
     // No implementation needed, this associator runs on the main

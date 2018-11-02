@@ -10,8 +10,9 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
-#include "public/platform/WebCommon.h"
-#include "public/platform/WebScheduler.h"
+#include "platform/PlatformExport.h"
+#include "platform/scheduler/base/task_queue.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "public/platform/WebThread.h"
 
 namespace blink {
@@ -19,10 +20,9 @@ namespace scheduler {
 
 class ChildScheduler;
 class SingleThreadIdleTaskRunner;
-class TaskQueue;
 class WebTaskRunnerImpl;
 
-class BLINK_PLATFORM_EXPORT WebSchedulerImpl : public WebScheduler {
+class PLATFORM_EXPORT WebSchedulerImpl : public WebScheduler {
  public:
   WebSchedulerImpl(ChildScheduler* child_scheduler,
                    scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner,
@@ -40,14 +40,16 @@ class BLINK_PLATFORM_EXPORT WebSchedulerImpl : public WebScheduler {
                                WebThread::IdleTask* task) override;
   WebTaskRunner* LoadingTaskRunner() override;
   WebTaskRunner* TimerTaskRunner() override;
+  WebTaskRunner* CompositorTaskRunner() override;
   std::unique_ptr<WebViewScheduler> CreateWebViewScheduler(
       InterventionReporter*,
       WebViewScheduler::WebViewSchedulerSettings*) override;
   void SuspendTimerQueue() override {}
   void ResumeTimerQueue() override {}
-  void AddPendingNavigation(WebScheduler::NavigatingFrameType type) override {}
+  void AddPendingNavigation(
+      scheduler::RendererScheduler::NavigatingFrameType type) override {}
   void RemovePendingNavigation(
-      WebScheduler::NavigatingFrameType type) override {}
+      scheduler::RendererScheduler::NavigatingFrameType type) override {}
 
  private:
   static void RunIdleTask(std::unique_ptr<WebThread::IdleTask> task,
@@ -55,7 +57,6 @@ class BLINK_PLATFORM_EXPORT WebSchedulerImpl : public WebScheduler {
 
   ChildScheduler* child_scheduler_;  // NOT OWNED
   scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner_;
-  scoped_refptr<TaskQueue> timer_task_runner_;
   RefPtr<WebTaskRunnerImpl> loading_web_task_runner_;
   RefPtr<WebTaskRunnerImpl> timer_web_task_runner_;
 

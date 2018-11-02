@@ -80,14 +80,16 @@ bool AutoConfirmPrompt(ExtensionInstallPrompt::DoneCallback* callback) {
     // the real implementations it's highly likely the message loop will be
     // pumping a few times before the user clicks accept or cancel.
     case extensions::ScopedTestDialogAutoConfirm::ACCEPT:
+    case extensions::ScopedTestDialogAutoConfirm::ACCEPT_AND_OPTION:
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(base::ResetAndReturn(callback),
-                                ExtensionInstallPrompt::Result::ACCEPTED));
+          FROM_HERE, base::BindOnce(base::ResetAndReturn(callback),
+                                    ExtensionInstallPrompt::Result::ACCEPTED));
       return true;
     case extensions::ScopedTestDialogAutoConfirm::CANCEL:
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(base::ResetAndReturn(callback),
-                                ExtensionInstallPrompt::Result::USER_CANCELED));
+          FROM_HERE,
+          base::BindOnce(base::ResetAndReturn(callback),
+                         ExtensionInstallPrompt::Result::USER_CANCELED));
       return true;
   }
 

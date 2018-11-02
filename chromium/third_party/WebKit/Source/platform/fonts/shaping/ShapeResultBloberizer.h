@@ -8,6 +8,7 @@
 #include "platform/PlatformExport.h"
 #include "platform/fonts/Glyph.h"
 #include "platform/fonts/SimpleFontData.h"
+#include "platform/fonts/shaping/ShapeResultBuffer.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Vector.h"
@@ -29,6 +30,21 @@ class PLATFORM_EXPORT ShapeResultBloberizer {
                         Type = Type::kNormal);
 
   Type GetType() const { return type_; }
+
+  float FillGlyphs(const TextRunPaintInfo&, const ShapeResultBuffer&);
+  float FillGlyphs(const StringView&,
+                   unsigned from,
+                   unsigned to,
+                   const ShapeResult*);
+  void FillTextEmphasisGlyphs(const TextRunPaintInfo&,
+                              const GlyphData& emphasis_data,
+                              const ShapeResultBuffer&);
+  void FillTextEmphasisGlyphs(const StringView&,
+                              TextDirection,
+                              unsigned from,
+                              unsigned to,
+                              const GlyphData& emphasis_data,
+                              const ShapeResult*);
 
   void Add(Glyph glyph, const SimpleFontData* font_data, float h_offset) {
     // cannot mix x-only/xy offsets
@@ -80,6 +96,36 @@ class PLATFORM_EXPORT ShapeResultBloberizer {
 
  private:
   friend class ShapeResultBloberizerTestInfo;
+
+  // Where TextContainerType can be either a TextRun or a StringView.
+  // For legacy layout and LayoutNG respectively.
+  template <typename TextContainerType>
+  float FillGlyphsForResult(const ShapeResult*,
+                            const TextContainerType&,
+                            unsigned from,
+                            unsigned to,
+                            float initial_advance,
+                            unsigned run_offset);
+
+  // Whether the FillFastHorizontalGlyphs can be used. Only applies for full
+  // runs with no vertical offsets and no text intercepts.
+  bool CanUseFastPath(unsigned from,
+                      unsigned to,
+                      unsigned length,
+                      bool has_vertical_offsets);
+  float FillFastHorizontalGlyphs(const ShapeResultBuffer&, TextDirection);
+  float FillFastHorizontalGlyphs(const ShapeResult*, float advance = 0);
+
+  template <typename TextContainerType>
+  float FillTextEmphasisGlyphsForRun(const ShapeResult::RunInfo*,
+                                     const TextContainerType&,
+                                     unsigned text_length,
+                                     TextDirection,
+                                     unsigned from,
+                                     unsigned to,
+                                     const GlyphData& emphasis_data,
+                                     float initial_advance,
+                                     unsigned run_offset);
 
   void CommitPendingRun();
   void CommitPendingBlob();

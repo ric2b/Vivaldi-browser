@@ -16,6 +16,7 @@
 #include "base/strings/string16.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/model/metadata_batch.h"
+#include "components/sync/model/sync_metadata_store.h"
 #include "components/webdata/common/web_database_table.h"
 
 class WebDatabase;
@@ -149,7 +150,8 @@ struct FormFieldData;
 //                      This table contains "masked" credit card information
 //                      about credit cards stored on the server. It consists
 //                      of a short description and an ID, but not full payment
-//                      information. Writing to this table is only done by sync.
+//                      information. Writing to this table is done by sync and
+//                      on successful save of card to the server.
 //                      When a server card is unmasked, it will stay here and
 //                      will additionally be added in unmasked_credit_cards.
 //
@@ -158,8 +160,8 @@ struct FormFieldData;
 //   status             Server's status of this card.
 //                      TODO(brettw) define constants for this.
 //   name_on_card
-//   type               Type of the credit card. This is one of the
-//                      kSyncCardType* strings.
+//   network            Issuer network of the card. For example, "VISA". Renamed
+//                      from "type" in version 72.
 //   last_four          Last four digits of the card number. For de-duping
 //                      with locally stored cards and generating descriptions.
 //   exp_month          Expiration month: 1-12
@@ -167,7 +169,9 @@ struct FormFieldData;
 //
 // unmasked_credit_cards
 //                      When a masked credit credit card is unmasked and the
-//                      full number is downloaded, it will be stored here.
+//                      full number is downloaded or when the full number is
+//                      available upon saving card to server, it will be stored
+//                      here.
 //
 //   id                 Server ID. This can be joined with the id in the
 //                      masked_credit_cards table to get the rest of the data.
@@ -249,7 +253,8 @@ struct FormFieldData;
 //
 //   value              The serialized ModelTypeState record.
 
-class AutofillTable : public WebDatabaseTable {
+class AutofillTable : public WebDatabaseTable,
+                      public syncer::SyncMetadataStore {
  public:
   AutofillTable();
   ~AutofillTable() override;
@@ -326,7 +331,7 @@ class AutofillTable : public WebDatabaseTable {
   // Records a single Autofill profile in the autofill_profiles table.
   virtual bool AddAutofillProfile(const AutofillProfile& profile);
 
-  // Updates the database values for the specified profile.  Mulit-value aware.
+  // Updates the database values for the specified profile.  Multi-value aware.
   virtual bool UpdateAutofillProfile(const AutofillProfile& profile);
 
   // Removes a row from the autofill_profiles table.  |guid| is the identifier
@@ -355,6 +360,9 @@ class AutofillTable : public WebDatabaseTable {
   // Removes a row from the credit_cards table.  |guid| is the identifier of the
   // credit card to remove.
   bool RemoveCreditCard(const std::string& guid);
+
+  // Adds to the masked_credit_cards and unmasked_credit_cards tables.
+  bool AddFullServerCreditCard(const CreditCard& credit_card);
 
   // Retrieves a credit card with guid |guid|.
   std::unique_ptr<CreditCard> GetCreditCard(const std::string& guid);
@@ -426,22 +434,16 @@ class AutofillTable : public WebDatabaseTable {
   bool GetAllSyncMetadata(syncer::ModelType model_type,
                           syncer::MetadataBatch* metadata_batch);
 
-  // Update the metadata row for |model_type|, keyed by |storage_key|, to
-  // contain the contents of |metadata|.
+  // syncer::SyncMetadataStore implementation.
   bool UpdateSyncMetadata(syncer::ModelType model_type,
                           const std::string& storage_key,
-                          const sync_pb::EntityMetadata& metadata);
-
-  // Remove the metadata row of type |model_type| keyed by |storage|key|.
+                          const sync_pb::EntityMetadata& metadata) override;
   bool ClearSyncMetadata(syncer::ModelType model_type,
-                         const std::string& storage_key);
-
-  // Update the stored sync state for the |model_type|.
-  bool UpdateModelTypeState(syncer::ModelType model_type,
-                            const sync_pb::ModelTypeState& model_type_state);
-
-  // Clear the stored sync state for |model_type|.
-  bool ClearModelTypeState(syncer::ModelType model_type);
+                         const std::string& storage_key) override;
+  bool UpdateModelTypeState(
+      syncer::ModelType model_type,
+      const sync_pb::ModelTypeState& model_type_state) override;
+  bool ClearModelTypeState(syncer::ModelType model_type) override;
 
   // Table migration functions. NB: These do not and should not rely on other
   // functions in this class. The implementation of a function such as
@@ -461,6 +463,7 @@ class AutofillTable : public WebDatabaseTable {
   bool MigrateToVersion67AddMaskedCardBillingAddress();
   bool MigrateToVersion70AddSyncMetadata();
   bool MigrateToVersion71AddHasConvertedAndBillingAddressIdMetadata();
+  bool MigrateToVersion72RenameCardTypeToIssuerNetwork();
 
   // Max data length saved in the table, AKA the maximum length allowed for
   // form data.
@@ -530,6 +533,18 @@ class AutofillTable : public WebDatabaseTable {
 
   // Checks if the guid is in the trash.
   bool IsAutofillGUIDInTrash(const std::string& guid);
+
+  // Adds to |masked_credit_cards| and updates |server_card_metadata|.
+  // Must already be in a transaction.
+  void AddMaskedCreditCards(const std::vector<CreditCard>& credit_cards);
+
+  // Adds to |unmasked_credit_cards|.
+  void AddUnmaskedCreditCard(const std::string& id,
+                             const base::string16& full_number);
+
+  // Deletes server credit cards by |id|. Returns true if a row was deleted.
+  bool DeleteFromMaskedCreditCards(const std::string& id);
+  bool DeleteFromUnmaskedCreditCards(const std::string& id);
 
   bool InitMainTable();
   bool InitCreditCardsTable();

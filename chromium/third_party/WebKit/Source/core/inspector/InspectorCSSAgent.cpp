@@ -86,9 +86,9 @@
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/shaping/CachingWordShaper.h"
 #include "platform/text/TextRun.h"
-#include "wtf/CurrentTime.h"
-#include "wtf/text/CString.h"
-#include "wtf/text/StringConcatenate.h"
+#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/text/CString.h"
+#include "platform/wtf/text/StringConcatenate.h"
 
 namespace blink {
 
@@ -171,20 +171,21 @@ void BlendWithColorsFromGradient(CSSGradientValue* gradient,
   } else {
     if (colors.size() > 1) {
       // Gradient on gradient is too complicated, bail out
-      colors.Clear();
+      colors.clear();
       return;
     }
 
     Color existing_color = colors.front();
-    colors.Clear();
+    colors.clear();
     for (auto stop_color : stop_colors) {
       found_non_transparent_color =
           found_non_transparent_color || (stop_color.Alpha() != 0);
       colors.push_back(existing_color.Blend(stop_color));
     }
   }
-  found_opaque_color =
-      found_opaque_color || gradient->KnownToBeOpaque(layout_object);
+  found_opaque_color = found_opaque_color ||
+                       gradient->KnownToBeOpaque(layout_object.GetDocument(),
+                                                 layout_object.StyleRef());
 }
 
 // Gets the colors from an image style, if one exists and it is a gradient.
@@ -204,7 +205,7 @@ void AddColorsFromImageStyle(const ComputedStyle& style,
 
   if (!style_image->IsGeneratedImage()) {
     // Make no assertions about the colors in non-generated images
-    colors.Clear();
+    colors.clear();
     found_opaque_color = false;
     return;
   }
@@ -247,7 +248,7 @@ bool GetColorsFromRect(LayoutRect rect,
         isHTMLImageElement(element) || isHTMLObjectElement(element) ||
         isHTMLPictureElement(element) || element->IsSVGElement() ||
         isHTMLVideoElement(element)) {
-      colors.Clear();
+      colors.clear();
       found_opaque_color = false;
       continue;
     }
@@ -267,7 +268,7 @@ bool GetColorsFromRect(LayoutRect rect,
         colors.push_back(background_color);
       } else {
         if (!background_color.HasAlpha()) {
-          colors.Clear();
+          colors.clear();
           colors.push_back(background_color);
           found_opaque_color = true;
         } else {
@@ -285,7 +286,7 @@ bool GetColorsFromRect(LayoutRect rect,
     bool contains = found_top_element || element->BoundingBox().Contains(rect);
     if (!contains && found_non_transparent_color) {
       // Only return colors if some opaque element covers up this one.
-      colors.Clear();
+      colors.clear();
       found_opaque_color = false;
     }
   }
@@ -380,7 +381,7 @@ struct InspectorCSSAgent::VectorStringHashTraits
   }
 
   static void ConstructDeletedValue(Vector<String>& vec, bool) {
-    vec.Clear();
+    vec.clear();
     vec.push_back(String(WTF::kHashTableDeletedValue));
   }
 
@@ -422,11 +423,11 @@ class InspectorCSSAgent::SetStyleSheetTextAction final
 
   String MergeId() override {
     return String::Format("SetStyleSheetText %s",
-                          style_sheet_->Id().Utf8().Data());
+                          style_sheet_->Id().Utf8().data());
   }
 
   void Merge(Action* action) override {
-    ASSERT(action->MergeId() == MergeId());
+    DCHECK_EQ(action->MergeId(), MergeId());
 
     SetStyleSheetTextAction* other =
         static_cast<SetStyleSheetTextAction*>(action);
@@ -486,7 +487,7 @@ class InspectorCSSAgent::ModifyRuleAction final
         return style_sheet_->SetKeyframeKey(new_range_, old_text_, nullptr,
                                             nullptr, exception_state);
       default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
     return false;
   }
@@ -510,7 +511,7 @@ class InspectorCSSAgent::ModifyRuleAction final
             old_range_, new_text_, &new_range_, &old_text_, exception_state);
         break;
       default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
     return css_rule_;
   }
@@ -541,13 +542,13 @@ class InspectorCSSAgent::ModifyRuleAction final
 
   String MergeId() override {
     return String::Format("ModifyRuleAction:%d %s:%d", type_,
-                          style_sheet_->Id().Utf8().Data(), old_range_.start);
+                          style_sheet_->Id().Utf8().data(), old_range_.start);
   }
 
   bool IsNoop() override { return old_text_ == new_text_; }
 
   void Merge(Action* action) override {
-    ASSERT(action->MergeId() == MergeId());
+    DCHECK_EQ(action->MergeId(), MergeId());
 
     ModifyRuleAction* other = static_cast<ModifyRuleAction*>(action);
     new_text_ = other->new_text_;
@@ -596,7 +597,7 @@ class InspectorCSSAgent::SetElementStyleAction final
 
   String MergeId() override {
     return String::Format("SetElementStyleAction:%s",
-                          style_sheet_->Id().Utf8().Data());
+                          style_sheet_->Id().Utf8().data());
   }
 
   std::unique_ptr<protocol::CSS::CSSStyle> TakeSerializedStyle() override {
@@ -604,7 +605,7 @@ class InspectorCSSAgent::SetElementStyleAction final
   }
 
   void Merge(Action* action) override {
-    ASSERT(action->MergeId() == MergeId());
+    DCHECK_EQ(action->MergeId(), MergeId());
 
     SetElementStyleAction* other = static_cast<SetElementStyleAction*>(action);
     text_ = other->text_;
@@ -707,18 +708,18 @@ void InspectorCSSAgent::FlushPendingProtocolNotifications() {
   if (!invalidated_documents_.size())
     return;
   HeapHashSet<Member<Document>> invalidated_documents;
-  invalidated_documents_.Swap(invalidated_documents);
+  invalidated_documents_.swap(invalidated_documents);
   for (Document* document : invalidated_documents)
     UpdateActiveStyleSheets(document);
 }
 
 void InspectorCSSAgent::Reset() {
-  id_to_inspector_style_sheet_.Clear();
-  id_to_inspector_style_sheet_for_inline_style_.Clear();
-  css_style_sheet_to_inspector_style_sheet_.Clear();
-  document_to_css_style_sheets_.Clear();
-  invalidated_documents_.Clear();
-  node_to_inspector_style_sheet_.Clear();
+  id_to_inspector_style_sheet_.clear();
+  id_to_inspector_style_sheet_for_inline_style_.clear();
+  css_style_sheet_to_inspector_style_sheet_.clear();
+  document_to_css_style_sheets_.clear();
+  invalidated_documents_.clear();
+  node_to_inspector_style_sheet_.clear();
   ResetNonPersistentData();
 }
 
@@ -817,7 +818,7 @@ void InspectorCSSAgent::SetActiveStyleSheets(
   for (CSSStyleSheet* css_style_sheet : removed_sheets) {
     InspectorStyleSheet* inspector_style_sheet =
         css_style_sheet_to_inspector_style_sheet_.at(css_style_sheet);
-    ASSERT(inspector_style_sheet);
+    DCHECK(inspector_style_sheet);
 
     document_css_style_sheets->erase(css_style_sheet);
     if (id_to_inspector_style_sheet_.Contains(inspector_style_sheet->Id())) {
@@ -856,7 +857,7 @@ void InspectorCSSAgent::ForcePseudoState(Element* element,
     return;
 
   NodeIdToForcedPseudoState::iterator it =
-      node_id_to_forced_pseudo_state_.Find(node_id);
+      node_id_to_forced_pseudo_state_.find(node_id);
   if (it == node_id_to_forced_pseudo_state_.end())
     return;
 
@@ -1423,7 +1424,7 @@ Response InspectorCSSAgent::setStyleTexts(
         Member<StyleSheetAction> revert = actions.at(j);
         DummyExceptionStateForTesting undo_exception_state;
         revert->Undo(undo_exception_state);
-        ASSERT(!undo_exception_state.HadException());
+        DCHECK(!undo_exception_state.HadException());
       }
       return Response::Error(
           String::Format("Failed applying edit #%d: ", i) +
@@ -1572,7 +1573,7 @@ Response InspectorCSSAgent::forcePseudoState(
   unsigned forced_pseudo_state =
       ComputePseudoClassMask(std::move(forced_pseudo_classes));
   NodeIdToForcedPseudoState::iterator it =
-      node_id_to_forced_pseudo_state_.Find(node_id);
+      node_id_to_forced_pseudo_state_.find(node_id);
   unsigned current_forced_pseudo_state =
       it == node_id_to_forced_pseudo_state_.end() ? 0 : it->value;
   bool need_style_recalc = forced_pseudo_state != current_forced_pseudo_state;
@@ -1785,7 +1786,7 @@ InspectorCSSAgent::BuildMediaListChain(CSSRule* rule) {
 InspectorStyleSheetForInlineStyle* InspectorCSSAgent::AsInspectorStyleSheet(
     Element* element) {
   NodeToInspectorStyleSheet::iterator it =
-      node_to_inspector_style_sheet_.Find(element);
+      node_to_inspector_style_sheet_.find(element);
   if (it != node_to_inspector_style_sheet_.end())
     return it->value.Get();
 
@@ -1894,7 +1895,7 @@ Response InspectorCSSAgent::AssertInspectorStyleSheetForId(
     const String& style_sheet_id,
     InspectorStyleSheet*& result) {
   IdToInspectorStyleSheet::iterator it =
-      id_to_inspector_style_sheet_.Find(style_sheet_id);
+      id_to_inspector_style_sheet_.find(style_sheet_id);
   if (it == id_to_inspector_style_sheet_.end())
     return Response::Error("No style sheet with given id found");
   result = it->value.Get();
@@ -1912,7 +1913,7 @@ Response InspectorCSSAgent::AssertStyleSheetForId(
     return response;
   }
   IdToInspectorStyleSheetForInlineStyle::iterator it =
-      id_to_inspector_style_sheet_for_inline_style_.Find(style_sheet_id);
+      id_to_inspector_style_sheet_for_inline_style_.find(style_sheet_id);
   if (it == id_to_inspector_style_sheet_for_inline_style_.end())
     return Response::Error("No style sheet with given id found");
   result = it->value.Get();
@@ -2052,7 +2053,7 @@ void InspectorCSSAgent::DidRemoveDOMNode(Node* node) {
     node_id_to_forced_pseudo_state_.erase(node_id);
 
   NodeToInspectorStyleSheet::iterator it =
-      node_to_inspector_style_sheet_.Find(node);
+      node_to_inspector_style_sheet_.find(node);
   if (it == node_to_inspector_style_sheet_.end())
     return;
 
@@ -2065,7 +2066,7 @@ void InspectorCSSAgent::DidModifyDOMAttr(Element* element) {
     return;
 
   NodeToInspectorStyleSheet::iterator it =
-      node_to_inspector_style_sheet_.Find(element);
+      node_to_inspector_style_sheet_.find(element);
   if (it == node_to_inspector_style_sheet_.end())
     return;
 
@@ -2088,7 +2089,7 @@ void InspectorCSSAgent::ResetPseudoStates() {
       documents_to_change.insert(element->ownerDocument());
   }
 
-  node_id_to_forced_pseudo_state_.Clear();
+  node_id_to_forced_pseudo_state_.clear();
   for (auto& document : documents_to_change)
     document->SetNeedsStyleRecalc(
         kSubtreeStyleChange,
@@ -2222,7 +2223,7 @@ Response InspectorCSSAgent::setEffectivePropertyValueForNode(
                                (force_important ? " !important" : "") + ";";
     if (!style_text.IsEmpty() && !style_text.StripWhiteSpace().EndsWith(';'))
       new_property_text = ";" + new_property_text;
-    style_text.Append(new_property_text);
+    style_text.append(new_property_text);
     change_range.start = body_range.end;
     change_range.end = body_range.end + new_property_text.length();
   } else {
@@ -2237,7 +2238,7 @@ Response InspectorCSSAgent::setEffectivePropertyValueForNode(
     String new_property_text =
         declaration.name + ": " + new_value_text +
         (declaration.important || force_important ? " !important" : "") + ";";
-    style_text.Replace(declaration.range.start - body_range.start,
+    style_text.replace(declaration.range.start - body_range.start,
                        declaration.range.length(), new_property_text);
     change_range.start = declaration.range.start;
     change_range.end = change_range.start + new_property_text.length();
@@ -2350,7 +2351,7 @@ int InspectorCSSAgent::GetStyleIndexForNode(
   if (all_properties_empty)
     return -1;
 
-  ComputedStylesMap::iterator it = style_to_index_map.Find(style);
+  ComputedStylesMap::iterator it = style_to_index_map.find(style);
   if (it != style_to_index_map.end())
     return it->value;
 

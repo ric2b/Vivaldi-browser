@@ -81,7 +81,7 @@ static bool ShouldCreateContext(
   if (extensions_util->SupportsExtension("GL_EXT_debug_marker")) {
     String context_label(
         String::Format("WebGLRenderingContext-%p", context_provider));
-    gl->PushGroupMarkerEXT(0, context_label.Ascii().Data());
+    gl->PushGroupMarkerEXT(0, context_label.Ascii().data());
   }
   return true;
 }
@@ -199,7 +199,7 @@ void WebGLRenderingContext::RegisterContextExtensions() {
   RegisterExtension<WebGLCompressedTextureS3TC>(
       webgl_compressed_texture_s3tc_, kApprovedExtension, kBothPrefixes);
   RegisterExtension<WebGLCompressedTextureS3TCsRGB>(
-      webgl_compressed_texture_s3tc_srgb_, kDraftExtension, kBothPrefixes);
+      webgl_compressed_texture_s3tc_srgb_);
   RegisterExtension<WebGLDebugRendererInfo>(webgl_debug_renderer_info_);
   RegisterExtension<WebGLDebugShaders>(webgl_debug_shaders_);
   RegisterExtension<WebGLDepthTexture>(webgl_depth_texture_, kApprovedExtension,

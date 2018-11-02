@@ -9,11 +9,13 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
-#include "chrome/browser/media/router/media_route.h"
-#include "chrome/browser/media/router/mojo/media_controller.mojom.h"
+#include "chrome/common/media_router/media_route.h"
+#include "chrome/common/media_router/mojo/media_controller.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace media_router {
+
+class MediaRouter;
 
 // A controller for a MediaRoute. Forwards commands for controlling the route to
 // an out-of-process controller. Notifies its observers whenever there is a
@@ -26,9 +28,9 @@ namespace media_router {
 //
 // A MediaRouteController instance is destroyed when all its observers dispose
 // their references to it. When the Mojo connection with the out-of-process
-// controller is terminated or has an error, OnControllerInvalidated() will be
-// called by the MediaRouter or a Mojo error handler to make observers dispose
-// their refptrs.
+// controller is terminated or has an error, Invalidate() will be called by the
+// MediaRouter or OnMojoConnectionError() to make observers dispose their
+// refptrs.
 class MediaRouteController : public mojom::MediaStatusObserver,
                              public base::RefCounted<MediaRouteController> {
  public:
@@ -50,6 +52,9 @@ class MediaRouteController : public mojom::MediaStatusObserver,
       return controller_;
     }
 
+   protected:
+    scoped_refptr<MediaRouteController> controller_;
+
    private:
     friend class MediaRouteController;
 
@@ -60,52 +65,79 @@ class MediaRouteController : public mojom::MediaStatusObserver,
     // disposed. Overridden by subclasses to do custom cleanup.
     virtual void OnControllerInvalidated();
 
-    scoped_refptr<MediaRouteController> controller_;
-
     DISALLOW_COPY_AND_ASSIGN(Observer);
   };
 
   // Constructs a MediaRouteController that forwards media commands to
-  // |media_controller|. |media_controller| must be bound to a message pipe.
+  // |mojo_media_controller|. |media_router| will be notified when the
+  // MediaRouteController is destroyed via DetachRouteController().
   MediaRouteController(const MediaRoute::Id& route_id,
-                       mojom::MediaControllerPtr media_controller);
+                       mojom::MediaControllerPtr mojo_media_controller,
+                       MediaRouter* media_router);
 
   // Media controller methods for forwarding commands to a
-  // mojom::MediaControllerPtr held in |media_controller_|.
-  void Play();
-  void Pause();
-  void Seek(base::TimeDelta time);
-  void SetMute(bool mute);
-  void SetVolume(float volume);
+  // mojom::MediaControllerPtr held in |mojo_media_controller_|.
+  virtual void Play() const;
+  virtual void Pause() const;
+  virtual void Seek(base::TimeDelta time) const;
+  virtual void SetMute(bool mute) const;
+  virtual void SetVolume(float volume) const;
 
   // mojom::MediaStatusObserver:
   // Notifies |observers_| of a status update.
   void OnMediaStatusUpdated(const MediaStatus& status) override;
 
-  // Called when the connection between |this| and |media_controller_| is no
-  // longer valid. Notifies |observers_| to dispose their references to |this|.
-  // |this| gets destroyed when all the references are disposed.
+  // Notifies |observers_| to dispose their references to the controller. The
+  // controller gets destroyed when all the references are disposed.
   void Invalidate();
 
+  // Returns a mojo pointer bound to |this| by |binding_|. This must only be
+  // called at most once in the lifetime of the controller.
+  mojom::MediaStatusObserverPtr BindObserverPtr();
+
   MediaRoute::Id route_id() const { return route_id_; }
+
+  // Returns the latest media status that the controller has been notified with.
+  // Returns a nullopt if the controller hasn't been notified yet.
+  const base::Optional<MediaStatus>& current_media_status() const {
+    return current_media_status_;
+  }
+
+ protected:
+  ~MediaRouteController() override;
 
  private:
   friend class base::RefCounted<MediaRouteController>;
 
-  ~MediaRouteController() override;
-
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
+
+  // Called when the connection between |this| and the MediaControllerPtr or
+  // the MediaStatusObserver binding is no longer valid. Notifies
+  // |media_router_| and |observers_| to dispose their references to |this|.
+  void OnMojoConnectionError();
 
   // The ID of the Media Route that |this| controls.
   const MediaRoute::Id route_id_;
 
   // Handle to the mojom::MediaController that receives media commands.
-  mojom::MediaControllerPtr media_controller_;
+  mojom::MediaControllerPtr mojo_media_controller_;
 
-  // Observers that |this| notifies of status updates. The observers share the
-  // ownership of |this| through scoped_refptr.
+  // |media_router_| will be notified when the controller is destroyed.
+  MediaRouter* const media_router_;
+
+  // The binding to observe the out-of-process provider of status updates.
+  mojo::Binding<mojom::MediaStatusObserver> binding_;
+
+  // Observers that are notified of status updates. The observers share the
+  // ownership of the controller through scoped_refptr.
   base::ObserverList<Observer> observers_;
+
+  // This becomes false when the controller is invalidated.
+  bool is_valid_ = true;
+
+  // The latest media status that the controller has been notified with.
+  base::Optional<MediaStatus> current_media_status_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaRouteController);
 };

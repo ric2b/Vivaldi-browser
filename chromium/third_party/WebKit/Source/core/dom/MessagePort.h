@@ -28,12 +28,13 @@
 #define MessagePort_h
 
 #include <memory>
-#include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventListener.h"
 #include "core/events/EventTarget.h"
+#include "platform/WebTaskRunner.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
@@ -113,6 +114,14 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
     return GetAttributeEventListener(EventTypeNames::message);
   }
 
+  void setOnmessageerror(EventListener* listener) {
+    SetAttributeEventListener(EventTypeNames::messageerror, listener);
+    start();
+  }
+  EventListener* onmessageerror() {
+    return GetAttributeEventListener(EventTypeNames::messageerror);
+  }
+
   // A port starts out its life entangled, and remains entangled until it is
   // closed or is cloned.
   bool IsEntangled() const { return !closed_ && !IsNeutered(); }
@@ -140,9 +149,11 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
 
   std::unique_ptr<WebMessagePortChannel> entangled_channel_;
 
-  int pending_dispatch_task_;
-  bool started_;
-  bool closed_;
+  int pending_dispatch_task_ = 0;
+  bool started_ = false;
+  bool closed_ = false;
+
+  RefPtr<WebTaskRunner> task_runner_;
 };
 
 }  // namespace blink

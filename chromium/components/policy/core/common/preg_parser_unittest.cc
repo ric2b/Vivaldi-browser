@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/base_paths.h"
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
@@ -22,6 +23,14 @@ namespace policy {
 namespace preg_parser {
 namespace {
 
+// Preg files are relative to |kRegistryPolBaseDir|.
+const char kRegistryPolBaseDir[] = "chrome/test/data/policy/gpo";
+const char kRegistryPolFile[] = "parser_test/registry.pol";
+const char kInvalidEncodingRegistryPolFile[] = "invalid_encoding/registry.pol";
+const char kNonExistingRegistryPolFile[] = "does_not_exist.pol";
+
+const char kRegistryKey[] = "SOFTWARE\\Policies\\Chromium";
+
 // Check whether two RegistryDicts equal each other.
 testing::AssertionResult RegistryDictEquals(const RegistryDict& a,
                                             const RegistryDict& b) {
@@ -30,15 +39,20 @@ testing::AssertionResult RegistryDictEquals(const RegistryDict& a,
   for (; iter_key_a != a.keys().end() && iter_key_b != b.keys().end();
        ++iter_key_a, ++iter_key_b) {
     if (iter_key_a->first != iter_key_b->first) {
-      return testing::AssertionFailure()
-          << "Key mismatch " << iter_key_a->first
-          << " vs. " << iter_key_b->first;
+      return testing::AssertionFailure() << "Key mismatch " << iter_key_a->first
+                                         << " vs. " << iter_key_b->first;
     }
-    testing::AssertionResult result = RegistryDictEquals(*iter_key_a->second,
-                                                         *iter_key_b->second);
+    testing::AssertionResult result =
+        RegistryDictEquals(*iter_key_a->second, *iter_key_b->second);
     if (!result)
       return result;
   }
+  if (iter_key_a != a.keys().end())
+    return testing::AssertionFailure()
+           << "key mismatch, a has extra key " << iter_key_a->first;
+  if (iter_key_b != b.keys().end())
+    return testing::AssertionFailure()
+           << "key mismatch, b has extra key " << iter_key_b->first;
 
   auto iter_value_a = a.values().begin();
   auto iter_value_b = b.values().begin();
@@ -53,26 +67,39 @@ testing::AssertionResult RegistryDictEquals(const RegistryDict& a,
              << "=" << *iter_value_b->second.get();
     }
   }
+  if (iter_value_a != a.values().end())
+    return testing::AssertionFailure()
+           << "Value mismatch, a has extra value " << iter_value_a->first << "="
+           << *iter_value_a->second.get();
+  if (iter_value_b != b.values().end())
+    return testing::AssertionFailure()
+           << "Value mismatch, b has extra value " << iter_value_b->first << "="
+           << *iter_value_b->second.get();
 
   return testing::AssertionSuccess();
 }
 
-void SetInteger(RegistryDict* dict,
-                const std::string& name,
-                int value) {
+void SetInteger(RegistryDict* dict, const std::string& name, int value) {
   dict->SetValue(name, base::WrapUnique<base::Value>(new base::Value(value)));
 }
 
 void SetString(RegistryDict* dict,
                const std::string& name,
-               const std::string&  value) {
+               const std::string& value) {
   dict->SetValue(name, base::WrapUnique<base::Value>(new base::Value(value)));
 }
 
-TEST(PRegParserTest, TestParseFile) {
-  base::FilePath test_data_dir;
-  ASSERT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
+class PRegParserTest : public testing::Test {
+ protected:
+  void SetUp() override {
+    ASSERT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir_));
+    test_data_dir_ = test_data_dir_.AppendASCII(kRegistryPolBaseDir);
+  }
 
+  base::FilePath test_data_dir_;
+};
+
+TEST_F(PRegParserTest, TestParseFile) {
   // Prepare the test dictionary with some data so the test can check that the
   // PReg action triggers work, i.e. remove these items.
   RegistryDict dict;
@@ -90,12 +117,10 @@ TEST(PRegParserTest, TestParseFile) {
   dict.SetKey("DelValsTest", std::move(subdict));
 
   // Run the parser.
-  base::FilePath test_file(
-      test_data_dir.AppendASCII("chrome/test/data/policy/registry.pol"));
-  PolicyLoadStatusSample status;
-  ASSERT_TRUE(preg_parser::ReadFile(
-      test_file, base::ASCIIToUTF16("SOFTWARE\\Policies\\Chromium"),
-      &dict, &status));
+  base::FilePath test_file(test_data_dir_.AppendASCII(kRegistryPolFile));
+  PolicyLoadStatusUmaReporter status;
+  ASSERT_TRUE(preg_parser::ReadFile(test_file, base::ASCIIToUTF16(kRegistryKey),
+                                    &dict, &status));
 
   // Build the expected output dictionary.
   RegistryDict expected;
@@ -114,6 +139,55 @@ TEST(PRegParserTest, TestParseFile) {
   SetString(&expected, "Empty", "");
 
   EXPECT_TRUE(RegistryDictEquals(dict, expected));
+}
+
+TEST_F(PRegParserTest, SubstringRootInvalid) {
+  // A root of "Aa/Bb/Cc" should not be considered a valid root for a
+  // key like "Aa/Bb/C".
+  base::FilePath test_file(test_data_dir_.AppendASCII(kRegistryPolFile));
+  RegistryDict empty;
+  PolicyLoadStatusUmaReporter status;
+
+  // No data should be loaded for partial roots ("Aa/Bb/C").
+  RegistryDict dict1;
+  ASSERT_TRUE(preg_parser::ReadFile(
+      test_file, base::ASCIIToUTF16("SOFTWARE\\Policies\\Chro"), &dict1,
+      &status));
+  EXPECT_TRUE(RegistryDictEquals(dict1, empty));
+
+  // Safety check with kRegistryKey (dict should not be empty).
+  RegistryDict dict2;
+  ASSERT_TRUE(preg_parser::ReadFile(test_file, base::ASCIIToUTF16(kRegistryKey),
+                                    &dict2, &status));
+  EXPECT_FALSE(RegistryDictEquals(dict2, empty));
+}
+
+TEST_F(PRegParserTest, RejectInvalidStrings) {
+  // Tests whether strings with invalid characters are rejected.
+  base::FilePath test_file(
+      test_data_dir_.AppendASCII(kInvalidEncodingRegistryPolFile));
+  PolicyLoadStatusUmaReporter status;
+  RegistryDict dict;
+  ASSERT_TRUE(preg_parser::ReadFile(test_file, base::ASCIIToUTF16(kRegistryKey),
+                                    &dict, &status));
+
+  RegistryDict empty;
+  EXPECT_TRUE(RegistryDictEquals(dict, empty));
+}
+
+TEST_F(PRegParserTest, LoadStatusSampling) {
+  // Tests load status sampling.
+  PolicyLoadStatusUmaReporter status;
+  RegistryDict dict;
+  base::FilePath test_file(
+      test_data_dir_.AppendASCII(kNonExistingRegistryPolFile));
+  ASSERT_FALSE(preg_parser::ReadFile(
+      test_file, base::ASCIIToUTF16(kRegistryKey), &dict, &status));
+
+  PolicyLoadStatusSampler::StatusSet expected_status_set;
+  expected_status_set[POLICY_LOAD_STATUS_STARTED] = true;
+  expected_status_set[POLICY_LOAD_STATUS_READ_ERROR] = true;
+  EXPECT_EQ(expected_status_set, status.GetStatusSet());
 }
 
 }  // namespace

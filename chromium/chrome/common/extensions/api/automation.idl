@@ -79,6 +79,7 @@
     buttonDropDown,
     canvas,
     caption,
+    caret,
     cell,
     checkBox,
     client,
@@ -99,7 +100,6 @@
     dialog,
     directory,
     disclosureTriangle,
-    div,
     document,
     embeddedObject,
     feed,
@@ -107,6 +107,7 @@
     figure,
     footer,
     form,
+    genericContainer,
     grid,
     group,
     heading,
@@ -200,7 +201,6 @@
   // Describes characteristics of an $(ref:automation.AutomationNode).
   enum StateType {
     busy,
-    checked,
     collapsed,
     default,
     disabled,
@@ -268,6 +268,7 @@
   enum NameFromType {
     uninitialized,
     attribute,
+    attributeExplicitlyEmpty,
     contents,
     placeholder,
     relatedElement,
@@ -552,24 +553,38 @@
     // Table attributes.
     //
 
-    // The number of rows in this table.
+    // The number of rows in this table as specified in the DOM.
     long? tableRowCount;
 
-    // The number of columns in this table.
+    // The number of rows in this table as specified by the page author.
+    long? ariaRowCount;
+
+    // The number of columns in this table as specified in the DOM.
     long? tableColumnCount;
+
+    // The number of columns in this table as specified by the page author.
+    long? ariaColumnCount;
 
     //
     // Table cell attributes.
     //
 
-    // The zero-based index of the column that this cell is in.
+    // The zero-based index of the column that this cell is in as specified in
+    // the DOM.
     long? tableCellColumnIndex;
+
+    // The ARIA column index as specified by the page author.
+    long? ariaCellColumnIndex;
 
     // The number of columns that this cell spans (default is 1).
     long? tableCellColumnSpan;
 
-    // The zero-based index of the row that this cell is in.
+    // The zero-based index of the row that this cell is in as specified in the
+    // DOM.
     long? tableCellRowIndex;
+
+    // The ARIA row index as specified by the page author.
+    long? ariaCellRowIndex;
 
     // The number of rows that this cell spans (default is 1).
     long? tableCellRowSpan;
@@ -638,8 +653,9 @@
     // The language code for this subtree.
     DOMString? language;
 
-    // If a checkbox or toggle button is in the mixed state.
-    boolean? buttonMixed;
+    // Tri-state describing checkbox or radio button:
+    // 'false' | 'true' | 'mixed'
+    DOMString? checked;
 
     // The RGBA foreground color of this subtree, as an integer.
     long? color;

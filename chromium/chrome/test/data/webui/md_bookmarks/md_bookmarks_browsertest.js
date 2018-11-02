@@ -22,6 +22,7 @@ MaterialBookmarksBrowserTest.prototype = {
                          switchValue: 'MaterialDesignBookmarks'}],
 
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+    'test_command_manager.js',
     'test_store.js',
     'test_util.js',
   ]),
@@ -52,6 +53,20 @@ MaterialBookmarksAppTest.prototype = {
 };
 
 TEST_F('MaterialBookmarksAppTest', 'All', function() {
+  mocha.run();
+});
+
+function MaterialBookmarksCommandManagerTest() {}
+
+MaterialBookmarksCommandManagerTest.prototype = {
+  __proto__: MaterialBookmarksBrowserTest.prototype,
+
+  extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
+    'command_manager_test.js',
+  ]),
+};
+
+TEST_F('MaterialBookmarksCommandManagerTest', 'All', function() {
   mocha.run();
 });
 
@@ -139,17 +154,17 @@ TEST_F('MaterialBookmarksRouterTest', 'All', function() {
   mocha.run();
 });
 
-function MaterialBookmarksSidebarTest() {}
+function MaterialBookmarksFolderNodeTest() {}
 
-MaterialBookmarksSidebarTest.prototype = {
+MaterialBookmarksFolderNodeTest.prototype = {
   __proto__: MaterialBookmarksBrowserTest.prototype,
 
   extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
-    'sidebar_test.js',
+    'folder_node_test.js',
   ]),
 };
 
-TEST_F('MaterialBookmarksSidebarTest', 'All', function() {
+TEST_F('MaterialBookmarksFolderNodeTest', 'All', function() {
   mocha.run();
 });
 
@@ -164,6 +179,20 @@ MaterialBookmarksStoreClientTest.prototype = {
 };
 
 TEST_F('MaterialBookmarksStoreClientTest', 'All', function() {
+  mocha.run();
+});
+
+function MaterialBookmarksToolbarTest() {}
+
+MaterialBookmarksToolbarTest.prototype = {
+  __proto__: MaterialBookmarksBrowserTest.prototype,
+
+  extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
+    'toolbar_test.js',
+  ]),
+};
+
+TEST_F('MaterialBookmarksToolbarTest', 'All', function() {
   mocha.run();
 });
 

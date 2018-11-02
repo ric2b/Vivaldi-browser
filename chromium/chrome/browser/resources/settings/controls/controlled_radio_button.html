@@ -1,5 +1,6 @@
-<link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_indicator.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_indicator.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-a11y-keys-behavior/iron-a11y-keys-behavior.html">
 <link rel="import" href="pref_control_behavior.html">
 <link rel="import" href="../prefs/pref_util.html">
@@ -83,6 +84,10 @@
                    --primary-text-color);
       }
 
+      :host(:not([controlled_])) {
+        @apply(--settings-actionable);
+      }
+
       :host([controlled_]) {
         /* Disable pointer events for this whole element, as outer on-tap gets
          * triggered when clicking/tapping anywhere in :host. */
@@ -108,7 +113,7 @@
       }
 
       cr-policy-pref-indicator {
-        -webkit-margin-start: var(--settings-control-spacing);
+        -webkit-margin-start: var(--settings-controlled-by-spacing);
         /* Enable pointer events for the indicator so :hover works. Disable
          * clicks/taps via onIndicatorTap_ so outer on-tap doesn't trigger. */
         pointer-events: all;

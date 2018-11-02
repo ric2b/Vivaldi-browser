@@ -5,7 +5,6 @@
 #ifndef COMPONENTS_UPDATE_CLIENT_TASK_UPDATE_H_
 #define COMPONENTS_UPDATE_CLIENT_TASK_UPDATE_H_
 
-#include <queue>
 #include <string>
 #include <vector>
 

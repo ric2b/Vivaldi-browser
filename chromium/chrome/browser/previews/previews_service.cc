@@ -8,8 +8,9 @@
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/common/chrome_constants.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/previews/core/previews_experiments.h"
 #include "components/previews/core/previews_io_data.h"
 #include "components/previews/core/previews_opt_out_store.h"
@@ -24,8 +25,14 @@ bool IsPreviewsTypeEnabled(previews::PreviewsType type) {
   switch (type) {
     case previews::PreviewsType::OFFLINE:
       return previews::params::IsOfflinePreviewsEnabled();
-    case previews::PreviewsType::CLIENT_LOFI:
-      return previews::params::IsClientLoFiEnabled();
+    case previews::PreviewsType::LOFI:
+      return previews::params::IsClientLoFiEnabled() ||
+             data_reduction_proxy::params::IsLoFiOnViaFlags() ||
+             data_reduction_proxy::params::IsIncludedInLoFiEnabledFieldTrial();
+    case previews::PreviewsType::LITE_PAGE:
+      return (data_reduction_proxy::params::IsLoFiOnViaFlags() &&
+              data_reduction_proxy::params::AreLitePagesEnabledViaFlags()) ||
+             data_reduction_proxy::params::IsIncludedInLitePageFieldTrial();
     case previews::PreviewsType::NONE:
     case previews::PreviewsType::LAST:
       break;
@@ -40,8 +47,10 @@ int GetPreviewsTypeVersion(previews::PreviewsType type) {
   switch (type) {
     case previews::PreviewsType::OFFLINE:
       return previews::params::OfflinePreviewsVersion();
-    case previews::PreviewsType::CLIENT_LOFI:
+    case previews::PreviewsType::LOFI:
       return previews::params::ClientLoFiVersion();
+    case previews::PreviewsType::LITE_PAGE:
+      return data_reduction_proxy::params::LitePageVersion();
     case previews::PreviewsType::NONE:
     case previews::PreviewsType::LAST:
       break;
@@ -81,11 +90,10 @@ void PreviewsService::Initialize(
     const base::FilePath& profile_path) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  base::SequencedWorkerPool* blocking_pool =
-      content::BrowserThread::GetBlockingPool();
   // Get the background thread to run SQLite on.
   scoped_refptr<base::SequencedTaskRunner> background_task_runner =
-      blocking_pool->GetSequencedTaskRunner(blocking_pool->GetSequenceToken());
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND});
 
   previews_ui_service_ = base::MakeUnique<previews::PreviewsUIService>(
       previews_io_data, io_task_runner,

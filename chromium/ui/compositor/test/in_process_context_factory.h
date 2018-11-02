@@ -30,8 +30,7 @@ class InProcessContextFactory : public ContextFactory,
  public:
   // surface_manager is owned by the creator of this and must outlive the
   // context factory.
-  InProcessContextFactory(bool context_factory_for_test,
-                          cc::SurfaceManager* surface_manager);
+  explicit InProcessContextFactory(cc::SurfaceManager* surface_manager);
   ~InProcessContextFactory() override;
 
   // If true (the default) an OutputSurface is created that does not display
@@ -44,6 +43,10 @@ class InProcessContextFactory : public ContextFactory,
   // using the SharedMainThreadContextProvider.
   void SendOnLostResources();
 
+  // Set refresh rate to 200 to spend less time waiting for BeginFrame when
+  // used for tests.
+  void SetUseFastRefreshRateForTests();
+
   // ContextFactory implementation
   void CreateCompositorFrameSink(base::WeakPtr<Compositor> compositor) override;
 
@@ -53,9 +56,7 @@ class InProcessContextFactory : public ContextFactory,
 
   scoped_refptr<cc::ContextProvider> SharedMainThreadContextProvider() override;
   void RemoveCompositor(Compositor* compositor) override;
-  bool DoesCreateTestContexts() override;
-  uint32_t GetImageTextureTarget(gfx::BufferFormat format,
-                                 gfx::BufferUsage usage) override;
+  double GetRefreshRate() const override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
   cc::FrameSinkId AllocateFrameSinkId() override;
@@ -73,6 +74,7 @@ class InProcessContextFactory : public ContextFactory,
                                  base::TimeTicks timebase,
                                  base::TimeDelta interval) override {}
   void SetOutputIsSecure(ui::Compositor* compositor, bool secure) override {}
+  const cc::RendererSettings& GetRendererSettings() const override;
   void AddObserver(ContextFactoryObserver* observer) override;
   void RemoveObserver(ContextFactoryObserver* observer) override;
 
@@ -89,10 +91,11 @@ class InProcessContextFactory : public ContextFactory,
   cc::TestTaskGraphRunner task_graph_runner_;
   cc::FrameSinkIdAllocator frame_sink_id_allocator_;
   bool use_test_surface_;
-  bool context_factory_for_test_;
+  double refresh_rate_ = 60.0;
   cc::SurfaceManager* surface_manager_;
   base::ObserverList<ContextFactoryObserver> observer_list_;
 
+  cc::RendererSettings renderer_settings_;
   using PerCompositorDataMap =
       base::hash_map<ui::Compositor*, std::unique_ptr<PerCompositorData>>;
   PerCompositorDataMap per_compositor_data_;

@@ -38,10 +38,9 @@ class SearchIPCRouterTest;
 // Per-tab search "helper".  Acts as the owner and controller of the tab's
 // search UI model.
 //
-// When the page is finished loading, SearchTabHelper determines the instant
-// support for the page. When a navigation entry is committed (except for
-// in-page navigations), SearchTabHelper resets the instant support state to
-// INSTANT_SUPPORT_UNKNOWN and cause support to be determined again.
+// When a navigation is committed and when the page is finished loading,
+// SearchTabHelper determines the instant support for the page, i.e. whether
+// the page is rendered in the instant process.
 class SearchTabHelper : public content::WebContentsObserver,
                         public content::WebContentsUserData<SearchTabHelper>,
                         public InstantServiceObserver,
@@ -72,8 +71,7 @@ class SearchTabHelper : public content::WebContentsObserver,
   void SetSuggestionToPrefetch(const InstantSuggestion& suggestion);
 
   // Tells the page that the user pressed Enter in the omnibox.
-  void Submit(const base::string16& text,
-              const EmbeddedSearchRequestParams& params);
+  void Submit(const EmbeddedSearchRequestParams& params);
 
   // Called when the tab corresponding to |this| instance is activated.
   void OnTabActivated();
@@ -134,7 +132,6 @@ class SearchTabHelper : public content::WebContentsObserver,
       const content::LoadCommittedDetails& load_details) override;
 
   // Overridden from SearchIPCRouter::Delegate:
-  void OnInstantSupportDetermined(bool supports_instant) override;
   void FocusOmnibox(OmniboxFocusState state) override;
   void OnDeleteMostVisitedItem(const GURL& url) override;
   void OnUndoMostVisitedDeletion(const GURL& url) override;
@@ -162,11 +159,6 @@ class SearchTabHelper : public content::WebContentsObserver,
   // Only updates the origin part of the mode if |update_origin| is true,
   // otherwise keeps the current origin.
   void UpdateMode(bool update_origin);
-
-  // Tells the renderer to determine if the page supports the Instant API, which
-  // results in a call to OnInstantSupportDetermined() when the reply is
-  // received.
-  void DetermineIfPageSupportsInstant();
 
   OmniboxView* GetOmniboxView();
   const OmniboxView* GetOmniboxView() const;

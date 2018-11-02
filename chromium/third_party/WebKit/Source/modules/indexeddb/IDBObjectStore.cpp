@@ -28,9 +28,8 @@
 #include <memory>
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/SerializedScriptValueFactory.h"
 #include "bindings/core/v8/ToV8ForCore.h"
+#include "bindings/core/v8/serialization/SerializedScriptValueFactory.h"
 #include "bindings/modules/v8/ToV8ForModules.h"
 #include "bindings/modules/v8/V8BindingForModules.h"
 #include "core/dom/DOMStringList.h"
@@ -41,8 +40,11 @@
 #include "modules/indexeddb/IDBDatabase.h"
 #include "modules/indexeddb/IDBKeyPath.h"
 #include "modules/indexeddb/IDBTracing.h"
+#include "modules/indexeddb/IDBValueWrapping.h"
 #include "platform/Histogram.h"
 #include "platform/SharedBuffer.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebBlobInfo.h"
 #include "public/platform/WebData.h"
 #include "public/platform/WebVector.h"
@@ -376,14 +378,13 @@ IDBRequest* IDBObjectStore::put(ScriptState* script_state,
 
   v8::Isolate* isolate = script_state->GetIsolate();
   DCHECK(isolate->InContext());
-  Vector<WebBlobInfo> blob_info;
-  SerializedScriptValue::SerializeOptions options;
-  options.blob_info = &blob_info;
-  options.write_wasm_to_stream =
-      ExecutionContext::From(script_state)->IsSecureContext();
-  RefPtr<SerializedScriptValue> serialized_value =
-      SerializedScriptValue::Serialize(isolate, value.V8Value(), options,
-                                       exception_state);
+  // TODO(crbug.com/719053): This wasm behavior differs from other browsers.
+  SerializedScriptValue::SerializeOptions::WasmSerializationPolicy wasm_policy =
+      ExecutionContext::From(script_state)->IsSecureContext()
+          ? SerializedScriptValue::SerializeOptions::kSerialize
+          : SerializedScriptValue::SerializeOptions::kBlockedInNonSecureContext;
+  IDBValueWrapper value_wrapper(isolate, value.V8Value(), wasm_policy,
+                                exception_state);
   if (exception_state.HadException())
     return nullptr;
 
@@ -407,9 +408,8 @@ IDBRequest* IDBObjectStore::put(ScriptState* script_state,
   // value.
   if (put_mode == kWebIDBPutModeCursorUpdate && uses_in_line_keys) {
     DCHECK(key);
-    if (clone.IsEmpty())
-      clone = DeserializeScriptValue(script_state, serialized_value.Get(),
-                                     &blob_info);
+    DCHECK(clone.IsEmpty());
+    value_wrapper.Clone(script_state, &clone);
     IDBKey* key_path_key = ScriptValue::To<IDBKey*>(
         script_state->GetIsolate(), clone, exception_state, key_path);
     if (exception_state.HadException())
@@ -432,10 +432,8 @@ IDBRequest* IDBObjectStore::put(ScriptState* script_state,
     return nullptr;
   }
   if (uses_in_line_keys) {
-    if (clone.IsEmpty()) {
-      clone = DeserializeScriptValue(script_state, serialized_value.Get(),
-                                     &blob_info);
-    }
+    if (clone.IsEmpty())
+      value_wrapper.Clone(script_state, &clone);
     IDBKey* key_path_key = ScriptValue::To<IDBKey*>(
         script_state->GetIsolate(), clone, exception_state, key_path);
     if (exception_state.HadException())
@@ -489,27 +487,30 @@ IDBRequest* IDBObjectStore::put(ScriptState* script_state,
   Vector<int64_t> index_ids;
   HeapVector<IndexKeys> index_keys;
   for (const auto& it : Metadata().indexes) {
-    if (clone.IsEmpty()) {
-      clone = DeserializeScriptValue(script_state, serialized_value.Get(),
-                                     &blob_info);
-    }
+    if (clone.IsEmpty())
+      value_wrapper.Clone(script_state, &clone);
     IndexKeys keys;
     GenerateIndexKeysForValue(script_state->GetIsolate(), *it.value, clone,
                               &keys);
     index_ids.push_back(it.key);
     index_keys.push_back(keys);
   }
+  // Records 1KB to 1GB.
+  UMA_HISTOGRAM_COUNTS_1M("WebCore.IndexedDB.PutValueSize2",
+                          value_wrapper.DataLengthBeforeWrapInBytes() / 1024);
 
   IDBRequest* request =
       IDBRequest::Create(script_state, source, transaction_.Get());
-  Vector<char> wire_bytes;
-  serialized_value->ToWireBytes(wire_bytes);
-  RefPtr<SharedBuffer> value_buffer = SharedBuffer::AdoptVector(wire_bytes);
 
-  BackendDB()->Put(transaction_->Id(), Id(), WebData(value_buffer), blob_info,
-                   key, static_cast<WebIDBPutMode>(put_mode),
-                   request->CreateWebCallbacks().release(), index_ids,
-                   index_keys);
+  value_wrapper.ExtractBlobDataHandles(request->transit_blob_handles());
+  value_wrapper.WrapIfBiggerThan(IDBValueWrapper::kWrapThreshold);
+
+  BackendDB()->Put(
+      transaction_->Id(), Id(), WebData(value_wrapper.ExtractWireBytes()),
+      value_wrapper.WrappedBlobInfo(), key,
+      static_cast<WebIDBPutMode>(put_mode),
+      request->CreateWebCallbacks().release(), index_ids, index_keys);
+
   return request;
 }
 
@@ -772,7 +773,7 @@ IDBIndex* IDBObjectStore::index(const String& name,
     return nullptr;
   }
 
-  IDBIndexMap::iterator it = index_map_.Find(name);
+  IDBIndexMap::iterator it = index_map_.find(name);
   if (it != index_map_.end())
     return it->value;
 
@@ -826,7 +827,7 @@ void IDBObjectStore::deleteIndex(const String& name,
   BackendDB()->DeleteIndex(transaction_->Id(), Id(), index_id);
 
   metadata_->indexes.erase(index_id);
-  IDBIndexMap::iterator it = index_map_.Find(name);
+  IDBIndexMap::iterator it = index_map_.find(name);
   if (it != index_map_.end()) {
     transaction_->IndexDeleted(it->value);
     it->value->MarkDeleted();
@@ -958,7 +959,7 @@ void IDBObjectStore::MarkDeleted() {
       << "An object store got deleted outside a versionchange transaction.";
 
   deleted_ = true;
-  metadata_->indexes.Clear();
+  metadata_->indexes.clear();
 
   for (auto& it : index_map_) {
     IDBIndex* index = it.value;
@@ -977,7 +978,7 @@ void IDBObjectStore::ClearIndexCache() {
   clear_index_cache_called_ = true;
 #endif  // DCHECK_IS_ON()
 
-  index_map_.Clear();
+  index_map_.clear();
 }
 
 void IDBObjectStore::RevertMetadata(
@@ -1032,7 +1033,7 @@ void IDBObjectStore::RenameIndex(int64_t index_id, const String& new_name) {
 
   BackendDB()->RenameIndex(transaction_->Id(), Id(), index_id, new_name);
 
-  auto metadata_iterator = metadata_->indexes.Find(index_id);
+  auto metadata_iterator = metadata_->indexes.find(index_id);
   DCHECK_NE(metadata_iterator, metadata_->indexes.end()) << "Invalid index_id";
   const String& old_name = metadata_iterator->value->name;
 

@@ -5,7 +5,7 @@
 #include "core/page/FocusController.h"
 
 #include <memory>
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/shadow/ShadowRootInit.h"
 #include "core/html/HTMLElement.h"
 #include "core/testing/DummyPageHolder.h"
@@ -29,7 +29,7 @@ class FocusControllerTest : public testing::Test {
 
 TEST_F(FocusControllerTest, SetInitialFocus) {
   GetDocument().body()->setInnerHTML("<input><textarea>");
-  Element* input = ToElement(GetDocument().body()->FirstChild());
+  Element* input = ToElement(GetDocument().body()->firstChild());
   // Set sequential focus navigation point before the initial focus.
   input->focus();
   input->blur();
@@ -44,7 +44,7 @@ TEST_F(FocusControllerTest, DoNotCrash1) {
       "<div id='host'></div>This test is for crbug.com/609012<p id='target' "
       "tabindex='0'></p>");
   // <div> with shadow root
-  Element* host = ToElement(GetDocument().body()->FirstChild());
+  Element* host = ToElement(GetDocument().body()->firstChild());
   ShadowRootInit init;
   init.setMode("open");
   host->attachShadow(ToScriptStateForMainWorld(GetDocument().GetFrame()), init,
@@ -67,7 +67,7 @@ TEST_F(FocusControllerTest, DoNotCrash2) {
       "<p id='target' tabindex='0'></p>This test is for crbug.com/609012<div "
       "id='host'></div>");
   // <p>
-  Element* target = ToElement(GetDocument().body()->FirstChild());
+  Element* target = ToElement(GetDocument().body()->firstChild());
   // "This test is for crbug.com/609012"
   Node* text = target->nextSibling();
   // <div> with shadow root

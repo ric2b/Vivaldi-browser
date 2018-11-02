@@ -145,13 +145,7 @@ void MockSignIn() {
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
 
-  [ChromeEarlGreyUI openToolsMenu];
-  [[[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(kToolsMenuSettingsId)]
-         usingSearchAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)
-      onElementWithMatcher:grey_accessibilityID(kToolsMenuTableViewId)]
-      performAction:grey_tap()];
-
+  [ChromeEarlGreyUI openSettingsMenu];
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(kSettingsSignInCellId)]
       performAction:grey_tap()];
@@ -397,9 +391,9 @@ void MockSignIn() {
   // Include sufficientlyVisible condition for the case of the clear browsing
   // dialog, which also has a "Done" button and is displayed over the history
   // panel.
-  id<GREYMatcher> visibleDoneButton = grey_allOf(
-      ButtonWithAccessibilityLabelId(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON),
-      grey_sufficientlyVisible(), nil);
+  id<GREYMatcher> visibleDoneButton =
+      grey_allOf(chrome_test_util::NavigationBarDoneButton(),
+                 grey_sufficientlyVisible(), nil);
   [[EarlGrey selectElementWithMatcher:visibleDoneButton]
       performAction:grey_tap()];
 

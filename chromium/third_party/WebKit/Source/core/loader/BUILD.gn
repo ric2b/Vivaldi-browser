@@ -6,6 +6,8 @@ import("//third_party/WebKit/Source/core/core.gni")
 
 blink_core_sources("loader") {
   sources = [
+    "BaseFetchContext.cpp",
+    "BaseFetchContext.h",
     "CookieJar.cpp",
     "CookieJar.h",
     "DocumentLoadTiming.cpp",
@@ -63,6 +65,8 @@ blink_core_sources("loader") {
     "ThreadableLoaderClient.h",
     "ThreadableLoadingContext.cpp",
     "ThreadableLoadingContext.h",
+    "WorkerFetchContext.cpp",
+    "WorkerFetchContext.h",
     "WorkerThreadableLoader.cpp",
     "WorkerThreadableLoader.h",
     "WorkletScriptLoader.cpp",
@@ -77,6 +81,10 @@ blink_core_sources("loader") {
     "modulescript/ModuleScriptLoaderClient.h",
     "modulescript/ModuleScriptLoaderRegistry.cpp",
     "modulescript/ModuleScriptLoaderRegistry.h",
+    "modulescript/ModuleTreeLinker.cpp",
+    "modulescript/ModuleTreeLinker.h",
+    "modulescript/ModuleTreeLinkerRegistry.cpp",
+    "modulescript/ModuleTreeLinkerRegistry.h",
     "private/CrossOriginPreflightResultCache.cpp",
     "private/CrossOriginPreflightResultCache.h",
     "private/FrameClientHintsPreferencesContext.cpp",

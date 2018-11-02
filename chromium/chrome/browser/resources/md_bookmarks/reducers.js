@@ -19,11 +19,18 @@ cr.define('bookmarks', function() {
    */
   SelectionState.selectItems = function(selectionState, action) {
     var newItems = new Set();
-    if (action.add)
+    if (!action.clear)
       newItems = new Set(selectionState.items);
 
     action.items.forEach(function(id) {
-      newItems.add(id);
+      var add = true;
+      if (action.toggle)
+        add = !newItems.has(id);
+
+      if (add)
+        newItems.add(id);
+      else
+        newItems.delete(id);
     });
 
     return /** @type {SelectionState} */ (Object.assign({}, selectionState, {
@@ -51,8 +58,21 @@ cr.define('bookmarks', function() {
   SelectionState.deselectDeletedItems = function(selectionState, deleted) {
     return /** @type {SelectionState} */ Object.assign({}, selectionState, {
       items: bookmarks.util.removeIdsFromSet(selectionState.items, deleted),
-      anchor: null,
+      anchor: !selectionState.anchor || deleted.has(selectionState.anchor) ?
+          null :
+          selectionState.anchor,
     });
+  };
+
+  /**
+   * @param {SelectionState} selectionState
+   * @param {Action} action
+   * @return {SelectionState}
+   */
+  SelectionState.updateAnchor = function(selectionState, action) {
+    return /** @type {SelectionState} */ (Object.assign({}, selectionState, {
+      anchor: action.anchor,
+    }));
   };
 
   /**
@@ -72,6 +92,8 @@ cr.define('bookmarks', function() {
       case 'remove-bookmark':
         return SelectionState.deselectDeletedItems(
             selection, action.descendants);
+      case 'update-anchor':
+        return SelectionState.updateAnchor(selection, action);
       default:
         return selection;
     }
@@ -153,10 +175,10 @@ cr.define('bookmarks', function() {
   var NodeState = {};
 
   /**
-   * @param {NodeList} nodes
+   * @param {NodeMap} nodes
    * @param {string} id
    * @param {function(BookmarkNode):BookmarkNode} callback
-   * @return {NodeList}
+   * @return {NodeMap}
    */
   NodeState.modifyNode_ = function(nodes, id, callback) {
     var nodeModification = {};
@@ -165,9 +187,9 @@ cr.define('bookmarks', function() {
   };
 
   /**
-   * @param {NodeList} nodes
+   * @param {NodeMap} nodes
    * @param {Action} action
-   * @return {NodeList}
+   * @return {NodeMap}
    */
   NodeState.createBookmark = function(nodes, action) {
     var nodeModifications = {};
@@ -184,9 +206,9 @@ cr.define('bookmarks', function() {
   };
 
   /**
-   * @param {NodeList} nodes
+   * @param {NodeMap} nodes
    * @param {Action} action
-   * @return {NodeList}
+   * @return {NodeMap}
    */
   NodeState.editBookmark = function(nodes, action) {
     // Do not allow folders to change URL (making them no longer folders).
@@ -200,9 +222,9 @@ cr.define('bookmarks', function() {
   };
 
   /**
-   * @param {NodeList} nodes
+   * @param {NodeMap} nodes
    * @param {Action} action
-   * @return {NodeList}
+   * @return {NodeMap}
    */
   NodeState.moveBookmark = function(nodes, action) {
     var nodeModifications = {};
@@ -232,9 +254,9 @@ cr.define('bookmarks', function() {
   };
 
   /**
-   * @param {NodeList} nodes
+   * @param {NodeMap} nodes
    * @param {Action} action
-   * @return {NodeList}
+   * @return {NodeMap}
    */
   NodeState.removeBookmark = function(nodes, action) {
     var newState =
@@ -249,9 +271,9 @@ cr.define('bookmarks', function() {
   };
 
   /**
-   * @param {NodeList} nodes
+   * @param {NodeMap} nodes
    * @param {Action} action
-   * @return {NodeList}
+   * @return {NodeMap}
    */
   NodeState.reorderChildren = function(nodes, action) {
     return NodeState.modifyNode_(nodes, action.id, function(node) {
@@ -261,9 +283,9 @@ cr.define('bookmarks', function() {
   };
 
   /**
-   * @param {NodeList} nodes
+   * @param {NodeMap} nodes
    * @param {Action} action
-   * @return {NodeList}
+   * @return {NodeMap}
    */
   NodeState.updateNodes = function(nodes, action) {
     switch (action.name) {
@@ -287,7 +309,7 @@ cr.define('bookmarks', function() {
   var SelectedFolderState = {};
 
   /**
-   * @param {NodeList} nodes
+   * @param {NodeMap} nodes
    * @param {string} ancestorId
    * @param {string} childId
    * @return {boolean}
@@ -306,14 +328,13 @@ cr.define('bookmarks', function() {
   /**
    * @param {string} selectedFolder
    * @param {Action} action
-   * @param {NodeList} nodes
+   * @param {NodeMap} nodes
    * @return {string}
    */
   SelectedFolderState.updateSelectedFolder = function(
       selectedFolder, action, nodes) {
     switch (action.name) {
       case 'select-folder':
-        // TODO(tsergeant): It should not be possible to select a non-folder.
         return action.id;
       case 'change-folder-open':
         // When hiding the selected folder by closing its ancestor, select
@@ -341,7 +362,7 @@ cr.define('bookmarks', function() {
   /**
    * @param {ClosedFolderState} closedFolders
    * @param {string|undefined} id
-   * @param {NodeList} nodes
+   * @param {NodeMap} nodes
    * @return {ClosedFolderState}
    */
   ClosedFolderState.openFolderAndAncestors = function(
@@ -377,7 +398,7 @@ cr.define('bookmarks', function() {
   /**
    * @param {ClosedFolderState} closedFolders
    * @param {Action} action
-   * @param {NodeList} nodes
+   * @param {NodeMap} nodes
    * @return {ClosedFolderState}
    */
   ClosedFolderState.updateClosedFolders = function(
@@ -399,7 +420,7 @@ cr.define('bookmarks', function() {
             closedFolders, action.descendants);
       default:
         return closedFolders;
-    };
+    }
   };
 
   /**

@@ -29,23 +29,21 @@
 #include "core/CoreExport.h"
 #include "core/layout/LayoutTable.h"
 #include "core/layout/LayoutTableBoxComponent.h"
+#include "core/layout/TableGridCell.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
-
-// This variable is used to balance the memory consumption vs the paint
-// invalidation time on big tables.
-const float kGMaxAllowedOverflowingCellRatioForFastPaintPath = 0.1f;
 
 // Helper class for paintObject.
 class CellSpan {
   STACK_ALLOCATED();
 
  public:
+  CellSpan() : start_(0), end_(0) {}
   CellSpan(unsigned start, unsigned end) : start_(start), end_(end) {}
 
   unsigned Start() const { return start_; }
-  unsigned end() const { return end_; }
+  unsigned End() const { return end_; }
 
   void DecreaseStart() { --start_; }
   void IncreaseEnd() { ++end_; }
@@ -58,7 +56,7 @@ class CellSpan {
 };
 
 inline bool operator==(const CellSpan& s1, const CellSpan& s2) {
-  return s1.Start() == s2.Start() && s1.end() == s2.end();
+  return s1.Start() == s2.Start() && s1.End() == s2.End();
 }
 inline bool operator!=(const CellSpan& s1, const CellSpan& s2) {
   return !(s1 == s2);
@@ -118,9 +116,10 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
 
   void AddCell(LayoutTableCell*, LayoutTableRow*);
 
+  int VBorderSpacingBeforeFirstRow() const;
   int CalcRowLogicalHeight();
   void LayoutRows();
-  void ComputeOverflowFromCells();
+  void ComputeOverflowFromDescendants();
   bool RecalcChildOverflowAfterStyleChange();
 
   void MarkAllCellsWidthsDirtyAndOrNeedsLayout(LayoutTable::WhatToMarkAllCells);
@@ -128,61 +127,6 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
   LayoutTable* Table() const { return ToLayoutTable(Parent()); }
 
   typedef Vector<LayoutTableCell*, 2> SpanningLayoutTableCells;
-
-  // CellStruct represents the cells that occupy an (N, M) position in the
-  // table grid.
-  struct CellStruct {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-
-   public:
-    // All the cells that fills this grid "slot".
-    // Due to colspan / rowpsan, it is possible to have overlapping cells
-    // (see class comment about an example).
-    // This Vector is sorted in DOM order.
-    Vector<LayoutTableCell*, 1> cells;
-    bool in_col_span;  // true for columns after the first in a colspan
-
-    CellStruct();
-    ~CellStruct();
-
-    // This is the cell in the grid "slot" that is on top of the others
-    // (aka the last cell in DOM order for this slot).
-    //
-    // Multiple grid slots can have the same primary cell if the cell spans
-    // into the grid slots. The slot having the smallest row index and
-    // smallest effective column index is the originating slot of the cell.
-    //
-    // The concept of a primary cell is dubious at most as it doesn't
-    // correspond to a DOM or rendering concept. Also callers should be
-    // careful about assumptions about it. For example, even though the
-    // primary cell is visibly the top most, it is not guaranteed to be
-    // the only one visible for this slot due to different visual
-    // overflow rectangles.
-    LayoutTableCell* PrimaryCell() {
-      return HasCells() ? cells[cells.size() - 1] : 0;
-    }
-
-    const LayoutTableCell* PrimaryCell() const {
-      return HasCells() ? cells[cells.size() - 1] : 0;
-    }
-
-    bool HasCells() const { return cells.size() > 0; }
-  };
-
-  // The index is effective column index.
-  typedef Vector<CellStruct> Row;
-
-  struct RowStruct {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-
-   public:
-    RowStruct() : row_layout_object(nullptr), baseline(-1) {}
-
-    Row row;
-    LayoutTableRow* row_layout_object;
-    int baseline;
-    Length logical_height;
-  };
 
   struct SpanningRowsHeight {
     STACK_ALLOCATED();
@@ -200,37 +144,38 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
     bool is_any_row_with_only_spanning_cells;
   };
 
-  const BorderValue& BorderAdjoiningTableStart() const {
+  BorderValue BorderAdjoiningTableStart() const {
     if (HasSameDirectionAs(Table()))
       return Style()->BorderStart();
 
     return Style()->BorderEnd();
   }
 
-  const BorderValue& BorderAdjoiningTableEnd() const {
+  BorderValue BorderAdjoiningTableEnd() const {
     if (HasSameDirectionAs(Table()))
       return Style()->BorderEnd();
 
     return Style()->BorderStart();
   }
 
-  const BorderValue& BorderAdjoiningStartCell(const LayoutTableCell*) const;
-  const BorderValue& BorderAdjoiningEndCell(const LayoutTableCell*) const;
+  BorderValue BorderAdjoiningStartCell(const LayoutTableCell*) const;
+  BorderValue BorderAdjoiningEndCell(const LayoutTableCell*) const;
 
   const LayoutTableCell* FirstRowCellAdjoiningTableStart() const;
   const LayoutTableCell* FirstRowCellAdjoiningTableEnd() const;
 
-  CellStruct& CellAt(unsigned row, unsigned effective_column) {
-    return grid_[row].row[effective_column];
+  TableGridCell& GridCellAt(unsigned row, unsigned effective_column) {
+    return grid_[row].grid_cells[effective_column];
   }
-  const CellStruct& CellAt(unsigned row, unsigned effective_column) const {
-    return grid_[row].row[effective_column];
+  const TableGridCell& GridCellAt(unsigned row,
+                                  unsigned effective_column) const {
+    return grid_[row].grid_cells[effective_column];
   }
   LayoutTableCell* PrimaryCellAt(unsigned row, unsigned effective_column) {
-    Row& row_vector = grid_[row].row;
-    if (effective_column >= row_vector.size())
+    auto& grid_cells = grid_[row].grid_cells;
+    if (effective_column >= grid_cells.size())
       return nullptr;
-    return row_vector[effective_column].PrimaryCell();
+    return grid_cells[effective_column].PrimaryCell();
   }
   const LayoutTableCell* PrimaryCellAt(unsigned row,
                                        unsigned effective_column) const {
@@ -247,15 +192,13 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
         row, effective_column);
   }
 
-  unsigned NumCols(unsigned row) const { return grid_[row].row.size(); }
+  unsigned NumCols(unsigned row) const { return grid_[row].grid_cells.size(); }
 
   // Returns null for cells with a rowspan that exceed the last row. Possibly
   // others.
-  LayoutTableRow* RowLayoutObjectAt(unsigned row) {
-    return grid_[row].row_layout_object;
-  }
+  LayoutTableRow* RowLayoutObjectAt(unsigned row) { return grid_[row].row; }
   const LayoutTableRow* RowLayoutObjectAt(unsigned row) const {
-    return grid_[row].row_layout_object;
+    return grid_[row].row;
   }
 
   void AppendEffectiveColumn(unsigned pos);
@@ -318,13 +261,17 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
   // columnPos vectors.
   LayoutRect LogicalRectForWritingModeAndDirection(const LayoutRect&) const;
 
-  // Returns a row or column span covering all grid slots from each of which
-  // a primary cell intersecting |visualRect| originates.
-  CellSpan DirtiedRows(const LayoutRect& visual_rect) const;
-  CellSpan DirtiedEffectiveColumns(const LayoutRect& visual_rect) const;
+  // Sets |rows| and |columns| to cover all cells needing repaint in
+  // |damage_rect|.
+  void DirtiedRowsAndEffectiveColumns(const LayoutRect& damage_rect,
+                                      CellSpan& rows,
+                                      CellSpan& columns) const;
 
   const HashSet<const LayoutTableCell*>& OverflowingCells() const {
     return overflowing_cells_;
+  }
+  bool HasOverflowingCell() const {
+    return overflowing_cells_.size() || force_full_paint_;
   }
   bool HasMultipleCellLevels() const { return has_multiple_cell_levels_; }
 
@@ -372,7 +319,7 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
   void WillBeRemovedFromTree() override;
 
   int BorderSpacingForRow(unsigned row) const {
-    return grid_[row].row_layout_object ? Table()->VBorderSpacing() : 0;
+    return grid_[row].row ? Table()->VBorderSpacing() : 0;
   }
 
   void EnsureRows(unsigned num_rows) {
@@ -382,7 +329,7 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
 
   void EnsureCols(unsigned row_index, unsigned num_cols) {
     if (num_cols > this->NumCols(row_index))
-      grid_[row_index].row.Grow(num_cols);
+      grid_[row_index].grid_cells.Grow(num_cols);
   }
 
   bool RowHasOnlySpanningCells(unsigned);
@@ -426,13 +373,6 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
                              unsigned row,
                              int& baseline_descent);
 
-  bool HasOverflowingCell() const {
-    return overflowing_cells_.size() ||
-           force_slow_paint_path_with_overflowing_cell_;
-  }
-
-  void ComputeOverflowFromCells(unsigned total_rows, unsigned n_eff_cols);
-
   // These two functions take a rectangle as input that has been flipped by
   // logicalRectForWritingModeAndDirection.
   // The returned span of rows or columns is end-exclusive, and empty if
@@ -453,8 +393,22 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
 
   bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
 
-  // The representation of the rows and their cells (CellStruct).
-  Vector<RowStruct> grid_;
+  struct TableGridRow {
+    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+
+   public:
+    inline void SetRowLogicalHeightToRowStyleLogicalHeight();
+    inline void UpdateLogicalHeightForCell(const LayoutTableCell*);
+
+    // The index is effective column index.
+    Vector<TableGridCell> grid_cells;
+    LayoutTableRow* row = nullptr;
+    int baseline = -1;
+    Length logical_height;
+  };
+
+  // The representation of the rows and their grid cells.
+  Vector<TableGridRow> grid_;
 
   // The logical offset of each row from the top of the section.
   //
@@ -486,12 +440,11 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
 
   bool needs_cell_recalc_;
 
-  // This HashSet holds the overflowing cells for faster painting.
-  // If we have more than gMaxAllowedOverflowingCellRatio * total cells, it will
-  // be empty and m_forceSlowPaintPathWithOverflowingCell will be set to save
-  // memory.
+  // This HashSet holds the overflowing cells for the partial paint path. If we
+  // have too many overflowing cells, it will be empty and force_full_paint_
+  // will be set to save memory. See ComputeOverflowFromDescendants().
   HashSet<const LayoutTableCell*> overflowing_cells_;
-  bool force_slow_paint_path_with_overflowing_cell_;
+  bool force_full_paint_;
 
   // This boolean tracks if we have cells overlapping due to rowspan / colspan
   // (see class comment above about when it could appear).

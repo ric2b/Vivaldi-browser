@@ -23,21 +23,22 @@ class LayoutTestContentRendererClient : public ShellContentRendererClient {
   void RenderThreadStarted() override;
   void RenderFrameCreated(RenderFrame* render_frame) override;
   void RenderViewCreated(RenderView* render_view) override;
-  blink::WebMediaStreamCenter* OverrideCreateWebMediaStreamCenter(
+  std::unique_ptr<blink::WebMediaStreamCenter>
+  OverrideCreateWebMediaStreamCenter(
       blink::WebMediaStreamCenterClient* client) override;
-  blink::WebRTCPeerConnectionHandler* OverrideCreateWebRTCPeerConnectionHandler(
+  std::unique_ptr<blink::WebRTCPeerConnectionHandler>
+  OverrideCreateWebRTCPeerConnectionHandler(
       blink::WebRTCPeerConnectionHandlerClient* client) override;
-  blink::WebMIDIAccessor* OverrideCreateMIDIAccessor(
+  std::unique_ptr<blink::WebMIDIAccessor> OverrideCreateMIDIAccessor(
       blink::WebMIDIAccessorClient* client) override;
-  blink::WebAudioDevice* OverrideCreateAudioDevice() override;
+  std::unique_ptr<blink::WebAudioDevice> OverrideCreateAudioDevice(
+      const blink::WebAudioLatencyHint& latency_hint) override;
   blink::WebClipboard* OverrideWebClipboard() override;
   blink::WebThemeEngine* OverrideThemeEngine() override;
   std::unique_ptr<MediaStreamRendererFactory> CreateMediaStreamRendererFactory()
       override;
-  std::unique_ptr<gfx::ICCProfile> GetImageDecodeColorProfile() override;
   void DidInitializeWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context) override;
-  void RunScriptsAtDocumentEnd(RenderFrame* render_frame) override;
   void SetRuntimeFeaturesDefaultsBeforeBlinkInitialization() override;
 
  private:

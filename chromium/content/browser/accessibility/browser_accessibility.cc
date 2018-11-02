@@ -40,16 +40,13 @@ BrowserAccessibility* BrowserAccessibility::Create() {
 BrowserAccessibility::BrowserAccessibility()
     : manager_(nullptr),
       node_(nullptr),
-      unique_id_(ui::GetNextAXPlatformNodeUniqueId()),
-      platform_node_(nullptr) {
+      unique_id_(ui::GetNextAXPlatformNodeUniqueId()) {
   g_unique_id_map.Get()[unique_id_] = this;
 }
 
 BrowserAccessibility::~BrowserAccessibility() {
   if (unique_id_)
     g_unique_id_map.Get().erase(unique_id_);
-  if (platform_node_)
-    platform_node_->Destroy();
 }
 
 // static
@@ -65,13 +62,6 @@ void BrowserAccessibility::Init(BrowserAccessibilityManager* manager,
     ui::AXNode* node) {
   manager_ = manager;
   node_ = node;
-
-// Here we create the AXPlatformNode which contains a platform-specific
-// implementation of requried accessibility APIS for this node. At this point,
-// we only are creating this object for Windows. See http://crbug.com/703369
-#if defined(OS_WIN)
-  platform_node_ = ui::AXPlatformNode::Create(this);
-#endif
 }
 
 bool BrowserAccessibility::PlatformIsLeaf() const {
@@ -781,13 +771,13 @@ bool BrowserAccessibility::GetAriaTristate(
 
 BrowserAccessibility* BrowserAccessibility::GetTable() const {
   BrowserAccessibility* table = const_cast<BrowserAccessibility*>(this);
-  while (table && !table->IsTableOrGridOrTreeGridRole())
+  while (table && !table->IsTableLikeRole())
     table = table->PlatformGetParent();
   return table;
 }
 
 BrowserAccessibility* BrowserAccessibility::GetTableCell(int index) const {
-  if (!IsTableOrGridOrTreeGridRole() && !IsCellOrTableHeaderRole())
+  if (!IsTableLikeRole() && !IsCellOrTableHeaderRole())
     return nullptr;
 
   BrowserAccessibility* table = GetTable();
@@ -802,7 +792,7 @@ BrowserAccessibility* BrowserAccessibility::GetTableCell(int index) const {
 
 BrowserAccessibility* BrowserAccessibility::GetTableCell(int row,
                                                          int column) const {
-  if (!IsTableOrGridOrTreeGridRole() && !IsCellOrTableHeaderRole())
+  if (!IsTableLikeRole() && !IsCellOrTableHeaderRole())
     return nullptr;
   if (row < 0 || row >= GetTableRowCount() || column < 0 ||
       column >= GetTableColumnCount()) {
@@ -892,7 +882,11 @@ base::string16 BrowserAccessibility::GetText() const {
 }
 
 bool BrowserAccessibility::HasState(ui::AXState state_enum) const {
-  return (GetState() >> state_enum) & 1;
+  return GetData().HasState(state_enum);
+}
+
+bool BrowserAccessibility::HasAction(ui::AXAction action_enum) const {
+  return GetData().HasAction(action_enum);
 }
 
 bool BrowserAccessibility::IsCellOrTableHeaderRole() const {
@@ -901,7 +895,7 @@ bool BrowserAccessibility::IsCellOrTableHeaderRole() const {
           GetRole() == ui::AX_ROLE_ROW_HEADER);
 }
 
-bool BrowserAccessibility::IsTableOrGridOrTreeGridRole() const {
+bool BrowserAccessibility::IsTableLikeRole() const {
   return (GetRole() == ui::AX_ROLE_TABLE ||
           GetRole() == ui::AX_ROLE_GRID ||
           GetRole() == ui::AX_ROLE_TREE_GRID);
@@ -1023,7 +1017,12 @@ bool BrowserAccessibility::IsRichTextControl() const {
           !PlatformGetParent()->HasState(ui::AX_STATE_RICHLY_EDITABLE));
 }
 
-std::string BrowserAccessibility::ComputeAccessibleNameFromDescendants() {
+bool BrowserAccessibility::HasExplicitlyEmptyName() const {
+  return GetIntAttribute(ui::AX_ATTR_NAME_FROM) ==
+         ui::AX_NAME_FROM_ATTRIBUTE_EXPLICITLY_EMPTY;
+}
+
+std::string BrowserAccessibility::ComputeAccessibleNameFromDescendants() const {
   std::string name;
   for (size_t i = 0; i < InternalChildCount(); ++i) {
     BrowserAccessibility* child = InternalGetChild(i);
@@ -1134,7 +1133,19 @@ gfx::Rect BrowserAccessibility::RelativeToAbsoluteBounds(
   return gfx::ToEnclosingRect(bounds);
 }
 
+gfx::NativeViewAccessible BrowserAccessibility::GetNativeViewAccessible() {
+  // TODO(703369) On Windows, where we have started to migrate to an
+  // AXPlatformNode implementation, the BrowserAccessibilityWin subclass has
+  // overridden this method. On all other platforms, this method should not be
+  // called yet. In the future, when all subclasses have moved over to be
+  // implemented by AXPlatformNode, we may make this method completely virtual.
+  NOTREACHED();
+  return nullptr;
+}
+
+//
 // AXPlatformNodeDelegate.
+//
 const ui::AXNodeData& BrowserAccessibility::GetData() const {
   CR_DEFINE_STATIC_LOCAL(ui::AXNodeData, empty_data, ());
   if (node_)
@@ -1149,18 +1160,23 @@ gfx::NativeWindow BrowserAccessibility::GetTopLevelWidget() {
 }
 
 gfx::NativeViewAccessible BrowserAccessibility::GetParent() {
-  NOTREACHED();
-  return nullptr;
+  auto* parent = PlatformGetParent();
+  if (!parent)
+    return nullptr;
+
+  return parent->GetNativeViewAccessible();
 }
 
 int BrowserAccessibility::GetChildCount() {
-  NOTREACHED();
-  return -1;
+  return PlatformChildCount();
 }
 
 gfx::NativeViewAccessible BrowserAccessibility::ChildAtIndex(int index) {
-  NOTREACHED();
-  return nullptr;
+  auto* child = PlatformGetChild(index);
+  if (!child)
+    return nullptr;
+
+  return child->GetNativeViewAccessible();
 }
 
 gfx::Rect BrowserAccessibility::GetScreenBoundsRect() const {
@@ -1179,19 +1195,29 @@ gfx::NativeViewAccessible BrowserAccessibility::HitTestSync(int x, int y) {
 }
 
 gfx::NativeViewAccessible BrowserAccessibility::GetFocus() {
-  NOTREACHED();
-  return nullptr;
+  auto* focused = manager()->GetFocus();
+  if (!focused)
+    return nullptr;
+
+  return focused->GetNativeViewAccessible();
 }
 
 gfx::AcceleratedWidget
 BrowserAccessibility::GetTargetForNativeAccessibilityEvent() {
-  NOTREACHED();
-  return gfx::kNullAcceleratedWidget;
+  BrowserAccessibilityDelegate* root_delegate =
+      manager()->GetDelegateFromRootManager();
+  if (!root_delegate)
+    return gfx::kNullAcceleratedWidget;
+  return root_delegate->AccessibilityGetAcceleratedWidget();
 }
 
 bool BrowserAccessibility::AccessibilityPerformAction(
     const ui::AXActionData& data) {
-  NOTREACHED();
+  if (data.action == ui::AX_ACTION_DO_DEFAULT) {
+    manager_->DoDefaultAction(*this);
+    return true;
+  }
+
   return false;
 }
 

@@ -31,8 +31,8 @@
 namespace blink {
 
 void DistributedNodes::Swap(DistributedNodes& other) {
-  nodes_.Swap(other.nodes_);
-  indices_.Swap(other.indices_);
+  nodes_.swap(other.nodes_);
+  indices_.swap(other.indices_);
 }
 
 void DistributedNodes::Append(Node* node) {
@@ -45,7 +45,7 @@ void DistributedNodes::Append(Node* node) {
 
 size_t DistributedNodes::Find(const Node* node) const {
   HeapHashMap<Member<const Node>, size_t>::const_iterator it =
-      indices_.Find(node);
+      indices_.find(node);
   if (it == indices_.end())
     return kNotFound;
 
@@ -55,14 +55,14 @@ size_t DistributedNodes::Find(const Node* node) const {
 Node* DistributedNodes::NextTo(const Node* node) const {
   size_t index = Find(node);
   if (index == kNotFound || index + 1 == size())
-    return 0;
+    return nullptr;
   return at(index + 1);
 }
 
 Node* DistributedNodes::PreviousTo(const Node* node) const {
   size_t index = Find(node);
   if (index == kNotFound || !index)
-    return 0;
+    return nullptr;
   return at(index - 1);
 }
 

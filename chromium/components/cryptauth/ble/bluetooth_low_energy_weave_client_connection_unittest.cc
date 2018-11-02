@@ -20,6 +20,7 @@
 #include "components/cryptauth/cryptauth_test_util.h"
 #include "components/cryptauth/remote_device.h"
 #include "components/cryptauth/wire_message.h"
+#include "components/proximity_auth/logging/logging.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "device/bluetooth/test/mock_bluetooth_device.h"
@@ -368,9 +369,9 @@ class CryptAuthBluetoothLowEnergyWeaveClientConnectionTest
         receiver_factory_(
             new MockBluetoothLowEnergyWeavePacketReceiverFactory()) {
     BluetoothLowEnergyWeavePacketGenerator::Factory::SetInstanceForTesting(
-        generator_factory_);
+        generator_factory_.get());
     BluetoothLowEnergyWeavePacketReceiver::Factory::SetInstanceForTesting(
-        receiver_factory_);
+        receiver_factory_.get());
   }
 
   ~CryptAuthBluetoothLowEnergyWeaveClientConnectionTest() override {
@@ -441,6 +442,12 @@ class CryptAuthBluetoothLowEnergyWeaveClientConnectionTest
   // Transitions |connection| from DISCONNECTED to WAITING_CHARACTERISTICS
   // state, without an existing GATT connection.
   void ConnectGatt(TestBluetoothLowEnergyWeaveClientConnection* connection) {
+    EXPECT_CALL(*mock_bluetooth_device_,
+                SetConnectionLatency(
+                    device::BluetoothDevice::CONNECTION_LATENCY_LOW, _, _))
+        .WillOnce(DoAll(SaveArg<1>(&connection_latency_callback_),
+                        SaveArg<2>(&connection_latency_error_callback_)));
+
     // Preparing |connection| for a CreateGattConnection call.
     EXPECT_CALL(*mock_bluetooth_device_, CreateGattConnection(_, _))
         .WillOnce(DoAll(SaveArg<0>(&create_gatt_connection_success_callback_),
@@ -451,6 +458,13 @@ class CryptAuthBluetoothLowEnergyWeaveClientConnectionTest
         .WillOnce(Return(base::TimeDelta()));
 
     connection->Connect();
+
+    // Handle setting the connection latency.
+    EXPECT_EQ(connection->sub_status(), SubStatus::WAITING_CONNECTION_LATENCY);
+    EXPECT_EQ(connection->status(), Connection::IN_PROGRESS);
+    ASSERT_FALSE(connection_latency_callback_.is_null());
+    ASSERT_FALSE(connection_latency_error_callback_.is_null());
+    connection_latency_callback_.Run();
 
     EXPECT_EQ(connection->sub_status(), SubStatus::WAITING_GATT_CONNECTION);
     EXPECT_EQ(connection->status(), Connection::IN_PROGRESS);
@@ -613,13 +627,15 @@ class CryptAuthBluetoothLowEnergyWeaveClientConnectionTest
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   base::MessageLoop message_loop_;
   bool last_wire_message_success_;
-  std::shared_ptr<MockBluetoothLowEnergyWeavePacketGeneratorFactory>
+  std::unique_ptr<MockBluetoothLowEnergyWeavePacketGeneratorFactory>
       generator_factory_;
-  std::shared_ptr<MockBluetoothLowEnergyWeavePacketReceiverFactory>
+  std::unique_ptr<MockBluetoothLowEnergyWeavePacketReceiverFactory>
       receiver_factory_;
   MockConnectionObserver connection_observer_;
 
   // Callbacks
+  base::Closure connection_latency_callback_;
+  device::BluetoothDevice::ErrorCallback connection_latency_error_callback_;
   device::BluetoothDevice::GattConnectionCallback
       create_gatt_connection_success_callback_;
   device::BluetoothDevice::ConnectErrorCallback
@@ -638,6 +654,8 @@ class CryptAuthBluetoothLowEnergyWeaveClientConnectionTest
   base::Closure write_remote_characteristic_success_callback_;
   device::BluetoothRemoteGattCharacteristic::ErrorCallback
       write_remote_characteristic_error_callback_;
+
+  proximity_auth::ScopedDisableLoggingForTesting disable_logging_;
 };
 
 TEST_F(CryptAuthBluetoothLowEnergyWeaveClientConnectionTest,
@@ -1065,19 +1083,66 @@ TEST_F(CryptAuthBluetoothLowEnergyWeaveClientConnectionTest,
 
   EXPECT_CALL(*bluetooth_throttler_, GetDelay())
       .WillOnce(Return(base::TimeDelta(base::TimeDelta::FromSeconds(1))));
+  EXPECT_CALL(*mock_bluetooth_device_,
+              SetConnectionLatency(
+                  device::BluetoothDevice::CONNECTION_LATENCY_LOW, _, _))
+      .WillOnce(DoAll(SaveArg<1>(&connection_latency_callback_),
+                      SaveArg<2>(&connection_latency_error_callback_)));
   EXPECT_CALL(*mock_bluetooth_device_, CreateGattConnection(_, _))
       .WillOnce(DoAll(SaveArg<0>(&create_gatt_connection_success_callback_),
                       SaveArg<1>(&create_gatt_connection_error_callback_)));
 
   // No GATT connection should be created before the delay.
   connection->Connect();
-  EXPECT_EQ(connection->sub_status(), SubStatus::WAITING_GATT_CONNECTION);
+  EXPECT_EQ(connection->sub_status(), SubStatus::WAITING_CONNECTION_LATENCY);
   EXPECT_EQ(connection->status(), Connection::IN_PROGRESS);
   EXPECT_TRUE(create_gatt_connection_error_callback_.is_null());
   EXPECT_TRUE(create_gatt_connection_success_callback_.is_null());
 
-  // A GATT connection should be created after the delay.
+  // A GATT connection should be created after the delay and after setting the
+  // connection latency.
   task_runner_->RunUntilIdle();
+  ASSERT_FALSE(connection_latency_callback_.is_null());
+  connection_latency_callback_.Run();
+
+  EXPECT_FALSE(create_gatt_connection_error_callback_.is_null());
+  ASSERT_FALSE(create_gatt_connection_success_callback_.is_null());
+
+  // Preparing |connection| to run |create_gatt_connection_success_callback_|.
+  EXPECT_CALL(*connection, CreateCharacteristicsFinder(_, _))
+      .WillOnce(DoAll(
+          SaveArg<0>(&characteristics_finder_success_callback_),
+          SaveArg<1>(&characteristics_finder_error_callback_),
+          Return(new NiceMock<MockBluetoothLowEnergyCharacteristicsFinder>)));
+
+  create_gatt_connection_success_callback_.Run(
+      base::MakeUnique<NiceMock<device::MockBluetoothGattConnection>>(
+          adapter_, kTestRemoteDeviceBluetoothAddress));
+
+  CharacteristicsFound(connection.get());
+  NotifySessionStarted(connection.get());
+  ConnectionResponseReceived(connection.get(), kDefaultMaxPacketSize);
+}
+
+TEST_F(CryptAuthBluetoothLowEnergyWeaveClientConnectionTest,
+       SetConnectionLatencyError) {
+  std::unique_ptr<TestBluetoothLowEnergyWeaveClientConnection> connection(
+      CreateConnection());
+
+  EXPECT_CALL(*mock_bluetooth_device_,
+              SetConnectionLatency(
+                  device::BluetoothDevice::CONNECTION_LATENCY_LOW, _, _))
+      .WillOnce(DoAll(SaveArg<1>(&connection_latency_callback_),
+                      SaveArg<2>(&connection_latency_error_callback_)));
+
+  // Even if setting the connection interval fails, we should still connect.
+  connection->Connect();
+  ASSERT_FALSE(connection_latency_error_callback_.is_null());
+
+  EXPECT_CALL(*mock_bluetooth_device_, CreateGattConnection(_, _))
+      .WillOnce(DoAll(SaveArg<0>(&create_gatt_connection_success_callback_),
+                      SaveArg<1>(&create_gatt_connection_error_callback_)));
+  connection_latency_error_callback_.Run();
   EXPECT_FALSE(create_gatt_connection_error_callback_.is_null());
   ASSERT_FALSE(create_gatt_connection_success_callback_.is_null());
 

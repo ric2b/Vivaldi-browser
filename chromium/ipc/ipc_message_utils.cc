@@ -9,6 +9,8 @@
 
 #include "base/files/file_path.h"
 #include "base/json/json_writer.h"
+#include "base/memory/ptr_util.h"
+#include "base/memory/shared_memory_handle.h"
 #include "base/strings/nullable_string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -26,10 +28,6 @@
 #include "ipc/ipc_platform_file_attachment_posix.h"
 #endif
 
-#if (defined(OS_MACOSX) && !defined(OS_IOS)) || defined(OS_WIN)
-#include "base/memory/shared_memory_handle.h"
-#endif  // (defined(OS_MACOSX) && !defined(OS_IOS)) || defined(OS_WIN)
-
 #if defined(OS_MACOSX) && !defined(OS_IOS)
 #include "ipc/mach_port_mac.h"
 #endif
@@ -37,6 +35,7 @@
 #if defined(OS_WIN)
 #include <tchar.h>
 #include "ipc/handle_win.h"
+#include "ipc/ipc_platform_file.h"
 #endif
 
 namespace IPC {
@@ -71,7 +70,7 @@ void LogBytes(const std::vector<CharType>& data, std::string* out) {
 
 bool ReadValue(const base::Pickle* m,
                base::PickleIterator* iter,
-               base::Value** value,
+               std::unique_ptr<base::Value>* value,
                int recursion);
 
 void GetValueSize(base::PickleSizer* sizer,
@@ -110,7 +109,7 @@ void GetValueSize(base::PickleSizer* sizer,
       break;
     }
     case base::Value::Type::BINARY: {
-      sizer->AddData(static_cast<int>(value->GetSize()));
+      sizer->AddData(static_cast<int>(value->GetBlob().size()));
       break;
     }
     case base::Value::Type::DICTIONARY: {
@@ -178,7 +177,8 @@ void WriteValue(base::Pickle* m, const base::Value* value, int recursion) {
       break;
     }
     case base::Value::Type::BINARY: {
-      m->WriteData(value->GetBuffer(), static_cast<int>(value->GetSize()));
+      m->WriteData(value->GetBlob().data(),
+                   static_cast<int>(value->GetBlob().size()));
       break;
     }
     case base::Value::Type::DICTIONARY: {
@@ -217,11 +217,11 @@ bool ReadDictionaryValue(const base::Pickle* m,
 
   for (int i = 0; i < size; ++i) {
     std::string key;
-    base::Value* subval;
+    std::unique_ptr<base::Value> subval;
     if (!ReadParam(m, iter, &key) ||
         !ReadValue(m, iter, &subval, recursion + 1))
       return false;
-    value->SetWithoutPathExpansion(key, subval);
+    value->SetWithoutPathExpansion(key, std::move(subval));
   }
 
   return true;
@@ -238,10 +238,10 @@ bool ReadListValue(const base::Pickle* m,
     return false;
 
   for (int i = 0; i < size; ++i) {
-    base::Value* subval;
+    std::unique_ptr<base::Value> subval;
     if (!ReadValue(m, iter, &subval, recursion + 1))
       return false;
-    value->Set(i, subval);
+    value->Set(i, std::move(subval));
   }
 
   return true;
@@ -249,7 +249,7 @@ bool ReadListValue(const base::Pickle* m,
 
 bool ReadValue(const base::Pickle* m,
                base::PickleIterator* iter,
-               base::Value** value,
+               std::unique_ptr<base::Value>* value,
                int recursion) {
   if (recursion > kMaxRecursionDepth) {
     LOG(ERROR) << "Max recursion depth hit in ReadValue.";
@@ -262,34 +262,34 @@ bool ReadValue(const base::Pickle* m,
 
   switch (static_cast<base::Value::Type>(type)) {
     case base::Value::Type::NONE:
-      *value = new base::Value();
+      *value = base::MakeUnique<base::Value>();
       break;
     case base::Value::Type::BOOLEAN: {
       bool val;
       if (!ReadParam(m, iter, &val))
         return false;
-      *value = new base::Value(val);
+      *value = base::MakeUnique<base::Value>(val);
       break;
     }
     case base::Value::Type::INTEGER: {
       int val;
       if (!ReadParam(m, iter, &val))
         return false;
-      *value = new base::Value(val);
+      *value = base::MakeUnique<base::Value>(val);
       break;
     }
     case base::Value::Type::DOUBLE: {
       double val;
       if (!ReadParam(m, iter, &val))
         return false;
-      *value = new base::Value(val);
+      *value = base::MakeUnique<base::Value>(val);
       break;
     }
     case base::Value::Type::STRING: {
       std::string val;
       if (!ReadParam(m, iter, &val))
         return false;
-      *value = new base::Value(val);
+      *value = base::MakeUnique<base::Value>(std::move(val));
       break;
     }
     case base::Value::Type::BINARY: {
@@ -297,23 +297,21 @@ bool ReadValue(const base::Pickle* m,
       int length;
       if (!iter->ReadData(&data, &length))
         return false;
-      std::unique_ptr<base::Value> val =
-          base::Value::CreateWithCopiedBuffer(data, length);
-      *value = val.release();
+      *value = base::Value::CreateWithCopiedBuffer(data, length);
       break;
     }
     case base::Value::Type::DICTIONARY: {
-      std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
-      if (!ReadDictionaryValue(m, iter, val.get(), recursion))
+      base::DictionaryValue val;
+      if (!ReadDictionaryValue(m, iter, &val, recursion))
         return false;
-      *value = val.release();
+      *value = base::MakeUnique<base::Value>(std::move(val));
       break;
     }
     case base::Value::Type::LIST: {
-      std::unique_ptr<base::ListValue> val(new base::ListValue());
-      if (!ReadListValue(m, iter, val.get(), recursion))
+      base::ListValue val;
+      if (!ReadListValue(m, iter, &val, recursion))
         return false;
-      *value = val.release();
+      *value = base::MakeUnique<base::Value>(std::move(val));
       break;
     }
     default:
@@ -623,6 +621,8 @@ void ParamTraits<base::FileDescriptor>::GetSize(base::PickleSizer* sizer,
 
 void ParamTraits<base::FileDescriptor>::Write(base::Pickle* m,
                                               const param_type& p) {
+  // This serialization must be kept in sync with
+  // nacl_message_scanner.cc:WriteHandle().
   const bool valid = p.fd >= 0;
   WriteParam(m, valid);
 
@@ -648,7 +648,6 @@ bool ParamTraits<base::FileDescriptor>::Read(const base::Pickle* m,
   if (!ReadParam(m, iter, &valid))
     return false;
 
-  // TODO(morrita): Seems like this should return false.
   if (!valid)
     return true;
 
@@ -678,111 +677,178 @@ void ParamTraits<base::FileDescriptor>::Log(const param_type& p,
 }
 #endif  // defined(OS_POSIX)
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
 void ParamTraits<base::SharedMemoryHandle>::GetSize(base::PickleSizer* sizer,
                                                     const param_type& p) {
+  GetParamSize(sizer, p.IsValid());
+  if (!p.IsValid())
+    return;
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
   GetParamSize(sizer, p.GetMemoryObject());
-  uint32_t dummy = 0;
-  GetParamSize(sizer, dummy);
+#elif defined(OS_WIN)
+  GetParamSize(sizer, p.GetHandle());
+#else
+  sizer->AddAttachment();
+#endif
+
+  GetParamSize(sizer, p.GetGUID());
+  GetParamSize(sizer, static_cast<uint64_t>(p.GetSize()));
 }
 
 void ParamTraits<base::SharedMemoryHandle>::Write(base::Pickle* m,
                                                   const param_type& p) {
-  MachPortMac mach_port_mac(p.GetMemoryObject());
-  ParamTraits<MachPortMac>::Write(m, mach_port_mac);
-  size_t size = 0;
-  bool result = p.GetSize(&size);
-  DCHECK(result);
-  ParamTraits<uint32_t>::Write(m, static_cast<uint32_t>(size));
+  // This serialization must be kept in sync with
+  // nacl_message_scanner.cc:WriteHandle().
+  const bool valid = p.IsValid();
+  WriteParam(m, valid);
 
+  if (!valid)
+    return;
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  MachPortMac mach_port_mac(p.GetMemoryObject());
+  WriteParam(m, mach_port_mac);
+#elif defined(OS_WIN)
+  HandleWin handle_win(p.GetHandle(), HandleWin::DUPLICATE);
+  WriteParam(m, handle_win);
+#else
+  if (p.OwnershipPassesToIPC()) {
+    if (!m->WriteAttachment(new internal::PlatformFileAttachment(
+            base::ScopedFD(p.GetHandle()))))
+      NOTREACHED();
+  } else {
+    if (!m->WriteAttachment(
+            new internal::PlatformFileAttachment(p.GetHandle())))
+      NOTREACHED();
+  }
+#endif
+
+#if (defined(OS_MACOSX) && !defined(OS_IOS)) || defined(OS_WIN)
   // If the caller intended to pass ownership to the IPC stack, release a
   // reference.
   if (p.OwnershipPassesToIPC())
     p.Close();
+#endif
+
+  DCHECK(!p.GetGUID().is_empty());
+  WriteParam(m, p.GetGUID());
+  WriteParam(m, static_cast<uint64_t>(p.GetSize()));
 }
 
 bool ParamTraits<base::SharedMemoryHandle>::Read(const base::Pickle* m,
                                                  base::PickleIterator* iter,
                                                  param_type* r) {
+  *r = base::SharedMemoryHandle();
+
+  bool valid;
+  if (!ReadParam(m, iter, &valid))
+    return false;
+  if (!valid)
+    return true;
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
   MachPortMac mach_port_mac;
-  if (!ParamTraits<MachPortMac>::Read(m, iter, &mach_port_mac))
+  if (!ReadParam(m, iter, &mach_port_mac))
+    return false;
+#elif defined(OS_WIN)
+  HandleWin handle_win;
+  if (!ReadParam(m, iter, &handle_win))
+    return false;
+#else
+  scoped_refptr<base::Pickle::Attachment> attachment;
+  if (!m->ReadAttachment(iter, &attachment))
     return false;
 
-  uint32_t size;
-  if (!ParamTraits<uint32_t>::Read(m, iter, &size))
+  if (static_cast<MessageAttachment*>(attachment.get())->GetType() !=
+      MessageAttachment::Type::PLATFORM_FILE) {
     return false;
+  }
+#endif
 
+  base::UnguessableToken guid;
+  uint64_t size;
+  if (!ReadParam(m, iter, &guid) || !ReadParam(m, iter, &size)) {
+    return false;
+  }
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
   *r = base::SharedMemoryHandle(mach_port_mac.get_mach_port(),
-                                static_cast<size_t>(size),
-                                base::GetCurrentProcId());
+                                static_cast<size_t>(size), guid);
+#elif defined(OS_WIN)
+  *r = base::SharedMemoryHandle(handle_win.get_handle(),
+                                static_cast<size_t>(size), guid);
+#else
+  *r = base::SharedMemoryHandle(
+      base::FileDescriptor(
+          static_cast<internal::PlatformFileAttachment*>(attachment.get())
+              ->TakePlatformFile(),
+          true),
+      static_cast<size_t>(size), guid);
+#endif
+
   return true;
 }
 
 void ParamTraits<base::SharedMemoryHandle>::Log(const param_type& p,
                                                 std::string* l) {
+#if defined(OS_MACOSX) && !defined(OS_IOS)
   l->append("Mach port: ");
   LogParam(p.GetMemoryObject(), l);
-}
-
 #elif defined(OS_WIN)
-void ParamTraits<base::SharedMemoryHandle>::GetSize(base::PickleSizer* s,
-                                                    const param_type& p) {
-  GetParamSize(s, p.NeedsBrokering());
-  if (p.NeedsBrokering()) {
-    GetParamSize(s, p.GetHandle());
-  } else {
-    GetParamSize(s, HandleToLong(p.GetHandle()));
-  }
+  l->append("HANDLE: ");
+  LogParam(p.GetHandle(), l);
+#else
+  l->append("FD: ");
+  LogParam(p.GetHandle(), l);
+#endif
+
+  l->append("GUID: ");
+  LogParam(p.GetGUID(), l);
+  l->append("size: ");
+  LogParam(static_cast<uint64_t>(p.GetSize()), l);
 }
 
-void ParamTraits<base::SharedMemoryHandle>::Write(base::Pickle* m,
+#if defined(OS_WIN)
+void ParamTraits<PlatformFileForTransit>::GetSize(base::PickleSizer* s,
                                                   const param_type& p) {
-  m->WriteBool(p.NeedsBrokering());
+  GetParamSize(s, p.IsValid());
+  if (p.IsValid())
+    GetParamSize(s, p.GetHandle());
+}
 
-  if (p.NeedsBrokering()) {
+void ParamTraits<PlatformFileForTransit>::Write(base::Pickle* m,
+                                                const param_type& p) {
+  m->WriteBool(p.IsValid());
+  if (p.IsValid()) {
     HandleWin handle_win(p.GetHandle(), HandleWin::DUPLICATE);
     ParamTraits<HandleWin>::Write(m, handle_win);
-
-    // If the caller intended to pass ownership to the IPC stack, release a
-    // reference.
-    if (p.OwnershipPassesToIPC() && p.BelongsToCurrentProcess())
-      p.Close();
-  } else {
-    m->WriteInt(HandleToLong(p.GetHandle()));
+    ::CloseHandle(p.GetHandle());
   }
 }
 
-bool ParamTraits<base::SharedMemoryHandle>::Read(const base::Pickle* m,
-                                                 base::PickleIterator* iter,
-                                                 param_type* r) {
-  bool needs_brokering;
-  if (!iter->ReadBool(&needs_brokering))
+bool ParamTraits<PlatformFileForTransit>::Read(const base::Pickle* m,
+                                               base::PickleIterator* iter,
+                                               param_type* r) {
+  bool is_valid;
+  if (!iter->ReadBool(&is_valid))
     return false;
-
-  if (needs_brokering) {
-    HandleWin handle_win;
-    if (!ParamTraits<HandleWin>::Read(m, iter, &handle_win))
-      return false;
-    *r = base::SharedMemoryHandle(handle_win.get_handle(),
-                                  base::GetCurrentProcId());
+  if (!is_valid) {
+    *r = PlatformFileForTransit();
     return true;
   }
 
-  int handle_int;
-  if (!iter->ReadInt(&handle_int))
+  HandleWin handle_win;
+  if (!ParamTraits<HandleWin>::Read(m, iter, &handle_win))
     return false;
-  HANDLE handle = LongToHandle(handle_int);
-  *r = base::SharedMemoryHandle(handle, base::GetCurrentProcId());
+  *r = PlatformFileForTransit(handle_win.get_handle());
   return true;
 }
 
-void ParamTraits<base::SharedMemoryHandle>::Log(const param_type& p,
-                                                std::string* l) {
+void ParamTraits<PlatformFileForTransit>::Log(const param_type& p,
+                                              std::string* l) {
   LogParam(p.GetHandle(), l);
-  l->append(" needs brokering: ");
-  LogParam(p.NeedsBrokering(), l);
 }
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // defined(OS_WIN)
 
 void ParamTraits<base::FilePath>::GetSize(base::PickleSizer* sizer,
                                           const param_type& p) {
@@ -997,6 +1063,8 @@ void ParamTraits<base::UnguessableToken>::Write(base::Pickle* m,
                                                 const param_type& p) {
   DCHECK(!p.is_empty());
 
+  // This serialization must be kept in sync with
+  // nacl_message_scanner.cc:WriteHandle().
   ParamTraits<uint64_t>::Write(m, p.GetHighForSerialization());
   ParamTraits<uint64_t>::Write(m, p.GetLowForSerialization());
 }

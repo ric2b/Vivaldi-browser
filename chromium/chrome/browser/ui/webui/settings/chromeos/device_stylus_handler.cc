@@ -4,6 +4,10 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/device_stylus_handler.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "ash/system/palette/palette_utils.h"
 #include "base/bind.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -20,6 +24,7 @@ namespace {
 constexpr char kAppNameKey[] = "name";
 constexpr char kAppIdKey[] = "value";
 constexpr char kAppPreferredKey[] = "preferred";
+constexpr char kAppLockScreenSupportKey[] = "supportsLockScreen";
 
 }  // namespace
 
@@ -77,6 +82,9 @@ void StylusHandler::UpdateNoteTakingApps() {
       dict->SetString(kAppNameKey, info.name);
       dict->SetString(kAppIdKey, info.app_id);
       dict->SetBoolean(kAppPreferredKey, info.preferred);
+      dict->SetBoolean(kAppLockScreenSupportKey,
+                       info.lock_screen_support !=
+                           NoteTakingLockScreenSupport::kNotSupported);
       apps_list.Append(std::move(dict));
 
       note_taking_app_ids_.insert(info.app_id);
@@ -84,9 +92,8 @@ void StylusHandler::UpdateNoteTakingApps() {
   }
 
   AllowJavascript();
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value("onNoteTakingAppsUpdated"), apps_list,
-                         base::Value(waiting_for_android));
+  FireWebUIListener("onNoteTakingAppsUpdated", apps_list,
+                    base::Value(waiting_for_android));
 }
 
 void StylusHandler::RequestApps(const base::ListValue* unused_args) {
@@ -116,9 +123,8 @@ void StylusHandler::HandleInitialize(const base::ListValue* args) {
 void StylusHandler::SendHasStylus() {
   DCHECK(ui::InputDeviceManager::GetInstance()->AreDeviceListsComplete());
   AllowJavascript();
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value("has-stylus-changed"),
-                         base::Value(ash::palette_utils::HasStylusInput()));
+  FireWebUIListener("has-stylus-changed",
+                    base::Value(ash::palette_utils::HasStylusInput()));
 }
 
 void StylusHandler::ShowPlayStoreApps(const base::ListValue* args) {

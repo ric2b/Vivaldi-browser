@@ -107,7 +107,7 @@ SpecialValueHandler::HandleResult SpecialValueHandler::Handle() {
   if (rhs_class == Decimal::EncodedData::kClassInfinity)
     return kRHSIsInfinity;
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return kBothFinite;
 }
 
@@ -119,7 +119,7 @@ Decimal SpecialValueHandler::Value() const {
       return rhs_;
     case kResultIsUnknown:
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return lhs_;
   }
 }
@@ -156,7 +156,7 @@ class UInt128 {
 };
 
 UInt128& UInt128::operator/=(const uint32_t divisor) {
-  ASSERT(divisor);
+  DCHECK(divisor);
 
   if (!high_) {
     low_ /= divisor;
@@ -203,7 +203,7 @@ static int CountDigits(uint64_t x) {
 }
 
 static uint64_t ScaleDown(uint64_t x, int n) {
-  ASSERT(n >= 0);
+  DCHECK_GE(n, 0);
   while (n > 0 && x) {
     x /= 10;
     --n;
@@ -212,8 +212,8 @@ static uint64_t ScaleDown(uint64_t x, int n) {
 }
 
 static uint64_t ScaleUp(uint64_t x, int n) {
-  ASSERT(n >= 0);
-  ASSERT(n <= kPrecision);
+  DCHECK_GE(n, 0);
+  DCHECK_LE(n, kPrecision);
 
   uint64_t y = 1;
   uint64_t z = 10;
@@ -426,7 +426,7 @@ Decimal Decimal::operator*(const Decimal& rhs) const {
       return lhs.IsZero() ? Nan() : Infinity(result_sign);
   }
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return Nan();
 }
 
@@ -454,8 +454,8 @@ Decimal Decimal::operator/(const Decimal& rhs) const {
       return Zero(result_sign);
   }
 
-  ASSERT(lhs.IsFinite());
-  ASSERT(rhs.IsFinite());
+  DCHECK(lhs.IsFinite());
+  DCHECK(rhs.IsFinite());
 
   if (rhs.IsZero())
     return lhs.IsZero() ? Nan() : Infinity(result_sign);
@@ -544,8 +544,8 @@ Decimal Decimal::Abs() const {
 
 Decimal::AlignedOperands Decimal::AlignOperands(const Decimal& lhs,
                                                 const Decimal& rhs) {
-  ASSERT(lhs.IsFinite());
-  ASSERT(rhs.IsFinite());
+  DCHECK(lhs.IsFinite());
+  DCHECK(rhs.IsFinite());
 
   const int lhs_exponent = lhs.Exponent();
   const int rhs_exponent = rhs.Exponent();
@@ -628,7 +628,7 @@ Decimal Decimal::CompareTo(const Decimal& rhs) const {
       return Zero(kPositive);
 
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return Nan();
   }
 }
@@ -829,7 +829,7 @@ Decimal Decimal::FromString(const String& str) {
         return Nan();
 
       default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return Nan();
     }
   }
@@ -922,7 +922,7 @@ String Decimal::ToString() const {
       break;
 
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return "";
   }
 
@@ -1000,11 +1000,11 @@ Decimal Decimal::Zero(Sign sign) {
 std::ostream& operator<<(std::ostream& ostream, const Decimal& decimal) {
   Decimal::EncodedData data = decimal.Value();
   return ostream << "encode("
-                 << String::Number(data.Coefficient()).Ascii().Data() << ", "
-                 << String::Number(data.Exponent()).Ascii().Data() << ", "
+                 << String::Number(data.Coefficient()).Ascii().data() << ", "
+                 << String::Number(data.Exponent()).Ascii().data() << ", "
                  << (data.GetSign() == Decimal::kNegative ? "Negative"
                                                           : "Positive")
-                 << ")=" << decimal.ToString().Ascii().Data();
+                 << ")=" << decimal.ToString().Ascii().data();
 }
 
 }  // namespace blink

@@ -71,19 +71,43 @@ private:
 
     bool ReceivedBytes(int bytes_read) {
       is_end_of_stream_ = (bytes_read <= 0);
-      if(!is_end_of_stream_)
+      if(!is_end_of_stream_) {
         read_position_ += bytes_read;
+      } else {
+        LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                  << " No bytes read, assuming end of stream";
+      }
       return !is_end_of_stream_;
     }
 
-    void Stop() { stopped_ = true; }
+    void Stop() {
+      stopped_ = true;
+    }
     bool HasStopped() const { return stopped_; }
     int64_t CurrentPosition() const { return read_position_; }
     void SetCurrentPosition(int64_t position) { read_position_ = position; }
     bool HasReceivedEOF() const { return is_end_of_stream_; }
+    void SetNextPosition(int64_t position) {
+      next_position_ = position;
+      next_position_set_ = true;
+      LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                << " Postpone Current Position change for pos : "
+                << position;
+    }
+    void UpdateCurrentPosition() {
+      if (next_position_set_) {
+          LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                    << " Update Current Position - before : " << read_position_
+                    << " after : " << next_position_;
+          next_position_set_ = false;
+          read_position_ = next_position_;
+      }
+    }
 
   private:
     int64_t read_position_ = 0;
+    int64_t next_position_ = 0;
+    bool next_position_set_ = false;
     bool stopped_ = false;
     bool is_end_of_stream_ = false;
   };
@@ -97,6 +121,7 @@ private:
   media::DataSource* data_source_;
   ReadStreamListener * listener_;
   media::DataSource::ReadCB read_cb_;
+  const size_t max_read_size_ = (64 * 1024);
 };
 
 }  // namespace content

@@ -22,10 +22,12 @@
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_controller_factory.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_home_tablet_ntp_controller.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
-#import "ios/chrome/browser/ui/ntp/google_landing_controller.h"
+#import "ios/chrome/browser/ui/ntp/google_landing_mediator.h"
+#import "ios/chrome/browser/ui/ntp/google_landing_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/incognito_panel_controller.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_bar_item.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_view.h"
@@ -113,6 +115,8 @@ enum {
 
   NewTabPageView* newTabPageView_;
 
+  base::scoped_nsobject<GoogleLandingMediator> googleLandingMediator_;
+
   base::scoped_nsobject<RecentTabsPanelController> openTabsController_;
   // Has the scrollView been initialized.
   BOOL scrollInitialized_;
@@ -158,21 +162,39 @@ enum {
 - (NewTabPage::PanelIdentifier)selectedPanelID;
 
 @property(nonatomic, retain) NewTabPageView* ntpView;
+
+// To ease modernizing the NTP only the internal panels are being converted
+// to UIViewControllers.  This means all the plumbing between the
+// BrowserViewController and the internal NTP panels (WebController, NTP)
+// hierarchy is skipped.  While normally the logic to push and pop a view
+// controller would be owned by a coordinator, in this case the old NTP
+// controller adds and removes child view controllers itself when a load
+// is initiated, and when WebController calls -willBeDismissed.
+@property(nonatomic, assign) UIViewController* parentViewController;
+
+// To ease modernizing the NTP a non-descript CommandDispatcher is passed thru
+// to be used by the reuabled NTP panels.
+@property(nonatomic, assign) id dispatcher;
+
 @end
 
 @implementation NewTabPageController
 
 @synthesize ntpView = newTabPageView_;
 @synthesize swipeRecognizerProvider = swipeRecognizerProvider_;
+@synthesize parentViewController = parentViewController_;
+@synthesize dispatcher = dispatcher_;
 
 - (id)initWithUrl:(const GURL&)url
-                loader:(id<UrlLoader>)loader
-               focuser:(id<OmniboxFocuser>)focuser
-           ntpObserver:(id<NewTabPageControllerObserver>)ntpObserver
-          browserState:(ios::ChromeBrowserState*)browserState
-            colorCache:(NSMutableDictionary*)colorCache
-    webToolbarDelegate:(id<WebToolbarDelegate>)webToolbarDelegate
-              tabModel:(TabModel*)tabModel {
+                  loader:(id<UrlLoader>)loader
+                 focuser:(id<OmniboxFocuser>)focuser
+             ntpObserver:(id<NewTabPageControllerObserver>)ntpObserver
+            browserState:(ios::ChromeBrowserState*)browserState
+              colorCache:(NSMutableDictionary*)colorCache
+      webToolbarDelegate:(id<WebToolbarDelegate>)webToolbarDelegate
+                tabModel:(TabModel*)tabModel
+    parentViewController:(UIViewController*)parentViewController
+              dispatcher:(id)dispatcher {
   self = [super initWithNibName:nil url:url];
   if (self) {
     DCHECK(browserState);
@@ -181,6 +203,8 @@ enum {
     browserState_ = browserState;
     loader_ = loader;
     newTabPageObserver_ = ntpObserver;
+    parentViewController_ = parentViewController;
+    dispatcher_ = dispatcher;
     focuser_.reset(focuser);
     webToolbarDelegate_.reset(webToolbarDelegate);
     tabModel_.reset([tabModel retain]);
@@ -278,6 +302,17 @@ enum {
   // Animations can last past the life of the NTP controller, nil out the
   // delegate.
   self.ntpView.scrollView.delegate = nil;
+
+  [googleLandingMediator_ shutdown];
+
+  // This is not an ideal place to put view controller contaimnent, rather a
+  // //web -wasDismissed method on CRWNativeContent would be more accurate. If
+  // CRWNativeContent leaks, this will not be called.
+  // TODO(crbug.com/708319): Also call -removeFromParentViewController for
+  // open tabs and incognito here.
+  [googleLandingController_ removeFromParentViewController];
+  [bookmarkController_ removeFromParentViewController];
+
   [googleLandingController_ setDelegate:nil];
   [bookmarkController_ setDelegate:nil];
   [openTabsController_ setDelegate:nil];
@@ -287,9 +322,15 @@ enum {
 
 #pragma mark - CRWNativeContent
 
-// Note: No point implementing -handleLowMemory because all native content
-// views but the selected one are dropped, and the selected view doesn't
-// need to do anything.
+- (void)willBeDismissed {
+  // This methods is called by //web immediately before |self|'s view is removed
+  // from the view hierarchy, making it an ideal spot to intiate view controller
+  // containment methods.
+  // TODO(crbug.com/708319): Also call -willMoveToParentViewController:nil for
+  // open tabs and incognito here.
+  [googleLandingController_ willMoveToParentViewController:nil];
+  [bookmarkController_ willMoveToParentViewController:nil];
+}
 
 - (void)reload {
   [currentController_ reload];
@@ -321,7 +362,7 @@ enum {
   TemplateURLService* service =
       ios::TemplateURLServiceFactory::GetForBrowserState(browserState_);
   if (service) {
-    TemplateURL* defaultURL = service->GetDefaultSearchProvider();
+    const TemplateURL* defaultURL = service->GetDefaultSearchProvider();
     if (defaultURL &&
         defaultURL->GetEngineType(service->search_terms_data()) !=
             SEARCH_ENGINE_GOOGLE) {
@@ -485,7 +526,9 @@ enum {
 }
 
 - (BOOL)loadPanel:(NewTabPageBarItem*)item {
-  UIView* view;
+  DCHECK(self.parentViewController);
+  UIView* view = nil;
+  UIViewController* panelController = nil;
   BOOL created = NO;
   // Only load the controllers once.
   if (item.identifier == NewTabPage::kBookmarksPanel) {
@@ -497,17 +540,22 @@ enum {
                                           loader:loader_
                                       colorCache:dominantColorCache_] retain]);
     }
+    panelController = bookmarkController_;
     view = [bookmarkController_ view];
     [bookmarkController_ setDelegate:self];
   } else if (item.identifier == NewTabPage::kMostVisitedPanel) {
     if (!googleLandingController_) {
-      googleLandingController_.reset([[GoogleLandingController alloc]
-              initWithLoader:loader_
-                browserState:browserState_
-                     focuser:focuser_
-          webToolbarDelegate:webToolbarDelegate_
-                    tabModel:tabModel_]);
+      googleLandingController_.reset(
+          [[GoogleLandingViewController alloc] init]);
+      [googleLandingController_ setDispatcher:self.dispatcher];
+      googleLandingMediator_.reset([[GoogleLandingMediator alloc]
+          initWithConsumer:googleLandingController_
+              browserState:browserState_
+                dispatcher:self.dispatcher
+              webStateList:[tabModel_ webStateList]]);
+      [googleLandingController_ setDataSource:googleLandingMediator_];
     }
+    panelController = googleLandingController_;
     view = [googleLandingController_ view];
     [googleLandingController_ setDelegate:self];
   } else if (item.identifier == NewTabPage::kOpenTabsPanel) {
@@ -515,6 +563,7 @@ enum {
       openTabsController_.reset([[RecentTabsPanelController alloc]
           initWithLoader:loader_
             browserState:browserState_]);
+    // TODO(crbug.com/708319): Also set panelController for opentabs here.
     view = [openTabsController_ view];
     [openTabsController_ setDelegate:self];
   } else if (item.identifier == NewTabPage::kIncognitoPanel) {
@@ -523,6 +572,7 @@ enum {
               initWithLoader:loader_
                 browserState:browserState_
           webToolbarDelegate:webToolbarDelegate_]);
+    // TODO(crbug.com/708319): Also set panelController for incognito here.
     view = [incognitoController_ view];
   } else {
     NOTREACHED();
@@ -535,7 +585,21 @@ enum {
     created = YES;
     view.frame = [self.ntpView panelFrameForItemAtIndex:index];
     item.view = view;
+
+    // To ease modernizing the NTP only the internal panels are being converted
+    // to UIViewControllers.  This means all the plumbing between the
+    // BrowserViewController and the internal NTP panels (WebController, NTP)
+    // hierarchy is skipped.  While normally the logic to push and pop a view
+    // controller would be owned by a coordinator, in this case the old NTP
+    // controller adds and removes child view controllers itself when a load
+    // is initiated, and when WebController calls -willBeDismissed.
+    // TODO(crbug.com/708319):This 'if' can become a DCHECK once all panels move
+    // to panelControllers.
+    if (panelController)
+      [self.parentViewController addChildViewController:panelController];
     [self.ntpView.scrollView addSubview:view];
+    if (panelController)
+      [panelController didMoveToParentViewController:self.parentViewController];
   }
   return created;
 }

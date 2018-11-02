@@ -15,10 +15,10 @@
 #include "bindings/core/v8/IDLTypes.h"
 #include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
-#include "bindings/core/v8/V8ObjectConstructor.h"
 #include "core/SVGNames.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/custom/V0CustomElementProcessingStack.h"
+#include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
 
@@ -37,7 +37,7 @@ const WrapperTypeInfo V8SVGTestInterface::wrapperTypeInfo = { gin::kEmbedderBlin
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in SVGTestInterface.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
-// bindings/core/v8/ScriptWrappable.h.
+// platform/bindings/ScriptWrappable.h.
 const WrapperTypeInfo& SVGTestInterface::wrapper_type_info_ = V8SVGTestInterface::wrapperTypeInfo;
 
 // not [ActiveScriptWrappable]
@@ -68,6 +68,8 @@ static void typeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::Function
   ALLOW_UNUSED_LOCAL(isolate);
 
   v8::Local<v8::Object> holder = info.Holder();
+  ALLOW_UNUSED_LOCAL(holder);
+
   SVGTestInterface* impl = V8SVGTestInterface::toImpl(holder);
 
   // Skip on compact node DOMString getters.
@@ -96,7 +98,8 @@ void V8SVGTestInterface::typeAttributeSetterCallback(const v8::FunctionCallbackI
 }
 
 static const V8DOMConfiguration::AccessorConfiguration V8SVGTestInterfaceAccessors[] = {
-    {"type", V8SVGTestInterface::typeAttributeGetterCallback, V8SVGTestInterface::typeAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds},
+      { "type", V8SVGTestInterface::typeAttributeGetterCallback, V8SVGTestInterface::typeAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
+    ,
 };
 
 static void installV8SVGTestInterfaceTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate) {

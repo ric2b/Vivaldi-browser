@@ -203,7 +203,8 @@ DownloadItemImpl::DownloadItemImpl(DownloadItemImplDelegate* delegate,
                                    uint32_t download_id,
                                    const DownloadCreateInfo& info,
                                    const net::NetLogWithSource& net_log)
-    : guid_(base::ToUpperASCII(base::GenerateGUID())),
+    : guid_(info.guid.empty() ? base::ToUpperASCII(base::GenerateGUID())
+                              : info.guid),
       download_id_(download_id),
       target_disposition_((info.save_info->prompt_for_save_location)
                               ? TARGET_DISPOSITION_PROMPT
@@ -230,7 +231,7 @@ DownloadItemImpl::DownloadItemImpl(DownloadItemImplDelegate* delegate,
       start_time_(info.start_time),
       delegate_(delegate),
       open_when_complete_(info.open_when_finished),
-      is_temporary_(!info.save_info->file_path.empty()),
+      is_temporary_(!info.transient && !info.save_info->file_path.empty()),
       transient_(info.transient),
       last_modified_time_(info.last_modified),
       etag_(info.etag),
@@ -938,6 +939,7 @@ DownloadItemImpl::ResumeMode DownloadItemImpl::GetResumeMode() const {
   switch(last_reason_) {
     case DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR:
     case DOWNLOAD_INTERRUPT_REASON_NETWORK_TIMEOUT:
+    case DOWNLOAD_INTERRUPT_REASON_SERVER_CONTENT_LENGTH_MISMATCH:
       break;
 
     case DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE:
@@ -996,7 +998,7 @@ DownloadItemImpl::ResumeMode DownloadItemImpl::GetResumeMode() const {
     case DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED:
     case DOWNLOAD_INTERRUPT_REASON_SERVER_CERT_PROBLEM:
     case DOWNLOAD_INTERRUPT_REASON_SERVER_FORBIDDEN:
-      // Unhandled.
+    case DOWNLOAD_INTERRUPT_REASON_FILE_SAME_AS_SOURCE:
       return RESUME_MODE_INVALID;
   }
 
@@ -1107,6 +1109,17 @@ void DownloadItemImpl::OnAllDataSaved(
                         // the download and don't expect to receive any more
                         // data.
 
+  if (received_bytes_at_length_mismatch > 0) {
+    if (total_bytes > received_bytes_at_length_mismatch) {
+      RecordDownloadCount(
+          MORE_BYTES_RECEIVED_AFTER_CONTENT_LENGTH_MISMATCH_COUNT);
+    } else if (total_bytes == received_bytes_at_length_mismatch) {
+      RecordDownloadCount(
+          NO_BYTES_RECEIVED_AFTER_CONTENT_LENGTH_MISMATCH_COUNT);
+    } else {
+      // This could happen if the content changes on the server.
+    }
+  }
   DVLOG(20) << __func__ << "() download=" << DebugString(true);
   UpdateObservers();
 }
@@ -1377,17 +1390,22 @@ void DownloadItemImpl::OnDownloadTargetDetermined(
     return;
   }
 
-  target_path_ = target_path;
-  target_disposition_ = disposition;
-  SetDangerType(danger_type);
-
   // There were no other pending errors, and we just failed to determined the
-  // download target.
+  // download target. The target path, if it is non-empty, should be considered
+  // suspect. The safe option here is to interrupt the download without doing an
+  // intermediate rename. In the case of a new download, we'll lose the partial
+  // data that may have been downloaded, but that should be a small loss.
   if (state_ == TARGET_PENDING_INTERNAL &&
       interrupt_reason != DOWNLOAD_INTERRUPT_REASON_NONE) {
     deferred_interrupt_reason_ = interrupt_reason;
     TransitionTo(INTERRUPTED_TARGET_PENDING_INTERNAL);
+    OnTargetResolved();
+    return;
   }
+
+  target_path_ = target_path;
+  target_disposition_ = disposition;
+  SetDangerType(danger_type);
 
   // This was an interrupted download that was looking for a filename. Resolve
   // early without performing the intermediate rename. If there is a
@@ -1792,6 +1810,9 @@ void DownloadItemImpl::InterruptWithPartialState(
   RecordDownloadInterrupted(reason, received_bytes_, total_bytes_,
                             job_ && job_->IsParallelizable(),
                             IsParallelDownloadEnabled());
+  if (reason == DOWNLOAD_INTERRUPT_REASON_SERVER_CONTENT_LENGTH_MISMATCH)
+    received_bytes_at_length_mismatch = received_bytes_;
+
   if (!GetWebContents())
     RecordDownloadCount(INTERRUPTED_WITHOUT_WEBCONTENTS);
 

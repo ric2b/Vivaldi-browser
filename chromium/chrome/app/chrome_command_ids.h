@@ -83,6 +83,8 @@
 #define IDC_TRANSLATE_PAGE              35009
 #define IDC_MANAGE_PASSWORDS_FOR_PAGE   35010
 #define IDC_ROUTE_MEDIA                 35011
+#define IDC_WINDOW_MUTE_TAB             35012
+#define IDC_WINDOW_PIN_TAB              35013
 
 // Clipboard commands
 #define IDC_CUT                         36000
@@ -169,6 +171,8 @@
 #define IDC_TAKE_SCREENSHOT             40248
 #define IDC_MORE_TOOLS_MENU             40249
 #define IDC_TOGGLE_FULLSCREEN_TOOLBAR   40250
+#define IDC_CUSTOMIZE_TOUCH_BAR         40251
+#define IDC_SHOW_BETA_FORUM             40252
 
 // Spell-check
 // Insert any additional suggestions before _LAST; these have to be consecutive.

@@ -251,6 +251,14 @@ cr.define('cr.ui', function() {
   };
 
   /**
+   * Sets the text content of the Bluetooth device info message.
+   * @param {string} bluetoothName The Bluetooth device name text.
+   */
+  Oobe.setBluetoothDeviceInfo = function(bluetoothName) {
+    DisplayManager.setBluetoothDeviceInfo(bluetoothName);
+  };
+
+  /**
    * Updates the device requisition string shown in the requisition prompt.
    * @param {string} requisition The device requisition.
    */
@@ -412,10 +420,11 @@ cr.define('cr.ui', function() {
   };
 
   /**
-   * Shows/hides pin keyboard on the lock screen.
+   * Changes some UI which depends on the virtual keyboard being shown/hidden.
    */
-  Oobe.showPinKeyboard = function(show) {
-    Oobe.getInstance().pinHidden = !show;
+  Oobe.setVirtualKeyboardShown = function(shown) {
+    Oobe.getInstance().virtualKeyboardShown = shown;
+    $('pod-row').setFocusedPodPinVisibility(!shown);
   };
 
   /**

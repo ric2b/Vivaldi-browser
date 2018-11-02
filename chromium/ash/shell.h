@@ -12,8 +12,7 @@
 #include "ash/ash_export.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/session/session_state_observer.h"
-#include "ash/wm/cursor_manager_chromeos.h"
+#include "ash/session/session_observer.h"
 #include "ash/wm/system_modal_container_event_filter_delegate.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -25,6 +24,11 @@
 #include "ui/wm/core/cursor_manager.h"
 #include "ui/wm/public/activation_change_observer.h"
 
+#if defined(OS_CHROMEOS)
+#include "ash/wm/cursor_manager_chromeos.h"
+#endif  // defined(OS_CHROMEOS)
+
+class PrefRegistrySimple;
 class PrefService;
 
 namespace aura {
@@ -115,12 +119,14 @@ class LinkHandlerModelFactory;
 class LocaleNotificationController;
 class LockStateController;
 class LogoutConfirmationController;
+class LockScreenController;
 class MagnificationController;
 class MaximizeModeController;
 class MediaController;
 class MouseCursorEventFilter;
 class MruWindowTracker;
 class NewWindowController;
+class NightLightController;
 class OverlayEventFilter;
 class PaletteDelegate;
 class PartialMagnificationController;
@@ -131,7 +137,6 @@ class ResizeShadowController;
 class ResolutionNotificationController;
 class RootWindowController;
 class ShellPort;
-class ScopedOverviewAnimationSettingsFactoryAura;
 class ScreenLayoutObserver;
 class ScreenOrientationController;
 class ScreenshotController;
@@ -140,7 +145,6 @@ class ScreenPositionController;
 class SessionController;
 class SessionStateDelegate;
 class ShelfController;
-class ShelfDelegate;
 class ShelfModel;
 class ShelfWindowWatcher;
 class ShellDelegate;
@@ -158,6 +162,7 @@ class SystemTrayDelegate;
 class SystemTrayNotifier;
 class ToplevelWindowEventHandler;
 class ToastManager;
+class TrayAction;
 class TrayBluetoothHelper;
 class VirtualKeyboardController;
 class VideoActivityNotifier;
@@ -189,7 +194,7 @@ class SmsObserverTest;
 //
 // Upon creation, the Shell sets itself as the RootWindow's delegate, which
 // takes ownership of the Shell.
-class ASH_EXPORT Shell : public SessionStateObserver,
+class ASH_EXPORT Shell : public SessionObserver,
                          public SystemModalContainerEventFilterDelegate,
                          public ui::EventTarget,
                          public aura::client::ActivationChangeObserver {
@@ -231,7 +236,6 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   // NOTE: this returns the root, newly created window should be added to the
   // appropriate container in the returned window.
   static aura::Window* GetRootWindowForNewWindows();
-  static WmWindow* GetWmRootWindowForNewWindows();
 
   // Returns all root windows.
   static aura::Window::Windows GetAllRootWindows();
@@ -259,6 +263,14 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   }
 
   static Config GetAshConfig();
+  static bool ShouldUseIMEService();
+
+  // Registers all ash related prefs to the given |registry|.
+  static void RegisterPrefs(PrefRegistrySimple* registry);
+
+  // Returns true if simplified display management should be enabled.
+  // TODO(sky): remove this; temporary until http://crbug.com/718860 is done.
+  static bool ShouldEnableSimplifiedDisplayManagement();
 
   // Creates a default views::NonClientFrameView for use by windows in the
   // Ash environment.
@@ -269,17 +281,14 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   void SetDisplayWorkAreaInsets(aura::Window* window,
                                 const gfx::Insets& insets);
 
-  // Called when the application is exiting.
-  void OnAppTerminating();
-
   // Called when a casting session is started or stopped.
   void OnCastingSessionStartedOrStopped(bool started);
 
   // Called when a root window is created.
-  void OnRootWindowAdded(WmWindow* root_window);
+  void OnRootWindowAdded(aura::Window* root_window);
 
-  // Creates a virtual keyboard. Deletes the old virtual keyboard if it already
-  // exists.
+  // Creates a keyboard controller and associate it with the primary root window
+  // controller. Destroys the old keyboard controller if it already exists.
   void CreateKeyboard();
 
   // Deactivates the virtual keyboard.
@@ -321,6 +330,9 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   LogoutConfirmationController* logout_confirmation_controller() {
     return logout_confirmation_controller_.get();
   }
+  LockScreenController* lock_screen_controller() {
+    return lock_screen_controller_.get();
+  }
   MaximizeModeController* maximize_mode_controller() {
     return maximize_mode_controller_.get();
   }
@@ -329,9 +341,9 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   NewWindowController* new_window_controller() {
     return new_window_controller_.get();
   }
+  NightLightController* night_light_controller();
   SessionController* session_controller() { return session_controller_.get(); }
   ShelfController* shelf_controller() { return shelf_controller_.get(); }
-  ShelfDelegate* shelf_delegate() { return shelf_delegate_.get(); }
   ShelfModel* shelf_model();
   ShutdownController* shutdown_controller() {
     return shutdown_controller_.get();
@@ -348,6 +360,7 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   views::corewm::TooltipController* tooltip_controller() {
     return tooltip_controller_.get();
   }
+  TrayAction* tray_action() { return tray_action_.get(); }
   VpnList* vpn_list() { return vpn_list_.get(); }
   WindowCycleController* window_cycle_controller() {
     return window_cycle_controller_.get();
@@ -369,7 +382,6 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   LockStateController* lock_state_controller() {
     return lock_state_controller_.get();
   }
-  PrefService* pref_service() { return pref_service_.get(); }
   PaletteDelegate* palette_delegate() { return palette_delegate_.get(); }
   ShellDelegate* shell_delegate() { return shell_delegate_.get(); }
   VideoDetector* video_detector() { return video_detector_.get(); }
@@ -426,6 +438,17 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   // Force the shelf to query for it's current visibility state.
   // TODO(jamescook): Move to Shelf.
   void UpdateShelfVisibility();
+
+  // Gets the current active user pref service.
+  // In classic ash, it will be null if there's no active user.
+  // In the case of mash, it can be null if it failed to or hasn't yet
+  // connected to the pref service.
+  //
+  // NOTE: Users of this pref service MUST listen to
+  // ash::SessionObserver::OnActiveUserSessionChanged() and recall this function
+  // to get the newly activated user's pref service, and use it to re-read the
+  // desired stored settings.
+  PrefService* GetActiveUserPrefService() const;
 
   // Returns WebNotificationTray on the primary root window.
   WebNotificationTray* GetWebNotificationTray();
@@ -495,17 +518,13 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   }
 
   // NOTE: Prefer ScopedRootWindowForNewWindows when setting temporarily.
-  void set_root_window_for_new_windows(WmWindow* root) {
+  void set_root_window_for_new_windows(aura::Window* root) {
     root_window_for_new_windows_ = root;
   }
 
   // Creates instance of FirstRunHelper. Caller is responsible for deleting
   // returned object.
   ash::FirstRunHelper* CreateFirstRunHelper();
-
-  // Creates the ShelfView for each display and populates it with items.
-  // Called after the user session is active and profile is available.
-  void CreateShelfView();
 
   void SetLargeCursorSizeInDip(int large_cursor_size_in_dip);
 
@@ -565,14 +584,16 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   void NotifyOverviewModeEnded();
 
   // Notifies observers that fullscreen mode has changed for |root_window|.
-  void NotifyFullscreenStateChanged(bool is_fullscreen, WmWindow* root_window);
+  void NotifyFullscreenStateChanged(bool is_fullscreen,
+                                    aura::Window* root_window);
 
   // Notifies observers that |pinned_window| changed its pinned window state.
-  void NotifyPinnedStateChanged(WmWindow* pinned_window);
+  void NotifyPinnedStateChanged(aura::Window* pinned_window);
 
   // Notifies observers that the virtual keyboard has been
   // activated/deactivated for |root_window|.
-  void NotifyVirtualKeyboardActivated(bool activated, WmWindow* root_window);
+  void NotifyVirtualKeyboardActivated(bool activated,
+                                      aura::Window* root_window);
 
   // Notifies observers that the shelf was created for |root_window|.
   // TODO(jamescook): Move to Shelf.
@@ -585,6 +606,9 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   // Notifies observers that |root_window|'s shelf changed auto-hide behavior.
   // TODO(jamescook): Move to Shelf.
   void NotifyShelfAutoHideBehaviorChanged(WmWindow* root_window);
+
+  // Used to provide better error messages for Shell::Get() under mash.
+  static void SetIsBrowserProcessWithMash();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ExtendedDesktopTest, TestCursor);
@@ -603,16 +627,11 @@ class ASH_EXPORT Shell : public SessionStateObserver,
 
   void Init(const ShellInitParams& init_params);
 
-  // Initializes virtual keyboard controller.
-  void InitKeyboard();
-
   // Initializes the root window so that it can host browser windows.
   void InitRootWindow(aura::Window* root_window);
 
   void SetSystemTrayDelegate(std::unique_ptr<SystemTrayDelegate> delegate);
   void DeleteSystemTrayDelegate();
-
-  void CreateShelfDelegate();
 
   // Destroys all child windows including widgets across all roots.
   void CloseAllRootWindowChildWindows();
@@ -631,10 +650,14 @@ class ASH_EXPORT Shell : public SessionStateObserver,
                          aura::Window* gained_active,
                          aura::Window* lost_active) override;
 
-  // SessionStateObserver:
-  void SessionStateChanged(session_manager::SessionState state) override;
-  void LoginStatusChanged(LoginStatus login_status) override;
-  void LockStateChanged(bool locked) override;
+  // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
+  void OnLoginStatusChanged(LoginStatus login_status) override;
+  void OnLockStateChanged(bool locked) override;
+
+  // Finalizes the shelf state. Called after the user session is active and
+  // the profile is available.
+  void InitializeShelf();
 
   // Callback for prefs::ConnectToPrefService.
   void OnPrefServiceInitialized(std::unique_ptr<::PrefService> pref_service);
@@ -649,8 +672,6 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   // when the screen is initially created.
   static bool initially_hide_cursor_;
 
-  std::unique_ptr<ScopedOverviewAnimationSettingsFactoryAura>
-      scoped_overview_animation_settings_factory_;
   std::unique_ptr<ShellPort> shell_port_;
 
   // The CompoundEventFilter owned by aura::Env object.
@@ -671,6 +692,7 @@ class ASH_EXPORT Shell : public SessionStateObserver,
       keyboard_brightness_control_delegate_;
   std::unique_ptr<KeyboardUI> keyboard_ui_;
   std::unique_ptr<LocaleNotificationController> locale_notification_controller_;
+  std::unique_ptr<LockScreenController> lock_screen_controller_;
   std::unique_ptr<LogoutConfirmationController> logout_confirmation_controller_;
   std::unique_ptr<MaximizeModeController> maximize_mode_controller_;
   std::unique_ptr<MediaController> media_controller_;
@@ -679,8 +701,8 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   std::unique_ptr<PaletteDelegate> palette_delegate_;
   std::unique_ptr<ResizeShadowController> resize_shadow_controller_;
   std::unique_ptr<SessionController> session_controller_;
+  std::unique_ptr<NightLightController> night_light_controller_;
   std::unique_ptr<ShelfController> shelf_controller_;
-  std::unique_ptr<ShelfDelegate> shelf_delegate_;
   std::unique_ptr<ShelfWindowWatcher> shelf_window_watcher_;
   std::unique_ptr<ShellDelegate> shell_delegate_;
   std::unique_ptr<ShutdownController> shutdown_controller_;
@@ -688,6 +710,7 @@ class ASH_EXPORT Shell : public SessionStateObserver,
   std::unique_ptr<SystemTrayDelegate> system_tray_delegate_;
   std::unique_ptr<SystemTrayNotifier> system_tray_notifier_;
   std::unique_ptr<ToastManager> toast_manager_;
+  std::unique_ptr<TrayAction> tray_action_;
   std::unique_ptr<VpnList> vpn_list_;
   std::unique_ptr<WallpaperController> wallpaper_controller_;
   std::unique_ptr<WallpaperDelegate> wallpaper_delegate_;
@@ -793,9 +816,9 @@ class ASH_EXPORT Shell : public SessionStateObserver,
 
   bool is_touch_hud_projection_enabled_;
 
-  // See comment for GetWmRootWindowForNewWindows().
-  WmWindow* root_window_for_new_windows_ = nullptr;
-  WmWindow* scoped_root_window_for_new_windows_ = nullptr;
+  // See comment for GetRootWindowForNewWindows().
+  aura::Window* root_window_for_new_windows_ = nullptr;
+  aura::Window* scoped_root_window_for_new_windows_ = nullptr;
 
   // Injected content::GPUDataManager support.
   std::unique_ptr<GPUSupport> gpu_support_;

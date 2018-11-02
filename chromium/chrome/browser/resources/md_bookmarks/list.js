@@ -10,10 +10,12 @@ Polymer({
   ],
 
   properties: {
-    /** @type {BookmarkNode} */
-    menuItem_: Object,
-
-    /** @private {Array<string>} */
+    /**
+     * A list of item ids wrapped in an Object. This is necessary because
+     * iron-list is unable to distinguish focusing index 6 from focusing id '6'
+     * so the item we supply to iron-list needs to be non-index-like.
+     * @private {Array<{id: string}>}
+     */
     displayedList_: {
       type: Array,
       value: function() {
@@ -23,81 +25,67 @@ Polymer({
       },
     },
 
+    /** @private {Array<string>} */
+    displayedIds_: {
+      type: Array,
+      observer: 'onDisplayedIdsChanged_',
+    },
+
     /** @private */
     searchTerm_: String,
   },
 
   listeners: {
     'click': 'deselectItems_',
-    'open-item-menu': 'onOpenItemMenu_',
   },
 
   attached: function() {
-    this.watch('displayedList_', function(state) {
+    var list = /** @type {IronListElement} */ (this.$.bookmarksCard);
+    list.scrollTarget = this;
+
+    this.watch('displayedIds_', function(state) {
       return bookmarks.util.getDisplayedList(state);
     });
     this.watch('searchTerm_', function(state) {
       return state.search.term;
     });
     this.updateFromStore();
+
+    this.$.bookmarksCard.addEventListener(
+        'keydown', this.onItemKeydown_.bind(this), true);
   },
 
+  /** @return {HTMLElement} */
   getDropTarget: function() {
     return this.$.message;
   },
 
   /**
-   * @param {Event} e
-   * @private
+   * Updates `displayedList_` using splices to be equivalent to `newValue`. This
+   * allows the iron-list to delete sublists of items which preserves scroll and
+   * focus on incremental update.
+   * @param {Array<string>} newValue
+   * @param {Array<string>} oldValue
    */
-  onOpenItemMenu_: function(e) {
-    this.menuItem_ = e.detail.item;
-    var menu = /** @type {!CrActionMenuElement} */ (
-        this.$.dropdown);
-    menu.showAt(/** @type {!Element} */ (e.detail.target));
-  },
-
-  /** @private */
-  onEditTap_: function() {
-    this.closeDropdownMenu_();
-    /** @type {BookmarksEditDialogElement} */ (this.$.editDialog.get())
-        .showEditDialog(this.menuItem_);
-  },
-
-  /** @private */
-  onCopyURLTap_: function() {
-    var idList = [this.menuItem_.id];
-    chrome.bookmarkManagerPrivate.copy(idList, function() {
-      // TODO(jiaxi): Add toast later.
-    });
-    this.closeDropdownMenu_();
-  },
-
-  /** @private */
-  onDeleteTap_: function() {
-    if (this.menuItem_.url) {
-      chrome.bookmarks.remove(this.menuItem_.id, function() {
-        // TODO(jiaxi): Add toast later.
-      }.bind(this));
+  onDisplayedIdsChanged_: function(newValue, oldValue) {
+    if (!oldValue) {
+      this.displayedList_ = this.displayedIds_.map(function(id) {
+        return {id: id};
+      });
     } else {
-      chrome.bookmarks.removeTree(this.menuItem_.id, function() {
-        // TODO(jiaxi): Add toast later.
+      var splices = Polymer.ArraySplice.calculateSplices(newValue, oldValue);
+      splices.forEach(function(splice) {
+        // TODO(calamity): Could use notifySplices to improve performance here.
+        var additions =
+            newValue.slice(splice.index, splice.index + splice.addedCount)
+                .map(function(id) {
+                  return {id: id};
+                });
+        this.splice.apply(this, [
+          'displayedList_', splice.index, splice.removed.length
+        ].concat(additions));
       }.bind(this));
     }
-    this.closeDropdownMenu_();
-  },
-
-  /** @private */
-  closeDropdownMenu_: function() {
-    var menu = /** @type {!CrActionMenuElement} */ (
-        this.$.dropdown);
-    menu.close();
-  },
-
-  /** @private */
-  getEditActionLabel_: function() {
-    var label = this.menuItem_.url ? 'menuEdit' : 'menuRename';
-    return loadTimeData.getString(label);
   },
 
   /** @private */
@@ -114,5 +102,82 @@ Polymer({
   /** @private */
   deselectItems_: function() {
     this.dispatch(bookmarks.actions.deselectItems());
+  },
+
+  /** @private */
+  selectAllItems_: function() {
+    this.dispatch(
+        bookmarks.actions.selectAll(this.displayedIds_, this.getState()));
+  },
+
+  /**
+   * @param{HTMLElement} el
+   * @private
+   */
+  getIndexForItemElement_: function(el) {
+    return this.$.bookmarksCard.modelForElement(el).index;
+  },
+
+  /**
+   * @param {KeyboardEvent} e
+   * @private
+   */
+  onItemKeydown_: function(e) {
+    var handled = true;
+    var list = this.$.bookmarksCard;
+    var focusMoved = false;
+    var focusedIndex =
+        this.getIndexForItemElement_(/** @type {HTMLElement} */ (e.target));
+    if (e.key == 'ArrowUp') {
+      focusedIndex--;
+      focusMoved = true;
+    } else if (e.key == 'ArrowDown') {
+      focusedIndex++;
+      focusMoved = true;
+      e.preventDefault();
+    } else if (e.key == 'Home') {
+      focusedIndex = 0;
+      focusMoved = true;
+    } else if (e.key == 'End') {
+      focusedIndex = list.items.length - 1;
+      focusMoved = true;
+    } else if (e.key == ' ' && e.ctrlKey) {
+      this.dispatch(bookmarks.actions.selectItem(
+          this.displayedIds_[focusedIndex], this.getState(), {
+            clear: false,
+            range: false,
+            toggle: true,
+          }));
+    } else if (e.key == 'a' && e.ctrlKey) {
+      this.selectAllItems_();
+    } else if (e.key == 'Escape') {
+      this.deselectItems_();
+    } else {
+      handled = false;
+    }
+
+    if (focusMoved) {
+      focusedIndex = Math.min(list.items.length - 1, Math.max(0, focusedIndex));
+      list.focusItem(focusedIndex);
+
+      if (e.ctrlKey && !e.shiftKey) {
+        this.dispatch(
+            bookmarks.actions.updateAnchor(this.displayedIds_[focusedIndex]));
+      } else {
+        // If the focus moved from something other than a Ctrl + move event,
+        // update the selection.
+        var config = {
+          clear: !e.ctrlKey,
+          range: e.shiftKey,
+          toggle: false,
+        };
+
+        this.dispatch(bookmarks.actions.selectItem(
+            this.displayedIds_[focusedIndex], this.getState(), config));
+      }
+    }
+
+    if (handled)
+      e.stopPropagation();
   },
 });

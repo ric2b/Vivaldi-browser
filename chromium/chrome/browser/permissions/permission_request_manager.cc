@@ -113,7 +113,7 @@ void PermissionRequestManager::AddRequest(PermissionRequest* request) {
   // any other renderer-side nav initiations?). Double-check this for
   // correct behavior on interstitials -- we probably want to basically queue
   // any request for which GetVisibleURL != GetLastCommittedURL.
-  request_url_ = web_contents()->GetLastCommittedURL();
+  const GURL& request_url_ = web_contents()->GetLastCommittedURL();
   bool is_main_frame = url::Origin(request_url_)
                            .IsSameOriginWith(url::Origin(request->GetOrigin()));
 
@@ -133,29 +133,20 @@ void PermissionRequestManager::AddRequest(PermissionRequest* request) {
     return;
   }
 
-  if (IsBubbleVisible()) {
-    if (is_main_frame) {
+  if (is_main_frame) {
+    if (IsBubbleVisible()) {
       base::RecordAction(
           base::UserMetricsAction("PermissionBubbleRequestQueued"));
-      queued_requests_.push_back(request);
-    } else {
-      base::RecordAction(
-          base::UserMetricsAction("PermissionBubbleIFrameRequestQueued"));
-      queued_frame_requests_.push_back(request);
     }
-    return;
-  }
-
-  if (is_main_frame) {
-    requests_.push_back(request);
-    accept_states_.push_back(true);
+    queued_requests_.push_back(request);
   } else {
     base::RecordAction(
         base::UserMetricsAction("PermissionBubbleIFrameRequestQueued"));
     queued_frame_requests_.push_back(request);
   }
 
-  ScheduleShowBubble();
+  if (!IsBubbleVisible())
+    ScheduleShowBubble();
 }
 
 void PermissionRequestManager::CancelRequest(PermissionRequest* request) {
@@ -189,16 +180,16 @@ void PermissionRequestManager::CancelRequest(PermissionRequest* request) {
 
     // We can simply erase the current entry in the request table if we aren't
     // showing the dialog, or if we are showing it and it can accept the update.
-    bool can_erase = !IsBubbleVisible() || view_->CanAcceptRequestUpdate();
+    bool can_erase = !view_ || view_->CanAcceptRequestUpdate();
     if (can_erase) {
       RequestFinishedIncludingDuplicates(*requests_iter);
       requests_.erase(requests_iter);
       accept_states_.erase(accepts_iter);
 
-      if (IsBubbleVisible()) {
+      if (view_) {
         view_->Hide();
         // Will redraw the bubble if it is being shown.
-        TriggerShowBubble();
+        DequeueRequestsAndShowBubble();
       }
       return;
     }
@@ -246,7 +237,15 @@ void PermissionRequestManager::DisplayPendingRequests() {
   view_ = view_factory_.Run(web_contents());
   view_->SetDelegate(this);
 
-  TriggerShowBubble();
+  if (!main_frame_has_fully_loaded_)
+    return;
+
+  if (requests_.empty()) {
+    DequeueRequestsAndShowBubble();
+  } else {
+    // We switched tabs away and back while a prompt was active.
+    ShowBubble();
+  }
 }
 
 void PermissionRequestManager::UpdateAnchorPosition() {
@@ -255,7 +254,7 @@ void PermissionRequestManager::UpdateAnchorPosition() {
 }
 
 bool PermissionRequestManager::IsBubbleVisible() {
-  return view_ && view_->IsVisible();
+  return view_ && !requests_.empty();
 }
 
 // static
@@ -314,6 +313,14 @@ void PermissionRequestManager::WebContentsDestroyed() {
   // returning from this function is the only safe thing to do.
 }
 
+const std::vector<PermissionRequest*>& PermissionRequestManager::Requests() {
+  return requests_;
+}
+
+const std::vector<bool>& PermissionRequestManager::AcceptStates() {
+  return accept_states_;
+}
+
 void PermissionRequestManager::ToggleAccept(int request_index, bool new_value) {
   DCHECK(request_index < static_cast<int>(accept_states_.size()));
   accept_states_[request_index] = new_value;
@@ -341,6 +348,7 @@ void PermissionRequestManager::Accept() {
 }
 
 void PermissionRequestManager::Deny() {
+  DCHECK_EQ(1u, requests_.size());
   PermissionUmaUtil::PermissionPromptDenied(requests_);
 
   std::vector<PermissionRequest*>::iterator requests_iter;
@@ -369,35 +377,38 @@ void PermissionRequestManager::ScheduleShowBubble() {
     return;
 
   content::BrowserThread::PostTask(
-      content::BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&PermissionRequestManager::TriggerShowBubble,
-                 weak_factory_.GetWeakPtr()));
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&PermissionRequestManager::DequeueRequestsAndShowBubble,
+                     weak_factory_.GetWeakPtr()));
 }
 
-void PermissionRequestManager::TriggerShowBubble() {
+void PermissionRequestManager::DequeueRequestsAndShowBubble() {
   if (!view_)
     return;
-  if (IsBubbleVisible())
+  if (!requests_.empty())
     return;
   if (!main_frame_has_fully_loaded_)
     return;
-  if (requests_.empty() && queued_requests_.empty() &&
-      queued_frame_requests_.empty()) {
+  if (queued_requests_.empty() && queued_frame_requests_.empty())
     return;
-  }
 
-  if (requests_.empty()) {
-    if (queued_requests_.size())
-      requests_.swap(queued_requests_);
-    else
-      requests_.swap(queued_frame_requests_);
+  if (queued_requests_.size())
+    requests_.swap(queued_requests_);
+  else
+    requests_.swap(queued_frame_requests_);
 
-    // Sets the default value for each request to be 'accept'.
-    accept_states_.resize(requests_.size(), true);
-  }
+  // Sets the default value for each request to be 'accept'.
+  accept_states_.resize(requests_.size(), true);
 
-  view_->Show(requests_, accept_states_);
+  ShowBubble();
+}
+
+void PermissionRequestManager::ShowBubble() {
+  DCHECK(view_);
+  DCHECK(!requests_.empty());
+  DCHECK(main_frame_has_fully_loaded_);
+
+  view_->Show();
   PermissionUmaUtil::PermissionPromptShown(requests_);
   NotifyBubbleAdded();
 
@@ -419,9 +430,7 @@ void PermissionRequestManager::FinalizeBubble() {
   requests_.clear();
   accept_states_.clear();
   if (queued_requests_.size() || queued_frame_requests_.size())
-    TriggerShowBubble();
-  else
-    request_url_ = GURL();
+    DequeueRequestsAndShowBubble();
 }
 
 void PermissionRequestManager::CancelPendingQueues() {
@@ -525,7 +534,14 @@ void PermissionRequestManager::DoAutoResponseForTesting() {
       Accept();
       break;
     case DENY_ALL:
-      Deny();
+      // Deny() assumes there is only 1 request.
+      if (accept_states_.size() == 1) {
+        Deny();
+      } else {
+        for (size_t i = 0; i < accept_states_.size(); ++i)
+          accept_states_[i] = false;
+        Accept();
+      }
       break;
     case DISMISS:
       Closing();

@@ -7,6 +7,7 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/single_thread_task_runner.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/timestamp_constants.h"
@@ -23,13 +24,7 @@ namespace remoting {
 mojo::DataPipe* DemuxerStreamAdapter::CreateDataPipe() {
   // Capacity in bytes for Mojo data pipe.
   constexpr int kMojoDataPipeCapacityInBytes = 512 * 1024;
-
-  MojoCreateDataPipeOptions options;
-  options.struct_size = sizeof(MojoCreateDataPipeOptions);
-  options.flags = MOJO_WRITE_DATA_FLAG_NONE;
-  options.element_num_bytes = 1;
-  options.capacity_num_bytes = kMojoDataPipeCapacityInBytes;
-  return new mojo::DataPipe(options);
+  return new mojo::DataPipe(kMojoDataPipeCapacityInBytes);
 }
 
 DemuxerStreamAdapter::DemuxerStreamAdapter(

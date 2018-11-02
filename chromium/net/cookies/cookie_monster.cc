@@ -66,6 +66,7 @@
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_util.h"
 #include "net/cookies/parsed_cookie.h"
+#include "net/ssl/channel_id_service.h"
 #include "url/origin.h"
 
 using base::Time;
@@ -347,10 +348,26 @@ CookieMonster::CookieMonster(PersistentCookieStore* store,
     : CookieMonster(
           store,
           delegate,
+          nullptr,
           base::TimeDelta::FromSeconds(kDefaultAccessUpdateThresholdSeconds)) {}
 
 CookieMonster::CookieMonster(PersistentCookieStore* store,
                              CookieMonsterDelegate* delegate,
+                             ChannelIDService* channel_id_service)
+    : CookieMonster(
+          store,
+          delegate,
+          channel_id_service,
+          base::TimeDelta::FromSeconds(kDefaultAccessUpdateThresholdSeconds)) {}
+
+CookieMonster::CookieMonster(PersistentCookieStore* store,
+                             CookieMonsterDelegate* delegate,
+                             base::TimeDelta last_access_threshold)
+    : CookieMonster(store, delegate, nullptr, last_access_threshold) {}
+
+CookieMonster::CookieMonster(PersistentCookieStore* store,
+                             CookieMonsterDelegate* delegate,
+                             ChannelIDService* channel_id_service,
                              base::TimeDelta last_access_threshold)
     : initialized_(false),
       started_fetching_all_cookies_(false),
@@ -360,6 +377,7 @@ CookieMonster::CookieMonster(PersistentCookieStore* store,
       store_(store),
       last_access_threshold_(last_access_threshold),
       delegate_(delegate),
+      channel_id_service_(channel_id_service),
       last_statistic_record_time_(base::Time::Now()),
       persist_session_cookies_(false),
       weak_ptr_factory_(this) {
@@ -862,10 +880,14 @@ void CookieMonster::SetCookieWithDetailsAsync(
 void CookieMonster::FlushStore(const base::Closure& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (initialized_ && store_.get())
+  if (initialized_ && store_.get()) {
+    if (channel_id_service_) {
+      channel_id_service_->GetChannelIDStore()->Flush();
+    }
     store_->Flush(callback);
-  else if (!callback.is_null())
+  } else if (!callback.is_null()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, callback);
+  }
 }
 
 void CookieMonster::SetForceKeepSessionState() {
@@ -1058,15 +1080,39 @@ bool CookieMonster::SetCookieWithDetails(const GURL& url,
     last_time_seen_ = actual_creation_time;
   }
 
-  std::unique_ptr<CanonicalCookie> cc(CanonicalCookie::Create(
-      url, name, value, domain, path, actual_creation_time, expiration_time,
-      secure, http_only, same_site, priority));
+  // Validate consistency of passed arguments.
+  if (ParsedCookie::ParseTokenString(name) != name ||
+      ParsedCookie::ParseValueString(value) != value ||
+      ParsedCookie::ParseValueString(domain) != domain ||
+      ParsedCookie::ParseValueString(path) != path) {
+    return false;
+  }
 
-  if (!cc.get())
+  // Validate passed arguments against URL.
+  if (secure && !url.SchemeIsCryptographic())
     return false;
 
-  if (!last_access_time.is_null())
-    cc->SetLastAccessDate(last_access_time);
+  std::string cookie_domain;
+  if (!cookie_util::GetCookieDomainWithString(url, domain, &cookie_domain))
+    return false;
+
+  std::string cookie_path = CanonicalCookie::CanonPathWithString(url, path);
+  if (!path.empty() && cookie_path != path)
+    return false;
+
+  // Canonicalize path again to make sure it escapes characters as needed.
+  url::Component path_component(0, cookie_path.length());
+  url::RawCanonOutputT<char> canon_path;
+  url::Component canon_path_component;
+  url::CanonicalizePath(cookie_path.data(), path_component, &canon_path,
+                        &canon_path_component);
+  cookie_path = std::string(canon_path.data() + canon_path_component.begin,
+                            canon_path_component.len);
+
+  std::unique_ptr<CanonicalCookie> cc(base::MakeUnique<CanonicalCookie>(
+      name, value, cookie_domain, cookie_path, actual_creation_time,
+      expiration_time, last_access_time, secure, http_only, same_site,
+      priority));
 
   CookieOptions options;
   options.set_include_httponly();

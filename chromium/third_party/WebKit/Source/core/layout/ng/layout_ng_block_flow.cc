@@ -7,6 +7,7 @@
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_fragment.h"
+#include "core/layout/ng/ng_layout_result.h"
 
 namespace blink {
 
@@ -47,7 +48,18 @@ void LayoutNGBlockFlow::UpdateBlockLayout(bool relayout_children) {
 
   for (auto& descendant : result->OutOfFlowDescendants())
     descendant->UseOldOutOfFlowPositioning();
+
+  UpdateAfterLayout();
   ClearNeedsLayout();
+}
+
+NGInlineNodeData& LayoutNGBlockFlow::GetNGInlineNodeData() const {
+  DCHECK(ng_inline_node_data_);
+  return *ng_inline_node_data_.get();
+}
+
+void LayoutNGBlockFlow::ResetNGInlineNodeData() {
+  ng_inline_node_data_ = WTF::MakeUnique<NGInlineNodeData>();
 }
 
 }  // namespace blink

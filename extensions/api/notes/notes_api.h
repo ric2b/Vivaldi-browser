@@ -108,7 +108,8 @@ class NotesGetChildrenFunction : public NotesAsyncFunction {
   bool RunAsync() override;
 };
 
-class NotesGetTreeFunction : public NotesAsyncFunction {
+class NotesGetTreeFunction : public NotesAsyncFunction,
+                             public NotesModelObserver {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.getTree", NOTES_GETTREE)
   NotesGetTreeFunction();
@@ -117,6 +118,13 @@ class NotesGetTreeFunction : public NotesAsyncFunction {
   ~NotesGetTreeFunction() override;
   // ExtensionFunction:
   bool RunAsync() override;
+
+ private:
+  void NotesModelLoaded(Notes_Model* model, bool ids_reassigned) override;
+  void NotesModelBeingDeleted(Notes_Model* model) override;
+
+  bool SendGetTreeResponse(Notes_Model* model);
+  Notes_Model* notes_model_ = nullptr;
 };
 
 class NotesMoveFunction : public NotesAsyncFunction {

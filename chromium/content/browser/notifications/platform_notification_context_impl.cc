@@ -9,7 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "content/browser/notifications/blink_notification_service_impl.h"
 #include "content/browser/notifications/notification_database.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -126,7 +126,8 @@ void PlatformNotificationContextImpl::ShutdownOnIO() {
 
 void PlatformNotificationContextImpl::CreateService(
     int render_process_id,
-    mojo::InterfaceRequest<blink::mojom::NotificationService> request) {
+    const service_manager::BindSourceInfo& source_info,
+    blink::mojom::NotificationServiceRequest request) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
@@ -170,7 +171,7 @@ void PlatformNotificationContextImpl::DoReadNotificationData(
     const std::string& notification_id,
     const GURL& origin,
     const ReadResultCallback& callback) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   NotificationDatabaseData database_data;
   NotificationDatabase::Status status =
@@ -268,7 +269,7 @@ void PlatformNotificationContextImpl::
         const ReadAllResultCallback& callback,
         std::unique_ptr<std::set<std::string>> displayed_notifications,
         bool supports_synchronization) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(displayed_notifications);
 
   std::vector<NotificationDatabaseData> notification_datas;
@@ -280,10 +281,10 @@ void PlatformNotificationContextImpl::
   UMA_HISTOGRAM_ENUMERATION("Notifications.Database.ReadForServiceWorkerResult",
                             status, NotificationDatabase::STATUS_COUNT);
 
+  std::vector<std::string> obsolete_notifications;
+
   if (status == NotificationDatabase::STATUS_OK) {
     if (supports_synchronization) {
-      // Filter out notifications that are not actually on display anymore.
-      // TODO(miguelg) synchronize the database if there are inconsistencies.
       for (auto it = notification_datas.begin();
            it != notification_datas.end();) {
         // The database is only used for persistent notifications.
@@ -292,6 +293,7 @@ void PlatformNotificationContextImpl::
         if (displayed_notifications->count(it->notification_id)) {
           ++it;
         } else {
+          obsolete_notifications.push_back(it->notification_id);
           it = notification_datas.erase(it);
         }
       }
@@ -300,6 +302,10 @@ void PlatformNotificationContextImpl::
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::Bind(callback, true /* success */, notification_datas));
+
+    // Remove notifications that are not actually on display anymore.
+    for (const auto& it : obsolete_notifications)
+      database_->DeleteNotificationData(it, origin);
     return;
   }
 
@@ -327,7 +333,7 @@ void PlatformNotificationContextImpl::DoWriteNotificationData(
     const GURL& origin,
     const NotificationDatabaseData& database_data,
     const WriteResultCallback& callback) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(database_data.notification_id.empty());
 
   // Eagerly delete data for replaced notifications from the database.
@@ -401,7 +407,7 @@ void PlatformNotificationContextImpl::DoDeleteNotificationData(
     const std::string& notification_id,
     const GURL& origin,
     const DeleteResultCallback& callback) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   NotificationDatabase::Status status =
       database_->DeleteNotificationData(notification_id, origin);
@@ -438,7 +444,7 @@ void PlatformNotificationContextImpl::
     DoDeleteNotificationsForServiceWorkerRegistration(
         const GURL& origin,
         int64_t service_worker_registration_id) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   std::set<std::string> deleted_notification_ids;
   NotificationDatabase::Status status =
@@ -472,10 +478,8 @@ void PlatformNotificationContextImpl::LazyInitialize(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   if (!task_runner_) {
-    base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
-    base::SequencedWorkerPool::SequenceToken token = pool->GetSequenceToken();
-
-    task_runner_ = pool->GetSequencedTaskRunner(token);
+    task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
+        {base::MayBlock(), base::TaskPriority::BACKGROUND});
   }
 
   task_runner_->PostTask(
@@ -486,7 +490,7 @@ void PlatformNotificationContextImpl::LazyInitialize(
 void PlatformNotificationContextImpl::OpenDatabase(
     const base::Closure& success_closure,
     const base::Closure& failure_closure) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (database_) {
     success_closure.Run();
@@ -536,7 +540,7 @@ void PlatformNotificationContextImpl::OpenDatabase(
 }
 
 bool PlatformNotificationContextImpl::DestroyDatabase() {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(database_);
 
   NotificationDatabase::Status status = database_->Destroy();

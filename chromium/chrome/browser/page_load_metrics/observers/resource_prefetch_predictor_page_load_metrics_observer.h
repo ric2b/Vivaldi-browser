@@ -35,7 +35,8 @@ class ResourcePrefetchPredictorPageLoadMetricsObserver
   // Public for testing. Normally one should use CreateIfNeeded. Predictor must
   // outlive this observer.
   explicit ResourcePrefetchPredictorPageLoadMetricsObserver(
-      predictors::ResourcePrefetchPredictor* predictor);
+      predictors::ResourcePrefetchPredictor* predictor,
+      content::WebContents* web_contents);
 
   ~ResourcePrefetchPredictorPageLoadMetricsObserver() override;
 
@@ -44,17 +45,19 @@ class ResourcePrefetchPredictorPageLoadMetricsObserver
                         const GURL& currently_commited_url,
                         bool started_in_foreground) override;
   ObservePolicy OnHidden(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
-  void OnFirstContentfulPaint(
-      const page_load_metrics::PageLoadTiming& timing,
+  void OnFirstContentfulPaintInPage(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
-  void OnFirstMeaningfulPaint(
-      const page_load_metrics::PageLoadTiming& timing,
+  void OnFirstMeaningfulPaintInMainFrameDocument(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
 
  private:
   predictors::ResourcePrefetchPredictor* predictor_;
+  content::WebContents* web_contents_;
+  bool record_histograms_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourcePrefetchPredictorPageLoadMetricsObserver);
 };

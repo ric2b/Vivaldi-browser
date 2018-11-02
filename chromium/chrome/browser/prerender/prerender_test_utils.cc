@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/loader/chrome_resource_dispatcher_host_delegate.h"
 #include "chrome/browser/prerender/prerender_manager.h"
@@ -60,8 +61,9 @@ class MockHTTPJob : public net::URLRequestMockHTTPJob {
             request,
             delegate,
             file,
-            BrowserThread::GetBlockingPool()->GetTaskRunnerWithShutdownBehavior(
-                base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)) {}
+            base::CreateTaskRunnerWithTraits(
+                {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                 base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {}
 
   void set_start_callback(const base::Closure& start_callback) {
     start_callback_ = start_callback;
@@ -99,7 +101,7 @@ class CountingInterceptor : public net::URLRequestInterceptor {
   void RequestStarted() {
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&RequestCounter::RequestStarted, counter_));
+        base::BindOnce(&RequestCounter::RequestStarted, counter_));
   }
 
  private:
@@ -119,8 +121,8 @@ class CountingInterceptorWithCallback : public net::URLRequestInterceptor {
                          base::Callback<void(net::URLRequest*)> callback_io) {
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&CountingInterceptorWithCallback::CreateAndAddOnIO, url,
-                   counter->AsWeakPtr(), callback_io));
+        base::BindOnce(&CountingInterceptorWithCallback::CreateAndAddOnIO, url,
+                       counter->AsWeakPtr(), callback_io));
   }
 
   // net::URLRequestInterceptor:
@@ -133,7 +135,7 @@ class CountingInterceptorWithCallback : public net::URLRequestInterceptor {
     // Ping the request counter.
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&RequestCounter::RequestStarted, counter_));
+        base::BindOnce(&RequestCounter::RequestStarted, counter_));
     return nullptr;
   }
 
@@ -193,11 +195,10 @@ class HangingFirstRequestInterceptor : public net::URLRequestInterceptor {
       return new HangingURLRequestJob(request, network_delegate);
     }
     return new net::URLRequestMockHTTPJob(
-        request,
-        network_delegate,
-        file_,
-        BrowserThread::GetBlockingPool()->GetTaskRunnerWithShutdownBehavior(
-            base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
+        request, network_delegate, file_,
+        base::CreateTaskRunnerWithTraits(
+            {base::MayBlock(), base::TaskPriority::BACKGROUND,
+             base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
   }
 
  private:
@@ -295,8 +296,8 @@ bool FakeSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& gurl,
 
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&FakeSafeBrowsingDatabaseManager::OnCheckBrowseURLDone, this,
-                 gurl, client));
+      base::BindOnce(&FakeSafeBrowsingDatabaseManager::OnCheckBrowseURLDone,
+                     this, gurl, client));
   return false;
 }
 
@@ -752,6 +753,18 @@ base::string16 PrerenderInProcessBrowserTest::MatchTaskManagerPrerender(
                                     base::ASCIIToUTF16(page_title));
 }
 
+GURL PrerenderInProcessBrowserTest::GetURLWithReplacement(
+    const std::string& url_file,
+    const std::string& replacement_variable,
+    const std::string& replacement_text) {
+  base::StringPairs replacement_pair;
+  replacement_pair.push_back(make_pair(replacement_variable, replacement_text));
+  std::string replacement_path;
+  net::test_server::GetFilePathWithReplacements(url_file, replacement_pair,
+                                                &replacement_path);
+  return src_server()->GetURL(MakeAbsolute(replacement_path));
+}
+
 std::vector<std::unique_ptr<TestPrerender>>
 PrerenderInProcessBrowserTest::NavigateWithPrerenders(
     const GURL& loader_url,
@@ -815,8 +828,8 @@ void CreateHangingFirstRequestInterceptor(
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&CreateHangingFirstRequestInterceptorOnIO, url, file,
-                 callback_io));
+      base::BindOnce(&CreateHangingFirstRequestInterceptorOnIO, url, file,
+                     callback_io));
 }
 
 }  // namespace test_utils

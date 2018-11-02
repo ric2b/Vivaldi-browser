@@ -17,8 +17,9 @@
 <translation id="3256316712990552818">Nokopēta pārlūkā Chromium</translation>
 <translation id="3413120535237193088">Pierakstieties pārlūkā Chromium, lai grāmatzīmes būtu pieejamas visās jūsu ierīcēs.</translation>
 <translation id="3473048256428424907">Chromium QR skenera ieslēgšana</translation>
+<translation id="3605252743693911722">Pierakstieties pārlūkā Chromium, lai iegūtu savas grāmatzīmes, paroles un citu saturu visās savās ierīcēs.</translation>
 <translation id="3805899903892079518">Chromium nevar piekļūt jūsu fotoattēliem un videoklipiem. Iespējojiet piekļuvi: iOS Settings &gt; Privacy &gt; Photos.</translation>
-<translation id="40863189315891987">Lai nodrošinātu ātrāku piekļuvi, <ph name="BEGIN_LINK" />pārvietojiet pārlūku Chromium uz savu doku<ph name="END_LINK" />.</translation>
+<translation id="4024541897090868497">Pierakstieties pārlūkā Chromium, lai jūsu cilnes būtu pieejamas visās jūsu ierīcēs.</translation>
 <translation id="418271229036116702">Pierakstieties pārlūkā Chromium, lai būtu pieejamas cilnes no citām jūsu ierīcēm.</translation>
 <translation id="4241912885070669028">Jūs izrakstāties no konta, kas tiek pārvaldīts domēnā <ph name="SIGNOUT_MANAGED_DOMAIN" />. Izrakstoties Chromium dati tiks dzēsti no šīs ierīces, taču tie paliks jūsu Google kontā.</translation>
 <translation id="4555020257205549924">Ja šī funkcija ir ieslēgta, Chromium piedāvā tulkot citās valodās rakstītas lapas, izmantojot Google tulkotāju. <ph name="BEGIN_LINK" />Uzziniet vairāk<ph name="END_LINK" />.</translation>
@@ -32,7 +33,6 @@
 <translation id="6268381023930128611">Vai izrakstīties no Chromium?</translation>
 <translation id="6424492062988593837">Lietojumprogramma Chromium ir uzlabota! Ir pieejama jauna versija.</translation>
 <translation id="6604711459180487467">Uzlabojiet savu pieredzi pārlūkā Chromium, sūtot informāciju par savu atrašanās vietu.</translation>
-<translation id="6989306073720242915">Vai jums patīk pārlūks Chromium? <ph name="BEGIN_LINK" />Pārvietojiet to uz savu doku<ph name="END_LINK" />!</translation>
 <translation id="7099326575020694068">Chromium nevar izmantot kameru dalītā skata režīmā.</translation>
 <translation id="7144758435978427212">Atklājiet tīmekļa lapas, ko nosūtījuši tuvumā esoši objekti. Ja ir ieslēgts Bluetooth savienojums, Chromium var apkopot tīmekļa lapas, kas ir saistītas ar jums apkārt esošajiem objektiem, un anonīmi nosūtīt tās Google serveriem, lai atrastu visnoderīgākās lapas. <ph name="BEGIN_LINK" />Uzziniet vairāk<ph name="END_LINK" />.</translation>
 <translation id="7208566199746267865">Chromium ietaupa jūsu laiku, pievienojot jūsu kontus tīmeklim. Kontus varat pievienot vai noņemt sadaļā Iestatījumi.</translation>
@@ -44,7 +44,6 @@
 <translation id="786327964234957808">Jūs pārslēdzat sinhronizējamos kontus no konta <ph name="USER_EMAIL1" /> uz kontu <ph name="USER_EMAIL2" />. Jūsu pašreizējos Chromium datus pārvalda <ph name="DOMAIN" />. Šādi jūsu dati tiks dzēsti no šīs ierīces, bet dati joprojām būs pieejami kontā <ph name="USER_EMAIL1" />.</translation>
 <translation id="8111736072665034317">Lietojot šo, piekrītat Chromium <ph name="BEGIN_LINK" />pakalpojumu sniegšanas noteikumiem<ph name="END_LINK" />.</translation>
 <translation id="8175055321229419309">Padoms. <ph name="BEGIN_LINK" />Pārvietojiet pārlūku Chromium uz savu doku<ph name="END_LINK" />.</translation>
-<translation id="8200548749940012969">Pierakstieties pārlūkā Chromium, lai jūsu iestatījumi būtu pieejami visās jūsu ierīcēs.</translation>
 <translation id="8252885722420466166">Izmantojiet visas Google sniegtās iespējas pārlūkā Chromium, sūtot informāciju par savu atrašanās vietu.</translation>
 <translation id="8353224596138547809">Vai vēlaties, lai produktā Chromium tiek saglabāta parole šai vietnei?</translation>
 <translation id="8586442755830160949">Autortiesības <ph name="YEAR" /> Chromium autori. Visas tiesības paturētas.</translation>

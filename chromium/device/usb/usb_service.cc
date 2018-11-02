@@ -8,6 +8,7 @@
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/device_event_log/device_event_log.h"
@@ -42,31 +43,34 @@ void UsbService::Observer::OnDeviceRemovedCleanup(
 
 void UsbService::Observer::WillDestroyUsbService() {}
 
+// Declare storage for this constexpr.
+constexpr base::TaskTraits UsbService::kBlockingTaskTraits;
+
 // static
-std::unique_ptr<UsbService> UsbService::Create(
-    scoped_refptr<base::SequencedTaskRunner> blocking_task_runner) {
+std::unique_ptr<UsbService> UsbService::Create() {
 #if defined(OS_ANDROID)
-  return base::WrapUnique(new UsbServiceAndroid(blocking_task_runner));
+  return base::WrapUnique(new UsbServiceAndroid());
 #elif defined(USE_UDEV)
-  return base::WrapUnique(new UsbServiceLinux(blocking_task_runner));
+  return base::WrapUnique(new UsbServiceLinux());
 #elif defined(OS_WIN)
   if (base::FeatureList::IsEnabled(kNewUsbBackend))
-    return base::WrapUnique(new UsbServiceWin(blocking_task_runner));
+    return base::WrapUnique(new UsbServiceWin());
   else
-    return base::WrapUnique(new UsbServiceImpl(blocking_task_runner));
+    return base::WrapUnique(new UsbServiceImpl());
 #elif defined(OS_MACOSX)
-  return base::WrapUnique(new UsbServiceImpl(blocking_task_runner));
+  return base::WrapUnique(new UsbServiceImpl());
 #else
   return nullptr;
 #endif
 }
 
+// static
+scoped_refptr<base::SequencedTaskRunner>
+UsbService::CreateBlockingTaskRunner() {
+  return base::CreateSequencedTaskRunnerWithTraits(kBlockingTaskTraits);
+}
+
 UsbService::~UsbService() {
-#if DCHECK_IS_ON()
-  DCHECK(did_shutdown_);
-#endif
-  for (const auto& map_entry : devices_)
-    map_entry.second->OnDisconnect();
   for (auto& observer : observer_list_)
     observer.WillDestroyUsbService();
 }
@@ -84,20 +88,6 @@ scoped_refptr<UsbDevice> UsbService::GetDevice(const std::string& guid) {
   if (it == devices_.end())
     return nullptr;
   return it->second;
-}
-
-void UsbService::Shutdown() {
-  for (const auto& map_entry : devices_) {
-    // Swap out this list as UsbDevice::HandleClosed() will try to modify it.
-    std::list<UsbDeviceHandle*> handles;
-    handles.swap(map_entry.second->handles());
-    for (auto* handle : handles)
-      handle->Close();
-  }
-#if DCHECK_IS_ON()
-  DCHECK(!did_shutdown_);
-  did_shutdown_ = true;
-#endif
 }
 
 void UsbService::GetDevices(const GetDevicesCallback& callback) {

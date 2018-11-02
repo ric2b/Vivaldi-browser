@@ -4,6 +4,8 @@
 
 #include "media/audio/win/audio_low_latency_input_win.h"
 
+#include <objbase.h>
+
 #include <cmath>
 #include <memory>
 
@@ -124,7 +126,7 @@ bool WASAPIAudioInputStream::Open() {
   // Obtain an IAudioClient interface which enables us to create and initialize
   // an audio stream between an audio application and the audio engine.
   hr = endpoint_device_->Activate(__uuidof(IAudioClient), CLSCTX_INPROC_SERVER,
-                                  NULL, audio_client_.ReceiveVoid());
+                                  NULL, &audio_client_);
   if (FAILED(hr)) {
     open_result_ = OPEN_RESULT_ACTIVATION_FAILED;
     ReportOpenResult();
@@ -200,7 +202,7 @@ void WASAPIAudioInputStream::Start(AudioInputCallback* callback) {
   HRESULT hr = audio_client_->Start();
   DLOG_IF(ERROR, FAILED(hr)) << "Failed to start input streaming.";
 
-  if (SUCCEEDED(hr) && audio_render_client_for_loopback_.get())
+  if (SUCCEEDED(hr) && audio_render_client_for_loopback_.Get())
     hr = audio_render_client_for_loopback_->Start();
 
   started_ = SUCCEEDED(hr);
@@ -377,7 +379,7 @@ void WASAPIAudioInputStream::Run() {
                           audio_samples_ready_event_.Get()};
 
   base::win::ScopedComPtr<IAudioClock> audio_clock;
-  audio_client_->GetService(__uuidof(IAudioClock), audio_clock.ReceiveVoid());
+  audio_client_->GetService(IID_PPV_ARGS(&audio_clock));
 
   while (recording && !error) {
     HRESULT hr = S_FALSE;
@@ -508,11 +510,12 @@ void WASAPIAudioInputStream::HandleError(HRESULT err) {
 
 HRESULT WASAPIAudioInputStream::SetCaptureDevice() {
   DCHECK_EQ(OPEN_RESULT_OK, open_result_);
-  DCHECK(!endpoint_device_.get());
+  DCHECK(!endpoint_device_.Get());
 
   ScopedComPtr<IMMDeviceEnumerator> enumerator;
-  HRESULT hr = enumerator.CreateInstance(__uuidof(MMDeviceEnumerator), NULL,
-                                         CLSCTX_INPROC_SERVER);
+  HRESULT hr =
+      ::CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL,
+                         CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&enumerator));
   if (FAILED(hr)) {
     open_result_ = OPEN_RESULT_CREATE_INSTANCE;
     return hr;
@@ -526,24 +529,24 @@ HRESULT WASAPIAudioInputStream::SetCaptureDevice() {
     // Note that, in Windows Vista, the MMDevice API supports device roles
     // but the system-supplied user interface programs do not.
     hr = enumerator->GetDefaultAudioEndpoint(eCapture, eConsole,
-                                             endpoint_device_.Receive());
+                                             endpoint_device_.GetAddressOf());
   } else if (device_id_ == AudioDeviceDescription::kCommunicationsDeviceId) {
     hr = enumerator->GetDefaultAudioEndpoint(eCapture, eCommunications,
-                                             endpoint_device_.Receive());
+                                             endpoint_device_.GetAddressOf());
   } else if (device_id_ == AudioDeviceDescription::kLoopbackWithMuteDeviceId) {
     // Capture the default playback stream.
     hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole,
-                                             endpoint_device_.Receive());
+                                             endpoint_device_.GetAddressOf());
 
     endpoint_device_->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL,
-                               system_audio_volume_.ReceiveVoid());
+                               &system_audio_volume_);
   } else if (device_id_ == AudioDeviceDescription::kLoopbackInputDeviceId) {
     // Capture the default playback stream.
     hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole,
-                                             endpoint_device_.Receive());
+                                             endpoint_device_.GetAddressOf());
   } else {
     hr = enumerator->GetDevice(base::UTF8ToUTF16(device_id_).c_str(),
-                               endpoint_device_.Receive());
+                               endpoint_device_.GetAddressOf());
   }
 
   if (FAILED(hr)) {
@@ -777,7 +780,7 @@ HRESULT WASAPIAudioInputStream::InitializeAudioEngine() {
       device_id_ == AudioDeviceDescription::kLoopbackWithMuteDeviceId) {
     hr = endpoint_device_->Activate(
         __uuidof(IAudioClient), CLSCTX_INPROC_SERVER, NULL,
-        audio_render_client_for_loopback_.ReceiveVoid());
+        &audio_render_client_for_loopback_);
     if (FAILED(hr)) {
       open_result_ = OPEN_RESULT_LOOPBACK_ACTIVATE_FAILED;
       return hr;
@@ -805,8 +808,7 @@ HRESULT WASAPIAudioInputStream::InitializeAudioEngine() {
 
   // Get access to the IAudioCaptureClient interface. This interface
   // enables us to read input data from the capture endpoint buffer.
-  hr = audio_client_->GetService(__uuidof(IAudioCaptureClient),
-                                 audio_capture_client_.ReceiveVoid());
+  hr = audio_client_->GetService(IID_PPV_ARGS(&audio_capture_client_));
   if (FAILED(hr)) {
     open_result_ = OPEN_RESULT_NO_CAPTURE_CLIENT;
     return hr;
@@ -814,8 +816,7 @@ HRESULT WASAPIAudioInputStream::InitializeAudioEngine() {
 
   // Obtain a reference to the ISimpleAudioVolume interface which enables
   // us to control the master volume level of an audio session.
-  hr = audio_client_->GetService(__uuidof(ISimpleAudioVolume),
-                                 simple_audio_volume_.ReceiveVoid());
+  hr = audio_client_->GetService(IID_PPV_ARGS(&simple_audio_volume_));
   if (FAILED(hr))
     open_result_ = OPEN_RESULT_NO_AUDIO_VOLUME;
 

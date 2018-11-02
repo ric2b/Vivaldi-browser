@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "core/CoreExport.h"
+#include "core/loader/DocumentLoader.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "public/platform/WebDocumentSubresourceFilter.h"
@@ -15,7 +16,6 @@
 
 namespace blink {
 
-class DocumentLoader;
 class KURL;
 
 // Wrapper around a WebDocumentSubresourceFilter. This class will make it easier
@@ -40,7 +40,8 @@ class CORE_EXPORT SubresourceFilter final
   SubresourceFilter(DocumentLoader*,
                     std::unique_ptr<WebDocumentSubresourceFilter>);
 
-  void ReportLoad(WebDocumentSubresourceFilter::LoadPolicy);
+  void ReportLoad(const KURL& resource_url,
+                  WebDocumentSubresourceFilter::LoadPolicy);
 
   Member<DocumentLoader> document_loader_;
   std::unique_ptr<WebDocumentSubresourceFilter> subresource_filter_;

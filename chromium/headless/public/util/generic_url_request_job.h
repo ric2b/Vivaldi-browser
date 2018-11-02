@@ -14,6 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
+#include "headless/public/headless_export.h"
 #include "headless/public/util/managed_dispatch_url_request_job.h"
 #include "headless/public/util/url_fetcher.h"
 #include "net/base/net_errors.h"
@@ -31,11 +32,14 @@ class ResourceRequestInfo;
 
 namespace headless {
 
+class HeadlessBrowserContext;
 class URLRequestDispatcher;
 
 // Wrapper around net::URLRequest with helpers to access select metadata.
-class Request {
+class HEADLESS_EXPORT Request {
  public:
+  virtual uint64_t GetRequestId() const = 0;
+
   virtual const net::URLRequest* GetURLRequest() const = 0;
 
   // The frame from which the request came from.
@@ -43,6 +47,9 @@ class Request {
 
   // The devtools agent host id for the page where the request came from.
   virtual std::string GetDevToolsAgentHostId() const = 0;
+
+  // Gets the POST data, if any, from the net::URLRequest.
+  virtual std::string GetPostData() const = 0;
 
   enum class ResourceType {
     MAIN_FRAME = 0,
@@ -78,7 +85,7 @@ class Request {
 
 // Details of a pending request received by GenericURLRequestJob which must be
 // either Allowed, Blocked, Modified or have it's response Mocked.
-class PendingRequest {
+class HEADLESS_EXPORT PendingRequest {
  public:
   virtual const Request* GetRequest() const = 0;
 
@@ -96,7 +103,6 @@ class PendingRequest {
       const net::HttpRequestHeaders& request_headers) = 0;
 
   struct MockResponseData {
-    int http_response_code = 0;
     std::string response_data;
   };
 
@@ -124,7 +130,7 @@ class HEADLESS_EXPORT GenericURLRequestJob
       public PendingRequest,
       public Request {
  public:
-  class Delegate {
+  class HEADLESS_EXPORT Delegate {
    public:
     // Notifies the delegate of an PendingRequest which must either be
     // allowed, blocked, modifed or it's response mocked. Called on an arbitrary
@@ -140,7 +146,6 @@ class HEADLESS_EXPORT GenericURLRequestJob
     virtual void OnResourceLoadComplete(
         const Request* request,
         const GURL& final_url,
-        int http_response_code,
         scoped_refptr<net::HttpResponseHeaders> response_headers,
         const char* body,
         size_t body_size) = 0;
@@ -155,14 +160,14 @@ class HEADLESS_EXPORT GenericURLRequestJob
                        net::NetworkDelegate* network_delegate,
                        URLRequestDispatcher* url_request_dispatcher,
                        std::unique_ptr<URLFetcher> url_fetcher,
-                       Delegate* delegate);
+                       Delegate* delegate,
+                       HeadlessBrowserContext* headless_browser_context);
   ~GenericURLRequestJob() override;
 
   // net::URLRequestJob implementation:
   void SetExtraRequestHeaders(const net::HttpRequestHeaders& headers) override;
   void Start() override;
   int ReadRawData(net::IOBuffer* buf, int buf_size) override;
-  int GetResponseCode() const override;
   void GetResponseInfo(net::HttpResponseInfo* info) override;
   bool GetMimeType(std::string* mime_type) const override;
   bool GetCharset(std::string* charset) override;
@@ -171,16 +176,17 @@ class HEADLESS_EXPORT GenericURLRequestJob
   // URLFetcher::FetchResultListener implementation:
   void OnFetchStartError(net::Error error) override;
   void OnFetchComplete(const GURL& final_url,
-                       int http_response_code,
                        scoped_refptr<net::HttpResponseHeaders> response_headers,
                        const char* body,
                        size_t body_size) override;
 
  protected:
   // Request implementation:
+  uint64_t GetRequestId() const override;
   const net::URLRequest* GetURLRequest() const override;
   int GetFrameTreeNodeId() const override;
   std::string GetDevToolsAgentHostId() const override;
+  std::string GetPostData() const override;
   ResourceType GetResourceType() const override;
 
   // PendingRequest implementation:
@@ -209,12 +215,14 @@ class HEADLESS_EXPORT GenericURLRequestJob
   scoped_refptr<base::SingleThreadTaskRunner> origin_task_runner_;
   std::unique_ptr<MockResponseData> mock_response_;
   Delegate* delegate_;          // Not owned.
+  HeadlessBrowserContext* headless_browser_context_;           // Not owned.
   const content::ResourceRequestInfo* request_resource_info_;  // Not owned.
   const char* body_ = nullptr;  // Not owned.
-  int http_response_code_ = 0;
   size_t body_size_ = 0;
   size_t read_offset_ = 0;
   base::TimeTicks response_time_;
+  const uint64_t request_id_;
+  static uint64_t next_request_id_;
 
   base::WeakPtrFactory<GenericURLRequestJob> weak_factory_;
 

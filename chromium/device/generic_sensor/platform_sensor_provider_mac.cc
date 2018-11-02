@@ -5,6 +5,7 @@
 #include "device/generic_sensor/platform_sensor_provider_mac.h"
 
 #include "base/memory/singleton.h"
+#include "device/generic_sensor/platform_sensor_accelerometer_mac.h"
 #include "device/generic_sensor/platform_sensor_ambient_light_mac.h"
 
 namespace device {
@@ -28,8 +29,13 @@ void PlatformSensorProviderMac::CreateSensorInternal(
   switch (type) {
     case mojom::SensorType::AMBIENT_LIGHT: {
       scoped_refptr<PlatformSensor> sensor =
-          new PlatformSensorAmbientLightMac(type, std::move(mapping), this);
+          new PlatformSensorAmbientLightMac(std::move(mapping), this);
       callback.Run(std::move(sensor));
+      break;
+    }
+    case mojom::SensorType::ACCELEROMETER: {
+      callback.Run(base::MakeRefCounted<PlatformSensorAccelerometerMac>(
+          std::move(mapping), this));
       break;
     }
     default:

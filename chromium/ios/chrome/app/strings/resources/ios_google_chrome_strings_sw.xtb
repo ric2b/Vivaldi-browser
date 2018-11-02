@@ -6,6 +6,7 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="2147651015520127414">Chrome imethibitisha kuwa <ph name="ISSUER" /> ndiye mtoa cheti cha tovuti hii.</translation>
 <translation id="2334084861041072223">Hakimiliki <ph name="YEAR" /> Google Inc. Haki zote zimehifadhiwa.</translation>
+<translation id="2342981853652716282">Ingia katika Chrome ili upate alamisho, manenosiri yako na mengine mengi kwenye vifaa vyako vyote.</translation>
 <translation id="2347208864470321755">Kipengee hiki kikiwashwa, Chrome itatafsiri kurasa zilizoandikwa kwa lugha zingine kwa kutumia Google Tafsiri. <ph name="BEGIN_LINK" />Pata maelezo zaidi<ph name="END_LINK" /></translation>
 <translation id="2441696206556358796">Ili kuhifadhi picha, gonga Mipangilio ili uruhusu Chrome itumie picha zako</translation>
 <translation id="2576431527583832481">Chrome imekuwa bora! Toleo jipya linapatikana.</translation>
@@ -16,8 +17,6 @@
 <translation id="3196546062792660320">Chrome inakuokolea wakati kwa kuleta akaunti zako kwenye wavuti. Unaweza kuongeza au kuondoa akaunti katika Mipangilio.</translation>
 <translation id="3282568296779691940">Ingia katika Chrome</translation>
 <translation id="3345341804167540816">Tumia Chrome Kila Mahali</translation>
-<translation id="3531621179462011934">Ingia katika Chrome ili upate mipangilio yako kwenye vifaa vyako vyote.</translation>
-<translation id="3601960512121168237">Unaipenda Chrome? <ph name="BEGIN_LINK" />Ihamishie kwenye kituo chako<ph name="END_LINK" /></translation>
 <translation id="3678774398092457402">Je, ungependa Chrome ihifadhi nenosiri lako la tovuti hii?</translation>
 <translation id="384394811301901750">Google Chrome haiwezi kutumia kamera hivi sasa</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
@@ -25,6 +24,7 @@
 <translation id="3988789688219830639">Google Chrome haina uwezo wa kufikia picha au video zako. Washa ufikiaji katika Mipangilio ya iOS &gt; Faragha &gt; Picha.</translation>
 <translation id="4099578267706723511">Saidia kuboresha Chrome kwa kutumia Google takwimu za matumizi na ripoti wakati wowote kivinjari hiki kinapoacha kufanya kazi.</translation>
 <translation id="415767770115540173">Pata hali bora ya Google katika Chrome kulingana na mahali ulipo.</translation>
+<translation id="4248297594476034182">Ingia katika Chrome ili upate vichupo vyako kwenye vifaa vyako vyote.</translation>
 <translation id="424864128008805179">Ungependa kuondoka kwenye Chrome?</translation>
 <translation id="4523886039239821078">Baadhi ya programu jalizi husababisha Chrome iache kufanya kazi. Tafadhali sanidua:</translation>
 <translation id="4615174829807303908">Unaondoka kwenye akaunti inayodhibitiwa na <ph name="SIGNOUT_MANAGED_DOMAIN" />. Hatua hii itafuta data yako ya Chrome kwenye kifaa hiki, lakini data yako itasalia katika akaunti yako ya Google.</translation>
@@ -43,7 +43,6 @@
 <translation id="7172660552945675509">Kidokezo: <ph name="BEGIN_LINK" />Hamishia Chrome kwenye kituo chako<ph name="END_LINK" /></translation>
 <translation id="7265369419224458312">Fikia vichupo ambavyo viko wazi kwenye kompyuta yako, papa hapa. Fungua Chrome kwenye kompyuta yako, nenda kwenye menyu, na uchague “Ingia katika Chrome…”</translation>
 <translation id="728488472449859922">Washa kichanganuzi cha QR cha Google Chrome</translation>
-<translation id="7311395200710390977">Ili upate ufikiaji wa haraka, <ph name="BEGIN_LINK" />hamishia Chrome kwenye kituo chako<ph name="END_LINK" /></translation>
 <translation id="7400722733683201933">Kuhusu Google Chrome</translation>
 <translation id="7437998757836447326">Ondoka kwenye Chrome</translation>
 <translation id="756809126120519699">Data ya Chrome imefutwa</translation>

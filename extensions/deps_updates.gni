@@ -48,6 +48,7 @@ post_process_target("//content/common:common") {
 
 post_process_target("//extensions/browser/guest_view/web_view:web_view") {
   deps += [
+    "//chrome/common/extensions/api",
     "//vivaldi/extensions/schema:api",
     "//vivaldi/extensions/schema:api_registration",
   ]

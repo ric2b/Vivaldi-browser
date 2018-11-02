@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target.h"
@@ -134,8 +135,6 @@ class MockSyntheticGestureTarget : public SyntheticGestureTarget {
 
   // SyntheticGestureTarget:
   void DispatchInputEventToPlatform(const WebInputEvent& event) override {}
-
-  void SetNeedsFlush() override { flush_requested_ = true; }
 
   SyntheticGestureParams::GestureSourceType
   GetDefaultSyntheticGestureSourceType() const override {
@@ -662,6 +661,23 @@ class MockSyntheticPointerMouseActionTarget
   WebMouseEvent::Button button_;
 };
 
+class DummySyntheticGestureControllerDelegate
+    : public SyntheticGestureController::Delegate {
+ public:
+  DummySyntheticGestureControllerDelegate() {}
+  ~DummySyntheticGestureControllerDelegate() override {}
+
+ private:
+  // SyntheticGestureController::Delegate:
+  void RequestBeginFrameForSynthesizedInput(
+      base::OnceClosure callback) override {}
+  bool HasGestureStopped() override { return true; }
+
+  DISALLOW_COPY_AND_ASSIGN(DummySyntheticGestureControllerDelegate);
+};
+
+}  // namespace
+
 class SyntheticGestureControllerTestBase {
  public:
   SyntheticGestureControllerTestBase() {}
@@ -671,8 +687,8 @@ class SyntheticGestureControllerTestBase {
   template<typename MockGestureTarget>
   void CreateControllerAndTarget() {
     target_ = new MockGestureTarget();
-    controller_.reset(new SyntheticGestureController(
-        std::unique_ptr<SyntheticGestureTarget>(target_)));
+    controller_ = base::MakeUnique<SyntheticGestureController>(
+        &delegate_, std::unique_ptr<SyntheticGestureTarget>(target_));
   }
 
   void QueueSyntheticGesture(std::unique_ptr<SyntheticGesture> gesture) {
@@ -684,14 +700,15 @@ class SyntheticGestureControllerTestBase {
   }
 
   void FlushInputUntilComplete() {
-    while (target_->flush_requested()) {
-      while (target_->flush_requested()) {
-        target_->ClearFlushRequest();
-        time_ += base::TimeDelta::FromMilliseconds(kFlushInputRateInMs);
-        controller_->Flush(time_);
-      }
-      controller_->OnDidFlushInput();
-    }
+    // Start and stop the timer explicitly here, since the test does not need to
+    // wait for begin-frame to start the timer.
+    controller_->dispatch_timer_.Start(FROM_HERE,
+                                       base::TimeDelta::FromSeconds(1),
+                                       base::Bind(&base::DoNothing));
+    do
+      time_ += base::TimeDelta::FromMilliseconds(kFlushInputRateInMs);
+    while (controller_->DispatchNextEvent(time_));
+    controller_->dispatch_timer_.Stop();
   }
 
   void OnSyntheticGestureCompleted(SyntheticGesture::Result result) {
@@ -704,7 +721,9 @@ class SyntheticGestureControllerTestBase {
 
   base::TimeDelta GetTotalTime() const { return time_ - start_time_; }
 
+  base::test::ScopedTaskEnvironment env_;
   MockSyntheticGestureTarget* target_;
+  DummySyntheticGestureControllerDelegate delegate_;
   std::unique_ptr<SyntheticGestureController> controller_;
   base::TimeTicks start_time_;
   base::TimeTicks time_;
@@ -836,22 +855,7 @@ TEST_F(SyntheticGestureControllerTest, GestureCompletedOnDidFlushInput) {
   QueueSyntheticGesture(std::move(gesture_1));
   QueueSyntheticGesture(std::move(gesture_2));
 
-  while (target_->flush_requested()) {
-    target_->ClearFlushRequest();
-    time_ += base::TimeDelta::FromMilliseconds(kFlushInputRateInMs);
-    controller_->Flush(time_);
-  }
-  EXPECT_EQ(0, num_success_);
-  controller_->OnDidFlushInput();
-  EXPECT_EQ(1, num_success_);
-
-  while (target_->flush_requested()) {
-    target_->ClearFlushRequest();
-    time_ += base::TimeDelta::FromMilliseconds(kFlushInputRateInMs);
-    controller_->Flush(time_);
-  }
-  EXPECT_EQ(1, num_success_);
-  controller_->OnDidFlushInput();
+  FlushInputUntilComplete();
   EXPECT_EQ(2, num_success_);
 }
 
@@ -1764,7 +1768,5 @@ TEST_F(SyntheticGestureControllerTest, PointerMouseAction) {
   EXPECT_TRUE(
       pointer_mouse_target->SyntheticMouseActionDispatchedCorrectly(param, 1));
 }
-
-}  // namespace
 
 }  // namespace content

@@ -17,10 +17,10 @@
 #include "bindings/core/v8/LongCallbackFunction.h"
 #include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
-#include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/VoidCallbackFunction.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/custom/V0CustomElementProcessingStack.h"
+#include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
 
@@ -39,7 +39,7 @@ const WrapperTypeInfo V8TestCallbackFunctions::wrapperTypeInfo = { gin::kEmbedde
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestCallbackFunctions.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
-// bindings/core/v8/ScriptWrappable.h.
+// platform/bindings/ScriptWrappable.h.
 const WrapperTypeInfo& TestCallbackFunctions::wrapper_type_info_ = V8TestCallbackFunctions::wrapperTypeInfo;
 
 // not [ActiveScriptWrappable]
@@ -70,6 +70,8 @@ static void voidCallbackFunctionAttributeAttributeSetter(v8::Local<v8::Value> v8
   ALLOW_UNUSED_LOCAL(isolate);
 
   v8::Local<v8::Object> holder = info.Holder();
+  ALLOW_UNUSED_LOCAL(holder);
+
   TestCallbackFunctions* impl = V8TestCallbackFunctions::toImpl(holder);
 
   // Prepare the value to be set.
@@ -91,6 +93,8 @@ static void anyCallbackFunctionOptionalAnyArgAttributeAttributeSetter(v8::Local<
   ALLOW_UNUSED_LOCAL(isolate);
 
   v8::Local<v8::Object> holder = info.Holder();
+  ALLOW_UNUSED_LOCAL(holder);
+
   TestCallbackFunctions* impl = V8TestCallbackFunctions::toImpl(holder);
 
   // Prepare the value to be set.
@@ -286,9 +290,14 @@ void V8TestCallbackFunctions::customElementCallbacksMethodMethodCallback(const v
 }
 
 static const V8DOMConfiguration::AccessorConfiguration V8TestCallbackFunctionsAccessors[] = {
-    {"voidCallbackFunctionAttribute", V8TestCallbackFunctions::voidCallbackFunctionAttributeAttributeGetterCallback, V8TestCallbackFunctions::voidCallbackFunctionAttributeAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds},
-    {"anyCallbackFunctionOptionalAnyArgAttribute", V8TestCallbackFunctions::anyCallbackFunctionOptionalAnyArgAttributeAttributeGetterCallback, V8TestCallbackFunctions::anyCallbackFunctionOptionalAnyArgAttributeAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds},
-    {"customElementsCallbacksReadonlyAttribute", V8TestCallbackFunctions::customElementsCallbacksReadonlyAttributeAttributeGetterCallback, nullptr, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds},
+      { "voidCallbackFunctionAttribute", V8TestCallbackFunctions::voidCallbackFunctionAttributeAttributeGetterCallback, V8TestCallbackFunctions::voidCallbackFunctionAttributeAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
+    ,
+
+      { "anyCallbackFunctionOptionalAnyArgAttribute", V8TestCallbackFunctions::anyCallbackFunctionOptionalAnyArgAttributeAttributeGetterCallback, V8TestCallbackFunctions::anyCallbackFunctionOptionalAnyArgAttributeAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
+    ,
+
+      { "customElementsCallbacksReadonlyAttribute", V8TestCallbackFunctions::customElementsCallbacksReadonlyAttributeAttributeGetterCallback, nullptr, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
+    ,
 };
 
 static const V8DOMConfiguration::MethodConfiguration V8TestCallbackFunctionsMethods[] = {

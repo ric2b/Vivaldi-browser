@@ -151,8 +151,8 @@ Sources.SourceMapNamesResolver._resolveScope = function(scope) {
     var sourceTextRange = new TextUtils.TextRange(
         startEntry.sourceLineNumber, startEntry.sourceColumnNumber, endEntry.sourceLineNumber,
         endEntry.sourceColumnNumber);
-    var uiSourceCode =
-        Bindings.NetworkProject.uiSourceCodeForScriptURL(Workspace.workspace, startEntry.sourceURL, script);
+    var uiSourceCode = Bindings.debuggerWorkspaceBinding.uiSourceCodeForSourceMapSourceURL(
+        script.debuggerModel, startEntry.sourceURL, script.isContentScript());
     if (!uiSourceCode)
       return Promise.resolve(/** @type {?string} */ (null));
 
@@ -510,14 +510,6 @@ Sources.SourceMapNamesResolver.RemoteObject = class extends SDK.RemoteObject {
    */
   getProperty(propertyPath, callback) {
     this._object.getProperty(propertyPath, callback);
-  }
-
-  /**
-   * @override
-   * @return {!Promise<?Array<!SDK.EventListener>>}
-   */
-  eventListeners() {
-    return this._object.eventListeners();
   }
 
   /**

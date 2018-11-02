@@ -56,6 +56,7 @@ class CoreOobeHandler : public BaseWebUIHandler,
       const std::string& os_version_label_text) override;
   void OnEnterpriseInfoUpdated(const std::string& message_text,
                                const std::string& asset_id) override;
+  void OnDeviceInfoUpdated(const std::string& bluetooth_name) override;
 
   // ui::EventSource implementation:
   ui::EventSink* GetEventSink() override;
@@ -92,7 +93,7 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void ReloadContent(const base::DictionaryValue& dictionary) override;
   void ReloadEulaContent(const base::DictionaryValue& dictionary) override;
   void ShowControlBar(bool show) override;
-  void ShowPinKeyboard(bool show) override;
+  void SetVirtualKeyboardShown(bool displayed) override;
   void SetClientAreaSize(int width, int height) override;
   void ShowDeviceResetScreen() override;
   void ShowEnableDebuggingScreen() override;

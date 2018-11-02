@@ -22,6 +22,11 @@
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
 #include "modules/media_controls/elements/MediaControlCurrentTimeDisplayElement.h"
+#include "modules/media_controls/elements/MediaControlDownloadButtonElement.h"
+#include "modules/media_controls/elements/MediaControlTimelineElement.h"
+#include "modules/media_controls/elements/MediaControlVolumeSliderElement.h"
+#include "modules/remoteplayback/HTMLMediaElementRemotePlayback.h"
+#include "modules/remoteplayback/RemotePlayback.h"
 #include "platform/heap/Handle.h"
 #include "platform/testing/EmptyWebMediaPlayer.h"
 #include "platform/testing/HistogramTester.h"
@@ -57,43 +62,15 @@ class MockVideoWebMediaPlayer : public EmptyWebMediaPlayer {
   WebTimeRanges seekable_;
 };
 
-class MockWebRemotePlaybackClient : public WebRemotePlaybackClient {
- public:
-  void StateChanged(WebRemotePlaybackState) override {}
-  void AvailabilityChanged(
-      WebRemotePlaybackAvailability availability) override {
-    availability_ = availability;
-  }
-  void PromptCancelled() override {}
-  bool RemotePlaybackAvailable() const override {
-    return availability_ == WebRemotePlaybackAvailability::kDeviceAvailable;
-  }
-
- private:
-  WebRemotePlaybackAvailability availability_ =
-      WebRemotePlaybackAvailability::kUnknown;
-};
-
 class MockLayoutObject : public LayoutObject {
  public:
-  MockLayoutObject() : LayoutObject(nullptr) {}
+  MockLayoutObject(Node* node) : LayoutObject(node) {}
 
   const char* GetName() const override { return "MockLayoutObject"; }
   void UpdateLayout() override {}
   FloatRect LocalBoundingBoxRectForAccessibility() const override {
     return FloatRect();
   }
-
-  void SetShouldDoFullPaintInvalidation(PaintInvalidationReason) {
-    full_paint_invalidation_call_count_++;
-  }
-
-  int FullPaintInvalidationCallCount() const {
-    return full_paint_invalidation_call_count_;
-  }
-
- private:
-  int full_paint_invalidation_call_count_ = 0;
 };
 
 class StubLocalFrameClient : public EmptyLocalFrameClient {
@@ -108,16 +85,9 @@ class StubLocalFrameClient : public EmptyLocalFrameClient {
   }
 
   WebRemotePlaybackClient* CreateWebRemotePlaybackClient(
-      HTMLMediaElement&) override {
-    if (!remote_playback_client_) {
-      remote_playback_client_ =
-          WTF::WrapUnique(new MockWebRemotePlaybackClient);
-    }
-    return remote_playback_client_.get();
+      HTMLMediaElement& element) override {
+    return HTMLMediaElementRemotePlayback::remote(element);
   }
-
- private:
-  std::unique_ptr<MockWebRemotePlaybackClient> remote_playback_client_;
 };
 
 Element* GetElementByShadowPseudoId(Node& root_node,
@@ -236,6 +206,10 @@ class MediaControlsImplTest : public ::testing::Test {
   void MouseMoveTo(WebFloatPoint pos);
   void MouseUpAt(WebFloatPoint pos);
 
+  bool HasAvailabilityCallbacks(RemotePlayback* remote_playback) {
+    return !remote_playback->availability_callbacks_.IsEmpty();
+  }
+
  private:
   std::unique_ptr<DummyPageHolder> page_holder_;
   Persistent<MediaControlsImpl> media_controls_;
@@ -285,7 +259,7 @@ TEST_F(MediaControlsImplTest, HideAndShow) {
   ASSERT_TRUE(IsElementVisible(*panel));
   MediaControls().Hide();
   ASSERT_FALSE(IsElementVisible(*panel));
-  MediaControls().Show();
+  MediaControls().MaybeShow();
   ASSERT_TRUE(IsElementVisible(*panel));
 }
 
@@ -357,10 +331,12 @@ TEST_F(MediaControlsImplTest, CastButtonDisableRemotePlaybackAttr) {
 
   MediaControls().MediaElement().SetBooleanAttribute(
       HTMLNames::disableremoteplaybackAttr, true);
+  testing::RunPendingTasks();
   ASSERT_FALSE(IsElementVisible(*cast_button));
 
   MediaControls().MediaElement().SetBooleanAttribute(
       HTMLNames::disableremoteplaybackAttr, false);
+  testing::RunPendingTasks();
   ASSERT_TRUE(IsElementVisible(*cast_button));
 }
 
@@ -384,10 +360,12 @@ TEST_F(MediaControlsImplTest, CastOverlayDisableRemotePlaybackAttr) {
 
   MediaControls().MediaElement().SetBooleanAttribute(
       HTMLNames::disableremoteplaybackAttr, true);
+  testing::RunPendingTasks();
   ASSERT_FALSE(IsElementVisible(*cast_overlay_button));
 
   MediaControls().MediaElement().SetBooleanAttribute(
       HTMLNames::disableremoteplaybackAttr, false);
+  testing::RunPendingTasks();
   ASSERT_TRUE(IsElementVisible(*cast_overlay_button));
 }
 
@@ -420,7 +398,7 @@ TEST_F(MediaControlsImplTest, KeepControlsVisibleIfOverflowListVisible) {
   MediaControls().MediaElement().Play();
   testing::RunPendingTasks();
 
-  MediaControls().Show();
+  MediaControls().MaybeShow();
   MediaControls().ToggleOverflowMenu();
   EXPECT_TRUE(IsElementVisible(*overflow_list));
 
@@ -590,21 +568,27 @@ TEST_F(MediaControlsImplTest, VolumeSliderPaintInvalidationOnInput) {
 
   Element* volume_slider = VolumeSliderElement();
 
-  MockLayoutObject layout_object;
+  MockLayoutObject layout_object(volume_slider);
   LayoutObject* prev_layout_object = volume_slider->GetLayoutObject();
   volume_slider->SetLayoutObject(&layout_object);
 
+  layout_object.ClearPaintInvalidationFlags();
+  EXPECT_FALSE(layout_object.ShouldDoFullPaintInvalidation());
   Event* event = Event::Create(EventTypeNames::input);
   volume_slider->DefaultEventHandler(event);
-  EXPECT_EQ(1, layout_object.FullPaintInvalidationCallCount());
+  EXPECT_TRUE(layout_object.ShouldDoFullPaintInvalidation());
 
+  layout_object.ClearPaintInvalidationFlags();
+  EXPECT_FALSE(layout_object.ShouldDoFullPaintInvalidation());
   event = Event::Create(EventTypeNames::input);
   volume_slider->DefaultEventHandler(event);
-  EXPECT_EQ(2, layout_object.FullPaintInvalidationCallCount());
+  EXPECT_TRUE(layout_object.ShouldDoFullPaintInvalidation());
 
+  layout_object.ClearPaintInvalidationFlags();
+  EXPECT_FALSE(layout_object.ShouldDoFullPaintInvalidation());
   event = Event::Create(EventTypeNames::input);
   volume_slider->DefaultEventHandler(event);
-  EXPECT_EQ(3, layout_object.FullPaintInvalidationCallCount());
+  EXPECT_TRUE(layout_object.ShouldDoFullPaintInvalidation());
 
   volume_slider->SetLayoutObject(prev_layout_object);
 }
@@ -847,6 +831,63 @@ TEST_F(MediaControlsImplTest, ControlsRemainVisibleDuringKeyboardInteraction) {
   // Once user interaction stops, controls can hide.
   platform->RunForPeriodSeconds(2);
   EXPECT_FALSE(IsElementVisible(*panel));
+}
+
+TEST_F(MediaControlsImplTest,
+       RemovingFromDocumentRemovesListenersAndCallbacks) {
+  auto page_holder = DummyPageHolder::Create();
+
+  HTMLMediaElement* element =
+      HTMLVideoElement::Create(page_holder->GetDocument());
+  element->SetBooleanAttribute(HTMLNames::controlsAttr, true);
+  page_holder->GetDocument().body()->AppendChild(element);
+
+  RemotePlayback* remote_playback =
+      HTMLMediaElementRemotePlayback::remote(*element);
+
+  EXPECT_TRUE(remote_playback->HasEventListeners());
+  EXPECT_TRUE(HasAvailabilityCallbacks(remote_playback));
+
+  WeakPersistent<HTMLMediaElement> weak_persistent_video = element;
+  {
+    Persistent<HTMLMediaElement> persistent_video = element;
+    page_holder->GetDocument().body()->setInnerHTML("");
+
+    // When removed from the document, the event listeners should have been
+    // dropped.
+    EXPECT_FALSE(remote_playback->HasEventListeners());
+    EXPECT_FALSE(HasAvailabilityCallbacks(remote_playback));
+  }
+
+  testing::RunPendingTasks();
+
+  ThreadState::Current()->CollectAllGarbage();
+
+  // It has been GC'd.
+  EXPECT_EQ(nullptr, weak_persistent_video);
+}
+
+TEST_F(MediaControlsImplTest,
+       ReInsertingInDocumentRestoresListenersAndCallbacks) {
+  auto page_holder = DummyPageHolder::Create();
+
+  HTMLMediaElement* element =
+      HTMLVideoElement::Create(page_holder->GetDocument());
+  element->SetBooleanAttribute(HTMLNames::controlsAttr, true);
+  page_holder->GetDocument().body()->AppendChild(element);
+
+  RemotePlayback* remote_playback =
+      HTMLMediaElementRemotePlayback::remote(*element);
+
+  // This should be a no-op. We keep a reference on the media element to avoid
+  // an unexpected GC.
+  {
+    Persistent<HTMLMediaElement> video_holder = element;
+    page_holder->GetDocument().body()->RemoveChild(element);
+    page_holder->GetDocument().body()->AppendChild(video_holder.Get());
+    EXPECT_TRUE(remote_playback->HasEventListeners());
+    EXPECT_TRUE(HasAvailabilityCallbacks(remote_playback));
+  }
 }
 
 }  // namespace blink

@@ -30,6 +30,7 @@
 #include "core/page/FocusController.h"
 #include "core/paint/PaintLayer.h"
 #include "core/svg/SVGDocumentExtensions.h"
+#include "platform/Histogram.h"
 #include "platform/geometry/FloatQuad.h"
 
 namespace blink {
@@ -95,6 +96,7 @@ void MouseEventManager::Clear() {
   mouse_pressed_ = false;
   click_count_ = 0;
   click_element_ = nullptr;
+  mouse_down_element_ = nullptr;
   mouse_down_pos_ = IntPoint();
   mouse_down_timestamp_ = TimeTicks();
   mouse_down_ = WebMouseEvent();
@@ -112,6 +114,7 @@ DEFINE_TRACE(MouseEventManager) {
   visitor->Trace(node_under_mouse_);
   visitor->Trace(mouse_press_node_);
   visitor->Trace(click_element_);
+  visitor->Trace(mouse_down_element_);
   SynchronousMutationObserver::Trace(visitor);
 }
 
@@ -249,9 +252,10 @@ WebInputEventResult MouseEventManager::DispatchMouseClickIfNeeded(
 #endif
 
   const bool should_dispatch_click_event =
-      click_count_ > 0 && !context_menu_event && click_element_ &&
+      click_count_ > 0 && !context_menu_event && mouse_down_element_ &&
       mouse_release_target.CanParticipateInFlatTree() &&
-      click_element_->CanParticipateInFlatTree() &&
+      mouse_down_element_->CanParticipateInFlatTree() &&
+      mouse_down_element_->isConnected() &&
       !(frame_->GetEventHandler()
             .GetSelectionController()
             .HasExtendedSelection() &&
@@ -260,27 +264,45 @@ WebInputEventResult MouseEventManager::DispatchMouseClickIfNeeded(
     return WebInputEventResult::kNotHandled;
 
   Node* click_target_node = nullptr;
-  if (click_element_ == mouse_release_target) {
-    click_target_node = click_element_;
-  } else if (click_element_->GetDocument() ==
+  if (mouse_down_element_ == mouse_release_target) {
+    click_target_node = mouse_down_element_;
+  } else if (mouse_down_element_->GetDocument() ==
              mouse_release_target.GetDocument()) {
     // Updates distribution because a 'mouseup' event listener can make the
     // tree dirty at dispatchMouseEvent() invocation above.
     // Unless distribution is updated, commonAncestor would hit ASSERT.
-    click_element_->UpdateDistribution();
+    mouse_down_element_->UpdateDistribution();
     mouse_release_target.UpdateDistribution();
     click_target_node = mouse_release_target.CommonAncestor(
-        *click_element_, EventHandlingUtil::ParentForClickEvent);
+        *mouse_down_element_, EventHandlingUtil::ParentForClickEvent);
   }
   if (!click_target_node)
     return WebInputEventResult::kNotHandled;
-  return DispatchMouseEvent(
-      click_target_node,
-      !RuntimeEnabledFeatures::auxclickEnabled() ||
-              (mev.Event().button == WebPointerProperties::Button::kLeft)
-          ? EventTypeNames::click
-          : EventTypeNames::auxclick,
-      mev.Event(), mev.CanvasRegionId(), nullptr);
+
+  DEFINE_STATIC_LOCAL(BooleanHistogram, histogram,
+                      ("Event.ClickNotFiredDueToDomManipulation"));
+
+  if (click_element_ && click_element_->CanParticipateInFlatTree() &&
+      click_element_->isConnected()) {
+    DCHECK(click_element_ == mouse_down_element_);
+    histogram.Count(false);
+  } else {
+    histogram.Count(true);
+  }
+
+  if ((click_element_ && click_element_->CanParticipateInFlatTree() &&
+       click_element_->isConnected()) ||
+      RuntimeEnabledFeatures::clickRetargettingEnabled()) {
+    return DispatchMouseEvent(
+        click_target_node,
+        !RuntimeEnabledFeatures::auxclickEnabled() ||
+                (mev.Event().button == WebPointerProperties::Button::kLeft)
+            ? EventTypeNames::click
+            : EventTypeNames::auxclick,
+        mev.Event(), mev.CanvasRegionId(), nullptr);
+  }
+
+  return WebInputEventResult::kNotHandled;
 }
 
 void MouseEventManager::FakeMouseMoveEventTimerFired(TimerBase* timer) {
@@ -386,6 +408,9 @@ void MouseEventManager::NodeChildrenWillBeRemoved(ContainerNode& container) {
   if (!container.IsShadowIncludingInclusiveAncestorOf(click_element_.Get()))
     return;
   click_element_ = nullptr;
+
+  // TODO(crbug.com/716694): Do not reset mouse_down_element_ for the purpose of
+  // gathering data.
 }
 
 void MouseEventManager::NodeWillBeRemoved(Node& node_to_be_removed) {
@@ -394,6 +419,9 @@ void MouseEventManager::NodeWillBeRemoved(Node& node_to_be_removed) {
     // We don't dispatch click events if the mousedown node is removed
     // before a mouseup event. It is compatible with IE and Firefox.
     click_element_ = nullptr;
+
+    // TODO(crbug.com/716694): Do not reset mouse_down_element_ for the purpose
+    // of gathering data.
   }
 }
 
@@ -505,6 +533,13 @@ bool MouseEventManager::SlideFocusOnShadowHostIfNecessary(
   return false;
 }
 
+void MouseEventManager::HandleMouseReleaseEventUpdateStates() {
+  ClearDragHeuristicState();
+  InvalidateClick();
+  frame_->GetEventHandler().GetSelectionController().SetMouseDownMayStartSelect(
+      false);
+}
+
 void MouseEventManager::HandleMousePressEventUpdateStates(
     const WebMouseEvent& mouse_event) {
   CancelFakeMouseMoveEvent();
@@ -522,6 +557,9 @@ void MouseEventManager::HandleMousePressEventUpdateStates(
   } else {
     InvalidateClick();
   }
+
+  frame_->GetEventHandler().GetSelectionController().SetMouseDownMayStartSelect(
+      false);
 }
 
 bool MouseEventManager::IsMousePositionUnknown() {
@@ -585,9 +623,6 @@ WebInputEventResult MouseEventManager::HandleMousePressEvent(
   mouse_down_may_start_drag_ =
       single_click && !IsLinkSelection(event) && !IsExtendingSelection(event);
 
-  frame_->GetEventHandler().GetSelectionController().HandleMousePressEvent(
-      event);
-
   mouse_down_ = event.Event();
 
   if (frame_->GetDocument()->IsSVGDocument() &&
@@ -613,22 +648,11 @@ WebInputEventResult MouseEventManager::HandleMousePressEvent(
   frame_->GetDocument()->SetSequentialFocusNavigationStartingPoint(inner_node);
   drag_start_pos_ = FlooredIntPoint(event.Event().PositionInRootFrame());
 
-  bool swallow_event = false;
   mouse_pressed_ = true;
 
-  if (event.Event().click_count == 2) {
-    swallow_event = frame_->GetEventHandler()
-                        .GetSelectionController()
-                        .HandleMousePressEventDoubleClick(event);
-  } else if (event.Event().click_count >= 3) {
-    swallow_event = frame_->GetEventHandler()
-                        .GetSelectionController()
-                        .HandleMousePressEventTripleClick(event);
-  } else {
-    swallow_event = frame_->GetEventHandler()
-                        .GetSelectionController()
-                        .HandleMousePressEventSingleClick(event);
-  }
+  bool swallow_event =
+      frame_->GetEventHandler().GetSelectionController().HandleMousePressEvent(
+          event);
 
   mouse_down_may_start_autoscroll_ =
       frame_->GetEventHandler()
@@ -722,14 +746,21 @@ WebInputEventResult MouseEventManager::HandleMouseDraggedEvent(
   //    that ends as a result of a mouse release does not send a mouse release
   //    event. As a result, m_mousePressed also ends up remaining true until
   //    the next mouse release event seen by the EventHandler.
-  if (event.Event().button != WebPointerProperties::Button::kLeft)
+  // 3. When pressing Esc key while dragging and the object is outside of the
+  //    we get a mouse leave event here
+  if (event.Event().button != WebPointerProperties::Button::kLeft ||
+      event.Event().GetType() == WebInputEvent::kMouseLeave)
     mouse_pressed_ = false;
 
   if (!mouse_pressed_)
     return WebInputEventResult::kNotHandled;
 
-  if (HandleDrag(event, DragInitiator::kMouse))
+  // We disable the drag and drop actions on pen input.
+  if (event.Event().pointer_type !=
+          blink::WebPointerProperties::PointerType::kPen &&
+      HandleDrag(event, DragInitiator::kMouse)) {
     return WebInputEventResult::kHandledSystem;
+  }
 
   Node* target_node = event.InnerNode();
   if (!target_node)
@@ -907,20 +938,27 @@ bool MouseEventManager::TryStartDrag(
 WebInputEventResult MouseEventManager::DispatchDragSrcEvent(
     const AtomicString& event_type,
     const WebMouseEvent& event) {
-  return DispatchDragEvent(event_type, GetDragState().drag_src_.Get(), event,
-                           GetDragState().drag_data_transfer_.Get());
+  return DispatchDragEvent(event_type, GetDragState().drag_src_.Get(), nullptr,
+                           event, GetDragState().drag_data_transfer_.Get());
 }
 
 WebInputEventResult MouseEventManager::DispatchDragEvent(
     const AtomicString& event_type,
     Node* drag_target,
+    Node* related_target,
     const WebMouseEvent& event,
     DataTransfer* data_transfer) {
   FrameView* view = frame_->View();
-
   // FIXME: We might want to dispatch a dragleave even if the view is gone.
   if (!view)
     return WebInputEventResult::kNotHandled;
+
+  // We should be setting relatedTarget correctly following the spec:
+  // https://html.spec.whatwg.org/multipage/interaction.html#dragevent
+  // At the same time this should prevent exposing a node from another document.
+  if (related_target &&
+      related_target->GetDocument() != drag_target->GetDocument())
+    related_target = nullptr;
 
   const bool cancelable = event_type != EventTypeNames::dragleave &&
                           event_type != EventTypeNames::dragend;
@@ -933,7 +971,8 @@ WebInputEventResult MouseEventManager::DispatchDragEvent(
       position.Y(), movement.X(), movement.Y(),
       static_cast<WebInputEvent::Modifiers>(event.GetModifiers()), 0,
       MouseEvent::WebInputEventModifiersToButtons(event.GetModifiers()),
-      nullptr, TimeTicks::FromSeconds(event.TimeStampSeconds()), data_transfer,
+      related_target, TimeTicks::FromSeconds(event.TimeStampSeconds()),
+      data_transfer,
       event.FromTouch() ? MouseEvent::kFromTouch
                         : MouseEvent::kRealOrIndistinguishable);
 
@@ -1013,6 +1052,7 @@ bool MouseEventManager::HandleSvgPanIfNeeded(bool is_release_event) {
 void MouseEventManager::InvalidateClick() {
   click_count_ = 0;
   click_element_ = nullptr;
+  mouse_down_element_ = nullptr;
 }
 
 bool MouseEventManager::MousePressed() {
@@ -1042,6 +1082,7 @@ void MouseEventManager::SetMousePressNode(Node* node) {
 void MouseEventManager::SetClickElement(Element* element) {
   SetContext(element ? element->ownerDocument() : nullptr);
   click_element_ = element;
+  mouse_down_element_ = element;
 }
 
 void MouseEventManager::SetClickCount(int click_count) {

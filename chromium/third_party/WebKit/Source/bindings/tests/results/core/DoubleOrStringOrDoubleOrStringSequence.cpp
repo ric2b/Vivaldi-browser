@@ -54,18 +54,18 @@ DoubleOrStringOrDoubleOrStringSequence DoubleOrStringOrDoubleOrStringSequence::f
   return container;
 }
 
-String DoubleOrStringOrDoubleOrStringSequence::getAsString() const {
+const String& DoubleOrStringOrDoubleOrStringSequence::getAsString() const {
   DCHECK(isString());
   return m_string;
 }
 
-void DoubleOrStringOrDoubleOrStringSequence::setString(String value) {
+void DoubleOrStringOrDoubleOrStringSequence::setString(const String& value) {
   DCHECK(isNull());
   m_string = value;
   m_type = SpecificTypeString;
 }
 
-DoubleOrStringOrDoubleOrStringSequence DoubleOrStringOrDoubleOrStringSequence::fromString(String value) {
+DoubleOrStringOrDoubleOrStringSequence DoubleOrStringOrDoubleOrStringSequence::fromString(const String& value) {
   DoubleOrStringOrDoubleOrStringSequence container;
   container.setString(value);
   return container;
@@ -86,8 +86,8 @@ void V8DoubleOrStringOrDoubleOrStringSequence::toImpl(v8::Isolate* isolate, v8::
   if (conversionMode == UnionTypeConversionMode::kNullable && IsUndefinedOrNull(v8Value))
     return;
 
-  if (v8Value->IsArray()) {
-    HeapVector<DoubleOrString> cppValue = ToImplArray<HeapVector<DoubleOrString>>(v8Value, 0, isolate, exceptionState);
+  if (HasCallableIteratorSymbol(isolate, v8Value, exceptionState)) {
+    HeapVector<DoubleOrString> cppValue = NativeValueTraits<IDLSequence<DoubleOrString>>::NativeValue(isolate, v8Value, exceptionState);
     if (exceptionState.HadException())
       return;
     impl.setDoubleOrStringSequence(cppValue);

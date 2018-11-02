@@ -9,6 +9,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/passwords/account_chooser_dialog_view.h"
 #include "chrome/browser/ui/views/passwords/auto_signin_first_run_dialog_view.h"
@@ -19,6 +20,7 @@
 #include "components/prefs/pref_service.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "ui/views/test/widget_test.h"
 #include "ui/views/widget/widget.h"
 
 using ::testing::Field;
@@ -41,39 +43,6 @@ class TestURLFetcherCallback {
 
   MOCK_METHOD1(OnRequestDone, void(const GURL&));
 };
-
-// A Widget observer class used to observe bubbles closing.
-class BubbleCloseObserver : public views::WidgetObserver {
- public:
-  explicit BubbleCloseObserver(views::DialogDelegateView* bubble);
-  ~BubbleCloseObserver() override;
-
-  bool widget_closed() const { return !widget_; }
-
- private:
-  // WidgetObserver:
-  void OnWidgetClosing(views::Widget* widget) override;
-
-  views::Widget* widget_;
-
-  DISALLOW_COPY_AND_ASSIGN(BubbleCloseObserver);
-};
-
-BubbleCloseObserver::BubbleCloseObserver(views::DialogDelegateView* bubble)
-    : widget_(bubble->GetWidget()) {
-  widget_->AddObserver(this);
-}
-
-BubbleCloseObserver::~BubbleCloseObserver() {
-  if (widget_)
-    widget_->RemoveObserver(this);
-}
-
-void BubbleCloseObserver::OnWidgetClosing(views::Widget* widget) {
-  DCHECK_EQ(widget_, widget);
-  widget_->RemoveObserver(this);
-  widget_ = nullptr;
-}
 
 // ManagePasswordsUIController subclass to capture the dialog instance
 class TestManagePasswordsUIController : public ManagePasswordsUIController {
@@ -114,7 +83,7 @@ TestManagePasswordsUIController::TestManagePasswordsUIController(
   // Do not silently replace an existing ManagePasswordsUIController because it
   // unregisters itself in WebContentsDestroyed().
   EXPECT_FALSE(web_contents->GetUserData(UserDataKey()));
-  web_contents->SetUserData(UserDataKey(), this);
+  web_contents->SetUserData(UserDataKey(), base::WrapUnique(this));
 }
 
 void TestManagePasswordsUIController::OnDialogHidden() {
@@ -137,10 +106,11 @@ TestManagePasswordsUIController::CreateAutoSigninPrompt(
   return current_autosignin_prompt_;
 }
 
-class PasswordDialogViewTest : public InProcessBrowserTest {
+class PasswordDialogViewTest : public DialogBrowserTest {
  public:
-  // InProcessBrowserTest:
+  // DialogBrowserTest:
   void SetUpOnMainThread() override;
+  void ShowDialog(const std::string& name) override;
 
   void SetupChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
@@ -211,15 +181,15 @@ IN_PROC_BROWSER_TEST_F(PasswordDialogViewTest,
   local_credentials.push_back(base::MakeUnique<autofill::PasswordForm>(form));
   GURL icon_url("https://google.com/icon.png");
   form.icon_url = icon_url;
-  form.display_name = base::ASCIIToUTF16("Peter Pen");
+  form.display_name = base::ASCIIToUTF16("Peter Pan");
   form.federation_origin = url::Origin(GURL("https://google.com/federation"));
   local_credentials.push_back(base::MakeUnique<autofill::PasswordForm>(form));
 
   // Prepare to capture the network request.
   TestURLFetcherCallback url_callback;
   net::FakeURLFetcherFactory factory(
-      NULL, base::Bind(&TestURLFetcherCallback::CreateURLFetcher,
-                       base::Unretained(&url_callback)));
+      nullptr, base::Bind(&TestURLFetcherCallback::CreateURLFetcher,
+                          base::Unretained(&url_callback)));
   factory.SetFakeResponse(icon_url, std::string(), net::HTTP_OK,
                           net::URLRequestStatus::FAILED);
   EXPECT_CALL(url_callback, OnRequestDone(icon_url));
@@ -247,7 +217,7 @@ IN_PROC_BROWSER_TEST_F(
   local_credentials.push_back(base::MakeUnique<autofill::PasswordForm>(form));
   GURL icon_url("https://google.com/icon.png");
   form.icon_url = icon_url;
-  form.display_name = base::ASCIIToUTF16("Peter Pen");
+  form.display_name = base::ASCIIToUTF16("Peter Pan");
   form.federation_origin = url::Origin(GURL("https://google.com/federation"));
   local_credentials.push_back(base::MakeUnique<autofill::PasswordForm>(form));
 
@@ -300,7 +270,7 @@ IN_PROC_BROWSER_TEST_F(PasswordDialogViewTest,
 
   EXPECT_TRUE(controller()->current_account_chooser());
   views::DialogDelegateView* dialog = controller()->current_account_chooser();
-  BubbleCloseObserver bubble_observer(dialog);
+  views::test::WidgetClosingObserver bubble_observer(dialog->GetWidget());
   EXPECT_CALL(*this, OnChooseCredential(testing::Pointee(form)));
   dialog->Accept();
   EXPECT_TRUE(bubble_observer.widget_closed());
@@ -406,7 +376,7 @@ IN_PROC_BROWSER_TEST_F(PasswordDialogViewTest, PopupAutoSigninPrompt) {
   EXPECT_EQ(password_manager::ui::INACTIVE_STATE, controller()->GetState());
   AutoSigninFirstRunDialogView* dialog =
       controller()->current_autosignin_prompt();
-  BubbleCloseObserver bubble_observer(dialog);
+  views::test::WidgetClosingObserver bubble_observer(dialog->GetWidget());
   ui::Accelerator esc(ui::VKEY_ESCAPE, 0);
   EXPECT_CALL(*controller(), OnDialogClosed());
   EXPECT_TRUE(dialog->GetWidget()->client_view()->AcceleratorPressed(esc));
@@ -463,6 +433,53 @@ IN_PROC_BROWSER_TEST_F(PasswordDialogViewTest,
   client()->NotifyUserCouldBeAutoSignedIn(std::move(blocked_form));
   client()->NotifySuccessfulLoginWithExistingPassword(form);
   ASSERT_TRUE(controller()->current_autosignin_prompt());
+}
+
+// DialogBrowserTest methods for interactive dialog invocation.
+void PasswordDialogViewTest::ShowDialog(const std::string& name) {
+  if (name == "AutoSigninFirstRun") {
+    controller()->OnPromptEnableAutoSignin();
+    return;
+  }
+
+  GURL origin("https://example.com");
+  std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials;
+  autofill::PasswordForm form;
+  form.origin = origin;
+  form.display_name = base::ASCIIToUTF16("Peter");
+  form.username_value = base::ASCIIToUTF16("peter@pan.test");
+  if (name == "PopupAutoSigninPrompt") {
+    form.icon_url = GURL("broken url");
+    local_credentials.push_back(base::MakeUnique<autofill::PasswordForm>(form));
+    form.icon_url = GURL("https://google.com/icon.png");
+    form.display_name = base::ASCIIToUTF16("Peter Pan");
+    form.federation_origin = url::Origin(GURL("https://google.com/federation"));
+    local_credentials.push_back(base::MakeUnique<autofill::PasswordForm>(form));
+    SetupChooseCredentials(std::move(local_credentials), origin);
+    ASSERT_TRUE(controller()->current_account_chooser());
+  } else if (name == "PopupAccountChooserWithSingleCredentialClickSignIn") {
+    local_credentials.push_back(base::MakeUnique<autofill::PasswordForm>(form));
+    SetupChooseCredentials(std::move(local_credentials), origin);
+  } else {
+    ADD_FAILURE() << "Unknown dialog type";
+    return;
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordDialogViewTest,
+                       InvokeDialog_PopupAutoSigninPrompt) {
+  RunDialog();
+}
+
+IN_PROC_BROWSER_TEST_F(
+    PasswordDialogViewTest,
+    InvokeDialog_PopupAccountChooserWithSingleCredentialClickSignIn) {
+  RunDialog();
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordDialogViewTest,
+                       InvokeDialog_AutoSigninFirstRun) {
+  RunDialog();
 }
 
 }  // namespace

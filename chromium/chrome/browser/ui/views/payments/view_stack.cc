@@ -21,6 +21,9 @@ ViewStack::ViewStack()
   // are out of bounds of their parent.
   SetPaintToLayer();
   layer()->SetMasksToBounds(true);
+
+  slide_in_animator_->set_tween_type(gfx::Tween::FAST_OUT_SLOW_IN);
+  slide_out_animator_->set_tween_type(gfx::Tween::FAST_OUT_SLOW_IN);
 }
 
 ViewStack::~ViewStack() {}
@@ -49,6 +52,7 @@ void ViewStack::Push(std::unique_ptr<views::View> view, bool animate) {
   // Add the new view to the stack so it can be popped later when navigating
   // back to the previous screen.
   stack_.push_back(std::move(view));
+  RequestFocus();
 }
 
 void ViewStack::Pop() {
@@ -57,6 +61,22 @@ void ViewStack::Pop() {
 
   slide_out_animator_->AnimateViewTo(
       stack_.back().get(), destination);
+}
+
+void ViewStack::PopMany(int n) {
+  DCHECK_LT(static_cast<size_t>(n), size());  // The stack can never be empty.
+
+  size_t pre_size = stack_.size();
+  // Erase N - 1 elements now, the last one will be erased when its animation
+  // completes
+  stack_.erase(stack_.end() - n, stack_.end() - 1);
+  DCHECK_EQ(pre_size - n + 1, stack_.size());
+
+  Pop();
+}
+
+size_t ViewStack::size() const {
+  return stack_.size();
 }
 
 bool ViewStack::CanProcessEventsWithinSubtree() const {
@@ -79,6 +99,14 @@ void ViewStack::Layout() {
   UpdateAnimatorBounds(slide_out_animator_.get(), out_new_destination);
 }
 
+void ViewStack::RequestFocus() {
+  // The view can only be focused if it has a widget already. It's possible that
+  // this isn't the case if some views are pushed before the stack is added to a
+  // hierarchy that has a widget.
+  if (top()->GetWidget())
+    top()->RequestFocus();
+}
+
 void ViewStack::UpdateAnimatorBounds(
     views::BoundsAnimator* animator, const gfx::Rect& target) {
   // If an animator is currently animating, figure out which views and update
@@ -99,4 +127,5 @@ void ViewStack::OnBoundsAnimatorDone(views::BoundsAnimator* animator) {
 
   stack_.pop_back();
   DCHECK(!stack_.empty()) << "State stack should never be empty";
+  RequestFocus();
 }

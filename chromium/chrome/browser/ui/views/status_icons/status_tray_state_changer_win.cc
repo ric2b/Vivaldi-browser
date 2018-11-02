@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/status_icons/status_tray_state_changer_win.h"
 
+#include <objbase.h>
+
 #include <utility>
 
 namespace {
@@ -127,19 +129,20 @@ bool StatusTrayStateChangerWin::CreateTrayNotify() {
 
   tray_notify_.Reset();  // Reset so this method can be called more than once.
 
-  HRESULT hr = tray_notify_.CreateInstance(CLSID_TrayNotify);
+  HRESULT hr = ::CoCreateInstance(CLSID_TrayNotify, nullptr, CLSCTX_ALL,
+                                  IID_PPV_ARGS(&tray_notify_));
   if (FAILED(hr))
     return false;
 
   base::win::ScopedComPtr<ITrayNotifyWin8> tray_notify_win8;
-  hr = tray_notify_win8.QueryFrom(tray_notify_.get());
+  hr = tray_notify_.CopyTo(tray_notify_win8.GetAddressOf());
   if (SUCCEEDED(hr)) {
     interface_version_ = INTERFACE_VERSION_WIN8;
     return true;
   }
 
   base::win::ScopedComPtr<ITrayNotify> tray_notify_legacy;
-  hr = tray_notify_legacy.QueryFrom(tray_notify_.get());
+  hr = tray_notify_.CopyTo(tray_notify_legacy.GetAddressOf());
   if (SUCCEEDED(hr)) {
     interface_version_ = INTERFACE_VERSION_LEGACY;
     return true;
@@ -174,7 +177,7 @@ std::unique_ptr<NOTIFYITEM> StatusTrayStateChangerWin::RegisterCallback() {
 
 bool StatusTrayStateChangerWin::RegisterCallbackWin8() {
   base::win::ScopedComPtr<ITrayNotifyWin8> tray_notify_win8;
-  HRESULT hr = tray_notify_win8.QueryFrom(tray_notify_.get());
+  HRESULT hr = tray_notify_.CopyTo(tray_notify_win8.GetAddressOf());
   if (FAILED(hr))
     return false;
 
@@ -194,7 +197,7 @@ bool StatusTrayStateChangerWin::RegisterCallbackWin8() {
 
 bool StatusTrayStateChangerWin::RegisterCallbackLegacy() {
   base::win::ScopedComPtr<ITrayNotify> tray_notify;
-  HRESULT hr = tray_notify.QueryFrom(tray_notify_.get());
+  HRESULT hr = tray_notify_.CopyTo(tray_notify.GetAddressOf());
   if (FAILED(hr)) {
     return false;
   }
@@ -221,12 +224,12 @@ void StatusTrayStateChangerWin::SendNotifyItemUpdate(
     std::unique_ptr<NOTIFYITEM> notify_item) {
   if (interface_version_ == INTERFACE_VERSION_LEGACY) {
     base::win::ScopedComPtr<ITrayNotify> tray_notify;
-    HRESULT hr = tray_notify.QueryFrom(tray_notify_.get());
+    HRESULT hr = tray_notify_.CopyTo(tray_notify.GetAddressOf());
     if (SUCCEEDED(hr))
       tray_notify->SetPreference(notify_item.get());
   } else if (interface_version_ == INTERFACE_VERSION_WIN8) {
     base::win::ScopedComPtr<ITrayNotifyWin8> tray_notify;
-    HRESULT hr = tray_notify.QueryFrom(tray_notify_.get());
+    HRESULT hr = tray_notify_.CopyTo(tray_notify.GetAddressOf());
     if (SUCCEEDED(hr))
       tray_notify->SetPreference(notify_item.get());
   }

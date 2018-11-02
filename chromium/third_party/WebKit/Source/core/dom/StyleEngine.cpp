@@ -78,6 +78,8 @@ StyleEngine::StyleEngine(Document& document)
   }
   if (document.IsInMainFrame())
     viewport_resolver_ = ViewportStyleResolver::Create(document);
+  if (IsMaster())
+    global_rule_set_ = CSSGlobalRuleSet::Create();
 }
 
 StyleEngine::~StyleEngine() {}
@@ -92,17 +94,17 @@ inline Document* StyleEngine::Master() {
   return import->Master();
 }
 
-TreeScopeStyleSheetCollection* StyleEngine::EnsureStyleSheetCollectionFor(
+TreeScopeStyleSheetCollection& StyleEngine::EnsureStyleSheetCollectionFor(
     TreeScope& tree_scope) {
   if (tree_scope == document_)
-    return &GetDocumentStyleSheetCollection();
+    return GetDocumentStyleSheetCollection();
 
   StyleSheetCollectionMap::AddResult result =
       style_sheet_collection_map_.insert(&tree_scope, nullptr);
   if (result.is_new_entry)
     result.stored_value->value =
         new ShadowTreeStyleSheetCollection(ToShadowRoot(tree_scope));
-  return result.stored_value->value.Get();
+  return *result.stored_value->value.Get();
 }
 
 TreeScopeStyleSheetCollection* StyleEngine::StyleSheetCollectionFor(
@@ -111,7 +113,7 @@ TreeScopeStyleSheetCollection* StyleEngine::StyleSheetCollectionFor(
     return &GetDocumentStyleSheetCollection();
 
   StyleSheetCollectionMap::iterator it =
-      style_sheet_collection_map_.Find(&tree_scope);
+      style_sheet_collection_map_.find(&tree_scope);
   if (it == style_sheet_collection_map_.end())
     return nullptr;
   return it->value.Get();
@@ -119,21 +121,22 @@ TreeScopeStyleSheetCollection* StyleEngine::StyleSheetCollectionFor(
 
 const HeapVector<TraceWrapperMember<StyleSheet>>&
 StyleEngine::StyleSheetsForStyleSheetList(TreeScope& tree_scope) {
-  // TODO(rune@opera.com): we could split styleSheets and active stylesheet
-  // update to have a lighter update while accessing the styleSheets list.
   DCHECK(Master());
+  TreeScopeStyleSheetCollection& collection =
+      EnsureStyleSheetCollectionFor(tree_scope);
   if (Master()->IsActive()) {
-    if (IsMaster())
+    if (all_tree_scopes_dirty_) {
+      // If all tree scopes are dirty, update all of active style. Otherwise, we
+      // would have to mark all tree scopes explicitly dirty for stylesheet list
+      // or repeatedly update the stylesheet list on styleSheets access. Note
+      // that this can only happen once if we kDidLayoutWithPendingSheets in
+      // Document::UpdateStyleAndLayoutTreeIgnoringPendingStyleSheets.
       UpdateActiveStyle();
-    else
-      Master()->GetStyleEngine().UpdateActiveStyle();
+    } else {
+      collection.UpdateStyleSheetList();
+    }
   }
-
-  if (tree_scope == document_)
-    return GetDocumentStyleSheetCollection().StyleSheetsForStyleSheetList();
-
-  return EnsureStyleSheetCollectionFor(tree_scope)
-      ->StyleSheetsForStyleSheetList();
+  return collection.StyleSheetsForStyleSheetList();
 }
 
 void StyleEngine::InjectAuthorSheet(StyleSheetContents* author_sheet) {
@@ -207,10 +210,7 @@ void StyleEngine::AddStyleSheetCandidateNode(Node& node) {
 
   DCHECK(!IsXSLStyleSheet(node));
   TreeScope& tree_scope = node.GetTreeScope();
-  TreeScopeStyleSheetCollection* collection =
-      EnsureStyleSheetCollectionFor(tree_scope);
-  DCHECK(collection);
-  collection->AddStyleSheetCandidateNode(node);
+  EnsureStyleSheetCollectionFor(tree_scope).AddStyleSheetCandidateNode(node);
 
   SetNeedsActiveStyleUpdate(tree_scope);
   if (tree_scope != document_)
@@ -252,7 +252,9 @@ void StyleEngine::MediaQueriesChangedInScope(TreeScope& tree_scope) {
 }
 
 void StyleEngine::WatchedSelectorsChanged() {
-  global_rule_set_.InitWatchedSelectorsRuleSet(GetDocument());
+  DCHECK(IsMaster());
+  DCHECK(global_rule_set_);
+  global_rule_set_->InitWatchedSelectorsRuleSet(GetDocument());
   // TODO(rune@opera.com): Should be able to use RuleSetInvalidation here.
   GetDocument().SetNeedsStyleRecalc(
       kSubtreeStyleChange, StyleChangeReasonForTracing::Create(
@@ -287,7 +289,7 @@ void StyleEngine::MediaQueryAffectingValueChanged() {
     resolver_->UpdateMediaType();
 }
 
-void StyleEngine::UpdateStyleSheetsInImport(
+void StyleEngine::UpdateActiveStyleSheetsInImport(
     StyleEngine& master_engine,
     DocumentStyleSheetCollector& parent_collector) {
   DCHECK(!IsMaster());
@@ -297,6 +299,12 @@ void StyleEngine::UpdateStyleSheetsInImport(
   GetDocumentStyleSheetCollection().CollectStyleSheets(master_engine,
                                                        subcollector);
   GetDocumentStyleSheetCollection().SwapSheetsForSheetList(sheets_for_list);
+
+  // all_tree_scopes_dirty_ should only be set on main documents, never html
+  // imports.
+  DCHECK(!all_tree_scopes_dirty_);
+  // Mark false for consistency. It is never checked for import documents.
+  document_scope_dirty_ = false;
 }
 
 void StyleEngine::UpdateActiveStyleSheetsInShadow(
@@ -344,7 +352,7 @@ void StyleEngine::UpdateActiveStyleSheets() {
 
   probe::activeStyleSheetsUpdated(document_);
 
-  dirty_tree_scopes_.Clear();
+  dirty_tree_scopes_.clear();
   document_scope_dirty_ = false;
   all_tree_scopes_dirty_ = false;
   tree_scopes_removed_ = false;
@@ -357,7 +365,8 @@ void StyleEngine::UpdateViewport() {
 
 bool StyleEngine::NeedsActiveStyleUpdate() const {
   return (viewport_resolver_ && viewport_resolver_->NeedsUpdate()) ||
-         NeedsActiveStyleSheetUpdate() || global_rule_set_.IsDirty();
+         NeedsActiveStyleSheetUpdate() ||
+         (global_rule_set_ && global_rule_set_->IsDirty());
 }
 
 void StyleEngine::UpdateActiveStyle() {
@@ -409,7 +418,7 @@ void StyleEngine::ResetAuthorStyle(TreeScope& tree_scope) {
   if (!scoped_resolver)
     return;
 
-  global_rule_set_.MarkDirty();
+  global_rule_set_->MarkDirty();
   if (tree_scope.RootNode().IsDocumentNode()) {
     scoped_resolver->ResetAuthorStyle();
     return;
@@ -459,10 +468,12 @@ void StyleEngine::ClearResolvers() {
 
 void StyleEngine::DidDetach() {
   ClearResolvers();
-  global_rule_set_.Dispose();
+  if (global_rule_set_)
+    global_rule_set_->Dispose();
+  global_rule_set_ = nullptr;
   tree_boundary_crossing_scopes_.Clear();
-  dirty_tree_scopes_.Clear();
-  active_tree_scopes_.Clear();
+  dirty_tree_scopes_.clear();
+  active_tree_scopes_.clear();
   viewport_resolver_ = nullptr;
   media_query_evaluator_ = nullptr;
   if (font_selector_)
@@ -509,13 +520,16 @@ void StyleEngine::MarkTreeScopeDirty(TreeScope& scope) {
     return;
   }
 
-  DCHECK(style_sheet_collection_map_.Contains(&scope));
+  TreeScopeStyleSheetCollection* collection = StyleSheetCollectionFor(scope);
+  DCHECK(collection);
+  collection->MarkSheetListDirty();
   dirty_tree_scopes_.insert(&scope);
   GetDocument().ScheduleLayoutTreeUpdateIfNeeded();
 }
 
 void StyleEngine::MarkDocumentDirty() {
   document_scope_dirty_ = true;
+  document_style_sheet_collection_->MarkSheetListDirty();
   if (RuntimeEnabledFeatures::cssViewportEnabled())
     ViewportRulesChanged();
   if (GetDocument().ImportLoader())
@@ -560,8 +574,11 @@ CSSStyleSheet* StyleEngine::CreateSheet(Element& element,
 
   DCHECK(style_sheet);
   if (!element.IsInShadowTree()) {
-    style_sheet->SetTitle(element.title());
-    SetPreferredStylesheetSetNameIfNotSet(element.title());
+    String title = element.title();
+    if (!title.IsEmpty()) {
+      style_sheet->SetTitle(title);
+      SetPreferredStylesheetSetNameIfNotSet(title);
+    }
   }
   return style_sheet;
 }
@@ -924,6 +941,7 @@ void StyleEngine::SetStatsEnabled(bool enabled) {
 }
 
 void StyleEngine::SetPreferredStylesheetSetNameIfNotSet(const String& name) {
+  DCHECK(!name.IsEmpty());
   if (!preferred_stylesheet_set_name_.IsEmpty())
     return;
   preferred_stylesheet_set_name_ = name;
@@ -946,27 +964,34 @@ void StyleEngine::SetSelectedStylesheetSetName(const String& name) {
 }
 
 void StyleEngine::SetHttpDefaultStyle(const String& content) {
-  SetPreferredStylesheetSetNameIfNotSet(content);
+  if (!content.IsEmpty())
+    SetPreferredStylesheetSetNameIfNotSet(content);
 }
 
 void StyleEngine::EnsureUAStyleForFullscreen() {
-  if (global_rule_set_.HasFullscreenUAStyle())
+  DCHECK(IsMaster());
+  DCHECK(global_rule_set_);
+  if (global_rule_set_->HasFullscreenUAStyle())
     return;
   CSSDefaultStyleSheets::Instance().EnsureDefaultStyleSheetForFullscreen();
-  global_rule_set_.MarkDirty();
+  global_rule_set_->MarkDirty();
   UpdateActiveStyle();
 }
 
 void StyleEngine::EnsureUAStyleForElement(const Element& element) {
+  DCHECK(IsMaster());
+  DCHECK(global_rule_set_);
   if (CSSDefaultStyleSheets::Instance().EnsureDefaultStyleSheetsForElement(
           element)) {
-    global_rule_set_.MarkDirty();
+    global_rule_set_->MarkDirty();
     UpdateActiveStyle();
   }
 }
 
 bool StyleEngine::HasRulesForId(const AtomicString& id) const {
-  return global_rule_set_.GetRuleFeatureSet().HasSelectorForId(id);
+  DCHECK(IsMaster());
+  DCHECK(global_rule_set_);
+  return global_rule_set_->GetRuleFeatureSet().HasSelectorForId(id);
 }
 
 void StyleEngine::InitialViewportChanged() {
@@ -1011,11 +1036,13 @@ void StyleEngine::HtmlImportAddedOrRemoved() {
 
 PassRefPtr<ComputedStyle> StyleEngine::FindSharedStyle(
     const ElementResolveContext& element_resolve_context) {
+  DCHECK(IsMaster());
   DCHECK(resolver_);
+  DCHECK(global_rule_set_);
   return SharedStyleFinder(
-             element_resolve_context, global_rule_set_.GetRuleFeatureSet(),
-             global_rule_set_.SiblingRuleSet(),
-             global_rule_set_.UncommonAttributeRuleSet(), *resolver_)
+             element_resolve_context, global_rule_set_->GetRuleFeatureSet(),
+             global_rule_set_->SiblingRuleSet(),
+             global_rule_set_->UncommonAttributeRuleSet(), *resolver_)
       .FindSharedStyle();
 }
 namespace {
@@ -1046,6 +1073,8 @@ void StyleEngine::ApplyRuleSetChanges(
     TreeScope& tree_scope,
     const ActiveStyleSheetVector& old_style_sheets,
     const ActiveStyleSheetVector& new_style_sheets) {
+  DCHECK(IsMaster());
+  DCHECK(global_rule_set_);
   HeapHashSet<Member<RuleSet>> changed_rule_sets;
 
   ScopedStyleResolver* scoped_resolver = tree_scope.GetScopedStyleResolver();
@@ -1058,7 +1087,7 @@ void StyleEngine::ApplyRuleSetChanges(
     return;
 
   // With rules added or removed, we need to re-aggregate rule meta data.
-  global_rule_set_.MarkDirty();
+  global_rule_set_->MarkDirty();
 
   unsigned changed_rule_flags = GetRuleSetFlags(changed_rule_sets);
   bool fonts_changed = tree_scope.RootNode().IsDocumentNode() &&
@@ -1099,6 +1128,9 @@ void StyleEngine::ApplyRuleSetChanges(
     return;
   }
 
+  if (changed_rule_sets.IsEmpty())
+    return;
+
   if (changed_rule_flags & kKeyframesRules)
     ScopedStyleResolver::KeyframesRulesAdded(tree_scope);
 
@@ -1129,9 +1161,11 @@ const MediaQueryEvaluator& StyleEngine::EnsureMediaQueryEvaluator() {
 }
 
 bool StyleEngine::MediaQueryAffectedByViewportChange() {
+  DCHECK(IsMaster());
+  DCHECK(global_rule_set_);
   const MediaQueryEvaluator& evaluator = EnsureMediaQueryEvaluator();
-  const auto& results =
-      global_rule_set_.GetRuleFeatureSet().ViewportDependentMediaQueryResults();
+  const auto& results = global_rule_set_->GetRuleFeatureSet()
+                            .ViewportDependentMediaQueryResults();
   for (unsigned i = 0; i < results.size(); ++i) {
     if (evaluator.Eval(results[i].Expression()) != results[i].Result())
       return true;
@@ -1140,9 +1174,11 @@ bool StyleEngine::MediaQueryAffectedByViewportChange() {
 }
 
 bool StyleEngine::MediaQueryAffectedByDeviceChange() {
+  DCHECK(IsMaster());
+  DCHECK(global_rule_set_);
   const MediaQueryEvaluator& evaluator = EnsureMediaQueryEvaluator();
   const auto& results =
-      global_rule_set_.GetRuleFeatureSet().DeviceDependentMediaQueryResults();
+      global_rule_set_->GetRuleFeatureSet().DeviceDependentMediaQueryResults();
   for (unsigned i = 0; i < results.size(); ++i) {
     if (evaluator.Eval(results[i].Expression()) != results[i].Result())
       return true;
@@ -1159,10 +1195,10 @@ DEFINE_TRACE(StyleEngine) {
   visitor->Trace(dirty_tree_scopes_);
   visitor->Trace(active_tree_scopes_);
   visitor->Trace(tree_boundary_crossing_scopes_);
-  visitor->Trace(global_rule_set_);
   visitor->Trace(resolver_);
   visitor->Trace(viewport_resolver_);
   visitor->Trace(media_query_evaluator_);
+  visitor->Trace(global_rule_set_);
   visitor->Trace(style_invalidator_);
   visitor->Trace(font_selector_);
   visitor->Trace(text_to_sheet_cache_);

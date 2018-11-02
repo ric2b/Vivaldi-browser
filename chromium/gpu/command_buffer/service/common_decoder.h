@@ -14,7 +14,8 @@
 
 #include "base/macros.h"
 #include "gpu/command_buffer/common/buffer.h"
-#include "gpu/command_buffer/service/cmd_parser.h"
+#include "gpu/command_buffer/common/cmd_buffer_common.h"
+#include "gpu/command_buffer/service/async_api_interface.h"
 #include "gpu/gpu_export.h"
 
 // Forwardly declare a few GL types to avoid including GL header files.
@@ -23,11 +24,11 @@ typedef int GLint;
 
 namespace gpu {
 
-class CommandBufferEngine;
+class CommandBufferServiceBase;
 
 // This class is a helper base class for implementing the common parts of the
 // o3d/gl2 command buffer decoder.
-class GPU_EXPORT CommonDecoder : NON_EXPORTED_BASE(public AsyncAPIInterface) {
+class GPU_EXPORT CommonDecoder {
  public:
   typedef error::Error Error;
 
@@ -109,14 +110,17 @@ class GPU_EXPORT CommonDecoder : NON_EXPORTED_BASE(public AsyncAPIInterface) {
   };
 
   CommonDecoder();
-  ~CommonDecoder() override;
+  ~CommonDecoder();
 
   // Sets the engine, to get shared memory buffers from, and to set the token
   // to.
-  void set_engine(CommandBufferEngine* engine) {
-    engine_ = engine;
+  void set_command_buffer_service(
+      CommandBufferServiceBase* command_buffer_service) {
+    command_buffer_service_ = command_buffer_service;
   }
-  CommandBufferEngine* engine() const { return engine_; }
+  CommandBufferServiceBase* command_buffer_service() const {
+    return command_buffer_service_;
+  }
 
   // Sets the maximum size for buckets.
   void set_max_bucket_size(size_t max_bucket_size) {
@@ -196,7 +200,7 @@ class GPU_EXPORT CommonDecoder : NON_EXPORTED_BASE(public AsyncAPIInterface) {
 
   #undef COMMON_COMMAND_BUFFER_CMD_OP
 
-  CommandBufferEngine* engine_;
+  CommandBufferServiceBase* command_buffer_service_;
   size_t max_bucket_size_;
 
   typedef std::map<uint32_t, std::unique_ptr<Bucket>> BucketMap;

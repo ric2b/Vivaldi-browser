@@ -4,14 +4,16 @@
 
 #include "net/http/http_stream_factory_impl_request.h"
 
+#include <utility>
+
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/http/http_stream_factory_impl_job.h"
 #include "net/log/net_log_event_type.h"
-#include "net/spdy/spdy_http_stream.h"
-#include "net/spdy/spdy_session.h"
+#include "net/spdy/chromium/spdy_http_stream.h"
+#include "net/spdy/chromium/spdy_session.h"
 
 namespace net {
 
@@ -42,11 +44,6 @@ HttpStreamFactoryImpl::Request::Request(
 HttpStreamFactoryImpl::Request::~Request() {
   net_log_.EndEvent(NetLogEventType::HTTP_STREAM_REQUEST);
   helper_->OnRequestComplete();
-}
-
-void HttpStreamFactoryImpl::Request::SetSpdySessionKey(
-    const SpdySessionKey& spdy_session_key) {
-  spdy_session_key_.reset(new SpdySessionKey(spdy_session_key));
 }
 
 void HttpStreamFactoryImpl::Request::Complete(bool was_alpn_negotiated,
@@ -117,9 +114,9 @@ void HttpStreamFactoryImpl::Request::OnHttpsProxyTunnelResponse(
     const HttpResponseInfo& response_info,
     const SSLConfig& used_ssl_config,
     const ProxyInfo& used_proxy_info,
-    HttpStream* stream) {
-  delegate_->OnHttpsProxyTunnelResponse(
-      response_info, used_ssl_config, used_proxy_info, stream);
+    std::unique_ptr<HttpStream> stream) {
+  delegate_->OnHttpsProxyTunnelResponse(response_info, used_ssl_config,
+                                        used_proxy_info, std::move(stream));
 }
 
 int HttpStreamFactoryImpl::Request::RestartTunnelWithProxyAuth() {
@@ -152,16 +149,6 @@ bool HttpStreamFactoryImpl::Request::using_spdy() const {
 const ConnectionAttempts& HttpStreamFactoryImpl::Request::connection_attempts()
     const {
   return connection_attempts_;
-}
-
-void HttpStreamFactoryImpl::Request::ResetSpdySessionKey() {
-  if (spdy_session_key_.get()) {
-    spdy_session_key_.reset();
-  }
-}
-
-bool HttpStreamFactoryImpl::Request::HasSpdySessionKey() const {
-  return spdy_session_key_.get() != NULL;
 }
 
 void HttpStreamFactoryImpl::Request::AddConnectionAttempts(

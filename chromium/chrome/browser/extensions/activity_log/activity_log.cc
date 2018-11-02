@@ -438,8 +438,9 @@ void LogApiActivity(content::BrowserContext* browser_context,
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&LogApiActivityOnUI, browser_context, extension_id,
-                   activity_name, base::Passed(args.CreateDeepCopy()), type));
+        base::BindOnce(&LogApiActivityOnUI, browser_context, extension_id,
+                       activity_name, base::Passed(args.CreateDeepCopy()),
+                       type));
     return;
   }
   LogApiActivityOnUI(browser_context, extension_id, activity_name,
@@ -499,8 +500,9 @@ void LogWebRequestActivity(content::BrowserContext* browser_context,
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&LogWebRequestActivityOnUI, browser_context, extension_id,
-                   url, is_incognito, api_call, base::Passed(&details)));
+        base::BindOnce(&LogWebRequestActivityOnUI, browser_context,
+                       extension_id, url, is_incognito, api_call,
+                       base::Passed(&details)));
     return;
   }
   LogWebRequestActivityOnUI(browser_context, extension_id, url, is_incognito,
@@ -679,7 +681,7 @@ void ActivityLog::OnExtensionLoaded(content::BrowserContext* browser_context,
 
 void ActivityLog::OnExtensionUnloaded(content::BrowserContext* browser_context,
                                       const Extension* extension,
-                                      UnloadedExtensionInfo::Reason reason) {
+                                      UnloadedExtensionReason reason) {
   if (!ActivityLogAPI::IsExtensionWhitelisted(extension->id()))
     return;
   --active_consumers_;

@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
@@ -179,7 +180,7 @@ void IntentPickerBubbleView::Init() {
   }
 
   scroll_view_ = new views::ScrollView();
-  scroll_view_->EnableViewPortLayer();
+  scroll_view_->SetBackgroundColor(SK_ColorWHITE);
   scroll_view_->SetContents(scrollable_view);
   // Setting a customized ScrollBar which is shown only when the mouse pointer
   // is inside the ScrollView.
@@ -225,7 +226,9 @@ IntentPickerBubbleView::IntentPickerBubbleView(
       intent_picker_cb_(intent_picker_cb),
       selected_app_tag_(0),
       scroll_view_(nullptr),
-      app_info_(app_info) {}
+      app_info_(app_info) {
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::INTENT_PICKER);
+}
 
 IntentPickerBubbleView::~IntentPickerBubbleView() {
   SetLayoutManager(nullptr);

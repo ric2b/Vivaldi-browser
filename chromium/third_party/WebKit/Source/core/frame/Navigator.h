@@ -20,14 +20,14 @@
 #ifndef Navigator_h
 #define Navigator_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
-#include "core/frame/NavigatorCPU.h"
+#include "core/frame/NavigatorConcurrentHardware.h"
 #include "core/frame/NavigatorID.h"
 #include "core/frame/NavigatorLanguage.h"
 #include "core/frame/NavigatorOnLine.h"
 #include "platform/Supplementable.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
 
@@ -36,7 +36,7 @@ namespace blink {
 class LocalFrame;
 
 class CORE_EXPORT Navigator final : public GarbageCollected<Navigator>,
-                                    public NavigatorCPU,
+                                    public NavigatorConcurrentHardware,
                                     public NavigatorID,
                                     public NavigatorLanguage,
                                     public NavigatorOnLine,

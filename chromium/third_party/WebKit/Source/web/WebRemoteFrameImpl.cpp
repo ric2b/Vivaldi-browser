@@ -4,17 +4,18 @@
 
 #include "web/WebRemoteFrameImpl.h"
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/WindowProxy.h"
 #include "core/dom/Fullscreen.h"
 #include "core/dom/RemoteSecurityContext.h"
 #include "core/dom/SecurityContext.h"
+#include "core/exported/WebViewBase.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/LayoutObject.h"
 #include "core/page/Page.h"
+#include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/feature_policy/FeaturePolicy.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebFeaturePolicy.h"
@@ -28,7 +29,6 @@
 #include "v8/include/v8.h"
 #include "web/RemoteFrameOwner.h"
 #include "web/WebLocalFrameImpl.h"
-#include "web/WebViewImpl.h"
 
 namespace blink {
 
@@ -51,8 +51,8 @@ WebRemoteFrameImpl::~WebRemoteFrameImpl() {}
 DEFINE_TRACE(WebRemoteFrameImpl) {
   visitor->Trace(frame_client_);
   visitor->Trace(frame_);
+  WebRemoteFrameBase::Trace(visitor);
   WebFrame::TraceFrames(visitor, this);
-  WebFrameImplBase::Trace(visitor);
 }
 
 bool WebRemoteFrameImpl::IsWebLocalFrame() const {
@@ -138,7 +138,7 @@ bool WebRemoteFrameImpl::HasVerticalScrollbar() const {
 WebView* WebRemoteFrameImpl::View() const {
   if (!GetFrame())
     return nullptr;
-  return WebViewImpl::FromPage(GetFrame()->GetPage());
+  return WebViewBase::FromPage(GetFrame()->GetPage());
 }
 
 WebDocument WebRemoteFrameImpl::GetDocument() const {
@@ -324,22 +324,16 @@ WebLocalFrame* WebRemoteFrameImpl::CreateLocalChild(
     blink::InterfaceProvider* interface_provider,
     blink::InterfaceRegistry* interface_registry,
     WebFrame* previous_sibling,
+    const WebParsedFeaturePolicy& container_policy,
     const WebFrameOwnerProperties& frame_owner_properties,
     WebFrame* opener) {
   WebLocalFrameImpl* child = WebLocalFrameImpl::Create(
       scope, client, interface_provider, interface_registry, opener);
   InsertAfter(child, previous_sibling);
-  RemoteFrameOwner* owner = RemoteFrameOwner::Create(
-      static_cast<SandboxFlags>(sandbox_flags), frame_owner_properties);
-  // FIXME: currently this calls LocalFrame::init() on the created LocalFrame,
-  // which may result in the browser observing two navigations to about:blank
-  // (one from the initial frame creation, and one from swapping it into the
-  // remote process).  FrameLoader might need a special initialization function
-  // for this case to avoid that duplicate navigation.
+  RemoteFrameOwner* owner =
+      RemoteFrameOwner::Create(static_cast<SandboxFlags>(sandbox_flags),
+                               container_policy, frame_owner_properties);
   child->InitializeCoreFrame(*GetFrame()->GetPage(), owner, name);
-  // Partially related with the above FIXME--the init() call may trigger JS
-  // dispatch. However,
-  // if the parent is remote, it should never be detached synchronously...
   DCHECK(child->GetFrame());
   return child;
 }
@@ -356,12 +350,14 @@ WebRemoteFrame* WebRemoteFrameImpl::CreateRemoteChild(
     WebTreeScopeType scope,
     const WebString& name,
     WebSandboxFlags sandbox_flags,
+    const WebParsedFeaturePolicy& container_policy,
     WebRemoteFrameClient* client,
     WebFrame* opener) {
   WebRemoteFrameImpl* child = WebRemoteFrameImpl::Create(scope, client, opener);
   AppendChild(child);
-  RemoteFrameOwner* owner = RemoteFrameOwner::Create(
-      static_cast<SandboxFlags>(sandbox_flags), WebFrameOwnerProperties());
+  RemoteFrameOwner* owner =
+      RemoteFrameOwner::Create(static_cast<SandboxFlags>(sandbox_flags),
+                               container_policy, WebFrameOwnerProperties());
   child->InitializeCoreFrame(*GetFrame()->GetPage(), owner, name);
   return child;
 }
@@ -423,11 +419,8 @@ void WebRemoteFrameImpl::SetReplicatedFeaturePolicyHeader(
           parent_frame->GetSecurityContext()->GetFeaturePolicy();
     }
     WebParsedFeaturePolicy container_policy;
-    if (GetFrame() && GetFrame()->Owner()) {
-      container_policy = GetContainerPolicyFromAllowedFeatures(
-          GetFrame()->Owner()->AllowedFeatures(),
-          GetFrame()->GetSecurityContext()->GetSecurityOrigin());
-    }
+    if (GetFrame()->Owner())
+      container_policy = GetFrame()->Owner()->ContainerPolicy();
     GetFrame()->GetSecurityContext()->InitializeFeaturePolicy(
         parsed_header, container_policy, parent_feature_policy);
   }
@@ -483,7 +476,7 @@ void WebRemoteFrameImpl::DidStopLoading() {
   if (Parent() && Parent()->IsWebLocalFrame()) {
     WebLocalFrameImpl* parent_frame =
         ToWebLocalFrameImpl(Parent()->ToWebLocalFrame());
-    parent_frame->GetFrame()->Loader().CheckCompleted();
+    parent_frame->GetFrame()->GetDocument()->CheckCompleted();
   }
 }
 
@@ -532,7 +525,7 @@ v8::Local<v8::Object> WebRemoteFrameImpl::GlobalProxy() const {
 
 WebRemoteFrameImpl::WebRemoteFrameImpl(WebTreeScopeType scope,
                                        WebRemoteFrameClient* client)
-    : WebRemoteFrame(scope),
+    : WebRemoteFrameBase(scope),
       frame_client_(RemoteFrameClientImpl::Create(this)),
       client_(client),
       self_keep_alive_(this) {}

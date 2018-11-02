@@ -8,6 +8,7 @@
 #include <tuple>
 
 #include "base/bind.h"
+#include "chrome/browser/conflicts/module_database_observer_win.h"
 
 namespace {
 
@@ -54,7 +55,7 @@ void ModuleDatabase::SetInstance(
 void ModuleDatabase::OnProcessStarted(uint32_t process_id,
                                       uint64_t creation_time,
                                       content::ProcessType process_type) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   CreateProcessInfo(process_id, creation_time, process_type);
 }
 
@@ -66,7 +67,7 @@ void ModuleDatabase::OnModuleLoad(uint32_t process_id,
                                   uintptr_t module_load_address) {
   // Messages can arrive from any thread (UI thread for calls over IPC, and
   // anywhere at all for calls from ModuleWatcher), so bounce if necessary.
-  if (!task_runner_->RunsTasksOnCurrentThread()) {
+  if (!task_runner_->RunsTasksInCurrentSequence()) {
     task_runner_->PostTask(
         FROM_HERE, base::Bind(&ModuleDatabase::OnModuleLoad,
                               weak_ptr_factory_.GetWeakPtr(), process_id,
@@ -103,7 +104,7 @@ void ModuleDatabase::OnModuleUnload(uint32_t process_id,
                                     uintptr_t module_load_address) {
   // Messages can arrive from any thread (UI thread for calls over IPC, and
   // anywhere at all for calls from ModuleWatcher), so bounce if necessary.
-  if (!task_runner_->RunsTasksOnCurrentThread()) {
+  if (!task_runner_->RunsTasksInCurrentSequence()) {
     task_runner_->PostTask(
         FROM_HERE, base::Bind(&ModuleDatabase::OnModuleUnload,
                               weak_ptr_factory_.GetWeakPtr(), process_id,
@@ -141,7 +142,7 @@ void ModuleDatabase::OnProcessEnded(uint32_t process_id,
                                     uint64_t creation_time) {
   // Messages can arrive from any thread (UI thread for calls over IPC, and
   // anywhere at all for calls from ModuleWatcher), so bounce if necessary.
-  if (!task_runner_->RunsTasksOnCurrentThread()) {
+  if (!task_runner_->RunsTasksInCurrentSequence()) {
     task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&ModuleDatabase::OnProcessEnded,
@@ -150,6 +151,18 @@ void ModuleDatabase::OnProcessEnded(uint32_t process_id,
   }
 
   DeleteProcessInfo(process_id, creation_time);
+}
+
+void ModuleDatabase::AddObserver(ModuleDatabaseObserver* observer) {
+  observer_list_.AddObserver(observer);
+  for (const auto& module : modules_) {
+    if (module.second.inspection_result)
+      observer->OnNewModuleFound(module.first, module.second);
+  }
+}
+
+void ModuleDatabase::RemoveObserver(ModuleDatabaseObserver* observer) {
+  observer_list_.RemoveObserver(observer);
 }
 
 // static
@@ -334,11 +347,16 @@ void ModuleDatabase::DeleteProcessInfo(uint32_t process_id,
 void ModuleDatabase::OnModuleInspected(
     const ModuleInfoKey& module_key,
     std::unique_ptr<ModuleInspectionResult> inspection_result) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   auto it = modules_.find(module_key);
-  if (it != modules_.end())
-    it->second.inspection_result = std::move(inspection_result);
+  if (it == modules_.end())
+    return;
+
+  it->second.inspection_result = std::move(inspection_result);
+
+  for (auto& observer : observer_list_)
+    observer.OnNewModuleFound(it->first, it->second);
 }
 
 // ModuleDatabase::ProcessInfoKey ----------------------------------------------

@@ -53,7 +53,6 @@
 <translation id="1820259098641718022">পড়ার তালিকায় যোগ করা হয়েছে</translation>
 <translation id="1876721852596493031">ব্যবহারের ডেটা পাঠান</translation>
 <translation id="1886928167269928266">শুরুর সময়</translation>
-<translation id="1894451531427596130">এটি কিভাবে কাজ করে তা <ph name="BEGIN_LINK" />সেটিংস<ph name="END_LINK" /> থেকে নিয়ন্ত্রণ করুন</translation>
 <translation id="1911619930368729126">Google ড্রাইভে আপলোড করুন</translation>
 <translation id="1941314575388338491">কপি করতে দুবার আলতো চাপুন।</translation>
 <translation id="1952728750904661634">পরিচালিত অ্যাকাউন্ট দিয়ে প্রবেশ করুন</translation>
@@ -97,6 +96,7 @@
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">অনুবাদ সেটিংস আবার সেট করুন</translation>
 <translation id="285960592395650245">আবার ডাউনলোডের চেষ্টা করুন</translation>
+<translation id="2870560284913253234">সাইট</translation>
 <translation id="2871695793448672541">লুকানো, পাসওয়ার্ড</translation>
 <translation id="2898963176829412617">নতুন ফোল্ডার...</translation>
 <translation id="2903493209154104877">ঠিকানা</translation>
@@ -109,7 +109,6 @@
 <translation id="2989805286512600854">নতুন ট্যাবে খুলুন</translation>
 <translation id="3024255823539804759">গত দিন</translation>
 <translation id="3037605927509011580">ইস!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> উপলব্ধ নয়। আপনার ব্রাউজিং ইতিহাস অ্যাক্সেস করতে, সরঞ্জামগুলি মেনু থেকে "<ph name="SHOW_HISTORY" />" নির্বাচন করুন।</translation>
 <translation id="3112556859945124369">চিহ্নিত করুন…</translation>
 <translation id="3151924044251363314">শুধুমাত্র আপনার পাসফ্রেজ সহ কোনো ব্যক্তি আপনার এনক্রিপ্ট করা ডেটা পড়তে পারবেন৷ পাসফ্রেজটি Google এ পাঠানো হয় না বা এর দ্বারা সংরক্ষণ করা হয় না৷ যদি আপনি আপনার পাসফ্রেজ ভুলে যান, তাহলে আপনাকে সিঙ্ক আবার সেট করতে হবে৷ <ph name="BEGIN_LINK" />আরো জানুন<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">সবগুলি চিহ্নিত করুন…</translation>
@@ -150,6 +149,7 @@
 <translation id="3638472932233958418">পূর্বলোড ওয়েবপৃষ্ঠা</translation>
 <translation id="3691593122358196899"><ph name="FOLDER_TITLE" /> এ বুকমার্ক করা হয়েছে</translation>
 <translation id="3738139272394829648">স্পর্শের মাধ্যমে অনুসন্ধান</translation>
+<translation id="3742082982782149146">সাইটের URLটি কপি করা হয়েছে।</translation>
 <translation id="3771033907050503522">ছদ্মবেশী ট্যাবগুলি</translation>
 <translation id="3783017676699494206">চিত্র সংরক্ষণ করুন</translation>
 <translation id="3789841737615482174">ইনস্টল করুন</translation>
@@ -164,10 +164,12 @@
 <translation id="4038354071007134711">এই ডিভাইসের কোনো অ্যাপ্লিকেশান ফাইলটি খুলতে পারবে না।</translation>
 <translation id="4049507953662678203">আপনি একটি নেটওয়ার্ক সংযোগে আছেন কিনা তা নিশ্চিত করুন এবং আবার চেষ্টা করুন।</translation>
 <translation id="411254640334432676">ডাউনলোড ব্যর্থ হয়েছে।</translation>
+<translation id="4117350985506774529">আপনার ইউজারনেম কপি করা হয়েছে।</translation>
 <translation id="4121993058175073134">নেট-রপ্তানি ডেটা পাঠানোর জন্য, দয়া করে সিস্টেম অ্যাপ্লিকেশানে আপনার ইমেল অ্যাকাউন্ট কনফিগার করুন৷</translation>
 <translation id="4124987746317609294">সময় সীমা</translation>
 <translation id="4172051516777682613">সর্বদা দেখান</translation>
 <translation id="418156467088430727">নতুন ট্যাবে অফলাইন সংস্করণ দেখুন</translation>
+<translation id="4237682350741091554"><ph name="BEGIN_LINK" />সেটিংস<ph name="END_LINK" /> থেকে Chrome সিঙ্ক এবং ব্যক্তিগতকরণ পরিচালনা করুন</translation>
 <translation id="424315890655130736">পাসফ্রেজ লিখুন</translation>
 <translation id="4272631900155121838">একটি QR কোড স্ক্যান করতে, সেটিংস থেকে ক্যামেরা সক্ষম করুন</translation>
 <translation id="4281844954008187215">পরিষেবার শর্তাদি</translation>
@@ -175,6 +177,7 @@
 <translation id="4359125752503270327">এই পৃষ্ঠাটি আরেকটি অ্যাপ্লিকেশানে খুলবে।</translation>
 <translation id="4378154925671717803">ফোন</translation>
 <translation id="441868831736628555">গোপনীয়তা বিজ্ঞপ্তি</translation>
+<translation id="4508750114462689118">সাইন-ইন প্রচার বন্ধ করুন</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> এ গিয়ে সংরক্ষণ করা পাসওয়ার্ডগুলি দেখুন ও পরিচালনা করুন</translation>
 <translation id="4536418791685807335">আবার সাইন ইন করার চেষ্টা করুন।</translation>
 <translation id="4620246317052452550">আপনি যেসব পৃষ্ঠা পড়েছেন</translation>
@@ -221,6 +224,7 @@
 
 সেটিংস-এর সাধারণ বিভাগে Handoff সক্ষমিত থাকা আবশ্যক, এবং আপনার ডিভাইস একই iCloud অ্যাকাউন্ট ব্যবহার করা আবশ্যক৷</translation>
 <translation id="5556459405103347317">আবার লোড করুন</translation>
+<translation id="5619279135193775234">মেল</translation>
 <translation id="5626245204502895507">ফাইলটি এই সময়ে ডাউনলোড করা যাবে না৷</translation>
 <translation id="5659593005791499971">ইমেল</translation>
 <translation id="5669528293118408608">www</translation>
@@ -311,6 +315,7 @@
 <translation id="7136892417564438900">ক্যামেরা অনুপলব্ধ</translation>
 <translation id="7159472599653637159">মোবাইল সাইটের জন্য অনুরোধ করুন</translation>
 <translation id="7167621057293532233">ডেটা প্রকার</translation>
+<translation id="7175593937868963913">ইমেল লিখুন</translation>
 <translation id="7189598951263744875">শেয়ার করুন...</translation>
 <translation id="7203585745079012652">আবার উত্তরগুলি বলে</translation>
 <translation id="722055596168483966">Google পরিষেবাগুলিকে ব্যক্তিগত করুন</translation>
@@ -359,7 +364,6 @@
 <translation id="8205564605687841303">বাতিল করুন</translation>
 <translation id="8225985093977202398">সঞ্চিত চিত্র এবং ফাইলগুলি</translation>
 <translation id="8261506727792406068">মুছুন</translation>
-<translation id="8272194309885535896">চিত্র ডাউনলোড করুন</translation>
 <translation id="8272426682713568063">ক্রেডিট কার্ডসমূহ</translation>
 <translation id="8281781826761538115">ডিফল্ট - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">অনুসন্ধান, বিজ্ঞাপন এবং অন্যান্য Google পরিষেবা ব্যক্তিগতকৃত করতে Google কিভাবে আপনার ব্রাউজিং ইতিহাস ব্যবহার করে তা নিয়ন্ত্রণ করুন</translation>

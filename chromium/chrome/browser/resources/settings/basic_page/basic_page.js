@@ -9,7 +9,7 @@
 Polymer({
   is: 'settings-basic-page',
 
-  behaviors: [SettingsPageVisibility, MainPageBehavior],
+  behaviors: [MainPageBehavior],
 
   properties: {
     /** Preferences state. */
@@ -24,7 +24,10 @@ Polymer({
      * Dictionary defining page visibility.
      * @type {!GuestModePageVisibility}
      */
-    pageVisibility: Object,
+    pageVisibility: {
+      type: Object,
+      value: function() { return {}; },
+    },
 
     advancedToggleExpanded: {
       type: Boolean,
@@ -102,6 +105,15 @@ Polymer({
   },
 
   /**
+   * @param {boolean|undefined} visibility
+   * @return {boolean}
+   * @private
+   */
+  showPage_: function(visibility) {
+    return visibility !== false;
+  },
+
+  /**
    * Queues a task to search the basic sections, then another for the advanced
    * sections.
    * @param {string} query The text to search for.
@@ -124,8 +136,8 @@ Polymer({
       // Combine the SearchRequests results to a single SearchResult object.
       return {
         canceled: requests.some(function(r) { return r.canceled; }),
-        didFindMatches: requests.every(function(r) {
-          return !r.didFindMatches();
+        didFindMatches: requests.some(function(r) {
+          return r.didFindMatches();
         }),
         // All requests correspond to the same user query, so only need to check
         // one of them.
@@ -157,7 +169,7 @@ Polymer({
   shouldShowAndroidApps_: function() {
     var visibility = /** @type {boolean|undefined} */ (
         this.get('pageVisibility.androidApps'));
-    return this.showAndroidApps && this.showPage(visibility);
+    return this.showAndroidApps && this.showPage_(visibility);
   },
 
   /**

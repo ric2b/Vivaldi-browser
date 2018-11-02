@@ -32,11 +32,11 @@
 #ifndef PerformanceEntry_h
 #define PerformanceEntry_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/DOMHighResTimeStamp.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -65,7 +65,8 @@ class CORE_EXPORT PerformanceEntry
     kResource = 1 << 5,
     kLongTask = 1 << 6,
     kTaskAttribution = 1 << 7,
-    kPaint = 1 << 8
+    kPaint = 1 << 8,
+    kServer = 1 << 9
   };
 
   String name() const;

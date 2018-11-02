@@ -76,8 +76,8 @@ void ExtensionActionUtil::BroadcastEvent(const std::string& eventname,
                                          std::unique_ptr<base::ListValue> args,
                                          content::BrowserContext* context) {
   std::unique_ptr<extensions::Event> event(new extensions::Event(
-      extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args)));
-  event->restrict_to_browser_context = context;
+      extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args),
+      context));
   EventRouter* event_router = EventRouter::Get(context);
   if (event_router) {
     event_router->BroadcastEvent(std::move(event));
@@ -126,6 +126,10 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
   // We only update the browseraction items for the active tab.
   int tab_id = ExtensionAction::kDefaultTabId;
   int windowId = extension_misc::kCurrentWindowId;
+
+  if (!web_contents) {
+    web_contents = GetCurrentWebContents();
+  }
 
   Browser* browser =
       web_contents ? chrome::FindBrowserWithWebContents(web_contents) : nullptr;
@@ -258,6 +262,7 @@ bool ExtensionActionUtil::FillInfoForTabId(
 
   info->id = action->extension_id();
 
+  // Note, all getters return default values if no explicit value has been set.
   info->badge_tooltip.reset(new std::string(action->GetTitle(tab_id)));
 
   info->badge_text.reset(new std::string(action->GetBadgeText(tab_id)));
@@ -314,7 +319,6 @@ bool ExtensionActionUtil::FillInfoForTabId(
 
 /*static*/
 std::string* ExtensionActionUtil::EncodeBitmapToPng(const SkBitmap* bitmap) {
-  SkAutoLockPixels lock_input(*bitmap);
   unsigned char* inputAddr =
       bitmap->bytesPerPixel() == 1
           ? reinterpret_cast<unsigned char*>(bitmap->getAddr8(0, 0))
@@ -430,7 +434,7 @@ void ExtensionActionUtil::OnExtensionLoaded(
 void ExtensionActionUtil::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const extensions::Extension* extension,
-    extensions::UnloadedExtensionInfo::Reason reason) {
+    extensions::UnloadedExtensionReason reason) {
   vivaldi::extension_action_utils::ExtensionInfo info;
   info.id = extension->id();
   std::unique_ptr<base::ListValue> args =

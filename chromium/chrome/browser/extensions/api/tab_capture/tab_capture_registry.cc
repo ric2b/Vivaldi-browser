@@ -69,9 +69,8 @@ class WindowAdoptionAgent : protected aura::WindowObserver {
     // avoid clashing with the currently-in-progress window tree hierarchy
     // changes.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&WindowAdoptionAgent::FindNewParent,
-                   weak_ptr_factory_.GetWeakPtr()));
+        FROM_HERE, base::BindOnce(&WindowAdoptionAgent::FindNewParent,
+                                  weak_ptr_factory_.GetWeakPtr()));
   }
 
   // aura::WindowObserver:
@@ -293,7 +292,7 @@ void TabCaptureRegistry::GetCapturedTabs(
 void TabCaptureRegistry::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
-    UnloadedExtensionInfo::Reason reason) {
+    UnloadedExtensionReason reason) {
   // Cleanup all the requested media streams for this extension.
   for (std::vector<std::unique_ptr<LiveRequest>>::iterator it =
            requests_.begin();
@@ -435,10 +434,9 @@ void TabCaptureRegistry::DispatchStatusChangeEvent(
   tab_capture::CaptureInfo info;
   request->GetCaptureInfo(&info);
   args->Append(info.ToValue());
-  std::unique_ptr<Event> event(
-      new Event(events::TAB_CAPTURE_ON_STATUS_CHANGED,
-                tab_capture::OnStatusChanged::kEventName, std::move(args)));
-  event->restrict_to_browser_context = browser_context_;
+  auto event = base::MakeUnique<Event>(events::TAB_CAPTURE_ON_STATUS_CHANGED,
+                                       tab_capture::OnStatusChanged::kEventName,
+                                       std::move(args), browser_context_);
 
   router->DispatchEventToExtension(request->extension_id(), std::move(event));
 }

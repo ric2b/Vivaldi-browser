@@ -8,9 +8,10 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
+#include "base/sequenced_task_runner.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/test/sequenced_worker_pool_owner.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "base/time/time.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/cookies/cookie_util.h"
@@ -36,8 +37,7 @@ using CanonicalCookieVector =
 class QuotaPolicyCookieStoreTest : public testing::Test {
  public:
   QuotaPolicyCookieStoreTest()
-      : pool_owner_(new base::SequencedWorkerPoolOwner(3, "Background Pool")),
-        loaded_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+      : loaded_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                       base::WaitableEvent::InitialState::NOT_SIGNALED),
         destroy_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                        base::WaitableEvent::InitialState::NOT_SIGNALED) {}
@@ -56,13 +56,13 @@ class QuotaPolicyCookieStoreTest : public testing::Test {
   }
 
   void ReleaseStore() {
-    EXPECT_TRUE(background_task_runner()->RunsTasksOnCurrentThread());
+    EXPECT_TRUE(background_task_runner_->RunsTasksInCurrentSequence());
     store_ = nullptr;
     destroy_event_.Signal();
   }
 
   void DestroyStoreOnBackgroundThread() {
-    background_task_runner()->PostTask(
+    background_task_runner_->PostTask(
         FROM_HERE, base::Bind(&QuotaPolicyCookieStoreTest::ReleaseStore,
                               base::Unretained(this)));
     destroy_event_.Wait();
@@ -70,46 +70,33 @@ class QuotaPolicyCookieStoreTest : public testing::Test {
   }
 
  protected:
-  scoped_refptr<base::SequencedTaskRunner> background_task_runner() {
-    return pool_owner_->pool()->GetSequencedTaskRunner(
-        pool_owner_->pool()->GetNamedSequenceToken("background"));
-  }
-
-  scoped_refptr<base::SequencedTaskRunner> client_task_runner() {
-    return pool_owner_->pool()->GetSequencedTaskRunner(
-        pool_owner_->pool()->GetNamedSequenceToken("client"));
-  }
-
   void CreateAndLoad(storage::SpecialStoragePolicy* storage_policy,
                      CanonicalCookieVector* cookies) {
     scoped_refptr<net::SQLitePersistentCookieStore> sqlite_store(
         new net::SQLitePersistentCookieStore(
             temp_dir_.GetPath().Append(kTestCookiesFilename),
-            client_task_runner(), background_task_runner(), true, nullptr));
+            base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}),
+            background_task_runner_, true, nullptr));
     store_ = new QuotaPolicyCookieStore(sqlite_store.get(), storage_policy);
     Load(cookies);
   }
 
   // Adds a persistent cookie to store_.
-  void AddCookie(const GURL& url,
-                 const std::string& name,
+  void AddCookie(const std::string& name,
                  const std::string& value,
                  const std::string& domain,
                  const std::string& path,
                  const base::Time& creation) {
-    store_->AddCookie(*net::CanonicalCookie::Create(
-        url, name, value, domain, path, creation, creation, false, false,
-        net::CookieSameSite::DEFAULT_MODE, net::COOKIE_PRIORITY_DEFAULT));
+    store_->AddCookie(net::CanonicalCookie(name, value, domain, path, creation,
+                                           creation, base::Time(), false, false,
+                                           net::CookieSameSite::DEFAULT_MODE,
+                                           net::COOKIE_PRIORITY_DEFAULT));
   }
 
   void DestroyStore() {
     store_ = nullptr;
-    // Ensure that |store_|'s destructor has run by shutting down the pool and
-    // then forcing the pool to be destructed. This will ensure that all the
-    // tasks that block pool shutdown (e.g. |store_|'s cleanup) have run before
-    // yielding control.
-    pool_owner_->pool()->FlushForTesting();
-    pool_owner_.reset(new base::SequencedWorkerPoolOwner(3, "Background Pool"));
+    // Ensure that |store_|'s destructor has run by flushing TaskScheduler.
+    base::TaskScheduler::GetInstance()->FlushForTesting();
   }
 
   void SetUp() override {
@@ -121,7 +108,8 @@ class QuotaPolicyCookieStoreTest : public testing::Test {
   }
 
   TestBrowserThreadBundle bundle_;
-  std::unique_ptr<base::SequencedWorkerPoolOwner> pool_owner_;
+  const scoped_refptr<base::SequencedTaskRunner> background_task_runner_ =
+      base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()});
   base::WaitableEvent loaded_event_;
   base::WaitableEvent destroy_event_;
   base::ScopedTempDir temp_dir_;
@@ -136,9 +124,9 @@ TEST_F(QuotaPolicyCookieStoreTest, TestPersistence) {
   ASSERT_EQ(0U, cookies.size());
 
   base::Time t = base::Time::Now();
-  AddCookie(GURL("http://foo.com"), "A", "B", std::string(), "/", t);
+  AddCookie("A", "B", "foo.com", "/", t);
   t += base::TimeDelta::FromInternalValue(10);
-  AddCookie(GURL("http://persistent.com"), "A", "B", std::string(), "/", t);
+  AddCookie("A", "B", "persistent.com", "/", t);
 
   // Replace the store, which forces the current store to flush data to
   // disk. Then, after reloading the store, confirm that the data was flushed by
@@ -180,11 +168,11 @@ TEST_F(QuotaPolicyCookieStoreTest, TestPolicy) {
   ASSERT_EQ(0U, cookies.size());
 
   base::Time t = base::Time::Now();
-  AddCookie(GURL("http://foo.com"), "A", "B", std::string(), "/", t);
+  AddCookie("A", "B", "foo.com", "/", t);
   t += base::TimeDelta::FromInternalValue(10);
-  AddCookie(GURL("http://persistent.com"), "A", "B", std::string(), "/", t);
+  AddCookie("A", "B", "persistent.com", "/", t);
   t += base::TimeDelta::FromInternalValue(10);
-  AddCookie(GURL("http://nonpersistent.com"), "A", "B", std::string(), "/", t);
+  AddCookie("A", "B", "nonpersistent.com", "/", t);
 
   // Replace the store, which forces the current store to flush data to
   // disk. Then, after reloading the store, confirm that the data was flushed by
@@ -203,8 +191,7 @@ TEST_F(QuotaPolicyCookieStoreTest, TestPolicy) {
   EXPECT_EQ(3U, cookies.size());
 
   t += base::TimeDelta::FromInternalValue(10);
-  AddCookie(GURL("http://nonpersistent.com"), "A", "B", std::string(),
-            "/second", t);
+  AddCookie("A", "B", "nonpersistent.com", "/second", t);
 
   // Now close the store, and "nonpersistent.com" should be deleted according to
   // policy.
@@ -225,7 +212,7 @@ TEST_F(QuotaPolicyCookieStoreTest, ForceKeepSessionState) {
   ASSERT_EQ(0U, cookies.size());
 
   base::Time t = base::Time::Now();
-  AddCookie(GURL("http://foo.com"), "A", "B", std::string(), "/", t);
+  AddCookie("A", "B", "foo.com", "/", t);
 
   // Recreate |store_| with a storage policy that makes "nonpersistent.com"
   // session only, but then instruct the store to forcibly keep all cookies.
@@ -241,9 +228,9 @@ TEST_F(QuotaPolicyCookieStoreTest, ForceKeepSessionState) {
   EXPECT_EQ(1U, cookies.size());
 
   t += base::TimeDelta::FromInternalValue(10);
-  AddCookie(GURL("http://persistent.com"), "A", "B", std::string(), "/", t);
+  AddCookie("A", "B", "persistent.com", "/", t);
   t += base::TimeDelta::FromInternalValue(10);
-  AddCookie(GURL("http://nonpersistent.com"), "A", "B", std::string(), "/", t);
+  AddCookie("A", "B", "nonpersistent.com", "/", t);
 
   // Now close the store, but the "nonpersistent.com" cookie should not be
   // deleted.
@@ -270,7 +257,7 @@ TEST_F(QuotaPolicyCookieStoreTest, TestDestroyOnBackgroundThread) {
   ASSERT_EQ(0U, cookies.size());
 
   base::Time t = base::Time::Now();
-  AddCookie(GURL("http://nonpersistent.com"), "A", "B", std::string(), "/", t);
+  AddCookie("A", "B", "nonpersistent.com", "/", t);
 
   // Replace the store, which forces the current store to flush data to
   // disk. Then, after reloading the store, confirm that the data was flushed by

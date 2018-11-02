@@ -12,13 +12,14 @@
 #include "android_webview/browser/aw_permission_manager.h"
 #include "android_webview/browser/aw_quota_manager_bridge.h"
 #include "android_webview/browser/aw_resource_context.h"
-#include "android_webview/browser/jni_dependency_factory.h"
 #include "android_webview/browser/net/aw_url_request_context_getter.h"
 #include "android_webview/common/aw_content_client.h"
 #include "base/base_paths_android.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
+#include "base/single_thread_task_runner.h"
+#include "base/task_scheduler/post_task.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/metrics/metrics_service.h"
 #include "components/policy/core/browser/browser_policy_connector_base.h"
@@ -94,9 +95,9 @@ bool OverrideBlacklistForURL(const GURL& url, bool* block, int* reason) {
 
 policy::URLBlacklistManager* CreateURLBlackListManager(
     PrefService* pref_service) {
-  base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
   scoped_refptr<base::SequencedTaskRunner> background_task_runner =
-      pool->GetSequencedTaskRunner(pool->GetSequenceToken());
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND});
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
 
@@ -110,11 +111,8 @@ policy::URLBlacklistManager* CreateURLBlackListManager(
 // Delete the legacy cache dir (in the app data dir) in 10 seconds after init.
 int AwBrowserContext::legacy_cache_removal_delay_ms_ = 10000;
 
-AwBrowserContext::AwBrowserContext(
-    const FilePath path,
-    JniDependencyFactory* native_factory)
-    : context_storage_path_(path),
-      native_factory_(native_factory) {
+AwBrowserContext::AwBrowserContext(const FilePath path)
+    : context_storage_path_(path) {
   DCHECK(!g_browser_context);
   g_browser_context = this;
   BrowserContext::Initialize(this, path);
@@ -173,11 +171,10 @@ void AwBrowserContext::PreMainMessageLoopRun() {
   url_request_context_getter_ = new AwURLRequestContextGetter(
       cache_path, CreateProxyConfigService(), user_pref_service_.get());
 
-  base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
   scoped_refptr<base::SequencedTaskRunner> db_task_runner =
-      pool->GetSequencedTaskRunnerWithShutdownBehavior(
-          pool->GetSequenceToken(),
-          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
   visitedlink_master_.reset(
       new visitedlink::VisitedLinkMaster(this, this, false));
   visitedlink_master_->Init();
@@ -226,7 +223,7 @@ void AwBrowserContext::AddVisitedURLs(const std::vector<GURL>& urls) {
 
 AwQuotaManagerBridge* AwBrowserContext::GetQuotaManagerBridge() {
   if (!quota_manager_bridge_.get()) {
-    quota_manager_bridge_ = native_factory_->CreateAwQuotaManagerBridge(this);
+    quota_manager_bridge_ = AwQuotaManagerBridge::Create(this);
   }
   return quota_manager_bridge_.get();
 }
@@ -270,12 +267,6 @@ void AwBrowserContext::InitUserPrefService() {
   pref_change_registrar_.Init(user_pref_service_.get());
 
   user_prefs::UserPrefs::Set(this, user_pref_service_.get());
-}
-
-std::unique_ptr<content::ZoomLevelDelegate>
-AwBrowserContext::CreateZoomLevelDelegate(
-    const base::FilePath& partition_path) {
-  return nullptr;
 }
 
 base::FilePath AwBrowserContext::GetPath() const {

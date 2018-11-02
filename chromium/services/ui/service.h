@@ -15,10 +15,8 @@
 #include "base/macros.h"
 #include "components/discardable_memory/public/interfaces/discardable_shared_memory_manager.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_runner.h"
-#include "services/tracing/public/cpp/provider.h"
 #include "services/ui/ime/ime_registrar_impl.h"
 #include "services/ui/ime/ime_server_impl.h"
 #include "services/ui/input_devices/input_device_server.h"
@@ -50,6 +48,7 @@ class ScreenManager;
 
 namespace service_manager {
 class Connector;
+class Identity;
 }
 
 namespace ui {
@@ -60,29 +59,27 @@ namespace ws {
 class WindowServer;
 }
 
-class Service
-    : public service_manager::Service,
-      public ws::WindowServerDelegate,
-      public service_manager::InterfaceFactory<mojom::AccessibilityManager>,
-      public service_manager::InterfaceFactory<mojom::Clipboard>,
-      public service_manager::InterfaceFactory<mojom::DisplayManager>,
-      public service_manager::InterfaceFactory<mojom::Gpu>,
-      public service_manager::InterfaceFactory<mojom::IMERegistrar>,
-      public service_manager::InterfaceFactory<mojom::IMEServer>,
-      public service_manager::InterfaceFactory<mojom::UserAccessManager>,
-      public service_manager::InterfaceFactory<mojom::UserActivityMonitor>,
-      public service_manager::InterfaceFactory<
-          mojom::WindowManagerWindowTreeFactory>,
-      public service_manager::InterfaceFactory<mojom::WindowTreeFactory>,
-      public service_manager::InterfaceFactory<mojom::WindowTreeHostFactory>,
-      public service_manager::InterfaceFactory<
-          discardable_memory::mojom::DiscardableSharedMemoryManager>,
-      public service_manager::InterfaceFactory<mojom::WindowServerTest> {
+class Service : public service_manager::Service,
+                public ws::WindowServerDelegate {
  public:
   Service();
   ~Service() override;
 
  private:
+  // How the ScreenManager is configured.
+  enum ScreenManagerConfig {
+    // Initial state.
+    UNKNOWN,
+
+    // ScreenManager runs locally.
+    INTERNAL,
+
+    // Used when the window manager supplies a value of false for
+    // |automatically_create_display_roots|. In this config the ScreenManager
+    // is configured to forward calls.
+    FORWARDING,
+  };
+
   // Holds InterfaceRequests received before the first WindowTreeHost Display
   // has been established.
   struct PendingRequest;
@@ -90,7 +87,9 @@ class Service
 
   using UserIdToUserState = std::map<ws::UserId, std::unique_ptr<UserState>>;
 
-  void InitializeResources(service_manager::Connector* connector);
+  // Attempts to initialize the resource bundle. Returns true if successful,
+  // otherwise false if resources cannot be loaded.
+  bool InitializeResources(service_manager::Connector* connector);
 
   // Returns the user specific state for the user id of |remote_identity|.
   // Service owns the return value.
@@ -102,7 +101,7 @@ class Service
 
   // service_manager::Service:
   void OnStart() override;
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
 
@@ -111,67 +110,60 @@ class Service
   void OnFirstDisplayReady() override;
   void OnNoMoreDisplays() override;
   bool IsTestConfig() const override;
+  void OnWillCreateTreeForWindowManager(
+      bool automatically_create_display_roots) override;
 
-  // service_manager::InterfaceFactory<mojom::AccessibilityManager>
-  // implementation.
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::AccessibilityManagerRequest request) override;
+  void BindAccessibilityManagerRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::AccessibilityManagerRequest request);
 
-  // service_manager::InterfaceFactory<mojom::Clipboard> implementation.
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::ClipboardRequest request) override;
+  void BindClipboardRequest(const service_manager::BindSourceInfo& source_info,
+                            mojom::ClipboardRequest request);
 
-  // service_manager::InterfaceFactory<mojom::DisplayManager> implementation.
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::DisplayManagerRequest request) override;
+  void BindDisplayManagerRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::DisplayManagerRequest request);
 
-  // service_manager::InterfaceFactory<mojom::Gpu> implementation.
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::GpuRequest request) override;
+  void BindGpuRequest(const service_manager::BindSourceInfo& source_info,
+                      mojom::GpuRequest request);
 
-  // service_manager::InterfaceFactory<mojom::IMERegistrar> implementation.
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::IMERegistrarRequest request) override;
+  void BindIMERegistrarRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::IMERegistrarRequest request);
 
-  // service_manager::InterfaceFactory<mojom::IMEServer> implementation.
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::IMEServerRequest request) override;
+  void BindIMEServerRequest(const service_manager::BindSourceInfo& source_info,
+                            mojom::IMEServerRequest request);
 
-  // service_manager::InterfaceFactory<mojom::UserAccessManager> implementation.
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::UserAccessManagerRequest request) override;
+  void BindUserAccessManagerRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::UserAccessManagerRequest request);
 
-  // service_manager::InterfaceFactory<mojom::UserActivityMonitor>
-  // implementation.
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::UserActivityMonitorRequest request) override;
+  void BindUserActivityMonitorRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::UserActivityMonitorRequest request);
 
-  // service_manager::InterfaceFactory<mojom::WindowManagerWindowTreeFactory>
-  // implementation.
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::WindowManagerWindowTreeFactoryRequest request) override;
+  void BindWindowManagerWindowTreeFactoryRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::WindowManagerWindowTreeFactoryRequest request);
 
-  // service_manager::InterfaceFactory<mojom::WindowTreeFactory>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::WindowTreeFactoryRequest request) override;
+  void BindWindowTreeFactoryRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::WindowTreeFactoryRequest request);
 
-  // service_manager::InterfaceFactory<mojom::WindowTreeHostFactory>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::WindowTreeHostFactoryRequest request) override;
+  void BindWindowTreeHostFactoryRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::WindowTreeHostFactoryRequest request);
 
-  // service_manager::InterfaceFactory<
-  //    discardable_memory::mojom::DiscardableSharedMemoryManager>:
-  void Create(const service_manager::Identity& remote_identity,
-              discardable_memory::mojom::DiscardableSharedMemoryManagerRequest
-                  request) override;
+  void BindDiscardableSharedMemoryManagerRequest(
+      const service_manager::BindSourceInfo& source_info,
+      discardable_memory::mojom::DiscardableSharedMemoryManagerRequest request);
 
-  // service_manager::InterfaceFactory<mojom::WindowServerTest> implementation.
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::WindowServerTestRequest request) override;
+  void BindWindowServerTestRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::WindowServerTestRequest request);
 
   std::unique_ptr<ws::WindowServer> window_server_;
   std::unique_ptr<ui::PlatformEventSource> event_source_;
-  tracing::Provider tracing_;
   using PendingRequests = std::vector<std::unique_ptr<PendingRequest>>;
   PendingRequests pending_requests_;
 
@@ -197,6 +189,10 @@ class Service
       discardable_shared_memory_manager_;
 
   service_manager::BinderRegistry registry_;
+
+  // Set to true in StartDisplayInit().
+  bool is_gpu_ready_ = false;
+  ScreenManagerConfig screen_manager_config_ = ScreenManagerConfig::UNKNOWN;
 
   DISALLOW_COPY_AND_ASSIGN(Service);
 };

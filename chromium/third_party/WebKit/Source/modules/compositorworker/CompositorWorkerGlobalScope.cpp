@@ -5,14 +5,15 @@
 #include "modules/compositorworker/CompositorWorkerGlobalScope.h"
 
 #include <memory>
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/dom/CompositorWorkerProxyClient.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/workers/InProcessWorkerObjectProxy.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "modules/EventTargetModules.h"
 #include "modules/compositorworker/CompositorWorkerThread.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/AutoReset.h"
 
 namespace blink {

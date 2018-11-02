@@ -42,6 +42,11 @@
       showcase::kUseCaseKey : @"Payment request picker view",
     },
     @{
+      showcase::kClassForDisplayKey : @"PaymentRequestSelectorViewController",
+      showcase::kClassForInstantiationKey : @"SCPaymentsSelectorCoordinator",
+      showcase::kUseCaseKey : @"Payment request selector view",
+    },
+    @{
       showcase::kClassForDisplayKey : @"RootContainerViewController",
       showcase::kClassForInstantiationKey : @"SCRootCoordinator",
       showcase::kUseCaseKey : @"Root container",
@@ -75,6 +80,11 @@
       showcase::kClassForDisplayKey : @"UITableViewCell",
       showcase::kClassForInstantiationKey : @"UIKitTableViewCellViewController",
       showcase::kUseCaseKey : @"UIKit Table Cells",
+    },
+    @{
+      showcase::kClassForDisplayKey : @"SearchWidgetViewController",
+      showcase::kClassForInstantiationKey : @"SCSearchWidgetCoordinator",
+      showcase::kUseCaseKey : @"Search Widget",
     },
   ];
 }

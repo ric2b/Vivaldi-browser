@@ -22,18 +22,19 @@
 #include "net/quic/core/crypto/aes_128_gcm_12_encrypter.h"
 #include "net/quic/core/crypto/null_encrypter.h"
 #include "net/quic/core/quic_client_session_base.h"
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_framer.h"
 #include "net/quic/core/quic_packet_creator.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/core/quic_session.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/platform/api/quic_socket_address.h"
 #include "net/quic/platform/api/quic_str_cat.h"
 #include "net/quic/platform/api/quic_string_piece.h"
+#include "net/quic/platform/api/quic_test.h"
 #include "net/quic/platform/api/quic_text_utils.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_config_peer.h"
@@ -86,7 +87,9 @@ struct TestParams {
              QuicTag congestion_control_tag,
              bool disable_hpack_dynamic_table,
              bool force_hol_blocking,
-             bool use_cheap_stateless_reject)
+             bool use_cheap_stateless_reject,
+             bool connection_id_big_endian_client,
+             bool connection_id_big_endian_server)
       : client_supported_versions(client_supported_versions),
         server_supported_versions(server_supported_versions),
         negotiated_version(negotiated_version),
@@ -96,7 +99,9 @@ struct TestParams {
         congestion_control_tag(congestion_control_tag),
         disable_hpack_dynamic_table(disable_hpack_dynamic_table),
         force_hol_blocking(force_hol_blocking),
-        use_cheap_stateless_reject(use_cheap_stateless_reject) {}
+        use_cheap_stateless_reject(use_cheap_stateless_reject),
+        connection_id_big_endian_client(connection_id_big_endian_client),
+        connection_id_big_endian_server(connection_id_big_endian_server) {}
 
   friend std::ostream& operator<<(std::ostream& os, const TestParams& p) {
     os << "{ server_supported_versions: "
@@ -112,8 +117,11 @@ struct TestParams {
        << QuicTagToString(p.congestion_control_tag);
     os << " disable_hpack_dynamic_table: " << p.disable_hpack_dynamic_table;
     os << " force_hol_blocking: " << p.force_hol_blocking;
-    os << " use_cheap_stateless_reject: " << p.use_cheap_stateless_reject
-       << " }";
+    os << " use_cheap_stateless_reject: " << p.use_cheap_stateless_reject;
+    os << " connection_id_big_endian_client: "
+       << p.connection_id_big_endian_client;
+    os << " connection_id_big_endian_server: "
+       << p.connection_id_big_endian_server << " }";
     return os;
   }
 
@@ -126,6 +134,8 @@ struct TestParams {
   bool disable_hpack_dynamic_table;
   bool force_hol_blocking;
   bool use_cheap_stateless_reject;
+  bool connection_id_big_endian_client;
+  bool connection_id_big_endian_server;
 };
 
 // Constructs various test permutations.
@@ -144,96 +154,113 @@ std::vector<TestParams> GetTestParams() {
   QuicVersionVector version_buckets[1];
 
   for (const QuicVersion version : all_supported_versions) {
-    // Versions: 34+
-    // QUIC_VERSION_34 deprecates entropy and uses new ack and stop waiting
-    // wire formats.
+    // Versions: 35+
+    // QUIC_VERSION_35 allows endpoints to independently set stream limit.
     version_buckets[0].push_back(version);
   }
 
   // This must be kept in sync with the number of nested for-loops below as it
   // is used to prune the number of tests that are run.
-  const int kMaxEnabledOptions = 5;
+  const int kMaxEnabledOptions = 7;
   int max_enabled_options = 0;
   std::vector<TestParams> params;
   for (bool server_uses_stateless_rejects_if_peer_supported : {true, false}) {
     for (bool client_supports_stateless_rejects : {true, false}) {
-      for (const QuicTag congestion_control_tag : {kRENO, kTBBR, kQBIC}) {
+      for (const QuicTag congestion_control_tag :
+           {kRENO, kTBBR, kQBIC, kTPCC}) {
         for (bool disable_hpack_dynamic_table : {false}) {
           for (bool force_hol_blocking : {true, false}) {
             for (bool use_cheap_stateless_reject : {true, false}) {
-              int enabled_options = 0;
-              if (force_hol_blocking) {
-                ++enabled_options;
-              }
-              if (congestion_control_tag != kQBIC) {
-                ++enabled_options;
-              }
-              if (disable_hpack_dynamic_table) {
-                ++enabled_options;
-              }
-              if (client_supports_stateless_rejects) {
-                ++enabled_options;
-              }
-              if (server_uses_stateless_rejects_if_peer_supported) {
-                ++enabled_options;
-              }
-              if (use_cheap_stateless_reject) {
-                ++enabled_options;
-              }
-              CHECK_GE(kMaxEnabledOptions, enabled_options);
-              if (enabled_options > max_enabled_options) {
-                max_enabled_options = enabled_options;
-              }
+              for (bool connection_id_big_endian_client : {true, false}) {
+                for (bool connection_id_big_endian_server : {true, false}) {
+                  int enabled_options = 0;
+                  if (force_hol_blocking) {
+                    ++enabled_options;
+                  }
+                  if (congestion_control_tag != kQBIC) {
+                    ++enabled_options;
+                  }
+                  if (disable_hpack_dynamic_table) {
+                    ++enabled_options;
+                  }
+                  if (client_supports_stateless_rejects) {
+                    ++enabled_options;
+                  }
+                  if (server_uses_stateless_rejects_if_peer_supported) {
+                    ++enabled_options;
+                  }
+                  if (use_cheap_stateless_reject) {
+                    ++enabled_options;
+                  }
+                  if (connection_id_big_endian_server) {
+                    ++enabled_options;
+                  }
+                  if (connection_id_big_endian_client) {
+                    ++enabled_options;
+                  }
+                  CHECK_GE(kMaxEnabledOptions, enabled_options);
+                  if (enabled_options > max_enabled_options) {
+                    max_enabled_options = enabled_options;
+                  }
 
-              // Run tests with no options, a single option, or all the
-              // options enabled to avoid a combinatorial explosion.
-              if (enabled_options > 1 && enabled_options < kMaxEnabledOptions) {
-                continue;
-              }
-
-              for (const QuicVersionVector& client_versions : version_buckets) {
-                CHECK(!client_versions.empty());
-                if (FilterSupportedVersions(client_versions).empty()) {
-                  continue;
-                }
-                // Add an entry for server and client supporting all
-                // versions.
-                params.push_back(TestParams(
-                    client_versions, all_supported_versions,
-                    client_versions.front(), client_supports_stateless_rejects,
-                    server_uses_stateless_rejects_if_peer_supported,
-                    congestion_control_tag, disable_hpack_dynamic_table,
-                    force_hol_blocking, use_cheap_stateless_reject));
-
-                // Run version negotiation tests tests with no options, or
-                // all the options enabled to avoid a combinatorial
-                // explosion.
-                if (enabled_options > 1 &&
-                    enabled_options < kMaxEnabledOptions) {
-                  continue;
-                }
-
-                // Test client supporting all versions and server supporting
-                // 1 version. Simulate an old server and exercise version
-                // downgrade in the client. Protocol negotiation should
-                // occur.  Skip the i = 0 case because it is essentially the
-                // same as the default case.
-                for (size_t i = 1; i < client_versions.size(); ++i) {
-                  QuicVersionVector server_supported_versions;
-                  server_supported_versions.push_back(client_versions[i]);
-                  if (FilterSupportedVersions(server_supported_versions)
-                          .empty()) {
+                  // Run tests with no options, a single option, or all the
+                  // options enabled to avoid a combinatorial explosion.
+                  if (enabled_options > 1 &&
+                      enabled_options < kMaxEnabledOptions) {
                     continue;
                   }
-                  params.push_back(TestParams(
-                      client_versions, server_supported_versions,
-                      server_supported_versions.front(),
-                      client_supports_stateless_rejects,
-                      server_uses_stateless_rejects_if_peer_supported,
-                      congestion_control_tag, disable_hpack_dynamic_table,
-                      force_hol_blocking, use_cheap_stateless_reject));
-                  }    // End of version for loop.
-                }      // End of 2nd version for loop.
+
+                  for (const QuicVersionVector& client_versions :
+                       version_buckets) {
+                    CHECK(!client_versions.empty());
+                    if (FilterSupportedVersions(client_versions).empty()) {
+                      continue;
+                    }
+                    // Add an entry for server and client supporting all
+                    // versions.
+                    params.push_back(TestParams(
+                        client_versions, all_supported_versions,
+                        client_versions.front(),
+                        client_supports_stateless_rejects,
+                        server_uses_stateless_rejects_if_peer_supported,
+                        congestion_control_tag, disable_hpack_dynamic_table,
+                        force_hol_blocking, use_cheap_stateless_reject,
+                        connection_id_big_endian_client,
+                        connection_id_big_endian_server));
+
+                    // Run version negotiation tests tests with no options, or
+                    // all the options enabled to avoid a combinatorial
+                    // explosion.
+                    if (enabled_options > 1 &&
+                        enabled_options < kMaxEnabledOptions) {
+                      continue;
+                    }
+
+                    // Test client supporting all versions and server supporting
+                    // 1 version. Simulate an old server and exercise version
+                    // downgrade in the client. Protocol negotiation should
+                    // occur.  Skip the i = 0 case because it is essentially the
+                    // same as the default case.
+                    for (size_t i = 1; i < client_versions.size(); ++i) {
+                      QuicVersionVector server_supported_versions;
+                      server_supported_versions.push_back(client_versions[i]);
+                      if (FilterSupportedVersions(server_supported_versions)
+                              .empty()) {
+                        continue;
+                      }
+                      params.push_back(TestParams(
+                          client_versions, server_supported_versions,
+                          server_supported_versions.front(),
+                          client_supports_stateless_rejects,
+                          server_uses_stateless_rejects_if_peer_supported,
+                          congestion_control_tag, disable_hpack_dynamic_table,
+                          force_hol_blocking, use_cheap_stateless_reject,
+                          connection_id_big_endian_client,
+                          connection_id_big_endian_server));
+                    }  // End of version for loop.
+                  }    // End of 2nd version for loop.
+                }      // End of connection_id_big_endian_server
+              }        // End of connection_id_big_endian_client
             }          // End of use_cheap_stateless_reject for loop.
           }            // End of force_hol_blocking loop.
         }              // End of disable_hpack_dynamic_table for loop.
@@ -268,7 +295,7 @@ class ClientDelegate : public PacketDroppingTestWriter::Delegate {
   QuicClient* client_;
 };
 
-class EndToEndTest : public ::testing::TestWithParam<TestParams> {
+class EndToEndTest : public QuicTestWithParam<TestParams> {
  protected:
   EndToEndTest()
       : initialized_(false),
@@ -306,6 +333,11 @@ class EndToEndTest : public ::testing::TestWithParam<TestParams> {
 
     AddToCache("/foo", 200, kFooResponseBody);
     AddToCache("/bar", 200, kBarResponseBody);
+
+    FLAGS_quic_restart_flag_quic_big_endian_connection_id_client =
+        GetParam().connection_id_big_endian_client;
+    FLAGS_quic_restart_flag_quic_big_endian_connection_id_server =
+        GetParam().connection_id_big_endian_server;
   }
 
   ~EndToEndTest() override {
@@ -393,6 +425,10 @@ class EndToEndTest : public ::testing::TestWithParam<TestParams> {
     if (GetParam().congestion_control_tag == kQBIC &&
         FLAGS_quic_reloadable_flag_quic_enable_cubic_per_ack_updates) {
       copt.push_back(kCPAU);
+    }
+    if (GetParam().congestion_control_tag == kTPCC &&
+        FLAGS_quic_reloadable_flag_quic_enable_pcc) {
+      copt.push_back(kTPCC);
     }
 
     if (support_server_push_) {
@@ -572,7 +608,16 @@ class EndToEndTest : public ::testing::TestWithParam<TestParams> {
     stream_factory_ = factory;
   }
 
-  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
+  QuicStreamId GetNthClientInitiatedId(int n) {
+    return QuicSpdySessionPeer::GetNthClientInitiatedStreamId(
+        *client_->client()->session(), n);
+  }
+
+  QuicStreamId GetNthServerInitiatedId(int n) {
+    return QuicSpdySessionPeer::GetNthServerInitiatedStreamId(
+        *client_->client()->session(), n);
+  }
+
   bool initialized_;
   QuicSocketAddress server_address_;
   string server_hostname_;
@@ -603,7 +648,7 @@ TEST_P(EndToEndTest, HandshakeSuccessful) {
   ASSERT_TRUE(Initialize());
   EXPECT_TRUE(client_->client()->WaitForCryptoHandshakeConfirmed());
   QuicCryptoStream* crypto_stream =
-      QuicSessionPeer::GetCryptoStream(client_->client()->session());
+      QuicSessionPeer::GetMutableCryptoStream(client_->client()->session());
   QuicStreamSequencer* sequencer = QuicStreamPeer::sequencer(crypto_stream);
   EXPECT_NE(FLAGS_quic_reloadable_flag_quic_release_crypto_stream_buffer,
             QuicStreamSequencerPeer::IsUnderlyingBufferAllocated(sequencer));
@@ -611,7 +656,7 @@ TEST_P(EndToEndTest, HandshakeSuccessful) {
   QuicDispatcher* dispatcher =
       QuicServerPeer::GetDispatcher(server_thread_->server());
   QuicSession* server_session = dispatcher->session_map().begin()->second.get();
-  crypto_stream = QuicSessionPeer::GetCryptoStream(server_session);
+  crypto_stream = QuicSessionPeer::GetMutableCryptoStream(server_session);
   sequencer = QuicStreamPeer::sequencer(crypto_stream);
   EXPECT_NE(FLAGS_quic_reloadable_flag_quic_release_crypto_stream_buffer,
             QuicStreamSequencerPeer::IsUnderlyingBufferAllocated(sequencer));
@@ -1167,7 +1212,8 @@ TEST_P(EndToEndTest, InvalidStream) {
 
   // Force the client to write with a stream ID belonging to a nonexistent
   // server-side stream.
-  QuicSessionPeer::SetNextOutgoingStreamId(client_->client()->session(), 2);
+  QuicSpdySession* session = client_->client()->session();
+  QuicSessionPeer::SetNextOutgoingStreamId(session, GetNthServerInitiatedId(0));
 
   client_->SendCustomSynchronousRequest(headers, body);
   EXPECT_EQ(QUIC_STREAM_CONNECTION_ERROR, client_->stream_error());
@@ -1248,41 +1294,6 @@ TEST_P(EndToEndTest, Timeout) {
   }
 }
 
-TEST_P(EndToEndTest, NegotiateMaxOpenStreams) {
-  // Negotiate 1 max open stream.
-  client_config_.SetMaxStreamsPerConnection(1, 1);
-  ASSERT_TRUE(Initialize());
-  EXPECT_TRUE(client_->client()->WaitForCryptoHandshakeConfirmed());
-
-  if (negotiated_version_ > QUIC_VERSION_34) {
-    // Newer versions use max incoming dynamic streams.
-    return;
-  }
-
-  // Make the client misbehave after negotiation.
-  const int kServerMaxStreams = kMaxStreamsMinimumIncrement + 1;
-  QuicSessionPeer::SetMaxOpenOutgoingStreams(client_->client()->session(),
-                                             kServerMaxStreams + 1);
-
-  SpdyHeaderBlock headers;
-  headers[":method"] = "POST";
-  headers[":path"] = "/foo";
-  headers[":scheme"] = "https";
-  headers[":authority"] = server_hostname_;
-  headers["content-length"] = "3";
-
-  // The server supports a small number of additional streams beyond the
-  // negotiated limit. Open enough streams to go beyond that limit.
-  for (int i = 0; i < kServerMaxStreams + 1; ++i) {
-    client_->SendMessage(headers, "", /*fin=*/false);
-  }
-  client_->WaitForResponse();
-
-  EXPECT_TRUE(client_->connected());
-  EXPECT_EQ(QUIC_REFUSED_STREAM, client_->stream_error());
-  EXPECT_EQ(QUIC_NO_ERROR, client_->connection_error());
-}
-
 TEST_P(EndToEndTest, MaxIncomingDynamicStreamsLimitRespected) {
   // Set a limit on maximum number of incoming dynamic streams.
   // Make sure the limit is respected.
@@ -1292,14 +1303,8 @@ TEST_P(EndToEndTest, MaxIncomingDynamicStreamsLimitRespected) {
   ASSERT_TRUE(Initialize());
   EXPECT_TRUE(client_->client()->WaitForCryptoHandshakeConfirmed());
 
-  if (negotiated_version_ <= QUIC_VERSION_34) {
-    // Earlier versions negotiated max open streams.
-    return;
-  }
-
   // Make the client misbehave after negotiation.
-  const int kServerMaxStreams =
-      kMaxStreamsMinimumIncrement + kServerMaxIncomingDynamicStreams;
+  const int kServerMaxStreams = kMaxStreamsMinimumIncrement + 1;
   QuicSessionPeer::SetMaxOpenOutgoingStreams(client_->client()->session(),
                                              kServerMaxStreams + 1);
 
@@ -1333,11 +1338,6 @@ TEST_P(EndToEndTest, SetIndependentMaxIncomingDynamicStreamsLimits) {
   ASSERT_TRUE(Initialize());
   EXPECT_TRUE(client_->client()->WaitForCryptoHandshakeConfirmed());
 
-  if (negotiated_version_ <= QUIC_VERSION_34) {
-    // Earlier versions negotiated max open streams.
-    return;
-  }
-
   // The client has received the server's limit and vice versa.
   EXPECT_EQ(kServerMaxIncomingDynamicStreams,
             client_->client()->session()->max_open_outgoing_streams());
@@ -1353,6 +1353,13 @@ TEST_P(EndToEndTest, SetIndependentMaxIncomingDynamicStreamsLimits) {
 TEST_P(EndToEndTest, NegotiateCongestionControl) {
   FLAGS_quic_reloadable_flag_quic_allow_new_bbr = true;
   ASSERT_TRUE(Initialize());
+
+  // For PCC, the underlying implementation may be a stub with a
+  // different name-tag.  Skip the rest of this test.
+  if (GetParam().congestion_control_tag == kTPCC) {
+    return;
+  }
+
   EXPECT_TRUE(client_->client()->WaitForCryptoHandshakeConfirmed());
 
   CongestionControlType expected_congestion_control_type = kReno;
@@ -1376,22 +1383,6 @@ TEST_P(EndToEndTest, NegotiateCongestionControl) {
                 *GetSentPacketManagerFromFirstServerSession())
                 ->GetCongestionControlType());
   server_thread_->Resume();
-}
-
-TEST_P(EndToEndTest, LimitMaxOpenStreams) {
-  // Server limits the number of max streams to 2.
-  server_config_.SetMaxStreamsPerConnection(2, 2);
-  // Client tries to negotiate for 10.
-  client_config_.SetMaxStreamsPerConnection(10, 5);
-
-  ASSERT_TRUE(Initialize());
-  EXPECT_TRUE(client_->client()->WaitForCryptoHandshakeConfirmed());
-  if (negotiated_version_ > QUIC_VERSION_34) {
-    // No negotiated max streams beyond version 34.
-    return;
-  }
-  QuicConfig* client_negotiated_config = client_->client()->session()->config();
-  EXPECT_EQ(2u, client_negotiated_config->MaxStreamsPerConnection());
 }
 
 TEST_P(EndToEndTest, ClientSuggestsRTT) {
@@ -1574,7 +1565,7 @@ TEST_P(EndToEndTest, StreamCancelErrorTest) {
   client_->client()->WaitForEvents();
   // Transmit the cancel, and ensure the connection is torn down properly.
   SetPacketLossPercentage(0);
-  QuicStreamId stream_id = kClientDataStreamId1;
+  QuicStreamId stream_id = GetNthClientInitiatedId(0);
   session->SendRstStream(stream_id, QUIC_STREAM_CANCELLED, 0);
 
   // WaitForEvents waits 50ms and returns true if there are outstanding
@@ -1733,8 +1724,6 @@ TEST_P(EndToEndTest, DifferentFlowControlWindows) {
 
 // Test negotiation of IFWA connection option.
 TEST_P(EndToEndTest, NegotiatedServerInitialFlowControlWindow) {
-  FLAGS_quic_reloadable_flag_quic_large_ifw_options = true;
-
   const uint32_t kClientStreamIFCW = 123456;
   const uint32_t kClientSessionIFCW = 234567;
   set_client_initial_stream_flow_control_receive_window(kClientStreamIFCW);
@@ -1797,7 +1786,7 @@ TEST_P(EndToEndTest, HeadersAndCryptoStreamsNoConnectionFlowControl) {
   server_thread_->WaitForCryptoHandshakeConfirmed();
 
   QuicCryptoStream* crypto_stream =
-      QuicSessionPeer::GetCryptoStream(client_->client()->session());
+      QuicSessionPeer::GetMutableCryptoStream(client_->client()->session());
   EXPECT_LT(
       QuicFlowControllerPeer::SendWindowSize(crypto_stream->flow_controller()),
       kStreamIFCW);
@@ -1848,8 +1837,10 @@ TEST_P(EndToEndTest, FlowControlsSynced) {
   ExpectFlowControlsSynced(client_session->flow_controller(),
                            server_session->flow_controller());
   ExpectFlowControlsSynced(
-      QuicSessionPeer::GetCryptoStream(client_session)->flow_controller(),
-      QuicSessionPeer::GetCryptoStream(server_session)->flow_controller());
+      QuicSessionPeer::GetMutableCryptoStream(client_session)
+          ->flow_controller(),
+      QuicSessionPeer::GetMutableCryptoStream(server_session)
+          ->flow_controller());
   SpdyFramer spdy_framer(SpdyFramer::ENABLE_COMPRESSION);
   SpdySettingsIR settings_frame;
   settings_frame.AddSetting(SETTINGS_MAX_HEADER_LIST_SIZE,
@@ -2030,10 +2021,10 @@ TEST_P(EndToEndTest, ServerSendPublicReset) {
   QuicConnectionId connection_id =
       client_->client()->session()->connection()->connection_id();
   QuicPublicResetPacket header;
-  header.public_header.connection_id = connection_id;
+  header.public_header.connection_id =
+      GetPeerInMemoryConnectionId(connection_id);
   header.public_header.reset_flag = true;
   header.public_header.version_flag = false;
-  header.rejected_packet_number = 10101;
   QuicFramer framer(server_supported_versions_, QuicTime::Zero(),
                     Perspective::IS_SERVER);
   std::unique_ptr<QuicEncryptedPacket> packet(
@@ -2063,10 +2054,10 @@ TEST_P(EndToEndTest, ServerSendPublicResetWithDifferentConnectionId) {
   QuicConnectionId incorrect_connection_id =
       client_->client()->session()->connection()->connection_id() + 1;
   QuicPublicResetPacket header;
-  header.public_header.connection_id = incorrect_connection_id;
+  header.public_header.connection_id =
+      GetPeerInMemoryConnectionId(incorrect_connection_id);
   header.public_header.reset_flag = true;
   header.public_header.version_flag = false;
-  header.rejected_packet_number = 10101;
   QuicFramer framer(server_supported_versions_, QuicTime::Zero(),
                     Perspective::IS_SERVER);
   std::unique_ptr<QuicEncryptedPacket> packet(
@@ -2102,7 +2093,6 @@ TEST_P(EndToEndTest, ClientSendPublicResetWithDifferentConnectionId) {
   header.public_header.connection_id = incorrect_connection_id;
   header.public_header.reset_flag = true;
   header.public_header.version_flag = false;
-  header.rejected_packet_number = 10101;
   QuicFramer framer(server_supported_versions_, QuicTime::Zero(),
                     Perspective::IS_CLIENT);
   std::unique_ptr<QuicEncryptedPacket> packet(
@@ -2128,8 +2118,9 @@ TEST_P(EndToEndTest, ServerSendVersionNegotiationWithDifferentConnectionId) {
   QuicConnectionId incorrect_connection_id =
       client_->client()->session()->connection()->connection_id() + 1;
   std::unique_ptr<QuicEncryptedPacket> packet(
-      QuicFramer::BuildVersionNegotiationPacket(incorrect_connection_id,
-                                                server_supported_versions_));
+      QuicFramer::BuildVersionNegotiationPacket(
+          GetPeerInMemoryConnectionId(incorrect_connection_id),
+          server_supported_versions_));
   testing::NiceMock<MockQuicConnectionDebugVisitor> visitor;
   client_->client()->session()->connection()->set_debug_visitor(&visitor);
   EXPECT_CALL(visitor, OnIncorrectConnectionId(incorrect_connection_id))
@@ -2448,6 +2439,9 @@ class ClientSessionThatDropsBody : public QuicClientSession {
     return QuicMakeUnique<ClientStreamThatDropsBody>(GetNextOutgoingStreamId(),
                                                      this);
   }
+  std::unique_ptr<QuicStream> CreateStream(QuicStreamId id) override {
+    return QuicMakeUnique<ClientStreamThatDropsBody>(id, this);
+  }
 };
 
 class MockableQuicClientThatDropsBody : public MockableQuicClient {
@@ -2485,8 +2479,9 @@ class QuicTestClientThatDropsBody : public QuicTestClient {
                        config,
                        supported_versions) {
     set_client(new MockableQuicClientThatDropsBody(
-        server_address, QuicServerId(server_hostname, server_address.port(),
-                                     PRIVACY_MODE_DISABLED),
+        server_address,
+        QuicServerId(server_hostname, server_address.port(),
+                     PRIVACY_MODE_DISABLED),
         config, supported_versions, epoll_server()));
   }
   ~QuicTestClientThatDropsBody() override {}
@@ -2558,49 +2553,6 @@ TEST_P(EndToEndTest, EarlyResponseFinRecording) {
               .size());
 
   server_thread_->Resume();
-}
-
-TEST_P(EndToEndTest, LargePostEarlyResponse) {
-  const uint32_t kWindowSize = 65536;
-  set_client_initial_stream_flow_control_receive_window(kWindowSize);
-  set_client_initial_session_flow_control_receive_window(kWindowSize);
-  set_server_initial_stream_flow_control_receive_window(kWindowSize);
-  set_server_initial_session_flow_control_receive_window(kWindowSize);
-
-  ASSERT_TRUE(Initialize());
-  if (FLAGS_quic_reloadable_flag_quic_always_enable_bidi_streaming) {
-    // This test is testing the same behavior as
-    // EarlyResponseWithQuicStreamNoError, except for the additional final check
-    // that the stream is reset on early response. Once this flag is deprecated
-    // the tests will be the same and this one can be removed.
-    return;
-  }
-
-  EXPECT_TRUE(client_->client()->WaitForCryptoHandshakeConfirmed());
-
-  // POST to a URL that gets an early error response, after the headers are
-  // received and before the body is received.
-  SpdyHeaderBlock headers;
-  headers[":method"] = "POST";
-  headers[":path"] = "/foo";
-  headers[":scheme"] = "https";
-  headers[":authority"] = server_hostname_;
-  headers["content-length"] = "-1";
-
-  // Tell the client to not close the stream if it receives an early response.
-  client_->set_allow_bidirectional_data(true);
-  // Send the headers.
-  client_->SendMessage(headers, "", /*fin=*/false);
-
-  // Receive the response and let the server close writing.
-  client_->WaitForInitialResponse();
-  EXPECT_EQ("500", client_->response_headers()->find(":status")->second);
-
-  // Receive the reset stream from server on early response.
-  QuicStream* stream =
-      client_->client()->session()->GetOrCreateStream(kClientDataStreamId1);
-  // The stream is reset by server's reset stream.
-  EXPECT_EQ(stream, nullptr);
 }
 
 TEST_P(EndToEndTest, Trailers) {
@@ -3049,6 +3001,48 @@ TEST_P(EndToEndTest, WayTooLongRequestHeaders) {
   client_->WaitForResponse();
   EXPECT_EQ(QUIC_HEADERS_STREAM_DATA_DECOMPRESS_FAILURE,
             client_->connection_error());
+}
+
+class WindowUpdateObserver : public QuicConnectionDebugVisitor {
+ public:
+  WindowUpdateObserver() : num_window_update_frames_(0) {}
+
+  size_t num_window_update_frames() const { return num_window_update_frames_; }
+
+  void OnWindowUpdateFrame(const QuicWindowUpdateFrame& frame) override {
+    ++num_window_update_frames_;
+  }
+
+ private:
+  size_t num_window_update_frames_;
+};
+
+TEST_P(EndToEndTest, WindowUpdateInAck) {
+  FLAGS_quic_reloadable_flag_quic_enable_version_38 = true;
+  FLAGS_quic_reloadable_flag_quic_enable_version_39 = true;
+  ASSERT_TRUE(Initialize());
+  EXPECT_TRUE(client_->client()->WaitForCryptoHandshakeConfirmed());
+  WindowUpdateObserver observer;
+  QuicConnection* client_connection =
+      client_->client()->session()->connection();
+  client_connection->set_debug_visitor(&observer);
+  QuicVersion version = client_connection->version();
+  // 100KB body.
+  string body(100 * 1024, 'a');
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
+  client_->Disconnect();
+  if (version > QUIC_VERSION_38) {
+    EXPECT_LT(0u, observer.num_window_update_frames());
+  } else {
+    EXPECT_EQ(0u, observer.num_window_update_frames());
+  }
 }
 
 class EndToEndBufferedPacketsTest : public EndToEndTest {

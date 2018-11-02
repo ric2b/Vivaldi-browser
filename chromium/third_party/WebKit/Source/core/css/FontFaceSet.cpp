@@ -27,7 +27,6 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSSegmentedFontFace.h"
 #include "core/css/FontFaceCache.h"
@@ -41,6 +40,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/Histogram.h"
+#include "platform/bindings/ScriptState.h"
 
 namespace blink {
 
@@ -71,7 +71,7 @@ class LoadFontPromiseResolver final
       : num_loading_(faces.size()),
         error_occured_(false),
         resolver_(ScriptPromiseResolver::Create(script_state)) {
-    font_faces_.Swap(faces);
+    font_faces_.swap(faces);
   }
 
   HeapVector<Member<FontFace>> font_faces_;
@@ -287,7 +287,7 @@ void FontFaceSet::clearForBinding(ScriptState*, ExceptionState&) {
     if (font_face->LoadStatus() == FontFace::kLoading)
       RemoveFromLoadingFonts(font_face);
   }
-  non_css_connected_faces_.Clear();
+  non_css_connected_faces_.clear();
   font_selector->FontFaceInvalidated();
 }
 
@@ -298,7 +298,7 @@ bool FontFaceSet::deleteForBinding(ScriptState*,
   if (!InActiveDocumentContext())
     return false;
   HeapListHashSet<Member<FontFace>>::iterator it =
-      non_css_connected_faces_.Find(font_face);
+      non_css_connected_faces_.find(font_face);
   if (it != non_css_connected_faces_.end()) {
     non_css_connected_faces_.erase(it);
     CSSFontSelector* font_selector =
@@ -362,11 +362,11 @@ void FontFaceSet::FireDoneEventIfPossible() {
     FontFaceSetLoadEvent* error_event = nullptr;
     done_event = FontFaceSetLoadEvent::CreateForFontFaces(
         EventTypeNames::loadingdone, loaded_fonts_);
-    loaded_fonts_.Clear();
+    loaded_fonts_.clear();
     if (!failed_fonts_.IsEmpty()) {
       error_event = FontFaceSetLoadEvent::CreateForFontFaces(
           EventTypeNames::loadingerror, failed_fonts_);
-      failed_fonts_.Clear();
+      failed_fonts_.clear();
     }
     is_loading_ = false;
     DispatchEvent(done_event);

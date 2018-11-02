@@ -16,6 +16,7 @@
 #include "ipc/ipc_message_macros.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/request_priority.h"
+#include "net/nqe/effective_connection_type.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
@@ -43,6 +44,8 @@ IPC_ENUM_TRAITS_VALIDATE(ui::PageTransition,
                           ui::PageTransition::PAGE_TRANSITION_LAST_CORE))
 IPC_ENUM_TRAITS_MAX_VALUE(net::NetworkChangeNotifier::ConnectionType,
                           net::NetworkChangeNotifier::CONNECTION_LAST)
+IPC_ENUM_TRAITS_MAX_VALUE(net::EffectiveConnectionType,
+                          net::EFFECTIVE_CONNECTION_TYPE_LAST - 1)
 IPC_ENUM_TRAITS_MAX_VALUE(content::ConsoleMessageLevel,
                           content::CONSOLE_MESSAGE_LEVEL_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebFrameSerializerCacheControlPolicy,
@@ -75,6 +78,10 @@ IPC_ENUM_TRAITS_MIN_MAX_VALUE(content::ImageAnimationPolicy,
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(content::ViewportStyle,
                               content::ViewportStyle::DEFAULT,
                               content::ViewportStyle::LAST)
+IPC_ENUM_TRAITS_MIN_MAX_VALUE(
+    content::AutoplayPolicy,
+    content::AutoplayPolicy::kNoUserGestureRequired,
+    content::AutoplayPolicy::kUserGestureRequiredForCrossOrigin)
 
 IPC_STRUCT_TRAITS_BEGIN(blink::WebPoint)
   IPC_STRUCT_TRAITS_MEMBER(x)
@@ -127,7 +134,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(context_menu_on_mouse_up)
   IPC_STRUCT_TRAITS_MEMBER(javascript_enabled)
   IPC_STRUCT_TRAITS_MEMBER(web_security_enabled)
-  IPC_STRUCT_TRAITS_MEMBER(javascript_can_open_windows_automatically)
   IPC_STRUCT_TRAITS_MEMBER(loads_images_automatically)
   IPC_STRUCT_TRAITS_MEMBER(images_enabled)
   IPC_STRUCT_TRAITS_MEMBER(plugins_enabled)
@@ -223,7 +229,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(force_enable_zoom)
   IPC_STRUCT_TRAITS_MEMBER(fullscreen_supported)
   IPC_STRUCT_TRAITS_MEMBER(double_tap_to_zoom_enabled)
-  IPC_STRUCT_TRAITS_MEMBER(user_gesture_required_for_media_playback)
   IPC_STRUCT_TRAITS_MEMBER(media_playback_gesture_whitelist_scope)
   IPC_STRUCT_TRAITS_MEMBER(default_video_poster_url)
   IPC_STRUCT_TRAITS_MEMBER(support_deprecated_target_density_dpi)
@@ -242,10 +247,10 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(progress_bar_completion)
   IPC_STRUCT_TRAITS_MEMBER(spellcheck_enabled_by_default)
   IPC_STRUCT_TRAITS_MEMBER(video_fullscreen_orientation_lock_enabled)
+  IPC_STRUCT_TRAITS_MEMBER(video_rotate_to_fullscreen_enabled)
   IPC_STRUCT_TRAITS_MEMBER(video_fullscreen_detection_enabled)
   IPC_STRUCT_TRAITS_MEMBER(embedded_media_experience_enabled)
-#else  // defined(OS_ANDROID)
-  IPC_STRUCT_TRAITS_MEMBER(cross_origin_media_playback_requires_user_gesture)
+  IPC_STRUCT_TRAITS_MEMBER(page_popups_suppressed)
 #endif  // defined(OS_ANDROID)
   IPC_STRUCT_TRAITS_MEMBER(default_minimum_page_scale_factor)
   IPC_STRUCT_TRAITS_MEMBER(default_maximum_page_scale_factor)
@@ -255,6 +260,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(presentation_receiver)
   IPC_STRUCT_TRAITS_MEMBER(media_controls_enabled)
   IPC_STRUCT_TRAITS_MEMBER(do_not_update_selection_on_mutating_selection_range)
+  IPC_STRUCT_TRAITS_MEMBER(autoplay_policy)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(blink::mojom::WindowFeatures)

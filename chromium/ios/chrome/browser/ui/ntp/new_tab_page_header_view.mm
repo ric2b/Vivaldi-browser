@@ -9,6 +9,7 @@
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/tabs/tab_model_observer.h"
 #import "ios/chrome/browser/ui/image_util.h"
+#import "ios/chrome/browser/ui/ntp/google_landing_data_source.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_toolbar_controller.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
@@ -24,9 +25,8 @@ const CGFloat kMaxConstraintConstantDiff = 5;
 
 }  // namespace
 
-@interface NewTabPageHeaderView ()<TabModelObserver> {
+@interface NewTabPageHeaderView () {
   base::scoped_nsobject<NewTabPageToolbarController> _toolbarController;
-  base::scoped_nsobject<TabModel> _tabModel;
   base::scoped_nsobject<UIImageView> _searchBoxBorder;
   base::scoped_nsobject<UIImageView> _shadow;
 }
@@ -44,7 +44,6 @@ const CGFloat kMaxConstraintConstantDiff = 5;
 }
 
 - (void)dealloc {
-  [_tabModel removeObserver:self];
   [super dealloc];
 }
 
@@ -65,39 +64,41 @@ const CGFloat kMaxConstraintConstantDiff = 5;
   [self addSubview:[_toolbarController view]];
 }
 
-- (void)addToolbarWithDelegate:(id<WebToolbarDelegate>)toolbarDelegate
-                       focuser:(id<OmniboxFocuser>)focuser
-                      tabModel:(TabModel*)tabModel
-              readingListModel:(ReadingListModel*)readingListModel {
+- (void)addToolbarWithDataSource:(id<GoogleLandingDataSource>)dataSource
+                      dispatcher:(id)dispatcher {
   DCHECK(!_toolbarController);
-  DCHECK(focuser);
+  DCHECK(dataSource);
 
-  _toolbarController.reset([[NewTabPageToolbarController alloc]
-      initWithToolbarDelegate:toolbarDelegate
-                      focuser:focuser]);
-  _toolbarController.get().readingListModel = readingListModel;
-  [_tabModel removeObserver:self];
-  _tabModel.reset([tabModel retain]);
-  [self addTabModelObserver];
+  _toolbarController.reset([[NewTabPageToolbarController alloc] init]);
+  [_toolbarController setDispatcher:dispatcher];
+  _toolbarController.get().readingListModel = [dataSource readingListModel];
 
   UIView* toolbarView = [_toolbarController view];
   CGRect toolbarFrame = self.bounds;
   toolbarFrame.size.height = ntp_header::kToolbarHeight;
   toolbarView.frame = toolbarFrame;
   [toolbarView setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
-  [self hideToolbarViewsForNewTabPage];
 
   [self setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
   [self addSubview:[_toolbarController view]];
+}
+
+- (void)setCanGoForward:(BOOL)canGoForward {
+  [_toolbarController setCanGoForward:canGoForward];
+  [self hideToolbarViewsForNewTabPage];
+}
+
+- (void)setCanGoBack:(BOOL)canGoBack {
+  [_toolbarController setCanGoBack:canGoBack];
+  [self hideToolbarViewsForNewTabPage];
 }
 
 - (void)hideToolbarViewsForNewTabPage {
   [_toolbarController hideViewsForNewTabPage:YES];
 };
 
-- (void)addTabModelObserver {
-  [_tabModel addObserver:self];
-  [_toolbarController setTabCount:[_tabModel count]];
+- (void)setToolbarTabCount:(int)tabCount {
+  [_toolbarController setTabCount:tabCount];
 }
 
 - (void)addViewsToSearchField:(UIView*)searchField {
@@ -122,11 +123,6 @@ const CGFloat kMaxConstraintConstantDiff = 5;
                                UIViewAutoresizingFlexibleTopMargin];
   [searchField addSubview:_shadow];
   [_shadow setAlpha:0];
-}
-
-- (void)tabModelDidChangeTabCount:(TabModel*)model {
-  DCHECK(model == _tabModel);
-  [_toolbarController setTabCount:[_tabModel count]];
 }
 
 - (void)updateSearchField:(UIView*)searchField

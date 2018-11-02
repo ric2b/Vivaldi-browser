@@ -286,6 +286,11 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   LayoutUnit BorderWidth() const { return BorderLeft() + BorderRight(); }
   LayoutUnit BorderHeight() const { return BorderTop() + BorderBottom(); }
 
+  virtual LayoutRectOutsets BorderBoxOutsets() const {
+    return LayoutRectOutsets(BorderTop(), BorderRight(), BorderBottom(),
+                             BorderLeft());
+  }
+
   // Insets from the border box to the inside of the border.
   LayoutRectOutsets BorderInsets() const {
     return LayoutRectOutsets(-BorderTop(), -BorderRight(), -BorderBottom(),
@@ -423,7 +428,7 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
     return false;
   }
 
-  void InvalidateTreeIfNeeded(const PaintInvalidationState&) override;
+  void DeprecatedInvalidateTree(const PaintInvalidationState&) override;
 
   // http://www.w3.org/TR/css3-background/#body-background
   // <html> root element with no background steals background from its first

@@ -138,6 +138,12 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   root_clip_ptr->test_properties()->AddChild(std::move(root_ptr));
   host_impl.active_tree()->SetRootLayerForTesting(std::move(root_clip_ptr));
 
+  // Make root the inner viewport scroll layer. This ensures the later call to
+  // |SetViewportBoundsDelta| will be on a viewport layer.
+  LayerTreeImpl::ViewportLayerIds viewport_ids;
+  viewport_ids.inner_viewport_scroll = root->id();
+  host_impl.active_tree()->SetViewportLayersFromIds(viewport_ids);
+
   root->test_properties()->force_render_surface = true;
   root->SetMasksToBounds(true);
   root->layer_tree_impl()->ResetAllChangeTracking();
@@ -192,11 +198,13 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
                                                    arbitrary_transform));
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->ScrollBy(arbitrary_vector2d);
                                      root->SetNeedsPushProperties());
-  // SetBoundsDelta changes subtree only when masks_to_bounds is true and it
-  // doesn't set needs_push_properties as it is always called on active tree.
+  // SetViewportBoundsDelta changes subtree only when masks_to_bounds is true
+  // and it doesn't set needs_push_properties as it is always called on active
+  // tree.
   root->SetMasksToBounds(true);
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetBoundsDelta(arbitrary_vector2d);
-                                     root->SetNeedsPushProperties());
+  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(
+      root->SetViewportBoundsDelta(arbitrary_vector2d);
+      root->SetNeedsPushProperties());
 
   // Changing these properties only affects the layer itself.
   EXECUTE_AND_VERIFY_ONLY_LAYER_CHANGED(root->SetDrawsContent(true));
@@ -218,7 +226,7 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   // Changing these properties does not cause the layer to be marked as changed
   // but does cause the layer to need to push properties.
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
-      root->SetElementId(ElementId(2, 0)));
+      root->SetElementId(ElementId(2)));
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
       root->SetMutableProperties(MutableProperty::kOpacity);
       root->SetNeedsPushProperties());
@@ -342,7 +350,7 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetBackgroundColor(arbitrary_color));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetBounds(arbitrary_size));
-  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetElementId(ElementId(2, 0)));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetElementId(ElementId(2)));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetMutableProperties(MutableProperty::kTransform));
 }
@@ -382,6 +390,43 @@ TEST(LayerImplTest, SafeOpaqueBackgroundColor) {
         }
       }
     }
+  }
+}
+
+TEST(LayerImplTest, PerspectiveTransformHasReasonableScale) {
+  FakeImplTaskRunnerProvider task_runner_provider;
+  TestTaskGraphRunner task_graph_runner;
+  std::unique_ptr<CompositorFrameSink> compositor_frame_sink =
+      FakeCompositorFrameSink::Create3d();
+  LayerTreeSettings settings;
+  settings.layer_transforms_should_scale_layer_contents = true;
+  FakeLayerTreeHostImpl host_impl(settings, &task_runner_provider,
+                                  &task_graph_runner);
+  auto owned_layer = LayerImpl::Create(host_impl.active_tree(), 1);
+  LayerImpl* layer = owned_layer.get();
+  layer->set_contributes_to_drawn_render_surface(true);
+  host_impl.active_tree()->SetRootLayerForTesting(std::move(owned_layer));
+  host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
+
+  // Ensure that we are close to the maximum scale for the matrix.
+  {
+    gfx::Transform transform;
+    transform.Scale(10.2f, 15.1f);
+    transform.ApplyPerspectiveDepth(10);
+    layer->draw_properties().screen_space_transform = transform;
+
+    ASSERT_TRUE(layer->ScreenSpaceTransform().HasPerspective());
+    EXPECT_FLOAT_EQ(15.f, layer->GetIdealContentsScale());
+  }
+  // Ensure that we don't fall below the device scale factor.
+  {
+    gfx::Transform transform;
+    transform.Scale(0.1f, 0.2f);
+    transform.ApplyPerspectiveDepth(10);
+    layer->draw_properties().screen_space_transform = transform;
+
+    ASSERT_TRUE(layer->ScreenSpaceTransform().HasPerspective());
+    EXPECT_FLOAT_EQ(1.f, layer->GetIdealContentsScale());
   }
 }
 

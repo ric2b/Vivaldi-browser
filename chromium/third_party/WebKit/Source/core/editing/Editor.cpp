@@ -186,7 +186,7 @@ Editor::RevealSelectionScope::~RevealSelectionScope() {
 // |SelectionInDOMTree| instead of |VisibleSelection|.
 VisibleSelection Editor::SelectionForCommand(Event* event) {
   VisibleSelection selection =
-      GetFrame().Selection().ComputeVisibleSelectionInDOMTreeDeprecated();
+      GetFrame().Selection().ComputeVisibleSelectionInDOMTree();
   if (!event)
     return selection;
   // If the target is a text control, and the current selection is outside of
@@ -228,12 +228,12 @@ EditorClient& Editor::Client() const {
 }
 
 static bool IsCaretAtStartOfWrappedLine(const FrameSelection& selection) {
-  if (!selection.ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret())
+  if (!selection.ComputeVisibleSelectionInDOMTree().IsCaret())
     return false;
   if (selection.GetSelectionInDOMTree().Affinity() != TextAffinity::kDownstream)
     return false;
   const Position& position =
-      selection.ComputeVisibleSelectionInDOMTreeDeprecated().Start();
+      selection.ComputeVisibleSelectionInDOMTree().Start();
   return !InSameLine(PositionWithAffinity(position, TextAffinity::kUpstream),
                      PositionWithAffinity(position, TextAffinity::kDownstream));
 }
@@ -249,7 +249,7 @@ bool Editor::HandleTextEvent(TextEvent* event) {
   if (event->IsIncrementalInsertion())
     return false;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   frame_->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -343,7 +343,7 @@ static HTMLImageElement* ImageElementFromImageDocument(Document* document) {
   if (!body)
     return 0;
 
-  Node* node = body->FirstChild();
+  Node* node = body->firstChild();
   if (!isHTMLImageElement(node))
     return 0;
   return toHTMLImageElement(node);
@@ -537,7 +537,7 @@ void Editor::PasteWithPasteboard(Pasteboard* pasteboard) {
     if (!text.IsEmpty()) {
       chose_plain_text = true;
 
-      // TODO(xiaochengh): Use of updateStyleAndLayoutIgnorePendingStylesheets
+      // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
       // needs to be audited.  See http://crbug.com/590369 for more details.
       // |selectedRange| requires clean layout for visible selection
       // normalization.
@@ -570,8 +570,9 @@ static PassRefPtr<Image> ImageFromNode(const Node& node) {
     return nullptr;
 
   if (layout_object->IsCanvas()) {
-    return toHTMLCanvasElement(node).CopiedImage(
-        kFrontBuffer, kPreferNoAcceleration, kSnapshotReasonCopyToClipboard);
+    return toHTMLCanvasElement(const_cast<Node&>(node))
+        .CopiedImage(kFrontBuffer, kPreferNoAcceleration,
+                     kSnapshotReasonCopyToClipboard);
   }
 
   if (layout_object->IsImage()) {
@@ -916,13 +917,16 @@ static void DispatchEditableContentChangedEvents(Element* start_root,
         Event::Create(EventTypeNames::webkitEditableContentChanged));
 }
 
-static VisibleSelection CorrectedVisibleSelection(
-    const VisibleSelection& passed_selection) {
+static SelectionInDOMTree CorrectedSelectionAfterCommand(
+    const VisibleSelection& passed_selection,
+    Document* document) {
   if (!passed_selection.Base().IsConnected() ||
-      !passed_selection.Extent().IsConnected())
-    return VisibleSelection();
-  DCHECK(!passed_selection.Base().GetDocument()->NeedsLayoutTreeUpdate());
-  return CreateVisibleSelection(passed_selection.AsSelection());
+      !passed_selection.Extent().IsConnected() ||
+      passed_selection.Base().GetDocument() != document ||
+      passed_selection.Base().GetDocument() !=
+          passed_selection.Extent().GetDocument())
+    return SelectionInDOMTree();
+  return passed_selection.AsSelection();
 }
 
 void Editor::AppliedEditing(CompositeEditCommand* cmd) {
@@ -942,19 +946,12 @@ void Editor::AppliedEditing(CompositeEditCommand* cmd) {
       undo_step->EndingRootEditableElement(), cmd->GetInputType(),
       cmd->TextDataForInputEvent(), IsComposingFromCommand(cmd));
 
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  See http://crbug.com/590369 for more details.
-  // The clean layout is consumed by |mostBackwardCaretPosition|, called through
-  // |changeSelectionAfterCommand|. In the long term, we should postpone visible
-  // selection canonicalization so that selection update does not need layout.
-  GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
-
-  const VisibleSelection& new_selection =
-      CorrectedVisibleSelection(cmd->EndingSelection());
+  const SelectionInDOMTree& new_selection = CorrectedSelectionAfterCommand(
+      cmd->EndingSelection(), GetFrame().GetDocument());
 
   // Don't clear the typing style with this selection change. We do those things
   // elsewhere if necessary.
-  ChangeSelectionAfterCommand(new_selection.AsSelection(), 0);
+  ChangeSelectionAfterCommand(new_selection, 0);
 
   if (!cmd->PreservesTypingStyle())
     ClearTypingStyle();
@@ -968,6 +965,8 @@ void Editor::AppliedEditing(CompositeEditCommand* cmd) {
     // Only register undo entry when combined with other commands.
     if (!last_edit_command_->GetUndoStep())
       undo_stack_->RegisterUndoStep(last_edit_command_->EnsureUndoStep());
+    last_edit_command_->EnsureUndoStep()->SetEndingSelection(
+        cmd->EnsureUndoStep()->EndingSelection());
     last_edit_command_->AppendCommandToUndoStep(cmd);
   } else {
     // Only register a new undo command if the command passed in is
@@ -976,7 +975,7 @@ void Editor::AppliedEditing(CompositeEditCommand* cmd) {
     undo_stack_->RegisterUndoStep(last_edit_command_->EnsureUndoStep());
   }
 
-  RespondToChangedContents(new_selection.Start());
+  RespondToChangedContents(new_selection.Base());
 }
 
 void Editor::UnappliedEditing(UndoStep* cmd) {
@@ -989,22 +988,15 @@ void Editor::UnappliedEditing(UndoStep* cmd) {
       InputEvent::InputType::kHistoryUndo, g_null_atom,
       InputEvent::EventIsComposing::kNotComposing);
 
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  See http://crbug.com/590369 for more details.
-  // In the long term, we should stop editing commands from storing
-  // VisibleSelections as starting and ending selections.
-  GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
-
-  const VisibleSelection& new_selection =
-      CorrectedVisibleSelection(cmd->StartingSelection());
-  DCHECK(new_selection.IsValidFor(*GetFrame().GetDocument())) << new_selection;
+  const SelectionInDOMTree& new_selection = CorrectedSelectionAfterCommand(
+      cmd->StartingSelection(), GetFrame().GetDocument());
   ChangeSelectionAfterCommand(
-      new_selection.AsSelection(),
+      new_selection,
       FrameSelection::kCloseTyping | FrameSelection::kClearTypingStyle);
 
   last_edit_command_ = nullptr;
   undo_stack_->RegisterRedoStep(cmd);
-  RespondToChangedContents(new_selection.Start());
+  RespondToChangedContents(new_selection.Base());
 }
 
 void Editor::ReappliedEditing(UndoStep* cmd) {
@@ -1017,21 +1009,15 @@ void Editor::ReappliedEditing(UndoStep* cmd) {
       InputEvent::InputType::kHistoryRedo, g_null_atom,
       InputEvent::EventIsComposing::kNotComposing);
 
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  See http://crbug.com/590369 for more details.
-  // In the long term, we should stop editing commands from storing
-  // VisibleSelections as starting and ending selections.
-  GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
-  const VisibleSelection& new_selection =
-      CorrectedVisibleSelection(cmd->EndingSelection());
-  DCHECK(new_selection.IsValidFor(*GetFrame().GetDocument())) << new_selection;
+  const SelectionInDOMTree& new_selection = CorrectedSelectionAfterCommand(
+      cmd->EndingSelection(), GetFrame().GetDocument());
   ChangeSelectionAfterCommand(
-      new_selection.AsSelection(),
+      new_selection,
       FrameSelection::kCloseTyping | FrameSelection::kClearTypingStyle);
 
   last_edit_command_ = nullptr;
   undo_stack_->RegisterUndoStep(cmd);
-  RespondToChangedContents(new_selection.Start());
+  RespondToChangedContents(new_selection.Base());
 }
 
 Editor* Editor::Create(LocalFrame& frame) {
@@ -1054,7 +1040,6 @@ Editor::Editor(LocalFrame& frame)
 Editor::~Editor() {}
 
 void Editor::Clear() {
-  GetFrame().GetInputMethodController().Clear();
   should_style_with_css_ = false;
   default_paragraph_separator_ = kEditorParagraphSeparatorIsDiv;
   last_edit_command_ = nullptr;
@@ -1148,7 +1133,7 @@ void Editor::Cut(EditorCommandSource source) {
   if (!CanCut())
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   // |tryDHTMLCut| dispatches cut event, which may make layout dirty, but we
   // need clean layout to obtain the selected content.
@@ -1159,7 +1144,7 @@ void Editor::Cut(EditorCommandSource source) {
     GetSpellChecker().UpdateMarkersForWordsAffectedByEditing(true);
     if (EnclosingTextControl(GetFrame()
                                  .Selection()
-                                 .ComputeVisibleSelectionInDOMTreeDeprecated()
+                                 .ComputeVisibleSelectionInDOMTree()
                                  .Start())) {
       String plain_text = GetFrame().SelectedTextForClipboard();
       Pasteboard::GeneralPasteboard()->WritePlainText(
@@ -1191,16 +1176,14 @@ void Editor::Copy() {
   if (!CanCopy())
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   // |tryDHTMLCopy| dispatches copy event, which may make layout dirty, but
   // we need clean layout to obtain the selected content.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
-  if (EnclosingTextControl(GetFrame()
-                               .Selection()
-                               .ComputeVisibleSelectionInDOMTreeDeprecated()
-                               .Start())) {
+  if (EnclosingTextControl(
+          GetFrame().Selection().ComputeVisibleSelectionInDOMTree().Start())) {
     Pasteboard::GeneralPasteboard()->WritePlainText(
         GetFrame().SelectedTextForClipboard(),
         CanSmartCopyOrDelete() ? Pasteboard::kCanSmartReplace
@@ -1228,7 +1211,7 @@ void Editor::Paste(EditorCommandSource source) {
 
   PasteMode paste_mode = GetFrame()
                                  .Selection()
-                                 .ComputeVisibleSelectionInDOMTreeDeprecated()
+                                 .ComputeVisibleSelectionInDOMTree()
                                  .IsContentRichlyEditable()
                              ? kAllMimeTypes
                              : kPlainTextOnly;
@@ -1267,7 +1250,7 @@ void Editor::PerformDelete() {
   if (!CanDelete())
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   // |selectedRange| requires clean layout for visible selection normalization.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
@@ -1502,8 +1485,8 @@ void Editor::ChangeSelectionAfterCommand(
     Client().RespondToChangedSelection(
         frame_, GetFrame()
                     .Selection()
-                    .ComputeVisibleSelectionInDOMTreeDeprecated()
-                    .GetSelectionType());
+                    .GetSelectionInDOMTree()
+                    .SelectionTypeWithLegacyGranularity());
   }
 }
 

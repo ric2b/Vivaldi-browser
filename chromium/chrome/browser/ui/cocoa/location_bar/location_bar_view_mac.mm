@@ -27,6 +27,7 @@
 #import "chrome/browser/ui/cocoa/content_settings/content_setting_bubble_cocoa.h"
 #import "chrome/browser/ui/cocoa/first_run_bubble_controller.h"
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
+#import "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_cell.h"
 #import "chrome/browser/ui/cocoa/location_bar/content_setting_decoration.h"
@@ -75,10 +76,6 @@
 using content::WebContents;
 
 namespace {
-
-// Vertical space between the bottom edge of the location_bar and the first run
-// bubble arrow point.
-const static int kFirstRunBubbleYOffset = 1;
 
 const int kDefaultIconSize = 16;
 
@@ -220,6 +217,11 @@ void LocationBarViewMac::UpdateBookmarkStarVisibility() {
   star_decoration_->SetVisible(IsStarEnabled());
 }
 
+void LocationBarViewMac::UpdateZoomViewVisibility() {
+  UpdateZoomDecoration(/*default_zoom_changed=*/false);
+  OnChanged();
+}
+
 void LocationBarViewMac::UpdateLocationBarVisibility(bool visible,
                                                      bool animate) {
   // Track the target location bar visibility to avoid redundant transitions
@@ -329,12 +331,16 @@ NSPoint LocationBarViewMac::GetPageInfoBubblePoint() const {
   return [field_ bubblePointForDecoration:GetPageInfoDecoration()];
 }
 
+NSPoint LocationBarViewMac::GetInfoBarAnchorPoint() const {
+  return [field_ arrowAnchorPointForDecoration:GetPageInfoDecoration()];
+}
+
 void LocationBarViewMac::OnDecorationsChanged() {
   // TODO(shess): The field-editor frame and cursor rects should not
   // change, here.
   std::vector<LocationBarDecoration*> decorations = GetDecorations();
   for (auto* decoration : decorations)
-    UpdateAccessibilityViewPosition(decoration);
+    UpdateAccessibilityView(decoration);
   [field_ updateMouseTracking];
   [field_ resetFieldEditorFrameIfNeeded];
   [field_ setNeedsDisplay:YES];
@@ -646,15 +652,13 @@ void LocationBarViewMac::ShowFirstRunBubbleInternal() {
   if (!field_ || ![field_ window])
     return;
 
-  // The first run bubble's left edge should line up with the left edge of the
-  // omnibox. This is different from other bubbles, which line up at a point
-  // set by their top arrow. Because the BaseBubbleController adjusts the
-  // window origin left to account for the arrow spacing, the first run bubble
-  // moves the window origin right by this spacing, so that the
-  // BaseBubbleController will move it back to the correct position.
+  // Point the bubble's arrow at the middle of the page info icon. The x offset
+  // isn't the exact center, but this behavior matches other platforms and it
+  // looks better in practice since the arrow ends up between the handle and
+  // lens of the magnifying glass.
   const NSPoint kOffset = NSMakePoint(
-      info_bubble::kBubbleArrowXOffset + info_bubble::kBubbleArrowWidth/2.0,
-      kFirstRunBubbleYOffset);
+      info_bubble::kBubbleArrowXOffset,
+      NSHeight([field_ frame]) / 2.0 - info_bubble::kBubbleArrowHeight);
   [FirstRunBubbleController showForView:field_
                                  offset:kOffset
                                 browser:browser_
@@ -738,14 +742,46 @@ bool LocationBarViewMac::IsSecureConnection(
          level == security_state::EV_SECURE;
 }
 
-void LocationBarViewMac::UpdateAccessibilityViewPosition(
+void LocationBarViewMac::UpdateAccessibilityView(
     LocationBarDecoration* decoration) {
   if (!decoration->IsVisible())
     return;
-  NSRect r =
+  // This uses |frame| instead of |bounds| because the accessibility views are
+  // parented to the toolbar.
+  NSRect apparent_frame =
       [[field_ cell] frameForDecoration:decoration inFrame:[field_ frame]];
-  [decoration->GetAccessibilityView() setFrame:r];
-  [decoration->GetAccessibilityView() setNeedsDisplayInRect:r];
+
+  // This is a bit subtle:
+  // The decorations' accessibility views can become key to allow keyboard
+  // access to the location bar decorations, but Cocoa's automatic key view loop
+  // sorts by top-left coordinate. Since the omnibox's top-left coordinate is
+  // before its leading decorations, the omnibox would sort before its own
+  // leading decorations, which was logical but visually unintuitive. Therefore,
+  // for leading decorations, this method moves their frame to be "just before"
+  // the omnibox in automatic key view loop order, and gives them an apparent
+  // frame (see DecorationAccessibilityView) so that they still paint their
+  // focus rings at the right place.
+  //
+  // TODO(lgrey): This hack doesn't work in RTL layouts, but the layout of the
+  // omnibox is currently screwed up in RTL layouts anyway. See
+  // https://crbug.com/715627.
+  NSRect real_frame = apparent_frame;
+  int left_index = [[field_ cell] leadingDecorationIndex:decoration];
+
+  // If there are ever too many leading views, the fake x-coords might land
+  // before the button preceding the omnibox in the key view order. This
+  // threshold is just a guess.
+  DCHECK_LT(left_index, 10);
+  if (left_index != -1) {
+    CGFloat delta = left_index + 1;
+    real_frame.origin.x =
+        cocoa_l10n_util::ShouldDoExperimentalRTLLayout()
+            ? NSMaxX([field_ frame]) + delta - NSWidth(real_frame)
+            : NSMinX([field_ frame]) - delta;
+  }
+  decoration->UpdateAccessibilityView(apparent_frame);
+  [decoration->GetAccessibilityView() setFrame:real_frame];
+  [decoration->GetAccessibilityView() setNeedsDisplayInRect:apparent_frame];
 }
 
 std::vector<LocationBarDecoration*> LocationBarViewMac::GetDecorations() {

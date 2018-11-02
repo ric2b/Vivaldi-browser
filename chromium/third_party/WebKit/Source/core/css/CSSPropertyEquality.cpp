@@ -4,6 +4,7 @@
 
 #include "core/css/CSSPropertyEquality.h"
 
+#include "core/animation/PropertyHandle.h"
 #include "core/css/CSSValue.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/DataEquivalency.h"
@@ -55,10 +56,15 @@ bool FillLayersEqual(const FillLayer& a_layers, const FillLayer& b_layers) {
 
 }  // namespace
 
-bool CSSPropertyEquality::PropertiesEqual(CSSPropertyID prop,
+bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
                                           const ComputedStyle& a,
                                           const ComputedStyle& b) {
-  switch (prop) {
+  if (property.IsCSSCustomProperty()) {
+    const AtomicString& name = property.CustomPropertyName();
+    return DataEquivalent(a.GetRegisteredVariable(name),
+                          b.GetRegisteredVariable(name));
+  }
+  switch (property.CssProperty()) {
     case CSSPropertyBackgroundColor:
       return a.BackgroundColor() == b.BackgroundColor() &&
              a.VisitedLinkBackgroundColor() == b.VisitedLinkBackgroundColor();
@@ -161,6 +167,9 @@ bool CSSPropertyEquality::PropertiesEqual(CSSPropertyID prop,
       return a.FontSizeAdjust() == b.FontSizeAdjust();
     case CSSPropertyFontStretch:
       return a.GetFontStretch() == b.GetFontStretch();
+    case CSSPropertyFontVariationSettings:
+      return DataEquivalent(a.GetFontDescription().VariationSettings(),
+                            b.GetFontDescription().VariationSettings());
     case CSSPropertyFontWeight:
       return a.GetFontWeight() == b.GetFontWeight();
     case CSSPropertyHeight:
@@ -200,8 +209,7 @@ bool CSSPropertyEquality::PropertiesEqual(CSSPropertyID prop,
     case CSSPropertyOffsetPosition:
       return a.OffsetPosition() == b.OffsetPosition();
     case CSSPropertyOffsetRotate:
-    case CSSPropertyOffsetRotation:
-      return a.OffsetRotation() == b.OffsetRotation();
+      return a.OffsetRotate() == b.OffsetRotate();
     case CSSPropertyOpacity:
       return a.Opacity() == b.Opacity();
     case CSSPropertyOrder:
@@ -374,14 +382,6 @@ bool CSSPropertyEquality::PropertiesEqual(CSSPropertyID prop,
       NOTREACHED();
       return true;
   }
-}
-
-bool CSSPropertyEquality::RegisteredCustomPropertiesEqual(
-    const AtomicString& property_name,
-    const ComputedStyle& a,
-    const ComputedStyle& b) {
-  return DataEquivalent(a.GetRegisteredVariable(property_name),
-                        b.GetRegisteredVariable(property_name));
 }
 
 }  // namespace blink

@@ -37,7 +37,7 @@ class TestDebugDaemonClient : public chromeos::FakeDebugDaemonClient {
     // dup() is needed as the file descriptor will be closed on the client side.
     base::File* file_param = new base::File(dup(file_descriptor));
     base::PostTaskWithTraitsAndReply(
-        FROM_HERE, base::TaskTraits().MayBlock(),
+        FROM_HERE, {base::MayBlock()},
         base::Bind(&GenerateTestLogDumpFile, test_file_,
                    base::Owned(file_param)),
         base::Bind(callback, true));
@@ -74,6 +74,7 @@ class LogPrivateApiTest : public ExtensionApiTest {
     chromeos::DBusThreadManager::GetSetterForTesting()->SetDebugDaemonClient(
         std::unique_ptr<chromeos::DebugDaemonClient>(
             new TestDebugDaemonClient(tar_file_path)));
+    host_resolver()->AddRule("www.test.com", "127.0.0.1");
     ExtensionApiTest::SetUpInProcessBrowserTestFixture();
   }
 
@@ -89,7 +90,6 @@ class LogPrivateApiTest : public ExtensionApiTest {
 
 IN_PROC_BROWSER_TEST_F(LogPrivateApiTest, DumpLogsAndCaptureEvents) {
   // Setup dummy HTTP server.
-  host_resolver()->AddRule("www.test.com", "127.0.0.1");
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&LogPrivateApiTest::HandleRequest, base::Unretained(this)));
   ASSERT_TRUE(StartEmbeddedTestServer());

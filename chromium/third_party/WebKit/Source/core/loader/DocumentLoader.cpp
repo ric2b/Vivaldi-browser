@@ -35,6 +35,7 @@
 #include "core/dom/WeakIdentifierMap.h"
 #include "core/events/Event.h"
 #include "core/frame/Deprecation.h"
+#include "core/frame/FrameConsole.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
@@ -61,6 +62,8 @@
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "core/probe/CoreProbes.h"
+#include "core/timing/DOMWindowPerformance.h"
+#include "core/timing/Performance.h"
 #include "platform/HTTPNames.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/feature_policy/FeaturePolicy.h"
@@ -87,18 +90,6 @@ namespace blink {
 
 static bool IsArchiveMIMEType(const String& mime_type) {
   return DeprecatedEqualIgnoringCase("multipart/related", mime_type);
-}
-
-static bool ShouldInheritSecurityOriginFromOwner(const KURL& url) {
-  // https://html.spec.whatwg.org/multipage/browsers.html#origin
-  //
-  // If a Document is the initial "about:blank" document The origin and
-  // effective script origin of the Document are those it was assigned when its
-  // browsing context was created.
-  //
-  // Note: We generalize this to all "blank" URLs and invalid URLs because we
-  // treat all of these URLs as about:blank.
-  return url.IsEmpty() || url.ProtocolIsAbout();
 }
 
 DocumentLoader::DocumentLoader(LocalFrame* frame,
@@ -140,8 +131,8 @@ LocalFrameClient& DocumentLoader::GetLocalFrameClient() const {
   DCHECK(frame_);
   LocalFrameClient* client = frame_->Client();
   // LocalFrame clears its |m_client| only after detaching all DocumentLoaders
-  // (i.e. calls detachFromFrame() which clears |m_frame|) owned by the
-  // LocalFrame's FrameLoader. So, if |m_frame| is non nullptr, |client| is
+  // (i.e. calls detachFromFrame() which clears |frame_|) owned by the
+  // LocalFrame's FrameLoader. So, if |frame_| is non nullptr, |client| is
   // also non nullptr.
   DCHECK(client);
   return *client;
@@ -198,10 +189,8 @@ Resource* DocumentLoader::StartPreload(Resource::Type type,
   Resource* resource = nullptr;
   switch (type) {
     case Resource::kImage:
-      if (frame_ && frame_->GetSettings() &&
-          frame_->GetSettings()->GetFetchImagePlaceholders()) {
-        params.SetAllowImagePlaceholder();
-      }
+      if (frame_)
+        frame_->MaybeAllowImagePlaceholder(params);
       resource = ImageResource::Fetch(params, Fetcher());
       break;
     case Resource::kScript:
@@ -229,11 +218,6 @@ Resource* DocumentLoader::StartPreload(Resource::Type type,
       NOTREACHED();
   }
 
-  // CSP layout tests verify that preloads are subject to access checks by
-  // seeing if they are in the `preload started` list. Therefore do not add
-  // them to the list if the load is immediately denied.
-  if (resource && !resource->GetResourceError().IsAccessCheck())
-    Fetcher()->PreloadStarted(resource);
   return resource;
 }
 
@@ -254,9 +238,10 @@ std::unique_ptr<SourceLocation> DocumentLoader::CopySourceLocation() const {
 void DocumentLoader::DispatchLinkHeaderPreloads(
     ViewportDescriptionWrapper* viewport,
     LinkLoader::MediaPreloadPolicy media_policy) {
+  DCHECK_GE(state_, kCommitted);
   LinkLoader::LoadLinksFromHeader(
       GetResponse().HttpHeaderField(HTTPNames::Link), GetResponse().Url(),
-      frame_->GetDocument(), NetworkHintsInterfaceImpl(),
+      *frame_, frame_->GetDocument(), NetworkHintsInterfaceImpl(),
       LinkLoader::kOnlyLoadResources, media_policy, viewport);
 }
 
@@ -414,23 +399,31 @@ void DocumentLoader::LoadFailed(const ResourceError& error) {
   }
 
   HistoryCommitType history_commit_type = LoadTypeToCommitType(load_type_);
-  FrameLoader& loader = GetFrameLoader();
-  if (state_ < kCommitted) {
-    if (state_ == kNotStarted)
+  switch (state_) {
+    case kNotStarted:
       probe::frameClearedScheduledClientNavigation(frame_);
-    state_ = kSentDidFinishLoad;
-    GetLocalFrameClient().DispatchDidFailProvisionalLoad(error,
-                                                         history_commit_type);
-    if (!frame_)
-      return;
-    loader.DetachProvisionalDocumentLoader(this);
-  } else if (state_ == kCommitted) {
-    if (frame_->GetDocument()->Parser())
-      frame_->GetDocument()->Parser()->StopParsing();
-    state_ = kSentDidFinishLoad;
-    GetLocalFrameClient().DispatchDidFailLoad(error, history_commit_type);
+    // Fall-through
+    case kProvisional:
+      state_ = kSentDidFinishLoad;
+      GetLocalFrameClient().DispatchDidFailProvisionalLoad(error,
+                                                           history_commit_type);
+      if (frame_)
+        GetFrameLoader().DetachProvisionalDocumentLoader(this);
+      break;
+    case kCommitted:
+      if (frame_->GetDocument()->Parser())
+        frame_->GetDocument()->Parser()->StopParsing();
+      state_ = kSentDidFinishLoad;
+      GetLocalFrameClient().DispatchDidFailLoad(error, history_commit_type);
+      if (frame_)
+        frame_->GetDocument()->CheckCompleted();
+      break;
+    case kSentDidFinishLoad:
+      // TODO(japhet): Why do we need to call DidFinishNavigation() again?
+      GetFrameLoader().DidFinishNavigation();
+      break;
   }
-  loader.CheckCompleted();
+  DCHECK_EQ(kSentDidFinishLoad, state_);
 }
 
 void DocumentLoader::FinishedLoading(double finish_time) {
@@ -458,19 +451,6 @@ void DocumentLoader::FinishedLoading(double finish_time) {
   application_cache_host_->FinishedLoadingMainResource();
   EndWriting();
   ClearMainResourceHandle();
-
-  // Shows the deprecation message and measures the impact of the new security
-  // restriction which disallows responding to navigation requests with
-  // redirected responses in the service worker.
-  // TODO(horo): Remove this when we actually introduce the restriction in
-  // RespondWithObserver.
-  if (response_.WasFetchedViaServiceWorker() &&
-      response_.UrlListViaServiceWorker().size() > 1) {
-    Deprecation::CountDeprecation(
-        frame_,
-        UseCounter::
-            kServiceWorkerRespondToNavigationRequestWithRedirectedResponse);
-  }
 }
 
 bool DocumentLoader::RedirectReceived(
@@ -488,11 +468,13 @@ bool DocumentLoader::RedirectReceived(
   RefPtr<SecurityOrigin> redirecting_origin =
       SecurityOrigin::Create(redirect_response.Url());
   if (!redirecting_origin->CanDisplay(request_url)) {
-    FrameLoader::ReportLocalLoadFailed(frame_, request_url.GetString());
+    frame_->Console().AddMessage(ConsoleMessage::Create(
+        kSecurityMessageSource, kErrorMessageLevel,
+        "Not allowed to load local resource: " + request_url.GetString()));
     fetcher_->StopFetching();
     return false;
   }
-  if (GetFrameLoader().ShouldContinueForNavigationPolicy(
+  if (GetFrameLoader().ShouldContinueForRedirectNavigationPolicy(
           request_, SubstituteData(), this, kCheckContentSecurityPolicy,
           navigation_type_, kNavigationPolicyCurrentTab, load_type_,
           IsClientRedirect(), nullptr) != kNavigationPolicyCurrentTab) {
@@ -532,8 +514,8 @@ bool DocumentLoader::ShouldContinueForResponse() const {
     return false;
   }
 
-  if (GetContentDispositionType(response_.HttpHeaderField(
-          HTTPNames::Content_Disposition)) == kContentDispositionAttachment) {
+  if (IsContentDispositionAttachment(
+          response_.HttpHeaderField(HTTPNames::Content_Disposition))) {
     // The server wants us to download instead of replacing the page contents.
     // Downloading is handled by the embedder, but we still get the initial
     // response so that we can ignore it and clean up properly.
@@ -607,12 +589,12 @@ void DocumentLoader::ResponseReceived(
           kContentSecurityPolicyHeaderTypeEnforce,
           kContentSecurityPolicyHeaderSourceHTTP);
     } else {
-      ContentSecurityPolicy* embedding_csp = ContentSecurityPolicy::Create();
-      embedding_csp->AddPolicyFromHeaderValue(
+      ContentSecurityPolicy* required_csp = ContentSecurityPolicy::Create();
+      required_csp->AddPolicyFromHeaderValue(
           GetFrameLoader().RequiredCSP(),
           kContentSecurityPolicyHeaderTypeEnforce,
           kContentSecurityPolicyHeaderSourceHTTP);
-      if (!embedding_csp->Subsumes(*content_security_policy_)) {
+      if (!required_csp->Subsumes(*content_security_policy_)) {
         String message = "Refused to display '" +
                          response.Url().ElidedString() +
                          "' because it has not opted-into the following policy "
@@ -676,7 +658,7 @@ void DocumentLoader::EnsureWriter(const AtomicString& mime_type,
   Document* owner = nullptr;
   // TODO(dcheng): This differs from the behavior of both IE and Firefox: the
   // origin is inherited from the document that loaded the URL.
-  if (ShouldInheritSecurityOriginFromOwner(Url())) {
+  if (Document::ShouldInheritSecurityOriginFromOwner(Url())) {
     Frame* owner_frame = frame_->Tree().Parent();
     if (!owner_frame)
       owner_frame = frame_->Loader().Opener();
@@ -685,7 +667,6 @@ void DocumentLoader::EnsureWriter(const AtomicString& mime_type,
   }
   DocumentInit init(owner, Url(), frame_);
   init.WithNewRegistrationContext();
-  frame_->Loader().Clear();
   DCHECK(frame_->GetPage());
 
   ParserSynchronizationPolicy parsing_policy = kAllowAsynchronousParsing;
@@ -729,7 +710,7 @@ void DocumentLoader::DataReceived(Resource* resource,
   if (in_data_received_) {
     // If this function is reentered, defer processing of the additional data to
     // the top-level invocation. Reentrant calls can occur because of web
-    // platform (mis-)features that require running a nested message loop:
+    // platform (mis-)features that require running a nested run loop:
     // - alert(), confirm(), prompt()
     // - Detach of plugin elements.
     // - Synchronous XMLHTTPRequest
@@ -768,7 +749,7 @@ void DocumentLoader::ProcessData(const char* data, size_t length) {
 }
 
 void DocumentLoader::ClearRedirectChain() {
-  redirect_chain_.Clear();
+  redirect_chain_.clear();
 }
 
 void DocumentLoader::AppendRedirect(const KURL& url) {
@@ -823,8 +804,14 @@ bool DocumentLoader::MaybeCreateArchive() {
   if (!frame_)
     return false;
 
-  // The Document has now been created.
-  frame_->GetDocument()->EnforceSandboxFlags(kSandboxAll);
+  // The MHTML page is loaded in full sandboxing mode with the only
+  // exception to open new top-level windows. Since the MHTML page stays in a
+  // unquie origin with script execution disabled, the risk to navigate to
+  // 'blob:'' and 'filesystem:'' URLs that allow code execution in the page's
+  // "real" origin is mitigated.
+  frame_->GetDocument()->EnforceSandboxFlags(
+      kSandboxAll &
+      ~(kSandboxPopups | kSandboxPropagatesToAuxiliaryBrowsingContexts));
 
   CommitData(main_resource->Data()->Data(), main_resource->Data()->size());
   return true;
@@ -943,7 +930,7 @@ void DocumentLoader::DidInstallNewDocument(Document* document) {
   String header_content_language =
       response_.HttpHeaderField(HTTPNames::Content_Language);
   if (!header_content_language.IsEmpty()) {
-    size_t comma_index = header_content_language.Find(',');
+    size_t comma_index = header_content_language.find(',');
     // kNotFound == -1 == don't truncate
     header_content_language.Truncate(comma_index);
     header_content_language =
@@ -959,6 +946,13 @@ void DocumentLoader::DidInstallNewDocument(Document* document) {
   if (!referrer_policy_header.IsNull()) {
     UseCounter::Count(*document, UseCounter::kReferrerPolicyHeader);
     document->ParseAndSetReferrerPolicy(referrer_policy_header);
+  }
+
+  if (RuntimeEnabledFeatures::serverTimingEnabled() &&
+      frame_->GetDocument()->domWindow()) {
+    DOMWindowPerformance::performance(*(frame_->GetDocument()->domWindow()))
+        ->AddServerTiming(response_,
+                          PerformanceBase::ShouldAddToBuffer::Always);
   }
 
   GetLocalFrameClient().DidCreateNewDocument();
@@ -1003,36 +997,6 @@ void DocumentLoader::DidCommitNavigation() {
   frame_->GetPage()->DidCommitLoad(frame_);
 }
 
-void SetFeaturePolicy(Document* document, const String& feature_policy_header) {
-  if (!RuntimeEnabledFeatures::featurePolicyEnabled())
-    return;
-  LocalFrame* frame = document->GetFrame();
-  WebFeaturePolicy* parent_feature_policy =
-      frame->IsMainFrame()
-          ? nullptr
-          : frame->Tree().Parent()->GetSecurityContext()->GetFeaturePolicy();
-  Vector<String> messages;
-  const WebParsedFeaturePolicy& parsed_header = ParseFeaturePolicy(
-      feature_policy_header, frame->GetSecurityContext()->GetSecurityOrigin(),
-      &messages);
-  WebParsedFeaturePolicy container_policy;
-  if (frame->Owner()) {
-    container_policy = GetContainerPolicyFromAllowedFeatures(
-        frame->Owner()->AllowedFeatures(),
-        frame->GetSecurityContext()->GetSecurityOrigin());
-  }
-  frame->GetSecurityContext()->InitializeFeaturePolicy(
-      parsed_header, container_policy, parent_feature_policy);
-
-  for (auto& message : messages) {
-    document->AddConsoleMessage(
-        ConsoleMessage::Create(kOtherMessageSource, kErrorMessageLevel,
-                               "Error with Feature-Policy header: " + message));
-  }
-  if (!parsed_header.empty())
-    frame->Client()->DidSetFeaturePolicyHeader(parsed_header);
-}
-
 // static
 bool DocumentLoader::ShouldClearWindowName(
     const LocalFrame& frame,
@@ -1060,6 +1024,11 @@ void DocumentLoader::InstallNewDocument(
   DCHECK(!frame_->GetDocument() || !frame_->GetDocument()->IsActive());
   DCHECK_EQ(frame_->Tree().ChildCount(), 0u);
 
+  if (GetFrameLoader().StateMachine()->IsDisplayingInitialEmptyDocument()) {
+    GetFrameLoader().StateMachine()->AdvanceTo(
+        FrameLoaderStateMachine::kCommittedFirstRealLoad);
+  }
+
   SecurityOrigin* previous_security_origin = nullptr;
   if (frame_->GetDocument())
     previous_security_origin = frame_->GetDocument()->GetSecurityOrigin();
@@ -1074,7 +1043,7 @@ void DocumentLoader::InstallNewDocument(
     // that the name would be nulled and if the name is accessed after we will
     // fire a UseCounter. If we decide to move forward with this change, we'd
     // actually clean the name here.
-    // m_frame->tree().setName(nullAtom);
+    // frame_->tree().setName(nullAtom);
     frame_->Tree().ExperimentalSetNulledName();
   }
 
@@ -1094,8 +1063,14 @@ void DocumentLoader::InstallNewDocument(
   // FeaturePolicy is reset in the browser process on commit, so this needs to
   // be initialized and replicated to the browser process after commit messages
   // are sent in didCommitNavigation().
-  SetFeaturePolicy(document,
-                   response_.HttpHeaderField(HTTPNames::Feature_Policy));
+  // Feature-Policy header is currently disabled while the details of the policy
+  // syntax are being worked out. Unless the Feature Policy experimental
+  // features flag is enabled, then ignore any header received.
+  // TODO(iclelland): Re-enable once the syntax is finalized. (crbug.com/737643)
+  document->SetFeaturePolicy(
+      RuntimeEnabledFeatures::featurePolicyExperimentalFeaturesEnabled()
+          ? response_.HttpHeaderField(HTTPNames::Feature_Policy)
+          : g_empty_string);
 
   GetFrameLoader().DispatchDidClearDocumentOfWindowObject();
 }

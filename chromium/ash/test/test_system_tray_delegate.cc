@@ -6,29 +6,15 @@
 
 #include <string>
 
-#include "ash/login_status.h"
-#include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "base/time/time.h"
 
 namespace ash {
 namespace test {
 
-namespace {
+TestSystemTrayDelegate::TestSystemTrayDelegate() = default;
 
-LoginStatus g_initial_status = LoginStatus::USER;
-
-}  // namespace
-
-TestSystemTrayDelegate::TestSystemTrayDelegate()
-    : login_status_(g_initial_status), session_length_limit_set_(false) {}
-
-TestSystemTrayDelegate::~TestSystemTrayDelegate() {}
-
-void TestSystemTrayDelegate::SetLoginStatus(LoginStatus login_status) {
-  login_status_ = login_status;
-  Shell::Get()->UpdateAfterLoginStatusChange(login_status);
-}
+TestSystemTrayDelegate::~TestSystemTrayDelegate() = default;
 
 void TestSystemTrayDelegate::SetSessionLengthLimitForTest(
     const base::TimeDelta& new_limit) {
@@ -46,28 +32,6 @@ void TestSystemTrayDelegate::SetCurrentIME(const IMEInfo& info) {
 
 void TestSystemTrayDelegate::SetAvailableIMEList(const IMEInfoList& list) {
   ime_list_ = list;
-}
-
-LoginStatus TestSystemTrayDelegate::GetUserLoginStatus() const {
-  // Initial login status has been changed for testing.
-  if (g_initial_status != LoginStatus::USER &&
-      g_initial_status == login_status_) {
-    return login_status_;
-  }
-
-  // At new user image screen manager->IsUserLoggedIn() would return true
-  // but there's no browser session available yet so use SessionStarted().
-  SessionController* controller = Shell::Get()->session_controller();
-
-  if (!controller->IsActiveUserSessionStarted())
-    return LoginStatus::NOT_LOGGED_IN;
-  if (controller->IsScreenLocked())
-    return LoginStatus::LOCKED;
-  return login_status_;
-}
-
-bool TestSystemTrayDelegate::IsUserSupervised() const {
-  return login_status_ == LoginStatus::SUPERVISED;
 }
 
 bool TestSystemTrayDelegate::GetSessionStartTime(
@@ -92,17 +56,6 @@ void TestSystemTrayDelegate::GetCurrentIME(IMEInfo* info) {
 
 void TestSystemTrayDelegate::GetAvailableIMEList(IMEInfoList* list) {
   *list = ime_list_;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-ScopedInitialLoginStatus::ScopedInitialLoginStatus(LoginStatus new_status)
-    : old_status_(g_initial_status) {
-  g_initial_status = new_status;
-}
-
-ScopedInitialLoginStatus::~ScopedInitialLoginStatus() {
-  g_initial_status = old_status_;
 }
 
 }  // namespace test

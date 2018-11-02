@@ -20,13 +20,16 @@ public abstract class ICronetEngineBuilder {
     public abstract ICronetEngineBuilder addPublicKeyPins(String hostName, Set<byte[]> pinsSha256,
             boolean includeSubdomains, Date expirationDate);
     public abstract ICronetEngineBuilder addQuicHint(String host, int port, int alternatePort);
-    public abstract ICronetEngineBuilder enableDataReductionProxy(String key);
     public abstract ICronetEngineBuilder enableHttp2(boolean value);
     public abstract ICronetEngineBuilder enableHttpCache(int cacheMode, long maxSize);
     public abstract ICronetEngineBuilder enablePublicKeyPinningBypassForLocalTrustAnchors(
             boolean value);
     public abstract ICronetEngineBuilder enableQuic(boolean value);
     public abstract ICronetEngineBuilder enableSdch(boolean value);
+    public ICronetEngineBuilder enableBrotli(boolean value) {
+        // Do nothing for older implementations.
+        return this;
+    }
     public abstract ICronetEngineBuilder setExperimentalOptions(String options);
     public abstract ICronetEngineBuilder setLibraryLoader(
             CronetEngine.Builder.LibraryLoader loader);
@@ -49,8 +52,7 @@ public abstract class ICronetEngineBuilder {
         return this;
     }
 
-    public ICronetEngineBuilder setDataReductionProxyOptions(
-            String primaryProxy, String fallbackProxy, String secureProxyCheckUrl) {
+    public ICronetEngineBuilder setThreadPriority(int priority) {
         return this;
     }
 }

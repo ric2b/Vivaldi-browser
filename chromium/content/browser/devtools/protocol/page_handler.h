@@ -30,15 +30,13 @@ class Image;
 
 namespace content {
 
-class DevToolsSession;
+class DevToolsAgentHostImpl;
 class NavigationHandle;
 class PageNavigationThrottle;
 class RenderFrameHostImpl;
 class WebContentsImpl;
 
 namespace protocol {
-
-class ColorPicker;
 
 class PageHandler : public DevToolsDomainHandler,
                     public Page::Backend,
@@ -47,7 +45,7 @@ class PageHandler : public DevToolsDomainHandler,
   PageHandler();
   ~PageHandler() override;
 
-  static PageHandler* FromSession(DevToolsSession* session);
+  static std::vector<PageHandler*> ForAgentHost(DevToolsAgentHostImpl* host);
 
   void Wire(UberDispatcher* dispatcher) override;
   void SetRenderFrameHost(RenderFrameHostImpl* host) override;
@@ -65,6 +63,7 @@ class PageHandler : public DevToolsDomainHandler,
                   Maybe<std::string> script_to_evaluate_on_load) override;
   Response Navigate(const std::string& url,
                     Maybe<std::string> referrer,
+                    Maybe<std::string> transition_type,
                     Page::FrameId* frame_id) override;
   Response StopLoading() override;
 
@@ -79,7 +78,18 @@ class PageHandler : public DevToolsDomainHandler,
       Maybe<int> quality,
       Maybe<bool> from_surface,
       std::unique_ptr<CaptureScreenshotCallback> callback) override;
-  void PrintToPDF(std::unique_ptr<PrintToPDFCallback> callback) override;
+  void PrintToPDF(Maybe<bool> landscape,
+                  Maybe<bool> display_header_footer,
+                  Maybe<bool> print_background,
+                  Maybe<double> scale,
+                  Maybe<double> paper_width,
+                  Maybe<double> paper_height,
+                  Maybe<double> margin_top,
+                  Maybe<double> margin_bottom,
+                  Maybe<double> margin_left,
+                  Maybe<double> margin_right,
+                  Maybe<String> page_ranges,
+                  std::unique_ptr<PrintToPDFCallback> callback) override;
   Response StartScreencast(Maybe<std::string> format,
                            Maybe<int> quality,
                            Maybe<int> max_width,
@@ -91,7 +101,6 @@ class PageHandler : public DevToolsDomainHandler,
   Response HandleJavaScriptDialog(bool accept,
                                   Maybe<std::string> prompt_text) override;
 
-  Response SetColorPickerEnabled(bool enabled) override;
   Response RequestAppBanner() override;
 
   Response SetControlNavigations(bool enabled) override;
@@ -122,8 +131,6 @@ class PageHandler : public DevToolsDomainHandler,
                           int quality,
                           const gfx::Image& image);
 
-  void OnColorPicked(int r, int g, int b, int a);
-
   // NotificationObserver overrides.
   void Observe(int type,
                const NotificationSource& source,
@@ -144,8 +151,6 @@ class PageHandler : public DevToolsDomainHandler,
   int session_id_;
   int frame_counter_;
   int frames_in_flight_;
-
-  std::unique_ptr<ColorPicker> color_picker_;
 
   bool navigation_throttle_enabled_;
   int next_navigation_id_;

@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/waitable_event.h"
@@ -19,8 +20,7 @@
 #include "net/cert/internal/parsed_certificate.h"
 #include "net/cert/internal/path_builder.h"
 #include "net/cert/internal/signature_policy.h"
-#include "net/cert/internal/trust_store_collection.h"
-#include "net/cert/internal/trust_store_in_memory.h"
+#include "net/cert/internal/system_trust_store.h"
 #include "net/cert/x509_util.h"
 #include "net/cert_net/cert_net_fetcher_impl.h"
 #include "net/tools/cert_verify_tool/cert_verify_tool_util.h"
@@ -28,20 +28,9 @@
 #include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_context_getter.h"
 
-#if defined(USE_NSS_CERTS)
-#include "base/threading/thread_task_runner_handle.h"
-#include "net/cert/internal/cert_issuer_source_nss.h"
-#include "net/cert/internal/trust_store_nss.h"
-#endif
-
 #if defined(OS_LINUX)
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_config_service_fixed.h"
-#endif
-
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-#include <Security/Security.h>
-#include "net/cert/internal/trust_store_mac.h"
 #endif
 
 namespace {
@@ -86,12 +75,6 @@ bool DumpParsedCertificateChain(const base::FilePath& file_path,
       return false;
   }
 
-  if (chain.trust_anchor && chain.trust_anchor->cert()) {
-    if (!AddPemEncodedCert(chain.trust_anchor->cert().get(),
-                           &pem_encoded_chain))
-      return false;
-  }
-
   return WriteToFile(file_path, base::JoinString(pem_encoded_chain, ""));
 }
 
@@ -116,19 +99,6 @@ std::string SubjectFromParsedCertificate(const net::ParsedCertificate* cert) {
   return SubjectToString(parsed_subject);
 }
 
-// Returns a textual representation of the Subject of |trust_anchor|.
-std::string SubjectFromTrustAnchor(const net::TrustAnchor* trust_anchor) {
-  // If the cert is present, display the original subject from that rather than
-  // the normalized subject.
-  if (trust_anchor->cert())
-    return SubjectFromParsedCertificate(trust_anchor->cert().get());
-
-  net::RDNSequence parsed_subject;
-  if (!net::ParseNameValue(trust_anchor->normalized_subject(), &parsed_subject))
-    return std::string();
-  return SubjectToString(parsed_subject);
-}
-
 // Dumps a ResultPath to std::cout.
 void PrintResultPath(const net::CertPathBuilder::ResultPath* result_path,
                      size_t index,
@@ -141,18 +111,6 @@ void PrintResultPath(const net::CertPathBuilder::ResultPath* result_path,
   for (const auto& cert : result_path->path.certs) {
     std::cout << " " << FingerPrintParsedCertificate(cert.get()) << " "
               << SubjectFromParsedCertificate(cert.get()) << "\n";
-  }
-
-  // Print the trust anchor (if there was one).
-  const auto& trust_anchor = result_path->path.trust_anchor;
-  if (trust_anchor) {
-    std::string trust_anchor_cert_fingerprint = "<no cert>";
-    if (trust_anchor->cert()) {
-      trust_anchor_cert_fingerprint =
-          FingerPrintParsedCertificate(trust_anchor->cert().get());
-    }
-    std::cout << " " << trust_anchor_cert_fingerprint << " "
-              << SubjectFromTrustAnchor(trust_anchor.get()) << "\n";
   }
 
   // Print the errors/warnings if there were any.
@@ -221,31 +179,20 @@ bool VerifyUsingPathBuilder(
   at_time.UTCExplode(&exploded_time);
   net::der::GeneralizedTime time = ConvertExplodedTime(exploded_time);
 
-  net::TrustStoreCollection trust_store;
+  std::unique_ptr<net::SystemTrustStore> ssl_trust_store =
+      net::CreateSslSystemTrustStore();
 
-  net::TrustStoreInMemory trust_store_in_memory;
-  trust_store.AddTrustStore(&trust_store_in_memory);
   for (const auto& der_cert : root_der_certs) {
     scoped_refptr<net::ParsedCertificate> cert = ParseCertificate(der_cert);
     if (cert) {
-      trust_store_in_memory.AddTrustAnchor(
-          net::TrustAnchor::CreateFromCertificateNoConstraints(cert));
+      ssl_trust_store->AddTrustAnchor(cert);
     }
   }
 
-#if defined(USE_NSS_CERTS)
-  net::TrustStoreNSS trust_store_nss(trustSSL);
-  trust_store.AddTrustStore(&trust_store_nss);
-#elif defined(OS_MACOSX) && !defined(OS_IOS)
-  net::TrustStoreMac trust_store_mac(kSecPolicyAppleSSL);
-  trust_store.AddTrustStore(&trust_store_mac);
-#else
-  if (root_der_certs.empty()) {
+  if (!ssl_trust_store->UsesSystemTrustStore() && root_der_certs.empty()) {
     std::cerr << "NOTE: CertPathBuilder does not currently use OS trust "
                  "settings (--roots must be specified).\n";
   }
-#endif
-
   net::CertIssuerSourceStatic intermediate_cert_issuer_source;
   for (const auto& der_cert : intermediate_der_certs) {
     scoped_refptr<net::ParsedCertificate> cert = ParseCertificate(der_cert);
@@ -261,14 +208,10 @@ bool VerifyUsingPathBuilder(
   // Verify the chain.
   net::SimpleSignaturePolicy signature_policy(2048);
   net::CertPathBuilder::Result result;
-  net::CertPathBuilder path_builder(target_cert, &trust_store,
-                                    &signature_policy, time,
-                                    net::KeyPurpose::SERVER_AUTH, &result);
+  net::CertPathBuilder path_builder(
+      target_cert, ssl_trust_store->GetTrustStore(), &signature_policy, time,
+      net::KeyPurpose::SERVER_AUTH, &result);
   path_builder.AddCertIssuerSource(&intermediate_cert_issuer_source);
-#if defined(USE_NSS_CERTS)
-  net::CertIssuerSourceNSS cert_issuer_source_nss;
-  path_builder.AddCertIssuerSource(&cert_issuer_source_nss);
-#endif
 
   // Create a network thread to be used for AIA fetches, and wait for a
   // CertNetFetcher to be constructed on that thread.

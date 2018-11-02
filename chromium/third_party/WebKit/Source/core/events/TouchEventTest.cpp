@@ -64,8 +64,9 @@ class TouchEventTest : public testing::Test {
   TouchEvent* EventWithDispatchType(WebInputEvent::DispatchType dispatch_type) {
     WebTouchEvent web_touch_event(WebInputEvent::kTouchStart, 0, 0);
     web_touch_event.dispatch_type = dispatch_type;
-    return TouchEvent::Create(web_touch_event, nullptr, nullptr, nullptr,
-                              "touchstart", &Window(), kTouchActionAuto);
+    return TouchEvent::Create(WebCoalescedInputEvent(web_touch_event), nullptr,
+                              nullptr, nullptr, "touchstart", &Window(),
+                              TouchAction::kTouchActionAuto);
   }
 
  private:
@@ -86,11 +87,11 @@ TEST_F(TouchEventTest, PreventDefaultUncancelable) {
   EXPECT_THAT(MessageSources(), ElementsAre(kJSMessageSource));
 
   EXPECT_TRUE(UseCounter::IsCounted(
-      GetDocument(), UseCounter::kUncancellableTouchEventPreventDefaulted));
+      GetDocument(), UseCounter::kUncancelableTouchEventPreventDefaulted));
   EXPECT_FALSE(UseCounter::IsCounted(
       GetDocument(),
       UseCounter::
-          kUncancellableTouchEventDueToMainThreadResponsivenessPreventDefaulted));
+          kUncancelableTouchEventDueToMainThreadResponsivenessPreventDefaulted));
 }
 
 TEST_F(TouchEventTest,
@@ -109,11 +110,11 @@ TEST_F(TouchEventTest,
   EXPECT_THAT(MessageSources(), ElementsAre(kInterventionMessageSource));
 
   EXPECT_TRUE(UseCounter::IsCounted(
-      GetDocument(), UseCounter::kUncancellableTouchEventPreventDefaulted));
+      GetDocument(), UseCounter::kUncancelableTouchEventPreventDefaulted));
   EXPECT_TRUE(UseCounter::IsCounted(
       GetDocument(),
       UseCounter::
-          kUncancellableTouchEventDueToMainThreadResponsivenessPreventDefaulted));
+          kUncancelableTouchEventDueToMainThreadResponsivenessPreventDefaulted));
 }
 
 TEST_F(TouchEventTest,

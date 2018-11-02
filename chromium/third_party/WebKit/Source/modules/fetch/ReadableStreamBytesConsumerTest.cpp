@@ -6,14 +6,14 @@
 
 #include <memory>
 
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8BindingMacros.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "core/dom/Document.h"
 #include "core/streams/ReadableStreamOperations.h"
 #include "core/testing/DummyPageHolder.h"
 #include "modules/fetch/BytesConsumerTestUtil.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8BindingMacros.h"
 #include "platform/heap/Handle.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -58,14 +58,13 @@ class ReadableStreamBytesConsumerTest : public ::testing::Test {
     v8::Local<v8::Script> script;
     v8::MicrotasksScope microtasks(GetIsolate(),
                                    v8::MicrotasksScope::kDoNotRunMicrotasks);
-    if (!V8Call(v8::String::NewFromUtf8(GetIsolate(), s,
-                                        v8::NewStringType::kNormal),
-                source)) {
+    if (!v8::String::NewFromUtf8(GetIsolate(), s, v8::NewStringType::kNormal)
+             .ToLocal(&source)) {
       ADD_FAILURE();
       return v8::MaybeLocal<v8::Value>();
     }
-    if (!V8Call(v8::Script::Compile(GetScriptState()->GetContext(), source),
-                script)) {
+    if (!v8::Script::Compile(GetScriptState()->GetContext(), source)
+             .ToLocal(&script)) {
       ADD_FAILURE() << "Compilation fails";
       return v8::MaybeLocal<v8::Value>();
     }
@@ -77,7 +76,7 @@ class ReadableStreamBytesConsumerTest : public ::testing::Test {
     if (block.HasCaught()) {
       ADD_FAILURE() << ToCoreString(block.Exception()->ToString(GetIsolate()))
                            .Utf8()
-                           .Data();
+                           .data();
       block.ReThrow();
     }
     return r;

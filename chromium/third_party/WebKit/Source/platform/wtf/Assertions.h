@@ -29,9 +29,6 @@
 
 // This file uses some GCC extensions, but it should be compatible with C++ and
 // Objective C++.
-//
-// For non-debug builds, everything is disabled by default, except for the
-// RELEASE_ASSERT family of macros.
 
 #include <stdarg.h>
 #include "base/allocator/partition_allocator/oom.h"
@@ -123,29 +120,9 @@ class WTF_EXPORT ScopedLogger {
 #define CRASH() IMMEDIATE_CRASH()
 #endif
 
-// ASSERT and ASSERT_NOT_REACHED
-//  These macros are compiled out of release builds.
-//  Expressions inside them are evaluated in debug builds only.
-//  They are deprecated. We should use:
-//    - DCHECK() for ASSERT()
-//    - NOTREACHED() for ASSERT_NOT_REACHED()
-#if OS(WIN)
-// FIXME: Change to use something other than ASSERT to avoid this conflict with
-// the underlying platform.
-#undef ASSERT
-#endif
-
 #define DCHECK_AT(assertion, file, line)                            \
   LAZY_STREAM(logging::LogMessage(file, line, #assertion).stream(), \
               DCHECK_IS_ON() ? !(assertion) : false)
-
-#if DCHECK_IS_ON()
-#define ASSERT(assertion) DCHECK(assertion)
-#define ASSERT_NOT_REACHED() NOTREACHED()
-#else
-#define ASSERT(assertion) ((void)0)
-#define ASSERT_NOT_REACHED() ((void)0)
-#endif
 
 // Users must test "#if ENABLE(SECURITY_ASSERT)", which helps ensure
 // that code testing this macro has included this header.
@@ -170,17 +147,6 @@ class WTF_EXPORT ScopedLogger {
 #else
 #define SECURITY_DCHECK(condition) ((void)0)
 #define SECURITY_CHECK(condition) CHECK(condition)
-#endif
-
-// RELEASE_ASSERT
-// Use in places where failure of an assertion indicates a definite security
-// vulnerability from which execution must not continue even in a release build.
-// Please sure to file bugs for these failures using the security template:
-//    http://code.google.com/p/chromium/issues/entry?template=Security%20Bug
-#if defined(ADDRESS_SANITIZER)
-#define RELEASE_ASSERT(condition) SECURITY_CHECK(condition)
-#else
-#define RELEASE_ASSERT(condition) CHECK(condition)
 #endif
 
 // DEFINE_COMPARISON_OPERATORS_WITH_REFERENCES

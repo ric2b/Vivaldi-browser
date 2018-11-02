@@ -32,9 +32,8 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8ObjectBuilder.h"
 #include "bindings/modules/v8/V8CryptoKey.h"
 #include "core/dom/ContextLifecycleObserver.h"
@@ -43,6 +42,7 @@
 #include "core/dom/ExecutionContext.h"
 #include "modules/crypto/CryptoKey.h"
 #include "modules/crypto/NormalizeAlgorithm.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/Atomics.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCryptoAlgorithm.h"
@@ -64,7 +64,7 @@ static void RejectWithTypeError(const String& error_details,
 class CryptoResultImpl::Resolver final : public ScriptPromiseResolver {
  public:
   static Resolver* Create(ScriptState* script_state, CryptoResultImpl* result) {
-    ASSERT(script_state->ContextIsValid());
+    DCHECK(script_state->ContextIsValid());
     Resolver* resolver = new Resolver(script_state, result);
     resolver->SuspendIfNeeded();
     resolver->KeepAliveWhilePending();
@@ -115,7 +115,7 @@ ExceptionCode WebCryptoErrorToExceptionCode(WebCryptoErrorType error_type) {
       return kV8TypeError;
   }
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return 0;
 }
 
@@ -128,7 +128,7 @@ CryptoResultImpl::CryptoResultImpl(ScriptState* script_state)
 }
 
 CryptoResultImpl::~CryptoResultImpl() {
-  ASSERT(!resolver_);
+  DCHECK(!resolver_);
 }
 
 DEFINE_TRACE(CryptoResultImpl) {
@@ -182,8 +182,8 @@ void CryptoResultImpl::CompleteWithJson(const char* utf8_data,
 
   v8::TryCatch exception_catcher(script_state->GetIsolate());
   v8::Local<v8::Value> json_dictionary;
-  if (V8Call(v8::JSON::Parse(script_state->GetIsolate(), json_string),
-             json_dictionary, exception_catcher))
+  if (v8::JSON::Parse(script_state->GetIsolate(), json_string)
+          .ToLocal(&json_dictionary))
     resolver_->Resolve(json_dictionary);
   else
     resolver_->Reject(exception_catcher.Exception());
@@ -226,7 +226,7 @@ void CryptoResultImpl::CompleteWithKeyPair(const WebCryptoKey& public_key,
 }
 
 void CryptoResultImpl::Cancel() {
-  ASSERT(cancel_);
+  DCHECK(cancel_);
   cancel_->Cancel();
   cancel_.Clear();
   ClearResolver();

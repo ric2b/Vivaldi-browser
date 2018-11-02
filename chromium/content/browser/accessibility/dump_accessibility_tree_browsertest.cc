@@ -12,7 +12,6 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/accessibility_tree_formatter.h"
@@ -59,10 +58,12 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   void AddDefaultFilters(std::vector<Filter>* filters) override {
     filters->push_back(Filter(base::ASCIIToUTF16("FOCUSABLE"), Filter::ALLOW));
     filters->push_back(Filter(base::ASCIIToUTF16("READONLY"), Filter::ALLOW));
-    filters->push_back(Filter(base::ASCIIToUTF16("name=*"), Filter::ALLOW));
     filters->push_back(Filter(base::ASCIIToUTF16("roleDescription=*"),
                               Filter::ALLOW));
     filters->push_back(Filter(base::ASCIIToUTF16("*=''"), Filter::DENY));
+    // After denying empty values, because we want to allow name=''
+    filters->push_back(
+        Filter(base::ASCIIToUTF16("name=*"), Filter::ALLOW_EMPTY));
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -70,6 +71,9 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
     // Enable <dialog>, which is used in some tests.
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kEnableExperimentalWebPlatformFeatures);
+    // Enable accessibility object model, used in other tests.
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        switches::kEnableBlinkFeatures, "AccessibilityObjectModel");
   }
 
   void RunAriaTest(const base::FilePath::CharType* file_path) {
@@ -84,9 +88,6 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   }
 
   void RunAomTest(const base::FilePath::CharType* file_path) {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kAccessibilityObjectModel);
-
     base::FilePath test_path = GetTestFilePath("accessibility", "aom");
     {
       base::ThreadRestrictions::ScopedAllowIO allow_io_for_test_setup;
@@ -134,9 +135,6 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
         actual_contents, "\n",
         base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   }
-
- protected:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityCSSColor) {
@@ -165,6 +163,10 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAbbr) {
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityActionVerbs) {
   RunHtmlTest(FILE_PATH_LITERAL("action-verbs.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityActions) {
+  RunHtmlTest(FILE_PATH_LITERAL("actions.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAddress) {
@@ -1048,6 +1050,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityImgEmptyAlt) {
   RunHtmlTest(FILE_PATH_LITERAL("img-empty-alt.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityImgLinkEmptyAlt) {
+  RunHtmlTest(FILE_PATH_LITERAL("img-link-empty-alt.html"));
+}
+
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInPageLinks) {
   RunHtmlTest(FILE_PATH_LITERAL("in-page-links.html"));
 }
@@ -1294,22 +1301,13 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-opened.html"));
 }
 
-// Flaky: crbug.com/593846, crbug.com/596514
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
-                       DISABLED_AccessibilityModalDialogInIframeClosed) {
+                       AccessibilityModalDialogInIframeClosed) {
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-in-iframe-closed.html"));
 }
 
-// Flaky on Windows and Mac: crbug.com/593846
-#if defined(OS_WIN) || defined(OS_MACOSX)
-#define MAYBE_AccessibilityModalDialogInIframeOpened \
-    DISABLED_AccessibilityModalDialogInIframeOpened
-#else
-#define MAYBE_AccessibilityModalDialogInIframeOpened \
-    AccessibilityModalDialogInIframeOpened
-#endif
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
-                       MAYBE_AccessibilityModalDialogInIframeOpened) {
+                       AccessibilityModalDialogInIframeOpened) {
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-in-iframe-opened.html"));
 }
 

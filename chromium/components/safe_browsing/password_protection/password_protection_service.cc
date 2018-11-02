@@ -4,9 +4,11 @@
 
 #include "components/safe_browsing/password_protection/password_protection_service.h"
 
+#include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -17,10 +19,13 @@
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/web_contents.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/escape.h"
+#include "net/base/url_util.h"
 
 using content::BrowserThread;
+using content::WebContents;
 using history::HistoryService;
 
 namespace safe_browsing {
@@ -63,6 +68,17 @@ GURL GetHostNameWithHTTPScheme(const GURL& url) {
 
 }  // namespace
 
+const base::Feature kPasswordFieldOnFocusPinging{
+    "PasswordFieldOnFocusPinging", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kProtectedPasswordEntryPinging{
+    "ProtectedPasswordEntryPinging", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const char kPasswordOnFocusRequestOutcomeHistogramName[] =
+    "PasswordProtection.RequestOutcome.PasswordFieldOnFocus";
+const char kPasswordEntryRequestOutcomeHistogramName[] =
+    "PasswordProtection.RequestOutcome.ProtectedPasswordEntry";
+
 PasswordProtectionService::PasswordProtectionService(
     const scoped_refptr<SafeBrowsingDatabaseManager>& database_manager,
     scoped_refptr<net::URLRequestContextGetter> request_context_getter,
@@ -80,35 +96,27 @@ PasswordProtectionService::PasswordProtectionService(
 }
 
 PasswordProtectionService::~PasswordProtectionService() {
+  tracker_.TryCancelAll();
   CancelPendingRequests();
   history_service_observer_.RemoveAll();
   weak_factory_.InvalidateWeakPtrs();
 }
 
-void PasswordProtectionService::RecordPasswordReuse(const GURL& url) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(database_manager_);
-  if (!url.is_valid())
-    return;
-
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(
-          &PasswordProtectionService::CheckCsdWhitelistOnIOThread, GetWeakPtr(),
-          url,
-          base::Bind(&PasswordProtectionService::OnMatchCsdWhiteListResult,
-                     base::Unretained(this))));
-}
-
 void PasswordProtectionService::CheckCsdWhitelistOnIOThread(
     const GURL& url,
-    const CheckCsdWhitelistCallback& callback) {
+    bool* check_result) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DCHECK(database_manager_);
-  bool check_result = database_manager_->MatchCsdWhitelistUrl(url);
-  DCHECK(callback);
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(callback, check_result));
+  *check_result =
+      url.is_valid() ? database_manager_->MatchCsdWhitelistUrl(url) : true;
+}
+
+bool PasswordProtectionService::CanGetReputationOfURL(const GURL& url) {
+  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS())
+    return false;
+
+  const std::string& hostname = url.HostNoBrackets();
+  return !net::IsLocalhost(hostname) && !net::IsHostnameNonUnique(hostname) &&
+         hostname.find('.') != std::string::npos;
 }
 
 LoginReputationClientResponse::VerdictType
@@ -140,11 +148,14 @@ PasswordProtectionService::GetCachedVerdict(
   for (base::DictionaryValue::Iterator it(*verdict_dictionary.get());
        !it.IsAtEnd(); it.Advance()) {
     base::DictionaryValue* verdict_entry = nullptr;
-    CHECK(verdict_dictionary->GetDictionaryWithoutPathExpansion(
-        it.key() /* cache_expression */, &verdict_entry));
+    verdict_dictionary->GetDictionaryWithoutPathExpansion(
+        it.key() /* cache_expression */, &verdict_entry);
     int verdict_received_time;
     LoginReputationClientResponse verdict;
-    CHECK(ParseVerdictEntry(verdict_entry, &verdict_received_time, &verdict));
+    // Ignore any entry that we cannot parse. These invalid entries will be
+    // cleaned up during shutdown.
+    if (!ParseVerdictEntry(verdict_entry, &verdict_received_time, &verdict))
+      continue;
     // Since password protection content settings are keyed by origin, we only
     // need to compare the path part of the cache_expression and the given url.
     std::string cache_expression_path =
@@ -199,19 +210,114 @@ void PasswordProtectionService::CacheVerdict(
       std::string(), std::move(verdict_dictionary));
 }
 
+void PasswordProtectionService::CleanUpExpiredVerdicts() {
+  DCHECK(content_settings_);
+  if (GetStoredVerdictCount() <= 0)
+    return;
+
+  ContentSettingsForOneType password_protection_settings;
+  content_settings_->GetSettingsForOneType(
+      CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION, std::string(),
+      &password_protection_settings);
+
+  for (const ContentSettingPatternSource& source :
+       password_protection_settings) {
+    GURL primary_pattern_url = GURL(source.primary_pattern.ToString());
+    // Find all verdicts associated with this origin.
+    std::unique_ptr<base::DictionaryValue> verdict_dictionary =
+        base::DictionaryValue::From(content_settings_->GetWebsiteSetting(
+            primary_pattern_url, GURL(),
+            CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION, std::string(), nullptr));
+    std::vector<std::string> expired_keys;
+    for (base::DictionaryValue::Iterator it(*verdict_dictionary.get());
+         !it.IsAtEnd(); it.Advance()) {
+      base::DictionaryValue* verdict_entry = nullptr;
+      verdict_dictionary->GetDictionaryWithoutPathExpansion(it.key(),
+                                                            &verdict_entry);
+      int verdict_received_time;
+      LoginReputationClientResponse verdict;
+
+      if (!ParseVerdictEntry(verdict_entry, &verdict_received_time, &verdict) ||
+          IsCacheExpired(verdict_received_time, verdict.cache_duration_sec())) {
+        // Since DictionaryValue::Iterator cannot be used to modify the
+        // dictionary, we record the keys of expired verdicts in |expired_keys|
+        // and remove them in the next for-loop.
+        expired_keys.push_back(it.key());
+      }
+    }
+
+    for (const std::string& key : expired_keys) {
+      verdict_dictionary->RemoveWithoutPathExpansion(key, nullptr);
+      stored_verdict_count_--;
+    }
+
+    if (verdict_dictionary->size() == 0u) {
+      content_settings_->ClearSettingsForOneTypeWithPredicate(
+          CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION, base::Time(),
+          base::Bind(&OriginMatchPrimaryPattern, primary_pattern_url));
+    } else if (expired_keys.size() > 0u) {
+      // Set the website setting of this origin with the updated
+      // |verdict_diectionary|.
+      content_settings_->SetWebsiteSettingDefaultScope(
+          primary_pattern_url, GURL(),
+          CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION, std::string(),
+          std::move(verdict_dictionary));
+    }
+  }
+}
+
 void PasswordProtectionService::StartRequest(
+    WebContents* web_contents,
     const GURL& main_frame_url,
+    const GURL& password_form_action,
+    const GURL& password_form_frame_url,
+    const std::string& saved_domain,
     LoginReputationClientRequest::TriggerType type) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!IsPingingEnabled())
-    return;
-  std::unique_ptr<PasswordProtectionRequest> request =
-      base::MakeUnique<PasswordProtectionRequest>(
-          main_frame_url, type, IsExtendedReporting(), IsIncognito(),
-          GetWeakPtr(), GetRequestTimeoutInMS());
+  scoped_refptr<PasswordProtectionRequest> request(
+      new PasswordProtectionRequest(web_contents, main_frame_url,
+                                    password_form_action,
+                                    password_form_frame_url, saved_domain, type,
+                                    this, GetRequestTimeoutInMS()));
   DCHECK(request);
   request->Start();
   requests_.insert(std::move(request));
+}
+
+void PasswordProtectionService::MaybeStartPasswordFieldOnFocusRequest(
+    WebContents* web_contents,
+    const GURL& main_frame_url,
+    const GURL& password_form_action,
+    const GURL& password_form_frame_url) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (CanSendPing(kPasswordFieldOnFocusPinging, main_frame_url)) {
+    StartRequest(web_contents, main_frame_url, password_form_action,
+                 password_form_frame_url,
+                 std::string(), /* saved_domain: not used for this type */
+                 LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE);
+  }
+}
+
+void PasswordProtectionService::MaybeStartProtectedPasswordEntryRequest(
+    WebContents* web_contents,
+    const GURL& main_frame_url,
+    const std::string& saved_domain) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (CanSendPing(kProtectedPasswordEntryPinging, main_frame_url)) {
+    StartRequest(web_contents, main_frame_url, GURL(), GURL(), saved_domain,
+                 LoginReputationClientRequest::PASSWORD_REUSE_EVENT);
+  }
+}
+
+bool PasswordProtectionService::CanSendPing(const base::Feature& feature,
+                                            const GURL& main_frame_url) {
+  RequestOutcome request_outcome = URL_NOT_VALID_FOR_REPUTATION_COMPUTING;
+  if (IsPingingEnabled(kPasswordFieldOnFocusPinging, &request_outcome) &&
+      CanGetReputationOfURL(main_frame_url)) {
+    return true;
+  }
+  RecordNoPingingReason(feature, request_outcome);
+  return false;
 }
 
 void PasswordProtectionService::RequestFinished(
@@ -220,9 +326,7 @@ void PasswordProtectionService::RequestFinished(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   DCHECK(request);
-  // TODO(jialiul): We don't cache verdict for incognito mode for now.
-  // Later we may consider temporarily caching verdict.
-  if (!request->is_incognito() && response)
+  if (response)
     CacheVerdict(request->main_frame_url(), response.get(), base::Time::Now());
 
   // Finished processing this request. Remove it from pending list.
@@ -244,6 +348,11 @@ void PasswordProtectionService::CancelPendingRequests() {
     request->Cancel(false);
   }
   DCHECK(requests_.empty());
+}
+
+scoped_refptr<SafeBrowsingDatabaseManager>
+PasswordProtectionService::database_manager() {
+  return database_manager_;
 }
 
 GURL PasswordProtectionService::GetPasswordProtectionRequestUrl() {
@@ -283,11 +392,29 @@ int PasswordProtectionService::GetRequestTimeoutInMS() {
   return kRequestTimeoutMs;
 }
 
-void PasswordProtectionService::OnMatchCsdWhiteListResult(
-    bool match_whitelist) {
-  UMA_HISTOGRAM_BOOLEAN(
-      "PasswordManager.PasswordReuse.MainFrameMatchCsdWhitelist",
-      match_whitelist);
+void PasswordProtectionService::FillUserPopulation(
+    const LoginReputationClientRequest::TriggerType& request_type,
+    LoginReputationClientRequest* request_proto) {
+  ChromeUserPopulation* user_population = request_proto->mutable_population();
+  user_population->set_user_population(
+      IsExtendedReporting() ? ChromeUserPopulation::EXTENDED_REPORTING
+                            : ChromeUserPopulation::SAFE_BROWSING);
+  user_population->set_is_history_sync_enabled(IsHistorySyncEnabled());
+
+  base::FieldTrial* low_reputation_field_trial =
+      base::FeatureList::GetFieldTrial(kPasswordFieldOnFocusPinging);
+  if (low_reputation_field_trial) {
+    user_population->add_finch_active_groups(
+        low_reputation_field_trial->trial_name() + "|" +
+        low_reputation_field_trial->group_name());
+  }
+  base::FieldTrial* password_entry_field_trial =
+      base::FeatureList::GetFieldTrial(kProtectedPasswordEntryPinging);
+  if (password_entry_field_trial) {
+    user_population->add_finch_active_groups(
+        low_reputation_field_trial->trial_name() + "|" +
+        low_reputation_field_trial->group_name());
+  }
 }
 
 void PasswordProtectionService::OnURLsDeleted(
@@ -296,6 +423,9 @@ void PasswordProtectionService::OnURLsDeleted(
     bool expired,
     const history::URLRows& deleted_rows,
     const std::set<GURL>& favicon_urls) {
+  if (stored_verdict_count_ <= 0)
+    return;
+
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(&PasswordProtectionService::RemoveContentSettingsOnURLsDeleted,
@@ -340,7 +470,7 @@ void PasswordProtectionService::RemoveContentSettingsOnURLsDeleted(
     int verdict_count = static_cast<int>(verdict_dictionary->size());
     stored_verdict_count_ = GetStoredVerdictCount() - verdict_count;
     content_settings_->ClearSettingsForOneTypeWithPredicate(
-        CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION,
+        CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION, base::Time(),
         base::Bind(&OriginMatchPrimaryPattern, url_key));
   }
 }
@@ -350,18 +480,14 @@ bool PasswordProtectionService::ParseVerdictEntry(
     base::DictionaryValue* verdict_entry,
     int* out_verdict_received_time,
     LoginReputationClientResponse* out_verdict) {
-  base::Value* binary_value = nullptr;
-  bool result = verdict_entry && out_verdict &&
-                verdict_entry->GetInteger(kCacheCreationTime,
-                                          out_verdict_received_time) &&
-                verdict_entry->Get(kVerdictProto, &binary_value);
-  if (!result)
-    return false;
-  DCHECK(result);
-  DCHECK_EQ(base::Value::Type::BINARY, binary_value->type());
-  const auto blob = binary_value->GetBlob();
-  const std::string serialized_verdict_proto(blob.begin(), blob.end());
-  return out_verdict->ParseFromString(serialized_verdict_proto);
+  std::string serialized_verdict_proto;
+  return verdict_entry && out_verdict &&
+         verdict_entry->GetInteger(kCacheCreationTime,
+                                   out_verdict_received_time) &&
+         verdict_entry->GetString(kVerdictProto, &serialized_verdict_proto) &&
+         base::Base64Decode(serialized_verdict_proto,
+                            &serialized_verdict_proto) &&
+         out_verdict->ParseFromString(serialized_verdict_proto);
 }
 
 bool PasswordProtectionService::PathVariantsMatchCacheExpression(
@@ -400,7 +526,10 @@ void PasswordProtectionService::GeneratePathVariantsWithoutQuery(
 // "foo.com/foo/bar/"  -> "/foo/bar/"
 std::string PasswordProtectionService::GetCacheExpressionPath(
     const std::string& cache_expression) {
-  DCHECK(!cache_expression.empty());
+  // TODO(jialiul): Change this to a DCHECk when SB server is ready.
+  if (cache_expression.empty())
+    return std::string("/");
+
   std::string out_put(cache_expression);
   // Append a trailing slash if needed.
   if (out_put[out_put.length() - 1] != '/')
@@ -420,16 +549,29 @@ PasswordProtectionService::CreateDictionaryFromVerdict(
       base::MakeUnique<base::DictionaryValue>();
   result->SetInteger(kCacheCreationTime,
                      static_cast<int>(receive_time.ToDoubleT()));
-  // Because DictionaryValue cannot take non-UTF8 string, we need to store
-  // serialized proto in its allowed binary format instead.
-  const std::string serialized_proto(verdict->SerializeAsString());
-  const std::vector<char> verdict_blob(serialized_proto.begin(),
-                                       serialized_proto.end());
-  std::unique_ptr<base::Value> binary_value =
-      base::MakeUnique<base::Value>(verdict_blob);
-  DCHECK_EQ(base::Value::Type::BINARY, binary_value->type());
-  result->Set(kVerdictProto, std::move(binary_value));
+  std::string serialized_proto(verdict->SerializeAsString());
+  // Performs a base64 encoding on the serialized proto.
+  base::Base64Encode(serialized_proto, &serialized_proto);
+  result->SetString(kVerdictProto, serialized_proto);
   return result;
+}
+
+void PasswordProtectionService::RecordNoPingingReason(
+    const base::Feature& feature,
+    RequestOutcome reason) {
+  DCHECK(feature.name == kProtectedPasswordEntryPinging.name ||
+         feature.name == kPasswordFieldOnFocusPinging.name);
+
+  bool is_password_entry_ping =
+      feature.name == kProtectedPasswordEntryPinging.name;
+
+  if (is_password_entry_ping) {
+    UMA_HISTOGRAM_ENUMERATION(kPasswordEntryRequestOutcomeHistogramName, reason,
+                              MAX_OUTCOME);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION(kPasswordOnFocusRequestOutcomeHistogramName,
+                              reason, MAX_OUTCOME);
+  }
 }
 
 }  // namespace safe_browsing

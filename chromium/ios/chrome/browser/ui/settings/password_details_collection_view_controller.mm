@@ -32,16 +32,21 @@
 namespace {
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
-  SectionIdentifierUsername = kSectionIdentifierEnumZero,
+  SectionIdentifierSite = kSectionIdentifierEnumZero,
+  SectionIdentifierUsername,
   SectionIdentifierPassword,
+  SectionIdentifierDelete,
 };
 
 typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeHeader = kItemTypeEnumZero,
+  ItemTypeSite,
+  ItemTypeCopySite,
   ItemTypeUsername,
+  ItemTypeCopyUsername,
   ItemTypePassword,
   ItemTypeShowHide,
-  ItemTypeCopy,
+  ItemTypeCopyPassword,
   ItemTypeDelete,
 };
 
@@ -52,6 +57,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   NSString* _username;
   // The saved password.
   NSString* _password;
+  // The origin site of the saved credential.
+  NSString* _site;
   // Whether the password is shown in plain text form or in obscured form.
   BOOL _plainTextPasswordShown;
   // The password form.
@@ -87,8 +94,11 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
     _passwordForm = passwordForm;
     _username = [username copy];
     _password = [password copy];
+    _site = base::SysUTF8ToNSString(_passwordForm.origin.spec());
     self.title =
         [PasswordDetailsCollectionViewController simplifyOrigin:origin];
+    self.collectionViewAccessibilityIdentifier =
+        @"PasswordDetailsCollectionViewController";
     NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
     [defaultCenter addObserver:self
                       selector:@selector(hidePassword)
@@ -118,6 +128,19 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
   [super loadModel];
   CollectionViewModel* model = self.collectionViewModel;
 
+  [model addSectionWithIdentifier:SectionIdentifierSite];
+  CollectionViewTextItem* siteHeader =
+      [[CollectionViewTextItem alloc] initWithType:ItemTypeHeader];
+  siteHeader.text = l10n_util::GetNSString(IDS_IOS_SHOW_PASSWORD_VIEW_SITE);
+  [model setHeader:siteHeader forSectionWithIdentifier:SectionIdentifierSite];
+  PasswordDetailsItem* siteItem =
+      [[PasswordDetailsItem alloc] initWithType:ItemTypeSite];
+  siteItem.text = _site;
+  siteItem.showingText = YES;
+  [model addItem:siteItem toSectionWithIdentifier:SectionIdentifierSite];
+  [model addItem:[self siteCopyButtonItem]
+      toSectionWithIdentifier:SectionIdentifierSite];
+
   [model addSectionWithIdentifier:SectionIdentifierUsername];
   CollectionViewTextItem* usernameHeader =
       [[CollectionViewTextItem alloc] initWithType:ItemTypeHeader];
@@ -131,6 +154,8 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
   usernameItem.text = _username;
   usernameItem.showingText = YES;
   [model addItem:usernameItem
+      toSectionWithIdentifier:SectionIdentifierUsername];
+  [model addItem:[self usernameCopyButtonItem]
       toSectionWithIdentifier:SectionIdentifierUsername];
 
   [model addSectionWithIdentifier:SectionIdentifierPassword];
@@ -153,8 +178,10 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
       toSectionWithIdentifier:SectionIdentifierPassword];
   [model addItem:[self passwordCopyButtonItem]
       toSectionWithIdentifier:SectionIdentifierPassword];
+
+  [model addSectionWithIdentifier:SectionIdentifierDelete];
   [model addItem:[self deletePasswordButtonItem]
-      toSectionWithIdentifier:SectionIdentifierPassword];
+      toSectionWithIdentifier:SectionIdentifierDelete];
 }
 
 - (void)dealloc {
@@ -163,10 +190,55 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
 
 #pragma mark - Items
 
+- (CollectionViewItem*)siteCopyButtonItem {
+  CollectionViewTextItem* item =
+      [[CollectionViewTextItem alloc] initWithType:ItemTypeCopySite];
+  item.text = l10n_util::GetNSString(IDS_IOS_SETTINGS_SITE_COPY_BUTTON);
+  item.textColor = [[MDCPalette cr_bluePalette] tint500];
+  // Accessibility label adds the header to the text, so that accessibility
+  // users do not have to rely on the visual grouping to understand which part
+  // of the credential is being copied.
+  item.accessibilityLabel = [NSString
+      stringWithFormat:@"%@: %@",
+                       l10n_util::GetNSString(IDS_IOS_SHOW_PASSWORD_VIEW_SITE),
+                       l10n_util::GetNSString(
+                           IDS_IOS_SETTINGS_SITE_COPY_BUTTON)];
+  item.accessibilityTraits |= UIAccessibilityTraitButton;
+  return item;
+}
+
+- (CollectionViewItem*)usernameCopyButtonItem {
+  CollectionViewTextItem* item =
+      [[CollectionViewTextItem alloc] initWithType:ItemTypeCopyUsername];
+  item.text = l10n_util::GetNSString(IDS_IOS_SETTINGS_USERNAME_COPY_BUTTON);
+  item.textColor = [[MDCPalette cr_bluePalette] tint500];
+  // Accessibility label adds the header to the text, so that accessibility
+  // users do not have to rely on the visual grouping to understand which part
+  // of the credential is being copied.
+  item.accessibilityLabel =
+      [NSString stringWithFormat:@"%@: %@",
+                                 l10n_util::GetNSString(
+                                     IDS_IOS_SHOW_PASSWORD_VIEW_USERNAME),
+                                 l10n_util::GetNSString(
+                                     IDS_IOS_SETTINGS_USERNAME_COPY_BUTTON)];
+  item.accessibilityTraits |= UIAccessibilityTraitButton;
+  return item;
+}
+
 - (CollectionViewItem*)passwordCopyButtonItem {
   CollectionViewTextItem* item =
-      [[CollectionViewTextItem alloc] initWithType:ItemTypeCopy];
+      [[CollectionViewTextItem alloc] initWithType:ItemTypeCopyPassword];
   item.text = l10n_util::GetNSString(IDS_IOS_SETTINGS_PASSWORD_COPY_BUTTON);
+  item.textColor = [[MDCPalette cr_bluePalette] tint500];
+  // Accessibility label adds the header to the text, so that accessibility
+  // users do not have to rely on the visual grouping to understand which part
+  // of the credential is being copied.
+  item.accessibilityLabel =
+      [NSString stringWithFormat:@"%@: %@",
+                                 l10n_util::GetNSString(
+                                     IDS_IOS_SHOW_PASSWORD_VIEW_PASSWORD),
+                                 l10n_util::GetNSString(
+                                     IDS_IOS_SETTINGS_PASSWORD_COPY_BUTTON)];
   item.accessibilityTraits |= UIAccessibilityTraitButton;
   return item;
 }
@@ -175,6 +247,7 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
   CollectionViewTextItem* item =
       [[CollectionViewTextItem alloc] initWithType:ItemTypeShowHide];
   item.text = [self showHideButtonText];
+  item.textColor = [[MDCPalette cr_bluePalette] tint500];
   item.accessibilityTraits |= UIAccessibilityTraitButton;
   return item;
 }
@@ -189,6 +262,20 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
 }
 
 #pragma mark - Actions
+
+- (void)copySite {
+  UIPasteboard* generalPasteboard = [UIPasteboard generalPasteboard];
+  generalPasteboard.string = _site;
+  [self showCopyResultToast:l10n_util::GetNSString(
+                                IDS_IOS_SETTINGS_SITE_WAS_COPIED_MESSAGE)];
+}
+
+- (void)copyUsername {
+  UIPasteboard* generalPasteboard = [UIPasteboard generalPasteboard];
+  generalPasteboard.string = _username;
+  [self showCopyResultToast:l10n_util::GetNSString(
+                                IDS_IOS_SETTINGS_USERNAME_WAS_COPIED_MESSAGE)];
+}
 
 - (NSString*)showHideButtonText {
   if (_plainTextPasswordShown) {
@@ -207,8 +294,8 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
       base::mac::ObjCCastStrict<CollectionViewTextItem>(
           [model itemAtIndexPath:path]);
   item.text = [self showHideButtonText];
-  [self reconfigureCellsForItems:@[ item ]
-         inSectionWithIdentifier:SectionIdentifierPassword];
+  item.textColor = [[MDCPalette cr_bluePalette] tint500];
+  [self reconfigureCellsForItems:@[ item ]];
   [self.collectionView.collectionViewLayout invalidateLayout];
 }
 
@@ -225,8 +312,7 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
         return;
       PasswordDetailsItem* passwordItem = strongSelf->_passwordItem;
       passwordItem.showingText = YES;
-      [strongSelf reconfigureCellsForItems:@[ passwordItem ]
-                   inSectionWithIdentifier:SectionIdentifierPassword];
+      [strongSelf reconfigureCellsForItems:@[ passwordItem ]];
       [[strongSelf collectionView].collectionViewLayout invalidateLayout];
       strongSelf->_plainTextPasswordShown = YES;
       [strongSelf toggleShowHideButton];
@@ -244,8 +330,7 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
     return;
   }
   _passwordItem.showingText = NO;
-  [self reconfigureCellsForItems:@[ _passwordItem ]
-         inSectionWithIdentifier:SectionIdentifierPassword];
+  [self reconfigureCellsForItems:@[ _passwordItem ]];
   [self.collectionView.collectionViewLayout invalidateLayout];
   _plainTextPasswordShown = NO;
   [self toggleShowHideButton];
@@ -259,9 +344,9 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
     UIPasteboard* generalPasteboard = [UIPasteboard generalPasteboard];
     generalPasteboard.string = _password;
     TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeSuccess);
-    [self showCopyPasswordResultToast:
-              l10n_util::GetNSString(
-                  IDS_IOS_SETTINGS_PASSWORD_WAS_COPIED_MESSAGE)];
+    [self
+        showCopyResultToast:l10n_util::GetNSString(
+                                IDS_IOS_SETTINGS_PASSWORD_WAS_COPIED_MESSAGE)];
   } else if ([_weakReauthenticationModule canAttemptReauth]) {
     __weak PasswordDetailsCollectionViewController* weakSelf = self;
     void (^copyPasswordHandler)(BOOL) = ^(BOOL success) {
@@ -272,12 +357,12 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
         UIPasteboard* generalPasteboard = [UIPasteboard generalPasteboard];
         generalPasteboard.string = strongSelf->_password;
         TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeSuccess);
-        [strongSelf showCopyPasswordResultToast:
+        [strongSelf showCopyResultToast:
                         l10n_util::GetNSString(
                             IDS_IOS_SETTINGS_PASSWORD_WAS_COPIED_MESSAGE)];
       } else {
         TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeError);
-        [strongSelf showCopyPasswordResultToast:
+        [strongSelf showCopyResultToast:
                         l10n_util::GetNSString(
                             IDS_IOS_SETTINGS_PASSWORD_WAS_NOT_COPIED_MESSAGE)];
       }
@@ -289,9 +374,12 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
   }
 }
 
-- (void)showCopyPasswordResultToast:(NSString*)message {
+- (void)showCopyResultToast:(NSString*)message {
+  // TODO(crbug.com/159166): Route this through some delegate API to be able
+  // to mock it in the unittest, and avoid having an EGTest just for that?
   MDCSnackbarMessage* copyPasswordResultMessage =
       [MDCSnackbarMessage messageWithText:message];
+  copyPasswordResultMessage.category = @"PasswordsSnackbarCategory";
   [MDCSnackbarManager showMessage:copyPasswordResultMessage];
 }
 
@@ -307,6 +395,12 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
   NSInteger itemType =
       [self.collectionViewModel itemTypeForIndexPath:indexPath];
   switch (itemType) {
+    case ItemTypeCopySite:
+      [self copySite];
+      break;
+    case ItemTypeCopyUsername:
+      [self copyUsername];
+      break;
     case ItemTypeShowHide:
       if (_plainTextPasswordShown) {
         [self hidePassword];
@@ -314,7 +408,7 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
         [self showPassword];
       }
       break;
-    case ItemTypeCopy:
+    case ItemTypeCopyPassword:
       [self copyPassword];
       break;
     case ItemTypeDelete:
@@ -340,6 +434,13 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
     default:
       return MDCCellDefaultOneLineHeight;
   }
+}
+
+#pragma mark - ForTesting
+
+- (void)setReauthenticationModule:
+    (id<ReauthenticationProtocol>)reauthenticationModule {
+  _weakReauthenticationModule = reauthenticationModule;
 }
 
 @end

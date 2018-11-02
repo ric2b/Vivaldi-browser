@@ -62,6 +62,8 @@ extern const base::Feature kBrowserTouchBar;
 extern const base::Feature kTabStripKeyboardFocus;
 #endif  // defined(OS_MACOSX)
 
+extern const base::Feature kCaptureThumbnailOnLoadFinished;
+
 extern const base::Feature kCheckInstallabilityForBannerOnLoad;
 
 #if defined(OS_WIN)
@@ -94,6 +96,8 @@ extern const base::Feature kGdiTextPrinting;
 extern const base::Feature kHappinessTrackingSystem;
 #endif
 
+extern const base::Feature kImportantSitesInCbd;
+
 extern const base::Feature kImprovedRecoveryComponent;
 
 #if defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -102,6 +106,10 @@ extern const base::Feature kLinuxObsoleteSystemIsEndOfTheLine;
 
 extern const base::Feature kLsdPermissionPrompt;
 
+#if defined(OS_MACOSX)
+extern const base::Feature kMacRTL;
+#endif
+
 extern const base::Feature kMaterialDesignBookmarks;
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -109,13 +117,13 @@ extern const base::Feature kMaterialDesignExtensions;
 extern const base::Feature kAcknowledgeNtpOverrideOnDeactivate;
 #endif
 
-extern const base::Feature kMaterialDesignHistory;
+extern const base::Feature kMaterialDesignIncognitoNTP;
 
 extern const base::Feature kMaterialDesignSettings;
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
 extern const base::Feature kMediaRemoting;
-extern const base::Feature kMediaRemotingEncrypted;
+extern const base::Feature kMediaRouterUIRouteController;
 #endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
 extern const base::Feature kModalPermissionPrompts;
@@ -130,10 +138,14 @@ extern const base::Feature kNativeNotifications;
 
 extern const base::Feature kOfflinePageDownloadSuggestionsFeature;
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+extern const base::Feature kOneGoogleBarOnLocalNtp;
+#endif
+
 extern const base::Feature kPermissionsBlacklist;
 
 #if defined(OS_WIN)
-extern const base::Feature kPostScriptPrinting;
+extern const base::Feature kDisablePostScriptPrinting;
 #endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -146,10 +158,8 @@ extern const base::Feature kPrefService;
 extern const base::Feature kPreloadLockScreen;
 #endif
 
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OS_WIN) && !defined(OS_MACOSX)
 extern const base::Feature kPrintPdfAsImage;
-
-extern const base::Feature kPrintScaling;
 #endif
 
 extern const base::Feature kPushMessagingBackgroundMode;
@@ -166,23 +176,37 @@ extern const base::Feature kSafeSearchUrlReporting;
 
 extern const base::Feature kSimplifiedFullscreenUI;
 
+extern const base::Feature kSiteDetails;
+
 #if defined(SYZYASAN)
 extern const base::Feature kSyzyasanDeferredFree;
 #endif
 
+extern const base::Feature kTabsInCbd;
+
+extern const base::Feature kUseGoogleLocalNtp;
+
 extern const base::Feature kUseGroupedPermissionInfobars;
+
+extern const base::Feature kUsePermissionManagerForMediaRequests;
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kOptInImeMenu;
 
 extern const base::Feature kQuickUnlockPin;
 
+extern const base::Feature kQuickUnlockPinSignin;
+
 extern const base::Feature kQuickUnlockFingerprint;
 
 extern const base::Feature kEHVInputOnImeMenu;
 
 extern const base::Feature kCrosCompUpdates;
+
+extern const base::Feature kCrOSComponent;
 #endif  // defined(OS_CHROMEOS)
+
+extern const base::Feature kPageLoadMetricsMojofication;
 
 bool PrefServiceEnabled();
 

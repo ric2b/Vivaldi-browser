@@ -6,9 +6,9 @@
 
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/dom/Document.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebURLRequest.h"
@@ -26,7 +26,7 @@ TEST(ServiceWorkerRequestTest, FromString) {
   Request* request =
       Request::Create(scope.GetScriptState(), url, exception_state);
   ASSERT_FALSE(exception_state.HadException());
-  ASSERT(request);
+  DCHECK(request);
   EXPECT_EQ(url, request->url());
 }
 
@@ -37,12 +37,12 @@ TEST(ServiceWorkerRequestTest, FromRequest) {
   KURL url(kParsedURLString, "http://www.example.com/");
   Request* request1 =
       Request::Create(scope.GetScriptState(), url, exception_state);
-  ASSERT(request1);
+  DCHECK(request1);
 
   Request* request2 =
       Request::Create(scope.GetScriptState(), request1, exception_state);
   ASSERT_FALSE(exception_state.HadException());
-  ASSERT(request2);
+  DCHECK(request2);
   EXPECT_EQ(url, request2->url());
 }
 
@@ -62,18 +62,27 @@ TEST(ServiceWorkerRequestTest, FromAndToWebRequest) {
       WebURLRequest::kRequestContextAudio;
   const WebURLRequest::FetchRequestMode kMode =
       WebURLRequest::kFetchRequestModeNavigate;
+  const WebURLRequest::FetchCredentialsMode kCredentialsMode =
+      WebURLRequest::kFetchCredentialsModeInclude;
+  const WebURLRequest::FetchRequestCacheMode kCacheMode =
+      WebURLRequest::kFetchRequestCacheModeNoCache;
+  const WebURLRequest::FetchRedirectMode kRedirectMode =
+      WebURLRequest::kFetchRedirectModeError;
 
   web_request.SetURL(url);
   web_request.SetMethod(method);
-  web_request.SetRequestContext(kContext);
   web_request.SetMode(kMode);
+  web_request.SetCredentialsMode(kCredentialsMode);
+  web_request.SetCacheMode(kCacheMode);
+  web_request.SetRedirectMode(kRedirectMode);
+  web_request.SetRequestContext(kContext);
   for (int i = 0; headers[i].key; ++i)
     web_request.SetHeader(WebString::FromUTF8(headers[i].key),
                           WebString::FromUTF8(headers[i].value));
   web_request.SetReferrer(referrer, kReferrerPolicy);
 
   Request* request = Request::Create(scope.GetScriptState(), web_request);
-  ASSERT(request);
+  DCHECK(request);
   EXPECT_EQ(url, request->url());
   EXPECT_EQ(method, request->method());
   EXPECT_EQ("audio", request->Context());
@@ -97,11 +106,14 @@ TEST(ServiceWorkerRequestTest, FromAndToWebRequest) {
   request->PopulateWebServiceWorkerRequest(second_web_request);
   EXPECT_EQ(url, KURL(second_web_request.Url()));
   EXPECT_EQ(method, String(second_web_request.Method()));
+  EXPECT_EQ(kMode, second_web_request.Mode());
+  EXPECT_EQ(kCredentialsMode, second_web_request.CredentialsMode());
+  EXPECT_EQ(kCacheMode, second_web_request.CacheMode());
+  EXPECT_EQ(kRedirectMode, second_web_request.RedirectMode());
   EXPECT_EQ(kContext, second_web_request.GetRequestContext());
   EXPECT_EQ(referrer, KURL(second_web_request.ReferrerUrl()));
   EXPECT_EQ(kWebReferrerPolicyAlways, second_web_request.GetReferrerPolicy());
   EXPECT_EQ(web_request.Headers(), second_web_request.Headers());
-  EXPECT_EQ(WebURLRequest::kFetchRequestModeNoCORS, second_web_request.Mode());
 }
 
 TEST(ServiceWorkerRequestTest, ToWebRequestStripsURLFragment) {
@@ -111,7 +123,7 @@ TEST(ServiceWorkerRequestTest, ToWebRequestStripsURLFragment) {
   String url = url_without_fragment + "#fragment";
   Request* request =
       Request::Create(scope.GetScriptState(), url, exception_state);
-  ASSERT(request);
+  DCHECK(request);
 
   WebServiceWorkerRequest web_request;
   request->PopulateWebServiceWorkerRequest(web_request);

@@ -6,7 +6,9 @@
 #define COMPONENTS_NTP_TILES_ICON_CACHER_IMPL_H_
 
 #include <memory>
+#include <set>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/cancelable_callback.h"
@@ -17,10 +19,12 @@
 
 namespace favicon {
 class FaviconService;
+class LargeIconService;
 }  // namespace favicon
 
 namespace favicon_base {
 struct FaviconImageResult;
+struct LargeIconResult;
 }  // namespace favicon_base
 
 namespace gfx {
@@ -36,13 +40,19 @@ namespace ntp_tiles {
 
 class IconCacherImpl : public IconCacher {
  public:
+  // TODO(jkrcal): Make this eventually use only LargeIconService.
+  // crbug.com/696563
   IconCacherImpl(favicon::FaviconService* favicon_service,
+                 favicon::LargeIconService* large_icon_service,
                  std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher);
   ~IconCacherImpl() override;
 
-  void StartFetch(PopularSites::Site site,
-                  const base::Closure& icon_available,
-                  const base::Closure& preliminary_icon_available) override;
+  void StartFetchPopularSites(
+      PopularSites::Site site,
+      const base::Closure& icon_available,
+      const base::Closure& preliminary_icon_available) override;
+  void StartFetchMostLikely(const GURL& page_url,
+                            const base::Closure& icon_available) override;
 
  private:
   using CancelableImageCallback =
@@ -50,28 +60,41 @@ class IconCacherImpl : public IconCacher {
 
   void OnGetFaviconImageForPageURLFinished(
       PopularSites::Site site,
-      const base::Closure& icon_available,
       const base::Closure& preliminary_icon_available,
       const favicon_base::FaviconImageResult& result);
 
-  void OnFaviconDownloaded(
+  void OnPopularSitesFaviconDownloaded(
       PopularSites::Site site,
       std::unique_ptr<CancelableImageCallback> preliminary_callback,
-      const base::Closure& icon_available,
       const std::string& id,
       const gfx::Image& fetched_image,
       const image_fetcher::RequestMetadata& metadata);
 
   std::unique_ptr<CancelableImageCallback> MaybeProvideDefaultIcon(
       const PopularSites::Site& site,
-      const base::Closure& icon_available);
-  void SaveAndNotifyIconForSite(const PopularSites::Site& site,
-                                const base::Closure& icon_available,
-                                const gfx::Image& image);
+      const base::Closure& preliminary_icon_available);
+  void SaveAndNotifyDefaultIconForSite(
+      const PopularSites::Site& site,
+      const base::Closure& preliminary_icon_available,
+      const gfx::Image& image);
+  void SaveIconForSite(const PopularSites::Site& site, const gfx::Image& image);
+
+  void OnGetLargeIconOrFallbackStyleFinished(
+      const GURL& page_url,
+      const favicon_base::LargeIconResult& result);
+
+  void OnMostLikelyFaviconDownloaded(const GURL& request_url, bool success);
+
+  bool StartRequest(const GURL& request_url,
+                    const base::Closure& icon_available);
+  void FinishRequestAndNotifyIconAvailable(const GURL& request_url,
+                                           bool newly_available);
 
   base::CancelableTaskTracker tracker_;
   favicon::FaviconService* const favicon_service_;
+  favicon::LargeIconService* const large_icon_service_;
   std::unique_ptr<image_fetcher::ImageFetcher> const image_fetcher_;
+  std::map<GURL, std::vector<base::Closure>> in_flight_requests_;
 
   base::WeakPtrFactory<IconCacherImpl> weak_ptr_factory_;
 

@@ -7,6 +7,8 @@
 #include <map>
 #include <string>
 
+#include "base/feature_list.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_util.h"
@@ -24,7 +26,6 @@ const char kEnabled[] = "Enabled";
 
 // Verifies that we can enable offline previews via field trial.
 TEST(PreviewsExperimentsTest, TestFieldTrialOfflinePage) {
-  EXPECT_FALSE(IsIncludedInClientSidePreviewsExperimentsFieldTrial());
   EXPECT_FALSE(params::IsOfflinePreviewsEnabled());
 
   base::FieldTrialList field_trial_list(nullptr);
@@ -36,9 +37,24 @@ TEST(PreviewsExperimentsTest, TestFieldTrialOfflinePage) {
   EXPECT_TRUE(base::FieldTrialList::CreateFieldTrial(
       kClientSidePreviewsFieldTrial, kEnabled));
 
-  EXPECT_TRUE(IsIncludedInClientSidePreviewsExperimentsFieldTrial());
   EXPECT_TRUE(params::IsOfflinePreviewsEnabled());
   variations::testing::ClearAllVariationParams();
+}
+
+// Verifies that we can enable offline previews via comand line.
+TEST(PreviewsExperimentsTest, TestCommandLineOfflinePage) {
+  EXPECT_FALSE(params::IsOfflinePreviewsEnabled());
+
+  std::unique_ptr<base::FeatureList> feature_list =
+      base::MakeUnique<base::FeatureList>();
+
+  // The feature is explicitly enabled on the command-line.
+  feature_list->InitializeFromCommandLine("OfflinePreviews", "");
+  base::FeatureList::ClearInstanceForTesting();
+  base::FeatureList::SetInstance(std::move(feature_list));
+
+  EXPECT_TRUE(params::IsOfflinePreviewsEnabled());
+  base::FeatureList::ClearInstanceForTesting();
 }
 
 // Verifies that the default params are correct, and that custom params can be
@@ -58,7 +74,7 @@ TEST(PreviewsExperimentsTest, TestParamsForBlackListAndOffline) {
   EXPECT_EQ(base::TimeDelta::FromDays(7),
             params::OfflinePreviewFreshnessDuration());
   EXPECT_EQ(net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G,
-            params::EffectiveConnectionTypeThresholdForOffline());
+            params::DefaultEffectiveConnectionTypeThreshold());
   EXPECT_EQ(0, params::OfflinePreviewsVersion());
 
   base::FieldTrialList field_trial_list(nullptr);
@@ -94,7 +110,7 @@ TEST(PreviewsExperimentsTest, TestParamsForBlackListAndOffline) {
   EXPECT_EQ(base::TimeDelta::FromDays(12),
             params::OfflinePreviewFreshnessDuration());
   EXPECT_EQ(net::EFFECTIVE_CONNECTION_TYPE_4G,
-            params::EffectiveConnectionTypeThresholdForOffline());
+            params::DefaultEffectiveConnectionTypeThreshold());
   EXPECT_EQ(10, params::OfflinePreviewsVersion());
 
   variations::testing::ClearAllVariationParams();
@@ -148,6 +164,22 @@ TEST(PreviewsExperimentsTest, TestEnableClientLoFiWithCustomParams) {
             params::EffectiveConnectionTypeThresholdForClientLoFi());
 
   variations::testing::ClearAllVariationParams();
+}
+
+// Verifies that we can enable offline previews via comand line.
+TEST(PreviewsExperimentsTest, TestCommandLineClientLoFi) {
+  EXPECT_FALSE(params::IsClientLoFiEnabled());
+
+  std::unique_ptr<base::FeatureList> feature_list =
+      base::MakeUnique<base::FeatureList>();
+
+  // The feature is explicitly enabled on the command-line.
+  feature_list->InitializeFromCommandLine("ClientLoFi", "");
+  base::FeatureList::ClearInstanceForTesting();
+  base::FeatureList::SetInstance(std::move(feature_list));
+
+  EXPECT_TRUE(params::IsClientLoFiEnabled());
+  base::FeatureList::ClearInstanceForTesting();
 }
 
 }  // namespace

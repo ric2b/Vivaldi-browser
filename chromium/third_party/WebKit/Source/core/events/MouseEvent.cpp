@@ -22,8 +22,6 @@
 
 #include "core/events/MouseEvent.h"
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/Element.h"
 #include "core/events/EventDispatcher.h"
 #include "core/frame/FrameView.h"
@@ -33,6 +31,8 @@
 #include "core/layout/LayoutObject.h"
 #include "core/paint/PaintLayer.h"
 #include "core/svg/SVGElement.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptState.h"
 #include "public/platform/WebPointerProperties.h"
 
 namespace blink {
@@ -229,8 +229,9 @@ MouseEvent::MouseEvent(const AtomicString& event_type,
 }
 
 MouseEvent::MouseEvent(const AtomicString& event_type,
-                       const MouseEventInit& initializer)
-    : UIEventWithKeyState(event_type, initializer),
+                       const MouseEventInit& initializer,
+                       TimeTicks platform_time_stamp)
+    : UIEventWithKeyState(event_type, initializer, platform_time_stamp),
       screen_location_(
           DoublePoint(initializer.screenX(), initializer.screenY())),
       movement_delta_(
@@ -383,13 +384,25 @@ bool MouseEvent::IsMouseEvent() const {
   return true;
 }
 
-int MouseEvent::which() const {
+short MouseEvent::button() const {
+  const AtomicString& event_name = type();
+  if (button_ == -1 || event_name == EventTypeNames::mousemove ||
+      event_name == EventTypeNames::mouseleave ||
+      event_name == EventTypeNames::mouseenter ||
+      event_name == EventTypeNames::mouseover ||
+      event_name == EventTypeNames::mouseout) {
+    return 0;
+  }
+  return button_;
+}
+
+unsigned MouseEvent::which() const {
   // For the DOM, the return values for left, middle and right mouse buttons are
   // 0, 1, 2, respectively.
   // For the Netscape "which" property, the return values for left, middle and
   // right mouse buttons are 1, 2, 3, respectively.
   // So we must add 1.
-  return button_ + 1;
+  return (unsigned)(button_ + 1);
 }
 
 Node* MouseEvent::toElement() const {
@@ -439,10 +452,20 @@ DispatchEventResult MouseEventDispatchMediator::DispatchEvent(
   mouse_event.GetEventPath().AdjustForRelatedTarget(
       dispatcher.GetNode(), mouse_event.relatedTarget());
 
+  bool is_click = mouse_event.type() == EventTypeNames::click;
+  bool send_to_disabled_form_controls =
+      RuntimeEnabledFeatures::sendMouseEventsDisabledFormControlsEnabled();
+
+  if (send_to_disabled_form_controls && is_click &&
+      mouse_event.GetEventPath().DisabledFormControlExistsInPath()) {
+    return DispatchEventResult::kCanceledBeforeDispatch;
+  }
+
   if (!mouse_event.isTrusted())
     return dispatcher.Dispatch();
 
-  if (IsDisabledFormControl(&dispatcher.GetNode()))
+  if (!send_to_disabled_form_controls &&
+      IsDisabledFormControl(&dispatcher.GetNode()))
     return DispatchEventResult::kCanceledBeforeDispatch;
 
   if (mouse_event.type().IsEmpty())
@@ -455,7 +478,7 @@ DispatchEventResult MouseEventDispatchMediator::DispatchEvent(
 
   DispatchEventResult dispatch_result = dispatcher.Dispatch();
 
-  if (mouse_event.type() != EventTypeNames::click || mouse_event.detail() != 2)
+  if (!is_click || mouse_event.detail() != 2)
     return dispatch_result;
 
   // Special case: If it's a double click event, we also send the dblclick

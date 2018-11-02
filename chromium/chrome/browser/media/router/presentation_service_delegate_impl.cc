@@ -15,19 +15,19 @@
 #include "base/strings/string_util.h"
 #include "chrome/browser/media/router/browser_presentation_connection_proxy.h"
 #include "chrome/browser/media/router/create_presentation_connection_request.h"
-#include "chrome/browser/media/router/media_route.h"
 #include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/media/router/media_router_dialog_controller.h"
 #include "chrome/browser/media/router/media_router_factory.h"
-#include "chrome/browser/media/router/media_sink.h"
-#include "chrome/browser/media/router/media_source_helper.h"
 #include "chrome/browser/media/router/offscreen_presentation_manager.h"
 #include "chrome/browser/media/router/offscreen_presentation_manager_factory.h"
 #include "chrome/browser/media/router/presentation_media_sinks_observer.h"
-#include "chrome/browser/media/router/route_message.h"
 #include "chrome/browser/media/router/route_message_observer.h"
-#include "chrome/browser/media/router/route_request_result.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
+#include "chrome/common/media_router/media_route.h"
+#include "chrome/common/media_router/media_sink.h"
+#include "chrome/common/media_router/media_source_helper.h"
+#include "chrome/common/media_router/route_message.h"
+#include "chrome/common/media_router/route_request_result.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/presentation_screen_availability_listener.h"
 #include "content/public/browser/render_frame_host.h"
@@ -164,8 +164,8 @@ class PresentationFrame {
  private:
   MediaSource GetMediaSourceFromListener(
       content::PresentationScreenAvailabilityListener* listener) const;
-  base::SmallMap<std::map<std::string, MediaRoute>> presentation_id_to_route_;
-  base::SmallMap<
+  base::small_map<std::map<std::string, MediaRoute>> presentation_id_to_route_;
+  base::small_map<
       std::map<std::string, std::unique_ptr<PresentationMediaSinksObserver>>>
       url_to_sinks_observer_;
   std::unordered_map<

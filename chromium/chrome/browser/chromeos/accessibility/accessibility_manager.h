@@ -235,7 +235,7 @@ class AccessibilityManager
 
   // ShellObserver overrides:
   void OnFullscreenStateChanged(bool is_fullscreen,
-                                ash::WmWindow* root_window) override;
+                                aura::Window* root_window) override;
 
   void SetProfileForTest(Profile* profile);
 
@@ -361,10 +361,9 @@ class AccessibilityManager
       const extensions::api::braille_display_private::KeyEvent& event) override;
 
   // ExtensionRegistryObserver implementation.
-  void OnExtensionUnloaded(
-      content::BrowserContext* browser_context,
-      const extensions::Extension* extension,
-      extensions::UnloadedExtensionInfo::Reason reason) override;
+  void OnExtensionUnloaded(content::BrowserContext* browser_context,
+                           const extensions::Extension* extension,
+                           extensions::UnloadedExtensionReason reason) override;
   void OnShutdown(extensions::ExtensionRegistry* registry) override;
 
   // InputMethodManager::Observer

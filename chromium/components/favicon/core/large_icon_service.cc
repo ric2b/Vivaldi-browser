@@ -40,9 +40,19 @@ const base::Feature kLargeIconServiceFetchingFeature{
 
 const char kGoogleServerV2RequestFormat[] =
     "https://t0.gstatic.com/faviconV2?"
-    "client=chrome&drop_404_icon=true&size=32&min_size=%d&max_size=64&"
-    "fallback_opts=TYPE,SIZE,URL&url=%s";
+    "client=chrome&drop_404_icon=true&%s"
+    "size=%d&min_size=%d&max_size=%d&fallback_opts=TYPE,SIZE,URL&url=%s";
 const char kGoogleServerV2RequestFormatParam[] = "request_format";
+
+const char kCheckSeenParam[] = "check_seen=true&";
+
+const int kGoogleServerV2EnforcedMinSizeInPixel = 16;
+const char kGoogleServerV2EnforcedMinSizeInPixelParam[] =
+    "enforced_min_size_in_pixel";
+
+const double kGoogleServerV2DesiredToMaxSizeFactor = 2.0;
+const char kGoogleServerV2DesiredToMaxSizeFactorParam[] =
+    "desired_to_max_size_factor";
 
 GURL TrimPageUrlForGoogleServer(const GURL& page_url) {
   if (!page_url.SchemeIsHTTPOrHTTPS() || page_url.HostIsIPAddress())
@@ -57,13 +67,30 @@ GURL TrimPageUrlForGoogleServer(const GURL& page_url) {
 }
 
 GURL GetRequestUrlForGoogleServerV2(const GURL& page_url,
-                                    int min_source_size_in_pixel) {
+                                    int min_source_size_in_pixel,
+                                    int desired_size_in_pixel,
+                                    bool may_page_url_be_private) {
   std::string url_format = base::GetFieldTrialParamValueByFeature(
       kLargeIconServiceFetchingFeature, kGoogleServerV2RequestFormatParam);
+  double desired_to_max_size_factor = base::GetFieldTrialParamByFeatureAsDouble(
+      kLargeIconServiceFetchingFeature,
+      kGoogleServerV2DesiredToMaxSizeFactorParam,
+      kGoogleServerV2DesiredToMaxSizeFactor);
+
+  min_source_size_in_pixel = std::max(
+      min_source_size_in_pixel, base::GetFieldTrialParamByFeatureAsInt(
+                                    kLargeIconServiceFetchingFeature,
+                                    kGoogleServerV2EnforcedMinSizeInPixelParam,
+                                    kGoogleServerV2EnforcedMinSizeInPixel));
+  desired_size_in_pixel =
+      std::max(desired_size_in_pixel, min_source_size_in_pixel);
+  int max_size_in_pixel =
+      static_cast<int>(desired_size_in_pixel * desired_to_max_size_factor);
 
   return GURL(base::StringPrintf(
       url_format.empty() ? kGoogleServerV2RequestFormat : url_format.c_str(),
-      min_source_size_in_pixel, page_url.spec().c_str()));
+      may_page_url_be_private ? kCheckSeenParam : "", desired_size_in_pixel,
+      min_source_size_in_pixel, max_size_in_pixel, page_url.spec().c_str()));
 }
 
 bool IsDbResultAdequate(const favicon_base::FaviconRawBitmapResult& db_result,
@@ -284,6 +311,7 @@ LargeIconService::LargeIconService(
     : favicon_service_(favicon_service),
       background_task_runner_(background_task_runner),
       image_fetcher_(std::move(image_fetcher)) {
+  large_icon_types_.push_back(favicon_base::IconType::WEB_MANIFEST_ICON);
   large_icon_types_.push_back(favicon_base::IconType::FAVICON);
   large_icon_types_.push_back(favicon_base::IconType::TOUCH_ICON);
   large_icon_types_.push_back(favicon_base::IconType::TOUCH_PRECOMPOSED_ICON);
@@ -320,12 +348,15 @@ void LargeIconService::
     GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
         const GURL& page_url,
         int min_source_size_in_pixel,
+        int desired_size_in_pixel,
+        bool may_page_url_be_private,
         const base::Callback<void(bool success)>& callback) {
   DCHECK_LE(0, min_source_size_in_pixel);
 
   const GURL trimmed_page_url = TrimPageUrlForGoogleServer(page_url);
   const GURL server_request_url = GetRequestUrlForGoogleServerV2(
-      trimmed_page_url, min_source_size_in_pixel);
+      trimmed_page_url, min_source_size_in_pixel, desired_size_in_pixel,
+      may_page_url_be_private);
 
   // Do not download if the URL is invalid after trimming, or there is a
   // previous cache miss recorded for |server_request_url|.
@@ -339,10 +370,34 @@ void LargeIconService::
 
   image_fetcher_->SetDataUseServiceName(
       data_use_measurement::DataUseUserData::LARGE_ICON_SERVICE);
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("favicon_component", R"(
+        semantics {
+          sender: "Favicon Component"
+          description:
+            "Sends a request to a Google server to retrieve the favicon bitmap "
+            "for a page URL."
+          trigger:
+            "A request can be sent if Chrome does not have a favicon for a "
+            "particular page. This is done in two scenarios:\n"
+            " 1- For articles suggestions on the new tab page (URLs are public "
+            "    and provided by Google).\n"
+            " 2- For server-suggested most visited tiles on the new tab page "
+            "    (User gets these URLs from Google, only if history sync is "
+            "    enabled)."
+          data: "Page URL and desired icon size."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting: "This feature cannot be disabled by settings."
+          policy_exception_justification: "Not implemented."
+        })");
   image_fetcher_->StartOrQueueNetworkRequest(
       server_request_url.spec(), server_request_url,
       base::Bind(&OnFetchIconFromGoogleServerComplete, favicon_service_,
-                 page_url, callback));
+                 page_url, callback),
+      traffic_annotation);
 }
 
 base::CancelableTaskTracker::TaskId

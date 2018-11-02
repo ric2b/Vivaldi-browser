@@ -12,6 +12,7 @@
 #include "ash/shell_port.h"
 #include "ash/wm_window.h"
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/run_loop.h"
@@ -203,8 +204,8 @@ int DragDropController::StartDragAndDrop(
   drag_image_final_bounds_for_cancel_animation_ =
       gfx::Rect(start_location - provider->GetDragImageOffset(),
                 provider->GetDragImage().size());
-  drag_image_.reset(
-      new DragImageView(WmWindow::Get(source_window->GetRootWindow()), source));
+  drag_image_ =
+      base::MakeUnique<DragImageView>(source_window->GetRootWindow(), source);
   drag_image_->SetImage(provider->GetDragImage());
   drag_image_offset_ = provider->GetDragImageOffset();
   gfx::Rect drag_image_bounds(start_location, drag_image_->GetPreferredSize());
@@ -435,13 +436,13 @@ void DragDropController::DragUpdate(aura::Window* target,
       e.set_root_location_f(event.root_location_f());
       e.set_flags(event.flags());
       op = delegate->OnDragUpdated(e);
-      gfx::NativeCursor cursor = ui::kCursorNoDrop;
+      gfx::NativeCursor cursor = ui::CursorType::kNoDrop;
       if (op & ui::DragDropTypes::DRAG_COPY)
-        cursor = ui::kCursorCopy;
+        cursor = ui::CursorType::kCopy;
       else if (op & ui::DragDropTypes::DRAG_LINK)
-        cursor = ui::kCursorAlias;
+        cursor = ui::CursorType::kAlias;
       else if (op & ui::DragDropTypes::DRAG_MOVE)
-        cursor = ui::kCursorGrabbing;
+        cursor = ui::CursorType::kGrabbing;
       ash::Shell::Get()->cursor_manager()->SetCursor(cursor);
     }
   }
@@ -459,7 +460,7 @@ void DragDropController::DragUpdate(aura::Window* target,
 
 void DragDropController::Drop(aura::Window* target,
                               const ui::LocatedEvent& event) {
-  ash::Shell::Get()->cursor_manager()->SetCursor(ui::kCursorPointer);
+  ash::Shell::Get()->cursor_manager()->SetCursor(ui::CursorType::kPointer);
 
   // We must guarantee that a target gets a OnDragEntered before Drop. WebKit
   // depends on not getting a Drop without DragEnter. This behavior is
@@ -501,7 +502,7 @@ void DragDropController::AnimationEnded(const gfx::Animation* animation) {
   if (!IsDragDropInProgress())
     drag_image_.reset();
   if (pending_long_tap_) {
-    // If not in a nested message loop, we can forward the long tap right now.
+    // If not in a nested run loop, we can forward the long tap right now.
     if (!should_block_during_drag_drop_) {
       ForwardPendingLongTap();
     } else {
@@ -514,7 +515,7 @@ void DragDropController::AnimationEnded(const gfx::Animation* animation) {
 }
 
 void DragDropController::DoDragCancel(int drag_cancel_animation_duration_ms) {
-  ash::Shell::Get()->cursor_manager()->SetCursor(ui::kCursorPointer);
+  ash::Shell::Get()->cursor_manager()->SetCursor(ui::CursorType::kPointer);
 
   // |drag_window_| can be NULL if we have just started the drag and have not
   // received any DragUpdates, or, if the |drag_window_| gets destroyed during

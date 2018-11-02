@@ -9,8 +9,10 @@
 #include "core/dom/NodeList.h"
 #include "core/dom/Range.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/editing/FindInPageCoordinates.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/VisualViewport.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/html/HTMLElement.h"
 #include "core/layout/TextAutosizer.h"
 #include "core/page/Page.h"
@@ -19,8 +21,6 @@
 #include "public/platform/Platform.h"
 #include "public/web/WebDocument.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "web/FindInPageCoordinates.h"
-#include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
 
 using blink::testing::RunPendingTasks;
@@ -31,7 +31,7 @@ class TextFinderTest : public ::testing::Test {
  protected:
   TextFinderTest() {
     web_view_helper_.Initialize();
-    WebLocalFrameImpl& frame_impl =
+    WebLocalFrameBase& frame_impl =
         *web_view_helper_.WebView()->MainFrameImpl();
     frame_impl.ViewImpl()->Resize(WebSize(640, 480));
     frame_impl.ViewImpl()->UpdateAllLifecyclePhases();
@@ -65,15 +65,16 @@ WebFloatRect TextFinderTest::FindInPageRect(Node* start_container,
                                             int start_offset,
                                             Node* end_container,
                                             int end_offset) {
-  Range* range = Range::Create(start_container->GetDocument(), start_container,
-                               start_offset, end_container, end_offset);
+  const Position start_position(start_container, start_offset);
+  const Position end_position(end_container, end_offset);
+  const EphemeralRange range(start_position, end_position);
   return WebFloatRect(FindInPageRectFromRange(range));
 }
 
 TEST_F(TextFinderTest, FindTextSimple) {
   GetDocument().body()->setInnerHTML("XXXXFindMeYYYYfindmeZZZZ");
   GetDocument().UpdateStyleAndLayout();
-  Node* text_node = GetDocument().body()->FirstChild();
+  Node* text_node = GetDocument().body()->firstChild();
 
   int identifier = 0;
   WebString search_text(String("FindMe"));
@@ -203,8 +204,8 @@ TEST_F(TextFinderTest, FindTextInShadowDOM) {
       ShadowRootType::V0, ASSERT_NO_EXCEPTION);
   shadow_root->setInnerHTML(
       "<content select=\"i\"></content><u>Foo</u><content></content>");
-  Node* text_in_b_element = GetDocument().body()->FirstChild()->firstChild();
-  Node* text_in_i_element = GetDocument().body()->LastChild()->firstChild();
+  Node* text_in_b_element = GetDocument().body()->firstChild()->firstChild();
+  Node* text_in_i_element = GetDocument().body()->lastChild()->firstChild();
   Node* text_in_u_element = shadow_root->childNodes()->item(1)->firstChild();
   GetDocument().UpdateStyleAndLayout();
 
@@ -302,7 +303,7 @@ TEST_F(TextFinderTest, ScopeTextMatchesSimple) {
   GetDocument().body()->setInnerHTML("XXXXFindMeYYYYfindmeZZZZ");
   GetDocument().UpdateStyleAndLayout();
 
-  Node* text_node = GetDocument().body()->FirstChild();
+  Node* text_node = GetDocument().body()->firstChild();
 
   int identifier = 0;
   WebString search_text(String("FindMe"));
@@ -326,7 +327,7 @@ TEST_F(TextFinderTest, ScopeTextMatchesRepeated) {
   GetDocument().body()->setInnerHTML("XXXXFindMeYYYYfindmeZZZZ");
   GetDocument().UpdateStyleAndLayout();
 
-  Node* text_node = GetDocument().body()->FirstChild();
+  Node* text_node = GetDocument().body()->firstChild();
 
   int identifier = 0;
   WebString search_text1(String("XFindMe"));
@@ -356,8 +357,8 @@ TEST_F(TextFinderTest, ScopeTextMatchesWithShadowDOM) {
       ShadowRootType::V0, ASSERT_NO_EXCEPTION);
   shadow_root->setInnerHTML(
       "<content select=\"i\"></content><u>Foo</u><content></content>");
-  Node* text_in_b_element = GetDocument().body()->FirstChild()->firstChild();
-  Node* text_in_i_element = GetDocument().body()->LastChild()->firstChild();
+  Node* text_in_b_element = GetDocument().body()->firstChild()->firstChild();
+  Node* text_in_i_element = GetDocument().body()->lastChild()->firstChild();
   Node* text_in_u_element = shadow_root->childNodes()->item(1)->firstChild();
   GetDocument().UpdateStyleAndLayout();
 
@@ -390,7 +391,7 @@ TEST_F(TextFinderTest, ScopeRepeatPatternTextMatches) {
   GetDocument().body()->setInnerHTML("ab ab ab ab ab");
   GetDocument().UpdateStyleAndLayout();
 
-  Node* text_node = GetDocument().body()->FirstChild();
+  Node* text_node = GetDocument().body()->firstChild();
 
   int identifier = 0;
   WebString search_text(String("ab ab"));
@@ -414,7 +415,7 @@ TEST_F(TextFinderTest, OverlappingMatches) {
   GetDocument().body()->setInnerHTML("aababaa");
   GetDocument().UpdateStyleAndLayout();
 
-  Node* text_node = GetDocument().body()->FirstChild();
+  Node* text_node = GetDocument().body()->firstChild();
 
   int identifier = 0;
   WebString search_text(String("aba"));
@@ -438,7 +439,7 @@ TEST_F(TextFinderTest, SequentialMatches) {
   GetDocument().body()->setInnerHTML("ababab");
   GetDocument().UpdateStyleAndLayout();
 
-  Node* text_node = GetDocument().body()->FirstChild();
+  Node* text_node = GetDocument().body()->firstChild();
 
   int identifier = 0;
   WebString search_text(String("ab"));
@@ -484,7 +485,7 @@ TEST_F(TextFinderTest, FindTextJavaScriptUpdatesDOM) {
   EXPECT_TRUE(active_now);
 
   // Add new text to DOM and try FindNext.
-  Element* i_element = ToElement(GetDocument().body()->LastChild());
+  Element* i_element = ToElement(GetDocument().body()->lastChild());
   ASSERT_TRUE(i_element);
   i_element->setInnerHTML("ZZFindMe");
   GetDocument().UpdateStyleAndLayout();
@@ -510,8 +511,8 @@ TEST_F(TextFinderTest, FindTextJavaScriptUpdatesDOM) {
   WebVector<WebFloatRect> match_rects;
   GetTextFinder().FindMatchRects(match_rects);
   ASSERT_EQ(2u, match_rects.size());
-  Node* text_in_b_element = GetDocument().body()->FirstChild()->firstChild();
-  Node* text_in_i_element = GetDocument().body()->LastChild()->firstChild();
+  Node* text_in_b_element = GetDocument().body()->firstChild()->firstChild();
+  Node* text_in_i_element = GetDocument().body()->lastChild()->firstChild();
   EXPECT_EQ(FindInPageRect(text_in_b_element, 4, text_in_b_element, 10),
             match_rects[0]);
   EXPECT_EQ(FindInPageRect(text_in_i_element, 2, text_in_i_element, 8),
@@ -540,7 +541,7 @@ TEST_F(TextFinderTest, FindTextJavaScriptUpdatesDOMAfterNoMatches) {
   EXPECT_FALSE(active_now);
 
   // Add new text to DOM and try FindNext.
-  Element* i_element = ToElement(GetDocument().body()->LastChild());
+  Element* i_element = ToElement(GetDocument().body()->lastChild());
   ASSERT_TRUE(i_element);
   i_element->setInnerHTML("ZZFindMe");
   GetDocument().UpdateStyleAndLayout();
@@ -566,7 +567,7 @@ TEST_F(TextFinderTest, FindTextJavaScriptUpdatesDOMAfterNoMatches) {
   WebVector<WebFloatRect> match_rects;
   GetTextFinder().FindMatchRects(match_rects);
   ASSERT_EQ(1u, match_rects.size());
-  Node* text_in_i_element = GetDocument().body()->LastChild()->firstChild();
+  Node* text_in_i_element = GetDocument().body()->lastChild()->firstChild();
   EXPECT_EQ(FindInPageRect(text_in_i_element, 2, text_in_i_element, 8),
             match_rects[0]);
 }

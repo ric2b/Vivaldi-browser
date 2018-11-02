@@ -21,12 +21,13 @@ Polymer({
     devices_: Array,
 
     /**
-     * The targetted object for menu operations.
+     * The targeted object for menu operations.
      * @private {?Object}
      */
     actionMenuModel_: Object
   },
 
+  /** @override */
   ready: function() {
     this.fetchUsbDevices_();
   },
@@ -39,6 +40,14 @@ Polymer({
     this.browserProxy.fetchUsbDevices().then(function(deviceList) {
       this.devices_ = deviceList;
     }.bind(this));
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  hasDevices_: function() {
+    return !!(this.devices_ && this.devices_.length);
   },
 
   /**

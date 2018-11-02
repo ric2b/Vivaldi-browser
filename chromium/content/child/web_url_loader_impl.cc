@@ -386,7 +386,8 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
                           bool stale_copy_in_cache,
                           const base::TimeTicks& completion_time,
                           int64_t total_transfer_size,
-                          int64_t encoded_body_size);
+                          int64_t encoded_body_size,
+                          int64_t decoded_body_size);
 
  private:
   friend class base::RefCounted<Context>;
@@ -435,7 +436,8 @@ class WebURLLoaderImpl::RequestPeerImpl : public RequestPeer {
                           bool stale_copy_in_cache,
                           const base::TimeTicks& completion_time,
                           int64_t total_transfer_size,
-                          int64_t encoded_body_size) override;
+                          int64_t encoded_body_size,
+                          int64_t decoded_body_size) override;
 
  private:
   scoped_refptr<Context> context_;
@@ -532,7 +534,7 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
   // the WebURLLoader are the ones created by CommitNavigation. Several browser
   // tests load HTML directly through a data url which will be handled by the
   // block above.
-  DCHECK(!IsBrowserSideNavigationEnabled() || stream_override_.get() ||
+  DCHECK(!IsBrowserSideNavigationEnabled() || stream_override_ ||
          request.GetFrameType() == WebURLRequest::kFrameTypeNone);
 
   GURL referrer_url(
@@ -603,7 +605,7 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
   // contains the body of the response. The network request has already been
   // made by the browser.
   mojo::ScopedDataPipeConsumerHandle consumer_handle;
-  if (stream_override_.get()) {
+  if (stream_override_) {
     CHECK(IsBrowserSideNavigationEnabled());
     DCHECK(!sync_load_response);
     DCHECK_NE(WebURLRequest::kFrameTypeNone, request.GetFrameType());
@@ -620,7 +622,8 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
   // https://crbug.com/705508 is found.
   if (IsBrowserSideNavigationEnabled() &&
       IsResourceTypeFrame(resource_request->resource_type) &&
-      !resource_request->resource_body_stream_url.SchemeIs(url::kBlobScheme)) {
+      !resource_request->resource_body_stream_url.SchemeIs(url::kBlobScheme) &&
+      !consumer_handle.is_valid()) {
     base::debug::DumpWithoutCrashing();
   }
 
@@ -631,6 +634,8 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
   else
     extra_data = &empty_extra_data;
   extra_data->CopyToResourceRequest(resource_request.get());
+  if (extra_data->url_loader_factory_override())
+    url_loader_factory_ = extra_data->url_loader_factory_override();
 
   if (sync_load_response) {
     DCHECK(defers_loading_ == NOT_DEFERRING);
@@ -716,7 +721,7 @@ void WebURLLoaderImpl::Context::OnReceivedResponse(
 
   // PlzNavigate: during navigations, the ResourceResponse has already been
   // received on the browser side, and has been passed down to the renderer.
-  if (stream_override_.get()) {
+  if (stream_override_) {
     CHECK(IsBrowserSideNavigationEnabled());
     // Compute the delta between the response sizes so that the accurate
     // transfer size can be reported at the end of the request.
@@ -785,19 +790,20 @@ void WebURLLoaderImpl::Context::OnReceivedResponse(
     client_->DidReceiveResponse(response, std::move(read_handle));
     // TODO(yhirano): Support ftp listening and multipart
     return;
-  } else {
-    client_->DidReceiveResponse(response);
   }
 
-  // We may have been cancelled after didReceiveResponse, which would leave us
-  // without a client and therefore without much need to do further handling.
+  client_->DidReceiveResponse(response);
+
+  // DidReceiveResponse() may have triggered a cancel, causing the |client_| to
+  // go away.
   if (!client_)
     return;
 
-  DCHECK(!ftp_listing_delegate_.get());
+  DCHECK(!ftp_listing_delegate_);
   if (info.mime_type == "text/vnd.chromium.ftp-dir" && !show_raw_listing) {
-    ftp_listing_delegate_.reset(
-        new FtpDirectoryListingResponseDelegate(client_, loader_, response));
+    ftp_listing_delegate_ =
+        base::MakeUnique<FtpDirectoryListingResponseDelegate>(client_, loader_,
+                                                              response);
   }
 }
 
@@ -829,16 +835,17 @@ void WebURLLoaderImpl::Context::OnReceivedData(
     // The FTP listing delegate will make the appropriate calls to
     // client_->didReceiveData and client_->didReceiveResponse.
     ftp_listing_delegate_->OnReceivedData(payload, data_length);
-  } else {
-    // We dispatch the data even when |useStreamOnResponse()| is set, in order
-    // to make Devtools work.
-    client_->DidReceiveData(payload, data_length);
+    return;
+  }
 
-    if (request_.UseStreamOnResponse()) {
-      // We don't support ftp_listening_delegate_ for now.
-      // TODO(yhirano): Support ftp listening.
-      body_stream_writer_->AddData(std::move(data));
-    }
+  // We dispatch the data even when |useStreamOnResponse()| is set, in order
+  // to make Devtools work.
+  client_->DidReceiveData(payload, data_length);
+
+  if (request_.UseStreamOnResponse()) {
+    // We don't support |ftp_listing_delegate_| for now.
+    // TODO(yhirano): Support ftp listening.
+    body_stream_writer_->AddData(std::move(data));
   }
 }
 
@@ -862,7 +869,8 @@ void WebURLLoaderImpl::Context::OnCompletedRequest(
     bool stale_copy_in_cache,
     const base::TimeTicks& completion_time,
     int64_t total_transfer_size,
-    int64_t encoded_body_size) {
+    int64_t encoded_body_size,
+    int64_t decoded_body_size) {
   if (stream_override_ && stream_override_->stream_url.is_empty()) {
     // TODO(kinuko|scottmg|jam): This is wrong. https://crbug.com/705744.
     total_transfer_size = stream_override_->total_transferred;
@@ -886,16 +894,18 @@ void WebURLLoaderImpl::Context::OnCompletedRequest(
     if (error_code != net::OK) {
       client_->DidFail(CreateWebURLError(request_.Url(), stale_copy_in_cache,
                                          error_code, was_ignored_by_handler),
-                       total_transfer_size, encoded_body_size);
+                       total_transfer_size, encoded_body_size,
+                       decoded_body_size);
     } else {
       // PlzNavigate: compute the accurate transfer size for navigations.
-      if (stream_override_.get()) {
+      if (stream_override_) {
         DCHECK(IsBrowserSideNavigationEnabled());
         total_transfer_size += stream_override_->total_transfer_size_delta;
       }
 
       client_->DidFinishLoading((completion_time - TimeTicks()).InSecondsF(),
-                                total_transfer_size, encoded_body_size);
+                                total_transfer_size, encoded_body_size,
+                                decoded_body_size);
     }
   }
 }
@@ -921,7 +931,7 @@ void WebURLLoaderImpl::Context::CancelBodyStreaming() {
   if (client_) {
     // TODO(yhirano): Set |stale_copy_in_cache| appropriately if possible.
     client_->DidFail(CreateWebURLError(request_.Url(), false, net::ERR_ABORTED),
-                     WebURLLoaderClient::kUnknownEncodedDataLength, 0);
+                     WebURLLoaderClient::kUnknownEncodedDataLength, 0, 0);
   }
 
   // Notify the browser process that the request is canceled.
@@ -993,7 +1003,7 @@ void WebURLLoaderImpl::Context::HandleDataURL() {
   }
 
   OnCompletedRequest(error_code, false, false, base::TimeTicks::Now(), 0,
-                     data.size());
+                     data.size(), data.size());
 }
 
 // WebURLLoaderImpl::RequestPeerImpl ------------------------------------------
@@ -1045,10 +1055,11 @@ void WebURLLoaderImpl::RequestPeerImpl::OnCompletedRequest(
     bool stale_copy_in_cache,
     const base::TimeTicks& completion_time,
     int64_t total_transfer_size,
-    int64_t encoded_body_size) {
-  context_->OnCompletedRequest(error_code, was_ignored_by_handler,
-                               stale_copy_in_cache, completion_time,
-                               total_transfer_size, encoded_body_size);
+    int64_t encoded_body_size,
+    int64_t decoded_body_size) {
+  context_->OnCompletedRequest(
+      error_code, was_ignored_by_handler, stale_copy_in_cache, completion_time,
+      total_transfer_size, encoded_body_size, decoded_body_size);
 }
 
 // WebURLLoaderImpl -----------------------------------------------------------
@@ -1247,7 +1258,6 @@ void WebURLLoaderImpl::LoadSynchronously(const WebURLRequest& request,
 
   PopulateURLResponse(final_url, sync_load_response, &response,
                       request.ReportRawHeaders());
-  response.AddToDecodedBodyLength(sync_load_response.data.size());
   encoded_data_length = sync_load_response.encoded_data_length;
   encoded_body_length = sync_load_response.encoded_body_length;
 

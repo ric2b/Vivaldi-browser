@@ -141,7 +141,7 @@ void CompareFrameWithExpectation(const PublicFrameInfo& expected,
   EXPECT_EQ(expected.alpha_blend, frame->GetAlphaBlendSource());
 }
 
-// This function removes |length| bytes at |offset|, and then calls frameCount.
+// This function removes |length| bytes at |offset|, and then calls FrameCount.
 // It assumes the missing bytes should result in a failed decode because the
 // parser jumps |length| bytes too far in the next chunk.
 void TestMissingDataBreaksDecoding(const char* png_file,
@@ -171,7 +171,7 @@ static void ExpectStatic(ImageDecoder* decoder) {
   ASSERT_NE(nullptr, frame);
   EXPECT_EQ(ImageFrame::kFrameComplete, frame->GetStatus());
   EXPECT_FALSE(decoder->Failed());
-  EXPECT_EQ(kCAnimationNone, decoder->RepetitionCount());
+  EXPECT_EQ(kAnimationNone, decoder->RepetitionCount());
 }
 
 // Decode up to the indicated fcTL offset and then provide an fcTL with the
@@ -256,8 +256,8 @@ void TestProgressiveDecodingContinuesAfterFullData(
   EXPECT_EQ(hash_full, hash_upfront);
 }
 
-// Modify the frame data bytes for frame |frameIndex| so that decoding fails.
-// Parsing should work fine, and is checked with |expectedFrameCount|.
+// Modify the frame data bytes for frame |frame_index| so that decoding fails.
+// Parsing should work fine, and is checked with |expected_frame_count|.
 void TestFailureDuringDecode(const char* file,
                              size_t idat_offset,
                              size_t frame_index,
@@ -265,7 +265,7 @@ void TestFailureDuringDecode(const char* file,
   RefPtr<SharedBuffer> full_data = ReadFile(file);
   ASSERT_FALSE(full_data->IsEmpty());
 
-  // This is the offset where the frame data chunk frame |frameIndex| starts.
+  // This is the offset where the frame data chunk frame |frame_index| starts.
   RefPtr<SharedBuffer> data =
       SharedBuffer::Create(full_data->Data(), idat_offset + 8u);
   // Repeat the first 8 bytes of the frame data. This should result in a
@@ -312,7 +312,7 @@ TEST(AnimatedPNGTests, repetitionCountTest) {
   TestRepetitionCount(
       "/LayoutTests/images/resources/"
       "png-animated-idat-not-part-of-animation.png",
-      kCAnimationNone);
+      kAnimationNone);
 }
 
 // Test if the decoded metdata corresponds to the defined expectations
@@ -456,7 +456,7 @@ TEST(AnimatedPNGTests, ActlErrors) {
     decoder->SetData(no_actl_data, true);
     EXPECT_EQ(1u, decoder->FrameCount());
     EXPECT_FALSE(decoder->Failed());
-    EXPECT_EQ(kCAnimationNone, decoder->RepetitionCount());
+    EXPECT_EQ(kAnimationNone, decoder->RepetitionCount());
   }
 
   // Store the acTL for more tests.
@@ -506,7 +506,7 @@ TEST(AnimatedPNGTests, ActlErrors) {
       decoder->SetData(extra_actl_data, true);
       EXPECT_EQ(1u, decoder->FrameCount());
       EXPECT_FALSE(decoder->Failed());
-      EXPECT_EQ(kCAnimationNone, decoder->RepetitionCount());
+      EXPECT_EQ(kAnimationNone, decoder->RepetitionCount());
       EXPECT_NE(nullptr, decoder->FrameBufferAtIndex(0));
       EXPECT_FALSE(decoder->Failed());
     }
@@ -654,7 +654,7 @@ TEST(AnimatedPNGTests, VerifyAlphaBlending) {
                     "png-animated-idat-part-of-animation.png");
 }
 
-// This tests if the frame count gets set correctly when parsing frameCount
+// This tests if the frame count gets set correctly when parsing FrameCount
 // fails in one of the parsing queries.
 //
 // First, enough data is provided such that two frames should be registered.
@@ -787,7 +787,7 @@ TEST(AnimatedPNGTests, VerifyInvalidDisposalAndBlending) {
   auto decoder = CreateDecoder();
 
   // The disposal byte in the frame control chunk is the 24th byte, alpha
-  // blending the 25th. |offsetDisposalOp| is 241 bytes to get to the third
+  // blending the 25th. |kOffsetDisposalOp| is 241 bytes to get to the third
   // fctl chunk, 8 bytes to skip the length and tag bytes, and 24 bytes to get
   // to the disposal op.
   //
@@ -936,14 +936,14 @@ TEST(AnimatedPNGTests, SubsetFromIHDR) {
   ASSERT_EQ(original_data->size(), data->size());
 
   // This will test both byte by byte and using the full data, and compare.
-  TestByteByByteDecode(CreateDecoder, data.Get(), 1, kCAnimationNone);
+  TestByteByByteDecode(CreateDecoder, data.Get(), 1, kAnimationNone);
 }
 
 // Static PNG tests
 
 TEST(StaticPNGTests, repetitionCountTest) {
   TestRepetitionCount("/LayoutTests/images/resources/png-simple.png",
-                      kCAnimationNone);
+                      kAnimationNone);
 }
 
 TEST(StaticPNGTests, sizeTest) {
@@ -1026,21 +1026,19 @@ TEST(PNGTests, VerifyFrameCompleteBehavior) {
     decoder->SetData(full_data.Get(), true);
 
     // With full data, parsing the size still does not mark a frame as
-    // complete.
+    // complete for animated images.
     EXPECT_TRUE(decoder->IsSizeAvailable());
-    EXPECT_FALSE(decoder->FrameIsCompleteAtIndex(0));
+    if (rec.expected_frame_count > 1)
+      EXPECT_FALSE(decoder->FrameIsCompleteAtIndex(0));
+    else
+      EXPECT_TRUE(decoder->FrameIsCompleteAtIndex(0));
 
     const auto frame_count = decoder->FrameCount();
     ASSERT_EQ(rec.expected_frame_count, frame_count);
 
-    if (frame_count > 1u) {
-      // After parsing (the full file), all frames are complete.
-      for (size_t i = 0; i < frame_count; ++i)
-        EXPECT_TRUE(decoder->FrameIsCompleteAtIndex(i));
-    } else {
-      // A single frame image is not reported complete until decoding.
-      EXPECT_FALSE(decoder->FrameIsCompleteAtIndex(0));
-    }
+    // After parsing (the full file), all frames are complete.
+    for (size_t i = 0; i < frame_count; ++i)
+      EXPECT_TRUE(decoder->FrameIsCompleteAtIndex(i));
 
     frame = decoder->FrameBufferAtIndex(0);
     ASSERT_TRUE(frame);

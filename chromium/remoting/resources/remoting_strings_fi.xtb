@@ -64,10 +64,12 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="225614027745146050">Tervetuloa</translation>
 <translation id="228809120910082333">Salli käyttö Chromotingin kautta vahvistamalla tilisi ja PIN-koodisi alla.</translation>
 <translation id="2314101195544969792"><ph name="APPLICATION_NAME" /> -istuntosi on ollut epäaktiivinen jonkin aikaa, ja se katkaistaan pian.</translation>
+<translation id="2317666076142640974">Tutustu uuteen <ph name="LINK_BEGIN" />Chrome-etäkäyttö-verkkosovellukseen<ph name="LINK_END" />. Kuulisimme mielellämme palautetta.</translation>
 <translation id="2353140552984634198">Tähän tietokoneeseen voi muodostaa suojatun yhteyden Chromotingin avulla.</translation>
 <translation id="2359808026110333948">Jatka</translation>
 <translation id="2366718077645204424">Isäntään ei saatu yhteyttä. Tämä johtuu luultavasti käyttämäsi verkon määrityksistä.</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  Havaittiin verkossa viimeksi <ph name="RELATIVE_TIMESTAMP" />.</translation>
+<translation id="2405928220797050937">Tätä sovellusta ei enää tueta. Varmista, että saat uusimmat ominaisuudet ja tietoturvapäivitykset, käyttämällä <ph name="LINK_BEGIN" />Chrome-etäkäyttö-verkkosovellusta<ph name="LINK_END" />.</translation>
 <translation id="2499160551253595098">Auta meitä parantamaan Chrome-etäkäyttöä antamalla meidän kerätä käyttötilastoja ja virheraportteja.</translation>
 <translation id="2512228156274966424">Huomaa: voit varmistaa kaikkien pikanäppäinten käytettävyyden, kun määrität Chrome-etäkäytön avautumaan ikkunassa.</translation>
 <translation id="2540992418118313681">Haluatko jakaa tämän tietokoneen niin, että toinen käyttäjä voi käyttää ja valvoa sitä?</translation>
@@ -95,7 +97,6 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="3194245623920924351">Chrome-etäkäyttö</translation>
 <translation id="3197730452537982411">Etäkäyttö</translation>
 <translation id="3258789396564295715">Tähän tietokoneeseen voi muodostaa suojatun yhteyden Chrome-etäkäytön avulla.</translation>
-<translation id="327263477022142889">Haluatko parantaa Chromen etäkäyttöä? <ph name="LINK_BEGIN" />Osallistu kyselyyn.<ph name="LINK_END" /></translation>
 <translation id="3286521253923406898">Chromoting-isännän hallinta</translation>
 <translation id="332624996707057614">Muokkaa tietokoneen nimeä</translation>
 <translation id="3339299787263251426">Käytä tietokonettasi turvallisesti internetissä</translation>
@@ -111,6 +112,7 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="3649256019230929621">Pienennä ikkuna</translation>
 <translation id="369442766917958684">Offline.</translation>
 <translation id="3695446226812920698">Lisätietoja</translation>
+<translation id="3718805989288361841">Chrome-etäkäytön käytäntöasetuksissa on virhe. Ota yhteyttä järjestelmänvalvojaan.</translation>
 <translation id="3776024066357219166">Chrome-etäkäyttökerta on päättynyt.</translation>
 <translation id="3785447812627779171">Chromoting-
 isäntä</translation>
@@ -137,7 +139,6 @@ isäntä</translation>
 <translation id="4277463233460010382">Tämä tietokone on määritetty sallimaan vähintään yhden asiakkaan yhteys ilman PIN-koodia.</translation>
 <translation id="4277736576214464567">Käyttökoodi on virheellinen. Yritä uudelleen.</translation>
 <translation id="4361728918881830843">Ota etäyhteys käyttöön asentamalla toiselle tietokoneelle Chrome-etäkäyttö ja valitsemalla <ph name="BUTTON_NAME" />.</translation>
-<translation id="4368630973089289038">Haluatko parantaa Chromoting-kokemusta? <ph name="LINK_BEGIN" />Osallistu kyselyyn.<ph name="LINK_END" /></translation>
 <translation id="4394049700291259645">Poista käytöstä</translation>
 <translation id="4405930547258349619">Ydinkirjasto</translation>
 <translation id="4430435636878359009">Poista käytöstä etäyhteydet tähän tietokoneeseen</translation>
@@ -232,6 +233,7 @@ isäntä</translation>
 <translation id="6930242544192836755">Kesto</translation>
 <translation id="6939719207673461467">Näytä/piilota näppäimistö</translation>
 <translation id="6944854424004126054">Palauta ikkuna</translation>
+<translation id="6948905685698011662">Chrome-etäkäyttö on nyt verkossa! Tutustu <ph name="LINK_BEGIN" />maksuttomaan verkkosovellukseen<ph name="LINK_END" />.</translation>
 <translation id="6963936880795878952">Yhteydet etätietokoneeseen on väliaikaisesti estetty, sillä siihen yritettiin muodostaa yhteys virheellisellä PIN-koodilla. Yritä myöhemmin uudelleen.</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Haluatko varmasti poistaa käytöstä etäyhteydet kohteeseen <ph name="HOSTNAME" />? Jos muutat mieltäsi, yhteydet täytyy palauttaa käyttöön kyseisellä tietokoneella.</translation>
@@ -248,6 +250,7 @@ isäntä</translation>
 <translation id="7401733114166276557">Chrome-etäkäyttö</translation>
 <translation id="7434397035092923453">Käyttöoikeus kiellettiin asiakkaalta <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="7444276978508498879">Asiakas <ph name="CLIENT_USERNAME" /> yhdistettiin.</translation>
+<translation id="7589941250119944644">Chrome-etäkäyttö siirtyy uuteen sijaintiin verkossa. Kokeile <ph name="LINK_BEGIN" />verkkosovellusta<ph name="LINK_END" /> – se on nopea ja maksuton, ja siinä on samat ominaisuudet kuin ennenkin.</translation>
 <translation id="7606912958770842224">Ota etäyhteydet käyttöön</translation>
 <translation id="7649070708921625228">Ohje</translation>
 <translation id="7658239707568436148">Peruuta</translation>

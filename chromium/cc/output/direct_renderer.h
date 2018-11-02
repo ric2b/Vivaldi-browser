@@ -6,10 +6,10 @@
 #define CC_OUTPUT_DIRECT_RENDERER_H_
 
 #include <memory>
-#include <unordered_map>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "cc/base/filter_operations.h"
 #include "cc/cc_export.h"
@@ -198,13 +198,15 @@ class CC_EXPORT DirectRenderer {
   // DirectComposition layers needed to be used.
   int frames_since_using_dc_layers_ = 0;
 
-  // TODO(danakj): Just use a vector of pairs here? Hash map is way overkill.
-  std::unordered_map<int, std::unique_ptr<ScopedResource>>
-      render_pass_textures_;
-  std::unordered_map<int, TileDrawQuad> render_pass_bypass_quads_;
+  // A map from RenderPass id to the texture used to draw the RenderPass from.
+  base::flat_map<int, std::unique_ptr<ScopedResource>> render_pass_textures_;
+  // A map from RenderPass id to the single quad present in and replacing the
+  // RenderPass.
+  base::flat_map<int, TileDrawQuad> render_pass_bypass_quads_;
 
-  RenderPassFilterList render_pass_filters_;
-  RenderPassFilterList render_pass_background_filters_;
+  // A map from RenderPass id to the filters used when drawing the RenderPass.
+  base::flat_map<int, FilterOperations*> render_pass_filters_;
+  base::flat_map<int, FilterOperations*> render_pass_background_filters_;
 
   bool visible_ = false;
   bool disable_color_checks_for_testing_ = false;

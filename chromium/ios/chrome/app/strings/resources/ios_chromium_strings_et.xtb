@@ -17,8 +17,9 @@
 <translation id="3256316712990552818">Kopeeritud Chromiumi</translation>
 <translation id="3413120535237193088">Kõikidesse seadmetesse järjehoidjate hankimiseks logige Chromiumisse sisse.</translation>
 <translation id="3473048256428424907">Chromiumi QR-skanneri sisselülitamine</translation>
+<translation id="3605252743693911722">Logige Chromiumi sisse, et kõikides oma seadmetes kasutada järjehoidjaid, paroole ja muud.</translation>
 <translation id="3805899903892079518">Chromiumil pole juurdepääsu fotodele ega videotele. Lubage iOS-is juurdepääs valikutega Seaded &gt; Privaatsus &gt; Fotod.</translation>
-<translation id="40863189315891987"><ph name="BEGIN_LINK" />Lisage Chromium dokki<ph name="END_LINK" />, et sellele kiiremini juurde pääseda</translation>
+<translation id="4024541897090868497">Kõikidesse seadmetesse vahelehtede hankimiseks logige Chromiumi sisse.</translation>
 <translation id="418271229036116702">Oma teistest seadmetest vahelehtede hankimiseks logige Chromiumisse sisse.</translation>
 <translation id="4241912885070669028">Logite välja kontolt, mida haldab <ph name="SIGNOUT_MANAGED_DOMAIN" />. Selle tulemusel kustutatakse seadmes olevad Chromiumi andmed, kuid need jäävad alles teie Google'i kontole.</translation>
 <translation id="4555020257205549924">Kui see funktsioon on sisse lülitatud, pakub Chromium võimalust tõlkida teistes keeltes kirjutatud lehti Google'i tõlke abil. <ph name="BEGIN_LINK" />Lisateave<ph name="END_LINK" /></translation>
@@ -32,7 +33,6 @@
 <translation id="6268381023930128611">Kas logida Chromiumist välja?</translation>
 <translation id="6424492062988593837">Chromium muutus just veelgi paremaks! Saadaval on uus versioon.</translation>
 <translation id="6604711459180487467">Täiustage Chromiumis oma kasutuskogemust asukohateabe abil.</translation>
-<translation id="6989306073720242915">Kas teile meeldib Chromium? <ph name="BEGIN_LINK" />Lisage see dokki<ph name="END_LINK" /></translation>
 <translation id="7099326575020694068">Chromium ei saa poolitatud vaate režiimis kaamerat kasutada</translation>
 <translation id="7144758435978427212">Avastage lähedalasuvate objektide saadetud veebilehti. Kui Bluetooth on sisse lülitatud, kogub Chromium teie ümbruses olevate objektidega seotud veebilehed kokku ja saadab need anonüümselt Google'ile, et leida teie jaoks kõige kasulikumad lehed. <ph name="BEGIN_LINK" />Lisateave<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Chromium säästab aega, tuues teie kontod veebi. Kontosid saate lisada või eemaldada menüüs Seaded.</translation>
@@ -44,7 +44,6 @@
 <translation id="786327964234957808">Vahetate sünkroonitavad kontod aadressilt <ph name="USER_EMAIL1" /> aadressile <ph name="USER_EMAIL2" />. Teie olemasolevaid Chromiumi andmeid haldab domeen <ph name="DOMAIN" />. Teie andmed kustutatakse sellest seadmest, kuid need jäävad alles kontole <ph name="USER_EMAIL1" />.</translation>
 <translation id="8111736072665034317">Seda rakendust kasutades nõustute Chromiumi <ph name="BEGIN_LINK" />teenusetingimustega<ph name="END_LINK" />.</translation>
 <translation id="8175055321229419309">Nõuanne: <ph name="BEGIN_LINK" />lisage Chromium dokki<ph name="END_LINK" /></translation>
-<translation id="8200548749940012969">Kõikidesse seadmetesse seadete hankimiseks logige Chromiumisse sisse.</translation>
 <translation id="8252885722420466166">Täiustage Chromiumis oma Google'i teenuste kasutuskogemust asukohateabe abil.</translation>
 <translation id="8353224596138547809">Kas soovite, et Chromium salvestaks parooli, mida selle saidi jaoks kasutate?</translation>
 <translation id="8586442755830160949">Autoriõigus <ph name="YEAR" /> The Chromium Authors. Kõik õigused on kaitstud.</translation>

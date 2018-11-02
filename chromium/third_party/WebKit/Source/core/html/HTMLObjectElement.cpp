@@ -41,7 +41,6 @@
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/layout/api/LayoutEmbeddedItem.h"
 #include "core/plugins/PluginView.h"
-#include "platform/FrameViewBase.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
 
 namespace blink {
@@ -223,7 +222,7 @@ void HTMLObjectElement::ParametersForPlugin(Vector<String>& param_names,
 }
 
 bool HTMLObjectElement::HasFallbackContent() const {
-  for (Node* child = FirstChild(); child; child = child->nextSibling()) {
+  for (Node* child = firstChild(); child; child = child->nextSibling()) {
     // Ignore whitespace-only text, and <param> tags, any other content is
     // fallback content.
     if (child->IsTextNode()) {
@@ -327,6 +326,9 @@ void HTMLObjectElement::UpdatePluginInternal() {
       DispatchErrorEvent();
     if (HasFallbackContent())
       RenderFallbackContent();
+  } else {
+    if (IsErrorplaceholder())
+      DispatchErrorEvent();
   }
 }
 
@@ -390,12 +392,13 @@ void HTMLObjectElement::RenderFallbackContent() {
   // Before we give up and use fallback content, check to see if this is a MIME
   // type issue.
   if (image_loader_ && image_loader_->GetImage() &&
-      image_loader_->GetImage()->GetStatus() != ResourceStatus::kLoadError) {
+      image_loader_->GetImage()->GetContentStatus() !=
+          ResourceStatus::kLoadError) {
     service_type_ = image_loader_->GetImage()->GetResponse().MimeType();
     if (!IsImageType()) {
       // If we don't think we have an image type anymore, then clear the image
       // from the loader.
-      image_loader_->SetImage(0);
+      image_loader_->ClearImage();
       ReattachFallbackContent();
       return;
     }

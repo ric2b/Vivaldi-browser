@@ -38,10 +38,13 @@ Polymer({
       value: false,
     },
 
-    showScrollBorders: {
+    /**
+     * True if the dialog should not be able to be cancelled, which will hide
+     * the 'x' button and prevent 'Escape' key presses from closing the dialog.
+     */
+    noCancel: {
       type: Boolean,
       value: false,
-      reflectToAttribute: true,
     },
   },
 
@@ -62,25 +65,29 @@ Polymer({
 
     if (!this.ignoreEnterKey)
       this.addEventListener('keypress', this.onKeypress_.bind(this));
+
+    if (this.noCancel)
+      this.addEventListener('cancel', this.onCancel_.bind(this));
   },
 
   /** @override */
   attached: function() {
-    if (!this.showScrollBorders)
-      return;
-
-    this.mutationObserver_ = new MutationObserver(function() {
-      if (this.open) {
+    var mutationObserverCallback = function() {
+      if (this.open)
         this.addIntersectionObserver_();
-      } else {
+      else
         this.removeIntersectionObserver_();
-      }
-    }.bind(this));
+    }.bind(this);
+
+    this.mutationObserver_ = new MutationObserver(mutationObserverCallback);
 
     this.mutationObserver_.observe(this, {
       attributes: true,
       attributeFilter: ['open'],
     });
+
+    // In some cases dialog already has the 'open' attribute by this point.
+    mutationObserverCallback();
   },
 
   /** @override */
@@ -180,5 +187,14 @@ Polymer({
       actionButton.click();
       e.preventDefault();
     }
+  },
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onCancel_: function(e) {
+    if (this.noCancel)
+      e.preventDefault();
   },
 });

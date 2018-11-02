@@ -36,7 +36,8 @@ class WebURLLoaderMockFactoryImpl : public WebURLLoaderMockFactory {
   ~WebURLLoaderMockFactoryImpl() override;
 
   // WebURLLoaderMockFactory:
-  WebURLLoader* CreateURLLoader(WebURLLoader* default_loader) override;
+  std::unique_ptr<WebURLLoader> CreateURLLoader(
+      std::unique_ptr<WebURLLoader> default_loader) override;
   void RegisterURL(const WebURL& url,
                    const WebURLResponse& response,
                    const WebString& file_path = WebString()) override;
@@ -44,6 +45,10 @@ class WebURLLoaderMockFactoryImpl : public WebURLLoaderMockFactory {
                         const WebURLResponse& response,
                         const WebURLError& error) override;
   void UnregisterURL(const WebURL& url) override;
+  void RegisterURLProtocol(const WebString& protocol,
+                           const WebURLResponse& response,
+                           const WebString& file_path) override;
+  void UnregisterURLProtocol(const WebString& protocol) override;
   void UnregisterAllURLsAndClearMemoryCache() override;
   void ServeAsynchronousRequests() override;
   void SetLoaderDelegate(WebURLLoaderTestDelegate* delegate) override {
@@ -83,6 +88,13 @@ class WebURLLoaderMockFactoryImpl : public WebURLLoaderMockFactory {
   // Checks if the loader is pending. Otherwise, it may have been deleted.
   bool IsPending(WeakPtr<WebURLLoaderMock> loader);
 
+  // Looks up an URL in the mock URL table.
+  //
+  // If the URL is found, returns true and sets |error| and |response_info|.
+  bool LookupURL(const WebURL& url,
+                 WebURLError* error,
+                 ResponseInfo* response_info);
+
   // Reads |m_filePath| and puts its content in |data|.
   // Returns true if it successfully read the file.
   static bool ReadFile(const base::FilePath& file_path, WebData* data);
@@ -99,6 +111,11 @@ class WebURLLoaderMockFactoryImpl : public WebURLLoaderMockFactory {
   // Table of the registered URLs and the responses that they should receive.
   using URLToResponseMap = HashMap<KURL, ResponseInfo>;
   URLToResponseMap url_to_response_info_;
+
+  // Table of the registered URL protocols and the responses that they should
+  // receive.
+  using ProtocolToResponseMap = HashMap<String, ResponseInfo>;
+  ProtocolToResponseMap protocol_to_response_info_;
 
   TestingPlatformSupport* platform_;
 

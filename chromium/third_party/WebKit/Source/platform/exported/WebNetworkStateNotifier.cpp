@@ -43,4 +43,12 @@ void WebNetworkStateNotifier::SetWebConnection(WebConnectionType type,
   GetNetworkStateNotifier().SetWebConnection(type, max_bandwidth_mbps);
 }
 
+void WebNetworkStateNotifier::SetNetworkQuality(WebEffectiveConnectionType type,
+                                                TimeDelta http_rtt,
+                                                TimeDelta transport_rtt,
+                                                int downlink_throughput_kbps) {
+  GetNetworkStateNotifier().SetNetworkQuality(type, http_rtt, transport_rtt,
+                                              downlink_throughput_kbps);
+}
+
 }  // namespace blink

@@ -33,8 +33,8 @@
 #include "core/dom/Document.h"
 #include "core/inspector/InspectedFrames.h"
 #include "platform/weborigin/KURL.h"
-#include "wtf/RefPtr.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -128,7 +128,7 @@ void InspectorWorkerAgent::DidStartWorker(WorkerInspectorProxy* proxy,
 
 void InspectorWorkerAgent::WorkerTerminated(WorkerInspectorProxy* proxy) {
   DCHECK(GetFrontend() && AutoAttachEnabled());
-  if (connected_proxies_.Find(proxy->InspectorId()) == connected_proxies_.end())
+  if (connected_proxies_.find(proxy->InspectorId()) == connected_proxies_.end())
     return;
   AttachedWorkerIds()->remove(proxy->InspectorId());
   GetFrontend()->detachedFromTarget(proxy->InspectorId());
@@ -138,8 +138,11 @@ void InspectorWorkerAgent::WorkerTerminated(WorkerInspectorProxy* proxy) {
 
 void InspectorWorkerAgent::ConnectToAllProxies() {
   for (WorkerInspectorProxy* proxy : WorkerInspectorProxy::AllProxies()) {
-    if (proxy->GetDocument()->GetFrame() &&
-        inspected_frames_->Contains(proxy->GetDocument()->GetFrame()))
+    // For now we assume this is document. TODO(kinuko): Fix this.
+    DCHECK(proxy->GetExecutionContext()->IsDocument());
+    Document* document = ToDocument(proxy->GetExecutionContext());
+    if (document->GetFrame() &&
+        inspected_frames_->Contains(document->GetFrame()))
       ConnectToProxy(proxy, false);
   }
 }
@@ -152,7 +155,7 @@ void InspectorWorkerAgent::DisconnectFromAllProxies(bool report_to_frontend) {
     }
     id_proxy.value->DisconnectFromInspector(this);
   }
-  connected_proxies_.Clear();
+  connected_proxies_.clear();
 }
 
 void InspectorWorkerAgent::DidCommitLoadForLocalFrame(LocalFrame* frame) {
@@ -167,7 +170,7 @@ void InspectorWorkerAgent::DidCommitLoadForLocalFrame(LocalFrame* frame) {
     GetFrontend()->detachedFromTarget(id_proxy.key);
     id_proxy.value->DisconnectFromInspector(this);
   }
-  connected_proxies_.Clear();
+  connected_proxies_.clear();
 }
 
 protocol::DictionaryValue* InspectorWorkerAgent::AttachedWorkerIds() {

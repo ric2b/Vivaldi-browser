@@ -63,11 +63,14 @@
   <message name="IDS_AUTOFILL_CC_DISCOVER" desc="Discover credit card name." formatter_data="android_java">
     Discover
   </message>
+  <message name="IDS_AUTOFILL_CC_ELO" desc="Elo credit card name." formatter_data="android_java">
+    Elo
+  </message>
   <message name="IDS_AUTOFILL_CC_JCB" desc="JCB credit card name." formatter_data="android_java">
     JCB
   </message>
-  <message name="IDS_AUTOFILL_CC_MASTERCARD" desc="MasterCard credit card name." formatter_data="android_java">
-    MasterCard
+  <message name="IDS_AUTOFILL_CC_MASTERCARD" desc="Mastercard credit card name." formatter_data="android_java">
+    Mastercard
   </message>
   <message name="IDS_AUTOFILL_CC_MIR" desc="Mir credit card name." formatter_data="android_java">
     Mir
@@ -204,10 +207,20 @@
       Do you want Chromium to save this card?
     </message>
   </if>
-  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD" desc="Title text for the Autofill save card prompt when the card is to be saved by uploading it to Google Payments. The prompt can be either a bubble or an infobar.">
-    Do you want to save this card to your Google Account?
-  </message>
-  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments. The prompt can be either a bubble or an infobar.">
+  <if expr="is_linux and not is_chromeos">
+    <then>
+      <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD" desc="Title text for the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally. The prompt can be either a bubble or an infobar.">
+        Do you want to save this card to your Google Account?
+      </message>
+    </then>
+    <else>
+      <!-- TODO(crbug/714920): Rename IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD to IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD_AND_LOCAL -->
+      <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD" desc="Title text for the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally. The prompt can be either a bubble or an infobar.">
+        Do you want to save this card to your Google Account and on this device?
+      </message>
+    </else>
+  </if>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally. The prompt can be either a bubble or an infobar.">
     Pay quickly on sites and apps across devices using cards you have saved with Google.
   </message>
   <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_ENTER_CVC" desc="Text displayed in the Autofill save credit card prompt explaining that the card needs additional CVC information in order to be saved to Google Payments.">
@@ -284,7 +297,7 @@
       Enter the expiration date and CVC for <ph name="CREDIT_CARD">$1<ex>Visa - 5679</ex></ph>
     </message>
     <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_INSTRUCTIONS" desc="Text explaining what the user should do in the card unmasking dialog.">
-      Once you confirm, your card details will be shared with this site
+      Once you confirm, your card details will be shared with this site.
     </message>
   </if>
   <if expr="is_ios">
@@ -346,10 +359,16 @@
   <message name="IDS_AUTOFILL_DIALOG_PLACEHOLDER_CVC" desc="The placeholder/label text for credit card verification code in the requestAutocomplete dialog.">
     CVC
   </message>
-  <message name="IDS_AUTOFILL_LOADING_REGIONS" desc="The string to display in the regions combo box while loading the region data.">
+  <message name="IDS_AUTOFILL_LOADING_REGIONS" desc="The string to display in the regions combobox while loading the region data.">
     Loading...
   </message>
   <message name="IDS_AUTOFILL_FAILED_LOADING_REGIONS" desc="The string to display in the regions combo box when loading the region data failed.">
     Failed loading regions data
+  </message>
+  <message name="IDS_AUTOFILL_SELECT" desc="The string to display in comboboxes when nothing got selected yet.">
+    Select
+  </message>
+  <message name="IDS_AUTOFILL_NO_SAVED_ADDRESS" desc="The string to display in comboboxes when no addresses are available.">
+    No saved addresses
   </message>
 </grit-part>

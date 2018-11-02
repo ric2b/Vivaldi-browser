@@ -477,6 +477,15 @@ VISIT_PROTO_FIELDS(const sync_pb::FaviconTrackingSpecifics& proto) {
   VISIT(is_bookmarked);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::FieldTrialEvent::FieldTrial& proto) {
+  VISIT(name_id);
+  VISIT(group_id);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::FieldTrialEvent& proto) {
+  VISIT_REP(field_trials);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::GcmChannelFlags& proto) {
   VISIT(enabled);
 }
@@ -534,6 +543,16 @@ VISIT_PROTO_FIELDS(const sync_pb::HistoryDeleteDirectives& proto) {
 
 VISIT_PROTO_FIELDS(const sync_pb::KeystoreEncryptionFlags& proto) {
   VISIT(enabled);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::LanguageDetection::Language& proto) {
+  VISIT(language_code);
+  VISIT(is_reliable);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::LanguageDetection& proto) {
+  VISIT_REP(detected_languages);
+  VISIT(adopted_language);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::LinkedAppIconInfo& proto) {
@@ -655,6 +674,7 @@ VISIT_PROTO_FIELDS(const sync_pb::PreferenceSpecifics& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::PrinterPPDReference& proto) {
   VISIT(user_supplied_ppd_url);
   VISIT(effective_make_and_model);
+  VISIT(autoconf);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::PrinterSpecifics& proto) {
@@ -815,6 +835,8 @@ VISIT_PROTO_FIELDS(const sync_pb::TabNavigation& proto) {
   VISIT(last_navigation_redirect_url);
   VISIT(correct_referrer_policy);
   VISIT_ENUM(password_state);
+  VISIT(task_id);
+  VISIT_REP(ancestor_task_id);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::ThemeSpecifics& proto) {
@@ -853,6 +875,9 @@ VISIT_PROTO_FIELDS(const sync_pb::UniquePosition& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics& proto) {
   VISIT(event_time_usec);
   VISIT(navigation_id);
+  VISIT(session_id);
+  VISIT(field_trial_event);
+  VISIT(language_detection);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WalletMaskedCreditCard& proto) {

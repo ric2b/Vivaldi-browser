@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <utility>
 
-#include "base/containers/small_map.h"
+#include "base/containers/flat_map.h"
 #include "base/memory/ptr_util.h"
 #include "ui/display/util/edid_parser.h"
 
@@ -198,6 +198,32 @@ bool HasColorCorrectionMatrix(int fd, drmModeCrtc* crtc) {
 
 }  // namespace
 
+DisplayMode_Params GetDisplayModeParams(const display::DisplayMode& mode) {
+  DisplayMode_Params params;
+  params.size = mode.size();
+  params.is_interlaced = mode.is_interlaced();
+  params.refresh_rate = mode.refresh_rate();
+  return params;
+}
+
+std::unique_ptr<const display::DisplayMode> CreateDisplayModeFromParams(
+    const DisplayMode_Params& pmode) {
+  return base::MakeUnique<const display::DisplayMode>(
+      pmode.size, pmode.is_interlaced, pmode.refresh_rate);
+}
+
+const gfx::Size ModeSize(const drmModeModeInfo& mode) {
+  return gfx::Size(mode.hdisplay, mode.vdisplay);
+}
+
+float ModeRefreshRate(const drmModeModeInfo& mode) {
+  return GetRefreshRate(mode);
+}
+
+bool ModeIsInterlaced(const drmModeModeInfo& mode) {
+  return mode.flags & DRM_MODE_FLAG_INTERLACE;
+}
+
 gfx::Size GetMaximumCursorSize(int fd) {
   uint64_t width = 0, height = 0;
   // Querying cursor dimensions is optional and is unsupported on older Chrome
@@ -236,8 +262,7 @@ GetAvailableDisplayControllerInfos(int fd) {
       available_connectors.push_back(std::move(connector));
   }
 
-  base::SmallMap<std::map<ScopedDrmConnectorPtr::element_type*, int>>
-      connector_crtcs;
+  base::flat_map<ScopedDrmConnectorPtr::element_type*, int> connector_crtcs;
   for (auto& c : available_connectors) {
     uint32_t possible_crtcs = 0;
     for (int i = 0; i < c->count_encoders; ++i) {

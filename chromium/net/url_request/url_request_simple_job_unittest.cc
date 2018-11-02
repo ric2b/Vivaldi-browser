@@ -10,14 +10,13 @@
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/scoped_task_scheduler.h"
 #include "net/base/request_priority.h"
 #include "net/test/gtest_util.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_job.h"
 #include "net/url_request/url_request_job_factory.h"
 #include "net/url_request/url_request_job_factory_impl.h"
@@ -111,15 +110,14 @@ class SimpleJobProtocolHandler :
 
 class URLRequestSimpleJobTest : public ::testing::Test {
  public:
-  URLRequestSimpleJobTest()
-      : context_(true), scoped_task_scheduler_(base::MessageLoop::current()) {
+  URLRequestSimpleJobTest() : context_(true) {
     job_factory_.SetProtocolHandler(
         "data", base::MakeUnique<SimpleJobProtocolHandler>());
     context_.set_job_factory(&job_factory_);
     context_.Init();
 
-    request_ =
-        context_.CreateRequest(GURL("data:test"), DEFAULT_PRIORITY, &delegate_);
+    request_ = context_.CreateRequest(GURL("data:test"), DEFAULT_PRIORITY,
+                                      &delegate_, TRAFFIC_ANNOTATION_FOR_TESTS);
   }
 
   void StartRequest(const HttpRequestHeaders* headers) {
@@ -139,8 +137,6 @@ class URLRequestSimpleJobTest : public ::testing::Test {
   std::unique_ptr<URLRequest> request_;
 
  private:
-  base::test::ScopedTaskScheduler scoped_task_scheduler_;
-
   DISALLOW_COPY_AND_ASSIGN(URLRequestSimpleJobTest);
 };
 
@@ -196,16 +192,16 @@ TEST_F(URLRequestSimpleJobTest, InvalidRangeRequest) {
 }
 
 TEST_F(URLRequestSimpleJobTest, EmptyDataRequest) {
-  request_ =
-      context_.CreateRequest(GURL("data:empty"), DEFAULT_PRIORITY, &delegate_);
+  request_ = context_.CreateRequest(GURL("data:empty"), DEFAULT_PRIORITY,
+                                    &delegate_, TRAFFIC_ANNOTATION_FOR_TESTS);
   StartRequest(nullptr);
   EXPECT_THAT(delegate_.request_status(), IsOk());
   EXPECT_EQ("", delegate_.data_received());
 }
 
 TEST_F(URLRequestSimpleJobTest, CancelBeforeResponseStarts) {
-  request_ =
-      context_.CreateRequest(GURL("data:cancel"), DEFAULT_PRIORITY, &delegate_);
+  request_ = context_.CreateRequest(GURL("data:cancel"), DEFAULT_PRIORITY,
+                                    &delegate_, TRAFFIC_ANNOTATION_FOR_TESTS);
   request_->Start();
   request_->Cancel();
 
@@ -216,12 +212,11 @@ TEST_F(URLRequestSimpleJobTest, CancelBeforeResponseStarts) {
 
 TEST_F(URLRequestSimpleJobTest, CancelAfterFirstReadStarted) {
   CancelAfterFirstReadURLRequestDelegate cancel_delegate;
-  request_ = context_.CreateRequest(GURL("data:cancel"), DEFAULT_PRIORITY,
-                                    &cancel_delegate);
+  request_ =
+      context_.CreateRequest(GURL("data:cancel"), DEFAULT_PRIORITY,
+                             &cancel_delegate, TRAFFIC_ANNOTATION_FOR_TESTS);
   request_->Start();
   cancel_delegate.WaitUntilHeadersReceived();
-
-  // Run ScopedTaskScheduler tasks.
   base::RunLoop().RunUntilIdle();
 
   EXPECT_THAT(cancel_delegate.request_status(), IsError(ERR_ABORTED));

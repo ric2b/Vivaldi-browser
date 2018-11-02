@@ -52,17 +52,17 @@ from v8_utilities import (cpp_name_or_partial, cpp_name, has_extended_attribute_
 INTERFACE_H_INCLUDES = frozenset([
     'bindings/core/v8/GeneratedCodeHelper.h',
     'bindings/core/v8/NativeValueTraits.h',
-    'bindings/core/v8/ScriptWrappable.h',
+    'platform/bindings/ScriptWrappable.h',
     'bindings/core/v8/ToV8ForCore.h',
-    'bindings/core/v8/V8Binding.h',
-    'bindings/core/v8/V8DOMWrapper.h',
-    'bindings/core/v8/WrapperTypeInfo.h',
+    'bindings/core/v8/V8BindingForCore.h',
+    'platform/bindings/V8DOMWrapper.h',
+    'platform/bindings/WrapperTypeInfo.h',
     'platform/heap/Handle.h',
 ])
 INTERFACE_CPP_INCLUDES = frozenset([
     'bindings/core/v8/ExceptionState.h',
     'bindings/core/v8/V8DOMConfiguration.h',
-    'bindings/core/v8/V8ObjectConstructor.h',
+    'platform/bindings/V8ObjectConstructor.h',
     'core/dom/ExecutionContext.h',
     'platform/wtf/GetPtr.h',
     'platform/wtf/RefPtr.h',
@@ -121,7 +121,6 @@ def origin_trial_features(interface, constants, attributes, methods):
     origin_trial_attributes = member_filter(attributes)
     origin_trial_methods = member_filter([method for method in methods
                                           if v8_methods.method_is_visible(method, interface.is_partial) and
-                                          not v8_methods.conditionally_exposed(method) and
                                           not v8_methods.custom_registration(method)])
 
     feature_names = set([member[KEY] for member in origin_trial_constants + origin_trial_attributes + origin_trial_methods])
@@ -135,10 +134,13 @@ def origin_trial_features(interface, constants, attributes, methods):
                 for name in feature_names]
     for feature in features:
         members = feature['constants'] + feature['attributes'] + feature['methods']
-        feature['needs_instance'] = reduce(or_, (member.get('on_instance', False) for member in members))
+        feature['needs_instance'] = any(member.get('on_instance', False) for member in members)
+        # TODO(chasej): Need to handle method overloads? e.g.
+        # (method['overloads']['secure_context_test_all'] if 'overloads' in method else method['secure_context_test'])
+        feature['needs_secure_context'] = any(member.get('secure_context_test', False) for member in members)
 
     if features:
-        includes.add('bindings/core/v8/ScriptState.h')
+        includes.add('platform/bindings/ScriptState.h')
         includes.add('core/origin_trials/OriginTrials.h')
     return sorted(features)
 
@@ -298,9 +300,9 @@ def interface_context(interface, interfaces):
                             ' specified on partial interface definitions: '
                             '%s' % interface.name)
         if named_constructor:
-            includes.add('bindings/core/v8/V8PrivateProperty.h')
+            includes.add('platform/bindings/V8PrivateProperty.h')
 
-        includes.add('bindings/core/v8/V8ObjectConstructor.h')
+        includes.add('platform/bindings/V8ObjectConstructor.h')
         includes.add('core/frame/LocalDOMWindow.h')
     elif 'Measure' in extended_attributes or 'MeasureAs' in extended_attributes:
         if not interface.is_partial:
@@ -351,23 +353,33 @@ def interface_context(interface, interfaces):
 
     # Attributes
     attributes = attributes_context(interface, interfaces)
+
     context.update({
         'attributes': attributes,
         # Elements in attributes are broken in following members.
         'accessors': v8_attributes.filter_accessors(attributes),
         'data_attributes': v8_attributes.filter_data_attributes(attributes),
         'lazy_data_attributes': v8_attributes.filter_lazy_data_attributes(attributes),
-        'origin_trial_attributes': v8_attributes.filter_origin_trial_enabled(attributes),
         'runtime_enabled_attributes': v8_attributes.filter_runtime_enabled(attributes),
     })
 
+    # Conditionally enabled attributes
+    conditional_enabled_attributes = v8_attributes.filter_conditionally_enabled(attributes)
+    has_conditional_attributes_on_prototype = any(  # pylint: disable=invalid-name
+        attribute['on_prototype'] for attribute in conditional_enabled_attributes)
+    context.update({
+        'has_conditional_attributes_on_prototype':
+            has_conditional_attributes_on_prototype,
+        'conditionally_enabled_attributes': conditional_enabled_attributes,
+    })
+
     # Methods
-    methods, iterator_method = methods_context(interface)
+    context.update(methods_context(interface))
+    methods = context['methods']
     context.update({
         'has_origin_safe_method_setter': any(method['is_cross_origin'] and not method['is_unforgeable']
             for method in methods),
-        'iterator_method': iterator_method,
-        'methods': methods,
+        'conditionally_enabled_methods': v8_methods.filter_conditionally_enabled(methods, interface.is_partial),
     })
 
     # Window.idl in Blink has indexed properties, but the spec says Window
@@ -383,17 +395,9 @@ def interface_context(interface, interfaces):
     })
 
     # Conditionally enabled members
-    has_conditional_attributes_on_prototype = any(  # pylint: disable=invalid-name
-        (attribute['exposed_test'] or attribute['secure_context_test']) and attribute['on_prototype']
-        for attribute in attributes)
-    context.update({
-        'has_conditional_attributes_on_prototype':
-            has_conditional_attributes_on_prototype,
-    })
-
     prepare_prototype_and_interface_object_func = None  # pylint: disable=invalid-name
     if (unscopables or has_conditional_attributes_on_prototype or
-            v8_methods.filter_conditionally_exposed(methods, interface.is_partial)):
+            context['conditionally_enabled_methods']):
         prepare_prototype_and_interface_object_func = '%s::preparePrototypeAndInterfaceObject' % v8_class_name_or_partial  # pylint: disable=invalid-name
 
     context.update({
@@ -502,7 +506,11 @@ def methods_context(interface):
         interface: An interface to create contexts for
 
     Returns:
-        A list of method contexts, and an iterator context if available or None
+        A dictionary with 3 keys:
+        'iterator_method': An iterator context if available or None.
+        'iterator_method_alias': A string that can also be used to refer to the
+                                 @@iterator symbol or None.
+        'methods': A list of method contexts.
     """
 
     methods = []
@@ -546,6 +554,10 @@ def methods_context(interface):
 
     # iterable<>, maplike<> and setlike<>
     iterator_method = None
+
+    # Depending on the declaration, @@iterator may be a synonym for e.g.
+    # 'entries' or 'values'.
+    iterator_method_alias = None
 
     # FIXME: support Iterable in partial interfaces. However, we don't
     # need to support iterator overloads between interface and
@@ -597,11 +609,19 @@ def methods_context(interface):
 
             # For value iterators, the |entries|, |forEach|, |keys| and |values| are originally set
             # to corresponding properties in %ArrayPrototype%.
+            # For pair iterators and maplike declarations, |entries| is an alias for @@iterator
+            # itself. For setlike declarations, |values| is an alias for @@iterator.
             if not is_value_iterator:
+                if not interface.setlike:
+                    iterator_method_alias = 'entries'
+                    entries_or_values_method = generated_iterator_method('values')
+                else:
+                    iterator_method_alias = 'values'
+                    entries_or_values_method = generated_iterator_method('entries')
+
                 non_overridable_methods.extend([
                     generated_iterator_method('keys'),
-                    generated_iterator_method('values'),
-                    generated_iterator_method('entries'),
+                    entries_or_values_method,
 
                     # void forEach(Function callback, [Default=Undefined] optional any thisArg)
                     generated_method(IdlType('void'), 'forEach',
@@ -728,7 +748,11 @@ def methods_context(interface):
         method['length'] = (method['overloads']['length'] if 'overloads' in method else
                             method['number_of_required_arguments'])
 
-    return methods, iterator_method
+    return {
+        'iterator_method': iterator_method,
+        'iterator_method_alias': iterator_method_alias,
+        'methods': methods,
+    }
 
 
 def reflected_name(constant_name):

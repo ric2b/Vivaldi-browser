@@ -21,37 +21,19 @@
 #include "core/dom/SpaceSplitString.h"
 
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "platform/wtf/ASCIICType.h"
-#include "platform/wtf/HashMap.h"
+#include "platform/wtf/HashSet.h"
 #include "platform/wtf/text/AtomicStringHash.h"
 
 namespace blink {
 
-template <typename CharacterType>
-static inline bool HasNonASCIIOrUpper(const CharacterType* characters,
-                                      unsigned length) {
-  bool has_upper = false;
-  CharacterType ored = 0;
-  for (unsigned i = 0; i < length; i++) {
-    CharacterType c = characters[i];
-    has_upper |= IsASCIIUpper(c);
-    ored |= c;
-  }
-  return has_upper || (ored & ~0x7F);
-}
-
-static inline bool HasNonASCIIOrUpper(const String& string) {
-  unsigned length = string.length();
-
-  if (string.Is8Bit())
-    return HasNonASCIIOrUpper(string.Characters8(), length);
-  return HasNonASCIIOrUpper(string.Characters16(), length);
-}
-
+// https://dom.spec.whatwg.org/#concept-ordered-set-parser
 template <typename CharacterType>
 inline void SpaceSplitString::Data::CreateVector(
+    const AtomicString& source,
     const CharacterType* characters,
     unsigned length) {
+  DCHECK_EQ(0u, vector_.size());
+  HashSet<AtomicString> token_set;
   unsigned start = 0;
   while (true) {
     while (start < length && IsHTMLSpace<CharacterType>(characters[start]))
@@ -62,21 +44,40 @@ inline void SpaceSplitString::Data::CreateVector(
     while (end < length && IsNotHTMLSpace<CharacterType>(characters[end]))
       ++end;
 
-    vector_.push_back(AtomicString(characters + start, end - start));
+    if (start == 0 && end == length) {
+      vector_.push_back(source);
+      return;
+    }
+
+    AtomicString token(characters + start, end - start);
+    // We skip adding |token| to |token_set| for the first token to reduce the
+    // cost of HashSet<>::insert(), and adjust |token_set| when the second
+    // unique token is found.
+    if (vector_.size() == 0) {
+      vector_.push_back(token);
+    } else if (vector_.size() == 1) {
+      if (vector_[0] != token) {
+        token_set.insert(vector_[0]);
+        token_set.insert(token);
+        vector_.push_back(token);
+      }
+    } else if (token_set.insert(token).is_new_entry) {
+      vector_.push_back(token);
+    }
 
     start = end + 1;
   }
 }
 
-void SpaceSplitString::Data::CreateVector(const String& string) {
+void SpaceSplitString::Data::CreateVector(const AtomicString& string) {
   unsigned length = string.length();
 
   if (string.Is8Bit()) {
-    CreateVector(string.Characters8(), length);
+    CreateVector(string, string.Characters8(), length);
     return;
   }
 
-  CreateVector(string.Characters16(), length);
+  CreateVector(string, string.Characters16(), length);
 }
 
 bool SpaceSplitString::Data::ContainsAll(Data& other) {
@@ -110,12 +111,13 @@ void SpaceSplitString::Data::Remove(unsigned index) {
 }
 
 void SpaceSplitString::Add(const AtomicString& string) {
-  // FIXME: add() does not allow duplicates but createVector() does.
   if (Contains(string))
     return;
   EnsureUnique();
   if (data_)
     data_->Add(string);
+  else
+    data_ = Data::Create(string);
 }
 
 bool SpaceSplitString::Remove(const AtomicString& string) {
@@ -141,21 +143,12 @@ SpaceSplitString::DataMap& SpaceSplitString::SharedDataMap() {
   return map;
 }
 
-void SpaceSplitString::Set(const AtomicString& input_string,
-                           CaseFolding case_folding) {
+void SpaceSplitString::Set(const AtomicString& input_string) {
   if (input_string.IsNull()) {
     Clear();
     return;
   }
-
-  if (case_folding == kShouldFoldCase &&
-      HasNonASCIIOrUpper(input_string.GetString())) {
-    String string(input_string.GetString());
-    string = string.FoldCase();
-    data_ = Data::Create(AtomicString(string));
-  } else {
-    data_ = Data::Create(input_string);
-  }
+  data_ = Data::Create(input_string);
 }
 
 SpaceSplitString::Data::~Data() {

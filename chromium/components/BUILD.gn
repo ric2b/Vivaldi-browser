@@ -5,6 +5,7 @@
 import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//extensions/features/features.gni")
 import("//printing/features/features.gni")
 import("//rlz/features/features.gni")
 import("//testing/test.gni")
@@ -82,6 +83,7 @@ test("components_unittests") {
     "//components/device_event_log:unit_tests",
     "//components/dom_distiller/core:unit_tests",
     "//components/doodle:unit_tests",
+    "//components/download:unit_tests",
     "//components/favicon/core:unit_tests",
     "//components/favicon_base:unit_tests",
     "//components/flags_ui:unit_tests",
@@ -97,7 +99,6 @@ test("components_unittests") {
     "//components/language_usage_metrics:unit_tests",
     "//components/leveldb_proto:unit_tests",
     "//components/login:unit_tests",
-    "//components/memory_pressure:unit_tests",
     "//components/metrics:unit_tests",
     "//components/mime_util:unit_tests",
     "//components/navigation_metrics:unit_tests",
@@ -107,10 +108,6 @@ test("components_unittests") {
     "//components/ntp_snippets:unit_tests",
     "//components/ntp_tiles:unit_tests",
     "//components/offline_items_collection/core:unit_tests",
-    "//components/offline_pages/core:unit_tests",
-    "//components/offline_pages/core/background:unit_tests",
-    "//components/offline_pages/core/downloads:unit_tests",
-    "//components/offline_pages/core/request_header:unit_tests",
     "//components/omnibox/browser:unit_tests",
     "//components/open_from_clipboard:unit_tests",
     "//components/os_crypt:unit_tests",
@@ -164,6 +161,10 @@ test("components_unittests") {
     deps += [ "//components/nacl/browser:unit_tests" ]
   }
 
+  if (enable_extensions) {
+    deps += [ "//components/guest_view/browser:unit_tests" ]
+  }
+
   if (is_ios) {
     deps += [
       "//components/image_fetcher/ios:unit_tests",
@@ -187,20 +188,24 @@ test("components_unittests") {
       "//components/data_use_measurement/core:unit_tests",
       "//components/discardable_memory/common:unit_tests",
       "//components/discardable_memory/service:unit_tests",
-      "//components/display_compositor:unit_tests",
       "//components/dom_distiller/content/browser:unit_tests",
       "//components/domain_reliability:unit_tests",
+      "//components/download/content:unit_tests",
       "//components/error_page/renderer:unit_tests",
       "//components/favicon/content:unit_tests",
       "//components/gcm_driver/instance_id:unit_tests",
-      "//components/guest_view/browser:unit_tests",
       "//components/history/content/browser:unit_tests",
       "//components/invalidation/impl:unit_tests",
       "//components/keyed_service/content:unit_tests",
       "//components/link_header_util:unit_tests",
       "//components/navigation_interception:unit_tests",
       "//components/network_hints/renderer:unit_tests",
+      "//components/offline_pages/content:unit_tests",
       "//components/offline_pages/content/background_loader:unit_tests",
+      "//components/offline_pages/core:unit_tests",
+      "//components/offline_pages/core/background:unit_tests",
+      "//components/offline_pages/core/downloads:unit_tests",
+      "//components/offline_pages/core/request_header:unit_tests",
       "//components/packed_ct_ev_whitelist:unit_tests",
       "//components/password_manager/content/browser:unit_tests",
       "//components/payments/content:unit_tests",
@@ -208,6 +213,7 @@ test("components_unittests") {
       "//components/policy/core/browser:unit_tests",
       "//components/policy/core/common:unit_tests",
       "//components/precache/content:unit_tests",
+      "//components/safe_browsing/common:unit_tests",
       "//components/safe_browsing/password_protection:password_protection_unittest",
       "//components/safe_browsing_db:unit_tests",
       "//components/safe_json:unit_tests",
@@ -219,10 +225,10 @@ test("components_unittests") {
       "//components/subresource_filter/content/renderer:unit_tests",
       "//components/tracing:unit_tests",
       "//components/visitedlink/test:unit_tests",
+      "//components/viz/display_compositor:unit_tests",
       "//components/wallpaper:unit_tests",
       "//components/web_cache/browser:unit_tests",
       "//components/webcrypto:unit_tests",
-      "//components/zoom:unit_tests",
     ]
 
     data_deps = [
@@ -278,6 +284,7 @@ test("components_unittests") {
       "//components/proximity_auth:unit_tests",
       "//components/storage_monitor:unit_tests",
       "//components/web_modal:unit_tests",
+      "//components/zoom:unit_tests",
     ]
   }
 

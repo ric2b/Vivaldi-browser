@@ -52,10 +52,10 @@ ProgressBar::~ProgressBar() {
 
 void ProgressBar::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_PROGRESS_INDICATOR;
-  node_data->AddStateFlag(ui::AX_STATE_READ_ONLY);
+  node_data->AddState(ui::AX_STATE_READ_ONLY);
 }
 
-gfx::Size ProgressBar::GetPreferredSize() const {
+gfx::Size ProgressBar::CalculatePreferredSize() const {
   // The width will typically be ignored.
   gfx::Size pref_size(1, preferred_height_);
   gfx::Insets insets = GetInsets();

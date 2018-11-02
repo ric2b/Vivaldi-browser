@@ -31,8 +31,9 @@
 #include "core/frame/FrameSerializer.h"
 
 #include <string>
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
+#include "core/exported/WebViewBase.h"
 #include "platform/SerializedResource.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -49,7 +50,6 @@
 #include "public/web/WebSettings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
-#include "web/WebViewImpl.h"
 #include "web/tests/FrameTestHelpers.h"
 
 using blink::URLTestHelpers::ToKURL;
@@ -116,7 +116,7 @@ class FrameSerializerTest : public ::testing::Test,
 
   void Serialize(const char* url) {
     FrameTestHelpers::LoadFrame(helper_.WebView()->MainFrame(),
-                                KURL(base_url_, url).GetString().Utf8().Data());
+                                KURL(base_url_, url).GetString().Utf8().data());
     FrameSerializer serializer(resources_, *this);
     Frame* frame = helper_.WebView()->MainFrameImpl()->GetFrame();
     for (; frame; frame = frame->Tree().TraverseNext()) {

@@ -7,8 +7,8 @@
 #include <set>
 #include <vector>
 
-#include "components/payments/content/payment_request.mojom.h"
 #include "components/payments/content/payments_validators.h"
+#include "components/payments/mojom/payment_request.mojom.h"
 
 namespace payments {
 namespace {
@@ -20,11 +20,6 @@ bool validateShippingOptionOrPaymentItem(
     const T& item,
     const payments::mojom::PaymentItemPtr& total,
     std::string* error_message) {
-  if (item->label.empty()) {
-    *error_message = "Item label required";
-    return false;
-  }
-
   if (!item->amount) {
     *error_message = "Currency amount required";
     return false;
@@ -37,11 +32,6 @@ bool validateShippingOptionOrPaymentItem(
 
   if (item->amount->value.empty()) {
     *error_message = "Currency value required";
-    return false;
-  }
-
-  if (total && item->amount->currency != total->amount->currency) {
-    *error_message = "Currencies must all be equal";
     return false;
   }
 

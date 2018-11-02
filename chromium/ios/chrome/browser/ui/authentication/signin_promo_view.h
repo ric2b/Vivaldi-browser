@@ -7,7 +7,10 @@
 
 #import <UIKit/UIKit.h>
 
+#include "components/signin/core/browser/signin_metrics.h"
+
 @class MDCFlatButton;
+@protocol SigninPromoViewDelegate;
 
 typedef NS_ENUM(NSInteger, SigninPromoViewMode) {
   // No identity available on the device.
@@ -31,11 +34,14 @@ typedef NS_ENUM(NSInteger, SigninPromoViewMode) {
 //   - the title for |secondaryButton|
 @interface SigninPromoView : UIView
 
+@property(nonatomic, weak) id<SigninPromoViewDelegate> delegate;
 @property(nonatomic) SigninPromoViewMode mode;
 @property(nonatomic, readonly) UIImageView* imageView;
 @property(nonatomic, readonly) UILabel* textLabel;
 @property(nonatomic, readonly) MDCFlatButton* primaryButton;
 @property(nonatomic, readonly) MDCFlatButton* secondaryButton;
+// Hidden by default.
+@property(nonatomic, readonly) UIButton* closeButton;
 
 // Horizontal padding used for |textLabel|, |primaryButton| and
 // |secondaryButton|. Used to compute the preferred max layout width of

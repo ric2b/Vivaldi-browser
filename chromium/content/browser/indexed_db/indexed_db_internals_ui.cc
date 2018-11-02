@@ -103,7 +103,7 @@ void IndexedDBInternalsUI::GetAllOrigins(const base::ListValue* args) {
 void IndexedDBInternalsUI::GetAllOriginsOnIndexedDBThread(
     scoped_refptr<IndexedDBContext> context,
     const base::FilePath& context_path) {
-  DCHECK(context->TaskRunner()->RunsTasksOnCurrentThread());
+  DCHECK(context->TaskRunner()->RunsTasksInCurrentSequence());
 
   IndexedDBContextImpl* context_impl =
       static_cast<IndexedDBContextImpl*>(context.get());
@@ -213,7 +213,7 @@ void IndexedDBInternalsUI::DownloadOriginDataOnIndexedDBThread(
     const base::FilePath& partition_path,
     const scoped_refptr<IndexedDBContextImpl> context,
     const Origin& origin) {
-  DCHECK(context->TaskRunner()->RunsTasksOnCurrentThread());
+  DCHECK(context->TaskRunner()->RunsTasksInCurrentSequence());
   // This runs on the IndexedDB task runner to prevent script from reopening
   // the origin while we are zipping.
 
@@ -251,7 +251,7 @@ void IndexedDBInternalsUI::ForceCloseOriginOnIndexedDBThread(
     const base::FilePath& partition_path,
     const scoped_refptr<IndexedDBContextImpl> context,
     const Origin& origin) {
-  DCHECK(context->TaskRunner()->RunsTasksOnCurrentThread());
+  DCHECK(context->TaskRunner()->RunsTasksInCurrentSequence());
 
   // Make sure the database hasn't been deleted since the page was loaded.
   if (!context->HasOrigin(origin))
@@ -283,14 +283,10 @@ void IndexedDBInternalsUI::OnDownloadDataReady(
     size_t connection_count) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const GURL url = GURL(FILE_PATH_LITERAL("file://") + zip_path.value());
-  BrowserContext* browser_context =
-      web_ui()->GetWebContents()->GetBrowserContext();
+  WebContents* web_contents = web_ui()->GetWebContents();
   std::unique_ptr<DownloadUrlParameters> dl_params(
-      DownloadUrlParameters::CreateForWebContentsMainFrame(
-          web_ui()->GetWebContents(), url));
-  DownloadManager* dlm = BrowserContext::GetDownloadManager(browser_context);
-
-  const GURL referrer(web_ui()->GetWebContents()->GetLastCommittedURL());
+      DownloadUrlParameters::CreateForWebContentsMainFrame(web_contents, url));
+  const GURL referrer(web_contents->GetLastCommittedURL());
   dl_params->set_referrer(content::Referrer::SanitizeForRequest(
       url, content::Referrer(referrer, blink::kWebReferrerPolicyDefault)));
 
@@ -300,7 +296,10 @@ void IndexedDBInternalsUI::OnDownloadDataReady(
   dl_params->set_callback(base::Bind(&IndexedDBInternalsUI::OnDownloadStarted,
                                      base::Unretained(this), partition_path,
                                      origin, temp_path, connection_count));
-  dlm->DownloadUrl(std::move(dl_params));
+
+  BrowserContext* context = web_contents->GetBrowserContext();
+  BrowserContext::GetDownloadManager(context)->DownloadUrl(
+      std::move(dl_params));
 }
 
 // The entire purpose of this class is to delete the temp file after

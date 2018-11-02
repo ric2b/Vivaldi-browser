@@ -9,6 +9,7 @@
 #include "core/layout/ng/ng_block_node.h"
 #include "core/layout/ng/ng_break_token.h"
 #include "core/layout/ng/ng_fragment.h"
+#include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_physical_box_fragment.h"
 #include "platform/heap/Handle.h"
 
@@ -109,11 +110,11 @@ NGFragmentBuilder& NGFragmentBuilder::AddChild(
   return *this;
 }
 
-NGFragmentBuilder& NGFragmentBuilder::AddFloatingObject(
-    RefPtr<NGFloatingObject> floating_object,
-    const NGLogicalOffset& floating_object_offset) {
-  positioned_floats_.push_back(floating_object);
-  floating_object_offsets_.push_back(floating_object_offset);
+NGFragmentBuilder& NGFragmentBuilder::AddPositionedFloat(
+    NGPositionedFloat positioned_float) {
+  did_break_ |= !positioned_float.fragment->BreakToken()->IsFinished();
+  child_break_tokens_.push_back(positioned_float.fragment->BreakToken());
+  positioned_floats_.push_back(positioned_float);
   return *this;
 }
 
@@ -136,8 +137,8 @@ NGFragmentBuilder& NGFragmentBuilder::AddOutOfFlowChildCandidate(
 }
 
 NGFragmentBuilder& NGFragmentBuilder::AddUnpositionedFloat(
-    RefPtr<NGFloatingObject> floating_object) {
-  unpositioned_floats_.push_back(std::move(floating_object));
+    RefPtr<NGUnpositionedFloat> unpositioned_float) {
+  unpositioned_floats_.push_back(std::move(unpositioned_float));
   return *this;
 }
 
@@ -167,8 +168,8 @@ void NGFragmentBuilder::GetAndClearOutOfFlowDescendantCandidates(
     descendants->insert(oof_node);
     descendant_positions->push_back(builder_relative_position);
   }
-  out_of_flow_descendant_candidates_.Clear();
-  out_of_flow_candidate_placements_.Clear();
+  out_of_flow_descendant_candidates_.clear();
+  out_of_flow_candidate_placements_.clear();
 }
 
 NGFragmentBuilder& NGFragmentBuilder::AddOutOfFlowDescendant(
@@ -204,11 +205,12 @@ RefPtr<NGLayoutResult> NGFragmentBuilder::ToBoxFragment() {
     break_token = NGBlockBreakToken::Create(node_.Get());
   }
 
-  for (size_t i = 0; i < positioned_floats_.size(); ++i) {
-    RefPtr<NGFloatingObject>& floating_object = positioned_floats_[i];
-    NGPhysicalFragment* floating_fragment = floating_object->fragment.Get();
-    floating_fragment->SetOffset(floating_object_offsets_[i].ConvertToPhysical(
-        writing_mode_, direction_, physical_size, floating_fragment->Size()));
+  for (auto& positioned_float : positioned_floats_) {
+    NGPhysicalFragment* floating_fragment = positioned_float.fragment.Get();
+    floating_fragment->SetOffset(
+        positioned_float.logical_offset.ConvertToPhysical(
+            writing_mode_, direction_, physical_size,
+            floating_fragment->Size()));
   }
 
   RefPtr<NGPhysicalBoxFragment> fragment = AdoptRef(new NGPhysicalBoxFragment(

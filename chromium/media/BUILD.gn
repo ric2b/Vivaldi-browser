@@ -201,34 +201,6 @@ component("media") {
     "filters/webvtt_util.h",
     "filters/wsola_internals.cc",
     "filters/wsola_internals.h",
-    "formats/common/offset_byte_queue.cc",
-    "formats/common/offset_byte_queue.h",
-    "formats/webm/webm_audio_client.cc",
-    "formats/webm/webm_audio_client.h",
-    "formats/webm/webm_cluster_parser.cc",
-    "formats/webm/webm_cluster_parser.h",
-    "formats/webm/webm_colour_parser.cc",
-    "formats/webm/webm_colour_parser.h",
-    "formats/webm/webm_constants.cc",
-    "formats/webm/webm_constants.h",
-    "formats/webm/webm_content_encodings.cc",
-    "formats/webm/webm_content_encodings.h",
-    "formats/webm/webm_content_encodings_client.cc",
-    "formats/webm/webm_content_encodings_client.h",
-    "formats/webm/webm_crypto_helpers.cc",
-    "formats/webm/webm_crypto_helpers.h",
-    "formats/webm/webm_info_parser.cc",
-    "formats/webm/webm_info_parser.h",
-    "formats/webm/webm_parser.cc",
-    "formats/webm/webm_parser.h",
-    "formats/webm/webm_stream_parser.cc",
-    "formats/webm/webm_stream_parser.h",
-    "formats/webm/webm_tracks_parser.cc",
-    "formats/webm/webm_tracks_parser.h",
-    "formats/webm/webm_video_client.cc",
-    "formats/webm/webm_video_client.h",
-    "formats/webm/webm_webvtt_parser.cc",
-    "formats/webm/webm_webvtt_parser.h",
     "muxers/webm_muxer.cc",
     "muxers/webm_muxer.h",
     "renderers/audio_renderer_impl.cc",
@@ -303,7 +275,7 @@ component("media") {
     ":media_features",
     ":shared_memory_support",
     "//media/audio",
-    "//media/base",
+    "//media/formats",
     "//ui/gfx:color_space",
   ]
 
@@ -312,6 +284,7 @@ component("media") {
     public_deps += [ "//media/ffmpeg" ]
     deps += [
       "//third_party/ffmpeg",
+      "//third_party/ffmpeg:ffmpeg_features",
       "//third_party/opus",
     ]
     sources += [
@@ -347,8 +320,6 @@ component("media") {
     sources += [
       "filters/h265_parser.cc",
       "filters/h265_parser.h",
-      "formats/mp4/hevc.cc",
-      "formats/mp4/hevc.h",
     ]
     if (media_use_ffmpeg) {
       sources += [
@@ -356,12 +327,6 @@ component("media") {
         "filters/ffmpeg_h265_to_annex_b_bitstream_converter.h",
       ]
     }
-  }
-  if (proprietary_codecs && enable_dolby_vision_demuxing) {
-    sources += [
-      "formats/mp4/dolby_vision.cc",
-      "formats/mp4/dolby_vision.h",
-    ]
   }
 
   if (current_cpu == "arm" && arm_use_neon) {
@@ -376,17 +341,12 @@ component("media") {
     deps += [ "//third_party/libvpx" ]
   }
 
-  if (disable_ffmpeg_video_decoders) {
-      sources -= [
-        "filters/decrypting_video_decoder.cc",
-        "filters/decrypting_video_decoder.h",
-      ]
-  }
-
   if (is_android) {
     sources -= [
       "filters/decrypting_audio_decoder.cc",
       "filters/decrypting_audio_decoder.h",
+      "filters/decrypting_video_decoder.cc",
+      "filters/decrypting_video_decoder.h",
     ]
     sources += [
       "filters/android/media_codec_audio_decoder.cc",
@@ -424,75 +384,7 @@ component("media") {
       "cdm/cenc_utils.h",
       "filters/h264_to_annex_b_bitstream_converter.cc",
       "filters/h264_to_annex_b_bitstream_converter.h",
-      "formats/mp4/aac.cc",
-      "formats/mp4/aac.h",
-      "formats/mp4/avc.cc",
-      "formats/mp4/avc.h",
-      "formats/mp4/bitstream_converter.cc",
-      "formats/mp4/bitstream_converter.h",
-      "formats/mp4/box_definitions.cc",
-      "formats/mp4/box_definitions.h",
-      "formats/mp4/box_reader.cc",
-      "formats/mp4/box_reader.h",
-      "formats/mp4/es_descriptor.cc",
-      "formats/mp4/es_descriptor.h",
-      "formats/mp4/mp4_stream_parser.cc",
-      "formats/mp4/mp4_stream_parser.h",
-      "formats/mp4/sample_to_group_iterator.cc",
-      "formats/mp4/sample_to_group_iterator.h",
-      "formats/mp4/track_run_iterator.cc",
-      "formats/mp4/track_run_iterator.h",
-      "formats/mpeg/adts_constants.cc",
-      "formats/mpeg/adts_constants.h",
-      "formats/mpeg/adts_stream_parser.cc",
-      "formats/mpeg/adts_stream_parser.h",
-      "formats/mpeg/mpeg1_audio_stream_parser.cc",
-      "formats/mpeg/mpeg1_audio_stream_parser.h",
-      "formats/mpeg/mpeg_audio_stream_parser_base.cc",
-      "formats/mpeg/mpeg_audio_stream_parser_base.h",
     ]
-    if (enable_mse_mpeg2ts_stream_parser) {
-      sources += [
-        "formats/mp2t/descriptors.cc",
-        "formats/mp2t/descriptors.h",
-        "formats/mp2t/es_adapter_video.cc",
-        "formats/mp2t/es_adapter_video.h",
-        "formats/mp2t/es_parser.cc",
-        "formats/mp2t/es_parser.h",
-        "formats/mp2t/es_parser_adts.cc",
-        "formats/mp2t/es_parser_adts.h",
-        "formats/mp2t/es_parser_h264.cc",
-        "formats/mp2t/es_parser_h264.h",
-        "formats/mp2t/es_parser_mpeg1audio.cc",
-        "formats/mp2t/es_parser_mpeg1audio.h",
-        "formats/mp2t/mp2t_common.h",
-        "formats/mp2t/mp2t_stream_parser.cc",
-        "formats/mp2t/mp2t_stream_parser.h",
-        "formats/mp2t/timestamp_unroller.cc",
-        "formats/mp2t/timestamp_unroller.h",
-        "formats/mp2t/ts_packet.cc",
-        "formats/mp2t/ts_packet.h",
-        "formats/mp2t/ts_section.h",
-        "formats/mp2t/ts_section_pat.cc",
-        "formats/mp2t/ts_section_pat.h",
-        "formats/mp2t/ts_section_pes.cc",
-        "formats/mp2t/ts_section_pes.h",
-        "formats/mp2t/ts_section_pmt.cc",
-        "formats/mp2t/ts_section_pmt.h",
-        "formats/mp2t/ts_section_psi.cc",
-        "formats/mp2t/ts_section_psi.h",
-      ]
-      if (enable_hls_sample_aes) {
-        sources += [
-          "formats/mp2t/ts_section_cat.cc",
-          "formats/mp2t/ts_section_cat.h",
-          "formats/mp2t/ts_section_cets_ecm.cc",
-          "formats/mp2t/ts_section_cets_ecm.h",
-          "formats/mp2t/ts_section_cets_pssh.cc",
-          "formats/mp2t/ts_section_cets_pssh.h",
-        ]
-      }
-    }
   }
 
   if (use_low_memory_buffer) {
@@ -514,6 +406,46 @@ component("media") {
       "device_monitors/device_monitor_udev.h",
     ]
   }
+
+  # TODO(xhwang): Move other library CDM related files to this block as well.
+  if (enable_pepper_cdms) {
+    deps += [
+      ":cdm_paths",
+
+      # TODO(xhwang): Remove this after Widevine specific logic is removed in
+      # CdmAdapterFactory. See http://crbug.com/510604
+      "//third_party/widevine/cdm:headers",
+    ]
+    sources += [
+      "cdm/cdm_adapter_factory.cc",
+      "cdm/cdm_adapter_factory.h",
+    ]
+  }
+}
+
+config("cdm_manager_implementation") {
+  defines = [ "CDM_MANAGER_IMPLEMENTATION" ]
+}
+
+# cdm_manager must not be a source_set() because CdmManager exposes a static
+# singleton, shared by multiple component()s.
+#
+# TODO(xhwang): Remove this component once AVDA no longer depends on it.
+component("cdm_manager") {
+  visibility = [
+    "//media/gpu",
+    "//media/mojo/services:lib",
+  ]
+  sources = [
+    "cdm/cdm_manager.cc",
+    "cdm/cdm_manager.h",
+    "cdm/cdm_manager_export.h",
+  ]
+  configs += [ ":cdm_manager_implementation" ]
+  deps = [
+    ":media",
+    "//base",
+  ]
 }
 
 static_library("cdm_paths") {
@@ -569,20 +501,6 @@ source_set("unit_tests") {
     "filters/vp8_parser_unittest.cc",
     "filters/vp9_parser_unittest.cc",
     "filters/vp9_raw_bits_reader_unittest.cc",
-    "formats/common/offset_byte_queue_unittest.cc",
-    "formats/webm/cluster_builder.cc",
-    "formats/webm/cluster_builder.h",
-    "formats/webm/opus_packet_builder.cc",
-    "formats/webm/opus_packet_builder.h",
-    "formats/webm/tracks_builder.cc",
-    "formats/webm/tracks_builder.h",
-    "formats/webm/webm_cluster_parser_unittest.cc",
-    "formats/webm/webm_content_encodings_client_unittest.cc",
-    "formats/webm/webm_crypto_helpers_unittest.cc",
-    "formats/webm/webm_parser_unittest.cc",
-    "formats/webm/webm_stream_parser_unittest.cc",
-    "formats/webm/webm_tracks_parser_unittest.cc",
-    "formats/webm/webm_webvtt_parser_unittest.cc",
     "muxers/webm_muxer_unittest.cc",
     "renderers/audio_renderer_impl_unittest.cc",
     "renderers/renderer_impl_unittest.cc",
@@ -612,6 +530,7 @@ source_set("unit_tests") {
     "//gpu/command_buffer/common",
     "//media/audio:test_support",
     "//media/base:test_support",
+    "//media/formats:unit_tests",
     "//ppapi/features",
     "//skia",  # Direct dependency required to inherit config.
     "//testing/gmock",
@@ -625,7 +544,7 @@ source_set("unit_tests") {
 
   data_deps = []
 
-  if (disable_ffmpeg_video_decoders) {
+  if (is_android) {
     sources -= [
       "filters/decrypting_audio_decoder_unittest.cc",
       "filters/decrypting_video_decoder_unittest.cc",
@@ -659,9 +578,8 @@ source_set("unit_tests") {
     ]
 
     if (!disable_ffmpeg_video_decoders) {
-      sources += [
-        "filters/ffmpeg_video_decoder_unittest.cc",
-      ]
+      # FFmpeg on Android does not include video decoders.
+      sources += [ "filters/ffmpeg_video_decoder_unittest.cc" ]
     }
   }
 
@@ -670,33 +588,6 @@ source_set("unit_tests") {
   }
 
   if (proprietary_codecs) {
-    sources += [
-      "cdm/cenc_utils_unittest.cc",
-      "filters/h264_to_annex_b_bitstream_converter_unittest.cc",
-      "formats/common/stream_parser_test_base.cc",
-      "formats/common/stream_parser_test_base.h",
-      "formats/mp4/aac_unittest.cc",
-      "formats/mp4/avc_unittest.cc",
-      "formats/mp4/box_reader_unittest.cc",
-      "formats/mp4/es_descriptor_unittest.cc",
-      "formats/mp4/mp4_stream_parser_unittest.cc",
-      "formats/mp4/sample_to_group_iterator_unittest.cc",
-      "formats/mp4/track_run_iterator_unittest.cc",
-      "formats/mpeg/adts_stream_parser_unittest.cc",
-      "formats/mpeg/mpeg1_audio_stream_parser_unittest.cc",
-    ]
-    if (enable_mse_mpeg2ts_stream_parser) {
-      sources += [
-        "formats/mp2t/es_adapter_video_unittest.cc",
-        "formats/mp2t/es_parser_adts_unittest.cc",
-        "formats/mp2t/es_parser_h264_unittest.cc",
-        "formats/mp2t/es_parser_mpeg1audio_unittest.cc",
-        "formats/mp2t/es_parser_test_base.cc",
-        "formats/mp2t/es_parser_test_base.h",
-        "formats/mp2t/mp2t_stream_parser_unittest.cc",
-        "formats/mp2t/timestamp_unroller_unittest.cc",
-      ]
-    }
     if (media_use_ffmpeg) {
       sources += [
         "filters/ffmpeg_aac_bitstream_converter_unittest.cc",
@@ -708,9 +599,6 @@ source_set("unit_tests") {
     }
     if (enable_hls_sample_aes) {
       deps += [ "//third_party/boringssl" ]
-    }
-    if (enable_dolby_vision_demuxing) {
-      sources += [ "formats/mp4/dolby_vision_unittest.cc" ]
     }
   }
 

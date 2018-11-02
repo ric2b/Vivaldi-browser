@@ -9,13 +9,15 @@
 
 #include "base/macros.h"
 #include "components/feature_engagement_tracker/internal/condition_validator.h"
-#include "components/feature_engagement_tracker/internal/model.h"
+#include "components/feature_engagement_tracker/public/feature_list.h"
 
 namespace base {
 struct Feature;
 }  // namespace base
 
 namespace feature_engagement_tracker {
+class AvailabilityModel;
+class Model;
 
 // An ConditionValidator that will ensure that each base::Feature will meet
 // conditions maximum one time for any given session.
@@ -36,12 +38,22 @@ class OnceConditionValidator : public ConditionValidator {
   ~OnceConditionValidator() override;
 
   // ConditionValidator implementation.
-  bool MeetsConditions(const base::Feature& feature,
-                       const Model& model) override;
+  ConditionValidator::Result MeetsConditions(
+      const base::Feature& feature,
+      const FeatureConfig& config,
+      const Model& model,
+      const AvailabilityModel& availability_model,
+      uint32_t current_day) const override;
+  void NotifyIsShowing(const base::Feature& feature) override;
+  void NotifyDismissed(const base::Feature& feature) override;
 
  private:
   // Contains all features that have met conditions within the current session.
   std::unordered_set<const base::Feature*> shown_features_;
+
+  // Which feature that is currently being shown, or nullptr if nothing is
+  // currently showing.
+  const base::Feature* currently_showing_feature_;
 
   DISALLOW_COPY_AND_ASSIGN(OnceConditionValidator);
 };

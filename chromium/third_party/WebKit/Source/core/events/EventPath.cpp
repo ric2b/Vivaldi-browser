@@ -69,8 +69,8 @@ void EventPath::InitializeWith(Node& node, Event* event) {
   node_ = &node;
   event_ = event;
   window_event_context_ = nullptr;
-  node_event_contexts_.Clear();
-  tree_scope_event_contexts_.Clear();
+  node_event_contexts_.clear();
+  tree_scope_event_contexts_.clear();
   Initialize();
 }
 
@@ -170,9 +170,9 @@ void EventPath::CalculateTreeOrderAndSetNearestAncestorClosedTree() {
       root_tree = tree_scope_event_context.Get();
       continue;
     }
-    DCHECK_NE(tree_scope_event_context_map.Find(parent),
+    DCHECK_NE(tree_scope_event_context_map.find(parent),
               tree_scope_event_context_map.end());
-    tree_scope_event_context_map.Find(parent)->value->AddChild(
+    tree_scope_event_context_map.find(parent)->value->AddChild(
         *tree_scope_event_context.Get());
   }
   DCHECK(root_tree);
@@ -259,7 +259,7 @@ EventTarget* EventPath::FindRelatedNode(TreeScope& scope,
   for (TreeScope* current = &scope; current;
        current = current->OlderShadowRootOrParentTreeScope()) {
     parent_tree_scopes.push_back(current);
-    RelatedTargetMap::const_iterator iter = related_target_map.Find(current);
+    RelatedTargetMap::const_iterator iter = related_target_map.find(current);
     if (iter != related_target_map.end() && iter->value) {
       related_node = iter->value;
       break;
@@ -374,6 +374,15 @@ void EventPath::AdjustTouchList(
           FindRelatedNode(*tree_scopes[j], related_node_map)));
     }
   }
+}
+
+bool EventPath::DisabledFormControlExistsInPath() const {
+  for (const auto& context : node_event_contexts_) {
+    const Node* target_node = context.GetNode();
+    if (target_node && IsDisabledFormControl(target_node))
+      return true;
+  }
+  return false;
 }
 
 NodeEventContext& EventPath::TopNodeEventContext() {

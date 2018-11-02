@@ -4,10 +4,10 @@
 
 #include "modules/fetch/FetchResponseData.h"
 
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/FetchHeaderList.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
@@ -82,11 +82,10 @@ FetchResponseData* FetchResponseData::CreateBasicFilteredResponse() const {
   FetchResponseData* response =
       new FetchResponseData(kBasicType, status_, status_message_);
   response->SetURLList(url_list_);
-  for (size_t i = 0; i < header_list_->size(); ++i) {
-    const FetchHeaderList::Header* header = header_list_->List()[i].get();
-    if (FetchUtils::IsForbiddenResponseHeaderName(header->first))
+  for (const auto& header : header_list_->List()) {
+    if (FetchUtils::IsForbiddenResponseHeaderName(header.first))
       continue;
-    response->header_list_->Append(header->first, header->second);
+    response->header_list_->Append(header.first, header.second);
   }
   response->buffer_ = buffer_;
   response->mime_type_ = mime_type_;
@@ -118,16 +117,15 @@ FetchResponseData* FetchResponseData::CreateCORSFilteredResponse(
   FetchResponseData* response =
       new FetchResponseData(kCORSType, status_, status_message_);
   response->SetURLList(url_list_);
-  for (size_t i = 0; i < header_list_->size(); ++i) {
-    const FetchHeaderList::Header* header = header_list_->List()[i].get();
-    const String& name = header->first;
+  for (const auto& header : header_list_->List()) {
+    const String& name = header.first;
     const bool explicitly_exposed = exposed_headers.Contains(name);
     if (IsOnAccessControlResponseHeaderWhitelist(name) ||
         (explicitly_exposed &&
          !FetchUtils::IsForbiddenResponseHeaderName(name))) {
       if (explicitly_exposed)
         response->cors_exposed_header_names_.insert(name);
-      response->header_list_->Append(name, header->second);
+      response->header_list_->Append(name, header.second);
     }
   }
   response->buffer_ = buffer_;
@@ -220,16 +218,16 @@ FetchResponseData* FetchResponseData::Clone(ScriptState* script_state) {
   switch (type_) {
     case kBasicType:
     case kCORSType:
-      ASSERT(internal_response_);
-      ASSERT(buffer_ == internal_response_->buffer_);
-      ASSERT(internal_response_->type_ == kDefaultType);
+      DCHECK(internal_response_);
+      DCHECK_EQ(buffer_, internal_response_->buffer_);
+      DCHECK_EQ(internal_response_->type_, kDefaultType);
       new_response->internal_response_ =
           internal_response_->Clone(script_state);
       buffer_ = internal_response_->buffer_;
       new_response->buffer_ = new_response->internal_response_->buffer_;
       break;
     case kDefaultType: {
-      ASSERT(!internal_response_);
+      DCHECK(!internal_response_);
       if (buffer_) {
         BodyStreamBuffer* new1 = nullptr;
         BodyStreamBuffer* new2 = nullptr;
@@ -240,14 +238,14 @@ FetchResponseData* FetchResponseData::Clone(ScriptState* script_state) {
       break;
     }
     case kErrorType:
-      ASSERT(!internal_response_);
-      ASSERT(!buffer_);
+      DCHECK(!internal_response_);
+      DCHECK(!buffer_);
       break;
     case kOpaqueType:
     case kOpaqueRedirectType:
-      ASSERT(internal_response_);
-      ASSERT(!buffer_);
-      ASSERT(internal_response_->type_ == kDefaultType);
+      DCHECK(internal_response_);
+      DCHECK(!buffer_);
+      DCHECK_EQ(internal_response_->type_, kDefaultType);
       new_response->internal_response_ =
           internal_response_->Clone(script_state);
       break;
@@ -272,9 +270,8 @@ void FetchResponseData::PopulateWebServiceWorkerResponse(
   response.SetCacheStorageCacheName(CacheStorageCacheName());
   response.SetCorsExposedHeaderNames(
       HeaderSetToWebVector(cors_exposed_header_names_));
-  for (size_t i = 0; i < HeaderList()->size(); ++i) {
-    const FetchHeaderList::Header* header = HeaderList()->List()[i].get();
-    response.AppendHeader(header->first, header->second);
+  for (const auto& header : HeaderList()->List()) {
+    response.AppendHeader(header.first, header.second);
   }
 }
 
@@ -289,11 +286,11 @@ FetchResponseData::FetchResponseData(Type type,
 
 void FetchResponseData::ReplaceBodyStreamBuffer(BodyStreamBuffer* buffer) {
   if (type_ == kBasicType || type_ == kCORSType) {
-    ASSERT(internal_response_);
+    DCHECK(internal_response_);
     internal_response_->buffer_ = buffer;
     buffer_ = buffer;
   } else if (type_ == kDefaultType) {
-    ASSERT(!internal_response_);
+    DCHECK(!internal_response_);
     buffer_ = buffer;
   }
 }

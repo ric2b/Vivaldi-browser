@@ -695,9 +695,8 @@ void PrintPreviewHandler::HandleGetPrivetPrinterCapabilities(
   DCHECK(success);
 
   CreatePrivetHTTP(
-      name,
-      base::Bind(&PrintPreviewHandler::PrivetCapabilitiesUpdateClient,
-                 base::Unretained(this)));
+      name, base::Bind(&PrintPreviewHandler::PrivetCapabilitiesUpdateClient,
+                       weak_factory_.GetWeakPtr()));
 #endif
 }
 
@@ -707,8 +706,9 @@ void PrintPreviewHandler::HandleGetExtensionPrinters(
   // Make sure all in progress requests are canceled before new printer search
   // starts.
   extension_printer_handler_->Reset();
-  extension_printer_handler_->StartGetPrinters(base::Bind(
-      &PrintPreviewHandler::OnGotPrintersForExtension, base::Unretained(this)));
+  extension_printer_handler_->StartGetPrinters(
+      base::Bind(&PrintPreviewHandler::OnGotPrintersForExtension,
+                 weak_factory_.GetWeakPtr()));
 }
 
 void PrintPreviewHandler::HandleGrantExtensionPrinterAccess(
@@ -720,7 +720,7 @@ void PrintPreviewHandler::HandleGrantExtensionPrinterAccess(
   EnsureExtensionPrinterHandlerSet();
   extension_printer_handler_->StartGrantPrinterAccess(
       printer_id, base::Bind(&PrintPreviewHandler::OnGotExtensionPrinterInfo,
-                             base::Unretained(this), printer_id));
+                             weak_factory_.GetWeakPtr(), printer_id));
 }
 
 void PrintPreviewHandler::HandleGetExtensionPrinterCapabilities(
@@ -733,11 +733,11 @@ void PrintPreviewHandler::HandleGetExtensionPrinterCapabilities(
   extension_printer_handler_->StartGetCapability(
       printer_id,
       base::Bind(&PrintPreviewHandler::OnGotExtensionPrinterCapabilities,
-                 base::Unretained(this)));
+                 weak_factory_.GetWeakPtr()));
 }
 
 void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
-  DCHECK_EQ(3U, args->GetSize());
+  DCHECK_EQ(2U, args->GetSize());
   std::unique_ptr<base::DictionaryValue> settings = GetSettingsDictionary(args);
   if (!settings)
     return;
@@ -769,10 +769,9 @@ void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
   // Retrieve the page title and url and send it to the renderer process if
   // headers and footers are to be displayed.
   bool display_header_footer = false;
-  if (!settings->GetBoolean(printing::kSettingHeaderFooterEnabled,
-                            &display_header_footer)) {
-    NOTREACHED();
-  }
+  bool success = settings->GetBoolean(printing::kSettingHeaderFooterEnabled,
+                                      &display_header_footer);
+  DCHECK(success);
   if (display_header_footer) {
     settings->SetString(printing::kSettingHeaderFooterTitle,
                         initiator->GetTitle());
@@ -790,33 +789,29 @@ void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
   }
 
   bool generate_draft_data = false;
-  bool success = settings->GetBoolean(printing::kSettingGenerateDraftData,
-                                      &generate_draft_data);
+  success = settings->GetBoolean(printing::kSettingGenerateDraftData,
+                                 &generate_draft_data);
   DCHECK(success);
 
   if (!generate_draft_data) {
-    double draft_page_count_double = -1;
-    success = args->GetDouble(1, &draft_page_count_double);
-    DCHECK(success);
-    int draft_page_count = static_cast<int>(draft_page_count_double);
-
-    bool preview_modifiable = false;
-    success = args->GetBoolean(2, &preview_modifiable);
+    int page_count = -1;
+    success = args->GetInteger(1, &page_count);
     DCHECK(success);
 
-    if (draft_page_count != -1 && preview_modifiable &&
-        print_preview_ui()->GetAvailableDraftPageCount() != draft_page_count) {
-      settings->SetBoolean(printing::kSettingGenerateDraftData, true);
+    if (page_count != -1) {
+      bool preview_modifiable = false;
+      success = settings->GetBoolean(printing::kSettingPreviewModifiable,
+                                     &preview_modifiable);
+      DCHECK(success);
+
+      if (preview_modifiable &&
+          print_preview_ui()->GetAvailableDraftPageCount() != page_count) {
+        settings->SetBoolean(printing::kSettingGenerateDraftData, true);
+      }
     }
   }
 
   VLOG(1) << "Print preview request start";
-
-  bool selection_only = false;
-  if (!settings->GetBoolean(printing::kSettingShouldPrintSelectionOnly,
-                            &selection_only)) {
-    NOTREACHED();
-  }
 
   rfh->Send(new PrintMsg_PrintPreview(rfh->GetRoutingID(), *settings));
 }
@@ -838,9 +833,6 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
   // Report whether the user printed a PDF or an HTML document.
   ReportPrintDocumentTypeHistogram(print_preview_ui()->source_is_modifiable() ?
                                    HTML_DOCUMENT : PDF_DOCUMENT);
-
-  // Never try to add headers/footers here. It's already in the generated PDF.
-  settings->SetBoolean(printing::kSettingHeaderFooterEnabled, false);
 
   bool print_to_pdf = false;
   bool is_cloud_printer = false;
@@ -933,7 +925,7 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
         destination_id, capabilities, title, print_ticket,
         gfx::Size(width, height), data,
         base::Bind(&PrintPreviewHandler::OnExtensionPrintResult,
-                   base::Unretained(this)));
+                   weak_factory_.GetWeakPtr()));
     return;
   }
 
@@ -949,66 +941,60 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
                          page_count);
     ReportUserActionHistogram(PRINT_WITH_CLOUD_PRINT);
     SendCloudPrintJob(data.get());
-  } else {
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
-    bool system_dialog = false;
-    settings->GetBoolean(printing::kSettingShowSystemDialog, &system_dialog);
-    if (system_dialog) {
-      UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.SystemDialog", page_count);
-      ReportUserActionHistogram(FALLBACK_TO_ADVANCED_SETTINGS_DIALOG);
-    } else {
-      UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.PrintToPrinter", page_count);
-      ReportUserActionHistogram(PRINT_TO_PRINTER);
-    }
-
-    // This tries to activate the initiator as well, so do not clear the
-    // association with the initiator yet.
-    print_preview_ui()->OnHidePreviewDialog();
-
-    // Grab the current initiator before calling ClearInitiatorDetails() below.
-    // Otherwise calling GetInitiator() later will return the wrong WebContents.
-    // https://crbug.com/407080
-    WebContents* initiator = GetInitiator();
-    if (initiator) {
-      // Save initiator IDs. PrintMsg_PrintForPrintPreview below should cause
-      // the renderer to send PrintHostMsg_UpdatePrintSettings and trigger
-      // PrintingMessageFilter::OnUpdatePrintSettings(), which needs this info.
-      auto* main_render_frame = initiator->GetMainFrame();
-      settings->SetInteger(printing::kPreviewInitiatorHostId,
-                           main_render_frame->GetProcess()->GetID());
-      settings->SetInteger(printing::kPreviewInitiatorRoutingId,
-                           main_render_frame->GetRoutingID());
-    }
-
-    // Do this so the initiator can open a new print preview dialog, while the
-    // current print preview dialog is still handling its print job.
-    ClearInitiatorDetails();
-
-    // The PDF being printed contains only the pages that the user selected,
-    // so ignore the page range and print all pages.
-    settings->Remove(printing::kSettingPageRange, nullptr);
-    // Reset selection only flag for the same reason.
-    settings->SetBoolean(printing::kSettingShouldPrintSelectionOnly, false);
-
-    // Set ID to know whether printing is for preview.
-    settings->SetInteger(printing::kPreviewUIID,
-                         print_preview_ui()->GetIDForPrintPreviewUI());
-    RenderFrameHost* rfh = preview_web_contents()->GetMainFrame();
-    rfh->Send(
-        new PrintMsg_PrintForPrintPreview(rfh->GetRoutingID(), *settings));
-
-    // For all other cases above, the preview dialog will stay open until the
-    // printing has finished. Then the dialog closes and PrintPreviewDone() gets
-    // called. In the case below, since the preview dialog will be hidden and
-    // not closed, we need to make this call.
-    if (initiator) {
-      auto* print_view_manager = PrintViewManager::FromWebContents(initiator);
-      print_view_manager->PrintPreviewDone();
-    }
-#else
-    NOTREACHED();
-#endif   // BUILDFLAG(ENABLE_BASIC_PRINTING)
+    return;
   }
+
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
+  bool system_dialog = false;
+  settings->GetBoolean(printing::kSettingShowSystemDialog, &system_dialog);
+  if (system_dialog) {
+    UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.SystemDialog", page_count);
+    ReportUserActionHistogram(FALLBACK_TO_ADVANCED_SETTINGS_DIALOG);
+  } else {
+    UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.PrintToPrinter", page_count);
+    ReportUserActionHistogram(PRINT_TO_PRINTER);
+  }
+
+  // This tries to activate the initiator as well, so do not clear the
+  // association with the initiator yet.
+  print_preview_ui()->OnHidePreviewDialog();
+
+  // Grab the current initiator before calling ClearInitiatorDetails() below.
+  // Otherwise calling GetInitiator() later will return the wrong WebContents.
+  // https://crbug.com/407080
+  WebContents* initiator = GetInitiator();
+  if (initiator) {
+    // Save initiator IDs. PrintMsg_PrintForPrintPreview below should cause
+    // the renderer to send PrintHostMsg_UpdatePrintSettings and trigger
+    // PrintingMessageFilter::OnUpdatePrintSettings(), which needs this info.
+    auto* main_render_frame = initiator->GetMainFrame();
+    settings->SetInteger(printing::kPreviewInitiatorHostId,
+                         main_render_frame->GetProcess()->GetID());
+    settings->SetInteger(printing::kPreviewInitiatorRoutingId,
+                         main_render_frame->GetRoutingID());
+  }
+
+  // Do this so the initiator can open a new print preview dialog, while the
+  // current print preview dialog is still handling its print job.
+  ClearInitiatorDetails();
+
+  // Set ID to know whether printing is for preview.
+  settings->SetInteger(printing::kPreviewUIID,
+                       print_preview_ui()->GetIDForPrintPreviewUI());
+  RenderFrameHost* rfh = preview_web_contents()->GetMainFrame();
+  rfh->Send(new PrintMsg_PrintForPrintPreview(rfh->GetRoutingID(), *settings));
+
+  // For all other cases above, the preview dialog will stay open until the
+  // printing has finished. Then the dialog closes and PrintPreviewDone() gets
+  // called. In the case below, since the preview dialog will be hidden and
+  // not closed, we need to make this call.
+  if (initiator) {
+    auto* print_view_manager = PrintViewManager::FromWebContents(initiator);
+    print_view_manager->PrintPreviewDone();
+  }
+#else
+  NOTREACHED();
+#endif   // BUILDFLAG(ENABLE_BASIC_PRINTING)
 }
 
 void PrintPreviewHandler::PrintToPdf() {
@@ -1019,7 +1005,7 @@ void PrintPreviewHandler::PrintToPdf() {
              !select_file_dialog_->IsRunning(platform_util::GetTopLevel(
                  preview_web_contents()->GetNativeView()))) {
     // Pre-populating select file dialog with print job title.
-    base::string16 print_job_title_utf16 =
+    const base::string16& print_job_title_utf16 =
         print_preview_ui()->initiator_title();
 
 #if defined(OS_WIN)
@@ -1222,11 +1208,18 @@ void PrintPreviewHandler::GetNumberFormatAndMeasurementSystem(
 }
 
 void PrintPreviewHandler::HandleGetInitialSettings(
-    const base::ListValue* /*args*/) {
+    const base::ListValue* args) {
+  std::string callback_id;
+  CHECK(args->GetString(0, &callback_id));
+  CHECK(!callback_id.empty());
+
+  AllowJavascript();
+
   // Send before SendInitialSettings() to allow cloud printer auto select.
   SendCloudPrintEnabled();
-  printer_backend_proxy()->GetDefaultPrinter(base::Bind(
-      &PrintPreviewHandler::SendInitialSettings, weak_factory_.GetWeakPtr()));
+  printer_backend_proxy()->GetDefaultPrinter(
+      base::Bind(&PrintPreviewHandler::SendInitialSettings,
+                 weak_factory_.GetWeakPtr(), callback_id));
 }
 
 void PrintPreviewHandler::HandleForceOpenNewTab(const base::ListValue* args) {
@@ -1242,6 +1235,7 @@ void PrintPreviewHandler::HandleForceOpenNewTab(const base::ListValue* args) {
 }
 
 void PrintPreviewHandler::SendInitialSettings(
+    const std::string& callback_id,
     const std::string& default_printer) {
   base::DictionaryValue initial_settings;
   initial_settings.SetString(kInitiatorTitle,
@@ -1276,8 +1270,7 @@ void PrintPreviewHandler::SendInitialSettings(
 
   if (print_preview_ui()->source_is_modifiable())
     GetNumberFormatAndMeasurementSystem(&initial_settings);
-  web_ui()->CallJavascriptFunctionUnsafe("setInitialSettings",
-                                         initial_settings);
+  ResolveJavascriptCallback(base::Value(callback_id), initial_settings);
 }
 
 void PrintPreviewHandler::ClosePreviewDialog() {
@@ -1294,15 +1287,17 @@ void PrintPreviewHandler::SendAccessToken(const std::string& type,
 void PrintPreviewHandler::SendPrinterCapabilities(
     const std::string& printer_name,
     std::unique_ptr<base::DictionaryValue> settings_info) {
-  if (!settings_info) {
-    VLOG(1) << "Get printer capabilities failed";
-    web_ui()->CallJavascriptFunctionUnsafe("failedToGetPrinterCapabilities",
-                                           base::Value(printer_name));
+  // Check that |settings_info| is valid.
+  if (settings_info && settings_info->Get("capabilities", nullptr)) {
+    VLOG(1) << "Get printer capabilities finished";
+    web_ui()->CallJavascriptFunctionUnsafe("updateWithPrinterCapabilities",
+                                           *settings_info);
     return;
   }
-  VLOG(1) << "Get printer capabilities finished";
-  web_ui()->CallJavascriptFunctionUnsafe("updateWithPrinterCapabilities",
-                                         *settings_info);
+
+  VLOG(1) << "Get printer capabilities failed";
+  web_ui()->CallJavascriptFunctionUnsafe("failedToGetPrinterCapabilities",
+                                         base::Value(printer_name));
 }
 
 void PrintPreviewHandler::SendPrinterSetup(
@@ -1404,8 +1399,7 @@ void PrintPreviewHandler::SelectFile(const base::FilePath& default_filename,
   // returns and eventually FileSelected() gets called.
   if (!prompt_user) {
     base::PostTaskWithTraitsAndReplyWithResult(
-        FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                       base::TaskPriority::BACKGROUND),
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
         base::Bind(&GetUniquePath,
                    download_prefs->SaveFilePath().Append(default_filename)),
         base::Bind(&PrintPreviewHandler::OnGotUniqueFileName,
@@ -1473,10 +1467,9 @@ void PrintPreviewHandler::PostPrintToPdfTask() {
   }
 
   base::PostTaskWithTraits(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
-      base::Bind(&PrintToPdfCallback, data, print_to_pdf_path_,
-                 pdf_file_saved_closure_));
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      base::BindOnce(&PrintToPdfCallback, data, print_to_pdf_path_,
+                     pdf_file_saved_closure_));
   print_to_pdf_path_.clear();
   ClosePreviewDialog();
 }
@@ -1510,7 +1503,8 @@ bool PrintPreviewHandler::GetPreviewDataAndTitle(
     // Nothing to print, no preview available.
     return false;
   }
-  DCHECK(tmp_data->size() && tmp_data->front());
+  DCHECK(tmp_data->size());
+  DCHECK(tmp_data->front());
 
   *data = tmp_data;
   *title = print_preview_ui()->initiator_title();
@@ -1559,7 +1553,7 @@ void PrintPreviewHandler::PrivetCapabilitiesUpdateClient(
   privet_capabilities_operation_ =
       privet_http_client_->CreateCapabilitiesOperation(
           base::Bind(&PrintPreviewHandler::OnPrivetCapabilities,
-                     base::Unretained(this)));
+                     weak_factory_.GetWeakPtr()));
   privet_capabilities_operation_->Start();
 }
 
@@ -1669,10 +1663,7 @@ void PrintPreviewHandler::PrintToPrivetPrinter(const std::string& device_name,
   CreatePrivetHTTP(
       device_name,
       base::Bind(&PrintPreviewHandler::PrivetLocalPrintUpdateClient,
-                 base::Unretained(this),
-                 ticket,
-                 capabilities,
-                 page_size));
+                 weak_factory_.GetWeakPtr(), ticket, capabilities, page_size));
 }
 
 bool PrintPreviewHandler::CreatePrivetHTTP(

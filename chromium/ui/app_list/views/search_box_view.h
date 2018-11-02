@@ -79,9 +79,9 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   void SetBackButtonLabel(bool folder);
 
   // Overridden from views::View:
-  gfx::Size GetPreferredSize() const override;
   bool OnMouseWheel(const ui::MouseWheelEvent& event) override;
   void OnEnabledChanged() override;
+  const char* GetClassName() const override;
 
  private:
   // Updates model text and selection model with current Textfield info.
@@ -103,7 +103,7 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   void SpeechRecognitionButtonPropChanged() override;
   void HintTextChanged() override;
   void SelectionModelChanged() override;
-  void TextChanged() override;
+  void Update() override;
 
   // Overridden from SpeechUIModelObserver:
   void OnSpeechRecognitionStateChanged(

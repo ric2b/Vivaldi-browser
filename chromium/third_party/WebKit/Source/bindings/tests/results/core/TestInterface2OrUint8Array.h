@@ -16,11 +16,11 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/NativeValueTraits.h"
 #include "bindings/core/v8/V8ArrayBufferView.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8Uint8Array.h"
 #include "core/CoreExport.h"
+#include "core/dom/ArrayBufferViewHelpers.h"
 #include "core/dom/FlexibleArrayBufferView.h"
-#include "core/dom/NotShared.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {

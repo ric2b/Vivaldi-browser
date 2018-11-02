@@ -4,25 +4,33 @@
 
 #include "ios/chrome/browser/ui/util/label_observer.h"
 
-#import "base/mac/scoped_nsobject.h"
 #include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
 #include "url/gurl.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 
 class LabelObserverTest : public PlatformTest {
  protected:
-  void SetUp() override {
-    label_.reset([[UILabel alloc] initWithFrame:CGRectZero]);
+  LabelObserverTest() {
+    label_ = [[UILabel alloc] initWithFrame:CGRectZero];
+    observer_ = [LabelObserver observerForLabel:label_];
+    [observer_ startObserving];
   }
 
-  UILabel* label() { return label_.get(); }
-  LabelObserver* observer() { return [LabelObserver observerForLabel:label()]; }
+  ~LabelObserverTest() override { [observer_ stopObserving]; }
 
-  base::scoped_nsobject<UILabel> label_;
+  UILabel* label() { return label_; }
+  LabelObserver* observer() { return observer_; }
+
+  UILabel* label_;
+  LabelObserver* observer_;
 };
 
 // Tests that all types of LabelObserverActions are successfully called.

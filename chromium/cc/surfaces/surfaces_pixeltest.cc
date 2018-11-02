@@ -11,6 +11,7 @@
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_aggregator.h"
 #include "cc/surfaces/surface_manager.h"
+#include "cc/test/compositor_frame_helpers.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -39,7 +40,7 @@ class SurfacesPixelTest : public RendererPixelTest<GLRenderer> {
                                                kIsRoot,
                                                kHandlesFrameSinkIdInvalidation,
                                                kNeedsSyncPoints)) {}
-  ~SurfacesPixelTest() override { support_->EvictFrame(); }
+  ~SurfacesPixelTest() override { support_->EvictCurrentSurface(); }
 
  protected:
   SurfaceManager manager_;
@@ -51,14 +52,14 @@ SharedQuadState* CreateAndAppendTestSharedQuadState(
     RenderPass* render_pass,
     const gfx::Transform& transform,
     const gfx::Size& size) {
-  const gfx::Size layer_bounds = size;
+  const gfx::Rect layer_rect = gfx::Rect(size);
   const gfx::Rect visible_layer_rect = gfx::Rect(size);
   const gfx::Rect clip_rect = gfx::Rect(size);
   bool is_clipped = false;
   float opacity = 1.f;
   const SkBlendMode blend_mode = SkBlendMode::kSrcOver;
   SharedQuadState* shared_state = render_pass->CreateAndAppendSharedQuadState();
-  shared_state->SetAll(transform, layer_bounds, visible_layer_rect, clip_rect,
+  shared_state->SetAll(transform, layer_rect, visible_layer_rect, clip_rect,
                        is_clipped, opacity, blend_mode, 0);
   return shared_state;
 }
@@ -82,8 +83,7 @@ TEST_F(SurfacesPixelTest, DrawSimpleFrame) {
                      SK_ColorGREEN,
                      force_anti_aliasing_off);
 
-
-  CompositorFrame root_frame;
+  CompositorFrame root_frame = test::MakeCompositorFrame();
   root_frame.render_pass_list.push_back(std::move(pass));
 
   LocalSurfaceId root_local_surface_id = allocator_.GenerateId();
@@ -140,7 +140,7 @@ TEST_F(SurfacesPixelTest, DrawSimpleAggregatedFrame) {
                        SK_ColorYELLOW,
                        force_anti_aliasing_off);
 
-    CompositorFrame root_frame;
+    CompositorFrame root_frame = test::MakeCompositorFrame();
     root_frame.render_pass_list.push_back(std::move(pass));
 
     support_->SubmitCompositorFrame(root_local_surface_id,
@@ -165,7 +165,7 @@ TEST_F(SurfacesPixelTest, DrawSimpleAggregatedFrame) {
                        SK_ColorBLUE,
                        force_anti_aliasing_off);
 
-    CompositorFrame child_frame;
+    CompositorFrame child_frame = test::MakeCompositorFrame();
     child_frame.render_pass_list.push_back(std::move(pass));
 
     child_support->SubmitCompositorFrame(child_local_surface_id,
@@ -182,7 +182,7 @@ TEST_F(SurfacesPixelTest, DrawSimpleAggregatedFrame) {
                            base::FilePath(FILE_PATH_LITERAL("blue_yellow.png")),
                            pixel_comparator));
 
-  child_support->EvictFrame();
+  child_support->EvictCurrentSurface();
 }
 
 // Tests a surface quad that has a non-identity transform into its pass.
@@ -240,7 +240,7 @@ TEST_F(SurfacesPixelTest, DrawAggregatedFrameWithSurfaceTransforms) {
                                right_child_id, SurfaceDrawQuadType::PRIMARY,
                                nullptr);
 
-    CompositorFrame root_frame;
+    CompositorFrame root_frame = test::MakeCompositorFrame();
     root_frame.render_pass_list.push_back(std::move(pass));
 
     support_->SubmitCompositorFrame(root_local_surface_id,
@@ -273,7 +273,7 @@ TEST_F(SurfacesPixelTest, DrawAggregatedFrameWithSurfaceTransforms) {
                               SK_ColorBLUE,
                               force_anti_aliasing_off);
 
-    CompositorFrame child_frame;
+    CompositorFrame child_frame = test::MakeCompositorFrame();
     child_frame.render_pass_list.push_back(std::move(pass));
 
     left_support->SubmitCompositorFrame(left_child_local_id,
@@ -306,7 +306,7 @@ TEST_F(SurfacesPixelTest, DrawAggregatedFrameWithSurfaceTransforms) {
                               SK_ColorGREEN,
                               force_anti_aliasing_off);
 
-    CompositorFrame child_frame;
+    CompositorFrame child_frame = test::MakeCompositorFrame();
     child_frame.render_pass_list.push_back(std::move(pass));
 
     right_support->SubmitCompositorFrame(right_child_local_id,
@@ -324,8 +324,8 @@ TEST_F(SurfacesPixelTest, DrawAggregatedFrameWithSurfaceTransforms) {
       base::FilePath(FILE_PATH_LITERAL("four_blue_green_checkers.png")),
       pixel_comparator));
 
-  left_support->EvictFrame();
-  right_support->EvictFrame();
+  left_support->EvictCurrentSurface();
+  right_support->EvictCurrentSurface();
 }
 
 }  // namespace

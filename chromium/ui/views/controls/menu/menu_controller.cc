@@ -10,7 +10,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "ui/base/dragdrop/drag_utils.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
@@ -408,14 +407,13 @@ MenuController* MenuController::GetActiveInstance() {
   return active_instance_;
 }
 
-MenuItemView* MenuController::Run(Widget* parent,
-                                  MenuButton* button,
-                                  MenuItemView* root,
-                                  const gfx::Rect& bounds,
-                                  MenuAnchorPosition position,
-                                  bool context_menu,
-                                  bool is_nested_drag,
-                                  int* result_event_flags) {
+void MenuController::Run(Widget* parent,
+                         MenuButton* button,
+                         MenuItemView* root,
+                         const gfx::Rect& bounds,
+                         MenuAnchorPosition position,
+                         bool context_menu,
+                         bool is_nested_drag) {
   exit_type_ = EXIT_NONE;
   possible_drag_ = false;
   drag_in_progress_ = false;
@@ -483,7 +481,7 @@ MenuItemView* MenuController::Run(Widget* parent,
       // notification when the drag has finished.
       StartCancelAllTimer();
     }
-    return NULL;
+    return;
   }
 
   if (button)
@@ -492,8 +490,6 @@ MenuItemView* MenuController::Run(Widget* parent,
   // Make sure Chrome doesn't attempt to shut down while the menu is showing.
   if (ViewsDelegate::GetInstance())
     ViewsDelegate::GetInstance()->AddRef();
-
-  return nullptr;
 }
 
 void MenuController::VivaldiSelectItem(MenuItemView* item) {
@@ -1257,8 +1253,7 @@ void MenuController::StartDrag(SubmenuView* source,
 
   OSExchangeData data;
   item->GetDelegate()->WriteDragData(item, &data);
-  drag_utils::SetDragImageOnDataObject(image, press_loc.OffsetFromOrigin(),
-                                       &data);
+  data.provider().SetDragImage(image, press_loc.OffsetFromOrigin());
 
   StopScrolling();
   int drag_ops = item->GetDelegate()->GetDragOperations(item);
@@ -1531,8 +1526,7 @@ bool MenuController::ShowSiblingMenu(SubmenuView* source,
 
   // There is a sibling menu, update the button state, hide the current menu
   // and show the new one.
-  pressed_lock_.reset(
-      new MenuButton::PressedLock(button, true /* is_sibling_menu_show */));
+  pressed_lock_.reset(new MenuButton::PressedLock(button, true, nullptr));
 
   // Need to reset capture when we show the menu again, otherwise we aren't
   // going to get any events.
@@ -1960,15 +1954,19 @@ gfx::Rect MenuController::CalculateMenuBounds(MenuItemView* item,
       if (menu_config.offset_context_menus && state_.context_menu)
         x -= 1;
     } else if (state_.anchor == MENU_ANCHOR_BOTTOMCENTER) {
-      x = x - (pref.width() - state_.initial_bounds.width()) / 2;
+      x += (state_.initial_bounds.width() - pref.width()) / 2;
       if (pref.height() >
           state_.initial_bounds.y() + kCenteredContextMenuYOffset) {
-        // Menu does not fit above the anchor. We move it to below.
+        // Place the menu below if it does not fit above.
         y = state_.initial_bounds.y() - kCenteredContextMenuYOffset;
       } else {
         y = std::max(0, state_.initial_bounds.y() - pref.height()) +
             kCenteredContextMenuYOffset;
       }
+    } else if (state_.anchor == MENU_ANCHOR_FIXED_BOTTOMCENTER) {
+      x += (state_.initial_bounds.width() - pref.width()) / 2;
+    } else if (state_.anchor == MENU_ANCHOR_FIXED_SIDECENTER) {
+      y += (state_.initial_bounds.height() - pref.height()) / 2;
     }
 
     if (!state_.monitor_bounds.IsEmpty() &&
@@ -2405,7 +2403,7 @@ void MenuController::RepostEventAndCancel(SubmenuView* source,
     } else {
       // We some times get an event after closing all the menus. Ignore it. Make
       // sure the menu is in fact not visible. If the menu is visible, then
-      // we're in a bad state where we think the menu isn't visibile but it is.
+      // we're in a bad state where we think the menu isn't visible but it is.
       DCHECK(!source->GetWidget()->IsVisible());
     }
 

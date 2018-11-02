@@ -12,6 +12,7 @@
 #include "components/metrics/leak_detector/leak_detector.mojom.h"
 #include "components/metrics/proto/memory_leak_report.pb.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 
 namespace metrics {
 
@@ -43,11 +44,11 @@ class LeakDetectorRemoteController : public mojom::LeakDetector {
 
   ~LeakDetectorRemoteController() override;
 
-  static void Create(mojom::LeakDetectorRequest request);
+  static void Create(const service_manager::BindSourceInfo& source_info,
+                     mojom::LeakDetectorRequest request);
 
   // mojom::LeakDetector:
-  void GetParams(
-      const mojom::LeakDetector::GetParamsCallback& callback) override;
+  void GetParams(mojom::LeakDetector::GetParamsCallback callback) override;
   void SendLeakReports(std::vector<mojom::MemoryLeakReportPtr>) override;
 
   // Sets a global pointer to a LocalController implementation. The global

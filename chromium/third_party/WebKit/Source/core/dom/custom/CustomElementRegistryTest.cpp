@@ -6,7 +6,7 @@
 
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementDefinitionOptions.h"
@@ -216,8 +216,8 @@ class LogUpgradeDefinition : public TestCustomElementDefinition {
   HeapVector<Member<Adopted>> adopted_;
 
   void Clear() {
-    logs_.Clear();
-    attribute_changed_.Clear();
+    logs_.clear();
+    attribute_changed_.clear();
   }
 
   bool RunConstructor(Element* element) override {

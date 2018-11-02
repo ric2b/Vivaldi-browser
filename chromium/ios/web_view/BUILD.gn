@@ -4,6 +4,7 @@
 
 import("//build/config/ios/ios_sdk.gni")
 import("//build/config/ios/rules.gni")
+import("//components/grpc_support/include/headers.gni")
 import("//tools/grit/repack.gni")
 
 config("config") {
@@ -20,13 +21,16 @@ config("config") {
 # and CrNetChromeWebView frameworks.
 ios_web_view_public_headers = [
   "public/ChromeWebView.h",
-  "public/cwv.h",
   "public/cwv_export.h",
   "public/cwv_html_element.h",
+  "public/cwv_language_detection_result.h",
   "public/cwv_navigation_action.h",
   "public/cwv_navigation_delegate.h",
-  "public/cwv_translate_delegate.h",
-  "public/cwv_translate_manager.h",
+  "public/cwv_scroll_view.h",
+  "public/cwv_scroll_view_delegate.h",
+  "public/cwv_translation_controller.h",
+  "public/cwv_translation_controller_delegate.h",
+  "public/cwv_translation_language.h",
   "public/cwv_ui_delegate.h",
   "public/cwv_user_content_controller.h",
   "public/cwv_user_script.h",
@@ -35,11 +39,12 @@ ios_web_view_public_headers = [
 ]
 
 ios_web_view_sources = [
-  "internal/cwv.mm",
   "internal/cwv_html_element.mm",
   "internal/cwv_html_element_internal.h",
   "internal/cwv_navigation_action.mm",
   "internal/cwv_navigation_action_internal.h",
+  "internal/cwv_scroll_view.mm",
+  "internal/cwv_scroll_view_internal.h",
   "internal/cwv_user_content_controller.mm",
   "internal/cwv_user_content_controller_internal.h",
   "internal/cwv_user_script.mm",
@@ -48,8 +53,12 @@ ios_web_view_sources = [
   "internal/cwv_web_view_configuration_internal.h",
   "internal/pref_names.cc",
   "internal/pref_names.h",
-  "internal/translate/cwv_translate_manager_impl.h",
-  "internal/translate/cwv_translate_manager_impl.mm",
+  "internal/translate/cwv_language_detection_result_internal.h",
+  "internal/translate/cwv_language_detection_result.mm",
+  "internal/translate/cwv_translation_controller.mm",
+  "internal/translate/cwv_translation_controller_internal.h",
+  "internal/translate/cwv_translation_language_internal.h",
+  "internal/translate/cwv_translation_language.mm",
   "internal/translate/web_view_translate_accept_languages_factory.cc",
   "internal/translate/web_view_translate_accept_languages_factory.h",
   "internal/translate/web_view_translate_client.h",
@@ -78,9 +87,9 @@ ios_web_view_sources = [
 ios_web_view_sources += ios_web_view_public_headers
 
 ios_web_view_deps = [
+  ":generate_license",
   ":packed_resources",
   "//base",
-  "//components/infobars/core",
   "//components/infobars/core",
   "//components/keyed_service/core",
   "//components/keyed_service/ios",
@@ -89,17 +98,15 @@ ios_web_view_deps = [
   "//components/translate/core/browser",
   "//components/translate/core/common",
   "//components/translate/ios/browser",
-  "//ios/net",
+  "//google_apis",
   "//ios/net",
   "//ios/web",
   "//ios/web:reload_type",
-  "//ios/web:user_agent",
   "//ios/web:user_agent",
   "//ios/web/public/app",
   "//net",
   "//net:extras",
   "//ui/base",
-  "//url",
   "//url",
 ]
 
@@ -147,6 +154,40 @@ ios_framework_bundle("crnet_web_view_combined") {
   ]
 }
 
+# Same framework as ChromeWebView above, but also exposes CroNet.
+ios_framework_bundle("cronet_web_view_combined") {
+  output_name = "CroNetChromeWebView"
+  info_plist = "Info.plist"
+
+  public_headers = ios_web_view_public_headers
+  public_headers += [
+    "//components/cronet/ios/Cronet.h",
+    "//components/cronet/ios/cronet_c_for_grpc.h",
+  ]
+  public_headers += grpc_public_headers
+
+  public = [
+    "public/ChromeWebView.h",
+  ]
+
+  sources = ios_web_view_sources
+  sources += [ "//components/cronet/ios/Cronet.h" ]
+
+  deps = ios_web_view_deps
+  deps += [ "//components/cronet/ios:cronet_sources" ]
+
+  public_deps = [
+    "//components/grpc_support",
+  ]
+
+  configs -= [ "//build/config/compiler:default_symbols" ]
+  configs += [
+    ":config",
+    "//build/config/compiler:symbols",
+    "//build/config/compiler:enable_arc",
+  ]
+}
+
 repack("repack_resources") {
   visibility = [ ":packed_resources" ]
   deps = [
@@ -170,5 +211,25 @@ bundle_data("packed_resources") {
   ]
   outputs = [
     "{{bundle_resources_dir}}/{{source_file_part}}",
+  ]
+}
+
+action("generate_license") {
+  _license_path = "$target_out_dir/LICENSE"
+
+  script = "//tools/licenses.py"
+  inputs = [
+    "//buildtools/$host_os/gn",
+  ]
+  outputs = [
+    _license_path,
+  ]
+  args = [
+    "license_file",
+    rebase_path(_license_path, root_build_dir),
+    "--gn-target",
+    "//ios/web_view",
+    "--gn-out-dir",
+    ".",
   ]
 }

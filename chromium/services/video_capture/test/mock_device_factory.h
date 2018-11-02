@@ -10,7 +10,6 @@
 #include "media/capture/video/video_capture_device_factory.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/video_capture/device_media_to_mojo_adapter.h"
-#include "services/video_capture/public/interfaces/device_descriptor.mojom.h"
 
 namespace video_capture {
 
@@ -24,7 +23,7 @@ class MockDeviceFactory : public media::VideoCaptureDeviceFactory {
   void AddMockDevice(media::VideoCaptureDevice* device,
                      const media::VideoCaptureDeviceDescriptor& descriptor);
 
-  // media::VideoCaptureDeviceFactory:
+  // media::VideoCaptureDeviceFactory implementation.
   std::unique_ptr<media::VideoCaptureDevice> CreateDevice(
       const media::VideoCaptureDeviceDescriptor& device_descriptor) override;
   void GetDeviceDescriptors(

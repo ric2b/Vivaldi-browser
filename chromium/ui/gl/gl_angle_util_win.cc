@@ -4,6 +4,8 @@
 
 #include "ui/gl/gl_angle_util_win.h"
 
+#include <objbase.h>
+
 #include "base/trace_event/trace_event.h"
 #include "third_party/angle/include/EGL/egl.h"
 #include "third_party/angle/include/EGL/eglext.h"
@@ -97,9 +99,9 @@ base::win::ScopedComPtr<IDCompositionDevice2> QueryDirectCompositionDevice(
   if (!d3d11_device)
     return dcomp_device;
 
-  UINT data_size = sizeof(dcomp_device.get());
+  UINT data_size = sizeof(dcomp_device.Get());
   HRESULT hr = d3d11_device->GetPrivateData(kDirectCompositionGUID, &data_size,
-                                            dcomp_device.ReceiveVoid());
+                                            &dcomp_device);
   if (SUCCEEDED(hr) && dcomp_device)
     return dcomp_device;
 
@@ -117,17 +119,17 @@ base::win::ScopedComPtr<IDCompositionDevice2> QueryDirectCompositionDevice(
     return dcomp_device;
 
   base::win::ScopedComPtr<IDXGIDevice> dxgi_device;
-  d3d11_device.QueryInterface(dxgi_device.Receive());
+  d3d11_device.CopyTo(dxgi_device.GetAddressOf());
   base::win::ScopedComPtr<IDCompositionDesktopDevice> desktop_device;
-  hr = create_device_function(dxgi_device.get(),
-                              IID_PPV_ARGS(desktop_device.Receive()));
+  hr = create_device_function(dxgi_device.Get(),
+                              IID_PPV_ARGS(desktop_device.GetAddressOf()));
   if (FAILED(hr))
     return dcomp_device;
 
-  hr = desktop_device.QueryInterface(dcomp_device.Receive());
+  hr = desktop_device.CopyTo(dcomp_device.GetAddressOf());
   CHECK(SUCCEEDED(hr));
   d3d11_device->SetPrivateDataInterface(kDirectCompositionGUID,
-                                        dcomp_device.get());
+                                        dcomp_device.Get());
 
   return dcomp_device;
 }

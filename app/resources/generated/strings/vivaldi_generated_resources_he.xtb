@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">התוסף הזה שינה את הדף שמוצג כשאתה לוחץ על הלחצן 'דף הבית'.</translation>
 <translation id="1588438908519853928">רגיל</translation>
 <translation id="1616206807336925449">אין צורך בהרשאות מיוחדות כדי להשתמש בתוסף זה.</translation>
-<translation id="1620510694547887537">מצלמה</translation>
 <translation id="1635033183663317347">הותקן על ידי האפוטרופוס שלך.</translation>
 <translation id="1723824996674794290">&amp;חלון חדש</translation>
 <translation id="1729533290416704613">הגדרה זו גם קובעת איזה דף מוצג כשאתה מבצע חיפוש מסרגל הכתובות.</translation>
-<translation id="1789575671122666129">חלונות קופצים</translation>
 <translation id="1850508293116537636">סובב &amp;בכיוון השעון</translation>
 <translation id="1859234291848436338">כיוון כתיבה</translation>
 <translation id="1901303067676059328">בחר &amp;הכל</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">הסתר פלאגין זה</translation>
 <translation id="2087822576218954668">הדפס: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">עדכן פלאגין</translation>
-<translation id="2147827593068025794">סינכרון ברקע</translation>
 <translation id="215753907730220065">צא ממסך מלא</translation>
 <translation id="2177950615300672361">כרטיסיית גלישה בסתר: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">זהה (ברירת מחדל)</translation>
 <translation id="219008588003277019">‏<ph name="NEXE_NAME" /> :Native Client יישום </translation>
 <translation id="2218515861914035131">הדבק כטקסט רגיל</translation>
 <translation id="2282146716419988068">‏תהליך GPU</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">‏תכנית אחרת במחשב שלך הוסיפה תוסף שעשוי לשנות את אופן הפעולה של Vivaldi.</translation>
 <translation id="2445081178310039857">ספריית הבסיס של ההרחבה נחוצה.</translation>
 <translation id="2470702053775288986">תוספים שלא נתמכים הושבתו</translation>
-<translation id="2482878487686419369">התראות</translation>
 <translation id="2501797496290880632">הקלד קיצור</translation>
-<translation id="2509857212037838238">התקן את <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">זיכרון מוחלף</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">הפוך מחדש לפעיל</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">מזהים ייחודיים של משתמש</translation>
 <translation id="3222066309010235055">קדם-עיבוד: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">מיקרופון</translation>
 <translation id="3241680850019875542">בחר את ספריית הבסיס של התוסף שיש לארוז. כדי לעדכן תוסף, בחר גם את קובץ המפתח הפרטי שבו ניתן להשתמש שוב.</translation>
 <translation id="3280237271814976245">שמור &amp;בשם...</translation>
 <translation id="3288047731229977326">תוספים הרצים במצב מפתח יכולים להזיק למחשב שלך. אם אינך מפתח, עליך להשבית את התוספים הרצים במצב מפתח כדי לשמור על ביטחונך.</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">העתק כתובת &amp;תמונה</translation>
 <translation id="335985608243443814">דפדף...</translation>
 <translation id="3378572629723696641">ייתכן שתוסף זה פגום.</translation>
-<translation id="3427092606871434483">התר (ברירת מחדל)</translation>
 <translation id="3435896845095436175">הפעל</translation>
 <translation id="345693547134384690">פתח &amp;תמונה בכרטיסייה חדשה</translation>
 <translation id="3467267818798281173">‏בקש הצעות מ-Google</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">פתח קישור בחלון גלישה פרטית</translation>
 <translation id="3678156199662914018">תוסף: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">טוען...</translation>
-<translation id="3789841737615482174">התקן</translation>
 <translation id="3798449238516105146">גרסה</translation>
 <translation id="3866249974567520381">תיאור</translation>
 <translation id="3905761538810670789">תקן את היישום</translation>
@@ -103,13 +94,11 @@
 <translation id="4096508467498758490">השבתת תוספים של מצב מפתח</translation>
 <translation id="4100839878934973028">‏תכנית אחרת במחשב שלך הוסיפה יישום שעשוי לשנות את אופן הפעולה של Vivaldi.</translation>
 <translation id="4130207949184424187">התוסף הזה שינה את הדף שמוצג כשאתה מבצע חיפוש מסרגל הכתובות.</translation>
-<translation id="4165986682804962316">הגדרות אתרים</translation>
 <translation id="4176463684765177261">מושבת</translation>
 <translation id="4200983522494130825">&amp;כרטיסייה חדשה</translation>
 <translation id="420665587194630159">(תוסף זה מנוהל ולא ניתן להסיר או להשבית אותו)</translation>
 <translation id="4240511609794012987">זיכרון משותף</translation>
 <translation id="4309420042698375243">‏‎<ph name="NUM_KILOBYTES" />K ‏‎(<ph name="NUM_KILOBYTES_LIVE" />K בשימוש)‎‎</translation>
-<translation id="4312866146174492540">חסום (ברירת מחדל)</translation>
 <translation id="4384652540891215547">הפעל את התוסף</translation>
 <translation id="4394049700291259645">השבת</translation>
 <translation id="4423482519432579560">&amp;בדיקת איות</translation>
@@ -122,7 +111,6 @@
 <translation id="4677772697204437347">‏זיכרון GPU</translation>
 <translation id="4711638718396952945">שחזר הגדרות</translation>
 <translation id="4839303808932127586">שמ&amp;ור וידאו כ...</translation>
-<translation id="4851858059374029925">להתקין את <ph name="PLUGIN_NAME" />? מומלץ להתקין רק יישומי פלאגין שאתה בוטח בהם.</translation>
 <translation id="488785315393301722">הצג פרטים</translation>
 <translation id="4911714727432509308">לאף תוסף לא הוקצו מקשי קיצור.</translation>
 <translation id="4927301649992043040">ארוז תוסף</translation>
@@ -153,12 +141,10 @@
 <translation id="5646376287012673985">מיקום</translation>
 <translation id="5715711091495208045">מתווך פלאגין: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">ש&amp;מור שמע כ...</translation>
-<translation id="5778550464785688721">‏שליטה מלאה במכשירי MIDI</translation>
 <translation id="5780973441651030252">עדיפות תהליך</translation>
 <translation id="5804241973901381774">הרשאות</translation>
 <translation id="583281660410589416">לא ידוע</translation>
 <translation id="59174027418879706">מופעל</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{אחד נמצא בשימוש}two{שניים נמצאים בשימוש}many{# נמצאים בשימוש}other{# נמצאים בשימוש}}</translation>
 <translation id="5956585768868398362">האם זהו דף החיפוש שציפית לראות?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (שיא של <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">הגדרה זו גם קובעת איזה דף מוצג כשאתה לוחץ על הלחצן 'דף הבית' או מבצע חיפוש מסרגל הכתובות.</translation>
@@ -187,14 +173,12 @@
 <translation id="6787839852456839824">מקשי קיצור</translation>
 <translation id="6798954102094737107">פלאגין: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">השאר שינויים</translation>
-<translation id="6863910145616405334">הפלאגין לא נמצא</translation>
 <translation id="6886871292305414135">פתח קישור &amp;בכרטיסייה חדשה</translation>
 <translation id="6900284862687837908">יישום רקע: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">בטל גישה לקבצים</translation>
 <translation id="6974053822202609517">מימין לשמאל</translation>
 <translation id="7013485839273047434">קבל תוספים נוספים</translation>
 <translation id="708060913198414444">העתק כתובת &amp;אודיו</translation>
-<translation id="7105578512429498960">התקן את <ph name="PLUGIN_NAME" /> כדי להציג את התוכן הזה</translation>
 <translation id="7144878232160441200">נסה שוב</translation>
 <translation id="7206693748120342859">מוריד את <ph name="PLUGIN_NAME" />...</translation>
 <translation id="7287143125007575591">הגישה נדחתה.</translation>
@@ -226,7 +210,6 @@
 
 שמור על קובץ המפתח שלך במקום בטוח. תצטרך אותו כדי ליצור גרסאות חדשות של התוסף שלך.</translation>
 <translation id="8004582292198964060">דפדפן</translation>
-<translation id="8037357227543935929">שאל (ברירת מחדל)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">בדוק את האיות של &amp;שדות הטקסט</translation>
 <translation id="8261378640211443080">התוסף הזה לא רשום ב<ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> וייתכן שנוסף ללא ידיעתך.</translation>
@@ -242,7 +225,6 @@
 <translation id="8664389313780386848">&amp;צפה במקור הדף</translation>
 <translation id="8719653885894320876">הורדת <ph name="PLUGIN_NAME" /> נכשלה</translation>
 <translation id="873545264931343897">לאחר שהעדכון של <ph name="PLUGIN_NAME" /> יסתיים, טען מחדש את הדף כדי להפעיל את הפלאגין</translation>
-<translation id="8763204422633679667">לאחר שהעדכון של <ph name="PLUGIN_NAME" /> יסתיים, טען מחדש את הדף כדי להפעיל את הפלאגין</translation>
 <translation id="8798099450830957504">ברירת מחדל</translation>
 <translation id="8808478386290700967">חנות אינטרנט</translation>
 <translation id="8859174528519900719">תת-מסגרת: <ph name="SUBFRAME_SITE" /></translation>

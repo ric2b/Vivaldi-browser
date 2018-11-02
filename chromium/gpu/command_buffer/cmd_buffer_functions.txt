@@ -293,6 +293,7 @@ GL_APICALL GLuint       GL_APIENTRY glCreateAndConsumeTextureCHROMIUM (GLenumTex
 GL_APICALL void         GL_APIENTRY glCreateAndConsumeTextureINTERNAL (GLenumTextureBindTarget target, GLuint texture, const GLbyte* mailbox);
 GL_APICALL void         GL_APIENTRY glBindUniformLocationCHROMIUM (GLidProgram program, GLint location, const char* name);
 GL_APICALL void         GL_APIENTRY glBindTexImage2DCHROMIUM (GLenumTextureBindTarget target, GLint imageId);
+GL_APICALL void         GL_APIENTRY glBindTexImage2DWithInternalformatCHROMIUM (GLenumTextureBindTarget target, GLenum internalformat, GLint imageId);
 GL_APICALL void         GL_APIENTRY glReleaseTexImage2DCHROMIUM (GLenumTextureBindTarget target, GLint imageId);
 GL_APICALL void         GL_APIENTRY glTraceBeginCHROMIUM (const char* category_name, const char* trace_name);
 GL_APICALL void         GL_APIENTRY glTraceEndCHROMIUM (void);
@@ -314,7 +315,7 @@ GL_APICALL void         GL_APIENTRY glSwapInterval (GLint interval);
 GL_APICALL void         GL_APIENTRY glFlushDriverCachesCHROMIUM (void);
 GL_APICALL GLuint       GL_APIENTRY glGetLastFlushIdCHROMIUM (void);
 GL_APICALL void         GL_APIENTRY glScheduleDCLayerSharedStateCHROMIUM (GLfloat opacity, GLboolean is_clipped, const GLfloat* clip_rect, GLint z_order, const GLfloat* transform);
-GL_APICALL void         GL_APIENTRY glScheduleDCLayerCHROMIUM (GLuint contents_texture_id, const GLfloat* contents_rect, GLuint background_color, GLuint edge_aa_mask, const GLfloat* bounds_rect, GLuint filter);
+GL_APICALL void         GL_APIENTRY glScheduleDCLayerCHROMIUM (GLsizei num_textures, const GLuint* contents_texture_ids, const GLfloat* contents_rect, GLuint background_color, GLuint edge_aa_mask, const GLfloat* bounds_rect, GLuint filter);
 
 // Extension CHROMIUM_path_rendering.
 GL_APICALL void         GL_APIENTRY glMatrixLoadfCHROMIUM (GLenumMatrixMode matrixMode, const GLfloat* m);
@@ -371,3 +372,8 @@ GL_APICALL void         GL_APIENTRY glSetDrawRectangleCHROMIUM (GLint x, GLint y
 
 // Extension CHROMIUM_dc_overlays
 GL_APICALL void         GL_APIENTRY glSetEnableDCLayersCHROMIUM (GLboolean enabled);
+
+// Extension CHROMIUM_discardable_textures
+GL_APICALL void         GL_APIENTRY glInitializeDiscardableTextureCHROMIUM (GLuint texture_id);
+GL_APICALL void         GL_APIENTRY glUnlockDiscardableTextureCHROMIUM (GLuint texture_id);
+GL_APICALL bool         GL_APIENTRY glLockDiscardableTextureCHROMIUM (GLuint texture_id);

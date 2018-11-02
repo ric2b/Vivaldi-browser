@@ -59,8 +59,8 @@ ui::AXTreeUpdate
   ui::AXNodeData empty_document;
   empty_document.id = 0;
   empty_document.role = ui::AX_ROLE_ROOT_WEB_AREA;
-  empty_document.state =
-      (1 << ui::AX_STATE_READ_ONLY) | (1 << ui::AX_STATE_BUSY);
+  empty_document.AddState(ui::AX_STATE_READ_ONLY);
+  empty_document.AddState(ui::AX_STATE_BUSY);
 
   ui::AXTreeUpdate update;
   update.root_id = empty_document.id;
@@ -205,7 +205,6 @@ BrowserAccessibilityEvent::Result
   // we can use to retrieve the IAccessible for this node.
   LONG child_id = -target->unique_id();
   ::NotifyWinEvent(win_event_type, hwnd, OBJID_CLIENT, child_id);
-
   return BrowserAccessibilityEvent::Sent;
 }
 
@@ -272,7 +271,9 @@ void BrowserAccessibilityManagerWin::OnAtomicUpdateFinished(
     DCHECK(changed_node);
     BrowserAccessibility* obj = GetFromAXNode(changed_node);
     if (obj && obj->IsNative() && !obj->PlatformIsChildOfLeaf())
-      ToBrowserAccessibilityWin(obj)->UpdateStep1ComputeWinAttributes();
+      ToBrowserAccessibilityWin(obj)
+          ->GetCOM()
+          ->UpdateStep1ComputeWinAttributes();
   }
 
   // The next step updates the hypertext of each node, which is a
@@ -283,7 +284,7 @@ void BrowserAccessibilityManagerWin::OnAtomicUpdateFinished(
     DCHECK(changed_node);
     BrowserAccessibility* obj = GetFromAXNode(changed_node);
     if (obj && obj->IsNative() && !obj->PlatformIsChildOfLeaf())
-      ToBrowserAccessibilityWin(obj)->UpdateStep2ComputeHypertext();
+      ToBrowserAccessibilityWin(obj)->GetCOM()->UpdateStep2ComputeHypertext();
   }
 
   // The third step fires events on nodes based on what's changed - like
@@ -299,7 +300,7 @@ void BrowserAccessibilityManagerWin::OnAtomicUpdateFinished(
     DCHECK(changed_node);
     BrowserAccessibility* obj = GetFromAXNode(changed_node);
     if (obj && obj->IsNative() && !obj->PlatformIsChildOfLeaf()) {
-      ToBrowserAccessibilityWin(obj)->UpdateStep3FireEvents(
+      ToBrowserAccessibilityWin(obj)->GetCOM()->UpdateStep3FireEvents(
           changes[i].type == AXTreeDelegate::SUBTREE_CREATED);
     }
   }

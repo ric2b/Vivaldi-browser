@@ -167,11 +167,7 @@ void SVGInlineTextBoxPainter::PaintTextFragments(
     has_visible_stroke = false;
   }
 
-  unsigned text_fragments_size = svg_inline_text_box_.TextFragments().size();
-  for (unsigned i = 0; i < text_fragments_size; ++i) {
-    const SVGTextFragment& fragment =
-        svg_inline_text_box_.TextFragments().at(i);
-
+  for (const SVGTextFragment& fragment : svg_inline_text_box_.TextFragments()) {
     GraphicsContextStateSaver state_saver(paint_info.context, false);
     if (fragment.IsTransformed()) {
       state_saver.Save();
@@ -184,10 +180,10 @@ void SVGInlineTextBoxPainter::PaintTextFragments(
     const Vector<AppliedTextDecoration>& decorations =
         style.AppliedTextDecorations();
     for (const AppliedTextDecoration& decoration : decorations) {
-      if (decoration.Lines() & kTextDecorationUnderline)
-        PaintDecoration(paint_info, kTextDecorationUnderline, fragment);
-      if (decoration.Lines() & kTextDecorationOverline)
-        PaintDecoration(paint_info, kTextDecorationOverline, fragment);
+      if (EnumHasFlags(decoration.Lines(), TextDecoration::kUnderline))
+        PaintDecoration(paint_info, TextDecoration::kUnderline, fragment);
+      if (EnumHasFlags(decoration.Lines(), TextDecoration::kOverline))
+        PaintDecoration(paint_info, TextDecoration::kOverline, fragment);
     }
 
     for (int i = 0; i < 3; i++) {
@@ -206,7 +202,7 @@ void SVGInlineTextBoxPainter::PaintTextFragments(
           // Markers don't apply to text
           break;
         default:
-          ASSERT_NOT_REACHED();
+          NOTREACHED();
           break;
       }
     }
@@ -214,8 +210,8 @@ void SVGInlineTextBoxPainter::PaintTextFragments(
     // Spec: Line-through should be drawn after the text is filled and stroked;
     // thus, the line-through is rendered on top of the text.
     for (const AppliedTextDecoration& decoration : decorations) {
-      if (decoration.Lines() & kTextDecorationLineThrough)
-        PaintDecoration(paint_info, kTextDecorationLineThrough, fragment);
+      if (EnumHasFlags(decoration.Lines(), TextDecoration::kLineThrough))
+        PaintDecoration(paint_info, TextDecoration::kLineThrough, fragment);
     }
   }
 }
@@ -275,7 +271,7 @@ static inline LayoutObject* FindLayoutObjectDefininingTextDecoration(
         LineLayoutAPIShim::LayoutObjectFrom(parent_box->GetLineLayoutItem());
 
     if (layout_object->Style() &&
-        layout_object->Style()->GetTextDecoration() != kTextDecorationNone)
+        layout_object->Style()->GetTextDecoration() != TextDecoration::kNone)
       break;
 
     parent_box = parent_box->Parent();
@@ -293,14 +289,14 @@ static inline float BaselineOffsetForDecoration(TextDecoration decoration,
   // FIXME: For SVG Fonts we need to use the attributes defined in the
   // <font-face> if specified.
   // Compatible with Batik/Presto.
-  if (decoration == kTextDecorationUnderline)
+  if (decoration == TextDecoration::kUnderline)
     return -thickness * 1.5f;
-  if (decoration == kTextDecorationOverline)
+  if (decoration == TextDecoration::kOverline)
     return font_metrics.FloatAscent() - thickness;
-  if (decoration == kTextDecorationLineThrough)
+  if (decoration == TextDecoration::kLineThrough)
     return font_metrics.FloatAscent() * 3 / 8.0f;
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return 0.0f;
 }
 
@@ -316,7 +312,7 @@ void SVGInlineTextBoxPainter::PaintDecoration(const PaintInfo& paint_info,
                                               const SVGTextFragment& fragment) {
   if (svg_inline_text_box_.GetLineLayoutItem()
           .Style()
-          ->TextDecorationsInEffect() == kTextDecorationNone)
+          ->TextDecorationsInEffect() == TextDecoration::kNone)
     return;
 
   if (fragment.width <= 0)
@@ -397,7 +393,7 @@ void SVGInlineTextBoxPainter::PaintDecoration(const PaintInfo& paint_info,
       case PT_MARKERS:
         break;
       default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
   }
 }
@@ -525,23 +521,15 @@ void SVGInlineTextBoxPainter::PaintText(const PaintInfo& paint_info,
 
   // Draw text using selection style from the start to the end position of the
   // selection.
-  if (style != selection_style) {
-    StyleDifference diff;
-    diff.SetNeedsPaintInvalidationObject();
-    SVGResourcesCache::ClientStyleChanged(&ParentInlineLayoutObject(), diff,
-                                          selection_style);
-  }
+  {
+    SVGResourcesCache::TemporaryStyleScope scope(ParentInlineLayoutObject(),
+                                                 style, selection_style);
 
-  PaintFlags flags;
-  if (SetupTextPaint(paint_info, selection_style, resource_mode, flags))
-    PaintText(paint_info, text_run, fragment, start_position, end_position,
-              flags);
-
-  if (style != selection_style) {
-    StyleDifference diff;
-    diff.SetNeedsPaintInvalidationObject();
-    SVGResourcesCache::ClientStyleChanged(&ParentInlineLayoutObject(), diff,
-                                          style);
+    PaintFlags flags;
+    if (SetupTextPaint(paint_info, selection_style, resource_mode, flags)) {
+      PaintText(paint_info, text_run, fragment, start_position, end_position,
+                flags);
+    }
   }
 
   // Eventually draw text using regular style from the end position of the
@@ -587,9 +575,7 @@ Vector<SVGTextFragmentWithRange>
 SVGInlineTextBoxPainter::CollectFragmentsInRange(int start_position,
                                                  int end_position) const {
   Vector<SVGTextFragmentWithRange> fragment_info_list;
-  const Vector<SVGTextFragment>& fragments =
-      svg_inline_text_box_.TextFragments();
-  for (const SVGTextFragment& fragment : fragments) {
+  for (const SVGTextFragment& fragment : svg_inline_text_box_.TextFragments()) {
     // TODO(ramya.v): If these can't be negative we should use unsigned.
     int fragment_start_position = start_position;
     int fragment_end_position = end_position;

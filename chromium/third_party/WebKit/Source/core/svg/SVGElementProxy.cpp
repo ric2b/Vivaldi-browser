@@ -115,7 +115,7 @@ void SVGElementProxy::RemoveClient(SVGResourceClient* client) {
       document_->RemoveClient(client);
     return;
   }
-  auto entry = clients_.Find(client);
+  auto entry = clients_.find(client);
   if (entry == clients_.end())
     return;
   IdObserver* observer = entry->value;
@@ -155,7 +155,7 @@ SVGElement* SVGElementProxy::FindElement(TreeScope& tree_scope) {
   TreeScope* lookup_scope = TreeScopeForLookup(tree_scope);
   if (!lookup_scope)
     return nullptr;
-  if (Element* target_element = lookup_scope->GetElementById(id_)) {
+  if (Element* target_element = lookup_scope->getElementById(id_)) {
     SVGElementProxySet* proxy_set =
         target_element->IsSVGElement()
             ? ToSVGElement(target_element)->ElementProxySet()

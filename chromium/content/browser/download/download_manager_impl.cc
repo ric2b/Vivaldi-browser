@@ -55,6 +55,10 @@
 #include "storage/browser/blob/blob_url_request_job_factory.h"
 #include "url/origin.h"
 
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#include "base/nix/xdg_util.h"
+#endif
+
 namespace content {
 namespace {
 
@@ -108,7 +112,7 @@ std::unique_ptr<UrlDownloader, BrowserThread::DeleteOnIOThread> BeginDownload(
 
   return std::unique_ptr<UrlDownloader, BrowserThread::DeleteOnIOThread>(
       UrlDownloader::BeginDownload(download_manager, std::move(url_request),
-                                   params->referrer())
+                                   params->referrer(), false)
           .release());
 }
 
@@ -174,6 +178,13 @@ class DownloadItemFactoryImpl : public DownloadItemFactory {
   }
 };
 
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+base::FilePath GetTemporaryDownloadDirectory() {
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+  return base::nix::GetXDGDirectory(env.get(), "XDG_DATA_HOME", ".local/share");
+}
+#endif
+
 }  // namespace
 
 DownloadManagerImpl::DownloadManagerImpl(net::NetLog* net_log,
@@ -181,6 +192,7 @@ DownloadManagerImpl::DownloadManagerImpl(net::NetLog* net_log,
     : item_factory_(new DownloadItemFactoryImpl()),
       file_factory_(new DownloadFileFactory()),
       shutdown_needed_(true),
+      initialized_(false),
       browser_context_(browser_context),
       delegate_(nullptr),
       net_log_(net_log),
@@ -358,12 +370,20 @@ void DownloadManagerImpl::StartDownloadWithId(
   }
 
   base::FilePath default_download_directory;
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  // TODO(thomasanderson): Remove this when all Linux distros with
+  // versions of GTK lower than 3.14.7 are no longer supported.  This
+  // should happen when support for Ubuntu Trusty and Debian Jessie
+  // are removed.
+  default_download_directory = GetTemporaryDownloadDirectory();
+#else
   if (delegate_) {
     base::FilePath website_save_directory;  // Unused
     bool skip_dir_check = false;            // Unused
     delegate_->GetSaveDir(GetBrowserContext(), &website_save_directory,
                           &default_download_directory, &skip_dir_check);
   }
+#endif
 
   std::unique_ptr<DownloadFile> download_file;
 
@@ -672,6 +692,17 @@ DownloadItem* DownloadManagerImpl::CreateDownloadItem(
     observer.OnDownloadCreated(this, item);
   DVLOG(20) << __func__ << "() download = " << item->DebugString(true);
   return item;
+}
+
+void DownloadManagerImpl::PostInitialization() {
+  DCHECK(!initialized_);
+  initialized_ = true;
+  for (auto& observer : observers_)
+    observer.OnManagerInitialized();
+}
+
+bool DownloadManagerImpl::IsManagerInitialized() const {
+  return initialized_;
 }
 
 int DownloadManagerImpl::InProgressCount() const {

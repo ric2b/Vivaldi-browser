@@ -4,10 +4,8 @@
 
 from core import perf_benchmark
 
-import ct_benchmarks_util
 from measurements import rasterize_and_record_micro
 import page_sets
-from page_sets import repaint_helpers
 from telemetry import benchmark
 
 
@@ -60,7 +58,7 @@ class RasterizeAndRecordMicroTop25(_RasterizeAndRecordMicro):
     return 'rasterize_and_record_micro.top_25'
 
 
-@benchmark.Disabled('mac', 'win', 'android')  # http://crbug.com/531597
+@benchmark.Disabled('all')  # http://crbug.com/531597
 class RasterizeAndRecordMicroKeyMobileSites(_RasterizeAndRecordMicro):
   """Measures rasterize and record performance on the key mobile sites.
 
@@ -87,7 +85,7 @@ class RasterizeAndRecordMicroKeySilkCases(_RasterizeAndRecordMicro):
     return page_sets.KeySilkCasesPageSet(run_no_page_interactions=True)
 
 
-@benchmark.Enabled('android')
+@benchmark.Disabled('all')  # http://crbug.com/709561
 class RasterizeAndRecordMicroPolymer(_RasterizeAndRecordMicro):
   """Measures rasterize and record performance on the Polymer cases.
 
@@ -115,26 +113,3 @@ class RasterizeAndRecordMicroPartialInvalidation(_RasterizeAndRecordMicro):
     return 'rasterize_and_record_micro.partial_invalidation'
 
 
-# Disabled because we do not plan on running CT benchmarks on the perf
-# waterfall any time soon.
-@benchmark.Disabled('all')
-class RasterizeAndRecordMicroCT(_RasterizeAndRecordMicro):
-  """Measures rasterize and record performance for Cluster Telemetry."""
-
-  @classmethod
-  def Name(cls):
-    return 'rasterize_and_record_micro_ct'
-
-  @classmethod
-  def AddBenchmarkCommandLineArgs(cls, parser):
-    _RasterizeAndRecordMicro.AddBenchmarkCommandLineArgs(parser)
-    ct_benchmarks_util.AddBenchmarkCommandLineArgs(parser)
-
-  @classmethod
-  def ProcessCommandLineArgs(cls, parser, args):
-    ct_benchmarks_util.ValidateCommandLineArgs(parser, args)
-
-  def CreateStorySet(self, options):
-    return page_sets.CTPageSet(
-        options.urls_list, options.user_agent, options.archive_data_file,
-        run_page_interaction_callback=repaint_helpers.WaitThenRepaint)

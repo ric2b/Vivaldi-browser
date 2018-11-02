@@ -46,6 +46,11 @@ class ProcessManagementTest : public ExtensionBrowserTest {
     command_line->AppendSwitch(
         extensions::switches::kEnableExperimentalExtensionApis);
   }
+
+  void SetUpOnMainThread() override {
+    ExtensionBrowserTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
+  }
 };
 
 class ChromeWebStoreProcessTest : public ExtensionBrowserTest {
@@ -88,7 +93,6 @@ IN_PROC_BROWSER_TEST_F(ProcessManagementTest, MAYBE_ProcessOverflow) {
   // Set max renderers to 1 to force running out of processes.
   content::RenderProcessHost::SetMaxRendererProcessCount(1);
 
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII("isolated_apps/app1")));
@@ -234,7 +238,6 @@ IN_PROC_BROWSER_TEST_F(ProcessManagementTest, MAYBE_ExtensionProcessBalancing) {
   // allocated.
   content::RenderProcessHost::SetMaxRendererProcessCount(6);
 
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // The app under test acts on URLs whose host is "localhost",
@@ -283,7 +286,6 @@ IN_PROC_BROWSER_TEST_F(ProcessManagementTest, MAYBE_ExtensionProcessBalancing) {
 
 IN_PROC_BROWSER_TEST_F(ProcessManagementTest,
                        NavigateExtensionTabToWebViaPost) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Load an extension.
@@ -324,11 +326,9 @@ IN_PROC_BROWSER_TEST_F(ProcessManagementTest,
 
   // Verify that the navigation transferred the contents to another renderer
   // process.
-  if (extensions::IsIsolateExtensionsEnabled()) {
-    content::RenderProcessHost* new_process_host =
-        web_contents->GetMainFrame()->GetProcess();
-    EXPECT_NE(old_process_host, new_process_host);
-  }
+  content::RenderProcessHost* new_process_host =
+      web_contents->GetMainFrame()->GetProcess();
+  EXPECT_NE(old_process_host, new_process_host);
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeWebStoreProcessTest,
@@ -364,21 +364,12 @@ IN_PROC_BROWSER_TEST_F(ChromeWebStoreProcessTest,
   // Store gallery URL (which will commit into a chrome-extension://cws-app-id).
   bool ignored_script_result = false;
   content::TestNavigationObserver nav_observer(web_contents, 1);
-  content::RenderProcessHostWatcher crash_observer(
-      web_contents->GetMainFrame()->GetProcess(),
-      content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
 
   EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
       web_contents, navigation_starting_script, &ignored_script_result));
 
-  // When --isolate-extensions is enabled, the expectation is that the store
-  // will be properly put in its own process, otherwise the renderer process
-  // is going to be terminated.
-  if (!extensions::IsIsolateExtensionsEnabled()) {
-    crash_observer.Wait();
-    return;
-  }
-
+  // The expectation is that the store will be properly put in its own process,
+  // otherwise the renderer process is going to be terminated.
   // Verify that the navigation succeeded.
   nav_observer.Wait();
   EXPECT_EQ(cws_web_url, web_contents->GetLastCommittedURL());
@@ -396,9 +387,8 @@ IN_PROC_BROWSER_TEST_F(ChromeWebStoreProcessTest,
 
 // This test verifies that blocked navigations to extensions pages do not
 // overwrite process-per-site map inside content/.
-IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest,
+IN_PROC_BROWSER_TEST_F(ProcessManagementTest,
                        NavigateToBlockedExtensionPageInNewTab) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Load an extension, which will block a request for a specific page in it.

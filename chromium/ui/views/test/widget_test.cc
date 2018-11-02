@@ -68,7 +68,7 @@ Widget* WidgetTest::CreateChildNativeWidgetWithParent(Widget* parent) {
 }
 
 Widget* WidgetTest::CreateChildNativeWidget() {
-  return CreateChildNativeWidgetWithParent(NULL);
+  return CreateChildNativeWidgetWithParent(nullptr);
 }
 
 Widget* WidgetTest::CreateNativeDesktopWidget() {
@@ -173,6 +173,28 @@ void WidgetActivationWaiter::OnWidgetActivationChanged(Widget* widget,
 
   observed_ = true;
   widget->RemoveObserver(this);
+  if (run_loop_.running())
+    run_loop_.Quit();
+}
+
+WidgetClosingObserver::WidgetClosingObserver(Widget* widget) : widget_(widget) {
+  widget_->AddObserver(this);
+}
+
+WidgetClosingObserver::~WidgetClosingObserver() {
+  if (widget_)
+    widget_->RemoveObserver(this);
+}
+
+void WidgetClosingObserver::Wait() {
+  if (widget_)
+    run_loop_.Run();
+}
+
+void WidgetClosingObserver::OnWidgetClosing(Widget* widget) {
+  DCHECK_EQ(widget_, widget);
+  widget_->RemoveObserver(this);
+  widget_ = nullptr;
   if (run_loop_.running())
     run_loop_.Quit();
 }

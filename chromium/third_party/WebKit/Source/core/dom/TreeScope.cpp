@@ -118,12 +118,12 @@ void TreeScope::ClearScopedStyleResolver() {
   scoped_style_resolver_.Clear();
 }
 
-Element* TreeScope::GetElementById(const AtomicString& element_id) const {
+Element* TreeScope::getElementById(const AtomicString& element_id) const {
   if (element_id.IsEmpty())
     return nullptr;
   if (!elements_by_id_)
     return nullptr;
-  return elements_by_id_->GetElementById(element_id, this);
+  return elements_by_id_->GetElementById(element_id, *this);
 }
 
 const HeapVector<Member<Element>>& TreeScope::GetAllElementsById(
@@ -134,7 +134,7 @@ const HeapVector<Member<Element>>& TreeScope::GetAllElementsById(
     return empty_vector;
   if (!elements_by_id_)
     return empty_vector;
-  return elements_by_id_->GetAllElementsById(element_id, this);
+  return elements_by_id_->GetAllElementsById(element_id, *this);
 }
 
 void TreeScope::AddElementById(const AtomicString& element_id,
@@ -189,10 +189,10 @@ HTMLMapElement* TreeScope::GetImageMap(const String& url) const {
     return nullptr;
   if (!image_maps_by_name_)
     return nullptr;
-  size_t hash_pos = url.Find('#');
+  size_t hash_pos = url.find('#');
   String name = hash_pos == kNotFound ? url : url.Substring(hash_pos + 1);
   return toHTMLMapElement(
-      image_maps_by_name_->GetElementByMapName(AtomicString(name), this));
+      image_maps_by_name_->GetElementByMapName(AtomicString(name), *this));
 }
 
 static bool PointWithScrollAndZoomIfPossible(const Document& document,
@@ -327,7 +327,7 @@ DOMSelection* TreeScope::GetSelection() const {
 Element* TreeScope::FindAnchor(const String& name) {
   if (name.IsEmpty())
     return nullptr;
-  if (Element* element = GetElementById(AtomicString(name)))
+  if (Element* element = getElementById(AtomicString(name)))
     return element;
   for (HTMLAnchorElement& anchor :
        Traversal<HTMLAnchorElement>::StartsAfter(RootNode())) {
@@ -453,11 +453,10 @@ unsigned short TreeScope::ComparePosition(const TreeScope& other_scope) const {
 
   // There was no difference between the two parent chains, i.e., one was a
   // subset of the other. The shorter chain is the ancestor.
-  return index1 < index2
-             ? Node::kDocumentPositionFollowing |
-                   Node::kDocumentPositionContainedBy
-             : Node::kDocumentPositionPreceding |
-                   Node::kDocumentPositionContains;
+  return index1 < index2 ? Node::kDocumentPositionFollowing |
+                               Node::kDocumentPositionContainedBy
+                         : Node::kDocumentPositionPreceding |
+                               Node::kDocumentPositionContains;
 }
 
 const TreeScope* TreeScope::CommonAncestorTreeScope(

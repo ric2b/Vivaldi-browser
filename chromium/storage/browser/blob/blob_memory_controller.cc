@@ -16,6 +16,7 @@
 #include "base/guid.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/numerics/safe_math.h"
@@ -41,6 +42,7 @@ namespace storage {
 namespace {
 constexpr int64_t kUnknownDiskAvailability = -1ll;
 constexpr uint64_t kMegabyte = 1024ull * 1024;
+const int64_t kMinSecondsForPressureEvictions = 30;
 
 using FileCreationInfo = BlobMemoryController::FileCreationInfo;
 using MemoryAllocation = BlobMemoryController::MemoryAllocation;
@@ -53,8 +55,8 @@ using DiskSpaceFuncPtr = BlobMemoryController::DiskSpaceFuncPtr;
 //   Note: The disk is the user partition, so the operating system can still
 //   function if this is full.
 // Android:
-// * RAM -  20%
-// * Disk -  5%
+// * RAM -  1%
+// * Disk -  6%
 // Desktop:
 // * Ram -  20%, or 2 GB if x64.
 // * Disk - 10%
@@ -71,6 +73,8 @@ BlobStorageLimits CalculateBlobStorageLimitsImpl(const FilePath& storage_dir,
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && defined(ARCH_CPU_64_BITS)
     constexpr size_t kTwoGigabytes = 2ull * 1024 * 1024 * 1024;
     limits.max_blob_in_memory_space = kTwoGigabytes;
+#elif defined(OS_ANDROID)
+    limits.max_blob_in_memory_space = static_cast<size_t>(memory_size / 100ll);
 #else
     limits.max_blob_in_memory_space = static_cast<size_t>(memory_size / 5ll);
 #endif
@@ -81,7 +85,7 @@ BlobStorageLimits CalculateBlobStorageLimitsImpl(const FilePath& storage_dir,
 #if defined(OS_CHROMEOS)
     limits.desired_max_disk_space = static_cast<uint64_t>(disk_size / 2ll);
 #elif defined(OS_ANDROID)
-    limits.desired_max_disk_space = static_cast<uint64_t>(disk_size / 20ll);
+    limits.desired_max_disk_space = static_cast<uint64_t>(3ll * disk_size / 50);
 #else
     limits.desired_max_disk_space = static_cast<uint64_t>(disk_size / 10ll);
 #endif
@@ -245,7 +249,7 @@ uint64_t GetTotalSizeAndFileSizes(
         unreserved_file_items,
     std::vector<uint64_t>* file_sizes_output) {
   uint64_t total_size_output = 0;
-  base::SmallMap<std::map<uint64_t, uint64_t>> file_id_to_sizes;
+  base::small_map<std::map<uint64_t, uint64_t>> file_id_to_sizes;
   for (const auto& item : unreserved_file_items) {
     const DataElement& element = item->item()->data_element();
     uint64_t file_id = BlobDataBuilder::GetFutureFileID(element);
@@ -503,6 +507,9 @@ BlobMemoryController::BlobMemoryController(
       disk_space_function_(&base::SysInfo::AmountOfFreeDiskSpace),
       populated_memory_items_(
           base::MRUCache<uint64_t, ShareableBlobDataItem*>::NO_AUTO_EVICT),
+      memory_pressure_listener_(
+          base::Bind(&BlobMemoryController::OnMemoryPressure,
+                     base::Unretained(this))),
       weak_factory_(this) {}
 
 BlobMemoryController::~BlobMemoryController() {}
@@ -602,7 +609,8 @@ base::WeakPtr<QuotaAllocationTask> BlobMemoryController::ReserveMemoryQuota(
   if (total_bytes_needed <= GetAvailableMemoryForBlobs()) {
     GrantMemoryAllocations(&unreserved_memory_items,
                            static_cast<size_t>(total_bytes_needed));
-    MaybeScheduleEvictionUntilSystemHealthy();
+    MaybeScheduleEvictionUntilSystemHealthy(
+        base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE);
     done_callback.Run(true);
     return base::WeakPtr<QuotaAllocationTask>();
   }
@@ -613,7 +621,8 @@ base::WeakPtr<QuotaAllocationTask> BlobMemoryController::ReserveMemoryQuota(
 
   auto weak_ptr = AppendMemoryTask(
       total_bytes_needed, std::move(unreserved_memory_items), done_callback);
-  MaybeScheduleEvictionUntilSystemHealthy();
+  MaybeScheduleEvictionUntilSystemHealthy(
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE);
   return weak_ptr;
 }
 
@@ -647,7 +656,8 @@ void BlobMemoryController::NotifyMemoryItemsUsed(
       populated_memory_items_.Put(item->item_id(), item.get());
     }
   }
-  MaybeScheduleEvictionUntilSystemHealthy();
+  MaybeScheduleEvictionUntilSystemHealthy(
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE);
 }
 
 void BlobMemoryController::CalculateBlobStorageLimits() {
@@ -769,11 +779,12 @@ void BlobMemoryController::MaybeGrantPendingMemoryRequests() {
 }
 
 size_t BlobMemoryController::CollectItemsForEviction(
-    std::vector<scoped_refptr<ShareableBlobDataItem>>* output) {
+    std::vector<scoped_refptr<ShareableBlobDataItem>>* output,
+    uint64_t min_page_file_size) {
   base::CheckedNumeric<size_t> total_items_size = 0;
   // Process the recent item list and remove items until we have at least a
   // minimum file size or we're at the end of our items to page to disk.
-  while (total_items_size.ValueOrDie() < limits_.min_page_file_size &&
+  while (total_items_size.ValueOrDie() < min_page_file_size &&
          !populated_memory_items_.empty()) {
     auto iterator = --populated_memory_items_.end();
     ShareableBlobDataItem* item = iterator->second;
@@ -787,7 +798,8 @@ size_t BlobMemoryController::CollectItemsForEviction(
   return total_items_size.ValueOrDie();
 }
 
-void BlobMemoryController::MaybeScheduleEvictionUntilSystemHealthy() {
+void BlobMemoryController::MaybeScheduleEvictionUntilSystemHealthy(
+    base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
   // Don't do eviction when others are happening, as we don't change our
   // pending_memory_quota_total_size_ value until after the paging files have
   // been written.
@@ -798,20 +810,42 @@ void BlobMemoryController::MaybeScheduleEvictionUntilSystemHealthy() {
       static_cast<uint64_t>(pending_memory_quota_total_size_) +
       blob_memory_used_;
 
+  size_t in_memory_limit = limits_.memory_limit_before_paging();
+  uint64_t min_page_file_size = limits_.min_page_file_size;
+  if (memory_pressure_level !=
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE) {
+    in_memory_limit = 0;
+    // Use lower page file size to reduce using more memory for writing under
+    // pressure.
+    min_page_file_size = limits_.max_blob_in_memory_space *
+                         limits_.max_blob_in_memory_space_under_pressure_ratio;
+  }
+
   // We try to page items to disk until our current system size + requested
   // memory is below our size limit.
   // Size limit is a lower |memory_limit_before_paging()| if we have disk space.
   while (total_memory_usage > limits_.effective_max_disk_space ||
          (disk_used_ < limits_.effective_max_disk_space &&
-          total_memory_usage > limits_.memory_limit_before_paging())) {
+          total_memory_usage > in_memory_limit)) {
+    const char* reason = nullptr;
+    if (memory_pressure_level !=
+        base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE) {
+      reason = "OnMemoryPressure";
+    } else if (total_memory_usage > limits_.effective_max_disk_space) {
+      reason = "SizeExceededMaxDiskSpace";
+    } else {
+      reason = "SizeExceededInMemoryLimit";
+    }
+
     // We only page when we have enough items to fill a whole page file.
-    if (populated_memory_items_bytes_ < limits_.min_page_file_size)
+    if (populated_memory_items_bytes_ < min_page_file_size)
       break;
-    DCHECK_LE(limits_.min_page_file_size,
-              static_cast<uint64_t>(blob_memory_used_));
+    DCHECK_LE(min_page_file_size, static_cast<uint64_t>(blob_memory_used_));
 
     std::vector<scoped_refptr<ShareableBlobDataItem>> items_to_swap;
-    size_t total_items_size = CollectItemsForEviction(&items_to_swap);
+
+    size_t total_items_size =
+        CollectItemsForEviction(&items_to_swap, min_page_file_size);
     if (total_items_size == 0)
       break;
 
@@ -847,7 +881,10 @@ void BlobMemoryController::MaybeScheduleEvictionUntilSystemHealthy() {
                    total_items_size),
         base::Bind(&BlobMemoryController::OnEvictionComplete,
                    weak_factory_.GetWeakPtr(), base::Passed(&file_reference),
-                   base::Passed(&items_to_swap), total_items_size));
+                   base::Passed(&items_to_swap), total_items_size, reason,
+                   total_memory_usage));
+
+    last_eviction_time_ = base::TimeTicks::Now();
   }
   RecordTracingCounters();
 }
@@ -856,6 +893,8 @@ void BlobMemoryController::OnEvictionComplete(
     scoped_refptr<ShareableFileReference> file_reference,
     std::vector<scoped_refptr<ShareableBlobDataItem>> items,
     size_t total_items_size,
+    const char* evict_reason,
+    size_t memory_usage_before_eviction,
     std::pair<FileCreationInfo, int64_t /* avail_disk */> result) {
   if (!file_paging_enabled_)
     return;
@@ -891,12 +930,32 @@ void BlobMemoryController::OnEvictionComplete(
   }
   in_flight_memory_used_ -= total_items_size;
 
+  // Record change in memory usage at the last eviction reply.
+  size_t total_usage = blob_memory_used_ + pending_memory_quota_total_size_;
+  if (!pending_evictions_ && memory_usage_before_eviction >= total_usage) {
+    std::string full_histogram_name =
+        std::string("Storage.Blob.SizeEvictedToDiskInKB.") + evict_reason;
+    base::UmaHistogramCounts100000(
+        full_histogram_name,
+        (memory_usage_before_eviction - total_usage) / 1024);
+  }
+
   // We want callback on blobs up to the amount we've freed.
   MaybeGrantPendingMemoryRequests();
 
   // If we still have more blobs waiting and we're not waiting on more paging
   // operations, schedule more.
-  MaybeScheduleEvictionUntilSystemHealthy();
+  MaybeScheduleEvictionUntilSystemHealthy(
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE);
+}
+
+void BlobMemoryController::OnMemoryPressure(
+    base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
+  auto time_from_last_evicion = base::TimeTicks::Now() - last_eviction_time_;
+  if (time_from_last_evicion.InSeconds() < kMinSecondsForPressureEvictions)
+    return;
+
+  MaybeScheduleEvictionUntilSystemHealthy(memory_pressure_level);
 }
 
 FilePath BlobMemoryController::GenerateNextPageFileName() {

@@ -96,10 +96,10 @@ static const gchar* browser_accessibility_get_name(AtkAction* atk_action,
     return nullptr;
 
   int action;
-  if (!obj->GetIntAttribute(ui::AX_ATTR_ACTION, &action))
+  if (!obj->GetIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB, &action))
     return nullptr;
-  base::string16 action_verb =
-      ui::ActionToUnlocalizedString(static_cast<ui::AXSupportedAction>(action));
+  base::string16 action_verb = ui::ActionVerbToUnlocalizedString(
+      static_cast<ui::AXDefaultActionVerb>(action));
   return base::UTF16ToUTF8(action_verb).c_str();
 }
 
@@ -469,6 +469,10 @@ static const gchar* browser_accessibility_get_name(AtkObject* atk_object) {
   BrowserAccessibilityAuraLinux* obj =
       ToBrowserAccessibilityAuraLinux(atk_object);
   if (!obj)
+    return NULL;
+
+  if (obj->GetStringAttribute(ui::AX_ATTR_NAME).empty() &&
+      !obj->HasExplicitlyEmptyName())
     return NULL;
 
   return obj->GetStringAttribute(ui::AX_ATTR_NAME).c_str();
@@ -850,7 +854,7 @@ void BrowserAccessibilityAuraLinux::InitRoleAndState() {
     case ui::AX_ROLE_DIALOG:
       atk_role_ = ATK_ROLE_DIALOG;
       break;
-    case ui::AX_ROLE_DIV:
+    case ui::AX_ROLE_GENERIC_CONTAINER:
     case ui::AX_ROLE_GROUP:
       atk_role_ = ATK_ROLE_SECTION;
       break;
@@ -949,6 +953,9 @@ void BrowserAccessibilityAuraLinux::InitRoleAndState() {
       break;
     case ui::AX_ROLE_TREE_ITEM:
       atk_role_ = ATK_ROLE_TREE_ITEM;
+      break;
+    case ui::AX_ROLE_TREE_GRID:
+      atk_role_ = ATK_ROLE_TREE_TABLE;
       break;
     case ui::AX_ROLE_VIDEO:
 #if defined(ATK_CHECK_VERSION)

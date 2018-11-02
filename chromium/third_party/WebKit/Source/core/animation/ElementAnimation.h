@@ -31,9 +31,9 @@
 #ifndef ElementAnimation_h
 #define ElementAnimation_h
 
+#include "base/gtest_prod_util.h"
 #include "bindings/core/v8/DictionarySequenceOrDictionary.h"
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/UnrestrictedDoubleOrKeyframeEffectOptions.h"
+#include "bindings/core/v8/UnrestrictedDoubleOrKeyframeAnimationOptions.h"
 #include "core/animation/DocumentTimeline.h"
 #include "core/animation/EffectInput.h"
 #include "core/animation/ElementAnimations.h"
@@ -44,19 +44,23 @@
 #include "core/dom/Element.h"
 #include "core/dom/ExecutionContext.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/Allocator.h"
 
 namespace blink {
+
+// Implements the interface in ElementAnimation.idl.
 
 class ElementAnimation {
   STATIC_ONLY(ElementAnimation);
 
  public:
-  static Animation* animate(ScriptState* script_state,
-                            Element& element,
-                            const DictionarySequenceOrDictionary& effect_input,
-                            UnrestrictedDoubleOrKeyframeEffectOptions options,
-                            ExceptionState& exception_state) {
+  static Animation* animate(
+      ScriptState* script_state,
+      Element& element,
+      const DictionarySequenceOrDictionary& effect_input,
+      UnrestrictedDoubleOrKeyframeAnimationOptions options,
+      ExceptionState& exception_state) {
     EffectModel* effect = EffectInput::Convert(
         &element, effect_input, ExecutionContext::From(script_state),
         exception_state);
@@ -68,12 +72,12 @@ class ElementAnimation {
                               exception_state))
       return nullptr;
 
-    if (options.isKeyframeEffectOptions()) {
-      Animation* animation = animate(element, effect, timing);
-      animation->setId(options.getAsKeyframeEffectOptions().id());
+    if (options.isKeyframeAnimationOptions()) {
+      Animation* animation = animateInternal(element, effect, timing);
+      animation->setId(options.getAsKeyframeAnimationOptions().id());
       return animation;
     }
-    return animate(element, effect, timing);
+    return animateInternal(element, effect, timing);
   }
 
   static Animation* animate(ScriptState* script_state,
@@ -85,15 +89,7 @@ class ElementAnimation {
         exception_state);
     if (exception_state.HadException())
       return nullptr;
-    return animate(element, effect, Timing());
-  }
-
-  static Animation* animate(Element& element,
-                            EffectModel* effect,
-                            const Timing& timing) {
-    KeyframeEffect* keyframe_effect =
-        KeyframeEffect::Create(&element, effect, timing);
-    return element.GetDocument().Timeline().Play(keyframe_effect);
+    return animateInternal(element, effect, Timing());
   }
 
   static HeapVector<Member<Animation>> getAnimations(Element& element) {
@@ -111,6 +107,17 @@ class ElementAnimation {
         animations.push_back(animation);
     }
     return animations;
+  }
+
+ private:
+  FRIEND_TEST_ALL_PREFIXES(AnimationSimTest, CustomPropertyBaseComputedStyle);
+
+  static Animation* animateInternal(Element& element,
+                                    EffectModel* effect,
+                                    const Timing& timing) {
+    KeyframeEffect* keyframe_effect =
+        KeyframeEffect::Create(&element, effect, timing);
+    return element.GetDocument().Timeline().Play(keyframe_effect);
   }
 };
 

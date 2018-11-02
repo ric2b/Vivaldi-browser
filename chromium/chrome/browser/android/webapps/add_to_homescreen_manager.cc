@@ -196,14 +196,15 @@ void AddToHomescreenManager::CreateInfoBarForWebApk(
   banners::AppBannerInfoBarDelegateAndroid::Create(
       web_contents, app_banner_manager->GetWeakPtr(), info.user_title,
       base::MakeUnique<ShortcutInfo>(info), primary_icon, badge_icon,
-      -1 /* event_request_id */, webapk::INSTALL_SOURCE_MENU);
+      -1 /* event_request_id */, true /* is_webapk */,
+      webapk::INSTALL_SOURCE_MENU);
 }
 
 SkBitmap AddToHomescreenManager::FinalizeLauncherIconInBackground(
     const SkBitmap& bitmap,
     const GURL& url,
     bool* is_generated) {
-  DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
+  base::ThreadRestrictions::AssertIOAllowed();
 
   return ShortcutHelper::FinalizeLauncherIconInBackground(bitmap, url,
                                                           is_generated);

@@ -6,10 +6,10 @@
 #define MEDIA_RENDERERS_DEFAULT_RENDERER_FACTORY_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "media/base/media_export.h"
 #include "media/base/renderer_factory.h"
 
@@ -24,16 +24,16 @@ class VideoDecoder;
 class VideoRendererSink;
 
 using CreateAudioDecodersCB =
-    base::RepeatingCallback<ScopedVector<AudioDecoder>()>;
+    base::RepeatingCallback<std::vector<std::unique_ptr<AudioDecoder>>()>;
 using CreateVideoDecodersCB =
-    base::RepeatingCallback<ScopedVector<VideoDecoder>()>;
+    base::RepeatingCallback<std::vector<std::unique_ptr<VideoDecoder>>()>;
 
 // The default factory class for creating RendererImpl.
 class MEDIA_EXPORT DefaultRendererFactory : public RendererFactory {
  public:
   using GetGpuFactoriesCB = base::Callback<GpuVideoAcceleratorFactories*()>;
 
-  DefaultRendererFactory(const scoped_refptr<MediaLog>& media_log,
+  DefaultRendererFactory(MediaLog* media_log,
                          DecoderFactory* decoder_factory,
                          const GetGpuFactoriesCB& get_gpu_factories_cb);
   ~DefaultRendererFactory() final;
@@ -43,20 +43,20 @@ class MEDIA_EXPORT DefaultRendererFactory : public RendererFactory {
       const scoped_refptr<base::TaskRunner>& worker_task_runner,
       AudioRendererSink* audio_renderer_sink,
       VideoRendererSink* video_renderer_sink,
-      const RequestSurfaceCB& request_surface_cb,
+      const RequestOverlayInfoCB& request_overlay_info_cb,
       bool use_platform_media_pipeline = false) final;
 
  private:
-  ScopedVector<AudioDecoder> CreateAudioDecoders(
+  std::vector<std::unique_ptr<AudioDecoder>> CreateAudioDecoders(
       const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
       bool use_platform_media_pipeline);
-  ScopedVector<VideoDecoder> CreateVideoDecoders(
+  std::vector<std::unique_ptr<VideoDecoder>> CreateVideoDecoders(
       const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-      const RequestSurfaceCB& request_surface_cb,
+      const RequestOverlayInfoCB& request_overlay_info_cb,
       GpuVideoAcceleratorFactories* gpu_factories,
       bool use_platform_media_pipeline);
 
-  scoped_refptr<MediaLog> media_log_;
+  MediaLog* media_log_;
 
   // Factory to create extra audio and video decoders.
   // Could be nullptr if not extra decoders are available.

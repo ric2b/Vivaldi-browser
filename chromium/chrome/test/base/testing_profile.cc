@@ -12,10 +12,12 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/autocomplete/in_memory_url_index_factory.h"
@@ -45,7 +47,6 @@
 #include "chrome/browser/search_engines/template_url_fetcher_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
-#include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
@@ -83,13 +84,11 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/webdata_services/web_data_service_wrapper.h"
-#include "components/zoom/zoom_event_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/browser/zoom_level_delegate.h"
 #include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/common/constants.h"
@@ -117,7 +116,11 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/signin/oauth2_token_service_delegate_android.h"
-#endif
+#else  // !defined(OS_ANDROID)
+#include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
+#include "components/zoom/zoom_event_manager.h"
+#include "content/public/browser/zoom_level_delegate.h"
+#endif  // defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
@@ -215,7 +218,6 @@ std::unique_ptr<KeyedService> BuildInMemoryURLIndex(
                            HistoryServiceFactory::GetForProfile(
                                profile, ServiceAccessType::IMPLICIT_ACCESS),
                            TemplateURLServiceFactory::GetForProfile(profile),
-                           content::BrowserThread::GetBlockingPool(),
                            profile->GetPath(), SchemeSet()));
   in_memory_url_index->Init();
   return std::move(in_memory_url_index);
@@ -391,6 +393,7 @@ TestingProfile::TestingProfile(
 }
 
 void TestingProfile::CreateTempProfileDir() {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   if (!temp_dir_.CreateUniqueTempDir()) {
     LOG(ERROR) << "Failed to create unique temporary directory.";
 
@@ -418,6 +421,7 @@ void TestingProfile::CreateTempProfileDir() {
 }
 
 void TestingProfile::Init() {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   // If threads have been initialized, we should be on the UI thread.
   DCHECK(!content::BrowserThread::IsThreadInitialized(
              content::BrowserThread::UI) ||
@@ -561,6 +565,9 @@ TestingProfile::~TestingProfile() {
     resource_context_ = NULL;
     content::RunAllPendingInMessageLoop(BrowserThread::IO);
   }
+
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  ignore_result(temp_dir_.Delete());
 }
 
 void TestingProfile::CreateFaviconService() {
@@ -668,12 +675,14 @@ base::FilePath TestingProfile::GetPath() const {
   return profile_path_;
 }
 
+#if !defined(OS_ANDROID)
 std::unique_ptr<content::ZoomLevelDelegate>
 TestingProfile::CreateZoomLevelDelegate(const base::FilePath& partition_path) {
   return base::MakeUnique<ChromeZoomLevelPrefs>(
       GetPrefs(), GetPath(), partition_path,
       zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr());
 }
+#endif  // !defined(OS_ANDROID)
 
 scoped_refptr<base::SequencedTaskRunner> TestingProfile::GetIOTaskRunner() {
   return base::ThreadTaskRunnerHandle::Get();
@@ -845,10 +854,12 @@ const PrefService* TestingProfile::GetPrefs() const {
   return prefs_.get();
 }
 
+#if !defined(OS_ANDROID)
 ChromeZoomLevelPrefs* TestingProfile::GetZoomLevelPrefs() {
   return static_cast<ChromeZoomLevelPrefs*>(
       GetDefaultStoragePartition(this)->GetZoomLevelDelegate());
 }
+#endif  // !defined(OS_ANDROID)
 
 DownloadManagerDelegate* TestingProfile::GetDownloadManagerDelegate() {
   return NULL;

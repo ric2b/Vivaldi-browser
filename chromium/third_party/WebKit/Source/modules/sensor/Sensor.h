@@ -5,8 +5,6 @@
 #ifndef Sensor_h
 #define Sensor_h
 
-#include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMHighResTimeStamp.h"
 #include "core/dom/DOMTimeStamp.h"
@@ -15,6 +13,9 @@
 #include "modules/EventTargetModules.h"
 #include "modules/sensor/SensorOptions.h"
 #include "modules/sensor/SensorProxy.h"
+#include "platform/WebTaskRunner.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -79,31 +80,32 @@ class Sensor : public EventTargetWithInlineData,
   bool CanReturnReadings() const;
   bool IsActivated() const { return state_ == SensorState::kActivated; }
 
+  // SensorProxy::Observer overrides.
+  void OnSensorInitialized() override;
+  void OnSensorReadingChanged() override;
+  void OnSensorError(ExceptionCode,
+                     const String& sanitized_message,
+                     const String& unsanitized_message) override;
+
  private:
   void InitSensorProxyIfNeeded();
 
   // ContextLifecycleObserver overrides.
   void ContextDestroyed(ExecutionContext*) override;
 
-  // SensorProxy::Observer overrides.
-  void OnSensorInitialized() override;
-  void NotifySensorChanged(double timestamp) override;
-  void OnSensorError(ExceptionCode,
-                     const String& sanitized_message,
-                     const String& unsanitized_message) override;
-
-  void OnStartRequestCompleted(bool);
-  void OnStopRequestCompleted(bool);
+  void OnAddConfigurationRequestCompleted(bool);
 
   void StartListening();
   void StopListening();
 
+  void RequestAddConfiguration();
+
   void UpdateState(SensorState new_state);
-  void ReportError(ExceptionCode = kUnknownError,
+  void HandleError(ExceptionCode = kUnknownError,
                    const String& sanitized_message = String(),
                    const String& unsanitized_message = String());
 
-  void NotifySensorReadingChanged();
+  void UpdateReading();
   void NotifyOnActivate();
   void NotifyError(DOMException* error);
 
@@ -112,9 +114,9 @@ class Sensor : public EventTargetWithInlineData,
   device::mojom::blink::SensorType type_;
   SensorState state_;
   Member<SensorProxy> sensor_proxy_;
-  device::SensorReading stored_data_;
+  device::SensorReading reading_;
   SensorConfigurationPtr configuration_;
-  double last_update_timestamp_;
+  TaskHandle pending_reading_update_;
 };
 
 }  // namespace blink

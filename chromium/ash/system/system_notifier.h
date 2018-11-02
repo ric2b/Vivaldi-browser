@@ -17,6 +17,7 @@ namespace system_notifier {
 ASH_EXPORT extern const char kNotifierAccessibility[];
 ASH_EXPORT extern const char kNotifierBattery[];
 ASH_EXPORT extern const char kNotifierBluetooth[];
+ASH_EXPORT extern const char kNotifierCapsLock[];
 ASH_EXPORT extern const char kNotifierDeprecatedAccelerator[];
 ASH_EXPORT extern const char kNotifierDisk[];
 ASH_EXPORT extern const char kNotifierDisplay[];
@@ -39,6 +40,7 @@ ASH_EXPORT extern const char kNotifierSessionLengthTimeout[];
 ASH_EXPORT extern const char kNotifierSms[];
 ASH_EXPORT extern const char kNotifierSupervisedUser[];
 ASH_EXPORT extern const char kNotifierWebUsb[];
+ASH_EXPORT extern const char kNotifierWifiToggle[];
 
 // Returns true if notifications from |notifier_id| should always appear as
 // popups. "Always appear" means the popups should appear even in login screen,

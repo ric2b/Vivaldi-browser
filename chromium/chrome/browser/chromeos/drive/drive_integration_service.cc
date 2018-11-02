@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/drive/debug_info_collector.h"
@@ -19,9 +19,8 @@
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/profiles/profile_util.h"
+#include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_prefs.h"
-#include "chrome/browser/download/download_service.h"
-#include "chrome/browser/download/download_service_factory.h"
 #include "chrome/browser/drive/drive_notification_manager_factory.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
@@ -250,9 +249,8 @@ DriveIntegrationService::DriveIntegrationService(
   DCHECK(profile && !profile->IsOffTheRecord());
 
   logger_.reset(new EventLogger);
-  base::SequencedWorkerPool* blocking_pool = BrowserThread::GetBlockingPool();
-  blocking_task_runner_ = blocking_pool->GetSequencedTaskRunner(
-      blocking_pool->GetSequenceToken());
+  blocking_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
+      {base::MayBlock(), base::TaskPriority::USER_BLOCKING});
 
   ProfileOAuth2TokenService* oauth_service =
       ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
@@ -639,7 +637,7 @@ DriveIntegrationServiceFactory::DriveIntegrationServiceFactory()
         BrowserContextDependencyManager::GetInstance()) {
   DependsOn(ProfileOAuth2TokenServiceFactory::GetInstance());
   DependsOn(DriveNotificationManagerFactory::GetInstance());
-  DependsOn(DownloadServiceFactory::GetInstance());
+  DependsOn(DownloadCoreServiceFactory::GetInstance());
 }
 
 DriveIntegrationServiceFactory::~DriveIntegrationServiceFactory() {

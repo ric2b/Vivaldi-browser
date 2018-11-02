@@ -8,13 +8,13 @@
 // IPC_MESSAGE_LOG_ENABLED. We need to use it to define
 // IPC_MESSAGE_MACROS_LOG_ENABLED so render_messages.h will generate the
 // ViewMsgLog et al. functions.
-#include "ipc/ipc_message.h"
+#include "ipc/ipc_features.h"
 
 // On Windows, the about:ipc dialog shows IPCs; on POSIX, we hook up a
 // logger in this file.  (We implement about:ipc on Mac but implement
 // the loggers here anyway).  We need to do this real early to be sure
 // IPC_MESSAGE_MACROS_LOG_ENABLED doesn't get undefined.
-#if defined(OS_POSIX) && defined(IPC_MESSAGE_LOG_ENABLED)
+#if defined(OS_POSIX) && BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
 #define IPC_MESSAGE_MACROS_LOG_ENABLED
 #include "content/public/common/content_ipc_logging.h"
 #define IPC_LOG_TABLE_ADD_ENTRY(msg_id, logger) \
@@ -33,6 +33,7 @@
 #include <string>  // NOLINT
 
 #include "base/base_switches.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/debug/debugger.h"
@@ -69,6 +70,7 @@ namespace {
 
 // When true, this means that error dialogs should not be shown.
 bool dialogs_are_suppressed_ = false;
+logging::ScopedLogAssertHandler* assert_handler_ = nullptr;
 
 // This should be true for exactly the period between the end of
 // InitChromeLogging() and the beginning of CleanupChromeLogging().
@@ -92,7 +94,10 @@ const GUID kChromeTraceProviderName = {
 // silenced.  To record a new error, pass the log string associated
 // with that error in the str parameter.
 MSVC_DISABLE_OPTIMIZE();
-void SilentRuntimeAssertHandler(const std::string& str) {
+void SilentRuntimeAssertHandler(const char* file,
+                                int line,
+                                const base::StringPiece message,
+                                const base::StringPiece stack_trace) {
   base::debug::BreakDebugger();
 }
 MSVC_ENABLE_OPTIMIZE();
@@ -103,7 +108,8 @@ void SuppressDialogs() {
   if (dialogs_are_suppressed_)
     return;
 
-  logging::SetLogAssertHandler(SilentRuntimeAssertHandler);
+  assert_handler_ = new logging::ScopedLogAssertHandler(
+      base::Bind(SilentRuntimeAssertHandler));
 
 #if defined(OS_WIN)
   UINT new_flags = SEM_FAILCRITICALERRORS |

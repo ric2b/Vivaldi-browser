@@ -59,7 +59,7 @@ static bool DigestsEqual(const DigestValue& digest1,
 }
 
 static String DigestToString(const DigestValue& digest) {
-  return Base64Encode(reinterpret_cast<const char*>(digest.Data()),
+  return Base64Encode(reinterpret_cast<const char*>(digest.data()),
                       digest.size(), kBase64DoNotInsertLFs);
 }
 
@@ -70,8 +70,8 @@ HashAlgorithm SubresourceIntegrity::GetPrioritizedHashFunction(
   const HashAlgorithm kWeakerThanSha512[] = {kHashAlgorithmSha256,
                                              kHashAlgorithmSha384};
 
-  ASSERT(algorithm1 != kHashAlgorithmSha1);
-  ASSERT(algorithm2 != kHashAlgorithmSha1);
+  DCHECK_NE(algorithm1, kHashAlgorithmSha1);
+  DCHECK_NE(algorithm2, kHashAlgorithmSha1);
 
   if (algorithm1 == algorithm2)
     return algorithm1;
@@ -90,7 +90,7 @@ HashAlgorithm SubresourceIntegrity::GetPrioritizedHashFunction(
       length = WTF_ARRAY_LENGTH(kWeakerThanSha512);
       break;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
   };
 
   for (size_t i = 0; i < length; i++) {
@@ -190,7 +190,7 @@ bool SubresourceIntegrity::CheckSubresourceIntegrity(
     if (metadata.Algorithm() != strongest_algorithm)
       continue;
 
-    digest.Clear();
+    digest.clear();
     bool digest_success =
         ComputeDigest(metadata.Algorithm(), content, size, digest);
 
@@ -199,7 +199,7 @@ bool SubresourceIntegrity::CheckSubresourceIntegrity(
       Base64Decode(metadata.Digest(), hash_vector);
       DigestValue converted_hash_vector;
       converted_hash_vector.Append(
-          reinterpret_cast<uint8_t*>(hash_vector.Data()), hash_vector.size());
+          reinterpret_cast<uint8_t*>(hash_vector.data()), hash_vector.size());
 
       if (DigestsEqual(digest, converted_hash_vector)) {
         UseCounter::Count(
@@ -210,7 +210,7 @@ bool SubresourceIntegrity::CheckSubresourceIntegrity(
     }
   }
 
-  digest.Clear();
+  digest.clear();
   if (ComputeDigest(kHashAlgorithmSha256, content, size, digest)) {
     // This message exposes the digest of the resource to the console.
     // Because this is only to the console, that's okay for now, but we
@@ -324,11 +324,11 @@ SubresourceIntegrity::ParseIntegrityAttribute(
     ExecutionContext* execution_context) {
   Vector<UChar> characters;
   attribute.StripWhiteSpace().AppendTo(characters);
-  const UChar* position = characters.Data();
+  const UChar* position = characters.data();
   const UChar* end = characters.end();
   const UChar* current_integrity_end;
 
-  metadata_set.Clear();
+  metadata_set.clear();
   bool error = false;
 
   // The integrity attribute takes the form:
@@ -381,7 +381,7 @@ SubresourceIntegrity::ParseIntegrityAttribute(
       continue;
     }
 
-    ASSERT(parse_result == kAlgorithmValid);
+    DCHECK_EQ(parse_result, kAlgorithmValid);
 
     if (!ParseDigest(position, current_integrity_end, digest)) {
       error = true;

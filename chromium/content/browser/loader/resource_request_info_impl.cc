@@ -20,14 +20,11 @@ namespace content {
 
 namespace {
 
-WebContents* GetWebContentsFromFTNID(int frame_tree_node_id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  FrameTreeNode* frame_tree_node =
-      FrameTreeNode::GloballyFindByID(frame_tree_node_id);
-  if (!frame_tree_node)
-    return nullptr;
-
-  return WebContentsImpl::FromFrameTreeNode(frame_tree_node);
+int FrameTreeNodeIdFromHostIds(int render_process_host_id,
+                               int render_frame_host_id) {
+  RenderFrameHost* render_frame_host =
+      RenderFrameHost::FromID(render_process_host_id, render_frame_host_id);
+  return render_frame_host ? render_frame_host->GetFrameTreeNodeId() : -1;
 }
 
 }  // namespace
@@ -196,7 +193,7 @@ ResourceRequestInfoImpl::GetWebContentsGetterForRequest() const {
   // ID should be used to access the WebContents.
   if (frame_tree_node_id_ != -1) {
     DCHECK(IsBrowserSideNavigationEnabled());
-    return base::Bind(&GetWebContentsFromFTNID, frame_tree_node_id_);
+    return base::Bind(WebContents::FromFrameTreeNodeId, frame_tree_node_id_);
   }
 
   // In other cases, use the RenderProcessHost ID + RenderFrameHost ID to get
@@ -210,6 +207,24 @@ ResourceRequestInfoImpl::GetWebContentsGetterForRequest() const {
 
   return base::Bind(&WebContentsImpl::FromRenderFrameHostID,
                     render_process_host_id, render_frame_host_id);
+}
+
+ResourceRequestInfo::FrameTreeNodeIdGetter
+ResourceRequestInfoImpl::GetFrameTreeNodeIdGetterForRequest() const {
+  if (frame_tree_node_id_ != -1) {
+    DCHECK(IsBrowserSideNavigationEnabled());
+    return base::Bind([](int id) { return id; }, frame_tree_node_id_);
+  }
+
+  int render_process_host_id = -1;
+  int render_frame_host_id = -1;
+  if (!GetAssociatedRenderFrame(&render_process_host_id,
+                                &render_frame_host_id)) {
+    NOTREACHED();
+  }
+
+  return base::Bind(&FrameTreeNodeIdFromHostIds, render_process_host_id,
+                    render_frame_host_id);
 }
 
 ResourceContext* ResourceRequestInfoImpl::GetContext() const {
@@ -307,13 +322,13 @@ NavigationUIData* ResourceRequestInfoImpl::GetNavigationUIData() const {
 }
 
 void ResourceRequestInfoImpl::AssociateWithRequest(net::URLRequest* request) {
-  request->SetUserData(NULL, this);
+  request->SetUserData(nullptr, base::WrapUnique(this));
   int render_process_id;
   int render_frame_id;
   if (GetAssociatedRenderFrame(&render_process_id, &render_frame_id)) {
-    request->SetUserData(
-        URLRequestUserData::kUserDataKey,
-        new URLRequestUserData(render_process_id, render_frame_id));
+    request->SetUserData(URLRequestUserData::kUserDataKey,
+                         base::MakeUnique<URLRequestUserData>(render_process_id,
+                                                              render_frame_id));
   }
 }
 

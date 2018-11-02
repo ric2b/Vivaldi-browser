@@ -53,7 +53,7 @@ extern const char kChromeUIGCMInternalsURL[];
 extern const char kChromeUIHelpFrameURL[];
 extern const char kChromeUIHelpURL[];
 extern const char kChromeUIHistoryURL[];
-extern const char kChromeUIHistoryFrameURL[];
+extern const char kDeprecatedChromeUIHistoryFrameURL[];
 extern const char kChromeUIIdentityInternalsURL[];
 extern const char kChromeUIInspectURL[];
 extern const char kChromeUIInstantURL[];
@@ -139,11 +139,9 @@ extern const char kChromeUITabModalConfirmDialogURL[];
 extern const char kChromeUIWebRtcLogsURL[];
 #endif
 
-#if defined(ENABLE_MEDIA_ROUTER)
 extern const char kChromeUIMediaRouterURL[];
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
 extern const char kChromeUICastURL[];
-#endif
 #endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
@@ -196,7 +194,7 @@ extern const char kChromeUIHelpHost[];
 extern const char kChromeUIHangHost[];
 extern const char kChromeUIHangUIHost[];
 extern const char kChromeUIHistoryHost[];
-extern const char kChromeUIHistoryFrameHost[];
+extern const char kDeprecatedChromeUIHistoryFrameHost[];
 extern const char kChromeUIIdentityInternalsHost[];
 extern const char kChromeUIInspectHost[];
 extern const char kChromeUIInstantHost[];
@@ -244,7 +242,6 @@ extern const char kChromeUIThemeHost[];
 extern const char kChromeUIThumbnailHost[];
 extern const char kChromeUIThumbnailHost2[];
 extern const char kChromeUIThumbnailListHost[];
-extern const char kChromeUITouchIconHost[];
 extern const char kChromeUITranslateInternalsHost[];
 extern const char kChromeUIUberFrameHost[];
 extern const char kChromeUIUberHost[];
@@ -326,11 +323,9 @@ extern const char kChromeUITabModalConfirmDialogHost[];
 extern const char kChromeUIWebRtcLogsHost[];
 #endif
 
-#if defined(ENABLE_MEDIA_ROUTER)
 extern const char kChromeUIMediaRouterHost[];
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
 extern const char kChromeUICastHost[];
-#endif
 #endif
 
 // Options sub-pages.
@@ -356,6 +351,7 @@ extern const char kBluetoothSubPage[];
 extern const char kDateTimeSubPage[];
 extern const char kDisplaySubPage[];
 extern const char kDeprecatedOptionsSearchSubPage[];
+extern const char kHelpSubPage[];
 extern const char kInternetSubPage[];
 extern const char kNetworkDetailSubPage[];
 extern const char kPowerSubPage[];
@@ -386,6 +382,9 @@ extern const char kExtensionControlledSettingLearnMoreURL[];
 extern const char kChromeHelpViaKeyboardURL[];
 extern const char kChromeHelpViaMenuURL[];
 extern const char kChromeHelpViaWebUIURL[];
+
+// Link to the forum for Chrome Beta.
+extern const char kChromeBetaForumURL[];
 
 #if defined(OS_CHROMEOS)
 // Accessibility help link for Chrome.

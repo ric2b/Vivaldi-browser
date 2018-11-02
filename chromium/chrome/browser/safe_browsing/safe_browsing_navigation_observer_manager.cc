@@ -195,9 +195,6 @@ std::size_t NavigationEventList::CleanUpNavigationEvents() {
 
 // -----------------SafeBrowsingNavigationObserverManager-----------
 // static
-const base::Feature SafeBrowsingNavigationObserverManager::kDownloadAttribution{
-    "DownloadAttribution", base::FEATURE_ENABLED_BY_DEFAULT};
-// static
 bool SafeBrowsingNavigationObserverManager::IsUserGestureExpired(
     const base::Time& timestamp) {
   return IsEventExpired(timestamp, kUserGestureTTLInSecond);
@@ -216,11 +213,10 @@ GURL SafeBrowsingNavigationObserverManager::ClearEmptyRef(const GURL& url) {
 // static
 bool SafeBrowsingNavigationObserverManager::IsEnabledAndReady(
     Profile* profile) {
-  return base::FeatureList::IsEnabled(
-      SafeBrowsingNavigationObserverManager::kDownloadAttribution) &&
-      profile->GetPrefs()->GetBoolean(prefs::kSafeBrowsingEnabled) &&
-      g_browser_process->safe_browsing_service() &&
-      g_browser_process->safe_browsing_service()->navigation_observer_manager();
+  return profile->GetPrefs()->GetBoolean(prefs::kSafeBrowsingEnabled) &&
+         g_browser_process->safe_browsing_service() &&
+         g_browser_process->safe_browsing_service()
+             ->navigation_observer_manager();
 }
 
 SafeBrowsingNavigationObserverManager::SafeBrowsingNavigationObserverManager()
@@ -260,11 +256,8 @@ bool SafeBrowsingNavigationObserverManager::HasUserGesture(
     content::WebContents* web_contents) {
   if (!web_contents)
     return false;
-  auto it = user_gesture_map_.find(web_contents);
-  if (it != user_gesture_map_.end() &&
-      !IsEventExpired(it->second, kUserGestureTTLInSecond)) {
+  if (user_gesture_map_.find(web_contents) != user_gesture_map_.end())
     return true;
-  }
   return false;
 }
 
@@ -443,7 +436,7 @@ void SafeBrowsingNavigationObserverManager::CleanUpNavigationEvents() {
 
 void SafeBrowsingNavigationObserverManager::CleanUpUserGestures() {
   for (auto it = user_gesture_map_.begin(); it != user_gesture_map_.end();) {
-    if (IsEventExpired(it->second, kUserGestureTTLInSecond))
+    if (IsEventExpired(it->second, kNavigationFootprintTTLInSecond))
       it = user_gesture_map_.erase(it);
     else
       ++it;

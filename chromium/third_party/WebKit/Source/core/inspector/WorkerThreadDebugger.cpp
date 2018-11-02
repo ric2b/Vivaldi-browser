@@ -30,10 +30,8 @@
 
 #include "core/inspector/WorkerThreadDebugger.h"
 
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8ErrorHandler.h"
-#include "bindings/core/v8/V8PerIsolateData.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/events/ErrorEvent.h"
@@ -45,6 +43,8 @@
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThread.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8PerIsolateData.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -220,7 +220,7 @@ void WorkerThreadDebugger::consoleClear(int context_group_id) {
 v8::MaybeLocal<v8::Value> WorkerThreadDebugger::memoryInfo(
     v8::Isolate*,
     v8::Local<v8::Context>) {
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return v8::MaybeLocal<v8::Value>();
 }
 

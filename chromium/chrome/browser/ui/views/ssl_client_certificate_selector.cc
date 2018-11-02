@@ -10,6 +10,7 @@
 #include "base/bind_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/client_certificate_delegate.h"
@@ -27,12 +28,16 @@
 SSLClientCertificateSelector::SSLClientCertificateSelector(
     content::WebContents* web_contents,
     const scoped_refptr<net::SSLCertRequestInfo>& cert_request_info,
+    net::CertificateList client_certs,
     std::unique_ptr<content::ClientCertificateDelegate> delegate)
-    : CertificateSelector(cert_request_info->client_certs, web_contents),
+    : CertificateSelector(std::move(client_certs), web_contents),
       SSLClientAuthObserver(web_contents->GetBrowserContext(),
                             cert_request_info,
                             std::move(delegate)),
-      WebContentsObserver(web_contents) {}
+      WebContentsObserver(web_contents) {
+  chrome::RecordDialogCreation(
+      chrome::DialogIdentifier::SSL_CLIENT_CERTIFICATE_SELECTOR);
+}
 
 SSLClientCertificateSelector::~SSLClientCertificateSelector() {}
 
@@ -99,6 +104,7 @@ namespace chrome {
 void ShowSSLClientCertificateSelector(
     content::WebContents* contents,
     net::SSLCertRequestInfo* cert_request_info,
+    net::CertificateList client_certs,
     std::unique_ptr<content::ClientCertificateDelegate> delegate) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -110,7 +116,8 @@ void ShowSSLClientCertificateSelector(
     return;
 
   SSLClientCertificateSelector* selector = new SSLClientCertificateSelector(
-      contents, cert_request_info, std::move(delegate));
+      contents, cert_request_info, std::move(client_certs),
+      std::move(delegate));
   selector->Init();
   selector->Show();
 }

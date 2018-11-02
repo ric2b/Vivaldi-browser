@@ -21,52 +21,54 @@
 #include "gpu/command_buffer/service/command_buffer_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/latency/latency_info.h"
 
 namespace gpu {
 
-class MockCommandBufferBase : public CommandBufferServiceBase {
+class FakeCommandBufferServiceBase : public CommandBufferServiceBase {
  public:
   static const int32_t kTransferBufferBaseId = 0x123;
   static const int32_t kMaxTransferBuffers = 32;
 
-  MockCommandBufferBase();
-  ~MockCommandBufferBase() override;
+  FakeCommandBufferServiceBase();
+  ~FakeCommandBufferServiceBase() override;
 
-  State GetLastState() override;
-  State WaitForTokenInRange(int32_t start, int32_t end) override;
-  State WaitForGetOffsetInRange(int32_t start, int32_t end) override;
-  void SetGetBuffer(int transfer_buffer_id) override;
-  void SetGetOffset(int32_t get_offset) override;
+  CommandBuffer::State GetState() override;
   void SetReleaseCount(uint64_t release_count) override;
-  scoped_refptr<gpu::Buffer> CreateTransferBuffer(size_t size,
-                                                  int32_t* id) override;
   scoped_refptr<gpu::Buffer> GetTransferBuffer(int32_t id) override;
   void SetToken(int32_t token) override;
   void SetParseError(error::Error error) override;
   void SetContextLostReason(error::ContextLostReason reason) override;
-  int32_t GetPutOffset() override;
 
   // Get's the Id of the next transfer buffer that will be returned
   // by CreateTransferBuffer. This is useful for testing expected ids.
   int32_t GetNextFreeTransferBufferId();
 
   void FlushHelper(int32_t put_offset);
+  void SetGetBufferHelper(int transfer_buffer_id);
+  scoped_refptr<gpu::Buffer> CreateTransferBufferHelper(size_t size,
+                                                        int32_t* id);
   void DestroyTransferBufferHelper(int32_t id);
-
-  virtual void OnFlush() = 0;
 
  private:
   scoped_refptr<Buffer> transfer_buffer_buffers_[kMaxTransferBuffers];
-  CommandBufferEntry* ring_buffer_;
-  scoped_refptr<Buffer> ring_buffer_buffer_;
-  State state_;
-  int32_t put_offset_;
+  CommandBuffer::State state_;
 };
 
-class MockClientCommandBuffer : public MockCommandBufferBase {
+class MockClientCommandBuffer : public CommandBuffer,
+                                public FakeCommandBufferServiceBase {
  public:
   MockClientCommandBuffer();
   ~MockClientCommandBuffer() override;
+
+  State GetLastState() override;
+  State WaitForTokenInRange(int32_t start, int32_t end) override;
+  State WaitForGetOffsetInRange(uint32_t set_get_buffer_count,
+                                int32_t start,
+                                int32_t end) override;
+  void SetGetBuffer(int transfer_buffer_id) override;
+  scoped_refptr<gpu::Buffer> CreateTransferBuffer(size_t size,
+                                                  int32_t* id) override;
 
   // This is so we can use all the gmock functions when Flush is called.
   MOCK_METHOD0(OnFlush, void());
@@ -76,6 +78,11 @@ class MockClientCommandBuffer : public MockCommandBufferBase {
   void OrderingBarrier(int32_t put_offset) override;
 
   void DelegateToFake();
+
+  int32_t GetServicePutOffset() { return put_offset_; }
+
+ private:
+  int32_t put_offset_ = 0;
 };
 
 class MockClientCommandBufferMockFlush : public MockClientCommandBuffer {
@@ -87,6 +94,7 @@ class MockClientCommandBufferMockFlush : public MockClientCommandBuffer {
   MOCK_METHOD1(OrderingBarrier, void(int32_t put_offset));
 
   void DelegateToFake();
+  void DoFlush(int32_t put_offset);
 };
 
 class MockClientGpuControl : public GpuControl {
@@ -109,7 +117,8 @@ class MockClientGpuControl : public GpuControl {
   MOCK_METHOD0(EnsureWorkVisible, void());
   MOCK_CONST_METHOD0(GetNamespaceID, CommandBufferNamespace());
   MOCK_CONST_METHOD0(GetCommandBufferID, CommandBufferId());
-  MOCK_CONST_METHOD0(GetExtraCommandBufferData, int32_t());
+  MOCK_CONST_METHOD0(GetStreamId, int32_t());
+  MOCK_METHOD1(FlushOrderingBarrierOnStream, void(int32_t));
   MOCK_METHOD0(GenerateFenceSyncRelease, uint64_t());
   MOCK_METHOD1(IsFenceSyncRelease, bool(uint64_t release));
   MOCK_METHOD1(IsFenceSyncFlushed, bool(uint64_t release));
@@ -119,6 +128,7 @@ class MockClientGpuControl : public GpuControl {
                                      const base::Closure& callback));
   MOCK_METHOD1(WaitSyncTokenHint, void(const SyncToken&));
   MOCK_METHOD1(CanWaitUnverifiedSyncToken, bool(const SyncToken&));
+  MOCK_METHOD1(AddLatencyInfo, void(const std::vector<ui::LatencyInfo>&));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockClientGpuControl);

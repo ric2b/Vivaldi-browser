@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ro">
+<translation id="2392002507524894126">Drepturi de autor <ph name="YEAR" />  Vivaldi Technologies AS. Toate drepturile rezervate.</translation>
+<translation id="5743878272102782872">Manager de activități - Vivaldi</translation>
 <translation id="6119720677647982841"><ph name="BEGIN_BOLD" />Avertisment:<ph name="END_BOLD" /> Vivaldi nu poate împiedica extensiile să înregistreze istoricul navigării. Pentru a dezactiva această extensie în modul incognito, debifează această opțiune.</translation>
 </translationbundle>

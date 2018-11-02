@@ -2,11 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("vr/features.gni")
+import("vr/features/features.gni")
 import("//build/config/features.gni")
 import("//testing/test.gni")
 
 if (is_android) {
+  import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")  # For generate_jni().
 }
 
@@ -19,8 +20,6 @@ is_linux_without_udev = is_linux && !use_udev
 test("device_unittests") {
   sources = [
     "base/synchronization/one_writer_seqlock_unittest.cc",
-    "battery/battery_status_manager_win_unittest.cc",
-    "battery/battery_status_service_unittest.cc",
     "bluetooth/bluetooth_adapter_mac_unittest.mm",
     "bluetooth/bluetooth_adapter_unittest.cc",
     "bluetooth/bluetooth_adapter_win_unittest.cc",
@@ -74,22 +73,19 @@ test("device_unittests") {
     "sensors/sensor_manager_android_unittest.cc",
     "sensors/sensor_manager_chromeos_unittest.cc",
     "test/run_all_unittests.cc",
-    "u2f/u2f_apdu_unittest.cc",
-    "u2f/u2f_message_unittest.cc",
   ]
 
   deps = [
     "//base/test:test_support",
     "//base/third_party/dynamic_annotations:dynamic_annotations",
     "//device/base/synchronization",
-    "//device/battery",
-    "//device/battery:mojo_bindings",
     "//device/bluetooth",
     "//device/bluetooth:mocks",
     "//device/bluetooth:mojo",
     "//device/bluetooth/uribeacon",
     "//device/gamepad",
     "//device/gamepad:test_helpers",
+    "//device/gamepad/public/cpp:shared_with_blink",
     "//device/gamepad/public/interfaces",
     "//device/gamepad/public/interfaces:gamepad_struct_traits_test",
     "//device/generic_sensor",
@@ -106,16 +102,10 @@ test("device_unittests") {
     "//net",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/WebKit/public:blink",
     "//third_party/WebKit/public:blink_headers",
     "//tools/usb_gadget",
     "//url",
   ]
-
-  if (is_linux && !is_chromeos && use_dbus) {
-    sources += [ "battery/battery_status_manager_linux_unittest.cc" ]
-    deps += [ "//dbus:test_support" ]
-  }
 
   if (!is_linux_without_udev) {
     sources +=
@@ -130,17 +120,25 @@ test("device_unittests") {
       "hid/hid_connection_unittest.cc",
       "hid/hid_device_filter_unittest.cc",
       "hid/hid_report_descriptor_unittest.cc",
+      "hid/hid_service_unittest.cc",
       "hid/input_service_linux_unittest.cc",
       "hid/test_report_descriptors.cc",
       "hid/test_report_descriptors.h",
       "serial/serial_io_handler_posix_unittest.cc",
+      "u2f/u2f_apdu_unittest.cc",
       "u2f/u2f_hid_device_unittest.cc",
+      "u2f/u2f_message_unittest.cc",
+      "u2f/u2f_register_unittest.cc",
+      "u2f/u2f_request_unittest.cc",
+      "u2f/u2f_sign_unittest.cc",
     ]
     deps += [
       "//device/hid",
       "//device/hid:mocks",
       "//device/serial",
       "//device/serial:test_support",
+      "//device/u2f",
+      "//device/u2f:mocks",
     ]
   }
 
@@ -170,7 +168,6 @@ test("device_unittests") {
     deps += [
       "//device/base",
       "//device/base:mocks",
-      "//device/u2f",
       "//device/usb",
       "//device/usb:test_support",
       "//device/usb/mojo",
@@ -186,7 +183,6 @@ test("device_unittests") {
   }
 
   if (is_android) {
-    sources -= [ "battery/battery_status_service_unittest.cc" ]
     deps += [
       ":bluetooth_test_java",
       ":bluetooth_test_jni_headers",
@@ -195,7 +191,6 @@ test("device_unittests") {
       "//device/sensors:java",
       "//device/usb:java",
     ]
-    deps -= [ "//device/battery" ]
   }
 
   if (is_chromeos) {
@@ -298,17 +293,17 @@ if (is_android) {
   junit_binary("device_junit_tests") {
     java_files = [
       "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadMappingsTest.java",
-      "generic_sensor/android/junit/src/org/chromium/device/sensors/PlatformSensorAndProviderTest.java",
-      "nfc/android/junit/src/org/chromium/device/nfc/NFCTest.java",
+      "geolocation/android/junit/src/org/chromium/device/geolocation/LocationProviderTest.java",
     ]
     deps = [
+      "$google_play_services_package:google_play_services_base_java",
+      "$google_play_services_package:google_play_services_basement_java",
+      "$google_play_services_package:google_play_services_location_java",
       "//base:base_java",
       "//base:base_java_test_support",
       "//device/gamepad:java",
-      "//device/generic_sensor:java",
-      "//device/generic_sensor/public/interfaces:interfaces_java",
-      "//device/nfc:mojo_bindings_java",
-      "//device/nfc/android:java",
+      "//device/geolocation:geolocation_java",
+      "//device/geolocation:geolocation_java_test_support",
       "//mojo/public/java:bindings_java",
       "//third_party/android_tools:android_support_annotations_java",
     ]

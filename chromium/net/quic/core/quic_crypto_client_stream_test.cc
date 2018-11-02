@@ -9,17 +9,16 @@
 #include "net/quic/core/crypto/aes_128_gcm_12_encrypter.h"
 #include "net/quic/core/crypto/quic_decrypter.h"
 #include "net/quic/core/crypto/quic_encrypter.h"
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_flags.h"
+#include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_stream_peer.h"
 #include "net/quic/test_tools/quic_stream_sequencer_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/quic/test_tools/simple_quic_framer.h"
-#include "testing/gmock/include/gmock/gmock.h"
-#include "testing/gtest/include/gtest/gtest.h"
 
 using std::string;
 
@@ -32,7 +31,7 @@ namespace {
 const char kServerHostname[] = "test.example.com";
 const uint16_t kServerPort = 443;
 
-class QuicCryptoClientStreamTest : public ::testing::Test {
+class QuicCryptoClientStreamTest : public QuicTest {
  public:
   QuicCryptoClientStreamTest()
       : server_id_(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED),
@@ -64,7 +63,9 @@ class QuicCryptoClientStreamTest : public ::testing::Test {
         framer.ConstructHandshakeMessage(message_, perspective));
   }
 
-  QuicCryptoClientStream* stream() { return session_->GetCryptoStream(); }
+  QuicCryptoClientStream* stream() {
+    return session_->GetMutableCryptoStream();
+  }
 
   MockQuicConnectionHelper server_helper_;
   MockQuicConnectionHelper client_helper_;
@@ -350,7 +351,7 @@ TEST_F(QuicCryptoClientStreamTest, NoTokenBindingInPrivacyMode) {
   EXPECT_EQ(0u, stream()->crypto_negotiated_params().token_binding_key_param);
 }
 
-class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
+class QuicCryptoClientStreamStatelessTest : public QuicTest {
  public:
   QuicCryptoClientStreamStatelessTest()
       : client_crypto_config_(crypto_test_utils::ProofVerifierForTesting()),
@@ -372,14 +373,14 @@ class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
   }
 
   QuicCryptoServerStream* server_stream() {
-    return server_session_->GetCryptoStream();
+    return server_session_->GetMutableCryptoStream();
   }
 
   void AdvanceHandshakeWithFakeServer() {
-    client_session_->GetCryptoStream()->CryptoConnect();
-    crypto_test_utils::AdvanceHandshake(client_connection_,
-                                        client_session_->GetCryptoStream(), 0,
-                                        server_connection_, server_stream(), 0);
+    client_session_->GetMutableCryptoStream()->CryptoConnect();
+    crypto_test_utils::AdvanceHandshake(
+        client_connection_, client_session_->GetMutableCryptoStream(), 0,
+        server_connection_, server_stream(), 0);
   }
 
   // Initializes the server_stream_ for stateless rejects.
@@ -398,8 +399,6 @@ class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
         &server_crypto_config_, options);
     FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
   }
-
-  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
 
   MockQuicConnectionHelper helper_;
   MockAlarmFactory alarm_factory_;
@@ -432,8 +431,8 @@ TEST_F(QuicCryptoClientStreamStatelessTest, StatelessReject) {
   EXPECT_EQ(1, server_stream()->NumHandshakeMessages());
   EXPECT_EQ(0, server_stream()->NumHandshakeMessagesWithServerNonces());
 
-  EXPECT_FALSE(client_session_->GetCryptoStream()->encryption_established());
-  EXPECT_FALSE(client_session_->GetCryptoStream()->handshake_confirmed());
+  EXPECT_FALSE(client_session_->IsEncryptionEstablished());
+  EXPECT_FALSE(client_session_->IsCryptoHandshakeConfirmed());
   // Even though the handshake was not complete, the cached client_state is
   // complete, and can be used for a subsequent successful handshake.
   EXPECT_TRUE(client_state->IsComplete(QuicWallTime::FromUNIXSeconds(0)));
@@ -445,7 +444,7 @@ TEST_F(QuicCryptoClientStreamStatelessTest, StatelessReject) {
       client_state->GetNextServerDesignatedConnectionId();
   QuicConnectionId expected_id =
       server_session_->connection()->random_generator()->RandUint64();
-  EXPECT_EQ(expected_id, server_designated_id);
+  EXPECT_EQ(GetPeerInMemoryConnectionId(expected_id), server_designated_id);
   EXPECT_FALSE(client_state->has_server_designated_connection_id());
 }
 

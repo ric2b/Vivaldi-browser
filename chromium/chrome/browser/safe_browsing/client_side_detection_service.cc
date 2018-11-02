@@ -23,9 +23,9 @@
 #include "chrome/common/safe_browsing/client_model.pb.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
 #include "components/safe_browsing/csd.pb.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -37,6 +37,7 @@
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
@@ -166,9 +167,10 @@ void ClientSideDetectionService::SendClientReportPhishingRequest(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&ClientSideDetectionService::StartClientReportPhishingRequest,
-                 weak_factory_.GetWeakPtr(), verdict, is_extended_reporting,
-                 callback));
+      base::BindOnce(
+          &ClientSideDetectionService::StartClientReportPhishingRequest,
+          weak_factory_.GetWeakPtr(), verdict, is_extended_reporting,
+          callback));
 }
 
 void ClientSideDetectionService::SendClientReportMalwareRequest(
@@ -177,8 +179,9 @@ void ClientSideDetectionService::SendClientReportMalwareRequest(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&ClientSideDetectionService::StartClientReportMalwareRequest,
-                 weak_factory_.GetWeakPtr(), verdict, callback));
+      base::BindOnce(
+          &ClientSideDetectionService::StartClientReportMalwareRequest,
+          weak_factory_.GetWeakPtr(), verdict, callback));
 }
 
 bool ClientSideDetectionService::IsPrivateIPAddress(
@@ -286,10 +289,44 @@ void ClientSideDetectionService::StartClientReportPhishingRequest(
     return;
   }
 
-  std::unique_ptr<net::URLFetcher> fetcher(
-      net::URLFetcher::Create(0 /* ID used for testing */,
-                              GetClientReportUrl(kClientReportPhishingUrl),
-                              net::URLFetcher::POST, this));
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation(
+          "safe_browsing_client_side_phishing_detector", R"(
+          semantics {
+            sender: "Safe Browsing Client-Side Phishing Detector"
+            description:
+              "If the client-side phishing detector determines that the "
+              "current page contents are similar to phishing pages, it will "
+              "send a request to Safe Browsing to ask for a final verdict. If "
+              "Safe Browsing agrees the page is dangerous, Chrome will show a "
+              "full-page interstitial warning."
+            trigger:
+              "Whenever the clinet-side detector machine learning model "
+              "computes a phishy-ness score above a threshold, after page-load."
+            data:
+              "Top-level page URL without CGI parameters, boolean and double "
+              "features extracted from DOM, such as the number of resources "
+              "loaded in the page, if certain likely phishing and social "
+              "engineering terms found on the page, etc."
+            destination: GOOGLE_OWNED_SERVICE
+          }
+          policy {
+            cookies_allowed: true
+            cookies_store: "Safe browsing cookie store"
+            setting:
+              "Users can enable or disable this feature by toggling 'Protect "
+              "you and your device from dangerous sites' in Chrome settings "
+              "under Privacy. This feature is enabled by default."
+            chrome_policy {
+              SafeBrowsingEnabled {
+                policy_options {mode: MANDATORY}
+                SafeBrowsingEnabled: false
+              }
+            }
+          })");
+  std::unique_ptr<net::URLFetcher> fetcher(net::URLFetcher::Create(
+      0 /* ID used for testing */, GetClientReportUrl(kClientReportPhishingUrl),
+      net::URLFetcher::POST, this, traffic_annotation));
   net::URLFetcher* fetcher_ptr = fetcher.get();
   data_use_measurement::DataUseUserData::AttachToFetcher(
       fetcher_ptr, data_use_measurement::DataUseUserData::SAFE_BROWSING);
@@ -331,10 +368,41 @@ void ClientSideDetectionService::StartClientReportMalwareRequest(
     return;
   }
 
-  std::unique_ptr<net::URLFetcher> fetcher(
-      net::URLFetcher::Create(0 /* ID used for testing */,
-                              GetClientReportUrl(kClientReportMalwareUrl),
-                              net::URLFetcher::POST, this));
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation(
+          "safe_browsing_client_side_malware_detector", R"(
+          semantics {
+            sender: "Safe Browsing Client-Side Malware Detector"
+            description:
+              "If the client-side malware detector determines that a requested "
+              "page's IP is in the blacklisted malware IPs, it will send a "
+              "request to Safe Browsing to ask for a final verdict. If Safe "
+              "Browsing agrees the page is dangerous, Chrome will show a "
+              "full-page interstitial warning."
+            trigger:
+              "Whenever the IP of the page is in malware blacklist."
+            data:
+              "Top-level page URL without CGI parameters, its non-https "
+              "referrer, URLs of resources that match IP blacklist."
+            destination: GOOGLE_OWNED_SERVICE
+          }
+          policy {
+            cookies_allowed: true
+            cookies_store: "Safe browsing cookie store"
+            setting:
+              "Users can enable or disable this feature by toggling 'Protect "
+              "you and your device from dangerous sites' in Chrome settings "
+              "under Privacy. This feature is enabled by default."
+            chrome_policy {
+              SafeBrowsingEnabled {
+                policy_options {mode: MANDATORY}
+                SafeBrowsingEnabled: false
+              }
+            }
+          })");
+  std::unique_ptr<net::URLFetcher> fetcher(net::URLFetcher::Create(
+      0 /* ID used for testing */, GetClientReportUrl(kClientReportMalwareUrl),
+      net::URLFetcher::POST, this, traffic_annotation));
   net::URLFetcher* fetcher_ptr = fetcher.get();
   data_use_measurement::DataUseUserData::AttachToFetcher(
       fetcher_ptr, data_use_measurement::DataUseUserData::SAFE_BROWSING);

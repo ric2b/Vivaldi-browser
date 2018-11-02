@@ -395,7 +395,7 @@ class VectorBufferBase {
 
   T* Buffer() { return buffer_; }
   const T* Buffer() const { return buffer_; }
-  size_t Capacity() const { return capacity_; }
+  size_t capacity() const { return capacity_; }
 
   void ClearUnusedSlots(T* from, T* to) {
     // If the vector backing is garbage-collected and needs tracing or
@@ -482,9 +482,9 @@ class VectorBuffer<T, 0, Allocator>
   }
 
   inline bool ShrinkBuffer(size_t new_capacity) {
-    DCHECK_LT(new_capacity, Capacity());
+    DCHECK_LT(new_capacity, capacity());
     size_t size_to_allocate = AllocationSize(new_capacity);
-    if (Allocator::ShrinkVectorBacking(buffer_, AllocationSize(Capacity()),
+    if (Allocator::ShrinkVectorBacking(buffer_, AllocationSize(capacity()),
                                        size_to_allocate)) {
       capacity_ = size_to_allocate / sizeof(T);
       return true;
@@ -514,7 +514,7 @@ class VectorBuffer<T, 0, Allocator>
   using Base::AllocationSize;
 
   using Base::Buffer;
-  using Base::Capacity;
+  using Base::capacity;
 
   using Base::ClearUnusedSlots;
   using Base::CheckUnusedSlots;
@@ -581,7 +581,7 @@ class VectorBuffer : protected VectorBufferBase<T, true, Allocator> {
   }
 
   inline bool ShrinkBuffer(size_t new_capacity) {
-    DCHECK_LT(new_capacity, Capacity());
+    DCHECK_LT(new_capacity, capacity());
     if (new_capacity <= inlineCapacity) {
       // We need to switch to inlineBuffer.  Vector::shrinkCapacity will
       // handle it.
@@ -590,7 +590,7 @@ class VectorBuffer : protected VectorBufferBase<T, true, Allocator> {
     DCHECK_NE(buffer_, InlineBuffer());
     size_t new_size = AllocationSize(new_capacity);
     if (!Allocator::ShrinkInlineVectorBacking(
-            buffer_, AllocationSize(Capacity()), new_size))
+            buffer_, AllocationSize(capacity()), new_size))
       return false;
     capacity_ = new_size / sizeof(T);
     return true;
@@ -602,7 +602,7 @@ class VectorBuffer : protected VectorBufferBase<T, true, Allocator> {
   }
 
   void AllocateBuffer(size_t new_capacity) {
-    // FIXME: This should DCHECK(!m_buffer) to catch misuse/leaks.
+    // FIXME: This should DCHECK(!buffer_) to catch misuse/leaks.
     if (new_capacity > inlineCapacity)
       Base::AllocateBuffer(new_capacity);
     else
@@ -633,9 +633,9 @@ class VectorBuffer : protected VectorBufferBase<T, true, Allocator> {
   // Further complication comes from the fact that VectorBuffer is also used as
   // the backing store of a Deque.  Deque allocates the objects like a ring
   // buffer, so there may be a "hole" (unallocated region) in the middle of the
-  // buffer. This function assumes elements in a range [m_buffer, m_buffer +
-  // m_size) are all allocated except for elements within |thisHole|. The same
-  // applies for |other.m_buffer| and |otherHole|.
+  // buffer. This function assumes elements in a range [buffer_, buffer_ +
+  // size_) are all allocated except for elements within |thisHole|. The same
+  // applies for |other.buffer_| and |otherHole|.
   void SwapVectorBuffer(VectorBuffer<T, inlineCapacity, Allocator>& other,
                         OffsetRange this_hole,
                         OffsetRange other_hole) {
@@ -800,7 +800,7 @@ class VectorBuffer : protected VectorBufferBase<T, true, Allocator> {
   }
 
   using Base::Buffer;
-  using Base::Capacity;
+  using Base::capacity;
 
   bool HasOutOfLineBuffer() const {
     return Buffer() && Buffer() != InlineBuffer();
@@ -872,7 +872,7 @@ class VectorBuffer : protected VectorBufferBase<T, true, Allocator> {
 //
 // Vectors may have an _inline buffer_. An inline buffer is a storage area
 // that is contained in the vector itself, along with other metadata like
-// m_size. It is used as a storage space when the vector's elements fit in
+// size_. It is used as a storage space when the vector's elements fit in
 // that space. If the inline buffer becomes full and further space is
 // necessary, an out-of-line buffer is allocated in the heap, and it will
 // take over the role of the inline buffer.
@@ -989,7 +989,7 @@ class Vector
   // capacity() is the maximum number of elements that the Vector can hold
   // without a reallocation. It can be zero.
   size_t size() const { return size_; }
-  size_t Capacity() const { return Base::Capacity(); }
+  size_t capacity() const { return Base::capacity(); }
   bool IsEmpty() const { return !size(); }
 
   // at() and operator[]: Obtain the reference of the element that is located
@@ -1000,11 +1000,11 @@ class Vector
   // instead of:
   //     (*pointerToVector)[1];
   T& at(size_t i) {
-    RELEASE_ASSERT(i < size());
+    CHECK_LT(i, size());
     return Base::Buffer()[i];
   }
   const T& at(size_t i) const {
-    RELEASE_ASSERT(i < size());
+    CHECK_LT(i, size());
     return Base::Buffer()[i];
   }
 
@@ -1013,13 +1013,13 @@ class Vector
 
   // Return a pointer to the front of the backing buffer. Those pointers get
   // invalidated on a reallocation.
-  T* Data() { return Base::Buffer(); }
-  const T* Data() const { return Base::Buffer(); }
+  T* data() { return Base::Buffer(); }
+  const T* data() const { return Base::Buffer(); }
 
   // Iterators and reverse iterators. They are invalidated on a reallocation.
-  iterator begin() { return Data(); }
+  iterator begin() { return data(); }
   iterator end() { return begin() + size_; }
-  const_iterator begin() const { return Data(); }
+  const_iterator begin() const { return data(); }
   const_iterator end() const { return begin() + size_; }
 
   reverse_iterator rbegin() { return reverse_iterator(end()); }
@@ -1065,7 +1065,7 @@ class Vector
   // will be default-initialized. A reallocation may happen in this case.
   void Shrink(size_t);
   void Grow(size_t);
-  void Resize(size_t);
+  void resize(size_t);
 
   // Increase the capacity of the vector to at least |newCapacity|. The
   // elements in the vector are not affected. This function does not shrink
@@ -1085,13 +1085,13 @@ class Vector
   // unused. If it shrinks, the new buffer contains roughly 25% of unused
   // space. This function may cause a reallocation.
   void ShrinkToReasonableCapacity() {
-    if (size() * 2 < Capacity())
+    if (size() * 2 < capacity())
       ShrinkCapacity(size() + size() / 4 + 1);
   }
 
   // Remove all the elements. This function actually releases the backing
   // buffer, thus any iterators will get invalidated (including begin()).
-  void Clear() { ShrinkCapacity(0); }
+  void clear() { ShrinkCapacity(0); }
 
   // Insertion to the back. All of these functions except uncheckedAppend() may
   // cause a reallocation.
@@ -1196,7 +1196,7 @@ class Vector
   void Fill(const T& val) { Fill(val, size()); }
 
   // Swap two vectors quickly.
-  void Swap(Vector& other) {
+  void swap(Vector& other) {
     Base::SwapVectorBuffer(other, OffsetRange(), OffsetRange());
   }
 
@@ -1218,7 +1218,7 @@ class Vector
       if (LIKELY(!Base::Buffer()))
         return;
     }
-    ANNOTATE_DELETE_BUFFER(begin(), Capacity(), size_);
+    ANNOTATE_DELETE_BUFFER(begin(), capacity(), size_);
     if (LIKELY(size_) &&
         !(Allocator::kIsGarbageCollected && this->HasOutOfLineBuffer())) {
       TypeOperations::Destruct(begin(), end());
@@ -1283,7 +1283,7 @@ inline Vector<T, inlineCapacity, Allocator>::Vector() {
                 "Cannot put raw pointers to garbage-collected classes into "
                 "an off-heap Vector.  Use HeapVector<Member<T>> instead.");
 
-  ANNOTATE_NEW_BUFFER(begin(), Capacity(), 0);
+  ANNOTATE_NEW_BUFFER(begin(), capacity(), 0);
   size_ = 0;
 }
 
@@ -1301,7 +1301,7 @@ inline Vector<T, inlineCapacity, Allocator>::Vector(size_t size) : Base(size) {
                 "Cannot put raw pointers to garbage-collected classes into "
                 "an off-heap Vector.  Use HeapVector<Member<T>> instead.");
 
-  ANNOTATE_NEW_BUFFER(begin(), Capacity(), size);
+  ANNOTATE_NEW_BUFFER(begin(), capacity(), size);
   size_ = size;
   TypeOperations::Initialize(begin(), end());
 }
@@ -1325,15 +1325,15 @@ inline Vector<T, inlineCapacity, Allocator>::Vector(size_t size, const T& val)
   //               "Cannot put raw pointers to garbage-collected classes into "
   //               "an off-heap Vector.  Use HeapVector<Member<T>> instead.");
 
-  ANNOTATE_NEW_BUFFER(begin(), Capacity(), size);
+  ANNOTATE_NEW_BUFFER(begin(), capacity(), size);
   size_ = size;
   TypeOperations::UninitializedFill(begin(), end(), val);
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
 Vector<T, inlineCapacity, Allocator>::Vector(const Vector& other)
-    : Base(other.Capacity()) {
-  ANNOTATE_NEW_BUFFER(begin(), Capacity(), other.size());
+    : Base(other.capacity()) {
+  ANNOTATE_NEW_BUFFER(begin(), capacity(), other.size());
   size_ = other.size();
   TypeOperations::UninitializedCopy(other.begin(), other.end(), begin());
 }
@@ -1342,8 +1342,8 @@ template <typename T, size_t inlineCapacity, typename Allocator>
 template <size_t otherCapacity>
 Vector<T, inlineCapacity, Allocator>::Vector(
     const Vector<T, otherCapacity, Allocator>& other)
-    : Base(other.Capacity()) {
-  ANNOTATE_NEW_BUFFER(begin(), Capacity(), other.size());
+    : Base(other.capacity()) {
+  ANNOTATE_NEW_BUFFER(begin(), capacity(), other.size());
   size_ = other.size();
   TypeOperations::UninitializedCopy(other.begin(), other.end(), begin());
 }
@@ -1356,13 +1356,13 @@ operator=(const Vector<T, inlineCapacity, Allocator>& other) {
 
   if (size() > other.size()) {
     Shrink(other.size());
-  } else if (other.size() > Capacity()) {
-    Clear();
+  } else if (other.size() > capacity()) {
+    clear();
     ReserveCapacity(other.size());
     DCHECK(begin());
   }
 
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, other.size());
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, other.size());
   std::copy(other.begin(), other.begin() + size(), begin());
   TypeOperations::UninitializedCopy(other.begin() + size(), other.end(), end());
   size_ = other.size();
@@ -1385,13 +1385,13 @@ operator=(const Vector<T, otherCapacity, Allocator>& other) {
 
   if (size() > other.size()) {
     Shrink(other.size());
-  } else if (other.size() > Capacity()) {
-    Clear();
+  } else if (other.size() > capacity()) {
+    clear();
     ReserveCapacity(other.size());
     DCHECK(begin());
   }
 
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, other.size());
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, other.size());
   std::copy(other.begin(), other.begin() + size(), begin());
   TypeOperations::UninitializedCopy(other.begin() + size(), other.end(), end());
   size_ = other.size();
@@ -1405,20 +1405,20 @@ Vector<T, inlineCapacity, Allocator>::Vector(
   size_ = 0;
   // It's a little weird to implement a move constructor using swap but this
   // way we don't have to add a move constructor to VectorBuffer.
-  Swap(other);
+  swap(other);
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
 Vector<T, inlineCapacity, Allocator>& Vector<T, inlineCapacity, Allocator>::
 operator=(Vector<T, inlineCapacity, Allocator>&& other) {
-  Swap(other);
+  swap(other);
   return *this;
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
 Vector<T, inlineCapacity, Allocator>::Vector(std::initializer_list<T> elements)
     : Base(elements.size()) {
-  ANNOTATE_NEW_BUFFER(begin(), Capacity(), elements.size());
+  ANNOTATE_NEW_BUFFER(begin(), capacity(), elements.size());
   size_ = elements.size();
   TypeOperations::UninitializedCopy(elements.begin(), elements.end(), begin());
 }
@@ -1428,13 +1428,13 @@ Vector<T, inlineCapacity, Allocator>& Vector<T, inlineCapacity, Allocator>::
 operator=(std::initializer_list<T> elements) {
   if (size() > elements.size()) {
     Shrink(elements.size());
-  } else if (elements.size() > Capacity()) {
-    Clear();
+  } else if (elements.size() > capacity()) {
+    clear();
     ReserveCapacity(elements.size());
     DCHECK(begin());
   }
 
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, elements.size());
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, elements.size());
   std::copy(elements.begin(), elements.begin() + size_, begin());
   TypeOperations::UninitializedCopy(elements.begin() + size_, elements.end(),
                                     end());
@@ -1478,13 +1478,13 @@ template <typename T, size_t inlineCapacity, typename Allocator>
 void Vector<T, inlineCapacity, Allocator>::Fill(const T& val, size_t new_size) {
   if (size() > new_size) {
     Shrink(new_size);
-  } else if (new_size > Capacity()) {
-    Clear();
+  } else if (new_size > capacity()) {
+    clear();
     ReserveCapacity(new_size);
     DCHECK(begin());
   }
 
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, new_size);
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, new_size);
   std::fill(begin(), end(), val);
   TypeOperations::UninitializedFill(end(), begin() + new_size, val);
   size_ = new_size;
@@ -1493,7 +1493,7 @@ void Vector<T, inlineCapacity, Allocator>::Fill(const T& val, size_t new_size) {
 template <typename T, size_t inlineCapacity, typename Allocator>
 void Vector<T, inlineCapacity, Allocator>::ExpandCapacity(
     size_t new_min_capacity) {
-  size_t old_capacity = Capacity();
+  size_t old_capacity = capacity();
   size_t expanded_capacity = old_capacity;
   // We use a more aggressive expansion strategy for Vectors with inline
   // storage.  This is because they are more likely to be on the stack, so the
@@ -1503,7 +1503,7 @@ void Vector<T, inlineCapacity, Allocator>::ExpandCapacity(
   if (INLINE_CAPACITY) {
     expanded_capacity *= 2;
     // Check for integer overflow, which could happen in the 32-bit build.
-    RELEASE_ASSERT(expanded_capacity > old_capacity);
+    CHECK_GT(expanded_capacity, old_capacity);
   } else {
     // This cannot integer overflow.
     // On 64-bit, the "expanded" integer is 32-bit, and any encroachment
@@ -1540,15 +1540,15 @@ inline U* Vector<T, inlineCapacity, Allocator>::ExpandCapacity(
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
-inline void Vector<T, inlineCapacity, Allocator>::Resize(size_t size) {
+inline void Vector<T, inlineCapacity, Allocator>::resize(size_t size) {
   if (size <= size_) {
     TypeOperations::Destruct(begin() + size, end());
     ClearUnusedSlots(begin() + size, end());
-    ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, size);
+    ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, size);
   } else {
-    if (size > Capacity())
+    if (size > capacity())
       ExpandCapacity(size);
-    ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, size);
+    ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, size);
     TypeOperations::Initialize(end(), begin() + size);
   }
 
@@ -1560,16 +1560,16 @@ void Vector<T, inlineCapacity, Allocator>::Shrink(size_t size) {
   DCHECK_LE(size, size_);
   TypeOperations::Destruct(begin() + size, end());
   ClearUnusedSlots(begin() + size, end());
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, size);
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, size);
   size_ = size;
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
 void Vector<T, inlineCapacity, Allocator>::Grow(size_t size) {
   DCHECK_GE(size, size_);
-  if (size > Capacity())
+  if (size > capacity())
     ExpandCapacity(size);
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, size);
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, size);
   TypeOperations::Initialize(end(), begin() + size);
   size_ = size;
 }
@@ -1577,7 +1577,7 @@ void Vector<T, inlineCapacity, Allocator>::Grow(size_t size) {
 template <typename T, size_t inlineCapacity, typename Allocator>
 void Vector<T, inlineCapacity, Allocator>::ReserveCapacity(
     size_t new_capacity) {
-  if (UNLIKELY(new_capacity <= Capacity()))
+  if (UNLIKELY(new_capacity <= capacity()))
     return;
   T* old_buffer = begin();
   if (!old_buffer) {
@@ -1585,13 +1585,13 @@ void Vector<T, inlineCapacity, Allocator>::ReserveCapacity(
     return;
   }
 #ifdef ANNOTATE_CONTIGUOUS_CONTAINER
-  size_t old_capacity = Capacity();
+  size_t old_capacity = capacity();
 #endif
   // The Allocator::isGarbageCollected check is not needed.  The check is just
   // a static hint for a compiler to indicate that Base::expandBuffer returns
   // false if Allocator is a PartitionAllocator.
   if (Allocator::kIsGarbageCollected && Base::ExpandBuffer(new_capacity)) {
-    ANNOTATE_CHANGE_CAPACITY(begin(), old_capacity, size_, Capacity());
+    ANNOTATE_CHANGE_CAPACITY(begin(), old_capacity, size_, capacity());
     return;
   }
   // Reallocating a backing buffer may resurrect a dead object.
@@ -1599,7 +1599,7 @@ void Vector<T, inlineCapacity, Allocator>::ReserveCapacity(
 
   T* old_end = end();
   Base::AllocateExpandedBuffer(new_capacity);
-  ANNOTATE_NEW_BUFFER(begin(), Capacity(), size_);
+  ANNOTATE_NEW_BUFFER(begin(), capacity(), size_);
   TypeOperations::Move(old_buffer, old_end, begin());
   ClearUnusedSlots(old_buffer, old_end);
   ANNOTATE_DELETE_BUFFER(old_buffer, old_capacity, size_);
@@ -1610,39 +1610,39 @@ template <typename T, size_t inlineCapacity, typename Allocator>
 inline void Vector<T, inlineCapacity, Allocator>::ReserveInitialCapacity(
     size_t initial_capacity) {
   DCHECK(!size_);
-  DCHECK(Capacity() == INLINE_CAPACITY);
+  DCHECK(capacity() == INLINE_CAPACITY);
   if (initial_capacity > INLINE_CAPACITY) {
-    ANNOTATE_DELETE_BUFFER(begin(), Capacity(), size_);
+    ANNOTATE_DELETE_BUFFER(begin(), capacity(), size_);
     Base::AllocateBuffer(initial_capacity);
-    ANNOTATE_NEW_BUFFER(begin(), Capacity(), size_);
+    ANNOTATE_NEW_BUFFER(begin(), capacity(), size_);
   }
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
 void Vector<T, inlineCapacity, Allocator>::ShrinkCapacity(size_t new_capacity) {
-  if (new_capacity >= Capacity())
+  if (new_capacity >= capacity())
     return;
 
   if (new_capacity < size())
     Shrink(new_capacity);
 
-  if (Allocator::IsObjectResurrectionForbidden())
-    return;
-
   T* old_buffer = begin();
 #ifdef ANNOTATE_CONTIGUOUS_CONTAINER
-  size_t old_capacity = Capacity();
+  size_t old_capacity = capacity();
 #endif
   if (new_capacity > 0) {
     if (Base::ShrinkBuffer(new_capacity)) {
-      ANNOTATE_CHANGE_CAPACITY(begin(), old_capacity, size_, Capacity());
+      ANNOTATE_CHANGE_CAPACITY(begin(), old_capacity, size_, capacity());
       return;
     }
+
+    if (Allocator::IsObjectResurrectionForbidden())
+      return;
 
     T* old_end = end();
     Base::AllocateBuffer(new_capacity);
     if (begin() != old_buffer) {
-      ANNOTATE_NEW_BUFFER(begin(), Capacity(), size_);
+      ANNOTATE_NEW_BUFFER(begin(), capacity(), size_);
       TypeOperations::Move(old_buffer, old_end, begin());
       ClearUnusedSlots(old_buffer, old_end);
       ANNOTATE_DELETE_BUFFER(old_buffer, old_capacity, size_);
@@ -1651,7 +1651,7 @@ void Vector<T, inlineCapacity, Allocator>::ShrinkCapacity(size_t new_capacity) {
     Base::ResetBufferPointer();
 #ifdef ANNOTATE_CONTIGUOUS_CONTAINER
     if (old_buffer != begin()) {
-      ANNOTATE_NEW_BUFFER(begin(), Capacity(), size_);
+      ANNOTATE_NEW_BUFFER(begin(), capacity(), size_);
       ANNOTATE_DELETE_BUFFER(old_buffer, old_capacity, size_);
     }
 #endif
@@ -1668,8 +1668,8 @@ template <typename T, size_t inlineCapacity, typename Allocator>
 template <typename U>
 ALWAYS_INLINE void Vector<T, inlineCapacity, Allocator>::push_back(U&& val) {
   DCHECK(Allocator::IsAllocationAllowed());
-  if (LIKELY(size() != Capacity())) {
-    ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, size_ + 1);
+  if (LIKELY(size() != capacity())) {
+    ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, size_ + 1);
     new (NotNull, end()) T(std::forward<U>(val));
     ++size_;
     return;
@@ -1683,10 +1683,10 @@ template <typename... Args>
 ALWAYS_INLINE T& Vector<T, inlineCapacity, Allocator>::emplace_back(
     Args&&... args) {
   DCHECK(Allocator::IsAllocationAllowed());
-  if (UNLIKELY(size() == Capacity()))
+  if (UNLIKELY(size() == capacity()))
     ExpandCapacity(size() + 1);
 
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, size_ + 1);
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, size_ + 1);
   T* t = new (NotNull, end()) T(std::forward<Args>(args)...);
   ++size_;
   return *t;
@@ -1698,13 +1698,13 @@ void Vector<T, inlineCapacity, Allocator>::Append(const U* data,
                                                   size_t data_size) {
   DCHECK(Allocator::IsAllocationAllowed());
   size_t new_size = size_ + data_size;
-  if (new_size > Capacity()) {
+  if (new_size > capacity()) {
     data = ExpandCapacity(new_size, data);
     DCHECK(begin());
   }
-  RELEASE_ASSERT(new_size >= size_);
+  CHECK_GE(new_size, size_);
   T* dest = end();
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, new_size);
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, new_size);
   VectorCopier<VectorTraits<T>::kCanCopyWithMemcpy, T>::UninitializedCopy(
       data, &data[data_size], dest);
   size_ = new_size;
@@ -1714,13 +1714,13 @@ template <typename T, size_t inlineCapacity, typename Allocator>
 template <typename U>
 NEVER_INLINE void Vector<T, inlineCapacity, Allocator>::AppendSlowCase(
     U&& val) {
-  DCHECK_EQ(size(), Capacity());
+  DCHECK_EQ(size(), capacity());
 
   typename std::remove_reference<U>::type* ptr = &val;
   ptr = ExpandCapacity(size() + 1, ptr);
   DCHECK(begin());
 
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, size_ + 1);
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, size_ + 1);
   new (NotNull, end()) T(std::forward<U>(*ptr));
   ++size_;
 }
@@ -1750,8 +1750,7 @@ ALWAYS_INLINE void Vector<T, inlineCapacity, Allocator>::UncheckedAppend(
   // Vectors in ASAN builds don't have inlineCapacity.
   push_back(std::forward<U>(val));
 #else
-  DCHECK_LT(size(), Capacity());
-  ANNOTATE_CHANGE_SIZE(begin(), capacity(), m_size, m_size + 1);
+  DCHECK_LT(size(), capacity());
   new (NotNull, end()) T(std::forward<U>(val));
   ++size_;
 #endif
@@ -1762,13 +1761,13 @@ template <typename U>
 inline void Vector<T, inlineCapacity, Allocator>::insert(size_t position,
                                                          U&& val) {
   DCHECK(Allocator::IsAllocationAllowed());
-  RELEASE_ASSERT(position <= size());
+  CHECK_LE(position, size());
   typename std::remove_reference<U>::type* data = &val;
-  if (size() == Capacity()) {
+  if (size() == capacity()) {
     data = ExpandCapacity(size() + 1, data);
     DCHECK(begin());
   }
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, size_ + 1);
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, size_ + 1);
   T* spot = begin() + position;
   TypeOperations::MoveOverlapping(spot, end(), spot + 1);
   new (NotNull, spot) T(std::forward<U>(*data));
@@ -1781,14 +1780,14 @@ void Vector<T, inlineCapacity, Allocator>::insert(size_t position,
                                                   const U* data,
                                                   size_t data_size) {
   DCHECK(Allocator::IsAllocationAllowed());
-  RELEASE_ASSERT(position <= size());
+  CHECK_LE(position, size());
   size_t new_size = size_ + data_size;
-  if (new_size > Capacity()) {
+  if (new_size > capacity()) {
     data = ExpandCapacity(new_size, data);
     DCHECK(begin());
   }
-  RELEASE_ASSERT(new_size >= size_);
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, new_size);
+  CHECK_GE(new_size, size_);
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, new_size);
   T* spot = begin() + position;
   TypeOperations::MoveOverlapping(spot, end(), spot + data_size);
   VectorCopier<VectorTraits<T>::kCanCopyWithMemcpy, T>::UninitializedCopy(
@@ -1826,12 +1825,12 @@ inline void Vector<T, inlineCapacity, Allocator>::PrependVector(
 
 template <typename T, size_t inlineCapacity, typename Allocator>
 inline void Vector<T, inlineCapacity, Allocator>::erase(size_t position) {
-  RELEASE_ASSERT(position < size());
+  CHECK_LT(position, size());
   T* spot = begin() + position;
   spot->~T();
   TypeOperations::MoveOverlapping(spot + 1, end(), spot);
   ClearUnusedSlots(end() - 1, end());
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, size_ - 1);
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, size_ - 1);
   --size_;
 }
 
@@ -1841,13 +1840,13 @@ inline void Vector<T, inlineCapacity, Allocator>::erase(size_t position,
   SECURITY_DCHECK(position <= size());
   if (!length)
     return;
-  RELEASE_ASSERT(position + length <= size());
+  CHECK_LE(position + length, size());
   T* begin_spot = begin() + position;
   T* end_spot = begin_spot + length;
   TypeOperations::Destruct(begin_spot, end_spot);
   TypeOperations::MoveOverlapping(end_spot, end(), begin_spot);
   ClearUnusedSlots(end() - length, end());
-  ANNOTATE_CHANGE_SIZE(begin(), Capacity(), size_, size_ - length);
+  ANNOTATE_CHANGE_SIZE(begin(), capacity(), size_, size_ - length);
   size_ -= length;
 }
 
@@ -1873,7 +1872,7 @@ bool operator==(const Vector<T, inlineCapacityA, Allocator>& a,
     return false;
   if (a.IsEmpty())
     return true;
-  return VectorTypeOperations<T>::Compare(a.Data(), b.Data(), a.size());
+  return VectorTypeOperations<T>::Compare(a.data(), b.data(), a.size());
 }
 
 template <typename T,
@@ -1911,7 +1910,7 @@ void Vector<T, inlineCapacity, Allocator>::Trace(VisitorDispatcher visitor) {
          buffer_entry++)
       Allocator::template Trace<VisitorDispatcher, T, VectorTraits<T>>(
           visitor, *const_cast<T*>(buffer_entry));
-    CheckUnusedSlots(Buffer() + size(), Buffer() + Capacity());
+    CheckUnusedSlots(Buffer() + size(), Buffer() + capacity());
   }
 }
 

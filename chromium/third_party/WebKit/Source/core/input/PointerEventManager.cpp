@@ -18,8 +18,8 @@
 #include "core/layout/HitTestCanvasResult.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
+#include "platform/wtf/AutoReset.h"
 #include "public/platform/WebTouchEvent.h"
-#include "wtf/AutoReset.h"
 
 namespace blink {
 
@@ -29,19 +29,18 @@ size_t ToPointerTypeIndex(WebPointerProperties::PointerType t) {
   return static_cast<size_t>(t);
 }
 
-bool IsInDocument(EventTarget* n) {
-  return n && n->ToNode() && n->ToNode()->isConnected();
-}
-
-Vector<WebTouchPoint> GetCoalescedPoints(
+Vector<std::pair<WebTouchPoint, TimeTicks>> GetCoalescedPoints(
     const Vector<WebTouchEvent>& coalesced_events,
     int id) {
-  Vector<WebTouchPoint> related_points;
+  Vector<std::pair<WebTouchPoint, TimeTicks>> related_points;
   for (const auto& touch_event : coalesced_events) {
     for (unsigned i = 0; i < touch_event.touches_length; ++i) {
       if (touch_event.touches[i].id == id &&
-          touch_event.touches[i].state != WebTouchPoint::kStateStationary)
-        related_points.push_back(touch_event.TouchPointInRootFrame(i));
+          touch_event.touches[i].state != WebTouchPoint::kStateStationary) {
+        related_points.push_back(std::pair<WebTouchPoint, TimeTicks>(
+            touch_event.TouchPointInRootFrame(i),
+            TimeTicks::FromSeconds(touch_event.TimeStampSeconds())));
+      }
     }
   }
   return related_points;
@@ -63,10 +62,10 @@ void PointerEventManager::Clear() {
   touch_event_manager_->Clear();
   in_canceled_state_for_pointer_type_touch_ = false;
   pointer_event_factory_.Clear();
-  touch_ids_for_canceled_pointerdowns_.Clear();
-  node_under_pointer_.Clear();
-  pointer_capture_target_.Clear();
-  pending_pointer_capture_target_.Clear();
+  touch_ids_for_canceled_pointerdowns_.clear();
+  node_under_pointer_.clear();
+  pointer_capture_target_.clear();
+  pending_pointer_capture_target_.clear();
   dispatching_pointer_id_ = 0;
 }
 
@@ -236,7 +235,7 @@ void PointerEventManager::SetNodeUnderPointer(PointerEvent* pointer_event,
   }
 }
 
-void PointerEventManager::BlockTouchPointers() {
+void PointerEventManager::BlockTouchPointers(TimeTicks platform_time_stamp) {
   if (in_canceled_state_for_pointer_type_touch_)
     return;
   in_canceled_state_for_pointer_type_touch_ = true;
@@ -247,7 +246,8 @@ void PointerEventManager::BlockTouchPointers() {
   for (int pointer_id : touch_pointer_ids) {
     PointerEvent* pointer_event =
         pointer_event_factory_.CreatePointerCancelEvent(
-            pointer_id, WebPointerProperties::PointerType::kTouch);
+            pointer_id, WebPointerProperties::PointerType::kTouch,
+            platform_time_stamp);
 
     DCHECK(node_under_pointer_.Contains(pointer_id));
     EventTarget* target = node_under_pointer_.at(pointer_id).target;
@@ -280,7 +280,7 @@ WebInputEventResult PointerEventManager::HandleTouchEvents(
     const WebTouchEvent& event,
     const Vector<WebTouchEvent>& coalesced_events) {
   if (event.GetType() == WebInputEvent::kTouchScrollStarted) {
-    BlockTouchPointers();
+    BlockTouchPointers(TimeTicks::FromSeconds(event.TimeStampSeconds()));
     return WebInputEventResult::kHandledSystem;
   }
 
@@ -318,7 +318,8 @@ WebInputEventResult PointerEventManager::HandleTouchEvents(
 
   DispatchTouchPointerEvents(event, coalesced_events, touch_infos);
 
-  return touch_event_manager_->HandleTouchEvent(event, touch_infos);
+  return touch_event_manager_->HandleTouchEvent(event, coalesced_events,
+                                                touch_infos);
 }
 
 void PointerEventManager::ComputeTouchTargets(
@@ -392,6 +393,7 @@ void PointerEventManager::DispatchTouchPointerEvents(
       PointerEvent* pointer_event = pointer_event_factory_.Create(
           touch_point, GetCoalescedPoints(coalesced_events, touch_point.id),
           static_cast<WebInputEvent::Modifiers>(event.GetModifiers()),
+          TimeTicks::FromSeconds(event.TimeStampSeconds()),
           touch_info.target_frame,
           touch_info.touch_node
               ? touch_info.touch_node->GetDocument().domWindow()
@@ -491,10 +493,11 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
     EventTarget* mouse_target = effective_target;
     // Event path could be null if pointer event is not dispatched and
     // that happens for example when pointer event feature is not enabled.
-    if (!IsInDocument(mouse_target) && pointer_event->HasEventPath()) {
+    if (!EventHandlingUtil::IsInDocument(mouse_target) &&
+        pointer_event->HasEventPath()) {
       for (const auto& context :
            pointer_event->GetEventPath().NodeEventContexts()) {
-        if (IsInDocument(context.GetNode())) {
+        if (EventHandlingUtil::IsInDocument(context.GetNode())) {
           mouse_target = context.GetNode();
           break;
         }
@@ -518,6 +521,10 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
     }
   }
 
+  if (mouse_event.GetType() == WebInputEvent::kMouseLeave &&
+      mouse_event.pointer_type == WebPointerProperties::PointerType::kPen) {
+    pointer_event_factory_.Remove(pointer_event->pointerId());
+  }
   return result;
 }
 
@@ -527,10 +534,10 @@ bool PointerEventManager::GetPointerCaptureState(
     EventTarget** pending_pointer_capture_target) {
   PointerCapturingMap::const_iterator it;
 
-  it = pointer_capture_target_.Find(pointer_id);
+  it = pointer_capture_target_.find(pointer_id);
   EventTarget* pointer_capture_target_temp =
       (it != pointer_capture_target_.end()) ? it->value : nullptr;
-  it = pending_pointer_capture_target_.Find(pointer_id);
+  it = pending_pointer_capture_target_.find(pointer_id);
   EventTarget* pending_pointercapture_target_temp =
       (it != pending_pointer_capture_target_.end()) ? it->value : nullptr;
 
@@ -551,7 +558,7 @@ EventTarget* PointerEventManager::ProcessCaptureAndPositionOfPointerEvent(
   ProcessPendingPointerCapture(pointer_event);
 
   PointerCapturingMap::const_iterator it =
-      pointer_capture_target_.Find(pointer_event->pointerId());
+      pointer_capture_target_.find(pointer_event->pointerId());
   if (EventTarget* pointercapture_target =
           (it != pointer_capture_target_.end()) ? it->value : nullptr)
     hit_test_target = pointercapture_target;

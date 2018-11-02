@@ -137,22 +137,15 @@ HeadlessBrowserTest::HeadlessBrowserTest() {
 
 HeadlessBrowserTest::~HeadlessBrowserTest() {}
 
-void HeadlessBrowserTest::SetUpOnMainThread() {}
-
-void HeadlessBrowserTest::TearDownOnMainThread() {
-  browser()->Shutdown();
-}
-
-void HeadlessBrowserTest::RunTestOnMainThreadLoop() {
+void HeadlessBrowserTest::PreRunTestOnMainThread() {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
 
   // Pump startup related events.
   base::RunLoop().RunUntilIdle();
+}
 
-  SetUpOnMainThread();
-  RunTestOnMainThread();
-  TearDownOnMainThread();
-
+void HeadlessBrowserTest::PostRunTestOnMainThread() {
+  browser()->Shutdown();
   for (content::RenderProcessHost::iterator i(
            content::RenderProcessHost::AllHostsIterator());
        !i.IsAtEnd(); i.Advance()) {
@@ -202,6 +195,7 @@ HeadlessAsyncDevTooledBrowserTest::HeadlessAsyncDevTooledBrowserTest()
     : browser_context_(nullptr),
       web_contents_(nullptr),
       devtools_client_(HeadlessDevToolsClient::Create()),
+      browser_devtools_client_(HeadlessDevToolsClient::Create()),
       render_process_exited_(false) {}
 
 HeadlessAsyncDevTooledBrowserTest::~HeadlessAsyncDevTooledBrowserTest() {}
@@ -218,25 +212,26 @@ void HeadlessAsyncDevTooledBrowserTest::RenderProcessExited(
   if (status == base::TERMINATION_STATUS_NORMAL_TERMINATION)
     return;
 
-  FAIL() << "Abnormal renderer termination";
   FinishAsynchronousTest();
   render_process_exited_ = true;
+  FAIL() << "Abnormal renderer termination";
 }
 
 void HeadlessAsyncDevTooledBrowserTest::RunTest() {
   HeadlessBrowserContext::Builder builder =
       browser()->CreateBrowserContextBuilder();
   builder.SetProtocolHandlers(GetProtocolHandlers());
-  if (GetCreateTabSocket()) {
+  if (GetTabSocketType() != HeadlessWebContents::Builder::TabSocketType::NONE) {
     builder.EnableUnsafeNetworkAccessWithMojoBindings(true);
     builder.AddTabSocketMojoBindings();
   }
   browser_context_ = builder.Build();
 
   browser()->SetDefaultBrowserContext(browser_context_);
+  browser()->GetDevToolsTarget()->AttachClient(browser_devtools_client_.get());
 
   web_contents_ = browser_context_->CreateWebContentsBuilder()
-                      .CreateTabSocket(GetCreateTabSocket())
+                      .SetTabSocketType(GetTabSocketType())
                       .Build();
   web_contents_->AddObserver(this);
 
@@ -247,6 +242,7 @@ void HeadlessAsyncDevTooledBrowserTest::RunTest() {
   web_contents_->RemoveObserver(this);
   web_contents_->Close();
   web_contents_ = nullptr;
+  browser()->GetDevToolsTarget()->DetachClient(browser_devtools_client_.get());
   browser_context_->Close();
   browser_context_ = nullptr;
 }
@@ -255,7 +251,13 @@ ProtocolHandlerMap HeadlessAsyncDevTooledBrowserTest::GetProtocolHandlers() {
   return ProtocolHandlerMap();
 }
 
-bool HeadlessAsyncDevTooledBrowserTest::GetCreateTabSocket() {
+HeadlessWebContents::Builder::TabSocketType
+HeadlessAsyncDevTooledBrowserTest::GetTabSocketType() {
+  return HeadlessWebContents::Builder::TabSocketType::NONE;
+}
+
+bool HeadlessAsyncDevTooledBrowserTest::
+    GetCreateTabSocketOnlyForIsolatedWorld() {
   return false;
 }
 

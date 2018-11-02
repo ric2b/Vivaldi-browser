@@ -28,6 +28,7 @@
 
 #include "modules/accessibility/AXListBoxOption.h"
 
+#include "core/dom/AccessibleNode.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/layout/LayoutObject.h"
@@ -64,7 +65,7 @@ AccessibilityRole AXListBoxOption::DetermineAccessibilityRole() {
 }
 
 bool AXListBoxOption::IsParentPresentationalRole() const {
-  AXObject* parent = ParentObject();
+  AXObjectImpl* parent = ParentObject();
   if (!parent)
     return false;
 
@@ -82,7 +83,7 @@ bool AXListBoxOption::IsEnabled() const {
   if (!GetNode())
     return false;
 
-  if (EqualIgnoringASCIICase(GetAttribute(aria_disabledAttr), "true"))
+  if (AOMPropertyOrARIAAttributeIsTrue(AOMBooleanProperty::kDisabled))
     return false;
 
   if (ToElement(GetNode())->hasAttribute(disabledAttr))
@@ -115,6 +116,10 @@ bool AXListBoxOption::ComputeAccessibilityIsIgnored(
   return false;
 }
 
+bool AXListBoxOption::CanSetFocusAttribute() const {
+  return CanSetSelectedAttribute();
+}
+
 bool AXListBoxOption::CanSetSelectedAttribute() const {
   if (!isHTMLOptionElement(GetNode()))
     return false;
@@ -123,10 +128,10 @@ bool AXListBoxOption::CanSetSelectedAttribute() const {
     return false;
 
   HTMLSelectElement* select_element = ListBoxOptionParentNode();
-  if (select_element && select_element->IsDisabledFormControl())
+  if (!select_element || select_element->IsDisabledFormControl())
     return false;
 
-  return true;
+  return IsEnabled();
 }
 
 String AXListBoxOption::TextAlternative(bool recursive,

@@ -84,7 +84,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/proximity_auth/switches.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -166,7 +166,7 @@ void AppendExtensionData(const std::string& key,
   std::unique_ptr<base::DictionaryValue> details(new base::DictionaryValue);
   details->SetString("id", extension ? extension->id() : std::string());
   details->SetString("name", extension ? extension->name() : std::string());
-  dict->Set(key, details.release());
+  dict->Set(key, std::move(details));
 }
 
 #if !defined(OS_CHROMEOS)
@@ -513,6 +513,8 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_FINGER_TOO_SLOW},
     {"configureFingerprintTooFast",
      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_FINGER_TOO_FAST},
+    {"configureFingerprintImmobile",
+     IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_FINGER_IMMOBILE},
     {"configureFingerprintCancelButton",
      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_CANCEL_BUTTON},
     {"configureFingerprintDoneButton",
@@ -537,6 +539,8 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_EDIT_FINGERPRINTS},
     {"lockScreenEditFingerprintsDescription",
      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_EDIT_FINGERPRINTS_DESCRIPTION},
+    {"lockScreenSetupFingerprintButton",
+     IDS_SETTINGS_PEOPLE_LOCK_SCREEN_FINGERPRINT_SETUP_BUTTON},
     {"lockScreenNumberFingerprints",
      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NUM_FINGERPRINTS},
     {"lockScreenFingerprintEnable",
@@ -548,6 +552,7 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
     {"lockScreenFingerprintWarning",
      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_FINGERPRINT_LESS_SECURE},
     {"lockScreenNone", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NONE},
+    {"lockScreenOptions", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_OPTIONS},
     {"lockScreenPasswordOnly", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PASSWORD_ONLY},
     {"lockScreenPinOrPassword",
      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_OR_PASSWORD},
@@ -662,7 +667,7 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
   values->SetString("username", username);
 #endif
   // Pass along sync status early so it will be available during page init.
-  values->Set("syncData", GetSyncStateDictionary().release());
+  values->Set("syncData", GetSyncStateDictionary());
 
   values->SetString("privacyLearnMoreURL", chrome::kPrivacyLearnMoreURL);
 
@@ -675,7 +680,7 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
 #if defined(OS_CHROMEOS)
   // TODO(pastarmovj): replace this with a call to the CrosSettings list
   // handling functionality to come.
-  values->Set("timezoneList", chromeos::system::GetTimezoneList().release());
+  values->Set("timezoneList", chromeos::system::GetTimezoneList());
 
   values->SetString("accessibilityLearnMoreURL",
                     chrome::kChromeAccessibilityHelpURL);
@@ -705,7 +710,7 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SCREEN_MAGNIFIER_PARTIAL));
   magnifier_list->Append(std::move(option_partial));
 
-  values->Set("magnifierList", magnifier_list.release());
+  values->Set("magnifierList", std::move(magnifier_list));
   values->SetBoolean("enablePolymerPreload", g_enable_polymer_preload);
 #endif  // defined(OS_CHROMEOS)
 
@@ -717,7 +722,7 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
 #endif
 
   if (ShouldShowMultiProfilesUserList())
-    values->Set("profilesInfo", GetProfilesInfoList().release());
+    values->Set("profilesInfo", GetProfilesInfoList());
 
   // Profile deletion is not allowed for any users in ChromeOS.
   bool allow_deletion = true;
@@ -1036,8 +1041,7 @@ void BrowserOptionsHandler::InitializeHandler() {
     signin_observer_.Add(signin_manager);
 
   // Create our favicon data source.
-  content::URLDataSource::Add(
-      profile, new FaviconSource(profile, FaviconSource::FAVICON));
+  content::URLDataSource::Add(profile, new FaviconSource(profile));
 
 #if !defined(OS_CHROMEOS)
   default_browser_policy_.Init(
@@ -1386,7 +1390,7 @@ void BrowserOptionsHandler::OnExtensionLoaded(
 void BrowserOptionsHandler::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
-    extensions::UnloadedExtensionInfo::Reason reason) {
+    extensions::UnloadedExtensionReason reason) {
   SetupExtensionControlledIndicators();
 }
 
@@ -1735,8 +1739,7 @@ void BrowserOptionsHandler::HandleAutoOpenButton(const base::ListValue* args) {
   base::RecordAction(UserMetricsAction("Options_ResetAutoOpenFiles"));
   DownloadManager* manager = BrowserContext::GetDownloadManager(
       web_ui()->GetWebContents()->GetBrowserContext());
-  if (manager)
-    DownloadPrefs::FromDownloadManager(manager)->ResetAutoOpen();
+  DownloadPrefs::FromDownloadManager(manager)->ResetAutoOpen();
 }
 
 void BrowserOptionsHandler::HandleDefaultFontSize(const base::ListValue* args) {
@@ -2184,8 +2187,7 @@ void BrowserOptionsHandler::SetupAutoOpenFileTypes() {
   // We show the button if the user has any auto-open file types registered.
   DownloadManager* manager = BrowserContext::GetDownloadManager(
       web_ui()->GetWebContents()->GetBrowserContext());
-  bool display = manager &&
-      DownloadPrefs::FromDownloadManager(manager)->IsAutoOpenUsed();
+  bool display = DownloadPrefs::FromDownloadManager(manager)->IsAutoOpenUsed();
   base::Value value(display);
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.setAutoOpenFileTypesDisplayed", value);

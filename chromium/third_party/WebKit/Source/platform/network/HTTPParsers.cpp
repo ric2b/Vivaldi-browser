@@ -32,8 +32,10 @@
 
 #include "platform/network/HTTPParsers.h"
 
+#include "net/http/http_content_disposition.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
+#include "platform/HTTPNames.h"
 #include "platform/json/JSONParser.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/weborigin/Suborigin.h"
@@ -212,7 +214,7 @@ const UChar* ParseSuboriginPolicyOption(const UChar* begin,
     return nullptr;
   }
 
-  ASSERT(position > begin);
+  DCHECK_GT(position, begin);
   size_t length = (position + 1) - begin;
 
   option = String(begin, length);
@@ -267,37 +269,10 @@ bool IsValidHTTPToken(const String& characters) {
   return true;
 }
 
-ContentDispositionType GetContentDispositionType(
-    const String& content_disposition) {
-  if (content_disposition.IsEmpty())
-    return kContentDispositionNone;
-
-  Vector<String> parameters;
-  content_disposition.Split(';', parameters);
-
-  if (parameters.IsEmpty())
-    return kContentDispositionNone;
-
-  String disposition_type = parameters[0];
-  disposition_type.StripWhiteSpace();
-
-  if (DeprecatedEqualIgnoringCase(disposition_type, "inline"))
-    return kContentDispositionInline;
-
-  // Some broken sites just send bogus headers like
-  //
-  //   Content-Disposition: ; filename="file"
-  //   Content-Disposition: filename="file"
-  //   Content-Disposition: name="file"
-  //
-  // without a disposition token... screen those out.
-  if (!IsValidHTTPToken(disposition_type))
-    return kContentDispositionNone;
-
-  // We have a content-disposition of "attachment" or unknown.
-  // RFC 2183, section 2.8 says that an unknown disposition
-  // value should be treated as "attachment"
-  return kContentDispositionAttachment;
+bool IsContentDispositionAttachment(const String& content_disposition) {
+  CString cstring(content_disposition.Utf8());
+  std::string string(cstring.data(), cstring.length());
+  return net::HttpContentDisposition(string, std::string()).is_attachment();
 }
 
 bool ParseHTTPRefresh(const String& refresh,
@@ -331,8 +306,7 @@ bool ParseHTTPRefresh(const String& refresh,
       ++pos;
     SkipWhiteSpace(refresh, pos, matcher);
     unsigned url_start_pos = pos;
-    if (refresh.Find("url", url_start_pos, kTextCaseASCIIInsensitive) ==
-        url_start_pos) {
+    if (refresh.FindIgnoringASCIICase("url", url_start_pos) == url_start_pos) {
       url_start_pos += 3;
       SkipWhiteSpace(refresh, url_start_pos, matcher);
       if (refresh[url_start_pos] == '=') {
@@ -370,7 +344,7 @@ bool ParseHTTPRefresh(const String& refresh,
 }
 
 double ParseDate(const String& value) {
-  return ParseDateFromNullTerminatedCharacters(value.Utf8().Data());
+  return ParseDateFromNullTerminatedCharacters(value.Utf8().data());
 }
 
 AtomicString ExtractMIMETypeFromMediaType(const AtomicString& media_type) {
@@ -432,7 +406,7 @@ void FindCharsetInMediaType(const String& media_type,
   unsigned length = media_type.length();
 
   while (pos < length) {
-    pos = media_type.Find("charset", pos, kTextCaseASCIIInsensitive);
+    pos = media_type.FindIgnoringASCIICase("charset", pos);
     if (pos == kNotFound || !pos) {
       charset_len = 0;
       return;
@@ -622,8 +596,8 @@ static void ParseCacheHeader(const String& header,
   const String safe_header = header.RemoveCharacters(IsControlCharacter);
   unsigned max = safe_header.length();
   for (unsigned pos = 0; pos < max; /* pos incremented in loop */) {
-    size_t next_comma_position = safe_header.Find(',', pos);
-    size_t next_equal_sign_position = safe_header.Find('=', pos);
+    size_t next_comma_position = safe_header.find(',', pos);
+    size_t next_equal_sign_position = safe_header.find('=', pos);
     if (next_equal_sign_position != kNotFound &&
         (next_equal_sign_position < next_comma_position ||
          next_comma_position == kNotFound)) {
@@ -637,16 +611,16 @@ static void ParseCacheHeader(const String& header,
       String value = safe_header.Substring(pos, max - pos).StripWhiteSpace();
       if (value[0] == '"') {
         // The value is a quoted string
-        size_t next_double_quote_position = value.Find('"', 1);
+        size_t next_double_quote_position = value.find('"', 1);
         if (next_double_quote_position != kNotFound) {
           // Store the value as a quoted string without quotes
           result.push_back(std::pair<String, String>(
               directive, value.Substring(1, next_double_quote_position - 1)
                              .StripWhiteSpace()));
-          pos += (safe_header.Find('"', pos) - pos) +
+          pos += (safe_header.find('"', pos) - pos) +
                  next_double_quote_position + 1;
           // Move past next comma, if there is one
-          size_t next_comma_position2 = safe_header.Find(',', pos);
+          size_t next_comma_position2 = safe_header.find(',', pos);
           if (next_comma_position2 != kNotFound)
             pos += next_comma_position2 - pos + 1;
           else
@@ -661,14 +635,14 @@ static void ParseCacheHeader(const String& header,
         }
       } else {
         // The value is a token until the next comma
-        size_t next_comma_position2 = value.Find(',');
+        size_t next_comma_position2 = value.find(',');
         if (next_comma_position2 != kNotFound) {
           // The value is delimited by the next comma
           result.push_back(std::pair<String, String>(
               directive,
               TrimToNextSeparator(
                   value.Substring(0, next_comma_position2).StripWhiteSpace())));
-          pos += (safe_header.Find(',', pos) - pos) + 1;
+          pos += (safe_header.find(',', pos) - pos) + 1;
         } else {
           // The rest is the value; no change to value needed
           result.push_back(
@@ -771,7 +745,7 @@ bool ParseSuboriginHeader(const String& header,
   Vector<UChar> characters;
   headers[0].AppendTo(characters);
 
-  const UChar* position = characters.Data();
+  const UChar* position = characters.data();
   const UChar* end = position + characters.size();
 
   skipWhile<UChar, IsASCIISpace>(position, end);
@@ -855,6 +829,46 @@ bool ParseMultipartHeadersFromBody(const char* bytes,
   return true;
 }
 
+bool ParseMultipartFormHeadersFromBody(const char* bytes,
+                                       size_t size,
+                                       HTTPHeaderMap* header_fields,
+                                       size_t* end) {
+  DCHECK_EQ(0u, header_fields->size());
+
+  int headersEndPos =
+      net::HttpUtil::LocateEndOfAdditionalHeaders(bytes, size, 0);
+
+  if (headersEndPos < 0)
+    return false;
+
+  *end = headersEndPos;
+
+  // Eat headers and prepend a status line as is required by
+  // HttpResponseHeaders.
+  std::string headers("HTTP/1.1 200 OK\r\n");
+  headers.append(bytes, headersEndPos);
+
+  scoped_refptr<net::HttpResponseHeaders> responseHeaders =
+      new net::HttpResponseHeaders(
+          net::HttpUtil::AssembleRawHeaders(headers.data(), headers.length()));
+
+  // Copy selected header fields.
+  const AtomicString* const headerNamePointers[] = {
+      &HTTPNames::Content_Disposition, &HTTPNames::Content_Type};
+  for (const AtomicString* headerNamePointer : headerNamePointers) {
+    StringUTF8Adaptor adaptor(*headerNamePointer);
+    size_t iterator = 0;
+    base::StringPiece headerNameStringPiece = adaptor.AsStringPiece();
+    std::string value;
+    while (responseHeaders->EnumerateHeader(&iterator, headerNameStringPiece,
+                                            &value)) {
+      header_fields->Add(*headerNamePointer, WebString::FromUTF8(value));
+    }
+  }
+
+  return true;
+}
+
 // See https://tools.ietf.org/html/draft-ietf-httpbis-jfv-01, Section 4.
 std::unique_ptr<JSONArray> ParseJSONHeader(const String& header,
                                            int max_parse_depth) {
@@ -874,6 +888,69 @@ bool ParseContentRangeHeaderFor206(const String& content_range,
   return net::HttpUtil::ParseContentRangeHeaderFor206(
       StringUTF8Adaptor(content_range).AsStringPiece(), first_byte_position,
       last_byte_position, instance_length);
+}
+
+template <typename CharType>
+inline bool IsNotServerTimingHeaderDelimiter(CharType c) {
+  return c != '=' && c != ';' && c != ',';
+}
+
+const LChar* ParseServerTimingToken(const LChar* begin,
+                                    const LChar* end,
+                                    String& result) {
+  const LChar* position = begin;
+  skipWhile<LChar, IsNotServerTimingHeaderDelimiter>(position, end);
+  result = String(begin, position - begin).StripWhiteSpace();
+  return position;
+}
+
+String CheckDoubleQuotedString(const String& value) {
+  if (value.length() < 2 || value[0] != '"' ||
+      value[value.length() - 1] != '"') {
+    return value;
+  }
+
+  StringBuilder out;
+  unsigned pos = 1;                   // Begin after the opening DQUOTE.
+  unsigned len = value.length() - 1;  // End before the closing DQUOTE.
+
+  // Skip past backslashes, but include everything else.
+  while (pos < len) {
+    if (value[pos] == '\\')
+      pos++;
+    if (pos < len)
+      out.Append(value[pos++]);
+  }
+
+  return out.ToString();
+}
+
+std::unique_ptr<ServerTimingHeaderVector> ParseServerTimingHeader(
+    const String& headerValue) {
+  std::unique_ptr<ServerTimingHeaderVector> headers =
+      WTF::MakeUnique<ServerTimingHeaderVector>();
+
+  if (!headerValue.IsNull()) {
+    DCHECK(headerValue.Is8Bit());
+
+    const LChar* position = headerValue.Characters8();
+    const LChar* end = position + headerValue.length();
+    while (position < end) {
+      String metric, value, description = "";
+      position = ParseServerTimingToken(position, end, metric);
+      if (position != end && *position == '=') {
+        position = ParseServerTimingToken(position + 1, end, value);
+      }
+      if (position != end && *position == ';') {
+        position = ParseServerTimingToken(position + 1, end, description);
+      }
+      position++;
+
+      headers->push_back(WTF::MakeUnique<ServerTimingHeader>(
+          metric, value.ToDouble(), CheckDoubleQuotedString(description)));
+    }
+  }
+  return headers;
 }
 
 }  // namespace blink

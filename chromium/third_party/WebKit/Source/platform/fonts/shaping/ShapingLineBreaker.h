@@ -28,12 +28,13 @@ enum class LineBreakType;
 // reshaping when absolutely necessarily and by only evaluating likely candidate
 // break opportunities instead of measuring and evaluating all possible options.
 class PLATFORM_EXPORT ShapingLineBreaker final {
+  STACK_ALLOCATED();
+
  public:
   ShapingLineBreaker(const HarfBuzzShaper*,
                      const Font*,
                      const ShapeResult*,
-                     const AtomicString,
-                     LineBreakType);
+                     const LazyLineBreakIterator*);
   ~ShapingLineBreaker() {}
 
   // Shapes a line of text by finding a valid and appropriate break opportunity
@@ -44,16 +45,11 @@ class PLATFORM_EXPORT ShapingLineBreaker final {
                                     unsigned* break_offset);
 
  private:
-  unsigned PreviousBreakOpportunity(LazyLineBreakIterator*,
-                                    unsigned start,
-                                    unsigned offset);
-  unsigned NextBreakOpportunity(LazyLineBreakIterator*, unsigned offset);
 
   const HarfBuzzShaper* shaper_;
   const Font* font_;
   const ShapeResult* result_;
-  const AtomicString locale_;
-  LineBreakType break_type_;
+  const LazyLineBreakIterator* break_iterator_;
   String text_;
 };
 

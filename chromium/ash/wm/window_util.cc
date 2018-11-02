@@ -8,14 +8,12 @@
 
 #include "ash/ash_constants.h"
 #include "ash/root_window_controller.h"
-#include "ash/shelf/wm_shelf.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm/wm_event.h"
-#include "ash/wm/wm_screen_util.h"
 #include "ash/wm_window.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
@@ -23,6 +21,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/base/hit_test.h"
 #include "ui/compositor/dip_util.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -98,14 +97,14 @@ void PinWindow(aura::Window* window, bool trusted) {
 void SetAutoHideShelf(aura::Window* window, bool autohide) {
   wm::GetWindowState(window)->set_autohide_shelf_when_maximized_or_fullscreen(
       autohide);
-  for (WmWindow* root_window : ShellPort::Get()->GetAllRootWindows())
-    WmShelf::ForWindow(root_window)->UpdateVisibilityState();
+  for (aura::Window* root_window : Shell::GetAllRootWindows())
+    Shelf::ForWindow(root_window)->UpdateVisibilityState();
 }
 
 bool MoveWindowToDisplay(aura::Window* window, int64_t display_id) {
   DCHECK(window);
-  WmWindow* root = ShellPort::Get()->GetRootWindowForDisplayId(display_id);
-  return root && MoveWindowToRoot(window, root->aura_window());
+  aura::Window* root = ShellPort::Get()->GetRootWindowForDisplayId(display_id);
+  return root && MoveWindowToRoot(window, root);
 }
 
 bool MoveWindowToEventRoot(aura::Window* window, const ui::Event& event) {
@@ -134,6 +133,12 @@ void SetSnapsChildrenToPhysicalPixelBoundary(aura::Window* container) {
   DCHECK(!container->GetProperty(kSnapChildrenToPixelBoundary))
       << container->GetName();
   container->SetProperty(kSnapChildrenToPixelBoundary, true);
+}
+
+int GetNonClientComponent(aura::Window* window, const gfx::Point& location) {
+  return window->delegate()
+             ? window->delegate()->GetNonClientComponent(location)
+             : HTNOWHERE;
 }
 
 }  // namespace wm

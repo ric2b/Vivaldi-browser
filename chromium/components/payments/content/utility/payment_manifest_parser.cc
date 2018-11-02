@@ -22,6 +22,7 @@ namespace payments {
 
 // static
 void PaymentManifestParser::Create(
+    const service_manager::BindSourceInfo& source_info,
     mojom::PaymentManifestParserRequest request) {
   mojo::MakeStrongBinding(base::MakeUnique<PaymentManifestParser>(),
                           std::move(request));
@@ -179,14 +180,14 @@ PaymentManifestParser::~PaymentManifestParser() {}
 
 void PaymentManifestParser::ParsePaymentMethodManifest(
     const std::string& content,
-    const ParsePaymentMethodManifestCallback& callback) {
-  callback.Run(ParsePaymentMethodManifestIntoVector(content));
+    ParsePaymentMethodManifestCallback callback) {
+  std::move(callback).Run(ParsePaymentMethodManifestIntoVector(content));
 }
 
 void PaymentManifestParser::ParseWebAppManifest(
     const std::string& content,
-    const ParseWebAppManifestCallback& callback) {
-  callback.Run(ParseWebAppManifestIntoVector(content));
+    ParseWebAppManifestCallback callback) {
+  std::move(callback).Run(ParseWebAppManifestIntoVector(content));
 }
 
 }  // namespace payments

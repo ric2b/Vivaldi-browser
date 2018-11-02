@@ -253,7 +253,7 @@ void HTMLImageElement::ParseAttribute(
   const QualifiedName& name = params.name;
   if (name == altAttr || name == titleAttr) {
     if (UserAgentShadowRoot()) {
-      Element* text = UserAgentShadowRoot()->GetElementById("alttext");
+      Element* text = UserAgentShadowRoot()->getElementById("alttext");
       String value = AltText();
       if (text && text->textContent() != params.new_value)
         text->setTextContent(AltText());
@@ -372,8 +372,9 @@ void HTMLImageElement::AttachLayoutTree(const AttachContext& context) {
           blink::DeviceScaleFactorDeprecated(layout_image->GetFrame());
       std::pair<Image*, float> broken_image_and_image_scale_factor =
           ImageResourceContent::BrokenImage(device_scale_factor);
-      ImageResourceContent* new_image_resource = ImageResourceContent::Create(
-          broken_image_and_image_scale_factor.first);
+      ImageResourceContent* new_image_resource =
+          ImageResourceContent::CreateLoaded(
+              broken_image_and_image_scale_factor.first);
       layout_image->ImageResource()->SetImageResource(new_image_resource);
     }
     if (layout_image_resource->HasImage())
@@ -688,28 +689,6 @@ void HTMLImageElement::ForceReload() const {
                                      referrer_policy_);
 }
 
-ScriptPromise HTMLImageElement::CreateImageBitmap(
-    ScriptState* script_state,
-    EventTarget& event_target,
-    Optional<IntRect> crop_rect,
-    const ImageBitmapOptions& options,
-    ExceptionState& exception_state) {
-  DCHECK(event_target.ToLocalDOMWindow());
-  if ((crop_rect &&
-       !ImageBitmap::IsSourceSizeValid(crop_rect->Width(), crop_rect->Height(),
-                                       exception_state)) ||
-      !ImageBitmap::IsSourceSizeValid(BitmapSourceSize().Width(),
-                                      BitmapSourceSize().Height(),
-                                      exception_state))
-    return ScriptPromise();
-  if (!ImageBitmap::IsResizeOptionValid(options, exception_state))
-    return ScriptPromise();
-  return ImageBitmapSource::FulfillImageBitmap(
-      script_state, ImageBitmap::Create(
-                        this, crop_rect,
-                        event_target.ToLocalDOMWindow()->document(), options));
-}
-
 void HTMLImageElement::SelectSourceURL(
     ImageLoader::UpdateFromElementBehavior behavior) {
   if (!GetDocument().IsActive())
@@ -831,16 +810,6 @@ PassRefPtr<ComputedStyle> HTMLImageElement::CustomStyleForLayoutObject() {
       NOTREACHED();
       return nullptr;
   }
-}
-
-IntSize HTMLImageElement::BitmapSourceSize() const {
-  ImageResourceContent* image = CachedImage();
-  if (!image)
-    return IntSize();
-  LayoutSize l_size = image->ImageSize(
-      LayoutObject::ShouldRespectImageOrientation(GetLayoutObject()), 1.0f);
-  DCHECK(l_size.Fraction().IsZero());
-  return IntSize(l_size.Width().ToInt(), l_size.Height().ToInt());
 }
 
 void HTMLImageElement::AssociateWith(HTMLFormElement* form) {

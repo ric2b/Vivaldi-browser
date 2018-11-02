@@ -17,6 +17,7 @@
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "dbus/object_path.h"
+#include "net/cert/x509_certificate.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace chromeos {
@@ -179,7 +180,7 @@ void NetworkCertMigrator::Init(NetworkStateHandler* network_state_handler) {
 }
 
 void NetworkCertMigrator::NetworkListChanged() {
-  if (!CertLoader::Get()->certificates_loaded()) {
+  if (!CertLoader::Get()->initial_load_finished()) {
     VLOG(2) << "Certs not loaded yet.";
     return;
   }
@@ -187,7 +188,7 @@ void NetworkCertMigrator::NetworkListChanged() {
   // certificates.
   VLOG(2) << "Start certificate migration of network configurations.";
   scoped_refptr<MigrationTask> helper(new MigrationTask(
-      CertLoader::Get()->cert_list(), weak_ptr_factory_.GetWeakPtr()));
+      CertLoader::Get()->all_certs(), weak_ptr_factory_.GetWeakPtr()));
   NetworkStateHandler::NetworkStateList networks;
   network_state_handler_->GetNetworkListByType(
       NetworkTypePattern::Default(),

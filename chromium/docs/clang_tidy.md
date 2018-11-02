@@ -53,7 +53,7 @@ ninja -C out/Release chrome
 ```
 2.  Generate the compilation database
 ```
-ninja -C out/Release -t compdb objcxx cxx > compile_commands.json
+tools/clang/scripts/generate_compdb.py -p out/Release > compile_commands.json
 ```
 3.  Enter the build directory.
 ```
@@ -90,17 +90,6 @@ Copy-Paste Friendly (though you'll still need to stub in the variables):
 \*It's not clear which, if any, `gn` flags may cause issues for `clang-tidy`.
 I've had no problems building a component release build, both with and without
 goma. if you run into issues, let us know!
-
-## Troubleshooting
-
-If you see errors like
-```
-src/build/linux/debian_wheezy_amd64-sysroot/usr/include/wchar.h:40:11: error: 'stdarg.h' file not found [clang-diagnostic-error]
-```
-
-then you should also build the `clang-headers` target in your llvm checkout.
-This is fixed by http://reviews.llvm.org/D22046, so if your llvm checkout is
-up-to-date, this shouldn't be needed.
 
 ## Questions
 

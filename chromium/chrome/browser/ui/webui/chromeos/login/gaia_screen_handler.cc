@@ -269,8 +269,7 @@ void GaiaScreenHandler::DisableRestrictiveProxyCheckForTest() {
 
 void GaiaScreenHandler::LoadGaia(const GaiaContext& context) {
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&version_loader::GetVersion, version_loader::VERSION_SHORT),
       base::Bind(&GaiaScreenHandler::LoadGaiaWithVersion,
                  weak_factory_.GetWeakPtr(), context));
@@ -540,15 +539,15 @@ void GaiaScreenHandler::DoAdAuth(
     const std::string& username,
     const Key& key,
     authpolicy::ErrorType error,
-    const authpolicy::ActiveDirectoryAccountData& account_data) {
+    const authpolicy::ActiveDirectoryAccountInfo& account_info) {
   switch (error) {
     case authpolicy::ERROR_NONE: {
-      DCHECK(account_data.has_account_id() &&
-             !account_data.account_id().empty());
+      DCHECK(account_info.has_account_id() &&
+             !account_info.account_id().empty());
       const AccountId account_id(GetAccountId(
-          username, account_data.account_id(), AccountType::ACTIVE_DIRECTORY));
-      Delegate()->SetDisplayAndGivenName(account_data.display_name(),
-                                         account_data.given_name());
+          username, account_info.account_id(), AccountType::ACTIVE_DIRECTORY));
+      Delegate()->SetDisplayAndGivenName(account_info.display_name(),
+                                         account_info.given_name());
       UserContext user_context(account_id);
       user_context.SetKey(key);
       user_context.SetAuthFlow(UserContext::AUTH_FLOW_ACTIVE_DIRECTORY);
@@ -598,7 +597,7 @@ void GaiaScreenHandler::HandleCompleteAdAuthentication(
   set_populated_email(username);
   DCHECK(authpolicy_login_helper_);
   authpolicy_login_helper_->AuthenticateUser(
-      username, password,
+      username, std::string() /* object_guid */, password,
       base::BindOnce(&GaiaScreenHandler::DoAdAuth, weak_factory_.GetWeakPtr(),
                      username, Key(password)));
 }
@@ -612,7 +611,8 @@ void GaiaScreenHandler::HandleCompleteAdPasswordChange(
 
   DCHECK(authpolicy_login_helper_);
   authpolicy_login_helper_->AuthenticateUser(
-      username, old_password + "\n" + new_password + "\n" + new_password,
+      username, std::string() /* object_guid */,
+      old_password + "\n" + new_password + "\n" + new_password,
       base::Bind(&GaiaScreenHandler::DoAdAuth, weak_factory_.GetWeakPtr(),
                  username, Key(new_password)));
 }

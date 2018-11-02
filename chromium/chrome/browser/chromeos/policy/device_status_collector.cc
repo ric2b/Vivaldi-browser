@@ -48,6 +48,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/update_engine_client.h"
 #include "chromeos/disks/disk_mount_manager.h"
+#include "chromeos/login/login_state.h"
 #include "chromeos/network/device_state.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state.h"
@@ -106,7 +107,7 @@ int64_t TimestampToDayKey(Time timestamp) {
   Time out_time;
   bool conversion_success = Time::FromUTCExploded(exploded, &out_time);
   DCHECK(conversion_success);
-  return (out_time - Time::UnixEpoch()).InMilliseconds();
+  return out_time.ToJavaTime();
 }
 
 // Helper function (invoked via blocking pool) to fetch information about
@@ -301,6 +302,12 @@ int ConvertWifiSignalStrength(int signal_strength) {
   return signal_strength - 120;
 }
 
+bool IsKioskApp() {
+  auto user_type = chromeos::LoginState::Get()->GetLoggedInUserType();
+  return user_type == chromeos::LoginState::LOGGED_IN_USER_KIOSK_APP ||
+         user_type == chromeos::LoginState::LOGGED_IN_USER_ARC_KIOSK_APP;
+}
+
 }  // namespace
 
 namespace policy {
@@ -357,9 +364,7 @@ class GetStatusState : public base::RefCountedThreadSafe<GetStatusState> {
 
     // Call out to the blocking pool to sample disk volume info.
     base::PostTaskWithTraitsAndReplyWithResult(
-        FROM_HERE,
-        base::TaskTraits().MayBlock().WithPriority(
-            base::TaskPriority::BACKGROUND),
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
         base::Bind(volume_info_fetcher, mount_points),
         base::Bind(&GetStatusState::OnVolumeInfoReceived, this));
   }
@@ -369,9 +374,7 @@ class GetStatusState : public base::RefCountedThreadSafe<GetStatusState> {
       const policy::DeviceStatusCollector::CPUTempFetcher& cpu_temp_fetcher) {
     // Call out to the blocking pool to sample CPU temp.
     base::PostTaskWithTraitsAndReplyWithResult(
-        FROM_HERE,
-        base::TaskTraits().MayBlock().WithPriority(
-            base::TaskPriority::BACKGROUND),
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
         cpu_temp_fetcher,
         base::Bind(&GetStatusState::OnCPUTempInfoReceived, this));
   }
@@ -499,17 +502,13 @@ DeviceStatusCollector::DeviceStatusCollector(
 
   // Get the the OS and firmware version info.
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE,
-      base::TaskTraits().MayBlock().WithPriority(
-          base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&chromeos::version_loader::GetVersion,
                  chromeos::version_loader::VERSION_FULL),
       base::Bind(&DeviceStatusCollector::OnOSVersion,
                  weak_factory_.GetWeakPtr()));
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE,
-      base::TaskTraits().MayBlock().WithPriority(
-          base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&chromeos::version_loader::GetFirmware),
       base::Bind(&DeviceStatusCollector::OnOSFirmware,
                  weak_factory_.GetWeakPtr()));
@@ -676,7 +675,8 @@ void DeviceStatusCollector::IdleStateCallback(ui::IdleState state) {
 
   Time now = GetCurrentTime();
 
-  if (state == ui::IDLE_STATE_ACTIVE) {
+  // For kiosk apps we report total uptime instead of active time.
+  if (state == ui::IDLE_STATE_ACTIVE || IsKioskApp()) {
     // If it's been too long since the last report, or if the activity is
     // negative (which can happen when the clock changes), assume a single
     // interval of activity.
@@ -727,9 +727,7 @@ void DeviceStatusCollector::SampleResourceUsage() {
 
   // Call out to the blocking pool to sample CPU stats.
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE,
-      base::TaskTraits().MayBlock().WithPriority(
-          base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       cpu_statistics_fetcher_,
       base::Bind(&DeviceStatusCollector::ReceiveCPUStatistics,
                  weak_factory_.GetWeakPtr()));

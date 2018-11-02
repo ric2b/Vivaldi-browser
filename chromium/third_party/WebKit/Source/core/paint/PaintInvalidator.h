@@ -13,22 +13,19 @@
 namespace blink {
 
 struct PaintInvalidatorContext {
-  PaintInvalidatorContext(
-      const PaintPropertyTreeBuilderContext* tree_builder_context)
-      : parent_context(nullptr), tree_builder_context_(tree_builder_context) {}
+  USING_FAST_MALLOC(PaintInvalidatorContext);
 
-  PaintInvalidatorContext(
-      const PaintPropertyTreeBuilderContext* tree_builder_context,
-      const PaintInvalidatorContext& parent_context)
+ public:
+  PaintInvalidatorContext() : parent_context(nullptr) {}
+
+  PaintInvalidatorContext(const PaintInvalidatorContext& parent_context)
       : parent_context(&parent_context),
-        forced_subtree_invalidation_flags(
-            parent_context.forced_subtree_invalidation_flags),
+        subtree_flags(parent_context.subtree_flags),
         paint_invalidation_container(
             parent_context.paint_invalidation_container),
         paint_invalidation_container_for_stacked_contents(
             parent_context.paint_invalidation_container_for_stacked_contents),
-        painting_layer(parent_context.painting_layer),
-        tree_builder_context_(tree_builder_context) {}
+        painting_layer(parent_context.painting_layer) {}
 
   // This method is virtual temporarily to adapt PaintInvalidatorContext and the
   // legacy PaintInvalidationState for code shared by old code and new code.
@@ -43,35 +40,33 @@ struct PaintInvalidatorContext {
       return true;
 #endif
     return object.NeedsPaintOffsetAndVisualRectUpdate() ||
-           (forced_subtree_invalidation_flags &
-            PaintInvalidatorContext::kForcedSubtreeVisualRectUpdate);
+           (subtree_flags & PaintInvalidatorContext::kSubtreeVisualRectUpdate);
   }
 
   const PaintInvalidatorContext* parent_context;
 
-  enum ForcedSubtreeInvalidationFlag {
-    kForcedSubtreeInvalidationChecking = 1 << 0,
-    kForcedSubtreeVisualRectUpdate = 1 << 1,
-    kForcedSubtreeFullInvalidation = 1 << 2,
-    kForcedSubtreeFullInvalidationForStackedContents = 1 << 3,
-    kForcedSubtreeSVGResourceChange = 1 << 4,
+  enum SubtreeFlag {
+    kSubtreeInvalidationChecking = 1 << 0,
+    kSubtreeVisualRectUpdate = 1 << 1,
+    kSubtreeFullInvalidation = 1 << 2,
+    kSubtreeFullInvalidationForStackedContents = 1 << 3,
+    kSubtreeSVGResourceChange = 1 << 4,
 
     // TODO(crbug.com/637313): This is temporary before we support filters in
     // paint property tree.
-    kForcedSubtreeSlowPathRect = 1 << 5,
+    kSubtreeSlowPathRect = 1 << 5,
 
-    // The paint invalidation tree walk invalidates paint caches, such as
-    // DisplayItemClients and subsequence caches, and also the regions
-    // into which objects raster pixels. When this flag is set, raster region
-    // invalidations are not issued.
+    // When this flag is set, no paint or raster invalidation will be issued
+    // for the subtree.
     //
     // Context: some objects in this paint walk, for example SVG resource
-    // container subtress, don't actually have any raster regions, because they
-    // are used as "painting subroutines" for one or more other locations in
-    // SVG.
-    kForcedSubtreeNoRasterInvalidation = 1 << 6,
+    // container subtrees, always paint onto temporary PaintControllers which
+    // don't have cache, and don't actually have any raster regions, so they
+    // don't need any invalidation. They are used as "painting subroutines"
+    // for one or more other locations in SVG.
+    kSubtreeNoInvalidation = 1 << 6,
   };
-  unsigned forced_subtree_invalidation_flags = 0;
+  unsigned subtree_flags = 0;
 
   // The following fields can be null only before
   // PaintInvalidator::updateContext().
@@ -106,9 +101,12 @@ struct PaintInvalidatorContext {
 
  private:
   friend class PaintInvalidator;
-  const PaintPropertyTreeBuilderContext* tree_builder_context_;
+  const PaintPropertyTreeBuilderFragmentContext* tree_builder_context_ =
+      nullptr;
 
 #if DCHECK_IS_ON()
+  bool tree_builder_context_actually_needed_ = false;
+  friend class FindVisualRectNeedingUpdateScope;
   friend class FindVisualRectNeedingUpdateScopeBase;
   mutable bool force_visual_rect_update_for_checking_ = false;
 #endif
@@ -116,8 +114,12 @@ struct PaintInvalidatorContext {
 
 class PaintInvalidator {
  public:
-  void InvalidatePaintIfNeeded(FrameView&, PaintInvalidatorContext&);
-  void InvalidatePaintIfNeeded(const LayoutObject&, PaintInvalidatorContext&);
+  void InvalidatePaint(FrameView&,
+                       const PaintPropertyTreeBuilderContext*,
+                       PaintInvalidatorContext&);
+  void InvalidatePaint(const LayoutObject&,
+                       const PaintPropertyTreeBuilderContext*,
+                       PaintInvalidatorContext&);
 
   // Process objects needing paint invalidation on the next frame.
   // See the definition of PaintInvalidationDelayedFull for more details.
@@ -140,8 +142,10 @@ class PaintInvalidator {
                                          PaintInvalidatorContext&);
   ALWAYS_INLINE void UpdatePaintInvalidationContainer(const LayoutObject&,
                                                       PaintInvalidatorContext&);
-  ALWAYS_INLINE void UpdateVisualRectIfNeeded(const LayoutObject&,
-                                              PaintInvalidatorContext&);
+  ALWAYS_INLINE void UpdateVisualRectIfNeeded(
+      const LayoutObject&,
+      const PaintPropertyTreeBuilderContext*,
+      PaintInvalidatorContext&);
   ALWAYS_INLINE void UpdateVisualRect(const LayoutObject&,
                                       PaintInvalidatorContext&);
 

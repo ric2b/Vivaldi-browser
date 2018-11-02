@@ -40,6 +40,7 @@ class ListValue;
 
 namespace chromeos {
 
+class AuthPolicyLoginHelper;
 class BootstrapUserContextInitializer;
 class CrosSettings;
 class LoginDisplayHost;
@@ -251,6 +252,11 @@ class ExistingUserController
   // auto-login timer is started.
   void PerformLoginFinishedActions(bool start_auto_login_timer);
 
+  // Invokes |continuation| after verifying that cryptohome service is
+  // available.
+  void ContinueLoginWhenCryptohomeAvailable(base::OnceClosure continuation,
+                                            bool service_is_available);
+
   // Invokes |continuation| after verifying that the device is not disabled.
   void ContinueLoginIfDeviceNotDisabled(const base::Closure& continuation);
 
@@ -293,6 +299,10 @@ class ExistingUserController
 
   // Used to execute login operations.
   std::unique_ptr<LoginPerformer> login_performer_;
+
+  // Used to execute login to AuthPolicy service. It provides authentication
+  // against Active Directory server.
+  std::unique_ptr<AuthPolicyLoginHelper> authpolicy_login_helper_;
 
   // Delegate to forward all authentication status events to.
   // Tests can use this to receive authentication status events.

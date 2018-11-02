@@ -20,6 +20,35 @@ sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir,
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
+# These network condition values are used in SetNetworkConnection()
+NETWORKS = {
+    '4G': {
+      'latency': 20,
+      'upload_throughput': 4096 * 1024,
+      'download_throughput': 4096 * 1024,
+      'offline': False,
+    },
+    '3G': {
+      'latency': 425,
+      'upload_throughput': 750 * 1024,
+      'download_throughput': 750 * 1024,
+      'offline': False,
+    },
+    '2G': {
+      'latency': 1650,
+      'upload_throughput': 250 * 1024,
+      'download_throughput': 250 * 1024,
+      'offline': False,
+    },
+    'OFFLINE': {
+      'latency': 0,
+      'upload_throughput': 0 * 1024,
+      'download_throughput': 0 * 1024,
+      # This stays false so that Chrome won't disconnect from ChromeDriver.
+      'offline': False,
+    },
+}
+
 def ParseFlags():
   """Parses the given command line arguments.
 
@@ -72,6 +101,11 @@ def ParseFlags():
     'successful test run, also pass --disable_buffer. Default=ERROR')
   parser.add_argument('--log_file', help='If given, write logging statements '
     'to the given file instead of stderr.')
+  parser.add_argument('--skip_slow', action='store_true', help='If set, tests '
+    'marked as slow will be skipped.', default=False)
+  parser.add_argument('--chrome_start_time', type=int, default=0, help='The '
+    'number of attempts to check if Chrome has fetched a proxy client config '
+    'before starting the test. Each check takes about one second.')
   return parser.parse_args(sys.argv[1:])
 
 def GetLogger(name='common'):
@@ -129,15 +163,21 @@ class TestDriver:
     _url: The string URL that Chrome will navigate to for this test.
     _has_logs: Boolean flag set when a page is loaded and cleared when logs are
       fetched.
+    _control_network_connection: Boolean signal that this chromedriver instance
+      was meant to support network connection control, and thus had to enable
+      mobile emulation
+    _network_connection: The connection type to use on start up
   """
 
-  def __init__(self):
+  def __init__(self, control_network_connection=False):
     self._flags = ParseFlags()
     self._driver = None
     self._chrome_args = set()
     self._url = ''
     self._logger = GetLogger(name='TestDriver')
     self._has_logs = False
+    self._control_network_connection = control_network_connection
+    self._network_connection = None
 
   def __enter__(self):
     return self
@@ -164,7 +204,8 @@ class TestDriver:
       # Override flags given in code with any command line arguments.
       for override_arg in shlex.split(self._flags.browser_args):
         arg_key = GetDictKey(override_arg)
-        if arg_key in original_args:
+        if (arg_key in original_args
+            and original_args[arg_key] in self._chrome_args):
           self._chrome_args.remove(original_args[arg_key])
           self._logger.info('Removed Chrome flag. %s', original_args[arg_key])
         self._chrome_args.add(override_arg)
@@ -179,9 +220,16 @@ class TestDriver:
     """
     self._OverrideChromeArgs()
     capabilities = {
-      'loggingPrefs': {'performance': 'INFO'}
+      'loggingPrefs': {'performance': 'INFO'},
     }
     chrome_options = Options()
+    if self._control_network_connection:
+      capabilities.update({
+        'networkConnectionEnabled': True,
+        'mobileEmulationEnabled': True,
+      })
+      chrome_options.add_experimental_option('mobileEmulation',
+        {'deviceName': 'Google Nexus 5'})
     for arg in self._chrome_args:
       chrome_options.add_argument(arg)
     self._logger.info('Starting Chrome with these flags: %s',
@@ -200,8 +248,16 @@ class TestDriver:
       desired_capabilities=capabilities, chrome_options=chrome_options)
     driver.command_executor._commands.update({
       'getAvailableLogTypes': ('GET', '/session/$sessionId/log/types'),
-      'getLog': ('POST', '/session/$sessionId/log')})
+      'getLog': ('POST', '/session/$sessionId/log'),
+      'setNetworkConditions':
+        ('POST', '/session/$sessionId/chromium/network_conditions')})
     self._driver = driver
+    if self._control_network_connection:
+      # Set network connection if it was called before LoadURL()
+      self.SetNetworkConnection(self._network_connection)
+    self.SleepUntilHistogramHasEntry(
+      'DataReductionProxy.ConfigService.FetchResponseCode',
+      sleep_intervals=self._flags.chrome_start_time)
 
   def _StopDriver(self):
     """Nicely stops the ChromeDriver.
@@ -267,6 +323,23 @@ class TestDriver:
       'clearHostResolverCache();}')
     self._logger.info('Cleared browser cache. Returned=%s', str(res))
 
+  def SetNetworkConnection(self, connection_type):
+    """Changes the emulated connection type.
+
+    Args:
+      connection_type: the connection type to use according to the dict near the
+        top of the file OR a dictionary specifying the network conditions
+    """
+    if not self._control_network_connection:
+      raise Exception('SetNetworkConnection can only be used with a TestDriver '
+        'initalized with control_network_connection=True')
+    self._network_connection = connection_type
+    network = (NETWORKS[self._network_connection]
+      if connection_type in NETWORKS else connection_type)
+    if self._driver and self._network_connection:
+      self._driver.execute('setNetworkConditions',
+        {'network_conditions': network})
+
   def LoadURL(self, url, timeout=30):
     """Starts Chromium with any arguments previously given and navigates to the
     given URL.
@@ -287,6 +360,18 @@ class TestDriver:
     self._driver.get(self._url)
     self._logger.debug('Loaded page %s', url)
     self._has_logs = True
+
+  def FindElement(self, by, value):
+    """Finds an element on the page.
+
+    Uses the By selector and value given.
+    Args:
+      by: the selenium.webdriver.common.By selector
+      value: the value
+    Returns:
+      a WebElement object
+    """
+    return self._driver.find_element(by=by, value=value)
 
   def ExecuteJavascript(self, script, timeout=30):
     """Executes the given javascript in the browser's current page in an
@@ -412,7 +497,8 @@ class TestDriver:
 
     return bool(histogram)
 
-  def GetHTTPResponses(self, include_favicon=False, skip_domainless_pages=True):
+  def GetHTTPResponses(self, include_favicon=False, skip_domainless_pages=True,
+      override_has_logs=False):
     """Parses the Performance Logs and returns a list of HTTPResponse objects.
 
     Use caution when calling this function  multiple times. Only responses
@@ -424,10 +510,14 @@ class TestDriver:
       include_favicon: A bool that if True will include responses for favicons.
       skip_domainless_pages: If True, only responses with a net_loc as in RFC
         1808 will be included. Pages such as about:blank will be skipped.
+      override_has_logs: Allows the _has_logs property to be set if there was
+        not a page load but an XHR was expected instead.
     Returns:
       A list of HTTPResponse objects, each representing a single completed HTTP
       transaction by Chrome.
     """
+    if override_has_logs:
+      self._has_logs = True
     def MakeHTTPResponse(log_dict):
       params = log_dict['params']
       response_dict = params['response']
@@ -506,7 +596,7 @@ class HTTPResponse:
       'status': self._status,
       'request_type': self._request_type
     }
-    return json.dumps(self_dict)
+    return json.dumps(self_dict, indent=2)
 
   @property
   def response_headers(self):
@@ -584,10 +674,11 @@ class IntegrationTest(unittest.TestCase):
 
   def checkLoFiResponse(self, http_response, expected_lo_fi):
     """Asserts that if expected the response headers contain the Lo-Fi directive
-    then the request headers do too. Also checks that the content size is less
-    than 100 if |expected_lo_fi|. Otherwise, checks that the response and
-    request headers don't contain the Lo-Fi directive and the content size is
-    greater than 100.
+    then the request headers do too. If the CPAT header contains if-heavy, the
+    request should not be LoFi. If-heavy will be deprecated in the future. Also
+    checks that the content size is less than 100 if |expected_lo_fi|.
+    Otherwise, checks that the response and request headers don't contain the
+    Lo-Fi directive and the content size is greater than 100.
 
     Args:
       http_response: The HTTPResponse object to check.
@@ -610,8 +701,11 @@ class IntegrationTest(unittest.TestCase):
         return True;
       return False;
     else:
-      self.assertNotIn('chrome-proxy-accept-transform',
-        http_response.request_headers)
+      if ('chrome-proxy-accept-transform' in http_response.request_headers):
+        cpat_request = http_response.request_headers[
+                       'chrome-proxy-accept-transform']
+        if ('empty-image' in cpat_request):
+          self.assertIn('if-heavy', cpat_request)
       self.assertNotIn('chrome-proxy-content-transform',
         http_response.response_headers)
       content_length = http_response.response_headers['content-length']
@@ -674,71 +768,3 @@ class IntegrationTest(unittest.TestCase):
     testRunner = unittest.runner.TextTestRunner(verbosity=2,
       failfast=flags.failfast, buffer=(not flags.disable_buffer))
     testRunner.run(tests)
-
-# Platform-specific decorators.
-# These decorators can be used to only run a test function for certain platforms
-# by annotating the function with them.
-
-def AndroidOnly(func):
-  def wrapper(*args, **kwargs):
-    if ParseFlags().android:
-      func(*args, **kwargs)
-    else:
-      args[0].skipTest('This test runs on Android only.')
-  return wrapper
-
-def NotAndroid(func):
-  def wrapper(*args, **kwargs):
-    if not ParseFlags().android:
-      func(*args, **kwargs)
-    else:
-      args[0].skipTest('This test does not run on Android.')
-  return wrapper
-
-def WindowsOnly(func):
-  def wrapper(*args, **kwargs):
-    if sys.platform == 'win32':
-      func(*args, **kwargs)
-    else:
-      args[0].skipTest('This test runs on Windows only.')
-  return wrapper
-
-def NotWindows(func):
-  def wrapper(*args, **kwargs):
-    if sys.platform != 'win32':
-      func(*args, **kwargs)
-    else:
-      args[0].skipTest('This test does not run on Windows.')
-  return wrapper
-
-def LinuxOnly(func):
-  def wrapper(*args, **kwargs):
-    if sys.platform.startswith('linux'):
-      func(*args, **kwargs)
-    else:
-      args[0].skipTest('This test runs on Linux only.')
-  return wrapper
-
-def NotLinux(func):
-  def wrapper(*args, **kwargs):
-    if sys.platform.startswith('linux'):
-      func(*args, **kwargs)
-    else:
-      args[0].skipTest('This test does not run on Linux.')
-  return wrapper
-
-def MacOnly(func):
-  def wrapper(*args, **kwargs):
-    if sys.platform == 'darwin':
-      func(*args, **kwargs)
-    else:
-      args[0].skipTest('This test runs on Mac OS only.')
-  return wrapper
-
-def NotMac(func):
-  def wrapper(*args, **kwargs):
-    if sys.platform == 'darwin':
-      func(*args, **kwargs)
-    else:
-      args[0].skipTest('This test does not run on Mac OS.')
-  return wrapper

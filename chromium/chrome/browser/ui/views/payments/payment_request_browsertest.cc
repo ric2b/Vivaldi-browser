@@ -7,6 +7,7 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/payments/payment_request_browsertest_base.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -53,8 +54,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestNoShippingTest, OpenAndNavigateTo404) {
 
   ResetEventObserver(DialogEvent::DIALOG_CLOSED);
 
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server()->GetURL("/non-existent.html"));
+  NavigateTo("/non-existent.html");
 
   WaitForObservedEvent();
 }
@@ -64,9 +64,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestNoShippingTest, OpenAndNavigateToSame) {
 
   ResetEventObserver(DialogEvent::DIALOG_CLOSED);
 
-  ui_test_utils::NavigateToURL(
-      browser(),
-      https_server()->GetURL("/payment_request_no_shipping_test.html"));
+  NavigateTo("/payment_request_no_shipping_test.html");
 
   WaitForObservedEvent();
 }
@@ -118,20 +116,39 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestNoShippingTest, PayWithVisa) {
   WaitForObservedEvent();
 
   // The actual structure of the card response is unit-tested.
-  ExpectBodyContains(std::vector<base::string16>{
-      card.GetRawInfo(autofill::CREDIT_CARD_NUMBER),
-      card.GetRawInfo(autofill::CREDIT_CARD_NAME_FULL),
-      card.GetRawInfo(autofill::CREDIT_CARD_EXP_MONTH),
-      card.GetRawInfo(autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR)});
-  ExpectBodyContains(std::vector<base::string16>{
-      billing_address.GetRawInfo(autofill::NAME_FIRST),
-      billing_address.GetRawInfo(autofill::NAME_LAST),
-      billing_address.GetRawInfo(autofill::ADDRESS_HOME_LINE1),
-      billing_address.GetRawInfo(autofill::ADDRESS_HOME_LINE2),
-      billing_address.GetRawInfo(autofill::ADDRESS_HOME_COUNTRY),
-      billing_address.GetRawInfo(autofill::ADDRESS_HOME_ZIP),
-      billing_address.GetRawInfo(autofill::ADDRESS_HOME_CITY),
-      billing_address.GetRawInfo(autofill::ADDRESS_HOME_STATE)});
+  ExpectBodyContains({card.GetRawInfo(autofill::CREDIT_CARD_NUMBER),
+                      card.GetRawInfo(autofill::CREDIT_CARD_NAME_FULL),
+                      card.GetRawInfo(autofill::CREDIT_CARD_EXP_MONTH),
+                      card.GetRawInfo(autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR)});
+  ExpectBodyContains(
+      {billing_address.GetRawInfo(autofill::NAME_FIRST),
+       billing_address.GetRawInfo(autofill::NAME_LAST),
+       billing_address.GetRawInfo(autofill::ADDRESS_HOME_LINE1),
+       billing_address.GetRawInfo(autofill::ADDRESS_HOME_LINE2),
+       billing_address.GetRawInfo(autofill::ADDRESS_HOME_COUNTRY),
+       billing_address.GetRawInfo(autofill::ADDRESS_HOME_ZIP),
+       billing_address.GetRawInfo(autofill::ADDRESS_HOME_CITY),
+       billing_address.GetRawInfo(autofill::ADDRESS_HOME_STATE)});
+}
+
+IN_PROC_BROWSER_TEST_F(PaymentRequestNoShippingTest, InvalidSSL) {
+  SetInvalidSsl();
+
+  autofill::AutofillProfile billing_address = autofill::test::GetFullProfile();
+  AddAutofillProfile(billing_address);
+  autofill::CreditCard card = autofill::test::GetCreditCard();
+  card.set_billing_address_id(billing_address.guid());
+  AddCreditCard(card);  // Visa.
+
+  ResetEventObserver(DialogEvent::NOT_SUPPORTED_ERROR);
+
+  EXPECT_TRUE(content::ExecuteScript(
+      GetActiveWebContents(),
+      "(function() { document.getElementById('buy').click(); })();"));
+
+  WaitForObservedEvent();
+
+  ExpectBodyContains({"NotSupportedError"});
 }
 
 class PaymentRequestAbortTest : public PaymentRequestBrowserTestBase {
@@ -147,7 +164,8 @@ class PaymentRequestAbortTest : public PaymentRequestBrowserTestBase {
 IN_PROC_BROWSER_TEST_F(PaymentRequestAbortTest, OpenThenAbort) {
   InvokePaymentRequestUI();
 
-  ResetEventObserver(DialogEvent::DIALOG_CLOSED);
+  ResetEventObserverForSequence(
+      {DialogEvent::ABORT_CALLED, DialogEvent::DIALOG_CLOSED});
 
   content::WebContents* web_contents = GetActiveWebContents();
   const std::string click_buy_button_js =
@@ -156,10 +174,35 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestAbortTest, OpenThenAbort) {
 
   WaitForObservedEvent();
 
+  ExpectBodyContains({"Aborted"});
+
   // The web-modal dialog should now be closed.
   web_modal::WebContentsModalDialogManager* web_contents_modal_dialog_manager =
       web_modal::WebContentsModalDialogManager::FromWebContents(web_contents);
   EXPECT_FALSE(web_contents_modal_dialog_manager->IsDialogActive());
+}
+
+IN_PROC_BROWSER_TEST_F(PaymentRequestAbortTest,
+                       AbortUnsuccessfulAfterCVCPromptShown) {
+  autofill::AutofillProfile billing_address = autofill::test::GetFullProfile();
+  AddAutofillProfile(billing_address);
+  autofill::CreditCard card = autofill::test::GetCreditCard();
+  card.set_billing_address_id(billing_address.guid());
+  AddCreditCard(card);  // Visa.
+
+  InvokePaymentRequestUI();
+  OpenCVCPromptWithCVC(base::UTF8ToUTF16("123"));
+
+  ResetEventObserver(DialogEvent::ABORT_CALLED);
+
+  content::WebContents* web_contents = GetActiveWebContents();
+  const std::string click_buy_button_js =
+      "(function() { document.getElementById('abort').click(); })();";
+  ASSERT_TRUE(content::ExecuteScript(web_contents, click_buy_button_js));
+
+  WaitForObservedEvent();
+
+  ExpectBodyContains({"Cannot abort"});
 }
 
 class PaymentRequestBasicCardTest : public PaymentRequestBrowserTestBase {
@@ -299,6 +342,32 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestBasicCardTest,
   EXPECT_EQ("mastercard", supported_card_networks[0]);
   EXPECT_EQ("visa", supported_card_networks[1]);
   EXPECT_EQ("jcb", supported_card_networks[2]);
+}
+
+// Test harness integrating with DialogBrowserTest to present the dialog in an
+// interactive manner for visual testing.
+class PaymentsRequestVisualTest
+    : public SupportsTestDialog<PaymentRequestNoShippingTest> {
+ protected:
+  PaymentsRequestVisualTest() {}
+
+  // TestBrowserDialog:
+  void ShowDialog(const std::string& name) override {
+    InvokePaymentRequestUI();
+  }
+
+  bool AlwaysCloseAsynchronously() override {
+    // Bypassing Widget::CanClose() causes payments::JourneyLogger to see the
+    // show, but not the close, resulting in a DCHECK in its destructor.
+    return true;
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PaymentsRequestVisualTest);
+};
+
+IN_PROC_BROWSER_TEST_F(PaymentsRequestVisualTest, InvokeDialog_NoShipping) {
+  RunDialog();
 }
 
 }  // namespace payments

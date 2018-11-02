@@ -59,9 +59,9 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
+#include "platform/wtf/allocator/Partitions.h"
+#include "platform/wtf/text/AtomicStringTable.h"
 #include "public/platform/Platform.h"
-#include "wtf/allocator/Partitions.h"
-#include "wtf/text/AtomicStringTable.h"
 
 namespace blink {
 
@@ -75,7 +75,7 @@ void CoreInitializer::RegisterEventFactory() {
 }
 
 void CoreInitializer::Initialize() {
-  ASSERT(!IsInitialized());
+  DCHECK(!IsInitialized());
   is_initialized_ = true;
   // Note: in order to add core static strings for a new module (1)
   // the value of 'coreStaticStringsCount' must be updated with the

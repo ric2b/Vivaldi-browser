@@ -27,14 +27,15 @@
 #define Node_h
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
 #include "core/dom/MutationObserver.h"
 #include "core/dom/SimulatedClickOptions.h"
 #include "core/dom/TreeScope.h"
 #include "core/editing/EditingBoundary.h"
 #include "core/events/EventTarget.h"
+#include "core/style/ComputedStyle.h"
 #include "core/style/ComputedStyleConstants.h"
+#include "platform/bindings/TraceWrapperMember.h"
 #include "platform/geometry/LayoutRect.h"
 #include "public/platform/WebFocusType.h"
 
@@ -57,7 +58,7 @@ class EventDispatchHandlingState;
 class NodeList;
 class NodeListsNodeData;
 class NodeOrString;
-class NodeLayoutData;
+class NodeRenderingData;
 class NodeRareData;
 class QualifiedName;
 class RegisteredEventListener;
@@ -73,6 +74,7 @@ using StaticNodeList = StaticNodeTypeList<Node>;
 class StyleChangeReasonForTracing;
 class Text;
 class WebMouseEvent;
+class WebPluginContainerBase;
 
 const int kNodeStyleChangeShift = 18;
 const int kNodeCustomElementShift = 20;
@@ -99,37 +101,52 @@ enum class SlotChangeType {
   kChained,
 };
 
-class NodeLayoutData {
+class NodeRenderingData {
+  WTF_MAKE_NONCOPYABLE(NodeRenderingData);
+
  public:
-  explicit NodeLayoutData(LayoutObject* layout_object)
-      : layout_object_(layout_object) {}
-  ~NodeLayoutData() { CHECK(!layout_object_); }
+  explicit NodeRenderingData(LayoutObject* layout_object,
+                             RefPtr<ComputedStyle> non_attached_style)
+      : layout_object_(layout_object),
+        non_attached_style_(non_attached_style) {}
+  ~NodeRenderingData() { CHECK(!layout_object_); }
 
   LayoutObject* GetLayoutObject() const { return layout_object_; }
   void SetLayoutObject(LayoutObject* layout_object) {
     DCHECK_NE(&SharedEmptyData(), this);
     layout_object_ = layout_object;
   }
-  static NodeLayoutData& SharedEmptyData() {
-    DEFINE_STATIC_LOCAL(NodeLayoutData, shared_empty_data, (nullptr));
+
+  ComputedStyle* GetNonAttachedStyle() const {
+    return non_attached_style_.Get();
+  }
+  void SetNonAttachedStyle(RefPtr<ComputedStyle> non_attached_style) {
+    DCHECK_NE(&SharedEmptyData(), this);
+    non_attached_style_ = non_attached_style;
+  }
+
+  static NodeRenderingData& SharedEmptyData() {
+    DEFINE_STATIC_LOCAL(NodeRenderingData, shared_empty_data,
+                        (nullptr, nullptr));
     return shared_empty_data;
   }
   bool IsSharedEmptyData() { return this == &SharedEmptyData(); }
 
  private:
   LayoutObject* layout_object_;
+  RefPtr<ComputedStyle> non_attached_style_;
 };
 
 class NodeRareDataBase {
  public:
-  NodeLayoutData* GetNodeLayoutData() const { return node_layout_data_; }
-  void SetNodeLayoutData(NodeLayoutData* node_layout_data) {
+  NodeRenderingData* GetNodeRenderingData() const { return node_layout_data_; }
+  void SetNodeRenderingData(NodeRenderingData* node_layout_data) {
     DCHECK(node_layout_data);
     node_layout_data_ = node_layout_data;
   }
 
  protected:
-  NodeRareDataBase(NodeLayoutData* node_layout_data)
+  NodeRareDataBase(NodeRenderingData* node_layout_data)
       : node_layout_data_(node_layout_data) {}
   ~NodeRareDataBase() {
     if (node_layout_data_ && !node_layout_data_->IsSharedEmptyData())
@@ -137,13 +154,14 @@ class NodeRareDataBase {
   }
 
  protected:
-  NodeLayoutData* node_layout_data_;
+  NodeRenderingData* node_layout_data_;
 };
 
 class Node;
 WILL_NOT_BE_EAGERLY_TRACED_CLASS(Node);
 
-// This class represents a DOM node in the DOM tree.
+// A Node is a base class for all objects in the DOM tree.
+// The spec governing this interface can be found here:
 // https://dom.spec.whatwg.org/#interface-node
 class CORE_EXPORT Node : public EventTarget {
   DEFINE_WRAPPERTYPEINFO();
@@ -263,6 +281,14 @@ class CORE_EXPORT Node : public EventTarget {
   void setTextContent(const String&);
 
   bool SupportsAltText();
+
+  void SetNonAttachedStyle(RefPtr<ComputedStyle> non_attached_style);
+
+  ComputedStyle* GetNonAttachedStyle() const {
+    return HasRareData()
+               ? data_.rare_data_->GetNodeRenderingData()->GetNonAttachedStyle()
+               : data_.node_layout_data_->GetNonAttachedStyle();
+  }
 
   // Other methods (not part of DOM)
 
@@ -518,8 +544,11 @@ class CORE_EXPORT Node : public EventTarget {
   // This is called only when the node is focused.
   virtual bool ShouldHaveFocusAppearance() const;
 
-  // Whether the node is inert. This can't be in Element because text nodes
-  // must be recognized as inert to prevent text selection.
+  // Whether the node is inert:
+  // https://html.spec.whatwg.org/multipage/interaction.html#inert
+  // https://github.com/WICG/inert/blob/master/README.md
+  // This can't be in Element because text nodes must be recognized as
+  // inert to prevent text selection.
   bool IsInert() const;
 
   virtual LayoutRect BoundingBox() const;
@@ -595,7 +624,7 @@ class CORE_EXPORT Node : public EventTarget {
   // have one as well.
   LayoutObject* GetLayoutObject() const {
     return HasRareData()
-               ? data_.rare_data_->GetNodeLayoutData()->GetLayoutObject()
+               ? data_.rare_data_->GetNodeRenderingData()->GetLayoutObject()
                : data_.node_layout_data_->GetLayoutObject();
   }
   void SetLayoutObject(LayoutObject*);
@@ -781,6 +810,7 @@ class CORE_EXPORT Node : public EventTarget {
 
   StaticNodeList* getDestinationInsertionPoints();
   HTMLSlotElement* AssignedSlot() const;
+  HTMLSlotElement* FinalDestinationSlot() const;
   HTMLSlotElement* assignedSlotForBinding();
 
   bool IsFinishedParsingChildren() const {
@@ -794,6 +824,9 @@ class CORE_EXPORT Node : public EventTarget {
   void CheckSlotChangeBeforeRemoved() {
     CheckSlotChange(SlotChangeType::kInitial);
   }
+
+  // If the node is a plugin, then this returns its WebPluginContainerBase.
+  WebPluginContainerBase* GetWebPluginContainerBase() const;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -951,10 +984,10 @@ class CORE_EXPORT Node : public EventTarget {
   Member<Node> next_;
   // When a node has rare data we move the layoutObject into the rare data.
   union DataUnion {
-    DataUnion() : node_layout_data_(&NodeLayoutData::SharedEmptyData()) {}
+    DataUnion() : node_layout_data_(&NodeRenderingData::SharedEmptyData()) {}
     // LayoutObjects are fully owned by their DOM node. See LayoutObject's
     // LIFETIME documentation section.
-    NodeLayoutData* node_layout_data_;
+    NodeRenderingData* node_layout_data_;
     NodeRareDataBase* rare_data_;
   } data_;
 };
@@ -991,12 +1024,6 @@ inline void Node::LazyReattachIfAttached() {
 inline bool Node::ShouldCallRecalcStyle(StyleRecalcChange change) {
   return change >= kIndependentInherit || NeedsStyleRecalc() ||
          ChildNeedsStyleRecalc();
-}
-
-// See the comment at the declaration of ScriptWrappable::fromNode in
-// bindings/core/v8/ScriptWrappable.h about why this method is defined here.
-inline ScriptWrappable* ScriptWrappable::FromNode(Node* node) {
-  return node;
 }
 
 // Allow equality comparisons of Nodes by reference or pointer, interchangeably.

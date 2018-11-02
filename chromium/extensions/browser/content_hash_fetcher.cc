@@ -52,7 +52,8 @@ class ContentHashFetcherJob
     : public base::RefCountedThreadSafe<ContentHashFetcherJob>,
       public net::URLFetcherDelegate {
  public:
-  typedef base::Callback<void(ContentHashFetcherJob*)> CompletionCallback;
+  using CompletionCallback =
+      base::Callback<void(scoped_refptr<ContentHashFetcherJob>)>;
   ContentHashFetcherJob(net::URLRequestContextGetter* request_context,
                         const ContentVerifierKey& key,
                         const std::string& extension_id,
@@ -141,6 +142,7 @@ class ContentHashFetcherJob
   content::BrowserThread::ID creation_thread_;
 
   // Used for fetching content signatures.
+  // Created and destroyed on |creation_thread_|.
   std::unique_ptr<net::URLFetcher> url_fetcher_;
 
   // The key used to validate verified_contents.json.
@@ -198,8 +200,7 @@ void ContentHashFetcherJob::Start() {
   base::FilePath verified_contents_path =
       file_util::GetVerifiedContentsPath(extension_path_);
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::USER_VISIBLE),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&ContentHashFetcherJob::LoadVerifiedContents, this,
                  verified_contents_path),
       base::Bind(&ContentHashFetcherJob::DoneCheckingForVerifiedContents,
@@ -218,6 +219,13 @@ bool ContentHashFetcherJob::IsCancelled() {
 }
 
 ContentHashFetcherJob::~ContentHashFetcherJob() {
+  // Destroy |url_fetcher_| on correct thread.
+  // It was possible for it to be deleted on blocking pool from
+  // MaybeCreateHashes(). See https://crbug.com/702300 for details.
+  if (url_fetcher_ && !content::BrowserThread::CurrentlyOn(creation_thread_)) {
+    content::BrowserThread::DeleteSoon(creation_thread_, FROM_HERE,
+                                       url_fetcher_.release());
+  }
 }
 
 bool ContentHashFetcherJob::LoadVerifiedContents(const base::FilePath& path) {
@@ -292,11 +300,14 @@ void ContentHashFetcherJob::OnURLFetchComplete(const net::URLFetcher* source) {
   VLOG(1) << "URLFetchComplete for " << extension_id_
           << " is_success:" << url_fetcher_->GetStatus().is_success() << " "
           << fetch_url_.possibly_invalid_spec();
+  // Delete |url_fetcher_| once we no longer need it.
+  std::unique_ptr<net::URLFetcher> url_fetcher = std::move(url_fetcher_);
+
   if (IsCancelled())
     return;
   std::unique_ptr<std::string> response(new std::string);
-  if (!url_fetcher_->GetStatus().is_success() ||
-      !url_fetcher_->GetResponseAsString(response.get())) {
+  if (!url_fetcher->GetStatus().is_success() ||
+      !url_fetcher->GetResponseAsString(response.get())) {
     DoneFetchingVerifiedContents(false);
     return;
   }
@@ -314,8 +325,7 @@ void ContentHashFetcherJob::OnURLFetchComplete(const net::URLFetcher* source) {
         file_util::GetVerifiedContentsPath(extension_path_);
     size_t size = response->size();
     base::PostTaskWithTraitsAndReplyWithResult(
-        FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                       base::TaskPriority::USER_VISIBLE),
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
         base::Bind(&WriteFileHelper, destination, base::Passed(&response)),
         base::Bind(&ContentHashFetcherJob::OnVerifiedContentsWritten, this,
                    size));
@@ -445,7 +455,7 @@ void ContentHashFetcherJob::DispatchCallback() {
     if (cancelled_)
       return;
   }
-  callback_.Run(this);
+  callback_.Run(make_scoped_refptr(this));
 }
 
 // ----
@@ -513,14 +523,19 @@ void ContentHashFetcher::ExtensionUnloaded(const Extension* extension) {
   }
 }
 
-void ContentHashFetcher::JobFinished(ContentHashFetcherJob* job) {
+void ContentHashFetcher::JobFinished(scoped_refptr<ContentHashFetcherJob> job) {
   if (!job->IsCancelled()) {
+    // Note: Run can result in ContentHashFetcher::ExtensionUnloaded.
+    //
+    // TODO(lazyboy): Add a unit test to cover the case where Run can result in
+    // ContentHashFetcher::ExtensionUnloaded, once https://crbug.com/702300 is
+    // fixed.
     fetch_callback_.Run(job->extension_id(), job->success(), job->force(),
                         job->hash_mismatch_unix_paths());
   }
 
   for (JobMap::iterator i = jobs_.begin(); i != jobs_.end(); ++i) {
-    if (i->second.get() == job) {
+    if (i->second.get() == job.get()) {
       jobs_.erase(i);
       break;
     }

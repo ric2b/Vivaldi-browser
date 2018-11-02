@@ -94,12 +94,14 @@ class ClearKeyCdm : public ClearKeyCdmInterface {
 
   // ContentDecryptionModule callbacks.
   void OnSessionMessage(const std::string& session_id,
-                        ContentDecryptionModule::MessageType message_type,
+                        CdmMessageType message_type,
                         const std::vector<uint8_t>& message);
   void OnSessionKeysChange(const std::string& session_id,
                            bool has_additional_usable_key,
                            CdmKeysInfo keys_info);
   void OnSessionClosed(const std::string& session_id);
+  void OnSessionExpirationUpdate(const std::string& session_id,
+                                 base::Time new_expiry_time);
 
   // Handle the success/failure of a promise. These methods are responsible for
   // calling |host_| to resolve or reject the promise.

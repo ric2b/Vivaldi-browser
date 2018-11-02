@@ -38,10 +38,12 @@ RenderSurfaceImpl::RenderSurfaceImpl(LayerTreeImpl* layer_tree_impl,
     : layer_tree_impl_(layer_tree_impl),
       stable_effect_id_(stable_effect_id),
       effect_tree_index_(EffectTree::kInvalidNodeId),
+      num_contributors_(0),
       has_contributing_layer_that_escapes_clip_(false),
       surface_property_changed_(false),
       ancestor_property_changed_(false),
       contributes_to_drawn_surface_(false),
+      is_render_surface_list_member_(false),
       nearest_occlusion_immune_ancestor_(nullptr) {
   damage_tracker_ = DamageTracker::Create();
 }
@@ -125,7 +127,7 @@ LayerImpl* RenderSurfaceImpl::MaskLayer() {
 }
 
 bool RenderSurfaceImpl::HasMask() const {
-  return OwningEffectNode()->mask_layer_id != EffectTree::kInvalidNodeId;
+  return OwningEffectNode()->mask_layer_id != Layer::INVALID_ID;
 }
 
 const FilterOperations& RenderSurfaceImpl::Filters() const {
@@ -160,10 +162,6 @@ int RenderSurfaceImpl::ClipTreeIndex() const {
 }
 
 int RenderSurfaceImpl::EffectTreeIndex() const {
-  DCHECK_EQ(
-      effect_tree_index_,
-      layer_tree_impl_->property_trees()
-          ->effect_tree.FindNodeIndexFromOwningLayerId(stable_effect_id_));
   return effect_tree_index_;
 }
 
@@ -339,7 +337,7 @@ void RenderSurfaceImpl::NoteAncestorPropertyChanged() {
   ancestor_property_changed_ = true;
 }
 
-gfx::Rect RenderSurfaceImpl::GetDamageRect() {
+gfx::Rect RenderSurfaceImpl::GetDamageRect() const {
   gfx::Rect damage_rect;
   bool is_valid_rect = damage_tracker_->GetDamageRectIfValid(&damage_rect);
   if (!is_valid_rect)
@@ -352,16 +350,12 @@ void RenderSurfaceImpl::ResetPropertyChangedFlags() {
   ancestor_property_changed_ = false;
 }
 
-void RenderSurfaceImpl::ClearLayerLists() {
-  layer_list_.clear();
-}
-
 int RenderSurfaceImpl::GetRenderPassId() {
   return id();
 }
 
 std::unique_ptr<RenderPass> RenderSurfaceImpl::CreateRenderPass() {
-  std::unique_ptr<RenderPass> pass = RenderPass::Create(layer_list_.size());
+  std::unique_ptr<RenderPass> pass = RenderPass::Create(num_contributors_);
   gfx::Rect damage_rect = GetDamageRect();
   damage_rect.Intersect(content_rect());
   pass->SetNew(id(), content_rect(), damage_rect,
@@ -385,7 +379,7 @@ void RenderSurfaceImpl::AppendQuads(RenderPass* render_pass,
   SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   shared_quad_state->SetAll(
-      draw_transform(), content_rect().size(), content_rect(),
+      draw_transform(), content_rect(), content_rect(),
       draw_properties_.clip_rect, draw_properties_.is_clipped,
       draw_properties_.draw_opacity, BlendMode(), sorting_context_id);
 
@@ -416,15 +410,18 @@ void RenderSurfaceImpl::AppendQuads(RenderPass* render_pass,
       TileMaskLayer(render_pass, shared_quad_state, visible_layer_rect);
       return;
     }
-    mask_layer->GetContentsResourceId(&mask_resource_id, &mask_texture_size);
+    gfx::SizeF mask_uv_size;
+    mask_layer->GetContentsResourceId(&mask_resource_id, &mask_texture_size,
+                                      &mask_uv_size);
     gfx::SizeF unclipped_mask_target_size = gfx::ScaleSize(
         gfx::SizeF(OwningEffectNode()->unscaled_mask_target_size),
         surface_contents_scale.x(), surface_contents_scale.y());
-    // Convert content_rect from target space to normalized space.
-    // Where unclipped_mask_target_size maps to gfx::Size(1, 1).
-    mask_uv_rect = gfx::ScaleRect(gfx::RectF(content_rect()),
-                                  1.0f / unclipped_mask_target_size.width(),
-                                  1.0f / unclipped_mask_target_size.height());
+    // Convert content_rect from target space to normalized mask UV space.
+    // Where |unclipped_mask_target_size| maps to |mask_uv_size|.
+    mask_uv_rect = gfx::ScaleRect(
+        gfx::RectF(content_rect()),
+        mask_uv_size.width() / unclipped_mask_target_size.width(),
+        mask_uv_size.height() / unclipped_mask_target_size.height());
   }
 
   gfx::RectF tex_coord_rect(gfx::Rect(content_rect().size()));
@@ -461,18 +458,18 @@ void RenderSurfaceImpl::TileMaskLayer(RenderPass* render_pass,
   shared_quad_state->quad_to_target_transform.matrix().preScale(
       mask_quad_to_surface_contents_scale.x(),
       mask_quad_to_surface_contents_scale.y(), 1.f);
-  shared_quad_state->quad_layer_bounds =
-      gfx::ScaleToCeiledSize(shared_quad_state->quad_layer_bounds,
-                             1.f / mask_quad_to_surface_contents_scale.x(),
-                             1.f / mask_quad_to_surface_contents_scale.y());
+  shared_quad_state->quad_layer_rect =
+      gfx::ScaleToEnclosingRect(shared_quad_state->quad_layer_rect,
+                                1.f / mask_quad_to_surface_contents_scale.x(),
+                                1.f / mask_quad_to_surface_contents_scale.y());
   shared_quad_state->visible_quad_layer_rect =
-      gfx::ScaleToEnclosedRect(shared_quad_state->visible_quad_layer_rect,
-                               mask_quad_to_surface_contents_scale.x(),
-                               mask_quad_to_surface_contents_scale.y());
-  gfx::Rect content_rect_in_coverage_space = gfx::ScaleToEnclosedRect(
+      gfx::ScaleToEnclosingRect(shared_quad_state->visible_quad_layer_rect,
+                                mask_quad_to_surface_contents_scale.x(),
+                                mask_quad_to_surface_contents_scale.y());
+  gfx::Rect content_rect_in_coverage_space = gfx::ScaleToEnclosingRect(
       content_rect(), 1.f / mask_quad_to_surface_contents_scale.x(),
       1.f / mask_quad_to_surface_contents_scale.y());
-  gfx::Rect visible_layer_rect_in_coverage_space = gfx::ScaleToEnclosedRect(
+  gfx::Rect visible_layer_rect_in_coverage_space = gfx::ScaleToEnclosingRect(
       visible_layer_rect, 1.f / mask_quad_to_surface_contents_scale.x(),
       1.f / mask_quad_to_surface_contents_scale.y());
 

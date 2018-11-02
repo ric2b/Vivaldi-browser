@@ -191,7 +191,7 @@ ui::AXTreeUpdate
   ui::AXNodeData empty_document;
   empty_document.id = 0;
   empty_document.role = ui::AX_ROLE_ROOT_WEB_AREA;
-  empty_document.state = 1 << ui::AX_STATE_READ_ONLY;
+  empty_document.AddState(ui::AX_STATE_READ_ONLY);
 
   ui::AXTreeUpdate update;
   update.root_id = empty_document.id;
@@ -209,6 +209,16 @@ void BrowserAccessibilityManagerAndroid::SetContentViewCore(
       env, Java_BrowserAccessibilityManager_create(
                env, reinterpret_cast<intptr_t>(this), content_view_core)
                .obj());
+}
+
+bool BrowserAccessibilityManagerAndroid::ShouldRespectDisplayedPasswordText() {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = GetJavaRefFromRootManager();
+  if (obj.is_null())
+    return false;
+
+  return Java_BrowserAccessibilityManager_shouldRespectDisplayedPasswordText(
+      env, obj);
 }
 
 bool BrowserAccessibilityManagerAndroid::ShouldExposePasswordText() {
@@ -253,7 +263,20 @@ void BrowserAccessibilityManagerAndroid::NotifyAccessibilityEvent(
   // Sometimes we get events on nodes in our internal accessibility tree
   // that aren't exposed on Android. Update |node| to point to the highest
   // ancestor that's a leaf node.
+  BrowserAccessibility* original_node = node;
   node = node->GetClosestPlatformObject();
+  BrowserAccessibilityAndroid* android_node =
+      static_cast<BrowserAccessibilityAndroid*>(node);
+
+  // If the closest platform object is a password field, the event we're
+  // getting is doing something in the shadow dom, for example replacing a
+  // character with a dot after a short pause. On Android we don't want to
+  // fire an event for those changes, but we do want to make sure our internal
+  // state is correct, so we call OnDataChanged() and then return.
+  if (android_node->IsPassword() && original_node != node) {
+    android_node->OnDataChanged();
+    return;
+  }
 
   // Always send AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED to notify
   // the Android system that the accessibility hierarchy rooted at this
@@ -267,8 +290,6 @@ void BrowserAccessibilityManagerAndroid::NotifyAccessibilityEvent(
     return;
   }
 
-  BrowserAccessibilityAndroid* android_node =
-      static_cast<BrowserAccessibilityAndroid*>(node);
   switch (event_type) {
     case ui::AX_EVENT_LOAD_COMPLETE:
       Java_BrowserAccessibilityManager_handlePageLoaded(
@@ -474,7 +495,9 @@ jboolean BrowserAccessibilityManagerAndroid::PopulateAccessibilityNodeInfo(
   Java_BrowserAccessibilityManager_setAccessibilityNodeInfoText(
       env, obj, info,
       base::android::ConvertUTF16ToJavaString(env, node->GetText()),
-      node->IsLink(), node->IsEditableText());
+      node->IsLink(), node->IsEditableText(),
+      base::android::ConvertUTF16ToJavaString(
+          env, node->GetInheritedString16Attribute(ui::AX_ATTR_LANGUAGE)));
   base::string16 element_id;
   if (node->GetHtmlAttribute("id", &element_id)) {
     Java_BrowserAccessibilityManager_setAccessibilityNodeInfoViewIdResourceName(
@@ -499,7 +522,9 @@ jboolean BrowserAccessibilityManagerAndroid::PopulateAccessibilityNodeInfo(
 
   Java_BrowserAccessibilityManager_setAccessibilityNodeInfoKitKatAttributes(
       env, obj, info, is_root, node->IsEditableText(),
-      base::android::ConvertUTF16ToJavaString(env, node->GetRoleDescription()));
+      base::android::ConvertUTF16ToJavaString(env, node->GetRoleDescription()),
+      node->GetIntAttribute(ui::AX_ATTR_TEXT_SEL_START),
+      node->GetIntAttribute(ui::AX_ATTR_TEXT_SEL_END));
 
   Java_BrowserAccessibilityManager_setAccessibilityNodeInfoLollipopAttributes(
       env, obj, info,
@@ -991,9 +1016,9 @@ void BrowserAccessibilityManagerAndroid::OnAutofillPopupDisplayed(
   ui::AXNodeData ax_node_data;
   ax_node_data.role = ui::AX_ROLE_MENU;
   ax_node_data.SetName("Autofill");
-  ax_node_data.state = 1 << ui::AX_STATE_READ_ONLY;
-  ax_node_data.state |= 1 << ui::AX_STATE_FOCUSABLE;
-  ax_node_data.state |= 1 << ui::AX_STATE_SELECTABLE;
+  ax_node_data.AddState(ui::AX_STATE_READ_ONLY);
+  ax_node_data.AddState(ui::AX_STATE_FOCUSABLE);
+  ax_node_data.AddState(ui::AX_STATE_SELECTABLE);
   g_autofill_popup_proxy_node_ax_node->SetData(ax_node_data);
   g_autofill_popup_proxy_node->Init(this, g_autofill_popup_proxy_node_ax_node);
 

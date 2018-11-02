@@ -137,7 +137,7 @@ static bool LayoutParentStyleForcesZIndexToCreateStackingContext(
 }
 
 void StyleAdjuster::AdjustStyleForEditing(ComputedStyle& style) {
-  if (style.UserModify() != READ_WRITE_PLAINTEXT_ONLY)
+  if (style.UserModify() != EUserModify::kReadWritePlaintextOnly)
     return;
   // Collapsing whitespace is harmful in plain-text editing.
   if (style.WhiteSpace() == EWhiteSpace::kNormal)
@@ -512,6 +512,15 @@ void StyleAdjuster::AdjustComputedStyle(
       style.ClearMultiCol();
   }
   AdjustStyleForAlignment(style, layout_parent_style);
+
+  // If this node is sticky it marks the creation of a sticky subtree, which we
+  // must track to properly handle document lifecycle in some cases.
+  //
+  // It is possible that this node is already in a sticky subtree (i.e. we have
+  // nested sticky nodes) - in that case the bit will already be set via
+  // inheritance from the ancestor and there is no harm to setting it again.
+  if (style.GetPosition() == EPosition::kSticky)
+    style.SetSubtreeIsSticky(true);
 }
 
 }  // namespace blink

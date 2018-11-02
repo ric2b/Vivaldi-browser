@@ -24,8 +24,6 @@
 <translation id="1774152462503052664">Permitir que Chromium se ejecute en segundo plano</translation>
 <translation id="1779356040007214683">Para que Chromium sea más seguro, inhabilitamos algunas extensiones que no figuran en <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> y que posiblemente se hayan agregado sin tu conocimiento.</translation>
 <translation id="1808667845054772817">Reinstalar Chromium</translation>
-<translation id="1816404578968201294">Chromium necesita acceso a tu ubicación para compartirla con el sitio.</translation>
-<translation id="1838412507805038478">Chromium verificó que <ph name="ISSUER" /> emitió el certificado de este sitio web.</translation>
 <translation id="1869480248812203386">Puedes ayudar a que Chromium sea más seguro y fácil de usar si informas automáticamente detalles de posibles incidentes de seguridad en Google.</translation>
 <translation id="1881322772814446296">Estás por acceder con una cuenta administrada, lo que significa que proporcionarás al administrador el control sobre tu perfil de Chromium. Tus datos de Chromium, como las aplicaciones, los favoritos, el historial, las contraseñas y otros parámetros de configuración quedarán vinculados a <ph name="USER_NAME" /> de forma permanente. Podrás eliminar estos datos a través del Panel de control de Cuentas de Google, pero no podrás asociarlos a otra cuenta. También puedes crear un perfil para mantener separados tus datos de Chromium. <ph name="LEARN_MORE" /></translation>
 <translation id="1929939181775079593">Chromium no responde. ¿Quieres reiniciarlo ahora?</translation>
@@ -37,6 +35,7 @@
 <translation id="2119636228670142020">Acerca de &amp;Chromium OS</translation>
 <translation id="2158734852934720349">Licencias de código abierto del Sistema operativo Chromium</translation>
 <translation id="2241627712206172106">Si compartes una computadora, tus amigos y familiares pueden navegar de forma independiente y configurar Chromium según los gustos individuales.</translation>
+<translation id="2265088490657775772">obtener Chromium para tu iPhone</translation>
 <translation id="2316129865977710310">No, gracias</translation>
 <translation id="2347108572062610441">Esta extensión cambió la página que se muestra al iniciar Chromium.</translation>
 <translation id="2372704305038231957">Es posible que Chromium de 32 bits no funcione correctamente porque ya no es compatible con este sistema Linux. Actualiza a Chromium de 64 bits.</translation>
@@ -49,7 +48,6 @@
 <translation id="2535480412977113886">El Sistema operativo Chromium no pudo sincronizar los datos porque la información de acceso de la cuenta está desactualizada.</translation>
 <translation id="2572494885440352020">Chromium Helper</translation>
 <translation id="2587578672395088481">El Sistema operativo Chromium debe reiniciarse para que se aplique la actualización.</translation>
-<translation id="2636877269779209383">Chromium necesita acceso a la cámara para compartirla con el sitio.</translation>
 <translation id="2647554856022461007">Es posible que Chromium use servicios web para mejorar tu experiencia de navegación (tienes la opción de inhabilitar estos servicios). <ph name="BEGIN_LINK" />Más información<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">Se produjo un error del sistema operativo durante la instalación. Descarga Chromium nuevamente.</translation>
 <translation id="2685838254101182273">Chromium dejó de actualizarse y ya no admite esta versión de tu sistema operativo.</translation>
@@ -110,12 +108,14 @@
 <translation id="4549794359424059447">Las próximas versiones de Chromium ya no serán compatibles con Windows XP o Windows Vista.</translation>
 <translation id="4567424176335768812">Accediste como <ph name="USER_EMAIL_ADDRESS" />. Ahora puedes ir a los favoritos, al historial y a otras opciones en todos los dispositivos en los que hayas accedido.</translation>
 <translation id="459535195905078186">Aplicaciones de Chromium</translation>
+<translation id="4611246891205775468">Chromium necesita permiso para acceder a tu micrófono para este sitio.</translation>
 <translation id="4621240073146040695">Chromium está casi actualizado. Reinícialo para completar la actualización.</translation>
 <translation id="4677944499843243528">Parece que otro proceso de Chromium (<ph name="PROCESS_ID" />) está utilizando el perfil en otra computadora (<ph name="HOST_NAME" />). Chromium bloqueó el perfil para que no se dañe. Si puedes confirmar que ningún otro proceso está utilizando este perfil, puedes desbloquearlo y volver a iniciar Chromium.</translation>
 <translation id="469338717132742108">Obtener ayuda con el Sistema operativo Chromium</translation>
 <translation id="4708774505295300557">Alguien accedió anteriormente a Chromium en esta computadora como <ph name="ACCOUNT_EMAIL_LAST" />. Crea un usuario de Chromium nuevo para mantener tu información por separado.</translation>
 <translation id="4714956846925717402">Cómo acceder a Chromium más rápido</translation>
 <translation id="4743926867934016338">Aceptar y buscar</translation>
+<translation id="4825874709045178029">Chromium necesita permiso para acceder a tu cámara para este sitio.</translation>
 <translation id="4888717733111232871">Regla de entrada para que Chromium permita el tráfico mDNS.</translation>
 <translation id="4943838377383847465">Chromium está en modo de segundo plano</translation>
 <translation id="4987820182225656817">Los invitados pueden utilizar Chromium sin dejar nada detrás.</translation>
@@ -165,11 +165,11 @@
 <translation id="6403826409255603130">Chromium es un navegador web que ejecuta páginas web y aplicaciones con la velocidad de la luz. Es rápido, estable y fácil de usar. Navega por la Web con seguridad y protección integrada contra software mailicioso y suplantación de identidad.</translation>
 <translation id="6475912303565314141">También controla qué página se muestra al iniciar Chromium.</translation>
 <translation id="6485906693002546646">Estás utilizando <ph name="PROFILE_EMAIL" /> para sincronizar los datos de Chromium. Si quieres actualizar las preferencias de sincronización o utilizar Chromium sin una cuenta de Google, accede a <ph name="SETTINGS_LINK" />.</translation>
+<translation id="6505742536731484931">Chromium necesita acceso a tu ubicación para compartirla con este sitio.</translation>
 <translation id="6510925080656968729">Desinstalar Chromium</translation>
 <translation id="6526111688217511984">Chromium necesita acceder al almacenamiento para descargar archivos.</translation>
 <translation id="6584627348340620412">Las futuras versiones de Chromium de 32 bits ya no serán compatibles con este sistema Linux. Actualiza a Chromium de 64 bits.</translation>
 <translation id="6593914713218535185">Es posible que Chromium no funcione correctamente porque ya no es compatible con este sistema Linux.</translation>
-<translation id="6637001341228460105">Chromium necesita acceso al micrófono para compartirlo con el sitio.</translation>
 <translation id="6638567566961868659">Busca tus favoritos en el menú de Chromium o en la barra de favoritos.</translation>
 <translation id="6676384891291319759">Acceder a Internet</translation>
 <translation id="6717134281241384636">Tu perfil no se puede utilizar porque proviene de una versión más actualizada de Chromium. Es posible que algunas características no estén disponibles. Especifica un directorio de perfil diferente o utiliza una versión más reciente de Chromium.</translation>
@@ -223,19 +223,20 @@ Para obtener más instrucciones, revisa tu correo electrónico en <ph name="ACCO
 <translation id="7975919845073681630">Como esta es una instalación secundaria de Chromium, no puede establecerse como tu navegador predeterminado.</translation>
 <translation id="7979877361127045932">Ocultar en el menú de Chromium</translation>
 <translation id="8030318113982266900">Actualizando el dispositivo al canal <ph name="CHANNEL_NAME" />…</translation>
-<translation id="8033665941300843262">Chromium necesita acceso a los permisos para compartirlos con el sitio.</translation>
 <translation id="8134284582177628525">Si compartes esta computadora con <ph name="PROFILE_NAME" />, agrégate a Chromium para navegar de manera independiente. De lo contrario, desconecta la cuenta de Google del otro usuario.</translation>
 <translation id="8157153840442649507">Chromium se muestra en este idioma</translation>
 <translation id="81770708095080097">Chromium bloqueó este archivo porque es peligroso.</translation>
 <translation id="8222496066431494154">Instala Chromium en el teléfono. Te enviaremos un SMS al número de teléfono de recuperación de la cuenta: <ph name="PHONE_NUMBER" /></translation>
 <translation id="8269379391216269538">Ayudar a mejorar Chromium</translation>
 <translation id="8290862415967981663">Chromium bloqueó este archivo porque podría ser peligroso.</translation>
+<translation id="8328596990138326317">Chromium necesita permiso para acceder a tu cámara y micrófono para este sitio.</translation>
 <translation id="8340674089072921962"><ph name="USER_EMAIL_ADDRESS" /> usaba Chromium anteriormente</translation>
 <translation id="8453117565092476964">El instalador está dañado o no es válido. Descarga Chromium nuevamente.</translation>
 <translation id="8493179195440786826">Chromium no actualizado</translation>
 <translation id="8563206822260884157">Usar una contraseña segura generada por Chromium</translation>
 <translation id="85843667276690461">Obtener ayuda para usar Chromium</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> Los autores de Chromium. Todos los derechos reservados.</translation>
+<translation id="8590769996813453836">Se encontró software dañino en tu computadora. Chromium puede quitarlo y restablecer la configuración para que el navegador vuelva a funcionar correctamente.</translation>
 <translation id="8621669128220841554">La instalación falló debido a un error no especificado. Descarga Chromium otra vez.</translation>
 <translation id="8628626585870903697">Chromium no incluye el visor de PDF que se requiere para la vista previa de impresión.</translation>
 <translation id="8667808506758191620">Tu <ph name="DEVICE_TYPE" /> está actualizado.</translation>

@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">আপনি হোম বোতাম ক্লিক করলে কোন পৃষ্ঠা দেখানো হবে তা এই এক্সটেনশানটি দ্বারা পরিবর্তন করা করেছে।</translation>
 <translation id="1588438908519853928">সাধারণ</translation>
 <translation id="1616206807336925449">এই এক্সটেনশনটির কোনো বিশেষ অনুমতির প্রয়োজন নেই।</translation>
-<translation id="1620510694547887537">ক্যামেরা</translation>
 <translation id="1635033183663317347">আপনার কাস্টডিয়ান দ্বারা এটি ইনস্টল করা হয়েছে।</translation>
 <translation id="1723824996674794290">&amp;নতুন উইন্ডো</translation>
 <translation id="1729533290416704613">আপনি Omnibox থেকে অনুসন্ধান করলে কোন পৃষ্ঠাটি দেখানো হবে তাও এটি নিয়ন্ত্রণ করে।</translation>
-<translation id="1789575671122666129">পপআপ</translation>
 <translation id="1850508293116537636">&amp;ঘড়ির কাঁটার দিকে ঘোরান</translation>
 <translation id="1859234291848436338">লিখন নির্দেশনা</translation>
 <translation id="1901303067676059328">&amp;সকল নির্বাচন করুন</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">এই প্লাগইনটি লুকান</translation>
 <translation id="2087822576218954668">প্রিন্ট করুন: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">প্ল্যাগ ইন আপডেট করুন</translation>
-<translation id="2147827593068025794">পটভূমি সিঙ্ক</translation>
 <translation id="215753907730220065">পূর্ণ স্ক্রীণ বন্ধ করুন</translation>
 <translation id="2177950615300672361">ছদ্মবেশী ট্যাব: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">সনাক্ত করুন (ডিফল্ট)</translation>
 <translation id="219008588003277019">স্থানীয় গ্রাহক মডিউল: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">সাধারণ পাঠ্য হিসাবে আটকে দিন  </translation>
 <translation id="2282146716419988068">GPU প্রক্রিয়া</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">আপনার কম্পিউটারের অন্য একটি প্রোগ্রাম একটি এক্সটেনশন জুড়েছে যা Vivaldi এর কাজ করার পদ্ধতিকে পাল্টে দিতে পারে৷</translation>
 <translation id="2445081178310039857">এক্সটেনশন রুট ডিরেক্টরি প্রয়োজন৷</translation>
 <translation id="2470702053775288986">অসমর্থিত এক্সটেনশানগুলি নিষ্ক্রিয় করা আছে</translation>
-<translation id="2482878487686419369">বিজ্ঞপ্তিগুলি</translation>
 <translation id="2501797496290880632">একটি শর্টকাট লিখুন</translation>
-<translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> ইনস্টল করুন</translation>
 <translation id="2550212893339833758">অদলবদল করা মেমরি</translation>
 <translation id="2662876636500006917">Vivaldi  ওয়েব বাজার</translation>
 <translation id="2678063897982469759">পুনঃ সক্ষম</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">ব্যবহারকারীর হ্যান্ডলগুলি</translation>
 <translation id="3222066309010235055">পূর্বউপস্থাপন: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">মাইক্রোফোন</translation>
 <translation id="3241680850019875542">প্যাক করার জন্য এক্সটেনশনের রুট ডিরেক্টরিটি নির্বাচন করুন৷ কোন এক্সটেনশন আপডেট করতে, আবার ব্যবহার করার জন্য ব্যক্তিগত কী ফাইলটিও নির্বাচন করুন৷</translation>
 <translation id="3280237271814976245">এই &amp;রূপে সংরক্ষণ করুন...</translation>
 <translation id="3288047731229977326">বিকাশকারী মোডে চলমান এক্সটেনশানগুলি আপনার কম্পিউটারের ক্ষতি করতে পারে৷ যদি আপনি একজন বিকাশকারী না হন, তবে সুরক্ষিত থাকার জন্য আপনার এই এক্সটেনশানগুলিকে বিকাশকারী মোডে চালানো অক্ষম করা উচিৎ৷</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">চি&amp;ত্র ঠিকানা কপি করুন</translation>
 <translation id="335985608243443814">ব্রাউজ করুন...</translation>
 <translation id="3378572629723696641">এই এক্সটেনশানটি হয়ত ক্ষতিগ্রস্ত হয়েছে৷</translation>
-<translation id="3427092606871434483">মঞ্জুরি দিন (ডিফল্ট)</translation>
 <translation id="3435896845095436175">সক্ষম করুন</translation>
 <translation id="345693547134384690">&amp;ছবি নতুন ট্যাবে খুলুন</translation>
 <translation id="3467267818798281173">Google-এর কাছে পরামর্শ চান</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">লিঙ্কটি ছ&amp;দ্মবেশী উইন্ডোতে খুলুন</translation>
 <translation id="3678156199662914018">এক্সটেনশন: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">লোড হচ্ছে...</translation>
-<translation id="3789841737615482174">ইনস্টল করুন</translation>
 <translation id="3798449238516105146">সংস্করণ</translation>
 <translation id="3866249974567520381">বর্ণনা</translation>
 <translation id="3905761538810670789">অ্যাপ্লিকেশান মেরামত করুন</translation>
@@ -103,13 +94,11 @@
 <translation id="4096508467498758490">বিকাশকারী মোড এক্সটেনশান অক্ষম করুন</translation>
 <translation id="4100839878934973028">আপনার কম্পিউটারের অন্য একটি প্রোগ্রাম একটি অ্যাপ্লিকেশন জুড়েছে যা Vivaldi এর কাজ করার পদ্ধতিকে পাল্টে দিতে পারে৷</translation>
 <translation id="4130207949184424187">আপনি বহুউপযোগী ক্ষেত্র থেকে অনুসন্ধান করলে কোন পৃষ্ঠাটি দেখানো হবে তা এই এক্সটেনশানটি পরিবর্তন করেছে।</translation>
-<translation id="4165986682804962316">সাইটের সেটিংস</translation>
 <translation id="4176463684765177261">অক্ষম</translation>
 <translation id="4200983522494130825">নতুন &amp;ট্যাব</translation>
 <translation id="420665587194630159">(এই এক্সটেনশানটি পরিচালিত হচ্ছে এবং সরানো অথবা অক্ষম করা যাবে না৷)</translation>
 <translation id="4240511609794012987">ভাগকরা মেমরি</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K লাইভ)</translation>
-<translation id="4312866146174492540">অবরুদ্ধ করুন (ডিফল্ট)</translation>
 <translation id="4384652540891215547">এক্সটেনশন সক্রিয় করুন</translation>
 <translation id="4394049700291259645">অক্ষম</translation>
 <translation id="4423482519432579560">&amp;বানান পরীক্ষা</translation>
@@ -122,7 +111,6 @@
 <translation id="4677772697204437347">GPU মেমোরি</translation>
 <translation id="4711638718396952945">সেটিংস পুনরুদ্ধার করুন</translation>
 <translation id="4839303808932127586">এইরূপে ভিডিও সংর&amp;ক্ষণ করুন...</translation>
-<translation id="4851858059374029925"><ph name="PLUGIN_NAME" /> ইনস্টল করবেন? যেসব প্লাগ ইন আপনি বিশ্বাস করেন শুধুমাত্র সেগুলি ইনস্টল করুন।</translation>
 <translation id="488785315393301722">বিশদ বিবরণ দেখান</translation>
 <translation id="4911714727432509308">কিবোর্ড শর্টকাটে কোনো এক্সটেনশন ধার্য করা হয়নি৷</translation>
 <translation id="4927301649992043040">প্যাক এক্সটেনশন</translation>
@@ -153,12 +141,10 @@
 <translation id="5646376287012673985">অবস্থান</translation>
 <translation id="5715711091495208045">প্লাগ ইন ব্রোকার: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">এইরূপে অডিও সংর&amp;ক্ষণ করুন...</translation>
-<translation id="5778550464785688721">MIDI ডিভাইসসমূহ পূর্ণ নিয়ন্ত্রণ</translation>
 <translation id="5780973441651030252">প্রক্রিয়ার অগ্রাধিকার</translation>
 <translation id="5804241973901381774">অনুমতিগুলি</translation>
 <translation id="583281660410589416">অজানা</translation>
 <translation id="59174027418879706">সক্ষম করা হযেছে</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{১টি ব্যবহৃত হচ্ছে}one{#টি ব্যবহৃত হচ্ছে}other{#টি ব্যবহৃত হচ্ছে}}</translation>
 <translation id="5956585768868398362">আপনি কি এই পৃষ্ঠাটিকে অনুসন্ধান পৃষ্টা হিসেবে আশা করছিলেন?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> পিক)</translation>
 <translation id="5965661248935608907">আপনি হোম বোতাম ক্লিক করলে বা Omnibox থেকে অনুসন্ধান করলে কোন পৃষ্ঠাটি দেখানো হবে তাও এটি নিয়ন্ত্রণ করে।</translation>
@@ -187,14 +173,12 @@
 <translation id="6787839852456839824">কীবোর্ড শর্টকাটগুলি</translation>
 <translation id="6798954102094737107">প্ল্যাগ ইন: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">পরিবর্তন রাখুন</translation>
-<translation id="6863910145616405334">প্লাগ ইন পাওয়া যায়নি</translation>
 <translation id="6886871292305414135">নতুন &amp;ট্যাবে লিঙ্ক খুলুন</translation>
 <translation id="6900284862687837908">পটভূমিতে কাজ করা অ্যাপ্লিকেশান: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ফাইল অ্যাক্সেস প্রত্যাহার করুন</translation>
 <translation id="6974053822202609517">ডান থেকে বামে</translation>
 <translation id="7013485839273047434">আরো এক্সটেনশান পান</translation>
 <translation id="708060913198414444">অ&amp;ডিও ঠিকানা কপি করুন</translation>
-<translation id="7105578512429498960">এই সামগ্রী প্রদর্শন করার জন্য <ph name="PLUGIN_NAME" /> ইনস্টল করুন</translation>
 <translation id="7144878232160441200">আবার চেষ্টা করুন</translation>
 <translation id="7206693748120342859"><ph name="PLUGIN_NAME" /> ডাউনলোড হচ্ছে ...</translation>
 <translation id="7287143125007575591">অ্যাক্সেস অস্বীকার করা হয়েছে।</translation>
@@ -226,7 +210,6 @@
 
 নিজের কী ফাইল কোন নিরাপদ স্থানে রাখুন৷ আপনাকে নিজের এক্সটেনশানের নতুন সংস্করণ তৈরি করতে হবে৷</translation>
 <translation id="8004582292198964060">ব্রাউজার</translation>
-<translation id="8037357227543935929">জিজ্ঞাসা করুন (ডিফল্ট)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">&amp;পাঠ্য ক্ষেত্রগুলির বানান চেক করুন</translation>
 <translation id="8261378640211443080">এই এক্সটেনশানটি <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> এ তালিকাভুক্ত নেই এবং হয়ত আপনাকে না জানিয়ে যোগ করা হয়েছে৷</translation>
@@ -242,7 +225,6 @@
 <translation id="8664389313780386848">পৃষ্ঠা উৎস &amp;দেখুন</translation>
 <translation id="8719653885894320876"><ph name="PLUGIN_NAME" /> ডাউনলোড ব্যর্থ হয়েছে</translation>
 <translation id="873545264931343897"><ph name="PLUGIN_NAME" /> আপডেট হওয়া শেষ হলে, এটি সক্রিয় করতে পৃষ্ঠাটি পুনঃলোড করুন</translation>
-<translation id="8763204422633679667"><ph name="PLUGIN_NAME" /> ইনস্টল হওয়া শেষ হলে, এটি সক্রিয় করতে পৃষ্ঠাটি পুনঃলোড করুন</translation>
 <translation id="8798099450830957504">ডিফল্ট</translation>
 <translation id="8808478386290700967">ওয়েব দোকান</translation>
 <translation id="8859174528519900719">সাবফ্রেম: <ph name="SUBFRAME_SITE" /></translation>

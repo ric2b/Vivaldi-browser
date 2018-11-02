@@ -9,7 +9,9 @@
 #include <string>
 
 #include "base/strings/string16.h"
-#include "components/payments/content/payment_request.mojom.h"
+#include "components/payments/mojom/payment_request.mojom.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/gfx/geometry/insets.h"
 
 namespace autofill {
 class AutofillProfile;
@@ -26,6 +28,7 @@ class View;
 namespace payments {
 
 class PaymentOptionsProvider;
+class PaymentsProfileComparator;
 enum class PaymentShippingType;
 
 constexpr int kPaymentRequestRowHorizontalInsets = 16;
@@ -37,8 +40,12 @@ constexpr int kPaymentRequestRowExtraRightInset = 8;
 constexpr int kPaymentRequestButtonSpacing = 10;
 
 // Dimensions of the dialog itself.
-constexpr int kDialogWidth = 450;
+constexpr int kDialogMinWidth = 512;
 constexpr int kDialogHeight = 450;
+
+// Fixed width of the amount sections in the payment sheet and the order summary
+// sheet, in pixels.
+constexpr int kAmountSectionWidth = 96;
 
 enum class PaymentRequestCommonTags {
   BACK_BUTTON_TAG = 0,
@@ -49,6 +56,8 @@ enum class PaymentRequestCommonTags {
   // specific events with tags can start their specific tags at this value.
   PAYMENT_REQUEST_COMMON_TAG_MAX
 };
+
+int GetActualDialogWidth();
 
 // Creates and returns a header for all the sheets in the PaymentRequest dialog.
 // The header contains an optional back arrow button (if |show_back_arrow| is
@@ -62,12 +71,13 @@ std::unique_ptr<views::View> CreateSheetHeaderView(
     const base::string16& title,
     views::ButtonListener* delegate);
 
-// Returns an instrument image view for the given |icon_resource_id|. Includes
-// a rounded rect border. Callers need to set the size of the resulting
-// ImageView. Callers should set a |tooltip_text|.
+// Returns an instrument image view for the given |icon_resource_id| and wanted
+// |opacity|. Includes a rounded rect border. Callers need to set the size of
+// the resulting ImageView. Callers should set a |tooltip_text|.
 std::unique_ptr<views::ImageView> CreateInstrumentIconView(
     int icon_resource_id,
-    const base::string16& tooltip_text);
+    const base::string16& tooltip_text,
+    float opacity = 1.0f);
 
 std::unique_ptr<views::View> CreateProductLogoFooterView();
 
@@ -76,11 +86,16 @@ std::unique_ptr<views::View> CreateProductLogoFooterView();
 enum class AddressStyleType { SUMMARY, DETAILED };
 
 // Extracts and formats descriptive text from the given |profile| to represent
-// the address in the context specified by |type|.
-std::unique_ptr<views::View> GetShippingAddressLabel(
+// the address in the context specified by |type|. The missing information will
+// be computed using |comp| and displayed as the last line in an informative
+// manner. |enabled| indicates whether the various label lines look enabled or
+// disabled.
+std::unique_ptr<views::View> GetShippingAddressLabelWithMissingInfo(
     AddressStyleType type,
     const std::string& locale,
-    const autofill::AutofillProfile& profile);
+    const autofill::AutofillProfile& profile,
+    const PaymentsProfileComparator& comp,
+    bool enabled = true);
 
 // Extracts and formats descriptive text from the given |profile| to represent
 // the contact info in the context specified by |type|. Includes/excludes name,
@@ -89,18 +104,30 @@ std::unique_ptr<views::View> GetContactInfoLabel(
     AddressStyleType type,
     const std::string& locale,
     const autofill::AutofillProfile& profile,
-    const PaymentOptionsProvider& options);
+    const PaymentOptionsProvider& options,
+    const PaymentsProfileComparator& comp);
 
-// Creates a views::Border object that can paint the gray horizontal ruler used
-// as a separator between items in the Payment Request dialog.
-std::unique_ptr<views::Border> CreatePaymentRequestRowBorder();
+// Creates a views::Border object with |insets| that can paint the gray
+// horizontal ruler used as a separator between items in the Payment Request
+// dialog.
+std::unique_ptr<views::Border> CreatePaymentRequestRowBorder(
+    SkColor color,
+    const gfx::Insets& insets);
 
 // Creates a label with a bold font.
 std::unique_ptr<views::Label> CreateBoldLabel(const base::string16& text);
 
+// Creates a label with a medium-weight font, with appropriate fallbacks for
+// platforms that have no medium font, or where a user has configured their
+// default font with a heavier weight.
+std::unique_ptr<views::Label> CreateMediumLabel(const base::string16& text);
+
+// Creates a 2 line label containing |shipping_option|'s label and amount. If
+// |emphasize_label| is true, the label part will be in medium weight.
 std::unique_ptr<views::View> CreateShippingOptionLabel(
     payments::mojom::PaymentShippingOption* shipping_option,
-    const base::string16& formatted_amount);
+    const base::string16& formatted_amount,
+    bool emphasize_label);
 
 }  // namespace payments
 

@@ -6,23 +6,26 @@
 #define SERVICES_DEVICE_DEVICE_SERVICE_H_
 
 #include "base/memory/ref_counted.h"
-#include "device/battery/battery_monitor.mojom.h"
 #include "device/generic_sensor/public/interfaces/sensor_provider.mojom.h"
 #include "device/screen_orientation/public/interfaces/screen_orientation.mojom.h"
-#include "device/sensors/public/interfaces/light.mojom.h"
 #include "device/sensors/public/interfaces/motion.mojom.h"
 #include "device/sensors/public/interfaces/orientation.mojom.h"
-#include "device/vibration/vibration_manager.mojom.h"
-#include "device/wake_lock/public/interfaces/wake_lock_context_provider.mojom.h"
+#include "device/wake_lock/public/interfaces/wake_lock_provider.mojom.h"
 #include "device/wake_lock/wake_lock_service_context.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/device/public/interfaces/battery_monitor.mojom.h"
 #include "services/device/public/interfaces/fingerprint.mojom.h"
+#include "services/device/public/interfaces/nfc_provider.mojom.h"
 #include "services/device/public/interfaces/power_monitor.mojom.h"
 #include "services/device/public/interfaces/time_zone_monitor.mojom.h"
+#include "services/device/public/interfaces/vibration_manager.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/public/cpp/service.h"
+
+#if defined(OS_ANDROID)
+#include "base/android/scoped_java_ref.h"
+#endif
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -34,41 +37,27 @@ class PowerMonitorMessageBroadcaster;
 class TimeZoneMonitor;
 
 #if defined(OS_ANDROID)
+// NOTE: See the comments on the definitions of |WakeLockContextCallback|
+// and NFCDelegate.java to understand the semantics and usage of these
+// parameters.
 std::unique_ptr<service_manager::Service> CreateDeviceService(
     scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-    const WakeLockContextCallback& wake_lock_context_callback);
+    const WakeLockContextCallback& wake_lock_context_callback,
+    const base::android::JavaRef<jobject>& java_nfc_delegate);
 #else
 std::unique_ptr<service_manager::Service> CreateDeviceService(
     scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner);
 #endif
 
-class DeviceService
-    : public service_manager::Service,
-      public service_manager::InterfaceFactory<mojom::Fingerprint>,
-      public service_manager::InterfaceFactory<mojom::LightSensor>,
-      public service_manager::InterfaceFactory<mojom::MotionSensor>,
-      public service_manager::InterfaceFactory<mojom::OrientationSensor>,
-      public service_manager::InterfaceFactory<
-          mojom::OrientationAbsoluteSensor>,
-#if !defined(OS_ANDROID)
-      // On Android the Device Service provides BatteryMonitor via Java.
-      public service_manager::InterfaceFactory<mojom::BatteryMonitor>,
-      // On Android the Device Service provides VibrationManager via Java.
-      public service_manager::InterfaceFactory<mojom::VibrationManager>,
-#endif
-      public service_manager::InterfaceFactory<mojom::PowerMonitor>,
-      public service_manager::InterfaceFactory<
-          mojom::ScreenOrientationListener>,
-      public service_manager::InterfaceFactory<mojom::SensorProvider>,
-      public service_manager::InterfaceFactory<mojom::TimeZoneMonitor>,
-      public service_manager::InterfaceFactory<mojom::WakeLockContextProvider> {
+class DeviceService : public service_manager::Service {
  public:
 #if defined(OS_ANDROID)
   DeviceService(scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
                 scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-                const WakeLockContextCallback& wake_lock_context_callback);
+                const WakeLockContextCallback& wake_lock_context_callback,
+                const base::android::JavaRef<jobject>& java_nfc_delegate);
 #else
   DeviceService(scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
                 scoped_refptr<base::SingleThreadTaskRunner> io_task_runner);
@@ -78,62 +67,66 @@ class DeviceService
  private:
   // service_manager::Service:
   void OnStart() override;
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
 
-  // InterfaceFactory<mojom::Fingerprint>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::FingerprintRequest request) override;
+  void BindFingerprintRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::FingerprintRequest request);
 
-  // InterfaceFactory<mojom::LightSensor>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::LightSensorRequest request) override;
+  void BindMotionSensorRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::MotionSensorRequest request);
 
-  // InterfaceFactory<mojom::MotionSensor>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::MotionSensorRequest request) override;
+  void BindOrientationSensorRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::OrientationSensorRequest request);
 
-  // InterfaceFactory<mojom::OrientationSensor>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::OrientationSensorRequest request) override;
-
-  // InterfaceFactory<mojom::OrientationAbsolueSensor>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::OrientationAbsoluteSensorRequest request) override;
+  void BindOrientationAbsoluteSensorRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::OrientationAbsoluteSensorRequest request);
 
 #if !defined(OS_ANDROID)
-  // InterfaceFactory<mojom::BatteryMonitor>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::BatteryMonitorRequest request) override;
-  // InterfaceFactory<mojom::VibrationManager>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::VibrationManagerRequest request) override;
+  void BindBatteryMonitorRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::BatteryMonitorRequest request);
+  void BindNFCProviderRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::NFCProviderRequest request);
+  void BindVibrationManagerRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::VibrationManagerRequest request);
 #endif
 
-  // InterfaceFactory<mojom::PowerMonitor>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::PowerMonitorRequest request) override;
+  void BindPowerMonitorRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::PowerMonitorRequest request);
 
-  // InterfaceFactory<mojom::ScreenOrientationListener>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::ScreenOrientationListenerRequest request) override;
+  void BindScreenOrientationListenerRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::ScreenOrientationListenerRequest request);
 
-  // InterfaceFactory<mojom::SensorProvider>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::SensorProviderRequest request) override;
+  void BindSensorProviderRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::SensorProviderRequest request);
 
-  // InterfaceFactory<mojom::TimeZoneMonitor>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::TimeZoneMonitorRequest request) override;
+  void BindTimeZoneMonitorRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::TimeZoneMonitorRequest request);
 
-  // InterfaceFactory<mojom::WakeLockContextProvider>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::WakeLockContextProviderRequest request) override;
+  void BindWakeLockProviderRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::WakeLockProviderRequest request);
 
   std::unique_ptr<PowerMonitorMessageBroadcaster>
       power_monitor_message_broadcaster_;
   std::unique_ptr<TimeZoneMonitor> time_zone_monitor_;
+  scoped_refptr<base::SingleThreadTaskRunner> file_task_runner_;
+  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
+
+  WakeLockContextCallback wake_lock_context_callback_;
+
 #if defined(OS_ANDROID)
   // Binds |java_interface_provider_| to an interface registry that exposes
   // factories for the interfaces that are provided via Java on Android.
@@ -143,12 +136,9 @@ class DeviceService
   service_manager::InterfaceProvider java_interface_provider_;
 
   bool java_interface_provider_initialized_;
+
+  base::android::ScopedJavaGlobalRef<jobject> java_nfc_delegate_;
 #endif
-
-  scoped_refptr<base::SingleThreadTaskRunner> file_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
-
-  WakeLockContextCallback wake_lock_context_callback_;
 
   service_manager::BinderRegistry registry_;
 

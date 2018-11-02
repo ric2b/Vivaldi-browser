@@ -1,3 +1,4 @@
+<link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
@@ -6,18 +7,33 @@
 
 <dom-module id="cr-dialog">
   <template>
-    <style>
+    <style include="cr-hidden-style">
       :host {
         --scroll-border: 1px solid var(--paper-grey-300);
         border: 0;
         border-radius: 2px;
         bottom: 0;
-        box-shadow: 0px 0px 16px rgba(0, 0, 0, 0.12),
-                    0px 16px 16px rgba(0, 0, 0, 0.24);
+        box-shadow: 0 0 16px rgba(0, 0, 0, 0.12),
+                    0 16px 16px rgba(0, 0, 0, 0.24);
         color: inherit;
+        overflow: auto;
         padding: 0;
         top: 0;
         width: 512px;
+      }
+
+      :host([open]) {
+        /* Keep max-height within viewport, and flex content accordingly. */
+        display: flex;
+        flex-direction: column;
+        max-height: 100vh;
+      }
+
+      /* When needing to flex, force .body-container alone to shrink. */
+      .top-container,
+      :host ::content .button-container,
+      :host ::content .footer {
+        flex-shrink: 0;
       }
 
       :host::backdrop {
@@ -29,35 +45,21 @@
         top: 0;
       }
 
-      :host([show-scroll-borders]) .body-container {
-        /* Prevent layout moving when border does appear. */
-        border-bottom: 1px solid transparent;
-        border-top: 1px solid transparent;
-      }
-
-      :host([show-scroll-borders]) .body-container.bottom-scrollable {
-        border-bottom: var(--scroll-border);
-      }
-
-      :host([show-scroll-borders]) .body-container.top-scrollable {
-        border-top: var(--scroll-border);
-      }
-
       :host ::content .body {
         padding: 12px 16px;
       }
 
       :host ::content .title {
-        font-size: 115.38%;  /* (15px / 13px) * 100 */
+        flex: 1;
+        font-size: calc(15 / 13 * 100%);
         line-height: 1;
         padding: 16px 16px;
-        flex: 1;
       }
 
       :host ::content .button-container {
-        padding: 16px 16px;
         display: flex;
         justify-content: flex-end;
+        padding: 16px;
       }
 
       :host ::content .button-container .cancel-button {
@@ -77,14 +79,28 @@
       }
 
       .body-container {
+        /* Prevent layout moving when border does appear. */
+        border-bottom: 1px solid transparent;
+        border-top: 1px solid transparent;
+
         display: flex;
         flex-direction: column;
+        min-height: 60px; /* Minimum reasonably usable height. */
         overflow: auto;
+
         @apply(--cr-dialog-body-container);
       }
 
+      .body-container.bottom-scrollable {
+        border-bottom: var(--scroll-border);
+      }
+
+      .body-container.top-scrollable {
+        border-top: var(--scroll-border);
+      }
+
       .top-container {
-        align-items: center;
+        align-items: flex-start;
         display: flex;
         min-height: 47px;
       }
@@ -106,6 +122,8 @@
         };
 
         -webkit-margin-end: 4px;
+        align-self: flex-start;
+        margin-top: 4px;
         padding: 10px;  /* Makes the actual icon 16x16. */
       }
     </style>
@@ -114,7 +132,8 @@
         <content select=".title"></content>
       </div>
       <paper-icon-button icon="cr:clear" on-tap="cancel" id="close"
-          aria-label$="[[closeText]]" on-keypress="onCloseKeypress_">
+          aria-label$="[[closeText]]" on-keypress="onCloseKeypress_"
+          hidden$="[[noCancel]]">
       </paper-icon-button>
     </div>
     <div class="body-container">

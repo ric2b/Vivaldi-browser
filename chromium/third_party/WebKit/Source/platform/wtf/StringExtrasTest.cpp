@@ -98,33 +98,33 @@ template <typename IntegerType>
 void TestBoundaries() {
   const unsigned kBufferSize = 256;
   Vector<char, kBufferSize> buffer;
-  buffer.Resize(kBufferSize);
+  buffer.resize(kBufferSize);
 
   const IntegerType min = std::numeric_limits<IntegerType>::min();
   CString min_string_data = String::Number(min).Latin1();
-  snprintf(buffer.Data(), kBufferSize, PrintfFormatTrait<IntegerType>::kFormat,
+  snprintf(buffer.data(), kBufferSize, PrintfFormatTrait<IntegerType>::kFormat,
            min);
-  EXPECT_STREQ(buffer.Data(), min_string_data.Data());
+  EXPECT_STREQ(buffer.data(), min_string_data.data());
 
   const IntegerType max = std::numeric_limits<IntegerType>::max();
   CString max_string_data = String::Number(max).Latin1();
-  snprintf(buffer.Data(), kBufferSize, PrintfFormatTrait<IntegerType>::kFormat,
+  snprintf(buffer.data(), kBufferSize, PrintfFormatTrait<IntegerType>::kFormat,
            max);
-  EXPECT_STREQ(buffer.Data(), max_string_data.Data());
+  EXPECT_STREQ(buffer.data(), max_string_data.data());
 }
 
 template <typename IntegerType>
 void TestNumbers() {
   const unsigned kBufferSize = 256;
   Vector<char, kBufferSize> buffer;
-  buffer.Resize(kBufferSize);
+  buffer.resize(kBufferSize);
 
   for (int i = -100; i < 100; ++i) {
     const IntegerType number = static_cast<IntegerType>(i);
     CString number_string_data = String::Number(number).Latin1();
-    snprintf(buffer.Data(), kBufferSize,
+    snprintf(buffer.data(), kBufferSize,
              PrintfFormatTrait<IntegerType>::kFormat, number);
-    EXPECT_STREQ(buffer.Data(), number_string_data.Data());
+    EXPECT_STREQ(buffer.data(), number_string_data.data());
   }
 }
 

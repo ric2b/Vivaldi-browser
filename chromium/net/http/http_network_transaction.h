@@ -116,7 +116,7 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   void OnHttpsProxyTunnelResponse(const HttpResponseInfo& response_info,
                                   const SSLConfig& used_ssl_config,
                                   const ProxyInfo& used_proxy_info,
-                                  HttpStream* stream) override;
+                                  std::unique_ptr<HttpStream> stream) override;
 
   void OnQuicBroken() override;
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
@@ -268,9 +268,6 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // Caches network error details from the stream if available
   // and resets the stream.
   void CacheNetErrorDetailsAndResetStream();
-
-  // Records metrics relating to SSL fallbacks.
-  void RecordSSLFallbackMetrics(int result);
 
   // Returns true if we should try to add a Proxy-Authorization header
   bool ShouldApplyProxyAuth() const;

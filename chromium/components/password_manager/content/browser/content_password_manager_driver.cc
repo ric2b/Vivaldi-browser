@@ -38,6 +38,7 @@ ContentPasswordManagerDriver::ContentPasswordManagerDriver(
       password_generation_manager_(client, this),
       password_autofill_manager_(this, autofill_client),
       next_free_key_(0),
+      is_main_frame_(render_frame_host->GetParent() == nullptr),
       password_manager_binding_(this),
       weak_factory_(this) {
   // Does nothing if a VisiblePasswordObserver has already been created
@@ -159,6 +160,10 @@ void ContentPasswordManagerDriver::AllowToRunFormClassifier() {
 autofill::AutofillDriver* ContentPasswordManagerDriver::GetAutofillDriver() {
   return autofill::ContentAutofillDriver::GetForRenderFrameHost(
       render_frame_host_);
+}
+
+bool ContentPasswordManagerDriver::IsMainFrame() const {
+  return is_main_frame_;
 }
 
 PasswordGenerationManager*
@@ -283,6 +288,14 @@ void ContentPasswordManagerDriver::SaveGenerationFieldDetectedByClassifier(
       password_form, generation_field);
 }
 
+void ContentPasswordManagerDriver::CheckSafeBrowsingReputation(
+    const GURL& form_action,
+    const GURL& frame_url) {
+#if defined(SAFE_BROWSING_DB_LOCAL)
+  client_->CheckSafeBrowsingReputation(form_action, frame_url);
+#endif
+}
+
 void ContentPasswordManagerDriver::ShowPasswordSuggestions(
     int key,
     base::i18n::TextDirection text_direction,
@@ -332,9 +345,8 @@ ContentPasswordManagerDriver::GetAutofillAgent() {
 const autofill::mojom::PasswordAutofillAgentPtr&
 ContentPasswordManagerDriver::GetPasswordAutofillAgent() {
   if (!password_autofill_agent_) {
-    autofill::mojom::PasswordAutofillAgentRequest request(
-        &password_autofill_agent_);
-    // Some test codes may have no initialized remote interfaces.
+    auto request = mojo::MakeRequest(&password_autofill_agent_);
+    // Some test environments may have no remote interface support.
     if (render_frame_host_->GetRemoteInterfaces()) {
       render_frame_host_->GetRemoteInterfaces()->GetInterface(
           std::move(request));

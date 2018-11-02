@@ -311,8 +311,8 @@ void NavigationResourceThrottle::WillProcessResponse(bool* defer) {
 
   SSLStatus ssl_status;
   if (request_->ssl_info().cert.get()) {
-    NavigationResourceHandler::GetSSLStatusForRequest(
-        request_->url(), request_->ssl_info(), info->GetChildID(), &ssl_status);
+    NavigationResourceHandler::GetSSLStatusForRequest(request_->ssl_info(),
+                                                      &ssl_status);
   }
 
   BrowserThread::PostTask(
@@ -354,7 +354,8 @@ void NavigationResourceThrottle::OnUIChecksPerformed(
     CancelAndIgnore();
   } else if (result == NavigationThrottle::CANCEL) {
     Cancel();
-  } else if (result == NavigationThrottle::BLOCK_REQUEST) {
+  } else if (result == NavigationThrottle::BLOCK_REQUEST ||
+             result == NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE) {
     CancelWithError(net::ERR_BLOCKED_BY_CLIENT);
   } else if (result == NavigationThrottle::BLOCK_RESPONSE) {
     // TODO(mkwst): If we cancel the main frame request with anything other than

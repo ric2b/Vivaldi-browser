@@ -73,14 +73,6 @@ Polymer({
     },
 // </if>
 
-    /** @private {!settings.SyncBrowserProxy} */
-    syncBrowserProxy_: {
-      type: Object,
-      value: function() {
-        return settings.SyncBrowserProxyImpl.getInstance();
-      },
-    },
-
     /** @private */
     showDisconnectDialog_: Boolean,
 
@@ -115,7 +107,8 @@ Polymer({
             settings.Route.CHANGE_PICTURE.path,
             '#picture-subpage-trigger .subpage-arrow');
         map.set(
-            settings.Route.LOCK_SCREEN.path, '#lockScreenSubpageTrigger');
+            settings.Route.LOCK_SCREEN.path,
+            '#lock-screen-subpage-trigger .subpage-arrow');
         map.set(
             settings.Route.ACCOUNTS.path,
             '#manage-other-people-subpage-trigger .subpage-arrow');
@@ -124,6 +117,9 @@ Polymer({
       },
     },
   },
+
+  /** @private {?settings.SyncBrowserProxy} */
+  syncBrowserProxy_: null,
 
   /** @override */
   attached: function() {
@@ -140,6 +136,7 @@ Polymer({
     this.addWebUIListener('profile-stats-count-ready',
                           this.handleProfileStatsCount_.bind(this));
 
+    this.syncBrowserProxy_ = settings.SyncBrowserProxyImpl.getInstance();
     this.syncBrowserProxy_.getSyncStatus().then(
         this.handleSyncStatus_.bind(this));
     this.addWebUIListener('sync-status-changed',
@@ -259,7 +256,7 @@ Polymer({
   /** @private */
   onDisconnectClosed_: function() {
     this.showDisconnectDialog_ = false;
-    this.$$('#disconnectButton').focus();
+    cr.ui.focusWithoutInk(assert(this.$$('#disconnectButton')));
 
     if (settings.getCurrentRoute() == settings.Route.SIGN_OUT)
       settings.navigateToPreviousRoute();
@@ -330,8 +327,15 @@ Polymer({
   },
 
 // <if expr="chromeos">
-  /** @private */
-  onConfigureLockTap_: function() {
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onConfigureLockTap_: function(e) {
+    // Navigating to the lock screen will always open the password prompt
+    // dialog, so prevent the end of the tap event to focus what is underneath
+    // it, which takes focus from the dialog.
+    e.preventDefault();
     settings.navigateTo(settings.Route.LOCK_SCREEN);
   },
 // </if>
@@ -344,11 +348,6 @@ Polymer({
 // <if expr="chromeos">
     settings.navigateTo(settings.Route.ACCOUNTS);
 // </if>
-  },
-
-  /** @private */
-  onManageSupervisedUsers_: function() {
-    window.open(loadTimeData.getString('supervisedUsersUrl'));
   },
 
 // <if expr="not chromeos">
@@ -371,7 +370,7 @@ Polymer({
   /** @private */
   onImportDataDialogClosed_: function() {
     settings.navigateToPreviousRoute();
-    this.$.importDataDialogTrigger.focus();
+    cr.ui.focusWithoutInk(assert(this.$.importDataDialogTrigger));
   },
 // </if>
 

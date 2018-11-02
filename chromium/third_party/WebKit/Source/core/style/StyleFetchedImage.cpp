@@ -78,7 +78,7 @@ bool StyleFetchedImage::ErrorOccurred() const {
 }
 
 LayoutSize StyleFetchedImage::ImageSize(
-    const LayoutObject&,
+    const Document&,
     float multiplier,
     const LayoutSize& default_object_size) const {
   if (image_->GetImage() && image_->GetImage()->IsSVGImage())
@@ -117,21 +117,19 @@ void StyleFetchedImage::ImageNotifyFinished(ImageResourceContent*) {
   document_.Clear();
 }
 
-PassRefPtr<Image> StyleFetchedImage::GetImage(const LayoutObject&,
-                                              const IntSize& container_size,
-                                              float zoom) const {
+PassRefPtr<Image> StyleFetchedImage::GetImage(
+    const LayoutObject& obj,
+    const IntSize& container_size) const {
   if (!image_->GetImage()->IsSVGImage())
     return image_->GetImage();
 
   return SVGImageForContainer::Create(ToSVGImage(image_->GetImage()),
-                                      container_size, zoom, url_);
+                                      container_size,
+                                      obj.StyleRef().EffectiveZoom(), url_);
 }
 
-bool StyleFetchedImage::KnownToBeOpaque(
-    const LayoutObject& layout_object) const {
-  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage",
-               "data",
-               InspectorPaintImageEvent::Data(&layout_object, *image_.Get()));
+bool StyleFetchedImage::KnownToBeOpaque(const Document&,
+                                        const ComputedStyle&) const {
   return image_->GetImage()->CurrentFrameKnownToBeOpaque(
       Image::kPreCacheMetadata);
 }

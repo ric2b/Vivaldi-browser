@@ -26,11 +26,10 @@
 #ifndef BaseAudioContext_h
 #define BaseAudioContext_h
 
-#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
+#include "core/dom/ArrayBufferViewHelpers.h"
 #include "core/dom/DOMTypedArray.h"
-#include "core/dom/NotShared.h"
 #include "core/dom/SuspendableObject.h"
 #include "core/events/EventListener.h"
 #include "modules/EventTargetModules.h"
@@ -40,6 +39,7 @@
 #include "modules/webaudio/DeferredTaskHandler.h"
 #include "modules/webaudio/IIRFilterNode.h"
 #include "platform/audio/AudioBus.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/RefPtr.h"

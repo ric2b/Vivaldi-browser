@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "chromeos/chromeos_export.h"
+#include "chromeos/dbus/biod/constants.pb.h"
 #include "chromeos/dbus/dbus_client.h"
 #include "chromeos/dbus/dbus_client_implementation_type.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
@@ -21,11 +22,11 @@
 namespace chromeos {
 
 // Each time the sensor detects a scan, an object containing all the users, each
-// with the labels of all the matched stored biometrics is returned. The users
-// are unique identifiers which are assigned by Chrome. The labels represent the
-// names the user gave their biometric.
+// with the object paths of all the matched stored biometrics is returned. The
+// users are unique identifiers which are assigned by Chrome. The object path
+// represent the object path of the biometric.
 using AuthScanMatches =
-    std::unordered_map<std::string, std::vector<std::string>>;
+    std::unordered_map<std::string, std::vector<dbus::ObjectPath>>;
 
 // BiodClient is used to communicate with a biod D-Bus manager
 // interface.
@@ -40,8 +41,11 @@ class CHROMEOS_EXPORT BiodClient : public DBusClient {
     // Called whenever a user attempts a scan during enrollment. |scan_result|
     // tells whether the scan was succesful. |enroll_session_complete| tells
     // whether enroll session is complete and is now over.
+    // |percent_complete| within [0, 100] represents the percent of enrollment
+    // completion and -1 means unknown percentage.
     virtual void BiodEnrollScanDoneReceived(biod::ScanResult scan_result,
-                                            bool enroll_session_complete) {}
+                                            bool enroll_session_complete,
+                                            int percent_complete) {}
 
     // Called when an authentication scan is performed. If the scan is
     // successful, |matches| will equal all the enrollment IDs that match the
@@ -75,7 +79,7 @@ class CHROMEOS_EXPORT BiodClient : public DBusClient {
 
   // BiometricTypeCallback is used for the GetType method. It receives
   // one argument which states the type of biometric.
-  using BiometricTypeCallback = base::Callback<void(biod::BiometricType)>;
+  using BiometricTypeCallback = base::Callback<void(uint32_t)>;
 
   // LabelCallback is for the RequestRecordLabel method.
   using LabelCallback = base::Callback<void(const std::string& label)>;
@@ -107,15 +111,13 @@ class CHROMEOS_EXPORT BiodClient : public DBusClient {
   // type after the method succeeds.
   virtual void RequestType(const BiometricTypeCallback& callback) = 0;
 
-  // Cancels the enroll session at |enroll_session_path|. |callback| is called
-  // asynchronously with the result.
-  virtual void CancelEnrollSession(const dbus::ObjectPath& enroll_session_path,
-                                   const VoidDBusMethodCallback& callback) = 0;
+  // Cancels the enroll session.
+  // |callback| is called asynchronously with the result.
+  virtual void CancelEnrollSession(const VoidDBusMethodCallback& callback) = 0;
 
-  // Ends the auth session at |auth_session_path|. |callback| is called
-  // asynchronously with the result.
-  virtual void EndAuthSession(const dbus::ObjectPath& auth_session_path,
-                              const VoidDBusMethodCallback& callback) = 0;
+  // Ends the auth session.
+  // |callback| is called asynchronously with the result.
+  virtual void EndAuthSession(const VoidDBusMethodCallback& callback) = 0;
 
   // Changes the label of the record at |record_path| to |label|. |callback| is
   // called asynchronously with the result.

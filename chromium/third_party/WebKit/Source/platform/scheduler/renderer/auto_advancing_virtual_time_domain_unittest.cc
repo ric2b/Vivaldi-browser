@@ -32,21 +32,19 @@ class AutoAdvancingVirtualTimeDomainTest : public testing::Test {
     main_task_runner_ = SchedulerTqmDelegateForTest::Create(
         mock_task_runner_, base::MakeUnique<TestTimeSource>(clock_.get()));
 
-    manager_ = base::MakeUnique<TaskQueueManager>(
-        main_task_runner_, "test.scheduler", "test.scheduler",
-        "test.scheduler.debug");
+    manager_ = base::MakeUnique<TaskQueueManager>(main_task_runner_);
     manager_->AddTaskTimeObserver(&test_task_time_observer_);
-    task_runner_ =
+    task_queue_ =
         manager_->NewTaskQueue(TaskQueue::Spec(TaskQueue::QueueType::TEST));
     initial_time_ = clock_->NowTicks();
     auto_advancing_time_domain_.reset(
         new AutoAdvancingVirtualTimeDomain(initial_time_));
     manager_->RegisterTimeDomain(auto_advancing_time_domain_.get());
-    task_runner_->SetTimeDomain(auto_advancing_time_domain_.get());
+    task_queue_->SetTimeDomain(auto_advancing_time_domain_.get());
   }
 
   void TearDown() override {
-    task_runner_->UnregisterTaskQueue();
+    task_queue_->UnregisterTaskQueue();
     manager_->UnregisterTimeDomain(auto_advancing_time_domain_.get());
   }
 
@@ -56,7 +54,7 @@ class AutoAdvancingVirtualTimeDomainTest : public testing::Test {
   scoped_refptr<cc::OrderedSimpleTaskRunner> mock_task_runner_;
   scoped_refptr<SchedulerTqmDelegate> main_task_runner_;
   std::unique_ptr<TaskQueueManager> manager_;
-  scoped_refptr<TaskQueue> task_runner_;
+  scoped_refptr<TaskQueue> task_queue_;
   std::unique_ptr<AutoAdvancingVirtualTimeDomain> auto_advancing_time_domain_;
   TestTaskTimeObserver test_task_time_observer_;
 };
@@ -70,8 +68,8 @@ void NopTask(bool* task_run) {
 TEST_F(AutoAdvancingVirtualTimeDomainTest, VirtualTimeAdvances) {
   base::TimeDelta delay = base::TimeDelta::FromMilliseconds(10);
   bool task_run = false;
-  task_runner_->PostDelayedTask(FROM_HERE, base::Bind(NopTask, &task_run),
-                                delay);
+  task_queue_->PostDelayedTask(FROM_HERE, base::Bind(NopTask, &task_run),
+                               delay);
 
   mock_task_runner_->RunUntilIdle();
 
@@ -84,8 +82,8 @@ TEST_F(AutoAdvancingVirtualTimeDomainTest, VirtualTimeAdvances) {
 TEST_F(AutoAdvancingVirtualTimeDomainTest, VirtualTimeDoesNotAdvance) {
   base::TimeDelta delay = base::TimeDelta::FromMilliseconds(10);
   bool task_run = false;
-  task_runner_->PostDelayedTask(FROM_HERE, base::Bind(NopTask, &task_run),
-                                delay);
+  task_queue_->PostDelayedTask(FROM_HERE, base::Bind(NopTask, &task_run),
+                               delay);
 
   auto_advancing_time_domain_->SetCanAdvanceVirtualTime(false);
 

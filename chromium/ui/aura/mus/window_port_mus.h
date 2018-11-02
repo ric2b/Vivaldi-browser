@@ -61,8 +61,8 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   void SetTextInputState(mojo::TextInputStatePtr state);
   void SetImeVisibility(bool visible, mojo::TextInputStatePtr state);
 
-  ui::mojom::CursorType predefined_cursor() const { return predefined_cursor_; }
-  void SetPredefinedCursor(ui::mojom::CursorType cursor_id);
+  const ui::CursorData& cursor() const { return cursor_; }
+  void SetCursor(const ui::CursorData& cursor);
 
   // Sets the EventTargetingPolicy, default is TARGET_AND_DESCENDANTS.
   void SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy policy);
@@ -76,21 +76,9 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
              uint32_t flags,
              const ui::mojom::WindowTree::EmbedCallback& callback);
 
-  using CompositorFrameSinkCallback =
-      base::Callback<void(std::unique_ptr<cc::CompositorFrameSink>)>;
-  void RequestCompositorFrameSink(
+  std::unique_ptr<cc::CompositorFrameSink> RequestCompositorFrameSink(
       scoped_refptr<cc::ContextProvider> context_provider,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      const CompositorFrameSinkCallback& callback);
-
-  void RequestCompositorFrameSinkInternal(
-      scoped_refptr<cc::ContextProvider> context_provider,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      const CompositorFrameSinkCallback& callback);
-
-  void AttachCompositorFrameSink(
-      std::unique_ptr<ui::ClientCompositorFrameSinkBinding>
-          compositor_frame_sink_binding);
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
 
  private:
   friend class WindowPortMusTestApi;
@@ -224,7 +212,7 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
       const base::Optional<cc::LocalSurfaceId>& local_surface_id) override;
   void SetVisibleFromServer(bool visible) override;
   void SetOpacityFromServer(float opacity) override;
-  void SetPredefinedCursorFromServer(ui::mojom::CursorType cursor) override;
+  void SetCursorFromServer(const ui::CursorData& cursor) override;
   void SetPropertyFromServer(
       const std::string& property_name,
       const std::vector<uint8_t>* property_data) override;
@@ -262,6 +250,10 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   void OnPropertyChanged(const void* key,
                          int64_t old_value,
                          std::unique_ptr<ui::PropertyData> data) override;
+  std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink() override;
+  cc::SurfaceId GetSurfaceId() const override;
+  void OnWindowAddedToRootWindow() override {}
+  void OnWillRemoveWindowFromRootWindow() override {}
 
   void UpdatePrimarySurfaceInfo();
   void UpdateClientSurfaceEmbedder();
@@ -277,7 +269,6 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   ServerChanges server_changes_;
 
   cc::FrameSinkId frame_sink_id_;
-  base::Closure pending_compositor_frame_sink_request_;
 
   cc::SurfaceInfo primary_surface_info_;
   cc::SurfaceInfo fallback_surface_info_;
@@ -286,7 +277,7 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   cc::LocalSurfaceIdAllocator local_surface_id_allocator_;
   gfx::Size last_surface_size_;
 
-  ui::mojom::CursorType predefined_cursor_ = ui::mojom::CursorType::CURSOR_NULL;
+  ui::CursorData cursor_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowPortMus);
 };

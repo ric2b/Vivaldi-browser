@@ -6,6 +6,7 @@
 
 #include "cc/layers/picture_image_layer.h"
 #include "cc/layers/solid_color_layer.h"
+#include "cc/paint/paint_image.h"
 #include "cc/test/layer_tree_pixel_resource_test.h"
 #include "cc/test/pixel_comparator.h"
 #include "third_party/skia/include/core/SkImage.h"
@@ -145,7 +146,8 @@ class LayerTreeHostBlendingPixelTest : public LayerTreeHostPixelResourceTest {
     scoped_refptr<PictureImageLayer> layer = PictureImageLayer::Create();
     layer->SetIsDrawable(true);
     layer->SetBounds(gfx::Size(width, height));
-    layer->SetImage(backing_store->makeImageSnapshot());
+    layer->SetImage(PaintImage(PaintImage::GetNextId(),
+                               backing_store->makeImageSnapshot()));
     return layer;
   }
 
@@ -167,7 +169,8 @@ class LayerTreeHostBlendingPixelTest : public LayerTreeHostPixelResourceTest {
                                       bounds.width() - kMaskOffset * 2,
                                       bounds.height() - kMaskOffset * 2),
                      paint);
-    mask->SetImage(surface->makeImageSnapshot());
+    mask->SetImage(
+        PaintImage(PaintImage::GetNextId(), surface->makeImageSnapshot()));
     layer->SetMaskLayer(mask.get());
   }
 

@@ -43,6 +43,8 @@ if (is_mac) {
     args += [
       "--sdk",
       mac_sdk_path,
+      "--include",
+      rebase_path("../compat/mac", root_build_dir),
     ]
   }
 }
@@ -78,6 +80,7 @@ static_library("util") {
     "misc/clock_mac.cc",
     "misc/clock_posix.cc",
     "misc/clock_win.cc",
+    "misc/from_pointer_cast.h",
     "misc/implicit_cast.h",
     "misc/initialization_state.h",
     "misc/initialization_state_dcheck.cc",
@@ -91,6 +94,8 @@ static_library("util") {
     "misc/pdb_structures.h",
     "misc/random_string.cc",
     "misc/random_string.h",
+    "misc/reinterpret_bytes.cc",
+    "misc/reinterpret_bytes.h",
     "misc/scoped_forbid_return.cc",
     "misc/scoped_forbid_return.h",
     "misc/symbolic_constants_common.h",
@@ -145,6 +150,7 @@ static_library("util") {
     "stdlib/strlcpy.h",
     "stdlib/strnlen.cc",
     "stdlib/strnlen.h",
+    "stdlib/thread_safe_vector.h",
     "string/split_string.cc",
     "string/split_string.h",
     "synchronization/semaphore.h",
@@ -188,6 +194,8 @@ static_library("util") {
     "win/process_structs.h",
     "win/registration_protocol_win.cc",
     "win/registration_protocol_win.h",
+    "win/safe_terminate_process.asm",
+    "win/safe_terminate_process.h",
     "win/scoped_handle.cc",
     "win/scoped_handle.h",
     "win/scoped_local_alloc.cc",
@@ -251,8 +259,11 @@ static_library("util") {
 
   deps = [
     "//base",
-    "//third_party/crashpad/crashpad/compat",
     "//third_party/crashpad/crashpad/third_party/zlib",
+  ]
+
+  public_deps = [
+    "//third_party/crashpad/crashpad/compat",
   ]
 
   if (is_win) {

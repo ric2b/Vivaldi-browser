@@ -21,8 +21,7 @@
 #include "core/css/CSSStyleSheet.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8PerIsolateData.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/HTMLNames.h"
 #include "core/SVGNames.h"
 #include "core/css/CSSImportRule.h"
@@ -40,6 +39,7 @@
 #include "core/html/HTMLStyleElement.h"
 #include "core/probe/CoreProbes.h"
 #include "core/svg/SVGStyleElement.h"
+#include "platform/bindings/V8PerIsolateData.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/text/StringBuilder.h"
 
@@ -212,8 +212,8 @@ void CSSStyleSheet::SetMediaQueries(RefPtr<MediaQuerySet> media_queries) {
 }
 
 bool CSSStyleSheet::MatchesMediaQueries(const MediaQueryEvaluator& evaluator) {
-  viewport_dependent_media_query_results_.Clear();
-  device_dependent_media_query_results_.Clear();
+  viewport_dependent_media_query_results_.clear();
+  device_dependent_media_query_results_.clear();
 
   if (!media_queries_)
     return true;
@@ -310,14 +310,6 @@ unsigned CSSStyleSheet::insertRule(const String& rule_string,
     child_rule_cssom_wrappers_.insert(index, Member<CSSRule>(nullptr));
 
   return index;
-}
-
-unsigned CSSStyleSheet::insertRule(const String& rule,
-                                   ExceptionState& exception_state) {
-  Deprecation::CountDeprecation(
-      CurrentExecutionContext(V8PerIsolateData::MainThreadIsolate()),
-      UseCounter::kCSSStyleSheetInsertRuleOptionalArg);
-  return insertRule(rule, 0, exception_state);
 }
 
 void CSSStyleSheet::deleteRule(unsigned index,
@@ -441,7 +433,7 @@ void CSSStyleSheet::SetLoadCompleted(bool completed) {
 }
 
 void CSSStyleSheet::SetText(const String& text) {
-  child_rule_cssom_wrappers_.Clear();
+  child_rule_cssom_wrappers_.clear();
 
   CSSStyleSheet::RuleMutationScope mutation_scope(this);
   contents_->ClearRules();

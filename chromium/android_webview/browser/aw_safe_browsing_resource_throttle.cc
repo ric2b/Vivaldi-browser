@@ -16,6 +16,10 @@
 namespace android_webview {
 
 // static
+const void* AwSafeBrowsingResourceThrottle::kUserDataKey =
+    static_cast<void*>(&AwSafeBrowsingResourceThrottle::kUserDataKey);
+
+// static
 AwSafeBrowsingResourceThrottle* AwSafeBrowsingResourceThrottle::MaybeCreate(
     net::URLRequest* request,
     content::ResourceType resource_type,
@@ -36,12 +40,28 @@ AwSafeBrowsingResourceThrottle::AwSafeBrowsingResourceThrottle(
     : safe_browsing::BaseResourceThrottle(request,
                                           resource_type,
                                           database_manager,
-                                          ui_manager) {}
+                                          ui_manager),
+      request_(request) {}
 
 AwSafeBrowsingResourceThrottle::~AwSafeBrowsingResourceThrottle() {}
 
 void AwSafeBrowsingResourceThrottle::CancelResourceLoad() {
-  CancelWithError(net::ERR_FAILED);
+  request_->SetUserData(kUserDataKey,
+                        base::MakeUnique<base::SupportsUserData::Data>());
+  Cancel();
+}
+
+void AwSafeBrowsingResourceThrottle::OnCheckBrowseUrlResult(
+    const GURL& url,
+    SBThreatType threat_type,
+    const ThreatMetadata& metadata) {
+  if (threat_type != safe_browsing::SB_THREAT_TYPE_URL_PHISHING &&
+      threat_type != safe_browsing::SB_THREAT_TYPE_URL_MALWARE) {
+    // If we don't recognize the threat type, just mark it as safe
+    threat_type = safe_browsing::SB_THREAT_TYPE_SAFE;
+  }
+
+  BaseResourceThrottle::OnCheckBrowseUrlResult(url, threat_type, metadata);
 }
 
 }  // namespace android_webview

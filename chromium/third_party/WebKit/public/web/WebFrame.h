@@ -31,13 +31,14 @@
 #ifndef WebFrame_h
 #define WebFrame_h
 
+#include <memory>
 #include "WebIconURL.h"
 #include "WebNode.h"
 #include "public/platform/WebCanvas.h"
+#include "public/platform/WebFeaturePolicy.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/web/WebFrameLoadType.h"
 #include "public/web/WebTreeScopeType.h"
-#include <memory>
 
 namespace v8 {
 class Context;
@@ -53,6 +54,7 @@ namespace blink {
 
 class Frame;
 class OpenedFrameTracker;
+class Page;
 class Visitor;
 class WebAssociatedURLLoader;
 struct WebAssociatedURLLoaderOptions;
@@ -61,7 +63,6 @@ class WebData;
 class WebDataSource;
 class WebDocument;
 class WebElement;
-class WebFrameImplBase;
 class WebLocalFrame;
 class WebPerformance;
 class WebRemoteFrame;
@@ -143,11 +144,13 @@ class WebFrame {
   // The security origin of this frame.
   BLINK_EXPORT WebSecurityOrigin GetSecurityOrigin() const;
 
-  // Updates the sandbox flags in the frame's FrameOwner.  This is used when
-  // this frame's parent is in another process and it dynamically updates
-  // this frame's sandbox flags.  The flags won't take effect until the next
-  // navigation.
-  BLINK_EXPORT void SetFrameOwnerSandboxFlags(WebSandboxFlags);
+  // Updates the snapshotted policy attributes (sandbox flags and feature policy
+  // container policy) in the frame's FrameOwner. This is used when this frame's
+  // parent is in another process and it dynamically updates this frame's
+  // sandbox flags or container policy. The new policy won't take effect until
+  // the next navigation.
+  BLINK_EXPORT void SetFrameOwnerPolicy(WebSandboxFlags,
+                                        const blink::WebParsedFeaturePolicy&);
 
   // The frame's insecure request policy.
   BLINK_EXPORT WebInsecureRequestPolicy GetInsecureRequestPolicy() const;
@@ -182,6 +185,11 @@ class WebFrame {
 
   virtual bool HasHorizontalScrollbar() const = 0;
   virtual bool HasVerticalScrollbar() const = 0;
+
+  // Whether to collapse the frame's owner element in the embedder document,
+  // that is, to remove it from the layout as if it did not exist. Only works
+  // for <iframe> owner elements.
+  BLINK_EXPORT void Collapse(bool);
 
   // Hierarchy ----------------------------------------------------------
 
@@ -416,21 +424,18 @@ class WebFrame {
   // text form. This is used only by layout tests.
   virtual WebString LayerTreeAsText(bool show_debug_info = false) const = 0;
 
-  virtual WebFrameImplBase* ToImplBase() = 0;
-  // TODO(dcheng): Fix const-correctness issues and remove this overload.
-  virtual const WebFrameImplBase* ToImplBase() const {
-    return const_cast<WebFrame*>(this)->ToImplBase();
-  }
-
   // Returns the frame inside a given frame or iframe element. Returns 0 if
   // the given element is not a frame, iframe or if the frame is empty.
   BLINK_EXPORT static WebFrame* FromFrameOwnerElement(const WebElement&);
 
 #if BLINK_IMPLEMENTATION
+  // TODO(mustaq): Should be named FromCoreFrame instead.
   static WebFrame* FromFrame(Frame*);
+  BLINK_EXPORT static Frame* ToCoreFrame(const WebFrame&);
 
   bool InShadowTree() const { return scope_ == WebTreeScopeType::kShadow; }
 
+  static void InitializeCoreFrame(WebFrame&, Page&);
   static void TraceFrames(Visitor*, WebFrame*);
 #endif
 

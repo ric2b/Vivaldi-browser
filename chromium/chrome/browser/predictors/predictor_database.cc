@@ -4,18 +4,18 @@
 
 #include "chrome/browser/predictors/predictor_database.h"
 
-#include <stdint.h>
+#include <cstdint>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor_table.h"
+#include "chrome/browser/predictors/loading_predictor_config.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor_tables.h"
-#include "chrome/browser/prerender/prerender_field_trial.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_thread.h"
 #include "sql/connection.h"
@@ -75,9 +75,8 @@ PredictorDatabaseInternal::PredictorDatabaseInternal(Profile* profile)
   // This db does not use [meta] table, store mmap status data elsewhere.
   db_->set_mmap_alt_status();
 
-  ResourcePrefetchPredictorConfig config;
   is_resource_prefetch_predictor_enabled_ =
-      IsSpeculativeResourcePrefetchingEnabled(profile, &config);
+      IsSpeculativeResourcePrefetchingEnabled(profile, nullptr);
 }
 
 PredictorDatabaseInternal::~PredictorDatabaseInternal() {
@@ -119,12 +118,6 @@ void PredictorDatabaseInternal::LogDatabaseStats() {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::DB) ||
         !BrowserThread::IsMessageLoopValid(BrowserThread::DB));
 
-  int64_t db_size;
-  bool success = base::GetFileSize(db_path_, &db_size);
-  DCHECK(success) << "Failed to get file size for " << db_path_.value();
-  UMA_HISTOGRAM_MEMORY_KB("PredictorDatabase.DatabaseSizeKB",
-                          static_cast<int>(db_size / 1024));
-
   autocomplete_table_->LogDatabaseStats();
   if (is_resource_prefetch_predictor_enabled_)
     resource_prefetch_tables_->LogDatabaseStats();
@@ -132,8 +125,9 @@ void PredictorDatabaseInternal::LogDatabaseStats() {
 
 PredictorDatabase::PredictorDatabase(Profile* profile)
     : db_(new PredictorDatabaseInternal(profile)) {
-  BrowserThread::PostTask(BrowserThread::DB, FROM_HERE,
-      base::Bind(&PredictorDatabaseInternal::Initialize, db_));
+  BrowserThread::PostTask(
+      BrowserThread::DB, FROM_HERE,
+      base::BindOnce(&PredictorDatabaseInternal::Initialize, db_));
 }
 
 PredictorDatabase::~PredictorDatabase() {

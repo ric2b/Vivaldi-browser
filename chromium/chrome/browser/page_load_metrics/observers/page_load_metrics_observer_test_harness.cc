@@ -38,6 +38,12 @@ class TestPageLoadMetricsEmbedderInterface
     test_->RegisterObservers(tracker);
   }
 
+  std::unique_ptr<base::Timer> CreateTimer() override {
+    auto timer = base::MakeUnique<test::WeakMockTimer>();
+    test_->SetMockTimer(timer->AsWeakPtr());
+    return std::move(timer);
+  }
+
  private:
   PageLoadMetricsObserverTestHarness* test_;
 
@@ -51,69 +57,12 @@ PageLoadMetricsObserverTestHarness::PageLoadMetricsObserverTestHarness()
 
 PageLoadMetricsObserverTestHarness::~PageLoadMetricsObserverTestHarness() {}
 
-// static
-void PageLoadMetricsObserverTestHarness::PopulateRequiredTimingFields(
-    PageLoadTiming* inout_timing) {
-  if (inout_timing->first_meaningful_paint &&
-      !inout_timing->first_contentful_paint) {
-    inout_timing->first_contentful_paint = inout_timing->first_meaningful_paint;
-  }
-  if ((inout_timing->first_text_paint || inout_timing->first_image_paint ||
-       inout_timing->first_contentful_paint) &&
-      !inout_timing->first_paint) {
-    inout_timing->first_paint =
-        OptionalMin(OptionalMin(inout_timing->first_text_paint,
-                                inout_timing->first_image_paint),
-                    inout_timing->first_contentful_paint);
-  }
-  if (inout_timing->first_paint && !inout_timing->first_layout) {
-    inout_timing->first_layout = inout_timing->first_paint;
-  }
-  if (inout_timing->load_event_start &&
-      !inout_timing->dom_content_loaded_event_start) {
-    inout_timing->dom_content_loaded_event_start =
-        inout_timing->load_event_start;
-  }
-  if (inout_timing->first_layout && !inout_timing->parse_start) {
-    inout_timing->parse_start = inout_timing->first_layout;
-  }
-  if (inout_timing->dom_content_loaded_event_start &&
-      !inout_timing->parse_stop) {
-    inout_timing->parse_stop = inout_timing->dom_content_loaded_event_start;
-  }
-  if (inout_timing->parse_stop && !inout_timing->parse_start) {
-    inout_timing->parse_start = inout_timing->parse_stop;
-  }
-  if (inout_timing->parse_start && !inout_timing->response_start) {
-    inout_timing->response_start = inout_timing->parse_start;
-  }
-  if (inout_timing->parse_start) {
-    if (!inout_timing->parse_blocked_on_script_load_duration)
-      inout_timing->parse_blocked_on_script_load_duration = base::TimeDelta();
-    if (!inout_timing->parse_blocked_on_script_execution_duration) {
-      inout_timing->parse_blocked_on_script_execution_duration =
-          base::TimeDelta();
-    }
-    if (!inout_timing
-             ->parse_blocked_on_script_load_from_document_write_duration) {
-      inout_timing->parse_blocked_on_script_load_from_document_write_duration =
-          base::TimeDelta();
-    }
-    if (!inout_timing
-             ->parse_blocked_on_script_execution_from_document_write_duration) {
-      inout_timing
-          ->parse_blocked_on_script_execution_from_document_write_duration =
-          base::TimeDelta();
-    }
-  }
-}
-
 void PageLoadMetricsObserverTestHarness::SetUp() {
   ChromeRenderViewHostTestHarness::SetUp();
   SetContents(CreateTestWebContents());
   NavigateAndCommit(GURL("http://www.google.com"));
   observer_ = MetricsWebContentsObserver::CreateForWebContents(
-      web_contents(),
+      web_contents(), base::nullopt,
       base::MakeUnique<TestPageLoadMetricsEmbedderInterface>(this));
   web_contents()->WasShown();
 }
@@ -125,28 +74,38 @@ void PageLoadMetricsObserverTestHarness::StartNavigation(const GURL& gurl) {
 }
 
 void PageLoadMetricsObserverTestHarness::SimulateTimingUpdate(
-    const PageLoadTiming& timing) {
-  SimulateTimingAndMetadataUpdate(timing, PageLoadMetadata());
+    const mojom::PageLoadTiming& timing) {
+  SimulateTimingAndMetadataUpdate(timing, mojom::PageLoadMetadata());
 }
 
 void PageLoadMetricsObserverTestHarness::SimulateTimingAndMetadataUpdate(
-    const PageLoadTiming& timing,
-    const PageLoadMetadata& metadata) {
-  observer_->OnMessageReceived(PageLoadMetricsMsg_TimingUpdated(
-                                   observer_->routing_id(), timing, metadata),
-                               web_contents()->GetMainFrame());
+    const mojom::PageLoadTiming& timing,
+    const mojom::PageLoadMetadata& metadata) {
+  observer_->OnTimingUpdated(web_contents()->GetMainFrame(), timing, metadata);
+  // If sending the timing update caused the PageLoadMetricsUpdateDispatcher to
+  // schedule a buffering timer, then fire it now so metrics are dispatched to
+  // observers.
+  base::MockTimer* mock_timer = GetMockTimer();
+  if (mock_timer && mock_timer->IsRunning())
+    mock_timer->Fire();
+}
+
+void PageLoadMetricsObserverTestHarness::SimulateStartedResource(
+    const ExtraRequestStartInfo& info) {
+  observer_->OnRequestStarted(content::GlobalRequestID(), info.resource_type,
+                              base::TimeTicks::Now());
 }
 
 void PageLoadMetricsObserverTestHarness::SimulateLoadedResource(
-    const ExtraRequestInfo& info) {
-  observer_->OnRequestComplete(content::GlobalRequestID(),
-                               content::RESOURCE_TYPE_SCRIPT, info.was_cached,
-                               info.data_reduction_proxy_data
-                                   ? info.data_reduction_proxy_data->DeepCopy()
-                                   : nullptr,
-                               info.raw_body_bytes,
-                               info.original_network_content_length,
-                               base::TimeTicks::Now());
+    const ExtraRequestCompleteInfo& info) {
+  observer_->OnRequestComplete(
+      info.url, info.frame_tree_node_id, content::GlobalRequestID(),
+      info.resource_type, info.was_cached,
+      info.data_reduction_proxy_data
+          ? info.data_reduction_proxy_data->DeepCopy()
+          : nullptr,
+      info.raw_body_bytes, info.original_network_content_length,
+      base::TimeTicks::Now());
 }
 
 void PageLoadMetricsObserverTestHarness::SimulateInputEvent(
@@ -169,6 +128,11 @@ void PageLoadMetricsObserverTestHarness::SimulateMediaPlayed() {
 const base::HistogramTester&
 PageLoadMetricsObserverTestHarness::histogram_tester() const {
   return histogram_tester_;
+}
+
+MetricsWebContentsObserver* PageLoadMetricsObserverTestHarness::observer()
+    const {
+  return observer_;
 }
 
 const PageLoadExtraInfo

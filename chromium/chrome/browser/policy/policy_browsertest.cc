@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "ash/accelerators/accelerator_controller_delegate_aura.h"
+#include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -24,6 +25,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
@@ -34,6 +36,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_file_util.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -103,6 +106,7 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/infobars/core/infobar.h"
+#include "components/network_time/network_time_tracker.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
@@ -129,6 +133,7 @@
 #include "components/update_client/url_request_post_interceptor.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/variations/service/variations_service.h"
+#include "components/variations/variations_switches.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -180,6 +185,8 @@
 #include "net/http/http_stream_factory.h"
 #include "net/http/transport_security_state.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_request.h"
+#include "net/test/embedded_test_server/http_response.h"
 #include "net/test/url_request/url_request_failed_job.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/url_request/url_request.h"
@@ -230,11 +237,11 @@
 #include "ui/base/window_open_disposition.h"
 #endif
 
-#if defined(ENABLE_MEDIA_ROUTER) && !defined(OS_ANDROID)
+#if !defined(OS_ANDROID)
 #include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
 #include "chrome/browser/ui/toolbar/media_router_action_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
-#endif  // defined(ENABLE_MEDIA_ROUTER) && !defined(OS_ANDROID)
+#endif  // !defined(OS_ANDROID)
 
 using content::BrowserThread;
 using net::URLRequestMockHTTPJob;
@@ -342,14 +349,15 @@ class MakeRequestFail {
   // Sets up the filter on IO thread such that requests to |host| fail.
   explicit MakeRequestFail(const std::string& host) : host_(host) {
     BrowserThread::PostTaskAndReply(BrowserThread::IO, FROM_HERE,
-                                    base::Bind(MakeRequestFailOnIO, host_),
+                                    base::BindOnce(MakeRequestFailOnIO, host_),
                                     base::MessageLoop::QuitWhenIdleClosure());
     content::RunMessageLoop();
   }
   ~MakeRequestFail() {
-    BrowserThread::PostTaskAndReply(BrowserThread::IO, FROM_HERE,
-                                    base::Bind(UndoMakeRequestFailOnIO, host_),
-                                    base::MessageLoop::QuitWhenIdleClosure());
+    BrowserThread::PostTaskAndReply(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(UndoMakeRequestFailOnIO, host_),
+        base::MessageLoop::QuitWhenIdleClosure());
     content::RunMessageLoop();
   }
 
@@ -637,7 +645,7 @@ class PolicyTest : public InProcessBrowserTest {
   void SetUpOnMainThread() override {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(chrome_browser_net::SetUrlRequestMocksEnabled, true));
+        base::BindOnce(chrome_browser_net::SetUrlRequestMocksEnabled, true));
     if (extension_service()->updater()) {
       extension_service()->updater()->SetExtensionCacheForTesting(
           test_extension_cache_.get());
@@ -651,8 +659,8 @@ class PolicyTest : public InProcessBrowserTest {
     PathService::Get(content::DIR_TEST_DATA, &root_http);
     BrowserThread::PostTaskAndReply(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(URLRequestMockHTTPJob::AddUrlHandlers, root_http,
-                   make_scoped_refptr(BrowserThread::GetBlockingPool())),
+        base::BindOnce(URLRequestMockHTTPJob::AddUrlHandlers, root_http,
+                       make_scoped_refptr(BrowserThread::GetBlockingPool())),
         base::MessageLoop::current()->QuitWhenIdleClosure());
     content::RunMessageLoop();
   }
@@ -875,6 +883,7 @@ IN_PROC_BROWSER_TEST_F(LocalePolicyTest, ApplicationLocaleValue) {
   EXPECT_EQ(french_title, title);
 
   // Make sure this is really French and differs from the English title.
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   std::string loaded =
       ui::ResourceBundle::GetSharedInstance().ReloadLocaleResources("en-US");
   EXPECT_EQ("en-US", loaded);
@@ -973,7 +982,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   TemplateURLService* service = TemplateURLServiceFactory::GetForProfile(
       browser()->profile());
   search_test_utils::WaitForTemplateURLServiceToLoad(service);
-  TemplateURL* default_search = service->GetDefaultSearchProvider();
+  const TemplateURL* default_search = service->GetDefaultSearchProvider();
   ASSERT_TRUE(default_search);
   EXPECT_NE(kKeyword, default_search->keyword());
   EXPECT_NE(kSearchURL, default_search->url());
@@ -1247,8 +1256,9 @@ bool GetPacHttpsUrlStrippingEnabled() {
   base::RunLoop loop;
   BrowserThread::PostTaskAndReply(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&GetPacHttpsUrlStrippingEnabledOnIOThread,
-                 g_browser_process->io_thread(), base::Unretained(&enabled)),
+      base::BindOnce(&GetPacHttpsUrlStrippingEnabledOnIOThread,
+                     g_browser_process->io_thread(),
+                     base::Unretained(&enabled)),
       loop.QuitClosure());
   loop.Run();
   return enabled;
@@ -1434,6 +1444,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DownloadDirectory) {
   // Verifies that the download directory can be forced by policy.
 
   // Set the initial download directory.
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::ScopedTempDir initial_dir;
   ASSERT_TRUE(initial_dir.CreateUniqueTempDir());
   browser()->profile()->GetPrefs()->SetFilePath(
@@ -1832,6 +1843,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_ExtensionInstallSources) {
       URLRequestMockHTTPJob::GetMockUrl("extensions/*"));
   const GURL referrer_url(URLRequestMockHTTPJob::GetMockUrl("policy/*"));
 
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::ScopedTempDir download_directory;
   ASSERT_TRUE(download_directory.CreateUniqueTempDir());
   DownloadPrefs* download_prefs =
@@ -2352,7 +2364,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklist) {
     base::RunLoop loop;
     BrowserThread::PostTaskAndReply(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(RedirectHostsToTestData, kURLS, arraysize(kURLS)),
+        base::BindOnce(RedirectHostsToTestData, kURLS, arraysize(kURLS)),
         loop.QuitClosure());
     loop.Run();
   }
@@ -2390,7 +2402,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklist) {
     base::RunLoop loop;
     BrowserThread::PostTaskAndReply(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(UndoRedirectHostsToTestData, kURLS, arraysize(kURLS)),
+        base::BindOnce(UndoRedirectHostsToTestData, kURLS, arraysize(kURLS)),
         loop.QuitClosure());
     loop.Run();
   }
@@ -2961,10 +2973,9 @@ class RestoreOnStartupPolicyTest
 
   void SetUpOnMainThread() override {
     BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(
-            RedirectHostsToTestData, kRestoredURLs, arraysize(kRestoredURLs)));
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(RedirectHostsToTestData, kRestoredURLs,
+                       arraysize(kRestoredURLs)));
   }
 
   void ListOfURLs() {
@@ -3128,16 +3139,16 @@ class MediaStreamDevicesControllerBrowserTest
   // we should remove PermissionPromptDelegate and just use
   // MockPermissionPromptFactory instead. The APIs are the same.
   class TestPermissionPromptDelegate
-      : public ::internal::PermissionPromptDelegate {
+      : public MediaStreamDevicesController::PermissionPromptDelegate {
    public:
-    void ShowPrompt(
-        bool user_gesture,
-        content::WebContents* web_contents,
-        std::unique_ptr<MediaStreamDevicesController> controller) override {
+    void ShowPrompt(bool user_gesture,
+                    content::WebContents* web_contents,
+                    std::unique_ptr<MediaStreamDevicesController::Request>
+                        request) override {
       if (response_type_ == PermissionRequestManager::ACCEPT_ALL)
-        controller->PermissionGranted();
+        request->PermissionGranted();
       else if (response_type_ == PermissionRequestManager::DENY_ALL)
-        controller->PermissionDenied();
+        request->PermissionDenied();
     }
 
     void set_response_type(
@@ -3272,11 +3283,12 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
 
   content::BrowserThread::PostTaskAndReply(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&MediaCaptureDevicesDispatcher::SetTestAudioCaptureDevices,
-                 base::Unretained(MediaCaptureDevicesDispatcher::GetInstance()),
-                 audio_devices),
-      base::Bind(&MediaStreamDevicesControllerBrowserTest::FinishAudioTest,
-                 base::Unretained(this)));
+      base::BindOnce(
+          &MediaCaptureDevicesDispatcher::SetTestAudioCaptureDevices,
+          base::Unretained(MediaCaptureDevicesDispatcher::GetInstance()),
+          audio_devices),
+      base::BindOnce(&MediaStreamDevicesControllerBrowserTest::FinishAudioTest,
+                     base::Unretained(this)));
 
   base::RunLoop().Run();
 }
@@ -3304,11 +3316,11 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
 
     content::BrowserThread::PostTaskAndReply(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &MediaCaptureDevicesDispatcher::SetTestAudioCaptureDevices,
             base::Unretained(MediaCaptureDevicesDispatcher::GetInstance()),
             audio_devices),
-        base::Bind(
+        base::BindOnce(
             &MediaStreamDevicesControllerBrowserTest::FinishAudioTest,
             base::Unretained(this)));
 
@@ -3329,11 +3341,12 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
 
   content::BrowserThread::PostTaskAndReply(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&MediaCaptureDevicesDispatcher::SetTestVideoCaptureDevices,
-                 base::Unretained(MediaCaptureDevicesDispatcher::GetInstance()),
-                 video_devices),
-      base::Bind(&MediaStreamDevicesControllerBrowserTest::FinishVideoTest,
-                 base::Unretained(this)));
+      base::BindOnce(
+          &MediaCaptureDevicesDispatcher::SetTestVideoCaptureDevices,
+          base::Unretained(MediaCaptureDevicesDispatcher::GetInstance()),
+          video_devices),
+      base::BindOnce(&MediaStreamDevicesControllerBrowserTest::FinishVideoTest,
+                     base::Unretained(this)));
 
   base::RunLoop().Run();
 }
@@ -3361,10 +3374,11 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
 
     content::BrowserThread::PostTaskAndReply(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&MediaCaptureDevicesDispatcher::SetTestVideoCaptureDevices,
+        base::BindOnce(
+            &MediaCaptureDevicesDispatcher::SetTestVideoCaptureDevices,
             base::Unretained(MediaCaptureDevicesDispatcher::GetInstance()),
             video_devices),
-        base::Bind(
+        base::BindOnce(
             &MediaStreamDevicesControllerBrowserTest::FinishVideoTest,
             base::Unretained(this)));
 
@@ -3393,6 +3407,9 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothPolicyTest, Block) {
   scoped_refptr<device::MockBluetoothAdapter> adapter =
       new testing::NiceMock<device::MockBluetoothAdapter>;
   EXPECT_CALL(*adapter, IsPresent()).WillRepeatedly(testing::Return(true));
+  auto bt_global_values =
+      device::BluetoothAdapterFactory::Get().InitGlobalValuesForTesting();
+  bt_global_values->SetLESupported(true);
   device::BluetoothAdapterFactory::SetAdapterForTesting(adapter);
 
   // Navigate to a secure context.
@@ -3443,8 +3460,8 @@ IN_PROC_BROWSER_TEST_F(PolicyTest,
   // Require CT for all hosts (in the absence of policy).
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(net::TransportSecurityState::SetShouldRequireCTForTesting,
-                 base::Owned(new bool(true))));
+      base::BindOnce(net::TransportSecurityState::SetShouldRequireCTForTesting,
+                     base::Owned(new bool(true))));
 
   ui_test_utils::NavigateToURL(browser(), https_server_ok.GetURL("/"));
 
@@ -3647,7 +3664,6 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, TaskManagerEndProcessEnabled) {
   EXPECT_TRUE(task_manager::TaskManagerInterface::IsEndProcessEnabled());
 }
 
-#if defined(ENABLE_MEDIA_ROUTER)
 // Sets the proper policy before the browser is started.
 template<bool enable>
 class MediaRouterPolicyTest : public PolicyTest {
@@ -3715,7 +3731,6 @@ IN_PROC_BROWSER_TEST_F(MediaRouterActionDisabledPolicyTest,
   EXPECT_FALSE(HasMediaRouterActionAtInit());
 }
 #endif  // !defined(OS_ANDROID)
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 
 #if BUILDFLAG(ENABLE_WEBRTC)
 // Sets the proper policy before the browser is started.
@@ -3898,7 +3913,7 @@ void ComponentUpdaterPolicyTest::UpdateComponent(
 
 void ComponentUpdaterPolicyTest::CallAsync(TestCaseAction action) {
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(action, base::Unretained(this)));
+                          base::BindOnce(action, base::Unretained(this)));
 }
 
 void ComponentUpdaterPolicyTest::OnDemandComplete(update_client::Error error) {
@@ -4490,5 +4505,82 @@ IN_PROC_BROWSER_TEST_F(ChromeOSPolicyTest, SystemTimezoneAutomaticDetection) {
   EXPECT_TRUE(manager->TimeZoneResolverShouldBeRunningForTests());
 }
 #endif  // defined(OS_CHROMEOS)
+
+class NetworkTimePolicyTest : public PolicyTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(
+        switches::kEnableFeatures,
+        std::string(network_time::kNetworkTimeServiceQuerying.name) +
+            "<SSLNetworkTimeBrowserTestFieldTrial");
+    command_line->AppendSwitchASCII(
+        switches::kForceFieldTrials,
+        "SSLNetworkTimeBrowserTestFieldTrial/Enabled/");
+    command_line->AppendSwitchASCII(
+        variations::switches::kForceFieldTrialParams,
+        "SSLNetworkTimeBrowserTestFieldTrial.Enabled:FetchBehavior/"
+        "on-demand-only");
+  }
+
+  // A request handler that returns a dummy response and counts the number of
+  // times it is called.
+  std::unique_ptr<net::test_server::HttpResponse> CountingRequestHandler(
+      const net::test_server::HttpRequest& request) {
+    net::test_server::BasicHttpResponse* response =
+        new net::test_server::BasicHttpResponse();
+    num_requests_++;
+    response->set_code(net::HTTP_OK);
+    response->set_content(
+        ")]}'\n"
+        "{\"current_time_millis\":1461621971825,\"server_nonce\":-6."
+        "006853099049523E85}");
+    response->AddCustomHeader("x-cup-server-proof", "dead:beef");
+    return std::unique_ptr<net::test_server::HttpResponse>(response);
+  }
+
+  uint32_t num_requests() { return num_requests_; }
+
+ private:
+  uint32_t num_requests_ = 0;
+};
+
+IN_PROC_BROWSER_TEST_F(NetworkTimePolicyTest, NetworkTimeQueriesDisabled) {
+  // Set a policy to disable network time queries.
+  PolicyMap policies;
+  policies.Set(key::kNetworkTimeQueriesEnabled, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               base::MakeUnique<base::Value>(false), nullptr);
+  UpdateProviderPolicy(policies);
+
+  embedded_test_server()->RegisterRequestHandler(base::Bind(
+      &NetworkTimePolicyTest::CountingRequestHandler, base::Unretained(this)));
+  ASSERT_TRUE(embedded_test_server()->Start());
+  g_browser_process->network_time_tracker()->SetTimeServerURLForTesting(
+      embedded_test_server()->GetURL("/"));
+
+  net::EmbeddedTestServer https_server_expired_(
+      net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server_expired_.SetSSLConfig(net::EmbeddedTestServer::CERT_EXPIRED);
+  ASSERT_TRUE(https_server_expired_.Start());
+
+  // Navigate to a page with a certificate date error and then check that a
+  // network time query was not sent.
+  ui_test_utils::NavigateToURL(browser(), https_server_expired_.GetURL("/"));
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  content::InterstitialPage* interstitial_page = tab->GetInterstitialPage();
+  ASSERT_TRUE(interstitial_page);
+  EXPECT_EQ(0u, num_requests());
+
+  // Now enable the policy and check that a network time query is sent.
+  policies.Set(key::kNetworkTimeQueriesEnabled, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               base::MakeUnique<base::Value>(true), nullptr);
+  UpdateProviderPolicy(policies);
+  ui_test_utils::NavigateToURL(browser(), https_server_expired_.GetURL("/"));
+  interstitial_page = tab->GetInterstitialPage();
+  ASSERT_TRUE(interstitial_page);
+  EXPECT_EQ(1u, num_requests());
+}
 
 }  // namespace policy

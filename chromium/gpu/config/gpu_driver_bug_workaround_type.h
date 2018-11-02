@@ -109,6 +109,8 @@
          force_discrete_gpu)                                 \
   GPU_OP(FORCE_INTEGRATED_GPU,                               \
          force_integrated_gpu)                               \
+  GPU_OP(FORCE_INT_OR_SRGB_CUBE_TEXTURE_COMPLETE,            \
+         force_int_or_srgb_cube_texture_complete)            \
   GPU_OP(FORCE_UPDATE_SCISSOR_STATE_WHEN_BINDING_FBO0,       \
          force_update_scissor_state_when_binding_fbo0)       \
   GPU_OP(GET_FRAG_DATA_INFO_BUG,                             \
@@ -219,6 +221,8 @@
          disable_non_empty_post_sub_buffers_for_onscreen_surfaces) \
   GPU_OP(AVOID_STENCIL_BUFFERS,                              \
          avoid_stencil_buffers)                              \
+  GPU_OP(RELY_ON_IMPLICIT_SYNC_FOR_SWAP_BUFFERS,             \
+         rely_on_implicit_sync_for_swap_buffers)             \
 // clang-format on
 
 namespace gpu {

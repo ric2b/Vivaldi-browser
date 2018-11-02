@@ -5,7 +5,6 @@
 #include "modules/beacon/NavigatorBeacon.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/modules/v8/ArrayBufferViewOrBlobOrStringOrFormData.h"
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/ExceptionCode.h"
@@ -16,6 +15,7 @@
 #include "core/frame/UseCounter.h"
 #include "core/html/FormData.h"
 #include "core/loader/PingLoader.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/loader/fetch/FetchUtils.h"
 
 namespace blink {
@@ -47,14 +47,13 @@ bool NavigatorBeacon::CanSendBeacon(ExecutionContext* context,
                                     const KURL& url,
                                     ExceptionState& exception_state) {
   if (!url.IsValid()) {
-    exception_state.ThrowDOMException(
-        kSyntaxError, "The URL argument is ill-formed or unsupported.");
+    exception_state.ThrowTypeError(
+        "The URL argument is ill-formed or unsupported.");
     return false;
   }
   // For now, only support HTTP and related.
   if (!url.ProtocolIsInHTTPFamily()) {
-    exception_state.ThrowDOMException(
-        kSyntaxError, "Beacons are only supported over HTTP(S).");
+    exception_state.ThrowTypeError("Beacons are only supported over HTTP(S).");
     return false;
   }
 

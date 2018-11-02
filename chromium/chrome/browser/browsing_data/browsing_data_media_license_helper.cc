@@ -71,23 +71,23 @@ void BrowsingDataMediaLicenseHelperImpl::StartFetching(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!callback.is_null());
   file_task_runner()->PostTask(
-      FROM_HERE, base::Bind(&BrowsingDataMediaLicenseHelperImpl::
-                                FetchMediaLicenseInfoOnFileTaskRunner,
-                            this, callback));
+      FROM_HERE, base::BindOnce(&BrowsingDataMediaLicenseHelperImpl::
+                                    FetchMediaLicenseInfoOnFileTaskRunner,
+                                this, callback));
 }
 
 void BrowsingDataMediaLicenseHelperImpl::DeleteMediaLicenseOrigin(
     const GURL& origin) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   file_task_runner()->PostTask(
-      FROM_HERE, base::Bind(&BrowsingDataMediaLicenseHelperImpl::
-                                DeleteMediaLicenseOriginOnFileTaskRunner,
-                            this, origin));
+      FROM_HERE, base::BindOnce(&BrowsingDataMediaLicenseHelperImpl::
+                                    DeleteMediaLicenseOriginOnFileTaskRunner,
+                                this, origin));
 }
 
 void BrowsingDataMediaLicenseHelperImpl::FetchMediaLicenseInfoOnFileTaskRunner(
     const FetchCallback& callback) {
-  DCHECK(file_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(file_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(!callback.is_null());
 
   const storage::FileSystemType kType = storage::kFileSystemTypePluginPrivate;
@@ -112,12 +112,12 @@ void BrowsingDataMediaLicenseHelperImpl::FetchMediaLicenseInfoOnFileTaskRunner(
   }
 
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(callback, result));
+                          base::BindOnce(callback, result));
 }
 
 void BrowsingDataMediaLicenseHelperImpl::
     DeleteMediaLicenseOriginOnFileTaskRunner(const GURL& origin) {
-  DCHECK(file_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(file_task_runner()->RunsTasksInCurrentSequence());
 
   const storage::FileSystemType kType = storage::kFileSystemTypePluginPrivate;
   storage::FileSystemBackend* backend =

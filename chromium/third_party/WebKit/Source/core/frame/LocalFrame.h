@@ -55,6 +55,7 @@ class Element;
 template <typename Strategy>
 class EphemeralRangeTemplate;
 class EventHandler;
+class FetchParameters;
 class FloatSize;
 class FrameConsole;
 class FrameSelection;
@@ -80,6 +81,8 @@ class PluginData;
 class ScriptController;
 class SpellChecker;
 class WebFrameScheduler;
+class WebPluginContainerBase;
+class WebURLLoader;
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<LocalFrame>;
 
@@ -154,7 +157,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   // frame's in-process subtree.
   // FIXME: This is a temporary hack to support RemoteFrames, and callers
   // should be updated to avoid storing things on the main frame.
-  LocalFrame* LocalFrameRoot();
+  LocalFrame& LocalFrameRoot() const;
 
   // Note that the result of this function should not be cached: a frame is
   // not necessarily detached when it is navigated, so the return value can
@@ -164,7 +167,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   // behavior for detached windows.
   bool IsCrossOriginSubframe() const;
 
-  CoreProbeSink* InstrumentingAgents() { return instrumenting_agents_.Get(); }
+  CoreProbeSink* GetProbeSink() { return probe_sink_.Get(); }
 
   // =========================================================================
   // All public functions below this point are candidates to move out of
@@ -179,7 +182,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
                    float maximum_shrink_ratio);
   bool ShouldUsePrintingLayout() const;
   FloatSize ResizePageRectsKeepingRatio(const FloatSize& original_size,
-                                        const FloatSize& expected_size);
+                                        const FloatSize& expected_size) const;
 
   bool InViewSourceMode() const;
   void SetInViewSourceMode(bool = true);
@@ -228,12 +231,33 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   PerformanceMonitor* GetPerformanceMonitor() { return performance_monitor_; }
 
+  // Convenience function to allow loading image placeholders for the request if
+  // either the flag in Settings() for using image placeholders is set, or if
+  // the embedder decides that Client Lo-Fi should be used for this request.
+  void MaybeAllowImagePlaceholder(FetchParameters&) const;
+
+  std::unique_ptr<WebURLLoader> CreateURLLoader();
+
   using FrameInitCallback = void (*)(LocalFrame*);
   // Allows for the registration of a callback that is invoked whenever a new
   // LocalFrame is initialized. Callbacks are executed in the order that they
   // were added using registerInitializationCallback, and there are no checks
   // for adding a callback multiple times.
   static void RegisterInitializationCallback(FrameInitCallback);
+
+  // If the frame hosts a PluginDocument, this method returns the
+  // WebPluginContainerBase that hosts the plugin. If the provided node is a
+  // plugin, then it returns its WebPluginContainerBase. Otherwise, uses the
+  // currently focused element (if any).
+  // TODO(slangley): Refactor this method to extract the logic of looking up
+  // focused element or passed node into explicit methods.
+  WebPluginContainerBase* GetWebPluginContainerBase(Node* = nullptr) const;
+
+  // Called on a view for a LocalFrame with a RemoteFrame parent. This makes
+  // viewport intersection available that accounts for remote ancestor frames
+  // and their respective scroll positions, clips, etc.
+  void SetViewportIntersectionFromParent(const IntRect&);
+  IntRect RemoteViewportIntersection() { return remote_viewport_intersection_; }
 
  private:
   friend class FrameNavigationDisabler;
@@ -278,11 +302,13 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   bool in_view_source_mode_;
 
-  Member<CoreProbeSink> instrumenting_agents_;
+  Member<CoreProbeSink> probe_sink_;
   Member<PerformanceMonitor> performance_monitor_;
 
   InterfaceProvider* const interface_provider_;
   InterfaceRegistry* const interface_registry_;
+
+  IntRect remote_viewport_intersection_;
 };
 
 inline FrameLoader& LocalFrame::Loader() const {
@@ -290,7 +316,7 @@ inline FrameLoader& LocalFrame::Loader() const {
 }
 
 inline NavigationScheduler& LocalFrame::GetNavigationScheduler() const {
-  ASSERT(navigation_scheduler_);
+  DCHECK(navigation_scheduler_);
   return *navigation_scheduler_.Get();
 }
 
@@ -331,7 +357,7 @@ inline void LocalFrame::SetInViewSourceMode(bool mode) {
 }
 
 inline EventHandler& LocalFrame::GetEventHandler() const {
-  ASSERT(event_handler_);
+  DCHECK(event_handler_);
   return *event_handler_;
 }
 

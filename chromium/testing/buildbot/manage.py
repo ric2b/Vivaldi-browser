@@ -169,6 +169,7 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
 
   # These are listed in Builders that are skipped for other reasons.
   'chrome_junit_tests',
+  'components_background_task_scheduler_junit_tests',
   'components_gcm_driver_junit_tests',
   'components_invalidation_impl_junit_tests',
   'components_policy_junit_tests',
@@ -176,12 +177,14 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
   'components_web_restrictions_junit_tests',
   'content_junit_tests',
   'content_junit_tests',
+  'device_junit_tests',
   'junit_unit_tests',
   'media_router_perf_tests',
   'media_router_tests',
   'motopho_latency_test',
   'net_junit_tests',
   'net_junit_tests',
+  'service_junit_tests',
   'ui_junit_tests',
   'webapk_client_junit_tests',
   'webapk_shell_apk_junit_tests',

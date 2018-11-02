@@ -4,30 +4,30 @@
 
 #include "ash/system/palette/palette_tray.h"
 
-#include "ash/material_design/material_design_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/grit/ash_resources.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
-#include "ash/shelf/wm_shelf.h"
-#include "ash/shelf/wm_shelf_util.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/palette/palette_tool_manager.h"
 #include "ash/system/palette/palette_utils.h"
 #include "ash/system/tray/system_menu_button.h"
 #include "ash/system/tray/system_tray_controller.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/tray_bubble_wrapper.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/system/tray/tray_container.h"
 #include "ash/system/tray/tray_popup_header_button.h"
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/wm_window.h"
 #include "base/metrics/histogram_macros.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/devices/input_device_manager.h"
 #include "ui/events/devices/stylus_state.h"
 #include "ui/gfx/color_palette.h"
@@ -66,8 +66,17 @@ bool IsInUserSession() {
   return !session_controller->IsUserSessionBlocked() &&
          session_controller->GetSessionState() ==
              session_manager::SessionState::ACTIVE &&
-         Shell::Get()->system_tray_delegate()->GetUserLoginStatus() !=
-             LoginStatus::KIOSK_APP;
+         !session_controller->IsKioskSession();
+}
+
+// Returns true if the |palette_tray| is on an internal display or on every
+// display if requested from the command line.
+bool ShouldShowOnDisplay(PaletteTray* palette_tray) {
+  const display::Display& display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(
+          palette_tray->GetWidget()->GetNativeWindow());
+  return display.IsInternal() ||
+         palette_utils::IsPaletteEnabledOnEveryDisplay();
 }
 
 class TitleView : public views::View, public views::ButtonListener {
@@ -86,31 +95,12 @@ class TitleView : public views::View, public views::ButtonListener {
     TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::TITLE);
     style.SetupLabel(title_label);
     box_layout->SetFlexForView(title_label, 1);
-    if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
-      help_button_ =
-          new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
-                               kSystemMenuHelpIcon, IDS_ASH_STATUS_TRAY_HELP);
-      settings_button_ = new SystemMenuButton(
-          this, TrayPopupInkDropStyle::HOST_CENTERED, kSystemMenuSettingsIcon,
-          IDS_ASH_PALETTE_SETTINGS);
-    } else {
-      gfx::ImageSkia help_icon =
-          gfx::CreateVectorIcon(kSystemMenuHelpIcon, kMenuIconColor);
-      gfx::ImageSkia settings_icon =
-          gfx::CreateVectorIcon(kSystemMenuSettingsIcon, kMenuIconColor);
-
-      auto* help_button = new ash::TrayPopupHeaderButton(
-          this, help_icon, IDS_ASH_STATUS_TRAY_HELP);
-      help_button->SetTooltipText(
-          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_HELP));
-      help_button_ = help_button;
-
-      auto* settings_button = new ash::TrayPopupHeaderButton(
-          this, settings_icon, IDS_ASH_STATUS_TRAY_SETTINGS);
-      settings_button->SetTooltipText(
-          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SETTINGS));
-      settings_button_ = settings_button;
-    }
+    help_button_ =
+        new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
+                             kSystemMenuHelpIcon, IDS_ASH_STATUS_TRAY_HELP);
+    settings_button_ =
+        new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
+                             kSystemMenuSettingsIcon, IDS_ASH_PALETTE_SETTINGS);
 
     AddChildView(help_button_);
     AddChildView(settings_button_);
@@ -147,15 +137,14 @@ class TitleView : public views::View, public views::ButtonListener {
 
 }  // namespace
 
-PaletteTray::PaletteTray(WmShelf* wm_shelf)
-    : TrayBackgroundView(wm_shelf, true),
+PaletteTray::PaletteTray(Shelf* shelf)
+    : TrayBackgroundView(shelf),
       palette_tool_manager_(new PaletteToolManager(this)),
+      scoped_session_observer_(this),
       weak_factory_(this) {
   PaletteTool::RegisterToolInstances(palette_tool_manager_.get());
 
-  if (MaterialDesignController::IsShelfMaterial())
-    SetInkDropMode(InkDropMode::ON);
-
+  SetInkDropMode(InkDropMode::ON);
   SetLayoutManager(new views::FillLayout());
   icon_ = new views::ImageView();
   UpdateTrayIcon();
@@ -164,7 +153,6 @@ PaletteTray::PaletteTray(WmShelf* wm_shelf)
   tray_container()->AddChildView(icon_);
 
   Shell::Get()->AddShellObserver(this);
-  Shell::Get()->session_controller()->AddSessionStateObserver(this);
   ui::InputDeviceManager::GetInstance()->AddObserver(this);
 }
 
@@ -174,7 +162,6 @@ PaletteTray::~PaletteTray() {
 
   ui::InputDeviceManager::GetInstance()->RemoveObserver(this);
   Shell::Get()->RemoveShellObserver(this);
-  Shell::Get()->session_controller()->RemoveSessionStateObserver(this);
 }
 
 bool PaletteTray::PerformAction(const ui::Event& event) {
@@ -200,10 +187,6 @@ bool PaletteTray::ShowPalette() {
   init_params.close_on_deactivate = true;
 
   DCHECK(tray_container());
-
-  // The views::TrayBubbleView ctor will cause a shelf auto hide update check.
-  // Make sure to block auto hiding before that check happens.
-  should_block_shelf_auto_hide_ = true;
 
   // TODO(tdanderson): Refactor into common row layout code.
   // TODO(tdanderson|jdufault): Add material design ripple effects to the menu
@@ -249,7 +232,7 @@ bool PaletteTray::ContainsPointInScreen(const gfx::Point& point) {
   return bubble_ && bubble_->bubble_view()->GetBoundsInScreen().Contains(point);
 }
 
-void PaletteTray::SessionStateChanged(session_manager::SessionState state) {
+void PaletteTray::OnSessionStateChanged(session_manager::SessionState state) {
   UpdateIconVisibility();
 }
 
@@ -326,8 +309,7 @@ void PaletteTray::OnBeforeBubbleWidgetInit(
     views::Widget* bubble_widget,
     views::Widget::InitParams* params) const {
   // Place the bubble in the same root window as |anchor_widget|.
-  WmWindow::Get(anchor_widget->GetNativeWindow())
-      ->GetRootWindowController()
+  RootWindowController::ForWindow(anchor_widget->GetNativeWindow())
       ->ConfigureWidgetInitParamsForContainer(
           bubble_widget, kShellWindowId_SettingBubbleContainer, params);
 }
@@ -337,7 +319,6 @@ void PaletteTray::HideBubble(const views::TrayBubbleView* bubble_view) {
 }
 
 void PaletteTray::HidePalette() {
-  should_block_shelf_auto_hide_ = false;
   is_bubble_auto_opened_ = false;
   num_actions_in_bubble_ = 0;
   bubble_.reset();
@@ -372,24 +353,13 @@ void PaletteTray::RecordPaletteModeCancellation(PaletteModeCancelType type) {
       PaletteModeCancelType::PALETTE_MODE_CANCEL_TYPE_COUNT);
 }
 
-bool PaletteTray::ShouldBlockShelfAutoHide() const {
-  return should_block_shelf_auto_hide_;
-}
-
 void PaletteTray::OnActiveToolChanged() {
   ++num_actions_in_bubble_;
   UpdateTrayIcon();
 }
 
-WmWindow* PaletteTray::GetWindow() {
-  return shelf()->GetWindow();
-}
-
-void PaletteTray::SetShelfAlignment(ShelfAlignment alignment) {
-  if (alignment == shelf_alignment())
-    return;
-
-  TrayBackgroundView::SetShelfAlignment(alignment);
+aura::Window* PaletteTray::GetWindow() {
+  return shelf()->GetWindow()->aura_window();
 }
 
 void PaletteTray::AnchorUpdated() {
@@ -429,7 +399,7 @@ void PaletteTray::OnPaletteEnabledPrefChanged(bool enabled) {
 
 void PaletteTray::UpdateIconVisibility() {
   SetVisible(is_palette_enabled_ && palette_utils::HasStylusInput() &&
-             IsInUserSession());
+             ShouldShowOnDisplay(this) && IsInUserSession());
 }
 
 }  // namespace ash

@@ -72,6 +72,13 @@ class LargeIconService : public KeyedService {
   // encouraged to use GetLargeIconOrFallbackStyle() first.
   //
   // A minimum size |min_source_size_in_pixel| can be specified as a constraint.
+  // |desired_size_in_pixel| serves only as a hint to the service, no guarantees
+  // on the fetched size are provided.
+  //
+  // Unless you are sure |page_url| is a public URL (known to Google Search),
+  // set |may_page_url_be_private| to true. This slighty increases the chance of
+  // a failure (e.g. if the URL _is_ private) but it makes sure Google servers
+  // do not crawl a private URL as a result of this call.
   //
   // The callback is triggered when the operation finishes, where |success|
   // tells whether the fetch actually managed to database a new icon in the
@@ -80,9 +87,13 @@ class LargeIconService : public KeyedService {
   // WARNING: This function will share the |page_url| with a Google server. This
   // Can be used only for urls that are not privacy sensitive or for users that
   // sync their history with Google servers.
+  // TODO(jkrcal): It is not clear from the name of this function, that it
+  // actually adds the icon to the local cache. Maybe "StoreLargeIcon..."?
   void GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
       const GURL& page_url,
       int min_source_size_in_pixel,
+      int desired_size_in_pixel,
+      bool may_page_url_be_private,
       const base::Callback<void(bool success)>& callback);
 
  private:

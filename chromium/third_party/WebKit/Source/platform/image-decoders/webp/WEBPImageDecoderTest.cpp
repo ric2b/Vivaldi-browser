@@ -56,8 +56,9 @@ std::unique_ptr<ImageDecoder> CreateDecoder() {
   return CreateDecoder(ImageDecoder::kAlphaNotPremultiplied);
 }
 
-// If 'parseErrorExpected' is true, error is expected during parse (frameCount()
-// call); else error is expected during decode (frameBufferAtIndex() call).
+// If 'parse_error_expected' is true, error is expected during parse
+// (FrameCount() call); else error is expected during decode
+// (FrameBufferAtIndex() call).
 void TestInvalidImage(const char* webp_file, bool parse_error_expected) {
   std::unique_ptr<ImageDecoder> decoder = CreateDecoder();
 
@@ -74,7 +75,7 @@ void TestInvalidImage(const char* webp_file, bool parse_error_expected) {
     ASSERT_TRUE(frame);
     EXPECT_EQ(ImageFrame::kFramePartial, frame->GetStatus());
   }
-  EXPECT_EQ(kCAnimationLoopOnce, decoder->RepetitionCount());
+  EXPECT_EQ(kAnimationLoopOnce, decoder->RepetitionCount());
   EXPECT_TRUE(decoder->Failed());
 }
 
@@ -98,7 +99,7 @@ TEST(AnimatedWebPTests, uniqueGenerationIDs) {
 
 TEST(AnimatedWebPTests, verifyAnimationParametersTransparentImage) {
   std::unique_ptr<ImageDecoder> decoder = CreateDecoder();
-  EXPECT_EQ(kCAnimationLoopOnce, decoder->RepetitionCount());
+  EXPECT_EQ(kAnimationLoopOnce, decoder->RepetitionCount());
 
   RefPtr<SharedBuffer> data =
       ReadFile("/LayoutTests/images/resources/webp-animated.webp");
@@ -139,13 +140,13 @@ TEST(AnimatedWebPTests, verifyAnimationParametersTransparentImage) {
   }
 
   EXPECT_EQ(WTF_ARRAY_LENGTH(kFrameParameters), decoder->FrameCount());
-  EXPECT_EQ(kCAnimationLoopInfinite, decoder->RepetitionCount());
+  EXPECT_EQ(kAnimationLoopInfinite, decoder->RepetitionCount());
 }
 
 TEST(AnimatedWebPTests,
      verifyAnimationParametersOpaqueFramesTransparentBackground) {
   std::unique_ptr<ImageDecoder> decoder = CreateDecoder();
-  EXPECT_EQ(kCAnimationLoopOnce, decoder->RepetitionCount());
+  EXPECT_EQ(kAnimationLoopOnce, decoder->RepetitionCount());
 
   RefPtr<SharedBuffer> data =
       ReadFile("/LayoutTests/images/resources/webp-animated-opaque.webp");
@@ -188,12 +189,12 @@ TEST(AnimatedWebPTests,
   }
 
   EXPECT_EQ(WTF_ARRAY_LENGTH(kFrameParameters), decoder->FrameCount());
-  EXPECT_EQ(kCAnimationLoopInfinite, decoder->RepetitionCount());
+  EXPECT_EQ(kAnimationLoopInfinite, decoder->RepetitionCount());
 }
 
 TEST(AnimatedWebPTests, verifyAnimationParametersBlendOverwrite) {
   std::unique_ptr<ImageDecoder> decoder = CreateDecoder();
-  EXPECT_EQ(kCAnimationLoopOnce, decoder->RepetitionCount());
+  EXPECT_EQ(kAnimationLoopOnce, decoder->RepetitionCount());
 
   RefPtr<SharedBuffer> data =
       ReadFile("/LayoutTests/images/resources/webp-animated-no-blend.webp");
@@ -236,13 +237,13 @@ TEST(AnimatedWebPTests, verifyAnimationParametersBlendOverwrite) {
   }
 
   EXPECT_EQ(WTF_ARRAY_LENGTH(kFrameParameters), decoder->FrameCount());
-  EXPECT_EQ(kCAnimationLoopInfinite, decoder->RepetitionCount());
+  EXPECT_EQ(kAnimationLoopInfinite, decoder->RepetitionCount());
 }
 
 TEST(AnimatedWebPTests, parseAndDecodeByteByByte) {
   TestByteByByteDecode(&CreateDecoder,
                        "/LayoutTests/images/resources/webp-animated.webp", 3u,
-                       kCAnimationLoopInfinite);
+                       kAnimationLoopInfinite);
   TestByteByByteDecode(
       &CreateDecoder,
       "/LayoutTests/images/resources/webp-animated-icc-xmp.webp", 13u, 32000);
@@ -326,7 +327,7 @@ TEST(AnimatedWebPTests, reproCrash) {
   frame = decoder->FrameBufferAtIndex(0);
   ASSERT_TRUE(frame);
   EXPECT_EQ(ImageFrame::kFramePartial, frame->GetStatus());
-  EXPECT_EQ(kCAnimationLoopOnce, decoder->RepetitionCount());
+  EXPECT_EQ(kAnimationLoopOnce, decoder->RepetitionCount());
   EXPECT_TRUE(decoder->Failed());
 }
 
@@ -431,7 +432,7 @@ TEST(AnimatedWebPTests, alphaBlending) {
 TEST(AnimatedWebPTests, isSizeAvailable) {
   TestByteByByteSizeAvailable(
       &CreateDecoder, "/LayoutTests/images/resources/webp-animated.webp", 142u,
-      false, kCAnimationLoopInfinite);
+      false, kAnimationLoopInfinite);
   // FIXME: Add color profile support for animated webp images.
   TestByteByByteSizeAvailable(
       &CreateDecoder,
@@ -449,7 +450,7 @@ TEST(AnimatedWEBPTests, clearCacheExceptFrameWithAncestors) {
 
   ASSERT_EQ(3u, decoder->FrameCount());
   // We need to store pointers to the image frames, since calling
-  // frameBufferAtIndex will decode the frame if it is not FrameComplete,
+  // FrameBufferAtIndex will decode the frame if it is not FrameComplete,
   // and we want to read the status of the frame without decoding it again.
   ImageFrame* buffers[3];
   size_t buffer_sizes[3];
@@ -461,7 +462,7 @@ TEST(AnimatedWEBPTests, clearCacheExceptFrameWithAncestors) {
 
   // Explicitly set the required previous frame for the frames, since this test
   // is designed on this chain. Whether the frames actually depend on each
-  // other is not important for this test - clearCacheExceptFrame just looks at
+  // other is not important for this test - ClearCacheExceptFrame just looks at
   // the frame status and the required previous frame.
   buffers[1]->SetRequiredPreviousFrameIndex(0);
   buffers[2]->SetRequiredPreviousFrameIndex(1);
@@ -500,7 +501,7 @@ TEST(AnimatedWEBPTests, clearCacheExceptFrameWithAncestors) {
   // FrameComplete    depends on    FrameEmpty   depends on    FramePartial
   //
   // The expected outcome is that frame 0 and frame 2 are preserved. Frame 2
-  // should be preserved since it is the frame passed to clearCacheExceptFrame.
+  // should be preserved since it is the frame passed to ClearCacheExceptFrame.
   // Frame 0 should be preserved since it is the nearest FrameComplete ancestor.
   // Thus, since frame 1 is FrameEmpty, no data is cleared in this case.
   for (size_t i = 0; i < decoder->FrameCount(); i++) {
@@ -527,17 +528,17 @@ TEST(StaticWebPTests, truncatedImage) {
 TEST(StaticWebPTests, incrementalDecode) {
   TestByteByByteDecode(&CreateDecoder,
                        "/LayoutTests/images/resources/crbug.364830.webp", 1u,
-                       kCAnimationNone);
+                       kAnimationNone);
 }
 
 TEST(StaticWebPTests, isSizeAvailable) {
   TestByteByByteSizeAvailable(
       &CreateDecoder,
       "/LayoutTests/images/resources/webp-color-profile-lossy.webp", 520u, true,
-      kCAnimationNone);
+      kAnimationNone);
   TestByteByByteSizeAvailable(&CreateDecoder,
                               "/LayoutTests/images/resources/test.webp", 30u,
-                              false, kCAnimationNone);
+                              false, kAnimationNone);
 }
 
 TEST(StaticWebPTests, notAnimated) {
@@ -547,7 +548,7 @@ TEST(StaticWebPTests, notAnimated) {
   ASSERT_TRUE(data.Get());
   decoder->SetData(data.Get(), true);
   EXPECT_EQ(1u, decoder->FrameCount());
-  EXPECT_EQ(kCAnimationNone, decoder->RepetitionCount());
+  EXPECT_EQ(kAnimationNone, decoder->RepetitionCount());
 }
 
 }  // namespace blink

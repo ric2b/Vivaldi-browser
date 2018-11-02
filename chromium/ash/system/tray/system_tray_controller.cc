@@ -70,6 +70,11 @@ void SystemTrayController::ShowIMESettings() {
     system_tray_client_->ShowIMESettings();
 }
 
+void SystemTrayController::ShowAboutChromeOS() {
+  if (system_tray_client_)
+    system_tray_client_->ShowAboutChromeOS();
+}
+
 void SystemTrayController::ShowHelp() {
   if (system_tray_client_)
     system_tray_client_->ShowHelp();
@@ -98,6 +103,11 @@ void SystemTrayController::ShowPaletteSettings() {
 void SystemTrayController::ShowPublicAccountInfo() {
   if (system_tray_client_)
     system_tray_client_->ShowPublicAccountInfo();
+}
+
+void SystemTrayController::ShowEnterpriseInfo() {
+  if (system_tray_client_)
+    system_tray_client_->ShowEnterpriseInfo();
 }
 
 void SystemTrayController::ShowNetworkConfigure(const std::string& network_id) {
@@ -146,7 +156,7 @@ void SystemTrayController::SetClient(mojom::SystemTrayClientPtr client) {
 
 void SystemTrayController::SetPrimaryTrayEnabled(bool enabled) {
   ash::SystemTray* tray =
-      ShellPort::Get()->GetPrimaryRootWindowController()->GetSystemTray();
+      Shell::GetPrimaryRootWindowController()->GetSystemTray();
   if (!tray)
     return;
 
@@ -165,7 +175,7 @@ void SystemTrayController::SetPrimaryTrayEnabled(bool enabled) {
 
 void SystemTrayController::SetPrimaryTrayVisible(bool visible) {
   ash::SystemTray* tray =
-      ShellPort::Get()->GetPrimaryRootWindowController()->GetSystemTray();
+      Shell::GetPrimaryRootWindowController()->GetSystemTray();
   if (!tray)
     return;
 
@@ -183,17 +193,36 @@ void SystemTrayController::SetUse24HourClock(bool use_24_hour) {
   Shell::Get()->system_tray_notifier()->NotifyDateFormatChanged();
 }
 
+void SystemTrayController::SetEnterpriseDomain(
+    const std::string& enterprise_domain,
+    bool active_directory_managed) {
+  enterprise_domain_ = enterprise_domain;
+  active_directory_managed_ = active_directory_managed;
+  Shell::Get()->system_tray_notifier()->NotifyEnterpriseDomainChanged();
+}
+
 void SystemTrayController::ShowUpdateIcon(mojom::UpdateSeverity severity,
                                           bool factory_reset_required,
                                           mojom::UpdateType update_type) {
+  // Show the icon on all displays.
+  for (RootWindowController* root : Shell::GetAllRootWindowControllers()) {
+    ash::SystemTray* tray = root->GetSystemTray();
+    // External monitors might not have a tray yet.
+    if (!tray)
+      continue;
+    tray->tray_update()->ShowUpdateIcon(severity, factory_reset_required,
+                                        update_type);
+  }
+}
+
+void SystemTrayController::ShowUpdateOverCellularAvailableIcon() {
   // Show the icon on all displays.
   for (WmWindow* root : ShellPort::Get()->GetAllRootWindows()) {
     ash::SystemTray* tray = root->GetRootWindowController()->GetSystemTray();
     // External monitors might not have a tray yet.
     if (!tray)
       continue;
-    tray->tray_update()->ShowUpdateIcon(severity, factory_reset_required,
-                                        update_type);
+    tray->tray_update()->ShowUpdateOverCellularAvailableIcon();
   }
 }
 

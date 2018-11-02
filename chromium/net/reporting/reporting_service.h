@@ -16,12 +16,11 @@ class GURL;
 
 namespace base {
 class Value;
-}  // namespace
+}  // namespace base
 
 namespace net {
 
 class ReportingContext;
-class ReportingDelegate;
 struct ReportingPolicy;
 class URLRequestContext;
 
@@ -32,12 +31,10 @@ class NET_EXPORT ReportingService {
   virtual ~ReportingService();
 
   // Creates a ReportingService. |policy| will be copied. |request_context| must
-  // outlive the ReportingService. The ReportingService will take ownership of
-  // |delegate| and destroy it when the service is destroyed.
+  // outlive the ReportingService.
   static std::unique_ptr<ReportingService> Create(
       const ReportingPolicy& policy,
-      URLRequestContext* request_context,
-      std::unique_ptr<ReportingDelegate> delegate);
+      URLRequestContext* request_context);
 
   // Creates a ReportingService for testing purposes using an
   // already-constructed ReportingContext. The ReportingService will take
@@ -61,6 +58,12 @@ class NET_EXPORT ReportingService {
   // |header_value| is the normalized value of the Report-To header.
   virtual void ProcessHeader(const GURL& url,
                              const std::string& header_value) = 0;
+
+  // Removes browsing data from the Reporting system. See
+  // ReportingBrowsingDataRemover for more details.
+  virtual void RemoveBrowsingData(
+      int data_type_mask,
+      base::Callback<bool(const GURL&)> origin_filter) = 0;
 
  protected:
   ReportingService() {}

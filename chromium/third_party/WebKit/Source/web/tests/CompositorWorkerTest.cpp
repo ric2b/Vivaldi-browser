@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 #include <memory>
+#include "core/exported/WebViewBase.h"
 #include "core/frame/FrameView.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
@@ -24,7 +25,6 @@
 #include "public/web/WebViewClient.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
-#include "web/WebViewImpl.h"
 #include "web/tests/FrameTestHelpers.h"
 
 namespace blink {
@@ -44,7 +44,7 @@ class CompositorWorkerTest
   void SetUp() override {
     helper_.Initialize(true, nullptr, &mock_web_view_client_, nullptr,
                        &ConfigureSettings);
-    GetWebViewImpl()->Resize(IntSize(320, 240));
+    GetWebView()->Resize(IntSize(320, 240));
   }
 
   ~CompositorWorkerTest() override {
@@ -54,12 +54,11 @@ class CompositorWorkerTest
   }
 
   void NavigateTo(const String& url) {
-    FrameTestHelpers::LoadFrame(GetWebViewImpl()->MainFrame(),
-                                url.Utf8().Data());
+    FrameTestHelpers::LoadFrame(GetWebView()->MainFrame(), url.Utf8().data());
   }
 
   void ForceFullCompositingUpdate() {
-    GetWebViewImpl()->UpdateAllLifecyclePhases();
+    GetWebView()->UpdateAllLifecyclePhases();
   }
 
   void RegisterMockedHttpURLLoad(const std::string& file_name) {
@@ -91,7 +90,7 @@ class CompositorWorkerTest
     return web_scroll_layer;
   }
 
-  WebViewImpl* GetWebViewImpl() const { return helper_.WebView(); }
+  WebViewBase* GetWebView() const { return helper_.WebView(); }
   LocalFrame* GetFrame() const {
     return helper_.WebView()->MainFrameImpl()->GetFrame();
   }
@@ -159,11 +158,11 @@ TEST_P(CompositorWorkerTest, plumbingElementIdAndMutableProperties) {
 
   Document* document = GetFrame()->GetDocument();
 
-  Element* tall_element = document->GetElementById("tall");
+  Element* tall_element = document->getElementById("tall");
   WebLayer* tall_layer = WebLayerFromElement(tall_element);
   EXPECT_TRUE(!tall_layer);
 
-  Element* proxied_element = document->GetElementById("proxied-transform");
+  Element* proxied_element = document->getElementById("proxied-transform");
   WebLayer* proxied_layer = WebLayerFromElement(proxied_element);
   EXPECT_TRUE(proxied_layer->CompositorMutableProperties() &
               CompositorMutableProperty::kTransform);
@@ -173,7 +172,7 @@ TEST_P(CompositorWorkerTest, plumbingElementIdAndMutableProperties) {
                 CompositorMutableProperty::kOpacity));
   EXPECT_TRUE(proxied_layer->GetElementId());
 
-  Element* scroll_element = document->GetElementById("proxied-scroller");
+  Element* scroll_element = document->getElementById("proxied-scroller");
   WebLayer* scroll_layer = ScrollingWebLayerFromElement(scroll_element);
   EXPECT_TRUE(scroll_layer->CompositorMutableProperties() &
               (CompositorMutableProperty::kScrollLeft |
@@ -204,11 +203,11 @@ TEST_P(CompositorWorkerTest, noProxies) {
 
   Document* document = GetFrame()->GetDocument();
 
-  Element* tall_element = document->GetElementById("tall");
+  Element* tall_element = document->getElementById("tall");
   WebLayer* tall_layer = WebLayerFromElement(tall_element);
   EXPECT_TRUE(!tall_layer);
 
-  Element* proxied_element = document->GetElementById("proxied");
+  Element* proxied_element = document->getElementById("proxied");
   WebLayer* proxied_layer = WebLayerFromElement(proxied_element);
   EXPECT_TRUE(!proxied_layer);
 
@@ -216,7 +215,7 @@ TEST_P(CompositorWorkerTest, noProxies) {
   // element has a corresponding compositor proxy. Element ids (which are also
   // used by animations) do not have this implication, so we do not check for
   // them here.
-  Element* scroll_element = document->GetElementById("proxied-scroller");
+  Element* scroll_element = document->getElementById("proxied-scroller");
   WebLayer* scroll_layer = ScrollingWebLayerFromElement(scroll_element);
   EXPECT_FALSE(!!scroll_layer->CompositorMutableProperties());
 
@@ -235,15 +234,15 @@ TEST_P(CompositorWorkerTest, disconnectedProxies) {
 
   Document* document = GetFrame()->GetDocument();
 
-  Element* tall_element = document->GetElementById("tall");
+  Element* tall_element = document->getElementById("tall");
   WebLayer* tall_layer = WebLayerFromElement(tall_element);
   EXPECT_TRUE(!tall_layer);
 
-  Element* proxied_element = document->GetElementById("proxied");
+  Element* proxied_element = document->getElementById("proxied");
   WebLayer* proxied_layer = WebLayerFromElement(proxied_element);
   EXPECT_TRUE(!proxied_layer);
 
-  Element* scroll_element = document->GetElementById("proxied-scroller");
+  Element* scroll_element = document->getElementById("proxied-scroller");
   WebLayer* scroll_layer = ScrollingWebLayerFromElement(scroll_element);
   EXPECT_FALSE(!!scroll_layer->CompositorMutableProperties());
 
@@ -260,7 +259,7 @@ TEST_P(CompositorWorkerTest, applyingMutationsMultipleElements) {
   {
     ForceFullCompositingUpdate();
 
-    Element* proxied_element = document->GetElementById("proxied-transform");
+    Element* proxied_element = document->getElementById("proxied-transform");
     WebLayer* proxied_layer = WebLayerFromElement(proxied_element);
     EXPECT_TRUE(proxied_layer->CompositorMutableProperties() &
                 CompositorMutableProperty::kTransform);
@@ -288,7 +287,7 @@ TEST_P(CompositorWorkerTest, applyingMutationsMultipleElements) {
         css_value);
   }
   {
-    Element* proxied_element = document->GetElementById("proxied-opacity");
+    Element* proxied_element = document->getElementById("proxied-opacity");
     WebLayer* proxied_layer = WebLayerFromElement(proxied_element);
     EXPECT_TRUE(proxied_layer->CompositorMutableProperties() &
                 CompositorMutableProperty::kOpacity);
@@ -321,7 +320,7 @@ TEST_P(CompositorWorkerTest, applyingMutationsMultipleProperties) {
   ForceFullCompositingUpdate();
 
   Element* proxied_element =
-      document->GetElementById("proxied-transform-and-opacity");
+      document->getElementById("proxied-transform-and-opacity");
   WebLayer* proxied_layer = WebLayerFromElement(proxied_element);
   EXPECT_TRUE(proxied_layer->CompositorMutableProperties() &
               CompositorMutableProperty::kTransform);

@@ -10,6 +10,7 @@ include_rules = [
     "+base/json",
     "+base/location.h",
     "+base/memory",
+    "+base/message_loop/message_loop.h",
     "+base/metrics/histogram.h",
     "+base/metrics/histogram_base.h",
     "+base/metrics/histogram_macros.h",
@@ -47,7 +48,4 @@ include_rules = [
     "-bindings",
     "-core",
     "-modules",
-
-    # Use platform/wtf/ now (see crbug.com/691465).
-    "-wtf/",
 ]

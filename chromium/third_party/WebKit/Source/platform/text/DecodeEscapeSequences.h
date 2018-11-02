@@ -86,7 +86,7 @@ struct Unicode16BitEscapeSequence {
 struct URLEscapeSequence {
   enum { kSequenceSize = 3 };  // e.g. %41
   static size_t FindInString(const String& string, size_t start_position) {
-    return string.Find('%', start_position);
+    return string.find('%', start_position);
   }
   static size_t FindEndOfRun(const String& string,
                              size_t start_position,
@@ -126,9 +126,9 @@ struct URLEscapeSequence {
     // where every %-sign introduces a valid escape sequence, but there may be
     // characters between the sequences.
     Vector<char, 512> buffer;
-    buffer.Resize(
+    buffer.resize(
         run_length);  // Unescaping hex sequences only makes the length smaller.
-    char* p = buffer.Data();
+    char* p = buffer.data();
     const CharType* run_end = run + run_length;
     while (run < run_end) {
       if (run[0] == '%') {
@@ -141,9 +141,9 @@ struct URLEscapeSequence {
     }
     DCHECK_GE(
         buffer.size(),
-        static_cast<size_t>(p - buffer.Data()));  // Prove buffer not overrun.
+        static_cast<size_t>(p - buffer.data()));  // Prove buffer not overrun.
     return (encoding.IsValid() ? encoding : UTF8Encoding())
-        .Decode(buffer.Data(), p - buffer.Data());
+        .Decode(buffer.data(), p - buffer.data());
   }
 };
 

@@ -29,7 +29,6 @@
 namespace blink {
 
 class FrameSelection;
-class LayoutView;
 
 class LayoutSelection final : public GarbageCollected<LayoutSelection> {
  public:
@@ -39,7 +38,7 @@ class LayoutSelection final : public GarbageCollected<LayoutSelection> {
 
   bool HasPendingSelection() const { return has_pending_selection_; }
   void SetHasPendingSelection() { has_pending_selection_ = true; }
-  void Commit(LayoutView&);
+  void Commit();
 
   IntRect SelectionBounds();
   void InvalidatePaintForSelection();
@@ -54,15 +53,13 @@ class LayoutSelection final : public GarbageCollected<LayoutSelection> {
       int end_pos,
       SelectionPaintInvalidationMode = kPaintInvalidationNewXOROld);
   void ClearSelection();
-  void SelectionStartEnd(int& start_pos, int& end_pos);
+  std::pair<int, int> SelectionStartEnd();
   void OnDocumentShutdown();
 
   DECLARE_TRACE();
 
  private:
   LayoutSelection(FrameSelection&);
-
-  const VisibleSelection& GetVisibleSelection() const;
 
   SelectionInFlatTree CalcVisibleSelection(
       const VisibleSelectionInFlatTree&) const;

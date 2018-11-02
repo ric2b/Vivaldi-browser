@@ -14,7 +14,6 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
-#include "base/threading/worker_pool.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
@@ -246,11 +245,10 @@ void NetworkScreenHandler::GetAdditionalParameters(
   const bool enable_layouts =
       !user_manager::UserManager::Get()->IsUserLoggedIn() && !is_slave;
 
-  dict->Set("languageList", language_list.release());
-  dict->Set(
-      "inputMethodsList",
-      GetAndActivateLoginKeyboardLayouts(
-          application_locale, selected_input_method, enable_layouts).release());
+  dict->Set("languageList", std::move(language_list));
+  dict->Set("inputMethodsList",
+            GetAndActivateLoginKeyboardLayouts(
+                application_locale, selected_input_method, enable_layouts));
   dict->Set("timezoneList", GetTimezoneList());
 }
 
@@ -268,7 +266,7 @@ void NetworkScreenHandler::Initialize() {
 // NetworkScreenHandler, private: ----------------------------------------------
 
 // static
-base::ListValue* NetworkScreenHandler::GetTimezoneList() {
+std::unique_ptr<base::ListValue> NetworkScreenHandler::GetTimezoneList() {
   std::string current_timezone_id;
   CrosSettings::Get()->GetString(kSystemTimezone, &current_timezone_id);
 
@@ -292,7 +290,7 @@ base::ListValue* NetworkScreenHandler::GetTimezoneList() {
     timezone_list->Append(std::move(timezone_option));
   }
 
-  return timezone_list.release();
+  return timezone_list;
 }
 
 }  // namespace chromeos

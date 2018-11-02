@@ -92,8 +92,6 @@ namespace {
 // Helpers --------------------------------------------------------------------
 
 const int kButtonHeight = 32;
-const int kPasswordCombinedFixedGaiaViewWidth = 360;
-const int kFixedGaiaViewWidth = 448;
 const int kFixedAccountRemovalViewWidth = 280;
 const int kFixedSwitchUserViewWidth = 320;
 const int kImageSide = 40;
@@ -273,20 +271,6 @@ class BackgroundColorHoverButton : public views::LabelButton {
   views::Label* subtitle_;
 
   DISALLOW_COPY_AND_ASSIGN(BackgroundColorHoverButton);
-};
-
-// SizedContainer -------------------------------------------------
-
-// A simple container view that takes an explicit preferred size.
-class SizedContainer : public views::View {
- public:
-  explicit SizedContainer(const gfx::Size& preferred_size)
-      : preferred_size_(preferred_size) {}
-
-  gfx::Size GetPreferredSize() const override { return preferred_size_; }
-
- private:
-  gfx::Size preferred_size_;
 };
 
 // A view to host the GAIA webview overlapped with a back button.  This class
@@ -493,7 +477,7 @@ class TitleCard : public views::View {
     title_label_->SetBounds(label_padding, 0, label_width, height());
   }
 
-  gfx::Size GetPreferredSize() const override {
+  gfx::Size CalculatePreferredSize() const override {
     int height = std::max(title_label_->GetPreferredSize().height(),
         back_button_->GetPreferredSize().height());
     return gfx::Size(width(), height);
@@ -546,6 +530,11 @@ bool ProfileChooserView::IsShowing() {
 }
 
 // static
+views::Widget* ProfileChooserView::GetCurrentBubbleWidget() {
+  return profile_bubble_ ? profile_bubble_->GetWidget() : nullptr;
+}
+
+// static
 void ProfileChooserView::Hide() {
   if (IsShowing())
     profile_bubble_->GetWidget()->Close();
@@ -567,6 +556,7 @@ ProfileChooserView::ProfileChooserView(views::View* anchor_view,
   // margins, see related bug <http://crbug.com/593203>.
   set_margins(gfx::Insets(0, 0, 2, 0));
   ResetView();
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::PROFILE_CHOOSER);
 }
 
 ProfileChooserView::~ProfileChooserView() {
@@ -718,14 +708,11 @@ void ProfileChooserView::ShowView(profiles::BubbleViewMode view_to_display,
   switch (view_mode_) {
     case profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN:
     case profiles::BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT:
-    case profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH: {
-      const int width = switches::UsePasswordSeparatedSigninFlow()
-          ? kFixedGaiaViewWidth : kPasswordCombinedFixedGaiaViewWidth;
-      layout = CreateSingleColumnLayout(this, width);
-      DCHECK(!switches::UsePasswordSeparatedSigninFlow());
-      sub_view = CreateGaiaSigninView(&view_to_focus);
+    case profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH:
+      // The modal sign-in view is shown in for bubble view modes.
+      // See |SigninViewController::ShouldShowModalSigninForMode|.
+      NOTREACHED();
       break;
-    }
     case profiles::BUBBLE_VIEW_MODE_ACCOUNT_REMOVAL:
       layout = CreateSingleColumnLayout(this, kFixedAccountRemovalViewWidth);
       sub_view = CreateAccountRemovalView();
@@ -1106,6 +1093,9 @@ views::View* ProfileChooserView::CreateTutorialView(
   views::View* view = new views::View();
   view->set_background(views::Background::CreateSolidBackground(
       profiles::kAvatarTutorialBackgroundColor));
+  view->SetBorder(views::CreateEmptyBorder(
+      views::kButtonVEdgeMarginNew, views::kButtonHEdgeMarginNew,
+      views::kButtonVEdgeMarginNew, views::kButtonHEdgeMarginNew));
   views::GridLayout* layout = CreateSingleColumnLayout(
       view, kFixedMenuWidth - 2 * views::kButtonHEdgeMarginNew);
   // Creates a second column set for buttons and links.
@@ -1116,10 +1106,6 @@ views::View* ProfileChooserView::CreateTutorialView(
       1, views::kUnrelatedControlHorizontalSpacing);
   button_columns->AddColumn(views::GridLayout::TRAILING,
       views::GridLayout::CENTER, 0, views::GridLayout::USE_PREF, 0, 0);
-  layout->SetInsets(views::kButtonVEdgeMarginNew,
-                    views::kButtonHEdgeMarginNew,
-                    views::kButtonVEdgeMarginNew,
-                    views::kButtonHEdgeMarginNew);
 
   // Adds title and close button if needed.
   const SkColor kTitleAndButtonTextColor = SK_ColorWHITE;
@@ -1280,8 +1266,9 @@ views::View* ProfileChooserView::CreateSyncErrorViewIfNeeded() {
     // already initialized.
     DCHECK(button_out);
     // Adds a padding row between error title/content and the button.
-    SizedContainer* padding =
-        new SizedContainer(gfx::Size(0, views::kRelatedControlVerticalSpacing));
+    auto* padding = new views::View;
+    padding->SetPreferredSize(
+        gfx::Size(0, views::kRelatedControlVerticalSpacing));
     vertical_view->AddChildView(padding);
 
     *button_out = views::MdTextButton::CreateSecondaryUiBlueButton(
@@ -1309,13 +1296,13 @@ views::View* ProfileChooserView::CreateCurrentProfileView(
   views::GridLayout* grid_layout = new views::GridLayout(current_profile_card);
   current_profile_card->SetLayoutManager(grid_layout);
   views::ColumnSet* columns = grid_layout->AddColumnSet(0);
-  columns->AddPaddingColumn(0, kMenuEdgeMargin);
+  // BackgroundColorHoverButton has already accounted for the left and right
+  // margins.
   columns->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 0,
                      views::GridLayout::USE_PREF, 0, 0);
   columns->AddPaddingColumn(0, kMenuEdgeMargin - kBadgeSpacing);
   columns->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1,
                      views::GridLayout::USE_PREF, 0, 0);
-  columns->AddPaddingColumn(0, kMenuEdgeMargin);
   grid_layout->AddPaddingRow(0, 0);
   const int num_labels =
       (avatar_item.signed_in && !switches::IsEnableAccountConsistency()) ? 2
@@ -1507,7 +1494,7 @@ views::View* ProfileChooserView::CreateOptionsView(bool display_lock,
   }
 
   // Add the "Guest" button for browsing as guest
-  if (!is_guest) {
+  if (!is_guest && !browser_->profile()->IsSupervised()) {
     PrefService* service = g_browser_process->local_state();
     DCHECK(service);
     if (service->GetBoolean(prefs::kBrowserGuestModeEnabled)) {
@@ -1534,7 +1521,7 @@ views::View* ProfileChooserView::CreateOptionsView(bool display_lock,
   if (display_lock) {
     lock_button_ = new BackgroundColorHoverButton(
         this, l10n_util::GetStringUTF16(IDS_PROFILES_PROFILE_SIGNOUT_BUTTON),
-        gfx::CreateVectorIcon(kLockIcon, kIconSize, gfx::kChromeIconGrey));
+        gfx::CreateVectorIcon(ui::kLockIcon, kIconSize, gfx::kChromeIconGrey));
     layout->StartRow(1, 0);
     layout->AddView(lock_button_);
   } else if (!is_guest) {
@@ -1564,7 +1551,8 @@ views::View* ProfileChooserView::CreateSupervisedUserDisclaimerView() {
   int horizontal_margin = kMenuEdgeMargin;
   views::GridLayout* layout =
       CreateSingleColumnLayout(view, kFixedMenuWidth - 2 * horizontal_margin);
-  layout->SetInsets(0, horizontal_margin, kMenuEdgeMargin, horizontal_margin);
+  view->SetBorder(views::CreateEmptyBorder(0, horizontal_margin,
+                                           kMenuEdgeMargin, horizontal_margin));
 
   views::Label* disclaimer = new views::Label(
       avatar_menu_->GetSupervisedUserInformation());
@@ -1678,47 +1666,13 @@ void ProfileChooserView::CreateAccountButton(views::GridLayout* layout,
   }
 }
 
-views::View* ProfileChooserView::CreateGaiaSigninView(
-    views::View** signin_content_view) {
-  std::unique_ptr<views::WebView> web_view =
-      SigninViewControllerDelegateViews::CreateGaiaWebView(
-          this, view_mode_, browser_, access_point_);
-
-  int message_id;
-  switch (view_mode_) {
-    case profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN:
-      message_id = IDS_PROFILES_GAIA_SIGNIN_TITLE;
-      break;
-    case profiles::BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT:
-      message_id = IDS_PROFILES_GAIA_ADD_ACCOUNT_TITLE;
-      break;
-    case profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH: {
-      message_id = IDS_PROFILES_GAIA_REAUTH_TITLE;
-      break;
-    }
-    default:
-      NOTREACHED() << "Called with invalid mode=" << view_mode_;
-      return NULL;
-  }
-
-  if (signin_content_view)
-    *signin_content_view = web_view.get();
-
-  TitleCard* title_card = new TitleCard(l10n_util::GetStringUTF16(message_id),
-                                        this,
-                                        &gaia_signin_cancel_button_);
-  return TitleCard::AddPaddedTitleCard(
-      web_view.release(), title_card, kPasswordCombinedFixedGaiaViewWidth);
-}
-
 views::View* ProfileChooserView::CreateAccountRemovalView() {
   views::View* view = new views::View();
   views::GridLayout* layout = CreateSingleColumnLayout(
       view, kFixedAccountRemovalViewWidth - 2 * views::kButtonHEdgeMarginNew);
-  layout->SetInsets(0,
-                    views::kButtonHEdgeMarginNew,
-                    views::kButtonVEdgeMarginNew,
-                    views::kButtonHEdgeMarginNew);
+  view->SetBorder(views::CreateEmptyBorder(0, views::kButtonHEdgeMarginNew,
+                                           views::kButtonVEdgeMarginNew,
+                                           views::kButtonHEdgeMarginNew));
 
   const std::string& primary_account = SigninManagerFactory::GetForProfile(
       browser_->profile())->GetAuthenticatedAccountId();

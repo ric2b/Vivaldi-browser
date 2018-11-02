@@ -5,6 +5,7 @@
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
 
 #include "base/base64.h"
+#include "base/hash.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/sha1.h"
@@ -304,7 +305,7 @@ bool V4ProtocolManagerUtil::FullHashToHashPrefix(const FullHash& full_hash,
   if (full_hash.size() < prefix_size) {
     return false;
   }
-  *hash_prefix = full_hash.substr(prefix_size);
+  *hash_prefix = full_hash.substr(0, prefix_size);
   return true;
 }
 

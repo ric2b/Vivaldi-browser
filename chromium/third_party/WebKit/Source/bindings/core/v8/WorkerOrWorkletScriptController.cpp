@@ -36,12 +36,9 @@
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/SourceLocation.h"
-#include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/V8ErrorHandler.h"
 #include "bindings/core/v8/V8Initializer.h"
-#include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
-#include "bindings/core/v8/WrapperTypeInfo.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/ErrorEvent.h"
 #include "core/inspector/InspectorTraceEvents.h"
@@ -49,6 +46,9 @@
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 #include "core/workers/WorkerThread.h"
+#include "platform/bindings/V8DOMWrapper.h"
+#include "platform/bindings/V8ObjectConstructor.h"
+#include "platform/bindings/WrapperTypeInfo.h"
 #include "platform/heap/ThreadState.h"
 #include "public/platform/Platform.h"
 #include "v8/include/v8.h"
@@ -103,13 +103,13 @@ WorkerOrWorkletScriptController::WorkerOrWorkletScriptController(
       execution_forbidden_(false),
       rejected_promises_(RejectedPromises::Create()),
       execution_state_(0) {
-  ASSERT(isolate);
+  DCHECK(isolate);
   world_ =
       DOMWrapperWorld::Create(isolate, DOMWrapperWorld::WorldType::kWorker);
 }
 
 WorkerOrWorkletScriptController::~WorkerOrWorkletScriptController() {
-  ASSERT(!rejected_promises_);
+  DCHECK(!rejected_promises_);
 }
 
 void WorkerOrWorkletScriptController::Dispose() {
@@ -165,7 +165,7 @@ bool WorkerOrWorkletScriptController::InitializeContextIfNeeded() {
         extension_names.push_back(extension->name());
     }
     v8::ExtensionConfiguration extension_configuration(extension_names.size(),
-                                                       extension_names.Data());
+                                                       extension_names.data());
 
     V8PerIsolateData::UseCounterDisabledScope use_counter_disabled(
         V8PerIsolateData::From(isolate_));
@@ -257,10 +257,10 @@ ScriptValue WorkerOrWorkletScriptController::Evaluate(
 
   v8::Local<v8::Script> compiled_script;
   v8::MaybeLocal<v8::Value> maybe_result;
-  if (V8Call(V8ScriptRunner::CompileScript(
-                 script, file_name, String(), script_start_position, isolate_,
-                 cache_handler, kSharableCrossOrigin, v8_cache_options),
-             compiled_script, block))
+  if (V8ScriptRunner::CompileScript(
+          script, file_name, String(), script_start_position, isolate_,
+          cache_handler, kSharableCrossOrigin, v8_cache_options)
+          .ToLocal(&compiled_script))
     maybe_result = V8ScriptRunner::RunCompiledScript(isolate_, compiled_script,
                                                      global_scope_);
 
@@ -339,12 +339,12 @@ bool WorkerOrWorkletScriptController::Evaluate(
 }
 
 void WorkerOrWorkletScriptController::ForbidExecution() {
-  ASSERT(global_scope_->IsContextThread());
+  DCHECK(global_scope_->IsContextThread());
   execution_forbidden_ = true;
 }
 
 bool WorkerOrWorkletScriptController::IsExecutionForbidden() const {
-  ASSERT(global_scope_->IsContextThread());
+  DCHECK(global_scope_->IsContextThread());
   return execution_forbidden_;
 }
 

@@ -11,7 +11,6 @@
 #include "base/version.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
-#include "chrome/browser/extensions/extension_install_ui_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/install_tracker.h"
 #include "chrome/browser/extensions/webstore_data_fetcher.h"
@@ -315,8 +314,8 @@ void WebstoreStandaloneInstaller::OnWebstoreResponseParseSuccess(
                                 manifest,
                                 icon_url,
                                 profile_->GetRequestContext());
-  // The helper will call us back via OnWebstoreParseSucces or
-  // OnWebstoreParseFailure.
+  // The helper will call us back via OnWebstoreParseSuccess() or
+  // OnWebstoreParseFailure().
   helper->Start();
 }
 

@@ -35,6 +35,7 @@
 #include "platform/graphics/DeferredImageDecoder.h"
 #include "platform/graphics/ImageObserver.h"
 #include "platform/testing/HistogramTester.h"
+#include "platform/testing/TestingPlatformSupport.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -59,6 +60,7 @@ class BitmapImageTest : public ::testing::Test {
     }
     bool ShouldPauseAnimation(const Image*) override { return false; }
     void AnimationAdvanced(const Image*) override {}
+    void AsyncLoadCompleted(const Image*) override { NOTREACHED(); }
 
     virtual void ChangedInRect(const Image*, const IntRect&) {}
 
@@ -68,7 +70,7 @@ class BitmapImageTest : public ::testing::Test {
 
   static PassRefPtr<SharedBuffer> ReadFile(const char* file_name) {
     String file_path = testing::BlinkRootDir();
-    file_path.Append(file_name);
+    file_path.append(file_name);
     return testing::ReadFromFile(file_path);
   }
 
@@ -139,6 +141,8 @@ class BitmapImageTest : public ::testing::Test {
 
   Persistent<FakeImageObserver> image_observer_;
   RefPtr<BitmapImage> image_;
+  ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
+      platform_;
 };
 
 TEST_F(BitmapImageTest, destroyDecodedData) {
@@ -309,8 +313,8 @@ TEST_P(DecodedImageOrientationHistogramTest, ImageOrientation) {
   RunTest("Blink.DecodedImage.Orientation");
 }
 
-DecodedImageOrientationHistogramTest::ParamType
-    g_k_decoded_image_orientation_histogram_test_params[] = {
+const DecodedImageOrientationHistogramTest::ParamType
+    kDecodedImageOrientationHistogramTestParams[] = {
         {"/LayoutTests/images/resources/exif-orientation-1-ul.jpg",
          kOriginTopLeft},
         {"/LayoutTests/images/resources/exif-orientation-2-ur.jpg",
@@ -331,6 +335,6 @@ DecodedImageOrientationHistogramTest::ParamType
 INSTANTIATE_TEST_CASE_P(
     DecodedImageOrientationHistogramTest,
     DecodedImageOrientationHistogramTest,
-    ::testing::ValuesIn(g_k_decoded_image_orientation_histogram_test_params));
+    ::testing::ValuesIn(kDecodedImageOrientationHistogramTestParams));
 
 }  // namespace blink

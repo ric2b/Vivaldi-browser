@@ -28,8 +28,8 @@
 #ifndef HTMLCanvasElement_h
 #define HTMLCanvasElement_h
 
+#include <memory>
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMTypedArray.h"
@@ -38,8 +38,10 @@
 #include "core/html/HTMLElement.h"
 #include "core/html/canvas/CanvasDrawListener.h"
 #include "core/html/canvas/CanvasImageSource.h"
+#include "core/html/canvas/CanvasRenderingContextHost.h"
 #include "core/imagebitmap/ImageBitmapSource.h"
 #include "core/page/PageVisibilityObserver.h"
+#include "platform/bindings/ScriptWrappableVisitor.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/CanvasSurfaceLayerBridge.h"
@@ -48,7 +50,6 @@
 #include "platform/graphics/ImageBufferClient.h"
 #include "platform/graphics/OffscreenCanvasPlaceholder.h"
 #include "platform/heap/Handle.h"
-#include <memory>
 
 #define CanvasDefaultInterpolationQuality kInterpolationLow
 
@@ -78,6 +79,7 @@ class CORE_EXPORT HTMLCanvasElement final
       public ContextLifecycleObserver,
       public PageVisibilityObserver,
       public CanvasImageSource,
+      public CanvasRenderingContextHost,
       public CanvasSurfaceLayerBridgeObserver,
       public ImageBufferClient,
       public ImageBitmapSource,
@@ -93,10 +95,10 @@ class CORE_EXPORT HTMLCanvasElement final
   ~HTMLCanvasElement() override;
 
   // Attributes and functions exposed to script
-  int width() const { return size().Width(); }
-  int height() const { return size().Height(); }
+  int width() const { return Size().Width(); }
+  int height() const { return Size().Height(); }
 
-  const IntSize& size() const { return size_; }
+  const IntSize& Size() const override { return size_; }
 
   void setWidth(int, ExceptionState&);
   void setHeight(int, ExceptionState&);
@@ -133,25 +135,23 @@ class CORE_EXPORT HTMLCanvasElement final
   void RemoveListener(CanvasDrawListener*);
 
   // Used for rendering
-  void DidDraw(const FloatRect&);
-  void DidDraw();
+  void DidDraw(const FloatRect&) override;
+  void DidDraw() override;
 
   void Paint(GraphicsContext&, const LayoutRect&);
 
-  PaintCanvas* DrawingCanvas() const;
-  void DisableDeferral(DisableDeferralReason) const;
+  PaintCanvas* DrawingCanvas();
+  void DisableDeferral(DisableDeferralReason);
   PaintCanvas* ExistingDrawingCanvas() const;
 
   CanvasRenderingContext* RenderingContext() const { return context_.Get(); }
 
   void EnsureUnacceleratedImageBuffer();
-  ImageBuffer* Buffer() const;
   PassRefPtr<Image> CopiedImage(SourceDrawingBuffer,
                                 AccelerationHint,
-                                SnapshotReason) const;
+                                SnapshotReason);
   void ClearCopiedImage();
 
-  SecurityOrigin* GetSecurityOrigin() const;
   bool OriginClean() const;
   void SetOriginTainted() { origin_clean_ = false; }
 
@@ -161,12 +161,13 @@ class CORE_EXPORT HTMLCanvasElement final
   bool Is2d() const;
   bool IsAnimated2d() const;
 
-  bool HasImageBuffer() const { return image_buffer_.get(); }
-  void DiscardImageBuffer();
+  void DiscardImageBuffer() override;
+  ImageBuffer* GetImageBuffer() const override { return image_buffer_.get(); }
+  ImageBuffer* GetOrCreateImageBuffer() override;
 
   bool ShouldBeDirectComposited() const;
 
-  void PrepareSurfaceForPaintingIfNeeded() const;
+  void PrepareSurfaceForPaintingIfNeeded();
 
   const AtomicString ImageSourceURL() const override;
 
@@ -176,7 +177,7 @@ class CORE_EXPORT HTMLCanvasElement final
 
   void DoDeferredPaintInvalidation();
 
-  void FinalizeFrame();
+  void FinalizeFrame() override;
 
   // ContextLifecycleObserver and PageVisibilityObserver implementation
   void ContextDestroyed(ExecutionContext*) override;
@@ -188,7 +189,7 @@ class CORE_EXPORT HTMLCanvasElement final
   PassRefPtr<Image> GetSourceImageForCanvas(SourceImageStatus*,
                                             AccelerationHint,
                                             SnapshotReason,
-                                            const FloatSize&) const override;
+                                            const FloatSize&) override;
   bool WouldTaintOrigin(SecurityOrigin*) const override;
   FloatSize ElementSize(const FloatSize&) const override;
   bool IsCanvasElement() const override { return true; }
@@ -246,9 +247,21 @@ class CORE_EXPORT HTMLCanvasElement final
   }
   void CreateLayer();
 
-  void DetachContext() { context_ = nullptr; }
+  void DetachContext() override { context_ = nullptr; }
 
   void WillDrawImageTo2DContext(CanvasImageSource*);
+
+  ExecutionContext* GetTopExecutionContext() const override {
+    return GetDocument().GetExecutionContext();
+  }
+
+  const KURL& GetExecutionContextUrl() const override {
+    return GetDocument().TopDocument().Url();
+  }
+
+  DispatchEventResult HostDispatchEvent(Event* event) override {
+    return DispatchEvent(event);
+  }
 
  protected:
   void DidMoveToNewDocument(Document& old_document) override;
@@ -322,8 +335,6 @@ class CORE_EXPORT HTMLCanvasElement final
   // Used for OffscreenCanvas that controls this HTML canvas element
   std::unique_ptr<CanvasSurfaceLayerBridge> surface_layer_bridge_;
 
-  int num_frames_since_last_rendering_mode_switch_;
-  bool pending_rendering_mode_switch_;
   bool did_notify_listeners_for_current_frame_ = false;
 };
 

@@ -22,7 +22,7 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_prefs.h"
@@ -212,8 +212,8 @@ void VivaldiSettingsApiNotification::BroadcastEvent(
     std::unique_ptr<base::ListValue> args,
     content::BrowserContext* context) {
   std::unique_ptr<extensions::Event> event(new extensions::Event(
-      extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args)));
-  event->restrict_to_browser_context = context;
+      extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args),
+      context));
   EventRouter* event_router = EventRouter::Get(context);
   if (event_router) {
     event_router->BroadcastEvent(std::move(event));
@@ -344,8 +344,7 @@ void VivaldiSettingsApiNotificationFactory::RegisterProfilePrefs(
 #endif
 
   registry->RegisterStringPref(vivaldiprefs::kVivaldiCaptureDirectory,
-                               path_string,
-                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+                               path_string, 0);
 
   registry->RegisterStringPref(vivaldiprefs::kVivaldiHomepage,
                                "https://vivaldi.com",

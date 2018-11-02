@@ -42,10 +42,6 @@ class FileNetLogObserver;
 namespace cronet {
 class TestUtil;
 
-#if defined(DATA_REDUCTION_PROXY_SUPPORT)
-class CronetDataReductionProxy;
-#endif
-
 struct URLRequestContextConfig;
 
 bool CronetUrlRequestContextAdapterRegisterJni(JNIEnv* env);
@@ -62,8 +58,8 @@ class CronetURLRequestContextAdapter
 
   ~CronetURLRequestContextAdapter() override;
 
-  // Called on main Java thread to initialize URLRequestContext.
-  void InitRequestContextOnMainThread(
+  // Called on init Java thread to initialize URLRequestContext.
+  void InitRequestContextOnInitThread(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jcaller);
 
@@ -111,8 +107,8 @@ class CronetURLRequestContextAdapter
   // Default net::LOAD flags used to create requests.
   int default_load_flags() const { return default_load_flags_; }
 
-  // Called on main Java thread to initialize URLRequestContext.
-  void InitRequestContextOnMainThread();
+  // Called on init Java thread to initialize URLRequestContext.
+  void InitRequestContextOnInitThread();
 
   // Configures the network quality estimator to observe requests to localhost,
   // to use smaller responses when estimating throughput, and to disable the
@@ -254,10 +250,6 @@ class CronetURLRequestContextAdapter
 
   // Java object that owns this CronetURLRequestContextAdapter.
   base::android::ScopedJavaGlobalRef<jobject> jcronet_url_request_context_;
-
-#if defined(DATA_REDUCTION_PROXY_SUPPORT)
-  std::unique_ptr<CronetDataReductionProxy> data_reduction_proxy_;
-#endif
 
   DISALLOW_COPY_AND_ASSIGN(CronetURLRequestContextAdapter);
 };

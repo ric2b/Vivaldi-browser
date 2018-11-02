@@ -77,10 +77,13 @@ RenderFrameHostDelegate::GetGeolocationServiceContext() {
   return nullptr;
 }
 
-device::mojom::WakeLockContext*
-RenderFrameHostDelegate::GetWakeLockServiceContext() {
+device::mojom::WakeLockService* RenderFrameHostDelegate::GetRendererWakeLock() {
   return nullptr;
 }
+
+#if defined(OS_ANDROID)
+void RenderFrameHostDelegate::GetNFC(device::mojom::NFCRequest request) {}
+#endif
 
 bool RenderFrameHostDelegate::ShouldRouteMessageEvent(
     RenderFrameHost* target_rfh,
@@ -107,5 +110,9 @@ RenderFrameHostDelegate::GetJavaRenderFrameHostDelegate() {
   return nullptr;
 }
 #endif
+
+bool RenderFrameHostDelegate::IsBeingDestroyed() const {
+  return false;
+}
 
 }  // namespace content

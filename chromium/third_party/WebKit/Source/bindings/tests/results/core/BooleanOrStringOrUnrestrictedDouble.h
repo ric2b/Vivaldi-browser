@@ -15,7 +15,7 @@
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/NativeValueTraits.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
 
@@ -33,9 +33,9 @@ class CORE_EXPORT BooleanOrStringOrUnrestrictedDouble final {
   static BooleanOrStringOrUnrestrictedDouble fromBoolean(bool);
 
   bool isString() const { return m_type == SpecificTypeString; }
-  String getAsString() const;
-  void setString(String);
-  static BooleanOrStringOrUnrestrictedDouble fromString(String);
+  const String& getAsString() const;
+  void setString(const String&);
+  static BooleanOrStringOrUnrestrictedDouble fromString(const String&);
 
   bool isUnrestrictedDouble() const { return m_type == SpecificTypeUnrestrictedDouble; }
   double getAsUnrestrictedDouble() const;

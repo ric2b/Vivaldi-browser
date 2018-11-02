@@ -31,8 +31,14 @@ class Media(legacy_page_test.LegacyPageTest):
 
   def CustomizeBrowserOptions(self, options):
     # Needed to run media actions in JS on touch-based devices as on Android.
+    # Note that both of these flags should be used until every build from
+    # ToT to Stable switches over to one flag or another. This is to support
+    # reference builds.
+    # --disable-gesture-requirement-for-media-playback is the old one and can be
+    # removed after M60 goes to stable.
     options.AppendExtraBrowserArgs(
-        '--disable-gesture-requirement-for-media-playback')
+        ['--ignore-autoplay-restrictions',
+         '--disable-gesture-requirement-for-media-playback'])
     power.PowerMetric.CustomizeBrowserOptions(options)
 
   def DidNavigateToPage(self, page, tab):

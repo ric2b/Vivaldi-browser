@@ -10,10 +10,10 @@
 #include "base/macros.h"
 #include "ui/base/models/simple_menu_model.h"
 
-class ChromeLauncherControllerImpl;
+class ChromeLauncherController;
 
 namespace ash {
-class WmShelf;
+class Shelf;
 }
 
 // Base class for context menu which is shown for a regular extension item in
@@ -42,9 +42,9 @@ class LauncherContextMenu : public ui::SimpleMenuModel,
   ~LauncherContextMenu() override;
 
   // Static function to create contextmenu instance.
-  static LauncherContextMenu* Create(ChromeLauncherControllerImpl* controller,
+  static LauncherContextMenu* Create(ChromeLauncherController* controller,
                                      const ash::ShelfItem* item,
-                                     ash::WmShelf* wm_shelf);
+                                     ash::Shelf* shelf);
 
   // ui::SimpleMenuModel::Delegate overrides:
   bool IsItemForCommandIdDynamic(int command_id) const override;
@@ -54,10 +54,10 @@ class LauncherContextMenu : public ui::SimpleMenuModel,
   void ExecuteCommand(int command_id, int event_flags) override;
 
  protected:
-  LauncherContextMenu(ChromeLauncherControllerImpl* controller,
+  LauncherContextMenu(ChromeLauncherController* controller,
                       const ash::ShelfItem* item,
-                      ash::WmShelf* wm_shelf);
-  ChromeLauncherControllerImpl* controller() const { return controller_; }
+                      ash::Shelf* shelf);
+  ChromeLauncherController* controller() const { return controller_; }
 
   const ash::ShelfItem& item() const { return item_; }
 
@@ -71,13 +71,13 @@ class LauncherContextMenu : public ui::SimpleMenuModel,
   bool ExecuteCommonCommand(int command_id, int event_flags);
 
  private:
-  ChromeLauncherControllerImpl* controller_;
+  ChromeLauncherController* controller_;
 
   ash::ShelfItem item_;
 
   ash::ShelfAlignmentMenu shelf_alignment_menu_;
 
-  ash::WmShelf* wm_shelf_;
+  ash::Shelf* shelf_;
 
   DISALLOW_COPY_AND_ASSIGN(LauncherContextMenu);
 };

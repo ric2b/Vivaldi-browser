@@ -15,9 +15,9 @@
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -30,8 +30,8 @@
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/command_updater.h"
-#include "chrome/browser/download/download_service.h"
-#include "chrome/browser/download/download_service_factory.h"
+#include "chrome/browser/download/download_core_service.h"
+#include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -354,6 +354,18 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
   if (!vivaldi::IsVivaldiRunning()) {
   // Initialize the Profile menu.
   [self initProfileMenu];
+
+  // If the OSX version supports this method, the system will automatically
+  // hide the item if there's no touch bar. However, for unsupported versions,
+  // we'll have to manually remove the item from the menu.
+  if (![NSApp
+          respondsToSelector:@selector(toggleTouchBarCustomizationPalette:)]) {
+    NSMenu* mainMenu = [NSApp mainMenu];
+    NSMenu* viewMenu = [[mainMenu itemWithTag:IDC_VIEW_MENU] submenu];
+    NSMenuItem* customizeItem = [viewMenu itemWithTag:IDC_CUSTOMIZE_TOUCH_BAR];
+    if (customizeItem)
+      [viewMenu removeItem:customizeItem];
+  }
   }
 }
 
@@ -425,8 +437,8 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
 
     // At this point, the user has already chosen to cancel downloads. If we
     // were to shut down as usual, the downloads would be cancelled in
-    // DownloadService::Shutdown().
-    DownloadService::CancelAllDownloads();
+    // DownloadCoreService::Shutdown().
+    DownloadCoreService::CancelAllDownloads();
 
     return NO;
   }
@@ -797,11 +809,12 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
 
   std::vector<Profile*> profiles(profile_manager->GetLoadedProfiles());
   for (size_t i = 0; i < profiles.size(); ++i) {
-    DownloadService* download_service =
-      DownloadServiceFactory::GetForBrowserContext(profiles[i]);
+    DownloadCoreService* download_core_service =
+        DownloadCoreServiceFactory::GetForBrowserContext(profiles[i]);
     DownloadManager* download_manager =
-        (download_service->HasCreatedDownloadManager() ?
-         BrowserContext::GetDownloadManager(profiles[i]) : NULL);
+        (download_core_service->HasCreatedDownloadManager()
+             ? BrowserContext::GetDownloadManager(profiles[i])
+             : NULL);
     if (download_manager &&
         download_manager->NonMaliciousInProgressCount() > 0) {
       int downloadCount = download_manager->NonMaliciousInProgressCount();
@@ -976,11 +989,12 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
   }
 
   // Ignore commands during session restore's browser creation.  It uses a
-  // nested message loop and commands dispatched during this operation cause
+  // nested run loop and commands dispatched during this operation cause
   // havoc.
   if (SessionRestore::IsRestoring(lastProfile) &&
-      base::MessageLoop::current()->IsNested())
+      base::RunLoop::IsNestedOnCurrentThread()) {
     return;
+  }
 
   NSInteger tag = [sender tag];
 
@@ -1515,7 +1529,8 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
 
   // if no browser window exists then create one with no tabs to be filled in
   if (!browser) {
-    browser = new Browser(Browser::CreateParams([self lastProfile], true));
+    browser = new Browser(
+        Browser::CreateParams([self safeLastProfileForNewWindows], true));
     browser->window()->Show();
   }
 

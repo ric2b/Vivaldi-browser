@@ -8,23 +8,25 @@
 
 namespace cc {
 
-DrawingDisplayItem::DrawingDisplayItem() : DisplayItem(DRAWING) {}
+DrawingDisplayItem::DrawingDisplayItem()
+    : DisplayItem(DRAWING), bounds(SkRect::MakeEmpty()) {}
 
-DrawingDisplayItem::DrawingDisplayItem(sk_sp<const PaintRecord> record)
-    : DisplayItem(DRAWING), picture(std::move(record)) {}
+DrawingDisplayItem::DrawingDisplayItem(sk_sp<const PaintRecord> record,
+                                       const SkRect& bounds)
+    : DisplayItem(DRAWING), picture(std::move(record)), bounds(bounds) {}
 
 DrawingDisplayItem::DrawingDisplayItem(const DrawingDisplayItem& item)
-    : DisplayItem(DRAWING), picture(item.picture) {}
+    : DisplayItem(DRAWING), picture(item.picture), bounds(item.bounds) {}
 
 DrawingDisplayItem::~DrawingDisplayItem() = default;
 
 size_t DrawingDisplayItem::ExternalMemoryUsage() const {
-  return picture->approximateBytesUsed();
+  return picture->bytes_used();
 }
 
 DISABLE_CFI_PERF
-int DrawingDisplayItem::ApproximateOpCount() const {
-  return picture->approximateOpCount();
+size_t DrawingDisplayItem::OpCount() const {
+  return picture->size();
 }
 
 }  // namespace cc

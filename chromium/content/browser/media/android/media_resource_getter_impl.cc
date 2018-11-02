@@ -4,14 +4,13 @@
 
 #include "content/browser/media/android/media_resource_getter_impl.h"
 
-#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/path_service.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/fileapi/browser_file_system_helper.h"
@@ -123,12 +122,11 @@ static void GetMediaMetadata(
 
   ScopedJavaLocalRef<jstring> j_url_string = ConvertUTF8ToJavaString(env, url);
   ScopedJavaLocalRef<jstring> j_cookies = ConvertUTF8ToJavaString(env, cookies);
-  const JavaRef<jobject>& j_context = base::android::GetApplicationContext();
   ScopedJavaLocalRef<jstring> j_user_agent = ConvertUTF8ToJavaString(
       env, user_agent);
   ScopedJavaLocalRef<jobject> j_metadata =
-      Java_MediaResourceGetter_extractMediaMetadata(
-          env, j_context, j_url_string, j_cookies, j_user_agent);
+      Java_MediaResourceGetter_extractMediaMetadata(env, j_url_string,
+                                                    j_cookies, j_user_agent);
 
   PostMediaMetadataCallbackTask(callback, env, j_metadata);
 }
@@ -362,10 +360,9 @@ void MediaResourceGetterImpl::ExtractMediaMetadata(
     const std::string& url, const std::string& cookies,
     const std::string& user_agent, const ExtractMediaMetadataCB& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  base::SequencedWorkerPool* pool = content::BrowserThread::GetBlockingPool();
-  pool->PostWorkerTask(
-      FROM_HERE,
-      base::Bind(&GetMediaMetadata, url, cookies, user_agent, callback));
+  base::PostTaskWithTraits(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&GetMediaMetadata, url, cookies, user_agent, callback));
 }
 
 void MediaResourceGetterImpl::ExtractMediaMetadata(
@@ -374,10 +371,9 @@ void MediaResourceGetterImpl::ExtractMediaMetadata(
     const int64_t size,
     const ExtractMediaMetadataCB& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  base::SequencedWorkerPool* pool = content::BrowserThread::GetBlockingPool();
-  pool->PostWorkerTask(
-      FROM_HERE,
-      base::Bind(&GetMediaMetadataFromFd, fd, offset, size, callback));
+  base::PostTaskWithTraits(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&GetMediaMetadataFromFd, fd, offset, size, callback));
 }
 
 }  // namespace content

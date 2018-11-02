@@ -47,7 +47,7 @@ TEST(ComputedStyleTest, FocusRingWidth) {
   RefPtr<ComputedStyle> style = ComputedStyle::Create();
   style->SetEffectiveZoom(3.5);
 #if OS(MACOSX)
-  style->SetOutlineStyle(kBorderStyleSolid);
+  style->SetOutlineStyle(EBorderStyle::kSolid);
   ASSERT_EQ(3, style->GetOutlineStrokeWidthForFocusRing());
 #else
   ASSERT_EQ(3.5, style->GetOutlineStrokeWidthForFocusRing());
@@ -58,7 +58,7 @@ TEST(ComputedStyleTest, FocusRingWidth) {
 
 TEST(ComputedStyleTest, FocusRingOutset) {
   RefPtr<ComputedStyle> style = ComputedStyle::Create();
-  style->SetOutlineStyle(kBorderStyleSolid);
+  style->SetOutlineStyle(EBorderStyle::kSolid);
   style->SetOutlineStyleIsAuto(kOutlineIsAutoOn);
   style->SetEffectiveZoom(4.75);
 #if OS(MACOSX)
@@ -100,6 +100,39 @@ TEST(ComputedStyleTest,
   StyleDifference diff;
   style->UpdatePropertySpecificDifferences(*other, diff);
   EXPECT_TRUE(diff.TransformChanged());
+}
+
+TEST(ComputedStyleTest, HasOutlineWithCurrentColor) {
+  RefPtr<ComputedStyle> style = ComputedStyle::Create();
+  EXPECT_FALSE(style->HasOutline());
+  EXPECT_FALSE(style->HasOutlineWithCurrentColor());
+  style->SetOutlineColor(StyleColor::CurrentColor());
+  EXPECT_FALSE(style->HasOutlineWithCurrentColor());
+  style->SetOutlineWidth(5);
+  EXPECT_FALSE(style->HasOutlineWithCurrentColor());
+  style->SetOutlineStyle(EBorderStyle::kSolid);
+  EXPECT_TRUE(style->HasOutlineWithCurrentColor());
+}
+
+TEST(ComputedStyleTest, HasBorderColorReferencingCurrentColor) {
+  RefPtr<ComputedStyle> style = ComputedStyle::Create();
+  EXPECT_FALSE(style->HasBorderColorReferencingCurrentColor());
+  style->SetBorderBottomColor(StyleColor::CurrentColor());
+  EXPECT_FALSE(style->HasBorderColorReferencingCurrentColor());
+  style->SetBorderBottomWidth(5);
+  EXPECT_FALSE(style->HasBorderColorReferencingCurrentColor());
+  style->SetBorderBottomStyle(EBorderStyle::kSolid);
+  EXPECT_TRUE(style->HasBorderColorReferencingCurrentColor());
+}
+
+TEST(ComputedStyleTest, BorderWidth) {
+  RefPtr<ComputedStyle> style = ComputedStyle::Create();
+  style->SetBorderBottomWidth(5);
+  EXPECT_EQ(style->BorderBottomWidth(), 0);
+  EXPECT_EQ(style->BorderBottom().Width(), 5);
+  style->SetBorderBottomStyle(EBorderStyle::kSolid);
+  EXPECT_EQ(style->BorderBottomWidth(), 5);
+  EXPECT_EQ(style->BorderBottom().Width(), 5);
 }
 
 }  // namespace blink

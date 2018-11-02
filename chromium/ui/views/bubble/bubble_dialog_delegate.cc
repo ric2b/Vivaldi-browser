@@ -4,6 +4,7 @@
 
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 
+#include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/default_style.h"
@@ -228,10 +229,11 @@ BubbleDialogDelegateView::BubbleDialogDelegateView(View* anchor_view,
       parent_window_(NULL) {
   LayoutProvider* provider = LayoutProvider::Get();
   margins_ = provider->GetInsetsMetric(INSETS_BUBBLE_CONTENTS);
-  title_margins_ = provider->GetInsetsMetric(INSETS_DIALOG_TITLE);
+  title_margins_ = provider->GetInsetsMetric(INSETS_BUBBLE_TITLE);
   if (anchor_view)
     SetAnchorView(anchor_view);
   UpdateColorsFromTheme(GetNativeTheme());
+  UMA_HISTOGRAM_BOOLEAN("Dialog.BubbleDialogDelegateView.Create", true);
 }
 
 gfx::Rect BubbleDialogDelegateView::GetBubbleBounds() {

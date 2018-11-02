@@ -58,7 +58,11 @@ NetworkStateNotifier::ScopedNotifier::~ScopedNotifier() {
   const NetworkState& after =
       notifier_.has_override_ ? notifier_.override_ : notifier_.state_;
   if ((after.type != before_.type ||
-       after.max_bandwidth_mbps != before_.max_bandwidth_mbps) &&
+       after.max_bandwidth_mbps != before_.max_bandwidth_mbps ||
+       after.effective_type != before_.effective_type ||
+       after.http_rtt != before_.http_rtt ||
+       after.transport_rtt != before_.transport_rtt ||
+       after.downlink_throughput_mbps != before_.downlink_throughput_mbps) &&
       before_.connection_initialized) {
     notifier_.NotifyObservers(notifier_.connection_observers_,
                               ObserverType::CONNECTION_TYPE, after);
@@ -91,6 +95,33 @@ void NetworkStateNotifier::SetWebConnection(WebConnectionType type,
   }
 }
 
+void NetworkStateNotifier::SetNetworkQuality(WebEffectiveConnectionType type,
+                                             TimeDelta http_rtt,
+                                             TimeDelta transport_rtt,
+                                             int downlink_throughput_kbps) {
+  DCHECK(IsMainThread());
+  ScopedNotifier notifier(*this);
+  {
+    MutexLocker locker(mutex_);
+
+    state_.effective_type = type;
+    state_.http_rtt = base::nullopt;
+    state_.transport_rtt = base::nullopt;
+    state_.downlink_throughput_mbps = base::nullopt;
+
+    if (http_rtt.InMilliseconds() >= 0)
+      state_.http_rtt = http_rtt;
+
+    if (transport_rtt.InMilliseconds() >= 0)
+      state_.transport_rtt = transport_rtt;
+
+    if (downlink_throughput_kbps >= 0) {
+      state_.downlink_throughput_mbps =
+          static_cast<double>(downlink_throughput_kbps) / 1000;
+    }
+  }
+}
+
 void NetworkStateNotifier::AddConnectionObserver(
     NetworkStateObserver* observer,
     PassRefPtr<WebTaskRunner> task_runner) {
@@ -115,9 +146,10 @@ void NetworkStateNotifier::RemoveOnLineObserver(
   RemoveObserver(on_line_state_observers_, observer, std::move(task_runner));
 }
 
-void NetworkStateNotifier::SetOverride(bool on_line,
-                                       WebConnectionType type,
-                                       double max_bandwidth_mbps) {
+void NetworkStateNotifier::SetNetworkConnectionInfoOverride(
+    bool on_line,
+    WebConnectionType type,
+    double max_bandwidth_mbps) {
   DCHECK(IsMainThread());
   ScopedNotifier notifier(*this);
   {
@@ -128,6 +160,26 @@ void NetworkStateNotifier::SetOverride(bool on_line,
     override_.connection_initialized = true;
     override_.type = type;
     override_.max_bandwidth_mbps = max_bandwidth_mbps;
+  }
+}
+
+void NetworkStateNotifier::SetNetworkQualityInfoOverride(
+    WebEffectiveConnectionType effective_type,
+    unsigned long transport_rtt_msec,
+    double downlink_throughput_mbps) {
+  DCHECK(IsMainThread());
+  ScopedNotifier notifier(*this);
+  {
+    MutexLocker locker(mutex_);
+    has_override_ = true;
+    override_.on_line_initialized = true;
+    override_.connection_initialized = true;
+    override_.effective_type = effective_type;
+    override_.transport_rtt =
+        base::TimeDelta::FromMilliseconds(transport_rtt_msec);
+    override_.downlink_throughput_mbps = base::nullopt;
+    if (downlink_throughput_mbps >= 0)
+      override_.downlink_throughput_mbps = downlink_throughput_mbps;
   }
 }
 
@@ -180,8 +232,10 @@ void NetworkStateNotifier::NotifyObserversOnTaskRunner(
         observer_list->observers[i]->OnLineStateChange(state.on_line);
         continue;
       case ObserverType::CONNECTION_TYPE:
-        observer_list->observers[i]->ConnectionChange(state.type,
-                                                      state.max_bandwidth_mbps);
+        observer_list->observers[i]->ConnectionChange(
+            state.type, state.max_bandwidth_mbps, state.effective_type,
+            state.http_rtt, state.transport_rtt,
+            state.downlink_throughput_mbps);
         continue;
     }
     NOTREACHED();
@@ -235,7 +289,7 @@ NetworkStateNotifier::LockAndFindObserverList(
     ObserverListMap& map,
     PassRefPtr<WebTaskRunner> task_runner) {
   MutexLocker locker(mutex_);
-  ObserverListMap::iterator it = map.Find(task_runner);
+  ObserverListMap::iterator it = map.find(task_runner);
   return it == map.end() ? nullptr : it->value.get();
 }
 
@@ -251,7 +305,7 @@ void NetworkStateNotifier::CollectZeroedObservers(
   for (size_t i = 0; i < list->zeroed_observers.size(); ++i)
     list->observers.erase(list->zeroed_observers[i]);
 
-  list->zeroed_observers.Clear();
+  list->zeroed_observers.clear();
 
   if (list->observers.IsEmpty()) {
     MutexLocker locker(mutex_);

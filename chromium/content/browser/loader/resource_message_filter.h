@@ -73,12 +73,13 @@ class CONTENT_EXPORT ResourceMessageFilter
   void CreateLoaderAndStart(mojom::URLLoaderAssociatedRequest request,
                             int32_t routing_id,
                             int32_t request_id,
+                            uint32_t options,
                             const ResourceRequest& url_request,
                             mojom::URLLoaderClientPtr client) override;
   void SyncLoad(int32_t routing_id,
                 int32_t request_id,
                 const ResourceRequest& request,
-                const SyncLoadCallback& callback) override;
+                SyncLoadCallback callback) override;
   int child_id() const;
 
   ResourceRequesterInfo* requester_info_for_test() {

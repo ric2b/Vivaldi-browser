@@ -11,9 +11,56 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "media/capture/video/fake_video_capture_device.h"
+#include "media/capture/video/video_capture_device_info.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/video_capture/device_media_to_mojo_adapter.h"
-#include "services/video_capture/public/cpp/capture_settings.h"
+
+namespace {
+
+// Translates a set of device infos reported by a VideoCaptureSystem to a set
+// of device infos that the video capture service exposes to its client.
+// The Video Capture Service instances of VideoCaptureDeviceClient to
+// convert the formats provided by the VideoCaptureDevice instances. Here, we
+// translate the set of supported formats as reported by the |device_factory_|
+// to what will be output by the VideoCaptureDeviceClient we connect to it.
+// TODO(chfremer): A cleaner design would be to have this translation
+// happen in VideoCaptureDeviceClient, and talk only to VideoCaptureDeviceClient
+// instead of VideoCaptureSystem.
+static void TranslateDeviceInfos(
+    const video_capture::mojom::DeviceFactory::GetDeviceInfosCallback& callback,
+    const std::vector<media::VideoCaptureDeviceInfo>& device_infos) {
+  std::vector<media::VideoCaptureDeviceInfo> translated_device_infos;
+  for (const auto& device_info : device_infos) {
+    media::VideoCaptureDeviceInfo translated_device_info;
+    translated_device_info.descriptor = device_info.descriptor;
+    for (const auto& format : device_info.supported_formats) {
+      media::VideoCaptureFormat translated_format;
+      translated_format.pixel_format =
+          (format.pixel_format == media::PIXEL_FORMAT_Y16)
+              ? media::PIXEL_FORMAT_Y16
+              : media::PIXEL_FORMAT_I420;
+      translated_format.frame_size = format.frame_size;
+      translated_format.frame_rate = format.frame_rate;
+      translated_format.pixel_storage = media::PIXEL_STORAGE_CPU;
+      if (base::ContainsValue(translated_device_info.supported_formats,
+                              translated_format))
+        continue;
+      translated_device_info.supported_formats.push_back(translated_format);
+    }
+    if (translated_device_info.supported_formats.empty())
+      continue;
+    translated_device_infos.push_back(translated_device_info);
+  }
+  callback.Run(translated_device_infos);
+}
+
+static void DiscardDeviceInfosAndCallContinuation(
+    base::Closure continuation,
+    const std::vector<media::VideoCaptureDeviceInfo>&) {
+  continuation.Run();
+}
+
+}  // anonymous namespace
 
 namespace video_capture {
 
@@ -31,45 +78,23 @@ DeviceFactoryMediaToMojoAdapter::ActiveDeviceEntry::operator=(
     DeviceFactoryMediaToMojoAdapter::ActiveDeviceEntry&& other) = default;
 
 DeviceFactoryMediaToMojoAdapter::DeviceFactoryMediaToMojoAdapter(
-    std::unique_ptr<media::VideoCaptureDeviceFactory> device_factory,
+    std::unique_ptr<service_manager::ServiceContextRef> service_ref,
+    std::unique_ptr<media::VideoCaptureSystem> capture_system,
     const media::VideoCaptureJpegDecoderFactoryCB&
         jpeg_decoder_factory_callback)
-    : device_factory_(std::move(device_factory)),
-      jpeg_decoder_factory_callback_(jpeg_decoder_factory_callback) {}
+    : service_ref_(std::move(service_ref)),
+      capture_system_(std::move(capture_system)),
+      jpeg_decoder_factory_callback_(jpeg_decoder_factory_callback),
+      has_called_get_device_infos_(false),
+      weak_factory_(this) {}
 
 DeviceFactoryMediaToMojoAdapter::~DeviceFactoryMediaToMojoAdapter() = default;
 
-void DeviceFactoryMediaToMojoAdapter::EnumerateDeviceDescriptors(
-    const EnumerateDeviceDescriptorsCallback& callback) {
-  media::VideoCaptureDeviceDescriptors descriptors;
-  device_factory_->GetDeviceDescriptors(&descriptors);
-  callback.Run(std::move(descriptors));
-}
-
-void DeviceFactoryMediaToMojoAdapter::GetSupportedFormats(
-    const std::string& device_id,
-    const GetSupportedFormatsCallback& callback) {
-  media::VideoCaptureDeviceDescriptor descriptor;
-  media::VideoCaptureFormats media_formats;
-  if (LookupDescriptorFromId(device_id, &descriptor))
-    device_factory_->GetSupportedFormats(descriptor, &media_formats);
-  std::vector<I420CaptureFormat> result;
-  for (const auto& media_format : media_formats) {
-    // The Video Capture Service requires devices to deliver frames either in
-    // I420 or MJPEG formats.
-    // TODO(chfremer): Add support for Y16 format. See crbug.com/624436.
-    if (media_format.pixel_format != media::PIXEL_FORMAT_I420 &&
-        media_format.pixel_format != media::PIXEL_FORMAT_MJPEG) {
-      continue;
-    }
-    I420CaptureFormat format;
-    format.frame_size = media_format.frame_size;
-    format.frame_rate = media_format.frame_rate;
-    if (base::ContainsValue(result, format))
-      continue;  // Result already contains this format
-    result.push_back(format);
-  }
-  callback.Run(std::move(result));
+void DeviceFactoryMediaToMojoAdapter::GetDeviceInfos(
+    const GetDeviceInfosCallback& callback) {
+  capture_system_->GetDeviceInfosAsync(
+      base::Bind(&TranslateDeviceInfos, callback));
+  has_called_get_device_infos_ = true;
 }
 
 void DeviceFactoryMediaToMojoAdapter::CreateDevice(
@@ -91,14 +116,26 @@ void DeviceFactoryMediaToMojoAdapter::CreateDevice(
     return;
   }
 
-  // Create device
-  media::VideoCaptureDeviceDescriptor descriptor;
-  if (LookupDescriptorFromId(device_id, &descriptor) == false) {
-    callback.Run(mojom::DeviceAccessResultCode::ERROR_DEVICE_NOT_FOUND);
+  const auto create_and_add_new_device_cb =
+      base::Bind(&DeviceFactoryMediaToMojoAdapter::CreateAndAddNewDevice,
+                 weak_factory_.GetWeakPtr(), device_id,
+                 base::Passed(&device_request), callback);
+
+  if (has_called_get_device_infos_) {
+    create_and_add_new_device_cb.Run();
     return;
   }
+
+  capture_system_->GetDeviceInfosAsync(base::Bind(
+      &DiscardDeviceInfosAndCallContinuation, create_and_add_new_device_cb));
+}
+
+void DeviceFactoryMediaToMojoAdapter::CreateAndAddNewDevice(
+    const std::string& device_id,
+    mojom::DeviceRequest device_request,
+    const CreateDeviceCallback& callback) {
   std::unique_ptr<media::VideoCaptureDevice> media_device =
-      device_factory_->CreateDevice(descriptor);
+      capture_system_->CreateDevice(device_id);
   if (media_device == nullptr) {
     callback.Run(mojom::DeviceAccessResultCode::ERROR_DEVICE_NOT_FOUND);
     return;
@@ -107,7 +144,8 @@ void DeviceFactoryMediaToMojoAdapter::CreateDevice(
   // Add entry to active_devices to keep track of it
   ActiveDeviceEntry device_entry;
   device_entry.device = base::MakeUnique<DeviceMediaToMojoAdapter>(
-      std::move(media_device), jpeg_decoder_factory_callback_);
+      service_ref_->Clone(), std::move(media_device),
+      jpeg_decoder_factory_callback_);
   device_entry.binding = base::MakeUnique<mojo::Binding<mojom::Device>>(
       device_entry.device.get(), std::move(device_request));
   device_entry.binding->set_connection_error_handler(base::Bind(
@@ -122,22 +160,6 @@ void DeviceFactoryMediaToMojoAdapter::OnClientConnectionErrorOrClose(
     const std::string& device_id) {
   active_devices_by_id_[device_id].device->Stop();
   active_devices_by_id_.erase(device_id);
-}
-
-bool DeviceFactoryMediaToMojoAdapter::LookupDescriptorFromId(
-    const std::string& device_id,
-    media::VideoCaptureDeviceDescriptor* descriptor) {
-  media::VideoCaptureDeviceDescriptors descriptors;
-  device_factory_->GetDeviceDescriptors(&descriptors);
-  auto descriptor_iter = std::find_if(
-      descriptors.begin(), descriptors.end(),
-      [&device_id](const media::VideoCaptureDeviceDescriptor& descriptor) {
-        return descriptor.device_id == device_id;
-      });
-  if (descriptor_iter == descriptors.end())
-    return false;
-  *descriptor = *descriptor_iter;
-  return true;
 }
 
 }  // namespace video_capture

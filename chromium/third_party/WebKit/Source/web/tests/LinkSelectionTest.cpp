@@ -4,6 +4,7 @@
 
 #include "core/dom/Range.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/input/EventHandler.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/ContextMenuController.h"
@@ -12,10 +13,10 @@
 #include "platform/Cursor.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
+#include "public/platform/WebCoalescedInputEvent.h"
 #include "public/web/WebSettings.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
 
 using ::testing::_;
@@ -49,8 +50,8 @@ class LinkSelectionTestBase : public ::testing::Test {
   String GetSelectionText();
 
   FrameTestHelpers::WebViewHelper helper_;
-  WebViewImpl* web_view_ = nullptr;
-  Persistent<WebLocalFrameImpl> main_frame_ = nullptr;
+  WebViewBase* web_view_ = nullptr;
+  Persistent<WebLocalFrameBase> main_frame_ = nullptr;
 };
 
 void LinkSelectionTestBase::EmulateMouseDrag(const IntPoint& down_point,
@@ -137,7 +138,7 @@ class LinkSelectionTest : public LinkSelectionTestBase {
 
     auto* document = main_frame_->GetFrame()->GetDocument();
     ASSERT_NE(nullptr, document);
-    auto* link_to_select = document->GetElementById("link")->FirstChild();
+    auto* link_to_select = document->getElementById("link")->firstChild();
     ASSERT_NE(nullptr, link_to_select);
     // We get larger range that we actually want to select, because we need a
     // slightly larger rect to include the last character to the selection.
@@ -175,7 +176,7 @@ TEST_F(LinkSelectionTest, HandCursorDuringLinkDrag) {
                    kSendDownEvent);
   main_frame_->GetFrame()
       ->LocalFrameRoot()
-      ->GetEventHandler()
+      .GetEventHandler()
       .ScheduleCursorUpdate();
   testing::RunDelayedTasks(50);
   const auto& cursor =
@@ -183,12 +184,24 @@ TEST_F(LinkSelectionTest, HandCursorDuringLinkDrag) {
   EXPECT_EQ(Cursor::kHand, cursor.GetType());
 }
 
+TEST_F(LinkSelectionTest, DragOnNothingShowsPointer) {
+  EmulateMouseDrag(IntPoint(100, 500), IntPoint(300, 500), 0, kSendDownEvent);
+  main_frame_->GetFrame()
+      ->LocalFrameRoot()
+      .GetEventHandler()
+      .ScheduleCursorUpdate();
+  testing::RunDelayedTasks(50);
+  const auto& cursor =
+      main_frame_->GetFrame()->GetChromeClient().LastSetCursorForTesting();
+  EXPECT_EQ(Cursor::kPointer, cursor.GetType());
+}
+
 TEST_F(LinkSelectionTest, CaretCursorOverLinkDuringSelection) {
   EmulateMouseDrag(right_point_in_link_, left_point_in_link_,
                    WebInputEvent::kAltKey, kSendDownEvent);
   main_frame_->GetFrame()
       ->LocalFrameRoot()
-      ->GetEventHandler()
+      .GetEventHandler()
       .ScheduleCursorUpdate();
   testing::RunDelayedTasks(50);
   const auto& cursor =
@@ -208,7 +221,7 @@ TEST_F(LinkSelectionTest, HandCursorOverLinkAfterContextMenu) {
   // Hide context menu.
   frame->GetPage()->GetContextMenuController().ClearContextMenu();
 
-  frame->LocalFrameRoot()->GetEventHandler().ScheduleCursorUpdate();
+  frame->LocalFrameRoot().GetEventHandler().ScheduleCursorUpdate();
   testing::RunDelayedTasks(50);
   const auto& cursor =
       main_frame_->GetFrame()->GetChromeClient().LastSetCursorForTesting();
@@ -226,7 +239,7 @@ TEST_F(LinkSelectionTest, SingleClickWithAltStartsDownload) {
 
 TEST_F(LinkSelectionTest, SingleClickWithAltStartsDownloadWhenTextSelected) {
   auto* document = main_frame_->GetFrame()->GetDocument();
-  auto* text_to_select = document->GetElementById("page_text")->FirstChild();
+  auto* text_to_select = document->getElementById("page_text")->firstChild();
   ASSERT_NE(nullptr, text_to_select);
 
   // Select some page text outside the link element.
@@ -276,8 +289,8 @@ class LinkSelectionClickEventsTest : public LinkSelectionTestBase {
     auto* document = main_frame_->GetFrame()->GetDocument();
     ASSERT_NE(nullptr, document);
 
-    auto* empty_div = document->GetElementById("empty_div");
-    auto* text_div = document->GetElementById("text_div");
+    auto* empty_div = document->getElementById("empty_div");
+    auto* text_div = document->getElementById("text_div");
     ASSERT_NE(nullptr, empty_div);
     ASSERT_NE(nullptr, text_div);
   }
@@ -312,7 +325,7 @@ class LinkSelectionClickEventsTest : public LinkSelectionTestBase {
 
 TEST_F(LinkSelectionClickEventsTest, SingleAndDoubleClickWillBeHandled) {
   auto* document = main_frame_->GetFrame()->GetDocument();
-  auto* element = document->GetElementById("empty_div");
+  auto* element = document->getElementById("empty_div");
 
   {
     SCOPED_TRACE("Empty div, single click");
@@ -324,7 +337,7 @@ TEST_F(LinkSelectionClickEventsTest, SingleAndDoubleClickWillBeHandled) {
     CheckMouseClicks(*element, true);
   }
 
-  element = document->GetElementById("text_div");
+  element = document->getElementById("text_div");
 
   {
     SCOPED_TRACE("Text div, single click");

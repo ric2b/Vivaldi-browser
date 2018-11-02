@@ -20,6 +20,7 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
  public:
   ChromePasswordProtectionService(SafeBrowsingService* sb_service,
                                   Profile* profile);
+
   ~ChromePasswordProtectionService() override;
 
  protected:
@@ -34,10 +35,32 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
 
   bool IsIncognito() override;
 
-  // Checks if Finch config allows sending pings to Safe Browsing backend.
-  bool IsPingingEnabled() override;
+  // Checks if Finch config allows sending pings to Safe Browsing Server.
+  // If not, indicated its reason by modifying |reason|.
+  // |feature| should be either kLowReputationPinging or
+  // kProtectedPasswordEntryPinging.
+  bool IsPingingEnabled(const base::Feature& feature,
+                        RequestOutcome* reason) override;
+
+  // If user enabled history syncing.
+  bool IsHistorySyncEnabled() override;
+
+  FRIEND_TEST_ALL_PREFIXES(
+      ChromePasswordProtectionServiceTest,
+      VerifyFinchControlForLowReputationPingSBEROnlyNoIncognito);
+  FRIEND_TEST_ALL_PREFIXES(
+      ChromePasswordProtectionServiceTest,
+      VerifyFinchControlForLowReputationPingSBERAndHistorySyncNoIncognito);
+  FRIEND_TEST_ALL_PREFIXES(ChromePasswordProtectionServiceTest,
+                           VerifyFinchControlForLowReputationPingAll);
+  FRIEND_TEST_ALL_PREFIXES(
+      ChromePasswordProtectionServiceTest,
+      VerifyFinchControlForLowReputationPingAllButNoIncognito);
 
  private:
+  friend class MockChromePasswordProtectionService;
+  // Default constructor used for tests only.
+  ChromePasswordProtectionService();
   // Profile associated with this instance.
   Profile* profile_;
   scoped_refptr<SafeBrowsingNavigationObserverManager>

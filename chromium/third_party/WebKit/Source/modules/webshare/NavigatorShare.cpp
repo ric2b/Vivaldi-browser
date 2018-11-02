@@ -109,7 +109,7 @@ ScriptPromise NavigatorShare::share(ScriptState* script_state,
     DOMException* error = DOMException::Create(kSecurityError, error_message);
     return ScriptPromise::RejectWithDOMException(script_state, error);
   }
-  if (!UserGestureIndicator::UtilizeUserGesture()) {
+  if (!UserGestureIndicator::ProcessingUserGesture()) {
     DOMException* error = DOMException::Create(
         kSecurityError,
         "Must be handling a user gesture to perform a share request.");
@@ -151,7 +151,7 @@ void NavigatorShare::OnConnectionError() {
   for (auto& client : clients_) {
     client->OnConnectionError();
   }
-  clients_.Clear();
+  clients_.clear();
   service_.reset();
 }
 

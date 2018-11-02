@@ -20,6 +20,7 @@
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
 #include "third_party/_winsparkle_lib/include/winsparkle.h"
+#include "update_notifier/update_notifier_switches.h"
 #endif
 
 #define UPDATE_SOURCE_WIN_normal 0
@@ -41,24 +42,26 @@ const char kUpdateRegPath[] = "Software\\Vivaldi\\AutoUpdate";
 const wchar_t kVivaldiKey[] = L"Software\\Vivaldi\\AutoUpdate";
 const wchar_t kEnabled[] = L"Enabled";
 
-const int kWinSparkleInitDelaySecs = 30;
+const int kWinSparkleInitDelaySecs = 20;
 
-void WinSparkleCheckForUpdates(
-    base::Callback<bool()> should_check_update_callback) {
+void WinSparkleCheckForUpdates(base::Callback<bool()> should_check_update_cb,
+                               bool force_check) {
   const int interval_secs = win_sparkle_get_update_check_interval();
   const time_t last_check_time = win_sparkle_get_last_check_time();
   const time_t current_time = time(NULL);
 
   // Only check for updates in reasonable intervals.
-  if (current_time - last_check_time >= interval_secs &&
-      (should_check_update_callback.is_null() ||
-       should_check_update_callback.Run())) {
+  // If |force_check| is true, an update request will be sent regardless of
+  // the last check time.
+  if ((force_check || current_time - last_check_time >= interval_secs) &&
+      (should_check_update_cb.is_null() ||
+       should_check_update_cb.Run())) {
     win_sparkle_check_update_without_ui();
   }
 
   base::MessageLoop::current()->task_runner()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&WinSparkleCheckForUpdates, should_check_update_callback),
+      base::Bind(&WinSparkleCheckForUpdates, should_check_update_cb, false),
       base::TimeDelta::FromSeconds(interval_secs));
 }
 #endif
@@ -146,6 +149,11 @@ void InitializeSparkle(const base::CommandLine& command_line,
 
     win_sparkle_init();
 
+    // Do not force a delayed check for updates on init if we are launched with
+    // the check-for-updates command line parameter, "--c".
+    bool force_update_on_init =
+        !command_line.HasSwitch(vivaldi_update_notifier::kCheckForUpdates);
+
     base::win::RegKey key(HKEY_CURRENT_USER, kVivaldiKey, KEY_QUERY_VALUE);
     std::wstring enabled;
     if (key.Valid())
@@ -153,7 +161,9 @@ void InitializeSparkle(const base::CommandLine& command_line,
     if (enabled == L"1") {
       base::MessageLoop::current()->task_runner()->PostDelayedTask(
           FROM_HERE,
-          base::Bind(&WinSparkleCheckForUpdates, should_check_update_callback),
+          base::Bind(&WinSparkleCheckForUpdates,
+                     should_check_update_callback,
+                     force_update_on_init),
           base::TimeDelta::FromSeconds(kWinSparkleInitDelaySecs));
     }
 #elif defined(OS_MACOSX)

@@ -167,7 +167,7 @@ class BeaconFormData final : public Beacon {
   explicit BeaconFormData(FormData* data)
       : data_(data), entity_body_(data_->EncodeMultiPartFormData()) {
     content_type_ = AtomicString("multipart/form-data; boundary=") +
-                    entity_body_->Boundary().Data();
+                    entity_body_->Boundary().data();
   }
 
   unsigned long long size() const override {
@@ -210,8 +210,14 @@ class PingLoaderImpl : public GarbageCollectedFinalized<PingLoaderImpl>,
   bool WillFollowRedirect(WebURLRequest&, const WebURLResponse&) override;
   void DidReceiveResponse(const WebURLResponse&) final;
   void DidReceiveData(const char*, int) final;
-  void DidFinishLoading(double, int64_t, int64_t encoded_data_length) final;
-  void DidFail(const WebURLError&, int64_t, int64_t encoded_data_length) final;
+  void DidFinishLoading(double,
+                        int64_t encoded_data_length,
+                        int64_t encoded_body_length,
+                        int64_t decoded_body_length) final;
+  void DidFail(const WebURLError&,
+               int64_t encoded_data_length,
+               int64_t encoded_body_length,
+               int64_t decoded_body_length) final;
 
   void Timeout(TimerBase*);
 
@@ -267,7 +273,7 @@ PingLoaderImpl::PingLoaderImpl(LocalFrame* frame,
   if (frame->FrameScheduler())
     frame->FrameScheduler()->DidStopLoading(identifier_);
 
-  loader_ = WTF::WrapUnique(Platform::Current()->CreateURLLoader());
+  loader_ = fetch_context.CreateURLLoader();
   DCHECK(loader_);
   WrappedResourceRequest wrapped_request(request);
   wrapped_request.SetAllowStoredCredentials(credentials_allowed ==
@@ -361,16 +367,18 @@ void PingLoaderImpl::DidReceiveData(const char*, int data_length) {
 }
 
 void PingLoaderImpl::DidFinishLoading(double,
-                                      int64_t,
-                                      int64_t encoded_data_length) {
+                                      int64_t encoded_data_length,
+                                      int64_t encoded_body_length,
+                                      int64_t decoded_body_length) {
   if (GetFrame())
     DidFailLoading(GetFrame());
   Dispose();
 }
 
 void PingLoaderImpl::DidFail(const WebURLError& resource_error,
-                             int64_t,
-                             int64_t encoded_data_length) {
+                             int64_t encoded_data_length,
+                             int64_t encoded_body_length,
+                             int64_t decoded_body_length) {
   if (GetFrame())
     DidFailLoading(GetFrame());
   Dispose();
@@ -471,11 +479,6 @@ bool SendBeaconCommon(LocalFrame* frame,
 }  // namespace
 
 void PingLoader::LoadImage(LocalFrame* frame, const KURL& url) {
-  if (!frame->GetDocument()->GetSecurityOrigin()->CanDisplay(url)) {
-    FrameLoader::ReportLocalLoadFailed(frame, url.GetString());
-    return;
-  }
-
   ResourceRequest request(url);
   request.SetHTTPHeaderField(HTTPNames::Cache_Control, "max-age=0");
   FinishPingRequestInitialization(request, frame,

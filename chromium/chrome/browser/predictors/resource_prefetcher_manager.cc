@@ -20,11 +20,9 @@ namespace predictors {
 
 ResourcePrefetcherManager::ResourcePrefetcherManager(
     ResourcePrefetchPredictor* predictor,
-    const ResourcePrefetchPredictorConfig& config,
+    const LoadingPredictorConfig& config,
     net::URLRequestContextGetter* context_getter)
-    : predictor_(predictor),
-      config_(config),
-      context_getter_(context_getter) {
+    : predictor_(predictor), config_(config), context_getter_(context_getter) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   CHECK(predictor_);
   CHECK(context_getter_);
@@ -40,9 +38,9 @@ void ResourcePrefetcherManager::ShutdownOnUIThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   predictor_ = NULL;
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-      base::Bind(&ResourcePrefetcherManager::ShutdownOnIOThread,
-                 this));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&ResourcePrefetcherManager::ShutdownOnIOThread, this));
 }
 
 void ResourcePrefetcherManager::ShutdownOnIOThread() {
@@ -60,8 +58,10 @@ void ResourcePrefetcherManager::MaybeAddPrefetch(
   if (base::ContainsKey(prefetcher_map_, key))
     return;
 
-  auto prefetcher =
-      base::MakeUnique<ResourcePrefetcher>(this, config_, main_frame_url, urls);
+  auto prefetcher = base::MakeUnique<ResourcePrefetcher>(
+      this, config_.max_prefetches_inflight_per_navigation,
+      config_.max_prefetches_inflight_per_host_per_navigation, main_frame_url,
+      urls);
   prefetcher->Start();
   prefetcher_map_[key] = std::move(prefetcher);
 }
@@ -86,9 +86,9 @@ void ResourcePrefetcherManager::ResourcePrefetcherFinished(
   const GURL& main_frame_url = resource_prefetcher->main_frame_url();
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&ResourcePrefetchPredictor::OnPrefetchingFinished,
-                 base::Unretained(predictor_), main_frame_url,
-                 base::Passed(std::move(stats))));
+      base::BindOnce(&ResourcePrefetchPredictor::OnPrefetchingFinished,
+                     base::Unretained(predictor_), main_frame_url,
+                     base::Passed(std::move(stats))));
 
   const std::string key = main_frame_url.host();
   auto it = prefetcher_map_.find(key);

@@ -4,10 +4,12 @@
 
 #include "components/feature_engagement_tracker/internal/never_condition_validator.h"
 
+#include <string>
+
 #include "base/feature_list.h"
-#include "base/metrics/field_trial.h"
-#include "base/test/scoped_feature_list.h"
+#include "components/feature_engagement_tracker/internal/configuration.h"
 #include "components/feature_engagement_tracker/internal/model.h"
+#include "components/feature_engagement_tracker/internal/never_availability_model.h"
 #include "components/feature_engagement_tracker/internal/proto/event.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -23,34 +25,20 @@ const base::Feature kTestFeatureBar{"test_bar",
 // A Model that is always postive to show in-product help.
 class TestModel : public Model {
  public:
-  TestModel() {
-    feature_config_.valid = true;
-    feature_config_.feature_used_event = "foobar";
-  }
+  TestModel() = default;
 
-  void Initialize(const OnModelInitializationFinished& callback) override {}
+  void Initialize(const OnModelInitializationFinished& callback,
+                  uint32_t current_day) override {}
 
   bool IsReady() const override { return true; }
 
-  const FeatureConfig& GetFeatureConfig(
-      const base::Feature& feature) const override {
-    return feature_config_;
+  const Event* GetEvent(const std::string& event_name) const override {
+    return nullptr;
   }
 
-  void SetIsCurrentlyShowing(bool is_showing) override {}
-
-  bool IsCurrentlyShowing() const override { return false; }
-
-  const Event& GetEvent(const std::string& event_name) override {
-    return empty_event_;
-  }
-
-  void IncrementEvent(const std::string& event_name) override {}
+  void IncrementEvent(const std::string& event_name, uint32_t day) override {}
 
  private:
-  FeatureConfig feature_config_;
-  Event empty_event_;
-
   DISALLOW_COPY_AND_ASSIGN(TestModel);
 };
 
@@ -59,8 +47,8 @@ class NeverConditionValidatorTest : public ::testing::Test {
   NeverConditionValidatorTest() = default;
 
  protected:
-  base::test::ScopedFeatureList scoped_feature_list_;
   TestModel model_;
+  NeverAvailabilityModel availability_model_;
   NeverConditionValidator validator_;
 
  private:
@@ -70,9 +58,14 @@ class NeverConditionValidatorTest : public ::testing::Test {
 }  // namespace
 
 TEST_F(NeverConditionValidatorTest, ShouldNeverMeetConditions) {
-  scoped_feature_list_.InitWithFeatures({kTestFeatureFoo, kTestFeatureBar}, {});
-  EXPECT_FALSE(validator_.MeetsConditions(kTestFeatureFoo, model_));
-  EXPECT_FALSE(validator_.MeetsConditions(kTestFeatureBar, model_));
+  EXPECT_FALSE(validator_
+                   .MeetsConditions(kTestFeatureFoo, FeatureConfig(), model_,
+                                    availability_model_, 0u)
+                   .NoErrors());
+  EXPECT_FALSE(validator_
+                   .MeetsConditions(kTestFeatureBar, FeatureConfig(), model_,
+                                    availability_model_, 0u)
+                   .NoErrors());
 }
 
 }  // namespace feature_engagement_tracker

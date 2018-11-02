@@ -5,25 +5,29 @@
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
 
 #include "base/feature_list.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "components/browser_sync/profile_sync_service.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/password_protection/password_protection_request.h"
+#include "components/safe_browsing_db/database_manager.h"
 
 using content::BrowserThread;
 
 namespace safe_browsing {
 
 namespace {
+
 // The number of user gestures we trace back for login event attribution.
 const int kPasswordEventAttributionUserGestureLimit = 2;
-}
 
-const base::Feature kPasswordProtectionPingOnly{
-    "PasswordProtectionPingOnly", base::FEATURE_DISABLED_BY_DEFAULT};
+}  // namespace
 
 ChromePasswordProtectionService::ChromePasswordProtectionService(
     SafeBrowsingService* sb_service,
@@ -41,9 +45,12 @@ ChromePasswordProtectionService::ChromePasswordProtectionService(
 }
 
 ChromePasswordProtectionService::~ChromePasswordProtectionService() {
-  UMA_HISTOGRAM_COUNTS_1000(
-      "PasswordProtection.NumberOfCachedVerdictBeforeShutdown",
-      GetStoredVerdictCount());
+  if (content_settings()) {
+    CleanUpExpiredVerdicts();
+    UMA_HISTOGRAM_COUNTS_1000(
+        "PasswordProtection.NumberOfCachedVerdictBeforeShutdown",
+        GetStoredVerdictCount());
+  }
 }
 
 void ChromePasswordProtectionService::FillReferrerChain(
@@ -72,8 +79,50 @@ bool ChromePasswordProtectionService::IsIncognito() {
   return profile_->IsOffTheRecord();
 }
 
-bool ChromePasswordProtectionService::IsPingingEnabled() {
-  return base::FeatureList::IsEnabled(kPasswordProtectionPingOnly);
+bool ChromePasswordProtectionService::IsPingingEnabled(
+    const base::Feature& feature,
+    RequestOutcome* reason) {
+  DCHECK(feature.name == kProtectedPasswordEntryPinging.name ||
+         feature.name == kPasswordFieldOnFocusPinging.name);
+  if (!base::FeatureList::IsEnabled(feature)) {
+    *reason = DISABLED_DUE_TO_FEATURE_DISABLED;
+    return false;
+  }
+
+  bool allowed_incognito =
+      base::GetFieldTrialParamByFeatureAsBool(feature, "incognito", false);
+  if (IsIncognito() && !allowed_incognito) {
+    *reason = DISABLED_DUE_TO_INCOGNITO;
+    return false;
+  }
+
+  bool allowed_all_population =
+      base::GetFieldTrialParamByFeatureAsBool(feature, "all_population", false);
+  if (!allowed_all_population) {
+    bool allowed_extended_reporting = base::GetFieldTrialParamByFeatureAsBool(
+        feature, "extended_reporting", false);
+    if (IsExtendedReporting() && allowed_extended_reporting)
+      return true;  // Ping enabled because this user opted in extended
+                    // reporting.
+
+    bool allowed_history_sync =
+        base::GetFieldTrialParamByFeatureAsBool(feature, "history_sync", false);
+    if (IsHistorySyncEnabled() && allowed_history_sync)
+      return true;
+
+    *reason = DISABLED_DUE_TO_USER_POPULATION;
+  }
+
+  return allowed_all_population;
 }
 
+bool ChromePasswordProtectionService::IsHistorySyncEnabled() {
+  browser_sync::ProfileSyncService* sync =
+      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
+  return sync && sync->IsSyncActive() && !sync->IsLocalSyncEnabled() &&
+         sync->GetActiveDataTypes().Has(syncer::HISTORY_DELETE_DIRECTIVES);
+}
+
+ChromePasswordProtectionService::ChromePasswordProtectionService()
+    : PasswordProtectionService(nullptr, nullptr, nullptr, nullptr) {}
 }  // namespace safe_browsing

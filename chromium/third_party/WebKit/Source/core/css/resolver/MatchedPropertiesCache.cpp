@@ -49,7 +49,7 @@ void CachedMatchedProperties::Set(const ComputedStyle& style,
 }
 
 void CachedMatchedProperties::Clear() {
-  matched_properties.Clear();
+  matched_properties.clear();
   computed_style = nullptr;
   parent_computed_style = nullptr;
 }
@@ -62,7 +62,7 @@ const CachedMatchedProperties* MatchedPropertiesCache::Find(
     const MatchedPropertiesVector& properties) {
   DCHECK(hash);
 
-  Cache::iterator it = cache_.Find(hash);
+  Cache::iterator it = cache_.find(hash);
   if (it == cache_.end())
     return nullptr;
   CachedMatchedProperties* cache_item = it->value.Get();
@@ -104,7 +104,7 @@ void MatchedPropertiesCache::Clear() {
   for (auto& cache_entry : cache_) {
     cache_entry.value->Clear();
   }
-  cache_.Clear();
+  cache_.clear();
 }
 
 void MatchedPropertiesCache::ClearViewportDependent() {

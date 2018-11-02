@@ -91,7 +91,7 @@ void GenericEventQueue::TimerFired(TimerBase*) {
   DCHECK(!pending_events_.IsEmpty());
 
   HeapVector<Member<Event>> pending_events;
-  pending_events_.Swap(pending_events);
+  pending_events_.swap(pending_events);
 
   for (const auto& pending_event : pending_events) {
     Event* event = pending_event.Get();
@@ -122,7 +122,7 @@ void GenericEventQueue::CancelAllEvents() {
     EventTarget* target = event->target() ? event->target() : owner_.Get();
     probe::AsyncTaskCanceled(target->GetExecutionContext(), event);
   }
-  pending_events_.Clear();
+  pending_events_.clear();
 }
 
 bool GenericEventQueue::HasPendingEvents() const {

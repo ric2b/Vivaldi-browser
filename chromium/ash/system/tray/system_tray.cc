@@ -10,11 +10,11 @@
 
 #include "ash/key_event_watcher.h"
 #include "ash/login_status.h"
+#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
-#include "ash/shelf/wm_shelf.h"
-#include "ash/shelf/wm_shelf_util.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -23,23 +23,26 @@
 #include "ash/system/brightness/tray_brightness.h"
 #include "ash/system/cast/tray_cast.h"
 #include "ash/system/date/tray_system_info.h"
+#include "ash/system/display_scale/tray_scale.h"
 #include "ash/system/enterprise/tray_enterprise.h"
 #include "ash/system/ime/tray_ime_chromeos.h"
 #include "ash/system/media_security/multi_profile_media_tray_item.h"
 #include "ash/system/network/tray_network.h"
 #include "ash/system/network/tray_vpn.h"
+#include "ash/system/night_light/tray_night_light.h"
 #include "ash/system/power/power_status.h"
 #include "ash/system/power/tray_power.h"
+#include "ash/system/rotation/tray_rotation_lock.h"
 #include "ash/system/screen_security/screen_capture_tray_item.h"
 #include "ash/system/screen_security/screen_share_tray_item.h"
 #include "ash/system/session/tray_session_length_limit.h"
 #include "ash/system/supervised/tray_supervised_user.h"
 #include "ash/system/tiles/tray_tiles.h"
 #include "ash/system/tray/system_tray_controller.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_item.h"
 #include "ash/system/tray/tray_bubble_wrapper.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/system/tray/tray_container.h"
 #include "ash/system/tray_accessibility.h"
 #include "ash/system/tray_caps_lock.h"
 #include "ash/system/tray_tracing.h"
@@ -48,7 +51,6 @@
 #include "ash/system/web_notification/web_notification_tray.h"
 #include "ash/wm/container_finder.h"
 #include "ash/wm/widget_finder.h"
-#include "ash/wm_window.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -63,6 +65,7 @@
 #include "ui/gfx/skia_util.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_style.h"
+#include "ui/native_theme/native_theme.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/view.h"
@@ -85,26 +88,15 @@ class PaddingTrayItem : public SystemTrayItem {
 
   // SystemTrayItem:
   views::View* CreateTrayView(LoginStatus status) override {
-    return new PaddingView();
+    auto* padding = new views::View();
+    // The other tray items already have some padding baked in so we have to
+    // subtract that off.
+    constexpr int side = kTrayEdgePadding - kTrayImageItemPadding;
+    padding->SetPreferredSize(gfx::Size(side, side));
+    return padding;
   }
 
  private:
-  class PaddingView : public views::View {
-   public:
-    PaddingView() {}
-    ~PaddingView() override {}
-
-   private:
-    gfx::Size GetPreferredSize() const override {
-      // The other tray items already have some padding baked in so we have to
-      // subtract that off.
-      const int side = kTrayEdgePadding - kTrayImageItemPadding;
-      return gfx::Size(side, side);
-    }
-
-    DISALLOW_COPY_AND_ASSIGN(PaddingView);
-  };
-
   DISALLOW_COPY_AND_ASSIGN(PaddingTrayItem);
 };
 
@@ -126,8 +118,8 @@ class SystemBubbleWrapper {
                 TrayBubbleView::InitParams* init_params,
                 bool is_persistent) {
     DCHECK(anchor);
-    LoginStatus login_status =
-        Shell::Get()->system_tray_delegate()->GetUserLoginStatus();
+    const LoginStatus login_status =
+        Shell::Get()->session_controller()->login_status();
     bubble_->InitView(anchor, login_status, init_params);
     bubble_->bubble_view()->set_anchor_view_insets(anchor_insets);
     bubble_wrapper_.reset(new TrayBubbleWrapper(tray, bubble_->bubble_view()));
@@ -178,9 +170,7 @@ class SystemTray::ActivationObserver
     if (!tray_->HasSystemBubble() || !gained_active)
       return;
 
-    WmWindow* wm_gained_active = WmWindow::Get(gained_active);
-    int container_id =
-        wm::GetContainerForWindow(wm_gained_active)->aura_window()->id();
+    int container_id = wm::GetContainerForWindow(gained_active)->id();
 
     // Don't close the bubble if a popup notification is activated.
     if (container_id == kShellWindowId_StatusContainer)
@@ -209,7 +199,7 @@ class SystemTray::ActivationObserver
 
 // SystemTray
 
-SystemTray::SystemTray(WmShelf* wm_shelf) : TrayBackgroundView(wm_shelf, true) {
+SystemTray::SystemTray(Shelf* shelf) : TrayBackgroundView(shelf) {
   SetInkDropMode(InkDropMode::ON);
 
   // Since user avatar is on the right hand side of System tray of a
@@ -242,23 +232,19 @@ void SystemTray::Shutdown() {
 }
 
 void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
-  // Create user items for each possible user.
-  const int maximum_user_profiles =
-      Shell::Get()->session_controller()->GetMaximumNumberOfLoggedInUsers();
-  for (int i = 0; i < maximum_user_profiles; i++)
-    AddTrayItem(base::MakeUnique<TrayUser>(this, i));
+  AddTrayItem(base::MakeUnique<TrayUser>(this));
 
   // Crucially, this trailing padding has to be inside the user item(s).
   // Otherwise it could be a main axis margin on the tray's box layout.
   AddTrayItem(base::MakeUnique<PaddingTrayItem>());
 
-  tray_accessibility_ = new TrayAccessibility(this);
-  tray_update_ = new TrayUpdate(this);
-
   AddTrayItem(base::MakeUnique<TraySessionLengthLimit>(this));
-  AddTrayItem(base::MakeUnique<TrayEnterprise>(this));
-  AddTrayItem(base::MakeUnique<TraySupervisedUser>(this));
+  tray_enterprise_ = new TrayEnterprise(this);
+  AddTrayItem(base::WrapUnique(tray_enterprise_));
+  tray_supervised_user_ = new TraySupervisedUser(this);
+  AddTrayItem(base::WrapUnique(tray_supervised_user_));
   AddTrayItem(base::MakeUnique<TrayIME>(this));
+  tray_accessibility_ = new TrayAccessibility(this);
   AddTrayItem(base::WrapUnique(tray_accessibility_));
   AddTrayItem(base::MakeUnique<TrayTracing>(this));
   AddTrayItem(
@@ -276,14 +262,19 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
   AddTrayItem(base::MakeUnique<MultiProfileMediaTrayItem>(this));
   tray_audio_ = new TrayAudio(this);
   AddTrayItem(base::WrapUnique(tray_audio_));
+  tray_scale_ = new TrayScale(this);
+  AddTrayItem(base::WrapUnique(tray_scale_));
   AddTrayItem(base::MakeUnique<TrayBrightness>(this));
   AddTrayItem(base::MakeUnique<TrayCapsLock>(this));
-  // TODO(jamescook): Remove this when mus has support for display management
+  if (NightLightController::IsFeatureEnabled()) {
+    tray_night_light_ = new TrayNightLight(this);
+    AddTrayItem(base::WrapUnique(tray_night_light_));
+  }
+  // TODO(jamescook): Remove this when mash has support for display management
   // and we have a DisplayManager equivalent. See http://crbug.com/548429
-  std::unique_ptr<SystemTrayItem> tray_rotation_lock =
-      delegate->CreateRotationLockTrayItem(this);
-  if (tray_rotation_lock)
-    AddTrayItem(std::move(tray_rotation_lock));
+  if (Shell::GetAshConfig() != Config::MASH)
+    AddTrayItem(base::MakeUnique<TrayRotationLock>(this));
+  tray_update_ = new TrayUpdate(this);
   AddTrayItem(base::WrapUnique(tray_update_));
   tray_tiles_ = new TrayTiles(this);
   AddTrayItem(base::WrapUnique(tray_tiles_));
@@ -297,15 +288,13 @@ void SystemTray::AddTrayItem(std::unique_ptr<SystemTrayItem> item) {
   SystemTrayItem* item_ptr = item.get();
   items_.push_back(std::move(item));
 
-  SystemTrayDelegate* delegate = Shell::Get()->system_tray_delegate();
-  views::View* tray_item =
-      item_ptr->CreateTrayView(delegate->GetUserLoginStatus());
-  item_ptr->UpdateAfterShelfAlignmentChange(shelf_alignment());
+  views::View* tray_item = item_ptr->CreateTrayView(
+      Shell::Get()->session_controller()->login_status());
+  item_ptr->UpdateAfterShelfAlignmentChange();
 
   if (tray_item) {
     tray_container()->AddChildViewAt(tray_item, 0);
     PreferredSizeChanged();
-    tray_item_map_[item_ptr] = tray_item;
   }
 }
 
@@ -371,18 +360,13 @@ void SystemTray::UpdateAfterLoginStatusChange(LoginStatus login_status) {
   for (const auto& item : items_)
     item->UpdateAfterLoginStatusChange(login_status);
 
-  // Items default to SHELF_ALIGNMENT_BOTTOM. Update them if the initial
-  // position of the shelf differs.
-  if (!IsHorizontalAlignment(shelf_alignment()))
-    UpdateAfterShelfAlignmentChange(shelf_alignment());
-
   SetVisible(true);
   PreferredSizeChanged();
 }
 
-void SystemTray::UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) {
+void SystemTray::UpdateItemsAfterShelfAlignmentChange() {
   for (const auto& item : items_)
-    item->UpdateAfterShelfAlignmentChange(alignment);
+    item->UpdateAfterShelfAlignmentChange();
 }
 
 bool SystemTray::ShouldShowShelf() const {
@@ -443,13 +427,8 @@ void SystemTray::ShowItems(const std::vector<SystemTrayItem*>& items,
                            BubbleCreationType creation_type,
                            bool persistent) {
   // No system tray bubbles in kiosk mode.
-  SystemTrayDelegate* system_tray_delegate =
-      Shell::Get()->system_tray_delegate();
-  if (system_tray_delegate->GetUserLoginStatus() == LoginStatus::KIOSK_APP ||
-      system_tray_delegate->GetUserLoginStatus() ==
-          LoginStatus::ARC_KIOSK_APP) {
+  if (Shell::Get()->session_controller()->IsKioskSession())
     return;
-  }
 
   // Destroy any existing bubble and create a new one.
   SystemTrayBubble::BubbleType bubble_type =
@@ -486,7 +465,6 @@ void SystemTray::ShowItems(const std::vector<SystemTrayItem*>& items,
       // This is the case where a volume control or brightness control bubble
       // is created.
       init_params.max_height = default_bubble_height_;
-      init_params.bg_color = kBackgroundColor;
     } else {
       init_params.bg_color = kHeaderBackgroundColor;
     }
@@ -551,11 +529,9 @@ base::string16 SystemTray::GetAccessibleTimeString(
                                                     base::kKeepAmPm);
 }
 
-void SystemTray::SetShelfAlignment(ShelfAlignment alignment) {
-  if (alignment == shelf_alignment())
-    return;
-  TrayBackgroundView::SetShelfAlignment(alignment);
-  UpdateAfterShelfAlignmentChange(alignment);
+void SystemTray::UpdateAfterShelfAlignmentChange() {
+  TrayBackgroundView::UpdateAfterShelfAlignmentChange();
+  UpdateItemsAfterShelfAlignmentChange();
   // Destroy any existing bubble so that it is rebuilt correctly.
   CloseSystemBubbleAndDeactivateSystemTray();
   // Rebuild any notification bubble.
@@ -612,8 +588,7 @@ void SystemTray::OnBeforeBubbleWidgetInit(
     views::Widget* bubble_widget,
     views::Widget::InitParams* params) const {
   // Place the bubble in the same root window as |anchor_widget|.
-  WmWindow::Get(anchor_widget->GetNativeWindow())
-      ->GetRootWindowController()
+  RootWindowController::ForWindow(anchor_widget->GetNativeWindow())
       ->ConfigureWidgetInitParamsForContainer(
           bubble_widget, kShellWindowId_SettingBubbleContainer, params);
 }
@@ -622,18 +597,20 @@ void SystemTray::HideBubble(const TrayBubbleView* bubble_view) {
   HideBubbleWithView(bubble_view);
 }
 
-views::View* SystemTray::GetTrayItemViewForTest(SystemTrayItem* item) {
-  std::map<SystemTrayItem*, views::View*>::iterator it =
-      tray_item_map_.find(item);
-  return it == tray_item_map_.end() ? NULL : it->second;
-}
-
 TrayCast* SystemTray::GetTrayCastForTesting() const {
   return tray_cast_;
 }
 
+TrayEnterprise* SystemTray::GetTrayEnterpriseForTesting() const {
+  return tray_enterprise_;
+}
+
 TrayNetwork* SystemTray::GetTrayNetworkForTesting() const {
   return tray_network_;
+}
+
+TraySupervisedUser* SystemTray::GetTraySupervisedUserForTesting() const {
+  return tray_supervised_user_;
 }
 
 TraySystemInfo* SystemTray::GetTraySystemInfoForTesting() const {

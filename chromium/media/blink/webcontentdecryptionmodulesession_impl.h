@@ -51,7 +51,7 @@ class WebContentDecryptionModuleSessionImpl
   void Remove(blink::WebContentDecryptionModuleResult result) override;
 
   // Callbacks.
-  void OnSessionMessage(ContentDecryptionModule::MessageType message_type,
+  void OnSessionMessage(CdmMessageType message_type,
                         const std::vector<uint8_t>& message);
   void OnSessionKeysChange(bool has_additional_usable_key,
                            CdmKeysInfo keys_info);
@@ -83,6 +83,9 @@ class WebContentDecryptionModuleSessionImpl
   // close event has been received or not.
   bool has_close_been_called_;
   bool is_closed_;
+
+  // Keep track of whether this is a persistent session or not.
+  bool is_persistent_session_;
 
   base::ThreadChecker thread_checker_;
   // Since promises will live until they are fired, use a weak reference when

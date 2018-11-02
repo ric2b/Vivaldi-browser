@@ -50,3 +50,9 @@ config("disable_new_dtags") {
     ldflags = [ "-Wl,--disable-new-dtags" ]
   }
 }
+
+config("linux_386_linking") {
+  if (is_linux && current_cpu == "x86") {
+    ldflags = [ "-z", "notext", ]
+  }
+}

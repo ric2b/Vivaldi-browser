@@ -59,7 +59,16 @@ class ProfileListViewController : public PaymentRequestSheetController {
 
   virtual void SelectProfile(autofill::AutofillProfile* profile) = 0;
 
+  // Shows an editor for modifying |profile|, or for creating a new profile
+  // if |profile| is null.
+  virtual void ShowEditor(autofill::AutofillProfile* profile) = 0;
+
   virtual autofill::AutofillProfile* GetSelectedProfile() = 0;
+
+  virtual bool IsValidProfile(const autofill::AutofillProfile& profile) = 0;
+
+  // Whether |profile| should be displayed in an enabled state and selectable.
+  virtual bool IsEnabled(autofill::AutofillProfile* profile);
 
  protected:
   // Does not take ownership of the arguments, which should outlive this object.
@@ -73,6 +82,10 @@ class ProfileListViewController : public PaymentRequestSheetController {
 
   virtual DialogViewID GetDialogViewId() = 0;
 
+  // Subclasses may choose to provide a header view to go on top of the item
+  // list view.
+  virtual std::unique_ptr<views::View> CreateHeaderView();
+
   void PopulateList();
 
   // PaymentRequestSheetController:
@@ -82,7 +95,6 @@ class ProfileListViewController : public PaymentRequestSheetController {
   virtual int GetSecondaryButtonTextId() = 0;
   virtual int GetSecondaryButtonTag() = 0;
   virtual int GetSecondaryButtonViewId() = 0;
-  virtual void OnSecondaryButtonPressed() = 0;
 
  private:
   std::unique_ptr<views::Button> CreateRow(autofill::AutofillProfile* profile);

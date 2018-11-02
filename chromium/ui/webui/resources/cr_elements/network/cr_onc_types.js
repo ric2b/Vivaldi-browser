@@ -22,10 +22,10 @@
  * @type {{
  *   OncTypeCellular: string,
  *   OncTypeEthernet: string,
+ *   OncTypeTether: string,
  *   OncTypeVPN: string,
  *   OncTypeWiFi: string,
  *   OncTypeWiMAX: string,
- *   networkDisabled: string,
  *   networkListItemConnected: string,
  *   networkListItemConnecting: string,
  *   networkListItemConnectingTo: string,
@@ -71,6 +71,9 @@ CrOnc.APNProperties;
 /** @typedef {chrome.networkingPrivate.CellularSimState} */
 CrOnc.CellularSimState;
 
+/** @typedef {chrome.networkingPrivate.DeviceStateProperties} */
+CrOnc.DeviceStateProperties;
+
 /** @typedef {chrome.networkingPrivate.IPConfigProperties} */
 CrOnc.IPConfigProperties;
 
@@ -107,6 +110,9 @@ CrOnc.ActivationState = chrome.networkingPrivate.ActivationStateType;
 CrOnc.ConnectionState = chrome.networkingPrivate.ConnectionStateType;
 
 /** @enum {string} */
+CrOnc.DeviceState = chrome.networkingPrivate.DeviceStateType;
+
+/** @enum {string} */
 CrOnc.IPConfigType = chrome.networkingPrivate.IPConfigType;
 
 /** @enum {string} */
@@ -119,6 +125,14 @@ CrOnc.Type = chrome.networkingPrivate.NetworkType;
 CrOnc.IPType = {
   IPV4: 'IPv4',
   IPV6: 'IPv6',
+};
+
+/** @enum {string} */
+CrOnc.EAPType = {
+  LEAP: 'LEAP',
+  PEAP: 'PEAP',
+  EAP_TLS: 'EAP-TLS',
+  EAP_TTLS: 'EAP-TTLS',
 };
 
 /** @enum {string} */
@@ -212,7 +226,7 @@ CrOnc.getActiveValue = function(property) {
 };
 
 /**
- * Return the acitve value for a managed or unmanaged string property.
+ * Return the active value for a managed or unmanaged string property.
  * @param {!CrOnc.ManagedProperty|string|undefined} property
  * @return {string}
  */
@@ -309,6 +323,8 @@ CrOnc.getSignalStrength = function(properties) {
   var type = properties.Type;
   if (type == CrOnc.Type.CELLULAR && properties.Cellular)
     return properties.Cellular.SignalStrength || 0;
+  if (type == CrOnc.Type.TETHER && properties.Tether)
+    return properties.Tether.SignalStrength || 0;
   if (type == CrOnc.Type.WI_FI && properties.WiFi)
     return properties.WiFi.SignalStrength || 0;
   if (type == CrOnc.Type.WI_MAX && properties.WiMAX)
@@ -553,4 +569,31 @@ CrOnc.getRoutingPrefixAsLength = function(netmask) {
  */
 CrOnc.proxyMatches = function(a, b) {
   return a.Host == b.Host && a.Port == b.Port;
+};
+
+/**
+ * @param {!CrOnc.NetworkProperties|!CrOnc.NetworkStateProperties|undefined}
+ *     networkProperties The ONC network properties or state properties.
+ * @return {boolean}
+ */
+CrOnc.shouldShowTetherDialogBeforeConnection = function(networkProperties) {
+  // Only show for Tether networks.
+  if (networkProperties.Type != CrOnc.Type.TETHER)
+    return false;
+
+  // Show if there are no Tether properties or if there are Tether properties
+  // and they indicate that a connection has not yet occurred to this host.
+  return !networkProperties.Tether ||
+      !networkProperties.Tether.HasConnectedToHost;
+};
+
+/**
+ * Returns a valid CrOnc.Type, or undefined.
+ * @param {string} typeStr
+ * @return {!CrOnc.Type|undefined}
+ */
+CrOnc.getValidType = function(typeStr) {
+  if (Object.values(CrOnc.Type).indexOf(typeStr) >= 0)
+    return /** @type {!CrOnc.Type} */ (typeStr);
+  return undefined;
 };

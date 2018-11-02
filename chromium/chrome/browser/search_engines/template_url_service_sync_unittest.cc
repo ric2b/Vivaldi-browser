@@ -442,8 +442,9 @@ TEST_F(TemplateURLServiceSyncTest, GetAllSyncDataWithSearchOverrideExtension) {
   std::unique_ptr<TemplateURLData> extension =
       GenerateDummyTemplateURLData("extension");
   auto ext_dse = base::MakeUnique<TemplateURL>(
-      *extension, TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION);
-  test_util_a_->AddExtensionControlledTURL(std::move(ext_dse), "ext", true);
+      *extension, TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION, "ext", Time(),
+      true);
+  test_util_a_->AddExtensionControlledTURL(std::move(ext_dse));
 
   const TemplateURL* ext_turl = model()->GetDefaultSearchProvider();
   EXPECT_TRUE(model()->IsExtensionControlledDefaultSearch());
@@ -1759,8 +1760,9 @@ TEST_F(TemplateURLServiceSyncTest, SyncWithExtensionDefaultSearch) {
   std::unique_ptr<TemplateURLData> extension =
       GenerateDummyTemplateURLData("extensiondefault");
   auto ext_dse = base::MakeUnique<TemplateURL>(
-      *extension, TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION);
-  test_util_a_->AddExtensionControlledTURL(std::move(ext_dse), "ext", true);
+      *extension, TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION, "ext", Time(),
+      true);
+  test_util_a_->AddExtensionControlledTURL(std::move(ext_dse));
 
   const TemplateURL* dsp_turl = model()->GetDefaultSearchProvider();
   EXPECT_TRUE(model()->IsExtensionControlledDefaultSearch());
@@ -1811,9 +1813,10 @@ TEST_F(TemplateURLServiceSyncTest, ExtensionAndNormalEngineConflict) {
   std::unique_ptr<TemplateURLData> extension =
       GenerateDummyTemplateURLData("common_keyword");
   auto ext_dse = base::MakeUnique<TemplateURL>(
-      *extension, TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION);
+      *extension, TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION, "ext", Time(),
+      true);
   const TemplateURL* extension_turl =
-      test_util_a_->AddExtensionControlledTURL(std::move(ext_dse), "ext", true);
+      test_util_a_->AddExtensionControlledTURL(std::move(ext_dse));
   EXPECT_TRUE(model()->IsExtensionControlledDefaultSearch());
   EXPECT_EQ(extension_turl, model()->GetTemplateURLForKeyword(kCommonKeyword));
 
@@ -2420,11 +2423,11 @@ TEST_F(TemplateURLServiceSyncTest, MergeConflictingPrepopulatedEngine) {
       syncer::SEARCH_ENGINES, list, PassProcessor(),
       CreateAndPassSyncErrorFactory());
 
-  result_turl = model()->GetDefaultSearchProvider();
-  EXPECT_TRUE(result_turl);
-  EXPECT_EQ(ASCIIToUTF16("new_kw"), result_turl->keyword());
-  EXPECT_EQ(ASCIIToUTF16("my name"), result_turl->short_name());
-  EXPECT_EQ(default_turl->url(), result_turl->url());
+  const TemplateURL* final_turl = model()->GetDefaultSearchProvider();
+  EXPECT_TRUE(final_turl);
+  EXPECT_EQ(ASCIIToUTF16("new_kw"), final_turl->keyword());
+  EXPECT_EQ(ASCIIToUTF16("my name"), final_turl->short_name());
+  EXPECT_EQ(default_turl->url(), final_turl->url());
 }
 
 TEST_F(TemplateURLServiceSyncTest, MergeNonEditedPrepopulatedEngine) {

@@ -796,31 +796,26 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
     int request_id =
         version_->StartRequest(ServiceWorkerMetrics::EventType::INSTALL,
                                CreateReceiver(BrowserThread::UI, done, result));
-    version_
-        ->RegisterRequestCallback<ServiceWorkerHostMsg_InstallEventFinished>(
-            request_id, base::Bind(&self::ReceiveInstallEventOnIOThread,
-                                   base::Unretained(this), done, result));
-    version_->DispatchEvent({request_id},
-                            ServiceWorkerMsg_InstallEvent(request_id));
+    mojom::ServiceWorkerInstallEventMethodsAssociatedPtrInfo ptr_info;
+    mojo::MakeRequest(&ptr_info);
+    version_->event_dispatcher()->DispatchInstallEvent(
+        std::move(ptr_info),
+        base::Bind(&self::ReceiveInstallEventOnIOThread, base::Unretained(this),
+                   done, result, request_id));
   }
 
   void ReceiveInstallEventOnIOThread(const base::Closure& done,
                                      ServiceWorkerStatusCode* out_result,
                                      int request_id,
-                                     blink::WebServiceWorkerEventResult result,
+                                     ServiceWorkerStatusCode status,
                                      bool has_fetch_handler,
                                      base::Time dispatch_event_time) {
-    version_->FinishRequest(
-        request_id, result == blink::kWebServiceWorkerEventResultCompleted,
-        dispatch_event_time);
+    version_->FinishRequest(request_id, status == SERVICE_WORKER_OK,
+                            dispatch_event_time);
     version_->set_fetch_handler_existence(
         has_fetch_handler
             ? ServiceWorkerVersion::FetchHandlerExistence::EXISTS
             : ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST);
-
-    ServiceWorkerStatusCode status = SERVICE_WORKER_OK;
-    if (result == blink::kWebServiceWorkerEventResultRejected)
-      status = SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED;
 
     *out_result = status;
     if (!done.is_null())
@@ -887,6 +882,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
       ServiceWorkerStatusCode actual_status,
       ServiceWorkerFetchEventResult actual_result,
       const ServiceWorkerResponse& actual_response,
+      blink::mojom::ServiceWorkerStreamHandlePtr /* stream */,
       const scoped_refptr<ServiceWorkerVersion>& worker) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
     ASSERT_TRUE(fetch_dispatcher_);
@@ -962,7 +958,14 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, StartNotFound) {
   StartWorker(SERVICE_WORKER_ERROR_NETWORK);
 }
 
-IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, ReadResourceFailure) {
+#if defined(ANDROID)
+// Flaky failures on Android; see https://crbug.com/720275.
+#define MAYBE_ReadResourceFailure DISABLED_ReadResourceFailure
+#else
+#define MAYBE_ReadResourceFailure ReadResourceFailure
+#endif
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
+                       MAYBE_ReadResourceFailure) {
   StartServerAndNavigateToSetup();
   // Create a registration.
   RunOnIOThread(base::Bind(&self::SetUpRegistrationOnIOThread,
@@ -1328,7 +1331,30 @@ class MockContentBrowserClient : public TestContentBrowserClient {
   bool data_saver_enabled_;
 };
 
+class ServiceWorkerVersionOffMainThreadFetchTest
+    : public ServiceWorkerVersionBrowserTest {
+ public:
+  ~ServiceWorkerVersionOffMainThreadFetchTest() override {}
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(switches::kEnableFeatures,
+                                    features::kOffMainThreadFetch.name);
+  }
+};
+
 IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, FetchWithSaveData) {
+  embedded_test_server()->RegisterRequestHandler(
+      base::Bind(&VerifySaveDataHeaderInRequest));
+  StartServerAndNavigateToSetup();
+  MockContentBrowserClient content_browser_client;
+  content_browser_client.set_data_saver_enabled(true);
+  ContentBrowserClient* old_client =
+      SetBrowserClientForTesting(&content_browser_client);
+  InstallTestHelper("/service_worker/fetch_in_install.js", SERVICE_WORKER_OK);
+  SetBrowserClientForTesting(old_client);
+}
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionOffMainThreadFetchTest,
+                       FetchWithSaveData) {
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&VerifySaveDataHeaderInRequest));
   StartServerAndNavigateToSetup();
@@ -2255,14 +2281,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest,
   EXPECT_EQ(1, GetRequestCount(kPageUrl));
 }
 
-// Flaky on Win/Mac: http://crbug.com/533631
-#if defined(OS_WIN) || defined(OS_MACOSX)
-#define MAYBE_ResponseFromHTTPSServiceWorkerIsMarkedAsSecure DISABLED_ResponseFromHTTPSServiceWorkerIsMarkedAsSecure
-#else
-#define MAYBE_ResponseFromHTTPSServiceWorkerIsMarkedAsSecure ResponseFromHTTPSServiceWorkerIsMarkedAsSecure
-#endif
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
-                       MAYBE_ResponseFromHTTPSServiceWorkerIsMarkedAsSecure) {
+                       ResponseFromHTTPSServiceWorkerIsMarkedAsSecure) {
   StartServerAndNavigateToSetup();
   const char kPageUrl[] = "/service_worker/fetch_event_blob.html";
   const char kWorkerUrl[] = "/service_worker/fetch_event_blob.js";

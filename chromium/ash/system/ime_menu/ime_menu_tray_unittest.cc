@@ -14,6 +14,7 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/status_area_widget_test_helper.h"
 #include "ash/test/test_system_tray_delegate.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -70,9 +71,10 @@ class ImeMenuTrayTest : public test::AshTestBase {
 
       // Tests that the checked IME is the current IME.
       ui::AXNodeData node_data;
-      node_data.state = 0;
       ime.first->GetAccessibleNodeData(&node_data);
-      if (node_data.HasStateFlag(ui::AX_STATE_CHECKED)) {
+      const auto checked_state = static_cast<ui::AXCheckedState>(
+          node_data.GetIntAttribute(ui::AX_ATTR_CHECKED_STATE));
+      if (checked_state == ui::AX_CHECKED_STATE_TRUE) {
         if (ime.second != expected_current_ime.id)
           return false;
       }
@@ -135,17 +137,24 @@ TEST_F(ImeMenuTrayTest, TrayLabelTest) {
 
 // Tests that IME menu tray changes background color when tapped/clicked. And
 // tests that the background color becomes 'inactive' when disabling the IME
-// menu feature.
+// menu feature. Also makes sure that the shelf won't autohide as long as the
+// IME menu is open.
 TEST_F(ImeMenuTrayTest, PerformAction) {
   Shell::Get()->system_tray_notifier()->NotifyRefreshIMEMenu(true);
   ASSERT_TRUE(IsVisible());
   ASSERT_FALSE(IsTrayBackgroundActive());
+  StatusAreaWidget* status = StatusAreaWidgetTestHelper::GetStatusAreaWidget();
+  EXPECT_FALSE(status->ShouldShowShelf());
 
   ui::GestureEvent tap(0, 0, 0, base::TimeTicks(),
                        ui::GestureEventDetails(ui::ET_GESTURE_TAP));
   GetTray()->PerformAction(tap);
   EXPECT_TRUE(IsTrayBackgroundActive());
   EXPECT_TRUE(IsBubbleShown());
+
+  // Auto-hidden shelf would be forced to be visible as long as the bubble is
+  // open.
+  EXPECT_TRUE(status->ShouldShowShelf());
 
   GetTray()->PerformAction(tap);
   EXPECT_FALSE(IsTrayBackgroundActive());
@@ -159,6 +168,7 @@ TEST_F(ImeMenuTrayTest, PerformAction) {
   EXPECT_FALSE(IsVisible());
   EXPECT_FALSE(IsBubbleShown());
   EXPECT_FALSE(IsTrayBackgroundActive());
+  EXPECT_FALSE(status->ShouldShowShelf());
 }
 
 // Tests that IME menu list updates when changing the current IME. This should
@@ -288,7 +298,8 @@ TEST_F(ImeMenuTrayTest, ForceToShowEmojiKeyset) {
 
   // Hides the keyboard.
   GetTray()->OnKeyboardHidden();
-  // The keyboard should still be disabled.
+  // The keyboard should still be disabled, which is a posted task.
+  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(accessibility_delegate->IsVirtualKeyboardEnabled());
 }
 

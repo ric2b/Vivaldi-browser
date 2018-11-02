@@ -10,10 +10,10 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/test/scoped_task_scheduler.h"
+#include "base/test/scoped_task_environment.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/surfaces/compositor_frame_sink_support.h"
 #include "cc/surfaces/surface.h"
@@ -53,6 +53,8 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   void SelectAll() override {}
 };
 
+}  // namespace
+
 class MockCrossProcessFrameConnector : public CrossProcessFrameConnector {
  public:
   MockCrossProcessFrameConnector() : CrossProcessFrameConnector(nullptr) {}
@@ -63,6 +65,10 @@ class MockCrossProcessFrameConnector : public CrossProcessFrameConnector {
     last_surface_info_ = surface_info;
   }
 
+  void SetViewportIntersection(const gfx::Rect& intersection) {
+    viewport_intersection_rect_ = intersection;
+  }
+
   RenderWidgetHostViewBase* GetParentRenderWidgetHostView() override {
     return nullptr;
   }
@@ -70,11 +76,11 @@ class MockCrossProcessFrameConnector : public CrossProcessFrameConnector {
   cc::SurfaceInfo last_surface_info_;
 };
 
-}  // namespace
-
 class RenderWidgetHostViewChildFrameTest : public testing::Test {
  public:
-  RenderWidgetHostViewChildFrameTest() : task_scheduler_(&message_loop_) {}
+  RenderWidgetHostViewChildFrameTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
 
   void SetUp() override {
     browser_context_.reset(new TestBrowserContext);
@@ -115,8 +121,8 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
 
     browser_context_.reset();
 
-    message_loop_.task_runner()->DeleteSoon(FROM_HERE,
-                                            browser_context_.release());
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE,
+                                                    browser_context_.release());
     base::RunLoop().RunUntilIdle();
 #if !defined(OS_ANDROID)
     ImageTransportFactory::Terminate();
@@ -136,10 +142,7 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
   }
 
  protected:
-  base::MessageLoopForUI message_loop_;
-
-  // TaskScheduler is used by RenderWidgetHostImpl constructor.
-  base::test::ScopedTaskScheduler task_scheduler_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
 
   std::unique_ptr<BrowserContext> browser_context_;
   MockRenderWidgetHostDelegate delegate_;
@@ -246,7 +249,7 @@ TEST_F(RenderWidgetHostViewChildFrameTest, FrameEviction) {
 }
 
 // Tests that BeginFrameAcks are forwarded correctly from the
-// SwapCompositorFrame and OnBeginFrameDidNotSwap IPCs through the
+// SwapCompositorFrame and DidNotProduceFrame IPCs through the
 // CompositorFrameSinkSupport.
 TEST_F(RenderWidgetHostViewChildFrameTest, ForwardsBeginFrameAcks) {
   gfx::Size view_size(100, 100);
@@ -281,13 +284,34 @@ TEST_F(RenderWidgetHostViewChildFrameTest, ForwardsBeginFrameAcks) {
         cc::CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, source_id, 6u);
     source.TestOnBeginFrame(args);
 
-    // Explicit ack through OnBeginFrameDidNotSwap is forwarded.
+    // Explicit ack through OnDidNotProduceFrame is forwarded.
     cc::BeginFrameAck ack(source_id, 6, 4, false);
-    view_->OnBeginFrameDidNotSwap(ack);
+    view_->OnDidNotProduceFrame(ack);
     EXPECT_EQ(ack, source.LastAckForObserver(view_->support_.get()));
   }
 
   view_->SetNeedsBeginFrames(false);
+}
+
+// Tests that the viewport intersection rect is dispatched to the RenderWidget
+// whenever screen rects are updated.
+TEST_F(RenderWidgetHostViewChildFrameTest, ViewportIntersectionUpdated) {
+  gfx::Rect intersection_rect(5, 5, 100, 80);
+  test_frame_connector_->SetViewportIntersection(intersection_rect);
+
+  MockRenderProcessHost* process =
+      static_cast<MockRenderProcessHost*>(widget_host_->GetProcess());
+  process->Init();
+
+  widget_host_->Init();
+
+  const IPC::Message* intersection_update =
+      process->sink().GetUniqueMessageMatching(
+          ViewMsg_SetViewportIntersection::ID);
+  ASSERT_TRUE(intersection_update);
+  std::tuple<gfx::Rect> sent_rect;
+  ViewMsg_SetViewportIntersection::Read(intersection_update, &sent_rect);
+  EXPECT_EQ(intersection_rect, std::get<0>(sent_rect));
 }
 
 }  // namespace content

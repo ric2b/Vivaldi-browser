@@ -22,18 +22,23 @@
 #include "content/browser/broadcast_channel/broadcast_channel_provider.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
-#include "content/browser/host_zoom_level_context.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/payments/payment_app_context_impl.h"
 #include "content/browser/push_messaging/push_messaging_context.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
+#include "content/browser/url_loader_factory_getter.h"
 #include "content/common/content_export.h"
+#include "content/common/network_service.mojom.h"
 #include "content/common/storage_partition_service.mojom.h"
 #include "content/public/browser/storage_partition.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "net/cookies/cookie_store.h"
 #include "storage/browser/quota/special_storage_policy.h"
+
+#if !defined(OS_ANDROID)
+#include "content/browser/host_zoom_level_context.h"
+#endif
 
 namespace content {
 
@@ -73,10 +78,37 @@ class CONTENT_EXPORT  StoragePartitionImpl
   IndexedDBContextImpl* GetIndexedDBContext() override;
   CacheStorageContextImpl* GetCacheStorageContext() override;
   ServiceWorkerContextWrapper* GetServiceWorkerContext() override;
+#if !defined(OS_ANDROID)
   HostZoomMap* GetHostZoomMap() override;
   HostZoomLevelContext* GetHostZoomLevelContext() override;
   ZoomLevelDelegate* GetZoomLevelDelegate() override;
+#endif  // !defined(OS_ANDROID)
   PlatformNotificationContextImpl* GetPlatformNotificationContext() override;
+  void ClearDataForOrigin(uint32_t remove_mask,
+                          uint32_t quota_storage_remove_mask,
+                          const GURL& storage_origin,
+                          net::URLRequestContextGetter* request_context_getter,
+                          const base::Closure& callback) override;
+  void ClearData(uint32_t remove_mask,
+                 uint32_t quota_storage_remove_mask,
+                 const GURL& storage_origin,
+                 const OriginMatcherFunction& origin_matcher,
+                 const base::Time begin,
+                 const base::Time end,
+                 const base::Closure& callback) override;
+  void ClearData(uint32_t remove_mask,
+                 uint32_t quota_storage_remove_mask,
+                 const OriginMatcherFunction& origin_matcher,
+                 const CookieMatcherFunction& cookie_matcher,
+                 const base::Time begin,
+                 const base::Time end,
+                 const base::Closure& callback) override;
+  void ClearHttpAndMediaCaches(
+      const base::Time begin,
+      const base::Time end,
+      const base::Callback<bool(const GURL&)>& url_matcher,
+      const base::Closure& callback) override;
+  void Flush() override;
   void ClearBluetoothAllowedDevicesMapForTesting() override;
 
   BackgroundFetchContext* GetBackgroundFetchContext();
@@ -90,34 +122,13 @@ class CONTENT_EXPORT  StoragePartitionImpl
       const url::Origin& origin,
       mojo::InterfaceRequest<mojom::LevelDBWrapper> request) override;
 
-  void ClearDataForOrigin(uint32_t remove_mask,
-                          uint32_t quota_storage_remove_mask,
-                          const GURL& storage_origin,
-                          net::URLRequestContextGetter* request_context_getter,
-                          const base::Closure& callback) override;
-  void ClearData(uint32_t remove_mask,
-                 uint32_t quota_storage_remove_mask,
-                 const GURL& storage_origin,
-                 const OriginMatcherFunction& origin_matcher,
-                 const base::Time begin,
-                 const base::Time end,
-                 const base::Closure& callback) override;
+  // Returns the NetworkContext associated with this storage partition. Only
+  // used when the network service is enabled.
+  mojom::NetworkContext* network_context() { return network_context_.get(); }
 
-  void ClearData(uint32_t remove_mask,
-                 uint32_t quota_storage_remove_mask,
-                 const OriginMatcherFunction& origin_matcher,
-                 const CookieMatcherFunction& cookie_matcher,
-                 const base::Time begin,
-                 const base::Time end,
-                 const base::Closure& callback) override;
-
-  void ClearHttpAndMediaCaches(
-      const base::Time begin,
-      const base::Time end,
-      const base::Callback<bool(const GURL&)>& url_matcher,
-      const base::Closure& callback) override;
-
-  void Flush() override;
+  scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter() {
+    return url_loader_factory_getter_;
+  }
 
   // Can return nullptr while |this| is being destroyed.
   BrowserContext* browser_context() const;
@@ -216,6 +227,7 @@ class CONTENT_EXPORT  StoragePartitionImpl
   base::FilePath partition_path_;
   scoped_refptr<net::URLRequestContextGetter> url_request_context_;
   scoped_refptr<net::URLRequestContextGetter> media_url_request_context_;
+  scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter_;
   scoped_refptr<storage::QuotaManager> quota_manager_;
   scoped_refptr<ChromeAppCacheService> appcache_service_;
   scoped_refptr<storage::FileSystemContext> filesystem_context_;
@@ -226,7 +238,9 @@ class CONTENT_EXPORT  StoragePartitionImpl
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
   scoped_refptr<PushMessagingContext> push_messaging_context_;
   scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy_;
+#if !defined(OS_ANDROID)
   scoped_refptr<HostZoomLevelContext> host_zoom_level_context_;
+#endif  // !defined(OS_ANDROID)
   scoped_refptr<PlatformNotificationContextImpl> platform_notification_context_;
   scoped_refptr<BackgroundFetchContext> background_fetch_context_;
   scoped_refptr<BackgroundSyncContext> background_sync_context_;
@@ -235,6 +249,7 @@ class CONTENT_EXPORT  StoragePartitionImpl
   scoped_refptr<BluetoothAllowedDevicesMap> bluetooth_allowed_devices_map_;
 
   mojo::BindingSet<mojom::StoragePartitionService> bindings_;
+  mojom::NetworkContextPtr network_context_;
 
   // Raw pointer that should always be valid. The BrowserContext owns the
   // StoragePartitionImplMap which then owns StoragePartitionImpl. When the

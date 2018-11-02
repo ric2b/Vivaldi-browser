@@ -26,6 +26,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutAnalyzer.h"
+#include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutPartItem.h"
 #include "core/layout/svg/LayoutSVGText.h"
 #include "core/layout/svg/SVGLayoutSupport.h"
@@ -134,6 +135,13 @@ LayoutUnit LayoutSVGRoot::ComputeReplacedLogicalHeight(
     return ContainingBlock()->AvailableLogicalHeight(
         kIncludeMarginBorderPadding);
 
+  const Length& logical_height = Style()->LogicalHeight();
+  if (IsDocumentElement() && logical_height.IsPercentOrCalc()) {
+    return ValueForLength(
+        logical_height,
+        GetDocument().GetLayoutView()->ViewLogicalHeightForPercentages());
+  }
+
   return LayoutReplaced::ComputeReplacedLogicalHeight(estimated_used_width);
 }
 
@@ -207,7 +215,7 @@ void LayoutSVGRoot::UpdateLayout() {
     AddContentsVisualOverflow(EnclosingLayoutRect(content_visual_rect));
   }
 
-  UpdateLayerTransformAfterLayout();
+  UpdateAfterLayout();
   has_box_decoration_background_ = IsDocumentElement()
                                        ? StyleRef().HasBoxDecorationBackground()
                                        : HasBoxDecorationBackground();
@@ -232,12 +240,6 @@ LayoutRect LayoutSVGRoot::VisualOverflowRect() const {
   if (!ShouldApplyViewportClip())
     rect.Unite(ContentsVisualOverflowRect());
   return rect;
-}
-
-LayoutRect LayoutSVGRoot::OverflowClipRect(const LayoutPoint& location,
-                                           OverlayScrollbarClipBehavior) const {
-  return LayoutRect(PixelSnappedIntRect(LayoutReplaced::OverflowClipRect(
-      location, kIgnorePlatformOverlayScrollbarSize)));
 }
 
 void LayoutSVGRoot::PaintReplaced(const PaintInfo& paint_info,

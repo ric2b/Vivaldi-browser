@@ -411,11 +411,7 @@ void LayoutBlock::RemoveLeftoverAnonymousBlock(LayoutBlock* child) {
 
 void LayoutBlock::UpdateAfterLayout() {
   InvalidateStickyConstraints();
-
-  // Update our scroll information if we're overflow:auto/scroll/hidden now that
-  // we know if we overflow or not.
-  if (HasOverflowClip())
-    Layer()->GetScrollableArea()->UpdateAfterLayout();
+  LayoutBox::UpdateAfterLayout();
 }
 
 void LayoutBlock::UpdateLayout() {
@@ -452,6 +448,9 @@ bool LayoutBlock::WidthAvailableToChildrenHasChanged() {
   // If we use border-box sizing, have percentage padding, and our parent has
   // changed width then the width available to our children has changed even
   // though our own width has remained the same.
+  // TODO(mstensho): NeedsPreferredWidthsRecalculation() is used here to check
+  // if we have percentage padding, which is rather non-obvious. That method
+  // returns true in other cases as well.
   width_available_to_children_has_changed |=
       Style()->BoxSizing() == EBoxSizing::kBorderBox &&
       NeedsPreferredWidthsRecalculation() &&
@@ -602,11 +601,6 @@ void LayoutBlock::UpdateBlockChildDirtyBitsBeforeLayout(bool relayout_children,
       (height_available_to_children_changed_ &&
        ChangeInAvailableLogicalHeightAffectsChild(this, child))) {
     child.SetChildNeedsLayout(kMarkOnlyThis);
-
-    // If the child has percentage padding or an embedded content box, we also
-    // need to invalidate the childs pref widths.
-    if (child.NeedsPreferredWidthsRecalculation())
-      child.SetPreferredLogicalWidthsDirty(kMarkOnlyThis);
   }
 }
 
@@ -689,8 +683,6 @@ bool LayoutBlock::SimplifiedLayout() {
                                            : ClientLogicalBottom();
     ComputeOverflow(old_client_after_edge, true);
   }
-
-  UpdateLayerTransformAfterLayout();
 
   UpdateAfterLayout();
 
@@ -815,12 +807,6 @@ void LayoutBlock::LayoutPositionedObject(LayoutBox* positioned_object,
       (relayout_children || height_available_to_children_changed_ ||
        NeedsLayoutDueToStaticPosition(positioned_object)))
     layout_scope.SetChildNeedsLayout(positioned_object);
-
-  // If relayoutChildren is set and the child has percentage padding or an
-  // embedded content box, we also need to invalidate the childs pref widths.
-  if (relayout_children &&
-      positioned_object->NeedsPreferredWidthsRecalculation())
-    positioned_object->SetPreferredLogicalWidthsDirty(kMarkOnlyThis);
 
   LayoutUnit logical_top_estimate;
   bool is_paginated = View()->GetLayoutState()->IsPaginated();
@@ -950,7 +936,7 @@ void LayoutBlock::InsertPositionedObject(LayoutBox* o) {
   DCHECK_EQ(o->ContainingBlock(), this);
 
   if (g_positioned_container_map) {
-    auto container_map_it = g_positioned_container_map->Find(o);
+    auto container_map_it = g_positioned_container_map->find(o);
     if (container_map_it != g_positioned_container_map->end()) {
       if (container_map_it->value == this) {
         DCHECK(HasPositionedObjects());
@@ -996,14 +982,9 @@ void LayoutBlock::RemovePositionedObject(LayoutBox* o) {
   }
 }
 
-PaintInvalidationReason LayoutBlock::InvalidatePaintIfNeeded(
-    const PaintInvalidationState& paint_invalidation_state) {
-  return LayoutBox::InvalidatePaintIfNeeded(paint_invalidation_state);
-}
-
-PaintInvalidationReason LayoutBlock::InvalidatePaintIfNeeded(
+PaintInvalidationReason LayoutBlock::InvalidatePaint(
     const PaintInvalidatorContext& context) const {
-  return BlockPaintInvalidator(*this).InvalidatePaintIfNeeded(context);
+  return BlockPaintInvalidator(*this).InvalidatePaint(context);
 }
 
 void LayoutBlock::ClearPreviousVisualRects() {
@@ -1024,8 +1005,6 @@ void LayoutBlock::RemovePositionedObjects(
         (positioned_object->IsDescendantOf(o) && o != positioned_object)) {
       if (containing_block_state == kNewContainingBlock) {
         positioned_object->SetChildNeedsLayout(kMarkOnlyThis);
-        if (positioned_object->NeedsPreferredWidthsRecalculation())
-          positioned_object->SetPreferredLogicalWidthsDirty(kMarkOnlyThis);
 
         // The positioned object changing containing block may change paint
         // invalidation container.
@@ -2060,7 +2039,8 @@ bool LayoutBlock::RecalcOverflowAfterStyleChange() {
   if (ChildNeedsOverflowRecalcAfterStyleChange())
     children_overflow_changed = RecalcChildOverflowAfterStyleChange();
 
-  if (!SelfNeedsOverflowRecalcAfterStyleChange() && !children_overflow_changed)
+  bool self_needs_overflow_recalc = SelfNeedsOverflowRecalcAfterStyleChange();
+  if (!self_needs_overflow_recalc && !children_overflow_changed)
     return false;
 
   ClearSelfNeedsOverflowRecalcAfterStyleChange();
@@ -2077,7 +2057,7 @@ bool LayoutBlock::RecalcOverflowAfterStyleChange() {
   if (HasOverflowClip())
     Layer()->GetScrollableArea()->UpdateAfterOverflowRecalc();
 
-  return !HasOverflowClip();
+  return !HasOverflowClip() || self_needs_overflow_recalc;
 }
 
 // Called when a positioned object moves but doesn't necessarily change size.
@@ -2205,6 +2185,11 @@ LayoutUnit LayoutBlock::AvailableLogicalHeightForPercentageComputation() const {
 
 bool LayoutBlock::HasDefiniteLogicalHeight() const {
   return AvailableLogicalHeightForPercentageComputation() != LayoutUnit(-1);
+}
+
+bool LayoutBlock::NeedsPreferredWidthsRecalculation() const {
+  return (HasRelativeLogicalHeight() && Style()->LogicalWidth().IsAuto()) ||
+         LayoutBox::NeedsPreferredWidthsRecalculation();
 }
 
 }  // namespace blink

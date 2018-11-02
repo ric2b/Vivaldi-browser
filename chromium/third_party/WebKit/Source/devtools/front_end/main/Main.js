@@ -93,7 +93,7 @@ Main.Main = class {
     // Keep this sorted alphabetically: both keys and values.
     Runtime.experiments.register('accessibilityInspection', 'Accessibility Inspection');
     Runtime.experiments.register('applyCustomStylesheet', 'Allow custom UI themes');
-    Runtime.experiments.register('audits2', 'Audits 2.0', true);
+    Runtime.experiments.register('audits2', 'Audits 2.0');
     Runtime.experiments.register('autoAttachToCrossProcessSubframes', 'Auto-attach to cross-process subframes', true);
     Runtime.experiments.register('blackboxJSFramesOnTimeline', 'Blackbox JavaScript frames on Timeline', true);
     Runtime.experiments.register('changesDrawer', 'Changes drawer', true);
@@ -109,6 +109,7 @@ Main.Main = class {
     Runtime.experiments.register('terminalInDrawer', 'Terminal in drawer', true);
 
     // Timeline
+    Runtime.experiments.register('timelineColorByProduct', 'Timeline: color by product', true);
     Runtime.experiments.register('timelineEventInitiators', 'Timeline: event initiators');
     Runtime.experiments.register('timelineFlowEvents', 'Timeline: flow events', true);
     Runtime.experiments.register('timelineInvalidationTracking', 'Timeline: invalidation tracking', true);
@@ -127,17 +128,20 @@ Main.Main = class {
       // Enable experiments for testing.
       if (testPath.indexOf('accessibility/') !== -1)
         Runtime.experiments.enableForTest('accessibilityInspection');
-      if (testPath.indexOf('coverage') !== -1)
-        Runtime.experiments.enableForTest('cssTrackerPanel');
       if (testPath.indexOf('audits2/') !== -1)
         Runtime.experiments.enableForTest('audits2');
+      if (testPath.indexOf('coverage/') !== -1)
+        Runtime.experiments.enableForTest('cssTrackerPanel');
       if (testPath.indexOf('changes/') !== -1)
         Runtime.experiments.enableForTest('changesDrawer');
       if (testPath.indexOf('sass/') !== -1)
         Runtime.experiments.enableForTest('liveSASS');
     }
 
-    Runtime.experiments.setDefaultExperiments([]);
+    Runtime.experiments.setDefaultExperiments([
+      'continueToLocationMarkers', 'autoAttachToCrossProcessSubframes', 'objectPreviews', 'audits2',
+      'networkGroupingRequests', 'timelineColorByProduct'
+    ]);
   }
 
   /**
@@ -149,7 +153,7 @@ Main.Main = class {
     UI.viewManager = new UI.ViewManager();
 
     // Request filesystems early, we won't create connections until callback is fired. Things will happen in parallel.
-    Workspace.isolatedFileSystemManager = new Workspace.IsolatedFileSystemManager();
+    Persistence.isolatedFileSystemManager = new Persistence.IsolatedFileSystemManager();
 
     var themeSetting = Common.settings.createSetting('uiTheme', 'default');
     UI.initializeUIUtils(document, themeSetting);
@@ -169,6 +173,7 @@ Main.Main = class {
     ConsoleModel.consoleModel = new ConsoleModel.ConsoleModel();
     SDK.multitargetNetworkManager = new SDK.MultitargetNetworkManager();
     NetworkLog.networkLog = new NetworkLog.NetworkLog();
+    SDK.domDebuggerManager = new SDK.DOMDebuggerManager();
     SDK.targetManager.addEventListener(
         SDK.TargetManager.Events.SuspendStateChanged, this._onSuspendStateChanged.bind(this));
 
@@ -182,9 +187,9 @@ Main.Main = class {
     Workspace.fileManager = new Workspace.FileManager();
     Workspace.workspace = new Workspace.Workspace();
     Common.formatterWorkerPool = new Common.FormatterWorkerPool();
-    Workspace.fileSystemMapping = new Workspace.FileSystemMapping(Workspace.isolatedFileSystemManager);
+    Persistence.fileSystemMapping = new Persistence.FileSystemMapping(Persistence.isolatedFileSystemManager);
 
-    Main.networkProjectManager = new Bindings.NetworkProjectManager(SDK.targetManager, Workspace.workspace);
+    Bindings.networkProjectManager = new Bindings.NetworkProjectManager(SDK.targetManager, Workspace.workspace);
     Bindings.presentationConsoleMessageHelper = new Bindings.PresentationConsoleMessageHelper(Workspace.workspace);
     Bindings.cssWorkspaceBinding = new Bindings.CSSWorkspaceBinding(SDK.targetManager, Workspace.workspace);
     Bindings.debuggerWorkspaceBinding = new Bindings.DebuggerWorkspaceBinding(SDK.targetManager, Workspace.workspace);
@@ -192,11 +197,10 @@ Main.Main = class {
         new Bindings.BreakpointManager(null, Workspace.workspace, SDK.targetManager, Bindings.debuggerWorkspaceBinding);
     Extensions.extensionServer = new Extensions.ExtensionServer();
 
-    new Persistence.FileSystemWorkspaceBinding(Workspace.isolatedFileSystemManager, Workspace.workspace);
+    new Persistence.FileSystemWorkspaceBinding(Persistence.isolatedFileSystemManager, Workspace.workspace);
     Persistence.persistence =
-        new Persistence.Persistence(Workspace.workspace, Bindings.breakpointManager, Workspace.fileSystemMapping);
+        new Persistence.Persistence(Workspace.workspace, Bindings.breakpointManager, Persistence.fileSystemMapping);
 
-    new Main.OverlayController();
     new Main.ExecutionContextSelector(SDK.targetManager, UI.context);
     Bindings.blackboxManager = new Bindings.BlackboxManager(Bindings.debuggerWorkspaceBinding);
 
@@ -205,14 +209,12 @@ Main.Main = class {
     new Main.NetworkPanelIndicator();
     new Main.SourcesPanelIndicator();
     new Main.BackendSettingsSync();
-    Components.domBreakpointsSidebarPane = new Components.DOMBreakpointsSidebarPane();
 
     UI.actionRegistry = new UI.ActionRegistry();
     UI.shortcutRegistry = new UI.ShortcutRegistry(UI.actionRegistry, document);
     UI.ShortcutsScreen.registerShortcuts();
     this._registerForwardedShortcuts();
     this._registerMessageSinkListener();
-    new Main.Main.InspectorDomainObserver();
 
     self.runtime.extension(Common.AppProvider).instance().then(this._showAppUI.bind(this));
     console.timeEnd('Main._createAppUI');
@@ -401,7 +403,7 @@ Main.Main = class {
    * @param {!Event} event
    */
   _redispatchClipboardEvent(event) {
-    var eventCopy = new CustomEvent('clipboard-' + event.type);
+    var eventCopy = new CustomEvent('clipboard-' + event.type, {bubbles: true});
     eventCopy['original'] = event;
     var document = event.target && event.target.ownerDocument;
     var target = document ? document.deepActiveElement() : null;
@@ -443,41 +445,16 @@ Main.Main = class {
 };
 
 /**
- * @implements {SDK.TargetManager.Observer}
- * @unrestricted
- */
-Main.Main.InspectorDomainObserver = class {
-  constructor() {
-    SDK.targetManager.observeTargets(this, SDK.Target.Capability.Browser);
-  }
-
-  /**
-   * @override
-   * @param {!SDK.Target} target
-   */
-  targetAdded(target) {
-    target.registerInspectorDispatcher(new Main.Main.InspectorDomainDispatcher(target));
-    target.inspectorAgent().enable();
-  }
-
-  /**
-   * @override
-   * @param {!SDK.Target} target
-   */
-  targetRemoved(target) {
-  }
-};
-
-/**
  * @implements {Protocol.InspectorDispatcher}
- * @unrestricted
  */
-Main.Main.InspectorDomainDispatcher = class {
+Main.Main.InspectorModel = class extends SDK.SDKModel {
   /**
    * @param {!SDK.Target} target
    */
   constructor(target) {
-    this._target = target;
+    super(target);
+    target.registerInspectorDispatcher(this);
+    target.inspectorAgent().enable();
   }
 
   /**
@@ -493,11 +470,13 @@ Main.Main.InspectorDomainDispatcher = class {
    * @override
    */
   targetCrashed() {
-    var debuggerModel = this._target.model(SDK.DebuggerModel);
+    var debuggerModel = this.target().model(SDK.DebuggerModel);
     if (debuggerModel)
       Main.TargetCrashedScreen.show(debuggerModel);
   }
 };
+
+SDK.SDKModel.register(Main.Main.InspectorModel, SDK.Target.Capability.Inspector, true);
 
 /**
  * @implements {UI.ActionDelegate}
@@ -749,6 +728,37 @@ Main.Main.MainMenuItem = class {
   }
 };
 
+/**
+ * @implements {UI.ToolbarItem.Provider}
+ */
+Main.Main.NodeIndicator = class {
+  constructor() {
+    var element = createElement('div');
+    var shadowRoot = UI.createShadowRootWithCoreStyles(element, 'main/nodeIcon.css');
+    this._element = shadowRoot.createChild('div', 'node-icon');
+    element.addEventListener('click', () => InspectorFrontendHost.openNodeFrontend(), false);
+    this._button = new UI.ToolbarItem(element);
+    this._button.setTitle(Common.UIString('Open dedicated DevTools for Node.js'));
+    SDK.targetManager.addEventListener(SDK.TargetManager.Events.AvailableNodeTargetsChanged, this._update, this);
+    this._button.setVisible(false);
+    this._update();
+  }
+
+  _update() {
+    this._element.classList.toggle('inactive', !SDK.targetManager.availableNodeTargetsCount());
+    if (SDK.targetManager.availableNodeTargetsCount())
+      this._button.setVisible(true);
+  }
+
+  /**
+   * @override
+   * @return {?UI.ToolbarItem}
+   */
+  item() {
+    return this._button;
+  }
+};
+
 Main.NetworkPanelIndicator = class {
   constructor() {
     // TODO: we should not access network from other modules.
@@ -820,7 +830,8 @@ Main.Main.PauseListener = class {
  */
 Main.Main.InspectedNodeRevealer = class {
   constructor() {
-    SDK.targetManager.addModelListener(SDK.DOMModel, SDK.DOMModel.Events.NodeInspected, this._inspectNode, this);
+    SDK.targetManager.addModelListener(
+        SDK.OverlayModel, SDK.OverlayModel.Events.InspectNodeRequested, this._inspectNode, this);
   }
 
   /**
@@ -933,8 +944,6 @@ Main.BackendSettingsSync = class {
   constructor() {
     this._autoAttachSetting = Common.settings.moduleSetting('autoAttachToCreatedPages');
     this._autoAttachSetting.addChangeListener(this._update, this);
-    this._disableJavascriptSetting = Common.settings.moduleSetting('javaScriptDisabled');
-    this._disableJavascriptSetting.addChangeListener(this._update, this);
     SDK.targetManager.observeTargets(this, SDK.Target.Capability.Browser);
   }
 
@@ -943,7 +952,6 @@ Main.BackendSettingsSync = class {
    */
   _updateTarget(target) {
     target.pageAgent().setAutoAttachToCreatedPages(this._autoAttachSetting.get());
-    target.emulationAgent().setScriptExecutionDisabled(this._disableJavascriptSetting.get());
   }
 
   _update() {
@@ -956,7 +964,6 @@ Main.BackendSettingsSync = class {
    */
   targetAdded(target) {
     this._updateTarget(target);
-    target.renderingAgent().setShowViewportSizeOnResize(true);
   }
 
   /**

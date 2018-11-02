@@ -5,6 +5,7 @@
 #include "core/animation/ElementAnimation.h"
 #include "core/css/PropertyDescriptor.h"
 #include "core/css/PropertyRegistration.h"
+#include "core/page/Page.h"
 #include "platform/wtf/CurrentTime.h"
 #include "public/web/WebScriptSource.h"
 #include "web/WebLocalFrameImpl.h"
@@ -39,7 +40,7 @@ TEST_F(AnimationSimTest, CustomPropertyBaseComputedStyle) {
   LoadURL("https://example.com/");
   main_resource.Complete("<div id=\"target\"></div>");
 
-  Element* target = GetDocument().GetElementById("target");
+  Element* target = GetDocument().getElementById("target");
 
   // CSS.registerProperty({
   //   name: '--x',
@@ -68,7 +69,7 @@ TEST_F(AnimationSimTest, CustomPropertyBaseComputedStyle) {
   keyframes.push_back(keyframe.Release());
   Timing timing;
   timing.iteration_duration = 1;  // Seconds.
-  ElementAnimation::animate(
+  ElementAnimation::animateInternal(
       *target, StringKeyframeEffectModel::Create(keyframes), timing);
 
   // This sets the baseComputedStyle on the animation exit frame.
@@ -84,11 +85,11 @@ TEST_F(AnimationSimTest, CustomPropertyBaseComputedStyle) {
   keyframe->SetCSSPropertyValue("--x", GetDocument().GetPropertyRegistry(),
                                 "100%",
                                 GetDocument().ElementSheet().Contents());
-  keyframes.Clear();
+  keyframes.clear();
   keyframes.push_back(keyframe.Release());
   timing = Timing::Defaults();
   timing.iteration_duration = 1;  // Seconds.
-  ElementAnimation::animate(
+  ElementAnimation::animateInternal(
       *target, StringKeyframeEffectModel::Create(keyframes), timing);
 
   // This (previously) would not clear the existing baseComputedStyle and would

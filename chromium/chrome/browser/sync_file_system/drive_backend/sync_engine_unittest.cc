@@ -10,6 +10,8 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/test/sequenced_worker_pool_owner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/sync_file_system/drive_backend/callback_helper.h"
@@ -43,10 +45,8 @@ class SyncEngineTest : public testing::Test,
 
     scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner =
         base::ThreadTaskRunnerHandle::Get();
-    worker_task_runner_ =
-        worker_pool_owner_.pool()->GetSequencedTaskRunnerWithShutdownBehavior(
-            worker_pool_owner_.pool()->GetSequenceToken(),
-            base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
+    worker_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
+        {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 
     sync_engine_.reset(new drive_backend::SyncEngine(
         ui_task_runner.get(), worker_task_runner_.get(),
@@ -97,11 +97,9 @@ class SyncEngineTest : public testing::Test,
   void PostUpdateServiceState(RemoteServiceState state,
                               const std::string& description) {
     worker_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&FakeSyncWorker::UpdateServiceState,
-                   base::Unretained(fake_sync_worker()),
-                   state,
-                   description));
+        FROM_HERE, base::BindOnce(&FakeSyncWorker::UpdateServiceState,
+                                  base::Unretained(fake_sync_worker()), state,
+                                  description));
     WaitForWorkerTaskRunner();
   }
 

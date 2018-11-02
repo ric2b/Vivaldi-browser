@@ -4,11 +4,11 @@
 
 #include "core/frame/HostsUsingFeatures.h"
 
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/page/Page.h"
+#include "platform/bindings/ScriptState.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -71,8 +71,8 @@ void HostsUsingFeatures::CountName(Feature feature, const String& name) {
 }
 
 void HostsUsingFeatures::Clear() {
-  value_by_name_.Clear();
-  url_and_values_.Clear();
+  value_by_name_.clear();
+  url_and_values_.clear();
 }
 
 void HostsUsingFeatures::DocumentDetached(Document& document) {
@@ -93,7 +93,7 @@ void HostsUsingFeatures::UpdateMeasurementsAndClear() {
   if (!url_and_values_.IsEmpty()) {
     RecordHostToRappor();
     RecordETLDPlus1ToRappor();
-    url_and_values_.Clear();
+    url_and_values_.clear();
   }
   if (!value_by_name_.IsEmpty())
     RecordNamesToRappor();
@@ -142,7 +142,7 @@ void HostsUsingFeatures::RecordNamesToRappor() {
   for (auto& name_and_value : value_by_name_)
     name_and_value.value.RecordNameToRappor(name_and_value.key);
 
-  value_by_name_.Clear();
+  value_by_name_.clear();
 }
 
 void HostsUsingFeatures::Value::Aggregate(HostsUsingFeatures::Value other) {

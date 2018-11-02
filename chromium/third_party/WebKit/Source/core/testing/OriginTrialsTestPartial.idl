@@ -9,7 +9,12 @@ partial interface OriginTrialsTest {
     const unsigned short CONSTANT_PARTIAL = 2;
     readonly attribute boolean normalAttributePartial;
     static readonly attribute boolean staticAttributePartial;
-    boolean methodPartial();
+    boolean normalMethodPartial();
     static boolean staticMethodPartial();
-};
 
+    // These are only available in a secure context.
+    [SecureContext] readonly attribute boolean secureAttributePartial;
+    [SecureContext] static readonly attribute boolean secureStaticAttributePartial;
+    [SecureContext] boolean secureMethodPartial();
+    [SecureContext] static boolean secureStaticMethodPartial();
+};

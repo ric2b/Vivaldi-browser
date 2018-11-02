@@ -54,11 +54,11 @@
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/AutoReset.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 
 namespace blink {
@@ -466,9 +466,9 @@ void HTMLDocumentParser::DiscardSpeculationsAndResumeFrom(
                       ("Parser.DiscardedTokenCount", 1, 100000, 50));
   discarded_token_count_histogram.Count(discarded_token_count);
 
-  speculations_.Clear();
+  speculations_.clear();
   pending_csp_meta_token_ = nullptr;
-  queued_preloads_.Clear();
+  queued_preloads_.clear();
 
   std::unique_ptr<BackgroundHTMLParser::Checkpoint> checkpoint =
       WTF::WrapUnique(new BackgroundHTMLParser::Checkpoint);
@@ -898,6 +898,10 @@ void HTMLDocumentParser::Append(const String& input_source) {
   const SegmentedString source(input_source);
 
   if (GetDocument()->IsPrefetchOnly()) {
+    // Do not prefetch if there is an appcache.
+    if (GetDocument()->Loader()->GetResponse().AppCacheID() != 0)
+      return;
+
     if (!preload_scanner_) {
       preload_scanner_ =
           CreatePreloadScanner(TokenPreloadScanner::ScannerType::kMainDocument);
@@ -985,7 +989,7 @@ void HTMLDocumentParser::EndIfDelayed() {
 }
 
 void HTMLDocumentParser::Finish() {
-  // FIXME: We should ASSERT(!m_parserStopped) here, since it does not makes
+  // FIXME: We should DCHECK(!m_parserStopped) here, since it does not makes
   // sense to call any methods on DocumentParser once it's been stopped.
   // However, FrameLoader::stop calls DocumentParser::finish unconditionally.
 
@@ -1199,7 +1203,7 @@ void HTMLDocumentParser::AppendBytes(const char* data, size_t length) {
 
     std::unique_ptr<Vector<char>> buffer =
         WTF::MakeUnique<Vector<char>>(length);
-    memcpy(buffer->Data(), data, length);
+    memcpy(buffer->data(), data, length);
     TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("blink.debug"),
                  "HTMLDocumentParser::appendBytes", "size", (unsigned)length);
 
@@ -1282,7 +1286,7 @@ void HTMLDocumentParser::FetchQueuedPreloads() {
     EvaluateAndPreloadScriptForDocumentWrite(script_source);
   }
 
-  queued_document_write_scripts_.Clear();
+  queued_document_write_scripts_.clear();
 }
 
 void HTMLDocumentParser::EvaluateAndPreloadScriptForDocumentWrite(

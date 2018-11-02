@@ -15,9 +15,8 @@
 #include "ash/shell/context_menu.h"
 #include "ash/shell/example_factory.h"
 #include "ash/shell/toplevel_window.h"
-#include "ash/system/tray/default_system_tray_delegate.h"
 #include "ash/test/test_keyboard_ui.h"
-#include "ash/test/test_shelf_delegate.h"
+#include "ash/test/test_system_tray_delegate.h"
 #include "ash/wm/window_state.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
@@ -52,6 +51,9 @@ class PaletteDelegateImpl : public PaletteDelegate {
       done.Run();
   }
   void CancelPartialScreenshot() override {}
+  bool IsMetalayerSupported() override { return false; }
+  void ShowMetalayer(const base::Closure& closed) override {}
+  void HideMetalayer() override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PaletteDelegateImpl);
@@ -122,12 +124,12 @@ keyboard::KeyboardUI* ShellDelegateImpl::CreateKeyboardUI() {
 
 void ShellDelegateImpl::OpenUrlFromArc(const GURL& url) {}
 
-ShelfDelegate* ShellDelegateImpl::CreateShelfDelegate(ShelfModel* model) {
-  return new test::TestShelfDelegate();
-}
+void ShellDelegateImpl::ShelfInit() {}
+
+void ShellDelegateImpl::ShelfShutdown() {}
 
 SystemTrayDelegate* ShellDelegateImpl::CreateSystemTrayDelegate() {
-  return new DefaultSystemTrayDelegate;
+  return new test::TestSystemTrayDelegate;
 }
 
 std::unique_ptr<WallpaperDelegate>
@@ -147,9 +149,9 @@ std::unique_ptr<PaletteDelegate> ShellDelegateImpl::CreatePaletteDelegate() {
   return base::MakeUnique<PaletteDelegateImpl>();
 }
 
-ui::MenuModel* ShellDelegateImpl::CreateContextMenu(WmShelf* wm_shelf,
+ui::MenuModel* ShellDelegateImpl::CreateContextMenu(Shelf* shelf,
                                                     const ShelfItem* item) {
-  return new ContextMenu(wm_shelf);
+  return new ContextMenu(shelf);
 }
 
 GPUSupport* ShellDelegateImpl::CreateGPUSupport() {
@@ -163,6 +165,10 @@ base::string16 ShellDelegateImpl::GetProductName() const {
 
 gfx::Image ShellDelegateImpl::GetDeprecatedAcceleratorImage() const {
   return gfx::Image();
+}
+
+PrefService* ShellDelegateImpl::GetActiveUserPrefService() const {
+  return nullptr;
 }
 
 bool ShellDelegateImpl::IsTouchscreenEnabledInPrefs(

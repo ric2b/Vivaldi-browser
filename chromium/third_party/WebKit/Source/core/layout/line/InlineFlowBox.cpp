@@ -95,7 +95,6 @@ void InlineFlowBox::AddToLine(InlineBox* child) {
   DCHECK(!child->Parent());
   DCHECK(!child->NextOnLine());
   DCHECK(!child->PrevOnLine());
-  CheckConsistency();
 
   child->SetParent(this);
   if (!first_child_) {
@@ -195,13 +194,9 @@ void InlineFlowBox::AddToLine(InlineBox* child) {
         !ToInlineFlowBox(child)->KnownToHaveNoOverflow())
       ClearKnownToHaveNoOverflow();
   }
-
-  CheckConsistency();
 }
 
 void InlineFlowBox::RemoveChild(InlineBox* child, MarkLineBoxes mark_dirty) {
-  CheckConsistency();
-
   if (mark_dirty == kMarkLineBoxesDirty && !IsDirty())
     DirtyLineBoxes();
 
@@ -217,8 +212,6 @@ void InlineFlowBox::RemoveChild(InlineBox* child, MarkLineBoxes mark_dirty) {
     child->PrevOnLine()->SetNextOnLine(child->NextOnLine());
 
   child->SetParent(nullptr);
-
-  CheckConsistency();
 }
 
 void InlineFlowBox::DeleteLine() {
@@ -339,7 +332,7 @@ void InlineFlowBox::DetermineSpacingForFlowBoxes(
     if (!line_box_list->FirstLineBox()->IsConstructed() &&
         !GetLineLayoutItem().IsInlineElementContinuation()) {
       if (GetLineLayoutItem().Style()->BoxDecorationBreak() ==
-          kBoxDecorationBreakClone)
+          EBoxDecorationBreak::kClone)
         include_left_edge = include_right_edge = true;
       else if (ltr && line_box_list->FirstLineBox() == this)
         include_left_edge = true;
@@ -368,7 +361,7 @@ void InlineFlowBox::DetermineSpacingForFlowBoxes(
       // (4) The decoration break is set to clone therefore there will be
       //     borders on every sides.
       if (GetLineLayoutItem().Style()->BoxDecorationBreak() ==
-          kBoxDecorationBreakClone) {
+          EBoxDecorationBreak::kClone) {
         include_left_edge = include_right_edge = true;
       } else if (ltr) {
         if (!NextLineBox() && ((last_line || is_last_object_on_line) &&
@@ -898,58 +891,38 @@ void InlineFlowBox::PlaceBoxesInBlockDirection(
   }
 }
 
-LayoutUnit InlineFlowBox::MaxLogicalBottomForUnderline(
-    LineLayoutItem decoration_object,
-    LayoutUnit max_logical_bottom) const {
+LayoutUnit InlineFlowBox::FarthestPositionForUnderline(
+    LineLayoutItem decorating_box,
+    LineVerticalPositionType position_type,
+    FontBaseline baseline_type,
+    LayoutUnit farthest) const {
   for (InlineBox* curr = FirstChild(); curr; curr = curr->NextOnLine()) {
     if (curr->GetLineLayoutItem().IsOutOfFlowPositioned())
       continue;  // Positioned placeholders don't affect calculations.
 
     // If the text decoration isn't in effect on the child, it must be outside
     // of |decorationObject|.
-    if (!(curr->LineStyleRef().TextDecorationsInEffect() &
-          kTextDecorationUnderline))
+    if (!EnumHasFlags(curr->LineStyleRef().TextDecorationsInEffect(),
+                      TextDecoration::kUnderline))
       continue;
 
-    if (decoration_object && decoration_object.IsLayoutInline() &&
-        !IsAncestorAndWithinBlock(decoration_object, curr->GetLineLayoutItem()))
-      continue;
-
-    if (curr->IsInlineFlowBox()) {
-      max_logical_bottom = ToInlineFlowBox(curr)->MaxLogicalBottomForUnderline(
-          decoration_object, max_logical_bottom);
-    } else if (curr->IsInlineTextBox()) {
-      max_logical_bottom = std::max(max_logical_bottom, curr->LogicalBottom());
-    }
-  }
-  return max_logical_bottom;
-}
-
-LayoutUnit InlineFlowBox::MinLogicalTopForUnderline(
-    LineLayoutItem decoration_object,
-    LayoutUnit min_logical_top) const {
-  for (InlineBox* curr = FirstChild(); curr; curr = curr->NextOnLine()) {
-    if (curr->GetLineLayoutItem().IsOutOfFlowPositioned())
-      continue;  // Positioned placeholders don't affect calculations.
-
-    // If the text decoration isn't in effect on the child, it must be outside
-    // of |decorationObject|.
-    if (!(curr->LineStyleRef().TextDecorationsInEffect() &
-          kTextDecorationUnderline))
-      continue;
-
-    if (decoration_object && decoration_object.IsLayoutInline() &&
-        !IsAncestorAndWithinBlock(decoration_object, curr->GetLineLayoutItem()))
+    if (decorating_box && decorating_box.IsLayoutInline() &&
+        !IsAncestorAndWithinBlock(decorating_box, curr->GetLineLayoutItem()))
       continue;
 
     if (curr->IsInlineFlowBox()) {
-      min_logical_top = ToInlineFlowBox(curr)->MinLogicalTopForUnderline(
-          decoration_object, min_logical_top);
+      farthest = ToInlineFlowBox(curr)->FarthestPositionForUnderline(
+          decorating_box, position_type, baseline_type, farthest);
     } else if (curr->IsInlineTextBox()) {
-      min_logical_top = std::min(min_logical_top, curr->LogicalTop());
+      LayoutUnit position =
+          ToInlineTextBox(curr)->VerticalPosition(position_type, baseline_type);
+      if (IsLineOverSide(position_type))
+        farthest = std::min(farthest, position);
+      else
+        farthest = std::max(farthest, position);
     }
   }
-  return min_logical_top;
+  return farthest;
 }
 
 void InlineFlowBox::FlipLinesInBlockDirection(LayoutUnit line_top,
@@ -1051,7 +1024,7 @@ inline void InlineFlowBox::AddTextBoxVisualOverflow(
       text_box->GetLineLayoutItem().StyleRef(IsFirstLineStyle());
 
   GlyphOverflowAndFallbackFontsMap::iterator it =
-      text_box_data_map.Find(text_box);
+      text_box_data_map.find(text_box);
   GlyphOverflow* glyph_overflow =
       it == text_box_data_map.end() ? nullptr : &it->value.second;
   bool is_flipped_line = style.IsFlippedLinesWritingMode();
@@ -1158,8 +1131,7 @@ inline void InlineFlowBox::AddReplacedChildOverflow(
   // be adjusted for writing-mode differences.
   if (!box.HasSelfPaintingLayer()) {
     LayoutRect child_logical_visual_overflow =
-        box.LogicalVisualOverflowRectForPropagation(
-            GetLineLayoutItem().StyleRef());
+        box.LogicalVisualOverflowRectForPropagation();
     child_logical_visual_overflow.Move(inline_box->LogicalLeft(),
                                        inline_box->LogicalTop());
     logical_visual_overflow.Unite(child_logical_visual_overflow);
@@ -1170,8 +1142,7 @@ inline void InlineFlowBox::AddReplacedChildOverflow(
   // as layout overflow. This rectangle must include transforms and relative
   // positioning and be adjusted for writing-mode differences.
   LayoutRect child_logical_layout_overflow =
-      box.LogicalLayoutOverflowRectForPropagation(
-          GetLineLayoutItem().StyleRef());
+      box.LogicalLayoutOverflowRectForPropagation();
   child_logical_layout_overflow.Move(inline_box->LogicalLeft(),
                                      inline_box->LogicalTop());
   logical_layout_overflow.Unite(child_logical_layout_overflow);
@@ -1738,23 +1709,6 @@ void InlineFlowBox::ShowLineTreeAndMark(const InlineBox* marked_box1,
   for (const InlineBox* box = FirstChild(); box; box = box->NextOnLine())
     box->ShowLineTreeAndMark(marked_box1, marked_label1, marked_box2,
                              marked_label2, obj, depth + 1);
-}
-
-#endif
-
-#if DCHECK_IS_ON()
-void InlineFlowBox::CheckConsistency() const {
-#ifdef CHECK_CONSISTENCY
-  DCHECK(!m_hasBadChildList);
-  const InlineBox* prev = nullptr;
-  for (const InlineBox* child = m_firstChild; child;
-       child = child->nextOnLine()) {
-    DCHECK_EQ(child->parent(), this);
-    DCHECK_EQ(child->prevOnLine(), prev);
-    prev = child;
-  }
-  DCHECK_EQ(prev, m_lastChild);
-#endif
 }
 
 #endif

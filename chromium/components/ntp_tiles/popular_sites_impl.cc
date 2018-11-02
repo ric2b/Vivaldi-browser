@@ -18,6 +18,7 @@
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/ntp_tiles/constants.h"
@@ -34,7 +35,7 @@
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
 #include "base/json/json_reader.h"
 #include "components/grit/components_resources.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -52,7 +53,8 @@ namespace ntp_tiles {
 namespace {
 
 const char kPopularSitesURLFormat[] =
-    "https://www.gstatic.com/chrome/ntp/suggested_sites_%s_%s.json";
+    "https://www.gstatic.com/%ssuggested_sites_%s_%s.json";
+const char kPopularSitesDefaultDirectory[] = "chrome/ntp/";
 const char kPopularSitesDefaultCountryCode[] = "DEFAULT";
 const char kPopularSitesDefaultVersion[] = "5";
 const int kPopularSitesRedownloadIntervalHours = 24;
@@ -65,10 +67,11 @@ const char kPopularSitesJsonPref[] = "suggested_sites_json";
 // versions of Chrome, no longer used. Remove after M61.
 const char kPopularSitesLocalFilenameToCleanup[] = "suggested_sites.json";
 
-GURL GetPopularSitesURL(const std::string& country,
+GURL GetPopularSitesURL(const std::string& directory,
+                        const std::string& country,
                         const std::string& version) {
-  return GURL(base::StringPrintf(kPopularSitesURLFormat, country.c_str(),
-                                 version.c_str()));
+  return GURL(base::StringPrintf(kPopularSitesURLFormat, directory.c_str(),
+                                 country.c_str(), version.c_str()));
 }
 
 // Extract the country from the default search engine if the default search
@@ -137,7 +140,7 @@ PopularSites::SitesVector ParseSiteList(const base::ListValue& list) {
   return sites;
 }
 
-#if defined(GOOGLE_CHROME_BUILD) && (defined(OS_ANDROID) || defined(OS_IOS))
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_ANDROID)
 void SetDefaultResourceForSite(int index,
                                int resource_id,
                                base::ListValue* sites) {
@@ -151,7 +154,7 @@ void SetDefaultResourceForSite(int index,
 
 // Creates the list of popular sites based on a snapshot available for mobile.
 std::unique_ptr<base::ListValue> DefaultPopularSites() {
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   return base::MakeUnique<base::ListValue>();
 #else
   if (!base::FeatureList::IsEnabled(kPopularSitesBakedInContentFeature)) {
@@ -259,13 +262,25 @@ GURL PopularSitesImpl::GetLastURLFetched() const {
 }
 
 GURL PopularSitesImpl::GetURLToFetch() {
+  const std::string directory = GetDirectoryToFetch();
   const std::string country = GetCountryToFetch();
   const std::string version = GetVersionToFetch();
 
   const GURL override_url =
       GURL(prefs_->GetString(ntp_tiles::prefs::kPopularSitesOverrideURL));
-  return override_url.is_valid() ? override_url
-                                 : GetPopularSitesURL(country, version);
+  return override_url.is_valid()
+             ? override_url
+             : GetPopularSitesURL(directory, country, version);
+}
+
+std::string PopularSitesImpl::GetDirectoryToFetch() {
+  std::string directory =
+      prefs_->GetString(ntp_tiles::prefs::kPopularSitesOverrideDirectory);
+
+  if (directory.empty())
+    directory = kPopularSitesDefaultDirectory;
+
+  return directory;
 }
 
 // Determine the country code to use. In order of precedence:
@@ -325,6 +340,8 @@ void PopularSitesImpl::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* user_prefs) {
   user_prefs->RegisterStringPref(ntp_tiles::prefs::kPopularSitesOverrideURL,
                                  std::string());
+  user_prefs->RegisterStringPref(
+      ntp_tiles::prefs::kPopularSitesOverrideDirectory, std::string());
   user_prefs->RegisterStringPref(ntp_tiles::prefs::kPopularSitesOverrideCountry,
                                  std::string());
   user_prefs->RegisterStringPref(ntp_tiles::prefs::kPopularSitesOverrideVersion,
@@ -413,7 +430,8 @@ void PopularSitesImpl::OnDownloadFailed() {
   if (!is_fallback_) {
     DLOG(WARNING) << "Download country site list failed";
     is_fallback_ = true;
-    pending_url_ = GetPopularSitesURL(kPopularSitesDefaultCountryCode,
+    pending_url_ = GetPopularSitesURL(kPopularSitesDefaultDirectory,
+                                      kPopularSitesDefaultCountryCode,
                                       kPopularSitesDefaultVersion);
     FetchPopularSites();
   } else {

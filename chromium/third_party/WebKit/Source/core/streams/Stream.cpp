@@ -46,8 +46,8 @@ Stream::Stream(ExecutionContext* context, const String& media_type)
 
 void Stream::AddData(const char* data, size_t len) {
   RefPtr<RawData> buffer(RawData::Create());
-  buffer->MutableData()->Resize(len);
-  memcpy(buffer->MutableData()->Data(), data, len);
+  buffer->MutableData()->resize(len);
+  memcpy(buffer->MutableData()->data(), data, len);
   BlobRegistry::AddDataToStream(internal_url_, buffer);
 }
 

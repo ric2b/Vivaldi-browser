@@ -98,7 +98,7 @@ void LayoutSVGResourceContainer::DetachAllClients(const AtomicString& to_id) {
     SvgTreeScopeResourcesFromElement(client_element)
         .AddPendingResource(to_id, *client_element);
   }
-  clients_.Clear();
+  clients_.clear();
 }
 
 void LayoutSVGResourceContainer::IdChanged(const AtomicString& old_id,
@@ -162,7 +162,7 @@ void LayoutSVGResourceContainer::MarkClientForInvalidation(
       // paint invalidation reason that will force paint invalidation of the
       // entire <text>/<tspan>/... subtree.
       client->SetShouldDoFullPaintInvalidation(
-          kPaintInvalidationSVGResourceChange);
+          PaintInvalidationReason::kSVGResource);
       // Invalidate paint properties to update effects if any.
       client->SetNeedsPaintPropertyUpdate();
       break;

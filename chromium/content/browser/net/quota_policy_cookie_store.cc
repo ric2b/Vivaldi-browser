@@ -13,7 +13,8 @@
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/profiler/scoped_tracker.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/sequenced_task_runner.h"
+#include "base/task_scheduler/post_task.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "net/cookies/canonical_cookie.h"
@@ -109,8 +110,9 @@ void QuotaPolicyCookieStore::OnLoad(
 }
 
 CookieStoreConfig::CookieStoreConfig()
-  : session_cookie_mode(EPHEMERAL_SESSION_COOKIES),
-    crypto_delegate(nullptr) {
+    : session_cookie_mode(EPHEMERAL_SESSION_COOKIES),
+      crypto_delegate(nullptr),
+      channel_id_service(nullptr) {
   // Default to an in-memory cookie store.
 }
 
@@ -123,7 +125,8 @@ CookieStoreConfig::CookieStoreConfig(
       session_cookie_mode(session_cookie_mode),
       storage_policy(storage_policy),
       cookie_delegate(cookie_delegate),
-      crypto_delegate(nullptr) {
+      crypto_delegate(nullptr),
+      channel_id_service(nullptr) {
   CHECK(!path.empty() || session_cookie_mode == EPHEMERAL_SESSION_COOKIES);
 }
 
@@ -154,9 +157,9 @@ std::unique_ptr<net::CookieStore> CreateCookieStore(
     }
 
     if (!background_task_runner.get()) {
-      background_task_runner =
-          BrowserThread::GetBlockingPool()->GetSequencedTaskRunner(
-              base::SequencedWorkerPool::GetSequenceToken());
+      background_task_runner = base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
     }
 
     scoped_refptr<net::SQLitePersistentCookieStore> sqlite_store(
@@ -173,8 +176,9 @@ std::unique_ptr<net::CookieStore> CreateCookieStore(
             sqlite_store.get(),
             config.storage_policy.get());
 
-    cookie_monster.reset(
-        new net::CookieMonster(persistent_store, config.cookie_delegate.get()));
+    cookie_monster.reset(new net::CookieMonster(persistent_store,
+                                                config.cookie_delegate.get(),
+                                                config.channel_id_service));
     if ((config.session_cookie_mode ==
          CookieStoreConfig::PERSISTANT_SESSION_COOKIES) ||
         (config.session_cookie_mode ==

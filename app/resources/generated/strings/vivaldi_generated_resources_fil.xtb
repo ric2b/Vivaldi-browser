@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">Binago ng extension na ito ang ipinapakitang page kapag na-click mo ang button ng Home.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1616206807336925449">Hindi nangangailangan ang extension na ito ng mga espesyal na pahintulot.</translation>
-<translation id="1620510694547887537">Camera</translation>
 <translation id="1635033183663317347">Na-install ng iyong tagapangalaga.</translation>
 <translation id="1723824996674794290">&amp;Bagong window</translation>
 <translation id="1729533290416704613">Kinokontrol din nito kung anong pahina ang ipinapakita kapag naghanap ka mula sa Omnibox.</translation>
-<translation id="1789575671122666129">Mga Popup</translation>
 <translation id="1850508293116537636">I-rotate &amp;pakanan</translation>
 <translation id="1859234291848436338">Pagsulat ng Direksyon</translation>
 <translation id="1901303067676059328">Piliin ang &amp;lahat</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">Itago ang plugin na ito</translation>
 <translation id="2087822576218954668">Print: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">I-update ang plugin</translation>
-<translation id="2147827593068025794">Pag-sync sa Background</translation>
 <translation id="215753907730220065">Umalis sa Full Screen</translation>
 <translation id="2177950615300672361">Tab na Incognito: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">Tukuyin (default)</translation>
 <translation id="219008588003277019">Module ng Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">I-paste bilang plain text</translation>
 <translation id="2282146716419988068">Proseso ng GPU</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">Ang isa pang program sa iyong computer ay nagdagdag ng extension na maaaring magpabago sa paraan ng paggana ng Vivaldi.</translation>
 <translation id="2445081178310039857">Kinakailangan ang pinagmulang direktoryo ng extension.</translation>
 <translation id="2470702053775288986">Na-disable ang mga hindi sinusuportahang extension</translation>
-<translation id="2482878487686419369">Mga Abiso</translation>
 <translation id="2501797496290880632">Mag-type ng shortcut</translation>
-<translation id="2509857212037838238">I-install ang <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">Na-swap na memory</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Muling paganahin</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">Mga USER handle</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikropono</translation>
 <translation id="3241680850019875542">Piliin ang pinagmulang direktoryo ng extension sa pack. Upang mai-update ang extension, piliin rin ang file ng private na key na muling gagamitin.</translation>
 <translation id="3280237271814976245">I-save &amp;bilang...</translation>
 <translation id="3288047731229977326">Ang mga extension na tumatakbo sa developer mode ay maaaring makapinsala sa iyong computer. Kung hindi ka isang developer, dapat mong i-disable ang mga extension na tumatakbo sa developer mode upang manatiling ligtas.</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">K&amp;opyahin ang address ng larawan</translation>
 <translation id="335985608243443814">Mag-browse...</translation>
 <translation id="3378572629723696641">Maaaring nasira ang extension na ito.</translation>
-<translation id="3427092606871434483">Payagan (default)</translation>
 <translation id="3435896845095436175">I-enable</translation>
 <translation id="345693547134384690">Buksan ang &amp;imahe sa bagong tab</translation>
 <translation id="3467267818798281173">Humingi ng mga suhestyon sa Google</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">Buksan ang link sa inco&amp;gnito window</translation>
 <translation id="3678156199662914018">Extension: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">Naglo-load...</translation>
-<translation id="3789841737615482174">Mag-install</translation>
 <translation id="3798449238516105146">Bersyon</translation>
 <translation id="3866249974567520381">Paglalarawan</translation>
 <translation id="3905761538810670789">Ayusin ang app</translation>
@@ -103,13 +94,11 @@
 <translation id="4096508467498758490">I-disable ang mga extension ng developer mode</translation>
 <translation id="4100839878934973028">Ang isa pang program sa iyong computer ay nagdagdag ng app na maaaring magpabago sa paraan ng paggana ng Vivaldi.</translation>
 <translation id="4130207949184424187">Binago ng extension na ito ang ipinapakitang page kapag naghahanap ka sa Omnibox.</translation>
-<translation id="4165986682804962316">Mga setting ng site</translation>
 <translation id="4176463684765177261">Hindi Pinagana</translation>
 <translation id="4200983522494130825">Bagong &amp;tab</translation>
 <translation id="420665587194630159">(Pinapamahalaan ang extension na ito at hindi ito maaaring alisin o hindi paganahin.)</translation>
 <translation id="4240511609794012987">Nakabahaging memory</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K live)</translation>
-<translation id="4312866146174492540">I-block (default)</translation>
 <translation id="4384652540891215547">I-activate ang extension</translation>
 <translation id="4394049700291259645">Huwag paganahin</translation>
 <translation id="4423482519432579560">&amp;Spellcheck</translation>
@@ -122,7 +111,6 @@
 <translation id="4677772697204437347">GPU memory</translation>
 <translation id="4711638718396952945">Ipanumbalik ang mga setting</translation>
 <translation id="4839303808932127586">I-sa&amp;ve ang video bilang...</translation>
-<translation id="4851858059374029925">I-install ang <ph name="PLUGIN_NAME" />? Mag-install lang ng mga plugin na pinagkakatiwalaan mo.</translation>
 <translation id="488785315393301722">Ipakita ang Mga Detalye</translation>
 <translation id="4911714727432509308">Walang mga extension na may mga nakatalagang keyboard shortcut.</translation>
 <translation id="4927301649992043040">Pack Extension</translation>
@@ -153,12 +141,10 @@
 <translation id="5646376287012673985">Lokasyon</translation>
 <translation id="5715711091495208045">Broker ng plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">I-sa&amp;ve ang audio bilang...</translation>
-<translation id="5778550464785688721">Ganap na pagkontrol sa mga MIDI device</translation>
 <translation id="5780973441651030252">Priority ng proseso</translation>
 <translation id="5804241973901381774">Mga Pahintulot</translation>
 <translation id="583281660410589416">Hindi-alam</translation>
 <translation id="59174027418879706">Naka-enable</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 ang ginagamit}one{# ang ginagamit}other{# ang ginagamit}}</translation>
 <translation id="5956585768868398362">Ito ba ang inaasahan mong pahina sa paghahanap?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> ang pinakamataas)</translation>
 <translation id="5965661248935608907">Kinokontrol din nito kung anong pahina ang ipinapakita kapag na-click mo ang button ng Home o naghanap mula sa Omnibox.</translation>
@@ -187,14 +173,12 @@
 <translation id="6787839852456839824">Mga keyboard shortcut</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Panatilihin ang mga pagbabago</translation>
-<translation id="6863910145616405334">Hindi nakita ang plugin</translation>
 <translation id="6886871292305414135">Buksan ang link sa bagong &amp;tab</translation>
 <translation id="6900284862687837908">Background App: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Bawiin ang access sa file</translation>
 <translation id="6974053822202609517">Kanan papuntang Kaliwa</translation>
 <translation id="7013485839273047434">Kumuha ng higit pang mga extension</translation>
 <translation id="708060913198414444">K&amp;opyahin ang address ng audio</translation>
-<translation id="7105578512429498960">I-install ang <ph name="PLUGIN_NAME" /> upang ipakita ang content na ito</translation>
 <translation id="7144878232160441200">Subukang muli</translation>
 <translation id="7206693748120342859">Dina-download ang <ph name="PLUGIN_NAME" />...</translation>
 <translation id="7287143125007575591">Tinanggihan ang access.</translation>
@@ -226,7 +210,6 @@ Key File: <ph name="KEY_FILE" />
 
 Ilagay ang iyong key file sa ligtas na lugar. Kailangan mo ito upang lumikha ng mga bagong bersyon ng iyong extension.</translation>
 <translation id="8004582292198964060">Browser</translation>
-<translation id="8037357227543935929">Magtanong (default)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">&amp;Tingnan ang spelling ng mga field ng text</translation>
 <translation id="8261378640211443080">Hindi nakalista ang extension na ito sa <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> at maaaring naidagdag nang hindi mo nalalaman.</translation>
@@ -242,7 +225,6 @@ Ilagay ang iyong key file sa ligtas na lugar. Kailangan mo ito upang lumikha ng 
 <translation id="8664389313780386848">&amp;Tingnan ang page source</translation>
 <translation id="8719653885894320876">Hindi na-download ang <ph name="PLUGIN_NAME" /></translation>
 <translation id="873545264931343897">Kapag natapos nang ma-update ang <ph name="PLUGIN_NAME" />, i-reload ang page upang i-activate ito</translation>
-<translation id="8763204422633679667">Kapag tapos nang ma-install ang <ph name="PLUGIN_NAME" />, i-reload ang page upang i-activate ito</translation>
 <translation id="8798099450830957504">Default</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>

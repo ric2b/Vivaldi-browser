@@ -99,8 +99,18 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicMac
   // Returns BluetoothRemoteGattDescriptorMac from CBDescriptor.
   BluetoothRemoteGattDescriptorMac* GetBluetoothRemoteGattDescriptorMac(
       CBDescriptor* cb_descriptor) const;
-  // Is true if the characteristic has been discovered with all its descriptors.
+  bool HasPendingRead() const {
+    return !read_characteristic_value_callbacks_.first.is_null();
+  };
+  bool HasPendingWrite() const {
+    return !write_characteristic_value_callbacks_.first.is_null();
+  };
+  // Is true if the characteristic has been discovered with all its descriptors
+  // and discovery_pending_count_ is 0.
   bool is_discovery_complete_;
+  // Increased each time DiscoverDescriptors() is called. And decreased when
+  // DidDiscoverDescriptors() is called.
+  int discovery_pending_count_;
   // gatt_service_ owns instances of this class.
   BluetoothRemoteGattServiceMac* gatt_service_;
   // A characteristic from CBPeripheral.services.characteristics.
@@ -111,8 +121,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicMac
   BluetoothUUID uuid_;
   // Characteristic value.
   std::vector<uint8_t> value_;
-  // True if a gatt read or write request is in progress.
-  bool characteristic_value_read_or_write_in_progress_;
   // ReadRemoteCharacteristic request callbacks.
   std::pair<ValueCallback, ErrorCallback> read_characteristic_value_callbacks_;
   // WriteRemoteCharacteristic request callbacks.

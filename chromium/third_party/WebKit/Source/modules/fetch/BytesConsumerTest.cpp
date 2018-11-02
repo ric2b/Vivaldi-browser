@@ -20,7 +20,7 @@ using Result = BytesConsumer::Result;
 using ReplayingBytesConsumer = BytesConsumerTestUtil::ReplayingBytesConsumer;
 
 String ToString(const Vector<char>& v) {
-  return String(v.Data(), v.size());
+  return String(v.data(), v.size());
 }
 
 class TestClient final : public GarbageCollectedFinalized<TestClient>,
@@ -48,7 +48,7 @@ class BytesConsumerTeeTest : public ::testing::Test {
 class FakeBlobBytesConsumer : public BytesConsumer {
  public:
   explicit FakeBlobBytesConsumer(PassRefPtr<BlobDataHandle> handle)
-      : blob_handle_(handle) {}
+      : blob_handle_(std::move(handle)) {}
   ~FakeBlobBytesConsumer() override {}
 
   Result BeginRead(const char** buffer, size_t* available) override {

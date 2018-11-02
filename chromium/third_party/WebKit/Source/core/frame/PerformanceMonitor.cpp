@@ -65,7 +65,7 @@ PerformanceMonitor::PerformanceMonitor(LocalFrame* local_root)
     : local_root_(local_root) {
   std::fill(std::begin(thresholds_), std::end(thresholds_), 0);
   Platform::Current()->CurrentThread()->AddTaskTimeObserver(this);
-  local_root_->InstrumentingAgents()->addPerformanceMonitor(this);
+  local_root_->GetProbeSink()->addPerformanceMonitor(this);
 }
 
 PerformanceMonitor::~PerformanceMonitor() {
@@ -94,10 +94,10 @@ void PerformanceMonitor::UnsubscribeAll(Client* client) {
 void PerformanceMonitor::Shutdown() {
   if (!local_root_)
     return;
-  subscriptions_.Clear();
+  subscriptions_.clear();
   UpdateInstrumentation();
   Platform::Current()->CurrentThread()->RemoveTaskTimeObserver(this);
-  local_root_->InstrumentingAgents()->removePerformanceMonitor(this);
+  local_root_->GetProbeSink()->removePerformanceMonitor(this);
   local_root_ = nullptr;
 }
 
@@ -196,7 +196,7 @@ void PerformanceMonitor::Did(const probe::CallFunction& probe) {
 
   String name = user_callback->name ? String(user_callback->name)
                                     : String(user_callback->atomicName);
-  String text = String::Format("'%s' handler took %ldms", name.Utf8().Data(),
+  String text = String::Format("'%s' handler took %ldms", name.Utf8().data(),
                                lround(duration * 1000));
   InnerReportGenericViolation(probe.context, handler_type, text, duration,
                               SourceLocation::FromFunction(probe.function));
@@ -284,11 +284,8 @@ void PerformanceMonitor::InnerReportGenericViolation(
   if (!location)
     location = SourceLocation::Capture(context);
   for (const auto& it : *client_thresholds) {
-    if (it.value < time) {
-      if (!location)
-        location = SourceLocation::Capture(context);
+    if (it.value < time)
       it.key->ReportGenericViolation(violation, text, time, location.get());
-    }
   }
 }
 

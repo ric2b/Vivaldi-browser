@@ -45,38 +45,35 @@ DecodingImageGenerator::DecodingImageGenerator(
     uint32_t unique_id)
     : SkImageGenerator(info, unique_id),
       frame_generator_(std::move(frame_generator)),
-      data_(data),
+      data_(std::move(data)),
       all_data_received_(all_data_received),
       frame_index_(index),
       can_yuv_decode_(false) {}
 
 DecodingImageGenerator::~DecodingImageGenerator() {}
 
-SkData* DecodingImageGenerator::onRefEncodedData(GrContext* ctx) {
+SkData* DecodingImageGenerator::onRefEncodedData() {
   TRACE_EVENT0("blink", "DecodingImageGenerator::refEncodedData");
 
-  // The GPU only wants the data if it has all been received, since the GPU
-  // only wants a complete texture. getAsSkData() may require copying, so
-  // skip it and just return nullptr to avoid a slowdown. (See
-  // crbug.com/568016 for details about such a slowdown.)
-  // TODO (scroggo): Stop relying on the internal knowledge of how Skia uses
-  // this. skbug.com/5485
-  if (ctx && !all_data_received_)
-    return nullptr;
-
-  // Other clients are serializers, which want the data even if it requires
-  // copying, and even if the data is incomplete. (Otherwise they would
-  // potentially need to decode the partial image in order to re-encode it.)
+  // getAsSkData() may require copying, but the clients of this function are
+  // serializers, which want the data even if it requires copying, and even
+  // if the data is incomplete. (Otherwise they would potentially need to
+  // decode the partial image in order to re-encode it.)
   return data_->GetAsSkData().release();
 }
 
 static void doColorSpaceXform(const SkImageInfo& dst_info,
                               void* pixels,
                               size_t row_bytes,
-                              SkColorSpace* src_color_space) {
+                              SkColorSpace* src_color_space,
+                              SkTransferFunctionBehavior behavior) {
   TRACE_EVENT0("blink", "DecodingImageGenerator::getPixels - apply xform");
   std::unique_ptr<SkColorSpaceXform> xform =
       SkColorSpaceXform::New(src_color_space, dst_info.colorSpace());
+
+  const bool post_xform_premul =
+      (dst_info.alphaType() == kPremul_SkAlphaType) &&
+      (behavior == SkTransferFunctionBehavior::kIgnore);
 
   uint32_t* row = reinterpret_cast<uint32_t*>(pixels);
   for (int y = 0; y < dst_info.height(); y++) {
@@ -86,13 +83,13 @@ static void doColorSpaceXform(const SkImageInfo& dst_info,
       format = SkColorSpaceXform::kBGRA_8888_ColorFormat;
     }
     SkAlphaType alpha_type =
-        dst_info.isOpaque() ? kOpaque_SkAlphaType : kUnpremul_SkAlphaType;
+        post_xform_premul ? kUnpremul_SkAlphaType : dst_info.alphaType();
     bool xformed =
         xform->apply(format, row, format, row, dst_info.width(), alpha_type);
     DCHECK(xformed);
 
     // To be compatible with dst space blending, premultiply in the dst space.
-    if (kPremul_SkAlphaType == dst_info.alphaType()) {
+    if (post_xform_premul) {
       for (int x = 0; x < dst_info.width(); x++) {
         row[x] =
             SkPreMultiplyARGB(SkGetPackedA32(row[x]), SkGetPackedR32(row[x]),
@@ -108,8 +105,7 @@ static void doColorSpaceXform(const SkImageInfo& dst_info,
 bool DecodingImageGenerator::onGetPixels(const SkImageInfo& dst_info,
                                          void* pixels,
                                          size_t row_bytes,
-                                         SkPMColor*,
-                                         int*) {
+                                         const Options& options) {
   TRACE_EVENT1("blink", "DecodingImageGenerator::getPixels", "frame index",
                static_cast<int>(frame_index_));
 
@@ -150,7 +146,8 @@ bool DecodingImageGenerator::onGetPixels(const SkImageInfo& dst_info,
   PlatformInstrumentation::DidDecodeLazyPixelRef();
 
   if (decoded && needs_color_xform) {
-    doColorSpaceXform(dst_info, pixels, row_bytes, decode_color_space);
+    doColorSpaceXform(dst_info, pixels, row_bytes, decode_color_space,
+                      options.fBehavior);
   }
 
   return decoded;

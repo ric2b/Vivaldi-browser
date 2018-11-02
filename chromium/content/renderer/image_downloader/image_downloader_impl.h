@@ -9,6 +9,10 @@
 #include "content/renderer/image_downloader/image_downloader_base.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
+namespace service_manager {
+struct BindSourceInfo;
+}
+
 namespace content {
 
 class ImageDownloaderImpl : public mojom::ImageDownloader,
@@ -16,8 +20,10 @@ class ImageDownloaderImpl : public mojom::ImageDownloader,
  public:
   ~ImageDownloaderImpl() override;
 
-  static void CreateMojoService(RenderFrame* render_frame,
-                                mojom::ImageDownloaderRequest request);
+  static void CreateMojoService(
+      RenderFrame* render_frame,
+      const service_manager::BindSourceInfo& source_info,
+      mojom::ImageDownloaderRequest request);
 
  private:
   ImageDownloaderImpl(RenderFrame* render_frame,
@@ -31,7 +37,7 @@ class ImageDownloaderImpl : public mojom::ImageDownloader,
                      bool is_favicon,
                      uint32_t max_bitmap_size,
                      bool bypass_cache,
-                     const DownloadImageCallback& callback) override;
+                     DownloadImageCallback callback) override;
 
   // Called when downloading finishes. All frames in |images| whose size <=
   // |max_image_size| will be returned through |callback|. If all of the frames
@@ -39,7 +45,7 @@ class ImageDownloaderImpl : public mojom::ImageDownloader,
   // |max_image_size| and is the only result. |max_image_size| == 0 is
   // interpreted as no max image size.
   void DidDownloadImage(uint32_t max_bitmap_size,
-                        const DownloadImageCallback& callback,
+                        DownloadImageCallback callback,
                         int32_t http_status_code,
                         const std::vector<SkBitmap>& images);
 

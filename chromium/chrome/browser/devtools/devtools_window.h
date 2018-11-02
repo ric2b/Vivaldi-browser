@@ -10,6 +10,7 @@
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
 #include "chrome/browser/devtools/devtools_ui_bindings.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 
@@ -17,6 +18,7 @@ class Browser;
 class BrowserWindow;
 class DevToolsWindowTesting;
 class DevToolsEventForwarder;
+class DevToolsEyeDropper;
 
 namespace content {
 class DevToolsAgentHost;
@@ -261,7 +263,8 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
     kFrontendNode
   };
 
-  DevToolsWindow(Profile* profile,
+  DevToolsWindow(FrontendType frontend_type,
+                 Profile* profile,
                  content::WebContents* main_web_contents,
                  DevToolsUIBindings* bindings,
                  content::WebContents* inspected_web_contents,
@@ -302,12 +305,15 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,
                       bool* was_blocked) override;
-  void WebContentsCreated(content::WebContents* source_contents,
-                          int opener_render_process_id,
-                          int opener_render_frame_id,
-                          const std::string& frame_name,
-                          const GURL& target_url,
-                          content::WebContents* new_contents) override;
+  void WebContentsCreated(
+      content::WebContents* source_contents,
+      int opener_render_process_id,
+      int opener_render_frame_id,
+      const std::string& frame_name,
+      const GURL& target_url,
+      content::WebContents* new_contents,
+      const base::Optional<content::WebContents::CreateParams>& create_params)
+      override;
   void CloseContents(content::WebContents* source) override;
   void ContentsZoomChange(bool zoom_in) override;
   void BeforeUnloadFired(content::WebContents* tab,
@@ -342,6 +348,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   void SetIsDocked(bool is_docked) override;
   void OpenInNewTab(const std::string& url) override;
   void SetWhitelistedShortcuts(const std::string& message) override;
+  void SetEyeDropperActive(bool active) override;
   void OpenNodeFrontend() override;
   void InspectedContentsClosing() override;
   void OnLoadCompleted() override;
@@ -349,6 +356,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   InfoBarService* GetInfoBarService() override;
   void RenderProcessGone(bool crashed) override;
 
+  void ColorPickedInEyeDropper(int r, int g, int b, int a);
   void CreateDevToolsBrowser();
   BrowserWindow* GetInspectedBrowserWindow();
   void ScheduleShow(const DevToolsToggleAction& action);
@@ -362,6 +370,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
 
   std::unique_ptr<ObserverWithAccessor> inspected_contents_observer_;
 
+  FrontendType frontend_type_;
   Profile* profile_;
   content::WebContents* main_web_contents_;
   content::WebContents* toolbox_web_contents_;
@@ -383,6 +392,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
 
   base::TimeTicks inspect_element_start_time_;
   std::unique_ptr<DevToolsEventForwarder> event_forwarder_;
+  std::unique_ptr<DevToolsEyeDropper> eye_dropper_;
 
   // Vivaldi:
   scoped_refptr<extensions::DevtoolsConnectorItem> connector_item_;

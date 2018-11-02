@@ -17,6 +17,7 @@
 #include "base/values.h"
 #include "chrome/browser/certificate_viewer.h"
 #include "chrome/browser/data_use_measurement/data_use_web_contents_observer.h"
+#include "chrome/browser/devtools/devtools_eye_dropper.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -596,6 +597,13 @@ void DevToolsWindow::OpenExternalFrontend(
 
 // static
 void DevToolsWindow::OpenNodeFrontendWindow(Profile* profile) {
+  for (DevToolsWindow* window : g_instances.Get()) {
+    if (window->frontend_type_ == kFrontendNode) {
+      window->ActivateWindow();
+      return;
+    }
+  }
+
   DevToolsWindow* window =
       Create(profile, nullptr, kFrontendNode, std::string(), false,
              std::string(), std::string());
@@ -658,24 +666,17 @@ void DevToolsWindow::InspectElement(
     content::RenderFrameHost* inspected_frame_host,
     int x,
     int y) {
+  WebContents* web_contents =
+      WebContents::FromRenderFrameHost(inspected_frame_host);
   scoped_refptr<DevToolsAgentHost> agent(
-      DevToolsAgentHost::GetOrCreateFor(inspected_frame_host));
+      DevToolsAgentHost::GetOrCreateFor(web_contents));
   bool should_measure_time = FindDevToolsWindow(agent.get()) == NULL;
   base::TimeTicks start_time = base::TimeTicks::Now();
   std::string host =
     net::GetHostOrSpecFromURL(agent->GetWebContents()->GetURL());
   // TODO(loislo): we should initiate DevTools window opening from within
   // renderer. Otherwise, we still can hit a race condition here.
-  if (agent->GetType() == content::DevToolsAgentHost::kTypePage ||
-    (IsVivaldiDockedDevtoolsEnabled(
-      Profile::FromBrowserContext(agent->GetBrowserContext())) &&
-        !vivaldi::IsVivaldiApp(host))) {
-    OpenDevToolsWindow(agent->GetWebContents(),
-                       DevToolsToggleAction::ShowElementsPanel());
-  } else {
-    OpenDevToolsWindowForFrame(Profile::FromBrowserContext(
-                                   agent->GetBrowserContext()), agent);
-  }
+  OpenDevToolsWindow(web_contents, DevToolsToggleAction::ShowElementsPanel());
   DevToolsWindow* window = FindDevToolsWindow(agent.get());
   if (window) {
     agent->InspectElement(window->bindings_, x, y);
@@ -880,12 +881,14 @@ void DevToolsWindow::OnPageCloseCanceled(WebContents* contents) {
   DevToolsWindow::OnPageCloseCanceled(window->main_web_contents_);
 }
 
-DevToolsWindow::DevToolsWindow(Profile* profile,
+DevToolsWindow::DevToolsWindow(FrontendType frontend_type,
+                               Profile* profile,
                                WebContents* main_web_contents,
                                DevToolsUIBindings* bindings,
                                WebContents* inspected_web_contents,
                                bool can_dock)
-    : profile_(profile),
+    : frontend_type_(frontend_type),
+      profile_(profile),
       main_web_contents_(main_web_contents),
       toolbox_web_contents_(nullptr),
       bindings_(bindings),
@@ -991,8 +994,8 @@ DevToolsWindow* DevToolsWindow::Create(
     return nullptr;
   if (!settings.empty())
     SetPreferencesFromJson(profile, settings);
-  return new DevToolsWindow(profile, main_web_contents.release(), bindings,
-                            inspected_web_contents, can_dock);
+  return new DevToolsWindow(frontend_type, profile, main_web_contents.release(),
+                            bindings, inspected_web_contents, can_dock);
 }
 
 // static
@@ -1123,12 +1126,14 @@ void DevToolsWindow::AddNewContents(WebContents* source,
   }
 }
 
-void DevToolsWindow::WebContentsCreated(WebContents* source_contents,
-                                        int opener_render_process_id,
-                                        int opener_render_frame_id,
-                                        const std::string& frame_name,
-                                        const GURL& target_url,
-                                        WebContents* new_contents) {
+void DevToolsWindow::WebContentsCreated(
+    WebContents* source_contents,
+    int opener_render_process_id,
+    int opener_render_frame_id,
+    const std::string& frame_name,
+    const GURL& target_url,
+    WebContents* new_contents,
+    const base::Optional<content::WebContents::CreateParams>& create_params) {
   if (target_url.SchemeIs(content::kChromeDevToolsScheme) &&
       target_url.path().rfind("toolbox.html") != std::string::npos) {
     CHECK(can_dock_);
@@ -1227,9 +1232,7 @@ bool DevToolsWindow::PreHandleGestureEvent(
     WebContents* source,
     const blink::WebGestureEvent& event) {
   // Disable pinch zooming.
-  return event.GetType() == blink::WebGestureEvent::kGesturePinchBegin ||
-         event.GetType() == blink::WebGestureEvent::kGesturePinchUpdate ||
-         event.GetType() == blink::WebGestureEvent::kGesturePinchEnd;
+  return blink::WebInputEvent::IsPinchGestureEventType(event.GetType());
 }
 
 void DevToolsWindow::ShowCertificateViewerInDevTools(
@@ -1331,6 +1334,29 @@ void DevToolsWindow::OpenInNewTab(const std::string& url) {
 void DevToolsWindow::SetWhitelistedShortcuts(
     const std::string& message) {
   event_forwarder_->SetWhitelistedShortcuts(message);
+}
+
+void DevToolsWindow::SetEyeDropperActive(bool active) {
+  WebContents* web_contents = GetInspectedWebContents();
+  if (!web_contents)
+    return;
+  if (active) {
+    eye_dropper_.reset(new DevToolsEyeDropper(
+        web_contents, base::Bind(&DevToolsWindow::ColorPickedInEyeDropper,
+                                 base::Unretained(this))));
+  } else {
+    eye_dropper_.reset();
+  }
+}
+
+void DevToolsWindow::ColorPickedInEyeDropper(int r, int g, int b, int a) {
+  base::DictionaryValue color;
+  color.SetInteger("r", r);
+  color.SetInteger("g", g);
+  color.SetInteger("b", b);
+  color.SetInteger("a", a);
+  bindings_->CallClientFunction("DevToolsAPI.eyeDropperPickedColor", &color,
+                                nullptr, nullptr);
 }
 
 void DevToolsWindow::InspectedContentsClosing() {

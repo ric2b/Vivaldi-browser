@@ -10,7 +10,7 @@ namespace feature_engagement_tracker {
 
 SingleInvalidConfiguration::SingleInvalidConfiguration() {
   invalid_feature_config_.valid = false;
-  invalid_feature_config_.feature_used_event = "nothing_to_see_here";
+  invalid_feature_config_.used.name = "nothing_to_see_here";
 };
 
 SingleInvalidConfiguration::~SingleInvalidConfiguration() = default;
@@ -18,6 +18,11 @@ SingleInvalidConfiguration::~SingleInvalidConfiguration() = default;
 const FeatureConfig& SingleInvalidConfiguration::GetFeatureConfig(
     const base::Feature& feature) const {
   return invalid_feature_config_;
+}
+
+const Configuration::ConfigMap&
+SingleInvalidConfiguration::GetRegisteredFeatures() const {
+  return configs_;
 }
 
 }  // namespace feature_engagement_tracker

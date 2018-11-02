@@ -39,14 +39,14 @@ void MockCredentialManagerClient::DispatchStore(
   delete callbacks;
 }
 
-void MockCredentialManagerClient::DispatchRequireUserMediation(
+void MockCredentialManagerClient::DispatchPreventSilentAccess(
     NotificationCallbacks* callbacks) {
   callbacks->OnSuccess();
   delete callbacks;
 }
 
 void MockCredentialManagerClient::DispatchGet(
-    bool zero_click_only,
+    blink::WebCredentialMediationRequirement mediation,
     bool include_passwords,
     const blink::WebVector<blink::WebURL>& federations,
     RequestCallbacks* callbacks) {

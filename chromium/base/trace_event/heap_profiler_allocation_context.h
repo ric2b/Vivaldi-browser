@@ -8,8 +8,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <functional>
+
 #include "base/base_export.h"
-#include "base/containers/hash_tables.h"
 
 namespace base {
 namespace trace_event {
@@ -68,8 +69,8 @@ bool BASE_EXPORT operator != (const StackFrame& lhs, const StackFrame& rhs);
 struct BASE_EXPORT Backtrace {
   Backtrace();
 
-  // If the stack is higher than what can be stored here, the bottom frames
-  // (the ones closer to main()) are stored. Depth of 12 is enough for most
+  // If the stack is higher than what can be stored here, the top frames
+  // (the ones further from main()) are stored. Depth of 12 is enough for most
   // pseudo traces (see above), but not for native traces, where we need more.
   enum { kMaxFrameCount = 48 };
   StackFrame frames[kMaxFrameCount];
@@ -109,7 +110,7 @@ struct AllocationMetrics {
 }  // namespace trace_event
 }  // namespace base
 
-namespace BASE_HASH_NAMESPACE {
+namespace std {
 
 template <>
 struct BASE_EXPORT hash<base::trace_event::StackFrame> {
@@ -126,6 +127,6 @@ struct BASE_EXPORT hash<base::trace_event::AllocationContext> {
   size_t operator()(const base::trace_event::AllocationContext& context) const;
 };
 
-}  // BASE_HASH_NAMESPACE
+}  // namespace std
 
 #endif  // BASE_TRACE_EVENT_HEAP_PROFILER_ALLOCATION_CONTEXT_H_

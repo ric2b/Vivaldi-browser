@@ -19,7 +19,6 @@
 #include "ash/system/date/clock_observer.h"
 #include "ash/system/ime/ime_observer.h"
 #include "ash/system/power/power_status.h"
-#include "ash/system/rotation/tray_rotation_lock.h"
 #include "ash/system/session/logout_button_observer.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray_accessibility.h"
@@ -34,16 +33,9 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/events/system_key_event_listener.h"
-#include "chrome/browser/chromeos/input_method/input_method_switch_recorder.h"
 #include "chrome/browser/chromeos/input_method/input_method_util.h"
-#include "chrome/browser/chromeos/login/help_app_launcher.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
 #include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
-#include "chrome/browser/chromeos/login/user_flow.h"
-#include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/supervised_user_manager.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/profiles/multiprofiles_intro_dialog.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -53,18 +45,15 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
-#include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/login/login_state.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "components/google/core/browser/google_util.h"
-#include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user.h"
@@ -79,11 +68,6 @@
 #include "ui/chromeos/events/pref_names.h"
 #include "ui/chromeos/ime/input_method_menu_item.h"
 #include "ui/chromeos/ime/input_method_menu_manager.h"
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_service.h"
-#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
-#endif
 
 namespace chromeos {
 
@@ -111,10 +95,6 @@ void OnAcceptMultiprofilesIntro(bool no_show_again) {
   UserAddingScreen::Get()->Start();
 }
 
-bool IsSessionInSecondaryLoginScreen() {
-  return session_manager::SessionManager::Get()->IsInSecondaryLoginScreen();
-}
-
 }  // namespace
 
 SystemTrayDelegateChromeOS::SystemTrayDelegateChromeOS()
@@ -123,7 +103,8 @@ SystemTrayDelegateChromeOS::SystemTrayDelegateChromeOS()
   // Register notifications on construction so that events such as
   // PROFILE_CREATED do not get missed if they happen before Initialize().
   registrar_.reset(new content::NotificationRegistrar);
-  if (GetUserLoginStatus() == ash::LoginStatus::NOT_LOGGED_IN) {
+  if (SystemTrayClient::GetUserLoginStatus() ==
+      ash::LoginStatus::NOT_LOGGED_IN) {
     registrar_->Add(this,
                     chrome::NOTIFICATION_SESSION_STARTED,
                     content::NotificationService::AllSources());
@@ -163,14 +144,7 @@ void SystemTrayDelegateChromeOS::Initialize() {
       prefs::kSessionLengthLimit,
       base::Bind(&SystemTrayDelegateChromeOS::UpdateSessionLengthLimit,
                  base::Unretained(this)));
-
-  policy::BrowserPolicyConnectorChromeOS* policy_connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
-      policy_connector->GetDeviceCloudPolicyManager();
-  if (policy_manager)
-    policy_manager->core()->store()->AddObserver(this);
-  UpdateEnterpriseDomain();
+  DBusThreadManager::Get()->GetUpdateEngineClient()->AddObserver(this);
 }
 
 SystemTrayDelegateChromeOS::~SystemTrayDelegateChromeOS() {
@@ -189,97 +163,9 @@ SystemTrayDelegateChromeOS::~SystemTrayDelegateChromeOS() {
 
   BrowserList::RemoveObserver(this);
   StopObservingAppWindowRegistry();
-  StopObservingCustodianInfoChanges();
 
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
-      connector->GetDeviceCloudPolicyManager();
-  if (policy_manager)
-    policy_manager->core()->store()->RemoveObserver(this);
-}
-
-ash::LoginStatus SystemTrayDelegateChromeOS::GetUserLoginStatus() const {
-  return SystemTrayClient::GetUserLoginStatus();
-}
-
-std::string SystemTrayDelegateChromeOS::GetEnterpriseDomain() const {
-  return enterprise_domain_;
-}
-
-base::string16 SystemTrayDelegateChromeOS::GetEnterpriseMessage() const {
-  if (is_active_directory_managed_)
-    return l10n_util::GetStringUTF16(IDS_DEVICE_ENTERPRISE_MANAGED_NOTICE);
-  if (!GetEnterpriseDomain().empty()) {
-    return l10n_util::GetStringFUTF16(IDS_DEVICE_OWNED_BY_NOTICE,
-                                      base::UTF8ToUTF16(GetEnterpriseDomain()));
-  }
-  return base::string16();
-}
-
-std::string SystemTrayDelegateChromeOS::GetSupervisedUserManager() const {
-  if (!IsUserSupervised())
-    return std::string();
-  return SupervisedUserServiceFactory::GetForProfile(user_profile_)->
-      GetCustodianEmailAddress();
-}
-
-base::string16
-SystemTrayDelegateChromeOS::GetSupervisedUserManagerName() const {
-  if (!IsUserSupervised())
-    return base::string16();
-  return base::UTF8ToUTF16(SupervisedUserServiceFactory::GetForProfile(
-      user_profile_)->GetCustodianName());
-}
-
-base::string16 SystemTrayDelegateChromeOS::GetSupervisedUserMessage()
-    const {
-  if (!IsUserSupervised())
-    return base::string16();
-  if (IsUserChild())
-    return GetChildUserMessage();
-  return GetLegacySupervisedUserMessage();
-}
-
-bool SystemTrayDelegateChromeOS::IsUserSupervised() const {
-  user_manager::User* user = user_manager::UserManager::Get()->GetActiveUser();
-  return user && user->IsSupervised();
-}
-
-bool SystemTrayDelegateChromeOS::IsUserChild() const {
-  return user_manager::UserManager::Get()->IsLoggedInAsChildUser();
-}
-
-bool SystemTrayDelegateChromeOS::ShouldShowSettings() const {
-  // Show setting button only when the user flow allows and it's not in the
-  // multi-profile login screen.
-  return ChromeUserManager::Get()->GetCurrentUserFlow()->ShouldShowSettings() &&
-         !IsSessionInSecondaryLoginScreen();
-}
-
-bool SystemTrayDelegateChromeOS::ShouldShowNotificationTray() const {
-  // Show notification tray only when the user flow allows and it's not in the
-  // multi-profile login screen.
-  return ChromeUserManager::Get()
-             ->GetCurrentUserFlow()
-             ->ShouldShowNotificationTray() &&
-         !IsSessionInSecondaryLoginScreen();
-}
-
-void SystemTrayDelegateChromeOS::ShowEnterpriseInfo() {
-  // TODO(mash): Refactor out SessionStateDelegate and move to SystemTrayClient.
-  ash::LoginStatus status = GetUserLoginStatus();
-  if (status == ash::LoginStatus::NOT_LOGGED_IN ||
-      status == ash::LoginStatus::LOCKED || IsSessionInSecondaryLoginScreen()) {
-    scoped_refptr<chromeos::HelpAppLauncher> help_app(
-        new chromeos::HelpAppLauncher(nullptr /* parent_window */));
-    help_app->ShowHelpTopic(chromeos::HelpAppLauncher::HELP_ENTERPRISE);
-  } else {
-    chrome::ScopedTabbedBrowserDisplayer displayer(
-        ProfileManager::GetActiveUserProfile());
-    chrome::ShowSingletonTab(displayer.browser(),
-                             GURL(chrome::kLearnMoreEnterpriseURL));
-  }
+  if (DBusThreadManager::IsInitialized())
+    DBusThreadManager::Get()->GetUpdateEngineClient()->RemoveObserver(this);
 }
 
 void SystemTrayDelegateChromeOS::ShowUserLogin() {
@@ -374,18 +260,6 @@ base::string16 SystemTrayDelegateChromeOS::GetIMEManagedMessage() {
              : l10n_util::GetStringUTF16(IDS_OPTIONS_CONTROLLED_SETTING_POLICY);
 }
 
-void SystemTrayDelegateChromeOS::SwitchIME(const std::string& ime_id) {
-  input_method::InputMethodManager::Get()
-      ->GetActiveIMEState()
-      ->ChangeInputMethod(ime_id, false /* show_message */);
-  input_method::InputMethodSwitchRecorder::Get()->RecordSwitch(
-      true /* by_tray_menu */);
-}
-
-void SystemTrayDelegateChromeOS::ActivateIMEProperty(const std::string& key) {
-  input_method::InputMethodManager::Get()->ActivateInputMethodMenuItem(key);
-}
-
 ash::NetworkingConfigDelegate*
 SystemTrayDelegateChromeOS::GetNetworkingConfigDelegate() const {
   return networking_config_delegate_.get();
@@ -411,21 +285,6 @@ bool SystemTrayDelegateChromeOS::IsSearchKeyMappedToCapsLock() {
   return search_key_mapped_to_ == input_method::kCapsLockKey;
 }
 
-void SystemTrayDelegateChromeOS::AddCustodianInfoTrayObserver(
-    ash::CustodianInfoTrayObserver* observer) {
-  custodian_info_changed_observers_.AddObserver(observer);
-}
-
-void SystemTrayDelegateChromeOS::RemoveCustodianInfoTrayObserver(
-    ash::CustodianInfoTrayObserver* observer) {
-  custodian_info_changed_observers_.RemoveObserver(observer);
-}
-
-std::unique_ptr<ash::SystemTrayItem>
-SystemTrayDelegateChromeOS::CreateRotationLockTrayItem(ash::SystemTray* tray) {
-  return base::MakeUnique<ash::TrayRotationLock>(tray);
-}
-
 ash::SystemTrayNotifier* SystemTrayDelegateChromeOS::GetSystemTrayNotifier() {
   return ash::Shell::Get()->system_tray_notifier();
 }
@@ -434,16 +293,10 @@ void SystemTrayDelegateChromeOS::SetProfile(Profile* profile) {
   // Stop observing the AppWindowRegistry of the current |user_profile_|.
   StopObservingAppWindowRegistry();
 
-  // Stop observing custodian info changes of the current |user_profile_|.
-  StopObservingCustodianInfoChanges();
-
   user_profile_ = profile;
 
   // Start observing the AppWindowRegistry of the newly set |user_profile_|.
   extensions::AppWindowRegistry::Get(user_profile_)->AddObserver(this);
-
-  // Start observing custodian info changes of the newly set |user_profile_|.
-  SupervisedUserServiceFactory::GetForProfile(profile)->AddObserver(this);
 
   PrefService* prefs = profile->GetPrefs();
   user_pref_registrar_.reset(new PrefChangeRegistrar);
@@ -480,7 +333,6 @@ void SystemTrayDelegateChromeOS::SetProfile(Profile* profile) {
   UpdateShowLogoutButtonInTray();
   UpdateLogoutDialogDuration();
   UpdatePerformanceTracing();
-  OnCustodianInfoChanged();
   search_key_mapped_to_ =
       profile->GetPrefs()->GetInteger(prefs::kLanguageRemapSearchKeyTo);
 }
@@ -543,16 +395,6 @@ void SystemTrayDelegateChromeOS::StopObservingAppWindowRegistry() {
           user_profile_, false);
   if (registry)
     registry->RemoveObserver(this);
-}
-
-void SystemTrayDelegateChromeOS::StopObservingCustodianInfoChanges() {
-  if (!user_profile_)
-    return;
-
-  SupervisedUserService* service = SupervisedUserServiceFactory::GetForProfile(
-      user_profile_);
-  if (service)
-    service->RemoveObserver(this);
 }
 
 void SystemTrayDelegateChromeOS::NotifyIfLastWindowClosed() {
@@ -641,30 +483,6 @@ void SystemTrayDelegateChromeOS::InputMethodMenuItemChanged(
   GetSystemTrayNotifier()->NotifyRefreshIME();
 }
 
-void SystemTrayDelegateChromeOS::UpdateEnterpriseDomain() {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  std::string old_enterprise_domain(std::move(enterprise_domain_));
-  enterprise_domain_ = connector->GetEnterpriseDomain();
-  bool old_is_active_directory_managed = is_active_directory_managed_;
-  is_active_directory_managed_ = connector->IsActiveDirectoryManaged();
-  if ((!is_active_directory_managed_ &&
-       enterprise_domain_ != old_enterprise_domain) ||
-      (is_active_directory_managed_ != old_is_active_directory_managed)) {
-    GetSystemTrayNotifier()->NotifyEnterpriseDomainChanged();
-  }
-}
-
-// Overridden from CloudPolicyStore::Observer
-void SystemTrayDelegateChromeOS::OnStoreLoaded(
-    policy::CloudPolicyStore* store) {
-  UpdateEnterpriseDomain();
-}
-
-void SystemTrayDelegateChromeOS::OnStoreError(policy::CloudPolicyStore* store) {
-  UpdateEnterpriseDomain();
-}
-
 // Overridden from chrome::BrowserListObserver.
 void SystemTrayDelegateChromeOS::OnBrowserRemoved(Browser* browser) {
   NotifyIfLastWindowClosed();
@@ -674,14 +492,6 @@ void SystemTrayDelegateChromeOS::OnBrowserRemoved(Browser* browser) {
 void SystemTrayDelegateChromeOS::OnAppWindowRemoved(
     extensions::AppWindow* app_window) {
   NotifyIfLastWindowClosed();
-}
-
-// Overridden from SupervisedUserServiceObserver.
-void SystemTrayDelegateChromeOS::OnCustodianInfoChanged() {
-  for (ash::CustodianInfoTrayObserver& observer :
-       custodian_info_changed_observers_) {
-    observer.OnCustodianInfoChanged();
-  }
 }
 
 void SystemTrayDelegateChromeOS::OnAccessibilityStatusChanged(
@@ -702,39 +512,8 @@ void SystemTrayDelegateChromeOS::ImeMenuItemsChanged(
     const std::string& engine_id,
     const std::vector<input_method::InputMethodManager::MenuItem>& items) {}
 
-const base::string16
-SystemTrayDelegateChromeOS::GetLegacySupervisedUserMessage() const {
-  std::string user_manager_name = GetSupervisedUserManager();
-  return l10n_util::GetStringFUTF16(
-      IDS_USER_IS_SUPERVISED_BY_NOTICE,
-      base::UTF8ToUTF16(user_manager_name));
-}
-
-const base::string16
-SystemTrayDelegateChromeOS::GetChildUserMessage() const {
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  SupervisedUserService* service =
-      SupervisedUserServiceFactory::GetForProfile(user_profile_);
-  base::string16 first_custodian =
-      base::UTF8ToUTF16(service->GetCustodianEmailAddress());
-  base::string16 second_custodian =
-      base::UTF8ToUTF16(service->GetSecondCustodianEmailAddress());
-  LOG_IF(WARNING, first_custodian.empty()) <<
-      "Returning incomplete child user message as manager not known yet.";
-  if (second_custodian.empty()) {
-    return l10n_util::GetStringFUTF16(
-        IDS_CHILD_USER_IS_MANAGED_BY_ONE_PARENT_NOTICE, first_custodian);
-  } else {
-    return l10n_util::GetStringFUTF16(
-        IDS_CHILD_USER_IS_MANAGED_BY_TWO_PARENTS_NOTICE,
-        first_custodian,
-        second_custodian);
-  }
-#endif
-
-  LOG(WARNING) << "SystemTrayDelegateChromeOS::GetChildUserMessage call while "
-               << "ENABLE_SUPERVISED_USERS undefined.";
-  return base::string16();
+void SystemTrayDelegateChromeOS::OnUpdateOverCellularTargetSet(bool success) {
+  GetSystemTrayNotifier()->NotifyUpdateOverCellularTargetSet(success);
 }
 
 ash::SystemTrayDelegate* CreateSystemTrayDelegate() {

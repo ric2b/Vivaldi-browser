@@ -62,14 +62,6 @@ void WMHelper::RemoveMaximizeModeObserver(MaximizeModeObserver* observer) {
   maximize_mode_observers_.RemoveObserver(observer);
 }
 
-void WMHelper::AddAccessibilityObserver(AccessibilityObserver* observer) {
-  accessibility_observers_.AddObserver(observer);
-}
-
-void WMHelper::RemoveAccessibilityObserver(AccessibilityObserver* observer) {
-  accessibility_observers_.RemoveObserver(observer);
-}
-
 void WMHelper::AddInputDeviceEventObserver(InputDeviceEventObserver* observer) {
   input_device_event_observers_.AddObserver(observer);
 }
@@ -111,6 +103,11 @@ void WMHelper::NotifyCursorSetChanged(ui::CursorSetType cursor_set) {
     observer.OnCursorSetChanged(cursor_set);
 }
 
+void WMHelper::NotifyCursorDisplayChanged(const display::Display& display) {
+  for (CursorObserver& observer : cursor_observers_)
+    observer.OnCursorDisplayChanged(display);
+}
+
 void WMHelper::NotifyMaximizeModeStarted() {
   for (MaximizeModeObserver& observer : maximize_mode_observers_)
     observer.OnMaximizeModeStarted();
@@ -124,11 +121,6 @@ void WMHelper::NotifyMaximizeModeEnding() {
 void WMHelper::NotifyMaximizeModeEnded() {
   for (MaximizeModeObserver& observer : maximize_mode_observers_)
     observer.OnMaximizeModeEnded();
-}
-
-void WMHelper::NotifyAccessibilityModeChanged() {
-  for (AccessibilityObserver& observer : accessibility_observers_)
-    observer.OnAccessibilityModeChanged();
 }
 
 void WMHelper::NotifyKeyboardDeviceConfigurationChanged() {

@@ -104,7 +104,6 @@ class URLRequestChromeJob : public net::URLRequestJob {
   void Kill() override;
   int ReadRawData(net::IOBuffer* buf, int buf_size) override;
   bool GetMimeType(std::string* mime_type) const override;
-  int GetResponseCode() const override;
   void GetResponseInfo(net::HttpResponseInfo* info) override;
 
   // Used to notify that the requested data's |mime_type| is ready.
@@ -248,10 +247,6 @@ void URLRequestChromeJob::Kill() {
 bool URLRequestChromeJob::GetMimeType(std::string* mime_type) const {
   *mime_type = mime_type_;
   return !mime_type_.empty();
-}
-
-int URLRequestChromeJob::GetResponseCode() const {
-  return net::HTTP_OK;
 }
 
 void URLRequestChromeJob::GetResponseInfo(net::HttpResponseInfo* info) {
@@ -440,12 +435,11 @@ bool URLDataManagerIOSBackend::StartRequest(const net::URLRequest* request,
   if (!source)
     return false;
 
-  if (!source->source()->ShouldServiceRequest(request))
+  if (!source->source()->ShouldServiceRequest(request->url()))
     return false;
 
   std::string path;
   URLToRequestPath(request->url(), &path);
-  source->source()->WillServiceRequest(request, &path);
 
   // Save this request so we know where to send the data.
   RequestID request_id = next_request_id_++;

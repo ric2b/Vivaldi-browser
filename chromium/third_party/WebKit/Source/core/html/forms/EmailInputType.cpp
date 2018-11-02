@@ -67,7 +67,7 @@ String EmailInputType::ConvertEmailAddressToASCII(const ScriptRegexp& regexp,
   if (address.ContainsOnlyASCII())
     return address;
 
-  size_t at_position = address.Find('@');
+  size_t at_position = address.find('@');
   if (at_position == kNotFound)
     return address;
   String host = address.Substring(at_position + 1);
@@ -93,7 +93,7 @@ String EmailInputType::ConvertEmailAddressToASCII(const ScriptRegexp& regexp,
   StringBuilder builder;
   builder.Append(address, 0, at_position + 1);
 #if U_ICU_VERSION_MAJOR_NUM >= 59
-  builder.append(icu::toUCharPtr(domainName.getBuffer()), domainName.length());
+  builder.Append(icu::toUCharPtr(domain_name.getBuffer()), domain_name.length());
 #else
   builder.Append(domain_name.getBuffer(), domain_name.length());
 #endif
@@ -106,7 +106,7 @@ String EmailInputType::ConvertEmailAddressToUnicode(
   if (!address.ContainsOnlyASCII())
     return address;
 
-  size_t at_position = address.Find('@');
+  size_t at_position = address.find('@');
   if (at_position == kNotFound)
     return address;
 
@@ -125,7 +125,7 @@ static bool IsInvalidLocalPartCharacter(UChar ch) {
   if (!IsASCII(ch))
     return true;
   DEFINE_STATIC_LOCAL(const String, valid_characters, (kLocalPartCharacters));
-  return valid_characters.Find(ToASCIILower(ch)) == kNotFound;
+  return valid_characters.find(ToASCIILower(ch)) == kNotFound;
 }
 
 static bool IsInvalidDomainCharacter(UChar ch) {
@@ -218,7 +218,7 @@ String EmailInputType::TypeMismatchText() const {
     return GetLocale().QueryString(
         WebLocalizedString::kValidationTypeMismatchForEmailEmpty);
   String at_sign = String("@");
-  size_t at_index = invalid_address.Find('@');
+  size_t at_index = invalid_address.find('@');
   if (at_index == kNotFound)
     return GetLocale().QueryString(
         WebLocalizedString::kValidationTypeMismatchForEmailNoAtSign, at_sign,
@@ -251,7 +251,7 @@ String EmailInputType::TypeMismatchText() const {
         at_sign, domain.Substring(invalid_char_index, char_length));
   }
   if (!CheckValidDotUsage(domain)) {
-    size_t at_index_in_unicode = unicode_address.Find('@');
+    size_t at_index_in_unicode = unicode_address.find('@');
     DCHECK_NE(at_index_in_unicode, kNotFound);
     return GetLocale().QueryString(
         WebLocalizedString::kValidationTypeMismatchForEmailInvalidDots,

@@ -6,7 +6,8 @@
 
 #include <utility>
 
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/sequenced_task_runner.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/dom_distiller/content/browser/distiller_page_web_contents.h"
@@ -17,7 +18,6 @@
 #include "components/leveldb_proto/proto_database.h"
 #include "components/leveldb_proto/proto_database_impl.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 
 namespace dom_distiller {
@@ -55,8 +55,8 @@ DomDistillerServiceFactory::~DomDistillerServiceFactory() {}
 KeyedService* DomDistillerServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* profile) const {
   scoped_refptr<base::SequencedTaskRunner> background_task_runner =
-      content::BrowserThread::GetBlockingPool()->GetSequencedTaskRunner(
-          base::SequencedWorkerPool::GetSequenceToken());
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND});
 
   std::unique_ptr<leveldb_proto::ProtoDatabaseImpl<ArticleEntry>> db(
       new leveldb_proto::ProtoDatabaseImpl<ArticleEntry>(

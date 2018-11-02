@@ -181,6 +181,11 @@ public class FakeSuggestionsSource implements SuggestionsSource {
     }
 
     @Override
+    public void fetchContextualSuggestions(String url, Callback<List<SnippetArticle>> callback) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void setObserver(Observer observer) {
         mObserver = observer;
     }
@@ -212,7 +217,4 @@ public class FakeSuggestionsSource implements SuggestionsSource {
         List<SnippetArticle> result = mSuggestions.get(category);
         return result == null ? Collections.<SnippetArticle>emptyList() : new ArrayList<>(result);
     }
-
-    @Override
-    public void onNtpInitialized() {}
 }

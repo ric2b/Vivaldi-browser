@@ -549,9 +549,6 @@ void InputHandlerProxy::RecordMainThreadScrollingReasons(
   static const char* kWheelHistogramName =
       "Renderer4.MainThreadWheelScrollReason";
 
-  DCHECK(device == blink::kWebGestureDeviceTouchpad ||
-         device == blink::kWebGestureDeviceTouchscreen);
-
   if (device != blink::kWebGestureDeviceTouchpad &&
       device != blink::kWebGestureDeviceTouchscreen) {
     return;
@@ -609,9 +606,6 @@ void InputHandlerProxy::RecordMainThreadScrollingReasons(
 void InputHandlerProxy::RecordScrollingThreadStatus(
     blink::WebGestureDevice device,
     uint32_t reasons) {
-  DCHECK(device == blink::kWebGestureDeviceTouchpad ||
-         device == blink::kWebGestureDeviceTouchscreen);
-
   if (device != blink::kWebGestureDeviceTouchpad &&
       device != blink::kWebGestureDeviceTouchscreen) {
     return;
@@ -910,6 +904,8 @@ InputHandlerProxy::HandleGestureScrollUpdate(
       gesture_event.source_device == blink::kWebGestureDeviceTouchpad &&
       touchpad_and_wheel_scroll_latching_enabled_) {
     gesture_scroll_on_impl_thread_ = false;
+    client_->GenerateScrollBeginAndSendToMainThread(gesture_event);
+
     if (!gesture_pinch_on_impl_thread_)
       return DID_NOT_HANDLE;
   }
@@ -964,6 +960,7 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleGestureFlingStart(
       }
       break;
     case blink::kWebGestureDeviceTouchscreen:
+    case blink::kWebGestureDeviceSyntheticAutoscroll:
       if (!gesture_scroll_on_impl_thread_) {
         scroll_status.thread = cc::InputHandler::SCROLL_ON_MAIN_THREAD;
         scroll_status.main_thread_scrolling_reasons =
@@ -973,6 +970,7 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleGestureFlingStart(
       }
       break;
     case blink::kWebGestureDeviceUninitialized:
+    case blink::kWebGestureDeviceCount:
       NOTREACHED();
       return DID_NOT_HANDLE;
   }
@@ -993,9 +991,8 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleGestureFlingStart(
       const float vy = gesture_event.data.fling_start.velocity_y;
       current_fling_velocity_ = gfx::Vector2dF(vx, vy);
       DCHECK(!current_fling_velocity_.IsZero());
-      fling_curve_.reset(client_->CreateFlingAnimationCurve(
-          gesture_event.source_device, WebFloatPoint(vx, vy),
-          blink::WebSize()));
+      fling_curve_ = client_->CreateFlingAnimationCurve(
+          gesture_event.source_device, WebFloatPoint(vx, vy), blink::WebSize());
       disallow_horizontal_fling_scroll_ = !vx;
       disallow_vertical_fling_scroll_ = !vy;
       TRACE_EVENT_ASYNC_BEGIN2("input,benchmark,rail",
@@ -1236,8 +1233,8 @@ bool InputHandlerProxy::FilterInputEventForFlingBoosting(
       disallow_horizontal_fling_scroll_ = !velocity.x;
       disallow_vertical_fling_scroll_ = !velocity.y;
       last_fling_boost_event_ = WebGestureEvent();
-      fling_curve_.reset(client_->CreateFlingAnimationCurve(
-          gesture_event.source_device, velocity, blink::WebSize()));
+      fling_curve_ = client_->CreateFlingAnimationCurve(
+          gesture_event.source_device, velocity, blink::WebSize());
       fling_parameters_.start_time = gesture_event.TimeStampSeconds();
       fling_parameters_.delta = velocity;
       fling_parameters_.point = WebPoint(gesture_event.x, gesture_event.y);
@@ -1597,7 +1594,8 @@ bool InputHandlerProxy::ScrollBy(const WebFloatSize& increment,
     case blink::kWebGestureDeviceTouchpad:
       did_scroll = TouchpadFlingScroll(clipped_increment);
       break;
-    case blink::kWebGestureDeviceTouchscreen: {
+    case blink::kWebGestureDeviceTouchscreen:
+    case blink::kWebGestureDeviceSyntheticAutoscroll: {
       clipped_increment = ToClientScrollIncrement(clipped_increment);
       cc::ScrollStateData scroll_state_data;
       scroll_state_data.delta_x = clipped_increment.width;
@@ -1612,6 +1610,7 @@ bool InputHandlerProxy::ScrollBy(const WebFloatSize& increment,
       did_scroll = scroll_result.did_scroll;
     } break;
     case blink::kWebGestureDeviceUninitialized:
+    case blink::kWebGestureDeviceCount:
       NOTREACHED();
       return false;
   }

@@ -45,6 +45,7 @@
 #include "core/html/ImageData.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
+#include "core/svg/SVGImageElement.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/CrossThreadFunctional.h"
@@ -63,9 +64,16 @@ static inline ImageBitmapSource* ToImageBitmapSourceInternal(
     ExceptionState& exception_state,
     const ImageBitmapOptions& options,
     bool has_crop_rect) {
+  ImageElementBase* image_element = nullptr;
   if (value.isHTMLImageElement()) {
-    HTMLImageElement* image_element = value.getAsHTMLImageElement();
-    if (!image_element || !image_element->CachedImage()) {
+    if (!(image_element = value.getAsHTMLImageElement()))
+      return nullptr;
+  } else if (value.isSVGImageElement()) {
+    if (!(image_element = value.getAsSVGImageElement()))
+      return nullptr;
+  }
+  if (image_element) {
+    if (!image_element->CachedImage()) {
       exception_state.ThrowDOMException(
           kInvalidStateError,
           "No image can be retrieved from the provided element.");
@@ -97,7 +105,7 @@ static inline ImageBitmapSource* ToImageBitmapSourceInternal(
     return value.getAsImageBitmap();
   if (value.isOffscreenCanvas())
     return value.getAsOffscreenCanvas();
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return nullptr;
 }
 
@@ -183,7 +191,7 @@ ImageBitmapFactories& ImageBitmapFactories::From(EventTarget& event_target) {
   if (LocalDOMWindow* window = event_target.ToLocalDOMWindow())
     return FromInternal(*window);
 
-  ASSERT(event_target.GetExecutionContext()->IsWorkerGlobalScope());
+  DCHECK(event_target.GetExecutionContext()->IsWorkerGlobalScope());
   return ImageBitmapFactories::FromInternal(
       *ToWorkerGlobalScope(event_target.GetExecutionContext()));
 }
@@ -204,7 +212,7 @@ void ImageBitmapFactories::AddLoader(ImageBitmapLoader* loader) {
 }
 
 void ImageBitmapFactories::DidFinishLoading(ImageBitmapLoader* loader) {
-  ASSERT(pending_loaders_.Contains(loader));
+  DCHECK(pending_loaders_.Contains(loader));
   pending_loaders_.erase(loader);
 }
 
@@ -269,7 +277,7 @@ void ImageBitmapFactories::ImageBitmapLoader::DecodeImageOnDecoderThread(
     DOMArrayBuffer* array_buffer,
     const String& premultiply_alpha_option,
     const String& color_space_conversion_option) {
-  ASSERT(!IsMainThread());
+  DCHECK(!IsMainThread());
 
   ImageDecoder::AlphaOption alpha_op = ImageDecoder::kAlphaPremultiplied;
   if (premultiply_alpha_option == "none")
@@ -300,7 +308,8 @@ void ImageBitmapFactories::ImageBitmapLoader::ResolvePromiseOnOriginalThread(
     RejectPromise();
     return;
   }
-  ASSERT(frame->width() && frame->height());
+  DCHECK(frame->width());
+  DCHECK(frame->height());
 
   RefPtr<StaticBitmapImage> image = StaticBitmapImage::Create(std::move(frame));
   image->SetOriginClean(true);

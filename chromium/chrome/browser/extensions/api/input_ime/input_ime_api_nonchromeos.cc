@@ -114,9 +114,8 @@ class ImeObserverNonChromeOS : public ui::ImeObserver {
       return;
     }
 
-    std::unique_ptr<extensions::Event> event(
-        new extensions::Event(histogram_value, event_name, std::move(args)));
-    event->restrict_to_browser_context = profile_;
+    auto event = base::MakeUnique<extensions::Event>(
+        histogram_value, event_name, std::move(args), profile_);
     extensions::EventRouter::Get(profile_)
         ->DispatchEventToExtension(extension_id_, std::move(event));
   }
@@ -156,7 +155,7 @@ void InputImeAPI::OnExtensionLoaded(content::BrowserContext* browser_context,
 
 void InputImeAPI::OnExtensionUnloaded(content::BrowserContext* browser_context,
                                       const Extension* extension,
-                                      UnloadedExtensionInfo::Reason reason) {
+                                      UnloadedExtensionReason reason) {
   InputImeEventRouter* event_router =
       GetInputImeEventRouter(Profile::FromBrowserContext(browser_context));
   if (event_router) {

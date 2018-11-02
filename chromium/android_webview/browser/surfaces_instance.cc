@@ -14,6 +14,7 @@
 #include "base/memory/ptr_util.h"
 #include "cc/output/renderer_settings.h"
 #include "cc/output/texture_mailbox_deleter.h"
+#include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/surface_draw_quad.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/compositor_frame_sink_support.h"
@@ -121,7 +122,7 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
   cc::SharedQuadState* quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   quad_state->quad_to_target_transform = transform;
-  quad_state->quad_layer_bounds = frame_size;
+  quad_state->quad_layer_rect = gfx::Rect(frame_size);
   quad_state->visible_quad_layer_rect = gfx::Rect(frame_size);
   quad_state->clip_rect = clip;
   quad_state->is_clipped = true;
@@ -129,8 +130,8 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
 
   cc::SurfaceDrawQuad* surface_quad =
       render_pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
-  surface_quad->SetNew(quad_state, gfx::Rect(quad_state->quad_layer_bounds),
-                       gfx::Rect(quad_state->quad_layer_bounds), child_id,
+  surface_quad->SetNew(quad_state, gfx::Rect(quad_state->quad_layer_rect),
+                       gfx::Rect(quad_state->quad_layer_rect), child_id,
                        cc::SurfaceDrawQuadType::PRIMARY, nullptr);
 
   cc::CompositorFrame frame;
@@ -138,13 +139,16 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
   frame.metadata.begin_frame_ack =
       cc::BeginFrameAck::CreateManualAckWithDamage();
   frame.render_pass_list.push_back(std::move(render_pass));
+  frame.metadata.device_scale_factor = 1.f;
   frame.metadata.referenced_surfaces = child_ids_;
 
-  if (!root_id_.is_valid()) {
+  if (!root_id_.is_valid() || viewport != surface_size_) {
     root_id_ = local_surface_id_allocator_->GenerateId();
+    surface_size_ = viewport;
     display_->SetLocalSurfaceId(root_id_, 1.f);
   }
-  support_->SubmitCompositorFrame(root_id_, std::move(frame));
+  bool result = support_->SubmitCompositorFrame(root_id_, std::move(frame));
+  DCHECK(result);
 
   display_->Resize(viewport);
   display_->DrawAndSwap();
@@ -155,7 +159,7 @@ void SurfacesInstance::AddChildId(const cc::SurfaceId& child_id) {
          child_ids_.end());
   child_ids_.push_back(child_id);
   if (root_id_.is_valid())
-    SetEmptyRootFrame();
+    SetSolidColorRootFrame();
 }
 
 void SurfacesInstance::RemoveChildId(const cc::SurfaceId& child_id) {
@@ -163,16 +167,30 @@ void SurfacesInstance::RemoveChildId(const cc::SurfaceId& child_id) {
   DCHECK(itr != child_ids_.end());
   child_ids_.erase(itr);
   if (root_id_.is_valid())
-    SetEmptyRootFrame();
+    SetSolidColorRootFrame();
 }
 
-void SurfacesInstance::SetEmptyRootFrame() {
-  cc::CompositorFrame empty_frame;
+void SurfacesInstance::SetSolidColorRootFrame() {
+  DCHECK(!surface_size_.IsEmpty());
+  gfx::Rect rect(surface_size_);
+  std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
+  render_pass->SetNew(1, rect, rect, gfx::Transform());
+  cc::SharedQuadState* quad_state =
+      render_pass->CreateAndAppendSharedQuadState();
+  quad_state->SetAll(gfx::Transform(), rect, rect, rect, false, 1.f,
+                     SkBlendMode::kSrcOver, 0);
+  cc::SolidColorDrawQuad* solid_quad =
+      render_pass->CreateAndAppendDrawQuad<cc::SolidColorDrawQuad>();
+  solid_quad->SetNew(quad_state, rect, rect, SK_ColorBLACK, false);
+  cc::CompositorFrame frame;
+  frame.render_pass_list.push_back(std::move(render_pass));
   // We draw synchronously, so acknowledge a manual BeginFrame.
-  empty_frame.metadata.begin_frame_ack =
+  frame.metadata.begin_frame_ack =
       cc::BeginFrameAck::CreateManualAckWithDamage();
-  empty_frame.metadata.referenced_surfaces = child_ids_;
-  support_->SubmitCompositorFrame(root_id_, std::move(empty_frame));
+  frame.metadata.referenced_surfaces = child_ids_;
+  frame.metadata.device_scale_factor = 1;
+  bool result = support_->SubmitCompositorFrame(root_id_, std::move(frame));
+  DCHECK(result);
 }
 
 void SurfacesInstance::DidReceiveCompositorFrameAck(

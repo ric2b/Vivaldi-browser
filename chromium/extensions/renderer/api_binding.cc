@@ -14,7 +14,9 @@
 #include "base/values.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/renderer/api_binding_hooks.h"
+#include "extensions/renderer/api_binding_types.h"
 #include "extensions/renderer/api_event_handler.h"
+#include "extensions/renderer/api_invocation_errors.h"
 #include "extensions/renderer/api_request_handler.h"
 #include "extensions/renderer/api_signature.h"
 #include "extensions/renderer/api_type_reference_map.h"
@@ -102,6 +104,7 @@ struct APIBinding::EventData {
             std::string full_name,
             bool supports_filters,
             bool supports_rules,
+            int max_listeners,
             std::vector<std::string> actions,
             std::vector<std::string> conditions,
             APIBinding* binding)
@@ -109,6 +112,7 @@ struct APIBinding::EventData {
         full_name(std::move(full_name)),
         supports_filters(supports_filters),
         supports_rules(supports_rules),
+        max_listeners(max_listeners),
         actions(std::move(actions)),
         conditions(std::move(conditions)),
         binding(binding) {}
@@ -125,6 +129,9 @@ struct APIBinding::EventData {
   // Whether the event supports rules.
   bool supports_rules;
 
+  // The maximum number of listeners this event supports.
+  int max_listeners;
+
   // The associated actions and conditions for declarative events.
   std::vector<std::string> actions;
   std::vector<std::string> conditions;
@@ -139,9 +146,11 @@ struct APIBinding::EventData {
 struct APIBinding::CustomPropertyData {
   CustomPropertyData(const std::string& type_name,
                      const std::string& property_name,
+                     const base::ListValue* property_values,
                      const CreateCustomType& create_custom_type)
       : type_name(type_name),
         property_name(property_name),
+        property_values(property_values),
         create_custom_type(create_custom_type) {}
 
   // The type of the property, e.g. 'storage.StorageArea'.
@@ -149,6 +158,8 @@ struct APIBinding::CustomPropertyData {
   // The name of the property on the object, e.g. 'local' for
   // chrome.storage.local.
   std::string property_name;
+  // Values curried into this particular type from the schema.
+  const base::ListValue* property_values;
 
   CreateCustomType create_custom_type;
 };
@@ -159,6 +170,7 @@ APIBinding::APIBinding(const std::string& api_name,
                        const base::ListValue* event_definitions,
                        const base::DictionaryValue* property_definitions,
                        const CreateCustomType& create_custom_type,
+                       const AvailabilityCallback& is_available,
                        std::unique_ptr<APIBindingHooks> binding_hooks,
                        APITypeReferenceMap* type_refs,
                        APIRequestHandler* request_handler,
@@ -166,6 +178,7 @@ APIBinding::APIBinding(const std::string& api_name,
     : api_name_(api_name),
       property_definitions_(property_definitions),
       create_custom_type_(create_custom_type),
+      is_available_(is_available),
       binding_hooks_(std::move(binding_hooks)),
       type_refs_(type_refs),
       request_handler_(request_handler),
@@ -253,30 +266,41 @@ APIBinding::APIBinding(const std::string& api_name,
       std::vector<std::string> rule_conditions;
       const base::DictionaryValue* options = nullptr;
       bool supports_rules = false;
-      if (event_dict->GetDictionary("options", &options) &&
-          options->GetBoolean("supportsRules", &supports_rules) &&
-          supports_rules) {
-        bool supports_listeners = false;
-        DCHECK(options->GetBoolean("supportsListeners", &supports_listeners));
-        DCHECK(!supports_listeners)
-            << "Events cannot support rules and listeners.";
-        auto get_values = [options](base::StringPiece name,
-                                    std::vector<std::string>* out_value) {
-          const base::ListValue* list = nullptr;
-          CHECK(options->GetList(name, &list));
-          for (const auto& entry : *list) {
-            DCHECK(entry.is_string());
-            out_value->push_back(entry.GetString());
-          }
-        };
-        get_values("actions", &rule_actions);
-        get_values("conditions", &rule_conditions);
+      int max_listeners = binding::kNoListenerMax;
+      if (event_dict->GetDictionary("options", &options)) {
+        bool temp_supports_filters = false;
+        // TODO(devlin): For some reason, schemas indicate supporting filters
+        // either through having a 'filters' property *or* through having
+        // a 'supportsFilters' property. We should clean that up.
+        supports_filters |=
+            (options->GetBoolean("supportsFilters", &temp_supports_filters) &&
+             temp_supports_filters);
+        if (options->GetBoolean("supportsRules", &supports_rules) &&
+            supports_rules) {
+          bool supports_listeners = false;
+          DCHECK(options->GetBoolean("supportsListeners", &supports_listeners));
+          DCHECK(!supports_listeners)
+              << "Events cannot support rules and listeners.";
+          auto get_values = [options](base::StringPiece name,
+                                      std::vector<std::string>* out_value) {
+            const base::ListValue* list = nullptr;
+            CHECK(options->GetList(name, &list));
+            for (const auto& entry : *list) {
+              DCHECK(entry.is_string());
+              out_value->push_back(entry.GetString());
+            }
+          };
+          get_values("actions", &rule_actions);
+          get_values("conditions", &rule_conditions);
+        }
+
+        options->GetInteger("maxListeners", &max_listeners);
       }
 
       events_.push_back(base::MakeUnique<EventData>(
           std::move(name), std::move(full_name), supports_filters,
-          supports_rules, std::move(rule_actions), std::move(rule_conditions),
-          this));
+          supports_rules, max_listeners, std::move(rule_actions),
+          std::move(rule_conditions), this));
     }
   }
 }
@@ -284,10 +308,9 @@ APIBinding::APIBinding(const std::string& api_name,
 APIBinding::~APIBinding() {}
 
 v8::Local<v8::Object> APIBinding::CreateInstance(
-    v8::Local<v8::Context> context,
-    v8::Isolate* isolate,
-    const AvailabilityCallback& is_available) {
+    v8::Local<v8::Context> context) {
   DCHECK(IsContextValid(context));
+  v8::Isolate* isolate = context->GetIsolate();
   if (object_template_.IsEmpty())
     InitializeTemplate(isolate);
   DCHECK(!object_template_.IsEmpty());
@@ -301,12 +324,18 @@ v8::Local<v8::Object> APIBinding::CreateInstance(
   // TODO(devlin): Ideally, we'd only do this check on the methods that are
   // conditionally exposed. Or, we could have multiple templates for different
   // configurations, assuming there are a small number of possibilities.
-  // TODO(devlin): enums should always be exposed, but there may be events that
-  // are restricted. Investigate.
   for (const auto& key_value : methods_) {
-    if (!is_available.Run(key_value.second->full_name)) {
+    if (!is_available_.Run(context, key_value.second->full_name)) {
       v8::Maybe<bool> success = object->Delete(
           context, gin::StringToSymbol(isolate, key_value.first));
+      CHECK(success.IsJust());
+      CHECK(success.FromJust());
+    }
+  }
+  for (const auto& event : events_) {
+    if (!is_available_.Run(context, event->full_name)) {
+      v8::Maybe<bool> success = object->Delete(
+          context, gin::StringToSymbol(isolate, event->exposed_name));
       CHECK(success.IsJust());
       CHECK(success.FromJust());
     }
@@ -356,6 +385,10 @@ void APIBinding::InitializeTemplate(v8::Isolate* isolate) {
                                    *property_definitions_);
   }
 
+  // Allow custom bindings a chance to tweak the template, such as to add
+  // additional properties or types.
+  binding_hooks_->InitializeTemplate(isolate, object_template, *type_refs_);
+
   object_template_.Set(isolate, object_template);
 }
 
@@ -379,8 +412,10 @@ void APIBinding::DecorateTemplateWithProperties(
     v8::Local<v8::String> v8_key = gin::StringToSymbol(isolate, iter.key());
     std::string ref;
     if (dict->GetString("$ref", &ref)) {
+      const base::ListValue* property_values = nullptr;
+      CHECK(dict->GetList("value", &property_values));
       auto property_data = base::MakeUnique<CustomPropertyData>(
-          ref, iter.key(), create_custom_type_);
+          ref, iter.key(), property_values, create_custom_type_);
       object_template->SetLazyDataProperty(
           v8_key, &APIBinding::GetCustomPropertyObject,
           v8::External::New(isolate, property_data.get()));
@@ -446,7 +481,8 @@ void APIBinding::GetEventObject(
     retval = event.ToV8();
   } else {
     retval = event_data->binding->event_handler_->CreateEventInstance(
-        event_data->full_name, event_data->supports_filters, context);
+        event_data->full_name, event_data->supports_filters,
+        event_data->max_listeners, context);
   }
   info.GetReturnValue().Set(retval);
 }
@@ -460,12 +496,14 @@ void APIBinding::GetCustomPropertyObject(
   if (!IsContextValid(context))
     return;
 
+  v8::Context::Scope context_scope(context);
   CHECK(info.Data()->IsExternal());
   auto* property_data =
       static_cast<CustomPropertyData*>(info.Data().As<v8::External>()->Value());
 
   v8::Local<v8::Object> property = property_data->create_custom_type.Run(
-      context, property_data->type_name, property_data->property_name);
+      isolate, property_data->type_name, property_data->property_name,
+      property_data->property_values);
   if (property.IsEmpty())
     return;
 
@@ -483,11 +521,16 @@ void APIBinding::HandleCall(const std::string& name,
   // GetCurrentContext() should always be correct.
   v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
-  std::vector<v8::Local<v8::Value>> argument_list;
-  if (arguments->Length() > 0) {
-    // Just copying handles should never fail.
-    CHECK(arguments->GetRemaining(&argument_list));
+  if (!is_available_.Run(context, name)) {
+    // TODO(devlin): Do we need handle this for events as well? I'm not sure the
+    // currrent system does (though perhaps it should). Investigate.
+    isolate->ThrowException(v8::Exception::Error(gin::StringToV8(
+        isolate, base::StringPrintf("'%s' is not available in this context.",
+                                    name.c_str()))));
+    return;
   }
+
+  std::vector<v8::Local<v8::Value>> argument_list = arguments->GetAll();
 
   bool invalid_invocation = false;
   v8::Local<v8::Function> custom_callback;
@@ -500,6 +543,7 @@ void APIBinding::HandleCall(const std::string& name,
     switch (hooks_result.code) {
       case APIBindingHooks::RequestResult::INVALID_INVOCATION:
         invalid_invocation = true;
+        error = std::move(hooks_result.error);
         // Throw a type error below so that it's not caught by our try-catch.
         break;
       case APIBindingHooks::RequestResult::THROWN:
@@ -519,7 +563,8 @@ void APIBinding::HandleCall(const std::string& name,
   }
 
   if (invalid_invocation) {
-    arguments->ThrowTypeError("Invalid invocation");
+    arguments->ThrowTypeError(api_errors::InvocationError(
+        name, signature->GetExpectedSignature(), error));
     return;
   }
 
@@ -557,7 +602,8 @@ void APIBinding::HandleCall(const std::string& name,
     }
   }
   if (invalid_invocation) {
-    arguments->ThrowTypeError("Invalid invocation");
+    arguments->ThrowTypeError(api_errors::InvocationError(
+        name, signature->GetExpectedSignature(), error));
     return;
   }
 

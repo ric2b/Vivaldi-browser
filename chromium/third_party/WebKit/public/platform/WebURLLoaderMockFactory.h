@@ -28,18 +28,19 @@ class WebURLLoaderMockFactory {
   // Create a WebURLLoader that takes care of mocked requests.
   // Non-mocked request are forwarded to given loader which should not
   // be nullptr.
-  virtual WebURLLoader* CreateURLLoader(WebURLLoader*) = 0;
+  virtual std::unique_ptr<WebURLLoader> CreateURLLoader(
+      std::unique_ptr<WebURLLoader>) = 0;
 
   // Registers a response and the file to be served when the specified URL
   // is loaded. If no file is specified then the response content will be empty.
-  // unregisterURL() should be called for each test entry before registering
+  // UnregisterURL() should be called for each test entry before registering
   // another response for the same URL from another test.
   virtual void RegisterURL(const WebURL&,
                            const WebURLResponse&,
                            const WebString& file_path) = 0;
 
   // Registers an error to be served when the specified URL is requested.
-  // unregisterURL() should be called for each test entry before registering
+  // UnregisterURL() should be called for each test entry before registering
   // another response for the same URL from another test.
   virtual void RegisterErrorURL(const WebURL&,
                                 const WebURLResponse&,
@@ -47,6 +48,17 @@ class WebURLLoaderMockFactory {
 
   // Unregisters the given URL so it is no longer mocked.
   virtual void UnregisterURL(const WebURL&) = 0;
+
+  // Registers a response and the file to be served when a URL with the given
+  // protocol is loaded. If no file is specified then the response content will
+  // be empty. UnregisterProtocol() should be called for each test entry before
+  // registering another response for the same protocol from another test.
+  virtual void RegisterURLProtocol(const WebString& protocol,
+                                   const WebURLResponse&,
+                                   const WebString& file_path) = 0;
+
+  // Unregisters the given URL protocol so it is no longer mocked.
+  virtual void UnregisterURLProtocol(const WebString& protocol) = 0;
 
   // Unregisters URLs so they are no longer mocked. This also clears the
   // MemoryCache.

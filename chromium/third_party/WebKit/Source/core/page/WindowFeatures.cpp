@@ -233,7 +233,7 @@ WindowFeatures::WindowFeatures(const String& dialog_features_string,
 bool WindowFeatures::BoolFeature(const DialogFeaturesMap& features,
                                  const char* key,
                                  bool default_value) {
-  DialogFeaturesMap::const_iterator it = features.Find(key);
+  DialogFeaturesMap::const_iterator it = features.find(key);
   if (it == features.end())
     return default_value;
   const String& value = it->value;
@@ -245,7 +245,7 @@ int WindowFeatures::IntFeature(const DialogFeaturesMap& features,
                                int min,
                                int max,
                                int default_value) {
-  DialogFeaturesMap::const_iterator it = features.Find(key);
+  DialogFeaturesMap::const_iterator it = features.find(key);
   if (it == features.end())
     return default_value;
   bool ok;
@@ -267,8 +267,8 @@ void WindowFeatures::ParseDialogFeatures(const String& string,
   for (size_t i = 0; i < size; ++i) {
     const String& feature_string = vector[i];
 
-    size_t separator_position = feature_string.Find('=');
-    size_t colon_position = feature_string.Find(':');
+    size_t separator_position = feature_string.find('=');
+    size_t colon_position = feature_string.find(':');
     if (separator_position != kNotFound && colon_position != kNotFound)
       continue;  // ignore strings that have both = and :
     if (separator_position == kNotFound)
@@ -284,7 +284,7 @@ void WindowFeatures::ParseDialogFeatures(const String& string,
       value = feature_string.Substring(separator_position + 1)
                   .StripWhiteSpace()
                   .DeprecatedLower();
-      value = value.Left(value.Find(' '));
+      value = value.Left(value.find(' '));
     }
 
     map.Set(key, value);

@@ -6,10 +6,10 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8DOMWrapper.h"
-#include "bindings/core/v8/V8PrivateProperty.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/modules/v8/IDBObserverCallback.h"
+#include "platform/bindings/V8DOMWrapper.h"
+#include "platform/bindings/V8PrivateProperty.h"
 
 namespace blink {
 

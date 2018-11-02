@@ -11,7 +11,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "components/payments/content/payment_app.mojom.h"
+#include "components/payments/mojom/payment_app.mojom.h"
 #include "content/browser/payments/payment_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -31,13 +31,6 @@ class PaymentAppContentUnitTestBase : public testing::Test {
   BrowserContext* browser_context();
   PaymentManager* CreatePaymentManager(const GURL& scope_url,
                                        const GURL& sw_script_url);
-  void SetManifest(PaymentManager* manager,
-                   payments::mojom::PaymentAppManifestPtr manifest,
-                   const PaymentManager::SetManifestCallback& callback);
-  void GetManifest(PaymentManager* manager,
-                   const PaymentManager::GetManifestCallback& callback);
-  payments::mojom::PaymentAppManifestPtr CreatePaymentAppManifestForTest(
-      const std::string& name);
   void UnregisterServiceWorker(const GURL& scope_url);
 
   void ResetPaymentAppInvoked() const;

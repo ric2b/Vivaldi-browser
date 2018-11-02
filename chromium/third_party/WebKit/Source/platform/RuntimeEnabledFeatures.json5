@@ -67,8 +67,11 @@
     },
     {
       name: "AccessibilityObjectModel",
-      settable_from_internals: true,
       status: "experimental",
+    },
+    {
+      name: "AllowContentInitiatedDataUrlNavigations",
+      status: "stable",
     },
     {
       name: "AudioOutputDevices",
@@ -120,6 +123,11 @@
     },
     {
       name: "Budget",
+      status: "stable",
+    },
+    {
+      name: "BudgetQuery",
+      origin_trial_feature_name: "BudgetQuery",
       status: "experimental",
     },
     {
@@ -132,6 +140,10 @@
     },
     {
       name: "Canvas2dImageChromium",
+      status: "experimental",
+    },
+    {
+      name: "ClickRetargetting",
       status: "experimental",
     },
     {
@@ -177,15 +189,11 @@
     },
     {
       name: "ContextMenu",
-      status: "test",
+      status: "experimental",
     },
     {
       name: "CorsRFC1918",
       status: "test",
-    },
-    {
-      name: "CredentialManager",
-      status: "stable",
     },
     {
       name: "CSS3Text",
@@ -218,7 +226,7 @@
     },
     {
       name: "CSSFontDisplay",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "CSSFontSizeAdjust",
@@ -254,16 +262,16 @@
       status: "experimental",
     },
     {
-      name: "CSSOffsetPositionAnchor",
+      name: "CSSOffsetPathRay",
       status: "experimental",
     },
     {
-      name: "CSSOffsetRotate",
-      status: "stable",
+      name: "CSSOffsetPathRayContain",
+      status: "experimental",
     },
     {
-      name: "CSSOffsetRotation",
-      status: "stable",
+      name: "CSSOffsetPositionAnchor",
+      status: "experimental",
     },
     {
       name: "CSSOMSmoothScroll",
@@ -285,7 +293,7 @@
     },
     {
       name: "CSSSelectorsFocusWithin",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "CSSSnapSize",
@@ -341,10 +349,6 @@
       status: "experimental",
     },
     {
-      name: "DeviceLight",
-      status: "experimental",
-    },
-    {
       name: "DisplayList2dCanvas",
       status: "stable",
     },
@@ -377,10 +381,6 @@
       status: "experimental",
     },
     {
-      name: "EnableCanvas2dDynamicRenderingModeSwitching",
-      status: "experimental",
-    },
-    {
       name: "ExecCommandInJavaScript",
       status: "test",
     },
@@ -405,11 +405,10 @@
     },
     {
       name: "FeaturePolicy",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "FeaturePolicyExperimentalFeatures",
-      status: "experimental",
     },
     {
       name:"FetchRequestCache",
@@ -455,6 +454,10 @@
       status: "experimental",
     },
     {
+      name: "FramesTimingFunction",
+      status: "experimental",
+    },
+    {
       name: "FrameTimingSupport",
       status: "experimental",
     },
@@ -494,6 +497,11 @@
       status: "experimental",
     },
     {
+      name: "IdleTimeColdModeSpellChecking",
+      depends_on: ["IdleTimeSpellChecking"],
+      status: "test",
+    },
+    {
       name: "IdleTimeSpellChecking",
       status: "test",
     },
@@ -506,12 +514,16 @@
       status: "test",
     },
     {
+      name: "InertAttribute",
+      status: "experimental",
+    },
+    {
       name: "InertTopControls",
       status: "stable",
     },
     {
       name: "InputEvent",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "InputModeAttribute",
@@ -529,6 +541,10 @@
     {
       name: "IntersectionObserver",
       status: "stable",
+    },
+    {
+      name: "KeyboardLock",
+      status: "test",
     },
     {
       name: "LangAttributeAwareFormControlUI",
@@ -632,7 +648,7 @@
     },
     {
       name: "ModuleScripts",
-      status: "test",
+      status: "experimental",
     },
     {
       name: "MojoJS",
@@ -646,12 +662,28 @@
       name: "NavigatorContentUtils",
     },
     {
+      name: "NetInfoDownlink",
+      status: "experimental",
+    },
+    {
       name: "NetInfoDownlinkMax",
       status: "stable",
     },
     {
+      name: "NetInfoEffectiveType",
+      status: "experimental",
+    },
+    {
+      name: "NetInfoRtt",
+      status: "experimental",
+    },
+    {
       name: "NetworkInformation",
       status: "stable",
+    },
+    // Not a web exposed feature, enabled from the command line.
+    {
+      name: "NewRemotePlaybackPipeline",
     },
     {
       name: "NotificationBadge",
@@ -675,6 +707,9 @@
       status: "stable",
     },
     {
+      name: "OffMainThreadFetch",
+    },
+    {
       name: "OnDeviceChange",
       status: "stable",
     },
@@ -695,6 +730,7 @@
     },
     {
       name: "OverlayScrollbars",
+      settable_from_internals: true,
     },
     {
       name: "PagePopup",
@@ -746,7 +782,7 @@
     },
     {
       name: "PerformancePaintTiming",
-      status: "test",
+      status: "stable",
     },
     {
       name: "PermissionDelegation",
@@ -825,6 +861,10 @@
       name: "RootLayerScrolling",
     },
     {
+      name: "RTCRtpSender",
+      status: "experimental",
+    },
+    {
       name: "ScriptedSpeech",
       status: "stable",
     },
@@ -848,7 +888,15 @@
       status: "stable",
     },
     {
+      name: "SendMouseEventsDisabledFormControls",
+      status: "experimental",
+    },
+    {
       name: "Sensor",
+      status: "experimental",
+    },
+    {
+      name: "ServerTiming",
       status: "experimental",
     },
     {
@@ -869,6 +917,7 @@
     },
     {
       name: "SharedArrayBuffer",
+      status: "stable",
     },
     {
       name: "SharedWorker",
@@ -884,7 +933,6 @@
     },
     {
       name: "SlimmingPaintV2",
-      implied_by: ["PrintBrowser"],
     },
     {
       name: "smil",
@@ -953,7 +1001,7 @@
     },
     {
       name: "VibrateRequiresUserGesture",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "VideoFullscreenDetection",
@@ -962,8 +1010,7 @@
       name: "VideoFullscreenOrientationLock",
     },
     {
-      name: "VisibilityChangeOnUnload",
-      status: "stable",
+      name: "VideoRotateToFullscreen",
     },
     {
       name: "VisualViewportAPI",
@@ -982,8 +1029,8 @@
       status: "experimental",
     },
     {
-      name: "WebAssemblySerialization",
-      status: "test",
+      name: "WebAssemblyStreaming",
+      status: "experimental",
     },
     {
       name: "WebAuth",
@@ -1041,7 +1088,9 @@
       name: "WebVRExperimentalRendering",
       // Don't mark this as depends_on: ["WebVR"], we want to be able to turn
       // it on for just origin trial sites where the dependency is unset.
-      status: "experimental",
+      // We also need it for tests since the default mode requires re-entrant
+      // mojo event handling, and the Javascript mocks don't support that.
+      status: "test",
     },
     {
       name: "WebVTTRegions",

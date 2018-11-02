@@ -19,18 +19,18 @@ namespace blink {
 
 StringOrStringSequence::StringOrStringSequence() : m_type(SpecificTypeNone) {}
 
-String StringOrStringSequence::getAsString() const {
+const String& StringOrStringSequence::getAsString() const {
   DCHECK(isString());
   return m_string;
 }
 
-void StringOrStringSequence::setString(String value) {
+void StringOrStringSequence::setString(const String& value) {
   DCHECK(isNull());
   m_string = value;
   m_type = SpecificTypeString;
 }
 
-StringOrStringSequence StringOrStringSequence::fromString(String value) {
+StringOrStringSequence StringOrStringSequence::fromString(const String& value) {
   StringOrStringSequence container;
   container.setString(value);
   return container;
@@ -67,8 +67,8 @@ void V8StringOrStringSequence::toImpl(v8::Isolate* isolate, v8::Local<v8::Value>
   if (conversionMode == UnionTypeConversionMode::kNullable && IsUndefinedOrNull(v8Value))
     return;
 
-  if (v8Value->IsArray()) {
-    Vector<String> cppValue = ToImplArray<Vector<String>>(v8Value, 0, isolate, exceptionState);
+  if (HasCallableIteratorSymbol(isolate, v8Value, exceptionState)) {
+    Vector<String> cppValue = NativeValueTraits<IDLSequence<IDLString>>::NativeValue(isolate, v8Value, exceptionState);
     if (exceptionState.HadException())
       return;
     impl.setStringSequence(cppValue);

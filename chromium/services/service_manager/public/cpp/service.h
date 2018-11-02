@@ -9,15 +9,16 @@
 
 #include "base/macros.h"
 #include "mojo/public/cpp/system/message_pipe.h"
+#include "services/service_manager/public/cpp/export.h"
 
 namespace service_manager {
 
 class ServiceContext;
-struct ServiceInfo;
+struct BindSourceInfo;
 
 // The primary contract between a Service and the Service Manager, receiving
 // lifecycle notifications and connection requests.
-class Service {
+class SERVICE_MANAGER_PUBLIC_CPP_EXPORT Service {
  public:
   Service();
   virtual ~Service();
@@ -27,12 +28,12 @@ class Service {
   // will be made before this.
   virtual void OnStart();
 
-  // Called when the service identified by |source_info| requests this service
-  // bind a request for |interface_name|. If this method has been called, the
-  // service manager has already determined that policy permits this interface
-  // to be bound, so the implementation of this method can trust that it should
-  // just blindly bind it under most conditions.
-  virtual void OnBindInterface(const ServiceInfo& source_info,
+  // Called when the service identified by |source.identity| requests this
+  // service bind a request for |interface_name|. If this method has been
+  // called, the service manager has already determined that policy permits this
+  // interface to be bound, so the implementation of this method can trust that
+  // it should just blindly bind it under most conditions.
+  virtual void OnBindInterface(const BindSourceInfo& source,
                                const std::string& interface_name,
                                mojo::ScopedMessagePipeHandle interface_pipe);
 
@@ -70,7 +71,7 @@ class Service {
 
 // TODO(rockot): Remove this. It's here to satisfy a few remaining use cases
 // where a Service impl is owned by something other than its ServiceContext.
-class ForwardingService : public Service {
+class SERVICE_MANAGER_PUBLIC_CPP_EXPORT ForwardingService : public Service {
  public:
   // |target| must outlive this object.
   explicit ForwardingService(Service* target);
@@ -78,7 +79,7 @@ class ForwardingService : public Service {
 
   // Service:
   void OnStart() override;
-  void OnBindInterface(const ServiceInfo& remote_info,
+  void OnBindInterface(const BindSourceInfo& source,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
   bool OnServiceManagerConnectionLost() override;

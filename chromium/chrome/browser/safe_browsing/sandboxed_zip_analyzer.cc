@@ -9,7 +9,7 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/task_scheduler/post_task.h"
-#include "chrome/common/safe_browsing/zip_analyzer_results.h"
+#include "chrome/common/safe_browsing/archive_analyzer_results.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -27,12 +27,9 @@ void SandboxedZipAnalyzer::Start() {
 
   base::PostTaskWithTraits(
       FROM_HERE,
-      base::TaskTraits()
-          .MayBlock()
-          .WithPriority(base::TaskPriority::BACKGROUND)
-          .WithShutdownBehavior(
-              base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
-      base::Bind(&SandboxedZipAnalyzer::PrepareFileToAnalyze, this));
+      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::BindOnce(&SandboxedZipAnalyzer::PrepareFileToAnalyze, this));
 }
 
 SandboxedZipAnalyzer::~SandboxedZipAnalyzer() = default;
@@ -63,15 +60,16 @@ void SandboxedZipAnalyzer::PrepareFileToAnalyze() {
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&SandboxedZipAnalyzer::AnalyzeFile, this, base::Passed(&file),
-                 base::Passed(&temp_file)));
+      base::BindOnce(&SandboxedZipAnalyzer::AnalyzeFile, this,
+                     base::Passed(&file), base::Passed(&temp_file)));
 }
 
 void SandboxedZipAnalyzer::ReportFileFailure() {
   DCHECK(!utility_process_mojo_client_);
 
-  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                   base::Bind(callback_, Results()));
+  content::BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(callback_, ArchiveAnalyzerResults()));
 }
 
 void SandboxedZipAnalyzer::AnalyzeFile(base::File file, base::File temp_file) {
@@ -82,8 +80,8 @@ void SandboxedZipAnalyzer::AnalyzeFile(base::File file, base::File temp_file) {
       content::UtilityProcessMojoClient<chrome::mojom::SafeArchiveAnalyzer>>(
       l10n_util::GetStringUTF16(
           IDS_UTILITY_PROCESS_SAFE_BROWSING_ZIP_FILE_ANALYZER_NAME));
-  utility_process_mojo_client_->set_error_callback(
-      base::Bind(&SandboxedZipAnalyzer::AnalyzeFileDone, this, Results()));
+  utility_process_mojo_client_->set_error_callback(base::Bind(
+      &SandboxedZipAnalyzer::AnalyzeFileDone, this, ArchiveAnalyzerResults()));
 
   utility_process_mojo_client_->Start();
 
@@ -92,7 +90,8 @@ void SandboxedZipAnalyzer::AnalyzeFile(base::File file, base::File temp_file) {
       base::Bind(&SandboxedZipAnalyzer::AnalyzeFileDone, this));
 }
 
-void SandboxedZipAnalyzer::AnalyzeFileDone(const Results& results) {
+void SandboxedZipAnalyzer::AnalyzeFileDone(
+    const ArchiveAnalyzerResults& results) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   utility_process_mojo_client_.reset();

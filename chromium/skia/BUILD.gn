@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//build/config/freetype/freetype.gni")
 import("//build/config/ui.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//printing/features/features.gni")
@@ -32,6 +33,7 @@ config("skia_config") {
     "//third_party/skia/include/config",
     "//third_party/skia/include/core",
     "//third_party/skia/include/effects",
+    "//third_party/skia/include/encode",
     "//third_party/skia/include/images",
     "//third_party/skia/include/lazy",
     "//third_party/skia/include/pathops",
@@ -39,11 +41,20 @@ config("skia_config") {
     "//third_party/skia/include/pipe",
     "//third_party/skia/include/ports",
     "//third_party/skia/include/utils",
+    "//third_party/skia/third_party/vulkan",
   ]
 
   defines = skia_for_chromium_defines
+  defines += [
+    "SK_HAS_PNG_LIBRARY",
+    "SK_HAS_WEBP_LIBRARY",
+  ]
 
-  if (is_win || is_android) {
+  if (!is_ios) {
+    defines += [ "SK_HAS_JPEG_LIBRARY" ]
+  }
+
+  if (!use_system_freetype) {
     defines += [ "SK_FREETYPE_MINIMUM_RUNTIME_VERSION=(((FREETYPE_MAJOR) * 0x01000000) | ((FREETYPE_MINOR) * 0x00010000) | ((FREETYPE_PATCH) * 0x00000100))" ]
   }
 
@@ -88,17 +99,19 @@ config("skia_config") {
 # Internal-facing config for Skia library code.
 config("skia_library_config") {
   # These include directories are only included for Skia code and are not
-  # exported to dependents. It's not clear if this is on purpose, but this
-  # matches the GYP build.
+  # exported to dependents.
   include_dirs = [
     "//third_party/skia/include/private",
     "//third_party/skia/include/client/android",
+    "//third_party/skia/src/codec",
     "//third_party/skia/src/core",
-    "//third_party/skia/src/effects/gradients",
     "//third_party/skia/src/image",
+    "//third_party/skia/src/images",
     "//third_party/skia/src/opts",
     "//third_party/skia/src/pdf",
     "//third_party/skia/src/ports",
+    "//third_party/skia/src/shaders",
+    "//third_party/skia/src/shaders/gradients",
     "//third_party/skia/src/sfnt",
     "//third_party/skia/src/utils",
     "//third_party/skia/src/lazy",
@@ -109,6 +122,9 @@ config("skia_library_config") {
   if (is_mac) {
     include_dirs += [ "//third_party/skia/include/utils/ios" ]
   }
+
+  # TODO: remove after Skia shader relocation (https://skia-review.googlesource.com/c/17927)
+  include_dirs += [ "//third_party/skia/src/effects/gradients" ]
 
   defines = []
 
@@ -217,8 +233,6 @@ component("skia") {
     "ext/opacity_filter_canvas.h",
     "ext/recursive_gaussian_convolution.cc",
     "ext/recursive_gaussian_convolution.h",
-    "ext/skia_encode_image.cc",
-    "ext/skia_encode_image.h",
     "ext/skia_histogram.cc",
     "ext/skia_histogram.h",
     "ext/skia_memory_dump_provider.cc",
@@ -261,6 +275,11 @@ component("skia") {
   sources += [
     "//third_party/skia/src/fonts/SkFontMgr_indirect.cpp",
     "//third_party/skia/src/fonts/SkRemotableFontMgr.cpp",
+    "//third_party/skia/src/images/SkImageEncoder.cpp",
+    "//third_party/skia/src/images/SkJPEGWriteUtility.cpp",
+    "//third_party/skia/src/images/SkJpegEncoder.cpp",
+    "//third_party/skia/src/images/SkPngEncoder.cpp",
+    "//third_party/skia/src/images/SkWebpEncoder.cpp",
     "//third_party/skia/src/ports/SkGlobalInitialization_default.cpp",
     "//third_party/skia/src/ports/SkImageGenerator_none.cpp",
     "//third_party/skia/src/ports/SkOSFile_stdio.cpp",
@@ -290,9 +309,6 @@ component("skia") {
     "//third_party/skia/src/utils/SkInterpolator.cpp",
     "//third_party/skia/src/utils/SkOSPath.cpp",
     "//third_party/skia/src/utils/SkParsePath.cpp",
-
-    # Testing.
-    "//third_party/skia/src/fonts/SkGScalerContext.cpp",
   ]
 
   if (is_win) {
@@ -325,6 +341,13 @@ component("skia") {
   }
 
   # Select Skia ports.
+
+  # FreeType is needed everywhere, on Linux and Android as main font backend, on Windows and Mac as fallback backend for Variations.
+  sources += [
+    "//third_party/skia/src/ports/SkFontHost_FreeType.cpp",
+    "//third_party/skia/src/ports/SkFontHost_FreeType_common.cpp",
+  ]
+
   if (is_win) {
     sources += [
       "//third_party/skia/src/ports/SkFontHost_win.cpp",
@@ -370,19 +393,16 @@ component("skia") {
     ]
   }
 
-  if (is_linux || is_android || is_win) {
+  if (is_win || is_mac) {
     sources += [
-      "//third_party/skia/src/ports/SkFontHost_FreeType.cpp",
-      "//third_party/skia/src/ports/SkFontHost_FreeType_common.cpp",
+      # Add the FreeType custom font manager as a fallback backend for variable fonts.
+      "//third_party/skia/src/ports/SkFontMgr_custom.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_custom_empty.cpp",
     ]
   }
 
   if (is_win) {
     sources += [
-      # Add the custom FreeType font manager to instantiate variable fonts on Windows.
-      "//third_party/skia/src/ports/SkFontMgr_custom.cpp",
-      "//third_party/skia/src/ports/SkFontMgr_custom_empty.cpp",
-
       # Select the right BitmapPlatformDevice.
       "ext/raster_handle_allocator_win.cc",
     ]
@@ -407,14 +427,31 @@ component("skia") {
     ":skia_opts",
     "//base",
     "//base/third_party/dynamic_annotations",
+    "//build/config/freetype",
+    "//third_party:jpeg",
+    "//third_party/libpng",
+    "//third_party/libwebp",
   ]
+
+  if (is_ios) {
+    sources -= [
+      "//third_party/skia/src/images/SkJPEGWriteUtility.cpp",
+      "//third_party/skia/src/images/SkJpegEncoder.cpp",
+    ]
+    deps -= [ "//third_party:jpeg" ]
+  }
 
   if (is_linux) {
     if (use_pango) {
-      configs += [ "//build/config/linux/pangocairo" ]
+      configs += [
+        # libpng_config will be included automatically from deps.  We do this
+        # to ensure that it is included before the pangocairo path (which also
+        # has a png.h).
+        "//third_party/libpng:libpng_config",
+        "//build/config/linux/pangocairo",
+      ]
     }
     deps += [
-      "//build/config/freetype",
       "//build/linux:fontconfig",
       "//third_party/expat",
       "//third_party/icu:icuuc",
@@ -426,10 +463,6 @@ component("skia") {
       "//third_party/android_tools:cpu_features",
       "//third_party/expat",
     ]
-  }
-
-  if (is_win || is_android) {
-    deps += [ "//build/config/freetype" ]
   }
 
   if (skia_support_pdf) {
@@ -698,7 +731,7 @@ if (!is_ios) {
     deps = [
       ":skia",
       "//base",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
     ]
   }
@@ -713,7 +746,7 @@ if (!is_ios) {
       ":skia",
       "//base",
       "//base/test:test_support",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
     ]
   }

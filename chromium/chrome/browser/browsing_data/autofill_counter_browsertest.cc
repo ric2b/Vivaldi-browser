@@ -68,10 +68,11 @@ class AutofillCounterTest : public InProcessBrowserTest {
 
   void AddCreditCard(const char* card_number,
                      const char* exp_month,
-                     const char* exp_year) {
+                     const char* exp_year,
+                     const char* billing_address_id) {
     autofill::CreditCard card;
     autofill::test::SetCreditCardInfo(&card, nullptr, card_number, exp_month,
-                                      exp_year);
+                                      exp_year, billing_address_id);
     credit_card_ids_.push_back(card.guid());
     web_data_service_->AddCreditCard(card);
   }
@@ -114,8 +115,8 @@ class AutofillCounterTest : public InProcessBrowserTest {
   void CallbackFromDBThread() {
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&base::RunLoop::Quit,
-                   base::Unretained(run_loop_.get())));
+        base::BindOnce(&base::RunLoop::Quit,
+                       base::Unretained(run_loop_.get())));
   }
 
   void WaitForDBThread() {
@@ -123,8 +124,8 @@ class AutofillCounterTest : public InProcessBrowserTest {
 
     content::BrowserThread::PostTask(
         content::BrowserThread::DB, FROM_HERE,
-        base::Bind(&AutofillCounterTest::CallbackFromDBThread,
-                   base::Unretained(this)));
+        base::BindOnce(&AutofillCounterTest::CallbackFromDBThread,
+                       base::Unretained(this)));
 
     run_loop_->Run();
   }
@@ -204,7 +205,7 @@ class AutofillCounterTest : public InProcessBrowserTest {
 // Tests that we count the correct number of autocomplete suggestions.
 IN_PROC_BROWSER_TEST_F(AutofillCounterTest, AutocompleteSuggestions) {
   Profile* profile = browser()->profile();
-  browsing_data::AutofillCounter counter(GetWebDataService());
+  browsing_data::AutofillCounter counter(GetWebDataService(), nullptr);
   counter.Init(
       profile->GetPrefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
       base::Bind(&AutofillCounterTest::Callback, base::Unretained(this)));
@@ -241,7 +242,7 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, AutocompleteSuggestions) {
 // Tests that we count the correct number of credit cards.
 IN_PROC_BROWSER_TEST_F(AutofillCounterTest, CreditCards) {
   Profile* profile = browser()->profile();
-  browsing_data::AutofillCounter counter(GetWebDataService());
+  browsing_data::AutofillCounter counter(GetWebDataService(), nullptr);
   counter.Init(
       profile->GetPrefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
       base::Bind(&AutofillCounterTest::Callback, base::Unretained(this)));
@@ -249,17 +250,17 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, CreditCards) {
   WaitForCounting();
   EXPECT_EQ(0, GetNumCreditCards());
 
-  AddCreditCard("0000-0000-0000-0000", "1", "2015");
+  AddCreditCard("0000-0000-0000-0000", "1", "2015", "1");
   counter.Restart();
   WaitForCounting();
   EXPECT_EQ(1, GetNumCreditCards());
 
-  AddCreditCard("0123-4567-8910-1112", "10", "2015");
+  AddCreditCard("0123-4567-8910-1112", "10", "2015", "1");
   counter.Restart();
   WaitForCounting();
   EXPECT_EQ(2, GetNumCreditCards());
 
-  AddCreditCard("1211-1098-7654-3210", "10", "2030");
+  AddCreditCard("1211-1098-7654-3210", "10", "2030", "1");
   counter.Restart();
   WaitForCounting();
   EXPECT_EQ(3, GetNumCreditCards());
@@ -278,7 +279,7 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, CreditCards) {
 // Tests that we count the correct number of addresses.
 IN_PROC_BROWSER_TEST_F(AutofillCounterTest, Addresses) {
   Profile* profile = browser()->profile();
-  browsing_data::AutofillCounter counter(GetWebDataService());
+  browsing_data::AutofillCounter counter(GetWebDataService(), nullptr);
   counter.Init(
       profile->GetPrefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
       base::Bind(&AutofillCounterTest::Callback, base::Unretained(this)));
@@ -321,15 +322,15 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, ComplexResult) {
   AddAutocompleteSuggestion("tel", "+987654321");
   AddAutocompleteSuggestion("city", "Munich");
 
-  AddCreditCard("0000-0000-0000-0000", "1", "2015");
-  AddCreditCard("1211-1098-7654-3210", "10", "2030");
+  AddCreditCard("0000-0000-0000-0000", "1", "2015", "1");
+  AddCreditCard("1211-1098-7654-3210", "10", "2030", "1");
 
   AddAddress("John", "Doe", "Main Street 12345");
   AddAddress("Jane", "Smith", "Main Street 12346");
   AddAddress("John", "Smith", "Side Street 47");
 
   Profile* profile = browser()->profile();
-  browsing_data::AutofillCounter counter(GetWebDataService());
+  browsing_data::AutofillCounter counter(GetWebDataService(), nullptr);
   counter.Init(
       profile->GetPrefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
       base::Bind(&AutofillCounterTest::Callback, base::Unretained(this)));
@@ -348,7 +349,7 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, TimeRanges) {
   base::Time time1 = base::Time::FromTimeT(base::Time::Now().ToTimeT());
 
   AddAutocompleteSuggestion("email", "example@example.com");
-  AddCreditCard("0000-0000-0000-0000", "1", "2015");
+  AddCreditCard("0000-0000-0000-0000", "1", "2015", "1");
   AddAddress("John", "Doe", "Main Street 12345");
   WaitForDBThread();
 
@@ -356,7 +357,7 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, TimeRanges) {
   base::PlatformThread::Sleep(base::TimeDelta::FromSeconds(1));
   base::Time time2 = base::Time::FromTimeT(base::Time::Now().ToTimeT());
 
-  AddCreditCard("0123-4567-8910-1112", "10", "2015");
+  AddCreditCard("0123-4567-8910-1112", "10", "2015", "1");
   AddAddress("Jane", "Smith", "Main Street 12346");
   AddAddress("John", "Smith", "Side Street 47");
   WaitForDBThread();
@@ -366,7 +367,7 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, TimeRanges) {
   base::Time time3 = base::Time::FromTimeT(base::Time::Now().ToTimeT());
 
   AddAutocompleteSuggestion("tel", "+987654321");
-  AddCreditCard("1211-1098-7654-3210", "10", "2030");
+  AddCreditCard("1211-1098-7654-3210", "10", "2030", "1");
   WaitForDBThread();
 
   // Test the results for different starting points.
@@ -385,7 +386,7 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, TimeRanges) {
   };
 
   Profile* profile = browser()->profile();
-  browsing_data::AutofillCounter counter(GetWebDataService());
+  browsing_data::AutofillCounter counter(GetWebDataService(), nullptr);
   counter.Init(
       profile->GetPrefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
       base::Bind(&AutofillCounterTest::Callback, base::Unretained(this)));

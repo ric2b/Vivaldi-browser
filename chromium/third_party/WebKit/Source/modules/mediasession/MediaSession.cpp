@@ -70,7 +70,7 @@ WTF::Optional<MediaSessionAction> ActionNameToMojomAction(
     return MediaSessionAction::SEEK_FORWARD;
 
   NOTREACHED();
-  return WTF::kNullopt;
+  return WTF::nullopt;
 }
 
 const AtomicString& MediaSessionPlaybackStateToString(
@@ -162,7 +162,7 @@ void MediaSession::setActionHandler(const String& action,
 
     NotifyActionChange(action, ActionChangeType::kActionEnabled);
   } else {
-    if (action_handlers_.Find(action) == action_handlers_.end())
+    if (action_handlers_.find(action) == action_handlers_.end())
       return;
 
     action_handlers_.erase(action);
@@ -225,7 +225,7 @@ void MediaSession::DidReceiveAction(
   UserGestureIndicator gesture_indicator(
       DocumentUserGestureToken::Create(document));
 
-  auto iter = action_handlers_.Find(MojomActionToActionName(action));
+  auto iter = action_handlers_.find(MojomActionToActionName(action));
   if (iter == action_handlers_.end())
     return;
 

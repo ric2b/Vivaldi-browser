@@ -10,9 +10,9 @@
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing_db/util.h"
-#include "components/security_interstitials/core/safe_browsing_error_ui.h"
+#include "components/security_interstitials/core/base_safe_browsing_error_ui.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -51,8 +51,8 @@ class SafeBrowsingCallbackWaiter {
      DCHECK_CURRENTLY_ON(BrowserThread::IO);
      BrowserThread::PostTask(
          BrowserThread::UI, FROM_HERE,
-         base::Bind(&SafeBrowsingCallbackWaiter::OnBlockingPageDone,
-                    base::Unretained(this), proceed));
+         base::BindOnce(&SafeBrowsingCallbackWaiter::OnBlockingPageDone,
+                        base::Unretained(this), proceed));
    }
 
    void WaitForCallback() {
@@ -344,14 +344,14 @@ class TestSafeBrowsingBlockingPage : public SafeBrowsingBlockingPage {
             web_contents,
             main_frame_url,
             unsafe_resources,
-            SafeBrowsingErrorUI::SBErrorDisplayOptions(
+            BaseSafeBrowsingErrorUI::SBErrorDisplayOptions(
                 BaseBlockingPage::IsMainPageLoadBlocked(unsafe_resources),
-                false,
-                false,
-                false,
-                false,
-                false,
-                BaseBlockingPage::IsMainPageLoadBlocked(unsafe_resources))) {
+                false,  // is_extended_reporting_opt_in_allowed
+                false,  // is_off_the_record
+                false,  // is_extended_reporting_enabled
+                false,  // is_scout_reporting_enabled
+                false,  // is_proceed_anyway_disabled
+                "cpn_safe_browsing")) {  // help_center_article_link
     // Don't delay details at all for the unittest.
     SetThreatDetailsProceedDelayForTesting(0);
     DontCreateViewForTesting();

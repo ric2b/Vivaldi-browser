@@ -8,7 +8,7 @@
 
 #include "bindings/core/v8/ScriptFunction.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/testing/DummyPageHolder.h"
@@ -32,7 +32,7 @@ class Function : public ScriptFunction {
       : ScriptFunction(script_state), value_(value) {}
 
   ScriptValue Call(ScriptValue value) override {
-    ASSERT(!value.IsEmpty());
+    DCHECK(!value.IsEmpty());
     *value_ = ToCoreString(value.V8Value()
                                ->ToString(GetScriptState()->GetContext())
                                .ToLocalChecked());

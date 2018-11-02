@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
 
 namespace chromeos {
@@ -25,6 +26,10 @@ const char kTestCrosGaiaIdMigration[] = "test-cros-gaia-id-migration";
 // Value for kTestCrosGaiaIdMigration indicating that migration is started (i.e.
 // all stored user keys will be converted to GaiaId)
 const char kTestCrosGaiaIdMigrationStarted[] = "started";
+
+// Controls whether enable voice interaction feature.
+const base::Feature kVoiceInteractionFeature{"ChromeOSVoiceInteraction",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace
 
@@ -68,8 +73,6 @@ const char kArcAlwaysStart[] = "arc-always-start";
 //   Users can enable ARC only when Finch experiment is turned on.
 // - officially-supported: ARC is installed and supported on this device. So
 //   users can enable ARC via settings etc.
-// - officially-supported-with-active-directory: ARC is supported and also
-//   allowed to use with Active Directory management.
 const char kArcAvailability[] = "arc-availability";
 
 // DEPRECATED: Please use --arc-availability=installed.
@@ -265,12 +268,19 @@ const char kEnableExtensionAssetsSharing[] = "enable-extension-assets-sharing";
 // Enables animated transitions during first-run tutorial.
 const char kEnableFirstRunUITransitions[] = "enable-first-run-ui-transitions";
 
+// Enables action handler apps (e.g. creating new notes) on lock screen.
+const char kEnableLockScreenApps[] = "enable-lock-screen-apps";
+
 // Enables Kiosk mode for Chrome OS. Note this switch refers to retail mode
 // rather than the kiosk app mode.
 const char kEnableKioskMode[] = "enable-kiosk-mode";
 
 // Enables tethering to nearby LTE devices.
 const char kEnableTether[] = "enable-tether";
+
+// Overrides Tether with stub service. Provide integer arguments for the number
+// of fake networks desired, e.g. 'tether-stub=2'.
+const char kTetherStub[] = "tether-stub";
 
 // Disables material design OOBE UI.
 const char kDisableMdOobe[] = "disable-md-oobe";
@@ -403,6 +413,15 @@ const char kMemoryPressureThresholds[] = "memory-pressure-thresholds";
 // Enables natural scroll by default.
 const char kNaturalScrollDefault[] = "enable-natural-scroll-default";
 
+// If present, the device needs to check the policy to see if the migration to
+// ext4 for ARC is allowed. It should be present only on devices that have been
+// initially issued with ecrypfs encryption and have ARC (N+) available. For the
+// devices in other categories this flag must be missing.
+const char kNeedArcMigrationPolicyCheck[] = "need-arc-migration-policy-check";
+
+// Enables Settings based network config in MD Settings.
+const char kNetworkSettingsConfig[] = "network-settings-config";
+
 // An optional comma-separated list of IDs of apps that can be used to take
 // notes. If unset, a hardcoded list is used instead.
 const char kNoteTakingAppIds[] = "note-taking-app-ids";
@@ -418,6 +437,12 @@ const char kOobeSkipPostLogin[] = "oobe-skip-postlogin";
 
 // Interval at which we check for total time on OOBE.
 const char kOobeTimerInterval[] = "oobe-timer-interval";
+
+// If true, the views-based md login and lock screens will be shown.
+const char kShowMdLogin[] = "show-md-login";
+
+// If true, the non-views-based md login and lock screens will be shown.
+const char kShowNonViewMdLogin[] = "show-non-view-md-login";
 
 // Specifies power stub behavior:
 //  'cycle=2' - Cycles power states every 2 seconds.
@@ -528,6 +553,12 @@ bool IsGaiaIdMigrationStarted() {
 
 bool IsCellularFirstDevice() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(kCellularFirst);
+}
+
+bool IsVoiceInteractionEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+             kEnableVoiceInteraction) ||
+         base::FeatureList::IsEnabled(kVoiceInteractionFeature);
 }
 
 }  // namespace switches

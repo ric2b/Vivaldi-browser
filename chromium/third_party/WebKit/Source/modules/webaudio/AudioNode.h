@@ -81,7 +81,7 @@ class MODULES_EXPORT AudioHandler : public ThreadSafeRefCounted<AudioHandler> {
     kNodeTypeMediaElementAudioSource = 4,
     kNodeTypeMediaStreamAudioDestination = 5,
     kNodeTypeMediaStreamAudioSource = 6,
-    kNodeTypeJavaScript = 7,
+    kNodeTypeScriptProcessor = 7,
     kNodeTypeBiquadFilter = 8,
     kNodeTypePanner = 9,
     kNodeTypeStereoPanner = 10,
@@ -106,8 +106,8 @@ class MODULES_EXPORT AudioHandler : public ThreadSafeRefCounted<AudioHandler> {
   // Do not release resources used by an audio rendering thread in dispose().
   virtual void Dispose();
 
-  // node() returns a valid object until dispose() is called.  This returns
-  // nullptr after dispose().  We must not call node() in an audio rendering
+  // GetNode() returns a valid object until dispose() is called.  This returns
+  // nullptr after dispose().  We must not call GetNode() in an audio rendering
   // thread.
   AudioNode* GetNode() const;
   // context() returns a valid object until the BaseAudioContext dies, and
@@ -186,7 +186,7 @@ class MODULES_EXPORT AudioHandler : public ThreadSafeRefCounted<AudioHandler> {
   virtual void CheckNumberOfChannelsForInput(AudioNodeInput*);
 
 #if DEBUG_AUDIONODE_REFERENCES
-  static void printNodeCounts();
+  static void PrintNodeCounts();
 #endif
 
   // tailTime() is the length of time (not counting latency time) where
@@ -259,8 +259,8 @@ class MODULES_EXPORT AudioHandler : public ThreadSafeRefCounted<AudioHandler> {
   NodeType node_type_;
 
   // The owner AudioNode.  This untraced member is safe because dispose() is
-  // called before the AudioNode death, and it clears m_node.  Do not access
-  // m_node directly, use node() instead.
+  // called before the AudioNode death, and it clears |node_|.  Do not access
+  // |node_| directly, use GetNode() instead.
   // See http://crbug.com/404527 for the detail.
   UntracedMember<AudioNode> node_;
 
@@ -281,8 +281,8 @@ class MODULES_EXPORT AudioHandler : public ThreadSafeRefCounted<AudioHandler> {
   bool is_disabled_;
 
 #if DEBUG_AUDIONODE_REFERENCES
-  static bool s_isNodeCountInitialized;
-  static int s_nodeCount[NodeTypeEnd];
+  static bool is_node_count_initialized_;
+  static int node_count_[kNodeTypeEnd];
 #endif
 
   ChannelCountMode channel_count_mode_;

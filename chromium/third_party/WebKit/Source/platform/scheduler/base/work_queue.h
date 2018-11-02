@@ -29,7 +29,7 @@ class WorkQueueSets;
 // API subset used by WorkQueueSets pretends the WorkQueue is empty until the
 // fence is removed.  This functionality is a primitive intended for use by
 // throttling mechanisms.
-class BLINK_PLATFORM_EXPORT WorkQueue {
+class PLATFORM_EXPORT WorkQueue {
  public:
   enum class QueueType { DELAYED, IMMEDIATE };
 
@@ -43,7 +43,8 @@ class BLINK_PLATFORM_EXPORT WorkQueue {
   // Assigns the current set index.
   void AssignSetIndex(size_t work_queue_set_index);
 
-  void AsValueInto(base::trace_event::TracedValue* state) const;
+  void AsValueInto(base::TimeTicks now,
+                   base::trace_event::TracedValue* state) const;
 
   // Returns true if the |work_queue_| is empty. This method ignores any fences.
   bool Empty() const { return work_queue_.empty(); }

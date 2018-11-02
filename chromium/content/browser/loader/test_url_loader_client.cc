@@ -15,12 +15,14 @@ TestURLLoaderClient::~TestURLLoaderClient() {}
 
 void TestURLLoaderClient::OnReceiveResponse(
     const ResourceResponseHead& response_head,
+    const base::Optional<net::SSLInfo>& ssl_info,
     mojom::DownloadedTempFilePtr downloaded_file) {
   EXPECT_FALSE(has_received_response_);
   EXPECT_FALSE(has_received_cached_metadata_);
   EXPECT_FALSE(has_received_completion_);
   has_received_response_ = true;
   response_head_ = response_head;
+  ssl_info_ = ssl_info;
   if (quit_closure_for_on_receive_response_)
     quit_closure_for_on_receive_response_.Run();
 }
@@ -71,9 +73,10 @@ void TestURLLoaderClient::OnTransferSizeUpdated(int32_t transfer_size_diff) {
   body_transfer_size_ += transfer_size_diff;
 }
 
-void TestURLLoaderClient::OnUploadProgress(int64_t current_position,
-                                           int64_t total_size,
-                                           const base::Closure& ack_callback) {
+void TestURLLoaderClient::OnUploadProgress(
+    int64_t current_position,
+    int64_t total_size,
+    OnUploadProgressCallback ack_callback) {
   EXPECT_TRUE(ack_callback);
   EXPECT_FALSE(has_received_response_);
   EXPECT_FALSE(has_received_completion_);
@@ -83,7 +86,7 @@ void TestURLLoaderClient::OnUploadProgress(int64_t current_position,
   has_received_upload_progress_ = true;
   current_upload_position_ = current_position;
   total_upload_size_ = total_size;
-  ack_callback.Run();
+  std::move(ack_callback).Run();
 }
 
 void TestURLLoaderClient::OnStartLoadingResponseBody(
@@ -110,7 +113,7 @@ void TestURLLoaderClient::ClearHasReceivedRedirect() {
 
 mojom::URLLoaderClientPtr TestURLLoaderClient::CreateInterfacePtr() {
   mojom::URLLoaderClientPtr client_ptr;
-  binding_.Bind(&client_ptr);
+  binding_.Bind(mojo::MakeRequest(&client_ptr));
   return client_ptr;
 }
 

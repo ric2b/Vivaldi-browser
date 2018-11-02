@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "components/payments/content/payment_app.mojom.h"
+#include "components/payments/mojom/payment_app.mojom.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "url/gurl.h"
@@ -29,12 +29,25 @@ class CONTENT_EXPORT PaymentManager
 
  private:
   friend class PaymentAppContentUnitTestBase;
+  friend class PaymentAppProviderTest;
+  friend class PaymentManagerTest;
 
   // payments::mojom::PaymentManager methods:
   void Init(const std::string& scope) override;
-  void SetManifest(payments::mojom::PaymentAppManifestPtr manifest,
-                   const SetManifestCallback& callback) override;
-  void GetManifest(const GetManifestCallback& callback) override;
+  void DeletePaymentInstrument(
+      const std::string& instrument_key,
+      DeletePaymentInstrumentCallback callback) override;
+  void GetPaymentInstrument(const std::string& instrument_key,
+                            GetPaymentInstrumentCallback callback) override;
+  void KeysOfPaymentInstruments(
+      KeysOfPaymentInstrumentsCallback callback) override;
+  void HasPaymentInstrument(const std::string& instrument_key,
+                            HasPaymentInstrumentCallback callback) override;
+  void SetPaymentInstrument(const std::string& instrument_key,
+                            payments::mojom::PaymentInstrumentPtr details,
+                            SetPaymentInstrumentCallback callback) override;
+  void ClearPaymentInstruments(
+      ClearPaymentInstrumentsCallback callback) override;
 
   // Called when an error is detected on binding_.
   void OnConnectionError();

@@ -29,13 +29,13 @@
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLMediaElement.h"
+#include "core/html/media/AutoplayPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ConsoleTypes.h"
 #include "modules/mediastream/MediaStream.h"
@@ -73,6 +73,7 @@
 #include "platform/Histogram.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/audio/IIRFilter.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/Platform.h"
 
@@ -104,10 +105,11 @@ BaseAudioContext::BaseAudioContext(Document* document)
       periodic_wave_sawtooth_(nullptr),
       periodic_wave_triangle_(nullptr),
       output_position_() {
-  // If mediaPlaybackRequiresUserGesture is enabled, cross origin iframes will
-  // require user gesture for the AudioContext to produce sound.
-  if (document->GetSettings() &&
-      document->GetSettings()->GetMediaPlaybackRequiresUserGesture() &&
+  // If the autoplay policy requires a user gesture, cross origin iframes will
+  // require user gesture for the AudioContext to produce sound. This apply even
+  // if the autoplay policy requires user gesture for top frames.
+  if (AutoplayPolicy::GetAutoplayPolicyForDocument(*document) !=
+          AutoplayPolicy::Type::kNoUserGestureRequired &&
       document->GetFrame() && document->GetFrame()->IsCrossOriginSubframe()) {
     autoplay_status_ = AutoplayStatus::kAutoplayStatusFailed;
     user_gesture_required_ = true;
@@ -520,7 +522,7 @@ OscillatorNode* BaseAudioContext::createOscillator(
     ExceptionState& exception_state) {
   DCHECK(IsMainThread());
 
-  return OscillatorNode::Create(*this, exception_state);
+  return OscillatorNode::Create(*this, "sine", nullptr, exception_state);
 }
 
 PeriodicWave* BaseAudioContext::createPeriodicWave(
@@ -670,7 +672,7 @@ void BaseAudioContext::RemoveFinishedSourceNodesOnMainThread() {
     if (i != kNotFound)
       active_source_nodes_.erase(i);
   }
-  finished_source_nodes_.Clear();
+  finished_source_nodes_.clear();
 }
 
 bool BaseAudioContext::ReleaseFinishedSourceNodes() {
@@ -689,7 +691,7 @@ bool BaseAudioContext::ReleaseFinishedSourceNodes() {
       }
     }
   }
-  finished_source_handlers_.Clear();
+  finished_source_handlers_.clear();
   return did_remove;
 }
 
@@ -706,7 +708,7 @@ void BaseAudioContext::ReleaseActiveSourceNodes() {
   for (auto& source_node : active_source_nodes_)
     source_node->Handler().BreakConnection();
 
-  active_source_nodes_.Clear();
+  active_source_nodes_.clear();
 }
 
 void BaseAudioContext::HandleStoppableSourceNodes() {
@@ -794,7 +796,7 @@ void BaseAudioContext::ResolvePromisesForResumeOnMainThread() {
     }
   }
 
-  resume_resolvers_.Clear();
+  resume_resolvers_.clear();
   is_resolving_resume_promises_ = false;
 }
 
@@ -821,7 +823,7 @@ void BaseAudioContext::RejectPendingDecodeAudioDataResolvers() {
   for (auto& resolver : decode_audio_resolvers_)
     resolver->Reject(DOMException::Create(kInvalidStateError,
                                           "Audio context is going away"));
-  decode_audio_resolvers_.Clear();
+  decode_audio_resolvers_.clear();
 }
 
 void BaseAudioContext::MaybeUnlockUserGesture() {
@@ -831,7 +833,6 @@ void BaseAudioContext::MaybeUnlockUserGesture() {
   DCHECK(!autoplay_status_.has_value() ||
          autoplay_status_ != AutoplayStatus::kAutoplayStatusSucceeded);
 
-  UserGestureIndicator::UtilizeUserGesture();
   user_gesture_required_ = false;
   autoplay_status_ = AutoplayStatus::kAutoplayStatusSucceeded;
 }
@@ -864,7 +865,7 @@ void BaseAudioContext::RejectPendingResolvers() {
     resolver->Reject(DOMException::Create(kInvalidStateError,
                                           "Audio context is going away"));
   }
-  resume_resolvers_.Clear();
+  resume_resolvers_.clear();
   is_resolving_resume_promises_ = false;
 
   RejectPendingDecodeAudioDataResolvers();

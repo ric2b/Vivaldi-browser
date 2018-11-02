@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_restrictions.h"
@@ -172,9 +173,14 @@ bool BrowserGpuMemoryBufferManager::OnMemoryDump(
       uint64_t client_tracing_process_id =
           ClientIdToTracingProcessId(client_id);
 
-      base::trace_event::MemoryAllocatorDumpGuid shared_buffer_guid =
-          gfx::GetGpuMemoryBufferGUIDForTracing(client_tracing_process_id,
-                                                buffer_id);
+      base::trace_event::MemoryAllocatorDumpGuid shared_buffer_guid;
+      if (buffer.second.type == gfx::SHARED_MEMORY_BUFFER) {
+        shared_buffer_guid = gfx::GetSharedMemoryGUIDForTracing(
+            client_tracing_process_id, buffer_id);
+      } else {
+        shared_buffer_guid = gfx::GetGenericSharedGpuMemoryGUIDForTracing(
+            client_tracing_process_id, buffer_id);
+      }
       pmd->CreateSharedGlobalAllocatorDump(shared_buffer_guid);
       pmd->AddOwnershipEdge(dump->guid(), shared_buffer_guid);
     }
@@ -337,6 +343,13 @@ void BrowserGpuMemoryBufferManager::CreateGpuMemoryBufferOnIO(
   }
 
   GpuProcessHost* host = GpuProcessHost::Get();
+
+  if (!host) {
+      DLOG(ERROR) << "Could not create GpuProcessHost";
+      callback.Run(gfx::GpuMemoryBufferHandle());
+      return;
+  }
+
   // Note: Unretained is safe as IO thread is stopped before manager is
   // destroyed.
   host->CreateGpuMemoryBuffer(

@@ -6,19 +6,23 @@
 
 #include <limits>
 
-#include "ash/default_accessibility_delegate.h"
 #include "ash/gpu_support_stub.h"
 #include "ash/palette_delegate.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "ash/session/session_state_delegate.h"
+#include "ash/shelf/shelf.h"
+#include "ash/shell.h"
+#include "ash/shell_observer.h"
 #include "ash/system/tray/system_tray_notifier.h"
+#include "ash/test/test_accessibility_delegate.h"
 #include "ash/test/test_keyboard_ui.h"
 #include "ash/test/test_session_state_delegate.h"
-#include "ash/test/test_shelf_delegate.h"
 #include "ash/test/test_system_tray_delegate.h"
 #include "ash/test/test_wallpaper_delegate.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm_window.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "ui/aura/window.h"
@@ -27,11 +31,35 @@
 namespace ash {
 namespace test {
 
+// A ShellObserver that sets the shelf alignment and auto hide behavior when the
+// shelf is created, to simulate ChromeLauncherController's behavior.
+class ShelfInitializer : public ShellObserver {
+ public:
+  ShelfInitializer() { Shell::Get()->AddShellObserver(this); }
+  ~ShelfInitializer() override { Shell::Get()->RemoveShellObserver(this); }
+
+  // ShellObserver:
+  void OnShelfCreatedForRootWindow(WmWindow* root_window) override {
+    Shelf* shelf = root_window->GetRootWindowController()->GetShelf();
+    // Do not override the custom initialization performed by some unit tests.
+    if (shelf->alignment() == SHELF_ALIGNMENT_BOTTOM_LOCKED &&
+        shelf->auto_hide_behavior() == SHELF_AUTO_HIDE_ALWAYS_HIDDEN) {
+      shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+      shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
+      shelf->UpdateVisibilityState();
+    }
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ShelfInitializer);
+};
+
 TestShellDelegate::TestShellDelegate()
     : num_exit_requests_(0),
       multi_profiles_enabled_(false),
       force_maximize_on_first_run_(false),
-      touchscreen_enabled_in_local_pref_(true) {}
+      touchscreen_enabled_in_local_pref_(true),
+      active_user_pref_service_(nullptr) {}
 
 TestShellDelegate::~TestShellDelegate() {}
 
@@ -73,9 +101,13 @@ keyboard::KeyboardUI* TestShellDelegate::CreateKeyboardUI() {
 
 void TestShellDelegate::OpenUrlFromArc(const GURL& url) {}
 
-ShelfDelegate* TestShellDelegate::CreateShelfDelegate(ShelfModel* model) {
-  return new TestShelfDelegate();
+void TestShellDelegate::ShelfInit() {
+  // Create a separate shelf initializer that mimics ChromeLauncherController.
+  if (!shelf_initializer_)
+    shelf_initializer_ = base::MakeUnique<ShelfInitializer>();
 }
+
+void TestShellDelegate::ShelfShutdown() {}
 
 SystemTrayDelegate* TestShellDelegate::CreateSystemTrayDelegate() {
   return new TestSystemTrayDelegate;
@@ -91,14 +123,14 @@ TestSessionStateDelegate* TestShellDelegate::CreateSessionStateDelegate() {
 }
 
 AccessibilityDelegate* TestShellDelegate::CreateAccessibilityDelegate() {
-  return new DefaultAccessibilityDelegate();
+  return new TestAccessibilityDelegate();
 }
 
 std::unique_ptr<PaletteDelegate> TestShellDelegate::CreatePaletteDelegate() {
   return nullptr;
 }
 
-ui::MenuModel* TestShellDelegate::CreateContextMenu(WmShelf* wm_shelf,
+ui::MenuModel* TestShellDelegate::CreateContextMenu(Shelf* shelf,
                                                     const ShelfItem* item) {
   return nullptr;
 }
@@ -114,6 +146,10 @@ base::string16 TestShellDelegate::GetProductName() const {
 
 gfx::Image TestShellDelegate::GetDeprecatedAcceleratorImage() const {
   return gfx::Image();
+}
+
+PrefService* TestShellDelegate::GetActiveUserPrefService() const {
+  return active_user_pref_service_;
 }
 
 bool TestShellDelegate::IsTouchscreenEnabledInPrefs(

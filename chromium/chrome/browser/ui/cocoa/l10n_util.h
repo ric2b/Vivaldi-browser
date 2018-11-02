@@ -37,12 +37,10 @@ NSString* ReplaceNSStringPlaceholders(NSString* formatString,
 // Generates a tooltip string for a given URL and title.
 NSString* TooltipForURLAndTitle(NSString* url, NSString* title);
 
-extern const base::Feature kExperimentalMacRTL;
 // Returns whether both:
-// 1) Experimental Mac RTL support is enabled via the ExperimentalMacRTL
-//    feature;
+// 1) Mac RTL support is enabled via the MacRTL feature;
 // 2) The browser UI is in RTL mode.
-// If ExperimentalMacRTL becomes the default, this function can be replaced with
+// If MacRTL becomes the default, this function can be replaced with
 // uses of base::i18n::IsRTL().
 bool ShouldDoExperimentalRTLLayout();
 
@@ -52,9 +50,26 @@ bool ShouldDoExperimentalRTLLayout();
 // OSes would make Chrome stick out.
 bool ShouldFlipWindowControlsInRTL();
 
+// Returns NSImageLeading when available (10.12+), otherwise
+// NSImageLeft for LTR and NSImageRight in RTL.
+NSCellImagePosition LeadingCellImagePosition();
+// Returns NSImageTrailing when available (10.12+), otherwise
+// NSImageRight for LTR and NSImageLeft in RTL.
+NSCellImagePosition TrailingCellImagePosition();
+// Returns NSMinXEdge for LTR and NSMaxXEdge for RTL.
+NSRectEdge LeadingEdge();
+// Returns NSMaxXEdge for LTR and NSMinXEdge for RTL.
+NSRectEdge TrailingEdge();
+
 // Returns an autoreleased image containing |image| flipped
 // across the x axis.
 NSImage* FlippedImage(NSImage* image);
+
+// In RTL, mirrors all subviews of |view|. Additionally,
+// reverses horizontal margin autoresizing masks.
+// This method is *not* recursive.
+// In LTR, this is a no-op.
+void FlipAllSubviewsIfNecessary(NSView* view);
 
 }  // namespace cocoa_l10n_util
 

@@ -17,6 +17,7 @@
 #include "base/time/time.h"
 #include "chromeos/dbus/services/service_provider_test_helper.h"
 #include "dbus/message.h"
+#include "dbus/object_path.h"
 #include "net/base/net_errors.h"
 #include "net/proxy/mock_proxy_resolver.h"
 #include "net/proxy/proxy_config_service_fixed.h"
@@ -195,9 +196,13 @@ class ProxyResolutionServiceProviderTest : public testing::Test {
     proxy_resolver_ =
         base::MakeUnique<TestProxyResolver>(network_thread_.task_runner());
     service_provider_ = base::MakeUnique<ProxyResolutionServiceProvider>(
+        kNetworkProxyServiceInterface, kNetworkProxyServiceResolveProxyMethod,
         base::MakeUnique<TestDelegate>(network_thread_.task_runner(),
                                        proxy_resolver_.get()));
-    test_helper_.SetUp(kResolveNetworkProxy, service_provider_.get());
+    test_helper_.SetUp(
+        kNetworkProxyServiceName, dbus::ObjectPath(kNetworkProxyServicePath),
+        kNetworkProxyServiceInterface, kNetworkProxyServiceResolveProxyMethod,
+        service_provider_.get());
   }
 
   ~ProxyResolutionServiceProviderTest() override {
@@ -248,7 +253,7 @@ class ProxyResolutionServiceProviderTest : public testing::Test {
     EXPECT_TRUE(success);
   }
 
-  // Makes a D-Bus call to |service_provider_|'s ResolveNetworkProxy method. If
+  // Makes a D-Bus call to |service_provider_|'s ResolveProxy method. If
   // |request_signal| is true, requests that the proxy information be returned
   // via a signal; otherwise it should be included in the response.
   // |response_out| is updated to hold the response, and |signal_out| is updated
@@ -257,8 +262,8 @@ class ProxyResolutionServiceProviderTest : public testing::Test {
                   bool request_signal,
                   std::unique_ptr<dbus::Response>* response_out,
                   std::unique_ptr<SignalInfo>* signal_out) {
-    dbus::MethodCall method_call(kLibCrosServiceInterface,
-                                 kResolveNetworkProxy);
+    dbus::MethodCall method_call(kNetworkProxyServiceInterface,
+                                 kNetworkProxyServiceResolveProxyMethod);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(source_url);
     if (request_signal) {
@@ -266,8 +271,7 @@ class ProxyResolutionServiceProviderTest : public testing::Test {
       writer.AppendString(kReturnSignalName);
 
       // Connect to the signal that will be sent to kReturnSignalInterface and
-      // kReturnSignalName. ResolveNetworkProxy() will send the result as a
-      // signal. OnSignalReceived() will be called upon the delivery.
+      // kReturnSignalName.
       test_helper_.SetUpReturnSignal(
           kReturnSignalInterface, kReturnSignalName,
           base::Bind(&ProxyResolutionServiceProviderTest::OnSignalReceived,

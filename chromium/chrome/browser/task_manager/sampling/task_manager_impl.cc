@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "base/containers/adapters.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/task_manager/providers/browser_process_task_provider.h"
 #include "chrome/browser/task_manager/providers/child_process_task_provider.h"
@@ -32,13 +32,6 @@ namespace task_manager {
 
 namespace {
 
-scoped_refptr<base::SequencedTaskRunner> GetBlockingPoolRunner() {
-  base::SequencedWorkerPool* blocking_pool =
-      content::BrowserThread::GetBlockingPool();
-  return blocking_pool->GetSequencedTaskRunner(
-      blocking_pool->GetSequenceToken());
-}
-
 base::LazyInstance<TaskManagerImpl>::DestructorAtExit
     lazy_task_manager_instance = LAZY_INSTANCE_INITIALIZER;
 
@@ -48,9 +41,12 @@ TaskManagerImpl::TaskManagerImpl()
     : on_background_data_ready_callback_(
           base::Bind(&TaskManagerImpl::OnTaskGroupBackgroundCalculationsDone,
                      base::Unretained(this))),
-      blocking_pool_runner_(GetBlockingPoolRunner()),
+      blocking_pool_runner_(base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       shared_sampler_(new SharedSampler(blocking_pool_runner_)),
-      is_running_(false) {
+      is_running_(false),
+      weak_ptr_factory_(this) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   task_providers_.emplace_back(new BrowserProcessTaskProvider());
@@ -60,12 +56,9 @@ TaskManagerImpl::TaskManagerImpl()
   if (arc::IsArcAvailable())
     task_providers_.emplace_back(new ArcProcessTaskProvider());
 #endif  // defined(OS_CHROMEOS)
-
-  content::GpuDataManager::GetInstance()->AddObserver(this);
 }
 
 TaskManagerImpl::~TaskManagerImpl() {
-  content::GpuDataManager::GetInstance()->RemoveObserver(this);
 }
 
 // static
@@ -452,13 +445,6 @@ void TaskManagerImpl::TaskUnresponsive(Task* task) {
   NotifyObserversOnTaskUnresponsive(task->task_id());
 }
 
-void TaskManagerImpl::OnVideoMemoryUsageStatsUpdate(
-    const gpu::VideoMemoryUsageStats& gpu_memory_stats) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  gpu_memory_stats_ = gpu_memory_stats;
-}
-
 // static
 void TaskManagerImpl::OnMultipleBytesReadUI(
     std::vector<BytesReadParam>* params) {
@@ -481,10 +467,18 @@ void TaskManagerImpl::OnMultipleBytesReadUI(
   }
 }
 
+void TaskManagerImpl::OnVideoMemoryUsageStatsUpdate(
+    const gpu::VideoMemoryUsageStats& gpu_memory_stats) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  gpu_memory_stats_ = gpu_memory_stats;
+}
+
 void TaskManagerImpl::Refresh() {
   if (IsResourceRefreshEnabled(REFRESH_TYPE_GPU_MEMORY)) {
-    content::GpuDataManager::GetInstance()->
-        RequestVideoMemoryUsageStatsUpdate();
+    content::GpuDataManager::GetInstance()->RequestVideoMemoryUsageStatsUpdate(
+        base::Bind(&TaskManagerImpl::OnVideoMemoryUsageStatsUpdate,
+                   weak_ptr_factory_.GetWeakPtr()));
   }
 
   for (auto& groups_itr : task_groups_by_proc_id_) {

@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/signin_view_controller.h"
 
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/signin_view_controller_delegate.h"
-#include "components/signin/core/common/profile_management_switches.h"
 
 SigninViewController::SigninViewController()
     : signin_view_controller_delegate_(nullptr) {}
@@ -24,6 +24,7 @@ void SigninViewController::ShowModalSignin(
   signin_view_controller_delegate_ =
       SigninViewControllerDelegate::CreateModalSigninDelegate(
           this, mode, browser, access_point);
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::SIGN_IN);
 }
 
 void SigninViewController::ShowModalSyncConfirmationDialog(Browser* browser) {
@@ -33,6 +34,8 @@ void SigninViewController::ShowModalSyncConfirmationDialog(Browser* browser) {
   signin_view_controller_delegate_ =
       SigninViewControllerDelegate::CreateSyncConfirmationDelegate(this,
                                                                    browser);
+  chrome::RecordDialogCreation(
+      chrome::DialogIdentifier::SIGN_IN_SYNC_CONFIRMATION);
 }
 
 void SigninViewController::ShowModalSigninErrorDialog(Browser* browser) {
@@ -41,6 +44,7 @@ void SigninViewController::ShowModalSigninErrorDialog(Browser* browser) {
   // is closed.
   signin_view_controller_delegate_ =
       SigninViewControllerDelegate::CreateSigninErrorDelegate(this, browser);
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::SIGN_IN_ERROR);
 }
 
 void SigninViewController::CloseModalSignin() {
@@ -62,8 +66,7 @@ void SigninViewController::ResetModalSigninDelegate() {
 // static
 bool SigninViewController::ShouldShowModalSigninForMode(
     profiles::BubbleViewMode mode) {
-  return switches::UsePasswordSeparatedSigninFlow() &&
-         (mode == profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN ||
-          mode == profiles::BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT ||
-          mode == profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH);
+  return mode == profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN ||
+         mode == profiles::BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT ||
+         mode == profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH;
 }

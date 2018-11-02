@@ -451,6 +451,8 @@ TEST_F(StaleHostResolverTest, CreatedByContext) {
       true,
       // Enable SDCH.
       false,
+      // Enable Brotli.
+      false,
       // Type of http cache.
       URLRequestContextConfig::HttpCacheType::DISK,
       // Max size of http cache in bytes.
@@ -468,14 +470,6 @@ TEST_F(StaleHostResolverTest, CreatedByContext) {
       "\"delay_ms\":0,"
       "\"max_expired_time_ms\":0,"
       "\"max_stale_uses\":0}}",
-      // Data reduction proxy key.
-      "",
-      // Data reduction proxy.
-      "",
-      // Fallback data reduction proxy.
-      "",
-      // Data reduction proxy secure proxy check URL.
-      "",
       // MockCertVerifier to use for testing purposes.
       std::unique_ptr<net::CertVerifier>(),
       // Enable network quality estimator.

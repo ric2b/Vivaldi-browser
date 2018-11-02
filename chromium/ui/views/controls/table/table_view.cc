@@ -345,7 +345,7 @@ const char* TableView::GetClassName() const {
   return kViewClassName;
 }
 
-gfx::Size TableView::GetPreferredSize() const {
+gfx::Size TableView::CalculatePreferredSize() const {
   int width = 50;
   if (header_ && !visible_columns_.empty())
     width = visible_columns_.back().x + visible_columns_.back().width;
@@ -445,7 +445,7 @@ bool TableView::GetTooltipTextOrigin(const gfx::Point& p,
 
 void TableView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_TABLE;
-  node_data->AddStateFlag(ui::AX_STATE_READ_ONLY);
+  node_data->AddState(ui::AX_STATE_READ_ONLY);
   node_data->AddIntAttribute(ui::AX_ATTR_SET_SIZE, RowCount());
 
   if (selection_model_.active() != ui::ListSelectionModel::kUnselectedIndex) {
@@ -455,7 +455,7 @@ void TableView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
     node_data->AddIntAttribute(ui::AX_ATTR_POS_IN_SET,
                                selection_model_.active());
     if (selection_model_.IsSelected(selection_model_.active())) {
-      node_data->AddStateFlag(ui::AX_STATE_SELECTED);
+      node_data->AddState(ui::AX_STATE_SELECTED);
     }
 
     std::vector<base::string16> name_parts;

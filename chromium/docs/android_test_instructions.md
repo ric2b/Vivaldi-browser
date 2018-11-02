@@ -58,7 +58,7 @@ adb shell settings put global package_verifier_enable 0
 Use an emulator (i.e. Android Virtual Device, AVD): Enabling Intel's
 Virtualizaton support provides the fastest, most reliable emulator configuration
 available (i.e. x86 emulator with GPU acceleration and KVM support). Remember to
-build with `target_arch=ia32` for x86. Otherwise installing the APKs will fail
+build with `target_cpu = "x86"` for x86. Otherwise installing the APKs will fail
 with `INSTALL_FAILED_NO_MATCHING_ABIS`.
 
 1.  Enable Intel Virtualization support in the BIOS.
@@ -121,7 +121,7 @@ Java test files vary a bit more widely than their C++ counterparts:
     typically belong in either `<top-level directory>_javatests` or `<top-level
     directory>_test_java`. Regardless, they'll wind up getting packaged into one
     of a few test APKs:
-    -   `android_webview_test_apk` for anything in `//android_webview`
+    -   `webview_instrumentation_test_apk` for anything in `//android_webview`
     -   `content_shell_test_apk` for anything in `//content` or below
     -   `chrome_public_test_apk` for most things in `//chrome`
     -   `chrome_sync_shell_test_apk` in a few exceptional cases
@@ -270,9 +270,9 @@ out/Release/bin/run_chrome_public_test_apk [-vv]
 AndroidWebView tests:
 
 ```shell
-ninja -C out/Release android_webview_apk
-ninja -C out/Release android_webview_test_apk
-out/Release/bin/run_android_webview_test_apk [-vv]
+ninja -C out/Release webview_instrumentation_apk
+ninja -C out/Release webview_instrumentation_test_apk
+out/Release/bin/run_webview_instrumentation_test_apk [-vv]
 ```
 
 In order to run a subset of tests, use -f to filter based on test class/method

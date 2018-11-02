@@ -5,6 +5,7 @@
 #include "base/macros.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/network_profile_bubble.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -21,7 +22,6 @@
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/link_listener.h"
 #include "ui/views/layout/fill_layout.h"
-#include "ui/views/layout/layout_constants.h"
 
 namespace {
 
@@ -66,6 +66,8 @@ NetworkProfileBubbleView::NetworkProfileBubbleView(
   // Compensate for built-in vertical padding in the anchor view's image.
   set_anchor_view_insets(gfx::Insets(
       GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
+  chrome::RecordDialogCreation(
+      chrome::DialogIdentifier::NETWORK_SHARE_PROFILE_WARNING);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

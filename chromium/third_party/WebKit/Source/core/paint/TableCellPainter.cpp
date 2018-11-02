@@ -63,10 +63,10 @@ void TableCellPainter::Paint(const PaintInfo& paint_info,
 }
 
 static EBorderStyle CollapsedBorderStyle(EBorderStyle style) {
-  if (style == kBorderStyleOutset)
-    return kBorderStyleGroove;
-  if (style == kBorderStyleInset)
-    return kBorderStyleRidge;
+  if (style == EBorderStyle::kOutset)
+    return EBorderStyle::kGroove;
+  if (style == EBorderStyle::kInset)
+    return EBorderStyle::kRidge;
   return style;
 }
 
@@ -144,36 +144,34 @@ void TableCellPainter::PaintCollapsedBorders(
   DrawingRecorder recorder(graphics_context, client,
                            static_cast<DisplayItem::Type>(display_item_type),
                            border_rect);
-  Color cell_color = layout_table_cell_.ResolveColor(CSSPropertyColor);
 
   // We never paint diagonals at the joins.  We simply let the border with the
   // highest precedence paint on top of borders with lower precedence.
   if (display_item_type & DisplayItem::kTableCollapsedBorderTop) {
     ObjectPainter::DrawLineForBoxSide(
         graphics_context, border_rect.X(), border_rect.Y(), border_rect.MaxX(),
-        border_rect.Y() + top_width, kBSTop,
-        top_border_value.GetColor().Resolve(cell_color),
+        border_rect.Y() + top_width, kBSTop, top_border_value.GetColor(),
         CollapsedBorderStyle(top_border_value.Style()), 0, 0, true);
   }
   if (display_item_type & DisplayItem::kTableCollapsedBorderBottom) {
     ObjectPainter::DrawLineForBoxSide(
         graphics_context, border_rect.X(), border_rect.MaxY() - bottom_width,
         border_rect.MaxX(), border_rect.MaxY(), kBSBottom,
-        bottom_border_value.GetColor().Resolve(cell_color),
+        bottom_border_value.GetColor(),
         CollapsedBorderStyle(bottom_border_value.Style()), 0, 0, true);
   }
   if (display_item_type & DisplayItem::kTableCollapsedBorderLeft) {
     ObjectPainter::DrawLineForBoxSide(
         graphics_context, border_rect.X(), border_rect.Y(),
         border_rect.X() + left_width, border_rect.MaxY(), kBSLeft,
-        left_border_value.GetColor().Resolve(cell_color),
+        left_border_value.GetColor(),
         CollapsedBorderStyle(left_border_value.Style()), 0, 0, true);
   }
   if (display_item_type & DisplayItem::kTableCollapsedBorderRight) {
     ObjectPainter::DrawLineForBoxSide(
         graphics_context, border_rect.MaxX() - right_width, border_rect.Y(),
         border_rect.MaxX(), border_rect.MaxY(), kBSRight,
-        right_border_value.GetColor().Resolve(cell_color),
+        right_border_value.GetColor(),
         CollapsedBorderStyle(right_border_value.Style()), 0, 0, true);
   }
 }
@@ -188,7 +186,7 @@ void TableCellPainter::PaintContainerBackgroundBehindCell(
     return;
 
   LayoutTable* table = layout_table_cell_.Table();
-  if (!table->CollapseBorders() &&
+  if (!table->ShouldCollapseBorders() &&
       layout_table_cell_.Style()->EmptyCells() == EEmptyCells::kHide &&
       !layout_table_cell_.FirstChild())
     return;
@@ -212,7 +210,7 @@ void TableCellPainter::PaintBackground(const PaintInfo& paint_info,
     bool should_clip = background_object.HasLayer() &&
                        (background_object == layout_table_cell_ ||
                         background_object == layout_table_cell_.Parent()) &&
-                       layout_table_cell_.Table()->CollapseBorders();
+                       layout_table_cell_.Table()->ShouldCollapseBorders();
     GraphicsContextStateSaver state_saver(paint_info.context, should_clip);
     if (should_clip) {
       LayoutRect clip_rect(paint_rect.Location(), layout_table_cell_.Size());
@@ -231,12 +229,13 @@ void TableCellPainter::PaintBoxDecorationBackground(
     const LayoutPoint& paint_offset) {
   LayoutTable* table = layout_table_cell_.Table();
   const ComputedStyle& style = layout_table_cell_.StyleRef();
-  if (!table->CollapseBorders() && style.EmptyCells() == EEmptyCells::kHide &&
+  if (!table->ShouldCollapseBorders() &&
+      style.EmptyCells() == EEmptyCells::kHide &&
       !layout_table_cell_.FirstChild())
     return;
 
   bool needs_to_paint_border =
-      style.HasBorderDecoration() && !table->CollapseBorders();
+      style.HasBorderDecoration() && !table->ShouldCollapseBorders();
   if (!style.HasBackground() && !style.BoxShadow() && !needs_to_paint_border)
     return;
 
@@ -274,7 +273,7 @@ void TableCellPainter::PaintMask(const PaintInfo& paint_info,
     return;
 
   LayoutTable* table_elt = layout_table_cell_.Table();
-  if (!table_elt->CollapseBorders() &&
+  if (!table_elt->ShouldCollapseBorders() &&
       layout_table_cell_.Style()->EmptyCells() == EEmptyCells::kHide &&
       !layout_table_cell_.FirstChild())
     return;

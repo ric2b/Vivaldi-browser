@@ -9,11 +9,13 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "cc/test/ordered_simple_task_runner.h"
 #include "platform/scheduler/base/real_time_domain.h"
-#include "public/platform/scheduler/base/task_queue.h"
+#include "platform/scheduler/base/task_queue.h"
 #include "platform/scheduler/base/task_queue_manager.h"
 #include "platform/scheduler/base/test_time_source.h"
 #include "platform/scheduler/child/scheduler_helper.h"
@@ -159,8 +161,6 @@ class IdleHelperForTest : public IdleHelper, public IdleHelper::Delegate {
       base::TimeDelta required_quiescence_duration_before_long_idle_period)
       : IdleHelper(scheduler_helper,
                    this,
-                   "test.idle",
-                   TRACE_DISABLED_BY_DEFAULT("test.idle"),
                    "TestSchedulerIdlePeriod",
                    required_quiescence_duration_before_long_idle_period) {}
 
@@ -191,15 +191,11 @@ class BaseIdleHelperTest : public testing::Test {
             message_loop,
             mock_task_runner_,
             base::WrapUnique(new TestTimeSource(clock_.get())))),
-        scheduler_helper_(
-            new SchedulerHelper(main_task_runner_,
-                                "test.idle",
-                                TRACE_DISABLED_BY_DEFAULT("test.idle"),
-                                TRACE_DISABLED_BY_DEFAULT("test.idle.debug"))),
+        scheduler_helper_(new SchedulerHelper(main_task_runner_)),
         idle_helper_(new IdleHelperForTest(
             scheduler_helper_.get(),
             required_quiescence_duration_before_long_idle_period)),
-        default_task_runner_(scheduler_helper_->DefaultTaskRunner()),
+        default_task_runner_(scheduler_helper_->DefaultTaskQueue()),
         idle_task_runner_(idle_helper_->IdleTaskRunner()) {
     clock_->Advance(base::TimeDelta::FromMicroseconds(5000));
   }

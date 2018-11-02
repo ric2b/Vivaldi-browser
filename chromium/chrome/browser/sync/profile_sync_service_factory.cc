@@ -33,6 +33,7 @@
 #include "chrome/browser/sync/chrome_sync_client.h"
 #include "chrome/browser/sync/sessions/sync_sessions_web_contents_router_factory.h"
 #include "chrome/browser/sync/supervised_user_signin_manager_wrapper.h"
+#include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "chrome/browser/web_data_service_factory.h"
@@ -92,8 +93,8 @@ void UpdateNetworkTime(const base::Time& network_time,
                        const base::TimeDelta& latency) {
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&UpdateNetworkTimeOnUIThread, network_time, resolution,
-                 latency, base::TimeTicks::Now()));
+      base::BindOnce(&UpdateNetworkTimeOnUIThread, network_time, resolution,
+                     latency, base::TimeTicks::Now()));
 }
 
 }  // anonymous namespace
@@ -140,6 +141,7 @@ ProfileSyncServiceFactory::ProfileSyncServiceFactory()
   DependsOn(autofill::PersonalDataManagerFactory::GetInstance());
   DependsOn(BookmarkModelFactory::GetInstance());
   DependsOn(BookmarkUndoServiceFactory::GetInstance());
+  DependsOn(browser_sync::UserEventServiceFactory::GetInstance());
   DependsOn(ChromeSigninClientFactory::GetInstance());
   DependsOn(dom_distiller::DomDistillerServiceFactory::GetInstance());
   DependsOn(GaiaCookieManagerServiceFactory::GetInstance());
@@ -155,8 +157,6 @@ ProfileSyncServiceFactory::ProfileSyncServiceFactory()
   DependsOn(SigninManagerFactory::GetInstance());
   DependsOn(SpellcheckServiceFactory::GetInstance());
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  // TODO(skym, crbug.com/705545): Fix this circular dependency.
-  // DependsOn(SupervisedUserServiceFactory::GetInstance());
   DependsOn(SupervisedUserSettingsServiceFactory::GetInstance());
 #if !defined(OS_ANDROID)
   DependsOn(SupervisedUserSharedSettingsServiceFactory::GetInstance());

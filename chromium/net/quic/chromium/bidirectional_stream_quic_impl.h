@@ -17,7 +17,7 @@
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/quic/chromium/quic_chromium_client_session.h"
 #include "net/quic/chromium/quic_chromium_client_stream.h"
-#include "net/spdy/spdy_header_block.h"
+#include "net/spdy/core/spdy_header_block.h"
 
 namespace base {
 class Timer;
@@ -30,11 +30,10 @@ class IOBuffer;
 
 class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
     : public BidirectionalStreamImpl,
-      public QuicChromiumClientStream::Delegate,
-      public QuicChromiumClientSession::Observer {
+      public QuicChromiumClientStream::Delegate {
  public:
   explicit BidirectionalStreamQuicImpl(
-      const base::WeakPtr<QuicChromiumClientSession>& session);
+      std::unique_ptr<QuicChromiumClientSession::Handle> session);
 
   ~BidirectionalStreamQuicImpl() override;
 
@@ -59,20 +58,16 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
 
  private:
   // QuicChromiumClientStream::Delegate implementation:
-  void OnHeadersAvailable(const SpdyHeaderBlock& headers,
-                          size_t frame_len) override;
   void OnDataAvailable() override;
+  void OnTrailingHeadersAvailable(const SpdyHeaderBlock& headers,
+                                  size_t frame_len) override;
   void OnClose() override;
   void OnError(int error) override;
-  bool HasSendHeadersComplete() override;
-
-  // QuicChromiumClientSession::Observer implementation:
-  void OnCryptoHandshakeConfirmed() override;
-  void OnSuccessfulVersionNegotiation(const QuicVersion& version) override;
-  void OnSessionClosed(int error, bool port_migration_detected) override;
 
   void OnStreamReady(int rv);
   void OnSendDataComplete(int rv);
+  void ReadInitialHeaders();
+  void OnReadInitialHeadersComplete(int rv);
   void OnReadDataComplete(int rv);
 
   // Notifies the delegate of an error.
@@ -82,10 +77,8 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
   // Resets the stream and ensures that |delegate_| won't be called back.
   void ResetStream();
 
-  base::WeakPtr<QuicChromiumClientSession> session_;
-  bool was_handshake_confirmed_;  // True if the crypto handshake succeeded.
-  QuicChromiumClientSession::StreamRequest stream_request_;
-  QuicChromiumClientStream* stream_;  // Non-owning.
+  const std::unique_ptr<QuicChromiumClientSession::Handle> session_;
+  std::unique_ptr<QuicChromiumClientStream::Handle> stream_;
 
   const BidirectionalStreamRequestInfo* request_info_;
   BidirectionalStreamImpl::Delegate* delegate_;
@@ -99,6 +92,8 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
   // Connect timing information for this stream. Populated when headers are
   // received.
   LoadTimingInfo::ConnectTiming connect_timing_;
+
+  SpdyHeaderBlock initial_headers_;
 
   // User provided read buffer for ReadData() response.
   scoped_refptr<IOBuffer> read_buffer_;
@@ -120,18 +115,12 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
   bool closed_is_first_stream_;
   // Indicates whether initial headers have been sent.
   bool has_sent_headers_;
-  // Indicates whether initial headers have been received.
-  bool has_received_headers_;
 
   // Whether to automatically send request headers when stream is negotiated.
   // If false, headers will not be sent until SendRequestHeaders() is called or
   // until next SendData/SendvData, during which QUIC will try to combine header
   // frame with data frame in the same packet if possible.
   bool send_request_headers_automatically_;
-
-  // True of this stream is waiting for the QUIC handshake to be confirmed
-  // before sending headers.
-  bool waiting_for_confirmation_;
 
   base::WeakPtrFactory<BidirectionalStreamQuicImpl> weak_factory_;
 

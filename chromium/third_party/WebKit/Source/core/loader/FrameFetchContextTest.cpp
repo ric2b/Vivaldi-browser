@@ -100,6 +100,8 @@ class FixedPolicySubresourceFilter : public WebDocumentSubresourceFilter {
 
   void ReportDisallowedLoad() override { ++*filtered_load_counter_; }
 
+  bool ShouldLogToConsole() override { return false; }
+
  private:
   const LoadPolicy policy_;
   int* filtered_load_counter_;
@@ -277,10 +279,10 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
     }
   }
 
-  void ExpectSetEmbeddingCSPRequestHeader(
+  void ExpectSetRequiredCSPRequestHeader(
       const char* input,
       WebURLRequest::FrameType frame_type,
-      const AtomicString& expected_embedding_csp) {
+      const AtomicString& expected_required_csp) {
     KURL input_url(kParsedURLString, input);
     ResourceRequest resource_request(input_url);
     resource_request.SetRequestContext(WebURLRequest::kRequestContextScript);
@@ -288,8 +290,8 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
 
     fetch_context->ModifyRequestForCSP(resource_request);
 
-    EXPECT_EQ(expected_embedding_csp,
-              resource_request.HttpHeaderField(HTTPNames::Embedding_CSP));
+    EXPECT_EQ(expected_required_csp,
+              resource_request.HttpHeaderField(HTTPNames::Required_CSP));
   }
 
   void SetFrameOwnerBasedOnFrameType(WebURLRequest::FrameType frame_type,
@@ -335,7 +337,7 @@ TEST_F(FrameFetchContextModifyRequestTest, UpgradeInsecureResourceRequests) {
   document->SetInsecureRequestPolicy(kUpgradeInsecureRequests);
 
   for (const auto& test : tests) {
-    document->InsecureNavigationsToUpgrade()->Clear();
+    document->InsecureNavigationsToUpgrade()->clear();
 
     // We always upgrade for FrameTypeNone and FrameTypeNested.
     ExpectUpgrade(test.original, WebURLRequest::kRequestContextScript,
@@ -438,7 +440,7 @@ TEST_F(FrameFetchContextModifyRequestTest, SendUpgradeInsecureRequestHeader) {
   }
 }
 
-TEST_F(FrameFetchContextModifyRequestTest, SendEmbeddingCSPHeader) {
+TEST_F(FrameFetchContextModifyRequestTest, SendRequiredCSPHeader) {
   struct TestCase {
     const char* to_request;
     WebURLRequest::FrameType frame_type;
@@ -454,19 +456,42 @@ TEST_F(FrameFetchContextModifyRequestTest, SendEmbeddingCSPHeader) {
 
   for (const auto& test : tests) {
     SetFrameOwnerBasedOnFrameType(test.frame_type, iframe, required_csp);
-    ExpectSetEmbeddingCSPRequestHeader(
+    ExpectSetRequiredCSPRequestHeader(
         test.to_request, test.frame_type,
         test.frame_type == WebURLRequest::kFrameTypeNested ? required_csp
                                                            : g_null_atom);
 
     SetFrameOwnerBasedOnFrameType(test.frame_type, iframe,
                                   another_required_csp);
-    ExpectSetEmbeddingCSPRequestHeader(
+    ExpectSetRequiredCSPRequestHeader(
         test.to_request, test.frame_type,
         test.frame_type == WebURLRequest::kFrameTypeNested
             ? another_required_csp
             : g_null_atom);
   }
+}
+
+// Tests that PopulateResourceRequest() checks report-only CSP headers, so that
+// any violations are reported before the request is modified.
+TEST_F(FrameFetchContextTest, PopulateResourceRequestChecksReportOnlyCSP) {
+  ContentSecurityPolicy* policy = document->GetContentSecurityPolicy();
+  policy->DidReceiveHeader(
+      "upgrade-insecure-requests; script-src https://foo.test",
+      kContentSecurityPolicyHeaderTypeEnforce,
+      kContentSecurityPolicyHeaderSourceHTTP);
+  policy->DidReceiveHeader("script-src https://bar.test",
+                           kContentSecurityPolicyHeaderTypeReport,
+                           kContentSecurityPolicyHeaderSourceHTTP);
+  KURL url(KURL(), "http://baz.test");
+  ResourceRequest resource_request(url);
+  resource_request.SetRequestContext(WebURLRequest::kRequestContextScript);
+  fetch_context->PopulateResourceRequest(
+      url, Resource::kScript, ClientHintsPreferences(),
+      FetchParameters::ResourceWidth(), ResourceLoaderOptions(),
+      SecurityViolationReportingPolicy::kReport, resource_request);
+  EXPECT_EQ(1u, policy->violation_reports_sent_.size());
+  // Check that the resource was upgraded to a secure URL.
+  EXPECT_EQ(KURL(KURL(), "https://baz.test"), resource_request.Url());
 }
 
 class FrameFetchContextHintsTest : public FrameFetchContextTest {
@@ -642,6 +667,11 @@ TEST_F(FrameFetchContextTest, MainResourceCachePolicy) {
 }
 
 TEST_F(FrameFetchContextTest, SubResourceCachePolicy) {
+  // Reset load event state: if the load event is finished, we ignore the
+  // DocumentLoader load type.
+  document->open();
+  ASSERT_FALSE(document->LoadEventFinished());
+
   // Default case
   ResourceRequest request("http://www.example.com/mock");
   EXPECT_EQ(WebCachePolicy::kUseProtocolCachePolicy,
@@ -757,29 +787,6 @@ TEST_F(FrameFetchContextTest, SetFirstPartyCookieAndRequestorOrigin) {
   }
 }
 
-TEST_F(FrameFetchContextTest, ModifyPriorityForLowPriorityIframes) {
-  Settings* settings = document->GetFrame()->GetSettings();
-  settings->SetLowPriorityIframes(false);
-  FrameFetchContext* child_fetch_context = CreateChildFrame();
-
-  // No low priority iframes, expect default values.
-  EXPECT_EQ(kResourceLoadPriorityVeryHigh,
-            child_fetch_context->ModifyPriorityForExperiments(
-                kResourceLoadPriorityVeryHigh));
-  EXPECT_EQ(kResourceLoadPriorityMedium,
-            child_fetch_context->ModifyPriorityForExperiments(
-                kResourceLoadPriorityMedium));
-
-  // Low priority iframes enabled, everything should be low priority
-  settings->SetLowPriorityIframes(true);
-  EXPECT_EQ(kResourceLoadPriorityVeryLow,
-            child_fetch_context->ModifyPriorityForExperiments(
-                kResourceLoadPriorityVeryHigh));
-  EXPECT_EQ(kResourceLoadPriorityVeryLow,
-            child_fetch_context->ModifyPriorityForExperiments(
-                kResourceLoadPriorityMedium));
-}
-
 // Tests if "Save-Data" header is correctly added on the first load and reload.
 TEST_F(FrameFetchContextTest, EnableDataSaver) {
   Settings* settings = document->GetFrame()->GetSettings();
@@ -865,136 +872,6 @@ TEST_F(FrameFetchContextMockedLocalFrameClientTest,
   EXPECT_CALL(*client, DidDisplayContentWithCertificateErrors(url));
   fetch_context->DispatchDidLoadResourceFromMemoryCache(
       CreateUniqueIdentifier(), resource_request, resource->GetResponse());
-}
-
-TEST_F(FrameFetchContextTest, SetIsExternalRequestForPublicDocument) {
-  EXPECT_EQ(kWebAddressSpacePublic, document->AddressSpace());
-
-  struct TestCase {
-    const char* url;
-    bool is_external_expectation;
-  } cases[] = {
-      {"data:text/html,whatever", false},  {"file:///etc/passwd", false},
-      {"blob:http://example.com/", false},
-
-      {"http://example.com/", false},      {"https://example.com/", false},
-
-      {"http://192.168.1.1:8000/", true},  {"http://10.1.1.1:8000/", true},
-
-      {"http://localhost/", true},         {"http://127.0.0.1/", true},
-      {"http://127.0.0.1:8000/", true}};
-  RuntimeEnabledFeatures::setCorsRFC1918Enabled(false);
-  for (const auto& test : cases) {
-    SCOPED_TRACE(test.url);
-    ResourceRequest main_request(test.url);
-    fetch_context->AddAdditionalRequestHeaders(main_request,
-                                               kFetchMainResource);
-    EXPECT_FALSE(main_request.IsExternalRequest());
-
-    ResourceRequest sub_request(test.url);
-    fetch_context->AddAdditionalRequestHeaders(sub_request, kFetchSubresource);
-    EXPECT_FALSE(sub_request.IsExternalRequest());
-  }
-
-  RuntimeEnabledFeatures::setCorsRFC1918Enabled(true);
-  for (const auto& test : cases) {
-    SCOPED_TRACE(test.url);
-    ResourceRequest main_request(test.url);
-    fetch_context->AddAdditionalRequestHeaders(main_request,
-                                               kFetchMainResource);
-    EXPECT_EQ(test.is_external_expectation, main_request.IsExternalRequest());
-
-    ResourceRequest sub_request(test.url);
-    fetch_context->AddAdditionalRequestHeaders(sub_request, kFetchSubresource);
-    EXPECT_EQ(test.is_external_expectation, sub_request.IsExternalRequest());
-  }
-}
-
-TEST_F(FrameFetchContextTest, SetIsExternalRequestForPrivateDocument) {
-  document->SetAddressSpace(kWebAddressSpacePrivate);
-  EXPECT_EQ(kWebAddressSpacePrivate, document->AddressSpace());
-
-  struct TestCase {
-    const char* url;
-    bool is_external_expectation;
-  } cases[] = {
-      {"data:text/html,whatever", false},  {"file:///etc/passwd", false},
-      {"blob:http://example.com/", false},
-
-      {"http://example.com/", false},      {"https://example.com/", false},
-
-      {"http://192.168.1.1:8000/", false}, {"http://10.1.1.1:8000/", false},
-
-      {"http://localhost/", true},         {"http://127.0.0.1/", true},
-      {"http://127.0.0.1:8000/", true}};
-  RuntimeEnabledFeatures::setCorsRFC1918Enabled(false);
-  for (const auto& test : cases) {
-    SCOPED_TRACE(test.url);
-    ResourceRequest main_request(test.url);
-    fetch_context->AddAdditionalRequestHeaders(main_request,
-                                               kFetchMainResource);
-    EXPECT_FALSE(main_request.IsExternalRequest());
-
-    ResourceRequest sub_request(test.url);
-    fetch_context->AddAdditionalRequestHeaders(sub_request, kFetchSubresource);
-    EXPECT_FALSE(sub_request.IsExternalRequest());
-  }
-
-  RuntimeEnabledFeatures::setCorsRFC1918Enabled(true);
-  for (const auto& test : cases) {
-    SCOPED_TRACE(test.url);
-    ResourceRequest main_request(test.url);
-    fetch_context->AddAdditionalRequestHeaders(main_request,
-                                               kFetchMainResource);
-    EXPECT_EQ(test.is_external_expectation, main_request.IsExternalRequest());
-
-    ResourceRequest sub_request(test.url);
-    fetch_context->AddAdditionalRequestHeaders(sub_request, kFetchSubresource);
-    EXPECT_EQ(test.is_external_expectation, sub_request.IsExternalRequest());
-  }
-}
-
-TEST_F(FrameFetchContextTest, SetIsExternalRequestForLocalDocument) {
-  document->SetAddressSpace(kWebAddressSpaceLocal);
-  EXPECT_EQ(kWebAddressSpaceLocal, document->AddressSpace());
-
-  struct TestCase {
-    const char* url;
-    bool is_external_expectation;
-  } cases[] = {
-      {"data:text/html,whatever", false},  {"file:///etc/passwd", false},
-      {"blob:http://example.com/", false},
-
-      {"http://example.com/", false},      {"https://example.com/", false},
-
-      {"http://192.168.1.1:8000/", false}, {"http://10.1.1.1:8000/", false},
-
-      {"http://localhost/", false},        {"http://127.0.0.1/", false},
-      {"http://127.0.0.1:8000/", false}};
-
-  RuntimeEnabledFeatures::setCorsRFC1918Enabled(false);
-  for (const auto& test : cases) {
-    ResourceRequest main_request(test.url);
-    fetch_context->AddAdditionalRequestHeaders(main_request,
-                                               kFetchMainResource);
-    EXPECT_FALSE(main_request.IsExternalRequest());
-
-    ResourceRequest sub_request(test.url);
-    fetch_context->AddAdditionalRequestHeaders(sub_request, kFetchSubresource);
-    EXPECT_FALSE(sub_request.IsExternalRequest());
-  }
-
-  RuntimeEnabledFeatures::setCorsRFC1918Enabled(true);
-  for (const auto& test : cases) {
-    ResourceRequest main_request(test.url);
-    fetch_context->AddAdditionalRequestHeaders(main_request,
-                                               kFetchMainResource);
-    EXPECT_EQ(test.is_external_expectation, main_request.IsExternalRequest());
-
-    ResourceRequest sub_request(test.url);
-    fetch_context->AddAdditionalRequestHeaders(sub_request, kFetchSubresource);
-    EXPECT_EQ(test.is_external_expectation, sub_request.IsExternalRequest());
-  }
 }
 
 TEST_F(FrameFetchContextSubresourceFilterTest, Filter) {

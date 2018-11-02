@@ -7,7 +7,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/time/time.h"
-#include "chrome/browser/media/router/route_request_result.h"
+#include "chrome/common/media_router/route_request_result.h"
 
 namespace base {
 class Version;
@@ -44,9 +44,10 @@ enum class MediaRouteProviderWakeReason {
   UPDATE_MEDIA_SINKS = 16,
   SEARCH_SINKS = 17,
   PROVIDE_SINKS = 18,
+  CREATE_MEDIA_ROUTE_CONTROLLER = 19,
 
   // NOTE: Add entries only immediately above this line.
-  TOTAL_COUNT = 19
+  TOTAL_COUNT = 20
 };
 
 // The install status of the Media Router component extension.
@@ -102,6 +103,10 @@ class MediaRouterMojoMetrics {
   // Provider Manager.
   static void RecordMediaRouteProviderTerminateRoute(
       RouteRequestResult::ResultCode result_code);
+
+  // Records whether the Media Route Provider succeeded or failed to create a
+  // controller for a media route.
+  static void RecordMediaRouteControllerCreationResult(bool success);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoMetricsTest,

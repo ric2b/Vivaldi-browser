@@ -7,6 +7,7 @@
 #include "base/callback_helpers.h"
 #import "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
+#include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "ios/chrome/browser/snapshots/snapshot_manager.h"
@@ -19,6 +20,10 @@
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/web/public/referrer.h"
 #import "net/base/mac/url_conversions.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 // These tests measure the performance of opening the stack view controller on
 // an iPhone. On an iPad, the tests do not run, as the iPad does not use the
@@ -53,7 +58,7 @@
   BOOL dismissAnimationEnded_;
   BOOL preloadCardViewsEnded_;
  @public
-  BrowserViewController* bvc_;  // weak
+  __weak BrowserViewController* bvc_;
 }
 
 - (void)reinitialize;
@@ -124,10 +129,6 @@
 
 namespace {
 
-#define ARRAYSIZE(a)            \
-  ((sizeof(a) / sizeof(*(a))) / \
-   static_cast<size_t>(!(sizeof(a) % sizeof(*(a)))))
-
 // Use multiple URLs in the test in case the complexity of a website has an
 // effect on the performance of UIWebView -renderInContext.
 static const char* url_list[] = {
@@ -166,8 +167,8 @@ class StackViewControllerPerfTest : public PerfTestWithBVC {
     reuse_svc_ = false;
 
     // The testing delegate will receive stack view animation notifications.
-    delegate_.reset([[StackViewControllerPerfTestDelegate alloc]
-        initWithBrowserViewController:bvc_]);
+    delegate_ = [[StackViewControllerPerfTestDelegate alloc]
+        initWithBrowserViewController:bvc_];
   }
   void TearDown() override {
     // Opening a StackViewController is done only on iPhones, not on iPads.
@@ -180,8 +181,8 @@ class StackViewControllerPerfTest : public PerfTestWithBVC {
 
  protected:
   // Stack view controller & delegate.
-  base::scoped_nsobject<StackViewControllerPerfTestDelegate> delegate_;
-  base::scoped_nsobject<StackViewController> view_controller_;
+  StackViewControllerPerfTestDelegate* delegate_;
+  StackViewController* view_controller_;
 
   int current_url_index_;
   BOOL reuse_svc_;
@@ -243,7 +244,7 @@ void StackViewControllerPerfTest::LoadNextURL() {
 
 const GURL StackViewControllerPerfTest::NextURL() {
   current_url_index_++;
-  if (static_cast<unsigned long>(current_url_index_) >= ARRAYSIZE(url_list))
+  if (static_cast<unsigned long>(current_url_index_) >= arraysize(url_list))
     current_url_index_ = 0;
   return GURL(url_list[current_url_index_]);
 }
@@ -286,15 +287,15 @@ void StackViewControllerPerfTest::MainControllerShowTabSwitcher() {
   // which will cache the first snapshot for the tab and reuse it instead of
   // regenerating a new one each time.
   [currentTab setSnapshotCoalescingEnabled:YES];
-  base::ScopedClosureRunner runner(base::BindBlock(^{
+  base::ScopedClosureRunner runner(base::BindBlockArc(^{
     [currentTab setSnapshotCoalescingEnabled:NO];
   }));
 
   if (!view_controller_) {
-    view_controller_.reset([[StackViewController alloc]
-        initWithMainTabModel:tab_model_
-                 otrTabModel:otr_tab_model_
-              activeTabModel:tab_model_]);
+    view_controller_ =
+        [[StackViewController alloc] initWithMainTabModel:tab_model_
+                                              otrTabModel:otr_tab_model_
+                                           activeTabModel:tab_model_];
   } else {
     [view_controller_ restoreInternalStateWithMainTabModel:tab_model_
                                                otrTabModel:otr_tab_model_
@@ -305,7 +306,7 @@ void StackViewControllerPerfTest::MainControllerShowTabSwitcher() {
   // The only addition to the function for testing.
   [view_controller_ setTestDelegate:delegate_];
 
-  [bvc_ presentViewController:view_controller_.get()
+  [bvc_ presentViewController:view_controller_
                      animated:NO
                    completion:^{
                      [view_controller_ showWithSelectedTabAnimation];
@@ -330,7 +331,7 @@ base::TimeDelta StackViewControllerPerfTest::CloseStackView() {
 
   [view_controller_ dismissViewControllerAnimated:NO completion:nil];
   if (!reuse_svc_)
-    view_controller_.reset();
+    view_controller_ = nil;
 
   base::TimeDelta closeTime = base::Time::NowFromSystemTime() - startTime;
 
@@ -352,7 +353,8 @@ base::TimeDelta StackViewControllerPerfTest::TakeSnapshot() {
   return elapsed;
 }
 
-TEST_F(StackViewControllerPerfTest, WebView_Shapshot) {
+// TODO(crbug.com/717314): Failed DCHECK in PerfTestWithBVC::SetUp().
+TEST_F(StackViewControllerPerfTest, DISABLED_WebView_Shapshot) {
   // Opening a StackViewController is done only on iPhones, not on iPads.
   // This test is meaningless on an iPad.
   if (IsIPadIdiom())

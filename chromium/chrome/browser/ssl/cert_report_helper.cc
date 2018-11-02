@@ -18,7 +18,7 @@
 #include "chrome/browser/ssl/ssl_cert_reporter.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "components/strings/grit/components_strings.h"
@@ -28,6 +28,10 @@
 #include "ui/base/l10n/l10n_util.h"
 
 namespace {
+
+// Certificate reports are only sent from official builds, but this flag can be
+// set by tests.
+static bool g_is_fake_official_build_for_testing = false;
 
 // Returns a pointer to the Profile associated with |web_contents|.
 Profile* GetProfile(content::WebContents* web_contents) {
@@ -63,6 +67,11 @@ CertReportHelper::CertReportHelper(
       metrics_helper_(metrics_helper) {}
 
 CertReportHelper::~CertReportHelper() {
+}
+
+// static
+void CertReportHelper::SetFakeOfficialBuildForTesting() {
+  g_is_fake_official_build_for_testing = true;
 }
 
 void CertReportHelper::PopulateExtendedReportingOption(
@@ -149,6 +158,15 @@ bool CertReportHelper::ShouldShowCertificateReporterCheckbox() {
 
 bool CertReportHelper::ShouldReportCertificateError() {
   DCHECK(ShouldShowCertificateReporterCheckbox());
+
+  bool is_official_build = g_is_fake_official_build_for_testing;
+#if defined(OFFICIAL_BUILD) && defined(GOOGLE_CHROME_BUILD)
+  is_official_build = true;
+#endif
+
+  if (!is_official_build)
+    return false;
+
   // Even in case the checkbox was shown, we don't send error reports
   // for all of these users. Check the Finch configuration for a sending
   // threshold and only send reports in case the threshold isn't exceeded.

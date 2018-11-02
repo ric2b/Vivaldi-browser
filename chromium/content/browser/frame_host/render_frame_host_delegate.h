@@ -18,6 +18,7 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/media_stream_request.h"
+#include "device/wake_lock/public/interfaces/wake_lock_service.mojom.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "net/http/http_response_headers.h"
 #include "ui/base/window_open_disposition.h"
@@ -28,6 +29,7 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
+#include "services/device/public/interfaces/nfc.mojom.h"
 #endif
 
 class GURL;
@@ -38,10 +40,6 @@ class Message;
 
 namespace device {
 class GeolocationServiceContext;
-
-namespace mojom {
-class WakeLockContext;
-}
 }
 
 namespace gfx {
@@ -194,8 +192,13 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Gets the GeolocationServiceContext associated with this delegate.
   virtual device::GeolocationServiceContext* GetGeolocationServiceContext();
 
-  // Gets the WakeLockServiceContext associated with this delegate.
-  virtual device::mojom::WakeLockContext* GetWakeLockServiceContext();
+  // Gets the WakeLockService that serves wake lock requests from the renderer.
+  virtual device::mojom::WakeLockService* GetRendererWakeLock();
+
+#if defined(OS_ANDROID)
+  // Gets an NFC implementation within the context of this delegate.
+  virtual void GetNFC(device::mojom::NFCRequest request);
+#endif
 
   // Notification that the frame wants to go into fullscreen mode.
   // |origin| represents the origin of the frame that requests fullscreen.
@@ -246,11 +249,14 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   // The page is trying to open a new page (e.g. a popup window). The window
   // should be created associated with the given |main_frame_widget_route_id| in
-  // the process of |source_site_instance|, but it should not be shown yet. That
-  // should happen in response to ShowCreatedWindow.
-  // |params.window_container_type| describes the type of RenderViewHost
-  // container that is requested -- in particular, the window.open call may have
-  // specified 'background' and 'persistent' in the feature string.
+  // the process of |opener|, but it should not be shown yet. That should happen
+  // in response to ShowCreatedWindow. |params.window_container_type| describes
+  // the type of RenderViewHost container that is requested -- in particular,
+  // the window.open call may have specified 'background' and 'persistent' in
+  // the feature string.
+  //
+  // The passed |opener| is the RenderFrameHost initiating the window creation.
+  // It will never be null, even if the opener is suppressed via |params|.
   //
   // The passed |params.frame_name| parameter is the name parameter that was
   // passed to window.open(), and will be empty if none was passed.
@@ -260,10 +266,9 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   //
   // The caller is expected to handle cleanup if this operation fails or is
   // suppressed, by looking for the existence of a RenderFrameHost in
-  // source_site_instance's process with |main_frame_route_id| after this method
-  // returns.
+  // |opener|'s process with |main_frame_route_id| after this method returns.
   virtual void CreateNewWindow(
-      SiteInstance* source_site_instance,
+      RenderFrameHost* opener,
       int32_t render_view_route_id,
       int32_t main_frame_route_id,
       int32_t main_frame_widget_route_id,
@@ -301,6 +306,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual base::android::ScopedJavaLocalRef<jobject>
   GetJavaRenderFrameHostDelegate();
 #endif
+
+  // Whether the delegate is being destroyed, in which case the RenderFrameHost
+  // should not be asked to create a RenderFrame.
+  virtual bool IsBeingDestroyed() const;
 
  protected:
   virtual ~RenderFrameHostDelegate() {}

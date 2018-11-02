@@ -82,7 +82,7 @@ class PrintContextTest : public RenderingTest {
 
   void PrintSinglePage(MockCanvas& canvas) {
     IntRect page_rect(0, 0, kPageWidth, kPageHeight);
-    GetPrintContext().begin(page_rect.Width(), page_rect.Height());
+    GetPrintContext().BeginPrintMode(page_rect.Width(), page_rect.Height());
     GetDocument().View()->UpdateAllLifecyclePhases();
     PaintRecordBuilder builder(page_rect);
     GraphicsContext& context = builder.Context();
@@ -96,7 +96,7 @@ class PrintContextTest : public RenderingTest {
       GetPrintContext().OutputLinkedDestinations(context, page_rect);
     }
     builder.EndRecording()->playback(&canvas);
-    GetPrintContext().end();
+    GetPrintContext().EndPrintMode();
   }
 
   static String AbsoluteBlockHtmlForLink(int x,

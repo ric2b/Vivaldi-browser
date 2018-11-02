@@ -11,7 +11,12 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
+#include "chrome/browser/android/vr_shell/gl_browser_interface.h"
+#include "chrome/browser/android/vr_shell/ui_browser_interface.h"
+#include "chrome/browser/android/vr_shell/ui_interface.h"
 #include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
+
+class GURL;
 
 namespace vr_shell {
 
@@ -20,20 +25,62 @@ class UiSceneManager;
 class VrShell;
 class VrShellGl;
 
-class VrGLThread : public base::Thread {
+class VrGLThread : public base::Thread,
+                   public GlBrowserInterface,
+                   public UiBrowserInterface,
+                   public UiInterface {
  public:
   VrGLThread(
       const base::WeakPtr<VrShell>& weak_vr_shell,
       scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
       gvr_context* gvr_api,
       bool initially_web_vr,
-      bool reprojected_rendering);
+      bool in_cct,
+      bool reprojected_rendering,
+      bool daydream_support);
 
   ~VrGLThread() override;
   base::WeakPtr<VrShellGl> GetVrShellGl() { return weak_vr_shell_gl_; }
   base::WeakPtr<UiSceneManager> GetSceneManager() {
     return weak_scene_manager_;
   }
+
+  // GlBrowserInterface implementation (VrShellGl calling to VrShell).
+  void ContentSurfaceChanged(jobject surface) override;
+  void GvrDelegateReady() override;
+  void UpdateGamepadData(device::GvrGamepadData) override;
+  void AppButtonClicked() override;
+  void AppButtonGesturePerformed(UiInterface::Direction direction) override;
+  void ProcessContentGesture(
+      std::unique_ptr<blink::WebInputEvent> event) override;
+  void ForceExitVr() override;
+  void RunVRDisplayInfoCallback(
+      const base::Callback<void(device::mojom::VRDisplayInfoPtr)>& callback,
+      device::mojom::VRDisplayInfoPtr* info) override;
+  void OnContentPaused(bool enabled) override;
+  void ToggleCardboardGamepad(bool enabled) override;
+
+  // UiBrowserInterface implementation (UI calling to VrShell).
+  void ExitPresent() override;
+  void ExitFullscreen() override;
+  void NavigateBack() override;
+  void ExitCct() override;
+  void OnUnsupportedMode(UiUnsupportedMode mode) override;
+
+  // UiInterface implementation (VrShell and GL calling to the UI).
+  void SetFullscreen(bool enabled) override;
+  void SetIncognito(bool incognito) override;
+  void SetHistoryButtonsEnabled(bool can_go_back, bool can_go_forward) override;
+  void SetLoadProgress(float progress) override;
+  void SetLoading(bool loading) override;
+  void SetSecurityLevel(security_state::SecurityLevel level) override;
+  void SetURL(const GURL& gurl) override;
+  void SetWebVrMode(bool enabled) override;
+  void SetWebVrSecureOrigin(bool secure) override;
+  void SetVideoCapturingIndicator(bool enabled) override;
+  void SetScreenCapturingIndicator(bool enabled) override;
+  void SetAudioCapturingIndicator(bool enabled) override;
+  void SetIsExiting() override;
 
  protected:
   void Init() override;
@@ -52,7 +99,9 @@ class VrGLThread : public base::Thread {
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
   gvr_context* gvr_api_;
   bool initially_web_vr_;
+  bool in_cct_;
   bool reprojected_rendering_;
+  bool daydream_support_;
 
   DISALLOW_COPY_AND_ASSIGN(VrGLThread);
 };

@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "content/public/common/console_message_level.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/event_filtering_info.h"
@@ -16,6 +17,9 @@
 #include "extensions/renderer/api_binding_hooks.h"
 #include "extensions/renderer/api_binding_js_util.h"
 #include "extensions/renderer/chrome_setting.h"
+#include "extensions/renderer/console.h"
+#include "extensions/renderer/content_setting.h"
+#include "extensions/renderer/declarative_content_hooks_delegate.h"
 #include "extensions/renderer/module_system.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
@@ -102,8 +106,19 @@ v8::Local<v8::Object> GetOrCreateChrome(v8::Local<v8::Context> context) {
     if (!success.IsJust() || !success.FromJust())
       return v8::Local<v8::Object>();
   } else if (chrome_value->IsObject()) {
-    chrome_object = chrome_value.As<v8::Object>();
-    DCHECK(chrome_object->CreationContext() == context);
+    v8::Local<v8::Object> obj = chrome_value.As<v8::Object>();
+    // The creation context of the `chrome` property could be different if a
+    // different context (such as the parent of an about:blank iframe) assigned
+    // it. Since in this case we know that the chrome object is not the one we
+    // created, do not use it for bindings. This also avoids weirdness of having
+    // bindings created in one context stored on a chrome object from another.
+    // TODO(devlin): There might be a way of detecting if the browser created
+    // the chrome object. For instance, we could add a v8::Private to the
+    // chrome object we construct, and check if it's present. Unfortunately, we
+    // need to a) track down each place we create the chrome object (it's not
+    // just in extensions) and also see how much that would break.
+    if (obj->CreationContext() == context)
+      chrome_object = obj;
   }
 
   return chrome_object;
@@ -164,6 +179,14 @@ v8::Global<v8::Value> CallJsFunctionSync(v8::Local<v8::Function> function,
   return result;
 }
 
+void AddConsoleError(v8::Local<v8::Context> context, const std::string& error) {
+  ScriptContext* script_context =
+      ScriptContextSet::GetContextByV8Context(context);
+  CHECK(script_context);
+  console::AddMessage(script_context, content::CONSOLE_MESSAGE_LEVEL_ERROR,
+                      error);
+}
+
 // Returns the API schema indicated by |api_name|.
 const base::DictionaryValue& GetAPISchema(const std::string& api_name) {
   const base::DictionaryValue* schema =
@@ -172,11 +195,14 @@ const base::DictionaryValue& GetAPISchema(const std::string& api_name) {
   return *schema;
 }
 
-// Returns true if the method specified by |method_name| is available to the
-// given |context|.
-bool IsAPIMethodAvailable(ScriptContext* context,
-                          const std::string& method_name) {
-  return context->GetAvailability(method_name).is_available();
+// Returns true if the feature specified by |name| is available to the given
+// |context|.
+bool IsAPIFeatureAvailable(v8::Local<v8::Context> context,
+                           const std::string& name) {
+  ScriptContext* script_context =
+      ScriptContextSet::GetContextByV8Context(context);
+  DCHECK(script_context);
+  return script_context->GetAvailability(name).is_available();
 }
 
 // Instantiates the binding object for the given |name|. |name| must specify a
@@ -186,9 +212,8 @@ v8::Local<v8::Object> CreateRootBinding(v8::Local<v8::Context> context,
                                         const std::string& name,
                                         APIBindingsSystem* bindings_system) {
   APIBindingHooks* hooks = nullptr;
-  v8::Local<v8::Object> binding_object = bindings_system->CreateAPIInstance(
-      name, context, context->GetIsolate(),
-      base::Bind(&IsAPIMethodAvailable, script_context), &hooks);
+  v8::Local<v8::Object> binding_object =
+      bindings_system->CreateAPIInstance(name, context, &hooks);
 
   gin::Handle<APIBindingBridge> bridge_handle = gin::CreateHandle(
       context->GetIsolate(),
@@ -331,18 +356,24 @@ NativeExtensionBindingsSystem::NativeExtensionBindingsSystem(
           base::Bind(&CallJsFunction),
           base::Bind(&CallJsFunctionSync),
           base::Bind(&GetAPISchema),
+          base::Bind(&IsAPIFeatureAvailable),
           base::Bind(&NativeExtensionBindingsSystem::SendRequest,
                      base::Unretained(this)),
           base::Bind(&NativeExtensionBindingsSystem::OnEventListenerChanged,
                      base::Unretained(this)),
-          APILastError(base::Bind(&GetRuntime))),
+          APILastError(base::Bind(&GetRuntime), base::Bind(&AddConsoleError))),
       weak_factory_(this) {
   api_system_.RegisterCustomType("storage.StorageArea",
                                  base::Bind(&StorageArea::CreateStorageArea));
   api_system_.RegisterCustomType("types.ChromeSetting",
                                  base::Bind(&ChromeSetting::Create));
+  api_system_.RegisterCustomType(
+      "contentSettings.ContentSetting",
+      base::Bind(&ContentSetting::Create, base::Bind(&CallJsFunction)));
   api_system_.GetHooksForAPI("webRequest")
       ->SetDelegate(base::MakeUnique<WebRequestHooks>());
+  api_system_.GetHooksForAPI("declarativeContent")
+      ->SetDelegate(base::MakeUnique<DeclarativeContentHooksDelegate>());
 }
 
 NativeExtensionBindingsSystem::~NativeExtensionBindingsSystem() {}
@@ -357,7 +388,7 @@ void NativeExtensionBindingsSystem::DidCreateScriptContext(
   DCHECK(!per_context_data->GetUserData(kBindingsSystemPerContextKey));
   auto data = base::MakeUnique<BindingsSystemPerContextData>(
       weak_factory_.GetWeakPtr());
-  per_context_data->SetUserData(kBindingsSystemPerContextKey, data.release());
+  per_context_data->SetUserData(kBindingsSystemPerContextKey, std::move(data));
 
   if (get_internal_api_.IsEmpty()) {
     get_internal_api_.Set(
@@ -466,7 +497,12 @@ void NativeExtensionBindingsSystem::HandleResponse(
     bool success,
     const base::ListValue& response,
     const std::string& error) {
-  api_system_.CompleteRequest(request_id, response, error);
+  // Some API calls result in failure, but don't set an error. Use a generic and
+  // unhelpful error string.
+  // TODO(devlin): Track these down and fix them. See crbug.com/648275.
+  api_system_.CompleteRequest(
+      request_id, response,
+      !success && error.empty() ? "Unknown error." : error);
 }
 
 RequestSender* NativeExtensionBindingsSystem::GetRequestSender() {

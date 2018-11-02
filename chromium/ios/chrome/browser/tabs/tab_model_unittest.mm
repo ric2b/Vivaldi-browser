@@ -5,7 +5,6 @@
 #import <objc/runtime.h>
 
 #include "base/files/file_path.h"
-#include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
@@ -14,6 +13,7 @@
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #include "ios/chrome/browser/sessions/ios_chrome_session_tab_helper.h"
+#import "ios/chrome/browser/sessions/session_ios.h"
 #import "ios/chrome/browser/sessions/session_window_ios.h"
 #import "ios/chrome/browser/sessions/test_session_service.h"
 #import "ios/chrome/browser/tabs/legacy_tab_helper.h"
@@ -41,6 +41,10 @@
 #include "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 // Defines a TabModelObserver for use in unittests.  This class can be used to
 // test if an observer method was called or not.
@@ -79,33 +83,34 @@ class TabModelTest : public PlatformTest {
     TestChromeBrowserState::Builder test_cbs_builder;
     chrome_browser_state_ = test_cbs_builder.Build();
 
-    session_window_.reset([[SessionWindowIOS alloc] init]);
+    session_window_ = [[SessionWindowIOS alloc] init];
 
     // Create tab model with just a dummy session service so the async state
     // saving doesn't trigger unless actually wanted.
-    SetTabModel(
-        CreateTabModel([[[TestSessionService alloc] init] autorelease], nil));
+    SetTabModel(CreateTabModel([[TestSessionService alloc] init], nil));
   }
 
-  ~TabModelTest() override {
-    [tab_model_ browserStateDestroyed];
+  ~TabModelTest() override = default;
+
+  void TearDown() override {
+    SetTabModel(nil);
+    PlatformTest::TearDown();
   }
 
-  void SetTabModel(base::scoped_nsobject<TabModel> tab_model) {
+  void SetTabModel(TabModel* tab_model) {
     if (tab_model_) {
       @autoreleasepool {
         [tab_model_ browserStateDestroyed];
-        tab_model_.reset();
+        tab_model_ = nil;
       }
     }
 
     tab_model_ = tab_model;
   }
 
-  base::scoped_nsobject<TabModel> CreateTabModel(
-      SessionServiceIOS* session_service,
-      SessionWindowIOS* session_window) {
-    base::scoped_nsobject<TabModel> tab_model([[TabModel alloc]
+  TabModel* CreateTabModel(SessionServiceIOS* session_service,
+                           SessionWindowIOS* session_window) {
+    TabModel* tab_model([[TabModel alloc]
         initWithSessionWindow:session_window
                sessionService:session_service
                  browserState:chrome_browser_state_.get()]);
@@ -118,11 +123,10 @@ class TabModelTest : public PlatformTest {
   // Creates a session window with entries named "restored window 1",
   // "restored window 2" and "restored window 3" and the second entry
   // marked as selected.
-  base::scoped_nsobject<SessionWindowIOS> CreateSessionWindow() {
+  SessionWindowIOS* CreateSessionWindow() {
     NSMutableArray<CRWSessionStorage*>* sessions = [NSMutableArray array];
     for (int i = 0; i < 3; i++) {
-      CRWSessionStorage* session_storage =
-          [[[CRWSessionStorage alloc] init] autorelease];
+      CRWSessionStorage* session_storage = [[CRWSessionStorage alloc] init];
       [sessions addObject:session_storage];
     }
     return base::scoped_nsobject<SessionWindowIOS>(
@@ -132,10 +136,9 @@ class TabModelTest : public PlatformTest {
   web::TestWebThreadBundle thread_bundle_;
   IOSChromeScopedTestingChromeBrowserStateManager scoped_browser_state_manager_;
   web::ScopedTestingWebClient web_client_;
-  base::scoped_nsobject<SessionWindowIOS> session_window_;
+  SessionWindowIOS* session_window_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
-  base::mac::ScopedNSAutoreleasePool pool_;
-  base::scoped_nsobject<TabModel> tab_model_;
+  TabModel* tab_model_;
 };
 
 TEST_F(TabModelTest, IsEmpty) {
@@ -347,8 +350,8 @@ TEST_F(TabModelTest, RestoreSessionOnNTPTest) {
                                   atIndex:0
                              inBackground:NO];
 
-  base::scoped_nsobject<SessionWindowIOS> window(CreateSessionWindow());
-  [tab_model_ restoreSessionWindow:window.get()];
+  SessionWindowIOS* window(CreateSessionWindow());
+  [tab_model_ restoreSessionWindow:window];
 
   ASSERT_EQ(3U, [tab_model_ count]);
   EXPECT_NSEQ([tab_model_ tabAtIndex:1], [tab_model_ currentTab]);
@@ -373,8 +376,8 @@ TEST_F(TabModelTest, RestoreSessionOn2NtpTest) {
                                    atIndex:1
                               inBackground:NO];
 
-  base::scoped_nsobject<SessionWindowIOS> window(CreateSessionWindow());
-  [tab_model_ restoreSessionWindow:window.get()];
+  SessionWindowIOS* window(CreateSessionWindow());
+  [tab_model_ restoreSessionWindow:window];
 
   ASSERT_EQ(5U, [tab_model_ count]);
   EXPECT_NSEQ([tab_model_ tabAtIndex:3], [tab_model_ currentTab]);
@@ -397,8 +400,8 @@ TEST_F(TabModelTest, RestoreSessionOnAnyTest) {
                                   atIndex:0
                              inBackground:NO];
 
-  base::scoped_nsobject<SessionWindowIOS> window(CreateSessionWindow());
-  [tab_model_ restoreSessionWindow:window.get()];
+  SessionWindowIOS* window(CreateSessionWindow());
+  [tab_model_ restoreSessionWindow:window];
 
   ASSERT_EQ(4U, [tab_model_ count]);
   EXPECT_NSEQ([tab_model_ tabAtIndex:2], [tab_model_ currentTab]);
@@ -1024,9 +1027,9 @@ TEST_F(TabModelTest, MoveTabs) {
   ASSERT_NSEQ(tab2, [tab_model_ tabAtIndex:2]);
 
   // Check that observer methods are called.
-  base::scoped_nsobject<TabModelObserverPong> tab_model_observer;
-  tab_model_observer.reset([[TabModelObserverPong alloc] init]);
-  [tab_model_ addObserver:tab_model_observer.get()];
+  TabModelObserverPong* tab_model_observer;
+  tab_model_observer = [[TabModelObserverPong alloc] init];
+  [tab_model_ addObserver:tab_model_observer];
 
   // Move a tab from index 1 to index 0 (move tab left by one).
   [tab_model_observer setTabMovedWasCalled:NO];
@@ -1075,7 +1078,7 @@ TEST_F(TabModelTest, MoveTabs) {
 
   // TabModel asserts that there are no observer when it is deallocated,
   // so remove the observer before the end of the method.
-  [tab_model_ removeObserver:tab_model_observer.get()];
+  [tab_model_ removeObserver:tab_model_observer];
 }
 
 TEST_F(TabModelTest, ParentTabModel) {
@@ -1087,7 +1090,7 @@ TEST_F(TabModelTest, ParentTabModel) {
   EXPECT_NSEQ(nil, [tab parentTabModel]);
 
   [tab_model_ webStateList]->InsertWebState(0, std::move(web_state));
-  EXPECT_NSEQ(tab_model_.get(), [tab parentTabModel]);
+  EXPECT_NSEQ(tab_model_, [tab parentTabModel]);
 }
 
 TEST_F(TabModelTest, TabCreatedOnInsertion) {
@@ -1107,9 +1110,8 @@ TEST_F(TabModelTest, PersistSelectionChange) {
 
   // Reset the TabModel with a custom SessionServiceIOS (to control whether
   // data is saved to disk).
-  base::scoped_nsobject<TestSessionService> test_session_service(
-      [[TestSessionService alloc] init]);
-  SetTabModel(CreateTabModel(test_session_service.get(), nil));
+  TestSessionService* test_session_service = [[TestSessionService alloc] init];
+  SetTabModel(CreateTabModel(test_session_service, nil));
 
   [tab_model_ insertTabWithURL:GURL(kURL1)
                       referrer:web::Referrer()
@@ -1150,11 +1152,13 @@ TEST_F(TabModelTest, PersistSelectionChange) {
 
   NSString* state_path = base::SysUTF8ToNSString(
       chrome_browser_state_->GetStatePath().AsUTF8Unsafe());
-  SessionWindowIOS* session_window =
-      [test_session_service loadSessionWindowFromDirectory:state_path];
+  SessionIOS* session =
+      [test_session_service loadSessionFromDirectory:state_path];
+  ASSERT_EQ(1u, session.sessionWindows.count);
+  SessionWindowIOS* session_window = session.sessionWindows[0];
 
   // Create tab model from saved session.
-  SetTabModel(CreateTabModel(test_session_service.get(), session_window));
+  SetTabModel(CreateTabModel(test_session_service, session_window));
 
   ASSERT_EQ(3u, [tab_model_ count]);
 

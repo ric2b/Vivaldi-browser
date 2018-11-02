@@ -584,19 +584,15 @@ bool ThumbnailDatabase::SetFaviconOutOfDate(favicon_base::FaviconID icon_id) {
 
 favicon_base::FaviconID ThumbnailDatabase::GetFaviconIDForFaviconURL(
     const GURL& icon_url,
-    int required_icon_type,
-    favicon_base::IconType* icon_type) {
-  sql::Statement statement(db_.GetCachedStatement(SQL_FROM_HERE,
-      "SELECT id, icon_type FROM favicons WHERE url=? AND (icon_type & ? > 0) "
-      "ORDER BY icon_type DESC"));
+    favicon_base::IconType icon_type) {
+  sql::Statement statement(db_.GetCachedStatement(
+      SQL_FROM_HERE, "SELECT id FROM favicons WHERE url=? AND icon_type=?"));
   statement.BindString(0, URLDatabase::GURLToDatabaseURL(icon_url));
-  statement.BindInt(1, required_icon_type);
+  statement.BindInt(1, icon_type);
 
   if (!statement.Step())
     return 0;  // not cached
 
-  if (icon_type)
-    *icon_type = static_cast<favicon_base::IconType>(statement.ColumnInt(1));
   return statement.ColumnInt64(0);
 }
 
@@ -676,11 +672,6 @@ bool ThumbnailDatabase::GetIconMappingsForPageURL(
       result = true;
       if (!filtered_mapping_data)
         return result;
-
-      // Restrict icon type of subsequent matches to |m->icon_type|.
-      // |m->icon_type| is the largest IconType in |mapping_data| because
-      // |mapping_data| is sorted in descending order of IconType.
-      required_icon_types = m->icon_type;
 
       filtered_mapping_data->push_back(*m);
     }

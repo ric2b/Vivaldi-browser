@@ -10,6 +10,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "cc/output/context_provider.h"
+#include "cc/output/renderer_settings.h"
 #include "cc/surfaces/surface_manager.h"
 #include "services/ui/public/cpp/raster_thread_helper.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
@@ -37,25 +39,23 @@ class AURA_EXPORT MusContextFactory : public ui::ContextFactory {
   void OnEstablishedGpuChannel(base::WeakPtr<ui::Compositor> compositor,
                                scoped_refptr<gpu::GpuChannelHost> gpu_channel);
 
-  void OnCompositorFrameSinkAvailable(
-      base::WeakPtr<ui::Compositor> compositor,
-      std::unique_ptr<cc::CompositorFrameSink> compositor_frame_sink);
-
   // ContextFactory:
   void CreateCompositorFrameSink(
       base::WeakPtr<ui::Compositor> compositor) override;
   scoped_refptr<cc::ContextProvider> SharedMainThreadContextProvider() override;
   void RemoveCompositor(ui::Compositor* compositor) override;
-  bool DoesCreateTestContexts() override;
-  uint32_t GetImageTextureTarget(gfx::BufferFormat format,
-                                 gfx::BufferUsage usage) override;
+  double GetRefreshRate() const override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
+  const cc::RendererSettings& GetRendererSettings() const override;
   void AddObserver(ui::ContextFactoryObserver* observer) override {}
   void RemoveObserver(ui::ContextFactoryObserver* observer) override {}
 
   ui::RasterThreadHelper raster_thread_helper_;
   ui::Gpu* gpu_;
+  const cc::RendererSettings renderer_settings_;
+  scoped_refptr<cc::ContextProvider> shared_main_thread_context_provider_;
+
   base::WeakPtrFactory<MusContextFactory> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MusContextFactory);

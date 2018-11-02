@@ -15,6 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
@@ -24,6 +25,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
@@ -190,8 +192,6 @@ bool FaviconRawBitmapsMatch(const SkBitmap& bitmap_a,
                << bitmap_b.height() << ")";
     return false;
   }
-  SkAutoLockPixels bitmap_lock_a(bitmap_a);
-  SkAutoLockPixels bitmap_lock_b(bitmap_b);
   void* node_pixel_addr_a = bitmap_a.getPixels();
   EXPECT_TRUE(node_pixel_addr_a);
   void* node_pixel_addr_b = bitmap_b.getPixels();
@@ -854,6 +854,7 @@ gfx::Image CreateFavicon(SkColor color) {
 }
 
 gfx::Image Create1xFaviconFromPNGFile(const std::string& path) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   const char* kPNGExtension = ".png";
   if (!base::EndsWith(path, kPNGExtension,
                       base::CompareCase::INSENSITIVE_ASCII))

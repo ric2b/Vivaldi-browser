@@ -20,6 +20,7 @@
 
 #include "modules/accessibility/AXProgressIndicator.h"
 
+#include "core/dom/AccessibleNode.h"
 #include "core/html/HTMLProgressElement.h"
 #include "core/layout/LayoutProgress.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
@@ -51,30 +52,33 @@ bool AXProgressIndicator::ComputeAccessibilityIsIgnored(
 }
 
 float AXProgressIndicator::ValueForRange() const {
-  if (HasAttribute(aria_valuenowAttr))
-    return GetAttribute(aria_valuenowAttr).ToFloat();
+  float value_now;
+  if (HasAOMPropertyOrARIAAttribute(AOMFloatProperty::kValueNow, value_now))
+    return value_now;
 
-  if (GetElement()->position() >= 0)
-    return clampTo<float>(GetElement()->value());
+  if (GetProgressElement()->position() >= 0)
+    return clampTo<float>(GetProgressElement()->value());
   // Indeterminate progress bar should return 0.
   return 0.0f;
 }
 
 float AXProgressIndicator::MaxValueForRange() const {
-  if (HasAttribute(aria_valuemaxAttr))
-    return GetAttribute(aria_valuemaxAttr).ToFloat();
+  float value_max;
+  if (HasAOMPropertyOrARIAAttribute(AOMFloatProperty::kValueMax, value_max))
+    return value_max;
 
-  return clampTo<float>(GetElement()->max());
+  return clampTo<float>(GetProgressElement()->max());
 }
 
 float AXProgressIndicator::MinValueForRange() const {
-  if (HasAttribute(aria_valueminAttr))
-    return GetAttribute(aria_valueminAttr).ToFloat();
+  float value_min;
+  if (HasAOMPropertyOrARIAAttribute(AOMFloatProperty::kValueMin, value_min))
+    return value_min;
 
   return 0.0f;
 }
 
-HTMLProgressElement* AXProgressIndicator::GetElement() const {
+HTMLProgressElement* AXProgressIndicator::GetProgressElement() const {
   return ToLayoutProgress(layout_object_)->ProgressElement();
 }
 

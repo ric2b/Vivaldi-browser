@@ -4,11 +4,12 @@
 
 #include "chrome/browser/ui/views/frame/minimize_button_metrics_win.h"
 
-#include "base/logging.h"
 #include "base/i18n/rtl.h"
+#include "base/logging.h"
 #include "base/win/windows_version.h"
 #include "dwmapi.h"
 #include "ui/base/win/shell.h"
+#include "ui/display/display.h"
 #include "ui/display/win/dpi.h"
 #include "ui/display/win/screen_win.h"
 #include "ui/gfx/geometry/point.h"
@@ -52,6 +53,29 @@ MinimizeButtonMetrics::MinimizeButtonMetrics()
 MinimizeButtonMetrics::~MinimizeButtonMetrics() {
 }
 
+// static
+int MinimizeButtonMetrics::GetCaptionButtonHeightInDIPs() {
+  // At DPI scaling settings other than 100% the result won't be exactly right.
+  // TODO: return a more accurate approximation [http://crbug.com/716365]
+
+  // SM_CYSIZE returns the caption button height, but to get the full height
+  // from the top of the window we add SM_CYSIZEFRAME.
+  const int caption_height = GetSystemMetrics(SM_CYSIZE);
+  const int frame_thickness = GetSystemMetrics(SM_CYSIZEFRAME);
+
+  // The result of GetSystemMetrics depends on the scale factor of the primary
+  // display. Divide the sum by that to convert to DIPs. (Converting SM_CYSIZE
+  // and SM_CYSIZEFRAME to DIPs individually adds a bigger rounding error.)
+  float primary_device_scale_factor =
+      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor();
+  float height_dips =
+      (caption_height + frame_thickness) / primary_device_scale_factor;
+
+  // Testing shows that floor() gives a more accurate approximation than
+  // round() here.
+  return std::floor(height_dips);
+}
+
 void MinimizeButtonMetrics::Init(HWND hwnd) {
   DCHECK(!hwnd_);
   hwnd_ = hwnd;
@@ -61,6 +85,12 @@ void MinimizeButtonMetrics::OnHWNDActivated() {
   was_activated_ = true;
   // NOTE: we don't cache here as it seems only after the activate is the value
   // correct.
+}
+
+void MinimizeButtonMetrics::OnDpiChanged() {
+  // This ensures that the next time GetMinimizeButtonOffsetX() is called, it
+  // will be recalculated, given the new scale factor.
+  cached_minimize_button_x_delta_ = 0;
 }
 
 // This function attempts to calculate the odd and varying difference
@@ -123,7 +153,7 @@ int MinimizeButtonMetrics::GetMinimizeButtonOffsetForWindow() const {
     TITLEBARINFOEX titlebar_info = {0};
     titlebar_info.cbSize = sizeof(TITLEBARINFOEX);
     SendMessage(hwnd_, WM_GETTITLEBARINFOEX, 0,
-                reinterpret_cast<WPARAM>(&titlebar_info));
+                reinterpret_cast<LPARAM>(&titlebar_info));
 
     // Under DWM WM_GETTITLEBARINFOEX won't return the right thing until after
     // WM_NCACTIVATE (maybe it returns classic values?). In an attempt to

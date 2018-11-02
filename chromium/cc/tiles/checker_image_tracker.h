@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/optional.h"
 #include "cc/cc_export.h"
 #include "cc/paint/image_id.h"
 #include "cc/tiles/image_controller.h"
@@ -37,33 +38,62 @@ class CC_EXPORT CheckerImageTracker {
                       bool enable_checker_imaging);
   ~CheckerImageTracker();
 
-  // Given the |images| for a tile, filters the images which will be deferred
-  // asynchronously using the image decoded service, eliminating them from
-  // |images| adds them to the |checkered_images| set, so they can be skipped
-  // during the rasterization of this tile.
-  // The entries remaining in |images| are for images for which a cached decode
-  // from the image decode service is available, or which must be decoded before
-  // before this tile can be rasterized.
-  void FilterImagesForCheckeringForTile(std::vector<DrawImage>* images,
-                                        ImageIdFlatSet* checkered_images,
-                                        WhichTree tree);
+  // Returns true if the decode for |image| will be deferred to the image decode
+  // service and it should be be skipped during raster.
+  bool ShouldCheckerImage(const PaintImage& image, WhichTree tree);
+
+  using ImageDecodeQueue = std::vector<PaintImage>;
+  void ScheduleImageDecodeQueue(ImageDecodeQueue image_decode_queue);
 
   // Returns the set of images to invalidate on the sync tree.
-  const ImageIdFlatSet& TakeImagesToInvalidateOnSyncTree();
+  const PaintImageIdFlatSet& TakeImagesToInvalidateOnSyncTree();
 
+  // Called when the sync tree is activated. Each call to
+  // TakeImagesToInvalidateOnSyncTree() must be followed by this when the
+  // invalidated sync tree is activated.
   void DidActivateSyncTree();
 
+  // Called to reset the tracker state on navigation. This will release all
+  // cached images. Setting |can_clear_decode_policy_tracking| will also result
+  // in re-checkering any images already decoded by the tracker.
+  void ClearTracker(bool can_clear_decode_policy_tracking);
+
  private:
-  void DidFinishImageDecode(ImageId image_id,
+  enum class DecodePolicy {
+    // The image can be decoded asynchronously from raster. When set, the image
+    // is always skipped during rasterization of content that includes this
+    // image until it has been decoded using the decode service.
+    ASYNC,
+    // The image has been decoded asynchronously once and should now be
+    // synchronously rasterized with the content.
+    SYNC_DECODED_ONCE,
+    // The image has been permanently vetoed from being decoded async.
+    SYNC_PERMANENT,
+  };
+
+  // Wrapper to unlock an image decode requested from the ImageController on
+  // destruction.
+  class ScopedDecodeHolder {
+   public:
+    ScopedDecodeHolder(ImageController* controller,
+                       ImageController::ImageDecodeRequestId request_id)
+        : controller_(controller), request_id_(request_id) {}
+    ~ScopedDecodeHolder() { controller_->UnlockImageDecode(request_id_); }
+
+   private:
+    ImageController* controller_;
+    ImageController::ImageDecodeRequestId request_id_;
+
+    DISALLOW_COPY_AND_ASSIGN(ScopedDecodeHolder);
+  };
+
+  void DidFinishImageDecode(PaintImage::Id image_id,
                             ImageController::ImageDecodeRequestId request_id,
                             ImageController::ImageDecodeResult result);
 
-  // Returns true if the decode for |image| will be deferred to the image decode
-  // service and it should be be skipped during raster.
-  bool ShouldCheckerImage(const sk_sp<const SkImage>& image,
-                          WhichTree tree) const;
-
-  void ScheduleImageDecodeIfNecessary(const sk_sp<const SkImage>& image);
+  // Called when the next request in the |image_decode_queue_| should be
+  // scheduled with the image decode service.
+  void ScheduleNextImageDecode();
 
   ImageController* image_controller_;
   CheckerImageTrackerClient* client_;
@@ -71,27 +101,26 @@ class CC_EXPORT CheckerImageTracker {
 
   // A set of images which have been decoded and are pending invalidation for
   // raster on the checkered tiles.
-  ImageIdFlatSet images_pending_invalidation_;
+  PaintImageIdFlatSet images_pending_invalidation_;
 
   // A set of images which were invalidated on the current sync tree.
-  ImageIdFlatSet invalidated_images_on_current_sync_tree_;
+  PaintImageIdFlatSet invalidated_images_on_current_sync_tree_;
 
-  // A set of images which are currently pending decode from the image decode
-  // service.
-  // TODO(khushalsagar): This should be a queue that gets re-built each time we
-  // do a PrepareTiles? See crbug.com/689184.
-  ImageIdFlatSet pending_image_decodes_;
+  // The queue of images pending decode. We maintain a queue to ensure that the
+  // order in which images are decoded is aligned with the priority of the tiles
+  // dependent on these images.
+  ImageDecodeQueue image_decode_queue_;
 
-  // A set of images which have been decoded at least once from the
-  // ImageDecodeService and should not be checkered again.
-  // TODO(khushalsagar): Limit the size of this set.
-  // TODO(khushalsagar): Plumb navigation changes here to reset this. See
-  // crbug.com/693228.
-  std::unordered_set<ImageId> images_decoded_once_;
+  // The currently outstanding image decode that has been scheduled with the
+  // decode service. There can be only one outstanding decode at a time.
+  base::Optional<PaintImage> outstanding_image_decode_;
+
+  // A map of ImageId to its DecodePolicy.
+  std::unordered_map<PaintImage::Id, DecodePolicy> image_async_decode_state_;
 
   // A map of image id to image decode request id for images to be unlocked.
-  std::unordered_map<ImageId, ImageController::ImageDecodeRequestId>
-      image_id_to_decode_request_id_;
+  std::unordered_map<PaintImage::Id, std::unique_ptr<ScopedDecodeHolder>>
+      image_id_to_decode_;
 
   base::WeakPtrFactory<CheckerImageTracker> weak_factory_;
 };

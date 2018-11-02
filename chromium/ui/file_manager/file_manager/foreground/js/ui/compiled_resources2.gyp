@@ -3,18 +3,31 @@
 # found in the LICENSE file.
 {
   'targets': [
-#    {
-#      'target_name': 'actions_submenu',
-#      'dependencies': [
-#        '../compiled_resources2.gyp:actions_model',
-#        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:command',
-#      ],
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'banners',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
+    {
+      'target_name': 'actions_submenu',
+      'dependencies': [
+        '../compiled_resources2.gyp:actions_model',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:command',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:menu',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:menu_item',
+      ],
+      'includes': ['../../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'banners',
+      'dependencies': [
+        '../../../../externs/compiled_resources2.gyp:chrome_echo_private',
+        '../../../common/js/compiled_resources2.gyp:util',
+        '../../../common/js/compiled_resources2.gyp:volume_manager_common',
+        '../compiled_resources2.gyp:directory_model',
+        '../compiled_resources2.gyp:volume_manager_wrapper',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
+        '<(DEPTH)/ui/webui/resources/js/cr/compiled_resources2.gyp:event_target',
+        '<(EXTERNS_GYP):chrome_extensions',
+        '<(EXTERNS_GYP):file_manager_private',
+      ],
+      'includes': ['../../../../compile_js2.gypi'],
+    },
     {
       'target_name': 'combobutton',
       'dependencies': [
@@ -53,10 +66,24 @@
       ],
       'includes': ['../../../../compile_js2.gypi'],
     },
-#    {
-#      'target_name': 'directory_tree',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
+    {
+      'target_name': 'directory_tree',
+      'dependencies': [
+        '../../../../externs/background/compiled_resources2.gyp:file_operation_manager',
+        '../../../../externs/compiled_resources2.gyp:menu_item_update_event',
+        '../../../common/js/compiled_resources2.gyp:util',
+        '../../../common/js/compiled_resources2.gyp:volume_manager_common',
+        '../compiled_resources2.gyp:directory_model',
+        '../compiled_resources2.gyp:navigation_list_model',
+        '../compiled_resources2.gyp:volume_manager_wrapper',
+        '../metadata/compiled_resources2.gyp:metadata_model',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:context_menu_button',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:context_menu_handler',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:menu',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:tree',
+      ],
+      'includes': ['../../../../compile_js2.gypi'],
+    },
     {
       'target_name': 'drag_selector',
       'dependencies': [
@@ -80,10 +107,22 @@
       ],
       'includes': ['../../../../compile_js2.gypi'],
     },
-#    {
-#      'target_name': 'file_grid',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
+    {
+      'target_name': 'file_grid',
+      'dependencies': [
+        '../../../../externs/background/compiled_resources2.gyp:import_history',
+        '../../../../externs/background/compiled_resources2.gyp:import_history_enum',
+        '../../../common/js/compiled_resources2.gyp:async_util',
+        '../../../common/js/compiled_resources2.gyp:file_type',
+        '../../../common/js/compiled_resources2.gyp:util',
+        '../compiled_resources2.gyp:list_thumbnail_loader',
+        '../metadata/compiled_resources2.gyp:metadata_model',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:grid',
+        'drag_selector',
+        'file_table_list',
+      ],
+      'includes': ['../../../../compile_js2.gypi'],
+    },
     {
       'target_name': 'file_list_selection_model',
       'dependencies': [
@@ -102,10 +141,43 @@
       ],
       'includes': ['../../../../compile_js2.gypi'],
     },
-#    {
-#      'target_name': 'file_manager_ui',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
+    {
+      'target_name': 'file_manager_ui',
+      'dependencies': [
+        '../../../common/js/compiled_resources2.gyp:util',
+        '../../elements/compiled_resources2.gyp:files_toggle_ripple',
+        '../../elements/compiled_resources2.gyp:files_tooltip',
+        '../compiled_resources2.gyp:launch_param',
+        '../compiled_resources2.gyp:providers_model',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_template_no_process',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:context_menu_button',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:dialogs',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:menu',
+        'actions_submenu',
+        'banners',
+        'combobutton',
+        'default_task_dialog',
+        'dialog_footer',
+        'directory_tree',
+        'empty_folder',
+        'error_dialog',
+        'file_grid',
+        'file_table',
+        'files_alert_dialog',
+        'files_confirm_dialog',
+        'gear_menu',
+        'list_container',
+        'location_line',
+        'multi_profile_share_dialog',
+        'progress_center_panel',
+        'providers_menu',
+        'search_box',
+        'share_dialog',
+        'suggest_apps_dialog',
+      ],
+      'includes': ['../../../../compile_js2.gypi'],
+    },
     {
       'target_name': 'file_metadata_formatter',
       'dependencies': [
@@ -114,10 +186,21 @@
       ],
       'includes': ['../../../../compile_js2.gypi'],
     },
-#    {
-#      'target_name': 'file_table',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
+    {
+      'target_name': 'file_table',
+      'dependencies': [
+        '../../../../externs/background/compiled_resources2.gyp:import_history',
+        '../../../../externs/background/compiled_resources2.gyp:import_history_enum',
+        '../compiled_resources2.gyp:file_list_model',
+        '../compiled_resources2.gyp:list_thumbnail_loader',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:table',
+        'drag_selector',
+        'file_metadata_formatter',
+        'file_table_list',
+      ],
+      'includes': ['../../../../compile_js2.gypi'],
+    },
     {
       'target_name': 'file_table_list',
       'dependencies': [
@@ -162,10 +245,15 @@
       ],
       'includes': ['../../../../compile_js2.gypi'],
     },
-#    {
-#      'target_name': 'list_container',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
+    {
+      'target_name': 'list_container',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:list_item',
+        'file_grid',
+        'file_table',
+      ],
+      'includes': ['../../../../compile_js2.gypi'],
+    },
     {
       'target_name': 'location_line',
       'dependencies': [
@@ -195,22 +283,33 @@
       ],
       'includes': ['../../../../compile_js2.gypi'],
     },
-#    {
-#      'target_name': 'providers_menu',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
     {
-      'target_name': 'scrollbar',
+      'target_name': 'providers_menu',
       'dependencies': [
-        '../../../common/js/compiled_resources2.gyp:util',
-        '<(DEPTH)/ui/webui/resources/js/cr/compiled_resources2.gyp:ui',
+        '../../../../externs/compiled_resources2.gyp:menu_item_update_event',
+        '../compiled_resources2.gyp:providers_model',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:menu',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:position_util',
+        'directory_tree',
+        'files_menu',
       ],
       'includes': ['../../../../compile_js2.gypi'],
     },
-#    {
-#      'target_name': 'search_box',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
+    {
+      'target_name': 'search_box',
+      'dependencies': [
+        '../../../../externs/compiled_resources2.gyp:search_item',
+        '../../../common/js/compiled_resources2.gyp:file_type',
+        '../../../common/js/compiled_resources2.gyp:util',
+        '../../elements/compiled_resources2.gyp:files_toggle_ripple',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
+        '<(DEPTH)/ui/webui/resources/js/cr/compiled_resources2.gyp:event_target',
+        '<(DEPTH)/ui/webui/resources/js/cr/compiled_resources2.gyp:ui',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:autocomplete_list',
+      ],
+      'includes': ['../../../../compile_js2.gypi'],
+    },
     {
       'target_name': 'share_dialog',
       'dependencies': [

@@ -14,9 +14,9 @@
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
 
 #if INSIDE_BLINK
-#include "wtf/Forward.h"
-#include "wtf/HashMap.h"
-#include "wtf/text/StringHash.h"
+#include "platform/wtf/Forward.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/text/StringHash.h"
 #endif
 
 namespace blink {
@@ -69,9 +69,6 @@ class BLINK_PLATFORM_EXPORT WebServiceWorkerResponse {
   void SetBlob(const WebString& uuid, uint64_t size);
   WebString BlobUUID() const;
   uint64_t BlobSize() const;
-
-  void SetStreamURL(const WebURL&);
-  const WebURL& StreamURL() const;
 
   // Provides a more detailed error when status() is zero.
   void SetError(WebServiceWorkerResponseError);

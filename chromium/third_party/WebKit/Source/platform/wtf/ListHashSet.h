@@ -173,8 +173,8 @@ class ListHashSet
   const ValueType& back() const;
   void pop_back();
 
-  iterator Find(ValuePeekInType);
-  const_iterator Find(ValuePeekInType) const;
+  iterator find(ValuePeekInType);
+  const_iterator find(ValuePeekInType) const;
   bool Contains(ValuePeekInType) const;
 
   // An alternate version of find() that finds the object by hashing and
@@ -214,9 +214,9 @@ class ListHashSet
   template <typename IncomingValueType>
   AddResult InsertBefore(iterator, IncomingValueType&&);
 
-  void erase(ValuePeekInType value) { return erase(Find(value)); }
+  void erase(ValuePeekInType value) { return erase(find(value)); }
   void erase(iterator);
-  void Clear();
+  void clear();
   template <typename Collection>
   void RemoveAll(const Collection& other) {
     WTF::RemoveAll(*this, other);
@@ -796,7 +796,7 @@ ListHashSet<T, inlineCapacity, U, V>::operator=(ListHashSet&& other) {
 
 template <typename T, size_t inlineCapacity, typename U, typename V>
 inline void ListHashSet<T, inlineCapacity, U, V>::Swap(ListHashSet& other) {
-  impl_.Swap(other.impl_);
+  impl_.swap(other.impl_);
   std::swap(head_, other.head_);
   std::swap(tail_, other.tail_);
   allocator_provider_.Swap(other.allocator_provider_);
@@ -850,7 +850,7 @@ inline void ListHashSet<T, inlineCapacity, U, V>::pop_back() {
 
 template <typename T, size_t inlineCapacity, typename U, typename V>
 inline typename ListHashSet<T, inlineCapacity, U, V>::iterator
-ListHashSet<T, inlineCapacity, U, V>::Find(ValuePeekInType value) {
+ListHashSet<T, inlineCapacity, U, V>::find(ValuePeekInType value) {
   ImplTypeIterator it = impl_.template Find<BaseTranslator>(value);
   if (it == impl_.end())
     return end();
@@ -859,7 +859,7 @@ ListHashSet<T, inlineCapacity, U, V>::Find(ValuePeekInType value) {
 
 template <typename T, size_t inlineCapacity, typename U, typename V>
 inline typename ListHashSet<T, inlineCapacity, U, V>::const_iterator
-ListHashSet<T, inlineCapacity, U, V>::Find(ValuePeekInType value) const {
+ListHashSet<T, inlineCapacity, U, V>::find(ValuePeekInType value) const {
   ImplTypeConstIterator it = impl_.template Find<BaseTranslator>(value);
   if (it == impl_.end())
     return end();
@@ -990,7 +990,7 @@ ListHashSet<T, inlineCapacity, U, V>::InsertBefore(
     ValuePeekInType before_value,
     IncomingValueType&& new_value) {
   CreateAllocatorIfNeeded();
-  return InsertBefore(Find(before_value),
+  return InsertBefore(find(before_value),
                       std::forward<IncomingValueType>(new_value));
 }
 
@@ -1003,9 +1003,9 @@ inline void ListHashSet<T, inlineCapacity, U, V>::erase(iterator it) {
 }
 
 template <typename T, size_t inlineCapacity, typename U, typename V>
-inline void ListHashSet<T, inlineCapacity, U, V>::Clear() {
+inline void ListHashSet<T, inlineCapacity, U, V>::clear() {
   DeleteAllNodes();
-  impl_.Clear();
+  impl_.clear();
   head_ = nullptr;
   tail_ = nullptr;
 }
@@ -1025,7 +1025,7 @@ auto ListHashSet<T, inlineCapacity, U, V>::Take(iterator it) -> ValueType {
 template <typename T, size_t inlineCapacity, typename U, typename V>
 auto ListHashSet<T, inlineCapacity, U, V>::Take(ValuePeekInType value)
     -> ValueType {
-  return Take(Find(value));
+  return Take(find(value));
 }
 
 template <typename T, size_t inlineCapacity, typename U, typename V>

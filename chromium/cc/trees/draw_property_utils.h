@@ -37,15 +37,12 @@ void CC_EXPORT ComputeTransforms(TransformTree* transform_tree);
 // Computes screen space opacity for every node in the opacity tree.
 void CC_EXPORT ComputeEffects(EffectTree* effect_tree);
 
-
 void CC_EXPORT UpdatePropertyTrees(LayerTreeHost* layer_tree_host,
-                                   PropertyTrees* property_trees,
-                                   bool can_render_to_separate_surface);
+                                   PropertyTrees* property_trees);
 
 void CC_EXPORT
 UpdatePropertyTreesAndRenderSurfaces(LayerImpl* root_layer,
                                      PropertyTrees* property_trees,
-                                     bool can_render_to_separate_surface,
                                      bool can_adjust_raster_scales);
 
 void CC_EXPORT FindLayersThatNeedUpdates(LayerTreeHost* layer_tree_host,
@@ -65,12 +62,12 @@ void CC_EXPORT ComputeMaskDrawProperties(LayerImpl* mask_layer,
                                          const PropertyTrees* property_trees);
 
 void CC_EXPORT ComputeSurfaceDrawProperties(PropertyTrees* property_trees,
-                                            RenderSurfaceImpl* render_surface,
-                                            const bool use_layer_lists);
+                                            RenderSurfaceImpl* render_surface);
 
-bool CC_EXPORT LayerShouldBeSkipped(LayerImpl* layer,
-                                    const TransformTree& transform_tree,
-                                    const EffectTree& effect_tree);
+bool CC_EXPORT LayerShouldBeSkippedForDrawPropertiesComputation(
+    LayerImpl* layer,
+    const TransformTree& transform_tree,
+    const EffectTree& effect_tree);
 
 bool CC_EXPORT LayerNeedsUpdate(Layer* layer,
                                 bool layer_is_drawn,

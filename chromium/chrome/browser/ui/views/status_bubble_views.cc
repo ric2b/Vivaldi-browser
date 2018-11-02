@@ -42,7 +42,6 @@
 
 #if defined(USE_ASH)
 #include "ash/wm/window_state.h"  // nogncheck
-#include "ash/wm/window_state_aura.h"  // nogncheck
 #endif
 
 #if defined(USE_AURA)
@@ -266,8 +265,9 @@ void StatusBubbleViews::StatusView::StartTimer(base::TimeDelta time) {
     timer_factory_.InvalidateWeakPtrs();
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&StatusBubbleViews::StatusView::OnTimer,
-                            timer_factory_.GetWeakPtr()),
+      FROM_HERE,
+      base::BindOnce(&StatusBubbleViews::StatusView::OnTimer,
+                     timer_factory_.GetWeakPtr()),
       time);
 }
 
@@ -484,7 +484,7 @@ void StatusBubbleViews::StatusView::OnPaint(gfx::Canvas* canvas) {
                       popup_size_.height());
   text_rect.Inset(kShadowThickness, kShadowThickness);
   // Make sure the text is aligned to the right on RTL UIs.
-  text_rect.set_x(GetMirroredXForRect(text_rect));
+  text_rect = GetMirroredRect(text_rect);
 
   // Text color is the foreground tab text color at 60% alpha.
   SkColor blended_text_color = color_utils::AlphaBlend(
@@ -678,7 +678,7 @@ void StatusBubbleViews::Reposition() {
   // Overlap the client edge that's shown in restored mode, or when there is no
   // client edge this makes the bubble snug with the corner of the window.
   int overlap = kShadowThickness;
-  int height = GetPreferredSize().height();
+  int height = GetPreferredHeight();
   int base_view_height = base_view()->bounds().height();
   gfx::Point origin(-overlap, base_view_height - height + overlap);
   SetBounds(origin.x(), origin.y(), base_view()->bounds().width() / 3, height);
@@ -698,8 +698,8 @@ void StatusBubbleViews::RepositionPopup() {
   }
 }
 
-gfx::Size StatusBubbleViews::GetPreferredSize() {
-  return gfx::Size(0, gfx::FontList().GetHeight() + kTotalVerticalPadding);
+int StatusBubbleViews::GetPreferredHeight() {
+  return gfx::FontList().GetHeight() + kTotalVerticalPadding;
 }
 
 void StatusBubbleViews::SetBounds(int x, int y, int w, int h) {
@@ -778,8 +778,9 @@ void StatusBubbleViews::SetURL(const GURL& url) {
     } else if (url_formatter::FormatUrl(url).length() >
                url_text_.length()) {
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, base::Bind(&StatusBubbleViews::ExpandBubble,
-                                expand_timer_factory_.GetWeakPtr()),
+          FROM_HERE,
+          base::BindOnce(&StatusBubbleViews::ExpandBubble,
+                         expand_timer_factory_.GetWeakPtr()),
           base::TimeDelta::FromMilliseconds(kExpandHoverDelayMS));
     }
   }

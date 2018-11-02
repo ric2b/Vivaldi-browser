@@ -101,6 +101,10 @@ void WaitForLoadStopWithoutSuccessCheck(WebContents* web_contents);
 // navigations should be refactored to do EXPECT_TRUE(WaitForLoadStop()).
 bool WaitForLoadStop(WebContents* web_contents);
 
+// If a test uses a beforeunload dialog, it must be prepared to avoid flakes.
+// This function collects everything that needs to be done.
+void PrepContentsForBeforeUnloadTest(WebContents* web_contents);
+
 #if defined(USE_AURA) || defined(OS_ANDROID)
 // If WebContent's view is currently being resized, this will wait for the ack
 // from the renderer that the resize is complete and for the
@@ -111,6 +115,11 @@ void WaitForResizeComplete(WebContents* web_contents);
 
 // Causes the specified web_contents to crash. Blocks until it is crashed.
 void CrashTab(WebContents* web_contents);
+
+// Causes the specified web_contents to issue an OnUnresponsiveRenderer event
+// to its observers.
+void SimulateUnresponsiveRenderer(WebContents* web_contents,
+                                  RenderWidgetHost* widget);
 
 // Simulates clicking at the center of the given tab asynchronously; modifiers
 // may contain bits from WebInputEvent::Modifiers.
@@ -746,6 +755,24 @@ class TestNavigationManager : public WebContentsObserver {
   base::WeakPtrFactory<TestNavigationManager> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TestNavigationManager);
+};
+
+class NavigationHandleCommitObserver : public content::WebContentsObserver {
+ public:
+  NavigationHandleCommitObserver(content::WebContents* web_contents,
+                                 const GURL& url);
+
+  bool has_committed() const { return has_committed_; }
+  bool was_same_document() const { return was_same_document_; }
+  bool was_renderer_initiated() const { return was_renderer_initiated_; }
+
+ private:
+  void DidFinishNavigation(content::NavigationHandle* handle) override;
+
+  const GURL url_;
+  bool has_committed_;
+  bool was_same_document_;
+  bool was_renderer_initiated_;
 };
 
 // A WebContentsDelegate that catches messages sent to the console.

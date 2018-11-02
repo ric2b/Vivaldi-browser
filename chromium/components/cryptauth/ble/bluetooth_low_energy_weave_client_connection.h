@@ -63,7 +63,7 @@ class BluetoothLowEnergyWeaveClientConnection
         BluetoothThrottler* bluetooth_throttler);
 
     // Exposed for testing.
-    static void SetInstanceForTesting(std::shared_ptr<Factory> factory);
+    static void SetInstanceForTesting(Factory* factory);
 
    protected:
     // Exposed for testing.
@@ -75,13 +75,14 @@ class BluetoothLowEnergyWeaveClientConnection
         BluetoothThrottler* bluetooth_throttler);
 
    private:
-    static std::shared_ptr<Factory> factory_instance_;
+    static Factory* factory_instance_;
   };
 
   // The sub-state of a BluetoothLowEnergyWeaveClientConnection
   // extends the IN_PROGRESS state of Connection::Status.
   enum SubStatus {
     DISCONNECTED,
+    WAITING_CONNECTION_LATENCY,
     WAITING_GATT_CONNECTION,
     WAITING_CHARACTERISTICS,
     CHARACTERISTICS_FOUND,
@@ -170,12 +171,18 @@ class BluetoothLowEnergyWeaveClientConnection
 
   void SetSubStatus(SubStatus status);
 
+  // Sets the connection interval before connecting.
+  void SetConnectionLatency();
+
   // Creates the GATT connection with |remote_device|.
   void CreateGattConnection();
 
   // Called when a GATT connection is created.
   void OnGattConnectionCreated(
       std::unique_ptr<device::BluetoothGattConnection> gatt_connection);
+
+  // Callback when there is an error setting the connection interval.
+  void OnSetConnectionLatencyError();
 
   // Callback called when there is an error creating the GATT connection.
   void OnCreateGattConnectionError(

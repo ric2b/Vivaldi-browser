@@ -36,7 +36,6 @@
 #include "core/html/forms/DateTimeChooser.h"
 #include "core/loader/DocumentLoader.h"
 #include "platform/FileChooser.h"
-#include "platform/FrameViewBase.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebApplicationCacheHost.h"
@@ -134,6 +133,7 @@ std::unique_ptr<WebFrameScheduler> EmptyChromeClient::CreateFrameScheduler(
 
 NavigationPolicy EmptyLocalFrameClient::DecidePolicyForNavigation(
     const ResourceRequest&,
+    Document* origin_document,
     DocumentLoader*,
     NavigationType,
     NavigationPolicy,

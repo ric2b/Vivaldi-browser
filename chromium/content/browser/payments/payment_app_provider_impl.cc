@@ -56,21 +56,21 @@ class ResponseCallback : public payments::mojom::PaymentAppResponseCallback {
   mojo::Binding<payments::mojom::PaymentAppResponseCallback> binding_;
 };
 
-void DidGetAllManifestsOnIO(
-    const PaymentAppProvider::GetAllManifestsCallback& callback,
-    PaymentAppProvider::Manifests manifests) {
+void DidGetAllPaymentAppsOnIO(
+    PaymentAppProvider::GetAllPaymentAppsCallback callback,
+    PaymentAppProvider::PaymentApps apps) {
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(callback, base::Passed(std::move(manifests))));
+      base::BindOnce(std::move(callback), base::Passed(std::move(apps))));
 }
 
-void GetAllManifestsOnIO(
+void GetAllPaymentAppsOnIO(
     scoped_refptr<PaymentAppContextImpl> payment_app_context,
-    const PaymentAppProvider::GetAllManifestsCallback& callback) {
+    PaymentAppProvider::GetAllPaymentAppsCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  payment_app_context->payment_app_database()->ReadAllManifests(
-      base::Bind(&DidGetAllManifestsOnIO, callback));
+  payment_app_context->payment_app_database()->ReadAllPaymentApps(
+      base::BindOnce(&DidGetAllPaymentAppsOnIO, std::move(callback)));
 }
 
 void DispatchPaymentRequestEventError(
@@ -148,9 +148,9 @@ PaymentAppProviderImpl* PaymentAppProviderImpl::GetInstance() {
   return base::Singleton<PaymentAppProviderImpl>::get();
 }
 
-void PaymentAppProviderImpl::GetAllManifests(
+void PaymentAppProviderImpl::GetAllPaymentApps(
     BrowserContext* browser_context,
-    const GetAllManifestsCallback& callback) {
+    GetAllPaymentAppsCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
@@ -160,7 +160,8 @@ void PaymentAppProviderImpl::GetAllManifests(
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&GetAllManifestsOnIO, payment_app_context, callback));
+      base::BindOnce(&GetAllPaymentAppsOnIO, payment_app_context,
+                     std::move(callback)));
 }
 
 void PaymentAppProviderImpl::InvokePaymentApp(

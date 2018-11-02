@@ -31,11 +31,11 @@ class WMFReadRequest : public base::win::IUnknownImpl {
 WMFByteStream::WMFByteStream(media::DataSource* data_source)
     : async_result_(nullptr),
       read_stream_(new ReadStream(data_source)) {
-  DVLOG(1) << __FUNCTION__;
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 }
 
 WMFByteStream::~WMFByteStream() {
-  DVLOG(1) << __FUNCTION__;
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(read_stream_->HasStopped());
 }
@@ -43,18 +43,20 @@ WMFByteStream::~WMFByteStream() {
 HRESULT WMFByteStream::Initialize(LPCWSTR mime_type) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  HRESULT hresult = MFCreateAttributes(attributes_.Receive(), 1);
+  HRESULT hresult = MFCreateAttributes(attributes_.GetAddressOf(), 1);
   if (SUCCEEDED(hresult)) {
     attributes_->SetString(MF_BYTESTREAM_CONTENT_TYPE, mime_type);
     read_stream_->Initialize(this);
     return S_OK;
   }
 
+  LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " (E_ABORT) MFCreateAttributes failed";
   return E_ABORT;
 }
 
 void WMFByteStream::Stop() {
-  DVLOG(1) << __FUNCTION__;
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
   read_stream_->Stop();
 
@@ -65,6 +67,8 @@ void WMFByteStream::Stop() {
     // to EndProc where it will be released.
     IMFAsyncResult* result = async_result_;
     async_result_ = NULL;
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " (E_INVALIDARG) Stopped while in async read";
     result->SetStatus(E_INVALIDARG);
     MFInvokeCallback(result);
   }
@@ -122,16 +126,29 @@ WMFByteStream::GetCurrentPosition(QWORD* position) {
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::SetCurrentPosition(QWORD position) {
   if (static_cast<int64_t>(position) < 0) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " (E_INVALIDARG) Invalid position";
     return E_INVALIDARG;  // might happen if the stream is not seekable or
                           // if the position overflows the stream
   }
 
-  read_stream_->SetCurrentPosition(position);
+  if(read_stream_->IsStreaming()) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Cannot SetCurrentPosition to " << position
+                 << " Media is streaming";
+  }
+  else
+  {
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " SetCurrentPosition " << position;
+    read_stream_->SetCurrentPosition(position);
+  }
   return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::IsEndOfStream(BOOL* end_of_stream) {
-  *end_of_stream = read_stream_->IsEndOfStream();
+  bool eof = read_stream_->IsEndOfStream();
+  *end_of_stream = eof;
   return S_OK;
 }
 
@@ -143,13 +160,18 @@ WMFByteStream::Read(BYTE* buff, ULONG len, ULONG* read) {
   if (read_stream_->HasStopped()) {
     // NOTE(pettern@vivaldi.com): Do not try to read when we've stopped
     // as it might cause freezes with the read_done event never firing.
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " (E_FAIL) Stream has stopped";
     return E_FAIL;
   }
 
   int bytes_read = read_stream_->SyncRead(buff, len);
 
-  if (bytes_read == media::DataSource::kReadError)
+  if (bytes_read == media::DataSource::kReadError) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " (E_FAIL) Stream sync read error";
     return E_FAIL;
+  }
 
   *read = bytes_read;
   return S_OK;
@@ -158,15 +180,20 @@ WMFByteStream::Read(BYTE* buff, ULONG len, ULONG* read) {
 void WMFByteStream::OnReadData(int size) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (read_stream_->HasStopped())
+  if (read_stream_->HasStopped()) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Stream has stopped";
     return;
+  }
 
   base::win::ScopedComPtr<IUnknown> unknown;
-  HRESULT hr = async_result_->GetObjectW(unknown.Receive());
-  WMFReadRequest* read_request = static_cast<WMFReadRequest*>(unknown.get());
+  HRESULT hr = async_result_->GetObjectW(unknown.GetAddressOf());
+  WMFReadRequest* read_request = static_cast<WMFReadRequest*>(unknown.Get());
 
   HRESULT status;
   if (FAILED(hr) || !unknown || size == media::DataSource::kReadError) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " (E_FAIL Stream async read error";
     status = E_FAIL;
   } else {
     DCHECK(static_cast<ULONG>(size) <= read_request->length);
@@ -190,18 +217,25 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::BeginRead(BYTE* buff,
                                                    IMFAsyncCallback* callback,
                                                    IUnknown* state) {
   if (read_stream_->HasStopped()) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " (E_INVALIDARG) Stream has stopped";
     return E_INVALIDARG;
   }
 
   if (async_result_) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " (E_ABORT) Stream in Progress";
     return E_ABORT;
   }
 
   base::win::ScopedComPtr<IUnknown> read_request(new WMFReadRequest(buff, len));
   HRESULT hresult =
-      MFCreateAsyncResult(read_request.get(), callback, state, &async_result_);
-  if (FAILED(hresult))
+      MFCreateAsyncResult(read_request.Get(), callback, state, &async_result_);
+  if (FAILED(hresult)) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " (E_ABORT) MFCreateAsyncResult failed";
     return E_ABORT;
+  }
 
   read_stream_->AsyncRead(buff, len);
   return S_OK;
@@ -211,10 +245,12 @@ HRESULT STDMETHODCALLTYPE
 WMFByteStream::EndRead(IMFAsyncResult* result, ULONG* read) {
   HRESULT hresult;
   base::win::ScopedComPtr<IUnknown> unknown;
-  if (FAILED(result->GetObjectW(unknown.Receive())) || !unknown) {
+  if (FAILED(result->GetObjectW(unknown.GetAddressOf())) || !unknown) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " (E_INVALIDARG) Stream has failed";
     hresult = E_INVALIDARG;
   } else {
-    WMFReadRequest* read_request = static_cast<WMFReadRequest*>(unknown.get());
+    WMFReadRequest* read_request = static_cast<WMFReadRequest*>(unknown.Get());
     *read = read_request->read;
     hresult = result->GetStatus();
   }
@@ -253,9 +289,14 @@ WMFByteStream::Seek(MFBYTESTREAM_SEEK_ORIGIN seek_origin,
   switch (seek_origin) {
     case msoBegin:
       if ((size > 0 && seek_offset > size) || seek_offset < 0) {
+        LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                     << " (E_INVALIDARG) Invalid Seek";
         return E_INVALIDARG;  // might happen if the stream is not seekable or
                               // if the llSeekOffset overflows the stream
       }
+
+      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << " SetCurrentPosition " << seek_offset;
       read_stream_->SetCurrentPosition(seek_offset);
       break;
 
@@ -263,9 +304,14 @@ WMFByteStream::Seek(MFBYTESTREAM_SEEK_ORIGIN seek_origin,
       int64_t current_position = read_stream_->CurrentPosition();
       if ((size > 0 && (current_position + seek_offset) > size) ||
           (current_position + seek_offset) < 0) {
+        LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                     << " (E_INVALIDARG) Invalid Seek";
         return E_INVALIDARG;  // might happen if the stream is not seekable or
                               // if the llSeekOffset overflows the stream
       }
+
+      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << " SetCurrentPosition " << (current_position + seek_offset);
       read_stream_->SetCurrentPosition(current_position + seek_offset);
       break;
   }
@@ -285,7 +331,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::Close() {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::GetItem(REFGUID guid_key, PROPVARIANT* value) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetItem(guid_key, value);
   } else {
     return E_FAIL;
@@ -294,7 +340,7 @@ WMFByteStream::GetItem(REFGUID guid_key, PROPVARIANT* value) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::GetItemType(REFGUID guid_key, MF_ATTRIBUTE_TYPE* type) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetItemType(guid_key, type);
   } else {
     return E_FAIL;
@@ -304,7 +350,7 @@ WMFByteStream::GetItemType(REFGUID guid_key, MF_ATTRIBUTE_TYPE* type) {
 HRESULT STDMETHODCALLTYPE WMFByteStream::CompareItem(REFGUID guid_key,
                                                      REFPROPVARIANT value,
                                                      BOOL* result) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->CompareItem(guid_key, value, result);
   } else {
     return E_FAIL;
@@ -315,7 +361,7 @@ HRESULT STDMETHODCALLTYPE
 WMFByteStream::Compare(IMFAttributes* theirs,
                        MF_ATTRIBUTES_MATCH_TYPE match_type,
                        BOOL* result) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->Compare(theirs, match_type, result);
   } else {
     return E_FAIL;
@@ -324,7 +370,7 @@ WMFByteStream::Compare(IMFAttributes* theirs,
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::GetUINT32(REFGUID guid_key, UINT32* value) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetUINT32(guid_key, value);
   } else {
     return E_FAIL;
@@ -333,7 +379,7 @@ WMFByteStream::GetUINT32(REFGUID guid_key, UINT32* value) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::GetUINT64(REFGUID guid_key, UINT64* value) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetUINT64(guid_key, value);
   } else {
     return E_FAIL;
@@ -342,7 +388,7 @@ WMFByteStream::GetUINT64(REFGUID guid_key, UINT64* value) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::GetDouble(REFGUID guid_key, double* value) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetDouble(guid_key, value);
   } else {
     return E_FAIL;
@@ -351,7 +397,7 @@ WMFByteStream::GetDouble(REFGUID guid_key, double* value) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::GetGUID(REFGUID guid_key, GUID* guid_value) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetGUID(guid_key, guid_value);
   } else {
     return E_FAIL;
@@ -360,7 +406,7 @@ WMFByteStream::GetGUID(REFGUID guid_key, GUID* guid_value) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::GetStringLength(REFGUID guid_key, UINT32* length) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetStringLength(guid_key, length);
   } else {
     return E_FAIL;
@@ -371,7 +417,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::GetString(REFGUID guid_key,
                                                    LPWSTR value,
                                                    UINT32 buf_size,
                                                    UINT32* length) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetString(guid_key, value, buf_size, length);
   } else {
     return E_FAIL;
@@ -382,7 +428,7 @@ HRESULT STDMETHODCALLTYPE
 WMFByteStream::GetAllocatedString(REFGUID guid_key,
                                   LPWSTR* value,
                                   UINT32* length) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetAllocatedString(guid_key, value, length);
   } else {
     return E_FAIL;
@@ -391,7 +437,7 @@ WMFByteStream::GetAllocatedString(REFGUID guid_key,
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::GetBlobSize(REFGUID guid_key, UINT32* blob_size) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetBlobSize(guid_key, blob_size);
   } else {
     return E_FAIL;
@@ -402,7 +448,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::GetBlob(REFGUID guid_key,
                                                  UINT8* buf,
                                                  UINT32 buf_size,
                                                  UINT32* blob_size) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetBlob(guid_key, buf, buf_size, blob_size);
   } else {
     return E_FAIL;
@@ -412,7 +458,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::GetBlob(REFGUID guid_key,
 HRESULT STDMETHODCALLTYPE WMFByteStream::GetAllocatedBlob(REFGUID guid_key,
                                                           UINT8** buf,
                                                           UINT32* size) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetAllocatedBlob(guid_key, buf, size);
   } else {
     return E_FAIL;
@@ -421,7 +467,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::GetAllocatedBlob(REFGUID guid_key,
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::GetUnknown(REFGUID guid_key, REFIID riid, LPVOID* ppv) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetUnknown(guid_key, riid, ppv);
   } else {
     return E_FAIL;
@@ -430,7 +476,7 @@ WMFByteStream::GetUnknown(REFGUID guid_key, REFIID riid, LPVOID* ppv) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::SetItem(REFGUID guid_key, REFPROPVARIANT value) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->SetItem(guid_key, value);
   } else {
     return E_FAIL;
@@ -438,7 +484,7 @@ WMFByteStream::SetItem(REFGUID guid_key, REFPROPVARIANT value) {
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::DeleteItem(REFGUID guid_key) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->DeleteItem(guid_key);
   } else {
     return E_FAIL;
@@ -446,7 +492,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::DeleteItem(REFGUID guid_key) {
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::DeleteAllItems() {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->DeleteAllItems();
   } else {
     return E_FAIL;
@@ -455,7 +501,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::DeleteAllItems() {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::SetUINT32(REFGUID guid_key, UINT32 value) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->SetUINT32(guid_key, value);
   } else {
     return E_FAIL;
@@ -464,7 +510,7 @@ WMFByteStream::SetUINT32(REFGUID guid_key, UINT32 value) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::SetUINT64(REFGUID guid_key, UINT64 value) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->SetUINT64(guid_key, value);
   } else {
     return E_FAIL;
@@ -473,7 +519,7 @@ WMFByteStream::SetUINT64(REFGUID guid_key, UINT64 value) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::SetDouble(REFGUID guid_key, double value) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->SetDouble(guid_key, value);
   } else {
     return E_FAIL;
@@ -482,7 +528,7 @@ WMFByteStream::SetDouble(REFGUID guid_key, double value) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::SetGUID(REFGUID guid_key, REFGUID guid_value) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->SetGUID(guid_key, guid_value);
   } else {
     return E_FAIL;
@@ -491,7 +537,7 @@ WMFByteStream::SetGUID(REFGUID guid_key, REFGUID guid_value) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::SetString(REFGUID guid_key, LPCWSTR value) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->SetString(guid_key, value);
   } else {
     return E_FAIL;
@@ -500,7 +546,7 @@ WMFByteStream::SetString(REFGUID guid_key, LPCWSTR value) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::SetBlob(REFGUID guid_key, const UINT8* buf, UINT32 buf_size) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->SetBlob(guid_key, buf, buf_size);
   } else {
     return E_FAIL;
@@ -509,7 +555,7 @@ WMFByteStream::SetBlob(REFGUID guid_key, const UINT8* buf, UINT32 buf_size) {
 
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::SetUnknown(REFGUID guid_key, IUnknown* unknown) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->SetUnknown(guid_key, unknown);
   } else {
     return E_FAIL;
@@ -517,7 +563,7 @@ WMFByteStream::SetUnknown(REFGUID guid_key, IUnknown* unknown) {
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::LockStore() {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->LockStore();
   } else {
     return E_FAIL;
@@ -525,7 +571,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::LockStore() {
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::UnlockStore() {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->UnlockStore();
   } else {
     return E_FAIL;
@@ -533,7 +579,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::UnlockStore() {
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::GetCount(UINT32* items) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetCount(items);
   } else {
     return E_FAIL;
@@ -543,7 +589,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::GetCount(UINT32* items) {
 HRESULT STDMETHODCALLTYPE WMFByteStream::GetItemByIndex(UINT32 index,
                                                         GUID* guid_key,
                                                         PROPVARIANT* value) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->GetItemByIndex(index, guid_key, value);
   } else {
     return E_FAIL;
@@ -551,7 +597,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::GetItemByIndex(UINT32 index,
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::CopyAllItems(IMFAttributes* dest) {
-  if (attributes_.get()) {
+  if (attributes_.Get()) {
     return attributes_->CopyAllItems(dest);
   } else {
     return E_FAIL;

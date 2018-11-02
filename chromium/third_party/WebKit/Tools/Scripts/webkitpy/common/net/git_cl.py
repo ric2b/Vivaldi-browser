@@ -8,11 +8,13 @@ The git-cl tool is responsible for communicating with Rietveld, Gerrit,
 and Buildbucket to manage changelists and try jobs associated with them.
 """
 
+import collections
 import json
 import logging
 import re
 
 from webkitpy.common.net.buildbot import Build, filter_latest_builds
+from webkitpy.common.checkout.git import Git
 
 _log = logging.getLogger(__name__)
 
@@ -21,16 +23,29 @@ _log = logging.getLogger(__name__)
 _COMMANDS_THAT_TAKE_REFRESH_TOKEN = ('try',)
 
 
+class TryJobStatus(collections.namedtuple('TryJobStatus', ('status', 'result'))):
+    """Represents a current status of a particular job.
+
+    Specifically, whether it is scheduled or started or finished, and if
+    it is finished, whether it failed or succeeded. If it failed,
+    """
+    def __new__(cls, status, result=None):
+        assert status in ('SCHEDULED', 'STARTED', 'COMPLETED')
+        assert result in (None, 'FAILURE', 'SUCCESS', 'CANCELED')
+        return super(TryJobStatus, cls).__new__(cls, status, result)
+
+
 class GitCL(object):
 
     def __init__(self, host, auth_refresh_token_json=None, cwd=None):
         self._host = host
         self._auth_refresh_token_json = auth_refresh_token_json
         self._cwd = cwd
+        self._git_executable_name = Git.find_executable_name(host.executive, host.platform)
 
     def run(self, args):
         """Runs git-cl with the given arguments and returns the output."""
-        command = ['git', 'cl'] + args
+        command = [self._git_executable_name, 'cl'] + args
         if self._auth_refresh_token_json and args[0] in _COMMANDS_THAT_TAKE_REFRESH_TOKEN:
             command += ['--auth-refresh-token-json', self._auth_refresh_token_json]
         return self._host.executive.run_command(command, cwd=self._cwd)
@@ -58,13 +73,14 @@ class GitCL(object):
             timeout_seconds: Time to wait before aborting.
 
         Returns:
-            A list of try job result dicts, or None if a timeout occurred.
+            A dict mapping Build objects to TryJobStatus objects, or
+            None if a timeout occurred.
         """
         start = self._host.time()
         self._host.print_('Waiting for try jobs (timeout: %d seconds).' % timeout_seconds)
         while self._host.time() - start < timeout_seconds:
             self._host.sleep(poll_delay_seconds)
-            try_results = self.fetch_try_results()
+            try_results = self.try_job_results()
             _log.debug('Fetched try results: %s', try_results)
             if self.all_jobs_finished(try_results):
                 self._host.print_('All jobs finished.')
@@ -75,9 +91,9 @@ class GitCL(object):
         return None
 
     def latest_try_jobs(self, builder_names=None):
-        """Returns a list of Builds for the latest jobs for the given builders.
+        """Returns a dict of Builds to results for the latest try jobs.
 
-        This includes builds that are not yet finished and builds with infra
+        This includes jobs that are not yet finished and builds with infra
         failures, so if a build is in this list, that doesn't guarantee that
         there are results.
 
@@ -85,16 +101,28 @@ class GitCL(object):
             builder_names: Optional list of builders used to filter results.
 
         Returns:
-            A list of Build objects for try jobs, with one Build listed
-            per builder. For scheduled builds, there is no build number.
+            A dict mapping Build objects to TryJobSTatus objects, with
+            only the latest jobs included.
         """
-        try_results = self.fetch_try_results()
+        try_results = self.try_job_results()
+        builds = try_results.keys()
         if builder_names:
-            try_results = [r for r in try_results if r['builder_name'] in builder_names]
-        return filter_latest_builds(self._try_result_to_build(r) for r in try_results)
+            builds = [b for b in builds if b.builder_name in builder_names]
+        latest_builds = filter_latest_builds(builds)
+        return {b: s for b, s in try_results.items() if b in latest_builds}
 
-    def fetch_try_results(self):
-        """Requests results of try jobs for the current CL."""
+    def try_job_results(self):
+        """Returns a dict mapping Build objects to TryJobStatus objects."""
+        raw_results = self.fetch_raw_try_job_results()
+        return {self._build(r): self._try_job_status(r) for r in raw_results}
+
+    def fetch_raw_try_job_results(self):
+        """Requests results of try jobs for the current CL and the parsed JSON.
+
+        The return value is expected to be a list of dicts, which each are
+        expected to have the fields "builder_name", "status", "result", and
+        "url". The format is determined by the output of "git cl try-results".
+        """
         with self._host.filesystem.mkdtemp() as temp_directory:
             results_path = self._host.filesystem.join(temp_directory, 'try-results.json')
             self.run(['try-results', '--json', results_path])
@@ -104,10 +132,10 @@ class GitCL(object):
         return json.loads(contents)
 
     @staticmethod
-    def _try_result_to_build(try_result):
+    def _build(result_dict):
         """Converts a parsed try result dict to a Build object."""
-        builder_name = try_result['builder_name']
-        url = try_result['url']
+        builder_name = result_dict['builder_name']
+        url = result_dict['url']
         if url is None:
             return Build(builder_name, None)
         match = re.match(r'.*/builds/(\d+)?$', url)
@@ -116,9 +144,14 @@ class GitCL(object):
         return Build(builder_name, int(build_number))
 
     @staticmethod
+    def _try_job_status(result_dict):
+        """Converts a parsed try result dict to a TryJobStatus object."""
+        return TryJobStatus(result_dict['status'], result_dict['result'])
+
+    @staticmethod
     def all_jobs_finished(try_results):
-        return all(r.get('status') == 'COMPLETED' for r in try_results)
+        return all(s.status == 'COMPLETED' for s in try_results.values())
 
     @staticmethod
     def has_failing_try_results(try_results):
-        return any(r.get('result') == 'FAILURE' for r in try_results)
+        return any(s.result == 'FAILURE' for s in try_results.values())

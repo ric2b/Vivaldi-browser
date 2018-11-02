@@ -55,6 +55,7 @@
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLPlugInElement.h"
+#include "core/html/PluginDocument.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/HitTestResult.h"
@@ -74,6 +75,7 @@
 #include "core/paint/PaintLayer.h"
 #include "core/paint/PaintLayerPainter.h"
 #include "core/paint/TransformRecorder.h"
+#include "core/plugins/PluginView.h"
 #include "core/probe/CoreProbes.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/timing/Performance.h"
@@ -90,15 +92,18 @@
 #include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "platform/graphics/paint/TransformDisplayItem.h"
 #include "platform/json/JSONValues.h"
+#include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/plugins/PluginData.h"
+#include "platform/scheduler/renderer/web_view_scheduler.h"
 #include "platform/text/TextStream.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "public/platform/InterfaceProvider.h"
 #include "public/platform/InterfaceRegistry.h"
 #include "public/platform/WebScreenInfo.h"
-#include "public/platform/WebViewScheduler.h"
+#include "public/platform/WebURLRequest.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
@@ -277,8 +282,6 @@ LocalFrame* LocalFrame::Create(LocalFrameClient* client,
 }
 
 void LocalFrame::Init() {
-  // Initialization code needs to run first as the call to m_loader.init() can
-  // actually lead to this object being freed!
   DCHECK(!GetInitializationVector().IsEmpty());
   for (auto& initilization_callback : GetInitializationVector()) {
     initilization_callback(this);
@@ -288,11 +291,8 @@ void LocalFrame::Init() {
 }
 
 void LocalFrame::SetView(FrameView* view) {
-  ASSERT(!view_ || view_ != view);
-  ASSERT(!GetDocument() || !GetDocument()->IsActive());
-
-  GetEventHandler().Clear();
-
+  DCHECK(!view_ || view_ != view);
+  DCHECK(!GetDocument() || !GetDocument()->IsActive());
   view_ = view;
 }
 
@@ -302,8 +302,8 @@ void LocalFrame::CreateView(const IntSize& viewport_size,
                             bool horizontal_lock,
                             ScrollbarMode vertical_scrollbar_mode,
                             bool vertical_lock) {
-  ASSERT(this);
-  ASSERT(GetPage());
+  DCHECK(this);
+  DCHECK(GetPage());
 
   bool is_local_root = this->IsLocalRoot();
 
@@ -336,7 +336,7 @@ void LocalFrame::CreateView(const IntSize& viewport_size,
   // FIXME: Not clear what the right thing for OOPI is here.
   if (!OwnerLayoutItem().IsNull()) {
     HTMLFrameOwnerElement* owner = DeprecatedLocalOwner();
-    ASSERT(owner);
+    DCHECK(owner);
     // FIXME: OOPI might lead to us temporarily lying to a frame and telling it
     // that it's owned by a FrameOwner that knows nothing about it. If we're
     // lying to this frame, don't let it clobber the existing widget.
@@ -352,11 +352,11 @@ void LocalFrame::CreateView(const IntSize& viewport_size,
 LocalFrame::~LocalFrame() {
   // Verify that the FrameView has been cleared as part of detaching
   // the frame owner.
-  ASSERT(!view_);
+  DCHECK(!view_);
 }
 
 DEFINE_TRACE(LocalFrame) {
-  visitor->Trace(instrumenting_agents_);
+  visitor->Trace(probe_sink_);
   visitor->Trace(performance_monitor_);
   visitor->Trace(loader_);
   visitor->Trace(navigation_scheduler_);
@@ -439,7 +439,6 @@ void LocalFrame::Detach(FrameDetachType type) {
   // - FrameLoader::detach() can fire XHR abort events
   // - Document::shutdown()'s deferred widget updates can run script.
   ScriptForbiddenScope forbid_script;
-  loader_.Clear();
   if (!Client())
     return;
 
@@ -466,7 +465,7 @@ void LocalFrame::Detach(FrameDetachType type) {
   probe::frameDetachedFromParent(this);
   Frame::Detach(type);
 
-  supplements_.Clear();
+  supplements_.clear();
   frame_scheduler_.reset();
   WeakIdentifierMap<LocalFrame>::NotifyObjectDestroyed(this);
   lifecycle_.AdvanceTo(FrameLifecycle::kDetached);
@@ -523,6 +522,8 @@ void LocalFrame::DetachChildren() {
 
 void LocalFrame::DocumentAttached() {
   DCHECK(GetDocument());
+  GetEditor().Clear();
+  GetEventHandler().Clear();
   Selection().DocumentAttached(GetDocument());
   GetInputMethodController().DocumentAttached(GetDocument());
   GetSpellChecker().DocumentAttached(GetDocument());
@@ -570,21 +571,20 @@ void LocalFrame::DidChangeVisibilityState() {
   Frame::DidChangeVisibilityState();
 }
 
-LocalFrame* LocalFrame::LocalFrameRoot() {
-  LocalFrame* cur_frame = this;
+LocalFrame& LocalFrame::LocalFrameRoot() const {
+  const LocalFrame* cur_frame = this;
   while (cur_frame && cur_frame->Tree().Parent() &&
          cur_frame->Tree().Parent()->IsLocalFrame())
     cur_frame = ToLocalFrame(cur_frame->Tree().Parent());
 
-  return cur_frame;
+  return const_cast<LocalFrame&>(*cur_frame);
 }
 
 bool LocalFrame::IsCrossOriginSubframe() const {
   const SecurityOrigin* security_origin =
       GetSecurityContext()->GetSecurityOrigin();
-  Frame* top = Tree().Top();
-  return top && !security_origin->CanAccess(
-                    top->GetSecurityContext()->GetSecurityOrigin());
+  return !security_origin->CanAccess(
+      Tree().Top().GetSecurityContext()->GetSecurityOrigin());
 }
 
 void LocalFrame::SetPrinting(bool printing,
@@ -637,24 +637,24 @@ bool LocalFrame::ShouldUsePrintingLayout() const {
 
 FloatSize LocalFrame::ResizePageRectsKeepingRatio(
     const FloatSize& original_size,
-    const FloatSize& expected_size) {
-  FloatSize result_size;
+    const FloatSize& expected_size) const {
   if (ContentLayoutItem().IsNull())
     return FloatSize();
 
-  if (ContentLayoutItem().Style()->IsHorizontalWritingMode()) {
-    ASSERT(fabs(original_size.Width()) > std::numeric_limits<float>::epsilon());
-    float ratio = original_size.Height() / original_size.Width();
-    result_size.SetWidth(floorf(expected_size.Width()));
-    result_size.SetHeight(floorf(result_size.Width() * ratio));
-  } else {
-    ASSERT(fabs(original_size.Height()) >
-           std::numeric_limits<float>::epsilon());
-    float ratio = original_size.Width() / original_size.Height();
-    result_size.SetHeight(floorf(expected_size.Height()));
-    result_size.SetWidth(floorf(result_size.Height() * ratio));
-  }
-  return result_size;
+  bool is_horizontal = ContentLayoutItem().Style()->IsHorizontalWritingMode();
+  float width = original_size.Width();
+  float height = original_size.Height();
+  if (!is_horizontal)
+    std::swap(width, height);
+  DCHECK_GT(fabs(width), std::numeric_limits<float>::epsilon());
+  float ratio = height / width;
+
+  float result_width =
+      floorf(is_horizontal ? expected_size.Width() : expected_size.Height());
+  float result_height = floorf(result_width * ratio);
+  if (!is_horizontal)
+    std::swap(result_width, result_height);
+  return FloatSize(result_width, result_height);
 }
 
 void LocalFrame::SetPageZoomFactor(float factor) {
@@ -749,7 +749,7 @@ std::unique_ptr<DragImage> LocalFrame::DragImageForSelection(float opacity) {
     return nullptr;
 
   view_->UpdateAllLifecyclePhasesExceptPaint();
-  ASSERT(GetDocument()->IsActive());
+  DCHECK(GetDocument()->IsActive());
 
   FloatRect painting_rect = FloatRect(Selection().Bounds());
   GlobalPaintFlags paint_flags =
@@ -901,11 +901,11 @@ inline LocalFrame::LocalFrame(LocalFrameClient* client,
       interface_provider_(interface_provider),
       interface_registry_(interface_registry) {
   if (IsLocalRoot()) {
-    instrumenting_agents_ = new CoreProbeSink();
+    probe_sink_ = new CoreProbeSink();
     performance_monitor_ = new PerformanceMonitor(this);
   } else {
-    instrumenting_agents_ = LocalFrameRoot()->instrumenting_agents_;
-    performance_monitor_ = LocalFrameRoot()->performance_monitor_;
+    probe_sink_ = LocalFrameRoot().probe_sink_;
+    performance_monitor_ = LocalFrameRoot().performance_monitor_;
   }
 }
 
@@ -931,7 +931,7 @@ PluginData* LocalFrame::GetPluginData() const {
   if (!Loader().AllowPlugins(kNotAboutToInstantiatePlugin))
     return nullptr;
   return GetPage()->GetPluginData(
-      Tree().Top()->GetSecurityContext()->GetSecurityOrigin());
+      Tree().Top().GetSecurityContext()->GetSecurityOrigin());
 }
 
 DEFINE_WEAK_IDENTIFIER_MAP(LocalFrame);
@@ -953,6 +953,53 @@ ScopedFrameBlamer::ScopedFrameBlamer(LocalFrame* frame) : frame_(frame) {
 ScopedFrameBlamer::~ScopedFrameBlamer() {
   if (frame_ && frame_->Client() && frame_->Client()->GetFrameBlameContext())
     frame_->Client()->GetFrameBlameContext()->Leave();
+}
+
+void LocalFrame::MaybeAllowImagePlaceholder(FetchParameters& params) const {
+  if (GetSettings() && GetSettings()->GetFetchImagePlaceholders()) {
+    params.SetAllowImagePlaceholder();
+    return;
+  }
+
+  if (Client() &&
+      Client()->ShouldUseClientLoFiForRequest(params.GetResourceRequest())) {
+    params.MutableResourceRequest().SetPreviewsState(
+        params.GetResourceRequest().GetPreviewsState() |
+        WebURLRequest::kClientLoFiOn);
+    params.SetAllowImagePlaceholder();
+  }
+}
+
+std::unique_ptr<WebURLLoader> LocalFrame::CreateURLLoader() {
+  return Client()->CreateURLLoader();
+}
+
+WebPluginContainerBase* LocalFrame::GetWebPluginContainerBase(
+    Node* node) const {
+  if (GetDocument() && GetDocument()->IsPluginDocument()) {
+    PluginDocument* plugin_document = ToPluginDocument(GetDocument());
+    if (plugin_document->GetPluginView()) {
+      return plugin_document->GetPluginView()->GetWebPluginContainerBase();
+    }
+  }
+  if (!node) {
+    DCHECK(GetDocument());
+    node = GetDocument()->FocusedElement();
+  }
+
+  if (node) {
+    return node->GetWebPluginContainerBase();
+  }
+  return nullptr;
+}
+
+void LocalFrame::SetViewportIntersectionFromParent(
+    const IntRect& viewport_intersection) {
+  if (remote_viewport_intersection_ != viewport_intersection) {
+    remote_viewport_intersection_ = viewport_intersection;
+    if (View())
+      View()->ScheduleAnimation();
+  }
 }
 
 }  // namespace blink

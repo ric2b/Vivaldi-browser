@@ -92,15 +92,13 @@
 #include <utility>
 
 #include "bindings/core/v8/BindingSecurity.h"
-#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/SourceLocation.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8GCController.h"
-#include "bindings/core/v8/V8PerIsolateData.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentUserGestureToken.h"
@@ -109,15 +107,23 @@
 #include "core/dom/Node.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/editing/CompositionUnderlineVectorBuilder.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
+#include "core/editing/FindInPageCoordinates.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/InputMethodController.h"
 #include "core/editing/PlainTextRange.h"
 #include "core/editing/TextAffinity.h"
 #include "core/editing/iterators/TextIterator.h"
+#include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/editing/spellcheck/SpellChecker.h"
+#include "core/exported/SharedWorkerRepositoryClientImpl.h"
+#include "core/exported/WebAssociatedURLLoaderImpl.h"
+#include "core/exported/WebDataSourceImpl.h"
+#include "core/exported/WebPluginContainerBase.h"
+#include "core/exported/WebViewBase.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/PageScaleConstraintsSet.h"
@@ -125,6 +131,7 @@
 #include "core/frame/ScreenOrientationController.h"
 #include "core/frame/Settings.h"
 #include "core/frame/SmartClip.h"
+#include "core/frame/SuspendableScriptExecutor.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLAnchorElement.h"
@@ -155,12 +162,13 @@
 #include "core/page/PrintContext.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/TransformRecorder.h"
-#include "core/style/StyleInheritedData.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/WebFrameScheduler.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/V8PerIsolateData.h"
 #include "platform/clipboard/ClipboardUtilities.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/graphics/Color.h"
@@ -173,6 +181,7 @@
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/loader/fetch/FetchContext.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/SubstituteData.h"
@@ -194,6 +203,7 @@
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebURLError.h"
+#include "public/platform/WebURLLoader.h"
 #include "public/platform/WebVector.h"
 #include "public/web/WebAssociatedURLLoaderOptions.h"
 #include "public/web/WebAutofillClient.h"
@@ -218,20 +228,12 @@
 #include "public/web/WebSerializedScriptValue.h"
 #include "public/web/WebTreeScopeType.h"
 #include "skia/ext/platform_canvas.h"
-#include "web/CompositionUnderlineVectorBuilder.h"
-#include "web/FindInPageCoordinates.h"
 #include "web/RemoteFrameOwner.h"
-#include "web/SharedWorkerRepositoryClientImpl.h"
-#include "web/SuspendableScriptExecutor.h"
 #include "web/TextCheckerClientImpl.h"
 #include "web/TextFinder.h"
-#include "web/WebAssociatedURLLoaderImpl.h"
-#include "web/WebDataSourceImpl.h"
 #include "web/WebDevToolsAgentImpl.h"
 #include "web/WebFrameWidgetImpl.h"
-#include "web/WebPluginContainerImpl.h"
 #include "web/WebRemoteFrameImpl.h"
-#include "web/WebViewImpl.h"
 
 namespace blink {
 
@@ -245,30 +247,6 @@ static HeapVector<ScriptSourceCode> CreateSourcesVector(
   return sources;
 }
 
-WebPluginContainerImpl* WebLocalFrameImpl::PluginContainerFromFrame(
-    LocalFrame* frame) {
-  if (!frame)
-    return 0;
-  if (!frame->GetDocument() || !frame->GetDocument()->IsPluginDocument())
-    return 0;
-  PluginDocument* plugin_document = ToPluginDocument(frame->GetDocument());
-  return ToWebPluginContainerImpl(plugin_document->GetPluginView());
-}
-
-WebPluginContainerImpl* WebLocalFrameImpl::CurrentPluginContainer(
-    LocalFrame* frame,
-    Node* node) {
-  WebPluginContainerImpl* plugin_container = PluginContainerFromFrame(frame);
-  if (plugin_container)
-    return plugin_container;
-
-  if (!node) {
-    DCHECK(frame->GetDocument());
-    node = frame->GetDocument()->FocusedElement();
-  }
-  return ToWebPluginContainerImpl(WebNode::PluginContainerFromNode(node));
-}
-
 // Simple class to override some of PrintContext behavior. Some of the methods
 // made virtual so that they can be overridden by ChromePluginPrintContext.
 class ChromePrintContext : public PrintContext {
@@ -280,11 +258,11 @@ class ChromePrintContext : public PrintContext {
 
   ~ChromePrintContext() override {}
 
-  virtual void begin(float width, float height) {
+  virtual void BeginPrintMode(float width, float height) {
     DCHECK(!printed_page_width_);
     printed_page_width_ = width;
     printed_page_height_ = height;
-    PrintContext::begin(printed_page_width_, height);
+    PrintContext::BeginPrintMode(printed_page_width_, height);
   }
 
   virtual float GetPageShrink(int page_number) const {
@@ -310,7 +288,7 @@ class ChromePrintContext : public PrintContext {
     builder.Context().SetPrinting(true);
     builder.Context().BeginRecording(bounds);
     float scale = SpoolPage(builder.Context(), page_number, bounds);
-    canvas->PlaybackPaintRecord(builder.Context().EndRecording());
+    canvas->drawPicture(builder.Context().EndRecording());
     return scale;
   }
 
@@ -326,9 +304,7 @@ class ChromePrintContext : public PrintContext {
         GetFrame()->GetDocument()->GetLayoutViewItem().IsNull())
       return;
 
-    float page_height;
-    ComputePageRects(FloatRect(FloatPoint(0, 0), page_size_in_pixels), 0, 0, 1,
-                     page_height);
+    ComputePageRects(page_size_in_pixels);
 
     const float page_width = page_size_in_pixels.Width();
     size_t num_pages = PageRects().size();
@@ -372,7 +348,7 @@ class ChromePrintContext : public PrintContext {
 
       current_height += page_size_in_pixels.Height() + 1;
     }
-    canvas->PlaybackPaintRecord(context.EndRecording());
+    canvas->drawPicture(context.EndRecording());
   }
 
  protected:
@@ -443,7 +419,7 @@ class ChromePrintContext : public PrintContext {
 class ChromePluginPrintContext final : public ChromePrintContext {
  public:
   ChromePluginPrintContext(LocalFrame* frame,
-                           WebPluginContainerImpl* plugin,
+                           WebPluginContainerBase* plugin,
                            const WebPrintParams& print_params)
       : ChromePrintContext(frame),
         plugin_(plugin),
@@ -456,22 +432,19 @@ class ChromePluginPrintContext final : public ChromePrintContext {
     ChromePrintContext::Trace(visitor);
   }
 
-  void begin(float width, float height) override {}
+  void BeginPrintMode(float width, float height) override {}
 
-  void end() override { plugin_->PrintEnd(); }
+  void EndPrintMode() override { plugin_->PrintEnd(); }
 
   float GetPageShrink(int page_number) const override {
     // We don't shrink the page (maybe we should ask the widget ??)
     return 1.0;
   }
 
-  void ComputePageRects(const FloatRect& print_rect,
-                        float header_height,
-                        float footer_height,
-                        float user_scale_factor,
-                        float& out_page_height) override {
-    print_params_.print_content_area = IntRect(print_rect);
-    page_rects_.Fill(IntRect(print_rect), plugin_->PrintBegin(print_params_));
+  void ComputePageRects(const FloatSize& print_size) override {
+    IntRect rect(FloatRect(FloatPoint(0, 0), print_size));
+    print_params_.print_content_area = rect;
+    page_rects_.Fill(rect, plugin_->PrintBegin(print_params_));
   }
 
   void ComputePageRectsWithPageSize(
@@ -501,7 +474,7 @@ class ChromePluginPrintContext final : public ChromePrintContext {
 
  private:
   // Set when printing.
-  Member<WebPluginContainerImpl> plugin_;
+  Member<WebPluginContainerBase> plugin_;
   WebPrintParams print_params_;
 };
 
@@ -874,7 +847,7 @@ v8::Local<v8::Context> WebLocalFrameImpl::MainWorldScriptContext() const {
 
 bool WebFrame::ScriptCanAccess(WebFrame* target) {
   return BindingSecurity::ShouldAllowAccessToFrame(
-      CurrentDOMWindow(MainThreadIsolate()), target->ToImplBase()->GetFrame(),
+      CurrentDOMWindow(MainThreadIsolate()), ToCoreFrame(*target),
       BindingSecurity::ErrorReportOption::kDoNotReport);
 }
 
@@ -969,7 +942,7 @@ void WebLocalFrameImpl::SetReferrerForRequest(WebURLRequest& request,
 
 WebAssociatedURLLoader* WebLocalFrameImpl::CreateAssociatedURLLoader(
     const WebAssociatedURLLoaderOptions& options) {
-  return new WebAssociatedURLLoaderImpl(this, options);
+  return new WebAssociatedURLLoaderImpl(GetFrame()->GetDocument(), options);
 }
 
 unsigned WebLocalFrameImpl::UnloadListenerCount() const {
@@ -977,7 +950,7 @@ unsigned WebLocalFrameImpl::UnloadListenerCount() const {
 }
 
 void WebLocalFrameImpl::ReplaceSelection(const WebString& text) {
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1016,7 +989,7 @@ bool WebLocalFrameImpl::FirstRectForCharacterRange(
   if (!editable)
     return false;
 
-  // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  see http://crbug.com/590369 for more details.
   editable->GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1059,7 +1032,7 @@ bool WebLocalFrameImpl::ExecuteCommand(const WebString& name) {
   String command = name;
 
   // Make sure the first letter is upper case.
-  command.Replace(0, 1, command.Substring(0, 1).DeprecatedUpper());
+  command.replace(0, 1, command.Substring(0, 1).UpperASCII());
 
   // Remove the trailing ':' if existing.
   if (command[command.length() - 1] == UChar(':'))
@@ -1067,8 +1040,8 @@ bool WebLocalFrameImpl::ExecuteCommand(const WebString& name) {
 
   Node* plugin_lookup_context_node =
       context_menu_node_ && name == "Copy" ? context_menu_node_ : nullptr;
-  WebPluginContainerImpl* plugin_container =
-      CurrentPluginContainer(GetFrame(), plugin_lookup_context_node);
+  WebPluginContainerBase* plugin_container =
+      GetFrame()->GetWebPluginContainerBase(plugin_lookup_context_node);
   if (plugin_container && plugin_container->ExecuteEditCommand(name))
     return true;
 
@@ -1079,7 +1052,8 @@ bool WebLocalFrameImpl::ExecuteCommand(const WebString& name,
                                        const WebString& value) {
   DCHECK(GetFrame());
 
-  WebPluginContainerImpl* plugin_container = CurrentPluginContainer(GetFrame());
+  WebPluginContainerBase* plugin_container =
+      GetFrame()->GetWebPluginContainerBase();
   if (plugin_container && plugin_container->ExecuteEditCommand(name, value))
     return true;
 
@@ -1105,10 +1079,10 @@ void WebLocalFrameImpl::ReplaceMisspelledRange(const WebString& text) {
   // If this caret selection has two or more markers, this function replace the
   // range covered by the first marker with the specified word as Microsoft Word
   // does.
-  if (PluginContainerFromFrame(GetFrame()))
+  if (GetFrame()->GetWebPluginContainerBase())
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  see http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1119,9 +1093,17 @@ void WebLocalFrameImpl::RemoveSpellingMarkers() {
   GetFrame()->GetSpellChecker().RemoveSpellingMarkers();
 }
 
+void WebLocalFrameImpl::RemoveSpellingMarkersUnderWords(
+    const WebVector<WebString>& words) {
+  Vector<String> converted_words;
+  converted_words.Append(words.Data(), words.size());
+  GetFrame()->RemoveSpellingMarkersUnderWords(converted_words);
+}
+
 bool WebLocalFrameImpl::HasSelection() const {
-  WebPluginContainerImpl* plugin_container =
-      PluginContainerFromFrame(GetFrame());
+  DCHECK(GetFrame());
+  WebPluginContainerBase* plugin_container =
+      GetFrame()->GetWebPluginContainerBase();
   if (plugin_container)
     return plugin_container->Plugin()->HasSelection();
 
@@ -1136,7 +1118,7 @@ bool WebLocalFrameImpl::HasSelection() const {
 }
 
 WebRange WebLocalFrameImpl::SelectionRange() const {
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1147,12 +1129,13 @@ WebRange WebLocalFrameImpl::SelectionRange() const {
 }
 
 WebString WebLocalFrameImpl::SelectionAsText() const {
-  WebPluginContainerImpl* plugin_container =
-      PluginContainerFromFrame(GetFrame());
+  DCHECK(GetFrame());
+  WebPluginContainerBase* plugin_container =
+      GetFrame()->GetWebPluginContainerBase();
   if (plugin_container)
     return plugin_container->Plugin()->SelectionAsText();
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1166,12 +1149,12 @@ WebString WebLocalFrameImpl::SelectionAsText() const {
 }
 
 WebString WebLocalFrameImpl::SelectionAsMarkup() const {
-  WebPluginContainerImpl* plugin_container =
-      PluginContainerFromFrame(GetFrame());
+  WebPluginContainerBase* plugin_container =
+      GetFrame()->GetWebPluginContainerBase();
   if (plugin_container)
     return plugin_container->Plugin()->SelectionAsMarkup();
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   // Selection normalization and markup generation require clean layout.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
@@ -1183,7 +1166,7 @@ void WebLocalFrameImpl::SelectWordAroundPosition(LocalFrame* frame,
                                                  VisiblePosition position) {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::selectWordAroundPosition");
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  see http://crbug.com/590369 for more details.
   frame->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1197,7 +1180,7 @@ bool WebLocalFrameImpl::SelectWordAroundCaret() {
       selection.ComputeVisibleSelectionInDOMTreeDeprecated().IsRange())
     return false;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  see http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1215,7 +1198,7 @@ void WebLocalFrameImpl::SelectRange(
     HandleVisibilityBehavior handle_visibility_behavior) {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::selectRange");
 
-  // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  see http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1238,7 +1221,7 @@ void WebLocalFrameImpl::SelectRange(
 }
 
 WebString WebLocalFrameImpl::RangeAsText(const WebRange& web_range) {
-  // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  see http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1253,7 +1236,7 @@ WebString WebLocalFrameImpl::RangeAsText(const WebRange& web_range) {
 void WebLocalFrameImpl::MoveRangeSelectionExtent(const WebPoint& point) {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::moveRangeSelectionExtent");
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1267,7 +1250,7 @@ void WebLocalFrameImpl::MoveRangeSelection(
     WebFrame::TextGranularity granularity) {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::moveRangeSelection");
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1293,7 +1276,7 @@ void WebLocalFrameImpl::MoveCaretSelection(const WebPoint& point_in_viewport) {
 bool WebLocalFrameImpl::SetEditableSelectionOffsets(int start, int end) {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::setEditableSelectionOffsets");
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1312,12 +1295,12 @@ bool WebLocalFrameImpl::SetCompositionFromExistingText(
   InputMethodController& input_method_controller =
       GetFrame()->GetInputMethodController();
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   input_method_controller.SetCompositionFromExistingText(
-      CompositionUnderlineVectorBuilder(underlines), composition_start,
+      CompositionUnderlineVectorBuilder::Build(underlines), composition_start,
       composition_end);
 
   return true;
@@ -1330,7 +1313,7 @@ void WebLocalFrameImpl::ExtendSelectionAndDelete(int before, int after) {
     return;
   }
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1379,8 +1362,7 @@ VisiblePosition WebLocalFrameImpl::VisiblePositionForViewportPoint(
 }
 
 WebPlugin* WebLocalFrameImpl::FocusedPluginIfInputMethodSupported() {
-  WebPluginContainerImpl* container =
-      WebLocalFrameImpl::CurrentPluginContainer(GetFrame());
+  WebPluginContainerBase* container = GetFrame()->GetWebPluginContainerBase();
   if (container && container->SupportsInputMethod())
     return container->Plugin();
   return 0;
@@ -1389,31 +1371,28 @@ WebPlugin* WebLocalFrameImpl::FocusedPluginIfInputMethodSupported() {
 int WebLocalFrameImpl::PrintBegin(const WebPrintParams& print_params,
                                   const WebNode& constrain_to_node) {
   DCHECK(!GetFrame()->GetDocument()->IsFrameSet());
-  WebPluginContainerImpl* plugin_container = nullptr;
+  WebPluginContainerBase* plugin_container = nullptr;
   if (constrain_to_node.IsNull()) {
     // If this is a plugin document, check if the plugin supports its own
     // printing. If it does, we will delegate all printing to that.
-    plugin_container = PluginContainerFromFrame(GetFrame());
+    plugin_container = GetFrame()->GetWebPluginContainerBase();
   } else {
     // We only support printing plugin nodes for now.
     plugin_container =
-        ToWebPluginContainerImpl(constrain_to_node.PluginContainer());
+        ToWebPluginContainerBase(constrain_to_node.PluginContainer());
   }
 
-  if (plugin_container && plugin_container->SupportsPaginatedPrint())
+  if (plugin_container && plugin_container->SupportsPaginatedPrint()) {
     print_context_ = new ChromePluginPrintContext(GetFrame(), plugin_container,
                                                   print_params);
-  else
+  } else {
     print_context_ = new ChromePrintContext(GetFrame());
+  }
 
-  FloatRect rect(0, 0,
-                 static_cast<float>(print_params.print_content_area.width),
+  FloatSize size(static_cast<float>(print_params.print_content_area.width),
                  static_cast<float>(print_params.print_content_area.height));
-  print_context_->begin(rect.Width(), rect.Height());
-  float page_height;
-  // We ignore the overlays calculation for now since they are generated in the
-  // browser. pageHeight is actually an output parameter.
-  print_context_->ComputePageRects(rect, 0, 0, 1.0, page_height);
+  print_context_->BeginPrintMode(size.Width(), size.Height());
+  print_context_->ComputePageRects(size);
 
   return static_cast<int>(print_context_->PageCount());
 }
@@ -1435,14 +1414,15 @@ float WebLocalFrameImpl::PrintPage(int page, WebCanvas* canvas) {
 
 void WebLocalFrameImpl::PrintEnd() {
   DCHECK(print_context_);
-  print_context_->end();
+  print_context_->EndPrintMode();
   print_context_.Clear();
 }
 
 bool WebLocalFrameImpl::IsPrintScalingDisabledForPlugin(const WebNode& node) {
-  WebPluginContainerImpl* plugin_container =
-      node.IsNull() ? PluginContainerFromFrame(GetFrame())
-                    : ToWebPluginContainerImpl(node.PluginContainer());
+  DCHECK(GetFrame());
+  WebPluginContainerBase* plugin_container =
+      node.IsNull() ? GetFrame()->GetWebPluginContainerBase()
+                    : ToWebPluginContainerBase(node.PluginContainer());
 
   if (!plugin_container || !plugin_container->SupportsPaginatedPrint())
     return false;
@@ -1453,9 +1433,9 @@ bool WebLocalFrameImpl::IsPrintScalingDisabledForPlugin(const WebNode& node) {
 bool WebLocalFrameImpl::GetPrintPresetOptionsForPlugin(
     const WebNode& node,
     WebPrintPresetOptions* preset_options) {
-  WebPluginContainerImpl* plugin_container =
-      node.IsNull() ? PluginContainerFromFrame(GetFrame())
-                    : ToWebPluginContainerImpl(node.PluginContainer());
+  WebPluginContainerBase* plugin_container =
+      node.IsNull() ? GetFrame()->GetWebPluginContainerBase()
+                    : ToWebPluginContainerBase(node.PluginContainer());
 
   if (!plugin_container || !plugin_container->SupportsPaginatedPrint())
     return false;
@@ -1558,33 +1538,30 @@ WebLocalFrameImpl* WebLocalFrameImpl::CreateProvisional(
   DCHECK(client);
   WebLocalFrameImpl* web_frame = new WebLocalFrameImpl(
       old_web_frame, client, interface_provider, interface_registry);
-  Frame* old_frame = old_web_frame->ToImplBase()->GetFrame();
+  Frame* old_frame = ToWebRemoteFrameImpl(old_web_frame)->GetFrame();
   web_frame->SetParent(old_web_frame->Parent());
   web_frame->SetOpener(old_web_frame->Opener());
   // Note: this *always* temporarily sets a frame owner, even for main frames!
   // When a core Frame is created with no owner, it attempts to set itself as
   // the main frame of the Page. However, this is a provisional frame, and may
   // disappear, so Page::m_mainFrame can't be updated just yet.
-  FrameOwner* temp_owner = DummyFrameOwner::Create();
-  // TODO(dcheng): This block is very similar to initializeCoreFrame. Try to
-  // reuse it here.
-  LocalFrame* frame = LocalFrame::Create(
-      web_frame->local_frame_client_impl_.Get(), *old_frame->GetPage(),
-      temp_owner, interface_provider, interface_registry);
-  frame->Tree().SetName(
-      ToWebRemoteFrameImpl(old_web_frame)->GetFrame()->Tree().GetName());
-  web_frame->SetCoreFrame(frame);
+  // Note 2: Becuase the dummy owner is still the owner when the initial empty
+  // document is created, the initial empty document will not inherit the
+  // correct sandbox flags. However, since the provisional frame is inivisible
+  // to the rest of the page, the initial document is also invisible and
+  // unscriptable. Once the provisional frame gets properly attached and is
+  // observable, it will have the real FrameOwner, and any subsequent real
+  // documents will correctly inherit sandbox flags from the owner.
+  web_frame->InitializeCoreFrame(*old_frame->GetPage(),
+                                 DummyFrameOwner::Create(),
+                                 old_frame->Tree().GetName());
 
-  frame->SetOwner(old_frame->Owner());
-
-  if (frame->Owner() && frame->Owner()->IsRemote())
-    ToRemoteFrameOwner(frame->Owner())
+  LocalFrame* new_frame = web_frame->GetFrame();
+  new_frame->SetOwner(old_frame->Owner());
+  if (new_frame->Owner() && new_frame->Owner()->IsRemote()) {
+    ToRemoteFrameOwner(new_frame->Owner())
         ->SetSandboxFlags(static_cast<SandboxFlags>(flags));
-
-  // We must call init() after m_frame is assigned because it is referenced
-  // during init(). Note that this may dispatch JS events; the frame may be
-  // detached after init() returns.
-  frame->Init();
+  }
   return web_frame;
 }
 
@@ -1593,7 +1570,7 @@ WebLocalFrameImpl::WebLocalFrameImpl(
     WebFrameClient* client,
     blink::InterfaceProvider* interface_provider,
     blink::InterfaceRegistry* interface_registry)
-    : WebLocalFrame(scope),
+    : WebLocalFrameBase(scope),
       local_frame_client_impl_(LocalFrameClientImpl::Create(this)),
       frame_widget_(0),
       client_(client),
@@ -1602,7 +1579,7 @@ WebLocalFrameImpl::WebLocalFrameImpl(
       interface_provider_(interface_provider),
       interface_registry_(interface_registry),
       web_dev_tools_frontend_(0),
-      input_method_controller_(new WebInputMethodControllerImpl(this)),
+      input_method_controller_(*this),
       text_checker_client_(new TextCheckerClientImpl(this)),
       self_keep_alive_(this) {
   DCHECK(client_);
@@ -1634,9 +1611,11 @@ DEFINE_TRACE(WebLocalFrameImpl) {
   visitor->Trace(text_finder_);
   visitor->Trace(print_context_);
   visitor->Trace(context_menu_node_);
+  visitor->Trace(input_method_controller_);
   visitor->Trace(text_checker_client_);
+  WebLocalFrameBase::Trace(visitor);
+  // TODO(slangley): Call this from WebLocalFrameBase, once WebFrame is in core.
   WebFrame::TraceFrames(visitor, this);
-  WebFrameImplBase::Trace(visitor);
 }
 
 void WebLocalFrameImpl::SetCoreFrame(LocalFrame* frame) {
@@ -1648,27 +1627,22 @@ void WebLocalFrameImpl::InitializeCoreFrame(Page& page,
                                             const AtomicString& name) {
   SetCoreFrame(LocalFrame::Create(local_frame_client_impl_.Get(), page, owner,
                                   interface_provider_, interface_registry_));
-  GetFrame()->Tree().SetName(name);
-  // We must call init() after m_frame is assigned because it is referenced
-  // during init(). Note that this may dispatch JS events; the frame may be
-  // detached after init() returns.
-  GetFrame()->Init();
-  if (GetFrame()) {
-    if (GetFrame()
-            ->Loader()
-            .StateMachine()
-            ->IsDisplayingInitialEmptyDocument() &&
-        !Parent() && !Opener() &&
-        GetFrame()->GetSettings()->GetShouldReuseGlobalForUnownedMainFrame()) {
-      GetFrame()->GetDocument()->GetSecurityOrigin()->GrantUniversalAccess();
-    }
+  frame_->Tree().SetName(name);
+  // We must call init() after frame_ is assigned because it is referenced
+  // during init().
+  frame_->Init();
+  CHECK(frame_);
+  CHECK(frame_->Loader().StateMachine()->IsDisplayingInitialEmptyDocument());
+  if (!Parent() && !Opener() &&
+      frame_->GetSettings()->GetShouldReuseGlobalForUnownedMainFrame()) {
+    frame_->GetDocument()->GetSecurityOrigin()->GrantUniversalAccess();
+  }
 
-    if (!owner) {
-      // This trace event is needed to detect the main frame of the
-      // renderer in telemetry metrics. See crbug.com/692112#c11.
-      TRACE_EVENT_INSTANT1("loading", "markAsMainFrame",
-                           TRACE_EVENT_SCOPE_THREAD, "frame", GetFrame());
-    }
+  if (!owner) {
+    // This trace event is needed to detect the main frame of the
+    // renderer in telemetry metrics. See crbug.com/692112#c11.
+    TRACE_EVENT_INSTANT1("loading", "markAsMainFrame", TRACE_EVENT_SCOPE_THREAD,
+                         "frame", frame_);
   }
 }
 
@@ -1698,34 +1672,56 @@ LocalFrame* WebLocalFrameImpl::CreateChildFrame(
           owner_element->getAttribute(
               owner_element->SubResourceAttributeName()),
           static_cast<WebSandboxFlags>(owner_element->GetSandboxFlags()),
-          owner_properties));
+          owner_element->ContainerPolicy(), owner_properties));
   if (!webframe_child)
     return nullptr;
 
   webframe_child->InitializeCoreFrame(*GetFrame()->GetPage(), owner_element,
                                       name);
-  // Initializing the core frame may cause the new child to be detached, since
-  // it may dispatch a load event in the parent.
-  if (!webframe_child->Parent())
-    return nullptr;
-
-  // If we're moving in the back/forward list, we might want to replace the
-  // content of this child frame with whatever was there at that point.
-  HistoryItem* child_item = nullptr;
-  if (IsBackForwardLoadType(
-          GetFrame()->Loader().GetDocumentLoader()->LoadType()) &&
-      !GetFrame()->GetDocument()->LoadEventFinished())
-    child_item = webframe_child->Client()->HistoryItemForNewChildFrame();
+  DCHECK(webframe_child->Parent());
 
   FrameLoadRequest new_request = request;
-  FrameLoadType load_type = kFrameLoadTypeStandard;
-  if (child_item) {
-    new_request = FrameLoadRequest(
-        request.OriginDocument(), child_item->GenerateResourceRequest(
-                                      WebCachePolicy::kUseProtocolCachePolicy));
-    load_type = kFrameLoadTypeInitialHistoryLoad;
+  FrameLoadType child_load_type = kFrameLoadTypeStandard;
+  HistoryItem* child_item = nullptr;
+
+  if (!GetFrame()->GetDocument()->LoadEventFinished()) {
+    FrameLoadType load_type =
+        GetFrame()->Loader().GetDocumentLoader()->LoadType();
+    switch (load_type) {
+      case kFrameLoadTypeStandard:
+      case kFrameLoadTypeReplaceCurrentItem:
+      case kFrameLoadTypeInitialInChildFrame:
+        break;
+
+      // If we're moving in the back/forward list, we might want to replace the
+      // content of this child frame with whatever was there at that point.
+      case kFrameLoadTypeBackForward:
+      case kFrameLoadTypeInitialHistoryLoad:
+        child_item = webframe_child->Client()->HistoryItemForNewChildFrame();
+        if (child_item) {
+          child_load_type = kFrameLoadTypeInitialHistoryLoad;
+          new_request =
+              FrameLoadRequest(request.OriginDocument(),
+                               child_item->GenerateResourceRequest(
+                                   WebCachePolicy::kUseProtocolCachePolicy));
+        }
+        break;
+
+      // We're in a middle of a reload. The FrameLoadType is propagated to its
+      // children only if it is a ReloadBypassingCache, else it becomes a
+      // standard load.
+      case kFrameLoadTypeReload:
+        break;
+      case kFrameLoadTypeReloadBypassingCache:
+        child_load_type = kFrameLoadTypeReloadBypassingCache;
+        new_request.GetResourceRequest().SetCachePolicy(
+            WebCachePolicy::kBypassingCache);
+        break;
+    }
   }
-  webframe_child->GetFrame()->Loader().Load(new_request, load_type, child_item);
+
+  webframe_child->GetFrame()->Loader().Load(new_request, child_load_type,
+                                            child_item);
 
   // Note a synchronous navigation (about:blank) would have already processed
   // onload, so it is possible for the child frame to have already been
@@ -1746,7 +1742,7 @@ void WebLocalFrameImpl::CreateFrameView() {
   DCHECK(GetFrame());  // If frame() doesn't exist, we probably didn't init
                        // properly.
 
-  WebViewImpl* web_view = ViewImpl();
+  WebViewBase* web_view = ViewImpl();
 
   // Check if we're shutting down.
   if (!web_view->GetPage())
@@ -1785,7 +1781,7 @@ WebLocalFrameImpl* WebLocalFrameImpl::FromFrame(LocalFrame& frame) {
   LocalFrameClient* client = frame.Loader().Client();
   if (!client || !client->IsLocalFrameClientImpl())
     return nullptr;
-  return ToLocalFrameClientImpl(client)->GetWebFrame();
+  return ToWebLocalFrameImpl(ToLocalFrameClientImpl(client)->GetWebFrame());
 }
 
 WebLocalFrameImpl* WebLocalFrameImpl::FromFrameOwnerElement(Element* element) {
@@ -1795,10 +1791,10 @@ WebLocalFrameImpl* WebLocalFrameImpl::FromFrameOwnerElement(Element* element) {
       ToLocalFrame(ToHTMLFrameOwnerElement(element)->ContentFrame()));
 }
 
-WebViewImpl* WebLocalFrameImpl::ViewImpl() const {
+WebViewBase* WebLocalFrameImpl::ViewImpl() const {
   if (!GetFrame())
     return nullptr;
-  return WebViewImpl::FromPage(GetFrame()->GetPage());
+  return WebViewBase::FromPage(GetFrame()->GetPage());
 }
 
 WebDataSourceImpl* WebLocalFrameImpl::DataSourceImpl() const {
@@ -1900,11 +1896,11 @@ void WebLocalFrameImpl::DidFail(const ResourceError& error,
   WebHistoryCommitType web_commit_type =
       static_cast<WebHistoryCommitType>(commit_type);
 
-  if (WebPluginContainerImpl* plugin = PluginContainerFromFrame(GetFrame()))
+  if (WebPluginContainerBase* plugin = GetFrame()->GetWebPluginContainerBase())
     plugin->DidFailLoading(error);
 
   if (was_provisional)
-    Client()->DidFailProvisionalLoad(this, web_error, web_commit_type);
+    Client()->DidFailProvisionalLoad(web_error, web_commit_type);
   else
     Client()->DidFailLoad(web_error, web_commit_type);
 }
@@ -1913,14 +1909,15 @@ void WebLocalFrameImpl::DidFinish() {
   if (!Client())
     return;
 
-  if (WebPluginContainerImpl* plugin = PluginContainerFromFrame(GetFrame()))
+  if (WebPluginContainerBase* plugin = GetFrame()->GetWebPluginContainerBase())
     plugin->DidFinishLoading();
 
-  Client()->DidFinishLoad(this);
+  Client()->DidFinishLoad();
 }
 
 void WebLocalFrameImpl::SetCanHaveScrollbars(bool can_have_scrollbars) {
-  GetFrame()->View()->SetCanHaveScrollbars(can_have_scrollbars);
+  if (FrameView* view = GetFrameView())
+    view->SetCanHaveScrollbars(can_have_scrollbars);
 }
 
 void WebLocalFrameImpl::SetInputEventsTransformForEmulation(
@@ -2437,6 +2434,10 @@ WebFrameWidgetBase* WebLocalFrameImpl::FrameWidget() const {
   return frame_widget_;
 }
 
+std::unique_ptr<WebURLLoader> WebLocalFrameImpl::CreateURLLoader() {
+  return client_->CreateURLLoader();
+}
+
 void WebLocalFrameImpl::CopyImageAt(const WebPoint& pos_in_viewport) {
   HitTestResult result = HitTestResultForVisualViewportPos(pos_in_viewport);
   if (!isHTMLCanvasElement(result.InnerNodeOrImageMapImage()) &&
@@ -2451,7 +2452,7 @@ void WebLocalFrameImpl::CopyImageAt(const WebPoint& pos_in_viewport) {
     return;
   }
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -2543,9 +2544,8 @@ base::SingleThreadTaskRunner* WebLocalFrameImpl::UnthrottledTaskRunner() {
       ->ToSingleThreadTaskRunner();
 }
 
-WebInputMethodControllerImpl* WebLocalFrameImpl::GetInputMethodController()
-    const {
-  return input_method_controller_.get();
+WebInputMethodControllerImpl* WebLocalFrameImpl::GetInputMethodController() {
+  return &input_method_controller_;
 }
 
 void WebLocalFrameImpl::ExtractSmartClipData(WebRect rect_in_viewport,
@@ -2650,7 +2650,9 @@ bool WebLocalFrameImpl::snapshotPage(SkBitmap& bitmap,
     pictureBuilder.EndRecording()->playback(canvas.get());
 
     bitmap.setInfo(SkImageInfo::MakeN32Premul(pageWidth, pageHeight));
-    canvas->readPixels(&bitmap, 0, 0);
+    if (bitmap.tryAllocPixels(bitmap.info())) {
+      canvas->readPixels(bitmap, 0, 0);
+    }
   }
   if (full_page) {
     document->GetSettings()->SetAcceleratedCompositingEnabled(

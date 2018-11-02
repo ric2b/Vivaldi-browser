@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -62,7 +63,6 @@ gfx::Image CreateGrayscaleImage(gfx::Size size, uint8_t greyscale_value) {
   SkBitmap result;
   result.allocN32Pixels(size.width(), size.height(), true);
 
-  result.lockPixels();
   uint8_t* pixels_data = reinterpret_cast<uint8_t*>(result.getPixels());
 
   // Set greyscale value for all pixels.
@@ -78,8 +78,6 @@ gfx::Image CreateGrayscaleImage(gfx::Size size, uint8_t greyscale_value) {
           0xff;
     }
   }
-
-  result.unlockPixels();
 
   return gfx::Image::CreateFrom1xBitmap(result);
 }

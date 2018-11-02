@@ -63,8 +63,8 @@ void BroadcastEvent(const std::string& eventname,
                     std::unique_ptr<base::ListValue> args,
                     content::BrowserContext* context) {
   std::unique_ptr<extensions::Event> event(new extensions::Event(
-      extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args)));
-  event->restrict_to_browser_context = context;
+      extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args),
+      context));
   EventRouter* event_router = EventRouter::Get(context);
   if (event_router) {
     event_router->BroadcastEvent(std::move(event));
@@ -234,20 +234,55 @@ NotesGetFunction::~NotesGetFunction() {}
 NotesGetTreeFunction::NotesGetTreeFunction() {}
 
 bool NotesGetTreeFunction::RunAsync() {
-  std::vector<NoteTreeNode> notes;
   Notes_Model* model = NotesModelFactory::GetForProfile(GetProfile());
+  // If the model has not loaded yet wait until it does and do the work then.
+  if (!model->loaded()) {
+    model->AddObserver(this);
+    notes_model_ = model;
+    AddRef();  // Balanced in NotesModelLoaded and NotesModelBeingDeleted.
+  } else {
+    SendGetTreeResponse(model);
+  }
+
+  return true;
+}
+
+bool NotesGetTreeFunction::SendGetTreeResponse(Notes_Model* model) {
+  std::vector<NoteTreeNode> notes;
   Notes_Node* root = model->main_node();
   std::unique_ptr<NoteTreeNode> new_note(CreateTreeNode(root));
   std::unique_ptr<NoteTreeNode> trash_note(CreateTreeNode(model->trash_node()));
   new_note->children->push_back(std::move(*trash_note));
-  if (new_note->children.get()->size())  // Do not return root.
+  if (new_note->children.get()->size()) {  // Do not return root.
     notes.push_back(std::move(*new_note));
+  }
   results_ = vivaldi::notes::GetTree::Results::Create(notes);
   SendResponse(true);
   return true;
 }
 
-NotesGetTreeFunction::~NotesGetTreeFunction() {}
+NotesGetTreeFunction::~NotesGetTreeFunction() {
+  if (notes_model_) {
+    notes_model_->RemoveObserver(this);
+  }
+  if (!did_respond()) {
+    SendResponse(false);
+  }
+}
+
+void NotesGetTreeFunction::NotesModelLoaded(Notes_Model *model,
+                                            bool ids_reassigned) {
+  SendGetTreeResponse(model);
+  model->RemoveObserver(this);
+  notes_model_ = nullptr;
+  Release();
+}
+
+void NotesGetTreeFunction::NotesModelBeingDeleted(Notes_Model *model) {
+  model->RemoveObserver(this);
+  notes_model_ = nullptr;
+  Release();
+}
 
 NotesCreateFunction::NotesCreateFunction() {}
 

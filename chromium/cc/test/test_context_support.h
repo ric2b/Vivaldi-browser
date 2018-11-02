@@ -27,6 +27,8 @@ class TestContextSupport : public gpu::ContextSupport {
   ~TestContextSupport() override;
 
   // gpu::ContextSupport implementation.
+  int32_t GetStreamId() const override;
+  void FlushOrderingBarrierOnStream(int32_t stream_id) override;
   void SignalSyncToken(const gpu::SyncToken& sync_token,
                        const base::Closure& callback) override;
   bool IsSyncTokenSignaled(const gpu::SyncToken& sync_token) override;
@@ -44,6 +46,8 @@ class TestContextSupport : public gpu::ContextSupport {
   uint64_t ShareGroupTracingGUID() const override;
   void SetErrorMessageCallback(
       const base::Callback<void(const char*, int32_t)>& callback) override;
+  void AddLatencyInfo(
+      const std::vector<ui::LatencyInfo>& latency_info) override;
 
   void CallAllSyncPointCallbacks();
 

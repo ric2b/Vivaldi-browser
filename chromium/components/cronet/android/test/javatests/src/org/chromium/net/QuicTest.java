@@ -4,7 +4,6 @@
 
 package org.chromium.net;
 
-import android.os.ConditionVariable;
 import android.support.test.filters.LargeTest;
 import android.support.test.filters.SmallTest;
 
@@ -29,7 +28,6 @@ import java.util.concurrent.Executors;
 public class QuicTest extends CronetTestBase {
     private static final String TAG = QuicTest.class.getSimpleName();
     private static final String QUIC_PROTOCOL_STRING_PREFIX = "http/2+quic/";
-    private CronetTestFramework mTestFramework;
     private ExperimentalCronetEngine.Builder mBuilder;
 
     @Override
@@ -48,7 +46,6 @@ public class QuicTest extends CronetTestBase {
         JSONObject quicParams = new JSONObject()
                                         .put("connection_options", "PACE,IW10,FOO,DEADBEEF")
                                         .put("max_server_configs_stored_in_properties", 2)
-                                        .put("delay_tcp_race", true)
                                         .put("idle_connection_timeout_seconds", 300)
                                         .put("close_sessions_on_ip_change", false)
                                         .put("migrate_sessions_on_network_change", false)
@@ -59,7 +56,7 @@ public class QuicTest extends CronetTestBase {
                                                  .put("QUIC", quicParams)
                                                  .put("HostResolverRules", hostResolverParams);
         mBuilder.setExperimentalOptions(experimentalOptions.toString());
-        mBuilder.setStoragePath(CronetTestFramework.getTestStorage(getContext()));
+        mBuilder.setStoragePath(getTestStorage(getContext()));
         mBuilder.enableHttpCache(CronetEngine.Builder.HTTP_CACHE_DISK_NO_HTTP, 1000 * 1024);
         CronetTestUtil.setMockCertVerifierForTesting(
                 mBuilder, QuicTestServer.createMockCertVerifier());
@@ -75,7 +72,7 @@ public class QuicTest extends CronetTestBase {
     @Feature({"Cronet"})
     @OnlyRunNativeCronet
     public void testQuicLoadUrl() throws Exception {
-        mTestFramework = startCronetTestFrameworkWithUrlAndCronetEngineBuilder(null, mBuilder);
+        ExperimentalCronetEngine cronetEngine = mBuilder.build();
         String quicURL = QuicTestServer.getServerURL() + "/simple.txt";
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
 
@@ -83,8 +80,8 @@ public class QuicTest extends CronetTestBase {
         // since there is no http server running on the corresponding TCP port,
         // QUIC will always succeed with a 200 (see
         // net::HttpStreamFactoryImpl::Request::OnStreamFailed).
-        UrlRequest.Builder requestBuilder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
-                quicURL, callback, callback.getExecutor());
+        UrlRequest.Builder requestBuilder =
+                cronetEngine.newUrlRequestBuilder(quicURL, callback, callback.getExecutor());
         requestBuilder.build().start();
         callback.blockForDone();
 
@@ -110,12 +107,12 @@ public class QuicTest extends CronetTestBase {
         }
         assertTrue(fileContainsString("local_prefs.json",
                 QuicTestServer.getServerHost() + ":" + QuicTestServer.getServerPort()));
-        mTestFramework.mCronetEngine.shutdown();
+        cronetEngine.shutdown();
 
         // Make another request using a new context but with no QUIC hints.
         ExperimentalCronetEngine.Builder builder =
                 new ExperimentalCronetEngine.Builder(getContext());
-        builder.setStoragePath(CronetTestFramework.getTestStorage(getContext()));
+        builder.setStoragePath(getTestStorage(getContext()));
         builder.enableHttpCache(CronetEngine.Builder.HTTP_CACHE_DISK, 1000 * 1024);
         builder.enableQuic(true);
         JSONObject hostResolverParams = CronetTestUtil.generateHostResolverRules();
@@ -124,10 +121,10 @@ public class QuicTest extends CronetTestBase {
         builder.setExperimentalOptions(experimentalOptions.toString());
         CronetTestUtil.setMockCertVerifierForTesting(
                 builder, QuicTestServer.createMockCertVerifier());
-        mTestFramework = startCronetTestFrameworkWithUrlAndCronetEngineBuilder(null, builder);
+        cronetEngine = builder.build();
         TestUrlRequestCallback callback2 = new TestUrlRequestCallback();
-        requestBuilder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
-                quicURL, callback2, callback2.getExecutor());
+        requestBuilder =
+                cronetEngine.newUrlRequestBuilder(quicURL, callback2, callback2.getExecutor());
         requestBuilder.build().start();
         callback2.blockForDone();
         assertEquals(200, callback2.mResponseInfo.getHttpStatusCode());
@@ -141,8 +138,7 @@ public class QuicTest extends CronetTestBase {
     // Returns whether a file contains a particular string.
     @SuppressFBWarnings("OBL_UNSATISFIED_OBLIGATION_EXCEPTION_EDGE")
     private boolean fileContainsString(String filename, String content) throws IOException {
-        File file =
-                new File(CronetTestFramework.getTestStorage(getContext()) + "/prefs/" + filename);
+        File file = new File(getTestStorage(getContext()) + "/prefs/" + filename);
         FileInputStream fileInputStream = new FileInputStream(file);
         byte[] data = new byte[(int) file.length()];
         fileInputStream.read(data);
@@ -150,33 +146,34 @@ public class QuicTest extends CronetTestBase {
         return new String(data, "UTF-8").contains(content);
     }
 
+    /**
+     * Tests that the network quality listeners are propoerly notified when QUIC is enabled.
+     */
     @LargeTest
     @Feature({"Cronet"})
     @OnlyRunNativeCronet
     @SuppressWarnings("deprecation")
-    public void testRealTimeNetworkQualityObservationsWithQuic() throws Exception {
-        mTestFramework = startCronetTestFrameworkWithUrlAndCronetEngineBuilder(null, mBuilder);
+    public void testNQEWithQuic() throws Exception {
+        ExperimentalCronetEngine cronetEngine = mBuilder.build();
         String quicURL = QuicTestServer.getServerURL() + "/simple.txt";
-        ConditionVariable waitForThroughput = new ConditionVariable();
 
         TestNetworkQualityRttListener rttListener =
                 new TestNetworkQualityRttListener(Executors.newSingleThreadExecutor());
         TestNetworkQualityThroughputListener throughputListener =
-                new TestNetworkQualityThroughputListener(
-                        Executors.newSingleThreadExecutor(), waitForThroughput);
+                new TestNetworkQualityThroughputListener(Executors.newSingleThreadExecutor());
 
-        mTestFramework.mCronetEngine.addRttListener(rttListener);
-        mTestFramework.mCronetEngine.addThroughputListener(throughputListener);
+        cronetEngine.addRttListener(rttListener);
+        cronetEngine.addThroughputListener(throughputListener);
 
-        mTestFramework.mCronetEngine.configureNetworkQualityEstimatorForTesting(true, true, true);
+        cronetEngine.configureNetworkQualityEstimatorForTesting(true, true, true);
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
 
         // Although the native stack races QUIC and SPDY for the first request,
         // since there is no http server running on the corresponding TCP port,
         // QUIC will always succeed with a 200 (see
         // net::HttpStreamFactoryImpl::Request::OnStreamFailed).
-        UrlRequest.Builder requestBuilder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
-                quicURL, callback, callback.getExecutor());
+        UrlRequest.Builder requestBuilder =
+                cronetEngine.newUrlRequestBuilder(quicURL, callback, callback.getExecutor());
         requestBuilder.build().start();
         callback.blockForDone();
 
@@ -188,7 +185,11 @@ public class QuicTest extends CronetTestBase {
         // Throughput observation is posted to the network quality estimator on the network thread
         // after the UrlRequest is completed. The observations are then eventually posted to
         // throughput listeners on the executor provided to network quality.
-        waitForThroughput.block();
+        throughputListener.waitUntilFirstThroughputObservationReceived();
+
+        // Wait for RTT observation (at the URL request layer) to be posted.
+        rttListener.waitUntilFirstUrlRequestRTTReceived();
+
         assertTrue(throughputListener.throughputObservationCount() > 0);
 
         // Check RTT observation count after throughput observation has been received. This ensures
@@ -201,14 +202,14 @@ public class QuicTest extends CronetTestBase {
 
         // Verify that effective connection type callback is received and
         // effective connection type is correctly set.
-        assertTrue(mTestFramework.mCronetEngine.getEffectiveConnectionType()
-                != EffectiveConnectionType.TYPE_UNKNOWN);
+        assertTrue(
+                cronetEngine.getEffectiveConnectionType() != EffectiveConnectionType.TYPE_UNKNOWN);
 
         // Verify that the HTTP RTT, transport RTT and downstream throughput
         // estimates are available.
-        assertTrue(mTestFramework.mCronetEngine.getHttpRttMs() >= 0);
-        assertTrue(mTestFramework.mCronetEngine.getTransportRttMs() >= 0);
-        assertTrue(mTestFramework.mCronetEngine.getDownstreamThroughputKbps() >= 0);
+        assertTrue(cronetEngine.getHttpRttMs() >= 0);
+        assertTrue(cronetEngine.getTransportRttMs() >= 0);
+        assertTrue(cronetEngine.getDownstreamThroughputKbps() >= 0);
 
         // Verify that the cached estimates were written to the prefs.
         while (true) {
@@ -224,22 +225,22 @@ public class QuicTest extends CronetTestBase {
             }
         }
         assertTrue(fileContainsString("local_prefs.json", "network_qualities"));
-        mTestFramework.mCronetEngine.shutdown();
+        cronetEngine.shutdown();
     }
 
     @SmallTest
     @OnlyRunNativeCronet
     @Feature({"Cronet"})
     public void testMetricsWithQuic() throws Exception {
-        mTestFramework = startCronetTestFrameworkWithUrlAndCronetEngineBuilder(null, mBuilder);
+        ExperimentalCronetEngine cronetEngine = mBuilder.build();
         TestRequestFinishedListener requestFinishedListener = new TestRequestFinishedListener();
-        mTestFramework.mCronetEngine.addRequestFinishedListener(requestFinishedListener);
+        cronetEngine.addRequestFinishedListener(requestFinishedListener);
 
         String quicURL = QuicTestServer.getServerURL() + "/simple.txt";
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
 
-        UrlRequest.Builder requestBuilder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
-                quicURL, callback, callback.getExecutor());
+        UrlRequest.Builder requestBuilder =
+                cronetEngine.newUrlRequestBuilder(quicURL, callback, callback.getExecutor());
         Date startTime = new Date();
         requestBuilder.build().start();
         callback.blockForDone();
@@ -257,8 +258,8 @@ public class QuicTest extends CronetTestBase {
         // Second request should use the same connection and not have ConnectTiming numbers
         callback = new TestUrlRequestCallback();
         requestFinishedListener.reset();
-        requestBuilder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
-                quicURL, callback, callback.getExecutor());
+        requestBuilder =
+                cronetEngine.newUrlRequestBuilder(quicURL, callback, callback.getExecutor());
         startTime = new Date();
         requestBuilder.build().start();
         callback.blockForDone();
@@ -273,7 +274,7 @@ public class QuicTest extends CronetTestBase {
         assertEquals(RequestFinishedInfo.SUCCEEDED, requestInfo.getFinishedReason());
         MetricsTestUtil.checkNoConnectTiming(requestInfo.getMetrics());
 
-        mTestFramework.mCronetEngine.shutdown();
+        cronetEngine.shutdown();
     }
 
     // Helper method to assert that the request is negotiated over QUIC.

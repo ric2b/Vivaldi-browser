@@ -14,7 +14,6 @@
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/component_extension_resource_manager.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -265,10 +264,8 @@ void ImageLoader::LoadImagesAsync(
     const std::vector<ImageRepresentation>& info_list,
     const ImageLoaderImageCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(!BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::USER_VISIBLE),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(LoadImagesBlocking, info_list,
                  LoadResourceBitmaps(extension, info_list)),
       base::Bind(&ImageLoader::ReplyBack, weak_ptr_factory_.GetWeakPtr(),
@@ -280,10 +277,8 @@ void ImageLoader::LoadImageFamilyAsync(
     const std::vector<ImageRepresentation>& info_list,
     const ImageLoaderImageFamilyCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(!BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::USER_VISIBLE),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(LoadImagesBlocking, info_list,
                  LoadResourceBitmaps(extension, info_list)),
       base::Bind(&ImageLoader::ReplyBackWithImageFamily,

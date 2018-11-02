@@ -10,6 +10,7 @@
 #include "platform/loader/fetch/ResourceTimingInfo.h"
 #include "platform/scheduler/test/fake_web_task_runner.h"
 #include "platform/wtf/PtrUtil.h"
+#include "public/platform/Platform.h"
 
 #include <memory>
 
@@ -54,6 +55,16 @@ class MockFetchContext : public FetchContext {
       FetchParameters::OriginRestriction) const override {
     return ResourceRequestBlockedReason::kNone;
   }
+  ResourceRequestBlockedReason CanFollowRedirect(
+      Resource::Type type,
+      const ResourceRequest& request,
+      const KURL& url,
+      const ResourceLoaderOptions& options,
+      SecurityViolationReportingPolicy reporting_policy,
+      FetchParameters::OriginRestriction origin_restriction) const override {
+    return CanRequest(type, request, url, options, reporting_policy,
+                      origin_restriction);
+  }
   bool ShouldLoadNewResource(Resource::Type) const override {
     return load_policy_ == kShouldLoadNewResource;
   }
@@ -62,6 +73,10 @@ class MockFetchContext : public FetchContext {
   void AddResourceTiming(
       const ResourceTimingInfo& resource_timing_info) override {
     transfer_size_ = resource_timing_info.TransferSize();
+  }
+
+  std::unique_ptr<WebURLLoader> CreateURLLoader() override {
+    return Platform::Current()->CreateURLLoader();
   }
 
  private:

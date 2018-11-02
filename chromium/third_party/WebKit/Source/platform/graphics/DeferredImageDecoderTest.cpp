@@ -32,6 +32,7 @@
 #include "platform/graphics/ImageDecodingStore.h"
 #include "platform/graphics/ImageFrameGenerator.h"
 #include "platform/graphics/paint/PaintCanvas.h"
+#include "platform/graphics/paint/PaintImage.h"
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/graphics/paint/PaintRecorder.h"
 #include "platform/graphics/test/MockImageDecoder.h"
@@ -111,7 +112,7 @@ class DeferredImageDecoderTest : public ::testing::Test,
     bitmap_.allocPixels(SkImageInfo::MakeN32Premul(100, 100));
     canvas_ = base::MakeUnique<cc::SkiaPaintCanvas>(bitmap_);
     decode_request_count_ = 0;
-    repetition_count_ = kCAnimationNone;
+    repetition_count_ = kAnimationNone;
     status_ = ImageFrame::kFrameComplete;
     frame_duration_ = 0;
     decoded_size_ = actual_decoder_->Size();
@@ -162,14 +163,13 @@ TEST_F(DeferredImageDecoderTest, drawIntoPaintRecord) {
 
   PaintRecorder recorder;
   PaintCanvas* temp_canvas = recorder.beginRecording(100, 100);
-  temp_canvas->drawImage(image, 0, 0);
+  temp_canvas->drawImage(PaintImage(PaintImage::GetNextId(), std::move(image)),
+                         0, 0);
   sk_sp<PaintRecord> record = recorder.finishRecordingAsPicture();
   EXPECT_EQ(0, decode_request_count_);
 
   canvas_->drawPicture(record);
   EXPECT_EQ(0, decode_request_count_);
-
-  SkAutoLockPixels auto_lock(bitmap_);
   EXPECT_EQ(SkColorSetARGB(255, 255, 255, 255), bitmap_.getColor(0, 0));
 }
 
@@ -183,7 +183,11 @@ TEST_F(DeferredImageDecoderTest, drawIntoPaintRecordProgressive) {
   ASSERT_TRUE(image);
   PaintRecorder recorder;
   PaintCanvas* temp_canvas = recorder.beginRecording(100, 100);
-  temp_canvas->drawImage(std::move(image), 0, 0);
+  PaintImage::Id stable_id = PaintImage::GetNextId();
+  temp_canvas->drawImage(
+      PaintImage(stable_id, std::move(image), PaintImage::AnimationType::STATIC,
+                 PaintImage::CompletionState::PARTIALLY_DONE),
+      0, 0);
   canvas_->drawPicture(recorder.finishRecordingAsPicture());
 
   // Fully received the file and draw the PaintRecord again.
@@ -191,10 +195,8 @@ TEST_F(DeferredImageDecoderTest, drawIntoPaintRecordProgressive) {
   image = lazy_decoder_->CreateFrameAtIndex(0);
   ASSERT_TRUE(image);
   temp_canvas = recorder.beginRecording(100, 100);
-  temp_canvas->drawImage(std::move(image), 0, 0);
+  temp_canvas->drawImage(PaintImage(stable_id, std::move(image)), 0, 0);
   canvas_->drawPicture(recorder.finishRecordingAsPicture());
-
-  SkAutoLockPixels auto_lock(bitmap_);
   EXPECT_EQ(SkColorSetARGB(255, 255, 255, 255), bitmap_.getColor(0, 0));
 }
 
@@ -211,21 +213,20 @@ TEST_F(DeferredImageDecoderTest, decodeOnOtherThread) {
 
   PaintRecorder recorder;
   PaintCanvas* temp_canvas = recorder.beginRecording(100, 100);
-  temp_canvas->drawImage(std::move(image), 0, 0);
+  temp_canvas->drawImage(PaintImage(PaintImage::GetNextId(), std::move(image)),
+                         0, 0);
   sk_sp<PaintRecord> record = recorder.finishRecordingAsPicture();
   EXPECT_EQ(0, decode_request_count_);
 
   // Create a thread to rasterize PaintRecord.
   std::unique_ptr<WebThread> thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("RasterThread"));
+      Platform::Current()->CreateThread("RasterThread");
   thread->GetWebTaskRunner()->PostTask(
       BLINK_FROM_HERE,
       CrossThreadBind(&RasterizeMain, CrossThreadUnretained(canvas_.get()),
                       record));
   thread.reset();
   EXPECT_EQ(0, decode_request_count_);
-
-  SkAutoLockPixels auto_lock(bitmap_);
   EXPECT_EQ(SkColorSetARGB(255, 255, 255, 255), bitmap_.getColor(0, 0));
 }
 
@@ -307,7 +308,8 @@ TEST_F(DeferredImageDecoderTest, decodedSize) {
   // The following code should not fail any assert.
   PaintRecorder recorder;
   PaintCanvas* temp_canvas = recorder.beginRecording(100, 100);
-  temp_canvas->drawImage(std::move(image), 0, 0);
+  temp_canvas->drawImage(PaintImage(PaintImage::GetNextId(), std::move(image)),
+                         0, 0);
   sk_sp<PaintRecord> record = recorder.finishRecordingAsPicture();
   EXPECT_EQ(0, decode_request_count_);
   canvas_->drawPicture(record);
@@ -342,7 +344,7 @@ TEST_F(DeferredImageDecoderTest, frameOpacity) {
     size_t size = pix_info.getSafeSize(row_bytes);
 
     Vector<char> storage(size);
-    SkPixmap pixmap(pix_info, storage.Data(), row_bytes);
+    SkPixmap pixmap(pix_info, storage.data(), row_bytes);
 
     // Before decoding, the frame is not known to be opaque.
     sk_sp<SkImage> frame = decoder->CreateFrameAtIndex(0);

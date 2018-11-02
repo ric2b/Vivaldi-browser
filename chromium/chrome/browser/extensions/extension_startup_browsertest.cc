@@ -273,19 +273,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionsLoadTest, Test) {
 
 #if defined(OS_CHROMEOS)
 
-class ExtensionsLoadTestWithLoginScreenApps : public ExtensionsLoadTest {
- protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionsLoadTest::SetUpCommandLine(command_line);
-    // TODO(emaxx): Remove this test fixture class once the
-    // EnableLoginScreenApps command line flag becomes on by default.
-    // crbug.com/576464
-    command_line->AppendSwitch(switches::kEnableLoginScreenApps);
-  }
-};
-
-IN_PROC_BROWSER_TEST_F(ExtensionsLoadTestWithLoginScreenApps,
-                       CommandLineExtensionsDontLoad) {
+IN_PROC_BROWSER_TEST_F(ExtensionsLoadTest,
+                       SigninProfileCommandLineExtensionsDontLoad) {
   // The --load-extension command line flag should not be applied to the sign-in
   // profile.
   EXPECT_EQ(0, GetNonComponentEnabledExtensionCount(

@@ -34,6 +34,14 @@ message ChromeUserPopulation {
     EXTENDED_REPORTING = 2;
   }
   optional UserPopulation user_population = 1;
+
+  // If user enabled history sync.
+  optional bool is_history_sync_enabled = 2;
+
+  // The finch active groups this user belongs to (if any). Active group is
+  // defined by finch trial name and group name. Trial name and group name are
+  // concatenated with separator "|", e.g. "PingOnlyTrial|DefaultGroup".
+  repeated string finch_active_groups = 4;
 }
 
 message ClientPhishingRequest {
@@ -200,20 +208,24 @@ message LoginReputationClientRequest {
   repeated Frame frames = 3;
 
   // The message contains fields needed for a password reuse event.
+  // Next tag: 4
   message PasswordReuseEvent {
-    // Origins that the reused password had been used on. The origins are
-    // maintained by Chrome password manager.
-    // The field is filled in only when TriggerType is PASSWORD_REUSE_EVENT.
-    repeated string password_reused_original_origins = 1;
+    reserved 1;
 
     // The frame that the password reuse is detected.
     optional int32 frame_id = 2;
+
+    // Whether the reused password is used for Chrome signin.
+    optional bool is_chrome_signin_password = 3;
   }
 
   optional PasswordReuseEvent password_reuse_event = 4;
 
   // The number of verdicts stored on the client.
   optional int32 stored_verdict_cnt = 5;
+
+  // Chrome user population.
+  optional ChromeUserPopulation population = 6;
 }
 
 // The message is used for client response for login reputation requests.
@@ -489,8 +501,9 @@ message ClientDownloadRequest {
   // comes last.
   repeated ReferrerChainEntry referrer_chain = 36;
 
-  // Whether DownloadAttribution Finch experiment is enabled for this ping.
-  optional bool download_attribution_finch_enabled = 39;
+  // Deprecated.
+  optional bool DEPRECATED_download_attribution_finch_enabled = 39
+      [deprecated = true];
 }
 
 message ReferrerChainEntry {

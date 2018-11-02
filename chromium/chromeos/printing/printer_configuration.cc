@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/guid.h"
+#include "base/strings/string_piece.h"
 
 namespace chromeos {
 
@@ -14,7 +15,8 @@ Printer::Printer() : source_(SRC_USER_PREFS) {
   id_ = base::GenerateGUID();
 }
 
-Printer::Printer(const std::string& id) : id_(id), source_(SRC_USER_PREFS) {
+Printer::Printer(const std::string& id, const base::Time& last_updated)
+    : id_(id), source_(SRC_USER_PREFS), last_updated_(last_updated) {
   if (id_.empty())
     id_ = base::GenerateGUID();
 }
@@ -26,8 +28,34 @@ Printer& Printer::operator=(const Printer& other) = default;
 Printer::~Printer() {}
 
 bool Printer::IsIppEverywhere() const {
-  // TODO(skau): Add check for IPP Everywhere value.
-  return false;
+  return ppd_reference_.autoconf;
+}
+
+Printer::PrinterProtocol Printer::GetProtocol() const {
+  const base::StringPiece uri(uri_);
+
+  if (uri.starts_with("usb:"))
+    return PrinterProtocol::kUsb;
+
+  if (uri.starts_with("ipp:"))
+    return PrinterProtocol::kIpp;
+
+  if (uri.starts_with("ipps:"))
+    return PrinterProtocol::kIpps;
+
+  if (uri.starts_with("http:"))
+    return PrinterProtocol::kHttp;
+
+  if (uri.starts_with("https:"))
+    return PrinterProtocol::kHttps;
+
+  if (uri.starts_with("socket:"))
+    return PrinterProtocol::kSocket;
+
+  if (uri.starts_with("lpd:"))
+    return PrinterProtocol::kLpd;
+
+  return PrinterProtocol::kUnknown;
 }
 
 }  // namespace chromeos

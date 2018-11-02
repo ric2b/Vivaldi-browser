@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "content/common/content_export.h"
 #include "media/base/android/stream_texture_wrapper.h"
 #include "media/base/renderer_factory.h"
@@ -34,7 +35,10 @@ class CONTENT_EXPORT MediaPlayerRendererClientFactory
       const scoped_refptr<base::TaskRunner>& worker_task_runner,
       media::AudioRendererSink* audio_renderer_sink,
       media::VideoRendererSink* video_renderer_sink,
-      const media::RequestSurfaceCB& request_surface_cb) override;
+      const media::RequestOverlayInfoCB& request_surface_cb) override;
+
+  // The MediaPlayerRenderer uses a Type::URL.
+  media::MediaResource::Type GetRequiredMediaResourceType() override;
 
  private:
   GetStreamTextureWrapperCB get_stream_texture_wrapper_cb_;

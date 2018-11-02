@@ -14,44 +14,27 @@ namespace blink {
 namespace scheduler {
 
 SchedulerHelper::SchedulerHelper(
-    scoped_refptr<SchedulerTqmDelegate> task_queue_manager_delegate,
-    const char* tracing_category,
-    const char* disabled_by_default_tracing_category,
-    const char* disabled_by_default_verbose_tracing_category)
+    scoped_refptr<SchedulerTqmDelegate> task_queue_manager_delegate)
     : SchedulerHelper(task_queue_manager_delegate,
-                      tracing_category,
-                      disabled_by_default_tracing_category,
-                      disabled_by_default_verbose_tracing_category,
                       TaskQueue::Spec(TaskQueue::QueueType::DEFAULT)
                           .SetShouldMonitorQuiescence(true)) {}
 
 SchedulerHelper::SchedulerHelper(
     scoped_refptr<SchedulerTqmDelegate> task_queue_manager_delegate,
-    const char* tracing_category,
-    const char* disabled_by_default_tracing_category,
-    const char* disabled_by_default_verbose_tracing_category,
     TaskQueue::Spec default_task_queue_spec)
     : task_queue_manager_delegate_(task_queue_manager_delegate),
-      task_queue_manager_(
-          new TaskQueueManager(task_queue_manager_delegate,
-                               tracing_category,
-                               disabled_by_default_tracing_category,
-                               disabled_by_default_verbose_tracing_category)),
-      control_task_runner_(
+      task_queue_manager_(new TaskQueueManager(task_queue_manager_delegate)),
+      control_task_queue_(
           NewTaskQueue(TaskQueue::Spec(TaskQueue::QueueType::CONTROL)
                            .SetShouldNotifyObservers(false))),
-      default_task_runner_(NewTaskQueue(default_task_queue_spec)),
-      observer_(nullptr),
-      tracing_category_(tracing_category),
-      disabled_by_default_tracing_category_(
-          disabled_by_default_tracing_category) {
-  control_task_runner_->SetQueuePriority(TaskQueue::CONTROL_PRIORITY);
+      default_task_queue_(NewTaskQueue(default_task_queue_spec)),
+      observer_(nullptr) {
+  control_task_queue_->SetQueuePriority(TaskQueue::CONTROL_PRIORITY);
 
   task_queue_manager_->SetWorkBatchSize(4);
 
   DCHECK(task_queue_manager_delegate_);
-  task_queue_manager_delegate_->SetDefaultTaskRunner(
-      default_task_runner_.get());
+  task_queue_manager_delegate_->SetDefaultTaskRunner(default_task_queue_.get());
 }
 
 SchedulerHelper::~SchedulerHelper() {
@@ -81,13 +64,13 @@ scoped_refptr<TaskQueue> SchedulerHelper::NewTaskQueue(
   return task_queue_manager_->NewTaskQueue(spec);
 }
 
-scoped_refptr<TaskQueue> SchedulerHelper::DefaultTaskRunner() {
+scoped_refptr<TaskQueue> SchedulerHelper::DefaultTaskQueue() {
   CheckOnValidThread();
-  return default_task_runner_;
+  return default_task_queue_;
 }
 
-scoped_refptr<TaskQueue> SchedulerHelper::ControlTaskRunner() {
-  return control_task_runner_;
+scoped_refptr<TaskQueue> SchedulerHelper::ControlTaskQueue() {
+  return control_task_queue_;
 }
 
 size_t SchedulerHelper::GetNumberOfPendingTasks() const {

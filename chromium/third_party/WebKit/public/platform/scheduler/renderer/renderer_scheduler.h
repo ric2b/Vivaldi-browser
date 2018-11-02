@@ -9,11 +9,10 @@
 
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "public/platform/WebCommon.h"
-#include "public/platform/WebInputEvent.h"
 #include "public/platform/WebInputEventResult.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/scheduler/child/child_scheduler.h"
 #include "public/platform/scheduler/child/single_thread_idle_task_runner.h"
 #include "public/platform/scheduler/renderer/render_widget_scheduling_state.h"
@@ -31,6 +30,7 @@ struct BeginFrameArgs;
 
 namespace blink {
 class WebThread;
+class WebInputEvent;
 }
 
 namespace blink {
@@ -50,31 +50,19 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
   static std::unique_ptr<RendererScheduler> Create();
 
   // Returns the compositor task runner.
-  virtual scoped_refptr<TaskQueue> CompositorTaskRunner() = 0;
+  virtual scoped_refptr<base::SingleThreadTaskRunner>
+  CompositorTaskRunner() = 0;
 
   // Creates a WebThread implementation for the renderer main thread.
   virtual std::unique_ptr<WebThread> CreateMainThread() = 0;
 
   // Returns the loading task runner.  This queue is intended for tasks related
   // to resource dispatch, foreground HTML parsing, etc...
-  virtual scoped_refptr<TaskQueue> LoadingTaskRunner() = 0;
+  virtual scoped_refptr<base::SingleThreadTaskRunner> LoadingTaskRunner() = 0;
 
   // Returns the timer task runner.  This queue is intended for DOM Timers.
   // TODO(alexclarke): Get rid of this default timer queue.
-  virtual scoped_refptr<TaskQueue> TimerTaskRunner() = 0;
-
-  // Returns a new loading task runner. This queue is intended for tasks related
-  // to resource dispatch, foreground HTML parsing, etc...
-  virtual scoped_refptr<TaskQueue> NewLoadingTaskRunner(
-      TaskQueue::QueueType queue_type) = 0;
-
-  // Returns a new timer task runner. This queue is intended for DOM Timers.
-  virtual scoped_refptr<TaskQueue> NewTimerTaskRunner(
-      TaskQueue::QueueType queue_type) = 0;
-
-  // Returns a task runner for tasks which should never get throttled.
-  virtual scoped_refptr<TaskQueue> NewUnthrottledTaskRunner(
-      TaskQueue::QueueType queue_type) = 0;
+  virtual scoped_refptr<base::SingleThreadTaskRunner> TimerTaskRunner() = 0;
 
   // Returns a new RenderWidgetSchedulingState.  The signals from this will be
   // used to make scheduling decisions.
@@ -84,6 +72,12 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
   // Called to notify about the start of an extended period where no frames
   // need to be drawn. Must be called from the main thread.
   virtual void BeginFrameNotExpectedSoon() = 0;
+
+  // Called to notify about the start of a period where main frames are not
+  // scheduled and so short idle work can be scheduled. This will precede
+  // BeginFrameNotExpectedSoon and is also called when the compositor may be
+  // busy but the main thread is not.
+  virtual void BeginMainFrameNotExpectedUntil(base::TimeTicks time) = 0;
 
   // Called to notify about the start of a new frame.  Must be called from the
   // main thread.
@@ -142,16 +136,17 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
   // backgrounded.
   virtual void ResumeRenderer() = 0;
 
+  enum class NavigatingFrameType { kMainFrame, kChildFrame };
+
   // Tells the scheduler that a navigation task is pending. While any main-frame
   // navigation tasks are pending, the scheduler will ensure that loading tasks
   // are not blocked even if they are expensive. Must be called on the main
   // thread.
-  virtual void AddPendingNavigation(WebScheduler::NavigatingFrameType type) = 0;
+  virtual void AddPendingNavigation(NavigatingFrameType type) = 0;
 
   // Tells the scheduler that a navigation task is no longer pending.
   // Must be called on the main thread.
-  virtual void RemovePendingNavigation(
-      WebScheduler::NavigatingFrameType type) = 0;
+  virtual void RemovePendingNavigation(NavigatingFrameType type) = 0;
 
   // Tells the scheduler that a navigation has started.  The scheduler will
   // prioritize loading tasks for a short duration afterwards.

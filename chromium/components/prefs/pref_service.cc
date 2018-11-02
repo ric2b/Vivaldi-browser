@@ -193,37 +193,27 @@ bool PrefService::HasPrefPath(const std::string& path) const {
   return pref && !pref->IsDefaultValue();
 }
 
-std::unique_ptr<base::DictionaryValue> PrefService::GetPreferenceValues()
-    const {
+void PrefService::IteratePreferenceValues(
+    base::RepeatingCallback<void(const std::string& key,
+                                 const base::Value& value)> callback) const {
   DCHECK(CalledOnValidThread());
-  std::unique_ptr<base::DictionaryValue> out(new base::DictionaryValue);
-  for (const auto& it : *pref_registry_) {
-    out->Set(it.first, GetPreferenceValue(it.first)->CreateDeepCopy());
-  }
-  return out;
+  for (const auto& it : *pref_registry_)
+    callback.Run(it.first, *GetPreferenceValue(it.first));
 }
 
-std::unique_ptr<base::DictionaryValue>
-PrefService::GetPreferenceValuesOmitDefaults() const {
+std::unique_ptr<base::DictionaryValue> PrefService::GetPreferenceValues(
+    IncludeDefaults include_defaults) const {
   DCHECK(CalledOnValidThread());
   std::unique_ptr<base::DictionaryValue> out(new base::DictionaryValue);
   for (const auto& it : *pref_registry_) {
-    const Preference* pref = FindPreference(it.first);
-    if (pref->IsDefaultValue())
-      continue;
-    out->Set(it.first, pref->GetValue()->CreateDeepCopy());
-  }
-  return out;
-}
-
-std::unique_ptr<base::DictionaryValue>
-PrefService::GetPreferenceValuesWithoutPathExpansion() const {
-  DCHECK(CalledOnValidThread());
-  std::unique_ptr<base::DictionaryValue> out(new base::DictionaryValue);
-  for (const auto& it : *pref_registry_) {
-    const base::Value* value = GetPreferenceValue(it.first);
-    DCHECK(value);
-    out->SetWithoutPathExpansion(it.first, value->CreateDeepCopy());
+    if (include_defaults == INCLUDE_DEFAULTS) {
+      out->Set(it.first, GetPreferenceValue(it.first)->CreateDeepCopy());
+    } else {
+      const Preference* pref = FindPreference(it.first);
+      if (pref->IsDefaultValue())
+        continue;
+      out->Set(it.first, pref->GetValue()->CreateDeepCopy());
+    }
   }
   return out;
 }
@@ -490,6 +480,14 @@ base::Value* PrefService::GetMutableUserPref(const std::string& path,
 void PrefService::ReportUserPrefChanged(const std::string& key) {
   DCHECK(CalledOnValidThread());
   user_pref_store_->ReportValueChanged(key, GetWriteFlags(FindPreference(key)));
+}
+
+void PrefService::ReportUserPrefChanged(
+    const std::string& key,
+    std::set<std::vector<std::string>> path_components) {
+  DCHECK(CalledOnValidThread());
+  user_pref_store_->ReportSubValuesChanged(key, std::move(path_components),
+                                           GetWriteFlags(FindPreference(key)));
 }
 
 void PrefService::SetUserPrefValue(const std::string& path,

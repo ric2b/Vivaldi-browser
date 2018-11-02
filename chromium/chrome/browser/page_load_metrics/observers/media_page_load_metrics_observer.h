@@ -11,11 +11,6 @@
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 
-namespace page_load_metrics {
-struct PageLoadExtraInfo;
-struct PageLoadTiming;
-}
-
 // Observer responsible for recording metrics on pages that play at least one
 // MEDIA request.
 class MediaPageLoadMetricsObserver
@@ -25,14 +20,14 @@ class MediaPageLoadMetricsObserver
   ~MediaPageLoadMetricsObserver() override;
 
   // page_load_metrics::PageLoadMetricsObserver:
-  void OnComplete(const page_load_metrics::PageLoadTiming& timing,
+  void OnComplete(const page_load_metrics::mojom::PageLoadTiming& timing,
                   const page_load_metrics::PageLoadExtraInfo& info) override;
   page_load_metrics::PageLoadMetricsObserver::ObservePolicy
   FlushMetricsOnAppEnterBackground(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info) override;
-  void OnLoadedResource(
-      const page_load_metrics::ExtraRequestInfo& extra_request_info) override;
+  void OnLoadedResource(const page_load_metrics::ExtraRequestCompleteInfo&
+                            extra_request_complete_info) override;
   void MediaStartedPlaying(
       const content::WebContentsObserver::MediaPlayerInfo& video_type,
       bool is_in_main_frame) override;

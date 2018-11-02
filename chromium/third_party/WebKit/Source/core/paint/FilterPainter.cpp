@@ -29,6 +29,9 @@ FilterPainter::FilterPainter(PaintLayer& layer,
     : filter_in_progress_(false),
       context_(context),
       layout_object_(layer.GetLayoutObject()) {
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+    return;
+
   if (!layer.PaintsWithFilters())
     return;
 
@@ -37,7 +40,7 @@ FilterPainter::FilterPainter(PaintLayer& layer,
     return;
 
   sk_sp<SkImageFilter> image_filter =
-      SkiaImageFilterBuilder::Build(last_effect, kColorSpaceDeviceRGB);
+      SkiaImageFilterBuilder::Build(last_effect, kInterpolationSpaceSRGB);
   if (!image_filter)
     return;
 

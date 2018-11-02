@@ -31,23 +31,22 @@ class SystemTrayItem;
 
 namespace tray {
 
+class UserCardView;
+
 // The view of a user item in system tray bubble.
 class UserView : public views::View,
                  public views::ButtonListener,
                  public views::FocusChangeListener {
  public:
-  UserView(SystemTrayItem* owner, LoginStatus login, UserIndex index);
+  UserView(SystemTrayItem* owner, LoginStatus login);
   ~UserView() override;
 
   TrayUser::TestState GetStateForTest() const;
   gfx::Rect GetBoundsInScreenOfUserButtonForTest();
 
-  views::View* user_card_view_for_test() const { return user_card_view_; }
+  views::View* user_card_view_for_test() const { return user_card_container_; }
 
  private:
-  // Retruns true if |this| view is for the currently active user, i.e. top row.
-  bool IsActiveUser() const;
-
   // Overridden from views::View.
   int GetHeightForWidth(int width) const override;
 
@@ -63,29 +62,30 @@ class UserView : public views::View,
 
   // Create the menu option to add another user. If |disabled| is set the user
   // cannot actively click on the item.
-  void ToggleAddUserMenuOption();
+  void ToggleUserDropdownWidget();
 
   // Removes the add user menu option.
-  void RemoveAddUserMenuOption();
+  void HideUserDropdownWidget();
 
-  const UserIndex user_index_;
-  views::View* user_card_view_;
+  // If |user_card_view_| is clickable, this is a ButtonFromView that wraps it.
+  // If |user_card_view_| is not clickable, this will be equal to
+  // |user_card_view_|.
+  views::View* user_card_container_ = nullptr;
+
+  // The |UserCardView| for the active user.
+  UserCardView* user_card_view_ = nullptr;
 
   // This is the owner system tray item of this view.
   SystemTrayItem* owner_;
 
-  // True if |user_card_view_| is a |ButtonFromView| - otherwise it is only
-  // a |UserCardView|.
-  bool is_user_card_button_;
-
-  views::View* logout_button_;
-  std::unique_ptr<views::Widget> add_menu_option_;
+  views::View* logout_button_ = nullptr;
+  std::unique_ptr<views::Widget> user_dropdown_widget_;
 
   // False when the add user panel is visible but not activatable.
-  bool add_user_enabled_;
+  bool add_user_enabled_ = true;
 
   // The focus manager which we use to detect focus changes.
-  views::FocusManager* focus_manager_;
+  views::FocusManager* focus_manager_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(UserView);
 };

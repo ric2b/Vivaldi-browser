@@ -4,18 +4,10 @@
 
 #include "platform/graphics/compositing/PaintArtifactCompositor.h"
 
-#include <algorithm>
-#include <memory>
-#include <utility>
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/picture_layer.h"
-#include "cc/paint/compositing_display_item.h"
 #include "cc/paint/display_item_list.h"
-#include "cc/paint/drawing_display_item.h"
-#include "cc/paint/filter_display_item.h"
-#include "cc/paint/float_clip_display_item.h"
-#include "cc/paint/transform_display_item.h"
 #include "cc/trees/layer_tree_host.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -23,7 +15,6 @@
 #include "platform/graphics/compositing/PropertyTreeManager.h"
 #include "platform/graphics/paint/ClipPaintPropertyNode.h"
 #include "platform/graphics/paint/DisplayItem.h"
-#include "platform/graphics/paint/DrawingDisplayItem.h"
 #include "platform/graphics/paint/ForeignLayerDisplayItem.h"
 #include "platform/graphics/paint/GeometryMapper.h"
 #include "platform/graphics/paint/PaintArtifact.h"
@@ -31,20 +22,10 @@
 #include "platform/graphics/paint/RasterInvalidationTracking.h"
 #include "platform/graphics/paint/ScrollPaintPropertyNode.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
-#include "platform/wtf/Allocator.h"
-#include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebLayer.h"
-#include "ui/gfx/geometry/point.h"
-#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/geometry/rect_f.h"
-#include "ui/gfx/geometry/size.h"
-#include "ui/gfx/geometry/size_conversions.h"
-#include "ui/gfx/geometry/size_f.h"
-#include "ui/gfx/skia_util.h"
 
 namespace blink {
 
@@ -89,7 +70,7 @@ class PaintArtifactCompositor::ContentLayerClientImpl
   void AddPaintChunkDebugData(std::unique_ptr<JSONArray> json) {
     paint_chunk_debug_data_.push_back(std::move(json));
   }
-  void ClearPaintChunkDebugData() { paint_chunk_debug_data_.Clear(); }
+  void ClearPaintChunkDebugData() { paint_chunk_debug_data_.clear(); }
 
   // cc::ContentLayerClient
   gfx::Rect PaintableRegion() override { return paintable_region_; }
@@ -110,7 +91,7 @@ class PaintArtifactCompositor::ContentLayerClientImpl
       return;
 
     if (RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled())
-      tracking->tracked_raster_invalidations.Clear();
+      tracking->invalidations.clear();
     else
       CcLayersRasterInvalidationTrackingMap().Remove(cc_picture_layer_.get());
   }
@@ -119,28 +100,28 @@ class PaintArtifactCompositor::ContentLayerClientImpl
     RasterInvalidationTracking* tracking =
         CcLayersRasterInvalidationTrackingMap().Find(cc_picture_layer_.get());
     if (tracking)
-      return !tracking->tracked_raster_invalidations.IsEmpty();
+      return !tracking->invalidations.IsEmpty();
     return false;
   }
 
-  void SetNeedsDisplayRect(const gfx::Rect& rect,
-                           RasterInvalidationInfo* raster_invalidation_info) {
+  void SetNeedsDisplayRect(const gfx::Rect& rect) {
     cc_picture_layer_->SetNeedsDisplayRect(rect);
+  }
 
-    if (!raster_invalidation_info || rect.IsEmpty())
-      return;
-
-    RasterInvalidationTracking& tracking =
+  void AddTrackedRasterInvalidations(
+      const RasterInvalidationTracking& tracking) {
+    auto& cc_tracking =
         CcLayersRasterInvalidationTrackingMap().Add(cc_picture_layer_.get());
+    cc_tracking.invalidations.AppendVector(tracking.invalidations);
 
-    tracking.tracked_raster_invalidations.push_back(*raster_invalidation_info);
-
-    if (RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled()) {
+    if (!RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled())
+      return;
+    for (const auto& info : tracking.invalidations) {
       // TODO(crbug.com/496260): Some antialiasing effects overflow the paint
       // invalidation rect.
-      IntRect r = raster_invalidation_info->rect;
+      IntRect r = info.rect;
       r.Inflate(1);
-      tracking.raster_invalidation_region_since_last_paint.Unite(r);
+      cc_tracking.invalidation_region_since_last_paint.Unite(r);
     }
   }
 
@@ -190,16 +171,9 @@ PaintArtifactCompositor::PaintArtifactCompositor() {
   root_layer_ = cc::Layer::Create();
   web_layer_ = Platform::Current()->CompositorSupport()->CreateLayerFromCCLayer(
       root_layer_.get());
-  is_tracking_raster_invalidations_ = false;
 }
 
 PaintArtifactCompositor::~PaintArtifactCompositor() {}
-
-void PaintArtifactCompositor::SetTracksRasterInvalidations(
-    bool tracks_paint_invalidations) {
-  ResetTrackedRasterInvalidations();
-  is_tracking_raster_invalidations_ = tracks_paint_invalidations;
-}
 
 void PaintArtifactCompositor::ResetTrackedRasterInvalidations() {
   for (auto& client : content_layer_clients_)
@@ -308,12 +282,6 @@ PaintArtifactCompositor::CompositedLayerForPendingLayer(
   content_layer_client->ClearPaintChunkDebugData();
 
   for (const auto& paint_chunk : pending_layer.paint_chunks) {
-    RasterInvalidationTracking* raster_tracking =
-        tracking_map ? tracking_map->Find(paint_chunk) : nullptr;
-    DCHECK(!raster_tracking ||
-           raster_tracking->tracked_raster_invalidations.size() ==
-               paint_chunk->raster_invalidation_rects.size());
-
     if (store_debug_info) {
       content_layer_client->AddPaintChunkDebugData(
           paint_artifact.GetDisplayItemList().SubsequenceAsJSON(
@@ -322,10 +290,8 @@ PaintArtifactCompositor::CompositedLayerForPendingLayer(
                   DisplayItemList::kShownOnlyDisplayItemTypes));
     }
 
-    for (unsigned index = 0;
-         index < paint_chunk->raster_invalidation_rects.size(); ++index) {
-      IntRect rect(
-          EnclosingIntRect(paint_chunk->raster_invalidation_rects[index]));
+    for (const auto& r : paint_chunk->raster_invalidation_rects) {
+      IntRect rect(EnclosingIntRect(r));
       gfx::Rect cc_invalidation_rect(rect.X(), rect.Y(),
                                      std::max(0, rect.Width()),
                                      std::max(0, rect.Height()));
@@ -334,12 +300,12 @@ PaintArtifactCompositor::CompositedLayerForPendingLayer(
       // Raster paintChunk.rasterInvalidationRects is in the space of the
       // containing transform node, so need to subtract off the layer offset.
       cc_invalidation_rect.Offset(-cc_combined_bounds.OffsetFromOrigin());
-      content_layer_client->SetNeedsDisplayRect(
-          cc_invalidation_rect,
-          raster_tracking
-              ? &raster_tracking->tracked_raster_invalidations[index]
-              : nullptr);
+      content_layer_client->SetNeedsDisplayRect(cc_invalidation_rect);
     }
+
+    if (auto* raster_tracking =
+            tracking_map ? tracking_map->Find(paint_chunk) : nullptr)
+      content_layer_client->AddTrackedRasterInvalidations(*raster_tracking);
   }
 
   new_content_layer_clients.push_back(std::move(content_layer_client));
@@ -493,11 +459,49 @@ bool PaintArtifactCompositor::CanDecompositeEffect(
   return true;
 }
 
+static bool EffectGroupContainsChunk(
+    const EffectPaintPropertyNode& group_effect,
+    const PaintChunk& chunk) {
+  const EffectPaintPropertyNode* effect =
+      chunk.properties.property_tree_state.Effect();
+  return effect == &group_effect ||
+         StrictChildOfAlongPath(&group_effect, effect);
+}
+
+static bool SkipGroupIfEffectivelyInvisible(
+    const PaintArtifact& paint_artifact,
+    const EffectPaintPropertyNode& current_group,
+    Vector<PaintChunk>::const_iterator& chunk_it) {
+  // The lower bound of visibility is considered to be 0.0004f < 1/2048. With
+  // 10-bit color channels (only available on the newest Macs as of 2016;
+  // otherwise it's 8-bit), we see that an alpha of 1/2048 or less leads to a
+  // color output of less than 0.5 in all channels, hence not visible.
+  static const float kMinimumVisibleOpacity = 0.0004f;
+  if (current_group.Opacity() >= kMinimumVisibleOpacity ||
+      current_group.HasDirectCompositingReasons()) {
+    return false;
+  }
+
+  // Fast-forward to just past the end of the chunk sequence within this
+  // effect group.
+  DCHECK(EffectGroupContainsChunk(current_group, *chunk_it));
+  while (++chunk_it != paint_artifact.PaintChunks().end()) {
+    if (!EffectGroupContainsChunk(current_group, *chunk_it))
+      break;
+  }
+  return true;
+}
+
 void PaintArtifactCompositor::LayerizeGroup(
     const PaintArtifact& paint_artifact,
     Vector<PendingLayer>& pending_layers,
     const EffectPaintPropertyNode& current_group,
     Vector<PaintChunk>::const_iterator& chunk_it) {
+  // Skip paint chunks that are effectively invisible due to opacity and don't
+  // have a direct compositing reason.
+  if (SkipGroupIfEffectivelyInvisible(paint_artifact, current_group, chunk_it))
+    return;
+
   size_t first_layer_in_current_group = pending_layers.size();
   // The worst case time complexity of the algorithm is O(pqd), where
   // p = the number of paint chunks.
@@ -603,22 +607,30 @@ void PaintArtifactCompositor::Update(
 
   DCHECK(root_layer_);
 
-  cc::LayerTreeHost* layer_tree_host = root_layer_->layer_tree_host();
-
   // The tree will be null after detaching and this update can be ignored.
   // See: WebViewImpl::detachPaintArtifactCompositor().
-  if (!layer_tree_host)
+  cc::LayerTreeHost* host = root_layer_->layer_tree_host();
+  if (!host)
     return;
 
   if (extra_data_for_testing_enabled_)
     extra_data_for_testing_ = WTF::WrapUnique(new ExtraDataForTesting);
 
+  // Unregister element ids for all layers. For now we rely on the
+  // element id being set on the layer, but we'll both be removing
+  // that for SPv2 soon. We may also shift to having multiple element
+  // ids per layer. When we do either of these, we'll need to keep
+  // around the element ids for unregistering in some other manner.
+  for (auto child : root_layer_->children()) {
+    host->UnregisterElement(child->element_id(), cc::ElementListType::ACTIVE,
+                            child.get());
+  }
   root_layer_->RemoveAllChildren();
 
   root_layer_->set_property_tree_sequence_number(
       g_s_property_tree_sequence_number);
 
-  PropertyTreeManager property_tree_manager(*layer_tree_host->property_trees(),
+  PropertyTreeManager property_tree_manager(*host->property_trees(),
                                             root_layer_.get(),
                                             g_s_property_tree_sequence_number);
 
@@ -644,13 +656,26 @@ void PaintArtifactCompositor::Update(
 
     layer->set_offset_to_transform_parent(layer_offset);
     CompositorElementId element_id =
-        pending_layer.property_tree_state.GetCompositorElementId();
+        pending_layer.property_tree_state.GetCompositorElementId(
+            composited_element_ids);
     if (element_id) {
+      // TODO(wkorman): Cease setting element id on layer once
+      // animation subsystem no longer requires element id to layer
+      // map. http://crbug.com/709137
       layer->SetElementId(element_id);
       composited_element_ids.insert(element_id);
     }
 
     root_layer_->AddChild(layer);
+    // TODO(wkorman): Once we've removed all uses of
+    // LayerTreeHost::{LayerByElementId,element_layers_map} we can
+    // revise element register/unregister to cease passing layer and
+    // only register/unregister element id with the mutator host.
+    if (element_id) {
+      host->RegisterElement(element_id, cc::ElementListType::ACTIVE,
+                            layer.get());
+    }
+
     layer->set_property_tree_sequence_number(g_s_property_tree_sequence_number);
     layer->SetTransformTreeIndex(transform_id);
     layer->SetClipTreeIndex(clip_id);
@@ -662,14 +687,13 @@ void PaintArtifactCompositor::Update(
     if (extra_data_for_testing_enabled_)
       extra_data_for_testing_->content_layers.push_back(layer);
   }
-  content_layer_clients_.Clear();
-  content_layer_clients_.Swap(new_content_layer_clients);
+  content_layer_clients_.clear();
+  content_layer_clients_.swap(new_content_layer_clients);
 
   // Mark the property trees as having been rebuilt.
-  layer_tree_host->property_trees()->sequence_number =
-      g_s_property_tree_sequence_number;
-  layer_tree_host->property_trees()->needs_rebuild = false;
-  layer_tree_host->property_trees()->ResetCachedData();
+  host->property_trees()->sequence_number = g_s_property_tree_sequence_number;
+  host->property_trees()->needs_rebuild = false;
+  host->property_trees()->ResetCachedData();
 
   g_s_property_tree_sequence_number++;
 }
@@ -679,7 +703,7 @@ void PaintArtifactCompositor::ShowDebugData() {
   LOG(ERROR) << LayersAsJSON(kLayerTreeIncludesDebugInfo)
                     ->ToPrettyJSONString()
                     .Utf8()
-                    .Data();
+                    .data();
 }
 #endif
 

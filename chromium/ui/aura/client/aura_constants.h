@@ -36,6 +36,11 @@ enum class WindowEmbedType {
 AURA_EXPORT extern const WindowProperty<bool>* const
     kAccessibilityFocusFallsbackToWidgetKey;
 
+// A property key to store whether activation on pointer event is enabled or
+// not. The default value is true, which means windows are activated when a
+// pointer down event occurs on them.
+AURA_EXPORT extern const WindowProperty<bool>* const kActivateOnPointerKey;
+
 // A property key to store always-on-top flag.
 AURA_EXPORT extern const WindowProperty<bool>* const kAlwaysOnTopKey;
 
@@ -45,9 +50,6 @@ AURA_EXPORT extern const WindowProperty<bool>* const kAnimationsDisabledKey;
 
 // A property key to store the app icon, typically larger for shelf icons, etc.
 AURA_EXPORT extern const WindowProperty<gfx::ImageSkia*>* const kAppIconKey;
-
-// A property key to store the string id of the app associated with this window.
-AURA_EXPORT extern const WindowProperty<std::string*>* const kAppIdKey;
 
 // A property key to store the type of window that will be used to record
 // pointer metrics. See AppType in ash/shared/app_types.h for more details.
@@ -65,6 +67,10 @@ AURA_EXPORT extern const WindowProperty<bool>* const kDrawAttentionKey;
 
 // A property key to store the focus client on the window.
 AURA_EXPORT extern const WindowProperty<FocusClient*>* const kFocusClientKey;
+
+// A bool property key to specify if the window should have a backdrop window
+// (typically black) that covers the desktop behind the window.
+AURA_EXPORT extern const WindowProperty<bool>* const kHasBackdrop;
 
 // A property key to store the host window of a window. This lets
 // WebContentsViews find the windows that should constrain NPAPI plugins.

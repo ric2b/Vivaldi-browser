@@ -86,23 +86,21 @@ const char GpuVideoDecoder::kDecoderName[] = "GpuVideoDecoder";
 // resources.
 enum { kMaxInFlightDecodes = 4 };
 
+struct GpuVideoDecoder::PendingDecoderBuffer {
+  PendingDecoderBuffer(std::unique_ptr<SHMBuffer> s,
+                       const scoped_refptr<DecoderBuffer>& b,
+                       const DecodeCB& done_cb)
+      : shm_buffer(std::move(s)), buffer(b), done_cb(done_cb) {}
+  std::unique_ptr<SHMBuffer> shm_buffer;
+  scoped_refptr<DecoderBuffer> buffer;
+  DecodeCB done_cb;
+};
+
 GpuVideoDecoder::SHMBuffer::SHMBuffer(std::unique_ptr<base::SharedMemory> m,
                                       size_t s)
     : shm(std::move(m)), size(s) {}
 
 GpuVideoDecoder::SHMBuffer::~SHMBuffer() {}
-
-GpuVideoDecoder::PendingDecoderBuffer::PendingDecoderBuffer(
-    SHMBuffer* s,
-    const scoped_refptr<DecoderBuffer>& b,
-    const DecodeCB& done_cb)
-    : shm_buffer(s), buffer(b), done_cb(done_cb) {
-}
-
-GpuVideoDecoder::PendingDecoderBuffer::PendingDecoderBuffer(
-    const PendingDecoderBuffer& other) = default;
-
-GpuVideoDecoder::PendingDecoderBuffer::~PendingDecoderBuffer() {}
 
 GpuVideoDecoder::BufferData::BufferData(int32_t bbid,
                                         base::TimeDelta ts,
@@ -115,17 +113,16 @@ GpuVideoDecoder::BufferData::BufferData(int32_t bbid,
 
 GpuVideoDecoder::BufferData::~BufferData() {}
 
-GpuVideoDecoder::GpuVideoDecoder(GpuVideoAcceleratorFactories* factories,
-                                 const RequestSurfaceCB& request_surface_cb,
-                                 scoped_refptr<MediaLog> media_log)
+GpuVideoDecoder::GpuVideoDecoder(
+    GpuVideoAcceleratorFactories* factories,
+    const RequestOverlayInfoCB& request_overlay_info_cb,
+    MediaLog* media_log)
     : needs_bitstream_conversion_(false),
       factories_(factories),
-      request_surface_cb_(request_surface_cb),
+      request_overlay_info_cb_(request_overlay_info_cb),
       media_log_(media_log),
       vda_initialized_(false),
       state_(kNormal),
-      decoder_texture_target_(0),
-      pixel_format_(PIXEL_FORMAT_UNKNOWN),
       next_picture_buffer_id_(0),
       next_bitstream_buffer_id_(0),
       available_pictures_(0),
@@ -173,7 +170,7 @@ static bool IsCodedSizeSupported(const gfx::Size& coded_size,
 // callsite to always be called with the same stat name (can't parameterize it).
 static void ReportGpuVideoDecoderInitializeStatusToUMAAndRunCB(
     const VideoDecoder::InitCB& cb,
-    scoped_refptr<MediaLog> media_log,
+    MediaLog* media_log,
     bool success) {
   // TODO(xhwang): Report |success| directly.
   PipelineStatus status = success ? PIPELINE_OK : DECODER_ERROR_NOT_SUPPORTED;
@@ -304,31 +301,37 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
   const bool supports_external_output_surface = !!(
       capabilities.flags &
       VideoDecodeAccelerator::Capabilities::SUPPORTS_EXTERNAL_OUTPUT_SURFACE);
-  if (supports_external_output_surface && !request_surface_cb_.is_null()) {
+  if (supports_external_output_surface && !request_overlay_info_cb_.is_null()) {
     const bool requires_restart_for_external_output_surface =
         !(capabilities.flags & VideoDecodeAccelerator::Capabilities::
                                    SUPPORTS_SET_EXTERNAL_OUTPUT_SURFACE);
 
     // If we have a surface request callback we should call it and complete
     // initialization with the returned surface.
-    request_surface_cb_.Run(
+    request_overlay_info_cb_.Run(
         requires_restart_for_external_output_surface,
-        BindToCurrentLoop(base::Bind(&GpuVideoDecoder::OnSurfaceAvailable,
+        BindToCurrentLoop(base::Bind(&GpuVideoDecoder::OnOverlayInfoAvailable,
                                      weak_factory_.GetWeakPtr())));
     return;
   }
 
   // If external surfaces are not supported we can complete initialization now.
-  CompleteInitialization(SurfaceManager::kNoSurfaceID);
+  CompleteInitialization(SurfaceManager::kNoSurfaceID,
+                         base::UnguessableToken());
+
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_MACOSX)
   pipeline_stats::ReportVideoDecoderInitResult(true);
 #endif
 }
 
-// OnSurfaceAvailable() might be called at any time between Initialize() and
+// OnOverlayInfoAvailable() might be called at any time between Initialize() and
 // ~GpuVideoDecoder() so we have to be careful to not make assumptions about
 // the current state.
-void GpuVideoDecoder::OnSurfaceAvailable(int surface_id) {
+// At most one of |surface_id| and |token| should be provided.  The other will
+// be kNoSurfaceID or an empty token, respectively.
+void GpuVideoDecoder::OnOverlayInfoAvailable(
+    int surface_id,
+    const base::Optional<base::UnguessableToken>& token) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
   if (!vda_)
@@ -339,16 +342,18 @@ void GpuVideoDecoder::OnSurfaceAvailable(int surface_id) {
   // SetSurface() before initializing because there is no remote VDA to handle
   // the call yet.
   if (!vda_initialized_) {
-    CompleteInitialization(surface_id);
+    CompleteInitialization(surface_id, token);
     return;
   }
 
   // The VDA must be already initialized (or async initialization is in
   // progress) so we can call SetSurface().
-  vda_->SetSurface(surface_id);
+  vda_->SetSurface(surface_id, token);
 }
 
-void GpuVideoDecoder::CompleteInitialization(int surface_id) {
+void GpuVideoDecoder::CompleteInitialization(
+    int surface_id,
+    const base::Optional<base::UnguessableToken>& token) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
   DCHECK(vda_);
   DCHECK(!init_cb_.is_null());
@@ -358,6 +363,7 @@ void GpuVideoDecoder::CompleteInitialization(int surface_id) {
   vda_config.profile = config_.profile();
   vda_config.cdm_id = cdm_id_;
   vda_config.surface_id = surface_id;
+  vda_config.overlay_routing_token = token;
   vda_config.encryption_scheme = config_.encryption_scheme();
   vda_config.is_deferred_initialization_allowed = true;
   vda_config.initial_expected_coded_size = config_.coded_size();
@@ -473,9 +479,9 @@ void GpuVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
   next_bitstream_buffer_id_ = (next_bitstream_buffer_id_ + 1) & 0x3FFFFFFF;
   DCHECK(
       !base::ContainsKey(bitstream_buffers_in_decoder_, bitstream_buffer.id()));
-  bitstream_buffers_in_decoder_.insert(std::make_pair(
+  bitstream_buffers_in_decoder_.emplace(
       bitstream_buffer.id(),
-      PendingDecoderBuffer(shm_buffer.release(), buffer, decode_cb)));
+      PendingDecoderBuffer(std::move(shm_buffer), buffer, decode_cb));
   DCHECK_LE(static_cast<int>(bitstream_buffers_in_decoder_.size()),
             kMaxInFlightDecodes);
   RecordBufferData(bitstream_buffer, *buffer.get());
@@ -545,26 +551,18 @@ void GpuVideoDecoder::ProvidePictureBuffers(uint32_t count,
 
   std::vector<uint32_t> texture_ids;
   std::vector<gpu::Mailbox> texture_mailboxes;
-  decoder_texture_target_ = texture_target;
 
   if (format == PIXEL_FORMAT_UNKNOWN) {
     format = IsOpaque(config_.format()) ? PIXEL_FORMAT_XRGB : PIXEL_FORMAT_ARGB;
   }
 
-  // TODO(jbauman): Move decoder_texture_target_ and pixel_format_ to the
-  // picture buffer. http://crbug.com/614789
-  if ((pixel_format_ != PIXEL_FORMAT_UNKNOWN) && (pixel_format_ != format)) {
+  if (!factories_->CreateTextures(count * textures_per_buffer, size,
+                                  &texture_ids, &texture_mailboxes,
+                                  texture_target)) {
     NotifyError(VideoDecodeAccelerator::PLATFORM_FAILURE);
     return;
   }
 
-  pixel_format_ = format;
-  if (!factories_->CreateTextures(count * textures_per_buffer, size,
-                                  &texture_ids, &texture_mailboxes,
-                                  decoder_texture_target_)) {
-    NotifyError(VideoDecodeAccelerator::PLATFORM_FAILURE);
-    return;
-  }
   sync_token_ = factories_->CreateSyncToken();
   DCHECK_EQ(count * textures_per_buffer, texture_ids.size());
   DCHECK_EQ(count * textures_per_buffer, texture_mailboxes.size());
@@ -583,8 +581,9 @@ void GpuVideoDecoder::ProvidePictureBuffers(uint32_t count,
       index++;
     }
 
-    picture_buffers.push_back(
-        PictureBuffer(next_picture_buffer_id_++, size, ids, mailboxes));
+    picture_buffers.push_back(PictureBuffer(next_picture_buffer_id_++, size,
+                                            ids, mailboxes, texture_target,
+                                            format));
     bool inserted = assigned_picture_buffers_.insert(std::make_pair(
         picture_buffers.back().id(), picture_buffers.back())).second;
     DCHECK(inserted);
@@ -663,16 +662,16 @@ void GpuVideoDecoder::PictureReady(const media::Picture& picture) {
     visible_rect = gfx::Rect(pb.size());
   }
 
-  DCHECK(decoder_texture_target_);
+  DCHECK(pb.texture_target());
 
   gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes];
   for (size_t i = 0; i < pb.client_texture_ids().size(); ++i) {
     mailbox_holders[i] = gpu::MailboxHolder(pb.texture_mailbox(i), sync_token_,
-                                            decoder_texture_target_);
+                                            pb.texture_target());
   }
 
   scoped_refptr<VideoFrame> frame(VideoFrame::WrapNativeTextures(
-      pixel_format_, mailbox_holders,
+      pb.pixel_format(), mailbox_holders,
       // Always post ReleaseMailbox to avoid deadlock with the compositor when
       // releasing video frames on the media thread; http://crbug.com/710209.
       BindToCurrentLoop(base::Bind(
@@ -693,9 +692,6 @@ void GpuVideoDecoder::PictureReady(const media::Picture& picture) {
     frame->metadata()->SetBoolean(VideoFrameMetadata::WANTS_PROMOTION_HINT,
                                   true);
   }
-#if defined(OS_WIN)
-  frame->metadata()->SetBoolean(VideoFrameMetadata::DECODER_OWNS_FRAME, true);
-#endif
 
   if (requires_texture_copy_)
     frame->metadata()->SetBoolean(VideoFrameMetadata::COPY_REQUIRED, true);
@@ -782,14 +778,14 @@ std::unique_ptr<GpuVideoDecoder::SHMBuffer> GpuVideoDecoder::GetSHM(
       return NULL;
     return base::MakeUnique<SHMBuffer>(std::move(shm), size_to_allocate);
   }
-  std::unique_ptr<SHMBuffer> ret(available_shm_segments_.back());
+  std::unique_ptr<SHMBuffer> ret(std::move(available_shm_segments_.back()));
   available_shm_segments_.pop_back();
   return ret;
 }
 
 void GpuVideoDecoder::PutSHM(std::unique_ptr<SHMBuffer> shm_buffer) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
-  available_shm_segments_.push_back(shm_buffer.release());
+  available_shm_segments_.push_back(std::move(shm_buffer));
 }
 
 void GpuVideoDecoder::NotifyEndOfBitstreamBuffer(int32_t id) {
@@ -804,7 +800,7 @@ void GpuVideoDecoder::NotifyEndOfBitstreamBuffer(int32_t id) {
     return;
   }
 
-  PutSHM(base::WrapUnique(it->second.shm_buffer));
+  PutSHM(std::move(it->second.shm_buffer));
   it->second.done_cb.Run(state_ == kError ? DecodeStatus::DECODE_ERROR
                                           : DecodeStatus::OK);
   bitstream_buffers_in_decoder_.erase(it);
@@ -820,18 +816,13 @@ GpuVideoDecoder::~GpuVideoDecoder() {
 
   if (!init_cb_.is_null())
     base::ResetAndReturn(&init_cb_).Run(false);
-  if (!request_surface_cb_.is_null())
-    base::ResetAndReturn(&request_surface_cb_).Run(false, SurfaceCreatedCB());
-
-  for (size_t i = 0; i < available_shm_segments_.size(); ++i) {
-    delete available_shm_segments_[i];
-  }
-  available_shm_segments_.clear();
+  if (!request_overlay_info_cb_.is_null())
+    base::ResetAndReturn(&request_overlay_info_cb_)
+        .Run(false, ProvideOverlayInfoCB());
 
   for (std::map<int32_t, PendingDecoderBuffer>::iterator it =
            bitstream_buffers_in_decoder_.begin();
        it != bitstream_buffers_in_decoder_.end(); ++it) {
-    delete it->second.shm_buffer;
     it->second.done_cb.Run(DecodeStatus::ABORTED);
   }
   bitstream_buffers_in_decoder_.clear();

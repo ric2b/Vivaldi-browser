@@ -12,6 +12,7 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
@@ -61,7 +62,6 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
-#include "ui/base/dragdrop/drag_utils.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
@@ -821,7 +821,7 @@ void WebContentsViewAura::CreateView(
   DCHECK(aura::Env::GetInstanceDontCreate());
   window_ = base::MakeUnique<aura::Window>(this);
   window_->set_owned_by_parent(false);
-  window_->SetType(ui::wm::WINDOW_TYPE_CONTROL);
+  window_->SetType(aura::client::WINDOW_TYPE_CONTROL);
   window_->SetName("WebContentsViewAura");
   window_->Init(ui::LAYER_NOT_DRAWN);
   window_->AddObserver(this);
@@ -964,7 +964,7 @@ void WebContentsViewAura::StartDragging(
   }
 
   // Grab a weak pointer to the RenderWidgetHost, since it can be destroyed
-  // during the drag and drop nested message loop in StartDragAndDrop.
+  // during the drag and drop nested run loop in StartDragAndDrop.
   // For example, the RenderWidgetHost can be deleted if a cross-process
   // transfer happens while dragging, since the RenderWidgetHost is deleted in
   // that case.
@@ -985,7 +985,7 @@ void WebContentsViewAura::StartDragging(
       std::move(provider));  // takes ownership of |provider|.
 
   if (!image.isNull())
-    drag_utils::SetDragImageOnDataObject(image, image_offset, &data);
+    data.provider().SetDragImage(image, image_offset);
 
   std::unique_ptr<WebDragSourceAura> drag_source(
       new WebDragSourceAura(GetNativeView(), web_contents_));
@@ -1041,6 +1041,10 @@ void WebContentsViewAura::UpdateDragCursor(blink::WebDragOperation operation) {
 
 void WebContentsViewAura::GotFocus() {
   web_contents_->NotifyWebContentsFocused();
+}
+
+void WebContentsViewAura::LostFocus() {
+  web_contents_->NotifyWebContentsLostFocus();
 }
 
 void WebContentsViewAura::TakeFocus(bool reverse) {

@@ -19,6 +19,7 @@
 #include "net/base/request_priority.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/http/http_response_headers.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_context.h"
 
 // TODO(eroman):
@@ -123,6 +124,9 @@ int ProxyScriptFetcherImpl::Fetch(
   DCHECK(!callback.is_null());
   DCHECK(text);
 
+  if (!url_request_context_)
+    return ERR_CONTEXT_SHUT_DOWN;
+
   // Handle base-64 encoded data-urls that contain custom PAC scripts.
   if (url.SchemeIs("data")) {
     std::string mime_type;
@@ -138,8 +142,39 @@ int ProxyScriptFetcherImpl::Fetch(
   DCHECK(fetch_start_time_.is_null());
   fetch_start_time_ = base::TimeTicks::Now();
 
-  cur_request_ =
-      url_request_context_->CreateRequest(url, DEFAULT_PRIORITY, this);
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("proxy_script_fetcher", R"(
+        semantics {
+          sender: "Proxy Service"
+          description:
+            "Fetches candidate URLs for proxy auto-config (PAC) scripts. This "
+            "may be carried out as part of the web proxy auto-discovery "
+            "protocol, or because an explicit PAC script is specified by the "
+            "proxy settings. The source of these URLs may be user-specified "
+            "(when part of proxy settings), or may be provided by the network "
+            "(DNS or DHCP based discovery). Note that a user may not be using "
+            "a proxy, but determining that (i.e. auto-detect) may cause these "
+            "fetches."
+          trigger:
+            "PAC URLs may be fetched on initial start, every time the network "
+            "changes, whenever the proxy settings change, or periodically on a "
+            "timer to check for changes."
+          data: "None."
+          destination: OTHER
+        }
+        policy {
+          cookies_allowed: true
+          cookies_store: "user"
+          setting:
+            "This feature cannot be disabled by settings. This request is only "
+            "made if the effective proxy settings include either auto-detect, "
+            "or specify a PAC script."
+          policy_exception_justification: "Not implemented."
+        })");
+  // Use highest priority, so if socket pools are being used for other types of
+  // requests, PAC requests are aren't blocked on them.
+  cur_request_ = url_request_context_->CreateRequest(url, MAXIMUM_PRIORITY,
+                                                     this, traffic_annotation);
   cur_request_->set_method("GET");
 
   // Make sure that the PAC script is downloaded using a direct connection,
@@ -150,9 +185,11 @@ int ProxyScriptFetcherImpl::Fetch(
   // If the PAC script is hosted on an HTTPS server we bypass revocation
   // checking in order to avoid a circular dependency when attempting to fetch
   // the OCSP response or CRL. We could make the revocation check go direct but
-  // the proxy might be the only way to the outside world.
+  // the proxy might be the only way to the outside world.  IGNORE_LIMITS is
+  // used to avoid blocking proxy resolution on other network requests.
   cur_request_->SetLoadFlags(LOAD_BYPASS_PROXY | LOAD_DISABLE_CACHE |
-                             LOAD_DISABLE_CERT_REVOCATION_CHECKING);
+                             LOAD_DISABLE_CERT_REVOCATION_CHECKING |
+                             LOAD_IGNORE_LIMITS);
 
   // Save the caller's info for notification on completion.
   callback_ = callback;
@@ -181,6 +218,15 @@ void ProxyScriptFetcherImpl::Cancel() {
 
 URLRequestContext* ProxyScriptFetcherImpl::GetRequestContext() const {
   return url_request_context_;
+}
+
+void ProxyScriptFetcherImpl::OnShutdown() {
+  url_request_context_ = nullptr;
+
+  if (cur_request_) {
+    result_code_ = ERR_CONTEXT_SHUT_DOWN;
+    FetchCompleted();
+  }
 }
 
 void ProxyScriptFetcherImpl::OnAuthRequired(URLRequest* request,
@@ -341,7 +387,7 @@ void ProxyScriptFetcherImpl::OnTimeout(int id) {
 
   DCHECK(cur_request_.get());
   result_code_ = ERR_TIMED_OUT;
-  cur_request_->Cancel();
+  FetchCompleted();
 }
 
 }  // namespace net

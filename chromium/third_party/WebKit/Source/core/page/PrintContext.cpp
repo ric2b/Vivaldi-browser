@@ -20,6 +20,8 @@
 
 #include "core/page/PrintContext.h"
 
+#include <utility>
+
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/layout/LayoutView.h"
@@ -29,19 +31,6 @@
 namespace blink {
 
 namespace {
-
-// By shrinking to a width of 75% (1.333f) we will render the correct physical
-// dimensions in paged media (i.e. cm, pt,). The shrinkage used
-// to be 80% (1.25f) to match other browsers - they have since moved on.
-// Wide pages will be scaled down more than this.
-const float kPrintingMinimumShrinkFactor = 1.333f;
-
-// This number determines how small we are willing to reduce the page content
-// in order to accommodate the widest line. If the page would have to be
-// reduced smaller to make the widest line fit, we just clip instead (this
-// behavior matches MacIE and Mozilla, at least).
-// TODO(rhogan): Decide if this quirk is still required.
-const float kPrintingMaximumShrinkFactor = 2;
 
 LayoutBoxModelObject* EnclosingBoxModelObject(LayoutObject* object) {
   while (object && !object->IsBoxModelObject())
@@ -65,46 +54,22 @@ PrintContext::~PrintContext() {
   DCHECK(!is_printing_);
 }
 
-void PrintContext::ComputePageRects(const FloatRect& print_rect,
-                                    float header_height,
-                                    float footer_height,
-                                    float user_scale_factor,
-                                    float& out_page_height) {
-  page_rects_.Clear();
-  out_page_height = 0;
+void PrintContext::ComputePageRects(const FloatSize& print_size) {
+  page_rects_.clear();
 
   if (!IsFrameValid())
     return;
 
-  if (user_scale_factor <= 0) {
-    DLOG(ERROR) << "userScaleFactor has bad value " << user_scale_factor;
-    return;
-  }
-
   LayoutViewItem view = frame_->GetDocument()->GetLayoutViewItem();
   const IntRect& document_rect = view.DocumentRect();
   FloatSize page_size = frame_->ResizePageRectsKeepingRatio(
-      FloatSize(print_rect.Width(), print_rect.Height()),
-      FloatSize(document_rect.Width(), document_rect.Height()));
-  float page_width = page_size.Width();
-  float page_height = page_size.Height();
-
-  out_page_height =
-      page_height;  // this is the height of the page adjusted by margins
-  page_height -= header_height + footer_height;
-
-  if (page_height <= 0) {
-    DLOG(ERROR) << "pageHeight has bad value " << page_height;
-    return;
-  }
-
-  ComputePageRectsWithPageSizeInternal(FloatSize(
-      page_width / user_scale_factor, page_height / user_scale_factor));
+      print_size, FloatSize(document_rect.Width(), document_rect.Height()));
+  ComputePageRectsWithPageSizeInternal(page_size);
 }
 
 void PrintContext::ComputePageRectsWithPageSize(
     const FloatSize& page_size_in_pixels) {
-  page_rects_.Clear();
+  page_rects_.clear();
   ComputePageRectsWithPageSizeInternal(page_size_in_pixels);
 }
 
@@ -129,37 +94,21 @@ void PrintContext::ComputePageRectsWithPageSizeInternal(
   int page_logical_height = is_horizontal ? page_height : page_width;
   int page_logical_width = is_horizontal ? page_width : page_height;
 
-  int inline_direction_start;
-  int inline_direction_end;
-  int block_direction_start;
-  int block_direction_end;
-  if (is_horizontal) {
-    if (view.Style()->IsFlippedBlocksWritingMode()) {
-      block_direction_start = doc_rect.MaxY();
-      block_direction_end = doc_rect.Y();
-    } else {
-      block_direction_start = doc_rect.Y();
-      block_direction_end = doc_rect.MaxY();
-    }
-    inline_direction_start =
-        view.Style()->IsLeftToRightDirection() ? doc_rect.X() : doc_rect.MaxX();
-    inline_direction_end =
-        view.Style()->IsLeftToRightDirection() ? doc_rect.MaxX() : doc_rect.X();
-  } else {
-    if (view.Style()->IsFlippedBlocksWritingMode()) {
-      block_direction_start = doc_rect.MaxX();
-      block_direction_end = doc_rect.X();
-    } else {
-      block_direction_start = doc_rect.X();
-      block_direction_end = doc_rect.MaxX();
-    }
-    inline_direction_start =
-        view.Style()->IsLeftToRightDirection() ? doc_rect.Y() : doc_rect.MaxY();
-    inline_direction_end =
-        view.Style()->IsLeftToRightDirection() ? doc_rect.MaxY() : doc_rect.Y();
+  int inline_direction_start = doc_rect.X();
+  int inline_direction_end = doc_rect.MaxX();
+  int block_direction_start = doc_rect.Y();
+  int block_direction_end = doc_rect.MaxY();
+  if (!is_horizontal) {
+    std::swap(block_direction_start, inline_direction_start);
+    std::swap(block_direction_end, inline_direction_end);
   }
+  if (!view.Style()->IsLeftToRightDirection())
+    std::swap(inline_direction_start, inline_direction_end);
+  if (view.Style()->IsFlippedBlocksWritingMode())
+    std::swap(block_direction_start, block_direction_end);
 
-  unsigned page_count = ceilf((float)doc_logical_height / page_logical_height);
+  unsigned page_count =
+      ceilf(static_cast<float>(doc_logical_height) / page_logical_height);
   for (unsigned i = 0; i < page_count; ++i) {
     int page_logical_top =
         block_direction_end > block_direction_start
@@ -177,9 +126,9 @@ void PrintContext::ComputePageRectsWithPageSizeInternal(
   }
 }
 
-void PrintContext::begin(float width, float height) {
-  ASSERT(width > 0);
-  ASSERT(height > 0);
+void PrintContext::BeginPrintMode(float width, float height) {
+  DCHECK_GT(width, 0);
+  DCHECK_GT(height, 0);
 
   // This function can be called multiple times to adjust printing parameters
   // without going back to screen mode.
@@ -197,12 +146,12 @@ void PrintContext::begin(float width, float height) {
       kPrintingMaximumShrinkFactor / kPrintingMinimumShrinkFactor);
 }
 
-void PrintContext::end() {
-  ASSERT(is_printing_);
+void PrintContext::EndPrintMode() {
+  DCHECK(is_printing_);
   is_printing_ = false;
   if (IsFrameValid())
     frame_->SetPrinting(false, FloatSize(), FloatSize(), 0);
-  linked_destinations_.Clear();
+  linked_destinations_.clear();
   linked_destinations_valid_ = false;
 }
 
@@ -214,7 +163,7 @@ int PrintContext::PageNumberForElement(Element* element,
   LocalFrame* frame = element->GetDocument().GetFrame();
   FloatRect page_rect(FloatPoint(0, 0), page_size_in_pixels);
   ScopedPrintContext print_context(frame);
-  print_context->begin(page_rect.Width(), page_rect.Height());
+  print_context->BeginPrintMode(page_rect.Width(), page_rect.Height());
 
   LayoutBoxModelObject* box =
       EnclosingBoxModelObject(element->GetLayoutObject());
@@ -271,8 +220,8 @@ void PrintContext::OutputLinkedDestinations(GraphicsContext& context,
     if (!layout_object || !layout_object->GetFrameView())
       continue;
     IntRect bounding_box = layout_object->AbsoluteBoundingBoxRect();
-    // TODO(bokan): boundingBox looks to be in content coordinates but
-    // convertToRootFrame doesn't apply scroll offsets when converting up to
+    // TODO(bokan): |bounding_box| looks to be in content coordinates but
+    // ConvertToRootFrame() doesn't apply scroll offsets when converting up to
     // the root frame.
     IntPoint point = layout_object->GetFrameView()->ConvertToRootFrame(
         bounding_box.Location());
@@ -292,7 +241,7 @@ String PrintContext::PageProperty(LocalFrame* frame,
   // Any non-zero size is OK here. We don't care about actual layout. We just
   // want to collect @page rules and figure out what declarations apply on a
   // given page (that may or may not exist).
-  print_context->begin(800, 1000);
+  print_context->BeginPrintMode(800, 1000);
   RefPtr<ComputedStyle> style = document->StyleForPage(page_number);
 
   // Implement formatters for properties we care about.
@@ -344,7 +293,7 @@ int PrintContext::NumberOfPages(LocalFrame* frame,
 
   FloatRect page_rect(FloatPoint(0, 0), page_size_in_pixels);
   ScopedPrintContext print_context(frame);
-  print_context->begin(page_rect.Width(), page_rect.Height());
+  print_context->BeginPrintMode(page_rect.Width(), page_rect.Height());
   // Account for shrink-to-fit.
   FloatSize scaled_page_size = page_size_in_pixels;
   scaled_page_size.Scale(frame->View()->ContentsSize().Width() /
@@ -367,7 +316,7 @@ ScopedPrintContext::ScopedPrintContext(LocalFrame* frame)
     : context_(new PrintContext(frame)) {}
 
 ScopedPrintContext::~ScopedPrintContext() {
-  context_->end();
+  context_->EndPrintMode();
 }
 
 }  // namespace blink

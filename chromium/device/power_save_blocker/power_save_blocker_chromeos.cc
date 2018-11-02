@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/sequenced_task_runner.h"
 #include "chromeos/dbus/power_policy_controller.h"
 
 namespace device {
@@ -48,7 +49,7 @@ class PowerSaveBlocker::Delegate
         ui_task_runner_(ui_task_runner) {}
 
   void ApplyBlock() {
-    DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+    DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
     if (!chromeos::PowerPolicyController::IsInitialized())
       return;
 
@@ -68,7 +69,7 @@ class PowerSaveBlocker::Delegate
   }
 
   void RemoveBlock() {
-    DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+    DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
     if (!chromeos::PowerPolicyController::IsInitialized())
       return;
 

@@ -111,14 +111,8 @@ void DeviceChooserContentView::Layout() {
   views::View::Layout();
 }
 
-gfx::Size DeviceChooserContentView::GetPreferredSize() const {
-  constexpr int kHeight = 320;
-  constexpr int kDefaultWidth = 402;
-  int width =
-      ChromeLayoutProvider::Get()->GetDialogPreferredWidth(DialogWidth::MEDIUM);
-  if (!width)
-    width = kDefaultWidth;
-  return gfx::Size(width, kHeight);
+gfx::Size DeviceChooserContentView::CalculatePreferredSize() const {
+  return gfx::Size(402, 320);
 }
 
 int DeviceChooserContentView::RowCount() {

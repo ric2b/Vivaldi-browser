@@ -31,6 +31,7 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/download/download_crx_util.h"
 #include "components/history/content/browser/download_conversions.h"
@@ -77,7 +78,7 @@ class DownloadHistoryData : public base::SupportsUserData::Data {
   explicit DownloadHistoryData(content::DownloadItem* item)
       : state_(NOT_PERSISTED),
         was_restored_from_history_(false) {
-    item->SetUserData(kKey, this);
+    item->SetUserData(kKey, base::WrapUnique(this));
   }
 
   ~DownloadHistoryData() override {}
@@ -314,6 +315,7 @@ void DownloadHistory::QueryCallback(std::unique_ptr<InfoVector> infos) {
     ++history_size_;
   }
   notifier_.GetManager()->CheckForHistoryFilesRemoval();
+  notifier_.GetManager()->PostInitialization();
 
   initial_history_query_complete_ = true;
   for (Observer& observer : observers_)
@@ -487,9 +489,10 @@ void DownloadHistory::ScheduleRemoveDownload(uint32_t download_id) {
   // For database efficiency, batch removals together if they happen all at
   // once.
   if (removing_ids_.empty()) {
-    content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&DownloadHistory::RemoveDownloadsBatch,
-                   weak_ptr_factory_.GetWeakPtr()));
+    content::BrowserThread::PostTask(
+        content::BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&DownloadHistory::RemoveDownloadsBatch,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
   removing_ids_.insert(download_id);
 }

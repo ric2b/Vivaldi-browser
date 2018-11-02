@@ -45,6 +45,7 @@
 #include "chrome/common/features.h"
 #include "chrome/common/url_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
@@ -100,9 +101,9 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/download/intercept_download_resource_throttle.h"
-#include "chrome/browser/android/offline_pages/background_loader_offliner.h"
 #include "chrome/browser/android/offline_pages/downloads/resource_throttle.h"
 #include "chrome/browser/loader/data_reduction_proxy_resource_throttle_android.h"
+#include "chrome/browser/offline_pages/background_loader_offliner.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #endif
 
@@ -313,7 +314,7 @@ void LogMainFrameMetricsOnUIThread(const GURL& url,
         TemplateURLServiceFactory::GetForProfile(profile);
     if (!template_url_service)
       return;
-    TemplateURL* default_provider =
+    const TemplateURL* default_provider =
         template_url_service->GetDefaultSearchProvider();
     if (!default_provider)
       return;
@@ -347,8 +348,30 @@ void LogMainFrameMetricsOnUIThread(const GURL& url,
   }
 }
 
+void NotifyUIThreadOfRequestStarted(
+    const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
+    const content::GlobalRequestID& request_id,
+    ResourceType resource_type,
+    base::TimeTicks request_creation_time) {
+  content::WebContents* web_contents = web_contents_getter.Run();
+
+  if (!web_contents)
+    return;
+
+  page_load_metrics::MetricsWebContentsObserver* metrics_observer =
+      page_load_metrics::MetricsWebContentsObserver::FromWebContents(
+          web_contents);
+
+  if (metrics_observer) {
+    metrics_observer->OnRequestStarted(request_id, resource_type,
+                                       request_creation_time);
+  }
+}
+
 void NotifyUIThreadOfRequestComplete(
     const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
+    const content::ResourceRequestInfo::FrameTreeNodeIdGetter&
+        frame_tree_node_id_getter,
     const GURL& url,
     const content::GlobalRequestID& request_id,
     ResourceType resource_type,
@@ -383,10 +406,10 @@ void NotifyUIThreadOfRequestComplete(
       page_load_metrics::MetricsWebContentsObserver::FromWebContents(
           web_contents);
   if (metrics_observer) {
-    metrics_observer->OnRequestComplete(request_id, resource_type, was_cached,
-                                        std::move(data_reduction_proxy_data),
-                                        raw_body_bytes, original_content_length,
-                                        request_creation_time);
+    metrics_observer->OnRequestComplete(
+        url, frame_tree_node_id_getter.Run(), request_id, resource_type,
+        was_cached, std::move(data_reduction_proxy_data), raw_body_bytes,
+        original_content_length, request_creation_time);
   }
 }
 
@@ -401,8 +424,9 @@ ChromeResourceDispatcherHostDelegate::ChromeResourceDispatcherHostDelegate()
       {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(content::ServiceWorkerContext::AddExcludedHeadersForFetchEvent,
-                 variations::GetVariationHeaderNames()));
+      base::BindOnce(
+          content::ServiceWorkerContext::AddExcludedHeadersForFetchEvent,
+          variations::GetVariationHeaderNames()));
 }
 
 ChromeResourceDispatcherHostDelegate::~ChromeResourceDispatcherHostDelegate() {
@@ -447,6 +471,17 @@ void ChromeResourceDispatcherHostDelegate::RequestBeginning(
     safe_browsing_->OnResourceRequest(request);
 
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
+
+  // TODO(petewil): Unify the safe browsing request and the metrics observer
+  // request if possible so we only have to cross to the main thread once.
+  // http://crbug.com/712312.
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&NotifyUIThreadOfRequestStarted,
+                 info->GetWebContentsGetterForRequest(),
+                 info->GetGlobalRequestID(), info->GetResourceType(),
+                 request->creation_time()));
+
   ProfileIOData* io_data = ProfileIOData::FromResourceContext(
       resource_context);
 
@@ -520,8 +555,8 @@ void ChromeResourceDispatcherHostDelegate::DownloadStarting(
         content::ResourceRequestInfo::ForRequest(request);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&NotifyDownloadInitiatedOnUI,
-      info->GetWebContentsGetterForRequest()));
+      base::BindOnce(&NotifyDownloadInitiatedOnUI,
+                     info->GetWebContentsGetterForRequest()));
 
   // If it's from the web, we don't trust it, so we push the throttle on.
   if (is_content_initiated) {
@@ -615,9 +650,9 @@ bool ChromeResourceDispatcherHostDelegate::HandleExternalProtocol(
       url_state == policy::URLBlacklist::URLBlacklistState::URL_IN_WHITELIST;
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&LaunchURL, url, info->GetWebContentsGetterForRequest(),
-                 info->GetPageTransition(), info->HasUserGesture(),
-                 is_whitelisted));
+      base::BindOnce(&LaunchURL, url, info->GetWebContentsGetterForRequest(),
+                     info->GetPageTransition(), info->HasUserGesture(),
+                     is_whitelisted));
   return true;
 }
 
@@ -753,10 +788,10 @@ void ChromeResourceDispatcherHostDelegate::OnStreamCreated(
   bool embedded = info->GetResourceType() != content::RESOURCE_TYPE_MAIN_FRAME;
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&SendExecuteMimeTypeHandlerEvent, base::Passed(&stream),
-                 request->GetExpectedContentSize(), ix->second.extension_id,
-                 ix->second.view_id, embedded, info->GetFrameTreeNodeId(),
-                 info->GetChildID(), info->GetRenderFrameID()));
+      base::BindOnce(&SendExecuteMimeTypeHandlerEvent, base::Passed(&stream),
+                     request->GetExpectedContentSize(), ix->second.extension_id,
+                     ix->second.view_id, embedded, info->GetFrameTreeNodeId(),
+                     info->GetChildID(), info->GetRenderFrameID()));
   stream_target_info_.erase(request);
 #endif
 }
@@ -849,15 +884,16 @@ void ChromeResourceDispatcherHostDelegate::RequestComplete(
 
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&NotifyUIThreadOfRequestComplete,
-                 info->GetWebContentsGetterForRequest(), url_request->url(),
-                 info->GetGlobalRequestID(), info->GetResourceType(),
-                 url_request->was_cached(),
-                 base::Passed(&data_reduction_proxy_data), net_error,
-                 url_request->GetTotalReceivedBytes(),
-                 url_request->GetRawBodyBytes(), original_content_length,
-                 url_request->creation_time(),
-                 base::TimeTicks::Now() - url_request->creation_time()));
+      base::BindOnce(&NotifyUIThreadOfRequestComplete,
+                     info->GetWebContentsGetterForRequest(),
+                     info->GetFrameTreeNodeIdGetterForRequest(),
+                     url_request->url(), info->GetGlobalRequestID(),
+                     info->GetResourceType(), url_request->was_cached(),
+                     base::Passed(&data_reduction_proxy_data), net_error,
+                     url_request->GetTotalReceivedBytes(),
+                     url_request->GetRawBodyBytes(), original_content_length,
+                     url_request->creation_time(),
+                     base::TimeTicks::Now() - url_request->creation_time()));
 }
 
 content::PreviewsState ChromeResourceDispatcherHostDelegate::GetPreviewsState(
@@ -869,16 +905,26 @@ content::PreviewsState ChromeResourceDispatcherHostDelegate::GetPreviewsState(
 
   content::PreviewsState previews_state = content::PREVIEWS_UNSPECIFIED;
 
-  if (data_reduction_proxy_io_data) {
-    if (data_reduction_proxy_io_data->ShouldEnableLoFi(url_request))
+  previews::PreviewsIOData* previews_io_data = io_data->previews_io_data();
+  if (data_reduction_proxy_io_data && previews_io_data) {
+    if (data_reduction_proxy_io_data->ShouldEnableLoFi(url_request,
+                                                       previews_io_data)) {
       previews_state |= content::SERVER_LOFI_ON;
-    if (data_reduction_proxy_io_data->ShouldEnableLitePages(url_request))
+    }
+    if (data_reduction_proxy_io_data->ShouldEnableLitePages(url_request,
+                                                            previews_io_data)) {
       previews_state |= content::SERVER_LITE_PAGE_ON;
+    }
 
-    previews::PreviewsIOData* previews_io_data = io_data->previews_io_data();
-    if (data_reduction_proxy_io_data->IsEnabled() && previews_io_data &&
-        previews_io_data->ShouldAllowPreview(
-            url_request, previews::PreviewsType::CLIENT_LOFI)) {
+    // Check that data saver is enabled, the user isn't opted out of LoFi for
+    // the session, and the user is eligible for previews.
+    if (data_reduction_proxy_io_data->IsEnabled() &&
+        !data_reduction_proxy_io_data->config()->lofi_off() &&
+        previews::params::IsClientLoFiEnabled() &&
+        previews_io_data->ShouldAllowPreviewAtECT(
+            url_request, previews::PreviewsType::LOFI,
+            previews::params::
+                EffectiveConnectionTypeThresholdForClientLoFi())) {
       previews_state |= content::CLIENT_LOFI_ON;
     }
   }
@@ -927,11 +973,12 @@ void ChromeResourceDispatcherHostDelegate::OnAbortedFrameLoad(
     const GURL& url,
     base::TimeDelta request_loading_time) {
   if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI)) {
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
-          base::Bind(&ChromeResourceDispatcherHostDelegate::OnAbortedFrameLoad,
-                    base::Unretained(this), url, request_loading_time));
-      return;
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::BindOnce(
+            &ChromeResourceDispatcherHostDelegate::OnAbortedFrameLoad,
+            base::Unretained(this), url, request_loading_time));
+    return;
   }
 
   std::string metric_name = (request_loading_time.InMilliseconds() < 100 ?

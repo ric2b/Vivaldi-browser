@@ -66,9 +66,9 @@ TEST(IPCMessageTest, BasicMessageTest) {
 
 TEST(IPCMessageTest, ListValue) {
   base::ListValue input;
-  input.Set(0, new base::Value(42.42));
-  input.Set(1, new base::Value("forty"));
-  input.Set(2, base::MakeUnique<base::Value>());
+  input.AppendDouble(42.42);
+  input.AppendString("forty");
+  input.Append(base::MakeUnique<base::Value>());
 
   IPC::Message msg(1, 2, IPC::Message::PRIORITY_NORMAL);
   IPC::WriteParam(&msg, input);
@@ -91,16 +91,16 @@ TEST(IPCMessageTest, DictionaryValue) {
   input.Set("null", base::MakeUnique<base::Value>());
   input.Set("bool", new base::Value(true));
   input.Set("int", new base::Value(42));
-  input.SetWithoutPathExpansion("int.with.dot", new base::Value(43));
+  input.SetIntegerWithoutPathExpansion("int.with.dot", 43);
 
   std::unique_ptr<base::DictionaryValue> subdict(new base::DictionaryValue());
   subdict->Set("str", new base::Value("forty two"));
   subdict->Set("bool", new base::Value(false));
 
   std::unique_ptr<base::ListValue> sublist(new base::ListValue());
-  sublist->Set(0, new base::Value(42.42));
-  sublist->Set(1, new base::Value("forty"));
-  sublist->Set(2, new base::Value("two"));
+  sublist->AppendDouble(42.42);
+  sublist->AppendString("forty");
+  sublist->AppendString("two");
   subdict->Set("list", sublist.release());
 
   input.Set("dict", subdict.release());

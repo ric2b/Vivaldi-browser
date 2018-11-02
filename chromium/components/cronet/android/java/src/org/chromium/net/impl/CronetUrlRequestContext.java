@@ -5,8 +5,6 @@
 package org.chromium.net.impl;
 
 import android.os.ConditionVariable;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.Process;
 
 import org.chromium.base.Log;
@@ -72,7 +70,8 @@ public class CronetUrlRequestContext extends CronetEngineBase {
      */
     private Thread mNetworkThread;
 
-    private boolean mNetworkQualityEstimatorEnabled;
+    private final boolean mNetworkQualityEstimatorEnabled;
+    private final int mNetworkThreadPriority;
 
     /**
      * Locks operations on network quality listeners, because listener
@@ -140,7 +139,7 @@ public class CronetUrlRequestContext extends CronetEngineBase {
     /** Holds CertVerifier data. */
     private String mCertVerifierData;
 
-    private ConditionVariable mStopNetLogCompleted;
+    private volatile ConditionVariable mStopNetLogCompleted;
 
     /**
      * True if a NetLog observer is active.
@@ -150,6 +149,8 @@ public class CronetUrlRequestContext extends CronetEngineBase {
 
     @UsedByReflection("CronetEngine.java")
     public CronetUrlRequestContext(final CronetEngineBuilderImpl builder) {
+        mNetworkQualityEstimatorEnabled = builder.networkQualityEstimatorEnabled();
+        mNetworkThreadPriority = builder.threadPriority(Process.THREAD_PRIORITY_BACKGROUND);
         CronetLibraryLoader.ensureInitialized(builder.getContext(), builder);
         nativeSetMinLogLevel(getLoggingLevel());
         synchronized (mLock) {
@@ -158,28 +159,21 @@ public class CronetUrlRequestContext extends CronetEngineBase {
             if (mUrlRequestContextAdapter == 0) {
                 throw new NullPointerException("Context Adapter creation failed.");
             }
-            mNetworkQualityEstimatorEnabled = builder.networkQualityEstimatorEnabled();
         }
 
-        // Init native Chromium URLRequestContext on main UI thread.
-        Runnable task = new Runnable() {
+        // Init native Chromium URLRequestContext on init thread.
+        CronetLibraryLoader.postToInitThread(new Runnable() {
             @Override
             public void run() {
-                CronetLibraryLoader.ensureInitializedOnMainThread(builder.getContext());
+                CronetLibraryLoader.ensureInitializedOnInitThread(builder.getContext());
                 synchronized (mLock) {
                     // mUrlRequestContextAdapter is guaranteed to exist until
-                    // initialization on main and network threads completes and
+                    // initialization on init and network threads completes and
                     // initNetworkThread is called back on network thread.
-                    nativeInitRequestContextOnMainThread(mUrlRequestContextAdapter);
+                    nativeInitRequestContextOnInitThread(mUrlRequestContextAdapter);
                 }
             }
-        };
-        // Run task immediately or post it to the UI thread.
-        if (Looper.getMainLooper() == Looper.myLooper()) {
-            task.run();
-        } else {
-            new Handler(Looper.getMainLooper()).post(task);
-        }
+        });
     }
 
     @VisibleForTesting
@@ -187,10 +181,8 @@ public class CronetUrlRequestContext extends CronetEngineBase {
         final long urlRequestContextConfig = nativeCreateRequestContextConfig(
                 builder.getUserAgent(), builder.storagePath(), builder.quicEnabled(),
                 builder.getDefaultQuicUserAgentId(), builder.http2Enabled(), builder.sdchEnabled(),
-                builder.dataReductionProxyKey(), builder.dataReductionProxyPrimaryProxy(),
-                builder.dataReductionProxyFallbackProxy(),
-                builder.dataReductionProxySecureProxyCheckUrl(), builder.cacheDisabled(),
-                builder.httpCacheMode(), builder.httpCacheMaxSize(), builder.experimentalOptions(),
+                builder.brotliEnabled(), builder.cacheDisabled(), builder.httpCacheMode(),
+                builder.httpCacheMaxSize(), builder.experimentalOptions(),
                 builder.mockCertVerifier(), builder.networkQualityEstimatorEnabled(),
                 builder.publicKeyPinningBypassForLocalTrustAnchorsEnabled(),
                 builder.certVerifierData());
@@ -253,7 +245,7 @@ public class CronetUrlRequestContext extends CronetEngineBase {
                 throw new IllegalThreadStateException("Cannot shutdown from network thread.");
             }
         }
-        // Wait for init to complete on main and network thread (without lock,
+        // Wait for init to complete on init and network thread (without lock,
         // so other thread could access it).
         mInitCompleted.block();
 
@@ -297,9 +289,9 @@ public class CronetUrlRequestContext extends CronetEngineBase {
                 return;
             }
             checkHaveAdapter();
+            mStopNetLogCompleted = new ConditionVariable();
             nativeStopNetLog(mUrlRequestContextAdapter);
             mIsLogging = false;
-            mStopNetLogCompleted = new ConditionVariable();
         }
         mStopNetLogCompleted.block();
     }
@@ -584,7 +576,7 @@ public class CronetUrlRequestContext extends CronetEngineBase {
         mNetworkThread = Thread.currentThread();
         mInitCompleted.open();
         Thread.currentThread().setName("ChromiumNet");
-        Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+        Process.setThreadPriority(mNetworkThreadPriority);
     }
 
     @SuppressWarnings("unused")
@@ -679,9 +671,7 @@ public class CronetUrlRequestContext extends CronetEngineBase {
     // Native methods are implemented in cronet_url_request_context_adapter.cc.
     private static native long nativeCreateRequestContextConfig(String userAgent,
             String storagePath, boolean quicEnabled, String quicUserAgentId, boolean http2Enabled,
-            boolean sdchEnabled, String dataReductionProxyKey,
-            String dataReductionProxyPrimaryProxy, String dataReductionProxyFallbackProxy,
-            String dataReductionProxySecureProxyCheckUrl, boolean disableCache, int httpCacheMode,
+            boolean sdchEnabled, boolean brotliEnabled, boolean disableCache, int httpCacheMode,
             long httpCacheMaxSize, String experimentalOptions, long mockCertVerifier,
             boolean enableNetworkQualityEstimator,
             boolean bypassPublicKeyPinningForLocalTrustAnchors, String certVerifierData);
@@ -715,7 +705,7 @@ public class CronetUrlRequestContext extends CronetEngineBase {
     private native void nativeGetCertVerifierData(long nativePtr);
 
     @NativeClassQualifiedName("CronetURLRequestContextAdapter")
-    private native void nativeInitRequestContextOnMainThread(long nativePtr);
+    private native void nativeInitRequestContextOnInitThread(long nativePtr);
 
     @NativeClassQualifiedName("CronetURLRequestContextAdapter")
     private native void nativeConfigureNetworkQualityEstimatorForTesting(long nativePtr,

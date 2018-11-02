@@ -25,12 +25,6 @@ namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
-namespace ash {
-
-class AppLaunchId;
-
-namespace launcher {
-
 // Path within the dictionary entries in the prefs::kPinnedLauncherApps list
 // specifying the extension ID of the app to be pinned by that entry.
 extern const char kPinnedAppsPrefAppIDPath[];
@@ -54,36 +48,37 @@ void RegisterChromeLauncherUserPrefs(
     user_prefs::PrefRegistrySyncable* registry);
 
 // Get or set the shelf auto hide behavior preference for a particular display.
-ShelfAutoHideBehavior GetShelfAutoHideBehaviorPref(PrefService* prefs,
-                                                   int64_t display_id);
+ash::ShelfAutoHideBehavior GetShelfAutoHideBehaviorPref(PrefService* prefs,
+                                                        int64_t display_id);
 void SetShelfAutoHideBehaviorPref(PrefService* prefs,
                                   int64_t display_id,
-                                  ShelfAutoHideBehavior behavior);
+                                  ash::ShelfAutoHideBehavior behavior);
 
 // Get or set the shelf alignment preference for a particular display.
-ShelfAlignment GetShelfAlignmentPref(PrefService* prefs, int64_t display_id);
+ash::ShelfAlignment GetShelfAlignmentPref(PrefService* prefs,
+                                          int64_t display_id);
 void SetShelfAlignmentPref(PrefService* prefs,
                            int64_t display_id,
-                           ShelfAlignment alignment);
+                           ash::ShelfAlignment alignment);
 
 // Get the list of pinned apps from preferences.
-std::vector<AppLaunchId> GetPinnedAppsFromPrefs(
+std::vector<ash::ShelfID> GetPinnedAppsFromPrefs(
     const PrefService* prefs,
     LauncherControllerHelper* helper);
 
-// Removes information about pin position from sync model for the app. Note,
-// |app_launch_id| with non-empty launch_id is not supported.
-void RemovePinPosition(Profile* profile, const AppLaunchId& app_launch_id);
+// Removes information about pin position from sync model for the app.
+// Note, |shelf_id| with non-empty launch_id is not supported.
+void RemovePinPosition(Profile* profile, const ash::ShelfID& shelf_id);
 
-// Updates information about pin position in sync model for the app
-// |app_launch_id|. |app_launch_id_before| optionally specifies an app that
-// exists right before the target app. |app_launch_ids_after| optionally
-// specifies sorted by position apps that exist right after the target app.
-// Note, |app_launch_id| with non-empty launch_id is not supported.
+// Updates information about pin position in sync model for the app |shelf_id|.
+// |shelf_id_before| optionally specifies an app that exists right before the
+// target app. |shelf_ids_after| optionally specifies sorted by position apps
+// that exist right after the target app.
+// Note, |shelf_id| with non-empty launch_id is not supported.
 void SetPinPosition(Profile* profile,
-                    const AppLaunchId& app_launch_id,
-                    const AppLaunchId& app_launch_id_before,
-                    const std::vector<AppLaunchId>& app_launch_ids_after);
+                    const ash::ShelfID& shelf_id,
+                    const ash::ShelfID& shelf_id_before,
+                    const std::vector<ash::ShelfID>& shelf_ids_after);
 
 // Used to propagate remote preferences to local during the first run.
 class ChromeLauncherPrefsObserver
@@ -109,8 +104,5 @@ class ChromeLauncherPrefsObserver
 
   DISALLOW_COPY_AND_ASSIGN(ChromeLauncherPrefsObserver);
 };
-
-}  // namespace launcher
-}  // namespace ash
 
 #endif  // CHROME_BROWSER_UI_ASH_CHROME_LAUNCHER_PREFS_H_

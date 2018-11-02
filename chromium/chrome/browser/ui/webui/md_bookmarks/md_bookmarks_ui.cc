@@ -36,9 +36,10 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
                      IDS_MD_BOOKMARK_MANAGER_ADD_BOOKMARK_TITLE);
   AddLocalizedString(source, "addFolderTitle",
                      IDS_MD_BOOKMARK_MANAGER_ADD_FOLDER_TITLE);
-  AddLocalizedString(source, "cancelEdit", IDS_CANCEL);
+  AddLocalizedString(source, "cancel", IDS_CANCEL);
   AddLocalizedString(source, "clearSearch",
                      IDS_MD_BOOKMARK_MANAGER_CLEAR_SEARCH);
+  AddLocalizedString(source, "delete", IDS_DELETE);
   AddLocalizedString(source, "editBookmarkTitle", IDS_BOOKMARK_EDITOR_TITLE);
   AddLocalizedString(source, "editDialogInvalidUrl",
                      IDS_BOOKMARK_MANAGER_INVALID_URL);
@@ -48,6 +49,8 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
                              IDS_BOOKMARK_MANAGER_URL_INPUT_PLACE_HOLDER);
   AddLocalizedString(source, "emptyList",
                      IDS_MD_BOOKMARK_MANAGER_EMPTY_LIST);
+  AddLocalizedString(source, "itemsSelected",
+                     IDS_MD_BOOKMARK_MANAGER_ITEMS_SELECTED);
   AddLocalizedString(source, "menuAddBookmark",
                      IDS_MD_BOOKMARK_MANAGER_MENU_ADD_BOOKMARK);
   AddLocalizedString(source, "menuAddFolder",
@@ -58,6 +61,19 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
   AddLocalizedString(source, "menuEdit", IDS_EDIT);
   AddLocalizedString(source, "menuExport", IDS_MD_BOOKMARK_MANAGER_MENU_EXPORT);
   AddLocalizedString(source, "menuImport", IDS_MD_BOOKMARK_MANAGER_MENU_IMPORT);
+  // TODO(tsergeant): These are not the exact strings specified by UI. Reconcile
+  // the differences between these strings and the work in crbug.com/708815.
+  AddLocalizedString(source, "menuOpenAllNewTab", IDS_BOOKMARK_BAR_OPEN_ALL);
+  AddLocalizedString(source, "menuOpenAllNewWindow",
+                     IDS_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW);
+  AddLocalizedString(source, "menuOpenAllIncognito",
+                     IDS_BOOKMARK_BAR_OPEN_ALL_INCOGNITO);
+  AddLocalizedString(source, "menuOpenNewTab",
+                     IDS_BOOKMARK_BAR_OPEN_IN_NEW_TAB);
+  AddLocalizedString(source, "menuOpenNewWindow",
+                     IDS_BOOKMARK_BAR_OPEN_IN_NEW_WINDOW);
+  AddLocalizedString(source, "menuOpenIncognito",
+                     IDS_BOOKMARK_BAR_OPEN_INCOGNITO);
   AddLocalizedString(source, "menuRename", IDS_MD_BOOKMARK_MANAGER_MENU_RENAME);
   AddLocalizedString(source, "menuSort", IDS_MD_BOOKMARK_MANAGER_MENU_SORT);
   AddLocalizedString(source, "noSearchResults",
@@ -77,6 +93,10 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
   source->AddResourcePath("api_listener.js", IDR_MD_BOOKMARKS_API_LISTENER_JS);
   source->AddResourcePath("app.html", IDR_MD_BOOKMARKS_APP_HTML);
   source->AddResourcePath("app.js", IDR_MD_BOOKMARKS_APP_JS);
+  source->AddResourcePath("command_manager.html",
+                          IDR_MD_BOOKMARKS_COMMAND_MANAGER_HTML);
+  source->AddResourcePath("command_manager.js",
+                          IDR_MD_BOOKMARKS_COMMAND_MANAGER_JS);
   source->AddResourcePath("constants.html", IDR_MD_BOOKMARKS_CONSTANTS_HTML);
   source->AddResourcePath("constants.js", IDR_MD_BOOKMARKS_CONSTANTS_JS);
   source->AddResourcePath("dnd_manager.html",
@@ -102,8 +122,6 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
                           IDR_MD_BOOKMARKS_SHARED_STYLE_HTML);
   source->AddResourcePath("shared_vars.html",
                           IDR_MD_BOOKMARKS_SHARED_VARS_HTML);
-  source->AddResourcePath("sidebar.html", IDR_MD_BOOKMARKS_SIDEBAR_HTML);
-  source->AddResourcePath("sidebar.js", IDR_MD_BOOKMARKS_SIDEBAR_JS);
   source->AddResourcePath("store.html", IDR_MD_BOOKMARKS_STORE_HTML);
   source->AddResourcePath("store.js", IDR_MD_BOOKMARKS_STORE_JS);
   source->AddResourcePath("store_client.html",

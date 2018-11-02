@@ -49,15 +49,21 @@ def method_is_visible(method, interface_is_partial):
     return method['visible'] and 'overload_index' not in method
 
 
-def conditionally_exposed(method):
+def is_origin_trial_enabled(method):
+    return bool(method['origin_trial_feature_name'])
+
+
+def is_conditionally_enabled(method):
     exposed = method['overloads']['exposed_test_all'] if 'overloads' in method else method['exposed_test']
     secure_context = method['overloads']['secure_context_test_all'] if 'overloads' in method else method['secure_context_test']
     return exposed or secure_context
 
 
-def filter_conditionally_exposed(methods, interface_is_partial):
+def filter_conditionally_enabled(methods, interface_is_partial):
     return [method for method in methods if (
-        method_is_visible(method, interface_is_partial) and conditionally_exposed(method))]
+        method_is_visible(method, interface_is_partial) and
+        is_conditionally_enabled(method) and
+        not is_origin_trial_enabled(method))]
 
 
 def custom_registration(method):
@@ -68,8 +74,8 @@ def custom_registration(method):
         return True
     if 'overloads' in method:
         return (method['overloads']['runtime_determined_lengths'] or
-                (method['overloads']['runtime_enabled_all'] and not conditionally_exposed(method)))
-    return method['runtime_enabled_feature_name'] and not conditionally_exposed(method)
+                (method['overloads']['runtime_enabled_all'] and not is_conditionally_enabled(method)))
+    return method['runtime_enabled_feature_name'] and not is_conditionally_enabled(method)
 
 
 def filter_custom_registration(methods, interface_is_partial):
@@ -80,14 +86,13 @@ def filter_custom_registration(methods, interface_is_partial):
 def filter_method_configuration(methods, interface_is_partial):
     return [method for method in methods if
             method_is_visible(method, interface_is_partial) and
-            not method['origin_trial_feature_name'] and
-            not conditionally_exposed(method) and
+            not is_origin_trial_enabled(method) and
+            not is_conditionally_enabled(method) and
             not custom_registration(method)]
 
 
 def method_filters():
-    return {'conditionally_exposed': filter_conditionally_exposed,
-            'custom_registration': filter_custom_registration,
+    return {'custom_registration': filter_custom_registration,
             'has_method_configuration': filter_method_configuration}
 
 
@@ -120,7 +125,7 @@ def method_context(interface, method, is_visible=True):
     is_call_with_script_state = has_extended_attribute_value(method, 'CallWith', 'ScriptState')
     is_call_with_this_value = has_extended_attribute_value(method, 'CallWith', 'ThisValue')
     if is_call_with_script_state or is_call_with_this_value:
-        includes.add('bindings/core/v8/ScriptState.h')
+        includes.add('platform/bindings/ScriptState.h')
 
     # [CheckSecurity]
     is_cross_origin = 'CrossOrigin' in extended_attributes
@@ -144,8 +149,8 @@ def method_context(interface, method, is_visible=True):
     is_custom_call_epilogue = has_extended_attribute_value(method, 'Custom', 'CallEpilogue')
     is_post_message = 'PostMessage' in extended_attributes
     if is_post_message:
-        includes.add('bindings/core/v8/SerializedScriptValueFactory.h')
-        includes.add('bindings/core/v8/Transferables.h')
+        includes.add('bindings/core/v8/serialization/SerializedScriptValueFactory.h')
+        includes.add('bindings/core/v8/serialization/Transferables.h')
         includes.add('core/dom/DOMArrayBufferBase.h')
         includes.add('core/frame/ImageBitmap.h')
 
@@ -275,7 +280,7 @@ def argument_context(interface, method, argument, index, is_visible=True):
         'use_permissive_dictionary_conversion': 'PermissiveDictionaryConversion' in extended_attributes,
         'v8_set_return_value': v8_set_return_value(interface.name, method, this_cpp_value),
         'v8_set_return_value_for_main_world': v8_set_return_value(interface.name, method, this_cpp_value, for_main_world=True),
-        'v8_value_to_local_cpp_value': v8_value_to_local_cpp_value(method, argument, index),
+        'v8_value_to_local_cpp_value': v8_value_to_local_cpp_value(interface.name, method, argument, index),
     }
     context.update({
         'is_optional_without_default_value':
@@ -370,14 +375,51 @@ def v8_value_to_local_cpp_variadic_value(method, argument, index, return_promise
     }
 
 
-def v8_value_to_local_cpp_value(method, argument, index, return_promise=False):
+def v8_value_to_local_cpp_ssv_value(extended_attributes, idl_type, v8_value, variable_name, for_storage):
+    this_cpp_type = idl_type.cpp_type_args(extended_attributes=extended_attributes, raw_type=True)
+
+    storage_policy = 'kForStorage' if for_storage else 'kNotForStorage'
+    arguments = ', '.join([
+        'info.GetIsolate()',
+        v8_value,
+        '{ssv}::SerializeOptions({ssv}::{storage_policy})',
+        'exceptionState'
+    ])
+    cpp_expression_format = 'NativeValueTraits<{ssv}>::NativeValue(%s)' % arguments
+    this_cpp_value = cpp_expression_format.format(
+        ssv='SerializedScriptValue',
+        storage_policy=storage_policy
+    )
+
+    return {
+        'assign_expression': this_cpp_value,
+        'check_expression': 'exceptionState.HadException()',
+        'cpp_type': this_cpp_type,
+        'cpp_name': variable_name,
+        'declare_variable': False,
+    }
+
+
+def v8_value_to_local_cpp_value(interface_name, method, argument, index, return_promise=False):
     extended_attributes = argument.extended_attributes
     idl_type = argument.idl_type
     name = argument.name
+    v8_value = 'info[%s]' % index
+
+    # History.pushState and History.replaceState are explicitly specified as
+    # serializing the value for storage. The default is to not serialize for
+    # storage. See https://html.spec.whatwg.org/multipage/browsers.html#dom-history-pushstate
+    if idl_type.name == 'SerializedScriptValue':
+        for_storage = (interface_name == 'History' and
+                       method.name in ('pushState', 'replaceState'))
+        return v8_value_to_local_cpp_ssv_value(extended_attributes, idl_type,
+                                               v8_value, name,
+                                               for_storage=for_storage)
+
     if argument.is_variadic:
         return v8_value_to_local_cpp_variadic_value(method, argument, index, return_promise)
-    return idl_type.v8_value_to_local_cpp_value(extended_attributes, 'info[%s]' % index,
-                                                name, index=index, declare_variable=False,
+    return idl_type.v8_value_to_local_cpp_value(extended_attributes, v8_value,
+                                                name, declare_variable=False,
                                                 use_exception_state=method.returns_promise)
 
 

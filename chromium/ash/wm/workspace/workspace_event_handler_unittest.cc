@@ -8,12 +8,11 @@
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/workspace_controller_test_api.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace_controller.h"
-#include "ash/wm/workspace_controller_test_helper.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
@@ -56,7 +55,7 @@ class WorkspaceEventHandlerTest : public test::AshTestBase {
   aura::Window* CreateTestWindow(aura::WindowDelegate* delegate,
                                  const gfx::Rect& bounds) {
     aura::Window* window = new aura::Window(delegate);
-    window->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+    window->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window->Init(ui::LAYER_TEXTURED);
     ParentWindowInPrimaryRootWindow(window);
     window->SetBounds(bounds);

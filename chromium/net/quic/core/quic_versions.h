@@ -24,13 +24,20 @@ enum QuicVersion {
   // Special case to indicate unknown/unsupported QUIC version.
   QUIC_VERSION_UNSUPPORTED = 0,
 
-  QUIC_VERSION_34 = 34,  // Deprecates entropy, removes private flag from packet
-                         // header, uses new ack and stop waiting wire format.
   QUIC_VERSION_35 = 35,  // Allows endpoints to independently set stream limit.
   QUIC_VERSION_36 = 36,  // Add support to force HOL blocking.
   QUIC_VERSION_37 = 37,  // Add perspective into null encryption.
-  QUIC_VERSION_38 = 38,  // Experimental support for HTTP stream pairs
-                         // and HPACK HoL avoidance.
+  QUIC_VERSION_38 = 38,  // PADDING frame is a 1-byte frame with type 0x00.
+                         // Respect NSTP connection option.
+  QUIC_VERSION_39 = 39,  // Integers and floating numbers are written in big
+                         // endian. Dot not ack acks. Send a connection level
+                         // WINDOW_UPDATE every 20 sent packets which do not
+                         // contain retransmittable frames.
+  QUIC_VERSION_40 = 40,  // Initial packet number is randomly chosen from
+                         // [0:2^31], WINDOW_UPDATE for connection flow control
+                         // advertises value in 1024-byte units, WINDOW_UPDATE
+                         // splits into MAX_DATA and MAX_STREAM_DATA, BLOCKED
+                         // frame split into BLOCKED and STREAM_BLOCKED frames
 
   // IMPORTANT: if you are adding to this list, follow the instructions at
   // http://sites/quic/adding-and-removing-versions
@@ -44,8 +51,8 @@ enum QuicVersion {
 // IMPORTANT: if you are adding to this list, follow the instructions at
 // http://sites/quic/adding-and-removing-versions
 static const QuicVersion kSupportedQuicVersions[] = {
-    QUIC_VERSION_38, QUIC_VERSION_37, QUIC_VERSION_36, QUIC_VERSION_35,
-    QUIC_VERSION_34};
+    QUIC_VERSION_40, QUIC_VERSION_39, QUIC_VERSION_38,
+    QUIC_VERSION_37, QUIC_VERSION_36, QUIC_VERSION_35};
 
 typedef std::vector<QuicVersion> QuicVersionVector;
 

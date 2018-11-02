@@ -28,6 +28,7 @@
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/editing/CaretDisplayItemClient.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/FrameSelection.h"
 #include "core/editing/SelectionEditor.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -146,10 +147,9 @@ void FrameCaret::UpdateStyleAndLayoutIfNeeded() {
       should_paint_caret ? CaretPosition() : PositionWithAffinity());
 }
 
-void FrameCaret::InvalidatePaintIfNeeded(
-    const LayoutBlock& block,
-    const PaintInvalidatorContext& context) {
-  display_item_client_->InvalidatePaintIfNeeded(block, context);
+void FrameCaret::InvalidatePaint(const LayoutBlock& block,
+                                 const PaintInvalidatorContext& context) {
+  display_item_client_->InvalidatePaint(block, context);
 }
 
 bool FrameCaret::CaretPositionIsValidForDocument(
@@ -213,8 +213,7 @@ bool FrameCaret::ShouldBlinkCaret() const {
   if (!focused_element)
     return false;
 
-  return focused_element->IsShadowIncludingInclusiveAncestorOf(
-      CaretPosition().AnchorNode());
+  return frame_->Selection().SelectionHasFocus();
 }
 
 void FrameCaret::CaretBlinkTimerFired(TimerBase*) {

@@ -86,14 +86,13 @@ IN_PROC_BROWSER_TEST_F(SnapshotAXTreeBrowserTest,
   ASSERT_NE(nullptr, root);
   ASSERT_EQ(ui::AX_ROLE_ROOT_WEB_AREA, root->data().role);
   ui::AXNode* group = root->ChildAtIndex(0);
-  ASSERT_EQ(ui::AX_ROLE_GROUP, group->data().role);
+  ASSERT_EQ(ui::AX_ROLE_GENERIC_CONTAINER, group->data().role);
   ui::AXNode* button = group->ChildAtIndex(0);
   ASSERT_EQ(ui::AX_ROLE_BUTTON, button->data().role);
 }
 
 IN_PROC_BROWSER_TEST_F(SnapshotAXTreeBrowserTest,
                        SnapshotAccessibilityTreeFromMultipleFrames) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 
   NavigateToURL(shell(), embedded_test_server()->GetURL(
@@ -123,7 +122,7 @@ IN_PROC_BROWSER_TEST_F(SnapshotAXTreeBrowserTest,
   DumpRolesAndNamesAsText(root, 0, &dump);
   EXPECT_EQ(
       "rootWebArea\n"
-      "  group\n"
+      "  genericContainer\n"
       "    button 'Before'\n"
       "    iframe\n"
       "      rootWebArea\n"
@@ -132,7 +131,7 @@ IN_PROC_BROWSER_TEST_F(SnapshotAXTreeBrowserTest,
       "    button 'Middle'\n"
       "    iframe\n"
       "      rootWebArea\n"
-      "        group\n"
+      "        genericContainer\n"
       "          button 'Inside Before'\n"
       "          iframe\n"
       "            rootWebArea\n"

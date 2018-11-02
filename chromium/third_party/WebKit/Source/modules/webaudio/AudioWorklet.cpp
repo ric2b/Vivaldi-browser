@@ -4,7 +4,7 @@
 
 #include "modules/webaudio/AudioWorklet.h"
 
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
 #include "modules/webaudio/AudioWorkletMessagingProxy.h"
@@ -17,7 +17,7 @@ AudioWorklet* AudioWorklet::Create(LocalFrame* frame) {
 }
 
 AudioWorklet::AudioWorklet(LocalFrame* frame)
-    : Worklet(frame), worklet_messaging_proxy_(nullptr) {}
+    : ThreadedWorklet(frame), worklet_messaging_proxy_(nullptr) {}
 
 AudioWorklet::~AudioWorklet() {
   if (worklet_messaging_proxy_)
@@ -45,7 +45,7 @@ WorkletGlobalScopeProxy* AudioWorklet::GetWorkletGlobalScopeProxy() const {
 }
 
 DEFINE_TRACE(AudioWorklet) {
-  Worklet::Trace(visitor);
+  ThreadedWorklet::Trace(visitor);
 }
 
 }  // namespace blink

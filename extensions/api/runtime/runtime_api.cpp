@@ -15,13 +15,13 @@
 #include "base/path_service.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/download/download_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_commands.h"
 #if defined(OS_MACOSX)
 #include "chrome/common/chrome_paths_internal.h"
 #endif  // defined(OS_MACOSX)
+#include "components/download/public/download_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/prefs/pref_filter.h"

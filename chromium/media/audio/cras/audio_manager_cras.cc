@@ -92,7 +92,7 @@ std::string MicPositions() {
 // virtual device name for them.
 void ProcessVirtualDeviceName(AudioDeviceNames* device_names,
                               const chromeos::AudioDeviceList& device_list) {
-  DCHECK_EQ(2, device_list.size());
+  DCHECK_EQ(2U, device_list.size());
   if (device_list[0].type == chromeos::AUDIO_TYPE_LINEOUT ||
       device_list[1].type == chromeos::AUDIO_TYPE_LINEOUT) {
     device_names->emplace_back(kHeadphoneLineOutVirtualDevice,
@@ -156,21 +156,15 @@ bool AudioManagerCras::HasAudioInputDevices() {
   return false;
 }
 
-AudioManagerCras::AudioManagerCras(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
-    AudioLogFactory* audio_log_factory)
-    : AudioManagerBase(std::move(task_runner),
-                       std::move(worker_task_runner),
-                       audio_log_factory),
+AudioManagerCras::AudioManagerCras(std::unique_ptr<AudioThread> audio_thread,
+                                   AudioLogFactory* audio_log_factory)
+    : AudioManagerBase(std::move(audio_thread), audio_log_factory),
       beamforming_on_device_id_(nullptr),
       beamforming_off_device_id_(nullptr) {
   SetMaxOutputStreamsAllowed(kMaxOutputStreams);
 }
 
-AudioManagerCras::~AudioManagerCras() {
-  Shutdown();
-}
+AudioManagerCras::~AudioManagerCras() = default;
 
 void AudioManagerCras::ShowAudioInputSettings() {
   NOTIMPLEMENTED();

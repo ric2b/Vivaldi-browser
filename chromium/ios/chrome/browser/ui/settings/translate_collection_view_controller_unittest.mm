@@ -8,15 +8,15 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
-#include "base/message_loop/message_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_locale_settings.h"
 #include "components/sync_preferences/pref_service_mock_factory.h"
+#include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
-#include "components/translate/core/common/translate_pref_names.h"
 #include "ios/chrome/browser/pref_names.h"
 #import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller_test.h"
@@ -42,6 +42,10 @@ const char kLanguage2[] = "pirate";
 class TranslateCollectionViewControllerTest
     : public CollectionViewControllerTest {
  protected:
+  TranslateCollectionViewControllerTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
+
   void SetUp() override {
     CollectionViewControllerTest::SetUp();
     pref_service_ = CreateLocalState();
@@ -66,7 +70,7 @@ class TranslateCollectionViewControllerTest
     return factory.Create(registry.get());
   }
 
-  base::MessageLoopForUI message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<PrefService> pref_service_;
 };
 

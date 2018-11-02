@@ -250,7 +250,7 @@ bool SoftwareImageDecodeCache::GetTaskForImageAndRefInternal(
   // image does not fit into the budget, then we don't ref this image, since it
   // will be decoded at raster time which is when it will be temporarily put in
   // the cache.
-  ImageKey key = ImageKey::FromDrawImage(image);
+  ImageKey key = ImageKey::FromDrawImage(image, format_);
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeCache::GetTaskForImageAndRef", "key",
                key.ToString());
@@ -345,7 +345,7 @@ void SoftwareImageDecodeCache::UnrefImage(const DrawImage& image) {
   //   2a. The image isn't in the locked cache because we didn't get to decode
   //       it yet (or failed to decode it).
   //   2b. Unlock the image but keep it in list.
-  const ImageKey& key = ImageKey::FromDrawImage(image);
+  const ImageKey& key = ImageKey::FromDrawImage(image, format_);
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeCache::UnrefImage", "key", key.ToString());
 
@@ -445,11 +445,11 @@ SoftwareImageDecodeCache::DecodeImageInternal(const ImageKey& key,
     case kNone_SkFilterQuality:
     case kLow_SkFilterQuality:
       if (key.should_use_subrect())
-        return GetSubrectImageDecode(key, std::move(image));
+        return GetSubrectImageDecode(key, draw_image.paint_image());
       return GetOriginalSizeImageDecode(key, std::move(image));
     case kMedium_SkFilterQuality:
     case kHigh_SkFilterQuality:
-      return GetScaledImageDecode(key, std::move(image));
+      return GetScaledImageDecode(key, draw_image.paint_image());
     default:
       NOTREACHED();
       return nullptr;
@@ -458,7 +458,7 @@ SoftwareImageDecodeCache::DecodeImageInternal(const ImageKey& key,
 
 DecodedDrawImage SoftwareImageDecodeCache::GetDecodedImageForDraw(
     const DrawImage& draw_image) {
-  ImageKey key = ImageKey::FromDrawImage(draw_image);
+  ImageKey key = ImageKey::FromDrawImage(draw_image, format_);
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeCache::GetDecodedImageForDraw", "key",
                key.ToString());
@@ -611,15 +611,16 @@ SoftwareImageDecodeCache::GetOriginalSizeImageDecode(
 
 std::unique_ptr<SoftwareImageDecodeCache::DecodedImage>
 SoftwareImageDecodeCache::GetSubrectImageDecode(const ImageKey& key,
-                                                sk_sp<const SkImage> image) {
+                                                const PaintImage& image) {
   // Construct a key to use in GetDecodedImageForDrawInternal().
   // This allows us to reuse an image in any cache if available.
-  gfx::Rect full_image_rect(image->width(), image->height());
-  DrawImage original_size_draw_image(
-      std::move(image), gfx::RectToSkIRect(full_image_rect),
-      kNone_SkFilterQuality, SkMatrix::I(), key.target_color_space());
+  gfx::Rect full_image_rect(image.sk_image()->width(),
+                            image.sk_image()->height());
+  DrawImage original_size_draw_image(image, gfx::RectToSkIRect(full_image_rect),
+                                     kNone_SkFilterQuality, SkMatrix::I(),
+                                     key.target_color_space());
   ImageKey original_size_key =
-      ImageKey::FromDrawImage(original_size_draw_image);
+      ImageKey::FromDrawImage(original_size_draw_image, format_);
   sk_sp<SkColorSpace> target_color_space =
       key.target_color_space().ToSkColorSpace();
 
@@ -674,15 +675,16 @@ SoftwareImageDecodeCache::GetSubrectImageDecode(const ImageKey& key,
 
 std::unique_ptr<SoftwareImageDecodeCache::DecodedImage>
 SoftwareImageDecodeCache::GetScaledImageDecode(const ImageKey& key,
-                                               sk_sp<const SkImage> image) {
+                                               const PaintImage& image) {
   // Construct a key to use in GetDecodedImageForDrawInternal().
   // This allows us to reuse an image in any cache if available.
-  gfx::Rect full_image_rect(image->width(), image->height());
-  DrawImage original_size_draw_image(
-      std::move(image), gfx::RectToSkIRect(full_image_rect),
-      kNone_SkFilterQuality, SkMatrix::I(), key.target_color_space());
+  gfx::Rect full_image_rect(image.sk_image()->width(),
+                            image.sk_image()->height());
+  DrawImage original_size_draw_image(image, gfx::RectToSkIRect(full_image_rect),
+                                     kNone_SkFilterQuality, SkMatrix::I(),
+                                     key.target_color_space());
   ImageKey original_size_key =
-      ImageKey::FromDrawImage(original_size_draw_image);
+      ImageKey::FromDrawImage(original_size_draw_image, format_);
   sk_sp<SkColorSpace> target_color_space =
       key.target_color_space().ToSkColorSpace();
 
@@ -745,8 +747,8 @@ void SoftwareImageDecodeCache::DrawWithImageFinished(
     const DecodedDrawImage& decoded_image) {
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeCache::DrawWithImageFinished", "key",
-               ImageKey::FromDrawImage(image).ToString());
-  ImageKey key = ImageKey::FromDrawImage(image);
+               ImageKey::FromDrawImage(image, format_).ToString());
+  ImageKey key = ImageKey::FromDrawImage(image, format_);
   if (!decoded_image.image())
     return;
 
@@ -839,6 +841,10 @@ void SoftwareImageDecodeCache::ClearCache() {
   ReduceCacheUsageUntilWithinLimit(0);
 }
 
+size_t SoftwareImageDecodeCache::GetMaximumMemoryLimitBytes() const {
+  return locked_images_budget_.total_limit_bytes();
+}
+
 void SoftwareImageDecodeCache::RemovePendingTask(const ImageKey& key,
                                                  DecodeTaskType task_type) {
   base::AutoLock lock(lock_);
@@ -898,7 +904,8 @@ void SoftwareImageDecodeCache::DumpImageMemoryForCache(
 }
 
 // SoftwareImageDecodeCacheKey
-ImageDecodeCacheKey ImageDecodeCacheKey::FromDrawImage(const DrawImage& image) {
+ImageDecodeCacheKey ImageDecodeCacheKey::FromDrawImage(const DrawImage& image,
+                                                       ResourceFormat format) {
   const SkSize& scale = image.scale();
   // If the src_rect falls outside of the image, we need to clip it since
   // otherwise we might end up with uninitialized memory in the decode process.
@@ -915,15 +922,21 @@ ImageDecodeCacheKey ImageDecodeCacheKey::FromDrawImage(const DrawImage& image) {
   // If we're not going to do a scale, we can use low filter quality. Note that
   // checking if the sizes are the same is better than checking if scale is 1.f,
   // because even non-1 scale can result in the same (rounded) width/height.
-  // If either dimension is a downscale, then use mipmaps (medium filter
-  // quality).
+  // If either dimension is a downscale, and the quality is not None (in which
+  // case we need to preserve the pixelated scale), then use mipmaps (medium
+  // filter quality).
   if (target_size.width() == src_rect.width() &&
       target_size.height() == src_rect.height()) {
     quality = std::min(quality, kLow_SkFilterQuality);
-  } else if (target_size.width() < src_rect.width() ||
-             target_size.height() < src_rect.height()) {
-    quality = std::min(quality, kMedium_SkFilterQuality);
+  } else if (quality != kNone_SkFilterQuality &&
+             (target_size.width() < src_rect.width() ||
+              target_size.height() < src_rect.height())) {
+    quality = kMedium_SkFilterQuality;
   }
+
+  // Skia doesn't scale an RGBA_4444 format, so always use the original decode.
+  if (format == RGBA_4444)
+    quality = std::min(quality, kLow_SkFilterQuality);
 
   // Drop from high to medium if the the matrix we applied wasn't decomposable,
   // or if the scaled image will be too large.

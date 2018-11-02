@@ -109,14 +109,14 @@ static KeyValueMap RetrieveKeyValuePairs(SharedBufferChunkReader* buffer) {
     }
     // New key/value, store the previous one if any.
     if (!key.IsEmpty()) {
-      if (key_value_pairs.Find(key) != key_value_pairs.end())
+      if (key_value_pairs.find(key) != key_value_pairs.end())
         DVLOG(1) << "Key duplicate found in MIME header. Key is '" << key
                  << "', previous value replaced.";
       key_value_pairs.insert(key, value.ToString().StripWhiteSpace());
       key = String();
       value.Clear();
     }
-    size_t semi_colon_index = line.Find(':');
+    size_t semi_colon_index = line.find(':');
     if (semi_colon_index == kNotFound) {
       // This is not a key value pair, ignore.
       continue;
@@ -135,7 +135,7 @@ MIMEHeader* MIMEHeader::ParseHeader(SharedBufferChunkReader* buffer) {
   MIMEHeader* mime_header = MIMEHeader::Create();
   KeyValueMap key_value_pairs = RetrieveKeyValuePairs(buffer);
   KeyValueMap::iterator mime_parameters_iterator =
-      key_value_pairs.Find("content-type");
+      key_value_pairs.find("content-type");
   if (mime_parameters_iterator != key_value_pairs.end()) {
     ParsedContentType parsed_content_type(mime_parameters_iterator->value,
                                           ParsedContentType::Mode::kRelaxed);
@@ -154,21 +154,21 @@ MIMEHeader* MIMEHeader::ParseHeader(SharedBufferChunkReader* buffer) {
       mime_header->end_of_part_boundary_.insert("--", 0);
       mime_header->end_of_document_boundary_ =
           mime_header->end_of_part_boundary_;
-      mime_header->end_of_document_boundary_.Append("--");
+      mime_header->end_of_document_boundary_.append("--");
     }
   }
 
-  mime_parameters_iterator = key_value_pairs.Find("content-transfer-encoding");
+  mime_parameters_iterator = key_value_pairs.find("content-transfer-encoding");
   if (mime_parameters_iterator != key_value_pairs.end())
     mime_header->content_transfer_encoding_ =
         ParseContentTransferEncoding(mime_parameters_iterator->value);
 
-  mime_parameters_iterator = key_value_pairs.Find("content-location");
+  mime_parameters_iterator = key_value_pairs.find("content-location");
   if (mime_parameters_iterator != key_value_pairs.end())
     mime_header->content_location_ = mime_parameters_iterator->value;
 
   // See rfc2557 - section 8.3 - Use of the Content-ID header and CID URLs.
-  mime_parameters_iterator = key_value_pairs.Find("content-id");
+  mime_parameters_iterator = key_value_pairs.find("content-id");
   if (mime_parameters_iterator != key_value_pairs.end())
     mime_header->content_id_ = mime_parameters_iterator->value;
 
@@ -212,7 +212,7 @@ HeapVector<Member<ArchiveResource>> MHTMLParser::ParseArchive() {
   MIMEHeader* header = MIMEHeader::ParseHeader(&line_reader_);
   HeapVector<Member<ArchiveResource>> resources;
   if (!ParseArchiveWithHeader(header, resources))
-    resources.Clear();
+    resources.clear();
   return resources;
 }
 
@@ -273,7 +273,7 @@ ArchiveResource* MHTMLParser::ParseNextPart(
     const String& end_of_part_boundary,
     const String& end_of_document_boundary,
     bool& end_of_archive_reached) {
-  ASSERT(end_of_part_boundary.IsEmpty() == end_of_document_boundary.IsEmpty());
+  DCHECK_EQ(end_of_part_boundary.IsEmpty(), end_of_document_boundary.IsEmpty());
 
   // If no content transfer encoding is specified, default to binary encoding.
   MIMEHeader::Encoding content_transfer_encoding =
@@ -289,7 +289,7 @@ ArchiveResource* MHTMLParser::ParseNextPart(
       DVLOG(1) << "Binary contents requires end of part";
       return nullptr;
     }
-    line_reader_.SetSeparator(end_of_part_boundary.Utf8().Data());
+    line_reader_.SetSeparator(end_of_part_boundary.Utf8().data());
     Vector<char> part;
     if (!line_reader_.NextChunk(part)) {
       DVLOG(1) << "Binary contents requires end of part";
@@ -303,7 +303,7 @@ ArchiveResource* MHTMLParser::ParseNextPart(
       return nullptr;
     }
     end_of_part_reached = true;
-    ASSERT(next_chars.size() == 2);
+    DCHECK(next_chars.size() == 2);
     end_of_archive_reached = (next_chars[0] == '-' && next_chars[1] == '-');
     if (!end_of_archive_reached) {
       String line = line_reader_.NextChunkAsUTF8StringWithLatin1Fallback();
@@ -324,7 +324,7 @@ ArchiveResource* MHTMLParser::ParseNextPart(
       }
       // Note that we use line.utf8() and not line.ascii() as ascii turns
       // special characters (such as tab, line-feed...) into '?'.
-      content->Append(line.Utf8().Data(), line.length());
+      content->Append(line.Utf8().data(), line.length());
       if (content_transfer_encoding == MIMEHeader::kQuotedPrintable) {
         // The line reader removes the \r\n, but we need them for the content in
         // this case as the QuotedPrintable decoder expects CR-LF terminated

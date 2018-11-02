@@ -44,6 +44,7 @@
 #include "platform/loader/fetch/ResourceClientWalker.h"
 #include "platform/loader/fetch/ResourceLoader.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/MathExtras.h"
@@ -53,7 +54,6 @@
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCachePolicy.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/WebSecurityOrigin.h"
 
 namespace blink {
@@ -185,7 +185,7 @@ void Resource::CachedMetadataHandlerImpl::SendToPlatform() {
     const Vector<char>& serialized_data = cached_metadata_->SerializedData();
     Platform::Current()->CacheMetadata(
         GetResponse().Url(), GetResponse().ResponseTime(),
-        serialized_data.Data(), serialized_data.size());
+        serialized_data.data(), serialized_data.size());
   } else {
     Platform::Current()->CacheMetadata(
         GetResponse().Url(), GetResponse().ResponseTime(), nullptr, 0);
@@ -235,7 +235,7 @@ void Resource::ServiceWorkerResponseCachedMetadataHandler::SendToPlatform() {
     const Vector<char>& serialized_data = cached_metadata_->SerializedData();
     Platform::Current()->CacheMetadataInCacheStorage(
         GetResponse().Url(), GetResponse().ResponseTime(),
-        serialized_data.Data(), serialized_data.size(),
+        serialized_data.data(), serialized_data.size(),
         WebSecurityOrigin(security_origin_),
         GetResponse().CacheStorageCacheName());
   } else {
@@ -244,67 +244,6 @@ void Resource::ServiceWorkerResponseCachedMetadataHandler::SendToPlatform() {
         WebSecurityOrigin(security_origin_),
         GetResponse().CacheStorageCacheName());
   }
-}
-
-// This class cannot be on-heap because the first callbackHandler() call
-// instantiates the singleton object while we can call it in the
-// pre-finalization step.
-class Resource::ResourceCallback final {
- public:
-  static ResourceCallback& CallbackHandler();
-  void Schedule(Resource*);
-  void Cancel(Resource*);
-  bool IsScheduled(Resource*) const;
-
- private:
-  ResourceCallback();
-
-  void RunTask();
-  TaskHandle task_handle_;
-  HashSet<Persistent<Resource>> resources_with_pending_clients_;
-};
-
-Resource::ResourceCallback& Resource::ResourceCallback::CallbackHandler() {
-  DEFINE_STATIC_LOCAL(ResourceCallback, callback_handler, ());
-  return callback_handler;
-}
-
-Resource::ResourceCallback::ResourceCallback() {}
-
-void Resource::ResourceCallback::Schedule(Resource* resource) {
-  if (!task_handle_.IsActive()) {
-    // WTF::unretained(this) is safe because a posted task is canceled when
-    // |m_taskHandle| is destroyed on the dtor of this ResourceCallback.
-    task_handle_ =
-        Platform::Current()
-            ->CurrentThread()
-            ->Scheduler()
-            ->LoadingTaskRunner()
-            ->PostCancellableTask(
-                BLINK_FROM_HERE,
-                WTF::Bind(&ResourceCallback::RunTask, WTF::Unretained(this)));
-  }
-  resources_with_pending_clients_.insert(resource);
-}
-
-void Resource::ResourceCallback::Cancel(Resource* resource) {
-  resources_with_pending_clients_.erase(resource);
-  if (task_handle_.IsActive() && resources_with_pending_clients_.IsEmpty())
-    task_handle_.Cancel();
-}
-
-bool Resource::ResourceCallback::IsScheduled(Resource* resource) const {
-  return resources_with_pending_clients_.Contains(resource);
-}
-
-void Resource::ResourceCallback::RunTask() {
-  HeapVector<Member<Resource>> resources;
-  for (const Member<Resource>& resource : resources_with_pending_clients_)
-    resources.push_back(resource.Get());
-  resources_with_pending_clients_.Clear();
-
-  for (const auto& resource : resources)
-    resource->FinishPendingClients();
 }
 
 Resource::Resource(const ResourceRequest& request,
@@ -330,16 +269,27 @@ Resource::Resource(const ResourceRequest& request,
       integrity_disposition_(ResourceIntegrityDisposition::kNotChecked),
       options_(options),
       response_timestamp_(CurrentTime()),
-      cancel_timer_(Platform::Current()->MainThread()->GetWebTaskRunner(),
-                    this,
-                    &Resource::CancelTimerFired),
+      cancel_timer_(
+          // We use MainThread() for main-thread cases to avoid syscall cost
+          // when checking main_thread_->isCurrentThread() in currentThread().
+          IsMainThread() ? Platform::Current()
+                               ->MainThread()
+                               ->Scheduler()
+                               ->LoadingTaskRunner()
+                         : Platform::Current()
+                               ->CurrentThread()
+                               ->Scheduler()
+                               ->LoadingTaskRunner(),
+          this,
+          &Resource::CancelTimerFired),
       resource_request_(request) {
   InstanceCounters::IncrementCounter(InstanceCounters::kResourceCounter);
 
   // Currently we support the metadata caching only for HTTP family.
   if (GetResourceRequest().Url().ProtocolIsInHTTPFamily())
     cache_handler_ = CachedMetadataHandlerImpl::Create(this);
-  MemoryCoordinator::Instance().RegisterClient(this);
+  if (IsMainThread())
+    MemoryCoordinator::Instance().RegisterClient(this);
 }
 
 Resource::~Resource() {
@@ -413,12 +363,12 @@ void Resource::SetDataBufferingPolicy(
   SetEncodedSize(0);
 }
 
-void Resource::GetError(const ResourceError& error) {
+void Resource::FinishAsError(const ResourceError& error) {
   DCHECK(!error.IsNull());
   error_ = error;
   is_revalidating_ = false;
 
-  if (error_.IsCancellation() || !IsPreloaded())
+  if ((error_.IsCancellation() || !IsPreloaded()) && IsMainThread())
     GetMemoryCache()->Remove(this);
 
   if (!ErrorOccurred())
@@ -493,10 +443,6 @@ static double CurrentAge(const ResourceResponse& response,
   return corrected_received_age + resident_time;
 }
 
-double Resource::CurrentAge() const {
-  return blink::CurrentAge(GetResponse(), response_timestamp_);
-}
-
 static double FreshnessLifetime(const ResourceResponse& response,
                                 double response_timestamp) {
 #if !OS(ANDROID)
@@ -526,10 +472,6 @@ static double FreshnessLifetime(const ResourceResponse& response,
   // If no cache headers are present, the specification leaves the decision to
   // the UA. Other browsers seem to opt for 0.
   return 0;
-}
-
-double Resource::FreshnessLifetime() const {
-  return blink::FreshnessLifetime(GetResponse(), response_timestamp_);
 }
 
 static bool CanUseResponse(const ResourceResponse& response,
@@ -646,16 +588,16 @@ String Resource::ReasonNotDeletable() const {
   if (loader_) {
     if (!builder.IsEmpty())
       builder.Append(' ');
-    builder.Append("m_loader");
+    builder.Append("loader_");
   }
   if (preload_count_) {
     if (!builder.IsEmpty())
       builder.Append(' ');
-    builder.Append("m_preloadCount(");
+    builder.Append("preload_count_(");
     builder.AppendNumber(preload_count_);
     builder.Append(')');
   }
-  if (GetMemoryCache()->Contains(this)) {
+  if (IsMainThread() && GetMemoryCache()->Contains(this)) {
     if (!builder.IsEmpty())
       builder.Append(' ');
     builder.Append("in_memory_cache");
@@ -730,7 +672,16 @@ void Resource::AddClient(ResourceClient* client,
       !TypeNeedsSynchronousCacheHit(GetType()) &&
       !needs_synchronous_cache_hit_) {
     clients_awaiting_callback_.insert(client);
-    ResourceCallback::CallbackHandler().Schedule(this);
+    if (!async_finish_pending_clients_task_.IsActive()) {
+      async_finish_pending_clients_task_ =
+          Platform::Current()
+              ->CurrentThread()
+              ->Scheduler()
+              ->LoadingTaskRunner()
+              ->PostCancellableTask(BLINK_FROM_HERE,
+                                    WTF::Bind(&Resource::FinishPendingClients,
+                                              WrapWeakPersistent(this)));
+    }
     return;
   }
 
@@ -752,8 +703,10 @@ void Resource::RemoveClient(ResourceClient* client) {
   else
     clients_.erase(client);
 
-  if (clients_awaiting_callback_.IsEmpty())
-    ResourceCallback::CallbackHandler().Cancel(this);
+  if (clients_awaiting_callback_.IsEmpty() &&
+      async_finish_pending_clients_task_.IsActive()) {
+    async_finish_pending_clients_task_.Cancel();
+  }
 
   DidRemoveClientOrObserver();
 }
@@ -770,7 +723,8 @@ void Resource::DidRemoveClientOrObserver() {
     // operation."
     // We allow non-secure content to be reused in history, but we do not allow
     // secure content to be reused.
-    if (HasCacheControlNoStoreHeader() && Url().ProtocolIs("https"))
+    if (HasCacheControlNoStoreHeader() && Url().ProtocolIs("https") &&
+        IsMainThread())
       GetMemoryCache()->Remove(this);
   }
 }
@@ -793,7 +747,8 @@ void Resource::SetDecodedSize(size_t decoded_size) {
     return;
   size_t old_size = size();
   decoded_size_ = decoded_size;
-  GetMemoryCache()->Update(this, old_size, size());
+  if (IsMainThread())
+    GetMemoryCache()->Update(this, old_size, size());
 }
 
 void Resource::SetEncodedSize(size_t encoded_size) {
@@ -803,7 +758,8 @@ void Resource::SetEncodedSize(size_t encoded_size) {
   size_t old_size = size();
   encoded_size_ = encoded_size;
   encoded_size_memory_usage_ = encoded_size;
-  GetMemoryCache()->Update(this, old_size, size());
+  if (IsMainThread())
+    GetMemoryCache()->Update(this, old_size, size());
 }
 
 void Resource::FinishPendingClients() {
@@ -816,7 +772,7 @@ void Resource::FinishPendingClients() {
   //    back.
   //
   // Handle case (1) by saving a list of clients to notify. A separate list also
-  // ensure a client is either in m_clients or m_clientsAwaitingCallback.
+  // ensure a client is either in cliens_ or clients_awaiting_callback_.
   HeapVector<Member<ResourceClient>> clients_to_notify;
   CopyToVector(clients_awaiting_callback_, clients_to_notify);
 
@@ -828,16 +784,16 @@ void Resource::FinishPendingClients() {
 
     // When revalidation starts after waiting clients are scheduled and
     // before they are added here. In such cases, we just add the clients
-    // to |m_clients| without didAddClient(), as in Resource::addClient().
+    // to |clients_| without DidAddClient(), as in Resource::AddClient().
     if (!is_revalidating_)
       DidAddClient(client);
   }
 
   // It is still possible for the above loop to finish a new client
   // synchronously. If there's no client waiting we should deschedule.
-  bool scheduled = ResourceCallback::CallbackHandler().IsScheduled(this);
+  bool scheduled = async_finish_pending_clients_task_.IsActive();
   if (scheduled && clients_awaiting_callback_.IsEmpty())
-    ResourceCallback::CallbackHandler().Cancel(this);
+    async_finish_pending_clients_task_.Cancel();
 
   // Prevent the case when there are clients waiting but no callback scheduled.
   DCHECK(clients_awaiting_callback_.IsEmpty() || scheduled);
@@ -930,8 +886,8 @@ void Resource::SetCachePolicyBypassingCache() {
   resource_request_.SetCachePolicy(WebCachePolicy::kBypassingCache);
 }
 
-void Resource::SetPreviewsStateNoTransform() {
-  resource_request_.SetPreviewsState(WebURLRequest::kPreviewsNoTransform);
+void Resource::SetPreviewsState(WebURLRequest::PreviewsState previews_state) {
+  resource_request_.SetPreviewsState(previews_state);
 }
 
 void Resource::ClearRangeRequestHeader() {

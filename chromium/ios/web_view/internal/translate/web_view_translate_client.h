@@ -15,7 +15,8 @@
 #import "components/translate/ios/browser/ios_translate_driver.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #import "ios/web/public/web_state/web_state_user_data.h"
-#import "ios/web_view/public/cwv_translate_delegate.h"
+
+@class CWVTranslationController;
 
 class PrefService;
 
@@ -36,10 +37,15 @@ class WebViewTranslateClient
       public web::WebStateObserver,
       public web::WebStateUserData<WebViewTranslateClient> {
  public:
-  // Sets the delegate passed by the embedder.
-  // |delegate| is assumed to outlive this WebViewTranslateClient.
-  void set_translate_delegate(id<CWVTranslateDelegate> delegate) {
-    delegate_.reset(delegate);
+  ~WebViewTranslateClient() override;
+
+  // This |controller| is assumed to outlive this WebViewTranslateClient.
+  void set_translation_controller(CWVTranslationController* controller) {
+    translation_controller_.reset(controller);
+  }
+
+  translate::TranslateManager* translate_manager() {
+    return translate_manager_.get();
   }
 
  private:
@@ -47,7 +53,6 @@ class WebViewTranslateClient
 
   // The lifetime of WebViewTranslateClient is managed by WebStateUserData.
   explicit WebViewTranslateClient(web::WebState* web_state);
-  ~WebViewTranslateClient() override;
 
   // TranslateClient implementation.
   translate::TranslateDriver* GetTranslateDriver() override;
@@ -72,8 +77,8 @@ class WebViewTranslateClient
   std::unique_ptr<translate::TranslateManager> translate_manager_;
   translate::IOSTranslateDriver translate_driver_;
 
-  // Delegate provided by the embedder.
-  base::WeakNSProtocol<id<CWVTranslateDelegate>> delegate_;
+  // ObjC class that wraps this class.
+  base::WeakNSObject<CWVTranslationController> translation_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewTranslateClient);
 };

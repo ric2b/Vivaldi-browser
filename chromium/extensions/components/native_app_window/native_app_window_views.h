@@ -95,7 +95,6 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
   bool CanMinimize() const override;
   base::string16 GetWindowTitle() const override;
   bool ShouldShowWindowTitle() const override;
-  bool ShouldShowWindowIcon() const override;
   void SaveWindowPlacement(const gfx::Rect& bounds,
                            ui::WindowShowState show_state) override;
   void DeleteDelegate() override;
@@ -149,6 +148,7 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
                                  const gfx::Size& max_size) override;
   bool CanHaveAlphaEnabled() const override;
   void SetVisibleOnAllWorkspaces(bool always_visible) override;
+  void SetActivateOnPointer(bool activate_on_pointer) override;
 
   // web_modal::WebContentsModalDialogHost implementation.
   gfx::NativeView GetHostView() const override;

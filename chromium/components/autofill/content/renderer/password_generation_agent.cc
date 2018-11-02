@@ -23,7 +23,7 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "google_apis/gaia/gaia_urls.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -152,6 +152,7 @@ PasswordGenerationAgent::PasswordGenerationAgent(
 PasswordGenerationAgent::~PasswordGenerationAgent() {}
 
 void PasswordGenerationAgent::BindRequest(
+    const service_manager::BindSourceInfo& source_info,
     mojom::PasswordGenerationAgentRequest request) {
   binding_.Bind(std::move(request));
 }
@@ -353,6 +354,7 @@ PasswordGenerationAgent::CreatePasswordFormToPresave() {
         *render_frame()->GetWebFrame(), nullptr, nullptr);
   }
   if (password_form) {
+    password_form->type = PasswordForm::TYPE_GENERATED;
     // TODO(kolos): when we are good in username detection, save username
     // as well.
     password_form->username_value = base::string16();

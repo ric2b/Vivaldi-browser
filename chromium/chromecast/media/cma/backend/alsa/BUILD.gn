@@ -21,6 +21,8 @@ shared_library("libcast_media_1.0_audio") {
   sources = [
     "cast_media_shlib.cc",
     "media_codec_support_cast_audio.cc",
+    "post_processing_pipeline_impl.cc",
+    "post_processing_pipeline_impl.h",
   ]
 
   deps = [
@@ -28,6 +30,7 @@ shared_library("libcast_media_1.0_audio") {
     "//base",
     "//chromecast/base",
     "//chromecast/public",
+    "//chromecast/public/media",
     "//media",
   ]
 }
@@ -44,7 +47,6 @@ source_set("alsa_cma_backend") {
     "filter_group.h",
     "media_pipeline_backend_alsa.cc",
     "media_pipeline_backend_alsa.h",
-    "post_processing_pipeline.cc",
     "post_processing_pipeline.h",
     "post_processing_pipeline_parser.cc",
     "post_processing_pipeline_parser.h",
@@ -132,15 +134,48 @@ source_set("test_support") {
   ]
 }
 
-shared_library("libcast_governor_1.0") {
+test("slew_volume_unittests") {
   sources = [
-    "post_processors/governor_shlib.cc",
+    "slew_volume_unittests.cc",
   ]
+  deps = [
+    ":slew_volume",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//media",
+    "//testing/gtest",
+  ]
+}
 
+shared_library("libcast_governor_1.0") {
+  deps = [
+    ":governor",
+  ]
+}
+
+test("libcast_governor_unittests") {
+  sources = [
+    "post_processors/governor_unittest.cc",
+  ]
+  deps = [
+    ":governor",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//media",
+    "//testing/gtest",
+  ]
+}
+
+source_set("governor") {
+  sources = [
+    "post_processors/governor.cc",
+    "post_processors/governor.h",
+  ]
   deps = [
     ":slew_volume",
     "//base",
     "//chromecast/base",
     "//chromecast/public/media",
   ]
+  public_configs = [ "//chromecast/public:public_config" ]
 }

@@ -60,8 +60,7 @@ MATCHER(ContainsInvalidDataLog, "") {
 class FFmpegVideoDecoderTest : public testing::Test {
  public:
   FFmpegVideoDecoderTest()
-      : media_log_(new StrictMock<MockMediaLog>()),
-        decoder_(new FFmpegVideoDecoder(media_log_)),
+      : decoder_(new FFmpegVideoDecoder(&media_log_)),
         decode_cb_(base::Bind(&FFmpegVideoDecoderTest::DecodeDone,
                               base::Unretained(this))) {
     FFmpegGlue::InitializeFFmpeg();
@@ -205,7 +204,7 @@ class FFmpegVideoDecoderTest : public testing::Test {
 
   MOCK_METHOD1(DecodeDone, void(DecodeStatus));
 
-  scoped_refptr<StrictMock<MockMediaLog>> media_log_;
+  StrictMock<MockMediaLog> media_log_;
 
   base::MessageLoop message_loop_;
   std::unique_ptr<FFmpegVideoDecoder> decoder_;
@@ -263,7 +262,7 @@ TEST_F(FFmpegVideoDecoderTest, DecodeFrame_Normal) {
   ASSERT_EQ(1U, output_frames_.size());
 }
 
-// Verify current behavior for 0 byte frames. FFmpeg simply ignores
+// Verify current behavior for 0 byte frames. FFmpegVideoDecoder simply ignores
 // the 0 byte frames.
 TEST_F(FFmpegVideoDecoderTest, DecodeFrame_0ByteFrame) {
   Initialize();

@@ -8,6 +8,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -34,6 +35,41 @@ void CommitUnused(base::WeakPtr<IndexedDBTransaction> transaction) {
     return;
   leveldb::Status status = transaction->Commit();
   DCHECK(status.ok());
+}
+
+// Used for UMA metrics - do not change values.
+enum UmaIDBException {
+  UmaIDBExceptionUnknownError = 0,
+  UmaIDBExceptionConstraintError = 1,
+  UmaIDBExceptionDataError = 2,
+  UmaIDBExceptionVersionError = 3,
+  UmaIDBExceptionAbortError = 4,
+  UmaIDBExceptionQuotaError = 5,
+  UmaIDBExceptionTimeoutError = 6,
+  UmaIDBExceptionExclusiveMaxValue = 7
+};
+
+// Used for UMA metrics - do not change mappings.
+UmaIDBException ExceptionCodeToUmaEnum(uint16_t code) {
+  switch (code) {
+    case blink::kWebIDBDatabaseExceptionUnknownError:
+      return UmaIDBExceptionUnknownError;
+    case blink::kWebIDBDatabaseExceptionConstraintError:
+      return UmaIDBExceptionConstraintError;
+    case blink::kWebIDBDatabaseExceptionDataError:
+      return UmaIDBExceptionDataError;
+    case blink::kWebIDBDatabaseExceptionVersionError:
+      return UmaIDBExceptionVersionError;
+    case blink::kWebIDBDatabaseExceptionAbortError:
+      return UmaIDBExceptionAbortError;
+    case blink::kWebIDBDatabaseExceptionQuotaError:
+      return UmaIDBExceptionQuotaError;
+    case blink::kWebIDBDatabaseExceptionTimeoutError:
+      return UmaIDBExceptionTimeoutError;
+    default:
+      NOTREACHED();
+  }
+  return UmaIDBExceptionUnknownError;
 }
 
 }  // namespace
@@ -151,6 +187,10 @@ void IndexedDBTransaction::Abort(const IndexedDBDatabaseError& error) {
   DCHECK(!processing_event_queue_);
   if (state_ == FINISHED)
     return;
+
+  UMA_HISTOGRAM_ENUMERATION("WebCore.IndexedDB.TransactionAbortReason",
+                            ExceptionCodeToUmaEnum(error.code()),
+                            UmaIDBExceptionExclusiveMaxValue);
 
   timeout_timer_.Stop();
 
@@ -341,6 +381,34 @@ leveldb::Status IndexedDBTransaction::CommitPhaseTwo() {
   if (!used_) {
     committed = true;
   } else {
+    base::TimeDelta active_time = base::Time::Now() - diagnostics_.start_time;
+    uint64_t size_kb = transaction_->GetTransactionSize() / 1024;
+    // All histograms record 1KB to 1GB.
+    switch (mode_) {
+      case blink::kWebIDBTransactionModeReadOnly:
+        UMA_HISTOGRAM_MEDIUM_TIMES(
+            "WebCore.IndexedDB.Transaction.ReadOnly.TimeActive", active_time);
+        UMA_HISTOGRAM_COUNTS_1M(
+            "WebCore.IndexedDB.Transaction.ReadOnly.SizeOnCommit2", size_kb);
+        break;
+      case blink::kWebIDBTransactionModeReadWrite:
+        UMA_HISTOGRAM_MEDIUM_TIMES(
+            "WebCore.IndexedDB.Transaction.ReadWrite.TimeActive", active_time);
+        UMA_HISTOGRAM_COUNTS_1M(
+            "WebCore.IndexedDB.Transaction.ReadWrite.SizeOnCommit2", size_kb);
+        break;
+      case blink::kWebIDBTransactionModeVersionChange:
+        UMA_HISTOGRAM_MEDIUM_TIMES(
+            "WebCore.IndexedDB.Transaction.VersionChange.TimeActive",
+            active_time);
+        UMA_HISTOGRAM_COUNTS_1M(
+            "WebCore.IndexedDB.Transaction.VersionChange.SizeOnCommit2",
+            size_kb);
+        break;
+      default:
+        NOTREACHED();
+    }
+
     s = transaction_->CommitPhaseTwo();
     committed = s.ok();
   }

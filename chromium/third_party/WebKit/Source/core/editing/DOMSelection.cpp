@@ -387,12 +387,6 @@ void DOMSelection::setBaseAndExtent(Node* base_node,
 
   ClearCachedRangeIfSelectionOfDocument();
 
-  // TODO(editing-dev): Once SVG USE element doesn't modify DOM tree, we
-  // should get rid of this update layout call.
-  // See http://crbug.com/566281
-  // See "svg/text/textpath-reference-crash.html"
-  GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
-
   Position base_position(base_node, base_offset);
   Position extent_position(extent_node, extent_offset);
   Range* new_range = Range::Create(base_node->GetDocument());
@@ -461,6 +455,10 @@ void DOMSelection::modify(const String& alter_string,
     granularity = kDocumentBoundary;
   else
     return;
+
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   Element* focused_element = GetFrame()->GetDocument()->FocusedElement();
   GetFrame()->Selection().Modify(alter, direction, granularity);
@@ -685,6 +683,10 @@ void DOMSelection::deleteFromDocument() {
     return;
   }
 
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
+
   // The following code is necessary for
   // editing/selection/deleteFromDocument-crash.html, which assumes
   // deleteFromDocument() for text selection in a TEXTAREA deletes the TEXTAREA
@@ -692,16 +694,11 @@ void DOMSelection::deleteFromDocument() {
 
   FrameSelection& selection = GetFrame()->Selection();
 
-  if (selection.ComputeVisibleSelectionInDOMTreeDeprecated().IsNone())
+  if (selection.ComputeVisibleSelectionInDOMTree().IsNone())
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  See http://crbug.com/590369 for more details.
-  // |VisibleSelection::toNormalizedEphemeralRange| requires clean layout.
-  GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
-
   Range* selected_range =
-      CreateRange(selection.ComputeVisibleSelectionInDOMTreeDeprecated()
+      CreateRange(selection.ComputeVisibleSelectionInDOMTree()
                       .ToNormalizedEphemeralRange());
   if (!selected_range)
     return;
@@ -721,7 +718,7 @@ bool DOMSelection::containsNode(const Node* n, bool allow_partial) const {
 
   unsigned node_index = n->NodeIndex();
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   // |VisibleSelection::toNormalizedEphemeralRange| requires clean layout.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
@@ -782,7 +779,7 @@ String DOMSelection::toString() {
   if (!IsAvailable())
     return String();
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 

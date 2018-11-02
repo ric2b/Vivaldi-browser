@@ -6,28 +6,30 @@
 #define THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_CHILD_WORKER_SCHEDULER_IMPL_H_
 
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
+#include "platform/scheduler/base/task_time_observer.h"
 #include "platform/scheduler/base/thread_load_tracker.h"
 #include "platform/scheduler/child/idle_canceled_delayed_task_sweeper.h"
 #include "platform/scheduler/child/idle_helper.h"
-#include "platform/scheduler/child/scheduler_helper.h"
 #include "platform/scheduler/child/worker_scheduler.h"
-#include "public/platform/scheduler/base/task_time_observer.h"
 
 namespace blink {
 namespace scheduler {
 
 class SchedulerTqmDelegate;
 
-class BLINK_PLATFORM_EXPORT WorkerSchedulerImpl : public WorkerScheduler,
-                                                  public IdleHelper::Delegate,
-                                                  public TaskTimeObserver {
+class PLATFORM_EXPORT WorkerSchedulerImpl : public WorkerScheduler,
+                                            public IdleHelper::Delegate,
+                                            public TaskTimeObserver {
  public:
   explicit WorkerSchedulerImpl(
       scoped_refptr<SchedulerTqmDelegate> main_task_runner);
   ~WorkerSchedulerImpl() override;
 
   // WorkerScheduler implementation:
-  scoped_refptr<TaskQueue> DefaultTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner() override;
+  scoped_refptr<TaskQueue> DefaultTaskQueue() override;
   scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner() override;
   bool CanExceedIdleDeadlineIfRequired() const override;
   bool ShouldYieldForHighPriorityWork() override;
@@ -42,7 +44,7 @@ class BLINK_PLATFORM_EXPORT WorkerSchedulerImpl : public WorkerScheduler,
   void DidProcessTask(TaskQueue* task_queue,
                       double start_time,
                       double end_time) override;
-  void OnBeginNestedMessageLoop() override;
+  void OnBeginNestedRunLoop() override;
 
   SchedulerHelper* GetSchedulerHelperForTesting();
   base::TimeTicks CurrentIdleTaskDeadlineForTesting() const;
@@ -59,7 +61,6 @@ class BLINK_PLATFORM_EXPORT WorkerSchedulerImpl : public WorkerScheduler,
  private:
   void MaybeStartLongIdlePeriod();
 
-  SchedulerHelper helper_;
   IdleHelper idle_helper_;
   IdleCanceledDelayedTaskSweeper idle_canceled_delayed_task_sweeper_;
   ThreadLoadTracker load_tracker_;

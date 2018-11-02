@@ -39,6 +39,7 @@ class GsmSMSClient;
 class ImageBurnerClient;
 class ImageLoaderClient;
 class LorgnetteManagerClient;
+class MediaAnalyticsClient;
 class ModemMessagingClient;
 class PermissionBrokerClient;
 class PowerManagerClient;
@@ -130,6 +131,7 @@ class CHROMEOS_EXPORT DBusThreadManager {
   GsmSMSClient* GetGsmSMSClient();
   ImageBurnerClient* GetImageBurnerClient();
   ImageLoaderClient* GetImageLoaderClient();
+  MediaAnalyticsClient* GetMediaAnalyticsClient();
   LorgnetteManagerClient* GetLorgnetteManagerClient();
   ModemMessagingClient* GetModemMessagingClient();
   PermissionBrokerClient* GetPermissionBrokerClient();
@@ -192,11 +194,13 @@ class CHROMEOS_EXPORT DBusThreadManagerSetter {
       std::unique_ptr<ShillThirdPartyVpnDriverClient> client);
   void SetImageBurnerClient(std::unique_ptr<ImageBurnerClient> client);
   void SetImageLoaderClient(std::unique_ptr<ImageLoaderClient> client);
+  void SetMediaAnalyticsClient(std::unique_ptr<MediaAnalyticsClient> client);
   void SetPermissionBrokerClient(
       std::unique_ptr<PermissionBrokerClient> client);
   void SetPowerManagerClient(std::unique_ptr<PowerManagerClient> client);
   void SetSessionManagerClient(std::unique_ptr<SessionManagerClient> client);
   void SetUpdateEngineClient(std::unique_ptr<UpdateEngineClient> client);
+  void SetUpstartClient(std::unique_ptr<UpstartClient> client);
 
  private:
   friend class DBusThreadManager;

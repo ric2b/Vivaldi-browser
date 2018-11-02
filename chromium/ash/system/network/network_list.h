@@ -13,11 +13,10 @@
 
 #include "ash/system/network/network_icon_animation_observer.h"
 #include "ash/system/network/network_info.h"
-#include "ash/system/network/network_list_view_base.h"
+#include "ash/system/network/network_state_list_detailed_view.h"
 #include "base/macros.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_type_pattern.h"
-#include "ui/gfx/image/image_skia.h"
 
 namespace views {
 class Label;
@@ -26,22 +25,23 @@ class View;
 }
 
 namespace ash {
+class HoverHighlightView;
+class TriView;
 
-struct NetworkInfo;
-class NetworkListDelegate;
+namespace tray {
 
 // A list of available networks of a given type. This class is used for all
 // network types except VPNs. For VPNs, see the |VPNList| class.
-class NetworkListView : public NetworkListViewBase,
+class NetworkListView : public NetworkStateListDetailedView,
                         public network_icon::AnimationObserver {
  public:
   class SectionHeaderRowView;
 
-  explicit NetworkListView(NetworkListDelegate* delegate);
+  NetworkListView(SystemTrayItem* owner, LoginStatus login);
   ~NetworkListView() override;
 
-  // NetworkListViewBase:
-  void Update() override;
+  // NetworkStateListDetailedView:
+  void UpdateNetworkList() override;
   bool IsNetworkEntry(views::View* view, std::string* guid) const override;
 
  private:
@@ -66,6 +66,22 @@ class NetworkListView : public NetworkListViewBase,
   // Adds new or updates existing child views including header row and messages.
   // Returns a set of guids for the added network connections.
   std::unique_ptr<std::set<std::string>> UpdateNetworkListEntries();
+
+  // Creates the view which displays a warning message, if a VPN or proxy is
+  // being used.
+  TriView* CreateConnectionWarning();
+
+  // Creates and returns a View with the information in |info|.
+  HoverHighlightView* CreateViewForNetwork(const NetworkInfo& info);
+
+  // Updates |view| with the information in |info|. Note that |view| is
+  // guaranteed to be a View returned from |CreateViewForNetwork()|.
+  void UpdateViewForNetwork(HoverHighlightView* view, const NetworkInfo& info);
+
+  // Creates the view of an extra icon appearing next to the network name
+  // indicating that the network is controlled by an extension. If no extension
+  // is registered for this network, returns |nullptr|.
+  views::View* CreateControlledByExtensionView(const NetworkInfo& info);
 
   // Adds or updates child views representing the network connections when
   // |is_wifi| is matching the attribute of a network connection starting at
@@ -107,7 +123,6 @@ class NetworkListView : public NetworkListViewBase,
   bool NeedUpdateViewForNetwork(const NetworkInfo& info) const;
 
   bool needs_relayout_;
-  NetworkListDelegate* delegate_;
 
   views::Label* no_wifi_networks_view_;
   views::Label* no_cellular_networks_view_;
@@ -117,6 +132,7 @@ class NetworkListView : public NetworkListViewBase,
   views::Separator* cellular_separator_view_;
   views::Separator* tether_separator_view_;
   views::Separator* wifi_separator_view_;
+  TriView* connection_warning_;
 
   // An owned list of network info.
   std::vector<std::unique_ptr<NetworkInfo>> network_list_;
@@ -125,7 +141,7 @@ class NetworkListView : public NetworkListViewBase,
   NetworkMap network_map_;
 
   // A map of network guids to their view.
-  using NetworkGuidMap = std::map<std::string, views::View*>;
+  using NetworkGuidMap = std::map<std::string, HoverHighlightView*>;
   NetworkGuidMap network_guid_map_;
 
   // Save a map of network guids to their infos against current |network_list_|.
@@ -135,6 +151,7 @@ class NetworkListView : public NetworkListViewBase,
   DISALLOW_COPY_AND_ASSIGN(NetworkListView);
 };
 
+}  // namespace tray
 }  // namespace ash
 
 #endif  // ASH_SYSTEM_NETWORK_NETWORK_LIST_H_

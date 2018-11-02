@@ -25,6 +25,7 @@ enum class BrowsingDataType {
   PASSWORDS,
   FORM_DATA,
   BOOKMARKS,
+  SITE_SETTINGS,
   NUM_TYPES
 };
 
@@ -51,8 +52,8 @@ base::Time CalculateEndDeleteTime(TimePeriod time_period);
 void RecordDeletionForPeriod(TimePeriod time_period);
 
 // Constructs the text to be displayed by a counter from the given |result|.
-// Currently this can only be used for counters for which the Result is defined
-// in components/browsing_data/core/counters.
+// Currently this can only be used for counters for which the Result is
+// defined in components/browsing_data/core/counters.
 base::string16 GetCounterTextFromResult(
     const BrowsingDataCounter::Result* result);
 

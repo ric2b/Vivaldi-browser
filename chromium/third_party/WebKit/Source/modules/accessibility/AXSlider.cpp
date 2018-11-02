@@ -100,7 +100,8 @@ void AXSlider::AddChildren() {
     children_.push_back(thumb);
 }
 
-AXObject* AXSlider::ElementAccessibilityHitTest(const IntPoint& point) const {
+AXObjectImpl* AXSlider::ElementAccessibilityHitTest(
+    const IntPoint& point) const {
   if (children_.size()) {
     DCHECK(children_.size() == 1);
     if (children_[0]->GetBoundsInFrameCoordinates().Contains(point))
@@ -111,7 +112,7 @@ AXObject* AXSlider::ElementAccessibilityHitTest(const IntPoint& point) const {
 }
 
 void AXSlider::SetValue(const String& value) {
-  HTMLInputElement* input = GetElement();
+  HTMLInputElement* input = GetInputElement();
 
   if (input->value() == value)
     return;
@@ -122,7 +123,7 @@ void AXSlider::SetValue(const String& value) {
   input->DispatchFormControlChangeEvent();
 }
 
-HTMLInputElement* AXSlider::GetElement() const {
+HTMLInputElement* AXSlider::GetInputElement() const {
   return toHTMLInputElement(layout_object_->GetNode());
 }
 
@@ -143,7 +144,7 @@ LayoutObject* AXSliderThumb::LayoutObjectForRelativeBounds() const {
   Element* thumb_element =
       ToElement(slider_layout_object->GetNode())
           ->UserAgentShadowRoot()
-          ->GetElementById(ShadowElementNames::SliderThumb());
+          ->getElementById(ShadowElementNames::SliderThumb());
   DCHECK(thumb_element);
   return thumb_element->GetLayoutObject();
 }

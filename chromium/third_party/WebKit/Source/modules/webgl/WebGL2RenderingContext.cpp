@@ -61,7 +61,7 @@ static bool ShouldCreateContext(WebGraphicsContext3DProvider* context_provider,
   if (extensions_util->SupportsExtension("GL_EXT_debug_marker")) {
     String context_label(
         String::Format("WebGL2RenderingContext-%p", context_provider));
-    gl->PushGroupMarkerEXT(0, context_label.Ascii().Data());
+    gl->PushGroupMarkerEXT(0, context_label.Ascii().data());
   }
   return true;
 }
@@ -148,8 +148,7 @@ void WebGL2RenderingContext::SetOffscreenCanvasGetContextResult(
 
 ImageBitmap* WebGL2RenderingContext::TransferToImageBitmap(
     ScriptState* script_state) {
-  NOTIMPLEMENTED();
-  return nullptr;
+  return TransferToImageBitmapBase(script_state);
 }
 
 void WebGL2RenderingContext::RegisterContextExtensions() {
@@ -168,7 +167,7 @@ void WebGL2RenderingContext::RegisterContextExtensions() {
       webgl_compressed_texture_pvrtc_);
   RegisterExtension<WebGLCompressedTextureS3TC>(webgl_compressed_texture_s3tc_);
   RegisterExtension<WebGLCompressedTextureS3TCsRGB>(
-      webgl_compressed_texture_s3tc_srgb_, kDraftExtension);
+      webgl_compressed_texture_s3tc_srgb_);
   RegisterExtension<WebGLDebugRendererInfo>(webgl_debug_renderer_info_);
   RegisterExtension<WebGLDebugShaders>(webgl_debug_shaders_);
   RegisterExtension<WebGLGetBufferSubDataAsync>(

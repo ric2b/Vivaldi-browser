@@ -3,7 +3,6 @@
 <translationbundle lang="ca">
 <translation id="1001534784610492198">El fitxer d'instal·lació està malmès o no és vàlid. Torna a baixar Google Chrome.</translation>
 <translation id="1035334672863811645">Inicia la sessió a Chrome</translation>
-<translation id="1061441684050139317">Chrome necessita accés al micròfon per compartir-lo amb aquest lloc web.</translation>
 <translation id="1065672644894730302">No es poden llegir les vostres preferències. És possible que algunes funcions no estiguin disponibles i que els canvis a les preferències no es desin.</translation>
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> abans utilitzava Chrome</translation>
 <translation id="1104959162601287462">Quant a &amp;SO Chrome</translation>
@@ -12,6 +11,7 @@
 <translation id="127345590676626841">Chrome s'actualitza automàticament perquè en tingueu sempre la versió més recent. Quan es completi aquesta baixada, Chrome es reiniciarà i ja el podreu utilitzar.</translation>
 <translation id="1302523850133262269">Espereu mentre Chrome instal·la les actualitzacions més recents del sistema.</translation>
 <translation id="1350930993895295930">Chrome ha detectat un comportament poc habitual</translation>
+<translation id="137466361146087520">Google Chrome Beta</translation>
 <translation id="1393853151966637042">Obtén ajuda per fer servir Chrome</translation>
 <translation id="1399397803214730675">Aquest equip ja disposa d'una versió més recent de Google Chrome. Si el programari no funciona, desinstal·leu Google Chrome i torneu-ho a provar.</translation>
 <translation id="1434626383986940139">Aplicacions de Chrome Canary</translation>
@@ -34,19 +34,19 @@
 <translation id="1773601347087397504">Obtén ajuda per a l'ús de Chrome OS</translation>
 <translation id="1795405610103747296">Instal·la Chrome al telèfon. T'enviarem un SMS al telèfon: <ph name="PHONE_NUMBER" /></translation>
 <translation id="1818142563254268765">No s'ha pogut fer l'actualització de Chrome a la versió més recent, de manera que esteu perdent funcions noves i correccions de seguretat magnífiques. Cal que actualitzeu Chrome.</translation>
+<translation id="1874309113135274312">Google Chrome Beta (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome no està actualitzat</translation>
 <translation id="2063848847527508675">Cal reiniciar Chrome OS per aplicar l'actualització.</translation>
 <translation id="2077129598763517140">Utilitza l'acceleració per maquinari quan estigui disponible</translation>
 <translation id="2084710999043359739">Afegeix a Chrome</translation>
 <translation id="2120620239521071941">Amb aquesta acció, se suprimiran <ph name="ITEMS_COUNT" /> elements d'aquest dispositiu. Per recuperar les teves dades més endavant, inicia la sessió a Chrome com a <ph name="USER_EMAIL" />.</translation>
 <translation id="2123055963409958220">Informa de la <ph name="BEGIN_LINK" />configuració actual<ph name="END_LINK" /> per ajudar-nos a millorar Chrome</translation>
-<translation id="2147651015520127414">Chrome ha verificat que <ph name="ISSUER" /> ha emès el certificat d'aquest lloc web.</translation>
 <translation id="216054706567564023">Instal·la Chrome al telèfon. T'enviarem un SMS al número de telèfon de recuperació del compte.</translation>
 <translation id="2246246234298806438">Google Chrome no pot mostrar la previsualització d'impressió perquè falta el lector de PDF incorporat.</translation>
 <translation id="2252923619938421629">Informa de la configuració actual per ajudar-nos a millorar Google Chrome</translation>
 <translation id="2286950485307333924">Heu iniciat la sessió a Chrome</translation>
 <translation id="2290014774651636340">Falten les claus de l'API de Google. Es desactivaran algunes de les funcionalitats de Google Chrome.</translation>
-<translation id="2290095356545025170">Esteu segur que voleu desinstal·lar Google Chrome?</translation>
+<translation id="2290095356545025170">Confirmeu que voleu desinstal·lar Google Chrome?</translation>
 <translation id="2309047409763057870">Aquesta és una instal·lació secundària de Google Chrome i no pot definir-se com a navegador predeterminat.</translation>
 <translation id="2316129865977710310">No, gràcies</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. Tots els drets reservats.</translation>
@@ -54,6 +54,7 @@
 
 En iniciar la sessió, sigui amb l'usuari que sigui, es combinarà amb <ph name="ACCOUNT_EMAIL_NEW" /> la informació de Chrome com ara adreces d'interès, historial i altres configuracions.</translation>
 <translation id="2397416548179033562">Mostra el menú de Chrome</translation>
+<translation id="2416359993254398973">Per visitar aquest lloc web, Chrome necessita permís per accedir a la teva càmera.</translation>
 <translation id="2429317896000329049">Google Chrome no ha pogut sincronitzar les dades perquè la sincronització no està disponible per al vostre domini.</translation>
 <translation id="2446511512801740068">Chrome no està actualitzat perquè fa temps que no s'inicia. Hi ha una actualització disponible i s'aplicarà tan aviat com el tornis a iniciar.</translation>
 <translation id="2485422356828889247">Desinstal·la</translation>
@@ -108,9 +109,10 @@ Per obtenir més instruccions, consulteu el correu electrònic a <ph name="ACCOU
 <translation id="4053720452172726777">Personalitza i controla Google Chrome</translation>
 <translation id="4147555960264124640">Esteu a punt d'iniciar la sessió amb un compte gestionat i d'atorgar el control del vostre perfil de Google Chrome a l'administrador corresponent. Les vostres dades de Chrome, com ara aplicacions, adreces d'interès, historial, contrasenyes i altres opcions, s'enllaçaran permanentment amb <ph name="USER_NAME" />. Podreu suprimir aquestes dades mitjançant el tauler de control de comptes de Google, però no les podreu associar amb un altre compte. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">L'instal·lador no ha pogut descomprimir el fitxer. Torna a baixar Google Chrome.</translation>
-<translation id="423410644998903704">Chrome necessita accés als permisos per compartir-los amb aquest lloc web.</translation>
 <translation id="4251615635259297716">Voleu enllaçar les vostres dades de Chrome amb aquest compte?</translation>
+<translation id="4251625577313994583">baixa Chrome al dispositiu iPhone</translation>
 <translation id="4309555186815777032">(cal <ph name="BEGIN_BUTTON" />reiniciar<ph name="END_BUTTON" /> Chrome)</translation>
+<translation id="4328355335528187361">Google Chrome Dev (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="437002079035561265">Aquest ordinador ja no rebrà més actualitzacions de Google Chrome perquè aquest sistema Linux ja no és compatible.</translation>
 <translation id="4407807842708586359">SO de Google Chrome</translation>
@@ -134,6 +136,7 @@ Per obtenir més instruccions, consulteu el correu electrònic a <ph name="ACCOU
 <translation id="4921569541910214635">Si compartiu un ordinador, ara podeu configurar Chrome com vulgueu.</translation>
 <translation id="4953650215774548573">Defineix Google Chrome com a navegador predeterminat</translation>
 <translation id="495931528404527476">A Chrome</translation>
+<translation id="4965682129423310439">Chrome ha trobat programari maliciós al teu ordinador. Chrome el pot suprimir i restaurar la teva configuració perquè el teu navegador torni a funcionar amb normalitat.</translation>
 <translation id="4987308747895123092">Tanqueu totes les finestres de Google Chrome (incloses les del mode Windows 8) i torneu-ho a provar.</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="5028489144783860647">Google Chrome no ha pogut sincronitzar les dades. Actualitzeu la frase de contrasenya de sincronització.</translation>
@@ -155,6 +158,7 @@ Per obtenir més instruccions, consulteu el correu electrònic a <ph name="ACCOU
 <translation id="556024056938947818">Google Chrome està provant de mostrar les contrasenyes.</translation>
 <translation id="5563479599352954471">Cercar amb un toc</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
+<translation id="557283862590186398">Per visitar aquest lloc web, Chrome necessita permís per accedir al teu micròfon.</translation>
 <translation id="5620765574781326016">Consulteu més informació sobre els temes en altres llocs web sense sortir de la pàgina.</translation>
 <translation id="565744775970812598">Chrome ha bloquejat <ph name="FILE_NAME" /> perquè pot ser perillós.</translation>
 <translation id="568643307450491754">Trobareu les adreces d'interès al menú de Chrome o a la barra d'adreces d'interès.</translation>
@@ -169,7 +173,6 @@ Per obtenir més instruccions, consulteu el correu electrònic a <ph name="ACCOU
 <translation id="5931853610562009806">En un Mac, és possible que les contrasenyes es desin a Keychain i que altres usuaris de Chrome que comparteixin aquest compte d'OS X puguin accedir-hi i sincronitzar-les.</translation>
 <translation id="5940385492829620908">El vostre web, les adreces d'interès i altres coses de Chrome resideixen aquí.</translation>
 <translation id="5941830788786076944">Estableix Google Chrome com el navegador predeterminat</translation>
-<translation id="6012342843556706400">Chrome necessita accés a la ubicació per compartir-la amb aquest lloc web.</translation>
 <translation id="6014844626092547096">Heu iniciat la sessió a Chrome. El vostre administrador ha desactivat la sincronització.</translation>
 <translation id="6070348360322141662">Per a més seguretat, Google Chrome encriptarà les teves dades</translation>
 <translation id="6113794647360055231">Chrome és millor que mai</translation>
@@ -177,9 +180,11 @@ Per obtenir més instruccions, consulteu el correu electrònic a <ph name="ACCOU
 <translation id="61852838583753520">Actualitza &amp;SO Chrome</translation>
 <translation id="6235018212288296708">Regla d'entrada de Google Chrome per permetre el trànsit de mDNS.</translation>
 <translation id="6236285698028833233">Google Chrome ha deixat d'actualitzar-se i ja no admet aquesta versió del vostre sistema operatiu.</translation>
+<translation id="6291089322031436445">Aplicacions de Chrome Dev</translation>
 <translation id="6291549208091401781">Ja tens instal·lat Google Chrome per a tots els usuaris de l'ordinador.</translation>
 <translation id="6338556085225130112">S'està actualitzant Google Chrome</translation>
 <translation id="6368958679917195344">Chrome OS és possible gràcies a <ph name="BEGIN_LINK_CROS_OSS" />programari addicional de codi obert<ph name="END_LINK_CROS_OSS" />.</translation>
+<translation id="6393863479814692971">Per visitar aquest lloc web, Chrome necessita permís per accedir a la teva càmera i al teu micròfon.</translation>
 <translation id="6400076122676892962">Aquest ordinador aviat deixarà de rebre actualitzacions de Google Chrome perquè Mac OS X 10.6, 10.7 i 10.8 ja no seran compatibles.</translation>
 <translation id="6410540444482791104">Per fer que Chrome sigui més segur i més fàcil d'utilitzar, envia automàticament algunes dades del sistema i contingut de les pàgines a Google per ajudar a detectar les aplicacions i els llocs perillosos.</translation>
 <translation id="6470176598693778404">Aquest ordinador ja no rebrà més actualitzacions de Google Chrome perquè Mac OS X 10.6, 10.7 i 10.8 ja no són compatibles.</translation>
@@ -190,10 +195,13 @@ Per obtenir més instruccions, consulteu el correu electrònic a <ph name="ACCOU
 <translation id="6626317981028933585">Lamentablement, la vostra configuració de Mozilla Firefox no estarà disponible mentre aquest navegador s'estigui executant. Per importar aquesta configuració a Google Chrome, deseu la feina que hagueu fet i tanqueu totes les finestres de Firefox. Seguidament, feu clic a "Continua".</translation>
 <translation id="6634887557811630702">Google Chrome està actualitzat.</translation>
 <translation id="6676384891291319759">Accedeix a Internet</translation>
+<translation id="6697947395630195233">Chrome necessita accés a la teva ubicació per compartir-la amb aquest lloc web.</translation>
 <translation id="6757767188268205357">No em molestis</translation>
 <translation id="683440813066116847">Regla d'entrada de Google Chrome Canary per permetre el trànsit de mDNS.</translation>
 <translation id="686561893457936865">Emporta't Chrome on vagis</translation>
 <translation id="6883876366448858277">Envia una paraula i el seu context a Cerca de Google i, a continuació, mostra definicions, imatges i altres resultats de la cerca.</translation>
+<translation id="6885412569789873916">Aplicacions de Chrome Beta</translation>
+<translation id="6967962315388095737">Regla d'entrada de Google Chrome Beta per permetre el trànsit d'mDNS.</translation>
 <translation id="6970811910055250180">S'està actualitzant el dispositiu...</translation>
 <translation id="6982337800632491844"><ph name="DOMAIN" /> exigeix que llegiu i accepteu els Termes i condicions següents abans no utilitzeu el dispositiu. Aquestes condicions no amplien, modifiquen ni restringeixen les condicions de Google Chrome OS.</translation>
 <translation id="6989339256997917931">Google Chrome està actualitzat, però no l'heu utilitzat durant un mínim de 30 dies.</translation>
@@ -220,6 +228,7 @@ Per obtenir més instruccions, consulteu el correu electrònic a <ph name="ACCOU
 <translation id="7473891865547856676">No, gràcies</translation>
 <translation id="7494905215383356681">Llicències de programari lliure de Chrome</translation>
 <translation id="7520096660192498279">{NUM_ITEMS,plural, =1{Amb aquesta acció, se suprimirà almenys $1 element d'aquest dispositiu de manera permanent. Per recuperar les vostres dades més endavant, inicieu la sessió a Chrome com a $2.}other{Amb aquesta acció, se suprimiran almenys $1 elements d'aquest dispositiu de manera permanent. Per recuperar les vostres dades més endavant, inicieu la sessió a Chrome com a $2.}}</translation>
+<translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7552219221109926349">Mostra Google Chrome en aquest idioma</translation>
 <translation id="7592736734348559088">Google Chrome no ha pogut sincronitzar les dades perquè els detalls d'inici de sessió del compte no estan actualitzats.</translation>
 <translation id="7626032353295482388">Us donem la benvinguda a Chrome</translation>
@@ -227,7 +236,6 @@ Per obtenir més instruccions, consulteu el correu electrònic a <ph name="ACCOU
 <translation id="7761834446675418963">Feu clic al vostre nom per obrir Chrome i començar a navegar.</translation>
 <translation id="7781002470561365167">Hi ha disponible una versió nova de Google Chrome.</translation>
 <translation id="7787950393032327779">Sembla que un altre procés de Google Chrome (<ph name="PROCESS_ID" />) està fent servir el perfil en un altre ordinador (<ph name="HOST_NAME" />). Chrome ha bloquejat el perfil perquè no es malmeti. Si esteu segur que no hi ha cap altre procés que utilitzi el perfil, podeu desbloquejar-lo i tornar a iniciar Chrome.</translation>
-<translation id="7788788617745289808">Chrome necessita accés a la càmera per compartir-la amb aquest lloc web.</translation>
 <translation id="7808348361785373670">Suprimeix de Chrome...</translation>
 <translation id="7825851276765848807">La instal·lació ha fallat a causa d'un error no especificat. Torneu a baixar Google Chrome.</translation>
 <translation id="7855730255114109580">Google Chrome està actualitzat</translation>
@@ -252,6 +260,7 @@ Per obtenir més instruccions, consulteu el correu electrònic a <ph name="ACCOU
 <translation id="8439301513305169426">Chrome desarà aquesta contrasenya amb <ph name="SAVED_PASSWORD_LINK" /> i no caldrà que la recordis.</translation>
 <translation id="8455999171311319804">Opcional: ajuda'ns a millorar Chrome OS enviant automàticament dades de diagnòstic i d'ús a Google.</translation>
 <translation id="8478823064122749032">Instal·la Chrome al telèfon. T'enviarem un SMS al número de telèfon de recuperació del compte: <ph name="PHONE_NUMBER" /></translation>
+<translation id="8521348052903287641">Regla d'entrada de Google Chrome Dev per permetre el trànsit d'mDNS.</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8547799825197623713">Menú d'aplicacions de Chrome per a Canary</translation>
 <translation id="8556340503434111824">Hi ha disponible una nova versió de Google Chrome, i és més ràpida que mai.</translation>
@@ -271,7 +280,7 @@ Per obtenir més instruccions, consulteu el correu electrònic a <ph name="ACCOU
 <translation id="8914504000324227558">Torna a iniciar Chrome</translation>
 <translation id="9026991721384951619">Chrome OS no ha pogut sincronitzar les vostres dades perquè les dades d'inici de sessió del compte no estan actualitzades.</translation>
 <translation id="9067395829937117663">Google Chrome requereix Windows 7 o una versió posterior.</translation>
-<translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Advertiment:<ph name="END_BOLD" /> Google Chrome no pot evitar que les extensions registrin l'historial de navegació. Per desactivar l'extensió en mode d'incògnit, anul·leu la selecció de l'opció corresponent.</translation>
+<translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Advertiment:<ph name="END_BOLD" /> Google Chrome no pot evitar que les extensions registrin l'historial de navegació. Per desactivar l'extensió en mode d'incògnit, desmarca aquesta opció.</translation>
 <translation id="911206726377975832">També voleu suprimir les dades de navegació?</translation>
 <translation id="919706545465235479">Actualitza Chrome per iniciar la sincronització</translation>
 <translation id="924447568950697217">Estableix Chrome com a navegador predeterminat</translation>

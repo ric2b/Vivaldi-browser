@@ -56,6 +56,33 @@
             "description": "true if we want to sync this data type, otherwise false."
           }
         }
+      },
+      {
+        "id": "SyncStatusInfo",
+        "type": "object",
+        "description": "Contains information about the last sync cycle and the state of the sync engine",
+        "properties":{
+          "last_sync_time": {
+            "type": "string",
+            "description": "The last time a sync cycle started"
+          },
+          "last_download_updates_success": {
+            "type": "boolean",
+            "description": "Whether the download updates part of the last sync cycle was successful"
+          },
+          "last_commit_success": {
+            "type": "boolean",
+            "description": "Whether the commit part of the last sync cycle was successful"
+          },
+          "is_encrypting_everything": {
+            "type": "boolean",
+            "description": "Wheter the engine is encrypting all data types"
+          },
+          "has_synced": {
+            "type": "boolean",
+            "description": "Whether the first sync cycle has been completed"
+          }
+        }
       }
     ],
     "functions": [
@@ -88,7 +115,7 @@
       {
         "name": "setEncryptionPassword",
         "type": "function",
-        "description": "Sets the password to use for encryption/decryption of Sync data.",
+        "description": "Sets the password to use for encryption/decryption of Sync data. If an empty password is supplied, the password supplied when logging in will be used.",
         "parameters": [
           {
             "name": "password",
@@ -116,6 +143,23 @@
         "name": "isFirstSetup",
         "type": "function",
         "description": "Returns true if this is the initial setup of Sync. If so,setTypes must be called before any syncing occurs.",
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "firstSetup",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "isEncryptionPasswordSetUp",
+        "type": "function",
+        "description": "Returns true if an encryption password has been set up.",
         "parameters": [
           {
             "name": "callback",
@@ -176,6 +220,29 @@
         ]
       },
       {
+        "name": "getStatus",
+        "type": "function",
+        "description": "Returns informations about the status of the last sync cycle and the sync engine",
+        "parameters":[
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters":[
+              {
+                "name": "Status_info",
+                "$ref": "SyncStatusInfo"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setupComplete",
+        "type": "function",
+        "description": "Informs the backed that the user is done setting up sync",
+        "parameters": [ ]
+      },
+      {
         "name": "logout",
         "type": "function",
         "description": "Indicates that the user should be logged out from sync",
@@ -185,14 +252,7 @@
         "name": "clearData",
         "type": "function",
         "description": "Clear all the user's data on the server side and logs them out",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "description": "Called when the data has been cleared",
-            "parameters": [ ]
-          }
-        ]
+        "parameters": [ ]
       },
       {
         "name": "pollServer",
@@ -202,12 +262,6 @@
       }
     ],
     "events": [
-      {
-        "name": "onSyncConfigured",
-        "type": "function",
-        "description": "Fired when the sync engine has been configured.",
-        "parameters": []
-      },
       {
         "name": "onLoginDone",
         "type": "function",
@@ -230,6 +284,12 @@
         "name": "onEndSyncing",
         "type": "function",
         "description": "Fired when syncing is done.",
+        "parameters": []
+      },
+      {
+        "name": "onLogoutDone",
+        "type": "function",
+        "description": "Fired when the user has been logged out, either from a UI action or from a server request.",
         "parameters": []
       },
       {

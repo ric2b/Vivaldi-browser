@@ -14,8 +14,10 @@ import("//url/features.gni")
 
 assert(!is_component_build, "Cronet requires static library build.")
 
-declare_args() {
-  cronet_enable_data_reduction_proxy_support = false
+group("cronet_consumer_group") {
+  deps = [
+    "//components/cronet/ios/cronet_consumer",
+  ]
 }
 
 process_version("cronet_version_header") {

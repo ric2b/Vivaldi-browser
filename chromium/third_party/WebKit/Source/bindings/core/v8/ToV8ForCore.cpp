@@ -19,12 +19,17 @@ v8::Local<v8::Value> ToV8(DOMWindow* window,
 
   if (UNLIKELY(!window))
     return v8::Null(isolate);
-  // Initializes environment of a frame, and return the global object
-  // of the frame.
+
+  // TODO(yukishiino): Get understanding of why it's possible to initialize
+  // the context after the frame is detached.  And then, remove the following
+  // lines.  See also https://crbug.com/712638 .
   Frame* frame = window->GetFrame();
   if (!frame)
-    return V8Undefined();
+    return v8::Local<v8::Object>();
 
+  // TODO(yukishiino): Make this function always return the non-empty handle
+  // even if the frame is detached because the global proxy must always exist
+  // per spec.
   return frame->GetWindowProxy(DOMWrapperWorld::Current(isolate))
       ->GlobalProxyIfNotDetached();
 }

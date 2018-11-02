@@ -6,7 +6,7 @@
 
 #include <v8.h>
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/modules/v8/V8PaymentAppResponse.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -54,6 +54,7 @@ const String GetMessageForResponseError(WebServiceWorkerResponseError error) {
     case kWebServiceWorkerResponseErrorForeignFetchHeadersWithoutOrigin:
     case kWebServiceWorkerResponseErrorForeignFetchMismatchedOrigin:
     case kWebServiceWorkerResponseErrorRedirectedResponseForNotFollowRequest:
+    case kWebServiceWorkerResponseErrorDataPipeCreationFailed:
       NOTREACHED();
       error_message = error_message + "an unexpected error occurred.";
       break;

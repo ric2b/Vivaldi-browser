@@ -9,6 +9,7 @@
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/interfaces/window_pin_type.mojom.h"
 #include "ash/root_window_controller.h"
+#include "ash/shelf/shelf_model.h"
 #include "ash/shell.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/chrome_browser_main.h"
@@ -17,7 +18,8 @@
 #include "chrome/browser/ui/ash/cast_config_client_media_router.h"
 #include "chrome/browser/ui/ash/chrome_new_window_client.h"
 #include "chrome/browser/ui/ash/chrome_shell_content_state.h"
-#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_mus.h"
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#include "chrome/browser/ui/ash/lock_screen_client.h"
 #include "chrome/browser/ui/ash/media_client.h"
 #include "chrome/browser/ui/ash/session_controller_client.h"
 #include "chrome/browser/ui/ash/system_tray_client.h"
@@ -41,6 +43,9 @@ ChromeBrowserMainExtraPartsAsh::~ChromeBrowserMainExtraPartsAsh() {}
 void ChromeBrowserMainExtraPartsAsh::ServiceManagerConnectionStarted(
     content::ServiceManagerConnection* connection) {
   if (ash_util::IsRunningInMash()) {
+    // ash::Shell will not be created because ash is running out-of-process.
+    ash::Shell::SetIsBrowserProcessWithMash();
+
     // Register ash-specific window properties with Chrome's property converter.
     // This propagates ash properties set on chrome windows to ash, via mojo.
     DCHECK(views::MusClient::Exists());
@@ -48,17 +53,19 @@ void ChromeBrowserMainExtraPartsAsh::ServiceManagerConnectionStarted(
     aura::WindowTreeClientDelegate* delegate = mus_client;
     aura::PropertyConverter* converter = delegate->GetPropertyConverter();
 
-    converter->RegisterProperty(
+    converter->RegisterPrimitiveProperty(
         ash::kPanelAttachedKey,
         ui::mojom::WindowManager::kPanelAttached_Property,
         aura::PropertyConverter::CreateAcceptAnyValueCallback());
-    converter->RegisterProperty(
+    converter->RegisterPrimitiveProperty(
         ash::kShelfItemTypeKey,
         ui::mojom::WindowManager::kShelfItemType_Property,
         base::Bind(&ash::IsValidShelfItemType));
-    converter->RegisterProperty(ash::kWindowPinTypeKey,
-                                ash::mojom::kWindowPinType_Property,
-                                base::Bind(&ash::IsValidWindowPinType));
+    converter->RegisterPrimitiveProperty(
+        ash::kWindowPinTypeKey, ash::mojom::kWindowPinType_Property,
+        base::Bind(&ash::IsValidWindowPinType));
+    converter->RegisterStringProperty(
+        ash::kShelfIDKey, ui::mojom::WindowManager::kShelfID_Property);
 
     mus_client->SetMusPropertyMirror(
         base::MakeUnique<ash::MusPropertyMirrorAsh>());
@@ -95,15 +102,18 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit() {
   if (ash_util::IsRunningInMash()) {
     DCHECK(!ash::Shell::HasInstance());
     DCHECK(!ChromeLauncherController::instance());
-    chrome_launcher_controller_mus_ =
-        base::MakeUnique<ChromeLauncherControllerMus>();
-    chrome_launcher_controller_mus_->Init();
+    // TODO(crbug.com/557406): Synchronize this ShelfModel with the one in Ash.
+    chrome_shelf_model_ = base::MakeUnique<ash::ShelfModel>();
+    chrome_launcher_controller_ = base::MakeUnique<ChromeLauncherController>(
+        nullptr, chrome_shelf_model_.get());
+    chrome_launcher_controller_->Init();
     chrome_shell_content_state_ = base::MakeUnique<ChromeShellContentState>();
   }
 
   cast_config_client_media_router_ =
       base::MakeUnique<CastConfigClientMediaRouter>();
   media_client_ = base::MakeUnique<MediaClient>();
+  lock_screen_client_ = base::MakeUnique<LockScreenClient>();
 
   if (!ash::Shell::HasInstance())
     return;
@@ -117,10 +127,13 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit() {
 }
 
 void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
+  chrome_launcher_controller_.reset();
+  chrome_shelf_model_.reset();
   vpn_list_forwarder_.reset();
   volume_controller_.reset();
   new_window_client_.reset();
   system_tray_client_.reset();
+  lock_screen_client_.reset();
   media_client_.reset();
   cast_config_client_media_router_.reset();
   session_controller_client_.reset();

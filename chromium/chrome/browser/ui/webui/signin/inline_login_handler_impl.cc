@@ -59,7 +59,6 @@
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/browser/signin_investigator.h"
 #include "components/signin/core/browser/signin_metrics.h"
-#include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_handle.h"
@@ -112,7 +111,7 @@ void RedirectToNtpOrAppsPageIfNecessary(
 }
 
 void CloseModalSigninIfNeeded(InlineLoginHandlerImpl* handler) {
-  if (handler && switches::UsePasswordSeparatedSigninFlow()) {
+  if (handler) {
     Browser* browser = handler->GetDesktopBrowser();
     if (browser)
       browser->signin_view_controller()->CloseModalSignin();
@@ -252,8 +251,8 @@ void InlineSigninHelper::OnClientOAuthSuccessAndBrowserOpened(
       // middle of any webui handler code.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE,
-          base::Bind(&InlineLoginHandlerImpl::CloseTab, handler_,
-                     signin::ShouldShowAccountManagement(current_url_)));
+          base::BindOnce(&InlineLoginHandlerImpl::CloseTab, handler_,
+                         signin::ShouldShowAccountManagement(current_url_)));
     }
 
     if (reason == signin_metrics::Reason::REASON_REAUTHENTICATION ||
@@ -274,9 +273,8 @@ void InlineSigninHelper::OnClientOAuthSuccessAndBrowserOpened(
       bool show_settings_without_configure =
           error_controller->HasError() && sync_service &&
           sync_service->IsFirstSetupComplete();
-      start_mode = show_settings_without_configure ?
-          OneClickSigninSyncStarter::SHOW_SETTINGS_WITHOUT_CONFIGURE :
-          OneClickSigninSyncStarter::CONFIGURE_SYNC_FIRST;
+      if (!show_settings_without_configure)
+        start_mode = OneClickSigninSyncStarter::CONFIGURE_SYNC_FIRST;
     }
 
     OneClickSigninSyncStarter::ConfirmationRequired confirmation_required =
@@ -543,11 +541,8 @@ void InlineLoginHandlerImpl::SetExtraInitParams(base::DictionaryValue& params) {
 
   // Use new embedded flow if in constrained window.
   if (is_constrained == "1") {
-    const bool is_new_gaia_flow = switches::UsePasswordSeparatedSigninFlow();
-    const GURL& url = is_new_gaia_flow
-            ? GaiaUrls::GetInstance()->embedded_signin_url()
-            : GaiaUrls::GetInstance()->password_combined_embedded_signin_url();
-    params.SetBoolean("isNewGaiaFlow", is_new_gaia_flow);
+    const GURL& url = GaiaUrls::GetInstance()->embedded_signin_url();
+    params.SetBoolean("isNewGaiaFlow", true);
     params.SetString("clientId",
                      GaiaUrls::GetInstance()->oauth2_chrome_client_id());
     params.SetString("gaiaPath", url.path().substr(1));
@@ -608,8 +603,7 @@ void InlineLoginHandlerImpl::CompleteLogin(const base::ListValue* args) {
 
   std::string is_constrained;
   net::GetValueForKeyInQuery(current_url, "constrained", &is_constrained);
-  const bool is_password_separated_signin_flow = is_constrained == "1" &&
-      switches::UsePasswordSeparatedSigninFlow();
+  const bool is_password_separated_signin_flow = is_constrained == "1";
 
   base::string16 session_index_string16;
   dict->GetString("sessionIndex", &session_index_string16);
@@ -858,9 +852,9 @@ void InlineLoginHandlerImpl::SyncStarterCallback(
   } else if (auto_close) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&InlineLoginHandlerImpl::CloseTab,
-                   weak_factory_.GetWeakPtr(),
-                   signin::ShouldShowAccountManagement(current_url)));
+        base::BindOnce(&InlineLoginHandlerImpl::CloseTab,
+                       weak_factory_.GetWeakPtr(),
+                       signin::ShouldShowAccountManagement(current_url)));
   } else {
     RedirectToNtpOrAppsPageIfNecessary(contents, access_point);
   }

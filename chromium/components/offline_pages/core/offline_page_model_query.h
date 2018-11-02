@@ -86,6 +86,13 @@ class OfflinePageModelQueryBuilder {
                                         const std::vector<GURL>& urls);
 
   // Only include pages whose namespaces satisfy
+  // ClientPolicyController::IsRemovedOnCacheReset(|namespace|) ==
+  //     |removed_on_cache_reset|
+  // Multiple calls overwrite previous ones.
+  OfflinePageModelQueryBuilder& RequireRemovedOnCacheReset(
+      Requirement removed_on_cache_reset);
+
+  // Only include pages whose namespaces satisfy
   // ClientPolicyController::IsSupportedByDownload(|namespace|) ==
   //     |supported_by_download|
   // Multiple calls overwrite previous ones.
@@ -106,6 +113,9 @@ class OfflinePageModelQueryBuilder {
   OfflinePageModelQueryBuilder& RequireRestrictedToOriginalTab(
       Requirement original_tab);
 
+  // Only include results from a single namespace.
+  OfflinePageModelQueryBuilder& RequireNamespace(const std::string& name_space);
+
   // Builds the query using the namespace policies provided by |controller|
   // This resets the internal state.  |controller| should not be |nullptr|.
   std::unique_ptr<OfflinePageModelQuery> Build(
@@ -123,9 +133,12 @@ class OfflinePageModelQueryBuilder {
   std::pair<Requirement, std::vector<ClientId>> client_ids_;
   std::pair<Requirement, std::vector<GURL>> urls_;
 
+  Requirement removed_on_cache_reset_ = Requirement::UNSET;
   Requirement supported_by_download_ = Requirement::UNSET;
   Requirement shown_as_recently_visited_site_ = Requirement::UNSET;
   Requirement restricted_to_original_tab_ = Requirement::UNSET;
+
+  std::unique_ptr<std::string> name_space_;
 
   DISALLOW_COPY_AND_ASSIGN(OfflinePageModelQueryBuilder);
 };

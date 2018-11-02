@@ -99,7 +99,7 @@ class Json5File(object):
         self._process(doc)
 
     @classmethod
-    def load_from_files(cls, file_paths, default_metadata, default_parameters=None):
+    def load_from_files(cls, file_paths, default_metadata=None, default_parameters=None):
         merged_doc = dict()
         for path in file_paths:
             assert path.endswith(".json5")
@@ -155,6 +155,7 @@ class Json5File(object):
         if not self.parameters:
             entry.update(item)
             return entry
+        assert "name" not in self.parameters, "The parameter 'name' is reserved, use a different name."
         entry["name"] = item.pop("name")
         # Validate parameters if it's specified.
         for key, value in item.items():
@@ -162,8 +163,9 @@ class Json5File(object):
                 raise Exception(
                     "Unknown parameter: '%s'\nKnown params: %s" %
                     (key, self.parameters.keys()))
-            if self.parameters[key]:
-                self._validate_parameter(self.parameters[key], value)
+            assert self.parameters[key] is not None, \
+                "Specification for parameter 'key' cannot be None. Use {} instead."
+            self._validate_parameter(self.parameters[key], value)
             entry[key] = value
         return entry
 
@@ -196,8 +198,6 @@ class Writer(object):
     def __init__(self, json5_files):
         self._outputs = {}  # file_name -> generator
         self.gperf_path = None
-        if isinstance(json5_files, basestring):
-            json5_files = [json5_files]
         if json5_files:
             self.json5_file = Json5File.load_from_files(json5_files,
                                                         self.default_metadata,

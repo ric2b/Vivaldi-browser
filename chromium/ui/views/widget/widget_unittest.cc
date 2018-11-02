@@ -738,6 +738,8 @@ class WidgetObserverTest : public WidgetTest, public WidgetObserver {
   void OnWidgetDestroying(Widget* widget) override {
     if (active_ == widget)
       active_ = nullptr;
+    if (widget_activated_ == widget)
+      widget_activated_ = nullptr;
     widget_closed_ = widget;
   }
 
@@ -808,11 +810,17 @@ class WidgetObserverTest : public WidgetTest, public WidgetObserver {
   Widget* widget_to_close_on_hide_;
 };
 
-TEST_F(WidgetObserverTest, DISABLED_ActivationChange) {
-  WidgetAutoclosePtr toplevel(CreateTopLevelPlatformWidget());
+// This test appears to be flaky on Mac.
+#if defined(OS_MACOSX)
+#define MAYBE_ActivationChange DISABLED_ActivationChange
+#else
+#define MAYBE_ActivationChange ActivationChange
+#endif
 
-  Widget* toplevel1 = NewWidget();
-  Widget* toplevel2 = NewWidget();
+TEST_F(WidgetObserverTest, MAYBE_ActivationChange) {
+  WidgetAutoclosePtr toplevel(CreateTopLevelPlatformWidget());
+  WidgetAutoclosePtr toplevel1(NewWidget());
+  WidgetAutoclosePtr toplevel2(NewWidget());
 
   toplevel1->Show();
   toplevel2->Show();
@@ -822,20 +830,82 @@ TEST_F(WidgetObserverTest, DISABLED_ActivationChange) {
   toplevel1->Activate();
 
   RunPendingMessages();
-  EXPECT_EQ(toplevel1, widget_activated());
+  EXPECT_EQ(toplevel1.get(), widget_activated());
 
   toplevel2->Activate();
   RunPendingMessages();
-  EXPECT_EQ(toplevel1, widget_deactivated());
-  EXPECT_EQ(toplevel2, widget_activated());
-  EXPECT_EQ(toplevel2, active());
+  EXPECT_EQ(toplevel1.get(), widget_deactivated());
+  EXPECT_EQ(toplevel2.get(), widget_activated());
+  EXPECT_EQ(toplevel2.get(), active());
 }
 
-TEST_F(WidgetObserverTest, DISABLED_VisibilityChange) {
-  WidgetAutoclosePtr toplevel(CreateTopLevelPlatformWidget());
+namespace {
 
-  Widget* child1 = NewWidget();
-  Widget* child2 = NewWidget();
+// This class simulates a focus manager that moves focus to a second widget when
+// the first one is closed. It simulates a situation where a sequence of widget
+// observers might try to call Widget::Close in response to a OnWidgetClosing().
+class WidgetActivationForwarder : public TestWidgetObserver {
+ public:
+  WidgetActivationForwarder(Widget* current_active_widget,
+                            Widget* widget_to_activate)
+      : TestWidgetObserver(current_active_widget),
+        widget_to_activate_(widget_to_activate) {}
+
+  ~WidgetActivationForwarder() override {}
+
+ private:
+  // WidgetObserver overrides:
+  void OnWidgetClosing(Widget* widget) override {
+    widget->OnNativeWidgetActivationChanged(false);
+    widget_to_activate_->Activate();
+  }
+  void OnWidgetActivationChanged(Widget* widget, bool active) override {
+    if (!active)
+      widget->Close();
+  }
+
+  Widget* widget_to_activate_;
+
+  DISALLOW_COPY_AND_ASSIGN(WidgetActivationForwarder);
+};
+
+// This class observes a widget and counts the number of times OnWidgetClosing
+// is called.
+class WidgetCloseCounter : public TestWidgetObserver {
+ public:
+  explicit WidgetCloseCounter(Widget* widget) : TestWidgetObserver(widget) {}
+
+  ~WidgetCloseCounter() override {}
+
+  int close_count() const { return close_count_; }
+
+ private:
+  // WidgetObserver overrides:
+  void OnWidgetClosing(Widget* widget) override { close_count_++; }
+
+  int close_count_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(WidgetCloseCounter);
+};
+
+}  // namespace
+
+// Makes sure close notifications aren't sent more than once when a Widget is
+// shutting down. Test for crbug.com/714334
+TEST_F(WidgetObserverTest, CloseReentrancy) {
+  Widget* widget1 = CreateTopLevelPlatformWidget();
+  Widget* widget2 = CreateTopLevelPlatformWidget();
+  WidgetCloseCounter counter(widget1);
+  WidgetActivationForwarder focus_manager(widget1, widget2);
+  widget1->Close();
+  EXPECT_EQ(1, counter.close_count());
+  widget2->Close();
+}
+
+TEST_F(WidgetObserverTest, VisibilityChange) {
+  WidgetAutoclosePtr toplevel(CreateTopLevelPlatformWidget());
+  WidgetAutoclosePtr child1(NewWidget());
+  WidgetAutoclosePtr child2(NewWidget());
 
   toplevel->Show();
   child1->Show();
@@ -844,16 +914,16 @@ TEST_F(WidgetObserverTest, DISABLED_VisibilityChange) {
   reset();
 
   child1->Hide();
-  EXPECT_EQ(child1, widget_hidden());
+  EXPECT_EQ(child1.get(), widget_hidden());
 
   child2->Hide();
-  EXPECT_EQ(child2, widget_hidden());
+  EXPECT_EQ(child2.get(), widget_hidden());
 
   child1->Show();
-  EXPECT_EQ(child1, widget_shown());
+  EXPECT_EQ(child1.get(), widget_shown());
 
   child2->Show();
-  EXPECT_EQ(child2, widget_shown());
+  EXPECT_EQ(child2.get(), widget_shown());
 }
 
 TEST_F(WidgetObserverTest, DestroyBubble) {
@@ -1321,16 +1391,18 @@ TEST_F(WidgetTest, TestViewWidthAfterMinimizingWidget) {
 // Desktop native widget Aura tests are for non Chrome OS platforms.
 #if !defined(OS_CHROMEOS)
 // This class validates whether paints are received for a visible Widget.
-// To achieve this it overrides the Show and Close methods on the Widget class
-// and sets state whether subsequent paints are expected.
-class DesktopAuraTestValidPaintWidget : public views::Widget {
+// It observes Widget visibility and Close() and tracks whether subsequent
+// paints are expected.
+class DesktopAuraTestValidPaintWidget : public Widget, public WidgetObserver {
  public:
   DesktopAuraTestValidPaintWidget()
-    : received_paint_(false),
-      expect_paint_(true),
-      received_paint_while_hidden_(false) {}
+      : received_paint_(false),
+        expect_paint_(true),
+        received_paint_while_hidden_(false) {
+    AddObserver(this);
+  }
 
-  ~DesktopAuraTestValidPaintWidget() override {}
+  ~DesktopAuraTestValidPaintWidget() override { RemoveObserver(this); }
 
   void InitForTest(Widget::InitParams create_params);
 
@@ -1353,20 +1425,10 @@ class DesktopAuraTestValidPaintWidget : public views::Widget {
     quit_closure_ = base::Closure();
   }
 
-  // views::Widget:
-  void Show() override {
-    expect_paint_ = true;
-    views::Widget::Show();
-  }
-
+  // Widget:
   void Close() override {
     expect_paint_ = false;
     views::Widget::Close();
-  }
-
-  void Hide() {
-    expect_paint_ = false;
-    views::Widget::Hide();
   }
 
   void OnNativeWidgetPaint(const ui::PaintContext& context) override {
@@ -1377,6 +1439,11 @@ class DesktopAuraTestValidPaintWidget : public views::Widget {
     views::Widget::OnNativeWidgetPaint(context);
     if (!quit_closure_.is_null())
       quit_closure_.Run();
+  }
+
+  // WidgetObserver:
+  void OnWidgetVisibilityChanged(Widget* widget, bool visible) override {
+    expect_paint_ = visible;
   }
 
  private:

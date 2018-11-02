@@ -170,7 +170,7 @@ _disabled_targets = [
   #  "//extensions/shell:app_shell_lib", # disabling this crashes GN
   "//extensions/shell:app_shell_framework",
   "//ui/aura:demo",
-  "//media/mojo/clients:clients",
+  #"//media/mojo/clients:clients",
   "//extensions/shell:app_shell",
   "//gpu:gles2_conform_support",
   "//tools/battor_agent:battor_agent",

@@ -11,15 +11,17 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "cc/surfaces/compositor_frame_sink_support.h"
 #include "cc/surfaces/direct_surface_reference_factory.h"
 #include "cc/surfaces/local_surface_id_allocator.h"
 #include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surface_info.h"
 
 #if DCHECK_IS_ON()
 #include <sstream>
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 namespace cc {
 
@@ -65,8 +67,8 @@ std::string SurfaceManager::SurfaceReferencesToString() {
 #endif
 
 void SurfaceManager::SetDependencyTracker(
-    std::unique_ptr<SurfaceDependencyTracker> dependency_tracker) {
-  dependency_tracker_ = std::move(dependency_tracker);
+    SurfaceDependencyTracker* dependency_tracker) {
+  dependency_tracker_ = dependency_tracker;
 }
 
 void SurfaceManager::RequestSurfaceResolution(Surface* pending_surface) {
@@ -75,41 +77,38 @@ void SurfaceManager::RequestSurfaceResolution(Surface* pending_surface) {
 }
 
 std::unique_ptr<Surface> SurfaceManager::CreateSurface(
-    base::WeakPtr<SurfaceFactory> surface_factory,
-    const LocalSurfaceId& local_surface_id) {
+    base::WeakPtr<CompositorFrameSinkSupport> compositor_frame_sink_support,
+    const SurfaceInfo& surface_info) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(local_surface_id.is_valid() && surface_factory);
-
-  SurfaceId surface_id(surface_factory->frame_sink_id(), local_surface_id);
+  DCHECK(surface_info.is_valid());
+  DCHECK(compositor_frame_sink_support);
+  DCHECK_EQ(surface_info.id().frame_sink_id(),
+            compositor_frame_sink_support->frame_sink_id());
 
   // If no surface with this SurfaceId exists, simply create the surface and
   // return.
-  auto surface_iter = surface_map_.find(surface_id);
-  // NOTE(andre@vivaldi.com) : Since we delete the view, and then the
-  // |SurfaceFactory| owned by the |Surface| in
+  auto surface_iter = surface_map_.find(surface_info.id());
+  // NOTE(andre@vivaldi.com) : Since we delete the view, in
   // WebContentsViewGuest::CreateViewForWidget we cannot reuse exsisting
   // Surfaces pending for destruction. Always clean up and return a new.
   // VB-28351.
-  bool do_not_reuse = false;
-  if (surface_iter != surface_map_.end()) {
-    auto* tsurface = surface_iter->second;
-    do_not_reuse = (tsurface->factory().get() == nullptr);
-    if (do_not_reuse) {
-      // make sure the surface is no longer referenced
-      UnregisterSurface(surface_id);
-      for (SurfaceDestroyList::iterator dead_iter =
-               surfaces_to_destroy_.begin();
-           dead_iter != surfaces_to_destroy_.end();) {
-        if ((*dead_iter)->surface_id() == surface_id) {
-          surfaces_to_destroy_.erase(dead_iter);
-          break;
-        }
-        dead_iter++;
+  if (vivaldi::IsVivaldiRunning() && surface_iter != surface_map_.end()) {
+    // make sure the surface is no longer referenced since we al
+    UnregisterSurface(surface_info.id());
+    for (SurfaceDestroyList::iterator dead_iter = surfaces_to_destroy_.begin();
+         dead_iter != surfaces_to_destroy_.end();) {
+      if ((*dead_iter)->surface_id() == surface_info.id()) {
+        surfaces_to_destroy_.erase(dead_iter);
+        break;
       }
+      dead_iter++;
     }
+    // Advance from the one that got destroyed.
+    surface_iter = surface_map_.end();
   }
-  if (do_not_reuse || surface_iter == surface_map_.end()) {
-    auto surface = base::MakeUnique<Surface>(surface_id, surface_factory);
+  if (surface_iter == surface_map_.end()) {
+    auto surface =
+        base::MakeUnique<Surface>(surface_info, compositor_frame_sink_support);
     surface_map_[surface->surface_id()] = surface.get();
     return surface;
   }
@@ -124,14 +123,15 @@ std::unique_ptr<Surface> SurfaceManager::CreateSurface(
   // the queue and reuse it.
   auto it =
       std::find_if(surfaces_to_destroy_.begin(), surfaces_to_destroy_.end(),
-                   [&surface_id](const std::unique_ptr<Surface>& surface) {
-                     return surface->surface_id() == surface_id;
+                   [&surface_info](const std::unique_ptr<Surface>& surface) {
+                     return surface->surface_id() == surface_info.id();
                    });
   DCHECK(it != surfaces_to_destroy_.end());
   std::unique_ptr<Surface> surface = std::move(*it);
   surfaces_to_destroy_.erase(it);
   surface->set_destroyed(false);
-  DCHECK_EQ(surface_factory.get(), surface->factory().get());
+  DCHECK_EQ(compositor_frame_sink_support.get(),
+            surface->compositor_frame_sink_support().get());
   return surface;
 }
 
@@ -430,15 +430,15 @@ void SurfaceManager::RemoveTemporaryReference(const SurfaceId& surface_id,
     temporary_reference_ranges_.erase(frame_sink_id);
 }
 
-void SurfaceManager::RegisterSurfaceFactoryClient(
+void SurfaceManager::RegisterFrameSinkManagerClient(
     const FrameSinkId& frame_sink_id,
-    SurfaceFactoryClient* client) {
-  framesink_manager_.RegisterSurfaceFactoryClient(frame_sink_id, client);
+    FrameSinkManagerClient* client) {
+  framesink_manager_.RegisterFrameSinkManagerClient(frame_sink_id, client);
 }
 
-void SurfaceManager::UnregisterSurfaceFactoryClient(
+void SurfaceManager::UnregisterFrameSinkManagerClient(
     const FrameSinkId& frame_sink_id) {
-  framesink_manager_.UnregisterSurfaceFactoryClient(frame_sink_id);
+  framesink_manager_.UnregisterFrameSinkManagerClient(frame_sink_id);
 }
 
 void SurfaceManager::RegisterBeginFrameSource(
@@ -449,6 +449,10 @@ void SurfaceManager::RegisterBeginFrameSource(
 
 void SurfaceManager::UnregisterBeginFrameSource(BeginFrameSource* source) {
   framesink_manager_.UnregisterBeginFrameSource(source);
+}
+
+BeginFrameSource* SurfaceManager::GetPrimaryBeginFrameSource() {
+  return framesink_manager_.GetPrimaryBeginFrameSource();
 }
 
 void SurfaceManager::RegisterFrameSinkHierarchy(
@@ -498,6 +502,28 @@ void SurfaceManager::SurfaceCreated(const SurfaceInfo& surface_info) {
     observer.OnSurfaceCreated(surface_info);
 }
 
+void SurfaceManager::SurfaceActivated(Surface* surface) {
+  if (dependency_tracker_)
+    dependency_tracker_->OnSurfaceActivated(surface);
+}
+
+void SurfaceManager::SurfaceDependenciesChanged(
+    Surface* surface,
+    const base::flat_set<SurfaceId>& added_dependencies,
+    const base::flat_set<SurfaceId>& removed_dependencies) {
+  if (dependency_tracker_) {
+    dependency_tracker_->OnSurfaceDependenciesChanged(
+        surface, added_dependencies, removed_dependencies);
+  }
+}
+
+void SurfaceManager::SurfaceDiscarded(Surface* surface) {
+  for (auto& observer : observer_list_)
+    observer.OnSurfaceDiscarded(surface->surface_id());
+  if (dependency_tracker_)
+    dependency_tracker_->OnSurfaceDiscarded(surface);
+}
+
 void SurfaceManager::UnregisterSurface(const SurfaceId& surface_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
   SurfaceMap::iterator it = surface_map_.find(surface_id);
@@ -521,19 +547,15 @@ void SurfaceManager::SurfaceReferencesToStringImpl(const SurfaceId& surface_id,
     if (surface->HasPendingFrame()) {
       // This provides the surface size from the root render pass.
       const CompositorFrame& frame = surface->GetPendingFrame();
-      if (!frame.render_pass_list.empty()) {
-        *str << " pending "
-             << frame.render_pass_list.back()->output_rect.size().ToString();
-      }
+      *str << " pending "
+           << frame.render_pass_list.back()->output_rect.size().ToString();
     }
 
     if (surface->HasActiveFrame()) {
       // This provides the surface size from the root render pass.
       const CompositorFrame& frame = surface->GetActiveFrame();
-      if (!frame.render_pass_list.empty()) {
-        *str << " active "
-             << frame.render_pass_list.back()->output_rect.size().ToString();
-      }
+      *str << " active "
+           << frame.render_pass_list.back()->output_rect.size().ToString();
     }
   } else {
     *str << surface_id;

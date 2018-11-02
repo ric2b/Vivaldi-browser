@@ -12,11 +12,6 @@ namespace content {
 class NavigationHandle;
 }
 
-namespace page_load_metrics {
-struct PageLoadExtraInfo;
-struct PageLoadTiming;
-}
-
 // Observer responsible for recording page load metrics relevant to page served
 // from the AMP cache. When AMP pages are served in a same page navigation, UMA
 // is not recorded; this is typical for AMP pages navigated to from google.com.
@@ -26,26 +21,46 @@ struct PageLoadTiming;
 class AMPPageLoadMetricsObserver
     : public page_load_metrics::PageLoadMetricsObserver {
  public:
+  // If you add elements to this enum, make sure you update the enum value in
+  // enums.xml. Only add elements to the end to prevent inconsistencies between
+  // versions.
+  enum class AMPViewType {
+    NONE,
+    AMP_CACHE,
+    GOOGLE_SEARCH_AMP_VIEWER,
+    GOOGLE_NEWS_AMP_VIEWER,
+
+    // New values should be added before this final entry.
+    AMP_VIEW_TYPE_LAST
+  };
+
+  static AMPViewType GetAMPViewType(const GURL& url);
+
   AMPPageLoadMetricsObserver();
   ~AMPPageLoadMetricsObserver() override;
 
   // page_load_metrics::PageLoadMetricsObserver:
   ObservePolicy OnCommit(content::NavigationHandle* navigation_handle) override;
+  void OnCommitSameDocumentNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void OnDomContentLoadedEventStart(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info) override;
   void OnLoadEventStart(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info) override;
-  void OnFirstLayout(const page_load_metrics::PageLoadTiming& timing,
+  void OnFirstLayout(const page_load_metrics::mojom::PageLoadTiming& timing,
                      const page_load_metrics::PageLoadExtraInfo& info) override;
-  void OnFirstContentfulPaint(
-      const page_load_metrics::PageLoadTiming& timing,
+  void OnFirstContentfulPaintInPage(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info) override;
-  void OnParseStart(const page_load_metrics::PageLoadTiming& timing,
+  void OnParseStart(const page_load_metrics::mojom::PageLoadTiming& timing,
                     const page_load_metrics::PageLoadExtraInfo& info) override;
 
  private:
+  GURL current_url_;
+  AMPViewType view_type_ = AMPViewType::NONE;
+
   DISALLOW_COPY_AND_ASSIGN(AMPPageLoadMetricsObserver);
 };
 

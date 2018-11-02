@@ -15,6 +15,7 @@ namespace extensions {
 // static
 void KeepAliveImpl::Create(content::BrowserContext* context,
                            const Extension* extension,
+                           const service_manager::BindSourceInfo& source_info,
                            KeepAliveRequest request) {
   // Owns itself.
   new KeepAliveImpl(context, extension, std::move(request));
@@ -38,7 +39,7 @@ KeepAliveImpl::~KeepAliveImpl() = default;
 void KeepAliveImpl::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
-    UnloadedExtensionInfo::Reason reason) {
+    UnloadedExtensionReason reason) {
   if (browser_context == context_ && extension == extension_)
     delete this;
 }

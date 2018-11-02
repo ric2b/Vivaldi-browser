@@ -11,6 +11,7 @@
 #include "ash/aura/key_event_watcher_aura.h"
 #include "ash/aura/pointer_watcher_adapter.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/host/ash_window_tree_host.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
 #include "ash/keyboard/keyboard_ui.h"
 #include "ash/laser/laser_pointer_controller.h"
@@ -36,14 +37,19 @@
 #include "ash/wm_window.h"
 #include "base/memory/ptr_util.h"
 #include "ui/aura/env.h"
+#include "ui/display/manager/chromeos/default_touch_transform_setter.h"
 #include "ui/display/manager/display_manager.h"
+#include "ui/display/types/native_display_delegate.h"
 
 #if defined(USE_X11)
 #include "ash/wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard_x11.h"
+#include "ui/display/manager/chromeos/x11/native_display_delegate_x11.h"
 #endif
 
 #if defined(USE_OZONE)
 #include "ash/wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard_ozone.h"
+#include "ui/display/types/native_display_delegate.h"
+#include "ui/ozone/public/ozone_platform.h"
 #endif
 
 namespace ash {
@@ -73,15 +79,13 @@ Config ShellPortClassic::GetAshConfig() const {
   return Config::CLASSIC;
 }
 
-WmWindow* ShellPortClassic::GetPrimaryRootWindow() {
-  return WmWindow::Get(
-      Shell::Get()->window_tree_host_manager()->GetPrimaryRootWindow());
+aura::Window* ShellPortClassic::GetPrimaryRootWindow() {
+  return Shell::Get()->window_tree_host_manager()->GetPrimaryRootWindow();
 }
 
-WmWindow* ShellPortClassic::GetRootWindowForDisplayId(int64_t display_id) {
-  return WmWindow::Get(
-      Shell::Get()->window_tree_host_manager()->GetRootWindowForDisplayId(
-          display_id));
+aura::Window* ShellPortClassic::GetRootWindowForDisplayId(int64_t display_id) {
+  return Shell::Get()->window_tree_host_manager()->GetRootWindowForDisplayId(
+      display_id);
 }
 
 const display::ManagedDisplayInfo& ShellPortClassic::GetDisplayInfo(
@@ -115,12 +119,33 @@ void ShellPortClassic::SetDisplayWorkAreaInsets(WmWindow* window,
       ->UpdateWorkAreaOfDisplayNearestWindow(window->aura_window(), insets);
 }
 
+std::unique_ptr<display::TouchTransformSetter>
+ShellPortClassic::CreateTouchTransformDelegate() {
+  return base::MakeUnique<display::DefaultTouchTransformSetter>();
+}
+
 void ShellPortClassic::LockCursor() {
   Shell::Get()->cursor_manager()->LockCursor();
 }
 
 void ShellPortClassic::UnlockCursor() {
   Shell::Get()->cursor_manager()->UnlockCursor();
+}
+
+void ShellPortClassic::ShowCursor() {
+  Shell::Get()->cursor_manager()->ShowCursor();
+}
+
+void ShellPortClassic::HideCursor() {
+  Shell::Get()->cursor_manager()->HideCursor();
+}
+
+void ShellPortClassic::SetGlobalOverrideCursor(
+    base::Optional<ui::CursorData> cursor) {
+  // This is part of a fat interface that is only implemented on the mash side;
+  // there isn't an equivalent operation in ::wm::CursorManager. We also can't
+  // just call into ShellPortMash because of library linking issues.
+  NOTREACHED();
 }
 
 bool ShellPortClassic::IsMouseEventsEnabled() {
@@ -239,6 +264,15 @@ void ShellPortClassic::CreatePointerWatcherAdapter() {
   pointer_watcher_adapter_ = base::MakeUnique<PointerWatcherAdapter>();
 }
 
+std::unique_ptr<AshWindowTreeHost> ShellPortClassic::CreateAshWindowTreeHost(
+    const AshWindowTreeHostInitParams& init_params) {
+  // A return value of null results in falling back to the default.
+  return nullptr;
+}
+
+void ShellPortClassic::OnCreatedRootWindowContainers(
+    RootWindowController* root_window_controller) {}
+
 void ShellPortClassic::CreatePrimaryHost() {
   Shell::Get()->window_tree_host_manager()->Start();
   AshWindowTreeHostInitParams ash_init_params;
@@ -247,6 +281,15 @@ void ShellPortClassic::CreatePrimaryHost() {
 
 void ShellPortClassic::InitHosts(const ShellInitParams& init_params) {
   Shell::Get()->window_tree_host_manager()->InitHosts();
+}
+
+std::unique_ptr<display::NativeDisplayDelegate>
+ShellPortClassic::CreateNativeDisplayDelegate() {
+#if defined(USE_OZONE)
+  return ui::OzonePlatform::GetInstance()->CreateNativeDisplayDelegate();
+#else
+  return base::MakeUnique<display::NativeDisplayDelegateX11>();
+#endif
 }
 
 std::unique_ptr<AcceleratorController>

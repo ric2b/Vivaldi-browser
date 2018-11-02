@@ -22,9 +22,11 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_view_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
 
 namespace blink {
+class WebFormElementObserver;
 class WebInputElement;
 class WebSecurityOrigin;
 }
@@ -44,7 +46,8 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   explicit PasswordAutofillAgent(content::RenderFrame* render_frame);
   ~PasswordAutofillAgent() override;
 
-  void BindRequest(mojom::PasswordAutofillAgentRequest request);
+  void BindRequest(const service_manager::BindSourceInfo& source_info,
+                   mojom::PasswordAutofillAgentRequest request);
 
   void SetAutofillAgent(AutofillAgent* autofill_agent);
 
@@ -57,7 +60,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void AutofillUsernameAndPasswordDataReceived(
       const FormsPredictionsMap& predictions) override;
   void FindFocusedPasswordForm(
-      const FindFocusedPasswordFormCallback& callback) override;
+      FindFocusedPasswordFormCallback callback) override;
 
   // WebFrameClient editor related calls forwarded by AutofillAgent.
   // If they return true, it indicates the event was consumed and should not
@@ -88,9 +91,13 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   bool DidClearAutofillSelection(
       const blink::WebFormControlElement& control_element);
 
-  // If the form is non-secure, show the "Not Secure" warning on username and
-  // password input fields.
+  // Returns whether a "Login not secure" warning should be shown on the input
+  // field. This is true if the feature is enabled and if the form is
+  // non-secure.
   bool ShouldShowNotSecureWarning(const blink::WebInputElement& element);
+
+  // Returns whether the element is a username or password textfield.
+  bool IsUsernameOrPasswordField(const blink::WebInputElement& element);
 
   // Shows an Autofill popup with username suggestions for |element|. If
   // |show_all| is |true|, will show all possible suggestions for that element,
@@ -141,6 +148,8 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
       const blink::WebSecurityOrigin& origin);
 
  private:
+  class FormElementObserverCallback;
+
   // Ways to restrict which passwords are saved in ProvisionallySavePassword.
   enum ProvisionallySaveRestriction {
     RESTRICTION_NONE,
@@ -220,12 +229,12 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
                            bool show_all,
                            bool show_on_password_field);
 
-  // Finds the PasswordInfo, username and password fields that corresponds to
-  // the passed in |element|. |element| can refer either to a username element
-  // or a password element. If a PasswordInfo was found, returns |true| and also
-  // assigns the corresponding username, password elements and PasswordInfo into
+  // Finds the PasswordInfo, username and password fields corresponding to the
+  // passed in |element|, which can refer to either a username or a password
+  // element. If a PasswordInfo was found, returns |true| and assigns the
+  // corresponding username, password elements and PasswordInfo into
   // |username_element|, |password_element| and |pasword_info|, respectively.
-  // Note, that |username_element->isNull()| can be true if |element| is a
+  // Note, that |username_element->IsNull()| can be true if |element| is a
   // password.
   bool FindPasswordInfoForElement(const blink::WebInputElement& element,
                                   blink::WebInputElement* username_element,
@@ -252,13 +261,14 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
                                  ProvisionallySaveRestriction restriction);
 
   // Helper function called when same-document navigation completed
-  void OnSameDocumentNavigationCompleted();
+  void OnSameDocumentNavigationCompleted(
+      PasswordForm::SubmissionIndicatorEvent event);
 
   const mojom::AutofillDriverPtr& GetAutofillDriver();
 
   // The logins we have filled so far with their associated info.
   WebInputToPasswordInfoMap web_input_to_password_info_;
-  // A (sort-of) reverse map to |login_to_password_info_|.
+  // A (sort-of) reverse map to |web_input_to_password_info_|.
   PasswordToLoginMap password_to_username_;
 
   // Set if the user might be submitting a password form on the current page,
@@ -286,6 +296,9 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // True indicates that a request for credentials has been sent to the store.
   bool sent_request_to_store_;
 
+  // True indicates that a safe browsing reputation check has been triggered.
+  bool checked_safe_browsing_reputation_;
+
   // Records the username typed before suggestions preview.
   base::string16 username_query_prefix_;
 
@@ -298,6 +311,8 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   mojom::PasswordManagerDriverPtr password_manager_driver_;
 
   mojo::Binding<mojom::PasswordAutofillAgent> binding_;
+
+  blink::WebFormElementObserver* form_element_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordAutofillAgent);
 };

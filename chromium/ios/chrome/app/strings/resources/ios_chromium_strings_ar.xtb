@@ -17,8 +17,9 @@
 <translation id="3256316712990552818">‏تم النسخ إلى Chromium</translation>
 <translation id="3413120535237193088">‏للحصول على الإشارات المرجعية على جميع أجهزتك، سجِّل الدخول إلى Chromium.</translation>
 <translation id="3473048256428424907">‏تشغيل الماسح الضوئي للاستجابة السريعة في Chromium</translation>
+<translation id="3605252743693911722">‏سجّل الدخول إلى Chromium للحصول غلى الإشارات المرجعية وكلمات المرور والمزيد على جميع أجهزتك.</translation>
 <translation id="3805899903892079518">‏لا تتوفر لدى Chromium إمكانية الدخول إلى الصور أو مقاطع الفيديو. تستطيع تمكين الدخول في إعدادات نظام التشغيل iOS &gt; الخصوصية &gt; الصور.</translation>
-<translation id="40863189315891987">‏للوصول بشكلٍ أسرع، <ph name="BEGIN_LINK" />انقل Chromium إلى شريط الإرساء<ph name="END_LINK" /></translation>
+<translation id="4024541897090868497">‏للحصول على علامات التبويب على جميع أجهزتك، سجِّل الدخول إلى Chromium.</translation>
 <translation id="418271229036116702">‏للحصول على علامات التبويب من أجهزتك الأخرى، سجّل الدخول إلى Chromium.</translation>
 <translation id="4241912885070669028">‏أنت بصدد الخروج من حساب تتم إدارته من خلال <ph name="SIGNOUT_MANAGED_DOMAIN" />. سيؤدي ذلك إلى حذف بيانات Chromium من هذا الجهاز، ولكن ستظل البيانات في حسابك في Google.</translation>
 <translation id="4555020257205549924">‏عند تشغيل هذه الميزة، سيعرض Chromium ترجمة الصفحات المكتوبة بلغات أخرى باستخدام ترجمة Google. <ph name="BEGIN_LINK" />مزيد من المعلومات<ph name="END_LINK" /></translation>
@@ -32,7 +33,6 @@
 <translation id="6268381023930128611">‏هل تريد الخروج من Chromium؟</translation>
 <translation id="6424492062988593837">‏لقد أصبح Chromium أفضل من ذي قبل! يتوفر إصدار جديد.</translation>
 <translation id="6604711459180487467">‏استمتع بتجربة أفضل في Chromium حسب موقعك.</translation>
-<translation id="6989306073720242915">‏هل يحظى Chromium بإعجابك؟ <ph name="BEGIN_LINK" />انقله إلى شريط الإرساء<ph name="END_LINK" /></translation>
 <translation id="7099326575020694068">‏يتعذر على Chromium استخدام الكاميرا في وضع تقسيم العرض</translation>
 <translation id="7144758435978427212">‏يمكنك التعرَّف على صفحات الويب التي أرسلتها الأجهزة المجاورة. عند تشغيل البلوتوث، يتمكّن Chromium من جمع صفحات الويب المرتبطة بالأجهزة الموجودة حولك وإرسالها دون الكشف عن هويتها إلى Google لمعرفة أكثرها نفعًا لك. <ph name="BEGIN_LINK" />مزيد من المعلومات<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">‏يوفر Chromium وقتك من خلال تجميع حساباتك على الويب. يمكنك إضافة حسابات أو إزالتها في الإعدادات.</translation>
@@ -44,7 +44,6 @@
 <translation id="786327964234957808">‏أنت تجري تبديلاً لحسابات المزامنة من <ph name="USER_EMAIL1" /> إلى <ph name="USER_EMAIL2" />. تتم إدارة بيانات Chromium الحالية من خلال <ph name="DOMAIN" />. سيؤدي ذلك إلى حذف بياناتك من هذا الجهاز، ولكن ستظل بياناتك في <ph name="USER_EMAIL1" />.</translation>
 <translation id="8111736072665034317">‏باستخدام هذا التطبيق، أنت توافق على <ph name="BEGIN_LINK" />بنود خدمة<ph name="END_LINK" /> Chromium.</translation>
 <translation id="8175055321229419309">‏نصيحة: <ph name="BEGIN_LINK" />انقل Chromium إلى شريط الإرساء<ph name="END_LINK" /></translation>
-<translation id="8200548749940012969">‏لتطبيق إعداداتك على جميع أجهزتك، سجِّل الدخول إلى Chromium.</translation>
 <translation id="8252885722420466166">‏احصل على تجربة أفضل لاستخدام Google في Chromium استنادًا إلى موقعك.</translation>
 <translation id="8353224596138547809">‏هل تريد من Chromium حفظ كلمة المرور لهذا الموقع؟</translation>
 <translation id="8586442755830160949">‏حقوق الطبع والنشر لعام <ph name="YEAR" /> لصالح The Chromium Authors. جميع الحقوق محفوظة.</translation>

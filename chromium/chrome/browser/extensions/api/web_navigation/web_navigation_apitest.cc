@@ -13,6 +13,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
@@ -74,9 +75,9 @@ class TestNavigationListener
   void DelayRequestsForURL(const GURL& url) {
     if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
       content::BrowserThread::PostTask(
-          content::BrowserThread::IO,
-          FROM_HERE,
-          base::Bind(&TestNavigationListener::DelayRequestsForURL, this, url));
+          content::BrowserThread::IO, FROM_HERE,
+          base::BindOnce(&TestNavigationListener::DelayRequestsForURL, this,
+                         url));
       return;
     }
     urls_to_delay_.insert(url);
@@ -86,9 +87,8 @@ class TestNavigationListener
   void ResumeAll() {
     if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
       content::BrowserThread::PostTask(
-          content::BrowserThread::IO,
-          FROM_HERE,
-          base::Bind(&TestNavigationListener::ResumeAll, this));
+          content::BrowserThread::IO, FROM_HERE,
+          base::BindOnce(&TestNavigationListener::ResumeAll, this));
       return;
     }
     WeakThrottleList::const_iterator it;
@@ -104,7 +104,7 @@ class TestNavigationListener
     if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
       content::BrowserThread::PostTask(
           content::BrowserThread::IO, FROM_HERE,
-          base::Bind(&TestNavigationListener::Resume, this, url));
+          base::BindOnce(&TestNavigationListener::Resume, this, url));
       return;
     }
     WeakThrottleList::iterator it;
@@ -274,7 +274,7 @@ class StartProvisionalLoadObserver : public content::WebContentsObserver {
     }
   }
 
-  // Run a nested message loop until navigation to the expected URL has started.
+  // Run a nested run loop until navigation to the expected URL has started.
   void Wait() {
     if (url_seen_)
       return;
@@ -407,6 +407,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, DISABLED_ServerRedirect) {
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Download) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::ScopedTempDir download_directory;
   ASSERT_TRUE(download_directory.CreateUniqueTempDir());
   DownloadPrefs* download_prefs =

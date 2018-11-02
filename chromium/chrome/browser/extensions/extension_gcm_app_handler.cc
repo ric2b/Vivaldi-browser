@@ -106,11 +106,11 @@ void ExtensionGCMAppHandler::OnExtensionLoaded(
 void ExtensionGCMAppHandler::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
-    UnloadedExtensionInfo::Reason reason) {
+    UnloadedExtensionReason reason) {
   if (!IsGCMPermissionEnabled(extension))
     return;
 
-  if (reason == UnloadedExtensionInfo::REASON_UPDATE &&
+  if (reason == UnloadedExtensionReason::UPDATE &&
       GetGCMDriver()->app_handlers().size() >= 1) {
     // When the extension is being updated, it will be first unloaded and then
     // loaded again by ExtensionService::AddExtension. If the app handler for
@@ -130,14 +130,15 @@ void ExtensionGCMAppHandler::OnExtensionUnloaded(
     AddDummyAppHandler();
 
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&ExtensionGCMAppHandler::RemoveDummyAppHandler,
-                              weak_factory_.GetWeakPtr()));
+        FROM_HERE,
+        base::BindOnce(&ExtensionGCMAppHandler::RemoveDummyAppHandler,
+                       weak_factory_.GetWeakPtr()));
   }
 
   // When the extention is being uninstalled, it will be unloaded first. We
   // should not remove the app handler in this case and it will be handled
   // in OnExtensionUninstalled.
-  if (reason != UnloadedExtensionInfo::REASON_UNINSTALL)
+  if (reason != UnloadedExtensionReason::UNINSTALL)
     RemoveAppHandler(extension->id());
 }
 
@@ -190,8 +191,8 @@ void ExtensionGCMAppHandler::OnDeleteIDCompleted(
   // Postpone to do it outside this calling context to avoid any risk to
   // the caller.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&ExtensionGCMAppHandler::RemoveInstanceID,
-                            weak_factory_.GetWeakPtr(), app_id));
+      FROM_HERE, base::BindOnce(&ExtensionGCMAppHandler::RemoveInstanceID,
+                                weak_factory_.GetWeakPtr(), app_id));
 }
 
 void ExtensionGCMAppHandler::RemoveInstanceID(const std::string& app_id) {

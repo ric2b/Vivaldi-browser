@@ -7,7 +7,9 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
+#include "ui/display/screen_base.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_snapshot_mojo.h"
 #include "ui/display/types/native_display_delegate.h"
@@ -35,19 +37,22 @@ const DisplayMode* GetCorrespondingMode(const DisplaySnapshot& snapshot,
 
 }  // namespace
 
-// TODO(sky/kylechar): Change ScreenManager::Create() to make a
-// ScreenManagerForwarding in mus mode.
-
-ScreenManagerForwarding::ScreenManagerForwarding() : binding_(this) {}
+ScreenManagerForwarding::ScreenManagerForwarding()
+    : screen_(base::MakeUnique<display::ScreenBase>()), binding_(this) {
+  Screen::SetScreenInstance(screen_.get());
+}
 
 ScreenManagerForwarding::~ScreenManagerForwarding() {
   if (native_display_delegate_)
     native_display_delegate_->RemoveObserver(this);
+  Screen::SetScreenInstance(nullptr);
 }
 
 void ScreenManagerForwarding::AddInterfaces(
     service_manager::BinderRegistry* registry) {
-  registry->AddInterface<mojom::NativeDisplayDelegate>(this);
+  registry->AddInterface<mojom::NativeDisplayDelegate>(
+      base::Bind(&ScreenManagerForwarding::BindNativeDisplayDelegateRequest,
+                 base::Unretained(this)));
 }
 
 void ScreenManagerForwarding::Init(ScreenManagerDelegate* delegate) {
@@ -55,6 +60,10 @@ void ScreenManagerForwarding::Init(ScreenManagerDelegate* delegate) {
 }
 
 void ScreenManagerForwarding::RequestCloseDisplay(int64_t display_id) {}
+
+display::ScreenBase* ScreenManagerForwarding::GetScreen() {
+  return screen_.get();
+}
 
 void ScreenManagerForwarding::OnConfigurationChanged() {
   if (observer_.is_bound())
@@ -66,7 +75,8 @@ void ScreenManagerForwarding::OnDisplaySnapshotsInvalidated() {
 }
 
 void ScreenManagerForwarding::Initialize(
-    mojom::NativeDisplayObserverPtr observer) {
+    mojom::NativeDisplayObserverPtr observer,
+    const InitializeCallback& callback) {
   DCHECK(!native_display_delegate_);
   observer_ = std::move(observer);
 
@@ -74,6 +84,16 @@ void ScreenManagerForwarding::Initialize(
       ui::OzonePlatform::GetInstance()->CreateNativeDisplayDelegate();
   native_display_delegate_->AddObserver(this);
   native_display_delegate_->Initialize();
+
+  // Provide the list of display snapshots initially. ForwardingDisplayDelegate
+  // will wait synchronously for this.
+  native_display_delegate_->GetDisplays(
+      base::Bind(&ScreenManagerForwarding::ForwardGetDisplays,
+                 base::Unretained(this), callback));
+
+  // When ForwardingDisplayDelegate receives this it will start asynchronous
+  // operation and redo any configuration that was skipped.
+  observer_->OnConfigurationChanged();
 }
 
 void ScreenManagerForwarding::TakeDisplayControl(
@@ -159,15 +179,15 @@ void ScreenManagerForwarding::SetColorCorrection(
                                                gamma_lut, correction_matrix);
 }
 
-void ScreenManagerForwarding::Create(
-    const service_manager::Identity& remote_identity,
+void ScreenManagerForwarding::BindNativeDisplayDelegateRequest(
+    const service_manager::BindSourceInfo& source_info,
     mojom::NativeDisplayDelegateRequest request) {
   DCHECK(!binding_.is_bound());
   binding_.Bind(std::move(request));
 }
 
 void ScreenManagerForwarding::ForwardGetDisplays(
-    const mojom::NativeDisplayDelegate::GetDisplaysCallback& callback,
+    const GetDisplaysCallback& callback,
     const std::vector<DisplaySnapshot*>& snapshots) {
   snapshot_map_.clear();
 

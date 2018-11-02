@@ -9,12 +9,14 @@
 #include <stdint.h>
 #include <memory>
 
+#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/process/process.h"
 #include "base/sync_socket.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "content/common/content_export.h"
 #include "media/audio/audio_output_controller.h"
 #include "media/base/audio_bus.h"
 
@@ -32,7 +34,8 @@ namespace content {
 // is used by AudioOutputController to provide a low latency data source for
 // transmitting audio packets between the browser process and the renderer
 // process.
-class AudioSyncReader : public media::AudioOutputController::SyncReader {
+class CONTENT_EXPORT AudioSyncReader
+    : public NON_EXPORTED_BASE(media::AudioOutputController::SyncReader) {
  public:
   ~AudioSyncReader() override;
 
@@ -66,6 +69,10 @@ class AudioSyncReader : public media::AudioOutputController::SyncReader {
   // Mutes all incoming samples. This is used to prevent audible sound
   // during automated testing.
   const bool mute_audio_;
+
+  // Denotes that the most recent socket error has been logged. Used to avoid
+  // log spam.
+  bool had_socket_error_;
 
   // Socket for transmitting audio data.
   std::unique_ptr<base::CancelableSyncSocket> socket_;

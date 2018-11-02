@@ -1623,7 +1623,7 @@ void ResourceProvider::ReceiveFromChild(
     // Don't allocate a texture for a child.
     resource->allocated = true;
     resource->imported_count = 1;
-    child_info.parent_to_child_map[local_id] = it->id;
+    resource->id_in_child = it->id;
     child_info.child_to_parent_map[it->id] = local_id;
   }
 }
@@ -1799,6 +1799,12 @@ void ResourceProvider::TransferResource(Resource* source,
   if (source->type == RESOURCE_TYPE_BITMAP) {
     resource->mailbox_holder.mailbox = source->shared_bitmap_id;
     resource->is_software = true;
+    if (source->shared_bitmap) {
+      resource->shared_bitmap_sequence_number =
+          source->shared_bitmap->sequence_number();
+    } else {
+      resource->shared_bitmap_sequence_number = 0;
+    }
   } else {
     DCHECK(source->mailbox().IsValid());
     DCHECK(source->mailbox().IsTexture());
@@ -1835,9 +1841,8 @@ void ResourceProvider::DeleteAndReturnUnusedResourcesToChild(
     Resource& resource = it->second;
 
     DCHECK(!resource.locked_for_write);
-    DCHECK(child_info->parent_to_child_map.count(local_id));
 
-    ResourceId child_id = child_info->parent_to_child_map[local_id];
+    ResourceId child_id = resource.id_in_child;
     DCHECK(child_info->child_to_parent_map.count(child_id));
 
     bool is_lost = resource.lost ||
@@ -1892,7 +1897,6 @@ void ResourceProvider::DeleteAndReturnUnusedResourcesToChild(
       }
     }
 
-    child_info->parent_to_child_map.erase(local_id);
     child_info->child_to_parent_map.erase(child_id);
     resource.imported_count = 0;
     DeleteResourceInternal(it, style);
@@ -1924,8 +1928,7 @@ void ResourceProvider::DeleteAndReturnUnusedResourcesToChild(
                                     blocking_main_thread_task_runner_);
 
   if (child_info->marked_for_deletion &&
-      child_info->parent_to_child_map.empty()) {
-    DCHECK(child_info->child_to_parent_map.empty());
+      child_info->child_to_parent_map.empty()) {
     children_.erase(child_it);
   }
 }
@@ -2177,8 +2180,8 @@ bool ResourceProvider::OnMemoryDump(
     base::trace_event::MemoryAllocatorDumpGuid guid;
     switch (resource.type) {
       case RESOURCE_TYPE_GPU_MEMORY_BUFFER:
-        guid = gfx::GetGpuMemoryBufferGUIDForTracing(
-            tracing_process_id, resource.gpu_memory_buffer->GetHandle().id);
+        guid =
+            resource.gpu_memory_buffer->GetGUIDForTracing(tracing_process_id);
         break;
       case RESOURCE_TYPE_GL_TEXTURE:
         DCHECK(resource.gl_id);

@@ -4,6 +4,8 @@
 
 #include "ash/shelf/app_list_shelf_item_delegate.h"
 
+#include <utility>
+
 #include "ash/shelf/shelf_model.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -13,33 +15,40 @@
 
 namespace ash {
 
+namespace {
+
+// An app id for the app list, used to identify the shelf item.
+// Generated as crx_file::id_util::GenerateId("org.chromium.applist")
+static constexpr char kAppListId[] = "jlfapfmkapbjlfbpjedlinehodkccjee";
+
+}  // namespace
+
 // static
 void AppListShelfItemDelegate::CreateAppListItemAndDelegate(ShelfModel* model) {
   // Add the app list item to the shelf model.
   ShelfItem item;
   item.type = TYPE_APP_LIST;
+  item.id = ShelfID(kAppListId);
   item.title = l10n_util::GetStringUTF16(IDS_ASH_SHELF_APP_LIST_LAUNCHER_TITLE);
   int index = model->Add(item);
   DCHECK_GE(index, 0);
 
   // Create an AppListShelfItemDelegate for that item.
-  ShelfID id = model->items()[index].id;
-  DCHECK_NE(id, kInvalidShelfID);
-  model->SetShelfItemDelegate(id, base::MakeUnique<AppListShelfItemDelegate>());
+  model->SetShelfItemDelegate(item.id,
+                              base::MakeUnique<AppListShelfItemDelegate>());
 }
 
 AppListShelfItemDelegate::AppListShelfItemDelegate()
-    : ShelfItemDelegate(AppLaunchId()) {}
+    : ShelfItemDelegate(ShelfID(kAppListId)) {}
 
 AppListShelfItemDelegate::~AppListShelfItemDelegate() {}
 
-void AppListShelfItemDelegate::ItemSelected(
-    std::unique_ptr<ui::Event> event,
-    int64_t display_id,
-    ShelfLaunchSource source,
-    const ItemSelectedCallback& callback) {
+void AppListShelfItemDelegate::ItemSelected(std::unique_ptr<ui::Event> event,
+                                            int64_t display_id,
+                                            ShelfLaunchSource source,
+                                            ItemSelectedCallback callback) {
   Shell::Get()->ToggleAppList();
-  callback.Run(SHELF_ACTION_APP_LIST_SHOWN, base::nullopt);
+  std::move(callback).Run(SHELF_ACTION_APP_LIST_SHOWN, base::nullopt);
 }
 
 void AppListShelfItemDelegate::ExecuteCommand(uint32_t command_id,

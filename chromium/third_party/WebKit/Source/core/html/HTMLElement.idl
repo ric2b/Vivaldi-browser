@@ -32,6 +32,7 @@ interface HTMLElement : Element {
     [CEReactions, Reflect] attribute boolean hidden;
     void click();
     [CEReactions, CustomElementCallbacks] attribute long tabIndex;
+    [CEReactions, RuntimeEnabled=InertAttribute, Reflect] attribute boolean inert;
     void focus();
     void blur();
     [CEReactions, Reflect] attribute DOMString accessKey;
@@ -63,3 +64,4 @@ interface HTMLElement : Element {
 };
 
 HTMLElement implements GlobalEventHandlers;
+HTMLElement implements NoncedElement;

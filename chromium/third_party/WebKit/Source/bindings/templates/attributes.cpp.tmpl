@@ -20,7 +20,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     return; // Return silently because of [LenientThis].
   {% endif %}
 
-  {% if not attribute.is_static %}
+  {% if not attribute.is_static or attribute.is_save_same_object %}
   v8::Local<v8::Object> holder = info.Holder();
   {% endif %}
 
@@ -63,7 +63,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
   V8PrivateProperty::Symbol propertySymbol =
       V8PrivateProperty::GetSymbol(info.GetIsolate(),
           "{{cpp_class}}#{{attribute.name.capitalize()}}");
-  if (!impl->{{attribute.cached_attribute_validation_method}}()) {
+  if (!static_cast<const {{cpp_class}}*>(impl)->{{attribute.cached_attribute_validation_method}}()) {
     v8::Local<v8::Value> v8Value = propertySymbol.GetOrUndefined(holder);
     if (!v8Value->IsUndefined()) {
       V8SetReturnValue(info, v8Value);
@@ -288,6 +288,9 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
   v8::Isolate* isolate = info.GetIsolate();
   ALLOW_UNUSED_LOCAL(isolate);
 
+  v8::Local<v8::Object> holder = info.Holder();
+  ALLOW_UNUSED_LOCAL(holder);
+
   {% set define_exception_state -%}
   ExceptionState exceptionState(isolate, ExceptionState::kSetterContext, "{{interface_name}}", "{{attribute.name}}");
   {%- endset %}
@@ -295,18 +298,11 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
   {% if attribute.is_lenient_this %}
   // [LenientThis]
   // Make sure that info.Holder() really points to an instance if [LenientThis].
-  if (!{{v8_class}}::hasInstance(info.Holder(), isolate))
+  if (!{{v8_class}}::hasInstance(holder, isolate))
     return; // Return silently because of [LenientThis].
   {% endif %}
 
-  {% if not attribute.is_static and not attribute.is_replaceable %}
-  v8::Local<v8::Object> holder = info.Holder();
-  {% if attribute.is_put_forwards %}
-  {{cpp_class}}* proxyImpl = {{v8_class}}::toImpl(holder);
-  {{attribute.cpp_type}} impl = WTF::GetPtr(proxyImpl->{{attribute.name}}());
-  if (!impl)
-    return;
-  {% else %}
+  {% if not attribute.is_static and not attribute.is_replaceable and not attribute.is_put_forwards %}
   {% set local_dom_window_only = interface_name == 'Window' and not attribute.has_cross_origin_setter %}
   {% if local_dom_window_only %}
   {% if attribute.is_check_security_for_receiver %}
@@ -320,7 +316,6 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
   {% else %}
   {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
   {% endif %}{# local_dom_window_only #}
-  {% endif %}
   {% endif %}
 
   {% if attribute.is_check_security_for_receiver and not attribute.is_data_type_property %}
@@ -343,6 +338,22 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
 #error Attribute setter with the security check for the return value is not supported.  Since the return value is the given value to be set, it\'s meaningless to perform the security check for the return value.
   {% endif %}
 
+  {% if attribute.is_put_forwards %}
+  // [PutForwards] => {{attribute.name}}.{{attribute.target_attribute_name}}
+  {{define_exception_state}}
+  v8::Local<v8::Value> target;
+  if (!holder->Get(isolate->GetCurrentContext(), V8String(isolate, "{{attribute.name}}")).ToLocal(&target))
+    return;
+  if (!target->IsObject()) {
+    exceptionState.ThrowTypeError("The attribute value is not an object");
+    return;
+  }
+  bool result;
+  if (!target.As<v8::Object>()->Set(isolate->GetCurrentContext(), V8String(isolate, "{{attribute.target_attribute_name}}"), v8Value).To(&result))
+    return;
+  if (!result)
+    return;
+  {% else %}{# attribute.is_put_forwards #}
   {% if attribute.is_custom_element_callbacks or
         (attribute.is_reflect and not (attribute.idl_type == 'DOMString' and is_node)) %}
   // Skip on compact node DOMString getters.
@@ -408,6 +419,7 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
       isolate, "{{cpp_class}}#{{attribute.name.capitalize()}}")
       .DeleteProperty(holder, v8::Undefined(isolate));
   {% endif %}
+  {% endif %}{# attribute.is_put_forwards #}
 }
 {% endfilter %}{# format_remove_duplicates #}
 {% endmacro %}
@@ -469,7 +481,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
 
 
 {##############################################################################}
-{% macro attribute_configuration(attribute) %}
+{% macro build_attribute_or_accessor_configuration(attribute, config_type) %}
 {% from 'utilities.cpp.tmpl' import property_location %}
 {% if attribute.constructor_type %}
   {% if attribute.needs_constructor_getter_callback %}
@@ -491,7 +503,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
        if attribute.constructor_type else 'nullptr' %}
 {% set property_attribute = 'static_cast<v8::PropertyAttribute>(%s)' %
                             ' | '.join(attribute.property_attributes) %}
-{% set cached_accessor_callback =
+{% set cached_property_key =
        '%s::%sCachedPropertyKey' % (v8_class_or_partial, attribute.name)
        if attribute.is_cached_accessor else
        'nullptr' %}
@@ -502,21 +514,70 @@ const v8::FunctionCallbackInfo<v8::Value>& info
 {% set setter_callback_for_main_world =
        '%sForMainWorld' % setter_callback
        if attribute.has_setter else 'nullptr' %}
-{"{{attribute.name}}", {{getter_callback_for_main_world}}, {{setter_callback_for_main_world}}, {{cached_accessor_callback}}, {{wrapper_type_info}}, {{property_attribute}}, {{property_location(attribute)}}, {{holder_check}}, V8DOMConfiguration::kMainWorld},
-{"{{attribute.name}}", {{getter_callback}}, {{setter_callback}}, {{cached_accessor_callback}}, {{wrapper_type_info}}, {{property_attribute}}, {{property_location(attribute)}}, {{holder_check}}, V8DOMConfiguration::kNonMainWorlds}
-{%- else %}
-{"{{attribute.name}}", {{getter_callback}}, {{setter_callback}}, {{cached_accessor_callback}}, {{wrapper_type_info}}, {{property_attribute}}, {{property_location(attribute)}}, {{holder_check}}, V8DOMConfiguration::kAllWorlds}
-{%- endif %}
-{%- endmacro %}
+{% endif %}
+
+
+{% set config_pre = {
+  "main" : [
+         '"%s"' % attribute.name,
+         getter_callback_for_main_world,
+         setter_callback_for_main_world,
+       ],
+  "non_main" : [
+         '"%s"' % attribute.name,
+         getter_callback,
+         setter_callback,
+       ],
+} %}
+
+{% set accessor_only_fields = [] if config_type == 'attribute' else [
+      cached_property_key,
+] %}
+
+{% set config_post = [
+       wrapper_type_info,
+       property_attribute,
+       property_location(attribute),
+       holder_check,
+] %}
+
+{% if attribute.is_per_world_bindings %}
+  {% set main_config_list = config_pre["main"] + accessor_only_fields +
+      config_post + ['V8DOMConfiguration::kMainWorld'] %}
+  {% set non_main_config_list = config_pre["non_main"] + accessor_only_fields +
+      config_post + ['V8DOMConfiguration::kNonMainWorlds'] %}
+  {# Emit for main world then non-main.#}
+  { {{main_config_list | join(', ')}} },
+  { {{non_main_config_list | join(', ')}} }
+{% else %}
+  {% set all_worlds_config_list = config_pre["non_main"] + accessor_only_fields +
+      config_post + ['V8DOMConfiguration::kAllWorlds'] %}
+  {# Emit only for all worlds #}
+  { {{all_worlds_config_list | join(', ')}} }
+{% endif %}
+{% endmacro %}
+
+
+{##############################################################################}
+{% macro attribute_configuration(attribute) %}
+{{build_attribute_or_accessor_configuration(attribute, 'attribute')}}
+{% endmacro %}
+
+
+{##############################################################################}
+{% macro accessor_configuration(attribute) %}
+{{build_attribute_or_accessor_configuration(attribute, 'accessor')}}
+{% endmacro %}
+
 
 {##############################################################################}
 {% macro install_conditionally_enabled_attributes_on_prototype() %}
-{% for attribute in attributes if (attribute.exposed_test or attribute.secure_context_test) and attribute.on_prototype %}
+{% for attribute in conditionally_enabled_attributes if attribute.on_prototype %}
 {% filter exposed(attribute.exposed_test) %}
 {% filter secure_context(attribute.secure_context_test) %}
 {% filter runtime_enabled(attribute.runtime_enabled_feature_name) %}
 static const V8DOMConfiguration::AccessorConfiguration accessorConfiguration[] = {
-  {{attribute_configuration(attribute)}}
+  {{accessor_configuration(attribute)}}
 };
 for (const auto& accessorConfig : accessorConfiguration)
   V8DOMConfiguration::InstallAccessor(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessorConfig);

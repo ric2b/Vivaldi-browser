@@ -147,6 +147,9 @@ class TestDownloadRequestHandler : public base::NonThreadSafe {
     // If true, the response contains a 'Accept-Ranges: bytes' header.
     bool support_byte_ranges;
 
+    // The connection type in the response.
+    net::HttpResponseInfo::ConnectionInfo connection_type;
+
     // If on_start_handler is valid, it will be invoked when a new request is
     // received. See details about the OnStartHandler above.
     OnStartHandler on_start_handler;
@@ -234,7 +237,7 @@ class TestDownloadRequestHandler : public base::NonThreadSafe {
   //   different runs of the same test.
   //
   // * Initialization of the handler synchronously runs a task on the
-  //   BrowserThread::IO thread using a nested message loop. Only construct an
+  //   BrowserThread::IO thread using a nested run loop. Only construct an
   //   instance of this object after browser threads have been initialized.
   TestDownloadRequestHandler();
 

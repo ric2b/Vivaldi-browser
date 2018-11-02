@@ -4,53 +4,126 @@
 
 import("//build/config/android/rules.gni")
 import("//chrome/common/features.gni")
-import("//device/vr/features.gni")
+import("//device/vr/features/features.gni")
 import("//testing/test.gni")
 
 assert(enable_vr)
 
 if (current_cpu == "arm" || current_cpu == "arm64") {
+  # This library is platform-independent UI and related modules, which should
+  # compile on any platform.
+  static_library("vr_common_ui") {
+    sources = [
+      "animation.cc",
+      "animation.h",
+      "color_scheme.cc",
+      "color_scheme.h",
+      "easing.cc",
+      "easing.h",
+      "font_fallback.cc",
+      "font_fallback.h",
+      "fps_meter.cc",
+      "fps_meter.h",
+      "gl_browser_interface.h",
+      "gltf_asset.cc",
+      "gltf_asset.h",
+      "gltf_parser.cc",
+      "gltf_parser.h",
+      "textures/button_texture.cc",
+      "textures/button_texture.h",
+      "textures/close_button_texture.cc",
+      "textures/close_button_texture.h",
+      "textures/exit_warning_texture.cc",
+      "textures/exit_warning_texture.h",
+      "textures/insecure_content_permanent_texture.cc",
+      "textures/insecure_content_permanent_texture.h",
+      "textures/insecure_content_transient_texture.cc",
+      "textures/insecure_content_transient_texture.h",
+      "textures/loading_indicator_texture.cc",
+      "textures/loading_indicator_texture.h",
+      "textures/render_text_wrapper.cc",
+      "textures/render_text_wrapper.h",
+      "textures/system_indicator_texture.cc",
+      "textures/system_indicator_texture.h",
+      "textures/ui_texture.cc",
+      "textures/ui_texture.h",
+      "textures/url_bar_texture.cc",
+      "textures/url_bar_texture.h",
+      "ui_browser_interface.h",
+      "ui_elements/audio_capture_indicator.cc",
+      "ui_elements/audio_capture_indicator.h",
+      "ui_elements/button.cc",
+      "ui_elements/button.h",
+      "ui_elements/exit_warning.cc",
+      "ui_elements/exit_warning.h",
+      "ui_elements/loading_indicator.cc",
+      "ui_elements/loading_indicator.h",
+      "ui_elements/permanent_security_warning.cc",
+      "ui_elements/permanent_security_warning.h",
+      "ui_elements/screen_capture_indicator.cc",
+      "ui_elements/screen_capture_indicator.h",
+      "ui_elements/screen_dimmer.cc",
+      "ui_elements/screen_dimmer.h",
+      "ui_elements/textured_element.cc",
+      "ui_elements/textured_element.h",
+      "ui_elements/transient_security_warning.cc",
+      "ui_elements/transient_security_warning.h",
+      "ui_elements/ui_element.cc",
+      "ui_elements/ui_element.h",
+      "ui_elements/ui_element_debug_id.h",
+      "ui_elements/url_bar.cc",
+      "ui_elements/url_bar.h",
+      "ui_elements/video_capture_indicator.cc",
+      "ui_elements/video_capture_indicator.h",
+      "ui_interface.h",
+      "ui_scene.cc",
+      "ui_scene.h",
+      "ui_scene_manager.cc",
+      "ui_scene_manager.h",
+      "ui_unsupported_mode.h",
+    ]
+
+    deps = [
+      "//base",
+      "//cc/paint",
+      "//chrome/app:generated_resources",
+      "//components/security_state/core",
+      "//components/strings",
+      "//components/toolbar:vector_icons",
+      "//components/url_formatter",
+      "//components/vector_icons",
+      "//content/public/browser",
+      "//content/public/common",
+      "//device/vr",
+      "//skia",
+      "//ui/base",
+      "//ui/display",
+      "//ui/gl",
+      "//ui/gl/init",
+      "//ui/vector_icons",
+    ]
+  }
+
+  # This library contains the VR code specific to Android.
+  # TODO(cjgrant): It should be renamed to reflect this.
   static_library("vr_common") {
     defines = []
 
     sources = [
       "android_ui_gesture_target.cc",
       "android_ui_gesture_target.h",
-      "animation.cc",
-      "animation.h",
-      "easing.cc",
-      "easing.h",
-      "fps_meter.cc",
-      "fps_meter.h",
-      "gltf_asset.cc",
-      "gltf_asset.h",
-      "gltf_parser.cc",
-      "gltf_parser.h",
+      "elbow_model.cc",
+      "elbow_model.h",
       "mailbox_to_surface_bridge.cc",
       "mailbox_to_surface_bridge.h",
       "non_presenting_gvr_delegate.cc",
       "non_presenting_gvr_delegate.h",
-      "textures/insecure_content_permanent_texture.cc",
-      "textures/insecure_content_permanent_texture.h",
-      "textures/insecure_content_transient_texture.cc",
-      "textures/insecure_content_transient_texture.h",
-      "textures/ui_texture.cc",
-      "textures/ui_texture.h",
-      "ui_element.cc",
-      "ui_element.h",
-      "ui_interface.cc",
-      "ui_interface.h",
-      "ui_scene.cc",
-      "ui_scene.h",
-      "ui_scene_manager.cc",
-      "ui_scene_manager.h",
       "vr_compositor.cc",
       "vr_compositor.h",
       "vr_controller.cc",
       "vr_controller.h",
       "vr_controller_model.cc",
       "vr_controller_model.h",
-      "vr_gesture.h",
       "vr_gl_thread.cc",
       "vr_gl_thread.h",
       "vr_gl_util.cc",
@@ -72,12 +145,12 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
     ]
 
     deps = [
+      ":vr_common_ui",
       ":vr_shell_jni_headers",
       "//base",
       "//cc",
-      "//components/omnibox/browser",
+      "//chrome:resources",
       "//components/rappor",
-      "//components/security_state/core",
       "//content/public/android:jni",
       "//content/public/browser",
       "//content/public/common",
@@ -89,7 +162,10 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       "//ui/display",
       "//ui/gl",
       "//ui/gl/init",
-      "//ui/vector_icons",
+    ]
+
+    public_deps = [
+      "//device/vr:mojo_bindings",
     ]
 
     libs = [
@@ -109,36 +185,35 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
   }
 }
 
-if (enable_vr) {
-  test("vr_shell_unittests") {
-    sources = [
-      "fps_meter_unittest.cc",
-      "gltf_parser_unittest.cc",
-      "test/paths.cc",
-      "test/paths.h",
-      "ui_element_unittest.cc",
-      "ui_scene_unittest.cc",
-    ]
+test("vr_shell_unittests") {
+  sources = [
+    "fps_meter_unittest.cc",
+    "gltf_parser_unittest.cc",
+    "test/paths.cc",
+    "test/paths.h",
+    "textures/close_button_texture_unittest.cc",
+    "textures/url_bar_texture_unittest.cc",
+    "ui_elements/ui_element_unittest.cc",
+    "ui_scene_manager_unittest.cc",
+    "ui_scene_unittest.cc",
+  ]
 
-    deps = [
-      ":vr_common",
-      "//base/test:run_all_unittests",
-      "//base/test:test_support",
-      "//chrome/browser",
-      "//testing/gtest",
-      "//third_party/WebKit/public:blink",
-      "//ui/gfx/geometry",
-    ]
+  deps = [
+    ":vr_common_ui",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//components/security_state/core",
+    "//skia",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/gfx/geometry",
+    "//ui/gl",
+  ]
 
-    # Ensure libgvr static library appears before gcc library in linking order.
-    # See https://crbug.com/704305 for details.
-    libs =
-        [ "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a" ]
-
-    data = [
-      "test/data/sample_inline.gltf",
-      "test/data/sample_external.gltf",
-      "test/data/sample.bin",
-    ]
-  }
+  data = [
+    "test/data/sample_inline.gltf",
+    "test/data/sample_external.gltf",
+    "test/data/sample.bin",
+    "test/data/sample.glb",
+  ]
 }

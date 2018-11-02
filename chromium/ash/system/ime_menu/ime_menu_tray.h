@@ -32,7 +32,7 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
                                public keyboard::KeyboardControllerObserver,
                                public VirtualKeyboardObserver {
  public:
-  explicit ImeMenuTray(WmShelf* wm_shelf);
+  explicit ImeMenuTray(Shelf* shelf);
   ~ImeMenuTray() override;
 
   // Shows the IME menu bubble and highlights the button.
@@ -47,9 +47,6 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   // Shows the virtual keyboard with the given keyset: emoji, handwriting or
   // voice.
   void ShowKeyboardWithKeyset(const std::string& keyset);
-
-  // Returns true if it should block the auto hide behavior of the shelf.
-  bool ShouldBlockShelfAutoHide() const;
 
   // Returns true if the menu should show emoji, handwriting and voice buttons
   // on the bottom. Otherwise, the menu will show a 'Customize...' bottom row
@@ -99,6 +96,9 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   // Updates the text of the label on the tray.
   void UpdateTrayLabel();
 
+  // Disables the virtual keyboard.
+  void DisableVirtualKeyboard();
+
   // Bubble for default and detailed views.
   std::unique_ptr<TrayBubbleWrapper> bubble_;
   ImeListView* ime_list_view_;
@@ -107,9 +107,10 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   IMEInfo current_ime_;
   bool show_keyboard_;
   bool force_show_keyboard_;
-  bool should_block_shelf_auto_hide_;
   bool keyboard_suppressed_;
   bool show_bubble_after_keyboard_hidden_;
+
+  base::WeakPtrFactory<ImeMenuTray> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ImeMenuTray);
 };

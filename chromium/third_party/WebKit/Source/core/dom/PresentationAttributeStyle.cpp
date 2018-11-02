@@ -36,11 +36,11 @@
 #include "core/dom/Element.h"
 #include "core/html/HTMLInputElement.h"
 #include "platform/Timer.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/HashFunctions.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/text/CString.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 
 namespace blink {
@@ -118,7 +118,7 @@ class PresentationAttributeCacheCleaner {
     hit_count_ = 0;
     if (hit_count > kMinimumPresentationAttributeCacheHitCountPerMinute)
       return;
-    GetPresentationAttributeCache().Clear();
+    GetPresentationAttributeCache().clear();
   }
 
   unsigned hit_count_;
@@ -170,7 +170,7 @@ static unsigned ComputePresentationAttributeCacheHash(
     return 0;
   DCHECK(key.attributes_and_values.size());
   unsigned attribute_hash = StringHasher::HashMemory(
-      key.attributes_and_values.Data(),
+      key.attributes_and_values.data(),
       key.attributes_and_values.size() * sizeof(key.attributes_and_values[0]));
   return WTF::HashInts(key.tag_name->ExistingHash(), attribute_hash);
 }
@@ -222,7 +222,7 @@ StylePropertySet* ComputePresentationAttributeStyle(Element& element) {
       kPresentationAttributeCacheMaximumSize) {
     // FIXME: Discarding the entire cache when it gets too big is probably bad
     // since it creates a perf "cliff". Perhaps we should use an LRU?
-    GetPresentationAttributeCache().Clear();
+    GetPresentationAttributeCache().clear();
     GetPresentationAttributeCache().Set(cache_hash, new_entry);
   } else {
     cache_value->value = new_entry;

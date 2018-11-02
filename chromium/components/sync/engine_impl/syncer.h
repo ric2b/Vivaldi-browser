@@ -19,7 +19,7 @@ namespace syncer {
 
 class CancelationSignal;
 class CommitProcessor;
-class GetUpdatesProcessor;
+class GetUpdatesDelegate;
 class NudgeTracker;
 class SyncCycle;
 
@@ -34,13 +34,8 @@ class SyncCycle;
 // lock contention, or on tasks posted to other threads.
 class Syncer {
  public:
-  using UnsyncedMetaHandles = std::vector<int64_t>;
-
   explicit Syncer(CancelationSignal* cancelation_signal);
   virtual ~Syncer();
-
-  // Whether an early exist was requested due to a cancelation signal.
-  bool ExitRequested();
 
   // Whether the syncer is in the middle of a sync cycle.
   bool IsSyncing() const;
@@ -63,7 +58,7 @@ class Syncer {
   // Returns: false if an error occurred and retries should backoff, true
   // otherwise.
   virtual bool ConfigureSyncShare(
-      ModelTypeSet request_types,
+      const ModelTypeSet& request_types,
       sync_pb::GetUpdatesCallerInfo::GetUpdatesSource source,
       SyncCycle* cycle);
 
@@ -81,43 +76,23 @@ class Syncer {
   virtual bool PostClearServerData(SyncCycle* cycle);
 
  private:
-  friend class SyncerTest;
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, NameClashWithResolver);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, IllegalAndLegalUpdates);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, TestCommitListOrderingAndNewParent);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest,
-                           TestCommitListOrderingAndNewParentAndChild);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, TestCommitListOrderingCounterexample);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, TestCommitListOrderingWithNesting);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, TestCommitListOrderingWithNewItems);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, TestGetUnsyncedAndSimpleCommit);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, TestPurgeWhileUnsynced);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, TestPurgeWhileUnapplied);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, UnappliedUpdateDuringCommit);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, DeletingEntryInFolder);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest,
-                           LongChangelistCreatesFakeOrphanedEntries);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, QuicklyMergeDualCreatedHierarchy);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, LongChangelistWithApplicationConflict);
-  FRIEND_TEST_ALL_PREFIXES(SyncerTest, DeletingEntryWithLocalEdits);
-  FRIEND_TEST_ALL_PREFIXES(EntryCreatedInNewFolderTest,
-                           EntryCreatedInNewFolderMidSync);
-
   bool DownloadAndApplyUpdates(ModelTypeSet* request_types,
                                SyncCycle* cycle,
-                               GetUpdatesProcessor* get_updates_processor,
+                               const GetUpdatesDelegate& delegate,
                                bool create_mobile_bookmarks_folder);
 
   // This function will commit batches of unsynced items to the server until the
   // number of unsynced and ready to commit items reaches zero or an error is
   // encountered.  A request to exit early will be treated as an error and will
   // abort any blocking operations.
-  SyncerError BuildAndPostCommits(ModelTypeSet request_types,
+  SyncerError BuildAndPostCommits(const ModelTypeSet& request_types,
                                   NudgeTracker* nudge_tracker,
                                   SyncCycle* cycle,
                                   CommitProcessor* commit_processor);
 
-  void HandleCycleBegin(SyncCycle* cycle);
+  // Whether an early exist was requested due to a cancelation signal.
+  bool ExitRequested();
+
   bool HandleCycleEnd(SyncCycle* cycle,
                       sync_pb::GetUpdatesCallerInfo::GetUpdatesSource source);
 

@@ -10,7 +10,9 @@
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/ash_test_helper.h"
 #include "ash/test/shell_test_api.h"
+#include "ash/test/test_shell_delegate.h"
 #include "ash/wm_window.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -21,7 +23,7 @@
 #include "chrome/browser/ui/ash/launcher/arc_app_shelf_id.h"
 #include "chrome/browser/ui/ash/launcher/arc_launcher_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/browser_shortcut_launcher_item_controller.h"
-#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_impl.h"
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/desktop_shell_launcher_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/extension_launcher_context_menu.h"
 #include "chrome/test/base/testing_profile.h"
@@ -34,31 +36,50 @@
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
 
+namespace {
+
+// A shell delegate that owns a ChromeLauncherController, like production.
+class ChromeLauncherTestShellDelegate : public ash::test::TestShellDelegate {
+ public:
+  explicit ChromeLauncherTestShellDelegate(Profile* profile)
+      : profile_(profile) {}
+
+  ChromeLauncherController* controller() { return controller_.get(); }
+
+  // ash::test::TestShellDelegate:
+  void ShelfInit() override {
+    if (!controller_) {
+      controller_ = base::MakeUnique<ChromeLauncherController>(
+          profile_, ash::Shell::Get()->shelf_model());
+      controller_->Init();
+    }
+  }
+  void ShelfShutdown() override { controller_.reset(); }
+
+ private:
+  Profile* profile_;
+  std::unique_ptr<ChromeLauncherController> controller_;
+
+  DISALLOW_COPY_AND_ASSIGN(ChromeLauncherTestShellDelegate);
+};
+
 class LauncherContextMenuTest : public ash::test::AshTestBase {
  protected:
   static bool IsItemPresentInMenu(LauncherContextMenu* menu, int command_id) {
     return menu->GetIndexOfCommandId(command_id) != -1;
   }
 
-  LauncherContextMenuTest() : profile_(new TestingProfile()) {}
+  LauncherContextMenuTest() {}
 
   void SetUp() override {
-    arc_test_.SetUp(profile_.get());
+    arc_test_.SetUp(&profile_);
     session_manager_ = base::MakeUnique<session_manager::SessionManager>();
+    shell_delegate_ = new ChromeLauncherTestShellDelegate(&profile_);
+    ash_test_helper()->set_test_shell_delegate(shell_delegate_);
     ash::test::AshTestBase::SetUp();
-    std::unique_ptr<ChromeLauncherControllerImpl> controller =
-        base::MakeUnique<ChromeLauncherControllerImpl>(
-            profile(), ash::Shell::Get()->shelf_model());
-    controller_ = controller.get();
-    controller_->Init();
-    ash::test::ShellTestApi().SetShelfDelegate(std::move(controller));
   }
 
-  void TearDown() override {
-    ash::test::AshTestBase::TearDown();
-  }
-
-  ash::WmShelf* GetWmShelf(int64_t display_id) {
+  ash::Shelf* GetShelf(int64_t display_id) {
     ash::RootWindowController* root_window_controller =
         ash::Shell::GetRootWindowControllerWithDisplayId(display_id);
     EXPECT_NE(nullptr, root_window_controller);
@@ -67,17 +88,16 @@ class LauncherContextMenuTest : public ash::test::AshTestBase {
 
   LauncherContextMenu* CreateLauncherContextMenu(
       ash::ShelfItemType shelf_item_type,
-      ash::WmShelf* wm_shelf) {
+      ash::Shelf* shelf) {
     ash::ShelfItem item;
-    item.id = 123;  // dummy id
+    item.id = ash::ShelfID("idmockidmockidmockidmockidmockid");
     item.type = shelf_item_type;
-    return LauncherContextMenu::Create(controller_, &item, wm_shelf);
+    return LauncherContextMenu::Create(controller(), &item, shelf);
   }
 
   LauncherContextMenu* CreateLauncherContextMenuForDesktopShell(
-      ash::WmShelf* wm_shelf) {
-    ash::ShelfItem* item = nullptr;
-    return LauncherContextMenu::Create(controller_, item, wm_shelf);
+      ash::Shelf* shelf) {
+    return LauncherContextMenu::Create(controller(), nullptr, shelf);
   }
 
   // Creates app window and set optional ARC application id.
@@ -94,13 +114,15 @@ class LauncherContextMenuTest : public ash::test::AshTestBase {
 
   ArcAppTest& arc_test() { return arc_test_; }
 
-  Profile* profile() { return profile_.get(); }
+  Profile* profile() { return &profile_; }
 
-  ChromeLauncherControllerImpl* controller() { return controller_; }
+  ChromeLauncherController* controller() {
+    return shell_delegate_->controller();
+  }
 
  private:
-  std::unique_ptr<TestingProfile> profile_;
-  ChromeLauncherControllerImpl* controller_ = nullptr;
+  TestingProfile profile_;
+  ChromeLauncherTestShellDelegate* shell_delegate_ = nullptr;
   ArcAppTest arc_test_;
   std::unique_ptr<session_manager::SessionManager> session_manager_;
 
@@ -114,7 +136,7 @@ TEST_F(LauncherContextMenuTest,
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
   // Initially, "New Incognito window" should be enabled.
   std::unique_ptr<LauncherContextMenu> menu(CreateLauncherContextMenu(
-      ash::TYPE_BROWSER_SHORTCUT, GetWmShelf(primary_id)));
+      ash::TYPE_BROWSER_SHORTCUT, GetShelf(primary_id)));
   ASSERT_TRUE(IsItemPresentInMenu(
       menu.get(), LauncherContextMenu::MENU_NEW_INCOGNITO_WINDOW));
   EXPECT_TRUE(menu->IsCommandIdEnabled(
@@ -124,7 +146,7 @@ TEST_F(LauncherContextMenuTest,
   IncognitoModePrefs::SetAvailability(profile()->GetPrefs(),
                                       IncognitoModePrefs::DISABLED);
   menu.reset(CreateLauncherContextMenu(ash::TYPE_BROWSER_SHORTCUT,
-                                       GetWmShelf(primary_id)));
+                                       GetShelf(primary_id)));
   // The item should be disabled.
   ASSERT_TRUE(IsItemPresentInMenu(
       menu.get(), LauncherContextMenu::MENU_NEW_INCOGNITO_WINDOW));
@@ -139,7 +161,7 @@ TEST_F(LauncherContextMenuTest,
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
   // Initially, "New window" should be enabled.
   std::unique_ptr<LauncherContextMenu> menu(CreateLauncherContextMenu(
-      ash::TYPE_BROWSER_SHORTCUT, GetWmShelf(primary_id)));
+      ash::TYPE_BROWSER_SHORTCUT, GetShelf(primary_id)));
   ASSERT_TRUE(IsItemPresentInMenu(
       menu.get(), LauncherContextMenu::MENU_NEW_WINDOW));
   EXPECT_TRUE(menu->IsCommandIdEnabled(LauncherContextMenu::MENU_NEW_WINDOW));
@@ -148,7 +170,7 @@ TEST_F(LauncherContextMenuTest,
   IncognitoModePrefs::SetAvailability(profile()->GetPrefs(),
                                       IncognitoModePrefs::FORCED);
   menu.reset(CreateLauncherContextMenu(ash::TYPE_BROWSER_SHORTCUT,
-                                       GetWmShelf(primary_id)));
+                                       GetShelf(primary_id)));
   ASSERT_TRUE(IsItemPresentInMenu(
       menu.get(), LauncherContextMenu::MENU_NEW_WINDOW));
   EXPECT_FALSE(menu->IsCommandIdEnabled(LauncherContextMenu::MENU_NEW_WINDOW));
@@ -158,7 +180,7 @@ TEST_F(LauncherContextMenuTest,
 TEST_F(LauncherContextMenuTest, DesktopShellLauncherContextMenuItemCheck) {
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
   std::unique_ptr<LauncherContextMenu> menu(
-      CreateLauncherContextMenuForDesktopShell(GetWmShelf(primary_id)));
+      CreateLauncherContextMenuForDesktopShell(GetShelf(primary_id)));
   EXPECT_FALSE(
       IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_OPEN_NEW));
   EXPECT_FALSE(IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_PIN));
@@ -183,7 +205,7 @@ TEST_F(LauncherContextMenuTest,
        DesktopShellLauncherContextMenuVerifyCloseItem) {
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
   std::unique_ptr<LauncherContextMenu> menu(CreateLauncherContextMenu(
-      ash::TYPE_BROWSER_SHORTCUT, GetWmShelf(primary_id)));
+      ash::TYPE_BROWSER_SHORTCUT, GetShelf(primary_id)));
   ASSERT_FALSE(
       IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_CLOSE));
 }
@@ -198,14 +220,13 @@ TEST_F(LauncherContextMenuTest, ArcLauncherContextMenuItemCheck) {
 
   controller()->PinAppWithID(app_id);
 
-  const ash::ShelfID item_id = controller()->GetShelfIDForAppID(app_id);
-  const ash::ShelfItem* item = controller()->GetItem(item_id);
+  const ash::ShelfItem* item = controller()->GetItem(ash::ShelfID(app_id));
   ASSERT_TRUE(item);
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
-  ash::WmShelf* wm_shelf = GetWmShelf(primary_id);
+  ash::Shelf* shelf = GetShelf(primary_id);
 
   std::unique_ptr<LauncherContextMenu> menu(
-      new ArcLauncherContextMenu(controller(), item, wm_shelf));
+      new ArcLauncherContextMenu(controller(), item, shelf));
 
   // ARC app is pinned but not running.
   EXPECT_TRUE(
@@ -235,7 +256,7 @@ TEST_F(LauncherContextMenuTest, ArcLauncherContextMenuItemCheck) {
   CreateArcWindow(window_app_id1);
   arc_test().app_instance()->SendTaskCreated(1, arc_test().fake_apps()[0],
                                              std::string());
-  menu.reset(new ArcLauncherContextMenu(controller(), item, wm_shelf));
+  menu.reset(new ArcLauncherContextMenu(controller(), item, shelf));
 
   EXPECT_FALSE(
       IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_OPEN_NEW));
@@ -250,10 +271,9 @@ TEST_F(LauncherContextMenuTest, ArcLauncherContextMenuItemCheck) {
   CreateArcWindow(window_app_id2);
   arc_test().app_instance()->SendTaskCreated(2, arc_test().fake_apps()[1],
                                              std::string());
-  const ash::ShelfID item_id2 = controller()->GetShelfIDForAppID(app_id2);
-  const ash::ShelfItem* item2 = controller()->GetItem(item_id2);
+  const ash::ShelfItem* item2 = controller()->GetItem(ash::ShelfID(app_id2));
   ASSERT_TRUE(item2);
-  menu.reset(new ArcLauncherContextMenu(controller(), item2, wm_shelf));
+  menu.reset(new ArcLauncherContextMenu(controller(), item2, shelf));
 
   EXPECT_FALSE(
       IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_OPEN_NEW));
@@ -274,10 +294,9 @@ TEST_F(LauncherContextMenuTest, ArcLauncherContextMenuItemCheck) {
   CreateArcWindow(window_app_id3);
   arc_test().app_instance()->SendTaskCreated(3, arc_test().fake_apps()[2],
                                              shortcuts[0].intent_uri);
-  const ash::ShelfID item_id3 = controller()->GetShelfIDForAppID(app_id3);
-  const ash::ShelfItem* item3 = controller()->GetItem(item_id3);
+  const ash::ShelfItem* item3 = controller()->GetItem(ash::ShelfID(app_id3));
   ASSERT_TRUE(item3);
-  menu.reset(new ArcLauncherContextMenu(controller(), item3, wm_shelf));
+  menu.reset(new ArcLauncherContextMenu(controller(), item3, shelf));
 
   EXPECT_FALSE(
       IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_OPEN_NEW));
@@ -302,11 +321,13 @@ TEST_F(LauncherContextMenuTest, AutohideShelfOptionOnExternalDisplay) {
 
   widget->SetFullscreen(true);
   std::unique_ptr<LauncherContextMenu> primary_menu(CreateLauncherContextMenu(
-      ash::TYPE_BROWSER_SHORTCUT, GetWmShelf(primary_id)));
+      ash::TYPE_BROWSER_SHORTCUT, GetShelf(primary_id)));
   std::unique_ptr<LauncherContextMenu> secondary_menu(CreateLauncherContextMenu(
-      ash::TYPE_BROWSER_SHORTCUT, GetWmShelf(secondary_id)));
+      ash::TYPE_BROWSER_SHORTCUT, GetShelf(secondary_id)));
   EXPECT_FALSE(IsItemPresentInMenu(primary_menu.get(),
                                    LauncherContextMenu::MENU_AUTO_HIDE));
   EXPECT_TRUE(IsItemPresentInMenu(secondary_menu.get(),
                                   LauncherContextMenu::MENU_AUTO_HIDE));
 }
+
+}  // namespace

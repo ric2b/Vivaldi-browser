@@ -23,7 +23,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task_scheduler/task_scheduler.h"
-#include "base/threading/worker_pool.h"
 #include "components/cronet/histogram_manager.h"
 #include "components/cronet/ios/version.h"
 #include "components/prefs/json_pref_store.h"
@@ -113,12 +112,12 @@ net::URLRequestContextGetter* CronetEnvironment::GetURLRequestContextGetter()
 
 // static
 void CronetEnvironment::Initialize() {
-  // DCHECK_EQ([NSThread currentThread], [NSThread mainThread]);
   // This method must be called once from the main thread.
+  DCHECK_EQ([NSThread currentThread], [NSThread mainThread]);
   if (!g_at_exit_)
     g_at_exit_ = new base::AtExitManager;
 
-  base::TaskScheduler::CreateAndSetSimpleTaskScheduler("CronetIos");
+  base::TaskScheduler::CreateAndStartWithDefaultParams("CronetIos");
 
   url::Initialize();
   base::CommandLine::Init(0, nullptr);
@@ -249,14 +248,20 @@ void CronetEnvironment::Start() {
 }
 
 CronetEnvironment::~CronetEnvironment() {
+  // TODO(lilyhoughton) make unregistering of this work.
   // net::HTTPProtocolHandlerDelegate::SetInstance(nullptr);
 
-  // TODO(lilyhoughton) right now this is relying on there being
-  // only one CronetEnvironment (per process).  if (when?) that
-  // changes, so will this have to.
-  base::TaskScheduler* ts = base::TaskScheduler::GetInstance();
-  if (ts)
-    ts->Shutdown();
+  // TODO(lilyhoughton) this can only be run once, so right now leaking it.
+  // Should be be called when the _last_ CronetEnvironment is destroyed.
+  // base::TaskScheduler* ts = base::TaskScheduler::GetInstance();
+  // if (ts)
+  //  ts->Shutdown();
+
+  // TODO(lilyhoughton) this should be smarter about making sure there are no
+  // pending requests, etc.
+
+  network_io_thread_->task_runner().get()->DeleteSoon(FROM_HERE,
+                                                      main_context_.release());
 }
 
 void CronetEnvironment::InitializeOnNetworkThread() {
@@ -266,12 +271,9 @@ void CronetEnvironment::InitializeOnNetworkThread() {
   static bool ssl_key_log_file_set = false;
   if (!ssl_key_log_file_set && !ssl_key_log_file_name_.empty()) {
     ssl_key_log_file_set = true;
-    base::FilePath ssl_key_log_file;
-    if (!PathService::Get(base::DIR_HOME, &ssl_key_log_file))
-      return;
-    net::SSLClientSocket::SetSSLKeyLogFile(
-        ssl_key_log_file.Append(ssl_key_log_file_name_),
-        file_thread_->task_runner());
+    base::FilePath ssl_key_log_file(ssl_key_log_file_name_);
+    net::SSLClientSocket::SetSSLKeyLogFile(ssl_key_log_file,
+                                           file_thread_->task_runner());
   }
 
   if (user_agent_partial_)
@@ -291,6 +293,8 @@ void CronetEnvironment::InitializeOnNetworkThread() {
       cache_path.value();  // Storage path for http cache and cookie storage.
   context_config_builder.user_agent =
       user_agent_;  // User-Agent request header field.
+  context_config_builder.experimental_options =
+      experimental_options_;  // Set experimental Cronet options.
   context_config_builder.mock_cert_verifier = std::move(
       mock_cert_verifier_);  // MockCertVerifier to use for testing purposes.
   std::unique_ptr<URLRequestContextConfig> config =
@@ -319,7 +323,6 @@ void CronetEnvironment::InitializeOnNetworkThread() {
           [NSHTTPCookieStorage sharedHTTPCookieStorage]);
   context_builder.SetCookieAndChannelIdStores(std::move(cookie_store), nullptr);
 
-  std::unordered_set<std::string> quic_host_whitelist;
   std::unique_ptr<net::HttpServerProperties> http_server_properties(
       new net::HttpServerPropertiesImpl());
   for (const auto& quic_hint : quic_hints_) {
@@ -329,11 +332,9 @@ void CronetEnvironment::InitializeOnNetworkThread() {
                                          quic_hint.port());
     http_server_properties->SetAlternativeService(
         quic_hint_server, alternative_service, base::Time::Max());
-    quic_host_whitelist.insert(quic_hint.host());
   }
 
   context_builder.SetHttpServerProperties(std::move(http_server_properties));
-  context_builder.set_quic_host_whitelist(quic_host_whitelist);
 
   main_context_ = context_builder.Build();
 }
@@ -349,7 +350,7 @@ std::string CronetEnvironment::user_agent() {
 }
 
 std::vector<uint8_t> CronetEnvironment::GetHistogramDeltas() {
-  base::StatisticsRecorder::Initialize();
+  DCHECK(base::StatisticsRecorder::IsActive());
   std::vector<uint8_t> data;
   if (!HistogramManager::GetInstance()->GetDeltas(&data))
     return std::vector<uint8_t>();

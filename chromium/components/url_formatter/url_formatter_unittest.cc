@@ -27,10 +27,29 @@ using base::ASCIIToUTF16;
 const size_t kNpos = base::string16::npos;
 
 struct IDNTestCase {
+  // The IDNA/Punycode version of the domain (plain ASCII).
   const char* const input;
+  // The equivalent Unicode version of the domain. Even if we expect the domain
+  // to be displayed in Punycode, this should still contain the Unicode
+  // equivalent (see |unicode_allowed|).
   const wchar_t* unicode_output;
+  // Whether we expect the domain to be displayed decoded as a Unicode string
+  // (true) or in its Punycode form (false).
   const bool unicode_allowed;
 };
+
+// These cases can be generated with the script
+// tools/security/idn_test_case_generator.py.
+// See documentation there: you can either run it from the command line or call
+// the make_case function directly from the Python shell (which may be easier
+// for entering Unicode text).
+//
+// Q: Why not just do this conversion right here in the test, rather than having
+//    a Python script to generate it?
+// A: Because then we would have to rely on complex logic (IDNA encoding) in the
+//    test itself; the same code we are trying to test. By using Python's IDN
+//    encoder to generate the test data, we independently verify that our
+//    algorithm is correct.
 
 // TODO(jshin): Replace L"..." with "..." in UTF-8 when it's easier to read.
 const IDNTestCase idn_cases[] = {
@@ -286,6 +305,34 @@ const IDNTestCase idn_cases[] = {
   // музей (museum in Russian) has characters without a Latin-look-alike.
   {"xn--e1adhj9a.com", L"\x043c\x0443\x0437\x0435\x0439.com", true},
 
+  // Combining Diacritic marks after a script other than Latin-Greek-Cyrillic
+  {"xn--rsa2568fvxya.com", L"\xd55c\x0301\xae00.com", false}, // 한́글.com
+  {"xn--rsa0336bjom.com", L"\x6f22\x0307\x5b57.com", false},  // 漢̇字.com
+  // नागरी́.com
+  {"xn--lsa922apb7a6do.com", L"\x0928\x093e\x0917\x0930\x0940\x0301.com",
+    false},
+
+  // Similarity checks against the list of top domains. "digklmo68.com" and
+  // 'digklmo68.co.uk" are listed for unittest in the top domain list.
+  {"xn--igklmo68-nea32c.com", L"\x0111igklmo68.com", false}, // đigklmo68.com
+  {"www.xn--igklmo68-nea32c.com", L"www.\x0111igklmo68.com", false},
+  {"foo.bar.xn--igklmo68-nea32c.com", L"foo.bar.\x0111igklmo68.com", false},
+  {"xn--igklmo68-nea32c.co.uk", L"\x0111igklmo68.co.uk", false},
+  {"mail.xn--igklmo68-nea32c.co.uk", L"mail.\x0111igklmo68.co.uk", false},
+  {"xn--digklmo68-6jf.com", L"di\x0307gklmo68.com", false}, // di̇gklmo68.com
+  {"xn--digklmo68-7vf.com", L"dig\x0331klmo68.com", false}, // dig̱klmo68.com
+  {"xn--diglmo68-omb.com", L"dig\x0138lmo68.com", false}, // digĸlmo68.com
+  {"xn--digkmo68-9ob.com", L"digk\x0142mo68.com", false}, // digkłmo68.com
+  {"xn--digklo68-l89c.com", L"digkl\x1e43o68.com", false}, // digklṃo68.com
+  {"xn--digklm68-b5a.com", L"digklm\x00f8" L"68.com", false}, // digklmø68.com
+  {"xn--digklmo8-h7g.com", L"digklmo\x0431" L"8.com", false}, // digklmoб8.com
+  {"xn--digklmo6-7yr.com", L"digklmo6\x09ea.com", false}, // digklmo6৪.com
+
+  // 'islkpx123.com' is listed for unitest in the top domain list.
+  // 'іѕӏкрх123' can look like 'islkpx123' in some fonts.
+  {"xn--123-bed4a4a6hh40i.com",
+    L"\x0456\x0455\x04cf\x043a\x0440\x0445" L"123.com", false},
+
   // Mixed digits: the first two will also fail mixed script test
   // Latin + ASCII digit + Deva digit
   {"xn--asc1deva-j0q.co.in", L"asc1deva\x0967.co.in", false},
@@ -319,15 +366,15 @@ const IDNTestCase idn_cases[] = {
   // U+115F (Hangul Filler)
   {"xn--osd3820f24c.kr", L"\xac00\xb098\x115f.kr", false},
   {"www.xn--google-ho0coa.com", L"www.\x2039google\x203a.com", false},
-  // Latin small capital w
+  // Latin small capital w: hardᴡare.com
   {"xn--hardare-l41c.com", L"hard\x1d21" L"are.com", false},
   // Minus Sign(U+2212)
   {"xn--t9g238xc2a.jp", L"\x65e5\x2212\x672c.jp", false},
-  // Latin Small Letter Script G
+  // Latin Small Letter Script G: ɡɡ.com
   {"xn--0naa.com", L"\x0261\x0261.com", false},
   // Hangul Jamo(U+11xx)
   {"xn--0pdc3b.com", L"\x1102\x1103\x1110.com", false},
-  // degree sign
+  // degree sign: 36°c.com
   {"xn--36c-tfa.com", L"36\x00b0" L"c.com", false},
   // Pound sign
   {"xn--5free-9ga.com", L"5free\x00a8.com", false},
@@ -339,7 +386,7 @@ const IDNTestCase idn_cases[] = {
   {"xn--oogle-qmc.com", L"\x0261oogle.com", false},
   // Small Katakana Extension(U+31F1)
   {"xn--wlk.com", L"\x31f1.com", false},
-  // Heart symbol
+  // Heart symbol: ♥
   {"xn--ab-u0x.com", L"ab\x2665.com", false},
   // Emoji
   {"xn--vi8hiv.xyz", L"\U0001f355\U0001f4a9.xyz", false},
@@ -349,7 +396,7 @@ const IDNTestCase idn_cases[] = {
   {"xn--registered-25c.com", L"registered\x01c3.com", false},
   // ASCII '!' not allowed in IDN
   {"xn--!-257eu42c.kr", L"\xc548\xb155!.kr", false},
-  // 'GOOGLE' in IPA extension
+  // 'GOOGLE' in IPA extension: ɢᴏᴏɢʟᴇ
   {"xn--1naa7pn51hcbaa.com",
     L"\x0262\x1d0f\x1d0f\x0262\x029f\x1d07.com", false},
   // Padlock icon spoof.
@@ -412,6 +459,13 @@ const IDNTestCase idn_cases[] = {
   {"xn--ldk.jp", L"\x30ce.jp", true},
   // Hebrew Gershayim used by itself is allowed.
   {"xn--5eb.il", L"\x05f4.il", true},
+
+  // Block RTL nonspacing marks (NSM) after unrelated scripts.
+  {"xn--foog-ycg.com", L"foog\x0650.com", false},    // Latin + Arabic NSM
+  {"xn--foog-jdg.com", L"foog\x0654.com", false},    // Latin + Arabic NSM
+  {"xn--foog-jhg.com", L"foog\x0670.com", false},    // Latin + Arbic NSM
+  {"xn--foog-opf.com", L"foog\x05b4.com", false},    // Latin + Hebrew NSM
+  {"xn--shb5495f.com", L"\xac00\x0650.com", false},  // Hang + Arabic NSM
 
   // 4 Deviation characters between IDNA 2003 and IDNA 2008
   // When entered in Unicode, the first two are mapped to 'ss' and Greek sigma

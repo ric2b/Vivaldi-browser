@@ -8,10 +8,10 @@ var NetworkUI = (function() {
   CrOncStrings = {
     OncTypeCellular: loadTimeData.getString('OncTypeCellular'),
     OncTypeEthernet: loadTimeData.getString('OncTypeEthernet'),
+    OncTypeTether: loadTimeData.getString('OncTypeTether'),
     OncTypeVPN: loadTimeData.getString('OncTypeVPN'),
     OncTypeWiFi: loadTimeData.getString('OncTypeWiFi'),
     OncTypeWiMAX: loadTimeData.getString('OncTypeWiMAX'),
-    networkDisabled: loadTimeData.getString('networkDisabled'),
     networkListItemConnected:
         loadTimeData.getString('networkListItemConnected'),
     networkListItemConnecting:

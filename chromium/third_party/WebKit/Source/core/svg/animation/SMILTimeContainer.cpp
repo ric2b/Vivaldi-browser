@@ -101,11 +101,11 @@ void SMILTimeContainer::Unschedule(SVGSMILElement* animation,
 #endif
 
   ElementAttributePair key(target, attribute_name);
-  GroupedAnimationsMap::iterator it = scheduled_animations_.Find(key);
+  GroupedAnimationsMap::iterator it = scheduled_animations_.find(key);
   DCHECK_NE(it, scheduled_animations_.end());
   AnimationsLinkedHashSet* scheduled = it->value.Get();
   DCHECK(scheduled);
-  AnimationsLinkedHashSet::iterator it_animation = scheduled->Find(animation);
+  AnimationsLinkedHashSet::iterator it_animation = scheduled->find(animation);
   DCHECK(it_animation != scheduled->end());
   scheduled->erase(it_animation);
 

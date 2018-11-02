@@ -18,6 +18,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/message_loop/timer_slack.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
@@ -40,7 +41,6 @@
 #include "content/child/child_resource_message_filter.h"
 #include "content/child/fileapi/file_system_dispatcher.h"
 #include "content/child/fileapi/webfilesystem_impl.h"
-#include "content/child/memory/child_memory_message_filter.h"
 #include "content/child/notifications/notification_dispatcher.h"
 #include "content/child/quota_dispatcher.h"
 #include "content/child/quota_message_filter.h"
@@ -60,17 +60,17 @@
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/ipc_sync_message_filter.h"
 #include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/incoming_broker_client_invitation.h"
 #include "mojo/edk/embedder/named_platform_channel_pair.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/scoped_ipc_support.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "services/device/public/cpp/power_monitor/power_monitor_broadcast_source.h"
-#include "services/resource_coordinator/public/cpp/memory/memory_dump_manager_delegate_impl.h"
+#include "services/resource_coordinator/public/cpp/memory_instrumentation/client_process_impl.h"
+#include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/runner/common/client_util.h"
 
 #if defined(OS_POSIX)
@@ -235,7 +235,8 @@ base::LazyInstance<QuitClosure>::DestructorAtExit g_quit_closure =
     LAZY_INSTANCE_INITIALIZER;
 #endif
 
-void InitializeMojoIPCChannel() {
+std::unique_ptr<mojo::edk::IncomingBrokerClientInvitation>
+InitializeMojoIPCChannel() {
   mojo::edk::ScopedPlatformHandle platform_channel;
 #if defined(OS_WIN)
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -257,8 +258,11 @@ void InitializeMojoIPCChannel() {
   // Mojo isn't supported on all child process types.
   // TODO(crbug.com/604282): Support Mojo in the remaining processes.
   if (!platform_channel.is_valid())
-    return;
-  mojo::edk::SetParentPipeHandle(std::move(platform_channel));
+    return nullptr;
+
+  return mojo::edk::IncomingBrokerClientInvitation::Accept(
+      mojo::edk::ConnectionParams(mojo::edk::TransportProtocol::kLegacy,
+                                  std::move(platform_channel)));
 }
 
 class ChannelBootstrapFilter : public ConnectionFilter {
@@ -268,7 +272,7 @@ class ChannelBootstrapFilter : public ConnectionFilter {
 
  private:
   // ConnectionFilter:
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle* interface_pipe,
                        service_manager::Connector* connector) override {
@@ -277,9 +281,9 @@ class ChannelBootstrapFilter : public ConnectionFilter {
 
     if (interface_name == IPC::mojom::ChannelBootstrap::Name_) {
       DCHECK(bootstrap_.is_valid());
-      mojo::FuseInterface(mojo::MakeRequest<IPC::mojom::ChannelBootstrap>(
-                              std::move(*interface_pipe)),
-                          std::move(bootstrap_));
+      mojo::FuseInterface(
+          IPC::mojom::ChannelBootstrapRequest(std::move(*interface_pipe)),
+          std::move(bootstrap_));
     }
   }
 
@@ -310,6 +314,7 @@ ChildThreadImpl::Options::Builder::InBrowserProcess(
     const InProcessChildThreadParams& params) {
   options_.browser_process_io_runner = params.io_runner();
   options_.in_process_service_request_token = params.service_request_token();
+  options_.broker_client_invitation = params.broker_client_invitation();
   return *this;
 }
 
@@ -383,7 +388,8 @@ scoped_refptr<base::SingleThreadTaskRunner> ChildThreadImpl::GetIOTaskRunner() {
   return ChildProcess::current()->io_task_runner();
 }
 
-void ChildThreadImpl::ConnectChannel() {
+void ChildThreadImpl::ConnectChannel(
+    mojo::edk::IncomingBrokerClientInvitation* invitation) {
   std::string channel_token;
   mojo::ScopedMessagePipeHandle handle;
   if (!IsInBrowserProcess()) {
@@ -395,7 +401,7 @@ void ChildThreadImpl::ConnectChannel() {
     // TODO(rockot): Remove all paths which lead to this branch. The Channel
     // connection should always be established by a service manager connection
     // from the browser. http://crbug.com/623396.
-    handle = mojo::edk::CreateChildMessagePipe(channel_token);
+    handle = invitation->ExtractMessagePipe(channel_token);
   } else {
     DCHECK(service_manager_connection_);
     IPC::mojom::ChannelBootstrapPtr bootstrap;
@@ -415,7 +421,7 @@ void ChildThreadImpl::Init(const Options& options) {
   g_lazy_tls.Pointer()->Set(this);
   on_channel_error_called_ = false;
   message_loop_ = base::MessageLoop::current();
-#ifdef IPC_MESSAGE_LOG_ENABLED
+#if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   // We must make sure to instantiate the IPC Logger *before* we create the
   // channel, otherwise we can get a callback on the IO thread which creates
   // the logger, and the logger does not like being created on the IO thread.
@@ -425,39 +431,35 @@ void ChildThreadImpl::Init(const Options& options) {
   channel_ =
       IPC::SyncChannel::Create(this, ChildProcess::current()->io_task_runner(),
                                ChildProcess::current()->GetShutDownEvent());
-#ifdef IPC_MESSAGE_LOG_ENABLED
+#if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   if (!IsInBrowserProcess())
     IPC::Logging::GetInstance()->SetIPCSender(this);
 #endif
 
+  std::unique_ptr<mojo::edk::IncomingBrokerClientInvitation> invitation;
+  mojo::ScopedMessagePipeHandle service_request_pipe;
   if (!IsInBrowserProcess()) {
-    // Don't double-initialize IPC support in single-process mode.
     mojo_ipc_support_.reset(new mojo::edk::ScopedIPCSupport(
         GetIOTaskRunner(), mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST));
-    InitializeMojoIPCChannel();
-  }
-  std::string service_request_token;
-  if (!IsInBrowserProcess()) {
-    service_request_token =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-        switches::kServiceRequestChannelToken);
-  } else {
-    service_request_token = options.in_process_service_request_token;
-  }
-  if (!service_request_token.empty()) {
-    mojo::ScopedMessagePipeHandle handle =
-        mojo::edk::CreateChildMessagePipe(service_request_token);
-    DCHECK(handle.is_valid());
-    service_manager_connection_ = ServiceManagerConnection::Create(
-        mojo::MakeRequest<service_manager::mojom::Service>(std::move(handle)),
-        GetIOTaskRunner());
+    invitation = InitializeMojoIPCChannel();
 
-    // TODO(rockot): Remove this once all child-to-browser interface connections
-    // are made via a Connector rather than directly through an
-    // InterfaceProvider, and all exposed interfaces are exposed via a
-    // ConnectionFilter.
-    service_manager_connection_->SetupInterfaceRequestProxies(
-        GetInterfaceRegistry(), nullptr);
+    std::string service_request_token =
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+            switches::kServiceRequestChannelToken);
+    if (!service_request_token.empty() && invitation) {
+      service_request_pipe =
+          invitation->ExtractMessagePipe(service_request_token);
+    }
+  } else {
+    service_request_pipe =
+        options.broker_client_invitation->ExtractInProcessMessagePipe(
+            options.in_process_service_request_token);
+  }
+
+  if (service_request_pipe.is_valid()) {
+    service_manager_connection_ = ServiceManagerConnection::Create(
+        service_manager::mojom::ServiceRequest(std::move(service_request_pipe)),
+        GetIOTaskRunner());
   }
 
   sync_message_filter_ = channel_->CreateSyncMessageFilter();
@@ -493,15 +495,24 @@ void ChildThreadImpl::Init(const Options& options) {
     // whole process including renderers.
     channel_->AddFilter(new tracing::ChildTraceMessageFilter(
         ChildProcess::current()->io_task_runner()));
-    channel_->AddFilter(new ChildMemoryMessageFilter());
 
     if (service_manager_connection_) {
-      memory_instrumentation::MemoryDumpManagerDelegateImpl::Config config(
-          GetConnector(), mojom::kBrowserServiceName);
-      auto delegate = base::MakeUnique<
-          memory_instrumentation::MemoryDumpManagerDelegateImpl>(config);
-      base::trace_event::MemoryDumpManager::GetInstance()->Initialize(
-          std::move(delegate));
+      std::string process_type_str =
+          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+              switches::kProcessType);
+      auto process_type = memory_instrumentation::mojom::ProcessType::OTHER;
+      if (process_type_str == switches::kRendererProcess)
+        process_type = memory_instrumentation::mojom::ProcessType::RENDERER;
+      else if (process_type_str == switches::kGpuProcess)
+        process_type = memory_instrumentation::mojom::ProcessType::GPU;
+      else if (process_type_str == switches::kUtilityProcess)
+        process_type = memory_instrumentation::mojom::ProcessType::UTILITY;
+      else if (process_type_str == switches::kPpapiPluginProcess)
+        process_type = memory_instrumentation::mojom::ProcessType::PLUGIN;
+
+      memory_instrumentation::ClientProcessImpl::Config config(
+          GetConnector(), mojom::kBrowserServiceName, process_type);
+      memory_instrumentation::ClientProcessImpl::CreateInstance(config);
     }
   }
 
@@ -527,7 +538,7 @@ void ChildThreadImpl::Init(const Options& options) {
     channel_->AddFilter(startup_filter);
   }
 
-  ConnectChannel();
+  ConnectChannel(invitation.get());
 
   // This must always be done after ConnectChannel, because ConnectChannel() may
   // add a ConnectionFilter to the connection.
@@ -565,7 +576,7 @@ void ChildThreadImpl::Init(const Options& options) {
 }
 
 ChildThreadImpl::~ChildThreadImpl() {
-#ifdef IPC_MESSAGE_LOG_ENABLED
+#if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   IPC::Logging::GetInstance()->SetIPCSender(NULL);
 #endif
 
@@ -637,32 +648,8 @@ ServiceManagerConnection* ChildThreadImpl::GetServiceManagerConnection() {
   return service_manager_connection_.get();
 }
 
-service_manager::InterfaceRegistry* ChildThreadImpl::GetInterfaceRegistry() {
-  if (!interface_registry_.get()) {
-    interface_registry_ = base::MakeUnique<service_manager::InterfaceRegistry>(
-        service_manager::mojom::kServiceManager_ConnectorSpec);
-  }
-  return interface_registry_.get();
-}
-
 service_manager::Connector* ChildThreadImpl::GetConnector() {
   return service_manager_connection_->GetConnector();
-}
-
-const service_manager::ServiceInfo&
-    ChildThreadImpl::GetChildServiceInfo() const {
-  DCHECK(IsConnectedToBrowser());
-  return child_info_;
-}
-
-const service_manager::ServiceInfo&
-    ChildThreadImpl::GetBrowserServiceInfo() const {
-  DCHECK(IsConnectedToBrowser());
-  return browser_info_;
-}
-
-bool ChildThreadImpl::IsConnectedToBrowser() const {
-  return connected_to_browser_;
 }
 
 IPC::MessageRouter* ChildThreadImpl::GetRouter() {
@@ -715,7 +702,7 @@ bool ChildThreadImpl::OnMessageReceived(const IPC::Message& msg) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ChildThreadImpl, msg)
     IPC_MESSAGE_HANDLER(ChildProcessMsg_Shutdown, OnShutdown)
-#if defined(IPC_MESSAGE_LOG_ENABLED)
+#if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
     IPC_MESSAGE_HANDLER(ChildProcessMsg_SetIPCLoggingEnabled,
                         OnSetIPCLoggingEnabled)
 #endif
@@ -747,9 +734,8 @@ void ChildThreadImpl::OnAssociatedInterfaceRequest(
     mojo::ScopedInterfaceEndpointHandle handle) {
   if (interface_name == mojom::RouteProvider::Name_) {
     DCHECK(!route_provider_binding_.is_bound());
-    mojom::RouteProviderAssociatedRequest request;
-    request.Bind(std::move(handle));
-    route_provider_binding_.Bind(std::move(request));
+    route_provider_binding_.Bind(
+        mojom::RouteProviderAssociatedRequest(std::move(handle)));
   } else {
     LOG(ERROR) << "Request for unknown Channel-associated interface: "
                << interface_name;
@@ -759,10 +745,6 @@ void ChildThreadImpl::OnAssociatedInterfaceRequest(
 void ChildThreadImpl::StartServiceManagerConnection() {
   DCHECK(service_manager_connection_);
   service_manager_connection_->Start();
-  // We don't care about storing the id, since if this pipe closes we're toast.
-  service_manager_connection_->AddOnConnectHandler(
-      base::Bind(&ChildThreadImpl::OnServiceConnect,
-                 weak_factory_.GetWeakPtr()));
 }
 
 bool ChildThreadImpl::OnControlMessageReceived(const IPC::Message& msg) {
@@ -786,7 +768,7 @@ void ChildThreadImpl::OnShutdown() {
   base::MessageLoop::current()->QuitWhenIdle();
 }
 
-#if defined(IPC_MESSAGE_LOG_ENABLED)
+#if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
 void ChildThreadImpl::OnSetIPCLoggingEnabled(bool enable) {
   if (enable)
     IPC::Logging::GetInstance()->Enable();
@@ -859,17 +841,6 @@ void ChildThreadImpl::GetAssociatedInterface(
   Listener* route = router_.GetRoute(routing_id);
   if (route)
     route->OnAssociatedInterfaceRequest(name, request.PassHandle());
-}
-
-void ChildThreadImpl::OnServiceConnect(
-    const service_manager::ServiceInfo& local_info,
-    const service_manager::ServiceInfo& remote_info) {
-  if (remote_info.identity.name() != mojom::kBrowserServiceName)
-    return;
-  DCHECK(!connected_to_browser_);
-  connected_to_browser_ = true;
-  child_info_ = local_info;
-  browser_info_ = remote_info;
 }
 
 bool ChildThreadImpl::IsInBrowserProcess() const {

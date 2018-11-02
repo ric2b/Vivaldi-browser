@@ -21,6 +21,7 @@
 #include "components/drive/chromeos/change_list_loader_observer.h"
 #include "components/drive/chromeos/change_list_processor.h"
 #include "components/drive/chromeos/resource_metadata.h"
+#include "components/drive/drive_api_util.h"
 #include "components/drive/event_logger.h"
 #include "components/drive/file_system_core_util.h"
 #include "components/drive/job_scheduler.h"
@@ -45,10 +46,13 @@ namespace {
 // Fetches all the (currently available) resource entries from the server.
 class FullFeedFetcher : public ChangeListLoader::FeedFetcher {
  public:
-  explicit FullFeedFetcher(JobScheduler* scheduler)
+  FullFeedFetcher(
+      JobScheduler* scheduler,
+      google_apis::TeamDrivesIntegrationStatus team_drives_integration)
       : scheduler_(scheduler),
-        weak_ptr_factory_(this) {
-  }
+        is_team_drive_enabled_(team_drives_integration ==
+                               google_apis::TEAM_DRIVES_INTEGRATION_ENABLED),
+        weak_ptr_factory_(this) {}
 
   ~FullFeedFetcher() override {}
 
@@ -56,16 +60,45 @@ class FullFeedFetcher : public ChangeListLoader::FeedFetcher {
     DCHECK(thread_checker_.CalledOnValidThread());
     DCHECK(!callback.is_null());
 
+    if (!is_team_drive_enabled_) {
+      StartFetchFileList(callback);
+      return;
+    }
+
+    // Fetch Team Drive before File list, so that files can be stored under
+    // root directories of each Team Drive like /team_drive/My Team Drive/.
+    scheduler_->GetAllTeamDriveList(
+        base::Bind(&FullFeedFetcher::OnTeamDriveListFetched,
+                   weak_ptr_factory_.GetWeakPtr(), callback));
+  }
+
+ private:
+  void OnTeamDriveListFetched(
+      const FeedFetcherCallback& callback,
+      google_apis::DriveApiErrorCode status,
+      std::unique_ptr<google_apis::TeamDriveList> team_drives) {
+    DCHECK(is_team_drive_enabled_);
+    change_lists_.push_back(base::MakeUnique<ChangeList>(*team_drives));
+
+    if (!team_drives->next_page_token().empty()) {
+      scheduler_->GetRemainingTeamDriveList(
+          team_drives->next_page_token(),
+          base::Bind(&FullFeedFetcher::OnTeamDriveListFetched,
+                     weak_ptr_factory_.GetWeakPtr(), callback));
+      return;
+    }
+    StartFetchFileList(callback);
+  }
+
+  void StartFetchFileList(const FeedFetcherCallback& callback) {
     // Remember the time stamp for usage stats.
     start_time_ = base::TimeTicks::Now();
-
     // This is full resource list fetch.
     scheduler_->GetAllFileList(
         base::Bind(&FullFeedFetcher::OnFileListFetched,
                    weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
- private:
   void OnFileListFetched(const FeedFetcherCallback& callback,
                          google_apis::DriveApiErrorCode status,
                          std::unique_ptr<google_apis::FileList> file_list) {
@@ -103,6 +136,7 @@ class FullFeedFetcher : public ChangeListLoader::FeedFetcher {
   std::vector<std::unique_ptr<ChangeList>> change_lists_;
   base::TimeTicks start_time_;
   base::ThreadChecker thread_checker_;
+  bool is_team_drive_enabled_;
   base::WeakPtrFactory<FullFeedFetcher> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(FullFeedFetcher);
 };
@@ -503,7 +537,8 @@ void ChangeListLoader::LoadChangeListFromServer(int64_t start_changestamp) {
     change_feed_fetcher_.reset(
         new DeltaFeedFetcher(scheduler_, start_changestamp));
   } else {
-    change_feed_fetcher_.reset(new FullFeedFetcher(scheduler_));
+    change_feed_fetcher_.reset(new FullFeedFetcher(
+        scheduler_, google_apis::GetTeamDrivesIntegrationSwitch()));
   }
 
   // Make a copy of cached_about_resource_ to remember at which changestamp we
@@ -542,9 +577,8 @@ void ChangeListLoader::LoadChangeListFromServerAfterLoadChangeList(
                "Apply change lists (is delta: %d)",
                is_delta_update);
   loader_controller_->ScheduleRun(base::Bind(
-      base::IgnoreResult(
-          &base::PostTaskAndReplyWithResult<FileError, FileError>),
-      base::RetainedRef(blocking_task_runner_), FROM_HERE,
+      &drive::util::RunAsyncTask, base::RetainedRef(blocking_task_runner_),
+      FROM_HERE,
       base::Bind(&ChangeListProcessor::Apply,
                  base::Unretained(change_list_processor),
                  base::Passed(&about_resource), base::Passed(&change_lists),

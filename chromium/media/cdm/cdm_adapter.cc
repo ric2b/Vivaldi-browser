@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -87,19 +88,18 @@ CdmPromise::Exception ToMediaExceptionType(cdm::Error error) {
   return CdmPromise::UNKNOWN_ERROR;
 }
 
-ContentDecryptionModule::MessageType ToMediaMessageType(
-    cdm::MessageType message_type) {
+CdmMessageType ToMediaMessageType(cdm::MessageType message_type) {
   switch (message_type) {
     case cdm::kLicenseRequest:
-      return ContentDecryptionModule::LICENSE_REQUEST;
+      return CdmMessageType::LICENSE_REQUEST;
     case cdm::kLicenseRenewal:
-      return ContentDecryptionModule::LICENSE_RENEWAL;
+      return CdmMessageType::LICENSE_RENEWAL;
     case cdm::kLicenseRelease:
-      return ContentDecryptionModule::LICENSE_RELEASE;
+      return CdmMessageType::LICENSE_RELEASE;
   }
 
   NOTREACHED() << "Unexpected cdm::MessageType " << message_type;
-  return ContentDecryptionModule::LICENSE_REQUEST;
+  return CdmMessageType::LICENSE_REQUEST;
 }
 
 CdmKeyInformation::KeyStatus ToCdmKeyInformationKeyStatus(
@@ -787,7 +787,7 @@ void CdmAdapter::OnSessionKeysChange(const char* session_id,
   keys.reserve(keys_info_count);
   for (uint32_t i = 0; i < keys_info_count; ++i) {
     const auto& info = keys_info[i];
-    keys.push_back(new CdmKeyInformation(
+    keys.push_back(base::MakeUnique<CdmKeyInformation>(
         info.key_id, info.key_id_size,
         ToCdmKeyInformationKeyStatus(info.status), info.system_code));
   }

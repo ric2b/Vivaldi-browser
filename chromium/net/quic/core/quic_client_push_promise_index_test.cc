@@ -7,8 +7,10 @@
 #include <string>
 
 #include "net/quic/core/spdy_utils.h"
+#include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/mock_quic_client_promised_info.h"
+#include "net/quic/test_tools/quic_spdy_session_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/tools/quic/quic_client_session.h"
 
@@ -42,14 +44,17 @@ class MockQuicClientSession : public QuicClientSession {
   DISALLOW_COPY_AND_ASSIGN(MockQuicClientSession);
 };
 
-class QuicClientPushPromiseIndexTest : public ::testing::Test {
+class QuicClientPushPromiseIndexTest : public QuicTest {
  public:
   QuicClientPushPromiseIndexTest()
       : connection_(new StrictMock<MockQuicConnection>(&helper_,
                                                        &alarm_factory_,
                                                        Perspective::IS_CLIENT)),
         session_(connection_, &index_),
-        promised_(&session_, kServerDataStreamId1, url_) {
+        promised_(
+            &session_,
+            QuicSpdySessionPeer::GetNthServerInitiatedStreamId(session_, 0),
+            url_) {
     request_[":path"] = "/bar";
     request_[":authority"] = "www.google.com";
     request_[":version"] = "HTTP/1.1";

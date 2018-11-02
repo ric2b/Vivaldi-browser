@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/web/web_state/navigation_context_impl.h"
+#import "ios/web/web_state/navigation_context_impl.h"
 
 #import "ios/web/public/test/fakes/test_web_state.h"
 #include "net/http/http_response_headers.h"
@@ -33,42 +33,48 @@ class NavigationContextImplTest : public PlatformTest {
 // Tests CreateNavigationContext factory method.
 TEST_F(NavigationContextImplTest, NavigationContext) {
   std::unique_ptr<NavigationContext> context =
-      NavigationContextImpl::CreateNavigationContext(&web_state_, url_,
-                                                     response_headers_);
+      NavigationContextImpl::CreateNavigationContext(
+          &web_state_, url_, ui::PageTransition::PAGE_TRANSITION_FORWARD_BACK);
   ASSERT_TRUE(context);
 
   EXPECT_EQ(&web_state_, context->GetWebState());
+  EXPECT_TRUE(PageTransitionTypeIncludingQualifiersIs(
+      context->GetPageTransition(),
+      ui::PageTransition::PAGE_TRANSITION_FORWARD_BACK));
   EXPECT_EQ(url_, context->GetUrl());
   EXPECT_FALSE(context->IsSameDocument());
-  EXPECT_FALSE(context->IsErrorPage());
-  EXPECT_EQ(response_headers_.get(), context->GetResponseHeaders());
-}
-
-// Tests CreateSameDocumentNavigationContext factory method.
-TEST_F(NavigationContextImplTest, SameDocumentNavigationContext) {
-  std::unique_ptr<NavigationContext> context =
-      NavigationContextImpl::CreateSameDocumentNavigationContext(&web_state_,
-                                                                 url_);
-  ASSERT_TRUE(context);
-
-  EXPECT_EQ(&web_state_, context->GetWebState());
-  EXPECT_EQ(url_, context->GetUrl());
-  EXPECT_TRUE(context->IsSameDocument());
-  EXPECT_FALSE(context->IsErrorPage());
+  EXPECT_FALSE(context->GetError());
   EXPECT_FALSE(context->GetResponseHeaders());
 }
 
-// Tests CreateErrorPageNavigationContext factory method.
-TEST_F(NavigationContextImplTest, ErrorPageNavigationContext) {
-  std::unique_ptr<NavigationContext> context =
-      NavigationContextImpl::CreateErrorPageNavigationContext(
-          &web_state_, url_, response_headers_);
+// Tests NavigationContextImpl Setters.
+TEST_F(NavigationContextImplTest, Setters) {
+  std::unique_ptr<NavigationContextImpl> context =
+      NavigationContextImpl::CreateNavigationContext(
+          &web_state_, url_, ui::PageTransition::PAGE_TRANSITION_FORWARD_BACK);
   ASSERT_TRUE(context);
 
-  EXPECT_EQ(&web_state_, context->GetWebState());
-  EXPECT_EQ(url_, context->GetUrl());
-  EXPECT_FALSE(context->IsSameDocument());
-  EXPECT_TRUE(context->IsErrorPage());
+  ASSERT_FALSE(context->IsSameDocument());
+  ASSERT_FALSE(context->GetError());
+  ASSERT_NE(response_headers_.get(), context->GetResponseHeaders());
+
+  // SetSameDocument
+  context->SetIsSameDocument(true);
+  EXPECT_TRUE(context->IsSameDocument());
+  EXPECT_FALSE(context->GetError());
+  EXPECT_NE(response_headers_.get(), context->GetResponseHeaders());
+
+  // SetErrorPage
+  NSError* error = [[[NSError alloc] init] autorelease];
+  context->SetError(error);
+  EXPECT_TRUE(context->IsSameDocument());
+  EXPECT_EQ(error, context->GetError());
+  EXPECT_NE(response_headers_.get(), context->GetResponseHeaders());
+
+  // SetResponseHeaders
+  context->SetResponseHeaders(response_headers_);
+  EXPECT_TRUE(context->IsSameDocument());
+  EXPECT_EQ(error, context->GetError());
   EXPECT_EQ(response_headers_.get(), context->GetResponseHeaders());
 }
 

@@ -94,15 +94,10 @@ MessageCenterView::MessageCenterView(MessageCenter* message_center,
   const int button_height = button_bar_->GetPreferredSize().height();
 
   scroller_ = new views::ScrollView();
+  scroller_->SetBackgroundColor(kMessageCenterBackgroundColor);
   scroller_->ClipHeightTo(kMinScrollViewHeight, max_height - button_height);
   scroller_->SetVerticalScrollBar(new views::OverlayScrollBar(false));
   scroller_->SetHorizontalScrollBar(new views::OverlayScrollBar(true));
-  scroller_->set_background(
-      views::Background::CreateSolidBackground(kMessageCenterBackgroundColor));
-
-  scroller_->SetPaintToLayer();
-  scroller_->layer()->SetFillsBoundsOpaquely(false);
-  scroller_->layer()->SetMasksToBounds(true);
 
   message_list_view_.reset(new MessageListView());
   message_list_view_->set_scroller(scroller_);
@@ -276,7 +271,7 @@ void MessageCenterView::Layout() {
     GetWidget()->GetRootView()->SchedulePaint();
 }
 
-gfx::Size MessageCenterView::GetPreferredSize() const {
+gfx::Size MessageCenterView::CalculatePreferredSize() const {
   if (settings_transition_animation_ &&
       settings_transition_animation_->is_animating()) {
     int content_width =
@@ -643,7 +638,7 @@ void MessageCenterView::EnableCloseAllIfAppropriate() {
   if (mode_ == Mode::NOTIFICATIONS) {
     bool no_closable_views = true;
     for (const auto& view : notification_views_) {
-      if (!view.second->IsPinned()) {
+      if (!view.second->pinned()) {
         no_closable_views = false;
         break;
       }
@@ -676,11 +671,11 @@ void MessageCenterView::UpdateNotification(const std::string& id) {
     if ((*iter)->id() == id) {
       int old_width = view->width();
       int old_height = view->height();
-      bool old_pinned = view->IsPinned();
+      bool old_pinned = view->pinned();
       message_list_view_->UpdateNotification(view, **iter);
       if (view->GetHeightForWidth(old_width) != old_height) {
         Update(true /* animate */);
-      } else if (view->IsPinned() != old_pinned) {
+      } else if (view->pinned() != old_pinned) {
         // Animate flag is false, since the pinned flag transition doesn't need
         // animation.
         Update(false /* animate */);

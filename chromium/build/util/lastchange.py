@@ -13,11 +13,8 @@ import os
 import subprocess
 import sys
 
-_GIT_SVN_ID_REGEX = re.compile(r'.*git-svn-id:\s*([^@]*)@([0-9]+)', re.DOTALL)
-
 class VersionInfo(object):
-  def __init__(self, url, revision):
-    self.url = url
+  def __init__(self, revision):
     self.revision = revision
 
 
@@ -48,7 +45,7 @@ def RunGitCommand(directory, command):
     return None
 
 
-def FetchGitRevision(directory, hash_only):
+def FetchGitRevision(directory):
   """
   Fetch the Git hash for a given directory.
 
@@ -59,8 +56,6 @@ def FetchGitRevision(directory, hash_only):
   """
   hsh = ''
   git_args = ['log', '-1', '--format=%H']
-  if hash_only:
-    git_args.append('--grep=^Cr-Commit-Position:')
   proc = RunGitCommand(directory, git_args)
   if proc:
     output = proc.communicate()[0].strip()
@@ -77,24 +72,17 @@ def FetchGitRevision(directory, hash_only):
         if line.startswith('Cr-Commit-Position:'):
           pos = line.rsplit()[-1].strip()
           break
-  if hash_only or not pos:
-    return VersionInfo('git', hsh)
-  return VersionInfo('git', '%s-%s' % (hsh, pos))
+  return VersionInfo('%s-%s' % (hsh, pos))
 
 
-def FetchVersionInfo(directory=None,
-                     directory_regex_prior_to_src_url='chrome|blink|svn',
-                     hash_only=False):
+def FetchVersionInfo(directory=None):
   """
   Returns the last change (in the form of a branch, revision tuple),
   from some appropriate revision control system.
   """
-  svn_url_regex = re.compile(
-      r'.*/(' + directory_regex_prior_to_src_url + r')(/.*)')
-
-  version_info = FetchGitRevision(directory, hash_only)
+  version_info = FetchGitRevision(directory)
   if not version_info:
-    version_info = VersionInfo(None, None)
+    version_info = VersionInfo(None)
   return version_info
 
 
@@ -117,8 +105,7 @@ def GetHeaderGuard(path):
 def GetHeaderContents(path, define, version):
   """
   Returns what the contents of the header file should be that indicate the given
-  revision. Note that the #define is specified as a string, even though it's
-  currently always a SVN revision number, in case we need to move to git hashes.
+  revision.
   """
   header_guard = GetHeaderGuard(path)
 
@@ -169,15 +156,12 @@ def main(argv=None):
                     help="Write last change to FILE as a C/C++ header. " +
                     "Can be combined with --output to write both files.")
   parser.add_option("--revision-only", action='store_true',
-                    help="Just print the SVN revision number. Overrides any " +
+                    help="Just print the GIT hash. Overrides any " +
                     "file-output-related options.")
   parser.add_option("-s", "--source-dir", metavar="DIR",
                     help="Use repository in the given directory.")
   parser.add_option("--name-suffix", default=None,
                     help="Suffix for LASTCHANGE name in file.")
-  parser.add_option("--git-hash-only", action="store_true",
-                    help="In a Git repo with commit positions, report only " +
-                    "the hash of the latest commit with a position.")
   opts, args = parser.parse_args(argv[1:])
 
   out_file = opts.output
@@ -196,8 +180,7 @@ def main(argv=None):
   else:
     src_dir = os.path.dirname(os.path.abspath(__file__))
 
-  version_info = FetchVersionInfo(directory=src_dir,
-                                  hash_only=opts.git_hash_only)
+  version_info = FetchVersionInfo(directory=src_dir)
 
   if version_info.revision == None:
     version_info.revision = '0'

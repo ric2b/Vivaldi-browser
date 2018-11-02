@@ -105,6 +105,18 @@ class PrintPreviewHandler
   // Sets |pdf_file_saved_closure_| to |closure|.
   void SetPdfSavedClosureForTesting(const base::Closure& closure);
 
+ protected:
+  // If |prompt_user| is true, displays a modal dialog, prompting the user to
+  // select a file. Otherwise, just accept |default_path| and uniquify it.
+  // Protected so unit tests can access.
+  virtual void SelectFile(const base::FilePath& default_path, bool prompt_user);
+
+  // Handles printing to PDF. Protected to expose to unit tests.
+  void PrintToPdf();
+
+  // The underlying dialog object. Protected to expose to unit tests.
+  scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
+
  private:
   friend class PrintPreviewPdfGeneratedBrowserTest;
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewPdfGeneratedBrowserTest,
@@ -197,7 +209,7 @@ class PrintPreviewHandler
   // Forces the opening of a new tab. |args| should consist of one element: the
   // URL to set the new tab to.
   //
-  // NOTE: This is needed to open FedEx confirmation window as a new tab.
+  // NOTE: This is needed to open register promo for Cloud Print as a new tab.
   // Javascript's "window.open" opens a new window popup (since initiated from
   // async HTTP request) and worse yet, on Windows and Chrome OS, the opened
   // window opens behind the initiator window.
@@ -209,7 +221,8 @@ class PrintPreviewHandler
   // |arg| contains the ID of the printer whose capabilities are requested.
   void HandleGetExtensionPrinterCapabilities(const base::ListValue* args);
 
-  void SendInitialSettings(const std::string& default_printer);
+  void SendInitialSettings(const std::string& callback_id,
+                           const std::string& default_printer);
 
   // Send OAuth2 access token.
   void SendAccessToken(const std::string& type,
@@ -237,9 +250,6 @@ class PrintPreviewHandler
   // Send the PDF data to the cloud to print.
   void SendCloudPrintJob(const base::RefCountedBytes* data);
 
-  // Handles printing to PDF.
-  void PrintToPdf();
-
   // Gets the initiator for the print preview dialog.
   content::WebContents* GetInitiator() const;
 
@@ -260,10 +270,6 @@ class PrintPreviewHandler
 
   bool GetPreviewDataAndTitle(scoped_refptr<base::RefCountedBytes>* data,
                               base::string16* title) const;
-
-  // If |prompt_user| is true, displays a modal dialog, prompting the user to
-  // select a file. Otherwise, just accept |default_path| and uniquify it.
-  void SelectFile(const base::FilePath& default_path, bool prompt_user);
 
   // Helper for getting a unique file name for SelectFile() without prompting
   // the user. Just an adaptor for FileSelected().
@@ -343,9 +349,6 @@ class PrintPreviewHandler
   // cookie.
   void RegisterForGaiaCookieChanges();
   void UnregisterForGaiaCookieChanges();
-
-  // The underlying dialog object.
-  scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
 
   // A count of how many requests received to regenerate preview data.
   // Initialized to 0 then incremented and emitted to a histogram.

@@ -16,7 +16,6 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/system_tray_controller.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/user/rounded_image_view.h"
@@ -39,11 +38,13 @@
 #include "ui/gfx/render_text.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/gfx/text_utils.h"
+#include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/link_listener.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/fill_layout.h"
 
 namespace ash {
 namespace tray {
@@ -80,13 +81,12 @@ views::View* CreateUserAvatarView(LoginStatus login_status, int user_index) {
 class PublicAccountUserDetails : public views::View,
                                  public views::LinkListener {
  public:
-  PublicAccountUserDetails(int max_width);
+  PublicAccountUserDetails();
   ~PublicAccountUserDetails() override;
 
  private:
   // Overridden from views::View.
   void Layout() override;
-  gfx::Size GetPreferredSize() const override;
   void OnPaint(gfx::Canvas* canvas) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
@@ -96,18 +96,16 @@ class PublicAccountUserDetails : public views::View,
   // Calculate a preferred size that ensures the label text and the following
   // link do not wrap over more than three lines in total for aesthetic reasons
   // if possible.
-  void CalculatePreferredSize();
+  void DeterminePreferredSize();
 
   base::string16 text_;
   views::Link* learn_more_;
-  gfx::Size preferred_size_;
   std::vector<std::unique_ptr<gfx::RenderText>> lines_;
 
   DISALLOW_COPY_AND_ASSIGN(PublicAccountUserDetails);
 };
 
-PublicAccountUserDetails::PublicAccountUserDetails(int max_width)
-    : learn_more_(NULL) {
+PublicAccountUserDetails::PublicAccountUserDetails() : learn_more_(nullptr) {
   const int inner_padding =
       kTrayPopupPaddingHorizontal - kTrayPopupPaddingBetweenItems;
   const bool rtl = base::i18n::IsRTL();
@@ -124,7 +122,7 @@ PublicAccountUserDetails::PublicAccountUserDetails(int max_width)
   display_name = kDisplayNameMark[0] + display_name + kDisplayNameMark[0];
   // Retrieve the domain managing the device and wrap it with markers.
   base::string16 domain = base::UTF8ToUTF16(
-      Shell::Get()->system_tray_delegate()->GetEnterpriseDomain());
+      Shell::Get()->system_tray_controller()->enterprise_domain());
   base::RemoveChars(domain, kDisplayNameMark, &domain);
   base::i18n::WrapStringWithLTRFormatting(&domain);
   // Retrieve the label text, inserting the display name and domain.
@@ -136,7 +134,7 @@ PublicAccountUserDetails::PublicAccountUserDetails(int max_width)
   learn_more_->set_listener(this);
   AddChildView(learn_more_);
 
-  CalculatePreferredSize();
+  DeterminePreferredSize();
 }
 
 PublicAccountUserDetails::~PublicAccountUserDetails() {}
@@ -208,10 +206,6 @@ void PublicAccountUserDetails::Layout() {
   learn_more_->SetBoundsRect(learn_more_bounds);
 }
 
-gfx::Size PublicAccountUserDetails::GetPreferredSize() const {
-  return preferred_size_;
-}
-
 void PublicAccountUserDetails::OnPaint(gfx::Canvas* canvas) {
   for (const auto& line : lines_)
     line->Draw(canvas);
@@ -231,7 +225,7 @@ void PublicAccountUserDetails::LinkClicked(views::Link* source,
   Shell::Get()->system_tray_controller()->ShowPublicAccountInfo();
 }
 
-void PublicAccountUserDetails::CalculatePreferredSize() {
+void PublicAccountUserDetails::DeterminePreferredSize() {
   const gfx::FontList font_list;
   const gfx::Size link_size = learn_more_->GetPreferredSize();
   const int space_width =
@@ -276,37 +270,29 @@ void PublicAccountUserDetails::CalculatePreferredSize() {
   const int line_height = font_list.GetHeight();
   const int link_extra_height = std::max(
       link_size.height() - learn_more_->GetInsets().top() - line_height, 0);
-  preferred_size_ =
-      gfx::Size(min_width + insets.width(),
-                line_count * line_height + link_extra_height + insets.height());
+  SetPreferredSize(gfx::Size(
+      min_width + insets.width(),
+      line_count * line_height + link_extra_height + insets.height()));
 }
 
 }  // namespace
 
-UserCardView::UserCardView(LoginStatus login_status,
-                           int max_width,
-                           int user_index)
-    : user_index_(user_index),
-      user_name_(nullptr),
-      media_capture_label_(nullptr),
-      media_capture_icon_(nullptr) {
+UserCardView::UserCardView(LoginStatus login_status, int user_index)
+    : user_index_(user_index) {
   auto* layout = new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0,
                                       kTrayPopupLabelHorizontalPadding);
   SetLayoutManager(layout);
   layout->set_minimum_cross_axis_size(kTrayPopupItemMinHeight);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
-  // For active users, the left inset is provided by ActiveUserBorder, which
-  // is necessary to make sure the ripple does not cover that part of the row.
-  // For inactive users, we set the inset here and this causes the ripple to
-  // extend all the way to the edges of the menu.
-  if (!is_active_user())
-    SetBorder(views::CreateEmptyBorder(0, kMenuExtraMarginFromLeftEdge, 0, 0));
+
+  set_background(views::Background::CreateThemedSolidBackground(
+      this, ui::NativeTheme::kColorId_BubbleBackground));
 
   Shell::Get()->media_controller()->AddObserver(this);
 
   if (login_status == LoginStatus::PUBLIC)
-    AddPublicModeUserContent(max_width);
+    AddPublicModeUserContent();
   else
     AddUserContent(layout, login_status);
 }
@@ -315,13 +301,9 @@ UserCardView::~UserCardView() {
   Shell::Get()->media_controller()->RemoveObserver(this);
 }
 
-void UserCardView::PaintChildren(const ui::PaintContext& context) {
-  if (!is_active_user()) {
-    ui::CompositingRecorder alpha(context, 0xFF / 2, true);
-    View::PaintChildren(context);
-  } else {
-    View::PaintChildren(context);
-  }
+void UserCardView::SetSuppressCaptureIcon(bool suppressed) {
+  DCHECK_EQ(0, user_index_);
+  media_capture_container_->SetVisible(!suppressed);
 }
 
 void UserCardView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
@@ -356,10 +338,17 @@ void UserCardView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
 void UserCardView::OnMediaCaptureChanged(
     const std::vector<mojom::MediaCaptureState>& capture_states) {
-  if (is_active_user())
-    return;
+  mojom::MediaCaptureState state = mojom::MediaCaptureState::NONE;
+  if (is_active_user()) {
+    int cumulative_state = 0;
+    // The active user reports media capture states for all /other/ users.
+    for (size_t i = 1; i < capture_states.size(); ++i)
+      cumulative_state |= static_cast<int32_t>(capture_states[i]);
+    state = static_cast<mojom::MediaCaptureState>(cumulative_state);
+  } else {
+    state = capture_states[user_index_];
+  }
 
-  mojom::MediaCaptureState state = capture_states[user_index_];
   int res_id = 0;
   switch (state) {
     case mojom::MediaCaptureState::AUDIO_VIDEO:
@@ -375,19 +364,15 @@ void UserCardView::OnMediaCaptureChanged(
       break;
   }
   if (res_id)
-    media_capture_label_->SetText(l10n_util::GetStringUTF16(res_id));
-  media_capture_label_->SetVisible(!!res_id);
+    media_capture_icon_->SetTooltipText(l10n_util::GetStringUTF16(res_id));
   media_capture_icon_->SetVisible(!!res_id);
-  user_name_->SetVisible(!res_id);
   Layout();
 }
 
-void UserCardView::AddPublicModeUserContent(int max_width) {
+void UserCardView::AddPublicModeUserContent() {
   views::View* avatar = CreateUserAvatarView(LoginStatus::PUBLIC, 0);
   AddChildView(avatar);
-  int details_max_width = max_width - avatar->GetPreferredSize().width() -
-                          kTrayPopupPaddingBetweenItems;
-  AddChildView(new PublicAccountUserDetails(details_max_width));
+  AddChildView(new PublicAccountUserDetails());
 }
 
 void UserCardView::AddUserContent(views::BoxLayout* layout,
@@ -406,15 +391,12 @@ void UserCardView::AddUserContent(views::BoxLayout* layout,
   user_name_style.SetupLabel(user_name_);
 
   TrayPopupItemStyle user_email_style(TrayPopupItemStyle::FontStyle::CAPTION);
-  // Only the active user's email label is lightened (for the inactive user, the
-  // label starts as black and the entire row is 54% opacity).
-  if (is_active_user())
-    user_email_style.set_color_style(TrayPopupItemStyle::ColorStyle::INACTIVE);
+  user_email_style.set_color_style(TrayPopupItemStyle::ColorStyle::INACTIVE);
   auto* user_email = new views::Label();
   base::string16 user_email_string;
   if (login_status != LoginStatus::GUEST) {
     user_email_string =
-        Shell::Get()->system_tray_delegate()->IsUserSupervised()
+        Shell::Get()->session_controller()->IsUserSupervised()
             ? l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SUPERVISED_LABEL)
             : base::UTF8ToUTF16(
                   controller->GetUserSession(user_index_)->display_email);
@@ -440,29 +422,22 @@ void UserCardView::AddUserContent(views::BoxLayout* layout,
   user_email->SetBorder(
       views::CreateEmptyBorder(0, 0, user_email_bottom_pad, 0));
 
-  // Only inactive users need media capture indicators.
-  if (!is_active_user()) {
-    media_capture_label_ = new views::Label();
-    media_capture_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    media_capture_label_->SetBorder(
-        views::CreateEmptyBorder(0, 0, user_email_bottom_pad, 0));
-    user_email_style.SetupLabel(media_capture_label_);
-    stack_of_labels->AddChildView(media_capture_label_);
+  media_capture_icon_ = new views::ImageView;
+  media_capture_icon_->SetImage(
+      gfx::CreateVectorIcon(kSystemTrayRecordingIcon, gfx::kGoogleRed700));
+  const int media_capture_width = kTrayPopupItemMinEndWidth;
+  media_capture_icon_->SetBorder(views::CreateEmptyBorder(gfx::Insets(
+      0,
+      (media_capture_width - media_capture_icon_->GetPreferredSize().width()) /
+          2)));
+  media_capture_icon_->set_id(VIEW_ID_USER_VIEW_MEDIA_INDICATOR);
 
-    media_capture_icon_ = new views::ImageView;
-    media_capture_icon_->SetImage(
-        gfx::CreateVectorIcon(kSystemTrayRecordingIcon, gfx::kGoogleRed700));
-    const int media_capture_width = kTrayPopupItemMinEndWidth;
-    media_capture_icon_->SetBorder(views::CreateEmptyBorder(
-        gfx::Insets(0, (media_capture_width -
-                        media_capture_icon_->GetPreferredSize().width()) /
-                           2)));
+  media_capture_container_ = new views::View();
+  media_capture_container_->SetLayoutManager(new views::FillLayout());
+  media_capture_container_->AddChildView(media_capture_icon_);
+  AddChildView(media_capture_container_);
 
-    media_capture_icon_->set_id(VIEW_ID_USER_VIEW_MEDIA_INDICATOR);
-    AddChildView(media_capture_icon_);
-
-    Shell::Get()->media_controller()->RequestCaptureState();
-  }
+  Shell::Get()->media_controller()->RequestCaptureState();
 }
 
 }  // namespace tray

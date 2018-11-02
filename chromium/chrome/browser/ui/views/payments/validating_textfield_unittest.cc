@@ -28,11 +28,18 @@ class ValidatingTextfieldTest : public testing::Test {
     ~TestValidationDelegate() override {}
 
     // ValidationDelegate:
-    bool ValidateTextfield(views::Textfield* textfield) override {
+    bool TextfieldValueChanged(views::Textfield* textfield,
+                               bool was_blurred) override {
+      return !was_blurred || IsValidTextfield(textfield);
+    }
+    bool ComboboxValueChanged(views::Combobox* combobox) override {
+      return IsValidCombobox(combobox);
+    }
+    bool IsValidTextfield(views::Textfield* textfield) override {
       // We really don't like textfields with more than 5 characters in them.
       return textfield->text().size() <= 5u;
     }
-    bool ValidateCombobox(views::Combobox* combobox) override { return true; }
+    bool IsValidCombobox(views::Combobox* combobox) override { return true; }
     void ComboboxModelChanged(views::Combobox* combobox) override {}
 
    private:

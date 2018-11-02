@@ -16,6 +16,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
@@ -264,10 +265,10 @@ std::unique_ptr<FileNetLogObserver> FileNetLogObserver::CreateUnbounded(
 FileNetLogObserver::~FileNetLogObserver() {
   if (net_log()) {
     // StopObserving was not called.
+    net_log()->DeprecatedRemoveObserver(this);
     file_task_runner_->PostTask(
         FROM_HERE, base::Bind(&FileNetLogObserver::FileWriter::DeleteAllFiles,
                               base::Unretained(file_writer_)));
-    net_log()->DeprecatedRemoveObserver(this);
   }
   file_task_runner_->DeleteSoon(FROM_HERE, file_writer_);
 }
@@ -279,13 +280,13 @@ void FileNetLogObserver::StartObserving(NetLog* net_log,
 
 void FileNetLogObserver::StopObserving(std::unique_ptr<base::Value> polled_data,
                                        const base::Closure& callback) {
+  net_log()->DeprecatedRemoveObserver(this);
+
   file_task_runner_->PostTaskAndReply(
       FROM_HERE, base::Bind(&FileNetLogObserver::FileWriter::FlushThenStop,
                             base::Unretained(file_writer_), write_queue_,
                             base::Passed(&polled_data)),
       callback);
-
-  net_log()->DeprecatedRemoveObserver(this);
 }
 
 void FileNetLogObserver::OnAddEntry(const NetLogEntry& entry) {
@@ -436,6 +437,7 @@ void FileNetLogObserver::BoundedFileWriter::Flush(
   write_queue->SwapQueue(&local_file_queue);
 
   std::string to_print;
+  CHECK(!event_files_.empty());
   size_t file_size = ftell(event_files_[current_file_idx_].get());
   size_t memory_freed = 0;
 

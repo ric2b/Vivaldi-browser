@@ -36,21 +36,6 @@
 
 #pragma mark - Coordinator lifecycle management
 
-- (void)dealloc {
-  // TODO(rohitrao): The __weak pointers in the CommandDispatcher appear to have
-  // already been zeroed out by this point, so stopDispatchingToTarget:self does
-  // not appear to properly delete the forwarding entries for this target.  Work
-  // around this by calling stopDispatchingForSelector: instead.
-
-  CommandDispatcher* dispatcher = self.browser->dispatcher();
-  [dispatcher stopDispatchingForSelector:@selector(showFindInPage)];
-  [dispatcher stopDispatchingForSelector:@selector(hideFindInPage)];
-
-  [dispatcher stopDispatchingForSelector:@selector(findStringInPage:)];
-  [dispatcher stopDispatchingForSelector:@selector(findNextInPage)];
-  [dispatcher stopDispatchingForSelector:@selector(findPreviousInPage)];
-}
-
 - (void)wasAddedToParentCoordinator:(BrowserCoordinator*)parent {
   DCHECK(self.browser);
 
@@ -61,7 +46,7 @@
   [dispatcher startDispatchingToTarget:self
                            forSelector:@selector(hideFindInPage)];
 
-  _mediator = [[FindInPageMediator alloc]
+  self.mediator = [[FindInPageMediator alloc]
       initWithWebStateList:(&self.browser->web_state_list())provider:self
                 dispatcher:static_cast<id>(dispatcher)];
   [dispatcher startDispatchingToTarget:self.mediator
@@ -72,10 +57,11 @@
                            forSelector:@selector(findPreviousInPage)];
 }
 
-- (void)wasRemovedFromParentCoordinator {
+- (void)willBeRemovedFromParentCoordinator {
   CommandDispatcher* dispatcher = self.browser->dispatcher();
   [dispatcher stopDispatchingToTarget:self];
   [dispatcher stopDispatchingToTarget:self.mediator];
+  self.mediator = nil;
 }
 
 - (void)start {

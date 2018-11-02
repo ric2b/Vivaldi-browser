@@ -104,7 +104,7 @@ class ExtensionActionUtil
   void OnExtensionUnloaded(
       content::BrowserContext* browser_context,
       const extensions::Extension* extension,
-      extensions::UnloadedExtensionInfo::Reason reason) override;
+      extensions::UnloadedExtensionReason reason) override;
 
   // Overridden from TabStripModelObserver:
   void ActiveTabChanged(content::WebContents* old_contents,

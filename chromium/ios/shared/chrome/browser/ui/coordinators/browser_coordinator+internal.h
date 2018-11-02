@@ -49,17 +49,18 @@
 // Adds |coordinator| as a child, taking ownership of it, setting the receiver's
 // viewController (if any) as the child's baseViewController, and setting
 // the receiver's |browser| as the child's |browser|.
-- (void)addChildCoordinator:(BrowserCoordinator*)coordinator;
+- (void)addChildCoordinator:(BrowserCoordinator*)childCoordinator;
 
 // Removes |coordinator| as a child, relinquishing ownership of it. If
 // |coordinator| isn't a child of the receiver, this method does nothing.
-- (void)removeChildCoordinator:(BrowserCoordinator*)coordinator;
+- (void)removeChildCoordinator:(BrowserCoordinator*)childCoordinator;
 
 // Called when this coordinator is added to a parent coordinator.
 - (void)wasAddedToParentCoordinator:(BrowserCoordinator*)parentCoordinator;
 
-// Called when this coordinator is removed from its parent coordinator.
-- (void)wasRemovedFromParentCoordinator;
+// Called when this coordinator is going to be removed from its parent
+// coordinator.
+- (void)willBeRemovedFromParentCoordinator;
 
 // Called when a child coordinator did start. This is a blank template method.
 // Subclasses can override this method when they need to know when their

@@ -132,11 +132,11 @@ void HistoryDataStore::Init(base::DictionaryValue* cached_dict) {
 }
 
 void HistoryDataStore::Flush(
-    const DictionaryDataStore::OnFlushedCallback& on_flushed) {
-  if (data_store_.get())
-    data_store_->Flush(on_flushed);
+    DictionaryDataStore::OnFlushedCallback on_flushed) {
+  if (data_store_)
+    data_store_->Flush(std::move(on_flushed));
   else
-    on_flushed.Run();
+    std::move(on_flushed).Run();
 }
 
 void HistoryDataStore::Load(
@@ -165,7 +165,7 @@ void HistoryDataStore::SetSecondary(
     results_list->AppendString(results[i]);
 
   base::DictionaryValue* entry_dict = GetEntryDict(query);
-  entry_dict->SetWithoutPathExpansion(kKeySecondary, results_list.release());
+  entry_dict->SetWithoutPathExpansion(kKeySecondary, std::move(results_list));
   if (data_store_.get())
     data_store_->ScheduleWrite();
 }
@@ -204,9 +204,9 @@ base::DictionaryValue* HistoryDataStore::GetEntryDict(
 
   base::DictionaryValue* entry_dict = nullptr;
   if (!assoc_dict->GetDictionaryWithoutPathExpansion(query, &entry_dict)) {
-    // Creates one if none exists. Ownership is taken in the set call after.
-    entry_dict = new base::DictionaryValue;
-    assoc_dict->SetWithoutPathExpansion(query, base::WrapUnique(entry_dict));
+    // Creates one if none exists.
+    entry_dict = assoc_dict->SetDictionaryWithoutPathExpansion(
+        query, base::MakeUnique<base::DictionaryValue>());
   }
 
   return entry_dict;

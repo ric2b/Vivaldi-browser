@@ -131,9 +131,9 @@ bool CopyTreeWorkItem::IsFileInUse(const base::FilePath& path) {
   if (!base::PathExists(path))
     return false;
 
-  HANDLE handle = ::CreateFile(path.value().c_str(), GENERIC_WRITE,
+  HANDLE handle = ::CreateFile(path.value().c_str(), FILE_ALL_ACCESS,
                                NULL, NULL, OPEN_EXISTING, NULL, NULL);
-  if (handle == INVALID_HANDLE_VALUE)
+  if (handle  == INVALID_HANDLE_VALUE)
     return true;
 
   CloseHandle(handle);

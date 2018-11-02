@@ -71,6 +71,7 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                       const std::string& extra_headers,
                       const Referrer& referrer,
                       WindowOpenDisposition disposition,
+                      bool force_new_process_for_new_contents,
                       bool should_replace_current_entry,
                       bool user_gesture) override;
   void RequestTransferURL(RenderFrameHostImpl* render_frame_host,
@@ -84,7 +85,9 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                           const std::string& method,
                           scoped_refptr<ResourceRequestBodyImpl> post_body,
                           const std::string& extra_headers) override;
-  void OnBeforeUnloadACK(FrameTreeNode* frame_tree_node, bool proceed) override;
+  void OnBeforeUnloadACK(FrameTreeNode* frame_tree_node,
+                         bool proceed,
+                         const base::TimeTicks& proceed_time) override;
   void OnBeginNavigation(FrameTreeNode* frame_tree_node,
                          const CommonNavigationParams& common_params,
                          const BeginNavigationParams& begin_params) override;
@@ -96,7 +99,7 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
       const base::TimeTicks& renderer_before_unload_end_time) override;
   void CancelNavigation(FrameTreeNode* frame_tree_node,
                         bool inform_renderer) override;
-  void DiscardPendingEntryIfNeeded(NavigationHandleImpl* handle) override;
+  void DiscardPendingEntryIfNeeded(int expected_pending_entry_id) override;
 
  private:
   // Holds data used to track browser side navigation metrics.
@@ -122,16 +125,18 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
   // PlzNavigate: if needed, sends a BeforeUnload IPC to the renderer to ask it
   // to execute the beforeUnload event. Otherwise, the navigation request will
   // be started.
-  void RequestNavigation(FrameTreeNode* frame_tree_node,
-                         const GURL& dest_url,
-                         const Referrer& dest_referrer,
-                         const FrameNavigationEntry& frame_entry,
-                         const NavigationEntryImpl& entry,
-                         ReloadType reload_type,
-                         PreviewsState previews_state,
-                         bool is_same_document_history_load,
-                         bool is_history_navigation_in_new_child,
-                         base::TimeTicks navigation_start);
+  void RequestNavigation(
+      FrameTreeNode* frame_tree_node,
+      const GURL& dest_url,
+      const Referrer& dest_referrer,
+      const FrameNavigationEntry& frame_entry,
+      const NavigationEntryImpl& entry,
+      ReloadType reload_type,
+      PreviewsState previews_state,
+      bool is_same_document_history_load,
+      bool is_history_navigation_in_new_child,
+      const scoped_refptr<ResourceRequestBodyImpl>& post_body,
+      base::TimeTicks navigation_start);
 
   void RecordNavigationMetrics(
       const LoadCommittedDetails& details,

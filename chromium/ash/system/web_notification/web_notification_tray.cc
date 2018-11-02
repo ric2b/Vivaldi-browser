@@ -8,9 +8,8 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
-#include "ash/shelf/wm_shelf.h"
-#include "ash/shelf/wm_shelf_util.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/status_area_widget.h"
@@ -18,9 +17,9 @@
 #include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/tray_bubble_wrapper.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/system/tray/tray_container.h"
 #include "ash/system/tray/tray_utils.h"
 #include "ash/system/web_notification/ash_popup_alignment_delegate.h"
-#include "ash/wm_window.h"
 #include "base/auto_reset.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
@@ -156,7 +155,7 @@ class WebNotificationItem : public views::View, public gfx::AnimationDelegate {
 
  protected:
   // Overridden from views::View:
-  gfx::Size GetPreferredSize() const override {
+  gfx::Size CalculatePreferredSize() const override {
     if (!animation_.get() || !animation_->is_animating())
       return kTrayItemOuterSize;
 
@@ -164,7 +163,7 @@ class WebNotificationItem : public views::View, public gfx::AnimationDelegate {
     // the icons on the left are shifted with the animation.
     // Note that TrayItemView does the same thing.
     gfx::Size size = kTrayItemOuterSize;
-    if (IsHorizontalLayout()) {
+    if (tray_->shelf()->IsHorizontalAlignment()) {
       size.set_width(std::max(
           1, gfx::ToRoundedInt(size.width() * animation_->GetCurrentValue())));
     } else {
@@ -178,15 +177,11 @@ class WebNotificationItem : public views::View, public gfx::AnimationDelegate {
     return GetPreferredSize().height();
   }
 
-  bool IsHorizontalLayout() const {
-    return IsHorizontalAlignment(tray_->shelf_alignment());
-  }
-
  private:
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override {
     gfx::Transform transform;
-    if (IsHorizontalLayout()) {
+    if (tray_->shelf()->IsHorizontalAlignment()) {
       transform.Translate(0, animation->CurrentValueBetween(
                                  static_cast<double>(height()) / 2., 0.));
     } else {
@@ -270,15 +265,14 @@ class WebNotificationLabel : public WebNotificationItem {
   DISALLOW_COPY_AND_ASSIGN(WebNotificationLabel);
 };
 
-WebNotificationTray::WebNotificationTray(WmShelf* shelf,
-                                         WmWindow* status_area_window,
+WebNotificationTray::WebNotificationTray(Shelf* shelf,
+                                         aura::Window* status_area_window,
                                          SystemTray* system_tray)
-    : TrayBackgroundView(shelf, true),
+    : TrayBackgroundView(shelf),
       status_area_window_(status_area_window),
       system_tray_(system_tray),
       show_message_center_on_unlock_(false),
-      should_update_tray_content_(false),
-      should_block_shelf_auto_hide_(false) {
+      should_update_tray_content_(false) {
   DCHECK(shelf);
   DCHECK(status_area_window_);
   DCHECK(system_tray_);
@@ -299,10 +293,9 @@ WebNotificationTray::WebNotificationTray(WmShelf* shelf,
   popup_collection_.reset(new message_center::MessagePopupCollection(
       message_center(), message_center_tray_.get(),
       popup_alignment_delegate_.get()));
-  const display::Display& display =
-      status_area_window_->GetDisplayNearestWindow();
-  popup_alignment_delegate_->StartObserving(display::Screen::GetScreen(),
-                                            display);
+  display::Screen* screen = display::Screen::GetScreen();
+  popup_alignment_delegate_->StartObserving(
+      screen, screen->GetDisplayNearestWindow(status_area_window_));
   OnMessageCenterTrayChanged();
 
   tray_container()->SetMargin(kTrayMainAxisInset, kTrayCrossAxisInset);
@@ -326,14 +319,13 @@ bool WebNotificationTray::ShowMessageCenterInternal(bool show_settings) {
   if (!ShouldShowMessageCenter())
     return false;
 
-  should_block_shelf_auto_hide_ = true;
   message_center::MessageCenterBubble* message_center_bubble =
       new message_center::MessageCenterBubble(message_center(),
                                               message_center_tray_.get());
 
   // In the horizontal case, message center starts from the top of the shelf.
   // In the vertical case, it starts from the bottom of WebNotificationTray.
-  const int max_height = IsHorizontalAlignment(shelf_alignment())
+  const int max_height = shelf()->IsHorizontalAlignment()
                              ? shelf()->GetIdealBounds().y()
                              : GetBoundsInScreen().bottom();
   message_center_bubble->SetMaxHeight(max_height);
@@ -344,11 +336,8 @@ bool WebNotificationTray::ShowMessageCenterInternal(bool show_settings) {
   // For vertical shelf alignments, anchor to the WebNotificationTray, but for
   // horizontal (i.e. bottom) shelves, anchor to the system tray.
   TrayBackgroundView* anchor_tray = this;
-  if (IsHorizontalAlignment(shelf_alignment())) {
-    anchor_tray = WmShelf::ForWindow(status_area_window_)
-                      ->GetStatusAreaWidget()
-                      ->system_tray();
-  }
+  if (shelf()->IsHorizontalAlignment())
+    anchor_tray = system_tray_;
 
   message_center_bubble_.reset(new WebNotificationBubbleWrapper(
       this, anchor_tray, message_center_bubble));
@@ -367,7 +356,6 @@ void WebNotificationTray::HideMessageCenter() {
     return;
   SetIsActive(false);
   message_center_bubble_.reset();
-  should_block_shelf_auto_hide_ = false;
   show_message_center_on_unlock_ = false;
   shelf()->UpdateAutoHideState();
 }
@@ -395,12 +383,9 @@ void WebNotificationTray::HidePopups() {
 
 // Private methods.
 
-bool WebNotificationTray::ShouldShowMessageCenter() {
-  return Shell::Get()->system_tray_delegate()->ShouldShowNotificationTray();
-}
-
-bool WebNotificationTray::ShouldBlockShelfAutoHide() const {
-  return should_block_shelf_auto_hide_;
+bool WebNotificationTray::ShouldShowMessageCenter() const {
+  // Hidden at login screen, during supervised user creation, etc.
+  return Shell::Get()->session_controller()->ShouldShowNotificationTray();
 }
 
 bool WebNotificationTray::IsMessageCenterBubbleVisible() const {
@@ -419,10 +404,8 @@ void WebNotificationTray::UpdateAfterLoginStatusChange(
   OnMessageCenterTrayChanged();
 }
 
-void WebNotificationTray::SetShelfAlignment(ShelfAlignment alignment) {
-  if (alignment == shelf_alignment())
-    return;
-  TrayBackgroundView::SetShelfAlignment(alignment);
+void WebNotificationTray::UpdateAfterShelfAlignmentChange() {
+  TrayBackgroundView::UpdateAfterShelfAlignmentChange();
   // Destroy any existing bubble so that it will be rebuilt correctly.
   message_center_tray_->HideMessageCenterBubble();
   message_center_tray_->HidePopupBubble();
@@ -475,8 +458,7 @@ void WebNotificationTray::OnBeforeBubbleWidgetInit(
     views::Widget* bubble_widget,
     views::Widget::InitParams* params) const {
   // Place the bubble in the same root window as |anchor_widget|.
-  WmWindow::Get(anchor_widget->GetNativeWindow())
-      ->GetRootWindowController()
+  RootWindowController::ForWindow(anchor_widget->GetNativeWindow())
       ->ConfigureWidgetInitParamsForContainer(
           bubble_widget, kShellWindowId_SettingBubbleContainer, params);
 }
@@ -496,7 +478,7 @@ bool WebNotificationTray::ShowNotifierSettings() {
 }
 
 bool WebNotificationTray::IsContextMenuEnabled() const {
-  return IsLoggedIn();
+  return ShouldShowMessageCenter();
 }
 
 message_center::MessageCenterTray* WebNotificationTray::GetMessageCenterTray() {
@@ -592,11 +574,11 @@ void WebNotificationTray::UpdateTrayContent() {
     counter_->SetVisible(false);
   }
 
-  SetVisible(IsLoggedIn() && ShouldShowMessageCenter());
+  SetVisible(ShouldShowMessageCenter());
   PreferredSizeChanged();
   Layout();
   SchedulePaint();
-  if (IsLoggedIn())
+  if (ShouldShowMessageCenter())
     system_tray_->SetNextFocusableView(this);
 }
 
@@ -610,12 +592,6 @@ void WebNotificationTray::ClickedOutsideBubble() {
 
 message_center::MessageCenter* WebNotificationTray::message_center() const {
   return message_center_tray_->message_center();
-}
-
-bool WebNotificationTray::IsLoggedIn() const {
-  return Shell::Get()->system_tray_delegate()->GetUserLoginStatus() !=
-             LoginStatus::NOT_LOGGED_IN &&
-         !Shell::Get()->session_controller()->IsInSecondaryLoginScreen();
 }
 
 // Methods for testing

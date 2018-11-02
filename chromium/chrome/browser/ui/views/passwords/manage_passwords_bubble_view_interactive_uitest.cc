@@ -11,11 +11,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/passwords/manage_passwords_test.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
+#include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/passwords/manage_passwords_icon_views.h"
@@ -26,7 +26,8 @@
 #include "content/public/common/content_features.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "ui/views/test/widget_test.h"
+#include "ui/base/ui_base_switches.h"
+#include "ui/base/ui_features.h"
 
 using testing::Eq;
 using testing::Field;
@@ -68,11 +69,11 @@ class ManagePasswordsBubbleViewTest : public ManagePasswordsTest {
   ManagePasswordsBubbleViewTest() {}
   ~ManagePasswordsBubbleViewTest() override {}
 
-  ManagePasswordsIconView* view() override {
-    BrowserView* browser_view = static_cast<BrowserView*>(browser()->window());
-    return browser_view->toolbar()
-        ->location_bar()
-        ->manage_passwords_icon_view();
+  // content::BrowserTestBase:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+#if defined(OS_MACOSX)
+    command_line->AppendSwitch(switches::kExtendMdToSecondaryUi);
+#endif
   }
 
  private:
@@ -80,6 +81,7 @@ class ManagePasswordsBubbleViewTest : public ManagePasswordsTest {
 };
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, BasicOpenAndClose) {
+  ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   EXPECT_FALSE(IsBubbleShowing());
   SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
@@ -89,11 +91,15 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, BasicOpenAndClose) {
   EXPECT_FALSE(bubble->GetFocusManager()->GetFocusedView());
   ManagePasswordsBubbleView::CloseCurrentBubble();
   EXPECT_FALSE(IsBubbleShowing());
+  // Drain message pump to ensure the bubble view is cleared so that it can be
+  // created again (it is checked on Mac to prevent re-opening the bubble when
+  // clicking the location bar button repeatedly).
+  content::RunAllPendingInMessageLoop();
 
   // And, just for grins, ensure that we can re-open the bubble.
-  ManagePasswordsBubbleView::ShowBubble(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      ManagePasswordsBubbleView::USER_GESTURE);
+  TabDialogs::FromWebContents(
+      browser()->tab_strip_model()->GetActiveWebContents())
+      ->ShowManagePasswordsBubble(true /* user_action */);
   EXPECT_TRUE(IsBubbleShowing());
   bubble = ManagePasswordsBubbleView::manage_password_bubble();
   EXPECT_TRUE(bubble->initially_focused_view());
@@ -106,6 +112,7 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, BasicOpenAndClose) {
 // Same as 'BasicOpenAndClose', but use the command rather than the static
 // method directly.
 IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, CommandControlsBubble) {
+  ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   // The command only works if the icon is visible, so get into management mode.
   SetupManagingPasswords();
   EXPECT_FALSE(IsBubbleShowing());
@@ -118,6 +125,10 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, CommandControlsBubble) {
             bubble->GetFocusManager()->GetFocusedView());
   ManagePasswordsBubbleView::CloseCurrentBubble();
   EXPECT_FALSE(IsBubbleShowing());
+  // Drain message pump to ensure the bubble view is cleared so that it can be
+  // created again (it is checked on Mac to prevent re-opening the bubble when
+  // clicking the location bar button repeatedly).
+  content::RunAllPendingInMessageLoop();
 
   // And, just for grins, ensure that we can re-open the bubble.
   ExecuteManagePasswordsCommand();
@@ -180,6 +191,11 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest,
   SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
   ManagePasswordsBubbleView::CloseCurrentBubble();
+  // Drain message pump to ensure the bubble view is cleared so that it can be
+  // created again (it is checked on Mac to prevent re-opening the bubble when
+  // clicking the location bar button repeatedly).
+  content::RunAllPendingInMessageLoop();
+
   // This opening should be measured as manual.
   ExecuteManagePasswordsCommand();
   EXPECT_TRUE(IsBubbleShowing());
@@ -284,10 +300,6 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, TwoTabsWithBubble) {
 }
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, AutoSignin) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kCredentialManagementAPI);
-  ASSERT_TRUE(base::FeatureList::IsEnabled(features::kCredentialManagementAPI));
-
   test_form()->origin = GURL("https://example.com");
   test_form()->display_name = base::ASCIIToUTF16("Peter");
   test_form()->username_value = base::ASCIIToUTF16("pet12@gmail.com");
@@ -331,24 +343,24 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, AutoSigninNoFocus) {
   // Open another window with focus.
   Browser* focused_window = CreateBrowser(browser()->profile());
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(focused_window));
-  content::RunAllPendingInMessageLoop();
 
-  gfx::NativeWindow window = browser()->window()->GetNativeWindow();
-  views::Widget* widget = views::Widget::GetWidgetForNativeWindow(window);
-  ASSERT_NE(nullptr, widget);
-
-  views::test::WidgetActivationWaiter inactive_waiter(widget, false);
-  inactive_waiter.Wait();
   ManagePasswordsBubbleView::set_auto_signin_toast_timeout(0);
   SetupAutoSignin(std::move(local_credentials));
-  content::RunAllPendingInMessageLoop();
   EXPECT_TRUE(IsBubbleShowing());
 
   // Bring the first window back. The toast closes by timeout.
   focused_window->window()->Close();
   browser()->window()->Activate();
   content::RunAllPendingInMessageLoop();
-  views::test::WidgetActivationWaiter active_waiter(widget, true);
-  active_waiter.Wait();
+  ui_test_utils::BrowserActivationWaiter waiter(browser());
+  waiter.WaitForActivation();
+
+// Sign-in dialogs opened for inactive browser windows do not auto-close on
+// MacOS. This matches existing Cocoa bubble behavior.
+// TODO(varkha): Remove the limitation as part of http://crbug/671916 .
+#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
   EXPECT_FALSE(IsBubbleShowing());
+#else
+  EXPECT_TRUE(IsBubbleShowing());
+#endif
 }

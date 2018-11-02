@@ -7,8 +7,7 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/V8ThrowException.h"
+#include "bindings/core/v8/V8ThrowDOMException.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/DOMTypedArray.h"
 #include "core/dom/ExceptionCode.h"
@@ -19,7 +18,9 @@
 #include "modules/encryptedmedia/MediaEncryptedEvent.h"
 #include "modules/encryptedmedia/MediaKeys.h"
 #include "platform/ContentDecryptionModuleResult.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/Functional.h"
+#include "platform/wtf/text/StringBuilder.h"
 
 #define EME_LOG_LEVEL 3
 
@@ -263,7 +264,7 @@ void SetMediaKeysHandler::Fail(ExceptionCode code,
   // Reject promise with an appropriate error.
   ScriptState::Scope scope(GetScriptState());
   v8::Isolate* isolate = GetScriptState()->GetIsolate();
-  Reject(V8ThrowException::CreateDOMException(isolate, code, error_message));
+  Reject(V8ThrowDOMException::CreateDOMException(isolate, code, error_message));
 }
 
 void SetMediaKeysHandler::ClearFailed(ExceptionCode code,

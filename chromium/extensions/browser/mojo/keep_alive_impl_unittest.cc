@@ -13,6 +13,7 @@
 #include "extensions/browser/extensions_test.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/common/extension_builder.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 
 namespace extensions {
 
@@ -59,6 +60,7 @@ class KeepAliveTest : public ExtensionsTest {
 
   void CreateKeepAlive(mojo::InterfaceRequest<KeepAlive> request) {
     KeepAliveImpl::Create(browser_context(), extension_.get(),
+                          service_manager::BindSourceInfo(),
                           std::move(request));
   }
 
@@ -131,11 +133,11 @@ TEST_F(KeepAliveTest, UnloadExtension) {
 
   ExtensionRegistry::Get(browser_context())
       ->TriggerOnUnloaded(other_extension.get(),
-                          UnloadedExtensionInfo::REASON_DISABLE);
+                          UnloadedExtensionReason::DISABLE);
   EXPECT_EQ(1, GetKeepAliveCount());
 
   ExtensionRegistry::Get(browser_context())
-      ->TriggerOnUnloaded(extension(), UnloadedExtensionInfo::REASON_DISABLE);
+      ->TriggerOnUnloaded(extension(), UnloadedExtensionReason::DISABLE);
   // When its extension is unloaded, the KeepAliveImpl should not modify the
   // keep-alive count for its extension. However, ProcessManager resets its
   // keep-alive count for an unloaded extension.

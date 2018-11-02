@@ -1293,6 +1293,19 @@ void FeatureInfo::InitializeFeatures() {
   }
   UMA_HISTOGRAM_BOOLEAN("GPU.TextureRG", feature_flags_.ext_texture_rg);
 
+  if (gl_version_info_->is_desktop_core_profile ||
+      extensions.Contains("GL_EXT_texture_norm16")) {
+    feature_flags_.ext_texture_norm16 = true;
+    AddExtensionString("GL_EXT_texture_norm16");
+
+    // Note: EXT_texture_norm16 is not exposed through WebGL API so we validate
+    // only the combinations used internally.
+    validators_.texture_format.AddValue(GL_RED_EXT);
+    validators_.texture_internal_format.AddValue(GL_R16_EXT);
+    validators_.texture_internal_format.AddValue(GL_RED_EXT);
+    validators_.texture_unsized_internal_format.AddValue(GL_RED_EXT);
+  }
+
   bool has_opengl_dual_source_blending =
       gl_version_info_->IsAtLeastGL(3, 3) ||
       (gl_version_info_->IsAtLeastGL(3, 2) &&
@@ -1401,7 +1414,7 @@ void FeatureInfo::InitializeFloatAndHalfFloatFeatures(
         enable_texture_float_linear = true;
       }
 
-      if (enable_ext_color_buffer_float || gl_version_info_->is_angle) {
+      if (enable_ext_color_buffer_float) {
         may_enable_chromium_color_buffer_float = true;
       }
     }
@@ -1438,7 +1451,25 @@ void FeatureInfo::InitializeFloatAndHalfFloatFeatures(
     }
   }
 
-  if (may_enable_chromium_color_buffer_float) {
+  bool had_native_chromium_color_buffer_float_ext = false;
+  if (extensions.Contains("GL_CHROMIUM_color_buffer_float_rgb")) {
+    had_native_chromium_color_buffer_float_ext = true;
+    feature_flags_.chromium_color_buffer_float_rgb = true;
+    if (!disallowed_features_.chromium_color_buffer_float_rgb) {
+      EnableCHROMIUMColorBufferFloatRGB();
+    }
+  }
+
+  if (extensions.Contains("GL_CHROMIUM_color_buffer_float_rgba")) {
+    had_native_chromium_color_buffer_float_ext = true;
+    feature_flags_.chromium_color_buffer_float_rgba = true;
+    if (!disallowed_features_.chromium_color_buffer_float_rgba) {
+      EnableCHROMIUMColorBufferFloatRGBA();
+    }
+  }
+
+  if (may_enable_chromium_color_buffer_float &&
+      !had_native_chromium_color_buffer_float_ext) {
     static_assert(GL_RGBA32F_ARB == GL_RGBA32F &&
                       GL_RGBA32F_EXT == GL_RGBA32F &&
                       GL_RGB32F_ARB == GL_RGB32F && GL_RGB32F_EXT == GL_RGB32F,
@@ -1493,8 +1524,10 @@ void FeatureInfo::InitializeFloatAndHalfFloatFeatures(
       }
       enable_ext_color_buffer_float = full_float_support;
     }
-    // Likewise for EXT_color_buffer_half_float on ES2 contexts.
-    if (IsWebGL1OrES2Context() && !enable_ext_color_buffer_half_float) {
+    // Likewise for EXT_color_buffer_half_float on ES2 contexts. On desktop,
+    // require at least GL 3.0, to ensure that all formats are defined.
+    if (IsWebGL1OrES2Context() && !enable_ext_color_buffer_half_float &&
+        (gl_version_info_->is_es || gl_version_info_->IsAtLeastGL(3, 0))) {
       bool full_half_float_support = true;
       GLenum internal_formats[] = {
           GL_R16F, GL_RG16F, GL_RGBA16F,

@@ -4,9 +4,8 @@
 
 cpu@chromium.org
 grt@chromium.org
-
-per-file address_input_strings*=estade@chromium.org
-per-file address_input_strings*=rouslan@chromium.org
+jcivelli@chromium.org
+rockot@chromium.org
 
 per-file bookmarks_strings.grdp=*
 per-file chromeos_strings.grdp=*

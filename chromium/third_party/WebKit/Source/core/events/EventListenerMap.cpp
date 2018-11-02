@@ -33,12 +33,12 @@
 #include "core/events/EventListenerMap.h"
 
 #include "core/events/EventTarget.h"
-#include "wtf/StdLibExtras.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/StdLibExtras.h"
+#include "platform/wtf/Vector.h"
 
 #if DCHECK_IS_ON()
-#include "wtf/Threading.h"
-#include "wtf/ThreadingPrimitives.h"
+#include "platform/wtf/Threading.h"
+#include "platform/wtf/ThreadingPrimitives.h"
 #endif
 
 namespace blink {
@@ -80,7 +80,7 @@ bool EventListenerMap::ContainsCapturing(const AtomicString& event_type) const {
 void EventListenerMap::Clear() {
   CheckNoActiveIterators();
 
-  entries_.Clear();
+  entries_.clear();
 }
 
 Vector<AtomicString> EventListenerMap::EventTypes() const {
@@ -129,7 +129,7 @@ static bool RemoveListenerFromVector(
     const EventListenerOptions& options,
     size_t* index_of_removed_listener,
     RegisteredEventListener* registered_listener) {
-  const auto begin = listener_vector->Data();
+  const auto begin = listener_vector->data();
   const auto end = begin + listener_vector->size();
 
   // Do a manual search for the matching RegisteredEventListener. It is not

@@ -7,6 +7,7 @@
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/sequenced_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "content/browser/byte_stream.h"
 #include "content/browser/download/download_create_info.h"
@@ -65,7 +66,8 @@ class UrlDownloader::RequestHandle : public DownloadRequestHandleInterface {
 std::unique_ptr<UrlDownloader> UrlDownloader::BeginDownload(
     base::WeakPtr<UrlDownloader::Delegate> delegate,
     std::unique_ptr<net::URLRequest> request,
-    const Referrer& referrer) {
+    const Referrer& referrer,
+    bool is_parallel_request) {
   Referrer::SetReferrerForRequest(request.get(), referrer);
 
   if (request->url().SchemeIs(url::kBlobScheme))
@@ -74,17 +76,18 @@ std::unique_ptr<UrlDownloader> UrlDownloader::BeginDownload(
   // From this point forward, the |UrlDownloader| is responsible for
   // |started_callback|.
   std::unique_ptr<UrlDownloader> downloader(
-      new UrlDownloader(std::move(request), delegate));
+      new UrlDownloader(std::move(request), delegate, is_parallel_request));
   downloader->Start();
 
   return downloader;
 }
 
 UrlDownloader::UrlDownloader(std::unique_ptr<net::URLRequest> request,
-                             base::WeakPtr<Delegate> delegate)
+                             base::WeakPtr<Delegate> delegate,
+                             bool is_parallel_request)
     : request_(std::move(request)),
       delegate_(delegate),
-      core_(request_.get(), this),
+      core_(request_.get(), this, is_parallel_request),
       weak_ptr_factory_(this) {}
 
 UrlDownloader::~UrlDownloader() {

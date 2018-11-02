@@ -53,7 +53,6 @@
 <translation id="1820259098641718022">വായനാ ലിസ്റ്റിൽ ചേർത്തു</translation>
 <translation id="1876721852596493031">ഉപയോഗ ഡാറ്റ അയയ്ക്കൂ</translation>
 <translation id="1886928167269928266">തുടക്കം മുതൽ</translation>
-<translation id="1894451531427596130">ഇത് പ്രവർത്തിക്കുന്ന രീതി <ph name="BEGIN_LINK" />ക്രമീകരണത്തിൽ<ph name="END_LINK" /> നിയന്ത്രിക്കുക</translation>
 <translation id="1911619930368729126">Google ഡ്രൈവിലേക്ക് അപ്‌ലോഡുചെയ്യുക</translation>
 <translation id="1941314575388338491">പകർത്താൻ രണ്ടുതവണ ടാപ്പുചെയ്യുക.</translation>
 <translation id="1952728750904661634">മാനേജുചെയ്‌ത അക്കൗണ്ട് ഉപയോഗിച്ച് സൈൻ ഇൻ ചെയ്യുക</translation>
@@ -97,6 +96,7 @@
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">വിവർത്തന ക്രമീകരണങ്ങൾ പുനഃസജ്ജമാക്കുക</translation>
 <translation id="285960592395650245">വീണ്ടും ഡൗൺലോഡുചെയ്യാൻ ശ്രമിക്കുക</translation>
+<translation id="2870560284913253234">സൈറ്റ്</translation>
 <translation id="2871695793448672541">മറച്ചിരിക്കുന്ന പാസ്‌വേഡ്</translation>
 <translation id="2898963176829412617">പുതിയ ഫോൾഡർ…</translation>
 <translation id="2903493209154104877">വിലാസങ്ങള്‍‌</translation>
@@ -109,7 +109,6 @@
 <translation id="2989805286512600854">പുതിയ ടാബില്‍ തുറക്കുക</translation>
 <translation id="3024255823539804759">കഴിഞ്ഞ ദിവസത്തെ</translation>
 <translation id="3037605927509011580">കഷ്ടം!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> ലഭ്യമല്ല. നിങ്ങളുടെ ബ്രൗസിംഗ് ചരിത്രം ആക്‌സസ് ചെയ്യാൻ, ടൂളുകൾ മെനുവിൽ നിന്ന് "<ph name="SHOW_HISTORY" />" തിരഞ്ഞെടുക്കുക.</translation>
 <translation id="3112556859945124369">അടയാളപ്പെടുത്തുക…</translation>
 <translation id="3151924044251363314">നിങ്ങളുടെ പാസ്‌ഫ്രെയ്‌സുള്ള ഒരാൾക്ക് മാത്രമേ എൻക്രിപ്‌റ്റുചെയ്‌ത ഡാറ്റ വായിക്കാനാവൂ. Google-ലേക്ക് പാസ്‌ഫ്രെയ്‌സ് അയയ്‌ക്കുകയോ Google അത് സൂക്ഷിക്കുകയോ ഇല്ല. പാസ്‌ഫ്രെയ്‌സ് മറന്നുപോവുകയോ ഈ ക്രമീകരണം മാറ്റണമെന്നുണ്ടെങ്കിലോ നിങ്ങൾ സമന്വയം റീസെറ്റുചെയ്യേണ്ടതുണ്ട്. <ph name="BEGIN_LINK" />കൂടുതലറിയുക<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">എല്ലാം അടയാളപ്പെടുത്തുക…</translation>
@@ -150,6 +149,7 @@
 <translation id="3638472932233958418">മുമ്പ് ലോഡുചെയ്‌ത വെബ്‌പേജുകൾ</translation>
 <translation id="3691593122358196899"><ph name="FOLDER_TITLE" /> ഫോൾഡറിലേക്ക് ബുക്ക്മാർക്ക് ചെയ്‌തു</translation>
 <translation id="3738139272394829648">തിരയാൻ സ്‌പർശിക്കുക</translation>
+<translation id="3742082982782149146">ഈ സൈറ്റിന്റെ URL പകർത്തി.</translation>
 <translation id="3771033907050503522">ആൾമാറാട്ട ടാബുകൾ</translation>
 <translation id="3783017676699494206">ഇമേജ് സംരക്ഷിക്കുക</translation>
 <translation id="3789841737615482174">ഇന്‍സ്റ്റാളുചെയ്യുക</translation>
@@ -164,10 +164,12 @@
 <translation id="4038354071007134711">ഈ ഉപകരണത്തിലുള്ള ഒരു അപ്ലിക്കേഷനും ഫയൽ തുറക്കാനാകില്ല.</translation>
 <translation id="4049507953662678203">നിങ്ങൾക്ക് നെറ്റ്‌വർക്ക് കണക്ഷനുണ്ടെന്ന് ഉറപ്പാക്കി, വീണ്ടും ശ്രമിക്കുക.</translation>
 <translation id="411254640334432676">ഡൗൺലോഡ് പരാജയപ്പെട്ടു.</translation>
+<translation id="4117350985506774529">നിങ്ങളുടെ ഉപയോക്തൃനാമം പകർത്തി.</translation>
 <translation id="4121993058175073134">നെറ്റ്-എക്‌സ്‌പോർട്ട് ഡാറ്റ അയയ്‌ക്കുന്നതിന്, ക്രമീകരണങ്ങളുടെ അപ്ലിക്കേഷനിൽ നിങ്ങളുടെ ഇമെയിൽ അക്കൗൺറ്റ് കോൺഫിഗർ ചെയ്യുക.</translation>
 <translation id="4124987746317609294">സമയ ശ്രേണി</translation>
 <translation id="4172051516777682613">എല്ലായ്പ്പോഴും ദൃശ്യമാക്കുക</translation>
 <translation id="418156467088430727">പുതിയ ടാബിൽ ഓഫ്‌ലൈൻ പതിപ്പ് കാണുക</translation>
+<translation id="4237682350741091554"><ph name="BEGIN_LINK" />ക്രമീകരണത്തിൽ<ph name="END_LINK" /> Chrome സമന്വയിപ്പിക്കലും വ്യക്‌തിപരമാക്കലും മാനേജുചെയ്യുക</translation>
 <translation id="424315890655130736">പാസ്‌ഫ്രെയ്‌സ് നൽകുക</translation>
 <translation id="4272631900155121838">QR കോഡ് സ്‌കാൻ ചെയ്യാൻ, ക്രമീകരണത്തിൽ നിന്ന് ക്യാമറ പ്രവർത്തനക്ഷമമാക്കുക</translation>
 <translation id="4281844954008187215">സേവന നിബന്ധനകൾ</translation>
@@ -175,6 +177,7 @@
 <translation id="4359125752503270327">ഈ പേജ് മറ്റൊരു അപ്ലിക്കേഷനിൽ തുറക്കും.</translation>
 <translation id="4378154925671717803">ഫോണ്‍</translation>
 <translation id="441868831736628555">സ്വകാര്യത അറിയിപ്പ്</translation>
+<translation id="4508750114462689118">സൈൻ ഇൻ പ്രമോ അടയ്‌ക്കുക</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> എന്നതിൽ സംരക്ഷിച്ച പാസ്‌വേഡുകൾ കാണുക, നിയന്ത്രിക്കുക</translation>
 <translation id="4536418791685807335">വീണ്ടും സൈൻ ഇൻ ചെയ്യാൻ ശ്രമിക്കുക.</translation>
 <translation id="4620246317052452550">നിങ്ങൾ വായിച്ചു കഴിഞ്ഞ പേജുകൾ</translation>
@@ -220,6 +223,7 @@
 
 ക്രമീകരണത്തിന്റെ പൊതു വിഭാഗത്തിലും Handoff പ്രവർത്തനക്ഷമമായിരിക്കുകയും നിങ്ങളുടെ ഉപകരണങ്ങൾ ഒരേ iCloud അക്കൗണ്ട് തന്നെ ഉപയോഗിക്കുകയും വേണം.</translation>
 <translation id="5556459405103347317">വീണ്ടും ലോഡുചെയ്യുക</translation>
+<translation id="5619279135193775234">മെയിൽ</translation>
 <translation id="5626245204502895507">ഫയൽ ഇപ്പോൾ ഡൗൺലോഡുചെയ്യാൻ കഴിയില്ല.</translation>
 <translation id="5659593005791499971">ഇമെയില്‍</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@
 <translation id="7136892417564438900">ക്യാമറ ലഭ്യമല്ല</translation>
 <translation id="7159472599653637159">മൊബൈൽ സൈറ്റ് അഭ്യർത്ഥിക്കുക</translation>
 <translation id="7167621057293532233">ഡാറ്റ തരങ്ങള്‍</translation>
+<translation id="7175593937868963913">ഇമെയിൽ രചിക്കുക</translation>
 <translation id="7189598951263744875">പങ്കിടുക...</translation>
 <translation id="7203585745079012652">മറുപടിയായി ഉത്തരങ്ങൾ പറയുക</translation>
 <translation id="722055596168483966">Google സേവനങ്ങൾ വ്യക്തിപരമാക്കുക</translation>
@@ -358,7 +363,6 @@
 <translation id="8205564605687841303">റദ്ദാക്കുക</translation>
 <translation id="8225985093977202398">കാഷെ ചെയ്‌ത ചിത്രങ്ങളും ഫയലുകളും</translation>
 <translation id="8261506727792406068">ഇല്ലാതാക്കൂ</translation>
-<translation id="8272194309885535896">ചിത്രം ഡൗൺലോഡുചെയ്യുക</translation>
 <translation id="8272426682713568063">ക്രെഡിറ്റ് കാര്‍‌ഡുകള്‍‌</translation>
 <translation id="8281781826761538115">ഡിഫോൾട്ട് - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">തിരയലും പരസ്യങ്ങളും മറ്റ് Google സേവനങ്ങളും വ്യക്തിപരമാക്കാൻ, Google നിങ്ങളുടെ ബ്രൗസിംഗ് ചരിത്രം ഉപയോഗിക്കുന്ന രീതി നിയന്ത്രിക്കുക</translation>

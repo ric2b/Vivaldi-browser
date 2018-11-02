@@ -4,6 +4,7 @@
 <translation id="1152921474424827756">Accede a una <ph name="BEGIN_LINK" />copia almacenada en caché<ph name="END_LINK" /> de <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> ha cerrado la conexión de forma inesperada.</translation>
 <translation id="1161325031994447685">Reconectarte a una red Wi-Fi</translation>
+<translation id="1175364870820465910">Im&amp;primir...</translation>
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Borrar tus cookies<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Información de la versión</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> no ha enviado ningún dato.</translation>
@@ -11,17 +12,21 @@
 <translation id="1559528461873125649">No existe tal archivo o carpeta</translation>
 <translation id="1640244768702815859">Prueba a <ph name="BEGIN_LINK" />acceder a la página principal del sitio web<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocolo no admitido</translation>
+<translation id="1676269943528358898"><ph name="SITE" /> normalmente utiliza la encriptación para proteger su información. Cuando Vivaldi ha intentado conectar con <ph name="SITE" />, el sitio web ha devuelto unas credenciales incorrectas e inusuales. Esto puede ocurrir cuando un atacante está pretendiendo ser <ph name="SITE" />, o cuando una petición de contraseña  Wi-Fi ha interrumpido su conexión. Su información se mantiene segura porque Vivaldi ha detenido la conexión antes de que se intercambiara ningún dato.</translation>
 <translation id="1710259589646384581">Sistema operativo</translation>
 <translation id="1728677426644403582">Estás viendo el código fuente de una página web</translation>
 <translation id="1734878702283171397">Intenta ponerte en contacto con el administrador del sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Probar a ejecutar diagnósticos de red de Windows<ph name="END_LINK" />.</translation>
 <translation id="194030505837763158">Ir a <ph name="LINK" /></translation>
+<translation id="1974060860693918893">Configuración avanzada</translation>
 <translation id="2030481566774242610">¿Querías decir <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Comprobando el proxy y el cortafuegos<ph name="END_LINK" /></translation>
+<translation id="2065985942032347596">Se requiere autenticación</translation>
 <translation id="2166378884831602661">Este sitio web no puede proporcionar una conexión segura</translation>
 <translation id="2230458221926704099">Soluciona los problemas de tu conexión con la <ph name="BEGIN_LINK" />aplicación de diagnóstico<ph name="END_LINK" /></translation>
-<translation id="224482879335890159">Busca <ph name="LINK" /> en Vivaldi</translation>
+<translation id="224482879335890159">Buscar <ph name="LINK" /> en Vivaldi</translation>
 <translation id="2292556288342944218">Tu acceso a Internet está bloqueado</translation>
+<translation id="2317259163369394535"><ph name="DOMAIN" /> necesita un nombre de usuario y una contraseña.</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Ejecutando diagnósticos de red<ph name="END_LINK" /></translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> ha enviado una respuesta no válida.</translation>
 <translation id="2609632851001447353">Variaciones</translation>
@@ -29,8 +34,10 @@
 <translation id="2705137772291741111">La copia guardada (almacenada en caché) de este sitio web no se ha podido leer.</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Ejecutando diagnósticos de conectividad<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Se ha restablecido la conexión.</translation>
+<translation id="2856444702002559011">Es posible que los atacantes estén intentando robar tu información de <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (por ejemplo, contraseñas, mensajes o tarjetas de crédito). <ph name="BEGIN_LEARN_MORE_LINK" />Más información<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Se ha detectado un cambio de red.</translation>
 <translation id="2948083400971632585">Puede deshabilitar cualquier proxy configurado para una conexión desde Opciones.</translation>
+<translation id="2991571918955627853">Ahora mismo no puedes acceder a <ph name="SITE" /> según el HSTS que utiliza el sitio web. Los ataques y los errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="3005723025932146533">Mostrar copia guardada</translation>
 <translation id="3093245981617870298">Está usted desconectado.</translation>
 <translation id="3109728660330352905">No tienes autorización para ver esta página.</translation>
@@ -42,29 +49,38 @@
 <translation id="3226128629678568754">Pulsa el botón de actualización de página para volver a enviar los datos necesarios para cargar la página.</translation>
 <translation id="3422472998109090673">No se puede acceder a la página <ph name="HOST_NAME" /> en este momento.</translation>
 <translation id="3447661539832366887">El propietario de este dispositivo ha desactivado el juego del dinosaurio.</translation>
+<translation id="3462200631372590220">Ocultar configuración avanzada</translation>
+<translation id="3566021033012934673">Tu conexión no es privada</translation>
 <translation id="3586931643579894722">Ocultar detalles</translation>
 <translation id="3630155396527302611">Si ya está incluido como programa autorizado para acceder a la red,
       elimínalo de la lista y vuelve a añadirlo.</translation>
 <translation id="3658742229777143148">Revisión</translation>
+<translation id="3693415264595406141">Contraseña:</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Comprobando el proxy, el cortafuegos y la configuración DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Si utilizas un servidor proxy...</translation>
 <translation id="3973234410852337861">La página <ph name="HOST_NAME" /> está bloqueada</translation>
+<translation id="3987940399970879459">Menos de 1 MB</translation>
 <translation id="4021036232240155012">DNS es el servicio de red que permite traducir el nombre de un sitio web a su dirección de Internet.</translation>
 <translation id="4075732493274867456">El cliente y el servidor no son compatibles con la misma versión del protocolo SSL o sistema de cifrado.</translation>
 <translation id="4130226655945681476">Comprobando los cables de red, el módem y el router</translation>
+<translation id="4165986682804962316">Configuración de sitios web</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Comprobando la configuración del cortafuegos y la del antivirus<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Probar a ejecutar diagnósticos de red<ph name="END_LINK" />.</translation>
+<translation id="4304224509867189079">Iniciar sesión</translation>
+<translation id="4381091992796011497">Nombre de usuario:</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> no ha aceptado el certificado de inicio de sesión o es posible que no se haya proporcionado ninguno.</translation>
 <translation id="4506599922270137252">Contactar al administrador del sistema</translation>
 <translation id="4522570452068850558">Detalles</translation>
 <translation id="4558551763791394412">Prueba deshabilitando las extensiones.</translation>
 <translation id="4708268264240856090">Se ha interrumpido la conexión</translation>
-<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Ejecutando diagnósticos de red de Windows<ph name="END_LINK" /></translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Ejecutando los diagnósticos de red de Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Ruta del ejecutable</translation>
 <translation id="4764776831041365478">Es posible que la página web <ph name="URL" /> esté temporalmente inactiva o que se haya trasladado definitivamente a otra dirección.</translation>
+<translation id="4807049035289105102">Ahora mismo no puedes acceder a <ph name="SITE" /> porque el sitio web ha enviado unas credenciales codificadas que Vivaldi no puede procesar. Los ataques y los errores de red suelen ser temporales, de modo que es probable que esta página funcione más tarde.</translation>
 <translation id="5023310440958281426">Consulta las políticas del administrador</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Comprobando la dirección del proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bits)</translation>
+<translation id="5355557959165512791">Ahora mismo no puedes acceder a <ph name="SITE" /> porque su certificado se ha revocado. Los ataques y los errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="5431657950005405462">No se ha encontrado tu archivo</translation>
 <translation id="5452270690849572955">No se puede encontrar esta página (<ph name="HOST_NAME" />)</translation>
 <translation id="5492298309214877701">Este sitio web de la intranet del centro educativo, de la organización o de la empresa tiene la misma URL que un sitio web externo.
@@ -75,13 +91,16 @@
 <translation id="5610142619324316209">Comprobando la conexión</translation>
 <translation id="5617949217645503996">La página <ph name="HOST_NAME" /> te ha redirigido demasiadas veces.</translation>
 <translation id="5675650730144413517">Esta página no funciona</translation>
+<translation id="5799902971440853357">Ahora mismo no puedes acceder a <ph name="SITE" /> porque el sitio web ha enviado credenciales codificadas que Vivaldi no puede procesar. Los ataques y los errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="5869405914158311789">No se puede acceder a este sitio web</translation>
 <translation id="5990559369517809815">Una extensión ha bloqueado el envío de solicitudes al servidor.</translation>
+<translation id="6051221802930200923">Ahora mismo no puedes acceder a <ph name="SITE" /> porque el sitio web utiliza la fijación de certificados (certificate pinning). Los ataques y los errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="6146055958333702838">Comprueba los cables y reinicia los routers, los módems o cualquier otro dispositivo
     de red que estés utilizando.</translation>
 <translation id="614940544461990577">Prueba a:</translation>
 <translation id="6165508094623778733">Más información</translation>
 <translation id="6203231073485539293">Comprueba tu conexión a Internet</translation>
+<translation id="6264485186158353794">Volver para estar a salvo</translation>
 <translation id="6305205051461490394">No se puede acceder a <ph name="URL" />.</translation>
 <translation id="6321917430147971392">Comprueba tu configuración de DNS</translation>
 <translation id="6328639280570009161">Prueba a inhabilitar la predicción de red</translation>
@@ -99,8 +118,8 @@
 <translation id="759889825892636187">La página <ph name="HOST_NAME" /> no puede procesar esta solicitud ahora.</translation>
 <translation id="7716424297397655342">No se puede cargar este sitio web desde la caché</translation>
 <translation id="7758069387465995638">Puede que el cortafuegos o el software antivirus hayan bloqueado la conexión.</translation>
+<translation id="7834399512844817676"><ph name="SITE" /> utiliza normalmente el cifrado para proteger tu información. Cuando Vivaldi intentó establecer conexión con <ph name="SITE" />, el sitio web devolvió unas credenciales inusuales e incorrectas. Esto puede ocurrir si un atacante intenta suplantar la identidad de <ph name="SITE" /> o si se interrumpe la conexión por una petición de inicio de sesión en el Wi-Fi. Tu información sigue estando protegida, ya que Vivaldi detuvo la conexión antes de que se intercambiaran datos.</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
-<translation id="8089520772729574115">menos de 1 MB</translation>
 <translation id="8134994873729925007">No se ha podido encontrar la <ph name="BEGIN_ABBR" />dirección DNS<ph name="END_ABBR" /> del servidor de <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">Accede a la página &lt;strong&gt;vivaldi://policy&lt;/strong&gt; para ver la lista de URLs no admitidas y otras políticas establecidas por el administrador del sistema.</translation>
 <translation id="8149426793427495338">El ordenador se ha suspendido.</translation>
@@ -110,6 +129,7 @@
 <translation id="8332188693563227489">Se ha denegado el acceso a <ph name="HOST_NAME" /></translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ha tardado demasiado tiempo en responder.</translation>
 <translation id="8740359287975076522">No se ha podido encontrar la &lt;abbr id="dnsDefinition"&gt;dirección DNS&lt;/abbr&gt; de la página <ph name="HOST_NAME" />. Se está diagnosticando el problema.</translation>
+<translation id="9001074447101275817">El proxy <ph name="DOMAIN" /> requiere de un nombre de usuario y una contraseña.</translation>
 <translation id="9183425211371246419">La página <ph name="HOST_NAME" /> utiliza un protocolo no admitido.</translation>
 <translation id="933612690413056017">No hay conexión a Internet</translation>
 <translation id="969892804517981540">Build oficial</translation>

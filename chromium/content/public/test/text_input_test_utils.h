@@ -78,6 +78,20 @@ void SendImeCommitTextToWidget(
     const gfx::Range& replacement_range,
     int relative_cursor_pos);
 
+// Sends a request to RenderWidget corresponding to |rwh| to set the given
+// composition text and update the corresponding IME params.
+void SendImeSetCompositionTextToWidget(
+    RenderWidgetHost* rwh,
+    const base::string16& text,
+    const std::vector<ui::CompositionUnderline>& underlines,
+    const gfx::Range& replacement_range,
+    int selection_start,
+    int selection_end);
+
+// Immediately destroys the RenderWidgetHost corresponding to the local root
+// which is identified by the given process ID and RenderFrameHost routing ID.
+bool DestroyRenderWidgetHost(int32_t process_id, int32_t local_root_routing_id);
+
 // This class provides the necessary API for accessing the state of and also
 // observing the TextInputManager for WebContents.
 class TextInputManagerTester {
@@ -112,6 +126,13 @@ class TextInputManagerTester {
   // Returns true if there is a focused <input> and populates |length| with the
   // length of the selected text range in the focused view.
   bool GetCurrentTextSelectionLength(size_t* length);
+
+  // This method sets |output| to the last value of composition range length
+  // reported by a renderer corresponding to WebContents. If no such update have
+  // been received, the method will leave |output| untouched and returns false.
+  // Returning true means an update has been received and the value of |output|
+  // has been updated accordingly.
+  bool GetLastCompositionRangeLength(uint32_t* output);
 
   // Returns the RenderWidgetHostView with a focused <input> element or nullptr
   // if none exists.
@@ -219,6 +240,11 @@ class TestTextInputClientMessageFilter : public BrowserMessageFilter {
   // BrowserMessageFilter overrides.
   bool OnMessageReceived(const IPC::Message& message) override;
 
+  // Sets a callback for the string for range IPC arriving from the renderer.
+  // The callback is invoked before that of TextInputClientMac and is handled on
+  // UI thread.
+  void SetStringForRangeCallback(const base::Closure& callback);
+
   RenderProcessHost* process() const { return host_; }
   std::string string_from_range() { return string_from_range_; }
 
@@ -227,6 +253,7 @@ class TestTextInputClientMessageFilter : public BrowserMessageFilter {
   RenderProcessHost* const host_;
   std::string string_from_range_;
   bool received_string_from_range_;
+  base::Closure string_for_range_callback_;
   scoped_refptr<MessageLoopRunner> message_loop_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(TestTextInputClientMessageFilter);

@@ -355,14 +355,15 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
 
   virtual base::string16 GetText() const;
 
-  // Returns true if the bit corresponding to the given state enum is 1.
+  // Returns true if the bit corresponding to the given enum is 1.
   bool HasState(ui::AXState state_enum) const;
+  bool HasAction(ui::AXAction action_enum) const;
 
   // Returns true if this node is a cell or a table header.
   bool IsCellOrTableHeaderRole() const;
 
   // Returns true if this node is a table, a grid or a treegrid.
-  bool IsTableOrGridOrTreeGridRole() const;
+  bool IsTableLikeRole() const;
 
   // Returns true if the caret is active on this object.
   bool HasCaret() const;
@@ -378,9 +379,12 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // Indicates if this object is at the root of a rich edit text control.
   bool IsRichTextControl() const;
 
+  // Return true if the accessible name was explicitly set to "" by the author
+  bool HasExplicitlyEmptyName() const;
+
   // If an object is focusable but has no accessible name, use this
   // to compute a name from its descendants.
-  std::string ComputeAccessibleNameFromDescendants();
+  std::string ComputeAccessibleNameFromDescendants() const;
 
   // Creates a text position rooted at this object.
   AXPlatformPosition::AXPositionInstance CreatePositionAt(
@@ -389,6 +393,8 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
 
   // Gets the text offsets where new lines start.
   std::vector<int> GetLineStartOffsets() const;
+
+  virtual gfx::NativeViewAccessible GetNativeViewAccessible();
 
   // AXPlatformNodeDelegate.
   const ui::AXNodeData& GetData() const override;

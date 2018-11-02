@@ -29,12 +29,10 @@ namespace {
 // Takes ownership of |memory_handle|.
 ScopedPlatformHandle SharedMemoryToPlatformHandle(
     base::SharedMemoryHandle memory_handle) {
-#if defined(OS_POSIX) && !(defined(OS_MACOSX) && !defined(OS_IOS))
-  return ScopedPlatformHandle(PlatformHandle(memory_handle.fd));
-#elif defined(OS_WIN)
-  return ScopedPlatformHandle(PlatformHandle(memory_handle.GetHandle()));
-#else
+#if defined(OS_MACOSX) && !defined(OS_IOS)
   return ScopedPlatformHandle(PlatformHandle(memory_handle.GetMemoryObject()));
+#else
+  return ScopedPlatformHandle(PlatformHandle(memory_handle.GetHandle()));
 #endif
 }
 
@@ -147,7 +145,7 @@ std::unique_ptr<PlatformSharedBufferMapping> PlatformSharedBuffer::MapNoCheck(
     handle = base::SharedMemory::DuplicateHandle(shared_memory_->handle());
   }
 
-  if (handle == base::SharedMemory::NULLHandle())
+  if (!handle.IsValid())
     return nullptr;
 
   std::unique_ptr<PlatformSharedBufferMapping> mapping(
@@ -165,7 +163,7 @@ ScopedPlatformHandle PlatformSharedBuffer::DuplicatePlatformHandle() {
     base::AutoLock locker(lock_);
     handle = base::SharedMemory::DuplicateHandle(shared_memory_->handle());
   }
-  if (handle == base::SharedMemory::NULLHandle())
+  if (!handle.IsValid())
     return ScopedPlatformHandle();
 
   return SharedMemoryToPlatformHandle(handle);
@@ -197,20 +195,18 @@ PlatformSharedBuffer* PlatformSharedBuffer::CreateReadOnlyDuplicate() {
     base::AutoLock locker(lock_);
     base::SharedMemoryHandle handle;
     handle = base::SharedMemory::DuplicateHandle(ro_shared_memory_->handle());
-    if (handle == base::SharedMemory::NULLHandle())
+    if (!handle.IsValid())
       return nullptr;
     return CreateFromSharedMemoryHandle(num_bytes_, true, handle);
   }
 
   base::SharedMemoryHandle handle;
-  bool success;
   {
     base::AutoLock locker(lock_);
-    success = shared_memory_->ShareReadOnlyToProcess(
-        base::GetCurrentProcessHandle(), &handle);
+    handle = shared_memory_->GetReadOnlyHandle();
   }
-  if (!success || handle == base::SharedMemory::NULLHandle())
-      return nullptr;
+  if (!handle.IsValid())
+    return nullptr;
 
   return CreateFromSharedMemoryHandle(num_bytes_, true, handle);
 }
@@ -237,15 +233,18 @@ bool PlatformSharedBuffer::InitFromPlatformHandle(
     ScopedPlatformHandle platform_handle) {
   DCHECK(!shared_memory_);
 
+  // TODO(rockot): Pass GUIDs through Mojo. https://crbug.com/713763.
+  base::UnguessableToken guid = base::UnguessableToken::Create();
 #if defined(OS_WIN)
-  base::SharedMemoryHandle handle(platform_handle.release().handle,
-                                  base::GetCurrentProcId());
+  base::SharedMemoryHandle handle(platform_handle.release().handle, num_bytes_,
+                                  guid);
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
-  base::SharedMemoryHandle handle;
-  handle = base::SharedMemoryHandle(platform_handle.release().port, num_bytes_,
-                                    base::GetCurrentProcId());
+  base::SharedMemoryHandle handle = base::SharedMemoryHandle(
+      platform_handle.release().port, num_bytes_, guid);
 #else
-  base::SharedMemoryHandle handle(platform_handle.release().handle, false);
+  base::SharedMemoryHandle handle(
+      base::FileDescriptor(platform_handle.release().handle, false), num_bytes_,
+      guid);
 #endif
 
   shared_memory_.reset(new base::SharedMemory(handle, read_only_));
@@ -260,15 +259,20 @@ bool PlatformSharedBuffer::InitFromPlatformHandlePair(
   return false;
 #else  // defined(OS_MACOSX)
 
+  // TODO(rockot): Pass GUIDs through Mojo. https://crbug.com/713763.
+  base::UnguessableToken guid = base::UnguessableToken::Create();
 #if defined(OS_WIN)
   base::SharedMemoryHandle handle(rw_platform_handle.release().handle,
-                                  base::GetCurrentProcId());
+                                  num_bytes_, guid);
   base::SharedMemoryHandle ro_handle(ro_platform_handle.release().handle,
-                                     base::GetCurrentProcId());
+                                     num_bytes_, guid);
 #else  // defined(OS_WIN)
-  base::SharedMemoryHandle handle(rw_platform_handle.release().handle, false);
-  base::SharedMemoryHandle ro_handle(ro_platform_handle.release().handle,
-                                     false);
+  base::SharedMemoryHandle handle(
+      base::FileDescriptor(rw_platform_handle.release().handle, false),
+      num_bytes_, guid);
+  base::SharedMemoryHandle ro_handle(
+      base::FileDescriptor(ro_platform_handle.release().handle, false),
+      num_bytes_, guid);
 #endif  // defined(OS_WIN)
 
   DCHECK(!shared_memory_);

@@ -61,6 +61,7 @@
 #include "content/renderer/render_widget.h"
 #include "content/renderer/render_widget_fullscreen_pepper.h"
 #include "content/renderer/sad_plugin.h"
+#include "device/gamepad/public/cpp/gamepads.h"
 #include "ppapi/c/dev/ppp_text_input_dev.h"
 #include "ppapi/c/pp_rect.h"
 #include "ppapi/c/ppb_audio_config.h"
@@ -96,9 +97,9 @@
 #include "printing/features/features.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
+#include "third_party/WebKit/public/platform/WebCoalescedInputEvent.h"
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
-#include "third_party/WebKit/public/platform/WebGamepads.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseEvent.h"
@@ -458,9 +459,9 @@ PPB_Gamepad_API* PepperPluginInstanceImpl::GamepadImpl::AsPPB_Gamepad_API() {
 void PepperPluginInstanceImpl::GamepadImpl::Sample(
     PP_Instance instance,
     PP_GamepadsSampleData* data) {
-  blink::WebGamepads webkit_data;
-  RenderThreadImpl::current()->SampleGamepads(&webkit_data);
-  ConvertWebKitGamepadData(bit_cast<ppapi::WebKitGamepads>(webkit_data), data);
+  device::Gamepads gamepads_data;
+  RenderThreadImpl::current()->SampleGamepads(&gamepads_data);
+  ppapi::ConvertDeviceGamepadData(gamepads_data, data);
 }
 
 PepperPluginInstanceImpl::PepperPluginInstanceImpl(
@@ -1115,10 +1116,29 @@ gfx::Rect PepperPluginInstanceImpl::GetCaretBounds() const {
   return caret;
 }
 
+bool PepperPluginInstanceImpl::HandleCoalescedInputEvent(
+    const blink::WebCoalescedInputEvent& event,
+    WebCursorInfo* cursor_info) {
+  if (blink::WebInputEvent::IsTouchEventType(event.Event().GetType()) &&
+      ((filtered_input_event_mask_ & PP_INPUTEVENT_CLASS_COALESCED_TOUCH) ||
+       (input_event_mask_ & PP_INPUTEVENT_CLASS_COALESCED_TOUCH))) {
+    bool result = false;
+    for (size_t i = 0; i < event.CoalescedEventSize(); ++i) {
+      result |= HandleInputEvent(event.CoalescedEvent(i), cursor_info);
+    }
+    return result;
+  } else {
+    return HandleInputEvent(event.Event(), cursor_info);
+  }
+}
+
 bool PepperPluginInstanceImpl::HandleInputEvent(
     const blink::WebInputEvent& event,
     WebCursorInfo* cursor_info) {
   TRACE_EVENT0("ppapi", "PepperPluginInstanceImpl::HandleInputEvent");
+
+  if (!render_frame_)
+    return false;
 
   if (!has_been_clicked_ && is_flash_plugin_ &&
       event.GetType() == blink::WebInputEvent::kMouseDown &&
@@ -1132,8 +1152,6 @@ bool PepperPluginInstanceImpl::HandleInputEvent(
   if (throttler_ && throttler_->ConsumeInputEvent(event))
     return true;
 
-  if (!render_frame_)
-    return false;
   if (WebInputEvent::IsMouseEventType(event.GetType())) {
     render_frame_->PepperDidReceiveMouseEvent(this);
   }
@@ -1262,6 +1280,9 @@ void PepperPluginInstanceImpl::ViewChanged(
     const gfx::Rect& window,
     const gfx::Rect& clip,
     const gfx::Rect& unobscured) {
+  if (!render_frame_)
+    return;
+
   // WebKit can give weird (x,y) positions for empty clip rects (since the
   // position technically doesn't matter). But we want to make these
   // consistent since this is given to the plugin, so force everything to 0
@@ -1380,6 +1401,9 @@ void PepperPluginInstanceImpl::ViewInitiatedPaint() {
 
 void PepperPluginInstanceImpl::SetSelectedText(
     const base::string16& selected_text) {
+  if (!render_frame_)
+    return;
+
   selected_text_ = selected_text;
   gfx::Range range(0, selected_text.length());
   render_frame_->SetSelectedText(selected_text, 0, range);
@@ -1390,6 +1414,9 @@ void PepperPluginInstanceImpl::SetLinkUnderCursor(const std::string& url) {
 }
 
 void PepperPluginInstanceImpl::SetTextInputType(ui::TextInputType type) {
+  if (!render_frame_)
+    return;
+
   text_input_type_ = type;
   render_frame_->PepperTextInputTypeChanged(this);
 }
@@ -1685,6 +1712,9 @@ void PepperPluginInstanceImpl::SendAsyncDidChangeView() {
 }
 
 void PepperPluginInstanceImpl::SendDidChangeView() {
+  if (!render_frame_)
+    return;
+
   // An asynchronous view update is scheduled. Skip sending this update.
   if (view_change_weak_ptr_factory_.HasWeakPtrs())
     return;
@@ -2155,8 +2185,10 @@ bool PepperPluginInstanceImpl::PrepareTextureMailbox(
 }
 
 void PepperPluginInstanceImpl::AccessibilityModeChanged() {
-  if (render_frame_->render_accessibility() && LoadPdfInterface())
+  if (render_frame_ && render_frame_->render_accessibility() &&
+      LoadPdfInterface()) {
     plugin_pdf_interface_->EnableAccessibility(pp_instance());
+  }
 }
 
 void PepperPluginInstanceImpl::OnDestruct() {
@@ -2164,6 +2196,9 @@ void PepperPluginInstanceImpl::OnDestruct() {
 }
 
 void PepperPluginInstanceImpl::OnThrottleStateChange() {
+  if (!render_frame_)
+    return;
+
   SendDidChangeView();
 
   bool is_throttled = throttler_->IsThrottled();
@@ -2808,7 +2843,9 @@ PP_Bool PepperPluginInstanceImpl::SetCursor(PP_Instance instance,
   SkBitmap bitmap(image_data->GetMappedBitmap());
   // Make a deep copy, so that the cursor remains valid even after the original
   // image data gets freed.
-  if (!bitmap.copyTo(&custom_cursor->custom_image.GetSkBitmap())) {
+  SkBitmap& dst = custom_cursor->custom_image.GetSkBitmap();
+  if (!dst.tryAllocPixels(bitmap.info()) ||
+      !bitmap.readPixels(dst.info(), dst.getPixels(), dst.rowBytes(), 0, 0)) {
     return PP_FALSE;
   }
 

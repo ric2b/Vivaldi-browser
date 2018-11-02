@@ -10,6 +10,10 @@
 #include "base/macros.h"
 #include "components/safe_json/public/interfaces/safe_json.mojom.h"
 
+namespace service_manager {
+struct BindSourceInfo;
+}
+
 namespace safe_json {
 
 class SafeJsonParserMojoImpl : public mojom::SafeJsonParser {
@@ -17,11 +21,12 @@ class SafeJsonParserMojoImpl : public mojom::SafeJsonParser {
   SafeJsonParserMojoImpl();
   ~SafeJsonParserMojoImpl() override;
 
-  static void Create(mojo::InterfaceRequest<mojom::SafeJsonParser> request);
+  static void Create(const service_manager::BindSourceInfo& source_info,
+                     mojom::SafeJsonParserRequest request);
 
  private:
   // mojom::SafeJsonParser implementation.
-  void Parse(const std::string& json, const ParseCallback& callback) override;
+  void Parse(const std::string& json, ParseCallback callback) override;
 
   DISALLOW_COPY_AND_ASSIGN(SafeJsonParserMojoImpl);
 };

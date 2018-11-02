@@ -461,8 +461,7 @@ void PPBNaClPrivate::LaunchSelLdr(
   if (nexe_file_info->handle != PP_kInvalidFileHandle)
     nexe_for_transit = base::FileDescriptor(nexe_file_info->handle, true);
 #elif defined(OS_WIN)
-  nexe_for_transit = IPC::PlatformFileForTransit(nexe_file_info->handle,
-                                                 base::GetCurrentProcId());
+  nexe_for_transit = IPC::PlatformFileForTransit(nexe_file_info->handle);
 #else
 # error Unsupported target platform.
 #endif
@@ -543,9 +542,8 @@ void PPBNaClPrivate::LaunchSelLdr(
     std::unique_ptr<TrustedPluginChannel> trusted_plugin_channel(
         new TrustedPluginChannel(
             load_manager,
-            mojo::MakeRequest<mojom::NaClRendererHost>(
-                mojo::ScopedMessagePipeHandle(
-                    launch_result.trusted_ipc_channel_handle.mojo_handle)),
+            mojom::NaClRendererHostRequest(mojo::ScopedMessagePipeHandle(
+                launch_result.trusted_ipc_channel_handle.mojo_handle)),
             is_helper_nexe));
     load_manager->set_trusted_plugin_channel(std::move(trusted_plugin_channel));
   } else {

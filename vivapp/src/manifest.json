@@ -24,6 +24,8 @@
   "offline_enabled": true,
   "permissions": [
     "<all_urls>",
+    "accessibilityFeatures.read",
+    "accessibilityFeatures.modify",
     "alwaysOnTopWindows",
     "app.window.fullscreen.overrideEsc",
     "audioCapture",
@@ -31,6 +33,7 @@
     "bookmarkManagerPrivate",
     "bookmarks",
     "bookmarksPrivate",
+    "calendar",
     "chrome://favicon/",
     "clipboardRead",
     "commandLinePrivate",

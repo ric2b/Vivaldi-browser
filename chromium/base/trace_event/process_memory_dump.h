@@ -14,10 +14,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
+#include "base/trace_event/heap_profiler_serialization_state.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
 #include "base/trace_event/memory_dump_request_args.h"
-#include "base/trace_event/memory_dump_session_state.h"
 #include "base/trace_event/process_memory_maps.h"
 #include "base/trace_event/process_memory_totals.h"
 #include "build/build_config.h"
@@ -31,7 +31,7 @@
 namespace base {
 namespace trace_event {
 
-class MemoryDumpSessionState;
+class HeapProfilerSerializationState;
 class TracedValue;
 
 // ProcessMemoryDump is as a strongly typed container which holds the dumps
@@ -67,7 +67,8 @@ class BASE_EXPORT ProcessMemoryDump {
   static size_t CountResidentBytes(void* start_address, size_t mapped_size);
 #endif
 
-  ProcessMemoryDump(scoped_refptr<MemoryDumpSessionState> session_state,
+  ProcessMemoryDump(scoped_refptr<HeapProfilerSerializationState>
+                        heap_profiler_serialization_state,
                     const MemoryDumpArgs& dump_args);
   ~ProcessMemoryDump();
 
@@ -118,11 +119,12 @@ class BASE_EXPORT ProcessMemoryDump {
   const AllocatorDumpsMap& allocator_dumps() const { return allocator_dumps_; }
 
   // Dumps heap usage with |allocator_name|.
-  void DumpHeapUsage(const base::hash_map<base::trace_event::AllocationContext,
-                                          base::trace_event::AllocationMetrics>&
-                         metrics_by_context,
-                     base::trace_event::TraceEventMemoryOverhead& overhead,
-                     const char* allocator_name);
+  void DumpHeapUsage(
+      const std::unordered_map<base::trace_event::AllocationContext,
+                               base::trace_event::AllocationMetrics>&
+          metrics_by_context,
+      base::trace_event::TraceEventMemoryOverhead& overhead,
+      const char* allocator_name);
 
   // Adds an ownership relationship between two MemoryAllocatorDump(s) with the
   // semantics: |source| owns |target|, and has the effect of attributing
@@ -147,8 +149,9 @@ class BASE_EXPORT ProcessMemoryDump {
   void AddSuballocation(const MemoryAllocatorDumpGuid& source,
                         const std::string& target_node_name);
 
-  const scoped_refptr<MemoryDumpSessionState>& session_state() const {
-    return session_state_;
+  const scoped_refptr<HeapProfilerSerializationState>&
+  heap_profiler_serialization_state() const {
+    return heap_profiler_serialization_state_;
   }
 
   // Removes all the MemoryAllocatorDump(s) contained in this instance. This
@@ -197,7 +200,8 @@ class BASE_EXPORT ProcessMemoryDump {
   HeapDumpsMap heap_dumps_;
 
   // State shared among all PMDs instances created in a given trace session.
-  scoped_refptr<MemoryDumpSessionState> session_state_;
+  scoped_refptr<HeapProfilerSerializationState>
+      heap_profiler_serialization_state_;
 
   // Keeps track of relationships between MemoryAllocatorDump(s).
   std::vector<MemoryAllocatorDumpEdge> allocator_dumps_edges_;

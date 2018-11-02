@@ -121,11 +121,9 @@ class GPU_EXPORT Shader : public base::RefCounted<Shader> {
       const std::string& original_name) const;
 
   // If the hashed_name is not found, return NULL.
+  // Use this only when one of the more specific Get*Info methods can't be used.
   const std::string* GetOriginalNameFromHashedName(
       const std::string& hashed_name) const;
-
-  const std::string* GetMappedName(
-      const std::string& original_name) const;
 
   const std::string& log_info() const {
     return log_info_;
@@ -259,9 +257,7 @@ class GPU_EXPORT Shader : public base::RefCounted<Shader> {
   VaryingMap varying_map_;
   InterfaceBlockMap interface_block_map_;
   OutputVariableList output_variable_list_;
-
-  // The name hashing info when the shader was last compiled.
-  NameMap name_map_;
+  // If a new info type is added, add it to GetOriginalNameFromHashedName.
 };
 
 // Tracks the Shaders.

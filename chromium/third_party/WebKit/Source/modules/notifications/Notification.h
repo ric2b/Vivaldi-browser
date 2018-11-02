@@ -31,16 +31,16 @@
 #ifndef Notification_h
 #define Notification_h
 
-#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMTimeStamp.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
 #include "modules/vibration/NavigatorVibration.h"
 #include "platform/AsyncMethodRunner.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/WebVector.h"

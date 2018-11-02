@@ -16,6 +16,7 @@
 #include "extensions/common/value_builder.h"
 #include "extensions/renderer/api_binding_test.h"
 #include "extensions/renderer/api_binding_test_util.h"
+#include "extensions/renderer/api_invocation_errors.h"
 #include "extensions/renderer/module_system.h"
 #include "extensions/renderer/safe_builtins.h"
 #include "extensions/renderer/script_context.h"
@@ -74,6 +75,15 @@ class EventChangeHandler {
                     const std::string& event_name,
                     const base::DictionaryValue* filter,
                     bool was_manual));
+};
+
+// Returns true if the value specified by |property| exists in the given
+// context.
+bool PropertyExists(v8::Local<v8::Context> context,
+                    base::StringPiece property) {
+  v8::Local<v8::Value> value = V8ValueFromScriptSource(context, property);
+  EXPECT_FALSE(value.IsEmpty());
+  return !value->IsUndefined();
 };
 
 }  // namespace
@@ -243,8 +253,16 @@ TEST_F(NativeExtensionBindingsSystemUnittest, Basic) {
     v8::Local<v8::Function> function =
         FunctionFromString(context, kCallIdleQueryStateInvalid);
     ASSERT_FALSE(function.IsEmpty());
-    RunFunctionAndExpectError(function, context, 0, nullptr,
-                              "Uncaught TypeError: Invalid invocation");
+    RunFunctionAndExpectError(
+        function, context, 0, nullptr,
+        "Uncaught TypeError: " +
+            api_errors::InvocationError(
+                "idle.queryState",
+                "integer detectionIntervalInSeconds, function callback",
+                api_errors::ArgumentError(
+                    "detectionIntervalInSeconds",
+                    api_errors::InvalidType(api_errors::kTypeInteger,
+                                            api_errors::kTypeString))));
   }
 
   {
@@ -694,31 +712,38 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestLastError) {
 
   bindings_system()->UpdateBindingsForContext(script_context);
 
-  {
-    // Try calling the function with an invalid invocation - an error should be
-    // thrown.
-    const char kCallFunction[] =
-        "(function() {\n"
-        "  chrome.idle.queryState(30, function(state) {\n"
-        "    if (chrome.runtime.lastError)\n"
-        "      this.lastErrorMessage = chrome.runtime.lastError.message;\n"
-        "  });\n"
-        "});";
-    v8::Local<v8::Function> function =
-        FunctionFromString(context, kCallFunction);
-    ASSERT_FALSE(function.IsEmpty());
-    RunFunctionOnGlobal(function, context, 0, nullptr);
-  }
+  const char kCallFunction[] =
+      "(function() {\n"
+      "  chrome.idle.queryState(30, function(state) {\n"
+      "    if (chrome.runtime.lastError)\n"
+      "      this.lastErrorMessage = chrome.runtime.lastError.message;\n"
+      "  });\n"
+      "});";
+  v8::Local<v8::Function> function = FunctionFromString(context, kCallFunction);
+  ASSERT_FALSE(function.IsEmpty());
+  RunFunctionOnGlobal(function, context, 0, nullptr);
 
   // Validate the params that would be sent to the browser.
   EXPECT_EQ(extension->id(), last_params().extension_id);
   EXPECT_EQ("idle.queryState", last_params().name);
 
-  // Respond and validate.
-  bindings_system()->HandleResponse(last_params().request_id, true,
+  int first_request_id = last_params().request_id;
+  // Respond with an error.
+  bindings_system()->HandleResponse(last_params().request_id, false,
                                     base::ListValue(), "Some API Error");
-
   EXPECT_EQ("\"Some API Error\"",
+            GetStringPropertyFromObject(context->Global(), context,
+                                        "lastErrorMessage"));
+
+  // Test responding with a failure, but no set error.
+  RunFunctionOnGlobal(function, context, 0, nullptr);
+  EXPECT_EQ(extension->id(), last_params().extension_id);
+  EXPECT_EQ("idle.queryState", last_params().name);
+  EXPECT_NE(first_request_id, last_params().request_id);
+
+  bindings_system()->HandleResponse(last_params().request_id, false,
+                                    base::ListValue(), std::string());
+  EXPECT_EQ("\"Unknown error.\"",
             GetStringPropertyFromObject(context->Global(), context,
                                         "lastErrorMessage"));
 }
@@ -791,6 +816,207 @@ TEST_F(NativeExtensionBindingsSystemUnittest,
   check_properties_inequal(context_a, context_b, "chrome");
   check_properties_inequal(context_a, context_b, "chrome.idle");
   check_properties_inequal(context_a, context_b, "chrome.idle.onStateChanged");
+}
+
+// Tests that API methods and events that are conditionally available based on
+// context are properly present or absent from the API object.
+TEST_F(NativeExtensionBindingsSystemUnittest,
+       CheckRestrictedFeaturesBasedOnContext) {
+  scoped_refptr<Extension> extension =
+      CreateExtension("extension", ItemType::EXTENSION, {"idle"});
+  RegisterExtension(extension->id());
+
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> blessed_context = MainContext();
+  v8::Local<v8::Context> webpage_context = AddContext();
+
+  // Create two contexts - a blessed extension context and a normal web page
+  // context.
+  ScriptContext* blessed_script_context = CreateScriptContext(
+      blessed_context, extension.get(), Feature::BLESSED_EXTENSION_CONTEXT);
+  blessed_script_context->set_url(extension->url());
+  bindings_system()->UpdateBindingsForContext(blessed_script_context);
+
+  ScriptContext* webpage_script_context =
+      CreateScriptContext(webpage_context, nullptr, Feature::WEB_PAGE_CONTEXT);
+  webpage_script_context->set_url(GURL("http://example.com"));
+  bindings_system()->UpdateBindingsForContext(webpage_script_context);
+
+  // Check that properties are correctly restricted. The blessed context should
+  // have access to the whole runtime API, but the webpage should only have
+  // access to sendMessage.
+  const char kSendMessage[] = "chrome.runtime.sendMessage";
+  const char kGetUrl[] = "chrome.runtime.getURL";
+  const char kOnMessage[] = "chrome.runtime.onMessage";
+  EXPECT_TRUE(PropertyExists(blessed_context, kSendMessage));
+  EXPECT_TRUE(PropertyExists(blessed_context, kGetUrl));
+  EXPECT_TRUE(PropertyExists(blessed_context, kOnMessage));
+  EXPECT_TRUE(PropertyExists(webpage_context, kSendMessage));
+  EXPECT_FALSE(PropertyExists(webpage_context, kGetUrl));
+  EXPECT_FALSE(PropertyExists(webpage_context, kOnMessage));
+}
+
+// Tests behavior when script sets window.chrome to be various things.
+TEST_F(NativeExtensionBindingsSystemUnittest, TestUsingOtherChromeObjects) {
+  scoped_refptr<Extension> extension = CreateExtension(
+      "extension", ItemType::EXTENSION, std::vector<std::string>());
+  RegisterExtension(extension->id());
+
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context_a = MainContext();
+  v8::Local<v8::Context> context_b = AddContext();
+
+  ScriptContext* script_context_a = CreateScriptContext(
+      context_a, extension.get(), Feature::BLESSED_EXTENSION_CONTEXT);
+  script_context_a->set_url(extension->url());
+  ScriptContext* script_context_b = CreateScriptContext(
+      context_b, extension.get(), Feature::BLESSED_EXTENSION_CONTEXT);
+  script_context_b->set_url(extension->url());
+
+  auto check_runtime = [this, context_a, context_b, script_context_a,
+                        script_context_b](bool expect_b_has_runtime) {
+    bindings_system()->UpdateBindingsForContext(script_context_a);
+    bindings_system()->UpdateBindingsForContext(script_context_b);
+
+    const char kRuntime[] = "chrome.runtime";
+    // chrome.runtime should always exist in context a - we only mess with
+    // context b.
+    EXPECT_TRUE(PropertyExists(context_a, kRuntime));
+    EXPECT_EQ(expect_b_has_runtime, PropertyExists(context_b, kRuntime));
+  };
+
+  // By default, runtime should exist in both contexts (since both have access
+  // to the API).
+  check_runtime(true);
+
+  {
+    v8::Context::Scope scope(context_a);
+    v8::Local<v8::Object> fake_chrome = v8::Object::New(isolate());
+    EXPECT_EQ(context_a, fake_chrome->CreationContext());
+    context_b->Global()
+        ->Set(context_b, gin::StringToSymbol(isolate(), "chrome"), fake_chrome)
+        .ToChecked();
+  }
+  // context_b has a chrome object that was created in a different context
+  // (context_a), so we shouldn't have used it. This can legitimately happen in
+  // the case of a parent frame modifying a child frame's window.chrome.
+  check_runtime(false);
+
+  {
+    v8::Context::Scope scope(context_b);
+    v8::Local<v8::Object> fake_chrome = v8::Object::New(isolate());
+    EXPECT_EQ(context_b, fake_chrome->CreationContext());
+    context_b->Global()
+        ->Set(context_b, gin::StringToSymbol(isolate(), "chrome"), fake_chrome)
+        .ToChecked();
+  }
+  // When the chrome object is created in the same context (context_b), that
+  // object will be used.
+  check_runtime(true);
+
+  {
+    v8::Context::Scope scope(context_b);
+    v8::Local<v8::Boolean> fake_chrome = v8::Boolean::New(isolate(), true);
+    context_b->Global()
+        ->Set(context_b, gin::StringToSymbol(isolate(), "chrome"), fake_chrome)
+        .ToChecked();
+  }
+  // A non-object chrome shouldn't be used.
+  check_runtime(false);
+}
+
+// Tests updating a context's bindings after adding or removing permissions.
+TEST_F(NativeExtensionBindingsSystemUnittest, TestUpdatingPermissions) {
+  scoped_refptr<Extension> extension =
+      CreateExtension("extension", ItemType::EXTENSION, {"idle"});
+  RegisterExtension(extension->id());
+
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = MainContext();
+  ScriptContext* script_context = CreateScriptContext(
+      context, extension.get(), Feature::BLESSED_EXTENSION_CONTEXT);
+  script_context->set_url(extension->url());
+  bindings_system()->UpdateBindingsForContext(script_context);
+
+  // To start, chrome.idle should be available.
+  v8::Local<v8::Value> initial_idle =
+      V8ValueFromScriptSource(context, "chrome.idle");
+  ASSERT_FALSE(initial_idle.IsEmpty());
+  EXPECT_TRUE(initial_idle->IsObject());
+
+  {
+    // chrome.power should not be defined.
+    v8::Local<v8::Value> power =
+        V8ValueFromScriptSource(context, "chrome.power");
+    ASSERT_FALSE(power.IsEmpty());
+    EXPECT_TRUE(power->IsUndefined());
+  }
+
+  // Remove all permissions (`idle`).
+  extension->permissions_data()->SetPermissions(
+      base::MakeUnique<PermissionSet>(), base::MakeUnique<PermissionSet>());
+
+  bindings_system()->UpdateBindingsForContext(script_context);
+  {
+    // TODO(devlin): Neither the native nor JS bindings systems clear the
+    // property on the chrome object when an API is no longer available. This
+    // seems unexpected, but warrants further investigation before changing
+    // behavior. It can be complicated by the fact that chrome.idle may not be
+    // the same chrome.idle the system instantiated, or may have additional
+    // properties.
+    // v8::Local<v8::Value> idle =
+    //     V8ValueFromScriptSource(context, "chrome.idle");
+    // ASSERT_FALSE(idle.IsEmpty());
+    // EXPECT_TRUE(idle->IsUndefined());
+
+    // chrome.power should still be undefined.
+    v8::Local<v8::Value> power =
+        V8ValueFromScriptSource(context, "chrome.power");
+    ASSERT_FALSE(power.IsEmpty());
+    EXPECT_TRUE(power->IsUndefined());
+  }
+
+  v8::Local<v8::Function> run_idle = FunctionFromString(
+      context, "(function(idle) { idle.queryState(30, function() {}); })");
+  {
+    // Trying to run a chrome.idle function should fail.
+    v8::Local<v8::Value> args[] = {initial_idle};
+    RunFunctionAndExpectError(
+        run_idle, context, arraysize(args), args,
+        "Uncaught Error: 'idle.queryState' is not available in this context.");
+    EXPECT_TRUE(last_params().name.empty());
+  }
+
+  {
+    // Add back the `idle` permission, and also add `power`.
+    APIPermissionSet apis;
+    apis.insert(APIPermission::kPower);
+    apis.insert(APIPermission::kIdle);
+    extension->permissions_data()->SetPermissions(
+        base::MakeUnique<PermissionSet>(apis, ManifestPermissionSet(),
+                                        URLPatternSet(), URLPatternSet()),
+        base::MakeUnique<PermissionSet>());
+    bindings_system()->UpdateBindingsForContext(script_context);
+  }
+
+  {
+    // Both chrome.idle and chrome.power should be defined.
+    v8::Local<v8::Value> idle = V8ValueFromScriptSource(context, "chrome.idle");
+    ASSERT_FALSE(idle.IsEmpty());
+    EXPECT_TRUE(idle->IsObject());
+
+    v8::Local<v8::Value> power =
+        V8ValueFromScriptSource(context, "chrome.power");
+    ASSERT_FALSE(power.IsEmpty());
+    EXPECT_TRUE(power->IsObject());
+  }
+
+  {
+    // Trying to run a chrome.idle function should now succeed.
+    v8::Local<v8::Value> args[] = {initial_idle};
+    RunFunction(run_idle, context, arraysize(args), args);
+    EXPECT_EQ("idle.queryState", last_params().name);
+  }
 }
 
 }  // namespace extensions

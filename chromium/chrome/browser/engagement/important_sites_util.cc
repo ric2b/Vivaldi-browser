@@ -32,10 +32,12 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "third_party/WebKit/public/platform/site_engagement.mojom.h"
 #include "url/gurl.h"
+#include "url/url_util.h"
 
 namespace {
 using bookmarks::BookmarkModel;
 using ImportantDomainInfo = ImportantSitesUtil::ImportantDomainInfo;
+using ImportantReason = ImportantSitesUtil::ImportantReason;
 
 // Note: These values are stored on both the per-site content settings
 // dictionary and the dialog preference dictionary.
@@ -50,16 +52,6 @@ static const int kTimesIgnoredForBlacklist = 3;
 // <= kMaxBookmarks, then we just use those bookmarks. Otherwise we filter all
 // bookmarks on site engagement > 0, sort, and trim to kMaxBookmarks.
 static const int kMaxBookmarks = 5;
-
-// Do not change the values here, as they are used for UMA histograms.
-enum ImportantReason {
-  ENGAGEMENT = 0,
-  DURABLE = 1,
-  BOOKMARKS = 2,
-  HOME_SCREEN = 3,
-  NOTIFICATIONS = 4,
-  REASON_BOUNDARY
-};
 
 // We need this to be a macro, as the histogram macros cache their pointers
 // after the first call, so when we change the uma name we check fail if we're
@@ -141,15 +133,6 @@ CrossedReason GetCrossedReasonFromBitfield(int32_t reason_bitfield) {
   return CROSSED_REASON_UNKNOWN;
 }
 
-std::string GetRegisterableDomainOrIP(const GURL& url) {
-  std::string registerable_domain =
-      net::registry_controlled_domains::GetDomainAndRegistry(
-          url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
-  if (registerable_domain.empty() && url.HostIsIPAddress())
-    registerable_domain = url.host();
-  return registerable_domain;
-}
-
 void MaybePopulateImportantInfoForReason(
     const GURL& origin,
     std::set<GURL>* visited_origins,
@@ -157,7 +140,8 @@ void MaybePopulateImportantInfoForReason(
     base::hash_map<std::string, ImportantDomainInfo>* output) {
   if (!origin.is_valid() || !visited_origins->insert(origin).second)
     return;
-  std::string registerable_domain = GetRegisterableDomainOrIP(origin);
+  std::string registerable_domain =
+      ImportantSitesUtil::GetRegisterableDomainOrIP(origin);
   ImportantDomainInfo& info = (*output)[registerable_domain];
   info.reason_bitfield |= 1 << reason;
   if (info.example_origin.is_empty()) {
@@ -254,7 +238,8 @@ void PopulateInfoMapWithSiteEngagement(
       continue;
     }
     std::string registerable_domain =
-        GetRegisterableDomainOrIP(url_engagement_pair.first);
+        ImportantSitesUtil::GetRegisterableDomainOrIP(
+            url_engagement_pair.first);
     ImportantDomainInfo& info = (*output)[registerable_domain];
     if (url_engagement_pair.second > info.engagement_score) {
       info.registerable_domain = registerable_domain;
@@ -355,6 +340,20 @@ void PopulateInfoMapWithHomeScreen(
 }
 
 }  // namespace
+
+std::string ImportantSitesUtil::GetRegisterableDomainOrIP(const GURL& url) {
+  return GetRegisterableDomainOrIPFromHost(url.host_piece());
+}
+
+std::string ImportantSitesUtil::GetRegisterableDomainOrIPFromHost(
+    base::StringPiece host) {
+  std::string registerable_domain =
+      net::registry_controlled_domains::GetDomainAndRegistry(
+          host, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+  if (registerable_domain.empty() && url::HostIsIPAddress(host))
+    registerable_domain = std::string(host);
+  return registerable_domain;
+}
 
 bool ImportantSitesUtil::IsDialogDisabled(Profile* profile) {
   PrefService* service = profile->GetPrefs();

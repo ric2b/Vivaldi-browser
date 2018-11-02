@@ -152,16 +152,16 @@ ObjectUI.ObjectPropertiesSection = class extends UI.TreeOutlineInShadow {
       addElements('class', textAfterPrefix, className);
     } else if (isAsync) {
       textAfterPrefix = text.substring('async function'.length);
-      addElements('async function', textAfterPrefix, nameAndArguments(textAfterPrefix));
+      addElements('async \u0192', textAfterPrefix, nameAndArguments(textAfterPrefix));
     } else if (isGenerator) {
       textAfterPrefix = text.substring('function*'.length);
-      addElements('function*', textAfterPrefix, nameAndArguments(textAfterPrefix));
+      addElements('\u0192*', textAfterPrefix, nameAndArguments(textAfterPrefix));
     } else if (isGeneratorShorthand) {
       textAfterPrefix = text.substring('*'.length);
-      addElements('function*', textAfterPrefix, nameAndArguments(textAfterPrefix));
+      addElements('\u0192*', textAfterPrefix, nameAndArguments(textAfterPrefix));
     } else if (isBasic) {
       textAfterPrefix = text.substring('function'.length);
-      addElements('function', textAfterPrefix, nameAndArguments(textAfterPrefix));
+      addElements('\u0192', textAfterPrefix, nameAndArguments(textAfterPrefix));
     } else if (isArrow) {
       const maxArrowFunctionCharacterLength = 60;
       var abbreviation = text;
@@ -171,7 +171,7 @@ ObjectUI.ObjectPropertiesSection = class extends UI.TreeOutlineInShadow {
         abbreviation = text.substring(0, firstArrowIndex + 2) + ' {\u2026}';
       addElements('', text, abbreviation);
     } else {
-      addElements('function', text, nameAndArguments(text));
+      addElements('\u0192', text, nameAndArguments(text));
     }
     valueElement.title = description || '';
     return valueElement;
@@ -306,8 +306,8 @@ ObjectUI.ObjectPropertiesSection = class extends UI.TreeOutlineInShadow {
         Common.Revealer.reveal(value);
         event.consume(true);
       }, false);
-      valueElement.addEventListener('mousemove', () => SDK.DOMModel.highlightObjectAsDOMNode(value), false);
-      valueElement.addEventListener('mouseleave', () => SDK.DOMModel.hideDOMNodeHighlight(), false);
+      valueElement.addEventListener('mousemove', () => SDK.OverlayModel.highlightObjectAsDOMNode(value), false);
+      valueElement.addEventListener('mouseleave', () => SDK.OverlayModel.hideDOMNodeHighlight(), false);
       return valueElement;
     }
 
@@ -738,7 +738,10 @@ ObjectUI.ObjectPropertyTreeElement = class extends UI.TreeElement {
       return null;
 
     var valueElement = createElementWithClass('span', 'value');
-    valueElement.setTextContentTruncatedIfNeeded(value.description || '');
+    if (value.description === 'Object')
+      valueElement.textContent = '';
+    else
+      valueElement.setTextContentTruncatedIfNeeded(value.description || '');
     valueElement.classList.add('object-value-' + (value.subtype || value.type));
     valueElement.title = value.description || '';
     return valueElement;
@@ -888,7 +891,7 @@ ObjectUI.ObjectPropertyTreeElement = class extends UI.TreeElement {
    */
   _applyExpression(expression) {
     var property = SDK.RemoteObject.toCallArgument(this.property.symbol || this.property.name);
-    expression = expression.trim();
+    expression = SDK.RuntimeModel.wrapObjectLiteralExpressionIfNeeded(expression.trim());
     if (expression)
       this.property.parentObject.setPropertyValue(property, expression, callback.bind(this));
     else

@@ -36,7 +36,6 @@
 #include "components/sessions/core/session_id.h"
 #include "components/toolbar/toolbar_model.h"
 #include "components/translate/content/browser/content_translate_driver.h"
-#include "components/zoom/zoom_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/page_navigator.h"
@@ -53,6 +52,10 @@
 #if !defined(OS_CHROMEOS)
 #include "chrome/browser/ui/signin_view_controller.h"
 #endif
+
+#if !defined(OS_ANDROID)
+#include "components/zoom/zoom_observer.h"
+#endif  // !defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/extension_registry_observer.h"
@@ -110,7 +113,9 @@ class Browser : public TabStripModelObserver,
                 public CoreTabHelperDelegate,
                 public ChromeWebModalDialogManagerDelegate,
                 public BookmarkTabHelperDelegate,
+#if !defined(OS_ANDROID)
                 public zoom::ZoomObserver,
+#endif  // !defined(OS_ANDROID)
                 public content::PageNavigator,
                 public content::NotificationObserver,
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -646,12 +651,15 @@ class Browser : public TabStripModelObserver,
       const GURL& target_url,
       const std::string& partition_id,
       content::SessionStorageNamespace* session_storage_namespace) override;
-  void WebContentsCreated(content::WebContents* source_contents,
-                          int opener_render_process_id,
-                          int opener_render_frame_id,
-                          const std::string& frame_name,
-                          const GURL& target_url,
-                          content::WebContents* new_contents) override;
+  void WebContentsCreated(
+      content::WebContents* source_contents,
+      int opener_render_process_id,
+      int opener_render_frame_id,
+      const std::string& frame_name,
+      const GURL& target_url,
+      content::WebContents* new_contents,
+      const base::Optional<content::WebContents::CreateParams>& create_params)
+      override;
   void RendererUnresponsive(
       content::WebContents* source,
       const content::WebContentsUnresponsiveState& unresponsive_state) override;
@@ -731,9 +739,11 @@ class Browser : public TabStripModelObserver,
   void URLStarredChanged(content::WebContents* web_contents,
                          bool starred) override;
 
+#if !defined(OS_ANDROID)
   // Overridden from ZoomObserver:
   void OnZoomChanged(
       const zoom::ZoomController::ZoomChangedEventData& data) override;
+#endif  // !defined(OS_ANDROID)
 
   // Overridden from SelectFileDialog::Listener:
   void FileSelected(const base::FilePath& path,
@@ -752,10 +762,9 @@ class Browser : public TabStripModelObserver,
   // Overridden from extensions::ExtensionRegistryObserver:
   void OnExtensionLoaded(content::BrowserContext* browser_context,
                          const extensions::Extension* extension) override;
-  void OnExtensionUnloaded(
-      content::BrowserContext* browser_context,
-      const extensions::Extension* extension,
-      extensions::UnloadedExtensionInfo::Reason reason) override;
+  void OnExtensionUnloaded(content::BrowserContext* browser_context,
+                           const extensions::Extension* extension,
+                           extensions::UnloadedExtensionReason reason) override;
 #endif
 
   // Overridden from translate::ContentTranslateDriver::Observer:

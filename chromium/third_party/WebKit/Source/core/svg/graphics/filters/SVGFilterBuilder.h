@@ -52,7 +52,7 @@ class SVGFilterGraphNodeMap final
   inline FilterEffectSet& EffectReferences(FilterEffect* effect) {
     // Only allowed for effects belongs to this builder.
     DCHECK(effect_references_.Contains(effect));
-    return effect_references_.Find(effect)->value;
+    return effect_references_.find(effect)->value;
   }
 
   // Required to change the attributes of a filter during an
@@ -88,7 +88,7 @@ class SVGFilterBuilder {
   FilterEffect* GetEffectById(const AtomicString& id) const;
   FilterEffect* LastEffect() const { return last_effect_.Get(); }
 
-  static ColorSpace ResolveColorSpace(EColorInterpolation);
+  static InterpolationSpace ResolveInterpolationSpace(EColorInterpolation);
 
  private:
   void Add(const AtomicString& id, FilterEffect*);

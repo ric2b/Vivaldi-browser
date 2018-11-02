@@ -25,7 +25,7 @@ class RankerModel;
 }  // namespace chrome_intelligence
 
 namespace ukm {
-class UkmService;
+class UkmRecorder;
 }  // namespace ukm
 
 namespace metrics {
@@ -34,13 +34,11 @@ class TranslateEventProto;
 
 namespace translate {
 
-class TranslatePrefs;
-
 // Features used to enable ranker query, enforcement and logging. Note that
 // enabling enforcement implies (forces) enabling queries.
 extern const base::Feature kTranslateRankerQuery;
 extern const base::Feature kTranslateRankerEnforcement;
-extern const base::Feature kTranslateRankerLogging;
+extern const base::Feature kTranslateRankerDecisionOverride;
 
 struct TranslateRankerFeatures {
   TranslateRankerFeatures();
@@ -53,10 +51,7 @@ struct TranslateRankerFeatures {
                           const std::string& cntry,
                           const std::string& locale);
 
-  TranslateRankerFeatures(const TranslatePrefs& prefs,
-                          const std::string& src,
-                          const std::string& dst,
-                          const std::string& locale);
+  TranslateRankerFeatures(const metrics::TranslateEventProto& tep);
 
   ~TranslateRankerFeatures();
 
@@ -84,7 +79,7 @@ class TranslateRankerImpl : public TranslateRanker {
  public:
   TranslateRankerImpl(const base::FilePath& model_path,
                       const GURL& model_url,
-                      ukm::UkmService* ukm_service);
+                      ukm::UkmRecorder* ukm_recorder);
   ~TranslateRankerImpl() override;
 
   // Get the file path of the translate ranker model, by default with a fixed
@@ -95,27 +90,30 @@ class TranslateRankerImpl : public TranslateRanker {
   // from Finch.
   static GURL GetModelURL();
 
-  // Over-ride the default enabled/disabled state of translate event logging.
+  // Override the default enabled/disabled state of translate event logging.
   void EnableLogging(bool value);
 
   // TranslateRanker...
-  bool IsLoggingEnabled() override;
-  bool IsQueryEnabled() override;
-  bool IsEnforcementEnabled() override;
-  int GetModelVersion() const override;
-  bool ShouldOfferTranslation(const TranslatePrefs& translate_prefs,
-                              const std::string& src_lang,
-                              const std::string& dst_lang) override;
-  void AddTranslateEvent(const metrics::TranslateEventProto& translate_event,
-                         const GURL& url) override;
+  uint32_t GetModelVersion() const override;
+  bool ShouldOfferTranslation(
+      metrics::TranslateEventProto* translate_event) override;
   void FlushTranslateEvents(
       std::vector<metrics::TranslateEventProto>* events) override;
+  void RecordTranslateEvent(
+      int event_type,
+      const GURL& url,
+      metrics::TranslateEventProto* translate_event) override;
+  bool ShouldOverrideDecision(
+      int event_type,
+      const GURL& url,
+      metrics::TranslateEventProto* translate_event) override;
 
   void OnModelAvailable(
       std::unique_ptr<chrome_intelligence::RankerModel> model);
 
-  // Calculate the score given to |features| by the |model|.
-  double CalculateScore(const TranslateRankerFeatures& features);
+  // Get the model decision on whether we should show the translate
+  // UI or not given |translate_event|.
+  bool GetModelDecision(const metrics::TranslateEventProto& translate_event);
 
   // Check if the ModelLoader has been initialized. Used to test ModelLoader
   // logic.
@@ -125,8 +123,12 @@ class TranslateRankerImpl : public TranslateRanker {
   void SendEventToUKM(const metrics::TranslateEventProto& translate_event,
                       const GURL& url);
 
+  // Caches the translate event.
+  void AddTranslateEvent(const metrics::TranslateEventProto& translate_event,
+                         const GURL& url);
+
   // Used to log URL-keyed metrics. This pointer will outlive |this|.
-  ukm::UkmService* ukm_service_;
+  ukm::UkmRecorder* ukm_recorder_;
 
   // Used to sanity check the threading of this ranker.
   base::SequenceChecker sequence_checker_;
@@ -146,6 +148,12 @@ class TranslateRankerImpl : public TranslateRanker {
   // Tracks whether or not translate ranker enforcement is enabled. Note that
   // that also enables the code paths for translate ranker querying.
   bool is_enforcement_enabled_ = true;
+
+  // Tracks whether or not translate ranker decision override is enabled. This
+  // will override suppression heuristics and follow ranker's decision. Note
+  // that that also enables the code paths for translate ranker querying and
+  // enforcement.
+  bool is_decision_override_enabled_ = true;
 
   // Saved cache of translate event protos.
   std::vector<metrics::TranslateEventProto> event_cache_;

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/history/history_tab_helper.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_observer.h"
 #include "chrome/browser/metrics/renderer_uptime_web_contents_observer.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
@@ -29,11 +31,12 @@
 #include "chrome/browser/page_load_metrics/page_load_metrics_initialize.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
-#include "chrome/browser/predictors/resource_prefetch_predictor_factory.h"
+#include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor_tab_helper.h"
 #include "chrome/browser/prerender/prerender_tab_helper.h"
 #include "chrome/browser/previews/previews_infobar_tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/resource_coordinator/resource_coordinator_web_contents_observer.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
@@ -76,6 +79,12 @@
 #include "chrome/browser/android/offline_pages/recent_tab_helper.h"
 #include "chrome/browser/android/search_geolocation/search_geolocation_disclosure_tab_helper.h"
 #include "chrome/browser/android/voice_search_tab_helper.h"
+
+#include "device/vr/features/features.h"  // nogncheck
+#if BUILDFLAG(ENABLE_VR)
+#include "chrome/browser/android/vr_shell/vr_tab_helper.h"
+#endif  // BUILDFLAG(ENABLE_VR)
+
 #include "chrome/browser/android/webapps/single_tab_mode_tab_helper.h"
 #include "chrome/browser/ui/android/context_menu_helper.h"
 #include "chrome/browser/ui/android/view_android_helper.h"
@@ -133,7 +142,9 @@ const char kTabContentsAttachedTabHelpersUserDataKey[] =
 }  // namespace
 
 // static
-void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
+void TabHelpers::AttachTabHelpers(
+    WebContents* web_contents,
+    const base::Optional<WebContents::CreateParams>& create_params) {
   // If already adopted, nothing to be done.
   base::SupportsUserData::Data* adoption_tag =
       web_contents->GetUserData(&kTabContentsAttachedTabHelpersUserDataKey);
@@ -142,7 +153,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
 
   // Mark as adopted.
   web_contents->SetUserData(&kTabContentsAttachedTabHelpersUserDataKey,
-                            new base::SupportsUserData::Data());
+                            base::MakeUnique<base::SupportsUserData::Data>());
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Set the view type.
@@ -177,6 +188,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
       web_contents,
       autofill::ChromeAutofillClient::FromWebContents(web_contents));
+  ChromeSubresourceFilterClient::CreateForWebContents(web_contents);
   if (!vivaldi::IsVivaldiRunning()) {
   ChromeTranslateClient::CreateForWebContents(web_contents);
   }
@@ -198,11 +210,10 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
     MixedContentSettingsTabHelper::CreateForWebContents(web_contents);
   NavigationCorrectionTabObserver::CreateForWebContents(web_contents);
   NavigationMetricsRecorder::CreateForWebContents(web_contents);
-
   if (!vivaldi::IsVivaldiRunning()) {
     // NOTE(pettern@vivald.com): Disable due to VB-11435, consider enabling
     // it when the page no longer fire OnLoad when attached.
-  chrome::InitializePageLoadMetricsForWebContents(web_contents);
+  chrome::InitializePageLoadMetricsForWebContents(web_contents, create_params);
   }
   PermissionRequestManager::CreateForWebContents(web_contents);
   PopupBlockerTabHelper::CreateForWebContents(web_contents);
@@ -218,10 +229,6 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   SecurityStateTabHelper::CreateForWebContents(web_contents);
   if (SiteEngagementService::IsEnabled())
     SiteEngagementService::Helper::CreateForWebContents(web_contents);
-  std::unique_ptr<ChromeSubresourceFilterClient> subresource_filter_client(
-      new ChromeSubresourceFilterClient(web_contents));
-  subresource_filter::ContentSubresourceFilterDriverFactory::
-      CreateForWebContents(web_contents, std::move(subresource_filter_client));
   sync_sessions::SyncSessionsRouterTabHelper::CreateForWebContents(
       web_contents,
       sync_sessions::SyncSessionsWebContentsRouterFactory::GetForProfile(
@@ -247,6 +254,11 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   SingleTabModeTabHelper::CreateForWebContents(web_contents);
   ViewAndroidHelper::CreateForWebContents(web_contents);
   VoiceSearchTabHelper::CreateForWebContents(web_contents);
+
+#if BUILDFLAG(ENABLE_VR)
+  vr_shell::VrTabHelper::CreateForWebContents(web_contents);
+#endif
+
 #else
   BookmarkTabHelper::CreateForWebContents(web_contents);
   extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
@@ -310,12 +322,18 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
         web_contents);
   }
 
-  if (predictors::ResourcePrefetchPredictorFactory::GetForProfile(
-      web_contents->GetBrowserContext())) {
+  if (predictors::LoadingPredictorFactory::GetForProfile(
+          Profile::FromBrowserContext(web_contents->GetBrowserContext()))) {
     predictors::ResourcePrefetchPredictorTabHelper::CreateForWebContents(
         web_contents);
   }
 
   if (tracing::NavigationTracingObserver::IsEnabled())
     tracing::NavigationTracingObserver::CreateForWebContents(web_contents);
+
+  if (MediaEngagementService::IsEnabled())
+    MediaEngagementService::CreateWebContentsObserver(web_contents);
+
+  if (ResourceCoordinatorWebContentsObserver::IsEnabled())
+    ResourceCoordinatorWebContentsObserver::CreateForWebContents(web_contents);
 }

@@ -5,13 +5,14 @@
 #include "modules/mediasession/MediaMetadata.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ToV8ForCore.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "modules/mediasession/MediaImage.h"
 #include "modules/mediasession/MediaMetadataInit.h"
 #include "modules/mediasession/MediaSession.h"
+#include "platform/bindings/ScriptState.h"
 
 namespace blink {
 
@@ -117,7 +118,7 @@ void MediaMetadata::SetArtworkInternal(ScriptState* script_state,
   }
 
   DCHECK(!exception_state.HadException());
-  artwork_.Swap(processed_artwork);
+  artwork_.swap(processed_artwork);
 }
 
 DEFINE_TRACE(MediaMetadata) {

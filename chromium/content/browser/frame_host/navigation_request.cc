@@ -28,6 +28,7 @@
 #include "content/common/appcache_interfaces.h"
 #include "content/common/resource_request_body_impl.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_controller.h"
@@ -199,12 +200,23 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
     PreviewsState previews_state,
     bool is_same_document_history_load,
     bool is_history_navigation_in_new_child,
+    const scoped_refptr<ResourceRequestBodyImpl>& post_body,
     const base::TimeTicks& navigation_start,
     NavigationControllerImpl* controller) {
-  // Fill POST data in the request body.
+  // A form submission happens either because the navigation is a
+  // renderer-initiated form submission that took the OpenURL path or a
+  // back/forward/reload navigation the does a form resubmission.
   scoped_refptr<ResourceRequestBodyImpl> request_body;
-  if (frame_entry.method() == "POST")
+  if (post_body) {
+    // Standard form submission from the renderer.
+    request_body = post_body;
+  } else if (frame_entry.method() == "POST") {
+    // Form resubmission during a back/forward/reload navigation.
     request_body = frame_entry.GetPostData();
+  }
+  // TODO(arthursonzogni): Form submission with the "GET" method is possible.
+  // This is not currently handled here.
+  bool is_form_submission = !!request_body;
 
   base::Optional<url::Origin> initiator =
       frame_tree_node->IsMainFrame()
@@ -227,11 +239,7 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
                             false,  // skip_service_worker
                             REQUEST_CONTEXT_TYPE_LOCATION,
                             blink::WebMixedContentContextType::kBlockable,
-                            // TODO(arthursonzogni): It can be true for form
-                            // resubmission when the user reloads the page. This
-                            // needs to be fixed.
-                            false,  // is_form_submission
-                            initiator),
+                            is_form_submission, initiator),
       entry.ConstructRequestNavigationParams(
           frame_entry, common_params.url, common_params.method,
           is_history_navigation_in_new_child,
@@ -250,10 +258,12 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
 // static
 std::unique_ptr<NavigationRequest> NavigationRequest::CreateRendererInitiated(
     FrameTreeNode* frame_tree_node,
+    NavigationEntryImpl* entry,
     const CommonNavigationParams& common_params,
     const BeginNavigationParams& begin_params,
     int current_history_list_offset,
-    int current_history_list_length) {
+    int current_history_list_length,
+    bool override_user_agent) {
   // Only normal navigations to a different document or reloads are expected.
   // - Renderer-initiated fragment-navigations never take place in the browser,
   //   even with PlzNavigate.
@@ -265,13 +275,11 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateRendererInitiated(
          common_params.navigation_type ==
              FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT);
 
-  // TODO(clamy): See how we should handle override of the user agent when the
-  // navigation may start in a renderer and commit in another one.
   // TODO(clamy): See if the navigation start time should be measured in the
   // renderer and sent to the browser instead of being measured here.
   // TODO(clamy): The pending history list offset should be properly set.
   RequestNavigationParams request_params(
-      false,                // is_overriding_user_agent
+      override_user_agent,
       std::vector<GURL>(),  // redirects
       common_params.url, common_params.method,
       false,                          // can_load_local_resources
@@ -290,7 +298,7 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateRendererInitiated(
       frame_tree_node, common_params, begin_params, request_params,
       false,  // browser_initiated
       false,  // may_transfer
-      nullptr, nullptr));
+      nullptr, entry));
   return navigation_request;
 }
 
@@ -314,8 +322,13 @@ NavigationRequest::NavigationRequest(
       bindings_(NavigationEntryImpl::kInvalidBindings),
       response_should_be_rendered_(true),
       associated_site_instance_type_(AssociatedSiteInstanceType::NONE),
-      may_transfer_(may_transfer) {
+      may_transfer_(may_transfer),
+      weak_factory_(this) {
   DCHECK(!browser_initiated || (entry != nullptr && frame_entry != nullptr));
+  TRACE_EVENT_ASYNC_BEGIN2("navigation", "NavigationRequest", this,
+                           "frame_tree_node",
+                           frame_tree_node_->frame_tree_node_id(), "url",
+                           common_params_.url.possibly_invalid_spec());
 
   // Sanitize the referrer.
   common_params_.referrer =
@@ -344,8 +357,12 @@ NavigationRequest::NavigationRequest(
                                 common_params_.method == "POST");
 
   // Add necessary headers that may not be present in the BeginNavigationParams.
+  if (entry)
+    nav_entry_id_ = entry->GetUniqueID();
+
   std::string user_agent_override;
-  if (entry && entry->GetIsOverridingUserAgent()) {
+  if (request_params.is_overriding_user_agent ||
+      (entry && entry->GetIsOverridingUserAgent())) {
     user_agent_override =
         frame_tree_node_->navigator()->GetDelegate()->GetUserAgentOverride();
   }
@@ -360,12 +377,17 @@ NavigationRequest::NavigationRequest(
 }
 
 NavigationRequest::~NavigationRequest() {
+  TRACE_EVENT_ASYNC_END0("navigation", "NavigationRequest", this);
 }
 
 void NavigationRequest::BeginNavigation() {
   DCHECK(!loader_);
   DCHECK(state_ == NOT_STARTED || state_ == WAITING_FOR_RENDERER_RESPONSE);
+  TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationRequest", this,
+                               "BeginNavigation");
   state_ = STARTED;
+  CreateNavigationHandle();
+
   RenderFrameDevToolsAgentHost::OnBeforeNavigation(navigation_handle_.get());
 
   if (ShouldMakeNetworkRequestForURL(common_params_.url) &&
@@ -390,6 +412,8 @@ void NavigationRequest::BeginNavigation() {
 
   // There is no need to make a network request for this navigation, so commit
   // it immediately.
+  TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationRequest", this,
+                               "ResponseStarted");
   state_ = RESPONSE_STARTED;
 
   // Select an appropriate RenderFrameHost.
@@ -404,7 +428,14 @@ void NavigationRequest::BeginNavigation() {
   CommitNavigation();
 }
 
-void NavigationRequest::CreateNavigationHandle(int pending_nav_entry_id) {
+void NavigationRequest::SetWaitingForRendererResponse() {
+  TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationRequest", this,
+                               "WaitingForRendererResponse");
+  DCHECK(state_ == NOT_STARTED);
+  state_ = WAITING_FOR_RENDERER_RESPONSE;
+}
+
+void NavigationRequest::CreateNavigationHandle() {
   DCHECK_EQ(frame_tree_node_->navigation_request(), this);
   FrameTreeNode* frame_tree_node = frame_tree_node_;
 
@@ -419,7 +450,7 @@ void NavigationRequest::CreateNavigationHandle(int pending_nav_entry_id) {
                                    FrameMsg_Navigate_Type::IsSameDocument(
                                        common_params_.navigation_type),
                                    common_params_.navigation_start,
-                                   pending_nav_entry_id,
+                                   nav_entry_id_,
                                    false,  // started_in_context_menu
                                    common_params_.should_check_main_world_csp,
                                    begin_params_.is_form_submission);
@@ -488,6 +519,7 @@ void NavigationRequest::OnRequestRedirected(
     // FilterURL sets the URL to about:blank if the CSP checks prevent the
     // renderer from accessing it.
     if ((url == url::kAboutBlankURL) && (url != common_params_.url)) {
+      navigation_handle_->set_net_error_code(net::ERR_ABORTED);
       frame_tree_node_->ResetNavigationRequest(false, true);
       return;
     }
@@ -516,6 +548,8 @@ void NavigationRequest::OnResponseStarted(
     bool is_stream) {
   DCHECK(state_ == STARTED);
   DCHECK(response);
+  TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationRequest", this,
+                               "OnResponseStarted");
   state_ = RESPONSE_STARTED;
 
   // Check if the response should be sent to a renderer.
@@ -570,6 +604,7 @@ void NavigationRequest::OnResponseStarted(
     // TODO(clamy): Rename ShouldTransferNavigation once PlzNavigate ships.
     if (!frame_tree_node_->navigator()->GetDelegate()->ShouldTransferNavigation(
             frame_tree_node_->IsMainFrame())) {
+      navigation_handle_->set_net_error_code(net::ERR_ABORTED);
       frame_tree_node_->ResetNavigationRequest(false, true);
       return;
     }
@@ -596,6 +631,8 @@ void NavigationRequest::OnResponseStarted(
 void NavigationRequest::OnRequestFailed(bool has_stale_copy_in_cache,
                                         int net_error) {
   DCHECK(state_ == STARTED || state_ == RESPONSE_STARTED);
+  TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationRequest", this,
+                               "OnRequestFailed", "error", net_error);
   state_ = FAILED;
   navigation_handle_->set_net_error_code(static_cast<net::Error>(net_error));
 
@@ -604,8 +641,11 @@ void NavigationRequest::OnRequestFailed(bool has_stale_copy_in_cache,
   // renderer, however do not discard the pending entry so that the URL bar
   // shows them correctly.
   if (!IsRendererDebugURL(common_params_.url)) {
+    int expected_pending_entry_id =
+        navigation_handle_.get() ? navigation_handle_->pending_nav_entry_id()
+                                 : nav_entry_id_;
     frame_tree_node_->navigator()->DiscardPendingEntryIfNeeded(
-        navigation_handle_.get());
+        expected_pending_entry_id);
   }
 
   // If the request was canceled by the user do not show an error page.
@@ -614,18 +654,23 @@ void NavigationRequest::OnRequestFailed(bool has_stale_copy_in_cache,
     return;
   }
 
-  // There are two types of error pages that need to be handled differently.
-  // * Error pages resulting from blocking the request, because the original
-  //   document wasn't even allowed to make the request. In such case,
-  //   the error pages should be committed in the process of the original
-  //   document, to avoid creating a process for the destination.
-  // * Error pages resulting from either network outage (no network, DNS
-  //   error, etc) or similar cases, where the user can reasonably expect that
-  //   a reload at a later point in time can be successful. Such error pages
-  //   do belong to the process that will host the destination URL, as a
-  //   reload will end up committing in that process anyway.
+  // Decide whether to leave the error page in the original process.
+  // * If this was a renderer-initiated navigation, and the request is blocked
+  //   because the initiating document wasn't allowed to make the request,
+  //   commit the error in the existing process. This is a strategy to to avoid
+  //   creating a process for the destination, which may belong to an origin
+  //   with a higher privilege level.
+  // * Error pages resulting from errors like network outage, no network, or DNS
+  //   error can reasonably expect that a reload at a later point in time would
+  //   work. These should be allowed to transfer away from the current process:
+  //   they do belong to whichever process that will host the destination URL,
+  //   as a reload will end up committing in that process anyway.
+  // * Error pages that arise during browser-initiated navigations to blocked
+  //   URLs should be allowed to transfer away from the current process, which
+  //   didn't request the navigation and may have a higher privilege level than
+  //   the blocked destination.
   RenderFrameHostImpl* render_frame_host = nullptr;
-  if (net_error == net::ERR_BLOCKED_BY_CLIENT) {
+  if (net_error == net::ERR_BLOCKED_BY_CLIENT && !browser_initiated()) {
     render_frame_host = frame_tree_node_->current_frame_host();
   } else {
     render_frame_host =
@@ -665,20 +710,26 @@ void NavigationRequest::OnStartChecksComplete(
 
   if (on_start_checks_complete_closure_)
     on_start_checks_complete_closure_.Run();
-
   // Abort the request if needed. This will destroy the NavigationRequest.
   if (result == NavigationThrottle::CANCEL_AND_IGNORE ||
-      result == NavigationThrottle::CANCEL) {
+      result == NavigationThrottle::CANCEL ||
+      result == NavigationThrottle::BLOCK_REQUEST ||
+      result == NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE) {
     // TODO(clamy): distinguish between CANCEL and CANCEL_AND_IGNORE.
-    OnRequestFailed(false, net::ERR_ABORTED);
+    int error_code = net::ERR_ABORTED;
+    if (result == NavigationThrottle::BLOCK_REQUEST ||
+        result == NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE) {
+      error_code = net::ERR_BLOCKED_BY_CLIENT;
+    }
 
-    // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
-    // destroyed the NavigationRequest.
-    return;
-  }
-
-  if (result == NavigationThrottle::BLOCK_REQUEST) {
-    OnRequestFailed(false, net::ERR_BLOCKED_BY_CLIENT);
+    // If the start checks completed synchronously, which could happen if there
+    // is no onbeforeunload handler or if a NavigationThrottle cancelled it,
+    // then this could cause reentrancy into NavigationController. So use a
+    // PostTask to avoid that.
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(&NavigationRequest::OnRequestFailed,
+                   weak_factory_.GetWeakPtr(), false, error_code));
 
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
@@ -694,6 +745,8 @@ void NavigationRequest::OnStartChecksComplete(
           ? frame_tree_node_->render_manager()->speculative_frame_host()
           : frame_tree_node_->current_frame_host();
   DCHECK(navigating_frame_host);
+
+  navigation_handle_->SetExpectedProcess(navigating_frame_host->GetProcess());
 
   BrowserContext* browser_context =
       frame_tree_node_->navigator()->GetController()->GetBrowserContext();
@@ -715,9 +768,7 @@ void NavigationRequest::OnStartChecksComplete(
   }
 
   if (IsSchemeSupportedForAppCache(common_params_.url)) {
-    RenderFrameHostImpl* render_frame_host =
-        frame_tree_node_->render_manager()->GetFrameHostForNavigation(*this);
-    if (render_frame_host->GetRenderViewHost()
+    if (navigating_frame_host->GetRenderViewHost()
             ->GetWebkitPreferences()
             .application_cache_enabled) {
       navigation_handle_->InitAppCacheHandle(
@@ -772,7 +823,7 @@ void NavigationRequest::OnRedirectChecksComplete(
   // Abort the request if needed. This will destroy the NavigationRequest.
   if (result == NavigationThrottle::CANCEL_AND_IGNORE ||
       result == NavigationThrottle::CANCEL) {
-    // TODO(clamy): distinguish between CANCEL and CANCEL_AND_IGNORE.
+    // TODO(clamy): distinguish between CANCEL and CANCEL_AND_IGNORE if needed.
     OnRequestFailed(false, net::ERR_ABORTED);
 
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
@@ -780,9 +831,9 @@ void NavigationRequest::OnRedirectChecksComplete(
     return;
   }
 
-  if (result == NavigationThrottle::BLOCK_REQUEST) {
+  if (result == NavigationThrottle::BLOCK_REQUEST ||
+      result == NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE) {
     OnRequestFailed(false, net::ERR_BLOCKED_BY_CLIENT);
-
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
     return;
@@ -794,6 +845,11 @@ void NavigationRequest::OnRedirectChecksComplete(
 void NavigationRequest::OnWillProcessResponseChecksComplete(
     NavigationThrottle::ThrottleCheckResult result) {
   DCHECK(result != NavigationThrottle::DEFER);
+
+  // If the NavigationThrottles allowed the navigation to continue, have the
+  // processing of the response resume in the network stack.
+  if (result == NavigationThrottle::PROCEED)
+    loader_->ProceedWithResponse();
 
   // Abort the request if needed. This includes requests that were blocked by
   // NavigationThrottles and requests that should not commit (e.g. downloads,
@@ -814,9 +870,6 @@ void NavigationRequest::OnWillProcessResponseChecksComplete(
     // destroyed the NavigationRequest.
     return;
   }
-
-  // Have the processing of the response resume in the network stack.
-  loader_->ProceedWithResponse();
 
   CommitNavigation();
 

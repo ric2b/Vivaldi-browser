@@ -10,11 +10,11 @@
 #include "core/html/ImageData.h"
 #include "modules/ModulesExport.h"
 #include "modules/canvas2d/CanvasGradient.h"
-#include "modules/canvas2d/CanvasPathMethods.h"
+#include "modules/canvas2d/CanvasPath.h"
 #include "modules/canvas2d/CanvasRenderingContext2DState.h"
 #include "modules/canvas2d/CanvasStyle.h"
+#include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/ColorBehavior.h"
-#include "platform/graphics/ExpensiveCanvasHeuristicParameters.h"
 #include "platform/graphics/paint/PaintCanvas.h"
 #include "third_party/skia/include/effects/SkComposeImageFilter.h"
 
@@ -31,7 +31,7 @@ typedef CSSImageValueOrHTMLImageElementOrSVGImageElementOrHTMLVideoElementOrHTML
     CanvasImageSourceUnion;
 
 class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
-                                              public CanvasPathMethods {
+                                              public CanvasPath {
   WTF_MAKE_NONCOPYABLE(BaseRenderingContext2D);
 
  public:
@@ -187,6 +187,20 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   ImageData* createImageData(ImageData*, ExceptionState&) const;
   ImageData* createImageData(int width, int height, ExceptionState&) const;
+  ImageData* createImageData(unsigned,
+                             unsigned,
+                             ImageDataColorSettings&,
+                             ExceptionState&) const;
+  ImageData* createImageData(ImageDataArray&,
+                             unsigned,
+                             unsigned,
+                             ExceptionState&) const;
+  ImageData* createImageData(ImageDataArray&,
+                             unsigned,
+                             unsigned,
+                             ImageDataColorSettings&,
+                             ExceptionState&) const;
+
   ImageData* getImageData(int sx, int sy, int sw, int sh, ExceptionState&);
   void putImageData(ImageData*, int dx, int dy, ExceptionState&);
   void putImageData(ImageData*,
@@ -237,6 +251,16 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   virtual ColorBehavior DrawImageColorBehavior() const = 0;
 
   virtual void WillDrawImage(CanvasImageSource*) const {}
+
+  virtual CanvasColorSpace ColorSpace() const {
+    return kLegacyCanvasColorSpace;
+  };
+  virtual String ColorSpaceAsString() const {
+    return kLegacyCanvasColorSpaceName;
+  }
+  virtual CanvasPixelFormat PixelFormat() const {
+    return kRGBA8CanvasPixelFormat;
+  }
 
   void RestoreMatrixClipStack(PaintCanvas*) const;
 
@@ -328,15 +352,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   HeapVector<Member<CanvasRenderingContext2DState>> state_stack_;
   AntiAliasingMode clip_antialiasing_;
 
-  void TrackDrawCall(DrawCallType,
-                     Path2D* path2d = nullptr,
-                     int width = 0,
-                     int height = 0);
-
   mutable UsageCounters usage_counters_;
-
-  float EstimateRenderingCost(
-      ExpensiveCanvasHeuristicParameters::RenderingModeCostIndex) const;
 
   virtual void NeedsFinalizeFrame(){};
 
@@ -372,6 +388,10 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   void ClearCanvas();
   bool RectContainsTransformedRect(const FloatRect&, const SkIRect&) const;
+
+  ImageDataColorSettings GetColorSettingsAsImageDataColorSettings() const;
+
+  bool color_management_enabled_;
 };
 
 template <typename DrawFunc, typename ContainsFunc>
@@ -428,7 +448,7 @@ void BaseRenderingContext2D::CompositedDraw(
     CanvasRenderingContext2DState::PaintType paint_type,
     CanvasRenderingContext2DState::ImageType image_type) {
   sk_sp<SkImageFilter> filter = StateGetFilter();
-  ASSERT(IsFullCanvasCompositeMode(GetState().GlobalComposite()) || filter);
+  DCHECK(IsFullCanvasCompositeMode(GetState().GlobalComposite()) || filter);
   SkMatrix ctm = c->getTotalMatrix();
   c->setMatrix(SkMatrix::I());
   PaintFlags composite_flags;
@@ -448,7 +468,7 @@ void BaseRenderingContext2D::CompositedDraw(
       c->setMatrix(ctm);
       draw_func(c, &foreground_flags);
     } else {
-      ASSERT(IsFullCanvasCompositeMode(GetState().GlobalComposite()));
+      DCHECK(IsFullCanvasCompositeMode(GetState().GlobalComposite()));
       c->saveLayer(nullptr, &composite_flags);
       shadow_flags.setBlendMode(SkBlendMode::kSrcOver);
       c->setMatrix(ctm);

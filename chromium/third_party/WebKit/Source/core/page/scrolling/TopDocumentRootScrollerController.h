@@ -25,7 +25,7 @@ class ViewportScrollCallback;
 // is, given all the iframes on a page and their individual root scrollers,
 // this class will determine which ultimate Element should be used as the root
 // scroller and ensures that Element is used to scroll browser controls and
-// provide overscroll effects.
+// provide overscroll effects. High level details are available in README.md.
 // TODO(bokan): This class is currently OOPIF unaware. crbug.com/642378.
 class CORE_EXPORT TopDocumentRootScrollerController
     : public GarbageCollected<TopDocumentRootScrollerController> {
@@ -57,13 +57,20 @@ class CORE_EXPORT TopDocumentRootScrollerController
   // Returns the GraphicsLayer for the global root scroller.
   GraphicsLayer* RootScrollerLayer() const;
 
+  // Returns the GraphicsLayer for the global root scroll container.
+  GraphicsLayer* RootContainerLayer() const;
+
   PaintLayer* RootScrollerPaintLayer() const;
 
-  // Returns the Element that's the global root scroller.
+  // Returns the Element that's the global root scroller.  See README.md for
+  // the difference between this and the root scroller types in
+  // RootScrollerController.
   Element* GlobalRootScroller() const;
 
   // Called when the root scroller in any frames on the page has changed.
   void DidChangeRootScroller();
+
+  void DidResizeViewport();
 
   // Returns the ScrollableArea associated with the globalRootScroller(). Note,
   // this isn't necessarily the PLSA belonging to the root scroller Element's

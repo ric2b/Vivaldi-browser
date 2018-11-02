@@ -48,13 +48,13 @@ class TestTaskRunner : public base::SingleThreadTaskRunner {
     task_ready_.Signal();
     return true;
   }
-  bool RunsTasksOnCurrentThread() const override {
+  bool RunsTasksInCurrentSequence() const override {
     return base::PlatformThread::CurrentRef() == thread_id_;
   }
 
   // Only quits when Quit() is called.
   void Run() {
-    DCHECK(RunsTasksOnCurrentThread());
+    DCHECK(RunsTasksInCurrentSequence());
     quit_called_ = false;
 
     while (true) {
@@ -77,13 +77,13 @@ class TestTaskRunner : public base::SingleThreadTaskRunner {
   }
 
   void Quit() {
-    DCHECK(RunsTasksOnCurrentThread());
+    DCHECK(RunsTasksInCurrentSequence());
     quit_called_ = true;
   }
 
   // Waits until one task is ready and runs it.
   void RunOneTask() {
-    DCHECK(RunsTasksOnCurrentThread());
+    DCHECK(RunsTasksInCurrentSequence());
 
     while (true) {
       {

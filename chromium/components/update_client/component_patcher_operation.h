@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/sequenced_task_runner.h"
 #include "components/update_client/component_patcher.h"
 #include "components/update_client/component_unpacker.h"
 
@@ -27,6 +28,7 @@ extern const char kInput[];
 extern const char kPatch[];
 
 class CrxInstaller;
+class OutOfProcessPatcher;
 enum class UnpackerError;
 
 class DeltaUpdateOp : public base::RefCountedThreadSafe<DeltaUpdateOp> {
@@ -126,24 +128,6 @@ class DeltaUpdateOpCreate : public DeltaUpdateOp {
   DISALLOW_COPY_AND_ASSIGN(DeltaUpdateOpCreate);
 };
 
-// An interface an embedder may fulfill to enable out-of-process patching.
-class OutOfProcessPatcher
-    : public base::RefCountedThreadSafe<OutOfProcessPatcher> {
- public:
-  virtual void Patch(
-      const std::string& operation,
-      scoped_refptr<base::SequencedTaskRunner> task_runner,
-      const base::FilePath& input_abs_path,
-      const base::FilePath& patch_abs_path,
-      const base::FilePath& output_abs_path,
-      base::Callback<void(int result)> callback) = 0;
-
- protected:
-  friend class base::RefCountedThreadSafe<OutOfProcessPatcher>;
-
-  virtual ~OutOfProcessPatcher() {}
-};
-
 // Both 'bsdiff' and 'courgette' operations take an existing file on disk,
 // and a bsdiff- or Courgette-format patch file provided in the delta update
 // package, and run bsdiff or Courgette to construct an output file in the
@@ -151,8 +135,9 @@ class OutOfProcessPatcher
 class DeltaUpdateOpPatch : public DeltaUpdateOp {
  public:
   // |out_of_process_patcher| may be NULL.
-  DeltaUpdateOpPatch(const std::string& operation,
-                     scoped_refptr<OutOfProcessPatcher> out_of_process_patcher);
+  DeltaUpdateOpPatch(
+      const std::string& operation,
+      const scoped_refptr<OutOfProcessPatcher>& out_of_process_patcher);
 
  private:
   ~DeltaUpdateOpPatch() override;
@@ -170,7 +155,7 @@ class DeltaUpdateOpPatch : public DeltaUpdateOp {
   void DonePatching(const ComponentPatcher::Callback& callback, int result);
 
   std::string operation_;
-  scoped_refptr<OutOfProcessPatcher> out_of_process_patcher_;
+  const scoped_refptr<OutOfProcessPatcher> out_of_process_patcher_;
   base::FilePath patch_abs_path_;
   base::FilePath input_abs_path_;
 

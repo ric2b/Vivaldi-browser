@@ -153,7 +153,6 @@ extern const char kWebKitMinimumFontSize[];
 extern const char kWebKitMinimumLogicalFontSize[];
 extern const char kWebKitJavascriptEnabled[];
 extern const char kWebKitWebSecurityEnabled[];
-extern const char kWebKitJavascriptCanOpenWindowsAutomatically[];
 extern const char kWebKitLoadsImagesAutomatically[];
 extern const char kWebKitPluginsEnabled[];
 extern const char kWebKitEncryptedMediaEnabled[];
@@ -179,7 +178,6 @@ extern const char kContextualSearchEnabled[];
 #endif  // defined(OS_ANDROID)
 #if defined(OS_MACOSX)
 extern const char kConfirmToQuitEnabled[];
-extern const char kHideFullscreenToolbar[];
 extern const char kShowFullscreenToolbar[];
 #endif
 extern const char kPromptForDownload[];
@@ -259,6 +257,7 @@ extern const char kDisplayRotationLock[];
 extern const char kEnableStylusTools[];
 extern const char kLaunchPaletteOnEjectEvent[];
 extern const char kNoteTakingAppId[];
+extern const char kNoteTakingAppEnabledOnLockScreen[];
 extern const char kSessionUserActivitySeen[];
 extern const char kSessionStartTime[];
 extern const char kSessionLengthLimit[];
@@ -315,6 +314,7 @@ extern const char kHatsSurveyCycleEndTimestamp[];
 extern const char kHatsDeviceIsSelected[];
 extern const char kQuickUnlockPinSalt[];
 extern const char kQuickUnlockPinSecret[];
+extern const char kQuickUnlockFingerprintRecord[];
 extern const char kEolStatus[];
 extern const char kEolNotificationDismissed[];
 extern const char kPinUnlockFeatureNotificationShown[];
@@ -325,6 +325,8 @@ extern const char kPinUnlockMinimumLength[];
 extern const char kPinUnlockMaximumLength[];
 extern const char kPinUnlockWeakPinsAllowed[];
 extern const char kEnableQuickUnlockFingerprint[];
+extern const char kInstantTetheringAllowed[];
+extern const char kInstantTetheringEnabled[];
 #endif  // defined(OS_CHROMEOS)
 extern const char kShowHomeButton[];
 extern const char kSpeechRecognitionFilterProfanities[];
@@ -377,12 +379,12 @@ extern const char kBackShortcutBubbleShownCount[];
 #if BUILDFLAG(ENABLE_PLUGINS)
 extern const char kContentSettingsPluginWhitelist[];
 #endif
+#if !defined(OS_ANDROID)
 extern const char kPartitionDefaultZoomLevel[];
 extern const char kPartitionPerHostZoomLevels[];
 
-#if !defined(OS_ANDROID)
 extern const char kPinnedTabs[];
-#endif
+#endif  // !defined(OS_ANDROID)
 
 extern const char kDisable3DAPIs[];
 extern const char kEnableDeprecatedWebPlatformFeatures[];
@@ -677,6 +679,7 @@ extern const char kOobeComplete[];
 extern const char kOobeScreenPending[];
 extern const char kOobeMdMode[];
 extern const char kOobeControllerDetected[];
+extern const char kOobeTimeOfLastUpdateCheckWithoutUpdate[];
 extern const char kCanShowOobeGoodiesPage[];
 extern const char kDeviceRegistered[];
 extern const char kEnrollmentRecoveryRequired[];
@@ -748,12 +751,10 @@ extern const char kResolveDeviceTimezoneByGeolocation[];
 extern const char kSystemTimezoneAutomaticDetectionPolicy[];
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(ENABLE_MEDIA_ROUTER)
 extern const char kEnableMediaRouter[];
 #if !defined(OS_ANDROID)
 extern const char kShowCastIconInToolbar[];
 #endif  // !defined(OS_ANDROID)
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 
 #if !defined(OS_ANDROID)
 extern const char kAttemptedToEnableAutoupdate[];
@@ -863,12 +864,10 @@ extern const char kClickedUpdateMenuItem[];
 extern const char kLatestVersionWhenClickedUpdateMenuItem[];
 #endif
 
-#if defined(ENABLE_MEDIA_ROUTER)
 extern const char kMediaRouterCloudServicesPrefSet[];
 extern const char kMediaRouterEnableCloudServices[];
 extern const char kMediaRouterFirstRunFlowAcknowledged[];
 extern const char kMediaRouterTabMirroringSources[];
-#endif
 
 extern const char kOriginTrialPublicKey[];
 extern const char kOriginTrialDisabledFeatures[];
@@ -889,7 +888,10 @@ extern const char kSearchGeolocationPreDisclosureMetricsRecorded[];
 extern const char kSearchGeolocationPostDisclosureMetricsRecorded[];
 #endif
 
-extern const char kGoogleDSEGeolocationSetting[];
+extern const char kDSEGeolocationSetting[];
+
+// Deprecated Google-specific version of the above.
+extern const char kGoogleDSEGeolocationSettingDeprecated[];
 
 extern const char kWebShareVisitedTargets[];
 

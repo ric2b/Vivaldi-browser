@@ -18,19 +18,18 @@
 #include "net/quic/core/crypto/quic_encrypter.h"
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_crypto_client_stream.h"
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_session.h"
+#include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/platform/api/quic_socket_address.h"
+#include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/failing_proof_source.h"
 #include "net/quic/test_tools/fake_proof_source.h"
 #include "net/quic/test_tools/quic_crypto_server_config_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
-#include "testing/gmock/include/gmock/gmock.h"
-#include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
 class QuicConnection;
@@ -57,7 +56,7 @@ namespace {
 const char kServerHostname[] = "test.example.com";
 const uint16_t kServerPort = 443;
 
-class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
+class QuicCryptoServerStreamTest : public QuicTestWithParam<bool> {
  public:
   QuicCryptoServerStreamTest()
       : QuicCryptoServerStreamTest(crypto_test_utils::ProofSourceForTesting()) {
@@ -106,11 +105,11 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
   }
 
   QuicCryptoServerStream* server_stream() {
-    return server_session_->GetCryptoStream();
+    return server_session_->GetMutableCryptoStream();
   }
 
   QuicCryptoClientStream* client_stream() {
-    return client_session_->GetCryptoStream();
+    return client_session_->GetMutableCryptoStream();
   }
 
   // Initializes a fake client, and all its associated state, for
@@ -155,8 +154,6 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
   }
 
  protected:
-  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
-
   // Every connection gets its own MockQuicConnectionHelper and
   // MockAlarmFactory, tracked separately from the server and client state so
   // their lifetimes persist through the whole test.
@@ -257,7 +254,8 @@ TEST_P(QuicCryptoServerStreamTest, StatelessRejectAfterCHLO) {
       client_state->GetNextServerDesignatedConnectionId();
   const QuicConnectionId expected_id =
       server_connection_->random_generator()->RandUint64();
-  EXPECT_EQ(expected_id, server_designated_connection_id);
+  EXPECT_EQ(GetPeerInMemoryConnectionId(expected_id),
+            server_designated_connection_id);
   EXPECT_FALSE(client_state->has_server_designated_connection_id());
   ASSERT_TRUE(client_state->IsComplete(QuicWallTime::FromUNIXSeconds(0)));
 }
@@ -284,7 +282,8 @@ TEST_P(QuicCryptoServerStreamTest, ConnectedAfterStatelessHandshake) {
       client_state->GetNextServerDesignatedConnectionId();
   const QuicConnectionId expected_id =
       server_connection_->random_generator()->RandUint64();
-  EXPECT_EQ(expected_id, server_designated_connection_id);
+  EXPECT_EQ(GetPeerInMemoryConnectionId(expected_id),
+            server_designated_connection_id);
   EXPECT_FALSE(client_state->has_server_designated_connection_id());
   ASSERT_TRUE(client_state->IsComplete(QuicWallTime::FromUNIXSeconds(0)));
 
@@ -334,6 +333,7 @@ TEST_P(QuicCryptoServerStreamTest, ZeroRTT) {
   // Do a first handshake in order to prime the client config with the server's
   // information.
   AdvanceHandshakeWithFakeClient();
+  EXPECT_FALSE(server_stream()->ZeroRttAttempted());
 
   // Now do another handshake, hopefully in 0-RTT.
   QUIC_LOG(INFO) << "Resetting for 0-RTT handshake attempt";
@@ -346,6 +346,7 @@ TEST_P(QuicCryptoServerStreamTest, ZeroRTT) {
       client_connection_, client_stream(), server_connection_, server_stream());
 
   EXPECT_EQ(1, client_stream()->num_sent_client_hellos());
+  EXPECT_TRUE(server_stream()->ZeroRttAttempted());
 }
 
 TEST_P(QuicCryptoServerStreamTest, FailByPolicy) {
@@ -533,7 +534,6 @@ INSTANTIATE_TEST_CASE_P(YetMoreTests,
 TEST_P(QuicCryptoServerStreamTestWithFakeProofSource, MultipleChlo) {
   Initialize();
   GetFakeProofSource()->Activate();
-  base::SetFlag(&FLAGS_quic_reloadable_flag_fix_quic_callback_crash, true);
   EXPECT_CALL(*server_session_->helper(), CanAcceptClientHello(_, _, _))
       .WillOnce(testing::Return(true));
 

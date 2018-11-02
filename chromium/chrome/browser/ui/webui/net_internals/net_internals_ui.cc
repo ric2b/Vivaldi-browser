@@ -33,8 +33,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_remover.h"
-#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/download/download_prefs.h"
@@ -52,6 +50,7 @@
 #include "components/url_formatter/url_fixer.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/storage_partition.h"
@@ -374,7 +373,7 @@ NetInternalsMessageHandler::~NetInternalsMessageHandler() {
     proxy_->OnWebUIDeleted();
     // Notify the handler on the IO thread that the renderer is gone.
     BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::Bind(&IOThreadImpl::Detach, proxy_));
+                            base::BindOnce(&IOThreadImpl::Detach, proxy_));
   }
 }
 
@@ -388,9 +387,6 @@ void NetInternalsMessageHandler::RegisterMessages() {
   proxy_->AddRequestContextGetter(
       content::BrowserContext::GetDefaultStoragePartition(profile)->
           GetMediaURLRequestContext());
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  proxy_->AddRequestContextGetter(profile->GetRequestContextForExtensions());
-#endif
 
   web_ui()->RegisterMessageCallback(
       "notifyReady",
@@ -502,12 +498,11 @@ void NetInternalsMessageHandler::OnRendererReady(const base::ListValue* list) {
 
 void NetInternalsMessageHandler::OnClearBrowserCache(
     const base::ListValue* list) {
-  BrowsingDataRemover* remover =
-      BrowsingDataRemoverFactory::GetForBrowserContext(
-          Profile::FromWebUI(web_ui()));
+  content::BrowsingDataRemover* remover =
+      Profile::GetBrowsingDataRemover(Profile::FromWebUI(web_ui()));
   remover->Remove(base::Time(), base::Time::Max(),
-                  BrowsingDataRemover::DATA_TYPE_CACHE,
-                  BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
+                  content::BrowsingDataRemover::DATA_TYPE_CACHE,
+                  content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
   // BrowsingDataRemover deletes itself.
 }
 
@@ -593,7 +588,7 @@ void NetInternalsMessageHandler::IOThreadImpl::CallbackHelper(
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(method, io_thread, base::Owned(list_copy)));
+      base::BindOnce(method, io_thread, base::Owned(list_copy)));
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::Detach() {
@@ -986,8 +981,8 @@ void NetInternalsMessageHandler::IOThreadImpl::OnSetCaptureMode(
 void NetInternalsMessageHandler::IOThreadImpl::OnAddEntry(
     const net::NetLogEntry& entry) {
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(&IOThreadImpl::AddEntryToQueue, this,
-                                     base::Passed(entry.ToValue())));
+                          base::BindOnce(&IOThreadImpl::AddEntryToQueue, this,
+                                         base::Passed(entry.ToValue())));
 }
 
 // Note that this can be called from ANY THREAD.
@@ -1004,8 +999,8 @@ void NetInternalsMessageHandler::IOThreadImpl::SendJavascriptCommand(
   }
 
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(&IOThreadImpl::SendJavascriptCommand, this,
-                                     command, base::Passed(&arg)));
+                          base::BindOnce(&IOThreadImpl::SendJavascriptCommand,
+                                         this, command, base::Passed(&arg)));
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::AddEntryToQueue(
@@ -1015,7 +1010,7 @@ void NetInternalsMessageHandler::IOThreadImpl::AddEntryToQueue(
     pending_entries_.reset(new base::ListValue());
     BrowserThread::PostDelayedTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&IOThreadImpl::PostPendingEntries, this),
+        base::BindOnce(&IOThreadImpl::PostPendingEntries, this),
         base::TimeDelta::FromMilliseconds(kNetLogEventDelayMilliseconds));
   }
   pending_entries_->Append(std::move(entry));

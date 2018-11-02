@@ -133,6 +133,7 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
 
   // Gets the InputMethod instance, if NULL, creates & owns it.
   ui::InputMethod* GetInputMethod();
+  bool has_input_method() const { return input_method_ != nullptr; }
 
   // Sets a shared unowned InputMethod. This is used when there is a singleton
   // InputMethod shared between multiple WindowTreeHost instances.
@@ -156,8 +157,7 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   void SetSharedInputMethod(ui::InputMethod* input_method);
 
   // Overridden from ui::internal::InputMethodDelegate:
-  ui::EventDispatchDetails DispatchKeyEventPostIME(
-      ui::KeyEvent* event) override;
+  ui::EventDispatchDetails DispatchKeyEventPostIME(ui::KeyEvent* event) final;
 
   // Returns the EventSource responsible for dispatching events to the window
   // tree.

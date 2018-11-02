@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame_sink_client.h"
 #include "cc/output/copy_output_request.h"
@@ -28,12 +29,13 @@ TestCompositorFrameSink::TestCompositorFrameSink(
     const RendererSettings& renderer_settings,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     bool synchronous_composite,
-    bool force_disable_reclaim_resources)
+    bool disable_display_vsync)
     : CompositorFrameSink(std::move(compositor_context_provider),
                           std::move(worker_context_provider),
                           gpu_memory_buffer_manager,
                           shared_bitmap_manager),
       synchronous_composite_(synchronous_composite),
+      disable_display_vsync_(disable_display_vsync),
       renderer_settings_(renderer_settings),
       task_runner_(std::move(task_runner)),
       frame_sink_id_(kCompositorFrameSinkId),
@@ -41,11 +43,6 @@ TestCompositorFrameSink::TestCompositorFrameSink(
       local_surface_id_allocator_(new LocalSurfaceIdAllocator()),
       external_begin_frame_source_(this),
       weak_ptr_factory_(this) {
-  // Since this CompositorFrameSink and the Display are tightly coupled and in
-  // the same process/thread, the LayerTreeHostImpl can reclaim resources from
-  // the Display. But we allow tests to disable this to mimic an out-of-process
-  // Display.
-  capabilities_.can_force_reclaim_resources = !force_disable_reclaim_resources;
   // Always use sync tokens so that code paths in resource provider that deal
   // with sync tokens are tested.
   capabilities_.delegated_sync_points_required = true;
@@ -71,7 +68,7 @@ bool TestCompositorFrameSink::BindToClient(CompositorFrameSinkClient* client) {
 
   std::unique_ptr<DisplayScheduler> scheduler;
   if (!synchronous_composite_) {
-    if (renderer_settings_.disable_display_vsync) {
+    if (disable_display_vsync_) {
       begin_frame_source_.reset(new BackToBackBeginFrameSource(
           base::MakeUnique<DelayBasedTimeSource>(task_runner_.get())));
     } else {
@@ -117,6 +114,7 @@ void TestCompositorFrameSink::DetachFromClient() {
   client_->SetBeginFrameSource(nullptr);
   support_ = nullptr;
   display_ = nullptr;
+  begin_frame_source_ = nullptr;
   local_surface_id_allocator_ = nullptr;
   surface_manager_ = nullptr;
   test_client_ = nullptr;
@@ -129,19 +127,25 @@ void TestCompositorFrameSink::SetLocalSurfaceId(
 }
 
 void TestCompositorFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
+  DCHECK(frame.metadata.begin_frame_ack.has_damage);
+  DCHECK_LE(BeginFrameArgs::kStartingFrameNumber,
+            frame.metadata.begin_frame_ack.sequence_number);
   test_client_->DisplayReceivedCompositorFrame(frame);
 
-  if (!delegated_local_surface_id_.is_valid()) {
-    delegated_local_surface_id_ = local_surface_id_allocator_->GenerateId();
-  }
-  display_->SetLocalSurfaceId(delegated_local_surface_id_,
-                              frame.metadata.device_scale_factor);
-
   gfx::Size frame_size = frame.render_pass_list.back()->output_rect.size();
-  display_->Resize(frame_size);
+  float device_scale_factor = frame.metadata.device_scale_factor;
+  if (!local_surface_id_.is_valid() || frame_size != display_size_ ||
+      device_scale_factor != device_scale_factor_) {
+    local_surface_id_ = local_surface_id_allocator_->GenerateId();
+    display_->SetLocalSurfaceId(local_surface_id_, device_scale_factor);
+    display_->Resize(frame_size);
+    display_size_ = frame_size;
+    device_scale_factor_ = device_scale_factor;
+  }
 
-  support_->SubmitCompositorFrame(delegated_local_surface_id_,
-                                  std::move(frame));
+  bool result =
+      support_->SubmitCompositorFrame(local_surface_id_, std::move(frame));
+  DCHECK(result);
 
   for (std::unique_ptr<CopyOutputRequest>& copy_request : copy_requests_) {
     support_->RequestCopyOfSurface(std::move(copy_request));
@@ -159,11 +163,10 @@ void TestCompositorFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
   }
 }
 
-void TestCompositorFrameSink::ForceReclaimResources() {
-  if (capabilities_.can_force_reclaim_resources &&
-      delegated_local_surface_id_.is_valid()) {
-    support_->ForceReclaimResources();
-  }
+void TestCompositorFrameSink::DidNotProduceFrame(const BeginFrameAck& ack) {
+  DCHECK(!ack.has_damage);
+  DCHECK_LE(BeginFrameArgs::kStartingFrameNumber, ack.sequence_number);
+  support_->DidNotProduceFrame(ack);
 }
 
 void TestCompositorFrameSink::DidReceiveCompositorFrameAck(
@@ -206,8 +209,6 @@ void TestCompositorFrameSink::DisplayDidDrawAndSwap() {
 void TestCompositorFrameSink::OnNeedsBeginFrames(bool needs_begin_frames) {
   support_->SetNeedsBeginFrame(needs_begin_frames);
 }
-
-void TestCompositorFrameSink::OnDidFinishFrame(const BeginFrameAck& ack) {}
 
 void TestCompositorFrameSink::SendCompositorFrameAckToClient() {
   client_->DidReceiveCompositorFrameAck();

@@ -89,7 +89,7 @@ class ImageFrameGeneratorTest : public ::testing::Test,
 
   size_t FrameCount() override { return frame_count_; }
   int RepetitionCount() const override {
-    return frame_count_ == 1 ? kCAnimationNone : kCAnimationLoopOnce;
+    return frame_count_ == 1 ? kAnimationNone : kAnimationLoopOnce;
   }
   float FrameDuration() const override { return 0; }
 
@@ -192,7 +192,7 @@ TEST_F(ImageFrameGeneratorTest, incompleteDecodeBecomesCompleteMultiThreaded) {
   SetFrameStatus(ImageFrame::kFrameComplete);
   AddNewData();
   std::unique_ptr<WebThread> thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("DecodeThread"));
+      Platform::Current()->CreateThread("DecodeThread");
   thread->GetWebTaskRunner()->PostTask(
       BLINK_FROM_HERE,
       CrossThreadBind(&DecodeThreadMain, generator_, segment_reader_));

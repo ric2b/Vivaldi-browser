@@ -36,18 +36,25 @@
 #include "core/InputTypeNames.h"
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/dom/Document.h"
+#include "core/dom/ElementTraversal.h"
 #include "core/editing/Editor.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/spellcheck/SpellChecker.h"
+#include "core/exported/WebDataSourceImpl.h"
+#include "core/exported/WebPluginContainerBase.h"
+#include "core/exported/WebViewBase.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLFormElement.h"
+#include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLPlugInElement.h"
+#include "core/input/ContextMenuAllowedScope.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutPart.h"
@@ -57,7 +64,6 @@
 #include "core/page/ContextMenuController.h"
 #include "core/page/Page.h"
 #include "platform/ContextMenu.h"
-#include "platform/FrameViewBase.h"
 #include "platform/exported/WrappedResourceResponse.h"
 #include "platform/text/TextBreakIterator.h"
 #include "platform/weborigin/KURL.h"
@@ -75,11 +81,6 @@
 #include "public/web/WebSearchableFormData.h"
 #include "public/web/WebTextCheckClient.h"
 #include "public/web/WebViewClient.h"
-#include "web/ContextMenuAllowedScope.h"
-#include "web/WebDataSourceImpl.h"
-#include "web/WebLocalFrameImpl.h"
-#include "web/WebPluginContainerImpl.h"
-#include "web/WebViewImpl.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -109,28 +110,54 @@ static bool IsWhiteSpaceOrPunctuation(UChar c) {
 static String SelectMisspellingAsync(LocalFrame* selected_frame,
                                      String& description) {
   VisibleSelection selection =
-      selected_frame->Selection().ComputeVisibleSelectionInDOMTreeDeprecated();
+      selected_frame->Selection().ComputeVisibleSelectionInDOMTree();
   if (selection.IsNone())
     return String();
 
   // Caret and range selections always return valid normalized ranges.
-  Range* selection_range = CreateRange(selection.ToNormalizedEphemeralRange());
-  DocumentMarkerVector markers =
-      selected_frame->GetDocument()->Markers().MarkersInRange(
-          EphemeralRange(selection_range),
-          DocumentMarker::MisspellingMarkers());
-  if (markers.size() != 1)
-    return String();
-  description = markers[0]->Description();
+  const EphemeralRange& selection_range =
+      selection.ToNormalizedEphemeralRange();
 
-  // Cloning a range fails only for invalid ranges.
-  Range* marker_range = selection_range->cloneRange();
-  marker_range->setStart(marker_range->startContainer(),
-                         markers[0]->StartOffset());
-  marker_range->setEnd(marker_range->endContainer(), markers[0]->EndOffset());
+  Node* const selection_start_container =
+      selection_range.StartPosition().ComputeContainerNode();
+  Node* const selection_end_container =
+      selection_range.EndPosition().ComputeContainerNode();
+
+  // We don't currently support the case where a misspelling spans multiple
+  // nodes
+  if (selection_start_container != selection_end_container)
+    return String();
+
+  const unsigned selection_start_offset =
+      selection_range.StartPosition().ComputeOffsetInContainerNode();
+  const unsigned selection_end_offset =
+      selection_range.EndPosition().ComputeOffsetInContainerNode();
+
+  const DocumentMarkerVector& markers_in_node =
+      selected_frame->GetDocument()->Markers().MarkersFor(
+          selection_start_container, DocumentMarker::MisspellingMarkers());
+
+  const auto marker_it =
+      std::find_if(markers_in_node.begin(), markers_in_node.end(),
+                   [=](const DocumentMarker* marker) {
+                     return marker->StartOffset() < selection_end_offset &&
+                            marker->EndOffset() > selection_start_offset;
+                   });
+  if (marker_it == markers_in_node.end())
+    return String();
+
+  const DocumentMarker* const found_marker = *marker_it;
+  description = found_marker->Description();
+
+  Range* const marker_range =
+      Range::Create(*selected_frame->GetDocument(), selection_start_container,
+                    found_marker->StartOffset(), selection_start_container,
+                    found_marker->EndOffset());
 
   if (marker_range->GetText().StripWhiteSpace(&IsWhiteSpaceOrPunctuation) !=
-      selection_range->GetText().StripWhiteSpace(&IsWhiteSpaceOrPunctuation))
+      CreateRange(selection_range)
+          ->GetText()
+          .StripWhiteSpace(&IsWhiteSpaceOrPunctuation))
     return String();
 
   return marker_range->GetText();
@@ -157,6 +184,8 @@ int ContextMenuClientImpl::ComputeEditFlags(Document& selected_document,
     edit_flags |= WebContextMenuData::kCanPaste;
   if (editor.CanDelete())
     edit_flags |= WebContextMenuData::kCanDelete;
+  if (editor.CanEditRichly())
+    edit_flags |= WebContextMenuData::kCanEditRichly;
   if (selected_document.queryCommandEnabled("selectAll", ASSERT_NO_EXCEPTION))
     edit_flags |= WebContextMenuData::kCanSelectAll;
   return edit_flags;
@@ -171,6 +200,59 @@ bool ContextMenuClientImpl::ShouldShowContextMenuFromTouch(
          data.media_type == WebContextMenuData::kMediaTypeImage ||
          data.media_type == WebContextMenuData::kMediaTypeVideo ||
          data.is_editable;
+}
+
+static HTMLFormElement* AssociatedFormElement(HTMLElement& element) {
+  if (isHTMLFormElement(element))
+    return &toHTMLFormElement(element);
+  return element.formOwner();
+}
+
+// Scans logically forward from "start", including any child frames.
+static HTMLFormElement* ScanForForm(const Node* start) {
+  if (!start)
+    return nullptr;
+
+  for (HTMLElement& element : Traversal<HTMLElement>::StartsAt(
+           start->IsHTMLElement() ? ToHTMLElement(start)
+                                  : Traversal<HTMLElement>::Next(*start))) {
+    if (HTMLFormElement* form = AssociatedFormElement(element))
+      return form;
+
+    if (IsHTMLFrameElementBase(element)) {
+      Node* child_document = ToHTMLFrameElementBase(element).contentDocument();
+      if (HTMLFormElement* frame_result = ScanForForm(child_document))
+        return frame_result;
+    }
+  }
+  return nullptr;
+}
+
+// We look for either the form containing the current focus, or for one
+// immediately after it
+static HTMLFormElement* CurrentForm(const FrameSelection& current_selection) {
+  // Start looking either at the active (first responder) node, or where the
+  // selection is.
+  const Node* start = current_selection.GetDocument().FocusedElement();
+  if (!start) {
+    start = current_selection.ComputeVisibleSelectionInDOMTree()
+                .Start()
+                .AnchorNode();
+  }
+  if (!start)
+    return nullptr;
+
+  // Try walking up the node tree to find a form element.
+  for (Node& node : NodeTraversal::InclusiveAncestorsOf(*start)) {
+    if (!node.IsHTMLElement())
+      break;
+    HTMLElement& element = ToHTMLElement(node);
+    if (HTMLFormElement* form = AssociatedFormElement(element))
+      return form;
+  }
+
+  // Try walking forward in the node tree to find a form element.
+  return ScanForForm(start);
 }
 
 bool ContextMenuClientImpl::ShowContextMenu(const ContextMenu* default_menu,
@@ -189,8 +271,8 @@ bool ContextMenuClientImpl::ShowContextMenu(const ContextMenu* default_menu,
   r.SetToShadowHostIfInRestrictedShadowRoot();
 
   LocalFrame* selected_frame = r.InnerNodeFrame();
-  WebLocalFrameImpl* selected_web_frame =
-      WebLocalFrameImpl::FromFrame(selected_frame);
+  WebLocalFrameBase* selected_web_frame =
+      WebLocalFrameBase::FromFrame(selected_frame);
 
   WebContextMenuData data;
   data.mouse_position = selected_frame->View()->ContentsToViewport(
@@ -271,7 +353,7 @@ bool ContextMenuClientImpl::ShowContextMenu(const ContextMenu* default_menu,
       PluginView* plugin_view = ToLayoutPart(object)->Plugin();
       if (plugin_view && plugin_view->IsPluginContainer()) {
         data.media_type = WebContextMenuData::kMediaTypePlugin;
-        WebPluginContainerImpl* plugin = ToWebPluginContainerImpl(plugin_view);
+        WebPluginContainerBase* plugin = ToWebPluginContainerBase(plugin_view);
         WebString text = plugin->Plugin()->SelectionAsText();
         if (!text.IsEmpty()) {
           data.selected_text = text;
@@ -366,7 +448,7 @@ bool ContextMenuClientImpl::ShowContextMenu(const ContextMenu* default_menu,
       }
     }
 
-    HTMLFormElement* form = selected_frame->Selection().CurrentForm();
+    HTMLFormElement* form = CurrentForm(selected_frame->Selection());
     if (form && isHTMLInputElement(*r.InnerNode())) {
       HTMLInputElement& selected_element = toHTMLInputElement(*r.InnerNode());
       WebSearchableFormData ws = WebSearchableFormData(
@@ -418,6 +500,19 @@ bool ContextMenuClientImpl::ShowContextMenu(const ContextMenu* default_menu,
     data.input_field_type = WebContextMenuData::kInputFieldTypeNone;
   }
 
+  WebRect focus_webrect;
+  WebRect anchor_webrect;
+  web_view_->SelectionBounds(focus_webrect, anchor_webrect);
+
+  int left = std::min(focus_webrect.x, anchor_webrect.x);
+  int top = std::min(focus_webrect.y, anchor_webrect.y);
+  int right = std::max(focus_webrect.x + focus_webrect.width,
+                       anchor_webrect.x + anchor_webrect.width);
+  int bottom = std::max(focus_webrect.y + focus_webrect.height,
+                        anchor_webrect.y + anchor_webrect.height);
+
+  data.selection_rect = WebRect(left, top, right - left, bottom - top);
+
   if (from_touch && !ShouldShowContextMenuFromTouch(data))
     return false;
 
@@ -436,8 +531,8 @@ void ContextMenuClientImpl::ClearContextMenu() {
   if (!selected_frame)
     return;
 
-  WebLocalFrameImpl* selected_web_frame =
-      WebLocalFrameImpl::FromFrame(selected_frame);
+  WebLocalFrameBase* selected_web_frame =
+      WebLocalFrameBase::FromFrame(selected_frame);
   selected_web_frame->ClearContextMenuNode();
 }
 

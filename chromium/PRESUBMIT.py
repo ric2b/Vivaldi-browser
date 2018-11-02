@@ -197,6 +197,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (
         r"^base[\\\/]memory[\\\/]shared_memory_posix\.cc$",
+        r"^base[\\\/]process[\\\/]internal_aix\.cc$",
         r"^base[\\\/]process[\\\/]process_linux\.cc$",
         r"^base[\\\/]process[\\\/]process_metrics_linux\.cc$",
         r"^chrome[\\\/]browser[\\\/]chromeos[\\\/]boot_times_recorder\.cc$",
@@ -318,6 +319,40 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (),
     ),
+    (
+      'BrowserThread::GetBlockingPool',
+      (
+        'Use base/task_scheduler/post_task.h instead of the blocking pool. See',
+        'mapping between both APIs in content/public/browser/browser_thread.h.',
+        'For questions, contact base/task_scheduler/OWNERS.',
+      ),
+      True,
+      (),
+    ),
+    (
+      'base::NonThreadSafe',
+      (
+        'base::NonThreadSafe is deprecated.',
+      ),
+      True,
+      (),
+    ),
+    (
+      'base::SequenceChecker',
+      (
+        'Consider using SEQUENCE_CHECKER macros instead of the class directly.',
+      ),
+      False,
+      (),
+    ),
+    (
+      'base::ThreadChecker',
+      (
+        'Consider using THREAD_CHECKER macros instead of the class directly.',
+      ),
+      False,
+      (),
+    ),
 )
 
 
@@ -328,11 +363,13 @@ _IPC_ENUM_TRAITS_DEPRECATED = (
 
 _VALID_OS_MACROS = (
     # Please keep sorted.
+    'OS_AIX',
     'OS_ANDROID',
     'OS_BSD',
     'OS_CAT',       # For testing.
     'OS_CHROMEOS',
     'OS_FREEBSD',
+    'OS_FUCHSIA',
     'OS_IOS',
     'OS_LINUX',
     'OS_MACOSX',
@@ -351,6 +388,8 @@ _VALID_OS_MACROS = (
 _ANDROID_SPECIFIC_PYDEPS_FILES = [
     'build/android/test_runner.pydeps',
     'build/android/test_wrapper/logdog_wrapper.pydeps',
+    'build/secondary/third_party/android_platform/'
+        'development/scripts/stack.pydeps',
     'net/tools/testserver/testserver.pydeps',
 ]
 
@@ -1079,7 +1118,49 @@ def _CheckNoAbbreviationInPngFileName(input_api, output_api):
   return results
 
 
-def _FilesToCheckForIncomingDeps(re, changed_lines):
+def _ExtractAddRulesFromParsedDeps(parsed_deps):
+  """Extract the rules that add dependencies from a parsed DEPS file.
+
+  Args:
+    parsed_deps: the locals dictionary from evaluating the DEPS file."""
+  add_rules = set()
+  add_rules.update([
+      rule[1:] for rule in parsed_deps.get('include_rules', [])
+      if rule.startswith('+') or rule.startswith('!')
+  ])
+  for specific_file, rules in parsed_deps.get('specific_include_rules',
+                                              {}).iteritems():
+    add_rules.update([
+        rule[1:] for rule in rules
+        if rule.startswith('+') or rule.startswith('!')
+    ])
+  return add_rules
+
+
+def _ParseDeps(contents):
+  """Simple helper for parsing DEPS files."""
+  # Stubs for handling special syntax in the root DEPS file.
+  class _VarImpl:
+
+    def __init__(self, local_scope):
+      self._local_scope = local_scope
+
+    def Lookup(self, var_name):
+      """Implements the Var syntax."""
+      try:
+        return self._local_scope['vars'][var_name]
+      except KeyError:
+        raise Exception('Var is not defined: %s' % var_name)
+
+  local_scope = {}
+  global_scope = {
+      'Var': _VarImpl(local_scope).Lookup,
+  }
+  exec contents in global_scope, local_scope
+  return local_scope
+
+
+def _CalculateAddedDeps(os_path, old_contents, new_contents):
   """Helper method for _CheckAddedDepsHaveTargetApprovals. Returns
   a set of DEPS entries that we should look up.
 
@@ -1090,22 +1171,20 @@ def _FilesToCheckForIncomingDeps(re, changed_lines):
   # We ignore deps entries on auto-generated directories.
   AUTO_GENERATED_DIRS = ['grit', 'jni']
 
-  # This pattern grabs the path without basename in the first
-  # parentheses, and the basename (if present) in the second. It
-  # relies on the simple heuristic that if there is a basename it will
-  # be a header file ending in ".h".
-  pattern = re.compile(
-      r"""['"]\+([^'"]+?)(/[a-zA-Z0-9_]+\.h)?['"].*""")
+  old_deps = _ExtractAddRulesFromParsedDeps(_ParseDeps(old_contents))
+  new_deps = _ExtractAddRulesFromParsedDeps(_ParseDeps(new_contents))
+
+  added_deps = new_deps.difference(old_deps)
+
   results = set()
-  for changed_line in changed_lines:
-    m = pattern.match(changed_line)
-    if m:
-      path = m.group(1)
-      if path.split('/')[0] not in AUTO_GENERATED_DIRS:
-        if m.group(2):
-          results.add('%s%s' % (path, m.group(2)))
-        else:
-          results.add('%s/DEPS' % path)
+  for added_dep in added_deps:
+    if added_dep.split('/')[0] in AUTO_GENERATED_DIRS:
+      continue
+    # Assume that a rule that ends in .h is a rule for a specific file.
+    if added_dep.endswith('.h'):
+      results.add(added_dep)
+    else:
+      results.add(os_path.join(added_dep, 'DEPS'))
   return results
 
 
@@ -1115,7 +1194,7 @@ def _CheckAddedDepsHaveTargetApprovals(input_api, output_api):
   target file or directory, to avoid layering violations from being
   introduced. This check verifies that this happens.
   """
-  changed_lines = set()
+  virtual_depended_on_files = set()
 
   file_filter = lambda f: not input_api.re.match(
       r"^third_party[\\\/]WebKit[\\\/].*", f.LocalPath())
@@ -1123,14 +1202,11 @@ def _CheckAddedDepsHaveTargetApprovals(input_api, output_api):
                                    file_filter=file_filter):
     filename = input_api.os_path.basename(f.LocalPath())
     if filename == 'DEPS':
-      changed_lines |= set(line.strip()
-                           for line_num, line
-                           in f.ChangedContents())
-  if not changed_lines:
-    return []
+      virtual_depended_on_files.update(_CalculateAddedDeps(
+          input_api.os_path,
+          '\n'.join(f.OldContents()),
+          '\n'.join(f.NewContents())))
 
-  virtual_depended_on_files = _FilesToCheckForIncomingDeps(input_api.re,
-                                                           changed_lines)
   if not virtual_depended_on_files:
     return []
 
@@ -1207,6 +1283,8 @@ def _CheckSpamLogging(input_api, output_api):
                  r"^chrome_elf[\\\/]dll_hash[\\\/]dll_hash_main\.cc$",
                  r"^chromecast[\\\/]",
                  r"^cloud_print[\\\/]",
+                 r"^components[\\\/]browser_watcher[\\\/]"
+                     r"dump_stability_report_main_win.cc$",
                  r"^components[\\\/]html_viewer[\\\/]"
                      r"web_test_delegate_impl\.cc$",
                  # TODO(peter): Remove this exception. https://crbug.com/534537
@@ -1646,7 +1724,7 @@ def _CheckUselessForwardDeclarations(input_api, output_api):
         for decl in useless_fwd_decls:
           if input_api.re.search(r'\b%s\b' % decl, line[1:]):
             results.append(output_api.PresubmitPromptWarning(
-              '%s: %s forward declaration is becoming useless' %
+              '%s: %s forward declaration is no longer needed' %
               (f.LocalPath(), decl)))
             useless_fwd_decls.remove(decl)
 
@@ -1973,26 +2051,6 @@ def _CheckSingletonInHeaders(input_api, output_api):
   return []
 
 
-def _CheckNoDeprecatedCompiledResourcesGyp(input_api, output_api):
-  """Checks for old style compiled_resources.gyp files."""
-  is_compiled_resource = lambda fp: fp.endswith('compiled_resources.gyp')
-
-  added_compiled_resources = filter(is_compiled_resource, [
-    f.LocalPath() for f in input_api.AffectedFiles() if f.Action() == 'A'
-  ])
-
-  if not added_compiled_resources:
-    return []
-
-  return [output_api.PresubmitError(
-      "Found new compiled_resources.gyp files:\n%s\n\n"
-      "compiled_resources.gyp files are deprecated,\n"
-      "please use compiled_resources2.gyp instead:\n"
-      "https://chromium.googlesource.com/chromium/src/+/master/docs/closure_compilation.md"
-      %
-      "\n".join(added_compiled_resources))]
-
-
 _DEPRECATED_CSS = [
   # Values
   ( "-webkit-box", "flex" ),
@@ -2148,7 +2206,6 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckForIPCRules(input_api, output_api))
   results.extend(_CheckForWindowsLineEndings(input_api, output_api))
   results.extend(_CheckSingletonInHeaders(input_api, output_api))
-  results.extend(_CheckNoDeprecatedCompiledResourcesGyp(input_api, output_api))
   results.extend(_CheckPydepsNeedsUpdating(input_api, output_api))
   results.extend(_CheckJavaStyle(input_api, output_api))
   results.extend(_CheckIpcOwners(input_api, output_api))
@@ -2259,6 +2316,8 @@ def _CheckForInvalidIfDefinedMacros(input_api, output_api):
   """Check all affected files for invalid "if defined" macros."""
   bad_macros = []
   for f in input_api.AffectedFiles():
+    if f.LocalPath().startswith('third_party/sqlite/'):
+      continue
     if f.LocalPath().endswith(('.h', '.c', '.cc', '.m', '.mm')):
       bad_macros.extend(_CheckForInvalidIfDefinedMacrosInFile(input_api, f))
 

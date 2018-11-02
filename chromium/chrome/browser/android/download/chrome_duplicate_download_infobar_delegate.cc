@@ -8,7 +8,6 @@
 
 #include "base/android/path_utils.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/android/download/download_controller.h"
 #include "chrome/browser/download/download_path_reservation_tracker.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -68,7 +67,6 @@ ChromeDuplicateDownloadInfoBarDelegate::ChromeDuplicateDownloadInfoBarDelegate(
       is_off_the_record_(download_item->GetBrowserContext()->IsOffTheRecord()),
       file_selected_callback_(file_selected_callback) {
   download_item_->AddObserver(this);
-  RecordDuplicateInfobarType(INFOBAR_SHOWN);
 }
 
 infobars::InfoBarDelegate::InfoBarIdentifier
@@ -77,16 +75,12 @@ ChromeDuplicateDownloadInfoBarDelegate::GetIdentifier() const {
 }
 
 bool ChromeDuplicateDownloadInfoBarDelegate::Accept() {
-  if (!download_item_) {
-    RecordDuplicateInfobarType(INFOBAR_DOWNLOAD_CANCELED);
+  if (!download_item_)
     return true;
-  }
 
   base::FilePath download_dir;
-  if (!base::android::GetDownloadsDirectory(&download_dir)) {
-    RecordDuplicateInfobarType(INFOBAR_NO_DOWNLOAD_DIR);
+  if (!base::android::GetDownloadsDirectory(&download_dir))
     return true;
-  }
 
   DownloadPathReservationTracker::GetReservedPath(
       download_item_,
@@ -95,7 +89,6 @@ bool ChromeDuplicateDownloadInfoBarDelegate::Accept() {
       true,
       DownloadPathReservationTracker::UNIQUIFY,
       base::Bind(&CreateNewFileDone, file_selected_callback_));
-  RecordDuplicateInfobarType(INFOBAR_CREATE_NEW_FILE);
   return true;
 }
 
@@ -121,12 +114,6 @@ void ChromeDuplicateDownloadInfoBarDelegate::InfoBarDismissed() {
 
 bool ChromeDuplicateDownloadInfoBarDelegate::IsOffTheRecord() const {
   return is_off_the_record_;
-}
-
-void ChromeDuplicateDownloadInfoBarDelegate::RecordDuplicateInfobarType(
-    DuplicateInfobarType type) {
-  UMA_HISTOGRAM_ENUMERATION("MobileDownload.DuplicateInfobar", type,
-                            INFOBAR_MAX);
 }
 
 }  // namespace android

@@ -29,9 +29,6 @@ Network.NetworkLogViewColumns = class {
     /** @type {!Array.<!Network.NetworkLogViewColumns.Descriptor>} */
     this._columns = [];
 
-    /** @type {!Map<string, ?Network.NetworkColumnExtensionInterface>} */
-    this._columnExtensions = new Map();
-
     this._waterfallRequestsAreStale = false;
     this._waterfallScrollerWidthIsStale = true;
 
@@ -78,6 +75,7 @@ Network.NetworkLogViewColumns = class {
 
   _setupDataGrid() {
     var defaultColumns = Network.NetworkLogViewColumns._defaultColumns;
+
     var defaultColumnConfig = Network.NetworkLogViewColumns._defaultColumnConfig;
 
     this._columns = /** @type {!Array<!Network.NetworkLogViewColumns.Descriptor>} */ ([]);
@@ -89,11 +87,11 @@ Network.NetworkLogViewColumns = class {
         columnConfig.titleDOMFragment = this._makeHeaderFragment(columnConfig.title, columnConfig.subtitle);
       this._columns.push(columnConfig);
     }
-    this._loadColumnExtensions();
     this._loadCustomColumnsAndSettings();
 
     this._popoverHelper = new UI.PopoverHelper(this._networkLogView.element, this._getPopoverRequest.bind(this));
     this._popoverHelper.setHasPadding(true);
+    this._popoverHelper.setTimeout(300, 300);
 
     /** @type {!DataGrid.SortableDataGrid<!Network.NetworkNode>} */
     this._dataGrid =
@@ -120,8 +118,7 @@ Network.NetworkLogViewColumns = class {
   }
 
   _setupWaterfall() {
-    this._waterfallColumn =
-        new Network.NetworkWaterfallColumn(this._networkLogView.rowHeight(), this._networkLogView.calculator());
+    this._waterfallColumn = new Network.NetworkWaterfallColumn(this._networkLogView.calculator());
 
     this._waterfallColumn.element.addEventListener('contextmenu', handleContextMenu.bind(this));
     this._waterfallColumn.element.addEventListener('mousewheel', this._onMouseWheel.bind(this, false), {passive: true});
@@ -237,11 +234,12 @@ Network.NetworkLogViewColumns = class {
 
   _updateRowsSize() {
     var largeRows = !!this._networkLogLargeRowsSetting.get();
+
     this._dataGrid.element.classList.toggle('small', !largeRows);
     this._dataGrid.scheduleUpdate();
 
     this._waterfallScrollerWidthIsStale = true;
-    this._waterfallColumn.setRowHeight(this._networkLogView.rowHeight());
+    this._waterfallColumn.setRowHeight(largeRows ? 41 : 21);
     this._waterfallScroller.classList.toggle('small', !largeRows);
     this._waterfallHeaderElement.classList.toggle('small', !largeRows);
     this._waterfallColumn.setHeaderHeight(this._waterfallScroller.offsetTop);
@@ -329,13 +327,6 @@ Network.NetworkLogViewColumns = class {
   }
 
   /**
-   * @return {!Map<string, ?Network.NetworkColumnExtensionInterface>}
-   */
-  columnExtensions() {
-    return this._columnExtensions;
-  }
-
-  /**
    * @param {!Network.NetworkLogViewColumns.Descriptor} columnConfig
    */
   _toggleColumnVisibility(columnConfig) {
@@ -351,43 +342,6 @@ Network.NetworkLogViewColumns = class {
       saveableSettings[columnConfig.id] = {visible: columnConfig.visible, title: columnConfig.title};
 
     this._persistantSettings.set(saveableSettings);
-  }
-
-  _loadColumnExtensions() {
-    var extensions = self.runtime.extensions(Network.NetworkColumnExtensionInterface);
-    for (var i = 0; i < extensions.length; i++) {
-      var extension = extensions[i];
-      var title = extension.title();
-      var columnId = title.toLowerCase() + '-extension';
-
-      this._columnExtensions.set(columnId, null);
-      extension.instance().then(extensionInstanceResolved.bind(this, columnId));
-
-      var columnConfig = /** @type {!Network.NetworkLogViewColumns.Descriptor} */ (
-          Object.assign({}, Network.NetworkLogViewColumns._defaultColumnConfig, {
-            id: columnId,
-            title: title,
-            isResponseHeader: false,
-            isCustomHeader: false,
-            visible: true,
-            sortingFunction:
-                Network.NetworkRequestNode.ExtensionColumnComparator.bind(null, this._columnExtensions, columnId)
-          }));
-      const columnIndex = i + 1;
-      this._columns.splice(columnIndex, 0, columnConfig);
-      if (this._dataGrid)
-        this._dataGrid.addColumn(Network.NetworkLogViewColumns._convertToDataGridDescriptor(columnConfig), columnIndex);
-    }
-
-    /**
-     * @param {string} columnId
-     * @param {!Network.NetworkColumnExtensionInterface} instance
-     * @this {Network.NetworkLogViewColumns}
-     */
-    function extensionInstanceResolved(columnId, instance) {
-      this._columnExtensions.set(columnId, instance);
-      this._networkLogView.columnExtensionResolved();
-    }
   }
 
   _loadCustomColumnsAndSettings() {
@@ -574,13 +528,17 @@ Network.NetworkLogViewColumns = class {
   _getPopoverRequest(event) {
     if (!this._gridMode)
       return null;
+    var hoveredNode = this._networkLogView.hoveredNode();
+    if (!hoveredNode)
+      return null;
 
     var anchor = event.target.enclosingNodeOrSelfWithClass('network-script-initiated');
-    var request = /** @type {?SDK.NetworkRequest} */ (anchor ? anchor.request : null);
+    if (!anchor)
+      return null;
+    var request = hoveredNode.request();
     var initiator = request ? request.initiator() : null;
     if (!initiator || !initiator.stack)
       return null;
-
     return {
       box: anchor.boxInWindow(),
       show: popover => {
@@ -589,9 +547,7 @@ Network.NetworkLogViewColumns = class {
         popover.contentElement.appendChild(content);
         return Promise.resolve(true);
       },
-      hide: () => {
-        this._popupLinkifier.reset();
-      }
+      hide: this._popupLinkifier.reset.bind(this._popupLinkifier)
     };
   }
 
@@ -853,24 +809,4 @@ Network.NetworkLogViewColumns.WaterfallSortIds = {
   EndTime: 'endTime',
   Duration: 'duration',
   Latency: 'latency'
-};
-
-/**
- * @interface
- */
-Network.NetworkColumnExtensionInterface = function() {};
-
-Network.NetworkColumnExtensionInterface.prototype = {
-  /**
-   * @param {!SDK.NetworkRequest} request
-   * @return {string}
-   */
-  lookupColumnValue(request) {},
-
-  /**
-   * @param {!SDK.NetworkRequest} aRequest
-   * @param {!SDK.NetworkRequest} bRequest
-   * @return {number}
-   */
-  requestComparator(aRequest, bRequest) {}
 };

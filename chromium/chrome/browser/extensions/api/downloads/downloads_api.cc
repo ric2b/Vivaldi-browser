@@ -24,6 +24,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -36,12 +37,12 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/download/download_core_service.h"
+#include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_danger_prompt.h"
 #include "chrome/browser/download/download_file_icon_extractor.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/download/download_query.h"
-#include "chrome/browser/download/download_service.h"
-#include "chrome/browser/download/download_service_factory.h"
 #include "chrome/browser/download/download_shelf.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/download/drag_download_item.h"
@@ -624,7 +625,7 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
         determined_conflict_action_(
             downloads::FILENAME_CONFLICT_ACTION_UNIQUIFY) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    download_item->SetUserData(kKey, this);
+    download_item->SetUserData(kKey, base::WrapUnique(this));
   }
 
   ~ExtensionDownloadsEventRouterData() override {
@@ -663,8 +664,9 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
         new base::WeakPtrFactory<ExtensionDownloadsEventRouterData>(this));
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&ExtensionDownloadsEventRouterData::DetermineFilenameTimeout,
-                   weak_ptr_factory_->GetWeakPtr()),
+        base::BindOnce(
+            &ExtensionDownloadsEventRouterData::DetermineFilenameTimeout,
+            weak_ptr_factory_->GetWeakPtr()),
         base::TimeDelta::FromSeconds(determine_filename_timeout_s_));
   }
 
@@ -829,8 +831,9 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
         new base::WeakPtrFactory<ExtensionDownloadsEventRouterData>(this));
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&ExtensionDownloadsEventRouterData::ClearPendingDeterminers,
-                   weak_ptr_factory_->GetWeakPtr()),
+        base::BindOnce(
+            &ExtensionDownloadsEventRouterData::ClearPendingDeterminers,
+            weak_ptr_factory_->GetWeakPtr()),
         base::TimeDelta::FromSeconds(15));
   }
 
@@ -956,7 +959,7 @@ DownloadedByExtension::DownloadedByExtension(
     const std::string& name)
   : id_(id),
     name_(name) {
-  item->SetUserData(kKey, this);
+  item->SetUserData(kKey, base::WrapUnique(this));
 }
 
 DownloadsDownloadFunction::DownloadsDownloadFunction() {}
@@ -1093,13 +1096,15 @@ ExtensionFunction::ResponseAction DownloadsSearchFunction::Run() {
   GetManagers(browser_context(), include_incognito(), &manager,
               &incognito_manager);
   ExtensionDownloadsEventRouter* router =
-      DownloadServiceFactory::GetForBrowserContext(
-          manager->GetBrowserContext())->GetExtensionEventRouter();
+      DownloadCoreServiceFactory::GetForBrowserContext(
+          manager->GetBrowserContext())
+          ->GetExtensionEventRouter();
   router->CheckForHistoryFilesRemoval();
   if (incognito_manager) {
     ExtensionDownloadsEventRouter* incognito_router =
-        DownloadServiceFactory::GetForBrowserContext(
-            incognito_manager->GetBrowserContext())->GetExtensionEventRouter();
+        DownloadCoreServiceFactory::GetForBrowserContext(
+            incognito_manager->GetBrowserContext())
+            ->GetExtensionEventRouter();
     incognito_router->CheckForHistoryFilesRemoval();
   }
   DownloadQuery::DownloadVector results;
@@ -1300,8 +1305,9 @@ void DownloadsAcceptDangerFunction::PromptOrWait(int download_id, int retries) {
   if (!visible) {
     if (retries > 0) {
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, base::Bind(&DownloadsAcceptDangerFunction::PromptOrWait,
-                                this, download_id, retries - 1),
+          FROM_HERE,
+          base::BindOnce(&DownloadsAcceptDangerFunction::PromptOrWait, this,
+                         download_id, retries - 1),
           base::TimeDelta::FromMilliseconds(100));
       return;
     }
@@ -1472,16 +1478,16 @@ ExtensionFunction::ResponseAction DownloadsSetShelfEnabledFunction::Run() {
   DownloadManager* incognito_manager = NULL;
   GetManagers(browser_context(), include_incognito(), &manager,
               &incognito_manager);
-  DownloadService* service = NULL;
-  DownloadService* incognito_service = NULL;
+  DownloadCoreService* service = NULL;
+  DownloadCoreService* incognito_service = NULL;
   if (manager) {
-    service = DownloadServiceFactory::GetForBrowserContext(
+    service = DownloadCoreServiceFactory::GetForBrowserContext(
         manager->GetBrowserContext());
     service->GetExtensionEventRouter()->SetShelfEnabled(extension(),
                                                         params->enabled);
   }
   if (incognito_manager) {
-    incognito_service = DownloadServiceFactory::GetForBrowserContext(
+    incognito_service = DownloadCoreServiceFactory::GetForBrowserContext(
         incognito_manager->GetBrowserContext());
     incognito_service->GetExtensionEventRouter()->SetShelfEnabled(
         extension(), params->enabled);
@@ -1492,8 +1498,8 @@ ExtensionFunction::ResponseAction DownloadsSetShelfEnabledFunction::Run() {
     for (BrowserList::const_iterator iter = browsers->begin();
         iter != browsers->end(); ++iter) {
       const Browser* browser = *iter;
-      DownloadService* current_service =
-        DownloadServiceFactory::GetForBrowserContext(browser->profile());
+      DownloadCoreService* current_service =
+          DownloadCoreServiceFactory::GetForBrowserContext(browser->profile());
       if (((current_service == service) ||
            (current_service == incognito_service)) &&
           browser->window()->IsDownloadShelfVisible() &&
@@ -1921,15 +1927,20 @@ void ExtensionDownloadsEventRouter::DispatchEvent(
   args->Append(std::move(arg));
   std::string json_args;
   base::JSONWriter::Write(*args, &json_args);
-  std::unique_ptr<Event> event(
-      new Event(histogram_value, event_name, std::move(args)));
   // The downloads system wants to share on-record events with off-record
   // extension renderers even in incognito_split_mode because that's how
   // chrome://downloads works. The "restrict_to_profile" mechanism does not
   // anticipate this, so it does not automatically prevent sharing off-record
   // events with on-record extension renderers.
-  event->restrict_to_browser_context =
-      (include_incognito && !profile_->IsOffTheRecord()) ? NULL : profile_;
+  // TODO(lazyboy): When |restrict_to_browser_context| is nullptr, this will
+  // broadcast events to unrelated profiles, not just incognito. Fix this
+  // by introducing "include incognito" option to Event constructor.
+  // https://crbug.com/726022.
+  Profile* restrict_to_browser_context =
+      (include_incognito && !profile_->IsOffTheRecord()) ? nullptr : profile_;
+  auto event =
+      base::MakeUnique<Event>(histogram_value, event_name, std::move(args),
+                              restrict_to_browser_context);
   event->will_dispatch_callback = will_dispatch_callback;
   EventRouter::Get(profile_)->BroadcastEvent(std::move(event));
   DownloadsNotificationSource notification_source;
@@ -1946,7 +1957,7 @@ void ExtensionDownloadsEventRouter::DispatchEvent(
 void ExtensionDownloadsEventRouter::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
-    UnloadedExtensionInfo::Reason reason) {
+    UnloadedExtensionReason reason) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   std::set<const Extension*>::iterator iter =
       shelf_disabling_extensions_.find(extension);

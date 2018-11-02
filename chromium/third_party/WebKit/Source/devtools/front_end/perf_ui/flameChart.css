@@ -1,3 +1,9 @@
+/*
+ * Copyright 2017 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 .flame-chart-main-pane {
     overflow: hidden;
 }
@@ -39,13 +45,13 @@
     overflow-y: scroll;
 }
 
+/* force non overlay scrollbars for Mac */
 :host-context(.platform-mac) .flame-chart-v-scroll {
     right: 2px;
     top: 3px;
     bottom: 3px;
 }
 
-/* force non-overlay scrollbars */
 :host-context(.platform-mac) ::-webkit-scrollbar {
     width: 8px;
 }
@@ -57,6 +63,19 @@
 
 :host-context(.platform-mac) .flame-chart-v-scroll:hover::-webkit-scrollbar-thumb {
     background-color: hsla(0, 0%, 25%, 0.6);
+}
+
+/* force non overlay scrollbars for Aura Overlay Scrollbar enabled */
+:host-context(.overlay-scrollbar-enabled) ::-webkit-scrollbar {
+    width: 10px;
+}
+
+:host-context(.overlay-scrollbar-enabled) ::-webkit-scrollbar-thumb {
+    background-color: hsla(0, 0%, 0%, 0.5);
+}
+
+:host-context(.overlay-scrollbar-enabled) .flame-chart-v-scroll:hover::-webkit-scrollbar-thumb {
+    background-color: hsla(0, 0%, 0%, 0.7);
 }
 
 .flame-chart-selection-overlay {
@@ -78,6 +97,16 @@
     left: 0;
     right: 0;
     bottom: 0;
+}
+
+.chart-cursor-element {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 100;
+    width: 2px;
+    background-color: rgb(56, 121, 217);
+    pointer-events: none;
 }
 
 .flame-chart-entry-info:not(:empty) {

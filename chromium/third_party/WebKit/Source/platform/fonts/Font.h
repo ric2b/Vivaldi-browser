@@ -56,6 +56,16 @@ class ShapeCache;
 class TextRun;
 struct TextRunPaintInfo;
 
+// Represents text content of a NGPhysicalTextFragment for painting.
+// TODO(eae): Move to a separate file?
+struct PLATFORM_EXPORT TextFragmentPaintInfo {
+  const StringView text;
+  TextDirection direction;
+  unsigned from;
+  unsigned to;
+  const ShapeResult* shape_result;
+};
+
 class PLATFORM_EXPORT Font {
   DISALLOW_NEW();
 
@@ -85,6 +95,11 @@ class PLATFORM_EXPORT Font {
                 const FloatPoint&,
                 float device_scale_factor,
                 const PaintFlags&) const;
+  bool DrawText(PaintCanvas*,
+                const TextFragmentPaintInfo&,
+                const FloatPoint&,
+                float device_scale_factor,
+                const PaintFlags&) const;
   bool DrawBidiText(PaintCanvas*,
                     const TextRunPaintInfo&,
                     const FloatPoint&,
@@ -93,6 +108,12 @@ class PLATFORM_EXPORT Font {
                     const PaintFlags&) const;
   void DrawEmphasisMarks(PaintCanvas*,
                          const TextRunPaintInfo&,
+                         const AtomicString& mark,
+                         const FloatPoint&,
+                         float device_scale_factor,
+                         const PaintFlags&) const;
+  void DrawEmphasisMarks(PaintCanvas*,
+                         const TextFragmentPaintInfo&,
                          const AtomicString& mark,
                          const FloatPoint&,
                          float device_scale_factor,
@@ -110,6 +131,11 @@ class PLATFORM_EXPORT Font {
   // TODO(drott): crbug.com/655154 Fix this for
   // upright in vertical.
   void GetTextIntercepts(const TextRunPaintInfo&,
+                         float device_scale_factor,
+                         const PaintFlags&,
+                         const std::tuple<float, float>& bounds,
+                         Vector<TextIntercept>&) const;
+  void GetTextIntercepts(const TextFragmentPaintInfo&,
                          float device_scale_factor,
                          const PaintFlags&,
                          const std::tuple<float, float>& bounds,
@@ -146,6 +172,7 @@ class PLATFORM_EXPORT Font {
   float TabWidth(const TabSize& tab_size, float position) const {
     return TabWidth(PrimaryFont(), tab_size, position);
   }
+  LayoutUnit TabWidth(const TabSize&, LayoutUnit position) const;
 
   int EmphasisMarkAscent(const AtomicString&) const;
   int EmphasisMarkDescent(const AtomicString&) const;
@@ -170,6 +197,8 @@ class PLATFORM_EXPORT Font {
     can_shape_word_by_word_ = b;
     shape_word_by_word_computed_ = true;
   }
+
+  void ReportNotDefGlyph() const;
 
  private:
   enum ForTextEmphasisOrNot { kNotForTextEmphasis, kForTextEmphasis };

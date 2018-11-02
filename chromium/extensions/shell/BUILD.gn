@@ -32,6 +32,7 @@ source_set("app_shell_lib") {
   deps = [
     ":resources",
     ":version_header",
+    "//apps",
     "//base",
     "//components/guest_view/browser",
     "//components/guest_view/common",
@@ -44,6 +45,7 @@ source_set("app_shell_lib") {
     "//content",
     "//content/shell:content_shell_lib",
     "//device/base",
+    "//device/bluetooth",
     "//device/hid",
     "//extensions:extensions_resources",
     "//extensions:shell_and_test_pak",
@@ -171,8 +173,6 @@ source_set("app_shell_lib") {
 
   if (use_aura) {
     sources += [
-      "browser/input_method_event_handler.cc",
-      "browser/input_method_event_handler.h",
       "browser/shell_app_window_client_aura.cc",
       "browser/shell_desktop_controller_aura.cc",
       "browser/shell_desktop_controller_aura.h",
@@ -229,7 +229,7 @@ if (is_mac) {
     ]
     deps = [
       ":app_shell_framework_bundle_data",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
       "//extensions:shell_and_test_pak",
     ]
     ldflags = [
@@ -248,7 +248,7 @@ if (is_mac) {
 
     deps = [
       ":app_shell_lib",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//extensions:shell_and_test_pak",
     ]
@@ -377,7 +377,7 @@ if (is_mac) {
     ]
     deps = [
       ":app_shell_framework+link",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
     ]
     ldflags = [
       "-rpath",

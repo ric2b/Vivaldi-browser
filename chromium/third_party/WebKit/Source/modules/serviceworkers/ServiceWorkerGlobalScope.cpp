@@ -35,9 +35,7 @@
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/SourceLocation.h"
-#include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/Event.h"
@@ -57,6 +55,8 @@
 #include "modules/serviceworkers/ServiceWorkerThread.h"
 #include "modules/serviceworkers/WaitUntilObserver.h"
 #include "platform/Histogram.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8ThrowException.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
@@ -189,7 +189,7 @@ bool ServiceWorkerGlobalScope::AddEventListenerInternal(
     String message = String::Format(
         "Event handler of '%s' event must be added on the initial evaluation "
         "of worker script.",
-        event_type.Utf8().Data());
+        event_type.Utf8().data());
     AddConsoleMessage(ConsoleMessage::Create(kJSMessageSource,
                                              kWarningMessageLevel, message));
   }

@@ -52,9 +52,7 @@ class MockSearchIPCRouterDelegate : public SearchIPCRouter::Delegate {
  public:
   virtual ~MockSearchIPCRouterDelegate() {}
 
-  MOCK_METHOD1(OnInstantSupportDetermined, void(bool supports_instant));
   MOCK_METHOD1(FocusOmnibox, void(OmniboxFocusState state));
-  MOCK_METHOD2(NavigateToURL, void(const GURL&, WindowOpenDisposition));
   MOCK_METHOD1(OnDeleteMostVisitedItem, void(const GURL& url));
   MOCK_METHOD1(OnUndoMostVisitedDeletion, void(const GURL& url));
   MOCK_METHOD0(OnUndoAllMostVisitedDeletions, void());
@@ -138,51 +136,6 @@ class SearchTabHelperTest : public ChromeRenderViewHostTestHarness {
   MockSearchIPCRouterDelegate delegate_;
   MockSearchBox mock_search_box_;
 };
-
-TEST_F(SearchTabHelperTest, DetermineIfPageSupportsInstant_Local) {
-  NavigateAndCommit(GURL(chrome::kChromeSearchLocalNtpUrl));
-  EXPECT_CALL(*mock_delegate(), OnInstantSupportDetermined(true)).Times(0);
-
-  SearchTabHelper* search_tab_helper =
-      SearchTabHelper::FromWebContents(web_contents());
-  ASSERT_NE(static_cast<SearchTabHelper*>(NULL), search_tab_helper);
-  search_tab_helper->ipc_router_for_testing().set_delegate_for_testing(
-      mock_delegate());
-  search_tab_helper->DetermineIfPageSupportsInstant();
-}
-
-TEST_F(SearchTabHelperTest, DetermineIfPageSupportsInstant_NonLocal) {
-  NavigateAndCommit(GURL("chrome-search://foo/bar"));
-  EXPECT_CALL(*mock_delegate(), OnInstantSupportDetermined(true)).Times(1);
-
-  SearchTabHelper* search_tab_helper =
-      SearchTabHelper::FromWebContents(web_contents());
-  ASSERT_NE(static_cast<SearchTabHelper*>(NULL), search_tab_helper);
-  search_tab_helper->ipc_router_for_testing().set_delegate_for_testing(
-      mock_delegate());
-  EXPECT_CALL(*mock_search_box(), DetermineIfPageSupportsInstant());
-  search_tab_helper->DetermineIfPageSupportsInstant();
-
-  search_tab_helper->ipc_router_for_testing().InstantSupportDetermined(
-      search_tab_helper->ipc_router_for_testing().page_seq_no_for_testing(),
-      true);
-}
-
-TEST_F(SearchTabHelperTest, PageURLDoesntBelongToInstantRenderer) {
-  // Navigate to a page URL that doesn't belong to Instant renderer.
-  // SearchTabHelper::DeterminerIfPageSupportsInstant() should return
-  // immediately without dispatching any message to the renderer.
-  NavigateAndCommit(GURL("http://www.example.com"));
-  EXPECT_CALL(*mock_delegate(), OnInstantSupportDetermined(false)).Times(0);
-
-  SearchTabHelper* search_tab_helper =
-      SearchTabHelper::FromWebContents(web_contents());
-  ASSERT_NE(static_cast<SearchTabHelper*>(NULL), search_tab_helper);
-  search_tab_helper->ipc_router_for_testing().set_delegate_for_testing(
-      mock_delegate());
-  EXPECT_CALL(*mock_search_box(), DetermineIfPageSupportsInstant()).Times(0);
-  search_tab_helper->DetermineIfPageSupportsInstant();
-}
 
 TEST_F(SearchTabHelperTest, OnChromeIdentityCheckMatch) {
   NavigateAndCommit(GURL(chrome::kChromeSearchLocalNtpUrl));

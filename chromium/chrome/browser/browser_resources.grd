@@ -40,13 +40,18 @@
         <structure name="IDR_HELP_CHANNEL_CHANGE_PAGE_CSS" file="resources\help\channel_change_page.css" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_HELP_CHANNEL_CHANGE_PAGE_HTML" file="resources\help\channel_change_page.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_INCOGNITO_TAB_HTML" file="resources\ntp4\incognito_tab.html" flattenhtml="true" type="chrome_html" />
+        <structure name="IDR_MD_INCOGNITO_TAB_HTML" file="resources\ntp4\md_incognito_tab.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_GUEST_TAB_HTML" file="resources\ntp4\guest_tab.html" flattenhtml="true" type="chrome_html" />
       </if>
       <if expr="chromeos">
         <structure name="IDR_LOCK_HTML" file="resources\chromeos\login\lock.html" flattenhtml="true" type="chrome_html" variables="OOBE=lock" expand_variables="true"/>
         <structure name="IDR_LOCK_JS" file="resources\chromeos\login\lock.js" flattenhtml="true" type="chrome_html" variables="OOBE=lock" expand_variables="true" />
+        <structure name="IDR_MD_LOCK_HTML" file="resources\chromeos\login\md_lock.html" flattenhtml="true" type="chrome_html" variables="OOBE=md_lock" expand_variables="true"/>
+        <structure name="IDR_MD_LOCK_JS" file="resources\chromeos\login\md_lock.js" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_LOGIN_HTML" file="resources\chromeos\login\login.html" flattenhtml="true" type="chrome_html" variables="OOBE=login" expand_variables="true"/>
         <structure name="IDR_LOGIN_JS" file="resources\chromeos\login\login.js" flattenhtml="true" type="chrome_html" />
+        <structure name="IDR_MD_LOGIN_HTML" file="resources\chromeos\login\md_login.html" flattenhtml="true" type="chrome_html" variables="OOBE=md_login" expand_variables="true"/>
+        <structure name="IDR_MD_LOGIN_JS" file="resources\chromeos\login\md_login.js" flattenhtml="true" type="chrome_html" />
       </if>
       <if expr="not is_android">
         <structure name="IDR_NEW_INCOGNITO_TAB_THEME_CSS" file="resources\ntp4\new_incognito_tab_theme.css" flattenhtml="true" type="chrome_html" />
@@ -69,6 +74,8 @@
         <structure name="IDR_CUSTOM_ELEMENTS_LOGIN_JS" file="resources\chromeos\login\custom_elements_login.js" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML" file="resources\chromeos\quick_unlock\pin_keyboard.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
         <structure name="IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS" file="resources\chromeos\quick_unlock\pin_keyboard.js" type="chrome_html" />
+        <structure name="IDR_MD_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML" file="resources\chromeos\quick_unlock\md_pin_keyboard.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
+        <structure name="IDR_MD_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS" file="resources\chromeos\quick_unlock\md_pin_keyboard.js" type="chrome_html" />
       </if>
       <structure name="IDR_SIGNIN_SHARED_CSS_HTML" file="resources\signin\signin_shared_css.html" preprocess="true" allowexternalscript="true" type="chrome_html" />
       <if expr="not is_android and not is_ios and not chromeos">
@@ -136,6 +143,7 @@
       </if>
       <if expr="enable_printing">
         <include name="IDR_CLOUDPRINT_MANIFEST" file="resources\cloud_print_app\manifest.json" type="BINDATA" />
+        <include name="IDR_PDF_COMPOSITOR_MANIFEST" file="..\..\components\printing\service\pdf_compositor_manifest.json" type="BINDATA" />
       </if>
       <if expr="not is_ios">
         <include name="IDR_DEVTOOLS_DISCOVERY_PAGE_HTML" file="devtools\frontend\devtools_discovery_page.html" type="BINDATA"/>
@@ -206,6 +214,8 @@
         <include name="IDR_MD_EXTENSIONS_ITEM_UTIL_JS" file="resources\md_extensions\item_util.js" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_LOAD_ERROR_HTML" file="resources\md_extensions\load_error.html" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_LOAD_ERROR_JS" file="resources\md_extensions\load_error.js" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_NAVIGATION_HELPER_HTML" file="resources\md_extensions\navigation_helper.html" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_NAVIGATION_HELPER_JS" file="resources\md_extensions\navigation_helper.js" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_OPTIONS_DIALOG_HTML" file="resources\md_extensions\options_dialog.html" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_OPTIONS_DIALOG_JS" file="resources\md_extensions\options_dialog.js" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_PACK_DIALOG_HTML" file="resources\md_extensions\pack_dialog.html" type="BINDATA" />
@@ -235,6 +245,7 @@
         <include name="IDR_SNIPPETS_INTERNALS_HTML" file="resources\snippets_internals.html" allowexternalscript="true" compress="gzip" type="BINDATA" />
         <include name="IDR_SNIPPETS_INTERNALS_CSS" file="resources\snippets_internals.css" compress="gzip" type="BINDATA" />
         <include name="IDR_SNIPPETS_INTERNALS_JS" file="resources\snippets_internals.js" compress="gzip" type="BINDATA" />
+        <part file="vr_shell_resources.grdp" />
       </if>
       <include name="IDR_SUPERVISED_USER_INTERNALS_HTML" file="resources\supervised_user_internals.html" allowexternalscript="true" compress="gzip" type="BINDATA" />
       <include name="IDR_SUPERVISED_USER_INTERNALS_CSS" file="resources\supervised_user_internals.css" compress="gzip" type="BINDATA" />
@@ -252,9 +263,6 @@
         <include name="IDR_HELP_PAGE_JS" file="resources\help\help_page.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_CHANNEL_CHANGE_PAGE_JS" file="resources\help\channel_change_page.js" flattenhtml="true" type="BINDATA" />
       </if>
-      <include name="IDR_HISTORY_HTML" file="resources\history\history.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
-      <include name="IDR_HISTORY_JS" file="resources\history\history.js" flattenhtml="true" type="BINDATA" compress="gzip" />
-      <include name="IDR_OTHER_DEVICES_JS" file="resources\history\other_devices.js" flattenhtml="true" type="BINDATA" compress="gzip" />
 
       <if expr="not is_android and not is_ios">
         <!-- MD Bookmarks. -->
@@ -265,6 +273,8 @@
         <include name="IDR_MD_BOOKMARKS_APP_HTML" file="resources\md_bookmarks\app.html" type="BINDATA" />
         <include name="IDR_MD_BOOKMARKS_APP_JS" file="resources\md_bookmarks\app.js" type="BINDATA" />
         <include name="IDR_MD_BOOKMARKS_BOOKMARKS_HTML" file="resources\md_bookmarks\bookmarks.html" type="BINDATA" />
+        <include name="IDR_MD_BOOKMARKS_COMMAND_MANAGER_HTML" file="resources\md_bookmarks\command_manager.html" type="BINDATA" />
+        <include name="IDR_MD_BOOKMARKS_COMMAND_MANAGER_JS" file="resources\md_bookmarks\command_manager.js" type="BINDATA" />
         <include name="IDR_MD_BOOKMARKS_CONSTANTS_HTML" file="resources\md_bookmarks\constants.html" type="BINDATA" />
         <include name="IDR_MD_BOOKMARKS_CONSTANTS_JS" file="resources\md_bookmarks\constants.js" type="BINDATA" />
         <include name="IDR_MD_BOOKMARKS_DND_MANAGER_HTML" file="resources\md_bookmarks\dnd_manager.html" type="BINDATA" />
@@ -284,8 +294,6 @@
         <include name="IDR_MD_BOOKMARKS_ROUTER_JS" file="resources\md_bookmarks\router.js" type="BINDATA" />
         <include name="IDR_MD_BOOKMARKS_SHARED_STYLE_HTML" file="resources\md_bookmarks\shared_style.html" type="BINDATA" />
         <include name="IDR_MD_BOOKMARKS_SHARED_VARS_HTML" file="resources\md_bookmarks\shared_vars.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_SIDEBAR_HTML" file="resources\md_bookmarks\sidebar.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_SIDEBAR_JS" file="resources\md_bookmarks\sidebar.js" type="BINDATA" />
         <include name="IDR_MD_BOOKMARKS_STORE_CLIENT_HTML" file="resources\md_bookmarks\store_client.html" type="BINDATA" />
         <include name="IDR_MD_BOOKMARKS_STORE_CLIENT_JS" file="resources\md_bookmarks\store_client.js" type="BINDATA" />
         <include name="IDR_MD_BOOKMARKS_STORE_HTML" file="resources\md_bookmarks\store.html" type="BINDATA" />
@@ -433,8 +441,6 @@
                  file="resources\print_preview\images\pdf.png" type="BINDATA" />
         <include name="IDR_PRINT_PREVIEW_IMAGES_THIRD_PARTY"
                  file="resources\print_preview\images\third_party.png" type="BINDATA" />
-        <include name="IDR_PRINT_PREVIEW_IMAGES_THIRD_PARTY_FEDEX"
-                 file="resources\print_preview\images\third_party_fedex.png" type="BINDATA" />
         <include name="IDR_PRINT_PREVIEW_IMAGES_MOBILE"
                  file="resources\print_preview\images\mobile.png" type="BINDATA" />
         <include name="IDR_PRINT_PREVIEW_IMAGES_MOBILE_SHARED"
@@ -624,10 +630,8 @@
         </if>
         <include name="IDR_BRAILLE_MANIFEST" file="resources\chromeos\braille_ime\manifest.json" type="BINDATA" />
       </if>
-      <if expr="enable_media_router">
-        <part file="media_router_resources.grdp" />
-      </if>
-      <if expr="enable_media_router and (chromeos or is_win or is_macosx)">
+      <part file="media_router_resources.grdp" />
+      <if expr="chromeos or is_win or is_macosx">
         <include name="IDR_CAST_HTML" file="resources\cast\cast.html" type="BINDATA" />
         <include name="IDR_CAST_CSS" file="resources\cast\cast.css" type="BINDATA" />
         <include name="IDR_CAST_JS" file="resources\cast\cast.js" type="BINDATA" />

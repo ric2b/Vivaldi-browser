@@ -54,6 +54,7 @@
 #include "core/css/CSSPendingSubstitutionValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSQuadValue.h"
+#include "core/css/CSSRayValue.h"
 #include "core/css/CSSReflectValue.h"
 #include "core/css/CSSShadowValue.h"
 #include "core/css/CSSStringValue.h"
@@ -202,6 +203,8 @@ bool CSSValue::operator==(const CSSValue& other) const {
         return CompareCSSValues<CSSPathValue>(*this, other);
       case kPrimitiveClass:
         return CompareCSSValues<CSSPrimitiveValue>(*this, other);
+      case kRayClass:
+        return CompareCSSValues<CSSRayValue>(*this, other);
       case kIdentifierClass:
         return CompareCSSValues<CSSIdentifierValue>(*this, other);
       case kQuadClass:
@@ -217,6 +220,8 @@ bool CSSValue::operator==(const CSSValue& other) const {
                                                                    other);
       case kStepsTimingFunctionClass:
         return CompareCSSValues<CSSStepsTimingFunctionValue>(*this, other);
+      case kFramesTimingFunctionClass:
+        return CompareCSSValues<CSSFramesTimingFunctionValue>(*this, other);
       case kUnicodeRangeClass:
         return CompareCSSValues<CSSUnicodeRangeValue>(*this, other);
       case kURIClass:
@@ -300,6 +305,8 @@ String CSSValue::CssText() const {
       return ToCSSPathValue(this)->CustomCSSText();
     case kPrimitiveClass:
       return ToCSSPrimitiveValue(this)->CustomCSSText();
+    case kRayClass:
+      return ToCSSRayValue(this)->CustomCSSText();
     case kIdentifierClass:
       return ToCSSIdentifierValue(this)->CustomCSSText();
     case kQuadClass:
@@ -314,6 +321,8 @@ String CSSValue::CssText() const {
       return ToCSSCubicBezierTimingFunctionValue(this)->CustomCSSText();
     case kStepsTimingFunctionClass:
       return ToCSSStepsTimingFunctionValue(this)->CustomCSSText();
+    case kFramesTimingFunctionClass:
+      return ToCSSFramesTimingFunctionValue(this)->CustomCSSText();
     case kUnicodeRangeClass:
       return ToCSSUnicodeRangeValue(this)->CustomCSSText();
     case kURIClass:
@@ -423,6 +432,9 @@ void CSSValue::FinalizeGarbageCollectedObject() {
     case kPrimitiveClass:
       ToCSSPrimitiveValue(this)->~CSSPrimitiveValue();
       return;
+    case kRayClass:
+      ToCSSRayValue(this)->~CSSRayValue();
+      return;
     case kIdentifierClass:
       ToCSSIdentifierValue(this)->~CSSIdentifierValue();
       return;
@@ -444,6 +456,9 @@ void CSSValue::FinalizeGarbageCollectedObject() {
       return;
     case kStepsTimingFunctionClass:
       ToCSSStepsTimingFunctionValue(this)->~CSSStepsTimingFunctionValue();
+      return;
+    case kFramesTimingFunctionClass:
+      ToCSSFramesTimingFunctionValue(this)->~CSSFramesTimingFunctionValue();
       return;
     case kUnicodeRangeClass:
       ToCSSUnicodeRangeValue(this)->~CSSUnicodeRangeValue();
@@ -562,6 +577,9 @@ DEFINE_TRACE(CSSValue) {
     case kPrimitiveClass:
       ToCSSPrimitiveValue(this)->TraceAfterDispatch(visitor);
       return;
+    case kRayClass:
+      ToCSSRayValue(this)->TraceAfterDispatch(visitor);
+      return;
     case kIdentifierClass:
       ToCSSIdentifierValue(this)->TraceAfterDispatch(visitor);
       return;
@@ -582,6 +600,9 @@ DEFINE_TRACE(CSSValue) {
       return;
     case kStepsTimingFunctionClass:
       ToCSSStepsTimingFunctionValue(this)->TraceAfterDispatch(visitor);
+      return;
+    case kFramesTimingFunctionClass:
+      ToCSSFramesTimingFunctionValue(this)->TraceAfterDispatch(visitor);
       return;
     case kUnicodeRangeClass:
       ToCSSUnicodeRangeValue(this)->TraceAfterDispatch(visitor);

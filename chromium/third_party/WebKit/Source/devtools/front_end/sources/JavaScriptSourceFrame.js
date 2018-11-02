@@ -54,6 +54,8 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
     this.textEditor.element.addEventListener('keydown', this._onKeyDown.bind(this), true);
     this.textEditor.element.addEventListener('keyup', this._onKeyUp.bind(this), true);
     this.textEditor.element.addEventListener('mousemove', this._onMouseMove.bind(this), false);
+    this.textEditor.element.addEventListener('mousedown', this._onMouseDown.bind(this), true);
+    this.textEditor.element.addEventListener('focusout', this._onBlur.bind(this), false);
     if (Runtime.experiments.isEnabled('continueToLocationMarkers')) {
       this.textEditor.element.addEventListener('wheel', event => {
         if (UI.KeyboardShortcut.eventHasCtrlOrMeta(event))
@@ -80,6 +82,8 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
     this._breakpointDecorations = new Set();
     /** @type {!Map<!Bindings.BreakpointManager.Breakpoint, !Sources.JavaScriptSourceFrame.BreakpointDecoration>} */
     this._decorationByBreakpoint = new Map();
+    /** @type {!Set<number>} */
+    this._possibleBreakpointsRequested = new Set();
 
     /** @type {!Map.<!SDK.DebuggerModel, !Bindings.ResourceScriptFile>}*/
     this._scriptFileForDebuggerModel = new Map();
@@ -92,6 +96,8 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
     this.onBindingChanged();
     Bindings.debuggerWorkspaceBinding.addEventListener(
         Bindings.DebuggerWorkspaceBinding.Events.SourceMappingChanged, this._onSourceMappingChanged, this);
+    /** @type {?Map<!Object, !Function>} */
+    this._continueToLocationDecorations = null;
   }
 
   /**
@@ -382,10 +388,12 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
   }
 
   /**
-   * @param {!Event} event
+   * @param {!MouseEvent} event
    * @return {?UI.PopoverRequest}
    */
   _getPopoverRequest(event) {
+    if (UI.KeyboardShortcut.eventHasCtrlOrMeta(event))
+      return null;
     var target = UI.context.flavor(SDK.Target);
     var debuggerModel = target ? target.model(SDK.DebuggerModel) : null;
     if (!debuggerModel || !debuggerModel.isPaused())
@@ -480,6 +488,8 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
    * @param {!KeyboardEvent} event
    */
   _onKeyDown(event) {
+    this._clearControlDown();
+
     if (event.key === 'Escape') {
       if (this._popoverHelper.isPopoverVisible()) {
         this._popoverHelper.hidePopover();
@@ -487,10 +497,14 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
       }
       return;
     }
+
     if (UI.KeyboardShortcut.eventHasCtrlOrMeta(event) && this._executionLocation) {
-      if (!this._continueToLocationShown) {
-        this._showContinueToLocations();
-        this._continueToLocationShown = true;
+      this._controlDown = true;
+      if (event.key === (Host.isMac() ? 'Meta' : 'Control')) {
+        this._controlTimeout = setTimeout(() => {
+          if (this._executionLocation && this._controlDown)
+            this._showContinueToLocations();
+        }, 150);
       }
     }
   }
@@ -499,25 +513,75 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
    * @param {!MouseEvent} event
    */
   _onMouseMove(event) {
-    if (this._executionLocation && UI.KeyboardShortcut.eventHasCtrlOrMeta(event)) {
-      if (!this._continueToLocationShown) {
+    if (this._executionLocation && this._controlDown && UI.KeyboardShortcut.eventHasCtrlOrMeta(event)) {
+      if (!this._continueToLocationDecorations)
         this._showContinueToLocations();
-        this._continueToLocationShown = true;
-      }
-      return;
     }
+    if (this._continueToLocationDecorations) {
+      var textPosition = this.textEditor.coordinatesToCursorPosition(event.x, event.y);
+      var hovering = !!event.target.enclosingNodeOrSelfWithClass('source-frame-async-step-in');
+      this._setAsyncStepInHoveredLine(textPosition ? textPosition.startLine : null, hovering);
+    }
+  }
+
+  /**
+   * @param {?number} line
+   * @param {boolean} hovered
+   */
+  _setAsyncStepInHoveredLine(line, hovered) {
+    if (this._asyncStepInHoveredLine === line && this._asyncStepInHovered === hovered)
+      return;
+    if (this._asyncStepInHovered && this._asyncStepInHoveredLine)
+      this.textEditor.toggleLineClass(this._asyncStepInHoveredLine, 'source-frame-async-step-in-hovered', false);
+    this._asyncStepInHoveredLine = line;
+    this._asyncStepInHovered = hovered;
+    if (this._asyncStepInHovered && this._asyncStepInHoveredLine)
+      this.textEditor.toggleLineClass(this._asyncStepInHoveredLine, 'source-frame-async-step-in-hovered', true);
+  }
+
+  /**
+   * @param {!MouseEvent} event
+   */
+  _onMouseDown(event) {
+    if (!this._executionLocation || !UI.KeyboardShortcut.eventHasCtrlOrMeta(event))
+      return;
+    if (!this._continueToLocationDecorations)
+      return;
+    event.consume();
+    var textPosition = this.textEditor.coordinatesToCursorPosition(event.x, event.y);
+    if (!textPosition)
+      return;
+    for (var decoration of this._continueToLocationDecorations.keys()) {
+      var range = decoration.find();
+      if (range.from.line !== textPosition.startLine || range.to.line !== textPosition.startLine)
+        continue;
+      if (range.from.ch <= textPosition.startColumn && textPosition.startColumn <= range.to.ch) {
+        this._continueToLocationDecorations.get(decoration)();
+        break;
+      }
+    }
+  }
+
+  /**
+   * @param {!Event} event
+   */
+  _onBlur(event) {
+    if (this.textEditor.element.isAncestor(event.target))
+      return;
+    this._clearControlDown();
   }
 
   /**
    * @param {!KeyboardEvent} event
    */
   _onKeyUp(event) {
-    if (UI.KeyboardShortcut.eventHasCtrlOrMeta(event))
-      return;
-    if (!this._continueToLocationShown)
-      return;
+    this._clearControlDown();
+  }
+
+  _clearControlDown() {
+    this._controlDown = false;
     this._clearContinueToLocations();
-    this._continueToLocationShown = false;
+    clearTimeout(this._controlTimeout);
   }
 
   /**
@@ -581,10 +645,11 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
     if (this.isShowing()) {
       // We need SourcesTextEditor to be initialized prior to this call. @see crbug.com/506566
       setImmediate(() => {
-        this._generateValuesInSource();
-        if (Runtime.experiments.isEnabled('continueToLocationMarkers')) {
-          if (this._continueToLocationShown)
+        if (this._controlDown) {
+          if (Runtime.experiments.isEnabled('continueToLocationMarkers'))
             this._showContinueToLocations();
+        } else {
+          this._generateValuesInSource();
         }
       });
     }
@@ -616,77 +681,172 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
   _showContinueToLocations() {
     if (!Runtime.experiments.isEnabled('continueToLocationMarkers'))
       return;
+    this._popoverHelper.hidePopover();
     var executionContext = UI.context.flavor(SDK.ExecutionContext);
     if (!executionContext)
       return;
     var callFrame = UI.context.flavor(SDK.DebuggerModel.CallFrame);
     if (!callFrame)
       return;
-    if (this._clearContinueToLocationsTimer) {
-      clearTimeout(this._clearContinueToLocationsTimer);
-      delete this._clearContinueToLocationsTimer;
-    }
     var localScope = callFrame.localScope();
     if (!localScope) {
-      this.textEditor.operation(clearExistingLocations.bind(this));
+      this._clearContinueToLocationsNoRestore();
       return;
     }
     var start = localScope.startLocation();
     var end = localScope.endLocation();
     var debuggerModel = callFrame.debuggerModel;
-    var executionLocation = callFrame.location();
     debuggerModel.getPossibleBreakpoints(start, end, true)
         .then(locations => this.textEditor.operation(renderLocations.bind(this, locations)));
+
     /**
      * @param {!Array<!SDK.DebuggerModel.BreakLocation>} locations
      * @this {Sources.JavaScriptSourceFrame}
      */
     function renderLocations(locations) {
-      clearExistingLocations.call(this);
+      this._clearContinueToLocationsNoRestore();
+      this.textEditor.hideExecutionLineBackground();
+      this._clearValueWidgets();
+      this._continueToLocationDecorations = new Map();
+      locations = locations.reverse();
+      var previousCallLine = -1;
       for (var location of locations) {
-        var icon;
-        var isCurrent = location.lineNumber === executionLocation.lineNumber &&
-            location.columnNumber === executionLocation.columnNumber;
-        if (!isCurrent || (location.type !== SDK.DebuggerModel.BreakLocationType.Call &&
-                           location.type !== SDK.DebuggerModel.BreakLocationType.Return)) {
-          icon = UI.Icon.create('smallicon-green-arrow');
-          icon.addEventListener('click', location.continueToLocation.bind(location));
-        } else if (location.type === SDK.DebuggerModel.BreakLocationType.Call) {
-          icon = UI.Icon.create('smallicon-step-in');
-          icon.addEventListener('click', () => {
-            debuggerModel.scheduleStepIntoAsync();
-            debuggerModel.stepInto();
-          });
-        } else if (location.type === SDK.DebuggerModel.BreakLocationType.Return) {
-          icon = UI.Icon.create('smallicon-step-out');
-          icon.addEventListener('click', () => {
-            debuggerModel.stepOut();
-          });
+        var lineNumber = location.lineNumber;
+        var token = this.textEditor.tokenAtTextPosition(lineNumber, location.columnNumber);
+        if (!token)
+          continue;
+        var line = this.textEditor.line(lineNumber);
+        var tokenContent = line.substring(token.startColumn, token.endColumn);
+        if (!token.type && tokenContent === '.') {
+          token = this.textEditor.tokenAtTextPosition(lineNumber, token.endColumn + 1);
+          tokenContent = line.substring(token.startColumn, token.endColumn);
         }
-        icon.classList.add('cm-continue-to-location');
-        icon.addEventListener('mousemove', hidePopoverAndConsumeEvent.bind(this));
-        this.textEditor.addBookmark(
-            location.lineNumber, location.columnNumber, icon,
-            Sources.JavaScriptSourceFrame.continueToLocationDecorationSymbol);
+        if (!token.type)
+          continue;
+        var validKeyword = token.type === 'js-keyword' &&
+            (tokenContent === 'this' || tokenContent === 'return' || tokenContent === 'new' ||
+             tokenContent === 'continue' || tokenContent === 'break');
+        if (!validKeyword && !this._isIdentifier(token.type))
+          continue;
+        if (previousCallLine === lineNumber && location.type !== Protocol.Debugger.BreakLocationType.Call)
+          continue;
+
+        var highlightRange = new TextUtils.TextRange(lineNumber, token.startColumn, lineNumber, token.endColumn - 1);
+        var decoration = this.textEditor.highlightRange(highlightRange, 'source-frame-continue-to-location');
+        this._continueToLocationDecorations.set(decoration, location.continueToLocation.bind(location));
+        if (location.type === Protocol.Debugger.BreakLocationType.Call)
+          previousCallLine = lineNumber;
+
+        var isAsyncCall = (line[token.startColumn - 1] === '.' && tokenContent === 'then') ||
+            tokenContent === 'setTimeout' || tokenContent === 'setInterval';
+        var isCurrentPosition = this._executionLocation && lineNumber === this._executionLocation.lineNumber &&
+            location.columnNumber === this._executionLocation.columnNumber;
+        if (location.type === Protocol.Debugger.BreakLocationType.Call && isAsyncCall) {
+          var asyncStepInRange = this._findAsyncStepInRange(this.textEditor, lineNumber, line, token.endColumn);
+          if (asyncStepInRange) {
+            highlightRange =
+                new TextUtils.TextRange(lineNumber, asyncStepInRange.from, lineNumber, asyncStepInRange.to - 1);
+            decoration = this.textEditor.highlightRange(highlightRange, 'source-frame-async-step-in');
+            this._continueToLocationDecorations.set(
+                decoration, this._asyncStepIn.bind(this, location, isCurrentPosition));
+          }
+        }
+      }
+
+      this._continueToLocationRenderedForTest();
+    }
+  }
+
+  _continueToLocationRenderedForTest() {
+  }
+
+  /**
+   * @param {!SourceFrame.SourcesTextEditor} textEditor
+   * @param {number} lineNumber
+   * @param {string} line
+   * @param {number} column
+   * @return {?{from: number, to: number}}
+   */
+  _findAsyncStepInRange(textEditor, lineNumber, line, column) {
+    var token;
+    var tokenText;
+    var from = column;
+    var to = line.length;
+
+    var position = line.indexOf('(', column);
+    if (position === -1)
+      return null;
+    position++;
+
+    skipWhitespace();
+    if (position >= line.length)
+      return null;
+
+    nextToken();
+    if (!token)
+      return null;
+    from = token.startColumn;
+
+    if (token.type === 'js-keyword' && tokenText === 'async') {
+      skipWhitespace();
+      if (position >= line.length)
+        return {from: from, to: to};
+      nextToken();
+      if (!token)
+        return {from: from, to: to};
+    }
+
+    if (token.type === 'js-keyword' && tokenText === 'function')
+      return {from: from, to: to};
+
+    if (token.type && this._isIdentifier(token.type))
+      return {from: from, to: to};
+
+    if (tokenText !== '(')
+      return null;
+    var closeParen = line.indexOf(')', position);
+    if (closeParen === -1 || line.substring(position, closeParen).indexOf('(') !== -1)
+      return {from: from, to: to};
+    return {from: from, to: closeParen + 1};
+
+    function nextToken() {
+      token = textEditor.tokenAtTextPosition(lineNumber, position);
+      if (token) {
+        position = token.endColumn;
+        to = token.endColumn;
+        tokenText = line.substring(token.startColumn, token.endColumn);
       }
     }
 
-    /**
-     * @this {Sources.JavaScriptSourceFrame}
-     */
-    function clearExistingLocations() {
-      var bookmarks = this.textEditor.bookmarks(
-          this.textEditor.fullRange(), Sources.JavaScriptSourceFrame.continueToLocationDecorationSymbol);
-      bookmarks.map(bookmark => bookmark.clear());
+    function skipWhitespace() {
+      while (position < line.length) {
+        if (line[position] === ' ') {
+          position++;
+          continue;
+        }
+        var token = textEditor.tokenAtTextPosition(lineNumber, position);
+        if (token.type === 'js-comment') {
+          position = token.endColumn;
+          continue;
+        }
+        break;
+      }
     }
+  }
 
-    /**
-     * @param {!Event} event
-     * @this {Sources.JavaScriptSourceFrame}
-     */
-    function hidePopoverAndConsumeEvent(event) {
-      event.consume(true);
-      this._popoverHelper.hidePopover();
+  /**
+   * @param {!SDK.DebuggerModel.BreakLocation} location
+   * @param {boolean} isCurrentPosition
+   */
+  _asyncStepIn(location, isCurrentPosition) {
+    if (!isCurrentPosition)
+      location.continueToLocation(asyncStepIn);
+    else
+      asyncStepIn();
+
+    function asyncStepIn() {
+      location.debuggerModel.scheduleStepIntoAsync();
+      location.debuggerModel.stepInto();
     }
   }
 
@@ -834,28 +994,44 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
   }
 
   clearExecutionLine() {
-    if (this.loaded && this._executionLocation)
-      this.textEditor.clearExecutionLine();
-    delete this._executionLocation;
-    this._clearValueWidgetsTimer = setTimeout(this._clearValueWidgets.bind(this), 1000);
-    if (Runtime.experiments.isEnabled('continueToLocationMarkers'))
-      this._clearContinueToLocationsTimer = setTimeout(this._clearContinueToLocations.bind(this), 1000);
+    this.textEditor.operation(() => {
+      if (this.loaded && this._executionLocation)
+        this.textEditor.clearExecutionLine();
+      delete this._executionLocation;
+      this._clearValueWidgetsTimer = setTimeout(this._clearValueWidgets.bind(this), 1000);
+      this._clearContinueToLocationsNoRestore();
+    });
   }
 
   _clearValueWidgets() {
+    clearTimeout(this._clearValueWidgetsTimer);
     delete this._clearValueWidgetsTimer;
-    for (var line of this._valueWidgets.keys())
-      this.textEditor.removeDecoration(this._valueWidgets.get(line), line);
-    this._valueWidgets.clear();
+    this.textEditor.operation(() => {
+      for (var line of this._valueWidgets.keys())
+        this.textEditor.removeDecoration(this._valueWidgets.get(line), line);
+      this._valueWidgets.clear();
+    });
+  }
+
+  _clearContinueToLocationsNoRestore() {
+    if (!this._continueToLocationDecorations)
+      return;
+    this.textEditor.operation(() => {
+      for (var decoration of this._continueToLocationDecorations.keys())
+        this.textEditor.removeHighlight(decoration);
+      this._continueToLocationDecorations = null;
+      this._setAsyncStepInHoveredLine(null, false);
+    });
   }
 
   _clearContinueToLocations() {
-    if (!Runtime.experiments.isEnabled('continueToLocationMarkers'))
+    if (!this._continueToLocationDecorations)
       return;
-    delete this._clearContinueToLocationsTimer;
-    var bookmarks = this.textEditor.bookmarks(
-        this.textEditor.fullRange(), Sources.JavaScriptSourceFrame.continueToLocationDecorationSymbol);
-    this.textEditor.operation(() => bookmarks.map(bookmark => bookmark.clear()));
+    this.textEditor.operation(() => {
+      this.textEditor.showExecutionLineBackground();
+      this._generateValuesInSource();
+      this._clearContinueToLocationsNoRestore();
+    });
   }
 
   /**
@@ -906,42 +1082,67 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
         lineNumbers.add(location.lineNumber);
       }
       delete this._scheduledBreakpointDecorationUpdates;
+      var waitingForInlineDecorations = false;
       for (var lineNumber of lineNumbers) {
-        this.textEditor.toggleLineClass(lineNumber, 'cm-breakpoint', false);
-        this.textEditor.toggleLineClass(lineNumber, 'cm-breakpoint-disabled', false);
-        this.textEditor.toggleLineClass(lineNumber, 'cm-breakpoint-conditional', false);
-
         var decorations = this._lineBreakpointDecorations(lineNumber);
-        var actualBookmarks =
-            new Set(decorations.map(decoration => decoration.bookmark).filter(bookmark => !!bookmark));
-        var lineEnd = this.textEditor.line(lineNumber).length;
-        var bookmarks = this.textEditor.bookmarks(
-            new TextUtils.TextRange(lineNumber, 0, lineNumber, lineEnd),
-            Sources.JavaScriptSourceFrame.BreakpointDecoration.bookmarkSymbol);
-        for (var bookmark of bookmarks) {
-          if (!actualBookmarks.has(bookmark))
-            bookmark.clear();
-        }
-        if (!decorations.length)
+        updateGutter.call(this, lineNumber, decorations);
+        if (this._possibleBreakpointsRequested.has(location.lineNumber)) {
+          waitingForInlineDecorations = true;
           continue;
+        }
+        updateInlineDecorations.call(this, lineNumber, decorations);
+      }
+      if (!waitingForInlineDecorations)
+        this._breakpointDecorationsUpdatedForTest();
+    }
+
+    /**
+     * @param {number} lineNumber
+     * @param {!Array<!Sources.JavaScriptSourceFrame.BreakpointDecoration>} decorations
+     * @this {Sources.JavaScriptSourceFrame}
+     */
+    function updateGutter(lineNumber, decorations) {
+      this.textEditor.toggleLineClass(lineNumber, 'cm-breakpoint', false);
+      this.textEditor.toggleLineClass(lineNumber, 'cm-breakpoint-disabled', false);
+      this.textEditor.toggleLineClass(lineNumber, 'cm-breakpoint-conditional', false);
+
+      if (decorations.length) {
         decorations.sort(Sources.JavaScriptSourceFrame.BreakpointDecoration.mostSpecificFirst);
         this.textEditor.toggleLineClass(lineNumber, 'cm-breakpoint', true);
         this.textEditor.toggleLineClass(lineNumber, 'cm-breakpoint-disabled', !decorations[0].enabled || this._muted);
         this.textEditor.toggleLineClass(lineNumber, 'cm-breakpoint-conditional', !!decorations[0].condition);
-        if (decorations.length > 1) {
-          for (var decoration of decorations) {
-            decoration.update();
-            if (!this._muted)
-              decoration.show();
-            else
-              decoration.hide();
-          }
-        } else {
-          decorations[0].update();
-          decorations[0].hide();
-        }
       }
-      this._breakpointDecorationsUpdatedForTest();
+    }
+
+    /**
+     * @param {number} lineNumber
+     * @param {!Array<!Sources.JavaScriptSourceFrame.BreakpointDecoration>} decorations
+     * @this {Sources.JavaScriptSourceFrame}
+     */
+    function updateInlineDecorations(lineNumber, decorations) {
+      var actualBookmarks = new Set(decorations.map(decoration => decoration.bookmark).filter(bookmark => !!bookmark));
+      var lineEnd = this.textEditor.line(lineNumber).length;
+      var bookmarks = this.textEditor.bookmarks(
+          new TextUtils.TextRange(lineNumber, 0, lineNumber, lineEnd),
+          Sources.JavaScriptSourceFrame.BreakpointDecoration.bookmarkSymbol);
+      for (var bookmark of bookmarks) {
+        if (!actualBookmarks.has(bookmark))
+          bookmark.clear();
+      }
+      if (!decorations.length)
+        return;
+      if (decorations.length > 1) {
+        for (var decoration of decorations) {
+          decoration.update();
+          if (!this._muted)
+            decoration.show();
+          else
+            decoration.hide();
+        }
+      } else {
+        decorations[0].update();
+        decorations[0].hide();
+      }
     }
   }
 
@@ -1046,7 +1247,7 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
     this._decorationByBreakpoint.set(breakpoint, decoration);
     this._updateBreakpointDecoration(decoration);
     if (!lineDecorations.length) {
-      this._willAddInlineDecorationsForTest();
+      this._possibleBreakpointsRequested.add(uiLocation.lineNumber);
       this._breakpointManager
           .possibleBreakpoints(
               this._debuggerSourceCode, new TextUtils.TextRange(uiLocation.lineNumber, 0, uiLocation.lineNumber + 1, 0))
@@ -1059,11 +1260,12 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
      * @param {!Array<!Workspace.UILocation>} possibleLocations
      */
     function addInlineDecorations(lineNumber, possibleLocations) {
+      this._possibleBreakpointsRequested.delete(lineNumber);
       var decorations = this._lineBreakpointDecorations(lineNumber);
-      if (!decorations.some(decoration => !!decoration.breakpoint)) {
-        this._didAddInlineDecorationsForTest(false);
+      for (var decoration of decorations)
+        this._updateBreakpointDecoration(decoration);
+      if (!decorations.some(decoration => !!decoration.breakpoint))
         return;
-      }
       /** @type {!Set<number>} */
       var columns = new Set();
       for (var decoration of decorations) {
@@ -1072,7 +1274,6 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
           continue;
         columns.add(location.columnNumber);
       }
-      var updateWasScheduled = false;
       for (var location of possibleLocations) {
         if (columns.has(location.columnNumber))
           continue;
@@ -1083,20 +1284,9 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
         decoration.element.addEventListener(
             'contextmenu', this._inlineBreakpointContextMenu.bind(this, decoration), true);
         this._breakpointDecorations.add(decoration);
-        updateWasScheduled = true;
         this._updateBreakpointDecoration(decoration);
       }
-      this._didAddInlineDecorationsForTest(updateWasScheduled);
     }
-  }
-
-  _willAddInlineDecorationsForTest() {
-  }
-
-  /**
-   * @param {boolean} updateWasScheduled
-   */
-  _didAddInlineDecorationsForTest(updateWasScheduled) {
   }
 
   /**
@@ -1205,27 +1395,40 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
       if (this._muted && !this.uiSourceCode().isDirty())
         this._restoreBreakpointsIfConsistentScripts();
     }
-    if (newScriptFile)
-      this._scriptFileForDebuggerModel.set(debuggerModel, newScriptFile);
+    if (!newScriptFile)
+      return;
+    this._scriptFileForDebuggerModel.set(debuggerModel, newScriptFile);
+    newScriptFile.addEventListener(Bindings.ResourceScriptFile.Events.DidMergeToVM, this._didMergeToVM, this);
+    newScriptFile.addEventListener(Bindings.ResourceScriptFile.Events.DidDivergeFromVM, this._didDivergeFromVM, this);
+    if (this.loaded)
+      newScriptFile.checkMapping();
+    this._showSourceMapInfobar(newScriptFile.hasSourceMapURL());
+  }
 
-    if (newScriptFile) {
-      newScriptFile.addEventListener(Bindings.ResourceScriptFile.Events.DidMergeToVM, this._didMergeToVM, this);
-      newScriptFile.addEventListener(Bindings.ResourceScriptFile.Events.DidDivergeFromVM, this._didDivergeFromVM, this);
-      if (this.loaded)
-        newScriptFile.checkMapping();
-      if (newScriptFile.hasSourceMapURL()) {
-        var sourceMapInfobar = UI.Infobar.create(
-            UI.Infobar.Type.Info, Common.UIString('Source Map detected.'),
-            Common.settings.createSetting('sourceMapInfobarDisabled', false));
-        if (sourceMapInfobar) {
-          sourceMapInfobar.createDetailsRowMessage(Common.UIString(
-              'Associated files should be added to the file tree. You can debug these resolved source files as regular JavaScript files.'));
-          sourceMapInfobar.createDetailsRowMessage(Common.UIString(
-              'Associated files are available via file tree or %s.',
-              UI.shortcutRegistry.shortcutTitleForAction('quickOpen.show')));
-          this.attachInfobars([sourceMapInfobar]);
-        }
+  /**
+   * @param {boolean} show
+   */
+  _showSourceMapInfobar(show) {
+    if (!show) {
+      if (this._sourceMapInfobar) {
+        this._sourceMapInfobar.dispose();
+        delete this._sourceMapInfobar;
       }
+      return;
+    }
+    if (this._sourceMapInfobar)
+      return;
+    this._sourceMapInfobar = UI.Infobar.create(
+        UI.Infobar.Type.Info, Common.UIString('Source Map detected.'),
+        Common.settings.createSetting('sourceMapInfobarDisabled', false));
+    if (this._sourceMapInfobar) {
+      this._sourceMapInfobar.createDetailsRowMessage(Common.UIString(
+          'Associated files should be added to the file tree. You can debug these resolved source files as regular JavaScript files.'));
+      this._sourceMapInfobar.createDetailsRowMessage(Common.UIString(
+          'Associated files are available via file tree or %s.',
+          UI.shortcutRegistry.shortcutTitleForAction('quickOpen.show')));
+      this._sourceMapInfobar.setCloseCallback(() => delete this._sourceMapInfobar);
+      this.attachInfobars([this._sourceMapInfobar]);
     }
   }
 
@@ -1253,7 +1456,7 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
     if (this._prettyPrintInfobar)
       return;
 
-    if (!TextUtils.isMinified(/** @type {string} */ (this._debuggerSourceCode.content())))
+    if (!TextUtils.isMinified(/** @type {string} */ (this.uiSourceCode().content())))
       return;
 
     this._prettyPrintInfobar = UI.Infobar.create(

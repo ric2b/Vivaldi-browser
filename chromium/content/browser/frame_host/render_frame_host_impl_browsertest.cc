@@ -247,7 +247,10 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
       "document.body.appendChild(iframe);"
       "iframe.contentWindow.onbeforeunload=function(e){return 'x'};";
   EXPECT_TRUE(content::ExecuteScript(wc, script));
-  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  EXPECT_TRUE(WaitForLoadStop(wc));
+  // JavaScript onbeforeunload dialogs require a user gesture.
+  for (auto* frame : wc->GetAllFrames())
+    frame->ExecuteJavaScriptWithUserGestureForTests(base::string16());
 
   // Force a process switch by going to a privileged page. The beforeunload
   // timer will be started on the top-level frame but will be paused while the
@@ -278,6 +281,76 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
 
   wc->SetDelegate(nullptr);
   wc->SetJavaScriptDialogManagerForTesting(nullptr);
+}
+
+// Tests that a gesture is required in a frame before it can request a
+// beforeunload dialog.
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       BeforeUnloadDialogRequiresGesture) {
+  WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
+  TestJavaScriptDialogManager dialog_manager;
+  wc->SetDelegate(&dialog_manager);
+
+  EXPECT_TRUE(NavigateToURL(
+      shell(), GetTestUrl("render_frame_host", "beforeunload.html")));
+  // Disable the hang monitor, otherwise there will be a race between the
+  // beforeunload dialog and the beforeunload hang timer.
+  wc->GetMainFrame()->DisableBeforeUnloadHangMonitorForTesting();
+
+  // Reload. There should be no beforeunload dialog because there was no gesture
+  // on the page. If there was, this WaitForLoadStop call will hang.
+  wc->GetController().Reload(ReloadType::NORMAL, false);
+  EXPECT_TRUE(WaitForLoadStop(wc));
+
+  // Give the page a user gesture and try reloading again. This time there
+  // should be a dialog. If there is no dialog, the call to Wait will hang.
+  wc->GetMainFrame()->ExecuteJavaScriptWithUserGestureForTests(
+      base::string16());
+  wc->GetController().Reload(ReloadType::NORMAL, false);
+  dialog_manager.Wait();
+
+  // Answer the dialog.
+  dialog_manager.callback().Run(true, base::string16());
+  EXPECT_TRUE(WaitForLoadStop(wc));
+
+  // The reload should have cleared the user gesture bit, so upon leaving again
+  // there should be no beforeunload dialog.
+  shell()->LoadURL(GURL("about:blank"));
+  EXPECT_TRUE(WaitForLoadStop(wc));
+
+  wc->SetDelegate(nullptr);
+  wc->SetJavaScriptDialogManagerForTesting(nullptr);
+}
+
+// Regression test for https://crbug.com/728171 where the sync IPC channel has a
+// connection error but we don't properly check for it. This occurs because we
+// send a sync window.open IPC after the RenderFrameHost is destroyed.
+//
+// This test reproduces the issue by calling window.close, and then
+// window.open in a task that runs immediately after window.close (which
+// internally posts a task to send the IPC). This ensures that the
+// RenderFrameHost is destroyed by the time the window.open IPC reaches the
+// browser process.
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       FrameDetached_WindowOpenIPCFails) {
+  NavigateToURL(shell(), GetTestUrl("", "title1.html"));
+  EXPECT_EQ(1u, Shell::windows().size());
+  GURL test_url = GetTestUrl("render_frame_host", "window_open_and_close.html");
+  std::string open_script =
+      base::StringPrintf("popup = window.open('%s');", test_url.spec().c_str());
+
+  EXPECT_TRUE(content::ExecuteScript(shell(), open_script));
+  ASSERT_EQ(2u, Shell::windows().size());
+
+  Shell* new_shell = Shell::windows()[1];
+  RenderFrameDeletedObserver deleted_observer(
+      new_shell->web_contents()->GetMainFrame());
+  deleted_observer.WaitUntilDeleted();
+
+  bool is_closed = false;
+  EXPECT_TRUE(ExecuteScriptAndExtractBool(
+      shell(), "domAutomationController.send(popup.closed)", &is_closed));
+  EXPECT_TRUE(is_closed);
 }
 
 }  // namespace content

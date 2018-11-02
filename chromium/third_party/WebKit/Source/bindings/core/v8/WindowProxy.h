@@ -31,9 +31,9 @@
 #ifndef WindowProxy_h
 #define WindowProxy_h
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
-#include "bindings/core/v8/ScopedPersistent.h"
 #include "core/CoreExport.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScopedPersistent.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/RefPtr.h"
 #include "v8/include/v8.h"
@@ -76,7 +76,7 @@ class Frame;
 // security checks for same-origin/cross-origin access to the Window interface.
 // When the check passes (i.e. the access is same-origin), the access is
 // forwarded to the inner global object of the active Document in this
-// WindowProxy's Frame).
+// WindowProxy's Frame.
 //
 // When the security check fails, the access is delegated to the outer global
 // proxy's cross-origin interceptors. The cross-origin interceptors may choose

@@ -36,18 +36,18 @@ BooleanOrString BooleanOrString::fromBoolean(bool value) {
   return container;
 }
 
-String BooleanOrString::getAsString() const {
+const String& BooleanOrString::getAsString() const {
   DCHECK(isString());
   return m_string;
 }
 
-void BooleanOrString::setString(String value) {
+void BooleanOrString::setString(const String& value) {
   DCHECK(isNull());
   m_string = value;
   m_type = SpecificTypeString;
 }
 
-BooleanOrString BooleanOrString::fromString(String value) {
+BooleanOrString BooleanOrString::fromString(const String& value) {
   BooleanOrString container;
   container.setString(value);
   return container;
@@ -86,7 +86,7 @@ v8::Local<v8::Value> ToV8(const BooleanOrString& impl, v8::Local<v8::Object> cre
     case BooleanOrString::SpecificTypeNone:
       return v8::Null(isolate);
     case BooleanOrString::SpecificTypeBoolean:
-      return V8Boolean(impl.getAsBoolean(), isolate);
+      return v8::Boolean::New(isolate, impl.getAsBoolean());
     case BooleanOrString::SpecificTypeString:
       return V8String(isolate, impl.getAsString());
     default:

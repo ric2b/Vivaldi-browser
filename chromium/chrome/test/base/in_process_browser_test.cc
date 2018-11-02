@@ -26,6 +26,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -304,6 +305,7 @@ void InProcessBrowserTest::SetUpDefaultCommandLine(
 }
 
 bool InProcessBrowserTest::RunAccessibilityChecks(std::string* error_message) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   if (!browser()) {
     *error_message = "browser is NULL";
     return false;
@@ -524,7 +526,7 @@ base::CommandLine InProcessBrowserTest::GetCommandLineForRelaunch() {
 }
 #endif
 
-void InProcessBrowserTest::RunTestOnMainThreadLoop() {
+void InProcessBrowserTest::PreRunTestOnMainThread() {
   AfterStartupTaskUtils::SetBrowserStartupIsCompleteForTesting();
 
   // Pump startup related events.
@@ -571,13 +573,16 @@ void InProcessBrowserTest::RunTestOnMainThreadLoop() {
   if (browser_ && global_browser_set_up_function_)
     ASSERT_TRUE(global_browser_set_up_function_(browser_));
 
-  SetUpOnMainThread();
 #if defined(OS_MACOSX)
   autorelease_pool_->Recycle();
 #endif
 
-  if (!HasFatalFailure())
-    RunTestOnMainThread();
+#if defined(OS_CHROMEOS)  // http://crbug.com/715735
+  disable_io_checks();
+#endif
+}
+
+void InProcessBrowserTest::PostRunTestOnMainThread() {
 #if defined(OS_MACOSX)
   autorelease_pool_->Recycle();
 #endif
@@ -588,9 +593,6 @@ void InProcessBrowserTest::RunTestOnMainThreadLoop() {
     EXPECT_EQ("", error_message);
   }
 
-  // Invoke cleanup and quit even if there are failures. This is similar to
-  // gtest in that it invokes TearDown even if Setup fails.
-  TearDownOnMainThread();
 #if defined(OS_MACOSX)
   autorelease_pool_->Recycle();
 #endif
@@ -608,7 +610,7 @@ void InProcessBrowserTest::RunTestOnMainThreadLoop() {
 
 void InProcessBrowserTest::QuitBrowsers() {
   if (chrome::GetTotalBrowserCount() == 0) {
-    chrome::NotifyAppTerminating();
+    browser_shutdown::NotifyAppTerminating();
     return;
   }
 

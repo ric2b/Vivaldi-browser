@@ -11,10 +11,9 @@
 #include "base/values.h"
 #include "components/grit/components_resources.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/security_interstitials/content/security_interstitial_controller_client.h"
 #include "components/security_interstitials/core/common_string_util.h"
-#include "components/security_interstitials/core/metrics_helper.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
@@ -93,11 +92,6 @@ SecurityInterstitialControllerClient* SecurityInterstitialPage::controller() {
   return controller_.get();
 }
 
-security_interstitials::MetricsHelper*
-SecurityInterstitialPage::metrics_helper() {
-  return controller_->metrics_helper();
-}
-
 void SecurityInterstitialPage::UpdateMetricsAfterSecurityInterstitial() {
   if (controller_->GetPrefService()) {
     safe_browsing::UpdateMetricsAfterSecurityInterstitial(
@@ -111,13 +105,17 @@ base::string16 SecurityInterstitialPage::GetFormattedHostName() const {
       request_url_);
 }
 
+int SecurityInterstitialPage::GetHTMLTemplateId() {
+  return IDR_SECURITY_INTERSTITIAL_HTML;
+}
+
 std::string SecurityInterstitialPage::GetHTMLContents() {
   base::DictionaryValue load_time_data;
   PopulateInterstitialStrings(&load_time_data);
   webui::SetLoadTimeDataDefaults(
       controller()->GetApplicationLocale(), &load_time_data);
   std::string html = ResourceBundle::GetSharedInstance()
-                         .GetRawDataResource(IDR_SECURITY_INTERSTITIAL_HTML)
+                         .GetRawDataResource(GetHTMLTemplateId())
                          .as_string();
   webui::AppendWebUiCssTextDefaults(&html);
   return webui::GetI18nTemplateHtml(html, &load_time_data);

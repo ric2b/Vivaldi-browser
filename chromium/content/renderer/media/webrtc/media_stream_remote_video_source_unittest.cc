@@ -7,9 +7,9 @@
 #include <memory>
 #include <utility>
 
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/child/child_process.h"
 #include "content/renderer/media/media_stream_video_track.h"
@@ -19,6 +19,7 @@
 #include "media/base/video_frame.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/web/WebHeap.h"
+#include "third_party/webrtc/api/video/i420_buffer.h"
 
 namespace content {
 
@@ -39,7 +40,9 @@ class MediaStreamRemoteVideoSourceTest
     : public ::testing::Test {
  public:
   MediaStreamRemoteVideoSourceTest()
-      : child_process_(new ChildProcess()),
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI),
+        child_process_(new ChildProcess()),
         mock_factory_(new MockPeerConnectionDependencyFactory()),
         webrtc_video_track_(MockWebRtcVideoTrack::Create("test")),
         remote_source_(new MediaStreamRemoteVideoSourceUnderTest(
@@ -101,7 +104,7 @@ class MediaStreamRemoteVideoSourceTest
       ++number_of_failed_track_starts_;
   }
 
-  base::MessageLoopForUI message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<ChildProcess> child_process_;
   std::unique_ptr<MockPeerConnectionDependencyFactory> mock_factory_;
   scoped_refptr<webrtc::VideoTrackInterface> webrtc_video_track_;
@@ -125,7 +128,7 @@ TEST_F(MediaStreamRemoteVideoSourceTest, StartTrack) {
   rtc::scoped_refptr<webrtc::I420Buffer> buffer(
       new rtc::RefCountedObject<webrtc::I420Buffer>(320, 240));
 
-  buffer->SetToBlack();
+  webrtc::I420Buffer::SetBlack(buffer);
 
   source()->SinkInterfaceForTest()->OnFrame(
       webrtc::VideoFrame(buffer, webrtc::kVideoRotation_0, 1000));

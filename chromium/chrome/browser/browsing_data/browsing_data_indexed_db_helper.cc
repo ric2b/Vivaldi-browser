@@ -32,7 +32,7 @@ void BrowsingDataIndexedDBHelper::StartFetching(const FetchCallback& callback) {
   DCHECK(!callback.is_null());
   indexed_db_context_->TaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           &BrowsingDataIndexedDBHelper::FetchIndexedDBInfoInIndexedDBThread,
           this, callback));
 }
@@ -41,15 +41,14 @@ void BrowsingDataIndexedDBHelper::DeleteIndexedDB(const GURL& origin) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   indexed_db_context_->TaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(
-          &BrowsingDataIndexedDBHelper::DeleteIndexedDBInIndexedDBThread,
-          this,
+      base::BindOnce(
+          &BrowsingDataIndexedDBHelper::DeleteIndexedDBInIndexedDBThread, this,
           origin));
 }
 
 void BrowsingDataIndexedDBHelper::FetchIndexedDBInfoInIndexedDBThread(
     const FetchCallback& callback) {
-  DCHECK(indexed_db_context_->TaskRunner()->RunsTasksOnCurrentThread());
+  DCHECK(indexed_db_context_->TaskRunner()->RunsTasksInCurrentSequence());
   DCHECK(!callback.is_null());
   std::vector<IndexedDBInfo> origins = indexed_db_context_->GetAllOriginsInfo();
   std::list<content::IndexedDBInfo> result;
@@ -59,12 +58,12 @@ void BrowsingDataIndexedDBHelper::FetchIndexedDBInfoInIndexedDBThread(
     result.push_back(origin);
   }
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(callback, result));
+                          base::BindOnce(callback, result));
 }
 
 void BrowsingDataIndexedDBHelper::DeleteIndexedDBInIndexedDBThread(
     const GURL& origin) {
-  DCHECK(indexed_db_context_->TaskRunner()->RunsTasksOnCurrentThread());
+  DCHECK(indexed_db_context_->TaskRunner()->RunsTasksInCurrentSequence());
   indexed_db_context_->DeleteForOrigin(origin);
 }
 
@@ -127,8 +126,8 @@ void CannedBrowsingDataIndexedDBHelper::StartFetching(
     result.push_back(info);
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE, base::Bind(callback, result));
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::BindOnce(callback, result));
 }
 
 void CannedBrowsingDataIndexedDBHelper::DeleteIndexedDB(

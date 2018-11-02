@@ -90,7 +90,8 @@ bool KeyframeEffectModelBase::SnapshotNeutralCompositorKeyframes(
   bool updated = false;
   EnsureKeyframeGroups();
   for (CSSPropertyID property : CompositorAnimations::kCompositableProperties) {
-    if (CSSPropertyEquality::PropertiesEqual(property, old_style, new_style))
+    if (CSSPropertyEquality::PropertiesEqual(PropertyHandle(property),
+                                             old_style, new_style))
       continue;
     PropertySpecificKeyframeGroup* keyframe_group =
         keyframe_groups_->at(PropertyHandle(property));
@@ -191,7 +192,7 @@ void KeyframeEffectModelBase::EnsureKeyframeGroups() const {
       zero_offset_easing = &keyframe->Easing();
 
     for (const PropertyHandle& property : keyframe->Properties()) {
-      KeyframeGroupMap::iterator group_iter = keyframe_groups_->Find(property);
+      KeyframeGroupMap::iterator group_iter = keyframe_groups_->find(property);
       PropertySpecificKeyframeGroup* group;
       if (group_iter == keyframe_groups_->end()) {
         group = keyframe_groups_
@@ -282,7 +283,7 @@ void KeyframeEffectModelBase::PropertySpecificKeyframeGroup::AppendKeyframe(
     PassRefPtr<Keyframe::PropertySpecificKeyframe> keyframe) {
   DCHECK(keyframes_.IsEmpty() ||
          keyframes_.back()->Offset() <= keyframe->Offset());
-  keyframes_.push_back(keyframe);
+  keyframes_.push_back(std::move(keyframe));
 }
 
 void KeyframeEffectModelBase::PropertySpecificKeyframeGroup::

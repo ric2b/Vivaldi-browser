@@ -442,13 +442,16 @@ void PersonalDataManager::RemoveObserver(
 bool PersonalDataManager::ImportFormData(
     const FormStructure& form,
     bool should_return_local_card,
-    std::unique_ptr<CreditCard>* imported_credit_card) {
+    std::unique_ptr<CreditCard>* imported_credit_card,
+    bool* imported_credit_card_matches_masked_server_credit_card) {
   // We try the same |form| for both credit card and address import/update.
   // - ImportCreditCard may update an existing card, or fill
   //   |imported_credit_card| with an extracted card. See .h for details of
-  //   |should_return_local_card|.
+  //   |should_return_local_card| and
+  //   |imported_credit_card_matches_masked_server_credit_card|.
   bool cc_import =
-      ImportCreditCard(form, should_return_local_card, imported_credit_card);
+      ImportCreditCard(form, should_return_local_card, imported_credit_card,
+                       imported_credit_card_matches_masked_server_credit_card);
   // - ImportAddressProfiles may eventually save or update one or more address
   //   profiles.
   bool address_import = ImportAddressProfiles(form);
@@ -611,6 +614,27 @@ void PersonalDataManager::UpdateCreditCard(const CreditCard& credit_card) {
   Refresh();
 }
 
+void PersonalDataManager::AddFullServerCreditCard(
+    const CreditCard& credit_card) {
+  DCHECK_EQ(CreditCard::FULL_SERVER_CARD, credit_card.record_type());
+  DCHECK(!credit_card.IsEmpty(app_locale_));
+  DCHECK(!credit_card.server_id().empty());
+
+  if (is_off_the_record_ || !database_.get())
+    return;
+
+  // Don't add a duplicate.
+  if (FindByGUID<CreditCard>(server_credit_cards_, credit_card.guid()) ||
+      FindByContents(server_credit_cards_, credit_card))
+    return;
+
+  // Add the new credit card to the web database.
+  database_->AddFullServerCreditCard(credit_card);
+
+  // Refresh our local cache and send notifications to observers.
+  Refresh();
+}
+
 void PersonalDataManager::UpdateServerCreditCard(
     const CreditCard& credit_card) {
   DCHECK_NE(CreditCard::LOCAL_CARD, credit_card.record_type());
@@ -709,10 +733,23 @@ void PersonalDataManager::RemoveByGUID(const std::string& guid) {
   if (!database_.get())
     return;
 
-  if (is_credit_card)
+  if (is_credit_card) {
     database_->RemoveCreditCard(guid);
-  else
+  } else {
     database_->RemoveAutofillProfile(guid);
+
+    // Reset the billing_address_id of any card that refered to this profile.
+    for (CreditCard* credit_card : GetCreditCards()) {
+      if (credit_card->billing_address_id() == guid) {
+        credit_card->set_billing_address_id("");
+
+        if (credit_card->record_type() == CreditCard::LOCAL_CARD)
+          database_->UpdateCreditCard(*credit_card);
+        else
+          database_->UpdateServerCardMetadata(*credit_card);
+      }
+    }
+  }
 
   // Refresh our local cache and send notifications to observers.
   Refresh();
@@ -723,6 +760,18 @@ CreditCard* PersonalDataManager::GetCreditCardByGUID(const std::string& guid) {
   std::vector<CreditCard*>::const_iterator iter =
       FindElementByGUID<CreditCard>(credit_cards, guid);
   return iter != credit_cards.end() ? *iter : nullptr;
+}
+
+CreditCard* PersonalDataManager::GetCreditCardByNumber(
+    const std::string& number) {
+  CreditCard numbered_card;
+  numbered_card.SetNumber(base::ASCIIToUTF16(number));
+  for (CreditCard* credit_card : GetCreditCards()) {
+    DCHECK(credit_card);
+    if (credit_card->HasSameNumberAs(numbered_card))
+      return credit_card;
+  }
+  return nullptr;
 }
 
 void PersonalDataManager::GetNonEmptyTypes(
@@ -1483,8 +1532,10 @@ bool PersonalDataManager::ImportAddressProfileForSection(
 bool PersonalDataManager::ImportCreditCard(
     const FormStructure& form,
     bool should_return_local_card,
-    std::unique_ptr<CreditCard>* imported_credit_card) {
+    std::unique_ptr<CreditCard>* imported_credit_card,
+    bool* imported_credit_card_matches_masked_server_credit_card) {
   DCHECK(!imported_credit_card->get());
+  *imported_credit_card_matches_masked_server_credit_card = false;
 
   // The candidate for credit card import. There are many ways for the candidate
   // to be rejected (see everywhere this function returns false, below).
@@ -1547,7 +1598,8 @@ bool PersonalDataManager::ImportCreditCard(
   // have already saved this card number, unless |should_return_local_card| is
   // true which indicates that upload is enabled. In this case, it's useful to
   // present the upload prompt to the user to promote the card from a local card
-  // to a synced server card.
+  // to a synced server card, provided we don't have a masked server card with
+  // the same |TypeAndLastFourDigits|.
   for (const auto& card : local_credit_cards_) {
     // Make a local copy so that the data in |local_credit_cards_| isn't
     // modified directly by the UpdateFromImportedCard() call.
@@ -1564,14 +1616,26 @@ bool PersonalDataManager::ImportCreditCard(
     }
   }
 
-  // Also don't offer to save if we already have this stored as a server card.
-  // We only check the number because if the new card has the same number as the
-  // server card, upload is guaranteed to fail. There's no mechanism for entries
-  // with the same number but different names or expiration dates as there is
-  // for local cards.
+  // Also don't offer to save if we already have this stored as a full server
+  // card. We only check the number because if the new card has the same number
+  // as the server card, upload is guaranteed to fail. There's no mechanism for
+  // entries with the same number but different names or expiration dates as
+  // there is for local cards.
   for (const auto& card : server_credit_cards_) {
-    if (candidate_credit_card.HasSameNumberAs(*card))
-      return false;
+    if (candidate_credit_card.HasSameNumberAs(*card)) {
+      // We can offer to save locally even if we already have this stored as
+      // another masked server card with the same |TypeAndLastFourDigits| as
+      // long as the AutofillOfferLocalSaveIfServerCardManuallyEntered flag is
+      // enabled. This will allow the user to fill the full card number in the
+      // future without having to unmask the card.
+      if (card->record_type() == CreditCard::FULL_SERVER_CARD ||
+          !IsAutofillOfferLocalSaveIfServerCardManuallyEnteredExperimentEnabled()) {
+        return false;
+      }
+      DCHECK_EQ(card->record_type(), CreditCard::MASKED_SERVER_CARD);
+      *imported_credit_card_matches_masked_server_credit_card = true;
+      break;
+    }
   }
 
   imported_credit_card->reset(new CreditCard(candidate_credit_card));
@@ -1611,7 +1675,7 @@ std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
       Suggestion* suggestion = &suggestions.back();
 
       suggestion->value = credit_card->GetInfo(type, app_locale_);
-      suggestion->icon = base::UTF8ToUTF16(credit_card->type());
+      suggestion->icon = base::UTF8ToUTF16(credit_card->network());
       suggestion->backend_id = credit_card->guid();
       suggestion->match = prefix_matched_suggestion
                               ? Suggestion::PREFIX_MATCH
@@ -1621,7 +1685,7 @@ std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
       // Otherwise the label is the card number, or if that is empty the
       // cardholder name. The label should never repeat the value.
       if (type.GetStorableType() == CREDIT_CARD_NUMBER) {
-        suggestion->value = credit_card->TypeAndLastFourDigits();
+        suggestion->value = credit_card->NetworkAndLastFourDigits();
         if (IsAutofillCreditCardLastUsedDateDisplayExperimentEnabled()) {
           suggestion->label =
               credit_card->GetLastUsedDateForDisplay(app_locale_);
@@ -1641,7 +1705,7 @@ std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
         // Since Android places the label on its own row, there's more
         // horizontal
         // space to work with. Show "Amex - 1234" rather than desktop's "*1234".
-        suggestion->label = credit_card->TypeAndLastFourDigits();
+        suggestion->label = credit_card->NetworkAndLastFourDigits();
 #else
         suggestion->label = base::ASCIIToUTF16("*");
         suggestion->label.append(credit_card->LastFourDigits());

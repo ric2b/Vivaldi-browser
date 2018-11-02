@@ -10,12 +10,15 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "base/time/time.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
+#include "chrome/common/page_load_metrics/page_load_metrics.mojom.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_binding_set.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/resource_type.h"
@@ -41,14 +44,39 @@ class PageLoadTracker;
 class MetricsWebContentsObserver
     : public content::WebContentsObserver,
       public content::WebContentsUserData<MetricsWebContentsObserver>,
-      public content::RenderWidgetHost::InputEventObserver {
+      public content::RenderWidgetHost::InputEventObserver,
+      public mojom::PageLoadMetrics {
  public:
+  // TestingObserver allows tests to observe MetricsWebContentsObserver state
+  // changes. Tests may use TestingObserver to wait until certain state changes,
+  // such as the arrivial of PageLoadTiming messages from the render process,
+  // have been observed.
+  class TestingObserver {
+   public:
+    enum class IPCType { LEGACY, MOJO };
+
+    explicit TestingObserver(content::WebContents* web_contents);
+    virtual ~TestingObserver();
+
+    void OnGoingAway();
+
+    virtual void OnCommit(PageLoadTracker* tracker) {}
+    virtual void DidReceiveTimingUpdate(IPCType type) {}
+
+   private:
+    page_load_metrics::MetricsWebContentsObserver* observer_;
+
+    DISALLOW_COPY_AND_ASSIGN(TestingObserver);
+  };
+
   // Note that the returned metrics is owned by the web contents.
   static MetricsWebContentsObserver* CreateForWebContents(
       content::WebContents* web_contents,
+      const base::Optional<content::WebContents::CreateParams>& create_params,
       std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface);
   MetricsWebContentsObserver(
       content::WebContents* web_contents,
+      const base::Optional<content::WebContents::CreateParams>& create_params,
       std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface);
   ~MetricsWebContentsObserver() override;
 
@@ -69,15 +97,24 @@ class MetricsWebContentsObserver
   void MediaStartedPlaying(
       const content::WebContentsObserver::MediaPlayerInfo& video_type,
       const content::WebContentsObserver::MediaPlayerId& id) override;
+  void WebContentsDestroyed() override;
 
   // These methods are forwarded from the MetricsNavigationThrottle.
   void WillStartNavigationRequest(content::NavigationHandle* navigation_handle);
   void WillProcessNavigationResponse(
       content::NavigationHandle* navigation_handle);
 
+  // A resource request started on the IO thread. This method is invoked on
+  // the UI thread.
+  void OnRequestStarted(const content::GlobalRequestID& request_id,
+                        content::ResourceType resource_type,
+                        base::TimeTicks creation_time);
+
   // A resource request completed on the IO thread. This method is invoked on
   // the UI thread.
   void OnRequestComplete(
+      const GURL& url,
+      int frame_tree_node_id,
       const content::GlobalRequestID& request_id,
       content::ResourceType resource_type,
       bool was_cached,
@@ -103,8 +140,26 @@ class MetricsWebContentsObserver
   // This getter function is required for testing.
   const PageLoadExtraInfo GetPageLoadExtraInfoForCommittedLoad();
 
+  // Register / unregister TestingObservers. Should only be called from tests.
+  void AddTestingObserver(TestingObserver* observer);
+  void RemoveTestingObserver(TestingObserver* observer);
+
+  // public only for testing
+  void OnTimingUpdated(content::RenderFrameHost* render_frame_host,
+                       const mojom::PageLoadTiming& timing,
+                       const mojom::PageLoadMetadata& metadata);
+
  private:
   friend class content::WebContentsUserData<MetricsWebContentsObserver>;
+
+  // page_load_metrics::mojom::PageLoadMetrics implementation.
+  void UpdateTiming(mojom::PageLoadTimingPtr timing,
+                    mojom::PageLoadMetadataPtr metadata) override;
+
+  // Called from legacy IPC.
+  void OnUpdateTimingOverIPC(content::RenderFrameHost* render_frame_host,
+                             const mojom::PageLoadTiming& timing,
+                             const mojom::PageLoadMetadata& metadata);
 
   void HandleFailedNavigationForTrackedLoad(
       content::NavigationHandle* navigation_handle,
@@ -143,10 +198,6 @@ class MetricsWebContentsObserver
       content::NavigationHandle* new_navigation,
       UserInitiatedInfo user_initiated_info);
 
-  void OnTimingUpdated(content::RenderFrameHost*,
-                       const PageLoadTiming& timing,
-                       const PageLoadMetadata& metadata);
-
   bool ShouldTrackNavigation(
       content::NavigationHandle* navigation_handle) const;
 
@@ -175,6 +226,10 @@ class MetricsWebContentsObserver
 
   // Has the MWCO observed at least one navigation?
   bool has_navigated_;
+
+  base::ObserverList<TestingObserver> testing_observers_;
+  content::WebContentsFrameBindingSet<mojom::PageLoadMetrics>
+      page_load_metrics_binding_;
 
   DISALLOW_COPY_AND_ASSIGN(MetricsWebContentsObserver);
 };

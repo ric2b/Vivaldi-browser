@@ -6,7 +6,6 @@
 
 #include "core/dom/Modulator.h"
 #include "core/dom/ModuleScript.h"
-#include "core/dom/ScriptModuleResolver.h"
 #include "core/loader/modulescript/ModuleScriptFetchRequest.h"
 #include "core/loader/modulescript/ModuleScriptLoaderClient.h"
 #include "platform/WebTaskRunner.h"
@@ -90,15 +89,10 @@ void ModuleMap::Entry::NotifyNewSingleModuleFinished(
   module_script_ = module_script;
   is_fetching_ = false;
 
-  if (module_script_) {
-    map_->GetModulator()->GetScriptModuleResolver()->RegisterModuleScript(
-        module_script_);
-  }
-
   for (const auto& client : clients_) {
     DispatchFinishedNotificationAsync(client);
   }
-  clients_.Clear();
+  clients_.clear();
 }
 
 ModuleScript* ModuleMap::Entry::GetModuleScript() const {
@@ -151,7 +145,7 @@ void ModuleMap::FetchSingleModuleScript(const ModuleScriptFetchRequest& request,
 }
 
 ModuleScript* ModuleMap::GetFetchedModuleScript(const KURL& url) const {
-  MapImpl::const_iterator it = map_.Find(url);
+  MapImpl::const_iterator it = map_.find(url);
   CHECK_NE(it, map_.end());
   return it->value->GetModuleScript();
 }

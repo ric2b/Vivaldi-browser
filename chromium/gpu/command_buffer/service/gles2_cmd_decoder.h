@@ -43,6 +43,7 @@ namespace gles2 {
 class ContextGroup;
 class ErrorState;
 class FeatureInfo;
+class FramebufferManager;
 class GLES2Util;
 class ImageManager;
 class Logger;
@@ -81,8 +82,8 @@ typedef base::Callback<void(const std::string& key,
 
 // This class implements the AsyncAPIInterface interface, decoding GLES2
 // commands and calling GL.
-class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
-                                public CommonDecoder {
+class GPU_EXPORT GLES2Decoder : public CommonDecoder,
+                                NON_EXPORTED_BASE(public AsyncAPIInterface) {
  public:
   typedef error::Error Error;
   typedef base::Callback<void(uint64_t release)> FenceSyncReleaseCallback;
@@ -124,6 +125,8 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
   void set_log_commands(bool log_commands) {
     log_commands_ = log_commands;
   }
+
+  virtual base::WeakPtr<GLES2Decoder> AsWeakPtr() = 0;
 
   // Initializes the graphics context. Can create an offscreen
   // decoder with a frame buffer that can be referenced from the parent.
@@ -178,7 +181,7 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
 
   // Restore States.
   virtual void RestoreActiveTexture() const = 0;
-  virtual void RestoreAllTextureUnitBindings(
+  virtual void RestoreAllTextureUnitAndSamplerBindings(
       const ContextState* prev_state) const = 0;
   virtual void RestoreActiveTextureUnitBinding(unsigned int target) const = 0;
   virtual void RestoreBufferBinding(unsigned int target) = 0;
@@ -203,6 +206,9 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
 
   // Gets the QueryManager for this context.
   virtual QueryManager* GetQueryManager() = 0;
+
+  // Gets the FramebufferManager for this context.
+  virtual FramebufferManager* GetFramebufferManager() = 0;
 
   // Gets the TransformFeedbackManager for this context.
   virtual TransformFeedbackManager* GetTransformFeedbackManager() = 0;
@@ -235,9 +241,6 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
   // If no such record is found then return false.
   virtual bool GetServiceTextureId(uint32_t client_texture_id,
                                    uint32_t* service_texture_id);
-
-  // Provides detail about a lost context if one occurred.
-  virtual error::ContextLostReason GetContextLostReason() = 0;
 
   // Clears a level sub area of a 2D texture.
   // Returns false if a GL error should be generated.
@@ -296,10 +299,6 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
       const NoParamCallback& callback) = 0;
 
   virtual void WaitForReadPixels(base::Closure callback) = 0;
-  virtual uint32_t GetTextureUploadCount() = 0;
-  virtual base::TimeDelta GetTotalTextureUploadTime() = 0;
-  virtual base::TimeDelta GetTotalProcessingCommandsTime() = 0;
-  virtual void AddProcessingCommandsTime(base::TimeDelta) = 0;
 
   // Returns true if the context was lost either by GL_ARB_robustness, forced
   // context loss or command buffer parse error.
@@ -313,8 +312,8 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
 
   virtual Logger* GetLogger() = 0;
 
-  virtual void BeginDecoding();
-  virtual void EndDecoding();
+  void BeginDecoding() override;
+  void EndDecoding() override;
 
   virtual const ContextState* GetContextState() = 0;
   virtual scoped_refptr<ShaderTranslatorInterface> GetTranslator(
@@ -323,13 +322,7 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
  protected:
   GLES2Decoder();
 
-  // Decode a command, and call the corresponding GL functions.
-  // NOTE: DoCommand() is slower than calling DoCommands() on larger batches
-  // of commands at once, and is now only used for tests that need to track
-  // individual commands.
-  error::Error DoCommand(unsigned int command,
-                         unsigned int arg_count,
-                         const volatile void* cmd_data) override;
+  base::StringPiece GetLogPrefix() override;
 
  private:
   bool initialized_;

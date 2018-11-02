@@ -27,15 +27,15 @@
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/ash_switches.h"
 #include "ash/system/devicetype_utils.h"
+#include "ash/system/night_light/night_light_controller.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -113,6 +113,8 @@ void AddCommonStrings(content::WebUIDataSource* html_source, Profile* profile) {
 #else
       profile->IsOffTheRecord());
 #endif
+
+  html_source->AddBoolean("isSupervised", profile->IsSupervised());
 }
 
 void AddA11yStrings(content::WebUIDataSource* html_source) {
@@ -126,8 +128,8 @@ void AddA11yStrings(content::WebUIDataSource* html_source) {
     {"optionsInMenuLabel", IDS_SETTINGS_OPTIONS_IN_MENU_LABEL},
     {"largeMouseCursorLabel", IDS_SETTINGS_LARGE_MOUSE_CURSOR_LABEL},
     {"largeMouseCursorSizeLabel", IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_LABEL},
-    {"largeMouseCursorSizeSmallLabel",
-     IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_SMALL_LABEL},
+    {"largeMouseCursorSizeDefaultLabel",
+     IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_DEFAULT_LABEL},
     {"largeMouseCursorSizeLargeLabel",
      IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_LARGE_LABEL},
     {"highContrastLabel", IDS_SETTINGS_HIGH_CONTRAST_LABEL},
@@ -203,10 +205,6 @@ void AddA11yStrings(content::WebUIDataSource* html_source) {
       "showExperimentalA11yFeatures",
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kEnableExperimentalAccessibilityFeatures));
-
-  html_source->AddBoolean("enableAdjustableLargeCursor",
-                          base::CommandLine::ForCurrentProcess()->HasSwitch(
-                              ash::switches::kAshAdjustableLargeCursor));
 #endif
 }
 
@@ -360,8 +358,6 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source,
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
-
-  html_source->AddBoolean("isSupervised", profile->IsSupervised());
 }
 
 #if defined(OS_CHROMEOS)
@@ -535,8 +531,10 @@ void AddClearBrowsingDataStrings(content::WebUIDataSource* html_source) {
       {"clearBrowsingDataLearnMoreUrl", IDS_SETTINGS_CLEAR_DATA_LEARN_MORE_URL},
       {"historyDeletionDialogTitle",
        IDS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_TITLE},
-      {"historyDeletionDialogOK",
-       IDS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_OK},
+      {"historyDeletionDialogOK", IDS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_OK},
+      {"importantSitesSubtitle", IDS_SETTINGS_IMPORTANT_SITES_SUBTITLE},
+      {"importantSitesConfirm", IDS_SETTINGS_IMPORTANT_SITES_CONFIRM},
+      {"notificationWarning", IDS_SETTINGS_NOTIFICATION_WARNING},
   };
 
   html_source->AddString(
@@ -635,6 +633,8 @@ void AddDeviceStrings(content::WebUIDataSource* html_source) {
       {"stylusFindMoreAppsSecondary",
        IDS_SETTINGS_STYLUS_FIND_MORE_APPS_SECONDARY},
       {"stylusNoteTakingApp", IDS_SETTINGS_STYLUS_NOTE_TAKING_APP_LABEL},
+      {"stylusNoteTakingAppEnabledOnLockScreen",
+       IDS_SETTINGS_STYLUS_NOTE_TAKING_APP_LOCK_SCREEN_CHECKBOX},
       {"stylusNoteTakingAppNoneAvailable",
        IDS_SETTINGS_STYLUS_NOTE_TAKING_APP_NONE_AVAILABLE},
       {"stylusNoteTakingAppWaitingForAndroid",
@@ -647,6 +647,22 @@ void AddDeviceStrings(content::WebUIDataSource* html_source) {
       {"displayArrangementText", IDS_SETTINGS_DISPLAY_ARRANGEMENT_TEXT},
       {"displayArrangementTitle", IDS_SETTINGS_DISPLAY_ARRANGEMENT_TITLE},
       {"displayMirror", IDS_SETTINGS_DISPLAY_MIRROR},
+      {"displayNightLightLabel", IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_LABEL},
+      {"displayNightLightScheduleCustom",
+       IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_SCHEDULE_CUSTOM},
+      {"displayNightLightScheduleLabel",
+       IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_SCHEDULE_LABEL},
+      {"displayNightLightScheduleNever",
+       IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_SCHEDULE_NEVER},
+      {"displayNightLightScheduleSunsetToSunRise",
+       IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_SCHEDULE_SUNSET_TO_SUNRISE},
+      {"displayNightLightText", IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_TEXT},
+      {"displayNightLightTemperatureLabel",
+       IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_TEMPERATURE_LABEL},
+      {"displayNightLightTempSliderMaxLabel",
+       IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_TEMP_SLIDER_MAX_LABEL},
+      {"displayNightLightTempSliderMinLabel",
+       IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_TEMP_SLIDER_MIN_LABEL},
       {"displayUnfiedDesktop", IDS_SETTINGS_DISPLAY_UNIFIED_DESKTOP},
       {"displayResolutionTitle", IDS_SETTINGS_DISPLAY_RESOLUTION_TITLE},
       {"displayResolutionText", IDS_SETTINGS_DISPLAY_RESOLUTION_TEXT},
@@ -680,6 +696,9 @@ void AddDeviceStrings(content::WebUIDataSource* html_source) {
       "enableTouchCalibrationSetting",
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kEnableTouchCalibrationSetting));
+
+  html_source->AddBoolean("nightLightFeatureEnabled",
+                          ash::NightLightController::IsFeatureEnabled());
 
   LocalizedString storage_strings[] = {
       {"storageTitle", IDS_SETTINGS_STORAGE_TITLE},
@@ -870,12 +889,17 @@ void AddInternetStrings(content::WebUIDataSource* html_source) {
       {"internetAddThirdPartyVPN", IDS_SETTINGS_INTERNET_ADD_THIRD_PARTY_VPN},
       {"internetAddVPN", IDS_SETTINGS_INTERNET_ADD_VPN},
       {"internetAddWiFi", IDS_SETTINGS_INTERNET_ADD_WIFI},
+      {"internetConfigTitle", IDS_SETTINGS_INTERNET_CONFIG},
       {"internetDetailPageTitle", IDS_SETTINGS_INTERNET_DETAIL},
+      {"internetDeviceEnabling", IDS_SETTINGS_INTERNET_DEVICE_ENABLING},
       {"internetKnownNetworksPageTitle", IDS_SETTINGS_INTERNET_KNOWN_NETWORKS},
+      {"internetMobileSearching", IDS_SETTINGS_INTERNET_MOBILE_SEARCH},
       {"internetNoNetworks", IDS_SETTINGS_INTERNET_NO_NETWORKS},
       {"internetPageTitle", IDS_SETTINGS_INTERNET},
       {"internetToggleMobileA11yLabel",
        IDS_SETTINGS_INTERNET_TOGGLE_MOBILE_ACCESSIBILITY_LABEL},
+      {"internetToggleTetherA11yLabel",
+       IDS_SETTINGS_INTERNET_TOGGLE_TETHER_ACCESSIBILITY_LABEL},
       {"internetToggleWiFiA11yLabel",
        IDS_SETTINGS_INTERNET_TOGGLE_WIFI_ACCESSIBILITY_LABEL},
       {"internetToggleWiMAXA11yLabel",
@@ -901,6 +925,9 @@ void AddInternetStrings(content::WebUIDataSource* html_source) {
       {"networkButtonForget", IDS_SETTINGS_INTERNET_BUTTON_FORGET},
       {"networkButtonViewAccount", IDS_SETTINGS_INTERNET_BUTTON_VIEW_ACCOUNT},
       {"networkConnectNotAllowed", IDS_SETTINGS_INTERNET_CONNECT_NOT_ALLOWED},
+      {"networkConfigSaveCredentials",
+       IDS_SETTINGS_INTERNET_CONFIG_SAVE_CREDENTIALS},
+      {"networkConfigShare", IDS_SETTINGS_INTERNET_CONFIG_SHARE},
       {"networkIPAddress", IDS_SETTINGS_INTERNET_NETWORK_IP_ADDRESS},
       {"networkIPConfigAuto", IDS_SETTINGS_INTERNET_NETWORK_IP_CONFIG_AUTO},
       {"networkPrefer", IDS_SETTINGS_INTERNET_NETWORK_PREFER},
@@ -999,6 +1026,9 @@ void AddInternetStrings(content::WebUIDataSource* html_source) {
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
+  html_source->AddBoolean("networkSettingsConfig",
+                          base::CommandLine::ForCurrentProcess()->HasSwitch(
+                              chromeos::switches::kNetworkSettingsConfig));
 }
 #endif
 
@@ -1209,6 +1239,8 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_FINGER_TOO_SLOW},
     {"configureFingerprintTooFast",
      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_FINGER_TOO_FAST},
+    {"configureFingerprintImmobile",
+     IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_FINGER_IMMOBILE},
     {"configureFingerprintCancelButton",
      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_CANCEL_BUTTON},
     {"configureFingerprintDoneButton",
@@ -1234,6 +1266,8 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_EDIT_FINGERPRINTS},
     {"lockScreenEditFingerprintsDescription",
      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_EDIT_FINGERPRINTS_DESCRIPTION},
+    {"lockScreenSetupFingerprintButton",
+     IDS_SETTINGS_PEOPLE_LOCK_SCREEN_FINGERPRINT_SETUP_BUTTON},
     {"lockScreenNumberFingerprints",
      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NUM_FINGERPRINTS},
     {"lockScreenNone", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NONE},
@@ -1245,6 +1279,7 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_FINGERPRINT_SUBPAGE_TITLE},
     {"lockScreenFingerprintWarning",
      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_FINGERPRINT_LESS_SECURE},
+    {"lockScreenOptions", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_OPTIONS},
     {"lockScreenPasswordOnly", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PASSWORD_ONLY},
     {"lockScreenPinOrPassword",
      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_OR_PASSWORD},
@@ -1431,6 +1466,7 @@ void AddPrintingStrings(content::WebUIDataSource* html_source) {
      IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_ACCESSIBILITY_LABEL},
     {"printerAddress", IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_ADDRESS},
     {"printerProtocol", IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_PROTOCOL},
+    {"printerURI", IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_URI},
     {"manuallyAddPrinterButtonText",
      IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTER_BUTTON_MANUAL_ADD},
     {"discoverPrintersButtonText",
@@ -1448,8 +1484,6 @@ void AddPrintingStrings(content::WebUIDataSource* html_source) {
     {"searchingPrinter", IDS_SETTINGS_PRINTING_CUPS_PRINTER_SEARCHING_PRINTER},
     {"printerNotFound", IDS_SETTINGS_PRINTING_CUPS_PRINTER_NOT_FOUND_PRINTER},
     {"printerFound", IDS_SETTINGS_PRINTING_CUPS_PRINTER_FOUND_PRINTER},
-    {"selectManufacturerModelMessage",
-     IDS_SETTINGS_PRINTING_CUPS_PRINTER_SELECT_MANUFACTURER_MODEL},
     {"printerManufacturer", IDS_SETTINGS_PRINTING_CUPS_PRINTER_MANUFACTURER},
     {"selectDriver", IDS_SETTINGS_PRINTING_CUPS_PRINTER_SELECT_DRIVER},
     {"selectDriverButtonText",
@@ -1516,6 +1550,10 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
+
+  html_source->AddBoolean(
+      "importantSitesInCbd",
+      base::FeatureList::IsEnabled(features::kImportantSitesInCbd));
 
   html_source->AddLocalizedString(
       "safeBrowsingEnableExtendedReporting",
@@ -1667,6 +1705,7 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"mediaLicenseSize", IDS_SETTINGS_COOKIES_LOCAL_STORAGE_SIZE_ON_DISK_LABEL},
     {"mediaLicenseLastModified",
      IDS_SETTINGS_COOKIES_LOCAL_STORAGE_LAST_MODIFIED_LABEL},
+    {"noUsbDevicesFound", IDS_SETTINGS_NO_USB_DEVICES_FOUND},
     {"serviceWorkerOrigin", IDS_SETTINGS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL},
     {"serviceWorkerScopes", IDS_SETTINGS_COOKIES_SERVICE_WORKER_SCOPES_LABEL},
     {"serviceWorkerSize",
@@ -1701,8 +1740,8 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"siteSettingsJavascript", IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT},
     {"siteSettingsFlash", IDS_SETTINGS_SITE_SETTINGS_FLASH},
     {"siteSettingsPdfDocuments", IDS_SETTINGS_SITE_SETTINGS_PDF_DOCUMENTS},
-    {"siteSettingsPdfDifferentApplication",
-     IDS_SETTINGS_SITE_SETTINGS_PDF_DIFFERENT_APPLICATION},
+    {"siteSettingsPdfDownloadPdfs",
+     IDS_SETTINGS_SITE_SETTINGS_PDF_DOWNLOAD_PDFS},
     {"siteSettingsProtectedContent",
      IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT},
     {"siteSettingsProtectedContentEnable",
@@ -1864,10 +1903,9 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
   }
 }
 
+#if defined(OS_CHROMEOS)
 void AddUsersStrings(content::WebUIDataSource* html_source) {
   LocalizedString localized_strings[] = {
-    {"usersPageTitle", IDS_SETTINGS_USERS},
-#if defined(OS_CHROMEOS)
     {"usersModifiedByOwnerLabel", IDS_SETTINGS_USERS_MODIFIED_BY_OWNER_LABEL},
     {"guestBrowsingLabel", IDS_SETTINGS_USERS_GUEST_BROWSING_LABEL},
     {"settingsManagedLabel", IDS_SETTINGS_USERS_MANAGED_LABEL},
@@ -1877,11 +1915,11 @@ void AddUsersStrings(content::WebUIDataSource* html_source) {
     {"deviceOwnerLabel", IDS_SETTINGS_USERS_DEVICE_OWNER_LABEL},
     {"addUsers", IDS_SETTINGS_USERS_ADD_USERS},
     {"addUsersEmail", IDS_SETTINGS_USERS_ADD_USERS_EMAIL},
-#endif
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
 }
+#endif
 
 #if !defined(OS_CHROMEOS)
 void AddSystemStrings(content::WebUIDataSource* html_source) {
@@ -1977,9 +2015,39 @@ void AddOncStrings(content::WebUIDataSource* html_source) {
        IDS_ONC_CELLULAR_SERVING_OPERATOR_NAME},
       {"OncConnected", IDS_ONC_CONNECTED},
       {"OncConnecting", IDS_ONC_CONNECTING},
+      {"OncEAP-AnonymousIdentity", IDS_ONC_EAP_ANONYMOUS_IDENTITY},
+      {"OncEAP-Identity", IDS_ONC_EAP_IDENTITY},
+      {"OncEAP-Inner", IDS_ONC_EAP_INNER},
+      {"OncEAP-Inner_Automatic", IDS_ONC_EAP_INNER_AUTOMATIC},
+      {"OncEAP-Inner_CHAP", IDS_ONC_EAP_INNER_CHAP},
+      {"OncEAP-Inner_GTC", IDS_ONC_EAP_INNER_GTC},
+      {"OncEAP-Inner_MD5", IDS_ONC_EAP_INNER_MD5},
+      {"OncEAP-Inner_MSCHAP", IDS_ONC_EAP_INNER_MSCHAP},
+      {"OncEAP-Inner_MSCHAPv2", IDS_ONC_EAP_INNER_MSCHAPV2},
+      {"OncEAP-Inner_PAP", IDS_ONC_EAP_INNER_PAP},
+      {"OncEAP-Outer", IDS_ONC_EAP_OUTER},
+      {"OncEAP-Outer_LEAP", IDS_ONC_EAP_OUTER_LEAP},
+      {"OncEAP-Outer_PEAP", IDS_ONC_EAP_OUTER_PEAP},
+      {"OncEAP-Outer_EAP-TLS", IDS_ONC_EAP_OUTER_TLS},
+      {"OncEAP-Outer_EAP-TTLS", IDS_ONC_EAP_OUTER_TTLS},
+      {"OncEAP-Password", IDS_ONC_WIFI_PASSWORD},
+      {"OncEAP-SubjectMatch", IDS_ONC_EAP_SUBJECT_MATCH},
       {"OncMacAddress", IDS_ONC_MAC_ADDRESS},
       {"OncNotConnected", IDS_ONC_NOT_CONNECTED},
       {"OncRestrictedConnectivity", IDS_ONC_RESTRICTED_CONNECTIVITY},
+      {"OncTether-BatteryPercentage", IDS_ONC_TETHER_BATTERY_PERCENTAGE},
+      {"OncTether-BatteryPercentage_Value",
+       IDS_ONC_TETHER_BATTERY_PERCENTAGE_VALUE},
+      {"OncTether-SignalStrength", IDS_ONC_TETHER_SIGNAL_STRENGTH},
+      {"OncTether-SignalStrength_Weak", IDS_ONC_TETHER_SIGNAL_STRENGTH_WEAK},
+      {"OncTether-SignalStrength_Okay", IDS_ONC_TETHER_SIGNAL_STRENGTH_OKAY},
+      {"OncTether-SignalStrength_Good", IDS_ONC_TETHER_SIGNAL_STRENGTH_GOOD},
+      {"OncTether-SignalStrength_Strong",
+       IDS_ONC_TETHER_SIGNAL_STRENGTH_STRONG},
+      {"OncTether-SignalStrength_VeryStrong",
+       IDS_ONC_TETHER_SIGNAL_STRENGTH_VERY_STRONG},
+      {"OncTether-Carrier", IDS_ONC_TETHER_CARRIER},
+      {"OncTether-Carrier_Unknown", IDS_ONC_TETHER_CARRIER_UNKNOWN},
       {"OncVPN-Host", IDS_ONC_VPN_HOST},
       {"OncVPN-L2TP-Username", IDS_ONC_VPN_L2TP_USERNAME},
       {"OncVPN-OpenVPN-Username", IDS_ONC_VPN_OPEN_VPN_USERNAME},
@@ -1987,7 +2055,14 @@ void AddOncStrings(content::WebUIDataSource* html_source) {
        IDS_ONC_VPN_THIRD_PARTY_VPN_PROVIDER_NAME},
       {"OncVPN-Type", IDS_ONC_VPN_TYPE},
       {"OncWiFi-Frequency", IDS_ONC_WIFI_FREQUENCY},
+      {"OncWiFi-Passphrase", IDS_ONC_WIFI_PASSWORD},
+      {"OncWiFi-SSID", IDS_ONC_WIFI_SSID},
       {"OncWiFi-Security", IDS_ONC_WIFI_SECURITY},
+      {"OncWiFi-Security_None", IDS_ONC_WIFI_SECURITY_NONE},
+      {"OncWiFi-Security_WEP-PSK", IDS_ONC_WIFI_SECURITY_WEP},
+      {"OncWiFi-Security_WPA-EAP", IDS_ONC_WIFI_SECURITY_EAP},
+      {"OncWiFi-Security_WPA-PSK", IDS_ONC_WIFI_SECURITY_PSK},
+      {"OncWiFi-Security_WEP-8021X", IDS_ONC_WIFI_SECURITY_EAP},
       {"OncWiFi-SignalStrength", IDS_ONC_WIFI_SIGNAL_STRENGTH},
       {"OncWiMAX-EAP-Identity", IDS_ONC_WIMAX_EAP_IDENTITY},
       {"Oncipv4-Gateway", IDS_ONC_IPV4_GATEWAY},
@@ -2021,7 +2096,6 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddSearchInSettingsStrings(html_source);
   AddSearchStrings(html_source);
   AddSiteSettingsStrings(html_source, profile);
-  AddUsersStrings(html_source);
   AddWebContentStrings(html_source);
 
 #if defined(OS_CHROMEOS)
@@ -2034,6 +2108,7 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddEasyUnlockStrings(html_source);
   AddInternetStrings(html_source);
   AddOncStrings(html_source);
+  AddUsersStrings(html_source);
 #else
   AddDefaultBrowserStrings(html_source);
   AddImportDataStrings(html_source);

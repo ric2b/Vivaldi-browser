@@ -14,7 +14,6 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "media/base/eme_constants.h"
 #include "media/base/media_export.h"
 #include "url/gurl.h"
@@ -34,7 +33,7 @@ class CdmPromiseTemplate;
 
 typedef CdmPromiseTemplate<std::string> NewSessionCdmPromise;
 typedef CdmPromiseTemplate<> SimpleCdmPromise;
-typedef ScopedVector<CdmKeyInformation> CdmKeysInfo;
+typedef std::vector<std::unique_ptr<CdmKeyInformation>> CdmKeysInfo;
 
 // Type of license required when creating/loading a session.
 // Must be consistent with the values specified in the spec:
@@ -44,6 +43,16 @@ enum class CdmSessionType {
   PERSISTENT_LICENSE_SESSION,
   PERSISTENT_RELEASE_MESSAGE_SESSION,
   SESSION_TYPE_MAX = PERSISTENT_RELEASE_MESSAGE_SESSION
+};
+
+// Type of message being sent to the application.
+// Must be consistent with the values specified in the spec:
+// https://w3c.github.io/encrypted-media/#idl-def-MediaKeyMessageType
+enum class CdmMessageType {
+  LICENSE_REQUEST,
+  LICENSE_RENEWAL,
+  LICENSE_RELEASE,
+  MESSAGE_TYPE_MAX = LICENSE_RELEASE
 };
 
 // An interface that represents the Content Decryption Module (CDM) in the
@@ -73,16 +82,6 @@ class MEDIA_EXPORT ContentDecryptionModule
     : public base::RefCountedThreadSafe<ContentDecryptionModule,
                                         ContentDecryptionModuleTraits> {
  public:
-  // Type of message being sent to the application.
-  // Must be consistent with the values specified in the spec:
-  // https://w3c.github.io/encrypted-media/#idl-def-MediaKeyMessageType
-  enum MessageType {
-    LICENSE_REQUEST,
-    LICENSE_RENEWAL,
-    LICENSE_RELEASE,
-    MESSAGE_TYPE_MAX = LICENSE_RELEASE
-  };
-
   // Provides a server certificate to be used to encrypt messages to the
   // license server.
   virtual void SetServerCertificate(
@@ -170,7 +169,7 @@ struct MEDIA_EXPORT ContentDecryptionModuleTraits {
 // Called when the CDM needs to queue a message event to the session object.
 // See http://w3c.github.io/encrypted-media/#dom-evt-message
 typedef base::Callback<void(const std::string& session_id,
-                            ContentDecryptionModule::MessageType message_type,
+                            CdmMessageType message_type,
                             const std::vector<uint8_t>& message)>
     SessionMessageCB;
 
@@ -189,6 +188,9 @@ typedef base::Callback<void(const std::string& session_id,
 
 // Called when the CDM changes the expiration time of a session.
 // See http://w3c.github.io/encrypted-media/#update-expiration
+// A null base::Time() will be translated to NaN in Javascript, which means "no
+// such time exists or if the license explicitly never expires, as determined
+// by the CDM", according to the EME spec.
 typedef base::Callback<void(const std::string& session_id,
                             base::Time new_expiry_time)>
     SessionExpirationUpdateCB;

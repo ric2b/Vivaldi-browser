@@ -378,7 +378,10 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
   bool HasCopyRequests() const;
   void ClearCopyRequests();
 
-  int ClosestAncestorWithCopyRequest(int id) const;
+  // Given the ids of two effect nodes that have render surfaces, returns the
+  // id of the lowest common ancestor effect node that also has a render
+  // surface.
+  int LowestCommonAncestorWithRenderSurface(int id_1, int id_2) const;
 
   void AddMaskLayerId(int id);
   const std::vector<int>& mask_layer_ids() const { return mask_layer_ids_; }
@@ -391,8 +394,7 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
     return render_surfaces_[id].get();
   }
 
-  void UpdateRenderSurfaces(LayerTreeImpl* layer_tree_impl,
-                            bool non_root_surfaces_enabled);
+  void UpdateRenderSurfaces(LayerTreeImpl* layer_tree_impl);
 
   bool ContributesToDrawnSurface(int id);
 
@@ -499,10 +501,12 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   void CopyCompleteTreeState(const ScrollTree& other);
 #endif
 
+  ScrollNode* FindNodeFromElementId(ElementId id);
+
  private:
-  using ScrollOffsetMap = std::unordered_map<int, gfx::ScrollOffset>;
+  using ScrollOffsetMap = base::flat_map<int, gfx::ScrollOffset>;
   using SyncedScrollOffsetMap =
-      std::unordered_map<int, scoped_refptr<SyncedScrollOffset>>;
+      base::flat_map<int, scoped_refptr<SyncedScrollOffset>>;
 
   int currently_scrolling_node_id_;
 
@@ -639,20 +643,15 @@ class CC_EXPORT PropertyTrees final {
   // from layer id to the respective property node. Completing that work is
   // pending the launch of Slimming Paint v2 and reworking UI compositor logic
   // to produce cc property trees and these maps.
-  std::unordered_map<ElementId, int, ElementIdHash>
-      element_id_to_effect_node_index;
-  std::unordered_map<ElementId, int, ElementIdHash>
-      element_id_to_scroll_node_index;
-  std::unordered_map<ElementId, int, ElementIdHash>
-      element_id_to_transform_node_index;
+  base::flat_map<ElementId, int> element_id_to_effect_node_index;
+  base::flat_map<ElementId, int> element_id_to_scroll_node_index;
+  base::flat_map<ElementId, int> element_id_to_transform_node_index;
 
-  std::vector<int> always_use_active_tree_opacity_effect_ids;
   TransformTree transform_tree;
   EffectTree effect_tree;
   ClipTree clip_tree;
   ScrollTree scroll_tree;
   bool needs_rebuild;
-  bool non_root_surfaces_enabled;
   bool can_adjust_raster_scales;
   // Change tracking done on property trees needs to be preserved across commits
   // (when they are not rebuild). We cache a global bool which stores whether
@@ -674,7 +673,6 @@ class CC_EXPORT PropertyTrees final {
   void SetInnerViewportContainerBoundsDelta(gfx::Vector2dF bounds_delta);
   void SetOuterViewportContainerBoundsDelta(gfx::Vector2dF bounds_delta);
   void SetInnerViewportScrollBoundsDelta(gfx::Vector2dF bounds_delta);
-  void PushOpacityIfNeeded(PropertyTrees* target_tree);
   void RemoveIdFromIdToIndexMaps(int id);
   void UpdateChangeTracking();
   void PushChangeTrackingTo(PropertyTrees* tree);

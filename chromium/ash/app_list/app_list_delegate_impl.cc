@@ -6,10 +6,11 @@
 
 #include "ash/root_window_controller.h"
 #include "ash/shelf/app_list_button.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
+#include "ash/wm_window.h"
 #include "ui/app_list/presenter/app_list.h"
 
 namespace ash {
@@ -24,10 +25,10 @@ AppListDelegateImpl::~AppListDelegateImpl() {
 
 void AppListDelegateImpl::OnAppListVisibilityChanged(bool visible,
                                                      int64_t display_id) {
-  WmWindow* root_window =
+  aura::Window* root_window =
       ShellPort::Get()->GetRootWindowForDisplayId(display_id);
   AppListButton* app_list_button =
-      WmShelf::ForWindow(root_window)->shelf_widget()->GetAppListButton();
+      Shelf::ForWindow(root_window)->shelf_widget()->GetAppListButton();
   if (!app_list_button)
     return;
 

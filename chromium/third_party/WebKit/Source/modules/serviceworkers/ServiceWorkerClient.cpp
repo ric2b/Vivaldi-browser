@@ -8,10 +8,10 @@
 #include <memory>
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/RefPtr.h"
 #include "public/platform/WebString.h"
 
@@ -30,10 +30,10 @@ ServiceWorkerClient* ServiceWorkerClient::Take(
     case kWebServiceWorkerClientTypeSharedWorker:
       return ServiceWorkerClient::Create(*web_client);
     case kWebServiceWorkerClientTypeLast:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return nullptr;
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return nullptr;
 }
 
@@ -45,9 +45,27 @@ ServiceWorkerClient* ServiceWorkerClient::Create(
 ServiceWorkerClient::ServiceWorkerClient(const WebServiceWorkerClientInfo& info)
     : uuid_(info.uuid),
       url_(info.url.GetString()),
+      type_(info.client_type),
       frame_type_(info.frame_type) {}
 
 ServiceWorkerClient::~ServiceWorkerClient() {}
+
+String ServiceWorkerClient::type() const {
+  switch (type_) {
+    case kWebServiceWorkerClientTypeWindow:
+      return "window";
+    case kWebServiceWorkerClientTypeWorker:
+      return "worker";
+    case kWebServiceWorkerClientTypeSharedWorker:
+      return "sharedworker";
+    case kWebServiceWorkerClientTypeAll:
+      NOTREACHED();
+      return String();
+  }
+
+  NOTREACHED();
+  return String();
+}
 
 String ServiceWorkerClient::frameType() const {
   switch (frame_type_) {
@@ -61,7 +79,7 @@ String ServiceWorkerClient::frameType() const {
       return "top-level";
   }
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return String();
 }
 

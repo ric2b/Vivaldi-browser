@@ -21,7 +21,9 @@ component("chromeos") {
   deps = [
     ":attestation_proto",
     ":authpolicy_proto",
+    ":biod_proto",
     ":cryptohome_proto",
+    ":media_perception_proto",
     ":power_manager_proto",
     "//base",
     "//base:i18n",
@@ -178,6 +180,8 @@ component("chromeos") {
     "dbus/fake_image_loader_client.h",
     "dbus/fake_lorgnette_manager_client.cc",
     "dbus/fake_lorgnette_manager_client.h",
+    "dbus/fake_media_analytics_client.cc",
+    "dbus/fake_media_analytics_client.h",
     "dbus/fake_modem_messaging_client.cc",
     "dbus/fake_modem_messaging_client.h",
     "dbus/fake_permission_broker_client.cc",
@@ -210,6 +214,8 @@ component("chromeos") {
     "dbus/image_loader_client.h",
     "dbus/lorgnette_manager_client.cc",
     "dbus/lorgnette_manager_client.h",
+    "dbus/media_analytics_client.cc",
+    "dbus/media_analytics_client.h",
     "dbus/modem_messaging_client.cc",
     "dbus/modem_messaging_client.h",
     "dbus/permission_broker_client.cc",
@@ -302,6 +308,8 @@ component("chromeos") {
     "login_event_recorder.h",
     "network/auto_connect_handler.cc",
     "network/auto_connect_handler.h",
+    "network/certificate_helper.cc",
+    "network/certificate_helper.h",
     "network/certificate_pattern.cc",
     "network/certificate_pattern.h",
     "network/client_cert_resolver.cc",
@@ -328,6 +336,8 @@ component("chromeos") {
     "network/network_activation_handler.h",
     "network/network_cert_migrator.cc",
     "network/network_cert_migrator.h",
+    "network/network_certificate_handler.cc",
+    "network/network_certificate_handler.h",
     "network/network_change_notifier_chromeos.cc",
     "network/network_change_notifier_chromeos.h",
     "network/network_change_notifier_factory_chromeos.cc",
@@ -339,6 +349,8 @@ component("chromeos") {
     "network/network_connect.h",
     "network/network_connection_handler.cc",
     "network/network_connection_handler.h",
+    "network/network_connection_handler_impl.cc",
+    "network/network_connection_handler_impl.h",
     "network/network_connection_observer.cc",
     "network/network_connection_observer.h",
     "network/network_device_handler.cc",
@@ -415,6 +427,8 @@ component("chromeos") {
     "network/shill_property_handler.h",
     "network/shill_property_util.cc",
     "network/shill_property_util.h",
+    "network/tether_constants.cc",
+    "network/tether_constants.h",
     "printing/ppd_cache.cc",
     "printing/ppd_cache.h",
     "printing/ppd_provider.cc",
@@ -437,6 +451,8 @@ component("chromeos") {
     "settings/timezone_settings.h",
     "settings/timezone_settings_helper.cc",
     "settings/timezone_settings_helper.h",
+    "system/cpu_temperature_reader.cc",
+    "system/cpu_temperature_reader.h",
     "system/devicemode.cc",
     "system/devicemode.h",
     "system/devicetype.cc",
@@ -492,6 +508,7 @@ static_library("test_support") {
   configs += [ "//build/config/linux/dbus" ]
   public_deps = [
     ":attestation_proto",
+    ":biod_proto",
     ":chromeos",
     ":cryptohome_proto",
     ":power_manager_proto",
@@ -542,6 +559,8 @@ static_library("test_support") {
     "login/auth/mock_auth_status_consumer.h",
     "login/auth/mock_url_fetchers.cc",
     "login/auth/mock_url_fetchers.h",
+    "login/scoped_test_public_session_login_state.cc",
+    "login/scoped_test_public_session_login_state.h",
     "network/fake_network_device_handler.cc",
     "network/fake_network_device_handler.h",
     "network/mock_managed_network_configuration_handler.cc",
@@ -552,6 +571,8 @@ static_library("test_support") {
     "network/network_state_test.h",
     "network/onc/onc_test_utils.cc",
     "network/onc/onc_test_utils.h",
+    "network/portal_detector/mock_network_portal_detector.cc",
+    "network/portal_detector/mock_network_portal_detector.h",
   ]
 }
 
@@ -560,6 +581,7 @@ static_library("test_support_without_gmock") {
   configs += [ "//build/config/linux/dbus" ]
   deps = [
     ":attestation_proto",
+    ":biod_proto",
     ":chromeos",
     ":cryptohome_proto",
     ":power_manager_proto",
@@ -585,6 +607,7 @@ test("chromeos_unittests") {
   ]
   deps = [
     ":attestation_proto",
+    ":biod_proto",
     ":cryptohome_proto",
     ":power_manager_proto",
     ":test_support",
@@ -644,6 +667,7 @@ test("chromeos_unittests") {
     "login/auth/key_unittest.cc",
     "login/login_state_unittest.cc",
     "network/auto_connect_handler_unittest.cc",
+    "network/certificate_helper_unittest.cc",
     "network/client_cert_resolver_unittest.cc",
     "network/firewall_hole_unittest.cc",
     "network/geolocation_handler_unittest.cc",
@@ -653,7 +677,7 @@ test("chromeos_unittests") {
     "network/network_change_notifier_chromeos_unittest.cc",
     "network/network_configuration_handler_unittest.cc",
     "network/network_connect_unittest.cc",
-    "network/network_connection_handler_unittest.cc",
+    "network/network_connection_handler_impl_unittest.cc",
     "network/network_device_handler_unittest.cc",
     "network/network_sms_handler_unittest.cc",
     "network/network_state_handler_unittest.cc",
@@ -675,6 +699,7 @@ test("chromeos_unittests") {
     "process_proxy/process_output_watcher_unittest.cc",
     "process_proxy/process_proxy_unittest.cc",
     "settings/timezone_settings_unittest.cc",
+    "system/cpu_temperature_reader_unittest.cc",
     "system/name_value_pairs_parser_unittest.cc",
     "system/version_loader_unittest.cc",
     "timezone/timezone_unittest.cc",
@@ -742,8 +767,25 @@ proto_library("cryptohome_signkey_proto") {
 
 proto_library("authpolicy_proto") {
   sources = [
-    "//third_party/cros_system_api/dbus/authpolicy/active_directory_account_data.proto",
+    "//third_party/cros_system_api/dbus/authpolicy/active_directory_info.proto",
   ]
 
   proto_out_dir = "chromeos/dbus/authpolicy"
+}
+
+proto_library("biod_proto") {
+  sources = [
+    "//third_party/cros_system_api/dbus/biod/constants.proto",
+    "//third_party/cros_system_api/dbus/biod/messages.proto",
+  ]
+
+  proto_out_dir = "chromeos/dbus/biod"
+}
+
+proto_library("media_perception_proto") {
+  sources = [
+    "dbus/proto/media_perception.proto",
+  ]
+
+  proto_out_dir = "chromeos/media_perception"
 }

@@ -13,6 +13,7 @@
 <translation id="2753617847762399167">Nederīgs ceļš (pilnais vai relatīvais ar elementu “..”): <ph name="IMAGE_PATH" /></translation>
 <translation id="27822970480436970">Šim paplašinājumam neizdevās modificēt tīkla pieprasījumu, jo šī modifikācija bija pretrunā ar citu paplašinājumu.</translation>
 <translation id="2857834222104759979">Manifesta fails nav derīgs.</translation>
+<translation id="2903070246402204397">Administrators bloķēja paplašinājumu <ph name="EXTENSION_NAME" /> (paplašinājuma ID “<ph name="EXTENSION_ID" />”). <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">Nevarēja instalēt pakotni: <ph name="ERROR_CODE" />.</translation>
 <translation id="3115238746683532089">Nezināms produkts (ID: <ph name="PRODUCT_ID" />), ko piedāvā <ph name="VENDOR_ID" /> (sērijas numurs: <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3163201441334626963">Nezināms produkts (ID: <ph name="PRODUCT_ID" />), ko piedāvā <ph name="VENDOR_ID" /></translation>
@@ -45,7 +46,6 @@
 <translation id="7003844668372540529">Nezināms produkts (ID: <ph name="PRODUCT_ID" />), ko piedāvā <ph name="VENDOR_NAME" /></translation>
 <translation id="7217838517480956708">Šīs ierīces administrators uzskata, ka paplašinājumam <ph name="EXTENSION_NAME" /> ir jābūt instalētam. To nevar noņemt vai pārveidot.</translation>
 <translation id="7581279002575751816">NPAPI spraudņi netiek atbalstīti.</translation>
-<translation id="7809034755304591547">Administrators bloķēja paplašinājumu <ph name="EXTENSION_NAME" /> (paplašinājuma ID “<ph name="EXTENSION_ID" />”).</translation>
 <translation id="7972881773422714442">Iespējas: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Vērsta uz lietotāju</translation>
 <translation id="8047248493720652249">Šim paplašinājumam neizdevās piešķirt nosaukumu lejupielādei “<ph name="ATTEMPTED_FILENAME" />”, jo cits paplašinājums (<ph name="EXTENSION_NAME" />) noteica citu faila nosaukumu “<ph name="ACTUAL_FILENAME" />”.</translation>

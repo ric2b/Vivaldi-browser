@@ -20,6 +20,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
+#include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/custom_button.h"
@@ -100,7 +101,7 @@ class VolumeButton : public ButtonListenerActionableView {
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VOLUME_MUTE));
     node_data->role = ui::AX_ROLE_TOGGLE_BUTTON;
     if (CrasAudioHandler::Get()->IsOutputMuted())
-      node_data->AddStateFlag(ui::AX_STATE_PRESSED);
+      node_data->AddState(ui::AX_STATE_PRESSED);
   }
 
   views::ImageView* image_;
@@ -130,30 +131,9 @@ VolumeView::VolumeView(SystemTrayItem* owner,
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VOLUME));
   tri_view_->AddView(TriView::Container::CENTER, slider_);
 
-  set_background(views::Background::CreateSolidBackground(kBackgroundColor));
+  set_background(views::Background::CreateThemedSolidBackground(
+      this, ui::NativeTheme::kColorId_BubbleBackground));
 
-  if (!is_default_view_) {
-    tri_view_->SetContainerVisible(TriView::Container::END, false);
-    Update();
-    return;
-  }
-
-  more_button_ = new ButtonListenerActionableView(
-      owner_, TrayPopupInkDropStyle::INSET_BOUNDS, this);
-  TrayPopupUtils::ConfigureContainer(TriView::Container::END, more_button_);
-
-  more_button_->SetInkDropMode(views::InkDropHostView::InkDropMode::ON);
-  more_button_->SetBorder(views::CreateEmptyBorder(gfx::Insets(
-      0, kTrayPopupButtonEndMargin)));
-  tri_view_->AddView(TriView::Container::END, more_button_);
-
-  device_type_ = TrayPopupUtils::CreateMoreImageView();
-  device_type_->SetVisible(false);
-  more_button_->AddChildView(device_type_);
-
-  more_button_->AddChildView(TrayPopupUtils::CreateMoreImageView());
-  more_button_->SetAccessibleName(
-      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_AUDIO));
   Update();
 }
 
@@ -186,19 +166,59 @@ void VolumeView::SetVolumeLevel(float percent) {
 
 void VolumeView::UpdateDeviceTypeAndMore() {
   CrasAudioHandler* audio_handler = CrasAudioHandler::Get();
-  bool show_more =
-      is_default_view_ && (audio_handler->has_alternative_output() ||
-                           audio_handler->has_alternative_input());
-
-  if (!show_more)
+  // There is no point in letting the user open the audio detailed submenu if
+  // there are no alternative output or input devices present, so do not show
+  // the 'more' button in the default audio row.
+  if (is_default_view_ && !audio_handler->has_alternative_output() &&
+      !audio_handler->has_alternative_input()) {
+    tri_view_->SetContainerVisible(TriView::Container::END, false);
+    // TODO(tdanderson): TriView itself should trigger a relayout when the
+    // visibility of one of its containers is changed.
+    tri_view_->InvalidateLayout();
     return;
+  }
 
   const gfx::VectorIcon& device_icon = GetActiveOutputDeviceVectorIcon();
-  const bool target_visibility = !device_icon.is_empty();
-  if (target_visibility)
+  const bool device_icon_visibility = !device_icon.is_empty();
+
+  if (is_default_view_) {
+    if (!more_button_) {
+      more_button_ = new ButtonListenerActionableView(
+          owner_, TrayPopupInkDropStyle::INSET_BOUNDS, this);
+      TrayPopupUtils::ConfigureContainer(TriView::Container::END, more_button_);
+
+      more_button_->SetInkDropMode(views::InkDropHostView::InkDropMode::ON);
+      more_button_->SetBorder(
+          views::CreateEmptyBorder(gfx::Insets(0, kTrayPopupButtonEndMargin)));
+      tri_view_->AddView(TriView::Container::END, more_button_);
+
+      device_type_ = TrayPopupUtils::CreateMoreImageView();
+      device_type_->SetVisible(false);
+      more_button_->AddChildView(device_type_);
+
+      more_button_->AddChildView(TrayPopupUtils::CreateMoreImageView());
+      more_button_->SetAccessibleName(
+          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_AUDIO));
+    }
+  } else {
+    if (!device_icon_visibility) {
+      tri_view_->SetContainerVisible(TriView::Container::END, false);
+      tri_view_->InvalidateLayout();
+      return;
+    }
+    if (!device_type_) {
+      device_type_ = TrayPopupUtils::CreateMoreImageView();
+      device_type_->SetVisible(false);
+      tri_view_->AddView(TriView::Container::END, device_type_);
+    }
+  }
+
+  tri_view_->SetContainerVisible(TriView::Container::END, true);
+  tri_view_->InvalidateLayout();
+  if (device_icon_visibility)
     device_type_->SetImage(gfx::CreateVectorIcon(device_icon, kMenuIconColor));
-  if (device_type_->visible() != target_visibility) {
-    device_type_->SetVisible(target_visibility);
+  if (device_type_->visible() != device_icon_visibility) {
+    device_type_->SetVisible(device_icon_visibility);
     device_type_->InvalidateLayout();
   }
 }

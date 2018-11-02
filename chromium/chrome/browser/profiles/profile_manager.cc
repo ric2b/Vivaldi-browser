@@ -30,8 +30,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/download/download_service.h"
-#include "chrome/browser/download/download_service_factory.h"
+#include "chrome/browser/download/download_core_service.h"
+#include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
@@ -486,6 +486,13 @@ Profile* ProfileManager::GetActiveUserProfile() {
   return profile;
 }
 
+// static
+Profile* ProfileManager::CreateInitialProfile() {
+  ProfileManager* const profile_manager = g_browser_process->profile_manager();
+  return profile_manager->GetProfile(profile_manager->user_data_dir().Append(
+      profile_manager->GetInitialProfileDir()));
+}
+
 Profile* ProfileManager::GetProfile(const base::FilePath& profile_dir) {
   TRACE_EVENT0("browser", "ProfileManager::GetProfile");
 
@@ -632,8 +639,8 @@ Profile* ProfileManager::GetLastUsedProfile(
     // If we get here, it means the user has logged in but the profile has not
     // finished initializing, so treat the user as not having logged in.
     if (!profile) {
-      DLOG(WARNING) << "Calling GetLastUsedProfile() before profile "
-                    << "initialization is completed. Returning login profile.";
+      LOG(WARNING) << "Calling GetLastUsedProfile() before profile "
+                   << "initialization is completed. Returning login profile.";
       return GetActiveUserOrOffTheRecordProfileFromPath(user_data_dir);
     }
     return profile->IsGuestSession() ? profile->GetOffTheRecordProfile() :
@@ -816,8 +823,8 @@ void ProfileManager::ScheduleProfileForDeletion(
     // Cancel all in-progress downloads before deleting the profile to prevent a
     // "Do you want to exit Google Chrome and cancel the downloads?" prompt
     // (crbug.com/336725).
-    DownloadService* service =
-        DownloadServiceFactory::GetForBrowserContext(profile);
+    DownloadCoreService* service =
+        DownloadCoreServiceFactory::GetForBrowserContext(profile);
     service->CancelDownloads();
     DCHECK_EQ(0, service->NonMaliciousDownloadCount());
 
@@ -889,7 +896,7 @@ void ProfileManager::CleanUpEphemeralProfiles() {
   // ProfileInfoCache will modify indices.
   for (const base::FilePath& profile_path : profiles_to_delete) {
     BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
-                            base::Bind(&NukeProfileFromDisk, profile_path));
+                            base::BindOnce(&NukeProfileFromDisk, profile_path));
 
     storage.RemoveProfile(profile_path);
   }
@@ -915,12 +922,12 @@ void ProfileManager::CleanUpDeletedProfiles() {
                         "Cleaning up now.";
         BrowserThread::PostTaskAndReply(
             BrowserThread::FILE, FROM_HERE,
-            base::Bind(&NukeProfileFromDisk, profile_path),
-            base::Bind(&ProfileCleanedUp, &value));
+            base::BindOnce(&NukeProfileFromDisk, profile_path),
+            base::BindOnce(&ProfileCleanedUp, &value));
       } else {
         // Everything is fine, the profile was removed on shutdown.
         BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                                base::Bind(&ProfileCleanedUp, &value));
+                                base::BindOnce(&ProfileCleanedUp, &value));
       }
     } else {
       LOG(ERROR) << "Found invalid profile path in deleted_profiles: "
@@ -1205,31 +1212,17 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   TRACE_EVENT0("browser", "ProfileManager::DoFinalInitForServices");
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  // Ensure that the HostContentSettingsMap has been created before the
-  // ExtensionSystem is initialized otherwise the ExtensionSystem will be
-  // registered twice
-  HostContentSettingsMap* content_settings_map =
-    HostContentSettingsMapFactory::GetForProfile(profile);
-
   bool extensions_enabled = !go_off_the_record;
 #if defined(OS_CHROMEOS)
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableLoginScreenApps) &&
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableLoginScreenApps) &&
       chromeos::ProfileHelper::IsSigninProfile(profile)) {
     extensions_enabled = true;
   }
 #endif
   extensions::ExtensionSystem::Get(profile)->InitForRegularProfile(
       extensions_enabled);
-  // During tests, when |profile| is an instance of TestingProfile,
-  // ExtensionSystem might not create an ExtensionService.
-  // This block is duplicated in the HostContentSettingsMapFactory
-  // ::BuildServiceInstanceFor method, it should be called once when both the
-  // HostContentSettingsMap and the extension_service are set up.
-  if (extensions::ExtensionSystem::Get(profile)->extension_service()) {
-    extensions::ExtensionSystem::Get(profile)->extension_service()->
-        RegisterContentSettings(content_settings_map);
-  }
+
   // Set the block extensions bit on the ExtensionService. There likely are no
   // blockable extensions to block.
   ProfileAttributesEntry* entry;
@@ -1304,7 +1297,7 @@ void ProfileManager::DoFinalInitLogging(Profile* profile) {
   // Log the profile size after a reasonable startup delay.
   BrowserThread::PostDelayedTask(
       BrowserThread::FILE, FROM_HERE,
-      base::Bind(&ProfileSizeTask, profile->GetPath(), enabled_app_count),
+      base::BindOnce(&ProfileSizeTask, profile->GetPath(), enabled_app_count),
       base::TimeDelta::FromSeconds(112));
 }
 
@@ -1341,9 +1334,9 @@ Profile* ProfileManager::GetActiveUserOrOffTheRecordProfileFromPath(
 
   default_profile_dir = default_profile_dir.Append(GetInitialProfileDir());
   ProfileInfo* profile_info = GetProfileInfoByPath(default_profile_dir);
-  // Fallback to default off-the-record profile, if user profile has not fully
-  // loaded yet.
-  if (profile_info && !profile_info->created)
+  // Fallback to default off-the-record profile, if user profile has not started
+  // loading or has not fully loaded yet.
+  if (!profile_info || !profile_info->created)
     default_profile_dir = profiles::GetDefaultProfileDir(user_data_dir);
 
   Profile* profile = GetProfile(default_profile_dir);
@@ -1525,9 +1518,8 @@ void ProfileManager::FinishDeletingProfile(
     profiles::RemoveBrowsingDataForProfile(profile_dir);
   } else {
     // It is safe to delete a not yet loaded Profile from disk.
-    BrowserThread::PostTask(
-        BrowserThread::FILE, FROM_HERE,
-        base::Bind(&NukeProfileFromDisk, profile_dir));
+    BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
+                            base::BindOnce(&NukeProfileFromDisk, profile_dir));
   }
 
   // Queue even a profile that was nuked so it will be MarkedForDeletion and so
@@ -1592,7 +1584,8 @@ void ProfileManager::AddProfileToStorage(Profile* profile) {
           !entry->IsAuthenticated()) {
         BrowserThread::PostTask(
             BrowserThread::UI, FROM_HERE,
-            base::Bind(&SignOut, static_cast<SigninManager*>(signin_manager)));
+            base::BindOnce(&SignOut,
+                           static_cast<SigninManager*>(signin_manager)));
       }
 #endif
       return;

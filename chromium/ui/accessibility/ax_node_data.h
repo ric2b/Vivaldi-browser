@@ -106,12 +106,13 @@ struct AX_EXPORT AXNodeData {
   void SetValue(const std::string& value);
   void SetValue(const base::string16& value);
 
-  // Helper to check whether |state_flag| is set in the given |state|.
-  static bool IsFlagSet(uint32_t state, ui::AXState state_flag);
+  // Returns true if the given enum bit is 1.
+  bool HasState(ui::AXState state_enum) const;
+  bool HasAction(ui::AXAction state_enum) const;
 
-  // Set or check bits in |state_|.
-  void AddStateFlag(ui::AXState state_flag);
-  bool HasStateFlag(ui::AXState state_flag) const;
+  // Set bits in the given enum's corresponding bitfield.
+  void AddState(ui::AXState state_enum);
+  void AddAction(ui::AXAction action_enum);
 
   // Return a string representation of this data, for debugging.
   virtual std::string ToString() const;
@@ -121,6 +122,7 @@ struct AX_EXPORT AXNodeData {
   int32_t id;
   AXRole role;
   uint32_t state;
+  uint32_t actions;
   std::vector<std::pair<AXStringAttribute, std::string>> string_attributes;
   std::vector<std::pair<AXIntAttribute, int32_t>> int_attributes;
   std::vector<std::pair<AXFloatAttribute, float>> float_attributes;

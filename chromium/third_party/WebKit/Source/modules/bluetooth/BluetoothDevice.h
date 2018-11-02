@@ -6,10 +6,10 @@
 #define BluetoothDevice_h
 
 #include <memory>
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "modules/EventTargetModules.h"
 #include "modules/bluetooth/BluetoothRemoteGATTServer.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Heap.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/modules/bluetooth/web_bluetooth.mojom-blink.h"
@@ -90,6 +90,11 @@ class BluetoothDevice final : public EventTargetWithInlineData,
   BluetoothRemoteGATTServer* gatt() { return gatt_; }
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(gattserverdisconnected);
+
+ protected:
+  // EventTarget overrides:
+  void AddedEventListener(const AtomicString& eventType,
+                          RegisteredEventListener&) override;
 
  private:
   // Holds all GATT Attributes associated with this BluetoothDevice.

@@ -183,6 +183,14 @@ void RawResource::WillNotFollowRedirect() {
 void RawResource::ResponseReceived(
     const ResourceResponse& response,
     std::unique_ptr<WebDataConsumerHandle> handle) {
+  if (response.WasFallbackRequiredByServiceWorker()) {
+    // The ServiceWorker asked us to re-fetch the request. This resource must
+    // not be reused.
+    // Note: This logic is needed here because DocumentThreadableLoader handles
+    // CORS independently from ResourceLoader. Fix it.
+    GetMemoryCache()->Remove(this);
+  }
+
   bool is_successful_revalidation =
       IsCacheValidator() && response.HttpStatusCode() == 304;
   Resource::ResponseReceived(response, nullptr);
@@ -242,12 +250,9 @@ static bool ShouldIgnoreHeaderForCacheReuse(AtomicString header_name) {
   // isn't complete.
   DEFINE_STATIC_LOCAL(
       HashSet<AtomicString>, headers,
-      ({
-          "Cache-Control", "If-Modified-Since", "If-None-Match", "Origin",
-          "Pragma", "Purpose", "Referer", "User-Agent",
-          HTTPNames::X_DevTools_Emulate_Network_Conditions_Client_Id,
-          HTTPNames::X_DevTools_Request_Id,
-      }));
+      ({"Cache-Control", "If-Modified-Since", "If-None-Match", "Origin",
+        "Pragma", "Purpose", "Referer", "User-Agent",
+        HTTPNames::X_DevTools_Emulate_Network_Conditions_Client_Id}));
   return headers.Contains(header_name);
 }
 

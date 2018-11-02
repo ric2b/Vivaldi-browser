@@ -32,6 +32,12 @@
 #define INFINITY HUGE_VAL
 #endif
 
+#ifdef USE_LIBFUZZER
+#define ASSERT(x)
+#else
+#define ASSERT(x) assert(x)
+#endif
+
 #define PARAMETRIC_CURVE_TYPE 0x70617261 //'para'
 
 /* value must be a value between 0 and 1 */
@@ -182,7 +188,7 @@ void compute_curve_gamma_table_type_parametric(float gamma_table[256], float par
                 f = parameter[6];
                 interval = parameter[4];
         } else {
-                assert(0 && "invalid parametric function type.");
+                ASSERT(0 && "invalid parametric function type.");
                 a = 1;
                 b = 0;
                 c = 0;
@@ -334,7 +340,8 @@ uint16_fract_t lut_inverse_interp16(uint16_t Value, uint16_t LutTable[], int len
         // Does the curve belong to this case?
         if (NumZeroes > 1 || NumPoles > 1)
         {
-                int a, b, sample;
+                float a, b;
+                int sample;
 
                 // Identify if value fall downto 0 or FFFF zone
                 if (Value == 0) return 0;
@@ -345,11 +352,11 @@ uint16_fract_t lut_inverse_interp16(uint16_t Value, uint16_t LutTable[], int len
 
                 // else restrict to valid zone
 
-                a = ((NumZeroes-1) * 0xFFFF) / (length-1);
-                b = ((length-1 - NumPoles) * 0xFFFF) / (length-1);
+                a = ((NumZeroes-1) * 65535.f) / (length-1);
+                b = ((length-1 - NumPoles) * 65535.f) / (length-1);
 
-                l = a - 1;
-                r = b + 1;
+                l = ((int)a) - 1;
+                r = ((int)b) + 1;
 
                 // Ensure a valid binary search range
 

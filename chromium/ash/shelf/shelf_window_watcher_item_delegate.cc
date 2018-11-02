@@ -4,6 +4,8 @@
 
 #include "ash/shelf/shelf_window_watcher_item_delegate.h"
 
+#include <utility>
+
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shelf/shelf_controller.h"
 #include "ash/shelf/shelf_model.h"
@@ -18,7 +20,7 @@ namespace ash {
 
 namespace {
 
-ShelfItemType GetShelfItemType(ShelfID id) {
+ShelfItemType GetShelfItemType(const ShelfID& id) {
   ShelfModel* model = Shell::Get()->shelf_controller()->model();
   ShelfItems::const_iterator item = model->ItemByID(id);
   return item == model->items().end() ? TYPE_UNDEFINED : item->type;
@@ -26,10 +28,11 @@ ShelfItemType GetShelfItemType(ShelfID id) {
 
 }  // namespace
 
-ShelfWindowWatcherItemDelegate::ShelfWindowWatcherItemDelegate(ShelfID id,
-                                                               WmWindow* window)
-    : ShelfItemDelegate(AppLaunchId()), id_(id), window_(window) {
-  DCHECK_NE(kInvalidShelfID, id_);
+ShelfWindowWatcherItemDelegate::ShelfWindowWatcherItemDelegate(
+    const ShelfID& id,
+    WmWindow* window)
+    : ShelfItemDelegate(id), window_(window) {
+  DCHECK(!id.IsNull());
   DCHECK(window_);
 }
 
@@ -39,28 +42,28 @@ void ShelfWindowWatcherItemDelegate::ItemSelected(
     std::unique_ptr<ui::Event> event,
     int64_t display_id,
     ShelfLaunchSource source,
-    const ItemSelectedCallback& callback) {
+    ItemSelectedCallback callback) {
   // Move panels attached on another display to the current display.
-  if (GetShelfItemType(id_) == TYPE_APP_PANEL &&
+  if (GetShelfItemType(shelf_id()) == TYPE_APP_PANEL &&
       window_->aura_window()->GetProperty(kPanelAttachedKey) &&
       wm::MoveWindowToDisplay(window_->aura_window(), display_id)) {
     window_->Activate();
-    callback.Run(SHELF_ACTION_WINDOW_ACTIVATED, base::nullopt);
+    std::move(callback).Run(SHELF_ACTION_WINDOW_ACTIVATED, base::nullopt);
     return;
   }
 
   if (window_->IsActive()) {
     if (event && event->type() == ui::ET_KEY_RELEASED) {
       window_->Animate(::wm::WINDOW_ANIMATION_TYPE_BOUNCE);
-      callback.Run(SHELF_ACTION_NONE, base::nullopt);
+      std::move(callback).Run(SHELF_ACTION_NONE, base::nullopt);
       return;
     }
     window_->Minimize();
-    callback.Run(SHELF_ACTION_WINDOW_MINIMIZED, base::nullopt);
+    std::move(callback).Run(SHELF_ACTION_WINDOW_MINIMIZED, base::nullopt);
     return;
   }
   window_->Activate();
-  callback.Run(SHELF_ACTION_WINDOW_ACTIVATED, base::nullopt);
+  std::move(callback).Run(SHELF_ACTION_WINDOW_ACTIVATED, base::nullopt);
 }
 
 void ShelfWindowWatcherItemDelegate::ExecuteCommand(uint32_t command_id,

@@ -152,6 +152,8 @@ int BrowserPluginGuest::GetGuestProxyRoutingID() {
   // create a RenderFrameProxyHost for the reverse path, or implement
   // MimeHandlerViewGuest using OOPIF (https://crbug.com/659750).
   SiteInstance* owner_site_instance = delegate_->GetOwnerSiteInstance();
+  if (!owner_site_instance)
+    return MSG_ROUTING_NONE;
   int proxy_routing_id = GetWebContents()
                              ->GetFrameTree()
                              ->root()
@@ -183,8 +185,12 @@ void BrowserPluginGuest::SizeContents(const gfx::Size& new_size) {
 
 void BrowserPluginGuest::WillDestroy() {
   is_in_destruction_ = true;
-  owner_web_contents_ = nullptr;
+
+  // It is important that the WebContents is notified before detaching.
+  GetWebContents()->BrowserPluginGuestWillDetach();
+
   attached_ = false;
+  owner_web_contents_ = nullptr;
 }
 
 RenderWidgetHostImpl* BrowserPluginGuest::GetOwnerRenderWidgetHost() const {
@@ -445,17 +451,6 @@ void BrowserPluginGuest::OnRequireSequence(
   GetSurfaceManager()->RequireSequence(id, sequence);
 }
 
-bool BrowserPluginGuest::HandleFindForEmbedder(
-    int request_id,
-    const base::string16& search_text,
-    const blink::WebFindOptions& options) {
-  return delegate_->HandleFindForEmbedder(request_id, search_text, options);
-}
-
-bool BrowserPluginGuest::HandleStopFindingForEmbedder(StopFindAction action) {
-  return delegate_->HandleStopFindingForEmbedder(action);
-}
-
 void BrowserPluginGuest::ResendEventToEmbedder(
     const blink::WebInputEvent& event) {
   if (!attached() || !owner_web_contents_)
@@ -506,6 +501,14 @@ gfx::Point BrowserPluginGuest::GetCoordinatesInEmbedderWebContents(
   point +=
       owner_rwhv->TransformPointToRootCoordSpace(guest_window_rect_.origin())
           .OffsetFromOrigin();
+  if (embedder_web_contents()->GetBrowserPluginGuest()) {
+    // |point| is currently with respect to the top-most view (outermost
+    // WebContents). We should subtract a displacement to find the point with
+    // resepct to embedder's WebContents.
+    point -= owner_rwhv->TransformPointToRootCoordSpace(gfx::Point())
+                 .OffsetFromOrigin();
+  }
+
   return point;
 }
 
@@ -662,8 +665,21 @@ void BrowserPluginGuest::SendTextInputTypeChangedToView(
     return;
   }
 
-  if (last_text_input_state_.get())
+  if (last_text_input_state_.get()) {
     guest_rwhv->TextInputStateChanged(*last_text_input_state_);
+    if (auto* rwh =
+            RenderWidgetHostImpl::From(guest_rwhv->GetRenderWidgetHost())) {
+      // We need composition range information for some IMEs. To get the
+      // updates, we need to explicitly ask the renderer to monitor and send the
+      // composition information changes. RenderWidgetHostView of the page will
+      // send the request to its process but the machinery for forwarding it to
+      // BrowserPlugin is not there. Therefore, we send a direct request to the
+      // guest process to start monitoring the state (see
+      // https://crbug.com/714771).
+      rwh->RequestCompositionUpdates(
+          false, last_text_input_state_->type != ui::TEXT_INPUT_TYPE_NONE);
+    }
+  }
 }
 
 void BrowserPluginGuest::DidFinishNavigation(
@@ -673,6 +689,9 @@ void BrowserPluginGuest::DidFinishNavigation(
 }
 
 void BrowserPluginGuest::RenderViewReady() {
+  if (GuestMode::IsCrossProcessFrameGuest(GetWebContents()))
+    return;
+
   RenderViewHost* rvh = GetWebContents()->GetRenderViewHost();
   // TODO(fsamuel): Investigate whether it's possible to update state earlier
   // here (see http://crbug.com/158151).
@@ -842,6 +861,9 @@ void BrowserPluginGuest::OnWillAttachComplete(
 void BrowserPluginGuest::OnDetach(int browser_plugin_instance_id) {
   if (!attached())
     return;
+
+  // It is important that the WebContents is notified before detaching.
+  GetWebContents()->BrowserPluginGuestWillDetach();
 
   // This tells BrowserPluginGuest to queue up all IPCs to BrowserPlugin until
   // it's attached again.

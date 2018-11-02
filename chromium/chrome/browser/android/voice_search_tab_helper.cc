@@ -8,16 +8,20 @@
 #include "components/google/core/browser/google_util.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/common/web_preferences.h"
+#include "media/base/media_switches.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(VoiceSearchTabHelper);
 
+// TODO(715588): this class shouldn't be playing with the user gesture
+// requirements like this.
 VoiceSearchTabHelper::VoiceSearchTabHelper(content::WebContents* contents)
     : content::WebContentsObserver(contents) {
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
   gesture_requirement_for_playback_disabled_ =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableGestureRequirementForMediaPlayback);
+      media::GetEffectiveAutoplayPolicy(*command_line) ==
+      switches::autoplay::kNoUserGestureRequiredPolicy;
 }
 
 VoiceSearchTabHelper::~VoiceSearchTabHelper() {
@@ -35,11 +39,17 @@ void VoiceSearchTabHelper::NavigationEntryCommitted(
 
   bool gesture_required =
       !google_util::IsGoogleSearchUrl(web_contents()->GetLastCommittedURL());
+  bool gesture_required_by_prefs =
+      prefs.autoplay_policy == content::AutoplayPolicy::kUserGestureRequired;
 
-  if (gesture_required != prefs.user_gesture_required_for_media_playback) {
+  if (gesture_required != gesture_required_by_prefs) {
     // TODO(chrishtr): this is wrong. user_gesture_required_for_media_playback
     // will be reset the next time a preference changes.
-    prefs.user_gesture_required_for_media_playback = gesture_required;
+    // TODO(mlamouri): this is even more wrong because it makes assumptions with
+    // regards to the default autoplay policy.
+    prefs.autoplay_policy =
+        gesture_required ? content::AutoplayPolicy::kUserGestureRequired
+                         : content::AutoplayPolicy::kNoUserGestureRequired;
     host->UpdateWebkitPreferences(prefs);
   }
 }

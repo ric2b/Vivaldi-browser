@@ -97,7 +97,7 @@ TestRenderFrameHost* TestRenderFrameHost::AppendChild(
   OnCreateChildFrame(GetProcess()->GetNextRoutingID(),
                      blink::WebTreeScopeType::kDocument, frame_name,
                      frame_unique_name, blink::WebSandboxFlags::kNone,
-                     FrameOwnerProperties());
+                     ParsedFeaturePolicyHeader(), FrameOwnerProperties());
   return static_cast<TestRenderFrameHost*>(
       child_creation_observer_.last_created_frame());
 }
@@ -511,6 +511,7 @@ WebBluetoothServiceImpl*
 TestRenderFrameHost::CreateWebBluetoothServiceForTesting() {
   WebBluetoothServiceImpl* service =
       RenderFrameHostImpl::CreateWebBluetoothService(
+          service_manager::BindSourceInfo(),
           blink::mojom::WebBluetoothServiceRequest());
   return service;
 }

@@ -175,9 +175,9 @@ WebInputEventResult GestureManager::HandleGestureTap(
   // FIXME: Use a hit-test cache to avoid unnecessary hit tests.
   // http://crbug.com/398920
   if (current_hit_test.InnerNode()) {
-    LocalFrame* main_frame = frame_->LocalFrameRoot();
-    if (main_frame && main_frame->View())
-      main_frame->View()->UpdateLifecycleToCompositingCleanPlusScrolling();
+    LocalFrame& main_frame = frame_->LocalFrameRoot();
+    if (main_frame.View())
+      main_frame.View()->UpdateLifecycleToCompositingCleanPlusScrolling();
     adjusted_point = frame_view->RootFrameToContents(
         FlooredIntPoint(gesture_event.PositionInRootFrame()));
     current_hit_test = EventHandlingUtil::HitTestResultInFrame(
@@ -188,8 +188,7 @@ WebInputEventResult GestureManager::HandleGestureTap(
   IntPoint tapped_position =
       FlooredIntPoint(gesture_event.PositionInRootFrame());
   Node* tapped_node = current_hit_test.InnerNode();
-  Element* tapped_element =
-      EventHandlingUtil::ParentElementIfNeeded(tapped_node);
+  Element* tapped_element = current_hit_test.InnerElement();
   UserGestureIndicator gesture_indicator(DocumentUserGestureToken::Create(
       tapped_node ? &tapped_node->GetDocument() : nullptr));
 
@@ -238,9 +237,9 @@ WebInputEventResult GestureManager::HandleGestureTap(
   // FIXME: Use a hit-test cache to avoid unnecessary hit tests.
   // http://crbug.com/398920
   if (current_hit_test.InnerNode()) {
-    LocalFrame* main_frame = frame_->LocalFrameRoot();
-    if (main_frame && main_frame->View())
-      main_frame->View()->UpdateAllLifecyclePhases();
+    LocalFrame& main_frame = frame_->LocalFrameRoot();
+    if (main_frame.View())
+      main_frame.View()->UpdateAllLifecyclePhases();
     adjusted_point = frame_view->RootFrameToContents(tapped_position);
     current_hit_test = EventHandlingUtil::HitTestResultInFrame(
         frame_, adjusted_point, hit_type);
@@ -332,8 +331,7 @@ WebInputEventResult GestureManager::HandleGestureLongPress(
 
   Node* inner_node = hit_test_result.InnerNode();
   if (inner_node && inner_node->GetLayoutObject() &&
-      selection_controller_->HandleGestureLongPress(gesture_event,
-                                                    hit_test_result)) {
+      selection_controller_->HandleGestureLongPress(hit_test_result)) {
     mouse_event_manager_->FocusDocumentView();
     return WebInputEventResult::kHandledSystem;
   }
@@ -389,11 +387,10 @@ WebInputEventResult GestureManager::SendContextMenuEventForGesture(
     event_type = WebInputEvent::kMouseUp;
 
   WebMouseEvent mouse_event(
-      event_type, gesture_event, WebPointerProperties::Button::kRight,
-      /* clickCount */ 1,
+      event_type, gesture_event, WebPointerProperties::Button::kNoButton,
+      /* clickCount */ 0,
       static_cast<WebInputEvent::Modifiers>(
-          modifiers | WebInputEvent::Modifiers::kRightButtonDown |
-          WebInputEvent::kIsCompatibilityEventForTouch),
+          modifiers | WebInputEvent::kIsCompatibilityEventForTouch),
       gesture_event.TimeStampSeconds());
 
   if (!suppress_mouse_events_from_gestures_ && frame_->View()) {

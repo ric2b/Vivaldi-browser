@@ -22,8 +22,6 @@ class GpuMemoryBufferManager;
 
 namespace content {
 
-class RenderWidget;
-
 // ui.mojom.WindowTreeClient implementation for RenderWidget. This lives and
 // operates on the renderer's main thread.
 class RendererWindowTreeClient : public ui::mojom::WindowTreeClient {
@@ -40,10 +38,6 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient {
   // Returns the RendererWindowTreeClient associated with |routing_id|. Returns
   // nullptr if none exists.
   static RendererWindowTreeClient* Get(int routing_id);
-
-  const cc::LocalSurfaceId& local_surface_id() const {
-    return current_local_surface_id_;
-  }
 
   void Bind(ui::mojom::WindowTreeClientRequest request);
 
@@ -63,8 +57,6 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient {
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       const CompositorFrameSinkCallback& callback);
 
-  RenderWidget* GetRenderWidgetFromRoutingId(int routing_id);
-
   void DestroySelf();
 
   // ui::mojom::WindowTreeClient:
@@ -79,7 +71,6 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient {
       int64_t display_id,
       ui::Id focused_window_id,
       bool drawn,
-      const cc::FrameSinkId& frame_sink_id,
       const base::Optional<cc::LocalSurfaceId>& local_surface_id) override;
   void OnEmbeddedAppDisconnected(ui::Id window_id) override;
   void OnUnembed(ui::Id window_id) override;
@@ -92,7 +83,6 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient {
       ui::mojom::WindowDataPtr data,
       int64_t display_id,
       bool drawn,
-      const cc::FrameSinkId& frame_sink_id,
       const base::Optional<cc::LocalSurfaceId>& local_surface_id) override;
   void OnWindowBoundsChanged(
       ui::Id window_id,
@@ -134,8 +124,7 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient {
                               uint32_t window_id,
                               int64_t display_id) override;
   void OnWindowFocused(ui::Id focused_window_id) override;
-  void OnWindowPredefinedCursorChanged(ui::Id window_id,
-                                       ui::mojom::CursorType cursor) override;
+  void OnWindowCursorChanged(ui::Id window_id, ui::CursorData cursor) override;
   void OnWindowSurfaceChanged(ui::Id window_id,
                               const cc::SurfaceInfo& surface_info) override;
   void OnDragDropStart(
@@ -169,13 +158,10 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient {
 
   const int routing_id_;
   ui::Id root_window_id_;
-  cc::FrameSinkId frame_sink_id_;
-  bool enable_surface_synchronization_ = false;
   scoped_refptr<cc::ContextProvider> pending_context_provider_;
   gpu::GpuMemoryBufferManager* pending_gpu_memory_buffer_manager_ = nullptr;
   CompositorFrameSinkCallback pending_compositor_frame_sink_callback_;
   ui::mojom::WindowTreePtr tree_;
-  cc::LocalSurfaceId current_local_surface_id_;
   mojo::Binding<ui::mojom::WindowTreeClient> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(RendererWindowTreeClient);

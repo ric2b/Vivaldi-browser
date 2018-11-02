@@ -39,12 +39,13 @@ namespace web {
 
 class BrowserState;
 struct ContextMenuParams;
-struct Credential;
 struct FaviconURL;
 struct LoadCommittedDetails;
+class NavigationContext;
 class NavigationManager;
 class SessionCertificatePolicyCacheImpl;
 class WebInterstitialImpl;
+class WebStateInterfaceProvider;
 class WebStatePolicyDecider;
 class WebUIIOS;
 
@@ -72,17 +73,11 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   CRWWebController* GetWebController();
   void SetWebController(CRWWebController* web_controller);
 
-  // Notifies the observers that a provisional navigation has started.
-  void OnProvisionalNavigationStarted(const GURL& url);
+  // Notifies the observers that a navigation has started.
+  void OnNavigationStarted(web::NavigationContext* context);
 
-  // Called when a navigation is committed.
-  void OnNavigationCommitted(const GURL& url);
-
-  // Notifies the observers that same page navigation did finish.
-  void OnSameDocumentNavigation(const GURL& url);
-
-  // Notifies the observers that navigation to error page did finish.
-  void OnErrorPageNavigation(const GURL& url);
+  // Notifies the observers that a navigation has finished.
+  void OnNavigationFinished(web::NavigationContext* context);
 
   // Called when page title was changed.
   void OnTitleChanged();
@@ -120,34 +115,6 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
 
   // Called when new FaviconURL candidates are received.
   void OnFaviconUrlUpdated(const std::vector<FaviconURL>& candidates);
-
-  // Called when the page requests a credential.
-  void OnCredentialsRequested(int request_id,
-                              const GURL& source_url,
-                              bool unmediated,
-                              const std::vector<std::string>& federations,
-                              bool user_interaction);
-
-  // Called when the page sends a notification that the user signed in with
-  // |credential|.
-  void OnSignedIn(int request_id,
-                  const GURL& source_url,
-                  const web::Credential& credential);
-
-  // Called when the page sends a notification that the user signed in.
-  void OnSignedIn(int request_id, const GURL& source_url);
-
-  // Called when the page sends a notification that the user was signed out.
-  void OnSignedOut(int request_id, const GURL& source_url);
-
-  // Called when the page sends a notification that the user failed to sign in
-  // with |credential|.
-  void OnSignInFailed(int request_id,
-                      const GURL& source_url,
-                      const web::Credential& credential);
-
-  // Called when the page sends a notification that the user failed to sign in.
-  void OnSignInFailed(int request_id, const GURL& source_url);
 
   // Returns the NavigationManager for this WebState.
   const NavigationManagerImpl& GetNavigationManagerImpl() const;
@@ -239,7 +206,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
                                 const std::string& command_prefix) override;
   void RemoveScriptCommandCallback(const std::string& command_prefix) override;
   id<CRWWebViewProxy> GetWebViewProxy() const override;
-  service_manager::InterfaceRegistry* GetMojoInterfaceRegistry() override;
+  WebStateInterfaceProvider* GetWebStateInterfaceProvider() override;
   bool HasOpener() const override;
   base::WeakPtr<WebState> AsWeakPtr() override;
 
@@ -380,7 +347,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   base::WeakPtrFactory<WebState> weak_factory_;
 
   // Mojo interface registry for this WebState.
-  std::unique_ptr<service_manager::InterfaceRegistry> mojo_interface_registry_;
+  std::unique_ptr<WebStateInterfaceProvider> web_state_interface_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(WebStateImpl);
 };

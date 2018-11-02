@@ -47,9 +47,6 @@
 #include "platform/wtf/text/Unicode.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 
-using namespace WTF;
-using namespace Unicode;
-
 namespace blink {
 
 Font::Font() : can_shape_word_by_word_(0), shape_word_by_word_computed_(0) {}
@@ -142,7 +139,27 @@ bool Font::DrawText(PaintCanvas* canvas,
     return false;
 
   ShapeResultBloberizer bloberizer(*this, device_scale_factor);
-  CachingWordShaper(*this).FillGlyphs(run_info, bloberizer);
+  CachingWordShaper word_shaper(*this);
+  ShapeResultBuffer buffer;
+  word_shaper.FillResultBuffer(run_info, &buffer);
+  bloberizer.FillGlyphs(run_info, buffer);
+  DrawBlobs(canvas, flags, bloberizer.Blobs(), point);
+  return true;
+}
+
+bool Font::DrawText(PaintCanvas* canvas,
+                    const TextFragmentPaintInfo& text_info,
+                    const FloatPoint& point,
+                    float device_scale_factor,
+                    const PaintFlags& flags) const {
+  // Don't draw anything while we are using custom fonts that are in the process
+  // of loading.
+  if (ShouldSkipDrawing())
+    return false;
+
+  ShapeResultBloberizer bloberizer(*this, device_scale_factor);
+  bloberizer.FillGlyphs(text_info.text, text_info.from, text_info.to,
+                        text_info.shape_result);
   DrawBlobs(canvas, flags, bloberizer.Blobs(), point);
   return true;
 }
@@ -178,6 +195,7 @@ bool Font::DrawBidiText(PaintCanvas* canvas,
 
   FloatPoint curr_point = point;
   BidiCharacterRun* bidi_run = bidi_runs.FirstRun();
+  CachingWordShaper word_shaper(*this);
   while (bidi_run) {
     TextRun subrun =
         run.SubRun(bidi_run->Start(), bidi_run->Stop() - bidi_run->Start());
@@ -189,8 +207,9 @@ bool Font::DrawBidiText(PaintCanvas* canvas,
     subrun_info.bounds = run_info.bounds;
 
     ShapeResultBloberizer bloberizer(*this, device_scale_factor);
-    float run_width =
-        CachingWordShaper(*this).FillGlyphs(subrun_info, bloberizer);
+    ShapeResultBuffer buffer;
+    word_shaper.FillResultBuffer(subrun_info, &buffer);
+    float run_width = bloberizer.FillGlyphs(subrun_info, buffer);
     DrawBlobs(canvas, flags, bloberizer.Blobs(), curr_point);
 
     bidi_run = bidi_run->Next();
@@ -217,8 +236,31 @@ void Font::DrawEmphasisMarks(PaintCanvas* canvas,
     return;
 
   ShapeResultBloberizer bloberizer(*this, device_scale_factor);
-  CachingWordShaper(*this).FillTextEmphasisGlyphs(run_info, emphasis_glyph_data,
-                                                  bloberizer);
+  CachingWordShaper word_shaper(*this);
+  ShapeResultBuffer buffer;
+  word_shaper.FillResultBuffer(run_info, &buffer);
+  bloberizer.FillTextEmphasisGlyphs(run_info, emphasis_glyph_data, buffer);
+  DrawBlobs(canvas, flags, bloberizer.Blobs(), point);
+}
+
+void Font::DrawEmphasisMarks(PaintCanvas* canvas,
+                             const TextFragmentPaintInfo& text_info,
+                             const AtomicString& mark,
+                             const FloatPoint& point,
+                             float device_scale_factor,
+                             const PaintFlags& flags) const {
+  if (ShouldSkipDrawing())
+    return;
+
+  FontCachePurgePreventer purge_preventer;
+  const auto emphasis_glyph_data = GetEmphasisMarkGlyphData(mark);
+  if (!emphasis_glyph_data.font_data)
+    return;
+
+  ShapeResultBloberizer bloberizer(*this, device_scale_factor);
+  bloberizer.FillTextEmphasisGlyphs(
+      text_info.text, text_info.direction, text_info.from, text_info.to,
+      emphasis_glyph_data, text_info.shape_result);
   DrawBlobs(canvas, flags, bloberizer.Blobs(), point);
 }
 
@@ -230,14 +272,15 @@ float Font::Width(const TextRun& run,
   return shaper.Width(run, fallback_fonts, glyph_bounds);
 }
 
-static int GetInterceptsFromBlobs(
-    const ShapeResultBloberizer::BlobBuffer& blobs,
-    const SkPaint& paint,
-    const std::tuple<float, float>& bounds,
-    SkScalar* intercepts_buffer) {
+namespace {  // anonymous namespace
+
+unsigned InterceptsFromBlobs(const ShapeResultBloberizer::BlobBuffer& blobs,
+                             const SkPaint& paint,
+                             const std::tuple<float, float>& bounds,
+                             SkScalar* intercepts_buffer) {
   SkScalar bounds_array[2] = {std::get<0>(bounds), std::get<1>(bounds)};
 
-  int num_intervals = 0;
+  unsigned num_intervals = 0;
   for (const auto& blob_info : blobs) {
     DCHECK(blob_info.blob);
 
@@ -257,6 +300,26 @@ static int GetInterceptsFromBlobs(
   return num_intervals;
 }
 
+void GetTextInterceptsInternal(const ShapeResultBloberizer::BlobBuffer& blobs,
+                               const PaintFlags& flags,
+                               const std::tuple<float, float>& bounds,
+                               Vector<Font::TextIntercept>& intercepts) {
+  // Get the number of intervals, without copying the actual values by
+  // specifying nullptr for the buffer, following the Skia allocation model for
+  // retrieving text intercepts.
+  SkPaint paint(ToSkPaint(flags));
+  unsigned num_intervals = InterceptsFromBlobs(blobs, paint, bounds, nullptr);
+  if (!num_intervals)
+    return;
+  DCHECK_EQ(num_intervals % 2, 0u);
+  intercepts.resize(num_intervals / 2u);
+
+  InterceptsFromBlobs(blobs, paint, bounds,
+                      reinterpret_cast<SkScalar*>(intercepts.data()));
+}
+
+}  // anonymous namespace
+
 void Font::GetTextIntercepts(const TextRunPaintInfo& run_info,
                              float device_scale_factor,
                              const PaintFlags& flags,
@@ -267,21 +330,28 @@ void Font::GetTextIntercepts(const TextRunPaintInfo& run_info,
 
   ShapeResultBloberizer bloberizer(
       *this, device_scale_factor, ShapeResultBloberizer::Type::kTextIntercepts);
-  CachingWordShaper(*this).FillGlyphs(run_info, bloberizer);
-  const auto& blobs = bloberizer.Blobs();
+  CachingWordShaper word_shaper(*this);
+  ShapeResultBuffer buffer;
+  word_shaper.FillResultBuffer(run_info, &buffer);
+  bloberizer.FillGlyphs(run_info, buffer);
 
-  // Get the number of intervals, without copying the actual values by
-  // specifying nullptr for the buffer, following the Skia allocation model for
-  // retrieving text intercepts.
-  SkPaint paint(ToSkPaint(flags));
-  int num_intervals = GetInterceptsFromBlobs(blobs, paint, bounds, nullptr);
-  if (!num_intervals)
+  GetTextInterceptsInternal(bloberizer.Blobs(), flags, bounds, intercepts);
+}
+
+void Font::GetTextIntercepts(const TextFragmentPaintInfo& text_info,
+                             float device_scale_factor,
+                             const PaintFlags& flags,
+                             const std::tuple<float, float>& bounds,
+                             Vector<TextIntercept>& intercepts) const {
+  if (ShouldSkipDrawing())
     return;
-  DCHECK_EQ(num_intervals % 2, 0);
-  intercepts.Resize(num_intervals / 2);
 
-  GetInterceptsFromBlobs(blobs, paint, bounds,
-                         reinterpret_cast<SkScalar*>(intercepts.Data()));
+  ShapeResultBloberizer bloberizer(
+      *this, device_scale_factor, ShapeResultBloberizer::Type::kTextIntercepts);
+  bloberizer.FillGlyphs(text_info.text, text_info.from, text_info.to,
+                        text_info.shape_result);
+
+  GetTextInterceptsInternal(bloberizer.Blobs(), flags, bounds, intercepts);
 }
 
 static inline FloatRect PixelSnappedSelectionRect(FloatRect rect) {
@@ -340,6 +410,16 @@ bool Font::ComputeCanShapeWordByWord() const {
   TypesettingFeatures features = GetFontDescription().GetTypesettingFeatures();
   return !platform_data.HasSpaceInLigaturesOrKerning(features);
 };
+
+void Font::ReportNotDefGlyph() const {
+  FontSelector* fontSelector = font_fallback_list_->GetFontSelector();
+  // We have a few non-DOM usages of Font code, for example in DragImage::Create
+  // and in EmbeddedObjectPainter::paintReplaced. In those cases, we can't
+  // retrieve a font selector as our connection to a Document object to report
+  // UseCounter metrics, and thus we cannot report notdef glyphs.
+  if (fontSelector)
+    fontSelector->ReportNotDefGlyph();
+}
 
 void Font::WillUseFontData(const String& text) const {
   const FontFamily& family = GetFontDescription().Family();
@@ -415,6 +495,26 @@ Vector<CharacterRange> Font::IndividualCharacterRanges(
   // more popular platforms, and to protect users, we are using a CHECK here.
   CHECK_EQ(ranges.size(), run.length());
   return ranges;
+}
+
+LayoutUnit Font::TabWidth(const TabSize& tab_size, LayoutUnit position) const {
+  const SimpleFontData* font_data = PrimaryFont();
+  if (!font_data)
+    return LayoutUnit::FromFloatCeil(GetFontDescription().LetterSpacing());
+  float base_tab_width = tab_size.GetPixelSize(font_data->SpaceWidth());
+  if (!base_tab_width)
+    return LayoutUnit::FromFloatCeil(GetFontDescription().LetterSpacing());
+
+  LayoutUnit distance_to_tab_stop = LayoutUnit::FromFloatFloor(
+      base_tab_width - fmodf(position, base_tab_width));
+
+  // Let the minimum width be the half of the space width so that it's always
+  // recognizable.  if the distance to the next tab stop is less than that,
+  // advance an additional tab stop.
+  if (distance_to_tab_stop < font_data->SpaceWidth() / 2)
+    distance_to_tab_stop += base_tab_width;
+
+  return distance_to_tab_stop;
 }
 
 bool Font::LoadingCustomFonts() const {

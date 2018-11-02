@@ -1,39 +1,50 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROME_BROWSER_DOWNLOAD_DOWNLOAD_SERVICE_FACTORY_H_
 #define CHROME_BROWSER_DOWNLOAD_DOWNLOAD_SERVICE_FACTORY_H_
 
-#include "base/compiler_specific.h"
-#include "base/memory/singleton.h"
+#include "base/macros.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
-class DownloadService;
+namespace base {
+template <typename T>
+struct DefaultSingletonTraits;
+}  // namespace base
 
-// Singleton that owns all DownloadServices and associates them with
-// Profiles. Listens for the Profile's destruction notification and cleans up
-// the associated DownloadService.
+namespace content {
+class BrowserContext;
+}  // namespace content
+
+namespace download {
+class DownloadService;
+}  // namespace download
+
+// DownloadServiceFactory is the main client class for interaction with the
+// download component.
 class DownloadServiceFactory : public BrowserContextKeyedServiceFactory {
  public:
-  // Returns the DownloadService for |context|, creating if not yet created.
-  static DownloadService* GetForBrowserContext(
-      content::BrowserContext* context);
-
+  // Returns singleton instance of DownloadServiceFactory.
   static DownloadServiceFactory* GetInstance();
 
- protected:
-  // BrowserContextKeyedServiceFactory:
-  KeyedService* BuildServiceInstanceFor(
-      content::BrowserContext* profile) const override;
-  content::BrowserContext* GetBrowserContextToUse(
-      content::BrowserContext* context) const override;
+  // Returns the DownloadService associated with |context|.
+  static download::DownloadService* GetForBrowserContext(
+      content::BrowserContext* context);
 
  private:
   friend struct base::DefaultSingletonTraits<DownloadServiceFactory>;
 
   DownloadServiceFactory();
   ~DownloadServiceFactory() override;
+
+  // BrowserContextKeyedServiceFactory overrides:
+  KeyedService* BuildServiceInstanceFor(
+      content::BrowserContext* context) const override;
+  content::BrowserContext* GetBrowserContextToUse(
+      content::BrowserContext* context) const override;
+
+  DISALLOW_COPY_AND_ASSIGN(DownloadServiceFactory);
 };
 
 #endif  // CHROME_BROWSER_DOWNLOAD_DOWNLOAD_SERVICE_FACTORY_H_

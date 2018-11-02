@@ -51,6 +51,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="4021036232240155012">DNS is in netwurk tsjinst dat in webstee namme omset nei syn ynternet adres.</translation>
 <translation id="4075732493274867456">De kliïnt en tsjinner stypje net in algemiene SSL protokol ferzje of sifer suite.</translation>
 <translation id="4130226655945681476">Kontrolearje de netwurk kabels, modem, en router</translation>
+<translation id="4165986682804962316">Webstee ynstellings</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Kontrolearje brânmuorre en anty-firus ynstellings<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Besykje it útfieren fan de oplosser foar netwurk<ph name="END_LINK" />.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> hat jo ynloch sertifikaat net akseptearre, of der is net ien ferskaft.</translation>
@@ -99,7 +100,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="7716424297397655342">Dizze webstee koe net laden wurde út it lytsûnthâld</translation>
 <translation id="7758069387465995638">Software fan  de brânmoarre of antyfirus software hat mooglik de ferbining tsjinkeard.</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
-<translation id="8089520772729574115">minder dan 1 MB</translation>
 <translation id="8134994873729925007">It <ph name="BEGIN_ABBR" />DNS adres<ph name="END_ABBR" /> fan de tsjinner fan <ph name="HOST_NAME" />koe net fûn wurde.</translation>
 <translation id="8142868475871995937">Gean nei &lt;strong&gt;vivaldi://policy&lt;/strong&gt; om de list fan URL-adressen op de swarte list te sjen en oare betingsten dy't twongen wurde troch de systeembehearder.</translation>
 <translation id="8149426793427495338">Jo kompjûter is gien sliepen.</translation>

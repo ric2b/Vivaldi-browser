@@ -14,7 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
@@ -134,7 +134,7 @@ std::unique_ptr<net::ProxyService>
 ShellURLRequestContextGetter::GetProxyService() {
   // TODO(jam): use v8 if possible, look at chrome code.
   return net::ProxyService::CreateUsingSystemProxyResolver(
-      std::move(proxy_config_service_), 0, url_request_context_->net_log());
+      std::move(proxy_config_service_), url_request_context_->net_log());
 }
 
 net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
@@ -257,8 +257,9 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
     set_protocol = job_factory->SetProtocolHandler(
         url::kFileScheme,
         base::MakeUnique<net::FileProtocolHandler>(
-            BrowserThread::GetBlockingPool()->GetTaskRunnerWithShutdownBehavior(
-                base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)));
+            base::CreateTaskRunnerWithTraits(
+                {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+                 base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})));
     DCHECK(set_protocol);
 #endif
 

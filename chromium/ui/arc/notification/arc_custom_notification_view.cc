@@ -9,6 +9,9 @@
 #include "base/memory/ptr_util.h"
 #include "components/exo/notification_surface.h"
 #include "components/exo/surface.h"
+#include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_node_data.h"
+#include "ui/arc/notification/arc_notification_view.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -18,7 +21,6 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/transform.h"
 #include "ui/message_center/message_center_style.h"
-#include "ui/message_center/views/custom_notification_view.h"
 #include "ui/message_center/views/toast_contents_view.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
@@ -83,8 +85,13 @@ class ArcCustomNotificationView::EventForwarder : public ui::EventHandler {
       ui::LocatedEvent* located_event = event->AsLocatedEvent();
       located_event->target()->ConvertEventToTarget(widget->GetNativeWindow(),
                                                     located_event);
-      if (located_event->type() == ui::ET_MOUSE_MOVED ||
-          located_event->IsMouseWheelEvent()) {
+      if (located_event->type() == ui::ET_MOUSE_ENTERED ||
+          located_event->type() == ui::ET_MOUSE_EXITED) {
+        owner_->UpdateControlButtonsVisibility();
+        return;
+      }
+
+      if (located_event->type() == ui::ET_MOUSE_MOVED) {
         widget->OnMouseEvent(located_event->AsMouseEvent());
       } else if (located_event->IsScrollEvent()) {
         widget->OnScrollEvent(located_event->AsScrollEvent());
@@ -175,7 +182,7 @@ class ArcCustomNotificationView::SlideHelper
 };
 
 class ArcCustomNotificationView::ContentViewDelegate
-    : public message_center::CustomNotificationContentViewDelegate {
+    : public ArcNotificationContentViewDelegate {
  public:
   explicit ContentViewDelegate(ArcCustomNotificationView* owner)
       : owner_(owner) {}
@@ -190,12 +197,6 @@ class ArcCustomNotificationView::ContentViewDelegate
     if (owner_->close_button_)
       owner_->close_button_->RequestFocus();
     owner_->UpdateControlButtonsVisibility();
-  }
-
-  bool IsPinned() const override {
-    if (!owner_->item_)
-      return false;
-    return owner_->item_->pinned();
   }
 
   void UpdateControlButtonsVisibility() override {
@@ -218,7 +219,7 @@ ArcCustomNotificationView::ControlButton::ControlButton(
     : message_center::PaddedButton(owner), owner_(owner) {
   if (owner_->item_) {
     set_background(views::Background::CreateSolidBackground(
-        GetControlButtonBackgroundColor(owner_->item_->shown_contents())));
+        GetControlButtonBackgroundColor(owner_->item_->GetShownContents())));
   } else {
     set_background(views::Background::CreateSolidBackground(
         message_center::kControlButtonBackgroundColor));
@@ -235,39 +236,44 @@ void ArcCustomNotificationView::ControlButton::OnBlur() {
   owner_->UpdateControlButtonsVisibility();
 }
 
-ArcCustomNotificationView::ArcCustomNotificationView(
-    ArcCustomNotificationItem* item)
+ArcCustomNotificationView::ArcCustomNotificationView(ArcNotificationItem* item)
     : item_(item),
-      notification_key_(item->notification_key()),
+      notification_key_(item->GetNotificationKey()),
       event_forwarder_(new EventForwarder(this)) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
+  set_notify_enter_exit_on_child(true);
 
   item_->IncrementWindowRefCount();
   item_->AddObserver(this);
 
-  ArcNotificationSurfaceManager::Get()->AddObserver(this);
-  exo::NotificationSurface* surface =
-      ArcNotificationSurfaceManager::Get()->GetSurface(notification_key_);
-  if (surface)
-    OnNotificationSurfaceAdded(surface);
+  auto* surface_manager = ArcNotificationSurfaceManager::Get();
+  if (surface_manager) {
+    surface_manager->AddObserver(this);
+    exo::NotificationSurface* surface =
+        surface_manager->GetSurface(notification_key_);
+    if (surface)
+      OnNotificationSurfaceAdded(surface);
+  }
 
   // Create a layer as an anchor to insert surface copy during a slide.
   SetPaintToLayer();
   UpdatePreferredSize();
+  UpdateAccessibleName();
 }
 
 ArcCustomNotificationView::~ArcCustomNotificationView() {
   SetSurface(nullptr);
-  if (item_) {
-    item_->DecrementWindowRefCount();
-    item_->RemoveObserver(this);
-  }
 
-  if (ArcNotificationSurfaceManager::Get())
-    ArcNotificationSurfaceManager::Get()->RemoveObserver(this);
+  auto* surface_manager = ArcNotificationSurfaceManager::Get();
+  if (surface_manager)
+    surface_manager->RemoveObserver(this);
+  if (item_) {
+    item_->RemoveObserver(this);
+    item_->DecrementWindowRefCount();
+  }
 }
 
-std::unique_ptr<message_center::CustomNotificationContentViewDelegate>
+std::unique_ptr<ArcNotificationContentViewDelegate>
 ArcCustomNotificationView::CreateContentViewDelegate() {
   return base::MakeUnique<ArcCustomNotificationView::ContentViewDelegate>(this);
 }
@@ -317,7 +323,7 @@ void ArcCustomNotificationView::MaybeCreateFloatingControlButtons() {
 
   if (item_->IsOpeningSettingsSupported())
     CreateSettingsButton();
-  if (!item_->pinned())
+  if (!item_->GetPinned())
     CreateCloseButton();
 
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_CONTROL);
@@ -366,9 +372,12 @@ void ArcCustomNotificationView::SetSurface(exo::NotificationSurface* surface) {
 }
 
 void ArcCustomNotificationView::UpdatePreferredSize() {
-  gfx::Size preferred_size =
-      surface_ ? surface_->GetSize() : item_ ? item_->snapshot().size()
-                                             : gfx::Size();
+  gfx::Size preferred_size;
+  if (surface_)
+    preferred_size = surface_->GetSize();
+  else if (item_)
+    preferred_size = item_->GetSnapshot().size();
+
   if (preferred_size.IsEmpty())
     return;
 
@@ -415,11 +424,11 @@ void ArcCustomNotificationView::UpdatePinnedState() {
   if (!item_)
     return;
 
-  if (item_->pinned() && close_button_) {
+  if (item_->GetPinned() && close_button_) {
     control_buttons_view_->RemoveChildView(close_button_.get());
     close_button_.reset();
     Layout();
-  } else if (!item_->pinned() && !close_button_) {
+  } else if (!item_->GetPinned() && !close_button_) {
     CreateCloseButton();
     Layout();
   }
@@ -473,13 +482,21 @@ bool ArcCustomNotificationView::ShouldUpdateControlButtonsColor() const {
 
   if (settings_button_ &&
       settings_button_->background()->get_color() !=
-          GetControlButtonBackgroundColor(item_->shown_contents()))
+          GetControlButtonBackgroundColor(item_->GetShownContents()))
     return true;
   if (close_button_ &&
       close_button_->background()->get_color() !=
-          GetControlButtonBackgroundColor(item_->shown_contents()))
+          GetControlButtonBackgroundColor(item_->GetShownContents()))
     return true;
   return false;
+}
+
+void ArcCustomNotificationView::UpdateAccessibleName() {
+  // Don't update the accessible name when we are about to be destroyed.
+  if (!item_)
+    return;
+
+  accessible_name_ = item_->GetAccessibleName();
 }
 
 void ArcCustomNotificationView::ViewHierarchyChanged(
@@ -562,11 +579,11 @@ void ArcCustomNotificationView::OnPaint(gfx::Canvas* canvas) {
   views::NativeViewHost::OnPaint(canvas);
 
   // Bail if there is a |surface_| or no item or no snapshot image.
-  if (surface_ || !item_ || item_->snapshot().isNull())
+  if (surface_ || !item_ || item_->GetSnapshot().isNull())
     return;
   const gfx::Rect contents_bounds = GetContentsBounds();
-  canvas->DrawImageInt(item_->snapshot(), 0, 0, item_->snapshot().width(),
-                       item_->snapshot().height(), contents_bounds.x(),
+  canvas->DrawImageInt(item_->GetSnapshot(), 0, 0, item_->GetSnapshot().width(),
+                       item_->GetSnapshot().height(), contents_bounds.x(),
                        contents_bounds.y(), contents_bounds.width(),
                        contents_bounds.height(), false);
 }
@@ -580,12 +597,10 @@ void ArcCustomNotificationView::OnMouseExited(const ui::MouseEvent&) {
 }
 
 void ArcCustomNotificationView::OnFocus() {
-  CHECK_EQ(message_center::CustomNotificationView::kViewClassName,
-           parent()->GetClassName());
+  CHECK_EQ(ArcNotificationView::kViewClassName, parent()->GetClassName());
 
   NativeViewHost::OnFocus();
-  static_cast<message_center::CustomNotificationView*>(parent())
-      ->OnContentFocused();
+  static_cast<ArcNotificationView*>(parent())->OnContentFocused();
 }
 
 void ArcCustomNotificationView::OnBlur() {
@@ -594,12 +609,10 @@ void ArcCustomNotificationView::OnBlur() {
     return;
   }
 
-  CHECK_EQ(message_center::CustomNotificationView::kViewClassName,
-           parent()->GetClassName());
+  CHECK_EQ(ArcNotificationView::kViewClassName, parent()->GetClassName());
 
   NativeViewHost::OnBlur();
-  static_cast<message_center::CustomNotificationView*>(parent())
-      ->OnContentBlured();
+  static_cast<ArcNotificationView*>(parent())->OnContentBlured();
 }
 
 void ArcCustomNotificationView::ActivateToast() {
@@ -617,31 +630,26 @@ views::FocusTraversable* ArcCustomNotificationView::GetFocusTraversable() {
   return nullptr;
 }
 
-bool ArcCustomNotificationView::OnMousePressed(const ui::MouseEvent& event) {
-  // TODO(yhanada): Remove this hack as soon as possible after letting
-  // accessible actions be delivered to this view.
-  // All mouse clicks or touches should be sent to corresponding Android view
-  // because the surface is on this view, so receiving a mouse pressed event
-  // means the event is generated by automation API.
-  // We can distinguish events from automation API by checking the target of the
-  // event because the target of all events generated by automation API is set
-  // to nullptr.
-  if (event.IsOnlyLeftMouseButton() && item_ &&
-      item_->expand_state() != mojom::ArcNotificationExpandState::FIXED_SIZE &&
-      event.target() == nullptr) {
+bool ArcCustomNotificationView::HandleAccessibleAction(
+    const ui::AXActionData& action_data) {
+  if (item_ && action_data.action == ui::AX_ACTION_DO_DEFAULT) {
     item_->ToggleExpansion();
     return true;
   }
   return false;
 }
 
+void ArcCustomNotificationView::GetAccessibleNodeData(
+    ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_BUTTON;
+  node_data->SetName(accessible_name_);
+}
+
 void ArcCustomNotificationView::ButtonPressed(views::Button* sender,
                                               const ui::Event& event) {
-  if (item_ && !item_->pinned() && sender == close_button_.get()) {
-    CHECK_EQ(message_center::CustomNotificationView::kViewClassName,
-             parent()->GetClassName());
-    static_cast<message_center::CustomNotificationView*>(parent())
-        ->OnCloseButtonPressed();
+  if (item_ && !item_->GetPinned() && sender == close_button_.get()) {
+    CHECK_EQ(ArcNotificationView::kViewClassName, parent()->GetClassName());
+    static_cast<ArcNotificationView*>(parent())->OnCloseButtonPressed();
   }
   if (item_ && settings_button_ && sender == settings_button_) {
     item_->OpenSettings();
@@ -673,6 +681,7 @@ void ArcCustomNotificationView::OnItemDestroying() {
 }
 
 void ArcCustomNotificationView::OnItemUpdated() {
+  UpdateAccessibleName();
   UpdatePinnedState();
   UpdateSnapshot();
   if (ShouldUpdateControlButtonsColor())
@@ -707,7 +716,7 @@ void ArcCustomNotificationView::AnimationProgressed(
 
   if (item_) {
     const SkColor target =
-        GetControlButtonBackgroundColor(item_->shown_contents());
+        GetControlButtonBackgroundColor(item_->GetShownContents());
     const SkColor start =
         target == message_center::kControlButtonBackgroundColor
             ? SK_ColorTRANSPARENT

@@ -4,7 +4,7 @@
 
 #include "modules/indexeddb/IDBValue.h"
 
-#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "platform/blob/BlobData.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebBlobInfo.h"
@@ -30,7 +30,7 @@ IDBValue::IDBValue(PassRefPtr<SharedBuffer> data,
                    const WebVector<WebBlobInfo>& web_blob_info,
                    IDBKey* primary_key,
                    const IDBKeyPath& key_path)
-    : data_(data),
+    : data_(std::move(data)),
       blob_data_(WTF::MakeUnique<Vector<RefPtr<BlobDataHandle>>>()),
       blob_info_(
           WTF::WrapUnique(new Vector<WebBlobInfo>(web_blob_info.size()))),
@@ -60,6 +60,17 @@ IDBValue::IDBValue(const IDBValue* value,
   }
 }
 
+IDBValue::IDBValue(PassRefPtr<SharedBuffer> unwrapped_data,
+                   std::unique_ptr<Vector<RefPtr<BlobDataHandle>>> blob_data,
+                   std::unique_ptr<Vector<WebBlobInfo>> blob_info,
+                   const IDBKey* primary_key,
+                   const IDBKeyPath& key_path)
+    : data_(std::move(unwrapped_data)),
+      blob_data_(std::move(blob_data)),
+      blob_info_(std::move(blob_info)),
+      primary_key_(primary_key),
+      key_path_(key_path) {}
+
 IDBValue::~IDBValue() {
   if (isolate_)
     isolate_->AdjustAmountOfExternalAllocatedMemory(-external_allocated_size_);
@@ -78,6 +89,16 @@ PassRefPtr<IDBValue> IDBValue::Create(const IDBValue* value,
                                       IDBKey* primary_key,
                                       const IDBKeyPath& key_path) {
   return AdoptRef(new IDBValue(value, primary_key, key_path));
+}
+
+PassRefPtr<IDBValue> IDBValue::Create(
+    PassRefPtr<SharedBuffer> unwrapped_data,
+    std::unique_ptr<Vector<RefPtr<BlobDataHandle>>> blob_data,
+    std::unique_ptr<Vector<WebBlobInfo>> blob_info,
+    const IDBKey* primary_key,
+    const IDBKeyPath& key_path) {
+  return AdoptRef(new IDBValue(std::move(unwrapped_data), std::move(blob_data),
+                               std::move(blob_info), primary_key, key_path));
 }
 
 Vector<String> IDBValue::GetUUIDs() const {

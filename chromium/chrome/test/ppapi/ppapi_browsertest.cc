@@ -7,6 +7,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
@@ -1180,7 +1181,13 @@ TEST_PPAPI_NACL(MouseCursor)
 
 TEST_PPAPI_NACL(NetworkProxy)
 
-TEST_PPAPI_NACL(TrueTypeFont)
+// TODO(crbug.com/619765): get working on CrOS ozone build.
+#if defined(OS_CHROMEOS) && defined(USE_OZONE)
+#define MAYBE_TrueTypeFont DISABLED_TrueTypeFont
+#else
+#define MAYBE_TrueTypeFont TrueTypeFont
+#endif
+TEST_PPAPI_NACL(MAYBE_TrueTypeFont)
 
 // TODO(crbug.com/602875), TODO(crbug.com/602876) Flaky on Win and CrOS.
 #if defined(OS_CHROMEOS) || defined(OS_WIN)
@@ -1259,7 +1266,10 @@ class PackagedAppTest : public ExtensionBrowserTest {
 
   void LaunchTestingApp(const std::string& extension_dirname) {
     base::FilePath data_dir;
-    ASSERT_TRUE(PathService::Get(chrome::DIR_GEN_TEST_DATA, &data_dir));
+    {
+      base::ThreadRestrictions::ScopedAllowIO allow_io;
+      ASSERT_TRUE(PathService::Get(chrome::DIR_GEN_TEST_DATA, &data_dir));
+    }
     base::FilePath app_dir = data_dir.AppendASCII("ppapi")
                                      .AppendASCII("tests")
                                      .AppendASCII("extensions")

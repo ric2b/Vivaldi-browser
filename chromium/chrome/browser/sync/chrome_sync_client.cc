@@ -30,6 +30,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/sessions/sync_sessions_web_contents_router.h"
 #include "chrome/browser/sync/sessions/sync_sessions_web_contents_router_factory.h"
+#include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/themes/theme_syncable_service.h"
@@ -67,6 +68,7 @@
 #include "components/sync/engine/browser_thread_model_worker.h"
 #include "components/sync/engine/passive_model_worker.h"
 #include "components/sync/engine/ui_model_worker.h"
+#include "components/sync/user_events/user_event_service.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/sync_sessions_client.h"
@@ -458,10 +460,16 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return SupervisedUserSharedSettingsServiceFactory::GetForBrowserContext(
           profile_)->AsWeakPtr();
 #endif  // !defined(OS_ANDROID)
-    case syncer::SUPERVISED_USER_WHITELISTS:
-      return SupervisedUserServiceFactory::GetForProfile(profile_)
-          ->GetWhitelistService()
-          ->AsWeakPtr();
+    case syncer::SUPERVISED_USER_WHITELISTS: {
+      // Unlike other types here, ProfileSyncServiceFactory does not declare a
+      // DependsOn the SupervisedUserServiceFactory (in order to avoid circular
+      // dependency), which means we cannot assume it is still alive.
+      SupervisedUserService* supervised_user_service =
+          SupervisedUserServiceFactory::GetForProfileIfExists(profile_);
+      if (supervised_user_service)
+        return supervised_user_service->GetWhitelistService()->AsWeakPtr();
+      return base::WeakPtr<syncer::SyncableService>();
+    }
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
     case syncer::ARTICLES: {
       dom_distiller::DomDistillerService* service =
@@ -518,9 +526,13 @@ ChromeSyncClient::GetSyncBridgeForModelType(syncer::ModelType type) {
           ->AsWeakPtr();
 #endif  // defined(OS_CHROMEOS)
     case syncer::TYPED_URLS:
-      // TODO(gangwu):implement TypedURLSyncBridge and return real
+      // TODO(gangwu): Implement TypedURLSyncBridge and return real
       // TypedURLSyncBridge here.
       return base::WeakPtr<syncer::ModelTypeSyncBridge>();
+    case syncer::USER_EVENTS:
+      return browser_sync::UserEventServiceFactory::GetForProfile(profile_)
+          ->GetSyncBridge()
+          ->AsWeakPtr();
     default:
       NOTREACHED();
       return base::WeakPtr<syncer::ModelTypeSyncBridge>();

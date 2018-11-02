@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "content/public/browser/web_contents.h"
 #include "headless/lib/browser/headless_devtools_manager_delegate.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
@@ -24,7 +25,8 @@ class HeadlessBrowserContextImpl;
 class HeadlessBrowserMainParts;
 
 // Exported for tests.
-class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
+class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser,
+                                            public HeadlessDevToolsTarget {
  public:
   HeadlessBrowserImpl(
       const base::Callback<void(HeadlessBrowser*)>& on_start_callback,
@@ -49,6 +51,13 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
   void SetDefaultBrowserContext(
       HeadlessBrowserContext* browser_context) override;
   HeadlessBrowserContext* GetDefaultBrowserContext() override;
+  HeadlessDevToolsTarget* GetDevToolsTarget() override;
+
+  // HeadlessDevToolsTarget implementation:
+  bool AttachClient(HeadlessDevToolsClient* client) override;
+  void ForceAttachClient(HeadlessDevToolsClient* client) override;
+  void DetachClient(HeadlessDevToolsClient* client) override;
+  bool IsAttached() override;
 
   void set_browser_main_parts(HeadlessBrowserMainParts* browser_main_parts);
   HeadlessBrowserMainParts* browser_main_parts() const;
@@ -62,6 +71,8 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
   // Close given |browser_context| and delete it
   // (all web contents associated with it go away too).
   void DestroyBrowserContext(HeadlessBrowserContextImpl* browser_context);
+
+  HeadlessWebContentsImpl* GetWebContentsForWindowId(const int window_id);
 
   base::WeakPtr<HeadlessBrowserImpl> GetWeakPtr();
 
@@ -81,6 +92,8 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
   std::unordered_map<std::string, std::unique_ptr<HeadlessBrowserContextImpl>>
       browser_contexts_;
   HeadlessBrowserContext* default_browser_context_;  // Not owned.
+
+  scoped_refptr<content::DevToolsAgentHost> agent_host_;
 
   base::WeakPtrFactory<HeadlessBrowserImpl> weak_ptr_factory_;
 

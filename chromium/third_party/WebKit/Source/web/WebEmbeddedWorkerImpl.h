@@ -35,6 +35,7 @@
 
 #include <memory>
 #include "platform/heap/Handle.h"
+#include "public/platform/Platform.h"
 #include "public/platform/WebContentSecurityPolicy.h"
 #include "public/web/WebDevToolsAgentClient.h"
 #include "public/web/WebEmbeddedWorker.h"
@@ -44,9 +45,8 @@
 namespace blink {
 
 class ThreadableLoadingContext;
-class ParentFrameTaskRunners;
 class ServiceWorkerGlobalScopeProxy;
-class WebLocalFrameImpl;
+class WebLocalFrameBase;
 class WebView;
 class WorkerInspectorProxy;
 class WorkerScriptLoader;
@@ -71,7 +71,7 @@ class WebEmbeddedWorkerImpl final : public WebEmbeddedWorker,
   void ReattachDevTools(const WebString& host_id,
                         int session_id,
                         const WebString& saved_state) override;
-  void DetachDevTools() override;
+  void DetachDevTools(int session_id) override;
   void DispatchDevToolsMessage(int session_id,
                                int call_id,
                                const WebString& method,
@@ -79,13 +79,18 @@ class WebEmbeddedWorkerImpl final : public WebEmbeddedWorker,
   void AddMessageToConsole(const WebConsoleMessage&) override;
 
   void PostMessageToPageInspector(const WTF::String&);
+  std::unique_ptr<blink::WebURLLoader> CreateURLLoader() override {
+    // TODO(yhirano): Stop using Platform::CreateURLLoader() here.
+    return Platform::Current()->CreateURLLoader();
+  }
 
  private:
   void PrepareShadowPageForLoader();
   void LoadShadowPage();
 
   // WebFrameClient overrides.
-  void DidFinishDocumentLoad(WebLocalFrame*) override;
+  void FrameDetached(WebLocalFrame*, DetachType) override;
+  void DidFinishDocumentLoad() override;
 
   // WebDevToolsAgentClient overrides.
   void SendProtocolMessage(int session_id,
@@ -100,11 +105,6 @@ class WebEmbeddedWorkerImpl final : public WebEmbeddedWorker,
   void StartWorkerThread();
 
   // WorkerLoaderProxyProvider
-  void PostTaskToLoader(const WebTraceLocation&,
-                        std::unique_ptr<WTF::CrossThreadClosure>) override;
-  void PostTaskToWorkerGlobalScope(
-      const WebTraceLocation&,
-      std::unique_ptr<WTF::CrossThreadClosure>) override;
   ThreadableLoadingContext* GetThreadableLoadingContext() override;
 
   WebEmbeddedWorkerStartData worker_start_data_;
@@ -118,10 +118,6 @@ class WebEmbeddedWorkerImpl final : public WebEmbeddedWorker,
   // Kept around only while main script loading is ongoing.
   RefPtr<WorkerScriptLoader> main_script_loader_;
 
-  // Owned by the main thread, but will be accessed by the worker when
-  // posting tasks.
-  CrossThreadPersistent<ParentFrameTaskRunners> main_thread_task_runners_;
-
   std::unique_ptr<WorkerThread> worker_thread_;
   RefPtr<WorkerLoaderProxy> loader_proxy_;
   Persistent<ServiceWorkerGlobalScopeProxy> worker_global_scope_proxy_;
@@ -133,7 +129,7 @@ class WebEmbeddedWorkerImpl final : public WebEmbeddedWorker,
   // are guaranteed to exist while this object is around.
   WebView* web_view_;
 
-  Persistent<WebLocalFrameImpl> main_frame_;
+  Persistent<WebLocalFrameBase> main_frame_;
   Persistent<ThreadableLoadingContext> loading_context_;
 
   bool loading_shadow_page_;

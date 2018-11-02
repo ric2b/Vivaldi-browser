@@ -29,12 +29,12 @@
 
 #include "core/timing/SharedWorkerPerformance.h"
 
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/loader/DocumentLoadTiming.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/workers/SharedWorker.h"
+#include "platform/bindings/ScriptState.h"
 
 namespace blink {
 
@@ -65,8 +65,8 @@ double SharedWorkerPerformance::workerStart(ScriptState* script_state,
 
 double SharedWorkerPerformance::GetWorkerStart(ExecutionContext* context,
                                                SharedWorker&) const {
-  ASSERT(context);
-  ASSERT(context->IsDocument());
+  DCHECK(context);
+  DCHECK(context->IsDocument());
   Document* document = ToDocument(context);
   if (!document->Loader())
     return 0;

@@ -22,6 +22,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -37,14 +38,17 @@
 #include "chrome/browser/background_sync/background_sync_controller_impl.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/dom_distiller/profile_utils.h"
 #include "chrome/browser/domain_reliability/service_factory.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
-#include "chrome/browser/download/download_service.h"
-#include "chrome/browser/download/download_service_factory.h"
+#include "chrome/browser/download/download_core_service.h"
+#include "chrome/browser/download/download_core_service_factory.h"
+#include "chrome/browser/media/media_device_id_salt.h"
 #include "chrome/browser/net/predictor.h"
 #include "chrome/browser/net/proxy_service_factory.h"
 #include "chrome/browser/permissions/permission_manager.h"
@@ -106,7 +110,6 @@
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/user_prefs/user_prefs.h"
-#include "components/zoom/zoom_event_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/notification_service.h"
@@ -114,7 +117,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/common/content_constants.h"
-#include "content/public/common/page_zoom.h"
 #include "extensions/features/features.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "ppapi/features/features.h"
@@ -128,6 +130,7 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/authpolicy/auth_policy_credentials_manager.h"
 #include "chrome/browser/chromeos/locale_change_guard.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
@@ -138,6 +141,11 @@
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#endif
+
+#if !defined(OS_ANDROID)
+#include "components/zoom/zoom_event_manager.h"
+#include "content/public/common/page_zoom.h"
 #endif
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
@@ -239,14 +247,13 @@ void CreateProfileDirectory(base::SequencedTaskRunner* sequenced_task_runner,
       new base::WaitableEvent(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                               base::WaitableEvent::InitialState::NOT_SIGNALED);
   sequenced_task_runner->PostTask(
-      FROM_HERE, base::Bind(&CreateDirectoryAndSignal, path, done_creating,
-                            create_readme));
+      FROM_HERE, base::BindOnce(&CreateDirectoryAndSignal, path, done_creating,
+                                create_readme));
   // Block the FILE thread until directory is created on I/O pool to make sure
   // that we don't attempt any operation until that part completes.
-  BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
-      base::Bind(&BlockFileThreadOnDirectoryCreate,
-                 base::Owned(done_creating)));
+  BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
+                          base::BindOnce(&BlockFileThreadOnDirectoryCreate,
+                                         base::Owned(done_creating)));
 }
 
 base::FilePath GetCachePath(const base::FilePath& base) {
@@ -398,12 +405,10 @@ void ProfileImpl::RegisterProfilePrefs(
   registry->RegisterStringPref(
       prefs::kPrintPreviewDefaultDestinationSelectionRules, std::string());
   registry->RegisterBooleanPref(prefs::kForceEphemeralProfiles, false);
-#if defined(ENABLE_MEDIA_ROUTER)
   registry->RegisterBooleanPref(prefs::kEnableMediaRouter, true);
 #if !defined(OS_ANDROID)
   registry->RegisterBooleanPref(prefs::kShowCastIconInToolbar, false);
 #endif  // !defined(OS_ANDROID)
-#endif  // defined(ENABLE_MEDIA_ROUTER)
   // Initialize the cache prefs.
   registry->RegisterFilePathPref(prefs::kDiskCacheDir, base::FilePath());
   registry->RegisterIntegerPref(prefs::kDiskCacheSize, 0);
@@ -468,6 +473,7 @@ ProfileImpl::ProfileImpl(
   configuration_policy_provider_ =
       policy::UserPolicyManagerFactoryChromeOS::CreateForProfile(
           this, force_immediate_policy_load, sequenced_task_runner);
+  AuthPolicyCredentialsManagerFactory::BuildForProfileIfActiveDirectory(this);
 #else
   configuration_policy_provider_ =
       policy::UserCloudPolicyManagerFactory::CreateForOriginalBrowserContext(
@@ -581,6 +587,8 @@ void ProfileImpl::DoFinalInit() {
       prefs::kForceEphemeralProfiles,
       base::Bind(&ProfileImpl::UpdateIsEphemeralInStorage,
                  base::Unretained(this)));
+
+  media_device_id_salt_ = new MediaDeviceIDSalt(prefs_.get());
 
   // It would be nice to use PathService for fetching this directory, but
   // the cache directory depends on the profile directory, which isn't available
@@ -786,12 +794,14 @@ Profile::ProfileType ProfileImpl::GetProfileType() const {
   return REGULAR_PROFILE;
 }
 
+#if !defined(OS_ANDROID)
 std::unique_ptr<content::ZoomLevelDelegate>
 ProfileImpl::CreateZoomLevelDelegate(const base::FilePath& partition_path) {
   return base::MakeUnique<ChromeZoomLevelPrefs>(
       GetPrefs(), GetPath(), partition_path,
       zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr());
 }
+#endif  // !defined(OS_ANDROID)
 
 base::FilePath ProfileImpl::GetPath() const {
   return path_;
@@ -977,10 +987,12 @@ const PrefService* ProfileImpl::GetPrefs() const {
   return prefs_.get();
 }
 
+#if !defined(OS_ANDROID)
 ChromeZoomLevelPrefs* ProfileImpl::GetZoomLevelPrefs() {
   return static_cast<ChromeZoomLevelPrefs*>(
       GetDefaultStoragePartition(this)->GetZoomLevelDelegate());
 }
+#endif  // !defined(OS_ANDROID)
 
 PrefService* ProfileImpl::GetOffTheRecordPrefs() {
   DCHECK(prefs_);
@@ -1025,8 +1037,8 @@ content::BrowserPluginGuestManager* ProfileImpl::GetGuestManager() {
 }
 
 DownloadManagerDelegate* ProfileImpl::GetDownloadManagerDelegate() {
-  return DownloadServiceFactory::GetForBrowserContext(this)->
-      GetDownloadManagerDelegate();
+  return DownloadCoreServiceFactory::GetForBrowserContext(this)
+      ->GetDownloadManagerDelegate();
 }
 
 storage::SpecialStoragePolicy* ProfileImpl::GetSpecialStoragePolicy() {
@@ -1043,6 +1055,11 @@ content::PushMessagingService* ProfileImpl::GetPushMessagingService() {
 
 content::SSLHostStateDelegate* ProfileImpl::GetSSLHostStateDelegate() {
   return ChromeSSLHostStateDelegateFactory::GetForProfile(this);
+}
+
+content::BrowsingDataRemoverDelegate*
+ProfileImpl::GetBrowsingDataRemoverDelegate() {
+  return ChromeBrowsingDataRemoverDelegateFactory::GetForProfile(this);
 }
 
 // TODO(mlamouri): we should all these BrowserContext implementation to Profile
@@ -1111,6 +1128,10 @@ void ProfileImpl::RegisterInProcessServices(StaticServiceMap* services) {
       base::Bind(&ProfileImpl::CreateIdentityService, base::Unretained(this));
   services->insert(
       std::make_pair(identity::mojom::kServiceName, identity_service_info));
+}
+
+std::string ProfileImpl::GetMediaDeviceIDSalt() {
+  return media_device_id_salt_->GetSalt();
 }
 
 bool ProfileImpl::IsSameProfile(Profile* profile) {

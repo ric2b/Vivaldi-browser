@@ -138,12 +138,11 @@ void TtsExtensionEventHandler::OnTtsEvent(Utterance* utterance,
   details->SetBoolean(constants::kIsFinalEventKey, utterance->finished());
 
   std::unique_ptr<base::ListValue> arguments(new base::ListValue());
-  arguments->Set(0, details.release());
+  arguments->Append(std::move(details));
 
-  std::unique_ptr<extensions::Event> event(
-      new extensions::Event(::extensions::events::TTS_ON_EVENT,
-                            ::events::kOnEvent, std::move(arguments)));
-  event->restrict_to_browser_context = utterance->browser_context();
+  auto event = base::MakeUnique<extensions::Event>(
+      ::extensions::events::TTS_ON_EVENT, ::events::kOnEvent,
+      std::move(arguments), utterance->browser_context());
   event->event_url = utterance->src_url();
   extensions::EventRouter::Get(utterance->browser_context())
       ->DispatchEventToExtension(src_extension_id_, std::move(event));
@@ -319,7 +318,7 @@ ExtensionFunction::ResponseAction TtsGetVoicesFunction::Run() {
   std::vector<VoiceData> voices;
   TtsController::GetInstance()->GetVoices(browser_context(), &voices);
 
-  std::unique_ptr<base::ListValue> result_voices(new base::ListValue());
+  auto result_voices = base::MakeUnique<base::ListValue>();
   for (size_t i = 0; i < voices.size(); ++i) {
     const VoiceData& voice = voices[i];
     std::unique_ptr<base::DictionaryValue> result_voice(
@@ -335,13 +334,13 @@ ExtensionFunction::ResponseAction TtsGetVoicesFunction::Run() {
     if (!voice.extension_id.empty())
       result_voice->SetString(constants::kExtensionIdKey, voice.extension_id);
 
-    base::ListValue* event_types = new base::ListValue();
+    auto event_types = base::MakeUnique<base::ListValue>();
     for (std::set<TtsEventType>::iterator iter = voice.events.begin();
          iter != voice.events.end(); ++iter) {
       const char* event_name_constant = TtsEventTypeToString(*iter);
       event_types->AppendString(event_name_constant);
     }
-    result_voice->Set(constants::kEventTypesKey, event_types);
+    result_voice->Set(constants::kEventTypesKey, std::move(event_types));
 
     result_voices->Append(std::move(result_voice));
   }

@@ -28,6 +28,7 @@
 
 #include "modules/accessibility/AXTableRow.h"
 
+#include "core/dom/AccessibleNode.h"
 #include "core/layout/LayoutObject.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
 #include "modules/accessibility/AXTableCell.h"
@@ -75,7 +76,7 @@ AccessibilityRole AXTableRow::DetermineAccessibilityRole() {
 }
 
 bool AXTableRow::IsTableRow() const {
-  AXObject* table = ParentTable();
+  AXObjectImpl* table = ParentTable();
   if (!table || !table->IsAXTable())
     return false;
 
@@ -96,15 +97,15 @@ bool AXTableRow::ComputeAccessibilityIsIgnored(
   return false;
 }
 
-AXObject* AXTableRow::ParentTable() const {
-  AXObject* parent = ParentObjectUnignored();
+AXObjectImpl* AXTableRow::ParentTable() const {
+  AXObjectImpl* parent = ParentObjectUnignored();
   if (!parent || !parent->IsAXTable())
     return 0;
 
   return parent;
 }
 
-AXObject* AXTableRow::HeaderObject() {
+AXObjectImpl* AXTableRow::HeaderObject() {
   AXObjectVector headers;
   HeaderObjectsForRow(headers);
   if (!headers.size())
@@ -114,17 +115,21 @@ AXObject* AXTableRow::HeaderObject() {
 }
 
 unsigned AXTableRow::AriaColumnIndex() const {
-  const AtomicString& col_index_value = GetAttribute(aria_colindexAttr);
-  if (col_index_value.ToInt() >= 1)
-    return col_index_value.ToInt();
+  uint32_t col_index;
+  if (HasAOMPropertyOrARIAAttribute(AOMUIntProperty::kColIndex, col_index) &&
+      col_index >= 1) {
+    return col_index;
+  }
 
   return 0;
 }
 
 unsigned AXTableRow::AriaRowIndex() const {
-  const AtomicString& row_index_value = GetAttribute(aria_rowindexAttr);
-  if (row_index_value.ToInt() >= 1)
-    return row_index_value.ToInt();
+  uint32_t row_index;
+  if (HasAOMPropertyOrARIAAttribute(AOMUIntProperty::kRowIndex, row_index) &&
+      row_index >= 1) {
+    return row_index;
+  }
 
   return 0;
 }

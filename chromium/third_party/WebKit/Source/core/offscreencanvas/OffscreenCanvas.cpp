@@ -18,10 +18,13 @@
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/OffscreenCanvasFrameDispatcherImpl.h"
 #include "platform/graphics/StaticBitmapImage.h"
+#include "platform/graphics/UnacceleratedImageBufferSurface.h"
+#include "platform/graphics/gpu/AcceleratedImageBufferSurface.h"
 #include "platform/image-encoders/ImageEncoderUtils.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/wtf/MathExtras.h"
 #include "public/platform/Platform.h"
 #include "third_party/skia/include/core/SkSurface.h"
-#include "wtf/MathExtras.h"
 
 namespace blink {
 
@@ -36,7 +39,7 @@ OffscreenCanvas::~OffscreenCanvas() {}
 
 void OffscreenCanvas::Dispose() {
   if (context_) {
-    context_->DetachOffscreenCanvas();
+    context_->DetachHost();
     context_ = nullptr;
   }
   if (commit_promise_resolver_) {
@@ -75,7 +78,7 @@ void OffscreenCanvas::SetSize(const IntSize& size) {
 }
 
 void OffscreenCanvas::SetNeutered() {
-  ASSERT(!context_);
+  DCHECK(!context_);
   is_neutered_ = true;
   size_.SetWidth(0);
   size_.SetHeight(0);
@@ -108,7 +111,7 @@ PassRefPtr<Image> OffscreenCanvas::GetSourceImageForCanvas(
     SourceImageStatus* status,
     AccelerationHint hint,
     SnapshotReason reason,
-    const FloatSize& size) const {
+    const FloatSize& size) {
   if (!context_) {
     *status = kInvalidSourceImageStatus;
     sk_sp<SkSurface> surface =
@@ -197,7 +200,7 @@ OffscreenCanvas::RenderingContextFactories() {
 
 CanvasRenderingContextFactory* OffscreenCanvas::GetRenderingContextFactory(
     int type) {
-  ASSERT(type < CanvasRenderingContext::kContextTypeCount);
+  DCHECK_LT(type, CanvasRenderingContext::kContextTypeCount);
   return RenderingContextFactories()[type].get();
 }
 
@@ -205,8 +208,8 @@ void OffscreenCanvas::RegisterRenderingContextFactory(
     std::unique_ptr<CanvasRenderingContextFactory> rendering_context_factory) {
   CanvasRenderingContext::ContextType type =
       rendering_context_factory->GetContextType();
-  ASSERT(type < CanvasRenderingContext::kContextTypeCount);
-  ASSERT(!RenderingContextFactories()[type]);
+  DCHECK_LT(type, CanvasRenderingContext::kContextTypeCount);
+  DCHECK(!RenderingContextFactories()[type]);
   RenderingContextFactories()[type] = std::move(rendering_context_factory);
 }
 
@@ -236,9 +239,53 @@ OffscreenCanvasFrameDispatcher* OffscreenCanvas::GetOrCreateFrameDispatcher() {
   return frame_dispatcher_.get();
 }
 
+void OffscreenCanvas::DiscardImageBuffer() {
+  image_buffer_.reset();
+  needs_matrix_clip_restore_ = true;
+}
+
+ImageBuffer* OffscreenCanvas::GetOrCreateImageBuffer() {
+  if (!image_buffer_) {
+    IntSize surface_size(width(), height());
+    OpacityMode opacity_mode =
+        context_->CreationAttributes().hasAlpha() ? kNonOpaque : kOpaque;
+    std::unique_ptr<ImageBufferSurface> surface;
+    if (RuntimeEnabledFeatures::accelerated2dCanvasEnabled()) {
+      surface.reset(
+          new AcceleratedImageBufferSurface(surface_size, opacity_mode));
+    }
+
+    if (!surface || !surface->IsValid()) {
+      surface.reset(new UnacceleratedImageBufferSurface(
+          surface_size, opacity_mode, kInitializeImagePixels));
+    }
+
+    image_buffer_ = ImageBuffer::Create(std::move(surface));
+
+    if (needs_matrix_clip_restore_) {
+      needs_matrix_clip_restore_ = false;
+      context_->RestoreCanvasMatrixClipStack(image_buffer_->Canvas());
+    }
+  }
+
+  return image_buffer_.get();
+}
+
 ScriptPromise OffscreenCanvas::Commit(RefPtr<StaticBitmapImage> image,
                                       bool is_web_gl_software_rendering,
-                                      ScriptState* script_state) {
+                                      ScriptState* script_state,
+                                      ExceptionState& exception_state) {
+  TRACE_EVENT0("blink", "OffscreenCanvas::Commit");
+
+  if (!HasPlaceholderCanvas()) {
+    exception_state.ThrowDOMException(
+        kInvalidStateError,
+        "Commit() was called on a context whose "
+        "OffscreenCanvas is not associated with a "
+        "canvas element.");
+    return exception_state.Reject(script_state);
+  }
+
   GetOrCreateFrameDispatcher()->SetNeedsBeginFrame(true);
 
   if (!commit_promise_resolver_) {
@@ -276,12 +323,14 @@ void OffscreenCanvas::FinalizeFrame() {
 
 void OffscreenCanvas::DoCommit(RefPtr<StaticBitmapImage> image,
                                bool is_web_gl_software_rendering) {
+  TRACE_EVENT0("blink", "OffscreenCanvas::DoCommit");
   double commit_start_time = WTF::MonotonicallyIncreasingTime();
   GetOrCreateFrameDispatcher()->DispatchFrame(
       std::move(image), commit_start_time, is_web_gl_software_rendering);
 }
 
 void OffscreenCanvas::BeginFrame() {
+  TRACE_EVENT0("blink", "OffscreenCanvas::BeginFrame");
   if (current_frame_) {
     // TODO(eseckler): beginFrame() shouldn't be used as confirmation of
     // CompositorFrame activation.
@@ -294,6 +343,7 @@ void OffscreenCanvas::BeginFrame() {
   } else if (commit_promise_resolver_) {
     commit_promise_resolver_->Resolve();
     commit_promise_resolver_.Clear();
+
     // We need to tell parent frame to stop sending signals on begin frame to
     // avoid overhead once we resolve the promise.
     GetOrCreateFrameDispatcher()->SetNeedsBeginFrame(false);

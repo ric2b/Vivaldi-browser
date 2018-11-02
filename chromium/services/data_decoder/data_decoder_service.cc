@@ -19,6 +19,7 @@ namespace {
 
 void OnImageDecoderRequest(
     service_manager::ServiceContextRefFactory* ref_factory,
+    const service_manager::BindSourceInfo& source_info,
     mojom::ImageDecoderRequest request) {
   mojo::MakeStrongBinding(
       base::MakeUnique<ImageDecoderImpl>(ref_factory->CreateRef()),
@@ -44,10 +45,10 @@ void DataDecoderService::OnStart() {
 }
 
 void DataDecoderService::OnBindInterface(
-    const service_manager::ServiceInfo& source_info,
+    const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(source_info.identity, interface_name,
+  registry_.BindInterface(source_info, interface_name,
                           std::move(interface_pipe));
 }
 

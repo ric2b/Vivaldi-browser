@@ -231,7 +231,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalData(
     base::TimeDelta timestamp) {
   return WrapExternalStorage(format, STORAGE_UNOWNED_MEMORY, coded_size,
                              visible_rect, natural_size, data, data_size,
-                             timestamp, base::SharedMemory::NULLHandle(), 0);
+                             timestamp, base::SharedMemoryHandle(), 0);
 }
 
 // static
@@ -712,13 +712,13 @@ VideoFrame::mailbox_holder(size_t texture_index) const {
 
 base::SharedMemoryHandle VideoFrame::shared_memory_handle() const {
   DCHECK_EQ(storage_type_, STORAGE_SHMEM);
-  DCHECK(shared_memory_handle_ != base::SharedMemory::NULLHandle());
+  DCHECK(shared_memory_handle_.IsValid());
   return shared_memory_handle_;
 }
 
 size_t VideoFrame::shared_memory_offset() const {
   DCHECK_EQ(storage_type_, STORAGE_SHMEM);
-  DCHECK(shared_memory_handle_ != base::SharedMemory::NULLHandle());
+  DCHECK(shared_memory_handle_.IsValid());
   return shared_memory_offset_;
 }
 
@@ -925,7 +925,6 @@ VideoFrame::VideoFrame(VideoPixelFormat format,
       coded_size_(coded_size),
       visible_rect_(visible_rect),
       natural_size_(natural_size),
-      shared_memory_handle_(base::SharedMemory::NULLHandle()),
       shared_memory_offset_(0),
       timestamp_(timestamp),
       unique_id_(g_unique_id_generator.GetNext()) {

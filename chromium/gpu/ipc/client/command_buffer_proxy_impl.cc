@@ -60,7 +60,6 @@ CommandBufferProxyImpl::CommandBufferProxyImpl(int channel_id,
       stream_id_(stream_id),
       weak_this_(AsWeakPtr()) {
   DCHECK(route_id);
-  DCHECK_NE(stream_id, GPU_STREAM_INVALID);
 }
 
 // static
@@ -69,7 +68,7 @@ std::unique_ptr<CommandBufferProxyImpl> CommandBufferProxyImpl::Create(
     gpu::SurfaceHandle surface_handle,
     CommandBufferProxyImpl* share_group,
     int32_t stream_id,
-    gpu::GpuStreamPriority stream_priority,
+    gpu::SchedulingPriority stream_priority,
     const gpu::gles2::ContextCreationAttribHelper& attribs,
     const GURL& active_url,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
@@ -318,13 +317,6 @@ void CommandBufferProxyImpl::OrderingBarrier(int32_t put_offset) {
   }
 }
 
-void CommandBufferProxyImpl::AddLatencyInfo(
-    const std::vector<ui::LatencyInfo>& latency_info) {
-  CheckLock();
-  for (size_t i = 0; i < latency_info.size(); i++)
-    latency_info_.push_back(latency_info[i]);
-}
-
 void CommandBufferProxyImpl::SetSwapBuffersCompletionCallback(
     const SwapBuffersCompletionCallback& callback) {
   CheckLock();
@@ -379,6 +371,7 @@ gpu::CommandBuffer::State CommandBufferProxyImpl::WaitForTokenInRange(
 }
 
 gpu::CommandBuffer::State CommandBufferProxyImpl::WaitForGetOffsetInRange(
+    uint32_t set_get_buffer_count,
     int32_t start,
     int32_t end) {
   CheckLock();
@@ -394,14 +387,16 @@ gpu::CommandBuffer::State CommandBufferProxyImpl::WaitForGetOffsetInRange(
     return last_state_;
   }
   TryUpdateState();
-  if (!InRange(start, end, last_state_.get_offset) &&
+  if (((set_get_buffer_count != last_state_.set_get_buffer_count) ||
+       !InRange(start, end, last_state_.get_offset)) &&
       last_state_.error == gpu::error::kNoError) {
     gpu::CommandBuffer::State state;
-    if (Send(new GpuCommandBufferMsg_WaitForGetOffsetInRange(route_id_, start,
-                                                             end, &state)))
+    if (Send(new GpuCommandBufferMsg_WaitForGetOffsetInRange(
+            route_id_, set_get_buffer_count, start, end, &state)))
       SetStateFromSyncReply(state);
   }
-  if (!InRange(start, end, last_state_.get_offset) &&
+  if (((set_get_buffer_count != last_state_.set_get_buffer_count) ||
+       !InRange(start, end, last_state_.get_offset)) &&
       last_state_.error == gpu::error::kNoError) {
     LOG(ERROR) << "GPU state invalid after WaitForGetOffsetInRange.";
     OnGpuSyncReplyError();
@@ -534,7 +529,7 @@ int32_t CommandBufferProxyImpl::CreateImage(ClientBuffer buffer,
   Send(new GpuCommandBufferMsg_CreateImage(route_id_, params));
 
   if (image_fence_sync) {
-    gpu::SyncToken sync_token(GetNamespaceID(), GetExtraCommandBufferData(),
+    gpu::SyncToken sync_token(GetNamespaceID(), GetStreamId(),
                               GetCommandBufferID(), image_fence_sync);
 
     // Force a synchronous IPC to validate sync token.
@@ -591,8 +586,13 @@ gpu::CommandBufferId CommandBufferProxyImpl::GetCommandBufferID() const {
   return command_buffer_id_;
 }
 
-int32_t CommandBufferProxyImpl::GetExtraCommandBufferData() const {
+int32_t CommandBufferProxyImpl::GetStreamId() const {
   return stream_id_;
+}
+
+void CommandBufferProxyImpl::FlushOrderingBarrierOnStream(int32_t stream_id) {
+  if (channel_)
+    channel_->FlushPendingStream(stream_id);
 }
 
 uint64_t CommandBufferProxyImpl::GenerateFenceSyncRelease() {
@@ -679,13 +679,17 @@ bool CommandBufferProxyImpl::CanWaitUnverifiedSyncToken(
 
   // If waiting on a different stream, flush pending commands on that stream.
   int32_t release_stream_id = sync_token.extra_data_field();
-  if (release_stream_id == gpu::GPU_STREAM_INVALID)
-    return false;
-
   if (release_stream_id != stream_id_)
     channel_->FlushPendingStream(release_stream_id);
 
   return true;
+}
+
+void CommandBufferProxyImpl::AddLatencyInfo(
+    const std::vector<ui::LatencyInfo>& latency_info) {
+  CheckLock();
+  for (size_t i = 0; i < latency_info.size(); i++)
+    latency_info_.push_back(latency_info[i]);
 }
 
 void CommandBufferProxyImpl::SignalQuery(uint32_t query,

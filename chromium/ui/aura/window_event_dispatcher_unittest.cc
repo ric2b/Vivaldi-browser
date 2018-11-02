@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/histogram_tester.h"
@@ -163,6 +164,38 @@ TEST_P(WindowEventDispatcherTest, RepostEvent) {
   host()->dispatcher()->RepostEvent(&touch_pressed_event);
   RunAllPendingInMessageLoop();
   EXPECT_TRUE(Env::GetInstance()->is_touch_down());
+}
+
+// Check that we correctly track whether any touch devices are down in response
+// to touch press and release events with two WindowTreeHost.
+TEST_P(WindowEventDispatcherTest, TouchDownState) {
+  std::unique_ptr<WindowTreeHost> second_host(
+      WindowTreeHost::Create(gfx::Rect(20, 30, 100, 50)));
+  second_host->InitHost();
+  second_host->window()->Show();
+
+  ui::TouchEvent touch_pressed_event1(
+      ui::ET_TOUCH_PRESSED, gfx::Point(10, 10), ui::EventTimeForNow(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 1));
+  ui::TouchEvent touch_pressed_event2(
+      ui::ET_TOUCH_PRESSED, gfx::Point(10, 10), ui::EventTimeForNow(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 2));
+  ui::TouchEvent touch_released_event1(
+      ui::ET_TOUCH_RELEASED, gfx::Point(10, 10), ui::EventTimeForNow(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 1));
+  ui::TouchEvent touch_released_event2(
+      ui::ET_TOUCH_RELEASED, gfx::Point(10, 10), ui::EventTimeForNow(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 2));
+
+  EXPECT_FALSE(Env::GetInstance()->is_touch_down());
+  host()->dispatcher()->OnEventFromSource(&touch_pressed_event1);
+  EXPECT_TRUE(Env::GetInstance()->is_touch_down());
+  second_host->dispatcher()->OnEventFromSource(&touch_pressed_event2);
+  EXPECT_TRUE(Env::GetInstance()->is_touch_down());
+  host()->dispatcher()->OnEventFromSource(&touch_released_event1);
+  EXPECT_TRUE(Env::GetInstance()->is_touch_down());
+  second_host->dispatcher()->OnEventFromSource(&touch_released_event2);
+  EXPECT_FALSE(Env::GetInstance()->is_touch_down());
 }
 
 // Check that we correctly track the state of the mouse buttons in response to
@@ -2084,7 +2117,7 @@ class WindowEventDispatcherTestWithMessageLoop
 };
 
 TEST_P(WindowEventDispatcherTestWithMessageLoop, EventRepostedInNonNestedLoop) {
-  CHECK(!message_loop()->is_running());
+  ASSERT_FALSE(base::RunLoop::IsRunningOnCurrentThread());
   // Perform the test in a callback, so that it runs after the message-loop
   // starts.
   message_loop()->task_runner()->PostTask(
@@ -2177,8 +2210,8 @@ TEST_P(WindowEventDispatcherTestInHighDPI, TouchMovesHeldOnScroll) {
   root_window()->RemovePreTargetHandler(&recorder);
 }
 
-// This handler triggers a nested message loop when it receives a right click
-// event, and runs a single callback in the nested message loop.
+// This handler triggers a nested run loop when it receives a right click
+// event, and runs a single callback in the nested run loop.
 class TriggerNestedLoopOnRightMousePress : public ui::test::TestEventHandler {
  public:
   explicit TriggerNestedLoopOnRightMousePress(const base::Closure& callback)
@@ -2212,8 +2245,8 @@ class TriggerNestedLoopOnRightMousePress : public ui::test::TestEventHandler {
   DISALLOW_COPY_AND_ASSIGN(TriggerNestedLoopOnRightMousePress);
 };
 
-// Tests that if dispatching a 'held' event triggers a nested message loop, then
-// the events that are dispatched from the nested message loop are transformed
+// Tests that if dispatching a 'held' event triggers a nested run loop, then
+// the events that are dispatched from the nested run loop are transformed
 // correctly.
 TEST_P(WindowEventDispatcherTestInHighDPI,
        EventsTransformedInRepostedEventTriggeredNestedLoop) {
@@ -2879,7 +2912,7 @@ class NestedLocationDelegate : public test::TestWindowDelegate {
 
   void InRunMessageLoop(base::RunLoop* run_loop) {
     ++nested_message_loop_count_;
-    // Nested message loops trigger falling back to using the location from
+    // nested run loops trigger falling back to using the location from
     // WindowTreeClient, which is 0,0.
     EXPECT_EQ(gfx::Point(0, 0), Env::GetInstance()->last_mouse_location());
     run_loop->Quit();

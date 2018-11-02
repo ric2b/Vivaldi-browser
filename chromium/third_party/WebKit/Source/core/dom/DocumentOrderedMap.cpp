@@ -88,14 +88,14 @@ void DocumentOrderedMap::Add(const AtomicString& key, Element* element) {
   DCHECK(entry->count);
   entry->element = nullptr;
   entry->count++;
-  entry->ordered_list.Clear();
+  entry->ordered_list.clear();
 }
 
 void DocumentOrderedMap::Remove(const AtomicString& key, Element* element) {
   DCHECK(key);
   DCHECK(element);
 
-  Map::iterator it = map_.Find(key);
+  Map::iterator it = map_.find(key);
   if (it == map_.end())
     return;
 
@@ -112,19 +112,18 @@ void DocumentOrderedMap::Remove(const AtomicString& key, Element* element) {
           entry->ordered_list.size() > 1 ? entry->ordered_list[1] : nullptr;
     }
     entry->count--;
-    entry->ordered_list.Clear();
+    entry->ordered_list.clear();
   }
 }
 
 template <bool keyMatches(const AtomicString&, const Element&)>
 inline Element* DocumentOrderedMap::Get(const AtomicString& key,
-                                        const TreeScope* scope) const {
+                                        const TreeScope& scope) const {
   DCHECK(key);
-  DCHECK(scope);
 
   MapEntry* entry = map_.at(key);
   if (!entry)
-    return 0;
+    return nullptr;
 
   DCHECK(entry->count);
   if (entry->element)
@@ -134,7 +133,7 @@ inline Element* DocumentOrderedMap::Get(const AtomicString& key,
   // with children having duplicate IDs is being removed -- the tree traversal
   // will be over an updated tree not having that subtree. In all other cases,
   // a match is expected.
-  for (Element& element : ElementTraversal::StartsAfter(scope->RootNode())) {
+  for (Element& element : ElementTraversal::StartsAfter(scope.RootNode())) {
     if (!keyMatches(key, element))
       continue;
     entry->element = &element;
@@ -145,23 +144,22 @@ inline Element* DocumentOrderedMap::Get(const AtomicString& key,
 #if DCHECK_IS_ON()
   DCHECK(g_remove_scope_level);
 #endif
-  return 0;
+  return nullptr;
 }
 
 Element* DocumentOrderedMap::GetElementById(const AtomicString& key,
-                                            const TreeScope* scope) const {
+                                            const TreeScope& scope) const {
   return Get<KeyMatchesId>(key, scope);
 }
 
 const HeapVector<Member<Element>>& DocumentOrderedMap::GetAllElementsById(
     const AtomicString& key,
-    const TreeScope* scope) const {
+    const TreeScope& scope) const {
   DCHECK(key);
-  DCHECK(scope);
   DEFINE_STATIC_LOCAL(HeapVector<Member<Element>>, empty_vector,
                       (new HeapVector<Member<Element>>));
 
-  Map::iterator it = map_.Find(key);
+  Map::iterator it = map_.find(key);
   if (it == map_.end())
     return empty_vector;
 
@@ -172,7 +170,7 @@ const HeapVector<Member<Element>>& DocumentOrderedMap::GetAllElementsById(
     entry->ordered_list.ReserveCapacity(entry->count);
     for (Element* element =
              entry->element ? entry->element.Get()
-                            : ElementTraversal::FirstWithin(scope->RootNode());
+                            : ElementTraversal::FirstWithin(scope.RootNode());
          entry->ordered_list.size() < entry->count;
          element = ElementTraversal::Next(*element)) {
       DCHECK(element);
@@ -188,14 +186,14 @@ const HeapVector<Member<Element>>& DocumentOrderedMap::GetAllElementsById(
 }
 
 Element* DocumentOrderedMap::GetElementByMapName(const AtomicString& key,
-                                                 const TreeScope* scope) const {
+                                                 const TreeScope& scope) const {
   return Get<KeyMatchesMapName>(key, scope);
 }
 
 // TODO(hayato): Template get<> by return type.
 HTMLSlotElement* DocumentOrderedMap::GetSlotByName(
     const AtomicString& key,
-    const TreeScope* scope) const {
+    const TreeScope& scope) const {
   if (Element* slot = Get<KeyMatchesSlotName>(key, scope)) {
     DCHECK(isHTMLSlotElement(slot));
     return toHTMLSlotElement(slot);

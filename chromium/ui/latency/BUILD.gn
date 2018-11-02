@@ -6,7 +6,7 @@ import("//testing/test.gni")
 
 source_set("latency") {
   sources = [
-    "latency/latency_histogram_macros.h",
+    "latency_histogram_macros.h",
     "latency_info.cc",
     "latency_info.h",
     "latency_tracker.cc",
@@ -16,6 +16,17 @@ source_set("latency") {
   deps = [
     "//base",
     "//ui/gfx",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "latency_info_test_support.cc",
+  ]
+
+  public_deps = [
+    ":latency",
   ]
 }
 

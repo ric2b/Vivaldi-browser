@@ -29,13 +29,13 @@ namespace gpu {
 class ImageFactory;
 struct GpuPreferences;
 class TransferBufferManager;
+class ServiceDiscardableManager;
 
 namespace gles2 {
 
 class ProgramCache;
 class BufferManager;
 class GLES2Decoder;
-class FramebufferManager;
 class MailboxManager;
 class RenderbufferManager;
 class PathManager;
@@ -67,7 +67,8 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
       bool bind_generates_resource,
       gpu::ImageFactory* image_factory,
       ProgressReporter* progress_reporter,
-      const GpuFeatureInfo& gpu_feature_info);
+      const GpuFeatureInfo& gpu_feature_info,
+      ServiceDiscardableManager* discardable_manager);
 
   // This should only be called by GLES2Decoder. This must be paired with a
   // call to destroy if it succeeds.
@@ -166,10 +167,6 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
     return buffer_manager_.get();
   }
 
-  FramebufferManager* framebuffer_manager() const {
-    return framebuffer_manager_.get();
-  }
-
   RenderbufferManager* renderbuffer_manager() const {
     return renderbuffer_manager_.get();
   }
@@ -202,6 +199,10 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
 
   SamplerManager* sampler_manager() const {
     return sampler_manager_.get();
+  }
+
+  ServiceDiscardableManager* discardable_manager() const {
+    return discardable_manager_;
   }
 
   uint32_t GetMemRepresented() const;
@@ -251,7 +252,7 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
   scoped_refptr<MemoryTracker> memory_tracker_;
   scoped_refptr<ShaderTranslatorCache> shader_translator_cache_;
   scoped_refptr<FramebufferCompletenessCache> framebuffer_completeness_cache_;
-  scoped_refptr<TransferBufferManager> transfer_buffer_manager_;
+  std::unique_ptr<TransferBufferManager> transfer_buffer_manager_;
 
   bool enforce_gl_minimums_;
   bool bind_generates_resource_;
@@ -279,8 +280,6 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
   ProgramCache* program_cache_;
 
   std::unique_ptr<BufferManager> buffer_manager_;
-
-  std::unique_ptr<FramebufferManager> framebuffer_manager_;
 
   std::unique_ptr<RenderbufferManager> renderbuffer_manager_;
 
@@ -311,6 +310,8 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
   ProgressReporter* progress_reporter_;
 
   GpuFeatureInfo gpu_feature_info_;
+
+  ServiceDiscardableManager* discardable_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(ContextGroup);
 };

@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/confirm_bubble.h"
 #include "chrome/browser/ui/confirm_bubble_model.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -13,7 +14,6 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/layout/grid_layout.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
 
 ConfirmBubbleViews::ConfirmBubbleViews(
@@ -40,6 +40,8 @@ ConfirmBubbleViews::ConfirmBubbleViews(
   link_ = new views::Link(model_->GetLinkText());
   link_->set_listener(this);
   link_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::CONFIRM_BUBBLE);
 }
 
 ConfirmBubbleViews::~ConfirmBubbleViews() {

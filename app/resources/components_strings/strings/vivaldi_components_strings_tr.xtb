@@ -7,6 +7,7 @@
 <translation id="139305205187523129"><ph name="HOST_NAME" /> hiç veri göndermedi.</translation>
 <translation id="1506687042165942984">Bu sayfanın kaydedilmiş (eski olduğu bilinen) bir kopyasını gösterin.</translation>
 <translation id="1559528461873125649">Belirtilen dosya veya dizin yok</translation>
+<translation id="1645368109819982629">Desteklenmeyen protokol</translation>
 <translation id="1710259589646384581">OS</translation>
 <translation id="194030505837763158"><ph name="LINK" /> adresine git</translation>
 <translation id="2030481566774242610">Demek istediğiniz şey <ph name="LINK" /> ifadesi mi?</translation>
@@ -34,6 +35,7 @@
 <translation id="382518646247711829">Proxy sunucu kullanıyorsanız...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> engellendi</translation>
 <translation id="4021036232240155012">DNS, bir web sitesinin adını o siteye özgü İnternet adresine dönüştüren ağ hizmetidir.</translation>
+<translation id="4165986682804962316">Site ayarları</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> giriş sertifikanızı kabul etmedi veya giriş sertifikası sağlanmamış olabilir.</translation>
 <translation id="4522570452068850558">Ayrıntılar</translation>
 <translation id="4708268264240856090">Bağlantınız kesildi</translation>
@@ -72,7 +74,6 @@
 <translation id="7716424297397655342">Bu site önbellekten yüklenemiyor</translation>
 <translation id="7758069387465995638">Bağlantıyı güvenlik duvarı veya virüsten korunma yazılımı engellemiş olabilir.</translation>
 <translation id="7951415247503192394">(32 bit)</translation>
-<translation id="8089520772729574115">1 MB'tan az</translation>
 <translation id="8134994873729925007"><ph name="HOST_NAME" /> ana makinesinin sunucu <ph name="BEGIN_ABBR" />DNS adresi<ph name="END_ABBR" /> bulunamadı.</translation>
 <translation id="8142868475871995937">Kara listeye alınmış URL'lerin ve sistem yöneticinizin zorunlu tuttuğu diğer politikaların listesini görmek için &lt;strong&gt;vivaldi://policy&lt;/strong&gt; adresini ziyaret edin.</translation>
 <translation id="8149426793427495338">Bilgisayarınız uyku moduna geçti.</translation>

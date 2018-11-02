@@ -24,6 +24,7 @@
 #include "chrome/browser/ui/app_list/launcher_page_event_dispatcher.h"
 #include "chrome/browser/ui/app_list/search/search_controller_factory.h"
 #include "chrome/browser/ui/app_list/search/search_resource_manager.h"
+#include "chrome/browser/ui/app_list/search_answer_web_contents_delegate.h"
 #include "chrome/browser/ui/app_list/start_page_service.h"
 #include "chrome/browser/ui/apps/chrome_app_delegate.h"
 #include "chrome/browser/ui/ash/app_list/app_sync_ui_state_watcher.h"
@@ -107,7 +108,6 @@ AppListViewDelegate::AppListViewDelegate(AppListControllerDelegate* controller)
     : controller_(controller),
       profile_(NULL),
       model_(NULL),
-      is_voice_query_(false),
       template_url_service_observer_(this) {
   CHECK(controller_);
   speech_ui_.reset(new app_list::SpeechUIModel);
@@ -154,6 +154,7 @@ void AppListViewDelegate::SetProfile(Profile* new_profile) {
       start_page_service->RemoveObserver(this);
     app_sync_ui_state_watcher_.reset();
     model_ = NULL;
+    search_answer_delegate_.reset();
   }
 
   template_url_service_observer_.RemoveAll();
@@ -187,13 +188,17 @@ void AppListViewDelegate::SetProfile(Profile* new_profile) {
     app_sync_ui_state_watcher_.reset(
         new AppSyncUIStateWatcher(profile_, model_));
 
+    search_answer_delegate_ =
+        base::MakeUnique<app_list::SearchAnswerWebContentsDelegate>(profile_,
+                                                                    model_);
+
     SetUpSearchUI();
     SetUpCustomLauncherPages();
     OnTemplateURLServiceChanged();
   }
 
   // Clear search query.
-  model_->search_box()->SetText(base::string16());
+  model_->search_box()->Update(base::string16(), false);
 }
 
 void AppListViewDelegate::SetUpSearchUI() {
@@ -271,9 +276,11 @@ app_list::SpeechUIModel* AppListViewDelegate::GetSpeechUI() {
 
 void AppListViewDelegate::StartSearch() {
   if (search_controller_) {
-    search_controller_->Start(is_voice_query_);
+    search_controller_->Start();
     controller_->OnSearchStarted();
   }
+  if (search_answer_delegate_)
+    search_answer_delegate_->Update();
 }
 
 void AppListViewDelegate::StopSearch() {
@@ -288,7 +295,6 @@ void AppListViewDelegate::OpenSearchResult(
   if (auto_launch)
     base::RecordAction(base::UserMetricsAction("AppList_AutoLaunched"));
   search_controller_->OpenResult(result, event_flags);
-  is_voice_query_ = false;
 }
 
 void AppListViewDelegate::InvokeSearchResultAction(
@@ -303,10 +309,8 @@ base::TimeDelta AppListViewDelegate::GetAutoLaunchTimeout() {
 }
 
 void AppListViewDelegate::AutoLaunchCanceled() {
-  if (is_voice_query_) {
+  if (model_ && model_->search_box()->is_voice_query()) {
     base::RecordAction(base::UserMetricsAction("AppList_AutoLaunchCanceled"));
-    // Cancelling the auto launch means we are no longer in a voice query.
-    is_voice_query_ = false;
   }
   auto_launch_timeout_ = base::TimeDelta();
 }
@@ -413,8 +417,7 @@ void AppListViewDelegate::OnSpeechResult(const base::string16& result,
   if (is_final) {
     auto_launch_timeout_ = base::TimeDelta::FromMilliseconds(
         kAutoLaunchDefaultTimeoutMilliSec);
-    is_voice_query_ = true;
-    model_->search_box()->SetText(result);
+    model_->search_box()->Update(result, true);
   }
 }
 
@@ -492,6 +495,10 @@ std::vector<views::View*> AppListViewDelegate::CreateCustomPageWebViews(
   return web_views;
 }
 
+views::View* AppListViewDelegate::GetSearchAnswerWebView() {
+  return search_answer_delegate_->web_view();
+}
+
 void AppListViewDelegate::CustomLauncherPageAnimationChanged(double progress) {
   if (launcher_page_event_dispatcher_)
     launcher_page_event_dispatcher_->ProgressChanged(progress);
@@ -513,10 +520,9 @@ void AppListViewDelegate::OnTemplateURLServiceChanged() {
       TemplateURLServiceFactory::GetForProfile(profile_);
   const TemplateURL* default_provider =
       template_url_service->GetDefaultSearchProvider();
-  bool is_google =
+  const bool is_google =
       default_provider->GetEngineType(
-          template_url_service->search_terms_data()) ==
-      SEARCH_ENGINE_GOOGLE;
+          template_url_service->search_terms_data()) == SEARCH_ENGINE_GOOGLE;
 
   model_->SetSearchEngineIsGoogle(is_google);
 

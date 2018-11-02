@@ -21,7 +21,9 @@
 #include "content/browser/devtools/service_worker_devtools_manager.h"
 #include "content/browser/devtools/shared_worker_devtools_agent_host.h"
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
+#include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/loader/netlog_observer.h"
+#include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 
@@ -41,6 +43,7 @@ char DevToolsAgentHost::kTypeSharedWorker[] = "shared_worker";
 char DevToolsAgentHost::kTypeServiceWorker[] = "service_worker";
 char DevToolsAgentHost::kTypeExternal[] = "external";
 char DevToolsAgentHost::kTypeBrowser[] = "browser";
+char DevToolsAgentHost::kTypeGuest[] = "webview";
 char DevToolsAgentHost::kTypeOther[] = "other";
 int DevToolsAgentHostImpl::s_attached_count_ = 0;
 int DevToolsAgentHostImpl::s_force_creation_count_ = 0;
@@ -55,6 +58,24 @@ std::string DevToolsAgentHost::GetProtocolVersion() {
 bool DevToolsAgentHost::IsSupportedProtocolVersion(const std::string& version) {
   // TODO(dgozman): generate this.
   return version == "1.0" || version == "1.1" || version == "1.2";
+}
+
+// static
+std::string DevToolsAgentHost::GetUntrustedDevToolsFrameIdForFrameTreeNodeId(
+    int process_id,
+    int frame_tree_node_id) {
+  FrameTreeNode* frame_tree_node =
+      FrameTreeNode::GloballyFindByID(frame_tree_node_id);
+  if (!frame_tree_node)
+    return "";
+  // Make sure |process_id| hasn't changed.
+  RenderFrameHostImpl* render_frame_host_impl =
+      frame_tree_node->current_frame_host();
+  if (!render_frame_host_impl ||
+      render_frame_host_impl->GetProcess()->GetID() != process_id) {
+    return "";
+  }
+  return render_frame_host_impl->untrusted_devtools_frame_id();
 }
 
 // static
@@ -82,13 +103,6 @@ DevToolsAgentHost::List DevToolsAgentHost::GetOrCreateAll() {
   return result;
 }
 
-// static
-void DevToolsAgentHost::DiscoverAllHosts(const DiscoveryCallback& callback) {
-  DevToolsManager* manager = DevToolsManager::GetInstance();
-  if (!manager->delegate() || !manager->delegate()->DiscoverTargets(callback))
-    callback.Run(DevToolsAgentHost::GetOrCreateAll());
-}
-
 // Called on the UI thread.
 // static
 scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::GetForWorker(
@@ -105,8 +119,7 @@ scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::GetForWorker(
 }
 
 DevToolsAgentHostImpl::DevToolsAgentHostImpl(const std::string& id)
-    : id_(id),
-      last_session_id_(0) {
+    : id_(id), last_session_id_(0), session_(nullptr) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
@@ -144,8 +157,10 @@ bool DevToolsAgentHostImpl::InnerAttachClient(DevToolsAgentHostClient* client,
   scoped_refptr<DevToolsAgentHostImpl> protect(this);
   if (session_)
     ForceDetach(true);
-  session_.reset(new DevToolsSession(this, client, ++last_session_id_));
-  AttachSession(session_.get());
+  DCHECK(!session_);
+  session_ = new DevToolsSession(this, client, ++last_session_id_);
+  sessions_.insert(std::unique_ptr<DevToolsSession>(session_));
+  AttachSession(session_);
   NotifyAttached();
   return true;
 }
@@ -172,12 +187,13 @@ bool DevToolsAgentHostImpl::DispatchProtocolMessage(
     const std::string& message) {
   if (!session_ || session_->client() != client)
     return false;
-  return DispatchProtocolMessage(session_.get(), message);
+  return DispatchProtocolMessage(session_, message);
 }
 
 void DevToolsAgentHostImpl::InnerDetachClient() {
   int session_id = session_->session_id();
-  session_.reset();
+  session_ = nullptr;
+  sessions_.clear();
   DetachSession(session_id);
   io_context_.DiscardAllStreams();
   NotifyDetached();
@@ -193,7 +209,7 @@ void DevToolsAgentHostImpl::InspectElement(
     int y) {
  if (!session_ || session_->client() != client)
    return;
- InspectElement(session_.get(), x, y);
+ InspectElement(session_, x, y);
 }
 
 std::string DevToolsAgentHostImpl::GetId() {

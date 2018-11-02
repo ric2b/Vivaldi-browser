@@ -87,11 +87,6 @@ const Extension* ShellExtensionSystem::LoadApp(const base::FilePath& app_dir) {
   RendererStartupHelperFactory::GetForBrowserContext(browser_context_)
       ->OnExtensionLoaded(*extension);
 
-  content::NotificationService::current()->Notify(
-      NOTIFICATION_EXTENSION_LOADED_DEPRECATED,
-      content::Source<BrowserContext>(browser_context_),
-      content::Details<const Extension>(extension.get()));
-
   return extension.get();
 }
 
@@ -185,8 +180,7 @@ void ShellExtensionSystem::RegisterExtensionWithRequestContexts(
 
 void ShellExtensionSystem::UnregisterExtensionWithRequestContexts(
     const std::string& extension_id,
-    const UnloadedExtensionInfo::Reason reason) {
-}
+    const UnloadedExtensionReason reason) {}
 
 const OneShotEvent& ShellExtensionSystem::ready() const {
   return ready_;

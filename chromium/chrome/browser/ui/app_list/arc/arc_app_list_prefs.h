@@ -125,8 +125,16 @@ class ArcAppListPrefs
                                const std::string& package_name,
                                const std::string& activity,
                                const std::string& intent) {}
+    // Notifies that task description has been updated.
+    virtual void OnTaskDescriptionUpdated(
+        int32_t task_id,
+        const std::string& label,
+        const std::vector<uint8_t>& icon_png_data) {}
     // Notifies that task has been destroyed.
     virtual void OnTaskDestroyed(int32_t task_id) {}
+    virtual void OnTaskOrientationLockRequested(
+        int32_t task_id,
+        const arc::mojom::OrientationLock orientation_lock) {}
     // Notifies that task has been activated and moved to the front.
     virtual void OnTaskSetActive(int32_t task_id) {}
 
@@ -138,14 +146,14 @@ class ArcAppListPrefs
     // Notifies that package has been modified.
     virtual void OnPackageModified(
         const arc::mojom::ArcPackageInfo& package_info) {}
-    // Notifies that package has been uninstalled.
-    virtual void OnPackageRemoved(const std::string& package_name) {}
+    // Notifies that package has been removed from the system. |uninstalled| is
+    // set to true in case package was uninstalled by user or sync.
+    // OnPackageRemoved is called for each active package with |uninstalled| set
+    // to false in case the user opts out the Play Store.
+    virtual void OnPackageRemoved(const std::string& package_name,
+                                  bool uninstalled) {}
     // Notifies sync date type controller the model is ready to start.
     virtual void OnPackageListInitialRefreshed() {}
-
-    virtual void OnTaskOrientationLockRequested(
-        int32_t task_id,
-        const arc::mojom::OrientationLock orientation_lock) {}
 
    protected:
     virtual ~Observer() {}
@@ -248,7 +256,7 @@ class ArcAppListPrefs
   void SimulateDefaultAppAvailabilityTimeoutForTesting();
 
  private:
-  friend class ChromeLauncherControllerImplTest;
+  friend class ChromeLauncherControllerTest;
   friend class ArcAppModelBuilderTest;
 
   // See the Create methods.
@@ -282,7 +290,14 @@ class ArcAppListPrefs
                      const std::string& activity,
                      const base::Optional<std::string>& name,
                      const base::Optional<std::string>& intent) override;
+  void OnTaskDescriptionUpdated(
+      int32_t task_id,
+      const std::string& label,
+      const std::vector<uint8_t>& icon_png_data) override;
   void OnTaskDestroyed(int32_t task_id) override;
+  void OnTaskOrientationLockRequested(
+      int32_t task_id,
+      const arc::mojom::OrientationLock orientation_lock) override;
   void OnTaskSetActive(int32_t task_id) override;
   void OnNotificationsEnabledChanged(const std::string& package_name,
                                      bool enabled) override;
@@ -290,9 +305,6 @@ class ArcAppListPrefs
   void OnPackageModified(arc::mojom::ArcPackageInfoPtr package_info) override;
   void OnPackageListRefreshed(
       std::vector<arc::mojom::ArcPackageInfoPtr> packages) override;
-  void OnTaskOrientationLockRequested(
-      int32_t task_id,
-      const arc::mojom::OrientationLock orientation_lock) override;
   void OnInstallationStarted(
       const base::Optional<std::string>& package_name) override;
   void OnInstallationFinished(
@@ -306,8 +318,10 @@ class ArcAppListPrefs
   // Returns list of packages from prefs. If |installed| is set to true then
   // returns currently installed packages. If not, returns list of packages that
   // where uninstalled. Note, we store uninstall packages only for packages of
-  // default apps.
-  std::vector<std::string> GetPackagesFromPrefs(bool installed) const;
+  // default apps. If |check_arc_alive| is set to true then package list is
+  // filled only in case ARC is currently active.
+  std::vector<std::string> GetPackagesFromPrefs(bool check_arc_alive,
+                                                bool installed) const;
 
   void AddApp(const arc::mojom::AppInfo& app_info);
   void AddAppAndShortcut(bool app_ready,
@@ -329,7 +343,7 @@ class ArcAppListPrefs
                               const std::string& package_name);
 
   void DisableAllApps();
-  void RemoveAllApps();
+  void RemoveAllAppsAndPackages();
   std::vector<std::string> GetAppIdsNoArcEnabledCheck() const;
   std::unordered_set<std::string> GetAppsAndShortcutsForPackage(
       const std::string& package_name,
@@ -357,10 +371,11 @@ class ArcAppListPrefs
   void RequestIcon(const std::string& app_id, ui::ScaleFactor scale_factor);
 
   // This checks if app is not registered yet and in this case creates
-  // non-launchable app entry.
-  void MaybeAddNonLaunchableApp(const base::Optional<std::string>& name,
-                                const std::string& package_name,
-                                const std::string& activity);
+  // non-launchable app entry. In case app is already registered then updates
+  // last launch time.
+  void HandleTaskCreated(const base::Optional<std::string>& name,
+                         const std::string& package_name,
+                         const std::string& activity);
 
   // Reveals first app from provided package in app launcher if package is newly
   // installed by user. If all apps in package are hidden then app list is not

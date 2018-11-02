@@ -404,7 +404,7 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 <td><code>emplace()</code>, <code>emplace_back()</code>, <code>emplace_front()</code>, <code>emplace_hint()</code></td>
 <td>Constructs elements directly within a container without a copy or a move. Less verbose than <code>push_back()</code> due to not naming the type being constructed.</td>
 <td>E.g. <a href="http://en.cppreference.com/w/cpp/container/vector/emplace_back">std::vector::emplace_back</a></td>
-<td><code>std::map::emplace()</code> is not yet available on all libstdc++ versions we support. When using emplacement for performance reasons, your type should probably be movable (since e.g. a vector of it might be resized); given a movable type, then, consider whether you really need to avoid the move done by <code>push_back()</code>. For readability concerns, treat like <code>auto</code>; sometimes the brevity over <code>push_back()</code> is a win, sometimes a loss. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/m3cblzEta7A">Discussion thread</a></td>
+<td>When using emplacement for performance reasons, your type should probably be movable (since e.g. a vector of it might be resized); given a movable type, then, consider whether you really need to avoid the move done by <code>push_back()</code>. For readability concerns, treat like <code>auto</code>; sometimes the brevity over <code>push_back()</code> is a win, sometimes a loss. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/m3cblzEta7A">Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -422,6 +422,14 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 <td>Allows containers to be initialized with aggregate elements</td>
 <td><a href="http://en.cppreference.com/w/cpp/utility/initializer_list">std::initializer_list</a></td>
 <td>Be cautious adding new constructors which take these, as they can hide non-initializer_list constructors in undesirable ways; see Effective Modern C++ Item 7. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/TQQ-L51_naM">Discussion thread</a>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/UpiCpuu9UNc">Another discussion thread</a></td>
+</tr>
+
+<tr>
+<td>Iterator Operators</td>
+<td><code>std::next()</code>, <code>std::prev()</code></td>
+<td>Copies an iterator and increments or decrements the copy by some value</td>
+<td><a href="http://en.cppreference.com/w/cpp/iterator/next">std::next</a>, <a href="http://en.cppreference.com/w/cpp/iterator/prev">std::prev</a></td>
+<td><a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/KeHhLI-E2Ww">Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -829,14 +837,6 @@ std::move(t).f();&nbsp;&nbsp;// second</code></td>
 <td><code>std::{un}declare_reachable()</code>, <code>std::{un}declare_no_pointers()</code></td>
 <td>Enables garbage collection implementations</td>
 <td><a href="http://en.cppreference.com/w/cpp/memory/gc/declare_reachable">std::declare_reachable</a>, <a href="http://en.cppreference.com/w/cpp/memory/gc/declare_no_pointers">std::declare_no_pointers</a></td>
-<td></td>
-</tr>
-
-<tr>
-<td>Iterator Operators</td>
-<td><code>std::next()</code>, <code>std::prev()</code></td>
-<td>Copies an iterator and increments or decrements the copy by some value</td>
-<td><a href="http://en.cppreference.com/w/cpp/iterator/next">std::next</a>, <a href="http://en.cppreference.com/w/cpp/iterator/prev">std::prev</a></td>
 <td></td>
 </tr>
 

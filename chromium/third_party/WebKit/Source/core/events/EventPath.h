@@ -32,8 +32,8 @@
 #include "core/events/TreeScopeEventContext.h"
 #include "core/events/WindowEventContext.h"
 #include "platform/heap/Handle.h"
-#include "wtf/HashMap.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -79,14 +79,16 @@ class CORE_EXPORT EventPath final : public GarbageCollected<EventPath> {
   void AdjustForRelatedTarget(Node&, EventTarget* related_target);
   void AdjustForTouchEvent(TouchEvent&);
 
+  bool DisabledFormControlExistsInPath() const;
+
   NodeEventContext& TopNodeEventContext();
 
   static EventTarget* EventTargetRespectingTargetRules(Node&);
 
   DECLARE_TRACE();
   void Clear() {
-    node_event_contexts_.Clear();
-    tree_scope_event_contexts_.Clear();
+    node_event_contexts_.clear();
+    tree_scope_event_contexts_.clear();
   }
 
  private:

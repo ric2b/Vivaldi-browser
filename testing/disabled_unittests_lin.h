@@ -16,14 +16,12 @@ DISABLE(ComponentFlashHintFileTest, InstallTest)
 // Seems to have broken in v57
 DISABLE(RenderTextHarfBuzzTest, GetSubstringBoundsMultiline/HarfBuzz)
 
-// Seems broken on Linux 386
-#if defined(ARCH_CPU_32_BITS)
-DISABLE(PointerLockBrowserTest, PointerLockEventRouting)
-#endif
-
 // Flaky
 DISABLE(SitePerProcessBrowserTest, PopupMenuTest)
 
 DISABLE(PointerLockBrowserTest, PointerLockEventRouting)
+DISABLE(PointerLockBrowserTest, PointerLockWheelEventRouting)
 DISABLE(LayerTreeHostTilesTestPartialInvalidation,
         PartialRaster_MultiThread_OneCopy)
+DISABLE(SitePerProcessBrowserTest, SubframeGestureEventRouting)
+DISABLE_MULTI(WebViewInteractiveTest, EditCommandsNoMenu)

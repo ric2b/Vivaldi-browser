@@ -65,26 +65,26 @@ class NodeListsNodeData final : public GarbageCollected<NodeListsNodeData> {
   struct NodeListAtomicCacheMapEntryHash {
     STATIC_ONLY(NodeListAtomicCacheMapEntryHash);
     static unsigned GetHash(
-        const std::pair<unsigned char, StringImpl*>& entry) {
-      return DefaultHash<StringImpl*>::Hash::GetHash(entry.second) +
+        const std::pair<unsigned char, AtomicString>& entry) {
+      return DefaultHash<AtomicString>::Hash::GetHash(entry.second) +
              entry.first;
     }
-    static bool Equal(const std::pair<unsigned char, StringImpl*>& a,
-                      const std::pair<unsigned char, StringImpl*>& b) {
+    static bool Equal(const std::pair<unsigned char, AtomicString>& a,
+                      const std::pair<unsigned char, AtomicString>& b) {
       return a == b;
     }
     static const bool safe_to_compare_to_empty_or_deleted =
-        DefaultHash<StringImpl*>::Hash::safe_to_compare_to_empty_or_deleted;
+        DefaultHash<AtomicString>::Hash::safe_to_compare_to_empty_or_deleted;
   };
 
   // Oilpan: keep a weak reference to the collection objects.
   // Object unregistration is handled by GC's weak processing.
-  typedef HeapHashMap<std::pair<unsigned char, StringImpl*>,
+  typedef HeapHashMap<std::pair<unsigned char, AtomicString>,
                       WeakMember<LiveNodeListBase>,
                       NodeListAtomicCacheMapEntryHash>
       NodeListAtomicNameCacheMap;
-  typedef HeapHashMap<QualifiedName, WeakMember<TagCollection>>
-      TagCollectionCacheNS;
+  typedef HeapHashMap<QualifiedName, WeakMember<TagCollectionNS>>
+      TagCollectionNSCache;
 
   template <typename T>
   T* AddCache(ContainerNode& node,
@@ -124,18 +124,18 @@ class NodeListsNodeData final : public GarbageCollected<NodeListsNodeData> {
         atomic_name_caches_.at(NamedNodeListKey(collection_type, g_star_atom)));
   }
 
-  TagCollection* AddCache(ContainerNode& node,
-                          const AtomicString& namespace_uri,
-                          const AtomicString& local_name) {
+  TagCollectionNS* AddCache(ContainerNode& node,
+                            const AtomicString& namespace_uri,
+                            const AtomicString& local_name) {
     DCHECK(ThreadState::Current()->IsGCForbidden());
     QualifiedName name(g_null_atom, local_name, namespace_uri);
-    TagCollectionCacheNS::AddResult result =
-        tag_collection_cache_ns_.insert(name, nullptr);
+    TagCollectionNSCache::AddResult result =
+        tag_collection_ns_caches_.insert(name, nullptr);
     if (!result.is_new_entry)
       return result.stored_value->value;
 
-    TagCollection* list =
-        TagCollection::Create(node, namespace_uri, local_name);
+    TagCollectionNS* list =
+        TagCollectionNS::Create(node, namespace_uri, local_name);
     result.stored_value->value = list;
     ScriptWrappableVisitor::WriteBarrier(this, list);
     return list;
@@ -147,7 +147,7 @@ class NodeListsNodeData final : public GarbageCollected<NodeListsNodeData> {
 
   bool IsEmpty() const {
     return !child_node_list_ && atomic_name_caches_.IsEmpty() &&
-           tag_collection_cache_ns_.IsEmpty();
+           tag_collection_ns_caches_.IsEmpty();
   }
 
   void AdoptTreeScope() { InvalidateCaches(); }
@@ -164,10 +164,10 @@ class NodeListsNodeData final : public GarbageCollected<NodeListsNodeData> {
       list->DidMoveToDocument(old_document, new_document);
     }
 
-    TagCollectionCacheNS::const_iterator tag_end =
-        tag_collection_cache_ns_.end();
-    for (TagCollectionCacheNS::const_iterator it =
-             tag_collection_cache_ns_.begin();
+    TagCollectionNSCache::const_iterator tag_end =
+        tag_collection_ns_caches_.end();
+    for (TagCollectionNSCache::const_iterator it =
+             tag_collection_ns_caches_.begin();
          it != tag_end; ++it) {
       LiveNodeListBase* list = it->value;
       DCHECK(!list->IsRootedAtTreeScope());
@@ -181,19 +181,16 @@ class NodeListsNodeData final : public GarbageCollected<NodeListsNodeData> {
  private:
   NodeListsNodeData() : child_node_list_(nullptr) {}
 
-  std::pair<unsigned char, StringImpl*> NamedNodeListKey(
+  std::pair<unsigned char, AtomicString> NamedNodeListKey(
       CollectionType type,
       const AtomicString& name) {
-    // Holding the raw StringImpl is safe because |name| is retained by the
-    // NodeList and the NodeList is reponsible for removing itself from the
-    // cache on deletion.
-    return std::pair<unsigned char, StringImpl*>(type, name.Impl());
+    return std::pair<unsigned char, AtomicString>(type, name);
   }
 
   // Can be a ChildNodeList or an EmptyNodeList.
   WeakMember<NodeList> child_node_list_;
   NodeListAtomicNameCacheMap atomic_name_caches_;
-  TagCollectionCacheNS tag_collection_cache_ns_;
+  TagCollectionNSCache tag_collection_ns_caches_;
 };
 
 DEFINE_TRAIT_FOR_TRACE_WRAPPERS(NodeListsNodeData);
@@ -217,7 +214,7 @@ inline Collection* ContainerNode::EnsureCachedCollection(
     CollectionType type,
     const AtomicString& namespace_uri,
     const AtomicString& local_name) {
-  DCHECK_EQ(type, kTagCollectionType);
+  DCHECK_EQ(type, kTagCollectionNSType);
   ThreadState::MainThreadGCForbiddenScope gc_forbidden;
   return EnsureNodeLists().AddCache(*this, namespace_uri, local_name);
 }
@@ -225,7 +222,7 @@ inline Collection* ContainerNode::EnsureCachedCollection(
 template <typename Collection>
 inline Collection* ContainerNode::CachedCollection(CollectionType type) {
   NodeListsNodeData* node_lists = this->NodeLists();
-  return node_lists ? node_lists->Cached<Collection>(type) : 0;
+  return node_lists ? node_lists->Cached<Collection>(type) : nullptr;
 }
 
 }  // namespace blink

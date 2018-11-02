@@ -19,10 +19,11 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -33,10 +34,7 @@
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/devtools/devtools_network_controller.h"
 #include "chrome/browser/devtools/devtools_network_transaction_factory.h"
-#include "chrome/browser/download/download_service.h"
-#include "chrome/browser/download/download_service_factory.h"
 #include "chrome/browser/io_thread.h"
-#include "chrome/browser/media/media_device_id_salt.h"
 #include "chrome/browser/net/chrome_http_user_agent_settings.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/chrome_url_request_context_getter.h"
@@ -44,8 +42,8 @@
 #include "chrome/browser/net/resource_prefetch_predictor_observer.h"
 #include "chrome/browser/policy/cloud/policy_header_service_factory.h"
 #include "chrome/browser/policy/policy_helpers.h"
-#include "chrome/browser/predictors/resource_prefetch_predictor.h"
-#include "chrome/browser/predictors/resource_prefetch_predictor_factory.h"
+#include "chrome/browser/predictors/loading_predictor.h"
+#include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/profiles/net_http_session_params_observer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -78,7 +76,6 @@
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/common/content_switches.h"
@@ -96,8 +93,10 @@
 #include "net/proxy/proxy_config_service_fixed.h"
 #include "net/proxy/proxy_script_fetcher_impl.h"
 #include "net/proxy/proxy_service.h"
+#include "net/reporting/reporting_service.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/client_cert_store.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/data_protocol_handler.h"
 #include "net/url_request/file_protocol_handler.h"
 #include "net/url_request/ftp_protocol_handler.h"
@@ -233,9 +232,9 @@ class DebugDevToolsInterceptor : public net::URLRequestInterceptor {
     if (IsSupportedDevToolsURL(request->url(), &path))
       return new net::URLRequestFileJob(
           request, network_delegate, path,
-          content::BrowserThread::GetBlockingPool()->
-              GetTaskRunnerWithShutdownBehavior(
-                  base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
+          base::CreateTaskRunnerWithTraits(
+              {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+               base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
 
     return NULL;
   }
@@ -392,11 +391,11 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
   params->cookie_monster_delegate = new ExtensionCookieMonsterDelegate(profile);
 #endif
 
-  if (predictors::ResourcePrefetchPredictor* predictor =
-          predictors::ResourcePrefetchPredictorFactory::GetForProfile(
-              profile)) {
+  if (auto* loading_predictor =
+          predictors::LoadingPredictorFactory::GetForProfile(profile)) {
     resource_prefetch_predictor_observer_.reset(
-        new chrome_browser_net::ResourcePrefetchPredictorObserver(predictor));
+        new chrome_browser_net::ResourcePrefetchPredictorObserver(
+            loading_predictor->resource_prefetch_predictor()));
   }
 
   ProtocolHandlerRegistry* protocol_handler_registry =
@@ -482,9 +481,6 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
     google_services_user_account_id_.MoveToThread(io_task_runner);
   }
 
-  if (!IsOffTheRecord())
-    media_device_id_salt_ = new MediaDeviceIDSalt(pref_service);
-
   network_prediction_options_.Init(prefs::kNetworkPredictionOptions,
                                    pref_service);
 
@@ -501,9 +497,9 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
   // ShutdownOnUIThread to release these observers on the right thread.
   // Don't pass it in |profile_params_| to make sure it is correctly cleaned up,
   // in particular when this ProfileIOData isn't |initialized_| during deletion.
-  base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
   scoped_refptr<base::SequencedTaskRunner> background_task_runner =
-      pool->GetSequencedTaskRunner(pool->GetSequenceToken());
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND});
   url_blacklist_manager_.reset(new policy::URLBlacklistManager(
       pref_service, background_task_runner, io_task_runner,
       base::Bind(policy::OverrideBlacklistForURL)));
@@ -580,7 +576,14 @@ void ProfileIOData::AppRequestContext::SetJobFactory(
   set_job_factory(job_factory_.get());
 }
 
+void ProfileIOData::AppRequestContext::SetReportingService(
+    std::unique_ptr<net::ReportingService> reporting_service) {
+  reporting_service_ = std::move(reporting_service);
+  set_reporting_service(reporting_service_.get());
+}
+
 ProfileIOData::AppRequestContext::~AppRequestContext() {
+  SetReportingService(std::unique_ptr<net::ReportingService>());
   AssertNoURLRequests();
 }
 
@@ -663,6 +666,17 @@ ProfileIOData::~ProfileIOData() {
 
   if (transport_security_state_)
     transport_security_state_->SetRequireCTDelegate(nullptr);
+
+  // And the same for the ReportingService.
+  if (main_request_context_storage()) {
+    main_request_context_storage()->set_reporting_service(
+        std::unique_ptr<net::ReportingService>());
+  }
+
+  // This should be shut down last, as any other requests may initiate more
+  // activity when the ProxyService aborts lookups.
+  if (proxy_service_)
+    proxy_service_->OnShutdown();
 
   // TODO(ajwong): These AssertNoURLRequests() calls are unnecessary since they
   // are already done in the URLRequestContext destructor.
@@ -860,11 +874,6 @@ HostContentSettingsMap* ProfileIOData::GetHostContentSettingsMap() const {
   return host_content_settings_map_.get();
 }
 
-std::string ProfileIOData::GetMediaDeviceIDSalt() const {
-  DCHECK(media_device_id_salt_);
-  return media_device_id_salt_->GetSalt();
-}
-
 bool ProfileIOData::IsOffTheRecord() const {
   return profile_type() == Profile::INCOGNITO_PROFILE
       || profile_type() == Profile::GUEST_PROFILE;
@@ -962,13 +971,6 @@ net::URLRequestContext* ProfileIOData::ResourceContext::GetRequestContext()  {
   return request_context_;
 }
 
-std::string ProfileIOData::ResourceContext::GetMediaDeviceIDSalt() {
-  if (io_data_->HasMediaDeviceIDSalt())
-    return io_data_->GetMediaDeviceIDSalt();
-
-  return content::ResourceContext::GetMediaDeviceIDSalt();
-}
-
 void ProfileIOData::Init(
     content::ProtocolHandlerMap* protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors) const {
@@ -994,7 +996,7 @@ void ProfileIOData::Init(
 
   main_request_context_->set_enable_brotli(io_thread_globals->enable_brotli);
 
-  std::unique_ptr<ChromeNetworkDelegate> network_delegate(
+  std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate(
       new ChromeNetworkDelegate(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
           io_thread_globals->extension_event_router_forwarder.get(),
@@ -1003,7 +1005,7 @@ void ProfileIOData::Init(
 #endif
           &enable_referrers_));
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  network_delegate->set_extension_info_map(
+  chrome_network_delegate->set_extension_info_map(
       profile_params_->extension_info_map.get());
   if (!command_line.HasSwitch(switches::kDisableExtensionsHttpThrottling)) {
     extension_throttle_manager_.reset(
@@ -1011,39 +1013,77 @@ void ProfileIOData::Init(
   }
 #endif
 
-  network_delegate->set_url_blacklist_manager(url_blacklist_manager_.get());
-  network_delegate->set_profile(profile_params_->profile);
-  network_delegate->set_profile_path(profile_params_->path);
-  network_delegate->set_cookie_settings(profile_params_->cookie_settings.get());
-  network_delegate->set_enable_do_not_track(&enable_do_not_track_);
-  network_delegate->set_force_google_safe_search(&force_google_safesearch_);
-  network_delegate->set_force_youtube_restrict(&force_youtube_restrict_);
-  network_delegate->set_allowed_domains_for_apps(&allowed_domains_for_apps_);
-  network_delegate->set_data_use_aggregator(
+  chrome_network_delegate->set_url_blacklist_manager(
+      url_blacklist_manager_.get());
+  chrome_network_delegate->set_profile(profile_params_->profile);
+  chrome_network_delegate->set_profile_path(profile_params_->path);
+  chrome_network_delegate->set_cookie_settings(
+      profile_params_->cookie_settings.get());
+  chrome_network_delegate->set_enable_do_not_track(&enable_do_not_track_);
+  chrome_network_delegate->set_force_google_safe_search(
+      &force_google_safesearch_);
+  chrome_network_delegate->set_force_youtube_restrict(&force_youtube_restrict_);
+  chrome_network_delegate->set_allowed_domains_for_apps(
+      &allowed_domains_for_apps_);
+  chrome_network_delegate->set_data_use_aggregator(
       io_thread_globals->data_use_aggregator.get(), IsOffTheRecord());
+
+  std::unique_ptr<net::NetworkDelegate> network_delegate =
+      ConfigureNetworkDelegate(profile_params_->io_thread,
+                               std::move(chrome_network_delegate));
+
+  main_request_context_->set_host_resolver(
+      io_thread_globals->host_resolver.get());
 
   // NOTE: Proxy service uses the default io thread network delegate, not the
   // delegate just created.
   proxy_service_ = ProxyServiceFactory::CreateProxyService(
-      io_thread->net_log(),
-      io_thread_globals->proxy_script_fetcher_context.get(),
-      io_thread_globals->system_network_delegate.get(),
+      io_thread->net_log(), main_request_context_.get(), network_delegate.get(),
       std::move(profile_params_->proxy_config_service), command_line,
       io_thread->WpadQuickCheckEnabled(),
       io_thread->PacHttpsUrlStrippingEnabled());
-  transport_security_state_.reset(new net::TransportSecurityState());
-  base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
-  transport_security_persister_.reset(
-      new net::TransportSecurityPersister(
-          transport_security_state_.get(),
-          profile_params_->path,
-          pool->GetSequencedTaskRunnerWithShutdownBehavior(
-              pool->GetSequenceToken(),
-              base::SequencedWorkerPool::BLOCK_SHUTDOWN),
-          IsOffTheRecord()));
 
-  certificate_report_sender_.reset(new net::ReportSender(
-      main_request_context_.get(), net::ReportSender::DO_NOT_SEND_COOKIES));
+  main_request_context_storage_->set_network_delegate(
+      std::move(network_delegate));
+
+  transport_security_state_.reset(new net::TransportSecurityState());
+  transport_security_persister_.reset(new net::TransportSecurityPersister(
+      transport_security_state_.get(), profile_params_->path,
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::BLOCK_SHUTDOWN}),
+      IsOffTheRecord()));
+
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("domain_security_policy", R"(
+        semantics {
+          sender: "Domain Security Policy"
+          description:
+            "Websites can opt in to have Chrome send reports to them when "
+            "Chrome observes connections to that website that do not meet "
+            "stricter security policies, such as with HTTP Public Key Pinning. "
+            "Websites can use this feature to discover misconfigurations that "
+            "prevent them from complying with stricter security policies that "
+            "they've opted in to."
+          trigger:
+            "Chrome observes that a user is loading a resource from a website "
+            "that has opted in for security policy reports, and the connection "
+            "does not meet the required security policies."
+          data:
+            "The time of the request, the hostname and port being requested, "
+            "the certificate chain, and sometimes certificate revocation "
+            "information included on the connection."
+          destination: OTHER
+        }
+        policy {
+          cookies_allowed: false
+          setting: "This feature cannot be disabled by settings."
+          policy_exception_justification:
+            "Not implemented, this is a feature that websites can opt into and "
+            "thus there is no Chrome-wide policy to disable it."
+        })");
+  certificate_report_sender_.reset(
+      new net::ReportSender(main_request_context_.get(), traffic_annotation));
   transport_security_state_->SetReportSender(certificate_report_sender_.get());
 
   expect_ct_reporter_.reset(
@@ -1122,8 +1162,8 @@ void ProfileIOData::Init(
       base::Bind(&IOThread::UnregisterSTHObserver, base::Unretained(io_thread),
                  ct_tree_tracker_.get());
 
-  InitializeInternal(std::move(network_delegate), profile_params_.get(),
-                     protocol_handlers, std::move(request_interceptors));
+  InitializeInternal(profile_params_.get(), protocol_handlers,
+                     std::move(request_interceptors));
 
   profile_params_.reset();
   initialized_ = true;
@@ -1149,9 +1189,9 @@ ProfileIOData::SetUpJobFactoryDefaults(
   bool set_protocol = job_factory->SetProtocolHandler(
       url::kFileScheme,
       base::MakeUnique<net::FileProtocolHandler>(
-          content::BrowserThread::GetBlockingPool()
-              ->GetTaskRunnerWithShutdownBehavior(
-                  base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)));
+          base::CreateTaskRunnerWithTraits(
+              {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+               base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})));
   DCHECK(set_protocol);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -1179,10 +1219,9 @@ ProfileIOData::SetUpJobFactoryDefaults(
 #if defined(OS_ANDROID)
   set_protocol = job_factory->SetProtocolHandler(
       url::kContentScheme,
-      content::ContentProtocolHandler::Create(
-          content::BrowserThread::GetBlockingPool()
-              ->GetTaskRunnerWithShutdownBehavior(
-                  base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)));
+      content::ContentProtocolHandler::Create(base::CreateTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})));
 #endif
 
   job_factory->SetProtocolHandler(
@@ -1229,8 +1268,6 @@ void ProfileIOData::ShutdownOnUIThread(
   enable_metrics_.Destroy();
   safe_browsing_enabled_.Destroy();
   network_prediction_options_.Destroy();
-  if (media_device_id_salt_.get())
-    media_device_id_salt_->ShutdownOnUIThread();
   if (url_blacklist_manager_)
     url_blacklist_manager_->ShutdownOnUIThread();
   if (ct_policy_manager_)
@@ -1244,8 +1281,8 @@ void ProfileIOData::ShutdownOnUIThread(
     if (BrowserThread::IsMessageLoopValid(BrowserThread::IO)) {
       BrowserThread::PostTask(
           BrowserThread::IO, FROM_HERE,
-          base::Bind(&NotifyContextGettersOfShutdownOnIO,
-              base::Passed(&context_getters)));
+          base::BindOnce(&NotifyContextGettersOfShutdownOnIO,
+                         base::Passed(&context_getters)));
     }
   }
 
@@ -1308,6 +1345,13 @@ std::unique_ptr<net::HttpCache> ProfileIOData::CreateHttpFactory(
       base::WrapUnique(new DevToolsNetworkTransactionFactory(
           network_controller_handle_.GetController(), shared_session)),
       std::move(backend), false /* is_main_cache */);
+}
+
+std::unique_ptr<net::NetworkDelegate> ProfileIOData::ConfigureNetworkDelegate(
+    IOThread* io_thread,
+    std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate) const {
+  return base::WrapUnique<net::NetworkDelegate>(
+      chrome_network_delegate.release());
 }
 
 void ProfileIOData::SetCookieSettingsForTesting(

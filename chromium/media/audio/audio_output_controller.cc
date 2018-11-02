@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/task_runner_util.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
@@ -21,6 +22,10 @@
 using base::TimeDelta;
 
 namespace media {
+namespace {
+// Time in seconds between two successive measurements of audio power levels.
+constexpr int kPowerMonitorLogIntervalSeconds = 15;
+}  // namespace
 
 AudioOutputController::AudioOutputController(
     AudioManager* audio_manager,
@@ -34,6 +39,7 @@ AudioOutputController::AudioOutputController(
       output_device_id_(output_device_id),
       stream_(NULL),
       diverting_to_stream_(NULL),
+      should_duplicate_(0),
       volume_(1.0),
       state_(kEmpty),
       sync_reader_(sync_reader),
@@ -65,66 +71,49 @@ scoped_refptr<AudioOutputController> AudioOutputController::Create(
   CHECK(audio_manager);
   CHECK_EQ(AudioManager::Get(), audio_manager);
   DCHECK(sync_reader);
-
-  if (!params.IsValid())
-    return NULL;
+  DCHECK(params.IsValid());
 
   scoped_refptr<AudioOutputController> controller(new AudioOutputController(
       audio_manager, event_handler, params, output_device_id, sync_reader));
-  controller->message_loop_->PostTask(FROM_HERE, base::Bind(
-      &AudioOutputController::DoCreate, controller, false));
+  controller->message_loop_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&AudioOutputController::DoCreate, controller, false));
   return controller;
 }
 
 void AudioOutputController::Play() {
   CHECK_EQ(AudioManager::Get(), audio_manager_);
-  message_loop_->PostTask(FROM_HERE, base::Bind(
-      &AudioOutputController::DoPlay, this));
+  message_loop_->PostTask(FROM_HERE,
+                          base::BindOnce(&AudioOutputController::DoPlay, this));
 }
 
 void AudioOutputController::Pause() {
   CHECK_EQ(AudioManager::Get(), audio_manager_);
-  message_loop_->PostTask(FROM_HERE, base::Bind(
-      &AudioOutputController::DoPause, this));
+  message_loop_->PostTask(
+      FROM_HERE, base::BindOnce(&AudioOutputController::DoPause, this));
 }
 
-void AudioOutputController::Close(const base::Closure& closed_task) {
+void AudioOutputController::Close(base::OnceClosure closed_task) {
   CHECK_EQ(AudioManager::Get(), audio_manager_);
   DCHECK(!closed_task.is_null());
-  message_loop_->PostTaskAndReply(FROM_HERE, base::Bind(
-      &AudioOutputController::DoClose, this), closed_task);
+  message_loop_->PostTaskAndReply(
+      FROM_HERE, base::BindOnce(&AudioOutputController::DoClose, this),
+      std::move(closed_task));
 }
 
 void AudioOutputController::SetVolume(double volume) {
   CHECK_EQ(AudioManager::Get(), audio_manager_);
-  message_loop_->PostTask(FROM_HERE, base::Bind(
-      &AudioOutputController::DoSetVolume, this, volume));
-}
-
-void AudioOutputController::GetOutputDeviceId(
-    base::Callback<void(const std::string&)> callback) const {
-  CHECK_EQ(AudioManager::Get(), audio_manager_);
-  base::PostTaskAndReplyWithResult(
-      message_loop_.get(),
+  message_loop_->PostTask(
       FROM_HERE,
-      base::Bind(&AudioOutputController::DoGetOutputDeviceId, this),
-      callback);
-}
-
-void AudioOutputController::SwitchOutputDevice(
-    const std::string& output_device_id, const base::Closure& callback) {
-  CHECK_EQ(AudioManager::Get(), audio_manager_);
-  message_loop_->PostTaskAndReply(
-      FROM_HERE,
-      base::Bind(&AudioOutputController::DoSwitchOutputDevice, this,
-                 output_device_id),
-      callback);
+      base::BindOnce(&AudioOutputController::DoSetVolume, this, volume));
 }
 
 void AudioOutputController::DoCreate(bool is_for_device_change) {
   DCHECK(message_loop_->BelongsToCurrentThread());
   SCOPED_UMA_HISTOGRAM_TIMER("Media.AudioOutputController.CreateTime");
   TRACE_EVENT0("audio", "AudioOutputController::DoCreate");
+  handler_->OnLog(base::StringPrintf("AOC::DoCreate (for device change: %s)",
+                                     is_for_device_change ? "yes" : "no"));
 
   // Close() can be called before DoCreate() is executed.
   if (state_ == kClosed)
@@ -169,6 +158,7 @@ void AudioOutputController::DoPlay() {
   DCHECK(message_loop_->BelongsToCurrentThread());
   SCOPED_UMA_HISTOGRAM_TIMER("Media.AudioOutputController.PlayTime");
   TRACE_EVENT0("audio", "AudioOutputController::DoPlay");
+  handler_->OnLog("AOC::DoPlay");
 
   // We can start from created or paused state.
   if (state_ != kCreated && state_ != kPaused)
@@ -178,6 +168,10 @@ void AudioOutputController::DoPlay() {
   sync_reader_->RequestMoreData(base::TimeDelta(), base::TimeTicks(), 0);
 
   state_ = kPlaying;
+
+  if (will_monitor_audio_levels()) {
+    last_audio_level_log_time_ = base::TimeTicks::Now();
+  }
 
   stream_->Start(this);
 
@@ -207,6 +201,10 @@ void AudioOutputController::StopStream() {
     wedge_timer_.reset();
     stream_->Stop();
 
+    if (will_monitor_audio_levels()) {
+      LogAudioPowerLevel("StopStream");
+    }
+
     // A stopped stream is silent, and power_montior_.Scan() is no longer being
     // called; so we must reset the power monitor.
     power_monitor_.Reset();
@@ -219,6 +217,7 @@ void AudioOutputController::DoPause() {
   DCHECK(message_loop_->BelongsToCurrentThread());
   SCOPED_UMA_HISTOGRAM_TIMER("Media.AudioOutputController.PauseTime");
   TRACE_EVENT0("audio", "AudioOutputController::DoPause");
+  handler_->OnLog("AOC::DoPause");
 
   StopStream();
 
@@ -237,6 +236,7 @@ void AudioOutputController::DoClose() {
   DCHECK(message_loop_->BelongsToCurrentThread());
   SCOPED_UMA_HISTOGRAM_TIMER("Media.AudioOutputController.CloseTime");
   TRACE_EVENT0("audio", "AudioOutputController::DoClose");
+  handler_->OnLog("AOC::DoClose");
 
   if (state_ != kClosed) {
     DoStopCloseAndClearStream();
@@ -261,31 +261,6 @@ void AudioOutputController::DoSetVolume(double volume) {
     default:
       return;
   }
-}
-
-std::string AudioOutputController::DoGetOutputDeviceId() const {
-  DCHECK(message_loop_->BelongsToCurrentThread());
-  return output_device_id_;
-}
-
-void AudioOutputController::DoSwitchOutputDevice(
-    const std::string& output_device_id) {
-  DCHECK(message_loop_->BelongsToCurrentThread());
-
-  if (state_ == kClosed)
-    return;
-
-  if (output_device_id == output_device_id_)
-    return;
-
-  output_device_id_ = output_device_id;
-
-  // If output is currently diverted, we must not call OnDeviceChange
-  // since it would break the diverted setup. Once diversion is
-  // finished using StopDiverting() the output will switch to the new
-  // device ID.
-  if (stream_ != diverting_to_stream_)
-    OnDeviceChange();
 }
 
 void AudioOutputController::DoReportError() {
@@ -314,23 +289,27 @@ int AudioOutputController::OnMoreData(base::TimeDelta delay,
 
   sync_reader_->RequestMoreData(delay, delay_timestamp, prior_frames_skipped);
 
-  bool need_to_duplicate = false;
-  {
-    base::AutoLock lock(duplication_targets_lock_);
-    need_to_duplicate = !duplication_targets_.empty();
-  }
-  if (need_to_duplicate) {
+  if (base::AtomicRefCountIsOne(&should_duplicate_)) {
     const base::TimeTicks reference_time = delay_timestamp + delay;
     std::unique_ptr<AudioBus> copy(AudioBus::Create(params_));
     dest->CopyTo(copy.get());
     message_loop_->PostTask(
         FROM_HERE,
-        base::Bind(&AudioOutputController::BroadcastDataToDuplicationTargets,
-                   this, base::Passed(&copy), reference_time));
+        base::BindOnce(
+            &AudioOutputController::BroadcastDataToDuplicationTargets, this,
+            std::move(copy), reference_time));
   }
 
-  if (will_monitor_audio_levels())
+  if (will_monitor_audio_levels()) {
     power_monitor_.Scan(*dest, frames);
+
+    const auto now = base::TimeTicks::Now();
+    if ((now - last_audio_level_log_time_).InSeconds() >
+        kPowerMonitorLogIntervalSeconds) {
+      LogAudioPowerLevel("OnMoreData");
+      last_audio_level_log_time_ = now;
+    }
+  }
 
   return frames;
 }
@@ -354,7 +333,14 @@ void AudioOutputController::BroadcastDataToDuplicationTargets(
   (*duplication_targets_.begin())->OnData(std::move(audio_bus), reference_time);
 }
 
-void AudioOutputController::OnError(AudioOutputStream* stream) {
+void AudioOutputController::LogAudioPowerLevel(const std::string& call_name) {
+  std::pair<float, bool> power_and_clip =
+      power_monitor_.ReadCurrentPowerAndClip();
+  handler_->OnLog(base::StringPrintf("AOC::%s: average audio level=%.2f dBFS",
+                                     call_name.c_str(), power_and_clip.first));
+}
+
+void AudioOutputController::OnError() {
   {
     base::AutoLock auto_lock(error_lock_);
     if (ignore_errors_during_stop_close_)
@@ -362,8 +348,8 @@ void AudioOutputController::OnError(AudioOutputStream* stream) {
   }
 
   // Handle error on the audio controller thread.
-  message_loop_->PostTask(FROM_HERE, base::Bind(
-      &AudioOutputController::DoReportError, this));
+  message_loop_->PostTask(
+      FROM_HERE, base::BindOnce(&AudioOutputController::DoReportError, this));
 }
 
 void AudioOutputController::DoStopCloseAndClearStream() {
@@ -400,6 +386,27 @@ void AudioOutputController::OnDeviceChange() {
   SCOPED_UMA_HISTOGRAM_TIMER("Media.AudioOutputController.DeviceChangeTime");
   TRACE_EVENT0("audio", "AudioOutputController::OnDeviceChange");
 
+  auto state_to_string = [](State state) {
+    switch (state) {
+      case AudioOutputController::kEmpty:
+        return "empty";
+      case AudioOutputController::kCreated:
+        return "created";
+      case AudioOutputController::kPlaying:
+        return "playing";
+      case AudioOutputController::kPaused:
+        return "paused";
+      case AudioOutputController::kClosed:
+        return "closed";
+      case AudioOutputController::kError:
+        return "error";
+    };
+    return "unknown";
+  };
+
+  handler_->OnLog(base::StringPrintf("AOC::OnDeviceChange while in state: %s",
+                                     state_to_string(state_)));
+
   // TODO(dalecurtis): Notify the renderer side that a device change has
   // occurred.  Currently querying the hardware information here will lead to
   // crashes on OSX.  See http://crbug.com/158170.
@@ -431,25 +438,25 @@ const AudioParameters& AudioOutputController::GetAudioParameters() {
 
 void AudioOutputController::StartDiverting(AudioOutputStream* to_stream) {
   message_loop_->PostTask(
-      FROM_HERE,
-      base::Bind(&AudioOutputController::DoStartDiverting, this, to_stream));
+      FROM_HERE, base::BindOnce(&AudioOutputController::DoStartDiverting, this,
+                                to_stream));
 }
 
 void AudioOutputController::StopDiverting() {
   message_loop_->PostTask(
-      FROM_HERE, base::Bind(&AudioOutputController::DoStopDiverting, this));
+      FROM_HERE, base::BindOnce(&AudioOutputController::DoStopDiverting, this));
 }
 
 void AudioOutputController::StartDuplicating(AudioPushSink* sink) {
   message_loop_->PostTask(
       FROM_HERE,
-      base::Bind(&AudioOutputController::DoStartDuplicating, this, sink));
+      base::BindOnce(&AudioOutputController::DoStartDuplicating, this, sink));
 }
 
 void AudioOutputController::StopDuplicating(AudioPushSink* sink) {
   message_loop_->PostTask(
       FROM_HERE,
-      base::Bind(&AudioOutputController::DoStopDuplicating, this, sink));
+      base::BindOnce(&AudioOutputController::DoStopDuplicating, this, sink));
 }
 
 void AudioOutputController::DoStartDiverting(AudioOutputStream* to_stream) {
@@ -484,7 +491,9 @@ void AudioOutputController::DoStartDuplicating(AudioPushSink* to_stream) {
   if (state_ == kClosed)
     return;
 
-  base::AutoLock lock(duplication_targets_lock_);
+  if (duplication_targets_.empty())
+    base::AtomicRefCountInc(&should_duplicate_);
+
   duplication_targets_.insert(to_stream);
 }
 
@@ -492,8 +501,11 @@ void AudioOutputController::DoStopDuplicating(AudioPushSink* to_stream) {
   DCHECK(message_loop_->BelongsToCurrentThread());
   to_stream->Close();
 
-  base::AutoLock lock(duplication_targets_lock_);
   duplication_targets_.erase(to_stream);
+  if (duplication_targets_.empty()) {
+    const bool is_nonzero = base::AtomicRefCountDec(&should_duplicate_);
+    DCHECK(!is_nonzero);
+  }
 }
 
 std::pair<float, bool> AudioOutputController::ReadCurrentPowerAndClip() {

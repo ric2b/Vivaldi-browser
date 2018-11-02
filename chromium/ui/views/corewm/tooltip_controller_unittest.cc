@@ -9,6 +9,7 @@
 #include "build/build_config.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/screen_position_client.h"
+#include "ui/aura/client/window_types.h"
 #include "ui/aura/env.h"
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/test/test_screen.h"
@@ -34,7 +35,6 @@
 #include "ui/wm/core/default_activation_client.h"
 #include "ui/wm/core/default_screen_position_client.h"
 #include "ui/wm/public/tooltip_client.h"
-#include "ui/wm/public/window_types.h"
 
 #if defined(OS_WIN)
 #include "ui/base/win/scoped_ole_initializer.h"
@@ -223,6 +223,32 @@ TEST_F(TooltipControllerTest, HideEmptyTooltip) {
   view_->set_tooltip_text(ASCIIToUTF16("    "));
   generator_->MoveMouseBy(1, 0);
   EXPECT_FALSE(helper_->IsTooltipVisible());
+}
+
+TEST_F(TooltipControllerTest, DontShowTooltipOnTouch) {
+  // TODO: these tests use GetContext(). That should go away for aura-mus
+  // client. http://crbug.com/663781.
+  if (IsMus())
+    return;
+
+  view_->set_tooltip_text(ASCIIToUTF16("Tooltip Text"));
+  EXPECT_EQ(base::string16(), helper_->GetTooltipText());
+  EXPECT_EQ(nullptr, helper_->GetTooltipWindow());
+
+  generator_->PressMoveAndReleaseTouchToCenterOf(GetWindow());
+  EXPECT_EQ(base::string16(), helper_->GetTooltipText());
+  EXPECT_EQ(nullptr, helper_->GetTooltipWindow());
+
+  generator_->MoveMouseToCenterOf(GetWindow());
+  EXPECT_EQ(base::string16(), helper_->GetTooltipText());
+  EXPECT_EQ(nullptr, helper_->GetTooltipWindow());
+
+  generator_->MoveMouseBy(1, 0);
+  EXPECT_TRUE(helper_->IsTooltipVisible());
+  base::string16 expected_tooltip = ASCIIToUTF16("Tooltip Text");
+  EXPECT_EQ(expected_tooltip, aura::client::GetTooltipText(GetWindow()));
+  EXPECT_EQ(expected_tooltip, helper_->GetTooltipText());
+  EXPECT_EQ(GetWindow(), helper_->GetTooltipWindow());
 }
 
 #if defined(OS_CHROMEOS)

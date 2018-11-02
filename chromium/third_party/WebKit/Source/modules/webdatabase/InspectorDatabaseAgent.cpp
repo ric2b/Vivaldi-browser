@@ -262,7 +262,7 @@ void InspectorDatabaseAgent::DidCommitLoadForLocalFrame(LocalFrame* frame) {
   if (frame != page_->MainFrame())
     return;
 
-  resources_.Clear();
+  resources_.clear();
 }
 
 InspectorDatabaseAgent::InspectorDatabaseAgent(Page* page)
@@ -290,7 +290,7 @@ Response InspectorDatabaseAgent::disable() {
   state_->setBoolean(DatabaseAgentState::kDatabaseAgentEnabled, enabled_);
   if (DatabaseClient* client = DatabaseClient::FromPage(page_))
     client->SetInspectorAgent(nullptr);
-  resources_.Clear();
+  resources_.clear();
   return Response::OK();
 }
 
@@ -360,7 +360,7 @@ InspectorDatabaseResource* InspectorDatabaseAgent::FindByFileName(
 
 blink::Database* InspectorDatabaseAgent::DatabaseForId(
     const String& database_id) {
-  DatabaseResourcesHeapMap::iterator it = resources_.Find(database_id);
+  DatabaseResourcesHeapMap::iterator it = resources_.find(database_id);
   if (it == resources_.end())
     return 0;
   return it->value->GetDatabase();

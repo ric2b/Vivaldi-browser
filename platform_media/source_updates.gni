@@ -203,6 +203,8 @@ post_process_target("//media:media") {
 post_process_target("//media:media") {
 
    sources += [
+    "//vivaldi/platform_media/common/platform_logging_util.cc",
+    "//vivaldi/platform_media/common/platform_logging_util.h",
     "//vivaldi/platform_media/common/platform_media_pipeline_constants.cc",
     "//vivaldi/platform_media/common/platform_media_pipeline_constants.h",
     "//vivaldi/platform_media/renderer/decoders/ipc_audio_decoder.cc",
@@ -327,4 +329,24 @@ if (is_mac) {
    }
 }
 
-}
+} # system_proprietary_codecs
+
+# --------------------
+# ffmpeg/linux and 386 changes
+# --------------------
+
+if (is_linux) {
+  declare_overrides() {
+    # Vivaldi Linux need component build of ffmpeg
+    is_component_ffmpeg = true
+  }
+
+  post_process_target("//third_party/ffmpeg:ffmpeg") {
+    configs += [ "//vivaldi/gn/config:linux_386_linking"]
+    output_dir = "$root_out_dir/lib"
+  }
+
+  post_process_target("//chrome:chrome_initial") {
+    configs += [ "//vivaldi/gn/config:linux_386_linking"]
+  }
+} # Linux

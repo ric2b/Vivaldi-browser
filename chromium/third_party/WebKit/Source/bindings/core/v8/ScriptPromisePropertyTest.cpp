@@ -6,18 +6,18 @@
 
 #include <memory>
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptFunction.h"
 #include "bindings/core/v8/ScriptPromise.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "core/dom/Document.h"
 #include "core/testing/DummyPageHolder.h"
 #include "core/testing/GCObservation.h"
 #include "core/testing/GarbageCollectedScriptWrappable.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefPtr.h"
@@ -218,7 +218,7 @@ class ScriptPromisePropertyNonScriptWrappableResolutionTargetTest
     if (expected != actual) {
       ADD_FAILURE_AT(file, line)
           << "toV8 returns an incorrect value.\n  Actual: "
-          << actual.Utf8().Data() << "\nExpected: " << expected;
+          << actual.Utf8().data() << "\nExpected: " << expected;
       return;
     }
   }

@@ -3,7 +3,6 @@
 <translationbundle lang="no">
 <translation id="1001534784610492198">Installasjonsarkivet er ødelagt. Last ned Google Chrome på nytt.</translation>
 <translation id="1035334672863811645">logg på Chrome</translation>
-<translation id="1061441684050139317">Chrome må ha tilgang til mikrofonen for å kunne dele den med dette nettstedet.</translation>
 <translation id="1065672644894730302">Kan ikke lese innstillingene. Enkelte funksjoner kan være utilgjengelige, og endringer av innstillingene blir ikke lagret.</translation>
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> brukte Chrome tidligere</translation>
 <translation id="1104959162601287462">Om &amp;Chrome OS</translation>
@@ -12,6 +11,7 @@
 <translation id="127345590676626841">Chrome oppdateres automatisk, sånn at du alltid har den nyeste versjonen. Når denne nedlastingen er fullført, kommer Chrome til å starte på nytt, og du er i gang.</translation>
 <translation id="1302523850133262269">Vent mens Chrome installerer de nyeste systemoppdateringene.</translation>
 <translation id="1350930993895295930">Chrome har oppdaget uvanlig atferd</translation>
+<translation id="137466361146087520">Google Chrome Beta</translation>
 <translation id="1393853151966637042">Oppsøk brukerstøtten</translation>
 <translation id="1399397803214730675">Denne datamaskinen har allerede en nyere versjon av Google Chrome. Hvis programvaren ikke fungerer, må du avinstallere Google Chrome og prøve på nytt.</translation>
 <translation id="1434626383986940139">Chrome Canary-apper</translation>
@@ -34,13 +34,13 @@
 <translation id="1773601347087397504">Få hjelp med å bruke Chrome OS</translation>
 <translation id="1795405610103747296">Installer Chrome på telefonen din. Vi sender deg en SMS på <ph name="PHONE_NUMBER" /></translation>
 <translation id="1818142563254268765">Chrome kan ikke oppdatere seg selv til den nyeste versjonen, så du går glipp av fantastiske nye funksjoner og sikkerhetsforbedringer. Du må oppdatere Chrome.</translation>
+<translation id="1874309113135274312">Google Chrome Beta (mDNS – inn)</translation>
 <translation id="1877026089748256423">Chrome er utdatert</translation>
 <translation id="2063848847527508675">Chrome OS må startes på nytt for at oppdateringen skal tas i bruk.</translation>
 <translation id="2077129598763517140">Bruk maskinvareakselerasjon når det er tilgjengelig</translation>
 <translation id="2084710999043359739">Legg til i Chrome</translation>
 <translation id="2120620239521071941">Dette sletter <ph name="ITEMS_COUNT" /> elementer fra denne enheten. For å hente dataene dine igjen senere må du logge på Chrome som <ph name="USER_EMAIL" />.</translation>
 <translation id="2123055963409958220">Bidra til å gjøre Chrome bedre ved å rapportere de <ph name="BEGIN_LINK" />nåværende innstillingene<ph name="END_LINK" /></translation>
-<translation id="2147651015520127414">Chrome bekreftet at sertifikatet for dette nettstedet er utstedt av <ph name="ISSUER" />.</translation>
 <translation id="216054706567564023">Installer Chrome på telefonen din. Vi sender en SMS til telefonnummeret ditt for kontogjenoppretting.</translation>
 <translation id="2246246234298806438">Google Chrome kan ikke vise forhåndsvisningen av utskrift når det innebygde PDF-visningsprogrammet mangler.</translation>
 <translation id="2252923619938421629">Bidra til å gjøre Google Chrome bedre ved å rapportere gjeldende innstillinger</translation>
@@ -54,6 +54,7 @@
 
 Hvis du logger deg på allikevel, blir Chrome-informasjon som bokmerker, loggen og andre innstillinger slått sammen med <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="2397416548179033562">Vis Chrome-menyen</translation>
+<translation id="2416359993254398973">Chrome trenger tilgang til kameraet ditt for dette nettstedet.</translation>
 <translation id="2429317896000329049">Google Chrome kunne ikke synkronisere dataene dine fordi synkronisering ikke er tilgjengelig for domenet ditt.</translation>
 <translation id="2446511512801740068">Chrome er utdatert fordi den ikke har vært startet på nytt på en stund. En oppdatering er tilgjengelig og tas i bruk når du starter Chrome på nytt.</translation>
 <translation id="2485422356828889247">Avinstaller</translation>
@@ -108,9 +109,10 @@ Vi har sendt deg (<ph name="ACCOUNT_EMAIL" />) en e-post med nærmere instruksjo
 <translation id="4053720452172726777">Tilpass og kontrollér Google Chrome</translation>
 <translation id="4147555960264124640">Du er i ferd med å logge deg på med en administrert konto og gir administratoren kontroll over Chrome-profilen din. Chrome-dataene dine, som apper, bokmerker, loggen, passord og andre innstillinger, blir permanent knyttet til <ph name="USER_NAME" />. Du kan slette disse dataene via kontooversikten for Google, men du kan ikke knytte disse dataene til en annen konto. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">Installasjonsprogrammet fikk ikke dekomprimert arkivet. Last ned Google Chrome på nytt.</translation>
-<translation id="423410644998903704">Chrome må ha tilgang til tillatelsene for å kunne dele dem med dette nettstedet.</translation>
 <translation id="4251615635259297716">Vil du koble Chrome-dataene dine til denne kontoen?</translation>
+<translation id="4251625577313994583">få Chrome på iPhone</translation>
 <translation id="4309555186815777032">(krever at Chrome <ph name="BEGIN_BUTTON" />startes på nytt<ph name="END_BUTTON" />)</translation>
+<translation id="4328355335528187361">Google Chrome Dev (mDNS – inn)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="437002079035561265">Denne datamaskinen kommer ikke til å motta oppdateringer av Google Chrome fordi dette Linux-systemet ikke støttes lenger.</translation>
 <translation id="4407807842708586359">Google Chromes operativsystem</translation>
@@ -134,6 +136,7 @@ Vi har sendt deg (<ph name="ACCOUNT_EMAIL" />) en e-post med nærmere instruksjo
 <translation id="4921569541910214635">Deler du datamaskinen din med andre? Nå kan du konfigurere Chrome akkurat slik du vil.</translation>
 <translation id="4953650215774548573">Bruk Google Chrome som standard nettleser</translation>
 <translation id="495931528404527476">I Chrome</translation>
+<translation id="4965682129423310439">Chrome fant skadelig programvare på datamaskinen du bruker. Chrome kan fjerne den og gjenopprette innstillingene dine, sånn at nettleseren fungerer normalt igjen.</translation>
 <translation id="4987308747895123092">Lukk alle Googler Chrome-vinduene (inkludert de i Windows 8-modus) og prøv på nytt.</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="5028489144783860647">Google Chrome kunne ikke synkronisere dataene dine. Oppdater passordfrasen for synkronisering.</translation>
@@ -155,6 +158,7 @@ Vi har sendt deg (<ph name="ACCOUNT_EMAIL" />) en e-post med nærmere instruksjo
 <translation id="556024056938947818">Google Chrome prøver å vise passord.</translation>
 <translation id="5563479599352954471">Søk med ett trykk</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-Inn)</translation>
+<translation id="557283862590186398">Chrome trenger tilgang til mikrofonen din for dette nettstedet.</translation>
 <translation id="5620765574781326016">Finn ut mer om emner på nettsteder uten å forlate siden.</translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> kan være farlig, så Chrome har blokkert den.</translation>
 <translation id="568643307450491754">Finn bokmerkene dine i Chrome-menyen eller på bokmerkeraden.</translation>
@@ -169,7 +173,6 @@ Vi har sendt deg (<ph name="ACCOUNT_EMAIL" />) en e-post med nærmere instruksjo
 <translation id="5931853610562009806">På Mac kan det hende at passord blir lagret i nøkkelringen. Andre Chrome-brukere som deler denne OS X-kontoen, har i så fall adgang til og kan synkronisere med disse passordene.</translation>
 <translation id="5940385492829620908">Her finner du nettinnholdet, bokmerkene og de andre Chrome-tingene dine.</translation>
 <translation id="5941830788786076944">Gjør Google Chrome til standardleser</translation>
-<translation id="6012342843556706400">Chrome må ha tilgang til posisjonen din for å kunne dele den med dette nettstedet.</translation>
 <translation id="6014844626092547096">Du er nå logget på Chrome. Synkronisering er deaktivert av administratoren din.</translation>
 <translation id="6070348360322141662">Google Chrome krypterer dataene dine for å øke sikkerheten</translation>
 <translation id="6113794647360055231">Nå er Chrome blitt enda bedre</translation>
@@ -177,9 +180,11 @@ Vi har sendt deg (<ph name="ACCOUNT_EMAIL" />) en e-post med nærmere instruksjo
 <translation id="61852838583753520">Oppdater &amp;Chrome OS</translation>
 <translation id="6235018212288296708">Regel om innkommende trafikk for Google Chrome for å tillate mDNS-trafikk.</translation>
 <translation id="6236285698028833233">Google Chrome oppdateres ikke lenger og har mistet støtten for denne versjonen av operativsystemet ditt.</translation>
+<translation id="6291089322031436445">Chrome Dev-apper</translation>
 <translation id="6291549208091401781">Google Chrome er allerede installert for alle brukerne på datamaskinen din.</translation>
 <translation id="6338556085225130112">Oppdaterer Google Chrome</translation>
 <translation id="6368958679917195344">Chrome OS muliggjøres av <ph name="BEGIN_LINK_CROS_OSS" />tilleggsprogramvare med åpen kildekode<ph name="END_LINK_CROS_OSS" />.</translation>
+<translation id="6393863479814692971">Chrome trenger tilgang til kameraet ditt og mikrofonen din for dette nettstedet.</translation>
 <translation id="6400076122676892962">Denne datamaskinen kommer snart til å slutte å motta oppdateringer av Google Chrome fordi Mac OS X 10.6, 10.7 og 10.8 ikke støttes lenger.</translation>
 <translation id="6410540444482791104">Du kan bidra til å gjøre Chrome tryggere og enklere å bruke ved å sende Google noe systeminformasjon og sideinnhold automatisk. Dette hjelper oss med å oppdage farlige apper og nettsteder.</translation>
 <translation id="6470176598693778404">Denne datamaskinen kommer ikke lenger til å motta oppdateringer av Google Chrome fordi Mac OS X 10.6, 10.7 og 10.8 ikke støttes lenger.</translation>
@@ -190,10 +195,13 @@ Vi har sendt deg (<ph name="ACCOUNT_EMAIL" />) en e-post med nærmere instruksjo
 <translation id="6626317981028933585">Mozilla Firefox-innstillingene er dessverre ikke tilgjengelige når nettleseren kjører. Hvis du vil importere disse innstillingene til Google Chrome, kan du lagre arbeidet ditt og lukke alle Firefox-vinduer. Deretter klikker du Fortsett.</translation>
 <translation id="6634887557811630702">Google Chrome er oppdatert.</translation>
 <translation id="6676384891291319759">Gå til Internett</translation>
+<translation id="6697947395630195233">Chrome trenger tilgang til posisjonen din for å kunne dele den med dette nettstedet.</translation>
 <translation id="6757767188268205357">Ikke spør meg igjen</translation>
 <translation id="683440813066116847">Regel om innkommende trafikk for Google Chrome Canary for å tillate mDNS-trafikk.</translation>
 <translation id="686561893457936865">Bruk Chrome overalt</translation>
 <translation id="6883876366448858277">sender et ord og den omkringliggende konteksten til Google Søk. Definisjoner, bilder og andre søkeresultater blir sendt tilbake.</translation>
+<translation id="6885412569789873916">Chrome Beta-apper</translation>
+<translation id="6967962315388095737">Regel for å tillate innkommende mDNS-trafikk i Google Chrome Beta.</translation>
 <translation id="6970811910055250180">Oppdaterer enheten ...</translation>
 <translation id="6982337800632491844"><ph name="DOMAIN" /> krever at du leser og godtar følgende vilkår før du bruker denne enheten. Disse vilkårene utvider, endrer eller begrenser ikke Google Chrome OS-vilkårene.</translation>
 <translation id="6989339256997917931">Google Chrome har blitt oppdatert, men du har ikke brukt programmet på minst 30 dager.</translation>
@@ -220,6 +228,7 @@ Vi har sendt deg (<ph name="ACCOUNT_EMAIL" />) en e-post med nærmere instruksjo
 <translation id="7473891865547856676">Nei takk</translation>
 <translation id="7494905215383356681">Åpen kildekode-lisenser for Chrome</translation>
 <translation id="7520096660192498279">{NUM_ITEMS,plural, =1{Dette fører til at minst $1 element slettes permanent fra denne enheten. For å hente dataene dine igjen senere, logg på Chrome som $2.}other{Dette fører til at minst $1 elementer slettes permanent fra denne enheten. For å hente dataene dine igjen senere, logg på Chrome som $2.}}</translation>
+<translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7552219221109926349">Vis Chrome OS på dette språket</translation>
 <translation id="7592736734348559088">Google Chrome kunne ikke synkronisere dataene dine. Dette skyldes at påloggingsopplysningene for kontoen din er foreldede.</translation>
 <translation id="7626032353295482388">Velkommen til Chrome</translation>
@@ -227,7 +236,6 @@ Vi har sendt deg (<ph name="ACCOUNT_EMAIL" />) en e-post med nærmere instruksjo
 <translation id="7761834446675418963">Klikk på navnet ditt for å åpne Chrome og starte surfingen.</translation>
 <translation id="7781002470561365167">En ny versjon av Google Chrome er tilgjengelig.</translation>
 <translation id="7787950393032327779">Profilen ser ut til å være i bruk av en annen Google Chrome-prosess (<ph name="PROCESS_ID" />) på en annen datamaskin (<ph name="HOST_NAME" />). Chrome har låst profilen slik at den ikke blir infisert. Hvis du er sikker på at ingen andre prosesser bruker profilen, kan du låse opp profilen og starte Chrome på nytt.</translation>
-<translation id="7788788617745289808">Chrome må ha tilgang til kameraet for å kunne dele det med dette nettstedet.</translation>
 <translation id="7808348361785373670">Fjern fra Chrome</translation>
 <translation id="7825851276765848807">Installeringen mislyktes på grunn av en uspesifisert feil. Last ned Google Chrome på nytt.</translation>
 <translation id="7855730255114109580">Google Chrome er oppdatert</translation>
@@ -252,6 +260,7 @@ Vi har sendt deg (<ph name="ACCOUNT_EMAIL" />) en e-post med nærmere instruksjo
 <translation id="8439301513305169426">Chrome lagrer dette passordet i <ph name="SAVED_PASSWORD_LINK" />, så du trenger ikke å huske det.</translation>
 <translation id="8455999171311319804">Valgfritt: Bidra til å gjøre Chrome OS bedre ved å sende diagnostikk og brukerdata automatisk til Google.</translation>
 <translation id="8478823064122749032">Installer Chrome på telefonen din. Vi sender en SMS til telefonnummeret ditt for kontogjenoppretting (<ph name="PHONE_NUMBER" />)</translation>
+<translation id="8521348052903287641">Regel for å tillate innkommende mDNS-trafikk i Google Chrome Dev.</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8547799825197623713">Chrome-appvelger – Canary</translation>
 <translation id="8556340503434111824">En ny versjon av Google Chrome er tilgjengelig, og den er nå raskere en noen sinne.</translation>

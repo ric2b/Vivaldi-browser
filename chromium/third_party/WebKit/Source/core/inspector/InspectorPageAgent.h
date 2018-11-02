@@ -35,10 +35,9 @@
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/protocol/Page.h"
 #include "core/page/ChromeClient.h"
-#include "wtf/HashMap.h"
-#include "wtf/text/WTFString.h"
-
-#include <v8-inspector.h>
+#include "platform/wtf/HashMap.h"
+#include "platform/wtf/text/WTFString.h"
+#include "v8/include/v8-inspector.h"
 
 namespace blink {
 
@@ -67,7 +66,6 @@ class CORE_EXPORT InspectorPageAgent final
    public:
     virtual ~Client() {}
     virtual void PageLayoutInvalidated(bool resized) {}
-    virtual void ConfigureOverlay(bool suspended, const String& message) {}
     virtual void WaitForCreateWindow(LocalFrame*) {}
   };
 
@@ -119,6 +117,7 @@ class CORE_EXPORT InspectorPageAgent final
                             Maybe<String> script_to_evaluate_on_load) override;
   protocol::Response navigate(const String& url,
                               Maybe<String> referrer,
+                              Maybe<String> transitionType,
                               String* frame_id) override;
   protocol::Response stopLoading() override;
   protocol::Response getResourceTree(
@@ -140,12 +139,14 @@ class CORE_EXPORT InspectorPageAgent final
                                      Maybe<int> max_height,
                                      Maybe<int> every_nth_frame) override;
   protocol::Response stopScreencast() override;
-  protocol::Response configureOverlay(Maybe<bool> suspended,
-                                      Maybe<String> message) override;
   protocol::Response getLayoutMetrics(
       std::unique_ptr<protocol::Page::LayoutViewport>*,
       std::unique_ptr<protocol::Page::VisualViewport>*,
       std::unique_ptr<protocol::DOM::Rect>*) override;
+  protocol::Response createIsolatedWorld(
+      const String& frame_id,
+      Maybe<String> world_name,
+      Maybe<bool> grant_universal_access) override;
 
   // InspectorInstrumentation API
   void DidClearDocumentOfWindowObject(LocalFrame*);

@@ -139,8 +139,8 @@ bool IsTCPFastOpenUserEnabled() {
 void CheckSupportAndMaybeEnableTCPFastOpen(bool user_enabled) {
 #if defined(OS_LINUX) || defined(OS_ANDROID)
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithShutdownBehavior(
-                     base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::Bind(SystemSupportsTCPFastOpen),
       base::Bind(RegisterTCPFastOpenIntentAndSupport, user_enabled));
 #endif
@@ -175,7 +175,7 @@ int TCPSocketPosix::Open(AddressFamily family) {
   return rv;
 }
 
-int TCPSocketPosix::AdoptConnectedSocket(int socket_fd,
+int TCPSocketPosix::AdoptConnectedSocket(SocketDescriptor socket,
                                          const IPEndPoint& peer_address) {
   DCHECK(!socket_);
 
@@ -187,7 +187,17 @@ int TCPSocketPosix::AdoptConnectedSocket(int socket_fd,
   }
 
   socket_.reset(new SocketPosix);
-  int rv = socket_->AdoptConnectedSocket(socket_fd, storage);
+  int rv = socket_->AdoptConnectedSocket(socket, storage);
+  if (rv != OK)
+    socket_.reset();
+  return rv;
+}
+
+int TCPSocketPosix::AdoptUnconnectedSocket(SocketDescriptor socket) {
+  DCHECK(!socket_);
+
+  socket_.reset(new SocketPosix);
+  int rv = socket_->AdoptUnconnectedSocket(socket);
   if (rv != OK)
     socket_.reset();
   return rv;
@@ -370,7 +380,7 @@ int TCPSocketPosix::GetPeerAddress(IPEndPoint* address) const {
 
 int TCPSocketPosix::SetDefaultOptionsForServer() {
   DCHECK(socket_);
-  return SetAddressReuse(true);
+  return AllowAddressReuse();
 }
 
 void TCPSocketPosix::SetDefaultOptionsForClient() {
@@ -399,29 +409,33 @@ void TCPSocketPosix::SetDefaultOptionsForClient() {
 #endif
 }
 
-int TCPSocketPosix::SetAddressReuse(bool allow) {
+int TCPSocketPosix::AllowAddressReuse() {
   DCHECK(socket_);
 
-  return SetReuseAddr(socket_->socket_fd(), allow);
+  return SetReuseAddr(socket_->socket_fd(), true);
 }
 
 int TCPSocketPosix::SetReceiveBufferSize(int32_t size) {
   DCHECK(socket_);
+
   return SetSocketReceiveBufferSize(socket_->socket_fd(), size);
 }
 
 int TCPSocketPosix::SetSendBufferSize(int32_t size) {
   DCHECK(socket_);
+
   return SetSocketSendBufferSize(socket_->socket_fd(), size);
 }
 
 bool TCPSocketPosix::SetKeepAlive(bool enable, int delay) {
   DCHECK(socket_);
+
   return SetTCPKeepAlive(socket_->socket_fd(), enable, delay);
 }
 
 bool TCPSocketPosix::SetNoDelay(bool no_delay) {
   DCHECK(socket_);
+
   return SetTCPNoDelay(socket_->socket_fd(), no_delay) == OK;
 }
 
@@ -479,6 +493,12 @@ void TCPSocketPosix::EndLoggingMultipleConnectAttempts(int net_error) {
   } else {
     NOTREACHED();
   }
+}
+
+SocketDescriptor TCPSocketPosix::ReleaseSocketDescriptorForTesting() {
+  SocketDescriptor socket_descriptor = socket_->ReleaseConnectedSocket();
+  socket_.reset();
+  return socket_descriptor;
 }
 
 void TCPSocketPosix::AcceptCompleted(

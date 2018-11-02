@@ -13,9 +13,9 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell_port.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
@@ -23,6 +23,7 @@
 #include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm_window.h"
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -35,6 +36,9 @@
 #include "ui/events/test/events_test_utils.h"
 #include "ui/events/test/test_event_handler.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/keyboard/keyboard_controller.h"
+#include "ui/keyboard/keyboard_switches.h"
+#include "ui/keyboard/keyboard_util.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
@@ -352,19 +356,14 @@ TEST_F(ShellTest, LockScreenClosesActiveMenu) {
   std::unique_ptr<ui::SimpleMenuModel> menu_model(
       new ui::SimpleMenuModel(&menu_delegate));
   menu_model->AddItem(0, base::ASCIIToUTF16("Menu item"));
-  views::Widget* widget = ShellPort::Get()
-                              ->GetPrimaryRootWindow()
-                              ->GetRootWindowController()
+  views::Widget* widget = Shell::GetPrimaryRootWindowController()
                               ->wallpaper_widget_controller()
                               ->widget();
-  std::unique_ptr<views::MenuRunner> menu_runner(new views::MenuRunner(
-      menu_model.get(),
-      views::MenuRunner::CONTEXT_MENU | views::MenuRunner::ASYNC));
+  std::unique_ptr<views::MenuRunner> menu_runner(
+      new views::MenuRunner(menu_model.get(), views::MenuRunner::CONTEXT_MENU));
 
-  EXPECT_EQ(views::MenuRunner::NORMAL_EXIT,
-            menu_runner->RunMenuAt(widget, NULL, gfx::Rect(),
-                                   views::MENU_ANCHOR_TOPLEFT,
-                                   ui::MENU_SOURCE_MOUSE));
+  menu_runner->RunMenuAt(widget, NULL, gfx::Rect(), views::MENU_ANCHOR_TOPLEFT,
+                         ui::MENU_SOURCE_MOUSE);
   LockScreenAndVerifyMenuClosed();
 }
 
@@ -437,13 +436,13 @@ TEST_F(ShellTest, FullscreenWindowHidesShelf) {
 TEST_F(ShellTest, ToggleAutoHide) {
   std::unique_ptr<aura::Window> window(new aura::Window(NULL));
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
-  window->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+  window->SetType(aura::client::WINDOW_TYPE_NORMAL);
   window->Init(ui::LAYER_TEXTURED);
   ParentWindowInPrimaryRootWindow(window.get());
   window->Show();
   wm::ActivateWindow(window.get());
 
-  WmShelf* shelf = GetPrimaryShelf();
+  Shelf* shelf = GetPrimaryShelf();
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
 
@@ -491,6 +490,23 @@ TEST_F(ShellTest, EnvPreTargetHandler) {
   aura::Env::GetInstance()->RemovePreTargetHandler(&event_handler);
 }
 
+// Verifies keyboard is re-created on proper timing.
+TEST_F(ShellTest, KeyboardCreation) {
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      keyboard::switches::kEnableVirtualKeyboard);
+
+  ASSERT_TRUE(keyboard::IsKeyboardEnabled());
+
+  SessionObserver* shell = Shell::Get();
+  EXPECT_FALSE(keyboard::KeyboardController::GetInstance());
+  shell->OnSessionStateChanged(
+      session_manager::SessionState::LOGGED_IN_NOT_ACTIVE);
+
+  EXPECT_TRUE(keyboard::KeyboardController::GetInstance());
+}
+
 // This verifies WindowObservers are removed when a window is destroyed after
 // the Shell is destroyed. This scenario (aura::Windows being deleted after the
 // Shell) occurs if someone is holding a reference to an unparented Window, as
@@ -511,13 +527,6 @@ class ShellTest2 : public test::AshTestBase {
 };
 
 TEST_F(ShellTest2, DontCrashWhenWindowDeleted) {
-  // TODO: delete this test when conversion to mash is done. This test isn't
-  // applicable to mash as all windows must be destroyed before ash, that isn't
-  // the case with classic-ash where embedders can separately create
-  // aura::Windows.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   window_.reset(new aura::Window(NULL));
   window_->Init(ui::LAYER_NOT_DRAWN);
 }

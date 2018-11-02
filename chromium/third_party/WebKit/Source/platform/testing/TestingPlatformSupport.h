@@ -35,13 +35,13 @@
 #include <utility>
 #include "platform/PlatformExport.h"
 #include "platform/WebTaskRunner.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/Vector.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 
 namespace base {
@@ -59,7 +59,6 @@ class WebCompositorSupportImpl;
 
 namespace blink {
 namespace scheduler {
-class RendererScheduler;
 class RendererSchedulerImpl;
 }
 class WebCompositorSupport;
@@ -113,7 +112,7 @@ class TestingPlatformSupport : public Platform {
   WebFileUtilities* GetFileUtilities() override;
   WebIDBFactory* IdbFactory() override;
   WebURLLoaderMockFactory* GetURLLoaderMockFactory() override;
-  blink::WebURLLoader* CreateURLLoader() override;
+  std::unique_ptr<blink::WebURLLoader> CreateURLLoader() override;
   WebData LoadResource(const char* name) override;
   WebURLError CancelledError(const WebURL&) const override;
   InterfaceProvider* GetInterfaceProvider() override;
@@ -161,7 +160,7 @@ class TestingPlatformSupportWithMockScheduler : public TestingPlatformSupport {
   // Advances |m_clock| by |seconds|.
   void AdvanceClockSeconds(double seconds);
 
-  scheduler::RendererScheduler* GetRendererScheduler() const;
+  scheduler::RendererSchedulerImpl* GetRendererScheduler() const;
 
   // Controls the behavior of |m_mockTaskRunner| if true, then |m_clock| will
   // be advanced to the next timer when there's no more immediate work to do.

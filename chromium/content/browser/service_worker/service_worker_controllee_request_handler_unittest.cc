@@ -28,6 +28,7 @@
 #include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/test/test_content_browser_client.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -39,23 +40,6 @@ namespace {
 int kMockProviderId = 1;
 
 }
-
-class FailureHelper : public EmbeddedWorkerTestHelper {
- public:
-  FailureHelper() : EmbeddedWorkerTestHelper(base::FilePath()) {}
-  ~FailureHelper() override {}
-
- protected:
-  void OnStartWorker(
-      int embedded_worker_id,
-      int64_t service_worker_version_id,
-      const GURL& scope,
-      const GURL& script_url,
-      bool pause_after_download,
-      mojom::ServiceWorkerEventDispatcherRequest request) override {
-    SimulateWorkerStopped(embedded_worker_id);
-  }
-};
 
 class ServiceWorkerControlleeRequestHandlerTest : public testing::Test {
  public:
@@ -70,7 +54,8 @@ class ServiceWorkerControlleeRequestHandlerTest : public testing::Test {
           request_(test->url_request_context_.CreateRequest(
               url,
               net::DEFAULT_PRIORITY,
-              &test->url_request_delegate_)),
+              &test->url_request_delegate_,
+              TRAFFIC_ANNOTATION_FOR_TESTS)),
           handler_(new ServiceWorkerControlleeRequestHandler(
               test->context()->AsWeakPtr(),
               test->provider_host_,

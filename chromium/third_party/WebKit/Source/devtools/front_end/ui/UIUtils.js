@@ -96,7 +96,7 @@ UI.DragHandler = class {
     this._glassPaneInUse = true;
     if (!UI.DragHandler._glassPaneUsageCount++) {
       UI.DragHandler._glassPane = new UI.GlassPane();
-      UI.DragHandler._glassPane.setBlockPointerEvents(true);
+      UI.DragHandler._glassPane.setPointerEventsBehavior(UI.GlassPane.PointerEventsBehavior.BlockedByGlassPane);
       UI.DragHandler._glassPane.show(UI.DragHandler._documentForMouseOut);
     }
   }
@@ -226,80 +226,6 @@ UI.DragHandler = class {
 };
 
 UI.DragHandler._glassPaneUsageCount = 0;
-
-/**
- * @param {!Element} element
- * @param {function(number, number, !MouseEvent): boolean} elementDragStart
- * @param {function(number, number)} elementDrag
- * @param {function(number, number)} elementDragEnd
- * @param {string} cursor
- * @param {?string=} hoverCursor
- * @param {number=} startDelay
- * @param {number=} friction
- */
-UI.installInertialDragHandle = function(
-    element, elementDragStart, elementDrag, elementDragEnd, cursor, hoverCursor, startDelay, friction) {
-  UI.installDragHandle(
-      element, drag.bind(null, elementDragStart), drag.bind(null, elementDrag), dragEnd, cursor, hoverCursor,
-      startDelay);
-  if (typeof friction !== 'number')
-    friction = 50;
-  var lastX;
-  var lastY;
-  var lastTime;
-  var velocityX;
-  var velocityY;
-  var holding = false;
-
-  /**
-   * @param {function(number, number, !MouseEvent): boolean} callback
-   * @param {!MouseEvent} event
-   * @return {boolean}
-   */
-  function drag(callback, event) {
-    lastTime = window.performance.now();
-    lastX = event.pageX;
-    lastY = event.pageY;
-    holding = true;
-    return callback(lastX, lastY, event);
-  }
-
-  /**
-   * @param {!MouseEvent} event
-   */
-  function dragEnd(event) {
-    var now = window.performance.now();
-    var duration = now - lastTime || 1;
-    const maxVelocity = 4;  // 4px per millisecond.
-    velocityX = Number.constrain((event.pageX - lastX) / duration, -maxVelocity, maxVelocity);
-    velocityY = Number.constrain((event.pageY - lastY) / duration, -maxVelocity, maxVelocity);
-    lastX = event.pageX;
-    lastY = event.pageY;
-    lastTime = now;
-    holding = false;
-    animationStep();
-  }
-
-  function animationStep() {
-    var v2 = velocityX * velocityX + velocityY * velocityY;
-    if (v2 < 0.001 || holding) {
-      elementDragEnd(lastX, lastY);
-      return;
-    }
-    element.window().requestAnimationFrame(animationStep);
-    var now = window.performance.now();
-    var duration = now - lastTime;
-    if (!duration)
-      return;
-    lastTime = now;
-    lastX += velocityX * duration;
-    lastY += velocityY * duration;
-    var k = Math.pow(1 / (1 + friction), duration / 1000);
-    velocityX *= k;
-    velocityY *= k;
-    elementDrag(lastX, lastY);
-  }
-};
 
 /**
  * @param {?Node=} node
@@ -743,6 +669,24 @@ UI.installComponentRootStyles = function(element) {
   UI.appendStyle(element, 'ui/inspectorCommon.css');
   UI.themeSupport.injectHighlightStyleSheets(element);
   element.classList.add('platform-' + Host.platform());
+
+  /**
+   * Detect overlay scrollbar enable by checking clientWidth and offsetWidth of
+   * overflow: scroll div.
+   * @param {?Document=} document
+   * @return {boolean}
+   */
+  function overlayScrollbarEnabled(document) {
+    var scrollDiv = document.createElement('div');
+    scrollDiv.setAttribute('style', 'width: 100px; height: 100px; overflow: scroll;');
+    document.body.appendChild(scrollDiv);
+    var scrollbarWidth = scrollDiv.offsetWidth - scrollDiv.clientWidth;
+    document.body.removeChild(scrollDiv);
+    return scrollbarWidth === 0;
+  }
+
+  if (!Host.isMac() && overlayScrollbarEnabled(element.ownerDocument))
+    element.classList.add('overlay-scrollbar-enabled');
 };
 
 /**
@@ -1184,6 +1128,7 @@ UI.LongClickController = class extends Common.Object {
  * @param {!Common.Setting} themeSetting
  */
 UI.initializeUIUtils = function(document, themeSetting) {
+  document.body.classList.toggle('inactive', !document.hasFocus());
   document.defaultView.addEventListener('focus', UI._windowFocused.bind(UI, document), false);
   document.defaultView.addEventListener('blur', UI._windowBlurred.bind(UI, document), false);
   document.addEventListener('focus', UI._focusChanged.bind(UI), true);
@@ -1561,6 +1506,7 @@ UI.bindInput = function(input, apply, validate, numeric) {
     if (isEnterKey(event)) {
       if (validate(input.value))
         apply(input.value);
+      event.preventDefault();
       return;
     }
 
@@ -1852,7 +1798,7 @@ UI.ThemeSupport = class {
     output.push(':');
     var items = value.replace(Common.Color.Regex, '\0$1\0').split('\0');
     for (var i = 0; i < items.length; ++i)
-      output.push(this.patchColor(items[i], colorUsage));
+      output.push(this.patchColorText(items[i], colorUsage));
     if (style.getPropertyPriority(name))
       output.push(' !important');
     output.push(';');
@@ -1863,20 +1809,28 @@ UI.ThemeSupport = class {
    * @param {!UI.ThemeSupport.ColorUsage} colorUsage
    * @return {string}
    */
-  patchColor(text, colorUsage) {
+  patchColorText(text, colorUsage) {
     var color = Common.Color.parse(text);
     if (!color)
       return text;
-
-    var hsla = color.hsla();
-    this._patchHSLA(hsla, colorUsage);
-    var rgba = [];
-    Common.Color.hsl2rgb(hsla, rgba);
-    var outColor = new Common.Color(rgba, color.format());
+    var outColor = this.patchColor(color, colorUsage);
     var outText = outColor.asString(null);
     if (!outText)
       outText = outColor.asString(outColor.hasAlpha() ? Common.Color.Format.RGBA : Common.Color.Format.RGB);
     return outText || text;
+  }
+
+  /**
+   * @param {!Common.Color} color
+   * @param {!UI.ThemeSupport.ColorUsage} colorUsage
+   * @return {!Common.Color}
+   */
+  patchColor(color, colorUsage) {
+    var hsla = color.hsla();
+    this._patchHSLA(hsla, colorUsage);
+    var rgba = [];
+    Common.Color.hsl2rgb(hsla, rgba);
+    return new Common.Color(rgba, color.format());
   }
 
   /**
@@ -2005,6 +1959,14 @@ UI.loadImage = function(url) {
   });
 };
 
+/**
+ * @param {?string} data
+ * @return {!Promise<?Image>}
+ */
+UI.loadImageFromData = function(data) {
+  return data ? UI.loadImage('data:image/jpg;base64,' + data) : Promise.resolve(null);
+};
+
 /** @type {!UI.ThemeSupport} */
 UI.themeSupport;
 
@@ -2069,4 +2031,18 @@ UI.ConfirmDialog = class extends UI.VBox {
     buttonsBar.appendChild(UI.createTextButton(Common.UIString('Ok'), okCallback));
     buttonsBar.appendChild(UI.createTextButton(Common.UIString('Cancel'), cancelCallback));
   }
+};
+
+/**
+ * @param {!UI.ToolbarToggle} toolbarButton
+ * @return {!Element}
+ */
+UI.createInlineButton = function(toolbarButton) {
+  var element = createElement('span');
+  var shadowRoot = UI.createShadowRootWithCoreStyles(element, 'ui/inlineButton.css');
+  element.classList.add('inline-button');
+  var toolbar = new UI.Toolbar('');
+  toolbar.appendToolbarItem(toolbarButton);
+  shadowRoot.appendChild(toolbar.element);
+  return element;
 };

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "build/build_config.h"
+#include "components/ukm/public/ukm_recorder.h"
 #include "content/common/content_export.h"
 #include "content/common/drag_event_source_info.h"
 #include "content/public/common/drop_data.h"
@@ -30,6 +31,10 @@ class Size;
 
 namespace rappor {
 class Sample;
+}
+
+namespace ukm {
+class UkmRecorder;
 }
 
 namespace content {
@@ -59,6 +64,10 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // The RenderWidgetHost got the focus.
   virtual void RenderWidgetGotFocus(RenderWidgetHostImpl* render_widget_host) {}
+
+  // The RenderWidgetHost lost the focus.
+  virtual void RenderWidgetLostFocus(
+      RenderWidgetHostImpl* render_widget_host) {}
 
   // The RenderWidget was resized.
   virtual void RenderWidgetWasResized(RenderWidgetHostImpl* render_widget_host,
@@ -240,6 +249,11 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // if the eTLD+1 is not known for |render_widget_host|.
   virtual bool AddDomainInfoToRapporSample(rappor::Sample* sample);
 
+  // Update UkmRecorder for the given source with the URL. This is used for
+  // URL-keyed metrics to set the url for a report.
+  virtual void UpdateUrlForUkmSource(ukm::UkmRecorder* service,
+                                     ukm::SourceId ukm_source_id);
+
   // Notifies the delegate that a focused editable element has been touched
   // inside this RenderWidgetHost. If |editable| is true then the focused
   // element accepts text input.
@@ -251,6 +265,12 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // Notifies that a CompositorFrame was received from the renderer.
   virtual void DidReceiveCompositorFrame() {}
+
+  // Gets the size set by a top-level frame with auto-resize enabled.
+  virtual gfx::Size GetAutoResizeSize();
+
+  // Reset the auto-size value, to indicate that auto-size is no longer active.
+  virtual void ResetAutoResizeSize() {}
 
   // TODO(ekaramad): This is only used for BrowserPlugins. Remove this once the
   // issue https://crbug.com/533069 is fixed.

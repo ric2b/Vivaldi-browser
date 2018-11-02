@@ -40,27 +40,6 @@ LayoutSelection::LayoutSelection(FrameSelection& frame_selection)
       selection_start_pos_(-1),
       selection_end_pos_(-1) {}
 
-const VisibleSelection& LayoutSelection::GetVisibleSelection() const {
-  return frame_selection_->ComputeVisibleSelectionInDOMTree();
-}
-
-static bool IsSelectionInDocument(
-    const VisibleSelectionInFlatTree& visible_selection,
-    const Document& document) {
-  const PositionInFlatTree& start = visible_selection.Start();
-  if (start.IsNotNull() &&
-      (!start.IsConnected() || start.GetDocument() != document))
-    return false;
-  const PositionInFlatTree& end = visible_selection.end();
-  if (end.IsNotNull() && (!end.IsConnected() || end.GetDocument() != document))
-    return false;
-  const PositionInFlatTree extent = visible_selection.Extent();
-  if (extent.IsNotNull() &&
-      (!extent.IsConnected() || extent.GetDocument() != document))
-    return false;
-  return true;
-}
-
 SelectionInFlatTree LayoutSelection::CalcVisibleSelection(
     const VisibleSelectionInFlatTree& original_selection) const {
   const PositionInFlatTree& start = original_selection.Start();
@@ -121,120 +100,69 @@ static LayoutObject* LayoutObjectAfterPosition(LayoutObject* object,
   return child ? child : object->NextInPreOrderAfterChildren();
 }
 
-// When exploring the LayoutTree looking for the nodes involved in the
-// Selection, sometimes it's required to change the traversing direction because
-// the "start" position is below the "end" one.
-static inline LayoutObject* GetNextOrPrevLayoutObjectBasedOnDirection(
-    const LayoutObject* o,
-    const LayoutObject* stop,
-    bool& continue_exploring,
-    bool& exploring_backwards) {
-  LayoutObject* next;
-  if (exploring_backwards) {
-    next = o->PreviousInPreOrder();
-    continue_exploring = next && !(next)->IsLayoutView();
-  } else {
-    next = o->NextInPreOrder();
-    continue_exploring = next && next != stop;
-    exploring_backwards = !next && (next != stop);
-    if (exploring_backwards) {
-      next = stop->PreviousInPreOrder();
-      continue_exploring = next && !next->IsLayoutView();
-    }
+// Objects each have a single selection rect to examine.
+using SelectedObjectMap = HashMap<LayoutObject*, SelectionState>;
+// Blocks contain selected objects and fill gaps between them, either on the
+// left, right, or in between lines and blocks.
+// In order to get the visual rect right, we have to examine left, middle, and
+// right rects individually, since otherwise the union of those rects might
+// remain the same even when changes have occurred.
+using SelectedBlockMap = HashMap<LayoutBlock*, SelectionState>;
+struct SelectedMap {
+  STACK_ALLOCATED();
+  SelectedObjectMap object_map;
+  SelectedBlockMap block_map;
+
+  SelectedMap() = default;
+  SelectedMap(SelectedMap&& other) {
+    object_map = std::move(other.object_map);
+    block_map = std::move(other.block_map);
   }
 
-  return next;
-}
+ private:
+  DISALLOW_COPY_AND_ASSIGN(SelectedMap);
+};
 
-void LayoutSelection::SetSelection(
-    LayoutObject* start,
-    int start_pos,
-    LayoutObject* end,
-    int end_pos,
-    SelectionPaintInvalidationMode block_paint_invalidation_mode) {
-  // This code makes no assumptions as to if the layout tree is up to date or
-  // not and will not try to update it. Currently clearSelection calls this
-  // (intentionally) without updating the layout tree as it doesn't care.
-  // Other callers may want to force recalc style before calling this.
+static SelectedMap CollectSelectedMap(
+    LayoutObject* selection_start,
+    LayoutObject* selection_end,
+    int selection_end_pos,
+    LayoutSelection::SelectionPaintInvalidationMode
+        block_paint_invalidation_mode) {
+  SelectedMap selected_map;
 
-  // Make sure both our start and end objects are defined.
-  // Check www.msnbc.com and try clicking around to find the case where this
-  // happened.
-  if ((start && !end) || (end && !start))
-    return;
+  LayoutObject* const stop =
+      LayoutObjectAfterPosition(selection_end, selection_end_pos);
+  for (LayoutObject* runner = selection_start; runner && (runner != stop);
+       runner = runner->NextInPreOrder()) {
+    if (!runner->CanBeSelectionLeaf() && runner != selection_start &&
+        runner != selection_end)
+      continue;
+    if (runner->GetSelectionState() == SelectionNone)
+      continue;
 
-  // Just return if the selection hasn't changed.
-  if (selection_start_ == start && selection_start_pos_ == start_pos &&
-      selection_end_ == end && selection_end_pos_ == end_pos)
-    return;
-
-  // Record the old selected objects. These will be used later when we compare
-  // against the new selected objects.
-  int old_start_pos = selection_start_pos_;
-  int old_end_pos = selection_end_pos_;
-
-  // Objects each have a single selection rect to examine.
-  typedef HashMap<LayoutObject*, SelectionState> SelectedObjectMap;
-  SelectedObjectMap old_selected_objects;
-  // FIXME: |newSelectedObjects| doesn't really need to store the
-  // SelectionState, it's just more convenient to have it use the same data
-  // structure as |oldSelectedObjects|.
-  SelectedObjectMap new_selected_objects;
-
-  // Blocks contain selected objects and fill gaps between them, either on the
-  // left, right, or in between lines and blocks.
-  // In order to get the visual rect right, we have to examine left, middle, and
-  // right rects individually, since otherwise the union of those rects might
-  // remain the same even when changes have occurred.
-  typedef HashMap<LayoutBlock*, SelectionState> SelectedBlockMap;
-  SelectedBlockMap old_selected_blocks;
-  // FIXME: |newSelectedBlocks| doesn't really need to store the SelectionState,
-  // it's just more convenient to have it use the same data structure as
-  // |oldSelectedBlocks|.
-  SelectedBlockMap new_selected_blocks;
-
-  LayoutObject* os = selection_start_;
-  LayoutObject* stop =
-      LayoutObjectAfterPosition(selection_end_, selection_end_pos_);
-  bool exploring_backwards = false;
-  bool continue_exploring = os && (os != stop);
-  while (continue_exploring) {
-    if ((os->CanBeSelectionLeaf() || os == selection_start_ ||
-         os == selection_end_) &&
-        os->GetSelectionState() != SelectionNone) {
-      // Blocks are responsible for painting line gaps and margin gaps.  They
-      // must be examined as well.
-      old_selected_objects.Set(os, os->GetSelectionState());
-      if (block_paint_invalidation_mode == kPaintInvalidationNewXOROld) {
-        LayoutBlock* cb = os->ContainingBlock();
-        while (cb && !cb->IsLayoutView()) {
-          SelectedBlockMap::AddResult result =
-              old_selected_blocks.insert(cb, cb->GetSelectionState());
-          if (!result.is_new_entry)
-            break;
-          cb = cb->ContainingBlock();
-        }
+    // Blocks are responsible for painting line gaps and margin gaps.  They
+    // must be examined as well.
+    selected_map.object_map.Set(runner, runner->GetSelectionState());
+    if (block_paint_invalidation_mode ==
+        LayoutSelection::kPaintInvalidationNewXOROld) {
+      LayoutBlock* containing_block = runner->ContainingBlock();
+      while (containing_block && !containing_block->IsLayoutView()) {
+        SelectedBlockMap::AddResult result = selected_map.block_map.insert(
+            containing_block, containing_block->GetSelectionState());
+        if (!result.is_new_entry)
+          break;
+        containing_block = containing_block->ContainingBlock();
       }
     }
-
-    os = GetNextOrPrevLayoutObjectBasedOnDirection(os, stop, continue_exploring,
-                                                   exploring_backwards);
   }
+  return selected_map;
+}
 
-  // Now clear the selection.
-  SelectedObjectMap::iterator old_objects_end = old_selected_objects.end();
-  for (SelectedObjectMap::iterator i = old_selected_objects.begin();
-       i != old_objects_end; ++i)
-    i->key->SetSelectionStateIfNeeded(SelectionNone);
-
-  // set selection start and end
-  selection_start_ = start;
-  selection_start_pos_ = start_pos;
-  selection_end_ = end;
-  selection_end_pos_ = end_pos;
-
-  // Update the selection status of all objects between m_selectionStart and
-  // m_selectionEnd
+// Update the selection status of all LayoutObjects between |start| and |end|.
+static void SetSelectionState(LayoutObject* start,
+                              LayoutObject* end,
+                              int end_pos) {
   if (start && start == end) {
     start->SetSelectionStateIfNeeded(SelectionBoth);
   } else {
@@ -244,88 +172,93 @@ void LayoutSelection::SetSelection(
       end->SetSelectionStateIfNeeded(SelectionEnd);
   }
 
-  LayoutObject* o = start;
-  stop = LayoutObjectAfterPosition(end, end_pos);
-
-  while (o && o != stop) {
-    if (o != start && o != end && o->CanBeSelectionLeaf())
-      o->SetSelectionStateIfNeeded(SelectionInside);
-    o = o->NextInPreOrder();
+  LayoutObject* const stop = LayoutObjectAfterPosition(end, end_pos);
+  for (LayoutObject* runner = start; runner && runner != stop;
+       runner = runner->NextInPreOrder()) {
+    if (runner != start && runner != end && runner->CanBeSelectionLeaf())
+      runner->SetSelectionStateIfNeeded(SelectionInside);
   }
+}
+
+void LayoutSelection::SetSelection(
+    LayoutObject* start,
+    int start_pos,
+    LayoutObject* end,
+    int end_pos,
+    SelectionPaintInvalidationMode block_paint_invalidation_mode) {
+  DCHECK(start);
+  DCHECK(end);
+
+  // Just return if the selection hasn't changed.
+  if (selection_start_ == start && selection_start_pos_ == start_pos &&
+      selection_end_ == end && selection_end_pos_ == end_pos)
+    return;
+
+  DCHECK(frame_selection_->GetDocument().GetLayoutView()->GetFrameView());
+  DCHECK(!frame_selection_->GetDocument().NeedsLayoutTreeUpdate());
+
+  SelectedMap old_selected_map =
+      CollectSelectedMap(selection_start_, selection_end_, selection_end_pos_,
+                         block_paint_invalidation_mode);
+
+  // Now clear the selection.
+  for (auto layout_object : old_selected_map.object_map.Keys())
+    layout_object->SetSelectionStateIfNeeded(SelectionNone);
+
+  SetSelectionState(start, end, end_pos);
 
   // Now that the selection state has been updated for the new objects, walk
   // them again and put them in the new objects list.
-  o = start;
-  exploring_backwards = false;
-  continue_exploring = o && (o != stop);
-  while (continue_exploring) {
-    if ((o->CanBeSelectionLeaf() || o == start || o == end) &&
-        o->GetSelectionState() != SelectionNone) {
-      new_selected_objects.Set(o, o->GetSelectionState());
-      LayoutBlock* cb = o->ContainingBlock();
-      while (cb && !cb->IsLayoutView()) {
-        SelectedBlockMap::AddResult result =
-            new_selected_blocks.insert(cb, cb->GetSelectionState());
-        if (!result.is_new_entry)
-          break;
-        cb = cb->ContainingBlock();
-      }
-    }
-
-    o = GetNextOrPrevLayoutObjectBasedOnDirection(o, stop, continue_exploring,
-                                                  exploring_backwards);
-  }
-
-  // TODO(yoichio): DCHECK(frame_selection_->,,,->GetFrameView());
-  if (!frame_selection_->GetDocument().GetLayoutView()->GetFrameView())
-    return;
+  // TODO(editing-dev): |new_selected_map| doesn't really need to store the
+  // SelectionState, it's just more convenient to have it use the same data
+  // structure as |old_selected_map|.
+  SelectedMap new_selected_map =
+      CollectSelectedMap(start, end, end_pos, kPaintInvalidationNewXOROld);
 
   // Have any of the old selected objects changed compared to the new selection?
-  for (SelectedObjectMap::iterator i = old_selected_objects.begin();
-       i != old_objects_end; ++i) {
-    LayoutObject* obj = i->key;
+  for (const auto& pair : old_selected_map.object_map) {
+    LayoutObject* obj = pair.key;
     SelectionState new_selection_state = obj->GetSelectionState();
-    SelectionState old_selection_state = i->value;
+    SelectionState old_selection_state = pair.value;
     if (new_selection_state != old_selection_state ||
-        (selection_start_ == obj && old_start_pos != selection_start_pos_) ||
-        (selection_end_ == obj && old_end_pos != selection_end_pos_)) {
+        (start == obj && start_pos != selection_start_pos_) ||
+        (end == obj && end_pos != selection_end_pos_)) {
       obj->SetShouldInvalidateSelection();
-      new_selected_objects.erase(obj);
+      new_selected_map.object_map.erase(obj);
     }
   }
 
   // Any new objects that remain were not found in the old objects dict, and so
   // they need to be updated.
-  SelectedObjectMap::iterator new_objects_end = new_selected_objects.end();
-  for (SelectedObjectMap::iterator i = new_selected_objects.begin();
-       i != new_objects_end; ++i)
-    i->key->SetShouldInvalidateSelection();
+  for (auto layout_object : new_selected_map.object_map.Keys())
+    layout_object->SetShouldInvalidateSelection();
 
   // Have any of the old blocks changed?
-  SelectedBlockMap::iterator old_blocks_end = old_selected_blocks.end();
-  for (SelectedBlockMap::iterator i = old_selected_blocks.begin();
-       i != old_blocks_end; ++i) {
-    LayoutBlock* block = i->key;
+  for (const auto& pair : old_selected_map.block_map) {
+    LayoutBlock* block = pair.key;
     SelectionState new_selection_state = block->GetSelectionState();
-    SelectionState old_selection_state = i->value;
+    SelectionState old_selection_state = pair.value;
     if (new_selection_state != old_selection_state) {
       block->SetShouldInvalidateSelection();
-      new_selected_blocks.erase(block);
+      new_selected_map.block_map.erase(block);
     }
   }
 
   // Any new blocks that remain were not found in the old blocks dict, and so
   // they need to be updated.
-  SelectedBlockMap::iterator new_blocks_end = new_selected_blocks.end();
-  for (SelectedBlockMap::iterator i = new_selected_blocks.begin();
-       i != new_blocks_end; ++i)
-    i->key->SetShouldInvalidateSelection();
+  for (auto layout_object : new_selected_map.block_map.Keys())
+    layout_object->SetShouldInvalidateSelection();
+
+  // set selection start and end
+  selection_start_ = start;
+  selection_start_pos_ = start_pos;
+  selection_end_ = end;
+  selection_end_pos_ = end_pos;
 }
 
-void LayoutSelection::SelectionStartEnd(int& start_pos, int& end_pos) {
-  Commit(*frame_selection_->GetDocument().GetLayoutView());
-  start_pos = selection_start_pos_;
-  end_pos = selection_end_pos_;
+std::pair<int, int> LayoutSelection::SelectionStartEnd() {
+  Commit();
+  return std::make_pair(selection_start_pos_, selection_end_pos_);
 }
 
 void LayoutSelection::ClearSelection() {
@@ -334,21 +267,40 @@ void LayoutSelection::ClearSelection() {
   // invalidations.
   DisableCompositingQueryAsserts disabler;
 
-  SetSelection(0, -1, 0, -1, kPaintInvalidationNewMinusOld);
+  // Just return if the selection hasn't changed.
+  if (!selection_start_) {
+    DCHECK_EQ(selection_end_, nullptr);
+    DCHECK_EQ(selection_start_pos_, -1);
+    DCHECK_EQ(selection_end_pos_, -1);
+    return;
+  }
+
+  const SelectedMap& old_selected_map =
+      CollectSelectedMap(selection_start_, selection_end_, selection_end_pos_,
+                         kPaintInvalidationNewMinusOld);
+  // Clear SelectionState and invalidation.
+  for (auto layout_object : old_selected_map.object_map.Keys()) {
+    const SelectionState old_state = layout_object->GetSelectionState();
+    layout_object->SetSelectionStateIfNeeded(SelectionNone);
+    if (layout_object->GetSelectionState() == old_state)
+      continue;
+    layout_object->SetShouldInvalidateSelection();
+  }
+
+  // Reset selection start and end.
+  selection_start_ = nullptr;
+  selection_start_pos_ = -1;
+  selection_end_ = nullptr;
+  selection_end_pos_ = -1;
 }
 
-void LayoutSelection::Commit(LayoutView& layout_view) {
+void LayoutSelection::Commit() {
   if (!HasPendingSelection())
     return;
-  DCHECK(!layout_view.NeedsLayout());
   has_pending_selection_ = false;
 
   const VisibleSelectionInFlatTree& original_selection =
       frame_selection_->ComputeVisibleSelectionInFlatTree();
-
-  // Skip if pending VisibilePositions became invalid before we reach here.
-  if (!IsSelectionInDocument(original_selection, layout_view.GetDocument()))
-    return;
 
   // Construct a new VisibleSolution, since visibleSelection() is not
   // necessarily valid, and the following steps assume a valid selection. See
@@ -357,7 +309,7 @@ void LayoutSelection::Commit(LayoutView& layout_view) {
   const VisibleSelectionInFlatTree& selection =
       CreateVisibleSelection(CalcVisibleSelection(original_selection));
 
-  if (!selection.IsRange()) {
+  if (!selection.IsRange() || frame_selection_->IsHidden()) {
     ClearSelection();
     return;
   }
@@ -384,12 +336,12 @@ void LayoutSelection::Commit(LayoutView& layout_view) {
       selection.VisibleStart().DeepEquivalent() ==
           selection.VisibleEnd().DeepEquivalent())
     return;
+  DCHECK_LE(start_pos, end_pos);
   LayoutObject* start_layout_object = start_pos.AnchorNode()->GetLayoutObject();
   LayoutObject* end_layout_object = end_pos.AnchorNode()->GetLayoutObject();
   if (!start_layout_object || !end_layout_object)
     return;
-  DCHECK(layout_view == start_layout_object->View());
-  DCHECK(layout_view == end_layout_object->View());
+  DCHECK(start_layout_object->View() == end_layout_object->View());
   SetSelection(start_layout_object, start_pos.ComputeEditingOffset(),
                end_layout_object, end_pos.ComputeEditingOffset());
 }
@@ -419,7 +371,7 @@ IntRect LayoutSelection::SelectionBounds() {
   typedef HashSet<const LayoutBlock*> VisitedContainingBlockSet;
   VisitedContainingBlockSet visited_containing_blocks;
 
-  Commit(*frame_selection_->GetDocument().GetLayoutView());
+  Commit();
   LayoutObject* os = selection_start_;
   LayoutObject* stop =
       LayoutObjectAfterPosition(selection_end_, selection_end_pos_);

@@ -20,6 +20,7 @@
 #include "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
 #include "ios/chrome/browser/web_state_list/web_state_list.h"
 #include "ios/chrome/test/base/perf_test_ios.h"
+#include "ios/web/public/test/fakes/test_navigation_manager.h"
 #include "ios/web/public/test/fakes/test_web_state.h"
 #include "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
@@ -80,6 +81,9 @@ class OmniboxPerfTest : public PerfTest {
     web_state_list_ = base::MakeUnique<WebStateList>(&web_state_list_delegate_);
     std::unique_ptr<web::TestWebState> web_state =
         base::MakeUnique<web::TestWebState>();
+    std::unique_ptr<web::TestNavigationManager> navigation_manager =
+        base::MakeUnique<web::TestNavigationManager>();
+    web_state->SetNavigationManager(std::move(navigation_manager));
     web_state_list_->InsertWebState(0, std::move(web_state));
 
     // Creates the Toolbar for testing and sizes it to the width of the screen.
@@ -91,10 +95,13 @@ class OmniboxPerfTest : public PerfTest {
     // The OCMOCK_VALUE macro doesn't like std::unique_ptr, but it works just
     // fine if a temporary variable is used.
     ToolbarModelIOS* model_for_mock = toolbar_model_ios_.get();
+    web::WebState* web_state_for_mock = web_state_list_->GetWebStateAt(0);
     id webToolbarDelegate =
         [OCMockObject niceMockForProtocol:@protocol(WebToolbarDelegate)];
     [[[webToolbarDelegate stub] andReturnValue:OCMOCK_VALUE(model_for_mock)]
         toolbarModelIOS];
+    [[[webToolbarDelegate stub] andReturnValue:OCMOCK_VALUE(web_state_for_mock)]
+        currentWebState];
     id urlLoader = [OCMockObject niceMockForProtocol:@protocol(UrlLoader)];
     toolbar_ = [[WebToolbarController alloc]
         initWithDelegate:webToolbarDelegate

@@ -10,10 +10,10 @@
 #include "core/dom/ResizeObservation.h"
 #include "core/dom/ResizeObserverCallback.h"
 #include "core/dom/ResizeObserverController.h"
+#include "core/exported/WebViewBase.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/wtf/CurrentTime.h"
 #include "public/web/WebHeap.h"
-#include "web/WebViewImpl.h"
 #include "web/tests/sim/SimCompositor.h"
 #include "web/tests/sim/SimDisplayItemList.h"
 #include "web/tests/sim/SimRequest.h"
@@ -70,8 +70,8 @@ TEST_F(ResizeObserverUnitTest, ResizeObservationSize) {
   ResizeObserverCallback* callback =
       new TestResizeObserverCallback(GetDocument());
   ResizeObserver* observer = ResizeObserver::Create(GetDocument(), callback);
-  Element* dom_target = GetDocument().GetElementById("domTarget");
-  Element* svg_target = GetDocument().GetElementById("svgTarget");
+  Element* dom_target = GetDocument().getElementById("domTarget");
+  Element* svg_target = GetDocument().getElementById("svgTarget");
   ResizeObservation* dom_observation =
       new ResizeObservation(dom_target, observer);
   ResizeObservation* svg_observation =

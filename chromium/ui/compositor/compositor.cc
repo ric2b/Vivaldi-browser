@@ -44,14 +44,8 @@
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/display_switches.h"
 #include "ui/gfx/icc_profile.h"
+#include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
-
-namespace {
-
-constexpr double kDefaultRefreshRate = 60.0;
-constexpr double kTestRefreshRate = 200.0;
-
-}  // namespace
 
 namespace ui {
 
@@ -65,6 +59,8 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
       task_runner_(task_runner),
       vsync_manager_(new CompositorVSyncManager()),
       layer_animator_collection_(this),
+      scheduled_timeout_(base::TimeTicks()),
+      allow_locks_to_extend_timeout_(false),
       weak_ptr_factory_(this),
       lock_timeout_weak_ptr_factory_(this) {
   if (context_factory_private) {
@@ -84,30 +80,8 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
   // Use occlusion to allow more overlapping windows to take less memory.
   settings.use_occlusion_for_tile_prioritization = true;
   refresh_rate_ = settings.renderer_settings.refresh_rate =
-      context_factory_->DoesCreateTestContexts() ? kTestRefreshRate
-                                                 : kDefaultRefreshRate;
+      context_factory_->GetRefreshRate();
   settings.main_frame_before_activation_enabled = false;
-  if (command_line->HasSwitch(switches::kDisableGpuVsync)) {
-    std::string display_vsync_string =
-        command_line->GetSwitchValueASCII(switches::kDisableGpuVsync);
-    // See comments in gl_switches about this flag.  The browser compositor
-    // is only unthrottled when "gpu" or no switch value is passed, as it
-    // is driven directly by the display compositor.
-    if (display_vsync_string != "beginframe") {
-      settings.renderer_settings.disable_display_vsync = true;
-    }
-  }
-  settings.renderer_settings.partial_swap_enabled =
-      !command_line->HasSwitch(switches::kUIDisablePartialSwap);
-#if defined(OS_WIN)
-  settings.renderer_settings.finish_rendering_on_resize = true;
-#elif defined(OS_MACOSX)
-  settings.renderer_settings.release_overlay_resources_after_gpu_query = true;
-#endif
-  settings.renderer_settings.gl_composited_texture_quad_border =
-      command_line->HasSwitch(cc::switches::kGlCompositedTextureQuadBorder);
-  settings.renderer_settings.show_overdraw_feedback =
-      command_line->HasSwitch(cc::switches::kShowOverdrawFeedback);
 
   if (command_line->HasSwitch(cc::switches::kUIShowCompositedLayerBorders)) {
     std::string layer_borders_string = command_line->GetSwitchValueASCII(
@@ -156,44 +130,25 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
 
   settings.use_zero_copy = IsUIZeroCopyEnabled();
 
-  if (command_line->HasSwitch(switches::kUIEnableRGBA4444Textures))
-    settings.renderer_settings.preferred_tile_format = cc::RGBA_4444;
-
   settings.use_layer_lists =
       command_line->HasSwitch(cc::switches::kUIEnableLayerLists);
 
   settings.enable_color_correct_rasterization =
-      command_line->HasSwitch(cc::switches::kEnableColorCorrectRendering);
-  settings.renderer_settings.enable_color_correct_rendering =
-      settings.enable_color_correct_rasterization ||
-      command_line->HasSwitch(switches::kEnableHDR);
+      command_line->HasSwitch(switches::kEnableColorCorrectRendering);
 
   // UI compositor always uses partial raster if not using zero-copy. Zero copy
   // doesn't currently support partial raster.
   settings.use_partial_raster = !settings.use_zero_copy;
 
-  // Populate buffer_to_texture_target_map for all buffer usage/formats.
-  for (int usage_idx = 0; usage_idx <= static_cast<int>(gfx::BufferUsage::LAST);
-       ++usage_idx) {
-    gfx::BufferUsage usage = static_cast<gfx::BufferUsage>(usage_idx);
-    for (int format_idx = 0;
-         format_idx <= static_cast<int>(gfx::BufferFormat::LAST);
-         ++format_idx) {
-      gfx::BufferFormat format = static_cast<gfx::BufferFormat>(format_idx);
-      uint32_t target = context_factory_->GetImageTextureTarget(format, usage);
-      settings.renderer_settings
-          .buffer_to_texture_target_map[std::make_pair(usage, format)] = target;
-    }
-  }
-
-  // Note: Although there is only one image decode thread, we should still get a
-  // benefit from locking images across several raster tasks. At worst, this
-  // should do as much work as it would anyway.
-  settings.image_decode_tasks_enabled = true;
-
   settings.gpu_memory_policy.bytes_limit_when_visible = 512 * 1024 * 1024;
   settings.gpu_memory_policy.priority_cutoff_when_visible =
       gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE;
+
+  settings.disallow_non_exact_resource_reuse =
+      command_line->HasSwitch(cc::switches::kDisallowNonExactResourceReuse);
+
+  // TODO(staraz): LayerTreeSettings shouldn't have a RendererSettings.
+  settings.renderer_settings = context_factory_->GetRendererSettings();
 
   base::TimeTicks before_create = base::TimeTicks::Now();
 
@@ -497,6 +452,8 @@ void Compositor::BeginMainFrame(const cc::BeginFrameArgs& args) {
 void Compositor::BeginMainFrameNotExpectedSoon() {
 }
 
+void Compositor::BeginMainFrameNotExpectedUntil(base::TimeTicks time) {}
+
 static void SendDamagedRectsRecursive(ui::Layer* layer) {
   layer->SendDamagedRects();
   for (auto* child : layer->children())
@@ -555,10 +512,6 @@ void Compositor::SetLayerTreeDebugState(
   host_->SetDebugState(debug_state);
 }
 
-const cc::RendererSettings& Compositor::GetRendererSettings() const {
-  return host_->GetSettings().renderer_settings;
-}
-
 std::unique_ptr<CompositorLock> Compositor::GetCompositorLock(
     CompositorLockClient* client,
     base::TimeDelta timeout) {
@@ -569,21 +522,34 @@ std::unique_ptr<CompositorLock> Compositor::GetCompositorLock(
   bool was_empty = active_locks_.empty();
   active_locks_.push_back(lock.get());
 
+  bool should_extend_timeout = false;
+  if ((was_empty || allow_locks_to_extend_timeout_) && !timeout.is_zero()) {
+    const base::TimeTicks time_to_timeout = base::TimeTicks::Now() + timeout;
+    // For the first lock, scheduled_timeout.is_null is true,
+    // |time_to_timeout| will always larger than |scheduled_timeout_|. And it
+    // is ok to invalidate the weakptr of |lock_timeout_weak_ptr_factory_|.
+    if (time_to_timeout > scheduled_timeout_) {
+      scheduled_timeout_ = time_to_timeout;
+      should_extend_timeout = true;
+      lock_timeout_weak_ptr_factory_.InvalidateWeakPtrs();
+    }
+  }
+
   if (was_empty) {
     host_->SetDeferCommits(true);
     for (auto& observer : observer_list_)
       observer.OnCompositingLockStateChanged(this);
+  }
 
-    if (!timeout.is_zero()) {
-      // The timeout task uses an independent WeakPtrFactory that is invalidated
-      // when all locks are ended to prevent the timeout from leaking into
-      // another lock that should have its own timeout.
-      task_runner_->PostDelayedTask(
-          FROM_HERE,
-          base::Bind(&Compositor::TimeoutLocks,
-                     lock_timeout_weak_ptr_factory_.GetWeakPtr()),
-          timeout);
-    }
+  if (should_extend_timeout) {
+    // The timeout task uses an independent WeakPtrFactory that is invalidated
+    // when all locks are ended to prevent the timeout from leaking into
+    // another lock that should have its own timeout.
+    task_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::Bind(&Compositor::TimeoutLocks,
+                   lock_timeout_weak_ptr_factory_.GetWeakPtr()),
+        timeout);
   }
   return lock;
 }
@@ -595,6 +561,7 @@ void Compositor::RemoveCompositorLock(CompositorLock* lock) {
     for (auto& observer : observer_list_)
       observer.OnCompositingLockStateChanged(this);
     lock_timeout_weak_ptr_factory_.InvalidateWeakPtrs();
+    scheduled_timeout_ = base::TimeTicks();
   }
 }
 

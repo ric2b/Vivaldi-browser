@@ -25,6 +25,7 @@
 #include "base/trace_event/trace_event_synthetic_delay.h"
 #include "build/build_config.h"
 #include "cc/animation/animation_host.h"
+#include "cc/input/touch_action.h"
 #include "cc/output/compositor_frame_sink.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/scheduler/begin_frame_source.h"
@@ -53,6 +54,7 @@
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/ime_event_guard.h"
 #include "content/renderer/input/input_handler_manager.h"
+#include "content/renderer/input/main_thread_event_queue.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_frame_proxy.h"
@@ -73,6 +75,7 @@
 #include "third_party/WebKit/public/platform/WebMouseEvent.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
+#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/scheduler/renderer/render_widget_scheduling_state.h"
@@ -86,7 +89,6 @@
 #include "third_party/WebKit/public/web/WebPagePopup.h"
 #include "third_party/WebKit/public/web/WebPopupMenuInfo.h"
 #include "third_party/WebKit/public/web/WebRange.h"
-#include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "third_party/WebKit/public/web/WebWidget.h"
 #include "third_party/skia/include/core/SkShader.h"
@@ -400,6 +402,9 @@ RenderWidget::RenderWidget(int32_t widget_routing_id,
 
 RenderWidget::~RenderWidget() {
   DCHECK(!webwidget_internal_) << "Leaking our WebWidget!";
+
+  if (input_event_queue_)
+    input_event_queue_->ClearClient();
 
   // If we are swapped out, we have released already.
   if (!is_swapped_out_ && RenderProcess::current())
@@ -818,6 +823,22 @@ void RenderWidget::OnHandleInputEvent(
       latency_info, dispatch_type);
 }
 
+InputEventAckState RenderWidget::HandleInputEvent(
+    const blink::WebCoalescedInputEvent& input_event,
+    const ui::LatencyInfo& latency_info,
+    InputEventDispatchType dispatch_type) {
+  return input_handler_->HandleInputEvent(input_event, latency_info,
+                                          dispatch_type);
+}
+
+void RenderWidget::SendInputEventAck(blink::WebInputEvent::Type type,
+                                     InputEventAckState ack_result,
+                                     uint32_t touch_event_id) {
+  InputEventAck ack(InputEventAckSource::MAIN_THREAD, type, ack_result,
+                    touch_event_id);
+  Send(new InputHostMsg_HandleInputEvent_ACK(routing_id_, ack));
+}
+
 void RenderWidget::OnCursorVisibilityChange(bool is_visible) {
   if (GetWebWidget())
     GetWebWidget()->SetCursorVisibilityState(is_visible);
@@ -872,13 +893,10 @@ void RenderWidget::RecordWheelAndTouchScrollingCount(
 }
 
 void RenderWidget::BeginMainFrame(double frame_time_sec) {
-  RenderThreadImpl* render_thread = RenderThreadImpl::current();
-  // render_thread may be NULL in tests.
-  InputHandlerManager* input_handler_manager =
-      render_thread ? render_thread->input_handler_manager() : NULL;
-  if (input_handler_manager)
-    input_handler_manager->ProcessRafAlignedInputOnMainThread(
-        routing_id_, ui::EventTimeStampFromSeconds(frame_time_sec));
+  if (input_event_queue_) {
+    input_event_queue_->DispatchRafAlignedInput(
+        ui::EventTimeStampFromSeconds(frame_time_sec));
+  }
 
   GetWebWidget()->BeginFrame(frame_time_sec);
 }
@@ -1045,19 +1063,6 @@ void RenderWidget::OnInputEventAck(
       new InputHostMsg_HandleInputEvent_ACK(routing_id_, *input_event_ack));
 }
 
-void RenderWidget::NotifyInputEventHandled(
-    blink::WebInputEvent::Type handled_type,
-    blink::WebInputEventResult result,
-    InputEventAckState ack_result) {
-  RenderThreadImpl* render_thread = RenderThreadImpl::current();
-  InputHandlerManager* input_handler_manager =
-      render_thread ? render_thread->input_handler_manager() : NULL;
-  if (input_handler_manager) {
-    input_handler_manager->NotifyInputEventHandledOnMainThread(
-        routing_id_, handled_type, result, ack_result);
-  }
-}
-
 void RenderWidget::SetInputHandler(RenderWidgetInputHandler* input_handler) {
   // Nothing to do here. RenderWidget created the |input_handler| and will take
   // ownership of it. We just verify here that we don't already have an input
@@ -1203,11 +1208,20 @@ void RenderWidget::Resize(const ResizeParams& params) {
   if (!GetWebWidget())
     return;
 
+  if (params.local_surface_id)
+    local_surface_id_ = *params.local_surface_id;
+
   if (compositor_) {
     compositor_->SetViewportSize(params.physical_backing_size);
     compositor_->setBottomControlsHeight(params.bottom_controls_height);
     compositor_->SetRasterColorSpace(
         screen_info_.icc_profile.GetParametricColorSpace());
+    // If surface synchronization is enable, then this will use the provided
+    // |local_surface_id_| to submit the next generated CompositorFrame.
+    // If the ID is not valid, then the compositor will defer commits until
+    // it receives a valid surface ID. This is a no-op if surface
+    // synchronization is disabled.
+    compositor_->SetLocalSurfaceId(local_surface_id_);
   }
 
   visible_viewport_size_ = params.visible_viewport_size;
@@ -1298,17 +1312,15 @@ blink::WebLayerTreeView* RenderWidget::InitializeLayerTreeView() {
 
   compositor_->SetViewportSize(physical_backing_size_);
   OnDeviceScaleFactorChanged();
-  compositor_->SetRasterColorSpace(screen_info_.icc_profile.GetColorSpace());
+  compositor_->SetRasterColorSpace(
+      screen_info_.icc_profile.GetParametricColorSpace());
   compositor_->SetContentSourceId(current_content_source_id_);
-#if defined(USE_AURA)
-  RendererWindowTreeClient* window_tree_client =
-      RendererWindowTreeClient::Get(routing_id_);
-  if (window_tree_client)
-    compositor_->SetLocalSurfaceId(window_tree_client->local_surface_id());
-#endif
+  compositor_->SetLocalSurfaceId(local_surface_id_);
   // For background pages and certain tests, we don't want to trigger
   // CompositorFrameSink creation.
-  if (compositor_never_visible_ || !RenderThreadImpl::current())
+  bool should_generate_frame_sink =
+      !compositor_never_visible_ && RenderThreadImpl::current();
+  if (!should_generate_frame_sink)
     compositor_->SetNeverVisible();
 
   StartCompositor();
@@ -1321,8 +1333,11 @@ blink::WebLayerTreeView* RenderWidget::InitializeLayerTreeView() {
   InputHandlerManager* input_handler_manager =
       render_thread ? render_thread->input_handler_manager() : NULL;
   if (input_handler_manager) {
+    input_event_queue_ = new MainThreadEventQueue(
+        this, render_thread->GetRendererScheduler()->CompositorTaskRunner(),
+        render_thread->GetRendererScheduler(), should_generate_frame_sink);
     input_handler_manager->AddInputHandler(
-        routing_id_, compositor()->GetInputHandler(),
+        routing_id_, compositor()->GetInputHandler(), input_event_queue_,
         weak_ptr_factory_.GetWeakPtr(),
         compositor_deps_->IsScrollAnimatorEnabled());
     has_added_input_handler_ = true;
@@ -1913,6 +1928,11 @@ void RenderWidget::OnSetDeviceScaleFactor(float device_scale_factor) {
 }
 
 void RenderWidget::OnOrientationChange() {
+  WebWidget* web_widget = GetWebWidget();
+  if (web_widget && web_widget->IsWebFrameWidget()) {
+    WebFrameWidget* web_frame_widget = static_cast<WebFrameWidget*>(web_widget);
+    web_frame_widget->LocalRoot()->SendOrientationChangeEvent();
+  }
 }
 
 void RenderWidget::SetHidden(bool hidden) {
@@ -2238,15 +2258,13 @@ void RenderWidget::HasTouchEventHandlers(bool has_handlers) {
   Send(new ViewHostMsg_HasTouchEventHandlers(routing_id_, has_handlers));
 }
 
-void RenderWidget::SetTouchAction(blink::WebTouchAction web_touch_action) {
+void RenderWidget::SetTouchAction(cc::TouchAction touch_action) {
   // Ignore setTouchAction calls that result from synthetic touch events (eg.
   // when blink is emulating touch with mouse).
   if (input_handler_->handling_event_type() != WebInputEvent::kTouchStart)
     return;
 
-   content::TouchAction content_touch_action =
-       static_cast<content::TouchAction>(web_touch_action);
-  Send(new InputHostMsg_SetTouchAction(routing_id_, content_touch_action));
+  Send(new InputHostMsg_SetTouchAction(routing_id_, touch_action));
 }
 
 void RenderWidget::RegisterRenderFrameProxy(RenderFrameProxy* proxy) {

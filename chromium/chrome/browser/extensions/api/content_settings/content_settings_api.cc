@@ -216,8 +216,9 @@ ContentSettingsContentSettingSetFunction::Run() {
   // [ask, block] for the default setting.
   if (primary_pattern == ContentSettingsPattern::Wildcard() &&
       secondary_pattern == ContentSettingsPattern::Wildcard() &&
-      !HostContentSettingsMap::IsDefaultSettingAllowedForType(setting,
-                                                              content_type)) {
+      !content_settings::ContentSettingsRegistry::GetInstance()
+           ->Get(content_type)
+           ->IsDefaultSettingValid(setting)) {
     static const char kUnsupportedDefaultSettingError[] =
         "'%s' is not supported as the default setting of %s.";
 
@@ -307,11 +308,11 @@ void ContentSettingsContentSettingGetResourceIdentifiersFunction::OnGotPlugins(
   }
   SetResult(std::move(list));
   BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE, base::Bind(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(
           &ContentSettingsContentSettingGetResourceIdentifiersFunction::
-          SendResponse,
-          this,
-          true));
+              SendResponse,
+          this, true));
 }
 
 }  // namespace extensions

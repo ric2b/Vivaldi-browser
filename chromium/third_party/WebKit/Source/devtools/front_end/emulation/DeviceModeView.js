@@ -12,7 +12,8 @@ Emulation.DeviceModeView = class extends UI.VBox {
     this.registerRequiredCSS('emulation/deviceModeView.css');
     UI.Tooltip.addNativeOverrideContainer(this.contentElement);
 
-    this._model = new Emulation.DeviceModeModel(this._updateUI.bind(this));
+    this._model = self.singleton(Emulation.DeviceModeModel);
+    this._model.addEventListener(Emulation.DeviceModeModel.Events.Updated, this._updateUI, this);
     this._mediaInspector = new Emulation.MediaQueryInspector(
         () => this._model.appliedDeviceSize().width, this._model.setWidth.bind(this._model));
     this._showMediaInspectorSetting = Common.settings.moduleSetting('showMediaQueryInspector');
@@ -375,9 +376,9 @@ Emulation.DeviceModeView = class extends UI.VBox {
    * @return {!Promise}
    */
   async captureScreenshot() {
-    SDK.DOMModel.muteHighlight();
+    SDK.OverlayModel.muteHighlight();
     var screenshot = await this._model.captureScreenshot(false);
-    SDK.DOMModel.unmuteHighlight();
+    SDK.OverlayModel.unmuteHighlight();
     if (screenshot === null)
       return;
 
@@ -410,9 +411,9 @@ Emulation.DeviceModeView = class extends UI.VBox {
    * @return {!Promise}
    */
   async captureFullSizeScreenshot() {
-    SDK.DOMModel.muteHighlight();
+    SDK.OverlayModel.muteHighlight();
     var screenshot = await this._model.captureScreenshot(true);
-    SDK.DOMModel.unmuteHighlight();
+    SDK.OverlayModel.unmuteHighlight();
     if (screenshot === null)
       return;
 
@@ -452,7 +453,7 @@ Emulation.DeviceModeView = class extends UI.VBox {
    * @param {!Element} canvas
    */
   _saveScreenshot(canvas) {
-    var url = this._model.target() && this._model.target().inspectedURL();
+    var url = this._model.inspectedURL();
     var fileName = url ? url.trimURL().removeURLFragment() : '';
     if (this._model.type() === Emulation.DeviceModeModel.Type.Device)
       fileName += Common.UIString('(%s)', this._model.device().title);

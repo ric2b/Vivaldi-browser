@@ -26,12 +26,12 @@
 #include "chrome/browser/sync_file_system/sync_status_code.h"
 #include "chrome/browser/sync_file_system/syncable_file_system_util.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/test/mock_blob_url_request_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "storage/browser/blob/scoped_file.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/fileapi/file_system_operation_runner.h"
 #include "storage/browser/fileapi/isolated_context.h"
+#include "storage/browser/test/mock_blob_url_request_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
 #include "third_party/leveldatabase/src/include/leveldb/env.h"
@@ -129,7 +129,7 @@ class LocalFileSyncContextTest : public testing::Test {
                          SyncStatusCode status,
                          const LocalFileSyncInfo& sync_file_info,
                          storage::ScopedFile snapshot) {
-    ASSERT_TRUE(ui_task_runner_->RunsTasksOnCurrentThread());
+    ASSERT_TRUE(ui_task_runner_->RunsTasksInCurrentSequence());
     has_inflight_prepare_for_sync_ = false;
     status_ = status;
     *metadata_out = sync_file_info.metadata;
@@ -179,16 +179,16 @@ class LocalFileSyncContextTest : public testing::Test {
   void StartModifyFileOnIOThread(CannedSyncableFileSystem* file_system,
                                  const FileSystemURL& url) {
     ASSERT_TRUE(file_system != nullptr);
-    if (!io_task_runner_->RunsTasksOnCurrentThread()) {
+    if (!io_task_runner_->RunsTasksInCurrentSequence()) {
       async_modify_finished_ = false;
-      ASSERT_TRUE(ui_task_runner_->RunsTasksOnCurrentThread());
+      ASSERT_TRUE(ui_task_runner_->RunsTasksInCurrentSequence());
       io_task_runner_->PostTask(
           FROM_HERE,
-          base::Bind(&LocalFileSyncContextTest::StartModifyFileOnIOThread,
-                     base::Unretained(this), file_system, url));
+          base::BindOnce(&LocalFileSyncContextTest::StartModifyFileOnIOThread,
+                         base::Unretained(this), file_system, url));
       return;
     }
-    ASSERT_TRUE(io_task_runner_->RunsTasksOnCurrentThread());
+    ASSERT_TRUE(io_task_runner_->RunsTasksInCurrentSequence());
     file_error_ = base::File::FILE_ERROR_FAILED;
     file_system->operation_runner()->Truncate(
         url, 1, base::Bind(&LocalFileSyncContextTest::DidModifyFile,
@@ -202,15 +202,14 @@ class LocalFileSyncContextTest : public testing::Test {
   }
 
   void DidModifyFile(base::File::Error error) {
-    if (!ui_task_runner_->RunsTasksOnCurrentThread()) {
-      ASSERT_TRUE(io_task_runner_->RunsTasksOnCurrentThread());
+    if (!ui_task_runner_->RunsTasksInCurrentSequence()) {
+      ASSERT_TRUE(io_task_runner_->RunsTasksInCurrentSequence());
       ui_task_runner_->PostTask(
-          FROM_HERE,
-          base::Bind(&LocalFileSyncContextTest::DidModifyFile,
-                     base::Unretained(this), error));
+          FROM_HERE, base::BindOnce(&LocalFileSyncContextTest::DidModifyFile,
+                                    base::Unretained(this), error));
       return;
     }
-    ASSERT_TRUE(ui_task_runner_->RunsTasksOnCurrentThread());
+    ASSERT_TRUE(ui_task_runner_->RunsTasksInCurrentSequence());
     file_error_ = error;
     async_modify_finished_ = true;
   }

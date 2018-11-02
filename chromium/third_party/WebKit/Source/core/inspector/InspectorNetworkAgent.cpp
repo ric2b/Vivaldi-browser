@@ -71,13 +71,13 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/text/Base64.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebMixedContentContextType.h"
 #include "public/platform/WebURLLoaderClient.h"
 #include "public/platform/WebURLRequest.h"
-#include "wtf/CurrentTime.h"
-#include "wtf/RefPtr.h"
-#include "wtf/text/Base64.h"
 
 namespace blink {
 
@@ -91,7 +91,6 @@ static const char kExtraRequestHeaders[] = "extraRequestHeaders";
 static const char kCacheDisabled[] = "cacheDisabled";
 static const char kBypassServiceWorker[] = "bypassServiceWorker";
 static const char kUserAgentOverride[] = "userAgentOverride";
-static const char kMonitoringXHR[] = "monitoringXHR";
 static const char kBlockedURLs[] = "blockedURLs";
 static const char kTotalBufferSize[] = "totalBufferSize";
 static const char kResourceBufferSize[] = "resourceBufferSize";
@@ -369,7 +368,7 @@ BuildObjectForResourceRequest(const ResourceRequest& request) {
     Vector<char> bytes;
     request.HttpBody()->Flatten(bytes);
     request_object->setPostData(
-        String::FromUTF8WithLatin1Fallback(bytes.Data(), bytes.size()));
+        String::FromUTF8WithLatin1Fallback(bytes.data(), bytes.size()));
   }
   return request_object;
 }
@@ -630,7 +629,7 @@ void InspectorNetworkAgent::WillSendRequestInternal(
           initiator_info);
   if (initiator_info.name == FetchInitiatorTypeNames::document) {
     FrameNavigationInitiatorMap::iterator it =
-        frame_navigation_initiator_map_.Find(frame_id);
+        frame_navigation_initiator_map_.find(frame_id);
     if (it != frame_navigation_initiator_map_.end())
       initiator_object = it->value->clone();
   }
@@ -704,10 +703,6 @@ void InspectorNetworkAgent::WillSendRequest(
     request.AddHTTPHeaderField(
         HTTPNames::X_DevTools_Emulate_Network_Conditions_Client_Id,
         AtomicString(host_id_));
-
-  request.SetHTTPHeaderField(
-      HTTPNames::X_DevTools_Request_Id,
-      AtomicString(IdentifiersFactory::RequestId(identifier)));
 }
 
 void InspectorNetworkAgent::MarkResourceAsCached(unsigned long identifier) {
@@ -973,18 +968,9 @@ void InspectorNetworkAgent::DidFinishXHRInternal(ExecutionContext* context,
   DelayedRemoveReplayXHR(xhr);
 
   ThreadableLoaderClientRequestIdMap::iterator it =
-      known_request_id_map_.Find(client);
+      known_request_id_map_.find(client);
   if (it == known_request_id_map_.end())
     return;
-
-  if (state_->booleanProperty(NetworkAgentState::kMonitoringXHR, false)) {
-    String message =
-        (success ? "XHR finished loading: " : "XHR failed loading: ") + method +
-        " \"" + url + "\".";
-    ConsoleMessage* console_message = ConsoleMessage::CreateForRequest(
-        kNetworkMessageSource, kInfoMessageLevel, message, url, it->value);
-    inspected_frames_->Root()->Console().AddMessageToStorage(console_message);
-  }
   known_request_id_map_.erase(client);
 }
 
@@ -1003,16 +989,9 @@ void InspectorNetworkAgent::DidFinishFetch(ExecutionContext* context,
                                            const AtomicString& method,
                                            const String& url) {
   ThreadableLoaderClientRequestIdMap::iterator it =
-      known_request_id_map_.Find(client);
+      known_request_id_map_.find(client);
   if (it == known_request_id_map_.end())
     return;
-
-  if (state_->booleanProperty(NetworkAgentState::kMonitoringXHR, false)) {
-    String message = "Fetch complete: " + method + " \"" + url + "\".";
-    ConsoleMessage* console_message = ConsoleMessage::CreateForRequest(
-        kNetworkMessageSource, kInfoMessageLevel, message, url, it->value);
-    inspected_frames_->Root()->Console().AddMessageToStorage(console_message);
-  }
   known_request_id_map_.erase(client);
 }
 
@@ -1029,7 +1008,7 @@ void InspectorNetworkAgent::WillDispatchEventSourceEvent(
     const AtomicString& event_id,
     const String& data) {
   ThreadableLoaderClientRequestIdMap::iterator it =
-      known_request_id_map_.Find(event_source);
+      known_request_id_map_.find(event_source);
   if (it == known_request_id_map_.end())
     return;
   GetFrontend()->eventSourceMessageReceived(
@@ -1242,7 +1221,7 @@ Response InspectorNetworkAgent::disable() {
   state_->setString(NetworkAgentState::kUserAgentOverride, "");
   instrumenting_agents_->removeInspectorNetworkAgent(this);
   resources_data_->Clear();
-  known_request_id_map_.Clear();
+  known_request_id_map_.clear();
   return Response::OK();
 }
 
@@ -1301,8 +1280,7 @@ void InspectorNetworkAgent::getResponseBody(
     return;
   }
 
-  // XHR with ResponseTypeBlob should be returned as blob.
-  if (resource_data->XhrReplayData() && CanGetResponseBodyBlob(request_id)) {
+  if (CanGetResponseBodyBlob(request_id)) {
     GetResponseBodyBlob(request_id, std::move(callback));
     return;
   }
@@ -1338,11 +1316,6 @@ void InspectorNetworkAgent::getResponseBody(
       callback->sendSuccess(content, base64_encoded);
       return;
     }
-  }
-
-  if (CanGetResponseBodyBlob(request_id)) {
-    GetResponseBodyBlob(request_id, std::move(callback));
-    return;
   }
 
   callback->sendFailure(
@@ -1391,11 +1364,6 @@ Response InspectorNetworkAgent::replayXHR(const String& request_id) {
   return Response::OK();
 }
 
-Response InspectorNetworkAgent::setMonitoringXHREnabled(bool enabled) {
-  state_->setBoolean(NetworkAgentState::kMonitoringXHR, enabled);
-  return Response::OK();
-}
-
 Response InspectorNetworkAgent::canClearBrowserCache(bool* result) {
   *result = true;
   return Response::OK();
@@ -1421,7 +1389,7 @@ Response InspectorNetworkAgent::emulateNetworkConditions(
   // TODO(dgozman): networkStateNotifier is per-process. It would be nice to
   // have per-frame override instead.
   if (offline || latency || download_throughput || upload_throughput)
-    GetNetworkStateNotifier().SetOverride(
+    GetNetworkStateNotifier().SetNetworkConnectionInfoOverride(
         !offline, type, download_throughput / (1024 * 1024 / 8));
   else
     GetNetworkStateNotifier().ClearOverride();
@@ -1550,7 +1518,7 @@ bool InspectorNetworkAgent::CacheDisabled() {
 }
 
 void InspectorNetworkAgent::RemoveFinishedReplayXHRFired(TimerBase*) {
-  replay_xhrs_to_be_deleted_.Clear();
+  replay_xhrs_to_be_deleted_.clear();
 }
 
 InspectorNetworkAgent::InspectorNetworkAgent(InspectedFrames* inspected_frames)

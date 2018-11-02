@@ -16,12 +16,14 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/sequenced_worker_pool_owner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/ntp_tiles/constants.h"
 #include "components/ntp_tiles/json_unsafe_parser.h"
 #include "components/ntp_tiles/pref_names.h"
@@ -59,7 +61,7 @@ using TestPopularSiteVector = std::vector<TestPopularSite>;
 }
 
 size_t GetNumberOfDefaultPopularSitesForPlatform() {
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
   return 8ul;
 #else
   return 0ul;
@@ -264,7 +266,7 @@ TEST_F(PopularSitesTest, AddsIconResourcesToDefaultPages) {
   std::unique_ptr<PopularSites> popular_sites =
       CreatePopularSites(url_request_context.get());
 
-#if defined(GOOGLE_CHROME_BUILD) && (defined(OS_ANDROID) || defined(OS_IOS))
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_ANDROID)
   ASSERT_FALSE(popular_sites->sites().empty());
   for (const auto& site : popular_sites->sites()) {
     EXPECT_THAT(site.default_icon_resource, Gt(0));
@@ -456,6 +458,19 @@ TEST_F(PopularSitesTest, RefetchesAfterFallback) {
               Eq(base::Optional<bool>(true)));
   ASSERT_THAT(sites.size(), Eq(1u));
   EXPECT_THAT(sites[0].url, URLEq("https://www.chromium.org/"));
+}
+
+TEST_F(PopularSitesTest, ShouldOverrideDirectory) {
+  SetCountryAndVersion("ZZ", "9");
+  prefs_->SetString(prefs::kPopularSitesOverrideDirectory, "foo/bar/");
+  RespondWithJSON("https://www.gstatic.com/foo/bar/suggested_sites_ZZ_9.json",
+                  {kWikipedia});
+
+  PopularSites::SitesVector sites;
+  EXPECT_THAT(FetchPopularSites(/*force_download=*/false, &sites),
+              Eq(base::Optional<bool>(true)));
+
+  EXPECT_THAT(sites.size(), Eq(1u));
 }
 
 }  // namespace

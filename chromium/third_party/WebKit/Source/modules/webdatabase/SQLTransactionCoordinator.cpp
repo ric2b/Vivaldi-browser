@@ -75,7 +75,7 @@ void SQLTransactionCoordinator::AcquireLock(
   String db_identifier = GetDatabaseIdentifier(transaction);
 
   CoordinationInfoHeapMap::iterator coordination_info_iterator =
-      coordination_info_map_.Find(db_identifier);
+      coordination_info_map_.find(db_identifier);
   if (coordination_info_iterator == coordination_info_map_.end()) {
     // No pending transactions for this DB
     CoordinationInfo& info =
@@ -98,7 +98,7 @@ void SQLTransactionCoordinator::ReleaseLock(
   String db_identifier = GetDatabaseIdentifier(transaction);
 
   CoordinationInfoHeapMap::iterator coordination_info_iterator =
-      coordination_info_map_.Find(db_identifier);
+      coordination_info_map_.find(db_identifier);
   SECURITY_DCHECK(coordination_info_iterator != coordination_info_map_.end());
   CoordinationInfo& info = coordination_info_iterator->value;
 
@@ -146,7 +146,7 @@ void SQLTransactionCoordinator::Shutdown() {
   }
 
   // Clean up all pending transactions for all databases
-  coordination_info_map_.Clear();
+  coordination_info_map_.clear();
 }
 
 }  // namespace blink

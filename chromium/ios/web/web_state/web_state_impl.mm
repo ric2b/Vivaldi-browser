@@ -22,22 +22,21 @@
 #include "ios/web/public/url_util.h"
 #import "ios/web/public/web_client.h"
 #import "ios/web/public/web_state/context_menu_params.h"
-#include "ios/web/public/web_state/credential.h"
 #import "ios/web/public/web_state/ui/crw_content_view.h"
 #import "ios/web/public/web_state/web_state_delegate.h"
+#include "ios/web/public/web_state/web_state_interface_provider.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #import "ios/web/public/web_state/web_state_policy_decider.h"
 #include "ios/web/public/web_thread.h"
 #include "ios/web/public/webui/web_ui_ios_controller.h"
 #include "ios/web/web_state/global_web_state_event_tracker.h"
-#include "ios/web/web_state/navigation_context_impl.h"
+#import "ios/web/web_state/navigation_context_impl.h"
 #import "ios/web/web_state/session_certificate_policy_cache_impl.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/ui/crw_web_controller_container_view.h"
 #include "ios/web/webui/web_ui_ios_controller_factory_registry.h"
 #include "ios/web/webui/web_ui_ios_impl.h"
 #include "net/http/http_response_headers.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 
 namespace web {
 
@@ -166,29 +165,6 @@ void WebStateImpl::SetWebController(CRWWebController* web_controller) {
   web_controller_.reset([web_controller retain]);
 }
 
-void WebStateImpl::OnNavigationCommitted(const GURL& url) {
-  std::unique_ptr<NavigationContext> context =
-      NavigationContextImpl::CreateNavigationContext(this, url,
-                                                     GetHttpResponseHeaders());
-  for (auto& observer : observers_)
-    observer.DidFinishNavigation(context.get());
-}
-
-void WebStateImpl::OnSameDocumentNavigation(const GURL& url) {
-  std::unique_ptr<NavigationContext> context =
-      NavigationContextImpl::CreateSameDocumentNavigationContext(this, url);
-  for (auto& observer : observers_)
-    observer.DidFinishNavigation(context.get());
-}
-
-void WebStateImpl::OnErrorPageNavigation(const GURL& url) {
-  std::unique_ptr<NavigationContext> context =
-      NavigationContextImpl::CreateErrorPageNavigationContext(
-          this, url, GetHttpResponseHeaders());
-  for (auto& observer : observers_)
-    observer.DidFinishNavigation(context.get());
-}
-
 void WebStateImpl::OnTitleChanged() {
   for (auto& observer : observers_)
     observer.TitleWasSet();
@@ -276,47 +252,6 @@ void WebStateImpl::OnFaviconUrlUpdated(
     const std::vector<FaviconURL>& candidates) {
   for (auto& observer : observers_)
     observer.FaviconUrlUpdated(candidates);
-}
-
-void WebStateImpl::OnCredentialsRequested(
-    int request_id,
-    const GURL& source_url,
-    bool unmediated,
-    const std::vector<std::string>& federations,
-    bool user_interaction) {
-  for (auto& observer : observers_) {
-    observer.CredentialsRequested(request_id, source_url, unmediated,
-                                  federations, user_interaction);
-  }
-}
-
-void WebStateImpl::OnSignedIn(int request_id,
-                              const GURL& source_url,
-                              const web::Credential& credential) {
-  for (auto& observer : observers_)
-    observer.SignedIn(request_id, source_url, credential);
-}
-
-void WebStateImpl::OnSignedIn(int request_id, const GURL& source_url) {
-  for (auto& observer : observers_)
-    observer.SignedIn(request_id, source_url);
-}
-
-void WebStateImpl::OnSignedOut(int request_id, const GURL& source_url) {
-  for (auto& observer : observers_)
-    observer.SignedOut(request_id, source_url);
-}
-
-void WebStateImpl::OnSignInFailed(int request_id,
-                                  const GURL& source_url,
-                                  const web::Credential& credential) {
-  for (auto& observer : observers_)
-    observer.SignInFailed(request_id, source_url, credential);
-}
-
-void WebStateImpl::OnSignInFailed(int request_id, const GURL& source_url) {
-  for (auto& observer : observers_)
-    observer.SignInFailed(request_id, source_url);
 }
 
 void WebStateImpl::OnDocumentSubmitted(const std::string& form_name,
@@ -582,12 +517,12 @@ bool WebStateImpl::ShouldAllowResponse(NSURLResponse* response) {
 
 #pragma mark - RequestTracker management
 
-service_manager::InterfaceRegistry* WebStateImpl::GetMojoInterfaceRegistry() {
-  if (!mojo_interface_registry_) {
-    mojo_interface_registry_ =
-        base::MakeUnique<service_manager::InterfaceRegistry>(std::string());
+WebStateInterfaceProvider* WebStateImpl::GetWebStateInterfaceProvider() {
+  if (!web_state_interface_provider_) {
+    web_state_interface_provider_ =
+        base::MakeUnique<WebStateInterfaceProvider>();
   }
-  return mojo_interface_registry_.get();
+  return web_state_interface_provider_.get();
 }
 
 base::WeakPtr<WebState> WebStateImpl::AsWeakPtr() {
@@ -650,6 +585,7 @@ WebStateImpl::GetSessionCertificatePolicyCache() {
 }
 
 CRWSessionStorage* WebStateImpl::BuildSessionStorage() {
+  [web_controller_ recordStateInHistory];
   SessionStorageBuilder session_storage_builder;
   return session_storage_builder.BuildStorage(this);
 }
@@ -734,9 +670,14 @@ bool WebStateImpl::HasOpener() const {
   return created_with_opener_;
 }
 
-void WebStateImpl::OnProvisionalNavigationStarted(const GURL& url) {
+void WebStateImpl::OnNavigationStarted(web::NavigationContext* context) {
   for (auto& observer : observers_)
-    observer.ProvisionalNavigationStarted(url);
+    observer.DidStartNavigation(context);
+}
+
+void WebStateImpl::OnNavigationFinished(web::NavigationContext* context) {
+  for (auto& observer : observers_)
+    observer.DidFinishNavigation(context);
 }
 
 #pragma mark - NavigationManagerDelegate implementation

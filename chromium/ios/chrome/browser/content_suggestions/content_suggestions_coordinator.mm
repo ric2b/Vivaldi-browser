@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/content_suggestions/content_suggestions_coordinator.h"
 
+#include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -21,7 +22,7 @@
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_article_item.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestion_identifier.h"
@@ -48,7 +49,7 @@
 - (void)openNewTabWithURL:(const GURL&)URL incognito:(BOOL)incognito;
 // Dismisses the |article|, removing it from the content service, and dismisses
 // the item at |indexPath| in the view controller.
-- (void)dismissArticle:(ContentSuggestionsArticleItem*)article
+- (void)dismissArticle:(ContentSuggestionsItem*)article
            atIndexPath:(NSIndexPath*)indexPath;
 
 @end
@@ -123,10 +124,13 @@
                                commandWithTag:IDC_SHOW_READING_LIST]];
 }
 
-- (void)openURL:(const GURL&)URL {
+- (void)openPageForItem:(CollectionViewItem*)item {
   // TODO(crbug.com/691979): Add metrics.
 
-  [self.URLLoader loadURL:URL
+  ContentSuggestionsItem* suggestionItem =
+      base::mac::ObjCCastStrict<ContentSuggestionsItem>(item);
+
+  [self.URLLoader loadURL:suggestionItem.URL
                  referrer:web::Referrer()
                transition:ui::PAGE_TRANSITION_AUTO_BOOKMARK
         rendererInitiated:NO];
@@ -134,9 +138,11 @@
   [self stop];
 }
 
-- (void)displayContextMenuForArticle:(ContentSuggestionsArticleItem*)articleItem
+- (void)displayContextMenuForArticle:(CollectionViewItem*)item
                              atPoint:(CGPoint)touchLocation
                          atIndexPath:(NSIndexPath*)indexPath {
+  ContentSuggestionsItem* articleItem =
+      base::mac::ObjCCastStrict<ContentSuggestionsItem>(item);
   self.alertCoordinator = [[ActionSheetCoordinator alloc]
       initWithBaseViewController:self.navigationController
                            title:nil
@@ -146,9 +152,9 @@
                             view:self.suggestionsViewController.collectionView];
 
   __weak ContentSuggestionsCoordinator* weakSelf = self;
-  GURL articleURL = articleItem.articleURL;
+  GURL articleURL = articleItem.URL;
   NSString* articleTitle = articleItem.title;
-  __weak ContentSuggestionsArticleItem* weakArticle = articleItem;
+  __weak ContentSuggestionsItem* weakArticle = articleItem;
 
   NSString* openInNewTabTitle =
       l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB);
@@ -230,7 +236,7 @@
   [self stop];
 }
 
-- (void)dismissArticle:(ContentSuggestionsArticleItem*)article
+- (void)dismissArticle:(ContentSuggestionsItem*)article
            atIndexPath:(NSIndexPath*)indexPath {
   if (!article)
     return;

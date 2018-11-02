@@ -224,10 +224,14 @@ void AddChromeWorkItems(const InstallationState& original_state,
 
   install_list->AddDeleteTreeWorkItem(new_chrome_exe, temp_path);
 
+  // For Vivaldi, always copy file to destination. We terminate all processes
+  // before updating so no need to check if file in use.
   install_list->AddCopyTreeWorkItem(
       src_path.Append(installer::kChromeExe).value(),
       target_path.Append(installer::kChromeExe).value(), temp_path.value(),
-      WorkItem::NEW_NAME_IF_IN_USE, new_chrome_exe.value());
+      installer_state.is_vivaldi() ? WorkItem::ALWAYS :
+          WorkItem::NEW_NAME_IF_IN_USE,
+      new_chrome_exe.value());
 
   // Install kVisualElementsManifest if it is present in |src_path|. No need to
   // make this a conditional work item as if the file is not there now, it will
@@ -285,20 +289,6 @@ void AddChromeWorkItems(const InstallationState& original_state,
       temp_path.value(),
       check_for_duplicates ? WorkItem::CHECK_DUPLICATES :
                              WorkItem::ALWAYS_MOVE);
-
-  // Notify the shell of renaming the folder. This is for fixing an issue that
-  // the temp folder (e.g., "\Temp\source30163_39131\Chrome-bin\...") shows up
-  // in the callstack backtrace. (https://crbug.com/710698)
-  install_list->AddCallbackWorkItem(base::Bind(
-      [](const base::FilePath& src, const base::FilePath& target,
-         const CallbackWorkItem& work_item) {
-        if (!work_item.IsRollback()) {
-          SHChangeNotify(SHCNE_RENAMEFOLDER, SHCNF_PATH | SHCNF_FLUSHNOWAIT,
-                         src.value().c_str(), target.value().c_str());
-        }
-        return true;
-      },
-      src_path, target_path));
 
   // Delete any old_chrome.exe if present (ignore failure if it's in use).
   install_list

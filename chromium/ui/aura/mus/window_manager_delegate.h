@@ -39,6 +39,8 @@ namespace aura {
 class Window;
 class WindowTreeHostMus;
 
+struct WindowTreeHostMusInitParams;
+
 // See the mojom with the same name for details on the functions in this
 // interface.
 class AURA_EXPORT WindowManagerClient {
@@ -46,7 +48,7 @@ class AURA_EXPORT WindowManagerClient {
   virtual void SetFrameDecorationValues(
       ui::mojom::FrameDecorationValuesPtr values) = 0;
   virtual void SetNonClientCursor(Window* window,
-                                  ui::mojom::CursorType non_client_cursor) = 0;
+                                  const ui::CursorData& non_client_cursor) = 0;
 
   virtual void AddAccelerators(
       std::vector<ui::mojom::WmAcceleratorPtr> accelerators,
@@ -58,13 +60,36 @@ class AURA_EXPORT WindowManagerClient {
   virtual void SetExtendedHitArea(Window* window,
                                   const gfx::Insets& hit_area) = 0;
 
+  // Queues changes to the cursor instead of applying them instantly. Queued
+  // changes will be executed on UnlockCursor().
+  virtual void LockCursor() = 0;
+
+  // Executes queued changes.
+  virtual void UnlockCursor() = 0;
+
+  // Globally shows or hides the cursor.
+  virtual void SetCursorVisible(bool visible) = 0;
+
+  // Sets a cursor which is used instead of the per window cursors. Pass a
+  // nullopt in |cursor| to clear the override.
+  virtual void SetGlobalOverrideCursor(
+      base::Optional<ui::CursorData> cursor) = 0;
+
   // Requests the client embedded in |window| to close the window. Only
   // applicable to top-level windows. If a client is not embedded in |window|,
   // this does nothing.
   virtual void RequestClose(Window* window) = 0;
 
-  // Blocks until the initial displays have been received.
+  // Blocks until the initial displays have been received, or if displays are
+  // not automatically created until the connection to mus has been
+  // established.
   virtual bool WaitForInitialDisplays() = 0;
+
+  // Used by the window manager to create a new display. This is only useful if
+  // the WindowTreeClient was configured not to automatically create displays
+  // (see ConnectAsWindowManager()). The caller needs to configure
+  // DisplayInitParams on the returned object.
+  virtual WindowTreeHostMusInitParams CreateInitParamsForNewDisplay() = 0;
 
  protected:
   virtual ~WindowManagerClient() {}
@@ -78,6 +103,9 @@ class AURA_EXPORT WindowManagerDelegate {
   // Called once to give the delegate access to functions only exposed to
   // the WindowManager.
   virtual void SetWindowManagerClient(WindowManagerClient* client) = 0;
+
+  // Called when the connection to mus has been fully established.
+  virtual void OnWmConnected();
 
   // A client requested the bounds of |window| to change to |bounds|.
   virtual void OnWmSetBounds(Window* window, const gfx::Rect& bounds) = 0;

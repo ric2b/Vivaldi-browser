@@ -31,7 +31,7 @@ DirectCompositorFrameSink::DirectCompositorFrameSink(
       surface_manager_(surface_manager),
       display_(display) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  capabilities_.can_force_reclaim_resources = true;
+  capabilities_.must_always_swap = true;
   // Display and DirectCompositorFrameSink share a GL context, so sync
   // points aren't needed when passing resources between them.
   capabilities_.delegated_sync_points_required = false;
@@ -47,7 +47,7 @@ DirectCompositorFrameSink::DirectCompositorFrameSink(
       surface_manager_(surface_manager),
       display_(display) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  capabilities_.can_force_reclaim_resources = true;
+  capabilities_.must_always_swap = true;
 }
 
 DirectCompositorFrameSink::~DirectCompositorFrameSink() {
@@ -99,19 +99,23 @@ void DirectCompositorFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
             frame.metadata.begin_frame_ack.sequence_number);
 
   gfx::Size frame_size = frame.render_pass_list.back()->output_rect.size();
-  if (frame_size.IsEmpty() || frame_size != last_swap_frame_size_) {
-    delegated_local_surface_id_ = local_surface_id_allocator_.GenerateId();
+  if (!local_surface_id_.is_valid() || frame_size != last_swap_frame_size_ ||
+      frame.metadata.device_scale_factor != device_scale_factor_) {
+    local_surface_id_ = local_surface_id_allocator_.GenerateId();
     last_swap_frame_size_ = frame_size;
+    device_scale_factor_ = frame.metadata.device_scale_factor;
+    display_->SetLocalSurfaceId(local_surface_id_, device_scale_factor_);
   }
-  display_->SetLocalSurfaceId(delegated_local_surface_id_,
-                              frame.metadata.device_scale_factor);
 
-  support_->SubmitCompositorFrame(delegated_local_surface_id_,
-                                  std::move(frame));
+  bool result =
+      support_->SubmitCompositorFrame(local_surface_id_, std::move(frame));
+  DCHECK(result);
 }
 
-void DirectCompositorFrameSink::ForceReclaimResources() {
-  support_->ForceReclaimResources();
+void DirectCompositorFrameSink::DidNotProduceFrame(const BeginFrameAck& ack) {
+  DCHECK(!ack.has_damage);
+  DCHECK_LE(BeginFrameArgs::kStartingFrameNumber, ack.sequence_number);
+  support_->DidNotProduceFrame(ack);
 }
 
 void DirectCompositorFrameSink::DisplayOutputSurfaceLost() {
@@ -154,12 +158,6 @@ void DirectCompositorFrameSink::WillDrawSurface(
 
 void DirectCompositorFrameSink::OnNeedsBeginFrames(bool needs_begin_frame) {
   support_->SetNeedsBeginFrame(needs_begin_frame);
-}
-
-void DirectCompositorFrameSink::OnDidFinishFrame(const BeginFrameAck& ack) {
-  // If there was damage, SubmitCompositorFrame includes the ack.
-  if (!ack.has_damage)
-    support_->BeginFrameDidNotSwap(ack);
 }
 
 }  // namespace cc

@@ -11,7 +11,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(
     dom_distiller::DistillabilityDriver);
@@ -54,7 +54,8 @@ DistillabilityDriver::~DistillabilityDriver() {
 }
 
 void DistillabilityDriver::CreateDistillabilityService(
-    mojo::InterfaceRequest<mojom::DistillabilityService> request) {
+    const service_manager::BindSourceInfo& source_info,
+    mojom::DistillabilityServiceRequest request) {
   mojo::MakeStrongBinding(
       base::MakeUnique<DistillabilityServiceImpl>(weak_factory_.GetWeakPtr()),
       std::move(request));

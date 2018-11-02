@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//android_webview/webview_repack_locales_list.gni")
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
 import("//build/util/process_version.gni")
@@ -11,7 +10,7 @@ import("//chrome/android/monochrome_android_manifest_jinja_variables.gni")
 import("//chrome/chrome_paks.gni")
 import("//chrome/common/features.gni")
 import("//chrome/process_version_rc_template.gni")  # For branding_file_path.
-import("//device/vr/features.gni")
+import("//device/vr/features/features.gni")
 import("//testing/test.gni")
 import("//third_party/icu/config.gni")
 import("//third_party/protobuf/proto_library.gni")
@@ -167,6 +166,7 @@ android_library("chrome_java") {
     ":chrome_public_android_manifest",
     ":chrome_public_apk_template_resources",
     ":document_tab_model_info_proto_java",
+    ":partner_location_descriptor_proto_java",
     "//base:base_java",
     "//chrome/android/webapk/libs/client:client_java",
     "//chrome/android/webapk/libs/common:common_java",
@@ -174,6 +174,7 @@ android_library("chrome_java") {
     "//components/autofill/android:autofill_java",
     "//components/background_task_scheduler:background_task_scheduler_java",
     "//components/bookmarks/common/android:bookmarks_java",
+    "//components/crash/android:java",
     "//components/dom_distiller/content/browser/android:dom_distiller_content_java",
     "//components/dom_distiller/core/android:dom_distiller_core_java",
     "//components/feature_engagement_tracker:feature_engagement_tracker_java",
@@ -185,20 +186,18 @@ android_library("chrome_java") {
     "//components/navigation_interception/android:navigation_interception_java",
     "//components/ntp_tiles/android:ntp_tiles_java",
     "//components/offline_items_collection/core:core_java",
-    "//components/payments/content:mojom_java",
-    "//components/payments/content:mojom_parser_java",
     "//components/payments/content/android:java",
+    "//components/payments/mojom:mojom_java",
+    "//components/payments/mojom:mojom_parser_java",
     "//components/policy/android:policy_java",
     "//components/precache/android:precache_java",
     "//components/safe_browsing_db/android:safe_browsing_java",
-    "//components/safe_json/android:safe_json_java",
     "//components/safe_json/android:safe_json_java",
     "//components/signin/core/browser/android:java",
     "//components/spellcheck/browser/android:java",
     "//components/sync/android:sync_java",
     "//components/url_formatter/android:url_formatter_java",
     "//components/variations/android:variations_java",
-    "//components/web_contents_delegate_android:web_contents_delegate_android_java",
     "//components/web_contents_delegate_android:web_contents_delegate_android_java",
     "//components/web_restrictions:web_restrictions_java",
     "//content/public/android:content_java",
@@ -213,10 +212,10 @@ android_library("chrome_java") {
     "//printing:printing_java",
     "//services/service_manager/public/interfaces:interfaces_java",
     "//services/service_manager/public/java:service_manager_java",
+    "//services/shape_detection:shape_detection_java",
     "//services/shape_detection/public/interfaces:interfaces_java",
     "//third_party/WebKit/public:android_mojo_bindings_java",
     "//third_party/WebKit/public:blink_headers_java",
-    "//third_party/WebKit/public:mojo_bindings_java",
     "//third_party/android_data_chart:android_data_chart_java",
     "//third_party/android_media:android_media_java",
     "//third_party/android_protobuf:protobuf_nano_javalib",
@@ -254,7 +253,9 @@ android_library("chrome_java") {
     "//chrome:offline_pages_enum_javagen",
     "//chrome:page_info_connection_type_javagen",
     "//chrome:page_info_action_javagen",
+    "//chrome:payments_journey_logger_enum_javagen",
     "//chrome:quick_action_category_enum_javagen",
+    "//chrome:sad_tab_event_enum_javagen",
     "//chrome:signin_metrics_enum_javagen",
     "//components/browsing_data/core:browsing_data_utils_java",
     "//components/browsing_data/core:clear_browsing_data_tab_java",
@@ -264,6 +265,7 @@ android_library("chrome_java") {
     "//components/offline_pages/core:offline_page_model_enums_java",
     "//components/omnibox/browser:autocomplete_match_javagen",
     "//components/omnibox/browser:autocomplete_match_type_javagen",
+    "//components/search_engines:search_engine_type_java",
     "//components/security_state/core:security_state_enums_java",
     "//components/signin/core/browser:investigated_scenario_java",
     "//components/supervised_user_error_page:enums_srcjar",
@@ -310,6 +312,7 @@ java_cpp_enum("chrome_android_java_enums_srcjar") {
     "//chrome/browser/notifications/notification_platform_bridge_android.cc",
     "//chrome/browser/ntp_snippets/ntp_snippets_metrics.h",
     "//chrome/browser/profiles/profile_metrics.h",
+    "//chrome/browser/translate/android/translate_utils.h",
     "//chrome/browser/ui/android/infobars/infobar_android.h",
   ]
 }
@@ -321,11 +324,18 @@ proto_java_library("document_tab_model_info_proto_java") {
   ]
 }
 
+proto_java_library("partner_location_descriptor_proto_java") {
+  proto_path = "java/src/org/chromium/chrome/browser/omnibox/geo"
+  sources = [
+    "$proto_path/partner_location_descriptor.proto",
+  ]
+}
+
 java_cpp_template("resource_id_javagen") {
   sources = [
     "java/ResourceId.template",
   ]
-  package_name = "org/chromium/chrome/browser"
+  package_path = "org/chromium/chrome/browser"
   inputs = [
     "../browser/android/resource_id.h",
   ]
@@ -338,19 +348,21 @@ junit_binary("chrome_junit_tests") {
     ":app_hooks_java",
     ":chrome_java",
     ":chrome_java_resources",
+    ":partner_location_descriptor_proto_java",
     "//base:base_java",
     "//base:base_java_test_support",
     "//chrome/android/webapk/libs/client:client_java",
     "//chrome/android/webapk/libs/common:common_java",
     "//chrome/android/webapk/test:junit_test_support",
     "//chrome/test/android:chrome_java_test_support",
+    "//components/background_task_scheduler:background_task_scheduler_java",
     "//components/bookmarks/common/android:bookmarks_java",
     "//components/invalidation/impl:java",
     "//components/minidump_uploader:minidump_uploader_java",
     "//components/offline_items_collection/core:core_java",
-    "//components/payments/content:mojom_java",
-    "//components/payments/content:mojom_parser_java",
     "//components/payments/content/android:java",
+    "//components/payments/mojom:mojom_java",
+    "//components/payments/mojom:mojom_parser_java",
     "//components/signin/core/browser/android:java",
     "//components/signin/core/browser/android:signin_java_test_support",
     "//components/sync:sync_java_test_support",
@@ -365,18 +377,21 @@ junit_binary("chrome_junit_tests") {
     "//net/android:net_java",
     "//third_party/WebKit/public:android_mojo_bindings_java",
     "//third_party/WebKit/public:blink_headers_java",
-    "//third_party/WebKit/public:mojo_bindings_java",
+    "//third_party/android_protobuf:protobuf_nano_javalib",
     "//third_party/android_tools:android_support_annotations_java",
     "//third_party/android_tools:android_support_v7_appcompat_java",
     "//third_party/android_tools:android_support_v7_mediarouter_java",
     "//third_party/android_tools:android_support_v7_recyclerview_java",
     "//third_party/cacheinvalidation:cacheinvalidation_javalib",
+    "//third_party/custom_tabs_client:custom_tabs_support_java",
     "//third_party/hamcrest:hamcrest_java",
     "//ui/android:ui_java",
     "//url/mojo:url_mojom_gurl_java",
     google_play_services_library,
   ]
   srcjar_deps = [ "//base:base_build_config_gen" ]
+
+  package_name = manifest_package
 }
 
 chrome_version_java_dir = "$root_gen_dir/templates/chrome_version_java"
@@ -421,6 +436,7 @@ android_library("chrome_test_java") {
   }
 
   deps = [
+    ":partner_location_descriptor_proto_java",
     "//base:base_java",
     "//base:base_java_test_support",
     "//chrome/android:app_hooks_java",
@@ -433,6 +449,7 @@ android_library("chrome_test_java") {
     "//components/background_task_scheduler:background_task_scheduler_java",
     "//components/background_task_scheduler:background_task_scheduler_javatests",
     "//components/bookmarks/common/android:bookmarks_java",
+    "//components/crash/android:javatests",
     "//components/dom_distiller/core/android:dom_distiller_core_java",
     "//components/gcm_driver/android:gcm_driver_java",
     "//components/gcm_driver/instance_id/android:instance_id_driver_java",
@@ -444,10 +461,11 @@ android_library("chrome_test_java") {
     "//components/minidump_uploader:minidump_uploader_javatests",
     "//components/navigation_interception/android:navigation_interception_java",
     "//components/offline_items_collection/core:core_java",
-    "//components/payments/content:mojom_java",
-    "//components/payments/content:mojom_parser_java",
     "//components/payments/content/android:java",
+    "//components/payments/mojom:mojom_java",
+    "//components/payments/mojom:mojom_parser_java",
     "//components/policy/android:policy_java",
+    "//components/policy/android:policy_java_test_support",
     "//components/precache/android:precache_java",
     "//components/precache/android:precache_javatests",
     "//components/signin/core/browser/android:java",
@@ -463,6 +481,7 @@ android_library("chrome_test_java") {
     "//content/public/test/android:content_java_test_support",
     "//device/geolocation:geolocation_java",
     "//device/geolocation:geolocation_java_test_support",
+    "//media/base/android:media_java",
     "//mojo/public/java:bindings_java",
     "//mojo/public/java:system_java",
     "//net/android:net_java",
@@ -470,20 +489,24 @@ android_library("chrome_test_java") {
     "//printing:printing_java",
     "//third_party/WebKit/public:android_mojo_bindings_java",
     "//third_party/WebKit/public:blink_headers_java",
-    "//third_party/WebKit/public:mojo_bindings_java",
+    "//third_party/android_protobuf:protobuf_nano_javalib",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/android_tools:android_support_annotations_java",
     "//third_party/android_tools:android_support_design_java",
     "//third_party/android_tools:android_support_transition_java",
     "//third_party/android_tools:android_support_v7_appcompat_java",
     "//third_party/android_tools:android_support_v7_recyclerview_java",
     "//third_party/cacheinvalidation:cacheinvalidation_javalib",
     "//third_party/custom_tabs_client:custom_tabs_support_java",
+    "//third_party/espresso:espresso_all_java",
     "//third_party/hamcrest:hamcrest_java",
     "//third_party/jsr-305:jsr_305_javalib",
     "//third_party/junit",
+    "//third_party/ub-uiautomator:ub_uiautomator_java",
     "//ui/android:ui_java",
     "//ui/base/mojo:mojo_bindings_java",
+    "//url/mojo:url_mojom_gurl_java",
     google_play_services_library,
   ]
 
@@ -519,9 +542,13 @@ if (enable_vr) {
 
     java_files = [
       "javatests/src/org/chromium/chrome/browser/media/RouterTestUtils.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/EmulatedVrController.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/MockVrCoreVersionCheckerImpl.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/MockVrDaydreamApi.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/VrFeedbackInfoBarTest.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/VrShellTest.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/VrShellNavigationTest.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/VrTestRule.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/VrUtils.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/WebVrTest.java",
     ]
@@ -536,9 +563,12 @@ if (enable_vr) {
       "//content/public/android:content_java",
       "//content/public/test/android:content_java_test_support",
       "//third_party/android_protobuf:protobuf_nano_javalib",
+      "//third_party/android_support_test_runner:rules_java",
       "//third_party/android_support_test_runner:runner_java",
       "//third_party/android_tools:android_support_v7_appcompat_java",
+      "//third_party/gvr-android-sdk:controller_test_api_java",
       "//third_party/gvr-android-sdk:gvr_common_java",
+      "//third_party/junit",
       "//ui/android:ui_java",
     ]
 
@@ -579,9 +609,6 @@ android_assets("chrome_public_pak_assets") {
   deps = [
     ":chrome_public_locale_pak_assets",
     "//chrome:packed_resources",
-    "//chrome/android/webapk/libs/runtime_library:runtime_library_assets",
-    "//third_party/icu:icu_assets",
-    "//v8:v8_external_startup_data_assets",
   ]
 }
 
@@ -626,7 +653,7 @@ shared_library("chrome") {
     "../browser/android/chrome_entry_point.cc",
   ]
   deps = [
-    "//build/config/sanitizers:deps",
+    "//build/config:exe_and_shlib_deps",
     "//chrome:chrome_android_core",
   ]
 
@@ -637,12 +664,12 @@ shared_library("chrome") {
         [ "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a" ]
   }
 
-  if (is_android && use_order_profiling) {
+  if (use_order_profiling) {
     deps += [ "//tools/cygprofile" ]
   }
 
-  # See crbug.com/705088 for more info.
-  if (is_android && target_cpu == "arm" && is_asan) {
+  # See crbug.com/705088, crbug.com/717815.
+  if (target_cpu == "arm" && (is_asan || use_order_profiling)) {
     ldflags = [ "-Wl,--long-plt" ]
   }
 
@@ -671,6 +698,7 @@ if (current_toolchain == default_toolchain) {
     }
   }
 
+  # This target does not output locale paks.
   chrome_paks("monochrome_paks") {
     output_dir = "$target_gen_dir/$target_name"
 
@@ -679,8 +707,7 @@ if (current_toolchain == default_toolchain) {
       "//android_webview:generate_aw_resources",
     ]
 
-    additional_locale_source_patterns = webview_repack_locales_source_patterns
-    deps += webview_repack_locales_deps
+    exclude_locale_paks = true
 
     if (enable_resource_whitelist_generation) {
       repack_whitelist = monochrome_resource_whitelist
@@ -688,18 +715,18 @@ if (current_toolchain == default_toolchain) {
     }
   }
 
+  # This target explicitly includes locale paks via deps.
   android_assets("monochrome_pak_assets") {
     sources = [
       "$target_gen_dir/monochrome_paks/chrome_100_percent.pak",
       "$target_gen_dir/monochrome_paks/resources.pak",
     ]
-    foreach(_locale, locales) {
-      sources += [ "$target_gen_dir/monochrome_paks/locales/$_locale.pak" ]
-    }
     disable_compression = true
 
     deps = [
+      ":chrome_public_locale_pak_assets",
       ":monochrome_paks",
+      "//android_webview:locale_pak_assets",
     ]
   }
 }  # current_toolchain == host_toolchain
@@ -753,7 +780,7 @@ shared_library("chrome_sync_shell") {
     "../browser/android/chrome_sync_shell_main_delegate_initializer.cc",
   ]
   deps = [
-    "//build/config/sanitizers:deps",
+    "//build/config:exe_and_shlib_deps",
     "//chrome:chrome_android_core",
     "//components/sync",
     "//components/sync:test_support_fake_server_android",

@@ -19,6 +19,8 @@ post_process_target("//extensions/renderer:renderer") {
     "//vivaldi/extensions/vivaldi_script_dispatcher.cpp",
     "//vivaldi/extensions/vivaldi_script_dispatcher.h",
   ]
+
+  deps += [ "//vivaldi/extensions:resources" ]
 }
 
 post_process_template("//chrome/common/extensions/api:api_features") {

@@ -658,12 +658,13 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 }
 
 - (NSNumber*)ariaColumnCount {
-  if (!browserAccessibility_->IsTableOrGridOrTreeGridRole())
+  if (!browserAccessibility_->IsTableLikeRole())
     return nil;
   int count = -1;
-  if (!browserAccessibility_->GetIntAttribute(
-      ui::AX_ATTR_ARIA_COL_COUNT, &count))
+  if (!browserAccessibility_->GetIntAttribute(ui::AX_ATTR_ARIA_COLUMN_COUNT,
+                                              &count)) {
     return nil;
+  }
   return [NSNumber numberWithInt:count];
 }
 
@@ -672,8 +673,9 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
     return nil;
   int index = -1;
   if (!browserAccessibility_->GetIntAttribute(
-      ui::AX_ATTR_ARIA_COL_INDEX, &index))
+          ui::AX_ATTR_ARIA_CELL_COLUMN_INDEX, &index)) {
     return nil;
+  }
   return [NSNumber numberWithInt:index];
 }
 
@@ -699,12 +701,13 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 }
 
 - (NSNumber*)ariaRowCount {
-  if (!browserAccessibility_->IsTableOrGridOrTreeGridRole())
+  if (!browserAccessibility_->IsTableLikeRole())
     return nil;
   int count = -1;
-  if (!browserAccessibility_->GetIntAttribute(
-      ui::AX_ATTR_ARIA_ROW_COUNT, &count))
+  if (!browserAccessibility_->GetIntAttribute(ui::AX_ATTR_ARIA_ROW_COUNT,
+                                              &count)) {
     return nil;
+  }
   return [NSNumber numberWithInt:count];
 }
 
@@ -712,9 +715,10 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   if (!browserAccessibility_->IsCellOrTableHeaderRole())
     return nil;
   int index = -1;
-  if (!browserAccessibility_->GetIntAttribute(
-      ui::AX_ATTR_ARIA_ROW_INDEX, &index))
+  if (!browserAccessibility_->GetIntAttribute(ui::AX_ATTR_ARIA_CELL_ROW_INDEX,
+                                              &index)) {
     return nil;
+  }
   return [NSNumber numberWithInt:index];
 }
 
@@ -778,8 +782,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 - (NSArray*)columnHeaders {
   if (![self instanceActive])
     return nil;
-  if ([self internalRole] != ui::AX_ROLE_TABLE &&
-      [self internalRole] != ui::AX_ROLE_GRID) {
+  if (!browserAccessibility_->IsTableLikeRole()) {
     return nil;
   }
 
@@ -857,7 +860,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   // Given an image where there's no other title, return the base part
   // of the filename as the description.
   if ([[self role] isEqualToString:NSAccessibilityImageRole]) {
-    if (browserAccessibility_->HasStringAttribute(ui::AX_ATTR_NAME))
+    if (browserAccessibility_->HasExplicitlyEmptyName())
       return @"";
     if ([self titleUIElement])
       return @"";
@@ -1007,8 +1010,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   if (![self instanceActive])
     return nil;
   int headerElementId = -1;
-  if ([self internalRole] == ui::AX_ROLE_TABLE ||
-      [self internalRole] == ui::AX_ROLE_GRID) {
+  if (browserAccessibility_->IsTableLikeRole()) {
     browserAccessibility_->GetIntAttribute(
         ui::AX_ATTR_TABLE_HEADER_ID, &headerElementId);
   } else if ([self internalRole] == ui::AX_ROLE_COLUMN) {
@@ -1516,8 +1518,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 - (NSArray*)rowHeaders {
   if (![self instanceActive])
     return nil;
-  if ([self internalRole] != ui::AX_ROLE_TABLE &&
-      [self internalRole] != ui::AX_ROLE_GRID) {
+  if (!browserAccessibility_->IsTableLikeRole()) {
     return nil;
   }
 
@@ -1885,22 +1886,27 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
              [role isEqualToString:NSAccessibilityRadioButtonRole] ||
              [self internalRole] == ui::AX_ROLE_MENU_ITEM_CHECK_BOX ||
              [self internalRole] == ui::AX_ROLE_MENU_ITEM_RADIO) {
-    int value = 0;
-    value = GetState(
-        browserAccessibility_, ui::AX_STATE_CHECKED) ? 1 : 0;
-    value = GetState(
-        browserAccessibility_, ui::AX_STATE_SELECTED) ?
-            1 :
-            value;
-
-    if (browserAccessibility_->GetBoolAttribute(ui::AX_ATTR_STATE_MIXED)) {
-      value = 2;
+    int value;
+    const auto checkedState = static_cast<ui::AXCheckedState>(
+        browserAccessibility_->GetIntAttribute(ui::AX_ATTR_CHECKED_STATE));
+    switch (checkedState) {
+      case ui::AX_CHECKED_STATE_TRUE:
+        value = 1;
+        break;
+      case ui::AX_CHECKED_STATE_MIXED:
+        value = 2;
+        break;
+      default:
+        value = GetState(browserAccessibility_, ui::AX_STATE_SELECTED) ? 1 : 0;
+        break;
     }
     return [NSNumber numberWithInt:value];
   } else if ([role isEqualToString:NSAccessibilityProgressIndicatorRole] ||
              [role isEqualToString:NSAccessibilitySliderRole] ||
              [role isEqualToString:NSAccessibilityIncrementorRole] ||
-             [role isEqualToString:NSAccessibilityScrollBarRole]) {
+             [role isEqualToString:NSAccessibilityScrollBarRole] ||
+             ([role isEqualToString:NSAccessibilitySplitterRole] &&
+              browserAccessibility_->HasState(ui::AX_STATE_FOCUSABLE))) {
     float floatValue;
     if (browserAccessibility_->GetFloatAttribute(
             ui::AX_ATTR_VALUE_FOR_RANGE, &floatValue)) {
@@ -2635,7 +2641,9 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   } else if ([role isEqualToString:NSAccessibilityProgressIndicatorRole] ||
              [role isEqualToString:NSAccessibilitySliderRole] ||
              [role isEqualToString:NSAccessibilityIncrementorRole] ||
-             [role isEqualToString:NSAccessibilityScrollBarRole]) {
+             [role isEqualToString:NSAccessibilityScrollBarRole] ||
+             ([role isEqualToString:NSAccessibilitySplitterRole] &&
+              browserAccessibility_->HasState(ui::AX_STATE_FOCUSABLE))) {
     [ret addObjectsFromArray:@[
       NSAccessibilityMaxValueAttribute, NSAccessibilityMinValueAttribute,
       NSAccessibilityValueDescriptionAttribute
@@ -2781,10 +2789,8 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
     return GetState(browserAccessibility_, ui::AX_STATE_FOCUSABLE);
   }
 
-  if ([attribute isEqualToString:NSAccessibilityValueAttribute]) {
-    return browserAccessibility_->GetBoolAttribute(
-        ui::AX_ATTR_CAN_SET_VALUE);
-  }
+  if ([attribute isEqualToString:NSAccessibilityValueAttribute])
+    return browserAccessibility_->HasAction(ui::AX_ACTION_SET_VALUE);
 
   if ([attribute isEqualToString:NSAccessibilitySelectedTextRangeAttribute] &&
       browserAccessibility_->HasState(ui::AX_STATE_EDITABLE)) {

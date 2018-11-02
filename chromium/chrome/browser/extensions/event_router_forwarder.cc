@@ -83,9 +83,9 @@ void EventRouterForwarder::HandleEvent(
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&EventRouterForwarder::HandleEvent, this, extension_id,
-                   histogram_value, event_name, base::Passed(&event_args),
-                   profile_ptr, use_profile_to_restrict_events, event_url));
+        base::BindOnce(&EventRouterForwarder::HandleEvent, this, extension_id,
+                       histogram_value, event_name, base::Passed(&event_args),
+                       profile_ptr, use_profile_to_restrict_events, event_url));
     return;
   }
 
@@ -132,9 +132,8 @@ void EventRouterForwarder::CallEventRouter(
     return;
 #endif
 
-  std::unique_ptr<Event> event(
-      new Event(histogram_value, event_name, std::move(event_args)));
-  event->restrict_to_browser_context = restrict_to_profile;
+  auto event = base::MakeUnique<Event>(
+      histogram_value, event_name, std::move(event_args), restrict_to_profile);
   event->event_url = event_url;
   if (extension_id.empty()) {
     extensions::EventRouter::Get(profile)->BroadcastEvent(std::move(event));

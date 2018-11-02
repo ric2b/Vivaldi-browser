@@ -6,6 +6,7 @@
 #define MEDIA_MOJO_CLIENTS_MOJO_DECODER_FACTORY_H_
 
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "media/base/decoder_factory.h"
 #include "services/service_manager/public/interfaces/interface_provider.mojom.h"
 
@@ -19,12 +20,12 @@ class MojoDecoderFactory : public DecoderFactory {
 
   void CreateAudioDecoders(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      ScopedVector<AudioDecoder>* audio_decoders) final;
+      std::vector<std::unique_ptr<AudioDecoder>>* audio_decoders) final;
 
   void CreateVideoDecoders(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       GpuVideoAcceleratorFactories* gpu_factories,
-      ScopedVector<VideoDecoder>* video_decoders) final;
+      std::vector<std::unique_ptr<VideoDecoder>>* video_decoders) final;
 
  private:
   service_manager::mojom::InterfaceProvider* interface_provider_;

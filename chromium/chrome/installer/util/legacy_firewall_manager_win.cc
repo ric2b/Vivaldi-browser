@@ -4,6 +4,8 @@
 
 #include "chrome/installer/util/legacy_firewall_manager_win.h"
 
+#include <objbase.h>
+
 #include "base/logging.h"
 #include "base/win/scoped_bstr.h"
 
@@ -16,23 +18,24 @@ LegacyFirewallManager::~LegacyFirewallManager() {}
 bool LegacyFirewallManager::Init(const base::string16& app_name,
                                  const base::FilePath& app_path) {
   base::win::ScopedComPtr<INetFwMgr> firewall_manager;
-  HRESULT hr = firewall_manager.CreateInstance(CLSID_NetFwMgr);
+  HRESULT hr = ::CoCreateInstance(CLSID_NetFwMgr, nullptr, CLSCTX_ALL,
+                                  IID_PPV_ARGS(&firewall_manager));
   if (FAILED(hr)) {
     DLOG(ERROR) << logging::SystemErrorCodeToString(hr);
     return false;
   }
 
   base::win::ScopedComPtr<INetFwPolicy> firewall_policy;
-  hr = firewall_manager->get_LocalPolicy(firewall_policy.Receive());
+  hr = firewall_manager->get_LocalPolicy(firewall_policy.GetAddressOf());
   if (FAILED(hr)) {
     DLOG(ERROR) << logging::SystemErrorCodeToString(hr);
     return false;
   }
 
-  hr = firewall_policy->get_CurrentProfile(current_profile_.Receive());
+  hr = firewall_policy->get_CurrentProfile(current_profile_.GetAddressOf());
   if (FAILED(hr)) {
     DLOG(ERROR) << logging::SystemErrorCodeToString(hr);
-    current_profile_ = NULL;
+    current_profile_ = nullptr;
     return false;
   }
 
@@ -52,13 +55,13 @@ bool LegacyFirewallManager::GetAllowIncomingConnection(bool* value) {
   // this chrome.exe.
   base::win::ScopedComPtr<INetFwAuthorizedApplications> authorized_apps(
       GetAuthorizedApplications());
-  if (!authorized_apps.get())
+  if (!authorized_apps.Get())
     return false;
 
   base::win::ScopedComPtr<INetFwAuthorizedApplication> chrome_application;
-  HRESULT hr = authorized_apps->Item(
-      base::win::ScopedBstr(app_path_.value().c_str()),
-      chrome_application.Receive());
+  HRESULT hr =
+      authorized_apps->Item(base::win::ScopedBstr(app_path_.value().c_str()),
+                            chrome_application.GetAddressOf());
   if (FAILED(hr))
     return false;
   VARIANT_BOOL is_enabled = VARIANT_FALSE;
@@ -74,15 +77,15 @@ bool LegacyFirewallManager::GetAllowIncomingConnection(bool* value) {
 bool LegacyFirewallManager::SetAllowIncomingConnection(bool allow) {
   base::win::ScopedComPtr<INetFwAuthorizedApplications> authorized_apps(
       GetAuthorizedApplications());
-  if (!authorized_apps.get())
+  if (!authorized_apps.Get())
     return false;
 
   // Authorize chrome.
   base::win::ScopedComPtr<INetFwAuthorizedApplication> authorization =
       CreateChromeAuthorization(allow);
-  if (!authorization.get())
+  if (!authorization.Get())
     return false;
-  HRESULT hr = authorized_apps->Add(authorization.get());
+  HRESULT hr = authorized_apps->Add(authorization.Get());
   DLOG_IF(ERROR, FAILED(hr)) << logging::SystemErrorCodeToString(hr);
   return SUCCEEDED(hr);
 }
@@ -90,7 +93,7 @@ bool LegacyFirewallManager::SetAllowIncomingConnection(bool allow) {
 void LegacyFirewallManager::DeleteRule() {
   base::win::ScopedComPtr<INetFwAuthorizedApplications> authorized_apps(
       GetAuthorizedApplications());
-  if (!authorized_apps.get())
+  if (!authorized_apps.Get())
     return;
   authorized_apps->Remove(base::win::ScopedBstr(app_path_.value().c_str()));
 }
@@ -98,8 +101,8 @@ void LegacyFirewallManager::DeleteRule() {
 base::win::ScopedComPtr<INetFwAuthorizedApplications>
 LegacyFirewallManager::GetAuthorizedApplications() {
   base::win::ScopedComPtr<INetFwAuthorizedApplications> authorized_apps;
-  HRESULT hr =
-      current_profile_->get_AuthorizedApplications(authorized_apps.Receive());
+  HRESULT hr = current_profile_->get_AuthorizedApplications(
+      authorized_apps.GetAddressOf());
   if (FAILED(hr)) {
     DLOG(ERROR) << logging::SystemErrorCodeToString(hr);
     return base::win::ScopedComPtr<INetFwAuthorizedApplications>();
@@ -113,7 +116,8 @@ LegacyFirewallManager::CreateChromeAuthorization(bool allow) {
   base::win::ScopedComPtr<INetFwAuthorizedApplication> chrome_application;
 
   HRESULT hr =
-      chrome_application.CreateInstance(CLSID_NetFwAuthorizedApplication);
+      ::CoCreateInstance(CLSID_NetFwAuthorizedApplication, nullptr, CLSCTX_ALL,
+                         IID_PPV_ARGS(&chrome_application));
   if (FAILED(hr)) {
     DLOG(ERROR) << logging::SystemErrorCodeToString(hr);
     return base::win::ScopedComPtr<INetFwAuthorizedApplication>();

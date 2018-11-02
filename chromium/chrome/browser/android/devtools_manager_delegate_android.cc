@@ -159,6 +159,17 @@ class TabProxyDelegate : public content::DevToolsExternalAgentProxyDelegate,
   DISALLOW_COPY_AND_ASSIGN(TabProxyDelegate);
 };
 
+scoped_refptr<DevToolsAgentHost> DevToolsAgentHostForTab(TabAndroid* tab) {
+  scoped_refptr<DevToolsAgentHost> result = tab->GetDevToolsAgentHost();
+  if (result)
+    return result;
+
+  result = DevToolsAgentHost::Forward(base::IntToString(tab->GetAndroidId()),
+                                      base::MakeUnique<TabProxyDelegate>(tab));
+  tab->SetDevToolsAgentHost(result);
+  return result;
+}
+
 } //  namespace
 
 DevToolsManagerDelegateAndroid::DevToolsManagerDelegateAndroid()
@@ -177,18 +188,15 @@ base::DictionaryValue* DevToolsManagerDelegateAndroid::HandleCommand(
 }
 
 std::string DevToolsManagerDelegateAndroid::GetTargetType(
-    content::RenderFrameHost* host) {
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(host);
+    content::WebContents* web_contents) {
   TabAndroid* tab = web_contents ? TabAndroid::FromWebContents(web_contents)
       : nullptr;
   return tab ? DevToolsAgentHost::kTypePage :
       DevToolsAgentHost::kTypeOther;
 }
 
-bool DevToolsManagerDelegateAndroid::DiscoverTargets(
-      const DevToolsAgentHost::DiscoveryCallback& callback) {
-#if defined(OS_ANDROID)
+DevToolsAgentHost::List
+DevToolsManagerDelegateAndroid::RemoteDebuggingTargets() {
   // Enumerate existing tabs, including the ones with no WebContents.
   DevToolsAgentHost::List result;
   std::set<WebContents*> tab_web_contents;
@@ -202,12 +210,7 @@ bool DevToolsManagerDelegateAndroid::DiscoverTargets(
 
       if (tab->web_contents())
         tab_web_contents.insert(tab->web_contents());
-
-      scoped_refptr<DevToolsAgentHost> host =
-          DevToolsAgentHost::Forward(
-              base::IntToString(tab->GetAndroidId()),
-              base::WrapUnique(new TabProxyDelegate(tab)));
-      result.push_back(host);
+      result.push_back(DevToolsAgentHostForTab(tab));
     }
   }
 
@@ -222,11 +225,7 @@ bool DevToolsManagerDelegateAndroid::DiscoverTargets(
     result.push_back(*it);
   }
 
-  callback.Run(std::move(result));
-  return true;
-#else
-  return false;
-#endif  // defined(OS_ANDROID)
+  return result;
 }
 
 scoped_refptr<DevToolsAgentHost>
@@ -243,12 +242,7 @@ DevToolsManagerDelegateAndroid::CreateNewTarget(const GURL& url) {
     return nullptr;
 
   TabAndroid* tab = TabAndroid::FromWebContents(web_contents);
-  if (!tab)
-    return nullptr;
-
-  return DevToolsAgentHost::Forward(
-      base::IntToString(tab->GetAndroidId()),
-      base::WrapUnique(new TabProxyDelegate(tab)));
+  return tab ? DevToolsAgentHostForTab(tab) : nullptr;
 }
 
 std::string DevToolsManagerDelegateAndroid::GetDiscoveryPageHTML() {

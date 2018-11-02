@@ -57,13 +57,13 @@ inline DistributionPool::DistributionPool(const ContainerNode& parent) {
 
 inline void DistributionPool::Clear() {
   DetachNonDistributedNodes();
-  nodes_.Clear();
-  distributed_.Clear();
+  nodes_.clear();
+  distributed_.clear();
 }
 
 inline void DistributionPool::PopulateChildren(const ContainerNode& parent) {
   Clear();
-  for (Node* child = parent.FirstChild(); child; child = child->nextSibling()) {
+  for (Node* child = parent.firstChild(); child; child = child->nextSibling()) {
     if (isHTMLSlotElement(child)) {
       // TODO(hayato): Support re-distribution across v0 and v1 shadow trees
       continue;
@@ -76,7 +76,7 @@ inline void DistributionPool::PopulateChildren(const ContainerNode& parent) {
       nodes_.push_back(child);
     }
   }
-  distributed_.Resize(nodes_.size());
+  distributed_.resize(nodes_.size());
   distributed_.Fill(false);
 }
 
@@ -101,7 +101,7 @@ void DistributionPool::DistributeTo(InsertionPoint* insertion_point,
   // Distributes fallback elements
   if (insertion_point->IsContentInsertionPoint() &&
       distributed_nodes.IsEmpty()) {
-    for (Node* fallback_node = insertion_point->FirstChild(); fallback_node;
+    for (Node* fallback_node = insertion_point->firstChild(); fallback_node;
          fallback_node = fallback_node->nextSibling()) {
       distributed_nodes.Append(fallback_node);
       element_shadow->DidDistributeNode(fallback_node, insertion_point);
@@ -145,7 +145,7 @@ const InsertionPoint* ElementShadowV0::FinalDestinationInsertionPointFor(
   DCHECK(key);
   DCHECK(!key->NeedsDistributionRecalc());
   NodeToDestinationInsertionPoints::const_iterator it =
-      node_to_insertion_points_.Find(key);
+      node_to_insertion_points_.find(key);
   return it == node_to_insertion_points_.end() ? nullptr : it->value->back();
 }
 
@@ -154,7 +154,7 @@ ElementShadowV0::DestinationInsertionPointsFor(const Node* key) const {
   DCHECK(key);
   DCHECK(!key->NeedsDistributionRecalc());
   NodeToDestinationInsertionPoints::const_iterator it =
-      node_to_insertion_points_.Find(key);
+      node_to_insertion_points_.find(key);
   return it == node_to_insertion_points_.end() ? nullptr : it->value;
 }
 
@@ -250,7 +250,7 @@ void ElementShadowV0::WillAffectSelector() {
 }
 
 void ElementShadowV0::ClearDistribution() {
-  node_to_insertion_points_.Clear();
+  node_to_insertion_points_.clear();
 
   for (ShadowRoot* root = &element_shadow_->YoungestShadowRoot(); root;
        root = root->OlderShadowRoot())

@@ -5,20 +5,20 @@
 #include "bindings/core/v8/RejectedPromises.h"
 
 #include <memory>
-#include "bindings/core/v8/ScopedPersistent.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8PerIsolateData.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/EventTarget.h"
 #include "core/events/PromiseRejectionEvent.h"
 #include "core/inspector/ThreadDebugger.h"
 #include "platform/WebTaskRunner.h"
+#include "platform/bindings/ScopedPersistent.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8PerIsolateData.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 
 namespace blink {
@@ -63,7 +63,7 @@ class RejectedPromises::Message final {
     // Either collected or https://crbug.com/450330
     if (value.IsEmpty() || !value->IsPromise())
       return;
-    ASSERT(!HasHandler());
+    DCHECK(!HasHandler());
 
     EventTarget* target = execution_context->ErrorEventTarget();
     if (target && !execution_context->ShouldSanitizeScriptError(resource_name_,
@@ -127,19 +127,21 @@ class RejectedPromises::Message final {
   }
 
   void MakePromiseWeak() {
-    ASSERT(!promise_.IsEmpty() && !promise_.IsWeak());
+    DCHECK(!promise_.IsEmpty());
+    DCHECK(!promise_.IsWeak());
     promise_.SetWeak(this, &Message::DidCollectPromise);
     exception_.SetWeak(this, &Message::DidCollectException);
   }
 
   void MakePromiseStrong() {
-    ASSERT(!promise_.IsEmpty() && promise_.IsWeak());
+    DCHECK(!promise_.IsEmpty());
+    DCHECK(promise_.IsWeak());
     promise_.ClearWeak();
     exception_.ClearWeak();
   }
 
   bool HasHandler() {
-    ASSERT(!IsCollected());
+    DCHECK(!IsCollected());
     ScriptState::Scope scope(script_state_);
     v8::Local<v8::Value> value = promise_.NewLocal(script_state_->GetIsolate());
     return v8::Local<v8::Promise>::Cast(value)->HasHandler();

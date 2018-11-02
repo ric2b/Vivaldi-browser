@@ -19,6 +19,7 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/sys_info.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -31,7 +32,6 @@
 #include "chrome/browser/ui/ash/chrome_screenshot_grabber.h"
 #include "chrome/browser/ui/ash/chrome_shell_content_state.h"
 #include "chrome/browser/ui/ash/chrome_shell_delegate.h"
-#include "chrome/browser/ui/ash/ime_controller_chromeos.h"
 #include "chrome/common/chrome_switches.h"
 #include "chromeos/accelerometer/accelerometer_reader.h"
 #include "chromeos/chromeos_switches.h"
@@ -64,12 +64,21 @@ void CreateClassicShell() {
 std::unique_ptr<ash::mus::WindowManager> CreateMusShell() {
   service_manager::Connector* connector =
       content::ServiceManagerConnection::GetForProcess()->GetConnector();
+  const bool show_primary_host_on_connect = true;
   std::unique_ptr<ash::mus::WindowManager> window_manager =
-      base::MakeUnique<ash::mus::WindowManager>(connector, ash::Config::MUS);
+      base::MakeUnique<ash::mus::WindowManager>(connector, ash::Config::MUS,
+                                                show_primary_host_on_connect);
+  // The WindowManager normally deletes the Shell when it loses its connection
+  // to mus. Disable that by installing an empty callback. Chrome installs
+  // its own callback to detect when the connection to mus is lost and that is
+  // what shuts everything down.
+  window_manager->SetLostConnectionCallback(base::BindOnce(&base::DoNothing));
   std::unique_ptr<aura::WindowTreeClient> window_tree_client =
       base::MakeUnique<aura::WindowTreeClient>(connector, window_manager.get(),
                                                window_manager.get());
-  window_tree_client->ConnectAsWindowManager();
+  const bool automatically_create_display_roots = false;
+  window_tree_client->ConnectAsWindowManager(
+      automatically_create_display_roots);
   aura::Env::GetInstance()->SetWindowTreeClient(window_tree_client.get());
   window_manager->Init(std::move(window_tree_client),
                        content::BrowserThread::GetBlockingPool(),
@@ -123,12 +132,9 @@ AshInit::AshInit() {
   }
   // TODO(flackr): Investigate exposing a blocking pool task runner to chromeos.
   chromeos::AccelerometerReader::GetInstance()->Initialize(
-      content::BrowserThread::GetBlockingPool()
-          ->GetSequencedTaskRunnerWithShutdownBehavior(
-              content::BrowserThread::GetBlockingPool()->GetSequenceToken(),
-              base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
-  shell->accelerator_controller()->SetImeControlDelegate(
-      std::unique_ptr<ash::ImeControlDelegate>(new ImeController));
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
   shell->high_contrast_controller()->SetEnabled(
       chromeos::AccessibilityManager::Get()->IsHighContrastEnabled());
 

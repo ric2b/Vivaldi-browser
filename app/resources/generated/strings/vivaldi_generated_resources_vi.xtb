@@ -2,6 +2,8 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="vi">
 <translation id="1018656279737460067">Đã hủy</translation>
+<translation id="1026822031284433028">Tải Hình ảnh</translation>
+<translation id="1047431265488717055">Sao chép Văn bản của Liên kết</translation>
 <translation id="1049795001945932310">&amp;Cài đặt ngôn ngữ</translation>
 <translation id="1056898198331236512">Cảnh báo</translation>
 <translation id="1084824384139382525">S&amp;ao chép địa chỉ liên kết</translation>
@@ -20,12 +22,10 @@
 <translation id="1588438908519853928">Bình thường</translation>
 <translation id="1603914832182249871">(Ẩn danh)</translation>
 <translation id="1616206807336925449">Tiện ích này không yêu cầu quyền đặc biệt.</translation>
-<translation id="1620510694547887537">Máy ảnh</translation>
 <translation id="1635033183663317347">Do người giám hộ của bạn cài đặt.</translation>
 <translation id="1708338024780164500">(Không hiện dịch)</translation>
 <translation id="1723824996674794290">Cửa sổ &amp;Mới</translation>
 <translation id="1729533290416704613">Tiện ích này cũng điều khiển trang nào được hiển thị khi bạn tìm kiếm từ Thanh địa chỉ.</translation>
-<translation id="1789575671122666129">Cửa sổ bật lên</translation>
 <translation id="1850508293116537636">Xoay &amp;theo chiều kim đồng hồ</translation>
 <translation id="1859234291848436338">Hướng Ghi</translation>
 <translation id="1901303067676059328">Chọn &amp;tất cả</translation>
@@ -34,10 +34,8 @@
 <translation id="2076269580855484719">Ẩn plugin này</translation>
 <translation id="2087822576218954668">Bản in: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">Cập nhật plugin</translation>
-<translation id="2147827593068025794">Đồng bộ hóa dưới nền</translation>
 <translation id="215753907730220065">Thoát khỏi Chế độ Toàn màn hình</translation>
 <translation id="2177950615300672361">Tab ẩn danh: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">Phát hiện (mặc định)</translation>
 <translation id="219008588003277019">Mô-đun Ứng dụng khách Gốc: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Dán dưới dạng văn bản thuần túy</translation>
 <translation id="2282146716419988068">Quá trình GPU</translation>
@@ -52,10 +50,9 @@
 <translation id="2439110203301358333">Một chương trình khác trên máy tính của bạn đã thêm một tiện ích có thể thay đổi cách Vivaldi hoạt động.</translation>
 <translation id="2445081178310039857">Thư mục gốc của tiện ích là bắt buộc.</translation>
 <translation id="2470702053775288986">Tiện ích không được hỗ trợ đã bị tắt</translation>
-<translation id="2482878487686419369">Thông báo</translation>
 <translation id="2501797496290880632">Nhập phím tắt</translation>
-<translation id="2509857212037838238">Cài đặt <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">Đã hoán đổi bộ nhớ</translation>
+<translation id="2553440850688409052">Ẩn Plugin Này</translation>
 <translation id="2662876636500006917">Cửa hàng Chrome Trực tuyến</translation>
 <translation id="2678063897982469759">Kích hoạt lại</translation>
 <translation id="2785873697295365461">Phần mô tả tệp</translation>
@@ -68,12 +65,12 @@
 <translation id="2972581237482394796">&amp;Làm lại</translation>
 <translation id="299483336428448530">Do phụ huynh của bạn cài đặt.</translation>
 <translation id="3012631534724231212">(iframe)</translation>
+<translation id="3031601332414921114">Tiếp tục in</translation>
 <translation id="3080207940057008665">Một chương trình khác trên máy tính của bạn đã thêm một chủ đề có thể thay đổi cách Vivaldi hoạt động.</translation>
 <translation id="3084548735795614657">Thả để cài đặt</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">Quản lý NGƯỜI DÙNG</translation>
 <translation id="3222066309010235055">Trình kết xuất trước: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Micrô</translation>
 <translation id="3241680850019875542">Chọn thư mục gốc của tiện ích để đóng gói. Để cập nhật tiện ích, bạn cũng chọn tệp khóa cá nhân để sử dụng lại.</translation>
 <translation id="3280237271814976245">Lưu &amp;thành...</translation>
 <translation id="3285322247471302225">&amp;Tab Mới</translation>
@@ -82,7 +79,6 @@
 <translation id="3347086966102161372">S&amp;ao chép địa chỉ hình ảnh</translation>
 <translation id="335985608243443814">Duyệt qua...</translation>
 <translation id="3378572629723696641">Tiện ích này có thể đã bị hỏng.</translation>
-<translation id="3427092606871434483">Cho phép (mặc định)</translation>
 <translation id="3435896845095436175">Bật</translation>
 <translation id="345693547134384690">Mở &amp;hình ảnh trong tab mới</translation>
 <translation id="3467267818798281173">Yêu cầu Google cung cấp đề xuất</translation>
@@ -91,7 +87,6 @@
 <translation id="3627588569887975815">Mở liên kết bằn&amp;g cửa số ẩn danh</translation>
 <translation id="3678156199662914018">Tiện ích: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">Đang tải...</translation>
-<translation id="3789841737615482174">Cài đặt</translation>
 <translation id="3798449238516105146">Phiên bản</translation>
 <translation id="3866249974567520381">Mô tả</translation>
 <translation id="3905761538810670789">Sửa ứng dụng</translation>
@@ -100,11 +95,12 @@
 <translation id="3909791450649380159">Cắ&amp;t</translation>
 <translation id="3927932062596804919">Từ chối</translation>
 <translation id="3936390757709632190">&amp;Mở âm thanh trong tab mới</translation>
-<translation id="3936999098172113189">Đang đợi in <ph name="PAGE_NUMBER" /> trang đến <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Quay lại</translation>
+<translation id="3948116654032448504">Tìm hình ảnh với <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3978267865113951599">(Treo)</translation>
 <translation id="3979395879372752341">Đã thêm tiện ích mới (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
+<translation id="4022426551683927403">Thêm vào Từ điển</translation>
 <translation id="4087089424473531098">Đã tạo tiện ích:
 
 <ph name="EXTENSION_FILE" /></translation>
@@ -113,13 +109,11 @@
 <translation id="4096508467498758490">Vô hiệu hóa tiện ích chế độ nhà phát triển</translation>
 <translation id="4100839878934973028">Một chương trình khác trên máy tính của bạn đã thêm một ứng dụng có thể thay đổi cách Vivaldi hoạt động.</translation>
 <translation id="4130207949184424187">Tiện ích này đã thay đổi trang nào được hiển thị khi bạn tìm kiếm từ Thanh địa chỉ.</translation>
-<translation id="4165986682804962316">Cài đặt trang web</translation>
 <translation id="4176463684765177261">Đã bị vô hiệu</translation>
 <translation id="4200983522494130825">&amp;Tab mới</translation>
 <translation id="420665587194630159">(Tiện ích này đã được quản lý và không thể bị xóa hoặc tắt.)</translation>
 <translation id="4240511609794012987">Bộ nhớ dùng chung</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K hiện có)</translation>
-<translation id="4312866146174492540">Chặn (mặc định)</translation>
 <translation id="4348766275249686434">Thu thập lỗi</translation>
 <translation id="4384652540891215547">Kích hoạt tiện ích</translation>
 <translation id="4394049700291259645">Vô hiệu hóa</translation>
@@ -134,7 +128,6 @@
 <translation id="4711638718396952945">Khôi phục cài đặt</translation>
 <translation id="4839303808932127586">Lưu &amp;video thành...</translation>
 <translation id="4850258771229959924">Xem với Công Cụ Nhà Phát Triển</translation>
-<translation id="4851858059374029925">Cài đặt <ph name="PLUGIN_NAME" />? Chỉ cài đặt những plugin mà bạn tin cậy.</translation>
 <translation id="488785315393301722">Hiển thị chi tiết</translation>
 <translation id="4911714727432509308">Không có tiện ích nào được gán phím tắt.</translation>
 <translation id="4927301649992043040">Đóng gói tiện ích</translation>
@@ -169,12 +162,10 @@
 <translation id="5715711091495208045">Trình môi giới plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Rất tiếc, chúng tôi không thể hiển thị mã lệnh của lỗi này.</translation>
 <translation id="5764483294734785780">Lư&amp;u âm thanh thành...</translation>
-<translation id="5778550464785688721">Điều khiển toàn bộ thiết bị MIDI</translation>
 <translation id="5780973441651030252">Mức độ ưu tiên quá trình</translation>
 <translation id="5804241973901381774">Giấy phép</translation>
 <translation id="583281660410589416">Không xác định</translation>
 <translation id="59174027418879706">Đã bật</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{Đang sử dụng 1 cookie}other{Đang sử dụng # cookie}}</translation>
 <translation id="5956585768868398362">Đây có phải là trang tìm kiếm bạn muốn không?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (tối đa <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Tiện ích này cũng điều khiển trang nào được hiển thị khi bạn nhấp vào nút Trang chủ hoặc tìm kiếm từ Thanh địa chỉ.</translation>
@@ -182,6 +173,7 @@
 <translation id="6122081475643980456">Kết nối Internet của bạn đang bị kiểm soát</translation>
 <translation id="6124650939968185064">Các tiện ích sau phụ thuộc vào tiện ích này:</translation>
 <translation id="6156863943908443225">Bộ nhớ cache tập lệnh</translation>
+<translation id="6171948306033499786">Tạm dừng in</translation>
 <translation id="6196854373336333322">Tiện ích "<ph name="EXTENSION_NAME" />" đã chiếm quyền kiểm soát cài đặt proxy của bạn, điều đó có nghĩa là tiện ích này có thể thay đổi, làm gián đoạn hoặc nghe trộm bất kỳ điều gì bạn thực hiện trực tuyến. Nếu bạn không chắc chắn về lý do thay đổi này diễn ra, bạn có thể không cần tiện ích này.</translation>
 <translation id="6220413761270491930">Lỗi Nạp Phần mở rộng</translation>
 <translation id="6239558157302047471">Tải lại &amp;khung</translation>
@@ -189,6 +181,7 @@
 <translation id="6251870443722440887">Quản lý GDI</translation>
 <translation id="6272643420381259437">Đã xảy ra lỗi (<ph name="ERROR" />) khi tải xuống plugin</translation>
 <translation id="6308937455967653460">Lưu liên &amp;kết thành...</translation>
+<translation id="6314335155547195432">Tạo Mật khẩu</translation>
 <translation id="6398765197997659313">Thoát khỏi chế độ toàn màn hình</translation>
 <translation id="6406303162637086258">Mô phỏng khởi động lại trình duyệt</translation>
 <translation id="6445450263907939268">Nếu không thích những thay đổi này, bạn có thể khôi phục cài đặt trước của mình.</translation>
@@ -204,15 +197,16 @@
 <translation id="6787839852456839824">Phím tắt</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Lưu thay đổi</translation>
-<translation id="6863910145616405334">Không tìm thấy plugin</translation>
+<translation id="6824564591481349393">Sao chép Địa chỉ &amp;Email</translation>
 <translation id="6886871292305414135">Mở liên kết trong &amp;tab mới</translation>
 <translation id="6900284862687837908">Ứng dụng nền: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Thu hồi quyền truy cập tệp</translation>
+<translation id="6943176775188458830">Huỷ lệnh in</translation>
 <translation id="6974053822202609517">Phải sang Trái</translation>
 <translation id="6985276906761169321">ID:</translation>
 <translation id="7013485839273047434">Tải thêm tiện ích</translation>
+<translation id="7030031465713069059">Ghi nhớ Mật khẩu</translation>
 <translation id="708060913198414444">S&amp;ao chép địa chỉ âm thanh</translation>
-<translation id="7105578512429498960">Hãy cài đặt <ph name="PLUGIN_NAME" /> để hiển thị nội dung này</translation>
 <translation id="7144878232160441200">Thử lại</translation>
 <translation id="7175353351958621980">Được nạp từ:</translation>
 <translation id="7206693748120342859">Đang tải xuống <ph name="PLUGIN_NAME" />...</translation>
@@ -222,6 +216,7 @@
 <translation id="7361297102842600584">Nhấp chuột phải để chạy <ph name="PLUGIN_NAME" /></translation>
 <translation id="7401543881546089382">Xóa phím tắt</translation>
 <translation id="7427348830195639090">Trang nền: <ph name="BACKGROUND_PAGE_URL" /></translation>
+<translation id="7473891865547856676">Không, Cảm ơn</translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">Tab mới</translation>
 <translation id="7564847347806291057">Kết thúc quá trình</translation>
@@ -246,7 +241,6 @@ Tệp Khoá: <ph name="KEY_FILE" />
 
 Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa để tạo phiên bản tiện ích mới của mình.</translation>
 <translation id="8004582292198964060">Trình duyệt</translation>
-<translation id="8037357227543935929">Yêu cầu (mặc định)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">&amp;Kiểm tra chính tả các trường văn bản</translation>
 <translation id="8261378640211443080">Tiện ích này không được liệt kê trong <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> và có thể đã được thêm mà bạn không biết.</translation>
@@ -255,6 +249,7 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="8357224663288891423">Phím tắt cho tiện ích và ứng dụng</translation>
 <translation id="8463955938112983119"><ph name="PLUGIN_NAME" /> đã tắt.</translation>
 <translation id="8465444703385715657"><ph name="PLUGIN_NAME" /> cần có sự cho phép của bạn để chạy</translation>
+<translation id="8496717697661868878">Cho phép Plugin Này</translation>
 <translation id="8546306075665861288">Bộ nhớ cache hình ảnh</translation>
 <translation id="8584280235376696778">&amp;Mở video trong tab mới</translation>
 <translation id="8615618338313291042">Ứng dụng Ẩn danh: <ph name="APP_NAME" /></translation>
@@ -262,9 +257,9 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="8664389313780386848">X&amp;em nguồn trang</translation>
 <translation id="8719653885894320876">Không tải <ph name="PLUGIN_NAME" /> xuống được</translation>
 <translation id="873545264931343897">Khi cập nhật xong <ph name="PLUGIN_NAME" />, hãy tải lại trang để kích hoạt plugin này</translation>
-<translation id="8763204422633679667">Khi cài đặt xong <ph name="PLUGIN_NAME" />, hãy tải lại trang để kích hoạt plugin này</translation>
 <translation id="8798099450830957504">Mặc định</translation>
 <translation id="8808478386290700967">Cửa hàng Trực tuyến</translation>
+<translation id="8845001906332463065">Hỗ trợ</translation>
 <translation id="8859174528519900719">Khung phụ: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Mở liên kết bằng cửa sổ &amp;mới</translation>
 <translation id="8916476537757519021">Khung ẩn danh phụ: <ph name="SUBFRAME_SITE" /></translation>

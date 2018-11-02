@@ -13,29 +13,26 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "chrome/browser/predictors/glowplug_key_value_table.h"
 #include "chrome/browser/predictors/predictor_table_base.h"
 #include "chrome/browser/predictors/resource_prefetch_common.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor.pb.h"
 #include "components/precache/core/proto/precache.pb.h"
 
-namespace sql {
-class Statement;
-}
-
 namespace predictors {
-
-// From resource_prefetch_predictor.proto.
-using RedirectStat = RedirectData_RedirectStat;
 
 // Interface for database tables used by the ResourcePrefetchPredictor.
 // All methods except the constructor and destructor need to be called on the DB
 // thread.
 //
 // Currently manages:
-//  - UrlResourceTable - resources per Urls.
-//  - UrlRedirectTable - redirects per Urls.
-//  - HostResourceTable - resources per host.
-//  - HostRedirectTable - redirects per host.
+//  - UrlResourceTable - key: url, value: PrefetchData
+//  - UrlRedirectTable - key: url, value: RedirectData
+//  - HostResourceTable - key: host, value: PrefetchData
+//  - HostRedirectTable - key: host, value: RedirectData
+//  - ManifestTable - key: host with stripped "www." prefix,
+//                    value: precache::PrecacheManifest
+//  - OriginTable - key: host, value: OriginData
 class ResourcePrefetchPredictorTables : public PredictorTableBase {
  public:
   typedef std::map<std::string, PrefetchData> PrefetchDataMap;
@@ -110,6 +107,10 @@ class ResourcePrefetchPredictorTables : public PredictorTableBase {
   // misses from |data|.
   static void TrimRedirects(RedirectData* data, size_t max_consecutive_misses);
 
+  // Computes score of |data|.
+  static float ComputePrecacheResourceScore(
+      const precache::PrecacheResource& data);
+
   // Removes the origins with more than |max_consecutive_misses| consecutive
   // misses from |data|.
   static void TrimOrigins(OriginData* data, size_t max_consecutive_misses);
@@ -117,7 +118,7 @@ class ResourcePrefetchPredictorTables : public PredictorTableBase {
   // Sorts the origins by score, decreasing.
   static void SortOrigins(OriginData* data);
 
-  // Computes score of |data|.
+  // Computes score of |origin|.
   static float ComputeOriginScore(const OriginStat& origin);
 
   // The maximum length of the string that can be stored in the DB.
@@ -130,11 +131,6 @@ class ResourcePrefetchPredictorTables : public PredictorTableBase {
   ~ResourcePrefetchPredictorTables() override;
 
  private:
-  // Represents the type of information that is stored in prefetch database.
-  enum class PrefetchDataType { RESOURCE, REDIRECT, MANIFEST, ORIGIN };
-
-  enum class TableOperationType { INSERT, REMOVE };
-
   friend class PredictorDatabaseInternal;
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTablesTest,
                            DatabaseVersionIsSet);
@@ -143,24 +139,7 @@ class ResourcePrefetchPredictorTables : public PredictorTableBase {
 
   // Database version. Always increment it when any change is made to the data
   // schema (including the .proto).
-  static constexpr int kDatabaseVersion = 7;
-
-  // Helper functions below help perform functions on the Url and host table
-  // using the same code.
-  void GetAllResourceDataHelper(PrefetchKeyType key_type,
-                                PrefetchDataMap* data_map);
-  void GetAllRedirectDataHelper(PrefetchKeyType key_type,
-                                RedirectDataMap* redirect_map);
-  void GetAllManifestDataHelper(ManifestDataMap* manifest_map);
-  void GetAllOriginDataHelper(OriginDataMap* manifest_map);
-
-  void UpdateDataHelper(PrefetchKeyType key_type,
-                        PrefetchDataType data_type,
-                        const std::string& key,
-                        const google::protobuf::MessageLite& data);
-  void DeleteDataHelper(PrefetchKeyType key_type,
-                        PrefetchDataType data_type,
-                        const std::vector<std::string>& keys);
+  static constexpr int kDatabaseVersion = 9;
 
   // PredictorTableBase:
   void CreateTableIfNonExistent() override;
@@ -170,14 +149,13 @@ class ResourcePrefetchPredictorTables : public PredictorTableBase {
   static int GetDatabaseVersion(sql::Connection* db);
   static bool SetDatabaseVersion(sql::Connection* db, int version);
 
-  // Helper to return cached Statements.
-  std::unique_ptr<sql::Statement> GetTableUpdateStatement(
-      PrefetchKeyType key_type,
-      PrefetchDataType data_type,
-      TableOperationType op_type);
-
-  static const char* GetTableName(PrefetchKeyType key_type,
-                                  PrefetchDataType data_type);
+  std::unique_ptr<GlowplugKeyValueTable<PrefetchData>> url_resource_table_;
+  std::unique_ptr<GlowplugKeyValueTable<RedirectData>> url_redirect_table_;
+  std::unique_ptr<GlowplugKeyValueTable<PrefetchData>> host_resource_table_;
+  std::unique_ptr<GlowplugKeyValueTable<RedirectData>> host_redirect_table_;
+  std::unique_ptr<GlowplugKeyValueTable<precache::PrecacheManifest>>
+      manifest_table_;
+  std::unique_ptr<GlowplugKeyValueTable<OriginData>> origin_table_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourcePrefetchPredictorTables);
 };

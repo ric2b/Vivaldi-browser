@@ -5,6 +5,7 @@
 #ifndef CC_TEST_FAKE_LAYER_TREE_HOST_IMPL_H_
 #define CC_TEST_FAKE_LAYER_TREE_HOST_IMPL_H_
 
+#include "base/sequenced_task_runner.h"
 #include "cc/test/fake_layer_tree_host_impl_client.h"
 #include "cc/test/fake_rendering_stats_instrumentation.h"
 #include "cc/trees/layer_tree_host_impl.h"
@@ -55,6 +56,8 @@ class FakeLayerTreeHostImpl : public LayerTreeHostImpl {
   }
 
   AnimationHost* animation_host() const;
+
+  FakeLayerTreeHostImplClient* client() { return &client_; }
 
  private:
   FakeLayerTreeHostImplClient client_;

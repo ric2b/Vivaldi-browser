@@ -24,15 +24,15 @@ namespace cc {
 class FakeContentLayerClient : public ContentLayerClient {
  public:
   struct ImageData {
-    ImageData(sk_sp<const SkImage> image,
+    ImageData(PaintImage image,
               const gfx::Point& point,
               const PaintFlags& flags);
-    ImageData(sk_sp<const SkImage> image,
+    ImageData(PaintImage image,
               const gfx::Transform& transform,
               const PaintFlags& flags);
     ImageData(const ImageData& other);
     ~ImageData();
-    sk_sp<const SkImage> image;
+    PaintImage image;
     gfx::Point point;
     gfx::Transform transform;
     PaintFlags flags;
@@ -59,17 +59,24 @@ class FakeContentLayerClient : public ContentLayerClient {
     draw_rects_.push_back(std::make_pair(rect, flags));
   }
 
-  void add_draw_image(sk_sp<const SkImage> image,
+  void add_draw_image(sk_sp<SkImage> image,
+                      const gfx::Point& point,
+                      const PaintFlags& flags) {
+    add_draw_image(PaintImage(PaintImage::GetNextId(), std::move(image)), point,
+                   flags);
+  }
+  void add_draw_image(PaintImage image,
                       const gfx::Point& point,
                       const PaintFlags& flags) {
     ImageData data(std::move(image), point, flags);
     draw_images_.push_back(data);
   }
 
-  void add_draw_image_with_transform(sk_sp<const SkImage> image,
+  void add_draw_image_with_transform(sk_sp<SkImage> image,
                                      const gfx::Transform& transform,
                                      const PaintFlags& flags) {
-    ImageData data(std::move(image), transform, flags);
+    ImageData data(PaintImage(PaintImage::GetNextId(), std::move(image)),
+                   transform, flags);
     draw_images_.push_back(data);
   }
 

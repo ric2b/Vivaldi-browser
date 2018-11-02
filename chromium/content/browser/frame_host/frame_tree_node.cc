@@ -106,6 +106,7 @@ FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
       original_opener_(nullptr),
       original_opener_observer_(nullptr),
       has_committed_real_load_(false),
+      is_collapsed_(false),
       replication_state_(
           scope,
           name,
@@ -263,6 +264,15 @@ void FrameTreeNode::SetCurrentOrigin(
       is_potentially_trustworthy_unique_origin;
 }
 
+void FrameTreeNode::SetCollapsed(bool collapsed) {
+  DCHECK(!IsMainFrame());
+  if (is_collapsed_ == collapsed)
+    return;
+
+  is_collapsed_ = collapsed;
+  render_manager_.OnDidChangeCollapsedState(collapsed);
+}
+
 void FrameTreeNode::SetFrameName(const std::string& name,
                                  const std::string& unique_name) {
   if (name == replication_state_.name) {
@@ -324,6 +334,14 @@ void FrameTreeNode::SetPendingSandboxFlags(
     pending_sandbox_flags_ |= parent()->effective_sandbox_flags();
 }
 
+void FrameTreeNode::SetPendingContainerPolicy(
+    const ParsedFeaturePolicyHeader& container_policy) {
+  // This should only be called on subframes; container policy is not mutable on
+  // main frame.
+  DCHECK(!IsMainFrame());
+  pending_container_policy_ = container_policy;
+}
+
 bool FrameTreeNode::IsDescendantOf(FrameTreeNode* other) const {
   if (!other || !other->child_count())
     return false;
@@ -367,11 +385,16 @@ bool FrameTreeNode::IsLoading() const {
   return current_frame_host->is_loading();
 }
 
-bool FrameTreeNode::CommitPendingSandboxFlags() {
+bool FrameTreeNode::CommitPendingFramePolicy() {
   bool did_change_flags =
       pending_sandbox_flags_ != replication_state_.sandbox_flags;
-  replication_state_.sandbox_flags = pending_sandbox_flags_;
-  return did_change_flags;
+  bool did_change_container_policy =
+      pending_container_policy_ != replication_state_.container_policy;
+  if (did_change_flags)
+    replication_state_.sandbox_flags = pending_sandbox_flags_;
+  if (did_change_container_policy)
+    replication_state_.container_policy = pending_container_policy_;
+  return did_change_flags || did_change_container_policy;
 }
 
 void FrameTreeNode::CreatedNavigationRequest(
@@ -390,7 +413,7 @@ void FrameTreeNode::CreatedNavigationRequest(
   // RenderFrameHostManager will take care of updates to the speculative
   // RenderFrameHost in DidCreateNavigationRequest below.
   if (was_previously_loading) {
-    if (navigation_request_) {
+    if (navigation_request_ && navigation_request_->navigation_handle()) {
       // Mark the old request as aborted.
       navigation_request_->navigation_handle()->set_net_error_code(
           net::ERR_ABORTED);
@@ -496,10 +519,14 @@ void FrameTreeNode::DidChangeLoadProgress(double load_progress) {
 bool FrameTreeNode::StopLoading() {
   if (IsBrowserSideNavigationEnabled()) {
     if (navigation_request_) {
-      navigation_request_->navigation_handle()->set_net_error_code(
-          net::ERR_ABORTED);
-      navigator_->DiscardPendingEntryIfNeeded(
-          navigation_request_->navigation_handle());
+      int expected_pending_nav_entry_id = navigation_request_->nav_entry_id();
+      if (navigation_request_->navigation_handle()) {
+        navigation_request_->navigation_handle()->set_net_error_code(
+            net::ERR_ABORTED);
+        expected_pending_nav_entry_id =
+            navigation_request_->navigation_handle()->pending_nav_entry_id();
+      }
+      navigator_->DiscardPendingEntryIfNeeded(expected_pending_nav_entry_id);
     }
     ResetNavigationRequest(false, true);
   }
@@ -534,6 +561,11 @@ void FrameTreeNode::BeforeUnloadCanceled() {
         render_manager_.speculative_frame_host();
     if (speculative_frame_host)
       speculative_frame_host->ResetLoadingState();
+    // Note: there is no need to set an error code on the NavigationHandle here
+    // as it has not been created yet. It is only created when the
+    // BeforeUnloadACK is received.
+    if (navigation_request_)
+      ResetNavigationRequest(false, true);
   } else {
     RenderFrameHostImpl* pending_frame_host =
         render_manager_.pending_frame_host();

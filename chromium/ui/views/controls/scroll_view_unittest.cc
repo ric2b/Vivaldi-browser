@@ -75,19 +75,12 @@ const int kWidth = 100;
 const int kMinHeight = 50;
 const int kMaxHeight = 100;
 
-// View implementation that allows setting the preferred size.
 class CustomView : public View {
  public:
   CustomView() {}
-
-  void SetPreferredSize(const gfx::Size& size) {
-    preferred_size_ = size;
-    PreferredSizeChanged();
-  }
+  ~CustomView() override {}
 
   const gfx::Point last_location() const { return last_location_; }
-
-  gfx::Size GetPreferredSize() const override { return preferred_size_; }
 
   void Layout() override {
     gfx::Size pref = GetPreferredSize();
@@ -106,7 +99,6 @@ class CustomView : public View {
   }
 
  private:
-  gfx::Size preferred_size_;
   gfx::Point last_location_;
 
   DISALLOW_COPY_AND_ASSIGN(CustomView);
@@ -713,6 +705,54 @@ TEST_F(ScrollViewTest, CornerViewVisibility) {
   scroll_view_.Layout();
   EXPECT_EQ(&scroll_view_, corner_view->parent());
   EXPECT_TRUE(corner_view->visible());
+}
+
+TEST_F(ScrollViewTest, ChildWithLayerTest) {
+  View* contents = InstallContents();
+  ScrollViewTestApi test_api(&scroll_view_);
+
+  if (test_api.contents_viewport()->layer())
+    return;
+
+  View* child = new View();
+  contents->AddChildView(child);
+  child->SetPaintToLayer(ui::LAYER_TEXTURED);
+
+  ASSERT_TRUE(test_api.contents_viewport()->layer());
+  // The default ScrollView color is opaque, so that fills bounds opaquely
+  // should be true.
+  EXPECT_TRUE(test_api.contents_viewport()->layer()->fills_bounds_opaquely());
+
+  // Setting a transparent color should make fills opaquely false.
+  scroll_view_.SetBackgroundColor(SK_ColorTRANSPARENT);
+  EXPECT_FALSE(test_api.contents_viewport()->layer()->fills_bounds_opaquely());
+
+  child->DestroyLayer();
+  EXPECT_FALSE(test_api.contents_viewport()->layer());
+
+  View* child_child = new View();
+  child->AddChildView(child_child);
+  EXPECT_FALSE(test_api.contents_viewport()->layer());
+  child->SetPaintToLayer(ui::LAYER_TEXTURED);
+  EXPECT_TRUE(test_api.contents_viewport()->layer());
+}
+
+// Validates that if a child of a ScrollView adds a layer, then a layer
+// is added to the ScrollView's viewport.
+TEST_F(ScrollViewTest, DontCreateLayerOnViewportIfLayerOnScrollViewCreated) {
+  View* contents = InstallContents();
+  ScrollViewTestApi test_api(&scroll_view_);
+
+  if (test_api.contents_viewport()->layer())
+    return;
+
+  scroll_view_.SetPaintToLayer();
+
+  View* child = new View();
+  contents->AddChildView(child);
+  child->SetPaintToLayer(ui::LAYER_TEXTURED);
+
+  EXPECT_FALSE(test_api.contents_viewport()->layer());
 }
 
 #if defined(OS_MACOSX)

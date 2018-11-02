@@ -431,7 +431,6 @@ bool WallpaperManagerBase::ResizeImage(
       gfx::Size(resized_width, resized_height));
 
   SkBitmap bitmap = *(resized_image.bitmap());
-  SkAutoLockPixels lock_input(bitmap);
   gfx::JPEGCodec::Encode(
       reinterpret_cast<unsigned char*>(bitmap.getAddr32(0, 0)),
       gfx::JPEGCodec::FORMAT_SkBitmap, bitmap.width(), bitmap.height(),
@@ -790,13 +789,10 @@ void WallpaperManagerBase::DeleteUserWallpapers(
   wallpaper_path = wallpaper_path.Append(path_to_file);
   file_to_remove.push_back(wallpaper_path);
 
-  base::PostTaskWithTraits(
-      FROM_HERE, base::TaskTraits()
-                     .WithShutdownBehavior(
-                         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
-                     .WithPriority(base::TaskPriority::BACKGROUND)
-                     .MayBlock(),
-      base::Bind(&DeleteWallpaperInList, file_to_remove));
+  base::PostTaskWithTraits(FROM_HERE,
+                           {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+                           base::Bind(&DeleteWallpaperInList, file_to_remove));
 }
 
 void WallpaperManagerBase::SetCommandLineForTesting(

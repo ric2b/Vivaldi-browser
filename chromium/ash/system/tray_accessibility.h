@@ -8,7 +8,6 @@
 #include <stdint.h>
 
 #include "ash/accessibility_delegate.h"
-#include "ash/shell_observer.h"
 #include "ash/system/accessibility_observer.h"
 #include "ash/system/tray/tray_details_view.h"
 #include "ash/system/tray/tray_image_item.h"
@@ -21,49 +20,21 @@ namespace chromeos {
 class TrayAccessibilityTest;
 }
 
-namespace gfx {
-struct VectorIcon;
-}
-
 namespace views {
 class Button;
 class CustomButton;
-class Label;
 class View;
 }
 
 namespace ash {
-class HoverHighlightView;
 class SystemTrayItem;
 
 namespace tray {
 
-// A view for closable notification views, laid out like:
-//  -------------------
-// | icon  contents  x |
-//  ----------------v--
-// The close button will call OnClose() when clicked.
-class AccessibilityPopupView : public views::View {
- public:
-  explicit AccessibilityPopupView(uint32_t enabled_state_bits);
-
-  const views::Label* label_for_test() const { return label_; }
-
-  void Init();
-
- private:
-  views::Label* CreateLabel(uint32_t enabled_state_bits);
-
-  views::Label* label_;
-
-  DISALLOW_COPY_AND_ASSIGN(AccessibilityPopupView);
-};
-
 // Create the detailed view of accessibility tray.
-class AccessibilityDetailedView : public TrayDetailsView,
-                                  public ShellObserver {
+class AccessibilityDetailedView : public TrayDetailsView {
  public:
-  AccessibilityDetailedView(SystemTrayItem* owner, LoginStatus login);
+  explicit AccessibilityDetailedView(SystemTrayItem* owner);
   ~AccessibilityDetailedView() override {}
 
  private:
@@ -81,15 +52,6 @@ class AccessibilityDetailedView : public TrayDetailsView,
 
   // Add the accessibility feature list.
   void AppendAccessibilityList();
-
-  // Helper function to create entries in the detailed accessibility view.
-  HoverHighlightView* AddScrollListItem(const base::string16& text,
-                                        bool checked,
-                                        const gfx::VectorIcon& icon);
-  HoverHighlightView* AddScrollListItemWithoutIcon(const base::string16& text,
-                                                   bool checked);
-
-  void AddSubHeader(const base::string16& header_text);
 
   views::View* spoken_feedback_view_ = nullptr;
   views::View* high_contrast_view_ = nullptr;
@@ -148,12 +110,7 @@ class TrayAccessibility : public TrayImageItem, public AccessibilityObserver {
       AccessibilityNotificationVisibility notify) override;
 
   views::View* default_;
-  tray::AccessibilityPopupView* detailed_popup_;
   tray::AccessibilityDetailedView* detailed_menu_;
-
-  // Bitmap of fvalues from AccessibilityState.  Can contain any or
-  // both of A11Y_SPOKEN_FEEDBACK A11Y_BRAILLE_DISPLAY_CONNECTED.
-  uint32_t request_popup_view_state_;
 
   bool tray_icon_visible_;
   LoginStatus login_;

@@ -79,7 +79,7 @@ class ASH_EXPORT CustomFrameViewAsh : public views::NonClientFrameView {
   void ActivationChanged(bool active) override;
 
   // views::View:
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
   void Layout() override;
   const char* GetClassName() const override;
   gfx::Size GetMinimumSize() const override;
@@ -95,6 +95,7 @@ class ASH_EXPORT CustomFrameViewAsh : public views::NonClientFrameView {
  private:
   class OverlayView;
   friend class TestWidgetConstraintsDelegate;
+  friend class CustomFrameViewAshSizeLock;
 
   // views::NonClientFrameView:
   bool DoesIntersectRect(const views::View* target,
@@ -116,6 +117,8 @@ class ASH_EXPORT CustomFrameViewAsh : public views::NonClientFrameView {
   OverlayView* overlay_view_;
 
   ImmersiveFullscreenControllerDelegate* immersive_delegate_;
+
+  static bool use_empty_minimum_size_for_test_;
 
   DISALLOW_COPY_AND_ASSIGN(CustomFrameViewAsh);
 };

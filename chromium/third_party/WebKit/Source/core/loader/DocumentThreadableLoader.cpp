@@ -393,7 +393,10 @@ void DocumentThreadableLoader::MakeCrossOriginAccessRequest(
     bool should_force_preflight = request.IsExternalRequest();
     if (!should_force_preflight)
       probe::shouldForceCORSPreflight(GetDocument(), &should_force_preflight);
+    // TODO(horo): Currently we don't support the CORS preflight cache on worker
+    // thread when off-main-thread-fetch is enabled. https://crbug.com/443374
     bool can_skip_preflight =
+        IsMainThread() &&
         CrossOriginPreflightResultCache::Shared().CanSkipPreflight(
             GetSecurityOrigin()->ToString(), cross_origin_request.Url(),
             EffectiveAllowCredentials(), cross_origin_request.HttpMethod(),
@@ -769,9 +772,13 @@ void DocumentThreadableLoader::HandlePreflightResponse(
     return;
   }
 
-  CrossOriginPreflightResultCache::Shared().AppendEntry(
-      GetSecurityOrigin()->ToString(), actual_request_.Url(),
-      std::move(preflight_result));
+  if (IsMainThread()) {
+    // TODO(horo): Currently we don't support the CORS preflight cache on worker
+    // thread when off-main-thread-fetch is enabled. https://crbug.com/443374
+    CrossOriginPreflightResultCache::Shared().AppendEntry(
+        GetSecurityOrigin()->ToString(), actual_request_.Url(),
+        std::move(preflight_result));
+  }
 }
 
 void DocumentThreadableLoader::ReportResponseReceived(
@@ -811,6 +818,25 @@ void DocumentThreadableLoader::HandleResponse(
       LoadFallbackRequestForServiceWorker();
       return;
     }
+
+    // It's possible that we issue a fetch with request with non "no-cors"
+    // mode but get an opaque filtered response if a service worker is involved.
+    // We dispatch a CORS failure for the case.
+    // TODO(yhirano): This is probably not spec conformant. Fix it after
+    // https://github.com/w3c/preload/issues/100 is addressed.
+    if (options_.cross_origin_request_policy != kAllowCrossOriginRequests &&
+        response.ServiceWorkerResponseType() ==
+            kWebServiceWorkerResponseTypeOpaque) {
+      StringBuilder builder;
+      CrossOriginAccessControl::AccessControlErrorString(
+          builder, CrossOriginAccessControl::kInvalidResponse, response,
+          GetSecurityOrigin(), request_context_);
+      DispatchDidFailAccessControlCheck(
+          ResourceError(kErrorDomainBlinkInternal, 0,
+                        response.Url().GetString(), builder.ToString()));
+      return;
+    }
+
     fallback_request_for_service_worker_ = ResourceRequest();
     client_->DidReceiveResponse(identifier, response, std::move(handle));
     return;

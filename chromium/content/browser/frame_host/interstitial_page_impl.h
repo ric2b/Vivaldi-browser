@@ -98,6 +98,7 @@ class CONTENT_EXPORT InterstitialPageImpl
   // NavigatorDelegate implementation.
   WebContents* OpenURL(const OpenURLParams& params) override;
   const std::string& GetUserAgentOverride() const override;
+  bool ShowingInterstitialPage() const override;
 
  protected:
   // NotificationObserver method:
@@ -119,7 +120,7 @@ class CONTENT_EXPORT InterstitialPageImpl
   void Paste() override;
   void SelectAll() override;
   void CreateNewWindow(
-      SiteInstance* source_site_instance,
+      RenderFrameHost* opener,
       int32_t render_view_route_id,
       int32_t main_frame_route_id,
       int32_t main_frame_widget_route_id,
@@ -265,7 +266,7 @@ class CONTENT_EXPORT InterstitialPageImpl
   RenderViewHostImpl* render_view_host_;
 
   // The frame tree structure of the current page.
-  FrameTree frame_tree_;
+  std::unique_ptr<FrameTree> frame_tree_;
 
   // The IDs for the Render[View|Process]Host hidden by this interstitial.
   int original_child_id_;

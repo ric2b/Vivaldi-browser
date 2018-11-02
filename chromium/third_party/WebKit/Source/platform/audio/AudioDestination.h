@@ -43,6 +43,7 @@ namespace blink {
 class PushPullFIFO;
 class SecurityOrigin;
 class WebAudioLatencyHint;
+class WebThread;
 
 // The AudioDestination class is an audio sink interface between the media
 // renderer and the Blink's WebAudio module. It has a FIFO to adapt the
@@ -73,49 +74,66 @@ class PLATFORM_EXPORT AudioDestination : public WebAudioDevice::RenderCallback {
               double delay_timestamp,
               size_t prior_frames_skipped) override;
 
+  // The actual render request to the WebAudio destination node. This triggers
+  // the WebAudio rendering pipe line on the web thread.
+  void RequestRenderOnWebThread(size_t frames_requested,
+                                size_t frames_to_render,
+                                double delay,
+                                double delay_timestamp,
+                                size_t prior_frames_skipped);
+
   virtual void Start();
   virtual void Stop();
 
-  size_t CallbackBufferSize() const { return callback_buffer_size_; }
-  bool IsPlaying() { return is_playing_; }
+  // Getters must be accessed from the main thread.
+  size_t CallbackBufferSize() const;
+  bool IsPlaying();
 
+  // TODO(hongchan): this should not be called by the rendering thread.
   double SampleRate() const { return web_audio_device_->SampleRate(); }
 
   // Returns the audio buffer size in frames used by the underlying audio
   // hardware.
-  int FramesPerBuffer() const { return web_audio_device_->FramesPerBuffer(); }
+  int FramesPerBuffer() const;
 
   // The information from the actual audio hardware. (via Platform::current)
   static float HardwareSampleRate();
   static unsigned long MaxChannelCount();
 
  private:
-  std::unique_ptr<WebAudioDevice> web_audio_device_;
-  unsigned number_of_output_channels_;
-  size_t callback_buffer_size_;
-  bool is_playing_;
-
-  // The render callback function of WebAudio engine. (i.e. DestinationNode)
-  AudioIOCallback& callback_;
-
-  // To pass the data from FIFO to the audio device callback.
-  RefPtr<AudioBus> output_bus_;
-
-  // To push the rendered result from WebAudio graph into the FIFO.
-  RefPtr<AudioBus> render_bus_;
-
-  // Resolves the buffer size mismatch between the WebAudio engine and
-  // the callback function from the actual audio device.
-  std::unique_ptr<PushPullFIFO> fifo_;
-
-  size_t frames_elapsed_;
-  AudioIOPosition output_position_;
-  base::TimeTicks output_position_received_timestamp_;
-
   // Check if the buffer size chosen by the WebAudioDevice is too large.
   bool CheckBufferSize();
 
   size_t HardwareBufferSize();
+
+  bool IsRenderingThread();
+
+  // Accessed by the main thread.
+  std::unique_ptr<WebAudioDevice> web_audio_device_;
+  const unsigned number_of_output_channels_;
+  size_t callback_buffer_size_;
+  bool is_playing_;
+
+  // Accessed by the device thread. Rendering thread for WebAudio graph.
+  std::unique_ptr<WebThread> rendering_thread_;
+
+  // Accessed by both threads: resolves the buffer size mismatch between the
+  // WebAudio engine and the callback function from the actual audio device.
+  std::unique_ptr<PushPullFIFO> fifo_;
+
+  // Accessed by device thread: to pass the data from FIFO to the device.
+  RefPtr<AudioBus> output_bus_;
+
+  // Accessed by rendering thread: to push the rendered result from WebAudio
+  // graph into the FIFO.
+  RefPtr<AudioBus> render_bus_;
+
+  // Accessed by rendering thread: the render callback function of WebAudio
+  // engine. (i.e. DestinationNode)
+  AudioIOCallback& callback_;
+
+  // Accessed by rendering thread.
+  size_t frames_elapsed_;
 };
 
 }  // namespace blink

@@ -35,6 +35,7 @@
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/client/cursor_client_observer.h"
 #include "ui/aura/client/focus_change_observer.h"
+#include "ui/aura/client/window_types.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_tree_host_observer.h"
 #include "ui/base/ime/text_input_client.h"
@@ -43,7 +44,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/selection_bound.h"
 #include "ui/wm/public/activation_delegate.h"
-#include "ui/wm/public/window_types.h"
 
 namespace aura {
 namespace client {
@@ -171,11 +171,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       override;
   void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
-  void OnBeginFrameDidNotSwap(const cc::BeginFrameAck& ack) override;
+  void OnDidNotProduceFrame(const cc::BeginFrameAck& ack) override;
   void ClearCompositorFrame() override;
   void DidStopFlinging() override;
   void OnDidNavigateMainFrameToNewPage() override;
   cc::FrameSinkId GetFrameSinkId() override;
+  cc::LocalSurfaceId GetLocalSurfaceId() const override;
   cc::FrameSinkId FrameSinkIdAtPoint(cc::SurfaceHittestDelegate* delegate,
                                      const gfx::Point& point,
                                      gfx::Point* transformed_point) override;
@@ -314,8 +315,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   // RenderWidgetHostViewEventHandler::Delegate:
   gfx::Rect ConvertRectToScreen(const gfx::Rect& rect) const override;
-  void ForwardKeyboardEvent(const NativeWebKeyboardEvent& event,
-                            bool* update_event) override;
+  void ForwardKeyboardEventWithLatencyInfo(const NativeWebKeyboardEvent& event,
+                                           const ui::LatencyInfo& latency,
+                                           bool* update_event) override;
   RenderFrameHostImpl* GetFocusedFrame();
   bool NeedsMouseCapture() override;
   void SetTooltipsEnabled(bool enable) override;
@@ -325,6 +327,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   RenderWidgetHostViewEventHandler* event_handler() {
     return event_handler_.get();
   }
+
+  TouchSelectionControllerClientManager*
+  touch_selection_controller_client_manager() override;
 
  protected:
   ~RenderWidgetHostViewAura() override;
@@ -375,6 +380,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                            FinishCompositionByMouse);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
                            ForwardsBeginFrameAcks);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
+                           VirtualKeyboardFocusEnsureCaretInRect);
   FRIEND_TEST_ALL_PREFIXES(WebContentsViewAuraTest,
                            WebContentsViewReparent);
 
@@ -384,7 +391,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   class WindowAncestorObserver;
   friend class WindowAncestorObserver;
 
-  void CreateAuraWindow(ui::wm::WindowType type);
+  void CreateAuraWindow(aura::client::WindowType type);
 
   void CreateDelegatedFrameHostClient();
 
@@ -573,6 +580,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // The last scroll offset of the view.
   gfx::Vector2dF last_scroll_offset_;
 
+  // The last selection bounds reported to the view.
+  gfx::SelectionBound selection_start_;
+  gfx::SelectionBound selection_end_;
+
   gfx::Insets insets_;
 
   std::vector<ui::LatencyInfo> software_latency_info_;
@@ -591,6 +602,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // While this is a ui::EventHandler for targetting, |event_handler_| actually
   // provides an implementation, and directs events to |host_|.
   std::unique_ptr<RenderWidgetHostViewEventHandler> event_handler_;
+
+  cc::FrameSinkId frame_sink_id_;
+  cc::LocalSurfaceId local_surface_id_;
 
   base::WeakPtrFactory<RenderWidgetHostViewAura> weak_ptr_factory_;
 

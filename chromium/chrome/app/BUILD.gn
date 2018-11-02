@@ -316,6 +316,7 @@ static_library("test_support") {
 
   deps = [
     "//base",
+    "//chrome/app:shutdown_signal_handlers",
     "//chrome/browser",
     "//chrome/browser/policy:path_parser",
     "//chrome/child",
@@ -328,9 +329,11 @@ static_library("test_support") {
     "//components/startup_metric_utils/browser:lib",
     "//content/public/app:both",
     "//content/public/common",
+    "//content/public/common:service_names",
     "//pdf",
     "//ppapi/features",
     "//printing/features",
+    "//services/service_manager/embedder",
     "//ui/base",
   ]
 
@@ -361,9 +364,28 @@ static_library("test_support") {
       "//components/nacl/renderer/plugin:nacl_trusted_plugin",
     ]
   }
+
+  if (enable_package_mash_services) {
+    deps += [
+      "//chrome/app/mash:chrome_mash_catalog",
+      "//chrome/app/mash:embedded_services",
+      "//mash/common",
+      "//mash/quick_launch/public/interfaces:constants",
+      "//services/ui/public/interfaces:constants",
+    ]
+
+    if (is_chromeos) {
+      deps += [ "//chrome/app/mash:chrome_mus_catalog" ]
+    }
+  }
 }
 
 chrome_packaged_services = [ ":chrome_manifest" ]
+
+if (enable_basic_printing || enable_print_preview) {
+  chrome_packaged_services +=
+      [ "//components/printing/service:pdf_compositor_manifest" ]
+}
 
 if (is_chromeos) {
   chrome_packaged_services +=
@@ -492,16 +514,14 @@ if (use_aura) {
     ":chrome_content_utility_manifest",
   ]
 
-  if (enable_package_mash_services) {
-    catalog("catalog_for_mus") {
-      embedded_services =
-          chrome_embedded_services +
-          [ ":chrome_content_packaged_services_manifest_for_mash" ]
-    }
-  }
-
   catalog("catalog") {
     embedded_services = chrome_embedded_services +
                         [ ":chrome_content_packaged_services_manifest" ]
+  }
+
+  catalog("catalog_for_mash") {
+    embedded_services =
+        chrome_embedded_services +
+        [ ":chrome_content_packaged_services_manifest_for_mash" ]
   }
 }

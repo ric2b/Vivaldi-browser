@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/simple_thread.h"
@@ -55,7 +56,7 @@ class DefaultService : public service_manager::Service {
   ~DefaultService() override {}
 
   // service_manager::Service:
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {}
 
@@ -196,8 +197,7 @@ class ServiceManagerConnection {
             nullptr, nullptr);
     service_manager::mojom::ServicePtr service;
     context_ = base::MakeUnique<service_manager::ServiceContext>(
-        base::MakeUnique<DefaultService>(),
-        service_manager::mojom::ServiceRequest(&service));
+        base::MakeUnique<DefaultService>(), mojo::MakeRequest(&service));
     background_service_manager_->RegisterService(
         service_manager::Identity(
             GetTestName(), service_manager::mojom::kRootUserID),

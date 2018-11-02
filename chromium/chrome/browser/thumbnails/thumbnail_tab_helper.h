@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "chrome/browser/thumbnails/thumbnailing_context.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -38,6 +39,7 @@ class ThumbnailTabHelper
   // content::WebContentsObserver overrides.
   void RenderViewDeleted(content::RenderViewHost* render_view_host) override;
   void DidStartLoading() override;
+  void DidStopLoading() override;
   void NavigationStopped() override;
 
   // Update the thumbnail of the given tab contents if necessary.
@@ -67,10 +69,16 @@ class ThumbnailTabHelper
   // Indicates that the given widget has changed is visibility.
   void WidgetHidden(content::RenderWidgetHost* widget);
 
+  const bool capture_on_load_finished_;
+
   content::NotificationRegistrar registrar_;
-  scoped_refptr<thumbnails::ThumbnailingContext> thumbnailing_context_;
 
   bool load_interrupted_;
+
+  scoped_refptr<thumbnails::ThumbnailingContext> thumbnailing_context_;
+
+  base::TimeTicks copy_from_surface_start_time_;
+  base::TimeTicks process_bitmap_start_time_;
 
   base::WeakPtrFactory<ThumbnailTabHelper> weak_factory_;
 

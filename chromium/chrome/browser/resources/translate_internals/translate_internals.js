@@ -7,13 +7,7 @@
 
   cr.define('cr.translateInternals', function() {
 
-    var detectionLogs_ = null;
-
-    function detectionLogs() {
-      if (detectionLogs_ === null)
-        detectionLogs_ = [];
-      return detectionLogs_;
-    }
+    var detectionLogs = [];
 
     /**
      * Initializes UI and sends a message to the browser for
@@ -244,8 +238,6 @@
         var li = document.createElement('li');
 
         var text = formatLanguageCode(language);
-        if (details['alpha_languages'].indexOf(language) != -1)
-          text += ' - alpha';
         li.innerText = text;
 
         ul.appendChild(li);
@@ -367,7 +359,7 @@
      * @param {Object} detail The object which represents the logs.
      */
     function onLanguageDetectionInfoAdded(detail) {
-      cr.translateInternals.detectionLogs().push(detail);
+      detectionLogs.push(detail);
 
       var tr = document.createElement('tr');
 
@@ -473,7 +465,7 @@
      * The callback of button#detetion-logs-dump.
      */
     function onDetectionLogsDump() {
-      var data = JSON.stringify(cr.translateInternals.detectionLogs());
+      var data = JSON.stringify(detectionLogs);
       var blob = new Blob([data], {'type': 'text/json'});
       var url = URL.createObjectURL(blob);
       var filename = 'translate_internals_detect_logs_dump.json';
@@ -489,7 +481,6 @@
     }
 
     return {
-      detectionLogs: detectionLogs,
       initialize: initialize,
       messageHandler: messageHandler,
     };

@@ -17,7 +17,6 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/threading/worker_pool.h"
 #include "net/base/net_errors.h"
 
 namespace net {
@@ -82,8 +81,8 @@ DirectoryLister::~DirectoryLister() {
 
 void DirectoryLister::Start() {
   base::PostTaskWithTraits(
-      FROM_HERE, base::TaskTraits().MayBlock().WithShutdownBehavior(
-                     base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::Bind(&Core::Start, core_));
 }
 

@@ -9,14 +9,16 @@
 
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/shelf/ink_drop_button_listener.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_view.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "chromeos/chromeos_switches.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/app_list/presenter/app_list.h"
@@ -28,37 +30,27 @@
 #include "ui/views/animation/ink_drop_mask.h"
 #include "ui/views/painter.h"
 
-namespace {
-
-bool IsVoiceInteractionEnabled() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kEnableVoiceInteraction);
-}
-
-}  // namespace
-
 namespace ash {
 
 AppListButton::AppListButton(InkDropButtonListener* listener,
                              ShelfView* shelf_view,
-                             WmShelf* wm_shelf)
+                             Shelf* shelf)
     : views::ImageButton(nullptr),
       is_showing_app_list_(false),
       background_color_(kShelfDefaultBaseColor),
       listener_(listener),
       shelf_view_(shelf_view),
-      wm_shelf_(wm_shelf) {
+      shelf_(shelf) {
   DCHECK(listener_);
   DCHECK(shelf_view_);
-  DCHECK(wm_shelf_);
+  DCHECK(shelf_);
 
   SetInkDropMode(InkDropMode::ON_NO_GESTURE_HANDLER);
   set_ink_drop_base_color(kShelfInkDropBaseColor);
   set_ink_drop_visible_opacity(kShelfInkDropVisibleOpacity);
   SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_ASH_SHELF_APP_LIST_LAUNCHER_TITLE));
-  SetSize(
-      gfx::Size(GetShelfConstant(SHELF_SIZE), GetShelfConstant(SHELF_SIZE)));
+  SetSize(gfx::Size(kShelfSize, kShelfSize));
   SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
   set_notify_action(CustomButton::NOTIFY_ON_PRESS);
 }
@@ -68,13 +60,13 @@ AppListButton::~AppListButton() {}
 void AppListButton::OnAppListShown() {
   AnimateInkDrop(views::InkDropState::ACTIVATED, nullptr);
   is_showing_app_list_ = true;
-  wm_shelf_->UpdateAutoHideState();
+  shelf_->UpdateAutoHideState();
 }
 
 void AppListButton::OnAppListDismissed() {
   AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr);
   is_showing_app_list_ = false;
-  wm_shelf_->UpdateAutoHideState();
+  shelf_->UpdateAutoHideState();
 }
 
 void AppListButton::UpdateShelfItemBackground(SkColor color) {
@@ -104,7 +96,9 @@ void AppListButton::OnGestureEvent(ui::GestureEvent* event) {
       ImageButton::OnGestureEvent(event);
       break;
     case ui::ET_GESTURE_LONG_PRESS:
-      if (IsVoiceInteractionEnabled()) {
+      if (chromeos::switches::IsVoiceInteractionEnabled()) {
+        base::RecordAction(base::UserMetricsAction(
+            "VoiceInteraction.Started.AppListButtonLongPress"));
         Shell::Get()->app_list()->StartVoiceInteractionSession();
         event->SetHandled();
       } else {
@@ -112,7 +106,7 @@ void AppListButton::OnGestureEvent(ui::GestureEvent* event) {
       }
       break;
     case ui::ET_GESTURE_LONG_TAP:
-      if (IsVoiceInteractionEnabled()) {
+      if (chromeos::switches::IsVoiceInteractionEnabled()) {
         // Also consume the long tap event. This happens after the user long
         // presses and lifts the finger. We already handled the long press
         // ignore the long tap to avoid bringing up the context menu again.
@@ -238,7 +232,7 @@ gfx::Point AppListButton::GetCenterPoint() const {
   // adjust the x-position for a left- or right-aligned shelf.
   const int x_mid = width() / 2.f;
   const int y_mid = height() / 2.f;
-  ShelfAlignment alignment = wm_shelf_->GetAlignment();
+  ShelfAlignment alignment = shelf_->alignment();
   if (alignment == SHELF_ALIGNMENT_BOTTOM ||
       alignment == SHELF_ALIGNMENT_BOTTOM_LOCKED) {
     return gfx::Point(x_mid, x_mid);

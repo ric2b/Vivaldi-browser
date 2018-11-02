@@ -27,7 +27,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/Nullable.h"
-#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "bindings/modules/v8/IDBObserverCallback.h"
 #include "bindings/modules/v8/V8BindingForModules.h"
 #include "core/dom/ExceptionCode.h"
@@ -186,7 +186,7 @@ void IDBDatabase::OnChanges(
     const WebVector<WebIDBObservation>& observations,
     const IDBDatabaseCallbacks::TransactionMap& transactions) {
   for (const auto& map_entry : observation_index_map) {
-    auto it = observers_.Find(map_entry.first);
+    auto it = observers_.find(map_entry.first);
     if (it != observers_.end()) {
       IDBObserver* observer = it->value;
 
@@ -221,7 +221,7 @@ DOMStringList* IDBDatabase::objectStoreNames() const {
 }
 
 const String& IDBDatabase::GetObjectStoreName(int64_t object_store_id) const {
-  const auto& it = metadata_.object_stores.Find(object_store_id);
+  const auto& it = metadata_.object_stores.find(object_store_id);
   DCHECK(it != metadata_.object_stores.end());
   return it->value->name;
 }
@@ -350,7 +350,7 @@ void IDBDatabase::deleteObjectStore(const String& name,
 
 IDBTransaction* IDBDatabase::transaction(
     ScriptState* script_state,
-    const StringOrStringSequenceOrDOMStringList& store_names,
+    const StringOrStringSequence& store_names,
     const String& mode_string,
     ExceptionState& exception_state) {
   IDB_TRACE("IDBDatabase::transaction");
@@ -361,10 +361,6 @@ IDBTransaction* IDBDatabase::transaction(
     scope.insert(store_names.getAsString());
   } else if (store_names.isStringSequence()) {
     for (const String& name : store_names.getAsStringSequence())
-      scope.insert(name);
-  } else if (store_names.isDOMStringList()) {
-    const Vector<String>& list = *store_names.getAsDOMStringList();
-    for (const String& name : list)
       scope.insert(name);
   } else {
     NOTREACHED();

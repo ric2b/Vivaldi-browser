@@ -239,19 +239,17 @@ class ConfigParserTest : public testing::Test {
 
   MOCK_METHOD0(Callback, void(void));
 
-  base::MessageLoopForIO loop_;
-  content::TestBrowserThread ui_thread_;
-  content::TestBrowserThread io_thread_;
+  content::TestBrowserThreadBundle test_browser_thread_bundle_;
   URLFetcherRequestListener request_listener_;
   net::FakeURLFetcherFactory factory_;
 };
 
 ConfigParserTest::ConfigParserTest()
-    : ui_thread_(content::BrowserThread::UI, &loop_),
-      io_thread_(content::BrowserThread::IO, &loop_),
-      factory_(NULL, base::Bind(&ConfigParserTest::CreateFakeURLFetcher,
-                                base::Unretained(this))) {
-}
+    : test_browser_thread_bundle_(
+          content::TestBrowserThreadBundle::IO_MAINLOOP),
+      factory_(NULL,
+               base::Bind(&ConfigParserTest::CreateFakeURLFetcher,
+                          base::Unretained(this))) {}
 
 ConfigParserTest::~ConfigParserTest() {}
 
@@ -389,7 +387,7 @@ scoped_refptr<Extension> CreateExtension(const base::string16& name,
   switch (type) {
     case extensions::Manifest::TYPE_THEME:
       manifest.Set(extensions::manifest_keys::kTheme,
-                   new base::DictionaryValue);
+                   base::MakeUnique<base::DictionaryValue>());
       break;
     case extensions::Manifest::TYPE_HOSTED_APP:
       manifest.SetString(extensions::manifest_keys::kLaunchWebURL,
@@ -438,7 +436,7 @@ TEST_F(ProfileResetterTest, ResetDefaultSearchEngineNonOrganic) {
 
   TemplateURLService* model =
       TemplateURLServiceFactory::GetForProfile(profile());
-  TemplateURL* default_engine = model->GetDefaultSearchProvider();
+  const TemplateURL* default_engine = model->GetDefaultSearchProvider();
   ASSERT_NE(static_cast<TemplateURL*>(NULL), default_engine);
   EXPECT_EQ(base::ASCIIToUTF16("first"), default_engine->short_name());
   EXPECT_EQ(base::ASCIIToUTF16("firstkey"), default_engine->keyword());

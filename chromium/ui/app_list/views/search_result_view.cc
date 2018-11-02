@@ -164,7 +164,7 @@ const char* SearchResultView::GetClassName() const {
   return kViewClassName;
 }
 
-gfx::Size SearchResultView::GetPreferredSize() const {
+gfx::Size SearchResultView::CalculatePreferredSize() const {
   return gfx::Size(kPreferredWidth, kPreferredHeight);
 }
 
@@ -406,8 +406,8 @@ void SearchResultView::ShowContextMenuForView(views::View* source,
   if (!menu_model)
     return;
 
-  context_menu_runner_.reset(new views::MenuRunner(
-      menu_model, views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::ASYNC));
+  context_menu_runner_.reset(
+      new views::MenuRunner(menu_model, views::MenuRunner::HAS_MNEMONICS));
   context_menu_runner_->RunMenuAt(GetWidget(), NULL,
                                   gfx::Rect(point, gfx::Size()),
                                   views::MENU_ANCHOR_TOPLEFT, source_type);

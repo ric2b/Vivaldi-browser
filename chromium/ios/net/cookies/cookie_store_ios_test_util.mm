@@ -6,6 +6,7 @@
 
 #import <Foundation/Foundation.h>
 
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #import "ios/net/cookies/cookie_store_ios.h"
 #include "net/cookies/canonical_cookie.h"
@@ -41,11 +42,11 @@ void TestPersistentCookieStore::RunLoadedCallback() {
   cookies.push_back(std::move(cookie));
 
   std::unique_ptr<net::CanonicalCookie> bad_canonical_cookie(
-      net::CanonicalCookie::Create(
-          GURL("http://domain/"), "name", "\x81r\xe4\xbd\xa0\xe5\xa5\xbd",
-          std::string(), "/path/",
+      base::MakeUnique<net::CanonicalCookie>(
+          "name", "\x81r\xe4\xbd\xa0\xe5\xa5\xbd", "domain", "/path/",
           base::Time(),  // creation
           base::Time(),  // expires
+          base::Time(),  // last accessed
           false,         // secure
           false,         // httponly
           net::CookieSameSite::DEFAULT_MODE, net::COOKIE_PRIORITY_DEFAULT));

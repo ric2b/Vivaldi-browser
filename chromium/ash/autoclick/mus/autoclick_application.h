@@ -25,13 +25,10 @@ class Widget;
 namespace ash {
 namespace autoclick {
 
-class AutoclickApplication
-    : public service_manager::Service,
-      public mash::mojom::Launchable,
-      public mojom::AutoclickController,
-      public service_manager::InterfaceFactory<mash::mojom::Launchable>,
-      public service_manager::InterfaceFactory<mojom::AutoclickController>,
-      public AutoclickControllerCommonDelegate {
+class AutoclickApplication : public service_manager::Service,
+                             public mash::mojom::Launchable,
+                             public mojom::AutoclickController,
+                             public AutoclickControllerCommonDelegate {
  public:
   AutoclickApplication();
   ~AutoclickApplication() override;
@@ -39,7 +36,7 @@ class AutoclickApplication
  private:
   // service_manager::Service:
   void OnStart() override;
-  void OnBindInterface(const service_manager::ServiceInfo& remote_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& remote_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
 
@@ -49,13 +46,12 @@ class AutoclickApplication
   // mojom::AutoclickController:
   void SetAutoclickDelay(uint32_t delay_in_milliseconds) override;
 
-  // service_manager::InterfaceFactory<mojom::Launchable>:
-  void Create(const service_manager::Identity& remote_identity,
-              mash::mojom::LaunchableRequest request) override;
+  void BindLaunchableRequest(const service_manager::BindSourceInfo& source_info,
+                             mash::mojom::LaunchableRequest request);
 
-  // service_manager::InterfaceFactory<mojom::AutoclickController>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::AutoclickControllerRequest request) override;
+  void BindAutoclickControllerRequest(
+      const service_manager::BindSourceInfo& source_info,
+      mojom::AutoclickControllerRequest request);
 
   // AutoclickControllerCommonDelegate:
   views::Widget* CreateAutoclickRingWidget(

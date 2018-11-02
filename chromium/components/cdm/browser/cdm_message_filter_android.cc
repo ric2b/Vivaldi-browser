@@ -41,14 +41,24 @@ const CodecInfo<media::VideoCodec> kVideoCodecsToQuery[] = {
 #if BUILDFLAG(ENABLE_HEVC_DEMUXING)
     {media::EME_CODEC_MP4_HEVC, media::kCodecHEVC, "video/mp4"},
 #endif
+#if BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
+    {media::EME_CODEC_MP4_DV_AVC, media::kCodecDolbyVision, "video/mp4"},
+#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+    {media::EME_CODEC_MP4_DV_HEVC, media::kCodecDolbyVision, "video/mp4"},
+#endif
+#endif
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 };
 
 const CodecInfo<media::AudioCodec> kAudioCodecsToQuery[] = {
+    // Vorbis is not supported. See http://crbug.com/710924 for details.
     {media::EME_CODEC_WEBM_OPUS, media::kCodecOpus, "video/webm"},
-    {media::EME_CODEC_WEBM_VORBIS, media::kCodecVorbis, "video/webm"},
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
     {media::EME_CODEC_MP4_AAC, media::kCodecAAC, "video/mp4"},
+#if BUILDFLAG(ENABLE_AC3_EAC3_AUDIO_DEMUXING)
+    {media::EME_CODEC_MP4_AC3, media::kCodecAC3, "video/mp4"},
+    {media::EME_CODEC_MP4_EAC3, media::kCodecEAC3, "video/mp4"},
+#endif
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 };
 

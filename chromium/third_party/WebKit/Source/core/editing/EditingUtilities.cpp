@@ -332,11 +332,11 @@ static bool HasEditableLevel(const Node& node, EditableLevel editable_level) {
     if ((ancestor.IsHTMLElement() || ancestor.IsDocumentNode()) &&
         ancestor.GetLayoutObject()) {
       switch (ancestor.GetLayoutObject()->Style()->UserModify()) {
-        case READ_ONLY:
+        case EUserModify::kReadOnly:
           return false;
-        case READ_WRITE:
+        case EUserModify::kReadWrite:
           return true;
-        case READ_WRITE_PLAINTEXT_ONLY:
+        case EUserModify::kReadWritePlaintextOnly:
           return editable_level != kRichlyEditable;
       }
       NOTREACHED();
@@ -980,13 +980,13 @@ Element* EnclosingBlockFlowElement(const Node& node) {
 
 EUserSelect UsedValueOfUserSelect(const Node& node) {
   if (node.IsHTMLElement() && ToHTMLElement(node).IsTextControl())
-    return SELECT_TEXT;
+    return EUserSelect::kText;
   if (!node.GetLayoutObject())
-    return SELECT_NONE;
+    return EUserSelect::kNone;
 
   const ComputedStyle* style = node.GetLayoutObject()->Style();
-  if (style->UserModify() != READ_ONLY)
-    return SELECT_TEXT;
+  if (style->UserModify() != EUserModify::kReadOnly)
+    return EUserSelect::kText;
 
   return style->UserSelect();
 }
@@ -2073,7 +2073,8 @@ bool IsInPasswordField(const Position& position) {
 
 bool IsTextSecurityNode(const Node* node) {
   return node && node->GetLayoutObject() &&
-         node->GetLayoutObject()->Style()->TextSecurity() != TSNONE;
+         node->GetLayoutObject()->Style()->TextSecurity() !=
+             ETextSecurity::kNone;
 }
 
 // If current position is at grapheme boundary, return 0; otherwise, return the
@@ -2103,7 +2104,7 @@ size_t ComputeDistanceToRightGraphemeBoundary(const Position& position) {
 }
 
 const StaticRangeVector* TargetRangesForInputEvent(const Node& node) {
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited. see http://crbug.com/590369 for more details.
   node.GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
   if (!HasRichlyEditableStyle(node))
@@ -2112,7 +2113,7 @@ const StaticRangeVector* TargetRangesForInputEvent(const Node& node) {
       FirstEphemeralRangeOf(node.GetDocument()
                                 .GetFrame()
                                 ->Selection()
-                                .ComputeVisibleSelectionInDOMTreeDeprecated());
+                                .ComputeVisibleSelectionInDOMTree());
   if (range.IsNull())
     return nullptr;
   return new StaticRangeVector(1, StaticRange::Create(range));

@@ -8,6 +8,7 @@ import android.accounts.Account;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -21,14 +22,14 @@ import org.chromium.chrome.test.util.browser.signin.MockChangeEventChecker;
 import org.chromium.components.signin.AccountManagerHelper;
 import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.signin.test.util.AccountHolder;
-import org.chromium.components.signin.test.util.MockAccountManager;
+import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
 
 /**
  * Instrumentation tests for {@link SigninHelper}.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 public class SigninHelperTest {
-    private MockAccountManager mAccountManager;
+    private FakeAccountManagerDelegate mAccountManager;
     private AdvancedMockContext mContext;
     private MockChangeEventChecker mEventChecker;
 
@@ -38,10 +39,13 @@ public class SigninHelperTest {
                 InstrumentationRegistry.getInstrumentation().getTargetContext());
         mEventChecker = new MockChangeEventChecker();
 
-        // Mock out the account manager on the device.
-        mAccountManager = new MockAccountManager(
-                mContext, InstrumentationRegistry.getInstrumentation().getContext());
+        mAccountManager = new FakeAccountManagerDelegate(mContext);
         AccountManagerHelper.overrideAccountManagerHelperForTests(mContext, mAccountManager);
+    }
+
+    @After
+    public void tearDown() {
+        AccountManagerHelper.resetAccountManagerHelperForTests();
     }
 
     @Test

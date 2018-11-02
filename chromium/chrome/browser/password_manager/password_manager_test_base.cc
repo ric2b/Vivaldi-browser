@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
@@ -26,6 +27,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/cert/cert_verify_result.h"
+#include "net/dns/mock_host_resolver.h"
 #include "net/http/transport_security_state.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/url_request/url_request_context.h"
@@ -63,6 +65,9 @@ class CustomManagePasswordsUIController : public ManagePasswordsUIController {
 
  private:
   // PasswordsClientUIDelegate:
+  void OnPasswordSubmitted(
+      std::unique_ptr<password_manager::PasswordFormManager> form_manager)
+      override;
   bool OnChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
       const GURL& origin,
@@ -93,7 +98,7 @@ CustomManagePasswordsUIController::CustomManagePasswordsUIController(
   // Do not silently replace an existing ManagePasswordsUIController because it
   // unregisters itself in WebContentsDestroyed().
   EXPECT_FALSE(web_contents->GetUserData(UserDataKey()));
-  web_contents->SetUserData(UserDataKey(), this);
+  web_contents->SetUserData(UserDataKey(), base::WrapUnique(this));
 }
 
 void CustomManagePasswordsUIController::WaitForState(
@@ -102,6 +107,17 @@ void CustomManagePasswordsUIController::WaitForState(
   target_state_ = target_state;
   run_loop_ = &run_loop;
   run_loop_->Run();
+}
+
+void CustomManagePasswordsUIController::OnPasswordSubmitted(
+    std::unique_ptr<password_manager::PasswordFormManager> form_manager) {
+  if (target_state_ == password_manager::ui::PENDING_PASSWORD_STATE) {
+    run_loop_->Quit();
+    run_loop_ = nullptr;
+    target_state_ = password_manager::ui::INACTIVE_STATE;
+  }
+  return ManagePasswordsUIController::OnPasswordSubmitted(
+      std::move(form_manager));
 }
 
 bool CustomManagePasswordsUIController::OnChooseCredentials(
@@ -232,6 +248,15 @@ void BubbleObserver::WaitForManagementState() const {
   controller->WaitForState(password_manager::ui::MANAGE_STATE);
 }
 
+void BubbleObserver::WaitForSavePrompt() const {
+  if (passwords_ui_controller_->GetState() ==
+      password_manager::ui::PENDING_PASSWORD_STATE)
+    return;
+  CustomManagePasswordsUIController* controller =
+      static_cast<CustomManagePasswordsUIController*>(passwords_ui_controller_);
+  controller->WaitForState(password_manager::ui::PENDING_PASSWORD_STATE);
+}
+
 PasswordManagerBrowserTestBase::PasswordManagerBrowserTestBase()
     : https_test_server_(net::EmbeddedTestServer::TYPE_HTTPS),
       web_contents_(nullptr) {}
@@ -255,6 +280,9 @@ void PasswordManagerBrowserTestBase::SetUpOnMainThread() {
       FILE_PATH_LITERAL("chrome/test/data");
   https_test_server().ServeFilesFromSourceDirectory(base::FilePath(kDocRoot));
   ASSERT_TRUE(https_test_server().Start());
+
+  // Setup the mock host resolver
+  host_resolver()->AddRule("*", "127.0.0.1");
 
   // Whitelist all certs for the HTTPS server.
   auto cert = https_test_server().GetCertificate();
@@ -460,9 +488,9 @@ void PasswordManagerBrowserTestBase::AddHSTSHost(const std::string& host) {
 
   content::BrowserThread::PostTaskAndReply(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&AddHSTSHostImpl,
-                 make_scoped_refptr(browser()->profile()->GetRequestContext()),
-                 host),
+      base::BindOnce(
+          &AddHSTSHostImpl,
+          make_scoped_refptr(browser()->profile()->GetRequestContext()), host),
       run_loop.QuitClosure());
 
   run_loop.Run();

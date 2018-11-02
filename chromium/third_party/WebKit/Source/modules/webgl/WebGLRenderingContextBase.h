@@ -29,13 +29,10 @@
 #include <memory>
 #include <set>
 #include "bindings/core/v8/Nullable.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/ScriptWrappable.h"
-#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "core/CoreExport.h"
+#include "core/dom/ArrayBufferViewHelpers.h"
 #include "core/dom/DOMTypedArray.h"
-#include "core/dom/NotShared.h"
 #include "core/dom/TypedFlexibleArrayBufferView.h"
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
@@ -45,6 +42,9 @@
 #include "modules/webgl/WebGLTexture.h"
 #include "modules/webgl/WebGLVertexArrayObjectBase.h"
 #include "platform/Timer.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/ScriptWrappable.h"
+#include "platform/bindings/ScriptWrappableVisitor.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/gpu/DrawingBuffer.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
@@ -127,6 +127,12 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
  public:
   ~WebGLRenderingContextBase() override;
 
+  HTMLCanvasElement* canvas() const {
+    if (host()->IsOffscreenCanvas())
+      return nullptr;
+    return static_cast<HTMLCanvasElement*>(host());
+  }
+
   virtual String ContextName() const = 0;
   virtual void RegisterContextExtensions() = 0;
 
@@ -168,7 +174,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void bufferData(GLenum target, long long size, GLenum usage);
   void bufferData(GLenum target, DOMArrayBuffer* data, GLenum usage);
   void bufferData(GLenum target,
-                  NotShared<DOMArrayBufferView> data,
+                  MaybeShared<DOMArrayBufferView> data,
                   GLenum usage);
   void bufferSubData(GLenum target, long long offset, DOMArrayBuffer* data);
   void bufferSubData(GLenum target,
@@ -192,7 +198,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                             GLsizei width,
                             GLsizei height,
                             GLint border,
-                            NotShared<DOMArrayBufferView> data);
+                            MaybeShared<DOMArrayBufferView> data);
   void compressedTexSubImage2D(GLenum target,
                                GLint level,
                                GLint xoffset,
@@ -200,7 +206,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                GLsizei width,
                                GLsizei height,
                                GLenum format,
-                               NotShared<DOMArrayBufferView> data);
+                               MaybeShared<DOMArrayBufferView> data);
 
   void copyTexImage2D(GLenum target,
                       GLint level,
@@ -325,7 +331,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                           GLsizei height,
                           GLenum format,
                           GLenum type,
-                          NotShared<DOMArrayBufferView> pixels);
+                          MaybeShared<DOMArrayBufferView> pixels);
   void renderbufferStorage(GLenum target,
                            GLenum internalformat,
                            GLsizei width,
@@ -348,7 +354,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                   GLint border,
                   GLenum format,
                   GLenum type,
-                  NotShared<DOMArrayBufferView>);
+                  MaybeShared<DOMArrayBufferView>);
   void texImage2D(GLenum target,
                   GLint level,
                   GLint internalformat,
@@ -398,7 +404,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                      GLsizei height,
                      GLenum format,
                      GLenum type,
-                     NotShared<DOMArrayBufferView>);
+                     MaybeShared<DOMArrayBufferView>);
   void texSubImage2D(GLenum target,
                      GLint level,
                      GLint xoffset,
@@ -476,19 +482,19 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void uniform4iv(const WebGLUniformLocation*, Vector<GLint>&);
   void uniformMatrix2fv(const WebGLUniformLocation*,
                         GLboolean transpose,
-                        NotShared<DOMFloat32Array> value);
+                        MaybeShared<DOMFloat32Array> value);
   void uniformMatrix2fv(const WebGLUniformLocation*,
                         GLboolean transpose,
                         Vector<GLfloat>& value);
   void uniformMatrix3fv(const WebGLUniformLocation*,
                         GLboolean transpose,
-                        NotShared<DOMFloat32Array> value);
+                        MaybeShared<DOMFloat32Array> value);
   void uniformMatrix3fv(const WebGLUniformLocation*,
                         GLboolean transpose,
                         Vector<GLfloat>& value);
   void uniformMatrix4fv(const WebGLUniformLocation*,
                         GLboolean transpose,
-                        NotShared<DOMFloat32Array> value);
+                        MaybeShared<DOMFloat32Array> value);
   void uniformMatrix4fv(const WebGLUniformLocation*,
                         GLboolean transpose,
                         Vector<GLfloat>& value);
@@ -497,16 +503,16 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void validateProgram(WebGLProgram*);
 
   void vertexAttrib1f(GLuint index, GLfloat x);
-  void vertexAttrib1fv(GLuint index, NotShared<const DOMFloat32Array> values);
+  void vertexAttrib1fv(GLuint index, MaybeShared<const DOMFloat32Array> values);
   void vertexAttrib1fv(GLuint index, const Vector<GLfloat>& values);
   void vertexAttrib2f(GLuint index, GLfloat x, GLfloat y);
-  void vertexAttrib2fv(GLuint index, NotShared<const DOMFloat32Array> values);
+  void vertexAttrib2fv(GLuint index, MaybeShared<const DOMFloat32Array> values);
   void vertexAttrib2fv(GLuint index, const Vector<GLfloat>& values);
   void vertexAttrib3f(GLuint index, GLfloat x, GLfloat y, GLfloat z);
-  void vertexAttrib3fv(GLuint index, NotShared<const DOMFloat32Array> values);
+  void vertexAttrib3fv(GLuint index, MaybeShared<const DOMFloat32Array> values);
   void vertexAttrib3fv(GLuint index, const Vector<GLfloat>& values);
   void vertexAttrib4f(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
-  void vertexAttrib4fv(GLuint index, NotShared<const DOMFloat32Array> values);
+  void vertexAttrib4fv(GLuint index, MaybeShared<const DOMFloat32Array> values);
   void vertexAttrib4fv(GLuint index, const Vector<GLfloat>& values);
   void vertexAttribPointer(GLuint index,
                            GLint size,
@@ -618,17 +624,12 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   friend class ScopedFramebufferRestorer;
   friend class ScopedUnpackParametersResetRestore;
 
-  WebGLRenderingContextBase(HTMLCanvasElement*,
-                            std::unique_ptr<WebGraphicsContext3DProvider>,
-                            const CanvasContextCreationAttributes&,
-                            unsigned);
-  WebGLRenderingContextBase(OffscreenCanvas*,
+  WebGLRenderingContextBase(CanvasRenderingContextHost*,
                             std::unique_ptr<WebGraphicsContext3DProvider>,
                             const CanvasContextCreationAttributes&,
                             unsigned);
   PassRefPtr<DrawingBuffer> CreateDrawingBuffer(
-      std::unique_ptr<WebGraphicsContext3DProvider>,
-      DrawingBuffer::ChromiumImageUsage);
+      std::unique_ptr<WebGraphicsContext3DProvider>);
   void SetupFlags();
 
   // CanvasRenderingContext implementation.
@@ -944,6 +945,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   bool is_oes_texture_half_float_formats_types_added_;
   bool is_web_gl_depth_texture_formats_types_added_;
   bool is_ext_srgb_formats_types_added_;
+  bool is_ext_color_buffer_float_formats_added_;
 
   std::set<GLenum> supported_internal_formats_;
   std::set<GLenum> supported_tex_image_source_internal_formats_;
@@ -1651,8 +1653,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                         GLuint offset);
 
  private:
-  WebGLRenderingContextBase(HTMLCanvasElement*,
-                            OffscreenCanvas*,
+  WebGLRenderingContextBase(CanvasRenderingContextHost*,
                             RefPtr<WebTaskRunner>,
                             std::unique_ptr<WebGraphicsContext3DProvider>,
                             const CanvasContextCreationAttributes&,
@@ -1684,6 +1685,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   bool IsPaintable() const final { return GetDrawingBuffer(); }
 };
 
+// TODO(fserb): remove this.
 DEFINE_TYPE_CASTS(WebGLRenderingContextBase,
                   CanvasRenderingContext,
                   context,

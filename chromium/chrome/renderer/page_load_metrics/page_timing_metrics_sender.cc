@@ -9,29 +9,25 @@
 #include "base/callback.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/common/page_load_metrics/page_load_metrics_messages.h"
-#include "ipc/ipc_sender.h"
+#include "chrome/common/page_load_metrics/page_load_metrics_constants.h"
+#include "chrome/renderer/page_load_metrics/page_timing_sender.h"
 
 namespace page_load_metrics {
 
 namespace {
 const int kInitialTimerDelayMillis = 50;
-const int kTimerDelayMillis = 1000;
 }  // namespace
 
 PageTimingMetricsSender::PageTimingMetricsSender(
-    IPC::Sender* ipc_sender,
-    int routing_id,
+    std::unique_ptr<PageTimingSender> sender,
     std::unique_ptr<base::Timer> timer,
-    const PageLoadTiming& initial_timing)
-    : ipc_sender_(ipc_sender),
-      routing_id_(routing_id),
+    mojom::PageLoadTimingPtr initial_timing)
+    : sender_(std::move(sender)),
       timer_(std::move(timer)),
-      last_timing_(initial_timing),
-      metadata_(PageLoadMetadata()) {
-  if (!initial_timing.IsEmpty()) {
-    // Send an initial IPC relatively early to help track aborts.
-    EnsureSendTimer(kInitialTimerDelayMillis);
+      last_timing_(std::move(initial_timing)),
+      metadata_(mojom::PageLoadMetadata::New()) {
+  if (!IsEmpty(*last_timing_)) {
+    EnsureSendTimer();
   }
 }
 
@@ -46,38 +42,43 @@ PageTimingMetricsSender::~PageTimingMetricsSender() {
 
 void PageTimingMetricsSender::DidObserveLoadingBehavior(
     blink::WebLoadingBehaviorFlag behavior) {
-  if (behavior & metadata_.behavior_flags)
+  if (behavior & metadata_->behavior_flags)
     return;
-  metadata_.behavior_flags |= behavior;
-  EnsureSendTimer(kTimerDelayMillis);
+  metadata_->behavior_flags |= behavior;
+  EnsureSendTimer();
 }
 
-void PageTimingMetricsSender::Send(const PageLoadTiming& timing) {
-  if (timing == last_timing_)
+void PageTimingMetricsSender::Send(mojom::PageLoadTimingPtr timing) {
+  if (last_timing_->Equals(*timing))
     return;
 
   // We want to make sure that each PageTimingMetricsSender is associated
   // with a distinct page navigation. Because we reset the object on commit,
   // we can trash last_timing_ on a provisional load before SendNow() fires.
-  if (!last_timing_.navigation_start.is_null() &&
-      last_timing_.navigation_start != timing.navigation_start) {
+  if (!last_timing_->navigation_start.is_null() &&
+      last_timing_->navigation_start != timing->navigation_start) {
     return;
   }
 
-  last_timing_ = timing;
-  EnsureSendTimer(kTimerDelayMillis);
+  last_timing_ = std::move(timing);
+  EnsureSendTimer();
 }
 
-void PageTimingMetricsSender::EnsureSendTimer(int delay) {
-  if (!timer_->IsRunning())
+void PageTimingMetricsSender::EnsureSendTimer() {
+  if (!timer_->IsRunning()) {
+    // Send the first IPC eagerly to make sure the receiving side knows we're
+    // sending metrics as soon as possible.
+    int delay_ms =
+        have_sent_ipc_ ? kBufferTimerDelayMillis : kInitialTimerDelayMillis;
     timer_->Start(
-        FROM_HERE, base::TimeDelta::FromMilliseconds(delay),
+        FROM_HERE, base::TimeDelta::FromMilliseconds(delay_ms),
         base::Bind(&PageTimingMetricsSender::SendNow, base::Unretained(this)));
+  }
 }
 
 void PageTimingMetricsSender::SendNow() {
-  ipc_sender_->Send(new PageLoadMetricsMsg_TimingUpdated(
-      routing_id_, last_timing_, metadata_));
+  have_sent_ipc_ = true;
+  sender_->SendTiming(last_timing_, metadata_);
 }
 
 }  // namespace page_load_metrics

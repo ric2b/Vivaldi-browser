@@ -27,7 +27,7 @@ ScrollAnimatorCompositorCoordinator::ScrollAnimatorCompositorCoordinator()
       compositor_animation_group_id_(0),
       impl_only_animation_takeover_(false) {
   compositor_player_ = CompositorAnimationPlayer::Create();
-  ASSERT(compositor_player_);
+  DCHECK(compositor_player_);
   compositor_player_->SetAnimationDelegate(this);
 }
 
@@ -67,7 +67,7 @@ bool ScrollAnimatorCompositorCoordinator::HasAnimationThatRequiresService()
     case RunState::kWaitingToCancelOnCompositor:
       return true;
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return false;
 }
 
@@ -158,7 +158,7 @@ void ScrollAnimatorCompositorCoordinator::CompositorAnimationFinished(
     case RunState::kIdle:
     case RunState::kPostAnimationCleanup:
     case RunState::kRunningOnMainThread:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       break;
     case RunState::kWaitingToSendToCompositor:
     case RunState::kWaitingToCancelOnCompositorButNewScroll:
@@ -343,7 +343,7 @@ String ScrollAnimatorCompositorCoordinator::RunStateAsText() const {
     case RunState::kRunningOnCompositorButNeedsAdjustment:
       return String("RunningOnCompositorButNeedsAdjustment");
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return String();
 }
 

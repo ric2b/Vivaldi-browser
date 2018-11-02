@@ -272,6 +272,11 @@ class AutofillManager : public AutofillDownloadManager::Observer,
     return form_interactions_ukm_logger_.get();
   }
 
+  // payments::PaymentsClientDelegate:
+  // Exposed for testing.
+  void OnDidUploadCard(AutofillClient::PaymentsRpcResult result,
+                       const std::string& server_id) override;
+
   // Exposed for testing.
   AutofillExternalDelegate* external_delegate() {
     return external_delegate_;
@@ -301,7 +306,6 @@ class AutofillManager : public AutofillDownloadManager::Observer,
       AutofillClient::PaymentsRpcResult result,
       const base::string16& context_token,
       std::unique_ptr<base::DictionaryValue> legal_message) override;
-  void OnDidUploadCard(AutofillClient::PaymentsRpcResult result) override;
 
   // payments::FullCardRequest::ResultDelegate:
   void OnFullCardRequestSucceeded(const CreditCard& card,
@@ -423,20 +427,26 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   void ImportFormData(const FormStructure& submitted_form);
 
   // Logs |metric_name| with RAPPOR, for the specific form |source_url|.
-  void CollectRapportSample(const GURL& source_url,
-                            const std::string& metric_name) const;
+  void CollectRapporSample(const GURL& source_url,
+                           const std::string& metric_name) const;
 
   // Examines |card| and the stored profiles and if a candidate set of profiles
   // is found that matches the client-side validation rules, assigns the values
-  // to |profiles|.  If no valid set can be found, returns false, assigns the
-  // failure reason to |address_upload_decision_metric|, and if applicable, the
-  // RAPPOR metric to log to |rappor_metric_name|.
-  bool GetProfilesForCreditCardUpload(const CreditCard& card,
-                                      std::vector<AutofillProfile>* profiles,
-                                      autofill::AutofillMetrics::
-                                          CardUploadDecisionMetric*
-                                              address_upload_decision_metric,
-                                      std::string* rappor_metric_name) const;
+  // to |upload_request.profiles| and returns 0. If no valid set can be found,
+  // returns the failure reasons and, if applicable, the RAPPOR metric to log to
+  // |rappor_metric_name|. Appends any experiments that were triggered to
+  // |upload_request.active_experiments|. The return value is a bitmask of
+  // |AutofillMetrics::CardUploadDecisionMetric|.
+  int SetProfilesForCreditCardUpload(
+      const CreditCard& card,
+      payments::PaymentsClient::UploadRequestDetails* upload_request,
+      std::string* rappor_metric_name) const;
+
+  // Returns metric relevant to the CVC field based on values in
+  // |found_cvc_field_|, |found_value_in_cvc_field_| and
+  // |found_cvc_value_in_non_cvc_field_|.
+  AutofillMetrics::CardUploadDecisionMetric GetCVCCardUploadDecisionMetric()
+      const;
 
   // If |initial_interaction_timestamp_| is unset or is set to a later time than
   // |interaction_timestamp|, updates the cached timestamp.  The latter check is
@@ -482,9 +492,10 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   void DumpAutofillData(bool imported_cc) const;
 #endif
 
-  // Logs the card upload decision UKM.
-  void LogCardUploadDecisionUkm(
-      AutofillMetrics::CardUploadDecisionMetric upload_decision);
+  // Logs the card upload decisions in UKM and UMA.
+  // |upload_decision_metrics| is a bitmask of
+  // |AutofillMetrics::CardUploadDecisionMetric|.
+  void LogCardUploadDecisions(int upload_decision_metrics);
 
   // Provides driver-level context to the shared code of the component. Must
   // outlive this object.
@@ -560,8 +571,22 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   // Collected information about a pending upload request.
   payments::PaymentsClient::UploadRequestDetails upload_request_;
   bool user_did_accept_upload_prompt_;
-  GURL pending_upload_request_url_;
+
+  // |should_cvc_be_requested_| is |true| if we should request CVC from the user
+  // in the card upload dialog.
   bool should_cvc_be_requested_;
+  // |found_cvc_field_| is |true| if there exists a field that is determined to
+  // be a CVC field via heuristics.
+  bool found_cvc_field_;
+  // |found_value_in_cvc_field_| is |true| if a field that is determined to
+  // be a CVC field via heuristics has non-empty |value|.
+  // |value| may or may not be a valid CVC.
+  bool found_value_in_cvc_field_;
+  // |found_cvc_value_in_non_cvc_field_| is |true| if a field that is not
+  // determined to be a CVC field via heuristics has a valid CVC |value|.
+  bool found_cvc_value_in_non_cvc_field_;
+
+  GURL pending_upload_request_url_;
 
 #ifdef ENABLE_FORM_DEBUG_DUMP
   // The last few autofilled forms (key/value pairs) submitted, for debugging.

@@ -8,26 +8,19 @@
 // ToV8() provides C++ -> V8 conversion. Note that ToV8() can return an empty
 // handle. Call sites must check IsEmpty() before using return value.
 
-#include "bindings/core/v8/ScriptWrappable.h"
-#include "bindings/core/v8/ToV8.h"
-#include "core/CoreExport.h"
-#include "core/dom/NotShared.h"
+#include "bindings/core/v8/IDLDictionaryBase.h"
+#include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/V8NodeFilterCondition.h"
+#include "core/dom/ArrayBufferViewHelpers.h"
+#include "core/dom/Node.h"
+#include "platform/bindings/ToV8.h"
 #include "v8/include/v8.h"
 
 namespace blink {
 
-class DOMWindow;
 class Dictionary;
+class DOMWindow;
 class EventTarget;
-class Node;
-
-inline v8::Local<v8::Value> ToV8(Node* impl,
-                                 v8::Local<v8::Object> creation_context,
-                                 v8::Isolate* isolate) {
-  return ToV8(ScriptWrappable::FromNode(impl), creation_context, isolate);
-}
-
-// Special versions for DOMWindow and EventTarget
 
 CORE_EXPORT v8::Local<v8::Value> ToV8(DOMWindow*,
                                       v8::Local<v8::Object> creation_context,
@@ -35,8 +28,11 @@ CORE_EXPORT v8::Local<v8::Value> ToV8(DOMWindow*,
 CORE_EXPORT v8::Local<v8::Value> ToV8(EventTarget*,
                                       v8::Local<v8::Object> creation_context,
                                       v8::Isolate*);
-
-// Dictionary
+inline v8::Local<v8::Value> ToV8(Node* node,
+                                 v8::Local<v8::Object> creation_context,
+                                 v8::Isolate* isolate) {
+  return ToV8(static_cast<ScriptWrappable*>(node), creation_context, isolate);
+}
 
 inline v8::Local<v8::Value> ToV8(const Dictionary& value,
                                  v8::Local<v8::Object> creation_context,
@@ -50,6 +46,37 @@ inline v8::Local<v8::Value> ToV8(NotShared<T> value,
                                  v8::Local<v8::Object> creation_context,
                                  v8::Isolate* isolate) {
   return ToV8(value.View(), creation_context, isolate);
+}
+
+inline v8::Local<v8::Value> ToV8(const V8NodeFilterCondition* value,
+                                 v8::Local<v8::Object> creation_context,
+                                 v8::Isolate* isolate) {
+  return value ? value->Callback(isolate) : v8::Null(isolate).As<v8::Value>();
+}
+
+// Dictionary
+
+inline v8::Local<v8::Value> ToV8(const IDLDictionaryBase& value,
+                                 v8::Local<v8::Object> creation_context,
+                                 v8::Isolate* isolate) {
+  return value.ToV8Impl(creation_context, isolate);
+}
+
+// ScriptValue
+
+inline v8::Local<v8::Value> ToV8(const ScriptValue& value,
+                                 v8::Local<v8::Object> creation_context,
+                                 v8::Isolate* isolate) {
+  if (value.IsEmpty())
+    return v8::Undefined(isolate);
+  return value.V8Value();
+}
+
+// Cannot define in ScriptValue because of the circular dependency between toV8
+// and ScriptValue
+template <typename T>
+inline ScriptValue ScriptValue::From(ScriptState* script_state, T&& value) {
+  return ScriptValue(script_state, ToV8(std::forward<T>(value), script_state));
 }
 
 }  // namespace blink

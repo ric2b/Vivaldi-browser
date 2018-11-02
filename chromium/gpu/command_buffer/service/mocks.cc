@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "gpu/command_buffer/service/mocks.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
-#include "gpu/command_buffer/service/command_executor.h"
-#include "gpu/command_buffer/service/mocks.h"
+#include "gpu/command_buffer/service/command_buffer_service.h"
 
 using testing::Invoke;
 using testing::_;
@@ -28,19 +28,44 @@ error::Error AsyncAPIMock::FakeDoCommands(unsigned int num_commands,
                                           const volatile void* buffer,
                                           int num_entries,
                                           int* entries_processed) {
-  return AsyncAPIInterface::DoCommands(
-      num_commands, buffer, num_entries, entries_processed);
+  DCHECK(entries_processed);
+  int commands_to_process = num_commands;
+  error::Error result = error::kNoError;
+  const volatile CommandBufferEntry* cmd_data =
+      static_cast<const volatile CommandBufferEntry*>(buffer);
+  int process_pos = 0;
+
+  while (process_pos < num_entries && result == error::kNoError &&
+         commands_to_process--) {
+    CommandHeader header = CommandHeader::FromVolatile(cmd_data->value_header);
+    DCHECK_GT(header.size, 0u);
+    DCHECK_LE(static_cast<int>(header.size) + process_pos, num_entries);
+
+    const unsigned int command = header.command;
+    const unsigned int arg_count = header.size - 1;
+
+    result = DoCommand(command, arg_count, cmd_data);
+
+    if (result != error::kDeferCommandUntilLater) {
+      process_pos += header.size;
+      cmd_data += header.size;
+    }
+  }
+
+  *entries_processed = process_pos;
+
+  return result;
 }
 
 void AsyncAPIMock::SetToken(unsigned int command,
                             unsigned int arg_count,
                             const volatile void* _args) {
-  DCHECK(engine_);
+  DCHECK(command_buffer_service_);
   DCHECK_EQ(1u, command);
   DCHECK_EQ(1u, arg_count);
   const volatile cmd::SetToken* args =
       static_cast<const volatile cmd::SetToken*>(_args);
-  engine_->set_token(args->token);
+  command_buffer_service_->SetToken(args->token);
 }
 
 namespace gles2 {

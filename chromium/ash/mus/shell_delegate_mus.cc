@@ -9,7 +9,6 @@
 #include "ash/gpu_support_stub.h"
 #include "ash/mus/accessibility_delegate_mus.h"
 #include "ash/mus/context_menu_mus.h"
-#include "ash/mus/shelf_delegate_mus.h"
 #include "ash/mus/system_tray_delegate_mus.h"
 #include "ash/mus/wallpaper_delegate_mus.h"
 #include "ash/palette_delegate.h"
@@ -103,8 +102,12 @@ void ShellDelegateMus::OpenUrlFromArc(const GURL& url) {
   NOTIMPLEMENTED();
 }
 
-ShelfDelegate* ShellDelegateMus::CreateShelfDelegate(ShelfModel* model) {
-  return new ShelfDelegateMus();
+void ShellDelegateMus::ShelfInit() {
+  NOTIMPLEMENTED();
+}
+
+void ShellDelegateMus::ShelfShutdown() {
+  NOTIMPLEMENTED();
 }
 
 SystemTrayDelegate* ShellDelegateMus::CreateSystemTrayDelegate() {
@@ -131,9 +134,9 @@ std::unique_ptr<PaletteDelegate> ShellDelegateMus::CreatePaletteDelegate() {
   return nullptr;
 }
 
-ui::MenuModel* ShellDelegateMus::CreateContextMenu(WmShelf* wm_shelf,
+ui::MenuModel* ShellDelegateMus::CreateContextMenu(Shelf* shelf,
                                                    const ShelfItem* item) {
-  return new ContextMenuMus(wm_shelf);
+  return new ContextMenuMus(shelf);
 }
 
 GPUSupport* ShellDelegateMus::CreateGPUSupport() {
@@ -150,6 +153,14 @@ base::string16 ShellDelegateMus::GetProductName() const {
 gfx::Image ShellDelegateMus::GetDeprecatedAcceleratorImage() const {
   NOTIMPLEMENTED();
   return gfx::Image();
+}
+
+PrefService* ShellDelegateMus::GetActiveUserPrefService() const {
+  // This code should never be called in the case of Config::MASH. Rather, the
+  // PrefService instance is stored by Shell when it manages to connect to the
+  // pref service in Chrome.
+  NOTREACHED();
+  return nullptr;
 }
 
 bool ShellDelegateMus::IsTouchscreenEnabledInPrefs(bool use_local_state) const {

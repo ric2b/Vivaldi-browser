@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">Це розширення змінило сторінку, яка відкривається під час натискання кнопки "Домашня сторінка".</translation>
 <translation id="1588438908519853928">Звичайний</translation>
 <translation id="1616206807336925449">Для цього розширення не потрібні спеціальні дозволи.</translation>
-<translation id="1620510694547887537">Камера</translation>
 <translation id="1635033183663317347">Установив опікун.</translation>
 <translation id="1723824996674794290">&amp;Нове вікно</translation>
 <translation id="1729533290416704613">Розширення також змінило сторінку, яка відкривається під час пошуку в універсальному вікні пошуку.</translation>
-<translation id="1789575671122666129">Спливаючі вікна</translation>
 <translation id="1850508293116537636">Повернути &amp;за годинниковою стрілкою</translation>
 <translation id="1859234291848436338">Напрямок письма</translation>
 <translation id="1901303067676059328">Вибрати &amp;всі</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">Сховати цей плагін</translation>
 <translation id="2087822576218954668">Друк: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">Оновити плагін</translation>
-<translation id="2147827593068025794">Фонова синхронізація</translation>
 <translation id="215753907730220065">Вийти з повноекранного режиму</translation>
 <translation id="2177950615300672361">Анонімна вкладка: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">Визначати (за умовчанням)</translation>
 <translation id="219008588003277019">Модуль Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Вставити як звичайний текст</translation>
 <translation id="2282146716419988068">Процес GPU</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">Інша програма на вашому комп’ютері додала розширення, яке може змінити роботу Vivaldi.</translation>
 <translation id="2445081178310039857">Потрібен кореневий каталог розширення.</translation>
 <translation id="2470702053775288986">Непідтримувані розширення вимкнено</translation>
-<translation id="2482878487686419369">Сповіщення</translation>
 <translation id="2501797496290880632">Введіть комбінацію</translation>
-<translation id="2509857212037838238">Установити плагін <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">Змінна пам’ять</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Знову ввімкнути</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">ЦП</translation>
 <translation id="3124111068741548686">Обробка КОРИСТУВАЧА</translation>
 <translation id="3222066309010235055">Візуалізатор: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Мікрофон</translation>
 <translation id="3241680850019875542">Виберіть кореневий каталог для пакування розширення. Щоб оновити розширення, також виберіть файл секретного ключа для повторного використання.</translation>
 <translation id="3280237271814976245">Зберегти &amp;як...</translation>
 <translation id="3288047731229977326">Розширення, які працюють у режимі розробника, можуть пошкодити ваш комп’ютер. Якщо ви не розробник, вимкніть їх заради безпеки.</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">Копіювати адресу зображення</translation>
 <translation id="335985608243443814">Переглянути...</translation>
 <translation id="3378572629723696641">Це розширення могло бути пошкоджено.</translation>
-<translation id="3427092606871434483">Дозволяти (за умовчанням)</translation>
 <translation id="3435896845095436175">Увімкнути</translation>
 <translation id="345693547134384690">Відкрити &amp;зображення в новій вкладці</translation>
 <translation id="3467267818798281173">Запитувати Google пропозиції</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">Відкрити посилання в аноні&amp;мному вікні</translation>
 <translation id="3678156199662914018">Розширення: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">Завантаження...</translation>
-<translation id="3789841737615482174">Встановити</translation>
 <translation id="3798449238516105146">Версія</translation>
 <translation id="3866249974567520381">Опис</translation>
 <translation id="3905761538810670789">Відновити додаток</translation>
@@ -103,13 +94,11 @@
 <translation id="4096508467498758490">Вимкнути розширення в режимі розробника</translation>
 <translation id="4100839878934973028">Інша програма на вашому комп’ютері додала програму, яка може змінити роботу Vivaldi.</translation>
 <translation id="4130207949184424187">Це розширення змінило сторінку, яка відкривається під час пошуку в універсальному вікні пошуку.</translation>
-<translation id="4165986682804962316">Налаштування сайту</translation>
 <translation id="4176463684765177261">Вимкнено</translation>
 <translation id="4200983522494130825">Нова &amp;вкладка</translation>
 <translation id="420665587194630159">(це розширення є керованим, його не можна видаляти чи вимикати.)</translation>
 <translation id="4240511609794012987">Спільна пам’ять</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> Кб (<ph name="NUM_KILOBYTES_LIVE" /> Кб у реальному часі)</translation>
-<translation id="4312866146174492540">Блокувати (за умовчанням)</translation>
 <translation id="4384652540891215547">Активувати розширення</translation>
 <translation id="4394049700291259645">Вимкнути</translation>
 <translation id="4423482519432579560">&amp;Перевірка правопису</translation>
@@ -122,7 +111,6 @@
 <translation id="4677772697204437347">Пам’ять GPU</translation>
 <translation id="4711638718396952945">Відновити налаштування</translation>
 <translation id="4839303808932127586">Збере&amp;гти відео як...</translation>
-<translation id="4851858059374029925">Установити плагін <ph name="PLUGIN_NAME" />? Установлюйте лише ті плагіни, яким ви довіряєте.</translation>
 <translation id="488785315393301722">Показати деталі</translation>
 <translation id="4911714727432509308">Комбінації клавіш не присвоєно жодному розширенню.</translation>
 <translation id="4927301649992043040">Пакування розширення</translation>
@@ -153,12 +141,10 @@
 <translation id="5646376287012673985">Місцезнаходження</translation>
 <translation id="5715711091495208045">Посередник для плагінів: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">Збере&amp;гти аудіо як...</translation>
-<translation id="5778550464785688721">Повний контроль пристроїв MIDI</translation>
 <translation id="5780973441651030252">Пріоритет обробки</translation>
 <translation id="5804241973901381774">Дозволи</translation>
 <translation id="583281660410589416">Невідомий</translation>
 <translation id="59174027418879706">Увімкнено</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{Використовується 1 файл}one{Використовується # файл}few{Використовуються # файли}many{Використовуються # файлів}other{Використовуються # файлу}}</translation>
 <translation id="5956585768868398362">Це сторінка пошуку, яку ви очікували?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (максимум <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Також указує сторінку, яка відкривається під час натискання кнопки "Домашня сторінка" чи пошуку в універсальному вікні пошуку.</translation>
@@ -187,14 +173,12 @@
 <translation id="6787839852456839824">Комбінації клавіш</translation>
 <translation id="6798954102094737107">Плагін: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Залишити зміни</translation>
-<translation id="6863910145616405334">Немає плагіну</translation>
 <translation id="6886871292305414135">Відкрити посилання в новій &amp;вкладці</translation>
 <translation id="6900284862687837908">Фоновий додаток: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Скасувати доступ до файлу</translation>
 <translation id="6974053822202609517">Справа наліво</translation>
 <translation id="7013485839273047434">Інші розширення</translation>
 <translation id="708060913198414444">Копіювати адресу аудіо</translation>
-<translation id="7105578512429498960">Установіть плагін <ph name="PLUGIN_NAME" />, щоб цей вміст відображався</translation>
 <translation id="7144878232160441200">Повторити спробу</translation>
 <translation id="7206693748120342859">Завантаження плагіна <ph name="PLUGIN_NAME" />...</translation>
 <translation id="7287143125007575591">У доступі відмовлено.</translation>
@@ -226,7 +210,6 @@
 
 Зберігайте свій файл ключа в безпечному місці. Він знадобиться вам для створення нових версій вашого розширення.</translation>
 <translation id="8004582292198964060">Переглядач</translation>
-<translation id="8037357227543935929">Запитувати (за умовчанням)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />К</translation>
 <translation id="8188120771410500975">&amp;Перевіряти правопис у текстових полях</translation>
 <translation id="8261378640211443080">Це розширення встановлено не із сайту <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />. Можливо, його було додано без вашого відома.</translation>
@@ -242,7 +225,6 @@
 <translation id="8664389313780386848">&amp;Переглянути джерело сторінки</translation>
 <translation id="8719653885894320876">Не вдалося завантажити плагін <ph name="PLUGIN_NAME" /></translation>
 <translation id="873545264931343897">Коли оновлення плагіна <ph name="PLUGIN_NAME" /> закінчиться, оновіть сторінку, щоб активувати його</translation>
-<translation id="8763204422633679667">Коли встановлення плагіна <ph name="PLUGIN_NAME" /> заінчиться, оновіть сторінку, щоб активувати його</translation>
 <translation id="8798099450830957504">За умовчанням</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8859174528519900719">Додатковий фрейм: <ph name="SUBFRAME_SITE" /></translation>

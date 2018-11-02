@@ -5,9 +5,7 @@
 #include "modules/fetch/BodyStreamBuffer.h"
 
 #include <memory>
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/V8PrivateProperty.h"
-#include "bindings/core/v8/V8ThrowException.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMTypedArray.h"
 #include "core/dom/ExceptionCode.h"
@@ -16,6 +14,9 @@
 #include "core/streams/ReadableStreamOperations.h"
 #include "modules/fetch/Body.h"
 #include "modules/fetch/ReadableStreamBytesConsumer.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8PrivateProperty.h"
+#include "platform/bindings/V8ThrowException.h"
 #include "platform/blob/BlobData.h"
 #include "platform/network/EncodedFormData.h"
 
@@ -47,14 +48,19 @@ class BodyStreamBuffer::LoaderClient final
     client_->DidFetchDataLoadedArrayBuffer(array_buffer);
   }
 
+  void DidFetchDataLoadedFormData(FormData* form_data) override {
+    buffer_->EndLoading();
+    client_->DidFetchDataLoadedFormData(form_data);
+  }
+
   void DidFetchDataLoadedString(const String& string) override {
     buffer_->EndLoading();
     client_->DidFetchDataLoadedString(string);
   }
 
-  void DidFetchDataLoadedStream() override {
+  void DidFetchDataLoadedDataPipe() override {
     buffer_->EndLoading();
-    client_->DidFetchDataLoadedStream();
+    client_->DidFetchDataLoadedDataPipe();
   }
 
   void DidFetchDataLoadedCustomFormat() override {
@@ -131,8 +137,8 @@ ScriptValue BodyStreamBuffer::Stream() {
 
 PassRefPtr<BlobDataHandle> BodyStreamBuffer::DrainAsBlobDataHandle(
     BytesConsumer::BlobSizePolicy policy) {
-  ASSERT(!IsStreamLocked());
-  ASSERT(!IsStreamDisturbed());
+  DCHECK(!IsStreamLocked());
+  DCHECK(!IsStreamDisturbed());
   if (IsStreamClosed() || IsStreamErrored())
     return nullptr;
 
@@ -149,8 +155,8 @@ PassRefPtr<BlobDataHandle> BodyStreamBuffer::DrainAsBlobDataHandle(
 }
 
 PassRefPtr<EncodedFormData> BodyStreamBuffer::DrainAsFormData() {
-  ASSERT(!IsStreamLocked());
-  ASSERT(!IsStreamDisturbed());
+  DCHECK(!IsStreamLocked());
+  DCHECK(!IsStreamDisturbed());
   if (IsStreamClosed() || IsStreamErrored())
     return nullptr;
 
@@ -167,8 +173,8 @@ PassRefPtr<EncodedFormData> BodyStreamBuffer::DrainAsFormData() {
 
 void BodyStreamBuffer::StartLoading(FetchDataLoader* loader,
                                     FetchDataLoader::Client* client) {
-  ASSERT(!loader_);
-  ASSERT(script_state_->ContextIsValid());
+  DCHECK(!loader_);
+  DCHECK(script_state_->ContextIsValid());
   loader_ = loader;
   loader->Start(ReleaseHandle(),
                 new LoaderClient(ExecutionContext::From(script_state_.Get()),
@@ -199,7 +205,7 @@ void BodyStreamBuffer::Tee(BodyStreamBuffer** branch1,
 }
 
 ScriptPromise BodyStreamBuffer::pull(ScriptState* script_state) {
-  ASSERT(script_state == script_state_.Get());
+  DCHECK_EQ(script_state, script_state_.Get());
   if (stream_needs_more_)
     return ScriptPromise::CastUndefined(script_state);
   stream_needs_more_ = true;
@@ -209,7 +215,7 @@ ScriptPromise BodyStreamBuffer::pull(ScriptState* script_state) {
 
 ScriptPromise BodyStreamBuffer::Cancel(ScriptState* script_state,
                                        ScriptValue reason) {
-  ASSERT(script_state == script_state_.Get());
+  DCHECK_EQ(script_state, script_state_.Get());
   Close();
   return ScriptPromise::CastUndefined(script_state);
 }
@@ -346,7 +352,7 @@ void BodyStreamBuffer::ProcessData() {
 }
 
 void BodyStreamBuffer::EndLoading() {
-  ASSERT(loader_);
+  DCHECK(loader_);
   loader_ = nullptr;
 }
 

@@ -119,17 +119,17 @@ class CSSAnimationUpdate final {
   }
 
   void Clear() {
-    new_animations_.Clear();
-    animations_with_updates_.Clear();
-    new_transitions_.Clear();
-    active_interpolations_for_animations_.Clear();
-    active_interpolations_for_custom_transitions_.Clear();
-    active_interpolations_for_standard_transitions_.Clear();
-    cancelled_animation_indices_.Clear();
-    animation_indices_with_pause_toggled_.Clear();
-    cancelled_transitions_.Clear();
-    finished_transitions_.Clear();
-    updated_compositor_keyframes_.Clear();
+    new_animations_.clear();
+    animations_with_updates_.clear();
+    new_transitions_.clear();
+    active_interpolations_for_animations_.clear();
+    active_interpolations_for_custom_transitions_.clear();
+    active_interpolations_for_standard_transitions_.clear();
+    cancelled_animation_indices_.clear();
+    animation_indices_with_pause_toggled_.clear();
+    cancelled_transitions_.clear();
+    finished_transitions_.clear();
+    updated_compositor_keyframes_.clear();
   }
 
   void StartAnimation(const AtomicString& animation_name,
@@ -167,9 +167,9 @@ class CSSAnimationUpdate final {
 
   void StartTransition(
       const PropertyHandle& property,
-      RefPtr<AnimatableValue> from,
-      RefPtr<AnimatableValue> to,
-      PassRefPtr<AnimatableValue> reversing_adjusted_start_value,
+      RefPtr<const ComputedStyle> from,
+      RefPtr<const ComputedStyle> to,
+      PassRefPtr<const ComputedStyle> reversing_adjusted_start_value,
       double reversing_shortening_factor,
       const InertEffect& effect) {
     NewTransition new_transition;
@@ -221,9 +221,9 @@ class CSSAnimationUpdate final {
     DEFINE_INLINE_TRACE() { visitor->Trace(effect); }
 
     PropertyHandle property = HashTraits<blink::PropertyHandle>::EmptyValue();
-    RefPtr<AnimatableValue> from;
-    RefPtr<AnimatableValue> to;
-    RefPtr<AnimatableValue> reversing_adjusted_start_value;
+    RefPtr<const ComputedStyle> from;
+    RefPtr<const ComputedStyle> to;
+    RefPtr<const ComputedStyle> reversing_adjusted_start_value;
     double reversing_shortening_factor;
     Member<const InertEffect> effect;
   };
@@ -238,15 +238,15 @@ class CSSAnimationUpdate final {
 
   void AdoptActiveInterpolationsForAnimations(
       ActiveInterpolationsMap& new_map) {
-    new_map.Swap(active_interpolations_for_animations_);
+    new_map.swap(active_interpolations_for_animations_);
   }
   void AdoptActiveInterpolationsForCustomTransitions(
       ActiveInterpolationsMap& new_map) {
-    new_map.Swap(active_interpolations_for_custom_transitions_);
+    new_map.swap(active_interpolations_for_custom_transitions_);
   }
   void AdoptActiveInterpolationsForStandardTransitions(
       ActiveInterpolationsMap& new_map) {
-    new_map.Swap(active_interpolations_for_standard_transitions_);
+    new_map.swap(active_interpolations_for_standard_transitions_);
   }
   const ActiveInterpolationsMap& ActiveInterpolationsForAnimations() const {
     return active_interpolations_for_animations_;

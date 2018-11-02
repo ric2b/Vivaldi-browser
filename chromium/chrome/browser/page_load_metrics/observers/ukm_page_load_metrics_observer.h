@@ -9,6 +9,7 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
+#include "components/ukm/ukm_service.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "ui/base/page_transition_types.h"
 
@@ -23,6 +24,7 @@ extern const char kUkmPageLoadEventName[];
 extern const char kUkmParseStartName[];
 extern const char kUkmDomContentLoadedName[];
 extern const char kUkmLoadEventName[];
+extern const char kUkmFirstPaintName[];
 extern const char kUkmFirstContentfulPaintName[];
 extern const char kUkmFirstMeaningfulPaintName[];
 extern const char kUkmForegroundDurationName[];
@@ -57,24 +59,25 @@ class UkmPageLoadMetricsObserver
   ObservePolicy OnCommit(content::NavigationHandle* navigation_handle) override;
 
   ObservePolicy FlushMetricsOnAppEnterBackground(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info) override;
 
   ObservePolicy OnHidden(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info) override;
 
   void OnFailedProvisionalLoad(
       const page_load_metrics::FailedProvisionalLoadInfo& failed_load_info,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
 
-  void OnComplete(const page_load_metrics::PageLoadTiming& timing,
+  void OnComplete(const page_load_metrics::mojom::PageLoadTiming& timing,
                   const page_load_metrics::PageLoadExtraInfo& info) override;
 
  private:
   // Records page load timing related metrics available in PageLoadTiming, such
   // as first contentful paint.
-  void RecordTimingMetrics(const page_load_metrics::PageLoadTiming& timing);
+  void RecordTimingMetrics(
+      const page_load_metrics::mojom::PageLoadTiming& timing);
 
   // Records metrics based on the PageLoadExtraInfo struct, as well as updating
   // the URL. |app_background_time| should be set to a timestamp if the app was
@@ -87,7 +90,7 @@ class UkmPageLoadMetricsObserver
       network_quality_provider_;
 
   // Unique UKM identifier for the page load we are recording metrics for.
-  const int32_t source_id_;
+  const ukm::SourceId source_id_;
 
   // Network quality estimates.
   net::EffectiveConnectionType effective_connection_type_ =

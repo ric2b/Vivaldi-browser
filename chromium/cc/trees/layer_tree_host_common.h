@@ -72,10 +72,8 @@ class CC_EXPORT LayerTreeHostCommon {
         const gfx::Vector2dF& elastic_overscroll,
         const LayerImpl* elastic_overscroll_application_layer,
         int max_texture_size,
-        bool can_render_to_separate_surface,
         bool can_adjust_raster_scales,
-        bool use_layer_lists,
-        LayerImplList* render_surface_layer_list,
+        RenderSurfaceList* render_surface_list,
         PropertyTrees* property_trees);
 
     LayerImpl* root_layer;
@@ -89,10 +87,8 @@ class CC_EXPORT LayerTreeHostCommon {
     gfx::Vector2dF elastic_overscroll;
     const LayerImpl* elastic_overscroll_application_layer;
     int max_texture_size;
-    bool can_render_to_separate_surface;
     bool can_adjust_raster_scales;
-    bool use_layer_lists;
-    LayerImplList* render_surface_layer_list;
+    RenderSurfaceList* render_surface_list;
     PropertyTrees* property_trees;
   };
 
@@ -102,18 +98,18 @@ class CC_EXPORT LayerTreeHostCommon {
                                       const gfx::Size& device_viewport_size,
                                       const gfx::Transform& device_transform,
                                       float device_scale_factor,
-                                      LayerImplList* render_surface_layer_list);
+                                      RenderSurfaceList* render_surface_list);
     CalcDrawPropsImplInputsForTesting(LayerImpl* root_layer,
                                       const gfx::Size& device_viewport_size,
                                       const gfx::Transform& device_transform,
-                                      LayerImplList* render_surface_layer_list);
+                                      RenderSurfaceList* render_surface_list);
     CalcDrawPropsImplInputsForTesting(LayerImpl* root_layer,
                                       const gfx::Size& device_viewport_size,
-                                      LayerImplList* render_surface_layer_list);
+                                      RenderSurfaceList* render_surface_list);
     CalcDrawPropsImplInputsForTesting(LayerImpl* root_layer,
                                       const gfx::Size& device_viewport_size,
                                       float device_scale_factor,
-                                      LayerImplList* render_surface_layer_list);
+                                      RenderSurfaceList* render_surface_list);
   };
 
   static int CalculateLayerJitter(LayerImpl* scrolling_layer);
@@ -149,11 +145,11 @@ class CC_EXPORT LayerTreeHostCommon {
   // to be told when they're faded out so it can stop handling input for
   // invisible scrollbars.
   struct CC_EXPORT ScrollbarsUpdateInfo {
-    int layer_id;
+    ElementId element_id;
     bool hidden;
 
     ScrollbarsUpdateInfo();
-    ScrollbarsUpdateInfo(int layer_id, bool hidden);
+    ScrollbarsUpdateInfo(ElementId element_id, bool hidden);
 
     bool operator==(const ScrollbarsUpdateInfo& other) const;
   };

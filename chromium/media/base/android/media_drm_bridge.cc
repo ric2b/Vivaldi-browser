@@ -18,6 +18,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -112,18 +113,18 @@ KeyType ConvertCdmSessionType(CdmSessionType session_type) {
   }
 }
 
-ContentDecryptionModule::MessageType GetMessageType(RequestType request_type) {
+CdmMessageType GetMessageType(RequestType request_type) {
   switch (request_type) {
     case RequestType::REQUEST_TYPE_INITIAL:
-      return ContentDecryptionModule::LICENSE_REQUEST;
+      return CdmMessageType::LICENSE_REQUEST;
     case RequestType::REQUEST_TYPE_RENEWAL:
-      return ContentDecryptionModule::LICENSE_RENEWAL;
+      return CdmMessageType::LICENSE_RENEWAL;
     case RequestType::REQUEST_TYPE_RELEASE:
-      return ContentDecryptionModule::LICENSE_RELEASE;
+      return CdmMessageType::LICENSE_RELEASE;
   }
 
   NOTREACHED();
-  return ContentDecryptionModule::LICENSE_REQUEST;
+  return CdmMessageType::LICENSE_REQUEST;
 }
 
 CdmKeyInformation::KeyStatus ConvertKeyStatus(KeyStatus key_status,
@@ -690,7 +691,7 @@ void MediaDrmBridge::OnSessionMessage(
 
   std::vector<uint8_t> message;
   JavaByteArrayToByteVector(env, j_message, &message);
-  ContentDecryptionModule::MessageType message_type =
+  CdmMessageType message_type =
       GetMessageType(static_cast<RequestType>(j_message_type));
 
   task_runner_->PostTask(
@@ -740,7 +741,8 @@ void MediaDrmBridge::OnSessionKeysChange(
              << base::HexEncode(&key_id[0], key_id.size()) << ", "
              << key_status;
 
-    cdm_keys_info.push_back(new CdmKeyInformation(key_id, key_status, 0));
+    cdm_keys_info.push_back(
+        base::MakeUnique<CdmKeyInformation>(key_id, key_status, 0));
   }
 
   task_runner_->PostTask(

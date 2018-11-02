@@ -149,7 +149,7 @@ void ColorInputType::HandleDOMActivateEvent(Event* event) {
   if (GetElement().IsDisabledFormControl())
     return;
 
-  if (!UserGestureIndicator::UtilizeUserGesture())
+  if (!UserGestureIndicator::ProcessingUserGesture())
     return;
 
   ChromeClient* chrome_client = this->GetChromeClient();
@@ -218,7 +218,7 @@ void ColorInputType::UpdateView() {
 
 HTMLElement* ColorInputType::ShadowColorSwatch() const {
   ShadowRoot* shadow = GetElement().UserAgentShadowRoot();
-  return shadow ? ToHTMLElementOrDie(shadow->FirstChild()->firstChild())
+  return shadow ? ToHTMLElementOrDie(shadow->firstChild()->firstChild())
                 : nullptr;
 }
 

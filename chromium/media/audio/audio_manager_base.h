@@ -12,8 +12,8 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "media/audio/audio_debug_recording_manager.h"
@@ -34,15 +34,6 @@ class MEDIA_EXPORT AudioManagerBase : public AudioManager {
  public:
   ~AudioManagerBase() override;
 
-  // AudioManager:
-  base::string16 GetAudioInputDeviceModel() override;
-  void ShowAudioInputSettings() override;
-
-  void GetAudioInputDeviceDescriptions(
-      AudioDeviceDescriptions* device_descriptions) final;
-  void GetAudioOutputDeviceDescriptions(
-      AudioDeviceDescriptions* device_descriptions) final;
-
   AudioOutputStream* MakeAudioOutputStream(
       const AudioParameters& params,
       const std::string& device_id,
@@ -59,13 +50,6 @@ class MEDIA_EXPORT AudioManagerBase : public AudioManager {
   void AddOutputDeviceChangeListener(AudioDeviceListener* listener) override;
   void RemoveOutputDeviceChangeListener(AudioDeviceListener* listener) override;
 
-  AudioParameters GetDefaultOutputStreamParameters() override;
-  AudioParameters GetOutputStreamParameters(
-      const std::string& device_id) override;
-  AudioParameters GetInputStreamParameters(
-      const std::string& device_id) override;
-  std::string GetAssociatedOutputDeviceID(
-      const std::string& input_device_id) override;
   std::unique_ptr<AudioLog> CreateAudioLog(
       AudioLogFactory::AudioComponent component) override;
   void EnableOutputDebugRecording(const base::FilePath& base_file_name) final;
@@ -111,16 +95,26 @@ class MEDIA_EXPORT AudioManagerBase : public AudioManager {
   int output_stream_count() const { return num_output_streams_; }
 
  protected:
-  AudioManagerBase(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
-      AudioLogFactory* audio_log_factory);
+  AudioManagerBase(std::unique_ptr<AudioThread> audio_thread,
+                   AudioLogFactory* audio_log_factory);
 
-  // Releases all the audio output dispatchers.
-  // All audio streams should be closed before Shutdown() is called.
-  // This must be called in the destructor of every AudioManagerBase
-  // implementation.
-  void Shutdown();
+  // AudioManager:
+  void ShutdownOnAudioThread() override;
+  base::string16 GetAudioInputDeviceModel() override;
+  void ShowAudioInputSettings() override;
+
+  void GetAudioInputDeviceDescriptions(
+      AudioDeviceDescriptions* device_descriptions) final;
+  void GetAudioOutputDeviceDescriptions(
+      AudioDeviceDescriptions* device_descriptions) final;
+
+  AudioParameters GetDefaultOutputStreamParameters() override;
+  AudioParameters GetOutputStreamParameters(
+      const std::string& device_id) override;
+  AudioParameters GetInputStreamParameters(
+      const std::string& device_id) override;
+  std::string GetAssociatedOutputDeviceID(
+      const std::string& input_device_id) override;
 
   void SetMaxOutputStreamsAllowed(int max) { max_num_output_streams_ = max; }
 
@@ -158,20 +152,18 @@ class MEDIA_EXPORT AudioManagerBase : public AudioManager {
 
   virtual std::unique_ptr<AudioDebugRecordingManager>
   CreateAudioDebugRecordingManager(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> file_task_runner);
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(AudioManagerTest, AudioDebugRecording);
 
   struct DispatcherParams;
-  typedef ScopedVector<DispatcherParams> AudioOutputDispatchers;
+  typedef std::vector<std::unique_ptr<DispatcherParams>> AudioOutputDispatchers;
 
   class CompareByParams;
 
   // AudioManager:
-  void InitializeOutputDebugRecording(
-      scoped_refptr<base::SingleThreadTaskRunner> file_task_runner) final;
+  void InitializeOutputDebugRecording() final;
 
   // These functions assign group ids to devices based on their device ids.
   // The default implementation is an attempt to do this based on

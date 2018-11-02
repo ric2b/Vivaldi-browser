@@ -10,6 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -184,8 +185,8 @@ class UserScriptListenerTest : public testing::Test {
 
     bool defer = false;
     if (throttle) {
-      request->SetUserData(nullptr,
-                           new ThrottleDelegate(request.get(), throttle));
+      request->SetUserData(
+          nullptr, base::MakeUnique<ThrottleDelegate>(request.get(), throttle));
 
       throttle->WillStartRequest(&defer);
     }
@@ -213,7 +214,7 @@ class UserScriptListenerTest : public testing::Test {
         ExtensionRegistry::Get(profile_)->enabled_extensions();
     ASSERT_FALSE(extensions.is_empty());
     service_->UnloadExtension((*extensions.begin())->id(),
-                              UnloadedExtensionInfo::REASON_DISABLE);
+                              UnloadedExtensionReason::DISABLE);
   }
 
   content::TestBrowserThreadBundle thread_bundle_;
@@ -358,7 +359,8 @@ TEST_F(UserScriptListenerTest, ResumeBeforeStart) {
   ResourceThrottle* throttle =
       listener_->CreateResourceThrottle(url, content::RESOURCE_TYPE_MAIN_FRAME);
   ASSERT_TRUE(throttle);
-  request->SetUserData(nullptr, new ThrottleDelegate(request.get(), throttle));
+  request->SetUserData(
+      nullptr, base::MakeUnique<ThrottleDelegate>(request.get(), throttle));
 
   ASSERT_FALSE(request->is_pending());
 

@@ -53,7 +53,8 @@ TEST_F(CredentialManagerLoggerTest, LogRequestCredential) {
   EXPECT_CALL(log_manager(),
               LogSavePasswordProgress(
                   AllOf(HasSubstr(kSiteOrigin), HasSubstr(kFederationOrigin))));
-  logger().LogRequestCredential(GURL(kSiteOrigin), true,
+  logger().LogRequestCredential(GURL(kSiteOrigin),
+                                CredentialMediationRequirement::kSilent,
                                 {GURL(kFederationOrigin)});
 }
 
@@ -69,9 +70,9 @@ TEST_F(CredentialManagerLoggerTest, LogStoreCredential) {
                               CredentialType::CREDENTIAL_TYPE_PASSWORD);
 }
 
-TEST_F(CredentialManagerLoggerTest, LogRequireUserMediation) {
+TEST_F(CredentialManagerLoggerTest, LogPreventSilentAccess) {
   EXPECT_CALL(log_manager(), LogSavePasswordProgress(HasSubstr(kSiteOrigin)));
-  logger().LogRequireUserMediation(GURL(kSiteOrigin));
+  logger().LogPreventSilentAccess(GURL(kSiteOrigin));
 }
 
 }  // namespace

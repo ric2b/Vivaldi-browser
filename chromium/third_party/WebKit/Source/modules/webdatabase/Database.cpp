@@ -239,7 +239,8 @@ Database::Database(DatabaseContext* database_context,
   context_thread_security_origin_ =
       database_context_->GetSecurityOrigin()->IsolatedCopy();
 
-  database_authorizer_ = DatabaseAuthorizer::Create(kInfoTableName);
+  database_authorizer_ =
+      DatabaseAuthorizer::Create(database_context, kInfoTableName);
 
   if (name_.IsNull())
     name_ = "";
@@ -468,7 +469,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
   {
     MutexLocker locker(GuidMutex());
 
-    GuidVersionMap::iterator entry = GuidToVersionMap().Find(guid_);
+    GuidVersionMap::iterator entry = GuidToVersionMap().find(guid_);
     if (entry != GuidToVersionMap().end()) {
       // Map null string to empty string (see updateGuidVersionMap()).
       current_version =

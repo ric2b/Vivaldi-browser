@@ -21,11 +21,22 @@ CredentialManagerLogger::~CredentialManagerLogger() = default;
 
 void CredentialManagerLogger::LogRequestCredential(
     const GURL& url,
-    bool zero_click_only,
+    CredentialMediationRequirement mediation,
     const std::vector<GURL>& federations) {
   std::string s("CM API get credentials: origin=" +
                 SavePasswordProgressLogger::ScrubURL(url));
-  s += ", zero_click_only=" + base::IntToString(zero_click_only);
+  s += ", mediation=";
+  switch (mediation) {
+    case CredentialMediationRequirement::kSilent:
+      s += "silent";
+      break;
+    case CredentialMediationRequirement::kOptional:
+      s += "optional";
+      break;
+    case CredentialMediationRequirement::kRequired:
+      s += "required";
+      break;
+  }
   s += ", federations=";
   for (const GURL& federation_provider : federations)
     s += SavePasswordProgressLogger::ScrubURL(federation_provider) + ", ";
@@ -49,7 +60,7 @@ void CredentialManagerLogger::LogStoreCredential(const GURL& url,
   log_manager_->LogSavePasswordProgress(s);
 }
 
-void CredentialManagerLogger::LogRequireUserMediation(const GURL& url) {
+void CredentialManagerLogger::LogPreventSilentAccess(const GURL& url) {
   std::string s("CM API sign out: origin=" +
                 SavePasswordProgressLogger::ScrubURL(url));
   log_manager_->LogSavePasswordProgress(s);

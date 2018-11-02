@@ -114,7 +114,7 @@ source_set("gbm") {
     "//base",
     "//ipc",
     "//mojo/common:common_base",
-    "//services/service_manager/public/cpp:sources",
+    "//services/service_manager/public/cpp",
     "//services/ui/public/interfaces:constants",
     "//skia",
     "//third_party/libdrm",
@@ -146,6 +146,7 @@ source_set("gbm") {
 source_set("gbm_unittests") {
   testonly = true
   sources = [
+    "common/drm_util_unittest.cc",
     "gpu/drm_overlay_validator_unittest.cc",
     "gpu/drm_window_unittest.cc",
     "gpu/fake_plane_info.cc",
@@ -162,6 +163,7 @@ source_set("gbm_unittests") {
     "gpu/mock_scanout_buffer.h",
     "gpu/mock_scanout_buffer_generator.cc",
     "gpu/mock_scanout_buffer_generator.h",
+    "gpu/proxy_helpers_unittest.cc",
     "gpu/screen_manager_unittest.cc",
   ]
 

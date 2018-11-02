@@ -25,6 +25,7 @@
 <translation id="164969095109328410">Chrome uređaj</translation>
 <translation id="1677472565718498478">Još <ph name="TIME" /></translation>
 <translation id="1698760176351776263">IPv6 adresa: <ph name="ADDRESS" /></translation>
+<translation id="1734367976349034509">Ovim uređajem upravlja tvrtka</translation>
 <translation id="1747827819627189109">Tipkovnica na zaslonu omogućena je</translation>
 <translation id="1823873187264960516">Ethernet: <ph name="ADDRESS" /></translation>
 <translation id="1850504506766569011">Wi-Fi je isključen.</translation>
@@ -36,7 +37,9 @@
 <translation id="1942830294380034169">Gumb dodatnog izbornika</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2049639323467105390">Ovim uređajem upravlja <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Portret</translation>
+<translation id="207439088875642105">Ovo je račun za djecu kojim upravljaju <ph name="FIRST_PARENT_EMAIL" /> i <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="2122028596993374965">Zaustavi emitiranje kartice <ph name="TAB_NAME" /> na prijamniku <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Punjač male snage</translation>
 <translation id="2144487987174258011">Ponovno pokrenite da biste ažurirali Adobe Flash Player</translation>
@@ -44,6 +47,7 @@
 <translation id="225680501294068881">Pretraživanje uređaja...</translation>
 <translation id="2268130516524549846">Bluetooth onemogućen</translation>
 <translation id="2268813581635650749">Odjavi sve</translation>
+<translation id="2292698582925480719">Skala prikaza</translation>
 <translation id="2303600792989757991">Prebaci na prozor pregleda</translation>
 <translation id="2352467521400612932">Postavke pisaljke</translation>
 <translation id="2354174487190027830">Aktiviranje mreže <ph name="NAME" /></translation>
@@ -71,6 +75,7 @@
 <translation id="3000461861112256445">Monoaudio</translation>
 <translation id="3009178788565917040">Izlaz</translation>
 <translation id="3019353588588144572">Baterija će se napuniti za <ph name="TIME_REMAINING" /></translation>
+<translation id="3047477924825107454">Ovo je račun za djecu kojim upravlja <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3050422059534974565">Uključena je opcija CAPS LOCK.
 Pritisnite tipke Pretraživanje ili Shift da biste ju isključili.</translation>
 <translation id="3077734595579995578">shift</translation>
@@ -125,6 +130,7 @@ Pritisnite tipke Pretraživanje ili Shift da biste ju isključili.</translation>
 <translation id="4527045527269911712">Bluetooth uređaj "<ph name="DEVICE_NAME" />" traži dopuštenje za uparivanje.</translation>
 <translation id="453661520163887813"><ph name="TIME" /> do potpune napunjenosti</translation>
 <translation id="4544944664594876241">Promijenio se prečac za zaključavanje zaslona. Upotrijebite <ph name="NEW_SHORTCUT" /> umjesto <ph name="OLD_SHORTCUT" />.</translation>
+<translation id="4659419629803378708">ChromeVox omogućen</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">Prekini vezu</translation>
 <translation id="4849058404725798627">Istakni objekt fokusom na tipkovnici</translation>
@@ -140,6 +146,7 @@ Pritisnite tipke Pretraživanje ili Shift da biste ju isključili.</translation>
 <translation id="523505283826916779">Postavke pristupačnosti</translation>
 <translation id="5313326810920013265">Postavke Bluetootha</translation>
 <translation id="5331975486040154427">USB-C uređaj (stražnji lijevi priključak)</translation>
+<translation id="5397578532367286026">Upravitelj (<ph name="MANAGER_EMAIL" />) može pregledavati upotrebu i povijest tog korisnika na web-lokaciji chrome.com.</translation>
 <translation id="5430931332414098647">Automatsko modemsko povezivanje</translation>
 <translation id="5431825016875453137">OpenVPN/L2TP</translation>
 <translation id="544691375626129091">Svi dostupni korisnici već su dodani ovoj sesiji.</translation>
@@ -147,6 +154,7 @@ Pritisnite tipke Pretraživanje ili Shift da biste ju isključili.</translation>
 <translation id="5548285847212963613">Proširenje "<ph name="EXTENSION_NAME" />" može pomoći pri povezivanju s tom mrežom.</translation>
 <translation id="5571066253365925590">Bluetooth omogućen</translation>
 <translation id="5597451508971090205"><ph name="SHORT_WEEKDAY" />, <ph name="DATE" /></translation>
+<translation id="5600837773213129531">Pritisnite Ctrl + Alt + Z da biste onemogućili govorne povratne informacije.</translation>
 <translation id="5648021990716966815">Utičnica mikrofona</translation>
 <translation id="5744083938413354016">Povlačenje dodirom</translation>
 <translation id="5777841717266010279">Prekinuti dijeljenje zaslona?</translation>
@@ -176,6 +184,7 @@ Pritisnite tipke Pretraživanje ili Shift da biste ju isključili.</translation>
 <translation id="6297287540776456956">Odaberite regiju pisaljkom</translation>
 <translation id="6310121235600822547">Zaslon <ph name="DISPLAY_NAME" /> rotiran je za <ph name="ROTATION" /></translation>
 <translation id="632744581670418035">Preklapanje tipkovnice</translation>
+<translation id="6395038768903208085">Način rada s metaslojem</translation>
 <translation id="639644700271529076">Tipka CAPS LOCK isključena</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6452181791372256707">Odbaci</translation>
@@ -201,8 +210,6 @@ Pritisnite tipke Pretraživanje ili Shift da biste ju isključili.</translation>
 <translation id="7052914147756339792">Postavljanje pozadinske slike...</translation>
 <translation id="7066646422045619941">Tu mrežu onemogućio je vaš administrator.</translation>
 <translation id="7067196344162293536">Automatski izmjenjuj</translation>
-<translation id="7097613348211027502">Omogućen je ChromeVox (govorne povratne informacije).
-Pritisnite Ctrl+Alt+Z da biste ga onemogućili.</translation>
 <translation id="7098389117866926363">USB-C uređaj (lijevi priključak sa stražnje strane)</translation>
 <translation id="7129360219436193655">Način laserskog pokazivača</translation>
 <translation id="714034171374937760">Chromebase</translation>
@@ -217,16 +224,20 @@ Pritisnite tipke Alt + Pretraživanje ili Shift da biste ju isključili.</transl
 <translation id="742594950370306541">Fotoaparat je aktivan.</translation>
 <translation id="743058460480092004">Fotoaparat i mikrofon su aktivni.</translation>
 <translation id="7510334386202674593">Ctrl + Shift + L</translation>
+<translation id="7526573455193969409">Mreža se možda nadzire</translation>
 <translation id="7536035074519304529">IP adresa: <ph name="ADDRESS" /></translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> ne podržava razlučivost <ph name="SPECIFIED_RESOLUTION" />. Razlučivost je promijenjena u <ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7562368315689366235">Paleta emojija</translation>
+<translation id="7569509451529460200">Brajica i ChromeVox omogućeni</translation>
 <translation id="7581273696622423628">Ispunite anketu</translation>
 <translation id="7593891976182323525">Pretraživanje ili Shift</translation>
 <translation id="7649070708921625228">Pomoć</translation>
 <translation id="7692480393933218409">Punjenje povezanih USB-C uređaja</translation>
+<translation id="776344839111254542">Kliknite da biste vidjeli pojedinosti o ažuriranju</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> i <ph name="MINUTE" /></translation>
 <translation id="7823564328645135659">Jezik je promijenjen iz: "<ph name="FROM_LOCALE" />" u: "<ph name="TO_LOCALE" />" nakon sinkronizacije vaših postavki.</translation>
 <translation id="7904094684485781019">Administrator ovog računa onemogućio je višestruku prijavu.</translation>
+<translation id="7951523953736115461">Noćno svjetlo</translation>
 <translation id="7977927628060636163">Traženje mobilnih mreža...</translation>
 <translation id="7982789257301363584">Mreža</translation>
 <translation id="8000066093800657092">Nema mreže</translation>
@@ -244,6 +255,7 @@ Pritisnite tipke Alt + Pretraživanje ili Shift da biste ju isključili.</transl
 <translation id="8433186206711564395">Postavke mreže</translation>
 <translation id="8433977262951327081">Promijenio se prečac za prikazivanje oblačića izbornika s opcijama unosa na polici. Upotrijebite <ph name="NEW_SHORTCUT" /> umjesto <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="8454013096329229812">Wi-Fi je uključen.</translation>
+<translation id="847056008324733326">Postavke skale prikaza</translation>
 <translation id="8484916590211895857"><ph name="NAME" />: ponovno povezivanje...</translation>
 <translation id="8517041960877371778">Uređaj <ph name="DEVICE_TYPE" /> možda se neće puniti dok je uključen.</translation>
 <translation id="8639760480004882931">Preostalo <ph name="PERCENTAGE" /></translation>

@@ -8,6 +8,7 @@
 
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/extensions/media_gallery_checkbox_view.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/grit/generated_resources.h"
@@ -74,6 +75,7 @@ MediaGalleriesDialogViews::MediaGalleriesDialogViews(
     constrained_window::ShowWebModalDialogViews(this,
                                                 controller->WebContents());
   }
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::MEDIA_GALLERIES);
 }
 
 MediaGalleriesDialogViews::~MediaGalleriesDialogViews() {
@@ -148,7 +150,8 @@ void MediaGalleriesDialogViews::InitChildViews() {
       header->SetHorizontalAlignment(gfx::ALIGN_LEFT);
       header->SetBorder(views::CreateEmptyBorder(
           vertical_padding,
-          provider->GetDistanceMetric(DISTANCE_PANEL_CONTENT_MARGIN),
+          provider->GetDistanceMetric(
+              views::DISTANCE_DIALOG_CONTENTS_VERTICAL_MARGIN),
           vertical_padding, 0));
       scroll_container->AddChildView(header);
     }
@@ -302,8 +305,7 @@ void MediaGalleriesDialogViews::ShowContextMenu(const gfx::Point& point,
                                                 MediaGalleryPrefId id) {
   context_menu_runner_.reset(new views::MenuRunner(
       controller_->GetContextMenu(id),
-      views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU |
-          views::MenuRunner::ASYNC,
+      views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU,
       base::Bind(&MediaGalleriesDialogViews::OnMenuClosed,
                  base::Unretained(this))));
 

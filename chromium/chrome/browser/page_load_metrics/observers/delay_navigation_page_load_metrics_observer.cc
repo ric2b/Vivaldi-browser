@@ -27,7 +27,7 @@ DelayNavigationPageLoadMetricsObserver::OnStart(
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 DelayNavigationPageLoadMetricsObserver::OnHidden(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   return STOP_OBSERVING;
 }
@@ -40,8 +40,8 @@ void DelayNavigationPageLoadMetricsObserver::OnNavigationDelayComplete(
   actual_delay_ = actual_delay;
 }
 
-void DelayNavigationPageLoadMetricsObserver::OnFirstPaint(
-    const page_load_metrics::PageLoadTiming& timing,
+void DelayNavigationPageLoadMetricsObserver::OnFirstPaintInPage(
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   if (!delay_navigation_)
     return;

@@ -8,11 +8,11 @@
 #include <deque>
 #include <list>
 #include <memory>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/audio_timestamp_helper.h"
@@ -50,16 +50,19 @@ class MEDIA_EXPORT DecoderStream {
     DECODE_ERROR,  // Decoder returned decode error.
   };
 
+  // Callback to create a list of decoders.
+  using CreateDecodersCB =
+      base::RepeatingCallback<std::vector<std::unique_ptr<Decoder>>()>;
+
   // Indicates completion of a DecoderStream initialization.
-  typedef base::Callback<void(bool success)> InitCB;
+  using InitCB = base::Callback<void(bool success)>;
 
   // Indicates completion of a DecoderStream read.
-  typedef base::Callback<void(Status, const scoped_refptr<Output>&)> ReadCB;
+  using ReadCB = base::Callback<void(Status, const scoped_refptr<Output>&)>;
 
-  DecoderStream(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-      ScopedVector<Decoder> decoders,
-      const scoped_refptr<MediaLog>& media_log);
+  DecoderStream(const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
+                CreateDecodersCB create_decoders_cb,
+                MediaLog* media_log);
   virtual ~DecoderStream();
 
   // Returns the string representation of the StreamType for logging purpose.
@@ -107,14 +110,17 @@ class MEDIA_EXPORT DecoderStream {
   // Allows callers to register for notification of config changes; this is
   // called immediately after receiving the 'kConfigChanged' status from the
   // DemuxerStream, before any action is taken to handle the config change.
-  typedef base::Closure ConfigChangeObserverCB;
+  using ConfigChangeObserverCB = base::Closure;
   void set_config_change_observer(
-      const ConfigChangeObserverCB& config_change_observer) {
+      ConfigChangeObserverCB config_change_observer) {
     config_change_observer_cb_ = config_change_observer;
   }
 
-  const Decoder* get_previous_decoder_for_testing() const {
-    return previous_decoder_.get();
+  // Allows tests to keep track the currently selected decoder.
+  using DecoderChangeObserverCB = base::RepeatingCallback<void(Decoder*)>;
+  void set_decoder_change_observer_for_testing(
+      DecoderChangeObserverCB decoder_change_observer_cb) {
+    decoder_change_observer_cb_ = std::move(decoder_change_observer_cb);
   }
 
   int get_pending_buffers_size_for_testing() const {
@@ -186,8 +192,8 @@ class MEDIA_EXPORT DecoderStream {
   DecoderStreamTraits<StreamType> traits_;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-
-  scoped_refptr<MediaLog> media_log_;
+  CreateDecodersCB create_decoders_cb_;
+  MediaLog* media_log_;
 
   State state_;
 
@@ -206,16 +212,23 @@ class MEDIA_EXPORT DecoderStream {
 
   std::unique_ptr<Decoder> decoder_;
 
-  // When falling back from H/W decoding to S/W decoding, destructing the
-  // GpuVideoDecoder too early results in black frames being displayed.
-  // |previous_decoder_| is used to keep it alive.  It is destroyed once we've
-  // decoded at least media::limits::kMaxVideoFrames frames after fallback.
-  int decoded_frames_since_fallback_;
-  std::unique_ptr<Decoder> previous_decoder_;
+  // Whether |decoder_| has produced a frame yet. Reset on fallback.
+  bool decoder_produced_a_frame_;
+
+  // Whether we have already fallen back once on decode error, used to prevent
+  // issues like infinite fallback like:
+  // 1. select decoder 1
+  // 2. decode error on decoder 1
+  // 3. black list decoder 1 and select decoder 2
+  // 4. decode error again on decoder 2
+  // 5. black list decoder 2 and select decoder 1
+  // 6. go to (2)
+  bool has_fallen_back_once_on_decode_error_;
 
   std::unique_ptr<DecryptingDemuxerStream> decrypting_demuxer_stream_;
 
   ConfigChangeObserverCB config_change_observer_cb_;
+  DecoderChangeObserverCB decoder_change_observer_cb_;
 
   // An end-of-stream buffer has been sent for decoding, no more buffers should
   // be sent for decoding until it completes.

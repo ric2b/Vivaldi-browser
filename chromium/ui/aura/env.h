@@ -16,6 +16,14 @@
 #include "ui/events/event_target.h"
 #include "ui/gfx/geometry/point.h"
 
+#if defined(USE_OZONE)
+#include "ui/ozone/public/client_native_pixmap_factory_ozone.h"
+
+namespace gfx {
+class ClientNativePixmapFactory;
+}
+#endif
+
 namespace ui {
 class ContextFactory;
 class ContextFactoryPrivate;
@@ -26,6 +34,7 @@ namespace test {
 class EnvTestHelper;
 }
 
+class EnvInputStateController;
 class EnvObserver;
 class InputStateLookup;
 class MusMouseLocationUpdater;
@@ -62,6 +71,10 @@ class AURA_EXPORT Env : public ui::EventTarget,
 
   void AddObserver(EnvObserver* observer);
   void RemoveObserver(EnvObserver* observer);
+
+  EnvInputStateController* env_controller() const {
+    return env_controller_.get();
+  }
 
   int mouse_button_flags() const { return mouse_button_flags_; }
   void set_mouse_button_flags(int mouse_button_flags) {
@@ -101,8 +114,10 @@ class AURA_EXPORT Env : public ui::EventTarget,
 
  private:
   friend class test::EnvTestHelper;
+  friend class EventInjector;
   friend class MusMouseLocationUpdater;
   friend class Window;
+  friend class WindowTreeClient;  // For call to WindowTreeClientDestroyed().
   friend class WindowTreeHost;
 
   explicit Env(Mode mode);
@@ -123,6 +138,8 @@ class AURA_EXPORT Env : public ui::EventTarget,
   // Invoked by WindowTreeHost when it is activated. Notifies observers.
   void NotifyHostActivated(WindowTreeHost* host);
 
+  void WindowTreeClientDestroyed(WindowTreeClient* client);
+
   // Overridden from ui::EventTarget:
   bool CanAcceptEvent(const ui::Event& event) override;
   ui::EventTarget* GetParentTarget() override;
@@ -137,11 +154,13 @@ class AURA_EXPORT Env : public ui::EventTarget,
   Mode mode_;
 
   // Intentionally not exposed publicly. Someday we might want to support
-  // multiple WindowTreeClients. Use EnvTestHelper in tests.
+  // multiple WindowTreeClients. Use EnvTestHelper in tests. This is set to null
+  // during shutdown.
   WindowTreeClient* window_tree_client_ = nullptr;
 
   base::ObserverList<EnvObserver> observers_;
 
+  std::unique_ptr<EnvInputStateController> env_controller_;
   int mouse_button_flags_;
   // Location of last mouse event, in screen coordinates.
   mutable gfx::Point last_mouse_location_;
@@ -156,8 +175,18 @@ class AURA_EXPORT Env : public ui::EventTarget,
   std::unique_ptr<InputStateLookup> input_state_lookup_;
   std::unique_ptr<ui::PlatformEventSource> event_source_;
 
+#if defined(USE_OZONE)
+  // Factory for pixmaps that can use be transported from the client to the GPU
+  // process using a low-level ozone-provided platform specific mechanism.
+  std::unique_ptr<gfx::ClientNativePixmapFactory> native_pixmap_factory_;
+#endif
+
   ui::ContextFactory* context_factory_;
   ui::ContextFactoryPrivate* context_factory_private_;
+
+  // This is set to true when the WindowTreeClient is destroyed. It triggers
+  // creating a different WindowPort implementation.
+  bool in_mus_shutdown_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(Env);
 };

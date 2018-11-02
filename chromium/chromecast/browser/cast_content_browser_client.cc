@@ -55,15 +55,18 @@
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
+#include "media/audio/audio_thread_impl.h"
+#include "media/mojo/features.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gl/gl_switches.h"
 
-#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
 #include "chromecast/media/service/cast_mojo_media_client.h"
 #include "media/mojo/services/media_service.h"  // nogncheck
 #endif  // ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS
@@ -81,7 +84,7 @@ namespace chromecast {
 namespace shell {
 
 namespace {
-#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
 static std::unique_ptr<service_manager::Service> CreateMediaService(
     CastContentBrowserClient* browser_client) {
   std::unique_ptr<media::CastMojoMediaClient> mojo_media_client(
@@ -95,7 +98,7 @@ static std::unique_ptr<service_manager::Service> CreateMediaService(
   return std::unique_ptr<service_manager::Service>(
       new ::media::MediaService(std::move(mojo_media_client)));
 }
-#endif  // defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
 
 }  // namespace
 
@@ -191,19 +194,20 @@ CastContentBrowserClient::media_pipeline_backend_manager() {
   return cast_browser_main_parts_->media_pipeline_backend_manager();
 }
 
-::media::ScopedAudioManagerPtr CastContentBrowserClient::CreateAudioManager(
+std::unique_ptr<::media::AudioManager>
+CastContentBrowserClient::CreateAudioManager(
     ::media::AudioLogFactory* audio_log_factory) {
-  return ::media::ScopedAudioManagerPtr(new media::CastAudioManager(
-      GetMediaTaskRunner(), GetMediaTaskRunner(), audio_log_factory,
-      media_pipeline_backend_manager()));
+  return base::MakeUnique<media::CastAudioManager>(
+      base::MakeUnique<::media::AudioThreadImpl>(), audio_log_factory,
+      media_pipeline_backend_manager());
 }
 
 std::unique_ptr<::media::CdmFactory>
 CastContentBrowserClient::CreateCdmFactory() {
-#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   return base::MakeUnique<media::CastCdmFactory>(GetMediaTaskRunner(),
                                                  media_resource_tracker());
-#endif  // defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   return nullptr;
 }
 #endif  // BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
@@ -401,6 +405,7 @@ void CastContentBrowserClient::AllowCertificateError(
 void CastContentBrowserClient::SelectClientCertificate(
     content::WebContents* web_contents,
     net::SSLCertRequestInfo* cert_request_info,
+    net::CertificateList client_certs,
     std::unique_ptr<content::ClientCertificateDelegate> delegate) {
   GURL requesting_url("https://" + cert_request_info->host_and_port.ToString());
 
@@ -411,7 +416,7 @@ void CastContentBrowserClient::SelectClientCertificate(
     return;
   }
 
-  // In our case there are no relevant certs in the cert_request_info. The cert
+  // In our case there are no relevant certs in |client_certs|. The cert
   // we need to return (if permitted) is the Cast device cert, which we can
   // access directly through the ClientAuthSigner instance. However, we need to
   // be on the IO thread to determine whether the app is whitelisted to return
@@ -450,8 +455,7 @@ CastContentBrowserClient::SelectClientCertificateOnIOThread(
 }
 
 bool CastContentBrowserClient::CanCreateWindow(
-    int opener_render_process_id,
-    int opener_render_frame_id,
+    content::RenderFrameHost* opener,
     const GURL& opener_url,
     const GURL& opener_top_level_frame_url,
     const GURL& source_origin,
@@ -463,7 +467,6 @@ bool CastContentBrowserClient::CanCreateWindow(
     const blink::mojom::WindowFeatures& features,
     bool user_gesture,
     bool opener_suppressed,
-    content::ResourceContext* context,
     bool* no_javascript_access) {
   *no_javascript_access = true;
   return false;
@@ -471,6 +474,7 @@ bool CastContentBrowserClient::CanCreateWindow(
 
 void CastContentBrowserClient::ExposeInterfacesToRenderer(
     service_manager::BinderRegistry* registry,
+    content::AssociatedInterfaceRegistry* associated_registry,
     content::RenderProcessHost* render_process_host) {
   registry->AddInterface(
       base::Bind(&media::MediaCapsImpl::AddBinding,
@@ -480,7 +484,7 @@ void CastContentBrowserClient::ExposeInterfacesToRenderer(
 
 void CastContentBrowserClient::RegisterInProcessServices(
     StaticServiceMap* services) {
-#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   content::ServiceInfo info;
   info.factory = base::Bind(&CreateMediaService, base::Unretained(this));
   info.task_runner = GetMediaTaskRunner();

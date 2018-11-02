@@ -25,7 +25,6 @@
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/command_buffer/common/command_buffer.h"
-#include "gpu/command_buffer/service/command_executor.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
@@ -52,6 +51,7 @@ class Size;
 
 namespace gpu {
 
+class ServiceDiscardableManager;
 class SyncPointClientState;
 class SyncPointOrderData;
 class SyncPointManager;
@@ -66,11 +66,10 @@ class ProgramCache;
 class ShaderTranslatorCache;
 }
 
-class CommandBufferServiceBase;
+class CommandBufferService;
 class GpuMemoryBufferManager;
-class CommandExecutor;
 class ImageFactory;
-class TransferBufferManagerInterface;
+class TransferBufferManager;
 
 // This class provides a thread-safe interface to the global GPU service (for
 // example GPU thread) when being run in single process mode.
@@ -81,6 +80,9 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
                                           public ImageTransportSurfaceDelegate {
  public:
   class Service;
+  typedef base::Callback<void(const std::vector<ui::LatencyInfo>&)>
+      LatencyInfoCallback;
+
   explicit InProcessCommandBuffer(const scoped_refptr<Service>& service);
   ~InProcessCommandBuffer() override;
 
@@ -101,7 +103,9 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   void Flush(int32_t put_offset) override;
   void OrderingBarrier(int32_t put_offset) override;
   State WaitForTokenInRange(int32_t start, int32_t end) override;
-  State WaitForGetOffsetInRange(int32_t start, int32_t end) override;
+  State WaitForGetOffsetInRange(uint32_t set_get_buffer_count,
+                                int32_t start,
+                                int32_t end) override;
   void SetGetBuffer(int32_t shm_id) override;
   scoped_refptr<gpu::Buffer> CreateTransferBuffer(size_t size,
                                                   int32_t* id) override;
@@ -121,7 +125,8 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   void EnsureWorkVisible() override;
   CommandBufferNamespace GetNamespaceID() const override;
   CommandBufferId GetCommandBufferID() const override;
-  int32_t GetExtraCommandBufferData() const override;
+  int32_t GetStreamId() const override;
+  void FlushOrderingBarrierOnStream(int32_t stream_id) override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
   bool IsFenceSyncFlushed(uint64_t release) override;
@@ -131,6 +136,8 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
                        const base::Closure& callback) override;
   void WaitSyncTokenHint(const SyncToken& sync_token) override;
   bool CanWaitUnverifiedSyncToken(const SyncToken& sync_token) override;
+  void AddLatencyInfo(
+      const std::vector<ui::LatencyInfo>& latency_info) override;
 
 // ImageTransportSurfaceDelegate implementation:
 #if defined(OS_WIN)
@@ -193,6 +200,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
     scoped_refptr<gl::GLShareGroup> share_group();
     scoped_refptr<gles2::MailboxManager> mailbox_manager();
     gpu::gles2::ProgramCache* program_cache();
+    ServiceDiscardableManager* discardable_manager();
     virtual bool BlockThreadOnWaitSyncToken() const = 0;
 
    protected:
@@ -203,6 +211,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
     std::unique_ptr<gpu::gles2::ProgramCache> program_cache_;
     // No-op default initialization is used in in-process mode.
     GpuProcessActivityFlags activity_flags_;
+    std::unique_ptr<ServiceDiscardableManager> discardable_manager_;
   };
 
  private:
@@ -232,7 +241,8 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   bool InitializeOnGpuThread(const InitializeOnGpuThreadParams& params);
   void Destroy();
   bool DestroyOnGpuThread();
-  void FlushOnGpuThread(int32_t put_offset);
+  void FlushOnGpuThread(int32_t put_offset,
+                        std::vector<ui::LatencyInfo>* latency_info);
   void UpdateLastStateOnGpuThread();
   void ScheduleDelayedWorkOnGpuThread();
   bool MakeCurrent();
@@ -273,8 +283,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   bool waiting_for_sync_point_ = false;
 
   scoped_refptr<base::SingleThreadTaskRunner> origin_task_runner_;
-  scoped_refptr<TransferBufferManagerInterface> transfer_buffer_manager_;
-  std::unique_ptr<CommandExecutor> executor_;
+  std::unique_ptr<TransferBufferManager> transfer_buffer_manager_;
   std::unique_ptr<gles2::GLES2Decoder> decoder_;
   scoped_refptr<gl::GLContext> context_;
   scoped_refptr<gl::GLSurface> surface_;
@@ -284,6 +293,11 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   // Used to throttle PerformDelayedWorkOnGpuThread.
   bool delayed_work_pending_;
   ImageFactory* image_factory_;
+
+  LatencyInfoCallback latency_info_callback_;
+
+  // Should only be accessed on the client thread.
+  std::unique_ptr<std::vector<ui::LatencyInfo>> latency_info_;
 
   // Members accessed on the client thread:
   GpuControlClient* gpu_control_client_;
@@ -300,7 +314,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   uint64_t flushed_fence_sync_release_;
 
   // Accessed on both threads:
-  std::unique_ptr<CommandBufferServiceBase> command_buffer_;
+  std::unique_ptr<CommandBufferService> command_buffer_;
   base::Lock command_buffer_lock_;
   base::WaitableEvent flush_event_;
   scoped_refptr<Service> service_;

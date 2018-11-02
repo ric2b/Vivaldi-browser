@@ -1,5 +1,6 @@
 <link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/default-theme.html">
 
 <!-- Common css variables for Material Design settings. -->
 <style is="custom-style">
@@ -12,6 +13,7 @@
      * UX design (bettes@). */
 
     --settings-actionable: var(--cr-actionable);
+    --settings-button-edge-spacing: 12px;
 
     --settings-box-row-padding: 20px;
     --settings-box-row-indent: calc(
@@ -81,21 +83,26 @@
 
     --checkbox-margin-start: 2px;
     --checkbox-size: 16px;
-    --settings-control-spacing: var(--cr-control-spacing);
+
+    /* Spacing between a control (e.g. checkbox) and its label. */
+    --settings-control-label-spacing: 20px;
+
+    /* Spacing between policy (controlledBy) indicator and control. */
+    --settings-controlled-by-spacing: var(--cr-controlled-by-spacing);
+
     --iron-icon-fill-color: var(--paper-grey-600);
     --iron-icon-height: var(--cr-icon-size);
     --iron-icon-width: var(--cr-icon-size);
     --paper-checkbox-label-color: inherit;
     --paper-dialog-color: inherit;
 
-    --cr-icon-ripple-size: 40px;
     --paper-icon-button: {
       /**
-       * This makes the icons 20px (in combination with "--cr-icon-ripple-size:
-       * 40px"), since paper-icon-button>iron-icon width and height are
-       * hardcoded to 100%.
+       * This makes the icons 20px (in combination with --cr-icon-ripple-size),
+       * since paper-icon-button>iron-icon width and height are hard-coded to
+       * 100%.
        */
-      padding: 10px;
+      padding: var(--cr-icon-ripple-padding);
     };
     --paper-input-container-focus-color: var(--google-blue-500);
     --paper-input-container-input: {

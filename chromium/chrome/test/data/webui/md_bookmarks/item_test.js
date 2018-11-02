@@ -12,8 +12,8 @@ suite('<bookmarks-item>', function() {
       nodes: testTree(createFolder(
           '1',
           [
-            createItem(['2']),
-            createItem(['3']),
+            createItem('2', {url: 'http://example.com/'}),
+            createItem('3'),
           ])),
     });
     bookmarks.Store.instance_ = store;
@@ -45,7 +45,27 @@ suite('<bookmarks-item>', function() {
   test('pressing the menu button selects the item', function() {
     MockInteractions.tap(item.$$('.more-vert-button'));
     assertDeepEquals(
-        bookmarks.actions.selectItem('2', false, false, store.data),
+        bookmarks.actions.selectItem('2', store.data, {
+          clear: true,
+          range: false,
+          toggle: false,
+        }),
+        store.lastAction);
+  });
+
+  test('context menu selects item if unselected', function() {
+    item.isSelectedItem_ = true;
+    item.dispatchEvent(new MouseEvent('contextmenu'));
+    assertEquals(null, store.lastAction);
+
+    item.isSelectedItem_ = false;
+    item.dispatchEvent(new MouseEvent('contextmenu'));
+    assertDeepEquals(
+        bookmarks.actions.selectItem('2', store.data, {
+          clear: true,
+          range: false,
+          toggle: false,
+        }),
         store.lastAction);
   });
 });

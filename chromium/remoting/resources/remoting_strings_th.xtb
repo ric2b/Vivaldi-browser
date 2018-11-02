@@ -64,10 +64,12 @@
 <translation id="225614027745146050">ยินดีต้อนรับ</translation>
 <translation id="228809120910082333">โปรดยืนยันบัญชีและ PIN ของคุณด้านล่างเพื่อให้สามารถเข้าถึงโดย Chromoting</translation>
 <translation id="2314101195544969792">เซสชัน <ph name="APPLICATION_NAME" /> ไม่มีการใช้งานมาระยะหนึ่งแล้ว และระบบจะยกเลิกการเชื่อมต่อเร็วๆ นี้</translation>
+<translation id="2317666076142640974">ลองใช้<ph name="LINK_BEGIN" />เว็บแอป Chrome Remote Desktop<ph name="LINK_END" /> ใหม่ก่อนใคร เราอยากฟังความคิดเห็นของคุณ</translation>
 <translation id="2353140552984634198">คุณสามารถเข้าถึงคอมพิวเตอร์เครื่องนี้ได้อย่างปลอดภัยโดยใช้ Chromoting</translation>
 <translation id="2359808026110333948">ดำเนินการต่อ</translation>
 <translation id="2366718077645204424">ไม่สามารถเข้าถึงโฮสต์ อาจเป็นเพราะการกำหนดค่าของเครือข่ายที่คุณกำลังใช้อยู่</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  ออนไลน์ล่าสุด<ph name="RELATIVE_TIMESTAMP" /></translation>
+<translation id="2405928220797050937">แอปนี้ใช้งานไม่ได้อีกต่อไป โปรดใช้<ph name="LINK_BEGIN" />เว็บแอป Chrome Remote Desktop<ph name="LINK_END" /> เพื่อให้คุณได้รับฟีเจอร์และการอัปเดตความปลอดภัยล่าสุดอยู่เสมอ</translation>
 <translation id="2499160551253595098">ช่วยเราปรับปรุง Chrome Remote Desktop ให้ดีขึ้นด้วยการอนุญาตให้เรารวบรวมสถิติการใช้งานและรายงานข้อขัดข้อง</translation>
 <translation id="2512228156274966424">หมายเหตุ: เพื่อให้มั่นใจว่าทุกแป้นพิมพ์ลัดพร้อมใช้งาน คุณสามารถกำหนดค่า Chrome Remote Desktop เป็น "เปิดเป็นหน้าต่าง"</translation>
 <translation id="2540992418118313681">คุณต้องการจะแชร์คอมพิวเตอร์เครื่องนี้เพื่อให้ผู้ใช้อื่นเห็นและควบคุมไหม</translation>
@@ -95,7 +97,6 @@
 <translation id="3194245623920924351">Chrome Remote Desktop</translation>
 <translation id="3197730452537982411">Remote Desktop</translation>
 <translation id="3258789396564295715">คุณสามารถเข้าถึงคอมพิวเตอร์เครื่องนี้ได้อย่างปลอดภัยโดยใช้ Chrome Remote Desktop</translation>
-<translation id="327263477022142889">หากต้องการช่วยปรับปรุง Chrome Remote Desktop โปรด<ph name="LINK_BEGIN" />ตอบแบบสำรวจ<ph name="LINK_END" /></translation>
 <translation id="3286521253923406898">Chromoting Host Controller</translation>
 <translation id="332624996707057614">แก้ไขชื่อคอมพิวเตอร์</translation>
 <translation id="3339299787263251426">เข้าถึงคอมพิวเตอร์ผ่านอินเทอร์เน็ตอย่างปลอดภัย</translation>
@@ -111,6 +112,7 @@
 <translation id="3649256019230929621">ย่อหน้าต่าง</translation>
 <translation id="369442766917958684">ออฟไลน์</translation>
 <translation id="3695446226812920698">เรียนรู้วิธี</translation>
+<translation id="3718805989288361841">การตั้งค่านโยบายของ Chrome Remote Desktop มีข้อผิดพลาด โปรดติดต่อขอรับความช่วยเหลือจากผู้ดูแลระบบของคุณ</translation>
 <translation id="3776024066357219166">เซสชัน Chrome Remote Desktop ของคุณสิ้นสุดแล้ว</translation>
 <translation id="3785447812627779171">Chromoting
 Host</translation>
@@ -137,7 +139,6 @@ Host</translation>
 <translation id="4277463233460010382">คอมพิวเตอร์เครื่องนี้ได้รับการกำหนดค่าให้อนุญาตไคลเอ็นต์หนึ่งหรือมากกว่าสามารถเชื่อมต่อโดยไม่ต้องป้อน PIN</translation>
 <translation id="4277736576214464567">รหัสการเข้าถึงไม่ถูกต้อง โปรดลองอีกครั้ง</translation>
 <translation id="4361728918881830843">ในการเปิดใช้งานการเชื่อมต่อระยะไกลกับคอมพิวเตอร์เครื่องอื่น ให้ติดตั้ง Chrome Remote Desktop ที่คอมพิวเตอร์ที่ต้องการใช้งานและคลิก "<ph name="BUTTON_NAME" />"</translation>
-<translation id="4368630973089289038">หากต้องการช่วยปรับปรุง Chromoting โปรด<ph name="LINK_BEGIN" />ตอบแบบสำรวจ<ph name="LINK_END" /></translation>
 <translation id="4394049700291259645">ปิดการใช้งาน</translation>
 <translation id="4405930547258349619">Core Library</translation>
 <translation id="4430435636878359009">ปิดใช้งานการเชื่อมต่อระยะไกลกับคอมพิวเตอร์เครื่องนี้</translation>
@@ -232,6 +233,7 @@ Desktop Host</translation>
 <translation id="6930242544192836755">ระยะเวลา</translation>
 <translation id="6939719207673461467">แสดง/ซ่อนแป้นพิมพ์</translation>
 <translation id="6944854424004126054">กู้คืนหน้าต่าง</translation>
+<translation id="6948905685698011662">Chrome Remote Desktop ใช้งานในเว็บได้แล้ว! ลองใช้<ph name="LINK_BEGIN" />เว็บแอปฟรี<ph name="LINK_END" />ของเราเลย</translation>
 <translation id="6963936880795878952">การเชื่อมต่อกับคอมพิวเตอร์ระยะไกลถูกบล็อกไว้ชั่วคราว เนื่องจากมีผู้พยายามเชื่อมต่อกับคอมพิวเตอร์ดังกล่าวโดยใช้ PIN ที่ไม่ถูกต้อง โปรดลองอีกครั้งในภายหลัง</translation>
 <translation id="6965382102122355670">ตกลง</translation>
 <translation id="6985691951107243942">คุณแน่ใจหรือไม่ว่าต้องการปิดใช้งานการเชื่อมต่อระยะไกลกับ <ph name="HOSTNAME" /> หากคุณเปลี่ยนใจภายหลัง คุณจะต้องไปที่คอมพิวเตอร์เครื่องนั้นเพื่อเปิดใช้งานการเชื่อมต่ออีกครั้ง</translation>
@@ -248,6 +250,7 @@ Desktop Host</translation>
 <translation id="7401733114166276557">Chrome Remote Desktop</translation>
 <translation id="7434397035092923453">การเข้าถึงถูกปฏิเสธสำหรับไคลเอ็นต์: <ph name="CLIENT_USERNAME" /></translation>
 <translation id="7444276978508498879">ไคลเอ็นต์ที่เชื่อมต่อ: <ph name="CLIENT_USERNAME" /></translation>
+<translation id="7589941250119944644">Chrome Remote Desktop กำลังจะย้ายไปอยู่บ้านหลังใหม่ในเว็บแล้ว ลองใช้<ph name="LINK_BEGIN" />เว็บแอป<ph name="LINK_END" />ของเราดูสิ ทั้งรวดเร็วและฟรี มีฟีเจอร์ครบเครื่องเหมือนเดิม</translation>
 <translation id="7606912958770842224">เปิดใช้งานการเชื่อมต่อระยะไกล</translation>
 <translation id="7649070708921625228">ช่วยเหลือ</translation>
 <translation id="7658239707568436148">ยกเลิก</translation>

@@ -17,6 +17,7 @@ mojom("interfaces_internal") {
     "constants.mojom",
     "event_properties.mojom",
     "locale.mojom",
+    "lock_screen.mojom",
     "media.mojom",
     "new_window.mojom",
     "session_controller.mojom",
@@ -24,6 +25,7 @@ mojom("interfaces_internal") {
     "shutdown.mojom",
     "system_tray.mojom",
     "touch_view.mojom",
+    "tray_action.mojom",
     "update.mojom",
     "volume.mojom",
     "vpn_list.mojom",
@@ -40,6 +42,7 @@ mojom("interfaces_internal") {
     "//ui/gfx/image/mojo:interfaces",
   ]
 
+  component_output_prefix = "ash_public_interfaces_internal"
   export_class_attribute = "ASH_PUBLIC_EXPORT"
   export_define = "ASH_PUBLIC_IMPLEMENTATION=1"
   export_header = "ash/public/cpp/ash_public_export.h"

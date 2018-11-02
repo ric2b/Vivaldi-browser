@@ -268,7 +268,9 @@ FT_BEGIN_HEADER
   /*                                                                       */
   /*   Define this macro if you want to enable this `feature'.             */
   /*                                                                       */
-/* #define FT_CONFIG_OPTION_USE_HARFBUZZ */
+#if !defined(WITHOUT_HARFBUZZ)
+#define FT_CONFIG_OPTION_USE_HARFBUZZ
+#endif
 
 
   /*************************************************************************/
@@ -323,8 +325,13 @@ FT_BEGIN_HEADER
 #endif
 
 #else
+#if !defined(MAC_RESTRICT_VISIBILITY)
 #define FT_EXPORT(x)     __attribute__((visibility ("default"))) x
 #define FT_EXPORT_DEF(x) __attribute__((visibility ("default"))) x
+#else
+#define FT_EXPORT(x)     x
+#define FT_EXPORT_DEF(x) x
+#endif
 #endif
 
   /*************************************************************************/
@@ -341,7 +348,7 @@ FT_BEGIN_HEADER
   /*                                                                       */
   /*   - The TrueType driver will provide its own set of glyph names,      */
   /*     if you build it to support postscript names in the TrueType       */
-  /*     `post' table.                                                     */
+  /*     `post' table, but will not synthesize a missing Unicode charmap.  */
   /*                                                                       */
   /*   - The Type 1 driver will not be able to synthesize a Unicode        */
   /*     charmap out of the glyphs found in the fonts.                     */
@@ -900,7 +907,9 @@ FT_BEGIN_HEADER
 
   /*************************************************************************/
   /*                                                                       */
-  /* Compile autofit module with Indic script support.                     */
+  /* Compile autofit module with fallback Indic script support, covering   */
+  /* some scripts that the `latin' submodule of the autofit module doesn't */
+  /* (yet) handle.                                                         */
   /*                                                                       */
 #define AF_CONFIG_OPTION_INDIC
 
@@ -918,6 +927,26 @@ FT_BEGIN_HEADER
   /* information; by default it is switched off).                          */
   /*                                                                       */
 /*#define AF_CONFIG_OPTION_USE_WARPER*/
+
+  /*************************************************************************/
+  /*                                                                       */
+  /* Use TrueType-like size metrics for `light' auto-hinting.              */
+  /*                                                                       */
+  /* It is strongly recommended to avoid this option, which exists only to */
+  /* help some legacy applications retain its appearance and behaviour     */
+  /* with respect to auto-hinted TrueType fonts.                           */
+  /*                                                                       */
+  /* The very reason this option exists at all are GNU/Linux distributions */
+  /* like Fedora that did not un-patch the following change (which was     */
+  /* present in FreeType between versions 2.4.6 and 2.7.1, inclusive).     */
+  /*                                                                       */
+  /*   2011-07-16  Steven Chu  <steven.f.chu@gmail.com>                    */
+  /*                                                                       */
+  /*     [truetype] Fix metrics on size request for scalable fonts.        */
+  /*                                                                       */
+  /* This problematic commit is now reverted (more or less).               */
+  /*                                                                       */
+/* #define AF_CONFIG_OPTION_TT_SIZE_METRICS */
 
   /* */
 

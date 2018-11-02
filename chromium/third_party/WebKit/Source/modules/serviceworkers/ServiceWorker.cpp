@@ -32,13 +32,13 @@
 
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/MessagePort.h"
 #include "core/events/Event.h"
 #include "modules/EventTargetModules.h"
 #include "modules/serviceworkers/ServiceWorkerContainerClient.h"
+#include "platform/bindings/ScriptState.h"
 #include "public/platform/WebMessagePortChannel.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebString.h"
@@ -99,7 +99,7 @@ String ServiceWorker::state() const {
   switch (handle_->ServiceWorker()->GetState()) {
     case kWebServiceWorkerStateUnknown:
       // The web platform should never see this internal state
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return "unknown";
     case kWebServiceWorkerStateInstalling:
       return "installing";
@@ -112,7 +112,7 @@ String ServiceWorker::state() const {
     case kWebServiceWorkerStateRedundant:
       return "redundant";
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return g_null_atom;
   }
 }
@@ -143,7 +143,7 @@ ServiceWorker* ServiceWorker::GetOrCreate(
   ServiceWorker* existing_worker =
       static_cast<ServiceWorker*>(handle->ServiceWorker()->Proxy());
   if (existing_worker) {
-    ASSERT(existing_worker->GetExecutionContext() == execution_context);
+    DCHECK_EQ(existing_worker->GetExecutionContext(), execution_context);
     return existing_worker;
   }
 
@@ -155,7 +155,7 @@ ServiceWorker::ServiceWorker(ExecutionContext* execution_context,
     : AbstractWorker(execution_context),
       handle_(std::move(handle)),
       was_stopped_(false) {
-  ASSERT(handle_);
+  DCHECK(handle_);
   handle_->ServiceWorker()->SetProxy(this);
 }
 

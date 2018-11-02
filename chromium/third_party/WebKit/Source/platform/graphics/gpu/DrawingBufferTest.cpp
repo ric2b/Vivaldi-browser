@@ -37,14 +37,15 @@
 #include "gpu/command_buffer/client/gles2_interface_stub.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
+#include "platform/graphics/CanvasColorParams.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/DrawingBufferTestHelpers.h"
+#include "platform/testing/TestingPlatformSupport.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/RefPtr.h"
 #include "public/platform/Platform.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/Source/platform/testing/TestingPlatformSupport.h"
 
 using testing::Test;
 using testing::_;
@@ -72,21 +73,23 @@ class DrawingBufferTest : public Test {
     IntSize initial_size(kInitialWidth, kInitialHeight);
     std::unique_ptr<GLES2InterfaceForTests> gl =
         WTF::WrapUnique(new GLES2InterfaceForTests);
-    gl_ = gl.get();
-    SetAndSaveRestoreState(false);
     std::unique_ptr<WebGraphicsContext3DProviderForTests> provider =
         WTF::WrapUnique(
             new WebGraphicsContext3DProviderForTests(std::move(gl)));
+    GLES2InterfaceForTests* gl_ =
+        static_cast<GLES2InterfaceForTests*>(provider->ContextGL());
     drawing_buffer_ = DrawingBufferForTests::Create(
         std::move(provider), gl_, initial_size, DrawingBuffer::kPreserve,
         use_multisampling);
     CHECK(drawing_buffer_);
+    SetAndSaveRestoreState(false);
   }
 
   // Initialize GL state with unusual values, to verify that they are restored.
   // The |invert| parameter will reverse all boolean parameters, so that all
   // values are tested.
   void SetAndSaveRestoreState(bool invert) {
+    GLES2InterfaceForTests* gl_ = drawing_buffer_->ContextGLForTests();
     GLboolean scissor_enabled = !invert;
     GLfloat clear_color[4] = {0.1, 0.2, 0.3, 0.4};
     GLfloat clear_depth = 0.8;
@@ -123,9 +126,11 @@ class DrawingBufferTest : public Test {
     gl_->SaveState();
   }
 
-  void VerifyStateWasRestored() { gl_->VerifyStateHasNotChangedSinceSave(); }
+  void VerifyStateWasRestored() {
+    GLES2InterfaceForTests* gl_ = drawing_buffer_->ContextGLForTests();
+    gl_->VerifyStateHasNotChangedSinceSave();
+  }
 
-  GLES2InterfaceForTests* gl_;
   RefPtr<DrawingBufferForTests> drawing_buffer_;
 };
 
@@ -151,6 +156,7 @@ TEST_F(DrawingBufferTestMultisample, verifyMultisampleResolve) {
 }
 
 TEST_F(DrawingBufferTest, verifyResizingProperlyAffectsMailboxes) {
+  GLES2InterfaceForTests* gl_ = drawing_buffer_->ContextGLForTests();
   VerifyStateWasRestored();
   cc::TextureMailbox texture_mailbox;
   std::unique_ptr<cc::SingleReleaseCallback> release_callback;
@@ -348,6 +354,7 @@ TEST_F(DrawingBufferTest, verifyOnlyOneRecycledMailboxMustBeKept) {
 }
 
 TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncTokenCorrectly) {
+  GLES2InterfaceForTests* gl_ = drawing_buffer_->ContextGLForTests();
   cc::TextureMailbox texture_mailbox;
   std::unique_ptr<cc::SingleReleaseCallback> release_callback;
 
@@ -390,18 +397,19 @@ class DrawingBufferImageChromiumTest : public DrawingBufferTest {
     IntSize initial_size(kInitialWidth, kInitialHeight);
     std::unique_ptr<GLES2InterfaceForTests> gl =
         WTF::WrapUnique(new GLES2InterfaceForTests);
-    gl_ = gl.get();
-    SetAndSaveRestoreState(true);
     std::unique_ptr<WebGraphicsContext3DProviderForTests> provider =
         WTF::WrapUnique(
             new WebGraphicsContext3DProviderForTests(std::move(gl)));
     RuntimeEnabledFeatures::setWebGLImageChromiumEnabled(true);
+    GLES2InterfaceForTests* gl_ =
+        static_cast<GLES2InterfaceForTests*>(provider->ContextGL());
     image_id0_ = gl_->NextImageIdToBeCreated();
     EXPECT_CALL(*gl_, BindTexImage2DMock(image_id0_)).Times(1);
     drawing_buffer_ = DrawingBufferForTests::Create(
         std::move(provider), gl_, initial_size, DrawingBuffer::kPreserve,
         kDisableMultisampling);
     CHECK(drawing_buffer_);
+    SetAndSaveRestoreState(true);
     testing::Mock::VerifyAndClearExpectations(gl_);
   }
 
@@ -415,6 +423,7 @@ class DrawingBufferImageChromiumTest : public DrawingBufferTest {
 };
 
 TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages) {
+  GLES2InterfaceForTests* gl_ = drawing_buffer_->ContextGLForTests();
   cc::TextureMailbox texture_mailbox;
   std::unique_ptr<cc::SingleReleaseCallback> release_callback;
 
@@ -496,6 +505,7 @@ TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages) {
 }
 
 TEST_F(DrawingBufferImageChromiumTest, allocationFailure) {
+  GLES2InterfaceForTests* gl_ = drawing_buffer_->ContextGLForTests();
   cc::TextureMailbox texture_mailbox1;
   std::unique_ptr<cc::SingleReleaseCallback> release_callback1;
   cc::TextureMailbox texture_mailbox2;
@@ -653,7 +663,7 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported) {
         std::move(provider), nullptr, IntSize(10, 10), premultiplied_alpha,
         want_alpha_channel, want_depth_buffer, want_stencil_buffer,
         want_antialiasing, preserve, DrawingBuffer::kWebGL1,
-        DrawingBuffer::kAllowChromiumImage);
+        DrawingBuffer::kAllowChromiumImage, CanvasColorParams());
 
     // When we request a depth or a stencil buffer, we will get both.
     EXPECT_EQ(cases[i].request_depth || cases[i].request_stencil,
@@ -694,6 +704,7 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported) {
 }
 
 TEST_F(DrawingBufferTest, verifySetIsHiddenProperlyAffectsMailboxes) {
+  GLES2InterfaceForTests* gl_ = drawing_buffer_->ContextGLForTests();
   cc::TextureMailbox texture_mailbox;
   std::unique_ptr<cc::SingleReleaseCallback> release_callback;
 

@@ -46,6 +46,7 @@
 <translation id="4021036232240155012">DNS je síťová služba, která překládá názvy webů na internetové adresy.</translation>
 <translation id="4075732493274867456">Klient a server nepodporují společnou verzi protokolu SSL nebo šifrovací sadu.</translation>
 <translation id="4130226655945681476">zkontrolovat síťové kabely, modem a směrovač</translation>
+<translation id="4165986682804962316">Nastavení webu</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />zkontrolovat konfiguraci firewallu a antivirového softwaru<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Zkusit spustit diagnostiku sítě<ph name="END_LINK" />.</translation>
 <translation id="4432688616882109544">Web <ph name="HOST_NAME" /> nepřijal přihlašovací certifikát, případně žádný certifikát nebyl poskytnut.</translation>
@@ -93,7 +94,6 @@ Kontaktujte administrátora systému.</translation>
 <translation id="7716424297397655342">Tento web nelze načíst z mezipaměti</translation>
 <translation id="7758069387465995638">Připojení mohlo být zablokováno firewallem nebo antivirovým softwarem.</translation>
 <translation id="7951415247503192394">(32bitový)</translation>
-<translation id="8089520772729574115">méně než 1 MB</translation>
 <translation id="8134994873729925007"><ph name="BEGIN_ABBR" />Adresa DNS<ph name="END_ABBR" /> serveru <ph name="HOST_NAME" /> nebyla nalezena.</translation>
 <translation id="8142868475871995937">Na stránce &lt;strong&gt;vivaldi://policy&lt;/strong&gt; naleznete seznam zakázaných adres URL a další zásady vynucené vaším správcem systému.</translation>
 <translation id="8149426793427495338">Počítač přešel do režimu spánku.</translation>

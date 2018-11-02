@@ -54,6 +54,7 @@
 #include "public/platform/WebFeaturePolicy.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
+#include "public/platform/WebURLRequest.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -85,6 +86,7 @@ class WebMediaPlayerSource;
 class WebRemotePlaybackClient;
 class WebRTCPeerConnectionHandler;
 class WebServiceWorkerProvider;
+class WebURLLoader;
 
 class CORE_EXPORT LocalFrameClient : public FrameClient {
  public:
@@ -118,6 +120,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual NavigationPolicy DecidePolicyForNavigation(
       const ResourceRequest&,
+      Document* origin_document,
       DocumentLoader*,
       NavigationType,
       NavigationPolicy,
@@ -236,6 +239,12 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual void DidChangeScrollOffset() {}
   virtual void DidUpdateCurrentHistoryItem() {}
 
+  // Called when a content-initiated, main frame navigation to a data URL is
+  // about to occur.
+  virtual bool AllowContentInitiatedDataUrlNavigations(const KURL&) {
+    return false;
+  }
+
   virtual WebCookieJar* CookieJar() const = 0;
 
   virtual void DidChangeName(const String&) {}
@@ -244,7 +253,9 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual void DidUpdateToUniqueOrigin() {}
 
-  virtual void DidChangeSandboxFlags(Frame* child_frame, SandboxFlags) {}
+  virtual void DidChangeFramePolicy(Frame* child_frame,
+                                    SandboxFlags,
+                                    const WebParsedFeaturePolicy&) {}
 
   virtual void DidSetFeaturePolicyHeader(
       const WebParsedFeaturePolicy& parsed_header) {}
@@ -307,6 +318,12 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
     return WebEffectiveConnectionType::kTypeUnknown;
   }
 
+  // Returns whether or not the requested image should be replaced with a
+  // placeholder as part of the Client Lo-Fi previews feature.
+  virtual bool ShouldUseClientLoFiForRequest(const ResourceRequest&) {
+    return false;
+  }
+
   // Overwrites the given URL to use an HTML5 embed if possible. An empty URL is
   // returned if the URL is not overriden.
   virtual KURL OverrideFlashEmbedWithHTML(const KURL&) { return KURL(); }
@@ -315,9 +332,13 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual void SetHasReceivedUserGesture(bool received_previously) {}
 
+  virtual void SetDevToolsFrameId(const String& devtools_frame_id) {}
+
   virtual void AbortClientNavigation() {}
 
   virtual TextCheckerClient& GetTextCheckerClient() const = 0;
+
+  virtual std::unique_ptr<WebURLLoader> CreateURLLoader() = 0;
 
   // VB-6063:
   virtual void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) {}

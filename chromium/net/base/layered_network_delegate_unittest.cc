@@ -21,6 +21,7 @@
 #include "net/proxy/proxy_config_service.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_retry_info.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -175,8 +176,8 @@ class TestLayeredNetworkDelegate : public LayeredNetworkDelegate {
 
   void CallAndVerify() {
     scoped_refptr<AuthChallengeInfo> auth_challenge(new AuthChallengeInfo());
-    std::unique_ptr<URLRequest> request =
-        context_.CreateRequest(GURL(), IDLE, &delegate_);
+    std::unique_ptr<URLRequest> request = context_.CreateRequest(
+        GURL(), IDLE, &delegate_, TRAFFIC_ANNOTATION_FOR_TESTS);
     std::unique_ptr<HttpRequestHeaders> request_headers(
         new HttpRequestHeaders());
     scoped_refptr<HttpResponseHeaders> response_headers(
@@ -332,6 +333,30 @@ class TestLayeredNetworkDelegate : public LayeredNetworkDelegate {
     EXPECT_EQ(1, (*counters_)
                      ["on_cancel_url_request_with_policy_"
                       "violating_referrer_header_count"]);
+  }
+
+  void OnCanQueueReportingReportInternal(
+      const url::Origin& origin) const override {
+    ++(*counters_)["on_can_queue_reporting_report_count"];
+    EXPECT_EQ(1, (*counters_)["on_can_queue_reporting_report_count"]);
+  }
+
+  void OnCanSendReportingReportInternal(
+      const url::Origin& origin) const override {
+    ++(*counters_)["on_can_send_reporting_report_count"];
+    EXPECT_EQ(1, (*counters_)["on_can_send_reporting_report_count"]);
+  }
+
+  void OnCanSetReportingClientInternal(const url::Origin& origin,
+                                       const GURL& endpoint) const override {
+    ++(*counters_)["on_can_set_reporting_client_count"];
+    EXPECT_EQ(1, (*counters_)["on_can_set_reporting_client_count"]);
+  }
+
+  void OnCanUseReportingClientInternal(const url::Origin& origin,
+                                       const GURL& endpoint) const override {
+    ++(*counters_)["on_can_use_reporting_client_count"];
+    EXPECT_EQ(1, (*counters_)["on_can_use_reporting_client_count"]);
   }
 
  private:

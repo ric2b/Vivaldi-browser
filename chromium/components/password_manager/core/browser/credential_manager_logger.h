@@ -23,11 +23,11 @@ class CredentialManagerLogger {
   ~CredentialManagerLogger();
 
   void LogRequestCredential(const GURL& url,
-                            bool zero_click_only,
+                            CredentialMediationRequirement mediation,
                             const std::vector<GURL>& federations);
   void LogSendCredential(const GURL& url, CredentialType type);
   void LogStoreCredential(const GURL& url, CredentialType type);
-  void LogRequireUserMediation(const GURL& url);
+  void LogPreventSilentAccess(const GURL& url);
 
  private:
   // The LogManager to which logs can be sent for display.

@@ -11,6 +11,9 @@
 #include "base/memory/ptr_util.h"
 #include "platform_media/gpu/pipeline/propmedia_gpu_channel.h"
 
+#include "gpu/command_buffer/service/mailbox_manager.h"
+#include "gpu/command_buffer/service/preemption_flag.h"
+
 namespace gpu {
 
 ProprietaryMediaGpuChannelManager::ProprietaryMediaGpuChannelManager(
@@ -20,6 +23,7 @@ ProprietaryMediaGpuChannelManager::ProprietaryMediaGpuChannelManager(
                     GpuWatchdogThread* watchdog,
                     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+                    Scheduler* scheduler,
                     SyncPointManager* sync_point_manager,
                     GpuMemoryBufferFactory* gpu_memory_buffer_factory,
                     const GpuFeatureInfo& gpu_feature_info,
@@ -31,6 +35,7 @@ ProprietaryMediaGpuChannelManager::ProprietaryMediaGpuChannelManager(
                     watchdog,
                     task_runner,
                     io_task_runner,
+                    scheduler,
                     sync_point_manager,
                     gpu_memory_buffer_factory,
                     gpu_feature_info,
@@ -43,15 +48,16 @@ GpuChannel* ProprietaryMediaGpuChannelManager::EstablishChannel(
     uint64_t client_tracing_id,
     bool is_gpu_host) {
 
-    std::unique_ptr<ProprietaryMediaGpuChannel> gpu_channel = base::MakeUnique<ProprietaryMediaGpuChannel>(
-                this, sync_point_manager(), watchdog(), share_group(),
-                mailbox_manager(), is_gpu_host ? preemption_flag() : nullptr,
-                is_gpu_host ? nullptr : preemption_flag(), task_runner_.get(),
-                io_task_runner_.get(), client_id, client_tracing_id,
-                is_gpu_host);
-    GpuChannel* gpu_channel_ptr = gpu_channel.get();
-    gpu_channels_[client_id] = std::move(gpu_channel);
-    return gpu_channel_ptr;
+  std::unique_ptr<ProprietaryMediaGpuChannel> gpu_channel = base::MakeUnique<ProprietaryMediaGpuChannel>(
+      this, scheduler_, sync_point_manager_, watchdog_, share_group_,
+      mailbox_manager_, &discardable_manager_,
+      is_gpu_host ? preemption_flag_ : nullptr,
+      is_gpu_host ? nullptr : preemption_flag_, task_runner_, io_task_runner_,
+      client_id, client_tracing_id, is_gpu_host);
+
+  GpuChannel* gpu_channel_ptr = gpu_channel.get();
+  gpu_channels_[client_id] = std::move(gpu_channel);
+  return gpu_channel_ptr;
 }
 
 }  // namespace gpu

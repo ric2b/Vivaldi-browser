@@ -4,7 +4,6 @@
 
 #include "ui/android/window_android.h"
 
-#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -145,8 +144,7 @@ WindowAndroid::~WindowAndroid() {
 
 WindowAndroid* WindowAndroid::CreateForTesting() {
   JNIEnv* env = AttachCurrentThread();
-  const JavaRef<jobject>& context = base::android::GetApplicationContext();
-  long native_pointer = Java_WindowAndroid_createForTesting(env, context);
+  long native_pointer = Java_WindowAndroid_createForTesting(env);
   return reinterpret_cast<WindowAndroid*>(native_pointer);
 }
 
@@ -276,6 +274,11 @@ bool WindowAndroid::CanRequestPermission(const std::string& permission) {
 WindowAndroid* WindowAndroid::GetWindowAndroid() const {
   DCHECK(parent_ == nullptr);
   return const_cast<WindowAndroid*>(this);
+}
+
+ScopedJavaLocalRef<jobject> WindowAndroid::GetWindowToken() {
+  JNIEnv* env = AttachCurrentThread();
+  return Java_WindowAndroid_getWindowToken(env, GetJavaObject());
 }
 
 // ----------------------------------------------------------------------------

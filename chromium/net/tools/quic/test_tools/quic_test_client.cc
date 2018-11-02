@@ -9,10 +9,10 @@
 #include <vector>
 
 #include "net/quic/core/crypto/proof_verifier.h"
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/core/quic_utils.h"
 #include "net/quic/core/spdy_utils.h"
+#include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/platform/api/quic_stack_trace.h"
@@ -27,7 +27,6 @@
 #include "net/tools/quic/quic_packet_writer_wrapper.h"
 #include "net/tools/quic/quic_spdy_client_stream.h"
 #include "net/tools/quic/test_tools/quic_client_peer.h"
-#include "third_party/boringssl/src/include/openssl/x509.h"
 
 using std::string;
 using testing::_;
@@ -216,8 +215,7 @@ QuicTestClient::QuicTestClient(QuicSocketAddress server_address,
                                                   PRIVACY_MODE_DISABLED),
                                      config,
                                      supported_versions,
-                                     &epoll_server_)),
-      allow_bidirectional_data_(false) {
+                                     &epoll_server_)) {
   Initialize();
 }
 
@@ -233,18 +231,16 @@ QuicTestClient::QuicTestClient(QuicSocketAddress server_address,
                                      config,
                                      supported_versions,
                                      &epoll_server_,
-                                     std::move(proof_verifier))),
-      allow_bidirectional_data_(false) {
+                                     std::move(proof_verifier))) {
   Initialize();
 }
 
-QuicTestClient::QuicTestClient() : allow_bidirectional_data_(false) {}
+QuicTestClient::QuicTestClient() {}
 
 QuicTestClient::~QuicTestClient() {
   for (std::pair<QuicStreamId, QuicSpdyClientStream*> stream : open_streams_) {
     stream.second->set_visitor(nullptr);
   }
-  client_->Disconnect();
 }
 
 void QuicTestClient::Initialize() {
@@ -442,8 +438,6 @@ QuicSpdyClientStream* QuicTestClient::GetOrCreateStream() {
     SetLatestCreatedStream(client_->CreateClientStream());
     if (latest_created_stream_) {
       latest_created_stream_->SetPriority(priority_);
-      latest_created_stream_->set_allow_bidirectional_data(
-          allow_bidirectional_data_);
     }
   }
 

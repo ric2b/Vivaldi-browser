@@ -10,6 +10,7 @@
 #include <deque>
 
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/sys_byteorder.h"
 #include "content/browser/renderer_host/p2p/socket_host_test_utils.h"
@@ -182,6 +183,19 @@ TEST_F(P2PSocketHostTcpTest, SendDataNoAuth) {
   socket_host_->Send(dest_.ip_address, packet, options, 0);
 
   EXPECT_EQ(0U, sent_data_.size());
+}
+
+// Verify that SetOption() doesn't crash after an error.
+TEST_F(P2PSocketHostTcpTest, SetOptionAfterError) {
+  // Get the sender into the error state.
+  EXPECT_CALL(sender_,
+              Send(MatchMessage(static_cast<uint32_t>(P2PMsg_OnError::ID))))
+      .WillOnce(DoAll(DeleteArg<0>(), Return(true)));
+  socket_host_->Send(dest_.ip_address, {1, 2, 3, 4}, rtc::PacketOptions(), 0);
+  testing::Mock::VerifyAndClearExpectations(&sender_);
+
+  // Verify that SetOptions() fails, but doesn't crash.
+  EXPECT_FALSE(socket_host_->SetOption(P2P_SOCKET_OPT_RCVBUF, 2048));
 }
 
 // Verify that we can send data after we've received STUN response

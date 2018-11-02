@@ -95,10 +95,10 @@ void WebrtcVideoRendererAdapter::SetVideoStatsChannel(
 }
 
 void WebrtcVideoRendererAdapter::OnFrame(const webrtc::VideoFrame& frame) {
-  if (frame.timestamp_us() >= rtc::TimeMicros()) {
+  if (frame.timestamp_us() > rtc::TimeMicros()) {
     // The host sets playout delay to 0, so all incoming frames are expected to
     // be rendered as so as they are received.
-    LOG(WARNING) << "Received frame with playout delay greater than 0.";
+    NOTREACHED() << "Received frame with playout delay greater than 0.";
   }
 
   task_runner_->PostTask(
@@ -175,8 +175,7 @@ void WebrtcVideoRendererAdapter::HandleFrameOnMainThread(
           webrtc::DesktopSize(frame->width(), frame->height()));
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().WithShutdownBehavior(
-                     base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
+      FROM_HERE, {base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::Bind(&ConvertYuvToRgb, base::Passed(&frame),
                  base::Passed(&rgb_frame),
                  video_renderer_->GetFrameConsumer()->GetPixelFormat()),

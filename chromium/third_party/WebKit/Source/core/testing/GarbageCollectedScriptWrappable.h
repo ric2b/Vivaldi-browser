@@ -5,10 +5,10 @@
 #ifndef GarbageCollectedScriptWrappable_h
 #define GarbageCollectedScriptWrappable_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Heap.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 

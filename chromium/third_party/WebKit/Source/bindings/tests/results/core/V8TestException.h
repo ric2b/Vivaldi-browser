@@ -14,13 +14,13 @@
 
 #include "bindings/core/v8/GeneratedCodeHelper.h"
 #include "bindings/core/v8/NativeValueTraits.h"
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/ToV8ForCore.h"
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8DOMWrapper.h"
-#include "bindings/core/v8/WrapperTypeInfo.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/tests/idls/core/TestException.h"
 #include "core/CoreExport.h"
+#include "platform/bindings/ScriptWrappable.h"
+#include "platform/bindings/V8DOMWrapper.h"
+#include "platform/bindings/WrapperTypeInfo.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -42,10 +42,10 @@ class V8TestException {
   static void TraceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
     visitor->TraceWrappers(scriptWrappable->ToImpl<TestException>());
   }
-  static void constructorCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount + 0;
 
   // Callback functions
+  CORE_EXPORT static void constructorCallback(const v8::FunctionCallbackInfo<v8::Value>&);
 
   CORE_EXPORT static void readonlyUnsignedShortAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void readonlyStringAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);

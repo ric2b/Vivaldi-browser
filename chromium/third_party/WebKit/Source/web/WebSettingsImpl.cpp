@@ -62,7 +62,7 @@ WebSettingsImpl::WebSettingsImpl(Settings* settings,
 
 void WebSettingsImpl::SetFromStrings(const WebString& name,
                                      const WebString& value) {
-  settings_->setFromStrings(name, value);
+  settings_->SetFromStrings(name, value);
 }
 
 void WebSettingsImpl::SetStandardFontFamily(const WebString& font,
@@ -139,6 +139,11 @@ void WebSettingsImpl::SetMinimumLogicalFontSize(int size) {
   settings_->SetMinimumLogicalFontSize(size);
 }
 
+void WebSettingsImpl::SetAutoplayPolicy(AutoplayPolicy policy) {
+  settings_->SetAutoplayPolicy(
+      static_cast<blink::AutoplayPolicy::Type>(policy));
+}
+
 void WebSettingsImpl::SetAutoZoomFocusedNodeToLegibleScale(
     bool auto_zoom_focused_node_to_legible_scale) {
   auto_zoom_focused_node_to_legible_scale_ =
@@ -187,11 +192,6 @@ void WebSettingsImpl::SetJavaScriptEnabled(bool enabled) {
 
 void WebSettingsImpl::SetWebSecurityEnabled(bool enabled) {
   settings_->SetWebSecurityEnabled(enabled);
-}
-
-void WebSettingsImpl::SetJavaScriptCanOpenWindowsAutomatically(
-    bool can_open_windows) {
-  settings_->SetJavaScriptCanOpenWindowsAutomatically(can_open_windows);
 }
 
 void WebSettingsImpl::SetSupportDeprecatedTargetDensityDPI(
@@ -623,10 +623,6 @@ void WebSettingsImpl::SetShouldRespectImageOrientation(bool enabled) {
   settings_->SetShouldRespectImageOrientation(enabled);
 }
 
-void WebSettingsImpl::SetMediaPlaybackRequiresUserGesture(bool required) {
-  settings_->SetMediaPlaybackRequiresUserGesture(required);
-}
-
 void WebSettingsImpl::SetMediaPlaybackGestureWhitelistScope(
     const WebString& scope) {
   settings_->SetMediaPlaybackGestureWhitelistScope(scope);
@@ -638,6 +634,10 @@ void WebSettingsImpl::SetPresentationRequiresUserGesture(bool required) {
 
 void WebSettingsImpl::SetEmbeddedMediaExperienceEnabled(bool enabled) {
   settings_->SetEmbeddedMediaExperienceEnabled(enabled);
+}
+
+void WebSettingsImpl::SetPagePopupsSuppressed(bool suppressed) {
+  settings_->SetPagePopupsSuppressed(suppressed);
 }
 
 void WebSettingsImpl::SetViewportEnabled(bool enabled) {
@@ -654,11 +654,6 @@ void WebSettingsImpl::SetSyncXHRInDocumentsEnabled(bool enabled) {
 
 void WebSettingsImpl::SetCookieEnabled(bool enabled) {
   settings_->SetCookieEnabled(enabled);
-}
-
-void WebSettingsImpl::SetCrossOriginMediaPlaybackRequiresUserGesture(
-    bool required) {
-  settings_->SetCrossOriginMediaPlaybackRequiresUserGesture(required);
 }
 
 void WebSettingsImpl::SetNavigateOnDragDrop(bool enabled) {

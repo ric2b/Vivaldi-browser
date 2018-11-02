@@ -88,6 +88,7 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
   // SurfaceObserver implementation.
   void OnSurfaceDamaged(const SurfaceId& surface, bool* changed) override;
   void OnSurfaceCreated(const SurfaceInfo& surface_info) override;
+  void OnSurfaceDiscarded(const SurfaceId& surface_id) override;
 
   bool has_scheduler() const { return !!scheduler_; }
   DirectRenderer* renderer_for_testing() const { return renderer_.get(); }
@@ -109,8 +110,8 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
   SurfaceId current_surface_id_;
   gfx::Size current_surface_size_;
   float device_scale_factor_ = 1.f;
-  gfx::ColorSpace blending_color_space_;
-  gfx::ColorSpace device_color_space_;
+  gfx::ColorSpace blending_color_space_ = gfx::ColorSpace::CreateSRGB();
+  gfx::ColorSpace device_color_space_ = gfx::ColorSpace::CreateSRGB();
   bool visible_ = false;
   bool swapped_since_resize_ = false;
   bool output_is_secure_ = false;

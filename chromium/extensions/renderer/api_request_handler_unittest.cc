@@ -67,7 +67,7 @@ TEST_F(APIRequestHandlerTest, AddRequestAndCompleteRequestTest) {
   APIRequestHandler request_handler(
       base::Bind(&DoNothingWithRequest),
       base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)),
-      APILastError(APILastError::GetParent()));
+      APILastError(APILastError::GetParent(), APILastError::AddConsoleError()));
 
   EXPECT_TRUE(request_handler.GetPendingRequestIdsForTesting().empty());
 
@@ -102,7 +102,7 @@ TEST_F(APIRequestHandlerTest, InvalidRequestsTest) {
   APIRequestHandler request_handler(
       base::Bind(&DoNothingWithRequest),
       base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)),
-      APILastError(APILastError::GetParent()));
+      APILastError(APILastError::GetParent(), APILastError::AddConsoleError()));
 
   v8::Local<v8::Function> function = FunctionFromString(context, kEchoArgs);
   ASSERT_FALSE(function.IsEmpty());
@@ -138,7 +138,7 @@ TEST_F(APIRequestHandlerTest, MultipleRequestsAndContexts) {
   APIRequestHandler request_handler(
       base::Bind(&DoNothingWithRequest),
       base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)),
-      APILastError(APILastError::GetParent()));
+      APILastError(APILastError::GetParent(), APILastError::AddConsoleError()));
 
   // By having both different arguments and different behaviors in the
   // callbacks, we can easily verify that the right function is called in the
@@ -190,7 +190,7 @@ TEST_F(APIRequestHandlerTest, CustomCallbackArguments) {
   APIRequestHandler request_handler(
       base::Bind(&DoNothingWithRequest),
       base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)),
-      APILastError(APILastError::GetParent()));
+      APILastError(APILastError::GetParent(), APILastError::AddConsoleError()));
 
   v8::Local<v8::Function> custom_callback =
       FunctionFromString(context, kEchoArgs);
@@ -237,7 +237,7 @@ TEST_F(APIRequestHandlerTest, CustomCallbackArgumentsWithEmptyCallback) {
   APIRequestHandler request_handler(
       base::Bind(&DoNothingWithRequest),
       base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)),
-      APILastError(APILastError::GetParent()));
+      APILastError(APILastError::GetParent(), APILastError::AddConsoleError()));
 
   v8::Local<v8::Function> custom_callback =
       FunctionFromString(context, kEchoArgs);
@@ -275,7 +275,7 @@ TEST_F(APIRequestHandlerTest, UserGestureTest) {
   APIRequestHandler request_handler(
       base::Bind(&DoNothingWithRequest),
       base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)),
-      APILastError(APILastError::GetParent()));
+      APILastError(APILastError::GetParent(), APILastError::AddConsoleError()));
 
   auto callback = [](base::Optional<bool>* ran_with_user_gesture) {
     *ran_with_user_gesture =
@@ -339,7 +339,7 @@ TEST_F(APIRequestHandlerTest, RequestThread) {
   APIRequestHandler request_handler(
       base::Bind(on_request, &thread),
       base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)),
-      APILastError(APILastError::GetParent()));
+      APILastError(APILastError::GetParent(), APILastError::AddConsoleError()));
 
   request_handler.StartRequest(
       context, kMethod, base::MakeUnique<base::ListValue>(),
@@ -356,6 +356,123 @@ TEST_F(APIRequestHandlerTest, RequestThread) {
   ASSERT_TRUE(thread);
   EXPECT_EQ(binding::RequestThread::IO, *thread);
   thread.reset();
+}
+
+TEST_F(APIRequestHandlerTest, SettingLastError) {
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = MainContext();
+
+  base::Optional<std::string> logged_error;
+  auto get_parent = [](v8::Local<v8::Context> context) {
+    return context->Global();
+  };
+
+  auto log_error = [](base::Optional<std::string>* logged_error,
+                      v8::Local<v8::Context> context,
+                      const std::string& error) { *logged_error = error; };
+
+  APIRequestHandler request_handler(
+      base::Bind(&DoNothingWithRequest),
+      base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)),
+      APILastError(base::Bind(get_parent),
+                   base::Bind(log_error, &logged_error)));
+
+  const char kReportExposedLastError[] =
+      "(function() {\n"
+      "  if (this.lastError)\n"
+      "    this.seenLastError = this.lastError.message;\n"
+      "})";
+  auto get_exposed_error = [context]() {
+    return GetStringPropertyFromObject(context->Global(), context,
+                                       "seenLastError");
+  };
+
+  {
+    // Test a successful function call. No last error should be emitted to the
+    // console or exposed to the callback.
+    v8::Local<v8::Function> callback =
+        FunctionFromString(context, kReportExposedLastError);
+    int request_id = request_handler.StartRequest(
+        context, kMethod, base::MakeUnique<base::ListValue>(), callback,
+        v8::Local<v8::Function>(), binding::RequestThread::UI);
+    request_handler.CompleteRequest(request_id, base::ListValue(),
+                                    std::string());
+    EXPECT_FALSE(logged_error);
+    EXPECT_EQ("undefined", get_exposed_error());
+    logged_error.reset();
+  }
+
+  {
+    // Test a function call resulting in an error. Since the callback checks the
+    // last error, no error should be logged to the console (but it should be
+    // exposed to the callback).
+    v8::Local<v8::Function> callback =
+        FunctionFromString(context, kReportExposedLastError);
+    int request_id = request_handler.StartRequest(
+        context, kMethod, base::MakeUnique<base::ListValue>(), callback,
+        v8::Local<v8::Function>(), binding::RequestThread::UI);
+    request_handler.CompleteRequest(request_id, base::ListValue(),
+                                    "some error");
+    EXPECT_FALSE(logged_error);
+    EXPECT_EQ("\"some error\"", get_exposed_error());
+    logged_error.reset();
+  }
+
+  {
+    // Test a function call resulting in an error that goes unchecked by the
+    // callback. The error should be logged.
+    v8::Local<v8::Function> callback =
+        FunctionFromString(context, "(function() {})");
+    int request_id = request_handler.StartRequest(
+        context, kMethod, base::MakeUnique<base::ListValue>(), callback,
+        v8::Local<v8::Function>(), binding::RequestThread::UI);
+    request_handler.CompleteRequest(request_id, base::ListValue(),
+                                    "some error");
+    ASSERT_TRUE(logged_error);
+    EXPECT_EQ("Unchecked runtime.lastError: some error", *logged_error);
+    logged_error.reset();
+  }
+}
+
+TEST_F(APIRequestHandlerTest, AddPendingRequest) {
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = MainContext();
+
+  bool dispatched_request = false;
+  auto handle_request = [](bool* dispatched_request,
+                           std::unique_ptr<APIRequestHandler::Request> request,
+                           v8::Local<v8::Context> context) {
+    *dispatched_request = true;
+  };
+
+  APIRequestHandler request_handler(
+      base::Bind(handle_request, &dispatched_request),
+      base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)),
+      APILastError(APILastError::GetParent(), APILastError::AddConsoleError()));
+
+  EXPECT_TRUE(request_handler.GetPendingRequestIdsForTesting().empty());
+  v8::Local<v8::Function> function = FunctionFromString(context, kEchoArgs);
+  ASSERT_FALSE(function.IsEmpty());
+
+  int request_id = request_handler.AddPendingRequest(context, function);
+  EXPECT_THAT(request_handler.GetPendingRequestIdsForTesting(),
+              testing::UnorderedElementsAre(request_id));
+  // Even though we add a pending request, we shouldn't have dispatched anything
+  // because AddPendingRequest() is intended for renderer-side implementations.
+  EXPECT_FALSE(dispatched_request);
+
+  const char kArguments[] = "['foo',1,{'prop1':'bar'}]";
+  std::unique_ptr<base::ListValue> response_arguments =
+      ListValueFromString(kArguments);
+  ASSERT_TRUE(response_arguments);
+  request_handler.CompleteRequest(request_id, *response_arguments,
+                                  std::string());
+
+  EXPECT_EQ(ReplaceSingleQuotes(kArguments),
+            GetStringPropertyFromObject(context->Global(), context, "result"));
+
+  EXPECT_TRUE(request_handler.GetPendingRequestIdsForTesting().empty());
+  EXPECT_FALSE(dispatched_request);
 }
 
 }  // namespace extensions

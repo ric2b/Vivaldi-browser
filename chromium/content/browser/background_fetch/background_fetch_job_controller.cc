@@ -18,16 +18,34 @@
 #include "content/public/browser/download_manager.h"
 #include "net/url_request/url_request_context_getter.h"
 
+#if defined(OS_ANDROID)
+#include "base/android/path_utils.h"
+#include "base/files/file_path.h"
+#include "base/guid.h"
+#endif
+
 namespace content {
+
+#if defined(OS_ANDROID)
+namespace {
+
+// Prefix for files stored in the Chromium-internal download directory to
+// indicate files thta were fetched through Background Fetch.
+const char kBackgroundFetchFilePrefix[] = "BGFetch-";
+
+}  // namespace
+#endif  // defined(OS_ANDROID)
 
 // Internal functionality of the BackgroundFetchJobController that lives on the
 // UI thread, where all interaction with the download manager must happen.
 class BackgroundFetchJobController::Core : public DownloadItem::Observer {
  public:
   Core(const base::WeakPtr<BackgroundFetchJobController>& io_parent,
+       const BackgroundFetchRegistrationId& registration_id,
        BrowserContext* browser_context,
        scoped_refptr<net::URLRequestContextGetter> request_context)
       : io_parent_(io_parent),
+        registration_id_(registration_id),
         browser_context_(browser_context),
         request_context_(std::move(request_context)),
         weak_ptr_factory_(this) {}
@@ -58,6 +76,33 @@ class BackgroundFetchJobController::Core : public DownloadItem::Observer {
 
     // TODO(peter): The |download_parameters| should be populated with all the
     // properties set in the |fetch_request| structure.
+
+    for (const auto& pair : fetch_request.headers)
+      download_parameters->add_request_header(pair.first, pair.second);
+
+    // Append the Origin header for requests whose CORS flag is set, or whose
+    // request method is not GET or HEAD. See section 3.1 of the standard:
+    // https://fetch.spec.whatwg.org/#origin-header
+    if (fetch_request.mode == FETCH_REQUEST_MODE_CORS ||
+        fetch_request.mode == FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT ||
+        (fetch_request.method != "GET" && fetch_request.method != "POST")) {
+      download_parameters->add_request_header(
+          "Origin", registration_id_.origin().Serialize());
+    }
+
+    // TODO(peter): Background Fetch responses should not end up in the user's
+    // download folder on any platform. Find an appropriate solution for desktop
+    // too. The Android internal directory is not scoped to a profile.
+
+    download_parameters->set_transient(true);
+
+#if defined(OS_ANDROID)
+    base::FilePath download_directory;
+    if (base::android::GetDownloadInternalDirectory(&download_directory)) {
+      download_parameters->set_file_path(download_directory.Append(
+          std::string(kBackgroundFetchFilePrefix) + base::GenerateGUID()));
+    }
+#endif  // defined(OS_ANDROID)
 
     download_parameters->set_callback(base::Bind(&Core::DidStartRequest,
                                                  weak_ptr_factory_.GetWeakPtr(),
@@ -147,6 +192,9 @@ class BackgroundFetchJobController::Core : public DownloadItem::Observer {
   // Weak reference to the BackgroundFetchJobController instance that owns us.
   base::WeakPtr<BackgroundFetchJobController> io_parent_;
 
+  // The Background Fetch registration Id for which this request is being made.
+  BackgroundFetchRegistrationId registration_id_;
+
   // The BrowserContext that owns the JobController, and thereby us.
   BrowserContext* browser_context_;
 
@@ -178,8 +226,8 @@ BackgroundFetchJobController::BackgroundFetchJobController(
 
   // Create the core, containing the internal functionality that will have to
   // be run on the UI thread. It will respond to this class with a weak pointer.
-  ui_core_.reset(new Core(weak_ptr_factory_.GetWeakPtr(), browser_context,
-                          std::move(request_context)));
+  ui_core_.reset(new Core(weak_ptr_factory_.GetWeakPtr(), registration_id,
+                          browser_context, std::move(request_context)));
 
   // Get a WeakPtr over which we can talk to the |ui_core_|.
   ui_core_ptr_ = ui_core_->GetWeakPtr();

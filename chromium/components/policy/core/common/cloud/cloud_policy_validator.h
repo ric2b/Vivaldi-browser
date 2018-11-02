@@ -15,6 +15,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -69,7 +70,7 @@ class POLICY_EXPORT CloudPolicyValidatorBase {
     VALIDATION_WRONG_POLICY_TYPE,
     // Unexpected settings entity id.
     VALIDATION_WRONG_SETTINGS_ENTITY_ID,
-    // Time stamp outside expected range.
+    // Timestamp is missing or is older than expected.
     VALIDATION_BAD_TIMESTAMP,
     // DM token is empty or doesn't match.
     VALIDATION_BAD_DM_TOKEN,
@@ -109,14 +110,8 @@ class POLICY_EXPORT CloudPolicyValidatorBase {
 
   enum ValidateTimestampOption {
     // The policy must have a timestamp field and the timestamp is checked
-    // against both start and end times.
-    TIMESTAMP_FULLY_VALIDATED,
-
-    // The timestamp is only checked against the |not_before| value. (This is
-    // appropriate for platforms with unreliable system times where we want to
-    // ensure that fresh policy is newer than existing policy, but we can't do
-    // any other validation).
-    TIMESTAMP_NOT_BEFORE,
+    // against the |not_before| value.
+    TIMESTAMP_VALIDATED,
 
     // The timestamp is not validated.
     TIMESTAMP_NOT_VALIDATED,
@@ -128,7 +123,7 @@ class POLICY_EXPORT CloudPolicyValidatorBase {
   Status status() const { return status_; }
   bool success() const { return status_ == VALIDATION_OK; }
 
-  // The policy objects owned by the validator. These are scoped_ptr
+  // The policy objects owned by the validator. These are unique_ptr
   // references, so ownership can be passed on once validation is complete.
   std::unique_ptr<enterprise_management::PolicyFetchResponse>& policy() {
     return policy_;
@@ -137,11 +132,11 @@ class POLICY_EXPORT CloudPolicyValidatorBase {
     return policy_data_;
   }
 
-  // Instruct the validator to check that the policy timestamp is not before
-  // |not_before| and not after |not_after| + grace interval. Depending on
-  // |timestamp_option|, some or all of the checks may be waived.
+  // Instruct the validator to check that the policy timestamp is present and is
+  // not before |not_before| if |timestamp_option| is TIMESTAMP_VALIDATED, or to
+  // not check the policy timestamp if |timestamp_option| is
+  // TIMESTAMP_NOT_VALIDATED.
   void ValidateTimestamp(base::Time not_before,
-                         base::Time not_after,
                          ValidateTimestampOption timestamp_option);
 
   // Instruct the validator to check that the username in the policy blob
@@ -233,9 +228,11 @@ class POLICY_EXPORT CloudPolicyValidatorBase {
       google::protobuf::MessageLite* payload,
       scoped_refptr<base::SequencedTaskRunner> background_task_runner);
 
-  // Posts an asynchronous calls to PerformValidation, which will eventually
-  // report its result via |completion_callback|.
-  void PostValidationTask(const base::Closure& completion_callback);
+  // Posts an asynchronous call to PerformValidation of the passed |validator|,
+  // which will eventually report its result via |completion_callback|.
+  static void PostValidationTask(
+      std::unique_ptr<CloudPolicyValidatorBase> validator,
+      const base::Closure& completion_callback);
 
  private:
   // Internal flags indicating what to check.
@@ -317,7 +314,6 @@ class POLICY_EXPORT CloudPolicyValidatorBase {
 
   int validation_flags_;
   int64_t timestamp_not_before_;
-  int64_t timestamp_not_after_;
   ValidateTimestampOption timestamp_option_;
   ValidateDMTokenOption dm_token_option_;
   ValidateDeviceIdOption device_id_option_;
@@ -344,32 +340,32 @@ class POLICY_EXPORT CloudPolicyValidatorBase {
 template<typename PayloadProto>
 class POLICY_EXPORT CloudPolicyValidator : public CloudPolicyValidatorBase {
  public:
-  typedef base::Callback<void(CloudPolicyValidator<PayloadProto>*)>
-      CompletionCallback;
+  using CompletionCallback = base::Callback<void(CloudPolicyValidator*)>;
 
   virtual ~CloudPolicyValidator() {}
 
   // Creates a new validator.
   // |background_task_runner| is optional; if RunValidation() is used directly
   // and StartValidation() is not used then it can be nullptr.
-  static CloudPolicyValidator<PayloadProto>* Create(
+  static std::unique_ptr<CloudPolicyValidator> Create(
       std::unique_ptr<enterprise_management::PolicyFetchResponse>
           policy_response,
       scoped_refptr<base::SequencedTaskRunner> background_task_runner) {
-    return new CloudPolicyValidator(
-        std::move(policy_response),
-        std::unique_ptr<PayloadProto>(new PayloadProto()),
-        background_task_runner);
+    return base::WrapUnique<CloudPolicyValidator>(new CloudPolicyValidator(
+        std::move(policy_response), base::MakeUnique<PayloadProto>(),
+        background_task_runner));
   }
 
   std::unique_ptr<PayloadProto>& payload() { return payload_; }
 
-  // Kicks off asynchronous validation. |completion_callback| is invoked when
-  // done. From this point on, the validator manages its own lifetime - this
-  // allows callers to provide a WeakPtr in the callback without leaking the
-  // validator.
-  void StartValidation(const CompletionCallback& completion_callback) {
-    PostValidationTask(base::Bind(completion_callback, this));
+  // Kicks off asynchronous validation through |validator|.
+  // |completion_callback| is invoked when done.
+  static void StartValidation(std::unique_ptr<CloudPolicyValidator> validator,
+                              const CompletionCallback& completion_callback) {
+    CloudPolicyValidator* const validator_ptr = validator.release();
+    PostValidationTask(
+        base::WrapUnique<CloudPolicyValidatorBase>(validator_ptr),
+        base::Bind(completion_callback, validator_ptr));
   }
 
  private:
@@ -388,12 +384,12 @@ class POLICY_EXPORT CloudPolicyValidator : public CloudPolicyValidatorBase {
   DISALLOW_COPY_AND_ASSIGN(CloudPolicyValidator);
 };
 
-typedef CloudPolicyValidator<enterprise_management::CloudPolicySettings>
-    UserCloudPolicyValidator;
+using UserCloudPolicyValidator =
+    CloudPolicyValidator<enterprise_management::CloudPolicySettings>;
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-typedef CloudPolicyValidator<enterprise_management::ExternalPolicyData>
-    ComponentCloudPolicyValidator;
+using ComponentCloudPolicyValidator =
+    CloudPolicyValidator<enterprise_management::ExternalPolicyData>;
 #endif
 
 }  // namespace policy

@@ -9,6 +9,8 @@ static_library("arc") {
   sources = [
     "arc_service_manager.cc",
     "arc_service_manager.h",
+    "arc_util.cc",
+    "arc_util.h",
     "audio/arc_audio_bridge.cc",
     "audio/arc_audio_bridge.h",
     "bluetooth/arc_bluetooth_bridge.cc",
@@ -68,6 +70,7 @@ static_library("arc") {
   deps = [
     "//ash:ash",
     "//ash/public/cpp:ash_public_cpp",
+    "//ash/shared:app_types",
     "//base",
     "//chromeos",
     "//chromeos:power_manager_proto",
@@ -76,6 +79,7 @@ static_library("arc") {
     "//components/onc",
     "//components/prefs",
     "//components/signin/core/account_id",
+    "//components/user_manager",
     "//device/bluetooth",
     "//google_apis",
     "//mojo/edk/system",
@@ -110,8 +114,6 @@ static_library("arc_base") {
     "arc_session_runner.h",
     "arc_stop_reason.cc",
     "arc_stop_reason.h",
-    "arc_util.cc",
-    "arc_util.h",
     "instance_holder.h",
   ]
 
@@ -159,6 +161,7 @@ mojom("arc_bindings") {
     "common/tts.mojom",
     "common/video.mojom",
     "common/video_accelerator.mojom",
+    "common/voice_interaction_arc_home.mojom",
     "common/voice_interaction_framework.mojom",
     "common/wallpaper.mojom",
   ]
@@ -167,6 +170,9 @@ mojom("arc_bindings") {
     "//mojo/common:common_custom_types",
     "//ui/gfx/geometry/mojo",
   ]
+
+  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
+  use_once_callback = false
 }
 
 static_library("arc_test_support") {
@@ -221,9 +227,13 @@ source_set("unit_tests") {
 
   deps = [
     ":arc_test_support",
+    "//ash/shared:app_types",
     "//base",
     "//base/test:test_support",
     "//chromeos",
+    "//components/signin/core/account_id",
+    "//components/user_manager",
+    "//components/user_manager:test_support",
     "//device/bluetooth",
     "//mojo/public/cpp/system:system",
     "//testing/gmock",

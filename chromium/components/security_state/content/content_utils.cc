@@ -154,10 +154,6 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   state->key_exchange_group = ssl.key_exchange_group;
   state->security_bits = ssl.security_bits;
   state->pkp_bypassed = ssl.pkp_bypassed;
-  state->sct_verify_statuses.clear();
-  state->sct_verify_statuses.insert(state->sct_verify_statuses.begin(),
-                                    ssl.sct_statuses.begin(),
-                                    ssl.sct_statuses.end());
   state->displayed_mixed_content =
       !!(ssl.content_status & content::SSLStatus::DISPLAYED_INSECURE_CONTENT);
   state->ran_mixed_content =
@@ -310,8 +306,9 @@ blink::WebSecurityStyle GetSecurityStyle(
   if (security_info.pkp_bypassed) {
     security_style_explanations->info_explanations.push_back(
         content::SecurityStyleExplanation(
-            "Public-Key Pinning Bypassed",
-            "Public-key pinning was bypassed by a local root certificate."));
+            l10n_util::GetStringUTF8(IDS_PRIVATE_KEY_PINNING_BYPASSED),
+            l10n_util::GetStringUTF8(
+                IDS_PRIVATE_KEY_PINNING_BYPASSED_DESCRIPTION)));
   }
 
   return security_style;

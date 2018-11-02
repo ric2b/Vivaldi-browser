@@ -9,6 +9,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/sequenced_task_runner.h"
 #include "jni/PowerSaveBlocker_jni.h"
 #include "ui/android/view_android.h"
 
@@ -47,7 +48,7 @@ PowerSaveBlocker::Delegate::Delegate(
 PowerSaveBlocker::Delegate::~Delegate() {}
 
 void PowerSaveBlocker::Delegate::ApplyBlock(ui::ViewAndroid* view_android) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(view_android);
 
   ScopedJavaLocalRef<jobject> obj(java_power_save_blocker_);
@@ -59,7 +60,7 @@ void PowerSaveBlocker::Delegate::ApplyBlock(ui::ViewAndroid* view_android) {
 }
 
 void PowerSaveBlocker::Delegate::RemoveBlock() {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
 
   ScopedJavaLocalRef<jobject> obj(java_power_save_blocker_);
   Java_PowerSaveBlocker_removeBlock(AttachCurrentThread(), obj);
@@ -84,7 +85,7 @@ PowerSaveBlocker::~PowerSaveBlocker() {
 }
 
 void PowerSaveBlocker::InitDisplaySleepBlocker(ui::ViewAndroid* view_android) {
-  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(view_android);
 
   delegate_ = new Delegate(ui_task_runner_);

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -699,8 +700,8 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
 }
 
 // FrameTreeBrowserTest variant where we isolate http://*.is, Iceland's top
-// level domain. This is an analogue to --isolate-extensions that we use inside
-// of content_browsertests, where extensions don't exist. Iceland, like an
+// level domain. This is an analogue to isolating extensions, which we can use
+// inside content_browsertests, where extensions don't exist. Iceland, like an
 // extension process, is a special place with magical powers; we want to protect
 // it from outsiders.
 class IsolateIcelandFrameTreeBrowserTest : public ContentBrowserTest {
@@ -708,6 +709,10 @@ class IsolateIcelandFrameTreeBrowserTest : public ContentBrowserTest {
   IsolateIcelandFrameTreeBrowserTest() {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    // blink suppresses navigations to blob URLs of origins different from the
+    // frame initiating the navigation. We disable those checks for this test,
+    // to test what happens in a compromise scenario.
+    command_line->AppendSwitch(switches::kDisableWebSecurity);
     command_line->AppendSwitchASCII(switches::kIsolateSitesForTesting, "*.is");
   }
 
@@ -724,12 +729,6 @@ class IsolateIcelandFrameTreeBrowserTest : public ContentBrowserTest {
 // Regression test for https://crbug.com/644966
 IN_PROC_BROWSER_TEST_F(IsolateIcelandFrameTreeBrowserTest,
                        ProcessSwitchForIsolatedBlob) {
-  // blink suppresses navigations to blob URLs of origins different from the
-  // frame initiating the navigation. We disable those checks for this test, to
-  // test what happens in a compromise scenario.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kDisableWebSecurity);
-
   // Set up an iframe.
   WebContents* contents = shell()->web_contents();
   FrameTreeNode* root =

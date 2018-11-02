@@ -8,6 +8,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_thread.h"
 #include "ui/ozone/platform/drm/gpu/proxy_helpers.h"
 #include "ui/ozone/platform/drm/host/drm_display_host_manager.h"
@@ -186,63 +187,73 @@ bool MusThreadProxy::GpuCheckOverlayCapabilities(
   DCHECK(drm_thread_->IsRunning());
   DCHECK(on_window_server_thread_.CalledOnValidThread());
   auto callback =
-      base::Bind(&MusThreadProxy::GpuCheckOverlayCapabilitiesCallback,
-                 weak_ptr_factory_.GetWeakPtr());
+      base::BindOnce(&MusThreadProxy::GpuCheckOverlayCapabilitiesCallback,
+                     weak_ptr_factory_.GetWeakPtr());
+  auto safe_callback = CreateSafeOnceCallback(std::move(callback));
   drm_thread_->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&DrmThread::CheckOverlayCapabilities,
-                            base::Unretained(drm_thread_), widget, overlays,
-                            CreateSafeCallback(callback)));
+      FROM_HERE, base::BindOnce(&DrmThread::CheckOverlayCapabilities,
+                                base::Unretained(drm_thread_), widget, overlays,
+                                std::move(safe_callback)));
   return true;
 }
 
 bool MusThreadProxy::GpuRefreshNativeDisplays() {
   DCHECK(drm_thread_->IsRunning());
   DCHECK(on_window_server_thread_.CalledOnValidThread());
-  auto callback = base::Bind(&MusThreadProxy::GpuRefreshNativeDisplaysCallback,
-                             weak_ptr_factory_.GetWeakPtr());
+  auto callback =
+      base::BindOnce(&MusThreadProxy::GpuRefreshNativeDisplaysCallback,
+                     weak_ptr_factory_.GetWeakPtr());
+  auto safe_callback = CreateSafeOnceCallback(std::move(callback));
   drm_thread_->task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&DrmThread::RefreshNativeDisplays,
-                 base::Unretained(drm_thread_), CreateSafeCallback(callback)));
+      base::BindOnce(&DrmThread::RefreshNativeDisplays,
+                     base::Unretained(drm_thread_), std::move(safe_callback)));
   return true;
 }
 
 bool MusThreadProxy::GpuConfigureNativeDisplay(int64_t id,
-                                               const DisplayMode_Params& mode,
+                                               const DisplayMode_Params& pmode,
                                                const gfx::Point& origin) {
   DCHECK(drm_thread_->IsRunning());
   DCHECK(on_window_server_thread_.CalledOnValidThread());
 
-  auto callback = base::Bind(&MusThreadProxy::GpuConfigureNativeDisplayCallback,
-                             weak_ptr_factory_.GetWeakPtr());
+  auto mode = CreateDisplayModeFromParams(pmode);
+  auto callback =
+      base::BindOnce(&MusThreadProxy::GpuConfigureNativeDisplayCallback,
+                     weak_ptr_factory_.GetWeakPtr());
+  auto safe_callback = CreateSafeOnceCallback(std::move(callback));
   drm_thread_->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&DrmThread::ConfigureNativeDisplay,
-                            base::Unretained(drm_thread_), id, mode, origin,
-                            CreateSafeCallback(callback)));
+      FROM_HERE,
+      base::BindOnce(&DrmThread::ConfigureNativeDisplay,
+                     base::Unretained(drm_thread_), id, std::move(mode), origin,
+                     std::move(safe_callback)));
   return true;
 }
 
 bool MusThreadProxy::GpuDisableNativeDisplay(int64_t id) {
   DCHECK(drm_thread_->IsRunning());
   DCHECK(on_window_server_thread_.CalledOnValidThread());
-  auto callback = base::Bind(&MusThreadProxy::GpuDisableNativeDisplayCallback,
-                             weak_ptr_factory_.GetWeakPtr());
+  auto callback =
+      base::BindOnce(&MusThreadProxy::GpuDisableNativeDisplayCallback,
+                     weak_ptr_factory_.GetWeakPtr());
+  auto safe_callback = CreateSafeOnceCallback(std::move(callback));
   drm_thread_->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&DrmThread::DisableNativeDisplay,
-                            base::Unretained(drm_thread_), id,
-                            CreateSafeCallback(callback)));
+      FROM_HERE, base::BindOnce(&DrmThread::DisableNativeDisplay,
+                                base::Unretained(drm_thread_), id,
+                                std::move(safe_callback)));
   return true;
 }
 
 bool MusThreadProxy::GpuTakeDisplayControl() {
   DCHECK(drm_thread_->IsRunning());
   DCHECK(on_window_server_thread_.CalledOnValidThread());
-  auto callback = base::Bind(&MusThreadProxy::GpuTakeDisplayControlCallback,
-                             weak_ptr_factory_.GetWeakPtr());
+  auto callback = base::BindOnce(&MusThreadProxy::GpuTakeDisplayControlCallback,
+                                 weak_ptr_factory_.GetWeakPtr());
+  auto safe_callback = CreateSafeOnceCallback(std::move(callback));
   drm_thread_->task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&DrmThread::TakeDisplayControl, base::Unretained(drm_thread_),
-                 CreateSafeCallback(callback)));
+      base::BindOnce(&DrmThread::TakeDisplayControl,
+                     base::Unretained(drm_thread_), std::move(safe_callback)));
   return true;
 }
 
@@ -250,12 +261,13 @@ bool MusThreadProxy::GpuRelinquishDisplayControl() {
   DCHECK(drm_thread_->IsRunning());
   DCHECK(on_window_server_thread_.CalledOnValidThread());
   auto callback =
-      base::Bind(&MusThreadProxy::GpuRelinquishDisplayControlCallback,
-                 weak_ptr_factory_.GetWeakPtr());
+      base::BindOnce(&MusThreadProxy::GpuRelinquishDisplayControlCallback,
+                     weak_ptr_factory_.GetWeakPtr());
+  auto safe_callback = CreateSafeOnceCallback(std::move(callback));
   drm_thread_->task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&DrmThread::RelinquishDisplayControl,
-                 base::Unretained(drm_thread_), CreateSafeCallback(callback)));
+      base::BindOnce(&DrmThread::RelinquishDisplayControl,
+                     base::Unretained(drm_thread_), std::move(safe_callback)));
   return true;
 }
 
@@ -281,12 +293,13 @@ bool MusThreadProxy::GpuRemoveGraphicsDevice(const base::FilePath& path) {
 bool MusThreadProxy::GpuGetHDCPState(int64_t display_id) {
   DCHECK(drm_thread_->IsRunning());
   DCHECK(on_window_server_thread_.CalledOnValidThread());
-  auto callback = base::Bind(&MusThreadProxy::GpuGetHDCPStateCallback,
-                             weak_ptr_factory_.GetWeakPtr());
+  auto callback = base::BindOnce(&MusThreadProxy::GpuGetHDCPStateCallback,
+                                 weak_ptr_factory_.GetWeakPtr());
+  auto safe_callback = CreateSafeOnceCallback(std::move(callback));
   drm_thread_->task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&DrmThread::GetHDCPState, base::Unretained(drm_thread_),
-                 display_id, CreateSafeCallback(callback)));
+      base::BindOnce(&DrmThread::GetHDCPState, base::Unretained(drm_thread_),
+                     display_id, std::move(safe_callback)));
   return true;
 }
 
@@ -294,12 +307,13 @@ bool MusThreadProxy::GpuSetHDCPState(int64_t display_id,
                                      display::HDCPState state) {
   DCHECK(on_window_server_thread_.CalledOnValidThread());
   DCHECK(drm_thread_->IsRunning());
-  auto callback = base::Bind(&MusThreadProxy::GpuSetHDCPStateCallback,
-                             weak_ptr_factory_.GetWeakPtr());
+  auto callback = base::BindOnce(&MusThreadProxy::GpuSetHDCPStateCallback,
+                                 weak_ptr_factory_.GetWeakPtr());
+  auto safe_callback = CreateSafeOnceCallback(std::move(callback));
   drm_thread_->task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&DrmThread::SetHDCPState, base::Unretained(drm_thread_),
-                 display_id, state, CreateSafeCallback(callback)));
+      base::BindOnce(&DrmThread::SetHDCPState, base::Unretained(drm_thread_),
+                     display_id, state, std::move(safe_callback)));
   return true;
 }
 

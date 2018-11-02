@@ -9,13 +9,17 @@
 #include <string>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/page_load_metrics/browser_page_track_decider.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_embedder_interface.h"
+#include "chrome/browser/page_load_metrics/page_load_metrics_update_dispatcher.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "chrome/browser/page_load_metrics/page_load_tracker.h"
+#include "chrome/browser/prerender/prerender_contents.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/page_load_metrics/page_load_metrics_messages.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
 #include "content/public/browser/browser_thread.h"
@@ -64,34 +68,57 @@ UserInitiatedInfo CreateUserInitiatedInfo(
 
 }  // namespace
 
-// static
 MetricsWebContentsObserver::MetricsWebContentsObserver(
     content::WebContents* web_contents,
+    const base::Optional<content::WebContents::CreateParams>& create_params,
     std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface)
     : content::WebContentsObserver(web_contents),
-      in_foreground_(false),
+      in_foreground_(create_params ? !create_params->initially_hidden : false),
       embedder_interface_(std::move(embedder_interface)),
-      has_navigated_(false) {
+      has_navigated_(false),
+      page_load_metrics_binding_(web_contents, this) {
+  // Prerender's CreateParams erroneously reports that it is not initially
+  // hidden, so we manually override visibility state for prerender.
+  const bool is_prerender =
+      prerender::PrerenderContents::FromWebContents(web_contents) != nullptr;
+  if (is_prerender)
+    in_foreground_ = false;
+
   RegisterInputEventObserver(web_contents->GetRenderViewHost());
 }
 
+// static
 MetricsWebContentsObserver* MetricsWebContentsObserver::CreateForWebContents(
     content::WebContents* web_contents,
+    const base::Optional<content::WebContents::CreateParams>& create_params,
     std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface) {
   DCHECK(web_contents);
 
   MetricsWebContentsObserver* metrics = FromWebContents(web_contents);
   if (!metrics) {
-    metrics = new MetricsWebContentsObserver(web_contents,
+    metrics = new MetricsWebContentsObserver(web_contents, create_params,
                                              std::move(embedder_interface));
-    web_contents->SetUserData(UserDataKey(), metrics);
+    web_contents->SetUserData(UserDataKey(), base::WrapUnique(metrics));
   }
   return metrics;
 }
 
-MetricsWebContentsObserver::~MetricsWebContentsObserver() {
+MetricsWebContentsObserver::~MetricsWebContentsObserver() {}
+
+void MetricsWebContentsObserver::WebContentsDestroyed() {
   // TODO(csharrison): Use a more user-initiated signal for CLOSE.
   NotifyPageEndAllLoads(END_CLOSE, UserInitiatedInfo::NotUserInitiated());
+
+  // We tear down PageLoadTrackers in WebContentsDestroyed, rather than in the
+  // destructor, since |web_contents()| returns nullptr in the destructor, and
+  // PageLoadMetricsObservers can cause code to execute that wants to be able to
+  // access the current WebContents.
+  committed_load_ = nullptr;
+  provisional_loads_.clear();
+  aborted_provisional_loads_.clear();
+
+  for (auto& observer : testing_observers_)
+    observer.OnGoingAway();
 }
 
 void MetricsWebContentsObserver::RegisterInputEventObserver(
@@ -134,7 +161,7 @@ bool MetricsWebContentsObserver::OnMessageReceived(
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(MetricsWebContentsObserver, message,
                                    render_frame_host)
-    IPC_MESSAGE_HANDLER(PageLoadMetricsMsg_TimingUpdated, OnTimingUpdated)
+    IPC_MESSAGE_HANDLER(PageLoadMetricsMsg_TimingUpdated, OnUpdateTimingOverIPC)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -212,7 +239,12 @@ PageLoadTracker* MetricsWebContentsObserver::GetTrackerOrNullForRequest(
     const content::GlobalRequestID& request_id,
     content::ResourceType resource_type,
     base::TimeTicks creation_time) {
-  if (resource_type == content::RESOURCE_TYPE_MAIN_FRAME) {
+  // TODO(jkarlin): The WebContentsTester framework doesn't provide a default
+  // GlobalRequestID to its NavigationHandles. Once the test framework
+  // supports real ids, remove the request_id != content::GlobalRequestID()
+  // condition. See https://crbug.com/711352.
+  if (resource_type == content::RESOURCE_TYPE_MAIN_FRAME &&
+      request_id != content::GlobalRequestID()) {
     // The main frame request can complete either before or after commit, so we
     // look at both provisional loads and the committed load to find a
     // PageLoadTracker with a matching request id. See https://goo.gl/6TzCYN for
@@ -252,7 +284,27 @@ PageLoadTracker* MetricsWebContentsObserver::GetTrackerOrNullForRequest(
   return nullptr;
 }
 
+void MetricsWebContentsObserver::OnRequestStarted(
+    const content::GlobalRequestID& request_id,
+    content::ResourceType resource_type,
+    base::TimeTicks creation_time) {
+  // Note for the main HTML page, the tracker may not exist yet, so
+  // OnStartedResource will not be called for the main page.  While the main
+  // page is not being tracked today, if we do decide to track it, we will need
+  // to first make sure that GlobalRequestID is set in an earlier callback.
+  // TODO(bmcquade): Evaluate whether moving tracker creation to
+  // DidStartNavigation would address this.
+  PageLoadTracker* tracker =
+      GetTrackerOrNullForRequest(request_id, resource_type, creation_time);
+  if (tracker) {
+    ExtraRequestStartInfo extra_request_start_info(resource_type);
+    tracker->OnStartedResource(extra_request_start_info);
+  }
+}
+
 void MetricsWebContentsObserver::OnRequestComplete(
+    const GURL& url,
+    int frame_tree_node_id,
     const content::GlobalRequestID& request_id,
     content::ResourceType resource_type,
     bool was_cached,
@@ -264,10 +316,11 @@ void MetricsWebContentsObserver::OnRequestComplete(
   PageLoadTracker* tracker =
       GetTrackerOrNullForRequest(request_id, resource_type, creation_time);
   if (tracker) {
-    ExtraRequestInfo extra_request_info(
-        was_cached, raw_body_bytes, was_cached ? 0 : original_content_length,
-        std::move(data_reduction_proxy_data));
-    tracker->OnLoadedResource(extra_request_info);
+    ExtraRequestCompleteInfo extra_request_complete_info(
+        url, frame_tree_node_id, was_cached, raw_body_bytes,
+        was_cached ? 0 : original_content_length,
+        std::move(data_reduction_proxy_data), resource_type);
+    tracker->OnLoadedResource(extra_request_complete_info);
   }
 }
 
@@ -289,8 +342,16 @@ MetricsWebContentsObserver::GetPageLoadExtraInfoForCommittedLoad() {
 
 void MetricsWebContentsObserver::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInMainFrame())
+  if (!navigation_handle->IsInMainFrame()) {
+    if (committed_load_ && navigation_handle->GetParentFrame() &&
+        GetMainFrame(navigation_handle->GetParentFrame()) ==
+            web_contents()->GetMainFrame()) {
+      committed_load_->DidFinishSubFrameNavigation(navigation_handle);
+      committed_load_->metrics_update_dispatcher()->DidFinishSubFrameNavigation(
+          navigation_handle);
+    }
     return;
+  }
 
   std::unique_ptr<PageLoadTracker> finished_nav(
       std::move(provisional_loads_[navigation_handle]));
@@ -301,6 +362,8 @@ void MetricsWebContentsObserver::DidFinishNavigation(
       navigation_handle->IsSameDocument()) {
     if (finished_nav)
       finished_nav->StopTracking();
+    if (committed_load_)
+      committed_load_->DidCommitSameDocumentNavigation(navigation_handle);
     return;
   }
 
@@ -389,6 +452,9 @@ void MetricsWebContentsObserver::HandleCommittedNavigationForTrackedLoad(
   committed_load_ = std::move(tracker);
   committed_load_->Commit(navigation_handle);
   DCHECK(committed_load_->did_commit());
+
+  for (auto& observer : testing_observers_)
+    observer.OnCommit(committed_load_.get());
 }
 
 void MetricsWebContentsObserver::NavigationStopped() {
@@ -542,8 +608,8 @@ MetricsWebContentsObserver::NotifyAbortedProvisionalLoadsNewNavigation(
 
 void MetricsWebContentsObserver::OnTimingUpdated(
     content::RenderFrameHost* render_frame_host,
-    const PageLoadTiming& timing,
-    const PageLoadMetadata& metadata) {
+    const mojom::PageLoadTiming& timing,
+    const mojom::PageLoadMetadata& metadata) {
   // We may receive notifications from frames that have been navigated away
   // from. We simply ignore them.
   if (GetMainFrame(render_frame_host) != web_contents()->GetMainFrame()) {
@@ -569,16 +635,31 @@ void MetricsWebContentsObserver::OnTimingUpdated(
   if (error)
     return;
 
-  if (render_frame_host->GetParent() != nullptr) {
-    // Child frames may send PageLoadMetadata updates, but not PageLoadTiming
-    // updates.
-    if (!timing.IsEmpty())
-      RecordInternalError(ERR_TIMING_IPC_FROM_SUBFRAME);
-    committed_load_->UpdateChildFrameMetadata(metadata);
-    return;
-  }
+  committed_load_->metrics_update_dispatcher()->UpdateMetrics(render_frame_host,
+                                                              timing, metadata);
+}
 
-  committed_load_->UpdateTiming(timing, metadata);
+void MetricsWebContentsObserver::OnUpdateTimingOverIPC(
+    content::RenderFrameHost* render_frame_host,
+    const mojom::PageLoadTiming& timing,
+    const mojom::PageLoadMetadata& metadata) {
+  DCHECK(!base::FeatureList::IsEnabled(features::kPageLoadMetricsMojofication));
+  OnTimingUpdated(render_frame_host, timing, metadata);
+
+  for (auto& observer : testing_observers_)
+    observer.DidReceiveTimingUpdate(TestingObserver::IPCType::LEGACY);
+}
+
+void MetricsWebContentsObserver::UpdateTiming(
+    const mojom::PageLoadTimingPtr timing,
+    const mojom::PageLoadMetadataPtr metadata) {
+  content::RenderFrameHost* render_frame_host =
+      page_load_metrics_binding_.GetCurrentTargetFrame();
+  DCHECK(base::FeatureList::IsEnabled(features::kPageLoadMetricsMojofication));
+  OnTimingUpdated(render_frame_host, *timing, *metadata);
+
+  for (auto& observer : testing_observers_)
+    observer.DidReceiveTimingUpdate(TestingObserver::IPCType::MOJO);
 }
 
 bool MetricsWebContentsObserver::ShouldTrackNavigation(
@@ -589,6 +670,34 @@ bool MetricsWebContentsObserver::ShouldTrackNavigation(
 
   return BrowserPageTrackDecider(embedder_interface_.get(), web_contents(),
                                  navigation_handle).ShouldTrack();
+}
+
+void MetricsWebContentsObserver::AddTestingObserver(TestingObserver* observer) {
+  if (!testing_observers_.HasObserver(observer))
+    testing_observers_.AddObserver(observer);
+}
+
+void MetricsWebContentsObserver::RemoveTestingObserver(
+    TestingObserver* observer) {
+  testing_observers_.RemoveObserver(observer);
+}
+
+MetricsWebContentsObserver::TestingObserver::TestingObserver(
+    content::WebContents* web_contents)
+    : observer_(page_load_metrics::MetricsWebContentsObserver::FromWebContents(
+          web_contents)) {
+  observer_->AddTestingObserver(this);
+}
+
+MetricsWebContentsObserver::TestingObserver::~TestingObserver() {
+  if (observer_) {
+    observer_->RemoveTestingObserver(this);
+    observer_ = nullptr;
+  }
+}
+
+void MetricsWebContentsObserver::TestingObserver::OnGoingAway() {
+  observer_ = nullptr;
 }
 
 }  // namespace page_load_metrics

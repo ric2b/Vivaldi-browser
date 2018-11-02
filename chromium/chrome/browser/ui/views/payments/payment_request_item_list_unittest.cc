@@ -19,7 +19,11 @@ namespace {
 class TestListItem : public PaymentRequestItemList::Item {
  public:
   TestListItem(PaymentRequestItemList* list, bool selected)
-      : PaymentRequestItemList::Item(nullptr, nullptr, list, selected),
+      : PaymentRequestItemList::Item(nullptr,
+                                     nullptr,
+                                     list,
+                                     selected,
+                                     /*show_edit_button=*/false),
         selected_state_changed_calls_count_(0) {}
 
   int selected_state_changed_calls_count() {
@@ -31,9 +35,13 @@ class TestListItem : public PaymentRequestItemList::Item {
     return base::MakeUnique<views::View>();
   }
 
-  bool CanBeSelected() const override { return true; }
+  bool IsEnabled() override { return true; }
+
+  bool CanBeSelected() override { return true; }
 
   void PerformSelectionFallback() override {}
+
+  void EditButtonPressed() override {}
 
   void SelectedStateChanged() override {
     ++selected_state_changed_calls_count_;

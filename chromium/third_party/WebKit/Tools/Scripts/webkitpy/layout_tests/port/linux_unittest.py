@@ -114,3 +114,122 @@ class LinuxPortTest(port_testcase.PortTestCase):
         port.clean_up_test_run()
         self.assertEqual(port.host.environ['HOME'], '/home/user')
         self.assertFalse(port.host.filesystem.exists(temp_home_dir))
+
+    def test_setup_test_run_starts_xvfb(self):
+        def run_command_fake(args):
+            if args[0] == 'xdpyinfo':
+                if '-display' in args:
+                    return 1
+            return 0
+
+        port = self.make_port()
+        port.host.executive = MockExecutive(
+            run_command_fn=run_command_fake)
+        port.setup_test_run()
+        self.assertEqual(
+            port.host.executive.calls,
+            [
+                ['xdpyinfo', '-display', ':99'],
+                ['Xvfb', ':99', '-screen', '0', '1280x800x24', '-ac', '-dpi', '96'],
+                ['xdpyinfo'],
+            ])
+        env = port.setup_environ_for_server()
+        self.assertEqual(env['DISPLAY'], ':99')
+
+    def test_setup_test_run_starts_xvfb_clears_tmpdir(self):
+        def run_command_fake(args):
+            if args[0] == 'xdpyinfo':
+                if '-display' in args:
+                    return 1
+            return 0
+
+        port = self.make_port()
+        port.host.environ['TMPDIR'] = '/foo/bar'
+        port.host.executive = MockExecutive(
+            run_command_fn=run_command_fake)
+        port.setup_test_run()
+
+        self.assertEqual(
+            port.host.executive.calls,
+            [
+                ['xdpyinfo', '-display', ':99'],
+                ['Xvfb', ':99', '-screen', '0', '1280x800x24', '-ac', '-dpi', '96'],
+                ['xdpyinfo'],
+            ])
+        self.assertEqual(port.host.executive.full_calls[1].env.get('TMPDIR'), '/tmp')
+        env = port.setup_environ_for_server()
+        self.assertEqual(env['DISPLAY'], ':99')
+
+    def test_setup_test_runs_finds_free_display(self):
+        def run_command_fake(args):
+            if args[0] == 'xdpyinfo':
+                if '-display' in args:
+                    if ':102' in args:
+                        return 1
+            return 0
+
+        port = self.make_port()
+        port.host.executive = MockExecutive(
+            run_command_fn=run_command_fake)
+        port.setup_test_run()
+        self.assertEqual(
+            port.host.executive.calls,
+            [
+                ['xdpyinfo', '-display', ':99'],
+                ['xdpyinfo', '-display', ':100'],
+                ['xdpyinfo', '-display', ':101'],
+                ['xdpyinfo', '-display', ':102'],
+                ['Xvfb', ':102', '-screen', '0', '1280x800x24', '-ac', '-dpi', '96'],
+                ['xdpyinfo'],
+            ])
+        env = port.setup_environ_for_server()
+        self.assertEqual(env['DISPLAY'], ':102')
+
+    def test_setup_test_runs_multiple_checks_when_slow_to_start(self):
+        count = [0]
+
+        def run_command_fake(args):
+            if args[0] == 'xdpyinfo':
+                if '-display' in args:
+                    return 1
+                if count[0] < 3:
+                    count[0] += 1
+                    return 1
+            return 0
+
+        port = self.make_port()
+        port.host.executive = MockExecutive(
+            run_command_fn=run_command_fake)
+        port.setup_test_run()
+        self.assertEqual(
+            port.host.executive.calls,
+            [
+                ['xdpyinfo', '-display', ':99'],
+                ['Xvfb', ':99', '-screen', '0', '1280x800x24', '-ac', '-dpi', '96'],
+                ['xdpyinfo'],
+                ['xdpyinfo'],
+                ['xdpyinfo'],
+                ['xdpyinfo'],
+            ])
+        env = port.setup_environ_for_server()
+        self.assertEqual(env['DISPLAY'], ':99')
+
+    def test_setup_test_runs_eventually_failes_on_failure(self):
+        def run_command_fake(args):
+            if args[0] == 'xdpyinfo':
+                return 1
+            return 0
+
+        host = MockSystemHost(os_name=self.os_name, os_version=self.os_version)
+        port = self.make_port(host=host)
+        port.host.executive = MockExecutive(
+            run_command_fn=run_command_fake)
+        port.setup_test_run()
+        self.assertEqual(
+            port.host.executive.calls,
+            [
+                ['xdpyinfo', '-display', ':99'],
+                ['Xvfb', ':99', '-screen', '0', '1280x800x24', '-ac', '-dpi', '96'],
+            ] + [['xdpyinfo']] * 51)
+        env = port.setup_environ_for_server()
+        self.assertEqual(env['DISPLAY'], ':99')

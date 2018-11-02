@@ -5,6 +5,7 @@
 #include "net/tools/quic/chlo_extractor.h"
 
 #include "net/quic/core/quic_framer.h"
+#include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 
@@ -40,7 +41,7 @@ class TestDelegate : public ChloExtractor::Delegate {
   string chlo_;
 };
 
-class ChloExtractorTest : public ::testing::Test {
+class ChloExtractorTest : public QuicTest {
  public:
   ChloExtractorTest() {
     header_.public_header.connection_id = 42;
@@ -94,7 +95,8 @@ TEST_F(ChloExtractorTest, FindsValidChlo) {
     EXPECT_TRUE(ChloExtractor::Extract(*packet_, versions, &delegate_))
         << QuicVersionToString(version);
     EXPECT_EQ(version, delegate_.version());
-    EXPECT_EQ(header_.public_header.connection_id, delegate_.connection_id());
+    EXPECT_EQ(GetPeerInMemoryConnectionId(header_.public_header.connection_id),
+              delegate_.connection_id());
     EXPECT_EQ(client_hello.DebugString(Perspective::IS_SERVER),
               delegate_.chlo())
         << QuicVersionToString(version);

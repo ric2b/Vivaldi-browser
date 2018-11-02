@@ -31,7 +31,6 @@ namespace content {
 class BrowserContext;
 class DevToolsExternalAgentProxyDelegate;
 class DevToolsSocketFactory;
-class RenderFrameHost;
 class WebContents;
 
 // Describes interface for managing devtools agents from browser process.
@@ -44,6 +43,7 @@ class CONTENT_EXPORT DevToolsAgentHost
   static char kTypeServiceWorker[];
   static char kTypeExternal[];
   static char kTypeBrowser[];
+  static char kTypeGuest[];
   static char kTypeOther[];
 
   // Latest DevTools protocol version supported.
@@ -52,6 +52,15 @@ class CONTENT_EXPORT DevToolsAgentHost
   // Returns whether particular version of DevTools protocol is supported.
   static bool IsSupportedProtocolVersion(const std::string& version);
 
+  // Returns the DevTools FrameId for the given pair of |process_id| and
+  // |frame_tree_node_id|. This is sent by the renderer and shouldn't be fully
+  // trusted.
+  // TODO(alexclarke): Remove once there is a solution for stable frame IDs. See
+  // crbug.com/715541
+  static std::string GetUntrustedDevToolsFrameIdForFrameTreeNodeId(
+      int process_id,
+      int frame_tree_node_id);
+
   // Returns DevToolsAgentHost with a given |id| or nullptr of it doesn't exist.
   static scoped_refptr<DevToolsAgentHost> GetForId(const std::string& id);
 
@@ -59,15 +68,6 @@ class CONTENT_EXPORT DevToolsAgentHost
   // A new DevToolsAgentHost will be created if it does not exist.
   static scoped_refptr<DevToolsAgentHost> GetOrCreateFor(
       WebContents* web_contents);
-
-  // Returns DevToolsAgentHost that can be used for inspecting |frame_host|.
-  // A new DevToolsAgentHost will be created if it does not exist.
-  // For main frame cases, prefer using the above method which takes WebContents
-  // instead.
-  // TODO(dgozman): this is a temporary measure until we can inspect
-  // cross-process subframes within a single agent.
-  static scoped_refptr<DevToolsAgentHost> GetOrCreateFor(
-      RenderFrameHost* frame_host);
 
   // Returns true iff an instance of DevToolsAgentHost for the |web_contents|
   // does exist.
@@ -104,11 +104,6 @@ class CONTENT_EXPORT DevToolsAgentHost
 
   // Returns all DevToolsAgentHosts content is aware of.
   static List GetOrCreateAll();
-
-  using DiscoveryCallback = base::Callback<void(List)>;
-
-  // Returns all possible DevToolsAgentHosts embedder is aware of.
-  static void DiscoverAllHosts(const DiscoveryCallback& callback);
 
   // Starts remote debugging.
   // Takes ownership over |socket_factory|.

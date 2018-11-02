@@ -84,15 +84,18 @@ class FailToStartWorkerTestHelper : public EmbeddedWorkerTestHelper {
  public:
   FailToStartWorkerTestHelper() : EmbeddedWorkerTestHelper(base::FilePath()) {}
 
-  void OnStartWorker(
-      int embedded_worker_id,
-      int64_t service_worker_version_id,
-      const GURL& scope,
-      const GURL& script_url,
-      bool pause_after_download,
-      mojom::ServiceWorkerEventDispatcherRequest request) override {
-    EmbeddedWorkerInstance* worker = registry()->GetWorker(embedded_worker_id);
-    registry()->OnWorkerStopped(worker->process_id(), embedded_worker_id);
+  void OnStartWorker(int embedded_worker_id,
+                     int64_t service_worker_version_id,
+                     const GURL& scope,
+                     const GURL& script_url,
+                     bool pause_after_download,
+                     mojom::ServiceWorkerEventDispatcherRequest request,
+                     mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo
+                         instance_host) override {
+    mojom::EmbeddedWorkerInstanceHostAssociatedPtr instance_host_ptr;
+    instance_host_ptr.Bind(std::move(instance_host));
+    instance_host_ptr->OnStopped();
+    base::RunLoop().RunUntilIdle();
   }
 };
 
@@ -830,8 +833,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, ReceivedTimedOutRequestResponse) {
   const int kFetchEventId = 91;  // Dummy value
   dispatcher_host_->OnMessageReceived(ServiceWorkerHostMsg_FetchEventResponse(
       version_->embedded_worker()->embedded_worker_id(), kFetchEventId,
-      SERVICE_WORKER_FETCH_EVENT_RESULT_FALLBACK, ServiceWorkerResponse(),
-      base::Time::Now()));
+      ServiceWorkerResponse(), base::Time::Now()));
 
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0, dispatcher_host_->bad_messages_received_count_);

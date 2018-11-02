@@ -9,9 +9,10 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
@@ -544,7 +545,8 @@ OfflinePageRequestJob* OfflinePageRequestJob::Create(
     if (info->use_default())
       return nullptr;
   } else {
-    request->SetUserData(&kUserDataKey, new OfflinePageRequestInfo());
+    request->SetUserData(&kUserDataKey,
+                         base::MakeUnique<OfflinePageRequestInfo>());
   }
 
   return new OfflinePageRequestJob(request, network_delegate, previews_decider);
@@ -558,9 +560,9 @@ OfflinePageRequestJob::OfflinePageRequestJob(
           request,
           network_delegate,
           base::FilePath(),
-          content::BrowserThread::GetBlockingPool()
-              ->GetTaskRunnerWithShutdownBehavior(
-                  base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)),
+          base::CreateTaskRunnerWithTraits(
+              {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+               base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       delegate_(new DefaultDelegate()),
       previews_decider_(previews_decider),
       weak_ptr_factory_(this) {}
@@ -637,13 +639,6 @@ void OfflinePageRequestJob::GetLoadTimingInfo(
 
 bool OfflinePageRequestJob::CopyFragmentOnRedirect(const GURL& location) const {
   return false;
-}
-
-int OfflinePageRequestJob::GetResponseCode() const {
-  if (!fake_headers_for_redirect_)
-    return URLRequestFileJob::GetResponseCode();
-
-  return net::URLRequestRedirectJob::REDIRECT_302_FOUND;
 }
 
 void OfflinePageRequestJob::OnOpenComplete(int result) {

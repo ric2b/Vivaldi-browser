@@ -5,21 +5,23 @@
 #include "services/service_manager/tests/lifecycle/app_client.h"
 
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "services/service_manager/public/cpp/service_context.h"
 
 namespace service_manager {
 namespace test {
 
 AppClient::AppClient() {
-  registry_.AddInterface<mojom::LifecycleControl>(this);
+  registry_.AddInterface<mojom::LifecycleControl>(
+      base::Bind(&AppClient::Create, base::Unretained(this)));
 }
 
 AppClient::~AppClient() {}
 
-void AppClient::OnBindInterface(const ServiceInfo& source_info,
+void AppClient::OnBindInterface(const BindSourceInfo& source_info,
                                 const std::string& interface_name,
                                 mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(source_info.identity, interface_name,
+  registry_.BindInterface(source_info, interface_name,
                           std::move(interface_pipe));
 }
 
@@ -28,7 +30,7 @@ bool AppClient::OnServiceManagerConnectionLost() {
   return true;
 }
 
-void AppClient::Create(const Identity& remote_identity,
+void AppClient::Create(const BindSourceInfo& source_info,
                        mojom::LifecycleControlRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }

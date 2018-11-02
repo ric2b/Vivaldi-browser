@@ -9,21 +9,33 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.os.SystemClock;
+import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.view.MotionEvent;
 import android.view.View;
 
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content.browser.input.ImeAdapter;
-import org.chromium.content.browser.input.TestImeAdapterDelegate;
+import org.chromium.content.browser.test.ContentJUnit4ClassRunner;
 import org.chromium.content.browser.test.util.TestInputMethodManagerWrapper;
-import org.chromium.content_shell_apk.ContentShellTestBase;
+import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 
 /**
  * Tests for PopupZoomer.
  */
-public class PopupZoomerTest extends ContentShellTestBase {
+@RunWith(ContentJUnit4ClassRunner.class)
+public class PopupZoomerTest {
+    @Rule
+    public ContentShellActivityTestRule mActivityTestRule = new ContentShellActivityTestRule();
+
     private CustomCanvasPopupZoomer mPopupZoomer;
     private ContentViewCore mContentViewCore;
 
@@ -76,46 +88,46 @@ public class PopupZoomerTest extends ContentShellTestBase {
                 MotionEvent.obtain(downEvent, downEvent + 10, MotionEvent.ACTION_UP, x, y, 0));
     }
 
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-
-        final Context context = getActivity();
-
+    @Before
+    public void setUp() throws Throwable {
+        mActivityTestRule.launchActivity(null);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                mPopupZoomer = createPopupZoomerForTest(getInstrumentation().getTargetContext());
+                Context context = mActivityTestRule.getActivity();
+                WebContents webContents = mActivityTestRule.getContentViewCore().getWebContents();
                 mContentViewCore = new ContentViewCore(context, "");
-                ImeAdapter imeAdapter = new ImeAdapter(
-                        new TestInputMethodManagerWrapper(mContentViewCore),
-                        new TestImeAdapterDelegate(getContentViewCore().getContainerView()));
-                mContentViewCore.setSelectionPopupControllerForTesting(
-                        new SelectionPopupController(context, null, null, null,
-                                mContentViewCore.getRenderCoordinates(), imeAdapter));
+                mContentViewCore.setSelectionPopupControllerForTesting(new SelectionPopupController(
+                        context, null, webContents, null, mContentViewCore.getRenderCoordinates()));
+                mContentViewCore.setImeAdapterForTest(new ImeAdapter(webContents,
+                        mActivityTestRule.getContentViewCore().getContainerView(),
+                        new TestInputMethodManagerWrapper(mContentViewCore)));
+                mPopupZoomer = createPopupZoomerForTest(InstrumentationRegistry.getTargetContext());
                 mContentViewCore.setPopupZoomerForTest(mPopupZoomer);
-                mContentViewCore.setImeAdapterForTest(imeAdapter);
             }
         });
     }
 
+    @Test
     @SmallTest
     @Feature({"Navigation"})
     public void testDefaultCreateState() throws Exception {
-        assertEquals(View.INVISIBLE, mPopupZoomer.getVisibility());
-        assertFalse(mPopupZoomer.isShowing());
+        Assert.assertEquals(View.INVISIBLE, mPopupZoomer.getVisibility());
+        Assert.assertFalse(mPopupZoomer.isShowing());
     }
 
+    @Test
     @SmallTest
     @Feature({"Navigation"})
     public void testShowWithoutBitmap() throws Exception {
         mPopupZoomer.show(new Rect(0, 0, 5, 5));
 
         // The view should be invisible.
-        assertEquals(View.INVISIBLE, mPopupZoomer.getVisibility());
-        assertFalse(mPopupZoomer.isShowing());
+        Assert.assertEquals(View.INVISIBLE, mPopupZoomer.getVisibility());
+        Assert.assertFalse(mPopupZoomer.isShowing());
     }
 
+    @Test
     @SmallTest
     @Feature({"Navigation"})
     public void testShowWithBitmap() throws Exception {
@@ -123,10 +135,11 @@ public class PopupZoomerTest extends ContentShellTestBase {
         mPopupZoomer.show(new Rect(0, 0, 5, 5));
 
         // The view should become visible.
-        assertEquals(View.VISIBLE, mPopupZoomer.getVisibility());
-        assertTrue(mPopupZoomer.isShowing());
+        Assert.assertEquals(View.VISIBLE, mPopupZoomer.getVisibility());
+        Assert.assertTrue(mPopupZoomer.isShowing());
     }
 
+    @Test
     @SmallTest
     @Feature({"Navigation"})
     public void testHide() throws Exception {
@@ -134,17 +147,18 @@ public class PopupZoomerTest extends ContentShellTestBase {
         mPopupZoomer.show(new Rect(0, 0, 5, 5));
 
         // The view should become visible.
-        assertEquals(View.VISIBLE, mPopupZoomer.getVisibility());
-        assertTrue(mPopupZoomer.isShowing());
+        Assert.assertEquals(View.VISIBLE, mPopupZoomer.getVisibility());
+        Assert.assertTrue(mPopupZoomer.isShowing());
 
         // Call hide without animation.
         mPopupZoomer.hide(false);
 
         // The view should be invisible.
-        assertEquals(View.INVISIBLE, mPopupZoomer.getVisibility());
-        assertFalse(mPopupZoomer.isShowing());
+        Assert.assertEquals(View.INVISIBLE, mPopupZoomer.getVisibility());
+        Assert.assertFalse(mPopupZoomer.isShowing());
     }
 
+    @Test
     @SmallTest
     @Feature({"Navigation"})
     public void testOnTouchEventOutsidePopup() throws Exception {
@@ -155,8 +169,8 @@ public class PopupZoomerTest extends ContentShellTestBase {
         mPopupZoomer.finishPendingDraws();
 
         // The view should be visible.
-        assertEquals(View.VISIBLE, mPopupZoomer.getVisibility());
-        assertTrue(mPopupZoomer.isShowing());
+        Assert.assertEquals(View.VISIBLE, mPopupZoomer.getVisibility());
+        Assert.assertTrue(mPopupZoomer.isShowing());
 
         // Send tap event at a point outside the popup.
         // i.e. coordinates greater than 10 + PopupZoomer.ZOOM_BOUNDS_MARGIN
@@ -166,10 +180,11 @@ public class PopupZoomerTest extends ContentShellTestBase {
         mPopupZoomer.finishPendingDraws();
 
         // The view should be invisible.
-        assertEquals(View.INVISIBLE, mPopupZoomer.getVisibility());
-        assertFalse(mPopupZoomer.isShowing());
+        Assert.assertEquals(View.INVISIBLE, mPopupZoomer.getVisibility());
+        Assert.assertFalse(mPopupZoomer.isShowing());
     }
 
+    @Test
     @SmallTest
     @Feature({"Navigation"})
     public void testOnTouchEventInsidePopupNoOnTapListener() throws Exception {
@@ -180,8 +195,8 @@ public class PopupZoomerTest extends ContentShellTestBase {
         mPopupZoomer.finishPendingDraws();
 
         // The view should be visible.
-        assertEquals(View.VISIBLE, mPopupZoomer.getVisibility());
-        assertTrue(mPopupZoomer.isShowing());
+        Assert.assertEquals(View.VISIBLE, mPopupZoomer.getVisibility());
+        Assert.assertTrue(mPopupZoomer.isShowing());
 
         // Send tap event at a point inside the popup.
         // i.e. coordinates between PopupZoomer.ZOOM_BOUNDS_MARGIN and
@@ -192,10 +207,11 @@ public class PopupZoomerTest extends ContentShellTestBase {
         mPopupZoomer.finishPendingDraws();
 
         // The view should still be visible as no OnTapListener is set.
-        assertEquals(View.VISIBLE, mPopupZoomer.getVisibility());
-        assertTrue(mPopupZoomer.isShowing());
+        Assert.assertEquals(View.VISIBLE, mPopupZoomer.getVisibility());
+        Assert.assertTrue(mPopupZoomer.isShowing());
     }
 
+    @Test
     @SmallTest
     @Feature({"Navigation"})
     public void testHidePopupOnLosingFocus() throws Exception {
@@ -207,8 +223,8 @@ public class PopupZoomerTest extends ContentShellTestBase {
         mPopupZoomer.finishPendingDraws();
 
         // The view should be visible.
-        assertEquals(View.VISIBLE, mPopupZoomer.getVisibility());
-        assertTrue(mPopupZoomer.isShowing());
+        Assert.assertEquals(View.VISIBLE, mPopupZoomer.getVisibility());
+        Assert.assertTrue(mPopupZoomer.isShowing());
 
         // Simulate losing the focus.
         mContentViewCore.onFocusChanged(false, true);
@@ -217,7 +233,7 @@ public class PopupZoomerTest extends ContentShellTestBase {
         mPopupZoomer.finishPendingDraws();
 
         // Now that another view has been focused, the view should be invisible.
-        assertEquals(View.INVISIBLE, mPopupZoomer.getVisibility());
-        assertFalse(mPopupZoomer.isShowing());
+        Assert.assertEquals(View.INVISIBLE, mPopupZoomer.getVisibility());
+        Assert.assertFalse(mPopupZoomer.isShowing());
     }
 }

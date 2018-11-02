@@ -412,7 +412,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
                        HitTestAction) override;
   void UpdateHitTestResult(HitTestResult&, const LayoutPoint&) override;
 
-  void UpdateAfterLayout();
+  void UpdateAfterLayout() override;
 
   void StyleWillChange(StyleDifference,
                        const ComputedStyle& new_style) override;
@@ -453,6 +453,8 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
     return IsInline() && IsAtomicInlineLevel();
   }
 
+  bool NeedsPreferredWidthsRecalculation() const override;
+
  private:
   LayoutObjectChildList* VirtualChildren() final { return Children(); }
   const LayoutObjectChildList* VirtualChildren() const final {
@@ -491,9 +493,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   }
 
  protected:
-  PaintInvalidationReason InvalidatePaintIfNeeded(
-      const PaintInvalidationState&) override;
-  PaintInvalidationReason InvalidatePaintIfNeeded(
+  PaintInvalidationReason InvalidatePaint(
       const PaintInvalidatorContext&) const override;
 
   void ClearPreviousVisualRects() override;

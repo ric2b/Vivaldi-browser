@@ -4,17 +4,23 @@
 
 #include "components/feature_engagement_tracker/internal/never_condition_validator.h"
 
-#include "components/feature_engagement_tracker/internal/model.h"
-
 namespace feature_engagement_tracker {
 
 NeverConditionValidator::NeverConditionValidator() = default;
 
 NeverConditionValidator::~NeverConditionValidator() = default;
 
-bool NeverConditionValidator::MeetsConditions(const base::Feature& feature,
-                                              const Model& model) {
-  return false;
+ConditionValidator::Result NeverConditionValidator::MeetsConditions(
+    const base::Feature& feature,
+    const FeatureConfig& config,
+    const Model& model,
+    const AvailabilityModel& availability_model,
+    uint32_t current_day) const {
+  return ConditionValidator::Result(false);
 }
+
+void NeverConditionValidator::NotifyIsShowing(const base::Feature& feature) {}
+
+void NeverConditionValidator::NotifyDismissed(const base::Feature& feature) {}
 
 }  // namespace feature_engagement_tracker

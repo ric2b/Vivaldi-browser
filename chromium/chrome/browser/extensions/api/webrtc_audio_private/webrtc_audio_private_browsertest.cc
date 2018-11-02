@@ -35,7 +35,7 @@
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "media/audio/audio_device_description.h"
-#include "media/audio/audio_manager.h"
+#include "media/audio/audio_system.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -47,47 +47,55 @@ using base::JSONWriter;
 using content::RenderProcessHost;
 using content::WebContents;
 using media::AudioDeviceDescriptions;
-using media::AudioManager;
 
 namespace extensions {
 
 using extension_function_test_utils::RunFunctionAndReturnError;
 using extension_function_test_utils::RunFunctionAndReturnSingleResult;
 
+namespace {
+
+// Synchronously (from the calling thread's point of view) runs the
+// given enumeration function on the device thread. On return,
+// |device_descriptions| has been filled with the device descriptions
+// resulting from that call.
+void GetAudioDeviceDescriptions(bool for_input,
+                                AudioDeviceDescriptions* device_descriptions) {
+  base::RunLoop run_loop;
+  media::AudioSystem::Get()->GetDeviceDescriptions(
+      base::Bind(
+          [](base::Closure finished_callback, AudioDeviceDescriptions* result,
+             AudioDeviceDescriptions received) {
+            *result = std::move(received);
+            finished_callback.Run();
+          },
+          base::Passed(run_loop.QuitClosure()), device_descriptions),
+      for_input);
+  run_loop.Run();
+}
+
+}  // namespace
+
 class AudioWaitingExtensionTest : public ExtensionApiTest {
  protected:
   void WaitUntilAudioIsPlaying(WebContents* tab) {
-    // Wait for audio to start playing. We gate this on there being one
-    // or more AudioOutputController objects for our tab.
+    // Wait for audio to start playing.
     bool audio_playing = false;
     for (size_t remaining_tries = 50; remaining_tries > 0; --remaining_tries) {
-      tab->GetRenderProcessHost()->GetAudioOutputControllers(
-          base::Bind(OnAudioControllers, &audio_playing));
+      audio_playing = tab->WasRecentlyAudible();
       base::RunLoop().RunUntilIdle();
       if (audio_playing)
         break;
-
       base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(100));
     }
-
     if (!audio_playing)
       FAIL() << "Audio did not start playing within ~5 seconds.";
-  }
-
-  // Used by the test above to wait until audio is playing.
-  static void OnAudioControllers(
-      bool* audio_playing,
-      const RenderProcessHost::AudioOutputControllerList& list) {
-    if (!list.empty())
-      *audio_playing = true;
   }
 };
 
 class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
  public:
-  WebrtcAudioPrivateTest()
-      : enumeration_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
-                           base::WaitableEvent::InitialState::NOT_SIGNALED) {}
+  WebrtcAudioPrivateTest() {}
 
   void SetUpOnMainThread() override {
     AudioWaitingExtensionTest::SetUpOnMainThread();
@@ -103,22 +111,6 @@ class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
     params->Append(std::move(request_info));
   }
 
-  std::string InvokeGetActiveSink(int tab_id) {
-    base::ListValue parameters;
-    AppendTabIdToRequestInfo(&parameters, tab_id);
-    std::string parameter_string;
-    JSONWriter::Write(parameters, &parameter_string);
-
-    scoped_refptr<WebrtcAudioPrivateGetActiveSinkFunction> function =
-        new WebrtcAudioPrivateGetActiveSinkFunction();
-    function->set_source_url(source_url_);
-    std::unique_ptr<base::Value> result(RunFunctionAndReturnSingleResult(
-        function.get(), parameter_string, browser()));
-    std::string device_id;
-    result->GetAsString(&device_id);
-    return device_id;
-  }
-
   std::unique_ptr<base::Value> InvokeGetSinks(base::ListValue** sink_list) {
     scoped_refptr<WebrtcAudioPrivateGetSinksFunction> function =
         new WebrtcAudioPrivateGetSinksFunction();
@@ -130,54 +122,6 @@ class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
     return result;
   }
 
-  // Synchronously (from the calling thread's point of view) runs the
-  // given enumeration function on the device thread. On return,
-  // |device_descriptions| has been filled with the device descriptions
-  // resulting from that call.
-  void GetAudioDeviceDescriptions(
-      void (AudioManager::*EnumerationFunc)(AudioDeviceDescriptions*),
-      AudioDeviceDescriptions* device_descriptions) {
-    AudioManager* audio_manager = AudioManager::Get();
-
-    if (!audio_manager->GetTaskRunner()->BelongsToCurrentThread()) {
-      audio_manager->GetTaskRunner()->PostTask(
-          FROM_HERE,
-          base::Bind(&WebrtcAudioPrivateTest::GetAudioDeviceDescriptions,
-                     base::Unretained(this), EnumerationFunc,
-                     device_descriptions));
-      enumeration_event_.Wait();
-    } else {
-      (audio_manager->*EnumerationFunc)(device_descriptions);
-      enumeration_event_.Signal();
-    }
-  }
-
-  // Synchronously (from the calling thread's point of view) retrieve the
-  // device id in the |origin| on the IO thread. On return,
-  // |id_in_origin| contains the id |raw_device_id| is known by in
-  // the origin.
-  void GetIDInOrigin(content::ResourceContext* resource_context,
-                     GURL origin,
-                     const std::string& raw_device_id,
-                     std::string* id_in_origin) {
-    if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI)) {
-      content::BrowserThread::PostTask(
-          content::BrowserThread::UI, FROM_HERE,
-          base::Bind(&WebrtcAudioPrivateTest::GetIDInOrigin,
-                     base::Unretained(this),
-                     resource_context, origin, raw_device_id, id_in_origin));
-      enumeration_event_.Wait();
-    } else {
-      *id_in_origin = content::GetHMACForMediaDeviceID(
-          resource_context->GetMediaDeviceIDSalt(), url::Origin(origin),
-          raw_device_id);
-      enumeration_event_.Signal();
-    }
-  }
-
-  // Event used to signal completion of enumeration.
-  base::WaitableEvent enumeration_event_;
-
   GURL source_url_;
 };
 
@@ -185,8 +129,7 @@ class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
 // http://crbug.com/334579
 IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetSinks) {
   AudioDeviceDescriptions devices;
-  GetAudioDeviceDescriptions(&AudioManager::GetAudioOutputDeviceDescriptions,
-                             &devices);
+  GetAudioDeviceDescriptions(false, &devices);
 
   base::ListValue* sink_list = NULL;
   std::unique_ptr<base::Value> result = InvokeGetSinks(&sink_list);
@@ -208,15 +151,12 @@ IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetSinks) {
     std::string sink_id;
     dict->GetString("sinkId", &sink_id);
 
-    std::string expected_id;
-    if (media::AudioDeviceDescription::IsDefaultDevice(it->unique_id)) {
-      expected_id = media::AudioDeviceDescription::kDefaultDeviceId;
-    } else {
-      GetIDInOrigin(profile()->GetResourceContext(),
-                    source_url_.GetOrigin(),
-                    it->unique_id,
-                    &expected_id);
-    }
+    std::string expected_id =
+        media::AudioDeviceDescription::IsDefaultDevice(it->unique_id)
+            ? media::AudioDeviceDescription::kDefaultDeviceId
+            : content::GetHMACForMediaDeviceID(
+                  profile()->GetMediaDeviceIDSalt(),
+                  url::Origin(source_url_.GetOrigin()), it->unique_id);
 
     EXPECT_EQ(expected_id, sink_id);
     std::string sink_label;
@@ -232,113 +172,12 @@ IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetSinks) {
 }
 #endif  // OS_MACOSX
 
-// This exercises the case where you have a tab with no active media
-// stream and try to retrieve the currently active audio sink.
-IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetActiveSinkNoMediaStream) {
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  int tab_id = ExtensionTabUtil::GetTabId(tab);
-  base::ListValue parameters;
-  AppendTabIdToRequestInfo(&parameters, tab_id);
-  std::string parameter_string;
-  JSONWriter::Write(parameters, &parameter_string);
-
-  scoped_refptr<WebrtcAudioPrivateGetActiveSinkFunction> function =
-      new WebrtcAudioPrivateGetActiveSinkFunction();
-  function->set_source_url(source_url_);
-  std::unique_ptr<base::Value> result(RunFunctionAndReturnSingleResult(
-      function.get(), parameter_string, browser()));
-
-  std::string result_string;
-  JSONWriter::Write(*result, &result_string);
-  EXPECT_EQ("\"\"", result_string);
-}
-
-// This exercises the case where you have a tab with no active media
-// stream and try to set the audio sink.
-IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, SetActiveSinkNoMediaStream) {
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  int tab_id = ExtensionTabUtil::GetTabId(tab);
-  base::ListValue parameters;
-  AppendTabIdToRequestInfo(&parameters, tab_id);
-  parameters.AppendString("no such id");
-  std::string parameter_string;
-  JSONWriter::Write(parameters, &parameter_string);
-
-  scoped_refptr<WebrtcAudioPrivateSetActiveSinkFunction> function =
-      new WebrtcAudioPrivateSetActiveSinkFunction();
-  function->set_source_url(source_url_);
-  std::string error(RunFunctionAndReturnError(function.get(),
-                                              parameter_string,
-                                              browser()));
-  EXPECT_EQ(base::StringPrintf("No active stream for tabId %d", tab_id),
-            error);
-}
-
-IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetAndSetWithMediaStream) {
-  // Disabled on Win 7. https://crbug.com/500432.
-#if defined(OS_WIN)
-  if (base::win::GetVersion() == base::win::VERSION_WIN7)
-    return;
-#endif
-
-  // First retrieve the list of all sinks, so that we can run a test
-  // where we set the active sink to each of the different available
-  // sinks in turn.
-  base::ListValue* sink_list = NULL;
-  std::unique_ptr<base::Value> result = InvokeGetSinks(&sink_list);
-
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
-  // Open a normal page that uses an audio sink.
-  ui_test_utils::NavigateToURL(
-      browser(),
-      GURL(embedded_test_server()->GetURL("/extensions/loop_audio.html")));
-
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  int tab_id = ExtensionTabUtil::GetTabId(tab);
-
-  WaitUntilAudioIsPlaying(tab);
-
-  std::string current_device = InvokeGetActiveSink(tab_id);
-  VLOG(2) << "Before setting, current device: " << current_device;
-  EXPECT_NE("", current_device);
-
-  // Set to each of the other devices in turn.
-  for (size_t ix = 0; ix < sink_list->GetSize(); ++ix) {
-    base::DictionaryValue* dict = NULL;
-    sink_list->GetDictionary(ix, &dict);
-    std::string target_device;
-    dict->GetString("sinkId", &target_device);
-
-    base::ListValue parameters;
-    AppendTabIdToRequestInfo(&parameters, tab_id);
-    parameters.AppendString(target_device);
-    std::string parameter_string;
-    JSONWriter::Write(parameters, &parameter_string);
-
-    scoped_refptr<WebrtcAudioPrivateSetActiveSinkFunction> function =
-      new WebrtcAudioPrivateSetActiveSinkFunction();
-    function->set_source_url(source_url_);
-    std::unique_ptr<base::Value> result(RunFunctionAndReturnSingleResult(
-        function.get(), parameter_string, browser()));
-    // The function was successful if the above invocation doesn't
-    // fail. Just for kicks, also check that it returns no result.
-    EXPECT_EQ(NULL, result.get());
-
-    current_device = InvokeGetActiveSink(tab_id);
-    VLOG(2) << "After setting to " << target_device
-            << ", current device is " << current_device;
-    EXPECT_EQ(target_device, current_device);
-  }
-}
-
 IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetAssociatedSink) {
   // Get the list of input devices. We can cheat in the unit test and
   // run this on the main thread since nobody else will be running at
   // the same time.
   AudioDeviceDescriptions devices;
-  GetAudioDeviceDescriptions(&AudioManager::GetAudioInputDeviceDescriptions,
-                             &devices);
+  GetAudioDeviceDescriptions(true, &devices);
 
   // Try to get an associated sink for each source.
   for (const auto& device : devices) {
@@ -348,12 +187,9 @@ IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetAssociatedSink) {
 
     std::string raw_device_id = device.unique_id;
     VLOG(2) << "Trying to find associated sink for device " << raw_device_id;
-    std::string source_id_in_origin;
     GURL origin(GURL("http://www.google.com/").GetOrigin());
-    GetIDInOrigin(profile()->GetResourceContext(),
-                  origin,
-                  raw_device_id,
-                  &source_id_in_origin);
+    std::string source_id_in_origin = content::GetHMACForMediaDeviceID(
+        profile()->GetMediaDeviceIDSalt(), url::Origin(origin), raw_device_id);
 
     base::ListValue parameters;
     parameters.AppendString(origin.spec());

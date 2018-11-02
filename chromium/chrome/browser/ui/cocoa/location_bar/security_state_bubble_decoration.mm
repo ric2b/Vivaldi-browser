@@ -151,6 +151,7 @@ void SecurityStateBubbleDecoration::DrawInFrame(NSRect frame,
   CGFloat text_left_offset = NSMinX(decoration_frame);
   CGFloat text_right_offset = NSMaxX(decoration_frame);
   const BOOL is_rtl = cocoa_l10n_util::ShouldDoExperimentalRTLLayout();
+  focus_ring_right_inset_ = 0;
   if (image_) {
     // The image should fade in if we're animating in.
     CGFloat image_alpha =
@@ -231,22 +232,12 @@ void SecurityStateBubbleDecoration::DrawInFrame(NSRect frame,
 
     // Draw the divider.
     if (state() == DecorationMouseState::NONE && !active()) {
-      const CGFloat divider_x_position =
-          is_rtl ? NSMinX(decoration_frame) + DividerPadding()
-                 : NSMaxX(decoration_frame) - DividerPadding();
-      NSBezierPath* line = [NSBezierPath bezierPath];
-      [line setLineWidth:line_width];
-      [line moveToPoint:NSMakePoint(divider_x_position,
-                                    NSMinY(decoration_frame))];
-      [line lineToPoint:NSMakePoint(divider_x_position,
-                                    NSMaxY(decoration_frame))];
-
-      NSColor* divider_color = GetDividerColor(in_dark_mode);
-      CGFloat divider_alpha =
-          [divider_color alphaComponent] * GetAnimationProgress();
-      divider_color = [divider_color colorWithAlphaComponent:divider_alpha];
-      [divider_color set];
-      [line stroke];
+      DrawDivider(control_view, decoration_frame, GetAnimationProgress());
+      focus_ring_right_inset_ = DividerPadding() + line_width;
+    } else {
+      // When mouse-hovered, the divider isn't drawn, but the padding for it is
+      // still present to separate the button from the location bar text.
+      focus_ring_right_inset_ = DividerPadding();
     }
   }
 }
@@ -290,6 +281,12 @@ NSString* SecurityStateBubbleDecoration::GetToolTip() {
     return tooltip_icon_text;
   return [NSString
       stringWithFormat:@"%@. %@", full_label_.get(), tooltip_icon_text];
+}
+
+NSRect SecurityStateBubbleDecoration::GetRealFocusRingBounds(
+    NSRect bounds) const {
+  bounds.size.width -= focus_ring_right_inset_;
+  return bounds;
 }
 
 //////////////////////////////////////////////////////////////////

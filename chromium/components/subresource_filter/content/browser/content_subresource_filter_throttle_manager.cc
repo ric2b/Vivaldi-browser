@@ -4,53 +4,28 @@
 
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/trace_event/trace_event.h"
+#include "base/trace_event/trace_event_argument.h"
 #include "components/subresource_filter/content/browser/activation_state_computing_navigation_throttle.h"
 #include "components/subresource_filter/content/browser/async_document_subresource_filter.h"
+#include "components/subresource_filter/content/browser/page_load_statistics.h"
 #include "components/subresource_filter/content/browser/subframe_navigation_filtering_throttle.h"
+#include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
 #include "components/subresource_filter/content/common/subresource_filter_messages.h"
+#include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/console_message_level.h"
 #include "net/base/net_errors.h"
 
 namespace subresource_filter {
-
-namespace {
-
-// Used to forward calls to WillProcessResonse to the driver.
-// TODO(https://crbug.com/708181): Remove this once the safe browsing navigation
-// throttle is responsible for all activation decisions.
-class ForwardingNavigationThrottle : public content::NavigationThrottle {
- public:
-  ForwardingNavigationThrottle(
-      content::NavigationHandle* handle,
-      ContentSubresourceFilterThrottleManager::Delegate* delegate)
-      : content::NavigationThrottle(handle), delegate_(delegate) {}
-  ~ForwardingNavigationThrottle() override {}
-
-  // content::NavigationThrottle:
-  content::NavigationThrottle::ThrottleCheckResult WillProcessResponse()
-      override {
-    delegate_->WillProcessResponse(navigation_handle());
-    return content::NavigationThrottle::PROCEED;
-  }
-
- private:
-  ContentSubresourceFilterThrottleManager::Delegate* delegate_;
-
-  DISALLOW_COPY_AND_ASSIGN(ForwardingNavigationThrottle);
-};
-
-}  // namespace
-
-bool ContentSubresourceFilterThrottleManager::Delegate::
-    ShouldSuppressActivation(content::NavigationHandle* navigation_handle) {
-  return false;
-}
 
 ContentSubresourceFilterThrottleManager::
     ContentSubresourceFilterThrottleManager(
@@ -58,23 +33,22 @@ ContentSubresourceFilterThrottleManager::
         VerifiedRulesetDealer::Handle* dealer_handle,
         content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
+      scoped_observer_(this),
       dealer_handle_(dealer_handle),
       delegate_(delegate),
-      weak_ptr_factory_(this) {}
+      weak_ptr_factory_(this) {
+  SubresourceFilterObserverManager::CreateForWebContents(web_contents);
+  scoped_observer_.Add(
+      SubresourceFilterObserverManager::FromWebContents(web_contents));
+}
 
 ContentSubresourceFilterThrottleManager::
     ~ContentSubresourceFilterThrottleManager() {}
 
-void ContentSubresourceFilterThrottleManager::NotifyPageActivationComputed(
-    content::NavigationHandle* navigation_handle,
-    const ActivationState& activation_state) {
-  DCHECK(navigation_handle->IsInMainFrame());
-  DCHECK(!navigation_handle->HasCommitted());
-  auto it = ongoing_activation_throttles_.find(navigation_handle);
-  if (it != ongoing_activation_throttles_.end()) {
-    it->second->NotifyPageActivationWithRuleset(EnsureRulesetHandle(),
-                                                activation_state);
-  }
+void ContentSubresourceFilterThrottleManager::OnSubresourceFilterGoingAway() {
+  // Stop observing here because the observer manager could be destroyed by the
+  // time this class is destroyed.
+  scoped_observer_.RemoveAll();
 }
 
 void ContentSubresourceFilterThrottleManager::RenderFrameDeleted(
@@ -96,10 +70,14 @@ void ContentSubresourceFilterThrottleManager::ReadyToCommitNavigation(
   AsyncDocumentSubresourceFilter* filter = throttle->second->filter();
   if (!filter || navigation_handle->GetNetErrorCode() != net::OK ||
       filter->activation_state().activation_level ==
-          ActivationLevel::DISABLED ||
-      delegate_->ShouldSuppressActivation(navigation_handle)) {
+          ActivationLevel::DISABLED) {
     return;
   }
+
+  TRACE_EVENT1(
+      TRACE_DISABLED_BY_DEFAULT("loading"),
+      "ContentSubresourceFilterThrottleManager::ReadyToCommitNavigation",
+      "activation_state", filter->activation_state().ToTracedValue());
 
   throttle->second->WillSendActivationToRenderer();
 
@@ -126,10 +104,25 @@ void ContentSubresourceFilterThrottleManager::DidFinishNavigation(
     ongoing_activation_throttles_.erase(throttle);
   }
 
-  // Make sure |activated_frame_hosts_| is updated or cleaned up depending on
-  // this navigation's activation state.
   content::RenderFrameHost* frame_host =
       navigation_handle->GetRenderFrameHost();
+  if (navigation_handle->IsInMainFrame()) {
+    current_committed_load_has_notified_disallowed_load_ = false;
+    statistics_.reset();
+    if (filter) {
+      statistics_ =
+          base::MakeUnique<PageLoadStatistics>(filter->activation_state());
+      if (filter->activation_state().enable_logging) {
+        DCHECK(filter->activation_state().activation_level !=
+               ActivationLevel::DISABLED);
+        frame_host->AddMessageToConsole(content::CONSOLE_MESSAGE_LEVEL_WARNING,
+                                        kActivationConsoleMessage);
+      }
+    }
+  }
+
+  // Make sure |activated_frame_hosts_| is updated or cleaned up depending on
+  // this navigation's activation state.
   if (filter) {
     filter->set_first_disallowed_load_callback(base::Bind(
         &ContentSubresourceFilterThrottleManager::MaybeCallFirstDisallowedLoad,
@@ -138,10 +131,15 @@ void ContentSubresourceFilterThrottleManager::DidFinishNavigation(
   } else {
     activated_frame_hosts_.erase(frame_host);
   }
-
-  if (navigation_handle->IsInMainFrame())
-    current_committed_load_has_notified_disallowed_load_ = false;
   DestroyRulesetHandleIfNoLongerUsed();
+}
+
+void ContentSubresourceFilterThrottleManager::DidFinishLoad(
+    content::RenderFrameHost* render_frame_host,
+    const GURL& validated_url) {
+  if (!statistics_ || render_frame_host->GetParent())
+    return;
+  statistics_->OnDidFinishLoad();
 }
 
 bool ContentSubresourceFilterThrottleManager::OnMessageReceived(
@@ -151,19 +149,37 @@ bool ContentSubresourceFilterThrottleManager::OnMessageReceived(
   IPC_BEGIN_MESSAGE_MAP(ContentSubresourceFilterThrottleManager, message)
     IPC_MESSAGE_HANDLER(SubresourceFilterHostMsg_DidDisallowFirstSubresource,
                         MaybeCallFirstDisallowedLoad)
+    IPC_MESSAGE_HANDLER(SubresourceFilterHostMsg_DocumentLoadStatistics,
+                        OnDocumentLoadStatistics)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
+}
+
+// Sets the desired page-level |activation_state| for the currently ongoing
+// page load, identified by its main-frame |navigation_handle|. If this method
+// is not called for a main-frame navigation, the default behavior is no
+// activation for that page load.
+void ContentSubresourceFilterThrottleManager::OnPageActivationComputed(
+    content::NavigationHandle* navigation_handle,
+    ActivationDecision activation_decision,
+    const ActivationState& activation_state) {
+  DCHECK(navigation_handle->IsInMainFrame());
+  DCHECK(!navigation_handle->HasCommitted());
+  // Do not notify the throttle if activation is disabled.
+  if (activation_state.activation_level == ActivationLevel::DISABLED)
+    return;
+  auto it = ongoing_activation_throttles_.find(navigation_handle);
+  if (it != ongoing_activation_throttles_.end()) {
+    it->second->NotifyPageActivationWithRuleset(EnsureRulesetHandle(),
+                                                activation_state);
+  }
 }
 
 void ContentSubresourceFilterThrottleManager::MaybeAppendNavigationThrottles(
     content::NavigationHandle* navigation_handle,
     std::vector<std::unique_ptr<content::NavigationThrottle>>* throttles) {
   DCHECK(!navigation_handle->IsSameDocument());
-  if (navigation_handle->IsInMainFrame()) {
-    throttles->push_back(base::MakeUnique<ForwardingNavigationThrottle>(
-        navigation_handle, delegate_));
-  }
   if (!dealer_handle_)
     return;
   if (auto filtering_throttle =
@@ -176,6 +192,18 @@ void ContentSubresourceFilterThrottleManager::MaybeAppendNavigationThrottles(
         activation_throttle.get();
     throttles->push_back(std::move(activation_throttle));
   }
+}
+
+bool ContentSubresourceFilterThrottleManager::ShouldDisallowNewWindow() {
+  auto it = activated_frame_hosts_.find(web_contents()->GetMainFrame());
+  if (it == activated_frame_hosts_.end())
+    return false;
+  const ActivationState state = it->second->activation_state();
+  // This should trigger the standard popup blocking UI, so don't force the
+  // subresource filter specific UI here.
+  return state.activation_level == ActivationLevel::ENABLED &&
+         !state.filtering_disabled_for_document &&
+         !state.generic_blocking_rules_disabled;
 }
 
 std::unique_ptr<SubframeNavigationFilteringThrottle>
@@ -216,8 +244,7 @@ AsyncDocumentSubresourceFilter*
 ContentSubresourceFilterThrottleManager::GetParentFrameFilter(
     content::NavigationHandle* child_frame_navigation) {
   DCHECK(!child_frame_navigation->IsInMainFrame());
-  content::RenderFrameHost* parent = web_contents()->FindFrameByFrameTreeNodeId(
-      child_frame_navigation->GetParentFrameTreeNodeId());
+  content::RenderFrameHost* parent = child_frame_navigation->GetParentFrame();
   DCHECK(parent);
   auto it = activated_frame_hosts_.find(parent);
   return it == activated_frame_hosts_.end() ? nullptr : it->second.get();
@@ -243,6 +270,12 @@ void ContentSubresourceFilterThrottleManager::
       0u) {
     ruleset_handle_.reset();
   }
+}
+
+void ContentSubresourceFilterThrottleManager::OnDocumentLoadStatistics(
+    const DocumentLoadStatistics& statistics) {
+  if (statistics_)
+    statistics_->OnDocumentLoadStatistics(statistics);
 }
 
 }  // namespace subresource_filter

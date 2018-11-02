@@ -16,9 +16,11 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/thread_test_helper.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browsing_data/browsing_data_helper_browsertest.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -54,6 +56,7 @@ const base::FilePath::CharType kTestFileExtension[] = FILE_PATH_LITERAL(
 class BrowsingDataLocalStorageHelperTest : public InProcessBrowserTest {
  protected:
   void CreateLocalStorageFilesForTest() {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
     // Note: This helper depends on details of how the dom_storage library
     // stores data in the host file system.
     base::FilePath storage_path = GetLocalStoragePathForTestingProfile();
@@ -128,6 +131,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataLocalStorageHelperTest, DeleteSingleFile) {
   content::RunAllBlockingPoolTasksUntilIdle();
 
   // Ensure the file has been deleted.
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::FileEnumerator file_enumerator(
       GetLocalStoragePathForTestingProfile(),
       false,

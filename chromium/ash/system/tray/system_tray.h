@@ -27,7 +27,11 @@ class SystemTrayItem;
 class TrayAccessibility;
 class TrayAudio;
 class TrayCast;
+class TrayEnterprise;
 class TrayNetwork;
+class TrayNightLight;
+class TrayScale;
+class TraySupervisedUser;
 class TraySystemInfo;
 class TrayTiles;
 class TrayUpdate;
@@ -42,10 +46,12 @@ enum BubbleCreationType {
 class ASH_EXPORT SystemTray : public TrayBackgroundView,
                               public views::TrayBubbleView::Delegate {
  public:
-  explicit SystemTray(WmShelf* wm_shelf);
+  explicit SystemTray(Shelf* shelf);
   ~SystemTray() override;
 
   TrayUpdate* tray_update() { return tray_update_; }
+
+  TrayNightLight* tray_night_light() { return tray_night_light_; }
 
   // Calls TrayBackgroundView::Initialize(), creates the tray items, and
   // adds them to SystemTrayNotifier.
@@ -86,7 +92,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   void UpdateAfterLoginStatusChange(LoginStatus login_status);
 
   // Updates the items when the shelf alignment changes.
-  void UpdateAfterShelfAlignmentChange(ShelfAlignment alignment);
+  void UpdateItemsAfterShelfAlignmentChange();
 
   // Returns true if the shelf should be forced visible when auto-hidden.
   bool ShouldShowShelf() const;
@@ -115,7 +121,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   TrayAudio* GetTrayAudio() const;
 
   // Overridden from TrayBackgroundView.
-  void SetShelfAlignment(ShelfAlignment alignment) override;
+  void UpdateAfterShelfAlignmentChange() override;
   void AnchorUpdated() override;
   base::string16 GetAccessibleNameForTray() override;
   void BubbleResized(const views::TrayBubbleView* bubble_view) override;
@@ -140,11 +146,11 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
     return tray_accessibility_;
   }
 
-  // Get the tray item view (or NULL) for a given |tray_item| in a unit test.
-  views::View* GetTrayItemViewForTest(SystemTrayItem* tray_item);
-
+  // TODO(jamescook): Add a SystemTrayTestApi instead of these methods.
   TrayCast* GetTrayCastForTesting() const;
+  TrayEnterprise* GetTrayEnterpriseForTesting() const;
   TrayNetwork* GetTrayNetworkForTesting() const;
+  TraySupervisedUser* GetTraySupervisedUserForTesting() const;
   TraySystemInfo* GetTraySystemInfoForTesting() const;
   TrayTiles* GetTrayTilesForTesting() const;
 
@@ -210,9 +216,6 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   // Pointers to members of |items_|.
   SystemTrayItem* detailed_item_ = nullptr;
 
-  // Mappings of system tray item and it's view in the tray.
-  std::map<SystemTrayItem*, views::View*> tray_item_map_;
-
   // Bubble for default and detailed views.
   std::unique_ptr<SystemBubbleWrapper> system_bubble_;
 
@@ -227,12 +230,16 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
 
   // These objects are not owned by this class.
   TrayAccessibility* tray_accessibility_ = nullptr;
-  TrayAudio* tray_audio_ = nullptr;  // May be null.
+  TrayAudio* tray_audio_ = nullptr;
   TrayCast* tray_cast_ = nullptr;
+  TrayEnterprise* tray_enterprise_ = nullptr;
   TrayNetwork* tray_network_ = nullptr;
   TrayTiles* tray_tiles_ = nullptr;
+  TrayScale* tray_scale_ = nullptr;
+  TraySupervisedUser* tray_supervised_user_ = nullptr;
   TraySystemInfo* tray_system_info_ = nullptr;
   TrayUpdate* tray_update_ = nullptr;
+  TrayNightLight* tray_night_light_ = nullptr;
 
   // A reference to the Screen share and capture item.
   ScreenTrayItem* screen_capture_tray_item_ = nullptr;  // not owned

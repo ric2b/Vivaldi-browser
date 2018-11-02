@@ -5,20 +5,24 @@
 #ifndef CHROME_BROWSER_ANDROID_VR_SHELL_TEXTURES_INSECURE_CONTENT_PERMANENT_TEXTURE_H_
 #define CHROME_BROWSER_ANDROID_VR_SHELL_TEXTURES_INSECURE_CONTENT_PERMANENT_TEXTURE_H_
 
+#include "base/macros.h"
 #include "chrome/browser/android/vr_shell/textures/ui_texture.h"
 
 namespace vr_shell {
 
-class InsecureContentPermanentTexture : public UITexture {
+class InsecureContentPermanentTexture : public UiTexture {
  public:
-  InsecureContentPermanentTexture(int texture_handle, int texture_size);
+  InsecureContentPermanentTexture();
   ~InsecureContentPermanentTexture() override;
+  gfx::Size GetPreferredTextureSize(int width) const override;
+  gfx::SizeF GetDrawnSize() const override;
 
  private:
-  void Draw(gfx::Canvas* canvas) override;
-  void SetSize() override;
+  void Draw(SkCanvas* canvas, const gfx::Size& texture_size) override;
 
-  int height_;
+  gfx::SizeF size_;
+
+  DISALLOW_COPY_AND_ASSIGN(InsecureContentPermanentTexture);
 };
 
 }  // namespace vr_shell

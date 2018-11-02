@@ -6,12 +6,12 @@
 
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "ui/aura/client/default_capture_client.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/input_state_lookup.h"
+#include "ui/aura/local/compositor_frame_sink_local.h"
 #include "ui/aura/mus/capture_synchronizer.h"
 #include "ui/aura/mus/focus_synchronizer.h"
 #include "ui/aura/mus/window_port_mus.h"
@@ -25,7 +25,6 @@
 #include "ui/aura/test/test_window_parenting_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
-#include "ui/aura/window_port_local.h"
 #include "ui/aura/window_targeter.h"
 #include "ui/base/ime/input_method_factory.h"
 #include "ui/base/ime/input_method_initializer.h"
@@ -48,9 +47,8 @@ AuraTestHelper* g_instance = nullptr;
 
 }  // namespace
 
-AuraTestHelper::AuraTestHelper(base::MessageLoopForUI* message_loop)
+AuraTestHelper::AuraTestHelper()
     : setup_called_(false), teardown_called_(false) {
-  DCHECK(message_loop);
   // Disable animations during tests.
   zero_duration_mode_.reset(new ui::ScopedAnimationDurationScaleMode(
       ui::ScopedAnimationDurationScaleMode::ZERO_DURATION));
@@ -86,6 +84,11 @@ void AuraTestHelper::EnableMusWithWindowTreeClient(
   DCHECK_EQ(Mode::LOCAL, mode_);
   mode_ = Mode::MUS;
   window_tree_client_ = window_tree_client;
+}
+
+void AuraTestHelper::DeleteWindowTreeClient() {
+  window_tree_client_setup_.reset();
+  window_tree_client_ = nullptr;
 }
 
 void AuraTestHelper::SetUp(ui::ContextFactory* context_factory,
@@ -174,8 +177,6 @@ void AuraTestHelper::TearDown() {
 
   if (env_)
     env_.reset();
-  else
-    EnvTestHelper().SetWindowTreeClient(nullptr);
   wm_state_.reset();
 }
 

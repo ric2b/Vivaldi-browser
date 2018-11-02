@@ -11,6 +11,10 @@
 #include "device/gamepad/gamepad_export.h"
 #include "device/gamepad/public/interfaces/gamepad.mojom.h"
 
+namespace service_manager {
+struct BindSourceInfo;
+}
+
 namespace device {
 
 class DEVICE_GAMEPAD_EXPORT GamepadMonitor
@@ -20,18 +24,16 @@ class DEVICE_GAMEPAD_EXPORT GamepadMonitor
   GamepadMonitor();
   ~GamepadMonitor() override;
 
-  static void Create(mojom::GamepadMonitorRequest request);
+  static void Create(const service_manager::BindSourceInfo& source_info,
+                     mojom::GamepadMonitorRequest request);
 
   // GamepadConsumer implementation.
-  void OnGamepadConnected(unsigned index,
-                          const blink::WebGamepad& gamepad) override;
-  void OnGamepadDisconnected(unsigned index,
-                             const blink::WebGamepad& gamepad) override;
+  void OnGamepadConnected(unsigned index, const Gamepad& gamepad) override;
+  void OnGamepadDisconnected(unsigned index, const Gamepad& gamepad) override;
 
   // mojom::GamepadMonitor implementation.
-  void GamepadStartPolling(
-      const GamepadStartPollingCallback& callback) override;
-  void GamepadStopPolling(const GamepadStopPollingCallback& callback) override;
+  void GamepadStartPolling(GamepadStartPollingCallback callback) override;
+  void GamepadStopPolling(GamepadStopPollingCallback callback) override;
   void SetObserver(mojom::GamepadObserverPtr gamepad_observer) override;
 
  private:

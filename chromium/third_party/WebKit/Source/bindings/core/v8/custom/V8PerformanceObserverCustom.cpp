@@ -6,14 +6,14 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/PerformanceObserverCallback.h"
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8DOMWrapper.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/V8Performance.h"
-#include "bindings/core/v8/V8PrivateProperty.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/PerformanceObserver.h"
+#include "platform/bindings/V8DOMWrapper.h"
+#include "platform/bindings/V8PrivateProperty.h"
 
 namespace blink {
 
@@ -40,7 +40,7 @@ void V8PerformanceObserver::constructorCustom(
     return;
   }
   performance = DOMWindowPerformance::performance(*window);
-  ASSERT(performance);
+  DCHECK(performance);
 
   if (info.Length() <= 0 || !info[0]->IsFunction()) {
     V8ThrowException::ThrowTypeError(

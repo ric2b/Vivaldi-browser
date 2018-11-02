@@ -17,8 +17,8 @@
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8Document.h"
 #include "bindings/core/v8/V8Node.h"
-#include "bindings/core/v8/V8ObjectConstructor.h"
 #include "core/dom/ExecutionContext.h"
+#include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
 
@@ -37,7 +37,7 @@ const WrapperTypeInfo V8TestIntegerIndexedPrimaryGlobal::wrapperTypeInfo = { gin
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestIntegerIndexedPrimaryGlobal.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
-// bindings/core/v8/ScriptWrappable.h.
+// platform/bindings/ScriptWrappable.h.
 const WrapperTypeInfo& TestIntegerIndexedPrimaryGlobal::wrapper_type_info_ = V8TestIntegerIndexedPrimaryGlobal::wrapperTypeInfo;
 
 // not [ActiveScriptWrappable]
@@ -68,6 +68,8 @@ static void lengthAttributeSetter(v8::Local<v8::Value> v8Value, const v8::Functi
   ALLOW_UNUSED_LOCAL(isolate);
 
   v8::Local<v8::Object> holder = info.Holder();
+  ALLOW_UNUSED_LOCAL(holder);
+
   TestIntegerIndexedPrimaryGlobal* impl = V8TestIntegerIndexedPrimaryGlobal::toImpl(holder);
 
   ExceptionState exceptionState(isolate, ExceptionState::kSetterContext, "TestIntegerIndexedPrimaryGlobal", "length");
@@ -164,7 +166,8 @@ void V8TestIntegerIndexedPrimaryGlobal::indexedPropertyDeleterCallback(uint32_t 
 }
 
 static const V8DOMConfiguration::AccessorConfiguration V8TestIntegerIndexedPrimaryGlobalAccessors[] = {
-    {"length", V8TestIntegerIndexedPrimaryGlobal::lengthAttributeGetterCallback, V8TestIntegerIndexedPrimaryGlobal::lengthAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnInstance, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds},
+      { "length", V8TestIntegerIndexedPrimaryGlobal::lengthAttributeGetterCallback, V8TestIntegerIndexedPrimaryGlobal::lengthAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnInstance, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
+    ,
 };
 
 static const V8DOMConfiguration::MethodConfiguration V8TestIntegerIndexedPrimaryGlobalMethods[] = {

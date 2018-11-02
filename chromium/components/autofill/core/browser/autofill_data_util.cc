@@ -8,32 +8,43 @@
 #include <vector>
 
 #include "base/i18n/char_iterator.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/grit/components_scaled_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "third_party/icu/source/common/unicode/uscript.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace autofill {
 namespace data_util {
 
 namespace {
-// Mappings from Chrome card types to Payment Request API basic card payment
-// spec types and icons. Note that "generic" is not in the spec.
+// Mappings from Chrome card networks to Payment Request API basic card payment
+// spec networks and icons. Note that "generic" is not in the spec.
 // https://w3c.github.io/webpayments-methods-card/#method-id
 const PaymentRequestData kPaymentRequestData[]{
-    {"americanExpressCC", "amex", IDR_AUTOFILL_PR_AMEX},
-    {"dinersCC", "diners", IDR_AUTOFILL_PR_DINERS},
-    {"discoverCC", "discover", IDR_AUTOFILL_PR_DISCOVER},
-    {"jcbCC", "jcb", IDR_AUTOFILL_PR_JCB},
-    {"masterCardCC", "mastercard", IDR_AUTOFILL_PR_MASTERCARD},
-    {"mirCC", "mir", IDR_AUTOFILL_PR_MIR},
-    {"unionPayCC", "unionpay", IDR_AUTOFILL_PR_UNIONPAY},
-    {"visaCC", "visa", IDR_AUTOFILL_PR_VISA},
+    {autofill::kAmericanExpressCard, "amex", IDR_AUTOFILL_CC_AMEX,
+     IDS_AUTOFILL_CC_AMEX},
+    {autofill::kDinersCard, "diners", IDR_AUTOFILL_CC_DINERS,
+     IDS_AUTOFILL_CC_DINERS},
+    {autofill::kDiscoverCard, "discover", IDR_AUTOFILL_CC_DISCOVER,
+     IDS_AUTOFILL_CC_DISCOVER},
+    {autofill::kEloCard, "elo", IDR_AUTOFILL_CC_ELO, IDS_AUTOFILL_CC_ELO},
+    {autofill::kJCBCard, "jcb", IDR_AUTOFILL_CC_JCB, IDS_AUTOFILL_CC_JCB},
+    {autofill::kMasterCard, "mastercard", IDR_AUTOFILL_CC_MASTERCARD,
+     IDS_AUTOFILL_CC_MASTERCARD},
+    {autofill::kMirCard, "mir", IDR_AUTOFILL_CC_MIR, IDS_AUTOFILL_CC_MIR},
+    {autofill::kUnionPay, "unionpay", IDR_AUTOFILL_CC_UNIONPAY,
+     IDS_AUTOFILL_CC_UNION_PAY},
+    {autofill::kVisaCard, "visa", IDR_AUTOFILL_CC_VISA, IDS_AUTOFILL_CC_VISA},
 };
-const PaymentRequestData kGenericPaymentRequestData = {"genericCC", "generic",
-                                                       IDR_AUTOFILL_PR_GENERIC};
+const PaymentRequestData kGenericPaymentRequestData = {
+    autofill::kGenericCard, "generic", IDR_AUTOFILL_CC_GENERIC,
+    IDS_AUTOFILL_CC_GENERIC};
 
 const char* const name_prefixes[] = {
     "1lt",     "1st", "2lt", "2nd",    "3rd",  "admiral", "capt",
@@ -121,15 +132,15 @@ void StripSuffixes(std::vector<base::StringPiece16>* name_tokens) {
 // none is found.
 size_t StartsWithAny(base::StringPiece16 name, const char** prefixes,
                      size_t prefix_count) {
-   base::string16 buffer;
-   for (size_t i = 0; i < prefix_count; i++) {
-     buffer.clear();
-     base::UTF8ToUTF16(prefixes[i], strlen(prefixes[i]), &buffer);
-     if (base::StartsWith(name, buffer, base::CompareCase::SENSITIVE)) {
-       return buffer.size();
-     }
-   }
-   return 0;
+  base::string16 buffer;
+  for (size_t i = 0; i < prefix_count; i++) {
+    buffer.clear();
+    base::UTF8ToUTF16(prefixes[i], strlen(prefixes[i]), &buffer);
+    if (base::StartsWith(name, buffer, base::CompareCase::SENSITIVE)) {
+      return buffer.size();
+    }
+  }
+  return 0;
 }
 
 // Returns true if |c| is a CJK (Chinese, Japanese, Korean) character, for any
@@ -401,22 +412,34 @@ bool ProfileMatchesFullName(base::StringPiece16 full_name,
   return false;
 }
 
-const PaymentRequestData& GetPaymentRequestData(const std::string& type) {
+const PaymentRequestData& GetPaymentRequestData(
+    const std::string& issuer_network) {
   for (const PaymentRequestData& data : kPaymentRequestData) {
-    if (type == data.card_type)
+    if (issuer_network == data.issuer_network)
       return data;
   }
   return kGenericPaymentRequestData;
 }
 
-const char* GetCardTypeForBasicCardPaymentType(
-    const std::string& basic_card_payment_type) {
+const char* GetIssuerNetworkForBasicCardIssuerNetwork(
+    const std::string& basic_card_issuer_network) {
   for (const PaymentRequestData& data : kPaymentRequestData) {
-    if (basic_card_payment_type == data.basic_card_payment_type) {
-      return data.card_type;
+    if (basic_card_issuer_network == data.basic_card_issuer_network) {
+      return data.issuer_network;
     }
   }
-  return kGenericPaymentRequestData.card_type;
+  return kGenericPaymentRequestData.issuer_network;
+}
+
+bool IsValidCountryCode(const std::string& country_code) {
+  if (country_code.size() != 2)
+    return false;
+
+  return re2::RE2::FullMatch(country_code, "^[A-Z]{2}$");
+}
+
+bool IsValidCountryCode(const base::string16& country_code) {
+  return IsValidCountryCode(base::UTF16ToUTF8(country_code));
 }
 
 }  // namespace data_util

@@ -19,8 +19,6 @@
 #include "chrome/browser/doodle/doodle_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
-#include "chrome/browser/search/suggestions/image_decoder_impl.h"
-#include "components/image_fetcher/core/image_fetcher_impl.h"
 #include "components/search_provider_logos/logo_tracker.h"
 #include "jni/LogoBridge_jni.h"
 #include "net/url_request/url_fetcher.h"
@@ -39,8 +37,6 @@ using base::android::ScopedJavaLocalRef;
 using base::android::ToJavaByteArray;
 
 namespace {
-
-const int64_t kMaxImageDownloadBytes = 1024 * 1024;
 
 ScopedJavaLocalRef<jobject> MakeJavaLogo(JNIEnv* env,
                                          const SkBitmap* bitmap,
@@ -200,11 +196,6 @@ LogoBridge::LogoBridge(jobject j_profile)
 
   if (base::FeatureList::IsEnabled(chrome::android::kUseNewDoodleApi)) {
     doodle_service_ = DoodleServiceFactory::GetForProfile(profile);
-    image_fetcher_ = base::MakeUnique<image_fetcher::ImageFetcherImpl>(
-        base::MakeUnique<suggestions::ImageDecoderImpl>(),
-        profile->GetRequestContext());
-    image_fetcher_->SetImageDownloadLimit(kMaxImageDownloadBytes);
-
     doodle_observer_.Add(doodle_service_);
   } else {
     logo_service_ = LogoServiceFactory::GetForProfile(profile);
@@ -226,9 +217,13 @@ void LogoBridge::GetCurrentLogo(JNIEnv* env,
   if (doodle_service_) {
     j_logo_observer_.Reset(j_logo_observer);
 
-    // Immediately hand out any current cached config.
-    DoodleConfigReceived(doodle_service_->config(), /*from_cache=*/true);
-    // Also request a refresh, in case something changed.
+    // Hand out any current cached config.
+    if (doodle_service_->config().has_value()) {
+      FetchDoodleImage(doodle_service_->config().value(), /*from_cache=*/true);
+    }
+    // Also request a refresh, in case something changed. Depending on whether a
+    // newer config was available, either |OnDoodleConfigUpdated| or
+    // |OnDoodleConfigRevalidated| are called.
     doodle_service_->Refresh();
   } else {
     // |observer| is deleted in LogoObserverAndroid::OnObserverRemoved().
@@ -246,67 +241,66 @@ void LogoBridge::GetAnimatedLogo(JNIEnv* env,
   animated_logo_fetcher_->Start(env, url, j_callback);
 }
 
+void LogoBridge::OnDoodleConfigRevalidated(bool from_cache) {
+  if (j_logo_observer_.is_null()) {
+    return;
+  }
+  // If an existing config got re-validated, there's nothing to do - the UI is
+  // already in the correct state. However, we do tell the UI when we validate
+  // that there really isn't a Doodle. This is needed for metrics tracking.
+  if (!doodle_service_->config().has_value()) {
+    NotifyNoLogoAvailable(from_cache);
+  }
+}
+
 void LogoBridge::OnDoodleConfigUpdated(
     const base::Optional<doodle::DoodleConfig>& maybe_doodle_config) {
   if (j_logo_observer_.is_null()) {
     return;
   }
-  DoodleConfigReceived(maybe_doodle_config, /*from_cache=*/false);
-}
-
-void LogoBridge::DoodleConfigReceived(
-    const base::Optional<doodle::DoodleConfig>& maybe_doodle_config,
-    bool from_cache) {
-  DCHECK(!j_logo_observer_.is_null());
-
   if (!maybe_doodle_config.has_value()) {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    Java_LogoObserver_onLogoAvailable(
-        env, j_logo_observer_, ScopedJavaLocalRef<jobject>(), from_cache);
+    NotifyNoLogoAvailable(/*from_cache=*/false);
     return;
   }
-  const doodle::DoodleConfig& doodle_config = maybe_doodle_config.value();
-  // If there is a CTA image, that means the main image is animated. Show the
+  FetchDoodleImage(maybe_doodle_config.value(), /*from_cache=*/false);
+}
+
+void LogoBridge::NotifyNoLogoAvailable(bool from_cache) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_LogoObserver_onLogoAvailable(env, j_logo_observer_,
+                                    ScopedJavaLocalRef<jobject>(), from_cache);
+}
+
+void LogoBridge::FetchDoodleImage(const doodle::DoodleConfig& doodle_config,
+                                  bool from_cache) {
+  DCHECK(!j_logo_observer_.is_null());
+
+  // If there is a CTA image, that means the main image is animated. We show the
   // non-animated CTA image first, and load the animated one only when the
   // user requests it.
   bool has_cta = doodle_config.large_cta_image.has_value();
-  const GURL& image_url = has_cta ? doodle_config.large_cta_image->url
-                                  : doodle_config.large_image.url;
   const GURL& animated_image_url =
       has_cta ? doodle_config.large_image.url : GURL::EmptyGURL();
-  // TODO(treib): For interactive doodles, use |fullpage_interactive_url|
-  // instead of |target_url|?
   const GURL& on_click_url = doodle_config.target_url;
   const std::string& alt_text = doodle_config.alt_text;
-  image_fetcher_->StartOrQueueNetworkRequest(
-      image_url.spec(), image_url,
+  doodle_service_->GetImage(
       base::Bind(&LogoBridge::DoodleImageFetched, base::Unretained(this),
                  from_cache, on_click_url, alt_text, animated_image_url));
 }
 
-void LogoBridge::DoodleImageFetched(
-    bool config_from_cache,
-    const GURL& on_click_url,
-    const std::string& alt_text,
-    const GURL& animated_image_url,
-    const std::string& image_fetch_id,
-    const gfx::Image& image,
-    const image_fetcher::RequestMetadata& metadata) {
+void LogoBridge::DoodleImageFetched(bool config_from_cache,
+                                    const GURL& on_click_url,
+                                    const std::string& alt_text,
+                                    const GURL& animated_image_url,
+                                    const gfx::Image& image) {
   JNIEnv* env = base::android::AttachCurrentThread();
 
-  if (image.IsEmpty()) {
-    DLOG(WARNING) << "Failed to download doodle image";
-    Java_LogoObserver_onLogoAvailable(env, j_logo_observer_,
-                                      ScopedJavaLocalRef<jobject>(),
-                                      config_from_cache);
-    return;
+  ScopedJavaLocalRef<jobject> j_logo;
+  if (!image.IsEmpty()) {
+    j_logo = MakeJavaLogo(env, image.ToSkBitmap(), on_click_url, alt_text,
+                          animated_image_url);
   }
 
-  UMA_HISTOGRAM_BOOLEAN("NewTabPage.LogoImageDownloaded",
-                        metadata.from_http_cache);
-
-  ScopedJavaLocalRef<jobject> j_logo = MakeJavaLogo(
-      env, image.ToSkBitmap(), on_click_url, alt_text, animated_image_url);
   Java_LogoObserver_onLogoAvailable(env, j_logo_observer_, j_logo,
                                     config_from_cache);
 }

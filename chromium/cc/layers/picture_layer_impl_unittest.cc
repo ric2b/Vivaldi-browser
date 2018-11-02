@@ -161,7 +161,7 @@ class PictureLayerImplTest : public TestLayerTreeHostBase {
     gfx::Transform scale_transform;
     scale_transform.Scale(ideal_contents_scale, ideal_contents_scale);
     layer->draw_properties().screen_space_transform = scale_transform;
-    layer->set_is_drawn_render_surface_layer_list_member(true);
+    layer->set_contributes_to_drawn_render_surface(true);
     DCHECK_EQ(layer->GetIdealContentsScale(), ideal_contents_scale);
     layer->layer_tree_impl()->property_trees()->SetAnimationScalesForTesting(
         layer->transform_tree_index(), maximum_animation_contents_scale,
@@ -417,7 +417,8 @@ TEST_F(PictureLayerImplTest, ClonePartialInvalidation) {
                                     Region());
   ActivateTree();
   // Add a unique tiling on the active tree.
-  PictureLayerTiling* tiling = active_layer()->AddTiling(3.f);
+  PictureLayerTiling* tiling =
+      active_layer()->AddTiling(gfx::AxisTransform2d(3.f, gfx::Vector2dF()));
   tiling->set_resolution(HIGH_RESOLUTION);
   tiling->CreateAllTilesForTesting();
 
@@ -1230,9 +1231,12 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
   // The mask resource exists.
   ResourceId mask_resource_id;
   gfx::Size mask_texture_size;
-  active_mask->GetContentsResourceId(&mask_resource_id, &mask_texture_size);
+  gfx::SizeF mask_uv_size;
+  active_mask->GetContentsResourceId(&mask_resource_id, &mask_texture_size,
+                                     &mask_uv_size);
   EXPECT_NE(0u, mask_resource_id);
   EXPECT_EQ(active_mask->bounds(), mask_texture_size);
+  EXPECT_EQ(gfx::SizeF(1.0f, 1.0f), mask_uv_size);
 
   // Drop resources and recreate them, still the same.
   pending_mask->ReleaseTileResources();
@@ -1243,8 +1247,6 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
                                     false);
   active_mask->HighResTiling()->CreateAllTilesForTesting();
   EXPECT_EQ(1u, active_mask->HighResTiling()->AllTilesForTesting().size());
-  EXPECT_NE(0u, mask_resource_id);
-  EXPECT_EQ(active_mask->bounds(), mask_texture_size);
 
   // Resize larger than the max texture size.
   int max_texture_size = host_impl()->resource_provider()->max_texture_size();
@@ -1271,11 +1273,13 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
   // Mask layers have a tiling with a single tile in it.
   EXPECT_EQ(1u, active_mask->HighResTiling()->AllTilesForTesting().size());
   // The mask resource exists.
-  active_mask->GetContentsResourceId(&mask_resource_id, &mask_texture_size);
+  active_mask->GetContentsResourceId(&mask_resource_id, &mask_texture_size,
+                                     &mask_uv_size);
   EXPECT_NE(0u, mask_resource_id);
   gfx::Size expected_size = active_mask->bounds();
   expected_size.SetToMin(gfx::Size(max_texture_size, max_texture_size));
   EXPECT_EQ(expected_size, mask_texture_size);
+  EXPECT_EQ(gfx::SizeF(1.0f, 1.0f), mask_uv_size);
 
   // Drop resources and recreate them, still the same.
   pending_mask->ReleaseTileResources();
@@ -1293,9 +1297,11 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
   SetupPendingTree(huge_raster_source);
   ActivateTree();
   EXPECT_EQ(1u, active_mask->HighResTiling()->AllTilesForTesting().size());
-  active_layer()->GetContentsResourceId(&mask_resource_id, &mask_texture_size);
+  active_layer()->GetContentsResourceId(&mask_resource_id, &mask_texture_size,
+                                        &mask_uv_size);
   EXPECT_EQ(expected_size, mask_texture_size);
   EXPECT_EQ(0u, mask_resource_id);
+  EXPECT_EQ(gfx::SizeF(1.0f, 1.0f), mask_uv_size);
 
   // Resize even larger, so that the scale would be smaller than the minimum
   // contents scale. Then the layer should no longer have any tiling.
@@ -1360,11 +1366,14 @@ TEST_F(PictureLayerImplTest, ScaledMaskLayer) {
   // The mask resource exists.
   ResourceId mask_resource_id;
   gfx::Size mask_texture_size;
-  active_mask->GetContentsResourceId(&mask_resource_id, &mask_texture_size);
+  gfx::SizeF mask_uv_size;
+  active_mask->GetContentsResourceId(&mask_resource_id, &mask_texture_size,
+                                     &mask_uv_size);
   EXPECT_NE(0u, mask_resource_id);
   gfx::Size expected_mask_texture_size =
       gfx::ScaleToCeiledSize(active_mask->bounds(), 1.3f);
   EXPECT_EQ(mask_texture_size, expected_mask_texture_size);
+  EXPECT_EQ(gfx::SizeF(1.0f, 1.0f), mask_uv_size);
 }
 
 TEST_F(PictureLayerImplTest, ReleaseTileResources) {
@@ -2133,7 +2142,7 @@ TEST_F(PictureLayerImplTest, ActivateUninitializedLayer) {
                                                    pending_raster_source);
   pending_layer->SetDrawsContent(true);
   pending_tree->SetRootLayerForTesting(std::move(pending_layer));
-  pending_tree->BuildLayerListForTesting();
+  pending_tree->BuildLayerListAndPropertyTreesForTesting();
 
   FakePictureLayerImpl* raw_pending_layer = static_cast<FakePictureLayerImpl*>(
       host_impl()->pending_tree()->LayerById(layer_id()));
@@ -2352,7 +2361,7 @@ TEST_F(PictureLayerImplTest, SyncTilingAfterGpuRasterizationToggles) {
   host_impl()->SetHasGpuRasterizationTrigger(true);
   host_impl()->SetContentIsSuitableForGpuRasterization(false);
   host_impl()->CommitComplete();
-  EXPECT_EQ(GpuRasterizationStatus::OFF_CONTENT,
+  EXPECT_EQ(GpuRasterizationStatus::ON,
             host_impl()->gpu_rasterization_status());
 }
 
@@ -3570,9 +3579,9 @@ TEST_F(PictureLayerImplTest, SharedQuadStateContainsMaxTilingScale) {
                 ->quad_to_target_transform.ToString());
   // The content_bounds should be scaled by the
   // MaximumTilingContentsScale on the layer.
-  EXPECT_EQ(gfx::Size(2500u, 5000u).ToString(),
-            render_pass->shared_quad_state_list.front()
-                ->quad_layer_bounds.ToString());
+  EXPECT_EQ(
+      gfx::Rect(2500u, 5000u).ToString(),
+      render_pass->shared_quad_state_list.front()->quad_layer_rect.ToString());
   // The visible_layer_rect should be scaled by the
   // MaximumTilingContentsScale on the layer.
   EXPECT_EQ(gfx::Rect(0u, 0u, 2500u, 5000u).ToString(),
@@ -3929,11 +3938,21 @@ TEST_F(OcclusionTrackingPictureLayerImplTest, OcclusionForDifferentScales) {
 
   pending_layer()->tilings()->RemoveAllTilings();
   float low_res_factor = host_impl()->settings().low_res_contents_scale_factor;
-  pending_layer()->AddTiling(low_res_factor)->set_resolution(LOW_RESOLUTION);
-  pending_layer()->AddTiling(0.3f)->set_resolution(HIGH_RESOLUTION);
-  pending_layer()->AddTiling(0.7f)->set_resolution(HIGH_RESOLUTION);
-  pending_layer()->AddTiling(1.0f)->set_resolution(HIGH_RESOLUTION);
-  pending_layer()->AddTiling(2.0f)->set_resolution(HIGH_RESOLUTION);
+  pending_layer()
+      ->AddTiling(gfx::AxisTransform2d(low_res_factor, gfx::Vector2dF()))
+      ->set_resolution(LOW_RESOLUTION);
+  pending_layer()
+      ->AddTiling(gfx::AxisTransform2d(0.3f, gfx::Vector2dF()))
+      ->set_resolution(HIGH_RESOLUTION);
+  pending_layer()
+      ->AddTiling(gfx::AxisTransform2d(0.7f, gfx::Vector2dF()))
+      ->set_resolution(HIGH_RESOLUTION);
+  pending_layer()
+      ->AddTiling(gfx::AxisTransform2d(1.0f, gfx::Vector2dF()))
+      ->set_resolution(HIGH_RESOLUTION);
+  pending_layer()
+      ->AddTiling(gfx::AxisTransform2d(2.0f, gfx::Vector2dF()))
+      ->set_resolution(HIGH_RESOLUTION);
 
   RebuildPropertyTreesOnPendingTree();
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
@@ -4997,6 +5016,136 @@ TEST_F(PictureLayerImplTest, CompositedImageRasterScaleChanges) {
                         ->FindTilingWithResolution(HIGH_RESOLUTION)
                         ->contents_scale_key())
         << "ideal_contents_scale: " << ideal_contents_scale;
+  }
+}
+
+TEST_F(PictureLayerImplTest, ChangeRasterTranslationNukePendingLayerTiles) {
+  gfx::Size layer_bounds(200, 200);
+  gfx::Size tile_size(256, 256);
+  SetupDefaultTreesWithFixedTileSize(layer_bounds, tile_size, Region());
+  pending_layer()->SetUseTransformedRasterization(true);
+
+  // Start with scale & translation of * 2.25 + (0.25, 0.5).
+  SetupDrawProperties(pending_layer(), 2.25f, 1.5f, 1.f, 2.25f, 2.25f, false);
+  gfx::Transform translate1;
+  translate1.Translate(0.25f, 0.5f);
+  pending_layer()->draw_properties().screen_space_transform.ConcatTransform(
+      translate1);
+  pending_layer()->draw_properties().target_space_transform =
+      pending_layer()->draw_properties().screen_space_transform;
+  pending_layer()->UpdateTiles();
+  ASSERT_EQ(1u, pending_layer()->tilings()->num_tilings());
+  {
+    PictureLayerTiling* tiling = pending_layer()->tilings()->tiling_at(0);
+    EXPECT_EQ(gfx::AxisTransform2d(2.25f, gfx::Vector2dF(0.25f, 0.5f)),
+              tiling->raster_transform());
+    EXPECT_EQ(4u, tiling->AllTilesForTesting().size());
+    for (auto* tile : tiling->AllTilesForTesting())
+      EXPECT_EQ(tile->raster_transform(), tiling->raster_transform());
+  }
+
+  // Change to scale & translation of * 2.25 + (0.75, 0.25).
+  // Verifies there is a hysteresis that simple layer movement doesn't update
+  // raster translation.
+  SetupDrawProperties(pending_layer(), 2.25f, 1.5f, 1.f, 2.25f, 2.25f, false);
+  gfx::Transform translate2;
+  translate2.Translate(0.75f, 0.25f);
+  pending_layer()->draw_properties().screen_space_transform.ConcatTransform(
+      translate2);
+  pending_layer()->draw_properties().target_space_transform =
+      pending_layer()->draw_properties().screen_space_transform;
+  pending_layer()->UpdateTiles();
+  ASSERT_EQ(1u, pending_layer()->tilings()->num_tilings());
+  {
+    PictureLayerTiling* tiling = pending_layer()->tilings()->tiling_at(0);
+    EXPECT_EQ(gfx::AxisTransform2d(2.25f, gfx::Vector2dF(0.25f, 0.5f)),
+              tiling->raster_transform());
+    EXPECT_EQ(4u, tiling->AllTilesForTesting().size());
+    for (auto* tile : tiling->AllTilesForTesting())
+      EXPECT_EQ(tile->raster_transform(), tiling->raster_transform());
+  }
+
+  // Now change the device scale factor but keep the same total scale.
+  // Our policy recomputes raster translation only if raster scale is
+  // recomputed. Even if the recomputed scale remains the same, we still
+  // updates to new translation value. Old tiles with the same scale but
+  // different translation would become non-ideal and deleted on pending
+  // layers (in fact, delete ahead due to slot conflict with the new tiling).
+  SetupDrawProperties(pending_layer(), 2.25f, 1.0f, 1.f, 2.25f, 2.25f, false);
+  pending_layer()->draw_properties().screen_space_transform.ConcatTransform(
+      translate2);
+  pending_layer()->draw_properties().target_space_transform =
+      pending_layer()->draw_properties().screen_space_transform;
+  pending_layer()->UpdateTiles();
+  ASSERT_EQ(1u, pending_layer()->tilings()->num_tilings());
+  {
+    PictureLayerTiling* tiling = pending_layer()->tilings()->tiling_at(0);
+    EXPECT_EQ(gfx::AxisTransform2d(2.25f, gfx::Vector2dF(0.75f, 0.25f)),
+              tiling->raster_transform());
+    EXPECT_EQ(4u, tiling->AllTilesForTesting().size());
+    for (auto* tile : tiling->AllTilesForTesting())
+      EXPECT_EQ(tile->raster_transform(), tiling->raster_transform());
+  }
+}
+
+TEST_F(PictureLayerImplTest, ChangeRasterTranslationNukeActiveLayerTiles) {
+  gfx::Size layer_bounds(200, 200);
+  gfx::Size tile_size(256, 256);
+  SetupDefaultTreesWithFixedTileSize(layer_bounds, tile_size, Region());
+  active_layer()->SetUseTransformedRasterization(true);
+  pending_layer()->SetUseTransformedRasterization(true);
+
+  // Start with scale & translation of * 2.25 + (0.25, 0.5) on the active layer.
+  SetupDrawProperties(active_layer(), 2.25f, 1.5f, 1.f, 2.25f, 2.25f, false);
+  gfx::Transform translate1;
+  translate1.Translate(0.25f, 0.5f);
+  active_layer()->draw_properties().screen_space_transform.ConcatTransform(
+      translate1);
+  active_layer()->draw_properties().target_space_transform =
+      active_layer()->draw_properties().screen_space_transform;
+  active_layer()->UpdateTiles();
+  ASSERT_EQ(3u, active_layer()->tilings()->num_tilings());
+  {
+    PictureLayerTiling* tiling =
+        active_layer()->tilings()->FindTilingWithScaleKey(2.25f);
+    EXPECT_EQ(gfx::AxisTransform2d(2.25f, gfx::Vector2dF(0.25f, 0.5f)),
+              tiling->raster_transform());
+    EXPECT_EQ(4u, tiling->AllTilesForTesting().size());
+    for (auto* tile : tiling->AllTilesForTesting())
+      EXPECT_EQ(tile->raster_transform(), tiling->raster_transform());
+  }
+
+  // Create a pending layer with the same scale but different translation.
+  SetupDrawProperties(pending_layer(), 2.25f, 1.5f, 1.f, 2.25f, 2.25f, false);
+  gfx::Transform translate2;
+  translate2.Translate(0.75f, 0.25f);
+  pending_layer()->draw_properties().screen_space_transform.ConcatTransform(
+      translate2);
+  pending_layer()->draw_properties().target_space_transform =
+      pending_layer()->draw_properties().screen_space_transform;
+  pending_layer()->UpdateTiles();
+  ASSERT_EQ(1u, pending_layer()->tilings()->num_tilings());
+  {
+    PictureLayerTiling* tiling = pending_layer()->tilings()->tiling_at(0);
+    EXPECT_EQ(gfx::AxisTransform2d(2.25f, gfx::Vector2dF(0.75f, 0.25f)),
+              tiling->raster_transform());
+    EXPECT_EQ(4u, tiling->AllTilesForTesting().size());
+    for (auto* tile : tiling->AllTilesForTesting())
+      EXPECT_EQ(tile->raster_transform(), tiling->raster_transform());
+  }
+
+  // Now push to the active layer.
+  // Verifies the active tiles get evicted due to slot conflict.
+  host_impl()->ActivateSyncTree();
+  ASSERT_EQ(3u, active_layer()->tilings()->num_tilings());
+  {
+    PictureLayerTiling* tiling =
+        active_layer()->tilings()->FindTilingWithScaleKey(2.25f);
+    EXPECT_EQ(gfx::AxisTransform2d(2.25f, gfx::Vector2dF(0.75f, 0.25f)),
+              tiling->raster_transform());
+    EXPECT_EQ(4u, tiling->AllTilesForTesting().size());
+    for (auto* tile : tiling->AllTilesForTesting())
+      EXPECT_EQ(tile->raster_transform(), tiling->raster_transform());
   }
 }
 

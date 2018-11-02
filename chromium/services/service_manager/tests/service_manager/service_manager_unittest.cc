@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/guid.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
@@ -20,13 +21,13 @@
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
 #include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/pending_process_connection.h"
+#include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_test.h"
 #include "services/service_manager/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/interfaces/service_manager.mojom.h"
@@ -37,14 +38,13 @@ namespace service_manager {
 
 namespace {
 
-class ServiceManagerTestClient
-    : public test::ServiceTestClient,
-      public InterfaceFactory<test::mojom::CreateInstanceTest>,
-      public test::mojom::CreateInstanceTest {
+class ServiceManagerTestClient : public test::ServiceTestClient,
+                                 public test::mojom::CreateInstanceTest {
  public:
   explicit ServiceManagerTestClient(test::ServiceTest* test)
       : test::ServiceTestClient(test), binding_(this) {
-    registry_.AddInterface<test::mojom::CreateInstanceTest>(this);
+    registry_.AddInterface<test::mojom::CreateInstanceTest>(
+        base::Bind(&ServiceManagerTestClient::Create, base::Unretained(this)));
   }
   ~ServiceManagerTestClient() override {}
 
@@ -57,16 +57,15 @@ class ServiceManagerTestClient
 
  private:
   // test::ServiceTestClient:
-  void OnBindInterface(const ServiceInfo& source_info,
+  void OnBindInterface(const BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(source_info.identity, interface_name,
+    registry_.BindInterface(source_info, interface_name,
                             std::move(interface_pipe));
   }
 
-  // InterfaceFactory<test::mojom::CreateInstanceTest>:
-  void Create(const Identity& remote_identity,
-              test::mojom::CreateInstanceTestRequest request) override {
+  void Create(const BindSourceInfo& source_info,
+              test::mojom::CreateInstanceTestRequest request) {
     binding_.Bind(std::move(request));
   }
 
@@ -86,6 +85,44 @@ class ServiceManagerTestClient
   mojo::Binding<test::mojom::CreateInstanceTest> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceManagerTestClient);
+};
+
+class SimpleService {
+ public:
+  explicit SimpleService(mojom::ServiceRequest request)
+      : context_(base::MakeUnique<ServiceImpl>(this), std::move(request)) {}
+  ~SimpleService() {}
+
+  Connector* connector() { return context_.connector(); }
+
+  void WaitForDisconnect() {
+    base::RunLoop loop;
+    connection_lost_closure_ = loop.QuitClosure();
+    loop.Run();
+  }
+
+ private:
+  class ServiceImpl : public Service {
+   public:
+    explicit ServiceImpl(SimpleService* service) : service_(service) {}
+    ~ServiceImpl() override {}
+
+    bool OnServiceManagerConnectionLost() override {
+      if (service_->connection_lost_closure_)
+        std::move(service_->connection_lost_closure_).Run();
+      return true;
+    }
+
+   private:
+    SimpleService* service_;
+
+    DISALLOW_COPY_AND_ASSIGN(ServiceImpl);
+  };
+
+  ServiceContext context_;
+  base::OnceClosure connection_lost_closure_;
+
+  DISALLOW_COPY_AND_ASSIGN(SimpleService);
 };
 
 }  // namespace
@@ -155,6 +192,21 @@ class ServiceManagerTest : public test::ServiceTest,
     service_failed_to_start_callback_ = callback;
   }
 
+  void WaitForInstanceToStart(const Identity& identity) {
+    base::RunLoop loop;
+    set_service_started_callback(base::Bind(
+        [](base::RunLoop* loop, const Identity* expected_identity,
+           const Identity& identity) {
+          EXPECT_EQ(expected_identity->name(), identity.name());
+          EXPECT_EQ(expected_identity->user_id(), identity.user_id());
+          EXPECT_EQ(expected_identity->instance(), identity.instance());
+          loop->Quit();
+        },
+        &loop, &identity));
+    loop.Run();
+    set_service_started_callback(ServiceStartedCallback());
+  }
+
   void StartTarget() {
     base::FilePath target_path;
     CHECK(base::PathService::Get(base::DIR_EXE, &target_path));
@@ -181,9 +233,9 @@ class ServiceManagerTest : public test::ServiceTest,
     platform_channel_pair.PrepareToPassClientHandleToChildProcess(
         &child_command_line, &handle_passing_info);
 
-    mojo::edk::PendingProcessConnection process_connection;
+    mojo::edk::OutgoingBrokerClientInvitation invitation;
     service_manager::mojom::ServicePtr client =
-        service_manager::PassServiceRequestOnCommandLine(&process_connection,
+        service_manager::PassServiceRequestOnCommandLine(&invitation,
                                                          &child_command_line);
     service_manager::mojom::PIDReceiverPtr receiver;
 
@@ -204,9 +256,10 @@ class ServiceManagerTest : public test::ServiceTest,
     target_ = base::LaunchProcess(child_command_line, options);
     DCHECK(target_.IsValid());
     receiver->SetPID(target_.Pid());
-    process_connection.Connect(
+    invitation.Send(
         target_.Handle(),
-        mojo::edk::ConnectionParams(platform_channel_pair.PassServerHandle()));
+        mojo::edk::ConnectionParams(mojo::edk::TransportProtocol::kLegacy,
+                                    platform_channel_pair.PassServerHandle()));
   }
 
   void KillTarget() {
@@ -361,6 +414,42 @@ TEST_F(ServiceManagerTest, CreatePackagedSingletonInstance) {
     EXPECT_EQ(1, start_count);
     EXPECT_EQ("service_manager_unittest_singleton", service_name);
   }
+}
+
+TEST_F(ServiceManagerTest, ClientProcessCapabilityEnforced) {
+  AddListenerAndWaitForApplications();
+
+  const std::string kTestService = "service_manager_unittest_target";
+  const Identity kInstance1Id(kTestService, mojom::kRootUserID, "1");
+  const Identity kInstance2Id(kTestService, mojom::kRootUserID);
+
+  // Introduce a new service instance for service_manager_unittest_target,
+  // using the client_process capability.
+  mojom::ServicePtr test_service_proxy1;
+  SimpleService test_service1(mojo::MakeRequest(&test_service_proxy1));
+  mojom::PIDReceiverPtr pid_receiver1;
+  connector()->StartService(kInstance1Id, std::move(test_service_proxy1),
+                            mojo::MakeRequest(&pid_receiver1));
+  pid_receiver1->SetPID(42);
+  WaitForInstanceToStart(kInstance1Id);
+  EXPECT_EQ(1u, instances().size());
+  EXPECT_TRUE(ContainsInstanceWithName("service_manager_unittest_target"));
+
+  // Now use the new instance (which does not have client_process capability)
+  // to attempt introduction of yet another instance. This should fail.
+  mojom::ServicePtr test_service_proxy2;
+  SimpleService test_service2(mojo::MakeRequest(&test_service_proxy2));
+  mojom::PIDReceiverPtr pid_receiver2;
+  test_service1.connector()->StartService(kInstance2Id,
+                                          std::move(test_service_proxy2),
+                                          mojo::MakeRequest(&pid_receiver2));
+  pid_receiver2->SetPID(43);
+
+  // The new service should be disconnected immediately.
+  test_service2.WaitForDisconnect();
+
+  // And still only one service instance around.
+  EXPECT_EQ(1u, instances().size());
 }
 
 }  // namespace service_manager

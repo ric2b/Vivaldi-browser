@@ -33,11 +33,11 @@
 #include <algorithm>
 #include <utility>
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
-#include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/V8Window.h"
 #include "platform/Histogram.h"
 #include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/V8DOMWrapper.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/wtf/Assertions.h"
 #include "v8/include/v8.h"
@@ -125,7 +125,6 @@ void RemoteWindowProxy::SetupWindowPrototypeChain() {
 
   // The global proxy object.  Note this is not the global object.
   v8::Local<v8::Object> global_proxy = global_proxy_.NewLocal(GetIsolate());
-  CHECK(global_proxy_ == global_proxy);
   V8DOMWrapper::SetNativeInfo(GetIsolate(), global_proxy, wrapper_type_info,
                               window);
   // Mark the handle to be traced by Oilpan, since the global proxy has a

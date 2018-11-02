@@ -5,13 +5,15 @@
 #ifndef Modulator_h
 #define Modulator_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
-#include "bindings/core/v8/V8PerContextData.h"
 #include "core/CoreExport.h"
+#include "core/dom/AncestorList.h"
+#include "platform/bindings/ScriptWrappable.h"
+#include "platform/bindings/V8PerContextData.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/AccessControlStatus.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
+#include "platform/wtf/text/TextPosition.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -29,9 +31,16 @@ class WebTaskRunner;
 // A SingleModuleClient is notified when single module script node (node as in a
 // module tree graph) load is complete and its corresponding entry is created in
 // module map.
-class SingleModuleClient : public GarbageCollectedMixin {
+class CORE_EXPORT SingleModuleClient : public GarbageCollectedMixin {
  public:
   virtual void NotifyModuleLoadFinished(ModuleScript*) = 0;
+};
+
+// A ModuleTreeClient is notified when a module script and its whole descendent
+// tree load is complete.
+class CORE_EXPORT ModuleTreeClient : public GarbageCollectedMixin {
+ public:
+  virtual void NotifyModuleTreeLoadFinished(ModuleScript*) = 0;
 };
 
 // spec: "top-level module fetch flag"
@@ -61,24 +70,51 @@ class CORE_EXPORT Modulator : public GarbageCollectedFinalized<Modulator>,
   virtual WebTaskRunner* TaskRunner() = 0;
   virtual ReferrerPolicy GetReferrerPolicy() = 0;
   virtual SecurityOrigin* GetSecurityOrigin() = 0;
+  virtual ScriptState* GetScriptState() = 0;
+
+  // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-module-script-tree
+  virtual void FetchTree(const ModuleScriptFetchRequest&,
+                         ModuleTreeClient*) = 0;
+
+  // https://html.spec.whatwg.org/#internal-module-script-graph-fetching-procedure
+  virtual void FetchTreeInternal(const ModuleScriptFetchRequest&,
+                                 const AncestorList&,
+                                 ModuleGraphLevel,
+                                 ModuleTreeClient*) = 0;
+
+  // Asynchronously retrieve a module script from the module map, or fetch it
+  // and put it in the map if it's not there already.
+  // https://html.spec.whatwg.org/#fetch-a-single-module-script
+  virtual void FetchSingle(const ModuleScriptFetchRequest&,
+                           ModuleGraphLevel,
+                           SingleModuleClient*) = 0;
+
+  virtual void FetchDescendantsForInlineScript(ModuleScript*,
+                                               ModuleTreeClient*) = 0;
 
   // Synchronously retrieves a single module script from existing module map
   // entry.
+  // Note: returns nullptr if the module map entry is still "fetching".
   virtual ModuleScript* GetFetchedModuleScript(const KURL&) = 0;
 
   // https://html.spec.whatwg.org/#resolve-a-module-specifier
   static KURL ResolveModuleSpecifier(const String& module_request,
                                      const KURL& base_url);
 
+  virtual bool HasValidContext() = 0;
+
   virtual ScriptModule CompileModule(const String& script,
                                      const String& url_str,
-                                     AccessControlStatus) = 0;
+                                     AccessControlStatus,
+                                     const TextPosition&) = 0;
 
   virtual ScriptValue InstantiateModule(ScriptModule) = 0;
 
+  virtual ScriptValue GetInstantiationError(const ModuleScript*) = 0;
+
   virtual Vector<String> ModuleRequestsFromScriptModule(ScriptModule) = 0;
 
-  virtual void ExecuteModule(ScriptModule) = 0;
+  virtual void ExecuteModule(const ModuleScript*) = 0;
 
  private:
   friend class ModuleMap;

@@ -7,10 +7,10 @@
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/surface_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
+#include "cc/surfaces/compositor_frame_sink_support.h"
 #include "cc/surfaces/surface_aggregator.h"
-#include "cc/surfaces/surface_factory.h"
-#include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surface_manager.h"
+#include "cc/test/compositor_frame_helpers.h"
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/fake_resource_provider.h"
 #include "cc/test/test_context_provider.h"
@@ -21,14 +21,12 @@
 namespace cc {
 namespace {
 
-static const base::UnguessableToken kArbitraryToken =
-    base::UnguessableToken::Create();
+constexpr bool kIsRoot = true;
+constexpr bool kIsChildRoot = false;
+constexpr bool kHandlesFrameSinkIdInvalidation = true;
+constexpr bool kNeedsSyncPoints = true;
 
-class EmptySurfaceFactoryClient : public SurfaceFactoryClient {
- public:
-  void ReturnResources(const ReturnedResourceArray& resources) override {}
-  void SetBeginFrameSource(BeginFrameSource* begin_frame_source) override {}
-};
+const base::UnguessableToken kArbitraryToken = base::UnguessableToken::Create();
 
 class SurfaceAggregatorPerfTest : public testing::Test {
  public:
@@ -47,16 +45,22 @@ class SurfaceAggregatorPerfTest : public testing::Test {
                bool optimize_damage,
                bool full_damage,
                const std::string& name) {
-    std::vector<std::unique_ptr<SurfaceFactory>> child_factories(num_surfaces);
-    for (int i = 0; i < num_surfaces; i++)
-      child_factories[i].reset(
-          new SurfaceFactory(FrameSinkId(1, i + 1), &manager_, &empty_client_));
+    std::vector<std::unique_ptr<CompositorFrameSinkSupport>> child_supports(
+        num_surfaces);
+    for (int i = 0; i < num_surfaces; i++) {
+      child_supports[i] = CompositorFrameSinkSupport::Create(
+          nullptr, &manager_, FrameSinkId(1, i + 1), kIsChildRoot,
+          kHandlesFrameSinkIdInvalidation, kNeedsSyncPoints);
+    }
     aggregator_.reset(new SurfaceAggregator(&manager_, resource_provider_.get(),
                                             optimize_damage));
     for (int i = 0; i < num_surfaces; i++) {
       LocalSurfaceId local_surface_id(i + 1, kArbitraryToken);
+
       std::unique_ptr<RenderPass> pass(RenderPass::Create());
-      CompositorFrame frame;
+      pass->output_rect = gfx::Rect(0, 0, 1, 2);
+
+      CompositorFrame frame = test::MakeEmptyCompositorFrame();
 
       SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
       for (int j = 0; j < num_textures; j++) {
@@ -67,11 +71,11 @@ class SurfaceAggregatorPerfTest : public testing::Test {
 
         TextureDrawQuad* quad =
             pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
-        const gfx::Rect rect(0, 0, 1, 1);
+        const gfx::Rect rect(0, 0, 1, 2);
         const gfx::Rect opaque_rect;
         // Half of rects should be visible with partial damage.
         gfx::Rect visible_rect =
-            j % 2 == 0 ? gfx::Rect(0, 0, 1, 1) : gfx::Rect(1, 1, 1, 1);
+            j % 2 == 0 ? gfx::Rect(0, 0, 1, 2) : gfx::Rect(0, 1, 1, 1);
         bool needs_blending = false;
         bool premultiplied_alpha = false;
         const gfx::PointF uv_top_left;
@@ -97,16 +101,18 @@ class SurfaceAggregatorPerfTest : public testing::Test {
       }
 
       frame.render_pass_list.push_back(std::move(pass));
-      child_factories[i]->SubmitCompositorFrame(
-          local_surface_id, std::move(frame), SurfaceFactory::DrawCallback());
+      child_supports[i]->SubmitCompositorFrame(local_surface_id,
+                                               std::move(frame));
     }
 
-    SurfaceFactory root_factory(FrameSinkId(1, num_surfaces + 1), &manager_,
-                                &empty_client_);
+    std::unique_ptr<CompositorFrameSinkSupport> root_support =
+        CompositorFrameSinkSupport::Create(
+            nullptr, &manager_, FrameSinkId(1, num_surfaces + 1), kIsRoot,
+            kHandlesFrameSinkIdInvalidation, kNeedsSyncPoints);
     timer_.Reset();
     do {
       std::unique_ptr<RenderPass> pass(RenderPass::Create());
-      CompositorFrame frame;
+      CompositorFrame frame = test::MakeEmptyCompositorFrame();
 
       SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
       SurfaceDrawQuad* surface_quad =
@@ -117,6 +123,8 @@ class SurfaceAggregatorPerfTest : public testing::Test {
                     LocalSurfaceId(num_surfaces, kArbitraryToken)),
           SurfaceDrawQuadType::PRIMARY, nullptr);
 
+      pass->output_rect = gfx::Rect(0, 0, 100, 100);
+
       if (full_damage)
         pass->damage_rect = gfx::Rect(0, 0, 100, 100);
       else
@@ -124,9 +132,8 @@ class SurfaceAggregatorPerfTest : public testing::Test {
 
       frame.render_pass_list.push_back(std::move(pass));
 
-      root_factory.SubmitCompositorFrame(
-          LocalSurfaceId(num_surfaces + 1, kArbitraryToken), std::move(frame),
-          SurfaceFactory::DrawCallback());
+      root_support->SubmitCompositorFrame(
+          LocalSurfaceId(num_surfaces + 1, kArbitraryToken), std::move(frame));
 
       CompositorFrame aggregated = aggregator_->Aggregate(
           SurfaceId(FrameSinkId(1, num_surfaces + 1),
@@ -137,13 +144,12 @@ class SurfaceAggregatorPerfTest : public testing::Test {
     perf_test::PrintResult("aggregator_speed", "", name, timer_.LapsPerSecond(),
                            "runs/s", true);
     for (int i = 0; i < num_surfaces; i++)
-      child_factories[i]->EvictSurface();
-    root_factory.EvictSurface();
+      child_supports[i]->EvictCurrentSurface();
+    root_support->EvictCurrentSurface();
   }
 
  protected:
   SurfaceManager manager_;
-  EmptySurfaceFactoryClient empty_client_;
   scoped_refptr<TestContextProvider> context_provider_;
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<ResourceProvider> resource_provider_;

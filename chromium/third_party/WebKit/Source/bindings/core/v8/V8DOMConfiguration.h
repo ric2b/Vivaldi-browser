@@ -30,9 +30,9 @@
 #define V8DOMConfiguration_h
 
 #include "bindings/core/v8/GeneratedCodeHelper.h"
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8DOMWrapper.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/CoreExport.h"
+#include "platform/bindings/V8DOMWrapper.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -83,10 +83,7 @@ class CORE_EXPORT V8DOMConfiguration final {
     const char* const name;
     v8::AccessorNameGetterCallback getter;
     v8::AccessorNameSetterCallback setter;
-    // TODO(vogelheim): This has to be removed too since it's only used in
-    //                  accessors.
-    // The accessor's 'result' is stored in a private property.
-    CachedPropertyKey cached_property_key;
+
     const WrapperTypeInfo* data;
     // v8::PropertyAttribute
     unsigned attribute : 8;
@@ -268,6 +265,7 @@ class CORE_EXPORT V8DOMConfiguration final {
     }
 
     v8::Local<v8::Symbol> (*get_symbol)(v8::Isolate*);
+    const char* const symbol_alias;
     v8::FunctionCallback callback;
     // SymbolKeyedMethodConfiguration doesn't support per-world bindings.
     int length;

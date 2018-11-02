@@ -15,6 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -62,10 +63,9 @@ class DownloadItemObserver : public DownloadItem::Observer,
                              public base::SupportsUserData::Data {
  public:
   explicit DownloadItemObserver(DownloadItem* download_item);
-
- private:
   ~DownloadItemObserver() override;
 
+ private:
   // DownloadItem::Observer
   void OnDownloadUpdated(DownloadItem* download) override;
   void OnDownloadDestroyed(DownloadItem* download) override;
@@ -219,6 +219,13 @@ PathValidationResult ValidatePathAndResolveConflicts(
       return PathValidationResult::NAME_TOO_LONG;
   }
 
+  // Disallow downloading a file onto itself. Assume that downloading a file
+  // onto another file that differs only by case is not enough of a legitimate
+  // edge case to justify determining the case sensitivity of the underlying
+  // filesystem.
+  if (*target_path == info.source_path)
+    return PathValidationResult::SAME_AS_SOURCE;
+
   if (!IsPathInUse(*target_path))
     return PathValidationResult::SUCCESS;
 
@@ -331,7 +338,7 @@ DownloadItemObserver::DownloadItemObserver(DownloadItem* download_item)
       last_target_path_(download_item->GetTargetFilePath()) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   download_item_->AddObserver(this);
-  download_item_->SetUserData(&kUserDataKey, this);
+  download_item_->SetUserData(&kUserDataKey, base::WrapUnique(this));
 }
 
 DownloadItemObserver::~DownloadItemObserver() {
@@ -347,8 +354,9 @@ void DownloadItemObserver::OnDownloadUpdated(DownloadItem* download) {
       // Update the reservation.
       base::FilePath new_target_path = download->GetTargetFilePath();
       if (new_target_path != last_target_path_) {
-        BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE, base::Bind(
-            &UpdateReservation, download, new_target_path));
+        BrowserThread::PostTask(
+            BrowserThread::FILE, FROM_HERE,
+            base::BindOnce(&UpdateReservation, download, new_target_path));
         last_target_path_ = new_target_path;
       }
       break;
@@ -367,8 +375,8 @@ void DownloadItemObserver::OnDownloadUpdated(DownloadItem* download) {
       // restarted. Holding on to the reservation now would prevent the name
       // from being used for a subsequent retry attempt.
 
-      BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE, base::Bind(
-          &RevokeReservation, download));
+      BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
+                              base::BindOnce(&RevokeReservation, download));
       download->RemoveUserData(&kUserDataKey);
       break;
 
@@ -381,8 +389,8 @@ void DownloadItemObserver::OnDownloadUpdated(DownloadItem* download) {
 void DownloadItemObserver::OnDownloadDestroyed(DownloadItem* download) {
   // Items should be COMPLETE/INTERRUPTED/CANCELLED before being destroyed.
   NOTREACHED();
-  BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE, base::Bind(
-      &RevokeReservation, download));
+  BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
+                          base::BindOnce(&RevokeReservation, download));
 }
 
 // static

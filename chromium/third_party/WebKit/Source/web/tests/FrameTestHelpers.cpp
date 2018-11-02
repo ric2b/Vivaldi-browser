@@ -30,6 +30,7 @@
 
 #include "web/tests/FrameTestHelpers.h"
 
+#include "core/frame/WebLocalFrameBase.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/testing/WebLayerTreeViewImplForTesting.h"
@@ -48,7 +49,6 @@
 #include "public/web/WebSettings.h"
 #include "public/web/WebTreeScopeType.h"
 #include "public/web/WebViewClient.h"
-#include "web/WebLocalFrameImpl.h"
 #include "web/WebRemoteFrameImpl.h"
 
 namespace blink {
@@ -72,7 +72,7 @@ namespace {
 //    progress, it exits the run loop.
 // 7. At this point, all parsing, resource loads, and layout should be finished.
 TestWebFrameClient* TestClientForFrame(WebFrame* frame) {
-  return static_cast<TestWebFrameClient*>(ToWebLocalFrameImpl(frame)->Client());
+  return static_cast<TestWebFrameClient*>(ToWebLocalFrameBase(frame)->Client());
 }
 
 void RunServeAsyncRequestsTask(TestWebFrameClient* client) {
@@ -92,11 +92,6 @@ TestWebFrameClient* DefaultWebFrameClient() {
 
 TestWebWidgetClient* DefaultWebWidgetClient() {
   DEFINE_STATIC_LOCAL(TestWebWidgetClient, client, ());
-  return &client;
-}
-
-TestWebViewClient* DefaultWebViewClient() {
-  DEFINE_STATIC_LOCAL(TestWebViewClient, client, ());
   return &client;
 }
 
@@ -154,7 +149,7 @@ WebMouseEvent CreateMouseEvent(WebInputEvent::Type type,
   return result;
 }
 
-WebLocalFrameImpl* CreateLocalChild(WebRemoteFrame* parent,
+WebLocalFrameBase* CreateLocalChild(WebRemoteFrame* parent,
                                     const WebString& name,
                                     WebFrameClient* client,
                                     WebWidgetClient* widget_client,
@@ -163,10 +158,10 @@ WebLocalFrameImpl* CreateLocalChild(WebRemoteFrame* parent,
   if (!client)
     client = DefaultWebFrameClient();
 
-  WebLocalFrameImpl* frame = ToWebLocalFrameImpl(parent->CreateLocalChild(
+  WebLocalFrameBase* frame = ToWebLocalFrameBase(parent->CreateLocalChild(
       WebTreeScopeType::kDocument, name, WebSandboxFlags::kNone, client,
       static_cast<TestWebFrameClient*>(client)->GetInterfaceProvider(), nullptr,
-      previous_sibling, properties, nullptr));
+      previous_sibling, WebParsedFeaturePolicy(), properties, nullptr));
 
   if (!widget_client)
     widget_client = DefaultWebWidgetClient();
@@ -178,9 +173,9 @@ WebLocalFrameImpl* CreateLocalChild(WebRemoteFrame* parent,
 WebRemoteFrameImpl* CreateRemoteChild(WebRemoteFrame* parent,
                                       WebRemoteFrameClient* client,
                                       const WebString& name) {
-  return ToWebRemoteFrameImpl(
-      parent->CreateRemoteChild(WebTreeScopeType::kDocument, name,
-                                WebSandboxFlags::kNone, client, nullptr));
+  return ToWebRemoteFrameImpl(parent->CreateRemoteChild(
+      WebTreeScopeType::kDocument, name, WebSandboxFlags::kNone,
+      WebParsedFeaturePolicy(), client, nullptr));
 }
 
 WebViewHelper::WebViewHelper(SettingOverrider* setting_overrider)
@@ -190,7 +185,7 @@ WebViewHelper::~WebViewHelper() {
   Reset();
 }
 
-WebViewImpl* WebViewHelper::InitializeWithOpener(
+WebViewBase* WebViewHelper::InitializeWithOpener(
     WebFrame* opener,
     bool enable_javascript,
     TestWebFrameClient* web_frame_client,
@@ -201,12 +196,14 @@ WebViewImpl* WebViewHelper::InitializeWithOpener(
 
   if (!web_frame_client)
     web_frame_client = DefaultWebFrameClient();
-  if (!web_view_client)
-    web_view_client = DefaultWebViewClient();
+  if (!web_view_client) {
+    owned_test_web_view_client_ = WTF::MakeUnique<TestWebViewClient>();
+    web_view_client = owned_test_web_view_client_.get();
+  }
   if (!web_widget_client)
     web_widget_client = web_view_client->WidgetClient();
-  web_view_ =
-      WebViewImpl::Create(web_view_client, kWebPageVisibilityStateVisible);
+  web_view_ = static_cast<WebViewBase*>(
+      WebView::Create(web_view_client, kWebPageVisibilityStateVisible));
   web_view_->GetSettings()->SetJavaScriptEnabled(enable_javascript);
   web_view_->GetSettings()->SetPluginsEnabled(true);
   // Enable (mocked) network loads of image URLs, as this simplifies
@@ -222,10 +219,11 @@ WebViewImpl* WebViewHelper::InitializeWithOpener(
   web_view_->SetDeviceScaleFactor(
       web_view_client->GetScreenInfo().device_scale_factor);
   web_view_->SetDefaultPageScaleLimits(1, 4);
-  WebLocalFrame* frame = WebLocalFrameImpl::Create(
+  WebLocalFrame* frame = WebLocalFrameBase::Create(
       WebTreeScopeType::kDocument, web_frame_client,
       web_frame_client->GetInterfaceProvider(), nullptr, opener);
   web_view_->SetMainFrame(frame);
+  web_frame_client->SetFrame(frame);
   // TODO(dcheng): The main frame widget currently has a special case.
   // Eliminate this once WebView is no longer a WebWidget.
   blink::WebFrameWidget::Create(web_widget_client, web_view_, frame);
@@ -235,7 +233,7 @@ WebViewImpl* WebViewHelper::InitializeWithOpener(
   return web_view_;
 }
 
-WebViewImpl* WebViewHelper::Initialize(
+WebViewBase* WebViewHelper::Initialize(
     bool enable_javascript,
     TestWebFrameClient* web_frame_client,
     TestWebViewClient* web_view_client,
@@ -246,7 +244,7 @@ WebViewImpl* WebViewHelper::Initialize(
                               update_settings_func);
 }
 
-WebViewImpl* WebViewHelper::InitializeAndLoad(
+WebViewBase* WebViewHelper::InitializeAndLoad(
     const std::string& url,
     bool enable_javascript,
     TestWebFrameClient* web_frame_client,
@@ -306,6 +304,7 @@ WebLocalFrame* TestWebFrameClient::CreateChildFrame(
     const WebString& name,
     const WebString& fallback_name,
     WebSandboxFlags sandbox_flags,
+    const WebParsedFeaturePolicy& container_policy,
     const WebFrameOwnerProperties& frame_owner_properties) {
   WebLocalFrame* frame =
       WebLocalFrame::Create(scope, this, GetInterfaceProvider(), nullptr);

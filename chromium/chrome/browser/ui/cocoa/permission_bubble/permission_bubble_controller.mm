@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_utils.h"
+#import "chrome/browser/ui/cocoa/bubble_anchor_helper.h"
 #import "chrome/browser/ui/cocoa/chrome_style.h"
 #import "chrome/browser/ui/cocoa/constrained_window/constrained_window_button.h"
 #import "chrome/browser/ui/cocoa/hover_close_button.h"
@@ -68,8 +69,6 @@ const CGFloat kButtonRightEdgePadding = 17.0f;
 const CGFloat kTitlePaddingX = 50.0f;
 const CGFloat kBubbleMinWidth = 315.0f;
 const NSSize kPermissionIconSize = {18, 18};
-
-const NSInteger kFullscreenLeftOffset = 40;
 
 }  // namespace
 
@@ -185,10 +184,6 @@ const NSInteger kFullscreenLeftOffset = 40;
 // Called when the 'close' button is pressed.
 - (void)onClose:(id)sender;
 
-// Returns the constant offset from the left to use for fullscreen permission
-// bubbles. Only used in tests.
-+ (NSInteger)getFullscreenLeftOffset;
-
 // Sets the width of both |viewA| and |viewB| to be the larger of the
 // two views' widths.  Does not change either view's origin or height.
 + (CGFloat)matchWidthsOf:(NSView*)viewA andOf:(NSView*)viewB;
@@ -233,43 +228,13 @@ const NSInteger kFullscreenLeftOffset = 40;
 }
 
 + (NSPoint)getAnchorPointForBrowser:(Browser*)browser {
-  NSPoint anchor;
-  NSWindow* parentWindow = browser->window()->GetNativeWindow();
-  if ([PermissionBubbleController hasVisibleLocationBarForBrowser:browser]) {
-    LocationBarViewMac* location_bar =
-        [[parentWindow windowController] locationBarBridge];
-    anchor = location_bar->GetPageInfoBubblePoint();
-  } else {
-    // Position the bubble on the left of the screen if there is no page info
-    // button to point at.
-    NSRect contentFrame = [[parentWindow contentView] frame];
-    anchor = NSMakePoint(NSMinX(contentFrame) + kFullscreenLeftOffset,
-                         NSMaxY(contentFrame));
-  }
-
-  return ui::ConvertPointFromWindowToScreen(parentWindow, anchor);
+  return GetPermissionBubbleAnchorPointForBrowser(
+      browser,
+      [PermissionBubbleController hasVisibleLocationBarForBrowser:browser]);
 }
 
 + (bool)hasVisibleLocationBarForBrowser:(Browser*)browser {
-  if (!browser->SupportsWindowFeature(Browser::FEATURE_LOCATIONBAR))
-    return false;
-
-  if (!browser->exclusive_access_manager()->context()->IsFullscreen())
-    return true;
-
-  // If the browser is in browser-initiated full screen, a preference can cause
-  // the toolbar to be hidden.
-  if (browser->exclusive_access_manager()
-          ->fullscreen_controller()
-          ->IsFullscreenForBrowser()) {
-    PrefService* prefs = browser->profile()->GetPrefs();
-    bool show_toolbar = prefs->GetBoolean(prefs::kShowFullscreenToolbar);
-    return show_toolbar;
-  }
-
-  // Otherwise this is fullscreen without a toolbar, so there is no visible
-  // location bar.
-  return false;
+  return HasVisibleLocationBarForBrowser(browser);
 }
 
 - (void)windowWillClose:(NSNotification*)notification {
@@ -316,12 +281,12 @@ const NSInteger kFullscreenLeftOffset = 40;
   [self setAnchorPoint:[self getExpectedAnchorPoint]];
 }
 
-- (void)showWithDelegate:(PermissionPrompt::Delegate*)delegate
-             forRequests:(const std::vector<PermissionRequest*>&)requests
-            acceptStates:(const std::vector<bool>&)acceptStates {
-  DCHECK(!requests.empty());
+- (void)showWithDelegate:(PermissionPrompt::Delegate*)delegate {
   DCHECK(delegate);
   delegate_ = delegate;
+
+  const std::vector<PermissionRequest*>& requests = delegate->Requests();
+  DCHECK(!requests.empty());
 
   NSView* contentView = [[self window] contentView];
   [contentView setSubviews:@[]];
@@ -358,10 +323,9 @@ const NSInteger kFullscreenLeftOffset = 40;
 
     if (!singlePermission) {
       int index = it - requests.begin();
-      base::scoped_nsobject<NSView> menu(
-          [[self menuForRequest:(*it)
-                        atIndex:index
-                          allow:acceptStates[index] ? YES : NO] retain]);
+      base::scoped_nsobject<NSView> menu([[self
+          menuForRequest:(*it)atIndex:index
+                   allow:delegate->AcceptStates()[index] ? YES : NO] retain]);
       // Align vertically.  Horizontal alignment will be adjusted once the
       // widest permission is know.
       [PermissionBubbleController alignCenterOf:menu
@@ -409,8 +373,10 @@ const NSInteger kFullscreenLeftOffset = 40;
                           NSWidth([closeButton frame]) +
                           chrome_style::kCloseButtonPadding;
 
-  bubbleFrame.size.width = std::max(
-      NSWidth(bubbleFrame), std::max(titleRowWidth, maxPermissionLineWidth));
+  bubbleFrame.size.width =
+      std::max(NSWidth(bubbleFrame),
+               std::max(titleRowWidth, maxPermissionLineWidth)) +
+      kHorizontalPadding;
 
   // Now that the bubble's dimensions have been set, lay out the buttons and
   // menus.
@@ -626,10 +592,6 @@ const NSInteger kFullscreenLeftOffset = 40;
 - (void)onClose:(id)sender {
   if (delegate_)
     delegate_->Closing();
-}
-
-+ (NSInteger)getFullscreenLeftOffset {
-  return kFullscreenLeftOffset;
 }
 
 - (void)activateTabWithContents:(content::WebContents*)newContents

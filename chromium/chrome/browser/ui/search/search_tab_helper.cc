@@ -22,10 +22,9 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/clipboard_utils.h"
-#include "chrome/browser/ui/search/instant_tab.h"
+#include "chrome/browser/ui/search/ntp_user_data_logger.h"
 #include "chrome/browser/ui/search/search_ipc_router_policy_impl.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
-#include "chrome/browser/ui/webui/ntp/ntp_user_data_logger.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browser_sync/profile_sync_service.h"
@@ -45,11 +44,9 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
-#include "content/public/common/referrer.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/base/net_errors.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(SearchTabHelper);
@@ -74,14 +71,6 @@ bool IsNTP(const content::WebContents* contents) {
   return search::IsInstantNTP(contents);
 }
 
-bool IsLocal(const content::WebContents* contents) {
-  if (!contents)
-    return false;
-  const content::NavigationEntry* entry =
-      contents->GetController().GetVisibleEntry();
-  return entry && entry->GetURL() == chrome::kChromeSearchLocalNtpUrl;
-}
-
 // Returns true if |contents| are rendered inside an Instant process.
 bool InInstantProcess(Profile* profile,
                       const content::WebContents* contents) {
@@ -104,17 +93,22 @@ void RecordNewTabLoadTime(content::WebContents* contents) {
 
   base::TimeDelta duration =
       base::TimeTicks::Now() - core_tab_helper->new_tab_start_time();
+  bool is_google = google_util::IsGoogleDomainUrl(
+      contents->GetController().GetLastCommittedEntry()->GetURL(),
+      google_util::ALLOW_SUBDOMAIN, google_util::DISALLOW_NON_STANDARD_PORTS);
   if (IsCacheableNTP(contents)) {
-    if (google_util::IsGoogleDomainUrl(
-        contents->GetController().GetLastCommittedEntry()->GetURL(),
-        google_util::ALLOW_SUBDOMAIN,
-        google_util::DISALLOW_NON_STANDARD_PORTS)) {
+    if (is_google) {
       UMA_HISTOGRAM_TIMES("Tab.NewTabOnload.Google", duration);
     } else {
       UMA_HISTOGRAM_TIMES("Tab.NewTabOnload.Other", duration);
     }
   } else {
     UMA_HISTOGRAM_TIMES("Tab.NewTabOnload.Local", duration);
+    if (is_google) {
+      UMA_HISTOGRAM_TIMES("Tab.NewTabOnload.LocalGoogle", duration);
+    } else {
+      UMA_HISTOGRAM_TIMES("Tab.NewTabOnload.LocalOther", duration);
+    }
   }
   core_tab_helper->set_new_tab_start_time(base::TimeTicks());
 }
@@ -136,10 +130,9 @@ SearchTabHelper::SearchTabHelper(content::WebContents* web_contents)
     : WebContentsObserver(web_contents),
       is_search_enabled_(search::IsInstantExtendedAPIEnabled()),
       web_contents_(web_contents),
-      ipc_router_(
-          web_contents,
-          this,
-          base::WrapUnique(new SearchIPCRouterPolicyImpl(web_contents))),
+      ipc_router_(web_contents,
+                  this,
+                  base::MakeUnique<SearchIPCRouterPolicyImpl>(web_contents)),
       instant_service_(nullptr) {
   if (!is_search_enabled_)
     return;
@@ -160,7 +153,7 @@ void SearchTabHelper::OmniboxInputStateChanged() {
   if (!is_search_enabled_)
     return;
 
-  UpdateMode(false);
+  UpdateMode(/*update_origin=*/false);
 }
 
 void SearchTabHelper::OmniboxFocusChanged(OmniboxFocusState state,
@@ -183,7 +176,7 @@ void SearchTabHelper::NavigationEntryUpdated() {
   if (!is_search_enabled_)
     return;
 
-  UpdateMode(false);
+  UpdateMode(/*update_origin=*/false);
 }
 
 void SearchTabHelper::SetSuggestionToPrefetch(
@@ -191,9 +184,8 @@ void SearchTabHelper::SetSuggestionToPrefetch(
   ipc_router_.SetSuggestionToPrefetch(suggestion);
 }
 
-void SearchTabHelper::Submit(const base::string16& text,
-                             const EmbeddedSearchRequestParams& params) {
-  ipc_router_.Submit(text, params);
+void SearchTabHelper::Submit(const EmbeddedSearchRequestParams& params) {
+  ipc_router_.Submit(params);
 }
 
 void SearchTabHelper::OnTabActivated() {
@@ -298,8 +290,6 @@ void SearchTabHelper::DidFinishLoad(content::RenderFrameHost* render_frame_host,
   if (!render_frame_host->GetParent()) {
     if (search::IsInstantNTP(web_contents_))
       RecordNewTabLoadTime(web_contents_);
-
-    DetermineIfPageSupportsInstant();
   }
 }
 
@@ -311,20 +301,10 @@ void SearchTabHelper::NavigationEntryCommitted(
   if (!load_details.is_main_frame)
     return;
 
-  UpdateMode(true);
-
-  content::NavigationEntry* entry =
-      web_contents_->GetController().GetVisibleEntry();
-  DCHECK(entry);
-
-  model_.SetInstantSupportState(INSTANT_SUPPORT_UNKNOWN);
+  UpdateMode(/*update_origin=*/true);
 
   if (InInstantProcess(profile(), web_contents_))
     ipc_router_.OnNavigationEntryCommitted();
-}
-
-void SearchTabHelper::OnInstantSupportDetermined(bool supports_instant) {
-  InstantSupportChanged(supports_instant);
 }
 
 void SearchTabHelper::ThemeInfoChanged(const ThemeBackgroundInfo& theme_info) {
@@ -468,16 +448,6 @@ void SearchTabHelper::OnHistorySyncCheck() {
   ipc_router_.SendHistorySyncCheckResult(IsHistorySyncEnabled(profile()));
 }
 
-void SearchTabHelper::InstantSupportChanged(bool instant_support) {
-  if (!is_search_enabled_)
-    return;
-
-  InstantSupportState new_state = instant_support ? INSTANT_SUPPORT_YES :
-      INSTANT_SUPPORT_NO;
-
-  model_.SetInstantSupportState(new_state);
-}
-
 void SearchTabHelper::UpdateMode(bool update_origin) {
   SearchMode::Type type = SearchMode::MODE_DEFAULT;
   SearchMode::Origin origin = SearchMode::ORIGIN_DEFAULT;
@@ -496,21 +466,6 @@ void SearchTabHelper::UpdateMode(bool update_origin) {
   model_.SetMode(SearchMode(type, origin));
   if (old_mode.is_ntp() != model_.mode().is_ntp()) {
     ipc_router_.SetInputInProgress(IsInputInProgress());
-  }
-}
-
-void SearchTabHelper::DetermineIfPageSupportsInstant() {
-  if (!InInstantProcess(profile(), web_contents_)) {
-    // The page is not in the Instant process. This page does not support
-    // instant. If we send an IPC message to a page that is not in the Instant
-    // process, it will never receive it and will never respond. Therefore,
-    // return immediately.
-    InstantSupportChanged(false);
-  } else if (IsLocal(web_contents_)) {
-    // Local pages always support Instant.
-    InstantSupportChanged(true);
-  } else {
-    ipc_router_.DetermineIfPageSupportsInstant();
   }
 }
 

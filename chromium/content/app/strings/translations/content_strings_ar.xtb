@@ -140,7 +140,7 @@
 <translation id="6790428901817661496">التشغيل</translation>
 <translation id="6820355525329141109">تعذر تحميل المكوّن الإضافي.</translation>
 <translation id="6843725295806269523">كتم الصوت</translation>
-<translation id="6853785296079745596">إخفاء التسميات التوضيحية المغلقة</translation>
+<translation id="6853785296079745596">إخفاء الترجمة والشرح</translation>
 <translation id="6885760532393684712">الدليل</translation>
 <translation id="6934078000481955284">علامة اقتباس فقرة</translation>
 <translation id="6941933287844615239">تنزيل وسائط</translation>
@@ -156,7 +156,7 @@
 <translation id="7514365320538308">تنزيل</translation>
 <translation id="7673697353781729403">ساعات</translation>
 <translation id="7720026100085573005">المدة المتبقية</translation>
-<translation id="7740016676195725605">إيقاف عرض التسميات التوضيحية المغلقة</translation>
+<translation id="7740016676195725605">إيقاف عرض الترجمة والشرح</translation>
 <translation id="7740050170769002709">‏محتوى HTML</translation>
 <translation id="7789962463072032349">إيقاف مؤقت</translation>
 <translation id="7802800022689234070">مثلث الإفصاح</translation>
@@ -164,13 +164,13 @@
 <translation id="7891486169920085145">أداة التقسيم</translation>
 <translation id="795667975304826397">ّلم يتمّ اختيار أيّ ملفّ</translation>
 <translation id="8053789581856978548">الحقل النصي للبحث</translation>
-<translation id="8115662671911883373">بدء عرض التسميات التوضيحية المغلقة</translation>
+<translation id="8115662671911883373">بدء عرض الترجمة والشرح</translation>
 <translation id="8117451130807776954">هذا الأسبوع</translation>
 <translation id="8141602879876242471">يمكن البحث في هذا الفهرس بإدخال كلمات مفتاحية:</translation>
 <translation id="819205353528511139">تشغيل الفيلم في وضع ملء الشاشة</translation>
 <translation id="8199524924445686405">سنة</translation>
 <translation id="8244226242650769279">مخطّط صورة</translation>
-<translation id="8284326494547611709">التسميات التوضيحية</translation>
+<translation id="8284326494547611709">الترجمة والشرح</translation>
 <translation id="835897206747267392">قيمة غير صحيحة</translation>
 <translation id="8433900881053900389">شريط الأدوات</translation>
 <translation id="8444882422881193423">عدد الملفات: <ph name="NUMBER_OF_FILES" /></translation>
@@ -190,7 +190,7 @@
 <translation id="8987927404178983737">شهر</translation>
 <translation id="901493112792887934">المدة الحالية بالثواني</translation>
 <translation id="9048119486235211610">تنقل</translation>
-<translation id="9050748414552849310">عرض التسميات التوضيحية المغلقة</translation>
+<translation id="9050748414552849310">عرض الترجمة والشرح</translation>
 <translation id="9062295712474918030">المستند</translation>
 <translation id="9108370397979208512">math</translation>
 <translation id="9132465097189459683">آخر...</translation>

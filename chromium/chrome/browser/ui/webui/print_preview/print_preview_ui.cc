@@ -66,6 +66,8 @@ const char kBasicPrintShortcut[] = "\x28\xE2\x8c\xA5\xE2\x8C\x98\x50\x29";
 const char kBasicPrintShortcut[] = "(Ctrl+Shift+P)";
 #endif
 
+PrintPreviewUI::TestingDelegate* g_testing_delegate = nullptr;
+
 // Thread-safe wrapper around a std::map to keep track of mappings from
 // PrintPreviewUI IDs to most recent print preview request IDs.
 class PrintPreviewRequestIdMapWithLock {
@@ -336,9 +338,6 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
   source->AddLocalizedString("offlineForWeek",
                              IDS_PRINT_PREVIEW_OFFLINE_FOR_WEEK);
   source->AddLocalizedString("offline", IDS_PRINT_PREVIEW_OFFLINE);
-  source->AddLocalizedString("fedexTos", IDS_PRINT_PREVIEW_FEDEX_TOS);
-  source->AddLocalizedString("tosCheckboxLabel",
-                             IDS_PRINT_PREVIEW_TOS_CHECKBOX_LABEL);
   source->AddLocalizedString("noDestsPromoTitle",
                              IDS_PRINT_PREVIEW_NO_DESTS_PROMO_TITLE);
   source->AddLocalizedString("noDestsPromoBody",
@@ -396,8 +395,6 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
                           IDR_PRINT_PREVIEW_IMAGES_ENTERPRISE_PRINTER);
   source->AddResourcePath("images/third_party.png",
                           IDR_PRINT_PREVIEW_IMAGES_THIRD_PARTY);
-  source->AddResourcePath("images/third_party_fedex.png",
-                          IDR_PRINT_PREVIEW_IMAGES_THIRD_PARTY_FEDEX);
   source->AddResourcePath("images/google_doc.png",
                           IDR_PRINT_PREVIEW_IMAGES_GOOGLE_DOC);
   source->AddResourcePath("images/pdf.png", IDR_PRINT_PREVIEW_IMAGES_PDF);
@@ -416,13 +413,13 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
   source->AddLocalizedString("moreOptionsLabel", IDS_MORE_OPTIONS_LABEL);
   source->AddLocalizedString("lessOptionsLabel", IDS_LESS_OPTIONS_LABEL);
 
-  bool scaling_enabled = base::FeatureList::IsEnabled(features::kPrintScaling);
-  source->AddBoolean("scalingEnabled", scaling_enabled);
-
+#if !defined(OS_MACOSX) && !defined(OS_WIN)
   bool print_pdf_as_image_enabled = base::FeatureList::IsEnabled(
       features::kPrintPdfAsImage);
   source->AddBoolean("printPdfAsImageEnabled", print_pdf_as_image_enabled);
-
+#else
+  source->AddBoolean("printPdfAsImageEnabled", false);
+#endif
 #if defined(OS_CHROMEOS)
   bool cups_and_md_settings_enabled =
       !base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -433,8 +430,6 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
 #endif
   return source;
 }
-
-PrintPreviewUI::TestingDelegate* g_testing_delegate = NULL;
 
 }  // namespace
 
@@ -463,29 +458,31 @@ PrintPreviewUI::PrintPreviewUI(content::WebUI* web_ui)
 }
 
 PrintPreviewUI::~PrintPreviewUI() {
-  print_preview_data_service()->RemoveEntry(id_);
+  PrintPreviewDataService::GetInstance()->RemoveEntry(id_);
   g_print_preview_request_id_map.Get().Erase(id_);
   g_print_preview_ui_id_map.Get().Remove(id_);
 }
 
 void PrintPreviewUI::GetPrintPreviewDataForIndex(
     int index,
-    scoped_refptr<base::RefCountedBytes>* data) {
-  print_preview_data_service()->GetDataEntry(id_, index, data);
+    scoped_refptr<base::RefCountedBytes>* data) const {
+  PrintPreviewDataService::GetInstance()->GetDataEntry(id_, index, data);
 }
 
 void PrintPreviewUI::SetPrintPreviewDataForIndex(
     int index,
     scoped_refptr<base::RefCountedBytes> data) {
-  print_preview_data_service()->SetDataEntry(id_, index, std::move(data));
+  PrintPreviewDataService::GetInstance()->SetDataEntry(id_, index,
+                                                       std::move(data));
 }
 
 void PrintPreviewUI::ClearAllPreviewData() {
-  print_preview_data_service()->RemoveEntry(id_);
+  PrintPreviewDataService::GetInstance()->RemoveEntry(id_);
 }
 
-int PrintPreviewUI::GetAvailableDraftPageCount() {
-  return print_preview_data_service()->GetAvailableDraftPageCount(id_);
+int PrintPreviewUI::GetAvailableDraftPageCount() const {
+  return PrintPreviewDataService::GetInstance()->GetAvailableDraftPageCount(
+      id_);
 }
 
 void PrintPreviewUI::SetInitiatorTitle(
@@ -639,10 +636,6 @@ void PrintPreviewUI::OnPrintPreviewFailed() {
 
 void PrintPreviewUI::OnInvalidPrinterSettings() {
   web_ui()->CallJavascriptFunctionUnsafe("invalidPrinterSettings");
-}
-
-PrintPreviewDataService* PrintPreviewUI::print_preview_data_service() {
-  return PrintPreviewDataService::GetInstance();
 }
 
 void PrintPreviewUI::OnHidePreviewDialog() {

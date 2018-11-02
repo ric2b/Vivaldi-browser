@@ -4,6 +4,8 @@
 
 #include "device/gamepad/gamepad_monitor.h"
 
+#include <utility>
+
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "device/gamepad/gamepad_service.h"
@@ -20,40 +22,39 @@ GamepadMonitor::~GamepadMonitor() {
 }
 
 // static
-void GamepadMonitor::Create(mojom::GamepadMonitorRequest request) {
+void GamepadMonitor::Create(const service_manager::BindSourceInfo& source_info,
+                            mojom::GamepadMonitorRequest request) {
   mojo::MakeStrongBinding(base::MakeUnique<GamepadMonitor>(),
                           std::move(request));
 }
 
 void GamepadMonitor::OnGamepadConnected(unsigned index,
-                                        const blink::WebGamepad& gamepad) {
+                                        const Gamepad& gamepad) {
   if (gamepad_observer_)
     gamepad_observer_->GamepadConnected(index, gamepad);
 }
 
 void GamepadMonitor::OnGamepadDisconnected(unsigned index,
-                                           const blink::WebGamepad& gamepad) {
+                                           const Gamepad& gamepad) {
   if (gamepad_observer_)
     gamepad_observer_->GamepadDisconnected(index, gamepad);
 }
 
-void GamepadMonitor::GamepadStartPolling(
-    const GamepadStartPollingCallback& callback) {
+void GamepadMonitor::GamepadStartPolling(GamepadStartPollingCallback callback) {
   DCHECK(!is_started_);
   is_started_ = true;
 
   GamepadService* service = GamepadService::GetInstance();
   service->ConsumerBecameActive(this);
-  callback.Run(service->GetSharedBufferHandle());
+  std::move(callback).Run(service->GetSharedBufferHandle());
 }
 
-void GamepadMonitor::GamepadStopPolling(
-    const GamepadStopPollingCallback& callback) {
+void GamepadMonitor::GamepadStopPolling(GamepadStopPollingCallback callback) {
   DCHECK(is_started_);
   is_started_ = false;
 
   GamepadService::GetInstance()->ConsumerBecameInactive(this);
-  callback.Run();
+  std::move(callback).Run();
 }
 
 void GamepadMonitor::SetObserver(mojom::GamepadObserverPtr gamepad_observer) {

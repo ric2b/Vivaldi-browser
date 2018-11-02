@@ -881,6 +881,50 @@ ServiceWorkerDatabase::Status ServiceWorkerDatabase::ReadUserData(
   return status;
 }
 
+ServiceWorkerDatabase::Status ServiceWorkerDatabase::ReadUserDataByKeyPrefix(
+    int64_t registration_id,
+    const std::string key_prefix,
+    std::vector<std::string>* user_data_values) {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_NE(kInvalidServiceWorkerRegistrationId, registration_id);
+  DCHECK(user_data_values);
+
+  Status status = LazyOpen(false);
+  if (IsNewOrNonexistentDatabase(status))
+    return STATUS_ERROR_NOT_FOUND;
+  if (status != STATUS_OK)
+    return status;
+
+  std::string prefix = CreateUserDataKey(registration_id, key_prefix);
+  {
+    std::unique_ptr<leveldb::Iterator> itr(
+        db_->NewIterator(leveldb::ReadOptions()));
+    for (itr->Seek(prefix); itr->Valid(); itr->Next()) {
+      status = LevelDBStatusToStatus(itr->status());
+      if (status != STATUS_OK) {
+        user_data_values->clear();
+        break;
+      }
+
+      if (!itr->key().starts_with(prefix))
+        break;
+
+      std::string user_data_value;
+      status = LevelDBStatusToStatus(
+          db_->Get(leveldb::ReadOptions(), itr->key(), &user_data_value));
+      if (status != STATUS_OK) {
+        user_data_values->clear();
+        break;
+      }
+
+      user_data_values->push_back(user_data_value);
+    }
+  }
+
+  HandleReadResult(FROM_HERE, status);
+  return status;
+}
+
 ServiceWorkerDatabase::Status ServiceWorkerDatabase::WriteUserData(
     int64_t registration_id,
     const GURL& origin,
@@ -973,6 +1017,71 @@ ServiceWorkerDatabase::ReadUserDataForAllRegistrations(
       status = LevelDBStatusToStatus(
           db_->Get(leveldb::ReadOptions(),
                    CreateUserDataKey(registration_id, user_data_name), &value));
+      if (status != STATUS_OK) {
+        user_data->clear();
+        break;
+      }
+      user_data->push_back(std::make_pair(registration_id, value));
+    }
+  }
+
+  HandleReadResult(FROM_HERE, status);
+  return status;
+}
+
+ServiceWorkerDatabase::Status
+ServiceWorkerDatabase::ReadUserDataForAllRegistrationsByKeyPrefix(
+    const std::string& user_data_name_prefix,
+    std::vector<std::pair<int64_t, std::string>>* user_data) {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK(user_data->empty());
+
+  Status status = LazyOpen(false);
+  if (IsNewOrNonexistentDatabase(status))
+    return STATUS_OK;
+  if (status != STATUS_OK)
+    return status;
+
+  std::string key_prefix = kRegHasUserDataKeyPrefix + user_data_name_prefix;
+  {
+    std::unique_ptr<leveldb::Iterator> itr(
+        db_->NewIterator(leveldb::ReadOptions()));
+    for (itr->Seek(key_prefix); itr->Valid(); itr->Next()) {
+      status = LevelDBStatusToStatus(itr->status());
+      if (status != STATUS_OK) {
+        user_data->clear();
+        break;
+      }
+
+      if (!itr->key().starts_with(key_prefix))
+        break;
+
+      std::string user_data_name_with_id;
+      if (!RemovePrefix(itr->key().ToString(), kRegHasUserDataKeyPrefix,
+                        &user_data_name_with_id)) {
+        break;
+      }
+
+      std::vector<std::string> parts = base::SplitString(
+          user_data_name_with_id, base::StringPrintf("%c", kKeySeparator),
+          base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+      if (parts.size() != 2) {
+        status = STATUS_ERROR_CORRUPTED;
+        user_data->clear();
+        break;
+      }
+
+      int64_t registration_id;
+      status = ParseId(parts[1], &registration_id);
+      if (status != STATUS_OK) {
+        user_data->clear();
+        break;
+      }
+
+      std::string value;
+      status = LevelDBStatusToStatus(
+          db_->Get(leveldb::ReadOptions(),
+                   CreateUserDataKey(registration_id, parts[0]), &value));
       if (status != STATUS_OK) {
         user_data->clear();
         break;

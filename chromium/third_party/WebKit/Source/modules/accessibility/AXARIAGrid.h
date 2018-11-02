@@ -48,16 +48,19 @@ class AXARIAGrid final : public AXTable {
 
   bool IsAriaTable() const override { return true; }
 
+  AccessibilityRole RoleValue() const final {
+    return AXLayoutObject::RoleValue();
+  }  // Use ARIA role
+
   void AddChildren() override;
 
  private:
   // ARIA treegrids and grids support selected rows.
   bool SupportsSelectedRows() override { return true; }
-  bool IsMultiSelectable() const override { return true; }
   bool IsTableExposableThroughAccessibility() const override { return true; }
 
-  bool AddTableRowChild(AXObject*,
-                        HeapHashSet<Member<AXObject>>& appended_rows,
+  bool AddTableRowChild(AXObjectImpl*,
+                        HeapHashSet<Member<AXObjectImpl>>& appended_rows,
                         unsigned& column_count);
 };
 

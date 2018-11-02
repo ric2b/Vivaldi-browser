@@ -37,6 +37,7 @@ void InitializeResourceData(ResourceData* resource,
   resource->set_consecutive_misses(consecutive_misses);
   resource->set_average_position(average_position);
   resource->set_priority(static_cast<ResourceData::Priority>(priority));
+  resource->set_before_first_contentful_paint(true);
   resource->set_has_validators(has_validators);
   resource->set_always_revalidate(always_revalidate);
 }
@@ -54,9 +55,11 @@ void InitializeRedirectStat(RedirectStat* redirect,
 
 void InitializePrecacheResource(precache::PrecacheResource* resource,
                                 const std::string& url,
-                                double weight_ratio) {
+                                double weight_ratio,
+                                precache::PrecacheResource::Type type) {
   resource->set_url(url);
   resource->set_weight_ratio(weight_ratio);
+  resource->set_type(type);
 }
 
 void InitializeOriginStat(OriginStat* origin_stat,
@@ -76,6 +79,25 @@ void InitializeOriginStat(OriginStat* origin_stat,
   origin_stat->set_accessed_network(accessed_network);
 }
 
+void InitializeExperiment(precache::PrecacheManifest* manifest,
+                          uint32_t experiment_id,
+                          const std::vector<bool>& bitset) {
+  std::string binary_bitset;
+  for (size_t i = 0; i < (bitset.size() + 7) / 8; ++i) {
+    char c = 0;
+    for (size_t j = 0; j < 8; ++j) {
+      if (i * 8 + j < bitset.size() && bitset[i * 8 + j])
+        c |= (1 << j);
+    }
+    binary_bitset.push_back(c);
+  }
+
+  precache::PrecacheResourceSelection prs;
+  prs.set_bitset(binary_bitset);
+  (*manifest->mutable_experiments()
+        ->mutable_resources_by_experiment_group())[experiment_id] = prs;
+}
+
 PrefetchData CreatePrefetchData(const std::string& primary_key,
                                 uint64_t last_visit_time) {
   PrefetchData data;
@@ -92,12 +114,9 @@ RedirectData CreateRedirectData(const std::string& primary_key,
   return data;
 }
 
-precache::PrecacheManifest CreateManifestData(uint64_t id) {
-  precache::PrecacheManifestId* manifest_id =
-      new precache::PrecacheManifestId();
-  manifest_id->set_id(id);
+precache::PrecacheManifest CreateManifestData(int64_t id) {
   precache::PrecacheManifest manifest;
-  manifest.set_allocated_id(manifest_id);
+  manifest.mutable_id()->set_id(id);
   return manifest;
 }
 
@@ -145,6 +164,7 @@ URLRequestSummary CreateURLRequestSummary(SessionID::id_type tab_id,
   summary.request_url = summary.resource_url;
   summary.resource_type = resource_type;
   summary.priority = priority;
+  summary.before_first_contentful_paint = true;
   summary.mime_type = mime_type;
   summary.was_cached = was_cached;
   if (!redirect_url.empty())
@@ -170,6 +190,7 @@ std::ostream& operator<<(std::ostream& os, const ResourceData& resource) {
             << resource.number_of_misses() << ","
             << resource.consecutive_misses() << ","
             << resource.average_position() << "," << resource.priority() << ","
+            << resource.before_first_contentful_paint() << ","
             << resource.has_validators() << "," << resource.always_revalidate()
             << "]";
 }
@@ -214,9 +235,10 @@ std::ostream& operator<<(std::ostream& os, const PageRequestSummary& summary) {
 std::ostream& operator<<(std::ostream& os, const URLRequestSummary& summary) {
   return os << "[" << summary.navigation_id << "," << summary.resource_url
             << "," << summary.resource_type << "," << summary.priority << ","
-            << summary.mime_type << "," << summary.was_cached << ","
-            << summary.redirect_url << "," << summary.has_validators << ","
-            << summary.always_revalidate << "]";
+            << summary.before_first_contentful_paint << "," << summary.mime_type
+            << "," << summary.was_cached << "," << summary.redirect_url << ","
+            << summary.has_validators << "," << summary.always_revalidate
+            << "]";
 }
 
 std::ostream& operator<<(std::ostream& os, const NavigationID& navigation_id) {
@@ -244,6 +266,8 @@ bool operator==(const ResourceData& lhs, const ResourceData& rhs) {
          lhs.consecutive_misses() == rhs.consecutive_misses() &&
          AlmostEqual(lhs.average_position(), rhs.average_position()) &&
          lhs.priority() == rhs.priority() &&
+         lhs.before_first_contentful_paint() ==
+             rhs.before_first_contentful_paint() &&
          lhs.has_validators() == rhs.has_validators() &&
          lhs.always_revalidate() == rhs.always_revalidate();
 }
@@ -279,6 +303,8 @@ bool operator==(const URLRequestSummary& lhs, const URLRequestSummary& rhs) {
          lhs.resource_url == rhs.resource_url &&
          lhs.resource_type == rhs.resource_type &&
          lhs.priority == rhs.priority && lhs.mime_type == rhs.mime_type &&
+         lhs.before_first_contentful_paint ==
+             rhs.before_first_contentful_paint &&
          lhs.was_cached == rhs.was_cached &&
          lhs.redirect_url == rhs.redirect_url &&
          lhs.has_validators == rhs.has_validators &&

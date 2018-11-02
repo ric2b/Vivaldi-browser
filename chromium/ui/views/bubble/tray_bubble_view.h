@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/mouse_watcher.h"
 #include "ui/views/views_export.h"
@@ -28,8 +29,8 @@ class TrayBubbleContentMask;
 // Ash status area). Mostly this handles custom anchor location and arrow and
 // border rendering. This also has its own delegate for handling mouse events
 // and other implementation specific details.
-class VIEWS_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
-                                    public views::MouseWatcherListener {
+class VIEWS_EXPORT TrayBubbleView : public BubbleDialogDelegateView,
+                                    public MouseWatcherListener {
  public:
   // AnchorAlignment determines to which side of the anchor the bubble will
   // align itself.
@@ -62,6 +63,9 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
 
     // Called before Widget::Init() on |bubble_widget|. Allows |params| to be
     // modified.
+    // TODO(jamescook): Eliminate this method. It was introduced to let mash set
+    // the widget container back when mash could not use aura::Window. Now the
+    // anchor view should be sufficient.
     virtual void OnBeforeBubbleWidgetInit(Widget* anchor_widget,
                                           Widget* bubble_widget,
                                           Widget::InitParams* params) const = 0;
@@ -83,7 +87,8 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
     int max_height;
     bool can_activate;
     bool close_on_deactivate;
-    SkColor bg_color;
+    // If not provided, the bg color will be derived from the NativeTheme.
+    base::Optional<SkColor> bg_color;
   };
 
   // Constructs and returns a TrayBubbleView. |init_params| may be modified.
@@ -92,6 +97,9 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
                                 InitParams* init_params);
 
   ~TrayBubbleView() override;
+
+  // Returns whether a tray bubble is active.
+  static bool IsATrayBubbleOpen();
 
   // Sets up animations, and show the bubble. Must occur after CreateBubble()
   // is called.
@@ -130,9 +138,10 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
   // Overridden from views::BubbleDialogDelegateView.
   void OnBeforeBubbleWidgetInit(Widget::InitParams* params,
                                 Widget* bubble_widget) const override;
+  void OnWidgetClosing(Widget* widget) override;
 
   // Overridden from views::View.
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
   gfx::Size GetMaximumSize() const override;
   int GetHeightForWidth(int width) const override;
   void OnMouseEntered(const ui::MouseEvent& event) override;

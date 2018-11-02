@@ -44,12 +44,13 @@ const int MenuButton::kMenuMarkerPaddingRight = -1;
 ////////////////////////////////////////////////////////////////////////////////
 
 MenuButton::PressedLock::PressedLock(MenuButton* menu_button)
-    : PressedLock(menu_button, false) {}
+    : PressedLock(menu_button, false, nullptr) {}
 
 MenuButton::PressedLock::PressedLock(MenuButton* menu_button,
-                                     bool is_sibling_menu_show)
+                                     bool is_sibling_menu_show,
+                                     const ui::LocatedEvent* event)
     : menu_button_(menu_button->weak_factory_.GetWeakPtr()) {
-  menu_button_->IncrementPressedLocked(is_sibling_menu_show);
+  menu_button_->IncrementPressedLocked(is_sibling_menu_show, event);
 }
 
 MenuButton::PressedLock::~PressedLock() {
@@ -190,8 +191,8 @@ void MenuButton::OnPaint(gfx::Canvas* canvas) {
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-gfx::Size MenuButton::GetPreferredSize() const {
-  gfx::Size prefsize = LabelButton::GetPreferredSize();
+gfx::Size MenuButton::CalculatePreferredSize() const {
+  gfx::Size prefsize = LabelButton::CalculatePreferredSize();
   if (show_menu_marker_) {
     prefsize.Enlarge(menu_marker_->width() + kMenuMarkerPaddingLeft +
                          kMenuMarkerPaddingRight,
@@ -298,10 +299,10 @@ bool MenuButton::OnKeyReleased(const ui::KeyEvent& event) {
 void MenuButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   CustomButton::GetAccessibleNodeData(node_data);
   node_data->role = ui::AX_ROLE_POP_UP_BUTTON;
-  node_data->AddStateFlag(ui::AX_STATE_HASPOPUP);
+  node_data->AddState(ui::AX_STATE_HASPOPUP);
   if (enabled()) {
-    node_data->AddIntAttribute(ui::AX_ATTR_ACTION,
-                               ui::AX_SUPPORTED_ACTION_OPEN);
+    node_data->AddIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB,
+                               ui::AX_DEFAULT_ACTION_VERB_OPEN);
   }
 }
 
@@ -366,7 +367,8 @@ void MenuButton::NotifyClick(const ui::Event& event) {
   Activate(&event);
 }
 
-void MenuButton::IncrementPressedLocked(bool snap_ink_drop_to_activated) {
+void MenuButton::IncrementPressedLocked(bool snap_ink_drop_to_activated,
+                                        const ui::LocatedEvent* event) {
   ++pressed_lock_count_;
   if (increment_pressed_lock_called_)
     *increment_pressed_lock_called_ = true;
@@ -375,9 +377,10 @@ void MenuButton::IncrementPressedLocked(bool snap_ink_drop_to_activated) {
     if (snap_ink_drop_to_activated)
       GetInkDrop()->SnapToActivated();
     else
-      AnimateInkDrop(InkDropState::ACTIVATED, nullptr /* event */);
+      AnimateInkDrop(InkDropState::ACTIVATED, event);
   }
   SetState(STATE_PRESSED);
+  GetInkDrop()->SetHovered(false);
 }
 
 void MenuButton::DecrementPressedLocked() {
@@ -393,6 +396,7 @@ void MenuButton::DecrementPressedLocked() {
       should_disable_after_press_ = false;
     } else if (ShouldEnterHoveredState()) {
       desired_state = STATE_HOVERED;
+      GetInkDrop()->SetHovered(true);
     }
     SetState(desired_state);
     // The widget may be null during shutdown. If so, it doesn't make sense to

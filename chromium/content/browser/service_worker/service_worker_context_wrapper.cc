@@ -673,6 +673,20 @@ void ServiceWorkerContextWrapper::GetRegistrationUserData(
   context_core_->storage()->GetUserData(registration_id, keys, callback);
 }
 
+void ServiceWorkerContextWrapper::GetRegistrationUserDataByKeyPrefix(
+    int64_t registration_id,
+    const std::string& key_prefix,
+    const GetUserDataCallback& callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (!context_core_) {
+    RunSoon(base::Bind(callback, std::vector<std::string>(),
+                       SERVICE_WORKER_ERROR_ABORT));
+    return;
+  }
+  context_core_->storage()->GetUserDataByKeyPrefix(registration_id, key_prefix,
+                                                   callback);
+}
+
 void ServiceWorkerContextWrapper::StoreRegistrationUserData(
     int64_t registration_id,
     const GURL& origin,
@@ -709,6 +723,19 @@ void ServiceWorkerContextWrapper::GetUserDataForAllRegistrations(
     return;
   }
   context_core_->storage()->GetUserDataForAllRegistrations(key, callback);
+}
+
+void ServiceWorkerContextWrapper::GetUserDataForAllRegistrationsByKeyPrefix(
+    const std::string& key_prefix,
+    const GetUserDataForAllRegistrationsCallback& callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (!context_core_) {
+    RunSoon(base::Bind(callback, std::vector<std::pair<int64_t, std::string>>(),
+                       SERVICE_WORKER_ERROR_ABORT));
+    return;
+  }
+  context_core_->storage()->GetUserDataForAllRegistrationsByKeyPrefix(
+      key_prefix, callback);
 }
 
 void ServiceWorkerContextWrapper::AddObserver(
@@ -797,6 +824,16 @@ void ServiceWorkerContextWrapper::DidDeleteAndStartOver(
 
   observer_list_->Notify(FROM_HERE,
                          &ServiceWorkerContextObserver::OnStorageWiped);
+}
+
+void ServiceWorkerContextWrapper::BindWorkerFetchContext(
+    int render_process_id,
+    int service_worker_provider_id,
+    mojom::ServiceWorkerWorkerClientAssociatedPtrInfo client_ptr_info) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  context()->BindWorkerFetchContext(render_process_id,
+                                    service_worker_provider_id,
+                                    std::move(client_ptr_info));
 }
 
 ServiceWorkerContextCore* ServiceWorkerContextWrapper::context() {

@@ -4,6 +4,7 @@
 #include <queue>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "media/base/test_data_util.h"
 
 #include "gpu/GLES2/gl2extchromium.h"
@@ -190,8 +191,10 @@ PlatformPipelineTestBase::PlatformPipelineTestBase()
 PlatformPipelineTestBase::~PlatformPipelineTestBase() {
 }
 
-Demuxer * PlatformPipelineTestBase::CreatePlatformDemuxer(std::unique_ptr<media::DataSource> & data_source,
-                                                     base::MessageLoop & message_loop_) {
+Demuxer * PlatformPipelineTestBase::CreatePlatformDemuxer(
+    std::unique_ptr<media::DataSource> & data_source,
+    base::MessageLoop & message_loop_,
+    MediaLog* media_log) {
   const std::string content_type;
   const GURL url("file://" + filepath_.AsUTF8Unsafe());
   if (media::IPCDemuxer::CanPlayType(content_type, url)) {
@@ -200,51 +203,52 @@ Demuxer * PlatformPipelineTestBase::CreatePlatformDemuxer(std::unique_ptr<media:
     return new media::IPCDemuxer(
                      message_loop_.task_runner(), data_source.get(),
                      std::move(pipeline_host), content_type, url,
-                     new media::MediaLog());
+                     media_log);
   }
 
   return nullptr;
 }
 
 void PlatformPipelineTestBase::AppendPlatformAudioDecoders(
-        ScopedVector<AudioDecoder> & audio_decoders,
+        std::vector<std::unique_ptr<AudioDecoder>> & audio_decoders,
         const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner)
 {
   const std::string content_type;
   const GURL url("file://" + filepath_.AsUTF8Unsafe());
   if (IPCDemuxer::CanPlayType(content_type, url)) {
     audio_decoders.push_back(
-        new PassThroughAudioDecoder(media_task_runner));
+        base::MakeUnique<PassThroughAudioDecoder>(media_task_runner));
   }
 
 #if defined(OS_MACOSX)
   audio_decoders.push_back(
-      new ATAudioDecoder(media_task_runner));
+      base::MakeUnique<ATAudioDecoder>(media_task_runner));
 #elif defined(OS_WIN)
   audio_decoders.push_back(
-      new media::WMFAudioDecoder(media_task_runner));
+      base::MakeUnique<media::WMFAudioDecoder>(media_task_runner));
 #endif
 }
 
 void PlatformPipelineTestBase::AppendPlatformVideoDecoders(
-        ScopedVector<VideoDecoder> & video_decoders,
-        const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner)
+        std::vector<std::unique_ptr<VideoDecoder>> & video_decoders,
+        const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+        MediaLog* media_log)
 {
   const std::string content_type;
   const GURL url("file://" + filepath_.AsUTF8Unsafe());
   if (IPCDemuxer::CanPlayType(content_type, url)) {
     video_decoders.push_back(
-        new PassThroughVideoDecoder(media_task_runner));
+          base::MakeUnique<PassThroughVideoDecoder>(media_task_runner));
   }
 
 #if defined(OS_WIN)
   video_decoders.push_back(
-      new media::WMFVideoDecoder(media_task_runner));
+      base::MakeUnique<media::WMFVideoDecoder>(media_task_runner));
 #endif
 
   video_decoders.push_back(
-      new GpuVideoDecoder(mock_video_accelerator_factories_.get(),
-                          RequestSurfaceCB(), new MediaLog()));
+      base::MakeUnique<GpuVideoDecoder>(mock_video_accelerator_factories_.get(),
+                                        RequestOverlayInfoCB(), media_log));
 
   media::VideoDecodeAccelerator::Capabilities capabilities;
   capabilities.supported_profiles = GetSupportedProfiles();

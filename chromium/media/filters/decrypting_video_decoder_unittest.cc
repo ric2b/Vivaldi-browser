@@ -50,7 +50,7 @@ class DecryptingVideoDecoderTest : public testing::Test {
   DecryptingVideoDecoderTest()
       : decoder_(new DecryptingVideoDecoder(
             message_loop_.task_runner(),
-            new MediaLog(),
+            &media_log_,
             base::Bind(&DecryptingVideoDecoderTest::OnWaitingForDecryptionKey,
                        base::Unretained(this)))),
         cdm_context_(new StrictMock<MockCdmContext>()),
@@ -223,6 +223,7 @@ class DecryptingVideoDecoderTest : public testing::Test {
   MOCK_METHOD0(OnWaitingForDecryptionKey, void(void));
 
   base::MessageLoop message_loop_;
+  MediaLog media_log_;
   std::unique_ptr<DecryptingVideoDecoder> decoder_;
   std::unique_ptr<StrictMock<MockCdmContext>> cdm_context_;
   std::unique_ptr<StrictMock<MockDecryptor>> decryptor_;
@@ -479,6 +480,14 @@ TEST_F(DecryptingVideoDecoderTest, Destroy_AfterReset) {
   EnterNormalDecodingState();
   Reset();
   Destroy();
+}
+
+// Test the case where color space in the config is set in the decoded frame.
+TEST_F(DecryptingVideoDecoderTest, ColorSpace) {
+  Initialize();
+  EXPECT_FALSE(decoded_video_frame_->ColorSpace().IsValid());
+  EnterNormalDecodingState();
+  EXPECT_TRUE(decoded_video_frame_->ColorSpace().IsValid());
 }
 
 }  // namespace media

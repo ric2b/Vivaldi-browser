@@ -7,13 +7,13 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/modules/v8/V8Response.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/FetchDataLoader.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/heap/Handle.h"
-#include "wtf/RefPtr.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -168,6 +168,17 @@ void CompileFromResponseCallback(
   }
 
   Response* response = V8Response::toImpl(v8::Local<v8::Object>::Cast(args[0]));
+  if (response->MimeType() != "application/wasm") {
+    V8SetReturnValue(
+        args,
+        ScriptPromise::Reject(
+            script_state,
+            V8ThrowException::CreateTypeError(
+                script_state->GetIsolate(),
+                "Incorrect response MIME type. Expected 'application/wasm'."))
+            .V8Value());
+    return;
+  }
   ScriptPromise promise;
   if (response->IsBodyLocked() || response->bodyUsed()) {
     promise = ScriptPromise::Reject(
@@ -224,7 +235,9 @@ bool WasmCompileOverload(const v8::FunctionCallbackInfo<v8::Value>& args) {
 }  // namespace
 
 void WasmResponseExtensions::Initialize(v8::Isolate* isolate) {
-  isolate->SetWasmCompileCallback(WasmCompileOverload);
+  if (RuntimeEnabledFeatures::webAssemblyStreamingEnabled()) {
+    isolate->SetWasmCompileCallback(WasmCompileOverload);
+  }
 }
 
 }  // namespace blink

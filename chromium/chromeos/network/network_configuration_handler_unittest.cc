@@ -361,6 +361,42 @@ TEST_F(NetworkConfigurationHandlerTest, GetProperties) {
   base::RunLoop().RunUntilIdle();
 }
 
+TEST_F(NetworkConfigurationHandlerTest, GetProperties_TetherNetwork) {
+  network_state_handler_->SetTetherTechnologyState(
+      NetworkStateHandler::TechnologyState::TECHNOLOGY_ENABLED);
+
+  std::string kTetherGuid = "TetherGuid";
+  // TODO(khorimoto): Pass a has_connected_to_host parameter to this function
+  // and verify that it is present in the JSON below. Currently, it is hard-
+  // coded to false.
+  network_state_handler_->AddTetherNetworkState(
+      kTetherGuid, "TetherNetworkName", "TetherNetworkCarrier",
+      100 /* battery_percentage */, 100 /* signal_strength */,
+      true /* has_connected_to_host */);
+
+  std::string expected_json =
+      "{\n   "
+      "\"GUID\": \"TetherGuid\",\n   "
+      "\"Name\": \"TetherNetworkName\",\n   "
+      "\"Priority\": 0,\n   "
+      "\"Profile\": \"\",\n   "
+      "\"SecurityClass\": \"\",\n   "
+      "\"State\": \"\",\n   "
+      "\"Tether.BatteryPercentage\": 100,\n   "
+      "\"Tether.Carrier\": \"TetherNetworkCarrier\",\n   "
+      "\"Tether.HasConnectedToHost\": true,\n   "
+      "\"Tether.SignalStrength\": 100,\n   "
+      "\"Type\": \"wifi-tether\"\n"
+      "}\n";
+
+  // Tether networks use service path and GUID interchangeably.
+  std::string& tether_service_path = kTetherGuid;
+  network_configuration_handler_->GetShillProperties(
+      tether_service_path,
+      base::Bind(&DictionaryValueCallback, tether_service_path, expected_json),
+      base::Bind(&ErrorCallback));
+}
+
 TEST_F(NetworkConfigurationHandlerTest, SetProperties) {
   std::string service_path = "/service/1";
   std::string networkName = "MyNetwork";
@@ -448,9 +484,8 @@ TEST_F(NetworkConfigurationHandlerTest, CreateConfiguration) {
   std::string profile = "profile path";
   base::DictionaryValue value;
   shill_property_util::SetSSID(networkName, &value);
-  value.SetWithoutPathExpansion(shill::kTypeProperty, new base::Value(type));
-  value.SetWithoutPathExpansion(shill::kProfileProperty,
-                                new base::Value(profile));
+  value.SetStringWithoutPathExpansion(shill::kTypeProperty, type);
+  value.SetStringWithoutPathExpansion(shill::kProfileProperty, profile);
 
   EXPECT_CALL(*mock_manager_client_,
               ConfigureServiceForProfile(dbus::ObjectPath(profile), _, _, _))
@@ -469,9 +504,8 @@ TEST_F(NetworkConfigurationHandlerTest, RemoveConfiguration) {
   std::string type = "wifi";
   base::DictionaryValue value;
   shill_property_util::SetSSID("Service", &value);
-  value.SetWithoutPathExpansion(shill::kTypeProperty, new base::Value(type));
-  value.SetWithoutPathExpansion(shill::kProfileProperty,
-                                new base::Value("profile2"));
+  value.SetStringWithoutPathExpansion(shill::kTypeProperty, type);
+  value.SetStringWithoutPathExpansion(shill::kProfileProperty, "profile2");
   EXPECT_CALL(*mock_manager_client_,
               ConfigureServiceForProfile(dbus::ObjectPath("profile2"), _, _, _))
       .WillOnce(
@@ -520,9 +554,8 @@ TEST_F(NetworkConfigurationHandlerTest, RemoveConfigurationFromCurrentProfile) {
   std::string type = "wifi";
   base::DictionaryValue value;
   shill_property_util::SetSSID("Service", &value);
-  value.SetWithoutPathExpansion(shill::kTypeProperty, new base::Value(type));
-  value.SetWithoutPathExpansion(shill::kProfileProperty,
-                                new base::Value("profile2"));
+  value.SetStringWithoutPathExpansion(shill::kTypeProperty, type);
+  value.SetStringWithoutPathExpansion(shill::kProfileProperty, "profile2");
   EXPECT_CALL(*mock_manager_client_,
               ConfigureServiceForProfile(dbus::ObjectPath("profile2"), _, _, _))
       .WillOnce(

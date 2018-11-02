@@ -15,7 +15,6 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/container_finder.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm_window.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/memory/ptr_util.h"
@@ -54,7 +53,7 @@ bool AllRootWindowsHaveModalBackgroundsForContainer(int container_id) {
   bool has_modal_screen = !containers.empty();
   for (aura::Window* container : containers) {
     has_modal_screen &= static_cast<SystemModalContainerLayoutManager*>(
-                            WmWindow::Get(container)->GetLayoutManager())
+                            container->layout_manager())
                             ->has_window_dimmer();
   }
   return has_modal_screen;
@@ -82,7 +81,9 @@ class TestWindow : public views::WidgetDelegateView {
   }
 
   // Overridden from views::View:
-  gfx::Size GetPreferredSize() const override { return gfx::Size(50, 50); }
+  gfx::Size CalculatePreferredSize() const override {
+    return gfx::Size(50, 50);
+  }
 
   // Overridden from views::WidgetDelegate:
   ui::ModalType GetModalType() const override {
@@ -426,7 +427,7 @@ TEST_F(SystemModalContainerLayoutManagerTest, ModalTransientChildEvents) {
   aura::test::EventCountDelegate control_delegate;
   control_delegate.set_window_component(HTCLIENT);
   std::unique_ptr<aura::Window> child(new aura::Window(&control_delegate));
-  child->SetType(ui::wm::WINDOW_TYPE_CONTROL);
+  child->SetType(aura::client::WINDOW_TYPE_CONTROL);
   child->Init(ui::LAYER_TEXTURED);
   modal1_transient->AddChild(child.get());
   child->SetBounds(gfx::Rect(100, 100));
@@ -802,9 +803,8 @@ TEST_F(SystemModalContainerLayoutManagerTest, VisibilityChange) {
                                              CurrentContext())
           ->GetNativeWindow());
   SystemModalContainerLayoutManager* layout_manager =
-      ShellPort::Get()
-          ->GetPrimaryRootWindowController()
-          ->GetSystemModalLayoutManager(WmWindow::Get(modal_window.get()));
+      Shell::GetPrimaryRootWindowController()->GetSystemModalLayoutManager(
+          modal_window.get());
 
   EXPECT_FALSE(ShellPort::Get()->IsSystemModalWindowOpen());
   EXPECT_FALSE(layout_manager->has_window_dimmer());
@@ -816,7 +816,7 @@ TEST_F(SystemModalContainerLayoutManagerTest, VisibilityChange) {
   // Make sure that a child visibility change should not cause
   // inconsistent state.
   std::unique_ptr<aura::Window> child = base::MakeUnique<aura::Window>(nullptr);
-  child->SetType(ui::wm::WINDOW_TYPE_CONTROL);
+  child->SetType(aura::client::WINDOW_TYPE_CONTROL);
   child->Init(ui::LAYER_TEXTURED);
   modal_window->AddChild(child.get());
   child->Show();

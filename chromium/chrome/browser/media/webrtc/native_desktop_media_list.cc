@@ -6,7 +6,7 @@
 
 #include "base/hash.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/media/webrtc/desktop_media_list_observer.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
@@ -54,7 +54,6 @@ gfx::ImageSkia ScaleDesktopFrame(std::unique_ptr<webrtc::DesktopFrame> frame,
 
   SkBitmap result;
   result.allocN32Pixels(scaled_rect.width(), scaled_rect.height(), true);
-  result.lockPixels();
 
   uint8_t* pixels_data = reinterpret_cast<uint8_t*>(result.getPixels());
   libyuv::ARGBScale(frame->data(), frame->stride(),
@@ -74,8 +73,6 @@ gfx::ImageSkia ScaleDesktopFrame(std::unique_ptr<webrtc::DesktopFrame> frame,
           0xff;
     }
   }
-
-  result.unlockPixels();
 
   return gfx::ImageSkia::CreateFrom1xBitmap(result);
 }
@@ -172,8 +169,8 @@ void NativeDesktopMediaList::Worker::Refresh(
 
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&NativeDesktopMediaList::RefreshForAuraWindows, media_list_,
-                 sources));
+      base::BindOnce(&NativeDesktopMediaList::RefreshForAuraWindows,
+                     media_list_, sources));
 }
 
 void NativeDesktopMediaList::Worker::RefreshThumbnails(
@@ -214,8 +211,8 @@ void NativeDesktopMediaList::Worker::RefreshThumbnails(
             ScaleDesktopFrame(std::move(current_frame_), thumbnail_size);
         BrowserThread::PostTask(
             BrowserThread::UI, FROM_HERE,
-            base::Bind(&NativeDesktopMediaList::UpdateSourceThumbnail,
-                       media_list_, id, thumbnail));
+            base::BindOnce(&NativeDesktopMediaList::UpdateSourceThumbnail,
+                           media_list_, id, thumbnail));
       }
     }
   }
@@ -224,8 +221,8 @@ void NativeDesktopMediaList::Worker::RefreshThumbnails(
 
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&NativeDesktopMediaList::UpdateNativeThumbnailsFinished,
-                 media_list_));
+      base::BindOnce(&NativeDesktopMediaList::UpdateNativeThumbnailsFinished,
+                     media_list_));
 }
 
 void NativeDesktopMediaList::Worker::OnCaptureResult(
@@ -240,9 +237,8 @@ NativeDesktopMediaList::NativeDesktopMediaList(
     : DesktopMediaListBase(
           base::TimeDelta::FromMilliseconds(kDefaultUpdatePeriod)),
       weak_factory_(this) {
-  base::SequencedWorkerPool* worker_pool = BrowserThread::GetBlockingPool();
-  capture_task_runner_ = worker_pool->GetSequencedTaskRunner(
-      worker_pool->GetSequenceToken());
+  capture_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE});
 
   worker_.reset(new Worker(weak_factory_.GetWeakPtr(),
                            std::move(screen_capturer),
@@ -261,8 +257,9 @@ void NativeDesktopMediaList::Refresh() {
 #endif
 
   capture_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&Worker::Refresh, base::Unretained(worker_.get()),
-                            view_dialog_id_.id));
+      FROM_HERE,
+      base::BindOnce(&Worker::Refresh, base::Unretained(worker_.get()),
+                     view_dialog_id_.id));
 }
 
 void NativeDesktopMediaList::RefreshForAuraWindows(
@@ -314,9 +311,9 @@ void NativeDesktopMediaList::RefreshForAuraWindows(
     pending_native_thumbnail_capture_ = true;
 #endif
     capture_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&Worker::RefreshThumbnails, base::Unretained(worker_.get()),
-                   native_ids, thumbnail_size_));
+        FROM_HERE, base::BindOnce(&Worker::RefreshThumbnails,
+                                  base::Unretained(worker_.get()), native_ids,
+                                  thumbnail_size_));
   }
 }
 
@@ -347,7 +344,9 @@ void NativeDesktopMediaList::CaptureAuraWindowThumbnail(
 
   pending_aura_capture_requests_++;
   ui::GrabWindowSnapshotAndScaleAsyncAura(
-      window, window_rect, scaled_rect.size(), BrowserThread::GetBlockingPool(),
+      window, window_rect, scaled_rect.size(),
+      base::CreateTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE}),
       base::Bind(&NativeDesktopMediaList::OnAuraThumbnailCaptured,
                  weak_factory_.GetWeakPtr(), id));
 }

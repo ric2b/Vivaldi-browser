@@ -11,6 +11,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/boringssl/src/include/openssl/pool.h"
 
+// TODO(eroman): Add tests for parsing of policy mappings.
+
 namespace net {
 
 namespace {
@@ -311,6 +313,56 @@ TEST(ParsedCertificateTest, BasicConstraintsPathLenButNotCa) {
   EXPECT_EQ(1u, cert->basic_constraints().path_len);
 }
 
+// Tests parsing a certificate that contains a policyConstraints
+// extension having requireExplicitPolicy:3.
+TEST(ParsedCertificateTest, PolicyConstraintsRequire) {
+  scoped_refptr<ParsedCertificate> cert =
+      ParseCertificateFromFile("policy_constraints_require.pem", {});
+  ASSERT_TRUE(cert);
+
+  EXPECT_TRUE(cert->has_policy_constraints());
+  EXPECT_TRUE(cert->policy_constraints().has_require_explicit_policy);
+  EXPECT_EQ(3, cert->policy_constraints().require_explicit_policy);
+  EXPECT_FALSE(cert->policy_constraints().has_inhibit_policy_mapping);
+  EXPECT_EQ(0, cert->policy_constraints().inhibit_policy_mapping);
+}
+
+// Tests parsing a certificate that contains a policyConstraints
+// extension having inhibitPolicyMapping:1.
+TEST(ParsedCertificateTest, PolicyConstraintsInhibit) {
+  scoped_refptr<ParsedCertificate> cert =
+      ParseCertificateFromFile("policy_constraints_inhibit.pem", {});
+  ASSERT_TRUE(cert);
+
+  EXPECT_TRUE(cert->has_policy_constraints());
+  EXPECT_FALSE(cert->policy_constraints().has_require_explicit_policy);
+  EXPECT_EQ(0, cert->policy_constraints().require_explicit_policy);
+  EXPECT_TRUE(cert->policy_constraints().has_inhibit_policy_mapping);
+  EXPECT_EQ(1, cert->policy_constraints().inhibit_policy_mapping);
+}
+
+// Tests parsing a certificate that contains a policyConstraints
+// extension having requireExplicitPolicy:5,inhibitPolicyMapping:2.
+TEST(ParsedCertificateTest, PolicyConstraintsInhibitRequire) {
+  scoped_refptr<ParsedCertificate> cert =
+      ParseCertificateFromFile("policy_constraints_inhibit_require.pem", {});
+  ASSERT_TRUE(cert);
+
+  EXPECT_TRUE(cert->has_policy_constraints());
+  EXPECT_TRUE(cert->policy_constraints().has_require_explicit_policy);
+  EXPECT_EQ(5, cert->policy_constraints().require_explicit_policy);
+  EXPECT_TRUE(cert->policy_constraints().has_inhibit_policy_mapping);
+  EXPECT_EQ(2, cert->policy_constraints().inhibit_policy_mapping);
+}
+
+// Tests parsing a certificate that has a policyConstraints
+// extension with an empty sequence.
+TEST(ParsedCertificateTest, PolicyConstraintsEmpty) {
+  scoped_refptr<ParsedCertificate> cert =
+      ParseCertificateFromFile("policy_constraints_empty.pem", {});
+  ASSERT_FALSE(cert);
+}
+
 // Tests a certificate with a serial number with a leading 0 padding byte in
 // the encoding since it is not negative.
 TEST(ParsedCertificateTest, SerialNumberZeroPadded) {
@@ -373,6 +425,20 @@ TEST(ParsedCertificateTest, SerialNumber37BytesLong) {
       0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,
       0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25};
   EXPECT_EQ(der::Input(expected_serial), cert->tbs().serial_number);
+}
+
+// Tests parsing a certificate that has an inhibitAnyPolicy extension.
+TEST(ParsedCertificateTest, InhibitAnyPolicy) {
+  scoped_refptr<ParsedCertificate> cert =
+      ParseCertificateFromFile("inhibit_any_policy.pem", {});
+  ASSERT_TRUE(cert);
+
+  ParsedExtension extension;
+  ASSERT_TRUE(cert->GetExtension(InhibitAnyPolicyOid(), &extension));
+
+  uint8_t skip_count;
+  ASSERT_TRUE(ParseInhibitAnyPolicy(extension.value, &skip_count));
+  EXPECT_EQ(3, skip_count);
 }
 
 }  // namespace

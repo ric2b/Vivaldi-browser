@@ -18,7 +18,6 @@
 #include "content/public/common/service_manager_connection.h"
 #include "content/renderer/mus/renderer_window_tree_client.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "url/gurl.h"
@@ -48,14 +47,14 @@ class RenderWidgetWindowTreeClientFactoryImpl
 
  private:
   // ConnectionFilter implementation:
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle* interface_pipe,
                        service_manager::Connector* connector) override {
     if (interface_name == mojom::RenderWidgetWindowTreeClientFactory::Name_) {
-      bindings_.AddBinding(
-          this, mojo::MakeRequest<mojom::RenderWidgetWindowTreeClientFactory>(
-                    std::move(*interface_pipe)));
+      bindings_.AddBinding(this,
+                           mojom::RenderWidgetWindowTreeClientFactoryRequest(
+                               std::move(*interface_pipe)));
     }
   }
 

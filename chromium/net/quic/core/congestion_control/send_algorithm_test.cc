@@ -12,6 +12,7 @@
 #include "net/quic/core/quic_utils.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_str_cat.h"
+#include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/quic_config_peer.h"
 #include "net/quic/test_tools/quic_connection_peer.h"
@@ -20,7 +21,6 @@
 #include "net/quic/test_tools/simulator/quic_endpoint.h"
 #include "net/quic/test_tools/simulator/simulator.h"
 #include "net/quic/test_tools/simulator/switch.h"
-#include "testing/gtest/include/gtest/gtest.h"
 
 using std::string;
 
@@ -114,6 +114,8 @@ const char* CongestionControlTypeToString(CongestionControlType cc_type) {
       return "RENO_BYTES";
     case kBBR:
       return "BBR";
+    case kPCC:
+      return "PCC";
     default:
       QUIC_DLOG(FATAL) << "Unexpected CongestionControlType";
       return nullptr;
@@ -163,7 +165,7 @@ string TestParamToString(const testing::TestParamInfo<TestParams>& params) {
 std::vector<TestParams> GetTestParams() {
   std::vector<TestParams> params;
   for (const CongestionControlType congestion_control_type :
-       {kBBR, kCubic, kCubicBytes, kReno, kRenoBytes}) {
+       {kBBR, kCubic, kCubicBytes, kReno, kRenoBytes, kPCC}) {
     if (congestion_control_type != kCubic &&
         congestion_control_type != kCubicBytes) {
       params.push_back(
@@ -204,7 +206,7 @@ std::vector<TestParams> GetTestParams() {
 
 }  // namespace
 
-class SendAlgorithmTest : public ::testing::TestWithParam<TestParams> {
+class SendAlgorithmTest : public QuicTestWithParam<TestParams> {
  protected:
   SendAlgorithmTest()
       : simulator_(),
@@ -217,7 +219,7 @@ class SendAlgorithmTest : public ::testing::TestWithParam<TestParams> {
                   "Receiver",
                   "QUIC sender",
                   Perspective::IS_SERVER,
-                  42) {
+                  net::test::GetPeerInMemoryConnectionId(42)) {
     rtt_stats_ = quic_sender_.connection()->sent_packet_manager().GetRttStats();
     sender_ = SendAlgorithmInterface::Create(
         simulator_.GetClock(), rtt_stats_,
@@ -230,7 +232,13 @@ class SendAlgorithmTest : public ::testing::TestWithParam<TestParams> {
     SetExperimentalOptionsInServerConfig();
 
     QuicConnectionPeer::SetSendAlgorithm(quic_sender_.connection(), sender_);
-
+    // TODO(jokulik):  Remove once b/38032710 is fixed.
+    // Disable pacing for PCC.
+    if (sender_->GetCongestionControlType() == kPCC) {
+      QuicSentPacketManagerPeer::SetUsingPacing(
+          QuicConnectionPeer::GetSentPacketManager(quic_sender_.connection()),
+          false);
+    }
     clock_ = simulator_.GetClock();
     simulator_.set_random_generator(&random_);
 

@@ -16,10 +16,10 @@
 #include "bindings/core/v8/IDLTypes.h"
 #include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
-#include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8TestInterfaceEmpty.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
 
@@ -38,7 +38,7 @@ const WrapperTypeInfo V8TestInterfaceConstructor2::wrapperTypeInfo = { gin::kEmb
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestInterfaceConstructor2.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
-// bindings/core/v8/ScriptWrappable.h.
+// platform/bindings/ScriptWrappable.h.
 const WrapperTypeInfo& TestInterfaceConstructor2::wrapper_type_info_ = V8TestInterfaceConstructor2::wrapperTypeInfo;
 
 // not [ActiveScriptWrappable]
@@ -91,7 +91,7 @@ static void constructor3(const v8::FunctionCallbackInfo<v8::Value>& info) {
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kConstructionContext, "TestInterfaceConstructor2");
 
   Vector<Vector<String>> stringSequenceSequenceArg;
-  stringSequenceSequenceArg = ToImplArray<Vector<Vector<String>>>(info[0], 1, info.GetIsolate(), exceptionState);
+  stringSequenceSequenceArg = NativeValueTraits<IDLSequence<IDLSequence<IDLString>>>::NativeValue(info.GetIsolate(), info[0], exceptionState);
   if (exceptionState.HadException())
     return;
 

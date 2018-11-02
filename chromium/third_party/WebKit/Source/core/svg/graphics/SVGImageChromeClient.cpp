@@ -83,7 +83,7 @@ void SVGImageChromeClient::ResumeAnimation() {
   ScheduleAnimation(nullptr);
 }
 
-void SVGImageChromeClient::ScheduleAnimation(FrameViewBase*) {
+void SVGImageChromeClient::ScheduleAnimation(const PlatformFrameView*) {
   // Because a single SVGImage can be shared by multiple pages, we can't key
   // our svg image layout on the page's real animation frame. Therefore, we
   // run this fake animation timer to trigger layout in SVGImages. The name,
@@ -114,11 +114,12 @@ void SVGImageChromeClient::AnimationTimerFired(TimerBase*) {
 
   // The SVGImageChromeClient object's lifetime is dependent on
   // the ImageObserver (an ImageResourceContent) of its image. Should it
-  // be dead and about to be lazily swept out, do not proceed.
+  // be dead and about to be lazily swept out, then GetImageObserver()
+  // becomes null and we do not proceed.
   //
   // TODO(Oilpan): move (SVG)Image to the Oilpan heap, and avoid
   // this explicit lifetime check.
-  if (ThreadHeap::WillObjectBeLazilySwept(image_->GetImageObserver()))
+  if (!image_->GetImageObserver())
     return;
 
   image_->ServiceAnimations(MonotonicallyIncreasingTime());

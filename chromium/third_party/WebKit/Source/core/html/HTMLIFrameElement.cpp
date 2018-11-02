@@ -39,6 +39,7 @@ using namespace HTMLNames;
 inline HTMLIFrameElement::HTMLIFrameElement(Document& document)
     : HTMLFrameElementBase(iframeTag, document),
       did_load_non_empty_document_(false),
+      collapsed_by_client_(false),
       sandbox_(HTMLIFrameElementSandbox::Create(this)),
       allow_(HTMLIFrameElementAllow::Create(this)),
       referrer_policy_(kReferrerPolicyDefault) {}
@@ -53,6 +54,18 @@ DEFINE_TRACE(HTMLIFrameElement) {
 }
 
 HTMLIFrameElement::~HTMLIFrameElement() {}
+
+void HTMLIFrameElement::SetCollapsed(bool collapse) {
+  if (collapsed_by_client_ == collapse)
+    return;
+
+  collapsed_by_client_ = collapse;
+
+  // This is always called in response to an IPC, so should not happen in the
+  // middle of a style recalc.
+  DCHECK(!GetDocument().InStyleRecalc());
+  LazyReattachIfAttached();
+}
 
 DOMTokenList* HTMLIFrameElement::sandbox() const {
   return sandbox_.Get();
@@ -134,12 +147,15 @@ void HTMLIFrameElement::ParseAttribute(
                 kHTMLIFrameElementAllowfullscreenAttributeSetAfterContentLoad);
       }
       FrameOwnerPropertiesChanged();
+      UpdateContainerPolicy();
     }
   } else if (name == allowpaymentrequestAttr) {
     bool old_allow_payment_request = allow_payment_request_;
     allow_payment_request_ = !value.IsNull();
-    if (allow_payment_request_ != old_allow_payment_request)
+    if (allow_payment_request_ != old_allow_payment_request) {
       FrameOwnerPropertiesChanged();
+      UpdateContainerPolicy();
+    }
   } else if (RuntimeEnabledFeatures::embedderCSPEnforcementEnabled() &&
              name == cspAttr) {
     // TODO(amalika): add more robust validation of the value
@@ -165,7 +181,8 @@ void HTMLIFrameElement::ParseAttribute(
 }
 
 bool HTMLIFrameElement::LayoutObjectIsNeeded(const ComputedStyle& style) {
-  return ContentFrame() && HTMLElement::LayoutObjectIsNeeded(style);
+  return ContentFrame() && !collapsed_by_client_ &&
+         HTMLElement::LayoutObjectIsNeeded(style);
 }
 
 LayoutObject* HTMLIFrameElement::CreateLayoutObject(const ComputedStyle&) {
@@ -214,6 +231,7 @@ void HTMLIFrameElement::AllowValueWasSet() {
   }
   SetSynchronizedLazyAttribute(allowAttr, allow_->value());
   FrameOwnerPropertiesChanged();
+  UpdateContainerPolicy();
 }
 
 ReferrerPolicy HTMLIFrameElement::ReferrerPolicyAttribute() {

@@ -26,7 +26,7 @@
 #ifndef WebGLActiveInfo_h
 #define WebGLActiveInfo_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "third_party/khronos/GLES2/gl2.h"
 
 namespace blink {
@@ -48,9 +48,9 @@ class WebGLActiveInfo final : public GarbageCollectedFinalized<WebGLActiveInfo>,
  private:
   WebGLActiveInfo(const String& name, GLenum type, GLint size)
       : name_(name), type_(type), size_(size) {
-    ASSERT(name.length());
-    ASSERT(type);
-    ASSERT(size);
+    DCHECK(name.length());
+    DCHECK(type);
+    DCHECK(size);
   }
   String name_;
   GLenum type_;

@@ -26,7 +26,9 @@ SecurityKeyIpcClient::SecurityKeyIpcClient()
     : named_channel_handle_(remoting::GetSecurityKeyIpcChannel()),
       weak_factory_(this) {}
 
-SecurityKeyIpcClient::~SecurityKeyIpcClient() {}
+SecurityKeyIpcClient::~SecurityKeyIpcClient() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+}
 
 bool SecurityKeyIpcClient::CheckForSecurityKeyIpcServerChannel() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -191,9 +193,13 @@ void SecurityKeyIpcClient::ConnectToIpcChannel() {
     return;
   }
 
-  ipc_channel_ = IPC::Channel::CreateClient(
-      mojo::edk::ConnectToPeerProcess(std::move(channel_handle_)).release(),
-      this);
+  ipc_channel_ =
+      IPC::Channel::CreateClient(peer_connection_
+                                     .Connect(mojo::edk::ConnectionParams(
+                                         mojo::edk::TransportProtocol::kLegacy,
+                                         std::move(channel_handle_)))
+                                     .release(),
+                                 this);
   if (ipc_channel_->Connect()) {
     return;
   }

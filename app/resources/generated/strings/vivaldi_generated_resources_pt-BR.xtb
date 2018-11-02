@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-BR">
-<translation id="1030173864176315846">Impressão de <ph name="PAGE_NUMBER" /> páginas completada em <ph name="PRINTER_NAME" /></translation>
 <translation id="1031362278801463162">Carregando visualização</translation>
 <translation id="1049795001945932310">&amp;Configurações de idioma</translation>
 <translation id="1084824384139382525">&amp;Copiar endereço do link</translation>
@@ -10,7 +9,6 @@
 <translation id="1175364870820465910">Im&amp;primir...</translation>
 <translation id="1181037720776840403">Remover</translation>
 <translation id="1187722533808055681">Ativações do estado ocioso</translation>
-<translation id="1218323606465324064">Imprimindo <ph name="PAGE_NUMBER" /> páginas em <ph name="PRINTER_NAME" /></translation>
 <translation id="1278049586634282054">Inspecionar:</translation>
 <translation id="1303101771013849280">Arquivo HTML de marcadores</translation>
 <translation id="1368832886055348810">Da &amp;esquerda para a direita</translation>
@@ -20,7 +18,6 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="159359590073980872">Cache de Imagem</translation>
 <translation id="1616206807336925449">Esta extensão não requer permissões especiais.</translation>
-<translation id="1620510694547887537">Câmera</translation>
 <translation id="1627276047960621195">Descritores de Arquivos</translation>
 <translation id="1635033183663317347">Instalada pelo seu tutor legal.</translation>
 <translation id="1682548588986054654">Nova janela privada</translation>
@@ -31,7 +28,6 @@
 <translation id="1744108098763830590">Página de fundo</translation>
 <translation id="176587472219019965">Nova &amp;Janela</translation>
 <translation id="1769104665586091481">Abrir link em nova &amp;janela</translation>
-<translation id="1789575671122666129">Popups</translation>
 <translation id="1815083418640426271">Colar &amp;sem formatação</translation>
 <translation id="1859234291848436338">&amp;Direção da escrita</translation>
 <translation id="1901303067676059328">Selecionar &amp;tudo</translation>
@@ -41,11 +37,8 @@
 <translation id="2019718679933488176">Abrir áudio em nova &amp;guia</translation>
 <translation id="2087822576218954668">Impressão: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Atualiza&amp;r frame</translation>
-<translation id="2115291620696624944">Erro ao imprimir <ph name="PAGE_NUMBER" /> páginas em <ph name="PRINTER_NAME" /></translation>
-<translation id="2147827593068025794">Sincronização em segundo plano</translation>
 <translation id="2148892889047469596">Transmitir guia</translation>
 <translation id="2177950615300672361">Guia Privada: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">Detectar (padrão)</translation>
 <translation id="219008588003277019">Módulo de Cliente Nativo: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Colar &amp;sem formatação</translation>
 <translation id="2282146716419988068">Processo de GPU</translation>
@@ -58,8 +51,8 @@
 <translation id="241082044617551207">Plugin desconhecido</translation>
 <translation id="2423578206845792524">&amp;Salvar imagem como...</translation>
 <translation id="2445081178310039857">O diretório raiz da extensão é obrigatório.</translation>
-<translation id="2482878487686419369">Notificações</translation>
 <translation id="2501797496290880632">Digite um atalho</translation>
+<translation id="253557089021624350">Manutenção de atividade</translation>
 <translation id="2550212893339833758">Memória de swap</translation>
 <translation id="2580924999637585241">Total: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2721037002783622288">Pes&amp;quisar imagem no <ph name="SEARCH_ENGINE" /></translation>
@@ -81,7 +74,6 @@
 <translation id="3124111068741548686">Handles do USER</translation>
 <translation id="3149510190863420837">Aplicativos</translation>
 <translation id="3222066309010235055">Pré-renderizador: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Microfone</translation>
 <translation id="32279126412636473">Recarregar (⌘R)</translation>
 <translation id="3241680850019875542">Selecione o diretório raiz da extensão a ser empacotada. Para atualizar uma extensão, selecione também a chave privada a ser reutilizada.</translation>
 <translation id="3280237271814976245">&amp;Salvar como...</translation>
@@ -91,7 +83,6 @@
 <translation id="3347086966102161372">&amp;Copiar endereço da imagem</translation>
 <translation id="335985608243443814">Procurar...</translation>
 <translation id="3396331542604645348">A impressora selecionada não está disponível ou instalada corretamente.  Verifique sua impressora ou selecione outra.</translation>
-<translation id="3427092606871434483">Permitir (padrão)</translation>
 <translation id="3435896845095436175">Habilitar</translation>
 <translation id="345693547134384690">Abrir imagem em nova &amp;guia</translation>
 <translation id="3467267818798281173">&amp;Obter sugestões da Google</translation>
@@ -108,7 +99,6 @@
 <translation id="3866249974567520381">Descrição</translation>
 <translation id="3909791450649380159">&amp;Recortar</translation>
 <translation id="3936390757709632190">Abrir áudio em nova &amp;guia</translation>
-<translation id="3936999098172113189">Aguardando para imprimir <ph name="PAGE_NUMBER" /> páginas em <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Voltar</translation>
 <translation id="3948116654032448504">Pes&amp;quisar imagem no <ph name="SEARCH_ENGINE" /></translation>
 <translation id="4021279097213088397">–</translation>
@@ -125,7 +115,6 @@
 <translation id="4240511609794012987">Memória compartilhada</translation>
 <translation id="4256316378292851214">&amp;Salvar vídeo como...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (<ph name="NUM_KILOBYTES_LIVE" /> KB ativos)</translation>
-<translation id="4312866146174492540">Bloquear (padrão)</translation>
 <translation id="4363771538994847871">Nenhum destino para transmissão foi encontrado. Precisa de ajuda?</translation>
 <translation id="4384652540891215547">Habilitar a extensão</translation>
 <translation id="4414232939543644979">Nova Janela &amp;Privada</translation>
@@ -140,6 +129,7 @@
 <translation id="4643612240819915418">Abrir vídeo em nova &amp;guia</translation>
 <translation id="4677772697204437347">Memória GPU</translation>
 <translation id="4688541352655220763">Você pode usar este recurso para exibir o conteúdo do Vivaldi na sua TV ou em outros dispositivos.</translation>
+<translation id="4726710629007580002">Avisos ao instalar esta extensão:</translation>
 <translation id="4839303808932127586">&amp;Salvar vídeo como...</translation>
 <translation id="4912643508233590958">Ativações do Estado Ocioso</translation>
 <translation id="4927301649992043040">Compactar Extensão</translation>
@@ -166,14 +156,12 @@
 <translation id="5646376287012673985">Localização</translation>
 <translation id="5715711091495208045">Agente de Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">&amp;Salvar áudio como...</translation>
-<translation id="5778550464785688721">Controle total de dispositivos MIDI</translation>
 <translation id="5780973441651030252">Prioridade</translation>
 <translation id="5804241973901381774">Permissões</translation>
 <translation id="583281660410589416">Desconhecida</translation>
 <translation id="5849869942539715694">Compactar Extensão...</translation>
 <translation id="5910363049092958439">&amp;Salvar imagem como...</translation>
 <translation id="59174027418879706">Habilitada</translation>
-<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 em uso} other {# em uso}}</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (pico de <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="6040143037577758943">Fechar</translation>
 <translation id="6086846494333236931">Instalada pelo administrador</translation>
@@ -188,11 +176,13 @@
 <translation id="6251870443722440887">Handles do GDI</translation>
 <translation id="6264365405983206840">Selecionar &amp;tudo</translation>
 <translation id="6308937455967653460">&amp;Salvar link como...</translation>
+<translation id="6326855256003666642">Manutenção de Atividade</translation>
 <translation id="6406303162637086258">Simular reinicialização do navegador</translation>
 <translation id="6412931879992742813">Nova janela privada</translation>
 <translation id="6437213622978068772">Recarregar (Ctrl+R)</translation>
 <translation id="6447842834002726250">Cookies</translation>
 <translation id="6498249116389603658">&amp;Todos os idiomas listados</translation>
+<translation id="6503077044568424649">Mais visitados</translation>
 <translation id="6508261954199872201">Aplicativo: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">&amp;Copiar imagem</translation>
 <translation id="6550675742724504774">Opções</translation>
@@ -265,7 +255,6 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8004582292198964060">Navegador</translation>
 <translation id="8023801379949507775">Verificar Atualizações</translation>
 <translation id="8032244173881942855">Não foi possível transmitir a guia.</translation>
-<translation id="8037357227543935929">Perguntar (padrão)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8188120771410500975">&amp;Verificar ortografia em campos de texto</translation>
 <translation id="8294431847097064396">Origem da instalação</translation>
@@ -275,7 +264,6 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8512476990829870887">Encerrar Processo</translation>
 <translation id="8523849605371521713">Adicionada por uma política administrativa</translation>
 <translation id="8546306075665861288">Cache de imagem</translation>
-<translation id="855705891482654011">Carregar extensão descompactada</translation>
 <translation id="8584280235376696778">Abrir vídeo em nova &amp;guia</translation>
 <translation id="8605428685123651449">Memória SQLite</translation>
 <translation id="8615618338313291042">Aplicativo Privado: <ph name="APP_NAME" /></translation>
@@ -296,7 +284,6 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8938356204940892126">Cancelar</translation>
 <translation id="895944840846194039">Memória JavaScript</translation>
 <translation id="9027459031423301635">Abrir link em nova &amp;guia</translation>
-<translation id="9145718805518496796">Compactar extensão</translation>
 <translation id="9170848237812810038">Des&amp;fazer</translation>
 <translation id="9219103736887031265">Imagens</translation>
 <translation id="994289308992179865">&amp;Repetir</translation>

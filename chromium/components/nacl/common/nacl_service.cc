@@ -12,12 +12,13 @@
 #include "content/public/common/service_names.mojom.h"
 #include "ipc/ipc.mojom.h"
 #include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/incoming_broker_client_invitation.h"
 #include "mojo/edk/embedder/scoped_ipc_support.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
-#include "services/service_manager/public/cpp/service_info.h"
 
 #if defined(OS_POSIX)
 #include "base/posix/global_descriptors.h"
@@ -28,7 +29,8 @@
 
 namespace {
 
-void EstablishMojoConnection() {
+std::unique_ptr<mojo::edk::IncomingBrokerClientInvitation>
+EstablishMojoConnection() {
 #if defined(OS_WIN)
   mojo::edk::ScopedPlatformHandle platform_channel(
       mojo::edk::PlatformChannelPair::PassClientHandleFromParentProcess(
@@ -38,22 +40,25 @@ void EstablishMojoConnection() {
       base::GlobalDescriptors::GetInstance()->Get(kMojoIPCChannel)));
 #endif
   DCHECK(platform_channel.is_valid());
-  mojo::edk::SetParentPipeHandle(std::move(platform_channel));
+  return mojo::edk::IncomingBrokerClientInvitation::Accept(
+      mojo::edk::ConnectionParams(mojo::edk::TransportProtocol::kLegacy,
+                                  std::move(platform_channel)));
 }
 
-service_manager::mojom::ServiceRequest ConnectToServiceManager() {
+service_manager::mojom::ServiceRequest ConnectToServiceManager(
+    mojo::edk::IncomingBrokerClientInvitation* invitation) {
   const std::string service_request_channel_token =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kServiceRequestChannelToken);
   DCHECK(!service_request_channel_token.empty());
   mojo::ScopedMessagePipeHandle parent_handle =
-      mojo::edk::CreateChildMessagePipe(service_request_channel_token);
+      invitation->ExtractMessagePipe(service_request_channel_token);
   DCHECK(parent_handle.is_valid());
-  return mojo::MakeRequest<service_manager::mojom::Service>(
-      std::move(parent_handle));
+  return service_manager::mojom::ServiceRequest(std::move(parent_handle));
 }
 
 void ConnectBootstrapChannel(IPC::mojom::ChannelBootstrapPtrInfo ptr,
+                             const service_manager::BindSourceInfo& source_info,
                              IPC::mojom::ChannelBootstrapRequest request) {
   mojo::FuseInterface(std::move(request), std::move(ptr));
 }
@@ -65,7 +70,7 @@ class NaClService : public service_manager::Service {
   ~NaClService() override;
 
   // Service overrides.
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
 
@@ -88,13 +93,13 @@ NaClService::NaClService(
 NaClService::~NaClService() = default;
 
 void NaClService::OnBindInterface(
-    const service_manager::ServiceInfo& source_info,
+    const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
   if (source_info.identity.name() == content::mojom::kBrowserServiceName &&
       !connected_) {
     connected_ = true;
-    registry_.BindInterface(source_info.identity, interface_name,
+    registry_.BindInterface(source_info, interface_name,
                             std::move(interface_pipe));
   }
 }
@@ -107,12 +112,12 @@ std::unique_ptr<service_manager::ServiceContext> CreateNaClServiceContext(
   auto ipc_support = base::MakeUnique<mojo::edk::ScopedIPCSupport>(
       std::move(io_task_runner),
       mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST);
-  EstablishMojoConnection();
-
+  auto invitation = EstablishMojoConnection();
   IPC::mojom::ChannelBootstrapPtr bootstrap;
   *ipc_channel = mojo::MakeRequest(&bootstrap).PassMessagePipe();
-  return base::MakeUnique<service_manager::ServiceContext>(
+  auto context = base::MakeUnique<service_manager::ServiceContext>(
       base::MakeUnique<NaClService>(bootstrap.PassInterface(),
                                     std::move(ipc_support)),
-      ConnectToServiceManager());
+      ConnectToServiceManager(invitation.get()));
+  return context;
 }

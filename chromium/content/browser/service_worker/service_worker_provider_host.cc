@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
@@ -26,7 +27,9 @@
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/origin_util.h"
+#include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "net/base/url_util.h"
 
 namespace content {
@@ -110,6 +113,31 @@ std::unique_ptr<ServiceWorkerProviderHost> ServiceWorkerProviderHost::Create(
   return base::WrapUnique(new ServiceWorkerProviderHost(
       process_id, info.route_id, info.provider_id, info.type,
       info.is_parent_frame_secure, context, dispatcher_host));
+}
+
+void ServiceWorkerProviderHost::BindWorkerFetchContext(
+    mojom::ServiceWorkerWorkerClientAssociatedPtrInfo client_ptr_info) {
+  DCHECK(base::FeatureList::IsEnabled(features::kOffMainThreadFetch));
+  mojom::ServiceWorkerWorkerClientAssociatedPtr client;
+  client.Bind(std::move(client_ptr_info));
+  client.set_connection_error_handler(
+      base::Bind(&ServiceWorkerProviderHost::UnregisterWorkerFetchContext,
+                 base::Unretained(this), client.get()));
+
+  if (controlling_version_)
+    client->SetControllerServiceWorker(controlling_version_->version_id());
+
+  auto result = worker_clients_.insert(
+      std::make_pair<mojom::ServiceWorkerWorkerClient*,
+                     mojom::ServiceWorkerWorkerClientAssociatedPtr>(
+          client.get(), std::move(client)));
+  DCHECK(result.second);
+}
+
+void ServiceWorkerProviderHost::UnregisterWorkerFetchContext(
+    mojom::ServiceWorkerWorkerClient* client) {
+  DCHECK(worker_clients_.count(client));
+  worker_clients_.erase(client);
 }
 
 ServiceWorkerProviderHost::ServiceWorkerProviderHost(
@@ -247,8 +275,12 @@ void ServiceWorkerProviderHost::SetControllerVersionAttribute(
 
   scoped_refptr<ServiceWorkerVersion> previous_version = controlling_version_;
   controlling_version_ = version;
-  if (version)
+  if (version) {
     version->AddControllee(this);
+    for (const auto& pair : worker_clients_) {
+      pair.second->SetControllerServiceWorker(version->version_id());
+    }
+  }
   if (previous_version.get())
     previous_version->RemoveControllee(this);
 
@@ -509,7 +541,7 @@ ServiceWorkerProviderHost::PrepareForCrossSiteTransfer() {
   DCHECK_EQ(kDocumentMainThreadId, render_thread_id_);
   DCHECK_NE(SERVICE_WORKER_PROVIDER_UNKNOWN, provider_type_);
 
-  std::unique_ptr<ServiceWorkerProviderHost> new_provider_host =
+  std::unique_ptr<ServiceWorkerProviderHost> provisional_host =
       base::WrapUnique(new ServiceWorkerProviderHost(
           process_id(), frame_id(), provider_id(), provider_type(),
           is_parent_frame_secure(), context_, dispatcher_host()));
@@ -533,24 +565,22 @@ ServiceWorkerProviderHost::PrepareForCrossSiteTransfer() {
   provider_id_ = kInvalidServiceWorkerProviderId;
   provider_type_ = SERVICE_WORKER_PROVIDER_UNKNOWN;
   dispatcher_host_ = nullptr;
-  return new_provider_host;
+  return provisional_host;
 }
 
 void ServiceWorkerProviderHost::CompleteCrossSiteTransfer(
-    int new_process_id,
-    int new_frame_id,
-    int new_provider_id,
-    ServiceWorkerProviderType new_provider_type,
-    ServiceWorkerDispatcherHost* new_dispatcher_host) {
+    ServiceWorkerProviderHost* provisional_host) {
   DCHECK_EQ(ChildProcessHost::kInvalidUniqueID, render_process_id_);
-  DCHECK_NE(ChildProcessHost::kInvalidUniqueID, new_process_id);
-  DCHECK_NE(MSG_ROUTING_NONE, new_frame_id);
+  DCHECK_NE(ChildProcessHost::kInvalidUniqueID, provisional_host->process_id());
+  DCHECK_NE(MSG_ROUTING_NONE, provisional_host->frame_id());
 
   render_thread_id_ = kDocumentMainThreadId;
-  provider_id_ = new_provider_id;
-  provider_type_ = new_provider_type;
+  provider_id_ = provisional_host->provider_id();
+  provider_type_ = provisional_host->provider_type();
 
-  FinalizeInitialization(new_process_id, new_frame_id, new_dispatcher_host);
+  FinalizeInitialization(provisional_host->process_id(),
+                         provisional_host->frame_id(),
+                         provisional_host->dispatcher_host());
 }
 
 // PlzNavigate

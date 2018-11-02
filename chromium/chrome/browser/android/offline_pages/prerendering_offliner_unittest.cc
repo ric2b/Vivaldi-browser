@@ -45,7 +45,8 @@ class MockPrerenderingLoader : public PrerenderingLoader {
         mock_loading_(false),
         mock_loaded_(false),
         mock_is_lowbar_met_(false),
-        start_snapshot_called_(false) {}
+        start_snapshot_called_(false),
+        web_contents_(nullptr) {}
   ~MockPrerenderingLoader() override { delete web_contents_; }
 
   bool LoadPage(const GURL& url,
@@ -66,7 +67,15 @@ class MockPrerenderingLoader : public PrerenderingLoader {
   bool IsLoaded() override { return mock_loaded_; }
   bool IsLowbarMet() override { return mock_is_lowbar_met_; }
 
-  void StartSnapshot() override { start_snapshot_called_ = true; }
+  void StartSnapshot() override {
+    start_snapshot_called_ = true;
+    // Call start saving process.
+    web_contents_ = content::WebContentsTester::CreateTestWebContents(
+        new TestingProfile(), NULL);
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(load_page_callback_,
+                              Offliner::RequestStatus::LOADED, web_contents_));
+  }
 
   void CompleteLoadingAsFailed() {
     DCHECK(mock_loading_);
@@ -150,6 +159,14 @@ class MockOfflinePageModel : public StubOfflinePageModel {
         base::Bind(save_page_callback_, SavePageResult::SUCCESS, 123456));
   }
 
+  void CompleteSavingAsAlreadyExists() {
+    DCHECK(mock_saving_);
+    mock_saving_ = false;
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(save_page_callback_,
+                              SavePageResult::ALREADY_EXISTS, 123456));
+  }
+
   bool mock_saving() const { return mock_saving_; }
 
  private:
@@ -199,7 +216,7 @@ class PrerenderingOfflinerTest : public testing::Test {
   void OnCompletion(const SavePageRequest& request,
                     Offliner::RequestStatus status);
   void OnProgress(const SavePageRequest& request, int64_t bytes);
-  void OnCancel(int64_t offline_id);
+  void OnCancel(const SavePageRequest& request);
 
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
@@ -243,7 +260,7 @@ void PrerenderingOfflinerTest::OnCompletion(const SavePageRequest& request,
 void PrerenderingOfflinerTest::OnProgress(const SavePageRequest& request,
                                           int64_t bytes) {}
 
-void PrerenderingOfflinerTest::OnCancel(int64_t offline_id) {
+void PrerenderingOfflinerTest::OnCancel(const SavePageRequest& request) {
   DCHECK(!cancel_callback_called_);
   cancel_callback_called_ = true;
 }
@@ -401,6 +418,29 @@ TEST_F(PrerenderingOfflinerTest, LoadAndSaveSuccessful) {
   EXPECT_FALSE(SaveInProgress());
 }
 
+TEST_F(PrerenderingOfflinerTest, LoadAndSavePageAlreadyExists) {
+  base::Time creation_time = base::Time::Now();
+  SavePageRequest request(kRequestId, kHttpUrl, kClientId, creation_time,
+                          kUserRequested);
+  EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
+                                      progress_callback()));
+  EXPECT_FALSE(loader()->IsIdle());
+  EXPECT_EQ(Offliner::RequestStatus::UNKNOWN, request_status());
+
+  loader()->CompleteLoadingAsLoaded();
+  PumpLoop();
+  EXPECT_FALSE(completion_callback_called());
+  EXPECT_TRUE(loader()->IsLoaded());
+  EXPECT_TRUE(SaveInProgress());
+
+  model()->CompleteSavingAsAlreadyExists();
+  PumpLoop();
+  EXPECT_TRUE(completion_callback_called());
+  EXPECT_EQ(Offliner::RequestStatus::SAVED, request_status());
+  EXPECT_FALSE(loader()->IsLoaded());
+  EXPECT_FALSE(SaveInProgress());
+}
+
 TEST_F(PrerenderingOfflinerTest, LoadAndSaveLoadedButThenCanceledFromLoader) {
   base::Time creation_time = base::Time::Now();
   SavePageRequest request(
@@ -431,12 +471,17 @@ TEST_F(PrerenderingOfflinerTest, ForegroundTransitionCancelsOnLowEndDevice) {
   base::Time creation_time = base::Time::Now();
   SavePageRequest request(
       kRequestId, kHttpUrl, kClientId, creation_time, kUserRequested);
+  // LoadAndSave completes asynchronously, and notifies us via the
+  // completion_callback() when it completes.
   EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
                                       progress_callback()));
   EXPECT_FALSE(loader()->IsIdle());
 
   offliner()->SetApplicationStateForTesting(
       base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES);
+
+  // Wait until the completion callback arrives before checking postconditions.
+  PumpLoop();
 
   // Loading canceled on low-end device.
   EXPECT_TRUE(loader()->IsIdle());
@@ -449,12 +494,17 @@ TEST_F(PrerenderingOfflinerTest, ForegroundTransitionIgnoredOnHighEndDevice) {
   base::Time creation_time = base::Time::Now();
   SavePageRequest request(
       kRequestId, kHttpUrl, kClientId, creation_time, kUserRequested);
+  // LoadAndSave completes asynchronously, and notifies us via the
+  // completion_callback() when it completes.
   EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
                                       progress_callback()));
   EXPECT_FALSE(loader()->IsIdle());
 
   offliner()->SetApplicationStateForTesting(
       base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES);
+
+  // Wait until the completion callback arrives before checking postconditions.
+  PumpLoop();
 
   // Loader still loading since not low-end device.
   EXPECT_FALSE(loader()->IsIdle());
@@ -470,8 +520,14 @@ TEST_F(PrerenderingOfflinerTest, HandleTimeoutWithLowbarAndCompletedTriesMet) {
   EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
                                       progress_callback()));
   loader()->set_is_lowbar_met(true);
-  EXPECT_TRUE(offliner()->HandleTimeout(request));
+  EXPECT_TRUE(offliner()->HandleTimeout(kRequestId));
   EXPECT_TRUE(loader()->start_snapshot_called());
+  PumpLoop();
+  // EXPECT_TRUE(SaveInProgress());
+  model()->CompleteSavingAsSuccess();
+  PumpLoop();
+  EXPECT_TRUE(completion_callback_called());
+  EXPECT_EQ(Offliner::RequestStatus::SAVED_ON_LAST_RETRY, request_status());
 }
 
 TEST_F(PrerenderingOfflinerTest,
@@ -485,7 +541,7 @@ TEST_F(PrerenderingOfflinerTest,
   EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
                                       progress_callback()));
   loader()->set_is_lowbar_met(true);
-  EXPECT_TRUE(offliner()->HandleTimeout(request));
+  EXPECT_TRUE(offliner()->HandleTimeout(kRequestId));
   EXPECT_TRUE(loader()->start_snapshot_called());
 }
 
@@ -500,7 +556,21 @@ TEST_F(PrerenderingOfflinerTest,
   EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
                                       progress_callback()));
   loader()->set_is_lowbar_met(false);
-  EXPECT_FALSE(offliner()->HandleTimeout(request));
+  EXPECT_FALSE(offliner()->HandleTimeout(kRequestId));
+  EXPECT_FALSE(loader()->start_snapshot_called());
+}
+
+TEST_F(PrerenderingOfflinerTest, HandleTimeoutStartedTriesMetWithoutLowbarMet) {
+  offliner()->SetLowEndDeviceForTesting(false);
+
+  base::Time creation_time = base::Time::Now();
+  SavePageRequest request(kRequestId, kHttpUrl, kClientId, creation_time,
+                          kUserRequested);
+  request.set_started_attempt_count(policy()->GetMaxStartedTries() - 1);
+  EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
+                                      progress_callback()));
+  loader()->set_is_lowbar_met(false);
+  EXPECT_FALSE(offliner()->HandleTimeout(kRequestId));
   EXPECT_FALSE(loader()->start_snapshot_called());
 }
 
@@ -514,7 +584,7 @@ TEST_F(PrerenderingOfflinerTest, HandleTimeoutWithLowbarAndStartedTriesMet) {
   EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
                                       progress_callback()));
   loader()->set_is_lowbar_met(true);
-  EXPECT_TRUE(offliner()->HandleTimeout(request));
+  EXPECT_TRUE(offliner()->HandleTimeout(kRequestId));
   EXPECT_TRUE(loader()->start_snapshot_called());
 }
 
@@ -527,7 +597,7 @@ TEST_F(PrerenderingOfflinerTest, HandleTimeoutWithOnlyLowbarMet) {
   EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
                                       progress_callback()));
   loader()->set_is_lowbar_met(true);
-  EXPECT_FALSE(offliner()->HandleTimeout(request));
+  EXPECT_FALSE(offliner()->HandleTimeout(kRequestId));
   EXPECT_FALSE(loader()->start_snapshot_called());
 }
 

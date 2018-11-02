@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_item_controller.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "ash/wm/window_util.h"
 #include "base/memory/ptr_util.h"
@@ -16,8 +17,8 @@
 #include "ui/wm/core/window_animations.h"
 
 AppWindowLauncherItemController::AppWindowLauncherItemController(
-    const ash::AppLaunchId& app_launch_id)
-    : ash::ShelfItemDelegate(app_launch_id), observed_windows_(this) {}
+    const ash::ShelfID& shelf_id)
+    : ash::ShelfItemDelegate(shelf_id), observed_windows_(this) {}
 
 AppWindowLauncherItemController::~AppWindowLauncherItemController() {}
 
@@ -26,6 +27,7 @@ void AppWindowLauncherItemController::AddWindow(ui::BaseWindow* app_window) {
   aura::Window* window = app_window->GetNativeWindow();
   if (window)
     observed_windows_.Add(window);
+  UpdateLauncherItem();
 }
 
 AppWindowLauncherItemController::WindowList::iterator
@@ -48,8 +50,8 @@ void AppWindowLauncherItemController::RemoveWindow(ui::BaseWindow* app_window) {
     NOTREACHED();
     return;
   }
-  OnWindowRemoved(app_window);
   windows_.erase(iter);
+  UpdateLauncherItem();
 }
 
 ui::BaseWindow* AppWindowLauncherItemController::GetAppWindow(
@@ -64,6 +66,7 @@ void AppWindowLauncherItemController::SetActiveWindow(aura::Window* window) {
   ui::BaseWindow* app_window = GetAppWindow(window);
   if (app_window)
     last_active_window_ = app_window;
+  UpdateLauncherItem();
 }
 
 AppWindowLauncherItemController*
@@ -75,9 +78,9 @@ void AppWindowLauncherItemController::ItemSelected(
     std::unique_ptr<ui::Event> event,
     int64_t display_id,
     ash::ShelfLaunchSource source,
-    const ItemSelectedCallback& callback) {
+    ItemSelectedCallback callback) {
   if (windows_.empty()) {
-    callback.Run(ash::SHELF_ACTION_NONE, base::nullopt);
+    std::move(callback).Run(ash::SHELF_ACTION_NONE, base::nullopt);
     return;
   }
 
@@ -93,7 +96,8 @@ void AppWindowLauncherItemController::ItemSelected(
     action = ShowAndActivateOrMinimize(window_to_show);
   }
 
-  callback.Run(action, GetAppMenuItems(event ? event->flags() : ui::EF_NONE));
+  std::move(callback).Run(
+      action, GetAppMenuItems(event ? event->flags() : ui::EF_NONE));
 }
 
 void AppWindowLauncherItemController::ExecuteCommand(uint32_t command_id,
@@ -115,6 +119,14 @@ void AppWindowLauncherItemController::ActivateIndexedApp(size_t index) {
   auto it = windows_.begin();
   std::advance(it, index);
   ShowAndActivateOrMinimize(*it);
+}
+
+ui::BaseWindow* AppWindowLauncherItemController::GetLastActiveWindow() {
+  if (last_active_window_)
+    return last_active_window_;
+  if (windows_.empty())
+    return nullptr;
+  return windows_.front();
 }
 
 void AppWindowLauncherItemController::OnWindowPropertyChanged(

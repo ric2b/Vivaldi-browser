@@ -16,8 +16,6 @@ namespace {
 // "chrome/browser/ui/webui/favicon_source.h" for a description of
 // what each does.
 const char kIconURLParameter[] = "iconurl/";
-const char kLargestParameter[] = "largest/";
-const char kOriginParameter[] = "origin/";
 const char kSizeParameter[] = "size/";
 
 // Returns true if |search| is a substring of |path| which starts at
@@ -33,7 +31,6 @@ bool HasSubstringAt(const std::string& path,
 namespace chrome {
 
 bool ParseFaviconPath(const std::string& path,
-                      int icon_types,
                       ParsedFaviconPath* parsed) {
   parsed->is_icon_url = false;
   parsed->url = "";
@@ -45,10 +42,7 @@ bool ParseFaviconPath(const std::string& path,
     return false;
 
   size_t parsed_index = 0;
-  if (HasSubstringAt(path, parsed_index, kLargestParameter)) {
-    parsed_index += strlen(kLargestParameter);
-    parsed->size_in_dip = 0;
-  } else if (HasSubstringAt(path, parsed_index, kSizeParameter)) {
+  if (HasSubstringAt(path, parsed_index, kSizeParameter)) {
     parsed_index += strlen(kSizeParameter);
 
     size_t slash = path.find("/", parsed_index);
@@ -71,23 +65,8 @@ bool ParseFaviconPath(const std::string& path,
     if (!base::StringToInt(size_str, &parsed->size_in_dip))
       return false;
 
-    if (parsed->size_in_dip != (gfx::kFaviconSize * 4) &&
-        parsed->size_in_dip != (gfx::kFaviconSize * 2)) {
-      // Only 64x64, 32x32 and 16x16 icons are supported.
-      parsed->size_in_dip = gfx::kFaviconSize;
-    }
     if (!scale_str.empty())
       webui::ParseScaleFactor(scale_str, &parsed->device_scale_factor);
-
-    // Return the default favicon (as opposed to a resized favicon) for
-    // favicon sizes which are not cached by the favicon service.
-    // Currently the favicon service caches:
-    // - favicons of sizes "gfx::kFaviconSize * scale factor" px of type FAVICON
-    //   where scale factor is one of FaviconUtil::GetFaviconScales().
-    // - the largest TOUCH_ICON / TOUCH_PRECOMPOSED_ICON
-    if (parsed->size_in_dip != gfx::kFaviconSize &&
-        icon_types == favicon_base::FAVICON)
-      return false;
 
     parsed_index = slash + 1;
   }
@@ -96,20 +75,6 @@ bool ParseFaviconPath(const std::string& path,
     parsed_index += strlen(kIconURLParameter);
     parsed->is_icon_url = true;
     parsed->url = path.substr(parsed_index);
-  } else if (HasSubstringAt(path, parsed_index, kOriginParameter)) {
-    // URL requests prefixed with "origin/" are converted to a form with an
-    // empty path and a valid scheme. (e.g., example.com -->
-    // http://example.com/ or http://example.com/a --> http://example.com/)
-    parsed_index += strlen(kOriginParameter);
-    std::string possibly_invalid_url = path.substr(parsed_index);
-
-    // If the URL does not specify a scheme (e.g., example.com instead of
-    // http://example.com), add "http://" as a default.
-    if (!GURL(possibly_invalid_url).has_scheme())
-      possibly_invalid_url = "http://" + possibly_invalid_url;
-
-    // Strip the path beyond the top-level domain.
-    parsed->url = GURL(possibly_invalid_url).GetOrigin().spec();
   } else {
     parsed->url = path.substr(parsed_index);
   }

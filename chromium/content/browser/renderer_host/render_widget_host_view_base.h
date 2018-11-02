@@ -17,7 +17,6 @@
 #include "base/observer_list.h"
 #include "base/process/kill.h"
 #include "base/strings/string16.h"
-#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "cc/ipc/mojo_compositor_frame_sink.mojom.h"
 #include "cc/output/compositor_frame.h"
@@ -75,6 +74,7 @@ class RenderWidgetHostImpl;
 class RenderWidgetHostViewBaseObserver;
 class SyntheticGestureTarget;
 class TextInputManager;
+class TouchSelectionControllerClientManager;
 class WebCursor;
 struct NativeWebKeyboardEvent;
 struct TextInputState;
@@ -192,7 +192,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // Called by the host when it requires an input flush; the flush call should
   // by synchronized with BeginFrame.
-  virtual void OnSetNeedsFlushInput();
+  virtual void OnSetNeedsFlushInput() = 0;
 
   virtual void WheelEventAck(const blink::WebMouseWheelEvent& event,
                              InputEventAckState ack_result);
@@ -232,7 +232,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
                                      cc::CompositorFrame frame) = 0;
 
-  virtual void OnBeginFrameDidNotSwap(const cc::BeginFrameAck& ack) {}
+  virtual void OnDidNotProduceFrame(const cc::BeginFrameAck& ack) {}
   virtual void OnSurfaceChanged(const cc::SurfaceInfo& surface_info) {}
 
   // This method exists to allow removing of displayed graphics, after a new
@@ -252,9 +252,10 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   virtual void DidStopFlinging() {}
 
-  // Returns the compositing surface ID namespace, or 0 if Surfaces are not
-  // enabled.
+  // Returns the ID associated with the CompositorFrameSink of this view.
   virtual cc::FrameSinkId GetFrameSinkId();
+
+  virtual cc::LocalSurfaceId GetLocalSurfaceId() const;
 
   // When there are multiple RenderWidgetHostViews for a single page, input
   // events need to be targeted to the correct one for handling. The following
@@ -265,7 +266,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
       cc::SurfaceHittestDelegate* delegate,
       const gfx::Point& point,
       gfx::Point* transformed_point);
-  virtual void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event) {}
+  virtual void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event,
+                                    const ui::LatencyInfo& latency) {}
   virtual void ProcessMouseEvent(const blink::WebMouseEvent& event,
                                  const ui::LatencyInfo& latency) {}
   virtual void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
@@ -311,6 +313,10 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // a more generic term -- in which case, static casts to RWHVChildFrame will
   // need to also be resolved.
   virtual bool IsRenderWidgetHostViewChildFrame();
+
+  // Notify the View that a screen rect update is being sent to the
+  // RenderWidget. Related platform-specific updates can be sent from here.
+  virtual void WillSendScreenRects() {}
 
   // Returns true if the current view is in virtual reality mode.
   virtual bool IsInVR() const;
@@ -417,6 +423,17 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   bool is_fullscreen() { return is_fullscreen_; }
 
+  bool wheel_scroll_latching_enabled() {
+    return wheel_scroll_latching_enabled_;
+  }
+
+  // This only returns non-null on platforms that implement touch
+  // selection editing (TSE), currently Aura and (soon) Android.
+  // TODO(wjmaclean): update this comment when OOPIF TSE is implemented on
+  // Android.
+  virtual TouchSelectionControllerClientManager*
+  touch_selection_controller_client_manager();
+
   // Exposed for testing.
   virtual bool IsChildFrameForTesting() const;
   virtual cc::SurfaceId SurfaceIdForTesting() const;
@@ -456,14 +473,12 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // destroyed before the RWHV is destroyed.
   TextInputManager* text_input_manager_;
 
- private:
-  void FlushInput();
+  const bool wheel_scroll_latching_enabled_;
 
+ private:
   gfx::Rect current_display_area_;
 
   uint32_t renderer_frame_number_;
-
-  base::OneShotTimer flush_input_timer_;
 
   base::ObserverList<RenderWidgetHostViewBaseObserver> observers_;
 

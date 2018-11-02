@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
 
 #include <memory>
+#include <string>
 
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
@@ -12,12 +13,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/browser/ui/webui/ntp/app_launcher_handler.h"
 #include "chrome/browser/ui/webui/ntp/core_app_launcher_handler.h"
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache.h"
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache_factory.h"
 #include "chrome/browser/ui/webui/theme_handler.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -26,13 +27,8 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
-#include "extensions/browser/extension_system.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
-
-using content::BrowserThread;
-using content::WebUIController;
 
 namespace {
 
@@ -53,37 +49,25 @@ const char* GetHtmlTextDirection(const base::string16& text) {
 ///////////////////////////////////////////////////////////////////////////////
 // NewTabUI
 
-NewTabUI::NewTabUI(content::WebUI* web_ui)
-    : WebUIController(web_ui) {
+NewTabUI::NewTabUI(content::WebUI* web_ui) : content::WebUIController(web_ui) {
   web_ui->OverrideTitle(l10n_util::GetStringUTF16(IDS_NEW_TAB_TITLE));
 
   Profile* profile = GetProfile();
-  if (!profile->IsOffTheRecord()) {
-    web_ui->AddMessageHandler(base::MakeUnique<MetricsHandler>());
-    web_ui->AddMessageHandler(base::MakeUnique<CoreAppLauncherHandler>());
-
-    ExtensionService* service =
-        extensions::ExtensionSystem::Get(profile)->extension_service();
-    // We might not have an ExtensionService (on ChromeOS when not logged in
-    // for example).
-    if (service) {
-      web_ui->AddMessageHandler(base::MakeUnique<AppLauncherHandler>(service));
-    }
-  }
 
   if (!profile->IsGuestSession())
     web_ui->AddMessageHandler(base::MakeUnique<ThemeHandler>());
 
-  std::unique_ptr<NewTabHTMLSource> html_source(
-      new NewTabHTMLSource(profile->GetOriginalProfile()));
-
-  // content::URLDataSource assumes the ownership of the html_source.
-  content::URLDataSource::Add(profile, html_source.release());
+  // content::URLDataSource assumes the ownership of the html source.
+  content::URLDataSource::Add(
+      profile, new NewTabHTMLSource(profile->GetOriginalProfile()));
 
   pref_change_registrar_.Init(profile->GetPrefs());
   pref_change_registrar_.Add(bookmarks::prefs::kShowBookmarkBar,
                              base::Bind(&NewTabUI::OnShowBookmarkBarChanged,
                                         base::Unretained(this)));
+  pref_change_registrar_.Add(
+      prefs::kWebKitDefaultFontSize,
+      base::Bind(&NewTabUI::OnDefaultFontSizeChanged, base::Unretained(this)));
 }
 
 NewTabUI::~NewTabUI() {}
@@ -97,6 +81,10 @@ void NewTabUI::OnShowBookmarkBarChanged() {
                                          attached);
 }
 
+void NewTabUI::OnDefaultFontSizeChanged() {
+  web_ui()->CallJavascriptFunctionUnsafe("ntp.defaultFontSizeChanged");
+}
+
 // static
 void NewTabUI::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
@@ -107,16 +95,6 @@ void NewTabUI::RegisterProfilePrefs(
 // static
 bool NewTabUI::IsNewTab(const GURL& url) {
   return url.GetOrigin() == GURL(chrome::kChromeUINewTabURL).GetOrigin();
-}
-
-// static
-bool NewTabUI::ShouldShowApps() {
-// Ash shows apps in app list thus should not show apps page in NTP4.
-#if defined(USE_ASH)
-  return false;
-#else
-  return true;
-#endif
 }
 
 // static
@@ -179,19 +157,7 @@ void NewTabUI::NewTabHTMLSource::StartDataRequest(
     const std::string& path,
     const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  std::map<std::string, std::pair<std::string, int> >::iterator it =
-    resource_map_.find(path);
-  if (it != resource_map_.end()) {
-    scoped_refptr<base::RefCountedMemory> resource_bytes(
-        it->second.second ?
-            ResourceBundle::GetSharedInstance().LoadDataResourceBytes(
-                it->second.second) :
-            new base::RefCountedStaticMemory);
-    callback.Run(resource_bytes.get());
-    return;
-  }
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (!path.empty() && path[0] != '#') {
     // A path under new-tab was requested; it's likely a bad relative
@@ -215,10 +181,6 @@ void NewTabUI::NewTabHTMLSource::StartDataRequest(
 
 std::string NewTabUI::NewTabHTMLSource::GetMimeType(const std::string& resource)
     const {
-  std::map<std::string, std::pair<std::string, int> >::const_iterator it =
-      resource_map_.find(resource);
-  if (it != resource_map_.end())
-    return it->second.first;
   return "text/html";
 }
 
@@ -247,15 +209,6 @@ std::string NewTabUI::NewTabHTMLSource::GetContentSecurityPolicyImgSrc()
 std::string NewTabUI::NewTabHTMLSource::GetContentSecurityPolicyChildSrc()
     const {
   return "child-src chrome-search://most-visited;";
-}
-
-void NewTabUI::NewTabHTMLSource::AddResource(const char* resource,
-                                             const char* mime_type,
-                                             int resource_id) {
-  DCHECK(resource);
-  DCHECK(mime_type);
-  resource_map_[std::string(resource)] =
-      std::make_pair(std::string(mime_type), resource_id);
 }
 
 NewTabUI::NewTabHTMLSource::~NewTabHTMLSource() {}

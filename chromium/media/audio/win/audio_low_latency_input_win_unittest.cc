@@ -14,6 +14,7 @@
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -22,9 +23,11 @@
 #include "base/test/test_timeouts.h"
 #include "base/win/scoped_com_initializer.h"
 #include "media/audio/audio_device_description.h"
+#include "media/audio/audio_device_info_accessor_for_tests.h"
 #include "media/audio/audio_io.h"
 #include "media/audio/audio_manager.h"
 #include "media/audio/audio_unittest_util.h"
+#include "media/audio/test_audio_thread.h"
 #include "media/audio/win/core_audio_util_win.h"
 #include "media/base/seekable_buffer.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -159,7 +162,8 @@ static bool HasCoreAudioAndInputDevices(AudioManager* audio_man) {
   // The low-latency (WASAPI-based) version requires Windows Vista or higher.
   // TODO(henrika): note that we use Wave today to query the number of
   // existing input devices.
-  return CoreAudioUtil::IsSupported() && audio_man->HasAudioInputDevices();
+  return CoreAudioUtil::IsSupported() &&
+         AudioDeviceInfoAccessorForTests(audio_man).HasAudioInputDevices();
 }
 
 // Convenience method which creates a default AudioInputStream object but
@@ -259,17 +263,14 @@ class WinAudioInputTest : public ::testing::Test {
  public:
   WinAudioInputTest() {
     audio_manager_ =
-        AudioManager::CreateForTesting(message_loop_.task_runner());
+        AudioManager::CreateForTesting(base::MakeUnique<TestAudioThread>());
     base::RunLoop().RunUntilIdle();
   }
-  ~WinAudioInputTest() override {
-    audio_manager_.reset();
-    base::RunLoop().RunUntilIdle();
-  }
+  ~WinAudioInputTest() override { audio_manager_->Shutdown(); }
 
  protected:
   base::MessageLoop message_loop_;
-  ScopedAudioManagerPtr audio_manager_;
+  std::unique_ptr<AudioManager> audio_manager_;
 };
 
 // Verify that we can retrieve the current hardware/mixing sample rate
@@ -279,7 +280,8 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamHardwareSampleRate) {
 
   // Retrieve a list of all available input devices.
   media::AudioDeviceDescriptions device_descriptions;
-  audio_manager_->GetAudioInputDeviceDescriptions(&device_descriptions);
+  AudioDeviceInfoAccessorForTests(audio_manager_.get())
+      .GetAudioInputDeviceDescriptions(&device_descriptions);
 
   // Scan all available input devices and repeat the same test for all of them.
   for (const auto& device : device_descriptions) {
@@ -443,15 +445,15 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
 
 // Test that we can capture a stream in loopback.
 TEST_F(WinAudioInputTest, WASAPIAudioInputStreamLoopback) {
-  ABORT_AUDIO_TEST_IF_NOT(audio_manager_->HasAudioOutputDevices() &&
+  AudioDeviceInfoAccessorForTests device_info_accessor(audio_manager_.get());
+  ABORT_AUDIO_TEST_IF_NOT(device_info_accessor.HasAudioOutputDevices() &&
                           CoreAudioUtil::IsSupported());
-
-  AudioParameters params = audio_manager_->GetInputStreamParameters(
+  AudioParameters params = device_info_accessor.GetInputStreamParameters(
       AudioDeviceDescription::kLoopbackInputDeviceId);
   EXPECT_EQ(params.effects(), 0);
 
   AudioParameters output_params =
-      audio_manager_->GetOutputStreamParameters(std::string());
+      device_info_accessor.GetOutputStreamParameters(std::string());
   EXPECT_EQ(params.sample_rate(), output_params.sample_rate());
   EXPECT_EQ(params.channel_layout(), output_params.channel_layout());
 

@@ -4,7 +4,6 @@
 
 #include "device/bluetooth/bluetooth_device_android.h"
 
-#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/metrics/histogram_macros.h"
@@ -152,6 +151,13 @@ void BluetoothDeviceAndroid::GetConnectionInfo(
   callback.Run(ConnectionInfo());
 }
 
+void BluetoothDeviceAndroid::SetConnectionLatency(
+    ConnectionLatency connection_latency,
+    const base::Closure& callback,
+    const ErrorCallback& error_callback) {
+  NOTIMPLEMENTED();
+}
+
 void BluetoothDeviceAndroid::Connect(
     PairingDelegate* pairing_delegate,
     const base::Closure& callback,
@@ -265,8 +271,8 @@ BluetoothDeviceAndroid::BluetoothDeviceAndroid(BluetoothAdapterAndroid* adapter)
     : BluetoothDevice(adapter) {}
 
 void BluetoothDeviceAndroid::CreateGattConnectionImpl() {
-  Java_ChromeBluetoothDevice_createGattConnectionImpl(
-      AttachCurrentThread(), j_device_, base::android::GetApplicationContext());
+  Java_ChromeBluetoothDevice_createGattConnectionImpl(AttachCurrentThread(),
+                                                      j_device_);
 }
 
 void BluetoothDeviceAndroid::DisconnectGatt() {

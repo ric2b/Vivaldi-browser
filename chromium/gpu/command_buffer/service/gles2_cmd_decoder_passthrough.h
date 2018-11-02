@@ -77,7 +77,7 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
                    int num_entries,
                    int* entries_processed) override;
 
-  const char* GetCommandName(unsigned int command_id) const override;
+  base::WeakPtr<GLES2Decoder> AsWeakPtr() override;
 
   bool Initialize(const scoped_refptr<gl::GLSurface>& surface,
                   const scoped_refptr<gl::GLContext>& context,
@@ -123,7 +123,7 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   // Restore States.
   void RestoreActiveTexture() const override;
-  void RestoreAllTextureUnitBindings(
+  void RestoreAllTextureUnitAndSamplerBindings(
       const ContextState* prev_state) const override;
   void RestoreActiveTextureUnitBinding(unsigned int target) const override;
   void RestoreBufferBinding(unsigned int target) override;
@@ -158,6 +158,9 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
   // Gets the QueryManager for this context.
   QueryManager* GetQueryManager() override;
 
+  // Gets the FramebufferManager for this context.
+  FramebufferManager* GetFramebufferManager() override;
+
   // Gets the TransformFeedbackManager for this context.
   TransformFeedbackManager* GetTransformFeedbackManager() override;
 
@@ -186,8 +189,6 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
                            uint32_t* service_texture_id) override;
 
   // Provides detail about a lost context if one occurred.
-  error::ContextLostReason GetContextLostReason() override;
-
   // Clears a level sub area of a texture
   // Returns false if a GL error should be generated.
   bool ClearLevel(Texture* texture,
@@ -229,14 +230,6 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
   void SetShaderCacheCallback(const ShaderCacheCallback& callback) override;
 
   void WaitForReadPixels(base::Closure callback) override;
-
-  uint32_t GetTextureUploadCount() override;
-
-  base::TimeDelta GetTotalTextureUploadTime() override;
-
-  base::TimeDelta GetTotalProcessingCommandsTime() override;
-
-  void AddProcessingCommandsTime(base::TimeDelta) override;
 
   // Returns true if the context was lost either by GL_ARB_robustness, forced
   // context loss or command buffer parse error.
@@ -302,6 +295,10 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
   void RemovePendingQuery(GLuint service_id);
 
   void UpdateTextureBinding(GLenum target, GLuint client_id, GLuint service_id);
+
+  error::Error BindTexImage2DCHROMIUMImpl(GLenum target,
+                                          GLenum internalformat,
+                                          GLint image_id);
 
   int commands_to_process_;
 
@@ -398,6 +395,8 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   // Cache of scratch memory
   std::vector<uint8_t> scratch_memory_;
+
+  base::WeakPtrFactory<GLES2DecoderPassthroughImpl> weak_ptr_factory_;
 
 // Include the prototypes of all the doer functions from a separate header to
 // keep this file clean.

@@ -192,12 +192,19 @@ void DataTransfer::setData(const String& type, const String& data) {
   data_object_->SetData(NormalizeType(type), data);
 }
 
-// extensions beyond IE's API
-Vector<String> DataTransfer::types() const {
-  Vector<String> types;
-  if (!CanReadTypes())
-    return types;
+bool DataTransfer::hasDataStoreItemListChanged() const {
+  return data_store_item_list_changed_ || !CanReadTypes();
+}
 
+void DataTransfer::OnItemListChanged() {
+  data_store_item_list_changed_ = true;
+}
+
+Vector<String> DataTransfer::types() {
+  if (!CanReadTypes())
+    return Vector<String>();
+
+  data_store_item_list_changed_ = false;
   return data_object_->Types();
 }
 
@@ -218,7 +225,7 @@ FileList* DataTransfer::files() const {
 }
 
 void DataTransfer::setDragImage(Element* image, int x, int y) {
-  ASSERT(image);
+  DCHECK(image);
 
   if (!IsForDragAndDrop())
     return;
@@ -265,7 +272,7 @@ std::unique_ptr<DragImage> DataTransfer::CreateDragImage(
 
 static ImageResourceContent* GetImageResourceContent(Element* element) {
   // Attempt to pull ImageResourceContent from element
-  ASSERT(element);
+  DCHECK(element);
   LayoutObject* layout_object = element->GetLayoutObject();
   if (!layout_object || !layout_object->IsImage())
     return 0;
@@ -316,7 +323,7 @@ void DataTransfer::DeclareAndWriteDragImage(Element* element,
 void DataTransfer::WriteURL(Node* node, const KURL& url, const String& title) {
   if (!data_object_)
     return;
-  ASSERT(!url.IsEmpty());
+  DCHECK(!url.IsEmpty());
 
   data_object_->SetURLAndTitle(url, title);
 
@@ -348,7 +355,7 @@ void DataTransfer::WriteSelection(const FrameSelection& selection) {
 
 void DataTransfer::SetAccessPolicy(DataTransferAccessPolicy policy) {
   // once you go numb, can never go back
-  ASSERT(policy_ != kDataTransferNumb || policy == kDataTransferNumb);
+  DCHECK(policy_ != kDataTransferNumb || policy == kDataTransferNumb);
   policy_ = policy;
 }
 
@@ -373,13 +380,13 @@ bool DataTransfer::CanSetDragImage() const {
 
 DragOperation DataTransfer::SourceOperation() const {
   DragOperation op = ConvertEffectAllowedToDragOperation(effect_allowed_);
-  ASSERT(op != kDragOperationPrivate);
+  DCHECK_NE(op, kDragOperationPrivate);
   return op;
 }
 
 DragOperation DataTransfer::DestinationOperation() const {
   DragOperation op = ConvertEffectAllowedToDragOperation(drop_effect_);
-  ASSERT(op == kDragOperationCopy || op == kDragOperationNone ||
+  DCHECK(op == kDragOperationCopy || op == kDragOperationNone ||
          op == kDragOperationLink ||
          op == (DragOperation)(kDragOperationGeneric | kDragOperationMove) ||
          op == kDragOperationEvery);
@@ -429,7 +436,10 @@ DataTransfer::DataTransfer(DataTransferType type,
       drop_effect_("uninitialized"),
       effect_allowed_("uninitialized"),
       transfer_type_(type),
-      data_object_(data_object) {}
+      data_object_(data_object),
+      data_store_item_list_changed_(true) {
+  data_object_->AddObserver(this);
+}
 
 void DataTransfer::setDragImage(ImageResourceContent* image,
                                 Node* node,
@@ -461,7 +471,7 @@ bool DataTransfer::HasStringOfType(const String& type) const {
   if (!CanReadTypes())
     return false;
 
-  return types().Contains(type);
+  return data_object_->Types().Contains(type);
 }
 
 DragOperation ConvertDropZoneOperationToDragOperation(

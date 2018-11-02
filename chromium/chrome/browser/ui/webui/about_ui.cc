@@ -320,8 +320,7 @@ class ChromeOSCreditsHandler
     }
     // Load local Chrome OS credits from the disk.
     base::PostTaskWithTraitsAndReply(
-        FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                       base::TaskPriority::BACKGROUND),
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
         base::Bind(&ChromeOSCreditsHandler::LoadCreditsFileAsync, this),
         base::Bind(&ChromeOSCreditsHandler::ResponseOnUIThread, this));
   }
@@ -611,7 +610,7 @@ class AboutDnsHandler : public base::RefCountedThreadSafe<AboutDnsHandler> {
     chrome_browser_net::Predictor* predictor = profile_->GetNetworkPredictor();
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&AboutDnsHandler::StartOnIOThread, this, predictor));
+        base::BindOnce(&AboutDnsHandler::StartOnIOThread, this, predictor));
   }
 
   void StartOnIOThread(chrome_browser_net::Predictor* predictor) {
@@ -625,7 +624,7 @@ class AboutDnsHandler : public base::RefCountedThreadSafe<AboutDnsHandler> {
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&AboutDnsHandler::FinishOnUIThread, this, data));
+        base::BindOnce(&AboutDnsHandler::FinishOnUIThread, this, data));
   }
 
   void FinishOnUIThread(const std::string& data) {

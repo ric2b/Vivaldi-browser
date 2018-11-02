@@ -31,7 +31,6 @@
 namespace blink {
 
 class Element;
-class FloatRect;
 class FloatSize;
 class GraphicsContext;
 class IntRect;
@@ -41,6 +40,20 @@ class Node;
 class CORE_EXPORT PrintContext
     : public GarbageCollectedFinalized<PrintContext> {
  public:
+  // By shrinking to a width of 75%, we will render the correct physical
+  // dimensions in paged media (i.e. cm, pt,). The shrinkage used
+  // to be 80% to match other browsers - they have since moved on.
+  // Wide pages will be scaled down more than this.
+  // This value is the percentage inverted.
+  static constexpr float kPrintingMinimumShrinkFactor = 1.33333333f;
+
+  // This number determines how small we are willing to reduce the page content
+  // in order to accommodate the widest line. If the page would have to be
+  // reduced smaller to make the widest line fit, we just clip instead (this
+  // behavior matches MacIE and Mozilla, at least).
+  // TODO(rhogan): Decide if this quirk is still required.
+  static constexpr float kPrintingMaximumShrinkFactor = 2;
+
   explicit PrintContext(LocalFrame*);
   virtual ~PrintContext();
 
@@ -48,16 +61,9 @@ class CORE_EXPORT PrintContext
 
   // Break up a page into rects without relayout.
   // FIXME: This means that CSS page breaks won't be on page boundary if the
-  // size is different than what was passed to begin(). That's probably not
-  // always desirable.
-  // FIXME: Header and footer height should be applied before layout, not after.
-  // FIXME: The printRect argument is only used to determine page aspect ratio,
-  // it would be better to pass a FloatSize with page dimensions instead.
-  virtual void ComputePageRects(const FloatRect& print_rect,
-                                float header_height,
-                                float footer_height,
-                                float user_scale_factor,
-                                float& out_page_height);
+  // size is different than what was passed to BeginPrintMode(). That's probably
+  // not always desirable.
+  virtual void ComputePageRects(const FloatSize& print_size);
 
   // Deprecated. Page size computation is already in this class, clients
   // shouldn't be copying it.
@@ -74,15 +80,16 @@ class CORE_EXPORT PrintContext
   // Enter print mode, updating layout for new page size.
   // This function can be called multiple times to apply new print options
   // without going back to screen mode.
-  virtual void begin(float width, float height = 0);
+  virtual void BeginPrintMode(float width, float height = 0);
 
   // Return to screen mode.
-  virtual void end();
+  virtual void EndPrintMode();
 
-  // Used by layout tests.
-  static int PageNumberForElement(
-      Element*,
-      const FloatSize& page_size_in_pixels);  // Returns -1 if page isn't found.
+  // The following static methods are used by layout tests:
+
+  // Returns -1 if page isn't found.
+  static int PageNumberForElement(Element*,
+                                  const FloatSize& page_size_in_pixels);
   static String PageProperty(LocalFrame*,
                              const char* property_name,
                              int page_number);
@@ -113,8 +120,8 @@ class CORE_EXPORT PrintContext
   void CollectLinkedDestinations(Node*);
   bool IsFrameValid() const;
 
-  // Used to prevent misuses of begin() and end() (e.g., call end without
-  // begin).
+  // Used to prevent misuses of BeginPrintMode() and EndPrintMode() (e.g., call
+  // EndPrintMode() without BeginPrintMode()).
   bool is_printing_;
 
   HeapHashMap<String, Member<Element>> linked_destinations_;

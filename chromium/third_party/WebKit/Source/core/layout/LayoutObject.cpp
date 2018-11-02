@@ -41,6 +41,7 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/TextAffinity.h"
+#include "core/editing/VisibleUnits.h"
 #include "core/frame/DeprecatedScheduleStyleRecalcDuringLayout.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameView.h"
@@ -85,6 +86,7 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/TransformState.h"
 #include "platform/graphics/GraphicsLayer.h"
+#include "platform/graphics/TouchAction.h"
 #include "platform/graphics/paint/PropertyTreeState.h"
 #include "platform/instrumentation/tracing/TracedValue.h"
 #include "platform/wtf/allocator/Partitions.h"
@@ -328,24 +330,6 @@ void LayoutObject::AddChild(LayoutObject* new_child,
   if (new_child->IsText() &&
       new_child->Style()->TextTransform() == ETextTransform::kCapitalize)
     ToLayoutText(new_child)->TransformText();
-
-  // SVG creates layoutObjects for <g display="none">, as SVG requires children
-  // of hidden <g>s to have layoutObjects - at least that's how our
-  // implementation works.
-  // Consider:
-  // <g display="none"><foreignObject><body style="position: relative">FOO...
-  // - layerTypeRequired() would return true for the <body>, creating a new
-  //   Layer
-  // - when the document is painted, both layers are painted. The <body> layer
-  //   doesn't know that it's inside a "hidden SVG subtree", and thus paints,
-  //   even if it shouldn't.
-  // To avoid the problem altogether, detect early if we're inside a hidden SVG
-  // subtree and stop creating layers at all for these cases - they're not used
-  // anyways.
-  if (new_child->HasLayer() && !LayerCreationAllowedForSubtree())
-    ToLayoutBoxModelObject(new_child)
-        ->Layer()
-        ->RemoveOnlyThisLayerAfterStyleChange();
 }
 
 void LayoutObject::RemoveChild(LayoutObject* old_child) {
@@ -1012,20 +996,14 @@ IntRect LayoutObject::AbsoluteElementBoundingBoxRect() const {
       .EnclosingBoundingBox();
 }
 
-FloatRect LayoutObject::AbsoluteBoundingBoxRectForRange(const Range* range) {
-  if (!range || !range->startContainer())
+FloatRect LayoutObject::AbsoluteBoundingBoxRectForRange(
+    const EphemeralRange& range) {
+  if (range.IsNull() || !range.StartPosition().ComputeContainerNode())
     return FloatRect();
 
-  range->OwnerDocument().UpdateStyleAndLayout();
+  range.GetDocument().UpdateStyleAndLayout();
 
-  Vector<FloatQuad> quads;
-  range->TextQuads(quads);
-
-  FloatRect result;
-  for (size_t i = 0; i < quads.size(); ++i)
-    result.Unite(quads[i].BoundingBox());
-
-  return result;
+  return ComputeTextFloatRect(range);
 }
 
 void LayoutObject::AddAbsoluteRectForLayer(IntRect& result) {
@@ -1154,7 +1132,7 @@ LayoutRect LayoutObject::InvalidatePaintRectangle(
       dirty_rect, display_item_client);
 }
 
-void LayoutObject::InvalidateTreeIfNeeded(
+void LayoutObject::DeprecatedInvalidateTree(
     const PaintInvalidationState& paint_invalidation_state) {
   DCHECK(!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
   EnsureIsReadyForPaintInvalidation();
@@ -1174,20 +1152,20 @@ void LayoutObject::InvalidateTreeIfNeeded(
   }
 
   PaintInvalidationReason reason =
-      InvalidatePaintIfNeeded(new_paint_invalidation_state);
+      DeprecatedInvalidatePaint(new_paint_invalidation_state);
   new_paint_invalidation_state.UpdateForChildren(reason);
-  InvalidatePaintOfSubtreesIfNeeded(new_paint_invalidation_state);
+  DeprecatedInvalidatePaintOfSubtrees(new_paint_invalidation_state);
 
   ClearPaintInvalidationFlags();
 }
 
 DISABLE_CFI_PERF
-void LayoutObject::InvalidatePaintOfSubtreesIfNeeded(
+void LayoutObject::DeprecatedInvalidatePaintOfSubtrees(
     const PaintInvalidationState& child_paint_invalidation_state) {
   DCHECK(!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
 
   for (auto* child = SlowFirstChild(); child; child = child->NextSibling())
-    child->InvalidateTreeIfNeeded(child_paint_invalidation_state);
+    child->DeprecatedInvalidateTree(child_paint_invalidation_state);
 }
 
 LayoutRect LayoutObject::SelectionRectInViewCoordinates() const {
@@ -1197,7 +1175,7 @@ LayoutRect LayoutObject::SelectionRectInViewCoordinates() const {
   return selection_rect;
 }
 
-PaintInvalidationReason LayoutObject::InvalidatePaintIfNeeded(
+PaintInvalidationReason LayoutObject::DeprecatedInvalidatePaint(
     const PaintInvalidationState& paint_invalidation_state) {
   DCHECK_EQ(&paint_invalidation_state.CurrentObject(), this);
 
@@ -1209,8 +1187,8 @@ PaintInvalidationReason LayoutObject::InvalidatePaintIfNeeded(
 
   LayoutView* v = View();
   if (v->GetDocument().Printing())
-    return kPaintInvalidationNone;  // Don't invalidate paints if we're
-                                    // printing.
+    return PaintInvalidationReason::kNone;  // Don't invalidate paints if we're
+                                            // printing.
 
   PaintInvalidatorContextAdapter context(paint_invalidation_state);
 
@@ -1234,17 +1212,16 @@ PaintInvalidationReason LayoutObject::InvalidatePaintIfNeeded(
           .ForcedSubtreeInvalidationRectUpdateWithinContainerOnly()) {
     // We are done updating the visual rect. No other paint invalidation work
     // to do for this object.
-    return kPaintInvalidationNone;
+    return PaintInvalidationReason::kNone;
   }
 
-  return InvalidatePaintIfNeeded(context);
+  return InvalidatePaint(context);
 }
 
 DISABLE_CFI_PERF
-PaintInvalidationReason LayoutObject::InvalidatePaintIfNeeded(
+PaintInvalidationReason LayoutObject::InvalidatePaint(
     const PaintInvalidatorContext& context) const {
-  return ObjectPaintInvalidatorWithContext(*this, context)
-      .InvalidatePaintIfNeeded();
+  return ObjectPaintInvalidatorWithContext(*this, context).InvalidatePaint();
 }
 
 void LayoutObject::AdjustVisualRectForCompositedScrolling(
@@ -1367,11 +1344,11 @@ void LayoutObject::ShowLayoutObject() const {
 
 void LayoutObject::ShowLayoutObject(StringBuilder& string_builder) const {
   string_builder.Append(
-      String::Format("%s %p", DecoratedName().Ascii().Data(), this));
+      String::Format("%s %p", DecoratedName().Ascii().data(), this));
 
   if (IsText() && ToLayoutText(this)->IsTextFragment())
     string_builder.Append(String::Format(
-        " \"%s\" ", ToLayoutText(this)->GetText().Ascii().Data()));
+        " \"%s\" ", ToLayoutText(this)->GetText().Ascii().data()));
 
   if (VirtualContinuation())
     string_builder.Append(
@@ -1381,10 +1358,10 @@ void LayoutObject::ShowLayoutObject(StringBuilder& string_builder) const {
     while (string_builder.length() < kShowTreeCharacterOffset)
       string_builder.Append(' ');
     string_builder.Append('\t');
-    WTFLogAlways("%s%s", string_builder.ToString().Utf8().Data(),
-                 GetNode()->ToString().Utf8().Data());
+    WTFLogAlways("%s%s", string_builder.ToString().Utf8().data(),
+                 GetNode()->ToString().Utf8().data());
   } else {
-    WTFLogAlways("%s", string_builder.ToString().Utf8().Data());
+    WTFLogAlways("%s", string_builder.ToString().Utf8().data());
   }
 }
 
@@ -1412,8 +1389,8 @@ void LayoutObject::ShowLayoutTreeAndMark(const LayoutObject* marked_object1,
 #endif  // NDEBUG
 
 bool LayoutObject::IsSelectable() const {
-  return !IsInert() && !(Style()->UserSelect() == SELECT_NONE &&
-                         Style()->UserModify() == READ_ONLY);
+  return !IsInert() && !(Style()->UserSelect() == EUserSelect::kNone &&
+                         Style()->UserModify() == EUserModify::kReadOnly);
 }
 
 Color LayoutObject::SelectionBackgroundColor() const {
@@ -1423,7 +1400,7 @@ Color LayoutObject::SelectionBackgroundColor() const {
   if (RefPtr<ComputedStyle> pseudo_style = GetUncachedSelectionStyle())
     return ResolveColor(*pseudo_style, CSSPropertyBackgroundColor)
         .BlendWithWhite();
-  return GetFrame()->Selection().IsFocusedAndActive()
+  return GetFrame()->Selection().FrameIsFocusedAndActive()
              ? LayoutTheme::GetTheme().ActiveSelectionBackgroundColor()
              : LayoutTheme::GetTheme().InactiveSelectionBackgroundColor();
 }
@@ -1440,7 +1417,7 @@ Color LayoutObject::SelectionColor(
     return ResolveColor(*pseudo_style, color_property);
   if (!LayoutTheme::GetTheme().SupportsSelectionForegroundColors())
     return ResolveColor(color_property);
-  return GetFrame()->Selection().IsFocusedAndActive()
+  return GetFrame()->Selection().FrameIsFocusedAndActive()
              ? LayoutTheme::GetTheme().ActiveSelectionForegroundColor()
              : LayoutTheme::GetTheme().InactiveSelectionForegroundColor();
 }
@@ -1455,8 +1432,9 @@ Color LayoutObject::SelectionEmphasisMarkColor(
   return SelectionColor(CSSPropertyWebkitTextEmphasisColor, global_paint_flags);
 }
 
-void LayoutObject::SelectionStartEnd(int& spos, int& epos) const {
-  View()->SelectionStartEnd(spos, epos);
+std::pair<int, int> LayoutObject::SelectionStartEnd() const {
+  DCHECK(!View()->NeedsLayout());
+  return GetFrame()->Selection().LayoutSelectionStartEnd();
 }
 
 // Called when an object that was floating or positioned becomes a normal flow
@@ -1544,7 +1522,8 @@ StyleDifference LayoutObject::AdjustStyleDifference(
   // needed if we have style or text affected by these properties.
   if (diff.TextDecorationOrColorChanged() &&
       !diff.NeedsFullPaintInvalidation()) {
-    if (Style()->HasBorder() || Style()->HasOutline() ||
+    if (Style()->HasBorderColorReferencingCurrentColor() ||
+        Style()->HasOutlineWithCurrentColor() ||
         Style()->HasBackgroundRelatedColorReferencingCurrentColor() ||
         // Skip any text nodes that do not contain text boxes. Whitespace cannot
         // be skipped or we will miss invalidating decorations (e.g.,
@@ -1836,13 +1815,13 @@ void LayoutObject::StyleWillChange(StyleDifference diff,
   // handler will have already been added for its parent so ignore it.
   // TODO: Remove this blocking event handler; crbug.com/318381
   TouchAction old_touch_action =
-      style_ ? style_->GetTouchAction() : kTouchActionAuto;
+      style_ ? style_->GetTouchAction() : TouchAction::kTouchActionAuto;
   if (GetNode() && !GetNode()->IsTextNode() &&
-      (old_touch_action == kTouchActionAuto) !=
-          (new_style.GetTouchAction() == kTouchActionAuto)) {
+      (old_touch_action == TouchAction::kTouchActionAuto) !=
+          (new_style.GetTouchAction() == TouchAction::kTouchActionAuto)) {
     EventHandlerRegistry& registry =
         GetDocument().GetPage()->GetEventHandlerRegistry();
-    if (new_style.GetTouchAction() != kTouchActionAuto)
+    if (new_style.GetTouchAction() != TouchAction::kTouchActionAuto)
       registry.DidAddEventHandler(
           *GetNode(), EventHandlerRegistry::kTouchStartOrMoveEventBlocking);
     else
@@ -1945,7 +1924,7 @@ void LayoutObject::StyleDidChange(StyleDifference diff,
       // frame if there are no RemoteFrame ancestors in the frame tree. Use of
       // localFrameRoot() is discouraged but will change when cursor update
       // scheduling is moved from EventHandler to PageEventHandler.
-      frame->LocalFrameRoot()->GetEventHandler().ScheduleCursorUpdate();
+      frame->LocalFrameRoot().GetEventHandler().ScheduleCursorUpdate();
     }
   }
 
@@ -2494,7 +2473,7 @@ void LayoutObject::AddLayerHitTestRects(
   // WebLayer::setTouchEventHandlerRegion - crbug.com/300282.
   const size_t kMaxRectsPerLayer = 100;
 
-  LayerHitTestRects::iterator iter = layer_rects.Find(current_layer);
+  LayerHitTestRects::iterator iter = layer_rects.find(current_layer);
   Vector<LayoutRect>* iter_value;
   if (iter == layer_rects.end())
     iter_value = &layer_rects.insert(current_layer, Vector<LayoutRect>())
@@ -2664,7 +2643,7 @@ void LayoutObject::WillBeDestroyed() {
   // m_style is null in cases of partial construction. Any handler we added
   // previously may have already been removed by the Document independently.
   if (GetNode() && !GetNode()->IsTextNode() && style_ &&
-      style_->GetTouchAction() != kTouchActionAuto) {
+      style_->GetTouchAction() != TouchAction::kTouchActionAuto) {
     EventHandlerRegistry& registry =
         GetDocument().GetPage()->GetEventHandlerRegistry();
     if (registry
@@ -3414,15 +3393,15 @@ static PaintInvalidationReason DocumentLifecycleBasedPaintInvalidationReason(
     const DocumentLifecycle& document_lifecycle) {
   switch (document_lifecycle.GetState()) {
     case DocumentLifecycle::kInStyleRecalc:
-      return kPaintInvalidationStyleChange;
+      return PaintInvalidationReason::kStyle;
     case DocumentLifecycle::kInPreLayout:
     case DocumentLifecycle::kInPerformLayout:
     case DocumentLifecycle::kAfterPerformLayout:
-      return kPaintInvalidationForcedByLayout;
+      return PaintInvalidationReason::kGeometry;
     case DocumentLifecycle::kInCompositingUpdate:
-      return kPaintInvalidationCompositingUpdate;
+      return PaintInvalidationReason::kCompositing;
     default:
-      return kPaintInvalidationFull;
+      return PaintInvalidationReason::kFull;
   }
 }
 
@@ -3486,14 +3465,16 @@ void LayoutObject::SetShouldDoFullPaintInvalidationWithoutGeometryChange(
 
   bool is_upgrading_delayed_full_to_full =
       bitfields_.FullPaintInvalidationReason() ==
-          kPaintInvalidationDelayedFull &&
-      reason != kPaintInvalidationDelayedFull;
+          PaintInvalidationReason::kDelayedFull &&
+      reason != PaintInvalidationReason::kDelayedFull;
 
-  if (bitfields_.FullPaintInvalidationReason() == kPaintInvalidationNone ||
+  if (bitfields_.FullPaintInvalidationReason() ==
+          PaintInvalidationReason::kNone ||
       is_upgrading_delayed_full_to_full) {
-    if (reason == kPaintInvalidationFull)
+    if (reason == PaintInvalidationReason::kFull) {
       reason = DocumentLifecycleBasedPaintInvalidationReason(
           GetDocument().Lifecycle());
+    }
     bitfields_.SetFullPaintInvalidationReason(reason);
     if (!is_upgrading_delayed_full_to_full)
       MarkAncestorsForPaintInvalidation();
@@ -3564,7 +3545,7 @@ void LayoutObject::
   // Clear first because PaintInvalidationSubtree overrides other full paint
   // invalidation reasons.
   ClearShouldDoFullPaintInvalidation();
-  SetShouldDoFullPaintInvalidation(kPaintInvalidationSubtree);
+  SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kSubtree);
 }
 
 void LayoutObject::SetIsBackgroundAttachmentFixedObject(
@@ -3599,6 +3580,16 @@ LayoutRect LayoutObject::DebugRect() const {
     block->AdjustChildDebugRect(rect);
 
   return rect;
+}
+
+FragmentData* LayoutObject::MutableForPainting::FirstFragment() {
+  if (auto* paint_data = layout_object_.GetRarePaintData())
+    return paint_data->Fragment();
+  return nullptr;
+}
+
+FragmentData& LayoutObject::MutableForPainting::EnsureFirstFragment() {
+  return layout_object_.EnsureRarePaintData().EnsureFragment();
 }
 
 void LayoutObject::InvalidatePaintForSelection() {

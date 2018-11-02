@@ -203,18 +203,25 @@ InputHandler::~InputHandler() {
 }
 
 // static
-InputHandler* InputHandler::FromSession(DevToolsSession* session) {
-  return static_cast<InputHandler*>(
-      session->GetHandlerByName(Input::Metainfo::domainName));
+std::vector<InputHandler*> InputHandler::ForAgentHost(
+    DevToolsAgentHostImpl* host) {
+  return DevToolsSession::HandlersForAgentHost<InputHandler>(
+      host, Input::Metainfo::domainName);
 }
 
 void InputHandler::SetRenderFrameHost(RenderFrameHostImpl* host) {
   ClearPendingKeyAndMouseCallbacks();
-  if (host_)
+  if (host_) {
     host_->GetRenderWidgetHost()->RemoveInputEventObserver(this);
+    if (ignore_input_events_)
+      host_->GetRenderWidgetHost()->SetIgnoreInputEvents(false);
+  }
   host_ = host;
-  if (host)
+  if (host) {
     host->GetRenderWidgetHost()->AddInputEventObserver(this);
+    if (ignore_input_events_)
+      host_->GetRenderWidgetHost()->SetIgnoreInputEvents(true);
+  }
 }
 
 void InputHandler::OnInputEvent(const blink::WebInputEvent& event) {
@@ -245,8 +252,12 @@ void InputHandler::OnSwapCompositorFrame(
 
 Response InputHandler::Disable() {
   ClearPendingKeyAndMouseCallbacks();
-  if (host_)
+  if (host_) {
     host_->GetRenderWidgetHost()->RemoveInputEventObserver(this);
+    if (ignore_input_events_)
+      host_->GetRenderWidgetHost()->SetIgnoreInputEvents(false);
+  }
+  ignore_input_events_ = false;
   return Response::OK();
 }
 
@@ -457,6 +468,13 @@ Response InputHandler::EmulateTouchFromMouseEvent(const std::string& type,
   return Response::OK();
 }
 
+Response InputHandler::SetIgnoreInputEvents(bool ignore) {
+  ignore_input_events_ = ignore;
+  if (host_)
+    host_->GetRenderWidgetHost()->SetIgnoreInputEvents(ignore);
+  return Response::OK();
+}
+
 void InputHandler::SynthesizePinchGesture(
     int x,
     int y,
@@ -474,6 +492,11 @@ void InputHandler::SynthesizePinchGesture(
 
   gesture_params.scale_factor = scale_factor;
   gesture_params.anchor = CssPixelsToPointF(x, y, page_scale_factor_);
+  if (!PointIsWithinContents(gesture_params.anchor)) {
+    callback->sendFailure(Response::InvalidParams("Position out of bounds"));
+    return;
+  }
+
   gesture_params.relative_pointer_speed_in_pixels_s =
       relative_speed.fromMaybe(kDefaultRelativeSpeed);
 
@@ -515,11 +538,16 @@ void InputHandler::SynthesizeScrollGesture(
   const int kDefaultSpeed = 800;
 
   gesture_params.anchor = CssPixelsToPointF(x, y, page_scale_factor_);
+  if (!PointIsWithinContents(gesture_params.anchor)) {
+    callback->sendFailure(Response::InvalidParams("Position out of bounds"));
+    return;
+  }
+
   gesture_params.prevent_fling =
       prevent_fling.fromMaybe(kDefaultPreventFling);
   gesture_params.speed_in_pixels_s = speed.fromMaybe(kDefaultSpeed);
 
-  if (x_distance.fromJust() || y_distance.fromJust()) {
+  if (x_distance.isJust() || y_distance.isJust()) {
     gesture_params.distances.push_back(
         CssPixelsToVector2dF(x_distance.fromMaybe(0),
                              y_distance.fromMaybe(0), page_scale_factor_));
@@ -609,6 +637,11 @@ void InputHandler::SynthesizeTapGesture(
   const int kDefaultTapCount = 1;
 
   gesture_params.position = CssPixelsToPointF(x, y, page_scale_factor_);
+  if (!PointIsWithinContents(gesture_params.position)) {
+    callback->sendFailure(Response::InvalidParams("Position out of bounds"));
+    return;
+  }
+
   gesture_params.duration_ms = duration.fromMaybe(kDefaultDuration);
 
   if (!StringToGestureSourceType(
@@ -642,6 +675,12 @@ void InputHandler::ClearPendingKeyAndMouseCallbacks() {
   for (auto& callback : pending_mouse_callbacks_)
     callback->sendSuccess();
   pending_mouse_callbacks_.clear();
+}
+
+bool InputHandler::PointIsWithinContents(gfx::PointF point) const {
+  gfx::Rect bounds = host_->GetView()->GetViewBounds();
+  bounds -= bounds.OffsetFromOrigin();  // Translate the bounds to (0,0).
+  return bounds.Contains(point.x(), point.y());
 }
 
 }  // namespace protocol

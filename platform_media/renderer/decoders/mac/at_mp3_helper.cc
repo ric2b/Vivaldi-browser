@@ -10,6 +10,7 @@
 
 #include "media/base/audio_decoder_config.h"
 #include "platform_media/common/mac/framework_type_conversions.h"
+#include "platform_media/common/platform_logging_util.h"
 
 namespace media {
 
@@ -21,6 +22,14 @@ bool ATMP3Helper::Initialize(const AudioDecoderConfig& config,
                              const InputFormatKnownCB& input_format_known_cb,
                              const ConvertAudioCB& convert_audio_cb) {
   convert_audio_cb_ = convert_audio_cb;
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " with AudioDecoderConfig :"
+          << Loggable(config);
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " input_samples_per_second : " << config.input_samples_per_second()
+          << " samples_per_second : " << config.samples_per_second();
 
   AudioStreamBasicDescription format = {0};
   format.mSampleRate = config.input_samples_per_second();

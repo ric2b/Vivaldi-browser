@@ -7,13 +7,14 @@
 #include "ash/metrics/user_metrics_action.h"
 #include "ash/public/interfaces/update.mojom.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/tray/fixed_sized_image_view.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/system_tray_delegate.h"
+#include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
@@ -24,6 +25,7 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/widget/widget.h"
 
 namespace ash {
 namespace {
@@ -60,6 +62,9 @@ bool TrayUpdate::update_required_ = false;
 mojom::UpdateSeverity TrayUpdate::severity_ = mojom::UpdateSeverity::NONE;
 // static
 bool TrayUpdate::factory_reset_required_ = false;
+// static
+bool TrayUpdate::update_over_cellular_available_ = false;
+
 mojom::UpdateType TrayUpdate::update_type_ = mojom::UpdateType::SYSTEM;
 
 // The "restart to update" item in the system tray menu.
@@ -80,17 +85,26 @@ class TrayUpdate::UpdateView : public ActionableView {
     tri_view->AddView(TriView::Container::START, image);
 
     base::string16 label_text;
+    update_label_ = TrayPopupUtils::CreateDefaultLabel();
     if (owner->factory_reset_required_) {
       label_text = bundle.GetLocalizedString(
           IDS_ASH_STATUS_TRAY_RESTART_AND_POWERWASH_TO_UPDATE);
     } else if (owner->update_type_ == mojom::UpdateType::FLASH) {
       label_text = bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_UPDATE_FLASH);
+    } else if (!owner->update_required_ &&
+               owner->update_over_cellular_available_) {
+      label_text = bundle.GetLocalizedString(
+          IDS_ASH_STATUS_TRAY_UPDATE_OVER_CELLULAR_AVAILABLE);
+      if (!Shell::Get()->session_controller()->ShouldEnableSettings()) {
+        // Disables the view if settings page is not enabled.
+        tri_view->SetEnabled(false);
+        update_label_->SetEnabled(false);
+      }
     } else {
       label_text = bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_UPDATE);
     }
 
     SetAccessibleName(label_text);
-    update_label_ = TrayPopupUtils::CreateDefaultLabel();
     update_label_->SetText(label_text);
 
     TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
@@ -106,10 +120,17 @@ class TrayUpdate::UpdateView : public ActionableView {
 
  private:
   // Overridden from ActionableView.
-  bool PerformAction(const ui::Event& event) override {
-    Shell::Get()->system_tray_controller()->RequestRestartForUpdate();
-    ShellPort::Get()->RecordUserMetricsAction(
-        UMA_STATUS_AREA_OS_UPDATE_DEFAULT_SELECTED);
+  bool PerformAction(const ui::Event& /* event */) override {
+    DCHECK(update_required_ || update_over_cellular_available_);
+    if (update_required_) {
+      Shell::Get()->system_tray_controller()->RequestRestartForUpdate();
+      ShellPort::Get()->RecordUserMetricsAction(
+          UMA_STATUS_AREA_OS_UPDATE_DEFAULT_SELECTED);
+    } else {
+      // Shows the about chrome OS page and checks for update after the page is
+      // loaded.
+      Shell::Get()->system_tray_controller()->ShowAboutChromeOS();
+    }
     CloseSystemBubble();
     return true;
   }
@@ -118,18 +139,22 @@ class TrayUpdate::UpdateView : public ActionableView {
 };
 
 TrayUpdate::TrayUpdate(SystemTray* system_tray)
-    : TrayImageItem(system_tray, kSystemTrayUpdateIcon, UMA_UPDATE) {}
+    : TrayImageItem(system_tray, kSystemTrayUpdateIcon, UMA_UPDATE) {
+  Shell::Get()->system_tray_notifier()->AddUpdateObserver(this);
+}
 
-TrayUpdate::~TrayUpdate() {}
+TrayUpdate::~TrayUpdate() {
+  Shell::Get()->system_tray_notifier()->RemoveUpdateObserver(this);
+}
 
 bool TrayUpdate::GetInitialVisibility() {
   // If chrome tells ash there is an update available before this item's system
   // tray is constructed then show the icon.
-  return update_required_;
+  return update_required_ || update_over_cellular_available_;
 }
 
 views::View* TrayUpdate::CreateDefaultView(LoginStatus status) {
-  if (update_required_) {
+  if (update_required_ || update_over_cellular_available_) {
     update_view_ = new UpdateView(this);
     return update_view_;
   }
@@ -138,6 +163,16 @@ views::View* TrayUpdate::CreateDefaultView(LoginStatus status) {
 
 void TrayUpdate::DestroyDefaultView() {
   update_view_ = nullptr;
+}
+
+void TrayUpdate::OnUpdateOverCellularTargetSet(bool success) {
+  if (!success)
+    return;
+
+  tray_view()->SetVisible(false);
+  update_over_cellular_available_ = false;
+  if (update_view_)
+    update_view_->GetWidget()->Close();
 }
 
 void TrayUpdate::ShowUpdateIcon(mojom::UpdateSeverity severity,
@@ -156,6 +191,16 @@ void TrayUpdate::ShowUpdateIcon(mojom::UpdateSeverity severity,
 
 views::Label* TrayUpdate::GetLabelForTesting() {
   return update_view_ ? update_view_->update_label_ : nullptr;
+}
+
+void TrayUpdate::ShowUpdateOverCellularAvailableIcon() {
+  update_over_cellular_available_ = true;
+
+  // TODO(weidongg/691108): adjust severity according the amount of time passing
+  // after update is available over cellular connection.
+  // Use low severity for update available over cellular connection.
+  SetIconColor(IconColorForUpdateSeverity(mojom::UpdateSeverity::LOW, false));
+  tray_view()->SetVisible(true);
 }
 
 }  // namespace ash

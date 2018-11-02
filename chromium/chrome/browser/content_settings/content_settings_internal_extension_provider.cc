@@ -10,6 +10,8 @@
 #include "chrome/browser/pdf/pdf_extension_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_content_client.h"
+#include "components/content_settings/core/browser/content_settings_info.h"
+#include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -23,8 +25,6 @@
 #include "extensions/common/extension_set.h"
 #include "extensions/common/features/simple_feature.h"
 #include "extensions/common/manifest_handlers/plugins_handler.h"
-
-using extensions::UnloadedExtensionInfo;
 
 namespace content_settings {
 
@@ -152,7 +152,7 @@ void InternalExtensionProvider::OnExtensionLoaded(
 void InternalExtensionProvider::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const extensions::Extension* extension,
-    extensions::UnloadedExtensionInfo::Reason reason) {
+    extensions::UnloadedExtensionReason reason) {
   ApplyPluginContentSettingsForExtension(extension, CONTENT_SETTING_DEFAULT);
 }
 
@@ -211,8 +211,12 @@ void InternalExtensionProvider::SetContentSettingForExtensionAndResource(
                              CONTENT_SETTINGS_TYPE_PLUGINS,
                              resource);
     } else {
+      DCHECK(content_settings::ContentSettingsRegistry::GetInstance()
+                 ->Get(CONTENT_SETTINGS_TYPE_PLUGINS)
+                 ->IsSettingValid(setting));
+      // Do not set a timestamp for extension settings.
       value_map_.SetValue(primary_pattern, secondary_pattern,
-                          CONTENT_SETTINGS_TYPE_PLUGINS, resource,
+                          CONTENT_SETTINGS_TYPE_PLUGINS, resource, base::Time(),
                           new base::Value(setting));
     }
   }

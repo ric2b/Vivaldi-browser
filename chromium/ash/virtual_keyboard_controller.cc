@@ -29,11 +29,8 @@ namespace {
 
 // Checks whether smart deployment is enabled.
 bool IsSmartVirtualKeyboardEnabled() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          keyboard::switches::kEnableVirtualKeyboard)) {
-    return false;
-  }
-  return keyboard::IsSmartDeployEnabled();
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      keyboard::switches::kEnableVirtualKeyboard);
 }
 
 void MoveKeyboardToDisplayInternal(const int64_t display_id) {
@@ -88,7 +85,6 @@ void VirtualKeyboardController::OnMaximizeModeStarted() {
   } else {
     UpdateKeyboardEnabled();
   }
-  keyboard::SetOverscrollEnabledWithAccessibilityKeyboard(true);
 }
 
 void VirtualKeyboardController::OnMaximizeModeEnded() {
@@ -97,7 +93,6 @@ void VirtualKeyboardController::OnMaximizeModeEnded() {
   } else {
     UpdateKeyboardEnabled();
   }
-  keyboard::SetOverscrollEnabledWithAccessibilityKeyboard(false);
 }
 
 void VirtualKeyboardController::OnTouchscreenDeviceConfigurationChanged() {

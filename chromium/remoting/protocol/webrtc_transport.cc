@@ -30,6 +30,7 @@
 #include "remoting/protocol/webrtc_dummy_video_encoder.h"
 #include "third_party/libjingle_xmpp/xmllite/xmlelement.h"
 #include "third_party/webrtc/api/audio_codecs/builtin_audio_decoder_factory.h"
+#include "third_party/webrtc/api/audio_codecs/builtin_audio_encoder_factory.h"
 #include "third_party/webrtc/api/test/fakeconstraints.h"
 
 using buzz::QName;
@@ -208,6 +209,9 @@ class WebrtcTransport::PeerConnectionWrapper
     // See crbug.com/660081.
     base::ThreadRestrictions::ScopedAllowIO allow_io;
     peer_connection_->Close();
+    peer_connection_ = nullptr;
+    peer_connection_factory_ = nullptr;
+    audio_module_ = nullptr;
   }
 
   WebrtcAudioModule* audio_module() {
@@ -295,6 +299,7 @@ WebrtcTransport::WebrtcTransport(
 }
 
 WebrtcTransport::~WebrtcTransport() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   Close(OK);
 }
 

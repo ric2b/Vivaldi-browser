@@ -8,7 +8,7 @@
 ##
 ## Top level settings
 ##
-version_id: 9
+version_id: 11
 sampled_ping_probability: 0.01
 default_file_type {
   uma_value: 18
@@ -1809,6 +1809,28 @@ file_types {
   }
 }
 file_types {
+  # HTML file. This extension is abused by UwS campaigns to evade referrer
+  # attribution via a two-level download scheme. crbug.com/719784
+  extension: "htm"
+  uma_value: 284
+  ping_setting: FULL_PING
+  platform_settings {
+    danger_level: NOT_DANGEROUS
+    auto_open_hint: ALLOW_AUTO_OPEN
+  }
+}
+file_types {
+  # HTML file. This extension is abused by UwS campaigns to evade referrer
+  # attribution via a two-level download scheme. crbug.com/719784
+  extension: "html"
+  uma_value: 285
+  ping_setting: FULL_PING
+  platform_settings {
+    danger_level: NOT_DANGEROUS
+    auto_open_hint: ALLOW_AUTO_OPEN
+  }
+}
+file_types {
   # Hypertext Template File. See https://support.microsoft.com/kb/181689.
   extension: "htt"
   uma_value: 79
@@ -2036,13 +2058,16 @@ file_types {
 file_types {
   # Microsoft Windows Explorer Command.
   # See https://support.microsoft.com/kb/190355 for an example
+  #
+  # http://crbug.com/722524: Can trigger dangerous network requests just
+  # by being displayed in Windows Explorer.
   extension: "scf"
   uma_value: 49
   ping_setting: FULL_PING
   platform_settings {
     platform: PLATFORM_WINDOWS
-    danger_level: ALLOW_ON_USER_GESTURE
-    auto_open_hint: ALLOW_AUTO_OPEN
+    danger_level: DANGEROUS
+    auto_open_hint: DISALLOW_AUTO_OPEN
   }
 }
 file_types {

@@ -94,6 +94,10 @@ PermissionRequestType PermissionUtil::GetRequestType(ContentSettingsType type) {
       return PermissionRequestType::PERMISSION_PROTECTED_MEDIA_IDENTIFIER;
     case CONTENT_SETTINGS_TYPE_PLUGINS:
       return PermissionRequestType::PERMISSION_FLASH;
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
+      return PermissionRequestType::PERMISSION_MEDIASTREAM_MIC;
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
+      return PermissionRequestType::PERMISSION_MEDIASTREAM_CAMERA;
     default:
       NOTREACHED();
       return PermissionRequestType::UNKNOWN;
@@ -135,6 +139,13 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     return false;
   }
   return true;
+}
+
+ContentSettingsType PermissionUtil::GetContentSettingsStorageType(
+    ContentSettingsType type) {
+  if (type == CONTENT_SETTINGS_TYPE_PUSH_MESSAGING)
+    return CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
+  return type;
 }
 
 bool PermissionUtil::IsPermission(ContentSettingsType type) {

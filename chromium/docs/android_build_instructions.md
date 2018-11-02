@@ -191,13 +191,13 @@ unplugging and reattaching your device.
 ### Build the full browser
 
 ```shell
-ninja -C out/Release chrome_public_apk
+ninja -C out/Default chrome_public_apk
 ```
 
 And deploy it to your Android device:
 
 ```shell
-CHROMIUM_OUTPUT_DIR=$gndir build/android/adb_install_apk.py $gndir/apks/ChromePublic.apk # for gn.
+build/android/adb_install_apk.py out/Default/apks/ChromePublic.apk
 ```
 
 The app will appear on the device as "Chromium".
@@ -209,13 +209,12 @@ Wraps the content module (but not the /chrome embedder). See
 for details on the content module and content shell.
 
 ```shell
-ninja -C out/Release content_shell_apk
-build/android/adb_install_apk.py out/Release/apks/ContentShell.apk
+ninja -C out/Default content_shell_apk
+build/android/adb_install_apk.py out/Default/apks/ContentShell.apk
 ```
 
 this will build and install an Android apk under
-`out/Release/apks/ContentShell.apk`. (Where `Release` is the name of your build
-directory.)
+`out/Default/apks/ContentShell.apk`.
 
 If you use custom out dir instead of standard out/ dir, use
 CHROMIUM_OUT_DIR env.
@@ -273,12 +272,12 @@ build/android/adb_gdb_content_shell
 build/android/adb_gdb_chrome_public
 ```
 
-See [Debugging Chromium on Android](https://www.chromium.org/developers/how-tos/debugging-on-android)
+See [Android Debugging Instructions](android_debugging_instructions.md)
 for more on debugging, including how to debug Java code.
 
 ### Testing
 
-For information on running tests, see [android\_test\_instructions.md](https://chromium.googlesource.com/chromium/src/+/master/docs/android_test_instructions.md).
+For information on running tests, see [Android Test Instructions](android_test_instructions.md).
 
 ### Faster Edit/Deploy (GN only)
 

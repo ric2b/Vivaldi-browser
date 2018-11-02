@@ -374,7 +374,7 @@ class FakeRendererGL : public GLRenderer {
   FakeRendererGL(const RendererSettings* settings,
                  OutputSurface* output_surface,
                  ResourceProvider* resource_provider)
-      : GLRenderer(settings, output_surface, resource_provider, nullptr, 0) {}
+      : GLRenderer(settings, output_surface, resource_provider, nullptr) {}
 
   FakeRendererGL(const RendererSettings* settings,
                  OutputSurface* output_surface,
@@ -383,8 +383,7 @@ class FakeRendererGL : public GLRenderer {
       : GLRenderer(settings,
                    output_surface,
                    resource_provider,
-                   texture_mailbox_deleter,
-                   0) {}
+                   texture_mailbox_deleter) {}
 
   void SetOverlayProcessor(OverlayProcessor* processor) {
     overlay_processor_.reset(processor);
@@ -1977,7 +1976,7 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
   TextureDrawQuad* overlay_quad =
       root_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
   SharedQuadState* shared_state = root_pass->CreateAndAppendSharedQuadState();
-  shared_state->SetAll(gfx::Transform(), viewport_size,
+  shared_state->SetAll(gfx::Transform(), gfx::Rect(viewport_size),
                        gfx::Rect(viewport_size), gfx::Rect(viewport_size),
                        false, 1, SkBlendMode::kSrcOver, 0);
   overlay_quad->SetNew(shared_state, gfx::Rect(viewport_size),
@@ -2179,7 +2178,7 @@ TEST_F(GLRendererTest, DCLayerOverlaySwitch) {
       gfx::RectF tex_coord_rect(0, 0, 1, 1);
       SharedQuadState* shared_state =
           root_pass->CreateAndAppendSharedQuadState();
-      shared_state->SetAll(gfx::Transform(), rect.size(), rect, rect, false, 1,
+      shared_state->SetAll(gfx::Transform(), rect, rect, rect, false, 1,
                            SkBlendMode::kSrcOver, 0);
       YUVVideoDrawQuad* quad =
           root_pass->CreateAndAppendDrawQuad<YUVVideoDrawQuad>();
@@ -2237,9 +2236,8 @@ class GLRendererWithMockContextTest : public ::testing::Test {
     output_surface_->BindToClient(&output_surface_client_);
     resource_provider_ = FakeResourceProvider::Create(
         output_surface_->context_provider(), nullptr);
-    renderer_ =
-        base::MakeUnique<GLRenderer>(&settings_, output_surface_.get(),
-                                     resource_provider_.get(), nullptr, 0);
+    renderer_ = base::MakeUnique<GLRenderer>(&settings_, output_surface_.get(),
+                                             resource_provider_.get(), nullptr);
     renderer_->Initialize();
   }
 

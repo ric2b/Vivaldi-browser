@@ -7,6 +7,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/background/background_contents_service.h"
@@ -52,8 +53,15 @@ class AppBackgroundPageApiTest : public ExtensionApiTest {
     command_line->AppendSwitch(extensions::switches::kAllowHTTPBackgroundPage);
   }
 
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
+    ASSERT_TRUE(StartEmbeddedTestServer());
+  }
+
   bool CreateApp(const std::string& app_manifest,
                  base::FilePath* app_dir) {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
     if (!app_dir_.CreateUniqueTempDir()) {
       LOG(ERROR) << "Unable to create a temporary directory.";
       return false;
@@ -101,9 +109,8 @@ class AppBackgroundPageApiTest : public ExtensionApiTest {
 
   void UnloadExtensionViaTask(const std::string& id) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&AppBackgroundPageApiTest::UnloadExtension,
-                   base::Unretained(this), id));
+        FROM_HERE, base::BindOnce(&AppBackgroundPageApiTest::UnloadExtension,
+                                  base::Unretained(this), id));
   }
 
  private:
@@ -130,6 +137,7 @@ class AppBackgroundPageNaClTest : public AppBackgroundPageApiTest {
 
  protected:
   void LaunchTestingApp() {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
     base::FilePath app_dir;
     PathService::Get(chrome::DIR_GEN_TEST_DATA, &app_dir);
     app_dir = app_dir.AppendASCII(
@@ -152,9 +160,6 @@ class AppBackgroundPageNaClTest : public AppBackgroundPageApiTest {
 #endif
 
 IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, MAYBE_Basic) {
-  host_resolver()->AddRule("a.com", "127.0.0.1");
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
   std::string app_manifest = base::StringPrintf(
       "{"
       "  \"name\": \"App\","
@@ -185,9 +190,6 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, MAYBE_Basic) {
 
 // Crashy, http://crbug.com/69215.
 IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, DISABLED_LacksPermission) {
-  host_resolver()->AddRule("a.com", "127.0.0.1");
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
   std::string app_manifest = base::StringPrintf(
       "{"
       "  \"name\": \"App\","
@@ -213,9 +215,6 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, DISABLED_LacksPermission) {
 }
 
 IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, ManifestBackgroundPage) {
-  host_resolver()->AddRule("a.com", "127.0.0.1");
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
   std::string app_manifest = base::StringPrintf(
       "{"
       "  \"name\": \"App\","
@@ -265,10 +264,6 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, NoJsBackgroundPage) {
   background_deleted_tracker.ListenFor(
       chrome::NOTIFICATION_BACKGROUND_CONTENTS_DELETED,
       content::Source<Profile>(browser()->profile()));
-
-  host_resolver()->AddRule("a.com", "127.0.0.1");
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
   std::string app_manifest = base::StringPrintf(
       "{"
       "  \"name\": \"App\","
@@ -310,9 +305,6 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, NoJsBackgroundPage) {
 }
 
 IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, NoJsManifestBackgroundPage) {
-  host_resolver()->AddRule("a.com", "127.0.0.1");
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
   std::string app_manifest = base::StringPrintf(
       "{"
       "  \"name\": \"App\","
@@ -350,9 +342,6 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, NoJsManifestBackgroundPage) {
 }
 
 IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, OpenTwoBackgroundPages) {
-  host_resolver()->AddRule("a.com", "127.0.0.1");
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
   std::string app_manifest = base::StringPrintf(
       "{"
       "  \"name\": \"App\","
@@ -379,9 +368,6 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, OpenTwoBackgroundPages) {
 }
 
 IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, OpenTwoPagesWithManifest) {
-  host_resolver()->AddRule("a.com", "127.0.0.1");
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
   std::string app_manifest = base::StringPrintf(
       "{"
       "  \"name\": \"App\","
@@ -414,9 +400,6 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, OpenTwoPagesWithManifest) {
 
 // Times out occasionally -- see crbug.com/108493
 IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, DISABLED_OpenPopupFromBGPage) {
-  host_resolver()->AddRule("a.com", "127.0.0.1");
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
   std::string app_manifest = base::StringPrintf(
       "{"
       "  \"name\": \"App\","
@@ -444,9 +427,6 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, DISABLED_OpenPopupFromBGPage) {
 }
 
 IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, DISABLED_OpenThenClose) {
-  host_resolver()->AddRule("a.com", "127.0.0.1");
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
   std::string app_manifest = base::StringPrintf(
       "{"
       "  \"name\": \"App\","
@@ -490,9 +470,6 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, DISABLED_OpenThenClose) {
 }
 
 IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, UnloadExtensionWhileHidden) {
-  host_resolver()->AddRule("a.com", "127.0.0.1");
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
   std::string app_manifest = base::StringPrintf(
       "{"
       "  \"name\": \"App\","

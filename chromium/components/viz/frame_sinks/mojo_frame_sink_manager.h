@@ -17,6 +17,7 @@
 #include "cc/surfaces/surface_manager.h"
 #include "cc/surfaces/surface_observer.h"
 #include "components/viz/frame_sinks/gpu_compositor_frame_sink_delegate.h"
+#include "components/viz/viz_export.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
@@ -32,19 +33,22 @@ class DisplayProvider;
 // will be true after the mus process split. For non-mus Chrome this will be
 // created in the browser process, at least until GPU implementations can be
 // unified.
-class MojoFrameSinkManager : public cc::SurfaceObserver,
-                             public GpuCompositorFrameSinkDelegate,
-                             public cc::mojom::FrameSinkManager {
+class VIZ_EXPORT MojoFrameSinkManager
+    : public cc::SurfaceObserver,
+      public NON_EXPORTED_BASE(GpuCompositorFrameSinkDelegate),
+      public NON_EXPORTED_BASE(cc::mojom::FrameSinkManager) {
  public:
   MojoFrameSinkManager(bool use_surface_references,
-                       DisplayProvider* display_provider,
-                       cc::mojom::FrameSinkManagerRequest request,
-                       cc::mojom::FrameSinkManagerClientPtr client);
+                       DisplayProvider* display_provider);
   ~MojoFrameSinkManager() override;
 
   cc::SurfaceManager* surface_manager() { return &manager_; }
 
-  // cc::mojom::MojoFrameSinkManager implementation:
+  // Binds to |request| and store connection back to |client|.
+  void Connect(cc::mojom::FrameSinkManagerRequest request,
+               cc::mojom::FrameSinkManagerClientPtr client);
+
+  // cc::mojom::FrameSinkManager implementation:
   void CreateRootCompositorFrameSink(
       const cc::FrameSinkId& frame_sink_id,
       gpu::SurfaceHandle surface_handle,
@@ -78,6 +82,7 @@ class MojoFrameSinkManager : public cc::SurfaceObserver,
   void OnSurfaceCreated(const cc::SurfaceInfo& surface_info) override;
   void OnSurfaceDamaged(const cc::SurfaceId& surface_id,
                         bool* changed) override;
+  void OnSurfaceDiscarded(const cc::SurfaceId& surface_id) override;
 
   // GpuCompositorFrameSinkDelegate implementation.
   void OnClientConnectionLost(const cc::FrameSinkId& frame_sink_id,
@@ -89,6 +94,8 @@ class MojoFrameSinkManager : public cc::SurfaceObserver,
   // destroyed in order to ensure that all other objects that depend on it have
   // access to a valid pointer for the entirety of their lifetimes.
   cc::SurfaceManager manager_;
+
+  std::unique_ptr<cc::SurfaceDependencyTracker> dependency_tracker_;
 
   // Provides a cc::Display for CreateRootCompositorFrameSink().
   DisplayProvider* const display_provider_;

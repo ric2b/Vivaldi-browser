@@ -6,6 +6,7 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="2147651015520127414">O Chrome confirmou que <ph name="ISSUER" /> emitiu o certificado deste Website.</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. Todos os direitos reservados.</translation>
+<translation id="2342981853652716282">Inicie sessão no Chrome para obter os seus marcadores, palavras-passe e muito mais em todos os dispositivos.</translation>
 <translation id="2347208864470321755">Se esta funcionalidade estiver ativada, o Chrome oferecer-se-á para traduzir páginas escritas noutros idiomas com o Google Tradutor. <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
 <translation id="2441696206556358796">Para guardar imagens, toque em Definições para permitir que o Chrome utilize as suas fotos</translation>
 <translation id="2576431527583832481">O Chrome ficou ainda melhor! Está disponível uma nova versão.</translation>
@@ -16,8 +17,6 @@
 <translation id="3196546062792660320">O Chrome poupa o seu tempo ao trazer as suas contas para a Web. Pode adicionar ou remover contas nas Definições.</translation>
 <translation id="3282568296779691940">Iniciar sessão no Chrome</translation>
 <translation id="3345341804167540816">Utilizar o Chrome em todas as plataformas</translation>
-<translation id="3531621179462011934">Para obter as suas definições em todos os dispositivos, inicie sessão no Chrome.</translation>
-<translation id="3601960512121168237">Adora o Chrome? <ph name="BEGIN_LINK" />Mova-o para a Dock<ph name="END_LINK" /></translation>
 <translation id="3678774398092457402">Pretende que o Chrome guarde a sua palavra-passe para este site?</translation>
 <translation id="384394811301901750">O Google Chrome não pode utilizar a câmara neste momento</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
@@ -25,6 +24,7 @@
 <translation id="3988789688219830639">O Google Chrome não tem acesso aos seus vídeos ou fotos. Ative o acesso nas Definições do iOS &gt; Privacidade &gt; Fotos.</translation>
 <translation id="4099578267706723511">Ajude a melhorar o Chrome ao enviar estatísticas de utilização e relatórios de falhas para a Google.</translation>
 <translation id="415767770115540173">Obter uma melhor experiência no Google Chrome com base na sua localização.</translation>
+<translation id="4248297594476034182">Para obter os seus separadores em todos os dispositivos, inicie sessão no Chrome.</translation>
 <translation id="424864128008805179">Pretende terminar sessão no Chrome?</translation>
 <translation id="4523886039239821078">Alguns suplementos provocam falhas no sistema do Chrome. Desinstale:</translation>
 <translation id="4615174829807303908">Está a terminar sessão numa conta gerida por <ph name="SIGNOUT_MANAGED_DOMAIN" />. Esta ação elimina os seus dados do Chrome deste dispositivo, embora permaneçam na Conta Google.</translation>
@@ -42,7 +42,6 @@
 <translation id="7172660552945675509">Sugestão: <ph name="BEGIN_LINK" />mova o Chrome para a Dock<ph name="END_LINK" /></translation>
 <translation id="7265369419224458312">Aceda aqui aos separadores abertos no computador. Basta abrir o Chrome no computador, aceder ao menu e selecionar "Iniciar sessão no Chrome..."</translation>
 <translation id="728488472449859922">Ativar o leitor de QR do Google Chrome</translation>
-<translation id="7311395200710390977">Para um acesso mais rápido, <ph name="BEGIN_LINK" />mova o Chrome para a Dock<ph name="END_LINK" /></translation>
 <translation id="7400722733683201933">Acerca do Google Chrome</translation>
 <translation id="7437998757836447326">Terminar sessão no Chrome</translation>
 <translation id="756809126120519699">Dados do Chrome limpos</translation>

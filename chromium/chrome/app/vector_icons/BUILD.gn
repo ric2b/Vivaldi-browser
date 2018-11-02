@@ -13,6 +13,8 @@ aggregate_vector_icons("chrome_vector_icons") {
     "account_child.icon",
     "account_child_circle.icon",
     "account_circle.icon",
+    "add.1x.icon",
+    "add.icon",
     "apps.icon",
     "autologin.icon",
     "blocked_badge.icon",
@@ -25,6 +27,7 @@ aggregate_vector_icons("chrome_vector_icons") {
     "caret_down.icon",
     "caret_up.1x.icon",
     "caret_up.icon",
+    "certificate.icon",
     "close_all.icon",
     "code.icon",
     "cookie.icon",
@@ -49,7 +52,6 @@ aggregate_vector_icons("chrome_vector_icons") {
     "incognito.1x.icon",
     "incognito.icon",
     "laptop.icon",
-    "lock.icon",
     "mixed_content.icon",
     "my_location.icon",
     "navigate_home.1x.icon",
@@ -62,6 +64,9 @@ aggregate_vector_icons("chrome_vector_icons") {
     "overflow_chevron.icon",
     "paintbrush.icon",
     "photo_camera.icon",
+    "profile_switcher_outline.icon",
+    "remove.1x.icon",
+    "remove.icon",
     "remove_box.icon",
     "sad_tab.icon",
     "settings.icon",
@@ -113,11 +118,11 @@ aggregate_vector_icons("chrome_vector_icons") {
 
 source_set("vector_icons") {
   sources = get_target_outputs(":chrome_vector_icons")
-  sources += [ "//ui/gfx/vector_icon_types.h" ]
 
   deps = [
     ":chrome_vector_icons",
     "//base",
     "//skia",
+    "//ui/gfx",
   ]
 }

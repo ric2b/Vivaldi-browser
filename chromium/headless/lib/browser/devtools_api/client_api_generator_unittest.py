@@ -147,6 +147,7 @@ class ClientApiGeneratorTest(unittest.TestCase):
     type = json_api['domains'][0]['types'][0]
     resolved = client_api_generator.ResolveType(type)
     self.assertEqual('std::string', resolved['raw_type'])
+    self.assertEqual('const std::string&', resolved['pass_type'])
 
   def test_ObjectType(self):
     json_api = {
@@ -514,8 +515,7 @@ class ClientApiGeneratorTest(unittest.TestCase):
       dirname = tempfile.mkdtemp()
       jinja_env = client_api_generator.InitializeJinjaEnv(dirname)
       client_api_generator.CreateTypeDefinitions(json_api)
-      client_api_generator.Generate(jinja_env, dirname, json_api,
-                                    'deprecated_types', ['h'])
+      client_api_generator.GenerateDomains(jinja_env, dirname, json_api)
       # This is just a smoke test; we don't actually verify the generated output
       # here.
     finally:

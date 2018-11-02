@@ -36,8 +36,8 @@ GpuCompositorFrameSink::GpuCompositorFrameSink(
 
 GpuCompositorFrameSink::~GpuCompositorFrameSink() {}
 
-void GpuCompositorFrameSink::EvictFrame() {
-  support_->EvictFrame();
+void GpuCompositorFrameSink::EvictCurrentSurface() {
+  support_->EvictCurrentSurface();
 }
 
 void GpuCompositorFrameSink::SetNeedsBeginFrame(bool needs_begin_frame) {
@@ -47,12 +47,15 @@ void GpuCompositorFrameSink::SetNeedsBeginFrame(bool needs_begin_frame) {
 void GpuCompositorFrameSink::SubmitCompositorFrame(
     const cc::LocalSurfaceId& local_surface_id,
     cc::CompositorFrame frame) {
-  support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+  if (!support_->SubmitCompositorFrame(local_surface_id, std::move(frame))) {
+    compositor_frame_sink_binding_.Close();
+    OnClientConnectionLost();
+  }
 }
 
-void GpuCompositorFrameSink::BeginFrameDidNotSwap(
+void GpuCompositorFrameSink::DidNotProduceFrame(
     const cc::BeginFrameAck& begin_frame_ack) {
-  support_->BeginFrameDidNotSwap(begin_frame_ack);
+  support_->DidNotProduceFrame(begin_frame_ack);
 }
 
 void GpuCompositorFrameSink::DidReceiveCompositorFrameAck(

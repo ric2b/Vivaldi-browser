@@ -100,7 +100,10 @@ struct RegulatoryLabel {
 // Returns message that informs user that for update it's better to
 // connect to a network of one of the allowed types.
 base::string16 GetAllowedConnectionTypesMessage() {
-  if (help_utils_chromeos::IsUpdateOverCellularAllowed()) {
+  // Old help page does not support interactive-updates over cellular, so just
+  // sets |interactive| to false to make its behavior the same as before.
+  if (help_utils_chromeos::IsUpdateOverCellularAllowed(
+          false /* interactive */)) {
     return l10n_util::GetStringUTF16(IDS_UPGRADE_NETWORK_LIST_CELLULAR_ALLOWED);
   } else {
     return l10n_util::GetStringUTF16(
@@ -462,19 +465,16 @@ void HelpHandler::RefreshUpdateStatus() {
 void HelpHandler::OnPageLoaded(const base::ListValue* args) {
 #if defined(OS_CHROMEOS)
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&chromeos::version_loader::GetVersion,
                  chromeos::version_loader::VERSION_FULL),
       base::Bind(&HelpHandler::OnOSVersion, weak_factory_.GetWeakPtr()));
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&chromeos::version_loader::GetARCVersion),
       base::Bind(&HelpHandler::OnARCVersion, weak_factory_.GetWeakPtr()));
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&chromeos::version_loader::GetFirmware),
       base::Bind(&HelpHandler::OnOSFirmware, weak_factory_.GetWeakPtr()));
 
@@ -517,8 +517,7 @@ void HelpHandler::OnPageLoaded(const base::ListValue* args) {
   }
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&FindRegulatoryLabelDir),
       base::Bind(&HelpHandler::OnRegulatoryLabelDirFound,
                  weak_factory_.GetWeakPtr()));
@@ -540,7 +539,8 @@ void HelpHandler::OpenFeedbackDialog(const base::ListValue* args) {
   DCHECK(args->empty());
   Browser* browser = chrome::FindBrowserWithWebContents(
       web_ui()->GetWebContents());
-  chrome::OpenFeedbackDialog(browser);
+  chrome::OpenFeedbackDialog(browser,
+                             chrome::kFeedbackSourceOldSettingsAboutPage);
 }
 
 void HelpHandler::OpenHelpPage(const base::ListValue* args) {
@@ -607,7 +607,10 @@ void HelpHandler::RequestUpdate(const base::ListValue* args) {
 }
 
 void HelpHandler::SetUpdateStatus(VersionUpdater::Status status,
-                                  int progress, const base::string16& message) {
+                                  int progress,
+                                  const std::string& /* version */,
+                                  int64_t /* size */,
+                                  const base::string16& message) {
   // Only UPDATING state should have progress set.
   DCHECK(status == VersionUpdater::UPDATING || progress == 0);
 
@@ -628,6 +631,9 @@ void HelpHandler::SetUpdateStatus(VersionUpdater::Status status,
   case VersionUpdater::FAILED:
   case VersionUpdater::FAILED_OFFLINE:
   case VersionUpdater::FAILED_CONNECTION_TYPE_DISALLOWED:
+  // Old help page does not support update over cellular connection. Treat this
+  // signal as FAILED.
+  case VersionUpdater::NEED_PERMISSION_TO_UPDATE:
     status_str = "failed";
     break;
   case VersionUpdater::DISABLED:
@@ -718,8 +724,7 @@ void HelpHandler::OnRegulatoryLabelDirFound(const base::FilePath& path) {
     return;
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&ReadRegulatoryLabelText, path),
       base::Bind(&HelpHandler::OnRegulatoryLabelTextRead,
                  weak_factory_.GetWeakPtr()));

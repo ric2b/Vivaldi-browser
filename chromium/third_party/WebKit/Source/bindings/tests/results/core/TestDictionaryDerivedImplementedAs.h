@@ -30,12 +30,12 @@ class CORE_EXPORT TestDictionaryDerivedImplementedAs : public TestDictionary {
   TestDictionaryDerivedImplementedAs& operator=(const TestDictionaryDerivedImplementedAs&);
 
   bool hasDerivedStringMember() const;
-  String derivedStringMember() const;
-  void setDerivedStringMember(String);
+  const String& derivedStringMember() const;
+  void setDerivedStringMember(const String&);
 
   bool hasDerivedStringMemberWithDefault() const;
-  String derivedStringMemberWithDefault() const;
-  void setDerivedStringMemberWithDefault(String);
+  const String& derivedStringMemberWithDefault() const;
+  void setDerivedStringMemberWithDefault(const String&);
 
   bool hasRequiredLongMember() const;
   int32_t requiredLongMember() const;
@@ -49,11 +49,12 @@ class CORE_EXPORT TestDictionaryDerivedImplementedAs : public TestDictionary {
   DECLARE_VIRTUAL_TRACE();
 
  private:
+  bool m_hasRequiredLongMember = false;
+  bool m_hasStringOrDoubleSequenceMember = false;
+
   String m_derivedStringMember;
   String m_derivedStringMemberWithDefault;
-  bool m_hasRequiredLongMember = false;
   int32_t m_requiredLongMember;
-  bool m_hasStringOrDoubleSequenceMember = false;
   HeapVector<StringOrDouble> m_stringOrDoubleSequenceMember;
 
   friend class V8TestDictionaryDerivedImplementedAs;

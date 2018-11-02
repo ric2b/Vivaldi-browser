@@ -37,6 +37,7 @@
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/layout/LayoutBox.h"
+#include "core/layout/LayoutView.h"
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "platform/geometry/IntRect.h"
@@ -57,8 +58,8 @@ FocusCandidate::FocusCandidate(Node* node, WebFocusType type)
       distance(MaxDistance()),
       is_offscreen(true),
       is_offscreen_after_scrolling(true) {
-  ASSERT(node);
-  ASSERT(node->IsElementNode());
+  DCHECK(node);
+  DCHECK(node->IsElementNode());
 
   if (isHTMLAreaElement(*node)) {
     HTMLAreaElement& area = toHTMLAreaElement(*node);
@@ -102,7 +103,7 @@ static bool RectsIntersectOnOrthogonalAxis(WebFocusType type,
     case kWebFocusTypeDown:
       return a.MaxX() > b.X() && a.X() < b.MaxX();
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return false;
   }
 }
@@ -136,7 +137,7 @@ static bool IsRectInDirection(WebFocusType type,
     case kWebFocusTypeDown:
       return Below(target_rect, cur_rect);
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return false;
   }
 }
@@ -152,7 +153,7 @@ bool HasOffscreenRect(Node* node, WebFocusType type) {
   if (!frame_view)
     return true;
 
-  ASSERT(!frame_view->NeedsLayout());
+  DCHECK(!frame_view->NeedsLayout());
 
   LayoutRect container_viewport_rect(frame_view->VisibleContentRect());
   // We want to select a node if it is currently off screen, but will be
@@ -160,7 +161,7 @@ bool HasOffscreenRect(Node* node, WebFocusType type) {
   // If the container has overflow:hidden, we cannot scroll, so we do not pass
   // direction and we do not adjust for scrolling.
   int pixels_per_line_step =
-      ScrollableArea::PixelsPerLineStep(frame_view->GetHostWindow());
+      ScrollableArea::PixelsPerLineStep(frame_view->GetChromeClient());
   switch (type) {
     case kWebFocusTypeLeft:
       container_viewport_rect.SetX(container_viewport_rect.X() -
@@ -198,13 +199,13 @@ bool HasOffscreenRect(Node* node, WebFocusType type) {
 }
 
 bool ScrollInDirection(LocalFrame* frame, WebFocusType type) {
-  ASSERT(frame);
+  DCHECK(frame);
 
   if (frame && CanScrollInDirection(frame->GetDocument(), type)) {
     int dx = 0;
     int dy = 0;
     int pixels_per_line_step =
-        ScrollableArea::PixelsPerLineStep(frame->View()->GetHostWindow());
+        ScrollableArea::PixelsPerLineStep(frame->View()->GetChromeClient());
     switch (type) {
       case kWebFocusTypeLeft:
         dx = -pixels_per_line_step;
@@ -219,7 +220,7 @@ bool ScrollInDirection(LocalFrame* frame, WebFocusType type) {
         dy = pixels_per_line_step;
         break;
       default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return false;
     }
 
@@ -230,7 +231,7 @@ bool ScrollInDirection(LocalFrame* frame, WebFocusType type) {
 }
 
 bool ScrollInDirection(Node* container, WebFocusType type) {
-  ASSERT(container);
+  DCHECK(container);
   if (container->IsDocumentNode())
     return ScrollInDirection(ToDocument(container)->GetFrame(), type);
 
@@ -243,28 +244,28 @@ bool ScrollInDirection(Node* container, WebFocusType type) {
     // TODO(leviw): Why are these values truncated (toInt) instead of rounding?
     FrameView* frame_view = container->GetDocument().View();
     int pixels_per_line_step = ScrollableArea::PixelsPerLineStep(
-        frame_view ? frame_view->GetHostWindow() : nullptr);
+        frame_view ? frame_view->GetChromeClient() : nullptr);
     switch (type) {
       case kWebFocusTypeLeft:
         dx = -pixels_per_line_step;
         break;
       case kWebFocusTypeRight:
-        ASSERT(container->GetLayoutBox()->ScrollWidth() >
-               (container->GetLayoutBox()->ScrollLeft() +
-                container->GetLayoutBox()->ClientWidth()));
+        DCHECK_GT(container->GetLayoutBox()->ScrollWidth(),
+                  (container->GetLayoutBox()->ScrollLeft() +
+                   container->GetLayoutBox()->ClientWidth()));
         dx = pixels_per_line_step;
         break;
       case kWebFocusTypeUp:
         dy = -pixels_per_line_step;
         break;
       case kWebFocusTypeDown:
-        ASSERT(container->GetLayoutBox()->ScrollHeight() -
+        DCHECK(container->GetLayoutBox()->ScrollHeight() -
                (container->GetLayoutBox()->ScrollTop() +
                 container->GetLayoutBox()->ClientHeight()));
         dy = pixels_per_line_step;
         break;
       default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return false;
     }
 
@@ -292,7 +293,7 @@ static void DeflateIfOverlapped(LayoutRect& a, LayoutRect& b) {
 }
 
 bool IsScrollableNode(const Node* node) {
-  ASSERT(!node->IsDocumentNode());
+  DCHECK(!node->IsDocumentNode());
 
   if (!node)
     return false;
@@ -307,7 +308,7 @@ bool IsScrollableNode(const Node* node) {
 
 Node* ScrollableEnclosingBoxOrParentFrameForNodeInDirection(WebFocusType type,
                                                             Node* node) {
-  ASSERT(node);
+  DCHECK(node);
   Node* parent = node;
   do {
     // FIXME: Spatial navigation is broken for OOPI.
@@ -322,7 +323,7 @@ Node* ScrollableEnclosingBoxOrParentFrameForNodeInDirection(WebFocusType type,
 }
 
 bool CanScrollInDirection(const Node* container, WebFocusType type) {
-  ASSERT(container);
+  DCHECK(container);
   if (container->IsDocumentNode())
     return CanScrollInDirection(ToDocument(container)->GetFrame(), type);
 
@@ -351,7 +352,7 @@ bool CanScrollInDirection(const Node* container, WebFocusType type) {
                       container->GetLayoutBox()->ClientHeight() <
                   container->GetLayoutBox()->ScrollHeight());
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return false;
   }
 }
@@ -359,9 +360,12 @@ bool CanScrollInDirection(const Node* container, WebFocusType type) {
 bool CanScrollInDirection(const LocalFrame* frame, WebFocusType type) {
   if (!frame->View())
     return false;
+  LayoutView* layoutView = frame->ContentLayoutObject();
+  if (!layoutView)
+    return false;
   ScrollbarMode vertical_mode;
   ScrollbarMode horizontal_mode;
-  frame->View()->CalculateScrollbarModes(horizontal_mode, vertical_mode);
+  layoutView->CalculateScrollbarModes(horizontal_mode, vertical_mode);
   if ((type == kWebFocusTypeLeft || type == kWebFocusTypeRight) &&
       kScrollbarAlwaysOff == horizontal_mode)
     return false;
@@ -382,7 +386,7 @@ bool CanScrollInDirection(const LocalFrame* frame, WebFocusType type) {
     case kWebFocusTypeDown:
       return rect.Height() + offset.Height() < size.Height();
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return false;
   }
 }
@@ -408,8 +412,9 @@ static LayoutRect RectToAbsoluteCoordinates(LocalFrame* initial_frame,
 }
 
 LayoutRect NodeRectInAbsoluteCoordinates(Node* node, bool ignore_border) {
-  ASSERT(node && node->GetLayoutObject() &&
-         !node->GetDocument().View()->NeedsLayout());
+  DCHECK(node);
+  DCHECK(node->GetLayoutObject());
+  DCHECK(!node->GetDocument().View()->NeedsLayout());
 
   if (node->IsDocumentNode())
     return FrameRectInAbsoluteCoordinates(ToDocument(node)->GetFrame());
@@ -475,7 +480,7 @@ void EntryAndExitPointsForDirection(WebFocusType type,
         entry_point.SetY(starting_rect.MaxY());
       break;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
   }
 
   switch (type) {
@@ -518,7 +523,7 @@ void EntryAndExitPointsForDirection(WebFocusType type,
       }
       break;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
   }
 }
 
@@ -607,7 +612,7 @@ void DistanceDataForNode(WebFocusType type,
           (x_axis + orthogonal_bias) * kOrthogonalWeightForUpDown;
       break;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return;
   }
 
@@ -624,7 +629,8 @@ void DistanceDataForNode(WebFocusType type,
 }
 
 bool CanBeScrolledIntoView(WebFocusType type, const FocusCandidate& candidate) {
-  ASSERT(candidate.visible_node && candidate.is_offscreen);
+  DCHECK(candidate.visible_node);
+  DCHECK(candidate.is_offscreen);
   LayoutRect candidate_rect = candidate.rect;
   for (Node& parent_node :
        NodeTraversal::AncestorsOf(*candidate.visible_node)) {
@@ -668,7 +674,7 @@ LayoutRect VirtualRectForDirection(WebFocusType type,
       virtual_starting_rect.SetHeight(width);
       break;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
   }
 
   return virtual_starting_rect;
@@ -676,7 +682,7 @@ LayoutRect VirtualRectForDirection(WebFocusType type,
 
 LayoutRect VirtualRectForAreaElementAndDirection(HTMLAreaElement& area,
                                                  WebFocusType type) {
-  ASSERT(area.ImageElement());
+  DCHECK(area.ImageElement());
   // Area elements tend to overlap more than other focusable elements. We
   // flatten the rect of the area elements to minimize the effect of overlapping
   // areas.

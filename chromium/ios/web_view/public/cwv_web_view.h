@@ -7,9 +7,10 @@
 #import <ChromeWebView/cwv_export.h>
 #import <UIKit/UIKit.h>
 
+@class CWVScrollView;
+@class CWVTranslationController;
 @class CWVWebViewConfiguration;
 @protocol CWVUIDelegate;
-@protocol CWVTranslateDelegate;
 @protocol CWVNavigationDelegate;
 
 // A web view component (like WKWebView) which uses iOS Chromium's web view
@@ -28,21 +29,24 @@ CWV_EXPORT
 // This web view's navigation delegate.
 @property(nonatomic, weak) id<CWVNavigationDelegate> navigationDelegate;
 
+// This web view's translation controller.
+@property(nonatomic, readonly) CWVTranslationController* translationController;
+
 // This web view's UI delegate
 @property(nonatomic, weak) id<CWVUIDelegate> UIDelegate;
 
-// A delegate for the translation feature.
-@property(nonatomic, weak) id<CWVTranslateDelegate> translationDelegate;
-
-// Whether or not this web view can go backwards or forwards.
+// Whether or not this web view can go backwards or forwards. KVO Compliant.
 @property(nonatomic, readonly) BOOL canGoBack;
 @property(nonatomic, readonly) BOOL canGoForward;
 
 // Whether or not this web view is loading a page.
 @property(nonatomic, readonly) BOOL isLoading;
 
-// The current URL, for display to the user.
+// The URL displayed in the url bar.
 @property(nonatomic, readonly) NSURL* visibleURL;
+
+// The URL of the current document.
+@property(nonatomic, readonly) NSURL* lastCommittedURL;
 
 // The current page title.
 @property(nonatomic, readonly, copy) NSString* title;
@@ -53,6 +57,33 @@ CWV_EXPORT
 // completes, it remains at 1.0 until a new navigation starts, at which point it
 // is reset to 0.0.
 @property(nonatomic, readonly) double estimatedProgress;
+
+// The scroll view associated with the web view.
+@property(nonatomic, readonly) CWVScrollView* scrollView;
+
+// The User Agent product string used to build the full User Agent.
++ (NSString*)userAgentProduct;
+
+// Customizes the User Agent string by inserting |product|. It should be of the
+// format "product/1.0". For example:
+// "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3 like Mac OS X) AppleWebKit/603.1.30
+// (KHTML, like Gecko) <product> Mobile/16D32 Safari/602.1" where <product>
+// will be replaced with |product| or empty string if not set.
+//
+// NOTE: It is recommended to set |product| before initializing any web views.
+// Setting |product| is only guaranteed to affect web views which have not yet
+// been initialized. However, exisiting web views could also be affected
+// depending upon their internal state.
++ (void)setUserAgentProduct:(NSString*)product;
+
+// Use this method to set the necessary credentials used to communicate with
+// the Google API for features such as translate. See this link for more info:
+// https://support.google.com/googleapi/answer/6158857
+// This method must be called before any |CWVWebViews| are instantiated for
+// the keys to be used.
++ (void)setGoogleAPIKey:(NSString*)googleAPIKey
+               clientID:(NSString*)clientID
+           clientSecret:(NSString*)clientSecret;
 
 // |configuration| must not be null
 - (instancetype)initWithFrame:(CGRect)frame

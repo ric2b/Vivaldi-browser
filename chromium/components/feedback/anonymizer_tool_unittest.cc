@@ -47,6 +47,22 @@ TEST_F(AnonymizerToolTest, Anonymize) {
 
   // Make sure custom pattern anonymization is invoked.
   EXPECT_EQ("Cell ID: '1'", AnonymizeCustomPatterns("Cell ID: 'A1B2'"));
+
+  // Make sure UUIDs are anonymized.
+  EXPECT_EQ(
+      "REQUEST localhost - - \"POST /printers/<UUID: 1> HTTP/1.1\" 200 291 "
+      "Create-Job successful-ok",
+      anonymizer_.Anonymize(
+          "REQUEST localhost - - \"POST /printers/"
+          "cb738a9f-6433-4d95-a81e-94e4ae0ed30b HTTP/1.1\" 200 291 Create-Job "
+          "successful-ok"));
+  EXPECT_EQ(
+      "REQUEST localhost - - \"POST /printers/<UUID: 2> HTTP/1.1\" 200 286 "
+      "Create-Job successful-ok",
+      anonymizer_.Anonymize(
+          "REQUEST localhost - - \"POST /printers/"
+          "d17188da-9cd3-44f4-b148-3e1d748a3b0f HTTP/1.1\" 200 286 Create-Job "
+          "successful-ok"));
 }
 
 TEST_F(AnonymizerToolTest, AnonymizeMACAddresses) {
@@ -94,6 +110,13 @@ TEST_F(AnonymizerToolTest, AnonymizeCustomPatterns) {
   EXPECT_EQ(
       "a\nb [SSID=1] [SSID=2] [SSID=foo\nbar] b",
       AnonymizeCustomPatterns("a\nb [SSID=foo] [SSID=bar] [SSID=foo\nbar] b"));
+
+  EXPECT_EQ("SerialNumber: 1",
+            AnonymizeCustomPatterns("SerialNumber: 1217D7EF"));
+  EXPECT_EQ("serial  number: 2",
+            AnonymizeCustomPatterns("serial  number: 50C971FEE7F3x010900"));
+  EXPECT_EQ("SerialNumber: 3",
+            AnonymizeCustomPatterns("SerialNumber: EVT23-17BA01-004"));
 
   EXPECT_EQ("<email: 1>",
             AnonymizeCustomPatterns("foo@bar.com"));

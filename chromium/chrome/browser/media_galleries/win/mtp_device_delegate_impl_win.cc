@@ -141,10 +141,10 @@ bool OpenDeviceOnBlockingPoolThread(
   DCHECK(!registered_device_path.empty());
   base::win::ScopedComPtr<IPortableDevice> device =
       media_transfer_protocol::OpenDevice(pnp_device_id);
-  bool init_succeeded = device.get() != NULL;
+  bool init_succeeded = device.Get() != NULL;
   if (init_succeeded) {
     PortableDeviceMapService::GetInstance()->AddPortableDevice(
-        registered_device_path, device.get());
+        registered_device_path, device.Get());
   }
   return init_succeeded;
 }
@@ -247,9 +247,7 @@ base::File::Error GetFileStreamOnBlockingPoolThread(
   base::win::ScopedComPtr<IStream> file_stream;
   if (file_info.size > 0) {
     HRESULT hr = media_transfer_protocol::GetFileStreamForObject(
-        device,
-        file_object_id,
-        file_stream.Receive(),
+        device, file_object_id, file_stream.GetAddressOf(),
         &optimal_transfer_size);
     if (hr != S_OK)
       return base::File::FILE_ERROR_FAILED;
@@ -266,7 +264,7 @@ base::File::Error GetFileStreamOnBlockingPoolThread(
 
   DCHECK(file_info.size == 0 || optimal_transfer_size > 0U);
   file_details->set_file_info(file_info);
-  file_details->set_device_file_stream(file_stream.get());
+  file_details->set_device_file_stream(file_stream.Get());
   file_details->set_optimal_transfer_size(optimal_transfer_size);
   return error;
 }

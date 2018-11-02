@@ -570,7 +570,7 @@ void DesktopWindowTreeHostX11::ShowWindowWithState(
     ui::WindowShowState show_state) {
   if (compositor())
     compositor()->SetVisible(true);
-  if (!IsVisible())
+  if (!IsVisible() || !window_mapped_in_server_)
     MapWindow(show_state);
 
   switch (show_state) {
@@ -809,6 +809,13 @@ void DesktopWindowTreeHostX11::Activate() {
     // would have raised an X error if the window is not mapped.
     auto old_error_handler = XSetErrorHandler(IgnoreX11Errors);
     XSetInputFocus(xdisplay_, xwindow_, RevertToParent, timestamp);
+    // At this point, we know we will receive focus, and some
+    // webdriver tests depend on a window being IsActive() immediately
+    // after an Activate(), so just set this state now.
+    has_pointer_focus_ = false;
+    has_window_focus_ = true;
+    // window_mapped_in_client_ == true based on the IsVisible() check above.
+    window_mapped_in_server_ = true;
     XSetErrorHandler(old_error_handler);
   }
   AfterActivationStateChanged();
@@ -1021,7 +1028,7 @@ bool DesktopWindowTreeHostX11::ShouldUseNativeFrame() const {
 }
 
 bool DesktopWindowTreeHostX11::ShouldWindowContentsBeTransparent() const {
-  return IsTranslucentWindowOpacitySupported();
+  return false;
 }
 
 void DesktopWindowTreeHostX11::FrameTypeChanged() {
@@ -1176,7 +1183,10 @@ bool DesktopWindowTreeHostX11::IsAnimatingClosed() const {
 }
 
 bool DesktopWindowTreeHostX11::IsTranslucentWindowOpacitySupported() const {
-  return use_argb_visual_;
+  // This function may be called before InitX11Window() (which
+  // initializes |use_argb_visual_|), so we cannot simply return
+  // |use_argb_visual_|.
+  return ui::XVisualManager::GetInstance()->ArgbVisualAvailable();
 }
 
 void DesktopWindowTreeHostX11::SizeConstraintsChanged() {
@@ -1837,7 +1847,7 @@ void DesktopWindowTreeHostX11::DispatchTouchEvent(ui::TouchEvent* event) {
 
 void DesktopWindowTreeHostX11::DispatchKeyEvent(ui::KeyEvent* event) {
   if (native_widget_delegate_->AsWidget()->IsActive())
-    GetInputMethod()->DispatchKeyEvent(event);
+    SendEventToSink(event);
 }
 
 void DesktopWindowTreeHostX11::ConvertEventToDifferentHost(
@@ -1914,7 +1924,6 @@ void DesktopWindowTreeHostX11::SerializeImageRepresentation(
   data->push_back(height);
 
   const SkBitmap& bitmap = rep.sk_bitmap();
-  SkAutoLockPixels locker(bitmap);
 
   for (int y = 0; y < height; ++y)
     for (int x = 0; x < width; ++x)

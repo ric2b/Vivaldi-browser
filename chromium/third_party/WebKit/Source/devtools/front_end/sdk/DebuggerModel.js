@@ -62,11 +62,11 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
     this._isPausing = false;
     Common.moduleSetting('pauseOnExceptionEnabled').addChangeListener(this._pauseOnExceptionStateChanged, this);
     Common.moduleSetting('pauseOnCaughtException').addChangeListener(this._pauseOnExceptionStateChanged, this);
-    Common.moduleSetting('enableAsyncStackTraces').addChangeListener(this.asyncStackTracesStateChanged, this);
+    Common.moduleSetting('disableAsyncStackTraces').addChangeListener(this._asyncStackTracesStateChanged, this);
 
     /** @type {!Map<string, string>} */
     this._fileURLToNodeJSPath = new Map();
-    this.enableDebugger();
+    this._enableDebugger();
 
     /** @type {!Map<string, string>} */
     this._stringMap = new Map();
@@ -109,37 +109,34 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
   }
 
   /**
-   * @param {function()=} callback
+   * @return {!Promise}
    */
-  enableDebugger(callback) {
-    if (this._debuggerEnabled) {
-      if (callback)
-        callback();
-      return;
-    }
-    this._agent.enable(callback);
+  _enableDebugger() {
+    if (this._debuggerEnabled)
+      return Promise.resolve();
     this._debuggerEnabled = true;
+
+    var enablePromise = new Promise(fulfill => this._agent.enable(fulfill));
     this._pauseOnExceptionStateChanged();
-    this.asyncStackTracesStateChanged();
+    this._asyncStackTracesStateChanged();
     this.dispatchEventToListeners(SDK.DebuggerModel.Events.DebuggerWasEnabled, this);
+    return enablePromise;
   }
 
   /**
-   * @param {function()=} callback
+   * @return {!Promise}
    */
-  disableDebugger(callback) {
-    if (!this._debuggerEnabled) {
-      if (callback)
-        callback();
-      return;
-    }
-
-    this._agent.disable(callback);
+  _disableDebugger() {
+    if (!this._debuggerEnabled)
+      return Promise.resolve();
     this._debuggerEnabled = false;
+
+    var disablePromise = new Promise(fulfill => this._agent.disable(fulfill));
     this._isPausing = false;
-    this.asyncStackTracesStateChanged();
+    this._asyncStackTracesStateChanged();
     this.globalObjectCleared();
     this.dispatchEventToListeners(SDK.DebuggerModel.Events.DebuggerWasDisabled);
+    return disablePromise;
   }
 
   /**
@@ -176,9 +173,9 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
     this._agent.setPauseOnExceptions(state);
   }
 
-  asyncStackTracesStateChanged() {
-    const maxAsyncStackChainDepth = 8;
-    var enabled = Common.moduleSetting('enableAsyncStackTraces').get() && this._debuggerEnabled;
+  _asyncStackTracesStateChanged() {
+    const maxAsyncStackChainDepth = 32;
+    var enabled = !Common.moduleSetting('disableAsyncStackTraces').get() && this._debuggerEnabled;
     this._agent.setAsyncCallStackDepth(enabled ? maxAsyncStackChainDepth : 0);
   }
 
@@ -302,26 +299,12 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
    * @param {boolean} restrictToFunction
    * @return {!Promise<!Array<!SDK.DebuggerModel.BreakLocation>>}
    */
-  getPossibleBreakpoints(startLocation, endLocation, restrictToFunction) {
-    var fulfill;
-    var promise = new Promise(resolve => fulfill = resolve);
-    this._agent.invoke_getPossibleBreakpoints(
-        {start: startLocation.payload(), end: endLocation.payload(), restrictToFunction: restrictToFunction},
-        checkErrorAndReturn.bind(this));
-    return promise;
-
-    /**
-     * @this {!SDK.DebuggerModel}
-     * @param {?Protocol.Error} error
-     * @param {?Array<!Protocol.Debugger.BreakLocation>} locations
-     */
-    function checkErrorAndReturn(error, locations) {
-      if (error || !locations) {
-        fulfill([]);
-        return;
-      }
-      fulfill(locations.map(location => SDK.DebuggerModel.BreakLocation.fromPayload(this, location)));
-    }
+  async getPossibleBreakpoints(startLocation, endLocation, restrictToFunction) {
+    var response = await this._agent.invoke_getPossibleBreakpoints(
+        {start: startLocation.payload(), end: endLocation.payload(), restrictToFunction: restrictToFunction});
+    if (response[Protocol.Error] || !response.locations)
+      return [];
+    return response.locations.map(location => SDK.DebuggerModel.BreakLocation.fromPayload(this, location));
   }
 
   /**
@@ -482,6 +465,14 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
   _pausedScript(callFrames, reason, auxData, breakpointIds, asyncStackTrace) {
     var pausedDetails =
         new SDK.DebuggerPausedDetails(this, callFrames, reason, auxData, breakpointIds, asyncStackTrace);
+
+    if (pausedDetails && this._continueToLocationCallback) {
+      var callback = this._continueToLocationCallback;
+      delete this._continueToLocationCallback;
+      if (callback(pausedDetails))
+        return;
+    }
+
     if (!this._setDebuggerPausedDetails(pausedDetails))
       this._agent.stepInto();
   }
@@ -703,11 +694,10 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
    * @param {?SDK.DebuggerModel.CallFrame} callFrame
    */
   setSelectedCallFrame(callFrame) {
-    this._selectedCallFrame = callFrame;
-    if (!this._selectedCallFrame)
+    if (this._selectedCallFrame === callFrame)
       return;
-
-    this.dispatchEventToListeners(SDK.DebuggerModel.Events.CallFrameSelected, callFrame);
+    this._selectedCallFrame = callFrame;
+    this.dispatchEventToListeners(SDK.DebuggerModel.Events.CallFrameSelected, this);
   }
 
   /**
@@ -864,39 +854,23 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
     this._sourceMapManager.dispose();
     Common.moduleSetting('pauseOnExceptionEnabled').removeChangeListener(this._pauseOnExceptionStateChanged, this);
     Common.moduleSetting('pauseOnCaughtException').removeChangeListener(this._pauseOnExceptionStateChanged, this);
-    Common.moduleSetting('enableAsyncStackTraces').removeChangeListener(this.asyncStackTracesStateChanged, this);
+    Common.moduleSetting('disableAsyncStackTraces').removeChangeListener(this._asyncStackTracesStateChanged, this);
   }
 
   /**
    * @override
    * @return {!Promise}
    */
-  suspendModel() {
-    return new Promise(promiseBody.bind(this));
-
-    /**
-     * @param {function()} fulfill
-     * @this {SDK.DebuggerModel}
-     */
-    function promiseBody(fulfill) {
-      this.disableDebugger(fulfill);
-    }
+  async suspendModel() {
+    await this._disableDebugger();
   }
 
   /**
    * @override
    * @return {!Promise}
    */
-  resumeModel() {
-    return new Promise(promiseBody.bind(this));
-
-    /**
-     * @param {function()} fulfill
-     * @this {SDK.DebuggerModel}
-     */
-    function promiseBody(fulfill) {
-      this.enableDebugger(fulfill);
-    }
+  async resumeModel() {
+    await this._enableDebugger();
   }
 
   /**
@@ -964,6 +938,11 @@ SDK.DebuggerEventTypes = {
   JavaScriptPause: 0,
   JavaScriptBreakpoint: 1,
   NativeBreakpoint: 2
+};
+
+SDK.DebuggerModel.ContinueToLocationTargetCallFrames = {
+  Any: 'any',
+  Current: 'current'
 };
 
 /**
@@ -1096,8 +1075,29 @@ SDK.DebuggerModel.Location = class {
     return this.debuggerModel.scriptForId(this.scriptId);
   }
 
-  continueToLocation() {
-    this.debuggerModel._agent.continueToLocation(this.payload());
+  /**
+   * @param {function()=} pausedCallback
+   */
+  continueToLocation(pausedCallback) {
+    if (pausedCallback)
+      this.debuggerModel._continueToLocationCallback = this._paused.bind(this, pausedCallback);
+    this.debuggerModel._agent.continueToLocation(
+        this.payload(), SDK.DebuggerModel.ContinueToLocationTargetCallFrames.Current);
+  }
+
+  /**
+   * @param {function()|undefined} pausedCallback
+   * @param {!SDK.DebuggerPausedDetails} debuggerPausedDetails
+   * @return {boolean}
+   */
+  _paused(pausedCallback, debuggerPausedDetails) {
+    var location = debuggerPausedDetails.callFrames[0].location();
+    if (location.scriptId === this.scriptId && location.lineNumber === this.lineNumber &&
+        location.columnNumber === this.columnNumber) {
+      pausedCallback();
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -1251,26 +1251,23 @@ SDK.DebuggerModel.CallFrame = class {
    * @param {boolean} generatePreview
    * @param {function(?Protocol.Runtime.RemoteObject, !Protocol.Runtime.ExceptionDetails=, string=)} callback
    */
-  evaluate(code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview, callback) {
-    /**
-     * @param {?Protocol.Error} error
-     * @param {!Protocol.Runtime.RemoteObject} result
-     * @param {!Protocol.Runtime.ExceptionDetails=} exceptionDetails
-     */
-    function didEvaluateOnCallFrame(error, result, exceptionDetails) {
-      if (error) {
-        console.error(error);
-        callback(null, undefined, error);
-        return;
-      }
-      callback(result, exceptionDetails);
+  async evaluate(code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview, callback) {
+    var response = await this.debuggerModel._agent.invoke_evaluateOnCallFrame({
+      callFrameId: this._payload.callFrameId,
+      expression: code,
+      objectGroup: objectGroup,
+      includeCommandLineAPI: includeCommandLineAPI,
+      silent: silent,
+      returnByValue: returnByValue,
+      generatePreview: generatePreview
+    });
+    var error = response[Protocol.Error];
+    if (error) {
+      console.error(error);
+      callback(null, undefined, error);
+      return;
     }
-    this.debuggerModel._agent.invoke_evaluateOnCallFrame(
-        {
-          callFrameId: this._payload.callFrameId,
-          expression: code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview
-        },
-        didEvaluateOnCallFrame);
+    callback(response.result, response.exceptionDetails);
   }
 
   /**
@@ -1379,6 +1376,8 @@ SDK.DebuggerModel.Scope = class {
         return Common.UIString('With Block');
       case Protocol.Debugger.ScopeType.Global:
         return Common.UIString('Global');
+      case Protocol.Debugger.ScopeType.Module:
+        return Common.UIString('Module');
     }
     return '';
   }

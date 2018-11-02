@@ -6,20 +6,31 @@ post_process_template("//chrome:packed_resources") {
   additional_extra_paks += [
     "$root_gen_dir/vivaldi/vivaldi_native_unscaled.pak",
   ]
-  if (!defined(additional_locale_source_patterns)) {
-    additional_locale_source_patterns = []
+  if (!defined(public_deps)) { public_deps = [] }
+  public_deps += [
+    "//vivaldi/app:vivaldi_native_resources",
+    "//vivaldi/app:vivaldi_native_strings",
+    "//vivaldi/app:vivaldi_unscaled_native_resources",
+  ]
+}
+
+post_process_template("//chrome:packed_resources_extra") {
+  if (!defined(deps)) { deps = [] }
+  deps += [
+    "//vivaldi/app:vivaldi_unscaled_native_resources",
+  ]
+}
+
+
+post_process_template("//chrome:packed_resources_locales") {
+  if (!defined(additional_source_patterns)) {
+    additional_source_patterns = []
   }
-  additional_locale_source_patterns += [ "$root_gen_dir/vivaldi/vivaldi_native_strings_" ]
+  additional_source_patterns += [ "$root_gen_dir/vivaldi/vivaldi_native_strings_" ]
 
   # Both deps and public_deps need to be updated; deps are used by subtargets
   if (!defined(deps)) { deps = [] }
   deps += [
-    "//vivaldi/app:vivaldi_native_strings",
-    "//vivaldi/app:vivaldi_unscaled_native_resources",
-  ]
-  if (!defined(public_deps)) { public_deps = [] }
-  public_deps += [
-    "//vivaldi/app:vivaldi_native_resources",
     "//vivaldi/app:vivaldi_native_strings",
     "//vivaldi/app:vivaldi_unscaled_native_resources",
   ]

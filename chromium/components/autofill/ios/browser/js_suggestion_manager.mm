@@ -9,6 +9,10 @@
 #include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 // Santizies |str| and wraps it in quotes so it can be injected safely in
 // JavaScript.
@@ -76,8 +80,6 @@ NSString* JSONEscape(NSString* str) {
     // 2) There is a race when the page is changing due to which
     // JSSuggestionManager has not yet injected __gCrWeb.suggestion object
     // Handle this case gracefully.
-    // TODO(shreyasv): Figure out / narrow down further why this occurs.
-    // crbug.com/432217.
     // If a page has overridden Array.toString, the string returned may not
     // contain a ",", hence this is a defensive measure to early return.
     NSArray* components = [result componentsSeparatedByString:@","];

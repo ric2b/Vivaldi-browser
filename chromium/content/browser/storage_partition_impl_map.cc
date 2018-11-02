@@ -20,7 +20,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/appcache/appcache_interceptor.h"
@@ -371,12 +370,9 @@ base::FilePath StoragePartitionImplMap::GetStoragePartitionPath(
 StoragePartitionImplMap::StoragePartitionImplMap(
     BrowserContext* browser_context)
     : browser_context_(browser_context),
-      resource_context_initialized_(false) {
-  // Doing here instead of initializer list cause it's just too ugly to read.
-  base::SequencedWorkerPool* blocking_pool = BrowserThread::GetBlockingPool();
-  file_access_runner_ =
-      blocking_pool->GetSequencedTaskRunner(blocking_pool->GetSequenceToken());
-}
+      file_access_runner_(base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND})),
+      resource_context_initialized_(false) {}
 
 StoragePartitionImplMap::~StoragePartitionImplMap() {
 }
@@ -415,30 +411,18 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
       linked_ptr<net::URLRequestJobFactory::ProtocolHandler>(
           CreateFileSystemProtocolHandler(partition_domain,
                                           partition->GetFileSystemContext()));
-  protocol_handlers[kChromeUIScheme] =
-      linked_ptr<net::URLRequestJobFactory::ProtocolHandler>(
-          URLDataManagerBackend::CreateProtocolHandler(
-              browser_context_->GetResourceContext(),
-              browser_context_->IsOffTheRecord(),
-              blob_storage_context).release());
-  std::vector<std::string> additional_webui_schemes;
-  GetContentClient()->browser()->GetAdditionalWebUISchemes(
-      &additional_webui_schemes);
-  for (std::vector<std::string>::const_iterator it =
-           additional_webui_schemes.begin();
-       it != additional_webui_schemes.end();
-       ++it) {
-    protocol_handlers[*it] =
+  for (const auto& scheme : URLDataManagerBackend::GetWebUISchemes()) {
+    protocol_handlers[scheme] =
         linked_ptr<net::URLRequestJobFactory::ProtocolHandler>(
             URLDataManagerBackend::CreateProtocolHandler(
-                browser_context_->GetResourceContext(),
-                browser_context_->IsOffTheRecord(),
-                blob_storage_context).release());
+                browser_context_->GetResourceContext(), blob_storage_context)
+                .release());
   }
+
   protocol_handlers[kChromeDevToolsScheme] =
       linked_ptr<net::URLRequestJobFactory::ProtocolHandler>(
-          CreateDevToolsProtocolHandler(browser_context_->GetResourceContext(),
-                                        browser_context_->IsOffTheRecord()));
+          CreateDevToolsProtocolHandler(
+              browser_context_->GetResourceContext()));
 
   URLRequestInterceptorScopedVector request_interceptors;
   request_interceptors.push_back(ServiceWorkerRequestHandler::CreateInterceptor(
@@ -520,8 +504,7 @@ void StoragePartitionImplMap::AsyncObliterate(
       GetStoragePartitionDomainPath(partition_domain));
 
   base::PostTaskWithTraits(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&BlockingObliteratePath, browser_context_->GetPath(),
                  domain_root, paths_to_keep,
                  base::ThreadTaskRunnerHandle::Get(), on_gc_required));

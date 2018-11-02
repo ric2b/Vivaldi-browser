@@ -10,6 +10,7 @@
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_samples.h"
+#include "base/metrics/metrics_hashes.h"
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/persistent_memory_allocator.h"
 #include "base/metrics/sample_map.h"
@@ -147,6 +148,25 @@ TEST_P(SparseHistogramTest, AddCount_LargeValuesDontOverflow) {
   EXPECT_EQ(30, snapshot2->GetCount(1000000000));
   EXPECT_EQ(25, snapshot2->GetCount(1010000000));
   EXPECT_EQ(55250000000LL, snapshot2->sum());
+}
+
+// Make sure that counts returned by Histogram::SnapshotDelta do not overflow
+// even when a total count (returned by Histogram::SnapshotSample) does.
+TEST_P(SparseHistogramTest, AddCount_LargeCountsDontOverflow) {
+  std::unique_ptr<SparseHistogram> histogram(NewSparseHistogram("Sparse"));
+  std::unique_ptr<HistogramSamples> snapshot(histogram->SnapshotSamples());
+  EXPECT_EQ(0, snapshot->TotalCount());
+  EXPECT_EQ(0, snapshot->sum());
+
+  const int count = (1 << 30) - 1;
+
+  // Repeat N times to make sure that there is no internal value overflow.
+  for (int i = 0; i < 10; ++i) {
+    histogram->AddCount(42, count);
+    std::unique_ptr<HistogramSamples> samples = histogram->SnapshotDelta();
+    EXPECT_EQ(count, samples->TotalCount());
+    EXPECT_EQ(count, samples->GetCount(42));
+  }
 }
 
 TEST_P(SparseHistogramTest, MacroBasicTest) {
@@ -325,6 +345,50 @@ TEST_P(SparseHistogramTest, FactoryTime) {
           << "ms or about "
           << (add_ms * 1000000) / kTestAddCount
           << "ns each.";
+}
+
+TEST_P(SparseHistogramTest, ExtremeValues) {
+  static const struct {
+    Histogram::Sample sample;
+    int64_t expected_max;
+  } cases[] = {
+      // Note: We use -2147483647 - 1 rather than -2147483648 because the later
+      // is interpreted as - operator applied to 2147483648 and the latter can't
+      // be represented as an int32 and causes a warning.
+      {-2147483647 - 1, -2147483647LL},
+      {0, 1},
+      {2147483647, 2147483648LL},
+  };
+
+  for (size_t i = 0; i < arraysize(cases); ++i) {
+    HistogramBase* histogram =
+        SparseHistogram::FactoryGet(StringPrintf("ExtremeValues_%zu", i),
+                                    HistogramBase::kUmaTargetedHistogramFlag);
+    histogram->Add(cases[i].sample);
+
+    std::unique_ptr<HistogramSamples> snapshot = histogram->SnapshotSamples();
+    std::unique_ptr<SampleCountIterator> it = snapshot->Iterator();
+    ASSERT_FALSE(it->Done());
+
+    base::Histogram::Sample min;
+    int64_t max;
+    base::Histogram::Count count;
+    it->Get(&min, &max, &count);
+
+    EXPECT_EQ(1, count);
+    EXPECT_EQ(cases[i].sample, min);
+    EXPECT_EQ(cases[i].expected_max, max);
+
+    it->Next();
+    EXPECT_TRUE(it->Done());
+  }
+}
+
+TEST_P(SparseHistogramTest, HistogramNameHash) {
+  const char kName[] = "TestName";
+  HistogramBase* histogram = SparseHistogram::FactoryGet(
+      kName, HistogramBase::kUmaTargetedHistogramFlag);
+  EXPECT_EQ(histogram->name_hash(), HashMetricName(kName));
 }
 
 }  // namespace base

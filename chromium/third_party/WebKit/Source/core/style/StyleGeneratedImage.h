@@ -31,6 +31,7 @@ namespace blink {
 
 class CSSValue;
 class CSSImageGeneratorValue;
+class Document;
 
 class CORE_EXPORT StyleGeneratedImage final : public StyleImage {
  public:
@@ -43,7 +44,7 @@ class CORE_EXPORT StyleGeneratedImage final : public StyleImage {
   CSSValue* CssValue() const override;
   CSSValue* ComputedCSSValue() const override;
 
-  LayoutSize ImageSize(const LayoutObject&,
+  LayoutSize ImageSize(const Document&,
                        float multiplier,
                        const LayoutSize& default_object_size) const override;
   bool ImageHasRelativeSize() const override { return !fixed_size_; }
@@ -51,9 +52,8 @@ class CORE_EXPORT StyleGeneratedImage final : public StyleImage {
   void AddClient(LayoutObject*) override;
   void RemoveClient(LayoutObject*) override;
   PassRefPtr<Image> GetImage(const LayoutObject&,
-                             const IntSize&,
-                             float) const override;
-  bool KnownToBeOpaque(const LayoutObject&) const override;
+                             const IntSize&) const override;
+  bool KnownToBeOpaque(const Document&, const ComputedStyle&) const override;
 
   DECLARE_VIRTUAL_TRACE();
 

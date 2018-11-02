@@ -109,11 +109,6 @@ CodecEnumerator::CodecEnumerator() {
   return;
 #endif
 
-#if defined(OS_ANDROID)
-  // See https://crbug.com/653864.
-  return;
-#endif
-
   content::RenderThreadImpl* const render_thread_impl =
       content::RenderThreadImpl::current();
   if (!render_thread_impl) {
@@ -131,13 +126,20 @@ CodecEnumerator::CodecEnumerator() {
   const auto vea_supported_profiles =
       gpu_factories->GetVideoEncodeAcceleratorSupportedProfiles();
   for (const auto& supported_profile : vea_supported_profiles) {
+    const media::VideoCodecProfile codec = supported_profile.profile;
+#if defined(OS_ANDROID)
+    // TODO(mcasas): enable other codecs, https://crbug.com/638664.
+    static_assert(media::VP8PROFILE_MAX + 1 == media::VP9PROFILE_MIN,
+                  "VP8 and VP9 VideoCodecProfiles should be contiguous");
+    if (codec < media::VP8PROFILE_MIN || codec > media::VP9PROFILE_MAX)
+      continue;
+#endif
     for (auto& codec_id_and_profile : kPreferredCodecIdAndVEAProfiles) {
-      if (supported_profile.profile >= codec_id_and_profile.min_profile &&
-          supported_profile.profile <= codec_id_and_profile.max_profile) {
-        DVLOG(2) << "Accelerated codec found: "
-                 << media::GetProfileName(supported_profile.profile);
-        codec_id_to_profile_.insert(std::make_pair(
-            codec_id_and_profile.codec_id, supported_profile.profile));
+      if (codec >= codec_id_and_profile.min_profile &&
+          codec <= codec_id_and_profile.max_profile) {
+        DVLOG(2) << "Accelerated codec found: " << media::GetProfileName(codec);
+        codec_id_to_profile_.insert(
+            std::make_pair(codec_id_and_profile.codec_id, codec));
       }
     }
   }
@@ -333,6 +335,16 @@ VideoTrackRecorder::CodecId VideoTrackRecorder::GetPreferredCodecId() {
   return GetCodecEnumerator()->GetPreferredCodecId();
 }
 
+// static
+bool VideoTrackRecorder::CanUseAcceleratedEncoder(CodecId codec,
+                                                  size_t width,
+                                                  size_t height) {
+  return GetCodecEnumerator()->CodecIdToVEAProfile(codec) !=
+             media::VIDEO_CODEC_PROFILE_UNKNOWN &&
+         width >= kVEAEncoderMinResolutionWidth &&
+         height >= kVEAEncoderMinResolutionHeight;
+}
+
 VideoTrackRecorder::VideoTrackRecorder(
     CodecId codec,
     const blink::WebMediaStreamTrack& track,
@@ -411,17 +423,14 @@ void VideoTrackRecorder::InitializeEncoder(
   MediaStreamVideoSink::DisconnectFromTrack();
 
   const gfx::Size& input_size = frame->visible_rect().size();
-  const auto& vea_supported_profile =
-      GetCodecEnumerator()->CodecIdToVEAProfile(codec);
-  if (allow_vea_encoder &&
-      vea_supported_profile != media::VIDEO_CODEC_PROFILE_UNKNOWN &&
-      input_size.width() >= kVEAEncoderMinResolutionWidth &&
-      input_size.height() >= kVEAEncoderMinResolutionHeight) {
+  if (allow_vea_encoder && CanUseAcceleratedEncoder(codec, input_size.width(),
+                                                    input_size.height())) {
+    const auto vea_profile = GetCodecEnumerator()->CodecIdToVEAProfile(codec);
     encoder_ = new VEAEncoder(
         on_encoded_video_callback,
         media::BindToCurrentLoop(base::Bind(&VideoTrackRecorder::OnError,
                                             weak_ptr_factory_.GetWeakPtr())),
-        bits_per_second, vea_supported_profile, input_size);
+        bits_per_second, vea_profile, input_size);
   } else {
     switch (codec) {
 #if BUILDFLAG(RTC_USE_H264)

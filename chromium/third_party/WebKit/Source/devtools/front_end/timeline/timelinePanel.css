@@ -364,9 +364,10 @@
     content: " ";
 }
 
-.timeline-details-view-row-title {
+.timeline-details-view-row-title:not(:empty) {
     color: rgb(152, 152, 152);
     overflow: hidden;
+    padding-right: 10px;
 }
 
 .timeline-details-warning {
@@ -388,7 +389,6 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
-    padding-left: 10px;
 }
 
 .timeline-details-view-row-value .stack-preview-container {
@@ -479,21 +479,12 @@
     flex: none;
 }
 
-.timeline-filmstrip-preview {
-    margin-top: 10px;
-    max-width: 200px;
-    max-height: 200px;
+.timeline-filmstrip-preview > img {
+    margin-top: 5px;
+    max-width: 500px;
+    max-height: 300px;
     cursor: pointer;
     border: 1px solid #ddd;
-}
-
-.timeline-overview-popover .frame .time {
-    display: none;
-}
-
-.timeline-overview-popover .frame .thumbnail img {
-    max-width: 300px;
-    max-height: 500px;
 }
 
 .timeline-tree-view {
@@ -552,6 +543,7 @@
 .timeline-tree-view .data-grid .name-container {
     display: flex;
     align-items: center;
+    padding-left: 2px;
 }
 
 .timeline-tree-view .data-grid .name-container div {
@@ -559,10 +551,21 @@
 }
 
 .timeline-tree-view .data-grid .name-container .activity-icon {
-    width: 10px;
-    height: 10px;
-    margin: 0 4px 0 2px;
+    width: 12px;
+    height: 12px;
     border: 1px solid rgba(0, 0, 0, 0.05);
+    margin: 3px 0;
+}
+
+.timeline-tree-view .data-grid .name-container .activity-icon-container {
+    margin-right: 3px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    overflow: hidden;
 }
 
 .timeline-tree-view .data-grid .name-container .activity-warning::after {
@@ -599,8 +602,8 @@
 }
 
 .timeline-tree-view .data-grid .selected .background-bar {
-    background-color: rgba(255, 255, 255, 0.25);
-    border-bottom-color: rgba(255, 255, 255, 0.5);
+    background-color: rgba(255, 255, 255, 0.3);
+    border-bottom-color: rgba(255, 255, 255, 0.9);
 }
 
 .timeline-tree-view .timeline-details-view-body .full-widget-dimmed-banner {
@@ -646,22 +649,6 @@
 .timeline-landing-page > div > p {
     flex: none;
     white-space: pre-line;
-}
-
-.timeline-landing-page button {
-    padding: 0;
-    vertical-align: sub;
-    border: 1px solid #ddd;
-    margin-top: 4px;
-    background-color: #f3f3f3;
-}
-
-.timeline-landing-page button > span {
-    margin: -1px 2px -3px -2px;
-}
-
-.timeline-landing-page button > span:hover {
-    background-color: #333;
 }
 
 .timeline-landing-warning {

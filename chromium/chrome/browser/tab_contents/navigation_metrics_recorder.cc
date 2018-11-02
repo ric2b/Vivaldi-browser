@@ -7,9 +7,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/tab_contents/origins_seen_service_factory.h"
 #include "components/navigation_metrics/navigation_metrics.h"
-#include "components/navigation_metrics/origins_seen_service.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -77,17 +75,12 @@ void NavigationMetricsRecorder::DidFinishNavigation(
     return;
 
   content::BrowserContext* context = web_contents()->GetBrowserContext();
-  navigation_metrics::OriginsSeenService* service =
-      OriginsSeenServiceFactory::GetForBrowserContext(context);
   content::NavigationEntry* last_committed_entry =
       web_contents()->GetController().GetLastCommittedEntry();
-  const url::Origin origin(last_committed_entry->GetVirtualURL());
-  bool have_already_seen_origin = service->Insert(origin);
 
   navigation_metrics::RecordMainFrameNavigation(
       last_committed_entry->GetVirtualURL(),
-      navigation_handle->IsSameDocument(), context->IsOffTheRecord(),
-      have_already_seen_origin);
+      navigation_handle->IsSameDocument(), context->IsOffTheRecord());
 
   // Record the domain and registry of the URL that resulted in a navigation to
   // a |data:| URL, either by redirects or user clicking a link.
@@ -95,6 +88,7 @@ void NavigationMetricsRecorder::DidFinishNavigation(
       !ui::PageTransitionCoreTypeIs(navigation_handle->GetPageTransition(),
                                     ui::PAGE_TRANSITION_TYPED)) {
     if (!navigation_handle->GetPreviousURL().is_empty()) {
+      // TODO(meacer): Remove once data URL navigations are blocked.
       rappor::SampleDomainAndRegistryFromGURL(
           rappor_service_, "Navigation.Scheme.Data",
           navigation_handle->GetPreviousURL());
@@ -103,6 +97,7 @@ void NavigationMetricsRecorder::DidFinishNavigation(
     // Also record the mime type of the data: URL.
     std::string mime_type;
     std::string charset;
+    // TODO(meacer): Remove once data URL navigations are blocked.
     if (net::DataURL::Parse(last_committed_entry->GetVirtualURL(), &mime_type,
                             &charset, nullptr)) {
       RecordDataURLMimeType(mime_type);

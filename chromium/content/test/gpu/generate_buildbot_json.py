@@ -422,6 +422,18 @@ FYI_WATERFALL = {
       'swarming': True,
       'os_type': 'mac',
     },
+    'Mac Experimental Release (Intel)': {
+      'swarming_dimensions': [
+        {
+          'gpu': '8086:0a2e',
+          'os': 'Mac'
+        },
+      ],
+      'build_config': 'Release',
+      # This bot is a one-off for testing purposes.
+      'swarming': False,
+      'os_type': 'mac',
+    },
     'Mac Experimental Retina Release (AMD)': {
       'swarming_dimensions': [
         {
@@ -623,21 +635,6 @@ FYI_WATERFALL = {
       'os_type': 'android',
     },
     'Android Release (Nexus 9)': {
-      'swarming_dimensions': [
-        {
-          # There are no PCI IDs on Android.
-          # This is a hack to get the script working.
-          'gpu': '0000:0000',
-          'os': 'Android'
-        },
-      ],
-      'build_config': 'android-chromium',
-      # This bot is a one-off and doesn't have similar slaves in the
-      # swarming pool.
-      'swarming': False,
-      'os_type': 'android',
-    },
-    'Android Release (Pixel C)': {
       'swarming_dimensions': [
         {
           # There are no PCI IDs on Android.
@@ -1320,10 +1317,6 @@ COMMON_GTESTS = {
     'disabled_tester_configs': [
       {
         'names': [
-          # TODO(kbr): investigate inability to recognize this
-          # configuration in the various tests. crbug.com/624621
-          'Android Release (Pixel C)',
-
           'Linux ChromiumOS Ozone (Intel)',
         ],
       },
@@ -1447,6 +1440,7 @@ COMMON_GTESTS = {
       {
         'names': [
           'Linux ChromiumOS Ozone (Intel)',
+          'Mac Experimental Release (Intel)',
           'Mac Experimental Retina Release (AMD)',
           'Mac Experimental Retina Release (NVIDIA)',
           'Mac Pro Release (AMD)',
@@ -1470,9 +1464,15 @@ COMMON_GTESTS = {
         'os_types': ['android'],
       },
     ],
-    'override_compile_targets': [
-      'tab_capture_end2end_tests_run',
+    'args': [
+      '--enable-gpu',
+      '--test-launcher-bot-mode',
+      '--test-launcher-jobs=1',
+      '--gtest_filter=CastStreamingApiTestWithPixelOutput.EndToEnd*:' + \
+          'TabCaptureApiPixelTest.EndToEnd*'
     ],
+    'linux_args': [ '--no-xvfb' ],
+    'test': 'browser_tests',
   },
   'video_decode_accelerator_d3d11_unittest': {
     'tester_configs': [
@@ -1550,6 +1550,7 @@ NON_SWARMED_GTESTS = {
     'test': 'browser_tests',
     'args': [
       '--enable-gpu',
+      '--no-xvfb',
       '--test-launcher-jobs=1',
       '--gtest_filter=CastStreamingApiTestWithPixelOutput.EndToEnd*:' + \
           'TabCaptureApiPixelTest.EndToEnd*'
@@ -2089,6 +2090,9 @@ def matches_swarming_dimensions(tester_config, dimension_sets):
 def is_android(tester_config):
   return tester_config['os_type'] == 'android'
 
+def is_linux(tester_config):
+  return tester_config['os_type'] == 'linux'
+
 def is_asan(tester_config):
   return tester_config.get('is_asan', False)
 
@@ -2177,12 +2181,6 @@ def generate_gtest(tester_name, tester_config, test, test_config):
       'dimension_sets': tester_config['swarming_dimensions']
     })
     if is_android(tester_config):
-      # Override the isolate target to get rid of any "_apk" suffix
-      # that would be added by the recipes.
-      if 'test' in result:
-        result['override_isolate_target'] = result['test']
-      else:
-        result['override_isolate_target'] = result['name']
       # Integrate with the unified logcat system.
       result['swarming'].update({
         'cipd_packages': [
@@ -2203,20 +2201,20 @@ def generate_gtest(tester_name, tester_config, test, test_config):
           }
         ]
       })
-  if 'desktop_args' in result:
-    if not is_android(tester_config):
-      if not 'args' in result:
-        result['args'] = []
-      result['args'] += result['desktop_args']
-    # Don't put the desktop args in the JSON.
-    result.pop('desktop_args')
-  if 'android_args' in result:
-    if is_android(tester_config):
-      if not 'args' in result:
-        result['args'] = []
-      result['args'] += result['android_args']
-    # Don't put the android args in the JSON.
-    result.pop('android_args')
+
+  def add_conditional_args(key, fn):
+    if key in result:
+      if fn(tester_config):
+        if not 'args' in result:
+          result['args'] = []
+        result['args'] += result[key]
+      # Don't put the conditional args in the JSON.
+      result.pop(key)
+
+  add_conditional_args('desktop_args', lambda cfg: not is_android(cfg))
+  add_conditional_args('linux_args', is_linux)
+  add_conditional_args('android_args', is_android)
+
   if 'desktop_swarming' in result:
     if not is_android(tester_config):
       result['swarming'].update(result['desktop_swarming'])
@@ -2308,12 +2306,16 @@ def generate_telemetry_test(tester_name, tester_config,
   prefix_args = [
     benchmark_name,
     '--show-stdout',
-    '--browser=%s' % tester_config['build_config'].lower()
+    '--browser=%s' % tester_config['build_config'].lower(),
+    # --passthrough displays more of the logging in Telemetry when run
+    # --via typ, in particular some of the warnings about tests being
+    # --expected to fail, but passing.
+    '--passthrough',
   ]
   return generate_isolated_test(tester_name, tester_config, test,
                                 test_config, extra_browser_args,
                                 'telemetry_gpu_integration_test',
-                                ['telemetry_gpu_integration_test_run'],
+                                ['telemetry_gpu_integration_test'],
                                 prefix_args)
 
 def generate_telemetry_tests(tester_name, tester_config,

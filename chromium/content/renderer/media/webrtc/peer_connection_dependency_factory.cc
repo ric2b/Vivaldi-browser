@@ -63,6 +63,7 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/webrtc/api/audio_codecs/builtin_audio_decoder_factory.h"
+#include "third_party/webrtc/api/audio_codecs/builtin_audio_encoder_factory.h"
 #include "third_party/webrtc/api/mediaconstraintsinterface.h"
 #include "third_party/webrtc/api/videosourceproxy.h"
 #include "third_party/webrtc/base/ssladapter.h"
@@ -117,7 +118,7 @@ PeerConnectionDependencyFactory::~PeerConnectionDependencyFactory() {
   DCHECK(!pc_factory_);
 }
 
-blink::WebRTCPeerConnectionHandler*
+std::unique_ptr<blink::WebRTCPeerConnectionHandler>
 PeerConnectionDependencyFactory::CreateRTCPeerConnectionHandler(
     blink::WebRTCPeerConnectionHandlerClient* client) {
   // Save histogram data so we can see how much PeerConnetion is used.
@@ -125,7 +126,7 @@ PeerConnectionDependencyFactory::CreateRTCPeerConnectionHandler(
   // webKitRTCPeerConnection.
   UpdateWebRTCMethodCount(WEBKIT_RTC_PEER_CONNECTION);
 
-  return new RTCPeerConnectionHandler(client, this);
+  return base::MakeUnique<RTCPeerConnectionHandler>(client, this);
 }
 
 const scoped_refptr<webrtc::PeerConnectionFactoryInterface>&

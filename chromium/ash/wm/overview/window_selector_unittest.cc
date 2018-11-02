@@ -9,14 +9,14 @@
 #include "ash/accessibility_types.h"
 #include "ash/drag_drop/drag_drop_controller.h"
 #include "ash/public/cpp/config.h"
-#include "ash/shelf/wm_shelf.h"
+#include "ash/public/cpp/window_properties.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shelf_view_test_api.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_app_list_view_presenter_impl.h"
-#include "ash/test/test_shelf_delegate.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector.h"
@@ -24,11 +24,11 @@
 #include "ash/wm/overview/window_selector_item.h"
 #include "ash/wm/panels/panel_layout_manager.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/workspace_window_resizer.h"
 #include "ash/wm_window.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/user_action_tester.h"
 #include "ui/aura/client/aura_constants.h"
@@ -145,9 +145,11 @@ class WindowSelectorTest : public test::AshTestBase {
 
   aura::Window* CreatePanelWindow(const gfx::Rect& bounds) {
     aura::Window* window = CreateTestWindowInShellWithDelegateAndType(
-        nullptr, ui::wm::WINDOW_TYPE_PANEL, 0, bounds);
+        nullptr, aura::client::WINDOW_TYPE_PANEL, 0, bounds);
+    static int id = 0;
+    std::string shelf_id(ShelfID(base::IntToString(id++)).Serialize());
+    window->SetProperty(kShelfIDKey, new std::string(shelf_id));
     window->SetProperty(aura::client::kTopViewInset, kHeaderHeight);
-    test::TestShelfDelegate::instance()->AddShelfItem(WmWindow::Get(window));
     shelf_view_test()->RunMessageLoopUntilAnimationsDone();
     return window;
   }
@@ -171,8 +173,7 @@ class WindowSelectorTest : public test::AshTestBase {
   aura::Window* GetOverviewWindowForMinimizedState(int index,
                                                    aura::Window* window) {
     WindowSelectorItem* selector = GetWindowItemForWindow(index, window);
-    return WmWindow::GetAuraWindow(
-        selector->GetOverviewWindowForMinimizedStateForTest());
+    return selector->GetOverviewWindowForMinimizedStateForTest();
   }
 
   gfx::Rect GetTransformedBounds(aura::Window* window) {
@@ -243,7 +244,7 @@ class WindowSelectorTest : public test::AshTestBase {
     auto iter =
         std::find_if(windows.cbegin(), windows.cend(),
                      [window](const std::unique_ptr<WindowSelectorItem>& item) {
-                       return item->Contains(WmWindow::Get(window));
+                       return item->Contains(window);
                      });
     if (iter == windows.end())
       return nullptr;
@@ -279,7 +280,7 @@ class WindowSelectorTest : public test::AshTestBase {
         ws->grid_list_[ws->selected_grid_index_]->SelectedWindow();
     if (!item)
       return nullptr;
-    return WmWindow::GetAuraWindow(item->GetWindow());
+    return item->GetWindow();
   }
 
   bool selection_widget_active() {
@@ -308,9 +309,8 @@ class WindowSelectorTest : public test::AshTestBase {
   // screen.
   void IsWindowAndCloseButtonInScreen(aura::Window* window,
                                       WindowSelectorItem* window_item) {
-    aura::Window* root_window =
-        WmWindow::GetAuraWindow(window_item->root_window());
-    EXPECT_TRUE(window_item->Contains(WmWindow::Get(window)));
+    aura::Window* root_window = window_item->root_window();
+    EXPECT_TRUE(window_item->Contains(window));
     EXPECT_TRUE(root_window->GetBoundsInScreen().Contains(
         GetTransformedTargetBounds(window)));
     EXPECT_TRUE(
@@ -516,9 +516,9 @@ TEST_F(WindowSelectorTest, WindowsOrder) {
   ToggleOverview();
   const std::vector<std::unique_ptr<WindowSelectorItem>>& overview1 =
       GetWindowItemsForRoot(0);
-  EXPECT_EQ(1, overview1[0]->GetWindow()->aura_window()->id());
-  EXPECT_EQ(3, overview1[1]->GetWindow()->aura_window()->id());
-  EXPECT_EQ(2, overview1[2]->GetWindow()->aura_window()->id());
+  EXPECT_EQ(1, overview1[0]->GetWindow()->id());
+  EXPECT_EQ(3, overview1[1]->GetWindow()->id());
+  EXPECT_EQ(2, overview1[2]->GetWindow()->id());
   ToggleOverview();
 
   // Activate the second window.
@@ -528,9 +528,9 @@ TEST_F(WindowSelectorTest, WindowsOrder) {
       GetWindowItemsForRoot(0);
 
   // The order should be MRU.
-  EXPECT_EQ(2, overview2[0]->GetWindow()->aura_window()->id());
-  EXPECT_EQ(1, overview2[1]->GetWindow()->aura_window()->id());
-  EXPECT_EQ(3, overview2[2]->GetWindow()->aura_window()->id());
+  EXPECT_EQ(2, overview2[0]->GetWindow()->id());
+  EXPECT_EQ(1, overview2[1]->GetWindow()->id());
+  EXPECT_EQ(3, overview2[2]->GetWindow()->id());
   ToggleOverview();
 }
 
@@ -1346,14 +1346,11 @@ TEST_F(WindowSelectorTest, BasicTabKeyNavigation) {
   const std::vector<std::unique_ptr<WindowSelectorItem>>& overview_windows =
       GetWindowItemsForRoot(0);
   SendKey(ui::VKEY_TAB);
-  EXPECT_EQ(GetSelectedWindow(),
-            WmWindow::GetAuraWindow(overview_windows[0]->GetWindow()));
+  EXPECT_EQ(GetSelectedWindow(), overview_windows[0]->GetWindow());
   SendKey(ui::VKEY_TAB);
-  EXPECT_EQ(GetSelectedWindow(),
-            WmWindow::GetAuraWindow(overview_windows[1]->GetWindow()));
+  EXPECT_EQ(GetSelectedWindow(), overview_windows[1]->GetWindow());
   SendKey(ui::VKEY_TAB);
-  EXPECT_EQ(GetSelectedWindow(),
-            WmWindow::GetAuraWindow(overview_windows[0]->GetWindow()));
+  EXPECT_EQ(GetSelectedWindow(), overview_windows[0]->GetWindow());
 }
 
 // Tests that pressing Ctrl+W while a window is selected in overview closes it.
@@ -1403,7 +1400,7 @@ TEST_F(WindowSelectorTest, BasicArrowKeyNavigation) {
       // string from the window IDs.
       const int index = index_path_for_direction[key_index][i];
       EXPECT_EQ(GetSelectedWindow()->id(),
-                overview_windows[index - 1]->GetWindow()->aura_window()->id());
+                overview_windows[index - 1]->GetWindow()->id());
     }
     ToggleOverview();
   }
@@ -1426,17 +1423,13 @@ TEST_F(WindowSelectorTest, BasicMultiMonitorArrowKeyNavigation) {
   const std::vector<std::unique_ptr<WindowSelectorItem>>& overview_root2 =
       GetWindowItemsForRoot(1);
   SendKey(ui::VKEY_RIGHT);
-  EXPECT_EQ(GetSelectedWindow(),
-            WmWindow::GetAuraWindow(overview_root1[0]->GetWindow()));
+  EXPECT_EQ(GetSelectedWindow(), overview_root1[0]->GetWindow());
   SendKey(ui::VKEY_RIGHT);
-  EXPECT_EQ(GetSelectedWindow(),
-            WmWindow::GetAuraWindow(overview_root1[1]->GetWindow()));
+  EXPECT_EQ(GetSelectedWindow(), overview_root1[1]->GetWindow());
   SendKey(ui::VKEY_RIGHT);
-  EXPECT_EQ(GetSelectedWindow(),
-            WmWindow::GetAuraWindow(overview_root2[0]->GetWindow()));
+  EXPECT_EQ(GetSelectedWindow(), overview_root2[0]->GetWindow());
   SendKey(ui::VKEY_RIGHT);
-  EXPECT_EQ(GetSelectedWindow(),
-            WmWindow::GetAuraWindow(overview_root2[1]->GetWindow()));
+  EXPECT_EQ(GetSelectedWindow(), overview_root2[1]->GetWindow());
 }
 
 // Tests first monitor when display order doesn't match left to right screen
@@ -1544,25 +1537,29 @@ TEST_F(WindowSelectorTest, SelectWindowWithReturnKey) {
 TEST_F(WindowSelectorTest, WindowOverviewHidesCalloutWidgets) {
   std::unique_ptr<aura::Window> panel1(
       CreatePanelWindow(gfx::Rect(0, 0, 100, 100)));
-  WmWindow* wm_panel1 = WmWindow::Get(panel1.get());
   std::unique_ptr<aura::Window> panel2(
       CreatePanelWindow(gfx::Rect(0, 0, 100, 100)));
-  WmWindow* wm_panel2 = WmWindow::Get(panel2.get());
-  PanelLayoutManager* panel_manager = PanelLayoutManager::Get(wm_panel1);
+  PanelLayoutManager* panel_manager = PanelLayoutManager::Get(panel1.get());
 
   // By default, panel callout widgets are visible.
-  EXPECT_TRUE(panel_manager->GetCalloutWidgetForPanel(wm_panel1)->IsVisible());
-  EXPECT_TRUE(panel_manager->GetCalloutWidgetForPanel(wm_panel2)->IsVisible());
+  EXPECT_TRUE(
+      panel_manager->GetCalloutWidgetForPanel(panel1.get())->IsVisible());
+  EXPECT_TRUE(
+      panel_manager->GetCalloutWidgetForPanel(panel2.get())->IsVisible());
 
   // Toggling the overview should hide the callout widgets.
   ToggleOverview();
-  EXPECT_FALSE(panel_manager->GetCalloutWidgetForPanel(wm_panel1)->IsVisible());
-  EXPECT_FALSE(panel_manager->GetCalloutWidgetForPanel(wm_panel2)->IsVisible());
+  EXPECT_FALSE(
+      panel_manager->GetCalloutWidgetForPanel(panel1.get())->IsVisible());
+  EXPECT_FALSE(
+      panel_manager->GetCalloutWidgetForPanel(panel2.get())->IsVisible());
 
   // Ending the overview should show them again.
   ToggleOverview();
-  EXPECT_TRUE(panel_manager->GetCalloutWidgetForPanel(wm_panel1)->IsVisible());
-  EXPECT_TRUE(panel_manager->GetCalloutWidgetForPanel(wm_panel2)->IsVisible());
+  EXPECT_TRUE(
+      panel_manager->GetCalloutWidgetForPanel(panel1.get())->IsVisible());
+  EXPECT_TRUE(
+      panel_manager->GetCalloutWidgetForPanel(panel2.get())->IsVisible());
 }
 
 // Creates three windows and tests filtering them by title.
@@ -1850,7 +1847,7 @@ TEST_F(WindowSelectorTest, OverviewWhileDragging) {
   const gfx::Rect bounds(10, 10, 100, 100);
   std::unique_ptr<aura::Window> window(CreateWindow(bounds));
   std::unique_ptr<WindowResizer> resizer(
-      CreateWindowResizer(WmWindow::Get(window.get()), gfx::Point(), HTCAPTION,
+      CreateWindowResizer(window.get(), gfx::Point(), HTCAPTION,
                           aura::client::WINDOW_MOVE_SOURCE_MOUSE));
   ASSERT_TRUE(resizer.get());
   gfx::Point location = resizer->GetInitialLocation();

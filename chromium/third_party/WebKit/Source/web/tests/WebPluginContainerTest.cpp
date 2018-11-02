@@ -34,6 +34,8 @@
 #include <string>
 #include "core/dom/Element.h"
 #include "core/events/KeyboardEvent.h"
+#include "core/exported/WebPluginContainerBase.h"
+#include "core/exported/WebViewBase.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/layout/LayoutObject.h"
 #include "core/page/Page.h"
@@ -47,6 +49,7 @@
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebClipboard.h"
+#include "public/platform/WebCoalescedInputEvent.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebLayer.h"
 #include "public/platform/WebMouseWheelEvent.h"
@@ -55,7 +58,6 @@
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebElement.h"
-#include "public/web/WebFrame.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebPluginParams.h"
 #include "public/web/WebPrintParams.h"
@@ -63,8 +65,6 @@
 #include "public/web/WebView.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
-#include "web/WebPluginContainerImpl.h"
-#include "web/WebViewImpl.h"
 #include "web/tests/FakeWebPlugin.h"
 #include "web/tests/FrameTestHelpers.h"
 
@@ -82,13 +82,12 @@ class WebPluginContainerTest : public ::testing::Test {
         ->UnregisterAllURLsAndClearMemoryCache();
   }
 
-  void CalculateGeometry(WebPluginContainerImpl* plugin_container_impl,
+  void CalculateGeometry(WebPluginContainerBase* plugin_container_impl,
                          IntRect& window_rect,
                          IntRect& clip_rect,
-                         IntRect& unobscured_rect,
-                         Vector<IntRect>& cut_out_rects) {
+                         IntRect& unobscured_rect) {
     plugin_container_impl->CalculateGeometry(window_rect, clip_rect,
-                                             unobscured_rect, cut_out_rects);
+                                             unobscured_rect);
   }
 
   void RegisterMockedURL(
@@ -108,9 +107,8 @@ namespace {
 template <typename T>
 class CustomPluginWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
  public:
-  WebPlugin* CreatePlugin(WebLocalFrame* frame,
-                          const WebPluginParams& params) override {
-    return new T(frame, params);
+  WebPlugin* CreatePlugin(const WebPluginParams& params) override {
+    return new T(params);
   }
 };
 
@@ -120,12 +118,9 @@ class TestPluginWebFrameClient;
 // as markup text.
 class TestPlugin : public FakeWebPlugin {
  public:
-  TestPlugin(WebFrame* frame,
-             const WebPluginParams& params,
+  TestPlugin(const WebPluginParams& params,
              TestPluginWebFrameClient* test_client)
-      : FakeWebPlugin(frame, params) {
-    test_client_ = test_client;
-  }
+      : FakeWebPlugin(params), test_client_(test_client) {}
 
   bool HasSelection() const override { return true; }
   WebString SelectionAsText() const override { return WebString("x"); }
@@ -135,21 +130,20 @@ class TestPlugin : public FakeWebPlugin {
   void PrintPage(int page_number, WebCanvas*) override;
 
  private:
-  TestPluginWebFrameClient* test_client_;
+  TestPluginWebFrameClient* const test_client_;
 };
 
 class TestPluginWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
-  WebPlugin* CreatePlugin(WebLocalFrame* frame,
-                          const WebPluginParams& params) override {
+  WebPlugin* CreatePlugin(const WebPluginParams& params) override {
     if (params.mime_type == "application/x-webkit-test-webplugin" ||
         params.mime_type == "application/pdf")
-      return new TestPlugin(frame, params, this);
-    return WebFrameClient::CreatePlugin(frame, params);
+      return new TestPlugin(params, this);
+    return WebFrameClient::CreatePlugin(params);
   }
 
  public:
   void OnPrintPage() { printed_page_ = true; }
-  bool PrintedAtLeastOnePage() { return printed_page_; }
+  bool PrintedAtLeastOnePage() const { return printed_page_; }
 
  private:
   bool printed_page_ = false;
@@ -429,7 +423,7 @@ TEST_F(WebPluginContainerTest, CopyInsertKeyboardEventsTest) {
                                         WebInputEvent::kTimeStampForTesting);
   web_keyboard_event_c.windows_key_code = 67;
   KeyboardEvent* key_event_c = KeyboardEvent::Create(web_keyboard_event_c, 0);
-  ToWebPluginContainerImpl(plugin_container_one_element.PluginContainer())
+  ToWebPluginContainerBase(plugin_container_one_element.PluginContainer())
       ->HandleEvent(key_event_c);
   EXPECT_EQ(WebString("x"), Platform::Current()->Clipboard()->ReadPlainText(
                                 WebClipboard::Buffer()));
@@ -445,7 +439,7 @@ TEST_F(WebPluginContainerTest, CopyInsertKeyboardEventsTest) {
   web_keyboard_event_insert.windows_key_code = 45;
   KeyboardEvent* key_event_insert =
       KeyboardEvent::Create(web_keyboard_event_insert, 0);
-  ToWebPluginContainerImpl(plugin_container_one_element.PluginContainer())
+  ToWebPluginContainerBase(plugin_container_one_element.PluginContainer())
       ->HandleEvent(key_event_insert);
   EXPECT_EQ(WebString("x"), Platform::Current()->Clipboard()->ReadPlainText(
                                 WebClipboard::Buffer()));
@@ -454,12 +448,14 @@ TEST_F(WebPluginContainerTest, CopyInsertKeyboardEventsTest) {
 // A class to facilitate testing that events are correctly received by plugins.
 class EventTestPlugin : public FakeWebPlugin {
  public:
-  EventTestPlugin(WebFrame* frame, const WebPluginParams& params)
-      : FakeWebPlugin(frame, params),
-        last_event_type_(WebInputEvent::kUndefined) {}
+  explicit EventTestPlugin(const WebPluginParams& params)
+      : FakeWebPlugin(params), last_event_type_(WebInputEvent::kUndefined) {}
 
-  WebInputEventResult HandleInputEvent(const WebInputEvent& event,
-                                       WebCursorInfo&) override {
+  WebInputEventResult HandleInputEvent(
+      const WebCoalescedInputEvent& coalesced_event,
+      WebCursorInfo&) override {
+    const WebInputEvent& event = coalesced_event.Event();
+    coalesced_event_count_ = coalesced_event.CoalescedEventSize();
     last_event_type_ = event.GetType();
     if (WebInputEvent::IsMouseEventType(event.GetType()) ||
         event.GetType() == WebInputEvent::kMouseWheel) {
@@ -486,7 +482,10 @@ class EventTestPlugin : public FakeWebPlugin {
 
   void ClearLastEventType() { last_event_type_ = WebInputEvent::kUndefined; }
 
+  size_t GetCoalescedEventCount() { return coalesced_event_count_; }
+
  private:
+  size_t coalesced_event_count_;
   WebInputEvent::Type last_event_type_;
   IntPoint last_event_location_;
 };
@@ -507,7 +506,7 @@ TEST_F(WebPluginContainerTest, GestureLongPressReachesPlugin) {
   WebElement plugin_container_one_element =
       web_view->MainFrame()->GetDocument().GetElementById(
           WebString::FromUTF8("translated-plugin"));
-  WebPlugin* plugin = static_cast<WebPluginContainerImpl*>(
+  WebPlugin* plugin = static_cast<WebPluginContainerBase*>(
                           plugin_container_one_element.PluginContainer())
                           ->Plugin();
   EventTestPlugin* test_plugin = static_cast<EventTestPlugin*>(plugin);
@@ -556,7 +555,7 @@ TEST_F(WebPluginContainerTest, MouseWheelEventTranslated) {
   WebElement plugin_container_one_element =
       web_view->MainFrame()->GetDocument().GetElementById(
           WebString::FromUTF8("translated-plugin"));
-  WebPlugin* plugin = static_cast<WebPluginContainerImpl*>(
+  WebPlugin* plugin = static_cast<WebPluginContainerBase*>(
                           plugin_container_one_element.PluginContainer())
                           ->Plugin();
   EventTestPlugin* test_plugin = static_cast<EventTestPlugin*>(plugin);
@@ -597,7 +596,7 @@ TEST_F(WebPluginContainerTest, TouchEventScrolled) {
           WebString::FromUTF8("scrolled-plugin"));
   plugin_container_one_element.PluginContainer()->RequestTouchEventType(
       WebPluginContainer::kTouchEventRequestTypeRaw);
-  WebPlugin* plugin = static_cast<WebPluginContainerImpl*>(
+  WebPlugin* plugin = static_cast<WebPluginContainerBase*>(
                           plugin_container_one_element.PluginContainer())
                           ->Plugin();
   EventTestPlugin* test_plugin = static_cast<EventTestPlugin*>(plugin);
@@ -613,6 +612,64 @@ TEST_F(WebPluginContainerTest, TouchEventScrolled) {
   web_view->HandleInputEvent(WebCoalescedInputEvent(event));
   RunPendingTasks();
 
+  EXPECT_EQ(WebInputEvent::kTouchStart, test_plugin->GetLastInputEventType());
+  EXPECT_EQ(rect.width / 2, test_plugin->GetLastEventLocation().X());
+  EXPECT_EQ(rect.height / 2, test_plugin->GetLastEventLocation().Y());
+}
+
+TEST_F(WebPluginContainerTest, TouchEventScrolledWithCoalescedTouches) {
+  RegisterMockedURL("plugin_scroll.html");
+  CustomPluginWebFrameClient<EventTestPlugin>
+      plugin_web_frame_client;  // Must outlive webViewHelper.
+  FrameTestHelpers::WebViewHelper web_view_helper;
+  WebView* web_view = web_view_helper.InitializeAndLoad(
+      base_url_ + "plugin_scroll.html", true, &plugin_web_frame_client);
+  DCHECK(web_view);
+  web_view->GetSettings()->SetPluginsEnabled(true);
+  web_view->Resize(WebSize(300, 300));
+  web_view->UpdateAllLifecyclePhases();
+  RunPendingTasks();
+  web_view->SmoothScroll(0, 200, 0);
+  web_view->UpdateAllLifecyclePhases();
+  RunPendingTasks();
+
+  WebElement plugin_container_one_element =
+      web_view->MainFrame()->GetDocument().GetElementById(
+          WebString::FromUTF8("scrolled-plugin"));
+  plugin_container_one_element.PluginContainer()->RequestTouchEventType(
+      WebPluginContainer::kTouchEventRequestTypeRaw);
+  WebPlugin* plugin = static_cast<WebPluginContainerBase*>(
+                          plugin_container_one_element.PluginContainer())
+                          ->Plugin();
+  EventTestPlugin* test_plugin = static_cast<EventTestPlugin*>(plugin);
+
+  WebTouchEvent event(WebInputEvent::kTouchStart, WebInputEvent::kNoModifiers,
+                      WebInputEvent::kTimeStampForTesting);
+  WebRect rect = plugin_container_one_element.BoundsInViewport();
+  event.touches_length = 1;
+  event.touches[0].state = WebTouchPoint::kStatePressed;
+  event.touches[0].position =
+      WebFloatPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+
+  WebCoalescedInputEvent coalesced_event(event);
+
+  WebTouchEvent c_event(WebInputEvent::kTouchMove, WebInputEvent::kNoModifiers,
+                        WebInputEvent::kTimeStampForTesting);
+  c_event.touches_length = 1;
+  c_event.touches[0].state = WebTouchPoint::kStatePressed;
+  c_event.touches[0].position =
+      WebFloatPoint(rect.x + rect.width / 2 + 1, rect.y + rect.height / 2 + 1);
+
+  coalesced_event.AddCoalescedEvent(c_event);
+  c_event.touches[0].position =
+      WebFloatPoint(rect.x + rect.width / 2 + 2, rect.y + rect.height / 2 + 2);
+  coalesced_event.AddCoalescedEvent(c_event);
+
+  web_view->HandleInputEvent(coalesced_event);
+  RunPendingTasks();
+
+  EXPECT_EQ(static_cast<const size_t>(3),
+            test_plugin->GetCoalescedEventCount());
   EXPECT_EQ(WebInputEvent::kTouchStart, test_plugin->GetLastInputEventType());
   EXPECT_EQ(rect.width / 2, test_plugin->GetLastEventLocation().X());
   EXPECT_EQ(rect.height / 2, test_plugin->GetLastEventLocation().Y());
@@ -639,7 +696,7 @@ TEST_F(WebPluginContainerTest, MouseWheelEventScrolled) {
           WebString::FromUTF8("scrolled-plugin"));
   plugin_container_one_element.PluginContainer()->RequestTouchEventType(
       WebPluginContainer::kTouchEventRequestTypeRaw);
-  WebPlugin* plugin = static_cast<WebPluginContainerImpl*>(
+  WebPlugin* plugin = static_cast<WebPluginContainerBase*>(
                           plugin_container_one_element.PluginContainer())
                           ->Plugin();
   EventTestPlugin* test_plugin = static_cast<EventTestPlugin*>(plugin);
@@ -680,7 +737,7 @@ TEST_F(WebPluginContainerTest, MouseEventScrolled) {
           WebString::FromUTF8("scrolled-plugin"));
   plugin_container_one_element.PluginContainer()->RequestTouchEventType(
       WebPluginContainer::kTouchEventRequestTypeRaw);
-  WebPlugin* plugin = static_cast<WebPluginContainerImpl*>(
+  WebPlugin* plugin = static_cast<WebPluginContainerBase*>(
                           plugin_container_one_element.PluginContainer())
                           ->Plugin();
   EventTestPlugin* test_plugin = static_cast<EventTestPlugin*>(plugin);
@@ -719,7 +776,7 @@ TEST_F(WebPluginContainerTest, MouseEventZoomed) {
           WebString::FromUTF8("scrolled-plugin"));
   plugin_container_one_element.PluginContainer()->RequestTouchEventType(
       WebPluginContainer::kTouchEventRequestTypeRaw);
-  WebPlugin* plugin = static_cast<WebPluginContainerImpl*>(
+  WebPlugin* plugin = static_cast<WebPluginContainerBase*>(
                           plugin_container_one_element.PluginContainer())
                           ->Plugin();
   EventTestPlugin* test_plugin = static_cast<EventTestPlugin*>(plugin);
@@ -760,7 +817,7 @@ TEST_F(WebPluginContainerTest, MouseWheelEventZoomed) {
           WebString::FromUTF8("scrolled-plugin"));
   plugin_container_one_element.PluginContainer()->RequestTouchEventType(
       WebPluginContainer::kTouchEventRequestTypeRaw);
-  WebPlugin* plugin = static_cast<WebPluginContainerImpl*>(
+  WebPlugin* plugin = static_cast<WebPluginContainerBase*>(
                           plugin_container_one_element.PluginContainer())
                           ->Plugin();
   EventTestPlugin* test_plugin = static_cast<EventTestPlugin*>(plugin);
@@ -802,7 +859,7 @@ TEST_F(WebPluginContainerTest, TouchEventZoomed) {
           WebString::FromUTF8("scrolled-plugin"));
   plugin_container_one_element.PluginContainer()->RequestTouchEventType(
       WebPluginContainer::kTouchEventRequestTypeRaw);
-  WebPlugin* plugin = static_cast<WebPluginContainerImpl*>(
+  WebPlugin* plugin = static_cast<WebPluginContainerBase*>(
                           plugin_container_one_element.PluginContainer())
                           ->Plugin();
   EventTestPlugin* test_plugin = static_cast<EventTestPlugin*>(plugin);
@@ -840,8 +897,8 @@ TEST_F(WebPluginContainerTest, IsRectTopmostTest) {
   web_view->UpdateAllLifecyclePhases();
   RunPendingTasks();
 
-  WebPluginContainerImpl* plugin_container_impl =
-      ToWebPluginContainerImpl(GetWebPluginContainer(
+  WebPluginContainerBase* plugin_container_impl =
+      ToWebPluginContainerBase(GetWebPluginContainer(
           web_view, WebString::FromUTF8("translated-plugin")));
   plugin_container_impl->SetFrameRect(IntRect(0, 0, 300, 300));
 
@@ -882,15 +939,15 @@ TEST_F(WebPluginContainerTest, ClippedRectsForIframedElement) {
   WebElement plugin_element =
       web_view->MainFrame()->FirstChild()->GetDocument().GetElementById(
           "translated-plugin");
-  WebPluginContainerImpl* plugin_container_impl =
-      ToWebPluginContainerImpl(plugin_element.PluginContainer());
+  WebPluginContainerBase* plugin_container_impl =
+      ToWebPluginContainerBase(plugin_element.PluginContainer());
 
   DCHECK(plugin_container_impl);
 
   IntRect window_rect, clip_rect, unobscured_rect;
   Vector<IntRect> cut_out_rects;
   CalculateGeometry(plugin_container_impl, window_rect, clip_rect,
-                    unobscured_rect, cut_out_rects);
+                    unobscured_rect);
   EXPECT_RECT_EQ(IntRect(20, 220, 40, 40), window_rect);
   EXPECT_RECT_EQ(IntRect(0, 0, 40, 40), clip_rect);
   EXPECT_RECT_EQ(IntRect(0, 0, 40, 40), unobscured_rect);
@@ -916,8 +973,8 @@ TEST_F(WebPluginContainerTest, ClippedRectsForSubpixelPositionedPlugin) {
   WebElement plugin_element =
       web_view->MainFrame()->GetDocument().GetElementById(
           "subpixel-positioned-plugin");
-  WebPluginContainerImpl* plugin_container_impl =
-      ToWebPluginContainerImpl(plugin_element.PluginContainer());
+  WebPluginContainerBase* plugin_container_impl =
+      ToWebPluginContainerBase(plugin_element.PluginContainer());
 
   DCHECK(plugin_container_impl);
 
@@ -925,7 +982,7 @@ TEST_F(WebPluginContainerTest, ClippedRectsForSubpixelPositionedPlugin) {
   Vector<IntRect> cut_out_rects;
 
   CalculateGeometry(plugin_container_impl, window_rect, clip_rect,
-                    unobscured_rect, cut_out_rects);
+                    unobscured_rect);
   EXPECT_RECT_EQ(IntRect(0, 0, 40, 40), window_rect);
   EXPECT_RECT_EQ(IntRect(0, 0, 40, 40), clip_rect);
   EXPECT_RECT_EQ(IntRect(0, 0, 40, 40), unobscured_rect);
@@ -940,21 +997,21 @@ TEST_F(WebPluginContainerTest, TopmostAfterDetachTest) {
   // Plugin that checks isRectTopmost in destroy().
   class TopmostPlugin : public FakeWebPlugin {
    public:
-    TopmostPlugin(WebFrame* frame, const WebPluginParams& params)
-        : FakeWebPlugin(frame, params) {}
+    explicit TopmostPlugin(const WebPluginParams& params)
+        : FakeWebPlugin(params) {}
 
     bool IsRectTopmost() { return Container()->IsRectTopmost(topmost_rect); }
 
     void Destroy() override {
-      // In destroy, isRectTopmost is no longer valid.
+      // In destroy, IsRectTopmost is no longer valid.
       EXPECT_FALSE(Container()->IsRectTopmost(topmost_rect));
       FakeWebPlugin::Destroy();
     }
   };
 
   RegisterMockedURL("plugin_container.html");
-  CustomPluginWebFrameClient<TopmostPlugin>
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // The client must outlive WebViewHelper.
+  CustomPluginWebFrameClient<TopmostPlugin> plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
   WebView* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", true, &plugin_web_frame_client);
@@ -964,8 +1021,8 @@ TEST_F(WebPluginContainerTest, TopmostAfterDetachTest) {
   web_view->UpdateAllLifecyclePhases();
   RunPendingTasks();
 
-  WebPluginContainerImpl* plugin_container_impl =
-      ToWebPluginContainerImpl(GetWebPluginContainer(
+  WebPluginContainerBase* plugin_container_impl =
+      ToWebPluginContainerBase(GetWebPluginContainer(
           web_view, WebString::FromUTF8("translated-plugin")));
   plugin_container_impl->SetFrameRect(IntRect(0, 0, 300, 300));
 
@@ -985,8 +1042,8 @@ namespace {
 
 class CompositedPlugin : public FakeWebPlugin {
  public:
-  CompositedPlugin(WebLocalFrame* frame, const WebPluginParams& params)
-      : FakeWebPlugin(frame, params),
+  explicit CompositedPlugin(const WebPluginParams& params)
+      : FakeWebPlugin(params),
         layer_(Platform::Current()->CompositorSupport()->CreateLayer()) {}
 
   WebLayer* GetWebLayer() const { return layer_.get(); }
@@ -1024,7 +1081,7 @@ TEST_F(WebPluginContainerTest, CompositedPluginSPv2) {
   web_view->UpdateAllLifecyclePhases();
   RunPendingTasks();
 
-  WebPluginContainerImpl* container = static_cast<WebPluginContainerImpl*>(
+  WebPluginContainerBase* container = static_cast<WebPluginContainerBase*>(
       GetWebPluginContainer(web_view, WebString::FromUTF8("plugin")));
   ASSERT_TRUE(container);
   Element* element = static_cast<Element*>(container->GetElement());
@@ -1058,7 +1115,7 @@ TEST_F(WebPluginContainerTest, NeedsWheelEvents) {
   TestPluginWebFrameClient
       plugin_web_frame_client;  // Must outlive webViewHelper
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
+  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", true, &plugin_web_frame_client);
   DCHECK(web_view);
   web_view->GetSettings()->SetPluginsEnabled(true);

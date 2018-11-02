@@ -14,6 +14,7 @@ class Window;
 }
 
 namespace display {
+class Display;
 class ManagedDisplayInfo;
 }
 
@@ -48,6 +49,7 @@ class WMHelper {
    public:
     virtual void OnCursorVisibilityChanged(bool is_visible) {}
     virtual void OnCursorSetChanged(ui::CursorSetType cursor_set) {}
+    virtual void OnCursorDisplayChanged(const display::Display& display) {}
 
    protected:
     virtual ~CursorObserver() {}
@@ -61,14 +63,6 @@ class WMHelper {
 
    protected:
     virtual ~MaximizeModeObserver() {}
-  };
-
-  class AccessibilityObserver {
-   public:
-    virtual void OnAccessibilityModeChanged() = 0;
-
-   protected:
-    virtual ~AccessibilityObserver() {}
   };
 
   class InputDeviceEventObserver {
@@ -100,28 +94,25 @@ class WMHelper {
   void RemoveCursorObserver(CursorObserver* observer);
   void AddMaximizeModeObserver(MaximizeModeObserver* observer);
   void RemoveMaximizeModeObserver(MaximizeModeObserver* observer);
-  void AddAccessibilityObserver(AccessibilityObserver* observer);
-  void RemoveAccessibilityObserver(AccessibilityObserver* observer);
   void AddInputDeviceEventObserver(InputDeviceEventObserver* observer);
   void RemoveInputDeviceEventObserver(InputDeviceEventObserver* observer);
   void AddDisplayConfigurationObserver(DisplayConfigurationObserver* observer);
   void RemoveDisplayConfigurationObserver(
       DisplayConfigurationObserver* observer);
 
-  virtual const display::ManagedDisplayInfo GetDisplayInfo(
+  virtual const display::ManagedDisplayInfo& GetDisplayInfo(
       int64_t display_id) const = 0;
-  virtual aura::Window* GetContainer(int container_id) = 0;
+  virtual aura::Window* GetPrimaryDisplayContainer(int container_id) = 0;
   virtual aura::Window* GetActiveWindow() const = 0;
   virtual aura::Window* GetFocusedWindow() const = 0;
   virtual ui::CursorSetType GetCursorSet() const = 0;
+  virtual const display::Display& GetCursorDisplay() const = 0;
   virtual void AddPreTargetHandler(ui::EventHandler* handler) = 0;
   virtual void PrependPreTargetHandler(ui::EventHandler* handler) = 0;
   virtual void RemovePreTargetHandler(ui::EventHandler* handler) = 0;
   virtual void AddPostTargetHandler(ui::EventHandler* handler) = 0;
   virtual void RemovePostTargetHandler(ui::EventHandler* handler) = 0;
   virtual bool IsMaximizeModeWindowManagerEnabled() const = 0;
-  virtual bool IsSpokenFeedbackEnabled() const = 0;
-  virtual void PlayEarcon(int sound_key) const = 0;
 
  protected:
   WMHelper();
@@ -132,10 +123,10 @@ class WMHelper {
                            aura::Window* lost_focus);
   void NotifyCursorVisibilityChanged(bool is_visible);
   void NotifyCursorSetChanged(ui::CursorSetType cursor_set);
+  void NotifyCursorDisplayChanged(const display::Display& display);
   void NotifyMaximizeModeStarted();
   void NotifyMaximizeModeEnding();
   void NotifyMaximizeModeEnded();
-  void NotifyAccessibilityModeChanged();
   void NotifyKeyboardDeviceConfigurationChanged();
   void NotifyDisplayConfigurationChanged();
 
@@ -144,7 +135,6 @@ class WMHelper {
   base::ObserverList<FocusObserver> focus_observers_;
   base::ObserverList<CursorObserver> cursor_observers_;
   base::ObserverList<MaximizeModeObserver> maximize_mode_observers_;
-  base::ObserverList<AccessibilityObserver> accessibility_observers_;
   base::ObserverList<InputDeviceEventObserver> input_device_event_observers_;
   base::ObserverList<DisplayConfigurationObserver> display_config_observers_;
 

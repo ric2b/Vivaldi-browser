@@ -61,14 +61,7 @@ static const bool kDefaultSelectTrailingWhitespaceEnabled = false;
 #endif
 
 Settings::Settings()
-#if DEBUG_TEXT_AUTOSIZING_ON_DESKTOP
-    : m_textAutosizingWindowSizeOverride(320, 480),
-      m_textAutosizingEnabled(true)
-#else
-    : text_autosizing_enabled_(false)
-#endif
-          SETTINGS_INITIALIZER_LIST {
-}
+    : text_autosizing_enabled_(false) SETTINGS_INITIALIZER_LIST {}
 
 std::unique_ptr<Settings> Settings::Create() {
   return WTF::WrapUnique(new Settings);

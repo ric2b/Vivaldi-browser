@@ -41,8 +41,8 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "net/cert/cert_status_flags.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 #include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
@@ -165,7 +165,9 @@ AutofillAgent::AutofillAgent(content::RenderFrame* render_frame,
 
 AutofillAgent::~AutofillAgent() {}
 
-void AutofillAgent::BindRequest(mojom::AutofillAgentRequest request) {
+void AutofillAgent::BindRequest(
+    const service_manager::BindSourceInfo& source_info,
+    mojom::AutofillAgentRequest request) {
   binding_.Bind(std::move(request));
 }
 

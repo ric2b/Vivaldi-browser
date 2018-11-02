@@ -30,6 +30,7 @@ class Origin;
 
 namespace net {
 
+class ReportingBrowsingDataRemover;
 class ReportingCache;
 struct ReportingClient;
 class ReportingGarbageCollector;
@@ -39,24 +40,6 @@ class ReportingGarbageCollector;
 const ReportingClient* FindClientInCache(const ReportingCache* cache,
                                          const url::Origin& origin,
                                          const GURL& endpoint);
-
-// A simple implementation of ReportingDelegate that only persists data in RAM.
-class TestReportingDelegate : public ReportingDelegate {
- public:
-  TestReportingDelegate();
-
-  ~TestReportingDelegate() override;
-
-  // ReportingDelegate implementation:
-  std::unique_ptr<const base::Value> GetPersistedData() override;
-
-  void PersistData(std::unique_ptr<const base::Value> persisted_data) override;
-
- private:
-  std::unique_ptr<const base::Value> persisted_data_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestReportingDelegate);
-};
 
 // A test implementation of ReportingUploader that holds uploads for tests to
 // examine and complete with a specified outcome.
@@ -94,35 +77,57 @@ class TestReportingUploader : public ReportingUploader {
   DISALLOW_COPY_AND_ASSIGN(TestReportingUploader);
 };
 
+class TestReportingDelegate : public ReportingDelegate {
+ public:
+  TestReportingDelegate();
+
+  // ReportingDelegate implementation:
+
+  ~TestReportingDelegate() override;
+
+  bool CanQueueReport(const url::Origin& origin) const override;
+
+  bool CanSendReport(const url::Origin& origin) const override;
+
+  bool CanSetClient(const url::Origin& origin,
+                    const GURL& endpoint) const override;
+
+  bool CanUseClient(const url::Origin& origin,
+                    const GURL& endpoint) const override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TestReportingDelegate);
+};
+
 // A test implementation of ReportingContext that uses test versions of
-// ReportingDelegate, Clock, TickClock, and ReportingUploader.
+// Clock, TickClock, Timer, and ReportingUploader.
 class TestReportingContext : public ReportingContext {
  public:
   TestReportingContext(const ReportingPolicy& policy);
   ~TestReportingContext();
 
-  TestReportingDelegate* test_delegate() {
-    return reinterpret_cast<TestReportingDelegate*>(delegate());
-  }
   base::SimpleTestClock* test_clock() {
     return reinterpret_cast<base::SimpleTestClock*>(clock());
   }
   base::SimpleTestTickClock* test_tick_clock() {
     return reinterpret_cast<base::SimpleTestTickClock*>(tick_clock());
   }
-  base::MockTimer* test_persistence_timer() { return persistence_timer_; }
+  base::MockTimer* test_delivery_timer() { return delivery_timer_; }
   base::MockTimer* test_garbage_collection_timer() {
     return garbage_collection_timer_;
   }
   TestReportingUploader* test_uploader() {
     return reinterpret_cast<TestReportingUploader*>(uploader());
   }
+  TestReportingDelegate* test_delegate() {
+    return reinterpret_cast<TestReportingDelegate*>(delegate());
+  }
 
  private:
   // Owned by the Persister and GarbageCollector, respectively, but referenced
   // here to preserve type:
 
-  base::MockTimer* persistence_timer_;
+  base::MockTimer* delivery_timer_;
   base::MockTimer* garbage_collection_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(TestReportingContext);
@@ -137,8 +142,7 @@ class ReportingTestBase : public ::testing::Test {
 
   void UsePolicy(const ReportingPolicy& policy);
 
-  // Simulates an embedder restart, preserving the ReportingPolicy and any data
-  // persisted via the TestReportingDelegate, but nothing else.
+  // Simulates an embedder restart, preserving the ReportingPolicy.
   //
   // Advances the Clock by |delta|, and the TickClock by |delta_ticks|. Both can
   // be zero or negative.
@@ -148,14 +152,11 @@ class ReportingTestBase : public ::testing::Test {
 
   const ReportingPolicy& policy() { return context_->policy(); }
 
-  TestReportingDelegate* delegate() { return context_->test_delegate(); }
   base::SimpleTestClock* clock() { return context_->test_clock(); }
   base::SimpleTestTickClock* tick_clock() {
     return context_->test_tick_clock();
   }
-  base::MockTimer* persistence_timer() {
-    return context_->test_persistence_timer();
-  }
+  base::MockTimer* delivery_timer() { return context_->test_delivery_timer(); }
   base::MockTimer* garbage_collection_timer() {
     return context_->test_garbage_collection_timer();
   }
@@ -171,19 +172,25 @@ class ReportingTestBase : public ::testing::Test {
   ReportingGarbageCollector* garbage_collector() {
     return context_->garbage_collector();
   }
+  ReportingBrowsingDataRemover* browsing_data_remover() {
+    return context_->browsing_data_remover();
+  }
 
   ReportingPersister* persister() { return context_->persister(); }
 
   base::TimeTicks yesterday();
-
+  base::TimeTicks now();
   base::TimeTicks tomorrow();
 
+  const std::vector<std::unique_ptr<TestReportingUploader::PendingUpload>>&
+  pending_uploads() {
+    return uploader()->pending_uploads();
+  }
+
  private:
-  void CreateAndInitializeContext(
-      const ReportingPolicy& policy,
-      std::unique_ptr<const base::Value> persisted_data,
-      base::Time now,
-      base::TimeTicks now_ticks);
+  void CreateContext(const ReportingPolicy& policy,
+                     base::Time now,
+                     base::TimeTicks now_ticks);
 
   std::unique_ptr<TestReportingContext> context_;
 

@@ -87,8 +87,6 @@ Sources.SourcesPanel = class extends UI.Panel {
 
     this._threadsSidebarPane = null;
     this._watchSidebarPane = /** @type {!UI.View} */ (UI.viewManager.view('sources.watch'));
-    // TODO: Force installing listeners from the model, not the UI.
-    self.runtime.sharedInstance(Sources.XHRBreakpointsSidebarPane);
     this._callstackPane = self.runtime.sharedInstance(Sources.CallStackSidebarPane);
     this._callstackPane.registerShortcuts(this.registerShortcuts.bind(this));
 
@@ -688,11 +686,6 @@ Sources.SourcesPanel = class extends UI.Panel {
     this._pauseOnExceptionButton.addEventListener(UI.ToolbarButton.Events.Click, this._togglePauseOnExceptions, this);
     debugToolbar.appendToolbarItem(this._pauseOnExceptionButton);
 
-    debugToolbar.appendSeparator();
-    debugToolbar.appendToolbarItem(new UI.ToolbarSettingCheckbox(
-        Common.moduleSetting('enableAsyncStackTraces'), Common.UIString('Capture async stack traces'),
-        Common.UIString('Async')));
-
     return debugToolbar;
   }
 
@@ -742,7 +735,8 @@ Sources.SourcesPanel = class extends UI.Panel {
       if (!networkUISourceCode)
         return;
       var fileSystemPath = Persistence.FileSystemWorkspaceBinding.fileSystemPath(uiSourceCode.project().id());
-      Workspace.fileSystemMapping.addMappingForResource(networkUISourceCode.url(), fileSystemPath, uiSourceCode.url());
+      Persistence.fileSystemMapping.addMappingForResource(
+          networkUISourceCode.url(), fileSystemPath, uiSourceCode.url());
     }
   }
 
@@ -760,7 +754,8 @@ Sources.SourcesPanel = class extends UI.Panel {
       if (!uiSourceCode)
         return;
       var fileSystemPath = Persistence.FileSystemWorkspaceBinding.fileSystemPath(uiSourceCode.project().id());
-      Workspace.fileSystemMapping.addMappingForResource(networkUISourceCode.url(), fileSystemPath, uiSourceCode.url());
+      Persistence.fileSystemMapping.addMappingForResource(
+          networkUISourceCode.url(), fileSystemPath, uiSourceCode.url());
     }
   }
 
@@ -768,7 +763,7 @@ Sources.SourcesPanel = class extends UI.Panel {
    * @param {!Workspace.UISourceCode} uiSourceCode
    */
   _removeNetworkMapping(uiSourceCode) {
-    Workspace.fileSystemMapping.removeMappingForURL(uiSourceCode.url());
+    Persistence.fileSystemMapping.removeMappingForURL(uiSourceCode.url());
   }
 
   /**
@@ -1050,12 +1045,18 @@ Sources.SourcesPanel = class extends UI.Panel {
     var jsBreakpoints = /** @type {!UI.View} */ (UI.viewManager.view('sources.jsBreakpoints'));
     var scopeChainView = /** @type {!UI.View} */ (UI.viewManager.view('sources.scopeChain'));
 
+    if (this._tabbedLocationHeader) {
+      this._splitWidget.uninstallResizer(this._tabbedLocationHeader);
+      this._tabbedLocationHeader = null;
+    }
+
     if (!vertically) {
       // Populate the rest of the stack.
       this._sidebarPaneStack.showView(scopeChainView);
       this._sidebarPaneStack.showView(jsBreakpoints);
       this._extensionSidebarPanesContainer = this._sidebarPaneStack;
       this.sidebarPaneView = vbox;
+      this._splitWidget.uninstallResizer(this._debugToolbar.gripElementForResize());
     } else {
       var splitWidget = new UI.SplitWidget(true, true, 'sourcesPanelDebuggerSidebarSplitViewState', 0.5);
       splitWidget.setMainWidget(vbox);
@@ -1065,6 +1066,9 @@ Sources.SourcesPanel = class extends UI.Panel {
 
       var tabbedLocation = UI.viewManager.createTabbedLocation(this._revealDebuggerSidebar.bind(this));
       splitWidget.setSidebarWidget(tabbedLocation.tabbedPane());
+      this._tabbedLocationHeader = tabbedLocation.tabbedPane().headerElement();
+      this._splitWidget.installResizer(this._tabbedLocationHeader);
+      this._splitWidget.installResizer(this._debugToolbar.gripElementForResize());
       tabbedLocation.appendView(scopeChainView);
       tabbedLocation.appendView(this._watchSidebarPane);
       this._extensionSidebarPanesContainer = tabbedLocation;

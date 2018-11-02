@@ -8,15 +8,15 @@
 #include <set>
 
 #include "base/macros.h"
+#include "platform/PlatformExport.h"
 #include "platform/scheduler/base/time_domain.h"
-#include "public/platform/WebCommon.h"
 
 namespace blink {
 namespace scheduler {
 
-class BLINK_PLATFORM_EXPORT RealTimeDomain : public TimeDomain {
+class PLATFORM_EXPORT RealTimeDomain : public TimeDomain {
  public:
-  explicit RealTimeDomain(const char* tracing_category);
+  RealTimeDomain();
   ~RealTimeDomain() override;
 
   // TimeDomain implementation:
@@ -34,7 +34,6 @@ class BLINK_PLATFORM_EXPORT RealTimeDomain : public TimeDomain {
       base::trace_event::TracedValue* state) const override;
 
  private:
-  const char* tracing_category_;          // NOT OWNED
   TaskQueueManager* task_queue_manager_;  // NOT OWNED
 
   DISALLOW_COPY_AND_ASSIGN(RealTimeDomain);

@@ -22,7 +22,6 @@
 
 #include "core/events/Event.h"
 
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/events/EventDispatchMediator.h"
@@ -32,6 +31,7 @@
 #include "core/svg/SVGElement.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
+#include "platform/bindings/ScriptState.h"
 
 namespace blink {
 
@@ -97,13 +97,15 @@ Event::Event(const AtomicString& event_type,
       current_target_(nullptr),
       platform_time_stamp_(platform_time_stamp) {}
 
-Event::Event(const AtomicString& event_type, const EventInit& initializer)
+Event::Event(const AtomicString& event_type,
+             const EventInit& initializer,
+             TimeTicks platform_time_stamp)
     : Event(event_type,
             initializer.bubbles(),
             initializer.cancelable(),
             initializer.composed() ? ComposedMode::kComposed
                                    : ComposedMode::kScoped,
-            TimeTicks::Now()) {}
+            platform_time_stamp) {}
 
 Event::~Event() {}
 

@@ -85,7 +85,7 @@ bool ParseColorOrCurrentColor(Color& parsed_color,
     case kParseFailed:
       return false;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return false;
   }
 }
@@ -99,12 +99,12 @@ CanvasStyle::CanvasStyle(CanvasPattern* pattern)
     : type_(kImagePattern), pattern_(pattern) {}
 
 CanvasStyle* CanvasStyle::CreateFromGradient(CanvasGradient* gradient) {
-  ASSERT(gradient);
+  DCHECK(gradient);
   return new CanvasStyle(gradient);
 }
 
 CanvasStyle* CanvasStyle::CreateFromPattern(CanvasPattern* pattern) {
-  ASSERT(pattern);
+  DCHECK(pattern);
   return new CanvasStyle(pattern);
 }
 
@@ -121,14 +121,14 @@ void CanvasStyle::ApplyToFlags(PaintFlags& flags) const {
           flags, AffineTransformToSkMatrix(GetCanvasPattern()->GetTransform()));
       break;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
   }
 }
 
 RGBA32 CanvasStyle::PaintColor() const {
   if (type_ == kColorRGBA)
     return rgba_;
-  ASSERT(type_ == kGradient || type_ == kImagePattern);
+  DCHECK(type_ == kGradient || type_ == kImagePattern);
   return Color::kBlack;
 }
 

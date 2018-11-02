@@ -113,10 +113,8 @@ bool FFmpegVideoDecoder::IsCodecSupported(VideoCodec codec) {
   return avcodec_find_decoder(VideoCodecToCodecID(codec)) != nullptr;
 }
 
-FFmpegVideoDecoder::FFmpegVideoDecoder(scoped_refptr<MediaLog> media_log)
-    : media_log_(std::move(media_log)),
-      state_(kUninitialized),
-      decode_nalus_(false) {
+FFmpegVideoDecoder::FFmpegVideoDecoder(MediaLog* media_log)
+    : media_log_(media_log), state_(kUninitialized), decode_nalus_(false) {
   thread_checker_.DetachFromThread();
 }
 
@@ -189,12 +187,13 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
   if (codec_context->color_primaries != AVCOL_PRI_UNSPECIFIED ||
       codec_context->color_trc != AVCOL_TRC_UNSPECIFIED ||
       codec_context->colorspace != AVCOL_SPC_UNSPECIFIED) {
-    video_frame->set_color_space(gfx::ColorSpace::CreateVideo(
+    media::VideoColorSpace video_color_space = media::VideoColorSpace(
         codec_context->color_primaries, codec_context->color_trc,
         codec_context->colorspace,
         codec_context->color_range != AVCOL_RANGE_MPEG
             ? gfx::ColorSpace::RangeID::FULL
-            : gfx::ColorSpace::RangeID::LIMITED));
+            : gfx::ColorSpace::RangeID::LIMITED);
+    video_frame->set_color_space(video_color_space.ToGfxColorSpace());
   }
 
   for (size_t i = 0; i < VideoFrame::NumPlanes(video_frame->format()); i++) {
@@ -241,18 +240,15 @@ void FFmpegVideoDecoder::Initialize(const VideoDecoderConfig& config,
   }
 
   FFmpegGlue::InitializeFFmpeg();
-  config_ = config;
 
-  // TODO(xhwang): Only set |config_| after we successfully configure the
-  // decoder.
-  if (!ConfigureDecoder(low_delay)) {
+  if (!ConfigureDecoder(config, low_delay)) {
     bound_init_cb.Run(false);
     return;
   }
 
-  output_cb_ = output_cb;
-
   // Success!
+  config_ = config;
+  output_cb_ = output_cb;
   state_ = kNormal;
   bound_init_cb.Run(true);
 }
@@ -350,6 +346,13 @@ bool FFmpegVideoDecoder::FFmpegDecode(
     packet.data = const_cast<uint8_t*>(buffer->data());
     packet.size = buffer->data_size();
 
+    // Starting in M60, avcodec_decode_video2() generates an error if an
+    // empty buffer is provided. Since we're not at EOS and there is no data
+    // available in the current buffer, simply return and let the caller
+    // provide more data. crbug.com/663438 has more context on 0-byte buffers.
+    if (!packet.size)
+      return true;
+
     // Let FFmpeg handle presentation timestamp reordering.
     codec_context_->reordered_opaque = buffer->timestamp().InMicroseconds();
   }
@@ -408,18 +411,19 @@ void FFmpegVideoDecoder::ReleaseFFmpegResources() {
   av_frame_.reset();
 }
 
-bool FFmpegVideoDecoder::ConfigureDecoder(bool low_delay) {
-  DCHECK(config_.IsValidConfig());
-  DCHECK(!config_.is_encrypted());
+bool FFmpegVideoDecoder::ConfigureDecoder(const VideoDecoderConfig& config,
+                                          bool low_delay) {
+  DCHECK(config.IsValidConfig());
+  DCHECK(!config.is_encrypted());
 
   // Release existing decoder resources if necessary.
   ReleaseFFmpegResources();
 
   // Initialize AVCodecContext structure.
   codec_context_.reset(avcodec_alloc_context3(NULL));
-  VideoDecoderConfigToAVCodecContext(config_, codec_context_.get());
+  VideoDecoderConfigToAVCodecContext(config, codec_context_.get());
 
-  codec_context_->thread_count = GetThreadCount(config_);
+  codec_context_->thread_count = GetThreadCount(config);
   codec_context_->thread_type =
       FF_THREAD_SLICE | (low_delay ? 0 : FF_THREAD_FRAME);
   codec_context_->opaque = this;

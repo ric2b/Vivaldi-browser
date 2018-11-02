@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/run_loop.h"
 #include "chrome/browser/safe_browsing/mock_permission_report_sender.h"
+
+#include "base/run_loop.h"
 #include "content/public/browser/browser_thread.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 
 namespace safe_browsing {
 
 MockPermissionReportSender::MockPermissionReportSender()
-    : net::ReportSender(nullptr, DO_NOT_SEND_COOKIES),
+    : net::ReportSender(nullptr, TRAFFIC_ANNOTATION_FOR_TESTS),
       number_of_reports_(0) {
   DCHECK(quit_closure_.is_null());
 }
@@ -22,7 +24,7 @@ void MockPermissionReportSender::Send(
     base::StringPiece content_type,
     base::StringPiece report,
     const base::Callback<void()>& success_callback,
-    const base::Callback<void(const GURL&, int)>& error_callback) {
+    const base::Callback<void(const GURL&, int, int)>& error_callback) {
   latest_report_uri_ = report_uri;
   report.CopyToString(&latest_report_);
   content_type.CopyToString(&latest_content_type_);
@@ -35,9 +37,8 @@ void MockPermissionReportSender::Send(
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(
-          &MockPermissionReportSender::NotifyReportSentOnUIThread,
-          base::Unretained(this)));
+      base::BindOnce(&MockPermissionReportSender::NotifyReportSentOnUIThread,
+                     base::Unretained(this)));
 }
 
 void MockPermissionReportSender::WaitForReportSent() {

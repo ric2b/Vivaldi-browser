@@ -37,7 +37,7 @@ class InputHandlerProxyClient {
 
   // Creates a new fling animation curve instance for device |device_source|
   // with |velocity| and already scrolled |cumulative_scroll| pixels.
-  virtual blink::WebGestureCurve* CreateFlingAnimationCurve(
+  virtual std::unique_ptr<blink::WebGestureCurve> CreateFlingAnimationCurve(
       blink::WebGestureDevice device_source,
       const blink::WebFloatPoint& velocity,
       const blink::WebSize& cumulative_scroll) = 0;
@@ -54,6 +54,11 @@ class InputHandlerProxyClient {
   virtual void DidStopFlinging() = 0;
 
   virtual void DidAnimateForInput() = 0;
+
+  // Used to send a GSB to the main thread when the wheel scroll latching is
+  // enabled and the scrolling should switch to the main thread.
+  virtual void GenerateScrollBeginAndSendToMainThread(
+      const blink::WebGestureEvent& update_event) = 0;
 
  protected:
   virtual ~InputHandlerProxyClient() {}

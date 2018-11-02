@@ -43,7 +43,6 @@ class ChromeNetworkDelegate;
 class ChromeURLRequestContextGetter;
 class ChromeExpectCTReporter;
 class HostContentSettingsMap;
-class MediaDeviceIDSalt;
 class NetHttpSessionParamsObserver;
 class ProtocolHandlerRegistry;
 
@@ -82,6 +81,7 @@ class CTVerifier;
 class HttpTransactionFactory;
 class ProxyConfigService;
 class ProxyService;
+class ReportingService;
 class ReportSender;
 class SSLConfigService;
 class TransportSecurityPersister;
@@ -179,12 +179,6 @@ class ProfileIOData {
   IntegerPrefMember* network_prediction_options() const {
     return &network_prediction_options_;
   }
-
-  bool HasMediaDeviceIDSalt() const {
-    return media_device_id_salt_.get() != nullptr;
-  }
-
-  std::string GetMediaDeviceIDSalt() const;
 
   DevToolsNetworkControllerHandle* network_controller_handle() const {
     return &network_controller_handle_;
@@ -290,6 +284,8 @@ class ProfileIOData {
     void SetHttpTransactionFactory(
         std::unique_ptr<net::HttpTransactionFactory> http_factory);
     void SetJobFactory(std::unique_ptr<net::URLRequestJobFactory> job_factory);
+    void SetReportingService(
+        std::unique_ptr<net::ReportingService> reporting_service);
 
    private:
     ~AppRequestContext() override;
@@ -299,6 +295,7 @@ class ProfileIOData {
     std::unique_ptr<net::HttpNetworkSession> http_network_session_;
     std::unique_ptr<net::HttpTransactionFactory> http_factory_;
     std::unique_ptr<net::URLRequestJobFactory> job_factory_;
+    std::unique_ptr<net::ReportingService> reporting_service_;
   };
 
   // Created on the UI thread, read on the IO thread during ProfileIOData lazy
@@ -433,7 +430,6 @@ class ProfileIOData {
     // ResourceContext implementation:
     net::HostResolver* GetHostResolver() override;
     net::URLRequestContext* GetRequestContext() override;
-    std::string GetMediaDeviceIDSalt() override;
 
    private:
     friend class ProfileIOData;
@@ -453,10 +449,16 @@ class ProfileIOData {
   // Virtual interface for subtypes to implement:
   // --------------------------------------------
 
+  // Does any necessary additional configuration of the network delegate,
+  // including composing it with other NetworkDelegates, if needed. By default,
+  // just returns the input NetworkDelegate.
+  virtual std::unique_ptr<net::NetworkDelegate> ConfigureNetworkDelegate(
+      IOThread* io_thread,
+      std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate) const;
+
   // Does the actual initialization of the ProfileIOData subtype. Subtypes
   // should use the static helper functions above to implement this.
   virtual void InitializeInternal(
-      std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate,
       ProfileParams* profile_params,
       content::ProtocolHandlerMap* protocol_handlers,
       content::URLRequestInterceptorScopedVector request_interceptors)
@@ -525,8 +527,6 @@ class ProfileIOData {
       client_cert_store_factory_;
 
   mutable StringPrefMember google_services_user_account_id_;
-
-  mutable scoped_refptr<MediaDeviceIDSalt> media_device_id_salt_;
 
   // Member variables which are pointed to by the various context objects.
   mutable BooleanPrefMember enable_referrers_;

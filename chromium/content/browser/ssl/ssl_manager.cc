@@ -5,9 +5,11 @@
 #include "content/browser/ssl/ssl_manager.h"
 
 #include <set>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
@@ -173,8 +175,10 @@ SSLManager::SSLManager(NavigationControllerImpl* controller)
   SSLManagerSet* managers = static_cast<SSLManagerSet*>(
       controller_->GetBrowserContext()->GetUserData(kSSLManagerKeyName));
   if (!managers) {
-    managers = new SSLManagerSet;
-    controller_->GetBrowserContext()->SetUserData(kSSLManagerKeyName, managers);
+    auto managers_owned = base::MakeUnique<SSLManagerSet>();
+    managers = managers_owned.get();
+    controller_->GetBrowserContext()->SetUserData(kSSLManagerKeyName,
+                                                  std::move(managers_owned));
   }
   managers->get().insert(this);
 }
@@ -379,17 +383,22 @@ void SSLManager::OnCertErrorInternal(std::unique_ptr<SSLErrorHandler> handler,
 
   DevToolsAgentHostImpl* agent_host = static_cast<DevToolsAgentHostImpl*>(
       DevToolsAgentHost::GetOrCreateFor(web_contents).get());
-  protocol::SecurityHandler* security_handler =
-      protocol::SecurityHandler::FromAgentHost(agent_host);
-  if (!security_handler ||
-      !security_handler->NotifyCertificateError(
-          cert_error, request_url,
-          base::Bind(&OnAllowCertificateWithRecordDecision, false, callback))) {
-    GetContentClient()->browser()->AllowCertificateError(
-        web_contents, cert_error, ssl_info, request_url, resource_type,
-        overridable, strict_enforcement, expired_previous_decision,
-        base::Bind(&OnAllowCertificateWithRecordDecision, true, callback));
+  if (agent_host) {
+    for (auto* security_handler :
+         protocol::SecurityHandler::ForAgentHost(agent_host)) {
+      if (security_handler->NotifyCertificateError(
+              cert_error, request_url,
+              base::Bind(&OnAllowCertificateWithRecordDecision, false,
+                         callback))) {
+        return;
+      }
+    }
   }
+
+  GetContentClient()->browser()->AllowCertificateError(
+      web_contents, cert_error, ssl_info, request_url, resource_type,
+      overridable, strict_enforcement, expired_previous_decision,
+      base::Bind(&OnAllowCertificateWithRecordDecision, true, callback));
 }
 
 void SSLManager::UpdateEntry(NavigationEntryImpl* entry,

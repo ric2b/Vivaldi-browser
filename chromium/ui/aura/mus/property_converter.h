@@ -79,7 +79,7 @@ class AURA_EXPORT PropertyConverter {
   // |validator| is a callback used to validate incoming values from
   // transport_data; if it returns false, the value is rejected.
   template <typename T>
-  void RegisterProperty(
+  void RegisterPrimitiveProperty(
       const WindowProperty<T>* property,
       const char* transport_name,
       const base::RepeatingCallback<bool(int64_t)>& validator) {
@@ -93,17 +93,18 @@ class AURA_EXPORT PropertyConverter {
     transport_names_.insert(transport_name);
   }
 
-  // Specializations for properties to pointer types supporting mojo conversion.
-  void RegisterProperty(const WindowProperty<gfx::ImageSkia*>* property,
-                        const char* transport_name);
-  void RegisterProperty(const WindowProperty<gfx::Rect*>* property,
-                        const char* transport_name);
-  void RegisterProperty(const WindowProperty<gfx::Size*>* property,
-                        const char* transport_name);
-  void RegisterProperty(const WindowProperty<std::string*>* property,
-                        const char* transport_name);
-  void RegisterProperty(const WindowProperty<base::string16*>* property,
-                        const char* transport_name);
+  // Register owned properties to support conversion between mus and aura.
+  void RegisterImageSkiaProperty(
+      const WindowProperty<gfx::ImageSkia*>* property,
+      const char* transport_name);
+  void RegisterRectProperty(const WindowProperty<gfx::Rect*>* property,
+                            const char* transport_name);
+  void RegisterSizeProperty(const WindowProperty<gfx::Size*>* property,
+                            const char* transport_name);
+  void RegisterStringProperty(const WindowProperty<std::string*>* property,
+                              const char* transport_name);
+  void RegisterString16Property(const WindowProperty<base::string16*>* property,
+                                const char* transport_name);
 
  private:
   // Contains data needed to store and convert primitive-type properties.

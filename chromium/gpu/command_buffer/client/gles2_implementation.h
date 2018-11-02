@@ -34,7 +34,8 @@
 #include "gpu/command_buffer/common/debug_marker_manager.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 
-#if !defined(NDEBUG) && !defined(__native_client__) && !defined(GLES2_CONFORMANCE_TESTS)  // NOLINT
+#if DCHECK_IS_ON() && !defined(__native_client__) && \
+    !defined(GLES2_CONFORMANCE_TESTS)
   #if defined(GLES2_INLINE_OPTIMIZATION)
     // TODO(gman): Replace with macros that work with inline optmization.
     #define GPU_CLIENT_SINGLE_THREAD_CHECK()
@@ -182,12 +183,22 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // Gets client side generated errors.
   GLenum GetClientSideGLError();
 
+  // GLES2Interface implementation
+  void FreeSharedMemory(void*) override;
+
   // Include the auto-generated part of this class. We split this because
   // it means we can easily edit the non-auto generated parts right here in
   // this file instead of having to edit some template or the code generator.
   #include "gpu/command_buffer/client/gles2_implementation_autogen.h"
 
   // ContextSupport implementation.
+  int32_t GetStreamId() const override;
+  void FlushOrderingBarrierOnStream(int32_t stream_id) override;
+  void SignalSyncToken(const gpu::SyncToken& sync_token,
+                       const base::Closure& callback) override;
+  bool IsSyncTokenSignaled(const gpu::SyncToken& sync_token) override;
+  void SignalQuery(uint32_t query, const base::Closure& callback) override;
+  void SetAggressivelyFreeResources(bool aggressively_free_resources) override;
   void Swap() override;
   void SwapWithBounds(const std::vector<gfx::Rect>& rects) override;
   void PartialSwapBuffers(const gfx::Rect& sub_buffer) override;
@@ -200,6 +211,8 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   uint64_t ShareGroupTracingGUID() const override;
   void SetErrorMessageCallback(
       const base::Callback<void(const char*, int32_t)>& callback) override;
+  void AddLatencyInfo(
+      const std::vector<ui::LatencyInfo>& latency_info) override;
 
   // TODO(danakj): Move to ContextSupport once ContextProvider doesn't need to
   // intercept it.
@@ -246,15 +259,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   void FreeUnusedSharedMemory();
   void FreeEverything();
 
-  void FreeSharedMemory(void*) override;
-
-  // ContextSupport implementation.
-  void SignalSyncToken(const gpu::SyncToken& sync_token,
-                       const base::Closure& callback) override;
-  bool IsSyncTokenSignaled(const gpu::SyncToken& sync_token) override;
-  void SignalQuery(uint32_t query, const base::Closure& callback) override;
-  void SetAggressivelyFreeResources(bool aggressively_free_resources) override;
-
   // Helper to set verified bit on sync token if allowed by gpu control.
   bool GetVerifiedSyncTokenForIPC(const gpu::SyncToken& sync_token,
                                   gpu::SyncToken* verified_sync_token);
@@ -281,6 +285,8 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   friend class GLES2ImplementationTest;
   friend class VertexArrayObjectManager;
   friend class QueryTracker;
+
+  using IdNamespaces = id_namespaces::IdNamespaces;
 
   // Used to track whether an extension is available
   enum ExtensionStatus {
@@ -486,7 +492,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   void BindBufferBaseStub(GLenum target, GLuint index, GLuint buffer);
   void BindBufferRangeStub(GLenum target, GLuint index, GLuint buffer,
                            GLintptr offset, GLsizeiptr size);
-  void BindFramebufferStub(GLenum target, GLuint framebuffer);
   void BindRenderbufferStub(GLenum target, GLuint renderbuffer);
   void BindTextureStub(GLenum target, GLuint texture);
 
@@ -513,16 +518,12 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   void DeleteSyncHelper(GLsync sync);
 
   void DeleteBuffersStub(GLsizei n, const GLuint* buffers);
-  void DeleteFramebuffersStub(GLsizei n, const GLuint* framebuffers);
   void DeleteRenderbuffersStub(GLsizei n, const GLuint* renderbuffers);
   void DeleteTexturesStub(GLsizei n, const GLuint* textures);
   void DeletePathsCHROMIUMStub(GLuint first_client_id, GLsizei range);
   void DeleteProgramStub(GLsizei n, const GLuint* programs);
   void DeleteShaderStub(GLsizei n, const GLuint* shaders);
-  void DeleteVertexArraysOESStub(GLsizei n, const GLuint* arrays);
   void DeleteSamplersStub(GLsizei n, const GLuint* samplers);
-  void DeleteTransformFeedbacksStub(
-      GLsizei n, const GLuint* transformfeedbacks);
   void DeleteSyncStub(GLsizei n, const GLuint* syncs);
 
   void BufferDataHelper(
@@ -617,12 +618,10 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // Caches certain capabilties state. Return true if cached.
   bool SetCapabilityState(GLenum cap, bool enabled);
 
-  IdHandlerInterface* GetIdHandler(int id_namespace) const;
+  IdHandlerInterface* GetIdHandler(SharedIdNamespaces id_namespace) const;
   RangeIdHandlerInterface* GetRangeIdHandler(int id_namespace) const;
   // IdAllocators for objects that can't be shared among contexts.
-  // For now, used only for Queries. TODO(hj.r.chung) Should be added for
-  // Framebuffer and Vertex array objects.
-  IdAllocator* GetIdAllocator(int id_namespace) const;
+  IdAllocator* GetIdAllocator(IdNamespaces id_namespace) const;
 
   void FinishHelper();
   void FlushHelper();
@@ -807,7 +806,8 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   ShareGroupContextData share_group_context_data_;
 
   std::unique_ptr<QueryTracker> query_tracker_;
-  std::unique_ptr<IdAllocator> query_id_allocator_;
+  std::unique_ptr<IdAllocator>
+      id_allocators_[static_cast<int>(IdNamespaces::kNumIdNamespaces)];
 
   std::unique_ptr<BufferTracker> buffer_tracker_;
 

@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
+<translation id="1017280919048282932">&amp;Dodaj do słownika</translation>
 <translation id="1018656279737460067">Anulowano</translation>
-<translation id="1030173864176315846">Drukowanie <ph name="PAGE_NUMBER" /> stron za pomocą <ph name="PRINTER_NAME" /> zakończone powodzeniem</translation>
+<translation id="1026822031284433028">Wczytaj obraz</translation>
 <translation id="1031362278801463162">Wczytywanie podglądu</translation>
+<translation id="1047431265488717055">Kopiuj te&amp;kst linku</translation>
 <translation id="1049795001945932310">&amp;Ustawienia języka</translation>
+<translation id="1054153489933238809">Otwórz oryginalny obraz w nowej karcie</translation>
 <translation id="1056898198331236512">Ostrzeżenie</translation>
 <translation id="1084824384139382525">Kopiuj adr&amp;es linku</translation>
 <translation id="114140604515785785">Główny katalog rozszerzenia:</translation>
@@ -15,7 +18,6 @@
 <translation id="1181037720776840403">Usuń</translation>
 <translation id="1187722533808055681">Wznowienia z bezczynności</translation>
 <translation id="119944043368869598">Wyczyść wszystko</translation>
-<translation id="1218323606465324064">Drukowanie <ph name="PAGE_NUMBER" /> stron za pomocą <ph name="PRINTER_NAME" /></translation>
 <translation id="1221825588892235038">Tylko zaznaczenie</translation>
 <translation id="1244303850296295656">Błąd rozszerzenia</translation>
 <translation id="1278049586634282054">Zbadaj widok:</translation>
@@ -25,6 +27,7 @@
 <translation id="1317502925920562130">Czy jest to strona główna, której oczekiwałeś?</translation>
 <translation id="1368832886055348810">Od lewej do prawej</translation>
 <translation id="1430915738399379752">Drukuj</translation>
+<translation id="1451375123200651445">Strona internetowa, pojedynczy plik</translation>
 <translation id="1465176863081977902">&amp;Kopiuj adres dźwięku</translation>
 <translation id="1476607407192946488">&amp;Ustawienia języka</translation>
 <translation id="1507705801791187716">Wspaniale, brak błędów!</translation>
@@ -32,11 +35,11 @@
 <translation id="1546280085599573572">To rozszerzenie zmieniło stronę wyświetlaną po kliknięciu przycisku strony głównej.</translation>
 <translation id="1580652505892042215">Kontekst:</translation>
 <translation id="1588438908519853928">Normalny</translation>
+<translation id="1588870296199743671">Otwórz link w...</translation>
 <translation id="159359590073980872">Pamięć podręczna grafiki</translation>
 <translation id="1601560923496285236">Zastosuj</translation>
 <translation id="1603914832182249871">(tryb prywatny)</translation>
 <translation id="1616206807336925449">To rozszerzenie nie wymaga specjalnych uprawnień.</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Deskryptory plików</translation>
 <translation id="1635033183663317347">Zainstalowane przez twojego opiekuna.</translation>
 <translation id="1681120471812444678">Skonfiguruj dodatkowe drukarki…</translation>
@@ -50,7 +53,6 @@
 <translation id="1744108098763830590">strona tła</translation>
 <translation id="176587472219019965">Nowe &amp;okno</translation>
 <translation id="1769104665586091481">Otwórz link w nowym &amp;oknie</translation>
-<translation id="1789575671122666129">Wyskakujące okienka</translation>
 <translation id="1815083418640426271">Wklej jako zwykły tekst</translation>
 <translation id="1828901632669367785">Drukuj w oknie systemowym…</translation>
 <translation id="1838288018605456492">Kliknij aby skonfigurować</translation>
@@ -69,16 +71,14 @@
 <translation id="2076269580855484719">Ukryj wtyczkę</translation>
 <translation id="2087822576218954668">Drukowanie: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Załaduj &amp;ramkę ponownie</translation>
-<translation id="2115291620696624944">Błąd podczas drukowania <ph name="PAGE_NUMBER" /> stron za pomocą <ph name="PRINTER_NAME" /></translation>
 <translation id="2129825002735785149">Aktualizuj wtyczkę</translation>
-<translation id="2147827593068025794">Synchronizacja w tle</translation>
+<translation id="2142328300403846845">Otwórz link jako</translation>
 <translation id="2148892889047469596">Przesyłaj kartę</translation>
 <translation id="2150139952286079145">Szukaj drukarek</translation>
 <translation id="215753907730220065">Zamknij pełny ekran</translation>
 <translation id="2177950615300672361">Karta prywatna: <ph name="TAB_NAME" /></translation>
 <translation id="218070003709087997">Wpisz wartość numeryczną, by określić liczbę kopii do wydrukowania (od 1 do 999).</translation>
 <translation id="2181927652428971824">Drukuj do Dokumentów Google i innych miejsc docelowych w chmurze. <ph name="BEGIN_LINK" />Zaloguj się<ph name="END_LINK" />, aby drukować za pomocą Google Cloud Print.</translation>
-<translation id="2187317261103489799">Wykrywaj (domyślnie)</translation>
 <translation id="219008588003277019">Moduł klienta natywnego: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Ukryj przycisk</translation>
 <translation id="2218515861914035131">Wklej jako zwykły tekst</translation>
@@ -103,13 +103,12 @@
 <translation id="2439110203301358333">Inny program na twoim komputerze dodał rozszerzenie, które może zmienić działanie Vivaldi.</translation>
 <translation id="2445081178310039857">Katalog główny rozszerzenia jest wymagany.</translation>
 <translation id="2470702053775288986">Wyłączono nieobsługiwane rozszerzenia</translation>
-<translation id="2482878487686419369">Powiadomienia</translation>
 <translation id="2498436043474441766">Dodaj drukarki</translation>
 <translation id="2501797496290880632">Wprowadź skrót</translation>
 <translation id="2509495747794740764">Współczynnik skalowania musi być liczbą z przedziału od 10 do 200.</translation>
-<translation id="2509857212037838238">Zainstaluj <ph name="PLUGIN_NAME" /></translation>
 <translation id="253557089021624350">Liczba sygnałów utrzymania aktywności</translation>
 <translation id="2550212893339833758">Pamięć stronicowana</translation>
+<translation id="2553440850688409052">Ukryj wtyczkę</translation>
 <translation id="2580924999637585241">Łącznie: <ph name="SHEETS_LABEL" /> – <ph name="NUMBER_OF_SHEETS" /></translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Włącz ponownie</translation>
@@ -124,8 +123,10 @@
 <translation id="2850541429955027218">Dodaj motyw</translation>
 <translation id="2861941300086904918">Menedżer zabezpieczeń klienta natywnego</translation>
 <translation id="2868746137289129307">To rozszerzenie jest nieaktualne i zostało wyłączone zgodnie z polityką firmy. Może zostać włączone automatycznie, gdy dostępna będzie nowa wersja.</translation>
+<translation id="2889064240420137087">Otwórz link za pomocą...</translation>
 <translation id="2890678560483811744">Odwołanie do strony spoza zakresu</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> nie może skomunikować się z tą drukarką. Upewnij się, że jest ona podłączona i spróbuj ponownie.</translation>
+<translation id="2914303854539667666">Wygeneruj hasło</translation>
 <translation id="2916745397441987255">Szukaj rozszerzeń</translation>
 <translation id="2932883381142163287">Zgłoś nadużycie</translation>
 <translation id="2941112035454246133">Niski</translation>
@@ -137,17 +138,21 @@
 <translation id="3021678814754966447">&amp;Wyświetl źródło ramki</translation>
 <translation id="302620147503052030">Pokaż przycisk</translation>
 <translation id="3031601332414921114">Wznów drukowanie</translation>
+<translation id="3036546437875325427">Włącz Flasha</translation>
+<translation id="3046910703532196514">Strona internetowa, kompletna</translation>
+<translation id="3067198360141518313">Uruchom wtyczkę</translation>
 <translation id="3080207940057008665">Inny program na twoim komputerze dodał motyw, który może zmienić działanie Vivaldi.</translation>
 <translation id="3084548735795614657">Upuść, aby zainstalować</translation>
 <translation id="3122464029669770682">Procesor</translation>
 <translation id="3124111068741548686">Uchwyty USER</translation>
 <translation id="3129173833825111527">Lewy margines</translation>
+<translation id="3144647712221361880">Otwórz link jako</translation>
 <translation id="3149510190863420837">Aplikacje Chrome</translation>
 <translation id="3154429428035006212">Offline od ponad miesiąca</translation>
 <translation id="3222066309010235055">Wstępne renderowanie: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="32279126412636473">Odśwież (⌘R)</translation>
 <translation id="3241680850019875542">Wybierz katalog główny rozszerzenia, które chcesz umieścić w pakiecie. Aby zaktualizować rozszerzenie, wybierz również plik kluczy prywatnych do ponownego użycia.</translation>
+<translation id="3269093882174072735">Wczytaj obraz</translation>
 <translation id="3280237271814976245">Zapisz &amp;jako...</translation>
 <translation id="3285322247471302225">Nowa &amp;karta</translation>
 <translation id="3288047731229977326">Rozszerzenia działające w trybie programisty mogą uszkodzić twój komputer. Jeśli nie jesteś programistą, wyłącz je dla bezpieczeństwa.</translation>
@@ -166,7 +171,6 @@
 <translation id="3360297538363969800">Drukowanie nie powiodło się. Sprawdź drukarkę i spróbuj ponownie.</translation>
 <translation id="3378572629723696641">To rozszerzenie może być uszkodzone.</translation>
 <translation id="3396331542604645348">Wybrana drukarka jest niedostępna lub została nieprawidłowo zainstalowana. Sprawdź ją lub wybierz inną.</translation>
-<translation id="3427092606871434483">Zezwalaj (domyślnie)</translation>
 <translation id="3435896845095436175">Włącz</translation>
 <translation id="3439970425423980614">Otwieranie PDF w podglądzie</translation>
 <translation id="345693547134384690">Otwórz &amp;obraz w nowej karcie</translation>
@@ -174,10 +178,10 @@
 <translation id="3468745736289470383">Udostępnij swój ekran</translation>
 <translation id="3487007233252413104">funkcja anonimowa</translation>
 <translation id="3505030558724226696">Cofnij dostęp do urządzeń</translation>
-<translation id="3509527969829946096">Ta opcja włącza obsługę sprzętowego kodowania strumieni wideo w Cast Streaming.</translation>
 <translation id="3511307672085573050">Kopiuj adr&amp;es linku</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce udostępnić drukarkę &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; należącej do ciebie grupie: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Jeśli się na to zgodzisz, wszyscy członkowie grupy będą mogli na niej drukować.</translation>
 <translation id="3587482841069643663">Wszystkie</translation>
+<translation id="3618849550573277856">Wyszukaj "<ph name="LOOKUP_STRING" />"</translation>
 <translation id="3627588569887975815">Otwórz link w oknie &amp;prywatnym</translation>
 <translation id="3640006360782160348">Anuluj konfigurację drukarki</translation>
 <translation id="3678156199662914018">Rozszerzenie: <ph name="EXTENSION_NAME" /></translation>
@@ -188,7 +192,7 @@
 <translation id="3730639321086573427">Lokalne drukarki</translation>
 <translation id="3760460896538743390">Zbadaj &amp;stronę tła</translation>
 <translation id="3763401818161139108">Zawsze uruchamiaj na <ph name="ORIGIN" /></translation>
-<translation id="3789841737615482174">Zainstaluj</translation>
+<translation id="3797900183766075808">Wy&amp;szukaj „<ph name="SEARCH_TERMS" />” w <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3798449238516105146">Wersja</translation>
 <translation id="385051799172605136">Wstecz</translation>
 <translation id="3855441664322950881">Spakuj rozszerzenie</translation>
@@ -202,12 +206,12 @@
 <translation id="3925842537050977900">Odepnij z półki</translation>
 <translation id="3927932062596804919">Odmawiaj</translation>
 <translation id="3936390757709632190">&amp;Otwórz dźwięk w nowej karcie</translation>
-<translation id="3936999098172113189">Oczekiwanie na wydruk <ph name="PAGE_NUMBER" /> stron za pomocą <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Wstecz</translation>
 <translation id="3948116654032448504">&amp;Szukaj obrazu w <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3978267865113951599">(zawieszony)</translation>
 <translation id="3979395879372752341">Dodano nowe rozszerzenie (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
+<translation id="4022426551683927403">&amp;Dodaj do słownika</translation>
 <translation id="407520071244661467">Skala</translation>
 <translation id="4087089424473531098">Utworzono rozszerzenie:
 
@@ -220,9 +224,7 @@
 <translation id="4100839878934973028">Inny program na twoim komputerze dodał aplikację, która może zmienić działanie Vivaldi.</translation>
 <translation id="411666854932687641">Pamięć prywatna</translation>
 <translation id="4130207949184424187">To rozszerzenie zmieniło stronę wyświetlaną przy wyszukiwaniu w polu adresu.</translation>
-<translation id="4130750466177569591">Zgadzam się</translation>
 <translation id="4131410914670010031">Czarno-biały</translation>
-<translation id="4165986682804962316">Ustawienia witryny</translation>
 <translation id="4176463684765177261">Wyłączono</translation>
 <translation id="4200983522494130825">Nowa &amp;karta</translation>
 <translation id="420665587194630159">(To rozszerzenie jest zarządzane i nie można go usunąć ani wyłączyć.)</translation>
@@ -230,8 +232,8 @@
 <translation id="4240511609794012987">Pamięć współdzielona</translation>
 <translation id="4256316378292851214">&amp;Zapisz film jako...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (aktywne <ph name="NUM_KILOBYTES_LIVE" /> KB)</translation>
-<translation id="4312866146174492540">Blokuj (domyślnie)</translation>
 <translation id="431291515148403474">Dodanie drukarek do Google Cloud Print umożliwia ci drukowanie z każdego urządzenia w dowolnym miejscu. Udostępnij drukarki wybranym osobom i drukuj z Vivaldi, telefonu, tabletu, komputera lub innego urządzenia z dostępem do internetu.</translation>
+<translation id="4345587454538109430">Konfiguruj...</translation>
 <translation id="4348766275249686434">Gromadź błędy</translation>
 <translation id="4363771538994847871">Nie wykryto żadnego urządzenia Cast. Potrzebujesz pomocy?</translation>
 <translation id="4384652540891215547">Aktywuj rozszerzenie</translation>
@@ -254,21 +256,21 @@
 <translation id="4628314759732363424">Zmień...</translation>
 <translation id="4643612240819915418">&amp;Otwórz film w nowej karcie</translation>
 <translation id="4677772697204437347">Pamięć GPU</translation>
+<translation id="4681930562518940301">Otwórz oryginalny &amp;obraz w nowej karcie</translation>
 <translation id="4688541352655220763">Za pomocą tej funkcji możesz wyświetlać treści z Vivaldi na telewizorze lub innych urządzeniach.</translation>
 <translation id="4711638718396952945">Przywróć ustawienia</translation>
 <translation id="4726710629007580002">Wystąpiły ostrzeżenia podczas próby instalacji tego rozszerzenia:</translation>
 <translation id="4742746985488890273">Przypnij do półki</translation>
+<translation id="479536056609751218">Strona internetowa, tylko kod HTML</translation>
 <translation id="4816492930507672669">Dopasuj do strony</translation>
 <translation id="4839303808932127586">&amp;Zapisz film jako...</translation>
 <translation id="4850258771229959924">Pokaż w narzędziach deweloperskich</translation>
-<translation id="4851858059374029925">Zainstalować wtyczkę <ph name="PLUGIN_NAME" />? Instaluj tylko wtyczki, którym ufasz.</translation>
 <translation id="488785315393301722">Pokaż szczegóły</translation>
 <translation id="4911714727432509308">Brak skrótów klawiszowych przypisanych do rozszerzeń.</translation>
 <translation id="4912643508233590958">Wznowienia z bezczynności</translation>
 <translation id="4918086044614829423">Akceptuj</translation>
 <translation id="4927301649992043040">Umieść rozszerzenie w pakiecie</translation>
 <translation id="4927753642311223124">Nie ma tu nic do oglądania, przejdź dalej.</translation>
-<translation id="4957028442764970964">Konfigurowanie drukarki.</translation>
 <translation id="4988526792673242964">Strony</translation>
 <translation id="49896407730300355">&amp;Obróć w lewo</translation>
 <translation id="4989966318180235467">Zbadaj &amp;stronę tła</translation>
@@ -290,6 +292,7 @@
 <translation id="5233736638227740678">&amp;Wklej</translation>
 <translation id="5265562206369321422">Offline od ponad tygodnia</translation>
 <translation id="5269977353971873915">Drukowanie nie powiodło się</translation>
+<translation id="5271549068863921519">Zapisz hasło</translation>
 <translation id="52912272896845572">Plik kluczy prywatnych jest nieprawidłowy.</translation>
 <translation id="5301954838959518834">OK, rozumiem</translation>
 <translation id="5311260548612583999">Plik kluczy (opcjonalnie):</translation>
@@ -325,7 +328,6 @@
 <translation id="5746169159649715125">Zapisz jako PDF</translation>
 <translation id="5759728514498647443">Dokumenty wysłane do drukowania z <ph name="APP_NAME" /> można odczytać w aplikacji <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">&amp;Zapisz dźwięk jako...</translation>
-<translation id="5778550464785688721">Pełne sterowanie urządzeniami MIDI</translation>
 <translation id="5780973441651030252">Priorytet procesu</translation>
 <translation id="5804241973901381774">Uprawnienia</translation>
 <translation id="5828633471261496623">Drukowanie…</translation>
@@ -335,13 +337,13 @@
 <translation id="5849869942539715694">Spakuj rozszerzenie...</translation>
 <translation id="5910363049092958439">Zapisz o&amp;braz jako...</translation>
 <translation id="59174027418879706">Włączone</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{W użyciu: 1}few{W użyciu: #}many{W użyciu: #}other{W użyciu: #}}</translation>
 <translation id="5956585768868398362">Czy to oczekiwana strona wyszukiwania?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (max: <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Kontroluje także to, jaka strona wyświetla się po kliknięciu przycisku strony startowej lub przy wyszukiwaniu w polu adresu.</translation>
+<translation id="5979421442488174909">&amp;Przetłumacz na <ph name="LANGUAGE" /></translation>
 <translation id="6025215716629925253">Stos wywołań</translation>
 <translation id="6040143037577758943">Zamknij</translation>
-<translation id="6051028581720248124">Drukując za pomocą FedEx Office, akceptujesz ich <ph name="START_LINK" />Warunki korzystania z usługi<ph name="END_LINK" />.</translation>
+<translation id="6042308850641462728">Więcej</translation>
 <translation id="6082651258230788217">Pokazuj na pasku narzędzi</translation>
 <translation id="6086814797483779854">Uruchom po kliknięciu</translation>
 <translation id="6086846494333236931">Zainstalowane przez twojego administratora</translation>
@@ -361,10 +363,12 @@
 <translation id="6248988683584659830">Przeszukaj ustawienia</translation>
 <translation id="6251870443722440887">Uchwyty GDI</translation>
 <translation id="6264365405983206840">Zaznacz &amp;wszystko</translation>
+<translation id="6268252012308737255">Otwórz w <ph name="APP" /></translation>
 <translation id="6272643420381259437">Podczas pobierania wtyczki wystąpił błąd (<ph name="ERROR" />)</translation>
 <translation id="6273677812470008672">Jakość</translation>
 <translation id="6295855836753816081">Zapisywanie…</translation>
 <translation id="6308937455967653460">Zapisz link ja&amp;ko...</translation>
+<translation id="6314335155547195432">Wygeneruj hasło</translation>
 <translation id="6326855256003666642">Liczba sygnałów utrzymania aktywności</translation>
 <translation id="6348109281845364640">Konfiguracja drukarki nie powiodła się</translation>
 <translation id="6370021412472292592">Nie można załadować pliku manifestu.</translation>
@@ -394,9 +398,10 @@
 <translation id="6807889908376551050">Pokaż wszystkie...</translation>
 <translation id="6812841287760418429">Zachowaj zmiany</translation>
 <translation id="682123305478866682">Przesyłaj pulpit</translation>
+<translation id="6824564591481349393">Kopiuj adres &amp;e-mail</translation>
 <translation id="6841186874966388268">Błędy</translation>
-<translation id="6863910145616405334">Nie znaleziono wtyczki</translation>
 <translation id="6886871292305414135">Otwórz link w nowej &amp;karcie</translation>
+<translation id="6892812721183419409">Otwórz link jako <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplikacja w tle: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Cofnij dostęp do plików</translation>
 <translation id="6916590542764765824">Zarządzaj rozszerzeniami</translation>
@@ -411,8 +416,8 @@
 <translation id="7005848115657603926">Nieprawidłowy zakres stron – użyj <ph name="EXAMPLE_PAGE_RANGE" /></translation>
 <translation id="7006634003215061422">Dolny margines</translation>
 <translation id="7013485839273047434">Pobierz więcej rozszerzeń</translation>
+<translation id="7030031465713069059">Zapisz hasło</translation>
 <translation id="708060913198414444">&amp;Kopiuj adres dźwięku</translation>
-<translation id="7105578512429498960">Aby wyświetlić tę zawartość, zainstaluj wtyczkę <ph name="PLUGIN_NAME" /></translation>
 <translation id="7144878232160441200">Ponów próbę</translation>
 <translation id="7175353351958621980">Załadowano z:</translation>
 <translation id="7186088072322679094">Trzymaj na pasku narzędzi</translation>
@@ -432,6 +437,7 @@
 <translation id="7427348830195639090">Strona w tle: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7438940380767210568">Skonfiguruj drukarkę...</translation>
 <translation id="7453008956351770337">Wybierając tę drukarkę, zezwalasz na dostęp do niej temu rozszerzeniu:</translation>
+<translation id="7473891865547856676">Nie, dziękuję</translation>
 <translation id="749028671485790643">Osoba <ph name="VALUE" /></translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7551643184018910560">Przypnij do półki</translation>
@@ -450,9 +456,11 @@
 <translation id="7710568461918838723">&amp;Przesyłaj...</translation>
 <translation id="7760004034676677601">Czy to oczekiwana strona startowa?</translation>
 <translation id="7771452384635174008">Układ</translation>
+<translation id="7782102568078991263">Nie pokazuj sugestii od Google</translation>
 <translation id="7786889348652477777">&amp;Przeładuj aplikację</translation>
 <translation id="7791543448312431591">Dodaj</translation>
 <translation id="7800518121066352902">&amp;Obróć w lewo</translation>
+<translation id="780301667611848630">Nie, dziękuję</translation>
 <translation id="7814458197256864873">&amp;Kopiuj</translation>
 <translation id="7818135753970109980">Dodano nowy motyw (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">&amp;Kopiuj adres filmu</translation>
@@ -481,7 +489,6 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8004582292198964060">Przeglądarka</translation>
 <translation id="8023801379949507775">Zaktualizuj rozszerzenia teraz</translation>
 <translation id="8032244173881942855">Nie można przesłać karty.</translation>
-<translation id="8037357227543935929">Pytaj (domyślnie)</translation>
 <translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">Drukuj jako obraz</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
@@ -495,17 +502,18 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8338952601723052325">Strona internetowa programisty</translation>
 <translation id="8351419472474436977">To rozszerzenie przejęło kontrolę nad ustawieniami serwera proxy, co oznacza, że może zmieniać, przerywać lub podglądać wszystko, co robisz online. Jeśli nie masz pewności skąd wzięła się ta zmiana, prawdopodobnie jej nie chcesz.</translation>
 <translation id="8357224663288891423">Skróty klawiszowe dla rozszerzeń i aplikacji</translation>
+<translation id="8382913212082956454">Kopiuj adres &amp;e-mail</translation>
 <translation id="839736845446313156">Zarejestruj się</translation>
 <translation id="8434480141477525001">Port debugowania NaCl</translation>
 <translation id="8437331208797669910">Dostęp do strony</translation>
 <translation id="8449008133205184768">Wklej i dopasuj styl</translation>
 <translation id="8463955938112983119">Wtyczka <ph name="PLUGIN_NAME" /> jest wyłączona.</translation>
 <translation id="8465444703385715657">Uruchomienie wtyczki <ph name="PLUGIN_NAME" /> wymaga Twojej zgody</translation>
+<translation id="8496717697661868878">Uruchom wtyczkę</translation>
 <translation id="8512476990829870887">Zakończ proces</translation>
 <translation id="8523493869875972733">Zachowaj zmiany</translation>
 <translation id="8523849605371521713">Dodano przez politykę firmy</translation>
 <translation id="8546306075665861288">Pamięć podręczna grafiki</translation>
-<translation id="855705891482654011">Wczytaj rozszerzenie bez pakietu</translation>
 <translation id="8569682776816196752">Nie znaleziono drukarek</translation>
 <translation id="8584280235376696778">&amp;Otwórz film w nowej karcie</translation>
 <translation id="8605428685123651449">Pamięć SQLite</translation>
@@ -520,7 +528,6 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8719653885894320876">Nie udało się pobrać wtyczki <ph name="PLUGIN_NAME" /></translation>
 <translation id="873545264931343897">Po aktualizacji wtyczki <ph name="PLUGIN_NAME" />, odśwież stronę, aby ją aktywować</translation>
 <translation id="8757090071857742562">Nie udało się przesłać pulpitu. Sprawdź, czy potwierdzono prośbę o rozpoczęcie udostępniania ekranu.</translation>
-<translation id="8763204422633679667">Po zainstalowaniu wtyczki <ph name="PLUGIN_NAME" />, odśwież stronę, aby ją aktywować</translation>
 <translation id="8770406935328356739">Główny katalog rozszerzenia</translation>
 <translation id="8774934320277480003">Górny margines</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce udostępnić ci drukarkę &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
@@ -529,11 +536,13 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8800004011501252845">Pokaż drukarki dla</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8813811964357448561">kartka</translation>
+<translation id="8823514049557262177">Kopiuj te&amp;kst linku</translation>
 <translation id="8845001906332463065">Uzyskaj pomoc</translation>
 <translation id="8859174528519900719">Ramka iframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899285681604219177">Wyłączono nieobsługiwane rozszerzenia</translation>
 <translation id="8899851313684471736">Otwórz link w nowym &amp;oknie</translation>
 <translation id="8910146161325739742">Udostępnianie ekranu</translation>
+<translation id="8915370057835397490">Ładowanie sugestii</translation>
 <translation id="8916476537757519021">Ramka iframe w trybie prywatnym: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8926518602592448999">Wyłącz rozszerzenia trybu programisty</translation>
 <translation id="8938356204940892126">Poddaję się</translation>
@@ -545,7 +554,7 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="9027459031423301635">Otwórz link w nowej &amp;karcie</translation>
 <translation id="9056810968620647706">Nie znaleziono żadnych dopasowań.</translation>
 <translation id="9088234649737575428">Wtyczka <ph name="PLUGIN_NAME" /> została zablokowana przez politykę firmy</translation>
-<translation id="9145718805518496796">Spakuj rozszerzenia...</translation>
+<translation id="9137916601698928395">Otwórz link jako <ph name="USER" /></translation>
 <translation id="9153341767479566106">Pozostałe rozszerzenia, których nie udało się załadować:</translation>
 <translation id="9170848237812810038">&amp;Cofnij</translation>
 <translation id="9215293857209265904">Dodano "<ph name="EXTENSION_NAME" />"</translation>

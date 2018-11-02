@@ -16,20 +16,17 @@
 
 namespace ui {
 
-class ClientCompositorFrameSinkBinding;
-
 class ClientCompositorFrameSink
     : public cc::CompositorFrameSink,
       public cc::mojom::MojoCompositorFrameSinkClient,
       public cc::ExternalBeginFrameSourceClient {
  public:
-  // static
-  static std::unique_ptr<ClientCompositorFrameSink> Create(
-      const cc::FrameSinkId& frame_sink_id,
+  ClientCompositorFrameSink(
       scoped_refptr<cc::ContextProvider> context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      std::unique_ptr<ClientCompositorFrameSinkBinding>*
-          compositor_frame_sink_binding);
+      cc::mojom::MojoCompositorFrameSinkPtrInfo compositor_frame_sink_info,
+      cc::mojom::MojoCompositorFrameSinkClientRequest client_request,
+      bool enable_surface_synchronization);
 
   ~ClientCompositorFrameSink() override;
 
@@ -38,15 +35,9 @@ class ClientCompositorFrameSink
   void DetachFromClient() override;
   void SetLocalSurfaceId(const cc::LocalSurfaceId& local_surface_id) override;
   void SubmitCompositorFrame(cc::CompositorFrame frame) override;
+  void DidNotProduceFrame(const cc::BeginFrameAck& ack) override;
 
  private:
-  ClientCompositorFrameSink(
-      const cc::FrameSinkId& frame_sink_id,
-      scoped_refptr<cc::ContextProvider> context_provider,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      cc::mojom::MojoCompositorFrameSinkPtrInfo compositor_frame_sink_info,
-      cc::mojom::MojoCompositorFrameSinkClientRequest client_request);
-
   // cc::mojom::MojoCompositorFrameSinkClient implementation:
   void DidReceiveCompositorFrameAck(
       const cc::ReturnedResourceArray& resources) override;
@@ -55,7 +46,6 @@ class ClientCompositorFrameSink
 
   // cc::ExternalBeginFrameSourceClient implementation.
   void OnNeedsBeginFrames(bool needs_begin_frames) override;
-  void OnDidFinishFrame(const cc::BeginFrameAck& ack) override;
 
   gfx::Size last_submitted_frame_size_;
   cc::LocalSurfaceId local_surface_id_;
@@ -67,38 +57,11 @@ class ClientCompositorFrameSink
   std::unique_ptr<mojo::Binding<cc::mojom::MojoCompositorFrameSinkClient>>
       client_binding_;
   std::unique_ptr<base::ThreadChecker> thread_checker_;
-  const cc::FrameSinkId frame_sink_id_;
-  bool enable_surface_synchronization_ = false;
+  const bool enable_surface_synchronization_;
 
   DISALLOW_COPY_AND_ASSIGN(ClientCompositorFrameSink);
 };
 
-// A ClientCompositorFrameSinkBinding is a bundle of mojo interfaces that is
-// created by ClientCompositorFrameSink::Create and is used by or implemented by
-// Mus when a window is attached to a frame-sink..
-// ClientCompositorFrameSinkBinding has no standalone functionality. Its purpose
-// is to allow safely creating and attaching a CompositorFrameSink on one
-// thread and using it on another.
-class ClientCompositorFrameSinkBinding {
- public:
-  ~ClientCompositorFrameSinkBinding();
-
-  cc::mojom::MojoCompositorFrameSinkRequest TakeFrameSinkRequest();
-  cc::mojom::MojoCompositorFrameSinkClientPtrInfo TakeFrameSinkClient();
-
- private:
-  friend class ClientCompositorFrameSink;
-
-  ClientCompositorFrameSinkBinding(
-      cc::mojom::MojoCompositorFrameSinkRequest compositor_frame_sink_request,
-      cc::mojom::MojoCompositorFrameSinkClientPtrInfo
-          compositor_frame_sink_client);
-
-  cc::mojom::MojoCompositorFrameSinkRequest compositor_frame_sink_request_;
-  cc::mojom::MojoCompositorFrameSinkClientPtrInfo compositor_frame_sink_client_;
-
-  DISALLOW_COPY_AND_ASSIGN(ClientCompositorFrameSinkBinding);
-};
 }  // namespace ui
 
 #endif  // SERVICES_UI_PUBLIC_CPP_WINDOW_COMPOSITOR_FRAME_SINK_H_

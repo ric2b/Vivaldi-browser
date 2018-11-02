@@ -25,48 +25,16 @@ class UsbDevice;
 namespace mojo {
 
 template <>
-struct TypeConverter<device::usb::TransferDirection,
-                     device::UsbEndpointDirection> {
-  static device::usb::TransferDirection Convert(
-      const device::UsbEndpointDirection& direction);
-};
-
-template <>
-struct TypeConverter<device::usb::TransferStatus, device::UsbTransferStatus> {
-  static device::usb::TransferStatus Convert(
-      const device::UsbTransferStatus& status);
-};
-
-template <>
-struct TypeConverter<device::UsbDeviceHandle::TransferRequestType,
-                     device::usb::ControlTransferType> {
-  static device::UsbDeviceHandle::TransferRequestType Convert(
-      const device::usb::ControlTransferType& type);
-};
-
-template <>
-struct TypeConverter<device::UsbDeviceHandle::TransferRecipient,
-                     device::usb::ControlTransferRecipient> {
-  static device::UsbDeviceHandle::TransferRecipient Convert(
-      const device::usb::ControlTransferRecipient& recipient);
-};
-
-template <>
-struct TypeConverter<device::usb::EndpointType, device::UsbTransferType> {
-  static device::usb::EndpointType Convert(const device::UsbTransferType& type);
-};
-
-template <>
-struct TypeConverter<device::usb::EndpointInfoPtr,
+struct TypeConverter<device::mojom::UsbEndpointInfoPtr,
                      device::UsbEndpointDescriptor> {
-  static device::usb::EndpointInfoPtr Convert(
+  static device::mojom::UsbEndpointInfoPtr Convert(
       const device::UsbEndpointDescriptor& endpoint);
 };
 
 template <>
-struct TypeConverter<device::usb::AlternateInterfaceInfoPtr,
+struct TypeConverter<device::mojom::UsbAlternateInterfaceInfoPtr,
                      device::UsbInterfaceDescriptor> {
-  static device::usb::AlternateInterfaceInfoPtr Convert(
+  static device::mojom::UsbAlternateInterfaceInfoPtr Convert(
       const device::UsbInterfaceDescriptor& iface);
 };
 
@@ -75,28 +43,29 @@ struct TypeConverter<device::usb::AlternateInterfaceInfoPtr,
 // settings, whereas InterfaceInfos contain their own sets of alternates with
 // a different structure type.
 template <>
-struct TypeConverter<std::vector<device::usb::InterfaceInfoPtr>,
+struct TypeConverter<std::vector<device::mojom::UsbInterfaceInfoPtr>,
                      std::vector<device::UsbInterfaceDescriptor>> {
-  static std::vector<device::usb::InterfaceInfoPtr> Convert(
+  static std::vector<device::mojom::UsbInterfaceInfoPtr> Convert(
       const std::vector<device::UsbInterfaceDescriptor>& interfaces);
 };
 
 template <>
-struct TypeConverter<device::usb::ConfigurationInfoPtr,
+struct TypeConverter<device::mojom::UsbConfigurationInfoPtr,
                      device::UsbConfigDescriptor> {
-  static device::usb::ConfigurationInfoPtr Convert(
+  static device::mojom::UsbConfigurationInfoPtr Convert(
       const device::UsbConfigDescriptor& config);
 };
 
 template <>
-struct TypeConverter<device::usb::DeviceInfoPtr, device::UsbDevice> {
-  static device::usb::DeviceInfoPtr Convert(const device::UsbDevice& device);
+struct TypeConverter<device::mojom::UsbDeviceInfoPtr, device::UsbDevice> {
+  static device::mojom::UsbDeviceInfoPtr Convert(
+      const device::UsbDevice& device);
 };
 
 template <>
-struct TypeConverter<device::usb::IsochronousPacketPtr,
+struct TypeConverter<device::mojom::UsbIsochronousPacketPtr,
                      device::UsbDeviceHandle::IsochronousPacket> {
-  static device::usb::IsochronousPacketPtr Convert(
+  static device::mojom::UsbIsochronousPacketPtr Convert(
       const device::UsbDeviceHandle::IsochronousPacket& packet);
 };
 

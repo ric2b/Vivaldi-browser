@@ -84,7 +84,7 @@ bool ThumbnailsIsThumbnailAvailableFunction::RunAsync() {
   bool has_thumbnail = service->HasPageThumbnail(url);
   vivaldi::thumbnails::ThumbnailQueryResult result;
   result.has_thumbnail = has_thumbnail;
-  result.thumbnail_url = url.spec();
+  result.thumbnail_url = "chrome://thumb/" + url.spec();
 
   results_ = vivaldi::thumbnails::IsThumbnailAvailable::Results::Create(result);
 

@@ -5,14 +5,14 @@
 #include "modules/webaudio/AudioWorkletGlobalScope.h"
 
 #include "bindings/core/v8/ToV8ForCore.h"
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8BindingMacros.h"
-#include "bindings/core/v8/V8ObjectConstructor.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/ExceptionCode.h"
 #include "modules/webaudio/AudioBuffer.h"
 #include "modules/webaudio/AudioWorkletProcessor.h"
 #include "modules/webaudio/AudioWorkletProcessorDefinition.h"
+#include "platform/bindings/V8BindingMacros.h"
+#include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/weborigin/SecurityOrigin.h"
 
 namespace blink {
@@ -43,8 +43,8 @@ AudioWorkletGlobalScope::~AudioWorkletGlobalScope() {}
 
 void AudioWorkletGlobalScope::Dispose() {
   DCHECK(IsContextThread());
-  processor_definition_map_.Clear();
-  processor_instances_.Clear();
+  processor_definition_map_.clear();
+  processor_instances_.clear();
   ThreadedWorkletGlobalScope::Dispose();
 }
 

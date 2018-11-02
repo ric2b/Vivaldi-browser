@@ -35,8 +35,8 @@ class ASH_EXPORT ShellPortClassic : public ShellPort,
   // ShellPort:
   void Shutdown() override;
   Config GetAshConfig() const override;
-  WmWindow* GetPrimaryRootWindow() override;
-  WmWindow* GetRootWindowForDisplayId(int64_t display_id) override;
+  aura::Window* GetPrimaryRootWindow() override;
+  aura::Window* GetRootWindowForDisplayId(int64_t display_id) override;
   const display::ManagedDisplayInfo& GetDisplayInfo(
       int64_t display_id) const override;
   bool IsActiveDisplayId(int64_t display_id) const override;
@@ -45,8 +45,13 @@ class ASH_EXPORT ShellPortClassic : public ShellPort,
   bool IsInUnifiedModeIgnoreMirroring() const override;
   void SetDisplayWorkAreaInsets(WmWindow* window,
                                 const gfx::Insets& insets) override;
+  std::unique_ptr<display::TouchTransformSetter> CreateTouchTransformDelegate()
+      override;
   void LockCursor() override;
   void UnlockCursor() override;
+  void ShowCursor() override;
+  void HideCursor() override;
+  void SetGlobalOverrideCursor(base::Optional<ui::CursorData> cursor) override;
   bool IsMouseEventsEnabled() override;
   std::vector<WmWindow*> GetAllRootWindows() override;
   void RecordGestureAction(GestureActionType action) override;
@@ -78,8 +83,14 @@ class ASH_EXPORT ShellPortClassic : public ShellPort,
   void SetLaserPointerEnabled(bool enabled) override;
   void SetPartialMagnifierEnabled(bool enabled) override;
   void CreatePointerWatcherAdapter() override;
+  std::unique_ptr<AshWindowTreeHost> CreateAshWindowTreeHost(
+      const AshWindowTreeHostInitParams& init_params) override;
+  void OnCreatedRootWindowContainers(
+      RootWindowController* root_window_controller) override;
   void CreatePrimaryHost() override;
   void InitHosts(const ShellInitParams& init_params) override;
+  std::unique_ptr<display::NativeDisplayDelegate> CreateNativeDisplayDelegate()
+      override;
   std::unique_ptr<AcceleratorController> CreateAcceleratorController() override;
 
  private:

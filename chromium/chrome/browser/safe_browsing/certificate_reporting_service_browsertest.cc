@@ -12,9 +12,11 @@
 #include "base/test/thread_test_helper.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/certificate_reporting_service_factory.h"
 #include "chrome/browser/safe_browsing/certificate_reporting_service_test_utils.h"
+#include "chrome/browser/ssl/cert_report_helper.h"
 #include "chrome/browser/ssl/certificate_reporting_test_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -64,7 +66,9 @@ namespace safe_browsing {
 class CertificateReportingServiceBrowserTest : public InProcessBrowserTest {
  public:
   CertificateReportingServiceBrowserTest()
-      : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {}
+      : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
+    CertReportHelper::SetFakeOfficialBuildForTesting();
+  }
 
   void SetUpOnMainThread() override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -90,7 +94,7 @@ class CertificateReportingServiceBrowserTest : public InProcessBrowserTest {
   void TearDownOnMainThread() override {
     test_helper()->ExpectNoRequests(service());
     content::BrowserThread::PostTask(content::BrowserThread::IO, FROM_HERE,
-                                     base::Bind(&CleanUpOnIOThread));
+                                     base::BindOnce(&CleanUpOnIOThread));
     EXPECT_GE(num_expected_failed_report_, 0)
         << "Don't forget to set expected failed report count.";
     // Check the histogram as the last thing. This makes sure no in-flight
@@ -384,9 +388,15 @@ IN_PROC_BROWSER_TEST_F(CertificateReportingServiceBrowserTest,
       ReportExpectation::Successful({{"report1", RetryStatus::RETRIED}}));
 }
 
+// Failing on some Win and Mac buildbots.  See crbug.com/719138.
+#if defined(OS_WIN) || defined(OS_MACOSX)
+#define MAYBE_DontSendOldReports DISABLED_DontSendOldReports
+#else
+#define MAYBE_DontSendOldReports DontSendOldReports
+#endif
 // CertificateReportingService should ignore reports older than the report TTL.
 IN_PROC_BROWSER_TEST_F(CertificateReportingServiceBrowserTest,
-                       DontSendOldReports) {
+                       MAYBE_DontSendOldReports) {
   SetExpectedHistogramCountOnTeardown(5);
 
   base::SimpleTestClock* clock = new base::SimpleTestClock();

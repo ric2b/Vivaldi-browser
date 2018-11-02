@@ -4,8 +4,8 @@
 
 #include "net/quic/core/quic_header_list.h"
 
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_packets.h"
+#include "net/quic/platform/api/quic_flags.h"
 
 using std::string;
 
@@ -37,10 +37,6 @@ void QuicHeaderList::OnHeader(QuicStringPiece name, QuicStringPiece value) {
   if (uncompressed_header_bytes_ == 0 || !header_list_.empty()) {
     header_list_.emplace_back(name.as_string(), value.as_string());
   }
-}
-
-void QuicHeaderList::OnHeaderBlockEnd(size_t uncompressed_header_bytes) {
-  OnHeaderBlockEnd(uncompressed_header_bytes, uncompressed_header_bytes);
 }
 
 void QuicHeaderList::OnHeaderBlockEnd(size_t uncompressed_header_bytes,

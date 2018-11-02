@@ -46,7 +46,10 @@ Polymer({
     showExtensionsList_: {
       type: Boolean,
       computed: 'computeShowExtensionsList_(extensions)',
-    }
+    },
+
+    /** @private {HTMLElement} */
+    omniboxExtensionlastFocused_: Object,
   },
 
   // Since the iron-list for extensions is enclosed in a dom-if, observe both
@@ -96,7 +99,7 @@ Polymer({
       // previous dialog's contents are cleared.
       dialog.addEventListener('close', function() {
         this.showAddSearchEngineDialog_ = false;
-        this.$.addSearchEngine.focus();
+        cr.ui.focusWithoutInk(assert(this.$.addSearchEngine));
       }.bind(this));
     }.bind(this));
   },

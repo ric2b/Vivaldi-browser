@@ -45,7 +45,7 @@ class InputHandlerWrapper : public ui::InputHandlerProxyClient {
   void DispatchNonBlockingEventToMainThread(
       ui::WebScopedInputEvent event,
       const ui::LatencyInfo& latency_info) override;
-  blink::WebGestureCurve* CreateFlingAnimationCurve(
+  std::unique_ptr<blink::WebGestureCurve> CreateFlingAnimationCurve(
       blink::WebGestureDevice deviceSource,
       const blink::WebFloatPoint& velocity,
       const blink::WebSize& cumulativeScroll) override;
@@ -55,6 +55,8 @@ class InputHandlerWrapper : public ui::InputHandlerProxyClient {
                      const gfx::PointF& causal_event_viewport_point) override;
   void DidStopFlinging() override;
   void DidAnimateForInput() override;
+  void GenerateScrollBeginAndSendToMainThread(
+      const blink::WebGestureEvent& update_event) override;
 
  private:
   InputHandlerManager* input_handler_manager_;

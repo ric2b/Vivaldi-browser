@@ -45,7 +45,7 @@ import time
 
 from webkitpy.common import exit_codes
 from webkitpy.common.net.file_uploader import FileUploader
-from webkitpy.common.webkit_finder import WebKitFinder
+from webkitpy.common.path_finder import PathFinder
 from webkitpy.layout_tests.controllers.layout_test_finder import LayoutTestFinder
 from webkitpy.layout_tests.controllers.layout_test_runner import LayoutTestRunner
 from webkitpy.layout_tests.controllers.test_result_writer import TestResultWriter
@@ -91,18 +91,22 @@ class Manager(object):
 
         self._results_directory = self._port.results_directory()
         self._finder = LayoutTestFinder(self._port, self._options)
-        self._webkit_finder = WebKitFinder(port.host.filesystem)
+        self._path_finder = PathFinder(port.host.filesystem)
         self._runner = LayoutTestRunner(self._options, self._port, self._printer, self._results_directory, self._test_is_slow)
 
     def run(self, args):
         """Run the tests and return a RunDetails object with the results."""
         start_time = time.time()
-        self._printer.write_update("Collecting tests ...")
+        self._printer.write_update('Collecting tests ...')
         running_all_tests = False
 
-        self._printer.write_update('Generating MANIFEST.json for web-platform-tests ...')
-        WPTManifest.ensure_manifest(self._port.host)
+        try:
+            self._printer.write_update('Generating MANIFEST.json for web-platform-tests ...')
+            WPTManifest.ensure_manifest(self._port.host)
+        finally:
+            self._printer.write_update('Completed generating manifest.')
 
+        self._printer.write_update('Collecting tests ...')
         try:
             paths, all_test_names, running_all_tests = self._collect_tests(args)
         except IOError:
@@ -191,12 +195,12 @@ class Manager(object):
 
         # Some crash logs can take a long time to be written out so look
         # for new logs after the test run finishes.
-        self._printer.write_update("looking for new crash logs")
+        self._printer.write_update('Looking for new crash logs ...')
         self._look_for_new_crash_logs(initial_results, start_time)
         for retry_attempt_results in all_retry_results:
             self._look_for_new_crash_logs(retry_attempt_results, start_time)
 
-        _log.debug("summarizing results")
+        self._printer.write_update('Summarizing results ...')
         summarized_full_results = test_run_results.summarize_results(
             self._port, self._expectations, initial_results, all_retry_results,
             enabled_pixel_tests_in_retry)
@@ -332,13 +336,6 @@ class Manager(object):
                 _log.error("Build check failed")
                 return exit_code
 
-        # Check that the system dependencies (themes, fonts, ...) are correct.
-        if not self._options.nocheck_sys_deps:
-            self._printer.write_update("Checking system dependencies ...")
-            exit_code = self._port.check_sys_deps(self._needs_servers(test_names))
-            if exit_code:
-                return exit_code
-
         if self._options.clobber_old_results:
             self._clobber_old_results()
         elif self._filesystem.exists(self._results_directory):
@@ -350,6 +347,14 @@ class Manager(object):
         self._port.host.filesystem.maybe_make_directory(self._results_directory)
 
         self._port.setup_test_run()
+
+        # Check that the system dependencies (themes, fonts, ...) are correct.
+        if not self._options.nocheck_sys_deps:
+            self._printer.write_update("Checking system dependencies ...")
+            exit_code = self._port.check_sys_deps(self._needs_servers(test_names))
+            if exit_code:
+                return exit_code
+
         return exit_codes.OK_EXIT_STATUS
 
     def _run_tests(self, tests_to_run, tests_to_skip, repeat_each, iterations,
@@ -444,7 +449,7 @@ class Manager(object):
 
     def _clobber_old_results(self):
         dir_above_results_path = self._filesystem.dirname(self._results_directory)
-        self._printer.write_update("Clobbering old results in %s" % dir_above_results_path)
+        self._printer.write_update('Clobbering old results in %s.' % dir_above_results_path)
         if not self._filesystem.exists(dir_above_results_path):
             return
         file_list = self._filesystem.listdir(dir_above_results_path)
@@ -536,7 +541,7 @@ class Manager(object):
             _log.error("Upload failed: %s", err)
 
     def _copy_results_html_file(self, destination_path):
-        base_dir = self._port.path_from_webkit_base('LayoutTests', 'fast', 'harness')
+        base_dir = self._path_finder.path_from_layout_tests('fast', 'harness')
         results_file = self._filesystem.join(base_dir, 'results.html')
         # Note that the results.html template file won't exist when we're using a MockFileSystem during unit tests,
         # so make sure it exists before we try to copy it.

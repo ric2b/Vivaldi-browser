@@ -8,6 +8,7 @@
 #include "core/dom/DOMException.h"
 #include "modules/serviceworkers/ServiceWorkerError.h"
 #include "modules/serviceworkers/ServiceWorkerWindowClient.h"
+#include "platform/bindings/V8ThrowException.h"
 #include "platform/wtf/PtrUtil.h"
 
 namespace blink {

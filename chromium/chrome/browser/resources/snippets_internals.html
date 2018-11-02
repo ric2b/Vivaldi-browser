@@ -50,6 +50,9 @@ found in the LICENSE file.
       <tr>
         <td class="name">Snippets fetch URL
         <td id="switch-fetch-url" class="value">
+      <tr>
+        <td class="name">Server-provided experiment IDs
+        <td id="experiment-ids" class="value">
     </table>
   </div>
 
@@ -72,6 +75,16 @@ found in the LICENSE file.
     <button id="clear-classification" type="button">
       Clear my classification
     </button>
+  </div>
+
+  <div id="ranker">
+    <h2>CategoryRanker</h2>
+      <table class="section-details">
+        <tr jsselect="list" style="display:none">
+          <td jscontent="label">
+          <td jscontent="content" class="value">
+        </tr>
+      </table>
   </div>
 
   <div id="snippets">
@@ -108,12 +121,16 @@ found in the LICENSE file.
       <button id="submit-dump" type="button">Dump the list</button>
     </h2>
     <div jsselect="list" style="display:none">
-      <h3>
-        <span jscontent="title"></span>
-        <span class="detail">
-          (<span jscontent="status"></span>)
-        </span>
-
+      <div>
+        <h3 style="margin-bottom: 0px; padding-bottom: 0px;">
+          <span jscontent="title"></span>
+          <span class="detail">
+            (id = <span jscontent="categoryId"></span>,
+            <span jscontent="status"></span>)
+          </span>
+        </h3>
+      </div>
+      <div class="vertical-buttons">
         <button jsvalues="category-id:categoryId" type="button"
             class="submit-clear-cached-suggestions">
           Clear cached suggestions
@@ -126,7 +143,7 @@ found in the LICENSE file.
             class="submit-clear-dismissed-suggestions">
           Clear dismissed suggestions
         </button>
-      </h3>
+      </div>
 
       <table class="section-details">
         <tr jsselect="suggestions" style="display:none">
@@ -143,6 +160,11 @@ found in the LICENSE file.
                 <tr>
                   <td>URL
                   <td><a class="url" jsvalues="href:url" jscontent="url"></a>
+                <tr>
+                  <td>URL with favicon
+                  <td>
+                    <a class="url" jsvalues="href:urlWithFavicon"
+                        jscontent="urlWithFavicon"></a>
                 <tr>
                   <td>Snippet text
                   <td jscontent="snippetText">

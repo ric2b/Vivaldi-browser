@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -93,13 +95,15 @@ void CreateTestPasswordForm(PasswordForm* form) {
   form->icon_url = GURL("https://foo.com/icon.png");
   form->federation_origin =
       url::Origin::UnsafelyCreateOriginWithoutNormalization(
-          "http", "www.google.com", 80);
+          "http", "www.google.com", 80, "");
   form->skip_zero_click = false;
   form->layout = PasswordForm::Layout::LAYOUT_LOGIN_AND_SIGNUP;
   form->was_parsed_using_autofill_predictions = false;
   form->is_public_suffix_match = true;
   form->is_affiliation_based_match = true;
   form->does_look_like_signup_form = true;
+  form->submission_event =
+      PasswordForm::SubmissionIndicatorEvent::SAME_DOCUMENT_NAVIGATION;
 }
 
 void CreateTestFormsPredictionsMap(FormsPredictionsMap* predictions) {
@@ -206,49 +210,48 @@ class AutofillTypeTraitsTestImpl : public testing::Test,
   }
 
   // mojom::TypeTraitsTest:
-  void PassFormData(const FormData& s,
-                    const PassFormDataCallback& callback) override {
-    callback.Run(s);
+  void PassFormData(const FormData& s, PassFormDataCallback callback) override {
+    std::move(callback).Run(s);
   }
 
   void PassFormFieldData(const FormFieldData& s,
-                         const PassFormFieldDataCallback& callback) override {
-    callback.Run(s);
+                         PassFormFieldDataCallback callback) override {
+    std::move(callback).Run(s);
   }
 
   void PassFormDataPredictions(
       const FormDataPredictions& s,
-      const PassFormDataPredictionsCallback& callback) override {
-    callback.Run(s);
+      PassFormDataPredictionsCallback callback) override {
+    std::move(callback).Run(s);
   }
 
   void PassFormFieldDataPredictions(
       const FormFieldDataPredictions& s,
-      const PassFormFieldDataPredictionsCallback& callback) override {
-    callback.Run(s);
+      PassFormFieldDataPredictionsCallback callback) override {
+    std::move(callback).Run(s);
   }
 
   void PassPasswordFormFillData(
       const PasswordFormFillData& s,
-      const PassPasswordFormFillDataCallback& callback) override {
-    callback.Run(s);
+      PassPasswordFormFillDataCallback callback) override {
+    std::move(callback).Run(s);
   }
 
   void PassPasswordFormGenerationData(
       const PasswordFormGenerationData& s,
-      const PassPasswordFormGenerationDataCallback& callback) override {
-    callback.Run(s);
+      PassPasswordFormGenerationDataCallback callback) override {
+    std::move(callback).Run(s);
   }
 
   void PassPasswordForm(const PasswordForm& s,
-                        const PassPasswordFormCallback& callback) override {
-    callback.Run(s);
+                        PassPasswordFormCallback callback) override {
+    std::move(callback).Run(s);
   }
 
   void PassFormsPredictionsMap(
       const FormsPredictionsMap& s,
-      const PassFormsPredictionsMapCallback& callback) override {
-    callback.Run(s);
+      PassFormsPredictionsMapCallback callback) override {
+    std::move(callback).Run(s);
   }
 
  private:

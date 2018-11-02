@@ -20,13 +20,13 @@
 #include "net/quic/chromium/quic_chromium_packet_writer.h"
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_connection.h"
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/core/spdy_utils.h"
+#include "net/quic/platform/api/quic_flags.h"
 #include "net/socket/udp_client_socket.h"
-#include "net/spdy/spdy_header_block.h"
-#include "net/spdy/spdy_http_utils.h"
+#include "net/spdy/chromium/spdy_http_utils.h"
+#include "net/spdy/core/spdy_header_block.h"
 
 using std::string;
 
@@ -154,11 +154,10 @@ QuicSocketAddress QuicSimpleClient::GetLatestClientAddress() const {
 }
 
 bool QuicSimpleClient::OnPacket(const QuicReceivedPacket& packet,
-                                IPEndPoint local_address,
-                                IPEndPoint peer_address) {
-  session()->connection()->ProcessUdpPacket(
-      QuicSocketAddress(QuicSocketAddressImpl(local_address)),
-      QuicSocketAddress(QuicSocketAddressImpl(peer_address)), packet);
+                                const QuicSocketAddress& local_address,
+                                const QuicSocketAddress& peer_address) {
+  session()->connection()->ProcessUdpPacket(local_address, peer_address,
+                                            packet);
   if (!session()->connection()->connected()) {
     return false;
   }

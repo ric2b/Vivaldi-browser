@@ -20,7 +20,7 @@ extern const char kDisableOfflineAutoReload[];
 extern const char kDisablePaymentRequest[];
 extern const char kDisableTabStripAutoScrollNewTabs[];
 extern const char kDisableIOSPhysicalWeb[];
-extern const char kDisableDownloadImageRenaming[];
+extern const char kDisableRequestMobileSite[];
 extern const char kDisableSuggestionsUI[];
 
 extern const char kEnableContextualSearch[];
@@ -35,7 +35,6 @@ extern const char kEnablePaymentRequest[];
 extern const char kEnableReaderModeToolbarIcon[];
 extern const char kEnableSpotlightActions[];
 extern const char kEnableIOSPhysicalWeb[];
-extern const char kEnableDownloadImageRenaming[];
 extern const char kEnableSuggestionsUI[];
 
 extern const char kIOSForceVariationIds[];
@@ -47,10 +46,6 @@ extern const char kIOSIgnoreCertificateErrors[];
 extern const char kIOSTestingFixedHttpPort[];
 extern const char kIOSTestingFixedHttpsPort[];
 
-// TODO(crbug.com/567136): this switches is duplicated between desktop
-// and iOS. Once the corresponding code has been componentized or is no longer
-// used by iOS, remove the duplicate definition.
-extern const char kHistoryEnableGroupByDomain[];
 }  // namespace switches
 
 #endif  // IOS_CHROME_BROWSER_CHROME_SWITCHES_H_

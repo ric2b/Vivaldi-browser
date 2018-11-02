@@ -37,7 +37,7 @@ var Audits2Service = class {
   }
 
   /**
-   * @return {!Promise<!Audits2.WorkerResult>}
+   * @return {!Promise<!ReportRenderer.ReportJSON>}
    */
   start(params) {
     self.listenForStatus(message => {
@@ -45,10 +45,22 @@ var Audits2Service = class {
     });
 
     return Promise.resolve()
-      .then(_ => self.runLighthouseInWorker(this, params.url, undefined, params.aggregationIDs))
-      .then(/** @type {!Audits2.LighthouseResult} */ result =>
-                ({blobUrl: /** @type {?string} */ self.createReportPageAsBlob(result, 'devtools'), result}))
-      .catchException(null);
+        .then(_ => self.runLighthouseInWorker(this, params.url, {}, params.categoryIDs))
+        .then(/** @type {!ReportRenderer.ReportJSON} */ result => {
+          // Filter out artifacts except for screenshots in traces to minimize report size.
+          var traces = result.artifacts.traces;
+          for (var pass in traces) {
+            traces[pass]['traceEvents'] =
+                traces[pass]['traceEvents'].filter(e => e['cat'] === 'disabled-by-default-devtools.screenshot');
+          }
+          result.artifacts = {traces: traces};
+          return result;
+        })
+        .catch(err => ({
+                 fatal: true,
+                 message: err.message,
+                 stack: err.stack,
+               }));
   }
 
   /**
@@ -105,7 +117,7 @@ var Audits2Service = class {
   }
 };
 
-// Make lighthouse happy.
+// Make lighthouse and traceviewer happy.
 global = self;
 global.isVinn = true;
 global.document = {};

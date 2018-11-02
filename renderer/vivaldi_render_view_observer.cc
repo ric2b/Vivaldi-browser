@@ -64,6 +64,7 @@ void VivaldiRenderViewObserver::OnPinchZoom(float scale, int x, int y) {
   render_view()->GetWebView()->SetPinchZoom(scale, x, y);
 }
 
+/*
 void VivaldiRenderViewObserver::FocusedNodeChanged(const blink::WebNode& node) {
   std::string tagname = "";
   std::string type = "";
@@ -86,6 +87,7 @@ void VivaldiRenderViewObserver::FocusedNodeChanged(const blink::WebNode& node) {
   Send(new VivaldiMsg_DidUpdateFocusedElementInfo(routing_id(), tagname, type,
                                                   editable, role));
 }
+*/
 
 namespace {
 
@@ -97,7 +99,6 @@ bool CopyBitmapToSharedMem(const SkBitmap& bitmap,
   const gfx::Size size(bitmap.width(), bitmap.height());
   std::unique_ptr<base::SharedMemory> shared_buf;
   {
-    SkAutoLockPixels locked(bitmap);
     void* pixels = bitmap.getPixels();
     if (!pixels)
       return false;
@@ -147,7 +148,10 @@ void VivaldiRenderViewObserver::OnRequestThumbnailForFrame(
     if (bitmap.colorType() == kN32_SkColorType) {
       thumbnail = bitmap;
     } else {
-      bitmap.copyTo(&thumbnail, kN32_SkColorType);
+      if (thumbnail.tryAllocPixels(bitmap.info())) {
+        bitmap.readPixels(thumbnail.info(), thumbnail.getPixels(),
+                          thumbnail.rowBytes(), 0, 0);
+      }
     }
     if (CopyBitmapToSharedMem(thumbnail, &shared_memory_handle)) {
       gfx::Size size(thumbnail.width(), thumbnail.height());

@@ -57,11 +57,7 @@ static bool IsViewportElement(const Element& element) {
 
 AffineTransform SVGGraphicsElement::ComputeCTM(
     SVGElement::CTMScope mode,
-    SVGGraphicsElement::StyleUpdateStrategy style_update_strategy,
     const SVGGraphicsElement* ancestor) const {
-  if (style_update_strategy == kAllowStyleUpdate)
-    GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-
   AffineTransform ctm;
   bool done = false;
 
@@ -88,26 +84,19 @@ AffineTransform SVGGraphicsElement::ComputeCTM(
         break;
     }
   }
-
   return ctm;
 }
 
-AffineTransform SVGGraphicsElement::GetCTM(
-    StyleUpdateStrategy style_update_strategy) {
-  return ComputeCTM(kNearestViewportScope, style_update_strategy);
+SVGMatrixTearOff* SVGGraphicsElement::getCTM() {
+  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
+
+  return SVGMatrixTearOff::Create(ComputeCTM(kNearestViewportScope));
 }
 
-AffineTransform SVGGraphicsElement::GetScreenCTM(
-    StyleUpdateStrategy style_update_strategy) {
-  return ComputeCTM(kScreenScope, style_update_strategy);
-}
+SVGMatrixTearOff* SVGGraphicsElement::getScreenCTM() {
+  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
 
-SVGMatrixTearOff* SVGGraphicsElement::getCTMFromJavascript() {
-  return SVGMatrixTearOff::Create(GetCTM());
-}
-
-SVGMatrixTearOff* SVGGraphicsElement::getScreenCTMFromJavascript() {
-  return SVGMatrixTearOff::Create(GetScreenCTM());
+  return SVGMatrixTearOff::Create(ComputeCTM(kScreenScope));
 }
 
 void SVGGraphicsElement::CollectStyleForPresentationAttribute(
@@ -173,17 +162,18 @@ SVGElement* SVGGraphicsElement::farthestViewportElement() const {
 }
 
 FloatRect SVGGraphicsElement::GetBBox() {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-
-  // FIXME: Eventually we should support getBBox for detached elements.
-  if (!GetLayoutObject())
-    return FloatRect();
-
+  DCHECK(GetLayoutObject());
   return GetLayoutObject()->ObjectBoundingBox();
 }
 
 SVGRectTearOff* SVGGraphicsElement::getBBoxFromJavascript() {
-  return SVGRectTearOff::Create(SVGRect::Create(GetBBox()), 0,
+  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+
+  // FIXME: Eventually we should support getBBox for detached elements.
+  FloatRect boundingBox;
+  if (GetLayoutObject())
+    boundingBox = GetBBox();
+  return SVGRectTearOff::Create(SVGRect::Create(boundingBox), 0,
                                 kPropertyIsNotAnimVal);
 }
 

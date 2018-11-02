@@ -36,6 +36,7 @@ ProxyMain::ProxyMain(LayerTreeHost* layer_tree_host,
       commit_waits_for_activation_(false),
       started_(false),
       defer_commits_(false),
+      frame_sink_bound_weak_factory_(this),
       weak_factory_(this) {
   TRACE_EVENT0("cc", "ProxyMain::ProxyMain");
   DCHECK(task_runner_provider_);
@@ -72,6 +73,12 @@ void ProxyMain::BeginMainFrameNotExpectedSoon() {
   TRACE_EVENT0("cc", "ProxyMain::BeginMainFrameNotExpectedSoon");
   DCHECK(IsMainThread());
   layer_tree_host_->BeginMainFrameNotExpectedSoon();
+}
+
+void ProxyMain::BeginMainFrameNotExpectedUntil(base::TimeTicks time) {
+  TRACE_EVENT0("cc", "ProxyMain::BeginMainFrameNotExpectedUntil");
+  DCHECK(IsMainThread());
+  layer_tree_host_->BeginMainFrameNotExpectedUntil(time);
 }
 
 void ProxyMain::DidCommitAndDrawFrame() {
@@ -288,9 +295,10 @@ bool ProxyMain::CommitToActiveTree() const {
 void ProxyMain::SetCompositorFrameSink(
     CompositorFrameSink* compositor_frame_sink) {
   ImplThreadTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&ProxyImpl::InitializeCompositorFrameSinkOnImpl,
-                                base::Unretained(proxy_impl_.get()),
-                                compositor_frame_sink));
+      FROM_HERE,
+      base::BindOnce(&ProxyImpl::InitializeCompositorFrameSinkOnImpl,
+                     base::Unretained(proxy_impl_.get()), compositor_frame_sink,
+                     frame_sink_bound_weak_factory_.GetWeakPtr()));
 }
 
 void ProxyMain::SetVisible(bool visible) {
@@ -469,6 +477,7 @@ bool ProxyMain::MainFrameWillHappenForTesting() {
 
 void ProxyMain::ReleaseCompositorFrameSink() {
   DCHECK(IsMainThread());
+  frame_sink_bound_weak_factory_.InvalidateWeakPtrs();
   DebugScopedSetMainThreadBlocked main_thread_blocked(task_runner_provider_);
   CompletionEvent completion;
   ImplThreadTaskRunner()->PostTask(

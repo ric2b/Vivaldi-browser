@@ -35,7 +35,7 @@
 #include "core/dom/DOMHighResTimeStamp.h"
 #include "core/timing/PerformanceEntry.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
+#include "platform/wtf/Forward.h"
 
 namespace blink {
 
@@ -121,6 +121,7 @@ class CORE_EXPORT PerformanceResourceTiming : public PerformanceEntry {
   bool did_reuse_connection_;
   bool allow_timing_details_;
   bool allow_redirect_details_;
+  bool allow_negative_value_;
 };
 
 }  // namespace blink

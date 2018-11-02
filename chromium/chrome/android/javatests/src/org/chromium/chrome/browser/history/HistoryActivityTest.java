@@ -26,10 +26,11 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseActivityInstrumentationTestCase;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.childaccounts.ChildAccountService;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.widget.TintedImageButton;
@@ -128,9 +129,9 @@ public class HistoryActivityTest extends BaseActivityInstrumentationTestCase<His
         mHistoryProvider = new StubbedHistoryProvider();
 
         Date today = new Date();
-        long[] timestamps = {today.getTime()};
-        mItem1 = StubbedHistoryProvider.createHistoryItem(0, timestamps);
-        mItem2 = StubbedHistoryProvider.createHistoryItem(1, timestamps);
+        long timestamp = today.getTime();
+        mItem1 = StubbedHistoryProvider.createHistoryItem(0, timestamp);
+        mItem2 = StubbedHistoryProvider.createHistoryItem(1, timestamp);
         mHistoryProvider.addItem(mItem1);
         mHistoryProvider.addItem(mItem2);
 
@@ -269,6 +270,7 @@ public class HistoryActivityTest extends BaseActivityInstrumentationTestCase<His
     }
 
     @SmallTest
+    @RetryOnFailure(message = "crbug.com/718689")
     public void testOpenSelectedItems() throws Exception {
         IntentFilter filter = new IntentFilter(Intent.ACTION_VIEW);
         filter.addDataPath(mItem1.getUrl(), PatternMatcher.PATTERN_LITERAL);
@@ -511,7 +513,7 @@ public class HistoryActivityTest extends BaseActivityInstrumentationTestCase<His
             @Override
             public Boolean call() throws Exception {
                 PrefServiceBridge.getInstance().setSupervisedUserId("ChildAccountSUID");
-                return ChildAccountService.isChildAccount()
+                return Profile.getLastUsedProfile().isChild()
                         && !PrefServiceBridge.getInstance().canDeleteBrowsingHistory()
                         && !PrefServiceBridge.getInstance().isIncognitoModeEnabled();
             }
@@ -561,5 +563,6 @@ public class HistoryActivityTest extends BaseActivityInstrumentationTestCase<His
                 SigninManager.get(getActivity()).removeSignInStateObserver(mTestObserver);
             }
         });
+        SigninTestUtil.tearDownAuthForTest();
     }
 }

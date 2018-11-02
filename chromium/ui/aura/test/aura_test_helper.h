@@ -12,10 +12,6 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
 
-namespace base {
-class MessageLoopForUI;
-}
-
 namespace ui {
 class ContextFactory;
 class ScopedAnimationDurationScaleMode;
@@ -48,7 +44,7 @@ class TestWindowParentingClient;
 // that are necessary to run test on Aura.
 class AuraTestHelper {
  public:
-  explicit AuraTestHelper(base::MessageLoopForUI* message_loop);
+  AuraTestHelper();
   ~AuraTestHelper();
 
   // Returns the current AuraTestHelper, or nullptr if it's not alive.
@@ -63,6 +59,11 @@ class AuraTestHelper {
   // Makes aura target mus with the specified WindowTreeClient. Must be called
   // before SetUp().
   void EnableMusWithWindowTreeClient(WindowTreeClient* window_tree_client);
+
+  // Deletes the WindowTreeClient now. Normally the WindowTreeClient is deleted
+  // at the right time and there is no need to call this. This is provided for
+  // testing shutdown ordering.
+  void DeleteWindowTreeClient();
 
   // Creates and initializes (shows and sizes) the RootWindow for use in tests.
   void SetUp(ui::ContextFactory* context_factory,

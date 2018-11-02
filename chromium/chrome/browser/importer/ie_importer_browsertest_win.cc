@@ -6,6 +6,7 @@
 #include <windows.h>
 #include <unknwn.h>
 #include <intshcut.h>
+#include <objbase.h>
 #include <propvarutil.h>
 #include <shlguid.h>
 #include <shlobj.h>
@@ -27,6 +28,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_comptr.h"
 #include "base/win/scoped_propvariant.h"
@@ -169,12 +171,13 @@ bool CreateUrlFileWithFavicon(const base::FilePath& file,
                               const base::string16& url,
                               const base::string16& favicon_url) {
   base::win::ScopedComPtr<IUniformResourceLocator> locator;
-  HRESULT result = locator.CreateInstance(CLSID_InternetShortcut, NULL,
-                                          CLSCTX_INPROC_SERVER);
+  HRESULT result =
+      ::CoCreateInstance(CLSID_InternetShortcut, NULL, CLSCTX_INPROC_SERVER,
+                         IID_PPV_ARGS(&locator));
   if (FAILED(result))
     return false;
   base::win::ScopedComPtr<IPersistFile> persist_file;
-  result = persist_file.QueryFrom(locator.get());
+  result = locator.CopyTo(persist_file.GetAddressOf());
   if (FAILED(result))
     return false;
   result = locator->SetURL(url.c_str(), 0);
@@ -184,12 +187,11 @@ bool CreateUrlFileWithFavicon(const base::FilePath& file,
   // Write favicon url if specified.
   if (!favicon_url.empty()) {
     base::win::ScopedComPtr<IPropertySetStorage> property_set_storage;
-    if (FAILED(property_set_storage.QueryFrom(locator.get())))
+    if (FAILED(locator.CopyTo(property_set_storage.GetAddressOf())))
       return false;
     base::win::ScopedComPtr<IPropertyStorage> property_storage;
-    if (FAILED(property_set_storage->Open(FMTID_Intshcut,
-                                          STGM_WRITE,
-                                          property_storage.Receive()))) {
+    if (FAILED(property_set_storage->Open(FMTID_Intshcut, STGM_WRITE,
+                                          property_storage.GetAddressOf()))) {
       return false;
     }
     PROPSPEC properties[] = {{PRSPEC_PROPID, {PID_IS_ICONFILE}}};
@@ -435,6 +437,7 @@ class IEImporterBrowserTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(IEImporterBrowserTest, IEImporter) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   // Sets up a favorites folder.
   base::FilePath path = temp_dir_.GetPath().AppendASCII("Favorites");
   CreateDirectory(path.value().c_str(), NULL);
@@ -487,8 +490,9 @@ IN_PROC_BROWSER_TEST_F(IEImporterBrowserTest, IEImporter) {
 
   // Sets up a special history link.
   base::win::ScopedComPtr<IUrlHistoryStg2> url_history_stg2;
-  ASSERT_EQ(S_OK, url_history_stg2.CreateInstance(CLSID_CUrlHistory, NULL,
-                                                  CLSCTX_INPROC_SERVER));
+  ASSERT_EQ(S_OK,
+            ::CoCreateInstance(CLSID_CUrlHistory, NULL, CLSCTX_INPROC_SERVER,
+                               IID_PPV_ARGS(&url_history_stg2)));
   // Usage of ADDURL_ADDTOHISTORYANDCACHE and ADDURL_ADDTOCACHE flags
   // is explained in the article:
   // http://msdn.microsoft.com/ru-ru/aa767730

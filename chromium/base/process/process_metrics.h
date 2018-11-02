@@ -167,10 +167,20 @@ class BASE_EXPORT ProcessMetrics {
   bool GetCommittedAndWorkingSetKBytes(CommittedKBytes* usage,
                                        WorkingSetKBytes* ws_usage) const;
 
-  // Returns the physical footprint, only available on macOS 10.11+. This
-  // measures anonymous, non-discardable memory. Returns 0 on error, or if the
-  // measurement was unavailable.
-  size_t GetPhysicalFootprint() const;
+  struct TaskVMInfo {
+    // Only available on macOS 10.12+.
+    // Anonymous, non-discardable memory, including non-volatile IOKit.
+    // Measured in bytes.
+    uint64_t phys_footprint = 0;
+
+    // Anonymous, non-discardable, non-compressed memory, excluding IOKit.
+    // Measured in bytes.
+    uint64_t internal = 0;
+
+    // Compressed memory measured in bytes.
+    uint64_t compressed = 0;
+  };
+  TaskVMInfo GetTaskVMInfo() const;
 
   // Returns private, shared, and total resident bytes. |locked_bytes| refers to
   // bytes that must stay resident. |locked_bytes| only counts bytes locked by
@@ -205,7 +215,7 @@ class BASE_EXPORT ProcessMetrics {
   // otherwise.
   bool GetIOCounters(IoCounters* io_counters) const;
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_AIX)
   // Returns the number of file descriptors currently open by the process, or
   // -1 on error.
   int GetOpenFdCount() const;
@@ -213,7 +223,12 @@ class BASE_EXPORT ProcessMetrics {
   // Returns the soft limit of file descriptors that can be opened by the
   // process, or -1 on error.
   int GetOpenFdSoftLimit() const;
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_AIX)
+
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+  // Bytes of swap as reported by /proc/[pid]/status.
+  uint64_t GetVmSwapBytes() const;
+#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
  private:
 #if !defined(OS_MACOSX) || defined(OS_IOS)
@@ -222,7 +237,7 @@ class BASE_EXPORT ProcessMetrics {
   ProcessMetrics(ProcessHandle process, PortProvider* port_provider);
 #endif  // !defined(OS_MACOSX) || defined(OS_IOS)
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_ANDROID) | defined(OS_AIX)
   bool GetWorkingSetKBytesStatm(WorkingSetKBytes* ws_usage) const;
 #endif
 
@@ -230,7 +245,7 @@ class BASE_EXPORT ProcessMetrics {
   bool GetWorkingSetKBytesTotmaps(WorkingSetKBytes *ws_usage) const;
 #endif
 
-#if defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_AIX)
   int CalculateIdleWakeupsPerSecond(uint64_t absolute_idle_wakeups);
 #endif
 
@@ -247,7 +262,7 @@ class BASE_EXPORT ProcessMetrics {
   TimeTicks last_cpu_time_;
   int64_t last_system_time_;
 
-#if defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_AIX)
   // Same thing for idle wakeups.
   TimeTicks last_idle_wakeups_time_;
   uint64_t last_absolute_idle_wakeups_;
@@ -289,7 +304,7 @@ BASE_EXPORT void SetFdLimit(unsigned int max_descriptors);
 #endif  // defined(OS_POSIX)
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
-    defined(OS_ANDROID)
+    defined(OS_ANDROID) || defined(OS_AIX) || defined(OS_FUCHSIA)
 // Data about system-wide memory consumption. Values are in KB. Available on
 // Windows, Mac, Linux, Android and Chrome OS.
 //
@@ -322,7 +337,7 @@ struct BASE_EXPORT SystemMemoryInfoKB {
   int avail_phys = 0;
 #endif
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_AIX)
   // This provides an estimate of available memory as described here:
   // https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/commit/?id=34e431b0ae398fc54ea69ff85ec700722c9da773
   // NOTE: this is ONLY valid in kernels 3.14 and up.  Its value will always
@@ -336,7 +351,8 @@ struct BASE_EXPORT SystemMemoryInfoKB {
   int swap_free = 0;
 #endif
 
-#if defined(OS_ANDROID) || defined(OS_LINUX)
+#if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_AIX) || \
+    defined(OS_FUCHSIA)
   int buffers = 0;
   int cached = 0;
   int active_anon = 0;
@@ -350,7 +366,8 @@ struct BASE_EXPORT SystemMemoryInfoKB {
   unsigned long pswpin = 0;
   unsigned long pswpout = 0;
   unsigned long pgmajfault = 0;
-#endif  // defined(OS_ANDROID) || defined(OS_LINUX)
+#endif  // defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_AIX) ||
+        // defined(OS_FUCHSIA)
 
 #if defined(OS_CHROMEOS)
   int shmem = 0;
@@ -378,11 +395,11 @@ BASE_EXPORT bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo);
 #endif  // defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) ||
         // defined(OS_ANDROID)
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_AIX)
 // Parse the data found in /proc/<pid>/stat and return the sum of the
 // CPU-related ticks.  Returns -1 on parse error.
 // Exposed for testing.
-BASE_EXPORT int ParseProcStatCPU(const std::string& input);
+BASE_EXPORT int ParseProcStatCPU(StringPiece input);
 
 // Get the number of threads of |process| as available in /proc/<pid>/stat.
 // This should be used with care as no synchronization with running threads is
@@ -395,12 +412,14 @@ BASE_EXPORT extern const char kProcSelfExe[];
 
 // Parses a string containing the contents of /proc/meminfo
 // returns true on success or false for a parsing error
-BASE_EXPORT bool ParseProcMeminfo(const std::string& input,
+// Exposed for testing.
+BASE_EXPORT bool ParseProcMeminfo(StringPiece input,
                                   SystemMemoryInfoKB* meminfo);
 
 // Parses a string containing the contents of /proc/vmstat
 // returns true on success or false for a parsing error
-BASE_EXPORT bool ParseProcVmstat(const std::string& input,
+// Exposed for testing.
+BASE_EXPORT bool ParseProcVmstat(StringPiece input,
                                  SystemMemoryInfoKB* meminfo);
 
 // Data from /proc/diskstats about system-wide disk I/O.
@@ -427,7 +446,7 @@ struct BASE_EXPORT SystemDiskInfo {
 // Checks whether the candidate string is a valid disk name, [hsv]d[a-z]+
 // for a generic disk or mmcblk[0-9]+ for the MMC case.
 // Names of disk partitions (e.g. sda1) are not valid.
-BASE_EXPORT bool IsValidDiskName(const std::string& candidate);
+BASE_EXPORT bool IsValidDiskName(StringPiece candidate);
 
 // Retrieves data from /proc/diskstats about system-wide disk I/O.
 // Fills in the provided |diskinfo| structure. Returns true on success.

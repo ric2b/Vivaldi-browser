@@ -11,6 +11,7 @@
 #include "third_party/WebKit/public/platform/modules/presentation/WebPresentationConnection.h"
 #include "third_party/WebKit/public/platform/modules/presentation/WebPresentationController.h"
 #include "third_party/WebKit/public/platform/modules/presentation/WebPresentationInfo.h"
+#include "third_party/WebKit/public/platform/modules/presentation/WebPresentationReceiver.h"
 
 namespace content {
 
@@ -56,6 +57,9 @@ void PresentationConnectionProxy::DidChangeState(
         blink::WebPresentationConnectionState::kConnected);
   } else if (state == content::PRESENTATION_CONNECTION_STATE_CLOSED) {
     source_connection_->DidClose();
+  } else if (state == content::PRESENTATION_CONNECTION_STATE_TERMINATED) {
+    source_connection_->DidChangeState(
+        blink::WebPresentationConnectionState::kTerminated);
   } else {
     NOTREACHED();
   }
@@ -63,7 +67,7 @@ void PresentationConnectionProxy::DidChangeState(
 
 void PresentationConnectionProxy::OnClose() {
   DCHECK(target_connection_ptr_);
-  source_connection_->DidClose();
+  DidChangeState(content::PRESENTATION_CONNECTION_STATE_CLOSED);
   target_connection_ptr_->DidChangeState(
       content::PRESENTATION_CONNECTION_STATE_CLOSED);
 }
@@ -71,6 +75,17 @@ void PresentationConnectionProxy::OnClose() {
 void PresentationConnectionProxy::Close() const {
   DCHECK(target_connection_ptr_);
   target_connection_ptr_->OnClose();
+}
+
+void PresentationConnectionProxy::NotifyTargetConnection(
+    blink::WebPresentationConnectionState state) {
+  if (!target_connection_ptr_)
+    return;
+
+  if (state == blink::WebPresentationConnectionState::kTerminated) {
+    target_connection_ptr_->DidChangeState(
+        content::PRESENTATION_CONNECTION_STATE_TERMINATED);
+  }
 }
 
 ControllerConnectionProxy::ControllerConnectionProxy(
@@ -91,8 +106,11 @@ ControllerConnectionProxy::MakeRemoteRequest() {
 }
 
 ReceiverConnectionProxy::ReceiverConnectionProxy(
-    blink::WebPresentationConnection* receiver_connection)
-    : PresentationConnectionProxy(receiver_connection) {}
+    blink::WebPresentationConnection* receiver_connection,
+    blink::WebPresentationReceiver* receiver)
+    : PresentationConnectionProxy(receiver_connection), receiver_(receiver) {
+  DCHECK(receiver_);
+}
 
 ReceiverConnectionProxy::~ReceiverConnectionProxy() = default;
 
@@ -109,6 +127,13 @@ void ReceiverConnectionProxy::BindControllerConnection(
       content::PRESENTATION_CONNECTION_STATE_CONNECTED);
 
   DidChangeState(content::PRESENTATION_CONNECTION_STATE_CONNECTED);
+}
+
+void ReceiverConnectionProxy::DidChangeState(
+    content::PresentationConnectionState state) {
+  PresentationConnectionProxy::DidChangeState(state);
+  if (state == content::PRESENTATION_CONNECTION_STATE_CLOSED)
+    receiver_->RemoveConnection(source_connection_);
 }
 
 }  // namespace content

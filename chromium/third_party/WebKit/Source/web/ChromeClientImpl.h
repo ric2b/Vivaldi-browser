@@ -32,23 +32,25 @@
 #ifndef ChromeClientImpl_h
 #define ChromeClientImpl_h
 
+#include <memory>
 #include "core/page/ChromeClient.h"
 #include "core/page/WindowFeatures.h"
+#include "platform/graphics/TouchAction.h"
 #include "public/web/WebNavigationPolicy.h"
 #include "web/WebExport.h"
-#include <memory>
 
 namespace blink {
 
 class PagePopup;
 class PagePopupClient;
-class WebViewImpl;
+class WebAutofillClient;
+class WebViewBase;
 struct WebCursorInfo;
 
 // Handles window-level notifications from core on behalf of a WebView.
 class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
  public:
-  static ChromeClientImpl* Create(WebViewImpl*);
+  static ChromeClientImpl* Create(WebViewBase*);
   ~ChromeClientImpl() override;
 
   void* WebView() const override;
@@ -110,8 +112,9 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void SetStatusbarText(const String& message) override;
   bool TabsToLinks() override;
   void InvalidateRect(const IntRect&) override;
-  void ScheduleAnimation(FrameViewBase*) override;
-  IntRect ViewportToScreen(const IntRect&, const FrameViewBase*) const override;
+  void ScheduleAnimation(const PlatformFrameView*) override;
+  IntRect ViewportToScreen(const IntRect&,
+                           const PlatformFrameView*) const override;
   float WindowToViewportScalar(const float) const override;
   WebScreenInfo GetScreenInfo() const override;
   WTF::Optional<IntRect> VisibleContentRectForPainting() const override;
@@ -119,6 +122,7 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void PageScaleFactorChanged() const override;
   float ClampPageScaleFactorToLimits(float scale) const override;
   void MainFrameScrollOffsetChanged() const override;
+  void ResizeAfterLayout(LocalFrame*) const override;
   void LayoutUpdated(LocalFrame*) const override;
   void ShowMouseOverURL(const HitTestResult&) override;
   void SetToolTip(LocalFrame&, const String&, TextDirection) override;
@@ -135,6 +139,7 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void OpenFileChooser(LocalFrame*, PassRefPtr<FileChooser>) override;
   void EnumerateChosenDirectory(FileChooser*) override;
   void SetCursor(const Cursor&, LocalFrame*) override;
+  void SetCursorOverridden(bool) override;
   Cursor LastSetCursorForTesting() const override;
   // The client keeps track of which touch/mousewheel event types have handlers,
   // and if they do, whether the handlers are passive and/or blocking. This
@@ -173,16 +178,15 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void PostAccessibilityNotification(AXObject*,
                                      AXObjectCache::AXNotification) override;
   String AcceptLanguages() override;
+  void SetCursorForPlugin(const WebCursorInfo&, LocalFrame*) override;
 
   // ChromeClientImpl:
-  void SetCursorForPlugin(const WebCursorInfo&, LocalFrame*);
   void SetNewWindowNavigationPolicy(WebNavigationPolicy);
-  void SetCursorOverridden(bool);
 
   bool HasOpenedPopup() const override;
   PopupMenu* OpenPopupMenu(LocalFrame&, HTMLSelectElement&) override;
-  PagePopup* OpenPagePopup(PagePopupClient*);
-  void ClosePagePopup(PagePopup*);
+  PagePopup* OpenPagePopup(PagePopupClient*) override;
+  void ClosePagePopup(PagePopup*) override;
   DOMWindow* PagePopupWindowForTesting() const override;
 
   bool ShouldOpenModalDialogDuringPageDismissal(
@@ -228,20 +232,28 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
 
   void RegisterPopupOpeningObserver(PopupOpeningObserver*) override;
   void UnregisterPopupOpeningObserver(PopupOpeningObserver*) override;
-  void NotifyPopupOpeningObservers() const;
+  void NotifyPopupOpeningObservers() const override;
 
   void InstallSupplements(LocalFrame&) override;
 
   WebLayerTreeView* GetWebLayerTreeView(LocalFrame*) override;
 
+  WebLocalFrameBase* GetWebLocalFrameBase(LocalFrame*) override;
+
+  WebRemoteFrameBase* GetWebRemoteFrameBase(RemoteFrame&) override;
+
  private:
-  explicit ChromeClientImpl(WebViewImpl*);
+  explicit ChromeClientImpl(WebViewBase*);
 
   bool IsChromeClientImpl() const override { return true; }
 
   void SetCursor(const WebCursorInfo&, LocalFrame*);
 
-  WebViewImpl* web_view_;  // Weak pointer.
+  // Returns WebAutofillClient associated with the WebLocalFrame. This takes and
+  // returns nullable.
+  WebAutofillClient* AutofillClientFromFrame(LocalFrame*);
+
+  WebViewBase* web_view_;  // Weak pointer.
   WindowFeatures window_features_;
   Vector<PopupOpeningObserver*> popup_opening_observers_;
   Cursor last_set_mouse_cursor_for_testing_;

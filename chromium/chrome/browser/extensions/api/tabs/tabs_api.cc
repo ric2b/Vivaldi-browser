@@ -95,16 +95,10 @@
 #include "ui/base/models/list_selection_model.h"
 #include "ui/base/ui_base_types.h"
 
-#if defined(USE_ASH)
-#include "chrome/browser/extensions/api/tabs/ash_panel_contents.h"  // nogncheck
-#include "extensions/browser/app_window/app_window_registry.h"  // nogncheck
-#endif
-
+#include "app/vivaldi_apptools.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/public/common/url_constants.h"
-
-#include "app/vivaldi_apptools.h"
 
 using content::BrowserThread;
 using content::NavigationController;
@@ -494,11 +488,6 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
 
   Browser::Type window_type = Browser::TYPE_TABBED;
 
-#if defined(USE_ASH)
-  bool create_ash_panel = false;
-  bool saw_focus_key = false;
-#endif  // defined(USE_ASH)
-
   gfx::Rect window_bounds;
   bool focused = true;
   std::string extension_id;
@@ -518,18 +507,6 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
 
       case windows::CREATE_TYPE_PANEL: {
         extension_id = extension()->id();
-#if defined(USE_ASH)
-      // Only ChromeOS' version of chrome.windows.create would create a panel
-      // window. It is whitelisted to Hangouts extension for limited time until
-      // it transitioned to other types of windows.
-        for (const char* id : extension_misc::kHangoutsExtensionIds) {
-          if (extension_id == id) {
-            create_ash_panel = true;
-            break;
-          }
-        }
-#endif  // defined(USE_ASH)
-        // Everything else gets POPUP instead of PANEL.
         // TODO(dimich): Eventually, remove the 'panel' values form valid
         // window.create parameters. However, this is a more breaking change, so
         // for now simply treat it as a POPUP.
@@ -574,38 +551,9 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
     if (create_data->height)
       window_bounds.set_height(*create_data->height);
 
-    if (create_data->focused) {
+    if (create_data->focused)
       focused = *create_data->focused;
-#if defined(USE_ASH)
-      saw_focus_key = true;
-#endif
-    }
   }
-
-#if defined(USE_ASH)
-  if (create_ash_panel) {
-    if (urls.empty())
-      urls.push_back(GURL(chrome::kChromeUINewTabURL));
-
-    AppWindow::CreateParams create_params;
-    create_params.window_type = AppWindow::WINDOW_TYPE_V1_PANEL;
-    create_params.window_key = extension_id;
-    create_params.window_spec.bounds = window_bounds;
-    create_params.focused = saw_focus_key && focused;
-    AppWindow* app_window =
-        new AppWindow(window_profile, new ChromeAppDelegate(true), extension());
-    AshPanelContents* ash_panel_contents = new AshPanelContents(app_window);
-    app_window->Init(urls[0], ash_panel_contents, render_frame_host(),
-                     create_params);
-    WindowController* window_controller =
-        WindowControllerList::GetInstance()->FindWindowById(
-            app_window->session_id().id());
-    if (!window_controller)
-      return RespondNow(Error(kUnknownErrorDoNotUse));
-    return RespondNow(
-        OneArgument(window_controller->CreateWindowValueWithTabs(extension())));
-  }
-#endif  // defined(USE_ASH)
 
   // Create a new BrowserWindow.
   Browser::CreateParams create_params(window_type, window_profile,
@@ -634,11 +582,20 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
     chrome::NavigateParams navigate_params(new_window, url,
                                            ui::PAGE_TRANSITION_LINK);
     navigate_params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+
+    // The next 2 statements put the new contents in the same BrowsingInstance
+    // as their opener.  Note that |force_new_process_for_new_contents = false|
+    // means that new contents might still end up in a new renderer
+    // (if they open a web URL and are transferred out of an extension
+    // renderer), but even in this case the flags below ensure findability via
+    // window.open.
+    navigate_params.force_new_process_for_new_contents = false;
     // NOTE(andre@vivaldi.com) : We cannot inherit the siteinstance here in
     // Vivaldi. We might end up with the same siteintance in subframes.
     if (!vivaldi::IsVivaldiRunning())
     navigate_params.source_site_instance =
         render_frame_host()->GetSiteInstance();
+
     chrome::Navigate(&navigate_params);
   }
 
@@ -951,6 +908,10 @@ ExtensionFunction::ResponseAction TabsQueryFunction::Run() {
 
       if (index > -1 && i != index)
         continue;
+
+      if (!web_contents) {
+        continue;
+      }
 
       if (!MatchesBool(params->query_info.highlighted.get(),
                        tab_strip->IsTabSelected(i))) {
@@ -1792,7 +1753,7 @@ bool TabsDetectLanguageFunction::RunAsync() {
     // returned.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &TabsDetectLanguageFunction::GotLanguage, this,
             chrome_translate_client->GetLanguageState().original_language()));
     return true;

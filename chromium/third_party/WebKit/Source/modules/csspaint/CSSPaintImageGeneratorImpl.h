@@ -5,9 +5,9 @@
 #ifndef CSSPaintImageGeneratorImpl_h
 #define CSSPaintImageGeneratorImpl_h
 
-#include "bindings/core/v8/ScopedPersistent.h"
 #include "core/css/CSSPaintImageGenerator.h"
 #include "core/css/cssom/CSSStyleValue.h"
+#include "platform/bindings/ScopedPersistent.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/heap/Handle.h"
 #include "v8/include/v8.h"
@@ -28,7 +28,6 @@ class CSSPaintImageGeneratorImpl final : public CSSPaintImageGenerator {
 
   PassRefPtr<Image> Paint(const LayoutObject&,
                           const IntSize&,
-                          float zoom,
                           const CSSStyleValueVector*) final;
   const Vector<CSSPropertyID>& NativeInvalidationProperties() const final;
   const Vector<AtomicString>& CustomInvalidationProperties() const final;

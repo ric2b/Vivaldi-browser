@@ -16,6 +16,7 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -619,7 +620,7 @@ TEST_F(DownloadItemTest, NotificationAfterTogglePause) {
   CleanupItem(item, mock_download_file, DownloadItem::IN_PROGRESS);
 }
 
-// Test that a download is resumed automatcially after a continuable interrupt.
+// Test that a download is resumed automatically after a continuable interrupt.
 TEST_F(DownloadItemTest, AutomaticResumption_Continue) {
   DownloadItemImpl* item = CreateDownloadItem();
   TestDownloadItemObserver observer(item);
@@ -716,6 +717,44 @@ TEST_F(DownloadItemTest, AutomaticResumption_NeedsUserAction) {
   RunAllPendingInMessageLoops();
 
   CleanupItem(item, nullptr, DownloadItem::INTERRUPTED);
+}
+
+// Test that a download is resumed automatically after a content length mismatch
+// error.
+TEST_F(DownloadItemTest, AutomaticResumption_ContentLengthMismatch) {
+  DownloadItemImpl* item = CreateDownloadItem();
+  TestDownloadItemObserver observer(item);
+  MockDownloadFile* download_file =
+      DoIntermediateRename(item, DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS);
+
+  // Interrupt the download with content length mismatch error. The intermediate
+  // file with data shouldn't be discarded.
+
+  // The DownloadFile should be detached without discarding.
+  EXPECT_CALL(*download_file, FullPath())
+      .WillOnce(ReturnRefOfCopy(base::FilePath()));
+  EXPECT_CALL(*download_file, Detach());
+
+  // Resumption attempt should pass the intermediate file along.
+  EXPECT_CALL(*mock_delegate(),
+              MockResumeInterruptedDownload(
+                  AllOf(Property(&DownloadUrlParameters::file_path,
+                                 Property(&base::FilePath::value,
+                                          kDummyIntermediatePath)),
+                        Property(&DownloadUrlParameters::offset, 1)),
+                  _));
+
+  item->DestinationObserverAsWeakPtr()->DestinationError(
+      DOWNLOAD_INTERRUPT_REASON_SERVER_CONTENT_LENGTH_MISMATCH, 1,
+      std::unique_ptr<crypto::SecureHash>());
+  ASSERT_TRUE(observer.CheckAndResetDownloadUpdated());
+  // Since the download is resumed automatically, the observer shouldn't notice
+  // the interruption.
+  ASSERT_EQ(0, observer.interrupt_count());
+  ASSERT_EQ(0, observer.resume_count());
+
+  RunAllPendingInMessageLoops();
+  CleanupItem(item, nullptr, DownloadItem::IN_PROGRESS);
 }
 
 // Check we do correct cleanup for RESUME_MODE_INVALID interrupts.
@@ -1378,6 +1417,21 @@ TEST_F(DownloadItemTest, DownloadTargetDetermined_CancelWithEmptyName) {
                DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS, base::FilePath(),
                DOWNLOAD_INTERRUPT_REASON_NONE);
   EXPECT_EQ(DownloadItem::CANCELLED, item->GetState());
+}
+
+TEST_F(DownloadItemTest, DownloadTargetDetermined_Conflict) {
+  DownloadItemImpl* item = CreateDownloadItem();
+  DownloadTargetCallback callback;
+  MockDownloadFile* download_file = CallDownloadItemStart(item, &callback);
+  base::FilePath target_path(FILE_PATH_LITERAL("/foo/bar"));
+
+  EXPECT_CALL(*download_file, Cancel());
+  callback.Run(target_path, DownloadItem::TARGET_DISPOSITION_OVERWRITE,
+               DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS, target_path,
+               DOWNLOAD_INTERRUPT_REASON_FILE_SAME_AS_SOURCE);
+  EXPECT_EQ(DownloadItem::INTERRUPTED, item->GetState());
+  EXPECT_EQ(DOWNLOAD_INTERRUPT_REASON_FILE_SAME_AS_SOURCE,
+            item->GetLastReason());
 }
 
 TEST_F(DownloadItemTest, FileRemoved) {

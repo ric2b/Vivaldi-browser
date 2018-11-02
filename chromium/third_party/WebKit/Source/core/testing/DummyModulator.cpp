@@ -5,14 +5,36 @@
 #include "core/testing/DummyModulator.h"
 
 #include "bindings/core/v8/ScriptValue.h"
+#include "core/dom/ScriptModuleResolver.h"
 
 namespace blink {
 
-DummyModulator::DummyModulator() {}
+namespace {
+
+class EmptyScriptModuleResolver final : public ScriptModuleResolver {
+ public:
+  EmptyScriptModuleResolver() {}
+
+  // We ignore RegisterModuleScript() calls caused by
+  // ModuleScript::CreateForTest().
+  void RegisterModuleScript(ModuleScript*) override {}
+
+  ScriptModule Resolve(const String& specifier,
+                       const ScriptModule& referrer,
+                       ExceptionState&) override {
+    NOTREACHED();
+    return ScriptModule();
+  }
+};
+
+}  // namespace
+
+DummyModulator::DummyModulator() : resolver_(new EmptyScriptModuleResolver()) {}
 
 DummyModulator::~DummyModulator() {}
 
 DEFINE_TRACE(DummyModulator) {
+  visitor->Trace(resolver_);
   Modulator::Trace(visitor);
 }
 
@@ -26,15 +48,42 @@ SecurityOrigin* DummyModulator::GetSecurityOrigin() {
   return nullptr;
 }
 
-ScriptModuleResolver* DummyModulator::GetScriptModuleResolver() {
+ScriptState* DummyModulator::GetScriptState() {
   NOTREACHED();
   return nullptr;
+}
+
+ScriptModuleResolver* DummyModulator::GetScriptModuleResolver() {
+  return resolver_.Get();
 }
 
 WebTaskRunner* DummyModulator::TaskRunner() {
   NOTREACHED();
   return nullptr;
 };
+
+void DummyModulator::FetchTree(const ModuleScriptFetchRequest&,
+                               ModuleTreeClient*) {
+  NOTREACHED();
+}
+
+void DummyModulator::FetchTreeInternal(const ModuleScriptFetchRequest&,
+                                       const AncestorList&,
+                                       ModuleGraphLevel,
+                                       ModuleTreeClient*) {
+  NOTREACHED();
+};
+
+void DummyModulator::FetchSingle(const ModuleScriptFetchRequest&,
+                                 ModuleGraphLevel,
+                                 SingleModuleClient*) {
+  NOTREACHED();
+}
+
+void DummyModulator::FetchDescendantsForInlineScript(ModuleScript*,
+                                                     ModuleTreeClient*) {
+  NOTREACHED();
+}
 
 ModuleScript* DummyModulator::GetFetchedModuleScript(const KURL&) {
   NOTREACHED();
@@ -47,9 +96,14 @@ void DummyModulator::FetchNewSingleModule(const ModuleScriptFetchRequest&,
   NOTREACHED();
 }
 
+bool DummyModulator::HasValidContext() {
+  return true;
+}
+
 ScriptModule DummyModulator::CompileModule(const String& script,
                                            const String& url_str,
-                                           AccessControlStatus) {
+                                           AccessControlStatus,
+                                           const TextPosition&) {
   NOTREACHED();
   return ScriptModule();
 }
@@ -59,12 +113,17 @@ ScriptValue DummyModulator::InstantiateModule(ScriptModule) {
   return ScriptValue();
 }
 
+ScriptValue DummyModulator::GetInstantiationError(const ModuleScript*) {
+  NOTREACHED();
+  return ScriptValue();
+}
+
 Vector<String> DummyModulator::ModuleRequestsFromScriptModule(ScriptModule) {
   NOTREACHED();
   return Vector<String>();
 }
 
-void DummyModulator::ExecuteModule(ScriptModule) {
+void DummyModulator::ExecuteModule(const ModuleScript*) {
   NOTREACHED();
 }
 

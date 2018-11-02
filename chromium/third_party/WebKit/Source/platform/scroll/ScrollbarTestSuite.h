@@ -7,12 +7,12 @@
 
 #include <memory>
 #include "platform/heap/GarbageCollected.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "platform/scroll/Scrollbar.h"
 #include "platform/scroll/ScrollbarThemeMock.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -44,6 +44,7 @@ class MockScrollableArea : public GarbageCollectedFinalized<MockScrollableArea>,
   MOCK_CONST_METHOD0(LayerForVerticalScrollbar, GraphicsLayer*());
   MOCK_CONST_METHOD0(HorizontalScrollbar, Scrollbar*());
   MOCK_CONST_METHOD0(VerticalScrollbar, Scrollbar*());
+  MOCK_CONST_METHOD0(ScrollbarsHidden, bool());
 
   bool UserInputScrollable(ScrollbarOrientation) const override { return true; }
   bool ScrollbarsCanBeActive() const override { return true; }

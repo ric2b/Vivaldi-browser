@@ -6,33 +6,95 @@
 #define CHROME_BROWSER_ANDROID_VR_SHELL_TEXTURES_UI_TEXTURE_H_
 
 #include <memory>
+#include <vector>
 
-#include "third_party/skia/include/core/SkSurface.h"
+#include "base/macros.h"
+#include "base/strings/string16.h"
+#include "chrome/browser/android/vr_shell/color_scheme.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/size_f.h"
+
+class SkCanvas;
 
 namespace gfx {
-class Canvas;
+
+class FontList;
+class PointF;
+class RenderText;
+
 }  // namespace gfx
 
 namespace vr_shell {
 
-class UITexture {
+class UiTexture {
  public:
-  UITexture(int texture_handle, int texture_size);
-  virtual ~UITexture();
+  UiTexture();
+  virtual ~UiTexture();
 
-  void DrawAndLayout();
-  void Flush();
-  gfx::Size size() const { return size_; }
+  void DrawAndLayout(SkCanvas* canvas, const gfx::Size& texture_size);
+  virtual gfx::Size GetPreferredTextureSize(int maximum_width) const = 0;
+  virtual gfx::SizeF GetDrawnSize() const = 0;
+  virtual bool HitTest(const gfx::PointF& point) const;
+
+  bool dirty() const { return dirty_; }
+
+  void SetMode(ColorScheme::Mode mode);
 
  protected:
-  virtual void Draw(gfx::Canvas* canvas) = 0;
-  virtual void SetSize() = 0;
+  enum TextAlignment {
+    kTextAlignmentNone,
+    kTextAlignmentLeft,
+    kTextAlignmentCenter,
+    kTextAlignmentRight,
+  };
 
-  int texture_handle_;
-  int texture_size_;
-  gfx::Size size_;
-  sk_sp<SkSurface> surface_;
+  enum WrappingBehavior {
+    kWrappingBehaviorWrap,
+    kWrappingBehaviorNoWrap,
+  };
+
+  virtual void Draw(SkCanvas* canvas, const gfx::Size& texture_size) = 0;
+
+  virtual void OnSetMode();
+  ColorScheme::Mode mode() const { return mode_; }
+  const ColorScheme& color_scheme() const;
+
+  // Prepares a set of RenderText objects with the given color and fonts.
+  // Attempts to fit the text within the provided size. |flags| specifies how
+  // the text should be rendered. If multiline is requested and provided height
+  // is 0, it will be set to the minimum needed to fit the whole text. If
+  // multiline is not requested and provided width is 0, it will be set to the
+  // minimum needed to fit the whole text.
+  static std::vector<std::unique_ptr<gfx::RenderText>> PrepareDrawStringRect(
+      const base::string16& text,
+      const gfx::FontList& font_list,
+      SkColor color,
+      gfx::Rect* bounds,
+      TextAlignment text_alignment,
+      WrappingBehavior wrapping_behavior);
+
+  static std::unique_ptr<gfx::RenderText> CreateRenderText(
+      const base::string16& text,
+      const gfx::FontList& font_list,
+      SkColor color,
+      TextAlignment text_alignment);
+
+  void set_dirty() { dirty_ = true; }
+
+  static bool IsRTL();
+  static gfx::FontList GetDefaultFontList(int size);
+  static bool GetFontList(int size,
+                          base::string16 text,
+                          gfx::FontList* font_list);
+  static void SetForceFontFallbackFailureForTesting(bool force);
+
+ private:
+  bool dirty_ = true;
+  ColorScheme::Mode mode_ = ColorScheme::kModeNormal;
+
+  DISALLOW_COPY_AND_ASSIGN(UiTexture);
 };
 
 }  // namespace vr_shell

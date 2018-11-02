@@ -37,6 +37,10 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
     }
   };
 
+  OffscreenCanvas* offscreenCanvasForBinding() const {
+    DCHECK(!host() || host()->IsOffscreenCanvas());
+    return static_cast<OffscreenCanvas*>(host());
+  }
   ScriptPromise commit(ScriptState*, ExceptionState&);
 
   // CanvasRenderingContext implementation
@@ -55,6 +59,9 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   PassRefPtr<Image> GetImage(AccelerationHint, SnapshotReason) const final;
   ImageData* ToImageData(SnapshotReason) override;
   void Reset() override;
+  void RestoreCanvasMatrixClipStack(PaintCanvas* c) const override {
+    RestoreMatrixClipStack(c);
+  }
 
   // BaseRenderingContext2D implementation
   bool OriginClean() const final;
@@ -103,19 +110,20 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   }
 
  private:
-  bool needs_matrix_clip_restore_ = false;
-  std::unique_ptr<ImageBuffer> image_buffer_;
-
   bool IsPaintable() const final;
 
   RefPtr<StaticBitmapImage> TransferToStaticBitmapImage();
+
+  CanvasColorSpace ColorSpace() const override;
+  String ColorSpaceAsString() const override;
+  CanvasPixelFormat PixelFormat() const override;
 };
 
 DEFINE_TYPE_CASTS(OffscreenCanvasRenderingContext2D,
                   CanvasRenderingContext,
                   context,
-                  context->Is2d() && context->offscreenCanvas(),
-                  context.Is2d() && context.offscreenCanvas());
+                  context->Is2d() && context->host(),
+                  context.Is2d() && context.host());
 
 }  // namespace blink
 

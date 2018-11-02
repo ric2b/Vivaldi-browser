@@ -4,6 +4,7 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 
+#include "base/memory/ptr_util.h"
 #include "net/url_request/url_request.h"
 
 namespace data_reduction_proxy {
@@ -14,6 +15,7 @@ const void* const kDataReductionProxyUserDataKey =
 DataReductionProxyData::DataReductionProxyData()
     : used_data_reduction_proxy_(false),
       lofi_requested_(false),
+      client_lofi_requested_(false),
       lite_page_received_(false),
       lofi_received_(false),
       effective_connection_type_(net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN) {}
@@ -25,6 +27,7 @@ std::unique_ptr<DataReductionProxyData> DataReductionProxyData::DeepCopy()
   std::unique_ptr<DataReductionProxyData> copy(new DataReductionProxyData());
   copy->used_data_reduction_proxy_ = used_data_reduction_proxy_;
   copy->lofi_requested_ = lofi_requested_;
+  copy->client_lofi_requested_ = client_lofi_requested_;
   copy->lite_page_received_ = lite_page_received_;
   copy->lofi_received_ = lofi_received_;
   copy->session_key_ = session_key_;
@@ -49,7 +52,7 @@ DataReductionProxyData* DataReductionProxyData::GetDataAndCreateIfNecessary(
   if (data)
     return data;
   data = new DataReductionProxyData();
-  request->SetUserData(kDataReductionProxyUserDataKey, data);
+  request->SetUserData(kDataReductionProxyUserDataKey, base::WrapUnique(data));
   return data;
 }
 

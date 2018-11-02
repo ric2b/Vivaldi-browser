@@ -53,7 +53,6 @@ Misalnya, beberapa situs web mungkin menanggapi permintaan ini dengan menayangka
 <translation id="1820259098641718022">Ditambahkan ke Daftar Baca</translation>
 <translation id="1876721852596493031">Krm Data Penggunaan</translation>
 <translation id="1886928167269928266">Awal Waktu</translation>
-<translation id="1894451531427596130">Kontrol cara kerjanya di <ph name="BEGIN_LINK" />Setelan<ph name="END_LINK" /></translation>
 <translation id="1911619930368729126">Upload ke Google Drive</translation>
 <translation id="1941314575388338491">Ketuk dua kali untuk menyalin.</translation>
 <translation id="1952728750904661634">Masuk dengan akun yang dikelola</translation>
@@ -97,6 +96,7 @@ Misalnya, beberapa situs web mungkin menanggapi permintaan ini dengan menayangka
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">Setel Ulang Setelan Terjemahan</translation>
 <translation id="285960592395650245">Coba Download Lagi</translation>
+<translation id="2870560284913253234">Situs</translation>
 <translation id="2871695793448672541">Sandi Tersembunyi</translation>
 <translation id="2898963176829412617">Folder Baru…</translation>
 <translation id="2903493209154104877">Alamat</translation>
@@ -109,7 +109,6 @@ Misalnya, beberapa situs web mungkin menanggapi permintaan ini dengan menayangka
 <translation id="2989805286512600854">Buka di Tab Baru</translation>
 <translation id="3024255823539804759">Kemarin</translation>
 <translation id="3037605927509011580">Yah!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> tidak tersedia. Untuk mengakses riwayat penjelajahan, pilih "<ph name="SHOW_HISTORY" />" dari menu alat.</translation>
 <translation id="3112556859945124369">Tandai…</translation>
 <translation id="3151924044251363314">Hanya mereka yang memiliki frasa sandi Anda yang dapat membaca data yang telah dienkripsi. Frasa sandi tidak akan dikirim ke atau disimpan oleh Google. Jika lupa frasa sandi atau ingin mengubah setelan ini, Anda perlu menyetel ulang sinkronisasi. <ph name="BEGIN_LINK" />Pelajari lebih lanjut<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">Tandai Semua...</translation>
@@ -125,7 +124,7 @@ Misalnya, beberapa situs web mungkin menanggapi permintaan ini dengan menayangka
 <translation id="3329904751041170572">Tidak dapat tersambung ke server.</translation>
 <translation id="3335947283844343239">Buka Kembali Tab yang Tertutup</translation>
 <translation id="3387752218061326363">Menampilkan riwayat dari perangkat yang Anda gunakan untuk login. <ph name="BEGIN_LINK" />Pelajari lebih lanjut<ph name="END_LINK" />.</translation>
-<translation id="3393920035788932672">Munculan Diizinkan</translation>
+<translation id="3393920035788932672">Pop-up Diizinkan</translation>
 <translation id="3414292259312108062">Chrome akan menyimpan sandi ini pada <ph name="BEGIN_LINK" />sandi tersimpan Google<ph name="END_LINK" /> dan melengkapinya secara otomatis sehingga Anda tidak perlu mengingatnya.</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> mnt</translation>
 <translation id="3448016392200048164">Layar Terpisah</translation>
@@ -150,6 +149,7 @@ Untuk menyesuaikan istilah penelusuran, tekan lama untuk memilih. Untuk menyarin
 <translation id="3638472932233958418">Pramuat Halaman Web</translation>
 <translation id="3691593122358196899">Dibookmark ke <ph name="FOLDER_TITLE" /></translation>
 <translation id="3738139272394829648">Sentuh untuk Menelusuri</translation>
+<translation id="3742082982782149146">URL situs disalin.</translation>
 <translation id="3771033907050503522">Tab Penyamaran</translation>
 <translation id="3783017676699494206">Simpan Gambar</translation>
 <translation id="3789841737615482174">Instal</translation>
@@ -164,10 +164,12 @@ Untuk menyesuaikan istilah penelusuran, tekan lama untuk memilih. Untuk menyarin
 <translation id="4038354071007134711">Tidak ada aplikasi di perangkat ini yang dapat membuka file.</translation>
 <translation id="4049507953662678203">Pastikan Anda memiliki sambungan jaringan, dan coba lagi.</translation>
 <translation id="411254640334432676">Download gagal.</translation>
+<translation id="4117350985506774529">Nama pengguna Anda telah disalin.</translation>
 <translation id="4121993058175073134">Konfigurasi akun email Anda di aplikasi Setelan untuk mengirim data net-ekspor.</translation>
 <translation id="4124987746317609294">Rentang Waktu</translation>
 <translation id="4172051516777682613">Selalu tampilkan</translation>
 <translation id="418156467088430727">Tampilkan Versi Offline di Tab Baru</translation>
+<translation id="4237682350741091554">Kelola personalisasi dan Sinkronisasi Chrome di <ph name="BEGIN_LINK" />Setelan<ph name="END_LINK" /></translation>
 <translation id="424315890655130736">Masukkan Frasa Sandi</translation>
 <translation id="4272631900155121838">Untuk memindai kode QR, aktifkan kamera dari setelan</translation>
 <translation id="4281844954008187215">Persyaratan Layanan</translation>
@@ -175,6 +177,7 @@ Untuk menyesuaikan istilah penelusuran, tekan lama untuk memilih. Untuk menyarin
 <translation id="4359125752503270327">Laman ini akan dibuka di aplikasi lain.</translation>
 <translation id="4378154925671717803">Telepon</translation>
 <translation id="441868831736628555">Notifikasi Privasi</translation>
+<translation id="4508750114462689118">Tutup promo login</translation>
 <translation id="4526249700380860531">Melihat dan mengelola sandi yang tersimpan di <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Coba masuk lagi.</translation>
 <translation id="4620246317052452550">Halaman yang Telah Anda Baca</translation>
@@ -220,6 +223,7 @@ Data Anda dienkripsi dengan frasa sandi sinkronisasi. Masukkan frasa sandi untuk
 
 Handoff juga harus diaktifkan pada bagian General di Settings, dan perangkat Anda harus menggunakan akun iCloud yang sama.</translation>
 <translation id="5556459405103347317">Muat ulang</translation>
+<translation id="5619279135193775234">Mail</translation>
 <translation id="5626245204502895507">File tidak dapat didownload saat ini.</translation>
 <translation id="5659593005791499971">Email</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@ Data Anda dienkripsi dengan frasa sandi sinkronisasi pada tanggal <ph name="TIME
 <translation id="7136892417564438900">Kamera tidak tersedia</translation>
 <translation id="7159472599653637159">Minta Situs Seluler</translation>
 <translation id="7167621057293532233">Jenis Data</translation>
+<translation id="7175593937868963913">Tulis Email</translation>
 <translation id="7189598951263744875">Bagikan...</translation>
 <translation id="7203585745079012652">Ucapkan Jawabannya</translation>
 <translation id="722055596168483966">Personalisasi layanan Google</translation>
@@ -358,7 +363,6 @@ Data Anda dienkripsi dengan frasa sandi sinkronisasi pada tanggal <ph name="TIME
 <translation id="8205564605687841303">Batal</translation>
 <translation id="8225985093977202398">Gambar &amp; File dalam Cache</translation>
 <translation id="8261506727792406068">Hapus</translation>
-<translation id="8272194309885535896">Download Gambar</translation>
 <translation id="8272426682713568063">Kartu Kredit</translation>
 <translation id="8281781826761538115">Default - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">Kontrol cara Google menggunakan riwayat penjelajahan Anda untuk mempersonalisasi Penelusuran, iklan, dan layanan Google lainnya</translation>

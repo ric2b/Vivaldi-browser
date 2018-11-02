@@ -21,7 +21,6 @@ source_set("lib") {
     "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/public/cpp:sources",
     "//services/ui/public/cpp",
     "//services/ui/public/interfaces",
     "//ui/views",
@@ -43,7 +42,6 @@ service("touch_hud") {
     "//base",
     "//mojo/public/cpp/bindings",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/public/cpp:sources",
     "//ui/views/mus:for_mojo_application",
   ]
 

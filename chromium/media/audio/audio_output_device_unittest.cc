@@ -158,6 +158,10 @@ AudioOutputDeviceTest::~AudioOutputDeviceTest() {
 }
 
 void AudioOutputDeviceTest::CreateDevice(const std::string& device_id) {
+  // Make sure the previous device is properly cleaned up.
+  if (audio_device_)
+    StopAudioDevice();
+
   audio_output_ipc_ = new MockAudioOutputIPC();
   audio_device_ = new AudioOutputDevice(
       base::WrapUnique(audio_output_ipc_), io_loop_.task_runner(), 0, device_id,
@@ -223,10 +227,12 @@ void AudioOutputDeviceTest::CreateStream() {
   SyncSocket::TransitDescriptor audio_device_socket_descriptor;
   ASSERT_TRUE(renderer_socket_.PrepareTransitDescriptor(
       base::GetCurrentProcessHandle(), &audio_device_socket_descriptor));
-  base::SharedMemoryHandle duplicated_memory_handle;
-  ASSERT_TRUE(shared_memory_.ShareToProcess(base::GetCurrentProcessHandle(),
-                                            &duplicated_memory_handle));
+  base::SharedMemoryHandle duplicated_memory_handle =
+      shared_memory_.handle().Duplicate();
+  ASSERT_TRUE(duplicated_memory_handle.IsValid());
 
+  // TODO(erikchen): This appears to leak the SharedMemoryHandle.
+  // https://crbug.com/640840.
   audio_device_->OnStreamCreated(
       duplicated_memory_handle,
       SyncSocket::UnwrapHandle(audio_device_socket_descriptor), kMemorySize);

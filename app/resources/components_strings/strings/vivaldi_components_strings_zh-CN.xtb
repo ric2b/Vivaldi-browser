@@ -4,6 +4,7 @@
 <translation id="1152921474424827756">访问<ph name="URL" />的<ph name="BEGIN_LINK" />缓存副本<ph name="END_LINK" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> 意外终止了连接。</translation>
 <translation id="1161325031994447685">重新连接到 Wi-Fi 网络</translation>
+<translation id="1175364870820465910">打印(&amp;P)...</translation>
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />尝试清理 Cookies<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">关于版本</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> 未发送任何数据。</translation>
@@ -16,12 +17,15 @@
 <translation id="1734878702283171397">请尝试联系系统管理员。</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />正在尝试运行Windows网络诊断<ph name="END_LINK" />.</translation>
 <translation id="194030505837763158">请访问<ph name="LINK" /></translation>
+<translation id="1974060860693918893">高级</translation>
 <translation id="2030481566774242610">您是想访问<ph name="LINK" />吗？</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />检查代理服务器和防火墙<ph name="END_LINK" /></translation>
+<translation id="2065985942032347596">需要验证身份</translation>
 <translation id="2166378884831602661">此网站无法提供安全连接</translation>
 <translation id="2230458221926704099">请使用<ph name="BEGIN_LINK" />诊断应用<ph name="END_LINK" />修复网络连接</translation>
 <translation id="224482879335890159">请在 Vivaldi 中搜索“<ph name="LINK" />”</translation>
 <translation id="2292556288342944218">您被禁止访问互联网</translation>
+<translation id="2317259163369394535"><ph name="DOMAIN" /> 要求提供用户名和口令。</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />正在进行网络诊断<ph name="END_LINK" /></translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> 发送的响应无效。</translation>
 <translation id="2609632851001447353">其他变体</translation>
@@ -29,8 +33,10 @@
 <translation id="2705137772291741111">无法读取此网站的已保存（缓存）副本。</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />正在运行网络诊断<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">连接已重置。</translation>
+<translation id="2856444702002559011">攻击者可能会试图从 <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> 窃取您的信息（例如：密码、通讯内容或信用卡信息）。<ph name="BEGIN_LEARN_MORE_LINK" />了解详情<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">检测到了网络变化。</translation>
 <translation id="2948083400971632585">你可以在设置页中为任意链接禁用任何代理设置。</translation>
+<translation id="2991571918955627853">您目前无法访问 <ph name="SITE" />，因为此网站使用了 HSTS。网络错误和攻击通常是暂时的，因此，此网页稍后可能会恢复正常。</translation>
 <translation id="3005723025932146533">显示已保存的版本</translation>
 <translation id="3093245981617870298">您已下线。</translation>
 <translation id="3109728660330352905">您未获授权，无法查看此网页。</translation>
@@ -40,17 +46,24 @@
 <translation id="3226128629678568754">点击刷新按钮以重新提交加载该网页所需的数据。</translation>
 <translation id="3422472998109090673">目前无法访问 <ph name="HOST_NAME" />。</translation>
 <translation id="3447661539832366887">此设备的所有者已关闭恐龙游戏。</translation>
+<translation id="3462200631372590220">隐藏详情</translation>
+<translation id="3566021033012934673">您的连接不是私密连接</translation>
 <translation id="3586931643579894722">隐藏详细信息</translation>
 <translation id="3630155396527302611">如果它已在可访问网络的程序列表中，请尝试将它从该列表中移除，然后重新添加到其中。</translation>
 <translation id="3658742229777143148">修订版本</translation>
+<translation id="3693415264595406141">口令：</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />检查代理服务器、防火墙和 DNS 配置<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">如果您使用代理服务器…</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> 已被屏蔽</translation>
+<translation id="3987940399970879459">小于 1 MB</translation>
 <translation id="4021036232240155012">DNS 是一项网络服务，可将网站的名称转译为其对应的互联网地址。</translation>
 <translation id="4075732493274867456">客户端和服务器不支持一般的 SSL 协议版本或加密套件。</translation>
 <translation id="4130226655945681476">检查网线、调制解调器和路由器</translation>
+<translation id="4165986682804962316">网站设置</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />检查防火墙和杀毒软件配置<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />正在尝试进行网络诊断<ph name="END_LINK" />.</translation>
+<translation id="4304224509867189079">登录</translation>
+<translation id="4381091992796011497">用户名：</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> 不接受您的登录证书，或者您可能没有提供登录证书。</translation>
 <translation id="4506599922270137252">联系系统管理员</translation>
 <translation id="4522570452068850558">详细信息</translation>
@@ -62,6 +75,7 @@
 <translation id="5023310440958281426">请查看管理员制定的政策</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />检查代理服务器地址<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">（64 位）</translation>
+<translation id="5355557959165512791">您目前无法访问 <ph name="SITE" />，因为此证书已被撤消。网络错误和攻击行为通常是暂时的，因此，此网页稍后可能会恢复正常。</translation>
 <translation id="5431657950005405462">找不到您的文件</translation>
 <translation id="5452270690849572955">找不到 <ph name="HOST_NAME" /> 的网页</translation>
 <translation id="5492298309214877701">这个位于公司、组织或学校内网中的网站使用的网址与某个外部网站的网址相同。
@@ -74,10 +88,12 @@
 <translation id="5675650730144413517">该网页无法正常运作</translation>
 <translation id="5869405914158311789">无法访问此网站</translation>
 <translation id="5990559369517809815">对服务器的请求已遭到某个扩展程序的阻止。</translation>
+<translation id="6051221802930200923">您目前无法访问 <ph name="SITE" />，因为此网站使用了证书锁定。网络错误和攻击通常是暂时的，因此，此网页稍后可能会恢复正常。</translation>
 <translation id="6146055958333702838">请检查所有网线是否都已连好，然后重新启动您可能正在使用的任何路由器、调制解调器或其他网络设备。</translation>
 <translation id="614940544461990577">请试试以下办法：</translation>
 <translation id="6165508094623778733">了解详情</translation>
 <translation id="6203231073485539293">请检查您的互联网连接是否正常</translation>
+<translation id="6264485186158353794">返回安全连接</translation>
 <translation id="6305205051461490394">无法访问 <ph name="URL" />。</translation>
 <translation id="6321917430147971392">请检查您的DNS设置是否正确</translation>
 <translation id="6328639280570009161">请尝试停用网络联想查询功能</translation>
@@ -96,7 +112,6 @@
 <translation id="7716424297397655342">无法从缓存中加载此网站</translation>
 <translation id="7758069387465995638">防火墙或防病毒软件可能已阻止您连接到网络。</translation>
 <translation id="7951415247503192394">（32 位）</translation>
-<translation id="8089520772729574115">小于 1 MB</translation>
 <translation id="8134994873729925007">找不到 <ph name="HOST_NAME" /> 的服务器 <ph name="BEGIN_ABBR" />DNS 地址<ph name="END_ABBR" />。</translation>
 <translation id="8142868475871995937">请访问 &lt;strong&gt;vivaldi:// 政策&lt;/strong&gt;，查看列入黑名单的网址列表以及您的系统管理员强制要求执行的其他政策。</translation>
 <translation id="8149426793427495338">您的计算机已进入休眠模式。</translation>
@@ -106,6 +121,7 @@
 <translation id="8332188693563227489">访问 <ph name="HOST_NAME" /> 的请求遭到拒绝</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> 的响应时间过长。</translation>
 <translation id="8740359287975076522">无法找到 <ph name="HOST_NAME" /> 的 &lt;abbr id="dnsDefinition"&gt;DNS 地址&lt;/abbr&gt;。正在诊断该问题。</translation>
+<translation id="9001074447101275817">代理 (<ph name="DOMAIN" />) 要求提供用户名和口令。</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不受支持的协议。</translation>
 <translation id="933612690413056017">未连接到互联网</translation>
 <translation id="969892804517981540">正式版本</translation>

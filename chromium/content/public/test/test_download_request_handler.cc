@@ -109,7 +109,6 @@ class TestDownloadRequestHandler::PartialResponseJob
   void GetResponseInfo(net::HttpResponseInfo* response_info) override;
   int64_t GetTotalReceivedBytes() const override;
   bool GetMimeType(std::string* mime_type) const override;
-  int GetResponseCode() const override;
   int ReadRawData(net::IOBuffer* buf, int buf_size) override;
 
  private:
@@ -275,11 +274,6 @@ bool TestDownloadRequestHandler::PartialResponseJob::GetMimeType(
   return !parameters_->content_type.empty();
 }
 
-int TestDownloadRequestHandler::PartialResponseJob::GetResponseCode() const {
-  return response_info_.headers.get() ? response_info_.headers->response_code()
-                                      : 0;
-}
-
 int TestDownloadRequestHandler::PartialResponseJob::ReadRawData(
     net::IOBuffer* buf,
     int buf_size) {
@@ -412,6 +406,7 @@ void TestDownloadRequestHandler::PartialResponseJob::HandleOnStartDefault() {
       HeadersFromString(base::StringPrintf("HTTP/1.1 200 Success\r\n"
                                            "Content-Length: %" PRId64 "\r\n",
                                            parameters_->size));
+  response_info_.connection_info = parameters_->connection_type;
   AddCommonEntityHeaders();
   NotifyHeadersCompleteAndPrepareToRead();
   return;
@@ -454,6 +449,7 @@ bool TestDownloadRequestHandler::PartialResponseJob::
           "Content-Length: %" PRId64 "\r\n",
           requested_range_begin_, requested_range_end_, parameters_->size,
           (requested_range_end_ - requested_range_begin_) + 1));
+  response_info_.connection_info = parameters_->connection_type;
   AddCommonEntityHeaders();
   NotifyHeadersCompleteAndPrepareToRead();
   return true;
@@ -585,7 +581,9 @@ TestDownloadRequestHandler::Parameters::Parameters()
       content_type("application/octet-stream"),
       size(102400),
       pattern_generator_seed(1),
-      support_byte_ranges(true) {}
+      support_byte_ranges(true),
+      connection_type(
+          net::HttpResponseInfo::ConnectionInfo::CONNECTION_INFO_UNKNOWN) {}
 
 // Copy and move constructors / assignment operators are all defaults.
 TestDownloadRequestHandler::Parameters::Parameters(const Parameters&) = default;
@@ -599,6 +597,7 @@ TestDownloadRequestHandler::Parameters::Parameters(Parameters&& that)
       size(that.size),
       pattern_generator_seed(that.pattern_generator_seed),
       support_byte_ranges(that.support_byte_ranges),
+      connection_type(that.connection_type),
       on_start_handler(that.on_start_handler),
       injected_errors(std::move(that.injected_errors)) {}
 

@@ -9,7 +9,7 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/profiles/new_avatar_button.h"
+#include "chrome/browser/ui/views/profiles/avatar_button.h"
 
 AvatarButtonManager::AvatarButtonManager(BrowserNonClientFrameView* frame_view)
     : frame_view_(frame_view), view_(nullptr) {}
@@ -31,7 +31,7 @@ void AvatarButtonManager::Update(AvatarButtonStyle style) {
       // Desktop guest shows the avatar button.
       browser_view->IsIncognito()) {
     if (!view_) {
-      view_ = new NewAvatarButton(this, style, profile);
+      view_ = new AvatarButton(this, style, profile);
       view_->set_id(VIEW_ID_AVATAR_BUTTON);
       frame_view_->AddChildView(view_);
       frame->GetRootView()->Layout();
@@ -43,18 +43,8 @@ void AvatarButtonManager::Update(AvatarButtonStyle style) {
   }
 }
 
-void AvatarButtonManager::ButtonPreferredSizeChanged() {
-  // Perform a re-layout if the avatar button has changed, since that can affect
-  // the size of the tabs.
-  if (!view_ || !frame_view_->browser_view()->initialized())
-    return;  // Ignore the update during view creation.
-
-  frame_view_->InvalidateLayout();
-  frame_view_->frame()->GetRootView()->Layout();
-}
-
 void AvatarButtonManager::ButtonPressed(views::Button* sender,
-                                       const ui::Event& event) {
+                                        const ui::Event& event) {
   DCHECK_EQ(view_, sender);
   BrowserWindow::AvatarBubbleMode mode =
       BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT;

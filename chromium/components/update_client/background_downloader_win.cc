@@ -6,6 +6,7 @@
 
 #include <atlbase.h>
 #include <atlcom.h>
+#include <objbase.h>
 #include <stddef.h>
 
 #include <stdint.h>
@@ -131,16 +132,17 @@ const int kPurgeStaleJobsIntervalBetweenChecksDays = 1;
 
 // Retrieves the singleton instance of GIT for this process.
 HRESULT GetGit(ScopedComPtr<IGlobalInterfaceTable>* git) {
-  return git->CreateInstance(CLSID_StdGlobalInterfaceTable, NULL,
-                             CLSCTX_INPROC_SERVER);
+  return ::CoCreateInstance(CLSID_StdGlobalInterfaceTable, NULL,
+                            CLSCTX_INPROC_SERVER,
+                            IID_PPV_ARGS(git->GetAddressOf()));
 }
 
 // Retrieves an interface pointer from the process GIT for a given |cookie|.
-template <typename T>
-HRESULT GetInterfaceFromGit(const ScopedComPtr<IGlobalInterfaceTable>& git,
+HRESULT GetInterfaceFromGit(IGlobalInterfaceTable* git,
                             DWORD cookie,
-                            ScopedComPtr<T>* p) {
-  return git->GetInterfaceFromGlobal(cookie, __uuidof(T), p->ReceiveVoid());
+                            REFIID riid,
+                            void** ppv) {
+  return git->GetInterfaceFromGlobal(cookie, riid, ppv);
 }
 
 // Registers an interface pointer in GIT and returns its corresponding |cookie|.
@@ -148,7 +150,7 @@ template <typename T>
 HRESULT RegisterInterfaceInGit(const ScopedComPtr<IGlobalInterfaceTable>& git,
                                const ScopedComPtr<T>& p,
                                DWORD* cookie) {
-  return git->RegisterInterfaceInGlobal(p.get(), __uuidof(T), cookie);
+  return git->RegisterInterfaceInGlobal(p.Get(), __uuidof(T), cookie);
 }
 
 // Returns the status code from a given BITS error.
@@ -168,7 +170,7 @@ int GetHttpStatusFromBitsError(HRESULT error) {
 HRESULT GetFilesInJob(IBackgroundCopyJob* job,
                       std::vector<ScopedComPtr<IBackgroundCopyFile>>* files) {
   ScopedComPtr<IEnumBackgroundCopyFiles> enum_files;
-  HRESULT hr = job->EnumFiles(enum_files.Receive());
+  HRESULT hr = job->EnumFiles(enum_files.GetAddressOf());
   if (FAILED(hr))
     return hr;
 
@@ -179,7 +181,7 @@ HRESULT GetFilesInJob(IBackgroundCopyJob* job,
 
   for (ULONG i = 0; i != num_files; ++i) {
     ScopedComPtr<IBackgroundCopyFile> file;
-    if (enum_files->Next(1, file.Receive(), NULL) == S_OK && file.get())
+    if (enum_files->Next(1, file.GetAddressOf(), NULL) == S_OK && file.Get())
       files->push_back(file);
   }
 
@@ -264,7 +266,7 @@ HRESULT GetJobDescription(IBackgroundCopyJob* job, const base::string16* name) {
 HRESULT GetJobError(IBackgroundCopyJob* job, HRESULT* error_code_out) {
   *error_code_out = S_OK;
   ScopedComPtr<IBackgroundCopyError> copy_error;
-  HRESULT hr = job->GetError(copy_error.Receive());
+  HRESULT hr = job->GetError(copy_error.GetAddressOf());
   if (FAILED(hr))
     return hr;
 
@@ -286,7 +288,7 @@ HRESULT FindBitsJobIf(Predicate pred,
                       IBackgroundCopyManager* bits_manager,
                       std::vector<ScopedComPtr<IBackgroundCopyJob>>* jobs) {
   ScopedComPtr<IEnumBackgroundCopyJobs> enum_jobs;
-  HRESULT hr = bits_manager->EnumJobs(0, enum_jobs.Receive());
+  HRESULT hr = bits_manager->EnumJobs(0, enum_jobs.GetAddressOf());
   if (FAILED(hr))
     return hr;
 
@@ -299,10 +301,10 @@ HRESULT FindBitsJobIf(Predicate pred,
   // the job description matches the component updater jobs.
   for (ULONG i = 0; i != job_count; ++i) {
     ScopedComPtr<IBackgroundCopyJob> current_job;
-    if (enum_jobs->Next(1, current_job.Receive(), NULL) == S_OK &&
-        pred(current_job.get())) {
+    if (enum_jobs->Next(1, current_job.GetAddressOf(), NULL) == S_OK &&
+        pred(current_job.Get())) {
       base::string16 job_description;
-      hr = GetJobDescription(current_job.get(), &job_description);
+      hr = GetJobDescription(current_job.Get(), &job_description);
       if (job_description.compare(kJobDescription) == 0)
         jobs->push_back(current_job);
     }
@@ -365,7 +367,8 @@ bool JobFileUrlEqual::operator()(IBackgroundCopyJob* job) const {
 // Creates an instance of the BITS manager.
 HRESULT CreateBitsManager(IBackgroundCopyManager** bits_manager) {
   ScopedComPtr<IBackgroundCopyManager> object;
-  HRESULT hr = object.CreateInstance(__uuidof(BackgroundCopyManager));
+  HRESULT hr = ::CoCreateInstance(__uuidof(BackgroundCopyManager), nullptr,
+                                  CLSCTX_ALL, IID_PPV_ARGS(&object));
   if (FAILED(hr)) {
     return hr;
   }
@@ -379,7 +382,7 @@ void CleanupJobFiles(IBackgroundCopyJob* job) {
     return;
   for (size_t i = 0; i != files.size(); ++i) {
     base::string16 local_name;
-    HRESULT hr(GetJobFileProperties(files[i].get(), &local_name, NULL, NULL));
+    HRESULT hr(GetJobFileProperties(files[i].Get(), &local_name, NULL, NULL));
     if (SUCCEEDED(hr))
       DeleteFileAndEmptyParentDirectory(base::FilePath(local_name));
   }
@@ -388,7 +391,7 @@ void CleanupJobFiles(IBackgroundCopyJob* job) {
 // Cleans up incompleted jobs that are too old.
 HRESULT CleanupStaleJobs(
     const ScopedComPtr<IBackgroundCopyManager>& bits_manager) {
-  if (!bits_manager.get())
+  if (!bits_manager.Get())
     return E_FAIL;
 
   static base::Time last_sweep;
@@ -404,13 +407,13 @@ HRESULT CleanupStaleJobs(
   std::vector<ScopedComPtr<IBackgroundCopyJob>> jobs;
   HRESULT hr = FindBitsJobIf(
       JobCreationOlderThanDays(kPurgeStaleJobsAfterDays),
-      bits_manager.get(), &jobs);
+      bits_manager.Get(), &jobs);
   if (FAILED(hr))
     return hr;
 
   for (size_t i = 0; i != jobs.size(); ++i) {
     jobs[i]->Cancel();
-    CleanupJobFiles(jobs[i].get());
+    CleanupJobFiles(jobs[i].Get());
   }
 
   return S_OK;
@@ -483,7 +486,7 @@ HRESULT BackgroundDownloader::BeginDownloadHelper(const GURL& url) {
   if (FAILED(hr))
     return hr;
 
-  hr = CreateBitsManager(bits_manager_.Receive());
+  hr = CreateBitsManager(bits_manager_.GetAddressOf());
   if (FAILED(hr))
     return hr;
 
@@ -491,7 +494,7 @@ HRESULT BackgroundDownloader::BeginDownloadHelper(const GURL& url) {
   if (FAILED(hr))
     return hr;
 
-  hr = QueueBitsJob(url, job_.Receive());
+  hr = QueueBitsJob(url, job_.GetAddressOf());
   if (FAILED(hr))
     return hr;
 
@@ -581,11 +584,11 @@ void BackgroundDownloader::EndDownload(HRESULT error) {
 
   int64_t downloaded_bytes = -1;
   int64_t total_bytes = -1;
-  GetJobByteCount(job_.get(), &downloaded_bytes, &total_bytes);
+  GetJobByteCount(job_.Get(), &downloaded_bytes, &total_bytes);
 
-  if (FAILED(error) && job_.get()) {
+  if (FAILED(error) && job_.Get()) {
     job_->Cancel();
-    CleanupJobFiles(job_.get());
+    CleanupJobFiles(job_.Get());
   }
 
   CleanupStaleJobs(bits_manager_);
@@ -635,7 +638,7 @@ bool BackgroundDownloader::OnStateTransferred() {
 // be made. Cancels this job and removes it from the BITS queue.
 bool BackgroundDownloader::OnStateError() {
   HRESULT error_code = S_OK;
-  HRESULT hr = GetJobError(job_.get(), &error_code);
+  HRESULT hr = GetJobError(job_.Get(), &error_code);
   if (FAILED(hr))
     error_code = hr;
 
@@ -670,7 +673,7 @@ bool BackgroundDownloader::OnStateTransientError() {
 
   // Don't retry at all if the transient error was a 5xx.
   HRESULT error_code = S_OK;
-  HRESULT hr = GetJobError(job_.get(), &error_code);
+  HRESULT hr = GetJobError(job_.Get(), &error_code);
   if (SUCCEEDED(hr) &&
       IsHttpServerError(GetHttpStatusFromBitsError(error_code))) {
     return OnStateError();
@@ -695,7 +698,7 @@ bool BackgroundDownloader::OnStateTransferring() {
 
   int64_t downloaded_bytes = -1;
   int64_t total_bytes = -1;
-  HRESULT hr = GetJobByteCount(job_.get(), &downloaded_bytes, &total_bytes);
+  HRESULT hr = GetJobByteCount(job_.Get(), &downloaded_bytes, &total_bytes);
   if (FAILED(hr))
     return false;
 
@@ -716,7 +719,7 @@ HRESULT BackgroundDownloader::QueueBitsJob(const GURL& url,
   DCHECK(task_runner()->RunsTasksOnCurrentThread());
 
   ScopedComPtr<IBackgroundCopyJob> p;
-  HRESULT hr = CreateOrOpenJob(url, p.Receive());
+  HRESULT hr = CreateOrOpenJob(url, p.GetAddressOf());
   if (FAILED(hr))
     return hr;
 
@@ -741,7 +744,7 @@ HRESULT BackgroundDownloader::CreateOrOpenJob(const GURL& url,
   std::vector<ScopedComPtr<IBackgroundCopyJob>> jobs;
   HRESULT hr = FindBitsJobIf(
       JobFileUrlEqual(base::SysUTF8ToWide(url.spec())),
-      bits_manager_.get(), &jobs);
+      bits_manager_.Get(), &jobs);
   if (SUCCEEDED(hr) && !jobs.empty()) {
     *job = jobs.front().Detach();
     return S_FALSE;
@@ -809,7 +812,7 @@ HRESULT BackgroundDownloader::CompleteJob() {
     return hr;
 
   std::vector<ScopedComPtr<IBackgroundCopyFile>> files;
-  hr = GetFilesInJob(job_.get(), &files);
+  hr = GetFilesInJob(job_.Get(), &files);
   if (FAILED(hr))
     return hr;
 
@@ -818,7 +821,7 @@ HRESULT BackgroundDownloader::CompleteJob() {
 
   base::string16 local_name;
   BG_FILE_PROGRESS progress = {0};
-  hr = GetJobFileProperties(files.front().get(), &local_name, NULL, &progress);
+  hr = GetJobFileProperties(files.front().Get(), &local_name, NULL, &progress);
   if (FAILED(hr))
     return hr;
 
@@ -842,12 +845,13 @@ HRESULT BackgroundDownloader::UpdateInterfacePointers() {
     return hr;
 
   bits_manager_ = nullptr;
-  hr = GetInterfaceFromGit(git, git_cookie_bits_manager_, &bits_manager_);
+  hr = GetInterfaceFromGit(git.Get(), git_cookie_bits_manager_,
+                           IID_PPV_ARGS(&bits_manager_));
   if (FAILED(hr))
     return hr;
 
   job_ = nullptr;
-  hr = GetInterfaceFromGit(git, git_cookie_job_, &job_);
+  hr = GetInterfaceFromGit(git.Get(), git_cookie_job_, IID_PPV_ARGS(&job_));
   if (FAILED(hr))
     return hr;
 

@@ -11,6 +11,7 @@
 #include "build/build_config.h"
 #include "components/proximity_auth/messenger_observer.h"
 #include "components/proximity_auth/proximity_auth_system.h"
+#include "components/proximity_auth/proximity_monitor_observer.h"
 #include "components/proximity_auth/remote_device_life_cycle.h"
 #include "components/proximity_auth/remote_status_update.h"
 #include "components/proximity_auth/screenlock_bridge.h"
@@ -32,6 +33,7 @@ class ProximityMonitor;
 // the authentication status of the registered remote devices.
 class UnlockManagerImpl : public UnlockManager,
                           public MessengerObserver,
+                          public ProximityMonitorObserver,
                           public ScreenlockBridge::Observer,
 #if defined(OS_CHROMEOS)
                           chromeos::PowerManagerClient::Observer,
@@ -52,10 +54,10 @@ class UnlockManagerImpl : public UnlockManager,
       ScreenlockBridge::LockHandler::AuthType auth_type) override;
 
  protected:
-  // Creates a ProximityMonitor instance for the given |remote_device|.
+  // Creates a ProximityMonitor instance for the given |connection|.
   // Exposed for testing.
   virtual std::unique_ptr<ProximityMonitor> CreateProximityMonitor(
-      const cryptauth::RemoteDevice& remote_device);
+      cryptauth::Connection* connection);
 
  private:
   // The possible lock screen states for the remote device.
@@ -72,6 +74,9 @@ class UnlockManagerImpl : public UnlockManager,
   void OnDecryptResponse(const std::string& decrypted_bytes) override;
   void OnUnlockResponse(bool success) override;
   void OnDisconnected() override;
+
+  // ProximityMonitorObserver:
+  void OnProximityStateChanged() override;
 
   // ScreenlockBridge::Observer
   void OnScreenDidLock(

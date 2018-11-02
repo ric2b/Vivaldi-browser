@@ -39,13 +39,19 @@
 #include "core/dom/Fullscreen.h"
 #include "core/dom/Node.h"
 #include "core/events/UIEventWithKeyState.h"
+#include "core/events/WebInputEventConversion.h"
+#include "core/exported/WebFileChooserCompletionImpl.h"
+#include "core/exported/WebPluginContainerBase.h"
+#include "core/exported/WebViewBase.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
+#include "core/frame/UseCounter.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/forms/ColorChooser.h"
 #include "core/html/forms/ColorChooserClient.h"
 #include "core/html/forms/DateTimeChooser.h"
+#include "core/html/forms/DateTimeChooserClient.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/compositing/CompositedSelection.h"
@@ -54,7 +60,7 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/PopupOpeningObserver.h"
-#include "modules/accessibility/AXObject.h"
+#include "modules/accessibility/AXObjectImpl.h"
 #include "modules/audio_output_devices/AudioOutputDeviceClient.h"
 #include "modules/installedapp/InstalledAppController.h"
 #include "modules/mediastream/UserMediaController.h"
@@ -73,6 +79,8 @@
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/GraphicsLayer.h"
+#include "platform/graphics/TouchAction.h"
+#include "platform/scheduler/renderer/web_view_scheduler.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Optional.h"
 #include "platform/wtf/PtrUtil.h"
@@ -85,7 +93,6 @@
 #include "public/platform/WebInputEvent.h"
 #include "public/platform/WebRect.h"
 #include "public/platform/WebURLRequest.h"
-#include "public/platform/WebViewScheduler.h"
 #include "public/web/WebAXObject.h"
 #include "public/web/WebAutofillClient.h"
 #include "public/web/WebColorChooser.h"
@@ -101,7 +108,6 @@
 #include "public/web/WebSelection.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebTextDirection.h"
-#include "public/web/WebTouchAction.h"
 #include "public/web/WebUserGestureIndicator.h"
 #include "public/web/WebUserGestureToken.h"
 #include "public/web/WebViewClient.h"
@@ -117,13 +123,10 @@
 #include "web/LocalFileSystemClient.h"
 #include "web/NavigatorContentUtilsClientImpl.h"
 #include "web/PopupMenuImpl.h"
-#include "web/WebFileChooserCompletionImpl.h"
 #include "web/WebFrameWidgetImpl.h"
-#include "web/WebInputEventConversion.h"
 #include "web/WebLocalFrameImpl.h"
-#include "web/WebPluginContainerImpl.h"
+#include "web/WebRemoteFrameImpl.h"
 #include "web/WebSettingsImpl.h"
-#include "web/WebViewImpl.h"
 
 namespace blink {
 
@@ -137,6 +140,8 @@ const char* DialogTypeToString(ChromeClient::DialogType dialog_type) {
       return "confirm";
     case ChromeClient::kPromptDialog:
       return "prompt";
+    case ChromeClient::kPrintDialog:
+      return "print";
     case ChromeClient::kHTMLDialog:
       NOTREACHED();
   }
@@ -171,14 +176,14 @@ static WebAXEvent ToWebAXEvent(AXObjectCache::AXNotification notification) {
   return static_cast<WebAXEvent>(notification);
 }
 
-ChromeClientImpl::ChromeClientImpl(WebViewImpl* web_view)
+ChromeClientImpl::ChromeClientImpl(WebViewBase* web_view)
     : web_view_(web_view),
       cursor_overridden_(false),
       did_request_non_empty_tool_tip_(false) {}
 
 ChromeClientImpl::~ChromeClientImpl() {}
 
-ChromeClientImpl* ChromeClientImpl::Create(WebViewImpl* web_view) {
+ChromeClientImpl* ChromeClientImpl::Create(WebViewBase* web_view) {
   return new ChromeClientImpl(web_view);
 }
 
@@ -187,7 +192,7 @@ void* ChromeClientImpl::WebView() const {
 }
 
 void ChromeClientImpl::ChromeDestroyed() {
-  // Our lifetime is bound to the WebViewImpl.
+  // Our lifetime is bound to the WebViewBase.
 }
 
 void ChromeClientImpl::SetWindowRect(const IntRect& r, LocalFrame& frame) {
@@ -330,24 +335,17 @@ void UpdatePolicyForEvent(const WebInputEvent* input_event,
 }
 
 WebNavigationPolicy GetNavigationPolicy(const WindowFeatures& features) {
-  // If the window features didn't enable the toolbar, or this window wasn't
-  // created by a user gesture, show as a popup instead of a new tab.
-  //
-  // Note: this previously also checked that menubar, resizable, scrollbar, and
-  // statusbar are enabled too. When no feature string is specified, these
-  // features default to enabled (and the window opens as a new tab). However,
-  // when a feature string is specified, any *unspecified* features default to
-  // disabled, often causing the window to open as a popup instead.
-  //
-  // As specifying menubar, resizable, scrollbar, and statusbar have no effect
-  // on the UI, just ignore them and only consider whether or not the toolbar is
-  // enabled, which matches Firefox's behavior.
-  bool as_popup = !features.tool_bar_visible;
+  // If our default configuration was modified by a script or wasn't
+  // created by a user gesture, then show as a popup. Else, let this
+  // new window be opened as a toplevel window.
+  bool as_popup = !features.tool_bar_visible || !features.status_bar_visible ||
+                  !features.scrollbars_visible || !features.menu_bar_visible ||
+                  !features.resizable;
 
   NavigationPolicy policy = kNavigationPolicyNewForegroundTab;
   if (as_popup)
     policy = kNavigationPolicyNewPopup;
-  UpdatePolicyForEvent(WebViewImpl::CurrentInputEvent(), &policy);
+  UpdatePolicyForEvent(WebViewBase::CurrentInputEvent(), &policy);
 
   return static_cast<WebNavigationPolicy>(policy);
 }
@@ -384,10 +382,12 @@ Page* ChromeClientImpl::CreateWindow(LocalFrame* frame,
   DCHECK(frame->GetDocument());
   Fullscreen::FullyExitFullscreen(*frame->GetDocument());
 
-  WebViewImpl* new_view = ToWebViewImpl(web_view_->Client()->CreateView(
-      WebLocalFrameImpl::FromFrame(frame),
-      WrappedResourceRequest(r.GetResourceRequest()), features, r.FrameName(),
-      policy, r.GetShouldSetOpener() == kNeverSetOpener || features.noopener));
+  WebViewBase* new_view =
+      static_cast<WebViewBase*>(web_view_->Client()->CreateView(
+          WebLocalFrameImpl::FromFrame(frame),
+          WrappedResourceRequest(r.GetResourceRequest()), features,
+          r.FrameName(), policy,
+          r.GetShouldSetOpener() == kNeverSetOpener || features.noopener));
   if (!new_view)
     return nullptr;
   return new_view->GetPage();
@@ -454,7 +454,7 @@ bool ChromeClientImpl::ShouldReportDetailedMessageForSource(
     LocalFrame& local_frame,
     const String& url) {
   WebLocalFrameImpl* webframe =
-      WebLocalFrameImpl::FromFrame(local_frame.LocalFrameRoot());
+      WebLocalFrameImpl::FromFrame(&local_frame.LocalFrameRoot());
   return webframe && webframe->Client() &&
          webframe->Client()->ShouldReportDetailedMessageForSource(url);
 }
@@ -554,31 +554,31 @@ void ChromeClientImpl::InvalidateRect(const IntRect& update_rect) {
     web_view_->InvalidateRect(update_rect);
 }
 
-void ChromeClientImpl::ScheduleAnimation(FrameViewBase* frame_view_base) {
-  DCHECK(frame_view_base->IsFrameView());
-  FrameView* view = ToFrameView(frame_view_base);
-  LocalFrame* frame = view->GetFrame().LocalFrameRoot();
-
+void ChromeClientImpl::ScheduleAnimation(
+    const PlatformFrameView* platform_frame_view) {
+  DCHECK(platform_frame_view->IsFrameView());
+  LocalFrame& frame =
+      ToFrameView(platform_frame_view)->GetFrame().LocalFrameRoot();
   // If the frame is still being created, it might not yet have a WebWidget.
   // FIXME: Is this the right thing to do? Is there a way to avoid having
   // a local frame root that doesn't have a WebWidget? During initialization
   // there is no content to draw so this call serves no purpose.
-  if (WebLocalFrameImpl::FromFrame(frame) &&
-      WebLocalFrameImpl::FromFrame(frame)->FrameWidget())
-    WebLocalFrameImpl::FromFrame(frame)->FrameWidget()->ScheduleAnimation();
+  if (WebLocalFrameImpl::FromFrame(&frame) &&
+      WebLocalFrameImpl::FromFrame(&frame)->FrameWidget())
+    WebLocalFrameImpl::FromFrame(&frame)->FrameWidget()->ScheduleAnimation();
 }
 
 IntRect ChromeClientImpl::ViewportToScreen(
     const IntRect& rect_in_viewport,
-    const FrameViewBase* frame_view_base) const {
+    const PlatformFrameView* platform_frame_view) const {
   WebRect screen_rect(rect_in_viewport);
 
-  DCHECK(frame_view_base->IsFrameView());
-  const FrameView* view = ToFrameView(frame_view_base);
-  LocalFrame* frame = view->GetFrame().LocalFrameRoot();
+  DCHECK(platform_frame_view->IsFrameView());
+  const FrameView* view = ToFrameView(platform_frame_view);
+  LocalFrame& frame = view->GetFrame().LocalFrameRoot();
 
   WebWidgetClient* client =
-      WebLocalFrameImpl::FromFrame(frame)->FrameWidget()->Client();
+      WebLocalFrameImpl::FromFrame(&frame)->FrameWidget()->Client();
 
   if (client) {
     client->ConvertViewportToWindow(&screen_rect);
@@ -627,6 +627,10 @@ float ChromeClientImpl::ClampPageScaleFactorToLimits(float scale) const {
   return web_view_->ClampPageScaleFactorToLimits(scale);
 }
 
+void ChromeClientImpl::ResizeAfterLayout(LocalFrame* frame) const {
+  web_view_->ResizeAfterLayout(WebLocalFrameImpl::FromFrame(frame));
+}
+
 void ChromeClientImpl::LayoutUpdated(LocalFrame* frame) const {
   web_view_->LayoutUpdated(WebLocalFrameImpl::FromFrame(frame));
 }
@@ -651,8 +655,8 @@ void ChromeClientImpl::ShowMouseOverURL(const HitTestResult& result) {
       if (object && object->IsLayoutPart()) {
         PluginView* plugin_view = ToLayoutPart(object)->Plugin();
         if (plugin_view && plugin_view->IsPluginContainer()) {
-          WebPluginContainerImpl* plugin =
-              ToWebPluginContainerImpl(plugin_view);
+          WebPluginContainerBase* plugin =
+              ToWebPluginContainerBase(plugin_view);
           url = plugin->Plugin()->LinkAtPosition(
               result.RoundedPointInInnerNodeFrame());
         }
@@ -698,6 +702,10 @@ ColorChooser* ChromeClientImpl::OpenColorChooser(
     const Color&) {
   NotifyPopupOpeningObservers();
   ColorChooserUIController* controller = nullptr;
+
+  if (frame->GetDocument()->GetSettings()->GetPagePopupsSuppressed())
+    return nullptr;
+
   if (RuntimeEnabledFeatures::pagePopupEnabled())
     controller =
         ColorChooserPopupUIController::Create(frame, this, chooser_client);
@@ -710,6 +718,12 @@ ColorChooser* ChromeClientImpl::OpenColorChooser(
 DateTimeChooser* ChromeClientImpl::OpenDateTimeChooser(
     DateTimeChooserClient* picker_client,
     const DateTimeChooserParameters& parameters) {
+  if (picker_client->OwnerElement()
+          .GetDocument()
+          .GetSettings()
+          ->GetPagePopupsSuppressed())
+    return nullptr;
+
   NotifyPopupOpeningObservers();
   if (RuntimeEnabledFeatures::inputMultipleFieldsUIEnabled())
     return DateTimeChooserImpl::Create(this, picker_client, parameters);
@@ -780,9 +794,9 @@ void ChromeClientImpl::SetCursor(const WebCursorInfo& cursor,
     return;
 #endif
 
-  LocalFrame* local_root = local_frame->LocalFrameRoot();
+  LocalFrame& local_root = local_frame->LocalFrameRoot();
   if (WebFrameWidgetBase* widget =
-          WebLocalFrameImpl::FromFrame(local_root)->FrameWidget())
+          WebLocalFrameImpl::FromFrame(&local_root)->FrameWidget())
     widget->Client()->DidChangeCursor(cursor);
 }
 
@@ -796,8 +810,10 @@ void ChromeClientImpl::SetCursorOverridden(bool overridden) {
 }
 
 void ChromeClientImpl::PostAccessibilityNotification(
-    AXObject* obj,
+    AXObject* axObject,
     AXObjectCache::AXNotification notification) {
+  AXObjectImpl* obj = ToAXObjectImpl(axObject);
+
   // Alert assistive technology about the accessibility object notification.
   if (!obj || !obj->GetDocument())
     return;
@@ -877,9 +893,9 @@ void ChromeClientImpl::FullscreenElementChanged(Element* from_element,
 }
 
 void ChromeClientImpl::ClearCompositedSelection(LocalFrame* frame) {
-  LocalFrame* local_root = frame->LocalFrameRoot();
+  LocalFrame& local_root = frame->LocalFrameRoot();
   WebFrameWidgetBase* widget =
-      WebLocalFrameImpl::FromFrame(local_root)->FrameWidget();
+      WebLocalFrameImpl::FromFrame(&local_root)->FrameWidget();
   WebWidgetClient* client = widget->Client();
   if (!client)
     return;
@@ -891,9 +907,9 @@ void ChromeClientImpl::ClearCompositedSelection(LocalFrame* frame) {
 void ChromeClientImpl::UpdateCompositedSelection(
     LocalFrame* frame,
     const CompositedSelection& selection) {
-  LocalFrame* local_root = frame->LocalFrameRoot();
+  LocalFrame& local_root = frame->LocalFrameRoot();
   WebFrameWidgetBase* widget =
-      WebLocalFrameImpl::FromFrame(local_root)->FrameWidget();
+      WebLocalFrameImpl::FromFrame(&local_root)->FrameWidget();
   WebWidgetClient* client = widget->Client();
   if (!client)
     return;
@@ -908,8 +924,11 @@ bool ChromeClientImpl::HasOpenedPopup() const {
 
 PopupMenu* ChromeClientImpl::OpenPopupMenu(LocalFrame& frame,
                                            HTMLSelectElement& select) {
+  if (frame.GetDocument()->GetSettings()->GetPagePopupsSuppressed())
+    return nullptr;
+
   NotifyPopupOpeningObservers();
-  if (WebViewImpl::UseExternalPopupMenus())
+  if (WebViewBase::UseExternalPopupMenus())
     return new ExternalPopupMenu(frame, select, *web_view_);
 
   DCHECK(RuntimeEnabledFeatures::pagePopupEnabled());
@@ -945,6 +964,15 @@ bool ChromeClientImpl::ShouldOpenModalDialogDuringPageDismissal(
 WebLayerTreeView* ChromeClientImpl::GetWebLayerTreeView(LocalFrame* frame) {
   WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame);
   return web_frame->LocalRoot()->FrameWidget()->GetLayerTreeView();
+}
+
+WebLocalFrameBase* ChromeClientImpl::GetWebLocalFrameBase(LocalFrame* frame) {
+  return WebLocalFrameImpl::FromFrame(frame);
+}
+
+WebRemoteFrameBase* ChromeClientImpl::GetWebRemoteFrameBase(
+    RemoteFrame& frame) {
+  return WebRemoteFrameImpl::FromFrame(frame);
 }
 
 void ChromeClientImpl::SetEventListenerProperties(
@@ -1050,20 +1078,20 @@ void ChromeClientImpl::SetTouchAction(LocalFrame* frame,
     return;
 
   if (WebWidgetClient* client = widget->Client())
-    client->SetTouchAction(static_cast<WebTouchAction>(touch_action));
+    client->SetTouchAction(static_cast<TouchAction>(touch_action));
 }
 
 bool ChromeClientImpl::RequestPointerLock(LocalFrame* frame) {
-  LocalFrame* local_root = frame->LocalFrameRoot();
-  return WebLocalFrameImpl::FromFrame(local_root)
+  LocalFrame& local_root = frame->LocalFrameRoot();
+  return WebLocalFrameImpl::FromFrame(&local_root)
       ->FrameWidget()
       ->Client()
       ->RequestPointerLock();
 }
 
 void ChromeClientImpl::RequestPointerUnlock(LocalFrame* frame) {
-  LocalFrame* local_root = frame->LocalFrameRoot();
-  return WebLocalFrameImpl::FromFrame(local_root)
+  LocalFrame& local_root = frame->LocalFrameRoot();
+  return WebLocalFrameImpl::FromFrame(&local_root)
       ->FrameWidget()
       ->Client()
       ->RequestPointerUnlock();
@@ -1075,9 +1103,8 @@ void ChromeClientImpl::AnnotatedRegionsChanged() {
 }
 
 void ChromeClientImpl::DidAssociateFormControlsAfterLoad(LocalFrame* frame) {
-  WebLocalFrameImpl* webframe = WebLocalFrameImpl::FromFrame(frame);
-  if (webframe->AutofillClient())
-    webframe->AutofillClient()->DidAssociateFormControlsDynamically();
+  if (auto* fill_client = AutofillClientFromFrame(frame))
+    fill_client->DidAssociateFormControlsDynamically();
 }
 
 void ChromeClientImpl::ShowVirtualKeyboardOnElementFocus(LocalFrame& frame) {
@@ -1099,8 +1126,7 @@ void ChromeClientImpl::ShowUnhandledTapUIIfNeeded(
 
 void ChromeClientImpl::OnMouseDown(Node& mouse_down_node) {
   if (auto* fill_client =
-          WebLocalFrameImpl::FromFrame(mouse_down_node.GetDocument().GetFrame())
-              ->AutofillClient()) {
+          AutofillClientFromFrame(mouse_down_node.GetDocument().GetFrame())) {
     fill_client->DidReceiveLeftMouseDownOrGestureTapInNode(
         WebNode(&mouse_down_node));
   }
@@ -1109,53 +1135,51 @@ void ChromeClientImpl::OnMouseDown(Node& mouse_down_node) {
 void ChromeClientImpl::HandleKeyboardEventOnTextField(
     HTMLInputElement& input_element,
     KeyboardEvent& event) {
-  WebLocalFrameImpl* webframe =
-      WebLocalFrameImpl::FromFrame(input_element.GetDocument().GetFrame());
-  if (webframe->AutofillClient())
-    webframe->AutofillClient()->TextFieldDidReceiveKeyDown(
-        WebInputElement(&input_element), WebKeyboardEventBuilder(event));
+  if (auto* fill_client =
+          AutofillClientFromFrame(input_element.GetDocument().GetFrame())) {
+    fill_client->TextFieldDidReceiveKeyDown(WebInputElement(&input_element),
+                                            WebKeyboardEventBuilder(event));
+  }
 }
 
 void ChromeClientImpl::DidChangeValueInTextField(
     HTMLFormControlElement& element) {
-  WebLocalFrameImpl* webframe =
-      WebLocalFrameImpl::FromFrame(element.GetDocument().GetFrame());
-  if (webframe->AutofillClient())
-    webframe->AutofillClient()->TextFieldDidChange(
-        WebFormControlElement(&element));
+  Document& doc = element.GetDocument();
+  if (auto* fill_client = AutofillClientFromFrame(doc.GetFrame()))
+    fill_client->TextFieldDidChange(WebFormControlElement(&element));
 
+  UseCounter::Count(doc, doc.IsSecureContext()
+                             ? UseCounter::kFieldEditInSecureContext
+                             : UseCounter::kFieldEditInNonSecureContext);
   web_view_->PageImportanceSignals()->SetHadFormInteraction();
 }
 
 void ChromeClientImpl::DidEndEditingOnTextField(
     HTMLInputElement& input_element) {
-  WebLocalFrameImpl* webframe =
-      WebLocalFrameImpl::FromFrame(input_element.GetDocument().GetFrame());
-  if (webframe->AutofillClient())
-    webframe->AutofillClient()->TextFieldDidEndEditing(
-        WebInputElement(&input_element));
+  if (auto* fill_client =
+          AutofillClientFromFrame(input_element.GetDocument().GetFrame())) {
+    fill_client->TextFieldDidEndEditing(WebInputElement(&input_element));
+  }
 }
 
 void ChromeClientImpl::OpenTextDataListChooser(HTMLInputElement& input) {
   NotifyPopupOpeningObservers();
-  WebLocalFrameImpl* webframe =
-      WebLocalFrameImpl::FromFrame(input.GetDocument().GetFrame());
-  if (webframe->AutofillClient())
-    webframe->AutofillClient()->OpenTextDataListChooser(
-        WebInputElement(&input));
+  if (auto* fill_client =
+          AutofillClientFromFrame(input.GetDocument().GetFrame())) {
+    fill_client->OpenTextDataListChooser(WebInputElement(&input));
+  }
 }
 
 void ChromeClientImpl::TextFieldDataListChanged(HTMLInputElement& input) {
-  WebLocalFrameImpl* webframe =
-      WebLocalFrameImpl::FromFrame(input.GetDocument().GetFrame());
-  if (webframe->AutofillClient())
-    webframe->AutofillClient()->DataListOptionsChanged(WebInputElement(&input));
+  if (auto* fill_client =
+          AutofillClientFromFrame(input.GetDocument().GetFrame())) {
+    fill_client->DataListOptionsChanged(WebInputElement(&input));
+  }
 }
 
 void ChromeClientImpl::AjaxSucceeded(LocalFrame* frame) {
-  WebLocalFrameImpl* webframe = WebLocalFrameImpl::FromFrame(frame);
-  if (webframe->AutofillClient())
-    webframe->AutofillClient()->AjaxSucceeded();
+  if (auto* fill_client = AutofillClientFromFrame(frame))
+    fill_client->AjaxSucceeded();
 }
 
 void ChromeClientImpl::RegisterViewportLayers() const {
@@ -1242,6 +1266,17 @@ void ChromeClientImpl::InstallSupplements(LocalFrame& frame) {
                                      new AudioOutputDeviceClientImpl(frame));
   }
   InstalledAppController::ProvideTo(frame, client->GetRelatedAppsFetcher());
+}
+
+WebAutofillClient* ChromeClientImpl::AutofillClientFromFrame(
+    LocalFrame* frame) {
+  if (!frame) {
+    // It is possible to pass nullptr to this method. For instance the call from
+    // OnMouseDown might be nullptr. See https://crbug.com/739199.
+    return nullptr;
+  }
+
+  return WebLocalFrameImpl::FromFrame(frame)->AutofillClient();
 }
 
 }  // namespace blink

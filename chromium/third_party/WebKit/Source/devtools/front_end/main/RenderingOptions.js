@@ -27,44 +27,31 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 /**
- * @implements {SDK.TargetManager.Observer}
- * @unrestricted
+ * @implements {SDK.SDKModelObserver<!SDK.EmulationModel>}
  */
 Main.RenderingOptionsView = class extends UI.VBox {
   constructor() {
     super(true);
     this.registerRequiredCSS('main/renderingOptions.css');
 
-    /** @type {!Map.<string, !Element>} */
-    this._settings = new Map();
-
-    var options = [
-      {
-        label: Common.UIString('Paint Flashing'),
-        subtitle: Common.UIString('Highlights areas of the page (green) that need to be repainted'),
-        setterName: 'setShowPaintRects'
-      },
-      {
-        label: Common.UIString('Layer Borders'),
-        subtitle: Common.UIString('Shows layer borders (orange/olive) and tiles (cyan)'),
-        setterName: 'setShowDebugBorders'
-      },
-      {
-        label: Common.UIString('FPS Meter'),
-        subtitle: Common.UIString('Plots frames per second, frame rate distribution, and GPU memory'),
-        setterName: 'setShowFPSCounter'
-      },
-      {
-        label: Common.UIString('Scrolling Performance Issues'),
-        subtitle: Common.UIString(
+    this._appendCheckbox(
+        Common.UIString('Paint Flashing'),
+        Common.UIString('Highlights areas of the page (green) that need to be repainted'),
+        Common.moduleSetting('showPaintRects'));
+    this._appendCheckbox(
+        Common.UIString('Layer Borders'), Common.UIString('Shows layer borders (orange/olive) and tiles (cyan)'),
+        Common.moduleSetting('showDebugBorders'));
+    this._appendCheckbox(
+        Common.UIString('FPS Meter'),
+        Common.UIString('Plots frames per second, frame rate distribution, and GPU memory'),
+        Common.moduleSetting('showFPSCounter'));
+    this._appendCheckbox(
+        Common.UIString('Scrolling Performance Issues'),
+        Common.UIString(
             'Highlights elements (teal) that can slow down scrolling, including touch & wheel event handlers and other main-thread scrolling situations.'),
-        setterName: 'setShowScrollBottleneckRects'
-      }
-    ];
-    for (var i = 0; i < options.length; i++)
-      this._appendCheckbox(options[i].label, options[i].setterName, options[i].subtitle);
-
+        Common.moduleSetting('showScrollBottleneckRects'));
     this.contentElement.createChild('div').classList.add('panel-section-separator');
 
     var cssMediaSubtitle = Common.UIString('Forces media type for testing print and screen styles');
@@ -80,73 +67,40 @@ Main.RenderingOptionsView = class extends UI.VBox {
     this._mediaSelect.addEventListener('change', this._mediaToggled.bind(this), false);
     this._mediaSelect.disabled = true;
 
-    SDK.targetManager.observeTargets(this, SDK.Target.Capability.Browser);
-  }
-
-  /**
-   * @return {!Main.RenderingOptionsView}
-   */
-  static instance() {
-    if (!Main.RenderingOptionsView._instanceObject)
-      Main.RenderingOptionsView._instanceObject = new Main.RenderingOptionsView();
-    return Main.RenderingOptionsView._instanceObject;
+    SDK.targetManager.observeModels(SDK.EmulationModel, this);
   }
 
   /**
    * @param {string} label
-   * @param {string} setterName
-   * @param {string=} subtitle
+   * @param {string} subtitle
+   * @param {!Common.Setting} setting
    */
-  _appendCheckbox(label, setterName, subtitle) {
+  _appendCheckbox(label, subtitle, setting) {
     var checkboxLabel = UI.CheckboxLabel.create(label, false, subtitle);
-    this._settings.set(setterName, checkboxLabel.checkboxElement);
-    checkboxLabel.checkboxElement.addEventListener('click', this._settingToggled.bind(this, setterName));
+    UI.SettingsUI.bindCheckbox(checkboxLabel.checkboxElement, setting);
     this.contentElement.appendChild(checkboxLabel);
   }
 
   /**
-   * @param {string} setterName
-   */
-  _settingToggled(setterName) {
-    var enabled = this._settings.get(setterName).checked;
-    for (var target of SDK.targetManager.targets(SDK.Target.Capability.Browser))
-      target.renderingAgent()[setterName](enabled);
-  }
-
-  /**
    * @override
-   * @param {!SDK.Target} target
+   * @param {!SDK.EmulationModel} emulationModel
    */
-  targetAdded(target) {
-    for (var setterName of this._settings.keysArray()) {
-      if (this._settings.get(setterName).checked)
-        target.renderingAgent()[setterName](true);
-    }
+  modelAdded(emulationModel) {
     if (this._mediaCheckbox.checked)
-      this._applyPrintMediaOverride(target);
+      emulationModel.emulateCSSMedia(this._mediaSelect.value);
   }
 
   _mediaToggled() {
     this._mediaSelect.disabled = !this._mediaCheckbox.checked;
-    var targets = SDK.targetManager.targets(SDK.Target.Capability.Browser);
-    for (var target of targets)
-      this._applyPrintMediaOverride(target);
-  }
-
-  /**
-   * @param {!SDK.Target} target
-   */
-  _applyPrintMediaOverride(target) {
-    target.emulationAgent().setEmulatedMedia(this._mediaCheckbox.checked ? this._mediaSelect.value : '');
-    var cssModel = target.model(SDK.CSSModel);
-    if (cssModel)
-      cssModel.mediaQueryResultChanged();
+    var media = this._mediaCheckbox.checked ? this._mediaSelect.value : null;
+    for (var emulationModel of SDK.targetManager.models(SDK.EmulationModel))
+      emulationModel.emulateCSSMedia(media);
   }
 
   /**
    * @override
-   * @param {!SDK.Target} target
+   * @param {!SDK.EmulationModel} emulationModel
    */
-  targetRemoved(target) {
+  modelRemoved(emulationModel) {
   }
 };

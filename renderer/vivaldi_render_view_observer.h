@@ -21,7 +21,7 @@ class VivaldiRenderViewObserver : public content::RenderViewObserver {
   void OnDestruct() override;
   void OnInsertText(const base::string16& text);
   void OnPinchZoom(float scale, int x, int y);
-  void FocusedNodeChanged(const blink::WebNode& node) override;
+  //void FocusedNodeChanged(const blink::WebNode& node) override;
   void OnRequestThumbnailForFrame(
       VivaldiViewMsg_RequestThumbnailForFrame_Params params);
 

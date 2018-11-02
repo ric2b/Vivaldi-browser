@@ -15,6 +15,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/memory/tab_manager.h"
+#include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
@@ -40,12 +41,12 @@
 #include "prefs/vivaldi_pref_names.h"
 #include "prefs/vivaldi_tab_zoom_pref.h"
 #include "renderer/vivaldi_render_messages.h"
-#include "ui/base/dragdrop/drag_utils.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/display/screen.h"
 #include "ui/display/win/dpi.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "ui/views/drag_utils.h"
 #if defined(OS_WIN)
 #include "ui/display/win/screen_win.h"
 #endif  // defined(OS_WIN)
@@ -408,6 +409,83 @@ void VivaldiPrivateTabObserver::OnRequestThumbnailForFrameResponse(
   }
 }
 
+void VivaldiPrivateTabObserver::OnFaviconUpdated(
+    favicon::FaviconDriver* favicon_driver,
+    NotificationIconType notification_icon_type,
+    const GURL& icon_url,
+    bool icon_url_changed,
+    const gfx::Image& image) {
+  favicon::ContentFaviconDriver* content_favicon_driver =
+      static_cast<favicon::ContentFaviconDriver*>(favicon_driver);
+
+  vivaldi::tabs_private::FaviconInfo info;
+  info.tab_id = extensions::ExtensionTabUtil::GetTabId(
+      content_favicon_driver->web_contents());
+  if (!image.IsEmpty()) {
+    info.fav_icon =
+        *extensions::ExtensionActionUtil::EncodeBitmapToPng(image.ToSkBitmap());
+  }
+  std::unique_ptr<base::ListValue> args =
+      vivaldi::tabs_private::OnFaviconUpdated::Create(info);
+
+  Profile* profile = Profile::FromBrowserContext(
+      content_favicon_driver->web_contents()->GetBrowserContext());
+
+  BroadcastEvent(tabs_private::OnFaviconUpdated::kEventName, std::move(args),
+                 profile);
+}
+
+void VivaldiPrivateTabObserver::OnPermissionAccessed(
+    ContentSettingsType content_settings_type, std::string origin,
+    ContentSetting content_setting) {
+  int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
+
+  std::string type_name = base::ToLowerASCII(
+      PermissionUtil::GetPermissionString(content_settings_type));
+
+  std::string setting;
+  switch (content_setting) {
+  case CONTENT_SETTING_ALLOW:
+    setting = "allow";
+    break;
+  case CONTENT_SETTING_ASK:
+    setting = "ask";
+    break;
+  case CONTENT_SETTING_BLOCK:
+    setting = "block";
+    break;
+  case CONTENT_SETTING_DEFAULT:
+  default:
+    setting = "default";
+    break;
+  }
+
+  std::unique_ptr<base::ListValue> args =
+      vivaldi::tabs_private::OnPermissionAccessed::Create(tab_id, type_name,
+                                                          origin, setting);
+
+  Profile *profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  BroadcastEvent(tabs_private::OnPermissionAccessed::kEventName,
+                 std::move(args), profile);
+}
+
+void VivaldiPrivateTabObserver::OnSitePermissionChanged(
+    ContentSettingsType content_settings_type, ContentSetting value) {
+  int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
+
+
+  std::unique_ptr<base::ListValue> args =
+      vivaldi::tabs_private::OnSitePrefsChange::Create(tab_id);
+  Profile *profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  BroadcastEvent(tabs_private::OnSitePrefsChange::kEventName, std::move(args),
+                 profile);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+
 TabsPrivateUpdateFunction::TabsPrivateUpdateFunction() {}
 
 TabsPrivateUpdateFunction::~TabsPrivateUpdateFunction() {}
@@ -467,39 +545,24 @@ bool TabsPrivateGetFunction::RunAsync() {
       info.load_from_cache_only.reset(
           new bool(tab_api->load_from_cache_only()));
       info.enable_plugins.reset(new bool(tab_api->enable_plugins()));
+      favicon::FaviconDriver *favicon_driver =
+          favicon::ContentFaviconDriver::FromWebContents(tabstrip_contents);
+      if (favicon_driver) {
+        gfx::Image image = favicon_driver->GetFavicon();
 
+        if (!image.IsEmpty()) {
+          info.fav_icon.reset(new std::string(
+              *extensions::ExtensionActionUtil::EncodeBitmapToPng(
+                  image.ToSkBitmap())));
+        }
+      }
       results_ = tabs_private::Get::Results::Create(info);
       SendResponse(true);
       return true;
     }
   }
+  SendResponse(false);
   return false;
-}
-
-void VivaldiPrivateTabObserver::OnFaviconUpdated(
-    favicon::FaviconDriver* favicon_driver,
-    NotificationIconType notification_icon_type,
-    const GURL& icon_url,
-    bool icon_url_changed,
-    const gfx::Image& image) {
-  favicon::ContentFaviconDriver* content_favicon_driver =
-      static_cast<favicon::ContentFaviconDriver*>(favicon_driver);
-
-  vivaldi::tabs_private::FaviconInfo info;
-  info.tab_id = extensions::ExtensionTabUtil::GetTabId(
-      content_favicon_driver->web_contents());
-  if (!image.IsEmpty()) {
-    info.fav_icon =
-        *extensions::ExtensionActionUtil::EncodeBitmapToPng(image.ToSkBitmap());
-  }
-  std::unique_ptr<base::ListValue> args =
-      vivaldi::tabs_private::OnFaviconUpdated::Create(info);
-
-  Profile* profile = Profile::FromBrowserContext(
-      content_favicon_driver->web_contents()->GetBrowserContext());
-
-  BroadcastEvent(tabs_private::OnFaviconUpdated::kEventName, std::move(args),
-                 profile);
 }
 
 TabsPrivateInsertTextFunction::TabsPrivateInsertTextFunction() {}

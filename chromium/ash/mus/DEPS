@@ -8,10 +8,14 @@ include_rules = [
   "+mojo/public",
   "+services/catalog/public",
   "+services/service_manager/public",
-  "+services/tracing/public",
+  "+chromeos/cryptohome",
 ]
 
 specific_include_rules = {
+  "ash_window_tree_host_mus\.*": [
+    "+ash/host",
+  ],
+
   "app_launch_unittest.cc": [
     "+mash/quick_launch/public",
   ],

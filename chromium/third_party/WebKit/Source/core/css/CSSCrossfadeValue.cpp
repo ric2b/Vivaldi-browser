@@ -47,12 +47,13 @@ static bool SubimageIsPending(CSSValue* value) {
 }
 
 static bool SubimageKnownToBeOpaque(CSSValue* value,
-                                    const LayoutObject& layout_object) {
+                                    const Document& document,
+                                    const ComputedStyle& style) {
   if (value->IsImageValue())
-    return ToCSSImageValue(value)->KnownToBeOpaque(layout_object);
+    return ToCSSImageValue(value)->KnownToBeOpaque(document, style);
 
   if (value->IsImageGeneratorValue())
-    return ToCSSImageGeneratorValue(value)->KnownToBeOpaque(layout_object);
+    return ToCSSImageGeneratorValue(value)->KnownToBeOpaque(document, style);
 
   NOTREACHED();
 
@@ -86,9 +87,8 @@ static ImageResourceContent* CachedImageForCSSValue(CSSValue* value,
 }
 
 static Image* RenderableImageForCSSValue(CSSValue* value,
-                                         const LayoutObject& layout_object) {
-  ImageResourceContent* cached_image =
-      CachedImageForCSSValue(value, layout_object.GetDocument());
+                                         const Document& document) {
+  ImageResourceContent* cached_image = CachedImageForCSSValue(value, document);
 
   if (!cached_image || cached_image->ErrorOccurred() ||
       cached_image->GetImage()->IsNull())
@@ -150,11 +150,10 @@ CSSCrossfadeValue* CSSCrossfadeValue::ValueWithURLsMadeAbsolute() {
   return CSSCrossfadeValue::Create(from_value, to_value, percentage_value_);
 }
 
-IntSize CSSCrossfadeValue::FixedSize(const LayoutObject& layout_object,
+IntSize CSSCrossfadeValue::FixedSize(const Document& document,
                                      const FloatSize& default_object_size) {
-  Image* from_image =
-      RenderableImageForCSSValue(from_value_.Get(), layout_object);
-  Image* to_image = RenderableImageForCSSValue(to_value_.Get(), layout_object);
+  Image* from_image = RenderableImageForCSSValue(from_value_.Get(), document);
+  Image* to_image = RenderableImageForCSSValue(to_value_.Get(), document);
 
   if (!from_image || !to_image)
     return IntSize();
@@ -190,10 +189,10 @@ bool CSSCrossfadeValue::IsPending() const {
          SubimageIsPending(to_value_.Get());
 }
 
-bool CSSCrossfadeValue::KnownToBeOpaque(
-    const LayoutObject& layout_object) const {
-  return SubimageKnownToBeOpaque(from_value_.Get(), layout_object) &&
-         SubimageKnownToBeOpaque(to_value_.Get(), layout_object);
+bool CSSCrossfadeValue::KnownToBeOpaque(const Document& document,
+                                        const ComputedStyle& style) const {
+  return SubimageKnownToBeOpaque(from_value_.Get(), document, style) &&
+         SubimageKnownToBeOpaque(to_value_.Get(), document, style);
 }
 
 void CSSCrossfadeValue::LoadSubimages(const Document& document) {
@@ -225,9 +224,9 @@ PassRefPtr<Image> CSSCrossfadeValue::GetImage(const LayoutObject& layout_object,
   if (size.IsEmpty())
     return nullptr;
 
-  Image* from_image =
-      RenderableImageForCSSValue(from_value_.Get(), layout_object);
-  Image* to_image = RenderableImageForCSSValue(to_value_.Get(), layout_object);
+  const Document& document = layout_object.GetDocument();
+  Image* from_image = RenderableImageForCSSValue(from_value_.Get(), document);
+  Image* to_image = RenderableImageForCSSValue(to_value_.Get(), document);
 
   if (!from_image || !to_image)
     return Image::NullImage();
@@ -245,7 +244,7 @@ PassRefPtr<Image> CSSCrossfadeValue::GetImage(const LayoutObject& layout_object,
 
   return CrossfadeGeneratedImage::Create(
       from_image_ref, to_image_ref, percentage_value_->GetFloatValue(),
-      FixedSize(layout_object, FloatSize(size)), size);
+      FixedSize(document, FloatSize(size)), size);
 }
 
 void CSSCrossfadeValue::CrossfadeChanged(const IntRect&) {

@@ -6,11 +6,9 @@
 
 #include <stdint.h>
 
-#include "base/base64.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/rand_util.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_request_info_impl.h"
@@ -28,25 +26,11 @@ const char kBlobStorageContextKeyName[] = "content_blob_storage_context";
 const char kStreamContextKeyName[] = "content_stream_context";
 const char kURLDataManagerBackendKeyName[] = "url_data_manager_backend";
 
-ResourceContext::ResourceContext()
-    : media_device_id_salt_(CreateRandomMediaDeviceIDSalt()) {
-}
+ResourceContext::ResourceContext() {}
 
 ResourceContext::~ResourceContext() {
   if (ResourceDispatcherHostImpl::Get())
     ResourceDispatcherHostImpl::Get()->CancelRequestsForContext(this);
-}
-
-std::string ResourceContext::GetMediaDeviceIDSalt() {
-  return media_device_id_salt_;
-}
-
-// static
-std::string ResourceContext::CreateRandomMediaDeviceIDSalt() {
-  std::string salt;
-  base::Base64Encode(base::RandBytesAsString(16), &salt);
-  DCHECK(!salt.empty());
-  return salt;
 }
 
 ChromeBlobStorageContext* GetChromeBlobStorageContextForResourceContext(
@@ -68,7 +52,7 @@ URLDataManagerBackend* GetURLDataManagerForResourceContext(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!context->GetUserData(kURLDataManagerBackendKeyName)) {
     context->SetUserData(kURLDataManagerBackendKeyName,
-                         new URLDataManagerBackend());
+                         base::MakeUnique<URLDataManagerBackend>());
   }
   return static_cast<URLDataManagerBackend*>(
       context->GetUserData(kURLDataManagerBackendKeyName));
@@ -79,13 +63,12 @@ void InitializeResourceContext(BrowserContext* browser_context) {
 
   resource_context->SetUserData(
       kBlobStorageContextKeyName,
-      new UserDataAdapter<ChromeBlobStorageContext>(
+      base::MakeUnique<UserDataAdapter<ChromeBlobStorageContext>>(
           ChromeBlobStorageContext::GetFor(browser_context)));
 
   resource_context->SetUserData(
-      kStreamContextKeyName,
-      new UserDataAdapter<StreamContext>(
-          StreamContext::GetFor(browser_context)));
+      kStreamContextKeyName, base::MakeUnique<UserDataAdapter<StreamContext>>(
+                                 StreamContext::GetFor(browser_context)));
 
   resource_context->DetachFromSequence();
 }

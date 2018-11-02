@@ -19,9 +19,6 @@
 #include "ipc/ipc_sync_message.h"
 #include "ipc/message_filter.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
-#include "services/service_manager/public/interfaces/interface_provider_spec.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/web/WebScriptController.h"
 
@@ -36,30 +33,14 @@ class MockRenderMessageFilterImpl : public mojom::RenderMessageFilter {
   ~MockRenderMessageFilterImpl() override {}
 
   // mojom::RenderMessageFilter:
-  void GenerateRoutingID(const GenerateRoutingIDCallback& callback) override {
+  void GenerateRoutingID(GenerateRoutingIDCallback callback) override {
     NOTREACHED();
-    callback.Run(MSG_ROUTING_NONE);
-  }
-
-  void CreateNewWindow(mojom::CreateNewWindowParamsPtr params,
-                       const CreateNewWindowCallback& callback) override {
-    // NOTE: This implementation of mojom::RenderMessageFilter is used client-
-    // side only. Because sync mojom methods have a different interface for
-    // bindings- and client-side, we only implement the client-side interface
-    // on this object.
-    NOTREACHED();
-  }
-
-  bool CreateNewWindow(mojom::CreateNewWindowParamsPtr params,
-                       mojom::CreateNewWindowReplyPtr* reply) override {
-    *reply = mojom::CreateNewWindowReply::New();
-    thread_->OnCreateWindow(*params, reply->get());
-    return true;
+    std::move(callback).Run(MSG_ROUTING_NONE);
   }
 
   void CreateNewWidget(int32_t opener_id,
-                      blink::WebPopupType popup_type,
-                      const CreateNewWidgetCallback& callback) override {
+                       blink::WebPopupType popup_type,
+                       CreateNewWidgetCallback callback) override {
     // See comment in CreateNewWindow().
     NOTREACHED();
   }
@@ -73,12 +54,7 @@ class MockRenderMessageFilterImpl : public mojom::RenderMessageFilter {
 
   void CreateFullscreenWidget(
       int opener_id,
-      const CreateFullscreenWidgetCallback& callback) override {
-    NOTREACHED();
-  }
-
-  void GetSharedBitmapManager(
-      cc::mojom::SharedBitmapManagerAssociatedRequest request) override {
+      CreateFullscreenWidgetCallback callback) override {
     NOTREACHED();
   }
 
@@ -267,14 +243,6 @@ void MockRenderThread::ReleaseCachedFonts() {
 
 ServiceManagerConnection* MockRenderThread::GetServiceManagerConnection() {
   return nullptr;
-}
-
-service_manager::InterfaceRegistry* MockRenderThread::GetInterfaceRegistry() {
-  if (!interface_registry_) {
-    interface_registry_ = base::MakeUnique<service_manager::InterfaceRegistry>(
-        service_manager::mojom::kServiceManager_ConnectorSpec);
-  }
-  return interface_registry_.get();
 }
 
 service_manager::Connector* MockRenderThread::GetConnector() {

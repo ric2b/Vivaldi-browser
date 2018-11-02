@@ -2,42 +2,25 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("features.gni")
-import("//build/buildflag_header.gni")
+import("features/features.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")  # For generate_jni().
 }
 
-# Generate a buildflag header for compile-time checking of WebVR support.
-buildflag_header("features") {
-  header = "features.h"
-  flags = [
-    "ENABLE_VR=$enable_vr",
-    "ENABLE_OPENVR=$enable_openvr",
-  ]
-}
+if (enable_vr) {
+  component("vr") {
+    output_name = "device_vr"
 
-component("vr") {
-  output_name = "device_vr"
-
-  sources = [
-    "vr_export.h",
-  ]
-  defines = [ "DEVICE_VR_IMPLEMENTATION" ]
-  deps = [
-    ":features",
-    ":mojo_bindings",
-  ]
-
-  if (!enable_vr) {
-    sources += [
-      # We need to include an empty .cc file so that mac and windows don't fall over when trying to
-      # compile this when webvr is disabled.
-      "empty.cc",
+    sources = [
+      "vr_export.h",
     ]
-  } else {
+    defines = [ "DEVICE_VR_IMPLEMENTATION" ]
+    deps = [
+      ":mojo_bindings",
+      "features",
+    ]
     sources += [
       "vr_device.cc",
       "vr_device.h",
@@ -46,7 +29,6 @@ component("vr") {
       "vr_device_provider.h",
       "vr_display_impl.cc",
       "vr_display_impl.h",
-      "vr_export.h",
       "vr_math.cc",
       "vr_math.h",
       "vr_service_impl.cc",
@@ -63,6 +45,9 @@ component("vr") {
 
     if (is_android && (current_cpu == "arm" || current_cpu == "arm64")) {
       sources += [
+        "android/gvr/cardboard_gamepad_data_fetcher.cc",
+        "android/gvr/cardboard_gamepad_data_fetcher.h",
+        "android/gvr/cardboard_gamepad_data_provider.h",
         "android/gvr/gvr_delegate.cc",
         "android/gvr/gvr_delegate.h",
         "android/gvr/gvr_delegate_provider.cc",
@@ -78,6 +63,7 @@ component("vr") {
 
       deps += [
         "//device/gamepad",
+        "//device/gamepad/public/cpp:shared_with_blink",
         "//third_party/WebKit/public:blink_headers",
       ]
       ldflags = [ "-landroid" ]
@@ -86,16 +72,21 @@ component("vr") {
     }
 
     if (enable_openvr) {
-      deps += [ "//third_party/openvr:openvr" ]
+      deps += [
+        "//device/gamepad",
+        "//third_party/openvr:openvr",
+      ]
       sources += [
         "openvr/openvr_device.cc",
+        "openvr/openvr_device.h",
         "openvr/openvr_device_provider.cc",
+        "openvr/openvr_device_provider.h",
+        "openvr/openvr_gamepad_data_fetcher.cc",
+        "openvr/openvr_gamepad_data_fetcher.h",
       ]
     }
   }
-}
 
-if (enable_vr) {
   static_library("fakes") {
     testonly = true
 
@@ -117,9 +108,20 @@ if (enable_vr) {
       "//mojo/public/cpp/bindings",
     ]
   }
+} else {
+  source_set("vr") {
+    # We need to include an empty .cc file so that mac and windows don't fall over when trying to
+    # compile this when webvr is disabled.
+    sources = [
+      "empty.cc",
+    ]
+  }
 }
 
-mojom("mojo_bindings") {
+mojom_component("mojo_bindings") {
+  output_prefix = "device_vr_mojo_bindings"
+  macro_prefix = "DEVICE_VR_MOJO_BINDINGS"
+
   sources = [
     "vr_service.mojom",
   ]
@@ -129,7 +131,6 @@ mojom("mojo_bindings") {
     "//mojo/common:common_custom_types",
   ]
 
-  export_class_attribute = "DEVICE_VR_EXPORT"
-  export_define = "DEVICE_VR_IMPLEMENTATION=1"
-  export_header = "device/vr/vr_export.h"
+  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
+  use_once_callback = false
 }

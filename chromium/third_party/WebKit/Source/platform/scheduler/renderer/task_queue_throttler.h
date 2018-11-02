@@ -12,10 +12,13 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/threading/thread_checker.h"
+#include "platform/PlatformExport.h"
 #include "platform/scheduler/base/cancelable_closure_holder.h"
 #include "platform/scheduler/base/time_domain.h"
 #include "platform/scheduler/renderer/budget_pool.h"
-#include "public/platform/WebViewScheduler.h"
+#include "platform/scheduler/renderer/cpu_time_budget_pool.h"
+#include "platform/scheduler/renderer/wake_up_budget_pool.h"
+#include "platform/scheduler/renderer/web_view_scheduler.h"
 
 namespace base {
 namespace trace_event {
@@ -30,9 +33,18 @@ class BudgetPool;
 class RendererSchedulerImpl;
 class ThrottledTimeDomain;
 class CPUTimeBudgetPool;
+class WakeUpBudgetPool;
+
+// kNewTasksOnly prevents new tasks from running (old tasks can run normally),
+// kAllTasks block queue completely.
+// kAllTasks-type block always blocks the queue completely.
+// kNewTasksOnly-type block does nothing when queue is already blocked by
+// kAllTasks, and overrides previous kNewTasksOnly block if any, which may
+// unblock some tasks.
+enum class QueueBlockType { kAllTasks, kNewTasksOnly };
 
 // Interface for BudgetPool to interact with TaskQueueThrottler.
-class BLINK_PLATFORM_EXPORT BudgetPoolController {
+class PLATFORM_EXPORT BudgetPoolController {
  public:
   virtual ~BudgetPoolController() {}
 
@@ -46,12 +58,10 @@ class BLINK_PLATFORM_EXPORT BudgetPoolController {
   // Deletes the budget pool.
   virtual void UnregisterBudgetPool(BudgetPool* budget_pool) = 0;
 
-  // Insert a fence to prevent tasks from running and schedule a wake-up at
-  // an appropriate time.
-  virtual void BlockQueue(base::TimeTicks now, TaskQueue* queue) = 0;
-
-  // Schedule a call to unblock queue at an appropriate moment.
-  virtual void UnblockQueue(base::TimeTicks now, TaskQueue* queue) = 0;
+  // Ensure that an appropriate type of the fence is installed and schedule
+  // a pump for this queue when needed.
+  virtual void UpdateQueueThrottlingState(base::TimeTicks now,
+                                          TaskQueue* queue) = 0;
 
   // Returns true if the |queue| is throttled (i.e. added to TaskQueueThrottler
   // and throttling is not disabled).
@@ -80,13 +90,10 @@ class BLINK_PLATFORM_EXPORT BudgetPoolController {
 // See IncreaseThrottleRefCount & DecreaseThrottleRefCount.
 //
 // This class is main-thread only.
-class BLINK_PLATFORM_EXPORT TaskQueueThrottler : public TaskQueue::Observer,
-                                                 public BudgetPoolController {
+class PLATFORM_EXPORT TaskQueueThrottler : public TaskQueue::Observer,
+                                           public BudgetPoolController {
  public:
-  // TODO(altimin): Do not pass tracing category as const char*,
-  // hard-code string instead.
-  TaskQueueThrottler(RendererSchedulerImpl* renderer_scheduler,
-                     const char* tracing_category);
+  explicit TaskQueueThrottler(RendererSchedulerImpl* renderer_scheduler);
 
   ~TaskQueueThrottler() override;
 
@@ -99,8 +106,8 @@ class BLINK_PLATFORM_EXPORT TaskQueueThrottler : public TaskQueue::Observer,
   void RemoveQueueFromBudgetPool(TaskQueue* queue,
                                  BudgetPool* budget_pool) override;
   void UnregisterBudgetPool(BudgetPool* budget_pool) override;
-  void BlockQueue(base::TimeTicks now, TaskQueue* queue) override;
-  void UnblockQueue(base::TimeTicks now, TaskQueue* queue) override;
+  void UpdateQueueThrottlingState(base::TimeTicks now,
+                                  TaskQueue* queue) override;
   bool IsThrottled(TaskQueue* queue) const override;
 
   // Increments the throttled refcount and causes |task_queue| to be throttled
@@ -125,13 +132,17 @@ class BLINK_PLATFORM_EXPORT TaskQueueThrottler : public TaskQueue::Observer,
 
   const ThrottledTimeDomain* time_domain() const { return time_domain_.get(); }
 
+  // TODO(altimin): Remove it.
   static base::TimeTicks AlignedThrottledRunTime(
       base::TimeTicks unthrottled_runtime);
 
-  const scoped_refptr<TaskQueue>& task_runner() const { return task_runner_; }
+  const scoped_refptr<TaskQueue>& task_queue() const {
+    return control_task_queue_;
+  }
 
   // Returned object is owned by |TaskQueueThrottler|.
   CPUTimeBudgetPool* CreateCPUTimeBudgetPool(const char* name);
+  WakeUpBudgetPool* CreateWakeUpBudgetPool(const char* name);
 
   // Accounts for given task for cpu-based throttling needs.
   void OnTaskRunTimeReported(TaskQueue* task_queue,
@@ -162,22 +173,26 @@ class BLINK_PLATFORM_EXPORT TaskQueueThrottler : public TaskQueue::Observer,
 
   // Return next possible time when queue is allowed to run in accordance
   // with throttling policy.
-  base::TimeTicks GetNextAllowedRunTime(base::TimeTicks now, TaskQueue* queue);
+  base::TimeTicks GetNextAllowedRunTime(TaskQueue* queue,
+                                        base::TimeTicks desired_run_time);
+
+  bool CanRunTasksAt(TaskQueue* queue, base::TimeTicks moment, bool is_wakeup);
 
   void MaybeDeleteQueueMetadata(TaskQueueMap::iterator it);
 
-  // Schedule a call PumpThrottledTasks at an appropriate moment for this queue.
-  void SchedulePumpQueue(const tracked_objects::Location& from_here,
-                         base::TimeTicks now,
-                         TaskQueue* queue);
+  void UpdateQueueThrottlingStateInternal(base::TimeTicks now,
+                                          TaskQueue* queue,
+                                          bool is_wake_up);
+
+  base::Optional<QueueBlockType> GetQueueBlockType(base::TimeTicks now,
+                                                   TaskQueue* queue);
 
   TaskQueueMap queue_details_;
   base::Callback<void(TaskQueue*, base::TimeTicks)>
       forward_immediate_work_callback_;
-  scoped_refptr<TaskQueue> task_runner_;
+  scoped_refptr<TaskQueue> control_task_queue_;
   RendererSchedulerImpl* renderer_scheduler_;  // NOT OWNED
   base::TickClock* tick_clock_;                // NOT OWNED
-  const char* tracing_category_;               // NOT OWNED
   std::unique_ptr<ThrottledTimeDomain> time_domain_;
 
   CancelableClosureHolder pump_throttled_tasks_closure_;

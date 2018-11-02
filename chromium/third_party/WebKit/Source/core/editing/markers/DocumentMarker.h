@@ -122,18 +122,12 @@ class CORE_EXPORT DocumentMarker : public GarbageCollected<DocumentMarker> {
 
   class AllMarkers : public MarkerTypes {
    public:
-    AllMarkers()
-        : MarkerTypes(kSpelling | kGrammar | kTextMatch | kComposition) {}
+    AllMarkers() : MarkerTypes((1 << kMarkerTypeIndexesCount) - 1) {}
   };
 
   class MisspellingMarkers : public MarkerTypes {
    public:
     MisspellingMarkers() : MarkerTypes(kSpelling | kGrammar) {}
-  };
-
-  class SpellCheckClientMarkers : public MarkerTypes {
-   public:
-    SpellCheckClientMarkers() : MarkerTypes(kSpelling | kGrammar) {}
   };
 
   enum class MatchStatus { kInactive, kActive };
@@ -179,13 +173,6 @@ class CORE_EXPORT DocumentMarker : public GarbageCollected<DocumentMarker> {
   void SetStartOffset(unsigned offset) { start_offset_ = offset; }
   void SetEndOffset(unsigned offset) { end_offset_ = offset; }
   void ShiftOffsets(int delta);
-
-  bool operator==(const DocumentMarker& o) const {
-    return GetType() == o.GetType() && StartOffset() == o.StartOffset() &&
-           EndOffset() == o.EndOffset();
-  }
-
-  bool operator!=(const DocumentMarker& o) const { return !(*this == o); }
 
   DECLARE_TRACE();
 

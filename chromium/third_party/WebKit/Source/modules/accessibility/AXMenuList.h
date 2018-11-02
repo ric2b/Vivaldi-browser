@@ -43,13 +43,14 @@ class AXMenuList final : public AXLayoutObject {
   AccessibilityExpanded IsExpanded() const final;
   bool Press() override;
   void ClearChildren() override;
-  bool NameFromContents() const override;
 
   void DidUpdateActiveOption(int option_index);
   void DidShowPopup();
   void DidHidePopup();
 
  private:
+  friend class AXMenuListOption;
+
   AXMenuList(LayoutMenuList*, AXObjectCacheImpl&);
 
   bool IsMenuList() const override { return true; }

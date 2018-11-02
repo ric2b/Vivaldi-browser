@@ -9,7 +9,6 @@
 #include <string>
 #include <utility>
 
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "extensions/renderer/module_system_test.h"
 #include "extensions/renderer/v8_schema_registry.h"
@@ -62,7 +61,7 @@ class TestInterfaceProvider : public gin::Wrappable<TestInterfaceProvider> {
       const base::Callback<void(mojo::InterfaceRequest<Interface>)>
           factory_callback,
       mojo::ScopedMessagePipeHandle handle) {
-    factory_callback.Run(mojo::MakeRequest<Interface>(std::move(handle)));
+    factory_callback.Run(mojo::InterfaceRequest<Interface>(std::move(handle)));
   }
 
   static void IgnoreHandle(mojo::ScopedMessagePipeHandle handle);
@@ -116,7 +115,6 @@ class ApiTestBase : public ModuleSystemTest {
   }
 
  private:
-  base::MessageLoop message_loop_;
   std::unique_ptr<ApiTestEnvironment> test_env_;
 };
 

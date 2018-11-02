@@ -140,23 +140,23 @@ const char* RequestContextName(WebURLRequest::RequestContext context) {
 
 }  // namespace
 
-static void MeasureStricterVersionOfIsMixedContent(Frame* frame,
+static void MeasureStricterVersionOfIsMixedContent(Frame& frame,
                                                    const KURL& url) {
   // We're currently only checking for mixed content in `https://*` contexts.
   // What about other "secure" contexts the SchemeRegistry knows about? We'll
   // use this method to measure the occurrence of non-webby mixed content to
   // make sure we're not breaking the world without realizing it.
-  SecurityOrigin* origin = frame->GetSecurityContext()->GetSecurityOrigin();
+  SecurityOrigin* origin = frame.GetSecurityContext()->GetSecurityOrigin();
   if (MixedContentChecker::IsMixedContent(origin, url)) {
     if (origin->Protocol() != "https") {
       UseCounter::Count(
-          frame,
+          &frame,
           UseCounter::kMixedContentInNonHTTPSFrameThatRestrictsMixedContent);
     }
   } else if (!SecurityOrigin::IsSecure(url) &&
              SchemeRegistry::ShouldTreatURLSchemeAsSecure(origin->Protocol())) {
     UseCounter::Count(
-        frame,
+        &frame,
         UseCounter::kMixedContentInSecureFrameThatDoesNotRestrictMixedContent);
   }
 }
@@ -202,13 +202,12 @@ Frame* MixedContentChecker::InWhichFrameIsContentMixed(
     return nullptr;
 
   // Check the top frame first.
-  if (Frame* top = frame->Tree().Top()) {
-    MeasureStricterVersionOfIsMixedContent(top, url);
-    if (IsMixedContent(top->GetSecurityContext()->GetSecurityOrigin(), url))
-      return top;
-  }
+  Frame& top = frame->Tree().Top();
+  MeasureStricterVersionOfIsMixedContent(top, url);
+  if (IsMixedContent(top.GetSecurityContext()->GetSecurityOrigin(), url))
+    return &top;
 
-  MeasureStricterVersionOfIsMixedContent(frame, url);
+  MeasureStricterVersionOfIsMixedContent(*frame, url);
   if (IsMixedContent(frame->GetSecurityContext()->GetSecurityOrigin(), url))
     return frame;
 
@@ -227,8 +226,8 @@ void MixedContentChecker::LogToConsoleAboutFetch(
   String message = String::Format(
       "Mixed Content: The page at '%s' was loaded over HTTPS, but requested an "
       "insecure %s '%s'. %s",
-      main_resource_url.ElidedString().Utf8().Data(),
-      RequestContextName(request_context), url.ElidedString().Utf8().Data(),
+      main_resource_url.ElidedString().Utf8().data(),
+      RequestContextName(request_context), url.ElidedString().Utf8().data(),
       allowed ? "This content should also be served over HTTPS."
               : "This request has been blocked; the content must be served "
                 "over HTTPS.");
@@ -424,8 +423,8 @@ void MixedContentChecker::LogToConsoleAboutWebSocket(
   String message = String::Format(
       "Mixed Content: The page at '%s' was loaded over HTTPS, but attempted to "
       "connect to the insecure WebSocket endpoint '%s'. %s",
-      main_resource_url.ElidedString().Utf8().Data(),
-      url.ElidedString().Utf8().Data(),
+      main_resource_url.ElidedString().Utf8().data(),
+      url.ElidedString().Utf8().data(),
       allowed ? "This endpoint should be available via WSS. Insecure access is "
                 "deprecated."
               : "This request has been blocked; this endpoint must be "
@@ -515,8 +514,8 @@ bool MixedContentChecker::IsMixedFormAction(
         "Mixed Content: The page at '%s' was loaded over a secure connection, "
         "but contains a form which targets an insecure endpoint '%s'. This "
         "endpoint should be made available over a secure connection.",
-        MainResourceUrlForFrame(mixed_frame).ElidedString().Utf8().Data(),
-        url.ElidedString().Utf8().Data());
+        MainResourceUrlForFrame(mixed_frame).ElidedString().Utf8().data(),
+        url.ElidedString().Utf8().data());
     frame->GetDocument()->AddConsoleMessage(ConsoleMessage::Create(
         kSecurityMessageSource, kWarningMessageLevel, message));
   }

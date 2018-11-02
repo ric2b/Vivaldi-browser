@@ -2917,6 +2917,7 @@ _FUNCTION_INFO = {
     'gl_test_func': 'glGenFramebuffersEXT',
     'resource_type': 'Framebuffer',
     'resource_types': 'Framebuffers',
+    'not_shared': 'True',
   },
   'GenRenderbuffers': {
     'type': 'GENn', 'gl_test_func': 'glGenRenderbuffersEXT',
@@ -2942,6 +2943,7 @@ _FUNCTION_INFO = {
     'resource_type': 'TransformFeedback',
     'resource_types': 'TransformFeedbacks',
     'es3': True,
+    'not_shared': 'True',
   },
   'GetActiveAttrib': {
     'type': 'Custom',
@@ -4245,6 +4247,7 @@ _FUNCTION_INFO = {
     'resource_types': 'VertexArrays',
     'unit_test': False,
     'pepper_interface': 'VertexArrayObject',
+    'not_shared': 'True',
   },
   'BindVertexArrayOES': {
     'type': 'Bind',
@@ -4275,6 +4278,11 @@ _FUNCTION_INFO = {
   },
   'BindTexImage2DCHROMIUM': {
     'decoder_func': 'DoBindTexImage2DCHROMIUM',
+    'unit_test': False,
+    'extension': "CHROMIUM_image",
+  },
+  'BindTexImage2DWithInternalformatCHROMIUM': {
+    'decoder_func': 'DoBindTexImage2DWithInternalformatCHROMIUM',
     'unit_test': False,
     'extension': "CHROMIUM_image",
   },
@@ -4399,7 +4407,7 @@ _FUNCTION_INFO = {
     'type': 'Custom',
     'impl_func': False,
     'client_test': False,
-    'cmd_args': 'GLuint contents_texture_id, GLuint background_color, '
+    'cmd_args': 'GLsizei num_textures, GLuint background_color, '
                 'GLuint edge_aa_mask, GLuint filter, GLuint shm_id, '
                 'GLuint shm_offset',
     'extension': 'CHROMIUM_schedule_ca_layer',
@@ -4552,6 +4560,28 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoSetEnableDCLayersCHROMIUM',
     'extension': 'CHROMIUM_dc_layers',
   },
+  'InitializeDiscardableTextureCHROMIUM': {
+    'type': 'Custom',
+    'cmd_args': 'GLuint texture_id, uint32_t shm_id, '
+                'uint32_t shm_offset',
+    'impl_func': False,
+    'client_test': False,
+    'extension': True,
+  },
+  'UnlockDiscardableTextureCHROMIUM': {
+    'type': 'Custom',
+    'cmd_args': 'GLuint texture_id',
+    'impl_func': False,
+    'client_test': False,
+    'extension': True,
+  },
+  'LockDiscardableTextureCHROMIUM': {
+    'type': 'Custom',
+    'cmd_args': 'GLuint texture_id',
+    'impl_func': False,
+    'client_test': False,
+    'extension': True,
+  },
 }
 
 
@@ -4632,6 +4662,27 @@ def ToGLExtensionString(extension_flag):
 def ToCamelCase(input_string):
   """converts ABC_underscore_case to ABCUnderscoreCase."""
   return ''.join(w[0].upper() + w[1:] for w in input_string.split('_'))
+
+def EnumsConflict(a, b):
+  """Returns true if the enums have different names (ignoring suffixes) and one
+  of them is a Chromium enum."""
+  if a == b:
+    return False
+
+  if b.endswith('_CHROMIUM'):
+    a, b = b, a
+
+  if not a.endswith('_CHROMIUM'):
+    return False
+
+  def removesuffix(string, suffix):
+    if not string.endswith(suffix):
+      return string
+    return string[:-len(suffix)]
+  b = removesuffix(b, "_NV")
+  b = removesuffix(b, "_EXT")
+  b = removesuffix(b, "_OES")
+  return removesuffix(a, "_CHROMIUM") != b
 
 def GetGLGetTypeConversion(result_type, value_type, value):
   """Makes a gl compatible type conversion string for accessing state variables.
@@ -5819,7 +5870,7 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
 TEST_P(%(test_name)s, %(name)sValidArgsNewId) {
   EXPECT_CALL(*gl_, %(gl_func_name)s(kNewServiceId));
   EXPECT_CALL(*gl_, %(gl_gen_func_name)s(1, _))
-     .WillOnce(SetArgumentPointee<1>(kNewServiceId));
+     .WillOnce(SetArgPointee<1>(kNewServiceId));
   SpecializedSetup<cmds::%(name)s, 0>(true);
   cmds::%(name)s cmd;
   cmd.Init(kNewClientId);
@@ -5849,7 +5900,7 @@ TEST_P(%(test_name)s, %(name)sValidArgsNewId) {
   EXPECT_CALL(*gl_,
               %(gl_func_name)s(%(gl_args_with_new_id)s));
   EXPECT_CALL(*gl_, %(gl_gen_func_name)s(1, _))
-     .WillOnce(SetArgumentPointee<1>(kNewServiceId));
+     .WillOnce(SetArgPointee<1>(kNewServiceId));
   SpecializedSetup<cmds::%(name)s, 0>(true);
   cmds::%(name)s cmd;
   cmd.Init(%(args_with_new_id)s);
@@ -6011,28 +6062,34 @@ class GENnHandler(TypeHandler):
       arg.WriteClientSideValidationCode(f, func)
     not_shared = func.GetInfo('not_shared')
     if not_shared:
-      alloc_code = (
-
-"""  IdAllocator* id_allocator = GetIdAllocator(id_namespaces::k%s);
-  for (GLsizei ii = 0; ii < n; ++ii)
-    %s[ii] = id_allocator->AllocateID();""" %
-  (func.GetInfo('resource_types'), func.GetOriginalArgs()[1].name))
+      alloc_code = ("""\
+      IdAllocator* id_allocator = GetIdAllocator(IdNamespaces::k%s);
+      for (GLsizei ii = 0; ii < n; ++ii)
+      %s[ii] = id_allocator->AllocateID();""" %
+      (func.GetInfo('resource_types'), func.GetOriginalArgs()[1].name))
     else:
-      alloc_code = ("""  GetIdHandler(id_namespaces::k%(resource_types)s)->
+      alloc_code = ("""\
+      GetIdHandler(SharedIdNamespaces::k%(resource_types)s)->
       MakeIds(this, 0, %(args)s);""" % args)
     args['alloc_code'] = alloc_code
 
-    code = """ GPU_CLIENT_SINGLE_THREAD_CHECK();
-%(alloc_code)s
-  %(name)sHelper(%(args)s);
-  helper_->%(name)sImmediate(%(args)s);
-  if (share_group_->bind_generates_resource())
-    helper_->CommandBufferHelper::Flush();
-%(log_code)s
-  CheckGLError();
-}
+    code = """\
+    GPU_CLIENT_SINGLE_THREAD_CHECK();
+    %(alloc_code)s
+    %(name)sHelper(%(args)s);
+    helper_->%(name)sImmediate(%(args)s);
+    """
+    if not not_shared:
+      code += """\
+      if (share_group_->bind_generates_resource())
+      helper_->CommandBufferHelper::Flush();
+      """
+    code += """\
+    %(log_code)s
+    CheckGLError();
+    }
 
-"""
+    """
     f.write(code % args)
 
   def WriteGLES2ImplementationUnitTest(self, func, f):
@@ -6068,7 +6125,7 @@ TEST_F(GLES2ImplementationTest, %(name)s) {
     valid_test = """
 TEST_P(%(test_name)s, %(name)sValidArgs) {
   EXPECT_CALL(*gl_, %(gl_func_name)s(1, _))
-      .WillOnce(SetArgumentPointee<1>(kNewServiceId));
+      .WillOnce(SetArgPointee<1>(kNewServiceId));
   cmds::%(name)s* cmd = GetImmediateAs<cmds::%(name)s>();
   GLuint temp = kNewClientId;
   SpecializedSetup<cmds::%(name)s, 0>(true);
@@ -6322,10 +6379,10 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs%(arg_index)d_%(value_index)d) {
     f.write("  GLuint client_id;\n")
     if func.return_type == "GLsync":
       f.write(
-          "  GetIdHandler(id_namespaces::kSyncs)->\n")
+          "  GetIdHandler(SharedIdNamespaces::kSyncs)->\n")
     else:
       f.write(
-          "  GetIdHandler(id_namespaces::kProgramsAndShaders)->\n")
+          "  GetIdHandler(SharedIdNamespaces::kProgramsAndShaders)->\n")
     f.write("      MakeIds(this, 0, 1, &client_id);\n")
     f.write("  helper_->%s(%s);\n" %
                (func.name, func.MakeCmdArgString("")))
@@ -8349,7 +8406,7 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
   SpecializedSetup<cmds::%(name)s, 0>(true);
 %(expect_len_code)s
   EXPECT_CALL(*gl_, %(gl_func_name)s(%(gl_args)s))
-      .WillOnce(DoAll(SetArgumentPointee<2>(strlen(kInfo)),
+      .WillOnce(DoAll(SetArgPointee<2>(strlen(kInfo)),
                       SetArrayArgument<3>(kInfo, kInfo + strlen(kInfo) + 1)));
   cmds::%(name)s cmd;
   cmd.Init(%(args)s);
@@ -8378,7 +8435,7 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
     if get_len_func and get_len_func[0:2] == 'gl':
       sub['expect_len_code'] = (
         "  EXPECT_CALL(*gl_, %s(%s, %s, _))\n"
-        "      .WillOnce(SetArgumentPointee<2>(strlen(kInfo) + 1));") % (
+        "      .WillOnce(SetArgPointee<2>(strlen(kInfo) + 1));") % (
             get_len_func[2:], id_name, get_len_enum)
     self.WriteValidUnitTest(func, f, valid_test, sub, *extras)
 
@@ -10906,8 +10963,7 @@ extern const NameToFunc g_gles2_function_table[] = {
             if not value in dict:
               dict[value] = name
             # check our own _CHROMIUM macro conflicts with khronos GL headers.
-            elif dict[value] != name and (name.endswith('_CHROMIUM') or
-                dict[value].endswith('_CHROMIUM')):
+            elif EnumsConflict(dict[value], name):
               self.Error("code collision: %s and %s have the same code %s" %
                          (dict[value], name, value))
 

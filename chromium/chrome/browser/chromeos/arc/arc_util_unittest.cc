@@ -17,10 +17,14 @@
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
+#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "chrome/browser/chromeos/settings/install_attributes.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/signin/core/account_id/account_id.h"
@@ -88,6 +92,22 @@ class ScopedLogIn {
   DISALLOW_COPY_AND_ASSIGN(ScopedLogIn);
 };
 
+class FakeInstallAttributesManaged : public chromeos::InstallAttributes {
+ public:
+  FakeInstallAttributesManaged() : chromeos::InstallAttributes(nullptr) {
+    device_locked_ = true;
+  }
+
+  ~FakeInstallAttributesManaged() {
+    policy::BrowserPolicyConnectorChromeOS::RemoveInstallAttributesForTesting();
+  }
+
+  void SetIsManaged(bool is_managed) {
+    registration_mode_ = is_managed ? policy::DEVICE_MODE_ENTERPRISE
+                                    : policy::DEVICE_MODE_CONSUMER;
+  }
+};
+
 class FakeUserManagerWithLocalState : public chromeos::FakeChromeUserManager {
  public:
   FakeUserManagerWithLocalState()
@@ -114,7 +134,6 @@ class ChromeArcUtilTest : public testing::Test {
 
   void SetUp() override {
     command_line_ = base::MakeUnique<base::test::ScopedCommandLine>();
-    command_line_->GetProcessCommandLine()->InitFromArgv({"", "--enable-arc"});
 
     user_manager_enabler_ =
         base::MakeUnique<chromeos::ScopedUserManagerEnabler>(
@@ -155,25 +174,40 @@ class ChromeArcUtilTest : public testing::Test {
 };
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported"});
   ScopedLogIn login(GetFakeUserManager(),
                     AccountId::FromUserEmailGaiaId(
                         profile()->GetProfileUserName(), kTestGaiaId));
   EXPECT_TRUE(IsArcAllowedForProfile(profile()));
-  EXPECT_TRUE(IsArcAllowedInAppListForProfile(profile()));
 
   // false for nullptr.
   EXPECT_FALSE(IsArcAllowedForProfile(nullptr));
-  EXPECT_FALSE(IsArcAllowedInAppListForProfile(nullptr));
 
   // false for incognito mode profile.
   EXPECT_FALSE(IsArcAllowedForProfile(profile()->GetOffTheRecordProfile()));
-  EXPECT_FALSE(
-      IsArcAllowedInAppListForProfile(profile()->GetOffTheRecordProfile()));
 
   // false for Legacy supervised user.
   profile()->SetSupervisedUserId("foo");
   EXPECT_FALSE(IsArcAllowedForProfile(profile()));
-  EXPECT_FALSE(IsArcAllowedInAppListForProfile(profile()));
+}
+
+TEST_F(ChromeArcUtilTest, IsArcAllowedForProfileLegacy) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv({"", "--enable-arc"});
+  ScopedLogIn login(GetFakeUserManager(),
+                    AccountId::FromUserEmailGaiaId(
+                        profile()->GetProfileUserName(), kTestGaiaId));
+  EXPECT_TRUE(IsArcAllowedForProfile(profile()));
+
+  // false for nullptr.
+  EXPECT_FALSE(IsArcAllowedForProfile(nullptr));
+
+  // false for incognito mode profile.
+  EXPECT_FALSE(IsArcAllowedForProfile(profile()->GetOffTheRecordProfile()));
+
+  // false for Legacy supervised user.
+  profile()->SetSupervisedUserId("foo");
+  EXPECT_FALSE(IsArcAllowedForProfile(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_DisableArc) {
@@ -182,10 +216,11 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_DisableArc) {
                     AccountId::FromUserEmailGaiaId(
                         profile()->GetProfileUserName(), kTestGaiaId));
   EXPECT_FALSE(IsArcAllowedForProfile(profile()));
-  EXPECT_FALSE(IsArcAllowedInAppListForProfile(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_NonPrimaryProfile) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported"});
   ScopedLogIn login2(
       GetFakeUserManager(),
       AccountId::FromUserEmailGaiaId("user2@gmail.com", "0123456789"));
@@ -193,21 +228,21 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_NonPrimaryProfile) {
                     AccountId::FromUserEmailGaiaId(
                         profile()->GetProfileUserName(), kTestGaiaId));
   EXPECT_FALSE(IsArcAllowedForProfile(profile()));
-  EXPECT_FALSE(IsArcAllowedInAppListForProfile(profile()));
 }
 
 // User without GAIA account.
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_PublicAccount) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported"});
   ScopedLogIn login(GetFakeUserManager(),
                     AccountId::FromUserEmail("public_user@gmail.com"),
                     user_manager::USER_TYPE_PUBLIC_ACCOUNT);
   EXPECT_FALSE(IsArcAllowedForProfile(profile()));
-  EXPECT_FALSE(IsArcAllowedInAppListForProfile(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_ActiveDirectoryEnabled) {
   base::CommandLine::ForCurrentProcess()->InitFromArgv(
-      {"", "--arc-availability=officially-supported-with-active-directory"});
+      {"", "--arc-availability=officially-supported"});
   ScopedLogIn login(
       GetFakeUserManager(),
       AccountId::AdFromObjGuid("f04557de-5da2-40ce-ae9d-b8874d8da96e"),
@@ -216,10 +251,10 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_ActiveDirectoryEnabled) {
                    ->GetUserByProfile(profile())
                    ->HasGaiaAccount());
   EXPECT_TRUE(IsArcAllowedForProfile(profile()));
-  EXPECT_TRUE(IsArcAllowedInAppListForProfile(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_ActiveDirectoryDisabled) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv({""});
   ScopedLogIn login(
       GetFakeUserManager(),
       AccountId::AdFromObjGuid("f04557de-5da2-40ce-ae9d-b8874d8da96e"),
@@ -228,7 +263,6 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_ActiveDirectoryDisabled) {
                    ->GetUserByProfile(profile())
                    ->HasGaiaAccount());
   EXPECT_FALSE(IsArcAllowedForProfile(profile()));
-  EXPECT_FALSE(IsArcAllowedInAppListForProfile(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_KioskArcNotAvailable) {
@@ -240,7 +274,6 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_KioskArcNotAvailable) {
                    ->GetUserByProfile(profile())
                    ->HasGaiaAccount());
   EXPECT_FALSE(IsArcAllowedForProfile(profile()));
-  EXPECT_FALSE(IsArcAllowedInAppListForProfile(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_KioskArcInstalled) {
@@ -253,7 +286,6 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_KioskArcInstalled) {
                    ->GetUserByProfile(profile())
                    ->HasGaiaAccount());
   EXPECT_TRUE(IsArcAllowedForProfile(profile()));
-  EXPECT_TRUE(IsArcAllowedInAppListForProfile(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_KioskArcSupported) {
@@ -266,10 +298,11 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_KioskArcSupported) {
                    ->GetUserByProfile(profile())
                    ->HasGaiaAccount());
   EXPECT_TRUE(IsArcAllowedForProfile(profile()));
-  EXPECT_TRUE(IsArcAllowedInAppListForProfile(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_SupervisedUserFlow) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported"});
   auto manager_id = AccountId::FromUserEmailGaiaId(
       profile()->GetProfileUserName(), kTestGaiaId);
   ScopedLogIn login(GetFakeUserManager(), manager_id);
@@ -281,23 +314,25 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_SupervisedUserFlow) {
 
 // Guest account is interpreted as EphemeralDataUser.
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_GuestAccount) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported"});
   ScopedLogIn login(GetFakeUserManager(),
                     GetFakeUserManager()->GetGuestAccountId());
   EXPECT_FALSE(IsArcAllowedForProfile(profile()));
-  EXPECT_FALSE(IsArcAllowedInAppListForProfile(profile()));
 }
 
 // Demo account is interpreted as EphemeralDataUser.
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_DemoAccount) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported"});
   ScopedLogIn login(GetFakeUserManager(), user_manager::DemoAccountId());
   EXPECT_FALSE(IsArcAllowedForProfile(profile()));
-  EXPECT_FALSE(IsArcAllowedInAppListForProfile(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcCompatibleFileSystemUsedForProfile) {
-  // TODO(kinaba): Come up with some way to test the conditions below
-  // causes differences in the return values of IsArcAllowedForProfile()
-  // and IsArcAllowedInAppListForProfile().
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported"});
+
   const AccountId id(AccountId::FromUserEmailGaiaId(
       profile()->GetProfileUserName(), kTestGaiaId));
   ScopedLogIn login(GetFakeUserManager(), id);
@@ -351,6 +386,8 @@ TEST_F(ChromeArcUtilTest, IsArcCompatibleFileSystemUsedForProfile) {
 }
 
 TEST_F(ChromeArcUtilTest, ArcPlayStoreEnabledForProfile) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported"});
   // Ensure IsAllowedForProfile() true.
   ScopedLogIn login(GetFakeUserManager(),
                     AccountId::FromUserEmailGaiaId(
@@ -370,6 +407,8 @@ TEST_F(ChromeArcUtilTest, ArcPlayStoreEnabledForProfile) {
 }
 
 TEST_F(ChromeArcUtilTest, ArcPlayStoreEnabledForProfile_NotAllowed) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported"});
   ASSERT_FALSE(IsArcAllowedForProfile(profile()));
 
   // If ARC is not allowed for the profile, always return false.
@@ -382,6 +421,8 @@ TEST_F(ChromeArcUtilTest, ArcPlayStoreEnabledForProfile_NotAllowed) {
 }
 
 TEST_F(ChromeArcUtilTest, ArcPlayStoreEnabledForProfile_Managed) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported"});
   // Ensure IsAllowedForProfile() true.
   ScopedLogIn login(GetFakeUserManager(),
                     AccountId::FromUserEmailGaiaId(
@@ -423,6 +464,8 @@ TEST_F(ChromeArcUtilTest, ArcPlayStoreEnabledForProfile_Managed) {
 
 // Test the AreArcAllOptInPreferencesManagedForProfile() function.
 TEST_F(ChromeArcUtilTest, AreArcAllOptInPreferencesManagedForProfile) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported"});
   // OptIn prefs are unset, the function returns false.
   EXPECT_FALSE(AreArcAllOptInPreferencesManagedForProfile(profile()));
 
@@ -449,6 +492,45 @@ TEST_F(ChromeArcUtilTest, AreArcAllOptInPreferencesManagedForProfile) {
   profile()->GetTestingPrefService()->SetManagedPref(
       prefs::kArcBackupRestoreEnabled, base::MakeUnique<base::Value>(false));
   EXPECT_TRUE(AreArcAllOptInPreferencesManagedForProfile(profile()));
+}
+
+class ArcMigrationTest : public testing::Test {
+ protected:
+  ArcMigrationTest() {
+    auto attributes = base::MakeUnique<FakeInstallAttributesManaged>();
+    attributes_ = attributes.get();
+    policy::BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
+        attributes.release());
+  }
+  ~ArcMigrationTest() override {}
+
+  void SetUp() override { chromeos::DeviceSettingsService::Initialize(); }
+
+  void TearDown() override { chromeos::DeviceSettingsService::Shutdown(); }
+
+  void SetDeviceIsEnterpriseManaged(bool is_managed) {
+    attributes_->SetIsManaged(is_managed);
+  }
+
+  FakeInstallAttributesManaged* attributes_;
+};
+
+TEST_F(ArcMigrationTest, IsMigrationAllowedConsumerOwned) {
+  ResetArcMigrationAllowedForTesting();
+  auto* const command_line = base::CommandLine::ForCurrentProcess();
+  command_line->InitFromArgv({"", "--need-arc-migration-policy-check",
+                              "--arc-availability=officially-supported"});
+  SetDeviceIsEnterpriseManaged(false);
+  EXPECT_TRUE(IsArcMigrationAllowed());
+}
+
+TEST_F(ArcMigrationTest, IsMigrationAllowedNoPolicy) {
+  ResetArcMigrationAllowedForTesting();
+  auto* const command_line = base::CommandLine::ForCurrentProcess();
+  command_line->InitFromArgv({"", "--need-arc-migration-policy-check",
+                              "--arc-availability=officially-supported"});
+  SetDeviceIsEnterpriseManaged(true);
+  EXPECT_FALSE(IsArcMigrationAllowed());
 }
 
 }  // namespace util

@@ -33,16 +33,22 @@ namespace memory {
 // Possible types of Apps/Tabs processes. From most important to least
 // important.
 enum class ProcessType {
-  // There can be only one process having process type "FOCUSED_APP"
-  // or "FOCUSED_TAB" in the system at any give time (i.e., The focused window
-  // could be either a chrome window or an Android app. But not both.
-  FOCUSED_APP = 1,
-  FOCUSED_TAB = FOCUSED_APP,
+  // Conceptually, the system cannot have both FOCUSED_TAB and FOCUSED_APP at
+  // the same time, but because Chrome cannot retrieve FOCUSED_APP status
+  // synchronously, Chrome may still see both at the same time. When that
+  // happens, treat FOCUSED_TAB as the most important since the (synchronously
+  // retrieved) tab information is more reliable and up-to-date.
+  FOCUSED_TAB = 1,
+  FOCUSED_APP = 2,
 
-  VISIBLE_APP = 2,
-  BACKGROUND_TAB = 3,
+  // Important apps are protected in two ways: 1) Chrome never kills them, and
+  // 2) the kernel is still allowed to kill them, but their OOM adjustment
+  // scores are better than BACKGROUND_TABs and BACKGROUND_APPs.
+  IMPORTANT_APP = 3,
+
   BACKGROUND_APP = 4,
-  UNKNOWN_TYPE = 5,
+  BACKGROUND_TAB = 5,
+  UNKNOWN_TYPE = 6,
 };
 
 // The Chrome OS TabManagerDelegate is responsible for keeping the
@@ -98,6 +104,8 @@ class TabManagerDelegate : public aura::client::ActivationChangeObserver,
 
  private:
   FRIEND_TEST_ALL_PREFIXES(TabManagerDelegateTest, CandidatesSorted);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerDelegateTest,
+                           CandidatesSortedWithFocusedAppAndTab);
   FRIEND_TEST_ALL_PREFIXES(TabManagerDelegateTest,
                            DoNotKillRecentlyKilledArcProcesses);
   FRIEND_TEST_ALL_PREFIXES(TabManagerDelegateTest, IsRecentlyKilledArcProcess);
@@ -158,6 +166,12 @@ class TabManagerDelegate : public aura::client::ActivationChangeObserver,
       int range_end,
       ProcessScoreMap* new_map);
 
+  // Changes |candidates|' OOM scores to |score|. The new scores are set in
+  // |new_map|.
+  void SetOomScore(const std::vector<TabManagerDelegate::Candidate>& candidates,
+                   int score,
+                   ProcessScoreMap* new_map);
+
   // Initiates an oom priority adjustment.
   void ScheduleEarlyOomPrioritiesAdjustment();
 
@@ -168,6 +182,9 @@ class TabManagerDelegate : public aura::client::ActivationChangeObserver,
   static constexpr base::TimeDelta GetArcRespawnKillDelay() {
     return base::TimeDelta::FromSeconds(60);
   }
+
+  // The lowest OOM adjustment score that will make the process non-killable.
+  static const int kLowestOomScore;
 
   // Holds a reference to the owning TabManager.
   const base::WeakPtr<TabManager> tab_manager_;

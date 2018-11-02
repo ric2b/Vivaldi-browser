@@ -11,8 +11,11 @@
 namespace content {
 
 NetworkServiceURLLoaderFactoryImpl::NetworkServiceURLLoaderFactoryImpl(
-    NetworkContext* context)
-    : context_(context) {}
+    NetworkContext* context,
+    uint32_t process_id)
+    : context_(context), process_id_(process_id) {
+  ignore_result(process_id_);
+}
 
 NetworkServiceURLLoaderFactoryImpl::~NetworkServiceURLLoaderFactoryImpl() =
     default;
@@ -21,9 +24,10 @@ void NetworkServiceURLLoaderFactoryImpl::CreateLoaderAndStart(
     mojom::URLLoaderAssociatedRequest request,
     int32_t routing_id,
     int32_t request_id,
+    uint32_t options,
     const ResourceRequest& url_request,
     mojom::URLLoaderClientPtr client) {
-  new URLLoaderImpl(context_, std::move(request), url_request,
+  new URLLoaderImpl(context_, std::move(request), options, url_request,
                     std::move(client));
 }
 
@@ -31,12 +35,12 @@ void NetworkServiceURLLoaderFactoryImpl::SyncLoad(
     int32_t routing_id,
     int32_t request_id,
     const ResourceRequest& url_request,
-    const SyncLoadCallback& callback) {
+    SyncLoadCallback callback) {
   NOTIMPLEMENTED();
 
   SyncLoadResult result;
   result.error_code = net::ERR_NOT_IMPLEMENTED;
-  callback.Run(result);
+  std::move(callback).Run(result);
 }
 
 }  // namespace content

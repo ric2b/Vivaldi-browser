@@ -303,7 +303,7 @@ class PLATFORM_EXPORT ResourceResponse final {
 
   const Vector<char>& MultipartBoundary() const { return multipart_boundary_; }
   void SetMultipartBoundary(const char* bytes, size_t size) {
-    multipart_boundary_.Clear();
+    multipart_boundary_.clear();
     multipart_boundary_.Append(bytes, size);
   }
 
@@ -345,10 +345,10 @@ class PLATFORM_EXPORT ResourceResponse final {
   void SetEncodedDataLength(long long value);
 
   long long EncodedBodyLength() const { return encoded_body_length_; }
-  void AddToEncodedBodyLength(long long value);
+  void SetEncodedBodyLength(long long value);
 
   long long DecodedBodyLength() const { return decoded_body_length_; }
-  void AddToDecodedBodyLength(long long value);
+  void SetDecodedBodyLength(long long value);
 
   const String& DownloadedFilePath() const { return downloaded_file_path_; }
   void SetDownloadedFilePath(const String&);

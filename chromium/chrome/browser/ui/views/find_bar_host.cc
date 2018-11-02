@@ -29,7 +29,8 @@ using content::NativeWebKeyboardEvent;
 
 FindBarHost::FindBarHost(BrowserView* browser_view)
     : DropdownBarHost(browser_view),
-      find_bar_controller_(NULL) {
+      find_bar_controller_(NULL),
+      audible_alerts_(0) {
   FindBarView* find_bar_view = new FindBarView(this);
   Init(browser_view->find_bar_host_view(), find_bar_view, find_bar_view);
 }
@@ -62,7 +63,9 @@ bool FindBarHost::MaybeForwardKeyEventToWebpage(
   // input. Otherwise Up and Down arrow key strokes get eaten. "Nom Nom Nom".
   contents->ClearFocusedElement();
   NativeWebKeyboardEvent event(key_event);
-  contents->GetRenderViewHost()->GetWidget()->ForwardKeyboardEvent(event);
+  contents->GetRenderViewHost()
+      ->GetWidget()
+      ->ForwardKeyboardEventWithLatencyInfo(event, *key_event.latency());
   return true;
 }
 
@@ -145,6 +148,7 @@ void FindBarHost::UpdateUIForFindResult(const FindNotificationDetails& result,
 }
 
 void FindBarHost::AudibleAlert() {
+  ++audible_alerts_;
 #if defined(OS_WIN)
   MessageBeep(MB_OK);
 #endif
@@ -243,6 +247,10 @@ base::string16 FindBarHost::GetMatchCountText() {
 
 int FindBarHost::GetWidth() {
   return view()->width();
+}
+
+size_t FindBarHost::GetAudibleAlertCount() {
+  return audible_alerts_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

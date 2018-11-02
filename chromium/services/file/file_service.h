@@ -7,12 +7,12 @@
 
 #include "base/callback_forward.h"
 #include "base/memory/ref_counted.h"
+#include "base/single_thread_task_runner.h"
 #include "components/filesystem/lock_table.h"
 #include "components/leveldb/public/interfaces/leveldb.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/file/public/interfaces/file_system.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
 
 namespace file {
@@ -21,10 +21,7 @@ std::unique_ptr<service_manager::Service> CreateFileService(
     scoped_refptr<base::SingleThreadTaskRunner> file_service_runner,
     scoped_refptr<base::SingleThreadTaskRunner> leveldb_service_runner);
 
-class FileService
-    : public service_manager::Service,
-      public service_manager::InterfaceFactory<mojom::FileSystem>,
-      public service_manager::InterfaceFactory<leveldb::mojom::LevelDBService> {
+class FileService : public service_manager::Service {
  public:
   FileService(
       scoped_refptr<base::SingleThreadTaskRunner> file_service_runner,
@@ -34,17 +31,16 @@ class FileService
  private:
   // |Service| override:
   void OnStart() override;
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
 
-  // |InterfaceFactory<mojom::FileSystem>| implementation:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::FileSystemRequest request) override;
+  void BindFileSystemRequest(const service_manager::BindSourceInfo& source_info,
+                             mojom::FileSystemRequest request);
 
-  // |InterfaceFactory<LevelDBService>| implementation:
-  void Create(const service_manager::Identity& remote_identity,
-              leveldb::mojom::LevelDBServiceRequest request) override;
+  void BindLevelDBServiceRequest(
+      const service_manager::BindSourceInfo& source_info,
+      leveldb::mojom::LevelDBServiceRequest request);
 
   void OnLevelDBServiceError();
 

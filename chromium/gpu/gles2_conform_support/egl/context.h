@@ -7,23 +7,21 @@
 
 #include <memory>
 
+#include <EGL/egl.h>
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/gpu_control.h"
-#include "gpu/command_buffer/service/command_buffer_service.h"
-#include "gpu/command_buffer/service/command_executor.h"
+#include "gpu/command_buffer/service/command_buffer_direct.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/gl_context.h"
-#include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface.h"
-#include "ui/gl/gl_surface.h"
-#include <EGL/egl.h>
 
 namespace gpu {
+class ServiceDiscardableManager;
 class TransferBuffer;
 
 namespace gles2 {
@@ -68,7 +66,8 @@ class Context : public base::RefCountedThreadSafe<Context>,
   void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
   gpu::CommandBufferId GetCommandBufferID() const override;
-  int32_t GetExtraCommandBufferData() const override;
+  int32_t GetStreamId() const override;
+  void FlushOrderingBarrierOnStream(int32_t stream_id) override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
   bool IsFenceSyncFlushed(uint64_t release) override;
@@ -78,6 +77,8 @@ class Context : public base::RefCountedThreadSafe<Context>,
                        const base::Closure& callback) override;
   void WaitSyncTokenHint(const gpu::SyncToken& sync_token) override;
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override;
+  void AddLatencyInfo(
+      const std::vector<ui::LatencyInfo>& latency_info) override;
 
   // Called by ThreadState to set the needed global variables when this context
   // is current.
@@ -102,11 +103,12 @@ class Context : public base::RefCountedThreadSafe<Context>,
   bool is_current_in_some_thread_;
   bool is_destroyed_;
   gpu::GpuPreferences gpu_preferences_;
+  std::unique_ptr<gpu::ServiceDiscardableManager> discardable_manager_;
   const gpu::GpuDriverBugWorkarounds gpu_driver_bug_workarounds_;
-  std::unique_ptr<gpu::CommandBufferService> command_buffer_;
+  std::unique_ptr<gpu::TransferBufferManager> transfer_buffer_manager_;
+  std::unique_ptr<gpu::CommandBufferDirect> command_buffer_;
   std::unique_ptr<gpu::gles2::GLES2CmdHelper> gles2_cmd_helper_;
   std::unique_ptr<gpu::gles2::GLES2Decoder> decoder_;
-  std::unique_ptr<gpu::CommandExecutor> command_executor_;
   std::unique_ptr<gpu::TransferBuffer> transfer_buffer_;
 
   scoped_refptr<gl::GLContext> gl_context_;

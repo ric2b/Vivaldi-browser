@@ -219,6 +219,7 @@
         {
             "type": "@UI.ViewLocationResolver",
             "name": "elements-sidebar",
+            "category": "Elements",
             "className": "Elements.ElementsPanel"
         },
         {
@@ -230,15 +231,6 @@
             "hasToolbar": true,
             "persistence": "permanent",
             "className": "Elements.EventListenersWidget"
-        },
-        {
-            "type": "view",
-            "location": "elements-sidebar",
-            "id": "elements.domBreakpoints",
-            "title": "DOM Breakpoints",
-            "order": 6,
-            "persistence": "permanent",
-            "factoryName": "Components.DOMBreakpointsSidebarPane.Proxy"
         },
         {
             "type": "view",

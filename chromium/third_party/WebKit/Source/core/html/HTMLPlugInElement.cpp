@@ -46,8 +46,8 @@
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/plugins/PluginView.h"
-#include "platform/FrameViewBase.h"
 #include "platform/Histogram.h"
+#include "platform/bindings/V8PerIsolateData.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/network/mime/MIMETypeFromURL.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
@@ -86,63 +86,14 @@ HTMLPlugInElement::HTMLPlugInElement(
                                          kShouldPreferPlugInsForImages) {}
 
 HTMLPlugInElement::~HTMLPlugInElement() {
-  DCHECK(!plugin_wrapper_);  // cleared in detachLayoutTree()
+  DCHECK(plugin_wrapper_.IsEmpty());  // cleared in detachLayoutTree()
   DCHECK(!is_delaying_load_event_);
 }
 
 DEFINE_TRACE(HTMLPlugInElement) {
   visitor->Trace(image_loader_);
-  visitor->Trace(plugin_);
   visitor->Trace(persisted_plugin_);
   HTMLFrameOwnerElement::Trace(visitor);
-}
-
-void HTMLPlugInElement::SetPlugin(PluginView* plugin) {
-  if (plugin == plugin_)
-    return;
-
-  // Remove and dispose the old plugin if we had one.
-  if (plugin_) {
-    GetDocument().View()->RemovePlugin(plugin_);
-    DisposeWidgetSoon(plugin_);
-  }
-  plugin_ = plugin;
-
-  // TODO(joelhockey): I copied the rest of this method from
-  // HTMLFrameOwnerElement.  There may be parts that can be removed
-  // such as the layoutPartItem.isNull check and DCHECKs.
-  // Once widget tree is removed (FrameView::m_children), try to unify
-  // this code with HTMLFrameOwnerElement::setWidget.
-  LayoutPart* layout_part = ToLayoutPart(GetLayoutObject());
-  LayoutPartItem layout_part_item = LayoutPartItem(layout_part);
-  if (layout_part_item.IsNull())
-    return;
-
-  // Update layout and frame with new plugin.
-  if (plugin_) {
-    layout_part_item.UpdateOnWidgetChange();
-
-    DCHECK_EQ(GetDocument().View(), layout_part_item.GetFrameView());
-    DCHECK(layout_part_item.GetFrameView());
-    GetDocument().View()->AddPlugin(plugin);
-  }
-
-  // Apparently accessibility objects might have been modified if plugin
-  // was removed.
-  if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
-    cache->ChildrenChanged(layout_part);
-}
-
-PluginView* HTMLPlugInElement::ReleasePlugin() {
-  if (!plugin_)
-    return nullptr;
-  GetDocument().View()->RemovePlugin(plugin_);
-  LayoutPart* layout_part = ToLayoutPart(GetLayoutObject());
-  if (layout_part) {
-    if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
-      cache->ChildrenChanged(layout_part);
-  }
-  return plugin_.Release();
 }
 
 void HTMLPlugInElement::SetPersistedPlugin(PluginView* plugin) {
@@ -150,14 +101,15 @@ void HTMLPlugInElement::SetPersistedPlugin(PluginView* plugin) {
     return;
   if (persisted_plugin_) {
     persisted_plugin_->Hide();
-    DisposeWidgetSoon(persisted_plugin_.Release());
+    DisposeFrameOrPluginSoon(persisted_plugin_.Release());
   }
   persisted_plugin_ = plugin;
 }
 
 void HTMLPlugInElement::SetFocused(bool focused, WebFocusType focus_type) {
-  if (plugin_)
-    plugin_->SetFocused(focused, focus_type);
+  PluginView* plugin = OwnedPlugin();
+  if (plugin)
+    plugin->SetFocused(focused, focus_type);
   HTMLFrameOwnerElement::SetFocused(focused, focus_type);
 }
 
@@ -207,9 +159,9 @@ bool HTMLPlugInElement::WillRespondToMouseClickEvents() {
 
 void HTMLPlugInElement::RemoveAllEventListeners() {
   HTMLFrameOwnerElement::RemoveAllEventListeners();
-  if (plugin_) {
-    plugin_->EventListenersRemoved();
-  }
+  PluginView* plugin = OwnedPlugin();
+  if (plugin)
+    plugin->EventListenersRemoved();
 }
 
 void HTMLPlugInElement::DidMoveToNewDocument(Document& old_document) {
@@ -308,7 +260,8 @@ void HTMLPlugInElement::CreatePluginWithoutLayoutObject() {
 }
 
 bool HTMLPlugInElement::ShouldAccelerate() const {
-  return plugin_ && plugin_->PlatformLayer();
+  PluginView* plugin = OwnedPlugin();
+  return plugin && plugin->PlatformLayer();
 }
 
 void HTMLPlugInElement::DetachLayoutTree(const AttachContext& context) {
@@ -324,11 +277,12 @@ void HTMLPlugInElement::DetachLayoutTree(const AttachContext& context) {
   }
 
   // Only try to persist a plugin we actually own.
-  if (plugin_ && context.performing_reattach) {
-    SetPersistedPlugin(ReleasePlugin());
+  PluginView* plugin = OwnedPlugin();
+  if (plugin && context.performing_reattach) {
+    SetPersistedPlugin(ToPluginView(ReleaseWidget()));
   } else {
     // Clear the plugin; will trigger disposal of it with Oilpan.
-    SetPlugin(nullptr);
+    SetWidget(nullptr);
   }
 
   ResetInstance();
@@ -365,31 +319,30 @@ void HTMLPlugInElement::FinishParsingChildren() {
 }
 
 void HTMLPlugInElement::ResetInstance() {
-  plugin_wrapper_.Clear();
+  plugin_wrapper_.Reset();
 }
 
-SharedPersistent<v8::Object>* HTMLPlugInElement::PluginWrapper() {
+v8::Local<v8::Object> HTMLPlugInElement::PluginWrapper() {
   LocalFrame* frame = GetDocument().GetFrame();
   if (!frame)
-    return nullptr;
+    return v8::Local<v8::Object>();
 
   // If the host dynamically turns off JavaScript (or Java) we will still
   // return the cached allocated Bindings::Instance. Not supporting this
   // edge-case is OK.
-  if (!plugin_wrapper_) {
+  v8::Isolate* isolate = V8PerIsolateData::MainThreadIsolate();
+  if (plugin_wrapper_.IsEmpty()) {
     PluginView* plugin;
 
     if (persisted_plugin_)
-      plugin = persisted_plugin_.Get();
+      plugin = persisted_plugin_;
     else
       plugin = PluginWidget();
 
-    if (plugin) {
-      plugin_wrapper_ =
-          frame->GetScriptController().CreatePluginWrapper(*plugin);
-    }
+    if (plugin)
+      plugin_wrapper_.Reset(isolate, plugin->ScriptableObject(isolate));
   }
-  return plugin_wrapper_.Get();
+  return plugin_wrapper_.Get(isolate);
 }
 
 PluginView* HTMLPlugInElement::PluginWidget() const {
@@ -398,8 +351,11 @@ PluginView* HTMLPlugInElement::PluginWidget() const {
   return nullptr;
 }
 
-PluginView* HTMLPlugInElement::Plugin() const {
-  return plugin_.Get();
+PluginView* HTMLPlugInElement::OwnedPlugin() const {
+  FrameOrPlugin* frame_or_plugin = OwnedWidget();
+  if (frame_or_plugin && frame_or_plugin->IsPluginView())
+    return ToPluginView(frame_or_plugin);
+  return nullptr;
 }
 
 bool HTMLPlugInElement::IsPresentationAttribute(
@@ -451,9 +407,10 @@ void HTMLPlugInElement::DefaultEventHandler(Event* event) {
             .ShowsUnavailablePluginIndicator())
       return;
   }
-  if (!plugin_)
+  PluginView* plugin = OwnedPlugin();
+  if (!plugin)
     return;
-  plugin_->HandleEvent(event);
+  plugin->HandleEvent(event);
   if (event->DefaultHandled())
     return;
   HTMLFrameOwnerElement::DefaultEventHandler(event);
@@ -481,6 +438,13 @@ bool HTMLPlugInElement::HasCustomFocusLogic() const {
 
 bool HTMLPlugInElement::IsPluginElement() const {
   return true;
+}
+
+bool HTMLPlugInElement::IsErrorplaceholder() {
+  if (PluginWidget() && PluginWidget()->IsPluginContainer() &&
+      PluginWidget()->IsErrorplaceholder())
+    return true;
+  return false;
 }
 
 void HTMLPlugInElement::DisconnectContentFrame() {
@@ -581,7 +545,7 @@ bool HTMLPlugInElement::LoadPlugin(const KURL& url,
   loaded_url_ = url;
 
   if (persisted_plugin_) {
-    SetPlugin(persisted_plugin_.Release());
+    SetWidget(persisted_plugin_.Release());
   } else {
     bool load_manually =
         GetDocument().IsPluginDocument() && !GetDocument().ContainsPlugins();
@@ -599,10 +563,12 @@ bool HTMLPlugInElement::LoadPlugin(const KURL& url,
       return false;
     }
 
-    if (!layout_item.IsNull())
-      SetPlugin(plugin);
-    else
+    if (!layout_item.IsNull()) {
+      SetWidget(plugin);
+      layout_item.GetFrameView()->AddPlugin(plugin);
+    } else {
       SetPersistedPlugin(plugin);
+    }
   }
 
   GetDocument().SetContainsPlugins();
@@ -653,11 +619,6 @@ bool HTMLPlugInElement::AllowedToLoadObject(const KURL& url,
 
   if (MIMETypeRegistry::IsJavaAppletMIMEType(mime_type))
     return false;
-
-  if (!GetDocument().GetSecurityOrigin()->CanDisplay(url)) {
-    FrameLoader::ReportLocalLoadFailed(frame, url.GetString());
-    return false;
-  }
 
   AtomicString declared_mime_type = FastGetAttribute(HTMLNames::typeAttr);
   if (!GetDocument().GetContentSecurityPolicy()->AllowObjectFromSource(url) ||

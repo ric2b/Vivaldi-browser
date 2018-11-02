@@ -7,50 +7,39 @@
 #include <utility>
 
 #include "content/public/browser/web_contents.h"
-#include "ui/views/widget/widget.h"
-#include "ui/views/widget/widget_observer.h"
 
 namespace payments {
 
 TestChromePaymentRequestDelegate::TestChromePaymentRequestDelegate(
     content::WebContents* web_contents,
     PaymentRequestDialogView::ObserverForTest* observer,
-    views::WidgetObserver* widget_observer,
-    bool is_incognito)
+    bool is_incognito,
+    bool is_valid_ssl)
     : ChromePaymentRequestDelegate(web_contents),
-      address_input_provider_(nullptr),
+      region_data_loader_(nullptr),
       observer_(observer),
-      widget_observer_(widget_observer),
-      is_incognito_for_testing_(is_incognito) {}
+      is_incognito_(is_incognito),
+      is_valid_ssl_(is_valid_ssl) {}
 
 void TestChromePaymentRequestDelegate::ShowDialog(PaymentRequest* request) {
   PaymentRequestDialogView* dialog_view =
       new PaymentRequestDialogView(request, observer_);
   dialog_view->ShowDialog();
-
-  // The widget is now valid, so register its observer.
-  views::Widget* widget = dialog_view->GetWidget();
-  widget->AddObserver(widget_observer_);
-
   dialog_ = std::move(dialog_view);
 }
 
 bool TestChromePaymentRequestDelegate::IsIncognito() const {
-  return is_incognito_for_testing_;
+  return is_incognito_;
 }
 
-std::unique_ptr<const ::i18n::addressinput::Source>
-TestChromePaymentRequestDelegate::GetAddressInputSource() {
-  if (address_input_provider_)
-    return address_input_provider_->GetAddressInputSource();
-  return ChromePaymentRequestDelegate::GetAddressInputSource();
+bool TestChromePaymentRequestDelegate::IsSslCertificateValid() {
+  return is_valid_ssl_;
 }
 
-std::unique_ptr<::i18n::addressinput::Storage>
-TestChromePaymentRequestDelegate::GetAddressInputStorage() {
-  if (address_input_provider_)
-    return address_input_provider_->GetAddressInputStorage();
-  return ChromePaymentRequestDelegate::GetAddressInputStorage();
+autofill::RegionDataLoader*
+TestChromePaymentRequestDelegate::GetRegionDataLoader() {
+  if (region_data_loader_)
+    return region_data_loader_;
+  return ChromePaymentRequestDelegate::GetRegionDataLoader();
 }
-
 }  // namespace payments

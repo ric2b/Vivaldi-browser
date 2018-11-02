@@ -249,7 +249,9 @@ ProcessManager::ProcessManager(BrowserContext* context,
   content::DevToolsAgentHost::AddObserver(this);
 }
 
-ProcessManager::~ProcessManager() = default;
+ProcessManager::~ProcessManager() {
+  content::DevToolsAgentHost::RemoveObserver(this);
+}
 
 void ProcessManager::Shutdown() {
   extension_registry_->RemoveObserver(this);
@@ -623,10 +625,9 @@ void ProcessManager::OnExtensionLoaded(BrowserContext* browser_context,
   }
 }
 
-void ProcessManager::OnExtensionUnloaded(
-    BrowserContext* browser_context,
-    const Extension* extension,
-    UnloadedExtensionInfo::Reason reason) {
+void ProcessManager::OnExtensionUnloaded(BrowserContext* browser_context,
+                                         const Extension* extension,
+                                         UnloadedExtensionReason reason) {
   ExtensionHost* host = GetBackgroundHostForExtension(extension->id());
   if (host != nullptr)
     CloseBackgroundHost(host);

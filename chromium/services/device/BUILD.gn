@@ -25,15 +25,14 @@ source_set("lib") {
 
   deps = [
     "//base",
-    "//device/battery:mojo_bindings",
     "//device/generic_sensor",
     "//device/sensors",
     "//device/sensors/public/interfaces",
-    "//device/vibration:mojo_bindings",
     "//device/wake_lock",
     "//services/device/fingerprint",
     "//services/device/power_monitor",
     "//services/device/public/cpp:device_features",
+    "//services/device/public/interfaces",
     "//services/device/screen_orientation",
     "//services/device/time_zone_monitor",
     "//services/service_manager/public/cpp",
@@ -48,8 +47,8 @@ source_set("lib") {
     deps += [ ":device_service_jni_headers" ]
   } else {
     deps += [
-      "//device/battery",
-      "//device/vibration",
+      "//services/device/battery",
+      "//services/device/vibration",
     ]
   }
 }
@@ -58,6 +57,8 @@ source_set("tests") {
   testonly = true
 
   sources = [
+    "battery/battery_status_manager_win_unittest.cc",
+    "battery/battery_status_service_unittest.cc",
     "power_monitor/power_monitor_message_broadcaster_unittest.cc",
     "public/cpp/power_monitor/power_monitor_broadcast_source_unittest.cc",
     "vibration/vibration_manager_impl_unittest.cc",
@@ -67,27 +68,39 @@ source_set("tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
-    "//device/vibration:mojo_bindings",
     "//mojo/public/cpp/bindings",
     "//services/device/power_monitor",
     "//services/device/public/cpp/power_monitor",
+    "//testing/gmock",
     "//testing/gtest",
   ]
 
+  if (is_linux && !is_chromeos && use_dbus) {
+    sources += [ "battery/battery_status_manager_linux_unittest.cc" ]
+    deps += [ "//dbus:test_support" ]
+  }
+
   if (is_chromeos) {
     sources += [ "fingerprint/fingerprint_chromeos_unittest.cc" ]
-    deps += [ "//services/device/fingerprint" ]
+    deps += [
+      "//chromeos",
+      "//dbus",
+      "//services/device/fingerprint",
+      "//third_party/protobuf:protobuf_lite",
+    ]
   }
 
   if (is_android) {
+    sources -= [ "battery/battery_status_service_unittest.cc" ]
     deps += [
       ":device_service_jni_headers",
-      "//device/vibration/android:vibration_jni_headers",
+      "//services/device/vibration/android:vibration_jni_headers",
     ]
   } else {
+    sources += [ "battery/battery_monitor_impl_unittest.cc" ]
     deps += [
-      "//device/battery",
-      "//device/vibration",
+      "//services/device/battery",
+      "//services/device/vibration",
     ]
   }
 }
@@ -122,8 +135,8 @@ source_set("test_support") {
     "//base/test:test_support",
     "//mojo/public/cpp/bindings",
     "//services/device/public/interfaces:constants",
+    "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp:service_test_support",
-    "//services/service_manager/public/cpp:sources",
   ]
 }
 
@@ -150,15 +163,16 @@ if (is_android) {
     java_files = [ "android/java/src/org/chromium/services/device/InterfaceRegistrar.java" ]
     deps = [
       "//base:base_java",
-      "//device/battery:mojo_bindings_java",
-      "//device/battery/android:battery_monitor_java",
-      "//device/vibration:mojo_bindings_java",
-      "//device/vibration/android:vibration_manager_java",
       "//mojo/android:system_java",
       "//mojo/public/java:bindings_java",
       "//mojo/public/java:system_java",
+      "//services/device/battery/android:battery_monitor_java",
+      "//services/device/nfc/android:java",
+      "//services/device/public/interfaces:interfaces_java",
+      "//services/device/public/java:nfc_java",
       "//services/device/screen_orientation:java",
       "//services/device/time_zone_monitor:java",
+      "//services/device/vibration/android:vibration_manager_java",
       "//services/service_manager/public/interfaces:interfaces_java",
       "//services/service_manager/public/java:service_manager_java",
     ]

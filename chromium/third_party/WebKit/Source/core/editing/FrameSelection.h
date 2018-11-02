@@ -51,7 +51,6 @@ class LocalFrame;
 class FrameCaret;
 class GranularityStrategy;
 class GraphicsContext;
-class HTMLFormElement;
 class SelectionEditor;
 class LayoutSelection;
 class TextIteratorBehavior;
@@ -123,13 +122,9 @@ class CORE_EXPORT FrameSelection final
                     SetSelectionOptions = kCloseTyping | kClearTypingStyle,
                     CursorAlignOnScroll = CursorAlignOnScroll::kIfNeeded,
                     TextGranularity = kCharacterGranularity);
-  bool SetSelectedRange(
-      const EphemeralRange&,
-      TextAffinity,
-      SelectionDirectionalMode = SelectionDirectionalMode::kNonDirectional,
-      FrameSelection::SetSelectionOptions = kCloseTyping | kClearTypingStyle);
-  void SelectAll();
+  void SelectAll(EUserTriggered = kNotUserTriggered);
   void Clear();
+  bool IsHidden() const;
 
   // TODO(tkent): These two functions were added to fix crbug.com/695211 without
   // changing focus behavior. Once we fix crbug.com/690272, we can remove these
@@ -183,8 +178,8 @@ class CORE_EXPORT FrameSelection final
   void DocumentAttached(Document*);
 
   void DidLayout();
-  bool IsAppearanceDirty() const;
-  void CommitAppearanceIfNeeded(LayoutView&);
+  bool NeedsLayoutSelectionUpdate() const;
+  void CommitAppearanceIfNeeded();
   void SetCaretVisible(bool caret_is_visible);
   void ScheduleVisualUpdate() const;
   void ScheduleVisualUpdateForPaintInvalidationIfNeeded() const;
@@ -193,8 +188,7 @@ class CORE_EXPORT FrameSelection final
   void ClearPreviousCaretVisualRect(const LayoutBlock&);
   void LayoutBlockWillBeDestroyed(const LayoutBlock&);
   void UpdateStyleAndLayoutIfNeeded();
-  void InvalidatePaintIfNeeded(const LayoutBlock&,
-                               const PaintInvalidatorContext&);
+  void InvalidatePaint(const LayoutBlock&, const PaintInvalidatorContext&);
 
   void PaintCaret(GraphicsContext&, const LayoutPoint&);
 
@@ -203,9 +197,10 @@ class CORE_EXPORT FrameSelection final
   bool IsCaretBlinkingSuspended() const;
 
   // Focus
-  void SetFocused(bool);
-  bool IsFocused() const { return focused_; }
-  bool IsFocusedAndActive() const;
+  bool SelectionHasFocus() const;
+  void SetFrameIsFocused(bool);
+  bool FrameIsFocused() const { return focused_; }
+  bool FrameIsFocusedAndActive() const;
   void PageActivationChanged();
 
   void SetUseSecureKeyboardEntryWhenActive(bool);
@@ -222,7 +217,7 @@ class CORE_EXPORT FrameSelection final
 #endif
 
   void SetFocusedNodeIfNeeded();
-  void NotifyLayoutObjectOfSelectionChange(EUserTriggered);
+  void NotifyTextControlOfSelectionChange(EUserTriggered);
 
   String SelectedHTMLForClipboard() const;
   String SelectedText(const TextIteratorBehavior&) const;
@@ -230,10 +225,10 @@ class CORE_EXPORT FrameSelection final
   String SelectedTextForClipboard() const;
 
   // The bounds are clipped to the viewport as this is what callers expect.
+  // This returns last layouted selection bounds of LayoutSelection rather than
+  // SelectionEditor keeps.
   LayoutRect Bounds() const;
   LayoutRect UnclippedBounds() const;
-
-  HTMLFormElement* CurrentForm() const;
 
   // TODO(tkent): This function has a bug that scrolling doesn't work well in
   // a case of RangeSelection. crbug.com/443061
@@ -252,7 +247,7 @@ class CORE_EXPORT FrameSelection final
 
   FrameCaret& FrameCaretForTesting() const { return *frame_caret_; }
 
-  void LayoutSelectionStartEnd(int& start_pos, int& end_pos);
+  std::pair<int, int> LayoutSelectionStartEnd();
   void ClearLayoutSelection();
 
   DECLARE_TRACE();

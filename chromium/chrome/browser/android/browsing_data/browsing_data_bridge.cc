@@ -19,7 +19,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/scoped_observer.h"
 #include "base/values.h"
-#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
+#include "chrome/browser/browsing_data/browsing_data_important_sites_util.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/engagement/important_sites_util.h"
 #include "chrome/browser/history/web_history_service_factory.h"
@@ -29,7 +29,9 @@
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/browsing_data/core/history_notice_utils.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
+#include "content/public/browser/browsing_data_remover.h"
 #include "jni/BrowsingDataBridge_jni.h"
 
 using base::android::AttachCurrentThread;
@@ -37,53 +39,23 @@ using base::android::JavaParamRef;
 using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ScopedJavaGlobalRef;
+using content::BrowsingDataRemover;
 
 namespace {
-
-const size_t kMaxImportantSites = 5;
 
 Profile* GetOriginalProfile() {
   return ProfileManager::GetActiveUserProfile()->GetOriginalProfile();
 }
 
-// Merges |task_count| BrowsingDataRemover completion callbacks and redirects
-// them back into Java.
-class ClearBrowsingDataObserver : public BrowsingDataRemover::Observer {
- public:
-  // |obj| is expected to be the object passed into ClearBrowsingData(); e.g. a
-  // ChromePreference.
-  ClearBrowsingDataObserver(JNIEnv* env,
-                            jobject obj,
-                            BrowsingDataRemover* browsing_data_remover,
-                            int task_count)
-      : task_count_(task_count),
-        weak_chrome_native_preferences_(env, obj),
-        observer_(this) {
-    DCHECK_GT(task_count, 0);
-    observer_.Add(browsing_data_remover);
-  }
+void OnBrowsingDataRemoverDone(
+    JavaObjectWeakGlobalRef weak_chrome_native_preferences) {
+  JNIEnv* env = AttachCurrentThread();
+  auto java_obj = weak_chrome_native_preferences.get(env);
+  if (java_obj.is_null())
+    return;
 
-  void OnBrowsingDataRemoverDone() override {
-    DCHECK(task_count_);
-    if (--task_count_)
-      return;
-
-    // We delete ourselves when done.
-    std::unique_ptr<ClearBrowsingDataObserver> auto_delete(this);
-
-    JNIEnv* env = AttachCurrentThread();
-    if (weak_chrome_native_preferences_.get(env).is_null())
-      return;
-
-    Java_BrowsingDataBridge_browsingDataCleared(
-        env, weak_chrome_native_preferences_.get(env));
-  }
-
- private:
-  int task_count_;
-  JavaObjectWeakGlobalRef weak_chrome_native_preferences_;
-  ScopedObserver<BrowsingDataRemover, BrowsingDataRemover::Observer> observer_;
-};
+  Java_BrowsingDataBridge_browsingDataCleared(env, java_obj);
+}
 
 }  // namespace
 
@@ -101,7 +73,7 @@ static void ClearBrowsingData(
     const JavaParamRef<jobjectArray>& jignoring_domains,
     const JavaParamRef<jintArray>& jignoring_domain_reasons) {
   BrowsingDataRemover* browsing_data_remover =
-      BrowsingDataRemoverFactory::GetForBrowserContext(GetOriginalProfile());
+      content::BrowserContext::GetBrowsingDataRemover(GetOriginalProfile());
 
   std::vector<int> data_types_vector;
   base::android::JavaIntArrayToIntVector(env, data_types, &data_types_vector);
@@ -128,6 +100,10 @@ static void ClearBrowsingData(
       case browsing_data::BrowsingDataType::BOOKMARKS:
         // Bookmarks are deleted separately on the Java side.
         NOTREACHED();
+        break;
+      case browsing_data::BrowsingDataType::SITE_SETTINGS:
+        remove_mask |=
+            ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS;
         break;
       case browsing_data::BrowsingDataType::NUM_TYPES:
         NOTREACHED();
@@ -158,44 +134,15 @@ static void ClearBrowsingData(
         ignoring_domains, ignoring_domain_reasons);
   }
 
-  // Delete the types protected by Important Sites with a filter,
-  // and the rest completely.
-  int filterable_mask =
-      remove_mask &
-      ChromeBrowsingDataRemoverDelegate::IMPORTANT_SITES_DATA_TYPES;
-  int nonfilterable_mask =
-      remove_mask &
-      ~ChromeBrowsingDataRemoverDelegate::IMPORTANT_SITES_DATA_TYPES;
-
-  // ClearBrowsingDataObserver deletes itself when |browsing_data_remover| is
-  // done with both removal tasks.
-  ClearBrowsingDataObserver* observer = new ClearBrowsingDataObserver(
-      env, obj, browsing_data_remover, 2 /* tasks_count */);
+  base::OnceClosure callback = base::BindOnce(
+      &OnBrowsingDataRemoverDone, JavaObjectWeakGlobalRef(env, obj));
 
   browsing_data::TimePeriod period =
       static_cast<browsing_data::TimePeriod>(time_period);
-  browsing_data::RecordDeletionForPeriod(period);
 
-  if (filterable_mask) {
-    browsing_data_remover->RemoveWithFilterAndReply(
-        browsing_data::CalculateBeginDeleteTime(period),
-        browsing_data::CalculateEndDeleteTime(period), filterable_mask,
-        BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
-        std::move(filter_builder), observer);
-  } else {
-    // Make sure |observer| doesn't wait for the filtered task.
-    observer->OnBrowsingDataRemoverDone();
-  }
-
-  if (nonfilterable_mask) {
-    browsing_data_remover->RemoveAndReply(
-        browsing_data::CalculateBeginDeleteTime(period),
-        browsing_data::CalculateEndDeleteTime(period), nonfilterable_mask,
-        BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB, observer);
-  } else {
-    // Make sure |observer| doesn't wait for the non-filtered task.
-    observer->OnBrowsingDataRemoverDone();
-  }
+  browsing_data_important_sites_util::Remove(
+      remove_mask, BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB, period,
+      std::move(filter_builder), browsing_data_remover, std::move(callback));
 }
 
 static void ShowNoticeAboutOtherFormsOfBrowsingHistory(
@@ -245,8 +192,8 @@ static void FetchImportantSites(JNIEnv* env,
                                 const JavaParamRef<jobject>& java_callback) {
   Profile* profile = GetOriginalProfile();
   std::vector<ImportantSitesUtil::ImportantDomainInfo> important_sites =
-      ImportantSitesUtil::GetImportantRegisterableDomains(profile,
-                                                          kMaxImportantSites);
+      ImportantSitesUtil::GetImportantRegisterableDomains(
+          profile, ImportantSitesUtil::kMaxImportantSites);
   bool dialog_disabled = ImportantSitesUtil::IsDialogDisabled(profile);
 
   std::vector<std::string> important_domains;
@@ -273,7 +220,7 @@ static void FetchImportantSites(JNIEnv* env,
 // This value should not change during a sessions, as it's used for UMA metrics.
 static jint GetMaxImportantSites(JNIEnv* env,
                                  const JavaParamRef<jclass>& clazz) {
-  return kMaxImportantSites;
+  return ImportantSitesUtil::kMaxImportantSites;
 }
 
 static void MarkOriginAsImportantForTesting(

@@ -3,6 +3,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import os.path
 import re
 import subprocess
 import unittest
@@ -412,20 +413,6 @@ class CheckSingletonInHeadersTest(unittest.TestCase):
     self.assertEqual(0, len(warnings))
 
 
-class CheckNoDeprecatedCompiledResourcesGypTest(unittest.TestCase):
-  def testNoDeprecatedCompiledResourcsGyp(self):
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [MockFile('some/js/compiled_resources.gyp', [])]
-    errors = PRESUBMIT._CheckNoDeprecatedCompiledResourcesGyp(mock_input_api,
-                                                              MockOutputApi())
-    self.assertEquals(1, len(errors))
-
-    mock_input_api.files = [MockFile('some/js/compiled_resources2.gyp', [])]
-    errors = PRESUBMIT._CheckNoDeprecatedCompiledResourcesGyp(mock_input_api,
-                                                              MockOutputApi())
-    self.assertEquals(0, len(errors))
-
-
 class InvalidOSMacroNamesTest(unittest.TestCase):
   def testInvalidOSMacroNames(self):
     lines = ['#if defined(OS_WINDOWS)',
@@ -469,41 +456,77 @@ class InvalidIfDefinedMacroNamesTest(unittest.TestCase):
 
 
 class CheckAddedDepsHaveTetsApprovalsTest(unittest.TestCase):
-  def testFilesToCheckForIncomingDeps(self):
-    changed_lines = [
-      '"+breakpad",',
-      '"+chrome/installer",',
-      '"+chrome/plugin/chrome_content_plugin_client.h",',
-      '"+chrome/utility/chrome_content_utility_client.h",',
-      '"+chromeos/chromeos_paths.h",',
-      '"+components/crash/content",',
-      '"+components/nacl/common",',
-      '"+content/public/browser/render_process_host.h",',
-      '"+jni/fooblat.h",',
-      '"+grit",  # For generated headers',
-      '"+grit/generated_resources.h",',
-      '"+grit/",',
-      '"+policy",  # For generated headers and source',
-      '"+sandbox",',
-      '"+tools/memory_watcher",',
-      '"+third_party/lss/linux_syscall_support.h",',
+
+  def calculate(self, old_include_rules, old_specific_include_rules,
+                new_include_rules, new_specific_include_rules):
+    return PRESUBMIT._CalculateAddedDeps(
+        os.path, 'include_rules = %r\nspecific_include_rules = %r' % (
+            old_include_rules, old_specific_include_rules),
+        'include_rules = %r\nspecific_include_rules = %r' % (
+            new_include_rules, new_specific_include_rules))
+
+  def testCalculateAddedDeps(self):
+    old_include_rules = [
+        '+base',
+        '-chrome',
+        '+content',
+        '-grit',
+        '-grit/",',
+        '+jni/fooblat.h',
+        '!sandbox',
     ]
-    files_to_check = PRESUBMIT._FilesToCheckForIncomingDeps(re, changed_lines)
+    old_specific_include_rules = {
+        'compositor\.*': {
+            '+cc',
+        },
+    }
+
+    new_include_rules = [
+        '-ash',
+        '+base',
+        '+chrome',
+        '+components',
+        '+content',
+        '+grit',
+        '+grit/generated_resources.h",',
+        '+grit/",',
+        '+jni/fooblat.h',
+        '+policy',
+        '+' + os.path.join('third_party', 'WebKit'),
+    ]
+    new_specific_include_rules = {
+        'compositor\.*': {
+            '+cc',
+        },
+        'widget\.*': {
+            '+gpu',
+        },
+    }
+
     expected = set([
-      'breakpad/DEPS',
-      'chrome/installer/DEPS',
-      'chrome/plugin/chrome_content_plugin_client.h',
-      'chrome/utility/chrome_content_utility_client.h',
-      'chromeos/chromeos_paths.h',
-      'components/crash/content/DEPS',
-      'components/nacl/common/DEPS',
-      'content/public/browser/render_process_host.h',
-      'policy/DEPS',
-      'sandbox/DEPS',
-      'tools/memory_watcher/DEPS',
-      'third_party/lss/linux_syscall_support.h',
+        os.path.join('chrome', 'DEPS'),
+        os.path.join('gpu', 'DEPS'),
+        os.path.join('components', 'DEPS'),
+        os.path.join('policy', 'DEPS'),
+        os.path.join('third_party', 'WebKit', 'DEPS'),
     ])
-    self.assertEqual(expected, files_to_check);
+    self.assertEqual(
+        expected,
+        self.calculate(old_include_rules, old_specific_include_rules,
+                       new_include_rules, new_specific_include_rules))
+
+  def testCalculateAddedDepsIgnoresPermutations(self):
+    old_include_rules = [
+        '+base',
+        '+chrome',
+    ]
+    new_include_rules = [
+        '+chrome',
+        '+base',
+    ]
+    self.assertEqual(set(),
+                     self.calculate(old_include_rules, {}, new_include_rules,
+                                    {}))
 
 
 class JSONParsingTest(unittest.TestCase):

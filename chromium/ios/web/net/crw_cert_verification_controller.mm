@@ -12,12 +12,12 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
-#include "base/threading/worker_pool.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/certificate_policy_cache.h"
 #include "ios/web/public/web_thread.h"
 #import "ios/web/web_state/wk_web_view_security_util.h"
 #include "net/cert/cert_verify_proc_ios.h"
+#include "net/cert/x509_util_ios.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -195,9 +195,7 @@ decideLoadPolicyForRejectedTrustResult:(SecTrustResultType)trustResult
   // SecTrustEvaluate performs trust evaluation synchronously, possibly making
   // network requests. The UI thread should not be blocked by that operation.
   base::PostTaskWithTraits(
-      FROM_HERE,
-      base::TaskTraits().WithShutdownBehavior(
-          base::TaskShutdownBehavior::BLOCK_SHUTDOWN),
+      FROM_HERE, {base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
       base::BindBlockArc(^{
         SecTrustResultType trustResult = kSecTrustResultInvalid;
         if (SecTrustEvaluate(trust.get(), &trustResult) != errSecSuccess) {
@@ -227,9 +225,9 @@ loadPolicyForRejectedTrustResult:(SecTrustResultType)trustResult
 
   // Check if user has decided to proceed with this bad cert.
   scoped_refptr<net::X509Certificate> leafCert =
-      net::X509Certificate::CreateFromHandle(
+      net::x509_util::CreateX509CertificateFromSecCertificate(
           SecTrustGetCertificateAtIndex(trust, 0),
-          net::X509Certificate::OSCertHandles());
+          std::vector<SecCertificateRef>());
   if (!leafCert)
     return web::CERT_ACCEPT_POLICY_NON_RECOVERABLE_ERROR;
 

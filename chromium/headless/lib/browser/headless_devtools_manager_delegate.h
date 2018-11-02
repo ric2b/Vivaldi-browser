@@ -13,9 +13,23 @@
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "content/public/browser/devtools_manager_delegate.h"
+#include "printing/features/features.h"
+
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
+#include "headless/lib/browser/headless_print_manager.h"
+#include "headless/public/headless_export.h"
+#endif
 
 namespace headless {
 class HeadlessBrowserImpl;
+
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
+// Exported for tests.
+HEADLESS_EXPORT std::unique_ptr<base::DictionaryValue> ParsePrintSettings(
+    int command_id,
+    const base::DictionaryValue* params,
+    printing::HeadlessPrintSettings* settings);
+#endif
 
 class HeadlessDevToolsManagerDelegate
     : public content::DevToolsManagerDelegate {
@@ -46,6 +60,15 @@ class HeadlessDevToolsManagerDelegate
       int command_id,
       const base::DictionaryValue* params);
   std::unique_ptr<base::DictionaryValue> DisposeBrowserContext(
+      int command_id,
+      const base::DictionaryValue* params);
+  std::unique_ptr<base::DictionaryValue> GetWindowForTarget(
+      int command_id,
+      const base::DictionaryValue* params);
+  std::unique_ptr<base::DictionaryValue> GetWindowBounds(
+      int command_id,
+      const base::DictionaryValue* params);
+  std::unique_ptr<base::DictionaryValue> SetWindowBounds(
       int command_id,
       const base::DictionaryValue* params);
   void PrintToPDF(content::DevToolsAgentHost* agent_host,

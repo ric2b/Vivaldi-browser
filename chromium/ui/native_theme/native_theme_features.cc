@@ -6,7 +6,7 @@
 
 namespace features {
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
 constexpr base::FeatureState kOverlayScrollbarFeatureState =
     base::FEATURE_ENABLED_BY_DEFAULT;
 #else

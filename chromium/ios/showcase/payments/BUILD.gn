@@ -8,15 +8,17 @@ source_set("payments") {
     "sc_payments_editor_coordinator.mm",
     "sc_payments_picker_coordinator.h",
     "sc_payments_picker_coordinator.mm",
+    "sc_payments_selector_coordinator.h",
+    "sc_payments_selector_coordinator.mm",
   ]
   deps = [
     "//base",
-    "//ios/chrome/browser/payments:payments_ui",
-    "//ios/chrome/browser/payments/cells",
     "//ios/chrome/browser/ui/autofill",
     "//ios/chrome/browser/ui/autofill:autofill_ui",
     "//ios/chrome/browser/ui/autofill/cells",
     "//ios/chrome/browser/ui/collection_view/cells",
+    "//ios/chrome/browser/ui/payments:payments_ui",
+    "//ios/chrome/browser/ui/payments/cells",
     "//ios/chrome/browser/ui/settings/cells",
     "//ios/showcase/common",
   ]
@@ -29,14 +31,16 @@ source_set("eg_tests") {
   sources = [
     "sc_payments_editor_egtest.mm",
     "sc_payments_picker_egtest.mm",
+    "sc_payments_selector_egtest.mm",
   ]
   deps = [
     "//base",
     "//components/strings",
-    "//ios/chrome/browser/payments:payments_ui",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/autofill:autofill_ui",
+    "//ios/chrome/browser/ui/payments:payments_ui",
     "//ios/chrome/browser/ui/settings",
+    "//ios/chrome/test/earl_grey:test_support",
     "//ios/showcase/test",
     "//ios/third_party/earl_grey",
     "//ui/base",

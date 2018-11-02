@@ -31,7 +31,7 @@
 
 #include "platform/scroll/ScrollableArea.h"
 
-#include "platform/HostWindow.h"
+#include "platform/PlatformChromeClient.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/scroll/MainThreadScrollingReason.h"
@@ -43,7 +43,7 @@ static const float kMinFractionToStepWhenPaging = 0.875f;
 
 namespace blink {
 
-int ScrollableArea::PixelsPerLineStep(HostWindow* host) {
+int ScrollableArea::PixelsPerLineStep(PlatformChromeClient* host) {
   if (!host)
     return kPixelsPerLineStep;
   return host->WindowToViewportScalar(kPixelsPerLineStep);
@@ -131,7 +131,7 @@ float ScrollableArea::ScrollStep(ScrollGranularity granularity,
     case kScrollByPrecisePixel:
       return PixelStep(orientation);
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return 0.0f;
   }
 }
@@ -193,7 +193,7 @@ void ScrollableArea::SetScrollOffset(const ScrollOffset& offset,
       UserScrollHelper(clamped_offset, behavior);
       break;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
   }
 }
 
@@ -248,7 +248,7 @@ void ScrollableArea::UserScrollHelper(const ScrollOffset& offset,
   // TODO(bokan): The userScroll method should probably be modified to call this
   //              method and ScrollAnimatorBase to have a simpler
   //              animateToOffset method like the ProgrammaticScrollAnimator.
-  ASSERT(scroll_behavior == kScrollBehaviorInstant);
+  DCHECK_EQ(scroll_behavior, kScrollBehaviorInstant);
   GetScrollAnimator().ScrollToOffsetWithoutAnimation(ScrollOffset(x, y));
 }
 
@@ -258,7 +258,7 @@ LayoutRect ScrollableArea::ScrollIntoView(const LayoutRect& rect_in_content,
                                           ScrollType) {
   // TODO(bokan): This should really be implemented here but ScrollAlignment is
   // in Core which is a dependency violation.
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return LayoutRect();
 }
 
@@ -283,9 +283,10 @@ void ScrollableArea::ScrollOffsetChanged(const ScrollOffset& offset,
   if (Scrollbar* vertical_scrollbar = this->VerticalScrollbar())
     vertical_scrollbar->OffsetDidChange();
 
-  if (GetScrollOffset() != old_offset)
-    GetScrollAnimator().NotifyContentAreaScrolled(GetScrollOffset() -
-                                                  old_offset);
+  if (GetScrollOffset() != old_offset) {
+    GetScrollAnimator().NotifyContentAreaScrolled(
+        GetScrollOffset() - old_offset, scroll_type);
+  }
 
   GetScrollAnimator().SetCurrentOffset(offset);
 }
@@ -397,7 +398,6 @@ void ScrollableArea::WillRemoveScrollbar(Scrollbar& scrollbar,
 }
 
 void ScrollableArea::ContentsResized() {
-  ShowOverlayScrollbars();
   if (ScrollAnimatorBase* scroll_animator = ExistingScrollAnimator())
     scroll_animator->ContentsResized();
 }
@@ -491,14 +491,6 @@ void ScrollableArea::LayerForScrollingDidChange(
         timeline);
   if (ScrollAnimatorBase* scroll_animator = ExistingScrollAnimator())
     scroll_animator->LayerForCompositedScrollingDidChange(timeline);
-}
-
-bool ScrollableArea::ScheduleAnimation() {
-  if (HostWindow* window = GetHostWindow()) {
-    window->ScheduleAnimation(GetFrameViewBase());
-    return true;
-  }
-  return false;
 }
 
 void ScrollableArea::ServiceScrollAnimations(double monotonic_time) {
@@ -623,7 +615,7 @@ ScrollOffset ScrollableArea::ClampScrollOffset(
 }
 
 int ScrollableArea::LineStep(ScrollbarOrientation) const {
-  return PixelsPerLineStep(GetHostWindow());
+  return PixelsPerLineStep(GetChromeClient());
 }
 
 int ScrollableArea::PageStep(ScrollbarOrientation orientation) const {

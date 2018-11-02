@@ -31,8 +31,8 @@
 #ifndef WebDevToolsAgent_h
 #define WebDevToolsAgent_h
 
-#include "../platform/WebCommon.h"
-#include "../platform/WebVector.h"
+#include "public/platform/WebCommon.h"
+#include "public/platform/WebVector.h"
 
 namespace blink {
 
@@ -47,7 +47,7 @@ class WebDevToolsAgent {
   virtual void Reattach(const WebString& host_id,
                         int session_id,
                         const WebString& saved_state) = 0;
-  virtual void Detach() = 0;
+  virtual void Detach(int session_id) = 0;
 
   virtual void ContinueProgram() = 0;
 

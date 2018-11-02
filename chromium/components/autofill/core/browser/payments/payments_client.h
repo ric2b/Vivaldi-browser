@@ -47,7 +47,10 @@ class PaymentsClientDelegate {
       std::unique_ptr<base::DictionaryValue> legal_message) = 0;
 
   // Returns the result of an upload request.
-  virtual void OnDidUploadCard(AutofillClient::PaymentsRpcResult result) = 0;
+  // If |result| == |AutofillClient::SUCCESS|, |server_id| may, optionally,
+  // contain the opaque identifier for the card on the server.
+  virtual void OnDidUploadCard(AutofillClient::PaymentsRpcResult result,
+                               const std::string& server_id) = 0;
 };
 
 // PaymentsClient issues Payments RPCs and manages responses and failure
@@ -88,6 +91,7 @@ class PaymentsClient : public net::URLFetcherDelegate,
     base::string16 context_token;
     std::string risk_data;
     std::string app_locale;
+    std::vector<const char*> active_experiments;
   };
 
   // |context_getter| is reference counted so it has no lifetime or ownership
@@ -112,9 +116,12 @@ class PaymentsClient : public net::URLFetcherDelegate,
   // The service uses |addresses| (from which names and phone numbers are
   // removed) and |app_locale| to determine which legal message to display. If
   // the conditions are met, the legal message will be returned via
-  // OnDidGetUploadDetails.
-  virtual void GetUploadDetails(const std::vector<AutofillProfile>& addresses,
-                                const std::string& app_locale);
+  // OnDidGetUploadDetails. |active_experiments| is used by payments server to
+  // track requests that were triggered by enabled features.
+  virtual void GetUploadDetails(
+      const std::vector<AutofillProfile>& addresses,
+      const std::vector<const char*>& active_experiments,
+      const std::string& app_locale);
 
   // The user has indicated that they would like to upload a card with the given
   // cvc. This request will fail server-side if a successful call to

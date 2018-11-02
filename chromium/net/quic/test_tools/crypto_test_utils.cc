@@ -22,6 +22,7 @@
 #include "net/quic/platform/api/quic_clock.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_socket_address.h"
+#include "net/quic/platform/api/quic_test.h"
 #include "net/quic/platform/api/quic_text_utils.h"
 #include "net/quic/test_tools/quic_connection_peer.h"
 #include "net/quic/test_tools/quic_framer_peer.h"
@@ -31,7 +32,7 @@
 #include "third_party/boringssl/src/include/openssl/bn.h"
 #include "third_party/boringssl/src/include/openssl/ec.h"
 #include "third_party/boringssl/src/include/openssl/ecdsa.h"
-#include "third_party/boringssl/src/include/openssl/obj_mac.h"
+#include "third_party/boringssl/src/include/openssl/nid.h"
 #include "third_party/boringssl/src/include/openssl/sha.h"
 
 using std::string;
@@ -403,8 +404,8 @@ int HandshakeWithFakeServer(QuicConfig* server_quic_config,
   CHECK_NE(0u, client_conn->encrypted_packets_.size());
 
   CommunicateHandshakeMessages(client_conn, client, server_conn,
-                               server_session.GetCryptoStream());
-  CompareClientAndServerKeys(client, server_session.GetCryptoStream());
+                               server_session.GetMutableCryptoStream());
+  CompareClientAndServerKeys(client, server_session.GetMutableCryptoStream());
 
   return client->num_sent_client_hellos();
 }
@@ -438,15 +439,15 @@ int HandshakeWithFakeClient(MockQuicConnectionHelper* helper,
 
   EXPECT_CALL(client_session, OnProofValid(testing::_))
       .Times(testing::AnyNumber());
-  client_session.GetCryptoStream()->CryptoConnect();
+  client_session.GetMutableCryptoStream()->CryptoConnect();
   CHECK_EQ(1u, client_conn->encrypted_packets_.size());
 
   CommunicateHandshakeMessagesAndRunCallbacks(
-      client_conn, client_session.GetCryptoStream(), server_conn, server,
+      client_conn, client_session.GetMutableCryptoStream(), server_conn, server,
       async_channel_id_source);
 
   if (server->handshake_confirmed() && server->encryption_established()) {
-    CompareClientAndServerKeys(client_session.GetCryptoStream(), server);
+    CompareClientAndServerKeys(client_session.GetMutableCryptoStream(), server);
 
     if (options.channel_id_enabled) {
       std::unique_ptr<ChannelIDKey> channel_id_key;

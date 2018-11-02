@@ -15,6 +15,7 @@
 #include <secure-output-unstable-v1-server-protocol.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stylus-tools-unstable-v1-server-protocol.h>
 #include <stylus-unstable-v1-server-protocol.h>
 #include <stylus-unstable-v2-server-protocol.h>
 #include <viewporter-server-protocol.h>
@@ -40,6 +41,7 @@
 #include "base/memory/free_deleter.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
@@ -162,6 +164,10 @@ DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasBlendingKey, false);
 // OnWindowActivated invocation should be ignored. The defualt is true
 // to ignore the activation event originated by creation.
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kIgnoreWindowActivated, true);
+
+// A property key containing a boolean set to true if the stylus_tool
+// object is associated with a window.
+DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasStylusToolKey, false);
 
 wl_resource* GetSurfaceResource(Surface* surface) {
   return surface->GetProperty(kSurfaceResourceKey);
@@ -444,7 +450,7 @@ void shm_create_pool(wl_client* client,
                      int32_t size) {
   std::unique_ptr<SharedMemory> shared_memory =
       GetUserDataAs<Display>(resource)->CreateSharedMemory(
-          base::FileDescriptor(fd, true), size);
+          base::SharedMemoryHandle::ImportHandle(fd, size), size);
   if (!shared_memory) {
     wl_resource_post_no_memory(resource);
     return;
@@ -2001,6 +2007,16 @@ void remote_surface_set_systemui_visibility(wl_client* client,
       visibility != ZCR_REMOTE_SURFACE_V1_SYSTEMUI_VISIBILITY_STATE_VISIBLE);
 }
 
+void remote_surface_set_always_on_top(wl_client* client,
+                                      wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->SetAlwaysOnTop(true);
+}
+
+void remote_surface_unset_always_on_top(wl_client* client,
+                                        wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->SetAlwaysOnTop(false);
+}
+
 void remote_surface_ack_configure(wl_client* client,
                                   wl_resource* resource,
                                   uint32_t serial) {
@@ -2032,6 +2048,8 @@ const struct zcr_remote_surface_v1_interface remote_surface_implementation = {
     remote_surface_unset_system_modal,
     remote_surface_set_rectangular_surface_shadow,
     remote_surface_set_systemui_visibility,
+    remote_surface_set_always_on_top,
+    remote_surface_unset_always_on_top,
     remote_surface_ack_configure,
     remote_surface_move};
 
@@ -2078,7 +2096,7 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
   }
 
   bool IsMultiDisplaySupported() const {
-    return wl_resource_get_version(remote_shell_resource_) >= 4;
+    return wl_resource_get_version(remote_shell_resource_) >= 5;
   }
 
   std::unique_ptr<ShellSurface> CreateShellSurface(Surface* surface,
@@ -2167,6 +2185,10 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
         const gfx::Rect& bounds = display.bounds();
         const gfx::Insets& insets = display.GetWorkAreaInsets();
 
+        double device_scale_factor =
+            WMHelper::GetInstance()->GetDisplayInfo(display.id())
+                .device_scale_factor();
+
         zcr_remote_shell_v1_send_workspace(
             remote_shell_resource_,
             static_cast<uint32_t>(display.id() >> 32),
@@ -2174,7 +2196,8 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
             bounds.x(), bounds.y(), bounds.width(), bounds.height(),
             insets.left(), insets.top(), insets.right(), insets.bottom(),
             OutputTransform(display.rotation()),
-            wl_fixed_from_double(display.device_scale_factor()));
+            wl_fixed_from_double(device_scale_factor),
+            display.IsInternal());
       }
 
       zcr_remote_shell_v1_send_configure(remote_shell_resource_, layout_mode_);
@@ -2381,7 +2404,7 @@ const struct zcr_remote_shell_v1_interface remote_shell_implementation = {
     remote_shell_destroy, remote_shell_get_remote_surface,
     remote_shell_get_notification_surface};
 
-const uint32_t remote_shell_version = 4;
+const uint32_t remote_shell_version = 5;
 
 void bind_remote_shell(wl_client* client,
                        void* data,
@@ -2735,7 +2758,7 @@ class WaylandKeyboardDelegate : public KeyboardDelegate {
     memcpy(shared_keymap.memory(), keymap_string.get(), keymap_size);
     wl_keyboard_send_keymap(keyboard_resource_,
                             WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
-                            shared_keymap.handle().fd, keymap_size);
+                            shared_keymap.handle().GetHandle(), keymap_size);
   }
 
   // Overridden from KeyboardDelegate:
@@ -3826,6 +3849,87 @@ void bind_keyboard_configuration(wl_client* client,
       resource, &keyboard_configuration_implementation, data, nullptr);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// stylus_tool interface:
+
+class StylusTool : public SurfaceObserver {
+ public:
+  explicit StylusTool(Surface* surface) : surface_(surface) {
+    surface_->AddSurfaceObserver(this);
+    surface_->SetProperty(kSurfaceHasStylusToolKey, true);
+  }
+  ~StylusTool() override {
+    if (surface_) {
+      surface_->RemoveSurfaceObserver(this);
+      surface_->SetProperty(kSurfaceHasStylusToolKey, false);
+    }
+  }
+
+  void SetStylusOnly() { surface_->SetStylusOnly(); }
+
+  // Overridden from SurfaceObserver:
+  void OnSurfaceDestroying(Surface* surface) override {
+    surface->RemoveSurfaceObserver(this);
+    surface_ = nullptr;
+  }
+
+ private:
+  Surface* surface_;
+
+  DISALLOW_COPY_AND_ASSIGN(StylusTool);
+};
+
+void stylus_tool_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void stylus_tool_set_stylus_only(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<StylusTool>(resource)->SetStylusOnly();
+}
+
+const struct zcr_stylus_tool_v1_interface stylus_tool_implementation = {
+    stylus_tool_destroy, stylus_tool_set_stylus_only};
+
+////////////////////////////////////////////////////////////////////////////////
+// stylus_tools interface:
+
+void stylus_tools_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void stylus_tools_get_stylus_tool(wl_client* client,
+                                  wl_resource* resource,
+                                  uint32_t id,
+                                  wl_resource* surface_resource) {
+  Surface* surface = GetUserDataAs<Surface>(surface_resource);
+  if (surface->GetProperty(kSurfaceHasStylusToolKey)) {
+    wl_resource_post_error(
+        resource, ZCR_STYLUS_TOOLS_V1_ERROR_STYLUS_TOOL_EXISTS,
+        "a stylus_tool object for that surface already exists");
+    return;
+  }
+
+  wl_resource* stylus_tool_resource =
+      wl_resource_create(client, &zcr_stylus_tool_v1_interface, 1, id);
+
+  SetImplementation(stylus_tool_resource, &stylus_tool_implementation,
+                    base::MakeUnique<StylusTool>(surface));
+}
+
+const struct zcr_stylus_tools_v1_interface stylus_tools_implementation = {
+    stylus_tools_destroy, stylus_tools_get_stylus_tool};
+
+void bind_stylus_tools(wl_client* client,
+                       void* data,
+                       uint32_t version,
+                       uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &zcr_stylus_tools_v1_interface, 1, id);
+
+  wl_resource_set_implementation(resource, &stylus_tools_implementation, data,
+                                 nullptr);
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3878,6 +3982,8 @@ Server::Server(Display* display)
                    bind_stylus_v2);
   wl_global_create(wl_display_.get(), &zcr_keyboard_configuration_v1_interface,
                    2, display_, bind_keyboard_configuration);
+  wl_global_create(wl_display_.get(), &zcr_stylus_tools_v1_interface, 1,
+                   display_, bind_stylus_tools);
 }
 
 Server::~Server() {}

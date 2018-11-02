@@ -28,8 +28,11 @@ class CHROMEOS_EXPORT FakeAuthPolicyClient : public AuthPolicyClient {
                     int password_fd,
                     JoinCallback callback) override;
   void AuthenticateUser(const std::string& user_principal_name,
+                        const std::string& object_guid,
                         int password_fd,
                         AuthCallback callback) override;
+  void GetUserStatus(const std::string& object_guid,
+                     GetUserStatusCallback callback) override;
   void RefreshDevicePolicy(RefreshPolicyCallback calllback) override;
   void RefreshUserPolicy(const AccountId& account_id,
                          RefreshPolicyCallback callback) override;

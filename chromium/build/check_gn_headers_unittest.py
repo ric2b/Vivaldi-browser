@@ -38,7 +38,13 @@ gn_input = json.loads(r'''
       "//:All": {
       },
       "//:base": {
+         "public": [ "//base/p.h" ],
          "sources": [ "//base/a.cc", "//base/a.h", "//base/b.hh" ],
+         "visibility": [ "*" ]
+      },
+      "//:star_public": {
+         "public": "*",
+         "sources": [ "//base/c.h", "//tmp/gen/a.h" ],
          "visibility": [ "*" ]
       }
     }
@@ -58,7 +64,7 @@ a/b/c
 
 class CheckGnHeadersTest(unittest.TestCase):
   def testNinja(self):
-    headers = check_gn_headers.ParseNinjaDepsOutput(ninja_input)
+    headers = check_gn_headers.ParseNinjaDepsOutput(ninja_input.split('\n'))
     expected = set([
         'dir/path/b.h',
         'c.hh',
@@ -71,7 +77,8 @@ class CheckGnHeadersTest(unittest.TestCase):
     old_sep = os.sep
     os.sep = '\\'
 
-    headers = check_gn_headers.ParseNinjaDepsOutput(ninja_input_win)
+    headers = check_gn_headers.ParseNinjaDepsOutput(
+        ninja_input_win.split('\n'))
     expected = set([
         'dir\\path\\b.h',
         'c.hh',
@@ -83,10 +90,14 @@ class CheckGnHeadersTest(unittest.TestCase):
     os.sep = old_sep
 
   def testGn(self):
-    headers = check_gn_headers.ParseGNProjectJSON(gn_input)
+    headers = check_gn_headers.ParseGNProjectJSON(gn_input,
+                                                  'out/Release', 'tmp')
     expected = set([
         'base/a.h',
         'base/b.hh',
+        'base/c.h',
+        'base/p.h',
+        'out/Release/gen/a.h',
     ])
     self.assertEquals(headers, expected)
 

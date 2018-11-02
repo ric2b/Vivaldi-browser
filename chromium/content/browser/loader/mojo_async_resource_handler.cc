@@ -195,7 +195,7 @@ void MojoAsyncResourceHandler::OnResponseStarted(
                                      response->head.download_file_path);
   }
 
-  url_loader_client_->OnReceiveResponse(response->head,
+  url_loader_client_->OnReceiveResponse(response->head, base::nullopt,
                                         std::move(downloaded_file_ptr));
 
   net::IOBufferWithSize* metadata = GetResponseMetadata(request());
@@ -406,8 +406,10 @@ MojoResult MojoAsyncResourceHandler::BeginWrite(void** data,
 
 MojoResult MojoAsyncResourceHandler::EndWrite(uint32_t written) {
   MojoResult result = mojo::EndWriteDataRaw(shared_writer_->writer(), written);
-  if (result == MOJO_RESULT_OK)
+  if (result == MOJO_RESULT_OK) {
+    total_written_bytes_ += written;
     handle_watcher_.ArmOrNotify();
+  }
   return result;
 }
 
@@ -458,6 +460,7 @@ void MojoAsyncResourceHandler::OnResponseCompleted(
   request_complete_data.encoded_data_length =
       request()->GetTotalReceivedBytes();
   request_complete_data.encoded_body_length = request()->GetRawBodyBytes();
+  request_complete_data.decoded_body_length = total_written_bytes_;
 
   url_loader_client_->OnComplete(request_complete_data);
   controller->Resume();

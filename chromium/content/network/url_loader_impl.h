@@ -26,6 +26,7 @@ class CONTENT_EXPORT URLLoaderImpl : public mojom::URLLoader,
  public:
   URLLoaderImpl(NetworkContext* context,
                 mojom::URLLoaderAssociatedRequest url_loader_request,
+                int32_t options,
                 const ResourceRequest& request,
                 mojom::URLLoaderClientPtr url_loader_client);
   ~URLLoaderImpl() override;
@@ -42,7 +43,7 @@ class CONTENT_EXPORT URLLoaderImpl : public mojom::URLLoader,
   void OnReceivedRedirect(net::URLRequest* url_request,
                           const net::RedirectInfo& redirect_info,
                           bool* defer_redirect) override;
-  void OnResponseStarted(net::URLRequest* url_request) override;
+  void OnResponseStarted(net::URLRequest* url_request, int net_error) override;
   void OnReadCompleted(net::URLRequest* url_request, int bytes_read) override;
 
  private:
@@ -56,6 +57,7 @@ class CONTENT_EXPORT URLLoaderImpl : public mojom::URLLoader,
   void DeleteIfNeeded();
 
   NetworkContext* context_;
+  int32_t options_;
   bool connected_;
   std::unique_ptr<net::URLRequest> url_request_;
   mojo::AssociatedBinding<mojom::URLLoader> binding_;

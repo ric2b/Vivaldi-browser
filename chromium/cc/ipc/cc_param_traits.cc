@@ -795,7 +795,7 @@ bool ParamTraits<cc::CompositorFrame>::Read(const base::Pickle* m,
 
   uint32_t num_render_passes;
   if (!ReadParam(m, iter, &p->resource_list) ||
-      !ReadParam(m, iter, &num_render_passes) ||
+      !ReadParam(m, iter, &num_render_passes) || num_render_passes == 0 ||
       num_render_passes > kMaxRenderPasses)
     return false;
   for (uint32_t i = 0; i < num_render_passes; ++i) {
@@ -958,6 +958,40 @@ void ParamTraits<cc::YUVVideoDrawQuad>::Log(const param_type& p,
   l->append(", ");
   LogParam(p.bits_per_channel, l);
   l->append("])");
+}
+
+void ParamTraits<cc::BeginFrameAck>::GetSize(base::PickleSizer* s,
+                                             const param_type& p) {
+  GetParamSize(s, p.sequence_number);
+  GetParamSize(s, p.latest_confirmed_sequence_number);
+  GetParamSize(s, p.source_id);
+}
+
+void ParamTraits<cc::BeginFrameAck>::Write(base::Pickle* m,
+                                           const param_type& p) {
+  m->WriteUInt64(p.sequence_number);
+  m->WriteUInt64(p.latest_confirmed_sequence_number);
+  m->WriteUInt32(p.source_id);
+  // |has_damage| is implicit through IPC message name, so not transmitted.
+}
+
+bool ParamTraits<cc::BeginFrameAck>::Read(const base::Pickle* m,
+                                          base::PickleIterator* iter,
+                                          param_type* p) {
+  return iter->ReadUInt64(&p->sequence_number) &&
+         p->sequence_number >= cc::BeginFrameArgs::kStartingFrameNumber &&
+         iter->ReadUInt64(&p->latest_confirmed_sequence_number) &&
+         iter->ReadUInt32(&p->source_id);
+}
+
+void ParamTraits<cc::BeginFrameAck>::Log(const param_type& p, std::string* l) {
+  l->append("(");
+  LogParam(p.sequence_number, l);
+  l->append(", ");
+  LogParam(p.latest_confirmed_sequence_number, l);
+  l->append(", ");
+  LogParam(p.source_id, l);
+  l->append(")");
 }
 
 }  // namespace IPC

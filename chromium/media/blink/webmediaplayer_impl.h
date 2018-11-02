@@ -27,8 +27,9 @@
 #include "build/build_config.h"
 #include "media/base/media_observer.h"
 #include "media/base/media_tracks.h"
+#include "media/base/overlay_info.h"
 #include "media/base/pipeline_impl.h"
-#include "media/base/renderer_factory.h"
+#include "media/base/renderer_factory_selector.h"
 #include "media/base/surface_manager.h"
 #include "media/base/text_track.h"
 #include "media/blink/buffered_data_source_host_impl.h"
@@ -48,12 +49,6 @@
 #if defined(OS_ANDROID)  // WMPI_CAST
 // Delete this file when WMPI_CAST is no longer needed.
 #include "media/blink/webmediaplayer_cast_android.h"
-#endif
-
-//#define USE_BUFFERED_DATA_SOURCE
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(USE_BUFFERED_DATA_SOURCE)
-#include "platform_media/renderer/data_source/buffered_data_source.h"
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -106,15 +101,15 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
       public base::SupportsWeakPtr<WebMediaPlayerImpl> {
  public:
   // Constructs a WebMediaPlayer implementation using Chromium's media stack.
-  // |delegate| and |renderer_factory| must not be null.
+  // |delegate| and |renderer_factory_selector| must not be null.
   WebMediaPlayerImpl(
       blink::WebLocalFrame* frame,
       blink::WebMediaPlayerClient* client,
       blink::WebMediaPlayerEncryptedMediaClient* encrypted_client,
       WebMediaPlayerDelegate* delegate,
-      std::unique_ptr<RendererFactory> renderer_factory,
+      std::unique_ptr<RendererFactorySelector> renderer_factory_selector,
       linked_ptr<UrlIndex> url_index,
-      const WebMediaPlayerParams& params);
+      std::unique_ptr<WebMediaPlayerParams> params);
   ~WebMediaPlayerImpl() override;
 
   void Load(LoadType load_type,
@@ -186,10 +181,12 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   size_t VideoDecodedByteCount() const override;
 
   bool CopyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface* gl,
+                                         unsigned int target,
                                          unsigned int texture,
                                          unsigned internal_format,
                                          unsigned format,
                                          unsigned type,
+                                         int level,
                                          bool premultiply_alpha,
                                          bool flip_y) override;
 
@@ -204,6 +201,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void ExitedFullscreen() override;
   void BecameDominantVisibleContent(bool isDominant) override;
   void SetIsEffectivelyFullscreen(bool isEffectivelyFullscreen) override;
+  void OnHasNativeControlsChanged(bool) override;
 
   // WebMediaPlayerDelegate::Observer implementation.
   void OnFrameHidden() override;
@@ -266,6 +264,14 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void EnableOverlay();
   void DisableOverlay();
 
+  // Do we have overlay information?  For CVV, this is a surface id.  For
+  // AndroidOverlay, this is the routing token.
+  bool HaveOverlayInfo();
+
+  // Send the overlay surface ID / routing token to the decoder if we have it
+  // and if it has been requested.
+  void MaybeSendOverlayInfoToDecoder();
+
   void OnPipelineSuspended();
   void OnBeforePipelineResume();
   void OnPipelineResumed();
@@ -303,12 +309,16 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Called by SurfaceManager when a surface is created.
   void OnSurfaceCreated(int surface_id);
 
+  // Called by RenderFrameImpl with the overlay routing token, if we request it.
+  void OnOverlayRoutingToken(const base::UnguessableToken& token);
+
   // Called by GpuVideoDecoder on Android to request a surface to render to (if
   // necessary).
-  void OnSurfaceRequested(bool decoder_requires_restart_for_overlay,
-                          const SurfaceCreatedCB& surface_created_cb);
+  void OnOverlayInfoRequested(
+      bool decoder_requires_restart_for_overlay,
+      const ProvideOverlayInfoCB& provide_overlay_info_cb);
 
-  // Creates a Renderer via the |renderer_factory_|.
+  // Creates a Renderer via the |renderer_factory_selector_|.
   std::unique_ptr<Renderer> CreateRenderer();
 
   // Finishes starting the pipeline due to a call to load().
@@ -500,7 +510,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
   scoped_refptr<base::TaskRunner> worker_task_runner_;
-  scoped_refptr<MediaLog> media_log_;
+  std::unique_ptr<MediaLog> media_log_;
 
   // |pipeline_controller_| owns an instance of Pipeline.
   PipelineController pipeline_controller_;
@@ -607,16 +617,9 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   //
   // |demuxer_| will contain the appropriate demuxer based on which resource
   // load strategy we're using.
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(USE_BUFFERED_DATA_SOURCE)
-  std::unique_ptr<BufferedDataSourceInterface> data_source_;
-#else
   std::unique_ptr<MultibufferDataSource> data_source_;
-#endif
   std::unique_ptr<Demuxer> demuxer_;
   ChunkDemuxer* chunk_demuxer_;
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(USE_BUFFERED_DATA_SOURCE)
-  BufferedDataSource* data_source2_;
-#endif
 
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
 
@@ -654,7 +657,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   double volume_;
   double volume_multiplier_;
 
-  std::unique_ptr<RendererFactory> renderer_factory_;
+  std::unique_ptr<RendererFactorySelector> renderer_factory_selector_;
 
   // For requesting surfaces on behalf of the Android H/W decoder in fullscreen.
   // This will be null everywhere but Android.
@@ -663,25 +666,26 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // For canceling ongoing surface creation requests when exiting fullscreen.
   base::CancelableCallback<void(int)> surface_created_cb_;
 
-  // The current overlay surface id. Populated while in fullscreen once the
-  // surface is created.
-  int overlay_surface_id_;
+  // The current overlay surface id. Populated, possibly with kNoSurfaceID if
+  // we're not supposed to use an overlay, unless we have an outstanding surface
+  // request to the SurfaceManager.
+  base::Optional<int> overlay_surface_id_;
 
-  // If a surface is requested before it's finished being created, the request
-  // is saved and satisfied once the surface is available. If the decoder does
-  // not require restart to change surfaces, this is callback is kept until
-  // cleared by the decoder.
-  SurfaceCreatedCB set_surface_cb_;
+  // For canceling AndroidOverlay routing token requests.
+  base::CancelableCallback<void(const base::UnguessableToken&)>
+      token_available_cb_;
+
+  // If overlay info is requested before we have it, then the request is saved
+  // and satisfied once the overlay info is available. If the decoder does not
+  // require restart to change surfaces, this is callback is kept until cleared
+  // by the decoder.
+  ProvideOverlayInfoCB provide_overlay_info_cb_;
 
   // On Android an overlay surface means using
   // SurfaceView instead of SurfaceTexture.
 
   // Use overlays for all video.
   bool force_video_overlays_;
-
-  // Use overlays for fullscreen video.
-  // (Implied if |force_video_overlays_| is true.)
-  bool enable_fullscreen_video_overlays_;
 
   // Suppresses calls to OnPipelineError() after destruction / shutdown has been
   // started; prevents us from spuriously logging errors that are transient or
@@ -693,8 +697,15 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Used for HLS playback and in certain fallback paths (e.g. on older devices
   // that can't support the unified media pipeline).
-  GURL fallback_url_;
-  bool use_fallback_path_;
+  GURL loaded_url_;
+
+  // NOTE: |using_media_player_renderer_| is set based on the usage of a
+  // MediaResource::Type::URL in StartPipeline(). This currently works because
+  // the MediaPlayerRendererClient factory is the only factory that returns that
+  // Type, but this may no longer be accurate when we remove |cast_impl_| and
+  // WebMediaPlayerCast. This flag should be renamed/updated accordingly when
+  // removing |cast_impl_|.
+  bool using_media_player_renderer_ = false;
 
   // Called sometime after the media is suspended in a playing state in
   // OnFrameHidden(), causing the state to change to paused.
@@ -761,6 +772,28 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   base::CancelableCallback<void(base::TimeTicks)> frame_time_report_cb_;
 
   bool initial_video_height_recorded_ = false;
+
+  enum class OverlayMode {
+    // All overlays are turned off.
+    kNoOverlays,
+
+    // Use ContentVideoView for overlays.
+    kUseContentVideoView,
+
+    // Use AndroidOverlay for overlays.
+    kUseAndroidOverlay,
+  };
+
+  OverlayMode overlay_mode_ = OverlayMode::kNoOverlays;
+
+  // Optional callback to request the routing token for AndroidOverlay.
+  RequestRoutingTokenCallback request_routing_token_cb_;
+
+  // Routing token, if we have one.  No value if we have a request pending to
+  // get it via |request_routing_token_cb_|.  A has_value() is_empty() token
+  // indicates that we requested and received an empty token.  Note that we
+  // can't send an empty token via IPC, so we handle that specially.
+  base::Optional<base::UnguessableToken> overlay_routing_token_;
 
   DISALLOW_COPY_AND_ASSIGN(WebMediaPlayerImpl);
 };

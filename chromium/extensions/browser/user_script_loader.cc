@@ -332,9 +332,8 @@ std::unique_ptr<base::SharedMemory> UserScriptLoader::Serialize(
   // Copy the pickle to shared memory.
   memcpy(shared_memory.memory(), pickle.data(), pickle.size());
 
-  base::SharedMemoryHandle readonly_handle;
-  if (!shared_memory.ShareReadOnlyToProcess(base::GetCurrentProcessHandle(),
-                                            &readonly_handle))
+  base::SharedMemoryHandle readonly_handle = shared_memory.GetReadOnlyHandle();
+  if (!readonly_handle.IsValid())
     return std::unique_ptr<base::SharedMemory>();
 
   return base::MakeUnique<base::SharedMemory>(readonly_handle,
@@ -417,9 +416,10 @@ void UserScriptLoader::SendUpdate(content::RenderProcessHost* process,
   if (!handle)
     return;
 
-  base::SharedMemoryHandle handle_for_process;
-  if (!shared_memory->ShareToProcess(handle, &handle_for_process))
-    return;  // This can legitimately fail if the renderer asserts at startup.
+  base::SharedMemoryHandle handle_for_process =
+      shared_memory->handle().Duplicate();
+  if (!handle_for_process.IsValid())
+    return;
 
   if (base::SharedMemory::IsHandleValid(handle_for_process)) {
     process->Send(new ExtensionMsg_UpdateUserScripts(

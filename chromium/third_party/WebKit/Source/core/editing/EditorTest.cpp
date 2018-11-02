@@ -20,8 +20,8 @@ class EditorTest : public EditingTestBase {
 };
 
 void EditorTest::MakeDocumentEmpty() {
-  while (GetDocument().FirstChild())
-    GetDocument().RemoveChild(GetDocument().FirstChild());
+  while (GetDocument().firstChild())
+    GetDocument().RemoveChild(GetDocument().firstChild());
 }
 
 TEST_F(EditorTest, tidyUpHTMLStructureFromBody) {
@@ -68,7 +68,7 @@ TEST_F(EditorTest, copyGeneratedPassword) {
   SetBodyContent(body_content);
 
   HTMLInputElement& element =
-      toHTMLInputElement(*GetDocument().GetElementById("password"));
+      toHTMLInputElement(*GetDocument().getElementById("password"));
 
   const String kPasswordValue = "secret";
   element.focus();

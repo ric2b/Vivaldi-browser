@@ -6,6 +6,7 @@
 
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/dom/Document.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/Deprecation.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/ThreadableLoadingContext.h"
@@ -64,23 +65,6 @@ void ThreadedMessagingProxyBase::InitializeWorkerThread(
   worker_thread_ = CreateWorkerThread(origin_time);
   worker_thread_->Start(std::move(startup_data), GetParentFrameTaskRunners());
   WorkerThreadCreated();
-}
-
-void ThreadedMessagingProxyBase::PostTaskToWorkerGlobalScope(
-    const WebTraceLocation& location,
-    std::unique_ptr<WTF::CrossThreadClosure> task) {
-  if (asked_to_terminate_)
-    return;
-
-  DCHECK(worker_thread_);
-  worker_thread_->PostTask(location, std::move(task));
-}
-
-void ThreadedMessagingProxyBase::PostTaskToLoader(
-    const WebTraceLocation& location,
-    std::unique_ptr<WTF::CrossThreadClosure> task) {
-  parent_frame_task_runners_->Get(TaskType::kNetworking)
-      ->PostTask(BLINK_FROM_HERE, std::move(task));
 }
 
 ThreadableLoadingContext*

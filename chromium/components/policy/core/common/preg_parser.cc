@@ -24,14 +24,14 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_byteorder.h"
 #include "base/values.h"
-#include "components/policy/core/common/policy_load_status.h"
 #include "components/policy/core/common/registry_dict.h"
 
 #if defined(OS_WIN)
-#include "windows.h"
+#include <windows.h>
 #else
 // Registry data type constants.
 #define REG_NONE 0
@@ -63,7 +63,7 @@ const base::char16 kDelimBracketClose = L']';
 const base::char16 kDelimSemicolon = L';';
 
 // Registry path separator.
-const base::string16 kRegistryPathSeparator = base::ASCIIToUTF16("\\");
+const base::char16 kRegistryPathSeparator[] = {L'\\', L'\0'};
 
 // Magic strings for the PReg value field to trigger special actions.
 const char kActionTriggerPrefix[] = "**";
@@ -128,27 +128,43 @@ bool ReadFieldString(const uint8_t** cursor,
   return current == L'\0';
 }
 
-std::string DecodePRegStringValue(const std::vector<uint8_t>& data) {
+// Converts the UTF16 |data| to an UTF8 string |value|. Returns false if the
+// resulting UTF8 string contains invalid characters.
+bool DecodePRegStringValue(const std::vector<uint8_t>& data,
+                           std::string* value) {
   size_t len = data.size() / sizeof(base::char16);
-  if (len <= 0)
-    return std::string();
+  if (len <= 0) {
+    value->clear();
+    return true;
+  }
 
   const base::char16* chars =
       reinterpret_cast<const base::char16*>(data.data());
-  base::string16 result;
-  std::transform(chars, chars + len - 1, std::back_inserter(result),
+  base::string16 utf16_str;
+  std::transform(chars, chars + len - 1, std::back_inserter(utf16_str),
                  std::ptr_fun(base::ByteSwapToLE16));
-  return base::UTF16ToUTF8(result);
+  // Note: UTF16ToUTF8() only checks whether all chars are valid code points,
+  // but not whether they're valid characters. IsStringUTF8(), however, does.
+  *value = base::UTF16ToUTF8(utf16_str);
+  if (!base::IsStringUTF8(*value)) {
+    LOG(ERROR) << "String '" << *value << "' is not a valid UTF8 string";
+    value->clear();
+    return false;
+  }
+  return true;
 }
 
 // Decodes a value from a PReg file given as a uint8_t vector.
 bool DecodePRegValue(uint32_t type,
                      const std::vector<uint8_t>& data,
                      std::unique_ptr<base::Value>* value) {
+  std::string data_utf8;
   switch (type) {
     case REG_SZ:
     case REG_EXPAND_SZ:
-      value->reset(new base::Value(DecodePRegStringValue(data)));
+      if (!DecodePRegStringValue(data, &data_utf8))
+        return false;
+      value->reset(new base::Value(data_utf8));
       return true;
     case REG_DWORD_LITTLE_ENDIAN:
     case REG_DWORD_BIG_ENDIAN:
@@ -176,6 +192,21 @@ bool DecodePRegValue(uint32_t type,
   }
 
   return false;
+}
+
+// Returns true if the registry key |key_name| belongs to the sub-tree specified
+// by the key |root|.
+bool KeyRootEquals(const base::string16& key_name, const base::string16& root) {
+  if (root.empty())
+    return true;
+
+  if (!base::StartsWith(key_name, root, base::CompareCase::INSENSITIVE_ASCII))
+    return false;
+
+  // Handle the case where |root| == "ABC" and |key_name| == "ABCDE\FG". This
+  // should not be interpreted as a match.
+  return key_name.length() == root.length() ||
+         key_name.at(root.length()) == kRegistryPathSeparator[0];
 }
 
 // Adds |value| and |data| to |dict| or an appropriate sub-dictionary indicated
@@ -216,24 +247,28 @@ void HandleRecord(const base::string16& key_name,
     return;
   }
 
-  std::string action_trigger(base::ToLowerASCII(value_name.substr(
-      arraysize(kActionTriggerPrefix) - 1)));
+  std::string data_utf8;
+  std::string action_trigger(base::ToLowerASCII(
+      value_name.substr(arraysize(kActionTriggerPrefix) - 1)));
   if (action_trigger == kActionTriggerDeleteValues) {
-    for (const std::string& value :
-         base::SplitString(DecodePRegStringValue(data), ";",
-                           base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY))
-      dict->RemoveValue(value);
+    if (DecodePRegStringValue(data, &data_utf8)) {
+      for (const std::string& value :
+           base::SplitString(data_utf8, ";", base::KEEP_WHITESPACE,
+                             base::SPLIT_WANT_NONEMPTY))
+        dict->RemoveValue(value);
+    }
   } else if (base::StartsWith(action_trigger, kActionTriggerDeleteKeys,
                               base::CompareCase::SENSITIVE)) {
-    for (const std::string& key :
-         base::SplitString(DecodePRegStringValue(data), ";",
-                           base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY))
-      dict->RemoveKey(key);
+    if (DecodePRegStringValue(data, &data_utf8)) {
+      for (const std::string& key :
+           base::SplitString(data_utf8, ";", base::KEEP_WHITESPACE,
+                             base::SPLIT_WANT_NONEMPTY))
+        dict->RemoveKey(key);
+    }
   } else if (base::StartsWith(action_trigger, kActionTriggerDel,
                               base::CompareCase::SENSITIVE)) {
-  dict->RemoveValue(
-        value_name.substr(arraysize(kActionTriggerPrefix) - 1 +
-                          arraysize(kActionTriggerDel) - 1));
+    dict->RemoveValue(value_name.substr(arraysize(kActionTriggerPrefix) - 1 +
+                                        arraysize(kActionTriggerDel) - 1));
   } else if (base::StartsWith(action_trigger, kActionTriggerDelVals,
                               base::CompareCase::SENSITIVE)) {
     // Delete all values.
@@ -253,13 +288,13 @@ void HandleRecord(const base::string16& key_name,
 namespace policy {
 namespace preg_parser {
 
-const char kPRegFileHeader[8] =
-    { 'P', 'R', 'e', 'g', '\x01', '\x00', '\x00', '\x00' };
+const char kPRegFileHeader[8] = {'P',    'R',    'e',    'g',
+                                 '\x01', '\x00', '\x00', '\x00'};
 
 bool ReadFile(const base::FilePath& file_path,
               const base::string16& root,
               RegistryDict* dict,
-              PolicyLoadStatusSample* status) {
+              PolicyLoadStatusSampler* status) {
   base::MemoryMappedFile mapped_file;
   if (!mapped_file.Initialize(file_path) || !mapped_file.IsValid()) {
     PLOG(ERROR) << "Failed to map " << file_path.value();
@@ -267,27 +302,41 @@ bool ReadFile(const base::FilePath& file_path,
     return false;
   }
 
-  if (mapped_file.length() > kMaxPRegFileSize) {
-    LOG(ERROR) << "PReg file " << file_path.value() << " too large: "
-               << mapped_file.length();
+  return ReadDataInternal(
+      mapped_file.data(), mapped_file.length(), root, dict, status,
+      base::StringPrintf("file '%s'", file_path.value().c_str()));
+}
+
+POLICY_EXPORT bool ReadDataInternal(const uint8_t* preg_data,
+                                    size_t preg_data_size,
+                                    const base::string16& root,
+                                    RegistryDict* dict,
+                                    PolicyLoadStatusSampler* status,
+                                    const std::string& debug_name) {
+  DCHECK(status);
+  DCHECK(root.empty() || root.back() != kRegistryPathSeparator[0]);
+
+  // Check data size.
+  if (preg_data_size > kMaxPRegFileSize) {
+    LOG(ERROR) << "PReg " << debug_name << " too large: " << preg_data_size;
     status->Add(POLICY_LOAD_STATUS_TOO_BIG);
     return false;
   }
 
   // Check the header.
   const int kHeaderSize = arraysize(kPRegFileHeader);
-  if (mapped_file.length() < kHeaderSize ||
-      memcmp(kPRegFileHeader, mapped_file.data(), kHeaderSize) != 0) {
-    LOG(ERROR) << "Bad policy file " << file_path.value();
+  if (!preg_data || preg_data_size < kHeaderSize ||
+      memcmp(kPRegFileHeader, preg_data, kHeaderSize) != 0) {
+    LOG(ERROR) << "Bad PReg " << debug_name;
     status->Add(POLICY_LOAD_STATUS_PARSE_ERROR);
     return false;
   }
 
-  // Parse file contents, which is UCS-2 and little-endian. The latter I
+  // Parse data, which is expected to be UCS-2 and little-endian. The latter I
   // couldn't find documentation on, but the example I saw were all
   // little-endian. It'd be interesting to check on big-endian hardware.
-  const uint8_t* cursor = mapped_file.data() + kHeaderSize;
-  const uint8_t* end = mapped_file.data() + mapped_file.length();
+  const uint8_t* cursor = preg_data + kHeaderSize;
+  const uint8_t* end = preg_data + preg_data_size;
   while (true) {
     if (cursor == end)
       return true;
@@ -337,13 +386,12 @@ bool ReadFile(const base::FilePath& file_path,
       break;
 
     // Process the record if it is within the |root| subtree.
-    if (base::StartsWith(key_name, root, base::CompareCase::INSENSITIVE_ASCII))
+    if (KeyRootEquals(key_name, root))
       HandleRecord(key_name.substr(root.size()), value, type, data, dict);
   }
 
-  LOG(ERROR) << "Error parsing " << file_path.value() << " at offset "
-             << reinterpret_cast<const uint8_t*>(cursor - 1) -
-                    mapped_file.data();
+  LOG(ERROR) << "Error parsing PReg " << debug_name << " at offset "
+             << (reinterpret_cast<const uint8_t*>(cursor - 1) - preg_data);
   status->Add(POLICY_LOAD_STATUS_PARSE_ERROR);
   return false;
 }

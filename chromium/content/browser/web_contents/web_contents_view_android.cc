@@ -185,8 +185,6 @@ void WebContentsViewAndroid::Focus() {
       web_contents_->GetRenderWidgetHostView());
   if (web_contents_->ShowingInterstitialPage()) {
     web_contents_->GetInterstitialPage()->Focus();
-    if (content_view_core_)
-      content_view_core_->ForceUpdateImeAdapter(rwhv->GetNativeImeAdapter());
   } else {
     rwhv->Focus();
   }
@@ -401,6 +399,11 @@ bool WebContentsViewAndroid::OnTouchEvent(const ui::MotionEventAndroid& event,
   if (event.GetAction() == ui::MotionEventAndroid::ACTION_DOWN)
     content_view_core_->OnTouchDown(event.GetJavaObject());
   return false;  // let the children handle the actual event.
+}
+
+void WebContentsViewAndroid::OnPhysicalBackingSizeChanged() {
+  if (web_contents_->GetRenderWidgetHostView())
+    web_contents_->SendScreenRects();
 }
 
 } // namespace content

@@ -19,6 +19,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "cc/benchmarks/micro_benchmark.h"
 #include "cc/benchmarks/micro_benchmark_controller.h"
@@ -67,8 +68,6 @@ struct ScrollAndScaleSet;
 class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
                                 public NON_EXPORTED_BASE(MutatorHostClient) {
  public:
-  // TODO(sad): InitParams should be a movable type so that it can be
-  // std::move()d to the Create* functions.
   struct CC_EXPORT InitParams {
     LayerTreeHostClient* client = nullptr;
     TaskGraphRunner* task_graph_runner = nullptr;
@@ -242,20 +241,32 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
   Layer* root_layer() { return root_layer_.get(); }
   const Layer* root_layer() const { return root_layer_.get(); }
 
-  void RegisterViewportLayers(scoped_refptr<Layer> overscroll_elasticity_layer,
-                              scoped_refptr<Layer> page_scale_layer,
-                              scoped_refptr<Layer> inner_viewport_scroll_layer,
-                              scoped_refptr<Layer> outer_viewport_scroll_layer);
-
+  struct CC_EXPORT ViewportLayers {
+    ViewportLayers();
+    ~ViewportLayers();
+    scoped_refptr<Layer> overscroll_elasticity;
+    scoped_refptr<Layer> page_scale;
+    scoped_refptr<Layer> inner_viewport_container;
+    scoped_refptr<Layer> outer_viewport_container;
+    scoped_refptr<Layer> inner_viewport_scroll;
+    scoped_refptr<Layer> outer_viewport_scroll;
+  };
+  void RegisterViewportLayers(const ViewportLayers& viewport_layers);
   Layer* overscroll_elasticity_layer() const {
-    return overscroll_elasticity_layer_.get();
+    return viewport_layers_.overscroll_elasticity.get();
   }
-  Layer* page_scale_layer() const { return page_scale_layer_.get(); }
+  Layer* page_scale_layer() const { return viewport_layers_.page_scale.get(); }
+  Layer* inner_viewport_container_layer() const {
+    return viewport_layers_.inner_viewport_container.get();
+  }
+  Layer* outer_viewport_container_layer() const {
+    return viewport_layers_.outer_viewport_container.get();
+  }
   Layer* inner_viewport_scroll_layer() const {
-    return inner_viewport_scroll_layer_.get();
+    return viewport_layers_.inner_viewport_scroll.get();
   }
   Layer* outer_viewport_scroll_layer() const {
-    return outer_viewport_scroll_layer_.get();
+    return viewport_layers_.outer_viewport_scroll.get();
   }
 
   void RegisterSelection(const LayerSelection& selection);
@@ -341,6 +352,9 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
                     bool* content_is_suitable_for_gpu);
   bool in_paint_layer_contents() const { return in_paint_layer_contents_; }
 
+  void SetHasCopyRequest(bool has_copy_request);
+  bool has_copy_request() const { return has_copy_request_; }
+
   void AddLayerShouldPushProperties(Layer* layer);
   void RemoveLayerShouldPushProperties(Layer* layer);
   std::unordered_set<Layer*>& LayersThatShouldPushProperties();
@@ -358,7 +372,9 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
 
   void SetPropertyTreesNeedRebuild();
 
-  void PushPropertiesTo(LayerTreeImpl* tree_impl);
+  void PushPropertyTreesTo(LayerTreeImpl* tree_impl);
+  void PushLayerTreePropertiesTo(LayerTreeImpl* tree_impl);
+  void PushLayerTreeHostPropertiesTo(LayerTreeHostImpl* host_impl);
 
   MutatorHost* mutator_host() const { return mutator_host_; }
 
@@ -384,6 +400,7 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
   void DidBeginMainFrame();
   void BeginMainFrame(const BeginFrameArgs& args);
   void BeginMainFrameNotExpectedSoon();
+  void BeginMainFrameNotExpectedUntil(base::TimeTicks time);
   void AnimateLayers(base::TimeTicks monotonic_frame_begin_time);
   void RequestMainFrameUpdate();
   void FinishCommitOnImplThread(LayerTreeHostImpl* host_impl);
@@ -557,10 +574,7 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
 
   scoped_refptr<Layer> root_layer_;
 
-  scoped_refptr<Layer> overscroll_elasticity_layer_;
-  scoped_refptr<Layer> page_scale_layer_;
-  scoped_refptr<Layer> inner_viewport_scroll_layer_;
-  scoped_refptr<Layer> outer_viewport_scroll_layer_;
+  ViewportLayers viewport_layers_;
 
   float top_controls_height_ = 0.f;
   float top_controls_shown_ratio_ = 0.f;
@@ -611,12 +625,15 @@ class CC_EXPORT LayerTreeHost : public NON_EXPORTED_BASE(SurfaceReferenceOwner),
   bool in_paint_layer_contents_ = false;
   bool in_update_property_trees_ = false;
 
+  // This is true if atleast one layer in the layer tree has a copy request. We
+  // use this bool to decide whether we need to compute subtree has copy request
+  // for every layer during property tree building.
+  bool has_copy_request_ = false;
+
   MutatorHost* mutator_host_;
 
   std::vector<std::pair<sk_sp<const SkImage>, base::Callback<void(bool)>>>
       queued_image_decodes_;
-
-  bool did_navigate_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeHost);
 };

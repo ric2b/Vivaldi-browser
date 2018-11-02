@@ -21,6 +21,7 @@
 #include "media/base/demuxer_stream.h"
 #include "platform_media/common/mac/framework_type_conversions.h"
 #include "platform_media/common/pipeline_stats.h"
+#include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_mime_util.h"
 #include "platform_media/renderer/decoders/mac/at_aac_helper.h"
 #include "platform_media/renderer/decoders/mac/at_mp3_helper.h"
@@ -87,23 +88,27 @@ OSStatus ProvideData(AudioConverterRef inAudioConverter,
                      AudioBufferList* ioData,
                      AudioStreamPacketDescription** outDataPacketDescription,
                      void* inUserData) {
-  DVLOG(5) << "AudioConverter wants " << *ioNumberDataPackets
-           << " input frames";
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " AudioConverter wants " << *ioNumberDataPackets
+          << " input frames";
 
   InputData* const input_data = reinterpret_cast<InputData*>(inUserData);
   DCHECK(input_data);
   if (input_data->consumed) {
-    DVLOG(5) << "But there is no more input data";
+    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " But there is no more input data";
     *ioNumberDataPackets = 0;
     return kDataConsumed;
   }
 
   if (ioData->mNumberBuffers != 1u) {
-    DVLOG(1) << "Expected 1 output buffer, got " << ioData->mNumberBuffers;
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Expected 1 output buffer, got " << ioData->mNumberBuffers;
     return kInvalidArgs;
   }
 
-  DVLOG(5) << "Providing " << input_data->data_size << " bytes";
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Providing " << input_data->data_size << " bytes";
 
   ioData->mBuffers[0].mNumberChannels = input_data->channel_count;
   ioData->mBuffers[0].mDataByteSize = input_data->data_size;
@@ -125,6 +130,8 @@ std::unique_ptr<ATCodecHelper> CreateCodecHelper(AudioCodec codec) {
                  ? base::WrapUnique(new ATMP3Helper)
                  : nullptr;
     default:
+      LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                << " Unsupported codec : " << GetCodecName(codec);
       return nullptr;
   }
 }
@@ -132,7 +139,7 @@ std::unique_ptr<ATCodecHelper> CreateCodecHelper(AudioCodec codec) {
 // Fills out the output format to meet Chrome pipeline requirements.
 void GetOutputFormat(const AudioStreamBasicDescription& input_format,
                      AudioStreamBasicDescription* output_format) {
-  DVLOG(1) << __func__;
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 
   memset(output_format, 0, sizeof(*output_format));
   output_format->mFormatID = kAudioFormatLinearPCM;
@@ -158,7 +165,7 @@ void GetOutputFormat(const AudioStreamBasicDescription& input_format,
 scoped_refptr<AudioBuffer> AddFrontPadding(
     const scoped_refptr<AudioBuffer>& buffer,
     size_t padding_frame_count) {
-  DVLOG(1) << __func__;
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 
   const scoped_refptr<AudioBuffer> result = AudioBuffer::CreateBuffer(
       kOutputSampleFormat, buffer->channel_layout(), buffer->channel_count(),
@@ -193,8 +200,9 @@ void ATAudioDecoder::ScopedAudioConverterRefTraits::Release(
     AudioConverterRef converter) {
   const OSStatus status = AudioConverterDispose(converter);
   if (status != noErr)
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to dispose of AudioConverter";
+    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                             << " " << FourCCToString(status)
+                             << ": Failed to dispose of AudioConverter";
 }
 
 AudioConverterRef ATAudioDecoder::ScopedAudioConverterRefTraits::InvalidValue() {
@@ -216,20 +224,26 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                 CdmContext* cdm_context,
                                 const InitCB& init_cb,
                                 const OutputCB& output_cb) {
-  DVLOG(1) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(config.IsValidConfig());
 
   pipeline_stats::AddDecoderClass(GetDisplayName());
 
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " with AudioDecoderConfig :"
+          << Loggable(config);
+
   codec_helper_ = CreateCodecHelper(config.codec());
   if (!codec_helper_) {
-    DVLOG(1) << "Unsupported codec: " << config.codec();
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Unsupported codec: " << GetCodecName(config.codec());
     task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
     return;
   }
 
   if (!IsPlatformAudioDecoderAvailable(config.codec())) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " PlatformAudioDecoder Not Available for codec : " << GetCodecName(config.codec());
     task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
     return;
   }
@@ -242,16 +256,23 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
 
   ResetTimestampState();
 
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << ": Initialize helper for codec : " << GetCodecName(config.codec());
   // Unretained() is safe, because ATCodecHelper is required to invoke the
   // callbacks synchronously.
   if (!codec_helper_->Initialize(
           config, base::Bind(&ATAudioDecoder::InitializeConverter,
                              base::Unretained(this)),
           base::Bind(&ATAudioDecoder::ConvertAudio, base::Unretained(this)))) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << ": Initialize helper failed for codec : " << GetCodecName(config.codec());
     pipeline_stats::ReportAudioDecoderInitResult(false);
     task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
     return;
   }
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << ": Initialize helper successful for codec : " << GetCodecName(config.codec());
 
   pipeline_stats::ReportAudioDecoderInitResult(true);
   task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, true));
@@ -264,11 +285,16 @@ void ATAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
   const media::DecodeStatus status =
       codec_helper_->ProcessBuffer(buffer) ? media::DecodeStatus::OK : media::DecodeStatus::DECODE_ERROR;
 
+  if (status == media::DecodeStatus::DECODE_ERROR) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " ProcessBuffer failed";
+  }
+
   task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));
 }
 
 void ATAudioDecoder::Reset(const base::Closure& closure) {
-  DVLOG(1) << __func__;
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   // There is no |converter_| if Reset() is called before Decode(), which is
@@ -276,8 +302,9 @@ void ATAudioDecoder::Reset(const base::Closure& closure) {
   if (converter_) {
     const OSStatus status = AudioConverterReset(converter_);
     if (status != noErr)
-      OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                                << ": Failed to reset AudioConverter";
+      OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                               << " " << FourCCToString(status)
+                               << ": Failed to reset AudioConverter";
   }
 
   ResetTimestampState();
@@ -288,7 +315,7 @@ void ATAudioDecoder::Reset(const base::Closure& closure) {
 bool ATAudioDecoder::InitializeConverter(
     const AudioStreamBasicDescription& input_format,
     ScopedAudioChannelLayoutPtr input_channel_layout) {
-  DVLOG(1) << __func__;
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   AudioStreamBasicDescription output_format;
@@ -297,8 +324,9 @@ bool ATAudioDecoder::InitializeConverter(
   OSStatus status = AudioConverterNew(&input_format, &output_format,
                                       converter_.InitializeInto());
   if (status != noErr) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to create AudioConverter";
+    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                             << " " << FourCCToString(status)
+                             << ": Failed to create AudioConverter";
     return false;
   }
 
@@ -306,8 +334,9 @@ bool ATAudioDecoder::InitializeConverter(
       converter_, kAudioConverterInputChannelLayout,
       sizeof(*input_channel_layout), input_channel_layout.get());
   if (status != noErr) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to set input channel layout";
+    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                             << " " << FourCCToString(status)
+                             << ": Failed to set input channel layout";
     return false;
   }
 
@@ -318,8 +347,9 @@ bool ATAudioDecoder::InitializeConverter(
       converter_, kAudioConverterOutputChannelLayout,
       sizeof(output_channel_layout), &output_channel_layout);
   if (status != noErr) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to set output channel layout";
+    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                             << ": Failed to set output channel layout :"
+                             << " Error Status : " << status;
     return false;
   }
 
@@ -369,8 +399,9 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
 
   OSStatus status = noErr;
   if (ApplyEOSWorkaround(input, &output_buffers)) {
-    DVLOG(1)
-        << "Couldn't flush AudioConverter properly on this system. Faking it";
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Couldn't flush AudioConverter properly on this system."
+            << " Faking it";
   } else {
     status = AudioConverterFillComplexBuffer(
         converter_, &ProvideData, &input_data, &output_frame_count,
@@ -378,13 +409,16 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
   }
 
   if (status != noErr && status != kDataConsumed) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to convert audio";
+    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                             << " " << FourCCToString(status)
+                             << ": Failed to convert audio";
     return false;
   }
 
   if (output_frame_count > max_output_frame_count) {
-    DVLOG(1) << "Unexpected output sample count: " << output_frame_count;
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Unexpected output sample count: "
+            << output_frame_count;
     return false;
   }
 
@@ -401,8 +435,9 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
     if (first_output_buffer)
       output = AddFrontPadding(output, config_.codec_delay());
 
-    DVLOG(5) << "Decoded " << output_frame_count << " frames @"
-             << dequeued_input->timestamp();
+    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Decoded " << output_frame_count << " frames @"
+            << dequeued_input->timestamp();
 
     // ProcessBuffers() computes and sets the timestamp on |output|.
     if (discard_helper_->ProcessBuffers(dequeued_input, output))
@@ -430,6 +465,10 @@ bool ATAudioDecoder::ApplyEOSWorkaround(
 
 void ATAudioDecoder::ResetTimestampState() {
   DCHECK(task_runner_->BelongsToCurrentThread());
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " input_samples_per_second : " << config_.input_samples_per_second()
+          << " samples_per_second : " << config_.samples_per_second();
 
   discard_helper_.reset(new AudioDiscardHelper(config_.samples_per_second(),
                                                config_.codec_delay(), false));

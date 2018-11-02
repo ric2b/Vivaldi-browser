@@ -17,11 +17,13 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
@@ -44,11 +46,18 @@ using content::OpenURLParams;
 using content::Referrer;
 using content::WebContents;
 
+class WindowOpenApiTest : public ExtensionApiTest {
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
+  }
+};
+
 // The test uses the chrome.browserAction.openPopup API, which requires that the
 // window can automatically be activated.
 // See comments at BrowserActionInteractiveTest::ShouldRunPopupTest
 // Fails flakily on all platforms. https://crbug.com/477691
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_WindowOpen) {
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, DISABLED_WindowOpen) {
   extensions::ResultCatcher catcher;
   ASSERT_TRUE(LoadExtensionIncognito(test_data_dir_
       .AppendASCII("window_open").AppendASCII("spanning")));
@@ -93,8 +102,7 @@ bool WaitForTabsAndPopups(Browser* browser,
           (num_popups == num_popups_seen));
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, BrowserIsApp) {
-  host_resolver()->AddRule("a.com", "127.0.0.1");
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, BrowserIsApp) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("window_open").AppendASCII("browser_is_app")));
@@ -109,7 +117,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, BrowserIsApp) {
   }
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, WindowOpenPopupDefault) {
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, WindowOpenPopupDefault) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("window_open").AppendASCII("popup")));
@@ -119,7 +127,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, WindowOpenPopupDefault) {
   EXPECT_TRUE(WaitForTabsAndPopups(browser(), num_tabs, num_popups));
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, WindowOpenPopupIframe) {
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, WindowOpenPopupIframe) {
   base::FilePath test_data_dir;
   PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
   embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
@@ -132,7 +140,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, WindowOpenPopupIframe) {
   EXPECT_TRUE(WaitForTabsAndPopups(browser(), num_tabs, num_popups));
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, WindowOpenPopupLarge) {
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, WindowOpenPopupLarge) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("window_open").AppendASCII("popup_large")));
@@ -143,7 +151,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, WindowOpenPopupLarge) {
   EXPECT_TRUE(WaitForTabsAndPopups(browser(), num_tabs, num_popups));
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, WindowOpenPopupSmall) {
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, WindowOpenPopupSmall) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("window_open").AppendASCII("popup_small")));
@@ -161,8 +169,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, WindowOpenPopupSmall) {
 #else
 #define MAYBE_PopupBlockingExtension PopupBlockingExtension
 #endif
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_PopupBlockingExtension) {
-  host_resolver()->AddRule("*", "127.0.0.1");
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, MAYBE_PopupBlockingExtension) {
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   ASSERT_TRUE(LoadExtension(
@@ -172,8 +179,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_PopupBlockingExtension) {
   EXPECT_TRUE(WaitForTabsAndPopups(browser(), 5, 3));
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, PopupBlockingHostedApp) {
-  host_resolver()->AddRule("*", "127.0.0.1");
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, PopupBlockingHostedApp) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(LoadExtension(
@@ -206,11 +212,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, PopupBlockingHostedApp) {
   EXPECT_TRUE(WaitForTabsAndPopups(browser(), 3, 1));
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, WindowArgumentsOverflow) {
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, WindowArgumentsOverflow) {
   ASSERT_TRUE(RunExtensionTest("window_open/argument_overflow")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_WindowOpener) {
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, DISABLED_WindowOpener) {
   ASSERT_TRUE(RunExtensionTest("window_open/opener")) << message_;
 }
 
@@ -222,7 +228,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_WindowOpener) {
 #endif
 // Ensure that the width and height properties of a window opened with
 // chrome.windows.create match the creation parameters. See crbug.com/173831.
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_WindowOpenSized) {
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, MAYBE_WindowOpenSized) {
   ASSERT_TRUE(RunExtensionTest("window_open/window_size")) << message_;
   EXPECT_TRUE(WaitForTabsAndPopups(browser(), 0, 1));
 }
@@ -240,7 +246,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, WindowOpenExtension) {
   WebContents* newtab = NULL;
   ASSERT_NO_FATAL_FAILURE(
       OpenWindow(browser()->tab_strip_model()->GetActiveWebContents(),
-      start_url.Resolve("newtab.html"), true, &newtab));
+                 start_url.Resolve("newtab.html"), true, &newtab));
 
   bool result = false;
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(newtab, "testExtensionApi()",
@@ -251,19 +257,32 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, WindowOpenExtension) {
 // Tests that if an extension page calls window.open to an invalid extension
 // URL, the browser doesn't crash.
 IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, WindowOpenInvalidExtension) {
-  ASSERT_TRUE(LoadExtension(
-      test_data_dir_.AppendASCII("uitest").AppendASCII("window_open")));
+  const extensions::Extension* extension = LoadExtension(
+      test_data_dir_.AppendASCII("uitest").AppendASCII("window_open"));
+  ASSERT_TRUE(extension);
 
-  GURL start_url(std::string(extensions::kExtensionScheme) +
-                     url::kStandardSchemeSeparator +
-                     last_loaded_extension_id() + "/test.html");
+  GURL start_url = extension->GetResourceURL("/test.html");
   ui_test_utils::NavigateToURL(browser(), start_url);
-  ASSERT_NO_FATAL_FAILURE(
-      OpenWindow(browser()->tab_strip_model()->GetActiveWebContents(),
+  WebContents* newtab = nullptr;
+  bool expect_error_page_in_new_process =
+      content::IsBrowserSideNavigationEnabled();
+  ASSERT_NO_FATAL_FAILURE(OpenWindow(
+      browser()->tab_strip_model()->GetActiveWebContents(),
       GURL("chrome-extension://thisissurelynotavalidextensionid/newtab.html"),
-      false, NULL));
+      expect_error_page_in_new_process, &newtab));
 
-  // If we got to this point, we didn't crash, so we're good.
+  // This is expected to commit an error page.
+  ASSERT_EQ(content::PAGE_TYPE_ERROR,
+            newtab->GetController().GetLastCommittedEntry()->GetPageType());
+
+  std::string document_body;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      newtab, "domAutomationController.send(document.body.innerText.trim());",
+      &document_body));
+
+  // Currently, in this test, the error page is blocked by CSP. This is
+  // https://crbug.com/703801.
+  EXPECT_EQ("", document_body);
 }
 
 // Tests that calling window.open from the newtab page to an extension URL

@@ -1,19 +1,28 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-BR">
+<translation id="1161325031994447685">Conectar-se à rede Wi-Fi novamente</translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />Excluir os cookies<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Sobre a Versão</translation>
 <translation id="1559528461873125649">Arquivo ou diretório não encontrado</translation>
+<translation id="1645368109819982629">Protocolo não suportado</translation>
 <translation id="1710259589646384581">Sistema Operacional</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Tente executar o diagnóstico de rede do Windows<ph name="END_LINK" />.</translation>
+<translation id="2032962459168915086"><ph name="BEGIN_LINK" />Verificar o proxy e o firewall<ph name="END_LINK" /></translation>
 <translation id="2166378884831602661">Não foi possível estabelecer uma conexão segura com este site</translation>
+<translation id="2230458221926704099">Corrigir sua conexão utilizando o <ph name="BEGIN_LINK" />aplicativo de diagnóstico<ph name="END_LINK" /></translation>
 <translation id="224482879335890159">Pesquise por <ph name="LINK" /> no Google</translation>
 <translation id="2292556288342944218">O seu acesso à Internet está bloqueado</translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Executar o diagnóstico de rede<ph name="END_LINK" /></translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> enviou uma resposta inválida.</translation>
 <translation id="2609632851001447353">Variações</translation>
 <translation id="2650446666397867134">O acesso ao arquivo foi negado</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Executar o diagnóstico de conectividade<ph name="END_LINK" /></translation>
 <translation id="2909946352844186028">Foi detectada uma alteração na rede.</translation>
 <translation id="2948083400971632585">Você pode desabilitar qualquer proxy configurado pela categoria "Rede" nas configurações do Vivaldi.</translation>
 <translation id="3093245981617870298">Você está offline</translation>
 <translation id="3109728660330352905">Você não tem autorização para ver esta página.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Tente executar o diagnóstico de conectividade<ph name="END_LINK" />.</translation>
 <translation id="3176929007561373547">Verifique suas configurações de proxy ou entre em contato com o administrador de rede para verificar se o servidor proxy está funcionando. Se você acredita que não deveria estar usando um servidor proxy: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3447661539832366887">O proprietário deste dispositivo desativou o jogo do Tony.</translation>
 <translation id="3586931643579894722">Ocultar detalhes</translation>
@@ -23,11 +32,17 @@
 <translation id="382518646247711829">Se você usa um servidor proxy...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> está bloqueado</translation>
 <translation id="4021036232240155012">O DNS é o serviço de rede que traduz o nome de um website para o real endereço na Internet.</translation>
+<translation id="4130226655945681476">Verificar o modem, o roteador e os cabos da rede</translation>
+<translation id="4203896806696719780"><ph name="BEGIN_LINK" />Verificar as configurações do antivírus e do firewall<ph name="END_LINK" /></translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Tente executar o diagnóstico de rede<ph name="END_LINK" />.</translation>
+<translation id="4506599922270137252">Entrar em contato com o administrador do sistema</translation>
 <translation id="4522570452068850558">Detalhes</translation>
 <translation id="4708268264240856090">A conexão foi interrompida</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Executar o diagnóstico de rede do Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Caminho do Executável</translation>
 <translation id="4764776831041365478">A página em <ph name="URL" /> pode estar temporariamente indisponível ou pode ter sido movida permanentemente para um novo endereço.</translation>
 <translation id="5023310440958281426">Verifique as políticas do administrador</translation>
+<translation id="5070335125961472645"><ph name="BEGIN_LINK" />Verificar o endereço do proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bits)</translation>
 <translation id="5431657950005405462">O arquivo não foi encontrado</translation>
 <translation id="5452270690849572955">Não foi possível encontrar esta página em <ph name="HOST_NAME" /></translation>
@@ -41,9 +56,11 @@
 <translation id="5990559369517809815">Solicitações ao servidor foram bloqueadas por uma extensão.</translation>
 <translation id="6146055958333702838">Verifique todos os cabos e reinicie todos os roteadores, modens ou outros dispositivos de rede que você estiver usando.</translation>
 <translation id="614940544461990577">Tente:</translation>
+<translation id="6165508094623778733">Saiba mais</translation>
 <translation id="6203231073485539293">Verifique sua conexão com a Internet</translation>
 <translation id="6321917430147971392">Verifique suas configurações de DNS</translation>
 <translation id="6328639280570009161">Tente desativar a previsão de página</translation>
+<translation id="6685834062052613830">Fazer logout e finalizar a configuração do dispositivo</translation>
 <translation id="6711464428925977395">Existe algum problema com o servidor proxy, ou o endereço está incorreto.</translation>
 <translation id="6757797048963528358">Seu dispositivo entrou em suspensão.</translation>
 <translation id="6897140037006041989">User-Agent</translation>
@@ -55,7 +72,6 @@
 <translation id="7716424297397655342">Não é possível carregar este site do cache</translation>
 <translation id="7758069387465995638">É possível que o software antivírus ou o firewall tenha bloqueado a conexão.</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
-<translation id="8089520772729574115">menos de 1 MB</translation>
 <translation id="8134994873729925007">Não foi possível encontrar um <ph name="BEGIN_ABBR" />endereço DNS<ph name="END_ABBR" /> para <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">Acesse &lt;strong&gt;vivaldi://policy&lt;/strong&gt; para ver a lista de URLs adicionados à lista negra e outras políticas aplicadas pelo administrador do seu sistema.</translation>
 <translation id="8149426793427495338">Seu computador entrou em suspensão.</translation>

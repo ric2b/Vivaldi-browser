@@ -47,7 +47,6 @@ namespace android_webview {
 class AwFormDatabaseService;
 class AwQuotaManagerBridge;
 class AwURLRequestContextGetter;
-class JniDependencyFactory;
 
 namespace prefs {
 
@@ -61,9 +60,7 @@ extern const char kWebRestrictionsAuthority[];
 class AwBrowserContext : public content::BrowserContext,
                          public visitedlink::VisitedLinkDelegate {
  public:
-
-  AwBrowserContext(const base::FilePath path,
-                   JniDependencyFactory* native_factory);
+  AwBrowserContext(const base::FilePath path);
   ~AwBrowserContext() override;
 
   // Currently only one instance per process is supported.
@@ -90,8 +87,6 @@ class AwBrowserContext : public content::BrowserContext,
   web_restrictions::WebRestrictionsClient* GetWebRestrictionProvider();
 
   // content::BrowserContext implementation.
-  std::unique_ptr<content::ZoomLevelDelegate> CreateZoomLevelDelegate(
-      const base::FilePath& partition_path) override;
   base::FilePath GetPath() const override;
   bool IsOffTheRecord() const override;
   content::ResourceContext* GetResourceContext() override;
@@ -133,7 +128,6 @@ class AwBrowserContext : public content::BrowserContext,
   // The file path where data for this context is persisted.
   base::FilePath context_storage_path_;
 
-  JniDependencyFactory* native_factory_;
   scoped_refptr<AwURLRequestContextGetter> url_request_context_getter_;
   scoped_refptr<AwQuotaManagerBridge> quota_manager_bridge_;
   std::unique_ptr<AwFormDatabaseService> form_database_service_;

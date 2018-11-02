@@ -62,7 +62,7 @@ StickyPositionScrollingConstraints* StickyConstraintsForLayoutObject(
 
   PaintLayerScrollableArea* scrollable_area =
       ancestor_overflow_layer->GetScrollableArea();
-  auto it = scrollable_area->GetStickyConstraintsMap().Find(obj->Layer());
+  auto it = scrollable_area->GetStickyConstraintsMap().find(obj->Layer());
   if (it == scrollable_area->GetStickyConstraintsMap().end())
     return nullptr;
 
@@ -270,7 +270,9 @@ void LayoutBoxModelObject::StyleWillChange(StyleDifference diff,
   // for the case because we can only see the new paintInvalidationContainer
   // during compositing update.
   if (Style() &&
-      (Style()->IsStackingContext() != new_style.IsStackingContext())) {
+      Style()->IsStackingContext() != new_style.IsStackingContext() &&
+      // InvalidatePaintIncludingNonCompositingDescendants() requires this.
+      IsRooted()) {
     // The following disablers are valid because we need to invalidate based on
     // the current status.
     DisableCompositingQueryAsserts compositing_disabler;
@@ -326,12 +328,13 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
 
   PaintLayerType type = LayerTypeRequired();
   if (type != kNoPaintLayer) {
-    if (!Layer() && LayerCreationAllowedForSubtree()) {
+    if (!Layer()) {
       if (was_floating_before_style_changed && IsFloating())
         SetChildNeedsLayout();
       CreateLayerAfterStyleChange();
       if (Parent() && !NeedsLayout()) {
-        // FIXME: We should call a specialized version of this function.
+        Layer()->UpdateSize();
+        // FIXME: We should call a specialized versions of this function.
         Layer()->UpdateLayerPositionsAfterLayout();
       }
     }
@@ -402,10 +405,11 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
         Style()->GetPosition() == EPosition::kFixed;
     bool old_style_is_fixed_position =
         old_style->GetPosition() == EPosition::kFixed;
-    if (new_style_is_fixed_position != old_style_is_fixed_position)
+    if (new_style_is_fixed_position != old_style_is_fixed_position) {
       ObjectPaintInvalidator(*this)
           .InvalidateDisplayItemClientsIncludingNonCompositingDescendants(
-              kPaintInvalidationStyleChange);
+              PaintInvalidationReason::kStyle);
+    }
   }
 
   // The used style for body background may change due to computed style change
@@ -549,7 +553,7 @@ void LayoutBoxModelObject::AddLayerHitTestRects(
 }
 
 DISABLE_CFI_PERF
-void LayoutBoxModelObject::InvalidateTreeIfNeeded(
+void LayoutBoxModelObject::DeprecatedInvalidateTree(
     const PaintInvalidationState& paint_invalidation_state) {
   DCHECK(!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
   EnsureIsReadyForPaintInvalidation();
@@ -568,7 +572,7 @@ void LayoutBoxModelObject::InvalidateTreeIfNeeded(
   LayoutRect previous_visual_rect = VisualRect();
   LayoutPoint previous_location = paint_invalidator.LocationInBacking();
   PaintInvalidationReason reason =
-      InvalidatePaintIfNeeded(new_paint_invalidation_state);
+      DeprecatedInvalidatePaint(new_paint_invalidation_state);
 
   if (previous_location != paint_invalidator.LocationInBacking()) {
     new_paint_invalidation_state
@@ -588,7 +592,7 @@ void LayoutBoxModelObject::InvalidateTreeIfNeeded(
   }
 
   new_paint_invalidation_state.UpdateForChildren(reason);
-  InvalidatePaintOfSubtreesIfNeeded(new_paint_invalidation_state);
+  DeprecatedInvalidatePaintOfSubtrees(new_paint_invalidation_state);
 
   ClearPaintInvalidationFlags();
 }

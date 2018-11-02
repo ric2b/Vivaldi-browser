@@ -13,20 +13,12 @@
 #include "ui/views/layout/layout_provider.h"
 
 enum ChromeDistanceMetric {
-  // The maximum width a button can have and still influence the sizes of
-  // other linked buttons.  This allows short buttons to have linked widths
-  // without long buttons making things overly wide.
-  DISTANCE_BUTTON_MAX_LINKABLE_WIDTH = views::VIEWS_DISTANCE_END,
   // Default minimum width of a button.
-  DISTANCE_BUTTON_MINIMUM_WIDTH,
-  // Margin between the edge of a dialog and the left, right, or bottom of a
-  // contained button.
-  DISTANCE_DIALOG_BUTTON_MARGIN,
+  DISTANCE_BUTTON_MINIMUM_WIDTH = views::VIEWS_DISTANCE_END,
+  // Vertical spacing between a list of multiple controls in one column.
+  DISTANCE_CONTROL_LIST_VERTICAL,
   // Spacing between a dialog button and the content above it.
   DISTANCE_DIALOG_BUTTON_TOP,
-  // Horizontal or vertical margin between the edge of a panel and the
-  // contained content.
-  DISTANCE_PANEL_CONTENT_MARGIN,
   // Smaller horizontal spacing between other controls that are logically
   // related.
   DISTANCE_RELATED_CONTROL_HORIZONTAL_SMALL,
@@ -48,12 +40,6 @@ enum ChromeDistanceMetric {
   DISTANCE_UNRELATED_CONTROL_VERTICAL_LARGE,
 };
 
-enum class DialogWidth {
-  SMALL,
-  MEDIUM,
-  LARGE,
-};
-
 class ChromeLayoutProvider : public views::LayoutProvider {
  public:
   ChromeLayoutProvider() {}
@@ -62,8 +48,8 @@ class ChromeLayoutProvider : public views::LayoutProvider {
   static ChromeLayoutProvider* Get();
   static std::unique_ptr<views::LayoutProvider> CreateLayoutProvider();
 
+  // views::LayoutProvider:
   int GetDistanceMetric(int metric) const override;
-
   const views::TypographyProvider& GetTypographyProvider() const override;
 
   // Returns the alignment used for control labels in a GridLayout; for example,
@@ -89,10 +75,6 @@ class ChromeLayoutProvider : public views::LayoutProvider {
   //
   // TODO(pkasting): Fix callers and remove this.
   virtual bool IsHarmonyMode() const;
-
-  // Returns the preferred width in DIPs for a dialog of the specified |width|.
-  // May return 0 if the dialog has no preferred width.
-  virtual int GetDialogPreferredWidth(DialogWidth width) const;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeLayoutProvider);

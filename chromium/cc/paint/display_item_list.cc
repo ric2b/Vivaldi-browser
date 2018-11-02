@@ -19,6 +19,7 @@
 #include "cc/paint/clip_display_item.h"
 #include "cc/paint/clip_path_display_item.h"
 #include "cc/paint/compositing_display_item.h"
+#include "cc/paint/discardable_image_store.h"
 #include "cc/paint/drawing_display_item.h"
 #include "cc/paint/filter_display_item.h"
 #include "cc/paint/float_clip_display_item.h"
@@ -97,12 +98,13 @@ NOINLINE DISABLE_CFI_PERF void RasterItem(const DisplayItem& base_item,
       break;
     case DisplayItem::DRAWING: {
       const auto& item = static_cast<const DrawingDisplayItem&>(base_item);
-      if (canvas->quickReject(item.picture->cullRect()))
-        break;
-
-      // SkPicture always does a wrapping save/restore on the canvas, so it is
-      // not necessary here.
+      // TODO(enne): Maybe the PaintRecord itself could know whether this
+      // was needed?  It's not clear whether these save/restore semantics
+      // that SkPicture handles during playback are things that should be
+      // kept around.
+      canvas->save();
       item.picture->playback(canvas, callback);
+      canvas->restore();
       break;
     }
     case DisplayItem::FLOAT_CLIP: {
@@ -158,22 +160,31 @@ DisplayItemList::DisplayItemList()
 
 DisplayItemList::~DisplayItemList() = default;
 
-void DisplayItemList::Raster(SkCanvas* canvas,
-                             SkPicture::AbortCallback* callback,
-                             const gfx::Rect& canvas_target_playback_rect,
-                             float contents_scale) const {
-  canvas->save();
-  if (!canvas_target_playback_rect.IsEmpty()) {
-    // canvas_target_playback_rect is specified in device space. We can't
-    // use clipRect because canvas CTM will be applied on it. Use clipRegion
-    // instead because it ignores canvas CTM.
-    SkRegion device_clip;
-    device_clip.setRect(gfx::RectToSkIRect(canvas_target_playback_rect));
-    canvas->clipRegion(device_clip);
-  }
-  canvas->scale(contents_scale, contents_scale);
-  Raster(canvas, callback);
-  canvas->restore();
+// Atttempts to merge a CompositingDisplayItem and DrawingDisplayItem
+// into a single "draw with alpha".  This function returns true if
+// it was successful.  If false, then the caller is responsible for
+// drawing these items.  This is a DisplayItemList version of the
+// SkRecord optimization SkRecordNoopSaveLayerDrawRestores.
+static bool MergeAndDrawIfPossible(const CompositingDisplayItem& save_item,
+                                   const DrawingDisplayItem& draw_item,
+                                   SkCanvas* canvas) {
+  if (save_item.color_filter)
+    return false;
+  if (save_item.xfermode != SkBlendMode::kSrcOver)
+    return false;
+  // TODO(enne): I believe that lcd_text_requires_opaque_layer is not
+  // relevant here and that lcd text is preserved post merge, but I haven't
+  // tested that.
+  const PaintRecord* record = draw_item.picture.get();
+  if (record->size() != 1u)
+    return false;
+
+  const PaintOp* op = record->GetFirstOp();
+  if (!op->IsDrawOp())
+    return false;
+
+  op->RasterWithAlpha(canvas, save_item.alpha);
+  return true;
 }
 
 void DisplayItemList::Raster(SkCanvas* canvas,
@@ -182,16 +193,34 @@ void DisplayItemList::Raster(SkCanvas* canvas,
   if (!GetCanvasClipBounds(canvas, &canvas_playback_rect))
     return;
 
-  std::vector<size_t> indices;
-  rtree_.Search(canvas_playback_rect, &indices);
-  for (size_t index : indices) {
-    RasterItem(items_[index], canvas, callback);
-
+  std::vector<size_t> indices = rtree_.Search(canvas_playback_rect);
+  for (size_t i = 0; i < indices.size(); ++i) {
     // We use a callback during solid color analysis on the compositor thread to
     // break out early. Since we're handling a sequence of pictures via rtree
     // query results ourselves, we have to respect the callback and early out.
     if (callback && callback->abort())
       break;
+
+    const DisplayItem& item = items_[indices[i]];
+    // Optimize empty begin/end compositing and merge begin/draw/end compositing
+    // where possible.
+    // TODO(enne): remove empty clips here too?
+    // TODO(enne): does this happen recursively? Or is this good enough?
+    if (i < indices.size() - 2 && item.type == DisplayItem::COMPOSITING) {
+      const DisplayItem& second = items_[indices[i + 1]];
+      const DisplayItem& third = items_[indices[i + 2]];
+      if (second.type == DisplayItem::DRAWING &&
+          third.type == DisplayItem::END_COMPOSITING) {
+        if (MergeAndDrawIfPossible(
+                static_cast<const CompositingDisplayItem&>(item),
+                static_cast<const DrawingDisplayItem&>(second), canvas)) {
+          i += 2;
+          continue;
+        }
+      }
+    }
+
+    RasterItem(item, canvas, callback);
   }
 }
 
@@ -222,8 +251,8 @@ bool DisplayItemList::IsSuitableForGpuRasterization() const {
   return all_items_are_suitable_for_gpu_rasterization_;
 }
 
-int DisplayItemList::ApproximateOpCount() const {
-  return approximate_op_count_;
+size_t DisplayItemList::OpCount() const {
+  return op_count_;
 }
 
 size_t DisplayItemList::ApproximateMemoryUsage() const {
@@ -282,7 +311,7 @@ size_t DisplayItemList::ApproximateMemoryUsage() const {
 }
 
 bool DisplayItemList::ShouldBeAnalyzedForSolidColor() const {
-  return ApproximateOpCount() <= kOpCountThatIsOkToAnalyze;
+  return OpCount() <= kOpCountThatIsOkToAnalyze;
 }
 
 void DisplayItemList::EmitTraceSnapshot() const {
@@ -395,15 +424,15 @@ DisplayItemList::CreateTracedValue(bool include_items) const {
           state->EndArray();
 
           state->BeginArray("cullRect");
-          state->AppendInteger(item.picture->cullRect().x());
-          state->AppendInteger(item.picture->cullRect().y());
-          state->AppendInteger(item.picture->cullRect().width());
-          state->AppendInteger(item.picture->cullRect().height());
+          state->AppendInteger(item.bounds.x());
+          state->AppendInteger(item.bounds.y());
+          state->AppendInteger(item.bounds.width());
+          state->AppendInteger(item.bounds.height());
           state->EndArray();
 
           std::string b64_picture;
-          PictureDebugUtil::SerializeAsBase64(ToSkPicture(item.picture).get(),
-                                              &b64_picture);
+          PictureDebugUtil::SerializeAsBase64(
+              ToSkPicture(item.picture, item.bounds).get(), &b64_picture);
           state->SetString("skp64", b64_picture);
           state->EndDictionary();
           break;
@@ -462,7 +491,7 @@ DisplayItemList::CreateTracedValue(bool include_items) const {
     SkCanvas* canvas = recorder.beginRecording(bounds.width(), bounds.height());
     canvas->translate(-bounds.x(), -bounds.y());
     canvas->clipRect(gfx::RectToSkRect(bounds));
-    Raster(canvas, nullptr, gfx::Rect(), 1.f);
+    Raster(canvas);
     sk_sp<SkPicture> picture = recorder.finishRecordingAsPicture();
 
     std::string b64_picture;
@@ -476,13 +505,28 @@ DisplayItemList::CreateTracedValue(bool include_items) const {
 void DisplayItemList::GenerateDiscardableImagesMetadata() {
   // This should be only called once.
   DCHECK(image_map_.empty());
+  if (!has_discardable_images_)
+    return;
 
   gfx::Rect bounds = rtree_.GetBounds();
   DiscardableImageMap::ScopedMetadataGenerator generator(
       &image_map_, gfx::Size(bounds.right(), bounds.bottom()));
-  auto* canvas = generator.canvas();
-  for (const auto& item : items_)
-    RasterItem(item, canvas, nullptr);
+  GatherDiscardableImages(generator.image_store());
+}
+
+void DisplayItemList::GatherDiscardableImages(
+    DiscardableImageStore* image_store) const {
+  // TODO(khushalsagar): Could we avoid this if the data was already stored in
+  // the |image_map_|?
+  SkCanvas* canvas = image_store->GetNoDrawCanvas();
+  for (const auto& item : items_) {
+    if (item.type == DisplayItem::DRAWING) {
+      const auto& drawing_item = static_cast<const DrawingDisplayItem&>(item);
+      image_store->GatherDiscardableImages(drawing_item.picture.get());
+    } else {
+      RasterItem(item, canvas, nullptr);
+    }
+  }
 }
 
 void DisplayItemList::GetDiscardableImagesInRect(
@@ -494,7 +538,7 @@ void DisplayItemList::GetDiscardableImagesInRect(
                                         target_color_space, images);
 }
 
-gfx::Rect DisplayItemList::GetRectForImage(ImageId image_id) const {
+gfx::Rect DisplayItemList::GetRectForImage(PaintImage::Id image_id) const {
   return image_map_.GetRectForImage(image_id);
 }
 

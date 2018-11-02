@@ -220,6 +220,9 @@ bool AXTree::Unserialize(const AXTreeUpdate& update) {
     changes.reserve(update.nodes.size());
     for (size_t i = 0; i < update.nodes.size(); ++i) {
       AXNode* node = GetFromId(update.nodes[i].id);
+      if (!node)
+        continue;
+
       bool is_new_node = new_nodes.find(node) != new_nodes.end();
       bool is_reparented_node =
           is_new_node && update_state.HasRemovedNode(node);
@@ -360,10 +363,8 @@ void AXTree::CallNodeChangeCallbacks(AXNode* node, const AXNodeData& new_data) {
   if (old_data.state != new_data.state) {
     for (int i = AX_STATE_NONE + 1; i <= AX_STATE_LAST; ++i) {
       AXState state = static_cast<AXState>(i);
-      if (old_data.HasStateFlag(state) != new_data.HasStateFlag(state)) {
-        delegate_->OnStateChanged(this, node, state,
-                                  new_data.HasStateFlag(state));
-      }
+      if (old_data.HasState(state) != new_data.HasState(state))
+        delegate_->OnStateChanged(this, node, state, new_data.HasState(state));
     }
   }
 

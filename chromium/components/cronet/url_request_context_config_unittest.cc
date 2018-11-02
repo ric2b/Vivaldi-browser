@@ -29,6 +29,8 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
       true,
       // Enable SDCH.
       false,
+      // Enable Brotli.
+      false,
       // Type of http cache.
       URLRequestContextConfig::HttpCacheType::DISK,
       // Max size of http cache in bytes.
@@ -42,8 +44,6 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
       "fake agent",
       // JSON encoded experimental options.
       "{\"QUIC\":{\"max_server_configs_stored_in_properties\":2,"
-      "\"delay_tcp_race\":true,"
-      "\"prefer_aes\":true,"
       "\"user_agent_id\":\"Custom QUIC UAID\","
       "\"idle_connection_timeout_seconds\":300,"
       "\"close_sessions_on_ip_change\":true,"
@@ -55,14 +55,6 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
       "\"MAP * 127.0.0.1\"},"
       // See http://crbug.com/696569.
       "\"disable_ipv6_on_wifi\":true}",
-      // Data reduction proxy key.
-      "",
-      // Data reduction proxy.
-      "",
-      // Fallback data reduction proxy.
-      "",
-      // Data reduction proxy secure proxy check URL.
-      "",
       // MockCertVerifier to use for testing purposes.
       std::unique_ptr<net::CertVerifier>(),
       // Enable network quality estimator.
@@ -97,12 +89,6 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
   // Check max_server_configs_stored_in_properties.
   EXPECT_EQ(2u, params->quic_max_server_configs_stored_in_properties);
 
-  // Check delay_tcp_race.
-  EXPECT_TRUE(params->quic_delay_tcp_race);
-
-  // Check prefer_aes.
-  EXPECT_TRUE(params->quic_prefer_aes);
-
   // Check idle_connection_timeout_seconds.
   EXPECT_EQ(300, params->quic_idle_connection_timeout_seconds);
 
@@ -134,6 +120,8 @@ TEST(URLRequestContextConfigTest, SetQuicConnectionMigrationOptions) {
       true,
       // Enable SDCH.
       false,
+      // Enable Brotli.
+      false,
       // Type of http cache.
       URLRequestContextConfig::HttpCacheType::DISK,
       // Max size of http cache in bytes.
@@ -148,14 +136,6 @@ TEST(URLRequestContextConfigTest, SetQuicConnectionMigrationOptions) {
       // JSON encoded experimental options.
       "{\"QUIC\":{\"migrate_sessions_on_network_change\":true,"
       "\"migrate_sessions_early\":true}}",
-      // Data reduction proxy key.
-      "",
-      // Data reduction proxy.
-      "",
-      // Fallback data reduction proxy.
-      "",
-      // Data reduction proxy secure proxy check URL.
-      "",
       // MockCertVerifier to use for testing purposes.
       std::unique_ptr<net::CertVerifier>(),
       // Enable network quality estimator.

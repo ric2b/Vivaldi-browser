@@ -10,6 +10,7 @@
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/geometry_test_utils.h"
+#include "cc/test/layer_test_common.h"
 #include "cc/test/mock_occlusion_tracker.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/layer_tree_impl.h"
@@ -53,7 +54,7 @@ TEST(RenderSurfaceTest, VerifySurfaceChangesAreTrackedProperly) {
   host_impl.active_tree()->UpdateDrawProperties(false /* update_lcd_text */);
 
   RenderSurfaceImpl* render_surface =
-      host_impl.active_tree()->root_layer_for_testing()->GetRenderSurface();
+      GetRenderSurface(host_impl.active_tree()->root_layer_for_testing());
   ASSERT_TRUE(render_surface);
 
   // Currently, the content_rect, clip_rect, and
@@ -86,7 +87,6 @@ TEST(RenderSurfaceTest, VerifySurfaceChangesAreTrackedProperly) {
       render_surface->SetDrawOpacity(0.5f));
   EXECUTE_AND_VERIFY_SURFACE_DID_NOT_CHANGE(
       render_surface->SetDrawTransform(dummy_matrix));
-  EXECUTE_AND_VERIFY_SURFACE_DID_NOT_CHANGE(render_surface->ClearLayerLists());
 }
 
 TEST(RenderSurfaceTest, SanityCheckSurfaceCreatesCorrectSharedQuadState) {
@@ -114,9 +114,9 @@ TEST(RenderSurfaceTest, SanityCheckSurfaceCreatesCorrectSharedQuadState) {
   host_impl.active_tree()->UpdateDrawProperties(false /* update_lcd_text */);
 
   ASSERT_TRUE(
-      host_impl.active_tree()->LayerById(owning_layer_id)->GetRenderSurface());
+      GetRenderSurface(host_impl.active_tree()->LayerById(owning_layer_id)));
   RenderSurfaceImpl* render_surface =
-      host_impl.active_tree()->LayerById(owning_layer_id)->GetRenderSurface();
+      GetRenderSurface(host_impl.active_tree()->LayerById(owning_layer_id));
 
   gfx::Rect content_rect(0, 0, 50, 50);
   gfx::Rect clip_rect(5, 5, 40, 40);
@@ -172,9 +172,9 @@ TEST(RenderSurfaceTest, SanityCheckSurfaceCreatesCorrectRenderPass) {
   host_impl.active_tree()->UpdateDrawProperties(false /* update_lcd_text */);
 
   ASSERT_TRUE(
-      host_impl.active_tree()->LayerById(owning_layer_id)->GetRenderSurface());
+      GetRenderSurface(host_impl.active_tree()->LayerById(owning_layer_id)));
   RenderSurfaceImpl* render_surface =
-      host_impl.active_tree()->LayerById(owning_layer_id)->GetRenderSurface();
+      GetRenderSurface(host_impl.active_tree()->LayerById(owning_layer_id));
 
   gfx::Rect content_rect(0, 0, 50, 50);
   gfx::Transform origin;

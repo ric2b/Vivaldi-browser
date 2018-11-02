@@ -33,6 +33,9 @@ if (enable_extensions) {
       "//mojo/common:common_custom_types",
       "//url/mojo:url_mojom_gurl",
     ]
+
+    # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
+    use_once_callback = false
   }
 
   # This must be a static library because extensions common depends on
@@ -47,6 +50,8 @@ if (enable_extensions) {
       "api/bluetooth/bluetooth_manifest_handler.h",
       "api/bluetooth/bluetooth_manifest_permission.cc",
       "api/bluetooth/bluetooth_manifest_permission.h",
+      "api/declarative/declarative_constants.cc",
+      "api/declarative/declarative_constants.h",
       "api/declarative/declarative_manifest_data.cc",
       "api/declarative/declarative_manifest_data.h",
       "api/declarative/declarative_manifest_handler.cc",
@@ -100,7 +105,6 @@ if (enable_extensions) {
       "extension_set.h",
       "extension_urls.cc",
       "extension_urls.h",
-      "extension_utility_messages.h",
       "extension_utility_types.h",
       "extensions_aliases.cc",
       "extensions_aliases.h",
@@ -108,7 +112,6 @@ if (enable_extensions) {
       "extensions_client.h",
       "feature_switch.cc",
       "feature_switch.h",
-      "features/api_feature.h",
       "features/behavior_feature.cc",
       "features/behavior_feature.h",
       "features/complex_feature.cc",

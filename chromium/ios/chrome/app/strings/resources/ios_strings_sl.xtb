@@ -53,7 +53,6 @@ Nekatera spletna mesta se bodo na primer odzvala na to zahtevo s prikazom oglaso
 <translation id="1820259098641718022">Dodano na bralni seznam</translation>
 <translation id="1876721852596493031">Pošlji pod. o upor.</translation>
 <translation id="1886928167269928266">Beginning of Time</translation>
-<translation id="1894451531427596130">Delovanje tega lahko nadzirate v <ph name="BEGIN_LINK" />nastavitvah<ph name="END_LINK" /></translation>
 <translation id="1911619930368729126">Prenos v Google Drive</translation>
 <translation id="1941314575388338491">Dvakrat se dotaknite, če želite kopirati.</translation>
 <translation id="1952728750904661634">Prijava z upravljanim računom</translation>
@@ -97,6 +96,7 @@ Nekatera spletna mesta se bodo na primer odzvala na to zahtevo s prikazom oglaso
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">Ponastavi nastavitve za prevajanje</translation>
 <translation id="285960592395650245">Vnovičen poskus prenosa</translation>
+<translation id="2870560284913253234">Spletno mesto</translation>
 <translation id="2871695793448672541">Skrito, geslo</translation>
 <translation id="2898963176829412617">Nova mapa …</translation>
 <translation id="2903493209154104877">Naslovi</translation>
@@ -109,7 +109,6 @@ Nekatera spletna mesta se bodo na primer odzvala na to zahtevo s prikazom oglaso
 <translation id="2989805286512600854">Odpri v novem zavihku</translation>
 <translation id="3024255823539804759">Past Day</translation>
 <translation id="3037605927509011580">Ti šment!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> ni na voljo. Če želite dostopati do zgodovine brskanja, v meniju z orodji izberite »<ph name="SHOW_HISTORY" />«.</translation>
 <translation id="3112556859945124369">Označi …</translation>
 <translation id="3151924044251363314">Vaše šifrirane podatke lahko bere samo oseba z vašim geslom. Geslo ni poslano Googlu in ni shranjeno v Googlu. Če ga pozabite ali želite spremeniti to nastavitev, boste morali sinhronizacijo ponastaviti. <ph name="BEGIN_LINK" />Več o tem<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">Označi vse …</translation>
@@ -150,6 +149,7 @@ Nekatera spletna mesta se bodo na primer odzvala na to zahtevo s prikazom oglaso
 <translation id="3638472932233958418">Vnaprej naloži spletne strani</translation>
 <translation id="3691593122358196899">Zaznamek ustvarjen v mapi <ph name="FOLDER_TITLE" /></translation>
 <translation id="3738139272394829648">Dotaknite se za iskanje</translation>
+<translation id="3742082982782149146">URL spletnega mesta je bil kopiran.</translation>
 <translation id="3771033907050503522">Incognito Tabs</translation>
 <translation id="3783017676699494206">Shrani sliko</translation>
 <translation id="3789841737615482174">Namesti</translation>
@@ -164,10 +164,12 @@ Nekatera spletna mesta se bodo na primer odzvala na to zahtevo s prikazom oglaso
 <translation id="4038354071007134711">Nobena aplikacija v tej napravi ne more odpreti datoteke.</translation>
 <translation id="4049507953662678203">Make sure you have a network connection, and try again.</translation>
 <translation id="411254640334432676">Prenos ni uspel.</translation>
+<translation id="4117350985506774529">Uporabniško ime je bilo kopirano.</translation>
 <translation id="4121993058175073134">Če želite pošiljati podatke net-export, v aplikaciji Nastavitve konfigurirajte e-poštni račun.</translation>
 <translation id="4124987746317609294">Časovno obdobje</translation>
 <translation id="4172051516777682613">Vedno pokaži</translation>
 <translation id="418156467088430727">Ogled različice brez povezave na novem zavihku</translation>
+<translation id="4237682350741091554">Upravljanje sinhronizacije za Chrome in prilagajanja v <ph name="BEGIN_LINK" />Nastavitvah<ph name="END_LINK" /></translation>
 <translation id="424315890655130736">Vnos gesla</translation>
 <translation id="4272631900155121838">Če želite optično prebrati kodo QR, v nastavitvah omogočite fotoaparat</translation>
 <translation id="4281844954008187215">Pogoji storitve</translation>
@@ -175,6 +177,7 @@ Nekatera spletna mesta se bodo na primer odzvala na to zahtevo s prikazom oglaso
 <translation id="4359125752503270327">This page will open in another application.</translation>
 <translation id="4378154925671717803">Telefon</translation>
 <translation id="441868831736628555">Obvestilo o zasebnosti</translation>
+<translation id="4508750114462689118">Zapri predstavitev prijave</translation>
 <translation id="4526249700380860531">Ogled in upravljanje shranjenih gesel na <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Try signing in again.</translation>
 <translation id="4620246317052452550">Prebrane strani</translation>
@@ -220,6 +223,7 @@ Podatki so šifrirani z vašim geslom za sinhronizacijo. Vnesite ga, če želite
 
 Handoff must also be enabled in the General section of Settings, and your devices must use the same iCloud account.</translation>
 <translation id="5556459405103347317">Ponovno naloži</translation>
+<translation id="5619279135193775234">Pošta</translation>
 <translation id="5626245204502895507">Datoteke trenutno ni mogoče prenesti.</translation>
 <translation id="5659593005791499971">E-pošta</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@ Podatki so bili šifrirani z vašim geslom za sinhronizacijo <ph name="TIME" />.
 <translation id="7136892417564438900">Fotoaparat ni na voljo</translation>
 <translation id="7159472599653637159">Zahtevaj spletno mesto za mob. napravo</translation>
 <translation id="7167621057293532233">Vrste podatkov</translation>
+<translation id="7175593937868963913">Novo e-poštno sporočilo</translation>
 <translation id="7189598951263744875">Deli z drugimi</translation>
 <translation id="7203585745079012652">Izgovorjava odgovorov</translation>
 <translation id="722055596168483966">Prilagajanje Googlovih storitev</translation>
@@ -358,7 +363,6 @@ Podatki so bili šifrirani z vašim geslom za sinhronizacijo <ph name="TIME" />.
 <translation id="8205564605687841303">Prekliči</translation>
 <translation id="8225985093977202398">Cached Images and Files</translation>
 <translation id="8261506727792406068">Izbriši</translation>
-<translation id="8272194309885535896">Prenos slike</translation>
 <translation id="8272426682713568063">Kreditne kartice</translation>
 <translation id="8281781826761538115">Privzeto - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">Nadzirajte, kako Google na podlagi vaše zgodovine brskanja prilagaja Iskanje Google, oglase in druge Googlove storitve.</translation>

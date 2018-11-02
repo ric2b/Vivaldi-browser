@@ -45,14 +45,14 @@ CSSValue* StyleGeneratedImage::ComputedCSSValue() const {
 }
 
 LayoutSize StyleGeneratedImage::ImageSize(
-    const LayoutObject& layout_object,
+    const Document& document,
     float multiplier,
     const LayoutSize& default_object_size) const {
   if (fixed_size_) {
     FloatSize unzoomed_default_object_size(default_object_size);
     unzoomed_default_object_size.Scale(1 / multiplier);
     return ApplyZoom(LayoutSize(image_generator_value_->FixedSize(
-                         layout_object, unzoomed_default_object_size)),
+                         document, unzoomed_default_object_size)),
                      multiplier);
   }
 
@@ -69,14 +69,13 @@ void StyleGeneratedImage::RemoveClient(LayoutObject* layout_object) {
 
 PassRefPtr<Image> StyleGeneratedImage::GetImage(
     const LayoutObject& layout_object,
-    const IntSize& size,
-    float zoom) const {
-  return image_generator_value_->GetImage(layout_object, size, zoom);
+    const IntSize& size) const {
+  return image_generator_value_->GetImage(layout_object, size);
 }
 
-bool StyleGeneratedImage::KnownToBeOpaque(
-    const LayoutObject& layout_object) const {
-  return image_generator_value_->KnownToBeOpaque(layout_object);
+bool StyleGeneratedImage::KnownToBeOpaque(const Document& document,
+                                          const ComputedStyle& style) const {
+  return image_generator_value_->KnownToBeOpaque(document, style);
 }
 
 DEFINE_TRACE(StyleGeneratedImage) {

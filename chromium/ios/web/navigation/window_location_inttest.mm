@@ -107,7 +107,13 @@ class WindowLocationTest : public web::WebIntTest {
 };
 
 // Tests that calling window.location.assign() creates a new NavigationItem.
-TEST_F(WindowLocationTest, Assign) {
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_Assign Assign
+#else
+#define MAYBE_Assign DISABLED_Assign
+#endif
+// TODO(crbug.com/721162): Enable this test on device.
+TEST_F(WindowLocationTest, MAYBE_Assign) {
   // Navigate to about:blank so there is a forward entry to prune.
   GURL about_blank("about:blank");
   LoadUrl(about_blank);
@@ -196,7 +202,13 @@ TEST_F(WindowLocationTest, WindowLocationReplaceUnresolvable) {
 }
 
 // Tests that calling window.location.reload() causes an onload event to occur.
-TEST_F(WindowLocationTest, WindowLocationReload) {
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_WindowLocationReload WindowLocationReload
+#else
+#define MAYBE_WindowLocationReload DISABLED_WindowLocationReload
+#endif
+// TODO(crbug.com/721465): Enable this test on device.
+TEST_F(WindowLocationTest, MAYBE_WindowLocationReload) {
   // Tap the window.location.reload() button.
   ExecuteBlockAndWaitForLoad(window_location_url(), ^{
     ASSERT_TRUE(web::test::TapWebViewElementWithId(web_state(),

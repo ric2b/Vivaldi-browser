@@ -30,6 +30,7 @@
 #include "test/test_paths.h"
 #include "test/win/child_launcher.h"
 #include "util/file/file_io.h"
+#include "util/misc/from_pointer_cast.h"
 #include "util/misc/random_string.h"
 #include "util/misc/uuid.h"
 #include "util/win/command_line.h"
@@ -125,7 +126,7 @@ TEST(ProcessInfo, Self) {
   // Find something we know is a code address and confirm expected memory
   // information settings.
   VerifyAddressInInCodePage(process_info,
-                            reinterpret_cast<WinVMAddress>(_ReturnAddress()));
+                            FromPointerCast<WinVMAddress>(_ReturnAddress()));
 }
 
 void TestOtherProcess(const base::string16& directory_modification) {
@@ -151,7 +152,7 @@ void TestOtherProcess(const base::string16& directory_modification) {
   AppendCommandLineArgument(done_uuid.ToString16(), &args);
 
   ChildLauncher child(child_test_executable, args);
-  child.Start();
+  ASSERT_NO_FATAL_FAILURE(child.Start());
 
   // The child sends us a code address we can look up in the memory map.
   WinVMAddress code_address;
@@ -640,7 +641,7 @@ TEST(ProcessInfo, OutOfRangeCheck) {
 
   EXPECT_TRUE(
       info.LoggingRangeIsFullyReadable(CheckedRange<WinVMAddress, WinVMSize>(
-          reinterpret_cast<WinVMAddress>(safe_memory.get()), kAllocationSize)));
+          FromPointerCast<WinVMAddress>(safe_memory.get()), kAllocationSize)));
   EXPECT_FALSE(info.LoggingRangeIsFullyReadable(
       CheckedRange<WinVMAddress, WinVMSize>(0, 1024)));
 }

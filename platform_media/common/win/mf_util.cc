@@ -37,8 +37,8 @@ void ReportMFStatus(MFStatus status) {
 
 bool CheckOSVersion() {
   if (base::win::GetVersion() < base::win::VERSION_VISTA) {
-    DLOG(WARNING)
-        << "We don't support proprietary media codecs in this Windows version";
+    LOG(WARNING) << " PROPMEDIA(COMMON) : " << __FUNCTION__
+                 << " We don't support proprietary media codecs in this Windows version";
     return false;
   }
 
@@ -51,8 +51,9 @@ bool LoadMFLibrary(const char* library_name) {
 
   if (::GetModuleHandleA(library_name) == NULL &&
       ::LoadLibraryA(library_name) == NULL) {
-    DLOG(WARNING) << "Failed to load " << library_name
-                  << ". Some media features will not be available.";
+    LOG(WARNING) << " PROPMEDIA(COMMON) : " << __FUNCTION__
+                 << " Failed to load " << library_name
+                 << ". Some media features will not be available.";
     return false;
   }
 

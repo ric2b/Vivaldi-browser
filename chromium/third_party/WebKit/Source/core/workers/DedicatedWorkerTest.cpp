@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/MessageEvent.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/testing/DummyPageHolder.h"
@@ -17,7 +19,6 @@
 #include "platform/testing/UnitTestHelpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 namespace blink {
 
@@ -66,7 +67,6 @@ class DedicatedWorkerThreadForTest final : public DedicatedWorkerThread {
   // Emulates deprecated API use on DedicatedWorkerGlobalScope.
   void CountDeprecation(UseCounter::Feature feature) {
     EXPECT_TRUE(IsCurrentThread());
-    EXPECT_EQ(0u, GetConsoleMessageStorage()->size());
     GlobalScope()->CountDeprecation(feature);
 
     // countDeprecation() should add a warning message.
@@ -80,6 +80,38 @@ class DedicatedWorkerThreadForTest final : public DedicatedWorkerThread {
   }
 };
 
+class InProcessWorkerObjectProxyForTest final
+    : public InProcessWorkerObjectProxy {
+ public:
+  InProcessWorkerObjectProxyForTest(
+      const WeakPtr<InProcessWorkerMessagingProxy>& messaging_proxy_weak_ptr,
+      ParentFrameTaskRunners* parent_frame_task_runners)
+      : InProcessWorkerObjectProxy(messaging_proxy_weak_ptr,
+                                   parent_frame_task_runners),
+        reported_features_(UseCounter::kNumberOfFeatures) {
+    default_interval_in_sec_ = kDefaultIntervalInSec;
+    next_interval_in_sec_ = kNextIntervalInSec;
+    max_interval_in_sec_ = kMaxIntervalInSec;
+  }
+
+  void CountFeature(UseCounter::Feature feature) override {
+    // Any feature should be reported only one time.
+    EXPECT_FALSE(reported_features_.QuickGet(feature));
+    reported_features_.QuickSet(feature);
+    InProcessWorkerObjectProxy::CountFeature(feature);
+  }
+
+  void CountDeprecation(UseCounter::Feature feature) override {
+    // Any feature should be reported only one time.
+    EXPECT_FALSE(reported_features_.QuickGet(feature));
+    reported_features_.QuickSet(feature);
+    InProcessWorkerObjectProxy::CountDeprecation(feature);
+  }
+
+ private:
+  BitVector reported_features_;
+};
+
 class InProcessWorkerMessagingProxyForTest
     : public InProcessWorkerMessagingProxy {
  public:
@@ -87,14 +119,12 @@ class InProcessWorkerMessagingProxyForTest
       : InProcessWorkerMessagingProxy(execution_context,
                                       nullptr /* workerObject */,
                                       nullptr /* workerClients */) {
-    WorkerObjectProxy().default_interval_in_sec_ = kDefaultIntervalInSec;
-    WorkerObjectProxy().next_interval_in_sec_ = kNextIntervalInSec;
-    WorkerObjectProxy().max_interval_in_sec_ = kMaxIntervalInSec;
-
-    mock_worker_loader_proxy_provider_ =
-        WTF::MakeUnique<MockWorkerLoaderProxyProvider>();
+    worker_object_proxy_ = WTF::MakeUnique<InProcessWorkerObjectProxyForTest>(
+        weak_ptr_factory_.CreateWeakPtr(), GetParentFrameTaskRunners());
+    worker_loader_proxy_provider_ =
+        WTF::MakeUnique<WorkerLoaderProxyProvider>();
     worker_thread_ = WTF::WrapUnique(new DedicatedWorkerThreadForTest(
-        mock_worker_loader_proxy_provider_.get(), WorkerObjectProxy()));
+        worker_loader_proxy_provider_.get(), WorkerObjectProxy()));
     mock_worker_thread_lifecycle_observer_ =
         new MockWorkerThreadLifecycleObserver(
             worker_thread_->GetWorkerThreadLifecycleContext());
@@ -106,7 +136,7 @@ class InProcessWorkerMessagingProxyForTest
   ~InProcessWorkerMessagingProxyForTest() override {
     EXPECT_FALSE(blocking_);
     worker_thread_->GetWorkerLoaderProxy()->DetachProvider(
-        mock_worker_loader_proxy_provider_.get());
+        worker_loader_proxy_provider_.get());
   }
 
   void StartWithSourceCode(const String& source) {
@@ -117,6 +147,9 @@ class InProcessWorkerMessagingProxyForTest
     CSPHeaderAndType header_and_type("contentSecurityPolicy",
                                      kContentSecurityPolicyHeaderTypeReport);
     headers->push_back(header_and_type);
+    WorkerV8Settings worker_v8_settings = WorkerV8Settings::Default();
+    worker_v8_settings.atomics_wait_mode_ =
+        WorkerV8Settings::AtomicsWaitMode::kAllow;
     GetWorkerThread()->Start(
         WorkerThreadStartupData::Create(
             script_url, "fake user agent", source, nullptr /* cachedMetaData */,
@@ -124,7 +157,7 @@ class InProcessWorkerMessagingProxyForTest
             "" /* referrerPolicy */, security_origin_.Get(),
             nullptr /* workerClients */, kWebAddressSpaceLocal,
             nullptr /* originTrialTokens */, nullptr /* workerSettings */,
-            WorkerV8Settings::Default()),
+            worker_v8_settings),
         GetParentFrameTaskRunners());
 
     GetWorkerInspectorProxy()->WorkerThreadCreated(
@@ -191,8 +224,7 @@ class InProcessWorkerMessagingProxyForTest
   }
 
  private:
-  std::unique_ptr<MockWorkerLoaderProxyProvider>
-      mock_worker_loader_proxy_provider_;
+  std::unique_ptr<WorkerLoaderProxyProvider> worker_loader_proxy_provider_;
   Persistent<MockWorkerThreadLifecycleObserver>
       mock_worker_thread_lifecycle_observer_;
   RefPtr<SecurityOrigin> security_origin_;
@@ -378,7 +410,8 @@ TEST_F(DedicatedWorkerTest, PendingActivity_SetIntervalOnMessageEvent) {
   EXPECT_FALSE(WorkerMessagingProxy()->HasPendingActivity());
 }
 
-TEST_F(DedicatedWorkerTest, UseCounter) {
+// Test is flaky. crbug.com/699712
+TEST_F(DedicatedWorkerTest, DISABLED_UseCounter) {
   const String source_code = "// Do nothing";
   WorkerMessagingProxy()->StartWithSourceCode(source_code);
 
@@ -388,12 +421,22 @@ TEST_F(DedicatedWorkerTest, UseCounter) {
   // API use on the DedicatedWorkerGlobalScope should be recorded in UseCounter
   // on the Document.
   EXPECT_FALSE(UseCounter::IsCounted(GetDocument(), kFeature1));
-  GetWorkerThread()->PostTask(
-      BLINK_FROM_HERE,
-      CrossThreadBind(&DedicatedWorkerThreadForTest::CountFeature,
-                      CrossThreadUnretained(GetWorkerThread()), kFeature1));
+  TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GetWorkerThread())
+      ->PostTask(
+          BLINK_FROM_HERE,
+          CrossThreadBind(&DedicatedWorkerThreadForTest::CountFeature,
+                          CrossThreadUnretained(GetWorkerThread()), kFeature1));
   testing::EnterRunLoop();
   EXPECT_TRUE(UseCounter::IsCounted(GetDocument(), kFeature1));
+
+  // API use should be reported to the Document only one time. See comments in
+  // InProcessWorkerObjectProxyForTest::CountFeature.
+  TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GetWorkerThread())
+      ->PostTask(
+          BLINK_FROM_HERE,
+          CrossThreadBind(&DedicatedWorkerThreadForTest::CountFeature,
+                          CrossThreadUnretained(GetWorkerThread()), kFeature1));
+  testing::EnterRunLoop();
 
   // This feature is randomly selected from Deprecation::deprecationMessage().
   const UseCounter::Feature kFeature2 =
@@ -402,12 +445,22 @@ TEST_F(DedicatedWorkerTest, UseCounter) {
   // Deprecated API use on the DedicatedWorkerGlobalScope should be recorded in
   // UseCounter on the Document.
   EXPECT_FALSE(UseCounter::IsCounted(GetDocument(), kFeature2));
-  GetWorkerThread()->PostTask(
-      BLINK_FROM_HERE,
-      CrossThreadBind(&DedicatedWorkerThreadForTest::CountDeprecation,
-                      CrossThreadUnretained(GetWorkerThread()), kFeature2));
+  TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GetWorkerThread())
+      ->PostTask(
+          BLINK_FROM_HERE,
+          CrossThreadBind(&DedicatedWorkerThreadForTest::CountDeprecation,
+                          CrossThreadUnretained(GetWorkerThread()), kFeature2));
   testing::EnterRunLoop();
   EXPECT_TRUE(UseCounter::IsCounted(GetDocument(), kFeature2));
+
+  // API use should be reported to the Document only one time. See comments in
+  // InProcessWorkerObjectProxyForTest::CountDeprecation.
+  TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GetWorkerThread())
+      ->PostTask(
+          BLINK_FROM_HERE,
+          CrossThreadBind(&DedicatedWorkerThreadForTest::CountDeprecation,
+                          CrossThreadUnretained(GetWorkerThread()), kFeature2));
+  testing::EnterRunLoop();
 }
 
 }  // namespace blink

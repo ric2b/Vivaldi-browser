@@ -12,7 +12,6 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
-#include "ash/system/tray/fixed_sized_image_view.h"
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/size_range_layout.h"
 #include "ash/system/tray/tray_constants.h"
@@ -21,6 +20,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
@@ -48,8 +48,8 @@ namespace {
 // stretched horizontally and centered vertically.
 std::unique_ptr<views::LayoutManager> CreateDefaultCenterLayoutManager() {
   // TODO(bruthig): Use constants instead of magic numbers.
-  auto box_layout =
-      base::MakeUnique<views::BoxLayout>(views::BoxLayout::kVertical, 4, 8, 0);
+  auto box_layout = base::MakeUnique<views::BoxLayout>(
+      views::BoxLayout::kVertical, kTrayPopupLabelHorizontalPadding, 8, 0);
   box_layout->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
   box_layout->set_cross_axis_alignment(
@@ -174,13 +174,31 @@ TriView* TrayPopupUtils::CreateDefaultRowView() {
   return tri_view;
 }
 
-TriView* TrayPopupUtils::CreateSubHeaderRowView() {
+TriView* TrayPopupUtils::CreateSubHeaderRowView(bool start_visible) {
+  TriView* tri_view = CreateDefaultRowView();
+  if (!start_visible) {
+    tri_view->SetInsets(gfx::Insets(
+        0, kTrayPopupPaddingHorizontal - kTrayPopupLabelHorizontalPadding, 0,
+        0));
+    tri_view->SetContainerVisible(TriView::Container::START, false);
+  }
+  return tri_view;
+}
+
+views::View* TrayPopupUtils::CreateInfoLabelRowView(int message_id) {
+  views::Label* label = TrayPopupUtils::CreateDefaultLabel();
+  label->SetText(l10n_util::GetStringUTF16(message_id));
+  TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::SYSTEM_INFO);
+  style.SetupLabel(label);
+
   TriView* tri_view = CreateMultiTargetRowView();
-  tri_view->SetInsets(gfx::Insets(0, kTrayPopupPaddingHorizontal, 0, 0));
+  tri_view->SetInsets(
+      gfx::Insets(0, kMenuExtraMarginFromLeftEdge + kTrayPopupPaddingHorizontal,
+                  0, kTrayPopupPaddingHorizontal));
   tri_view->SetContainerVisible(TriView::Container::START, false);
-  tri_view->SetContainerLayout(
-      TriView::Container::END,
-      CreateDefaultLayoutManager(TriView::Container::END));
+  tri_view->SetContainerVisible(TriView::Container::END, false);
+  tri_view->AddView(TriView::Container::CENTER, label);
+
   return tri_view;
 }
 
@@ -206,25 +224,24 @@ TriView* TrayPopupUtils::CreateMultiTargetRowView() {
 views::Label* TrayPopupUtils::CreateDefaultLabel() {
   views::Label* label = new views::Label();
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  label->SetBorder(
-      views::CreateEmptyBorder(0, 0, 0, kTrayPopupLabelRightPadding));
   // Frequently the label will paint to a layer that's non-opaque, so subpixel
   // rendering won't work unless we explicitly set a background. See
   // crbug.com/686363
-  label->set_background(
-      views::Background::CreateSolidBackground(kBackgroundColor));
-  label->SetBackgroundColor(kBackgroundColor);
+  label->set_background(views::Background::CreateThemedSolidBackground(
+      label, ui::NativeTheme::kColorId_BubbleBackground));
   return label;
 }
 
 views::ImageView* TrayPopupUtils::CreateMainImageView() {
-  return new FixedSizedImageView(kTrayPopupItemMinStartWidth,
-                                 kTrayPopupItemMinHeight);
+  auto* image = new views::ImageView;
+  image->SetPreferredSize(
+      gfx::Size(kTrayPopupItemMinStartWidth, kTrayPopupItemMinHeight));
+  return image;
 }
 
 views::ImageView* TrayPopupUtils::CreateMoreImageView() {
-  views::ImageView* image =
-      new FixedSizedImageView(kMenuIconSize, kMenuIconSize);
+  auto* image = new views::ImageView;
+  image->SetPreferredSize(gfx::Size(gfx::Size(kMenuIconSize, kMenuIconSize)));
   image->EnableCanvasFlippingForRTLUI(true);
   image->SetImage(
       gfx::CreateVectorIcon(kSystemMenuArrowRightIcon, kMenuIconColor));
@@ -272,8 +289,8 @@ void TrayPopupUtils::ConfigureTrayPopupButton(views::CustomButton* button) {
 
 void TrayPopupUtils::ConfigureAsStickyHeader(views::View* view) {
   view->set_id(VIEW_ID_STICKY_HEADER);
-  view->set_background(
-      views::Background::CreateSolidBackground(kBackgroundColor));
+  view->set_background(views::Background::CreateThemedSolidBackground(
+      view, ui::NativeTheme::kColorId_BubbleBackground));
   view->SetBorder(
       views::CreateEmptyBorder(gfx::Insets(kMenuSeparatorVerticalPadding, 0)));
   view->SetPaintToLayer();
@@ -427,13 +444,8 @@ views::Separator* TrayPopupUtils::CreateListSubHeaderSeparator() {
   return separator;
 }
 
-bool TrayPopupUtils::CanOpenWebUISettings(LoginStatus status) {
-  // TODO(tdanderson): Consider moving this into ShellPort, or introduce a
-  // CanShowSettings() method in each delegate type that has a
-  // ShowSettings() method.
-  return status != LoginStatus::NOT_LOGGED_IN &&
-         status != LoginStatus::LOCKED &&
-         !Shell::Get()->session_controller()->IsInSecondaryLoginScreen();
+bool TrayPopupUtils::CanOpenWebUISettings() {
+  return Shell::Get()->session_controller()->ShouldEnableSettings();
 }
 
 void TrayPopupUtils::InitializeAsCheckableRow(HoverHighlightView* container,

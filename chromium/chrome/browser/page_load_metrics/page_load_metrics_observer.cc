@@ -20,8 +20,8 @@ PageLoadExtraInfo::PageLoadExtraInfo(
     PageEndReason page_end_reason,
     UserInitiatedInfo page_end_user_initiated_info,
     const base::Optional<base::TimeDelta>& page_end_time,
-    const PageLoadMetadata& main_frame_metadata,
-    const PageLoadMetadata& child_frame_metadata)
+    const mojom::PageLoadMetadata& main_frame_metadata,
+    const mojom::PageLoadMetadata& subframe_metadata)
     : navigation_start(navigation_start),
       first_background_time(first_background_time),
       first_foreground_time(first_foreground_time),
@@ -34,7 +34,7 @@ PageLoadExtraInfo::PageLoadExtraInfo(
       page_end_user_initiated_info(page_end_user_initiated_info),
       page_end_time(page_end_time),
       main_frame_metadata(main_frame_metadata),
-      child_frame_metadata(child_frame_metadata) {}
+      subframe_metadata(subframe_metadata) {}
 
 PageLoadExtraInfo::PageLoadExtraInfo(const PageLoadExtraInfo& other) = default;
 
@@ -52,22 +52,36 @@ PageLoadExtraInfo PageLoadExtraInfo::CreateForTesting(
       UserInitiatedInfo::BrowserInitiated(), url, url, true /* did_commit */,
       page_load_metrics::END_NONE,
       page_load_metrics::UserInitiatedInfo::NotUserInitiated(),
-      base::TimeDelta(), page_load_metrics::PageLoadMetadata(),
-      page_load_metrics::PageLoadMetadata());
+      base::TimeDelta(), page_load_metrics::mojom::PageLoadMetadata(),
+      page_load_metrics::mojom::PageLoadMetadata());
 }
 
-ExtraRequestInfo::ExtraRequestInfo(
+ExtraRequestCompleteInfo::ExtraRequestCompleteInfo(
+    const GURL& url,
+    int frame_tree_node_id,
     bool was_cached,
     int64_t raw_body_bytes,
     int64_t original_network_content_length,
     std::unique_ptr<data_reduction_proxy::DataReductionProxyData>
-        data_reduction_proxy_data)
-    : was_cached(was_cached),
+        data_reduction_proxy_data,
+    content::ResourceType detected_resource_type)
+    : url(url),
+      frame_tree_node_id(frame_tree_node_id),
+      was_cached(was_cached),
       raw_body_bytes(raw_body_bytes),
       original_network_content_length(original_network_content_length),
-      data_reduction_proxy_data(std::move(data_reduction_proxy_data)) {}
+      data_reduction_proxy_data(std::move(data_reduction_proxy_data)),
+      resource_type(detected_resource_type) {}
 
-ExtraRequestInfo::~ExtraRequestInfo() {}
+ExtraRequestCompleteInfo::~ExtraRequestCompleteInfo() {}
+
+ExtraRequestStartInfo::ExtraRequestStartInfo(content::ResourceType found_type)
+    : resource_type(found_type) {}
+
+ExtraRequestStartInfo::ExtraRequestStartInfo(
+    const ExtraRequestStartInfo& other) = default;
+
+ExtraRequestStartInfo::~ExtraRequestStartInfo() {}
 
 FailedProvisionalLoadInfo::FailedProvisionalLoadInfo(base::TimeDelta interval,
                                                      net::Error error)
@@ -93,7 +107,7 @@ PageLoadMetricsObserver::ObservePolicy PageLoadMetricsObserver::OnCommit(
 }
 
 PageLoadMetricsObserver::ObservePolicy PageLoadMetricsObserver::OnHidden(
-    const PageLoadTiming& timing,
+    const mojom::PageLoadTiming& timing,
     const PageLoadExtraInfo& extra_info) {
   return CONTINUE_OBSERVING;
 }
@@ -104,7 +118,7 @@ PageLoadMetricsObserver::ObservePolicy PageLoadMetricsObserver::OnShown() {
 
 PageLoadMetricsObserver::ObservePolicy
 PageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
-    const PageLoadTiming& timing,
+    const mojom::PageLoadTiming& timing,
     const PageLoadExtraInfo& extra_info) {
   return CONTINUE_OBSERVING;
 }

@@ -73,6 +73,8 @@ _NEGATIVE_FILTER = [
 
 _VERSION_SPECIFIC_FILTER = {}
 _VERSION_SPECIFIC_FILTER['HEAD'] = [
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1819
+    'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
 ]
 _VERSION_SPECIFIC_FILTER['58'] = [
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1673
@@ -175,7 +177,7 @@ _ANDROID_NEGATIVE_FILTER['chromium'] = (
 )
 _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
     _ANDROID_NEGATIVE_FILTER['chrome'] + [
-        'PerformanceLoggerTest.testPerformanceLogger',
+        'ChromeLoggingCapabilityTest.testPerformanceLogger',
         'ChromeDriverTest.testShadowDom*',
         # WebView doesn't support emulating network conditions.
         'ChromeDriverTest.testEmulateNetworkConditions',
@@ -677,6 +679,7 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
   def testAlertHandlingOnPageUnload(self):
     self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
     self._driver.ExecuteScript('window.onbeforeunload=function(){return true}')
+    self._driver.FindElement('tag name', 'body').Click()
     self._driver.GoBack()
     self.assertTrue(self._driver.IsAlertOpen())
     self._driver.HandleAlert(True)
@@ -861,11 +864,11 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
 
   def testWindowMaximize(self):
     self._driver.SetWindowPosition(100, 200)
-    self._driver.SetWindowSize(600, 400)
+    self._driver.SetWindowSize(500, 300)
     self._driver.MaximizeWindow()
 
     self.assertNotEqual([100, 200], self._driver.GetWindowPosition())
-    self.assertNotEqual([600, 400], self._driver.GetWindowSize())
+    self.assertNotEqual([500, 300], self._driver.GetWindowSize())
     # Set size first so that the window isn't moved offscreen.
     # See https://bugs.chromium.org/p/chromedriver/issues/detail?id=297.
     self._driver.SetWindowSize(600, 400)
@@ -1061,6 +1064,25 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     # we have to explicitly wait for this to change. We can't rely on the
     # navigation tracker to block the call to Load() above.
     self.WaitForCondition(lambda: 'is not available' in self._driver.GetTitle())
+
+  def testSendCommand(self):
+    """Sends a custom command to the DevTools debugger"""
+    params = {}
+    res = self._driver.SendCommandAndGetResult('CSS.enable', params)
+    self.assertEqual({}, res)
+
+  def testSendCommandNoParams(self):
+    """Sends a custom command to the DevTools debugger without params"""
+    self.assertRaisesRegexp(
+            chromedriver.UnknownError, "params not passed",
+            self._driver.SendCommandAndGetResult, 'CSS.enable', None)
+
+  def testSendCommandAndGetResult(self):
+    """Sends a custom command to the DevTools debugger and gets the result"""
+    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/page_test.html'))
+    params = {}
+    document = self._driver.SendCommandAndGetResult('DOM.getDocument', params)
+    self.assertTrue('root' in document)
 
   def testShadowDomFindElementWithSlashDeep(self):
     """Checks that chromedriver can find elements in a shadow DOM using /deep/
@@ -1818,6 +1840,17 @@ class ChromeExtensionsCapabilityTest(ChromeDriverBaseTest):
         return
     self.fail("couldn't find generated background page for test app")
 
+  def testIFrameWithExtensionsSource(self):
+    crx_path = os.path.join(_TEST_DATA_DIR, 'frames_extension.crx')
+    driver = self.CreateDriver(
+        chrome_extensions=[self._PackExtension(crx_path)])
+    driver.Load(
+        ChromeDriverTest._http_server.GetUrl() +
+          '/chromedriver/iframe_extension.html')
+    driver.SwitchToFrame('testframe')
+    element = driver.FindElement('id', 'p1')
+    self.assertEqual('Its a frame with extension source', element.GetText())
+
   def testDontExecuteScriptsInContentScriptContext(self):
     # This test extension has a content script which runs in all frames (see
     # https://developer.chrome.com/extensions/content_scripts) which causes each
@@ -2203,7 +2236,7 @@ class ChromeDriverLogTest(ChromeDriverBaseTest):
   def testDisablingDriverLogsSuppressesChromeDriverLog(self):
     _, tmp_log_path = tempfile.mkstemp(prefix='chromedriver_log_')
     chromedriver_server = server.Server(
-        _CHROMEDRIVER_BINARY, log_path=tmp_log_path)
+        _CHROMEDRIVER_BINARY, log_path=tmp_log_path, verbose=False)
     try:
       driver = self.CreateDriver(
           chromedriver_server.GetUrl(), logging_prefs={'driver':'OFF'})
@@ -2217,7 +2250,7 @@ class ChromeDriverLogTest(ChromeDriverBaseTest):
       self.assertNotIn('bosco', f.read())
 
 
-class PerformanceLoggerTest(ChromeDriverBaseTest):
+class ChromeLoggingCapabilityTest(ChromeDriverBaseTest):
   """Tests chromedriver tracing support and Inspector event collection."""
 
   def testPerformanceLogger(self):
@@ -2252,6 +2285,18 @@ class PerformanceLoggerTest(ChromeDriverBaseTest):
     self.assertEquals({'Network', 'Page', 'Tracing'},
                       set(seen_log_domains.keys()))
 
+  def testDevToolsEventsLogger(self):
+    """Tests that the correct event type (and no other) is logged"""
+    event = 'Page.loadEventFired'
+    driver = self.CreateDriver(
+        devtools_events_to_log=[event], logging_prefs={'devtools':'ALL'})
+    driver.Load('about:blank')
+    logs = driver.GetLog('devtools')
+    for entry in logs:
+      devtools_message = json.loads(entry['message'])
+      method = devtools_message['method']
+      self.assertTrue('params' in devtools_message)
+      self.assertEquals(event, method)
 
 class SessionHandlingTest(ChromeDriverBaseTest):
   """Tests for session operations."""

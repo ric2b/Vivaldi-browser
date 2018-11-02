@@ -4,9 +4,9 @@
 
 #include "net/quic/core/quic_packets.h"
 
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_utils.h"
 #include "net/quic/core/quic_versions.h"
+#include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/platform/api/quic_str_cat.h"
 #include "net/quic/platform/api/quic_text_utils.h"
@@ -52,7 +52,6 @@ size_t GetStartOfEncryptedData(QuicVersion version,
 QuicPacketPublicHeader::QuicPacketPublicHeader()
     : connection_id(0),
       connection_id_length(PACKET_8BYTE_CONNECTION_ID),
-      multipath_flag(false),
       reset_flag(false),
       version_flag(false),
       packet_number_length(PACKET_6BYTE_PACKET_NUMBER),
@@ -70,12 +69,11 @@ QuicPacketHeader::QuicPacketHeader(const QuicPacketPublicHeader& header)
 
 QuicPacketHeader::QuicPacketHeader(const QuicPacketHeader& other) = default;
 
-QuicPublicResetPacket::QuicPublicResetPacket()
-    : nonce_proof(0), rejected_packet_number(0) {}
+QuicPublicResetPacket::QuicPublicResetPacket() : nonce_proof(0) {}
 
 QuicPublicResetPacket::QuicPublicResetPacket(
     const QuicPacketPublicHeader& header)
-    : public_header(header), nonce_proof(0), rejected_packet_number(0) {}
+    : public_header(header), nonce_proof(0) {}
 
 std::ostream& operator<<(std::ostream& os, const QuicPacketHeader& header) {
   os << "{ connection_id: " << header.public_header.connection_id

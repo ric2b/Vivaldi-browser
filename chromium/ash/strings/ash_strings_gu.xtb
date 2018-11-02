@@ -25,6 +25,7 @@
 <translation id="164969095109328410">Chrome ઉપકરણ</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> બાકી</translation>
 <translation id="1698760176351776263">IPv6 સરનામું: <ph name="ADDRESS" /></translation>
+<translation id="1734367976349034509">આ ઉપકરણ એન્ટરપ્રાઇઝ દ્વારા સંચાલિત થાય છે</translation>
 <translation id="1747827819627189109">ઓન-સ્ક્રીન કીબોર્ડ સક્ષમ કર્યું</translation>
 <translation id="1823873187264960516">ઇથરનેટ: <ph name="ADDRESS" /></translation>
 <translation id="1850504506766569011">Wi-Fi બંધ છે.</translation>
@@ -36,7 +37,9 @@
 <translation id="1942830294380034169">ઓવરફ્લો બટન</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2049639323467105390">આ ઉપકરણને <ph name="DOMAIN" /> દ્વારા મેનેજ કરવામાં આવેલું છે.</translation>
 <translation id="2050339315714019657">પોર્ટ્રેટ</translation>
+<translation id="207439088875642105"><ph name="FIRST_PARENT_EMAIL" /> અને <ph name="SECOND_PARENT_EMAIL" /> દ્વારા સંચાલિત આ બાળકો માટેનું એક એકાઉન્ટ છે</translation>
 <translation id="2122028596993374965"><ph name="RECEIVER_NAME" /> પર <ph name="TAB_NAME" /> ને કાસ્ટ કરવાનું રોકો</translation>
 <translation id="2127372758936585790">નિમ્ન-પાવર ચાર્જર</translation>
 <translation id="2144487987174258011">Adobe Flash Player અપડેટ કરવા પુનઃપ્રારંભ કરો</translation>
@@ -44,6 +47,7 @@
 <translation id="225680501294068881">ઉપકરણો માટે સ્કેન કરી રહ્યું છે...</translation>
 <translation id="2268130516524549846">Bluetooth અક્ષમ છે</translation>
 <translation id="2268813581635650749">બધામાંથી સાઇન આઉટ કરો</translation>
+<translation id="2292698582925480719">પ્રદર્શન સ્કેલ</translation>
 <translation id="2303600792989757991">ટોગલ વિન્ડો વિહંગાવલોકન</translation>
 <translation id="2352467521400612932">કલમની સેટિંગ્સ</translation>
 <translation id="2354174487190027830"><ph name="NAME" /> ને સક્રિય કરી રહ્યું છે</translation>
@@ -71,6 +75,7 @@
 <translation id="3000461861112256445">મૉનો ઑડિઓ</translation>
 <translation id="3009178788565917040">આઉટપુટ</translation>
 <translation id="3019353588588144572">બેટરી સંપૂર્ણપણે ચાર્જ થવામાં બાકી સમય, <ph name="TIME_REMAINING" /></translation>
+<translation id="3047477924825107454">આ <ph name="MANAGER_EMAIL" /> દ્વારા સંચાલિત બાળકોનું એકાઉન્ટ છે</translation>
 <translation id="3050422059534974565">CAPS LOCK ચાલુ છે. 
 રદ કરવા માટે Search અથવા Shift દબાવો.</translation>
 <translation id="3077734595579995578">shift</translation>
@@ -125,6 +130,7 @@
 <translation id="4527045527269911712">Bluetooth ઉપકરણ "<ph name="DEVICE_NAME" />" ને જોડી બનાવવા માટે પરવાનગી જોઈએ છે.</translation>
 <translation id="453661520163887813">પૂર્ણપણે ચાર્જ થવામાં <ph name="TIME" /></translation>
 <translation id="4544944664594876241">સ્ક્રીનને લૉક કરવાનો શોર્ટકટ બદલાયો છે. કૃપા કરીને <ph name="OLD_SHORTCUT" /> ને બદલે <ph name="NEW_SHORTCUT" /> નો ઉપયોગ કરો.</translation>
+<translation id="4659419629803378708">ChromeVox સક્ષમ કર્યું</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">ડિસ્કનેક્ટ કરો</translation>
 <translation id="4849058404725798627">કીબોર્ડ ફોકસ વડે ઑબ્જેક્ટને હાઇલાઇટ કરો</translation>
@@ -140,6 +146,7 @@
 <translation id="523505283826916779">ઍક્સેસિબિલિટી સેટિંગ્સ</translation>
 <translation id="5313326810920013265">Bluetooth સેટિંગ્સ</translation>
 <translation id="5331975486040154427">USB-C ઉપકરણ (ડાબી બાજુનું પાછળનું પોર્ટ)</translation>
+<translation id="5397578532367286026">આ વપરાશકર્તાના ઉપયોગ અને ઇતિહાસની chrome.com પર સંચાલક (<ph name="MANAGER_EMAIL" />) દ્વારા સમીક્ષા કરવામાં આવી શકે છે.</translation>
 <translation id="5430931332414098647">ઝટપટ ટિથરિંગ</translation>
 <translation id="5431825016875453137">OpenVPN / L2TP</translation>
 <translation id="544691375626129091">બધા ઉપલબ્ધ વપરાશકર્તાઓ પહેલેથી જ આ સત્ર પર ઉમેરવામાં આવ્યા છે.</translation>
@@ -147,6 +154,7 @@
 <translation id="5548285847212963613">વિસ્તાર "<ph name="EXTENSION_NAME" />" આ નેટવર્ક સાથે કનેક્ટ કરવામાં મદદ કરી શકે છે.</translation>
 <translation id="5571066253365925590">Bluetooth સક્ષમ છે</translation>
 <translation id="5597451508971090205"><ph name="SHORT_WEEKDAY" />, <ph name="DATE" /></translation>
+<translation id="5600837773213129531">બોલાયેલ પ્રતિસાદને અક્ષમ કરવા માટે Ctrl + Alt + Z દબાવો.</translation>
 <translation id="5648021990716966815">માઇક જેક</translation>
 <translation id="5744083938413354016">ખેંચવાને ટૅપ કરો</translation>
 <translation id="5777841717266010279">સ્ક્રીન શેરિંગ રોકીએ?</translation>
@@ -176,6 +184,7 @@
 <translation id="6297287540776456956">કોઈ પ્રદેશ પસંદ કરવા માટે કલમનો ઉપયોગ કરો</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> ને <ph name="ROTATION" /> પર ફેરવવામાં આવ્યું હતું</translation>
 <translation id="632744581670418035">કીબોર્ડ ઓવરલે</translation>
+<translation id="6395038768903208085">મેટાલેયર મોડ</translation>
 <translation id="639644700271529076">CAPS LOCK બંધ છે</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6452181791372256707">નકારો</translation>
@@ -201,7 +210,6 @@
 <translation id="7052914147756339792">વૉલપેપર સેટ કરો...</translation>
 <translation id="7066646422045619941">આ નેટવર્ક તમારા વ્યવસ્થાપક દ્વારા અક્ષમ કરેલ છે.</translation>
 <translation id="7067196344162293536">સ્વતઃ ફેરવો</translation>
-<translation id="7097613348211027502">ChromeVox (બોલાયેલ પ્રતિસાદ) સક્ષમ છે. અક્ષમ કરવા માટે Ctrl+Alt+Z દબાવો.</translation>
 <translation id="7098389117866926363">USB-C ઉપકરણ (પાછળની બાજુએ ડાબું પોર્ટ)</translation>
 <translation id="7129360219436193655">લેઝર પૉઇન્ટર મોડ</translation>
 <translation id="714034171374937760">Chromebase</translation>
@@ -216,16 +224,20 @@
 <translation id="742594950370306541">કૅમેરો ઉપયોગમાં છે.</translation>
 <translation id="743058460480092004">કૅમેરો અને માઇક્રોફોન ઉપયોગમાં છે.</translation>
 <translation id="7510334386202674593">ctrl + shift + L</translation>
+<translation id="7526573455193969409">નેટવર્કને મોનિટર કરવામાં આવી શકે છે</translation>
 <translation id="7536035074519304529">IP સરનામું: <ph name="ADDRESS" /></translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" />, <ph name="SPECIFIED_RESOLUTION" /> ને સમર્થન આપતું નથી. રિઝોલ્યુશન <ph name="FALLBACK_RESOLUTION" /> પર બદલાયું હતું</translation>
 <translation id="7562368315689366235">ઇમોજી પૅલેટ</translation>
+<translation id="7569509451529460200">બ્રેઇલ અને ChromeVox સક્ષમ કર્યાં</translation>
 <translation id="7581273696622423628">સર્વેક્ષણમાં ભાગ લો</translation>
 <translation id="7593891976182323525">Search અથવા Shift</translation>
 <translation id="7649070708921625228">સહાય</translation>
 <translation id="7692480393933218409">કનેક્ટ કરેલા USB-C ઉપકરણોને ચાર્જ કરી રહ્યાં છે</translation>
+<translation id="776344839111254542">અપડેટની વિગતો જોવા માટે ક્લિક કરો</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> અને <ph name="MINUTE" /></translation>
 <translation id="7823564328645135659">તમારી સેટિંગ્સ સમન્વયિત કર્યા પછી ભાષા "<ph name="FROM_LOCALE" />" થી "<ph name="TO_LOCALE" />" માં બદલાઈ ગઈ છે.</translation>
 <translation id="7904094684485781019">આ એકાઉન્ટ માટે વ્યસ્થાપકે બહુવિધ સાઇન-ઇનને નામંજૂર કર્યું છે.</translation>
+<translation id="7951523953736115461">રાત્રિ પ્રકાશ</translation>
 <translation id="7977927628060636163">મોબાઇલ નેટવર્કની શોધ કરી રહ્યું છે...</translation>
 <translation id="7982789257301363584">નેટવર્ક</translation>
 <translation id="8000066093800657092">નેટવર્ક નથી</translation>
@@ -243,6 +255,7 @@
 <translation id="8433186206711564395">નેટવર્ક સેટિંગ્સ</translation>
 <translation id="8433977262951327081">શેલ્ફમાં મેનૂ પરપોટો ઇનપુટ વિકલ્પો બતાવવાનો શૉર્ટકટ બદલાયો છે. કૃપા કરીને <ph name="OLD_SHORTCUT" />ને બદલે <ph name="NEW_SHORTCUT" />નો ઉપયોગ કરો.</translation>
 <translation id="8454013096329229812">Wi-Fi ચાલુ છે.</translation>
+<translation id="847056008324733326">પ્રદર્શન સ્કેલની સેટિંગ્સ</translation>
 <translation id="8484916590211895857"><ph name="NAME" />: ફરીથી કનેક્ટ કરી રહ્યાં છે...</translation>
 <translation id="8517041960877371778">તમારું <ph name="DEVICE_TYPE" /> ચાલુ હોય ત્યારે તે ચાર્જ ન થાય તેવું બની શકે.</translation>
 <translation id="8639760480004882931"><ph name="PERCENTAGE" /> બાકી</translation>

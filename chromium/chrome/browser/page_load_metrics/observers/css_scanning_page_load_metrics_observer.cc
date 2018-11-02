@@ -30,13 +30,13 @@ CssScanningMetricsObserver::OnStart(
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 CssScanningMetricsObserver::OnHidden(
-    const page_load_metrics::PageLoadTiming&,
+    const page_load_metrics::mojom::PageLoadTiming&,
     const page_load_metrics::PageLoadExtraInfo&) {
   return STOP_OBSERVING;
 }
 
-void CssScanningMetricsObserver::OnFirstContentfulPaint(
-    const page_load_metrics::PageLoadTiming& timing,
+void CssScanningMetricsObserver::OnFirstContentfulPaintInPage(
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   if (!css_preload_found_)
     return;
@@ -44,11 +44,12 @@ void CssScanningMetricsObserver::OnFirstContentfulPaint(
   PAGE_LOAD_HISTOGRAM(
       "PageLoad.Clients.CssScanner.PaintTiming."
       "ParseStartToFirstContentfulPaint",
-      timing.first_contentful_paint.value() - timing.parse_start.value());
+      timing.paint_timing->first_contentful_paint.value() -
+          timing.parse_timing->parse_start.value());
 }
 
-void CssScanningMetricsObserver::OnFirstMeaningfulPaint(
-    const page_load_metrics::PageLoadTiming& timing,
+void CssScanningMetricsObserver::OnFirstMeaningfulPaintInMainFrameDocument(
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   if (!css_preload_found_)
     return;
@@ -56,5 +57,6 @@ void CssScanningMetricsObserver::OnFirstMeaningfulPaint(
   PAGE_LOAD_HISTOGRAM(
       "PageLoad.Clients.CssScanner.Experimental.PaintTiming."
       "ParseStartToFirstMeaningfulPaint",
-      timing.first_meaningful_paint.value() - timing.parse_start.value());
+      timing.paint_timing->first_meaningful_paint.value() -
+          timing.parse_timing->parse_start.value());
 }

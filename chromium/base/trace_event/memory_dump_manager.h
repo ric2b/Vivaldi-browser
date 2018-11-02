@@ -24,30 +24,27 @@
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 
-// Forward declare |MemoryDumpManagerDelegateImplTest| so that we can make it a
-// friend of |MemoryDumpManager| and give it access to |SetInstanceForTesting|.
-namespace memory_instrumentation {
-
-class MemoryDumpManagerDelegateImplTest;
-
-}  // namespace memory_instrumentation
-
 namespace base {
 
+class SequencedTaskRunner;
 class SingleThreadTaskRunner;
 class Thread;
 
 namespace trace_event {
 
-class MemoryDumpManagerDelegate;
+class MemoryTracingObserver;
 class MemoryDumpProvider;
-class MemoryDumpSessionState;
+class HeapProfilerSerializationState;
 
 // This is the interface exposed to the rest of the codebase to deal with
 // memory tracing. The main entry point for clients is represented by
 // RequestDumpPoint(). The extension by Un(RegisterDumpProvider).
-class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
+class BASE_EXPORT MemoryDumpManager {
  public:
+  using RequestGlobalDumpFunction =
+      RepeatingCallback<void(const MemoryDumpRequestArgs& args,
+                             const GlobalMemoryDumpCallback& callback)>;
+
   static const char* const kTraceCategory;
   static const char* const kLogPrefix;
 
@@ -56,6 +53,7 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   static const uint64_t kInvalidTracingProcessId;
 
   static MemoryDumpManager* GetInstance();
+  static std::unique_ptr<MemoryDumpManager> CreateInstanceForTesting();
 
   // Invoked once per process to listen to trace begin / end events.
   // Initialization can happen after (Un)RegisterMemoryDumpProvider() calls
@@ -63,10 +61,12 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   // On the other side, the MemoryDumpManager will not be fully operational
   // (i.e. will NACK any RequestGlobalMemoryDump()) until initialized.
   // Arguments:
-  //  delegate: inversion-of-control interface for embedder-specific behaviors
-  //      (multiprocess handshaking). See the lifetime and thread-safety
-  //      requirements in the |MemoryDumpManagerDelegate| docstring.
-  void Initialize(std::unique_ptr<MemoryDumpManagerDelegate> delegate);
+  //  request_dump_function: Function to invoke a global dump. Global dump
+  //      involves embedder-specific behaviors like multiprocess handshaking.
+  //  is_coordinator: True when current process coodinates the periodic dump
+  //      triggering.
+  void Initialize(RequestGlobalDumpFunction request_dump_function,
+                  bool is_coordinator);
 
   // (Un)Registers a MemoryDumpProvider instance.
   // Args:
@@ -107,6 +107,8 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
 
   // Requests a memory dump. The dump might happen or not depending on the
   // filters and categories specified when enabling tracing.
+  // A SUMMARY_ONLY dump can be requested at any time after initialization and
+  // other type of dumps can be requested only when MDM is enabled.
   // The optional |callback| is executed asynchronously, on an arbitrary thread,
   // to notify about the completion of the global dump (i.e. after all the
   // processes have dumped) and its success (true iff all the dumps were
@@ -119,25 +121,33 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   void RequestGlobalDump(MemoryDumpType dump_type,
                          MemoryDumpLevelOfDetail level_of_detail);
 
-  // TraceLog::EnabledStateObserver implementation.
-  void OnTraceLogEnabled() override;
-  void OnTraceLogDisabled() override;
+  // Prepare MemoryDumpManager for RequestGlobalMemoryDump calls for tracing
+  // related modes (non-SUMMARY_ONLY).
+  // Initializes the peak detector, scheduler and heap profiler with the given
+  // config.
+  void SetupForTracing(const TraceConfig::MemoryDumpConfig&);
+
+  // Tear-down tracing related state.
+  // Non-tracing modes (e.g. SUMMARY_ONLY) will continue to work.
+  void TeardownForTracing();
+
+  // NOTE: Use RequestGlobalDump() to create memory dumps. Creates a memory dump
+  // for the current process and appends it to the trace. |callback| will be
+  // invoked asynchronously upon completion on the same thread on which
+  // CreateProcessDump() was called. This method should only be used by the
+  // embedder while creating a global memory dump.
+  void CreateProcessDump(const MemoryDumpRequestArgs& args,
+                         const ProcessMemoryDumpCallback& callback);
 
   // Enable heap profiling if kEnableHeapProfiling is specified.
   void EnableHeapProfilingIfNeeded();
 
-  // Returns true if the dump mode is allowed for current tracing session.
-  bool IsDumpModeAllowed(MemoryDumpLevelOfDetail dump_mode);
-
   // Lets tests see if a dump provider is registered.
   bool IsDumpProviderRegisteredForTesting(MemoryDumpProvider*);
 
-  // Returns the MemoryDumpSessionState object, which is shared by all the
-  // ProcessMemoryDump and MemoryAllocatorDump instances through all the tracing
-  // session lifetime.
-  const scoped_refptr<MemoryDumpSessionState>& session_state_for_testing()
-      const {
-    return session_state_;
+  const scoped_refptr<HeapProfilerSerializationState>&
+  heap_profiler_serialization_state_for_testing() const {
+    return heap_profiler_serialization_state_;
   }
 
   // Returns a unique id for identifying the processes. The id can be
@@ -165,9 +175,7 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
  private:
   friend std::default_delete<MemoryDumpManager>;  // For the testing instance.
   friend struct DefaultSingletonTraits<MemoryDumpManager>;
-  friend class MemoryDumpManagerDelegate;
   friend class MemoryDumpManagerTest;
-  friend class memory_instrumentation::MemoryDumpManagerDelegateImplTest;
 
   // Holds the state of a process memory dump that needs to be carried over
   // across task runners in order to fulfil an asynchronous CreateProcessDump()
@@ -177,9 +185,10 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
     ProcessMemoryDumpAsyncState(
         MemoryDumpRequestArgs req_args,
         const MemoryDumpProviderInfo::OrderedSet& dump_providers,
-        scoped_refptr<MemoryDumpSessionState> session_state,
+        scoped_refptr<HeapProfilerSerializationState>
+            heap_profiler_serialization_state,
         ProcessMemoryDumpCallback callback,
-        scoped_refptr<SingleThreadTaskRunner> dump_thread_task_runner);
+        scoped_refptr<SequencedTaskRunner> dump_thread_task_runner);
     ~ProcessMemoryDumpAsyncState();
 
     // Gets or creates the memory dump container for the given target process.
@@ -201,8 +210,11 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
     // and becomes empty at the end, when all dump providers have been invoked.
     std::vector<scoped_refptr<MemoryDumpProviderInfo>> pending_dump_providers;
 
-    // The trace-global session state.
-    scoped_refptr<MemoryDumpSessionState> session_state;
+    // The HeapProfilerSerializationState object, which is shared by all
+    // the ProcessMemoryDump and MemoryAllocatorDump instances through all the
+    // tracing session lifetime.
+    scoped_refptr<HeapProfilerSerializationState>
+        heap_profiler_serialization_state;
 
     // Callback passed to the initial call to CreateProcessDump().
     ProcessMemoryDumpCallback callback;
@@ -220,7 +232,7 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
     // as a separate variable as it needs to be accessed by arbitrary dumpers'
     // threads outside of the lock_ to avoid races when disabling tracing.
     // It is immutable for all the duration of a tracing session.
-    const scoped_refptr<SingleThreadTaskRunner> dump_thread_task_runner;
+    const scoped_refptr<SequencedTaskRunner> dump_thread_task_runner;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(ProcessMemoryDumpAsyncState);
@@ -230,19 +242,16 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   static const char* const kSystemAllocatorPoolName;
 
   MemoryDumpManager();
-  ~MemoryDumpManager() override;
+  virtual ~MemoryDumpManager();
 
   static void SetInstanceForTesting(MemoryDumpManager* instance);
   static uint32_t GetDumpsSumKb(const std::string&, const ProcessMemoryDump*);
-  static void FinalizeDumpAndAddToTrace(
+
+  void FinalizeDumpAndAddToTrace(
       std::unique_ptr<ProcessMemoryDumpAsyncState> pmd_async_state);
 
-  // Internal, used only by MemoryDumpManagerDelegate.
-  // Creates a memory dump for the current process and appends it to the trace.
-  // |callback| will be invoked asynchronously upon completion on the same
-  // thread on which CreateProcessDump() was called.
-  void CreateProcessDump(const MemoryDumpRequestArgs& args,
-                         const ProcessMemoryDumpCallback& callback);
+  // Lazily initializes dump_thread_ and returns its TaskRunner.
+  scoped_refptr<base::SequencedTaskRunner> GetOrCreateBgTaskRunnerLocked();
 
   // Calls InvokeOnMemoryDump() for the next MDP on the task runner specified by
   // the MDP while registration. On failure to do so, skips and continues to
@@ -276,22 +285,20 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   MemoryDumpProviderInfo::OrderedSet dump_providers_;
 
   // Shared among all the PMDs to keep state scoped to the tracing session.
-  scoped_refptr<MemoryDumpSessionState> session_state_;
+  scoped_refptr<HeapProfilerSerializationState>
+      heap_profiler_serialization_state_;
 
-  // The list of names of dump providers that are blacklisted from strict thread
-  // affinity check on unregistration.
-  std::unordered_set<StringPiece, StringPieceHash>
-      strict_thread_check_blacklist_;
+  std::unique_ptr<MemoryTracingObserver> tracing_observer_;
 
-  std::unique_ptr<MemoryDumpManagerDelegate> delegate_;
+  // Function provided by the embedder to handle global dump requests.
+  RequestGlobalDumpFunction request_dump_function_;
 
-  // Protects from concurrent accesses to the |dump_providers_*| and |delegate_|
-  // to guard against disabling logging while dumping on another thread.
+  // True when current process coordinates the periodic dump triggering.
+  bool is_coordinator_;
+
+  // Protects from concurrent accesses to the local state, eg: to guard against
+  // disabling logging while dumping on another thread.
   Lock lock_;
-
-  // Optimization to avoid attempting any memory dump (i.e. to not walk an empty
-  // dump_providers_enabled_ list) when tracing is not enabled.
-  subtle::AtomicWord memory_tracing_enabled_;
 
   // Thread used for MemoryDumpProviders which don't specify a task runner
   // affinity.
@@ -308,29 +315,6 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   bool heap_profiling_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(MemoryDumpManager);
-};
-
-// The delegate is supposed to be long lived (read: a Singleton) and thread
-// safe (i.e. should expect calls from any thread and handle thread hopping).
-class BASE_EXPORT MemoryDumpManagerDelegate {
- public:
-  MemoryDumpManagerDelegate() {}
-  virtual ~MemoryDumpManagerDelegate() {}
-
-  virtual void RequestGlobalMemoryDump(
-      const MemoryDumpRequestArgs& args,
-      const GlobalMemoryDumpCallback& callback) = 0;
-
-  virtual bool IsCoordinator() const = 0;
-
- protected:
-  void CreateProcessDump(const MemoryDumpRequestArgs& args,
-                         const ProcessMemoryDumpCallback& callback) {
-    MemoryDumpManager::GetInstance()->CreateProcessDump(args, callback);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MemoryDumpManagerDelegate);
 };
 
 }  // namespace trace_event

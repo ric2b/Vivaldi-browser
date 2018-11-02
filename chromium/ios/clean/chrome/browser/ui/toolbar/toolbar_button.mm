@@ -16,16 +16,11 @@
 + (instancetype)toolbarButtonWithImageForNormalState:(UIImage*)normalImage
                             imageForHighlightedState:(UIImage*)highlightedImage
                                imageForDisabledState:(UIImage*)disabledImage {
-  ToolbarButton* button = [[self class] buttonWithType:UIButtonTypeSystem];
+  ToolbarButton* button = [[self class] buttonWithType:UIButtonTypeCustom];
   [button setImage:normalImage forState:UIControlStateNormal];
   [button setImage:highlightedImage forState:UIControlStateHighlighted];
   [button setImage:disabledImage forState:UIControlStateDisabled];
   button.translatesAutoresizingMaskIntoConstraints = NO;
-  [button
-      setContentCompressionResistancePriority:UILayoutPriorityRequired
-                                      forAxis:UILayoutConstraintAxisHorizontal];
-  [button setContentHuggingPriority:UILayoutPriorityRequired
-                            forAxis:UILayoutConstraintAxisHorizontal];
   return button;
 }
 

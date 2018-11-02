@@ -5,7 +5,15 @@
 #ifndef COMPONENTS_SUBRESOURCE_FILTER_CORE_COMMON_ACTIVATION_STATE_H_
 #define COMPONENTS_SUBRESOURCE_FILTER_CORE_COMMON_ACTIVATION_STATE_H_
 
+#include <memory>
+
 #include "components/subresource_filter/core/common/activation_level.h"
+
+namespace base {
+namespace trace_event {
+class TracedValue;
+}  // namespace trace_event
+}  // namespace base
 
 namespace subresource_filter {
 
@@ -24,10 +32,13 @@ struct ActivationState {
            (filtering_disabled_for_document ||
             generic_blocking_rules_disabled ==
                 rhs.generic_blocking_rules_disabled) &&
-           measure_performance == rhs.measure_performance;
+           measure_performance == rhs.measure_performance &&
+           enable_logging == rhs.enable_logging;
   }
 
   bool operator!=(const ActivationState& rhs) const { return !operator==(rhs); }
+
+  std::unique_ptr<base::trace_event::TracedValue> ToTracedValue() const;
 
   // The degree to which subresource filtering is activated for the page load.
   ActivationLevel activation_level = ActivationLevel::DISABLED;
@@ -50,6 +61,9 @@ struct ActivationState {
   // Whether or not extended performance measurements are enabled for the
   // current page load (across all frames).
   bool measure_performance = false;
+
+  // Whether or not to log messages in the devtools console.
+  bool enable_logging = false;
 };
 
 }  // namespace subresource_filter

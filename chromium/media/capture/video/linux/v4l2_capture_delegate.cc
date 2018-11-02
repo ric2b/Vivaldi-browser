@@ -377,7 +377,8 @@ V4L2CaptureDelegate::V4L2CaptureDelegate(
       power_line_frequency_(power_line_frequency),
       is_capturing_(false),
       timeout_count_(0),
-      rotation_(0) {}
+      rotation_(0),
+      weak_factory_(this) {}
 
 void V4L2CaptureDelegate::AllocateAndStart(
     int width,
@@ -509,7 +510,7 @@ void V4L2CaptureDelegate::AllocateAndStart(
 
   // Post task to start fetching frames from v4l2.
   v4l2_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&V4L2CaptureDelegate::DoCapture, this));
+      FROM_HERE, base::Bind(&V4L2CaptureDelegate::DoCapture, GetWeakPtr()));
 }
 
 void V4L2CaptureDelegate::StopAndDeAllocate() {
@@ -749,6 +750,10 @@ void V4L2CaptureDelegate::SetRotation(int rotation) {
   rotation_ = rotation;
 }
 
+base::WeakPtr<V4L2CaptureDelegate> V4L2CaptureDelegate::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
 V4L2CaptureDelegate::~V4L2CaptureDelegate() {}
 
 bool V4L2CaptureDelegate::MapAndQueueBuffer(int index) {
@@ -855,7 +860,7 @@ void V4L2CaptureDelegate::DoCapture() {
   }
 
   v4l2_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&V4L2CaptureDelegate::DoCapture, this));
+      FROM_HERE, base::Bind(&V4L2CaptureDelegate::DoCapture, GetWeakPtr()));
 }
 
 void V4L2CaptureDelegate::SetErrorState(

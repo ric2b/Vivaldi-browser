@@ -17,6 +17,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_names.mojom.h"
@@ -201,6 +202,28 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
   if (breakpad::IsCrashReporterEnabled())
     command_line->AppendSwitch(::switches::kEnableCrashReporter);
 #endif  // defined(HEADLESS_USE_BREAKPAD)
+}
+
+void HeadlessContentBrowserClient::AllowCertificateError(
+    content::WebContents* web_contents,
+    int cert_error,
+    const net::SSLInfo& ssl_info,
+    const GURL& request_url,
+    content::ResourceType resource_type,
+    bool overridable,
+    bool strict_enforcement,
+    bool expired_previous_decision,
+    const base::Callback<void(content::CertificateRequestResultType)>&
+        callback) {
+  if (!callback.is_null())
+    callback.Run(content::CERTIFICATE_REQUEST_RESULT_TYPE_DENY);
+}
+
+void HeadlessContentBrowserClient::ResourceDispatcherHostCreated() {
+  resource_dispatcher_host_delegate_.reset(
+      new HeadlessResourceDispatcherHostDelegate);
+  content::ResourceDispatcherHost::Get()->SetDelegate(
+      resource_dispatcher_host_delegate_.get());
 }
 
 }  // namespace headless

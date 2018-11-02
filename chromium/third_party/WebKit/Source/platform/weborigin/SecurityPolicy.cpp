@@ -92,7 +92,7 @@ Referrer SecurityPolicy::GenerateReferrer(ReferrerPolicy referrer_policy,
   }
   if (referrer == Referrer::NoReferrer())
     return Referrer(Referrer::NoReferrer(), referrer_policy_no_default);
-  ASSERT(!referrer.IsEmpty());
+  DCHECK(!referrer.IsEmpty());
 
   KURL referrer_url = KURL(KURL(), referrer);
   String scheme = referrer_url.Protocol();
@@ -141,7 +141,7 @@ Referrer SecurityPolicy::GenerateReferrer(ReferrerPolicy referrer_policy,
     case kReferrerPolicyNoReferrerWhenDowngrade:
       break;
     case kReferrerPolicyDefault:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       break;
   }
 
@@ -179,8 +179,10 @@ bool SecurityPolicy::IsUrlWhiteListedTrustworthy(const KURL& url) {
 
 bool SecurityPolicy::IsAccessWhiteListed(const SecurityOrigin* active_origin,
                                          const SecurityOrigin* target_origin) {
-  if (OriginAccessWhiteList* list =
-          GetOriginAccessMap().at(active_origin->ToString())) {
+  const OriginAccessMap& map = GetOriginAccessMap();
+  if (map.IsEmpty())
+    return false;
+  if (OriginAccessWhiteList* list = map.at(active_origin->ToString())) {
     for (size_t i = 0; i < list->size(); ++i) {
       if (list->at(i).MatchesOrigin(*target_origin) !=
           OriginAccessEntry::kDoesNotMatchOrigin)
@@ -202,8 +204,8 @@ void SecurityPolicy::AddOriginAccessWhitelistEntry(
     const String& destination_protocol,
     const String& destination_domain,
     bool allow_destination_subdomains) {
-  ASSERT(IsMainThread());
-  ASSERT(!source_origin.IsUnique());
+  DCHECK(IsMainThread());
+  DCHECK(!source_origin.IsUnique());
   if (source_origin.IsUnique())
     return;
 
@@ -225,14 +227,14 @@ void SecurityPolicy::RemoveOriginAccessWhitelistEntry(
     const String& destination_protocol,
     const String& destination_domain,
     bool allow_destination_subdomains) {
-  ASSERT(IsMainThread());
-  ASSERT(!source_origin.IsUnique());
+  DCHECK(IsMainThread());
+  DCHECK(!source_origin.IsUnique());
   if (source_origin.IsUnique())
     return;
 
   String source_string = source_origin.ToString();
   OriginAccessMap& map = GetOriginAccessMap();
-  OriginAccessMap::iterator it = map.Find(source_string);
+  OriginAccessMap::iterator it = map.find(source_string);
   if (it == map.end())
     return;
 
@@ -252,8 +254,8 @@ void SecurityPolicy::RemoveOriginAccessWhitelistEntry(
 }
 
 void SecurityPolicy::ResetOriginAccessWhitelists() {
-  ASSERT(IsMainThread());
-  GetOriginAccessMap().Clear();
+  DCHECK(IsMainThread());
+  GetOriginAccessMap().clear();
 }
 
 bool SecurityPolicy::ReferrerPolicyFromString(

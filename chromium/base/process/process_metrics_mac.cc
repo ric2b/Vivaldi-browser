@@ -50,12 +50,11 @@ struct ChromeTaskVMInfo {
   mach_vm_size_t compressed_lifetime;
   mach_vm_size_t phys_footprint;
 };
-mach_msg_type_number_t ChromeTaskVMInfoCount =
-    sizeof(ChromeTaskVMInfo) / sizeof(natural_t);
 #else
 using ChromeTaskVMInfo = task_vm_info;
-mach_msg_type_number_t ChromeTaskVMInfoCount = TASK_VM_INFO_REV1_COUNT;
 #endif  // MAC_OS_X_VERSION_10_11
+mach_msg_type_number_t ChromeTaskVMInfoCount =
+    sizeof(ChromeTaskVMInfo) / sizeof(natural_t);
 
 bool GetTaskInfo(mach_port_t task, task_basic_info_64* task_info_data) {
   if (task == MACH_PORT_NULL)
@@ -288,18 +287,21 @@ bool ProcessMetrics::GetCommittedAndWorkingSetKBytes(
   return true;
 }
 
-size_t ProcessMetrics::GetPhysicalFootprint() const {
-  if (mac::IsAtMostOS10_11())
-    return 0;
-
+ProcessMetrics::TaskVMInfo ProcessMetrics::GetTaskVMInfo() const {
+  TaskVMInfo info;
   ChromeTaskVMInfo task_vm_info;
   mach_msg_type_number_t count = ChromeTaskVMInfoCount;
   kern_return_t result =
       task_info(TaskForPid(process_), TASK_VM_INFO,
                 reinterpret_cast<task_info_t>(&task_vm_info), &count);
   if (result != KERN_SUCCESS)
-    return 0;
-  return task_vm_info.phys_footprint;
+    return info;
+
+  info.internal = task_vm_info.internal;
+  info.compressed = task_vm_info.compressed;
+  if (count == ChromeTaskVMInfoCount)
+    info.phys_footprint = task_vm_info.phys_footprint;
+  return info;
 }
 
 #define TIME_VALUE_TO_TIMEVAL(a, r) do {  \

@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_icon_loader.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/native_window_tracker.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/grit/generated_resources.h"
@@ -23,7 +24,6 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -39,20 +39,6 @@ const int kIconSourceSize = 48;
 
 using ArcAppConfirmCallback =
     base::Callback<void(const std::string& app_id, Profile* profile)>;
-
-// Helper class to hold a smaller icon in a fixed-size view.
-class FixedBoundarySizeImageView : public views::ImageView {
- public:
-  FixedBoundarySizeImageView() {}
-  ~FixedBoundarySizeImageView() override {}
-  // Overriden from View:
-  gfx::Size GetPreferredSize() const override {
-    return gfx::Size(kIconSize, kIconSize);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(FixedBoundarySizeImageView);
-};
 
 class ArcAppDialogView : public views::DialogDelegateView,
                          public AppIconLoaderDelegate {
@@ -138,13 +124,18 @@ ArcAppDialogView::ArcAppDialogView(Profile* profile,
   if (parent_)
     parent_window_tracker_ = NativeWindowTracker::Create(parent_);
 
-  SetLayoutManager(new views::BoxLayout(
-      views::BoxLayout::kHorizontal, views::kButtonHEdgeMarginNew,
-      ChromeLayoutProvider::Get()->GetDistanceMetric(
-          DISTANCE_PANEL_CONTENT_MARGIN),
-      views::kRelatedControlHorizontalSpacing));
+  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
-  icon_view_ = new FixedBoundarySizeImageView();
+  SetLayoutManager(new views::BoxLayout(
+      views::BoxLayout::kHorizontal,
+      provider->GetDistanceMetric(
+          views::DISTANCE_DIALOG_CONTENTS_HORIZONTAL_MARGIN),
+      provider->GetDistanceMetric(
+          views::DISTANCE_DIALOG_CONTENTS_VERTICAL_MARGIN),
+      provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_HORIZONTAL)));
+
+  icon_view_ = new views::ImageView();
+  icon_view_->SetPreferredSize(gfx::Size(kIconSize, kIconSize));
   AddChildView(icon_view_);
 
   views::View* text_container = new views::View();
@@ -165,6 +156,7 @@ ArcAppDialogView::ArcAppDialogView(Profile* profile,
   icon_loader_.reset(new ArcAppIconLoader(profile_, kIconSourceSize, this));
   // The dialog will show once the icon is loaded.
   icon_loader_->FetchImage(app_id_);
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::ARC_APP);
 }
 
 ArcAppDialogView::~ArcAppDialogView() {

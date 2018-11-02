@@ -163,7 +163,8 @@ scoped_refptr<GbmBuffer> GbmBuffer::CreateBuffer(
   gbm_bo* bo =
       gbm_bo_create(gbm->device(), size.width(), size.height(), format, flags);
 
-  return CreateBufferForBO(gbm, bo, format, size, flags, 0, 0);
+  return CreateBufferForBO(gbm, bo, format, size, flags,
+                           gbm_bo_get_format_modifier(bo), 0);
 }
 
 // static

@@ -8,8 +8,6 @@
  * to https://www.w3.org/TR/payment-request/. Note: This is a work in progress.
  */
 
-goog.provide('__crWeb.paymentRequestManager');
-
 /**
  * This class implements the DOM level 2 EventTarget interface. The
  * Implementation is copied form src/ui/webui/resources/js/cr/event_target.js.
@@ -230,20 +228,21 @@ var SerializedPaymentResponse;
 
   /**
    * Handles invocation of updateWith() on the updateEvent object. Updates the
-   * payment details when the |updateWithPromise| is resolved. Throws an error
-   * if |updateWithPromise| is not a valid instance of Promise or if it fulfills
-   * with an invalid instance of window.PaymentDetails.
-   * @param {?Promise<?window.PaymentDetails|undefined>|undefined}
-   *     updateWithPromise
+   * payment details. Throws an error if |detailsOrPromise| is not a valid
+   * instance of window.PaymentDetails or it is a promise that does not fulfill
+   * with a valid one.
+   * @param {!Promise<!window.PaymentDetails>|!window.PaymentDetails}
+   *     detailsOrPromise
    */
-  __gCrWeb['paymentRequestManager'].updateWith = function(updateWithPromise) {
-    // Check to see |updateWithPromise| is an instance of Promise.
-    if (!updateWithPromise || !(updateWithPromise.then instanceof Function) ||
-        !(updateWithPromise.catch instanceof Function)) {
-      throw new TypeError('An instance of Promise must be provided');
+  __gCrWeb['paymentRequestManager'].updateWith = function(detailsOrPromise) {
+    // if |detailsOrPromise| is not an instance of a Promise, wrap it in a
+    // Promise that fulfills with |detailsOrPromise|.
+    if (!detailsOrPromise || !(detailsOrPromise.then instanceof Function) ||
+        !(detailsOrPromise.catch instanceof Function)) {
+      detailsOrPromise = Promise.resolve(detailsOrPromise);
     }
 
-    updateWithPromise
+    detailsOrPromise
         .then(function(paymentDetails) {
           if (!paymentDetails)
             throw new TypeError(
@@ -304,7 +303,7 @@ var SerializedPaymentResponse;
 
   /**
    * Rejects the pending PaymentRequest.
-   * @param {!string} message An error message explaining why the Promise is
+   * @param {string} message An error message explaining why the Promise is
    * being rejected.
    */
   __gCrWeb['paymentRequestManager'].rejectRequestPromise = function(message) {
@@ -332,6 +331,42 @@ var SerializedPaymentResponse;
 
     __gCrWeb['paymentRequestManager'].abortPromiseResolver.resolve();
     __gCrWeb['paymentRequestManager'].abortPromiseResolver = null;
+  };
+
+  /**
+   * Resolves the promise returned by calling canMakePayment on the current
+   * PaymentRequest.
+   * @param {boolean} value The response to provide to the resolve function of
+   *     the Promise.
+   */
+  __gCrWeb['paymentRequestManager'].resolveCanMakePaymentPromise = function(
+      value) {
+    if (!__gCrWeb['paymentRequestManager'].canMakePaymentPromiseResolver) {
+      throw new Error('Internal PaymentRequest error: No Promise to resolve.');
+    }
+
+    __gCrWeb['paymentRequestManager'].canMakePaymentPromiseResolver.resolve(
+        value);
+    __gCrWeb['paymentRequestManager'].canMakePaymentPromiseResolver = null;
+  };
+
+  /**
+   * Rejects the promise returned by calling canMakePayment on the current
+   * PaymentRequest.
+   * @param {string} message An error message explaining why the Promise is
+   *     being rejected.
+   */
+  __gCrWeb['paymentRequestManager'].rejectCanMakePaymentPromise = function(
+      message) {
+    if (!__gCrWeb['paymentRequestManager'].canMakePaymentPromiseResolver) {
+      throw new Error(
+          'Internal PaymentRequest error: No Promise to reject. ',
+          'Message was: ', message);
+    }
+
+    __gCrWeb['paymentRequestManager'].canMakePaymentPromiseResolver.reject(
+        message);
+    __gCrWeb['paymentRequestManager'].canMakePaymentPromiseResolver = null;
   };
 
   /**
@@ -596,6 +631,29 @@ window.PaymentRequest.prototype.abort = function() {
   __gCrWeb['paymentRequestManager'].abortPromiseResolver =
       new __gCrWeb.PromiseResolver();
   return __gCrWeb['paymentRequestManager'].abortPromiseResolver.promise;
+};
+
+/**
+ * May be called before calling show() to determine if the PaymentRequest object
+ * can be used to make a payment.
+ * @return {!Promise<boolean>} A promise to notify the caller whether the
+ *     PaymentRequest object can be used to make a payment.
+ */
+window.PaymentRequest.prototype.canMakePayment = function() {
+  // TODO(crbug.com/602666): return a promise rejected with InvalidStateError if
+  // |this.state| != 'created'.
+
+  var message = {
+    'command': 'paymentRequest.requestCanMakePayment',
+    'payment_request':
+        __gCrWeb['paymentRequestManager'].serializePaymentRequest(this),
+  };
+  __gCrWeb.message.invokeOnHost(message);
+
+  __gCrWeb['paymentRequestManager'].canMakePaymentPromiseResolver =
+      new __gCrWeb.PromiseResolver();
+  return __gCrWeb['paymentRequestManager'].canMakePaymentPromiseResolver
+      .promise;
 };
 
 /**

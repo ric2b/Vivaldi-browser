@@ -19,6 +19,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
@@ -68,6 +69,8 @@
 #include "chrome/browser/ui/webui/help/version_updater_chromeos.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/power_manager_client.h"
+#include "chromeos/network/network_state.h"
+#include "chromeos/network/network_state_handler.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/user_manager/user_manager.h"
 #endif
@@ -97,8 +100,19 @@ struct RegulatoryLabel {
 // Returns message that informs user that for update it's better to
 // connect to a network of one of the allowed types.
 base::string16 GetAllowedConnectionTypesMessage() {
-  if (help_utils_chromeos::IsUpdateOverCellularAllowed()) {
-    return l10n_util::GetStringUTF16(IDS_UPGRADE_NETWORK_LIST_CELLULAR_ALLOWED);
+  const chromeos::NetworkState* network = chromeos::NetworkHandler::Get()
+                                              ->network_state_handler()
+                                              ->DefaultNetwork();
+  const bool mobile_data =
+      network && network->IsConnectedState() && network->IsUsingMobileData();
+
+  if (help_utils_chromeos::IsUpdateOverCellularAllowed(
+          true /* interactive */)) {
+    return mobile_data
+               ? l10n_util::GetStringUTF16(
+                     IDS_UPGRADE_NETWORK_LIST_CELLULAR_ALLOWED_NOT_AUTOMATIC)
+               : l10n_util::GetStringUTF16(
+                     IDS_UPGRADE_NETWORK_LIST_CELLULAR_ALLOWED);
   } else {
     return l10n_util::GetStringUTF16(
         IDS_UPGRADE_NETWORK_LIST_CELLULAR_DISALLOWED);
@@ -239,6 +253,9 @@ std::string UpdateStatusToString(VersionUpdater::Status status) {
     case VersionUpdater::DISABLED_BY_ADMIN:
       status_str = "disabled_by_admin";
       break;
+    case VersionUpdater::NEED_PERMISSION_TO_UPDATE:
+      status_str = "need_permission_to_update";
+      break;
   }
 
   return status_str;
@@ -340,7 +357,10 @@ void AboutHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "requestUpdate",
       base::Bind(&AboutHandler::HandleRequestUpdate, base::Unretained(this)));
-
+  web_ui()->RegisterMessageCallback(
+      "requestUpdateOverCellular",
+      base::Bind(&AboutHandler::HandleRequestUpdateOverCellular,
+                 base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getVersionInfo",
       base::Bind(&AboutHandler::HandleGetVersionInfo, base::Unretained(this)));
@@ -440,7 +460,8 @@ void AboutHandler::HandleOpenFeedbackDialog(const base::ListValue* args) {
   DCHECK(args->empty());
   Browser* browser =
       chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
-  chrome::OpenFeedbackDialog(browser);
+  chrome::OpenFeedbackDialog(browser,
+                             chrome::kFeedbackSourceMdSettingsAboutPage);
 }
 
 void AboutHandler::HandleOpenHelpPage(const base::ListValue* args) {
@@ -484,8 +505,7 @@ void AboutHandler::HandleGetVersionInfo(const base::ListValue* args) {
   CHECK(args->GetString(0, &callback_id));
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::USER_VISIBLE),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&GetVersionInfo),
       base::Bind(&AboutHandler::OnGetVersionInfoReady,
                  weak_factory_.GetWeakPtr(), callback_id));
@@ -503,8 +523,7 @@ void AboutHandler::HandleGetRegulatoryInfo(const base::ListValue* args) {
   CHECK(args->GetString(0, &callback_id));
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::USER_VISIBLE),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&FindRegulatoryLabelDir),
       base::Bind(&AboutHandler::OnRegulatoryLabelDirFound,
                  weak_factory_.GetWeakPtr(), callback_id));
@@ -545,6 +564,28 @@ void AboutHandler::HandleRequestUpdate(const base::ListValue* args) {
   RequestUpdate();
 }
 
+void AboutHandler::HandleRequestUpdateOverCellular(
+    const base::ListValue* args) {
+  CHECK_EQ(2U, args->GetSize());
+
+  std::string target_version;
+  std::string target_size_string;
+  int64_t target_size;
+
+  CHECK(args->GetString(0, &target_version));
+  CHECK(args->GetString(1, &target_size_string));
+  CHECK(base::StringToInt64(target_size_string, &target_size));
+
+  RequestUpdateOverCellular(target_version, target_size);
+}
+
+void AboutHandler::RequestUpdateOverCellular(const std::string& target_version,
+                                             int64_t target_size) {
+  version_updater_->SetUpdateOverCellularTarget(
+      base::Bind(&AboutHandler::SetUpdateStatus, base::Unretained(this)),
+      target_version, target_size);
+}
+
 #endif  // defined(OS_CHROMEOS)
 
 void AboutHandler::RequestUpdate() {
@@ -559,6 +600,8 @@ void AboutHandler::RequestUpdate() {
 
 void AboutHandler::SetUpdateStatus(VersionUpdater::Status status,
                                    int progress,
+                                   const std::string& version,
+                                   int64_t size,
                                    const base::string16& message) {
   // Only UPDATING state should have progress set.
   DCHECK(status == VersionUpdater::UPDATING || progress == 0);
@@ -567,7 +610,9 @@ void AboutHandler::SetUpdateStatus(VersionUpdater::Status status,
   event->SetString("status", UpdateStatusToString(status));
   event->SetString("message", message);
   event->SetInteger("progress", progress);
-
+  event->SetString("version", version);
+  // DictionaryValue does not support int64_t, so convert to string.
+  event->SetString("size", base::Int64ToString(size));
 #if defined(OS_CHROMEOS)
   if (status == VersionUpdater::FAILED_OFFLINE ||
       status == VersionUpdater::FAILED_CONNECTION_TYPE_DISALLOWED) {
@@ -581,8 +626,7 @@ void AboutHandler::SetUpdateStatus(VersionUpdater::Status status,
   }
 #endif  // defined(OS_CHROMEOS)
 
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value("update-status-changed"), *event);
+  FireWebUIListener("update-status-changed", *event);
 }
 
 #if defined(OS_MACOSX)
@@ -609,8 +653,7 @@ void AboutHandler::SetPromotionState(VersionUpdater::PromotionState state) {
   if (!text.empty())
     promo_state.SetString("text", text);
 
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value("promotion-state-changed"), promo_state);
+  FireWebUIListener("promotion-state-changed", promo_state);
 }
 #endif  // defined(OS_MACOSX)
 
@@ -624,8 +667,7 @@ void AboutHandler::OnRegulatoryLabelDirFound(
   }
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::USER_VISIBLE),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&ReadRegulatoryLabelText, label_dir_path),
       base::Bind(&AboutHandler::OnRegulatoryLabelTextRead,
                  weak_factory_.GetWeakPtr(), callback_id, label_dir_path));

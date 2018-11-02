@@ -4,8 +4,9 @@
 
 #include "chrome/browser/ui/ash/launcher/arc_playstore_shortcut_launcher_item_controller.h"
 
+#include <utility>
+
 #include "base/memory/ptr_util.h"
-#include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_launcher.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
@@ -14,8 +15,7 @@
 
 ArcPlaystoreShortcutLauncherItemController::
     ArcPlaystoreShortcutLauncherItemController()
-    : AppShortcutLauncherItemController(
-          ash::AppLaunchId(ArcSupportHost::kHostAppId)) {}
+    : AppShortcutLauncherItemController(ash::ShelfID(arc::kPlayStoreAppId)) {}
 
 ArcPlaystoreShortcutLauncherItemController::
     ~ArcPlaystoreShortcutLauncherItemController() {}
@@ -24,7 +24,7 @@ void ArcPlaystoreShortcutLauncherItemController::ItemSelected(
     std::unique_ptr<ui::Event> event,
     int64_t display_id,
     ash::ShelfLaunchSource source,
-    const ItemSelectedCallback& callback) {
+    ItemSelectedCallback callback) {
   if (!playstore_launcher_) {
     // Play Store launch request has never been scheduled.
     std::unique_ptr<ArcAppLauncher> playstore_launcher =
@@ -39,5 +39,5 @@ void ArcPlaystoreShortcutLauncherItemController::ItemSelected(
     if (!playstore_launcher->app_launched())
       playstore_launcher_ = std::move(playstore_launcher);
   }
-  callback.Run(ash::SHELF_ACTION_NONE, base::nullopt);
+  std::move(callback).Run(ash::SHELF_ACTION_NONE, base::nullopt);
 }

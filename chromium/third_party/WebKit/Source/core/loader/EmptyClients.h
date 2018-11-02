@@ -45,12 +45,15 @@
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/IntRect.h"
+#include "platform/graphics/TouchAction.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/text/TextCheckerClient.h"
 #include "platform/wtf/Forward.h"
+#include "public/platform/Platform.h"
 #include "public/platform/WebFocusType.h"
 #include "public/platform/WebScreenInfo.h"
+#include "public/platform/WebURLLoader.h"
 #include "v8/include/v8.h"
 
 /*
@@ -162,6 +165,8 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
 
   bool HasOpenedPopup() const override { return false; }
   PopupMenu* OpenPopupMenu(LocalFrame&, HTMLSelectElement&) override;
+  PagePopup* OpenPagePopup(PagePopupClient*) override { return nullptr; }
+  void ClosePagePopup(PagePopup*) override{};
   DOMWindow* PagePopupWindowForTesting() const override { return nullptr; }
 
   void SetStatusbarText(const String&) override {}
@@ -169,10 +174,10 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   bool TabsToLinks() override { return false; }
 
   void InvalidateRect(const IntRect&) override {}
-  void ScheduleAnimation(FrameViewBase*) override {}
+  void ScheduleAnimation(const PlatformFrameView*) override {}
 
   IntRect ViewportToScreen(const IntRect& r,
-                           const FrameViewBase*) const override {
+                           const PlatformFrameView*) const override {
     return r;
   }
   float WindowToViewportScalar(const float s) const override { return s; }
@@ -198,6 +203,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void OpenFileChooser(LocalFrame*, PassRefPtr<FileChooser>) override;
 
   void SetCursor(const Cursor&, LocalFrame* local_root) override {}
+  void SetCursorOverridden(bool) override {}
   Cursor LastSetCursorForTesting() const override { return PointerCursor(); }
 
   void AttachRootGraphicsLayer(GraphicsLayer*, LocalFrame* local_root) override;
@@ -233,6 +239,9 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
 
   void RegisterPopupOpeningObserver(PopupOpeningObserver*) override {}
   void UnregisterPopupOpeningObserver(PopupOpeningObserver*) override {}
+  void NotifyPopupOpeningObservers() const {}
+
+  void SetCursorForPlugin(const WebCursorInfo&, LocalFrame*) override {}
 
   std::unique_ptr<WebFrameScheduler> CreateFrameScheduler(
       BlameContext*) override;
@@ -283,6 +292,7 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
 
   NavigationPolicy DecidePolicyForNavigation(
       const ResourceRequest&,
+      Document* origin_document,
       DocumentLoader*,
       NavigationType,
       NavigationPolicy,
@@ -372,6 +382,10 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
       WebApplicationCacheHostClient*) override;
 
   TextCheckerClient& GetTextCheckerClient() const override;
+  std::unique_ptr<WebURLLoader> CreateURLLoader() override {
+    // TODO(yhirano): Stop using Platform::CreateURLLoader() here.
+    return Platform::Current()->CreateURLLoader();
+  }
 
  protected:
   EmptyLocalFrameClient() {}

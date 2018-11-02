@@ -101,6 +101,24 @@ TEST_F(CRWWebViewScrollViewProxyTest, testScrollViewPresent) {
   [[[mockScrollView_ stub] andReturnValue:[NSValue valueWithCGRect:frame]]
       frame];
   EXPECT_TRUE(CGRectEqualToRect(frame, [webViewScrollViewProxy_ frame]));
+
+  [[[mockScrollView_ expect] andReturnValue:@YES] isDecelerating];
+  EXPECT_TRUE([webViewScrollViewProxy_ isDecelerating]);
+
+  [[[mockScrollView_ expect] andReturnValue:@NO] isDecelerating];
+  EXPECT_FALSE([webViewScrollViewProxy_ isDecelerating]);
+
+  [[[mockScrollView_ expect] andReturnValue:@YES] isDragging];
+  EXPECT_TRUE([webViewScrollViewProxy_ isDragging]);
+
+  [[[mockScrollView_ expect] andReturnValue:@NO] isDragging];
+  EXPECT_FALSE([webViewScrollViewProxy_ isDragging]);
+
+  [[[mockScrollView_ expect] andReturnValue:@YES] scrollsToTop];
+  EXPECT_TRUE([webViewScrollViewProxy_ scrollsToTop]);
+
+  [[[mockScrollView_ expect] andReturnValue:@NO] scrollsToTop];
+  EXPECT_FALSE([webViewScrollViewProxy_ scrollsToTop]);
 }
 
 // Tests that CRWWebViewScrollViewProxy returns the correct property values when
@@ -117,6 +135,9 @@ TEST_F(CRWWebViewScrollViewProxyTest, testScrollViewAbsent) {
   EXPECT_TRUE(
       CGSizeEqualToSize(CGSizeZero, [webViewScrollViewProxy_ contentSize]));
   EXPECT_TRUE(CGRectEqualToRect(CGRectZero, [webViewScrollViewProxy_ frame]));
+  EXPECT_FALSE([webViewScrollViewProxy_ isDecelerating]);
+  EXPECT_FALSE([webViewScrollViewProxy_ isDragging]);
+  EXPECT_FALSE([webViewScrollViewProxy_ scrollsToTop]);
 
   // Make sure setting the properties is fine too.
   // Arbitrary point.

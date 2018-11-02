@@ -10,7 +10,6 @@
 #include "ash/shell.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm_window.h"
 #include "base/auto_reset.h"
 #include "base/macros.h"
@@ -88,9 +87,7 @@ void RecordUMAForTransferredWindowType(aura::Window* window) {
     }
     if (app_window) {
       if (app_window->window_type() ==
-          extensions::AppWindow::WINDOW_TYPE_PANEL ||
-          app_window->window_type() ==
-          extensions::AppWindow::WINDOW_TYPE_V1_PANEL) {
+          extensions::AppWindow::WINDOW_TYPE_PANEL) {
         window_type = ash::MultiProfileUMA::TELEPORT_WINDOW_PANEL;
       } else {
         window_type = ash::MultiProfileUMA::TELEPORT_WINDOW_V2_APP;
@@ -690,10 +687,8 @@ void MultiUserWindowManagerChromeOS::SetWindowVisible(
   // are not user activatable. Since invisible windows are not being tracked,
   // we tell it to maximize / track this window now before it gets shown, to
   // reduce animation jank from multiple resizes.
-  if (visible) {
-    ash::Shell::Get()->maximize_mode_controller()->AddWindow(
-        ash::WmWindow::Get(window));
-  }
+  if (visible)
+    ash::Shell::Get()->maximize_mode_controller()->AddWindow(window);
 
   AnimationSetter animation_setter(
       window,

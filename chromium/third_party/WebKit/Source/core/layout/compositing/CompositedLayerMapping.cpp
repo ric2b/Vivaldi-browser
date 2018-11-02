@@ -41,6 +41,7 @@
 #include "core/layout/LayoutEmbeddedObject.h"
 #include "core/layout/LayoutHTMLCanvas.h"
 #include "core/layout/LayoutImage.h"
+#include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutVideo.h"
 #include "core/layout/LayoutView.h"
@@ -53,6 +54,7 @@
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/page/scrolling/StickyPositionScrollingConstraints.h"
 #include "core/page/scrolling/TopDocumentRootScrollerController.h"
+#include "core/paint/FramePaintTiming.h"
 #include "core/paint/ObjectPaintInvalidator.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayerPainter.h"
@@ -335,6 +337,12 @@ void CompositedLayerMapping::UpdateStickyConstraints(
     parent_relative_sticky_box_offset.MoveBy(
         FloatPoint(-enclosing_layer_offset) -
         FloatSize(ContentOffsetInCompositingLayer()));
+
+    if (compositing_container != ancestor_overflow_layer) {
+      parent_relative_sticky_box_offset.MoveBy(
+          FloatPoint(compositing_container->GetCompositedLayerMapping()
+                         ->ContentOffsetInCompositingLayer()));
+    }
 
     web_constraint.is_sticky = true;
     web_constraint.is_anchored_left =
@@ -884,20 +892,32 @@ void CompositedLayerMapping::ComputeBoundsOfOwningLayer(
     IntRect& compositing_bounds_relative_to_composited_ancestor,
     LayoutPoint& offset_from_composited_ancestor,
     IntPoint& snapped_offset_from_composited_ancestor) {
-  LayoutRect local_raw_compositing_bounds = CompositedBounds();
+  // HACK(chrishtr): adjust for position of inlines.
+  LayoutPoint local_representative_point_for_fragmentation;
+  if (owning_layer_.GetLayoutObject().IsLayoutInline()) {
+    local_representative_point_for_fragmentation =
+        ToLayoutInline(owning_layer_.GetLayoutObject()).FirstLineBoxTopLeft();
+  }
   offset_from_composited_ancestor = ComputeOffsetFromCompositedAncestor(
       &owning_layer_, composited_ancestor,
-      local_raw_compositing_bounds.Location());
+      local_representative_point_for_fragmentation);
   snapped_offset_from_composited_ancestor =
       IntPoint(offset_from_composited_ancestor.X().Round(),
                offset_from_composited_ancestor.Y().Round());
 
-  LayoutSize subpixel_accumulation =
-      offset_from_composited_ancestor - snapped_offset_from_composited_ancestor;
+  LayoutSize subpixel_accumulation;
+  if (!owning_layer_.Transform() ||
+      owning_layer_.Transform()->IsIdentityOrTranslation()) {
+    subpixel_accumulation = offset_from_composited_ancestor -
+                            snapped_offset_from_composited_ancestor;
+  }
+  // Otherwise discard the sub-pixel remainder because paint offset can't be
+  // transformed by a non-translation transform.
   owning_layer_.SetSubpixelAccumulation(subpixel_accumulation);
 
   // Move the bounds by the subpixel accumulation so that it pixel-snaps
   // relative to absolute pixels instead of local coordinates.
+  LayoutRect local_raw_compositing_bounds = CompositedBounds();
   local_raw_compositing_bounds.Move(subpixel_accumulation);
   local_bounds = PixelSnappedIntRect(local_raw_compositing_bounds);
 
@@ -1333,6 +1353,9 @@ void CompositedLayerMapping::UpdateOverflowControlsHostLayerGeometry(
       ToLayoutBox(owning_layer_.GetLayoutObject()).PixelSnappedBorderBoxRect();
   overflow_controls_host_layer_->SetSize(FloatSize(border_box.Size()));
   overflow_controls_host_layer_->SetMasksToBounds(true);
+  overflow_controls_host_layer_->SetBackfaceVisibility(
+      owning_layer_.GetLayoutObject().Style()->BackfaceVisibility() ==
+      kBackfaceVisibilityVisible);
 }
 
 void CompositedLayerMapping::UpdateChildContainmentLayerGeometry(
@@ -1513,12 +1536,12 @@ void CompositedLayerMapping::UpdateChildClippingMaskLayerGeometry() {
       !GetLayoutObject().IsBox())
     return;
   LayoutBox& layout_box = ToLayoutBox(GetLayoutObject());
-  IntRect client_box = EnclosingIntRect(layout_box.ClientBoxRect());
+  IntRect padding_box = EnclosingIntRect(layout_box.PaddingBoxRect());
 
   child_clipping_mask_layer_->SetPosition(graphics_layer_->GetPosition());
   child_clipping_mask_layer_->SetSize(graphics_layer_->Size());
   child_clipping_mask_layer_->SetOffsetFromLayoutObject(
-      ToIntSize(client_box.Location()));
+      ToIntSize(padding_box.Location()));
 
   // NOTE: also some stuff happening in updateChildContainmentLayerGeometry().
 }
@@ -2183,6 +2206,37 @@ void CompositedLayerMapping::UpdateShouldFlattenTransform() {
   }
 }
 
+struct AnimatingData {
+  STACK_ALLOCATED()
+  Persistent<Node> owning_node = nullptr;
+  Persistent<Element> animating_element = nullptr;
+  const ComputedStyle* animating_style = nullptr;
+};
+
+void GetAnimatingData(PaintLayer& paint_layer, AnimatingData& data) {
+  if (!RuntimeEnabledFeatures::compositorWorkerEnabled())
+    return;
+
+  data.owning_node = paint_layer.GetLayoutObject().GetNode();
+
+  if (!data.owning_node)
+    return;
+
+  Document& document = data.owning_node->GetDocument();
+  Element* scrolling_element = document.ScrollingElementNoLayout();
+  if (data.owning_node->IsElementNode() &&
+      (!RuntimeEnabledFeatures::rootLayerScrollingEnabled() ||
+       data.owning_node != scrolling_element)) {
+    data.animating_element = ToElement(data.owning_node);
+    data.animating_style = paint_layer.GetLayoutObject().Style();
+  } else if (data.owning_node->IsDocumentNode() &&
+             RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
+    data.owning_node = data.animating_element = scrolling_element;
+    if (scrolling_element && scrolling_element->GetLayoutObject())
+      data.animating_style = scrolling_element->GetLayoutObject()->Style();
+  }
+}
+
 // Some background on when you receive an element id or mutable properties.
 //
 // element id:
@@ -2197,51 +2251,34 @@ void CompositedLayerMapping::UpdateShouldFlattenTransform() {
 // well as the mutable properties for all layers may change according to the
 // rules above so we update those values here.
 void CompositedLayerMapping::UpdateElementIdAndCompositorMutableProperties() {
-  int element_id = 0;
   uint32_t primary_mutable_properties = CompositorMutableProperty::kNone;
   uint32_t scroll_mutable_properties = CompositorMutableProperty::kNone;
 
-  Node* owning_node = owning_layer_.GetLayoutObject().GetNode();
-  Element* animating_element = nullptr;
-  const ComputedStyle* animating_style = nullptr;
-  if (owning_node) {
-    Document& document = owning_node->GetDocument();
-    Element* scrolling_element = document.ScrollingElementNoLayout();
-    if (owning_node->IsElementNode() &&
-        (!RuntimeEnabledFeatures::rootLayerScrollingEnabled() ||
-         owning_node != scrolling_element)) {
-      animating_element = ToElement(owning_node);
-      animating_style = owning_layer_.GetLayoutObject().Style();
-    } else if (owning_node->IsDocumentNode() &&
-               RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
-      owning_node = animating_element = scrolling_element;
-      if (scrolling_element && scrolling_element->GetLayoutObject())
-        animating_style = scrolling_element->GetLayoutObject()->Style();
-    }
-  }
+  AnimatingData data;
+  GetAnimatingData(owning_layer_, data);
 
-  if (RuntimeEnabledFeatures::compositorWorkerEnabled() && animating_style &&
-      animating_style->HasCompositorProxy()) {
+  CompositorElementId element_id;
+  if (data.animating_style && data.animating_style->HasCompositorProxy()) {
+    // Compositor proxy element ids cannot be based on PaintLayers, since
+    // those are not kept alive by script across frames.
+    element_id = CompositorElementIdFromDOMNodeId(
+        DOMNodeIds::IdForNode(data.owning_node),
+        CompositorElementIdNamespace::kPrimaryCompositorProxy);
+
     uint32_t compositor_mutable_properties =
-        animating_element->CompositorMutableProperties();
-    element_id = DOMNodeIds::IdForNode(owning_node);
+        data.animating_element->CompositorMutableProperties();
     primary_mutable_properties = (CompositorMutableProperty::kOpacity |
                                   CompositorMutableProperty::kTransform) &
                                  compositor_mutable_properties;
     scroll_mutable_properties = (CompositorMutableProperty::kScrollLeft |
                                  CompositorMutableProperty::kScrollTop) &
                                 compositor_mutable_properties;
+  } else {
+    element_id = CompositorElementIdFromPaintLayerId(
+        owning_layer_.UniqueId(), CompositorElementIdNamespace::kPrimary);
   }
 
-  if (animating_style && animating_style->ShouldCompositeForCurrentAnimations())
-    element_id = DOMNodeIds::IdForNode(owning_node);
-
-  CompositorElementId compositor_element_id;
-  if (element_id)
-    compositor_element_id =
-        CreateCompositorElementId(element_id, CompositorSubElementId::kPrimary);
-
-  graphics_layer_->SetElementId(compositor_element_id);
+  graphics_layer_->SetElementId(element_id);
   graphics_layer_->SetCompositorMutableProperties(primary_mutable_properties);
 
   // We always set the elementId for m_scrollingContentsLayer since it can be
@@ -2363,10 +2400,20 @@ bool CompositedLayerMapping::UpdateScrollingLayers(
       scrolling_contents_layer_ =
           CreateGraphicsLayer(kCompositingReasonLayerForScrollingContents);
 
-      if (Node* owning_node = owning_layer_.GetLayoutObject().GetNode())
-        scrolling_contents_layer_->SetElementId(
-            CreateCompositorElementId(DOMNodeIds::IdForNode(owning_node),
-                                      CompositorSubElementId::kScroll));
+      AnimatingData data;
+      GetAnimatingData(owning_layer_, data);
+
+      CompositorElementId element_id;
+      if (data.animating_style && data.animating_style->HasCompositorProxy()) {
+        element_id = CompositorElementIdFromDOMNodeId(
+            DOMNodeIds::IdForNode(data.owning_node),
+            CompositorElementIdNamespace::kScrollCompositorProxy);
+      } else {
+        element_id = CompositorElementIdFromPaintLayerId(
+            owning_layer_.UniqueId(), CompositorElementIdNamespace::kScroll);
+      }
+
+      scrolling_contents_layer_->SetElementId(element_id);
 
       scrolling_layer_->AddChild(scrolling_contents_layer_.get());
 
@@ -3278,6 +3325,8 @@ void CompositedLayerMapping::PaintContents(
     GraphicsContext& context,
     GraphicsLayerPaintingPhase graphics_layer_painting_phase,
     const IntRect& interest_rect) const {
+  FramePaintTiming frame_paint_timing(context, GetLayoutObject().GetFrame());
+
   // https://code.google.com/p/chromium/issues/detail?id=343772
   DisableCompositingQueryAsserts disabler;
   // Allow throttling to make sure no painting paths (e.g.,
@@ -3408,7 +3457,7 @@ void CompositedLayerMapping::PaintScrollableArea(
   DrawingRecorder drawing_recorder(context, *graphics_layer,
                                    DisplayItem::kScrollbarCompositedScrollbar,
                                    layer_bounds);
-  context.Canvas()->PlaybackPaintRecord(builder.EndRecording());
+  context.Canvas()->drawPicture(builder.EndRecording());
 }
 
 bool CompositedLayerMapping::IsScrollableAreaLayer(
@@ -3440,7 +3489,7 @@ void CompositedLayerMapping::InvalidateTargetElementForTesting() {
   // The below is an artificial construct formed intentionally to focus a
   // microbenchmark on the cost of paint with a partial invalidation.
   Element* target_element =
-      owning_layer_.GetLayoutObject().GetDocument().GetElementById(
+      owning_layer_.GetLayoutObject().GetDocument().getElementById(
           AtomicString(kTestPaintInvalidationTargetName));
   // TODO(wkorman): If we don't find the expected target element, we could
   // consider walking to the first leaf node so that the partial-invalidation
@@ -3453,7 +3502,8 @@ void CompositedLayerMapping::InvalidateTargetElementForTesting() {
   target_object->EnclosingLayer()->SetNeedsRepaint();
   // TODO(wkorman): Consider revising the below to invalidate all
   // non-compositing descendants as well.
-  target_object->InvalidateDisplayItemClients(kPaintInvalidationForTesting);
+  target_object->InvalidateDisplayItemClients(
+      PaintInvalidationReason::kForTesting);
 }
 
 IntRect CompositedLayerMapping::PixelSnappedCompositedBounds() const {

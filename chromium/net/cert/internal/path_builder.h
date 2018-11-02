@@ -32,17 +32,18 @@ class SignaturePolicy;
 // By convention:
 //   certs[0] is the target certificate
 //   certs[i] was issued by certs[i+1]
-//   certs.back() was issued by trust_anchor
+//   certs.back() is the root certificate.
 //
-// TODO(eroman): The current code doesn't allow for the target certificate to
-//               be the trust anchor. Should it?
+// Note that the final certificate may or may not be a trust achor -- inspect
+// |last_cert_trust| to determine it (or use GetTrustedCert())
 struct NET_EXPORT CertPath {
   CertPath();
   ~CertPath();
 
-  scoped_refptr<TrustAnchor> trust_anchor;
+  // Contains information on whether certs.back() is trusted.
+  CertificateTrust last_cert_trust;
 
-  // Path in the forward direction (path[0] is the target cert).
+  // Path in the forward direction (see class description).
   ParsedCertificateList certs;
 
   // Resets the path to empty path (same as if default constructed).
@@ -50,6 +51,10 @@ struct NET_EXPORT CertPath {
 
   // TODO(eroman): Can we remove this? Unclear on how this relates to validity.
   bool IsEmpty() const;
+
+  // Returns the chain's root certificate or nullptr if the chain doesn't chain
+  // to a trust anchor.
+  const ParsedCertificate* GetTrustedCert() const;
 };
 
 // Checks whether a certificate is trusted by building candidate paths to trust
@@ -91,6 +96,9 @@ class NET_EXPORT CertPathBuilder {
     // was none.
     const ResultPath* GetBestValidPath() const;
 
+    // Resets to the initial value.
+    void Clear();
+
     // List of paths that were attempted and the result for each.
     std::vector<std::unique_ptr<ResultPath>> paths;
 
@@ -106,9 +114,6 @@ class NET_EXPORT CertPathBuilder {
   // TODO(mattm): allow caller specified hook/callback to extend path
   // verification.
   //
-  // TODO(eroman): The assumption is that |result| is default initialized. Can
-  // probably just internalize |result| into CertPathBuilder.
-  //
   // Creates a CertPathBuilder that attempts to find a path from |cert| to a
   // trust anchor in |trust_store|, which satisfies |signature_policy| and is
   // valid at |time|.  Details of attempted path(s) are stored in |*result|.
@@ -116,7 +121,7 @@ class NET_EXPORT CertPathBuilder {
   // The caller must keep |trust_store|, |signature_policy|, and |*result| valid
   // for the lifetime of the CertPathBuilder.
   CertPathBuilder(scoped_refptr<ParsedCertificate> cert,
-                  const TrustStore* trust_store,
+                  TrustStore* trust_store,
                   const SignaturePolicy* signature_policy,
                   const der::GeneralizedTime& time,
                   KeyPurpose key_purpose,

@@ -459,7 +459,7 @@ void BookmarkFaviconFetcher::ExecuteWriter() {
   BookmarkCodec codec;
   BrowserThread::PostTask(
       BrowserThread::FILE, FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           &Writer::DoWrite,
           new Writer(codec.Encode(
                          BookmarkModelFactory::GetForBrowserContext(profile_)),

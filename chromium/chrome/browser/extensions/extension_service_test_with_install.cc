@@ -12,6 +12,7 @@
 #include "chrome/browser/extensions/extension_error_reporter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/notification_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -41,10 +42,11 @@ bool IsCrxInstallerDone(extensions::CrxInstaller** installer,
 ExtensionServiceTestWithInstall::ExtensionServiceTestWithInstall()
     : installed_(nullptr),
       was_update_(false),
-      unloaded_reason_(UnloadedExtensionInfo::REASON_UNDEFINED),
+      unloaded_reason_(UnloadedExtensionReason::UNDEFINED),
       expected_extensions_count_(0),
       override_external_install_prompt_(
-          FeatureSwitch::prompt_for_external_extensions(), false),
+          FeatureSwitch::prompt_for_external_extensions(),
+          false),
       registry_observer_(this) {}
 
 ExtensionServiceTestWithInstall::~ExtensionServiceTestWithInstall() {}
@@ -285,7 +287,7 @@ void ExtensionServiceTestWithInstall::UpdateExtension(
   if (installer)
     observer.Wait();
   else
-    base::RunLoop().RunUntilIdle();
+    content::RunAllBlockingPoolTasksUntilIdle();
 
   std::vector<base::string16> errors = GetErrors();
   int error_count = errors.size();
@@ -312,7 +314,9 @@ void ExtensionServiceTestWithInstall::UpdateExtension(
               enabled_extension_count);
   }
 
-  // Update() should the temporary input file.
+  // Verify that after running all pending tasks, the temporary file has been
+  // deleted.
+  content::RunAllBlockingPoolTasksUntilIdle();
   EXPECT_FALSE(base::PathExists(path));
 }
 
@@ -361,7 +365,7 @@ void ExtensionServiceTestWithInstall::UninstallExtension(
 
   // The extension should not be in the service anymore.
   EXPECT_FALSE(service()->GetInstalledExtension(extension_id));
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
 
   // The directory should be gone.
   EXPECT_FALSE(base::PathExists(extension_path));
@@ -389,7 +393,7 @@ void ExtensionServiceTestWithInstall::OnExtensionLoaded(
 void ExtensionServiceTestWithInstall::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
-    UnloadedExtensionInfo::Reason reason) {
+    UnloadedExtensionReason reason) {
   unloaded_id_ = extension->id();
   unloaded_reason_ = reason;
   extensions::ExtensionList::iterator i =

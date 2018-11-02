@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_local.h"
@@ -88,9 +89,9 @@ class SyncChannel::ReceivedSyncMsgQueue :
           outer_state_(sync_msg_queue_->top_send_done_event_watcher_),
           event_(context->GetSendDoneEvent()),
           callback_(
-              base::Bind(&SyncChannel::SyncContext::OnSendDoneEventSignaled,
-                         context,
-                         run_loop)) {
+              base::BindOnce(&SyncChannel::SyncContext::OnSendDoneEventSignaled,
+                             context,
+                             run_loop)) {
       sync_msg_queue_->top_send_done_event_watcher_ = this;
       if (outer_state_)
         outer_state_->StopWatching();
@@ -104,14 +105,23 @@ class SyncChannel::ReceivedSyncMsgQueue :
     }
 
    private:
-    void StartWatching() { watcher_.StartWatching(event_, callback_); }
+    void Run(WaitableEvent* event) {
+      DCHECK(callback_);
+      std::move(callback_).Run(event);
+    }
+
+    void StartWatching() {
+      watcher_.StartWatching(event_, base::BindOnce(&NestedSendDoneWatcher::Run,
+                                                    base::Unretained(this)));
+    }
+
     void StopWatching() { watcher_.StopWatching(); }
 
     ReceivedSyncMsgQueue* const sync_msg_queue_;
     NestedSendDoneWatcher* const outer_state_;
 
     base::WaitableEvent* const event_;
-    const base::WaitableEventWatcher::EventCallback callback_;
+    base::WaitableEventWatcher::EventCallback callback_;
     base::WaitableEventWatcher watcher_;
 
     DISALLOW_COPY_AND_ASSIGN(NestedSendDoneWatcher);
@@ -578,7 +588,7 @@ scoped_refptr<SyncMessageFilter> SyncChannel::CreateSyncMessageFilter() {
 }
 
 bool SyncChannel::Send(Message* message) {
-#ifdef IPC_MESSAGE_LOG_ENABLED
+#if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   std::string name;
   Logging::GetInstance()->GetMessageText(
       message->type(), &name, message, nullptr);
@@ -665,7 +675,7 @@ void SyncChannel::WaitForReply(mojo::SyncHandleRegistry* registry,
     }
 
     if (should_pump_messages)
-      WaitForReplyWithNestedMessageLoop(context);  // Run a nested message loop.
+      WaitForReplyWithNestedMessageLoop(context);  // Run a nested run loop.
 
     break;
   }

@@ -7,6 +7,7 @@
 #include "core/dom/Document.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLVideoElement.h"
+#include "core/html/media/AutoplayPolicy.h"
 #include "core/testing/DummyPageHolder.h"
 
 #include "testing/gmock/include/gmock/gmock.h"
@@ -40,7 +41,7 @@ class AutoplayUmaHelperTest : public testing::Test {
   Document& GetDocument() { return page_holder_->GetDocument(); }
 
   HTMLMediaElement& MediaElement() {
-    Element* element = GetDocument().GetElementById("video");
+    Element* element = GetDocument().getElementById("video");
     DCHECK(element);
     return toHTMLVideoElement(*element);
   }
@@ -56,7 +57,7 @@ class AutoplayUmaHelperTest : public testing::Test {
                                                   ASSERT_NO_EXCEPTION);
     HTMLMediaElement& element = MediaElement();
     uma_helper_ = new MockAutoplayUmaHelper(&element);
-    element.autoplay_uma_helper_ = uma_helper_;
+    element.autoplay_policy_->autoplay_uma_helper_ = uma_helper_;
     ::testing::Mock::AllowLeak(&UmaHelper());
   }
 

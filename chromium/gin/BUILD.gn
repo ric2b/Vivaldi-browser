@@ -32,6 +32,8 @@ component("gin") {
     "context_holder.cc",
     "converter.cc",
     "converter.h",
+    "data_object_builder.cc",
+    "data_object_builder.h",
     "debug_impl.cc",
     "debug_impl.h",
     "dictionary.cc",
@@ -120,7 +122,7 @@ executable("gin_shell") {
     ":gin",
     "//base",
     "//base:i18n",
-    "//build/config/sanitizers:deps",
+    "//build/config:exe_and_shlib_deps",
     "//build/win:default_exe_manifest",
     "//v8",
   ]
@@ -151,6 +153,7 @@ source_set("gin_test") {
     "//testing/gtest",
   ]
   deps = [
+    "//base/test:test_support",
     "//v8",
   ]
 
@@ -161,6 +164,7 @@ test("gin_unittests") {
   sources = [
     "arguments_unittest.cc",
     "converter_unittest.cc",
+    "data_object_builder_unittest.cc",
     "interceptor_unittest.cc",
     "modules/module_registry_unittest.cc",
     "modules/timer_unittest.cc",

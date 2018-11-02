@@ -29,6 +29,7 @@
 #include "platform/PlatformExport.h"
 #include "platform/SharedBuffer.h"
 #include "platform/Timer.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/instrumentation/tracing/web_process_memory_dump.h"
 #include "platform/loader/fetch/CachedMetadataHandler.h"
 #include "platform/loader/fetch/IntegrityMetadata.h"
@@ -106,7 +107,7 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   virtual void SetEncoding(const String&) {}
   virtual String Encoding() const { return String(); }
   virtual void AppendData(const char*, size_t);
-  virtual void GetError(const ResourceError&);
+  virtual void FinishAsError(const ResourceError&);
   virtual void SetCORSFailed() {}
 
   void SetNeedsSynchronousCacheHit(bool needs_synchronous_cache_hit) {
@@ -262,7 +263,7 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
 
   bool CanReuseRedirectChain() const;
   bool MustRevalidateDueToCacheHeaders() const;
-  bool CanUseCacheValidator() const;
+  virtual bool CanUseCacheValidator() const;
   bool IsCacheValidator() const { return is_revalidating_; }
   bool HasCacheControlNoStoreHeader() const;
   bool MustReloadDueToVaryHeader(const ResourceRequest& new_request) const;
@@ -282,9 +283,6 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   }
   bool MustRefetchDueToIntegrityMetadata(const FetchParameters&) const;
 
-  double CurrentAge() const;
-  double FreshnessLifetime() const;
-
   bool IsAlive() const { return is_alive_; }
 
   void SetCacheIdentifier(const String& cache_identifier) {
@@ -301,11 +299,11 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   void SetEncodedDataLength(int64_t value) {
     response_.SetEncodedDataLength(value);
   }
-  void AddToEncodedBodyLength(int value) {
-    response_.AddToEncodedBodyLength(value);
+  void SetEncodedBodyLength(int value) {
+    response_.SetEncodedBodyLength(value);
   }
-  void AddToDecodedBodyLength(int value) {
-    response_.AddToDecodedBodyLength(value);
+  void SetDecodedBodyLength(int value) {
+    response_.SetDecodedBodyLength(value);
   }
 
   virtual bool CanReuse(const FetchParameters&) const { return true; }
@@ -335,9 +333,26 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   virtual void ReloadIfLoFiOrPlaceholderImage(ResourceFetcher*,
                                               ReloadLoFiOrPlaceholderPolicy) {}
 
+  // Used to notify ImageResourceContent of the start of actual loading.
+  // JavaScript calls or client/observer notifications are disallowed inside
+  // notifyStartLoad().
+  virtual void NotifyStartLoad() {}
+
   static const char* ResourceTypeToString(
       Type,
       const AtomicString& fetch_initiator_name);
+
+  class ProhibitAddRemoveClientInScope : public AutoReset<bool> {
+   public:
+    ProhibitAddRemoveClientInScope(Resource* resource)
+        : AutoReset(&resource->is_add_remove_client_prohibited_, true) {}
+  };
+
+  class RevalidationStartForbiddenScope : public AutoReset<bool> {
+   public:
+    RevalidationStartForbiddenScope(Resource* resource)
+        : AutoReset(&resource->is_revalidation_start_forbidden_, true) {}
+  };
 
  protected:
   Resource(const ResourceRequest&, Type, const ResourceLoaderOptions&);
@@ -392,26 +407,13 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   }
 
   void SetCachePolicyBypassingCache();
-  void SetPreviewsStateNoTransform();
+  void SetPreviewsState(WebURLRequest::PreviewsState);
   void ClearRangeRequestHeader();
 
   SharedBuffer* Data() const { return data_.Get(); }
   void ClearData();
 
-  class ProhibitAddRemoveClientInScope : public AutoReset<bool> {
-   public:
-    ProhibitAddRemoveClientInScope(Resource* resource)
-        : AutoReset(&resource->is_add_remove_client_prohibited_, true) {}
-  };
-
-  class RevalidationStartForbiddenScope : public AutoReset<bool> {
-   public:
-    RevalidationStartForbiddenScope(Resource* resource)
-        : AutoReset(&resource->is_revalidation_start_forbidden_, true) {}
-  };
-
  private:
-  class ResourceCallback;
   class CachedMetadataHandlerImpl;
   class ServiceWorkerResponseCachedMetadataHandler;
 
@@ -478,6 +480,7 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   double response_timestamp_;
 
   TaskRunnerTimer<Resource> cancel_timer_;
+  TaskHandle async_finish_pending_clients_task_;
 
   ResourceRequest resource_request_;
   Member<ResourceLoader> loader_;

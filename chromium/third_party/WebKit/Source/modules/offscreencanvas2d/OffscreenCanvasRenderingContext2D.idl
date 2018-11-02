@@ -9,7 +9,7 @@
     RuntimeEnabled=ExperimentalCanvasFeatures,
 ] interface OffscreenCanvasRenderingContext2D {
     // back-reference to the canvas
-    [ImplementedAs=offscreenCanvas] readonly attribute OffscreenCanvas canvas;
+    [ImplementedAs=offscreenCanvasForBinding] readonly attribute OffscreenCanvas canvas;
 
     [CallWith=ScriptState, RaisesException] Promise commit();
 
@@ -77,6 +77,12 @@
     [RaisesException] void putImageData(ImageData imagedata, long dx, long dy);
     [RaisesException] void putImageData(ImageData imagedata, long dx, long dy, long dirtyX, long dirtyY, long dirtyWidth, long dirtyHeight);
 
+    // If OffscreenCanva ships before color managed canvas, this method must remain behind flag.
+    // https://github.com/WICG/canvas-color-space/blob/master/CanvasColorSpaceProposal.md
+    [RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException] ImageData createImageData(unsigned long sw, unsigned long sh, ImageDataColorSettings imageDataColorSettings);
+    [RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException] ImageData createImageData(ImageDataArray data, unsigned long sw, unsigned long sh, ImageDataColorSettings imageDataColorSettings);
+
+
     // Line caps/joins
     attribute unrestricted double lineWidth; // (default 1)
     attribute DOMString lineCap; // "butt", "round", "square" (default "butt")
@@ -89,4 +95,4 @@
     attribute unrestricted double lineDashOffset;
 };
 
-OffscreenCanvasRenderingContext2D implements CanvasPathMethods;
+OffscreenCanvasRenderingContext2D implements CanvasPath;

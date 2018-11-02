@@ -29,9 +29,10 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/devtools/devtools_window.h"
-#include "chrome/browser/download/download_service.h"
-#include "chrome/browser/download/download_service_factory.h"
 #include "chrome/browser/download/download_stats.h"
+#include "chrome/browser/media/router/media_router_dialog_controller.h"
+#include "chrome/browser/media/router/media_router_feature.h"
+#include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
@@ -145,12 +146,6 @@
 #include "chrome/browser/printing/print_preview_dialog_controller.h"
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #endif  // BUILDFLAG(ENABLE_PRINTING)
-
-#if defined(ENABLE_MEDIA_ROUTER)
-#include "chrome/browser/media/router/media_router_dialog_controller.h"
-#include "chrome/browser/media/router/media_router_feature.h"
-#include "chrome/browser/media/router/media_router_metrics.h"
-#endif
 
 #if defined(GOOGLE_CHROME_BUILD)
 #include "chrome/grit/theme_resources.h"
@@ -566,7 +561,6 @@ RenderViewContextMenu::RenderViewContextMenu(
       protocol_handler_submenu_model_(this),
       protocol_handler_registry_(
           ProtocolHandlerRegistryFactory::GetForBrowserContext(GetProfile())),
-      save_as_text_experiement_enabled_(false),
       embedder_web_contents_(GetWebContentsToUse(source_web_contents_)) {
   if (!g_custom_id_ranges_initialized) {
     g_custom_id_ranges_initialized = true;
@@ -575,12 +569,6 @@ RenderViewContextMenu::RenderViewContextMenu(
   }
   set_content_type(ContextMenuContentTypeFactory::Create(
       source_web_contents_, params));
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableSaveAsMenuLabelExperiment) ||
-      base::FieldTrialList::FindFullName("SaveAsMenuText") == "download") {
-    save_as_text_experiement_enabled_ = true;
-  }
 }
 
 RenderViewContextMenu::~RenderViewContextMenu() {
@@ -1101,13 +1089,8 @@ void RenderViewContextMenu::AppendLinkItems() {
     }
 #endif  // !defined(OS_CHROMEOS)
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-    if (save_as_text_experiement_enabled_) {
-      menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVELINKAS,
-                                      IDS_CONTENT_CONTEXT_DOWNLOADLINK);
-    } else {
-      menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVELINKAS,
-                                      IDS_CONTENT_CONTEXT_SAVELINKAS);
-    }
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVELINKAS,
+                                    IDS_CONTENT_CONTEXT_SAVELINKAS);
   }
 
   menu_model_.AddItemWithStringId(
@@ -1155,13 +1138,8 @@ void RenderViewContextMenu::AppendImageItems() {
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENIMAGENEWTAB,
                                     IDS_CONTENT_CONTEXT_OPENIMAGENEWTAB);
   }
-  if (save_as_text_experiement_enabled_) {
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
-                                    IDS_CONTENT_CONTEXT_DOWNLOADIMAGE);
-  } else {
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
-                                    IDS_CONTENT_CONTEXT_SAVEIMAGEAS);
-  }
+  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
+                                  IDS_CONTENT_CONTEXT_SAVEIMAGEAS);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYIMAGE,
                                   IDS_CONTENT_CONTEXT_COPYIMAGE);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYIMAGELOCATION,
@@ -1194,26 +1172,16 @@ void RenderViewContextMenu::AppendAudioItems() {
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENAVNEWTAB,
                                   IDS_CONTENT_CONTEXT_OPENAUDIONEWTAB);
-  if (save_as_text_experiement_enabled_) {
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
-                                    IDS_CONTENT_CONTEXT_DOWNLOADAUDIO);
-  } else {
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
-                                    IDS_CONTENT_CONTEXT_SAVEAUDIOAS);
-  }
+  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
+                                  IDS_CONTENT_CONTEXT_SAVEAUDIOAS);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYAVLOCATION,
                                   IDS_CONTENT_CONTEXT_COPYAUDIOLOCATION);
   AppendMediaRouterItem();
 }
 
 void RenderViewContextMenu::AppendCanvasItems() {
-  if (save_as_text_experiement_enabled_) {
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
-                                    IDS_CONTENT_CONTEXT_DOWNLOADIMAGE);
-  } else {
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
-                                    IDS_CONTENT_CONTEXT_SAVEIMAGEAS);
-  }
+  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
+                                  IDS_CONTENT_CONTEXT_SAVEIMAGEAS);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYIMAGE,
                                   IDS_CONTENT_CONTEXT_COPYIMAGE);
 }
@@ -1223,13 +1191,8 @@ void RenderViewContextMenu::AppendVideoItems() {
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENAVNEWTAB,
                                   IDS_CONTENT_CONTEXT_OPENVIDEONEWTAB);
-  if (save_as_text_experiement_enabled_) {
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
-                                    IDS_CONTENT_CONTEXT_DOWNLOADVIDEO);
-  } else {
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
-                                    IDS_CONTENT_CONTEXT_SAVEVIDEOAS);
-  }
+  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
+                                  IDS_CONTENT_CONTEXT_SAVEVIDEOAS);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYAVLOCATION,
                                   IDS_CONTENT_CONTEXT_COPYVIDEOLOCATION);
   AppendMediaRouterItem();
@@ -1244,8 +1207,11 @@ void RenderViewContextMenu::AppendMediaItems() {
 
 void RenderViewContextMenu::AppendPluginItems() {
   if (params_.page_url == params_.src_url ||
-      guest_view::GuestViewBase::IsGuest(source_web_contents_)) {
-    // Full page plugin, so show page menu items.
+      (guest_view::GuestViewBase::IsGuest(source_web_contents_) &&
+       (!embedder_web_contents_ || !embedder_web_contents_->IsSavable()))) {
+    // Both full page and embedded plugins are hosted as guest now,
+    // the difference is a full page plugin is not considered as savable.
+    // For full page plugin, we show page menu items.
     if (params_.link_url.is_empty() && params_.selection_text.empty())
       AppendPageItems();
   } else {
@@ -1267,13 +1233,8 @@ void RenderViewContextMenu::AppendPageItems() {
   menu_model_.AddItemWithStringId(IDC_FORWARD, IDS_CONTENT_CONTEXT_FORWARD);
   menu_model_.AddItemWithStringId(IDC_RELOAD, IDS_CONTENT_CONTEXT_RELOAD);
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-  if (save_as_text_experiement_enabled_) {
-    menu_model_.AddItemWithStringId(IDC_SAVE_PAGE,
-                                    IDS_CONTENT_CONTEXT_DOWNLOADPAGE);
-  } else {
-    menu_model_.AddItemWithStringId(IDC_SAVE_PAGE,
-                                    IDS_CONTENT_CONTEXT_SAVEPAGEAS);
-  }
+  menu_model_.AddItemWithStringId(IDC_SAVE_PAGE,
+                                  IDS_CONTENT_CONTEXT_SAVEPAGEAS);
   menu_model_.AddItemWithStringId(IDC_PRINT, IDS_CONTENT_CONTEXT_PRINT);
   AppendMediaRouterItem();
 
@@ -1284,6 +1245,8 @@ void RenderViewContextMenu::AppendPageItems() {
     std::unique_ptr<translate::TranslatePrefs> prefs(
         ChromeTranslateClient::CreateTranslatePrefs(
             GetPrefs(browser_context_)));
+    // TODO(crbug.com/711217): We should not allow to use the translate when the
+    // feature is disabled by the PolicyList.
     std::string locale =
         translate::TranslateManager::GetTargetLanguage(prefs.get());
     base::string16 language =
@@ -1331,12 +1294,10 @@ void RenderViewContextMenu::AppendPrintItem() {
 }
 
 void RenderViewContextMenu::AppendMediaRouterItem() {
-#if defined(ENABLE_MEDIA_ROUTER)
   if (media_router::MediaRouterEnabled(browser_context_)) {
     menu_model_.AddItemWithStringId(IDC_ROUTE_MEDIA,
                                     IDS_MEDIA_ROUTER_MENU_ITEM_TITLE);
   }
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 }
 
 void RenderViewContextMenu::AppendRotationItems() {
@@ -2208,7 +2169,6 @@ bool RenderViewContextMenu::IsPrintPreviewEnabled() const {
 }
 
 bool RenderViewContextMenu::IsRouteMediaEnabled() const {
-#if defined(ENABLE_MEDIA_ROUTER)
   if (!media_router::MediaRouterEnabled(browser_context_))
     return false;
 
@@ -2228,13 +2188,13 @@ bool RenderViewContextMenu::IsRouteMediaEnabled() const {
   const web_modal::WebContentsModalDialogManager* manager =
       web_modal::WebContentsModalDialogManager::FromWebContents(web_contents);
   return !manager || !manager->IsDialogActive();
-#else
-  return false;
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 }
 
 bool RenderViewContextMenu::IsOpenLinkOTREnabled() const {
   if (browser_context_->IsOffTheRecord() || !params_.link_url.is_valid())
+    return false;
+
+  if (!chrome::IsURLAllowedInIncognito(params_.link_url, browser_context_))
     return false;
 
   IncognitoModePrefs::Availability incognito_avail =
@@ -2498,7 +2458,6 @@ void RenderViewContextMenu::ExecPrint() {
 }
 
 void RenderViewContextMenu::ExecRouteMedia() {
-#if defined(ENABLE_MEDIA_ROUTER)
   if (!media_router::MediaRouterEnabled(browser_context_))
     return;
 
@@ -2511,7 +2470,6 @@ void RenderViewContextMenu::ExecRouteMedia() {
   dialog_controller->ShowMediaRouterDialog();
   media_router::MediaRouterMetrics::RecordMediaRouterDialogOrigin(
       media_router::MediaRouterDialogOpenOrigin::CONTEXTUAL_MENU);
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 }
 
 void RenderViewContextMenu::ExecTranslate() {

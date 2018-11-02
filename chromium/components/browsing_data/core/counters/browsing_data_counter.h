@@ -60,6 +60,23 @@ class BrowsingDataCounter {
     DISALLOW_COPY_AND_ASSIGN(FinishedResult);
   };
 
+  // A subclass of FinishedResult that besides |Value()| also stores whether
+  // the datatype is synced.
+  class SyncResult : public FinishedResult {
+   public:
+    SyncResult(const BrowsingDataCounter* source,
+               ResultInt value,
+               bool sync_enabled);
+    ~SyncResult() override;
+
+    bool is_sync_enabled() const { return sync_enabled_; }
+
+   private:
+    bool sync_enabled_;
+
+    DISALLOW_COPY_AND_ASSIGN(SyncResult);
+  };
+
   typedef base::Callback<void(std::unique_ptr<Result>)> Callback;
 
   // Every calculation progresses through a state machine. At initialization,
@@ -128,7 +145,8 @@ class BrowsingDataCounter {
   // Called after the class is initialized by calling |Init|.
   virtual void OnInitialized();
 
-  // Count the data.
+  // Count the data. Call ReportResult() when finished. Tasks that are still
+  // running should be cancelled to avoid reporting old results.
   virtual void Count() = 0;
 
   // State transition methods.

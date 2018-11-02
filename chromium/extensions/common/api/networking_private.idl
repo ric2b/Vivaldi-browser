@@ -58,7 +58,7 @@ namespace networkingPrivate {
   };
 
   enum NetworkType {
-    All, Cellular, Ethernet, VPN, Wireless, WiFi, WiMAX
+    All, Cellular, Ethernet, Tether, VPN, Wireless, WiFi, WiMAX
   };
 
   enum ProxySettingsType {
@@ -202,14 +202,14 @@ namespace networkingPrivate {
     DOMString? CommonName;
     DOMString? Locality;
     DOMString? Organization;
-    DOMString? OrganizationalUnit;    
+    DOMString? OrganizationalUnit;
   };
 
   dictionary ManagedIssuerSubjectPattern {
     ManagedDOMString? CommonName;
     ManagedDOMString? Locality;
     ManagedDOMString? Organization;
-    ManagedDOMString? OrganizationalUnit;    
+    ManagedDOMString? OrganizationalUnit;
   };
 
   dictionary CertificatePattern {
@@ -229,6 +229,7 @@ namespace networkingPrivate {
   dictionary EAPProperties {
     DOMString? AnonymousIdentity;
     CertificatePattern? ClientCertPattern;
+    DOMString? ClientCertPKCS11Id;
     DOMString? ClientCertRef;
     DOMString? ClientCertType;
     DOMString? Identity;
@@ -240,6 +241,7 @@ namespace networkingPrivate {
     boolean? SaveCredentials;
     DOMString[]? ServerCAPEMs;
     DOMString[]? ServerCARefs;
+    DOMString? SubjectMatch;
     boolean? UseProactiveKeyCaching;
     boolean? UseSystemCAs;
   };
@@ -247,6 +249,7 @@ namespace networkingPrivate {
   dictionary ManagedEAPProperties {
     ManagedDOMString? AnonymousIdentity;
     ManagedCertificatePattern? ClientCertPattern;
+    ManagedDOMString? ClientCertPKCS11Id;
     ManagedDOMString? ClientCertRef;
     ManagedDOMString? ClientCertType;
     ManagedDOMString? Identity;
@@ -258,6 +261,7 @@ namespace networkingPrivate {
     ManagedBoolean? SaveCredentials;
     ManagedDOMStringList? ServerCAPEMs;
     ManagedDOMStringList? ServerCARefs;
+    ManagedDOMString? SubjectMatch;
     ManagedBoolean? UseProactiveKeyCaching;
     ManagedBoolean? UseSystemCAs;
   };
@@ -580,6 +584,13 @@ namespace networkingPrivate {
     DOMString Authentication;
   };
 
+  dictionary TetherProperties {
+    long? BatteryPercentage;
+    DOMString? Carrier;
+    boolean HasConnectedToHost;
+    long? SignalStrength;
+  };
+
   dictionary VPNProperties {
     boolean? AutoConnect;
     DOMString? Host;
@@ -695,6 +706,7 @@ namespace networkingPrivate {
     IPConfigProperties? StaticIPConfig;
     IPConfigProperties? SavedIPConfig;
     DOMString? Source;
+    TetherProperties? Tether;
     NetworkType Type;
     VPNProperties? VPN;
     WiFiProperties? WiFi;
@@ -719,6 +731,7 @@ namespace networkingPrivate {
     ManagedIPConfigProperties? StaticIPConfig;
     IPConfigProperties? SavedIPConfig;
     DOMString? Source;
+    TetherProperties? Tether;
     NetworkType Type;
     ManagedVPNProperties? VPN;
     ManagedWiFiProperties? WiFi;
@@ -735,6 +748,7 @@ namespace networkingPrivate {
     DOMString? Name;
     long? Priority;
     DOMString? Source;
+    TetherProperties? Tether;
     NetworkType Type;
     VPNStateProperties? VPN;
     WiFiStateProperties? WiFi;
@@ -821,6 +835,34 @@ namespace networkingPrivate {
     boolean? AllowOnlyPolicyNetworksToConnect;
   };
 
+  dictionary Certificate {
+    // Unique hash for the certificate.
+    DOMString hash;
+
+    // Certificate issuer common name.
+    DOMString issuedBy;
+
+    // Certificate name or nickname.
+    DOMString issuedTo;
+
+    // PEM for server CA certificates.
+    DOMString? pem;
+
+    // PKCS#11 id for user certificates.
+    DOMString? PKCS11Id;
+
+    // Whether or not the certificate is hardware backed.
+    boolean hardwareBacked;
+  };
+
+  dictionary CertificateLists {
+    // List of avaliable server CA certificates.
+    Certificate[] serverCaCertificates;
+
+    // List of available user certificates.
+    Certificate[] userCertificates;
+  };
+
   callback VoidCallback = void();
   callback BooleanCallback = void(boolean result);
   callback StringCallback = void(DOMString result);
@@ -834,6 +876,7 @@ namespace networkingPrivate {
   callback GetEnabledNetworkTypesCallback = void(NetworkType[] result);
   callback CaptivePortalStatusCallback = void(CaptivePortalStatus result);
   callback GetGlobalPolicyCallback = void(GlobalPolicy result);
+  callback GetCertificateListsCallback = void(CertificateLists result);
 
   // These functions all report failures via chrome.runtime.lastError.
   interface Functions {
@@ -1059,6 +1102,9 @@ namespace networkingPrivate {
     // Gets the global policy properties. These properties are not expected to
     // change during a session.
     static void getGlobalPolicy(GetGlobalPolicyCallback callback);
+
+    // Gets the lists of certificates available for network configuration.
+    static void getCertificateLists(GetCertificateListsCallback callback);
   };
 
   interface Events {
@@ -1078,5 +1124,8 @@ namespace networkingPrivate {
     // the network and the corresponding captive portal status.
     static void onPortalDetectionCompleted(DOMString networkGuid,
                                            CaptivePortalStatus status);
+
+    // Fired when any certificate list has changed.
+    static void onCertificateListsChanged();
   };
 };

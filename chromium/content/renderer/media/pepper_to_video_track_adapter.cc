@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/rand_util.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "content/renderer/media/media_stream.h"
@@ -168,7 +169,6 @@ void PpFrameWriter::PutFrame(PPB_ImageData_Impl* image_data,
     return;
   }
 
-  SkAutoLockPixels src_lock(bitmap);
   const uint8_t* src_data = static_cast<uint8_t*>(bitmap.getPixels());
   const int src_stride = static_cast<int>(bitmap.rowBytes());
   const int width = bitmap.width();

@@ -118,7 +118,7 @@ void GetDownloadFilePath(
   if (!base::DirectoryExists(download_directory)) {
     if (!base::CreateDirectory(download_directory)) {
       BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                              base::Bind(callback, base::FilePath()));
+                              base::BindOnce(callback, base::FilePath()));
       return;
     }
   }
@@ -141,7 +141,7 @@ void GetDownloadFilePath(
   }
 
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(callback, file));
+                          base::BindOnce(callback, file));
 }
 
 void MaybeAppendAuthUserParameter(const std::string& authuser, GURL* url) {
@@ -496,12 +496,12 @@ void WebstoreInstaller::OnDownloadStarted(
     if (version_required.IsValid()) {
       approval->minimum_version.reset(new base::Version(version_required));
     }
-    download_item_->SetUserData(kApprovalKey, approval.release());
+    download_item_->SetUserData(kApprovalKey, std::move(approval));
   } else {
     // It is for the main module of the extension. We should use the provided
     // |approval_|.
     if (approval_)
-      download_item_->SetUserData(kApprovalKey, approval_.release());
+      download_item_->SetUserData(kApprovalKey, std::move(approval_));
   }
 
   if (!download_started_) {
@@ -602,8 +602,9 @@ void WebstoreInstaller::DownloadCrx(
 
   BrowserThread::PostTask(
       BrowserThread::FILE, FROM_HERE,
-      base::Bind(&GetDownloadFilePath, download_directory, extension_id,
-        base::Bind(&WebstoreInstaller::StartDownload, this, extension_id)));
+      base::BindOnce(
+          &GetDownloadFilePath, download_directory, extension_id,
+          base::Bind(&WebstoreInstaller::StartDownload, this, extension_id)));
 }
 
 // http://crbug.com/165634

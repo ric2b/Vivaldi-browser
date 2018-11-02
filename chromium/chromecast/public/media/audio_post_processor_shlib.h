@@ -6,6 +6,7 @@
 #define CHROMECAST_PUBLIC_MEDIA_AUDIO_POST_PROCESSOR_SHLIB_H_
 
 #include <string>
+#include <vector>
 
 #include "chromecast_export.h"
 
@@ -40,21 +41,17 @@ class AudioPostProcessor {
   virtual bool SetSampleRate(int sample_rate) = 0;
 
   // Processes audio frames from |data|, overwriting contents.
-  // |data| will always be 32-bit planar float.
+  // |data| will always be 32-bit interleaved float.
   // |frames| is the number of audio frames in data and is
   // always non-zero and less than or equal to 20ms of audio.
   // AudioPostProcessor must always provide |frames| frames of data back
   // (may output 0’s)
-  // |volume| is the attenuation level (multiplier) of the stream.
-  // |volume| is between 0 and 1 inclusive.
+  // |volume| is the Cast Volume applied to the stream (normalized to 0-1)
   // AudioPostProcessor should assume that it has already been applied.
-  // TODO(bshaya): Change |volume| to Cast System Volume.
   // Returns the current rendering delay of the filter in frames,
   // or negative if an error occurred during processing.
   // If an error occurred during processing, |data| should be unchanged.
-  virtual int ProcessFrames(const std::vector<float*>& data,
-                            int frames,
-                            float volume) = 0;
+  virtual int ProcessFrames(float* data, int frames, float volume) = 0;
 
   // Returns the number of frames of silence it will take for the
   // processor to come to rest.
@@ -65,6 +62,11 @@ class AudioPostProcessor {
   // This is not expected to be real-time;
   // It should only change when SetSampleRate is called.
   virtual int GetRingingTimeInFrames() = 0;
+
+  // Sends a message to the PostProcessor. Implementations are responsible
+  // for the format and parsing of messages.
+  // OEM's do not need to implement this method.
+  virtual void UpdateParameters(const std::string& message) {}
 
   virtual ~AudioPostProcessor() = default;
 };

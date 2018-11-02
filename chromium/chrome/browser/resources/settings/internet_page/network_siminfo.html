@@ -1,7 +1,11 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
 <link rel="import" href="chrome://resources/cr_elements/network/cr_onc_types.html">
-<link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/html/cr/ui/focus_without_ink.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-a11y-keys/iron-a11y-keys.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
@@ -11,7 +15,7 @@
 
 <dom-module id="network-siminfo">
   <template>
-    <style include="settings-shared internet-shared">
+    <style include="settings-shared internet-shared iron-flex">
       iron-icon {
        -webkit-margin-end: 10px;
       }
@@ -46,7 +50,7 @@
       }
 
       paper-toggle-button {
-        -webkit-margin-start: var(--settings-control-spacing);
+        -webkit-margin-start: var(--settings-control-label-spacing);
       }
     </style>
 
@@ -66,11 +70,10 @@
         <iron-icon icon="settings:lock"></iron-icon>
         <div class="error">$i18n{networkSimCardLocked}</div>
       </div>
-      <div class="secondary-action">
-        <paper-button id="unlockPinButton" on-tap="onUnlockPinTap_">
-          $i18n{networkSimUnlock}
-        </paper-button>
-      </div>
+      <div class="separator"></div>
+      <paper-button id="unlockPinButton" on-tap="onUnlockPinTap_">
+        $i18n{networkSimUnlock}
+      </paper-button>
     </div>
 
     <!-- SIM unlocked -->

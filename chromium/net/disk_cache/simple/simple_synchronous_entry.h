@@ -98,6 +98,24 @@ class SimpleSynchronousEntry {
     uint32_t data_crc32;
   };
 
+  struct CRCRequest {
+    CRCRequest()
+        : data_crc32(0),
+          request_verify(false),
+          performed_verify(false),
+          verify_ok(false) {}
+
+    // Initial CRC, to be updated with CRC of block.
+    uint32_t data_crc32;
+
+    // If true, CRC should be verified if at end of stream.
+    bool request_verify;
+
+    // If true, CRC was actually checked.
+    bool performed_verify;
+    bool verify_ok;
+  };
+
   struct EntryOperationData {
     EntryOperationData(int index_p, int offset_p, int buf_len_p);
     EntryOperationData(int index_p,
@@ -118,11 +136,14 @@ class SimpleSynchronousEntry {
   // Opens a disk cache entry on disk. The |key| parameter is optional, if empty
   // the operation may be slower. The |entry_hash| parameter is required.
   // |had_index| is provided only for histograms.
+  // |time_enqueued| is when this operation was added to the I/O thread pool,
+  //  and is provided only for histograms.
   static void OpenEntry(net::CacheType cache_type,
                         const base::FilePath& path,
                         const std::string& key,
                         uint64_t entry_hash,
                         bool had_index,
+                        const base::TimeTicks& time_enqueued,
                         SimpleEntryCreationResults* out_results);
 
   static void CreateEntry(net::CacheType cache_type,
@@ -130,6 +151,7 @@ class SimpleSynchronousEntry {
                           const std::string& key,
                           uint64_t entry_hash,
                           bool had_index,
+                          const base::TimeTicks& time_enqueued,
                           SimpleEntryCreationResults* out_results);
 
   // Deletes an entry from the file system without affecting the state of the
@@ -150,20 +172,25 @@ class SimpleSynchronousEntry {
   static int DoomEntrySet(const std::vector<uint64_t>* key_hashes,
                           const base::FilePath& path);
 
-  // N.B. ReadData(), WriteData(), CheckEOFRecord() and Close() may block on IO.
+  // N.B. ReadData(), WriteData(), CheckEOFRecord(), ReadSparseData(),
+  // WriteSparseData() and Close() may block on IO.
+  //
+  // All of these methods will put the //net return value into |*out_result|.
+
+  // |crc_request| can be nullptr here, to denote that no CRC computation is
+  // requested.
   void ReadData(const EntryOperationData& in_entry_op,
-                net::IOBuffer* out_buf,
-                uint32_t* out_crc32,
+                CRCRequest* crc_request,
                 SimpleEntryStat* entry_stat,
+                net::IOBuffer* out_buf,
                 int* out_result);
   void WriteData(const EntryOperationData& in_entry_op,
                  net::IOBuffer* in_buf,
                  SimpleEntryStat* out_entry_stat,
                  int* out_result);
-  void CheckEOFRecord(int index,
-                      const SimpleEntryStat& entry_stat,
-                      uint32_t expected_crc32,
-                      int* out_result) const;
+  int CheckEOFRecord(int index,
+                     const SimpleEntryStat& entry_stat,
+                     uint32_t expected_crc32) const;
 
   void ReadSparseData(const EntryOperationData& in_entry_op,
                       net::IOBuffer* out_buf,

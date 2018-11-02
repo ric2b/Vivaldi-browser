@@ -34,7 +34,8 @@ namespace {
 
 // TODO(mlamouri): refactor in one common place.
 WebPresentationClient* PresentationClient(ExecutionContext* execution_context) {
-  ASSERT(execution_context && execution_context->IsDocument());
+  DCHECK(execution_context);
+  DCHECK(execution_context->IsDocument());
 
   Document* document = ToDocument(execution_context);
   if (!document->GetFrame())
@@ -62,7 +63,7 @@ const AtomicString& ConnectionStateToString(
       return terminated_value;
   }
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return terminated_value;
 }
 
@@ -81,7 +82,7 @@ const AtomicString& ConnectionCloseReasonToString(
       return went_away_value;
   }
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return error_value;
 }
 
@@ -156,7 +157,7 @@ PresentationConnection::PresentationConnection(LocalFrame* frame,
       proxy_(nullptr) {}
 
 PresentationConnection::~PresentationConnection() {
-  ASSERT(!blob_loader_);
+  DCHECK(!blob_loader_);
 }
 
 void PresentationConnection::BindProxy(
@@ -170,9 +171,9 @@ PresentationConnection* PresentationConnection::Take(
     ScriptPromiseResolver* resolver,
     const WebPresentationInfo& presentation_info,
     PresentationRequest* request) {
-  ASSERT(resolver);
-  ASSERT(request);
-  ASSERT(resolver->GetExecutionContext()->IsDocument());
+  DCHECK(resolver);
+  DCHECK(request);
+  DCHECK(resolver->GetExecutionContext()->IsDocument());
 
   Document* document = ToDocument(resolver->GetExecutionContext());
   if (!document->GetFrame())
@@ -191,8 +192,8 @@ PresentationConnection* PresentationConnection::Take(
     PresentationController* controller,
     const WebPresentationInfo& presentation_info,
     PresentationRequest* request) {
-  ASSERT(controller);
-  ASSERT(request);
+  DCHECK(controller);
+  DCHECK(request);
 
   PresentationConnection* connection = new PresentationConnection(
       controller->GetFrame(), presentation_info.id, presentation_info.url);
@@ -274,7 +275,8 @@ void PresentationConnection::send(const String& message,
 
 void PresentationConnection::send(DOMArrayBuffer* array_buffer,
                                   ExceptionState& exception_state) {
-  ASSERT(array_buffer && array_buffer->Buffer());
+  DCHECK(array_buffer);
+  DCHECK(array_buffer->Buffer());
   if (!CanSendMessage(exception_state))
     return;
 
@@ -294,7 +296,7 @@ void PresentationConnection::send(
 }
 
 void PresentationConnection::send(Blob* data, ExceptionState& exception_state) {
-  ASSERT(data);
+  DCHECK(data);
   if (!CanSendMessage(exception_state))
     return;
 
@@ -332,7 +334,7 @@ void PresentationConnection::HandleMessageQueue() {
         messages_.pop_front();
         break;
       case kMessageTypeBlob:
-        ASSERT(!blob_loader_);
+        DCHECK(!blob_loader_);
         blob_loader_ = new BlobLoader(message->blob_data_handle, this);
         break;
     }
@@ -346,7 +348,7 @@ String PresentationConnection::binaryType() const {
     case kBinaryTypeArrayBuffer:
       return "arraybuffer";
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return String();
 }
 
@@ -359,7 +361,7 @@ void PresentationConnection::setBinaryType(const String& binary_type) {
     binary_type_ = kBinaryTypeArrayBuffer;
     return;
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
 }
 
 void PresentationConnection::DidReceiveTextMessage(const WebString& message) {
@@ -388,7 +390,7 @@ void PresentationConnection::DidReceiveBinaryMessage(const uint8_t* data,
       DispatchEvent(MessageEvent::Create(buffer));
       return;
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
 }
 
 WebPresentationConnectionState PresentationConnection::GetState() {
@@ -460,11 +462,19 @@ void PresentationConnection::DidChangeState(
   NOTREACHED();
 }
 
+void PresentationConnection::NotifyTargetConnection(
+    WebPresentationConnectionState state) {
+  if (proxy_)
+    proxy_->NotifyTargetConnection(state);
+}
+
 void PresentationConnection::DidClose(
     WebPresentationConnectionCloseReason reason,
     const String& message) {
-  if (state_ == WebPresentationConnectionState::kClosed)
+  if (state_ == WebPresentationConnectionState::kClosed ||
+      state_ == WebPresentationConnectionState::kTerminated) {
     return;
+  }
 
   state_ = WebPresentationConnectionState::kClosed;
   DispatchStateChangeEvent(PresentationConnectionCloseEvent::Create(
@@ -476,8 +486,10 @@ void PresentationConnection::DidClose() {
 }
 
 void PresentationConnection::DidFinishLoadingBlob(DOMArrayBuffer* buffer) {
-  ASSERT(!messages_.IsEmpty() && messages_.front()->type == kMessageTypeBlob);
-  ASSERT(buffer && buffer->Buffer());
+  DCHECK(!messages_.IsEmpty());
+  DCHECK_EQ(messages_.front()->type, kMessageTypeBlob);
+  DCHECK(buffer);
+  DCHECK(buffer->Buffer());
   // Send the loaded blob immediately here and continue processing the queue.
   WebPresentationClient* client = PresentationClient(GetExecutionContext());
   if (client) {
@@ -492,7 +504,8 @@ void PresentationConnection::DidFinishLoadingBlob(DOMArrayBuffer* buffer) {
 
 void PresentationConnection::DidFailLoadingBlob(
     FileError::ErrorCode error_code) {
-  ASSERT(!messages_.IsEmpty() && messages_.front()->type == kMessageTypeBlob);
+  DCHECK(!messages_.IsEmpty());
+  DCHECK_EQ(messages_.front()->type, kMessageTypeBlob);
   // FIXME: generate error message?
   // Ignore the current failed blob item and continue with next items.
   messages_.pop_front();
@@ -521,7 +534,7 @@ void PresentationConnection::TearDown() {
     blob_loader_->Cancel();
     blob_loader_.Clear();
   }
-  messages_.Clear();
+  messages_.clear();
 }
 
 }  // namespace blink

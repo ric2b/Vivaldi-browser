@@ -27,7 +27,7 @@ json_schema_api("api_registration") {
     # Different APIs include headers from these targets.
     ":api",
 
-    #"//content/public/browser",
+    "//content/public/browser",
     #"//extensions/browser",
     "//skia",
   ]

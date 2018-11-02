@@ -14,6 +14,9 @@
 
 namespace data_use_measurement {
 
+DataUseAscriber::DataUseAscriber() {}
+DataUseAscriber::~DataUseAscriber() {}
+
 std::unique_ptr<net::NetworkDelegate> DataUseAscriber::CreateNetworkDelegate(
     std::unique_ptr<net::NetworkDelegate> wrapped_network_delegate,
     const metrics::UpdateUsagePrefCallbackType& metrics_data_use_forwarder) {
@@ -42,7 +45,7 @@ void DataUseAscriber::OnNetworkBytesReceived(net::URLRequest* request,
     recorder->OnNetworkBytesReceived(request, bytes_received);
 }
 
-void DataUseAscriber::OnUrlRequestCompleted(net::URLRequest* request,
+void DataUseAscriber::OnUrlRequestCompleted(const net::URLRequest& request,
                                             bool started) {}
 
 void DataUseAscriber::OnUrlRequestDestroyed(net::URLRequest* request) {

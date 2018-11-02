@@ -12,6 +12,7 @@
 #include "media/base/key_systems.h"
 #include "media/cdm/aes_decryptor.h"
 #include "media/mojo/clients/mojo_cdm.h"
+#include "media/mojo/features.h"
 #include "services/service_manager/public/cpp/connect.h"
 #include "services/service_manager/public/interfaces/interface_provider.mojom.h"
 
@@ -47,11 +48,11 @@ void MojoCdmFactory::Create(
 // create the MojoCdm, giving the remote CDM a chance to handle |key_system|.
 // Note: We should not run AesDecryptor in the browser process except for
 // testing. See http://crbug.com/441957
-#if !defined(ENABLE_MOJO_RENDERER)
+#if !BUILDFLAG(ENABLE_MOJO_RENDERER)
   if (CanUseAesDecryptor(key_system)) {
     scoped_refptr<ContentDecryptionModule> cdm(
         new AesDecryptor(security_origin, session_message_cb, session_closed_cb,
-                         session_keys_change_cb));
+                         session_keys_change_cb, session_expiration_update_cb));
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(cdm_created_cb, cdm, ""));
     return;

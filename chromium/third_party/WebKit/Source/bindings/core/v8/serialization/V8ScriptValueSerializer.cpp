@@ -14,6 +14,7 @@
 #include "bindings/core/v8/V8MessagePort.h"
 #include "bindings/core/v8/V8OffscreenCanvas.h"
 #include "bindings/core/v8/V8SharedArrayBuffer.h"
+#include "bindings/core/v8/V8ThrowDOMException.h"
 #include "core/dom/DOMArrayBufferBase.h"
 #include "core/html/ImageData.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -50,7 +51,8 @@ V8ScriptValueSerializer::V8ScriptValueSerializer(
       serializer_(script_state_->GetIsolate(), this),
       transferables_(options.transferables),
       blob_info_array_(options.blob_info),
-      inline_wasm_(options.write_wasm_to_stream) {}
+      wasm_policy_(options.wasm_policy),
+      for_storage_(options.for_storage == SerializedScriptValue::kForStorage) {}
 
 RefPtr<SerializedScriptValue> V8ScriptValueSerializer::Serialize(
     v8::Local<v8::Value> value,
@@ -116,32 +118,37 @@ void V8ScriptValueSerializer::PrepareTransfer(ExceptionState& exception_state) {
 
 void V8ScriptValueSerializer::FinalizeTransfer(
     ExceptionState& exception_state) {
-  if (!transferables_ && shared_array_buffers_.IsEmpty())
-    return;
-
   // TODO(jbroman): Strictly speaking, this is not correct; transfer should
   // occur in the order of the transfer list.
   // https://html.spec.whatwg.org/multipage/infrastructure.html#structuredclonewithtransfer
 
+  v8::Isolate* isolate = script_state_->GetIsolate();
+
+  // The order of ArrayBuffers and SharedArrayBuffers matters; we use the index
+  // into this array for deserialization.
   ArrayBufferArray array_buffers;
-  array_buffers.AppendVector(transferables_->array_buffers);
+  if (transferables_)
+    array_buffers.AppendVector(transferables_->array_buffers);
   array_buffers.AppendVector(shared_array_buffers_);
 
-  v8::Isolate* isolate = script_state_->GetIsolate();
-  serialized_script_value_->TransferArrayBuffers(isolate, array_buffers,
-                                                 exception_state);
-  if (exception_state.HadException())
-    return;
+  if (!array_buffers.IsEmpty()) {
+    serialized_script_value_->TransferArrayBuffers(isolate, array_buffers,
+                                                   exception_state);
+    if (exception_state.HadException())
+      return;
+  }
 
-  serialized_script_value_->TransferImageBitmaps(
-      isolate, transferables_->image_bitmaps, exception_state);
-  if (exception_state.HadException())
-    return;
+  if (transferables_) {
+    serialized_script_value_->TransferImageBitmaps(
+        isolate, transferables_->image_bitmaps, exception_state);
+    if (exception_state.HadException())
+      return;
 
-  serialized_script_value_->TransferOffscreenCanvas(
-      isolate, transferables_->offscreen_canvases, exception_state);
-  if (exception_state.HadException())
-    return;
+    serialized_script_value_->TransferOffscreenCanvas(
+        isolate, transferables_->offscreen_canvases, exception_state);
+    if (exception_state.HadException())
+      return;
+  }
 }
 
 void V8ScriptValueSerializer::WriteUTF8String(const String& string) {
@@ -363,9 +370,8 @@ void V8ScriptValueSerializer::ThrowDataCloneError(
   DCHECK(exception_state_);
   String message = exception_state_->AddExceptionContext(
       V8StringToWebCoreString<String>(v8_message, kDoNotExternalize));
-  v8::Local<v8::Value> exception = V8ThrowException::CreateDOMException(
-      script_state_->GetIsolate(), kDataCloneError, message);
-  V8ThrowException::ThrowException(script_state_->GetIsolate(), exception);
+  V8ThrowDOMException::ThrowDOMException(script_state_->GetIsolate(),
+                                         kDataCloneError, message);
 }
 
 v8::Maybe<bool> V8ScriptValueSerializer::WriteHostObject(
@@ -399,6 +405,18 @@ v8::Maybe<bool> V8ScriptValueSerializer::WriteHostObject(
 v8::Maybe<uint32_t> V8ScriptValueSerializer::GetSharedArrayBufferId(
     v8::Isolate* isolate,
     v8::Local<v8::SharedArrayBuffer> v8_shared_array_buffer) {
+  if (for_storage_) {
+    DCHECK(exception_state_);
+    DCHECK_EQ(isolate, script_state_->GetIsolate());
+    ExceptionState exception_state(isolate, exception_state_->Context(),
+                                   exception_state_->InterfaceName(),
+                                   exception_state_->PropertyName());
+    exception_state.ThrowDOMException(
+        kDataCloneError,
+        "A SharedArrayBuffer can not be serialized for storage.");
+    return v8::Nothing<uint32_t>();
+  }
+
   DOMSharedArrayBuffer* shared_array_buffer =
       V8SharedArrayBuffer::toImpl(v8_shared_array_buffer);
 
@@ -427,18 +445,38 @@ v8::Maybe<uint32_t> V8ScriptValueSerializer::GetSharedArrayBufferId(
 v8::Maybe<uint32_t> V8ScriptValueSerializer::GetWasmModuleTransferId(
     v8::Isolate* isolate,
     v8::Local<v8::WasmCompiledModule> module) {
-  if (inline_wasm_)
-    return v8::Nothing<uint32_t>();
+  switch (wasm_policy_) {
+    case Options::kSerialize:
+      return v8::Nothing<uint32_t>();
 
-  // We don't expect scenarios with numerous wasm modules being transferred
-  // around. Most likely, we'll have one module. The vector approach is simple
-  // and should perform sufficiently well under these expectations.
-  this->serialized_script_value_->WasmModules().push_back(
-      module->GetTransferrableModule());
-  uint32_t size =
-      static_cast<uint32_t>(serialized_script_value_->WasmModules().size());
-  DCHECK_GE(size, 1u);
-  return v8::Just(size - 1);
+    case Options::kBlockedInNonSecureContext: {
+      // This happens, currently, when we try to serialize to IndexedDB
+      // in an non-secure context.
+      ExceptionState exception_state(isolate, exception_state_->Context(),
+                                     exception_state_->InterfaceName(),
+                                     exception_state_->PropertyName());
+      exception_state.ThrowDOMException(kDataCloneError,
+                                        "Serializing WebAssembly modules in "
+                                        "non-secure contexts is not allowed.");
+      return v8::Nothing<uint32_t>();
+    }
+
+    case Options::kTransfer: {
+      // We don't expect scenarios with numerous wasm modules being transferred
+      // around. Most likely, we'll have one module. The vector approach is
+      // simple and should perform sufficiently well under these expectations.
+      serialized_script_value_->WasmModules().push_back(
+          module->GetTransferrableModule());
+      uint32_t size =
+          static_cast<uint32_t>(serialized_script_value_->WasmModules().size());
+      DCHECK_GE(size, 1u);
+      return v8::Just(size - 1);
+    }
+
+    case Options::kUnspecified:
+      NOTREACHED();
+  }
+  return v8::Nothing<uint32_t>();
 }
 
 void* V8ScriptValueSerializer::ReallocateBufferMemory(void* old_buffer,

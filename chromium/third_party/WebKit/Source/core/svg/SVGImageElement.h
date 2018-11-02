@@ -21,8 +21,7 @@
 #ifndef SVGImageElement_h
 #define SVGImageElement_h
 
-#include "core/SVGNames.h"
-#include "core/html/canvas/CanvasImageElementSource.h"
+#include "core/html/canvas/ImageElementBase.h"
 #include "core/svg/SVGAnimatedLength.h"
 #include "core/svg/SVGAnimatedPreserveAspectRatio.h"
 #include "core/svg/SVGGraphicsElement.h"
@@ -33,7 +32,7 @@
 namespace blink {
 
 class CORE_EXPORT SVGImageElement final : public SVGGraphicsElement,
-                                          public CanvasImageElementSource,
+                                          public ImageElementBase,
                                           public SVGURIReference {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(SVGImageElement);
@@ -91,7 +90,6 @@ class CORE_EXPORT SVGImageElement final : public SVGGraphicsElement,
   Member<SVGAnimatedPreserveAspectRatio> preserve_aspect_ratio_;
 
   Member<SVGImageLoader> image_loader_;
-  bool needs_loader_uri_update_ : 1;
 };
 
 }  // namespace blink

@@ -58,7 +58,7 @@ void IntersectionObserverController::Resume() {
 void IntersectionObserverController::DeliverIntersectionObservations() {
   ExecutionContext* context = GetExecutionContext();
   if (!context) {
-    pending_intersection_observers_.Clear();
+    pending_intersection_observers_.clear();
     return;
   }
   if (context->IsContextSuspended()) {
@@ -66,7 +66,7 @@ void IntersectionObserverController::DeliverIntersectionObservations() {
     return;
   }
   HeapHashSet<Member<IntersectionObserver>> observers;
-  pending_intersection_observers_.Swap(observers);
+  pending_intersection_observers_.swap(observers);
   for (auto& observer : observers)
     observer->Deliver();
 }

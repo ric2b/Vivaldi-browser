@@ -618,6 +618,8 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
   if (token->GetName() == formTag) {
     if (tree_.IsFormElementPointerNonNull() && !IsParsingTemplateContents()) {
       ParseError(token);
+      UseCounter::Count(tree_.CurrentNode()->GetDocument(),
+                        UseCounter::kHTMLParseErrorNestedForm);
       return;
     }
     ProcessFakePEndTagIfPInButtonScope();
@@ -732,9 +734,7 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
       frameset_ok_ = false;
     return;
   }
-  if ((RuntimeEnabledFeatures::contextMenuEnabled() &&
-       token->GetName() == menuitemTag) ||
-      token->GetName() == paramTag || token->GetName() == sourceTag ||
+  if (token->GetName() == paramTag || token->GetName() == sourceTag ||
       token->GetName() == trackTag) {
     tree_.InsertSelfClosingHTMLElementDestroyingToken(token);
     return;

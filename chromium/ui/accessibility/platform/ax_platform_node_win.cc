@@ -33,48 +33,100 @@
     if (!delegate_) \
       return E_FAIL;
 #define COM_OBJECT_VALIDATE_1_ARG(arg) \
-    if (!delegate_) return E_FAIL; \
-    if (!arg) return E_INVALIDARG
+  if (!delegate_)                      \
+    return E_FAIL;                     \
+  if (!arg)                            \
+    return E_INVALIDARG;
 #define COM_OBJECT_VALIDATE_2_ARGS(arg1, arg2) \
-    if (!delegate_) return E_FAIL; \
-    if (!arg1) return E_INVALIDARG; \
-    if (!arg2) return E_INVALIDARG
+  if (!delegate_)                              \
+    return E_FAIL;                             \
+  if (!arg1)                                   \
+    return E_INVALIDARG;                       \
+  if (!arg2)                                   \
+    return E_INVALIDARG;
 #define COM_OBJECT_VALIDATE_3_ARGS(arg1, arg2, arg3) \
-    if (!delegate_) return E_FAIL; \
-    if (!arg1) return E_INVALIDARG; \
-    if (!arg2) return E_INVALIDARG; \
-    if (!arg3) return E_INVALIDARG
+  if (!delegate_)                                    \
+    return E_FAIL;                                   \
+  if (!arg1)                                         \
+    return E_INVALIDARG;                             \
+  if (!arg2)                                         \
+    return E_INVALIDARG;                             \
+  if (!arg3)                                         \
+    return E_INVALIDARG;
 #define COM_OBJECT_VALIDATE_4_ARGS(arg1, arg2, arg3, arg4) \
-    if (!delegate_) return E_FAIL; \
-    if (!arg1) return E_INVALIDARG; \
-    if (!arg2) return E_INVALIDARG; \
-    if (!arg3) return E_INVALIDARG; \
-    if (!arg4) return E_INVALIDARG
-#define COM_OBJECT_VALIDATE_VAR_ID(var_id) \
-    if (!delegate_) return E_FAIL; \
-    if (!IsValidId(var_id)) return E_INVALIDARG
-#define COM_OBJECT_VALIDATE_VAR_ID_1_ARG(var_id, arg) \
-    if (!delegate_) return E_FAIL; \
-    if (!IsValidId(var_id)) return E_INVALIDARG; \
-    if (!arg) return E_INVALIDARG
-#define COM_OBJECT_VALIDATE_VAR_ID_2_ARGS(var_id, arg1, arg2) \
-    if (!delegate_) return E_FAIL; \
-    if (!IsValidId(var_id)) return E_INVALIDARG; \
-    if (!arg1) return E_INVALIDARG; \
-    if (!arg2) return E_INVALIDARG
-#define COM_OBJECT_VALIDATE_VAR_ID_3_ARGS(var_id, arg1, arg2, arg3) \
-    if (!delegate_) return E_FAIL; \
-    if (!IsValidId(var_id)) return E_INVALIDARG; \
-    if (!arg1) return E_INVALIDARG; \
-    if (!arg2) return E_INVALIDARG; \
-    if (!arg3) return E_INVALIDARG
-#define COM_OBJECT_VALIDATE_VAR_ID_4_ARGS(var_id, arg1, arg2, arg3, arg4) \
-    if (!delegate_) return E_FAIL; \
-    if (!IsValidId(var_id)) return E_INVALIDARG; \
-    if (!arg1) return E_INVALIDARG; \
-    if (!arg2) return E_INVALIDARG; \
-    if (!arg3) return E_INVALIDARG; \
-    if (!arg4) return E_INVALIDARG
+  if (!delegate_)                                          \
+    return E_FAIL;                                         \
+  if (!arg1)                                               \
+    return E_INVALIDARG;                                   \
+  if (!arg2)                                               \
+    return E_INVALIDARG;                                   \
+  if (!arg3)                                               \
+    return E_INVALIDARG;                                   \
+  if (!arg4)                                               \
+    return E_INVALIDARG;
+#define COM_OBJECT_VALIDATE_VAR_ID_AND_GET_TARGET(var_id, target) \
+  if (!delegate_)                                                 \
+    return E_FAIL;                                                \
+  target = GetTargetFromChildID(var_id);                          \
+  if (!target)                                                    \
+    return E_INVALIDARG;                                          \
+  if (!target->delegate_)                                         \
+    return E_INVALIDARG;
+#define COM_OBJECT_VALIDATE_VAR_ID_1_ARG_AND_GET_TARGET(var_id, arg, target) \
+  if (!delegate_)                                                            \
+    return E_FAIL;                                                           \
+  if (!arg)                                                                  \
+    return E_INVALIDARG;                                                     \
+  target = GetTargetFromChildID(var_id);                                     \
+  if (!target)                                                               \
+    return E_INVALIDARG;                                                     \
+  if (!target->delegate_)                                                    \
+    return E_INVALIDARG;
+#define COM_OBJECT_VALIDATE_VAR_ID_2_ARGS_AND_GET_TARGET(var_id, arg1, arg2, \
+                                                         target)             \
+  if (!delegate_)                                                            \
+    return E_FAIL;                                                           \
+  if (!arg1)                                                                 \
+    return E_INVALIDARG;                                                     \
+  if (!arg2)                                                                 \
+    return E_INVALIDARG;                                                     \
+  target = GetTargetFromChildID(var_id);                                     \
+  if (!target)                                                               \
+    return E_INVALIDARG;                                                     \
+  if (!target->delegate_)                                                    \
+    return E_INVALIDARG;
+#define COM_OBJECT_VALIDATE_VAR_ID_3_ARGS_AND_GET_TARGET(var_id, arg1, arg2, \
+                                                         arg3, target)       \
+  if (!delegate_)                                                            \
+    return E_FAIL;                                                           \
+  if (!arg1)                                                                 \
+    return E_INVALIDARG;                                                     \
+  if (!arg2)                                                                 \
+    return E_INVALIDARG;                                                     \
+  if (!arg3)                                                                 \
+    return E_INVALIDARG;                                                     \
+  target = GetTargetFromChildID(var_id);                                     \
+  if (!target)                                                               \
+    return E_INVALIDARG;                                                     \
+  if (!target->delegate_)                                                    \
+    return E_INVALIDARG;
+#define COM_OBJECT_VALIDATE_VAR_ID_4_ARGS_AND_GET_TARGET(var_id, arg1, arg2, \
+                                                         arg3, arg4, target) \
+  if (!delegate_)                                                            \
+    return E_FAIL;                                                           \
+  if (!arg1)                                                                 \
+    return E_INVALIDARG;                                                     \
+  if (!arg2)                                                                 \
+    return E_INVALIDARG;                                                     \
+  if (!arg3)                                                                 \
+    return E_INVALIDARG;                                                     \
+  if (!arg4)                                                                 \
+    return E_INVALIDARG;                                                     \
+  target = GetTargetFromChildID(var_id);                                     \
+  if (!target)                                                               \
+    return E_INVALIDARG;                                                     \
+  if (!target->delegate_)                                                    \
+    return E_INVALIDARG;
 
 namespace ui {
 
@@ -128,9 +180,11 @@ AXPlatformNode* AXPlatformNode::Create(AXPlatformNodeDelegate* delegate) {
 // static
 AXPlatformNode* AXPlatformNode::FromNativeViewAccessible(
     gfx::NativeViewAccessible accessible) {
+  if (!accessible)
+    return nullptr;
   base::win::ScopedComPtr<AXPlatformNodeWin> ax_platform_node;
-  accessible->QueryInterface(ax_platform_node.Receive());
-  return ax_platform_node.get();
+  accessible->QueryInterface(ax_platform_node.GetAddressOf());
+  return ax_platform_node.Get();
 }
 
 //
@@ -189,9 +243,9 @@ void AXPlatformNodeWin::NotifyAccessibilityEvent(ui::AXEvent event_type) {
 int AXPlatformNodeWin::GetIndexInParent() {
   base::win::ScopedComPtr<IDispatch> parent_dispatch;
   base::win::ScopedComPtr<IAccessible> parent_accessible;
-  if (S_OK != get_accParent(parent_dispatch.Receive()))
+  if (S_OK != get_accParent(parent_dispatch.GetAddressOf()))
     return -1;
-  if (S_OK != parent_dispatch.QueryInterface(parent_accessible.Receive()))
+  if (S_OK != parent_dispatch.CopyTo(parent_accessible.GetAddressOf()))
     return -1;
 
   LONG child_count = 0;
@@ -201,10 +255,10 @@ int AXPlatformNodeWin::GetIndexInParent() {
     base::win::ScopedVariant childid_index(index);
     base::win::ScopedComPtr<IDispatch> child_dispatch;
     base::win::ScopedComPtr<IAccessible> child_accessible;
-    if (S_OK == parent_accessible->get_accChild(childid_index,
-                                                child_dispatch.Receive()) &&
-        S_OK == child_dispatch.QueryInterface(child_accessible.Receive())) {
-      if (child_accessible.get() == this)
+    if (S_OK == parent_accessible->get_accChild(
+                    childid_index, child_dispatch.GetAddressOf()) &&
+        S_OK == child_dispatch.CopyTo(child_accessible.GetAddressOf())) {
+      if (child_accessible.Get() == this)
         return index - 1;
     }
   }
@@ -252,18 +306,23 @@ STDMETHODIMP AXPlatformNodeWin::accHitTest(
 }
 
 HRESULT AXPlatformNodeWin::accDoDefaultAction(VARIANT var_id) {
-  COM_OBJECT_VALIDATE_VAR_ID(var_id);
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_AND_GET_TARGET(var_id, target);
   AXActionData data;
   data.action = ui::AX_ACTION_DO_DEFAULT;
-  if (delegate_->AccessibilityPerformAction(data))
+
+  if (target->delegate_->AccessibilityPerformAction(data))
     return S_OK;
   return E_FAIL;
 }
 
 STDMETHODIMP AXPlatformNodeWin::accLocation(
     LONG* x_left, LONG* y_top, LONG* width, LONG* height, VARIANT var_id) {
-  COM_OBJECT_VALIDATE_VAR_ID_4_ARGS(var_id, x_left, y_top, width, height);
-  gfx::Rect bounds = delegate_->GetScreenBoundsRect();
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_4_ARGS_AND_GET_TARGET(var_id, x_left, y_top, width,
+                                                   height, target);
+
+  gfx::Rect bounds = target->delegate_->GetScreenBoundsRect();
   *x_left = bounds.x();
   *y_top = bounds.y();
   *width  = bounds.width();
@@ -277,21 +336,22 @@ STDMETHODIMP AXPlatformNodeWin::accLocation(
 
 STDMETHODIMP AXPlatformNodeWin::accNavigate(
     LONG nav_dir, VARIANT start, VARIANT* end) {
-  COM_OBJECT_VALIDATE_VAR_ID_1_ARG(start, end);
-  IAccessible* result = nullptr;
-
-  if ((nav_dir == NAVDIR_LASTCHILD || nav_dir == NAVDIR_FIRSTCHILD) &&
-      start.lVal != CHILDID_SELF) {
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_1_ARG_AND_GET_TARGET(start, end, target);
+  end->vt = VT_EMPTY;
+  if ((nav_dir == NAVDIR_FIRSTCHILD || nav_dir == NAVDIR_LASTCHILD) &&
+      V_VT(&start) == VT_I4 && V_I4(&start) != CHILDID_SELF) {
     // MSAA states that navigating to first/last child can only be from self.
     return E_INVALIDARG;
   }
 
+  IAccessible* result = nullptr;
   switch (nav_dir) {
     case NAVDIR_DOWN:
     case NAVDIR_UP:
     case NAVDIR_LEFT:
     case NAVDIR_RIGHT:
-      // These directions are not implemented, matching Mozilla and IE.
+      // These directions are not implemented except in tables.
       return E_NOTIMPL;
 
     case NAVDIR_FIRSTCHILD:
@@ -305,27 +365,22 @@ STDMETHODIMP AXPlatformNodeWin::accNavigate(
       break;
 
     case NAVDIR_NEXT: {
-      AXPlatformNodeBase* next = GetNextSibling();
+      AXPlatformNodeBase* next = target->GetNextSibling();
       if (next)
         result = next->GetNativeViewAccessible();
       break;
     }
 
     case NAVDIR_PREVIOUS: {
-      AXPlatformNodeBase* previous = GetPreviousSibling();
+      AXPlatformNodeBase* previous = target->GetPreviousSibling();
       if (previous)
         result = previous->GetNativeViewAccessible();
       break;
     }
-
-    default:
-      return E_INVALIDARG;
   }
 
-  if (!result) {
-    end->vt = VT_EMPTY;
+  if (!result)
     return S_FALSE;
-  }
 
   end->vt = VT_DISPATCH;
   end->pdispVal = result;
@@ -337,41 +392,13 @@ STDMETHODIMP AXPlatformNodeWin::accNavigate(
 
 STDMETHODIMP AXPlatformNodeWin::get_accChild(VARIANT var_child,
                                              IDispatch** disp_child) {
-  COM_OBJECT_VALIDATE_1_ARG(disp_child);
-  LONG child_id = V_I4(&var_child);
-  if (child_id == CHILDID_SELF) {
-    *disp_child = this;
-    (*disp_child)->AddRef();
-    return S_OK;
-  }
-
-  if (child_id >= 1 && child_id <= delegate_->GetChildCount()) {
-    // Positive child ids are a 1-based child index, used by clients
-    // that want to enumerate all immediate children.
-    *disp_child = delegate_->ChildAtIndex(child_id - 1);
-    if (!(*disp_child))
-      return E_INVALIDARG;
-    (*disp_child)->AddRef();
-    return S_OK;
-  }
-
-  if (child_id >= 0)
-    return E_INVALIDARG;
-
-  // Negative child ids can be used to map to any descendant.
-  AXPlatformNodeWin* child = static_cast<AXPlatformNodeWin*>(
-      GetFromUniqueId(-child_id));
-  if (child && !IsDescendant(child))
-    child = nullptr;
-
-  if (child) {
-    *disp_child = child;
-    (*disp_child)->AddRef();
-    return S_OK;
-  }
-
   *disp_child = nullptr;
-  return E_INVALIDARG;
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_AND_GET_TARGET(var_child, target);
+
+  *disp_child = target;
+  (*disp_child)->AddRef();
+  return S_OK;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_accChildCount(LONG* child_count) {
@@ -382,15 +409,17 @@ STDMETHODIMP AXPlatformNodeWin::get_accChildCount(LONG* child_count) {
 
 STDMETHODIMP AXPlatformNodeWin::get_accDefaultAction(
     VARIANT var_id, BSTR* def_action) {
-  COM_OBJECT_VALIDATE_VAR_ID_1_ARG(var_id, def_action);
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_1_ARG_AND_GET_TARGET(var_id, def_action, target);
+
   int action;
-  if (!GetIntAttribute(AX_ATTR_ACTION, &action)) {
+  if (!target->GetIntAttribute(AX_ATTR_DEFAULT_ACTION_VERB, &action)) {
     *def_action = nullptr;
     return S_FALSE;
   }
 
   base::string16 action_verb =
-      ActionToString(static_cast<AXSupportedAction>(action));
+      ActionVerbToLocalizedString(static_cast<AXDefaultActionVerb>(action));
   if (action_verb.empty()) {
     *def_action = nullptr;
     return S_FALSE;
@@ -403,8 +432,10 @@ STDMETHODIMP AXPlatformNodeWin::get_accDefaultAction(
 
 STDMETHODIMP AXPlatformNodeWin::get_accDescription(
     VARIANT var_id, BSTR* desc) {
-  COM_OBJECT_VALIDATE_VAR_ID_1_ARG(var_id, desc);
-  return GetStringAttributeAsBstr(ui::AX_ATTR_DESCRIPTION, desc);
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_1_ARG_AND_GET_TARGET(var_id, desc, target);
+
+  return target->GetStringAttributeAsBstr(ui::AX_ATTR_DESCRIPTION, desc);
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_accFocus(VARIANT* focus_child) {
@@ -427,14 +458,29 @@ STDMETHODIMP AXPlatformNodeWin::get_accFocus(VARIANT* focus_child) {
 
 STDMETHODIMP AXPlatformNodeWin::get_accKeyboardShortcut(
     VARIANT var_id, BSTR* acc_key) {
-  COM_OBJECT_VALIDATE_VAR_ID_1_ARG(var_id, acc_key);
-  return GetStringAttributeAsBstr(ui::AX_ATTR_SHORTCUT, acc_key);
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_1_ARG_AND_GET_TARGET(var_id, acc_key, target);
+
+  return target->GetStringAttributeAsBstr(ui::AX_ATTR_SHORTCUT, acc_key);
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_accName(
     VARIANT var_id, BSTR* name) {
-  COM_OBJECT_VALIDATE_VAR_ID_1_ARG(var_id, name);
-  return GetStringAttributeAsBstr(ui::AX_ATTR_NAME, name);
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_1_ARG_AND_GET_TARGET(var_id, name, target);
+
+  HRESULT result = target->GetStringAttributeAsBstr(ui::AX_ATTR_NAME, name);
+  if (FAILED(result) && MSAARole() == ROLE_SYSTEM_DOCUMENT && GetParent()) {
+    // Hack: Some versions of JAWS crash if they get an empty name on
+    // a document that's the child of an iframe, so always return a
+    // nonempty string for this role.  https://crbug.com/583057
+    base::string16 str = L" ";
+
+    *name = SysAllocString(str.c_str());
+    DCHECK(*name);
+  }
+
+  return result;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_accParent(
@@ -451,38 +497,43 @@ STDMETHODIMP AXPlatformNodeWin::get_accParent(
 
 STDMETHODIMP AXPlatformNodeWin::get_accRole(
     VARIANT var_id, VARIANT* role) {
-  COM_OBJECT_VALIDATE_VAR_ID_1_ARG(var_id, role);
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_1_ARG_AND_GET_TARGET(var_id, role, target);
   role->vt = VT_I4;
-  role->lVal = MSAARole();
+  role->lVal = target->MSAARole();
   return S_OK;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_accState(
     VARIANT var_id, VARIANT* state) {
-  COM_OBJECT_VALIDATE_VAR_ID_1_ARG(var_id, state);
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_1_ARG_AND_GET_TARGET(var_id, state, target);
   state->vt = VT_I4;
-  state->lVal = MSAAState();
+  state->lVal = target->MSAAState();
   return S_OK;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_accHelp(
     VARIANT var_id, BSTR* help) {
-  COM_OBJECT_VALIDATE_VAR_ID_1_ARG(var_id, help);
+  COM_OBJECT_VALIDATE_1_ARG(help);
   return S_FALSE;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_accValue(VARIANT var_id, BSTR* value) {
-  COM_OBJECT_VALIDATE_VAR_ID_1_ARG(var_id, value);
-  return GetStringAttributeAsBstr(ui::AX_ATTR_VALUE, value);
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_1_ARG_AND_GET_TARGET(var_id, value, target);
+  return target->GetStringAttributeAsBstr(ui::AX_ATTR_VALUE, value);
 }
 
 STDMETHODIMP AXPlatformNodeWin::put_accValue(VARIANT var_id,
                                              BSTR new_value) {
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_AND_GET_TARGET(var_id, target);
+
   AXActionData data;
   data.action = ui::AX_ACTION_SET_VALUE;
   data.value = new_value;
-  COM_OBJECT_VALIDATE_VAR_ID(var_id);
-  if (delegate_->AccessibilityPerformAction(data))
+  if (target->delegate_->AccessibilityPerformAction(data))
     return S_OK;
   return E_FAIL;
 }
@@ -498,13 +549,14 @@ STDMETHODIMP AXPlatformNodeWin::get_accSelection(VARIANT* selected) {
 
 STDMETHODIMP AXPlatformNodeWin::accSelect(
     LONG flagsSelect, VARIANT var_id) {
-  COM_OBJECT_VALIDATE_VAR_ID(var_id);
   return E_NOTIMPL;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_accHelpTopic(
     BSTR* help_file, VARIANT var_id, LONG* topic_id) {
-  COM_OBJECT_VALIDATE_VAR_ID_2_ARGS(var_id, help_file, topic_id);
+  AXPlatformNodeWin* target;
+  COM_OBJECT_VALIDATE_VAR_ID_2_ARGS_AND_GET_TARGET(var_id, help_file, topic_id,
+                                                   target);
   if (help_file) {
     *help_file = nullptr;
   }
@@ -516,7 +568,6 @@ STDMETHODIMP AXPlatformNodeWin::get_accHelpTopic(
 
 STDMETHODIMP AXPlatformNodeWin::put_accName(
     VARIANT var_id, BSTR put_name) {
-  COM_OBJECT_VALIDATE_VAR_ID(var_id);
   // Deprecated.
   return E_NOTIMPL;
 }
@@ -974,13 +1025,6 @@ STDMETHODIMP AXPlatformNodeWin::QueryService(
 //
 // Private member functions.
 //
-
-bool AXPlatformNodeWin::IsValidId(const VARIANT& child) const {
-  // Since we have a separate IAccessible COM object for each node, we only
-  // support the CHILDID_SELF id.
-  return (VT_I4 == child.vt) && (CHILDID_SELF == child.lVal);
-}
-
 int AXPlatformNodeWin::MSAARole() {
   switch (GetData().role) {
     case ui::AX_ROLE_ALERT:
@@ -991,12 +1035,16 @@ int AXPlatformNodeWin::MSAARole() {
       return ROLE_SYSTEM_BUTTONDROPDOWN;
     case ui::AX_ROLE_POP_UP_BUTTON:
       return ROLE_SYSTEM_BUTTONMENU;
+    case ui::AX_ROLE_CARET:
+      return ROLE_SYSTEM_CARET;
     case ui::AX_ROLE_CHECK_BOX:
       return ROLE_SYSTEM_CHECKBUTTON;
     case ui::AX_ROLE_COMBO_BOX:
       return ROLE_SYSTEM_COMBOBOX;
     case ui::AX_ROLE_DIALOG:
       return ROLE_SYSTEM_DIALOG;
+    case ui::AX_ROLE_GENERIC_CONTAINER:
+      return ROLE_SYSTEM_GROUPING;
     case ui::AX_ROLE_GROUP:
       return ROLE_SYSTEM_GROUPING;
     case ui::AX_ROLE_IMAGE:
@@ -1053,11 +1101,10 @@ int AXPlatformNodeWin::MSAARole() {
 }
 
 int AXPlatformNodeWin::MSAAState() {
-  uint32_t state = GetData().state;
+  const AXNodeData& data = GetData();
+  const uint32_t state = data.state;
 
   int msaa_state = 0;
-  if (state & (1 << ui::AX_STATE_CHECKED))
-    msaa_state |= STATE_SYSTEM_CHECKED;
   if (state & (1 << ui::AX_STATE_COLLAPSED))
     msaa_state |= STATE_SYSTEM_COLLAPSED;
   if (state & (1 << ui::AX_STATE_DEFAULT))
@@ -1070,8 +1117,10 @@ int AXPlatformNodeWin::MSAAState() {
     msaa_state |= STATE_SYSTEM_HASPOPUP;
   if (state & (1 << ui::AX_STATE_HOVERED))
     msaa_state |= STATE_SYSTEM_HOTTRACKED;
-  if (state & (1 << ui::AX_STATE_INVISIBLE))
+  if (state & (1 << ui::AX_STATE_INVISIBLE) ||
+      GetData().role == ui::AX_ROLE_IGNORED) {
     msaa_state |= STATE_SYSTEM_INVISIBLE;
+  }
   if (state & (1 << ui::AX_STATE_LINKED))
     msaa_state |= STATE_SYSTEM_LINKED;
   if (state & (1 << ui::AX_STATE_OFFSCREEN))
@@ -1089,6 +1138,20 @@ int AXPlatformNodeWin::MSAAState() {
   if (state & (1 << ui::AX_STATE_DISABLED))
     msaa_state |= STATE_SYSTEM_UNAVAILABLE;
 
+  // Checked state
+  const auto checked_state = static_cast<ui::AXCheckedState>(
+      GetIntAttribute(ui::AX_ATTR_CHECKED_STATE));
+  switch (checked_state) {
+    case ui::AX_CHECKED_STATE_TRUE:
+      msaa_state |= STATE_SYSTEM_CHECKED;
+      break;
+    case ui::AX_CHECKED_STATE_MIXED:
+      msaa_state |= STATE_SYSTEM_MIXED;
+      break;
+    default:
+      break;
+  }
+
   gfx::NativeViewAccessible focus = delegate_->GetFocus();
   if (focus == GetNativeViewAccessible())
     msaa_state |= STATE_SYSTEM_FOCUSED;
@@ -1099,7 +1162,7 @@ int AXPlatformNodeWin::MSAAState() {
   // TODO(dmazzoni): this should probably check if focus is actually inside
   // the menu bar, but we don't currently track focus inside menu pop-ups,
   // and Chrome only has one menu visible at a time so this works for now.
-  if (GetData().role == ui::AX_ROLE_MENU_BAR &&
+  if (data.role == ui::AX_ROLE_MENU_BAR &&
       !(state & (1 << ui::AX_STATE_INVISIBLE))) {
     msaa_state |= STATE_SYSTEM_FOCUSED;
   }
@@ -1144,9 +1207,6 @@ HRESULT AXPlatformNodeWin::GetStringAttributeAsBstr(
   base::string16 str;
 
   if (!GetString16Attribute(attribute, &str))
-    return S_FALSE;
-
-  if (str.empty())
     return S_FALSE;
 
   *value_bstr = SysAllocString(str.c_str());
@@ -1204,6 +1264,39 @@ LONG AXPlatformNodeWin::FindBoundary(
   return static_cast<LONG>(ui::FindAccessibleTextBoundary(
       text, line_breaks, boundary, start_offset, direction,
       AX_TEXT_AFFINITY_DOWNSTREAM));
+}
+
+AXPlatformNodeWin* AXPlatformNodeWin::GetTargetFromChildID(
+    const VARIANT& var_id) {
+  if (V_VT(&var_id) != VT_I4)
+    return nullptr;
+
+  LONG child_id = V_I4(&var_id);
+  if (child_id == CHILDID_SELF)
+    return this;
+
+  if (child_id >= 1 && child_id <= delegate_->GetChildCount()) {
+    // Positive child ids are a 1-based child index, used by clients
+    // that want to enumerate all immediate children.
+    AXPlatformNodeBase* base =
+        FromNativeViewAccessible(delegate_->ChildAtIndex(child_id - 1));
+    return static_cast<AXPlatformNodeWin*>(base);
+  }
+
+  if (child_id >= 0)
+    return nullptr;
+
+  // Negative child ids can be used to map to any descendant.
+  AXPlatformNode* node = GetFromUniqueId(-child_id);
+  if (!node)
+    return nullptr;
+
+  AXPlatformNodeBase* base =
+      FromNativeViewAccessible(node->GetNativeViewAccessible());
+  if (base && !IsDescendant(base))
+    base = nullptr;
+
+  return static_cast<AXPlatformNodeWin*>(base);
 }
 
 }  // namespace ui

@@ -157,20 +157,18 @@ class PickleTest : public testing::Test {
   template <typename ProxyType = PicklePasser>
   InterfacePtr<ProxyType> ConnectToChromiumService() {
     InterfacePtr<ProxyType> proxy;
-    InterfaceRequest<ProxyType> request(&proxy);
     chromium_bindings_.AddBinding(
         &chromium_service_,
-        ConvertInterfaceRequest<PicklePasser>(std::move(request)));
+        ConvertInterfaceRequest<PicklePasser>(mojo::MakeRequest(&proxy)));
     return proxy;
   }
 
   template <typename ProxyType = blink::PicklePasser>
   InterfacePtr<ProxyType> ConnectToBlinkService() {
     InterfacePtr<ProxyType> proxy;
-    InterfaceRequest<ProxyType> request(&proxy);
-    blink_bindings_.AddBinding(
-        &blink_service_,
-        ConvertInterfaceRequest<blink::PicklePasser>(std::move(request)));
+    blink_bindings_.AddBinding(&blink_service_,
+                               ConvertInterfaceRequest<blink::PicklePasser>(
+                                   mojo::MakeRequest(&proxy)));
     return proxy;
   }
 
@@ -184,7 +182,22 @@ class PickleTest : public testing::Test {
 
 }  // namespace
 
-TEST_F(PickleTest, ChromiumProxyToChromiumService) {
+#if _MSC_FULL_VER == 191025017
+// Disabled due to this VS 2017 RTM code-gen bug:
+// https://developercommunity.visualstudio.com/content/problem/40904/bad-code-gen-in-chromes-mojo-public-bindings-unitt.html
+#define MAYBE_ChromiumProxyToChromiumService \
+  DISABLED_ChromiumProxyToChromiumService
+#define MAYBE_ChromiumProxyToBlinkService DISABLED_ChromiumProxyToBlinkService
+#define MAYBE_BlinkProxyToBlinkService DISABLED_BlinkProxyToBlinkService
+#define MAYBE_BlinkProxyToChromiumService DISABLED_BlinkProxyToChromiumService
+#else
+#define MAYBE_ChromiumProxyToChromiumService ChromiumProxyToChromiumService
+#define MAYBE_ChromiumProxyToBlinkService ChromiumProxyToBlinkService
+#define MAYBE_BlinkProxyToBlinkService BlinkProxyToBlinkService
+#define MAYBE_BlinkProxyToChromiumService BlinkProxyToChromiumService
+#endif
+
+TEST_F(PickleTest, MAYBE_ChromiumProxyToChromiumService) {
   auto chromium_proxy = ConnectToChromiumService();
   {
     base::RunLoop loop;
@@ -210,7 +223,7 @@ TEST_F(PickleTest, ChromiumProxyToChromiumService) {
   }
 }
 
-TEST_F(PickleTest, ChromiumProxyToBlinkService) {
+TEST_F(PickleTest, MAYBE_ChromiumProxyToBlinkService) {
   auto chromium_proxy = ConnectToBlinkService<PicklePasser>();
   {
     base::RunLoop loop;
@@ -258,7 +271,7 @@ TEST_F(PickleTest, ChromiumProxyToBlinkService) {
   }
 }
 
-TEST_F(PickleTest, BlinkProxyToBlinkService) {
+TEST_F(PickleTest, MAYBE_BlinkProxyToBlinkService) {
   auto blink_proxy = ConnectToBlinkService();
   {
     base::RunLoop loop;
@@ -277,7 +290,7 @@ TEST_F(PickleTest, BlinkProxyToBlinkService) {
   }
 }
 
-TEST_F(PickleTest, BlinkProxyToChromiumService) {
+TEST_F(PickleTest, MAYBE_BlinkProxyToChromiumService) {
   auto blink_proxy = ConnectToChromiumService<blink::PicklePasser>();
   {
     base::RunLoop loop;

@@ -34,7 +34,7 @@ a local W3C repository source directory into a destination directory.
 import logging
 import mimetypes
 
-from webkitpy.common.webkit_finder import WebKitFinder
+from webkitpy.common.path_finder import PathFinder
 from webkitpy.layout_tests.models.test_expectations import TestExpectationParser
 
 _log = logging.getLogger(__name__)
@@ -59,9 +59,8 @@ class TestCopier(object):
         self.dest_dir_name = dest_dir_name
 
         self.filesystem = self.host.filesystem
-        self.webkit_finder = WebKitFinder(self.filesystem)
-        self._webkit_root = self.webkit_finder.webkit_base()
-        self.layout_tests_dir = self.webkit_finder.path_from_webkit_base('LayoutTests')
+        self.path_finder = PathFinder(self.filesystem)
+        self.layout_tests_dir = self.path_finder.layout_tests_dir()
         self.destination_directory = self.filesystem.normpath(
             self.filesystem.join(
                 self.layout_tests_dir,
@@ -142,7 +141,7 @@ class TestCopier(object):
     def find_paths_to_skip(self):
         paths_to_skip = set()
         port = self.host.port_factory.get()
-        w3c_import_expectations_path = self.webkit_finder.path_from_webkit_base('LayoutTests', 'W3CImportExpectations')
+        w3c_import_expectations_path = self.path_finder.path_from_layout_tests('W3CImportExpectations')
         w3c_import_expectations = self.filesystem.read_text_file(w3c_import_expectations_path)
         parser = TestExpectationParser(port, all_tests=(), is_lint_mode=False)
         expectation_lines = parser.parse(w3c_import_expectations_path, w3c_import_expectations)
@@ -168,12 +167,8 @@ class TestCopier(object):
             if not self.filesystem.exists(dest_dir):
                 self.filesystem.maybe_make_directory(dest_dir)
 
-            copied_files = []
-
             for file_to_copy in dir_to_copy['copy_list']:
-                copied_file = self.copy_file(file_to_copy, dest_dir)
-                if copied_file:
-                    copied_files.append(copied_file)
+                self.copy_file(file_to_copy, dest_dir)
 
         _log.info('')
         _log.info('Import complete')
@@ -195,20 +190,17 @@ class TestCopier(object):
                     "destination": File name of the destination file.
                 And possibly also the keys "reference_support_info" or "is_jstest".
             dest_dir: Path to the directory where the file should be copied.
-
-        Returns:
-            The path to the new file, relative to the Blink root (//third_party/WebKit).
         """
         source_path = self.filesystem.normpath(file_to_copy['src'])
         dest_path = self.filesystem.join(dest_dir, file_to_copy['dest'])
 
         if self.filesystem.isdir(source_path):
             _log.error('%s refers to a directory', source_path)
-            return None
+            return
 
         if not self.filesystem.exists(source_path):
             _log.error('%s not found. Possible error in the test.', source_path)
-            return None
+            return
 
         if not self.filesystem.exists(self.filesystem.dirname(dest_path)):
             if not self.import_in_place:
@@ -224,5 +216,3 @@ class TestCopier(object):
             self.filesystem.copyfile(source_path, dest_path)
             if self.filesystem.read_binary_file(source_path)[:2] == '#!':
                 self.filesystem.make_executable(dest_path)
-
-        return dest_path.replace(self._webkit_root, '')

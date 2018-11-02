@@ -125,6 +125,7 @@ class CC_EXPORT GpuImageDecodeCache
   void SetShouldAggressivelyFreeResources(
       bool aggressively_free_resources) override;
   void ClearCache() override;
+  size_t GetMaximumMemoryLimitBytes() const override;
 
   // MemoryDumpProvider overrides.
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
@@ -230,7 +231,7 @@ class CC_EXPORT GpuImageDecodeCache
     UsageStats usage_stats_;
   };
 
-  struct ImageData : public base::RefCounted<ImageData> {
+  struct ImageData : public base::RefCountedThreadSafe<ImageData> {
     ImageData(DecodedDataMode mode,
               size_t size,
               const gfx::ColorSpace& target_color_space,
@@ -250,7 +251,7 @@ class CC_EXPORT GpuImageDecodeCache
     UploadedImageData upload;
 
    private:
-    friend class base::RefCounted<ImageData>;
+    friend class base::RefCountedThreadSafe<ImageData>;
     ~ImageData();
   };
 
@@ -347,6 +348,8 @@ class CC_EXPORT GpuImageDecodeCache
   sk_sp<GrContextThreadSafeProxy> context_threadsafe_proxy_;
 
   // All members below this point must only be accessed while holding |lock_|.
+  // The exception are const members like |normal_max_cache_bytes_| that can
+  // be accessed without a lock since they are thread safe.
   base::Lock lock_;
 
   // |persistent_cache_| represents the long-lived cache, keeping a certain

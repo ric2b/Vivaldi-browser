@@ -9,6 +9,7 @@
 #include "base/compiler_specific.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
+#include "content/public/test/test_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -17,10 +18,6 @@ namespace base {
 class CommandLine;
 class FilePath;
 }
-
-namespace net {
-class RuleBasedHostResolverProc;
-}  // namespace net
 
 namespace content {
 
@@ -51,7 +48,7 @@ class BrowserTestBase : public testing::Test {
   // Returns the host resolver being used for the tests. Subclasses might want
   // to configure it inside tests.
   net::RuleBasedHostResolverProc* host_resolver() {
-    return rule_based_resolver_.get();
+    return test_host_resolver_->host_resolver();
   }
 
  protected:
@@ -67,13 +64,20 @@ class BrowserTestBase : public testing::Test {
   // Override this for things you would normally override TearDown for.
   virtual void TearDownInProcessBrowserTestFixture() {}
 
+  // This is invoked from main after browser_init/browser_main have completed.
+  // This prepares for the test by creating a new browser and doing any other
+  // initialization.
+  // This is meant to be inherited only by the test harness.
+  virtual void PreRunTestOnMainThread() = 0;
+
   // Override this rather than TestBody.
+  // Note this is internally called by the browser test macros.
   virtual void RunTestOnMainThread() = 0;
 
-  // This is invoked from main after browser_init/browser_main have completed.
-  // This prepares for the test by creating a new browser, runs the test
-  // (RunTestOnMainThread), quits the browsers and returns.
-  virtual void RunTestOnMainThreadLoop() = 0;
+  // This is invoked from main after RunTestOnMainThread has run, to give the
+  // harness a chance for post-test cleanup.
+  // This is meant to be inherited only by the test harness.
+  virtual void PostRunTestOnMainThread() = 0;
 
   // Sets expected browser exit code, in case it's different than 0 (success).
   void set_expected_exit_code(int code) { expected_exit_code_ = code; }
@@ -110,7 +114,7 @@ class BrowserTestBase : public testing::Test {
   void CreateTestServer(const base::FilePath& test_server_base);
 
   // When the test is running in --single-process mode, runs the given task on
-  // the in-process renderer thread. A nested message loop is run until it
+  // the in-process renderer thread. A nested run loop is run until it
   // returns.
   void PostTaskToInProcessRendererAndWait(const base::Closure& task);
 
@@ -124,8 +128,16 @@ class BrowserTestBase : public testing::Test {
   // Returns true if the test will be using GL acceleration via a software GL.
   bool UsingSoftwareGL() const;
 
+  // Temporary
+  // TODO(jam): remove this.
+  void disable_io_checks() { disable_io_checks_ = true; }
+
  private:
   void ProxyRunTestOnMainThreadLoop();
+
+  // When using the network process, update the host resolver rules that were
+  // added in SetUpOnMainThread.
+  void InitializeNetworkProcess();
 
   // Testing server, started on demand.
   std::unique_ptr<net::SpawnedTestServer> spawned_test_server_;
@@ -134,7 +146,7 @@ class BrowserTestBase : public testing::Test {
   std::unique_ptr<net::EmbeddedTestServer> embedded_test_server_;
 
   // Host resolver used during tests.
-  scoped_refptr<net::RuleBasedHostResolverProc> rule_based_resolver_;
+  std::unique_ptr<TestHostResolver> test_host_resolver_;
 
   // Expected exit code (default is 0).
   int expected_exit_code_;
@@ -150,6 +162,11 @@ class BrowserTestBase : public testing::Test {
   // class to ensure that SetUp was called. If it's not called, the test will
   // not run and report a false positive result.
   bool set_up_called_;
+
+  // Tests should keep on the IO thread checks to test that production code
+  // paths don't make file access. Keep this for now since src/chrome didn't
+  // check this.
+  bool disable_io_checks_;
 
 #if defined(OS_POSIX)
   bool handle_sigterm_;

@@ -10,10 +10,9 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/safe_browsing/protocol_manager.h"
 #include "chrome/common/safe_browsing/client_model.pb.h"
@@ -22,8 +21,10 @@
 #include "components/safe_browsing/common/safebrowsing_switches.h"
 #include "components/safe_browsing/csd.pb.h"
 #include "components/variations/variations_associated_data.h"
+#include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
@@ -107,6 +108,9 @@ ModelLoader::ModelLoader(base::Closure update_renderers_callback,
 }
 
 ModelLoader::~ModelLoader() {
+  // This must happen on the same sequence as ScheduleFetch because it
+  // invalidates any WeakPtrs allocated there.
+  DCHECK(fetch_sequence_checker_.CalledOnValidSequence());
 }
 
 void ModelLoader::StartFetch() {
@@ -116,15 +120,49 @@ void ModelLoader::StartFetch() {
   // TODO(nparker): If no profile needs this model, we shouldn't fetch it.
   // Then only re-fetch when a profile setting changes to need it.
   // This will save on the order of ~50KB/week/client of bandwidth.
-  fetcher_ = net::URLFetcher::Create(0 /* ID used for testing */, url_,
-                                     net::URLFetcher::GET, this);
+  DCHECK(fetch_sequence_checker_.CalledOnValidSequence());
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("safe_browsing_module_loader", R"(
+        semantics {
+          sender: "Safe Browsing Service"
+          description:
+            "Safe Browsing downloads the latest client-side phishing detection "
+            "model at startup. It uses this data on future page loads to "
+            "determine if it looks like a phishing page."
+          trigger:
+            "At startup. Most of the time the data will be in cache, so the "
+            "response will be small."
+          data:
+            "No user-controlled data or PII is sent. Only a static URL of the "
+            "model which is provided by field study is passed."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting:
+            "Users can enable or disable this feature by toggling 'Protect "
+            "you and your device from dangerous sites' in Chromium settings "
+            "under Privacy. This feature is enabled by default."
+          chrome_policy {
+            SafeBrowsingEnabled {
+              policy_options {mode: MANDATORY}
+              SafeBrowsingEnabled: false
+            }
+          }
+        })");
+  fetcher_ =
+      net::URLFetcher::Create(0 /* ID used for testing */, url_,
+                              net::URLFetcher::GET, this, traffic_annotation);
   data_use_measurement::DataUseUserData::AttachToFetcher(
       fetcher_.get(), data_use_measurement::DataUseUserData::SAFE_BROWSING);
   fetcher_->SetRequestContext(request_context_getter_);
+  fetcher_->SetLoadFlags(net::LOAD_DO_NOT_SAVE_COOKIES |
+                         net::LOAD_DO_NOT_SEND_COOKIES);
   fetcher_->Start();
 }
 
 void ModelLoader::OnURLFetchComplete(const net::URLFetcher* source) {
+  DCHECK(fetch_sequence_checker_.CalledOnValidSequence());
   DCHECK_EQ(fetcher_.get(), source);
   DCHECK_EQ(url_, source->GetURL());
 
@@ -171,6 +209,7 @@ void ModelLoader::OnURLFetchComplete(const net::URLFetcher* source) {
 }
 
 void ModelLoader::EndFetch(ClientModelStatus status, base::TimeDelta max_age) {
+  DCHECK(fetch_sequence_checker_.CalledOnValidSequence());
   // We don't differentiate models in the UMA stats.
   UMA_HISTOGRAM_ENUMERATION("SBClientPhishing.ClientModelStatus",
                             status,
@@ -197,16 +236,20 @@ void ModelLoader::EndFetch(ClientModelStatus status, base::TimeDelta max_age) {
 }
 
 void ModelLoader::ScheduleFetch(int64_t delay_ms) {
+  DCHECK(fetch_sequence_checker_.CalledOnValidSequence());
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           safe_browsing::switches::kSbDisableAutoUpdate))
     return;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&ModelLoader::StartFetch, weak_factory_.GetWeakPtr()),
+      base::BindOnce(&ModelLoader::StartFetch, weak_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(delay_ms));
 }
 
 void ModelLoader::CancelFetcher() {
+  // This must be called on the same sequence as ScheduleFetch because it
+  // invalidates any WeakPtrs allocated there.
+  DCHECK(fetch_sequence_checker_.CalledOnValidSequence());
   // Invalidate any scheduled request.
   weak_factory_.InvalidateWeakPtrs();
   // Cancel any request in progress.

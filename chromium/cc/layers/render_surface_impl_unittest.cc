@@ -29,8 +29,7 @@ TEST(RenderSurfaceLayerImplTest, Occlusion) {
 
   impl.CalcDrawProps(viewport_size);
 
-  RenderSurfaceImpl* render_surface_impl =
-      owning_layer_impl->GetRenderSurface();
+  RenderSurfaceImpl* render_surface_impl = GetRenderSurface(owning_layer_impl);
   ASSERT_TRUE(render_surface_impl);
 
   {
@@ -69,6 +68,7 @@ TEST(RenderSurfaceLayerImplTest, Occlusion) {
 TEST(RenderSurfaceLayerImplTest, AppendQuadsWithScaledMask) {
   gfx::Size layer_size(1000, 1000);
   gfx::Size viewport_size(1000, 1000);
+  float scale_factor = 2;
   scoped_refptr<FakeRasterSource> raster_source =
       FakeRasterSource::CreateFilledSolidColor(layer_size);
 
@@ -83,14 +83,17 @@ TEST(RenderSurfaceLayerImplTest, AppendQuadsWithScaledMask) {
   surface->test_properties()->force_render_surface = true;
 
   gfx::Transform scale;
-  scale.Scale(2, 2);
+  scale.Scale(scale_factor, scale_factor);
   surface->test_properties()->transform = scale;
 
-  surface->test_properties()->SetMaskLayer(FakeMaskLayerImpl::Create(
+  std::unique_ptr<FakeMaskLayerImpl> mask_layer = FakeMaskLayerImpl::Create(
       impl.host_impl()->active_tree(), 4, raster_source,
-      Layer::LayerMaskType::SINGLE_TEXTURE_MASK));
-  surface->test_properties()->mask_layer->SetDrawsContent(true);
-  surface->test_properties()->mask_layer->SetBounds(layer_size);
+      Layer::LayerMaskType::SINGLE_TEXTURE_MASK);
+  mask_layer->set_resource_size(
+      gfx::ScaleToCeiledSize(layer_size, scale_factor));
+  mask_layer->SetDrawsContent(true);
+  mask_layer->SetBounds(layer_size);
+  surface->test_properties()->SetMaskLayer(std::move(mask_layer));
 
   std::unique_ptr<LayerImpl> child =
       LayerImpl::Create(impl.host_impl()->active_tree(), 5);
@@ -110,7 +113,7 @@ TEST(RenderSurfaceLayerImplTest, AppendQuadsWithScaledMask) {
                                ->root_layer_for_testing()
                                ->test_properties()
                                ->children[0];
-  RenderSurfaceImpl* render_surface_impl = surface_raw->GetRenderSurface();
+  RenderSurfaceImpl* render_surface_impl = GetRenderSurface(surface_raw);
   std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
   AppendQuadsData append_quads_data;
   render_surface_impl->AppendQuads(render_pass.get(), &append_quads_data);

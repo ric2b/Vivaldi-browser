@@ -55,7 +55,7 @@ void RenderFrameAudioOutputStreamFactory::RequestDeviceAuthorization(
     media::mojom::AudioOutputStreamProviderRequest stream_provider_request,
     int64_t session_id,
     const std::string& device_id,
-    const RequestDeviceAuthorizationCallback& callback) {
+    RequestDeviceAuthorizationCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   const base::TimeTicks auth_start_time = base::TimeTicks::Now();
 
@@ -63,20 +63,22 @@ void RenderFrameAudioOutputStreamFactory::RequestDeviceAuthorization(
     mojo::ReportBadMessage("session_id is not in integer range");
     // Note: We must call the callback even though we are killing the renderer.
     // This is mandated by mojo.
-    callback.Run(
+    std::move(callback).Run(
         media::OutputDeviceStatus::OUTPUT_DEVICE_STATUS_ERROR_NOT_AUTHORIZED,
         media::AudioParameters::UnavailableDeviceParams(), std::string());
     return;
   }
 
-  base::PostTaskAndReplyWithResult(
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI).get(), FROM_HERE,
-      base::Bind(GetOrigin, context_->GetRenderProcessId(), render_frame_id_),
-      base::Bind(&RenderFrameAudioOutputStreamFactory::
-                     RequestDeviceAuthorizationForOrigin,
-                 weak_ptr_factory_.GetWeakPtr(), auth_start_time,
-                 base::Passed(&stream_provider_request),
-                 static_cast<int>(session_id), device_id, callback));
+  BrowserThread::PostTaskAndReplyWithResult(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(GetOrigin, context_->GetRenderProcessId(),
+                     render_frame_id_),
+      base::BindOnce(&RenderFrameAudioOutputStreamFactory::
+                         RequestDeviceAuthorizationForOrigin,
+                     weak_ptr_factory_.GetWeakPtr(), auth_start_time,
+                     std::move(stream_provider_request),
+                     static_cast<int>(session_id), device_id,
+                     std::move(callback)));
 }
 
 void RenderFrameAudioOutputStreamFactory::RequestDeviceAuthorizationForOrigin(
@@ -84,20 +86,21 @@ void RenderFrameAudioOutputStreamFactory::RequestDeviceAuthorizationForOrigin(
     media::mojom::AudioOutputStreamProviderRequest stream_provider_request,
     int session_id,
     const std::string& device_id,
-    const RequestDeviceAuthorizationCallback& callback,
+    RequestDeviceAuthorizationCallback callback,
     const url::Origin& origin) {
   DCHECK(thread_checker_.CalledOnValidThread());
   context_->RequestDeviceAuthorization(
       render_frame_id_, session_id, device_id, origin,
-      base::Bind(&RenderFrameAudioOutputStreamFactory::AuthorizationCompleted,
-                 weak_ptr_factory_.GetWeakPtr(), auth_start_time,
-                 base::Passed(&stream_provider_request), callback, origin));
+      base::BindOnce(
+          &RenderFrameAudioOutputStreamFactory::AuthorizationCompleted,
+          weak_ptr_factory_.GetWeakPtr(), auth_start_time,
+          std::move(stream_provider_request), std::move(callback), origin));
 }
 
 void RenderFrameAudioOutputStreamFactory::AuthorizationCompleted(
     base::TimeTicks auth_start_time,
     media::mojom::AudioOutputStreamProviderRequest request,
-    const RequestDeviceAuthorizationCallback& callback,
+    RequestDeviceAuthorizationCallback callback,
     const url::Origin& origin,
     media::OutputDeviceStatus status,
     bool should_send_id,
@@ -107,9 +110,9 @@ void RenderFrameAudioOutputStreamFactory::AuthorizationCompleted(
   UMALogDeviceAuthorizationTime(auth_start_time);
 
   if (status != media::OUTPUT_DEVICE_STATUS_OK) {
-    callback.Run(media::OutputDeviceStatus(status),
-                 media::AudioParameters::UnavailableDeviceParams(),
-                 std::string());
+    std::move(callback).Run(media::OutputDeviceStatus(status),
+                            media::AudioParameters::UnavailableDeviceParams(),
+                            std::string());
     return;
   }
 
@@ -121,13 +124,13 @@ void RenderFrameAudioOutputStreamFactory::AuthorizationCompleted(
           base::BindOnce(
               &RendererAudioOutputStreamFactoryContext::CreateDelegate,
               base::Unretained(context_), raw_device_id, render_frame_id_),
-          base::Bind(&RenderFrameAudioOutputStreamFactory::RemoveStream,
-                     base::Unretained(this))));
+          base::BindOnce(&RenderFrameAudioOutputStreamFactory::RemoveStream,
+                         base::Unretained(this))));
 
-  callback.Run(media::OutputDeviceStatus(status), params,
-               should_send_id
-                   ? context_->GetHMACForDeviceId(origin, raw_device_id)
-                   : std::string());
+  std::move(callback).Run(
+      media::OutputDeviceStatus(status), params,
+      should_send_id ? context_->GetHMACForDeviceId(origin, raw_device_id)
+                     : std::string());
 }
 
 void RenderFrameAudioOutputStreamFactory::RemoveStream(

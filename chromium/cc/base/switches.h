@@ -28,7 +28,6 @@ CC_BASE_EXPORT extern const char kStrictLayerPropertyChangeChecking[];
 CC_BASE_EXPORT extern const char kEnableTileCompression[];
 
 // Switches for both the renderer and ui compositors.
-CC_BASE_EXPORT extern const char kEnableColorCorrectRendering[];
 CC_BASE_EXPORT extern const char kEnableGpuBenchmarking[];
 CC_BASE_EXPORT extern const char kEnableSurfaceSynchronization[];
 
@@ -53,10 +52,11 @@ CC_BASE_EXPORT extern const char kCompositedRenderPassBorders[];
 CC_BASE_EXPORT extern const char kCompositedSurfaceBorders[];
 CC_BASE_EXPORT extern const char kCompositedLayerBorders[];
 
-// Unit test related.
+// Test related.
 CC_BASE_EXPORT extern const char kCCLayerTreeTestNoTimeout[];
 CC_BASE_EXPORT extern const char kCCLayerTreeTestLongTimeout[];
 CC_BASE_EXPORT extern const char kCCRebaselinePixeltests[];
+CC_BASE_EXPORT extern const char kDisallowNonExactResourceReuse[];
 
 }  // namespace switches
 }  // namespace cc

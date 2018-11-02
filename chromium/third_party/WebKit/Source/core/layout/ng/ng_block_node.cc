@@ -54,21 +54,20 @@ void FragmentPositionUpdated(const NGPhysicalFragment& fragment) {
   LayoutBlock* containing_block = layout_box->ContainingBlock();
   if (containing_block->StyleRef().IsFlippedBlocksWritingMode()) {
     LayoutUnit container_width = containing_block->Size().Width();
-    layout_box->SetX(container_width - fragment.LeftOffset() -
-                     fragment.Width());
+    layout_box->SetX(container_width - fragment.Offset().left -
+                     fragment.Size().width);
   } else {
-    layout_box->SetX(fragment.LeftOffset());
+    layout_box->SetX(fragment.Offset().left);
   }
-  layout_box->SetY(fragment.TopOffset());
+  layout_box->SetY(fragment.Offset().top);
 }
 
 // Similar to FragmentPositionUpdated but for floats.
 // - Updates layout object's geometric information.
 // - Creates legacy FloatingObject and attached it to the provided parent.
-void FloatingObjectPositionedUpdated(NGFloatingObject* ng_floating_object,
+void FloatingObjectPositionedUpdated(const NGPositionedFloat& positioned_float,
                                      LayoutBox* parent) {
-  NGPhysicalBoxFragment* box_fragment =
-      ToNGPhysicalBoxFragment(ng_floating_object->fragment.Get());
+  NGPhysicalBoxFragment* box_fragment = positioned_float.fragment.Get();
   FragmentPositionUpdated(*box_fragment);
 
   LayoutBox* layout_box = ToLayoutBox(box_fragment->GetLayoutObject());
@@ -78,8 +77,8 @@ void FloatingObjectPositionedUpdated(NGFloatingObject* ng_floating_object,
     FloatingObject* floating_object =
         ToLayoutBlockFlow(parent)->InsertFloatingObject(*layout_box);
     floating_object->SetIsInPlacedTree(false);
-    floating_object->SetX(ng_floating_object->left_offset);
-    floating_object->SetY(box_fragment->TopOffset());
+    floating_object->SetX(positioned_float.paint_offset.left);
+    floating_object->SetY(positioned_float.paint_offset.top);
     floating_object->SetIsPlaced(true);
     floating_object->SetIsInPlacedTree(true);
   }
@@ -92,20 +91,20 @@ void UpdateLegacyMultiColumnFlowThread(LayoutBox* layout_box,
   if (!flow_thread)
     return;
   if (LayoutMultiColumnSet* column_set = flow_thread->FirstMultiColumnSet()) {
-    column_set->SetWidth(fragment->Width());
-    column_set->SetHeight(fragment->Height());
+    column_set->SetWidth(fragment->Size().width);
+    column_set->SetHeight(fragment->Size().height);
 
     // TODO(mstensho): This value has next to nothing to do with the flow thread
     // portion size, but at least it's usually better than zero.
-    column_set->EndFlow(fragment->Height());
+    column_set->EndFlow(fragment->Size().height);
 
     column_set->ClearNeedsLayout();
   }
   // TODO(mstensho): Fix the relatively nonsensical values here (the content box
   // size of the multicol container has very little to do with the price of
   // eggs).
-  flow_thread->SetWidth(fragment->Width());
-  flow_thread->SetHeight(fragment->Height());
+  flow_thread->SetWidth(fragment->Size().width);
+  flow_thread->SetHeight(fragment->Size().height);
 
   flow_thread->ValidateColumnSets();
   flow_thread->ClearNeedsLayout();
@@ -203,8 +202,13 @@ NGLayoutInputNode* NGBlockNode::NextSibling() {
     LayoutObject* next_sibling = layout_box_->NextSibling();
     if (next_sibling) {
       if (next_sibling->IsInline()) {
+        // As long as we traverse LayoutObject tree, this should not happen.
+        // See ShouldHandleByInlineContext() for more context.
+        // Also this leads to incorrect layout because we create two
+        // NGLayoutInputNode for one LayoutBlockFlow.
+        NOTREACHED();
         next_sibling_ = new NGInlineNode(
-            next_sibling, ToLayoutBlockFlow(layout_box_->Parent()));
+            next_sibling, ToLayoutNGBlockFlow(layout_box_->Parent()));
       } else {
         next_sibling_ = new NGBlockNode(next_sibling);
       }
@@ -213,7 +217,7 @@ NGLayoutInputNode* NGBlockNode::NextSibling() {
   return next_sibling_;
 }
 
-LayoutObject* NGBlockNode::GetLayoutObject() {
+LayoutObject* NGBlockNode::GetLayoutObject() const {
   return layout_box_;
 }
 
@@ -221,8 +225,9 @@ NGLayoutInputNode* NGBlockNode::FirstChild() {
   if (!first_child_) {
     LayoutObject* child = layout_box_->SlowFirstChild();
     if (child) {
-      if (child->IsInline()) {
-        first_child_ = new NGInlineNode(child, ToLayoutBlockFlow(layout_box_));
+      if (layout_box_->ChildrenInline()) {
+        first_child_ =
+            new NGInlineNode(child, ToLayoutNGBlockFlow(layout_box_));
       } else {
         first_child_ = new NGBlockNode(child);
       }
@@ -237,7 +242,7 @@ DEFINE_TRACE(NGBlockNode) {
   NGLayoutInputNode::Trace(visitor);
 }
 
-bool NGBlockNode::CanUseNewLayout() {
+bool NGBlockNode::CanUseNewLayout() const {
   // [Multicol]: for the 1st phase of LayoutNG's multicol implementation we want
   // to utilize the existing ColumnBalancer class. That's why a multicol block
   // should be processed by Legacy Layout engine.
@@ -246,24 +251,12 @@ bool NGBlockNode::CanUseNewLayout() {
 
   if (!layout_box_->IsLayoutBlockFlow())
     return false;
-  return RuntimeEnabledFeatures::layoutNGEnabled() || !HasInlineChildren();
+  return RuntimeEnabledFeatures::layoutNGEnabled();
 }
 
-bool NGBlockNode::HasInlineChildren() {
-  if (!layout_box_->IsLayoutBlockFlow())
-    return false;
-
-  const LayoutBlockFlow* block_flow = ToLayoutBlockFlow(layout_box_);
-  if (!block_flow->ChildrenInline())
-    return false;
-  LayoutObject* child = block_flow->FirstChild();
-  while (child) {
-    if (child->IsInline())
-      return true;
-    child = child->NextSibling();
-  }
-
-  return false;
+String NGBlockNode::ToString() const {
+  return String::Format("NGBlockNode: '%s'",
+                        GetLayoutObject()->DebugName().Ascii().data());
 }
 
 void NGBlockNode::CopyFragmentDataToLayoutBox(
@@ -274,8 +267,8 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
 
   if (layout_box_->Style()->SpecifiesColumns())
     UpdateLegacyMultiColumnFlowThread(layout_box_, fragment);
-  layout_box_->SetWidth(fragment->Width());
-  layout_box_->SetHeight(fragment->Height());
+  layout_box_->SetWidth(fragment->Size().width);
+  layout_box_->SetHeight(fragment->Size().height);
   NGBoxStrut border_and_padding = ComputeBorders(constraint_space, Style()) +
                                   ComputePadding(constraint_space, Style());
   LayoutUnit intrinsic_logical_height =
@@ -285,23 +278,17 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
   intrinsic_logical_height -= border_and_padding.BlockSum();
   layout_box_->SetIntrinsicContentLogicalHeight(intrinsic_logical_height);
 
-  // We may still have unpositioned floats when we reach the root box.
-  if (!layout_box_->Parent()) {
-    for (const RefPtr<NGFloatingObject>& floating_object :
-         fragment->PositionedFloats()) {
-      FloatingObjectPositionedUpdated(floating_object.Get(), layout_box_);
-    }
-  }
+  for (const NGPositionedFloat& positioned_float : fragment->PositionedFloats())
+    FloatingObjectPositionedUpdated(positioned_float, layout_box_);
 
   for (const auto& child_fragment : fragment->Children()) {
     if (child_fragment->IsPlaced())
       FragmentPositionUpdated(ToNGPhysicalBoxFragment(*child_fragment));
 
-    for (const RefPtr<NGFloatingObject>& floating_object :
+    for (const NGPositionedFloat& positioned_float :
          ToNGPhysicalBoxFragment(child_fragment.Get())->PositionedFloats()) {
       FloatingObjectPositionedUpdated(
-          floating_object.Get(),
-          ToLayoutBox(child_fragment->GetLayoutObject()));
+          positioned_float, ToLayoutBox(child_fragment->GetLayoutObject()));
     }
   }
 

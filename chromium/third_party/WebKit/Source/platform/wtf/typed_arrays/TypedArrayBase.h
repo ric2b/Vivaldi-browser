@@ -38,6 +38,9 @@ class TypedArrayBase : public ArrayBufferView {
   typedef T ValueType;
 
   T* Data() const { return static_cast<T*>(BaseAddress()); }
+  T* DataMaybeShared() const {
+    return static_cast<T*>(BaseAddressMaybeShared());
+  }
 
   bool Set(TypedArrayBase<T>* array, unsigned offset) {
     return SetImpl(array, offset * sizeof(T));
@@ -85,7 +88,7 @@ class TypedArrayBase : public ArrayBufferView {
                                      unsigned byte_offset,
                                      unsigned length) {
     RefPtr<ArrayBuffer> buf(std::move(buffer));
-    RELEASE_ASSERT(VerifySubRange<T>(buf, byte_offset, length));
+    CHECK(VerifySubRange<T>(buf, byte_offset, length));
     return AdoptRef(new Subclass(buf.Release(), byte_offset, length));
   }
 

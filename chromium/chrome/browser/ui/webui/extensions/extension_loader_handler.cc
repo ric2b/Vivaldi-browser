@@ -4,17 +4,20 @@
 
 #include "chrome/browser/ui/webui/extensions/extension_loader_handler.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/values.h"
 #include "chrome/browser/extensions/path_util.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/profiles/profile.h"
@@ -121,9 +124,7 @@ void ExtensionLoaderHandler::GetManifestError(
   // This will read the manifest and call AddFailure with the read manifest
   // contents.
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE,
-      base::TaskTraits().MayBlock().WithPriority(
-          base::TaskPriority::USER_BLOCKING),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::Bind(&ReadFileToString, extension_path.Append(kManifestFilename)),
       base::Bind(callback, extension_path, error, line));
 }
@@ -205,9 +206,9 @@ void ExtensionLoaderHandler::AddFailure(
   highlighter.SetHighlightedRegions(manifest_value.get());
 
   std::unique_ptr<base::DictionaryValue> failure(new base::DictionaryValue());
-  failure->Set("path", new base::Value(prettified_path.LossyDisplayName()));
-  failure->Set("error", new base::Value(base::UTF8ToUTF16(error)));
-  failure->Set("manifest", manifest_value.release());
+  failure->SetString("path", prettified_path.LossyDisplayName());
+  failure->SetString("error", error);
+  failure->Set("manifest", std::move(manifest_value));
   failures_.Append(std::move(failure));
 
   // Only notify the frontend if the frontend UI is ready.

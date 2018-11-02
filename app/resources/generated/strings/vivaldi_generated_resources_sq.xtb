@@ -2,7 +2,6 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sq">
 <translation id="1018656279737460067">U anulua</translation>
-<translation id="1030173864176315846">Printimi i <ph name="PAGE_NUMBER" /> faqeve me <ph name="PRINTER_NAME" /> u krye me sukses</translation>
 <translation id="1049795001945932310">&amp;Parametrat gjuhësorë</translation>
 <translation id="1056898198331236512">Vërejtje</translation>
 <translation id="1084824384139382525">Kopjoj adres&amp;ën e lidhjes</translation>
@@ -12,7 +11,6 @@
 <translation id="1175364870820465910">&amp;Printoj...</translation>
 <translation id="1181037720776840403">Heq</translation>
 <translation id="119944043368869598">Pastroj të gjitha</translation>
-<translation id="1218323606465324064">Po printohen <ph name="PAGE_NUMBER" /> faqe me <ph name="PRINTER_NAME" /></translation>
 <translation id="1244303850296295656">Gabim me shtesën</translation>
 <translation id="1317502925920562130">A është kjo faqja zyrtare që po prisnit?</translation>
 <translation id="1368832886055348810">Nga e majta në të djathtë</translation>
@@ -25,7 +23,6 @@
 <translation id="159359590073980872">Cache i imazheve</translation>
 <translation id="1603914832182249871">(E fshehur)</translation>
 <translation id="1616206807336925449">Kjo shtesë nuk kërkon leje të veçanta.</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Përshkruesit e skedarëve</translation>
 <translation id="1635033183663317347">E instaluar nga kujdestari juaj.</translation>
 <translation id="1682548588986054654">Dritare e fshehtë e re</translation>
@@ -36,7 +33,6 @@
 <translation id="1744108098763830590">faqe në sfond</translation>
 <translation id="176587472219019965">Dritare e &amp;re</translation>
 <translation id="1769104665586091481">Hap lidhjen në &amp;dritare të re</translation>
-<translation id="1789575671122666129">Faqet automatike</translation>
 <translation id="1815083418640426271">Ngjit si tekst të thjeshtë</translation>
 <translation id="1846308012215045257">Ctrl+klikim për të ekzekutuar <ph name="PLUGIN_NAME" /></translation>
 <translation id="1850508293116537636">Rrotulloj në kahun &amp;orar</translation>
@@ -50,11 +46,9 @@
 <translation id="2076269580855484719">Fsheh këtë fishën</translation>
 <translation id="2087822576218954668">Printimi: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Freskoj &amp;kuadrin</translation>
-<translation id="2115291620696624944">Problem me printimin e <ph name="PAGE_NUMBER" /> faqeve me <ph name="PRINTER_NAME" /></translation>
 <translation id="2129825002735785149">Përditësoj fishën</translation>
 <translation id="215753907730220065">Mbyll ekranin e madh</translation>
 <translation id="2177950615300672361">Skeda e fshehtë: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">Diktoj (standard)</translation>
 <translation id="219008588003277019">Moduli Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Fsheh butonin</translation>
 <translation id="2218515861914035131">Ngjit si tekst të thjeshtë</translation>
@@ -71,9 +65,7 @@
 <translation id="2424091190911472304">Ekzekutoj gjithmonë në <ph name="ORIGIN" /></translation>
 <translation id="2439110203301358333">Një program në kompjuterin tuaj instaloi një shtesë që mund të ndryshojë funksionimin e Vivaldit.</translation>
 <translation id="2445081178310039857">Nevojitet katalogu kryesor i shtesës.</translation>
-<translation id="2482878487686419369">Njoftimet</translation>
 <translation id="2501797496290880632">Shkruani kombinimin</translation>
-<translation id="2509857212037838238">Instaloni <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">Memorja virtuale</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Riaktivizoj</translation>
@@ -99,7 +91,6 @@
 <translation id="3084548735795614657">Hidheni këtu për ta instaluar</translation>
 <translation id="3122464029669770682">Procesori</translation>
 <translation id="3149510190863420837">Chrome Apps</translation>
-<translation id="3227137524299004712">Mikrofoni</translation>
 <translation id="32279126412636473">Freskoj (⌘R)</translation>
 <translation id="3241680850019875542">Përzgjidhni katalogun kryesor të shtesës që do të paketohet. Për ta përditësuar atë, zgjidhni një çelës privat që mund të përdoret përsëri.</translation>
 <translation id="3280237271814976245">Ruaj &amp;si...</translation>
@@ -113,7 +104,6 @@
 <translation id="3347086966102161372">K&amp;opjoj adresën e imazhit</translation>
 <translation id="335985608243443814">Shfletoj...</translation>
 <translation id="3378572629723696641">Kjo shtesë mund të jetë dëmtuar.</translation>
-<translation id="3427092606871434483">Lejoj (standard)</translation>
 <translation id="3435896845095436175">Aktivizoj</translation>
 <translation id="345693547134384690">Hap &amp;imazhin në skedë të re</translation>
 <translation id="3467267818798281173">Marr sugjerime nga Google</translation>
@@ -126,7 +116,6 @@
 <translation id="3727187387656390258">Inspektoj faqen automatike</translation>
 <translation id="3760460896538743390">Inspektoj faqen në &amp;sfond</translation>
 <translation id="3763401818161139108">Ekzekutoj gjithmonë në <ph name="ORIGIN" /></translation>
-<translation id="3789841737615482174">Instaloj</translation>
 <translation id="3798449238516105146">Versioni</translation>
 <translation id="3855441664322950881">Paketoj shtesën</translation>
 <translation id="3866249974567520381">Përshkrimi</translation>
@@ -136,7 +125,6 @@
 <translation id="3909791450649380159">Pre&amp;s</translation>
 <translation id="3927932062596804919">Refuzoj</translation>
 <translation id="3936390757709632190">&amp;Hap audion në skedë të re</translation>
-<translation id="3936999098172113189">Gati për printimin e <ph name="PAGE_NUMBER" /> faqeve me <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Kthej</translation>
 <translation id="3948116654032448504">&amp;Kërkoj për imazhin në <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3979395879372752341">U shtua një shtesë e re (<ph name="EXTENSION_NAME" />)</translation>
@@ -148,7 +136,6 @@
 <translation id="4090535558450035482">(Kjo shtesë po administrohet dhe nuk mund të hiqet.)</translation>
 <translation id="4100839878934973028">Një program në kompjuterin tuaj shtoi një aplikacion që mund të ndryshojë funksionimin e Vivaldit.</translation>
 <translation id="411666854932687641">Memorja private</translation>
-<translation id="4130750466177569591">Pranoj</translation>
 <translation id="4176463684765177261">Joaktiv</translation>
 <translation id="4200983522494130825">&amp;Skedë e re</translation>
 <translation id="420665587194630159">(Kjo shtesë po administrohet dhe nuk mund të hiqet a çaktivizohet.)</translation>
@@ -156,7 +143,6 @@
 <translation id="4240511609794012987">Memorja e shpërndarë</translation>
 <translation id="4256316378292851214">Ru&amp;aj videon si...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K efektivë)</translation>
-<translation id="4312866146174492540">Bllokoj (standard)</translation>
 <translation id="4348766275249686434">Nxjerr gabimet</translation>
 <translation id="4384652540891215547">Aktivizoj shtesën</translation>
 <translation id="4394049700291259645">Çaktivizoj</translation>
@@ -222,7 +208,6 @@
 <translation id="5849869942539715694">Paketoj shtesën...</translation>
 <translation id="5910363049092958439">Ru&amp;aj imazhin si...</translation>
 <translation id="59174027418879706">Aktiv</translation>
-<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 në përdorim} other {# në përdorim}}</translation>
 <translation id="5956585768868398362">A është kjo faqja e kërkimit që po prisnit?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (piku: <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="6040143037577758943">Mbyll</translation>
@@ -262,7 +247,6 @@
 <translation id="6798954102094737107">Fisha: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Ruaj ndryshimet</translation>
 <translation id="6841186874966388268">Gabimet</translation>
-<translation id="6863910145616405334">Nuk gjendet fisha</translation>
 <translation id="6886871292305414135">Hap lidhjen në &amp;skedë të re</translation>
 <translation id="6900284862687837908">Aplikacioni në sfond: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Revokoj aksesin te skedari</translation>
@@ -321,7 +305,6 @@ Shtesa: <ph name="EXTENSION_FILE" />
 Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të reja të shtesës.</translation>
 <translation id="8004582292198964060">Shfletuesi</translation>
 <translation id="8023801379949507775">Përditësoj shtesat tani</translation>
-<translation id="8037357227543935929">Pyet (standard)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
 <translation id="8137559199583651773">Administroj shtesat</translation>
 <translation id="8188120771410500975">&amp;Kontrolloj drejtshkrimin në fushat me tekst</translation>
@@ -337,7 +320,6 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8512476990829870887">Përfundoj procesin</translation>
 <translation id="8523493869875972733">Ruaj ndryshimet</translation>
 <translation id="8546306075665861288">Cache i imazheve</translation>
-<translation id="855705891482654011">Hap shtesat e shpaketuara</translation>
 <translation id="8584280235376696778">&amp;Hap videon në skedë të re</translation>
 <translation id="8605428685123651449">Memorja SQLite</translation>
 <translation id="8615618338313291042">Aplikacioni i fshehtë: <ph name="APP_NAME" /></translation>
@@ -347,7 +329,6 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8664389313780386848">&amp;Shoh burimin e faqes</translation>
 <translation id="8719653885894320876">E pamundur të shkarkohej <ph name="PLUGIN_NAME" /></translation>
 <translation id="873545264931343897">Kur të përditësohet <ph name="PLUGIN_NAME" />, freskoni faqen për ta aktivizuar</translation>
-<translation id="8763204422633679667">Kur të instalohet <ph name="PLUGIN_NAME" />, freskoni faqen për ta aktivizuar</translation>
 <translation id="8770406935328356739">Katalogu kryesor i shtesës</translation>
 <translation id="8795916974678578410">Dritare e re</translation>
 <translation id="8798099450830957504">Standard</translation>
@@ -362,7 +343,6 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="9003647077635673607">Lejoj në të gjitha faqet</translation>
 <translation id="9027459031423301635">Hap lidhjen në &amp;skedë të re</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> është bllokuar sipas rregullave të kompanisë</translation>
-<translation id="9145718805518496796">Paketoj shtesat...</translation>
 <translation id="9153341767479566106">Shtesa të tjera që nuk mund të hapeshin:</translation>
 <translation id="9170848237812810038">&amp;Kthej</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" u shtua</translation>

@@ -101,9 +101,9 @@ class TestPrerenderingSupport : public WebPrerenderingSupport {
   ~TestPrerenderingSupport() override { Shutdown(); }
 
   void Clear() {
-    added_prerenders_.Clear();
-    canceled_prerenders_.Clear();
-    abandoned_prerenders_.Clear();
+    added_prerenders_.clear();
+    canceled_prerenders_.clear();
+    abandoned_prerenders_.clear();
   }
 
   size_t TotalCount() const {
@@ -191,7 +191,7 @@ class PrerenderingTest : public ::testing::Test {
   Element& Console() {
     Document* document =
         web_view_helper_.WebView()->MainFrameImpl()->GetFrame()->GetDocument();
-    Element* console = document->GetElementById("console");
+    Element* console = document->getElementById("console");
     DCHECK(isHTMLUListElement(console));
     return *console;
   }

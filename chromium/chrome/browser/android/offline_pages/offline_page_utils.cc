@@ -29,6 +29,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "net/base/mime_util.h"
 
 namespace offline_pages {
 namespace {
@@ -126,6 +127,19 @@ void CheckDuplicateOngoingDownloads(
 
   request_coordinator->GetAllRequests(base::Bind(
       request_coordinator_continuation, browser_context, url, callback));
+}
+
+void DoCalculateSizeBetween(
+    const offline_pages::SizeInBytesCallback& callback,
+    const base::Time& begin_time,
+    const base::Time& end_time,
+    const offline_pages::MultipleOfflinePageItemResult& result) {
+  int64_t total_size = 0;
+  for (auto& page : result) {
+    if (begin_time <= page.creation_time && page.creation_time < end_time)
+      total_size += page.file_size;
+  }
+  callback.Run(total_size);
 }
 
 }  // namespace
@@ -296,6 +310,34 @@ void OfflinePageUtils::ScheduleDownload(content::WebContents* web_contents,
   if (!tab_helper)
     return;
   tab_helper->ScheduleDownloadHelper(web_contents, name_space, url, ui_action);
+}
+
+// static
+bool OfflinePageUtils::CanDownloadAsOfflinePage(
+    const GURL& url,
+    const std::string& contents_mime_type) {
+  return url.SchemeIsHTTPOrHTTPS() &&
+         (net::MatchesMimeType(contents_mime_type, "text/html") ||
+          net::MatchesMimeType(contents_mime_type, "application/xhtml+xml"));
+}
+
+// static
+bool OfflinePageUtils::GetCachedOfflinePageSizeBetween(
+    content::BrowserContext* browser_context,
+    const SizeInBytesCallback& callback,
+    const base::Time& begin_time,
+    const base::Time& end_time) {
+  OfflinePageModel* offline_page_model =
+      OfflinePageModelFactory::GetForBrowserContext(browser_context);
+  if (!offline_page_model || begin_time > end_time)
+    return false;
+  OfflinePageModelQueryBuilder builder;
+  builder.RequireRemovedOnCacheReset(
+      OfflinePageModelQuery::Requirement::INCLUDE_MATCHING);
+  offline_page_model->GetPagesMatchingQuery(
+      builder.Build(offline_page_model->GetPolicyController()),
+      base::Bind(&DoCalculateSizeBetween, callback, begin_time, end_time));
+  return true;
 }
 
 }  // namespace offline_pages

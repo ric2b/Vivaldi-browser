@@ -10,10 +10,10 @@
 #include "core/events/PointerEventFactory.h"
 #include "core/input/BoundaryEventDispatcher.h"
 #include "core/input/TouchEventManager.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/HashMap.h"
 #include "public/platform/WebInputEventResult.h"
 #include "public/platform/WebPointerProperties.h"
-#include "wtf/Allocator.h"
-#include "wtf/HashMap.h"
 
 namespace blink {
 
@@ -132,7 +132,7 @@ class CORE_EXPORT PointerEventManager
   // unblockTouchPointers(). Also sends pointercancels for existing touch-type
   // PointerEvents.  See:
   // www.w3.org/TR/pointerevents/#declaring-candidate-regions-for-default-touch-behaviors
-  void BlockTouchPointers();
+  void BlockTouchPointers(TimeTicks platform_time_stamp);
 
   // Enables firing of touch-type PointerEvents after they were inhibited by
   // blockTouchPointers().

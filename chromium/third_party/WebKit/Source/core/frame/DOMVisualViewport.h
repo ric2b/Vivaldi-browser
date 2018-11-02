@@ -31,9 +31,9 @@
 #ifndef DOMVisualViewport_h
 #define DOMVisualViewport_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/EventTarget.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 
@@ -58,13 +58,13 @@ class DOMVisualViewport final : public EventTargetWithInlineData {
   const AtomicString& InterfaceName() const override;
   ExecutionContext* GetExecutionContext() const override;
 
-  float scrollLeft();
-  float scrollTop();
-  float pageX();
-  float pageY();
-  double clientWidth();
-  double clientHeight();
-  double scale();
+  float offsetLeft() const;
+  float offsetTop() const;
+  float pageLeft() const;
+  float pageTop() const;
+  double width() const;
+  double height() const;
+  double scale() const;
 
  private:
   explicit DOMVisualViewport(LocalDOMWindow*);

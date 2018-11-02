@@ -143,6 +143,22 @@ class Configurator;
 enum class Error;
 struct CrxUpdateItem;
 
+enum class ComponentState {
+  kNew,
+  kChecking,
+  kCanUpdate,
+  kDownloadingDiff,
+  kDownloading,
+  kDownloaded,
+  kUpdatingDiff,
+  kUpdating,
+  kUpdated,
+  kUpToDate,
+  kUpdateError,
+  kUninstalled,
+  kLastStatus
+};
+
 // Called when a non-blocking call in this module completes.
 using Callback = base::Callback<void(Error error)>;
 
@@ -252,7 +268,7 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
    public:
     enum class Events {
       // Sent before the update client does an update check.
-      COMPONENT_CHECKING_FOR_UPDATES,
+      COMPONENT_CHECKING_FOR_UPDATES = 1,
 
       // Sent when there is a new version of a registered CRX. After
       // the notification is sent the CRX will be downloaded unless the
@@ -328,7 +344,8 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
   // of this class.
   virtual void SendUninstallPing(const std::string& id,
                                  const base::Version& version,
-                                 int reason) = 0;
+                                 int reason,
+                                 const Callback& callback) = 0;
 
   // Returns status details about a CRX update. The function returns true in
   // case of success and false in case of errors, such as |id| was

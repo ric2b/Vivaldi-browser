@@ -5,7 +5,7 @@
 #include "bindings/core/v8/V8DOMActivityLogger.h"
 
 #include <memory>
-#include "bindings/core/v8/V8Binding.h"
+#include "platform/bindings/V8Binding.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/text/StringHash.h"
@@ -21,14 +21,14 @@ typedef HashMap<int,
     DOMActivityLoggerMapForIsolatedWorld;
 
 static DOMActivityLoggerMapForMainWorld& DomActivityLoggersForMainWorld() {
-  ASSERT(IsMainThread());
+  DCHECK(IsMainThread());
   DEFINE_STATIC_LOCAL(DOMActivityLoggerMapForMainWorld, map, ());
   return map;
 }
 
 static DOMActivityLoggerMapForIsolatedWorld&
 DomActivityLoggersForIsolatedWorld() {
-  ASSERT(IsMainThread());
+  DCHECK(IsMainThread());
   DEFINE_STATIC_LOCAL(DOMActivityLoggerMapForIsolatedWorld, map, ());
   return map;
 }
@@ -49,7 +49,7 @@ V8DOMActivityLogger* V8DOMActivityLogger::ActivityLogger(
   if (world_id) {
     DOMActivityLoggerMapForIsolatedWorld& loggers =
         DomActivityLoggersForIsolatedWorld();
-    DOMActivityLoggerMapForIsolatedWorld::iterator it = loggers.Find(world_id);
+    DOMActivityLoggerMapForIsolatedWorld::iterator it = loggers.find(world_id);
     return it == loggers.end() ? 0 : it->value.get();
   }
 
@@ -57,7 +57,7 @@ V8DOMActivityLogger* V8DOMActivityLogger::ActivityLogger(
     return 0;
 
   DOMActivityLoggerMapForMainWorld& loggers = DomActivityLoggersForMainWorld();
-  DOMActivityLoggerMapForMainWorld::iterator it = loggers.Find(extension_id);
+  DOMActivityLoggerMapForMainWorld::iterator it = loggers.find(extension_id);
   return it == loggers.end() ? 0 : it->value.get();
 }
 
@@ -83,8 +83,6 @@ V8DOMActivityLogger* V8DOMActivityLogger::CurrentActivityLogger() {
 
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context = isolate->GetCurrentContext();
-  if (context.IsEmpty() || !ToLocalDOMWindow(context))
-    return 0;
 
   V8PerContextData* context_data = ScriptState::From(context)->PerContextData();
   if (!context_data)
@@ -101,8 +99,6 @@ V8DOMActivityLogger::CurrentActivityLoggerIfIsolatedWorld() {
 
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context = isolate->GetCurrentContext();
-  if (context.IsEmpty() || !ToLocalDOMWindow(context))
-    return 0;
 
   ScriptState* script_state = ScriptState::From(context);
   if (!script_state->World().IsIsolatedWorld())

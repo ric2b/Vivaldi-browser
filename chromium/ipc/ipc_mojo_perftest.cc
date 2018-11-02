@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/process/process_metrics.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -471,7 +472,7 @@ MULTIPROCESS_TEST_MAIN(MojoPerfTestClientTestChildMain) {
 class ReflectorImpl : public IPC::mojom::Reflector {
  public:
   explicit ReflectorImpl(mojo::ScopedMessagePipeHandle handle)
-      : binding_(this, std::move(handle)) {}
+      : binding_(this, IPC::mojom::ReflectorRequest(std::move(handle))) {}
   ~ReflectorImpl() override {
     ignore_result(binding_.Unbind().PassMessagePipe().release());
   }

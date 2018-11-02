@@ -33,7 +33,6 @@ using blink::WebDragData;
 using blink::WebDragOperationsMask;
 using blink::WebFrameWidget;
 using blink::WebImage;
-using blink::WebInputEvent;
 using blink::WebLocalFrame;
 using blink::WebMouseEvent;
 using blink::WebPlugin;
@@ -148,6 +147,12 @@ void WebViewPlugin::UpdateAllLifecyclePhases() {
   web_view()->UpdateAllLifecyclePhases();
 }
 
+bool WebViewPlugin::IsErrorPlaceholder() {
+  if (!delegate_)
+    return false;
+  return delegate_->IsErrorPlaceholder();
+}
+
 void WebViewPlugin::Paint(WebCanvas* canvas, const WebRect& rect) {
   gfx::Rect paint_rect = gfx::IntersectRects(rect_, rect);
   if (paint_rect.IsEmpty())
@@ -176,7 +181,6 @@ void WebViewPlugin::Paint(WebCanvas* canvas, const WebRect& rect) {
 void WebViewPlugin::UpdateGeometry(const WebRect& window_rect,
                                    const WebRect& clip_rect,
                                    const WebRect& unobscured_rect,
-                                   const WebVector<WebRect>& cut_outs_rects,
                                    bool is_visible) {
   DCHECK(container_);
 
@@ -200,19 +204,20 @@ void WebViewPlugin::UpdateFocus(bool focused, blink::WebFocusType focus_type) {
 }
 
 blink::WebInputEventResult WebViewPlugin::HandleInputEvent(
-    const WebInputEvent& event,
+    const blink::WebCoalescedInputEvent& coalesced_event,
     WebCursorInfo& cursor) {
+  const blink::WebInputEvent& event = coalesced_event.Event();
   // For tap events, don't handle them. They will be converted to
   // mouse events later and passed to here.
-  if (event.GetType() == WebInputEvent::kGestureTap)
+  if (event.GetType() == blink::WebInputEvent::kGestureTap)
     return blink::WebInputEventResult::kNotHandled;
 
   // For LongPress events we return false, since otherwise the context menu will
   // be suppressed. https://crbug.com/482842
-  if (event.GetType() == WebInputEvent::kGestureLongPress)
+  if (event.GetType() == blink::WebInputEvent::kGestureLongPress)
     return blink::WebInputEventResult::kNotHandled;
 
-  if (event.GetType() == WebInputEvent::kContextMenu) {
+  if (event.GetType() == blink::WebInputEvent::kContextMenu) {
     if (delegate_) {
       const WebMouseEvent& mouse_event =
           reinterpret_cast<const WebMouseEvent&>(event);
@@ -328,14 +333,20 @@ void WebViewPlugin::WebViewHelper::ScheduleAnimation() {
   }
 }
 
-void WebViewPlugin::WebViewHelper::DidClearWindowObject(WebLocalFrame* frame) {
-  DCHECK_EQ(frame, web_view_->MainFrame());
+std::unique_ptr<blink::WebURLLoader>
+WebViewPlugin::WebViewHelper::CreateURLLoader() {
+  // TODO(yhirano): Stop using Platform::CreateURLLoader() here.
+  return blink::Platform::Current()->CreateURLLoader();
+}
+
+void WebViewPlugin::WebViewHelper::DidClearWindowObject() {
   if (!plugin_->delegate_)
     return;
 
   v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
-  v8::Local<v8::Context> context = frame->MainWorldScriptContext();
+  v8::Local<v8::Context> context =
+      web_view_->MainFrame()->MainWorldScriptContext();
   DCHECK(!context.IsEmpty());
 
   v8::Context::Scope context_scope(context);
@@ -343,6 +354,14 @@ void WebViewPlugin::WebViewHelper::DidClearWindowObject(WebLocalFrame* frame) {
 
   global->Set(gin::StringToV8(isolate, "plugin"),
               plugin_->delegate_->GetV8Handle(isolate));
+}
+
+void WebViewPlugin::WebViewHelper::FrameDetached(blink::WebLocalFrame* frame,
+                                                 DetachType type) {
+  if (frame->FrameWidget())
+    frame->FrameWidget()->Close();
+
+  frame->Close();
 }
 
 void WebViewPlugin::OnZoomLevelChanged() {

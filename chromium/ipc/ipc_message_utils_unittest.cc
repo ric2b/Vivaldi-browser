@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/shared_memory.h"
 #include "base/unguessable_token.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_message.h"
@@ -98,13 +99,13 @@ TEST(IPCMessageUtilsTest, StackVector) {
 // Tests that PickleSizer and Pickle agree on the size of a complex base::Value.
 TEST(IPCMessageUtilsTest, ValueSize) {
   std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue);
-  value->SetWithoutPathExpansion("foo", new base::Value(42));
-  value->SetWithoutPathExpansion("bar", new base::Value(3.14));
-  value->SetWithoutPathExpansion("baz", new base::Value("hello"));
+  value->SetIntegerWithoutPathExpansion("foo", 42);
+  value->SetDoubleWithoutPathExpansion("bar", 3.14);
+  value->SetStringWithoutPathExpansion("baz", "hello");
   value->SetWithoutPathExpansion("qux", base::MakeUnique<base::Value>());
 
   std::unique_ptr<base::DictionaryValue> nested_dict(new base::DictionaryValue);
-  nested_dict->SetWithoutPathExpansion("foobar", new base::Value(5));
+  nested_dict->SetIntegerWithoutPathExpansion("foobar", 5);
   value->SetWithoutPathExpansion("nested", std::move(nested_dict));
 
   std::unique_ptr<base::ListValue> list_value(new base::ListValue);
@@ -195,6 +196,25 @@ TEST(IPCMessageUtilsTest, OptionalSet) {
   EXPECT_EQ(opt.value(), unserialized_opt.value());
 }
 
+TEST(IPCMessageUtilsTest, SharedMemoryHandle) {
+  base::SharedMemoryCreateOptions options;
+  options.size = 1004;
+  base::SharedMemory shmem;
+  ASSERT_TRUE(shmem.Create(options));
+
+  base::SharedMemoryHandle pre_pickle = shmem.handle().Duplicate();
+  ASSERT_TRUE(pre_pickle.IsValid());
+
+  IPC::Message message;
+  IPC::WriteParam(&message, pre_pickle);
+
+  base::SharedMemoryHandle post_pickle;
+  base::PickleIterator iter(message);
+  EXPECT_TRUE(IPC::ReadParam(&message, &iter, &post_pickle));
+  EXPECT_EQ(pre_pickle.GetGUID(), post_pickle.GetGUID());
+  EXPECT_EQ(pre_pickle.GetSize(), post_pickle.GetSize());
+}
+
 TEST(IPCMessageUtilsTest, UnguessableTokenTest) {
   base::UnguessableToken token = base::UnguessableToken::Create();
   base::Pickle pickle;
@@ -213,6 +233,26 @@ TEST(IPCMessageUtilsTest, UnguessableTokenTest) {
   base::PickleIterator iter(pickle);
   EXPECT_TRUE(IPC::ReadParam(&pickle, &iter, &deserialized_token));
   EXPECT_EQ(token, deserialized_token);
+}
+
+TEST(IPCMessageUtilsTest, FlatMap) {
+  base::flat_map<std::string, int> input;
+  input["foo"] = 42;
+  input["bar"] = 96;
+
+  base::Pickle pickle;
+  IPC::WriteParam(&pickle, input);
+
+  base::PickleSizer sizer;
+  IPC::GetParamSize(&sizer, input);
+
+  EXPECT_EQ(sizer.payload_size(), pickle.payload_size());
+
+  base::PickleIterator iter(pickle);
+  base::flat_map<std::string, int> output;
+  EXPECT_TRUE(IPC::ReadParam(&pickle, &iter, &output));
+
+  EXPECT_EQ(input, output);
 }
 
 }  // namespace

@@ -29,8 +29,12 @@ class SharedPersistentMemoryAllocator;
 class TimeDelta;
 }
 
-namespace media {
-class AudioOutputController;
+namespace service_manager {
+class Identity;
+}
+
+namespace viz {
+class HostSharedBitmapManagerClient;
 }
 
 namespace content {
@@ -283,6 +287,8 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void BindInterface(const std::string& interface_name,
                              mojo::ScopedMessagePipeHandle interface_pipe) = 0;
 
+  virtual const service_manager::Identity& GetChildIdentity() const = 0;
+
   // Extracts any persistent-memory-allocator used for renderer metrics.
   // Ownership is passed to the caller. To support sharing of histogram data
   // between the Renderer and the Browser, the allocator is created when the
@@ -297,16 +303,6 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // value.
   // Note: Do not use! Will disappear after PlzNavitate is completed.
   virtual const base::TimeTicks& GetInitTimeForNavigationMetrics() const = 0;
-
-  // Retrieves the list of AudioOutputController objects associated
-  // with this object and passes it to the callback you specify, on
-  // the same thread on which you called the method.
-  typedef std::list<scoped_refptr<media::AudioOutputController>>
-      AudioOutputControllerList;
-  typedef base::Callback<void(const AudioOutputControllerList&)>
-      GetAudioOutputControllersCallback;
-  virtual void GetAudioOutputControllers(
-      const GetAudioOutputControllersCallback& callback) const = 0;
 
   // Returns true if this process currently has backgrounded priority.
   virtual bool IsProcessBackgrounded() const = 0;
@@ -363,6 +359,19 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // Returns the current number of active views in this process.  Excludes
   // any RenderViewHosts that are swapped out.
   size_t GetActiveViewCount();
+
+  // Posts |task|, if this RenderProcessHost is ready or when it becomes ready
+  // (see RenderProcessHost::IsReady method).  The |task| might not run at all
+  // (e.g. if |render_process_host| is destroyed before becoming ready).  This
+  // function can only be called on the browser's UI thread (and the |task| will
+  // be posted back on the UI thread).
+  void PostTaskWhenProcessIsReady(base::OnceClosure task);
+
+  // Returns the SharedBitmapAllocationNotifier associated with this process.
+  // SharedBitmapAllocationNotifier manages viz::SharedBitmaps created by this
+  // process and can notify observers when a new SharedBitmap is allocated.
+  virtual viz::HostSharedBitmapManagerClient*
+  GetSharedBitmapAllocationNotifier() = 0;
 
   // Static management functions -----------------------------------------------
 

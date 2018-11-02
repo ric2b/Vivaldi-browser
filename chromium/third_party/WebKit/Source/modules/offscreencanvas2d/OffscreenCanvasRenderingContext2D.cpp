@@ -12,8 +12,6 @@
 #include "core/workers/WorkerSettings.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/StaticBitmapImage.h"
-#include "platform/graphics/UnacceleratedImageBufferSurface.h"
-#include "platform/graphics/gpu/AcceleratedImageBufferSurface.h"
 #include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/CurrentTime.h"
@@ -26,7 +24,7 @@ OffscreenCanvasRenderingContext2D::OffscreenCanvasRenderingContext2D(
     ScriptState* script_state,
     OffscreenCanvas* canvas,
     const CanvasContextCreationAttributes& attrs)
-    : CanvasRenderingContext(nullptr, canvas, attrs) {
+    : CanvasRenderingContext(canvas, attrs) {
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   if (execution_context->IsDocument()) {
     if (ToDocument(execution_context)
@@ -52,30 +50,19 @@ ScriptPromise OffscreenCanvasRenderingContext2D::commit(
     ExceptionState& exception_state) {
   UseCounter::Feature feature = UseCounter::kOffscreenCanvasCommit2D;
   UseCounter::Count(ExecutionContext::From(script_state), feature);
-  if (!offscreenCanvas()->HasPlaceholderCanvas()) {
-    // If an OffscreenCanvas has no associated canvas Id, it indicates that
-    // it is not an OffscreenCanvas created by transfering control from html
-    // canvas.
-    exception_state.ThrowDOMException(
-        kInvalidStateError,
-        "Commit() was called on a context whose "
-        "OffscreenCanvas is not associated with a "
-        "canvas element.");
-    return exception_state.Reject(script_state);
-  }
-
   bool is_web_gl_software_rendering = false;
-  return offscreenCanvas()->Commit(TransferToStaticBitmapImage(),
-                                   is_web_gl_software_rendering, script_state);
+  return host()->Commit(TransferToStaticBitmapImage(),
+                        is_web_gl_software_rendering, script_state,
+                        exception_state);
 }
 
 // BaseRenderingContext2D implementation
 bool OffscreenCanvasRenderingContext2D::OriginClean() const {
-  return offscreenCanvas()->OriginClean();
+  return host()->OriginClean();
 }
 
 void OffscreenCanvasRenderingContext2D::SetOriginTainted() {
-  return offscreenCanvas()->SetOriginTainted();
+  return host()->SetOriginTainted();
 }
 
 bool OffscreenCanvasRenderingContext2D::WouldTaintOrigin(
@@ -93,19 +80,19 @@ bool OffscreenCanvasRenderingContext2D::WouldTaintOrigin(
 }
 
 int OffscreenCanvasRenderingContext2D::Width() const {
-  return offscreenCanvas()->width();
+  return host()->Size().Width();
 }
 
 int OffscreenCanvasRenderingContext2D::Height() const {
-  return offscreenCanvas()->height();
+  return host()->Size().Height();
 }
 
 bool OffscreenCanvasRenderingContext2D::HasImageBuffer() const {
-  return !!image_buffer_;
+  return host()->GetImageBuffer();
 }
 
 void OffscreenCanvasRenderingContext2D::Reset() {
-  image_buffer_ = nullptr;
+  host()->DiscardImageBuffer();
   BaseRenderingContext2D::Reset();
 }
 
@@ -115,38 +102,15 @@ ColorBehavior OffscreenCanvasRenderingContext2D::DrawImageColorBehavior()
 }
 
 ImageBuffer* OffscreenCanvasRenderingContext2D::GetImageBuffer() const {
-  if (!image_buffer_) {
-    IntSize surface_size(Width(), Height());
-    OpacityMode opacity_mode = HasAlpha() ? kNonOpaque : kOpaque;
-    std::unique_ptr<ImageBufferSurface> surface;
-    if (RuntimeEnabledFeatures::accelerated2dCanvasEnabled()) {
-      surface.reset(
-          new AcceleratedImageBufferSurface(surface_size, opacity_mode));
-    }
-
-    if (!surface || !surface->IsValid()) {
-      surface.reset(new UnacceleratedImageBufferSurface(
-          surface_size, opacity_mode, kInitializeImagePixels));
-    }
-
-    OffscreenCanvasRenderingContext2D* non_const_this =
-        const_cast<OffscreenCanvasRenderingContext2D*>(this);
-    non_const_this->image_buffer_ = ImageBuffer::Create(std::move(surface));
-
-    if (needs_matrix_clip_restore_) {
-      RestoreMatrixClipStack(image_buffer_->Canvas());
-      non_const_this->needs_matrix_clip_restore_ = false;
-    }
-  }
-
-  return image_buffer_.get();
+  return const_cast<CanvasRenderingContextHost*>(host())
+      ->GetOrCreateImageBuffer();
 }
 
 RefPtr<StaticBitmapImage>
 OffscreenCanvasRenderingContext2D::TransferToStaticBitmapImage() {
   if (!GetImageBuffer())
     return nullptr;
-  sk_sp<SkImage> sk_image = image_buffer_->NewSkImageSnapshot(
+  sk_sp<SkImage> sk_image = GetImageBuffer()->NewSkImageSnapshot(
       kPreferAcceleration, kSnapshotReasonTransferToImageBitmap);
   RefPtr<StaticBitmapImage> image =
       StaticBitmapImage::Create(std::move(sk_image));
@@ -162,8 +126,7 @@ ImageBitmap* OffscreenCanvasRenderingContext2D::TransferToImageBitmap(
   RefPtr<StaticBitmapImage> image = TransferToStaticBitmapImage();
   if (!image)
     return nullptr;
-  image_buffer_.reset();  // "Transfer" means no retained buffer
-  needs_matrix_clip_restore_ = true;
+  host()->DiscardImageBuffer();  // "Transfer" means no retained buffer
   return ImageBitmap::Create(std::move(image));
 }
 
@@ -172,7 +135,7 @@ PassRefPtr<Image> OffscreenCanvasRenderingContext2D::GetImage(
     SnapshotReason reason) const {
   if (!GetImageBuffer())
     return nullptr;
-  sk_sp<SkImage> sk_image = image_buffer_->NewSkImageSnapshot(hint, reason);
+  sk_sp<SkImage> sk_image = GetImageBuffer()->NewSkImageSnapshot(hint, reason);
   RefPtr<StaticBitmapImage> image =
       StaticBitmapImage::Create(std::move(sk_image));
   return image;
@@ -183,10 +146,10 @@ ImageData* OffscreenCanvasRenderingContext2D::ToImageData(
   if (!GetImageBuffer())
     return nullptr;
   sk_sp<SkImage> snapshot =
-      image_buffer_->NewSkImageSnapshot(kPreferNoAcceleration, reason);
+      GetImageBuffer()->NewSkImageSnapshot(kPreferNoAcceleration, reason);
   ImageData* image_data = nullptr;
   if (snapshot) {
-    image_data = ImageData::Create(offscreenCanvas()->Size());
+    image_data = ImageData::Create(host()->Size());
     SkImageInfo image_info =
         SkImageInfo::Make(this->Width(), this->Height(), kRGBA_8888_SkColorType,
                           kUnpremul_SkAlphaType);
@@ -215,28 +178,28 @@ PaintCanvas* OffscreenCanvasRenderingContext2D::DrawingCanvas() const {
 }
 
 PaintCanvas* OffscreenCanvasRenderingContext2D::ExistingDrawingCanvas() const {
-  if (!image_buffer_)
+  if (!HasImageBuffer())
     return nullptr;
-  return image_buffer_->Canvas();
+  return GetImageBuffer()->Canvas();
 }
 
 void OffscreenCanvasRenderingContext2D::DisableDeferral(DisableDeferralReason) {
 }
 
 AffineTransform OffscreenCanvasRenderingContext2D::BaseTransform() const {
-  if (!image_buffer_)
+  if (!HasImageBuffer())
     return AffineTransform();  // identity
-  return image_buffer_->BaseTransform();
+  return GetImageBuffer()->BaseTransform();
 }
 
 void OffscreenCanvasRenderingContext2D::DidDraw(const SkIRect& dirty_rect) {}
 
 bool OffscreenCanvasRenderingContext2D::StateHasFilter() {
-  return GetState().HasFilterForOffscreenCanvas(offscreenCanvas()->Size());
+  return GetState().HasFilterForOffscreenCanvas(host()->Size());
 }
 
 sk_sp<SkImageFilter> OffscreenCanvasRenderingContext2D::StateGetFilter() {
-  return GetState().GetFilterForOffscreenCanvas(offscreenCanvas()->Size());
+  return GetState().GetFilterForOffscreenCanvas(host()->Size());
 }
 
 void OffscreenCanvasRenderingContext2D::ValidateStateStack() const {
@@ -253,10 +216,22 @@ bool OffscreenCanvasRenderingContext2D::isContextLost() const {
 }
 
 bool OffscreenCanvasRenderingContext2D::IsPaintable() const {
-  return this->GetImageBuffer();
+  return GetImageBuffer();
+}
+
+CanvasColorSpace OffscreenCanvasRenderingContext2D::ColorSpace() const {
+  return color_params().color_space();
+}
+
+String OffscreenCanvasRenderingContext2D::ColorSpaceAsString() const {
+  return CanvasRenderingContext::ColorSpaceAsString();
+}
+
+CanvasPixelFormat OffscreenCanvasRenderingContext2D::PixelFormat() const {
+  return color_params().pixel_format();
 }
 
 bool OffscreenCanvasRenderingContext2D::IsAccelerated() const {
-  return image_buffer_ && image_buffer_->IsAccelerated();
+  return HasImageBuffer() && GetImageBuffer()->IsAccelerated();
 }
 }

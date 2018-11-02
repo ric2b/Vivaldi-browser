@@ -61,7 +61,7 @@ class FakeWebTaskRunner::BaseTaskRunner : public base::SingleThreadTaskRunner {
     return true;
   }
 
-  bool RunsTasksOnCurrentThread() const { return true; }
+  bool RunsTasksInCurrentSequence() const { return true; }
 
  private:
   RefPtr<Data> data_;
@@ -82,14 +82,7 @@ void FakeWebTaskRunner::SetTime(double new_time) {
   data_->time_ = new_time;
 }
 
-void FakeWebTaskRunner::PostDelayedTask(const WebTraceLocation&,
-                                        base::OnceClosure closure,
-                                        double delay_ms) {
-  data_->PostTask(std::move(closure),
-                  base::TimeDelta::FromMillisecondsD(delay_ms));
-}
-
-bool FakeWebTaskRunner::RunsTasksOnCurrentThread() {
+bool FakeWebTaskRunner::RunsTasksInCurrentSequence() {
   return true;
 }
 

@@ -889,7 +889,7 @@ void Range::insertNode(Node* new_node, ExceptionState& exception_state) {
       !new_node->IsShadowRoot()) {
     // check each child node, not the DocumentFragment itself
     num_new_children = 0;
-    for (Node* c = ToDocumentFragment(new_node)->FirstChild(); c;
+    for (Node* c = ToDocumentFragment(new_node)->firstChild(); c;
          c = c->nextSibling()) {
       if (!check_against->ChildTypeAllowed(c->getNodeType())) {
         exception_state.ThrowDOMException(
@@ -972,13 +972,13 @@ void Range::insertNode(Node* new_node, ExceptionState& exception_state) {
     }
   } else {
     Node* last_child = (new_node_type == Node::kDocumentFragmentNode)
-                           ? ToDocumentFragment(new_node)->LastChild()
+                           ? ToDocumentFragment(new_node)->lastChild()
                            : new_node;
     if (last_child && last_child == start_.ChildBefore()) {
       // The insertion will do nothing, but we need to extend the range to
       // include the inserted nodes.
       Node* first_child = (new_node_type == Node::kDocumentFragmentNode)
-                              ? ToDocumentFragment(new_node)->FirstChild()
+                              ? ToDocumentFragment(new_node)->firstChild()
                               : new_node;
       DCHECK(first_child);
       start_.SetToBeforeChild(*first_child);
@@ -1441,57 +1441,7 @@ Node* Range::PastLastNode() const {
 }
 
 IntRect Range::BoundingBox() const {
-  IntRect result;
-  Vector<IntRect> rects;
-  TextRects(rects);
-  for (const IntRect& rect : rects)
-    result.Unite(rect);
-  return result;
-}
-
-void Range::TextRects(Vector<IntRect>& rects, bool use_selection_height) const {
-  Node* start_container = &start_.Container();
-  DCHECK(start_container);
-  Node* end_container = &end_.Container();
-  DCHECK(end_container);
-
-  Node* stop_node = PastLastNode();
-  for (Node* node = FirstNode(); node != stop_node;
-       node = NodeTraversal::Next(*node)) {
-    LayoutObject* r = node->GetLayoutObject();
-    if (!r || !r->IsText())
-      continue;
-    LayoutText* layout_text = ToLayoutText(r);
-    unsigned start_offset = node == start_container ? start_.Offset() : 0;
-    unsigned end_offset = node == end_container
-                              ? end_.Offset()
-                              : std::numeric_limits<unsigned>::max();
-    layout_text->AbsoluteRectsForRange(rects, start_offset, end_offset,
-                                       use_selection_height);
-  }
-}
-
-void Range::TextQuads(Vector<FloatQuad>& quads,
-                      bool use_selection_height) const {
-  Node* start_container = &start_.Container();
-  DCHECK(start_container);
-  Node* end_container = &end_.Container();
-  DCHECK(end_container);
-
-  Node* stop_node = PastLastNode();
-  for (Node* node = FirstNode(); node != stop_node;
-       node = NodeTraversal::Next(*node)) {
-    LayoutObject* r = node->GetLayoutObject();
-    if (!r || !r->IsText())
-      continue;
-    LayoutText* layout_text = ToLayoutText(r);
-    unsigned start_offset = node == start_container ? start_.Offset() : 0;
-    unsigned end_offset = node == end_container
-                              ? end_.Offset()
-                              : std::numeric_limits<unsigned>::max();
-    layout_text->AbsoluteQuadsForRange(quads, start_offset, end_offset,
-                                       use_selection_height);
-  }
+  return ComputeTextRect(EphemeralRange(this));
 }
 
 bool AreRangesEqual(const Range* a, const Range* b) {
@@ -1506,7 +1456,7 @@ bool AreRangesEqual(const Range* a, const Range* b) {
 static inline void BoundaryNodeChildrenWillBeRemoved(
     RangeBoundaryPoint& boundary,
     ContainerNode& container) {
-  for (Node* node_to_be_removed = container.FirstChild(); node_to_be_removed;
+  for (Node* node_to_be_removed = container.firstChild(); node_to_be_removed;
        node_to_be_removed = node_to_be_removed->nextSibling()) {
     if (boundary.ChildBefore() == node_to_be_removed) {
       boundary.SetToStartOfNode(container);
@@ -1556,10 +1506,10 @@ void Range::NodeWillBeRemoved(Node& node) {
 }
 
 static inline void BoundaryTextInserted(RangeBoundaryPoint& boundary,
-                                        Node* text,
+                                        const CharacterData& text,
                                         unsigned offset,
                                         unsigned length) {
-  if (boundary.Container() != text)
+  if (boundary.Container() != &text)
     return;
   boundary.MarkValid();
   unsigned boundary_offset = boundary.Offset();
@@ -1568,18 +1518,19 @@ static inline void BoundaryTextInserted(RangeBoundaryPoint& boundary,
   boundary.SetOffset(boundary_offset + length);
 }
 
-void Range::DidInsertText(Node* text, unsigned offset, unsigned length) {
-  DCHECK(text);
-  DCHECK_EQ(text->GetDocument(), owner_document_);
+void Range::DidInsertText(const CharacterData& text,
+                          unsigned offset,
+                          unsigned length) {
+  DCHECK_EQ(text.GetDocument(), owner_document_);
   BoundaryTextInserted(start_, text, offset, length);
   BoundaryTextInserted(end_, text, offset, length);
 }
 
 static inline void BoundaryTextRemoved(RangeBoundaryPoint& boundary,
-                                       Node* text,
+                                       const CharacterData& text,
                                        unsigned offset,
                                        unsigned length) {
-  if (boundary.Container() != text)
+  if (boundary.Container() != &text)
     return;
   boundary.MarkValid();
   unsigned boundary_offset = boundary.Offset();
@@ -1591,9 +1542,10 @@ static inline void BoundaryTextRemoved(RangeBoundaryPoint& boundary,
     boundary.SetOffset(boundary_offset - length);
 }
 
-void Range::DidRemoveText(Node* text, unsigned offset, unsigned length) {
-  DCHECK(text);
-  DCHECK_EQ(text->GetDocument(), owner_document_);
+void Range::DidRemoveText(const CharacterData& text,
+                          unsigned offset,
+                          unsigned length) {
+  DCHECK_EQ(text.GetDocument(), owner_document_);
   BoundaryTextRemoved(start_, text, offset, length);
   BoundaryTextRemoved(end_, text, offset, length);
 }
@@ -1815,7 +1767,7 @@ void showTree(const blink::Range* range) {
                      ->ToMarkedTreeString(range->startContainer(), "S",
                                           range->endContainer(), "E")
                      .Utf8()
-                     .Data()
+                     .data()
               << "start offset: " << range->startOffset()
               << ", end offset: " << range->endOffset();
   } else {

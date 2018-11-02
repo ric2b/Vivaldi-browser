@@ -23,8 +23,10 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/Document.h"
+#include "core/frame/DOMWindow.h"
 #include "core/frame/FrameOwner.h"
 #include "core/html/HTMLElement.h"
+#include "platform/feature_policy/FeaturePolicy.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/weborigin/SecurityPolicy.h"
@@ -34,7 +36,7 @@ namespace blink {
 
 class ExceptionState;
 class Frame;
-class FrameViewBase;
+class FrameOrPlugin;
 class LayoutPart;
 
 class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
@@ -54,14 +56,18 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   // return any LayoutObject when using fallback content.
   LayoutPart* GetLayoutPart() const;
 
+  // Whether to collapse the frame owner element in the embedder document. That
+  // is, to remove it from the layout as if it did not exist.
+  virtual void SetCollapsed(bool) {}
+
   Document* getSVGDocument(ExceptionState&) const;
 
   virtual bool LoadedNonEmptyDocument() const { return false; }
   virtual void DidLoadNonEmptyDocument() {}
 
-  void SetWidget(FrameViewBase*);
-  FrameViewBase* ReleaseWidget();
-  FrameViewBase* OwnedWidget() const;
+  void SetWidget(FrameOrPlugin*);
+  FrameOrPlugin* ReleaseWidget();
+  FrameOrPlugin* OwnedWidget() const { return widget_; }
 
   class UpdateSuspendScope {
     STACK_ALLOCATED();
@@ -93,6 +99,10 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   bool IsDisplayNone() const override { return !widget_; }
   AtomicString Csp() const override { return g_null_atom; }
   const WebVector<WebFeaturePolicyFeature>& AllowedFeatures() const override;
+  const WebParsedFeaturePolicy& ContainerPolicy() const override;
+
+  // For unit tests, manually trigger the UpdateContainerPolicy method.
+  void UpdateContainerPolicyForTests() { UpdateContainerPolicy(); }
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -105,8 +115,21 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
                               bool replace_current_item);
   bool IsKeyboardFocusable() const override;
 
-  void DisposeWidgetSoon(FrameViewBase*);
+  void DisposeFrameOrPluginSoon(FrameOrPlugin*);
   void FrameOwnerPropertiesChanged();
+
+  // Return the origin which is to be used for feature policy container
+  // policies, as "the origin of the URL in the frame's src attribute" (see
+  // https://wicg.github.io/feature-policy/#iframe-allow-attribute).
+  // This method is intended to be overridden by specific frame classes.
+  virtual RefPtr<SecurityOrigin> GetOriginForFeaturePolicy() const {
+    return SecurityOrigin::CreateUnique();
+  }
+
+  // Construct a new feature policy container policy for this frame, based on
+  // the frame attributes and the effective origin specified in the frame
+  // attributes.
+  void UpdateContainerPolicy();
 
  private:
   // Intentionally private to prevent redundant checks when the type is
@@ -121,8 +144,10 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   }
 
   Member<Frame> content_frame_;
-  Member<FrameViewBase> widget_;
+  Member<FrameOrPlugin> widget_;
   SandboxFlags sandbox_flags_;
+
+  WebParsedFeaturePolicy container_policy_;
 };
 
 DEFINE_ELEMENT_TYPE_CASTS(HTMLFrameOwnerElement, IsFrameOwnerElement());

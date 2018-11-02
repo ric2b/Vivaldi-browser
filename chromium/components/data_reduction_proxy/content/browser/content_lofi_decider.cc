@@ -180,22 +180,6 @@ void ContentLoFiDecider::RemoveAcceptTransformHeader(
   headers->RemoveHeader(chrome_proxy_accept_transform_header());
 }
 
-void ContentLoFiDecider::MaybeSetIgnorePreviewsBlacklistDirective(
-    net::HttpRequestHeaders* headers) const {
-  if (!headers || !params::AreLitePagesEnabledViaFlags() ||
-      !IsLitePagePreviewRequested(*headers)) {
-    return;
-  }
-  std::string chrome_proxy_header_value;
-  headers->GetHeader(chrome_proxy_header(), &chrome_proxy_header_value);
-  headers->RemoveHeader(chrome_proxy_header());
-  if (!chrome_proxy_header_value.empty())
-    chrome_proxy_header_value += ", ";
-  chrome_proxy_header_value +=
-      chrome_proxy_lite_page_ignore_blacklist_directive();
-  headers->SetHeader(chrome_proxy_header(), chrome_proxy_header_value);
-}
-
 bool ContentLoFiDecider::ShouldRecordLoFiUMA(
     const net::URLRequest& request) const {
   const content::ResourceRequestInfo* request_info =
@@ -212,4 +196,20 @@ bool ContentLoFiDecider::ShouldRecordLoFiUMA(
          params::IsIncludedInLoFiControlFieldTrial();
 }
 
+bool ContentLoFiDecider::IsClientLoFiImageRequest(
+    const net::URLRequest& request) const {
+  const content::ResourceRequestInfo* request_info =
+      content::ResourceRequestInfo::ForRequest(&request);
+  return request_info &&
+         request_info->GetResourceType() == content::RESOURCE_TYPE_IMAGE &&
+         (request_info->GetPreviewsState() & content::CLIENT_LOFI_ON);
+}
+
+bool ContentLoFiDecider::IsClientLoFiAutoReloadRequest(
+    const net::URLRequest& request) const {
+  const content::ResourceRequestInfo* request_info =
+      content::ResourceRequestInfo::ForRequest(&request);
+  return request_info &&
+         (request_info->GetPreviewsState() & content::CLIENT_LOFI_AUTO_RELOAD);
+}
 }  // namespace data_reduction_proxy

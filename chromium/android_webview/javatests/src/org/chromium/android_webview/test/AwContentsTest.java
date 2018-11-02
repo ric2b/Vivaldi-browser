@@ -590,15 +590,12 @@ public class AwContentsTest extends AwTestBase {
         }
 
         @Override
-        public void setInForeground(int pid, boolean inForeground) {
+        public void setPriority(int pid, boolean foreground, boolean boostForPendingView) {
             synchronized (mForegroundStateLock) {
-                mForegroundState.add(inForeground);
+                mForegroundState.add(foreground);
                 mForegroundStateLock.notifyAll();
             }
         }
-
-        @Override
-        public void determinedVisibility(int pid) {}
 
         @Override
         public void onSentToBackground() {}
@@ -607,12 +604,7 @@ public class AwContentsTest extends AwTestBase {
         public void onBroughtToForeground() {}
 
         @Override
-        public boolean isOomProtected(int pid) {
-            return false;
-        }
-
-        @Override
-        public void clearConnection(int pid) {}
+        public void removeConnection(int pid) {}
 
         @Override
         public void startModerateBindingManagement(Context context, int maxSize) {}
@@ -750,5 +742,32 @@ public class AwContentsTest extends AwTestBase {
         awContents.destroy();
         awContents = createAwTestContainerView(mContentsClient).getAwContents();
         awContents.resumeTimers();
+    }
+
+    /** Regression test for https://crbug.com/732976. Load a data URL, then immediately
+     * after that load a javascript URL. The data URL navigation shouldn't be blocked.
+     */
+    @LargeTest
+    @Feature({"AndroidWebView"})
+    public void testJavaScriptUrlAfterLoadData() throws Throwable {
+        AwTestContainerView testView = createAwTestContainerViewOnMainSync(mContentsClient);
+        final AwContents awContents = testView.getAwContents();
+        getInstrumentation().runOnMainSync(new Runnable() {
+            @Override
+            public void run() {
+                // Run javascript navigation immediately, without waiting for the completion of data
+                // URL.
+                awContents.loadData("<html>test</html>", "text/html", "utf-8");
+                awContents.loadUrl("javascript: void(0)");
+            }
+        });
+
+        mContentsClient.getOnPageFinishedHelper().waitForCallback(
+                0, 1, WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        assertEquals("data:text/html,<html>test</html>", awContents.getLastCommittedUrl());
+
+        TestAwContentsClient.AddMessageToConsoleHelper consoleHelper =
+                mContentsClient.getAddMessageToConsoleHelper();
+        assertEquals(0, consoleHelper.getMessages().size());
     }
 }

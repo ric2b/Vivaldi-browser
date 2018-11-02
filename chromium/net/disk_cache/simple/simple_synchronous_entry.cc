@@ -43,7 +43,8 @@ enum OpenEntryResult {
   OPEN_ENTRY_KEY_MISMATCH = 6,
   OPEN_ENTRY_KEY_HASH_MISMATCH = 7,
   OPEN_ENTRY_SPARSE_OPEN_FAILED = 8,
-  OPEN_ENTRY_MAX = 9,
+  OPEN_ENTRY_INVALID_FILE_LENGTH = 9,
+  OPEN_ENTRY_MAX = 10,
 };
 
 // Used in histograms, please only add entries at the end.
@@ -258,8 +259,12 @@ void SimpleSynchronousEntry::OpenEntry(
     const std::string& key,
     const uint64_t entry_hash,
     const bool had_index,
+    const base::TimeTicks& time_enqueued,
     SimpleEntryCreationResults* out_results) {
-  base::ElapsedTimer open_time;
+  base::TimeTicks start_sync_open_entry = base::TimeTicks::Now();
+  SIMPLE_CACHE_UMA(TIMES, "QueueLatency.OpenEntry", cache_type,
+                   (start_sync_open_entry - time_enqueued));
+
   SimpleSynchronousEntry* sync_entry =
       new SimpleSynchronousEntry(cache_type, path, key, entry_hash, had_index);
   out_results->result = sync_entry->InitializeForOpen(
@@ -272,7 +277,8 @@ void SimpleSynchronousEntry::OpenEntry(
     out_results->stream_0_data = NULL;
     return;
   }
-  UMA_HISTOGRAM_TIMES("SimpleCache.DiskOpenLatency", open_time.Elapsed());
+  SIMPLE_CACHE_UMA(TIMES, "DiskOpenLatency", cache_type,
+                   base::TimeTicks::Now() - start_sync_open_entry);
   out_results->sync_entry = sync_entry;
 }
 
@@ -283,8 +289,13 @@ void SimpleSynchronousEntry::CreateEntry(
     const std::string& key,
     const uint64_t entry_hash,
     const bool had_index,
+    const base::TimeTicks& time_enqueued,
     SimpleEntryCreationResults* out_results) {
   DCHECK_EQ(entry_hash, GetEntryHashKey(key));
+  base::TimeTicks start_sync_create_entry = base::TimeTicks::Now();
+  SIMPLE_CACHE_UMA(TIMES, "QueueLatency.CreateEntry", cache_type,
+                   (start_sync_create_entry - time_enqueued));
+
   SimpleSynchronousEntry* sync_entry =
       new SimpleSynchronousEntry(cache_type, path, key, entry_hash, had_index);
   out_results->result =
@@ -297,6 +308,8 @@ void SimpleSynchronousEntry::CreateEntry(
     return;
   }
   out_results->sync_entry = sync_entry;
+  SIMPLE_CACHE_UMA(TIMES, "DiskCreateLatency", cache_type,
+                   base::TimeTicks::Now() - start_sync_create_entry);
 }
 
 // static
@@ -326,9 +339,9 @@ int SimpleSynchronousEntry::DoomEntrySet(
 }
 
 void SimpleSynchronousEntry::ReadData(const EntryOperationData& in_entry_op,
-                                      net::IOBuffer* out_buf,
-                                      uint32_t* out_crc32,
+                                      CRCRequest* crc_request,
                                       SimpleEntryStat* entry_stat,
+                                      net::IOBuffer* out_buf,
                                       int* out_result) {
   DCHECK(initialized_);
   DCHECK_NE(0, in_entry_op.index);
@@ -349,9 +362,26 @@ void SimpleSynchronousEntry::ReadData(const EntryOperationData& in_entry_op,
                                            in_entry_op.buf_len);
   if (bytes_read > 0) {
     entry_stat->set_last_used(Time::Now());
-    *out_crc32 = crc32(crc32(0L, Z_NULL, 0),
-                       reinterpret_cast<const Bytef*>(out_buf->data()),
-                       bytes_read);
+    if (crc_request != nullptr) {
+      crc_request->data_crc32 =
+          crc32(crc_request->data_crc32,
+                reinterpret_cast<const Bytef*>(out_buf->data()), bytes_read);
+      // Verify checksum after last read, if we've been asked to.
+      if (crc_request->request_verify &&
+          in_entry_op.offset + bytes_read ==
+              entry_stat->data_size(in_entry_op.index)) {
+        crc_request->performed_verify = true;
+        int checksum_result = CheckEOFRecord(in_entry_op.index, *entry_stat,
+                                             crc_request->data_crc32);
+        if (checksum_result < 0) {
+          crc_request->verify_ok = false;
+          *out_result = checksum_result;
+          return;
+        } else {
+          crc_request->verify_ok = true;
+        }
+      }
+    }
   }
   if (bytes_read >= 0) {
     *out_result = bytes_read;
@@ -365,6 +395,7 @@ void SimpleSynchronousEntry::WriteData(const EntryOperationData& in_entry_op,
                                        net::IOBuffer* in_buf,
                                        SimpleEntryStat* out_entry_stat,
                                        int* out_result) {
+  base::ElapsedTimer write_time;
   DCHECK(initialized_);
   DCHECK_NE(0, in_entry_op.index);
   int index = in_entry_op.index;
@@ -445,6 +476,8 @@ void SimpleSynchronousEntry::WriteData(const EntryOperationData& in_entry_op,
     }
   }
 
+  SIMPLE_CACHE_UMA(TIMES, "DiskWriteLatency", cache_type_,
+                   write_time.Elapsed());
   RecordWriteResult(cache_type_, WRITE_RESULT_SUCCESS);
   base::Time modification_time = Time::Now();
   out_entry_stat->set_last_used(modification_time);
@@ -657,35 +690,35 @@ void SimpleSynchronousEntry::GetAvailableRange(
   *out_result = static_cast<int>(std::min(avail_so_far, len_from_start));
 }
 
-void SimpleSynchronousEntry::CheckEOFRecord(int index,
-                                            const SimpleEntryStat& entry_stat,
-                                            uint32_t expected_crc32,
-                                            int* out_result) const {
+int SimpleSynchronousEntry::CheckEOFRecord(int index,
+                                           const SimpleEntryStat& entry_stat,
+                                           uint32_t expected_crc32) const {
   DCHECK(initialized_);
   uint32_t crc32;
   bool has_crc32;
   bool has_key_sha256;
   int32_t stream_size;
-  *out_result = GetEOFRecordData(index, entry_stat, &has_crc32, &has_key_sha256,
-                                 &crc32, &stream_size);
-  if (*out_result != net::OK) {
+  int rv = GetEOFRecordData(index, entry_stat, &has_crc32, &has_key_sha256,
+                            &crc32, &stream_size);
+  if (rv != net::OK) {
     Doom();
-    return;
+    return rv;
   }
   if (has_crc32 && crc32 != expected_crc32) {
     DVLOG(1) << "EOF record had bad crc.";
-    *out_result = net::ERR_CACHE_CHECKSUM_MISMATCH;
     RecordCheckEOFResult(cache_type_, CHECK_EOF_RESULT_CRC_MISMATCH);
     Doom();
-    return;
+    return net::ERR_CACHE_CHECKSUM_MISMATCH;
   }
   RecordCheckEOFResult(cache_type_, CHECK_EOF_RESULT_SUCCESS);
+  return net::OK;
 }
 
 void SimpleSynchronousEntry::Close(
     const SimpleEntryStat& entry_stat,
     std::unique_ptr<std::vector<CRCRecord>> crc32s_to_write,
     net::GrowableIOBuffer* stream_0_data) {
+  base::ElapsedTimer close_time;
   DCHECK(stream_0_data);
 
   for (std::vector<CRCRecord>::const_iterator it = crc32s_to_write->begin();
@@ -772,6 +805,8 @@ void SimpleSynchronousEntry::Close(
     SIMPLE_CACHE_UMA(BOOLEAN, "EntryCreatedAndStream2Omitted", cache_type_,
                      empty_file_omitted_[stream2_file_index]);
   }
+  SIMPLE_CACHE_UMA(TIMES, "DiskCloseLatency", cache_type_,
+                   close_time.Elapsed());
   RecordCloseResult(cache_type_, CLOSE_RESULT_SUCCESS);
   have_open_files_ = false;
   delete this;
@@ -834,8 +869,19 @@ bool SimpleSynchronousEntry::MaybeCreateFile(
   int flags = File::FLAG_CREATE | File::FLAG_READ | File::FLAG_WRITE |
               File::FLAG_SHARE_DELETE;
   files_[file_index].Initialize(filename, flags);
-  *out_error = files_[file_index].error_details();
 
+  // It's possible that the creation failed because someone deleted the
+  // directory (e.g. because someone pressed "clear cache" on Android).
+  // If so, we would keep failing for a while until periodic index snapshot
+  // re-creates the cache dir, so try to recover from it quickly here.
+  if (!files_[file_index].IsValid() &&
+      files_[file_index].error_details() == File::FILE_ERROR_NOT_FOUND &&
+      !base::DirectoryExists(path_)) {
+    if (base::CreateDirectory(path_))
+      files_[file_index].Initialize(filename, flags);
+  }
+
+  *out_error = files_[file_index].error_details();
   empty_file_omitted_[file_index] = false;
 
   return files_[file_index].IsValid();
@@ -886,10 +932,7 @@ bool SimpleSynchronousEntry::OpenFiles(SimpleEntryStat* out_entry_stat) {
       continue;
     }
     out_entry_stat->set_last_used(file_info.last_accessed);
-    if (simple_util::GetMTime(path_, &file_last_modified))
-      out_entry_stat->set_last_modified(file_last_modified);
-    else
-      out_entry_stat->set_last_modified(file_info.last_modified);
+    out_entry_stat->set_last_modified(file_info.last_modified);
 
     base::TimeDelta stream_age =
         base::Time::Now() - out_entry_stat->last_modified();
@@ -909,6 +952,11 @@ bool SimpleSynchronousEntry::OpenFiles(SimpleEntryStat* out_entry_stat) {
     // 0, stream 1 and one EOF record. The exact distribution of sizes between
     // stream 1 and stream 0 is only determined after reading the EOF record
     // for stream 0 in ReadAndValidateStream0.
+    if (!base::IsValueInRangeForNumericType<int>(file_info.size)) {
+      RecordSyncOpenResult(cache_type_, OPEN_ENTRY_INVALID_FILE_LENGTH,
+                           had_index_);
+      return false;
+    }
     out_entry_stat->set_data_size(i + 1, static_cast<int>(file_info.size));
   }
   SIMPLE_CACHE_UMA(CUSTOM_COUNTS,
@@ -1058,11 +1106,20 @@ int SimpleSynchronousEntry::InitializeForOpen(
     if (empty_file_omitted_[i])
       continue;
 
-    if (!key_.empty()) {
-      header_and_key_check_needed_[i] = true;
-    } else {
+    if (key_.empty()) {
+      // If |key_| is empty, we were opened via the iterator interface, without
+      // knowing what our key is. We must therefore read the header immediately
+      // to discover it, so SimpleEntryImpl can make it available to
+      // disk_cache::Entry::GetKey().
       if (!CheckHeaderAndKey(i))
         return net::ERR_FAILED;
+    } else {
+      // If we do know which key were are looking for, we still need to
+      // check that the file actually has it (rather than just being a hash
+      // collision or some sort of file system accident), but that can be put
+      // off until opportune time: either the read of the footer, or when we
+      // start reading in the data, depending on stream # and format revision.
+      header_and_key_check_needed_[i] = true;
     }
 
     if (i == 0) {
@@ -1228,6 +1285,8 @@ int SimpleSynchronousEntry::ReadAndValidateStream0(
       RecordKeySHA256Result(cache_type_, KeySHA256Result::NO_MATCH);
       return net::ERR_FAILED;
     }
+    // Elide header check if we verified sha256(key) via footer.
+    header_and_key_check_needed_[0] = false;
     RecordKeySHA256Result(cache_type_, KeySHA256Result::MATCHED);
   } else {
     RecordKeySHA256Result(cache_type_, KeySHA256Result::NOT_PRESENT);

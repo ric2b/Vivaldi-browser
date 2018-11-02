@@ -85,8 +85,18 @@ class CC_EXPORT CompositorFrameMetadata {
   // retain. Thus, this field will likely go away.
   std::vector<SurfaceId> referenced_surfaces;
 
-  // This is the set of SurfaceIds embedded in DrawQuads.
-  std::vector<SurfaceId> embedded_surfaces;
+  // This is the set of dependent SurfaceIds that should be active in the
+  // display compositor before this CompositorFrame can be activated. Note
+  // that if |can_activate_before_dependencies| then the display compositor
+  // can choose to activate a CompositorFrame before all dependencies are
+  // available.
+  // Note: |activation_dependencies| and |referenced_surfaces| are disjoint
+  //       sets of surface IDs. If a surface ID is known to exist and can be
+  //       used without additional synchronization, then it is placed in
+  //       |referenced_surfaces|. |activation_dependencies| is the set of
+  //       surface IDs that this frame would like to block on until they
+  //       become available or a deadline hits.
+  std::vector<SurfaceId> activation_dependencies;
 
   // This indicates whether this CompositorFrame can be activated before
   // dependencies have been resolved.

@@ -19,11 +19,10 @@ enum GaiaEnvironment {
 };
 
 enum WhatsNewPromoStatus {
-  WHATS_NEW_DEFAULT = 0,          // Not forced to enable a promo.
-  WHATS_NEW_APP_RATING,           // Force enable App Rating Promo.
-  WHATS_NEW_MOVE_TO_DOCK_FASTER,  // Force enable Move To Dock Faster Access
-  WHATS_NEW_MOVE_TO_DOCK_LOVE,    // Force enable Move To Dock Love Chrome
-  WHATS_NEW_MOVE_TO_DOCK_TIP,     // Force enable Move To Dock Tip promo.
+  WHATS_NEW_DEFAULT = 0,         // Not forced to enable a promo.
+  WHATS_NEW_APP_RATING,          // Force enable App Rating Promo.
+  WHATS_NEW_MOVE_TO_DOCK_TIP,    // Force enable Move To Dock Tip promo.
+  WHATS_NEW_PROMO_STATUS_COUNT,  // Count of Whats New Promo Statuses.
 };
 
 // Whether the First Run UI will be always be displayed.
@@ -45,12 +44,6 @@ bool IsAlertOnBackgroundUploadEnabled();
 
 // Whether auto-reload is enabled.
 bool IsAutoReloadEnabled();
-
-// Whether "Save Image" should be renamed as "Download Image".
-bool IsDownloadRenamingEnabled();
-
-// Whether the external applicaiton prompt is enabled.
-bool IsExternalApplicationPromptEnabled();
 
 // Whether contextual search must be reset to undecided state.
 bool IsForceResetContextualSearchEnabled();
@@ -82,6 +75,9 @@ bool IsPhysicalWebEnabled();
 // Whether reader mode is enabled.
 bool IsReaderModeEnabled();
 
+// Whether request mobile site is enabled.
+bool IsRequestMobileSiteEnabled();
+
 // Whether the Sign In Flow via SFSafariViewController is enabled.
 bool IsSafariVCSignInEnabled();
 
@@ -101,8 +97,11 @@ bool UseOnlyLocalHeuristicsForPasswordGeneration();
 // Whether the Suggestions UI is enabled.
 bool IsSuggestionsUIEnabled();
 
-// Wether Sign-in promo is enabled.
+// Whether Sign-in promo is enabled.
 bool IsSigninPromoEnabled();
+
+// Whether Google Native App Launcher is enabled.
+bool IsNativeAppLauncherEnabled();
 
 }  // namespace experimental_flags
 

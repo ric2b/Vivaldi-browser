@@ -2,6 +2,7 @@
 
 #include "extensions/api/devtools/devtools_private_api.h"
 
+#include "app/vivaldi_apptools.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -9,6 +10,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/web_contents.h"
+#include "net/base/url_util.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_ui_utils.h"
 
@@ -115,13 +117,21 @@ bool DevtoolsPrivateToggleDevtoolsFunction::RunAsync() {
       dispatcher()->GetAssociatedWebContents());
   content::WebContents* current_tab =
       browser->tab_strip_model()->GetActiveWebContents();
+  std::string host = net::GetHostOrSpecFromURL(current_tab->GetURL());
   DevToolsWindow* window =
       DevToolsWindow::GetInstanceForInspectedWebContents(current_tab);
   if (window) {
     window->ForceCloseWindow();
   } else {
-    DevToolsWindow::OpenDevToolsWindow(current_tab,
-                                       DevToolsToggleAction::Show());
+    // Trying to inspect the Vivaldi app using shortcuts or the menu. We fake a
+    // inspect element to get into the code path that leads to a
+    // separate window.
+    if (::vivaldi::IsVivaldiApp(host)) {
+      DevToolsWindow::InspectElement(current_tab->GetMainFrame(), 0, 0);
+    } else {
+      DevToolsWindow::OpenDevToolsWindow(current_tab,
+                                         DevToolsToggleAction::Show());
+    }
   }
   SendResponse(true);
   return true;

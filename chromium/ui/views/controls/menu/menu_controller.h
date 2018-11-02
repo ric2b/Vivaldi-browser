@@ -82,14 +82,13 @@ class VIEWS_EXPORT MenuController
   // Runs the menu at the specified location. If the menu was configured to
   // block, the selected item is returned. If the menu does not block this
   // returns NULL immediately.
-  MenuItemView* Run(Widget* parent,
-                    MenuButton* button,
-                    MenuItemView* root,
-                    const gfx::Rect& bounds,
-                    MenuAnchorPosition position,
-                    bool context_menu,
-                    bool is_nested_drag,
-                    int* event_flags);
+  void Run(Widget* parent,
+           MenuButton* button,
+           MenuItemView* root,
+           const gfx::Rect& bounds,
+           MenuAnchorPosition position,
+           bool context_menu,
+           bool is_nested_drag);
 
   // Whether or not Run blocks.
   bool IsBlockingRun() const { return blocking_run_; }
@@ -311,7 +310,7 @@ class VIEWS_EXPORT MenuController
   // Key processing.
   void OnKeyDown(ui::KeyboardCode key_code);
 
-  // Creates a MenuController. If |blocking| is true a nested message loop is
+  // Creates a MenuController. If |blocking| is true a nested run loop is
   // started in |Run|.
   MenuController(bool blocking,
                  internal::MenuControllerDelegate* delegate);

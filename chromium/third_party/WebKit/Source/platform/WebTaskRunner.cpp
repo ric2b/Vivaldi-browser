@@ -111,6 +111,10 @@ TaskHandle::TaskHandle(RefPtr<Runner> runner) : runner_(std::move(runner)) {
   DCHECK(runner_);
 }
 
+bool WebTaskRunner::RunsTasksOnCurrentThread() {
+  return RunsTasksInCurrentSequence();
+}
+
 // Use a custom function for base::Bind instead of convertToBaseCallback to
 // avoid copying the closure later in the call chain. Copying the bound state
 // can lead to data races with ref counted objects like StringImpl. See
@@ -123,10 +127,9 @@ void WebTaskRunner::PostTask(const WebTraceLocation& location,
 
 void WebTaskRunner::PostDelayedTask(const WebTraceLocation& location,
                                     std::unique_ptr<CrossThreadClosure> task,
-                                    long long delay_ms) {
+                                    TimeDelta delay) {
   ToSingleThreadTaskRunner()->PostDelayedTask(
-      location, base::Bind(&RunCrossThreadClosure, base::Passed(&task)),
-      base::TimeDelta::FromMilliseconds(delay_ms));
+      location, base::Bind(&RunCrossThreadClosure, base::Passed(&task)), delay);
 }
 
 void WebTaskRunner::PostTask(const WebTraceLocation& location,
@@ -137,10 +140,9 @@ void WebTaskRunner::PostTask(const WebTraceLocation& location,
 
 void WebTaskRunner::PostDelayedTask(const WebTraceLocation& location,
                                     std::unique_ptr<WTF::Closure> task,
-                                    long long delay_ms) {
+                                    TimeDelta delay) {
   ToSingleThreadTaskRunner()->PostDelayedTask(
-      location, ConvertToBaseCallback(std::move(task)),
-      base::TimeDelta::FromMilliseconds(delay_ms));
+      location, ConvertToBaseCallback(std::move(task)), delay);
 }
 
 TaskHandle WebTaskRunner::PostCancellableTask(
@@ -157,14 +159,14 @@ TaskHandle WebTaskRunner::PostCancellableTask(
 TaskHandle WebTaskRunner::PostDelayedCancellableTask(
     const WebTraceLocation& location,
     std::unique_ptr<WTF::Closure> task,
-    long long delay_ms) {
+    TimeDelta delay) {
   DCHECK(RunsTasksOnCurrentThread());
   RefPtr<TaskHandle::Runner> runner =
       AdoptRef(new TaskHandle::Runner(std::move(task)));
   PostDelayedTask(location,
                   WTF::Bind(&TaskHandle::Runner::Run, runner->AsWeakPtr(),
                             TaskHandle(runner)),
-                  delay_ms);
+                  delay);
   return TaskHandle(runner);
 }
 

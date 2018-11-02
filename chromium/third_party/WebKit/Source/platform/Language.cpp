@@ -42,7 +42,7 @@ static const AtomicString& PlatformLanguage() {
   if (computed_default_language.IsEmpty()) {
     computed_default_language = AtomicString(
         CanonicalizeLanguageIdentifier(Platform::Current()->DefaultLocale()));
-    ASSERT(!computed_default_language.IsEmpty());
+    DCHECK(!computed_default_language.IsEmpty());
   }
   return computed_default_language;
 }
@@ -54,7 +54,7 @@ static Vector<AtomicString>& PreferredLanguagesOverride() {
 
 void OverrideUserPreferredLanguages(const Vector<AtomicString>& override) {
   Vector<AtomicString>& canonicalized = PreferredLanguagesOverride();
-  canonicalized.Resize(0);
+  canonicalized.resize(0);
   canonicalized.ReserveCapacity(override.size());
   for (const auto& lang : override)
     canonicalized.push_back(CanonicalizeLanguageIdentifier(lang));

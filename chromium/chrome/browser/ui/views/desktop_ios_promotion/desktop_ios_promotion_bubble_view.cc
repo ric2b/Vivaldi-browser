@@ -6,7 +6,7 @@
 
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/desktop_ios_promotion/desktop_ios_promotion_controller.h"
+#include "chrome/browser/ui/desktop_ios_promotion/desktop_ios_promotion_bubble_controller.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/passwords/manage_passwords_bubble_view.h"
 #include "chrome/grit/generated_resources.h"
@@ -37,20 +37,20 @@ DesktopIOSPromotionBubbleView::DesktopIOSPromotionBubbleView(
     : promotion_text_label_(
           new views::Label(desktop_ios_promotion::GetPromoText(entry_point))),
       promotion_controller_(
-          base::MakeUnique<DesktopIOSPromotionController>(profile,
-                                                          this,
-                                                          entry_point)) {
+          base::MakeUnique<DesktopIOSPromotionBubbleController>(profile,
+                                                                this,
+                                                                entry_point)) {
   views::GridLayout* layout = new views::GridLayout(this);
+  SetLayoutManager(layout);
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
-  layout->SetInsets(
+  SetBorder(views::CreateEmptyBorder(
       0,
-      provider->GetDistanceMetric(DISTANCE_PANEL_CONTENT_MARGIN) +
+      provider->GetInsetsMetric(views::INSETS_BUBBLE_CONTENTS).left() +
           desktop_ios_promotion::GetPromoImage(
               GetNativeTheme()->GetSystemColor(
                   ui::NativeTheme::kColorId_TextfieldDefaultColor))
               .width(),
-      0, 0);
-  SetLayoutManager(layout);
+      0, 0));
   send_sms_button_ = views::MdTextButton::CreateSecondaryUiBlueButton(
       this, l10n_util::GetStringUTF16(IDS_DESKTOP_TO_IOS_PROMO_SEND_TO_PHONE));
   no_button_ = views::MdTextButton::CreateSecondaryUiButton(

@@ -9,15 +9,23 @@
 #include "chromeos/components/tether/active_host_network_state_updater.h"
 #include "chromeos/components/tether/ble_connection_manager.h"
 #include "chromeos/components/tether/device_id_tether_network_guid_map.h"
+#include "chromeos/components/tether/host_scan_cache.h"
 #include "chromeos/components/tether/host_scan_device_prioritizer.h"
 #include "chromeos/components/tether/host_scan_scheduler.h"
 #include "chromeos/components/tether/host_scanner.h"
 #include "chromeos/components/tether/local_device_data_provider.h"
+#include "chromeos/components/tether/network_configuration_remover.h"
+#include "chromeos/components/tether/network_connection_handler_tether_delegate.h"
 #include "chromeos/components/tether/notification_presenter.h"
 #include "chromeos/components/tether/tether_connector.h"
+#include "chromeos/components/tether/tether_disconnector.h"
 #include "chromeos/components/tether/tether_host_fetcher.h"
+#include "chromeos/components/tether/tether_host_response_recorder.h"
+#include "chromeos/components/tether/tether_network_disconnection_handler.h"
 #include "chromeos/components/tether/wifi_hotspot_connector.h"
+#include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_connect.h"
+#include "chromeos/network/network_connection_handler.h"
 #include "chromeos/network/network_state_handler.h"
 #include "components/cryptauth/bluetooth_throttler_impl.h"
 #include "components/cryptauth/cryptauth_service.h"
@@ -50,9 +58,11 @@ void Initializer::Init(
     PrefService* pref_service,
     ProfileOAuth2TokenService* token_service,
     NetworkStateHandler* network_state_handler,
-    NetworkConnect* network_connect) {
-  if (!device::BluetoothAdapterFactory::IsBluetoothAdapterAvailable()) {
-    PA_LOG(WARNING) << "Bluetooth is unavailable on this device; cannot "
+    ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
+    NetworkConnect* network_connect,
+    NetworkConnectionHandler* network_connection_handler) {
+  if (!device::BluetoothAdapterFactory::IsBluetoothSupported()) {
+    PA_LOG(WARNING) << "Bluetooth is not supported on this device; cannot "
                     << "initialize tether feature.";
     return;
   }
@@ -64,15 +74,17 @@ void Initializer::Init(
     return;
   }
 
-  instance_ = new Initializer(
-      cryptauth_service, std::move(notification_presenter), pref_service,
-      token_service, network_state_handler, network_connect);
+  instance_ =
+      new Initializer(cryptauth_service, std::move(notification_presenter),
+                      pref_service, token_service, network_state_handler,
+                      managed_network_configuration_handler, network_connect,
+                      network_connection_handler);
 }
 
 // static
 void Initializer::Shutdown() {
   if (instance_) {
-    PA_LOG(INFO) << "Shutting down tether feature.";
+    PA_LOG(INFO) << "Shutting down Tether feature.";
     delete instance_;
     instance_ = nullptr;
   }
@@ -81,7 +93,7 @@ void Initializer::Shutdown() {
 // static
 void Initializer::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   ActiveHost::RegisterPrefs(registry);
-  HostScanDevicePrioritizer::RegisterPrefs(registry);
+  TetherHostResponseRecorder::RegisterPrefs(registry);
 }
 
 Initializer::Initializer(
@@ -90,13 +102,18 @@ Initializer::Initializer(
     PrefService* pref_service,
     ProfileOAuth2TokenService* token_service,
     NetworkStateHandler* network_state_handler,
-    NetworkConnect* network_connect)
+    ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
+    NetworkConnect* network_connect,
+    NetworkConnectionHandler* network_connection_handler)
     : cryptauth_service_(cryptauth_service),
       notification_presenter_(std::move(notification_presenter)),
       pref_service_(pref_service),
       token_service_(token_service),
       network_state_handler_(network_state_handler),
+      managed_network_configuration_handler_(
+          managed_network_configuration_handler),
       network_connect_(network_connect),
+      network_connection_handler_(network_connection_handler),
       weak_ptr_factory_(this) {
   if (!token_service_->RefreshTokenIsAvailable(
           cryptauth_service_->GetAccountId())) {
@@ -163,8 +180,10 @@ void Initializer::OnBluetoothAdapterAdvertisingIntervalSet(
       cryptauth_service_, adapter, local_device_data_provider_.get(),
       remote_beacon_seed_fetcher_.get(),
       cryptauth::BluetoothThrottlerImpl::GetInstance());
-  host_scan_device_prioritizer_ =
-      base::MakeUnique<HostScanDevicePrioritizer>(pref_service_);
+  tether_host_response_recorder_ =
+      base::MakeUnique<TetherHostResponseRecorder>(pref_service_);
+  host_scan_device_prioritizer_ = base::MakeUnique<HostScanDevicePrioritizer>(
+      tether_host_response_recorder_.get());
   wifi_hotspot_connector_ = base::MakeUnique<WifiHotspotConnector>(
       network_state_handler_, network_connect_);
   active_host_ =
@@ -175,18 +194,42 @@ void Initializer::OnBluetoothAdapterAdvertisingIntervalSet(
   device_id_tether_network_guid_map_ =
       base::MakeUnique<DeviceIdTetherNetworkGuidMap>();
   tether_connector_ = base::MakeUnique<TetherConnector>(
-      network_connect_, network_state_handler_, wifi_hotspot_connector_.get(),
-      active_host_.get(), tether_host_fetcher_.get(),
-      ble_connection_manager_.get(), host_scan_device_prioritizer_.get(),
+      network_state_handler_, wifi_hotspot_connector_.get(), active_host_.get(),
+      tether_host_fetcher_.get(), ble_connection_manager_.get(),
+      tether_host_response_recorder_.get(),
       device_id_tether_network_guid_map_.get());
+  network_configuration_remover_ =
+      base::MakeUnique<NetworkConfigurationRemover>(
+          network_state_handler_, managed_network_configuration_handler_);
+  tether_disconnector_ = base::MakeUnique<TetherDisconnector>(
+      network_connection_handler_, network_state_handler_, active_host_.get(),
+      ble_connection_manager_.get(), network_configuration_remover_.get(),
+      tether_connector_.get(), device_id_tether_network_guid_map_.get(),
+      tether_host_fetcher_.get());
+  tether_network_disconnection_handler_ =
+      base::MakeUnique<TetherNetworkDisconnectionHandler>(
+          active_host_.get(), network_state_handler_,
+          network_configuration_remover_.get());
+  network_connection_handler_tether_delegate_ =
+      base::MakeUnique<NetworkConnectionHandlerTetherDelegate>(
+          network_connection_handler_, tether_connector_.get(),
+          tether_disconnector_.get());
+  host_scan_cache_ = base::MakeUnique<HostScanCache>(
+      network_state_handler_, active_host_.get(),
+      tether_host_response_recorder_.get(),
+      device_id_tether_network_guid_map_.get());
+  clock_ = base::MakeUnique<base::DefaultClock>();
   host_scanner_ = base::MakeUnique<HostScanner>(
       tether_host_fetcher_.get(), ble_connection_manager_.get(),
-      host_scan_device_prioritizer_.get(), network_state_handler_,
-      notification_presenter_.get());
+      host_scan_device_prioritizer_.get(), tether_host_response_recorder_.get(),
+      notification_presenter_.get(), device_id_tether_network_guid_map_.get(),
+      host_scan_cache_.get(), clock_.get());
+  host_scan_scheduler_ = base::MakeUnique<HostScanScheduler>(
+      network_state_handler_, host_scanner_.get());
 
-  // TODO(khorimoto): Hook up HostScanScheduler. Currently, we simply start a
-  // new scan once the user logs in.
-  host_scanner_->StartScan();
+  // Because Initializer is created on each user log in, it's appropriate to
+  // call this method now.
+  host_scan_scheduler_->UserLoggedIn();
 }
 
 void Initializer::OnBluetoothAdapterAdvertisingIntervalError(

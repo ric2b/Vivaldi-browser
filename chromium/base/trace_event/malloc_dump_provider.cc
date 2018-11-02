@@ -6,13 +6,14 @@
 
 #include <stddef.h>
 
+#include <unordered_map>
+
 #include "base/allocator/allocator_extension.h"
 #include "base/allocator/allocator_shim.h"
 #include "base/allocator/features.h"
 #include "base/debug/profiler.h"
 #include "base/trace_event/heap_profiler_allocation_context.h"
 #include "base/trace_event/heap_profiler_allocation_context_tracker.h"
-#include "base/trace_event/heap_profiler_allocation_register.h"
 #include "base/trace_event/heap_profiler_heap_dump_writer.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event_argument.h"
@@ -31,7 +32,7 @@ namespace base {
 namespace trace_event {
 
 namespace {
-#if BUILDFLAG(USE_EXPERIMENTAL_ALLOCATOR_SHIM)
+#if BUILDFLAG(USE_ALLOCATOR_SHIM)
 
 using allocator::AllocatorDispatch;
 
@@ -138,7 +139,7 @@ AllocatorDispatch g_allocator_hooks = {
     &HookFreeDefiniteSize, /* free_definite_size_function */
     nullptr,               /* next */
 };
-#endif  // BUILDFLAG(USE_EXPERIMENTAL_ALLOCATOR_SHIM)
+#endif  // BUILDFLAG(USE_ALLOCATOR_SHIM)
 
 #if defined(OS_WIN)
 // A structure containing some information about a given heap.
@@ -188,7 +189,7 @@ MallocDumpProvider* MallocDumpProvider::GetInstance() {
 }
 
 MallocDumpProvider::MallocDumpProvider()
-    : heap_profiler_enabled_(false), tid_dumping_heap_(kInvalidThreadId) {}
+    : tid_dumping_heap_(kInvalidThreadId) {}
 
 MallocDumpProvider::~MallocDumpProvider() {}
 
@@ -240,6 +241,8 @@ bool MallocDumpProvider::OnMemoryDump(const MemoryDumpArgs& args,
   resident_size = main_heap_info.committed_size;
   allocated_objects_size = main_heap_info.allocated_size;
   allocated_objects_count = main_heap_info.block_count;
+#elif defined(OS_FUCHSIA)
+// TODO(fuchsia): Port, see https://crbug.com/706592.
 #else
   struct mallinfo info = mallinfo();
   DCHECK_GE(info.arena + info.hblkhd, info.uordblks);
@@ -282,7 +285,7 @@ bool MallocDumpProvider::OnMemoryDump(const MemoryDumpArgs& args,
   }
 
   // Heap profiler dumps.
-  if (!heap_profiler_enabled_)
+  if (!allocation_register_.is_enabled())
     return true;
 
   // The dumps of the heap profiler should be created only when heap profiling
@@ -292,24 +295,25 @@ bool MallocDumpProvider::OnMemoryDump(const MemoryDumpArgs& args,
 
   tid_dumping_heap_ = PlatformThread::CurrentId();
   // At this point the Insert/RemoveAllocation hooks will ignore this thread.
-  // Enclosing all the temporariy data structures in a scope, so that the heap
-  // profiler does not see unabalanced malloc/free calls from these containers.
+  // Enclosing all the temporary data structures in a scope, so that the heap
+  // profiler does not see unbalanced malloc/free calls from these containers.
   {
     TraceEventMemoryOverhead overhead;
-    hash_map<AllocationContext, AllocationMetrics> metrics_by_context;
-    {
-      AutoLock lock(allocation_register_lock_);
-      if (allocation_register_) {
-        if (args.level_of_detail == MemoryDumpLevelOfDetail::DETAILED) {
-          for (const auto& alloc_size : *allocation_register_) {
-            AllocationMetrics& metrics = metrics_by_context[alloc_size.context];
-            metrics.size += alloc_size.size;
-            metrics.count++;
-          }
-        }
-        allocation_register_->EstimateTraceMemoryOverhead(&overhead);
-      }
-    }  // lock(allocation_register_lock_)
+    std::unordered_map<AllocationContext, AllocationMetrics> metrics_by_context;
+    if (args.level_of_detail == MemoryDumpLevelOfDetail::DETAILED) {
+      ShardedAllocationRegister::OutputMetrics shim_metrics =
+          allocation_register_.UpdateAndReturnsMetrics(metrics_by_context);
+
+      // Aggregate data for objects allocated through the shim.
+      inner_dump->AddScalar("shim_allocated_objects_size",
+                            MemoryAllocatorDump::kUnitsBytes,
+                            shim_metrics.size);
+      inner_dump->AddScalar("shim_allocator_object_count",
+                            MemoryAllocatorDump::kUnitsObjects,
+                            shim_metrics.count);
+    }
+    allocation_register_.EstimateTraceMemoryOverhead(&overhead);
+
     pmd->DumpHeapUsage(metrics_by_context, overhead, "malloc");
   }
   tid_dumping_heap_ = kInvalidThreadId;
@@ -318,22 +322,14 @@ bool MallocDumpProvider::OnMemoryDump(const MemoryDumpArgs& args,
 }
 
 void MallocDumpProvider::OnHeapProfilingEnabled(bool enabled) {
-#if BUILDFLAG(USE_EXPERIMENTAL_ALLOCATOR_SHIM)
+#if BUILDFLAG(USE_ALLOCATOR_SHIM)
   if (enabled) {
-    {
-      AutoLock lock(allocation_register_lock_);
-      allocation_register_.reset(new AllocationRegister());
-    }
+    allocation_register_.SetEnabled();
     allocator::InsertAllocatorDispatch(&g_allocator_hooks);
   } else {
-    AutoLock lock(allocation_register_lock_);
-    allocation_register_.reset();
-    // Insert/RemoveAllocation below will no-op if the register is torn down.
-    // Once disabled, heap profiling will not re-enabled anymore for the
-    // lifetime of the process.
+    allocation_register_.SetDisabled();
   }
 #endif
-  heap_profiler_enabled_ = enabled;
 }
 
 void MallocDumpProvider::InsertAllocation(void* address, size_t size) {
@@ -355,11 +351,10 @@ void MallocDumpProvider::InsertAllocation(void* address, size_t size) {
   if (!tracker->GetContextSnapshot(&context))
     return;
 
-  AutoLock lock(allocation_register_lock_);
-  if (!allocation_register_)
+  if (!allocation_register_.is_enabled())
     return;
 
-  allocation_register_->Insert(address, size, context);
+  allocation_register_.Insert(address, size, context);
 }
 
 void MallocDumpProvider::RemoveAllocation(void* address) {
@@ -368,10 +363,9 @@ void MallocDumpProvider::RemoveAllocation(void* address) {
   if (tid_dumping_heap_ != kInvalidThreadId &&
       tid_dumping_heap_ == PlatformThread::CurrentId())
     return;
-  AutoLock lock(allocation_register_lock_);
-  if (!allocation_register_)
+  if (!allocation_register_.is_enabled())
     return;
-  allocation_register_->Remove(address);
+  allocation_register_.Remove(address);
 }
 
 }  // namespace trace_event

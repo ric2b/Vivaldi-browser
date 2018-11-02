@@ -10,34 +10,38 @@
 #include "base/macros.h"
 #include "net/base/net_export.h"
 
-namespace base {
-class Value;
-}  // namespace base
+class GURL;
+
+namespace url {
+class Origin;
+}  // namespace url
 
 namespace net {
 
-// Delegate for things that the Reporting system can't do by itself, like
-// persisting data across embedder restarts.
+class URLRequestContext;
+
 class NET_EXPORT ReportingDelegate {
  public:
   virtual ~ReportingDelegate();
 
-  // Gets previously persisted data, if any is available. Returns a null pointer
-  // if no data is available. Can be called any number of times.
-  virtual std::unique_ptr<const base::Value> GetPersistedData() = 0;
+  // Checks whether |origin| is allowed to queue reports for future delivery.
+  virtual bool CanQueueReport(const url::Origin& origin) const = 0;
 
-  // Sets data to be persisted across embedder restarts. Ideally, this data will
-  // be returned by any future calls to GetPersistedData() in this or future
-  // sessions (until newer data is persisted), but no guarantee is made, since
-  // the underlying persistence mechanism may or may not be reliable.
-  virtual void PersistData(
-      std::unique_ptr<const base::Value> persisted_data) = 0;
+  // Checks whether |origin| is allowed to receive reports, either in real time
+  // or that were queued earlier.
+  virtual bool CanSendReport(const url::Origin& origin) const = 0;
 
- protected:
-  ReportingDelegate();
+  // Checks whether |origin| can set |endpoint| to be used for future report
+  // deliveries.
+  virtual bool CanSetClient(const url::Origin& origin,
+                            const GURL& endpoint) const = 0;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(ReportingDelegate);
+  // Checks whether |origin| can use |endpoint| for a report delivery right now.
+  virtual bool CanUseClient(const url::Origin& origin,
+                            const GURL& endpoint) const = 0;
+
+  static std::unique_ptr<ReportingDelegate> Create(
+      URLRequestContext* request_context);
 };
 
 }  // namespace net

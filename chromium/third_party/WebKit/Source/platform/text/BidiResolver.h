@@ -73,7 +73,7 @@ class MidpointState final {
     // previous end point doesn't preserve whitespace.
     if (l_break.GetLineLayoutItem() && num_midpoints_ &&
         !(num_midpoints_ % 2)) {
-      Iterator* midpoints_iterator = midpoints_.Data();
+      Iterator* midpoints_iterator = midpoints_.data();
       Iterator& endpoint = midpoints_iterator[num_midpoints_ - 2];
       const Iterator& startpoint = midpoints_iterator[num_midpoints_ - 1];
       Iterator currpoint = endpoint;
@@ -114,7 +114,7 @@ class MidpointState final {
     if (midpoints_.size() <= num_midpoints_)
       midpoints_.Grow(num_midpoints_ + 10);
 
-    Iterator* midpoints_iterator = midpoints_.Data();
+    Iterator* midpoints_iterator = midpoints_.data();
     midpoints_iterator[num_midpoints_++] = midpoint;
   }
 };
@@ -640,7 +640,7 @@ bool BidiResolver<Iterator, Run, IsolatedRun>::CommitExplicitEmbedding(
 
   SetContext(to_context);
 
-  current_explicit_embedding_sequence_.Clear();
+  current_explicit_embedding_sequence_.clear();
 
   return from_level != to_level;
 }

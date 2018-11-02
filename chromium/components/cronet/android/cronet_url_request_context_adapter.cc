@@ -37,6 +37,7 @@
 #include "base/values.h"
 #include "components/cronet/android/cert/cert_verifier_cache_serializer.h"
 #include "components/cronet/android/cert/proto/cert_verification.pb.h"
+#include "components/cronet/android/cronet_library_loader.h"
 #include "components/cronet/histogram_manager.h"
 #include "components/cronet/url_request_context_config.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -68,10 +69,6 @@
 #include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_interceptor.h"
 
-#if defined(DATA_REDUCTION_PROXY_SUPPORT)
-#include "components/cronet/android/cronet_data_reduction_proxy.h"
-#endif
-
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
@@ -88,16 +85,16 @@ class NetLogWithNetworkChangeEvents {
   net::NetLog* net_log() { return &net_log_; }
   // This function registers with the NetworkChangeNotifier and so must be
   // called *after* the NetworkChangeNotifier is created. Should only be
-  // called on the UI thread as it is not thread-safe and the UI thread is
+  // called on the init thread as it is not thread-safe and the init thread is
   // the thread the NetworkChangeNotifier is created on. This function is
   // not thread-safe because accesses to |net_change_logger_| are not atomic.
   // There might be multiple CronetEngines each with a network thread so
-  // so the UI thread is used. |g_net_log_| also outlives the network threads
+  // so the init thread is used. |g_net_log_| also outlives the network threads
   // so it would be unsafe to receive callbacks on the network threads without
   // a complicated thread-safe reference-counting system to control callback
   // registration.
-  void EnsureInitializedOnMainThread() {
-    DCHECK(base::MessageLoopForUI::IsCurrent());
+  void EnsureInitializedOnInitThread() {
+    DCHECK(cronet::OnInitThread());
     if (net_change_logger_)
       return;
     net_change_logger_.reset(new net::LoggingNetworkChangeObserver(&net_log_));
@@ -508,7 +505,7 @@ CronetURLRequestContextAdapter::~CronetURLRequestContextAdapter() {
   StopNetLogOnNetworkThread();
 }
 
-void CronetURLRequestContextAdapter::InitRequestContextOnMainThread(
+void CronetURLRequestContextAdapter::InitRequestContextOnInitThread(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller) {
   base::android::ScopedJavaGlobalRef<jobject> jcaller_ref;
@@ -522,7 +519,7 @@ void CronetURLRequestContextAdapter::InitRequestContextOnMainThread(
   // TODO(csharrison) Architect the wrapper better so we don't need to cast for
   // android ProxyConfigServices.
   android_proxy_config_service->set_exclude_pac_url(true);
-  g_net_log.Get().EnsureInitializedOnMainThread();
+  g_net_log.Get().EnsureInitializedOnInitThread();
   GetNetworkTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(&CronetURLRequestContextAdapter::InitializeOnNetworkThread,
@@ -615,25 +612,6 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
 
   std::unique_ptr<net::NetworkDelegate> network_delegate(
       new BasicNetworkDelegate());
-#if defined(DATA_REDUCTION_PROXY_SUPPORT)
-  DCHECK(!data_reduction_proxy_);
-  // For now, the choice to enable the data reduction proxy happens once,
-  // at initialization. It cannot be disabled thereafter.
-  if (!config->data_reduction_proxy_key.empty()) {
-    data_reduction_proxy_.reset(new CronetDataReductionProxy(
-        config->data_reduction_proxy_key, config->data_reduction_primary_proxy,
-        config->data_reduction_fallback_proxy,
-        config->data_reduction_secure_proxy_check_url, config->user_agent,
-        GetNetworkTaskRunner(), g_net_log.Get().net_log()));
-    network_delegate = data_reduction_proxy_->CreateNetworkDelegate(
-        std::move(network_delegate));
-    context_builder.set_proxy_delegate(
-        data_reduction_proxy_->CreateProxyDelegate());
-    std::vector<std::unique_ptr<net::URLRequestInterceptor>> interceptors;
-    interceptors.push_back(data_reduction_proxy_->CreateInterceptor());
-    context_builder.SetInterceptors(std::move(interceptors));
-  }
-#endif  // defined(DATA_REDUCTION_PROXY_SUPPORT)
   context_builder.set_network_delegate(std::move(network_delegate));
   context_builder.set_net_log(g_net_log.Get().net_log());
 
@@ -731,6 +709,7 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
   context_ = context_builder.Build();
 
   context_->set_check_cleartext_permitted(true);
+  context_->set_enable_brotli(config->enable_brotli);
 
   if (network_quality_estimator_)
     context_->set_network_quality_estimator(network_quality_estimator_.get());
@@ -818,10 +797,6 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
   Java_CronetUrlRequestContext_initNetworkThread(env,
                                                  jcronet_url_request_context);
 
-#if defined(DATA_REDUCTION_PROXY_SUPPORT)
-  if (data_reduction_proxy_)
-    data_reduction_proxy_->Init(true, GetURLRequestContext());
-#endif
   is_context_initialized_ = true;
   while (!tasks_waiting_for_context_.empty()) {
     tasks_waiting_for_context_.front().Run();
@@ -1090,10 +1065,7 @@ static jlong CreateRequestContextConfig(
     const JavaParamRef<jstring>& jquic_default_user_agent_id,
     jboolean jhttp2_enabled,
     jboolean jsdch_enabled,
-    const JavaParamRef<jstring>& jdata_reduction_proxy_key,
-    const JavaParamRef<jstring>& jdata_reduction_proxy_primary_proxy,
-    const JavaParamRef<jstring>& jdata_reduction_proxy_fallback_proxy,
-    const JavaParamRef<jstring>& jdata_reduction_proxy_secure_proxy_check_url,
+    jboolean jbrotli_enabled,
     jboolean jdisable_cache,
     jint jhttp_cache_mode,
     jlong jhttp_cache_max_size,
@@ -1105,19 +1077,13 @@ static jlong CreateRequestContextConfig(
   return reinterpret_cast<jlong>(new URLRequestContextConfig(
       jquic_enabled,
       ConvertNullableJavaStringToUTF8(env, jquic_default_user_agent_id),
-      jhttp2_enabled, jsdch_enabled,
+      jhttp2_enabled, jsdch_enabled, jbrotli_enabled,
       static_cast<URLRequestContextConfig::HttpCacheType>(jhttp_cache_mode),
       jhttp_cache_max_size, jdisable_cache,
       ConvertNullableJavaStringToUTF8(env, jstorage_path),
       ConvertNullableJavaStringToUTF8(env, juser_agent),
       ConvertNullableJavaStringToUTF8(env,
                                       jexperimental_quic_connection_options),
-      ConvertNullableJavaStringToUTF8(env, jdata_reduction_proxy_key),
-      ConvertNullableJavaStringToUTF8(env, jdata_reduction_proxy_primary_proxy),
-      ConvertNullableJavaStringToUTF8(env,
-                                      jdata_reduction_proxy_fallback_proxy),
-      ConvertNullableJavaStringToUTF8(
-          env, jdata_reduction_proxy_secure_proxy_check_url),
       base::WrapUnique(
           reinterpret_cast<net::CertVerifier*>(jmock_cert_verifier)),
       jenable_network_quality_estimator,

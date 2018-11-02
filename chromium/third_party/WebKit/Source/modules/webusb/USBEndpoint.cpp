@@ -9,35 +9,35 @@
 #include "device/usb/public/interfaces/device.mojom-blink.h"
 #include "modules/webusb/USBAlternateInterface.h"
 
-using device::usb::blink::EndpointType;
-using device::usb::blink::TransferDirection;
+using device::mojom::blink::UsbTransferType;
+using device::mojom::blink::UsbTransferDirection;
 
 namespace blink {
 
 namespace {
 
-String ConvertDirectionToEnum(const TransferDirection& direction) {
+String ConvertDirectionToEnum(const UsbTransferDirection& direction) {
   switch (direction) {
-    case TransferDirection::INBOUND:
+    case UsbTransferDirection::INBOUND:
       return "in";
-    case TransferDirection::OUTBOUND:
+    case UsbTransferDirection::OUTBOUND:
       return "out";
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return "";
   }
 }
 
-String ConvertTypeToEnum(const EndpointType& type) {
+String ConvertTypeToEnum(const UsbTransferType& type) {
   switch (type) {
-    case EndpointType::BULK:
+    case UsbTransferType::BULK:
       return "bulk";
-    case EndpointType::INTERRUPT:
+    case UsbTransferType::INTERRUPT:
       return "interrupt";
-    case EndpointType::ISOCHRONOUS:
+    case UsbTransferType::ISOCHRONOUS:
       return "isochronous";
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return "";
   }
 }
@@ -53,9 +53,9 @@ USBEndpoint* USBEndpoint::Create(const USBAlternateInterface* alternate,
                                  size_t endpoint_number,
                                  const String& direction,
                                  ExceptionState& exception_state) {
-  TransferDirection mojo_direction = direction == "in"
-                                         ? TransferDirection::INBOUND
-                                         : TransferDirection::OUTBOUND;
+  UsbTransferDirection mojo_direction = direction == "in"
+                                            ? UsbTransferDirection::INBOUND
+                                            : UsbTransferDirection::OUTBOUND;
   const auto& endpoints = alternate->Info().endpoints;
   for (size_t i = 0; i < endpoints.size(); ++i) {
     const auto& endpoint = endpoints[i];
@@ -71,14 +71,14 @@ USBEndpoint* USBEndpoint::Create(const USBAlternateInterface* alternate,
 USBEndpoint::USBEndpoint(const USBAlternateInterface* alternate,
                          size_t endpoint_index)
     : alternate_(alternate), endpoint_index_(endpoint_index) {
-  ASSERT(alternate_);
-  ASSERT(endpoint_index_ < alternate_->Info().endpoints.size());
+  DCHECK(alternate_);
+  DCHECK_LT(endpoint_index_, alternate_->Info().endpoints.size());
 }
 
-const device::usb::blink::EndpointInfo& USBEndpoint::Info() const {
-  const device::usb::blink::AlternateInterfaceInfo& alternate_info =
+const device::mojom::blink::UsbEndpointInfo& USBEndpoint::Info() const {
+  const device::mojom::blink::UsbAlternateInterfaceInfo& alternate_info =
       alternate_->Info();
-  ASSERT(endpoint_index_ < alternate_info.endpoints.size());
+  DCHECK_LT(endpoint_index_, alternate_info.endpoints.size());
   return *alternate_info.endpoints[endpoint_index_];
 }
 

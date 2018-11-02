@@ -19,7 +19,9 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/sequenced_task_runner.h"
 #include "net/base/net_export.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 
 namespace net {
@@ -34,7 +36,8 @@ class NET_EXPORT_PRIVATE URLFetcherImpl : public URLFetcher {
   // |d| the object that will receive the callback on fetch completion.
   URLFetcherImpl(const GURL& url,
                  RequestType request_type,
-                 URLFetcherDelegate* d);
+                 URLFetcherDelegate* d,
+                 net::NetworkTrafficAnnotationTag traffic_annotation);
   ~URLFetcherImpl() override;
 
   // URLFetcher implementation:

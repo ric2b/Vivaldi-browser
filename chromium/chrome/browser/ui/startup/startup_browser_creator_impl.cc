@@ -287,16 +287,6 @@ void AppendTabs(const StartupTabs& from, StartupTabs* to) {
     to->insert(to->end(), from.begin(), from.end());
 }
 
-// Prevent profiles created in M56 from seeing Welcome page. See
-// crbug.com/704977.
-// TODO(tmartino): Remove this in ~M60.
-void ProcessErroneousWelcomePagePrefs(Profile* profile) {
-  const std::string kVersionErroneousWelcomeFixed = "58.0.0.0";
-  if (profile->WasCreatedByVersionOrLater(kVersionErroneousWelcomeFixed))
-    return;
-  profile->GetPrefs()->SetBoolean(prefs::kHasSeenWelcomePage, true);
-}
-
 }  // namespace
 
 namespace internals {
@@ -633,8 +623,6 @@ void StartupBrowserCreatorImpl::ProcessLaunchUrlsUsingConsolidatedFlow(
   if (process_startup && command_line_.HasSwitch(switches::kNoStartupWindow))
     return;
 
-  ProcessErroneousWelcomePagePrefs(profile_);
-
   StartupTabs cmd_line_tabs;
   UrlsToTabs(cmd_line_urls, &cmd_line_tabs);
 
@@ -661,8 +649,6 @@ void StartupBrowserCreatorImpl::ProcessLaunchUrlsUsingConsolidatedFlow(
     behavior_options |= PROCESS_STARTUP;
   if (is_post_crash_launch)
     behavior_options |= IS_POST_CRASH_LAUNCH;
-  if (command_line_.HasSwitch(switches::kRestoreLastSession))
-    behavior_options |= HAS_RESTORE_SWITCH;
   if (command_line_.HasSwitch(switches::kOpenInNewWindow))
     behavior_options |= HAS_NEW_WINDOW_SWITCH;
   if (!cmd_line_tabs.empty())
@@ -797,11 +783,19 @@ Browser* StartupBrowserCreatorImpl::RestoreOrCreateBrowser(
   // OpenTabsInBrowser requires at least one tab be passed. As a fallback to
   // prevent a crash, use the NTP if |tabs| is empty. This could happen if
   // we expected a session restore to happen but it did not occur/succeed.
+  if (vivaldi::IsVivaldiRunning()) {
+    browser = OpenTabsInBrowser(
+        browser, process_startup,
+        (tabs.empty() ? StartupTabs({StartupTab(
+                            GURL(vivaldi::kVivaldiNewTabURL), false)})
+                      : tabs));
+  } else {
   browser = OpenTabsInBrowser(
       browser, process_startup,
       (tabs.empty()
            ? StartupTabs({StartupTab(GURL(chrome::kChromeUINewTabURL), false)})
            : tabs));
+  }
 
   // Now that a restore is no longer possible, it is safe to clear DOM storage,
   // unless this is a crash recovery.
@@ -906,8 +900,8 @@ StartupBrowserCreatorImpl::DetermineBrowserOpenBehavior(
 
   if (pref.type == SessionStartupPref::LAST) {
     // Don't perform a session restore on a post-crash launch, as this could
-    // cause a crash loop. These checks can be overridden by a switch.
-    if (!(options & IS_POST_CRASH_LAUNCH) || (options & HAS_RESTORE_SWITCH))
+    // cause a crash loop.
+    if (!(options & IS_POST_CRASH_LAUNCH))
       return BrowserOpenBehavior::SYNCHRONOUS_RESTORE;
   }
 

@@ -23,7 +23,7 @@ namespace {
 void ResetFileChangeTracker(storage::FileSystemContext* file_system_context,
                             const storage::FileSystemURL& url) {
   DCHECK(file_system_context->default_file_task_runner()->
-             RunsTasksOnCurrentThread());
+             RunsTasksInCurrentSequence());
   SyncFileSystemBackend* backend =
       SyncFileSystemBackend::GetBackend(file_system_context);
   DCHECK(backend);
@@ -76,10 +76,11 @@ void RootDeleteHelper::DidDeleteFileSystem(base::File::Error error) {
   // TODO(kinuko): This should be probably automatically handled in
   // DeleteFileSystem via QuotaUtil::DeleteOriginDataOnFileThread.
   file_system_context_->default_file_task_runner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(&ResetFileChangeTracker,
-                            base::RetainedRef(file_system_context_), url_),
-      base::Bind(&RootDeleteHelper::DidResetFileChangeTracker,
-                 weak_factory_.GetWeakPtr()));
+      FROM_HERE,
+      base::BindOnce(&ResetFileChangeTracker,
+                     base::RetainedRef(file_system_context_), url_),
+      base::BindOnce(&RootDeleteHelper::DidResetFileChangeTracker,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void RootDeleteHelper::DidResetFileChangeTracker() {

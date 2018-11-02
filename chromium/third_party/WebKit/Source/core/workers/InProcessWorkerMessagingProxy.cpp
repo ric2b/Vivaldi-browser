@@ -30,6 +30,7 @@
 #include <memory>
 #include "core/dom/Document.h"
 #include "core/dom/SecurityContext.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/ErrorEvent.h"
 #include "core/events/MessageEvent.h"
 #include "core/frame/LocalFrame.h"
@@ -106,6 +107,9 @@ void InProcessWorkerMessagingProxy::StartWorkerGlobalScope(
       ToIsolate(document)->IsHeapLimitIncreasedForDebugging()
           ? WorkerV8Settings::HeapLimitMode::kIncreasedForDebugging
           : WorkerV8Settings::HeapLimitMode::kDefault;
+  worker_v8_settings.atomics_wait_mode_ =
+      IsAtomicsWaitAllowed() ? WorkerV8Settings::AtomicsWaitMode::kAllow
+                             : WorkerV8Settings::AtomicsWaitMode::kDisallow;
   std::unique_ptr<WorkerThreadStartupData> startup_data =
       WorkerThreadStartupData::Create(
           script_url, user_agent, source_code, nullptr, start_mode,
@@ -148,7 +152,8 @@ void InProcessWorkerMessagingProxy::PostMessageToWorkerGlobalScope(
         CrossThreadUnretained(&WorkerObjectProxy()), std::move(message),
         WTF::Passed(std::move(channels)),
         CrossThreadUnretained(GetWorkerThread()));
-    GetWorkerThread()->PostTask(BLINK_FROM_HERE, std::move(task));
+    TaskRunnerHelper::Get(TaskType::kPostedMessage, GetWorkerThread())
+        ->PostTask(BLINK_FROM_HERE, std::move(task));
   } else {
     queued_early_tasks_.push_back(
         QueuedTask{std::move(message), std::move(channels)});
@@ -174,11 +179,15 @@ void InProcessWorkerMessagingProxy::DispatchErrorEvent(
   if (worker_object_->DispatchEvent(event) != DispatchEventResult::kNotCanceled)
     return;
 
-  PostTaskToWorkerGlobalScope(
-      BLINK_FROM_HERE,
-      CrossThreadBind(&InProcessWorkerObjectProxy::ProcessUnhandledException,
-                      CrossThreadUnretained(worker_object_proxy_.get()),
-                      exception_id, CrossThreadUnretained(GetWorkerThread())));
+  // The HTML spec requires to queue an error event using the DOM manipulation
+  // task source.
+  // https://html.spec.whatwg.org/multipage/workers.html#runtime-script-errors-2
+  TaskRunnerHelper::Get(TaskType::kDOMManipulation, GetWorkerThread())
+      ->PostTask(BLINK_FROM_HERE,
+                 CrossThreadBind(
+                     &InProcessWorkerObjectProxy::ProcessUnhandledException,
+                     CrossThreadUnretained(worker_object_proxy_.get()),
+                     exception_id, CrossThreadUnretained(GetWorkerThread())));
 }
 
 void InProcessWorkerMessagingProxy::WorkerThreadCreated() {
@@ -197,9 +206,10 @@ void InProcessWorkerMessagingProxy::WorkerThreadCreated() {
         queued_task.message.Release(),
         WTF::Passed(std::move(queued_task.channels)),
         CrossThreadUnretained(GetWorkerThread()));
-    GetWorkerThread()->PostTask(BLINK_FROM_HERE, std::move(task));
+    TaskRunnerHelper::Get(TaskType::kPostedMessage, GetWorkerThread())
+        ->PostTask(BLINK_FROM_HERE, std::move(task));
   }
-  queued_early_tasks_.Clear();
+  queued_early_tasks_.clear();
 }
 
 void InProcessWorkerMessagingProxy::ParentObjectDestroyed() {

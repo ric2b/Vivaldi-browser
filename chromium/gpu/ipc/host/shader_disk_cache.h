@@ -10,10 +10,12 @@
 #include <map>
 #include <queue>
 #include <string>
+#include <unordered_map>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "net/disk_cache/disk_cache.h"
 

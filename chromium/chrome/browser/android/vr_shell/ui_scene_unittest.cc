@@ -13,7 +13,7 @@
 #include "base/values.h"
 #include "chrome/browser/android/vr_shell/animation.h"
 #include "chrome/browser/android/vr_shell/easing.h"
-#include "chrome/browser/android/vr_shell/ui_element.h"
+#include "chrome/browser/android/vr_shell/ui_elements/ui_element.h"
 #include "device/vr/vr_math.h"
 #include "device/vr/vr_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -39,7 +39,7 @@ base::TimeDelta usToDelta(uint64_t us) {
 
 void addElement(UiScene* scene, int id) {
   auto element = base::MakeUnique<UiElement>();
-  element->id = id;
+  element->set_id(id);
   scene->AddUiElement(std::move(element));
 }
 
@@ -48,7 +48,7 @@ void addAnimation(UiScene* scene,
                   int animation_id,
                   Animation::Property property) {
   std::unique_ptr<easing::Easing> easing = base::MakeUnique<easing::Linear>();
-  std::vector<float> from = {};
+  std::vector<float> from;
   std::vector<float> to = {1, 1, 1, 1};
   auto animation =
       base::MakeUnique<Animation>(animation_id, property, std::move(easing),
@@ -88,22 +88,22 @@ TEST(UiScene, AddRemoveAnimations) {
   addElement(&scene, 0);
   auto* element = scene.GetUiElementById(0);
 
-  EXPECT_EQ(element->animations.size(), 0u);
+  EXPECT_EQ(element->animations().size(), 0u);
   addAnimation(&scene, 0, 0, Animation::Property::SIZE);
-  EXPECT_EQ(element->animations.size(), 1u);
-  EXPECT_EQ(element->animations[0]->property, Animation::Property::SIZE);
+  EXPECT_EQ(element->animations().size(), 1u);
+  EXPECT_EQ(element->animations()[0]->property, Animation::Property::SIZE);
   addAnimation(&scene, 0, 1, Animation::Property::SCALE);
-  EXPECT_EQ(element->animations.size(), 2u);
-  EXPECT_EQ(element->animations[1]->property, Animation::Property::SCALE);
+  EXPECT_EQ(element->animations().size(), 2u);
+  EXPECT_EQ(element->animations()[1]->property, Animation::Property::SCALE);
 
   scene.RemoveAnimation(0, 0);
-  EXPECT_EQ(element->animations.size(), 1u);
-  EXPECT_EQ(element->animations[0]->property, Animation::Property::SCALE);
+  EXPECT_EQ(element->animations().size(), 1u);
+  EXPECT_EQ(element->animations()[0]->property, Animation::Property::SCALE);
   scene.RemoveAnimation(0, 1);
-  EXPECT_EQ(element->animations.size(), 0u);
+  EXPECT_EQ(element->animations().size(), 0u);
 
   scene.RemoveAnimation(0, 0);
-  EXPECT_EQ(element->animations.size(), 0u);
+  EXPECT_EQ(element->animations().size(), 0u);
 }
 
 // This test creates a parent and child UI element, each with their own
@@ -115,28 +115,28 @@ TEST(UiScene, ParentTransformAppliesToChild) {
   // Add a parent element, with distinct transformations.
   // Size of the parent should be ignored by the child.
   auto element = base::MakeUnique<UiElement>();
-  element->id = 0;
-  element->size = {1000, 1000, 1};
-  element->scale = {3, 3, 1};
-  element->rotation = {0, 0, 1, M_PI / 2};
-  element->translation = {6, 1, 0};
+  element->set_id(0);
+  element->set_size({1000, 1000, 1});
+  element->set_scale({3, 3, 1});
+  element->set_rotation({0, 0, 1, M_PI / 2});
+  element->set_translation({6, 1, 0});
   scene.AddUiElement(std::move(element));
 
   // Add a child to the parent, with different transformations.
   element = base::MakeUnique<UiElement>();
-  element->id = 1;
-  element->parent_id = 0;
-  element->size = {1, 1, 1};
-  element->scale = {2, 2, 1};
-  element->rotation = {0, 0, 1, M_PI / 2};
-  element->translation = {3, 0, 0};
+  element->set_id(1);
+  element->set_parent_id(0);
+  element->set_size({1, 1, 1});
+  element->set_scale({2, 2, 1});
+  element->set_rotation({0, 0, 1, M_PI / 2});
+  element->set_translation({3, 0, 0});
   scene.AddUiElement(std::move(element));
   const UiElement* child = scene.GetUiElementById(1);
 
   const gfx::Vector3dF origin(0, 0, 0);
   const gfx::Vector3dF point(1, 0, 0);
 
-  scene.UpdateTransforms(usToTicks(0));
+  scene.OnBeginFrame(usToTicks(0));
   auto new_origin = vr::MatrixVectorMul(child->TransformMatrix(), origin);
   auto new_point = vr::MatrixVectorMul(child->TransformMatrix(), point);
   EXPECT_VEC3F_NEAR(gfx::Vector3dF(6, 10, 0), new_origin);
@@ -147,38 +147,38 @@ TEST(UiScene, Opacity) {
   UiScene scene;
 
   auto element = base::MakeUnique<UiElement>();
-  element->id = 0;
-  element->opacity = 0.5;
+  element->set_id(0);
+  element->set_opacity(0.5);
   scene.AddUiElement(std::move(element));
 
   element = base::MakeUnique<UiElement>();
-  element->id = 1;
-  element->parent_id = 0;
-  element->opacity = 0.5;
+  element->set_id(1);
+  element->set_parent_id(0);
+  element->set_opacity(0.5);
   scene.AddUiElement(std::move(element));
 
-  scene.UpdateTransforms(usToTicks(0));
-  EXPECT_EQ(scene.GetUiElementById(0)->computed_opacity, 0.5f);
-  EXPECT_EQ(scene.GetUiElementById(1)->computed_opacity, 0.25f);
+  scene.OnBeginFrame(usToTicks(0));
+  EXPECT_EQ(0.5f, scene.GetUiElementById(0)->computed_opacity());
+  EXPECT_EQ(0.25f, scene.GetUiElementById(1)->computed_opacity());
 }
 
 TEST(UiScene, LockToFov) {
   UiScene scene;
 
   auto element = base::MakeUnique<UiElement>();
-  element->id = 0;
-  element->lock_to_fov = true;
+  element->set_id(0);
+  element->set_lock_to_fov(true);
   scene.AddUiElement(std::move(element));
 
   element = base::MakeUnique<UiElement>();
-  element->id = 1;
-  element->parent_id = 0;
-  element->lock_to_fov = false;
+  element->set_id(1);
+  element->set_parent_id(0);
+  element->set_lock_to_fov(false);
   scene.AddUiElement(std::move(element));
 
-  scene.UpdateTransforms(usToTicks(0));
-  EXPECT_EQ(scene.GetUiElementById(0)->computed_lock_to_fov, true);
-  EXPECT_EQ(scene.GetUiElementById(1)->computed_lock_to_fov, true);
+  scene.OnBeginFrame(usToTicks(0));
+  EXPECT_TRUE(scene.GetUiElementById(0)->computed_lock_to_fov());
+  EXPECT_TRUE(scene.GetUiElementById(1)->computed_lock_to_fov());
 }
 
 typedef struct {
@@ -195,23 +195,23 @@ TEST_P(AnchoringTest, VerifyCorrectPosition) {
 
   // Create a parent element with non-unity size and scale.
   auto element = base::MakeUnique<UiElement>();
-  element->id = 0;
-  element->size = {2, 2, 1};
-  element->scale = {2, 2, 1};
+  element->set_id(0);
+  element->set_size({2, 2, 1});
+  element->set_scale({2, 2, 1});
   scene.AddUiElement(std::move(element));
 
   // Add a child to the parent, with anchoring.
   element = base::MakeUnique<UiElement>();
-  element->id = 1;
-  element->parent_id = 0;
-  element->x_anchoring = GetParam().x_anchoring;
-  element->y_anchoring = GetParam().y_anchoring;
+  element->set_id(1);
+  element->set_parent_id(0);
+  element->set_x_anchoring(GetParam().x_anchoring);
+  element->set_y_anchoring(GetParam().y_anchoring);
   scene.AddUiElement(std::move(element));
 
-  scene.UpdateTransforms(usToTicks(0));
+  scene.OnBeginFrame(usToTicks(0));
   const UiElement* child = scene.GetUiElementById(1);
-  EXPECT_NEAR(child->GetCenter().x(), GetParam().expected_x, TOLERANCE);
-  EXPECT_NEAR(child->GetCenter().y(), GetParam().expected_y, TOLERANCE);
+  EXPECT_NEAR(GetParam().expected_x, child->GetCenter().x(), TOLERANCE);
+  EXPECT_NEAR(GetParam().expected_y, child->GetCenter().y(), TOLERANCE);
   scene.RemoveUiElement(1);
 }
 

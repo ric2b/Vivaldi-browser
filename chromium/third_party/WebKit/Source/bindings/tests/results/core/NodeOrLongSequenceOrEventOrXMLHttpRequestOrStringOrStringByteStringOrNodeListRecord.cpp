@@ -79,18 +79,18 @@ NodeOrLongSequenceOrEventOrXMLHttpRequestOrStringOrStringByteStringOrNodeListRec
   return container;
 }
 
-String NodeOrLongSequenceOrEventOrXMLHttpRequestOrStringOrStringByteStringOrNodeListRecord::getAsString() const {
+const String& NodeOrLongSequenceOrEventOrXMLHttpRequestOrStringOrStringByteStringOrNodeListRecord::getAsString() const {
   DCHECK(isString());
   return m_string;
 }
 
-void NodeOrLongSequenceOrEventOrXMLHttpRequestOrStringOrStringByteStringOrNodeListRecord::setString(String value) {
+void NodeOrLongSequenceOrEventOrXMLHttpRequestOrStringOrStringByteStringOrNodeListRecord::setString(const String& value) {
   DCHECK(isNull());
   m_string = value;
   m_type = SpecificTypeString;
 }
 
-NodeOrLongSequenceOrEventOrXMLHttpRequestOrStringOrStringByteStringOrNodeListRecord NodeOrLongSequenceOrEventOrXMLHttpRequestOrStringOrStringByteStringOrNodeListRecord::fromString(String value) {
+NodeOrLongSequenceOrEventOrXMLHttpRequestOrStringOrStringByteStringOrNodeListRecord NodeOrLongSequenceOrEventOrXMLHttpRequestOrStringOrStringByteStringOrNodeListRecord::fromString(const String& value) {
   NodeOrLongSequenceOrEventOrXMLHttpRequestOrStringOrStringByteStringOrNodeListRecord container;
   container.setString(value);
   return container;
@@ -166,8 +166,8 @@ void V8NodeOrLongSequenceOrEventOrXMLHttpRequestOrStringOrStringByteStringOrNode
     return;
   }
 
-  if (v8Value->IsArray()) {
-    Vector<int32_t> cppValue = ToImplArray<Vector<int32_t>, IDLLong>(v8Value, 0, isolate, exceptionState);
+  if (HasCallableIteratorSymbol(isolate, v8Value, exceptionState)) {
+    Vector<int32_t> cppValue = NativeValueTraits<IDLSequence<IDLLong>>::NativeValue(isolate, v8Value, exceptionState);
     if (exceptionState.HadException())
       return;
     impl.setLongSequence(cppValue);

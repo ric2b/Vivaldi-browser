@@ -21,6 +21,7 @@
 #include "base/message_loop/timer_slack.h"
 #include "base/observer_list.h"
 #include "base/pending_task.h"
+#include "base/run_loop.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -46,7 +47,6 @@ class JavaMessageHandlerFactory;
 
 namespace base {
 
-class RunLoop;
 class ThreadTaskRunnerHandle;
 class WaitableEvent;
 
@@ -81,7 +81,8 @@ class WaitableEvent;
 // Please be SURE your task is reentrant (nestable) and all global variables
 // are stable and accessible before calling SetNestableTasksAllowed(true).
 //
-class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
+class BASE_EXPORT MessageLoop : public MessagePump::Delegate,
+                                public RunLoop::Delegate {
  public:
   // A MessageLoop has a particular type, which indicates the set of
   // asynchronous events it may process in addition to tasks and timers.
@@ -161,19 +162,6 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   // Remove a DestructionObserver.  It is safe to call this method while a
   // DestructionObserver is receiving a notification callback.
   void RemoveDestructionObserver(DestructionObserver* destruction_observer);
-
-  // A NestingObserver is notified when a nested message loop begins. The
-  // observers are notified before the first task is processed.
-  class BASE_EXPORT NestingObserver {
-   public:
-    virtual void OnBeginNestedMessageLoop() = 0;
-
-   protected:
-    virtual ~NestingObserver();
-  };
-
-  void AddNestingObserver(NestingObserver* observer);
-  void RemoveNestingObserver(NestingObserver* observer);
 
   // Deprecated: use RunLoop instead.
   //
@@ -277,9 +265,6 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
     bool old_state_;
   };
 
-  // Returns true if we are currently running a nested message loop.
-  bool IsNested();
-
   // A TaskObserver is an object that receives task notifications from the
   // MessageLoop.
   //
@@ -303,9 +288,6 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   void AddTaskObserver(TaskObserver* task_observer);
   void RemoveTaskObserver(TaskObserver* task_observer);
 
-  // Can only be called from the thread that owns the MessageLoop.
-  bool is_running() const;
-
   // Returns true if the message loop has high resolution timers enabled.
   // Provided for testing.
   bool HasHighResolutionTasks();
@@ -320,12 +302,6 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   // Runs the specified PendingTask.
   void RunTask(PendingTask* pending_task);
 
-  bool nesting_allowed() const { return allow_nesting_; }
-
-  // Disallow nesting. After this is called, running a nested RunLoop or calling
-  // Add/RemoveNestingObserver() on this MessageLoop will crash.
-  void DisallowNesting() { allow_nesting_ = false; }
-
   // Disallow task observers. After this is called, calling
   // Add/RemoveTaskObserver() on this MessageLoop will crash.
   void DisallowTaskObservers() { allow_task_observers_ = false; }
@@ -334,7 +310,8 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
  protected:
   std::unique_ptr<MessagePump> pump_;
 
-  using MessagePumpFactoryCallback = Callback<std::unique_ptr<MessagePump>()>;
+  using MessagePumpFactoryCallback =
+      OnceCallback<std::unique_ptr<MessagePump>()>;
 
   // Common protected constructor. Other constructors delegate the
   // initialization to this constructor.
@@ -349,7 +326,6 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
 
  private:
   friend class internal::IncomingTaskQueue;
-  friend class RunLoop;
   friend class ScheduleWorkTest;
   friend class Thread;
   friend struct PendingTask;
@@ -375,8 +351,9 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   // task runner for this message loop.
   void SetThreadTaskRunnerHandle();
 
-  // Invokes the actual run loop using the message pump.
-  void RunHandler();
+  // RunLoop::Delegate:
+  void Run() override;
+  void Quit() override;
 
   // Called to process any delayed non-nestable tasks.
   bool ProcessNextDelayedNonNestableTask();
@@ -400,9 +377,6 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   // Wakes up the message pump. Can be called on any thread. The caller is
   // responsible for synchronizing ScheduleWork() calls.
   void ScheduleWork();
-
-  // Notify observers that a nested message loop is starting.
-  void NotifyBeginNestedLoop();
 
   // MessagePump::Delegate methods:
   bool DoWork() override;
@@ -432,13 +406,11 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   TimeTicks recent_time_;
 
   // A queue of non-nestable tasks that we had to defer because when it came
-  // time to execute them we were in a nested message loop.  They will execute
-  // once we're out of nested message loops.
+  // time to execute them we were in a nested run loop.  They will execute
+  // once we're out of nested run loops.
   TaskQueue deferred_non_nestable_work_queue_;
 
   ObserverList<DestructionObserver> destruction_observers_;
-
-  ObserverList<NestingObserver> nesting_observers_;
 
   // A recursion block that prevents accidentally running additional tasks when
   // insider a (accidentally induced?) nested message pump.
@@ -447,8 +419,6 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   // pump_factory_.Run() is called to create a message pump for this loop
   // if type_ is TYPE_CUSTOM and pump_ is null.
   MessagePumpFactoryCallback pump_factory_;
-
-  RunLoop* run_loop_;
 
   ObserverList<TaskObserver> task_observers_;
 
@@ -474,11 +444,11 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   // MessageLoop is bound to its thread and constant forever after.
   PlatformThreadId thread_id_;
 
-  // Whether nesting is allowed.
-  bool allow_nesting_ = true;
-
   // Whether task observers are allowed.
   bool allow_task_observers_ = true;
+
+  // An interface back to RunLoop state accessible by this RunLoop::Delegate.
+  RunLoop::Delegate::Client* run_loop_client_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(MessageLoop);
 };

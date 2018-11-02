@@ -92,7 +92,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerResponse)
   IPC_STRUCT_TRAITS_MEMBER(headers)
   IPC_STRUCT_TRAITS_MEMBER(blob_uuid)
   IPC_STRUCT_TRAITS_MEMBER(blob_size)
-  IPC_STRUCT_TRAITS_MEMBER(stream_url)
   IPC_STRUCT_TRAITS_MEMBER(error)
   IPC_STRUCT_TRAITS_MEMBER(response_time)
   IPC_STRUCT_TRAITS_MEMBER(is_in_cache_storage)
@@ -237,17 +236,11 @@ IPC_MESSAGE_CONTROL1(ServiceWorkerHostMsg_DecrementRegistrationRefCount,
 IPC_MESSAGE_CONTROL1(ServiceWorkerHostMsg_TerminateWorker,
                      int /* handle_id */)
 
-// Informs the browser that event handling has finished.
-// Routed to the target ServiceWorkerVersion.
-IPC_MESSAGE_ROUTED4(ServiceWorkerHostMsg_InstallEventFinished,
-                    int /* request_id */,
-                    blink::WebServiceWorkerEventResult,
-                    bool /* has_fetch_event_handler */,
-                    base::Time /* dispatch_event_time */)
-
-IPC_MESSAGE_ROUTED4(ServiceWorkerHostMsg_FetchEventResponse,
+// Returns the response as the result of fetch event. This is used only for blob
+// to keep the IPC ordering. Mojo IPC is used when the response body is a stream
+// or is empty, and for the fallback-to-network response.
+IPC_MESSAGE_ROUTED3(ServiceWorkerHostMsg_FetchEventResponse,
                     int /* fetch_event_id */,
-                    content::ServiceWorkerFetchEventResult,
                     content::ServiceWorkerResponse,
                     base::Time /* dispatch_event_time */)
 
@@ -475,8 +468,6 @@ IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_CountFeature,
                      uint32_t /* feature */)
 
 // Sent via EmbeddedWorker to dispatch events.
-IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_InstallEvent,
-                     int /* request_id */)
 IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_DidSkipWaiting,
                      int /* request_id */)
 IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_DidClaimClients,

@@ -12,6 +12,7 @@
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/favicon/core/favicon_driver_observer.h"
 #include "components/zoom/zoom_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -19,6 +20,7 @@
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
+
 
 typedef std::map<base::string16, base::string16> TabDragDataCollection;
 typedef base::Callback<void(base::SharedMemoryHandle handle,
@@ -178,6 +180,15 @@ class VivaldiPrivateTabObserver
 
   // Returns true if a capture is already underway for this WebContents.
   bool IsCapturing();
+
+  // This will fire an event for site permission-changes, telling the user that
+  // the page might be acting differently the next time it's loaded.
+  void OnSitePermissionChanged(ContentSettingsType type, ContentSetting value);
+
+  // If a page is accessing a resource controlled by a permission this will
+  // fire.
+  void OnPermissionAccessed(ContentSettingsType type, std::string origin,
+                            ContentSetting content_setting);
 
  private:
   explicit VivaldiPrivateTabObserver(content::WebContents* web_contents);

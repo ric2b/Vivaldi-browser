@@ -157,6 +157,7 @@
 #endif  // !defined(OS_CHROMEOS)
 
 #if defined(USE_AURA)
+#include "chrome/browser/ui/views/theme_profile_key.h"
 #include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -418,8 +419,7 @@ BrowserView::BrowserView()
       handling_theme_changed_(false),
       in_process_fullscreen_(false),
       force_location_bar_focus_(false),
-      activate_modal_dialog_factory_(this) {
-}
+      activate_modal_dialog_factory_(this) {}
 
 BrowserView::~BrowserView() {
   // All the tabs should have been destroyed already. If we were closed by the
@@ -1297,7 +1297,8 @@ void BrowserView::ShowPageInfo(
     const GURL& virtual_url,
     const security_state::SecurityInfo& security_info) {
   PageInfoBubbleView::ShowBubble(
-      GetLocationBarView()->GetSecurityBubbleAnchorView(), gfx::Rect(), profile,
+      GetLocationBarView()->GetSecurityBubbleAnchorView(),
+      GetLocationBarView()->location_icon_view(), gfx::Rect(), profile,
       web_contents, virtual_url, security_info);
 }
 
@@ -1598,8 +1599,8 @@ bool BrowserView::CanActivate() const {
   // that doesn't have the modal dialog the windows keep trying to get the focus
   // from each other on Windows. http://crbug.com/141650.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&BrowserView::ActivateAppModalDialog,
-                            activate_modal_dialog_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&BrowserView::ActivateAppModalDialog,
+                                activate_modal_dialog_factory_.GetWeakPtr()));
 #endif
   return false;
 }
@@ -2001,6 +2002,16 @@ void BrowserView::ViewHierarchyChanged(
   }
 }
 
+void BrowserView::PaintChildren(const ui::PaintContext& context) {
+  views::ClientView::PaintChildren(context);
+  // Don't reset the instance before it had a chance to get compositor callback.
+  if (!histogram_helper_) {
+    histogram_helper_ = BrowserWindowHistogramHelper::
+        MaybeRecordValueAndCreateInstanceOnBrowserPaint(
+            GetWidget()->GetCompositor());
+  }
+}
+
 void BrowserView::ChildPreferredSizeChanged(View* child) {
   Layout();
 }
@@ -2080,6 +2091,12 @@ void BrowserView::InitViews() {
   // can get it later when all we have is a native view.
   GetWidget()->SetNativeWindowProperty(Profile::kProfileKey,
                                        browser_->profile());
+
+#if defined(USE_AURA)
+  // Stow a pointer to the browser's profile onto the window handle so
+  // that windows will be styled with the appropriate NativeTheme.
+  SetThemeProfileForWindow(GetNativeWindow(), browser_->profile());
+#endif
 
   LoadAccelerators();
 
@@ -2677,6 +2694,11 @@ bool BrowserView::IsImmersiveModeEnabled() {
 
 gfx::Rect BrowserView::GetTopContainerBoundsInScreen() {
   return top_container_->GetBoundsInScreen();
+}
+
+void BrowserView::DestroyAnyExclusiveAccessBubble() {
+  exclusive_access_bubble_.reset();
+  new_back_shortcut_bubble_.reset();
 }
 
 extensions::ActiveTabPermissionGranter*

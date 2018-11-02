@@ -54,7 +54,7 @@ class MODULES_EXPORT AXTable : public AXLayoutObject {
   bool IsAXTable() const final;
   bool IsDataTable() const final;
 
-  AccessibilityRole RoleValue() const final;
+  AccessibilityRole RoleValue() const;
 
   void AddChildren() override;
   void ClearChildren() final;
@@ -77,13 +77,13 @@ class MODULES_EXPORT AXTable : public AXLayoutObject {
   void RowHeaders(AXObjectVector&);
 
   // an object that contains, as children, all the objects that act as headers
-  AXObject* HeaderContainer();
+  AXObjectImpl* HeaderContainer();
 
  protected:
   AXObjectVector rows_;
   AXObjectVector columns_;
 
-  Member<AXObject> header_container_;
+  Member<AXObjectImpl> header_container_;
   bool is_ax_table_;
 
   bool HasARIARole() const;

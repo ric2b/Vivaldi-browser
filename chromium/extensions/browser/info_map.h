@@ -37,14 +37,14 @@ class InfoMap : public base::RefCountedThreadSafe<InfoMap> {
   const ProcessMap& process_map() const { return process_map_; }
 
   // Callback for when new extensions are loaded.
-  void AddExtension(const extensions::Extension* extension,
+  void AddExtension(const Extension* extension,
                     base::Time install_time,
                     bool incognito_enabled,
                     bool notifications_disabled);
 
   // Callback for when an extension is unloaded.
   void RemoveExtension(const std::string& extension_id,
-                       const extensions::UnloadedExtensionInfo::Reason reason);
+                       const UnloadedExtensionReason reason);
 
   // Returns the time the extension was installed, or base::Time() if not found.
   base::Time GetInstallTime(const std::string& extension_id) const;
@@ -55,7 +55,7 @@ class InfoMap : public base::RefCountedThreadSafe<InfoMap> {
 
   // Returns true if the given extension can see events and data from another
   // sub-profile (incognito to original profile, or vice versa).
-  bool CanCrossIncognito(const extensions::Extension* extension) const;
+  bool CanCrossIncognito(const Extension* extension) const;
 
   // Adds an entry to process_map_.
   void RegisterExtensionProcess(const std::string& extension_id,
@@ -67,13 +67,6 @@ class InfoMap : public base::RefCountedThreadSafe<InfoMap> {
                                   int process_id,
                                   int site_instance_id);
   void UnregisterAllExtensionsInProcess(int process_id);
-
-  // Returns true if there is exists an extension with the same origin as
-  // |origin| in |process_id| with |permission|.
-  bool SecurityOriginHasAPIPermission(const GURL& origin,
-                                      int process_id,
-                                      extensions::APIPermission::ID permission)
-      const;
 
   // Maps a |file_url| to a |file_path| on the local filesystem, including
   // resources in extensions. Returns true on success. See NaClBrowserDelegate
@@ -115,7 +108,7 @@ class InfoMap : public base::RefCountedThreadSafe<InfoMap> {
   std::unique_ptr<QuotaService> quota_service_;
 
   // Assignment of extensions to renderer processes.
-  extensions::ProcessMap process_map_;
+  ProcessMap process_map_;
 
   scoped_refptr<ContentVerifier> content_verifier_;
 };

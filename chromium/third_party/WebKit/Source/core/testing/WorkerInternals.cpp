@@ -4,11 +4,12 @@
 
 #include "core/testing/WorkerInternals.h"
 
-#include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/UseCounter.h"
 #include "core/testing/OriginTrialsTest.h"
+#include "platform/bindings/ScriptState.h"
 
 namespace blink {
 
@@ -21,13 +22,25 @@ OriginTrialsTest* WorkerInternals::originTrialsTest() const {
 }
 
 void WorkerInternals::countFeature(ScriptState* script_state,
-                                   uint32_t feature) {
+                                   uint32_t feature,
+                                   ExceptionState& exception_state) {
+  if (UseCounter::kNumberOfFeatures <= feature) {
+    exception_state.ThrowTypeError(
+        "The given feature does not exist in UseCounter::Feature.");
+    return;
+  }
   UseCounter::Count(ExecutionContext::From(script_state),
                     static_cast<UseCounter::Feature>(feature));
 }
 
 void WorkerInternals::countDeprecation(ScriptState* script_state,
-                                       uint32_t feature) {
+                                       uint32_t feature,
+                                       ExceptionState& exception_state) {
+  if (UseCounter::kNumberOfFeatures <= feature) {
+    exception_state.ThrowTypeError(
+        "The given feature does not exist in UseCounter::Feature.");
+    return;
+  }
   Deprecation::CountDeprecation(ExecutionContext::From(script_state),
                                 static_cast<UseCounter::Feature>(feature));
 }

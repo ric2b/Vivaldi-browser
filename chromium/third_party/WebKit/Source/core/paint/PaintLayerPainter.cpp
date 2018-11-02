@@ -4,7 +4,7 @@
 
 #include "core/paint/PaintLayerPainter.h"
 
-#include "core/frame/LocalFrame.h"
+#include "core/frame/FrameView.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/ClipPathClipper.h"
 #include "core/paint/FilterPainter.h"
@@ -70,6 +70,12 @@ bool PaintLayerPainter::PaintedOutputInvisible(
   if (layout_object.HasBackdropFilter())
     return false;
 
+  // Always paint when 'will-change: opacity' is present. Reduces jank for
+  // common animation implementation approaches, for example, an element that
+  // starts with opacity zero and later begins to animate.
+  if (layout_object.StyleRef().HasWillChangeOpacityHint())
+    return false;
+
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     if (layout_object.StyleRef().Opacity())
       return false;
@@ -99,6 +105,9 @@ PaintResult PaintLayerPainter::Paint(
     GraphicsContext& context,
     const PaintLayerPaintingInfo& painting_info,
     PaintLayerFlags paint_flags) {
+  if (paint_layer_.GetLayoutObject().GetFrameView()->ShouldThrottleRendering())
+    return kFullyPainted;
+
   // https://code.google.com/p/chromium/issues/detail?id=343772
   DisableCompositingQueryAsserts disabler;
 
@@ -122,16 +131,14 @@ PaintResult PaintLayerPainter::Paint(
   if (ShouldSuppressPaintingLayer(paint_layer_))
     return kFullyPainted;
 
-  if (paint_layer_.GetLayoutObject().View()->GetFrame() &&
-      paint_layer_.GetLayoutObject()
-          .View()
-          ->GetFrame()
-          ->ShouldThrottleRendering())
+  // If this layer is totally invisible then there is nothing to paint. In SPv2
+  // we simplify this optimization by painting even when effectively invisible
+  // but skipping the painted content during layerization in
+  // PaintArtifactCompositor.
+  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled() &&
+      PaintedOutputInvisible(painting_info)) {
     return kFullyPainted;
-
-  // If this layer is totally invisible then there is nothing to paint.
-  if (PaintedOutputInvisible(painting_info))
-    return kFullyPainted;
+  }
 
   if (paint_layer_.PaintsWithTransparency(painting_info.GetGlobalPaintFlags()))
     paint_flags |= kPaintLayerHaveTransparency;
@@ -226,13 +233,13 @@ static bool ShouldRepaintSubsequence(
         paint_layer.Clipper(PaintLayer::kDoNotUseGeometryMapper)
             .PaintingClipRects(painting_info.root_layer, respect_overflow_clip,
                                subpixel_accumulation);
-    ClipRects* previous_clip_rects = paint_layer.PreviousPaintingClipRects();
+    ClipRects* previous_clip_rects = paint_layer.PreviousClipRects();
     if (&clip_rects != previous_clip_rects &&
         (!previous_clip_rects || clip_rects != *previous_clip_rects)) {
       needs_repaint = true;
       should_clear_empty_paint_phase_flags = true;
     }
-    paint_layer.SetPreviousPaintingClipRects(clip_rects);
+    paint_layer.SetPreviousClipRects(clip_rects);
   }
 
   // Repaint if previously the layer might be clipped by paintDirtyRect and
@@ -261,6 +268,11 @@ PaintResult PaintLayerPainter::PaintLayerContents(
     const PaintLayerPaintingInfo& painting_info_arg,
     PaintLayerFlags paint_flags,
     FragmentPolicy fragment_policy) {
+  PaintResult result = kFullyPainted;
+
+  if (paint_layer_.GetLayoutObject().GetFrameView()->ShouldThrottleRendering())
+    return result;
+
   Optional<ScopedPaintChunkProperties> scoped_paint_chunk_properties;
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() &&
       RuntimeEnabledFeatures::rootLayerScrollingEnabled() &&
@@ -302,17 +314,8 @@ PaintResult PaintLayerPainter::PaintLayerContents(
       (is_painting_composited_decoration || !is_painting_scrolling_content) &&
       paint_layer_.GetLayoutObject().StyleRef().HasOutline();
 
-  PaintResult result = kFullyPainted;
-
   if (paint_flags & kPaintLayerPaintingRootBackgroundOnly &&
       !paint_layer_.GetLayoutObject().IsLayoutView())
-    return result;
-
-  if (paint_layer_.GetLayoutObject().View()->GetFrame() &&
-      paint_layer_.GetLayoutObject()
-          .View()
-          ->GetFrame()
-          ->ShouldThrottleRendering())
     return result;
 
   // Ensure our lists are up to date.
@@ -470,6 +473,11 @@ PaintResult PaintLayerPainter::PaintLayerContents(
           geometry_mapper_option, kIgnorePlatformOverlayScrollbarSize,
           respect_overflow_clip, &offset_from_root,
           local_painting_info.sub_pixel_accumulation);
+      // PaintLayer::collectFragments depends on the paint dirty rect in
+      // complicated ways. For now, always assume a partially painted output
+      // for fragmented content.
+      if (layer_fragments.size() > 1)
+        result = kMayBeClippedByPaintDirtyRect;
     }
 
     if (paint_flags & kPaintLayerPaintingAncestorClippingMaskPhase) {
@@ -697,6 +705,7 @@ PaintResult PaintLayerPainter::PaintLayerWithTransform(
   if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
     geometry_mapper_option = PaintLayer::kUseGeometryMapper;
 
+  PaintResult result = kFullyPainted;
   PaintLayer* pagination_layer = paint_layer_.EnclosingPaginationLayer();
   PaintLayerFragments layer_fragments;
   bool is_fixed_position_object_in_paged_media =
@@ -739,6 +748,11 @@ PaintResult PaintLayerPainter::PaintLayerWithTransform(
         painting_info.paint_dirty_rect, cache_slot, geometry_mapper_option,
         kIgnorePlatformOverlayScrollbarSize, respect_overflow_clip, nullptr,
         painting_info.sub_pixel_accumulation, &transformed_extent);
+    // PaintLayer::collectFragments depends on the paint dirty rect in
+    // complicated ways. For now, always assume a partially painted output
+    // for fragmented content.
+    if (layer_fragments.size() > 1)
+      result = kMayBeClippedByPaintDirtyRect;
   }
 
   Optional<DisplayItemCacheSkipper> cache_skipper;
@@ -774,7 +788,6 @@ PaintResult PaintLayerPainter::PaintLayerWithTransform(
     }
   }
 
-  PaintResult result = kFullyPainted;
   for (const auto& fragment : layer_fragments) {
     Optional<LayerClipRecorder> clip_recorder;
     if (parent_layer && !RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
@@ -812,12 +825,18 @@ PaintResult PaintLayerPainter::PaintFragmentByApplyingTransform(
   LayoutPoint delta;
   paint_layer_.ConvertToLayerCoords(painting_info.root_layer, delta);
   delta.MoveBy(fragment_translation);
+  delta += painting_info.sub_pixel_accumulation;
+  IntPoint rounded_delta = RoundedIntPoint(delta);
+
   TransformationMatrix transform(
       paint_layer_.RenderableTransform(painting_info.GetGlobalPaintFlags()));
-  IntPoint rounded_delta = RoundedIntPoint(delta);
   transform.PostTranslate(rounded_delta.X(), rounded_delta.Y());
-  LayoutSize adjusted_sub_pixel_accumulation =
-      painting_info.sub_pixel_accumulation + (delta - rounded_delta);
+
+  LayoutSize new_sub_pixel_accumulation;
+  if (transform.IsIdentityOrTranslation())
+    new_sub_pixel_accumulation += delta - rounded_delta;
+  // Otherwise discard the sub-pixel remainder because paint offset can't be
+  // transformed by a non-translation transform.
 
   // TODO(jbroman): Put the real transform origin here, instead of using a
   // matrix with the origin baked in.
@@ -831,7 +850,7 @@ PaintResult PaintLayerPainter::PaintFragmentByApplyingTransform(
       &paint_layer_,
       LayoutRect(EnclosingIntRect(
           transform.Inverse().MapRect(painting_info.paint_dirty_rect))),
-      painting_info.GetGlobalPaintFlags(), adjusted_sub_pixel_accumulation);
+      painting_info.GetGlobalPaintFlags(), new_sub_pixel_accumulation);
   transformed_painting_info.ancestor_has_clip_path_clipping =
       painting_info.ancestor_has_clip_path_clipping;
 

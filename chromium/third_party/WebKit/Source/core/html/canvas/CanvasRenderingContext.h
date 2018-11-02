@@ -31,6 +31,7 @@
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
 #include "core/layout/HitTestCanvasResult.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
+#include "platform/graphics/CanvasColorParams.h"
 #include "platform/graphics/ColorBehavior.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/Noncopyable.h"
@@ -46,20 +47,6 @@ class HTMLCanvasElement;
 class ImageData;
 class ImageBitmap;
 class WebLayer;
-
-enum CanvasColorSpace {
-  kLegacyCanvasColorSpace,
-  kSRGBCanvasColorSpace,
-  kRec2020CanvasColorSpace,
-  kP3CanvasColorSpace,
-};
-
-enum CanvasPixelFormat {
-  kRGBA8CanvasPixelFormat,
-  kRGB10A2CanvasPixelFormat,
-  kRGBA12CanvasPixelFormat,
-  kF16CanvasPixelFormat,
-};
 
 constexpr const char* kLegacyCanvasColorSpaceName = "legacy-srgb";
 constexpr const char* kSRGBCanvasColorSpaceName = "srgb";
@@ -100,23 +87,13 @@ class CORE_EXPORT CanvasRenderingContext
   static ContextType ContextTypeFromId(const String& id);
   static ContextType ResolveContextTypeAliases(ContextType);
 
-  HTMLCanvasElement* canvas() const { return canvas_; }
+  CanvasRenderingContextHost* host() const { return host_; }
 
-  CanvasColorSpace ColorSpace() const { return color_space_; };
   WTF::String ColorSpaceAsString() const;
-  CanvasPixelFormat PixelFormat() const { return pixel_format_; };
   WTF::String PixelFormatAsString() const;
-  bool LinearPixelMath() const { return linear_pixel_math_; };
 
-  // The color space in which the the content should be interpreted by the
-  // compositor. This is always defined.
-  gfx::ColorSpace GfxColorSpace() const;
-  // The color space that should be used for SkSurface creation. This may
-  // be nullptr.
-  sk_sp<SkColorSpace> SkSurfaceColorSpace() const;
-  SkColorType ColorType() const;
+  const CanvasColorParams& color_params() const { return color_params_; }
   ColorBehavior ColorBehaviorForMediaDrawnToCanvas() const;
-  bool SkSurfacesUseColorSpace() const;
 
   virtual PassRefPtr<Image> GetImage(AccelerationHint,
                                      SnapshotReason) const = 0;
@@ -127,6 +104,7 @@ class CORE_EXPORT CanvasRenderingContext
   virtual bool ShouldAntialias() const { return false; }
   virtual void SetIsHidden(bool) = 0;
   virtual bool isContextLost() const { return true; }
+  // TODO(fserb): remove SetCanvasGetContextResult.
   virtual void SetCanvasGetContextResult(RenderingContext&) { NOTREACHED(); };
   virtual void SetOffscreenCanvasGetContextResult(OffscreenRenderingContext&) {
     NOTREACHED();
@@ -184,7 +162,6 @@ class CORE_EXPORT CanvasRenderingContext
     return HitTestCanvasResult::Create(String(), nullptr);
   }
   virtual String GetIdFromControl(const Element* element) { return String(); }
-  virtual bool IsAccelerationOptimalForCanvasContent() const { return true; }
   virtual void ResetUsageTracking(){};
 
   // WebGL-specific interface
@@ -205,22 +182,19 @@ class CORE_EXPORT CanvasRenderingContext
   virtual bool Paint(GraphicsContext&, const IntRect&) { return false; }
 
   // OffscreenCanvas-specific methods
-  OffscreenCanvas* offscreenCanvas() const { return offscreen_canvas_; }
   virtual ImageBitmap* TransferToImageBitmap(ScriptState*) { return nullptr; }
 
   bool WouldTaintOrigin(CanvasImageSource*, SecurityOrigin*);
   void DidMoveToNewDocument(Document*);
 
-  void DetachCanvas() { canvas_ = nullptr; }
-  void DetachOffscreenCanvas() { offscreen_canvas_ = nullptr; }
+  void DetachHost() { host_ = nullptr; }
 
   const CanvasContextCreationAttributes& CreationAttributes() const {
     return creation_attributes_;
   }
 
  protected:
-  CanvasRenderingContext(HTMLCanvasElement*,
-                         OffscreenCanvas*,
+  CanvasRenderingContext(CanvasRenderingContextHost*,
                          const CanvasContextCreationAttributes&);
   DECLARE_VIRTUAL_TRACE();
   virtual void Stop() = 0;
@@ -228,13 +202,10 @@ class CORE_EXPORT CanvasRenderingContext
  private:
   void Dispose();
 
-  Member<HTMLCanvasElement> canvas_;
-  Member<OffscreenCanvas> offscreen_canvas_;
+  Member<CanvasRenderingContextHost> host_;
   HashSet<String> clean_urls_;
   HashSet<String> dirty_urls_;
-  CanvasColorSpace color_space_;
-  CanvasPixelFormat pixel_format_;
-  bool linear_pixel_math_ = false;
+  CanvasColorParams color_params_;
   CanvasContextCreationAttributes creation_attributes_;
   bool finalize_frame_scheduled_ = false;
 };

@@ -29,6 +29,7 @@ const CGFloat kLabelAndFieldGap = 5;
 @synthesize textFieldName = _textFieldName;
 @synthesize textFieldValue = _textFieldValue;
 @synthesize cardTypeIcon = _cardTypeIcon;
+@synthesize inputView = _inputView;
 @synthesize textFieldEnabled = _textFieldEnabled;
 @synthesize autofillUIType = _autofillUIType;
 @synthesize required = _required;
@@ -60,6 +61,7 @@ const CGFloat kLabelAndFieldGap = 5;
   [cell.textField addTarget:self
                      action:@selector(textFieldChanged:)
            forControlEvents:UIControlEventEditingChanged];
+  cell.textField.inputView = self.inputView;
   cell.cardTypeIconView.image = self.cardTypeIcon;
 }
 
@@ -113,9 +115,6 @@ const CGFloat kLabelAndFieldGap = 5;
 
     // Card type icon.
     _cardTypeIconView = [[UIImageView alloc] initWithFrame:CGRectZero];
-    _cardTypeIconView.layer.borderColor =
-        [UIColor colorWithWhite:0.9 alpha:1.0].CGColor;
-    _cardTypeIconView.layer.borderWidth = 1.0;
     _cardTypeIconView.translatesAutoresizingMaskIntoConstraints = NO;
     [contentView addSubview:_cardTypeIconView];
 

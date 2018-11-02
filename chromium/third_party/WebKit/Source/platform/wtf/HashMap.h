@@ -105,7 +105,7 @@ class HashMap {
       const_iterator;
   typedef typename HashTableType::AddResult AddResult;
 
-  void Swap(HashMap& ref) { impl_.Swap(ref.impl_); }
+  void swap(HashMap& ref) { impl_.swap(ref.impl_); }
 
   unsigned size() const;
   unsigned Capacity() const;
@@ -133,8 +133,8 @@ class HashMap {
     return static_cast<const HashMapValuesProxy&>(*this);
   }
 
-  iterator Find(KeyPeekInType);
-  const_iterator Find(KeyPeekInType) const;
+  iterator find(KeyPeekInType);
+  const_iterator find(KeyPeekInType) const;
   bool Contains(KeyPeekInType) const;
   MappedPeekType at(KeyPeekInType) const;
 
@@ -152,7 +152,7 @@ class HashMap {
 
   void erase(KeyPeekInType);
   void erase(iterator);
-  void Clear();
+  void clear();
   template <typename Collection>
   void RemoveAll(const Collection& to_be_removed) {
     WTF::RemoveAll(*this, to_be_removed);
@@ -182,7 +182,7 @@ class HashMap {
   template <typename HashTranslator,
             typename IncomingKeyType,
             typename IncomingMappedType>
-  AddResult insert(IncomingKeyType&&, IncomingMappedType&&);
+  AddResult Insert(IncomingKeyType&&, IncomingMappedType&&);
 
   static bool IsValidKey(KeyPeekInType);
 
@@ -447,8 +447,8 @@ template <typename T,
           typename X,
           typename Y>
 inline typename HashMap<T, U, V, W, X, Y>::iterator
-HashMap<T, U, V, W, X, Y>::Find(KeyPeekInType key) {
-  return impl_.Find(key);
+HashMap<T, U, V, W, X, Y>::find(KeyPeekInType key) {
+  return impl_.find(key);
 }
 
 template <typename T,
@@ -458,8 +458,8 @@ template <typename T,
           typename X,
           typename Y>
 inline typename HashMap<T, U, V, W, X, Y>::const_iterator
-HashMap<T, U, V, W, X, Y>::Find(KeyPeekInType key) const {
-  return impl_.Find(key);
+HashMap<T, U, V, W, X, Y>::find(KeyPeekInType key) const {
+  return impl_.find(key);
 }
 
 template <typename T,
@@ -561,7 +561,7 @@ template <typename T,
 template <typename HashTranslator,
           typename IncomingKeyType,
           typename IncomingMappedType>
-auto HashMap<T, U, V, W, X, Y>::insert(IncomingKeyType&& key,
+auto HashMap<T, U, V, W, X, Y>::Insert(IncomingKeyType&& key,
                                        IncomingMappedType&& mapped)
     -> AddResult {
   return impl_.template AddPassingHashCode<
@@ -592,7 +592,7 @@ template <typename T,
           typename Y>
 typename HashMap<T, U, V, W, X, Y>::MappedPeekType
 HashMap<T, U, V, W, X, Y>::at(KeyPeekInType key) const {
-  ValueType* entry = const_cast<HashTableType&>(impl_).Lookup(key);
+  const ValueType* entry = impl_.Lookup(key);
   if (!entry)
     return MappedTraits::Peek(MappedTraits::EmptyValue());
   return MappedTraits::Peek(entry->value);
@@ -615,7 +615,7 @@ template <typename T,
           typename X,
           typename Y>
 inline void HashMap<T, U, V, W, X, Y>::erase(KeyPeekInType key) {
-  erase(Find(key));
+  erase(find(key));
 }
 
 template <typename T,
@@ -624,8 +624,8 @@ template <typename T,
           typename W,
           typename X,
           typename Y>
-inline void HashMap<T, U, V, W, X, Y>::Clear() {
-  impl_.Clear();
+inline void HashMap<T, U, V, W, X, Y>::clear() {
+  impl_.clear();
 }
 
 template <typename T,
@@ -635,7 +635,7 @@ template <typename T,
           typename X,
           typename Y>
 auto HashMap<T, U, V, W, X, Y>::Take(KeyPeekInType key) -> MappedType {
-  iterator it = Find(key);
+  iterator it = find(key);
   if (it == end())
     return MappedTraits::EmptyValue();
   MappedType result = std::move(it->value);
@@ -680,7 +680,7 @@ bool operator==(const HashMap<T, U, V, W, X, Y>& a,
   const_iterator a_end = a.end();
   const_iterator b_end = b.end();
   for (const_iterator it = a.begin(); it != a_end; ++it) {
-    const_iterator b_pos = b.Find(it->key);
+    const_iterator b_pos = b.find(it->key);
     if (b_pos == b_end || it->value != b_pos->value)
       return false;
   }
@@ -711,7 +711,7 @@ inline void CopyKeysToVector(const HashMap<T, U, V, W, X, Y>& collection,
   typedef
       typename HashMap<T, U, V, W, X, Y>::const_iterator::KeysIterator iterator;
 
-  vector.Resize(collection.size());
+  vector.resize(collection.size());
 
   iterator it = collection.begin().Keys();
   iterator end = collection.end().Keys();
@@ -731,7 +731,7 @@ inline void CopyValuesToVector(const HashMap<T, U, V, W, X, Y>& collection,
   typedef typename HashMap<T, U, V, W, X, Y>::const_iterator::ValuesIterator
       iterator;
 
-  vector.Resize(collection.size());
+  vector.resize(collection.size());
 
   iterator it = collection.begin().Values();
   iterator end = collection.end().Values();

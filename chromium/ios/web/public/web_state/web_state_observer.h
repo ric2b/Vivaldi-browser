@@ -12,11 +12,8 @@
 
 #include "base/macros.h"
 
-class GURL;
-
 namespace web {
 
-struct Credential;
 struct FaviconURL;
 class NavigationContext;
 struct LoadCommittedDetails;
@@ -33,13 +30,14 @@ class WebStateObserver {
   // Returns the web state associated with this observer.
   WebState* web_state() const { return web_state_; }
 
-  // This method is invoked when a load request is registered.
-  virtual void ProvisionalNavigationStarted(const GURL& url) {}
-
   // This method is invoked when committed navigation items have been pruned.
   virtual void NavigationItemsPruned(size_t pruned_item_count) {}
 
-  // This method is invoked when a navigation item has changed.
+  // This method is invoked either when NavigationItem's titile did change or
+  // when window.location.replace JavaScript API was called.
+  // DEPRECATED. Use |TitleWasSet| to listen for title changes and
+  // |DidFinishNavigation| for |window.location.replace|.
+  // TODO(crbug.com/720786): Remove this method.
   virtual void NavigationItemChanged() {}
 
   // This method is invoked when a new non-pending navigation item is created.
@@ -49,10 +47,28 @@ class WebStateObserver {
   virtual void NavigationItemCommitted(
       const LoadCommittedDetails& load_details) {}
 
-  // Called when a navigation finished in the WebState. This happens when a
-  // navigation is committed, aborted or replaced by a new one. To know if the
-  // navigation has resulted in an error page, use
-  // NavigationContext::IsErrorPage().
+  // Called when a navigation started in the WebState for the main frame.
+  // |navigation_context| is unique to a specific navigation. The same
+  // NavigationContext will be provided on subsequent call to
+  // DidFinishNavigation() when related to this navigation. Observers should
+  // clear any references to |navigation_context| in DidFinishNavigation(), just
+  // before it is destroyed.
+  //
+  // This is also fired by same-document navigations, such as fragment
+  // navigations or pushState/replaceState, which will not result in a document
+  // change. To filter these out, use NavigationContext::IsSameDocument().
+  //
+  // More than one navigation can be ongoing in the same frame at the same
+  // time. Each will get its own NavigationHandle.
+  //
+  // There is no guarantee that DidFinishNavigation() will be called for any
+  // particular navigation before DidStartNavigation is called on the next.
+  virtual void DidStartNavigation(NavigationContext* navigation_context) {}
+
+  // Called when a navigation finished in the WebState for the main frame. This
+  // happens when a navigation is committed, aborted or replaced by a new one.
+  // To know if the navigation has resulted in an error page, use
+  // NavigationContext::GetError().
   //
   // If this is called because the navigation committed, then the document load
   // will still be ongoing in the WebState returned by |navigation_context|.
@@ -91,8 +107,7 @@ class WebStateObserver {
   // Called when the visible security state of the page changes.
   virtual void DidChangeVisibleSecurityState() {}
 
-  // Called when a dialog (JavaScript, geolocation) or window open request was
-  // suppressed.
+  // Called when a JavaScript dialog or window open request was suppressed.
   // NOTE: Called only if WebState::SetShouldSuppressDialogs() was called with
   // false.
   virtual void DidSuppressDialog() {}
@@ -116,54 +131,6 @@ class WebStateObserver {
   // Called when the web process is terminated (usually by crashing, though
   // possibly by other means).
   virtual void RenderProcessGone() {}
-
-  // Notifies the observer that the credential manager API was invoked from
-  // |source_url| to request a credential from the browser. If |unmediated|
-  // is true, the browser MUST NOT show any UI to the user. If this means that
-  // no credential will be returned to the page, so be it. Otherwise, the
-  // browser may show the user any UI that is necessary to get a Credential and
-  // return it to the page. |federations| specifies a list of acceptable
-  // federation providers. |user_interaction| indicates whether the API was
-  // invoked in response to a user interaction. Responses to the page should
-  // provide the specified |request_id|.
-  virtual void CredentialsRequested(int request_id,
-                                    const GURL& source_url,
-                                    bool unmediated,
-                                    const std::vector<std::string>& federations,
-                                    bool is_user_initiated) {}
-
-  // Notifies the observer that the credential manager API was invoked from
-  // |source_url| to notify the browser that the user signed in. |credential|
-  // specifies the credential that was used to sign in. Responses to the page
-  // should provide the specified |request_id|.
-  virtual void SignedIn(int request_id,
-                        const GURL& source_url,
-                        const web::Credential& credential) {}
-
-  // Notifies the observer that the credential manager API was invoked from
-  // |source_url| to notify the browser that the user signed in without
-  // specifying the credential that was used. Responses to the page should
-  // provide the specified |request_id|.
-  virtual void SignedIn(int request_id, const GURL& source_url) {}
-
-  // Notifies the observer that the credential manager API was invoked from
-  // |source_url| to notify the browser that the user signed out. Responses
-  // to the page should provide the specified |request_id|.
-  virtual void SignedOut(int request_id, const GURL& source_url) {}
-
-  // Notifies the observer that the credential manager API was invoked from
-  // |source_url| to notify the browser that the user failed to sign in.
-  // |credential| specifies the credential that failed to sign in. Responses
-  // to the page should provide the specified |request_id|.
-  virtual void SignInFailed(int request_id,
-                            const GURL& source_url,
-                            const web::Credential& credential) {}
-
-  // Notifies the observer that the credential manager API was invoked from
-  // |source_url| to notify the browser that the user failed to sign in without
-  // specifying the credential that failed. Responses to the page should provide
-  // the specified |request_id|.
-  virtual void SignInFailed(int request_id, const GURL& source_url) {}
 
   // Invoked when the WebState is being destroyed. Gives subclasses a chance
   // to cleanup.

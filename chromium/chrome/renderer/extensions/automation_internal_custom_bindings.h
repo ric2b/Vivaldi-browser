@@ -30,7 +30,6 @@ struct TreeCache {
   int tree_id;
   int parent_node_id_from_parent_tree;
 
-  gfx::Vector2d location_offset;
   ui::AXTree tree;
   AutomationInternalCustomBindings* owner;
 };
@@ -59,6 +58,8 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler,
   ScriptContext* context() const {
     return ObjectBackedNativeHandler::context();
   }
+
+  float GetDeviceScaleFactor() const;
 
  private:
   // ObjectBackedNativeHandler overrides:

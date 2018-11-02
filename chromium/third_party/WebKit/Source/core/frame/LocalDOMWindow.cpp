@@ -65,6 +65,7 @@
 #include "core/frame/Settings.h"
 #include "core/frame/SuspendableTimer.h"
 #include "core/frame/VisualViewport.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -83,6 +84,7 @@
 #include "platform/Histogram.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/scroll/ScrollbarTheme.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/Suborigin.h"
 #include "public/platform/Platform.h"
@@ -110,7 +112,7 @@ class PostMessageTimer final
       : SuspendableTimer(window.document(), TaskType::kPostedMessage),
         event_(event),
         window_(&window),
-        target_origin_(target_origin),
+        target_origin_(std::move(target_origin)),
         location_(std::move(location)),
         user_gesture_token_(user_gesture_token),
         disposal_allowed_(true) {
@@ -268,21 +270,9 @@ unsigned LocalDOMWindow::PendingUnloadEventListeners() const {
       const_cast<LocalDOMWindow*>(this));
 }
 
-bool LocalDOMWindow::AllowPopUp(LocalFrame& first_frame) {
-  if (UserGestureIndicator::UtilizeUserGesture())
-    return true;
-
-  Settings* settings = first_frame.GetSettings();
-  return settings && settings->GetJavaScriptCanOpenWindowsAutomatically();
-}
-
-bool LocalDOMWindow::AllowPopUp() {
-  return GetFrame() && AllowPopUp(*GetFrame());
-}
-
 LocalDOMWindow::LocalDOMWindow(LocalFrame& frame)
     : DOMWindow(frame),
-      visual_viewport_(DOMVisualViewport::Create(this)),
+      view_(DOMVisualViewport::Create(this)),
       unused_preloads_timer_(
           TaskRunnerHelper::Get(TaskType::kUnspecedTimer, &frame),
           this,
@@ -294,7 +284,7 @@ void LocalDOMWindow::ClearDocument() {
   if (!document_)
     return;
 
-  ASSERT(!document_->IsActive());
+  DCHECK(!document_->IsActive());
 
   // FIXME: This should be part of SuspendableObject shutdown
   ClearEventQueue();
@@ -345,7 +335,7 @@ LocalDOMWindow* LocalDOMWindow::From(const ScriptState* script_state) {
 Document* LocalDOMWindow::InstallNewDocument(const String& mime_type,
                                              const DocumentInit& init,
                                              bool force_xhtml) {
-  ASSERT(init.GetFrame() == GetFrame());
+  DCHECK_EQ(init.GetFrame(), GetFrame());
 
   ClearDocument();
 
@@ -463,7 +453,7 @@ void LocalDOMWindow::StatePopped(
 
 LocalDOMWindow::~LocalDOMWindow() {
   // Cleared when detaching document.
-  ASSERT(!event_queue_);
+  DCHECK(!event_queue_);
 }
 
 void LocalDOMWindow::Dispose() {
@@ -528,27 +518,30 @@ void LocalDOMWindow::Reset() {
 }
 
 void LocalDOMWindow::SendOrientationChangeEvent() {
-  ASSERT(RuntimeEnabledFeatures::orientationEventEnabled());
-  ASSERT(GetFrame()->IsMainFrame());
+  DCHECK(RuntimeEnabledFeatures::orientationEventEnabled());
+  DCHECK(GetFrame()->IsLocalRoot());
 
   // Before dispatching the event, build a list of all frames in the page
   // to send the event to, to mitigate side effects from event handlers
   // potentially interfering with others.
-  HeapVector<Member<Frame>> frames;
-  for (Frame* f = GetFrame(); f; f = f->Tree().TraverseNext())
-    frames.push_back(f);
+  HeapVector<Member<LocalFrame>> frames;
+  frames.push_back(GetFrame());
+  for (size_t i = 0; i < frames.size(); i++) {
+    for (Frame* child = frames[i]->Tree().FirstChild(); child;
+         child = child->Tree().NextSibling()) {
+      if (child->IsLocalFrame())
+        frames.push_back(ToLocalFrame(child));
+    }
+  }
 
-  for (size_t i = 0; i < frames.size(); ++i) {
-    if (!frames[i]->IsLocalFrame())
-      continue;
-    ToLocalFrame(frames[i].Get())
-        ->DomWindow()
-        ->DispatchEvent(Event::Create(EventTypeNames::orientationchange));
+  for (LocalFrame* frame : frames) {
+    frame->DomWindow()->DispatchEvent(
+        Event::Create(EventTypeNames::orientationchange));
   }
 }
 
 int LocalDOMWindow::orientation() const {
-  ASSERT(RuntimeEnabledFeatures::orientationEventEnabled());
+  DCHECK(RuntimeEnabledFeatures::orientationEventEnabled());
 
   if (!GetFrame() || !GetFrame()->GetPage())
     return 0;
@@ -697,6 +690,14 @@ void LocalDOMWindow::DispatchMessageEventWithOriginCheck(
       GetFrameConsole()->AddMessage(console_message);
       return;
     }
+  }
+
+  KURL sender(kParsedURLString, static_cast<MessageEvent*>(event)->origin());
+  if (!document()->GetContentSecurityPolicy()->AllowConnectToSource(
+          sender, RedirectStatus::kNoRedirect,
+          SecurityViolationReportingPolicy::kSuppressReporting)) {
+    UseCounter::Count(
+        GetFrame(), UseCounter::kPostMessageIncomingWouldBeBlockedByConnectSrc);
   }
 
   DispatchEvent(event);
@@ -975,11 +976,17 @@ FloatSize LocalDOMWindow::GetViewportSize(
   if (!page)
     return FloatSize();
 
-  // The main frame's viewport size depends on the page scale. Since the
-  // initial page scale depends on the content width and is set after a
-  // layout, perform one now so queries during page load will use the up to
-  // date viewport.
-  if (page->GetSettings().GetViewportEnabled() && GetFrame()->IsMainFrame())
+  // The main frame's viewport size depends on the page scale. If viewport is
+  // enabled, the initial page scale depends on the content width and is set
+  // after a layout, perform one now so queries during page load will use the
+  // up to date viewport.
+  bool affectedByScale =
+      page->GetSettings().GetViewportEnabled() && GetFrame()->IsMainFrame();
+  bool affectedByScrollbars =
+      scrollbar_inclusion == kExcludeScrollbars &&
+      !ScrollbarTheme::GetTheme().UsesOverlayScrollbars();
+
+  if (affectedByScale || affectedByScrollbars)
     document()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   // FIXME: This is potentially too much work. We really only need to know the
@@ -1050,7 +1057,7 @@ double LocalDOMWindow::scrollX() const {
     return 0;
 
   if (!GetFrame()->GetPage()->GetSettings().GetInertVisualViewport())
-    return visual_viewport_->pageX();
+    return view_->pageLeft();
 
   FrameView* view = GetFrame()->View();
   if (!view)
@@ -1068,7 +1075,7 @@ double LocalDOMWindow::scrollY() const {
     return 0;
 
   if (!GetFrame()->GetPage()->GetSettings().GetInertVisualViewport())
-    return visual_viewport_->pageY();
+    return view_->pageTop();
 
   FrameView* view = GetFrame()->View();
   if (!view)
@@ -1081,11 +1088,11 @@ double LocalDOMWindow::scrollY() const {
   return AdjustScrollForAbsoluteZoom(viewport_y, GetFrame()->PageZoomFactor());
 }
 
-DOMVisualViewport* LocalDOMWindow::visualViewport() {
+DOMVisualViewport* LocalDOMWindow::view() {
   if (!GetFrame())
     return nullptr;
 
-  return visual_viewport_;
+  return view_;
 }
 
 const AtomicString& LocalDOMWindow::name() const {
@@ -1110,7 +1117,7 @@ void LocalDOMWindow::setName(const AtomicString& name) {
     return;
 
   GetFrame()->Tree().SetName(name);
-  ASSERT(GetFrame()->Loader().Client());
+  DCHECK(GetFrame()->Loader().Client());
   GetFrame()->Loader().Client()->DidChangeName(name);
 }
 
@@ -1157,7 +1164,7 @@ StyleMedia* LocalDOMWindow::styleMedia() const {
 CSSStyleDeclaration* LocalDOMWindow::getComputedStyle(
     Element* elt,
     const String& pseudo_elt) const {
-  ASSERT(elt);
+  DCHECK(elt);
   return CSSComputedStyleDeclaration::Create(elt, false, pseudo_elt);
 }
 
@@ -1429,8 +1436,7 @@ bool LocalDOMWindow::isSecureContext() const {
   if (!GetFrame())
     return false;
 
-  return document()->IsSecureContext(
-      ExecutionContext::kStandardSecureContextCheck);
+  return document()->IsSecureContext();
 }
 
 void LocalDOMWindow::AddedEventListener(
@@ -1442,7 +1448,7 @@ void LocalDOMWindow::AddedEventListener(
         *this, event_type, registered_listener.Options());
 
   if (Document* document = this->document())
-    document->AddListenerTypeIfNeeded(event_type);
+    document->AddListenerTypeIfNeeded(event_type, *this);
 
   for (auto& it : event_listener_observers_) {
     it->DidAddEventListener(this, event_type);
@@ -1505,6 +1511,7 @@ void LocalDOMWindow::DispatchLoadEvent() {
     DocumentLoadTiming& timing = document_loader->GetTiming();
     timing.MarkLoadEventStart();
     DispatchEvent(load_event, document());
+    SetHasLoadEventFired();
     timing.MarkLoadEventEnd();
     DCHECK(document_loader->Fetcher());
     // If fetcher->countPreloads() is not empty here, it's full of link
@@ -1600,7 +1607,8 @@ DOMWindow* LocalDOMWindow::open(const String& url_string,
                                 const AtomicString& frame_name,
                                 const String& window_features_string,
                                 LocalDOMWindow* calling_window,
-                                LocalDOMWindow* entered_window) {
+                                LocalDOMWindow* entered_window,
+                                ExceptionState& exception_state) {
   if (!IsCurrentlyDisplayedInFrame())
     return nullptr;
   if (!calling_window->GetFrame())
@@ -1616,19 +1624,11 @@ DOMWindow* LocalDOMWindow::open(const String& url_string,
   if (!window_features_string.IsEmpty())
     UseCounter::Count(*active_document, UseCounter::kDOMWindowOpenFeatures);
 
-  if (!entered_window->AllowPopUp()) {
-    // Because FrameTree::find() returns true for empty strings, we must check
-    // for empty frame names.  Otherwise, illegitimate window.open() calls with
-    // no name will pass right through the popup blocker.
-    if (frame_name.IsEmpty() || !GetFrame()->Tree().Find(frame_name))
-      return nullptr;
-  }
-
   // Get the target frame for the special cases of _top and _parent.
   // In those cases, we schedule a location change right now and return early.
   Frame* target_frame = nullptr;
   if (EqualIgnoringASCIICase(frame_name, "_top")) {
-    target_frame = GetFrame()->Tree().Top();
+    target_frame = &GetFrame()->Tree().Top();
   } else if (EqualIgnoringASCIICase(frame_name, "_parent")) {
     if (Frame* parent = GetFrame()->Tree().Parent())
       target_frame = parent;
@@ -1638,8 +1638,9 @@ DOMWindow* LocalDOMWindow::open(const String& url_string,
 
   if (target_frame) {
     if (!active_document->GetFrame() ||
-        !active_document->GetFrame()->CanNavigate(*target_frame))
+        !active_document->GetFrame()->CanNavigate(*target_frame)) {
       return nullptr;
+    }
 
     KURL completed_url = first_frame->GetDocument()->CompleteURL(url_string);
 
@@ -1658,7 +1659,7 @@ DOMWindow* LocalDOMWindow::open(const String& url_string,
   WindowFeatures features(window_features_string);
   DOMWindow* new_window =
       CreateWindow(url_string, frame_name, features, *calling_window,
-                   *first_frame, *GetFrame());
+                   *first_frame, *GetFrame(), exception_state);
   return features.noopener ? nullptr : new_window;
 }
 
@@ -1679,7 +1680,7 @@ DEFINE_TRACE(LocalDOMWindow) {
   visitor->Trace(application_cache_);
   visitor->Trace(event_queue_);
   visitor->Trace(post_message_timers_);
-  visitor->Trace(visual_viewport_);
+  visitor->Trace(view_);
   visitor->Trace(event_listener_observers_);
   DOMWindow::Trace(visitor);
   Supplementable<LocalDOMWindow>::Trace(visitor);

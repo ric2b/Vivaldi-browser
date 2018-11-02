@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/critical_closure.h"
 #include "base/debug/alias.h"
 #include "base/files/file.h"
@@ -32,7 +33,7 @@ namespace base {
 
 namespace {
 
-const int kDefaultCommitIntervalMs = 10000;
+constexpr auto kDefaultCommitInterval = TimeDelta::FromSeconds(10);
 
 // This enum is used to define the buckets for an enumerated UMA histogram.
 // Hence,
@@ -138,10 +139,9 @@ bool ImportantFileWriter::WriteFileAtomically(const FilePath& path,
 ImportantFileWriter::ImportantFileWriter(
     const FilePath& path,
     scoped_refptr<SequencedTaskRunner> task_runner)
-    : ImportantFileWriter(
-          path,
-          std::move(task_runner),
-          TimeDelta::FromMilliseconds(kDefaultCommitIntervalMs)) {}
+    : ImportantFileWriter(path,
+                          std::move(task_runner),
+                          kDefaultCommitInterval) {}
 
 ImportantFileWriter::ImportantFileWriter(
     const FilePath& path,
@@ -165,7 +165,7 @@ ImportantFileWriter::~ImportantFileWriter() {
 
 bool ImportantFileWriter::HasPendingWrite() const {
   DCHECK(CalledOnValidThread());
-  return timer_.IsRunning();
+  return timer().IsRunning();
 }
 
 void ImportantFileWriter::WriteNow(std::unique_ptr<std::string> data) {
@@ -175,12 +175,10 @@ void ImportantFileWriter::WriteNow(std::unique_ptr<std::string> data) {
     return;
   }
 
-  if (HasPendingWrite())
-    timer_.Stop();
-
-  Closure task = Bind(&WriteScopedStringToFileAtomically, path_, Passed(&data),
-                      Passed(&before_next_write_callback_),
-                      Passed(&after_next_write_callback_));
+  Closure task = AdaptCallbackForRepeating(
+      BindOnce(&WriteScopedStringToFileAtomically, path_, std::move(data),
+               std::move(before_next_write_callback_),
+               std::move(after_next_write_callback_)));
 
   if (!task_runner_->PostTask(FROM_HERE, MakeCriticalClosure(task))) {
     // Posting the task to background message loop is not expected
@@ -190,6 +188,7 @@ void ImportantFileWriter::WriteNow(std::unique_ptr<std::string> data) {
 
     task.Run();
   }
+  ClearPendingWrite();
 }
 
 void ImportantFileWriter::ScheduleWrite(DataSerializer* serializer) {
@@ -198,9 +197,10 @@ void ImportantFileWriter::ScheduleWrite(DataSerializer* serializer) {
   DCHECK(serializer);
   serializer_ = serializer;
 
-  if (!timer_.IsRunning()) {
-    timer_.Start(FROM_HERE, commit_interval_, this,
-                 &ImportantFileWriter::DoScheduledWrite);
+  if (!timer().IsRunning()) {
+    timer().Start(
+        FROM_HERE, commit_interval_,
+        Bind(&ImportantFileWriter::DoScheduledWrite, Unretained(this)));
   }
 }
 
@@ -213,7 +213,7 @@ void ImportantFileWriter::DoScheduledWrite() {
     DLOG(WARNING) << "failed to serialize data to be saved in "
                   << path_.value();
   }
-  serializer_ = nullptr;
+  ClearPendingWrite();
 }
 
 void ImportantFileWriter::RegisterOnNextWriteCallbacks(
@@ -221,6 +221,15 @@ void ImportantFileWriter::RegisterOnNextWriteCallbacks(
     const Callback<void(bool success)>& after_next_write_callback) {
   before_next_write_callback_ = before_next_write_callback;
   after_next_write_callback_ = after_next_write_callback;
+}
+
+void ImportantFileWriter::ClearPendingWrite() {
+  timer().Stop();
+  serializer_ = nullptr;
+}
+
+void ImportantFileWriter::SetTimerForTesting(Timer* timer_override) {
+  timer_override_ = timer_override;
 }
 
 }  // namespace base

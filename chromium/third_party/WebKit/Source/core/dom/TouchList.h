@@ -26,9 +26,9 @@
 #ifndef TouchList_h
 #define TouchList_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/Touch.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Vector.h"
 
@@ -63,7 +63,7 @@ class CORE_EXPORT TouchList final : public GarbageCollected<TouchList>,
  private:
   TouchList() {}
 
-  TouchList(HeapVector<Member<Touch>>& touches) { values_.Swap(touches); }
+  TouchList(HeapVector<Member<Touch>>& touches) { values_.swap(touches); }
 
   HeapVector<Member<Touch>> values_;
 };

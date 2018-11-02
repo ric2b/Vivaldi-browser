@@ -5,13 +5,14 @@
 #include "web/RemoteFrameOwner.h"
 
 #include "core/frame/LocalFrame.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "public/web/WebFrameClient.h"
-#include "web/WebLocalFrameImpl.h"
 
 namespace blink {
 
 RemoteFrameOwner::RemoteFrameOwner(
     SandboxFlags flags,
+    const WebParsedFeaturePolicy& container_policy,
     const WebFrameOwnerProperties& frame_owner_properties)
     : sandbox_flags_(flags),
       browsing_context_container_name_(
@@ -23,7 +24,8 @@ RemoteFrameOwner::RemoteFrameOwner(
       allow_fullscreen_(frame_owner_properties.allow_fullscreen),
       allow_payment_request_(frame_owner_properties.allow_payment_request),
       is_display_none_(frame_owner_properties.is_display_none),
-      csp_(frame_owner_properties.required_csp) {}
+      csp_(frame_owner_properties.required_csp),
+      container_policy_(container_policy) {}
 
 DEFINE_TRACE(RemoteFrameOwner) {
   visitor->Trace(frame_);
@@ -45,8 +47,8 @@ void RemoteFrameOwner::ClearContentFrame() {
 }
 
 void RemoteFrameOwner::DispatchLoad() {
-  WebLocalFrameImpl* web_frame =
-      WebLocalFrameImpl::FromFrame(ToLocalFrame(*frame_));
+  WebLocalFrameBase* web_frame =
+      WebLocalFrameBase::FromFrame(ToLocalFrame(*frame_));
   web_frame->Client()->DispatchLoad();
 }
 

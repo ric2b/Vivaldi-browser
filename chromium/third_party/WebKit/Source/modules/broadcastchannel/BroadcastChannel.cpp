@@ -4,7 +4,7 @@
 
 #include "modules/broadcastchannel/BroadcastChannel.h"
 
-#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/events/EventQueue.h"
 #include "core/events/MessageEvent.h"
@@ -129,7 +129,7 @@ BroadcastChannel::BroadcastChannel(ExecutionContext* execution_context,
   // Local BroadcastChannelClient for messages send from the browser to this
   // channel.
   mojom::blink::BroadcastChannelClientAssociatedPtrInfo local_client_info;
-  binding_.Bind(&local_client_info);
+  binding_.Bind(mojo::MakeRequest(&local_client_info));
   binding_.set_connection_error_handler(ConvertToBaseCallback(
       WTF::Bind(&BroadcastChannel::OnError, WrapWeakPersistent(this))));
 

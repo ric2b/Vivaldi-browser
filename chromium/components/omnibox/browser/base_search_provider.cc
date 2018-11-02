@@ -23,11 +23,23 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "url/gurl.h"
 
 using metrics::OmniboxEventProto;
+
+namespace {
+bool IsNTPPage(OmniboxEventProto::PageClassification page_classification) {
+  return (page_classification == OmniboxEventProto::NTP) ||
+         (page_classification == OmniboxEventProto::OBSOLETE_INSTANT_NTP) ||
+         (page_classification ==
+          OmniboxEventProto::INSTANT_NTP_WITH_FAKEBOX_AS_STARTING_FOCUS) ||
+         (page_classification ==
+          OmniboxEventProto::INSTANT_NTP_WITH_OMNIBOX_AS_STARTING_FOCUS);
+}
+}  // namespace
 
 // SuggestionDeletionHandler -------------------------------------------------
 
@@ -62,9 +74,44 @@ SuggestionDeletionHandler::SuggestionDeletionHandler(
   GURL url(deletion_url);
   DCHECK(url.is_valid());
 
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("omnibox_suggest_deletion", R"(
+        semantics {
+          sender: "Omnibox"
+          description:
+            "When users attempt to delete server-provided personalized search "
+            "or navigation suggestions from the omnibox dropdown, Chrome sends "
+            "a message to the server requesting deletion of the suggestion."
+          trigger:
+            "A user attempt to delete a server-provided omnibox suggestion, "
+            "for which the server provided a custom deletion URL."
+          data:
+            "No user data is explicitly sent with the request, but because the "
+            "requested URL is provided by the server for each specific "
+            "suggestion, it necessarily uniquely identifies the suggestion the "
+            "user is attempting to delete."
+          destination: WEBSITE
+        }
+        policy {
+          cookies_allowed: true
+          cookies_store: "user"
+          setting:
+            "Since this can only be triggered on seeing server-provided "
+            "suggestions in the omnibox dropdown, whether it is enabled is the "
+            "same as whether those suggestions are enabled.\n"
+            "Users can control this feature via the 'Use a prediction service "
+            "to help complete searches and URLs typed in the address bar' "
+            "setting under 'Privacy'. The feature is enabled by default."
+          chrome_policy {
+            SearchSuggestEnabled {
+                policy_options {mode: MANDATORY}
+                SearchSuggestEnabled: false
+            }
+          }
+        })");
   deletion_fetcher_ =
       net::URLFetcher::Create(BaseSearchProvider::kDeletionURLFetcherID, url,
-                              net::URLFetcher::GET, this);
+                              net::URLFetcher::GET, this, traffic_annotation);
   data_use_measurement::DataUseUserData::AttachToFetcher(
       deletion_fetcher_.get(), data_use_measurement::DataUseUserData::OMNIBOX);
   deletion_fetcher_->SetRequestContext(request_context);
@@ -133,7 +180,7 @@ void BaseSearchProvider::DeleteMatch(const AutocompleteMatch& match) {
                    base::Unretained(this))));
   }
 
-  TemplateURL* template_url =
+  const TemplateURL* template_url =
       match.GetTemplateURL(client_->GetTemplateURLService(), false);
   // This may be NULL if the template corresponding to the keyword has been
   // deleted or there is no keyword set.
@@ -217,8 +264,8 @@ AutocompleteMatch BaseSearchProvider::CreateSearchSuggestion(
   match.answer = SuggestionAnswer::copy(suggestion.answer());
   match.subtype_identifier = suggestion.subtype_identifier();
   if (suggestion.type() == AutocompleteMatchType::SEARCH_SUGGEST_TAIL) {
-    match.RecordAdditionalInfo(
-        kACMatchPropertyInputText, base::UTF16ToUTF8(input.text()));
+    match.RecordAdditionalInfo(kACMatchPropertySuggestionText,
+                               base::UTF16ToUTF8(suggestion.suggestion()));
     match.RecordAdditionalInfo(
         kACMatchPropertyContentsPrefix,
         base::UTF16ToUTF8(suggestion.match_contents_prefix()));
@@ -291,34 +338,14 @@ bool BaseSearchProvider::ZeroSuggestEnabled(
   if (!OmniboxFieldTrial::InZeroSuggestFieldTrial())
     return false;
 
-  // Make sure we are sending the suggest request through a cryptographically
-  // secure channel to prevent exposing the current page URL or personalized
-  // results without encryption.
-  if (!suggest_url.SchemeIsCryptographic())
-    return false;
-
   // Don't show zero suggest on the NTP.
   // TODO(hfung): Experiment with showing MostVisited zero suggest on NTP
   // under the conditions described in crbug.com/305366.
-  if ((page_classification ==
-       OmniboxEventProto::INSTANT_NTP_WITH_FAKEBOX_AS_STARTING_FOCUS) ||
-      (page_classification ==
-       OmniboxEventProto::INSTANT_NTP_WITH_OMNIBOX_AS_STARTING_FOCUS))
+  if (IsNTPPage(page_classification))
     return false;
 
   // Don't run if in incognito mode.
   if (client->IsOffTheRecord())
-    return false;
-
-  // Don't run if we can't get preferences or search suggest is not enabled.
-  if (!client->SearchSuggestEnabled())
-    return false;
-
-  // Only make the request if we know that the provider supports zero suggest
-  // (currently only the prepopulated Google provider).
-  if (template_url == NULL ||
-      !template_url->SupportsReplacement(search_terms_data) ||
-      template_url->GetEngineType(search_terms_data) != SEARCH_ENGINE_GOOGLE)
     return false;
 
   return true;
@@ -332,11 +359,34 @@ bool BaseSearchProvider::CanSendURL(
     OmniboxEventProto::PageClassification page_classification,
     const SearchTermsData& search_terms_data,
     AutocompleteProviderClient* client) {
-  if (!ZeroSuggestEnabled(suggest_url, template_url, page_classification,
-                          search_terms_data, client))
+  // Make sure we are sending the suggest request through a cryptographically
+  // secure channel to prevent exposing the current page URL or personalized
+  // results without encryption.
+  if (!suggest_url.SchemeIsCryptographic())
+    return false;
+
+  // Don't run if in incognito mode.
+  if (client->IsOffTheRecord())
+    return false;
+
+  // Don't run if we can't get preferences or search suggest is not enabled.
+  if (!client->SearchSuggestEnabled())
+    return false;
+
+  // Only make the request if we know that the provider supports sending zero
+  // suggest. (currently only the prepopulated Google provider).
+  if (template_url == NULL ||
+      !template_url->SupportsReplacement(search_terms_data) ||
+      template_url->GetEngineType(search_terms_data) != SEARCH_ENGINE_GOOGLE)
     return false;
 
   if (!current_page_url.is_valid())
+    return false;
+
+  // Don't bother sending the URL of an NTP page; it's not useful.  The server
+  // already gets equivalent information in the form of the current page
+  // classification.
+  if (IsNTPPage(page_classification))
     return false;
 
   // Only allow HTTP URLs or HTTPS URLs.  For HTTPS URLs, require that either

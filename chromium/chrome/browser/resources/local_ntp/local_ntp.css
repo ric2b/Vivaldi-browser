@@ -283,3 +283,13 @@ html[dir=rtl] #attribution,
   height: 100%;
   width: 100%;
 }
+
+#one-google {
+  position: fixed;
+  transition: opacity 130ms;
+  z-index: 1;
+}
+
+#one-google.hidden {
+  opacity: 0;
+}

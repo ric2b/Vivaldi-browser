@@ -20,7 +20,7 @@
 #include "media/filters/decoder_stream_traits.h"
 #include "media/filters/decrypting_demuxer_stream.h"
 
-#if !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
+#if !defined(OS_ANDROID)
 #include "media/filters/decrypting_audio_decoder.h"
 #include "media/filters/decrypting_video_decoder.h"
 #endif
@@ -43,10 +43,10 @@ static bool HasValidStreamConfig(DemuxerStream* stream) {
 template <DemuxerStream::Type StreamType>
 DecoderSelector<StreamType>::DecoderSelector(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    ScopedVector<Decoder> decoders,
-    const scoped_refptr<MediaLog>& media_log)
+    CreateDecodersCB create_decoders_cb,
+    MediaLog* media_log)
     : task_runner_(task_runner),
-      decoders_(std::move(decoders)),
+      create_decoders_cb_(std::move(create_decoders_cb)),
       media_log_(media_log),
       input_stream_(nullptr),
       weak_ptr_factory_(this) {}
@@ -68,17 +68,16 @@ void DecoderSelector<StreamType>::SelectDecoder(
     StreamTraits* traits,
     DemuxerStream* stream,
     CdmContext* cdm_context,
+    const std::string& blacklisted_decoder,
     const SelectDecoderCB& select_decoder_cb,
     const typename Decoder::OutputCB& output_cb,
     const base::Closure& waiting_for_decryption_key_cb) {
-  DVLOG(2) << __func__;
+  DVLOG(2) << __func__ << ": cdm_context=" << cdm_context
+           << ", blacklisted_decoder=" << blacklisted_decoder;
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(traits);
   DCHECK(stream);
   DCHECK(select_decoder_cb_.is_null());
-
-  cdm_context_ = cdm_context;
-  waiting_for_decryption_key_cb_ = waiting_for_decryption_key_cb;
 
   // Make sure |select_decoder_cb| runs on a different execution stack.
   select_decoder_cb_ = BindToCurrentLoop(select_decoder_cb);
@@ -91,12 +90,21 @@ void DecoderSelector<StreamType>::SelectDecoder(
 
   traits_ = traits;
   input_stream_ = stream;
+  cdm_context_ = cdm_context;
+  blacklisted_decoder_ = blacklisted_decoder;
   output_cb_ = output_cb;
+  waiting_for_decryption_key_cb_ = waiting_for_decryption_key_cb;
+
+  decoders_ = create_decoders_cb_.Run();
+  config_ = StreamTraits::GetDecoderConfig(input_stream_);
 
   // When there is a CDM attached, always try the decrypting decoder or
   // demuxer-stream first.
-  if (cdm_context_) {
-#if !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
+  if (config_.is_encrypted()) {
+    DCHECK(cdm_context_);
+// TODO(xhwang): This if-defined doesn't make a lot of sense. It should be
+// replaced by some better checks.
+#if !defined(OS_ANDROID)
     InitializeDecryptingDecoder();
 #else
     InitializeDecryptingDemuxerStream();
@@ -104,20 +112,22 @@ void DecoderSelector<StreamType>::SelectDecoder(
     return;
   }
 
-  config_ = StreamTraits::GetDecoderConfig(input_stream_);
-
-  // If the input stream is encrypted, CdmContext must be non-null.
-  DCHECK(!config_.is_encrypted());
-
   InitializeDecoder();
 }
 
-#if !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
+#if !defined(OS_ANDROID)
 template <DemuxerStream::Type StreamType>
 void DecoderSelector<StreamType>::InitializeDecryptingDecoder() {
   DVLOG(2) << __func__;
+
   decoder_.reset(new typename StreamTraits::DecryptingDecoderType(
       task_runner_, media_log_, waiting_for_decryption_key_cb_));
+
+  if (decoder_->GetDisplayName() == blacklisted_decoder_) {
+    DVLOG(1) << __func__ << ": Decrypting decoder is blacklisted.";
+    DecryptingDecoderInitDone(false);
+    return;
+  }
 
   traits_->InitializeDecoder(
       decoder_.get(), StreamTraits::GetDecoderConfig(input_stream_),
@@ -134,6 +144,7 @@ void DecoderSelector<StreamType>::DecryptingDecoderInitDone(bool success) {
 
   if (success) {
     DVLOG(1) << __func__ << ": " << decoder_->GetDisplayName() << " selected.";
+    decoders_.clear();
     base::ResetAndReturn(&select_decoder_cb_)
         .Run(std::move(decoder_), std::unique_ptr<DecryptingDemuxerStream>());
     return;
@@ -145,7 +156,7 @@ void DecoderSelector<StreamType>::DecryptingDecoderInitDone(bool success) {
   // DecryptingDemuxerStream to do decrypt-only.
   InitializeDecryptingDemuxerStream();
 }
-#endif  // !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
+#endif  // !defined(OS_ANDROID)
 
 template <DemuxerStream::Type StreamType>
 void DecoderSelector<StreamType>::InitializeDecryptingDemuxerStream() {
@@ -177,11 +188,7 @@ void DecoderSelector<StreamType>::DecryptingDemuxerStreamInitDone(
     DCHECK(!config_.is_encrypted());
   } else {
     decrypted_stream_.reset();
-    config_ = StreamTraits::GetDecoderConfig(input_stream_);
-
-    // Prefer decrypting decoder by using an encrypted config.
-    if (!config_.is_encrypted())
-      config_.SetIsEncrypted(true);
+    DCHECK(config_.is_encrypted());
   }
 
   InitializeDecoder();
@@ -193,13 +200,23 @@ void DecoderSelector<StreamType>::InitializeDecoder() {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(!decoder_);
 
-  if (decoders_.empty()) {
+  // Select the next non-blacklisted decoder.
+  while (!decoders_.empty()) {
+    std::unique_ptr<Decoder> decoder(std::move(decoders_.front()));
+    decoders_.erase(decoders_.begin());
+    // When |decrypted_stream_| is selected, the |config_| has changed so ignore
+    // the blacklist.
+    if (decrypted_stream_ ||
+        decoder->GetDisplayName() != blacklisted_decoder_) {
+      decoder_ = std::move(decoder);
+      break;
+    }
+  }
+
+  if (!decoder_) {
     ReturnNullDecoder();
     return;
   }
-
-  decoder_.reset(decoders_.front());
-  decoders_.weak_erase(decoders_.begin());
 
   traits_->InitializeDecoder(
       decoder_.get(), config_,
@@ -224,6 +241,7 @@ void DecoderSelector<StreamType>::DecoderInitDone(bool success) {
            << " selected. DecryptingDemuxerStream "
            << (decrypted_stream_ ? "also" : "not") << " selected.";
 
+  decoders_.clear();
   base::ResetAndReturn(&select_decoder_cb_)
       .Run(std::move(decoder_), std::move(decrypted_stream_));
 }
@@ -232,6 +250,7 @@ template <DemuxerStream::Type StreamType>
 void DecoderSelector<StreamType>::ReturnNullDecoder() {
   DVLOG(1) << __func__ << ": No decoder selected.";
   DCHECK(task_runner_->BelongsToCurrentThread());
+  decoders_.clear();
   base::ResetAndReturn(&select_decoder_cb_)
       .Run(std::unique_ptr<Decoder>(),
            std::unique_ptr<DecryptingDemuxerStream>());

@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/autofill/content/renderer/renderer_save_password_progress_logger.h"
+
+#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "components/autofill/content/common/autofill_driver.mojom.h"
-#include "components/autofill/content/renderer/renderer_save_password_progress_logger.h"
 #include "mojo/public/cpp/bindings/binding.h"
-
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill {
@@ -72,6 +73,9 @@ class FakeContentPasswordManagerDriver : public mojom::PasswordManagerDriver {
   void SaveGenerationFieldDetectedByClassifier(
       const autofill::PasswordForm& password_form,
       const base::string16& generation_field) override {}
+
+  void CheckSafeBrowsingReputation(const GURL& form_action,
+                                   const GURL& frame_url) override {}
 
   // Records whether RecordSavePasswordProgress() gets called.
   bool called_record_save_;

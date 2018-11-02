@@ -5,9 +5,9 @@
 #include "net/tools/quic/quic_client_base.h"
 
 #include "net/quic/core/crypto/quic_random.h"
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/core/spdy_utils.h"
+#include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_text_utils.h"
 
@@ -257,8 +257,10 @@ QuicSpdyClientStream* QuicClientBase::CreateClientStream() {
     return nullptr;
   }
 
-  QuicSpdyClientStream* stream =
-      session_->CreateOutgoingDynamicStream(kDefaultPriority);
+  auto* stream = static_cast<QuicSpdyClientStream*>(
+      FLAGS_quic_reloadable_flag_quic_refactor_stream_creation
+          ? session_->MaybeCreateOutgoingDynamicStream(kDefaultPriority)
+          : session_->CreateOutgoingDynamicStream(kDefaultPriority));
   if (stream) {
     stream->set_visitor(this);
   }

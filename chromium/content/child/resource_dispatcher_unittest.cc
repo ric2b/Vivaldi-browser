@@ -167,9 +167,9 @@ class ResourceDispatcherTest : public testing::Test, public IPC::Sender {
     shared_memory_map_[request_id] = base::WrapUnique(shared_memory);
     EXPECT_TRUE(shared_memory->CreateAndMapAnonymous(buffer_size));
 
-    base::SharedMemoryHandle duplicate_handle;
-    EXPECT_TRUE(shared_memory->ShareToProcess(base::GetCurrentProcessHandle(),
-                                              &duplicate_handle));
+    base::SharedMemoryHandle duplicate_handle =
+        shared_memory->handle().Duplicate();
+    EXPECT_TRUE(duplicate_handle.IsValid());
     EXPECT_TRUE(dispatcher_->OnMessageReceived(ResourceMsg_SetDataBuffer(
         request_id, duplicate_handle, shared_memory->requested_size(), 0)));
   }
@@ -418,15 +418,17 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
                             bool stale_copy_in_cache,
                             const base::TimeTicks& completion_time,
                             int64_t total_transfer_size,
-                            int64_t encoded_body_size) override {
+                            int64_t encoded_body_size,
+                            int64_t decoded_body_size) override {
       original_peer_->OnReceivedResponse(response_info_);
       if (!data_.empty()) {
         original_peer_->OnReceivedData(
             base::MakeUnique<FixedReceivedData>(data_.data(), data_.size()));
       }
-      original_peer_->OnCompletedRequest(
-          error_code, was_ignored_by_handler, stale_copy_in_cache,
-          completion_time, total_transfer_size, encoded_body_size);
+      original_peer_->OnCompletedRequest(error_code, was_ignored_by_handler,
+                                         stale_copy_in_cache, completion_time,
+                                         total_transfer_size, encoded_body_size,
+                                         decoded_body_size);
     }
 
    private:

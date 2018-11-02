@@ -6,7 +6,6 @@
 
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -24,9 +23,8 @@
 #include "ui/wm/core/window_animations.h"
 
 ExtensionAppWindowLauncherItemController::
-    ExtensionAppWindowLauncherItemController(
-        const ash::AppLaunchId& app_launch_id)
-    : AppWindowLauncherItemController(app_launch_id) {}
+    ExtensionAppWindowLauncherItemController(const ash::ShelfID& shelf_id)
+    : AppWindowLauncherItemController(shelf_id) {}
 
 ExtensionAppWindowLauncherItemController::
     ~ExtensionAppWindowLauncherItemController() {}

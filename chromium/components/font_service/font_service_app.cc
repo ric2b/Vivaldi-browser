@@ -40,32 +40,25 @@ base::File GetFileForPath(const base::FilePath& path) {
 namespace font_service {
 
 FontServiceApp::FontServiceApp() {
-  registry_.AddInterface(this);
+  registry_.AddInterface(
+      base::Bind(&FontServiceApp::Create, base::Unretained(this)));
 }
 
 FontServiceApp::~FontServiceApp() {}
 
-void FontServiceApp::OnStart() {
-  tracing_.Initialize(context()->connector(), context()->identity().name());
-}
+void FontServiceApp::OnStart() {}
 
 void FontServiceApp::OnBindInterface(
-    const service_manager::ServiceInfo& source_info,
+    const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(source_info.identity, interface_name,
+  registry_.BindInterface(source_info, interface_name,
                           std::move(interface_pipe));
-}
-
-void FontServiceApp::Create(
-    const service_manager::Identity& remote_identity,
-    mojo::InterfaceRequest<mojom::FontService> request) {
-  bindings_.AddBinding(this, std::move(request));
 }
 
 void FontServiceApp::MatchFamilyName(const std::string& family_name,
                                      mojom::TypefaceStylePtr requested_style,
-                                     const MatchFamilyNameCallback& callback) {
+                                     MatchFamilyNameCallback callback) {
   SkFontConfigInterface::FontIdentity result_identity;
   SkString result_family;
   SkFontStyle result_style;
@@ -83,7 +76,7 @@ void FontServiceApp::MatchFamilyName(const std::string& family_name,
     style->weight = SkFontStyle().weight();
     style->width = SkFontStyle().width();
     style->slant = static_cast<mojom::TypefaceSlant>(SkFontStyle().slant());
-    callback.Run(nullptr, "", std::move(style));
+    std::move(callback).Run(nullptr, "", std::move(style));
     return;
   }
 
@@ -101,17 +94,23 @@ void FontServiceApp::MatchFamilyName(const std::string& family_name,
   style->width = result_style.width();
   style->slant = static_cast<mojom::TypefaceSlant>(result_style.slant());
 
-  callback.Run(std::move(identity), result_family.c_str(), std::move(style));
+  std::move(callback).Run(std::move(identity), result_family.c_str(),
+                          std::move(style));
 }
 
 void FontServiceApp::OpenStream(uint32_t id_number,
-                                const OpenStreamCallback& callback) {
+                                OpenStreamCallback callback) {
   base::File file;
   if (id_number < static_cast<uint32_t>(paths_.size())) {
     file = GetFileForPath(base::FilePath(paths_[id_number].c_str()));
   }
 
-  callback.Run(std::move(file));
+  std::move(callback).Run(std::move(file));
+}
+
+void FontServiceApp::Create(const service_manager::BindSourceInfo& source_info,
+                            mojom::FontServiceRequest request) {
+  bindings_.AddBinding(this, std::move(request));
 }
 
 int FontServiceApp::FindOrAddPath(const SkString& path) {

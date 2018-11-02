@@ -24,27 +24,74 @@ device::mojom::VRFieldOfViewPtr openVRFovToWebVRFov(vr::IVRSystem* vr_system,
   return out;
 }
 
+std::vector<float> HmdVector3ToWebVR(const vr::HmdVector3_t& vec) {
+  std::vector<float> out;
+  out.resize(3);
+  out[0] = vec.v[0];
+  out[1] = vec.v[1];
+  out[2] = vec.v[2];
+  return out;
+}
+
+std::string GetOpenVRString(vr::IVRSystem* vr_system,
+                            vr::TrackedDeviceProperty prop) {
+  std::string out;
+
+  vr::TrackedPropertyError error = vr::TrackedProp_Success;
+  char openvr_string[vr::k_unMaxPropertyStringSize];
+  vr_system->GetStringTrackedDeviceProperty(
+      vr::k_unTrackedDeviceIndex_Hmd, prop, openvr_string,
+      vr::k_unMaxPropertyStringSize, &error);
+
+  if (error == vr::TrackedProp_Success)
+    out = openvr_string;
+
+  return out;
+}
+
+std::vector<float> HmdMatrix34ToWebVRTransformMatrix(
+    const vr::HmdMatrix34_t& mat) {
+  std::vector<float> transform;
+  transform.resize(16);
+  transform[0] = mat.m[0][0];
+  transform[1] = mat.m[1][0];
+  transform[2] = mat.m[2][0];
+  transform[3] = 0.0f;
+  transform[4] = mat.m[0][1];
+  transform[5] = mat.m[1][1];
+  transform[6] = mat.m[2][1];
+  transform[7] = 0.0f;
+  transform[8] = mat.m[0][2];
+  transform[9] = mat.m[1][2];
+  transform[10] = mat.m[2][2];
+  transform[11] = 0.0f;
+  transform[12] = mat.m[0][3];
+  transform[13] = mat.m[1][3];
+  transform[14] = mat.m[2][3];
+  transform[15] = 1.0f;
+  return transform;
+}
+
 }  // namespace
 
 namespace device {
 
-OpenVRDevice::OpenVRDevice() {}
+OpenVRDevice::OpenVRDevice(vr::IVRSystem* vr)
+    : vr_system_(vr), weak_ptr_factory_(this), is_polling_events_(false) {}
 OpenVRDevice::~OpenVRDevice() {}
 
 void OpenVRDevice::CreateVRDisplayInfo(
     const base::Callback<void(mojom::VRDisplayInfoPtr)>& on_created) {
-  vr::EVRInitError init_error;
-  auto vr_system =
-      vr::VR_Init(&init_error, vr::EVRApplicationType::VRApplication_Scene);
-
-  if (init_error != vr::VRInitError_None) {
-    LOG(ERROR) << vr::VR_GetVRInitErrorAsEnglishDescription(init_error);
+  if (!vr_system_) {
     on_created.Run(nullptr);
     return;
   }
 
   mojom::VRDisplayInfoPtr device = mojom::VRDisplayInfo::New();
   device->index = id();
+  device->displayName =
+      GetOpenVRString(vr_system_, vr::Prop_ManufacturerName_String) + " " +
+      GetOpenVRString(vr_system_, vr::Prop_ModelNumber_String);
   device->capabilities = mojom::VRDisplayCapabilities::New();
   device->capabilities->hasPosition = true;
   device->capabilities->hasExternalDisplay = true;
@@ -55,11 +102,11 @@ void OpenVRDevice::CreateVRDisplayInfo(
   mojom::VREyeParametersPtr& left_eye = device->leftEye;
   mojom::VREyeParametersPtr& right_eye = device->rightEye;
 
-  left_eye->fieldOfView = openVRFovToWebVRFov(vr_system, vr::Eye_Left);
-  right_eye->fieldOfView = openVRFovToWebVRFov(vr_system, vr::Eye_Left);
+  left_eye->fieldOfView = openVRFovToWebVRFov(vr_system_, vr::Eye_Left);
+  right_eye->fieldOfView = openVRFovToWebVRFov(vr_system_, vr::Eye_Left);
 
   vr::TrackedPropertyError error = vr::TrackedProp_Success;
-  float ipd = vr_system->GetFloatTrackedDeviceProperty(
+  float ipd = vr_system_->GetFloatTrackedDeviceProperty(
       vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_UserIpdMeters_Float, &error);
 
   if (error != vr::TrackedProp_Success)
@@ -75,13 +122,35 @@ void OpenVRDevice::CreateVRDisplayInfo(
   right_eye->offset[2] = 0.0;
 
   uint32_t width, height;
-  vr_system->GetRecommendedRenderTargetSize(&width, &height);
+  vr_system_->GetRecommendedRenderTargetSize(&width, &height);
   left_eye->renderWidth = width;
   left_eye->renderHeight = height;
   right_eye->renderWidth = left_eye->renderWidth;
   right_eye->renderHeight = left_eye->renderHeight;
 
-  render_loop_ = std::make_unique<OpenVRRenderLoop>(vr_system);
+  device->stageParameters = mojom::VRStageParameters::New();
+  vr::HmdMatrix34_t mat =
+      vr_system_->GetSeatedZeroPoseToStandingAbsoluteTrackingPose();
+  device->stageParameters->standingTransform =
+      HmdMatrix34ToWebVRTransformMatrix(mat);
+
+  vr::IVRChaperone* chaperone = vr::VRChaperone();
+  if (chaperone) {
+    chaperone->GetPlayAreaSize(&device->stageParameters->sizeX,
+                               &device->stageParameters->sizeZ);
+  } else {
+    device->stageParameters->sizeX = 0.0f;
+    device->stageParameters->sizeZ = 0.0f;
+  }
+
+  // If it is the first initialization, OpenVRRenderLoop instance needs to be
+  // created and the polling event callback needs to be registered.
+  if (!render_loop_) {
+    render_loop_ = std::make_unique<OpenVRRenderLoop>(vr_system_);
+
+    render_loop_->RegisterPollingEventCallback(base::Bind(
+        &OpenVRDevice::OnPollingEvents, weak_ptr_factory_.GetWeakPtr()));
+  }
 
   on_created.Run(std::move(device));
 }
@@ -119,8 +188,11 @@ void OpenVRDevice::GetVRVSyncProvider(mojom::VRVSyncProviderRequest request) {
 
 OpenVRDevice::OpenVRRenderLoop::OpenVRRenderLoop(vr::IVRSystem* vr_system)
     : vr_system_(vr_system),
+      main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       binding_(this),
-      base::SimpleThread("OpenVRRenderLoop") {}
+      base::SimpleThread("OpenVRRenderLoop") {
+  DCHECK(main_thread_task_runner_);
+}
 
 void OpenVRDevice::OpenVRRenderLoop::Bind(
     mojom::VRVSyncProviderRequest request) {
@@ -150,7 +222,7 @@ device::mojom::VRPosePtr OpenVRDevice::OpenVRRenderLoop::getPose() {
   vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
 
   vr_system_->GetDeviceToAbsoluteTrackingPose(
-      vr::TrackingUniverseStanding, 0.0f, poses, vr::k_unMaxTrackedDeviceCount);
+      vr::TrackingUniverseSeated, 0.0f, poses, vr::k_unMaxTrackedDeviceCount);
   const auto& hmdPose = poses[vr::k_unTrackedDeviceIndex_Hmd];
   if (hmdPose.bPoseIsValid && hmdPose.bDeviceIsConnected) {
     const auto& transform = hmdPose.mDeviceToAbsoluteTracking;
@@ -164,15 +236,74 @@ device::mojom::VRPosePtr OpenVRDevice::OpenVRRenderLoop::getPose() {
     pose->position.value()[0] = m[0][3];
     pose->position.value()[1] = m[1][3];
     pose->position.value()[2] = m[2][3];
+
+    pose->linearVelocity = HmdVector3ToWebVR(hmdPose.vVelocity);
+    pose->angularVelocity = HmdVector3ToWebVR(hmdPose.vAngularVelocity);
   }
 
   return std::move(pose);
+}
+
+// Only deal with events that will cause displayInfo changes for now.
+void OpenVRDevice::OnPollingEvents() {
+  if (!vr_system_ || is_polling_events_)
+    return;
+
+  // Polling events through vr_system_ has started.
+  is_polling_events_ = true;
+
+  vr::VREvent_t event;
+  bool is_changed = false;
+  while (vr_system_->PollNextEvent(&event, sizeof(event))) {
+    if (event.trackedDeviceIndex != vr::k_unTrackedDeviceIndex_Hmd &&
+        event.trackedDeviceIndex != vr::k_unTrackedDeviceIndexInvalid) {
+      continue;
+    }
+
+    switch (event.eventType) {
+      case vr::VREvent_TrackedDeviceUpdated:
+      case vr::VREvent_IpdChanged:
+      case vr::VREvent_ChaperoneDataHasChanged:
+      case vr::VREvent_ChaperoneSettingsHaveChanged:
+      case vr::VREvent_ChaperoneUniverseHasChanged:
+        is_changed = true;
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  // Polling events through vr_system_ has finished.
+  is_polling_events_ = false;
+
+  if (is_changed) {
+    OnChanged();
+  }
+}
+
+// Register a callback function to deal with system events.
+void OpenVRDevice::OpenVRRenderLoop::RegisterPollingEventCallback(
+    const base::Callback<void()>& onPollingEvents) {
+  if (onPollingEvents.is_null())
+    return;
+
+  on_polling_events_ = onPollingEvents;
+}
+
+void OpenVRDevice::OpenVRRenderLoop::UnregisterPollingEventCallback() {
+  on_polling_events_.Reset();
 }
 
 void OpenVRDevice::OpenVRRenderLoop::GetVSync(
     const mojom::VRVSyncProvider::GetVSyncCallback& callback) {
   static int16_t next_frame = 0;
   int16_t frame = next_frame++;
+
+  // VSync could be used as a signal to poll events.
+  if (!on_polling_events_.is_null()) {
+    main_thread_task_runner_->PostTask(FROM_HERE, on_polling_events_);
+  }
 
   // TODO(BillOrr): Give real values when VSync loop is hooked up.  This is the
   // presentation time for the frame. Just returning a default value for now

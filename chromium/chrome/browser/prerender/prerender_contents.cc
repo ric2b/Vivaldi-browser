@@ -44,7 +44,7 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/frame_navigate_params.h"
 #include "net/http/http_response_headers.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -287,8 +287,11 @@ void PrerenderContents::StartPrerendering(
 
   prerendering_has_started_ = true;
 
-  prerender_contents_.reset(CreateWebContents(session_storage_namespace));
-  TabHelpers::AttachTabHelpers(prerender_contents_.get());
+  content::WebContents::CreateParams create_params =
+      WebContents::CreateParams(profile_);
+  prerender_contents_.reset(
+      CreateWebContents(create_params, session_storage_namespace));
+  TabHelpers::AttachTabHelpers(prerender_contents_.get(), create_params);
   content::WebContentsObserver::Observe(prerender_contents_.get());
 
   // Tag the prerender contents with the task manager specific prerender tag, so
@@ -447,13 +450,14 @@ void PrerenderContents::OnRenderViewHostCreated(
 }
 
 WebContents* PrerenderContents::CreateWebContents(
+    const content::WebContents::CreateParams& create_params,
     SessionStorageNamespace* session_storage_namespace) {
   // TODO(ajwong): Remove the temporary map once prerendering is aware of
   // multiple session storage namespaces per tab.
   content::SessionStorageNamespaceMap session_storage_namespace_map;
   session_storage_namespace_map[std::string()] = session_storage_namespace;
-  return WebContents::CreateWithSessionStorage(
-      WebContents::CreateParams(profile_), session_storage_namespace_map);
+  return WebContents::CreateWithSessionStorage(create_params,
+                                               session_storage_namespace_map);
 }
 
 void PrerenderContents::NotifyPrerenderStart() {
@@ -763,7 +767,7 @@ void PrerenderContents::PrepareForUse() {
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&ResumeThrottles, resource_throttles_, idle_resources_));
+      base::BindOnce(&ResumeThrottles, resource_throttles_, idle_resources_));
   resource_throttles_.clear();
   idle_resources_.clear();
 }
@@ -773,6 +777,7 @@ void PrerenderContents::CancelPrerenderForPrinting() {
 }
 
 void PrerenderContents::OnPrerenderCancelerRequest(
+    const service_manager::BindSourceInfo& source_info,
     chrome::mojom::PrerenderCancelerRequest request) {
   if (!prerender_canceler_binding_.is_bound())
     prerender_canceler_binding_.Bind(std::move(request));

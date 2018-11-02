@@ -4,16 +4,18 @@
 
 #include "chrome/browser/ui/views/download/download_feedback_dialog_view.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/supports_user_data.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/page_navigator.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -58,7 +60,7 @@ void DownloadFeedbackDialogView::Show(
       static_cast<DialogStatusData*>(profile->GetUserData(kDialogStatusKey));
   if (data == NULL) {
     data = new DialogStatusData();
-    profile->SetUserData(kDialogStatusKey, data);
+    profile->SetUserData(kDialogStatusKey, base::WrapUnique(data));
   }
   if (data->currently_shown() == false) {
     data->set_currently_shown(true);
@@ -92,6 +94,8 @@ DownloadFeedbackDialogView::DownloadFeedbackDialogView(
       cancel_button_text_(l10n_util::GetStringUTF16(
           IDS_FEEDBACK_SERVICE_DIALOG_CANCEL_BUTTON_LABEL)) {
   link_view_->set_listener(this);
+  chrome::RecordDialogCreation(
+      chrome::DialogIdentifier::SAFE_BROWSING_DOWNLOAD_FEEDBACK);
 }
 
 DownloadFeedbackDialogView::~DownloadFeedbackDialogView() {}

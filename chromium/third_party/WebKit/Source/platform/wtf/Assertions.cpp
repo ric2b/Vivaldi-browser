@@ -102,7 +102,7 @@ static void vprintf_stderr_common(const char* format, va_list args) {
   vfprintf(stderr, format, args);
 }
 
-#if COMPILER(CLANG) || (COMPILER(GCC) && GCC_VERSION_AT_LEAST(4, 6, 0))
+#if COMPILER(GCC)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"
 #endif
@@ -124,43 +124,9 @@ static void vprintf_stderr_with_trailing_newline(const char* format,
   vprintf_stderr_common(formatWithNewline.get(), args);
 }
 
-#if COMPILER(CLANG) || (COMPILER(GCC) && GCC_VERSION_AT_LEAST(4, 6, 0))
+#if COMPILER(GCC)
 #pragma GCC diagnostic pop
 #endif
-
-namespace {
-
-class FrameToNameScope {
- public:
-  explicit FrameToNameScope(void*);
-  ~FrameToNameScope();
-  const char* nullableName() { return m_name; }
-
- private:
-  const char* m_name;
-  char* m_cxaDemangled;
-};
-
-FrameToNameScope::FrameToNameScope(void* addr) : m_name(0), m_cxaDemangled(0) {
-#if OS(MACOSX) || (OS(LINUX) && !defined(__UCLIBC__))
-  Dl_info info;
-  if (!dladdr(addr, &info) || !info.dli_sname)
-    return;
-  const char* mangledName = info.dli_sname;
-  if ((m_cxaDemangled = abi::__cxa_demangle(mangledName, 0, 0, 0)))
-    m_name = m_cxaDemangled;
-  else
-    m_name = mangledName;
-#else
-  (void)addr;
-#endif
-}
-
-FrameToNameScope::~FrameToNameScope() {
-  free(m_cxaDemangled);
-}
-
-}  // anonymous namespace
 
 #if !LOG_DISABLED
 namespace WTF {

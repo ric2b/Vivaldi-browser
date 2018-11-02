@@ -42,7 +42,7 @@ using ::testing::InSequence;
 using ::testing::NotNull;
 using ::testing::Return;
 using ::testing::SaveArg;
-using ::testing::SetArgumentPointee;
+using ::testing::SetArgPointee;
 using ::testing::StrictMock;
 using ::testing::WithParamInterface;
 using ::testing::_;
@@ -178,9 +178,7 @@ class ChunkDemuxerTest : public ::testing::Test {
     return GenerateCluster(46, 66, 5);
   }
 
-  ChunkDemuxerTest()
-      : media_log_(new StrictMock<MockMediaLog>()),
-        append_window_end_for_next_append_(kInfiniteDuration) {
+  ChunkDemuxerTest() : append_window_end_for_next_append_(kInfiniteDuration) {
     init_segment_received_cb_ = base::Bind(
         &ChunkDemuxerTest::InitSegmentReceived, base::Unretained(this));
     CreateNewDemuxer();
@@ -192,7 +190,7 @@ class ChunkDemuxerTest : public ::testing::Test {
     Demuxer::EncryptedMediaInitDataCB encrypted_media_init_data_cb = base::Bind(
         &ChunkDemuxerTest::OnEncryptedMediaInitData, base::Unretained(this));
     demuxer_.reset(
-        new ChunkDemuxer(open_cb, encrypted_media_init_data_cb, media_log_));
+        new ChunkDemuxer(open_cb, encrypted_media_init_data_cb, &media_log_));
   }
 
   virtual ~ChunkDemuxerTest() {
@@ -1298,10 +1296,10 @@ class ChunkDemuxerTest : public ::testing::Test {
     return true;
   }
 
+  StrictMock<MockMediaLog> media_log_;
+
   base::MessageLoop message_loop_;
   MockDemuxerHost host_;
-
-  scoped_refptr<StrictMock<MockMediaLog>> media_log_;
 
   std::unique_ptr<ChunkDemuxer> demuxer_;
   Demuxer::MediaTracksUpdatedCB init_segment_received_cb_;
@@ -4658,16 +4656,16 @@ void CheckStreamStatusNotifications(MediaResource* media_resource,
   base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                             base::WaitableEvent::InitialState::NOT_SIGNALED);
 
-  ASSERT_TRUE(stream->enabled());
+  ASSERT_TRUE(stream->IsEnabled());
   media_resource->SetStreamStatusChangeCB(
       base::Bind(&OnStreamStatusChanged, base::Unretained(&event)));
 
-  stream->set_enabled(false, base::TimeDelta());
+  stream->SetEnabled(false, base::TimeDelta());
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(event.IsSignaled());
 
   event.Reset();
-  stream->set_enabled(true, base::TimeDelta());
+  stream->SetEnabled(true, base::TimeDelta());
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(event.IsSignaled());
 }
@@ -4677,11 +4675,23 @@ TEST_F(ChunkDemuxerTest, StreamStatusNotifications) {
   ChunkDemuxerStream* audio_stream =
       static_cast<ChunkDemuxerStream*>(GetStream(DemuxerStream::AUDIO));
   EXPECT_NE(nullptr, audio_stream);
-  CheckStreamStatusNotifications(demuxer_.get(), audio_stream);
   ChunkDemuxerStream* video_stream =
       static_cast<ChunkDemuxerStream*>(GetStream(DemuxerStream::VIDEO));
   EXPECT_NE(nullptr, video_stream);
+
+  // Verify stream status changes without pending read.
+  CheckStreamStatusNotifications(demuxer_.get(), audio_stream);
   CheckStreamStatusNotifications(demuxer_.get(), video_stream);
+
+  // Verify stream status changes with pending read.
+  bool read_done = false;
+  audio_stream->Read(base::Bind(&OnReadDone_EOSExpected, &read_done));
+  CheckStreamStatusNotifications(demuxer_.get(), audio_stream);
+  EXPECT_TRUE(read_done);
+  read_done = false;
+  video_stream->Read(base::Bind(&OnReadDone_EOSExpected, &read_done));
+  CheckStreamStatusNotifications(demuxer_.get(), video_stream);
+  EXPECT_TRUE(read_done);
 }
 
 TEST_F(ChunkDemuxerTest, MultipleIds) {
@@ -4760,42 +4770,18 @@ TEST_F(ChunkDemuxerTest, RemovingIdMustRemoveStreams) {
   EXPECT_EQ(nullptr, GetStream(DemuxerStream::VIDEO));
 }
 
-// TODO(servolk): Add a unit test with multiple audio/video tracks using the
-// same codec type in a single SourceBufferState, when WebM parser supports
-// multiple tracks. crbug.com/646900
-
-class ChunkDemuxerMp4Vp9Test : public ChunkDemuxerTest,
-                               public WithParamInterface<bool> {
- public:
-  void SetUp() override {
-    ChunkDemuxerTest::SetUp();
-    const bool enable_mp4_vp9_demuxing = GetParam();
-    if (enable_mp4_vp9_demuxing) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kEnableVp9InMp4);
-    }
-  }
-};
-
-TEST_P(ChunkDemuxerMp4Vp9Test, CodecSupport) {
+TEST_F(ChunkDemuxerTest, Mp4Vp9CodecSupport) {
   ChunkDemuxer::Status expected = ChunkDemuxer::kNotSupported;
-
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
-  const bool enable_mp4_vp9_demuxing = GetParam();
-  if (enable_mp4_vp9_demuxing) {
-    expected = ChunkDemuxer::kOk;
-  } else {
-    EXPECT_MEDIA_LOG(
-        HasSubstr("Codec 'vp09.00.10.08' is not supported for 'video/mp4'"));
-  }
+  expected = ChunkDemuxer::kOk;
 #endif
 
   EXPECT_EQ(demuxer_->AddId("source_id", "video/mp4", "vp09.00.10.08"),
             expected);
 }
 
-INSTANTIATE_TEST_CASE_P(EnableDisableMp4Vp9Demuxing,
-                        ChunkDemuxerMp4Vp9Test,
-                        ::testing::Bool());
+// TODO(servolk): Add a unit test with multiple audio/video tracks using the
+// same codec type in a single SourceBufferState, when WebM parser supports
+// multiple tracks. crbug.com/646900
 
 }  // namespace media

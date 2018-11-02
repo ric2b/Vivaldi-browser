@@ -4,10 +4,8 @@
 
 #include "core/xml/DocumentXSLT.h"
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8AbstractEventListener.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/Node.h"
@@ -18,6 +16,8 @@
 #include "core/probe/CoreProbes.h"
 #include "core/xml/XSLStyleSheet.h"
 #include "core/xml/XSLTProcessor.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptState.h"
 
 namespace blink {
 
@@ -113,7 +113,7 @@ void DocumentXSLT::ApplyXSLTransform(Document& document,
 }
 
 ProcessingInstruction* DocumentXSLT::FindXSLStyleSheet(Document& document) {
-  for (Node* node = document.FirstChild(); node; node = node->nextSibling()) {
+  for (Node* node = document.firstChild(); node; node = node->nextSibling()) {
     if (node->getNodeType() != Node::kProcessingInstructionNode)
       continue;
 

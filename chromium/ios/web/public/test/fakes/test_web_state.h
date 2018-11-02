@@ -74,7 +74,7 @@ class TestWebState : public WebState {
 
   void AddPolicyDecider(WebStatePolicyDecider* decider) override {}
   void RemovePolicyDecider(WebStatePolicyDecider* decider) override {}
-  service_manager::InterfaceRegistry* GetMojoInterfaceRegistry() override;
+  WebStateInterfaceProvider* GetWebStateInterfaceProvider() override;
   bool HasOpener() const override;
   base::WeakPtr<WebState> AsWeakPtr() override;
 
@@ -89,18 +89,18 @@ class TestWebState : public WebState {
   void SetView(UIView* view);
 
   // Getters for test data.
-  bool IsShowingTransientContentView();
+  CRWContentView* GetTransientContentView();
 
   // Notifier for tests.
   void OnPageLoaded(PageLoadCompletionStatus load_completion_status);
-  void OnProvisionalNavigationStarted(const GURL& url);
+  void OnNavigationStarted(NavigationContext* navigation_context);
   void OnRenderProcessGone();
 
  private:
   BrowserState* browser_state_;
   bool web_usage_enabled_;
   bool is_loading_;
-  bool is_showing_transient_content_view_;
+  base::scoped_nsobject<CRWContentView> transient_content_view_;
   GURL url_;
   base::string16 title_;
   URLVerificationTrustLevel trust_level_;

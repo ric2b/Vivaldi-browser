@@ -519,10 +519,8 @@ void FakeBluetoothDeviceClient::ConnectProfile(
   }
 
   base::PostTaskWithTraits(
-      FROM_HERE, base::TaskTraits()
-                     .WithShutdownBehavior(
-                         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
-                     .MayBlock(),
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::Bind(&SimulatedProfileSocket, fds[0]));
 
   base::ScopedFD fd(fds[1]);
@@ -595,6 +593,20 @@ void FakeBluetoothDeviceClient::GetConnInfo(
   }
 
   callback.Run(connection_rssi_, transmit_power_, max_transmit_power_);
+}
+
+void FakeBluetoothDeviceClient::SetLEConnectionParameters(
+    const dbus::ObjectPath& object_path,
+    const ConnectionParameters& conn_params,
+    const base::Closure& callback,
+    const ErrorCallback& error_callback) {
+  Properties* properties = GetProperties(object_path);
+  if (!properties->connected.value()) {
+    error_callback.Run(bluetooth_device::kErrorNotConnected, "Not Connected");
+    return;
+  }
+
+  callback.Run();
 }
 
 void FakeBluetoothDeviceClient::GetServiceRecords(

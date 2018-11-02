@@ -32,6 +32,8 @@
 
 #include "core/dom/ContextFeatures.h"
 #include "core/events/MessageEvent.h"
+#include "core/events/WebInputEventConversion.h"
+#include "core/exported/WebViewBase.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
@@ -46,12 +48,13 @@
 #include "core/page/Page.h"
 #include "core/page/PagePopupClient.h"
 #include "core/page/PagePopupSupplement.h"
-#include "modules/accessibility/AXObject.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
+#include "modules/accessibility/AXObjectImpl.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/LayoutTestSupport.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/animation/CompositorAnimationHost.h"
+#include "platform/graphics/GraphicsLayer.h"
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/wtf/PtrUtil.h"
@@ -62,10 +65,8 @@
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebViewClient.h"
 #include "public/web/WebWidgetClient.h"
-#include "web/WebInputEventConversion.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebSettingsImpl.h"
-#include "web/WebViewImpl.h"
 
 namespace blink {
 
@@ -88,9 +89,8 @@ class PagePopupChromeClient final : public EmptyChromeClient {
 
   IntRect RootWindowRect() override { return popup_->WindowRectInScreen(); }
 
-  IntRect ViewportToScreen(
-      const IntRect& rect,
-      const FrameViewBase* frame_view_base) const override {
+  IntRect ViewportToScreen(const IntRect& rect,
+                           const PlatformFrameView* frame_view) const override {
     WebRect rect_in_screen(rect);
     WebRect window_rect = popup_->WindowRectInScreen();
     popup_->WidgetClient()->ConvertViewportToWindow(&rect_in_screen);
@@ -114,7 +114,7 @@ class PagePopupChromeClient final : public EmptyChromeClient {
                            const String&) override {
 #ifndef NDEBUG
     fprintf(stderr, "CONSOLE MESSSAGE:%u: %s\n", line_number,
-            message.Utf8().Data());
+            message.Utf8().data());
 #endif
   }
 
@@ -123,7 +123,7 @@ class PagePopupChromeClient final : public EmptyChromeClient {
       popup_->WidgetClient()->DidInvalidateRect(paint_rect);
   }
 
-  void ScheduleAnimation(FrameViewBase*) override {
+  void ScheduleAnimation(const PlatformFrameView*) override {
     // Calling scheduleAnimation on m_webView so WebViewTestProxy will call
     // beginFrame.
     if (LayoutTestSupport::IsRunningLayoutTest())
@@ -224,9 +224,11 @@ class PagePopupChromeClient final : public EmptyChromeClient {
       AXObjectCache::AXNotification notification) override {
     WebLocalFrameImpl* frame = WebLocalFrameImpl::FromFrame(
         popup_->popup_client_->OwnerElement().GetDocument().GetFrame());
-    if (obj && frame && frame->Client())
+    if (obj && frame && frame->Client()) {
       frame->Client()->PostAccessibilityEvent(
-          WebAXObject(obj), static_cast<WebAXEvent>(notification));
+          WebAXObject(ToAXObjectImpl(obj)),
+          static_cast<WebAXEvent>(notification));
+    }
   }
 
   void SetToolTip(LocalFrame&,
@@ -268,7 +270,7 @@ WebPagePopupImpl::~WebPagePopupImpl() {
   DCHECK(!page_);
 }
 
-bool WebPagePopupImpl::Initialize(WebViewImpl* web_view,
+bool WebPagePopupImpl::Initialize(WebViewBase* web_view,
                                   PagePopupClient* popup_client) {
   DCHECK(web_view);
   DCHECK(popup_client);
@@ -332,7 +334,7 @@ bool WebPagePopupImpl::InitializePage() {
   popup_client_->WriteDocument(data.Get());
   frame->SetPageZoomFactor(popup_client_->ZoomFactor());
   frame->Loader().Load(
-      FrameLoadRequest(0, BlankURL(),
+      FrameLoadRequest(0, ResourceRequest(BlankURL()),
                        SubstituteData(data, "text/html", "UTF-8", KURL(),
                                       kForceSynchronousLoad)));
   return true;
@@ -601,10 +603,10 @@ WebPagePopup* WebPagePopup::Create(WebWidgetClient* client) {
     CRASH();
   // A WebPagePopupImpl instance usually has two references.
   //  - One owned by the instance itself. It represents the visible widget.
-  //  - One owned by a WebViewImpl. It's released when the WebViewImpl ask the
+  //  - One owned by a WebViewBase. It's released when the WebViewBase ask the
   //    WebPagePopupImpl to close.
   // We need them because the closing operation is asynchronous and the widget
-  // can be closed while the WebViewImpl is unaware of it.
+  // can be closed while the WebViewBase is unaware of it.
   return AdoptRef(new WebPagePopupImpl(client)).LeakRef();
 }
 

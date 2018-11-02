@@ -8,6 +8,7 @@
 #include "base/callback_forward.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
@@ -59,7 +60,7 @@ class MemoryTracingTest : public ContentBrowserTest {
       bool success) {
     // Make sure we run the RunLoop closure on the same thread that originated
     // the run loop (which is the IN_PROC_BROWSER_TEST_F main thread).
-    if (!task_runner->RunsTasksOnCurrentThread()) {
+    if (!task_runner->RunsTasksInCurrentSequence()) {
       task_runner->PostTask(
           FROM_HERE, base::Bind(&MemoryTracingTest::OnGlobalMemoryDumpDone,
                                 base::Unretained(this), task_runner, closure,

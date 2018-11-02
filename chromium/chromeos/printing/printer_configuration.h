@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "chromeos/chromeos_export.h"
 
 namespace chromeos {
@@ -35,6 +36,9 @@ class CHROMEOS_EXPORT Printer {
     // Where possible, this is the same as the ipp/ldap
     // printer-make-and-model field.
     std::string effective_make_and_model;
+
+    // True if the printer should be auto-configured and a PPD is unnecessary.
+    bool autoconf = false;
   };
 
   // The location where the printer is stored.
@@ -43,11 +47,26 @@ class CHROMEOS_EXPORT Printer {
     SRC_POLICY,
   };
 
+  // An enumeration of printer protocols.
+  // These values are written to logs.  New enum values can be added, but
+  // existing enums must never be renumbered or deleted and reused.
+  enum PrinterProtocol {
+    kUnknown = 0,
+    kUsb = 1,
+    kIpp = 2,
+    kIpps = 3,
+    kHttp = 4,
+    kHttps = 5,
+    kSocket = 6,
+    kLpd = 7,
+    kProtocolMax
+  };
+
   // Constructs a printer object that is completely empty.
   Printer();
 
-  // Constructs a printer object with an id.
-  explicit Printer(const std::string& id);
+  // Constructs a printer object with an |id| and a |last_updated| timestamp.
+  explicit Printer(const std::string& id, const base::Time& last_updated = {});
 
   // Copy constructor and assignment.
   Printer(const Printer& printer);
@@ -90,8 +109,15 @@ class CHROMEOS_EXPORT Printer {
   // |uri_|.
   bool IsIppEverywhere() const;
 
+  // Returns the printer protocol the printer is configured with.
+  Printer::PrinterProtocol GetProtocol() const;
+
   Source source() const { return source_; }
   void set_source(const Source source) { source_ = source; }
+
+  // Returns the timestamp for the most recent update.  Returns 0 if the
+  // printer was not created with a valid timestamp.
+  base::Time last_updated() const { return last_updated_; }
 
  private:
   // Globally unique identifier. Empty indicates a new printer.
@@ -121,6 +147,9 @@ class CHROMEOS_EXPORT Printer {
 
   // The datastore which holds this printer.
   Source source_;
+
+  // Timestamp of most recent change.
+  base::Time last_updated_;
 };
 
 }  // namespace chromeos

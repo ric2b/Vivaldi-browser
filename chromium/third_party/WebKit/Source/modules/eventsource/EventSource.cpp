@@ -35,8 +35,8 @@
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptController.h"
-#include "bindings/core/v8/SerializedScriptValue.h"
-#include "bindings/core/v8/SerializedScriptValueFactory.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValueFactory.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -142,7 +142,7 @@ void EventSource::Connect() {
     CString last_event_id_utf8 = parser_->LastEventId().Utf8();
     request.SetHTTPHeaderField(
         HTTPNames::Last_Event_ID,
-        AtomicString(reinterpret_cast<const LChar*>(last_event_id_utf8.Data()),
+        AtomicString(reinterpret_cast<const LChar*>(last_event_id_utf8.data()),
                      last_event_id_utf8.length()));
   }
 

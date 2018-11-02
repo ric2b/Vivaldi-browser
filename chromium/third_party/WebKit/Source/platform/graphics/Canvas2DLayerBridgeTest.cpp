@@ -38,17 +38,16 @@
 #include "platform/graphics/paint/PaintFlags.h"
 #include "platform/graphics/test/FakeGLES2Interface.h"
 #include "platform/graphics/test/FakeWebGraphicsContext3DProvider.h"
+#include "platform/scheduler/child/web_scheduler.h"
+#include "platform/testing/TestingPlatformSupport.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/RefPtr.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebExternalBitmap.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
 #include "skia/ext/texture_handle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/Source/platform/testing/TestingPlatformSupport.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 
@@ -69,7 +68,7 @@ class Canvas2DLayerBridgePtr {
  public:
   Canvas2DLayerBridgePtr() {}
   Canvas2DLayerBridgePtr(PassRefPtr<Canvas2DLayerBridge> layer_bridge)
-      : layer_bridge_(layer_bridge) {}
+      : layer_bridge_(std::move(layer_bridge)) {}
 
   ~Canvas2DLayerBridgePtr() { Clear(); }
 
@@ -82,7 +81,7 @@ class Canvas2DLayerBridgePtr {
 
   void operator=(PassRefPtr<Canvas2DLayerBridge> layer_bridge) {
     DCHECK(!layer_bridge_);
-    layer_bridge_ = layer_bridge;
+    layer_bridge_ = std::move(layer_bridge);
   }
 
   Canvas2DLayerBridge* operator->() { return layer_bridge_.Get(); }
@@ -124,9 +123,9 @@ class Canvas2DLayerBridgeTest : public Test {
       std::unique_ptr<FakeWebGraphicsContext3DProvider> provider,
       const IntSize& size,
       Canvas2DLayerBridge::AccelerationMode acceleration_mode) {
-    RefPtr<Canvas2DLayerBridge> bridge = AdoptRef(new Canvas2DLayerBridge(
-        std::move(provider), size, 0, kNonOpaque, acceleration_mode,
-        gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType));
+    RefPtr<Canvas2DLayerBridge> bridge = AdoptRef(
+        new Canvas2DLayerBridge(std::move(provider), size, 0, kNonOpaque,
+                                acceleration_mode, CanvasColorParams()));
     bridge->DontUseIdleSchedulingForTesting();
     return bridge.Release();
   }
@@ -139,8 +138,7 @@ class Canvas2DLayerBridgeTest : public Test {
 
     Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
         std::move(context_provider), IntSize(300, 150), 0, kNonOpaque,
-        Canvas2DLayerBridge::kDisableAcceleration,
-        gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType)));
+        Canvas2DLayerBridge::kDisableAcceleration, CanvasColorParams())));
 
     const GrGLTextureInfo* texture_info =
         skia::GrBackendObjectToGrGLTextureInfo(
@@ -157,11 +155,10 @@ class Canvas2DLayerBridgeTest : public Test {
     std::unique_ptr<FakeWebGraphicsContext3DProvider> context_provider =
         WTF::WrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
 
-    gl.setIsContextLost(true);
+    gl.SetIsContextLost(true);
     Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
         std::move(context_provider), IntSize(300, 150), 0, kNonOpaque,
-        Canvas2DLayerBridge::kEnableAcceleration, gfx::ColorSpace::CreateSRGB(),
-        false, kN32_SkColorType)));
+        Canvas2DLayerBridge::kEnableAcceleration, CanvasColorParams())));
     EXPECT_TRUE(bridge->CheckSurfaceValid());
     EXPECT_FALSE(bridge->IsAccelerated());
   }
@@ -174,8 +171,7 @@ class Canvas2DLayerBridgeTest : public Test {
           WTF::WrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
       Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
           std::move(context_provider), IntSize(300, 150), 0, kNonOpaque,
-          Canvas2DLayerBridge::kEnableAcceleration,
-          gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType)));
+          Canvas2DLayerBridge::kEnableAcceleration, CanvasColorParams())));
       EXPECT_TRUE(bridge->CheckSurfaceValid());
       EXPECT_TRUE(bridge->IsAccelerated());
       sk_sp<SkImage> snapshot = bridge->NewImageSnapshot(
@@ -192,8 +188,7 @@ class Canvas2DLayerBridgeTest : public Test {
       GrContext* gr = context_provider->GetGrContext();
       Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
           std::move(context_provider), IntSize(300, 150), 0, kNonOpaque,
-          Canvas2DLayerBridge::kEnableAcceleration,
-          gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType)));
+          Canvas2DLayerBridge::kEnableAcceleration, CanvasColorParams())));
       EXPECT_TRUE(bridge->CheckSurfaceValid());
       EXPECT_TRUE(bridge->IsAccelerated());  // We don't yet know that
                                              // allocation will fail.
@@ -215,13 +210,13 @@ class Canvas2DLayerBridgeTest : public Test {
     Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
         std::move(context_provider), IntSize(300, 150), 0, kNonOpaque,
         Canvas2DLayerBridge::kForceAccelerationForTesting,
-        gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType)));
+        CanvasColorParams())));
     EXPECT_TRUE(bridge->CheckSurfaceValid());
     PaintFlags flags;
     uint32_t gen_id = bridge->GetOrCreateSurface()->generationID();
     bridge->Canvas()->drawRect(SkRect::MakeXYWH(0, 0, 1, 1), flags);
     EXPECT_EQ(gen_id, bridge->GetOrCreateSurface()->generationID());
-    gl.setIsContextLost(true);
+    gl.SetIsContextLost(true);
     EXPECT_EQ(gen_id, bridge->GetOrCreateSurface()->generationID());
     bridge->Canvas()->drawRect(SkRect::MakeXYWH(0, 0, 1, 1), flags);
     EXPECT_EQ(gen_id, bridge->GetOrCreateSurface()->generationID());
@@ -241,13 +236,13 @@ class Canvas2DLayerBridgeTest : public Test {
     Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
         std::move(context_provider), IntSize(300, 150), 0, kNonOpaque,
         Canvas2DLayerBridge::kForceAccelerationForTesting,
-        gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType)));
+        CanvasColorParams())));
 
     EXPECT_TRUE(bridge->IsAccelerated());
 
     // When the context is lost we are not sure if we should still be producing
     // GL frames for the compositor or not, so fail to generate frames.
-    gl.setIsContextLost(true);
+    gl.SetIsContextLost(true);
 
     cc::TextureMailbox texture_mailbox;
     std::unique_ptr<cc::SingleReleaseCallback> release_callback;
@@ -262,13 +257,13 @@ class Canvas2DLayerBridgeTest : public Test {
     Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
         std::move(context_provider), IntSize(300, 150), 0, kNonOpaque,
         Canvas2DLayerBridge::kForceAccelerationForTesting,
-        gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType)));
+        CanvasColorParams())));
 
     bridge->GetOrCreateSurface();
     EXPECT_TRUE(bridge->CheckSurfaceValid());
     // When the context is lost we are not sure if we should still be producing
     // GL frames for the compositor or not, so fail to generate frames.
-    gl.setIsContextLost(true);
+    gl.SetIsContextLost(true);
     EXPECT_FALSE(bridge->CheckSurfaceValid());
 
     // Restoration will fail because
@@ -293,7 +288,7 @@ class Canvas2DLayerBridgeTest : public Test {
       Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
           std::move(context_provider), IntSize(300, 150), 0, kNonOpaque,
           Canvas2DLayerBridge::kForceAccelerationForTesting,
-          gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType)));
+          CanvasColorParams())));
 
       cc::TextureMailbox texture_mailbox;
       std::unique_ptr<cc::SingleReleaseCallback> release_callback;
@@ -317,7 +312,7 @@ class Canvas2DLayerBridgeTest : public Test {
         Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
             std::move(context_provider), IntSize(300, 150), 0, kNonOpaque,
             Canvas2DLayerBridge::kForceAccelerationForTesting,
-            gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType)));
+            CanvasColorParams())));
         bridge->PrepareTextureMailbox(&texture_mailbox, &release_callback);
         // |bridge| goes out of scope and would normally be destroyed, but
         // object is kept alive by self references.
@@ -339,8 +334,7 @@ class Canvas2DLayerBridgeTest : public Test {
           WTF::WrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
       Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
           std::move(context_provider), IntSize(300, 300), 0, kNonOpaque,
-          Canvas2DLayerBridge::kEnableAcceleration,
-          gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType)));
+          Canvas2DLayerBridge::kEnableAcceleration, CanvasColorParams())));
       PaintFlags flags;
       bridge->Canvas()->drawRect(SkRect::MakeXYWH(0, 0, 1, 1), flags);
       sk_sp<SkImage> image = bridge->NewImageSnapshot(kPreferAcceleration,
@@ -355,8 +349,7 @@ class Canvas2DLayerBridgeTest : public Test {
           WTF::WrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
       Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
           std::move(context_provider), IntSize(300, 300), 0, kNonOpaque,
-          Canvas2DLayerBridge::kEnableAcceleration,
-          gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType)));
+          Canvas2DLayerBridge::kEnableAcceleration, CanvasColorParams())));
       PaintFlags flags;
       bridge->Canvas()->drawRect(SkRect::MakeXYWH(0, 0, 1, 1), flags);
       sk_sp<SkImage> image = bridge->NewImageSnapshot(kPreferNoAcceleration,
@@ -513,7 +506,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_HibernationLifeCycle)
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -566,7 +559,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_HibernationReEntry)
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -626,7 +619,7 @@ TEST_F(Canvas2DLayerBridgeTest,
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -705,7 +698,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_BackgroundRenderingWhileHibernating)
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -770,7 +763,7 @@ TEST_F(
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -843,7 +836,7 @@ TEST_F(Canvas2DLayerBridgeTest,
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -914,7 +907,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_TeardownWhileHibernating)
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -958,7 +951,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_SnapshotWhileHibernating)
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -1021,7 +1014,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_TeardownWhileHibernationIsPending)
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -1069,7 +1062,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_HibernationAbortedDueToPendingTeardown)
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -1115,7 +1108,7 @@ TEST_F(Canvas2DLayerBridgeTest,
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -1161,7 +1154,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_HibernationAbortedDueToLostContext)
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -1174,7 +1167,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_HibernationAbortedDueToLostContext)
   MockLogger* mock_logger_ptr = mock_logger.get();
   bridge->SetLoggerForTesting(std::move(mock_logger));
 
-  gl.setIsContextLost(true);
+  gl.SetIsContextLost(true);
   // Test entering hibernation
   std::unique_ptr<WaitableEvent> hibernation_aborted_event =
       WTF::MakeUnique<WaitableEvent>();
@@ -1204,7 +1197,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_PrepareMailboxWhileHibernating)
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -1253,7 +1246,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_PrepareMailboxWhileBackgroundRendering)
 {
   FakeGLES2Interface gl;
   std::unique_ptr<WebThread> test_thread =
-      WTF::WrapUnique(Platform::Current()->CreateThread("TestThread"));
+      Platform::Current()->CreateThread("TestThread");
 
   // The Canvas2DLayerBridge has to be created on the thread that will use it
   // to avoid WeakPtr thread check issues.
@@ -1320,7 +1313,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_DeleteIOSurfaceAfterTeardown)
     Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
         std::move(context_provider), IntSize(300, 150), 0, kNonOpaque,
         Canvas2DLayerBridge::kForceAccelerationForTesting,
-        gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType)));
+        CanvasColorParams())));
     bridge->PrepareTextureMailbox(&texture_mailbox, &release_callback);
   }
 
@@ -1344,8 +1337,7 @@ TEST_F(Canvas2DLayerBridgeTest, NoUnnecessaryFlushes) {
   EXPECT_CALL(gl, Flush()).Times(0);
   Canvas2DLayerBridgePtr bridge(AdoptRef(new Canvas2DLayerBridge(
       std::move(context_provider), IntSize(300, 150), 0, kNonOpaque,
-      Canvas2DLayerBridge::kForceAccelerationForTesting,
-      gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType)));
+      Canvas2DLayerBridge::kForceAccelerationForTesting, CanvasColorParams())));
   EXPECT_FALSE(bridge->HasRecordedDrawCommands());
   ::testing::Mock::VerifyAndClearExpectations(&gl);
 

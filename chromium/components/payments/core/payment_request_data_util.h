@@ -35,7 +35,7 @@ PaymentAddress GetPaymentAddressFromAutofillProfile(
 BasicCardResponse GetBasicCardResponseFromAutofillCreditCard(
     const autofill::CreditCard& card,
     const base::string16& cvc,
-    const std::vector<autofill::AutofillProfile*>& billing_profiles,
+    const autofill::AutofillProfile& billing_profile,
     const std::string& app_locale);
 
 // Parse the supported card networks from supportedMethods and  "basic-card"'s
@@ -44,14 +44,18 @@ BasicCardResponse GetBasicCardResponseFromAutofillCreditCard(
 // |out_basic_card_supported_networks| is a subset of |out_supported_networks|
 // that includes all networks that were specified as part of "basic-card". This
 // is used to know whether to return the card network name (e.g., "visa") or
-// "basic-card" in the PaymentResponse. Returns true on success, false on
-// invalid data specified. |method_data.supported_networks| is expected to only
-// contain basic-card card network names (the list is at
+// "basic-card" in the PaymentResponse. |method_data.supported_networks| is
+// expected to only contain basic-card card network names (the list is at
 // https://www.w3.org/Payments/card-network-ids).
-bool ParseBasicCardSupportedNetworks(
+void ParseBasicCardSupportedNetworks(
     const std::vector<PaymentMethodData>& method_data,
     std::vector<std::string>* out_supported_networks,
     std::set<std::string>* out_basic_card_supported_networks);
+
+// Returns the phone number from the given |profile| formatted for display.
+base::string16 GetFormattedPhoneNumberForDisplay(
+    const autofill::AutofillProfile& profile,
+    const std::string& locale);
 
 // Formats the given number |phone_number| to
 // i18n::phonenumbers::PhoneNumberUtil::PhoneNumberFormat::INTERNATIONAL format
@@ -66,6 +70,12 @@ std::string FormatPhoneForDisplay(const std::string& phone_number,
 // (https://w3c.github.io/browser-payment-api/#paymentrequest-updated-algorithm)
 std::string FormatPhoneForResponse(const std::string& phone_number,
                                    const std::string& country_code);
+
+// Returns a country code to be used when validating this profile. If the
+// profile has a valid country code set, it is returned. If not, a country code
+// associated with |app_locale| is used as a fallback.
+std::string GetCountryCodeWithFallback(const autofill::AutofillProfile* profile,
+                                       const std::string& app_locale);
 
 }  // namespace data_util
 }  // namespace payments

@@ -30,9 +30,9 @@
 
 #include "bindings/core/v8/ScriptValue.h"
 
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/SerializedScriptValueFactory.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
+#include "bindings/core/v8/serialization/SerializedScriptValueFactory.h"
+#include "platform/bindings/ScriptState.h"
 
 namespace blink {
 
@@ -40,16 +40,15 @@ v8::Local<v8::Value> ScriptValue::V8Value() const {
   if (IsEmpty())
     return v8::Local<v8::Value>();
 
-  ASSERT(GetIsolate()->InContext());
+  DCHECK(GetIsolate()->InContext());
 
   // This is a check to validate that you don't return a ScriptValue to a world
   // different from the world that created the ScriptValue.
   // Probably this could be:
-  //   if (&m_scriptState->world() == &DOMWrapperWorld::current(isolate()))
+  //   if (&script_state_->world() == &DOMWrapperWorld::current(isolate()))
   //       return v8::Local<v8::Value>();
-  // instead of triggering RELEASE_ASSERT.
-  RELEASE_ASSERT(&script_state_->World() ==
-                 &DOMWrapperWorld::Current(GetIsolate()));
+  // instead of triggering CHECK.
+  CHECK_EQ(&script_state_->World(), &DOMWrapperWorld::Current(GetIsolate()));
   return value_->NewLocal(GetIsolate());
 }
 
@@ -61,7 +60,7 @@ v8::Local<v8::Value> ScriptValue::V8ValueFor(
   if (&script_state_->World() == &target_script_state->World())
     return value_->NewLocal(isolate);
 
-  ASSERT(isolate->InContext());
+  DCHECK(isolate->InContext());
   v8::Local<v8::Value> value = value_->NewLocal(isolate);
   RefPtr<SerializedScriptValue> serialized =
       SerializedScriptValue::SerializeAndSwallowExceptions(isolate, value);

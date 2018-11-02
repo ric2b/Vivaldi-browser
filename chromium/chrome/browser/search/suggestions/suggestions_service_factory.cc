@@ -8,6 +8,8 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "base/sequenced_task_runner.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/suggestions/image_decoder_impl.h"
@@ -62,8 +64,8 @@ SuggestionsServiceFactory::~SuggestionsServiceFactory() {}
 KeyedService* SuggestionsServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   scoped_refptr<base::SequencedTaskRunner> background_task_runner =
-      BrowserThread::GetBlockingPool()->GetSequencedTaskRunner(
-          base::SequencedWorkerPool::GetSequenceToken());
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND});
 
   Profile* profile = static_cast<Profile*>(context);
 

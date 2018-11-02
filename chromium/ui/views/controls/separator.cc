@@ -33,7 +33,7 @@ void Separator::SetPreferredHeight(int height) {
 ////////////////////////////////////////////////////////////////////////////////
 // Separator, View overrides:
 
-gfx::Size Separator::GetPreferredSize() const {
+gfx::Size Separator::CalculatePreferredSize() const {
   gfx::Size size(kThickness, preferred_height_);
   gfx::Insets insets = GetInsets();
   size.Enlarge(insets.width(), insets.height());
@@ -54,6 +54,8 @@ void Separator::OnPaint(gfx::Canvas* canvas) {
   float dsf = canvas->UndoDeviceScaleFactor();
   gfx::RectF contents = gfx::ScaleRect(gfx::RectF(GetContentsBounds()), dsf);
   canvas->FillRect(gfx::ToEnclosedRect(contents), color);
+
+  View::OnPaint(canvas);
 }
 
 const char* Separator::GetClassName() const {

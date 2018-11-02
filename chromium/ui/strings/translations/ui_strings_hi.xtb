@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hi">
-<translation id="111910763555783249">नोटिफिकेशन सेटिंग</translation>
+<translation id="111910763555783249">नोटिफ़िकेशन सेटिंग</translation>
 <translation id="1127811143501539442">{DAYS,plural, =1{1 दिन पहले}one{# दिन पहले}other{# दिन पहले}}</translation>
 <translation id="1156623771253174079">{SECONDS,plural, =1{1 मिनट पहले}one{# मिनट पहले}other{# मिनट पहले}}</translation>
 <translation id="1190609913194133056">सूचना केंद्र</translation>
@@ -32,7 +32,7 @@
 <translation id="252373100621549798">अज्ञात डिस्प्ले</translation>
 <translation id="2583543531130364912">अपनी टचस्क्रीन कैलिब्रेट करें</translation>
 <translation id="2666092431469916601">शीर्ष</translation>
-<translation id="2743387203779672305">क्लिपबोर्ड पर प्रतिलिपि बनाएं</translation>
+<translation id="2743387203779672305">क्लिपबोर्ड में कॉपी करें</translation>
 <translation id="2803313416453193357">फ़ोल्डर खोलें</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{1 वर्ष पहले}one{# वर्ष पहले}other{# वर्ष पहले}}</translation>
 <translation id="2931838996092594335">क्लिक करें</translation>
@@ -103,11 +103,11 @@
 <translation id="688711909580084195">शीर्षक-रहित वेबपेज</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{1 वर्ष शेष}one{# वर्ष शेष}other{# वर्ष शेष}}</translation>
-<translation id="6918245111648057970">प्रत्येक उपयोगकर्ता के लिए निम्न में से नोटिफिकेशन की अनुमति दें:</translation>
+<translation id="6918245111648057970">प्रत्येक उपयोगकर्ता के लिए निम्न में से नोटिफ़िकेशन की अनुमति दें:</translation>
 <translation id="6945221475159498467">चुनें</translation>
 <translation id="6965382102122355670">ठीक</translation>
 <translation id="7052633198403197513">F1</translation>
-<translation id="7135556860107312402">निम्न से आने वाली नोटिफिकेशन की अनुमति दें:</translation>
+<translation id="7135556860107312402">निम्न से आने वाली नोटिफ़िकेशन की अनुमति दें:</translation>
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{1 मिनट शेष}one{# मिनट शेष}other{# मिनट शेष}}</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{1 मिनट पहले}one{# मिनट पहले}other{# मिनट पहले}}</translation>

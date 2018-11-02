@@ -284,7 +284,7 @@ void TypingCommand::AdjustSelectionAfterIncrementalInsertion(
   if (!IsIncrementalInsertion())
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited. see http://crbug.com/590369 for more details.
   frame->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -340,7 +340,7 @@ void TypingCommand::InsertText(
   if (selection_for_insertion.IsCaret() && new_text.IsEmpty())
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited. see http://crbug.com/590369 for more details.
   document.UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -554,7 +554,7 @@ void TypingCommand::InsertText(const String& text,
   // inserted text.
   unsigned offset = 0;
   size_t newline;
-  while ((newline = text.Find('\n', offset)) != kNotFound) {
+  while ((newline = text.find('\n', offset)) != kNotFound) {
     if (newline > offset) {
       const size_t insertion_length = newline - offset;
       InsertTextRunWithoutNewlines(text.Substring(offset, insertion_length),
@@ -665,8 +665,8 @@ bool TypingCommand::MakeEditableRootEmpty(EditingState* editing_state) {
   if (!root || !root->HasChildren())
     return false;
 
-  if (root->FirstChild() == root->LastChild()) {
-    if (isHTMLBRElement(root->FirstChild())) {
+  if (root->firstChild() == root->lastChild()) {
+    if (isHTMLBRElement(root->firstChild())) {
       // If there is a single child and it could be a placeholder, leave it
       // alone.
       if (root->GetLayoutObject() &&
@@ -675,7 +675,7 @@ bool TypingCommand::MakeEditableRootEmpty(EditingState* editing_state) {
     }
   }
 
-  while (Node* child = root->FirstChild()) {
+  while (Node* child = root->firstChild()) {
     RemoveNode(child, editing_state);
     if (editing_state->IsAborted())
       return false;

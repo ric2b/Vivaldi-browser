@@ -18,10 +18,7 @@
 #include "content/public/browser/download_interrupt_reasons.h"
 #include "content/public/browser/download_save_info.h"
 #include "content/public/browser/download_url_parameters.h"
-
-namespace device {
-class PowerSaveBlocker;
-}  // namespace device
+#include "device/wake_lock/public/interfaces/wake_lock_service.mojom.h"
 
 namespace net {
 class HttpResponseHeaders;
@@ -52,8 +49,11 @@ class CONTENT_EXPORT DownloadRequestCore
   };
 
   // All parameters are required. |request| and |delegate| must outlive
-  // DownloadRequestCore.
-  DownloadRequestCore(net::URLRequest* request, Delegate* delegate);
+  // DownloadRequestCore. The request is not the main request if
+  // |is_parallel_request| is true.
+  DownloadRequestCore(net::URLRequest* request,
+                      Delegate* delegate,
+                      bool is_parallel_request);
   ~DownloadRequestCore();
 
   // Should be called when the URLRequest::Delegate receives OnResponseStarted.
@@ -121,7 +121,7 @@ class CONTENT_EXPORT DownloadRequestCore
 
  private:
   static DownloadInterruptReason HandleRequestStatus(
-      const net::URLRequestStatus& status);
+      const net::URLRequestStatus& status, bool has_strong_validators);
 
   static DownloadInterruptReason HandleSuccessfulServerResponse(
       const net::HttpResponseHeaders& http_headers,
@@ -140,6 +140,7 @@ class CONTENT_EXPORT DownloadRequestCore
   // populate the DownloadCreateInfo when the time comes.
   std::unique_ptr<DownloadSaveInfo> save_info_;
   uint32_t download_id_;
+  std::string guid_;
   bool transient_;
   DownloadUrlParameters::OnStartedCallback on_started_callback_;
 
@@ -147,10 +148,10 @@ class CONTENT_EXPORT DownloadRequestCore
   scoped_refptr<net::IOBuffer> read_buffer_;    // From URLRequest.
   std::unique_ptr<ByteStreamWriter> stream_writer_;  // To rest of system.
 
-  // Keeps the system from sleeping while this is alive. If the
-  // system enters power saving mode while a request is alive, it can cause the
-  // request to fail and the associated download will be interrupted.
-  std::unique_ptr<device::PowerSaveBlocker> power_save_blocker_;
+  // Used to keep the system from sleeping while a download is ongoing. If the
+  // system enters power saving mode while a URLRequest is alive, it can cause
+  // URLRequest to fail and the associated download will be interrupted.
+  device::mojom::WakeLockServicePtr wake_lock_;
 
   // The following are used to collect stats.
   base::TimeTicks download_start_time_;

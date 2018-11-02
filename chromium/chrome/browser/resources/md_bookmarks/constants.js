@@ -15,6 +15,21 @@ var DropPosition = {
   BELOW: 4,
 };
 
+/**
+ * @enum {string}
+ * @const
+ */
+var Command = {
+  EDIT: 'edit',
+  COPY: 'copy',
+  DELETE: 'delete',
+  OPEN_NEW_TAB: 'open-new-tab',
+  OPEN_NEW_WINDOW: 'open-new-window',
+  OPEN_INCOGNITO: 'open-incognito',
+  // OPEN triggers when you double-click an item.
+  OPEN: 'open',
+};
+
 /** @const */
 var LOCAL_STORAGE_CLOSED_FOLDERS_KEY = 'closedState';
 

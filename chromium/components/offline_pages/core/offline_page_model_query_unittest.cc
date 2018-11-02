@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/time/time.h"
-#include "components/offline_pages/client_namespace_constants.h"
-#include "components/offline_pages/client_policy_controller.h"
 #include "components/offline_pages/core/offline_page_model_query.h"
-#include "components/offline_pages/offline_page_client_policy.h"
-#include "components/offline_pages/offline_page_item.h"
 
+#include "base/time/time.h"
+#include "components/offline_pages/core/client_namespace_constants.h"
+#include "components/offline_pages/core/client_policy_controller.h"
+#include "components/offline_pages/core/offline_page_client_policy.h"
+#include "components/offline_pages/core/offline_page_item.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace offline_pages {
@@ -37,6 +37,10 @@ class OfflinePageModelQueryTest : public testing::Test {
   ClientPolicyController policy_;
   OfflinePageModelQueryBuilder builder_;
 
+  const OfflinePageItem cache_page() {
+    return OfflinePageItem(GURL("https://download.com"), 3,
+                           {kBookmarkNamespace, "id1"}, base::FilePath(), 3);
+  }
   const OfflinePageItem download_page() {
     return OfflinePageItem(GURL("https://download.com"), 4,
                            {kDownloadNamespace, "id1"}, base::FilePath(), 4);
@@ -278,6 +282,43 @@ TEST_F(OfflinePageModelQueryTest, UrlsReplace) {
   EXPECT_TRUE(query->Matches(kTestItem2));
 }
 
+TEST_F(OfflinePageModelQueryTest, RequireRemovedOnCacheReset_Only) {
+  builder_.RequireRemovedOnCacheReset(Requirement::INCLUDE_MATCHING);
+  std::unique_ptr<OfflinePageModelQuery> query = builder_.Build(&policy_);
+
+  auto restriction = query->GetRestrictedToNamespaces();
+  std::set<std::string> namespaces_allowed = restriction.second;
+  bool restricted_to_namespaces = restriction.first;
+  EXPECT_TRUE(restricted_to_namespaces);
+
+  for (const std::string& name_space : namespaces_allowed) {
+    EXPECT_TRUE(policy_.IsRemovedOnCacheReset(name_space))
+        << "Namespace: " << name_space;
+  }
+  EXPECT_TRUE(query->Matches(kTestItem1));
+  EXPECT_TRUE(query->Matches(cache_page()));
+  EXPECT_FALSE(query->Matches(download_page()));
+}
+
+TEST_F(OfflinePageModelQueryTest, RequireRemovedOnCacheReset_Except) {
+  builder_.RequireRemovedOnCacheReset(Requirement::EXCLUDE_MATCHING);
+  std::unique_ptr<OfflinePageModelQuery> query = builder_.Build(&policy_);
+
+  auto restriction = query->GetRestrictedToNamespaces();
+  std::set<std::string> namespaces_allowed = restriction.second;
+  bool restricted_to_namespaces = restriction.first;
+  EXPECT_TRUE(restricted_to_namespaces);
+
+  for (const std::string& name_space : namespaces_allowed) {
+    EXPECT_FALSE(policy_.IsRemovedOnCacheReset(name_space))
+        << "Namespace: " << name_space;
+  }
+
+  EXPECT_FALSE(query->Matches(kTestItem1));
+  EXPECT_FALSE(query->Matches(cache_page()));
+  EXPECT_TRUE(query->Matches(download_page()));
+}
+
 TEST_F(OfflinePageModelQueryTest, RequireSupportedByDownload_Only) {
   builder_.RequireSupportedByDownload(Requirement::INCLUDE_MATCHING);
   std::unique_ptr<OfflinePageModelQuery> query = builder_.Build(&policy_);
@@ -394,6 +435,21 @@ TEST_F(OfflinePageModelQueryTest, IntersectNamespaces) {
 
   EXPECT_TRUE(namespaces_allowed.count(kTestNamespace) == 1);
   EXPECT_FALSE(query->Matches(recent_page()));
+}
+
+TEST_F(OfflinePageModelQueryTest, RequireNamespace) {
+  builder_.RequireNamespace(kDefaultNamespace);
+  std::unique_ptr<OfflinePageModelQuery> query = builder_.Build(&policy_);
+  auto restriction = query->GetRestrictedToNamespaces();
+  std::set<std::string> namespaces_allowed = restriction.second;
+  bool restricted_to_namespaces = restriction.first;
+  EXPECT_TRUE(restricted_to_namespaces);
+  EXPECT_EQ(1U, namespaces_allowed.size());
+  EXPECT_TRUE(namespaces_allowed.find(kDefaultNamespace) !=
+              namespaces_allowed.end());
+
+  EXPECT_TRUE(query->Matches(kTestItem1));
+  EXPECT_FALSE(query->Matches(test_namespace_page()));
 }
 
 }  // namespace offline_pages

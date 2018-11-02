@@ -5,13 +5,17 @@
 #include "components/payments/android/web_app_manifest_section_table.h"
 
 #include <stdint.h>
-
+#include <time.h>
 #include <memory>
 
+#include "base/time/time.h"
 #include "sql/statement.h"
+#include "sql/transaction.h"
 
 namespace payments {
 namespace {
+// Data valid duration in seconds.
+const time_t DATA_VALID_TIME_IN_SECONDS = 90 * 24 * 60 * 60;
 
 // Note that the fingerprint is calculated with SHA-256.
 const size_t kFingerPrintLength = 32;
@@ -71,7 +75,8 @@ WebDatabaseTable::TypeKey WebAppManifestSectionTable::GetTypeKey() const {
 
 bool WebAppManifestSectionTable::CreateTablesIfNecessary() {
   if (!db_->Execute("CREATE TABLE IF NOT EXISTS web_app_manifest_section ( "
-                    "id VARCHAR PRIMARY KEY, "
+                    "expire_date INTEGER NOT NULL DEFAULT 0, "
+                    "id VARCHAR, "
                     "min_version INTEGER NOT NULL DEFAULT 0, "
                     "fingerprints BLOB) ")) {
     NOTREACHED();
@@ -91,52 +96,85 @@ bool WebAppManifestSectionTable::MigrateToVersion(
   return true;
 }
 
-bool WebAppManifestSectionTable::AddWebAppManifest(
-    mojom::WebAppManifestSection* manifest) {
-  DCHECK(manifest);
-  DCHECK(!manifest->id.empty());
+void WebAppManifestSectionTable::RemoveExpiredData() {
+  const time_t now_date_in_seconds = base::Time::NowFromSystemTime().ToTimeT();
+  sql::Statement s(db_->GetUniqueStatement(
+      "DELETE FROM web_app_manifest_section WHERE expire_date < ? "));
+  s.BindInt64(0, now_date_in_seconds);
+  s.Run();
+}
 
-  sql::Statement s(
-      db_->GetUniqueStatement("INSERT OR REPLACE INTO web_app_manifest_section "
-                              "(id, min_version, fingerprints) "
-                              "VALUES (?, ?, ?)"));
-  int index = 0;
-  s.BindString(index++, manifest->id);
-  s.BindInt64(index++, manifest->min_version);
-  std::unique_ptr<std::vector<uint8_t>> serialized_fingerprints =
-      SerializeFingerPrints(manifest->fingerprints);
-  s.BindBlob(index, serialized_fingerprints->data(),
-             serialized_fingerprints->size());
-  if (!s.Run())
+bool WebAppManifestSectionTable::AddWebAppManifest(
+    const std::vector<mojom::WebAppManifestSectionPtr>& manifest) {
+  DCHECK_LT(0U, manifest.size());
+
+  sql::Transaction transaction(db_);
+  if (!transaction.Begin())
+    return false;
+
+  sql::Statement s1(db_->GetUniqueStatement(
+      "DELETE FROM web_app_manifest_section WHERE id=? "));
+  s1.BindString(0, manifest[0]->id);
+  if (!s1.Run())
+    return false;
+
+  sql::Statement s2(
+      db_->GetUniqueStatement("INSERT INTO web_app_manifest_section "
+                              "(expire_date, id, min_version, fingerprints) "
+                              "VALUES (?, ?, ?, ?)"));
+  const time_t expire_date_in_seconds =
+      base::Time::NowFromSystemTime().ToTimeT() + DATA_VALID_TIME_IN_SECONDS;
+  for (const auto& section : manifest) {
+    DCHECK_EQ(manifest[0]->id, section->id);
+    int index = 0;
+    s2.BindInt64(index++, expire_date_in_seconds);
+    s2.BindString(index++, section->id);
+    s2.BindInt64(index++, section->min_version);
+    std::unique_ptr<std::vector<uint8_t>> serialized_fingerprints =
+        SerializeFingerPrints(section->fingerprints);
+    s2.BindBlob(index, serialized_fingerprints->data(),
+                serialized_fingerprints->size());
+    if (!s2.Run())
+      return false;
+    s2.Reset(true);
+  }
+
+  if (!transaction.Commit())
     return false;
 
   return true;
 }
 
-mojom::WebAppManifestSectionPtr WebAppManifestSectionTable::GetWebAppManifest(
-    const std::string& web_app) {
+std::vector<mojom::WebAppManifestSectionPtr>
+WebAppManifestSectionTable::GetWebAppManifest(const std::string& web_app) {
   sql::Statement s(
       db_->GetUniqueStatement("SELECT id, min_version, fingerprints "
                               "FROM web_app_manifest_section "
                               "WHERE id=?"));
   s.BindString(0, web_app);
 
-  if (!s.Step())
-    return nullptr;
+  std::vector<mojom::WebAppManifestSectionPtr> manifest;
+  while (s.Step()) {
+    mojom::WebAppManifestSectionPtr section =
+        mojom::WebAppManifestSection::New();
 
-  mojom::WebAppManifestSectionPtr manifest =
-      mojom::WebAppManifestSection::New();
+    int index = 0;
+    section->id = s.ColumnString(index++);
+    section->min_version = s.ColumnInt64(index++);
 
-  int index = 0;
-  manifest->id = s.ColumnString(index++);
-  manifest->min_version = s.ColumnInt64(index++);
+    std::vector<uint8_t> fingerprints;
+    if (!s.ColumnBlobAsVector(index, &fingerprints)) {
+      manifest.clear();
+      break;
+    }
 
-  std::vector<uint8_t> fingerprints;
-  if (!s.ColumnBlobAsVector(index, &fingerprints))
-    return nullptr;
+    if (!DeserializeFingerPrints(fingerprints, section->fingerprints)) {
+      manifest.clear();
+      break;
+    }
 
-  if (!DeserializeFingerPrints(fingerprints, manifest->fingerprints))
-    return nullptr;
+    manifest.emplace_back(std::move(section));
+  }
 
   return manifest;
 }

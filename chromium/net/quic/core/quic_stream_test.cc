@@ -7,12 +7,13 @@
 #include <memory>
 
 #include "net/quic/core/quic_connection.h"
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_utils.h"
 #include "net/quic/core/quic_write_blocked_list.h"
 #include "net/quic/core/spdy_utils.h"
+#include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
+#include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/quic_config_peer.h"
 #include "net/quic/test_tools/quic_connection_peer.h"
 #include "net/quic/test_tools/quic_flow_controller_peer.h"
@@ -20,7 +21,6 @@
 #include "net/quic/test_tools/quic_stream_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/test/gtest_util.h"
-#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gmock_mutant.h"
 
 using std::string;
@@ -68,7 +68,7 @@ class TestStream : public QuicStream {
   string data_;
 };
 
-class QuicStreamTest : public ::testing::TestWithParam<bool> {
+class QuicStreamTest : public QuicTestWithParam<bool> {
  public:
   QuicStreamTest()
       : initial_flow_control_window_bytes_(kMaxPacketSize),
@@ -142,7 +142,7 @@ class QuicStreamTest : public ::testing::TestWithParam<bool> {
       QuicStreamId id,
       QuicIOVector /*iov*/,
       QuicStreamOffset /*offset*/,
-      bool /*fin*/,
+      StreamSendingState /*state*/,
       const QuicReferenceCountedPointer<
           QuicAckListenerInterface>& /*ack_listener*/) {
     session_->CloseStream(id);

@@ -25,7 +25,6 @@
 #include "chrome/browser/chromeos/ash_config.h"
 #include "chrome/browser/chromeos/input_method/candidate_window_controller.h"
 #include "chrome/browser/chromeos/input_method/component_extension_ime_manager_impl.h"
-#include "chrome/browser/chromeos/input_method/input_method_switch_recorder.h"
 #include "chrome/browser/chromeos/language_preferences.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -700,17 +699,23 @@ void InputMethodManagerImpl::StateImpl::SetInputMethodLoginDefault() {
   // and US dvorak keyboard layouts.
   if (g_browser_process && g_browser_process->local_state()) {
     const std::string locale = g_browser_process->GetApplicationLocale();
-    // If the preferred keyboard for the login screen has been saved, use it.
-    PrefService* prefs = g_browser_process->local_state();
-    std::string initial_input_method_id =
-        prefs->GetString(chromeos::language_prefs::kPreferredKeyboardLayout);
     std::vector<std::string> input_methods_to_be_enabled;
-    if (initial_input_method_id.empty()) {
-      // If kPreferredKeyboardLayout is not specified, use the hardware layout.
-      input_methods_to_be_enabled =
-          manager_->util_.GetHardwareLoginInputMethodIds();
+    if (!GetAllowedInputMethods().empty()) {
+      // Prefer policy-set input methods.
+      input_methods_to_be_enabled = GetAllowedInputMethods();
     } else {
-      input_methods_to_be_enabled.push_back(initial_input_method_id);
+      // If the preferred keyboard for the login screen has been saved, use it.
+      PrefService* prefs = g_browser_process->local_state();
+      std::string initial_input_method_id =
+          prefs->GetString(chromeos::language_prefs::kPreferredKeyboardLayout);
+      if (initial_input_method_id.empty()) {
+        // If kPreferredKeyboardLayout is not specified, use the hardware
+        // layout.
+        input_methods_to_be_enabled =
+            manager_->util_.GetHardwareLoginInputMethodIds();
+      } else {
+        input_methods_to_be_enabled.push_back(initial_input_method_id);
+      }
     }
     EnableLoginLayouts(locale, input_methods_to_be_enabled);
     manager_->LoadNecessaryComponentExtensions(this);
@@ -742,7 +747,6 @@ void InputMethodManagerImpl::StateImpl::SwitchToNextInputMethod() {
   // Find the next input method and switch to it.
   SwitchToNextInputMethodInternal(active_input_method_ids,
                                   current_input_method.id());
-  InputMethodSwitchRecorder::Get()->RecordSwitch(false /* by_tray_menu*/);
 }
 
 void InputMethodManagerImpl::StateImpl::SwitchToPreviousInputMethod() {
@@ -766,7 +770,6 @@ void InputMethodManagerImpl::StateImpl::SwitchToPreviousInputMethod() {
     return;
   }
   ChangeInputMethod(*iter, true);
-  InputMethodSwitchRecorder::Get()->RecordSwitch(false /* by_tray_menu*/);
 }
 
 bool InputMethodManagerImpl::StateImpl::CanSwitchInputMethod(
@@ -784,10 +787,8 @@ void InputMethodManagerImpl::StateImpl::SwitchInputMethod(
   std::vector<std::string> candidate_ids;
   GetCandidateInputMethodsForAccelerator(accelerator, &candidate_ids);
   DCHECK(!candidate_ids.empty());
-  if (!candidate_ids.empty()) {
+  if (!candidate_ids.empty())
     SwitchToNextInputMethodInternal(candidate_ids, current_input_method.id());
-    InputMethodSwitchRecorder::Get()->RecordSwitch(false /* by_tray_menu*/);
-  }
 }
 
 void InputMethodManagerImpl::StateImpl::SwitchToNextInputMethodInternal(

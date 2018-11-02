@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 package org.chromium.net.impl;
 
+import static android.os.Process.THREAD_PRIORITY_LOWEST;
+
 import android.content.Context;
 import android.support.annotation.IntDef;
 import android.support.annotation.VisibleForTesting;
@@ -71,6 +73,8 @@ public abstract class CronetEngineBuilderImpl extends ICronetEngineBuilder {
 
     private static final Pattern INVALID_PKP_HOST_NAME = Pattern.compile("^[0-9\\.]*$");
 
+    private static final int INVALID_THREAD_PRIORITY = THREAD_PRIORITY_LOWEST + 1;
+
     // Private fields are simply storage of configuration for the resulting CronetEngine.
     // See setters below for verbose descriptions.
     private final Context mApplicationContext;
@@ -83,10 +87,7 @@ public abstract class CronetEngineBuilderImpl extends ICronetEngineBuilder {
     private boolean mQuicEnabled;
     private boolean mHttp2Enabled;
     private boolean mSdchEnabled;
-    private String mDataReductionProxyKey;
-    private String mDataReductionProxyPrimaryProxy;
-    private String mDataReductionProxyFallbackProxy;
-    private String mDataReductionProxySecureProxyCheckUrl;
+    private boolean mBrotiEnabled;
     private boolean mDisableCache;
     private int mHttpCacheMode;
     private long mHttpCacheMaxSize;
@@ -94,6 +95,7 @@ public abstract class CronetEngineBuilderImpl extends ICronetEngineBuilder {
     protected long mMockCertVerifier;
     private boolean mNetworkQualityEstimatorEnabled;
     private String mCertVerifierData;
+    private int mThreadPriority = INVALID_THREAD_PRIORITY;
 
     /**
      * Default config enables SPDY, disables QUIC, SDCH and HTTP cache.
@@ -104,6 +106,7 @@ public abstract class CronetEngineBuilderImpl extends ICronetEngineBuilder {
         enableQuic(false);
         enableHttp2(true);
         enableSdch(false);
+        enableBrotli(false);
         enableHttpCache(HTTP_CACHE_DISABLED, 0);
         enableNetworkQualityEstimator(false);
         enablePublicKeyPinningBypassForLocalTrustAnchors(true);
@@ -188,38 +191,13 @@ public abstract class CronetEngineBuilderImpl extends ICronetEngineBuilder {
     }
 
     @Override
-    public CronetEngineBuilderImpl enableDataReductionProxy(String key) {
-        mDataReductionProxyKey = key;
+    public CronetEngineBuilderImpl enableBrotli(boolean value) {
+        mBrotiEnabled = value;
         return this;
     }
 
-    String dataReductionProxyKey() {
-        return mDataReductionProxyKey;
-    }
-
-    @Override
-    public CronetEngineBuilderImpl setDataReductionProxyOptions(
-            String primaryProxy, String fallbackProxy, String secureProxyCheckUrl) {
-        if (primaryProxy.isEmpty() || fallbackProxy.isEmpty() || secureProxyCheckUrl.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Primary and fallback proxies and check url must be set");
-        }
-        mDataReductionProxyPrimaryProxy = primaryProxy;
-        mDataReductionProxyFallbackProxy = fallbackProxy;
-        mDataReductionProxySecureProxyCheckUrl = secureProxyCheckUrl;
-        return this;
-    }
-
-    String dataReductionProxyPrimaryProxy() {
-        return mDataReductionProxyPrimaryProxy;
-    }
-
-    String dataReductionProxyFallbackProxy() {
-        return mDataReductionProxyFallbackProxy;
-    }
-
-    String dataReductionProxySecureProxyCheckUrl() {
-        return mDataReductionProxySecureProxyCheckUrl;
+    boolean brotliEnabled() {
+        return mBrotiEnabled;
     }
 
     @IntDef({
@@ -412,6 +390,22 @@ public abstract class CronetEngineBuilderImpl extends ICronetEngineBuilder {
 
     String certVerifierData() {
         return mCertVerifierData;
+    }
+
+    @Override
+    public CronetEngineBuilderImpl setThreadPriority(int priority) {
+        if (priority > THREAD_PRIORITY_LOWEST || priority < -20) {
+            throw new IllegalArgumentException("Thread priority invalid");
+        }
+        mThreadPriority = priority;
+        return this;
+    }
+
+    /**
+     * @returns thread priority provided by user, or {@code defaultThreadPriority} if none provided.
+     */
+    int threadPriority(int defaultThreadPriority) {
+        return mThreadPriority == INVALID_THREAD_PRIORITY ? defaultThreadPriority : mThreadPriority;
     }
 
     /**

@@ -267,7 +267,7 @@ bool CompositeEditCommand::IsRemovableBlock(const Node* node) {
 
   const HTMLDivElement& element = toHTMLDivElement(*node);
   ContainerNode* parent_node = element.parentNode();
-  if (parent_node && parent_node->FirstChild() != parent_node->LastChild())
+  if (parent_node && parent_node->firstChild() != parent_node->lastChild())
     return false;
 
   if (!element.hasAttributes())
@@ -303,7 +303,7 @@ void CompositeEditCommand::InsertNodeAfter(Node* insert_child,
   ContainerNode* parent = ref_child->parentNode();
   DCHECK(parent);
   DCHECK(!parent->IsShadowRoot()) << parent;
-  if (parent->LastChild() == ref_child) {
+  if (parent->lastChild() == ref_child) {
     AppendNode(insert_child, parent, editing_state);
   } else {
     DCHECK(ref_child->nextSibling()) << ref_child;
@@ -1073,9 +1073,9 @@ HTMLElement* CompositeEditCommand::MoveParagraphContentsToNewBlockIfNecessary(
   if (editing_state->IsAborted())
     return nullptr;
 
-  if (new_block->LastChild() && isHTMLBRElement(*new_block->LastChild()) &&
+  if (new_block->lastChild() && isHTMLBRElement(*new_block->lastChild()) &&
       !end_was_br) {
-    RemoveNode(new_block->LastChild(), editing_state);
+    RemoveNode(new_block->lastChild(), editing_state);
     if (editing_state->IsAborted())
       return nullptr;
   }
@@ -1266,9 +1266,10 @@ void CompositeEditCommand::MoveParagraphWithClones(
   DCHECK(outer_node);
   DCHECK(block_element);
 
-  VisiblePosition before_paragraph =
-      PreviousPositionOf(start_of_paragraph_to_move);
-  VisiblePosition after_paragraph = NextPositionOf(end_of_paragraph_to_move);
+  RelocatablePosition relocatable_before_paragraph(
+      PreviousPositionOf(start_of_paragraph_to_move).DeepEquivalent());
+  RelocatablePosition relocatable_after_paragraph(
+      NextPositionOf(end_of_paragraph_to_move).DeepEquivalent());
 
   // We upstream() the end and downstream() the start so that we don't include
   // collapsed whitespace in the move. When we paste a fragment, spaces after
@@ -1311,14 +1312,10 @@ void CompositeEditCommand::MoveParagraphWithClones(
   // would cause 'baz' to collapse onto the line with 'foobar' unless we insert
   // a br. Must recononicalize these two VisiblePositions after the pruning
   // above.
-  // TODO(yosin): We should abort when |beforeParagraph| is a orphan when
-  // we have a sample.
-  before_paragraph = CreateVisiblePosition(before_paragraph.DeepEquivalent());
-  if (after_paragraph.IsOrphan()) {
-    editing_state->Abort();
-    return;
-  }
-  after_paragraph = CreateVisiblePosition(after_paragraph.DeepEquivalent());
+  const VisiblePosition& before_paragraph =
+      CreateVisiblePosition(relocatable_before_paragraph.GetPosition());
+  const VisiblePosition& after_paragraph =
+      CreateVisiblePosition(relocatable_after_paragraph.GetPosition());
 
   if (before_paragraph.IsNotNull() &&
       !IsDisplayInsideTable(before_paragraph.DeepEquivalent().AnchorNode()) &&

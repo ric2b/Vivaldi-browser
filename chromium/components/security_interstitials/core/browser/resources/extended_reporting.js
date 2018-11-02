@@ -35,13 +35,13 @@ function setupExtendedReportingCheckbox() {
 
   if ($('whitepaper-link')) {
     $('whitepaper-link').addEventListener('click', function(event) {
-      sendCommand(CMD_OPEN_WHITEPAPER);
+      sendCommand(SecurityInterstitialCommandId.CMD_OPEN_WHITEPAPER);
     });
   }
 
   $('opt-in-checkbox').addEventListener('click', function() {
     sendCommand($('opt-in-checkbox').checked ?
-                CMD_DO_REPORT :
-                CMD_DONT_REPORT);
+                SecurityInterstitialCommandId.CMD_DO_REPORT :
+                SecurityInterstitialCommandId.CMD_DONT_REPORT);
   });
 }

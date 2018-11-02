@@ -38,12 +38,11 @@ class WebShareTargetPickerView : public views::DialogDelegateView,
   // the share.
   WebShareTargetPickerView(
       const std::vector<std::pair<base::string16, GURL>>& targets,
-      const base::Callback<void(base::Optional<std::string>)>&
-          close_callback);
+      chrome::WebShareTargetPickerCallback close_callback);
   ~WebShareTargetPickerView() override;
 
   // views::View overrides:
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
 
   // views::WidgetDelegate overrides:
   ui::ModalType GetModalType() const override;
@@ -68,7 +67,7 @@ class WebShareTargetPickerView : public views::DialogDelegateView,
   const std::vector<std::pair<base::string16, GURL>> targets_;
   std::unique_ptr<TargetPickerTableModel> table_model_;
 
-  base::Callback<void(base::Optional<std::string>)> close_callback_;
+  chrome::WebShareTargetPickerCallback close_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(WebShareTargetPickerView);
 };

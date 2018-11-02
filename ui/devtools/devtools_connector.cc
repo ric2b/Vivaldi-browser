@@ -139,8 +139,8 @@ void DevtoolsConnectorAPI::BroadcastEvent(const std::string& eventname,
                                           std::unique_ptr<base::ListValue> args,
                                           content::BrowserContext* context) {
   std::unique_ptr<Event> event(
-      new Event(events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args)));
-  event->restrict_to_browser_context = context;
+      new Event(events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args),
+                context));
   EventRouter* event_router = EventRouter::Get(context);
   if (event_router) {
     event_router->BroadcastEvent(std::move(event));
@@ -195,16 +195,17 @@ void DevtoolsConnectorItem::WebContentsCreated(
     int opener_render_frame_id,
     const std::string& frame_name,
     const GURL& target_url,
-    content::WebContents* new_contents) {
+    content::WebContents* new_contents,
+    const base::Optional<content::WebContents::CreateParams>& create_params) {
   if (devtools_delegate_) {
     devtools_delegate_->WebContentsCreated(
         source_contents, opener_render_process_id, opener_render_frame_id,
-        frame_name, target_url, new_contents);
+        frame_name, target_url, new_contents, create_params);
   }
   if (guest_delegate_) {
     guest_delegate_->WebContentsCreated(
       source_contents, opener_render_process_id, opener_render_frame_id,
-      frame_name, target_url, new_contents);
+      frame_name, target_url, new_contents, create_params);
   }
 }
 
@@ -453,6 +454,12 @@ void UIBindingsDelegate::RenderProcessGone(
     bool crashed) {
   if (ui_bindings_delegate_) {
     return ui_bindings_delegate_->RenderProcessGone(crashed);
+  }
+}
+
+void UIBindingsDelegate::SetEyeDropperActive(bool active) {
+  if (ui_bindings_delegate_) {
+    ui_bindings_delegate_->SetEyeDropperActive(active);
   }
 }
 

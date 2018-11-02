@@ -245,8 +245,8 @@ bool Region::Shape::CanCoalesce(SegmentIterator begin, SegmentIterator end) {
     return false;
 
   SegmentIterator last_span_begin =
-      segments_.Data() + spans_.back().segment_index;
-  SegmentIterator last_span_end = segments_.Data() + segments_.size();
+      segments_.data() + spans_.back().segment_index;
+  SegmentIterator last_span_end = segments_.data() + segments_.size();
 
   // Check if both spans have an equal number of segments.
   if (last_span_end - last_span_begin != end - begin)
@@ -282,17 +282,17 @@ void Region::Shape::AppendSegment(int x) {
 }
 
 Region::Shape::SpanIterator Region::Shape::SpansBegin() const {
-  return spans_.Data();
+  return spans_.data();
 }
 
 Region::Shape::SpanIterator Region::Shape::SpansEnd() const {
-  return spans_.Data() + spans_.size();
+  return spans_.data() + spans_.size();
 }
 
 Region::Shape::SegmentIterator Region::Shape::SegmentsBegin(
     SpanIterator it) const {
-  ASSERT(it >= spans_.Data());
-  ASSERT(it < spans_.Data() + spans_.size());
+  DCHECK_GE(it, spans_.data());
+  DCHECK_LT(it, spans_.data() + spans_.size());
 
   // Check if this span has any segments.
   if (it->segment_index == segments_.size())
@@ -303,18 +303,18 @@ Region::Shape::SegmentIterator Region::Shape::SegmentsBegin(
 
 Region::Shape::SegmentIterator Region::Shape::SegmentsEnd(
     SpanIterator it) const {
-  ASSERT(it >= spans_.Data());
-  ASSERT(it < spans_.Data() + spans_.size());
+  DCHECK_GE(it, spans_.data());
+  DCHECK_LT(it, spans_.data() + spans_.size());
 
   // Check if this span has any segments.
   if (it->segment_index == segments_.size())
     return 0;
 
-  ASSERT(it + 1 < spans_.Data() + spans_.size());
+  DCHECK_LT(it + 1, spans_.data() + spans_.size());
   size_t segment_index = (it + 1)->segment_index;
 
   SECURITY_DCHECK(segment_index <= segments_.size());
-  return segments_.Data() + segment_index;
+  return segments_.data() + segment_index;
 }
 
 #ifndef NDEBUG
@@ -352,7 +352,7 @@ IntRect Region::Shape::Bounds() const {
     SegmentIterator last_segment = SegmentsEnd(span) - 1;
 
     if (first_segment && last_segment) {
-      ASSERT(first_segment != last_segment);
+      DCHECK_NE(first_segment, last_segment);
 
       if (*first_segment < min_x)
         min_x = *first_segment;
@@ -364,8 +364,8 @@ IntRect Region::Shape::Bounds() const {
     ++span;
   }
 
-  ASSERT(min_x <= max_x);
-  ASSERT(min_y <= max_y);
+  DCHECK_LE(min_x, max_x);
+  DCHECK_LE(min_y, max_y);
 
   return IntRect(min_x, min_y, max_x - min_x, max_y - min_y);
 }
@@ -378,8 +378,8 @@ void Region::Shape::Translate(const IntSize& offset) {
 }
 
 void Region::Shape::Swap(Shape& other) {
-  segments_.Swap(other.segments_);
-  spans_.Swap(other.spans_);
+  segments_.swap(other.segments_);
+  spans_.swap(other.spans_);
 }
 
 enum {
@@ -446,8 +446,8 @@ Region::Shape Region::Shape::ShapeOperation(const Shape& shape1,
     SegmentIterator s2 = segments2;
 
     // Clear vector without dropping capacity.
-    segments.Resize(0);
-    ASSERT(segments.Capacity());
+    segments.resize(0);
+    DCHECK(segments.capacity());
 
     // Now iterate over the segments in each span and construct a new vector of
     // segments.
@@ -481,7 +481,7 @@ Region::Shape Region::Shape::ShapeOperation(const Shape& shape1,
 
     // Add the span.
     if (!segments.IsEmpty() || !result.IsEmpty())
-      result.AppendSpan(y, segments.Data(), segments.Data() + segments.size());
+      result.AppendSpan(y, segments.data(), segments.data() + segments.size());
   }
 
   // Add any remaining spans.

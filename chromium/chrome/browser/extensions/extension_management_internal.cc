@@ -20,6 +20,9 @@ namespace internal {
 namespace {
 const char kMalformedPreferenceWarning[] =
     "Malformed extension management preference.";
+
+// Maximum number of characters for a 'blocked_install_message' value.
+const int kBlockedInstallMessageMaxLength = 1000;
 }  // namespace
 
 IndividualSettings::IndividualSettings() {
@@ -115,6 +118,14 @@ bool IndividualSettings::Parse(const base::DictionaryValue* dict,
     // Get the list of URLPatterns.
     if (dict->GetListWithoutPathExpansion(key,
                                           &host_list_value)) {
+      if (host_list_value->GetSize() >
+          schema_constants::kMaxItemsURLPatternSet) {
+        LOG(WARNING) << "Exceeded maximum number of URL match patterns ("
+                     << schema_constants::kMaxItemsURLPatternSet
+                     << ") for attribute '" << key << "'";
+        return false;
+      }
+
       out_value->ClearPatterns();
       const int extension_scheme_mask =
           URLPattern::GetValidSchemeMaskForExtensions();
@@ -122,7 +133,8 @@ bool IndividualSettings::Parse(const base::DictionaryValue* dict,
         std::string unparsed_str;
         host_list_value->GetString(i, &unparsed_str);
         URLPattern pattern = URLPattern(extension_scheme_mask);
-        URLPattern::ParseResult parse_result = pattern.Parse(unparsed_str);
+        URLPattern::ParseResult parse_result = pattern.Parse(
+            unparsed_str, URLPattern::ALLOW_WILDCARD_FOR_EFFECTIVE_TLD);
         if (parse_result != URLPattern::PARSE_SUCCESS) {
           LOG(WARNING) << kMalformedPreferenceWarning;
           LOG(WARNING) << "Invalid URL pattern '" + unparsed_str +
@@ -159,6 +171,15 @@ bool IndividualSettings::Parse(const base::DictionaryValue* dict,
       minimum_version_required = std::move(version);
   }
 
+  if (dict->GetStringWithoutPathExpansion(
+          schema_constants::kBlockedInstallMessage, &blocked_install_message)) {
+    if (blocked_install_message.length() > kBlockedInstallMessageMaxLength) {
+      LOG(WARNING) << "Truncated blocked install message to 1000 characters";
+      blocked_install_message.erase(kBlockedInstallMessageMaxLength,
+                                    std::string::npos);
+    }
+  }
+
   return true;
 }
 
@@ -168,6 +189,7 @@ void IndividualSettings::Reset() {
   blocked_permissions.clear();
   runtime_blocked_hosts.ClearPatterns();
   runtime_allowed_hosts.ClearPatterns();
+  blocked_install_message.clear();
 }
 
 GlobalSettings::GlobalSettings() {

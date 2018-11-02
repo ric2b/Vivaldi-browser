@@ -1,0 +1,61 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module payments.mojom;
+
+import "components/payments/mojom/payment_request.mojom";
+import "mojo/common/time.mojom";
+import "url/mojo/url.mojom";
+
+enum PaymentHandlerStatus {
+  SUCCESS,
+  NOT_IMPLEMENTED,
+  NOT_FOUND,
+  NO_ACTIVE_WORKER,
+  STORAGE_OPERATION_FAILED,
+};
+
+struct PaymentInstrument {
+  string name;
+  array<string> enabled_methods;
+  string stringified_capabilities;
+};
+
+interface PaymentManager {
+  Init(string service_worker_scope);
+  DeletePaymentInstrument(string instrument_key)
+      => (PaymentHandlerStatus status);
+  GetPaymentInstrument(string instrument_key)
+      => (PaymentInstrument instrument, PaymentHandlerStatus status);
+  KeysOfPaymentInstruments()
+      => (array<string> keys, PaymentHandlerStatus status);
+  HasPaymentInstrument(string instrument_key)
+      => (PaymentHandlerStatus status);
+  SetPaymentInstrument(string instrument_key, PaymentInstrument instrument)
+      => (PaymentHandlerStatus status);
+  ClearPaymentInstruments()
+      => (PaymentHandlerStatus status);
+};
+
+struct PaymentAppRequest {
+  url.mojom.Url top_level_origin;
+  url.mojom.Url payment_request_origin;
+  string payment_request_id;
+  array<PaymentMethodData> method_data;
+  PaymentItem total;
+  array<PaymentDetailsModifier> modifiers;
+  string instrument_key;
+};
+
+struct PaymentAppResponse {
+  string method_name;
+  string stringified_details;
+};
+
+// This interface is provided to pass a payment app response from payment
+// request event in renderer side to browser side by calling respondWith().
+interface PaymentAppResponseCallback {
+  OnPaymentAppResponse(PaymentAppResponse response,
+                       mojo.common.mojom.Time dispatch_event_time);
+};

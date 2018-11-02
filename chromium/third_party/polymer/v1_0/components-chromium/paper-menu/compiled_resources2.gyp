@@ -13,15 +13,10 @@
       'includes': ['../../../../closure_compiler/compile_js2.gypi'],
     },
     {
-      'target_name': 'paper-menu-shared-styles-extracted',
-      'includes': ['../../../../closure_compiler/compile_js2.gypi'],
-    },
-    {
       'target_name': 'paper-submenu-extracted',
       'dependencies': [
         '../iron-behaviors/compiled_resources2.gyp:iron-control-state-extracted',
         '../iron-collapse/compiled_resources2.gyp:iron-collapse-extracted',
-        '../iron-menu-behavior/compiled_resources2.gyp:iron-menu-behavior-extracted',
       ],
       'includes': ['../../../../closure_compiler/compile_js2.gypi'],
     },

@@ -5,11 +5,13 @@
 #ifndef CC_LAYERS_SCROLLBAR_LAYER_IMPL_BASE_H_
 #define CC_LAYERS_SCROLLBAR_LAYER_IMPL_BASE_H_
 
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "cc/cc_export.h"
 #include "cc/input/scrollbar.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
+#include "cc/trees/layer_tree_settings.h"
 
 namespace cc {
 
@@ -17,9 +19,8 @@ class LayerTreeImpl;
 
 class CC_EXPORT ScrollbarLayerImplBase : public LayerImpl {
  public:
-  int ScrollLayerId() const { return scroll_layer_id_; }
-
-  void SetScrollLayerId(int scroll_layer_id);
+  ElementId scroll_element_id() const { return scroll_element_id_; }
+  void SetScrollElementId(ElementId scroll_element_id);
 
   float current_pos() const { return current_pos_; }
   bool SetCurrentPos(float current_pos);
@@ -47,7 +48,8 @@ class CC_EXPORT ScrollbarLayerImplBase : public LayerImpl {
   ScrollbarLayerImplBase* ToScrollbarLayer() override;
 
   // Thumb quad rect in layer space.
-  virtual gfx::Rect ComputeThumbQuadRect() const;
+  gfx::Rect ComputeThumbQuadRect() const;
+  gfx::Rect ComputeExpandedThumbQuadRect() const;
 
   float thumb_thickness_scale_factor() {
     return thumb_thickness_scale_factor_;
@@ -59,6 +61,8 @@ class CC_EXPORT ScrollbarLayerImplBase : public LayerImpl {
   // TODO(crbug.com/702832): No need for this function once there is element id
   // on overlay scrollbar layers.
   void SetOverlayScrollbarLayerOpacityAnimated(float opacity);
+
+  virtual LayerTreeSettings::ScrollbarAnimator GetScrollbarAnimator() const;
 
  protected:
   ScrollbarLayerImplBase(LayerTreeImpl* tree_impl,
@@ -76,7 +80,10 @@ class CC_EXPORT ScrollbarLayerImplBase : public LayerImpl {
   virtual bool IsThumbResizable() const = 0;
 
  private:
-  int scroll_layer_id_;
+  gfx::Rect ComputeThumbQuadRectWithThumbThicknessScale(
+      float thumb_thickness_scale_factor) const;
+
+  ElementId scroll_element_id_;
   bool is_overlay_scrollbar_;
 
   float thumb_thickness_scale_factor_;
@@ -93,7 +100,7 @@ class CC_EXPORT ScrollbarLayerImplBase : public LayerImpl {
   DISALLOW_COPY_AND_ASSIGN(ScrollbarLayerImplBase);
 };
 
-typedef std::set<ScrollbarLayerImplBase*> ScrollbarSet;
+using ScrollbarSet = base::flat_set<ScrollbarLayerImplBase*>;
 
 }  // namespace cc
 

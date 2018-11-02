@@ -20,6 +20,7 @@
 #include "components/favicon/core/large_icon_service.h"
 #include "components/favicon_base/fallback_icon_style.h"
 #include "components/favicon_base/favicon_types.h"
+#include "components/ntp_snippets/content_suggestions_metrics.h"
 #include "components/ntp_snippets/pref_names.h"
 #include "components/ntp_snippets/remote/remote_suggestions_provider.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -169,16 +170,9 @@ void ContentSuggestionsService::FetchSuggestionFavicon(
     return;
   }
 
-  // TODO(jkrcal): Create a general wrapper function in LargeIconService that
-  // does handle the get-from-cache-and-fallback-to-google-server functionality
-  // in one shot (for all clients that do not need to react in between).
-  large_icon_service_->GetLargeIconImageOrFallbackStyle(
-      domain_with_favicon, minimum_size_in_pixel, desired_size_in_pixel,
-      base::Bind(&ContentSuggestionsService::OnGetFaviconFromCacheFinished,
-                 base::Unretained(this), domain_with_favicon,
-                 minimum_size_in_pixel, desired_size_in_pixel, callback,
-                 /*continue_to_google_server=*/true),
-      &favicons_task_tracker_);
+  GetFaviconFromCache(domain_with_favicon, minimum_size_in_pixel,
+                      desired_size_in_pixel, callback,
+                      /*continue_to_google_server=*/true);
 }
 
 GURL ContentSuggestionsService::GetFaviconDomain(
@@ -202,6 +196,26 @@ GURL ContentSuggestionsService::GetFaviconDomain(
     return remote_suggestions_provider_->GetUrlWithFavicon(suggestion_id);
   }
   return GURL();
+}
+
+void ContentSuggestionsService::GetFaviconFromCache(
+    const GURL& publisher_url,
+    int minimum_size_in_pixel,
+    int desired_size_in_pixel,
+    const ImageFetchedCallback& callback,
+    bool continue_to_google_server) {
+  // TODO(jkrcal): Create a general wrapper function in LargeIconService that
+  // does handle the get-from-cache-and-fallback-to-google-server functionality
+  // in one shot (for all clients that do not need to react in between).
+
+  // Use desired_size = 0 for getting the icon from the cache (so that the icon
+  // is not poorly rescaled by LargeIconService).
+  large_icon_service_->GetLargeIconImageOrFallbackStyle(
+      publisher_url, minimum_size_in_pixel, /*desired_size_in_pixel=*/0,
+      base::Bind(&ContentSuggestionsService::OnGetFaviconFromCacheFinished,
+                 base::Unretained(this), publisher_url, minimum_size_in_pixel,
+                 desired_size_in_pixel, callback, continue_to_google_server),
+      &favicons_task_tracker_);
 }
 
 void ContentSuggestionsService::OnGetFaviconFromCacheFinished(
@@ -233,9 +247,13 @@ void ContentSuggestionsService::OnGetFaviconFromCacheFinished(
   }
 
   // Try to fetch the favicon from a Google favicon server.
+  // TODO(jkrcal): Currently used only for Articles for you which have public
+  // URLs. Let the provider decide whether |publisher_url| may be private or
+  // not.
   large_icon_service_
       ->GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
-          publisher_url, minimum_size_in_pixel,
+          publisher_url, minimum_size_in_pixel, desired_size_in_pixel,
+          /*may_page_url_be_private=*/false,
           base::Bind(
               &ContentSuggestionsService::OnGetFaviconFromGoogleServerFinished,
               base::Unretained(this), publisher_url, minimum_size_in_pixel,
@@ -254,14 +272,9 @@ void ContentSuggestionsService::OnGetFaviconFromGoogleServerFinished(
     return;
   }
 
-  // Get the freshly downloaded icon from the cache.
-  large_icon_service_->GetLargeIconImageOrFallbackStyle(
-      publisher_url, minimum_size_in_pixel, desired_size_in_pixel,
-      base::Bind(&ContentSuggestionsService::OnGetFaviconFromCacheFinished,
-                 base::Unretained(this), publisher_url, minimum_size_in_pixel,
-                 desired_size_in_pixel, callback,
-                 /*continue_to_google_server=*/false),
-      &favicons_task_tracker_);
+  GetFaviconFromCache(publisher_url, minimum_size_in_pixel,
+                      desired_size_in_pixel, callback,
+                      /*continue_to_google_server=*/false);
 }
 
 void ContentSuggestionsService::ClearHistory(
@@ -324,6 +337,9 @@ void ContentSuggestionsService::DismissSuggestion(
                  << " for unavailable category " << suggestion_id.category();
     return;
   }
+
+  metrics::RecordContentSuggestionDismissed();
+
   providers_by_category_[suggestion_id.category()]->DismissSuggestion(
       suggestion_id);
 
@@ -338,6 +354,8 @@ void ContentSuggestionsService::DismissCategory(Category category) {
   if (providers_it == providers_by_category_.end()) {
     return;
   }
+
+  metrics::RecordCategoryDismissed();
 
   ContentSuggestionsProvider* provider = providers_it->second;
   UnregisterCategory(category, provider);
@@ -381,6 +399,8 @@ void ContentSuggestionsService::Fetch(
   if (providers_it == providers_by_category_.end()) {
     return;
   }
+
+  metrics::RecordFetchAction();
 
   providers_it->second->Fetch(category, known_suggestion_ids, callback);
 }

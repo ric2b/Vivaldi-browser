@@ -17,16 +17,17 @@
 #include "cc/paint/compositing_display_item.h"
 #include "cc/paint/drawing_display_item.h"
 #include "cc/paint/filter_display_item.h"
-
 #include "cc/paint/float_clip_display_item.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_record.h"
 #include "cc/paint/paint_recorder.h"
+#include "cc/paint/skia_paint_canvas.h"
 #include "cc/paint/transform_display_item.h"
 #include "cc/test/geometry_test_utils.h"
 #include "cc/test/pixel_test_utils.h"
 #include "cc/test/skia_common.h"
+#include "cc/test/test_skcanvas.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -80,6 +81,19 @@ sk_sp<const PaintRecord> CreateRectPicture(const gfx::Rect& bounds) {
   return recorder.finishRecordingAsPicture();
 }
 
+sk_sp<const PaintRecord> CreateRectPictureWithAlpha(const gfx::Rect& bounds,
+                                                    uint8_t alpha) {
+  PaintRecorder recorder;
+  PaintCanvas* canvas =
+      recorder.beginRecording(bounds.width(), bounds.height());
+  PaintFlags flags;
+  flags.setAlpha(alpha);
+  canvas->drawRect(
+      SkRect::MakeXYWH(bounds.x(), bounds.y(), bounds.width(), bounds.height()),
+      flags);
+  return recorder.finishRecordingAsPicture();
+}
+
 void AppendFirstSerializationTestPicture(scoped_refptr<DisplayItemList> list,
                                          const gfx::Size& layer_size) {
   gfx::PointF offset(2.f, 3.f);
@@ -88,12 +102,13 @@ void AppendFirstSerializationTestPicture(scoped_refptr<DisplayItemList> list,
   PaintFlags red_paint;
   red_paint.setColor(SK_ColorRED);
 
-  PaintCanvas* canvas = recorder.beginRecording(SkRect::MakeXYWH(
-      offset.x(), offset.y(), layer_size.width(), layer_size.height()));
+  SkRect bounds = SkRect::MakeXYWH(offset.x(), offset.y(), layer_size.width(),
+                                   layer_size.height());
+  PaintCanvas* canvas = recorder.beginRecording(bounds);
   canvas->translate(offset.x(), offset.y());
   canvas->drawRect(SkRect::MakeWH(4, 4), red_paint);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      kVisualRect, recorder.finishRecordingAsPicture());
+      kVisualRect, recorder.finishRecordingAsPicture(), bounds);
 }
 
 }  // namespace
@@ -116,7 +131,8 @@ TEST(DisplayItemListTest, SingleDrawingItem) {
   canvas->drawRect(SkRect::MakeLTRB(0.f, 0.f, 60.f, 60.f), red_paint);
   canvas->drawRect(SkRect::MakeLTRB(50.f, 50.f, 75.f, 75.f), blue_flags);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      kVisualRect, recorder.finishRecordingAsPicture());
+      kVisualRect, recorder.finishRecordingAsPicture(),
+      gfx::RectFToSkRect(recording_rect));
   list->Finalize();
   DrawDisplayList(pixels, layer_rect, list);
 
@@ -156,7 +172,8 @@ TEST(DisplayItemListTest, ClipItem) {
   canvas->translate(first_offset.x(), first_offset.y());
   canvas->drawRect(SkRect::MakeWH(60, 60), red_paint);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      kVisualRect, recorder.finishRecordingAsPicture());
+      kVisualRect, recorder.finishRecordingAsPicture(),
+      gfx::RectFToSkRect(first_recording_rect));
 
   gfx::Rect clip_rect(60, 60, 10, 10);
   list->CreateAndAppendPairedBeginItem<ClipDisplayItem>(
@@ -169,7 +186,8 @@ TEST(DisplayItemListTest, ClipItem) {
   canvas->translate(second_offset.x(), second_offset.y());
   canvas->drawRect(SkRect::MakeLTRB(50.f, 50.f, 75.f, 75.f), blue_flags);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      kVisualRect, recorder.finishRecordingAsPicture());
+      kVisualRect, recorder.finishRecordingAsPicture(),
+      gfx::RectFToSkRect(second_recording_rect));
 
   list->CreateAndAppendPairedEndItem<EndClipDisplayItem>();
   list->Finalize();
@@ -213,7 +231,8 @@ TEST(DisplayItemListTest, TransformItem) {
   canvas->translate(first_offset.x(), first_offset.y());
   canvas->drawRect(SkRect::MakeWH(60, 60), red_paint);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      kVisualRect, recorder.finishRecordingAsPicture());
+      kVisualRect, recorder.finishRecordingAsPicture(),
+      gfx::RectFToSkRect(first_recording_rect));
 
   gfx::Transform transform;
   transform.Rotate(45.0);
@@ -226,7 +245,8 @@ TEST(DisplayItemListTest, TransformItem) {
   canvas->translate(second_offset.x(), second_offset.y());
   canvas->drawRect(SkRect::MakeLTRB(50.f, 50.f, 75.f, 75.f), blue_flags);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      kVisualRect, recorder.finishRecordingAsPicture());
+      kVisualRect, recorder.finishRecordingAsPicture(),
+      gfx::RectFToSkRect(second_recording_rect));
 
   list->CreateAndAppendPairedEndItem<EndTransformDisplayItem>();
   list->Finalize();
@@ -289,14 +309,16 @@ TEST(DisplayItemListTest, FilterItem) {
     PaintFlags red_paint;
     red_paint.setColor(SK_ColorRED);
 
-    PaintCanvas* canvas = recorder.beginRecording(
-        SkRect::MakeXYWH(0, 0, layer_rect.width(), layer_rect.height()));
+    SkRect bounds =
+        SkRect::MakeXYWH(0, 0, layer_rect.width(), layer_rect.height());
+    PaintCanvas* canvas = recorder.beginRecording(bounds);
     canvas->drawRect(
         SkRect::MakeLTRB(filter_bounds.x(), filter_bounds.y(),
                          filter_bounds.right(), filter_bounds.bottom()),
         red_paint);
     list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-        ToNearestRect(filter_bounds), recorder.finishRecordingAsPicture());
+        ToNearestRect(filter_bounds), recorder.finishRecordingAsPicture(),
+        bounds);
   }
 
   list->CreateAndAppendPairedEndItem<EndFilterDisplayItem>();
@@ -330,11 +352,12 @@ TEST(DisplayItemListTest, ApproximateMemoryUsage) {
   for (int i = 0; i < kNumCommandsInTestSkPicture; i++)
     canvas->drawRect(SkRect(), blue_flags);
   sk_sp<PaintRecord> record = recorder.finishRecordingAsPicture();
-  size_t record_size = record->approximateBytesUsed();
+  size_t record_size = record->bytes_used();
   ASSERT_GE(record_size, kNumCommandsInTestSkPicture * sizeof(SkRect));
 
   auto list = make_scoped_refptr(new DisplayItemList);
-  list->CreateAndAppendDrawingItem<DrawingDisplayItem>(kVisualRect, record);
+  list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
+      kVisualRect, record, gfx::RectToSkRect(layer_rect));
   list->Finalize();
   memory_usage = list->ApproximateMemoryUsage();
   EXPECT_GE(memory_usage, record_size);
@@ -394,7 +417,8 @@ TEST(DisplayItemListTest, SizeOne) {
   auto list = make_scoped_refptr(new DisplayItemList);
   gfx::Rect drawing_bounds(5, 6, 1, 1);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_bounds, CreateRectPicture(drawing_bounds));
+      drawing_bounds, CreateRectPicture(drawing_bounds),
+      gfx::RectToSkRect(drawing_bounds));
   EXPECT_EQ(1u, list->size());
 }
 
@@ -414,7 +438,8 @@ TEST(DisplayItemListTest, AppendVisualRectSimple) {
 
   gfx::Rect drawing_bounds(5, 6, 7, 8);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_bounds, CreateRectPicture(drawing_bounds));
+      drawing_bounds, CreateRectPicture(drawing_bounds),
+      gfx::RectToSkRect(drawing_bounds));
 
   EXPECT_EQ(1u, list->size());
   EXPECT_RECT_EQ(drawing_bounds, list->VisualRectForTesting(0));
@@ -466,7 +491,8 @@ TEST(DisplayItemListTest, AppendVisualRectBlockContainingDrawing) {
 
   gfx::Rect drawing_bounds(5, 6, 1, 1);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_bounds, CreateRectPicture(drawing_bounds));
+      drawing_bounds, CreateRectPicture(drawing_bounds),
+      gfx::RectToSkRect(drawing_bounds));
 
   list->CreateAndAppendPairedEndItem<EndClipDisplayItem>();
 
@@ -487,7 +513,8 @@ TEST(DisplayItemListTest, AppendVisualRectBlockContainingEscapedDrawing) {
 
   gfx::Rect drawing_bounds(1, 2, 3, 4);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_bounds, CreateRectPicture(drawing_bounds));
+      drawing_bounds, CreateRectPicture(drawing_bounds),
+      gfx::RectToSkRect(drawing_bounds));
 
   list->CreateAndAppendPairedEndItem<EndClipDisplayItem>();
 
@@ -506,7 +533,8 @@ TEST(DisplayItemListTest,
 
   gfx::Rect drawing_a_bounds(1, 2, 3, 4);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_a_bounds, CreateRectPicture(drawing_a_bounds));
+      drawing_a_bounds, CreateRectPicture(drawing_a_bounds),
+      gfx::RectToSkRect(drawing_a_bounds));
 
   gfx::Rect clip_bounds(5, 6, 7, 8);
   list->CreateAndAppendPairedBeginItem<ClipDisplayItem>(
@@ -514,7 +542,8 @@ TEST(DisplayItemListTest,
 
   gfx::Rect drawing_b_bounds(13, 14, 1, 1);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_b_bounds, CreateRectPicture(drawing_b_bounds));
+      drawing_b_bounds, CreateRectPicture(drawing_b_bounds),
+      gfx::RectToSkRect(drawing_b_bounds));
 
   list->CreateAndAppendPairedEndItem<EndClipDisplayItem>();
 
@@ -536,13 +565,15 @@ TEST(DisplayItemListTest, AppendVisualRectTwoBlocksTwoDrawings) {
 
   gfx::Rect drawing_a_bounds(5, 6, 1, 1);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_a_bounds, CreateRectPicture(drawing_a_bounds));
+      drawing_a_bounds, CreateRectPicture(drawing_a_bounds),
+      gfx::RectToSkRect(drawing_a_bounds));
 
   list->CreateAndAppendPairedBeginItem<TransformDisplayItem>(gfx::Transform());
 
   gfx::Rect drawing_b_bounds(7, 8, 1, 1);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_b_bounds, CreateRectPicture(drawing_b_bounds));
+      drawing_b_bounds, CreateRectPicture(drawing_b_bounds),
+      gfx::RectToSkRect(drawing_b_bounds));
 
   list->CreateAndAppendPairedEndItem<EndTransformDisplayItem>();
   list->CreateAndAppendPairedEndItem<EndClipDisplayItem>();
@@ -571,13 +602,15 @@ TEST(DisplayItemListTest,
 
   gfx::Rect drawing_a_bounds(5, 6, 1, 1);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_a_bounds, CreateRectPicture(drawing_a_bounds));
+      drawing_a_bounds, CreateRectPicture(drawing_a_bounds),
+      gfx::RectToSkRect(drawing_a_bounds));
 
   list->CreateAndAppendPairedBeginItem<TransformDisplayItem>(gfx::Transform());
 
   gfx::Rect drawing_b_bounds(1, 2, 3, 4);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_b_bounds, CreateRectPicture(drawing_b_bounds));
+      drawing_b_bounds, CreateRectPicture(drawing_b_bounds),
+      gfx::RectToSkRect(drawing_b_bounds));
 
   list->CreateAndAppendPairedEndItem<EndTransformDisplayItem>();
   list->CreateAndAppendPairedEndItem<EndClipDisplayItem>();
@@ -606,13 +639,15 @@ TEST(DisplayItemListTest,
 
   gfx::Rect drawing_a_bounds(1, 2, 3, 4);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_a_bounds, CreateRectPicture(drawing_a_bounds));
+      drawing_a_bounds, CreateRectPicture(drawing_a_bounds),
+      gfx::RectToSkRect(drawing_a_bounds));
 
   list->CreateAndAppendPairedBeginItem<TransformDisplayItem>(gfx::Transform());
 
   gfx::Rect drawing_b_bounds(7, 8, 1, 1);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_b_bounds, CreateRectPicture(drawing_b_bounds));
+      drawing_b_bounds, CreateRectPicture(drawing_b_bounds),
+      gfx::RectToSkRect(drawing_b_bounds));
 
   list->CreateAndAppendPairedEndItem<EndTransformDisplayItem>();
   list->CreateAndAppendPairedEndItem<EndClipDisplayItem>();
@@ -641,13 +676,15 @@ TEST(DisplayItemListTest,
 
   gfx::Rect drawing_a_bounds(13, 14, 1, 1);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_a_bounds, CreateRectPicture(drawing_a_bounds));
+      drawing_a_bounds, CreateRectPicture(drawing_a_bounds),
+      gfx::RectToSkRect(drawing_a_bounds));
 
   list->CreateAndAppendPairedBeginItem<TransformDisplayItem>(gfx::Transform());
 
   gfx::Rect drawing_b_bounds(1, 2, 3, 4);
   list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-      drawing_b_bounds, CreateRectPicture(drawing_b_bounds));
+      drawing_b_bounds, CreateRectPicture(drawing_b_bounds),
+      gfx::RectToSkRect(drawing_b_bounds));
 
   list->CreateAndAppendPairedEndItem<EndTransformDisplayItem>();
   list->CreateAndAppendPairedEndItem<EndClipDisplayItem>();
@@ -702,6 +739,114 @@ TEST(DisplayItemListTest, AppendVisualRectBlockContainingFilterNoDrawings) {
   EXPECT_RECT_EQ(filter_bounds, list->VisualRectForTesting(1));
   EXPECT_RECT_EQ(filter_bounds, list->VisualRectForTesting(2));
   EXPECT_RECT_EQ(filter_bounds, list->VisualRectForTesting(3));
+}
+
+// Verify that raster time optimizations for compositing item / draw single op /
+// end compositing item can be collapsed together into a single draw op
+// with the opacity from the compositing item folded in.
+TEST(DisplayItemListTest, SaveDrawRestore) {
+  auto list = make_scoped_refptr(new DisplayItemList);
+
+  list->CreateAndAppendPairedBeginItem<CompositingDisplayItem>(
+      80, SkBlendMode::kSrcOver, nullptr, nullptr, false);
+  list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
+      kVisualRect, CreateRectPictureWithAlpha(kVisualRect, 40),
+      gfx::RectToSkRect(kVisualRect));
+  list->CreateAndAppendPairedEndItem<EndCompositingDisplayItem>();
+  list->Finalize();
+
+  SaveCountingCanvas canvas;
+  list->Raster(&canvas);
+
+  EXPECT_EQ(0, canvas.save_count_);
+  EXPECT_EQ(0, canvas.restore_count_);
+  EXPECT_EQ(gfx::RectToSkRect(kVisualRect), canvas.draw_rect_);
+
+  float expected_alpha = 80 * 40 / 255.f;
+  EXPECT_LE(std::abs(expected_alpha - canvas.paint_.getAlpha()), 1.f);
+}
+
+// Verify that compositing item / end compositing item is a noop.
+// Here we're testing that Skia does an optimization that skips
+// save/restore with nothing in between.  If skia stops doing this
+// then we should reimplement this optimization in display list raster.
+TEST(DisplayItemListTest, SaveRestoreNoops) {
+  auto list = make_scoped_refptr(new DisplayItemList);
+
+  list->CreateAndAppendPairedBeginItem<CompositingDisplayItem>(
+      80, SkBlendMode::kSrcOver, nullptr, nullptr, false);
+  list->CreateAndAppendPairedEndItem<EndCompositingDisplayItem>();
+  list->CreateAndAppendPairedBeginItem<CompositingDisplayItem>(
+      255, SkBlendMode::kSrcOver, nullptr, nullptr, false);
+  list->CreateAndAppendPairedEndItem<EndCompositingDisplayItem>();
+  list->CreateAndAppendPairedBeginItem<CompositingDisplayItem>(
+      255, SkBlendMode::kSrc, nullptr, nullptr, false);
+  list->CreateAndAppendPairedEndItem<EndCompositingDisplayItem>();
+  list->Finalize();
+
+  SaveCountingCanvas canvas;
+  list->Raster(&canvas);
+
+  EXPECT_EQ(0, canvas.save_count_);
+  EXPECT_EQ(0, canvas.restore_count_);
+}
+
+// The same as SaveDrawRestore, but with save flags that prevent the
+// optimization.
+TEST(DisplayItemListTest, SaveDrawRestoreFail_BadSaveFlags) {
+  auto list = make_scoped_refptr(new DisplayItemList);
+
+  // Use a blend mode that's not compatible with the SaveDrawRestore
+  // optimization.
+  list->CreateAndAppendPairedBeginItem<CompositingDisplayItem>(
+      80, SkBlendMode::kSrc, nullptr, nullptr, false);
+  list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
+      kVisualRect, CreateRectPictureWithAlpha(kVisualRect, 40),
+      gfx::RectToSkRect(kVisualRect));
+  list->CreateAndAppendPairedEndItem<EndCompositingDisplayItem>();
+  list->Finalize();
+
+  SaveCountingCanvas canvas;
+  list->Raster(&canvas);
+
+  EXPECT_EQ(1, canvas.save_count_);
+  EXPECT_EQ(1, canvas.restore_count_);
+  EXPECT_EQ(gfx::RectToSkRect(kVisualRect), canvas.draw_rect_);
+  EXPECT_LE(40, canvas.paint_.getAlpha());
+}
+
+// The same as SaveDrawRestore, but with too many ops in the PaintRecord.
+TEST(DisplayItemListTest, SaveDrawRestoreFail_TooManyOps) {
+  sk_sp<const PaintRecord> record;
+  SkRect bounds = SkRect::MakeWH(kVisualRect.width(), kVisualRect.height());
+  {
+    PaintRecorder recorder;
+    PaintCanvas* canvas = recorder.beginRecording(bounds);
+    PaintFlags flags;
+    flags.setAlpha(40);
+    canvas->drawRect(gfx::RectToSkRect(kVisualRect), flags);
+    // Add an extra op here.
+    canvas->drawRect(gfx::RectToSkRect(kVisualRect), flags);
+    record = recorder.finishRecordingAsPicture();
+  }
+  EXPECT_GT(record->size(), 1u);
+
+  auto list = make_scoped_refptr(new DisplayItemList);
+
+  list->CreateAndAppendPairedBeginItem<CompositingDisplayItem>(
+      80, SkBlendMode::kSrcOver, nullptr, nullptr, false);
+  list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
+      kVisualRect, std::move(record), bounds);
+  list->CreateAndAppendPairedEndItem<EndCompositingDisplayItem>();
+  list->Finalize();
+
+  SaveCountingCanvas canvas;
+  list->Raster(&canvas);
+
+  EXPECT_EQ(1, canvas.save_count_);
+  EXPECT_EQ(1, canvas.restore_count_);
+  EXPECT_EQ(gfx::RectToSkRect(kVisualRect), canvas.draw_rect_);
+  EXPECT_LE(40, canvas.paint_.getAlpha());
 }
 
 }  // namespace cc

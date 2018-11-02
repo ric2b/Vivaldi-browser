@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -138,7 +139,7 @@ class StreamsPrivateApiTest : public ExtensionApiTest {
     test_server_.reset(new net::EmbeddedTestServer);
     test_server_->RegisterRequestHandler(base::Bind(&HandleRequest));
     ASSERT_TRUE(test_server_->Start());
-
+    host_resolver()->AddRule("*", "127.0.0.1");
     ExtensionApiTest::SetUpOnMainThread();
   }
 
@@ -150,6 +151,7 @@ class StreamsPrivateApiTest : public ExtensionApiTest {
   }
 
   void InitializeDownloadSettings() {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
     ASSERT_TRUE(browser());
     ASSERT_TRUE(downloads_dir_.CreateUniqueTempDir());
 
@@ -295,7 +297,6 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, NavigateCrossSite) {
 
   // Navigate to a URL on a different hostname.
   static const char kInitialHost[] = "www.example.com";
-  host_resolver()->AddRule(kInitialHost, "127.0.0.1");
   GURL::Replacements replacements;
   replacements.SetHostStr(kInitialHost);
   GURL initial_url =

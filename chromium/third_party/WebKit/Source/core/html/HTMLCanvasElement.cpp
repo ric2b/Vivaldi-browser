@@ -67,8 +67,8 @@
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/Canvas2DImageBufferSurface.h"
+#include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/CanvasMetrics.h"
-#include "platform/graphics/ExpensiveCanvasHeuristicParameters.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/RecordingImageBufferSurface.h"
 #include "platform/graphics/StaticBitmapImage.h"
@@ -142,9 +142,7 @@ inline HTMLCanvasElement::HTMLCanvasElement(Document& document)
       externally_allocated_memory_(0),
       origin_clean_(true),
       did_fail_to_create_image_buffer_(false),
-      image_buffer_is_clear_(false),
-      num_frames_since_last_rendering_mode_switch_(0),
-      pending_rendering_mode_switch_(false) {
+      image_buffer_is_clear_(false) {
   CanvasMetrics::CountCanvasContextUsage(CanvasMetrics::kCanvasCreated);
   UseCounter::Count(document, UseCounter::kHTMLCanvasElement);
 }
@@ -161,7 +159,7 @@ void HTMLCanvasElement::Dispose() {
     ReleasePlaceholderFrame();
 
   if (context_) {
-    context_->DetachCanvas();
+    context_->DetachHost();
     context_ = nullptr;
   }
 
@@ -201,7 +199,7 @@ void HTMLCanvasElement::setWidth(int value, ExceptionState& exception_state) {
 }
 
 void HTMLCanvasElement::SetSize(const IntSize& new_size) {
-  if (new_size == size())
+  if (new_size == Size())
     return;
   ignore_reset_ = true;
   SetIntegralAttribute(widthAttr, new_size.Width());
@@ -295,13 +293,13 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContext(
 
 bool HTMLCanvasElement::ShouldBeDirectComposited() const {
   return (context_ && context_->IsComposited()) ||
-         (HasImageBuffer() && Buffer()->IsExpensiveToPaint()) ||
+         (GetImageBuffer() && GetImageBuffer()->IsExpensiveToPaint()) ||
          (!!surface_layer_bridge_);
 }
 
 bool HTMLCanvasElement::IsPaintable() const {
   return (context_ && context_->IsPaintable()) ||
-         ImageBuffer::CanCreateImageBuffer(size());
+         ImageBuffer::CanCreateImageBuffer(Size());
 }
 
 bool HTMLCanvasElement::IsAccelerated() const {
@@ -323,16 +321,16 @@ void HTMLCanvasElement::DidDraw(const FloatRect& rect) {
   } else {
     dirty_rect_.Unite(rect);
   }
-  if (Is2d() && HasImageBuffer())
-    Buffer()->DidDraw(rect);
+  if (Is2d() && GetImageBuffer())
+    GetImageBuffer()->DidDraw(rect);
 }
 
 void HTMLCanvasElement::DidDraw() {
-  DidDraw(FloatRect(0, 0, size().Width(), size().Height()));
+  DidDraw(FloatRect(0, 0, Size().Width(), Size().Height()));
 }
 
 void HTMLCanvasElement::FinalizeFrame() {
-  if (HasImageBuffer())
+  if (GetImageBuffer())
     image_buffer_->FinalizeFrame();
 
   // If the canvas is visible, notifying listeners is taken
@@ -367,7 +365,7 @@ void HTMLCanvasElement::SetNeedsCompositingUpdate() {
 void HTMLCanvasElement::DoDeferredPaintInvalidation() {
   DCHECK(!dirty_rect_.IsEmpty());
   if (Is2d()) {
-    FloatRect src_rect(0, 0, size().Width(), size().Height());
+    FloatRect src_rect(0, 0, Size().Width(), Size().Height());
     dirty_rect_.Intersect(src_rect);
     LayoutBox* lb = GetLayoutBox();
     FloatRect invalidation_rect;
@@ -387,7 +385,7 @@ void HTMLCanvasElement::DoDeferredPaintInvalidation() {
     if (dirty_rect_.IsEmpty())
       return;
 
-    if (HasImageBuffer()) {
+    if (GetImageBuffer()) {
       image_buffer_->DoPaintInvalidation(invalidation_rect);
     }
   }
@@ -404,7 +402,7 @@ void HTMLCanvasElement::DoDeferredPaintInvalidation() {
 
   // Propagate the m_dirtyRect accumulated so far to the compositor
   // before restarting with a blank dirty rect.
-  FloatRect src_rect(0, 0, size().Width(), size().Height());
+  FloatRect src_rect(0, 0, Size().Width(), Size().Height());
 
   LayoutBox* ro = GetLayoutBox();
   // Canvas content updates do not need to be propagated as
@@ -429,37 +427,6 @@ void HTMLCanvasElement::DoDeferredPaintInvalidation() {
   }
   dirty_rect_ = FloatRect();
 
-  num_frames_since_last_rendering_mode_switch_++;
-  if (RuntimeEnabledFeatures::
-          enableCanvas2dDynamicRenderingModeSwitchingEnabled() &&
-      !RuntimeEnabledFeatures::canvas2dFixedRenderingModeEnabled()) {
-    if (Is2d() && HasImageBuffer() && Buffer()->IsAccelerated() &&
-        num_frames_since_last_rendering_mode_switch_ >=
-            ExpensiveCanvasHeuristicParameters::kMinFramesBeforeSwitch &&
-        !pending_rendering_mode_switch_) {
-      if (!context_->IsAccelerationOptimalForCanvasContent()) {
-        // The switch must be done asynchronously in order to avoid switching
-        // during the paint invalidation step.
-        Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
-            BLINK_FROM_HERE,
-            WTF::Bind(
-                [](WeakPtr<ImageBuffer> buffer) {
-                  if (buffer) {
-                    buffer->DisableAcceleration();
-                  }
-                },
-                image_buffer_->weak_ptr_factory_.CreateWeakPtr()));
-        num_frames_since_last_rendering_mode_switch_ = 0;
-        pending_rendering_mode_switch_ = true;
-      }
-    }
-  }
-
-  if (pending_rendering_mode_switch_ && Buffer() &&
-      !Buffer()->IsAccelerated()) {
-    pending_rendering_mode_switch_ = false;
-  }
-
   DCHECK(dirty_rect_.IsEmpty());
 }
 
@@ -470,7 +437,7 @@ void HTMLCanvasElement::Reset() {
   dirty_rect_ = FloatRect();
 
   bool ok;
-  bool had_image_buffer = HasImageBuffer();
+  bool had_image_buffer = GetImageBuffer();
 
   int w = getAttribute(widthAttr).ToInt(&ok);
   if (!ok || w < 0)
@@ -483,13 +450,13 @@ void HTMLCanvasElement::Reset() {
   if (Is2d())
     context_->Reset();
 
-  IntSize old_size = size();
+  IntSize old_size = Size();
   IntSize new_size(w, h);
 
   // If the size of an existing buffer matches, we can just clear it instead of
   // reallocating.  This optimization is only done for 2D canvases for now.
   if (had_image_buffer && old_size == new_size && Is2d() &&
-      !Buffer()->IsRecording()) {
+      !GetOrCreateImageBuffer()->IsRecording()) {
     if (!image_buffer_is_clear_) {
       image_buffer_is_clear_ = true;
       context_->clearRect(0, 0, width(), height());
@@ -499,12 +466,12 @@ void HTMLCanvasElement::Reset() {
 
   SetSurfaceSize(new_size);
 
-  if (Is3d() && old_size != size())
+  if (Is3d() && old_size != Size())
     context_->Reshape(width(), height());
 
   if (LayoutObject* layout_object = this->GetLayoutObject()) {
     if (layout_object->IsCanvas()) {
-      if (old_size != size()) {
+      if (old_size != Size()) {
         ToLayoutHTMLCanvas(layout_object)->CanvasSizeChanged();
         if (GetLayoutBox() && GetLayoutBox()->HasAcceleratedCompositing())
           GetLayoutBox()->ContentChanged(kCanvasChanged);
@@ -532,7 +499,7 @@ void HTMLCanvasElement::NotifyListenersCanvasChanged() {
     return;
 
   if (!OriginClean()) {
-    listeners_.Clear();
+    listeners_.clear();
     return;
   }
 
@@ -573,11 +540,11 @@ void HTMLCanvasElement::Paint(GraphicsContext& context, const LayoutRect& r) {
 
   if (Is3d()) {
     context_->SetFilterQuality(filter_quality);
-  } else if (HasImageBuffer()) {
+  } else if (GetImageBuffer()) {
     image_buffer_->SetFilterQuality(filter_quality);
   }
 
-  if (HasImageBuffer() && !image_buffer_is_clear_)
+  if (GetImageBuffer() && !image_buffer_is_clear_)
     PaintTiming::From(GetDocument()).MarkFirstContentfulPaint();
 
   if (!PaintsIntoCanvasBuffer() && !GetDocument().Printing())
@@ -596,13 +563,14 @@ void HTMLCanvasElement::Paint(GraphicsContext& context, const LayoutRect& r) {
     return;
 
   context_->PaintRenderingResultsToCanvas(kFrontBuffer);
-  if (HasImageBuffer()) {
+  if (GetImageBuffer()) {
     if (!context.ContextDisabled()) {
       SkBlendMode composite_operator =
           !context_ || context_->CreationAttributes().alpha()
               ? SkBlendMode::kSrcOver
               : SkBlendMode::kSrc;
-      Buffer()->Draw(context, PixelSnappedIntRect(r), 0, composite_operator);
+      GetImageBuffer()->Draw(context, PixelSnappedIntRect(r), 0,
+                             composite_operator);
     }
   } else {
     // When alpha is false, we should draw to opaque black.
@@ -623,7 +591,8 @@ bool HTMLCanvasElement::Is2d() const {
 }
 
 bool HTMLCanvasElement::IsAnimated2d() const {
-  return Is2d() && HasImageBuffer() && image_buffer_->WasDrawnToAfterSnapshot();
+  return Is2d() && GetImageBuffer() &&
+         GetImageBuffer()->WasDrawnToAfterSnapshot();
 }
 
 void HTMLCanvasElement::SetSurfaceSize(const IntSize& size) {
@@ -641,9 +610,9 @@ const AtomicString HTMLCanvasElement::ImageSourceURL() const {
       ToDataURLInternal(ImageEncoderUtils::kDefaultMimeType, 0, kFrontBuffer));
 }
 
-void HTMLCanvasElement::PrepareSurfaceForPaintingIfNeeded() const {
+void HTMLCanvasElement::PrepareSurfaceForPaintingIfNeeded() {
   DCHECK(Is2d());  // This function is called by the 2d context
-  if (Buffer())
+  if (GetOrCreateImageBuffer())
     image_buffer_->PrepareSurfaceForPaintingIfNeeded();
 }
 
@@ -659,9 +628,9 @@ ImageData* HTMLCanvasElement::ToImageData(SourceDrawingBuffer source_buffer,
 
     context_->PaintRenderingResultsToCanvas(source_buffer);
     image_data = ImageData::Create(size_);
-    if (image_data && HasImageBuffer()) {
+    if (image_data && GetImageBuffer()) {
       sk_sp<SkImage> snapshot =
-          Buffer()->NewSkImageSnapshot(kPreferNoAcceleration, reason);
+          GetImageBuffer()->NewSkImageSnapshot(kPreferNoAcceleration, reason);
       if (snapshot) {
         SkImageInfo image_info = SkImageInfo::Make(
             width(), height(), kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
@@ -679,8 +648,9 @@ ImageData* HTMLCanvasElement::ToImageData(SourceDrawingBuffer source_buffer,
 
   DCHECK(Is2d() || PlaceholderFrame());
   sk_sp<SkImage> snapshot;
-  if (HasImageBuffer()) {
-    snapshot = Buffer()->NewSkImageSnapshot(kPreferNoAcceleration, reason);
+  if (GetImageBuffer()) {
+    snapshot =
+        GetImageBuffer()->NewSkImageSnapshot(kPreferNoAcceleration, reason);
   } else if (PlaceholderFrame()) {
     DCHECK(PlaceholderFrame()->OriginClean());
     snapshot = PlaceholderFrame()->ImageForCurrentFrame();
@@ -813,10 +783,6 @@ void HTMLCanvasElement::RemoveListener(CanvasDrawListener* listener) {
   listeners_.erase(listener);
 }
 
-SecurityOrigin* HTMLCanvasElement::GetSecurityOrigin() const {
-  return GetDocument().GetSecurityOrigin();
-}
-
 bool HTMLCanvasElement::OriginClean() const {
   if (GetDocument().GetSettings() &&
       GetDocument().GetSettings()->GetDisableReadingFromCanvas())
@@ -842,8 +808,8 @@ bool HTMLCanvasElement::ShouldAccelerate(AccelerationCriteria criteria) const {
   if (GetLayoutBox() && !GetLayoutBox()->HasAcceleratedCompositing())
     return false;
 
-  CheckedNumeric<int> checked_canvas_pixel_count = size().Width();
-  checked_canvas_pixel_count *= size().Height();
+  CheckedNumeric<int> checked_canvas_pixel_count = Size().Width();
+  checked_canvas_pixel_count *= Size().Height();
   if (!checked_canvas_pixel_count.IsValid())
     return false;
   int canvas_pixel_count = checked_canvas_pixel_count.ValueOrDie();
@@ -859,8 +825,8 @@ bool HTMLCanvasElement::ShouldAccelerate(AccelerationCriteria criteria) const {
             return false;
 #endif
     // If the GPU resources would be very expensive, prefer a display list.
-    if (canvas_pixel_count > ExpensiveCanvasHeuristicParameters::
-                                 kPreferDisplayListOverGpuSizeThreshold)
+    if (canvas_pixel_count >
+        CanvasHeuristicParameters::kPreferDisplayListOverGpuSizeThreshold)
       return false;
   }
 
@@ -889,27 +855,11 @@ bool HTMLCanvasElement::ShouldAccelerate(AccelerationCriteria criteria) const {
   return true;
 }
 
-namespace {
-
-class UnacceleratedSurfaceFactory
-    : public RecordingImageBufferFallbackSurfaceFactory {
- public:
-  virtual std::unique_ptr<ImageBufferSurface> CreateSurface(
-      const IntSize& size,
-      OpacityMode opacity_mode,
-      sk_sp<SkColorSpace> color_space,
-      SkColorType color_type) {
-    return WTF::WrapUnique(new UnacceleratedImageBufferSurface(
-        size, opacity_mode, kInitializeImagePixels, color_space, color_type));
-  }
-
-  virtual ~UnacceleratedSurfaceFactory() {}
-};
-
-}  // namespace
-
 bool HTMLCanvasElement::ShouldUseDisplayList() {
-  if (context_->ColorSpace() != kLegacyCanvasColorSpace)
+  // Rasterization of web contents will blend in the output space. Only embed
+  // the canvas as a display list if it intended to do output space blending as
+  // well.
+  if (!context_->color_params().UsesOutputSpaceBlending())
     return false;
 
   if (RuntimeEnabledFeatures::forceDisplayList2dCanvasEnabled())
@@ -918,7 +868,10 @@ bool HTMLCanvasElement::ShouldUseDisplayList() {
   if (!RuntimeEnabledFeatures::displayList2dCanvasEnabled())
     return false;
 
-  return true;
+  // TODO(crbug.com/721727): Due to a rendering regression with display-
+  // list-2d-canvas, this feature is now disabled by default.  For now, the
+  // feature will only be enabled with --force-display-list-2d-canvas.
+  return false;
 }
 
 std::unique_ptr<ImageBufferSurface>
@@ -927,9 +880,8 @@ HTMLCanvasElement::CreateWebGLImageBufferSurface(OpacityMode opacity_mode) {
   // If 3d, but the use of the canvas will be for non-accelerated content
   // then make a non-accelerated ImageBuffer. This means copying the internal
   // Image will require a pixel readback, but that is unavoidable in this case.
-  auto surface = WTF::WrapUnique(new AcceleratedImageBufferSurface(
-      size(), opacity_mode, context_->SkSurfaceColorSpace(),
-      context_->ColorType()));
+  auto surface = WTF::MakeUnique<AcceleratedImageBufferSurface>(
+      Size(), opacity_mode, context_->color_params());
   if (surface->IsValid())
     return std::move(surface);
   return nullptr;
@@ -956,11 +908,9 @@ HTMLCanvasElement::CreateAcceleratedImageBufferSurface(OpacityMode opacity_mode,
   if (context_provider->IsSoftwareRendering())
     return nullptr;  // Don't use accelerated canvas with swiftshader.
 
-  std::unique_ptr<ImageBufferSurface> surface =
-      WTF::WrapUnique(new Canvas2DImageBufferSurface(
-          std::move(context_provider), size(), *msaa_sample_count, opacity_mode,
-          Canvas2DLayerBridge::kEnableAcceleration, context_->GfxColorSpace(),
-          context_->SkSurfacesUseColorSpace(), context_->ColorType()));
+  auto surface = WTF::MakeUnique<Canvas2DImageBufferSurface>(
+      std::move(context_provider), Size(), *msaa_sample_count, opacity_mode,
+      Canvas2DLayerBridge::kEnableAcceleration, context_->color_params());
   if (!surface->IsValid()) {
     CanvasMetrics::CountCanvasContextUsage(
         CanvasMetrics::kGPUAccelerated2DCanvasImageBufferCreationFailed);
@@ -969,16 +919,16 @@ HTMLCanvasElement::CreateAcceleratedImageBufferSurface(OpacityMode opacity_mode,
 
   CanvasMetrics::CountCanvasContextUsage(
       CanvasMetrics::kGPUAccelerated2DCanvasImageBufferCreated);
-  return surface;
+  return std::move(surface);
 }
 
 std::unique_ptr<ImageBufferSurface>
 HTMLCanvasElement::CreateUnacceleratedImageBufferSurface(
     OpacityMode opacity_mode) {
   if (ShouldUseDisplayList()) {
-    auto surface = WTF::WrapUnique(new RecordingImageBufferSurface(
-        size(), WTF::WrapUnique(new UnacceleratedSurfaceFactory), opacity_mode,
-        context_->SkSurfaceColorSpace(), context_->ColorType()));
+    auto surface = WTF::MakeUnique<RecordingImageBufferSurface>(
+        Size(), RecordingImageBufferSurface::kAllowFallback, opacity_mode,
+        context_->color_params());
     if (surface->IsValid()) {
       CanvasMetrics::CountCanvasContextUsage(
           CanvasMetrics::kDisplayList2DCanvasImageBufferCreated);
@@ -988,14 +938,12 @@ HTMLCanvasElement::CreateUnacceleratedImageBufferSurface(
     // here.
   }
 
-  auto surface_factory = WTF::MakeUnique<UnacceleratedSurfaceFactory>();
-  auto surface = surface_factory->CreateSurface(size(), opacity_mode,
-                                                context_->SkSurfaceColorSpace(),
-                                                context_->ColorType());
+  auto surface = WTF::MakeUnique<UnacceleratedImageBufferSurface>(
+      Size(), opacity_mode, kInitializeImagePixels, context_->color_params());
   if (surface->IsValid()) {
     CanvasMetrics::CountCanvasContextUsage(
         CanvasMetrics::kUnaccelerated2DCanvasImageBufferCreated);
-    return surface;
+    return std::move(surface);
   }
 
   CanvasMetrics::CountCanvasContextUsage(
@@ -1005,7 +953,7 @@ HTMLCanvasElement::CreateUnacceleratedImageBufferSurface(
 
 void HTMLCanvasElement::CreateImageBuffer() {
   CreateImageBufferInternal(nullptr);
-  if (did_fail_to_create_image_buffer_ && Is2d() && !size().IsEmpty())
+  if (did_fail_to_create_image_buffer_ && Is2d() && !Size().IsEmpty())
     context_->LoseContext(CanvasRenderingContext::kSyntheticLostContext);
 }
 
@@ -1016,7 +964,7 @@ void HTMLCanvasElement::CreateImageBufferInternal(
   did_fail_to_create_image_buffer_ = true;
   image_buffer_is_clear_ = true;
 
-  if (!ImageBuffer::CanCreateImageBuffer(size()))
+  if (!ImageBuffer::CanCreateImageBuffer(Size()))
     return;
 
   OpacityMode opacity_mode = !context_ || context_->CreationAttributes().alpha()
@@ -1120,28 +1068,28 @@ void HTMLCanvasElement::UpdateExternallyAllocatedMemory() const {
   externally_allocated_memory_ = externally_allocated_memory;
 }
 
-PaintCanvas* HTMLCanvasElement::DrawingCanvas() const {
-  return Buffer() ? image_buffer_->Canvas() : nullptr;
+PaintCanvas* HTMLCanvasElement::DrawingCanvas() {
+  return GetOrCreateImageBuffer() ? GetImageBuffer()->Canvas() : nullptr;
 }
 
-void HTMLCanvasElement::DisableDeferral(DisableDeferralReason reason) const {
-  if (Buffer())
+void HTMLCanvasElement::DisableDeferral(DisableDeferralReason reason) {
+  if (GetOrCreateImageBuffer())
     image_buffer_->DisableDeferral(reason);
 }
 
 PaintCanvas* HTMLCanvasElement::ExistingDrawingCanvas() const {
-  if (!HasImageBuffer())
+  if (!GetImageBuffer())
     return nullptr;
 
   return image_buffer_->Canvas();
 }
 
-ImageBuffer* HTMLCanvasElement::Buffer() const {
+ImageBuffer* HTMLCanvasElement::GetOrCreateImageBuffer() {
   DCHECK(context_);
   DCHECK(context_->GetContextType() !=
          CanvasRenderingContext::kContextImageBitmap);
-  if (!HasImageBuffer() && !did_fail_to_create_image_buffer_)
-    const_cast<HTMLCanvasElement*>(this)->CreateImageBuffer();
+  if (!image_buffer_ && !did_fail_to_create_image_buffer_)
+    CreateImageBuffer();
   return image_buffer_.get();
 }
 
@@ -1155,28 +1103,29 @@ void HTMLCanvasElement::CreateImageBufferUsingSurfaceForTesting(
 
 void HTMLCanvasElement::EnsureUnacceleratedImageBuffer() {
   DCHECK(context_);
-  if ((HasImageBuffer() && !image_buffer_->IsAccelerated()) ||
+  if ((GetImageBuffer() && !GetImageBuffer()->IsAccelerated()) ||
       did_fail_to_create_image_buffer_)
     return;
   DiscardImageBuffer();
   OpacityMode opacity_mode =
       context_->CreationAttributes().alpha() ? kNonOpaque : kOpaque;
-  image_buffer_ = ImageBuffer::Create(size(), opacity_mode);
+  image_buffer_ = ImageBuffer::Create(Size(), opacity_mode);
   did_fail_to_create_image_buffer_ = !image_buffer_;
 }
 
 PassRefPtr<Image> HTMLCanvasElement::CopiedImage(
     SourceDrawingBuffer source_buffer,
     AccelerationHint hint,
-    SnapshotReason snapshot_reason) const {
+    SnapshotReason snapshot_reason) {
   if (!IsPaintable())
     return nullptr;
   if (!context_)
-    return CreateTransparentImage(size());
+    return CreateTransparentImage(Size());
 
   if (context_->GetContextType() ==
       CanvasRenderingContext::kContextImageBitmap) {
     RefPtr<Image> image = context_->GetImage(hint, snapshot_reason);
+    // TODO(fserb): return image?
     if (image)
       return context_->GetImage(hint, snapshot_reason);
     // Special case: transferFromImageBitmap is not yet called.
@@ -1189,8 +1138,8 @@ PassRefPtr<Image> HTMLCanvasElement::CopiedImage(
   // The concept of SourceDrawingBuffer is valid on only WebGL.
   if (context_->Is3d())
     need_to_update |= context_->PaintRenderingResultsToCanvas(source_buffer);
-  if (need_to_update && Buffer()) {
-    copied_image_ = Buffer()->NewImageSnapshot(hint, snapshot_reason);
+  if (need_to_update && GetOrCreateImageBuffer()) {
+    copied_image_ = GetImageBuffer()->NewImageSnapshot(hint, snapshot_reason);
     UpdateExternallyAllocatedMemory();
   }
   return copied_image_;
@@ -1210,7 +1159,7 @@ void HTMLCanvasElement::ClearCopiedImage() {
 }
 
 AffineTransform HTMLCanvasElement::BaseTransform() const {
-  DCHECK(HasImageBuffer() && !did_fail_to_create_image_buffer_);
+  DCHECK(GetImageBuffer() && !did_fail_to_create_image_buffer_);
   return image_buffer_->BaseTransform();
 }
 
@@ -1246,9 +1195,9 @@ void HTMLCanvasElement::DidMoveToNewDocument(Document& old_document) {
 }
 
 void HTMLCanvasElement::WillDrawImageTo2DContext(CanvasImageSource* source) {
-  if (ExpensiveCanvasHeuristicParameters::kEnableAccelerationToAvoidReadbacks &&
+  if (CanvasHeuristicParameters::kEnableAccelerationToAvoidReadbacks &&
       SharedGpuContext::AllowSoftwareToAcceleratedCanvasUpgrade() &&
-      source->IsAccelerated() && !Buffer()->IsAccelerated() &&
+      source->IsAccelerated() && !GetOrCreateImageBuffer()->IsAccelerated() &&
       ShouldAccelerate(kIgnoreResourceLimitCriteria)) {
     OpacityMode opacity_mode =
         context_->CreationAttributes().alpha() ? kNonOpaque : kOpaque;
@@ -1256,7 +1205,7 @@ void HTMLCanvasElement::WillDrawImageTo2DContext(CanvasImageSource* source) {
     std::unique_ptr<ImageBufferSurface> surface =
         CreateAcceleratedImageBufferSurface(opacity_mode, &msaa_sample_count);
     if (surface) {
-      Buffer()->SetSurface(std::move(surface));
+      GetOrCreateImageBuffer()->SetSurface(std::move(surface));
       SetNeedsCompositingUpdate();
     }
   }
@@ -1266,7 +1215,7 @@ PassRefPtr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
     SourceImageStatus* status,
     AccelerationHint hint,
     SnapshotReason reason,
-    const FloatSize&) const {
+    const FloatSize&) {
   if (!width() || !height()) {
     *status = kZeroSizeCanvasSourceImageStatus;
     return nullptr;
@@ -1283,7 +1232,7 @@ PassRefPtr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
   }
 
   if (!context_) {
-    RefPtr<Image> result = CreateTransparentImage(size());
+    RefPtr<Image> result = CreateTransparentImage(Size());
     *status = result ? kNormalSourceImageStatus : kInvalidSourceImageStatus;
     return result;
   }
@@ -1302,24 +1251,23 @@ PassRefPtr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
     // use paintRenderingResultsToCanvas instead of getImage in order to keep a
     // cached copy of the backing in the canvas's ImageBuffer.
     RenderingContext()->PaintRenderingResultsToCanvas(kBackBuffer);
-    if (HasImageBuffer()) {
-      sk_image = Buffer()->NewSkImageSnapshot(hint, reason);
+    if (GetImageBuffer()) {
+      sk_image = GetImageBuffer()->NewSkImageSnapshot(hint, reason);
     } else {
-      sk_image = CreateTransparentSkImage(size());
+      sk_image = CreateTransparentSkImage(Size());
     }
   } else {
-    if (ExpensiveCanvasHeuristicParameters::
-            kDisableAccelerationToAvoidReadbacks &&
+    if (CanvasHeuristicParameters::kDisableAccelerationToAvoidReadbacks &&
         !RuntimeEnabledFeatures::canvas2dFixedRenderingModeEnabled() &&
-        hint == kPreferNoAcceleration && HasImageBuffer() &&
-        Buffer()->IsAccelerated()) {
-      Buffer()->DisableAcceleration();
+        hint == kPreferNoAcceleration && GetImageBuffer() &&
+        GetImageBuffer()->IsAccelerated()) {
+      GetImageBuffer()->DisableAcceleration();
     }
     RefPtr<Image> image = RenderingContext()->GetImage(hint, reason);
     if (image) {
       sk_image = image->ImageForCurrentFrame();
     } else {
-      sk_image = CreateTransparentSkImage(size());
+      sk_image = CreateTransparentSkImage(Size());
     }
   }
 
@@ -1481,7 +1429,7 @@ void HTMLCanvasElement::CreateLayer() {
     layer_tree_view =
         frame->GetPage()->GetChromeClient().GetWebLayerTreeView(frame);
     surface_layer_bridge_ =
-        WTF::WrapUnique(new CanvasSurfaceLayerBridge(this, layer_tree_view));
+        WTF::MakeUnique<CanvasSurfaceLayerBridge>(this, layer_tree_view);
     // Creates a placeholder layer first before Surface is created.
     surface_layer_bridge_->CreateSolidColorLayer();
   }

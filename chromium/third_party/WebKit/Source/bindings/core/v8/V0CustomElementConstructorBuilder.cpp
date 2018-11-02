@@ -30,15 +30,11 @@
 
 #include "bindings/core/v8/V0CustomElementConstructorBuilder.h"
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/StringOrDictionary.h"
-#include "bindings/core/v8/V0CustomElementBinding.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8Document.h"
 #include "bindings/core/v8/V8HTMLElement.h"
-#include "bindings/core/v8/V8PerContextData.h"
-#include "bindings/core/v8/V8PrivateProperty.h"
 #include "bindings/core/v8/V8SVGElement.h"
 #include "core/HTMLNames.h"
 #include "core/SVGNames.h"
@@ -49,6 +45,10 @@
 #include "core/dom/custom/V0CustomElementException.h"
 #include "core/dom/custom/V0CustomElementProcessingStack.h"
 #include "core/frame/UseCounter.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/V0CustomElementBinding.h"
+#include "platform/bindings/V8PerContextData.h"
+#include "platform/bindings/V8PrivateProperty.h"
 #include "platform/wtf/Assertions.h"
 
 namespace blink {
@@ -59,7 +59,7 @@ V0CustomElementConstructorBuilder::V0CustomElementConstructorBuilder(
     ScriptState* script_state,
     const ElementRegistrationOptions& options)
     : script_state_(script_state), options_(options) {
-  ASSERT(script_state_->GetContext() ==
+  DCHECK(script_state_->GetContext() ==
          script_state_->GetIsolate()->GetCurrentContext());
 }
 
@@ -71,7 +71,7 @@ bool V0CustomElementConstructorBuilder::ValidateOptions(
     const AtomicString& type,
     QualifiedName& tag_name,
     ExceptionState& exception_state) {
-  ASSERT(prototype_.IsEmpty());
+  DCHECK(prototype_.IsEmpty());
 
   v8::TryCatch try_catch(script_state_->GetIsolate());
 
@@ -85,7 +85,7 @@ bool V0CustomElementConstructorBuilder::ValidateOptions(
   }
 
   if (options_.hasPrototype()) {
-    ASSERT(options_.prototype().IsObject());
+    DCHECK(options_.prototype().IsObject());
     prototype_ = options_.prototype().V8Value().As<v8::Object>();
   } else {
     prototype_ = v8::Object::New(script_state_->GetIsolate());
@@ -103,7 +103,7 @@ bool V0CustomElementConstructorBuilder::ValidateOptions(
   if (HasValidPrototypeChainFor(&V8SVGElement::wrapperTypeInfo))
     namespace_uri = SVGNames::svgNamespaceURI;
 
-  ASSERT(!try_catch.HasCaught());
+  DCHECK(!try_catch.HasCaught());
 
   AtomicString local_name;
 
@@ -135,14 +135,14 @@ bool V0CustomElementConstructorBuilder::ValidateOptions(
     local_name = type;
   }
 
-  ASSERT(!try_catch.HasCaught());
+  DCHECK(!try_catch.HasCaught());
   tag_name = QualifiedName(g_null_atom, local_name, namespace_uri);
   return true;
 }
 
 V0CustomElementLifecycleCallbacks*
 V0CustomElementConstructorBuilder::CreateCallbacks() {
-  ASSERT(!prototype_.IsEmpty());
+  DCHECK(!prototype_.IsEmpty());
 
   v8::TryCatch exception_catcher(script_state_->GetIsolate());
   exception_catcher.SetVerbose(true);
@@ -175,9 +175,9 @@ bool V0CustomElementConstructorBuilder::CreateConstructor(
     Document* document,
     V0CustomElementDefinition* definition,
     ExceptionState& exception_state) {
-  ASSERT(!prototype_.IsEmpty());
-  ASSERT(constructor_.IsEmpty());
-  ASSERT(document);
+  DCHECK(!prototype_.IsEmpty());
+  DCHECK(constructor_.IsEmpty());
+  DCHECK(document);
 
   v8::Isolate* isolate = script_state_->GetIsolate();
   v8::Local<v8::Context> context = script_state_->GetContext();
@@ -266,9 +266,9 @@ bool V0CustomElementConstructorBuilder::PrototypeIsValid(
   }
 
   v8::PropertyAttribute property_attribute;
-  if (!V8Call(prototype_->GetPropertyAttributes(
-                  context, V8String(isolate, "constructor")),
-              property_attribute) ||
+  if (!prototype_
+           ->GetPropertyAttributes(context, V8String(isolate, "constructor"))
+           .To(&property_attribute) ||
       (property_attribute & v8::DontDelete)) {
     V0CustomElementException::ThrowException(
         V0CustomElementException::kConstructorPropertyNotConfigurable, type,
@@ -280,7 +280,7 @@ bool V0CustomElementConstructorBuilder::PrototypeIsValid(
 }
 
 bool V0CustomElementConstructorBuilder::DidRegisterDefinition() const {
-  ASSERT(!constructor_.IsEmpty());
+  DCHECK(!constructor_.IsEmpty());
 
   return callbacks_->SetBinding(
       V0CustomElementBinding::Create(script_state_->GetIsolate(), prototype_));
@@ -343,7 +343,7 @@ static void ConstructCustomElement(
                                  "CustomElement");
   V0CustomElementProcessingStack::CallbackDeliveryScope delivery_scope;
   Element* element = document->createElementNS(
-      namespace_uri, tag_name,
+      nullptr, namespace_uri, tag_name,
       StringOrDictionary::fromString(maybe_type->IsNull() ? g_null_atom : type),
       exception_state);
   if (element) {

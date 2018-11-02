@@ -32,8 +32,13 @@ class VideoFrame;
 }  // namespace media
 
 namespace video_track_recorder {
+#if defined(OS_ANDROID)
+const int kVEAEncoderMinResolutionWidth = 176;
+const int kVEAEncoderMinResolutionHeight = 144;
+#else
 const int kVEAEncoderMinResolutionWidth = 640;
 const int kVEAEncoderMinResolutionHeight = 480;
+#endif
 }  // namespace video_track_recorder
 
 namespace content {
@@ -149,6 +154,9 @@ class CONTENT_EXPORT VideoTrackRecorder
   };
 
   static CodecId GetPreferredCodecId();
+  static bool CanUseAcceleratedEncoder(CodecId codec,
+                                       size_t width,
+                                       size_t height);
 
   VideoTrackRecorder(CodecId codec,
                      const blink::WebMediaStreamTrack& track,

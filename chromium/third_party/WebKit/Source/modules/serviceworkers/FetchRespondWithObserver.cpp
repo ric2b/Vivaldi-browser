@@ -6,7 +6,7 @@
 
 #include <v8.h>
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/modules/v8/V8Response.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -94,6 +94,9 @@ const String GetMessageForResponseError(WebServiceWorkerResponseError error,
                       "a redirected response was used for a request whose "
                       "redirect mode is not \"follow\".";
       break;
+    case kWebServiceWorkerResponseErrorDataPipeCreationFailed:
+      error_message = error_message + "insufficient resources.";
+      break;
     case kWebServiceWorkerResponseErrorUnknown:
     default:
       error_message = error_message + "an unexpected error occurred.";
@@ -113,17 +116,26 @@ bool IsClientRequest(WebURLRequest::FrameType frame_type,
          request_context == WebURLRequest::kRequestContextWorker;
 }
 
-class NoopLoaderClient final
-    : public GarbageCollectedFinalized<NoopLoaderClient>,
+// Notifies the result of FetchDataLoader to |handle_|. |handle_| pass through
+// the result to its observer which is outside of blink.
+class FetchLoaderClient final
+    : public GarbageCollectedFinalized<FetchLoaderClient>,
       public FetchDataLoader::Client {
-  WTF_MAKE_NONCOPYABLE(NoopLoaderClient);
-  USING_GARBAGE_COLLECTED_MIXIN(NoopLoaderClient);
+  WTF_MAKE_NONCOPYABLE(FetchLoaderClient);
+  USING_GARBAGE_COLLECTED_MIXIN(FetchLoaderClient);
 
  public:
-  NoopLoaderClient() = default;
-  void DidFetchDataLoadedStream() override {}
-  void DidFetchDataLoadFailed() override {}
+  explicit FetchLoaderClient(
+      std::unique_ptr<WebServiceWorkerStreamHandle> handle)
+      : handle_(std::move(handle)) {}
+
+  void DidFetchDataLoadedDataPipe() override { handle_->Completed(); }
+  void DidFetchDataLoadFailed() override { handle_->Aborted(); }
+
   DEFINE_INLINE_TRACE() { FetchDataLoader::Client::Trace(visitor); }
+
+ private:
+  std::unique_ptr<WebServiceWorkerStreamHandle> handle_;
 };
 
 }  // namespace
@@ -222,13 +234,34 @@ void FetchRespondWithObserver::OnResponseFulfilled(const ScriptValue& value) {
     RefPtr<BlobDataHandle> blob_data_handle = buffer->DrainAsBlobDataHandle(
         BytesConsumer::BlobSizePolicy::kAllowBlobWithInvalidSize);
     if (blob_data_handle) {
+      // Handle the blob response body.
       web_response.SetBlobDataHandle(blob_data_handle);
-    } else {
-      Stream* out_stream = Stream::Create(GetExecutionContext(), "");
-      web_response.SetStreamURL(out_stream->Url());
-      buffer->StartLoading(FetchDataLoader::CreateLoaderAsStream(out_stream),
-                           new NoopLoaderClient);
+      ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
+          ->RespondToFetchEvent(event_id_, web_response, event_dispatch_time_);
+      return;
     }
+    // Handle the stream response body.
+    mojo::ScopedDataPipeProducerHandle producer;
+    mojo::ScopedDataPipeConsumerHandle consumer;
+    MojoResult result = mojo::CreateDataPipe(nullptr, &producer, &consumer);
+    if (result != MOJO_RESULT_OK) {
+      OnResponseRejected(kWebServiceWorkerResponseErrorDataPipeCreationFailed);
+      return;
+    }
+    DCHECK(producer.is_valid());
+    DCHECK(consumer.is_valid());
+
+    std::unique_ptr<WebServiceWorkerStreamHandle> body_stream_handle =
+        WTF::MakeUnique<WebServiceWorkerStreamHandle>(std::move(consumer));
+    ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
+        ->RespondToFetchEventWithResponseStream(event_id_, web_response,
+                                                body_stream_handle.get(),
+                                                event_dispatch_time_);
+
+    buffer->StartLoading(
+        FetchDataLoader::CreateLoaderAsDataPipe(std::move(producer)),
+        new FetchLoaderClient(std::move(body_stream_handle)));
+    return;
   }
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
       ->RespondToFetchEvent(event_id_, web_response, event_dispatch_time_);
@@ -236,7 +269,7 @@ void FetchRespondWithObserver::OnResponseFulfilled(const ScriptValue& value) {
 
 void FetchRespondWithObserver::OnNoResponse() {
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToFetchEvent(event_id_, event_dispatch_time_);
+      ->RespondToFetchEventWithNoResponse(event_id_, event_dispatch_time_);
 }
 
 FetchRespondWithObserver::FetchRespondWithObserver(

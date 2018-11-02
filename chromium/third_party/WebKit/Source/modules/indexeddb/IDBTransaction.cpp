@@ -26,8 +26,6 @@
 #include "modules/indexeddb/IDBTransaction.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/V8PerIsolateData.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -38,7 +36,10 @@
 #include "modules/indexeddb/IDBIndex.h"
 #include "modules/indexeddb/IDBObjectStore.h"
 #include "modules/indexeddb/IDBOpenDBRequest.h"
+#include "modules/indexeddb/IDBRequestQueueItem.h"
 #include "modules/indexeddb/IDBTracing.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8PerIsolateData.h"
 #include "platform/wtf/PtrUtil.h"
 
 #include <memory>
@@ -201,7 +202,7 @@ IDBObjectStore* IDBTransaction::objectStore(const String& name,
     return nullptr;
   }
 
-  IDBObjectStoreMap::iterator it = object_store_map_.Find(name);
+  IDBObjectStoreMap::iterator it = object_store_map_.find(name);
   if (it != object_store_map_.end())
     return it->value;
 
@@ -258,7 +259,7 @@ void IDBTransaction::ObjectStoreDeleted(const int64_t object_store_id,
       << "A finished transaction deleted an object store";
   DCHECK_EQ(mode_, kWebIDBTransactionModeVersionChange)
       << "A non-versionchange transaction deleted an object store";
-  IDBObjectStoreMap::iterator it = object_store_map_.Find(name);
+  IDBObjectStoreMap::iterator it = object_store_map_.find(name);
   if (it == object_store_map_.end()) {
     // No IDBObjectStore instance was created for the deleted store in this
     // transaction. This happens if IDBDatabase.deleteObjectStore() is called
@@ -312,7 +313,7 @@ void IDBTransaction::IndexDeleted(IDBIndex* index) {
   DCHECK(object_store_map_.Contains(object_store->name()))
       << "An index was deleted without accessing its object store";
 
-  const auto& object_store_iterator = old_store_metadata_.Find(object_store);
+  const auto& object_store_iterator = old_store_metadata_.find(object_store);
   if (object_store_iterator == old_store_metadata_.end()) {
     // The index's object store was created in this transaction, so this
     // index was also created (and deleted) in this transaction, and will
@@ -373,14 +374,42 @@ void IDBTransaction::abort(ExceptionState& exception_state) {
 
 void IDBTransaction::RegisterRequest(IDBRequest* request) {
   DCHECK(request);
+  DCHECK(!request_list_.Contains(request));
   DCHECK_EQ(state_, kActive);
   request_list_.insert(request);
 }
 
 void IDBTransaction::UnregisterRequest(IDBRequest* request) {
   DCHECK(request);
+#if DCHECK_IS_ON()
+  // Make sure that no pending IDBRequest gets left behind in the result queue.
+  DCHECK(!request->QueueItem() || request->QueueItem()->IsReady());
+#endif  // DCHECK_IS_ON()
+
   // If we aborted the request, it will already have been removed.
   request_list_.erase(request);
+}
+
+void IDBTransaction::EnqueueResult(
+    std::unique_ptr<IDBRequestQueueItem> result) {
+  DCHECK(result);
+  DCHECK(HasQueuedResults() || !result->IsReady());
+
+  result_queue_.push_back(std::move(result));
+  // StartLoading() may complete post-processing synchronously, so the result
+  // needs to be in the queue before StartLoading() is called.
+  result_queue_.back()->StartLoading();
+}
+
+void IDBTransaction::OnResultReady() {
+  while (!result_queue_.empty()) {
+    IDBRequestQueueItem* result = result_queue_.front().get();
+    if (!result->IsReady())
+      break;
+
+    result->EnqueueResponse();
+    result_queue_.pop_front();
+  }
 }
 
 void IDBTransaction::OnAbort(DOMException* error) {
@@ -548,7 +577,7 @@ void IDBTransaction::EnqueueEvent(Event* event) {
 void IDBTransaction::AbortOutstandingRequests() {
   for (IDBRequest* request : request_list_)
     request->Abort();
-  request_list_.Clear();
+  request_list_.clear();
 }
 
 void IDBTransaction::RevertDatabaseMetadata() {
@@ -608,16 +637,16 @@ void IDBTransaction::Finished() {
       DCHECK(old_store_metadata_.Contains(object_store));
     }
   }
-  object_store_map_.Clear();
+  object_store_map_.clear();
 
   for (auto& it : old_store_metadata_) {
     IDBObjectStore* object_store = it.key;
     object_store->ClearIndexCache();
   }
-  old_store_metadata_.Clear();
+  old_store_metadata_.clear();
 
-  deleted_indexes_.Clear();
-  deleted_object_stores_.Clear();
+  deleted_indexes_.clear();
+  deleted_object_stores_.clear();
 }
 
 }  // namespace blink

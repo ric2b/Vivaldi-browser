@@ -52,6 +52,7 @@ SingleThreadProxy::SingleThreadProxy(LayerTreeHost* layer_tree_host,
       inside_synchronous_composite_(false),
       compositor_frame_sink_creation_requested_(false),
       compositor_frame_sink_lost_(true),
+      frame_sink_bound_weak_factory_(this),
       weak_factory_(this) {
   TRACE_EVENT0("cc", "SingleThreadProxy::SingleThreadProxy");
   DCHECK(task_runner_provider_);
@@ -123,6 +124,7 @@ void SingleThreadProxy::RequestNewCompositorFrameSink() {
 
 void SingleThreadProxy::ReleaseCompositorFrameSink() {
   compositor_frame_sink_lost_ = true;
+  frame_sink_bound_weak_factory_.InvalidateWeakPtrs();
   if (scheduler_on_impl_thread_)
     scheduler_on_impl_thread_->DidLoseCompositorFrameSink();
   return layer_tree_host_impl_->ReleaseCompositorFrameSink();
@@ -141,6 +143,7 @@ void SingleThreadProxy::SetCompositorFrameSink(
   }
 
   if (success) {
+    frame_sink_bound_weak_ptr_ = frame_sink_bound_weak_factory_.GetWeakPtr();
     layer_tree_host_->DidInitializeCompositorFrameSink();
     if (scheduler_on_impl_thread_)
       scheduler_on_impl_thread_->DidCreateAndInitializeCompositorFrameSink();
@@ -425,7 +428,12 @@ void SingleThreadProxy::DidReceiveCompositorFrameAckOnImplThread() {
                "SingleThreadProxy::DidReceiveCompositorFrameAckOnImplThread");
   if (scheduler_on_impl_thread_)
     scheduler_on_impl_thread_->DidReceiveCompositorFrameAck();
-  layer_tree_host_->DidReceiveCompositorFrameAck();
+  // We do a PostTask here because freeing resources in some cases (such as in
+  // TextureLayer) is PostTasked and we want to make sure ack is received after
+  // resources are returned.
+  task_runner_provider_->MainThreadTaskRunner()->PostTask(
+      FROM_HERE, base::Bind(&SingleThreadProxy::DidReceiveCompositorFrameAck,
+                            frame_sink_bound_weak_ptr_));
 }
 
 void SingleThreadProxy::OnDrawForCompositorFrameSink(
@@ -624,6 +632,11 @@ void SingleThreadProxy::SendBeginMainFrameNotExpectedSoon() {
   layer_tree_host_->BeginMainFrameNotExpectedSoon();
 }
 
+void SingleThreadProxy::ScheduledActionBeginMainFrameNotExpectedUntil(
+    base::TimeTicks time) {
+  layer_tree_host_->BeginMainFrameNotExpectedUntil(time);
+}
+
 void SingleThreadProxy::BeginMainFrame(const BeginFrameArgs& begin_frame_args) {
   if (scheduler_on_impl_thread_) {
     scheduler_on_impl_thread_->NotifyBeginMainFrameStarted(
@@ -792,6 +805,15 @@ void SingleThreadProxy::DidFinishImplFrame() {
       << "DidFinishImplFrame called while not inside an impl frame!";
   inside_impl_frame_ = false;
 #endif
+}
+
+void SingleThreadProxy::DidNotProduceFrame(const BeginFrameAck& ack) {
+  DebugScopedSetImplThread impl(task_runner_provider_);
+  layer_tree_host_impl_->DidNotProduceFrame(ack);
+}
+
+void SingleThreadProxy::DidReceiveCompositorFrameAck() {
+  layer_tree_host_->DidReceiveCompositorFrameAck();
 }
 
 }  // namespace cc

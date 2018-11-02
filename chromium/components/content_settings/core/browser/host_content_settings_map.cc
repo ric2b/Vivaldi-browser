@@ -178,13 +178,15 @@ content_settings::PatternPair GetPatternsForContentSettingsType(
 
 HostContentSettingsMap::HostContentSettingsMap(PrefService* prefs,
                                                bool is_incognito_profile,
-                                               bool is_guest_profile)
+                                               bool is_guest_profile,
+                                               bool store_last_modified)
     : RefcountedKeyedService(base::ThreadTaskRunnerHandle::Get()),
 #ifndef NDEBUG
       used_from_thread_id_(base::PlatformThread::CurrentId()),
 #endif
       prefs_(prefs),
       is_incognito_(is_incognito_profile || is_guest_profile),
+      store_last_modified_(store_last_modified),
       weak_ptr_factory_(this) {
   DCHECK(!(is_incognito_profile && is_guest_profile));
 
@@ -194,8 +196,8 @@ HostContentSettingsMap::HostContentSettingsMap(PrefService* prefs,
       base::WrapUnique(policy_provider);
   policy_provider->AddObserver(this);
 
-  pref_provider_ =
-      new content_settings::PrefProvider(prefs_, is_incognito_);
+  pref_provider_ = new content_settings::PrefProvider(prefs_, is_incognito_,
+                                                      store_last_modified_);
   content_settings_providers_[PREF_PROVIDER] = base::WrapUnique(pref_provider_);
   pref_provider_->AddObserver(this);
 
@@ -347,7 +349,9 @@ void HostContentSettingsMap::SetDefaultContentSetting(
   std::unique_ptr<base::Value> value;
   // A value of CONTENT_SETTING_DEFAULT implies deleting the content setting.
   if (setting != CONTENT_SETTING_DEFAULT) {
-    DCHECK(IsDefaultSettingAllowedForType(setting, content_type));
+    DCHECK(content_settings::ContentSettingsRegistry::GetInstance()
+               ->Get(content_type)
+               ->IsDefaultSettingValid(setting));
     value.reset(new base::Value(setting));
   }
   SetWebsiteSettingCustomScope(ContentSettingsPattern::Wildcard(),
@@ -656,55 +660,39 @@ void HostContentSettingsMap::ClearSettingsForOneType(
   FlushLossyWebsiteSettings();
 }
 
+base::Time HostContentSettingsMap::GetSettingLastModifiedDate(
+    const ContentSettingsPattern& primary_pattern,
+    const ContentSettingsPattern& secondary_pattern,
+    ContentSettingsType content_type) const {
+  return pref_provider_->GetWebsiteSettingLastModified(
+      primary_pattern, secondary_pattern, content_type, std::string());
+}
+
 void HostContentSettingsMap::ClearSettingsForOneTypeWithPredicate(
     ContentSettingsType content_type,
-    const base::Callback<bool(const ContentSettingsPattern& primary_pattern,
-                              const ContentSettingsPattern& secondary_pattern)>&
-        pattern_predicate) {
-  if (pattern_predicate.is_null()) {
+    base::Time begin_time,
+    const PatternSourcePredicate& pattern_predicate) {
+  if (pattern_predicate.is_null() && begin_time.is_null()) {
     ClearSettingsForOneType(content_type);
     return;
   }
-
+  UsedContentSettingsProviders();
   ContentSettingsForOneType settings;
   GetSettingsForOneType(content_type, std::string(), &settings);
   for (const ContentSettingPatternSource& setting : settings) {
-    if (pattern_predicate.Run(setting.primary_pattern,
+    if (pattern_predicate.is_null() ||
+        pattern_predicate.Run(setting.primary_pattern,
                               setting.secondary_pattern)) {
-      SetWebsiteSettingCustomScope(setting.primary_pattern,
-                                   setting.secondary_pattern, content_type,
-                                   std::string(), nullptr);
+      base::Time last_modified = pref_provider_->GetWebsiteSettingLastModified(
+          setting.primary_pattern, setting.secondary_pattern, content_type,
+          std::string());
+      if (last_modified >= begin_time) {
+        pref_provider_->SetWebsiteSetting(setting.primary_pattern,
+                                          setting.secondary_pattern,
+                                          content_type, std::string(), nullptr);
+      }
     }
   }
-}
-
-// TODO(raymes): Remove this function. Consider making it a property of
-// ContentSettingsInfo or removing it altogether (it's unclear whether we should
-// be restricting allowed default values at this layer).
-// static
-bool HostContentSettingsMap::IsDefaultSettingAllowedForType(
-    ContentSetting setting,
-    ContentSettingsType content_type) {
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
-  // Don't support ALLOW for protected media default setting until migration.
-  if (content_type == CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER &&
-      setting == CONTENT_SETTING_ALLOW) {
-    return false;
-  }
-#endif
-
-  // Don't support ALLOW for the default media settings.
-  if ((content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA ||
-       content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC) &&
-      setting == CONTENT_SETTING_ALLOW) {
-    return false;
-  }
-
-  const content_settings::ContentSettingsInfo* info =
-      content_settings::ContentSettingsRegistry::GetInstance()->Get(
-          content_type);
-  DCHECK(info);
-  return info->IsSettingValid(setting);
 }
 
 void HostContentSettingsMap::OnContentSettingChanged(
@@ -806,11 +794,8 @@ std::unique_ptr<base::Value> HostContentSettingsMap::GetWebsiteSetting(
     }
   }
 
-  return GetWebsiteSettingInternal(primary_url,
-                                   secondary_url,
-                                   content_type,
-                                   resource_identifier,
-                                   info);
+  return GetWebsiteSettingInternal(primary_url, secondary_url, content_type,
+                                   resource_identifier, info);
 }
 
 // static
@@ -920,4 +905,9 @@ HostContentSettingsMap::GetContentSettingValueAndPatterns(
     }
   }
   return std::unique_ptr<base::Value>();
+}
+
+void HostContentSettingsMap::SetClockForTesting(
+    std::unique_ptr<base::Clock> clock) {
+  pref_provider_->SetClockForTesting(std::move(clock));
 }

@@ -12,10 +12,10 @@
 #ifndef V8TestCallbackInterface_h
 #define V8TestCallbackInterface_h
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
-#include "bindings/core/v8/ScopedPersistent.h"
 #include "bindings/tests/idls/core/TestCallbackInterface.h"
 #include "core/CoreExport.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScopedPersistent.h"
 
 namespace blink {
 
@@ -42,8 +42,8 @@ class V8TestCallbackInterface final : public TestCallbackInterface {
  private:
   CORE_EXPORT V8TestCallbackInterface(v8::Local<v8::Function>, ScriptState*);
 
-  ScopedPersistent<v8::Function> m_callback;
-  RefPtr<ScriptState> m_scriptState;
+  ScopedPersistent<v8::Function> callback_;
+  RefPtr<ScriptState> script_state_;
 };
 }
 #endif  // V8TestCallbackInterface_h

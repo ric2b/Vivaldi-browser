@@ -4,6 +4,7 @@
 
 #include "chrome/browser/media_galleries/win/mtp_device_operations_util.h"
 
+#include <objbase.h>
 #include <portabledevice.h>
 #include <stdint.h>
 
@@ -33,8 +34,9 @@ bool GetClientInformation(
     base::win::ScopedComPtr<IPortableDeviceValues>* client_info) {
   base::ThreadRestrictions::AssertIOAllowed();
   DCHECK(client_info);
-  HRESULT hr = client_info->CreateInstance(__uuidof(PortableDeviceValues),
-                                           NULL, CLSCTX_INPROC_SERVER);
+  HRESULT hr = ::CoCreateInstance(__uuidof(PortableDeviceValues), NULL,
+                                  CLSCTX_INPROC_SERVER,
+                                  IID_PPV_ARGS(client_info->GetAddressOf()));
   if (FAILED(hr)) {
     DPLOG(ERROR) << "Failed to create an instance of IPortableDeviceValues";
     return false;
@@ -59,7 +61,7 @@ base::win::ScopedComPtr<IPortableDeviceContent> GetDeviceContent(
   base::ThreadRestrictions::AssertIOAllowed();
   DCHECK(device);
   base::win::ScopedComPtr<IPortableDeviceContent> content;
-  if (SUCCEEDED(device->Content(content.Receive())))
+  if (SUCCEEDED(device->Content(content.GetAddressOf())))
     return content;
   return base::win::ScopedComPtr<IPortableDeviceContent>();
 }
@@ -75,12 +77,12 @@ base::win::ScopedComPtr<IEnumPortableDeviceObjectIDs> GetDeviceObjectEnumerator(
   DCHECK(!parent_id.empty());
   base::win::ScopedComPtr<IPortableDeviceContent> content =
       GetDeviceContent(device);
-  if (!content.get())
+  if (!content.Get())
     return base::win::ScopedComPtr<IEnumPortableDeviceObjectIDs>();
 
   base::win::ScopedComPtr<IEnumPortableDeviceObjectIDs> enum_object_ids;
   if (SUCCEEDED(content->EnumObjects(0, parent_id.c_str(), NULL,
-                                     enum_object_ids.Receive())))
+                                     enum_object_ids.GetAddressOf())))
     return enum_object_ids;
   return base::win::ScopedComPtr<IEnumPortableDeviceObjectIDs>();
 }
@@ -182,18 +184,18 @@ bool GetObjectDetails(IPortableDevice* device,
   DCHECK(last_modified_time);
   base::win::ScopedComPtr<IPortableDeviceContent> content =
       GetDeviceContent(device);
-  if (!content.get())
+  if (!content.Get())
     return false;
 
   base::win::ScopedComPtr<IPortableDeviceProperties> properties;
-  HRESULT hr = content->Properties(properties.Receive());
+  HRESULT hr = content->Properties(properties.GetAddressOf());
   if (FAILED(hr))
     return false;
 
   base::win::ScopedComPtr<IPortableDeviceKeyCollection> properties_to_read;
-  hr = properties_to_read.CreateInstance(__uuidof(PortableDeviceKeyCollection),
-                                         NULL,
-                                         CLSCTX_INPROC_SERVER);
+  hr = ::CoCreateInstance(__uuidof(PortableDeviceKeyCollection), NULL,
+                          CLSCTX_INPROC_SERVER,
+                          IID_PPV_ARGS(&properties_to_read));
   if (FAILED(hr))
     return false;
 
@@ -207,14 +209,13 @@ bool GetObjectDetails(IPortableDevice* device,
     return false;
 
   base::win::ScopedComPtr<IPortableDeviceValues> properties_values;
-  hr = properties->GetValues(object_id.c_str(),
-                             properties_to_read.get(),
-                             properties_values.Receive());
+  hr = properties->GetValues(object_id.c_str(), properties_to_read.Get(),
+                             properties_values.GetAddressOf());
   if (FAILED(hr))
     return false;
 
-  *is_directory = IsDirectory(properties_values.get());
-  *name = GetObjectName(properties_values.get());
+  *is_directory = IsDirectory(properties_values.Get());
+  *name = GetObjectName(properties_values.Get());
   if (name->empty())
     return false;
 
@@ -227,9 +228,9 @@ bool GetObjectDetails(IPortableDevice* device,
   }
 
   // Try to get the last modified time, but don't fail if we can't.
-  GetLastModifiedTime(properties_values.get(), last_modified_time);
+  GetLastModifiedTime(properties_values.Get(), last_modified_time);
 
-  int64_t object_size = GetObjectSize(properties_values.get());
+  int64_t object_size = GetObjectSize(properties_values.Get());
   if (object_size < 0)
     return false;
   *size = object_size;
@@ -270,7 +271,7 @@ bool GetMTPDeviceObjectEntries(IPortableDevice* device,
   DCHECK(object_entries);
   base::win::ScopedComPtr<IEnumPortableDeviceObjectIDs> enum_object_ids =
       GetDeviceObjectEnumerator(device, directory_object_id);
-  if (!enum_object_ids.get())
+  if (!enum_object_ids.Get())
     return false;
 
   // Loop calling Next() while S_OK is being returned.
@@ -311,12 +312,12 @@ base::win::ScopedComPtr<IPortableDevice> OpenDevice(
   if (!GetClientInformation(&client_info))
     return base::win::ScopedComPtr<IPortableDevice>();
   base::win::ScopedComPtr<IPortableDevice> device;
-  HRESULT hr = device.CreateInstance(__uuidof(PortableDevice), NULL,
-                                     CLSCTX_INPROC_SERVER);
+  HRESULT hr = ::CoCreateInstance(__uuidof(PortableDevice), NULL,
+                                  CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&device));
   if (FAILED(hr))
     return base::win::ScopedComPtr<IPortableDevice>();
 
-  hr = device->Open(pnp_device_id.c_str(), client_info.get());
+  hr = device->Open(pnp_device_id.c_str(), client_info.Get());
   if (SUCCEEDED(hr))
     return device;
   if (hr == E_ACCESSDENIED)
@@ -360,11 +361,11 @@ HRESULT GetFileStreamForObject(IPortableDevice* device,
   DCHECK(!file_object_id.empty());
   base::win::ScopedComPtr<IPortableDeviceContent> content =
       GetDeviceContent(device);
-  if (!content.get())
+  if (!content.Get())
     return E_FAIL;
 
   base::win::ScopedComPtr<IPortableDeviceResources> resources;
-  HRESULT hr = content->Transfer(resources.Receive());
+  HRESULT hr = content->Transfer(resources.GetAddressOf());
   if (FAILED(hr))
     return hr;
   return resources->GetStream(file_object_id.c_str(), WPD_RESOURCE_DEFAULT,

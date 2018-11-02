@@ -273,7 +273,13 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   virtual int GetBaseline() const;
 
   // Get the size the View would like to be, if enough space were available.
-  virtual gfx::Size GetPreferredSize() const;
+  // First checks |preferred_size_|, then CalculatePreferredSize().
+  gfx::Size GetPreferredSize() const;
+
+  // Sets the size that this View will request during layout. The actual size
+  // may differ. It should rarely be necessary to set this; usually the right
+  // approach is controlling the parent's layout via a LayoutManager.
+  void SetPreferredSize(const gfx::Size& size);
 
   // Convenience method that sizes this view to its preferred size.
   void SizeToPreferredSize();
@@ -340,9 +346,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Compositor.
   void SetPaintToLayer(ui::LayerType layer_type = ui::LAYER_TEXTURED);
 
-  // Destroys the layer associated with this view, and reparents any descendants
-  // to the destroyed layer's parent. If the view does not currently have a
-  // layer, this has no effect.
+  // Please refer to the comments above the DestroyLayerImpl() function for
+  // details.
   void DestroyLayer();
 
   // Overridden from ui::LayerOwner:
@@ -369,6 +374,10 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // no need to call this routine from anywhere within your subclass
   // implementation.
   int GetMirroredXForRect(const gfx::Rect& rect) const;
+
+  // Given a rectangle specified in this View's coordinate system, the function
+  // computes the mirrored rectangle.
+  gfx::Rect GetMirroredRect(const gfx::Rect& rect) const;
 
   // Given the X coordinate of a point inside the View, this function returns
   // the mirrored X coordinate of the point if the View's UI layout is
@@ -808,7 +817,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // IMPORTANT NOTE: loops in the focus hierarchy are not supported.
   void SetNextFocusableView(View* view);
 
-  // Sets |focus_behavior| and advances focus if necessary.
+  // Gets/sets |focus_behavior|. SetFocusBehavior() advances focus if necessary.
+  FocusBehavior focus_behavior() const { return focus_behavior_; }
   void SetFocusBehavior(FocusBehavior focus_behavior);
 
   // Returns true if this view is focusable, |enabled_| and drawn.
@@ -1056,6 +1066,10 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Size and disposition ------------------------------------------------------
 
+  // Calculates the natural size for the View, to be taken into consideration
+  // when the parent is performing layout.
+  virtual gfx::Size CalculatePreferredSize() const;
+
   // Override to be notified when the bounds of the view have changed.
   virtual void OnBoundsChanged(const gfx::Rect& previous_bounds);
 
@@ -1189,14 +1203,16 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // below layers owned by a view.
   virtual void ReorderChildLayers(ui::Layer* parent_layer);
 
+  // Notifies parents about a layer being created or destroyed in a child. An
+  // example where a subclass may override this method is when it wants to clip
+  // the child by adding its own layer.
+  virtual void OnChildLayerChanged(View* child);
+
   // Input ---------------------------------------------------------------------
 
   virtual DragInfo* GetDragInfo();
 
   // Focus ---------------------------------------------------------------------
-
-  // Returns last set focus behavior.
-  FocusBehavior focus_behavior() const { return focus_behavior_; }
 
   // Override to be notified when focus has changed either to or from this View.
   virtual void OnFocus();
@@ -1448,6 +1464,25 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   void UpdateLayerVisibility();
   void UpdateChildLayerVisibility(bool visible);
 
+  enum class LayerChangeNotifyBehavior {
+    // Notify the parent chain about the layer change.
+    NOTIFY,
+    // Don't notify the parent chain about the layer change.
+    DONT_NOTIFY
+  };
+
+  // Destroys the layer associated with this view, and reparents any descendants
+  // to the destroyed layer's parent. If the view does not currently have a
+  // layer, this has no effect.
+  // The |notify_parents| enum controls whether a notification about the layer
+  // change is sent to the parents.
+  void DestroyLayerImpl(LayerChangeNotifyBehavior notify_parents);
+
+  // Notifies parents about layering changes in the view. This includes layer
+  // creation and destruction.
+  void NotifyParentsOfLayerChange();
+
+
   // Orphans the layers in this subtree that are parented to layers outside of
   // this subtree.
   void OrphanLayers();
@@ -1548,6 +1583,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   bool can_process_events_within_subtree_;
 
   // Size and disposition ------------------------------------------------------
+
+  base::Optional<gfx::Size> preferred_size_;
 
   // This View's bounds in the parent coordinate system.
   gfx::Rect bounds_;

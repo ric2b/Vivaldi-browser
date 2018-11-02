@@ -152,7 +152,7 @@ function pageRangeTextToPageRanges(pageRangeText, opt_totalPageCount) {
  * See pageRangeTextToPageRanges for details.
  * @param {string} pageRangeText The text to be checked.
  * @param {number} totalPageCount The total number of pages.
- * @return {Array<number>} A list of all pages.
+ * @return {!Array<number>} A list of all pages.
  */
 function pageRangeTextToPageList(pageRangeText, totalPageCount) {
   var pageRanges = pageRangeTextToPageRanges(pageRangeText, totalPageCount);
@@ -216,8 +216,8 @@ function arrayContains(array, item) {
 }
 
 /**
- * @param {!goog.array.ArrayLike<!{locale: string, value: string}>}
- *     localizedStrings An array of strings with corresponding locales.
+ * @param {!Array<!{locale: string, value: string}>} localizedStrings An array
+ *     of strings with corresponding locales.
  * @param {string} locale Locale to look the string up for.
  * @return {string} A string for the requested {@code locale}. An empty string
  *     if there's no string for the specified locale found.
@@ -232,8 +232,8 @@ function getStringForLocale(localizedStrings, locale) {
 }
 
 /**
- * @param {!goog.array.ArrayLike<!{locale: string, value: string}>}
- *     localizedStrings An array of strings with corresponding locales.
+ * @param {!Array<!{locale: string, value: string}>} localizedStrings An array
+ *     of strings with corresponding locales.
  * @return {string} A string for the current locale. An empty string if there's
  *     no string for the current locale found.
  */

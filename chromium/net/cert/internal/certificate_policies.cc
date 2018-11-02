@@ -7,6 +7,7 @@
 #include "net/cert/internal/certificate_policies.h"
 
 #include "net/der/input.h"
+#include "net/der/parse_values.h"
 #include "net/der/parser.h"
 #include "net/der/tag.h"
 
@@ -83,6 +84,26 @@ const der::Input AnyPolicy() {
   // In dotted decimal form: 2.5.29.32.0
   static const uint8_t any_policy[] = {0x55, 0x1D, 0x20, 0x00};
   return der::Input(any_policy);
+}
+
+der::Input InhibitAnyPolicyOid() {
+  // From RFC 5280:
+  //
+  //     id-ce-inhibitAnyPolicy OBJECT IDENTIFIER ::=  { id-ce 54 }
+  //
+  // In dotted notation: 2.5.29.54
+  static const uint8_t oid[] = {0x55, 0x1d, 0x36};
+  return der::Input(oid);
+}
+
+der::Input PolicyMappingsOid() {
+  // From RFC 5280:
+  //
+  //     id-ce-policyMappings OBJECT IDENTIFIER ::=  { id-ce 33 }
+  //
+  // In dotted notation: 2.5.29.33
+  static const uint8_t oid[] = {0x55, 0x1d, 0x21};
+  return der::Input(oid);
 }
 
 // RFC 5280 section 4.2.1.4.  Certificate Policies:
@@ -170,6 +191,135 @@ bool ParseCertificatePoliciesExtension(const der::Input& extension_value,
     if (!ParsePolicyQualifiers(policy_oid, &policy_qualifiers_sequence_parser))
       return false;
   }
+
+  return true;
+}
+
+// From RFC 5280:
+//
+//   PolicyConstraints ::= SEQUENCE {
+//        requireExplicitPolicy           [0] SkipCerts OPTIONAL,
+//        inhibitPolicyMapping            [1] SkipCerts OPTIONAL }
+//
+//   SkipCerts ::= INTEGER (0..MAX)
+bool ParsePolicyConstraints(const der::Input& policy_constraints_tlv,
+                            ParsedPolicyConstraints* out) {
+  der::Parser parser(policy_constraints_tlv);
+
+  //   PolicyConstraints ::= SEQUENCE {
+  der::Parser sequence_parser;
+  if (!parser.ReadSequence(&sequence_parser))
+    return false;
+
+  // RFC 5280 prohibits CAs from issuing PolicyConstraints as an empty sequence:
+  //
+  //   Conforming CAs MUST NOT issue certificates where policy constraints
+  //   is an empty sequence.  That is, either the inhibitPolicyMapping field
+  //   or the requireExplicitPolicy field MUST be present.  The behavior of
+  //   clients that encounter an empty policy constraints field is not
+  //   addressed in this profile.
+  if (!sequence_parser.HasMore())
+    return false;
+
+  der::Input value;
+  if (!sequence_parser.ReadOptionalTag(der::ContextSpecificPrimitive(0), &value,
+                                       &out->has_require_explicit_policy)) {
+    return false;
+  }
+
+  if (out->has_require_explicit_policy) {
+    if (!ParseUint8(value, &out->require_explicit_policy)) {
+      // TODO(eroman): Surface reason for failure if length was longer than
+      // uint8.
+      return false;
+    }
+  } else {
+    out->require_explicit_policy = 0;
+  }
+
+  if (!sequence_parser.ReadOptionalTag(der::ContextSpecificPrimitive(1), &value,
+                                       &out->has_inhibit_policy_mapping)) {
+    return false;
+  }
+
+  if (out->has_inhibit_policy_mapping) {
+    if (!ParseUint8(value, &out->inhibit_policy_mapping)) {
+      // TODO(eroman): Surface reason for failure if length was longer than
+      // uint8.
+      return false;
+    }
+  } else {
+    out->inhibit_policy_mapping = 0;
+  }
+
+  // There should be no remaining data.
+  if (sequence_parser.HasMore() || parser.HasMore())
+    return false;
+
+  return true;
+}
+
+// From RFC 5280:
+//
+//   InhibitAnyPolicy ::= SkipCerts
+//
+//   SkipCerts ::= INTEGER (0..MAX)
+bool ParseInhibitAnyPolicy(const der::Input& inhibit_any_policy_tlv,
+                           uint8_t* num_certs) {
+  der::Parser parser(inhibit_any_policy_tlv);
+
+  // TODO(eroman): Surface reason for failure if length was longer than uint8.
+  if (!parser.ReadUint8(num_certs))
+    return false;
+
+  // There should be no remaining data.
+  if (parser.HasMore())
+    return false;
+
+  return true;
+}
+
+// From RFC 5280:
+//
+//   PolicyMappings ::= SEQUENCE SIZE (1..MAX) OF SEQUENCE {
+//        issuerDomainPolicy      CertPolicyId,
+//        subjectDomainPolicy     CertPolicyId }
+bool ParsePolicyMappings(const der::Input& policy_mappings_tlv,
+                         std::vector<ParsedPolicyMapping>* mappings) {
+  mappings->clear();
+
+  der::Parser parser(policy_mappings_tlv);
+
+  //   PolicyMappings ::= SEQUENCE SIZE (1..MAX) OF SEQUENCE {
+  der::Parser sequence_parser;
+  if (!parser.ReadSequence(&sequence_parser))
+    return false;
+
+  // Must be at least 1 mapping.
+  if (!sequence_parser.HasMore())
+    return false;
+
+  while (sequence_parser.HasMore()) {
+    der::Parser mapping_parser;
+    if (!sequence_parser.ReadSequence(&mapping_parser))
+      return false;
+
+    ParsedPolicyMapping mapping;
+    if (!mapping_parser.ReadTag(der::kOid, &mapping.issuer_domain_policy))
+      return false;
+    if (!mapping_parser.ReadTag(der::kOid, &mapping.subject_domain_policy))
+      return false;
+
+    // There shouldn't be extra unconsumed data.
+    if (mapping_parser.HasMore())
+      return false;
+
+    mappings->push_back(mapping);
+  }
+
+  // There shouldn't be extra unconsumed data.
+  if (parser.HasMore())
+    return false;
 
   return true;
 }

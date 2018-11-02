@@ -461,6 +461,7 @@ static_library("sync") {
     "model/sync_error_factory.h",
     "model/sync_merge_result.cc",
     "model/sync_merge_result.h",
+    "model/sync_metadata_store.h",
     "model/syncable_service.cc",
     "model/syncable_service.h",
     "model/time.h",
@@ -481,6 +482,8 @@ static_library("sync") {
     "model_impl/processor_entity_tracker.h",
     "model_impl/shared_model_type_processor.cc",
     "model_impl/shared_model_type_processor.h",
+    "model_impl/sync_metadata_store_change_list.cc",
+    "model_impl/sync_metadata_store_change_list.h",
     "protocol/proto_enum_conversions.cc",
     "protocol/proto_enum_conversions.h",
     "protocol/proto_memory_estimations.cc",
@@ -569,19 +572,26 @@ static_library("sync") {
     "syncable/write_transaction.h",
     "syncable/write_transaction_info.cc",
     "syncable/write_transaction_info.h",
+    "user_events/user_event_service.cc",
+    "user_events/user_event_service.h",
+    "user_events/user_event_sync_bridge.cc",
+    "user_events/user_event_sync_bridge.h",
   ]
 
   configs += [ "//build/config:precompiled_headers" ]
 
   public_deps = [
+    "//base",
     "//components/sync/protocol",
+    "//net",
+    "//url",
   ]
   deps = [
-    "//base",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
     "//components/data_use_measurement/core",
     "//components/invalidation/public",
+    "//components/keyed_service/core",
     "//components/metrics",
     "//components/os_crypt",
     "//components/pref_registry",
@@ -592,13 +602,11 @@ static_library("sync") {
     "//components/version_info",
     "//crypto",
     "//google_apis",
-    "//net",
     "//sql",
     "//third_party/cacheinvalidation",
     "//third_party/leveldatabase",
     "//third_party/zlib",
-    "//third_party/zlib:compression_utils",
-    "//url",
+    "//third_party/zlib/google:compression_utils",
   ]
 
   if (is_android) {
@@ -937,6 +945,8 @@ source_set("unit_tests") {
     "syncable/syncable_enum_conversions_unittest.cc",
     "syncable/syncable_id_unittest.cc",
     "syncable/syncable_unittest.cc",
+    "user_events/user_event_service_unittest.cc",
+    "user_events/user_event_sync_bridge_unittest.cc",
   ]
 
   configs += [ "//build/config:precompiled_headers" ]
@@ -976,7 +986,7 @@ source_set("unit_tests") {
     "//testing/gtest",
     "//third_party/leveldatabase",
     "//third_party/protobuf:protobuf_lite",
-    "//third_party/zlib:compression_utils",
+    "//third_party/zlib/google:compression_utils",
     "//url",
   ]
 
@@ -1080,7 +1090,7 @@ if (!is_ios) {
       ":test_support_testserver",
       "//base",
       "//base/test:test_support",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//net:test_support",
       "//testing/gtest",

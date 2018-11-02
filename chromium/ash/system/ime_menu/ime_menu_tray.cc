@@ -9,9 +9,8 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/grit/ash_resources.h"
 #include "ash/root_window_controller.h"
-#include "ash/session/session_state_delegate.h"
-#include "ash/shelf/wm_shelf.h"
-#include "ash/shelf/wm_shelf_util.h"
+#include "ash/session/session_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -21,12 +20,13 @@
 #include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/system/tray/tray_container.h"
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tray_utils.h"
-#include "ash/wm_window.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/session_manager/session_manager_types.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/text_input_client.h"
@@ -85,9 +85,11 @@ void RecordButtonsClicked(const std::string& button_name) {
 
 // Returns true if the current screen is login or lock screen.
 bool IsInLoginOrLockScreen() {
-  LoginStatus login =
-      Shell::Get()->system_tray_delegate()->GetUserLoginStatus();
-  return !TrayPopupUtils::CanOpenWebUISettings(login);
+  using session_manager::SessionState;
+  SessionState state = Shell::Get()->session_controller()->GetSessionState();
+  return state == SessionState::LOGIN_PRIMARY ||
+         state == SessionState::LOCKED ||
+         state == SessionState::LOGIN_SECONDARY;
 }
 
 // Returns true if the current input context type is password.
@@ -98,11 +100,16 @@ bool IsInPasswordInputContext() {
 
 class ImeMenuLabel : public views::Label {
  public:
-  ImeMenuLabel() {}
+  ImeMenuLabel() {
+    // Sometimes the label will be more than 2 characters, e.g. INTL and EXTD.
+    // This border makes sure we only leave room for ~2 and the others are
+    // truncated.
+    SetBorder(views::CreateEmptyBorder(gfx::Insets(0, 6)));
+  }
   ~ImeMenuLabel() override {}
 
   // views:Label:
-  gfx::Size GetPreferredSize() const override {
+  gfx::Size CalculatePreferredSize() const override {
     return gfx::Size(kTrayItemSize, kTrayItemSize);
   }
   int GetHeightForWidth(int width) const override { return kTrayItemSize; }
@@ -145,7 +152,7 @@ class ImeTitleView : public views::View, public views::ButtonListener {
     if (show_settings_button) {
       settings_button_ = CreateImeMenuButton(
           this, kSystemMenuSettingsIcon, IDS_ASH_STATUS_TRAY_IME_SETTINGS, 0);
-      if (IsInLoginOrLockScreen())
+      if (!TrayPopupUtils::CanOpenWebUISettings())
         settings_button_->SetEnabled(false);
       AddChildView(settings_button_);
     }
@@ -238,6 +245,8 @@ class ImeButtonsView : public views::View, public views::ButtonListener {
     settings_button_ = CreateImeMenuButton(this, kSystemMenuSettingsIcon,
                                            IDS_ASH_STATUS_TRAY_IME_SETTINGS, 0);
     AddChildView(settings_button_);
+    if (!TrayPopupUtils::CanOpenWebUISettings())
+      settings_button_->SetEnabled(false);
   }
 
   ImeMenuTray* ime_menu_tray_;
@@ -271,16 +280,17 @@ class ImeMenuListView : public ImeListView {
 
 }  // namespace
 
-ImeMenuTray::ImeMenuTray(WmShelf* wm_shelf)
-    : TrayBackgroundView(wm_shelf, true),
+ImeMenuTray::ImeMenuTray(Shelf* shelf)
+    : TrayBackgroundView(shelf),
       label_(new ImeMenuLabel()),
       show_keyboard_(false),
       force_show_keyboard_(false),
-      should_block_shelf_auto_hide_(false),
       keyboard_suppressed_(false),
-      show_bubble_after_keyboard_hidden_(false) {
+      show_bubble_after_keyboard_hidden_(false),
+      weak_ptr_factory_(this) {
   SetInkDropMode(InkDropMode::ON);
   SetupLabelForTray(label_);
+  label_->SetElideBehavior(gfx::TRUNCATE);
   tray_container()->AddChildView(label_);
   SystemTrayNotifier* tray_notifier = Shell::Get()->system_tray_notifier();
   tray_notifier->AddIMEObserver(this);
@@ -313,7 +323,6 @@ void ImeMenuTray::ShowImeMenuBubble() {
 }
 
 void ImeMenuTray::ShowImeMenuBubbleInternal() {
-  should_block_shelf_auto_hide_ = true;
   views::TrayBubbleView::InitParams init_params(
       GetAnchorAlignment(), kTrayMenuMinimumWidth, kTrayMenuMinimumWidth);
   init_params.can_activate = true;
@@ -344,7 +353,6 @@ void ImeMenuTray::HideImeMenuBubble() {
   bubble_.reset();
   ime_list_view_ = nullptr;
   SetIsActive(false);
-  should_block_shelf_auto_hide_ = false;
   shelf()->UpdateAutoHideState();
 }
 
@@ -391,10 +399,6 @@ void ImeMenuTray::ShowKeyboardWithKeyset(const std::string& keyset) {
     keyboard_controller->AddObserver(this);
     keyboard_controller->ShowKeyboard(false);
   }
-}
-
-bool ImeMenuTray::ShouldBlockShelfAutoHide() const {
-  return should_block_shelf_auto_hide_;
 }
 
 bool ImeMenuTray::ShouldShowEmojiHandwritingVoiceButtons() const {
@@ -472,8 +476,7 @@ void ImeMenuTray::OnBeforeBubbleWidgetInit(
     views::Widget* bubble_widget,
     views::Widget::InitParams* params) const {
   // Place the bubble in the same root window as |anchor_widget|.
-  WmWindow::Get(anchor_widget->GetNativeWindow())
-      ->GetRootWindowController()
+  RootWindowController::ForWindow(anchor_widget->GetNativeWindow())
       ->ConfigureWidgetInitParamsForContainer(
           bubble_widget, kShellWindowId_SettingBubbleContainer, params);
 }
@@ -527,8 +530,10 @@ void ImeMenuTray::OnKeyboardHidden() {
   if (!force_show_keyboard_)
     return;
 
-  Shell::Get()->accessibility_delegate()->SetVirtualKeyboardEnabled(false);
-  force_show_keyboard_ = false;
+  // Posts a task to disable the virtual keyboard.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&ImeMenuTray::DisableVirtualKeyboard,
+                            weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ImeMenuTray::OnKeyboardSuppressionChanged(bool suppressed) {
@@ -545,6 +550,11 @@ void ImeMenuTray::UpdateTrayLabel() {
     label_->SetText(current_ime_.short_name + base::UTF8ToUTF16("*"));
   else
     label_->SetText(current_ime_.short_name);
+}
+
+void ImeMenuTray::DisableVirtualKeyboard() {
+  Shell::Get()->accessibility_delegate()->SetVirtualKeyboardEnabled(false);
+  force_show_keyboard_ = false;
 }
 
 }  // namespace ash

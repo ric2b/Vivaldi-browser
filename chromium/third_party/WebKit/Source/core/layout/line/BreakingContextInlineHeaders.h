@@ -744,7 +744,7 @@ ALWAYS_INLINE int LastBreakablePositionForBreakAll(LineLayoutText text,
                                                    int start,
                                                    int end) {
   LazyLineBreakIterator line_break_iterator(text.GetText(),
-                                            LocaleForLineBreakIterator(style));
+                                            style.LocaleForLineBreakIterator());
   int last_breakable_position = 0, next_breakable_position = -1;
   for (int i = start;; i = next_breakable_position + 1) {
     line_break_iterator.IsBreakable(i, next_breakable_position,
@@ -788,7 +788,7 @@ ALWAYS_INLINE bool BreakingContext::CanMidWordBreakBefore(LineLayoutText text) {
       const ComputedStyle& parent_style = parent.StyleRef();
       return parent_style.AutoWrap() &&
              ((parent_style.BreakWords() && !width_.CommittedWidth()) ||
-              parent_style.WordBreak() == kBreakAllWordBreak);
+              parent_style.WordBreak() == EWordBreak::kBreakAll);
     }
   }
   return false;
@@ -804,7 +804,7 @@ ALWAYS_INLINE bool BreakingContext::RewindToFirstMidWordBreak(
   int end = CanMidWordBreakBefore(text) ? start : start + 1;
   if (break_all) {
     LazyLineBreakIterator line_break_iterator(
-        text.GetText(), LocaleForLineBreakIterator(style));
+        text.GetText(), style.LocaleForLineBreakIterator());
     int next_breakable = -1;
     line_break_iterator.IsBreakable(end, next_breakable,
                                     LineBreakType::kBreakAll);
@@ -955,9 +955,9 @@ inline bool BreakingContext::HandleText(WordMeasurements& word_measurements,
                       curr_ws_ == EWhiteSpace::kPre);
   bool mid_word_break = false;
   bool break_all =
-      current_style_->WordBreak() == kBreakAllWordBreak && auto_wrap_;
+      current_style_->WordBreak() == EWordBreak::kBreakAll && auto_wrap_;
   bool keep_all =
-      current_style_->WordBreak() == kKeepAllWordBreak && auto_wrap_;
+      current_style_->WordBreak() == EWordBreak::kKeepAll && auto_wrap_;
   bool prohibit_break_inside = current_style_->HasTextCombine() &&
                                layout_text.IsCombineText() &&
                                LineLayoutTextCombine(layout_text).IsCombined();
@@ -969,7 +969,7 @@ inline bool BreakingContext::HandleText(WordMeasurements& word_measurements,
   float width_measurement_at_last_break_opportunity = 0;
 
   Hyphenation* hyphenation = auto_wrap_ ? style.GetHyphenation() : nullptr;
-  bool disable_soft_hyphen = style.GetHyphens() == kHyphensNone;
+  bool disable_soft_hyphen = style.GetHyphens() == Hyphens::kNone;
   float hyphen_width = 0;
   bool is_line_empty = line_info_.IsEmpty();
 
@@ -996,7 +996,7 @@ inline bool BreakingContext::HandleText(WordMeasurements& word_measurements,
     layout_text_info_.text_ = layout_text;
     layout_text_info_.font_ = &font;
     layout_text_info_.line_break_iterator_.ResetStringAndReleaseIterator(
-        layout_text.GetText(), LocaleForLineBreakIterator(style));
+        layout_text.GetText(), style.LocaleForLineBreakIterator());
   } else if (layout_text_info_.font_ != &font) {
     layout_text_info_.font_ = &font;
   }

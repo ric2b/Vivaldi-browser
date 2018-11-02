@@ -7,11 +7,13 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/memory/ptr_util.h"
 #include "cc/surfaces/compositor_frame_sink_support.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_id.h"
 #include "cc/surfaces/surface_manager.h"
+#include "cc/test/compositor_frame_helpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -21,7 +23,6 @@ using testing::SizeIs;
 using testing::UnorderedElementsAre;
 
 namespace cc {
-
 namespace {
 
 constexpr FrameSinkId kFrameSink1(1, 0);
@@ -41,13 +42,14 @@ class SurfaceManagerRefTest : public testing::Test {
     LocalSurfaceId local_surface_id(local_id,
                                     base::UnguessableToken::Deserialize(0, 1u));
     GetCompositorFrameSinkSupport(frame_sink_id)
-        .SubmitCompositorFrame(local_surface_id, CompositorFrame());
+        .SubmitCompositorFrame(local_surface_id, test::MakeCompositorFrame());
     return SurfaceId(frame_sink_id, local_surface_id);
   }
 
   // Destroy Surface with |surface_id|.
   void DestroySurface(const SurfaceId& surface_id) {
-    GetCompositorFrameSinkSupport(surface_id.frame_sink_id()).EvictFrame();
+    GetCompositorFrameSinkSupport(surface_id.frame_sink_id())
+        .EvictCurrentSurface();
   }
 
   CompositorFrameSinkSupport& GetCompositorFrameSinkSupport(
@@ -81,13 +83,13 @@ class SurfaceManagerRefTest : public testing::Test {
   }
 
   // Returns all the references where |surface_id| is the parent.
-  const SurfaceManager::SurfaceIdSet& GetReferencesFrom(
+  const base::flat_set<SurfaceId>& GetReferencesFrom(
       const SurfaceId& surface_id) {
     return manager().parent_to_child_refs_[surface_id];
   }
 
   // Returns all the references where |surface_id| is the child.
-  const SurfaceManager::SurfaceIdSet& GetReferencesFor(
+  const base::flat_set<SurfaceId>& GetReferencesFor(
       const SurfaceId& surface_id) {
     return manager().child_to_parent_refs_[surface_id];
   }
@@ -110,7 +112,7 @@ class SurfaceManagerRefTest : public testing::Test {
   }
   void TearDown() override {
     for (auto& support : supports_)
-      support.second->EvictFrame();
+      support.second->EvictCurrentSurface();
     supports_.clear();
     manager_.reset();
   }

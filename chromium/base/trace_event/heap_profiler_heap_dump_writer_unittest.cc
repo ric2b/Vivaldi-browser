@@ -16,7 +16,6 @@
 #include "base/trace_event/heap_profiler_allocation_context.h"
 #include "base/trace_event/heap_profiler_stack_frame_deduplicator.h"
 #include "base/trace_event/heap_profiler_type_name_deduplicator.h"
-#include "base/trace_event/memory_dump_session_state.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -179,7 +178,7 @@ TEST(HeapDumpWriterTest, SizeAndCountAreHexadecimal) {
 }
 
 TEST(HeapDumpWriterTest, BacktraceTypeNameTable) {
-  hash_map<AllocationContext, AllocationMetrics> metrics_by_context;
+  std::unordered_map<AllocationContext, AllocationMetrics> metrics_by_context;
 
   AllocationContext ctx;
   ctx.backtrace.frames[0] = kBrowserMain;
@@ -274,7 +273,7 @@ TEST(HeapDumpWriterTest, BacktraceTypeNameTable) {
 }
 
 TEST(HeapDumpWriterTest, InsignificantValuesNotDumped) {
-  hash_map<AllocationContext, AllocationMetrics> metrics_by_context;
+  std::unordered_map<AllocationContext, AllocationMetrics> metrics_by_context;
 
   AllocationContext ctx;
   ctx.backtrace.frames[0] = kBrowserMain;

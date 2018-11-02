@@ -87,7 +87,7 @@ SmartClipData SmartClip::DataForRect(const IntRect& crop_rect_in_viewport) {
   CollectOverlappingChildNodes(best_node, crop_rect_in_viewport, hit_nodes);
 
   if (hit_nodes.IsEmpty() || hit_nodes.size() == best_node->CountChildren()) {
-    hit_nodes.Clear();
+    hit_nodes.clear();
     hit_nodes.push_back(best_node);
   }
 
@@ -202,7 +202,7 @@ Node* SmartClip::FindBestOverlappingNode(Node* root_node,
 // image in the smart clip. It seems to want to include sprites created from
 // CSS background images but to skip actual backgrounds.
 bool SmartClip::ShouldSkipBackgroundImage(Node* node) {
-  ASSERT(node);
+  DCHECK(node);
   // Apparently we're only interested in background images on spans and divs.
   if (!isHTMLSpanElement(*node) && !isHTMLDivElement(*node))
     return true;
@@ -243,7 +243,7 @@ String SmartClip::ExtractTextFromNode(Node* node) {
   StringBuilder result;
   for (Node& current_node : NodeTraversal::InclusiveDescendantsOf(*node)) {
     const ComputedStyle* style = current_node.EnsureComputedStyle();
-    if (style && style->UserSelect() == SELECT_NONE)
+    if (style && style->UserSelect() == EUserSelect::kNone)
       continue;
 
     if (Node* node_from_frame = NodeInsideFrame(&current_node))

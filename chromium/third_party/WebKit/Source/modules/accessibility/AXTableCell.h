@@ -60,7 +60,7 @@ class MODULES_EXPORT AXTableCell : public AXLayoutObject {
   void SetARIAColIndexFromRow(int index) { aria_col_index_from_row_ = index; }
 
  protected:
-  virtual AXObject* ParentTable() const;
+  virtual AXObjectImpl* ParentTable() const;
   AccessibilityRole DetermineAccessibilityRole() final;
 
  private:
@@ -70,7 +70,7 @@ class MODULES_EXPORT AXTableCell : public AXLayoutObject {
 
   bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const final;
 
-  unsigned aria_col_index_from_row_;
+  unsigned aria_col_index_from_row_ = 0;
 };
 
 DEFINE_AX_OBJECT_TYPE_CASTS(AXTableCell, IsTableCell());

@@ -12,6 +12,7 @@
 
 #include "ash/root_window_controller.h"
 #include "ash/shell_delegate.h"
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "services/ui/common/types.h"
@@ -30,6 +31,10 @@ class Display;
 
 namespace service_manager {
 class Connector;
+}
+
+namespace ui {
+class InputDeviceClient;
 }
 
 namespace views {
@@ -54,7 +59,6 @@ class AshTestHelper;
 namespace mus {
 
 class AcceleratorHandler;
-class WmTestHelper;
 
 // WindowManager serves as the WindowManagerDelegate and
 // WindowTreeClientDelegate for mash. WindowManager creates (and owns)
@@ -63,12 +67,20 @@ class WmTestHelper;
 class WindowManager : public aura::WindowManagerDelegate,
                       public aura::WindowTreeClientDelegate {
  public:
-  WindowManager(service_manager::Connector* connector, Config config);
+  // Set |show_primary_host_on_connect| to true if the initial display should
+  // be made visible.  Generally tests should use false, other places use true.
+  WindowManager(service_manager::Connector* connector,
+                Config config,
+                bool show_primary_host_on_connect);
   ~WindowManager() override;
 
   void Init(std::unique_ptr<aura::WindowTreeClient> window_tree_client,
             const scoped_refptr<base::SequencedWorkerPool>& blocking_pool,
             std::unique_ptr<ash::ShellDelegate> shell_delegate = nullptr);
+
+  // Sets the callback that is run once the connection to mus is lost. If not
+  // set shutdown occurs when the connection is lost (the Shell is deleted).
+  void SetLostConnectionCallback(base::OnceClosure closure);
 
   // Blocks waiting for the initial set of displays.
   bool WaitForInitialDisplays();
@@ -114,7 +126,6 @@ class WindowManager : public aura::WindowManagerDelegate,
 
  private:
   friend class test::AshTestHelper;
-  friend class WmTestHelper;
 
   using RootWindowControllers = std::set<std::unique_ptr<RootWindowController>>;
 
@@ -134,8 +145,6 @@ class WindowManager : public aura::WindowManagerDelegate,
 
   void Shutdown();
 
-  RootWindowController* GetPrimaryRootWindowController();
-
   // WindowTreeClientDelegate:
   void OnEmbed(
       std::unique_ptr<aura::WindowTreeHostMus> window_tree_host) override;
@@ -147,6 +156,7 @@ class WindowManager : public aura::WindowManagerDelegate,
 
   // WindowManagerDelegate:
   void SetWindowManagerClient(aura::WindowManagerClient* client) override;
+  void OnWmConnected() override;
   void OnWmSetBounds(aura::Window* window, const gfx::Rect& bounds) override;
   bool OnWmSetProperty(
       aura::Window* window,
@@ -192,6 +202,10 @@ class WindowManager : public aura::WindowManagerDelegate,
 
   const Config config_;
 
+  const bool show_primary_host_on_connect_;
+
+  base::OnceClosure lost_connection_callback_;
+
   std::unique_ptr<::wm::WMState> wm_state_;
   std::unique_ptr<aura::PropertyConverter> property_converter_;
 
@@ -223,6 +237,8 @@ class WindowManager : public aura::WindowManagerDelegate,
   // State that is only valid during a drag.
   struct DragState;
   std::unique_ptr<DragState> drag_state_;
+
+  std::unique_ptr<ui::InputDeviceClient> input_device_client_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowManager);
 };

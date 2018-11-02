@@ -6,6 +6,8 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread.h"
@@ -53,7 +55,6 @@ class BidirectionalStreamTestURLRequestContextGetter
       url::SchemeHostPort quic_hint_server("https", kTestServerHost, 443);
       server_properties_->SetAlternativeService(
           quic_hint_server, alternative_service, base::Time::Max());
-      params->quic_host_whitelist.insert(kTestServerHost);
 
       request_context_->set_cert_verifier(mock_cert_verifier_.get());
       request_context_->set_host_resolver(host_resolver_.get());
@@ -126,5 +127,8 @@ stream_engine* GetTestStreamEngine(int port) {
   engine.obj = g_request_context_getter_.Get().get();
   return &engine;
 }
+
+void StartTestStreamEngine(int port) {}
+void ShutdownTestStreamEngine() {}
 
 }  // namespace grpc_support

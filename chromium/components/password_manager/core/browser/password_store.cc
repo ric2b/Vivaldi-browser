@@ -67,13 +67,13 @@ PasswordStore::CheckReuseRequest::~CheckReuseRequest() {}
 
 void PasswordStore::CheckReuseRequest::OnReuseFound(
     const base::string16& password,
-    const std::string& saved_domain,
+    const std::string& legitimate_domain,
     int saved_passwords,
     int number_matches) {
   origin_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&PasswordReuseDetectorConsumer::OnReuseFound, consumer_weak_,
-                 password, saved_domain, saved_passwords, number_matches));
+                 password, legitimate_domain, saved_passwords, number_matches));
 }
 #endif
 
@@ -111,8 +111,10 @@ PasswordStore::PasswordStore(
       is_propagating_password_changes_to_web_credentials_enabled_(false),
       shutdown_called_(false) {}
 
-bool PasswordStore::Init(const syncer::SyncableService::StartSyncFlare& flare) {
-  ScheduleTask(base::Bind(&PasswordStore::InitOnBackgroundThread, this, flare));
+bool PasswordStore::Init(const syncer::SyncableService::StartSyncFlare& flare,
+                         PrefService* prefs) {
+  ScheduleTask(
+      base::Bind(&PasswordStore::InitOnBackgroundThread, this, flare, prefs));
   return true;
 }
 
@@ -223,6 +225,14 @@ void PasswordStore::GetLogins(const FormDigest& form,
   }
 }
 
+void PasswordStore::GetLoginsForSameOrganizationName(
+    const std::string& signon_realm,
+    PasswordStoreConsumer* consumer) {
+  std::unique_ptr<GetLoginsRequest> request(new GetLoginsRequest(consumer));
+  ScheduleTask(base::Bind(&PasswordStore::GetLoginsForSameOrganizationNameImpl,
+                          this, signon_realm, base::Passed(&request)));
+}
+
 void PasswordStore::GetAutofillableLogins(PasswordStoreConsumer* consumer) {
   Schedule(&PasswordStore::GetAutofillableLoginsImpl, consumer);
 }
@@ -317,6 +327,11 @@ void PasswordStore::CheckReuse(const base::string16& input,
   ScheduleTask(base::Bind(&PasswordStore::CheckReuseImpl, this,
                           base::Passed(&check_reuse_request), input, domain));
 }
+
+void PasswordStore::SaveSyncPasswordHash(const base::string16& password) {
+  ScheduleTask(
+      base::Bind(&PasswordStore::SaveSyncPasswordHashImpl, this, password));
+}
 #endif
 
 PasswordStore::~PasswordStore() {
@@ -398,6 +413,11 @@ void PasswordStore::CheckReuseImpl(std::unique_ptr<CheckReuseRequest> request,
                                    const std::string& domain) {
   if (reuse_detector_)
     reuse_detector_->CheckReuse(input, domain, request.get());
+}
+
+void PasswordStore::SaveSyncPasswordHashImpl(const base::string16& password) {
+  if (reuse_detector_)
+    reuse_detector_->SaveSyncPasswordHash(password);
 }
 #endif
 
@@ -485,6 +505,13 @@ void PasswordStore::DisableAutoSignInForOriginsInternal(
   DisableAutoSignInForOriginsImpl(origin_filter);
   if (!completion.is_null())
     main_thread_runner_->PostTask(FROM_HERE, completion);
+}
+
+void PasswordStore::GetLoginsForSameOrganizationNameImpl(
+    const std::string& signon_realm,
+    std::unique_ptr<GetLoginsRequest> request) {
+  request->NotifyConsumerWithResults(
+      FillLoginsForSameOrganizationName(signon_realm));
 }
 
 void PasswordStore::GetAutofillableLoginsImpl(
@@ -708,14 +735,15 @@ void PasswordStore::ScheduleUpdateAffiliatedWebLoginsImpl(
 }
 
 void PasswordStore::InitOnBackgroundThread(
-    const syncer::SyncableService::StartSyncFlare& flare) {
+    const syncer::SyncableService::StartSyncFlare& flare,
+    PrefService* prefs) {
   DCHECK(GetBackgroundTaskRunner()->BelongsToCurrentThread());
   DCHECK(!syncable_service_);
   syncable_service_.reset(new PasswordSyncableService(this));
   syncable_service_->InjectStartSyncFlare(flare);
 // TODO(crbug.com/706392): Fix password reuse detection for Android.
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-  reuse_detector_.reset(new PasswordReuseDetector);
+  reuse_detector_ = base::MakeUnique<PasswordReuseDetector>(prefs);
   GetAutofillableLoginsImpl(
       base::MakeUnique<GetLoginsRequest>(reuse_detector_.get()));
 #endif

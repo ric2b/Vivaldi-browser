@@ -10,6 +10,7 @@
 #include "core/dom/NodeList.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingTestBase.h"
+#include "core/editing/VisibleUnits.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLDivElement.h"
@@ -70,7 +71,7 @@ TEST_F(RangeTest, SplitTextNodeRangeWithinText) {
   V8TestingScope scope;
 
   GetDocument().body()->setInnerHTML("1234");
-  Text* old_text = ToText(GetDocument().body()->FirstChild());
+  Text* old_text = ToText(GetDocument().body()->firstChild());
 
   Range* range04 = Range::Create(GetDocument(), old_text, 0, old_text, 4);
   Range* range02 = Range::Create(GetDocument(), old_text, 0, old_text, 2);
@@ -115,11 +116,11 @@ TEST_F(RangeTest, SplitTextNodeRangeOutsideText) {
       "id=\"inner-right\">2</span>3</span>");
 
   Element* outer =
-      GetDocument().GetElementById(AtomicString::FromUTF8("outer"));
+      GetDocument().getElementById(AtomicString::FromUTF8("outer"));
   Element* inner_left =
-      GetDocument().GetElementById(AtomicString::FromUTF8("inner-left"));
+      GetDocument().getElementById(AtomicString::FromUTF8("inner-left"));
   Element* inner_right =
-      GetDocument().GetElementById(AtomicString::FromUTF8("inner-right"));
+      GetDocument().getElementById(AtomicString::FromUTF8("inner-right"));
   Text* old_text = ToText(outer->childNodes()->item(2));
 
   Range* range_outer_outside = Range::Create(GetDocument(), outer, 0, outer, 5);
@@ -198,8 +199,8 @@ TEST_F(RangeTest, NotMarkedValidByIrrelevantTextInsert) {
       "<div><span id=span1>foo</span>bar<span id=span2>baz</span></div>");
 
   Element* div = GetDocument().QuerySelector("div");
-  Element* span1 = GetDocument().GetElementById("span1");
-  Element* span2 = GetDocument().GetElementById("span2");
+  Element* span1 = GetDocument().getElementById("span1");
+  Element* span2 = GetDocument().getElementById("span2");
   Text* text = ToText(div->childNodes()->item(1));
 
   Range* range = Range::Create(GetDocument(), span2, 0, div, 3);
@@ -220,8 +221,8 @@ TEST_F(RangeTest, NotMarkedValidByIrrelevantTextRemove) {
       "<div><span id=span1>foofoo</span>bar<span id=span2>baz</span></div>");
 
   Element* div = GetDocument().QuerySelector("div");
-  Element* span1 = GetDocument().GetElementById("span1");
-  Element* span2 = GetDocument().GetElementById("span2");
+  Element* span1 = GetDocument().getElementById("span1");
+  Element* span2 = GetDocument().getElementById("span2");
   Text* text = ToText(div->childNodes()->item(1));
 
   Range* range = Range::Create(GetDocument(), span2, 0, div, 3);
@@ -242,16 +243,6 @@ TEST_F(RangeTest, ExpandNotCrash) {
   Node* div = HTMLDivElement::Create(GetDocument());
   range->setStart(div, 0, ASSERT_NO_EXCEPTION);
   range->expand("", ASSERT_NO_EXCEPTION);
-}
-
-TEST_F(RangeTest, MultipleTextQuads) {
-  SetBodyContent("<div><p id='one'>one</p><p id='two'>two</p></div>");
-  Position start(GetDocument().GetElementById("one")->FirstChild(), 0);
-  Position end(GetDocument().GetElementById("two")->FirstChild(), 3);
-  Range* range = Range::Create(GetDocument(), start, end);
-  Vector<FloatQuad> quads;
-  range->TextQuads(quads);
-  EXPECT_EQ(2u, quads.size());
 }
 
 TEST_F(RangeTest, ToPosition) {

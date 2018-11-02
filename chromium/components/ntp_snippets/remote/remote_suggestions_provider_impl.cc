@@ -33,6 +33,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/variations/variations_associated_data.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
 
@@ -46,6 +47,10 @@ const int kMaxSuggestionCount = 10;
 
 // Number of archived suggestions we keep around in memory.
 const int kMaxArchivedSuggestionCount = 200;
+
+// Maximal number of dismissed suggestions to exclude when fetching new
+// suggestions from the server. This limit exists to decrease data usage.
+const int kMaxExcludedDismissedIds = 100;
 
 // Keys for storing CategoryContent info in prefs.
 const char kCategoryContentId[] = "id";
@@ -192,6 +197,17 @@ void CallWithEmptyResults(const FetchDoneCallback& callback,
   callback.Run(status, std::vector<ContentSuggestion>());
 }
 
+void AddDismissedIdsToRequest(const RemoteSuggestion::PtrVector& dismissed,
+                              RequestParams* request_params) {
+  // The latest ids are added first, because they are more relevant.
+  for (auto it = dismissed.rbegin(); it != dismissed.rend(); ++it) {
+    if (request_params->excluded_ids.size() == kMaxExcludedDismissedIds) {
+      break;
+    }
+    request_params->excluded_ids.insert((*it)->id());
+  }
+}
+
 }  // namespace
 
 CachedImageFetcher::CachedImageFetcher(
@@ -288,10 +304,34 @@ void CachedImageFetcher::FetchImageFromNetwork(
     return;
   }
 
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("remote_suggestions_provider", R"(
+        semantics {
+          sender: "Content Suggestion Thumbnail Fetch"
+          description:
+            "Retrieves thumbnails for content suggestions, for display on the "
+            "New Tab page or Chrome Home."
+          trigger:
+            "Triggered when the user looks at a content suggestion (and its "
+            "thumbnail isn't cached yet)."
+          data: "None."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting: "Currently not available, but in progress: crbug.com/703684"
+        chrome_policy {
+          NTPContentSuggestionsEnabled {
+            policy_options {mode: MANDATORY}
+            NTPContentSuggestionsEnabled: false
+          }
+        }
+      })");
   image_fetcher_->StartOrQueueNetworkRequest(
       suggestion_id.id_within_category(), url,
       base::Bind(&CachedImageFetcher::OnImageDecodingDone,
-                 base::Unretained(this), callback));
+                 base::Unretained(this), callback),
+      traffic_annotation);
 }
 
 RemoteSuggestionsProviderImpl::RemoteSuggestionsProviderImpl(
@@ -408,7 +448,7 @@ void RemoteSuggestionsProviderImpl::FetchSuggestions(
 
   MarkEmptyCategoriesAsLoading();
 
-  RequestParams params = BuildFetchParams();
+  RequestParams params = BuildFetchParams(/*fetched_category=*/base::nullopt);
   params.interactive_request = interactive_request;
   suggestions_fetcher_->FetchSnippets(
       params,
@@ -441,7 +481,7 @@ void RemoteSuggestionsProviderImpl::Fetch(
       },
       base::Unretained(remote_suggestions_scheduler_), callback);
 
-  RequestParams params = BuildFetchParams();
+  RequestParams params = BuildFetchParams(category);
   params.excluded_ids.insert(known_suggestion_ids.begin(),
                              known_suggestion_ids.end());
   params.interactive_request = true;
@@ -454,15 +494,23 @@ void RemoteSuggestionsProviderImpl::Fetch(
 }
 
 // Builds default fetcher params.
-RequestParams RemoteSuggestionsProviderImpl::BuildFetchParams() const {
+RequestParams RemoteSuggestionsProviderImpl::BuildFetchParams(
+    base::Optional<Category> fetched_category) const {
   RequestParams result;
   result.language_code = application_language_code_;
   result.count_to_fetch = kMaxSuggestionCount;
+  // If this is a fetch for a specific category, its dismissed suggestions are
+  // added first to truncate them less.
+  if (fetched_category.has_value()) {
+    DCHECK(category_contents_.count(*fetched_category));
+    AddDismissedIdsToRequest(
+        category_contents_.find(*fetched_category)->second.dismissed, &result);
+  }
   for (const auto& map_entry : category_contents_) {
-    const CategoryContent& content = map_entry.second;
-    for (const auto& dismissed_suggestion : content.dismissed) {
-      result.excluded_ids.insert(dismissed_suggestion->id());
+    if (fetched_category.has_value() && map_entry.first == *fetched_category) {
+      continue;
     }
+    AddDismissedIdsToRequest(map_entry.second.dismissed, &result);
   }
   return result;
 }
@@ -684,31 +732,12 @@ void RemoteSuggestionsProviderImpl::OnFetchMoreFinished(
       UpdateCategoryInfo(category, fetched_category.info);
   SanitizeReceivedSuggestions(existing_content->dismissed,
                               &fetched_category.suggestions);
-  // We compute the result now before modifying |fetched_category.suggestions|.
-  // However, we wait with notifying the caller until the end of the method when
-  // all state is updated.
   std::vector<ContentSuggestion> result =
       ConvertToContentSuggestions(category, fetched_category.suggestions);
-
-  // Fill up the newly fetched suggestions with existing ones, store them, and
-  // notify observers about new data.
-  while (fetched_category.suggestions.size() <
-             static_cast<size_t>(kMaxSuggestionCount) &&
-         !existing_content->suggestions.empty()) {
-    fetched_category.suggestions.emplace(
-        fetched_category.suggestions.begin(),
-        std::move(existing_content->suggestions.back()));
-    existing_content->suggestions.pop_back();
-  }
-  std::vector<std::string> to_dismiss =
-      *GetSuggestionIDVector(existing_content->suggestions);
-  for (const auto& id : to_dismiss) {
-    DismissSuggestionFromCategoryContent(existing_content, id);
-  }
-  DCHECK(existing_content->suggestions.empty());
-
-  IntegrateSuggestions(existing_content,
-                       std::move(fetched_category.suggestions));
+  // Store the additional suggestions into the archive to be able to fetch
+  // images and favicons for them. Note that ArchiveSuggestions clears
+  // |fetched_category.suggestions|.
+  ArchiveSuggestions(existing_content, &fetched_category.suggestions);
 
   // TODO(tschumann): We should properly honor the existing category state,
   // e.g. to make sure we don't serve results after the sign-out. Revisit this:
@@ -716,7 +745,6 @@ void RemoteSuggestionsProviderImpl::OnFetchMoreFinished(
   // status?
   UpdateCategoryStatus(category, CategoryStatus::AVAILABLE);
   fetching_callback.Run(Status::Success(), std::move(result));
-  NotifyNewSuggestions(category, *existing_content);
 }
 
 void RemoteSuggestionsProviderImpl::OnFetchFinished(

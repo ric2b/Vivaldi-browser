@@ -38,6 +38,7 @@
 #include "content/shell/common/shell_messages.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/grit/shell_resources.h"
+#include "media/mojo/features.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "storage/browser/quota/quota_settings.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -63,12 +64,8 @@
 #include "sandbox/win/src/sandbox.h"
 #endif
 
-#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
 #include "media/mojo/services/media_service_factory.h"  // nogncheck
-#endif
-
-#if defined(USE_AURA)
-#include "services/navigation/navigation.h"
 #endif
 
 namespace content {
@@ -197,18 +194,11 @@ bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {
 
 void ShellContentBrowserClient::RegisterInProcessServices(
     StaticServiceMap* services) {
-#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   {
     content::ServiceInfo info;
     info.factory = base::Bind(&media::CreateMediaServiceForTesting);
     services->insert(std::make_pair("media", info));
-  }
-#endif
-#if defined(USE_AURA)
-  {
-    content::ServiceInfo info;
-    info.factory = base::Bind(&navigation::CreateNavigationService);
-    services->insert(std::make_pair("navigation", info));
   }
 #endif
 }
@@ -302,6 +292,7 @@ void ShellContentBrowserClient::GetQuotaSettings(
 void ShellContentBrowserClient::SelectClientCertificate(
     WebContents* web_contents,
     net::SSLCertRequestInfo* cert_request_info,
+    net::CertificateList client_certs,
     std::unique_ptr<ClientCertificateDelegate> delegate) {
   if (!select_client_certificate_callback_.is_null())
     select_client_certificate_callback_.Run();

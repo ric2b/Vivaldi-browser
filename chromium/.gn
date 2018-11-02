@@ -141,10 +141,14 @@ check_targets = [
   "//testing/*",
 
   #"//third_party/*",  # May not ever want this.
+  "//third_party/brotli/*",
   "//third_party/hunspell/*",
+  "//third_party/leveldatabase/*",
   "//third_party/libaddressinput/*",
   "//third_party/libphonenumber/*",
-  "//third_party/WebKit/Source/*",
+  "//third_party/libwebp/*",
+  "//third_party/snappy/*",
+  "//third_party/WebKit/*",
   "//tools/*",
 
   #"//ui/*",  # Work left on Chromeos w/ use_ozone. Some parts of UI that work:

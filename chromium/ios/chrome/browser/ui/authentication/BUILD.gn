@@ -9,6 +9,9 @@ bundle_data("resources") {
     "resources/signin_confirmation_more.png",
     "resources/signin_confirmation_more@2x.png",
     "resources/signin_confirmation_more@3x.png",
+    "resources/signin_promo_close_gray.png",
+    "resources/signin_promo_close_gray@2x.png",
+    "resources/signin_promo_close_gray@3x.png",
   ]
   if (is_chrome_branded) {
     sources += [
@@ -110,6 +113,7 @@ source_set("authentication_arc") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/commands",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/signin",
     "//ios/third_party/material_components_ios",
@@ -130,13 +134,16 @@ source_set("authentication_ui") {
     "signin_promo_view_configurator.h",
     "signin_promo_view_configurator.mm",
     "signin_promo_view_consumer.h",
+    "signin_promo_view_delegate.h",
   ]
   deps = [
     "//base",
+    "//components/signin/core/browser",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/collection_view/cells",
     "//ios/chrome/browser/ui/colors",
+    "//ios/chrome/browser/ui/commands",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/signin",
     "//ui/base",
@@ -150,6 +157,7 @@ source_set("unit_tests") {
   sources = [
     "account_control_item_unittest.mm",
     "authentication_flow_unittest.mm",
+    "authentication_ui_util_unittest.mm",
     "re_signin_infobar_delegate_unittest.mm",
     "signed_in_accounts_view_controller_unittest.mm",
     "signin_promo_item_unittest.mm",

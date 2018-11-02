@@ -4,8 +4,6 @@
 
 #include "ui/display/mojo/display_struct_traits.h"
 
-#include "ui/gfx/geometry/mojo/geometry_struct_traits.h"
-
 namespace mojo {
 
 display::mojom::Rotation
@@ -87,6 +85,9 @@ bool StructTraits<display::mojom::DisplayDataView, display::Display>::Read(
   if (!data.ReadBounds(&out->bounds_))
     return false;
 
+  if (!data.ReadSizeInPixels(&out->size_in_pixels_))
+    return false;
+
   if (!data.ReadWorkArea(&out->work_area_))
     return false;
 
@@ -100,6 +101,10 @@ bool StructTraits<display::mojom::DisplayDataView, display::Display>::Read(
 
   if (!data.ReadMaximumCursorSize(&out->maximum_cursor_size_))
     return false;
+
+  out->set_color_depth(data.color_depth());
+  out->set_depth_per_component(data.depth_per_component());
+  out->set_is_monochrome(data.is_monochrome());
 
   return true;
 }

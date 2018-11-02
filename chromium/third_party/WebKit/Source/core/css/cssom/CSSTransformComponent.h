@@ -5,9 +5,9 @@
 #ifndef CSSTransformComponent_h
 #define CSSTransformComponent_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/css/CSSFunctionValue.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -50,7 +50,7 @@ class CORE_EXPORT CSSTransformComponent
 
   bool is2D() const { return Is2DComponentType(GetType()); }
 
-  String cssText() const { return ToCSSValue()->CssText(); }
+  String toString() const { return ToCSSValue()->CssText(); }
 
   virtual CSSFunctionValue* ToCSSValue() const = 0;
   virtual CSSMatrixComponent* asMatrix() const = 0;

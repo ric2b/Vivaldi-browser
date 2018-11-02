@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
@@ -19,6 +20,7 @@
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/previews_state.h"
 #include "net/socket/socket_test_util.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_test_util.h"
@@ -109,8 +111,8 @@ class ContentResourceProviderTest : public testing::Test {
   std::unique_ptr<net::URLRequest> CreateRequestByType(
       const GURL& gurl,
       content::ResourceType resource_type) {
-    std::unique_ptr<net::URLRequest> request =
-        context_.CreateRequest(gurl, net::IDLE, &delegate_);
+    std::unique_ptr<net::URLRequest> request = context_.CreateRequest(
+        gurl, net::IDLE, &delegate_, TRAFFIC_ANNOTATION_FOR_TESTS);
     AllocateRequestInfoForTesting(request.get(), resource_type);
     return request;
   }

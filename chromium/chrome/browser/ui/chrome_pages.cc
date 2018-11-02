@@ -92,7 +92,7 @@ void NavigateToSingletonTab(Browser* browser, const GURL& url) {
 // is created.
 void ShowHelpImpl(Browser* browser, Profile* profile, HelpSource source) {
   base::RecordAction(UserMetricsAction("ShowHelpTab"));
-#if defined(OS_CHROMEOS) && defined(OFFICIAL_BUILD)
+#if defined(OS_CHROMEOS) && defined(GOOGLE_CHROME_BUILD)
   const extensions::Extension* extension =
       extensions::ExtensionRegistry::Get(profile)->GetExtensionById(
           genius_app::kGeniusAppId,
@@ -252,6 +252,10 @@ void ShowHelpForProfile(Profile* profile, HelpSource source) {
   ShowHelpImpl(NULL, profile, source);
 }
 
+void ShowBetaForum(Browser* browser) {
+  ShowSingletonTab(browser, GURL(kChromeBetaForumURL));
+}
+
 void ShowPolicy(Browser* browser) {
   ShowSingletonTab(browser, GURL(kChromeUIPolicyURL));
 }
@@ -318,12 +322,6 @@ void ShowSettingsSubPageForProfile(Profile* profile,
     } else if (sub_page == chrome::kStylusSubPage ||
                sub_page == chrome::kPowerSubPage) {
       sub_page_path += "-overlay";
-    }
-  } else {
-    if (sub_page == chrome::kPowerSubPage) {
-      // TODO(stevenjbj/derat): Remove this once we have a 'power' subpage,
-      // crbug.com/633455.
-      sub_page_path = "device";
     }
   }
 #endif

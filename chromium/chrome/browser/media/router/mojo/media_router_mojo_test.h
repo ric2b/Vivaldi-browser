@@ -10,9 +10,9 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/media/router/mock_media_router.h"
-#include "chrome/browser/media/router/mojo/media_router.mojom.h"
 #include "chrome/browser/media/router/mojo/media_router_mojo_impl.h"
 #include "chrome/browser/media/router/test_helper.h"
+#include "chrome/common/media_router/mojo/media_router.mojom.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/event_page_tracker.h"
@@ -90,15 +90,28 @@ class MockMediaRouteProvider : public mojom::MediaRouteProvider {
       const std::string& media_source,
       mojom::SinkSearchCriteriaPtr search_criteria,
       const SearchSinksCallback& callback) override {
-    SearchSinks_(sink_id, media_source, search_criteria, callback);
+    SearchSinksInternal(sink_id, media_source, search_criteria, callback);
   }
-  MOCK_METHOD4(SearchSinks_,
+  MOCK_METHOD4(SearchSinksInternal,
                void(const std::string& sink_id,
                     const std::string& media_source,
                     mojom::SinkSearchCriteriaPtr& search_criteria,
                     const SearchSinksCallback& callback));
   MOCK_METHOD2(ProvideSinks,
                void(const std::string&, const std::vector<MediaSinkInternal>&));
+  void CreateMediaRouteController(
+      const std::string& route_id,
+      mojom::MediaControllerRequest media_controller,
+      mojom::MediaStatusObserverPtr observer,
+      const CreateMediaRouteControllerCallback& callback) override {
+    CreateMediaRouteControllerInternal(route_id, media_controller, observer,
+                                       callback);
+  }
+  MOCK_METHOD4(CreateMediaRouteControllerInternal,
+               void(const std::string& route_id,
+                    mojom::MediaControllerRequest& media_controller,
+                    mojom::MediaStatusObserverPtr& observer,
+                    const CreateMediaRouteControllerCallback& callback));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockMediaRouteProvider);
@@ -113,6 +126,69 @@ class MockEventPageTracker : public extensions::EventPageTracker {
   MOCK_METHOD2(WakeEventPage,
                bool(const std::string& extension_id,
                     const base::Callback<void(bool)>& callback));
+};
+
+class MockMediaController : public mojom::MediaController {
+ public:
+  MockMediaController();
+  ~MockMediaController();
+
+  void Bind(mojom::MediaControllerRequest request);
+  mojom::MediaControllerPtr BindInterfacePtr();
+  void CloseBinding();
+
+  MOCK_METHOD0(Play, void());
+  MOCK_METHOD0(Pause, void());
+  MOCK_METHOD1(SetMute, void(bool mute));
+  MOCK_METHOD1(SetVolume, void(float volume));
+  MOCK_METHOD1(Seek, void(base::TimeDelta time));
+
+ private:
+  mojo::Binding<mojom::MediaController> binding_;
+};
+
+class MockMediaRouteController : public MediaRouteController {
+ public:
+  MockMediaRouteController(const MediaRoute::Id& route_id,
+                           mojom::MediaControllerPtr mojo_media_controller,
+                           MediaRouter* media_router);
+
+  MOCK_CONST_METHOD0(Play, void());
+  MOCK_CONST_METHOD0(Pause, void());
+  MOCK_CONST_METHOD1(Seek, void(base::TimeDelta time));
+  MOCK_CONST_METHOD1(SetMute, void(bool mute));
+  MOCK_CONST_METHOD1(SetVolume, void(float volume));
+
+ protected:
+  // The dtor is protected because MockMediaRouteController is ref-counted.
+  ~MockMediaRouteController() override;
+};
+
+class MockMediaRouteControllerObserver : public MediaRouteController::Observer {
+ public:
+  MockMediaRouteControllerObserver(
+      scoped_refptr<MediaRouteController> controller);
+  ~MockMediaRouteControllerObserver() override;
+
+  MOCK_METHOD1(OnMediaStatusUpdated, void(const MediaStatus& status));
+  MOCK_METHOD0(OnControllerInvalidated, void());
+};
+
+// Mockable class for awaiting RegisterMediaRouteProvider callbacks.
+class RegisterMediaRouteProviderHandler {
+ public:
+  RegisterMediaRouteProviderHandler();
+  ~RegisterMediaRouteProviderHandler();
+
+  // A wrapper function to deal with move only parameter |config|.
+  void Invoke(const std::string& instance_id,
+              mojom::MediaRouteProviderConfigPtr config) {
+    InvokeInternal(instance_id, config.get());
+  }
+
+  MOCK_METHOD2(InvokeInternal,
+               void(const std::string& instance_id,
+                    mojom::MediaRouteProviderConfig* config));
 };
 
 // Tests the API call flow between the MediaRouterMojoImpl and the Media Router
@@ -140,6 +216,8 @@ class MediaRouterMojoTest : public ::testing::Test {
 
   // Mojo proxy object for |mock_media_router_|
   media_router::mojom::MediaRouterPtr media_router_proxy_;
+
+  RegisterMediaRouteProviderHandler provide_handler_;
 
  private:
   content::TestBrowserThreadBundle test_thread_bundle_;

@@ -190,31 +190,35 @@ template("test") {
       }
     }
 
-    group(target_name) {
-      testonly = true
-      if (_incremental_apk_only) {
-        deps = [
-          ":${target_name}_incremental",
-        ]
-      } else {
-        deps = [
+    test_runner_script(target_name) {
+      forward_variables_from(invoker,
+                             _wrapper_script_vars + [
+                                   "data",
+                                   "data_deps",
+                                   "deps",
+                                   "public_deps",
+                                 ])
+
+      if (_use_raw_android_executable) {
+        executable_dist_dir = "$root_out_dir/$_dist_target"
+        deps += [
+          ":$_dist_target",
           ":$_test_runner_target",
         ]
-        if (_use_raw_android_executable) {
-          deps += [ ":$_dist_target" ]
+      } else {
+        apk_target = ":$_apk_target"
+        deps += [ ":$_apk_target" ]
+        if (_incremental_apk_only) {
+          deps += [ ":${target_name}_incremental" ]
         } else {
-          deps += [ ":$_apk_target" ]
+          deps += [ ":$_test_runner_target" ]
         }
       }
-    }
-
-    # TODO(GYP_GONE): Delete this after we've converted everything to GN.
-    # The _run targets exist only for compatibility w/ GYP.
-    group("${target_name}_apk_run") {
-      testonly = true
-      deps = [
-        ":${invoker.target_name}",
-      ]
+      generated_script = "$root_build_dir/$_output_name"
+      incremental_install = _incremental_apk_only
+      test_name = _output_name
+      test_suite = _output_name
+      test_type = "gtest"
     }
   } else if (is_ios) {
     import("//build/config/ios/ios_sdk.gni")
@@ -261,7 +265,7 @@ template("test") {
       deps += [
         # All shared libraries must have the sanitizer deps to properly link in
         # asan mode (this target will be empty in other cases).
-        "//build/config/sanitizers:deps",
+        "//build/config:exe_and_shlib_deps",
       ]
       if (!defined(bundle_deps)) {
         bundle_deps = []
@@ -277,29 +281,11 @@ template("test") {
       deps += [
         # All shared libraries must have the sanitizer deps to properly link in
         # asan mode (this target will be empty in other cases).
-        "//build/config/sanitizers:deps",
+        "//build/config:exe_and_shlib_deps",
 
         # Give tests the default manifest on Windows (a no-op elsewhere).
         "//build/win:default_exe_manifest",
       ]
-    }
-
-    # TODO(GYP_GONE): Delete this after we've converted everything to GN.
-    # The _run targets exist only for compatibility with GYP.
-    group("${target_name}_run") {
-      testonly = true
-      deps = [
-        ":${invoker.target_name}",
-      ]
-    }
-
-    if (defined(invoker.output_name) && target_name != invoker.output_name) {
-      group("${invoker.output_name}_run") {
-        testonly = true
-        deps = [
-          ":${invoker.target_name}",
-        ]
-      }
     }
   }
 }

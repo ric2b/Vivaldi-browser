@@ -77,6 +77,7 @@ DocumentType* DOMImplementation::createDocumentType(
 }
 
 XMLDocument* DOMImplementation::createDocument(
+    const LocalDOMWindow* window,
     const AtomicString& namespace_uri,
     const AtomicString& qualified_name,
     DocumentType* doctype,
@@ -98,8 +99,8 @@ XMLDocument* DOMImplementation::createDocument(
 
   Node* document_element = nullptr;
   if (!qualified_name.IsEmpty()) {
-    document_element =
-        doc->createElementNS(namespace_uri, qualified_name, exception_state);
+    document_element = doc->createElementNS(window, namespace_uri,
+                                            qualified_name, exception_state);
     if (exception_state.HadException())
       return nullptr;
   }
@@ -174,7 +175,7 @@ bool DOMImplementation::IsJSONMIMEType(const String& mime_type) {
   if (mime_type.StartsWith("application/json", kTextCaseASCIIInsensitive))
     return true;
   if (mime_type.StartsWith("application/", kTextCaseASCIIInsensitive)) {
-    size_t subtype = mime_type.Find("+json", 12, kTextCaseASCIIInsensitive);
+    size_t subtype = mime_type.FindIgnoringASCIICase("+json", 12);
     if (subtype != kNotFound) {
       // Just check that a parameter wasn't matched.
       size_t parameter_marker = mime_type.Find(";");
@@ -247,7 +248,7 @@ Document* DOMImplementation::createDocument(const String& type,
           init.GetFrame()->GetPage()->GetPluginData(init.GetFrame()
                                                         ->Tree()
                                                         .Top()
-                                                        ->GetSecurityContext()
+                                                        .GetSecurityContext()
                                                         ->GetSecurityOrigin());
     }
   }

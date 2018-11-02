@@ -239,7 +239,6 @@ void WebViewPrivateGetThumbnailFromServiceFunction::SendResultFromBitmap(
       ThumbnailServiceFactory::GetForProfile(profile);
 
   // Scale the  bitmap.
-  SkAutoLockPixels screen_capture_lock(screen_capture);
   gfx::Size dst_size_pixels;
   SkBitmap bitmap;
 
@@ -321,7 +320,6 @@ void WebViewPrivateAddToThumbnailServiceFunction::SendResultFromBitmap(
       ThumbnailServiceFactory::GetForProfile(profile);
 
   // Scale the  bitmap.
-  SkAutoLockPixels screen_capture_lock(screen_capture);
   gfx::Size dst_size_pixels;
   SkBitmap bitmap;
 

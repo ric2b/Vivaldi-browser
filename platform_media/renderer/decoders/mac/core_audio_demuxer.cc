@@ -83,7 +83,8 @@ void CoreAudioDemuxerStream::set_enabled(bool enabled, base::TimeDelta timestamp
 
   is_enabled_ = enabled;
   if (!is_enabled_ && !read_cb_.is_null()) {
-    DVLOG(1) << "Read from disabled stream, returning EOS";
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Read from disabled stream, returning EOS";
     base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     return;
   }
@@ -176,8 +177,9 @@ void CoreAudioDemuxer::OnEnabledAudioTracksChanged(
   if (track_ids.size() > 0) {
     enabled = true;
   }
-  DVLOG(1) << __func__ << ": " << (enabled ? "enabling" : "disabling")
-           << " audio stream";
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " : " << (enabled ? "enabling" : "disabling")
+          << " audio stream";
   audio_stream->set_enabled(enabled, currTime);
 }
 
@@ -190,8 +192,9 @@ void CoreAudioDemuxer::OnSelectedVideoTrackChanged(
   if (track_id) {
     enabled = true;
   }
-  DVLOG(1) << __func__ << ": " << (enabled ? "enabling" : "disabling")
-           << " video stream";
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " : " << (enabled ? "enabling" : "disabling")
+          << " video stream";
   video_stream->set_enabled(enabled, currTime);
 }
 
@@ -305,7 +308,8 @@ void CoreAudioDemuxer::AudioPacketsProc(
   } else {
     // We are unable to find audio length. User will be still able to play,
     // but there is impossible to seek or display audio length in html control
-    DLOG(WARNING) << "Cannot calculate audio duration";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Cannot calculate audio duration";
   }
 }
 
@@ -333,7 +337,8 @@ void CoreAudioDemuxer::AudioPropertyListenerProc(
                                        &asbd_size,
                                        &demuxer->input_format_info_);
       if (err)
-        LOG(ERROR) << "Get kAudioFileStreamProperty_DataFormat " << err;
+        LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Get kAudioFileStreamProperty_DataFormat " << err;
 
       demuxer->input_format_found_ = true;
       break;
@@ -344,7 +349,8 @@ void CoreAudioDemuxer::AudioPropertyListenerProc(
 int CoreAudioDemuxer::ReadDataSource() {
   int64_t offset = 0;
   url_protocol_->GetPosition(&offset);
-  VLOG(1) << "ReadDataSource: at offset: " << offset;
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " ReadDataSource: at offset: " << offset;
   return url_protocol_->Read(kStreamInfoBufferSize, buffer_);
 }
 

@@ -4,6 +4,9 @@
 
 #include "chrome/browser/feedback/system_logs/log_sources/chrome_internal_log_source.h"
 
+#include <memory>
+#include <string>
+
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
@@ -26,6 +29,7 @@
 #include "extensions/common/extension_set.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
 #include "chromeos/system/statistics_provider.h"
 #include "chromeos/system/version_loader.h"
@@ -50,6 +54,7 @@ constexpr char kChromeEnrollmentTag[] = "ENTERPRISE_ENROLLED";
 constexpr char kHWIDKey[] = "HWID";
 constexpr char kSettingsKey[] = "settings";
 constexpr char kLocalStateSettingsResponseKey[] = "Local State: settings";
+constexpr char kArcStatusKey[] = "CHROMEOS_ARC_STATUS";
 #else
 constexpr char kOsVersionTag[] = "OS VERSION";
 #endif
@@ -88,11 +93,11 @@ void GetEntriesAsync(SystemLogsResponse* response) {
   if (!stats->GetMachineStatistic(chromeos::system::kHardwareClassKey, &hwid))
     VLOG(1) << "Couldn't get machine statistic 'hardware_class'.";
   else
-    (*response)[kHWIDKey] = hwid;
+    response->emplace(kHWIDKey, hwid);
 
   // Get the firmware version.
-  (*response)[kChromeOsFirmwareVersion] =
-      chromeos::version_loader::GetFirmware();
+  response->emplace(kChromeOsFirmwareVersion,
+                    chromeos::version_loader::GetFirmware());
 }
 #endif
 
@@ -111,15 +116,15 @@ void ChromeInternalLogSource::Fetch(const SysLogsSourceCallback& callback) {
 
   std::unique_ptr<SystemLogsResponse> response(new SystemLogsResponse());
 
-  (*response)[kChromeVersionTag] = chrome::GetVersionString();
+  response->emplace(kChromeVersionTag, chrome::GetVersionString());
 
 #if defined(OS_CHROMEOS)
-  (*response)[kChromeEnrollmentTag] = GetEnrollmentStatusString();
+  response->emplace(kChromeEnrollmentTag, GetEnrollmentStatusString());
 #else
   // On ChromeOS, this will be pulled in from the LSB_RELEASE.
   std::string os_version = base::SysInfo::OperatingSystemName() + ": " +
                            base::SysInfo::OperatingSystemVersion();
-  (*response)[kOsVersionTag] =  os_version;
+  response->emplace(kOsVersionTag, os_version);
 #endif
 
   PopulateSyncLogs(response.get());
@@ -133,17 +138,22 @@ void ChromeInternalLogSource::Fetch(const SysLogsSourceCallback& callback) {
 #endif
 
   if (ProfileManager::GetLastUsedProfile()->IsChild())
-    (*response)["account_type"] = "child";
+    response->emplace("account_type", "child");
 
 #if defined(OS_CHROMEOS)
   PopulateLocalStateSettings(response.get());
+
+  // Store ARC enabled status.
+  response->emplace(kArcStatusKey, arc::IsArcPlayStoreEnabledForProfile(
+                                       ProfileManager::GetLastUsedProfile())
+                                       ? "enabled"
+                                       : "disabled");
 
   // Get the entries that should be retrieved on the blocking pool and invoke
   // the callback later when done.
   SystemLogsResponse* response_ptr = response.release();
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&GetEntriesAsync, response_ptr),
       base::Bind(callback, base::Owned(response_ptr)));
 #else
@@ -162,8 +172,8 @@ void ChromeInternalLogSource::PopulateSyncLogs(SystemLogsResponse* response) {
   browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
   std::unique_ptr<base::DictionaryValue> sync_logs(
-      syncer::sync_ui_util::ConstructAboutInformation(
-          service, service->signin(), chrome::GetChannel()));
+      syncer::sync_ui_util::ConstructAboutInformation(service,
+                                                      chrome::GetChannel()));
 
   // Remove identity section.
   base::ListValue* details = NULL;
@@ -188,7 +198,7 @@ void ChromeInternalLogSource::PopulateSyncLogs(SystemLogsResponse* response) {
   JSONStringValueSerializer serializer(&sync_logs_string);
   serializer.Serialize(*sync_logs.get());
 
-  (*response)[kSyncDataKey] = sync_logs_string;
+  response->emplace(kSyncDataKey, sync_logs_string);
 }
 
 void ChromeInternalLogSource::PopulateExtensionInfoLogs(
@@ -217,7 +227,7 @@ void ChromeInternalLogSource::PopulateExtensionInfoLogs(
   }
 
   if (!extensions_list.empty())
-    (*response)[kExtensionsListKey] = extensions_list;
+    response->emplace(kExtensionsListKey, extensions_list);
 }
 
 void ChromeInternalLogSource::PopulatePowerApiLogs(
@@ -234,7 +244,7 @@ void ChromeInternalLogSource::PopulatePowerApiLogs(
   }
 
   if (!info.empty())
-    (*response)[kPowerApiListKey] = info;
+    response->emplace(kPowerApiListKey, info);
 }
 
 void ChromeInternalLogSource::PopulateDataReductionProxyLogs(
@@ -243,8 +253,8 @@ void ChromeInternalLogSource::PopulateDataReductionProxyLogs(
   bool is_data_reduction_proxy_enabled =
       prefs->HasPrefPath(prefs::kDataSaverEnabled) &&
       prefs->GetBoolean(prefs::kDataSaverEnabled);
-  (*response)[kDataReductionProxyKey] = is_data_reduction_proxy_enabled ?
-      "enabled" : "disabled";
+  response->emplace(kDataReductionProxyKey,
+                    is_data_reduction_proxy_enabled ? "enabled" : "disabled");
 }
 
 #if defined(OS_CHROMEOS)
@@ -253,7 +263,8 @@ void ChromeInternalLogSource::PopulateLocalStateSettings(
   // Extract the "settings" entry in the local state and serialize back to
   // a string.
   std::unique_ptr<base::DictionaryValue> local_state =
-      g_browser_process->local_state()->GetPreferenceValuesOmitDefaults();
+      g_browser_process->local_state()->GetPreferenceValues(
+          PrefService::EXCLUDE_DEFAULTS);
   const base::DictionaryValue* local_state_settings = nullptr;
   if (!local_state->GetDictionary(kSettingsKey, &local_state_settings)) {
     VLOG(1) << "Failed to extract the settings entry from Local State.";
@@ -264,7 +275,7 @@ void ChromeInternalLogSource::PopulateLocalStateSettings(
   if (!serializer.Serialize(*local_state_settings))
     return;
 
-  (*response)[kLocalStateSettingsResponseKey] = serialized_settings;
+  response->emplace(kLocalStateSettingsResponseKey, serialized_settings);
 }
 #endif  // defined(OS_CHROMEOS)
 
@@ -273,24 +284,23 @@ void ChromeInternalLogSource::PopulateUsbKeyboardDetected(
     SystemLogsResponse* response) {
   std::string reason;
   bool result = base::win::IsKeyboardPresentOnSlate(&reason);
-  (*response)[kUsbKeyboardDetected] = result ? "Keyboard Detected:\n" :
-                                               "No Keyboard:\n";
-  (*response)[kUsbKeyboardDetected] += reason;
+  reason.insert(0, result ? "Keyboard Detected:\n" : "No Keyboard:\n");
+  response->emplace(kUsbKeyboardDetected, reason);
 }
 
 void ChromeInternalLogSource::PopulateEnrolledToDomain(
     SystemLogsResponse* response) {
-  (*response)[kIsEnrolledToDomain] = base::win::IsEnrolledToDomain()
-                                         ? "Enrolled to domain"
-                                         : "Not enrolled to domain";
+  response->emplace(kIsEnrolledToDomain, base::win::IsEnrolledToDomain()
+                                             ? "Enrolled to domain"
+                                             : "Not enrolled to domain");
 }
 
 void ChromeInternalLogSource::PopulateInstallerBrandCode(
     SystemLogsResponse* response) {
   std::string brand;
   google_brand::GetBrand(&brand);
-  (*response)[kInstallerBrandCode] =
-      brand.empty() ? "Unknown brand code" : brand;
+  response->emplace(kInstallerBrandCode,
+                    brand.empty() ? "Unknown brand code" : brand);
 }
 #endif
 

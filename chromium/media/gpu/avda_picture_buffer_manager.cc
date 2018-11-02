@@ -72,23 +72,28 @@ AVDAPictureBufferManager::AVDAPictureBufferManager(
 
 AVDAPictureBufferManager::~AVDAPictureBufferManager() {}
 
-void AVDAPictureBufferManager::InitializeForOverlay() {
-  shared_state_ = new AVDASharedState();
-  surface_texture_ = nullptr;
-}
-
-gl::ScopedJavaSurface AVDAPictureBufferManager::InitializeForSurfaceTexture() {
-  shared_state_ = new AVDASharedState();
+bool AVDAPictureBufferManager::Initialize(
+    scoped_refptr<AVDASurfaceBundle> surface_bundle) {
+  shared_state_ = nullptr;
   surface_texture_ = nullptr;
 
-  // Create a SurfaceTexture.
-  surface_texture_ =
-      CreateAttachedSurfaceTexture(state_provider_->GetGlDecoder());
-  if (!surface_texture_)
-    return gl::ScopedJavaSurface();
+  if (!surface_bundle->overlay) {
+    // Create the surface texture.
+    surface_texture_ =
+        CreateAttachedSurfaceTexture(state_provider_->GetGlDecoder());
+    if (!surface_texture_)
+      return false;
 
-  shared_state_->SetSurfaceTexture(surface_texture_);
-  return gl::ScopedJavaSurface(surface_texture_.get());
+    surface_bundle->surface_texture_surface =
+        gl::ScopedJavaSurface(surface_texture_.get());
+    surface_bundle->surface_texture = surface_texture_;
+  }
+
+  // Only do this once the surface texture is filled in, since the constructor
+  // assumes that it will be.
+  shared_state_ = new AVDASharedState(surface_bundle);
+
+  return true;
 }
 
 void AVDAPictureBufferManager::Destroy(const PictureBufferMap& buffers) {
@@ -182,8 +187,8 @@ void AVDAPictureBufferManager::AssignOnePictureBuffer(
     bool have_context) {
   // Attach a GLImage to each texture that will use the surface texture.
   scoped_refptr<gpu::gles2::GLStreamTextureImage> gl_image =
-      codec_images_[picture_buffer.id()] = new AVDACodecImage(
-          shared_state_, media_codec_, state_provider_->GetGlDecoder());
+      codec_images_[picture_buffer.id()] =
+          new AVDACodecImage(shared_state_, media_codec_);
   SetImageForPicture(picture_buffer, gl_image.get());
 }
 
@@ -269,7 +274,7 @@ void AVDAPictureBufferManager::CodecChanged(MediaCodecBridge* codec) {
   media_codec_ = codec;
   for (auto& image_kv : codec_images_)
     image_kv.second->CodecChanged(codec);
-  shared_state_->clear_release_time();
+  shared_state_->ClearReleaseTime();
 }
 
 bool AVDAPictureBufferManager::ArePicturesOverlayable() {

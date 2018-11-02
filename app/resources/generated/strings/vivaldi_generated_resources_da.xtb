@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="da">
+<translation id="1017280919048282932">&amp;Tilføj til ordbog</translation>
 <translation id="1018656279737460067">Annulleret</translation>
-<translation id="1030173864176315846">Udskrift af <ph name="PAGE_NUMBER" /> på<ph name="PRINTER_NAME" /> lykkedes</translation>
+<translation id="1026822031284433028">Indlæs billede</translation>
 <translation id="1031362278801463162">Indlæser eksempel</translation>
+<translation id="1047431265488717055">Kopier linkte&amp;kst</translation>
 <translation id="1049795001945932310">&amp;Sprogindstillinger</translation>
+<translation id="1054153489933238809">Åbn originalbillede i ny fane</translation>
 <translation id="1056898198331236512">Advarsel</translation>
 <translation id="1084824384139382525">Kopier linkadr&amp;esse</translation>
 <translation id="114140604515785785">Udvidelsens rodmappe:</translation>
@@ -15,7 +18,6 @@
 <translation id="1181037720776840403">Fjern</translation>
 <translation id="1187722533808055681">Aktivering efter dvale</translation>
 <translation id="119944043368869598">Ryd alle</translation>
-<translation id="1218323606465324064">Udskriver nu <ph name="PAGE_NUMBER" /> sider på<ph name="PRINTER_NAME" /></translation>
 <translation id="1221825588892235038">Kun det markerede</translation>
 <translation id="1244303850296295656">Udvidelsesfejl</translation>
 <translation id="1278049586634282054">Undersøg visninger:</translation>
@@ -25,6 +27,7 @@
 <translation id="1317502925920562130">Var det den startside, du forventede?</translation>
 <translation id="1368832886055348810">Venstre til højre</translation>
 <translation id="1430915738399379752">Udskriv</translation>
+<translation id="1451375123200651445">Webside, enkelt fil</translation>
 <translation id="1465176863081977902">K&amp;opiér webadressen til lyden</translation>
 <translation id="1476607407192946488">&amp;Sprogindstillinger</translation>
 <translation id="1507705801791187716">Fantastisk, ingen fejl!</translation>
@@ -32,11 +35,11 @@
 <translation id="1546280085599573572">Denne udvidelse har ændret, hvilken side der vises, når du klikker på knappen Startside.</translation>
 <translation id="1580652505892042215">Kontekst:</translation>
 <translation id="1588438908519853928">Normal</translation>
+<translation id="1588870296199743671">Åbn link med...</translation>
 <translation id="159359590073980872">Billedcache</translation>
 <translation id="1601560923496285236">Anvend</translation>
 <translation id="1603914832182249871">(privat)</translation>
 <translation id="1616206807336925449">Denne udvidelse kræver ikke nogen særlige tilladelser.</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Fil-beskrivelser</translation>
 <translation id="1635033183663317347">Installeret af din tilsynsførende.</translation>
 <translation id="1681120471812444678">Konfigurer for at tilføje printere…</translation>
@@ -50,7 +53,6 @@
 <translation id="1744108098763830590">baggrundsside</translation>
 <translation id="176587472219019965">&amp;Nyt vindue</translation>
 <translation id="1769104665586091481">Åbn link i nyt &amp;vindue</translation>
-<translation id="1789575671122666129">Pop op-vinduer</translation>
 <translation id="1815083418640426271">Indsæt som almindelig tekst</translation>
 <translation id="1828901632669367785">Udskriv ved brug af systemets dialogboks...</translation>
 <translation id="1838288018605456492">Klik her for at konfigurere</translation>
@@ -69,16 +71,14 @@
 <translation id="2076269580855484719">Skjul dette plugin</translation>
 <translation id="2087822576218954668">Udskrift: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Genindlæs &amp;ramme</translation>
-<translation id="2115291620696624944">Udskrift af <ph name="PAGE_NUMBER" /> sider på <ph name="PRINTER_NAME" /> fejlede</translation>
 <translation id="2129825002735785149">Opdater plugin</translation>
-<translation id="2147827593068025794">Synkronisering i baggrunden</translation>
+<translation id="2142328300403846845">Åbn link som</translation>
 <translation id="2148892889047469596">Cast fanen</translation>
 <translation id="2150139952286079145">Søg efter destinationer</translation>
 <translation id="215753907730220065">Afslut fuld skærm</translation>
 <translation id="2177950615300672361">Inkognitofane: <ph name="TAB_NAME" /></translation>
 <translation id="218070003709087997">Brug et tal til at angive, hvor mange kopier der skal udskrives (1 til 999).</translation>
 <translation id="2181927652428971824">Udskriv til Vivaldi Docs og andre cloud-destinationer. <ph name="BEGIN_LINK" />Log ind<ph name="END_LINK" /> for at udskrive til Google Cloud-printer.</translation>
-<translation id="2187317261103489799">Registrer (standardindstilling)</translation>
 <translation id="219008588003277019">Native Client-modul: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Skjul knap</translation>
 <translation id="2218515861914035131">Indsæt som almindelig tekst</translation>
@@ -103,13 +103,12 @@
 <translation id="2439110203301358333">Et andet program på din computer tilføjede en udvidelse, der kan ændre den måde, hvorpå Vivaldi fungerer.</translation>
 <translation id="2445081178310039857">Udvidelsens rodmappe er påkrævet.</translation>
 <translation id="2470702053775288986">Understøttede udvidelser er blevet deaktiveret</translation>
-<translation id="2482878487686419369">Underretninger</translation>
 <translation id="2498436043474441766">Tilføj printere</translation>
 <translation id="2501797496290880632">Indtast en genvej</translation>
 <translation id="2509495747794740764">Skaleringsværdien skal være et tal mellem 10 og 200.</translation>
-<translation id="2509857212037838238">Installer <ph name="PLUGIN_NAME" /></translation>
 <translation id="253557089021624350">Antal aktiviteter, der bruger udvidelsen</translation>
 <translation id="2550212893339833758">Ombyttet hukommelse</translation>
+<translation id="2553440850688409052">Skjul dette plugin</translation>
 <translation id="2580924999637585241">I alt: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chromes netbutik</translation>
 <translation id="2678063897982469759">Genaktiver</translation>
@@ -124,8 +123,10 @@
 <translation id="2850541429955027218">Tilføj tema</translation>
 <translation id="2861941300086904918">Sikkerhedsadministrator for Native Client</translation>
 <translation id="2868746137289129307">Denne udvidelse er forældet og deaktiveret af virksomhedspolitikken. Den kan aktiveres automatisk, når en nyere version er tilgængelig.</translation>
+<translation id="2889064240420137087">Åbn link med...</translation>
 <translation id="2890678560483811744">Sidereferencen er ugyldig</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> kunne ikke kommunikere med denne printer. Sørg for, at printeren er tilsluttet, og prøv igen.</translation>
+<translation id="2914303854539667666">Generér adgangskode</translation>
 <translation id="2916745397441987255">Søg efter udvidelser</translation>
 <translation id="2932883381142163287">Rapportér misbrug</translation>
 <translation id="2941112035454246133">Lav</translation>
@@ -137,17 +138,21 @@
 <translation id="3021678814754966447">&amp;Vis rammens kildetekst</translation>
 <translation id="302620147503052030">Vis knap</translation>
 <translation id="3031601332414921114">Genoptag udskrift</translation>
+<translation id="3036546437875325427">Aktivér Flash</translation>
+<translation id="3046910703532196514">Webside, komplet</translation>
+<translation id="3067198360141518313">Kør dette plugin</translation>
 <translation id="3080207940057008665">Et andet program på din computer tilføjede et tema, der kan ændre den måde, hvorpå Vivaldi fungerer.</translation>
 <translation id="3084548735795614657">Slip for at installere</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">BRUGER-håndtag</translation>
 <translation id="3129173833825111527">Venstre-margen</translation>
+<translation id="3144647712221361880">Åbn linket som</translation>
 <translation id="3149510190863420837">Chrome-apps</translation>
 <translation id="3154429428035006212">Offline i mere end en måned</translation>
 <translation id="3222066309010235055">Forhåndsgengivelse: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="32279126412636473">Genindlæs (⌘R)</translation>
 <translation id="3241680850019875542">Vælg rodmappen for udvidelsen, der skal pakkes. Opdater en udvidelse ved også at vælge den private nøglefil til genbrug.</translation>
+<translation id="3269093882174072735">Indlæs billede</translation>
 <translation id="3280237271814976245">Gem &amp;som...</translation>
 <translation id="3285322247471302225">Ny &amp;fane</translation>
 <translation id="3288047731229977326">Udvidelser, der kører i udviklertilstand, kan skade din computer. Hvis du ikke er udvikler, skal du deaktivere udvidelserne, der kører i udviklertilstand, af hensyn til sikkerheden.</translation>
@@ -166,7 +171,6 @@
 <translation id="3360297538363969800">Udskrift mislykkedes. Kontrollér din printer, og prøv igen.</translation>
 <translation id="3378572629723696641">Denne udvidelse kan være blevet beskadiget.</translation>
 <translation id="3396331542604645348">Den valgte printer er ikke tilgængelig eller ikke installeret korrekt. Tjek din printer, eller vælg en anden printer.</translation>
-<translation id="3427092606871434483">Tillad (standardindstilling)</translation>
 <translation id="3435896845095436175">Aktivér</translation>
 <translation id="3439970425423980614">Åbner PDF i Billedfremviser</translation>
 <translation id="345693547134384690">Åbn &amp;billede på ny fane</translation>
@@ -174,10 +178,10 @@
 <translation id="3468745736289470383">Del din skærm</translation>
 <translation id="3487007233252413104">anonym funktion</translation>
 <translation id="3505030558724226696">Tilbagekald adgang til enhed</translation>
-<translation id="3509527969829946096">Denne valgmulighed aktiverer understøttelse af kodning af videostreams via platformhardware i Cast Streaming.</translation>
 <translation id="3511307672085573050">Kopier linkadr&amp;esse</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vil dele printeren &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; med en gruppe du ejer: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Hvis du accepterer dette, vil alle gruppens medlemmer kunne udskrive til denne printer.</translation>
 <translation id="3587482841069643663">Alle</translation>
+<translation id="3618849550573277856">Slå "<ph name="LOOKUP_STRING" />" op</translation>
 <translation id="3627588569887975815">Åbn link i inkognitovindue</translation>
 <translation id="3640006360782160348">Annuller printer-konfiguration</translation>
 <translation id="3678156199662914018">Udvidelse: <ph name="EXTENSION_NAME" /></translation>
@@ -188,7 +192,7 @@
 <translation id="3730639321086573427">Lokale destinationer</translation>
 <translation id="3760460896538743390">Undersøg &amp;baggrundsside</translation>
 <translation id="3763401818161139108">Kør altid på <ph name="ORIGIN" /></translation>
-<translation id="3789841737615482174">Installer</translation>
+<translation id="3797900183766075808">&amp;Søg på <ph name="SEARCH_ENGINE" /> efter "<ph name="SEARCH_TERMS" />"</translation>
 <translation id="3798449238516105146">Version</translation>
 <translation id="385051799172605136">Tilbage</translation>
 <translation id="3855441664322950881">Pak udvidelse</translation>
@@ -202,12 +206,12 @@
 <translation id="3925842537050977900">Frigør fra hylde</translation>
 <translation id="3927932062596804919">Afvis</translation>
 <translation id="3936390757709632190">&amp;Åbn lyd på ny fane</translation>
-<translation id="3936999098172113189">Venter på at udskrive <ph name="PAGE_NUMBER" /> sider på<ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Tilbage</translation>
 <translation id="3948116654032448504">&amp;Søg efter billede på <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3978267865113951599">(crashede)</translation>
 <translation id="3979395879372752341">Ny udvidelse er tilføjet (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
+<translation id="4022426551683927403">&amp;Tilføj til ordbog</translation>
 <translation id="407520071244661467">Skaler</translation>
 <translation id="4087089424473531098">Oprettede udvidelsen:
 
@@ -220,9 +224,7 @@
 <translation id="4100839878934973028">Et andet program på din computer tilføjede en app, der kan ændre den måde, hvorpå Vivaldi fungerer.</translation>
 <translation id="411666854932687641">Privat hukommelse</translation>
 <translation id="4130207949184424187">Denne udvidelse har ændret, hvilken side der vises, når du søger via omnifeltet.</translation>
-<translation id="4130750466177569591">Jeg accepterer</translation>
 <translation id="4131410914670010031">Sort/hvid</translation>
-<translation id="4165986682804962316">Indstillinger for website</translation>
 <translation id="4176463684765177261">Deaktiveret</translation>
 <translation id="4200983522494130825">Ny &amp;fane</translation>
 <translation id="420665587194630159">(Denne udvidelse er under administration og kan ikke fjernes eller deaktiveres.)</translation>
@@ -230,11 +232,11 @@
 <translation id="4240511609794012987">Delt hukommelse</translation>
 <translation id="4256316378292851214">&amp;Gem video som ...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K bruges)</translation>
-<translation id="4312866146174492540">Bloker (standardindstilling)</translation>
 <translation id="431291515148403474">Ved at tilføje dine printere i Google Cloud-printer kan du udskrive
           hvor som helst. Del dine printere med hvem som helst, og
           udskriv på dem via Vivaldi, din telefon, tablet, pc eller en anden
           enhed med netforbindelse.</translation>
+<translation id="4345587454538109430">Konfigurer...</translation>
 <translation id="4348766275249686434">Indsaml fejl</translation>
 <translation id="4363771538994847871">Der blev ikke fundet nogen Cast-destinationer. Har du brug for hjælp?</translation>
 <translation id="4384652540891215547">Aktivér udvidelsen</translation>
@@ -257,21 +259,21 @@
 <translation id="4628314759732363424">Skift...</translation>
 <translation id="4643612240819915418">&amp;Åbn video på ny fane</translation>
 <translation id="4677772697204437347">GPU-hukommelse</translation>
+<translation id="4681930562518940301">Åbn originalbillede på ny fane</translation>
 <translation id="4688541352655220763">Du kan bruge denne funktion til at vise indhold fra Vivaldi på dit fjernsyn eller andre enheder.</translation>
 <translation id="4711638718396952945">Gendan indstillinger</translation>
 <translation id="4726710629007580002">Der opstod advarsler under forsøget på at installere udvidelsen:</translation>
 <translation id="4742746985488890273">Fastgør til hylde</translation>
+<translation id="479536056609751218">Webside, kun HTML</translation>
 <translation id="4816492930507672669">Tilpas til siden</translation>
 <translation id="4839303808932127586">&amp;Gem video som ...</translation>
 <translation id="4850258771229959924">Vis i Udvikler-værktøjer</translation>
-<translation id="4851858059374029925">Vil du installere <ph name="PLUGIN_NAME" />? Du bør kun installere plugins, du har tillid til.</translation>
 <translation id="488785315393301722">Vis detaljer</translation>
 <translation id="4911714727432509308">Ingen udvidelser har tildelte tastaturgenveje.</translation>
 <translation id="4912643508233590958">Aktivering efter dvale</translation>
 <translation id="4918086044614829423">Accepter</translation>
 <translation id="4927301649992043040">Pak udvidelse</translation>
 <translation id="4927753642311223124">Intet at se her, gå videre.</translation>
-<translation id="4957028442764970964">Konfigurerer din printer.</translation>
 <translation id="4988526792673242964">Sider</translation>
 <translation id="49896407730300355">Roter m&amp;od uret</translation>
 <translation id="4989966318180235467">Undersøg &amp;baggrundsside</translation>
@@ -291,6 +293,7 @@
 <translation id="5233736638227740678">&amp;Indsæt</translation>
 <translation id="5265562206369321422">Offline i mere end en uge</translation>
 <translation id="5269977353971873915">Udskrift mislykkedes</translation>
+<translation id="5271549068863921519">Gem adgangskode</translation>
 <translation id="52912272896845572">Den private nøglefil er ugyldig.</translation>
 <translation id="5301954838959518834">OK, det er forstået</translation>
 <translation id="5311260548612583999">Privat nøglefil (valgfri):</translation>
@@ -326,7 +329,6 @@
 <translation id="5746169159649715125">Gem som PDF</translation>
 <translation id="5759728514498647443">De dokumenter, du sender til udskrift via <ph name="APP_NAME" />, kan læses af <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">&amp;Gem lyd som...</translation>
-<translation id="5778550464785688721">Fuld kontrol over MIDI</translation>
 <translation id="5780973441651030252">Procesprioritet</translation>
 <translation id="5804241973901381774">Tilladelser</translation>
 <translation id="5828633471261496623">Udskriver...</translation>
@@ -336,13 +338,13 @@
 <translation id="5849869942539715694">Pak udvidelse...</translation>
 <translation id="5910363049092958439">&amp;Gem billede som...</translation>
 <translation id="59174027418879706">Aktiveret</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 i brug}one{# i brug}other{# i brug}}</translation>
 <translation id="5956585768868398362">Var det den søgeside, du havde forventet?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maks. <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Den styrer også, hvilken side der vises, når du klikker på knappen Startside eller søger via omnifeltet.</translation>
+<translation id="5979421442488174909">&amp;Oversæt til <ph name="LANGUAGE" /></translation>
 <translation id="6025215716629925253">Stack Trace</translation>
 <translation id="6040143037577758943">Luk</translation>
-<translation id="6051028581720248124">Ved udskrivning til FedEx Office accepterer du deres <ph name="START_LINK" />servicevilkår<ph name="END_LINK" />.</translation>
+<translation id="6042308850641462728">Mere</translation>
 <translation id="6082651258230788217">Vis i værktøjslinje</translation>
 <translation id="6086814797483779854">Kør ved klik</translation>
 <translation id="6086846494333236931">Installeret af din administrator</translation>
@@ -362,10 +364,12 @@
 <translation id="6248988683584659830">Søg i indstillinger</translation>
 <translation id="6251870443722440887">GDI-håndtag</translation>
 <translation id="6264365405983206840">Vælg &amp;alle</translation>
+<translation id="6268252012308737255">Åbn med <ph name="APP" /></translation>
 <translation id="6272643420381259437">Der opstod en fejl (<ph name="ERROR" />) under download af pluginnet</translation>
 <translation id="6273677812470008672">Kvalitet</translation>
 <translation id="6295855836753816081">Gemmer...</translation>
 <translation id="6308937455967653460">Gem lin&amp;k som...</translation>
+<translation id="6314335155547195432">Generér adgangskode</translation>
 <translation id="6326855256003666642">Antal aktiviteter, der bruger udvidelsen</translation>
 <translation id="6348109281845364640">Konfiguration af printer fejlede</translation>
 <translation id="6370021412472292592">Kunne ikke indlæse manifest.</translation>
@@ -395,9 +399,10 @@
 <translation id="6807889908376551050">Vis alle...</translation>
 <translation id="6812841287760418429">Behold ændringer</translation>
 <translation id="682123305478866682">Cast skrivebordet</translation>
+<translation id="6824564591481349393">Kopier &amp;email-adresse</translation>
 <translation id="6841186874966388268">Fejl</translation>
-<translation id="6863910145616405334">Der blev ikke fundet et plugin</translation>
 <translation id="6886871292305414135">Åbn link i ny &amp;fane</translation>
+<translation id="6892812721183419409">Åbn link som <ph name="USER" /></translation>
 <translation id="6900284862687837908">Baggrundsapp: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Tilbagekald filadgang</translation>
 <translation id="6916590542764765824">Håndter udvidelser</translation>
@@ -412,8 +417,8 @@
 <translation id="7005848115657603926">Ugyldigt sideinterval, brug <ph name="EXAMPLE_PAGE_RANGE" /></translation>
 <translation id="7006634003215061422">Bund-margen</translation>
 <translation id="7013485839273047434">Hent flere udvidelser</translation>
+<translation id="7030031465713069059">Gem adgangskode</translation>
 <translation id="708060913198414444">K&amp;opiér webadressen til lyden</translation>
-<translation id="7105578512429498960">Installer <ph name="PLUGIN_NAME" /> for at se dette indhold</translation>
 <translation id="7144878232160441200">Prøv igen</translation>
 <translation id="7175353351958621980">Indlæst fra:</translation>
 <translation id="7186088072322679094">Behold i værktøjslinje</translation>
@@ -433,6 +438,7 @@
 <translation id="7427348830195639090">Baggrundsside: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7438940380767210568">Konfigurer printer...</translation>
 <translation id="7453008956351770337">Ved at vælge denne printer giver du følgende udvidelser adgang til din printer:</translation>
+<translation id="7473891865547856676">Nej tak</translation>
 <translation id="749028671485790643">Person <ph name="VALUE" /></translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7551643184018910560">Fastgør til hylde</translation>
@@ -451,9 +457,11 @@
 <translation id="7710568461918838723">&amp;Cast...</translation>
 <translation id="7760004034676677601">Var det den opstartsside, du havde forventet?</translation>
 <translation id="7771452384635174008">Layout</translation>
+<translation id="7782102568078991263">Ikke flere forslag fra Google</translation>
 <translation id="7786889348652477777">&amp;Genindlæs app</translation>
 <translation id="7791543448312431591">Tilføj</translation>
 <translation id="7800518121066352902">Roter m&amp;od uret</translation>
+<translation id="780301667611848630">Nej tak</translation>
 <translation id="7814458197256864873">&amp;Kopier</translation>
 <translation id="7818135753970109980">Nyt tema er tilføjet (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">K&amp;opiér webadressen til videoen</translation>
@@ -482,7 +490,6 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8004582292198964060">Browser</translation>
 <translation id="8023801379949507775">Opdater udvidelser nu</translation>
 <translation id="8032244173881942855">Fanen kunne ikke castes.</translation>
-<translation id="8037357227543935929">Spørg (standardindstilling)</translation>
 <translation id="8069615408251337349">Google Cloud-printer</translation>
 <translation id="8071432093239591881">Udskriv i billedformat</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
@@ -496,17 +503,18 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8338952601723052325">Udviklerens website</translation>
 <translation id="8351419472474436977">En udvidelse har taget kontrol over dine proxyindstillinger, hvilket betyder, at den kan ændre, ødelægge eller aflytte alt, hvad du foretager dig på nettet. Hvis du ikke er sikker på, hvorfor denne ændring er sket, er den sandsynligvis uønsket.</translation>
 <translation id="8357224663288891423">Tastaturgenveje til udvidelser og apps</translation>
+<translation id="8382913212082956454">Kopier &amp;email-adresse</translation>
 <translation id="839736845446313156">Registrer</translation>
 <translation id="8434480141477525001">NaCl-fejlretningsport</translation>
 <translation id="8437331208797669910">Side-adgang</translation>
 <translation id="8449008133205184768">Indsæt og match stil</translation>
 <translation id="8463955938112983119"><ph name="PLUGIN_NAME" /> er deaktiveret.</translation>
 <translation id="8465444703385715657"><ph name="PLUGIN_NAME" /> kræver din tilladelse for at køre</translation>
+<translation id="8496717697661868878">Kør dette plugin</translation>
 <translation id="8512476990829870887">Afslut proces</translation>
 <translation id="8523493869875972733">Behold ændringer</translation>
 <translation id="8523849605371521713">Tilføjet af politik</translation>
 <translation id="8546306075665861288">Billedcache</translation>
-<translation id="855705891482654011">Indlæs eksperimentelle udvidelser</translation>
 <translation id="8569682776816196752">Der blev ikke fundet nogen destinationer</translation>
 <translation id="8584280235376696778">&amp;Åbn video på ny fane</translation>
 <translation id="8605428685123651449">SQLite-hukommelse</translation>
@@ -521,7 +529,6 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8719653885894320876">Download af <ph name="PLUGIN_NAME" /> mislykkedes</translation>
 <translation id="873545264931343897">Når <ph name="PLUGIN_NAME" /> er opdateret, skal du aktivere det ved at genindlæse siden</translation>
 <translation id="8757090071857742562">Skrivebordet kunne ikke castes. Kontrollér, om du har bekræftet meddelelsen om at starte delingen af din skærm.</translation>
-<translation id="8763204422633679667">Når <ph name="PLUGIN_NAME" /> er installeret, skal du aktivere det ved at genindlæse siden</translation>
 <translation id="8770406935328356739">Udvidelsens rodmappe</translation>
 <translation id="8774934320277480003">Top-margen</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vil dele printeren, &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;, med dig.</translation>
@@ -530,11 +537,13 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8800004011501252845">Viser destinationer for</translation>
 <translation id="8808478386290700967">Webshop</translation>
 <translation id="8813811964357448561">papirark</translation>
+<translation id="8823514049557262177">Kopiér linkte&amp;kst</translation>
 <translation id="8845001906332463065">Få hjælp</translation>
 <translation id="8859174528519900719">Underramme: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899285681604219177">Ikke understøttede udvidelser deaktiveret</translation>
 <translation id="8899851313684471736">Åbn link i nyt &amp;vindue</translation>
 <translation id="8910146161325739742">Del din skærm</translation>
+<translation id="8915370057835397490">Indlæser forslag</translation>
 <translation id="8916476537757519021">Underramme for inkognitotilstand: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8926518602592448999">Deaktiver udvidelser, der kører i udviklertilstand</translation>
 <translation id="8938356204940892126">Jeg gi'r op</translation>
@@ -546,7 +555,7 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="9027459031423301635">Åbn link i ny &amp;fane</translation>
 <translation id="9056810968620647706">Der blev ikke fundet resultater.</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> er blokeret af en virksomhedspolitik</translation>
-<translation id="9145718805518496796">Pak udvidelser...</translation>
+<translation id="9137916601698928395">Åbn linket som <ph name="USER" /></translation>
 <translation id="9153341767479566106">Andre udvidelser, der fejlede under indlæsning:</translation>
 <translation id="9170848237812810038">&amp;Fortryd</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" er tilføjet</translation>

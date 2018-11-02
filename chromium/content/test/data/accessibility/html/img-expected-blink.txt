@@ -1,0 +1,5 @@
+rootWebArea
+++genericContainer
+++++image name='pipe'
+++++image name=''
+++++image name='  '

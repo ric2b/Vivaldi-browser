@@ -115,7 +115,7 @@ class CORE_EXPORT AtomicHTMLToken {
       case HTMLToken::kEndTag: {
         self_closing_ = token.SelfClosing();
         if (StringImpl* tag_name =
-                lookupHTMLTag(token.GetName().Data(), token.GetName().size()))
+                lookupHTMLTag(token.GetName().data(), token.GetName().size()))
           name_ = AtomicString(tag_name);
         else
           name_ = AtomicString(token.GetName());
@@ -220,7 +220,7 @@ inline void AtomicHTMLToken::InitializeAttributes(
   if (!size)
     return;
 
-  attributes_.Clear();
+  attributes_.clear();
   attributes_.ReserveInitialCapacity(size);
   for (const auto& attribute : attributes) {
     if (attribute.NameAsVector().IsEmpty())

@@ -36,12 +36,16 @@ target(link_target_type, "base") {
   # depend on "media" target directly.
   visibility = [
     "//media",
+    "//media/formats",
 
     # TODO(xhwang): Clean up the dependency graph within "media" target.
     "//media/audio",
     "//media/ffmpeg",
   ]
   sources = [
+    "android_overlay_config.cc",
+    "android_overlay_config.h",
+    "android_overlay_mojo_factory.h",
     "audio_block_fifo.cc",
     "audio_block_fifo.h",
     "audio_buffer.cc",
@@ -194,6 +198,7 @@ target(link_target_type, "base") {
     "null_video_sink.h",
     "output_device_info.cc",
     "output_device_info.h",
+    "overlay_info.h",
     "pipeline.h",
     "pipeline_impl.cc",
     "pipeline_impl.h",
@@ -210,6 +215,8 @@ target(link_target_type, "base") {
     "renderer_client.h",
     "renderer_factory.cc",
     "renderer_factory.h",
+    "renderer_factory_selector.cc",
+    "renderer_factory_selector.h",
     "sample_format.cc",
     "sample_format.h",
     "seekable_buffer.cc",
@@ -264,6 +271,8 @@ target(link_target_type, "base") {
     "video_util.h",
     "wall_clock_time_source.cc",
     "wall_clock_time_source.h",
+    "watch_time_keys.cc",
+    "watch_time_keys.h",
   ]
 
   allow_circular_includes_from = []
@@ -454,6 +463,7 @@ source_set("unit_tests") {
     "null_video_sink_unittest.cc",
     "pipeline_impl_unittest.cc",
     "ranges_unittest.cc",
+    "renderer_factory_selector_unittest.cc",
     "seekable_buffer_unittest.cc",
     "serial_runner_unittest.cc",
     "silent_sink_suspender_unittest.cc",
@@ -464,6 +474,7 @@ source_set("unit_tests") {
     "time_delta_interpolator_unittest.cc",
     "vector_math_unittest.cc",
     "video_codecs_unittest.cc",
+    "video_color_space_unittest.cc",
     "video_decoder_config_unittest.cc",
     "video_frame_pool_unittest.cc",
     "video_frame_unittest.cc",

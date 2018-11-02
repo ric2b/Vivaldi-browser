@@ -12,10 +12,12 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/system_tray_client.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/login/login_state.h"
 #include "chromeos/network/client_cert_util.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_event_log.h"
@@ -62,7 +64,7 @@ class EnrollmentDialogView : public views::DialogDelegateView {
   void WindowClosing() override;
 
   // views::View overrides
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
 
  private:
   EnrollmentDialogView(const std::string& network_name,
@@ -92,6 +94,7 @@ EnrollmentDialogView::EnrollmentDialogView(const std::string& network_name,
       target_uri_(target_uri),
       connect_(connect),
       added_cert_(false) {
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::ENROLLMENT);
 }
 
 EnrollmentDialogView::~EnrollmentDialogView() {
@@ -147,7 +150,7 @@ void EnrollmentDialogView::WindowClosing() {
   chrome::Navigate(&params);
 }
 
-gfx::Size EnrollmentDialogView::GetPreferredSize() const {
+gfx::Size EnrollmentDialogView::CalculatePreferredSize() const {
   return gfx::Size(kDefaultWidth, kDefaultHeight);
 }
 
@@ -251,6 +254,37 @@ void EnrollmentComplete(const std::string& network_id) {
   NET_LOG_USER("Enrollment Complete", network_id);
 }
 
+// Decides if the enrollment dialog is allowed in the current login state.
+bool EnrollmentDialogAllowed(Profile* profile) {
+  // Enrollment dialog is currently not supported on the sign-in profile.
+  // This also applies to lock screen,
+  if (ProfileHelper::IsSigninProfile(profile))
+    return false;
+
+  chromeos::LoginState::LoggedInUserType user_type =
+      LoginState::Get()->GetLoggedInUserType();
+  switch (user_type) {
+    case LoginState::LOGGED_IN_USER_NONE:
+      return false;
+    case LoginState::LOGGED_IN_USER_REGULAR:
+      return true;
+    case LoginState::LOGGED_IN_USER_OWNER:
+      return true;
+    case LoginState::LOGGED_IN_USER_GUEST:
+      return true;
+    case LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT:
+      return false;
+    case LoginState::LOGGED_IN_USER_SUPERVISED:
+      return true;
+    case LoginState::LOGGED_IN_USER_KIOSK_APP:
+      return false;
+    case LoginState::LOGGED_IN_USER_ARC_KIOSK_APP:
+      return false;
+  }
+  NOTREACHED();
+  return false;
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -270,6 +304,8 @@ bool CreateEnrollmentDialog(const std::string& network_id,
   Browser* browser = chrome::FindBrowserWithWindow(owning_window);
   Profile* profile =
       browser ? browser->profile() : ProfileManager::GetPrimaryUserProfile();
+  if (!EnrollmentDialogAllowed(profile))
+    return false;
   std::string username_hash = ProfileHelper::GetUserIdHashFromProfile(profile);
 
   onc::ONCSource onc_source = onc::ONC_SOURCE_NONE;
@@ -278,14 +314,11 @@ bool CreateEnrollmentDialog(const std::string& network_id,
           ->managed_network_configuration_handler()
           ->FindPolicyByGUID(username_hash, network_id, &onc_source);
 
-  // We skip certificate patterns for device policy ONC so that an unmanaged
-  // user can't get to the place where a cert is presented for them
-  // involuntarily.
-  if (!policy || onc_source == onc::ONC_SOURCE_DEVICE_POLICY)
+  if (!policy)
     return false;
 
   client_cert::ClientCertConfig cert_config;
-  OncToClientCertConfig(*policy, &cert_config);
+  OncToClientCertConfig(onc_source, *policy, &cert_config);
 
   if (cert_config.client_cert_type != onc::client_cert::kPattern)
     return false;

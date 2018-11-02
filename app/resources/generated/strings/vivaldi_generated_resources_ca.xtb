@@ -20,12 +20,10 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1603914832182249871">(Incògnit)</translation>
 <translation id="1616206807336925449">Aquesta extensió no requereix cap permís especial.</translation>
-<translation id="1620510694547887537">Càmera</translation>
 <translation id="1635033183663317347">Extensió instal·lada pel tutor.</translation>
 <translation id="1708338024780164500">(Inactiva)</translation>
 <translation id="1723824996674794290">&amp;Finestra nova</translation>
 <translation id="1729533290416704613">També controla la pàgina que es mostra quan feu una cerca des de l'omnibox.</translation>
-<translation id="1789575671122666129">Finestres emergents</translation>
 <translation id="1850508293116537636">Gira en el sentit de les &amp;agulles del rellotge</translation>
 <translation id="1859234291848436338">Direcció de l'escriptura</translation>
 <translation id="1901303067676059328">Selecciona-ho &amp;tot</translation>
@@ -34,10 +32,8 @@
 <translation id="2076269580855484719">Amaga aquest connector</translation>
 <translation id="2087822576218954668">Impressió: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">Actualitza el connector</translation>
-<translation id="2147827593068025794">Sincronització en segon pla</translation>
 <translation id="215753907730220065">Surt de la pantalla completa</translation>
 <translation id="2177950615300672361">Pestanya d'incògnit: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">Detecta (opció predeterminada)</translation>
 <translation id="219008588003277019">Mòdul de client nadiu: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Amaga el botó</translation>
 <translation id="2218515861914035131">Enganxa com a text sense format</translation>
@@ -53,9 +49,7 @@
 <translation id="2439110203301358333">Un altre programa de l'ordinador ha afegit una extensió que pot canviar el funcionament de Vivaldi.</translation>
 <translation id="2445081178310039857">El directori arrel de l'extensió és obligatori.</translation>
 <translation id="2470702053775288986">Extensions no compatibles desactivades</translation>
-<translation id="2482878487686419369">Notificacions</translation>
 <translation id="2501797496290880632">Escriviu una drecera</translation>
-<translation id="2509857212037838238">Instal·lació de: <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">Memòria intercanviada</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Torna a activar</translation>
@@ -77,7 +71,6 @@
 <translation id="3124111068741548686">Controls d'USUARI</translation>
 <translation id="3149510190863420837">Aplicacions de Chrome</translation>
 <translation id="3222066309010235055">Renderitzador previ: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Micròfon</translation>
 <translation id="3241680850019875542">Seleccioneu el directori arrel de l'extensió que voleu empaquetar. Per actualitzar una extensió, cal que seleccioneu també el fitxer de clau privada que s'utilitzarà.</translation>
 <translation id="3280237271814976245">Desa &amp;com a...</translation>
 <translation id="3288047731229977326">Les extensions que funcionen amb el mode desenvolupador poden malmetre el vostre ordinador. Si no sou desenvolupador, hauríeu de desactivar aquestes extensions per continuar protegit.</translation>
@@ -86,7 +79,6 @@
 <translation id="3347086966102161372">C&amp;opia l'adreça de la imatge</translation>
 <translation id="335985608243443814">Examina...</translation>
 <translation id="3378572629723696641">És possible que aquesta extensió estigui malmesa.</translation>
-<translation id="3427092606871434483">Permet (opció predeterminada)</translation>
 <translation id="3435896845095436175">Activa</translation>
 <translation id="345693547134384690">Obre la &amp;imatge en una pestanya nova</translation>
 <translation id="3467267818798281173">Demana suggeriments a Google</translation>
@@ -95,7 +87,6 @@
 <translation id="3627588569887975815">Obre l'enllaç en una finestra d'inco&amp;gnito</translation>
 <translation id="3678156199662914018">Extensió: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">S'està carregant...</translation>
-<translation id="3789841737615482174">Instal·la</translation>
 <translation id="3798449238516105146">Versió</translation>
 <translation id="3866249974567520381">Descripció</translation>
 <translation id="3905761538810670789">Repara l'aplicació</translation>
@@ -115,13 +106,11 @@
 <translation id="4096508467498758490">Desactivació de les extensions del mode desenvolupador</translation>
 <translation id="4100839878934973028">Un altre programa de l'ordinador ha afegit una aplicació que pot canviar el funcionament de Vivaldi.</translation>
 <translation id="4130207949184424187">Aquesta extensió ha canviat la pàgina que es mostra quan feu una cerca des de l'omnibox.</translation>
-<translation id="4165986682804962316">Configuració del lloc</translation>
 <translation id="4176463684765177261">Desactivat</translation>
 <translation id="4200983522494130825">Pes&amp;tanya nova</translation>
 <translation id="420665587194630159">(Aquesta extensió s'està gestionant i no es pot eliminar ni desactivar.)</translation>
 <translation id="4240511609794012987">Memòria compartida</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K actius)</translation>
-<translation id="4312866146174492540">Bloqueja (opció predeterminada)</translation>
 <translation id="4348766275249686434">Recopila errors</translation>
 <translation id="4384652540891215547">Activa l'extensió</translation>
 <translation id="4394049700291259645">Desactiva</translation>
@@ -136,7 +125,6 @@
 <translation id="4711638718396952945">Restaura la configuració</translation>
 <translation id="4839303808932127586">De&amp;sa el vídeo com a...</translation>
 <translation id="4850258771229959924">Veure a les Eines de Desenvolupador</translation>
-<translation id="4851858059374029925">Vols instal·lar <ph name="PLUGIN_NAME" />? Instal·la només connectors de confiança.</translation>
 <translation id="488785315393301722">Mostra els detalls</translation>
 <translation id="4911714727432509308">No hi ha cap extensió que tingui tecles de drecera assignades.</translation>
 <translation id="4927301649992043040">Empaqueta l'extensió</translation>
@@ -172,12 +160,10 @@
 <translation id="5715711091495208045">Agent de connectors: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">No es pot mostrar el codi per aquest error.</translation>
 <translation id="5764483294734785780">De&amp;sa l'àudio com a...</translation>
-<translation id="5778550464785688721">Control total dels dispositius MIDI</translation>
 <translation id="5780973441651030252">Prioritat del procés</translation>
 <translation id="5804241973901381774">Permisos</translation>
 <translation id="583281660410589416">Desconegut</translation>
 <translation id="59174027418879706">Activada</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 en ús}other{# en ús}}</translation>
 <translation id="5956585768868398362">Aquesta pàgina de cerca és la que esperàveu?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> màxim)</translation>
 <translation id="5965661248935608907">També controla la pàgina que es mostra quan feu clic al botó d'inici o quan feu una cerca des de l'omnibox.</translation>
@@ -209,7 +195,6 @@
 <translation id="6787839852456839824">Tecles de drecera</translation>
 <translation id="6798954102094737107">Connector: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Mantén els canvis</translation>
-<translation id="6863910145616405334">El connector no s'ha trobat</translation>
 <translation id="6886871292305414135">Obre l'enllaç en una pes&amp;tanya nova</translation>
 <translation id="6900284862687837908">Aplicació en segon pla: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Revoca l'accés al fitxer</translation>
@@ -217,7 +202,6 @@
 <translation id="6985276906761169321">ID:</translation>
 <translation id="7013485839273047434">Baixa més extensions</translation>
 <translation id="708060913198414444">C&amp;opia l'adreça de l'àudio</translation>
-<translation id="7105578512429498960">Instal·la <ph name="PLUGIN_NAME" /> per poder veure aquest contingut</translation>
 <translation id="7144878232160441200">Torna-ho a provar</translation>
 <translation id="7175353351958621980">Carregada des de:</translation>
 <translation id="7206693748120342859">S'està baixant <ph name="PLUGIN_NAME" />...</translation>
@@ -252,7 +236,6 @@ Fitxer de clau: <ph name="KEY_FILE" />
 
 Deseu el fitxer de clau en una ubicació segura. El necessitareu per crear versions noves de l'extensió.</translation>
 <translation id="8004582292198964060">Navegador</translation>
-<translation id="8037357227543935929">Pregunta (opció predeterminada)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />.000</translation>
 <translation id="8188120771410500975">&amp;Revisa l'ortografia dels camps de text</translation>
 <translation id="8261378640211443080">Aquesta extensió no apareix a <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> i és possible que s'hagi afegit sense que ho sapigueu.</translation>
@@ -270,7 +253,6 @@ Deseu el fitxer de clau en una ubicació segura. El necessitareu per crear versi
 <translation id="8664389313780386848">&amp;Visualitza l'origen de la pàgina</translation>
 <translation id="8719653885894320876">No s'ha pogut baixar <ph name="PLUGIN_NAME" /></translation>
 <translation id="873545264931343897">Quan el connector <ph name="PLUGIN_NAME" /> s'acabi d'actualitzar, torna a carregar la pàgina per activar-lo</translation>
-<translation id="8763204422633679667">Quan el connector <ph name="PLUGIN_NAME" /> s'acabi d'instal·lar, torna a carregar la pàgina per activar-lo</translation>
 <translation id="8798099450830957504">Predeterminat</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8859174528519900719">Submarc: <ph name="SUBFRAME_SITE" /></translation>

@@ -31,8 +31,8 @@ USBConfiguration* USBConfiguration::Create(const USBDevice* device,
 USBConfiguration::USBConfiguration(const USBDevice* device,
                                    size_t configuration_index)
     : device_(device), configuration_index_(configuration_index) {
-  ASSERT(device_);
-  ASSERT(configuration_index_ < device_->Info().configurations.size());
+  DCHECK(device_);
+  DCHECK_LT(configuration_index_, device_->Info().configurations.size());
 }
 
 const USBDevice* USBConfiguration::Device() const {
@@ -43,7 +43,8 @@ size_t USBConfiguration::Index() const {
   return configuration_index_;
 }
 
-const device::usb::blink::ConfigurationInfo& USBConfiguration::Info() const {
+const device::mojom::blink::UsbConfigurationInfo& USBConfiguration::Info()
+    const {
   return *device_->Info().configurations[configuration_index_];
 }
 

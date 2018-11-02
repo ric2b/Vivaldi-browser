@@ -22,7 +22,7 @@ cr.define('print_preview', function() {
      * @private
      */
     this.landscapeTicketItem_ = landscapeTicketItem;
-  };
+  }
 
   LayoutSettings.prototype = {
     __proto__: print_preview.SettingsSection.prototype,
@@ -66,11 +66,13 @@ cr.define('print_preview', function() {
     },
 
     /**
-     * @return {HTMLSelectElement} Select element containing the layout options.
+     * @return {!HTMLSelectElement} Select element containing the layout
+     *     options.
      * @private
      */
     get select_() {
-      return this.getChildElement('.layout-settings-select');
+      return /** @type {!HTMLSelectElement} */(
+          this.getChildElement('.layout-settings-select'));
     },
 
     /**

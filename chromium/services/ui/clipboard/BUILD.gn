@@ -19,30 +19,22 @@ source_set("lib") {
     "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//services/service_manager/public/cpp",
-    "//services/tracing/public/cpp",
     "//services/ui/public/interfaces",
   ]
 }
 
-group("tests") {
+source_set("tests") {
   testonly = true
-  deps = [
-    ":mus_clipboard_unittests",
-  ]
-}
 
-service_test("mus_clipboard_unittests") {
   sources = [
     "clipboard_unittest.cc",
   ]
 
-  catalog = ":mus_clipboard_unittests_catalog"
-
   deps = [
     "//base",
     "//mojo/common",
+    "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp:service_test_support",
-    "//services/service_manager/public/cpp:sources",
     "//services/ui/public/interfaces",
   ]
 
@@ -52,12 +44,13 @@ service_test("mus_clipboard_unittests") {
   ]
 }
 
-service_manifest("test_manifest") {
-  name = "mus_clipboard_unittests"
+service_manifest("unittest_manifest") {
+  name = "clipboard_unittests"
   source = "test_manifest.json"
 }
 
-catalog("mus_clipboard_unittests_catalog") {
-  embedded_services = [ ":test_manifest" ]
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittest_manifest" ]
   standalone_services = [ "//services/ui:manifest" ]
 }

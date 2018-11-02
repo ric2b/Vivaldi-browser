@@ -245,7 +245,7 @@ std::unique_ptr<CrossThreadResourceResponseData> ResourceResponse::CopyData()
   data->was_fallback_required_by_service_worker_ =
       was_fallback_required_by_service_worker_;
   data->service_worker_response_type_ = service_worker_response_type_;
-  data->url_list_via_service_worker_.Resize(
+  data->url_list_via_service_worker_.resize(
       url_list_via_service_worker_.size());
   std::transform(url_list_via_service_worker_.begin(),
                  url_list_via_service_worker_.end(),
@@ -513,7 +513,7 @@ double ResourceResponse::LastModified() const {
 bool ResourceResponse::IsAttachment() const {
   static const char kAttachmentString[] = "attachment";
   String value = http_header_fields_.Get(HTTPNames::Content_Disposition);
-  size_t loc = value.Find(';');
+  size_t loc = value.find(';');
   if (loc != kNotFound)
     value = value.Left(loc);
   value = value.StripWhiteSpace();
@@ -577,12 +577,12 @@ void ResourceResponse::SetEncodedDataLength(long long value) {
   encoded_data_length_ = value;
 }
 
-void ResourceResponse::AddToEncodedBodyLength(long long value) {
-  encoded_body_length_ += value;
+void ResourceResponse::SetEncodedBodyLength(long long value) {
+  encoded_body_length_ = value;
 }
 
-void ResourceResponse::AddToDecodedBodyLength(long long value) {
-  decoded_body_length_ += value;
+void ResourceResponse::SetDecodedBodyLength(long long value) {
+  decoded_body_length_ = value;
 }
 
 void ResourceResponse::SetDownloadedFilePath(

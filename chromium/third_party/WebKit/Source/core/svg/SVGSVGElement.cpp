@@ -332,8 +332,8 @@ bool SVGSVGElement::CheckIntersectionOrEnclosure(
   if (!IsIntersectionOrEnclosureTarget(layout_object))
     return false;
 
-  AffineTransform ctm = ToSVGGraphicsElement(element).ComputeCTM(
-      kAncestorScope, kDisallowStyleUpdate, this);
+  AffineTransform ctm =
+      ToSVGGraphicsElement(element).ComputeCTM(kAncestorScope, this);
   FloatRect mapped_repaint_rect =
       ctm.MapRect(layout_object->VisualRectInLocalSVGCoordinates());
 
@@ -536,8 +536,8 @@ Node::InsertionNotificationRequest SVGSVGElement::InsertedInto(
       // the load event, but if we miss that train (deferred programmatic
       // element insertion for example) we need to initialize the time container
       // here.
-      if (!GetDocument().Parsing() && !GetDocument().ProcessingLoadEvent() &&
-          GetDocument().LoadEventFinished() && !TimeContainer()->IsStarted())
+      if (!GetDocument().Parsing() && GetDocument().LoadEventFinished() &&
+          !TimeContainer()->IsStarted())
         TimeContainer()->Start();
     }
   }

@@ -309,7 +309,7 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed,
 static void CopyLevelDBToProfile(Shell* shell,
                                  scoped_refptr<IndexedDBContextImpl> context,
                                  const std::string& test_directory) {
-  DCHECK(context->TaskRunner()->RunsTasksOnCurrentThread());
+  DCHECK(context->TaskRunner()->RunsTasksInCurrentSequence());
   base::FilePath leveldb_dir(FILE_PATH_LITERAL("file__0.indexeddb.leveldb"));
   base::FilePath test_data_dir =
       GetTestFilePath("indexeddb", test_directory.c_str()).Append(leveldb_dir);
@@ -489,10 +489,10 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, BlobsCountAgainstQuota) {
 }
 
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, DeleteForOriginDeletesBlobs) {
-  SimpleTest(GetTestUrl("indexeddb", "write_20mb_blob.html"));
+  SimpleTest(GetTestUrl("indexeddb", "write_4mb_blob.html"));
   int64_t size = RequestDiskUsage();
   // This assertion assumes that we do not compress blobs.
-  EXPECT_GT(size, 20 << 20 /* 20 MB */);
+  EXPECT_GT(size, 4 << 20 /* 4 MB */);
   // TODO(jsbell): Remove static_cast<> when overloads are eliminated.
   GetContext()->TaskRunner()->PostTask(
       FROM_HERE,
@@ -726,7 +726,6 @@ INSTANTIATE_TEST_CASE_P(IndexedDBBrowserTestInstantiation,
                         ::testing::Values("failGetBlobJournal",
                                           "get",
                                           "getAll",
-                                          "failWebkitGetDatabaseNames",
                                           "iterate",
                                           "failTransactionCommit",
                                           "clearObjectStore"));

@@ -19,8 +19,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
-#include "components/payments/content/payment_app.mojom.h"
+#include "components/payments/mojom/payment_app.mojom.h"
 #include "content/child/webmessageportchannel_impl.h"
+#include "content/common/service_worker/embedded_worker.mojom.h"
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
@@ -60,6 +61,7 @@ class ServiceWorkerProviderContext;
 class ServiceWorkerContextClient;
 class ThreadSafeSender;
 class EmbeddedWorkerInstanceClientImpl;
+class WebWorkerFetchContext;
 
 // This class provides access to/from an ServiceWorker's WorkerGlobalScope.
 // Unless otherwise noted, all methods are called on the worker thread.
@@ -67,11 +69,11 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
                                    public mojom::ServiceWorkerEventDispatcher {
  public:
   using SyncCallback =
-      base::Callback<void(ServiceWorkerStatusCode,
-                          base::Time /* dispatch_event_time */)>;
+      base::OnceCallback<void(ServiceWorkerStatusCode,
+                              base::Time /* dispatch_event_time */)>;
   using FetchCallback =
-      base::Callback<void(ServiceWorkerStatusCode,
-                          base::Time /* dispatch_event_time */)>;
+      base::OnceCallback<void(ServiceWorkerStatusCode,
+                              base::Time /* dispatch_event_time */)>;
 
   // Returns a thread-specific client instance.  This does NOT create a
   // new instance.
@@ -84,6 +86,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
       const GURL& service_worker_scope,
       const GURL& script_url,
       mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+      mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
       std::unique_ptr<EmbeddedWorkerInstanceClientImpl> embedded_worker_client);
   ~ServiceWorkerContextClient() override;
 
@@ -154,14 +157,19 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
       int request_id,
       blink::WebServiceWorkerEventResult result,
       double dispatch_event_time) override;
-  void DidHandleInstallEvent(int request_id,
+  void DidHandleInstallEvent(int event_id,
                              blink::WebServiceWorkerEventResult result,
                              double event_dispatch_time) override;
-  void RespondToFetchEvent(int fetch_event_id,
-                           double event_dispatch_time) override;
+  void RespondToFetchEventWithNoResponse(int fetch_event_id,
+                                         double event_dispatch_time) override;
   void RespondToFetchEvent(int fetch_event_id,
                            const blink::WebServiceWorkerResponse& response,
                            double event_dispatch_time) override;
+  void RespondToFetchEventWithResponseStream(
+      int fetch_event_id,
+      const blink::WebServiceWorkerResponse& response,
+      blink::WebServiceWorkerStreamHandle* web_body_as_stream,
+      double event_dispatch_time) override;
   void DidHandleFetchEvent(int fetch_event_id,
                            blink::WebServiceWorkerEventResult result,
                            double dispatch_event_time) override;
@@ -188,9 +196,12 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
                                     double dispatch_event_time) override;
 
   // Called on the main thread.
-  blink::WebServiceWorkerNetworkProvider* CreateServiceWorkerNetworkProvider()
+  std::unique_ptr<blink::WebServiceWorkerNetworkProvider>
+  CreateServiceWorkerNetworkProvider() override;
+  std::unique_ptr<blink::WebWorkerFetchContext>
+  CreateServiceWorkerFetchContext() override;
+  std::unique_ptr<blink::WebServiceWorkerProvider> CreateServiceWorkerProvider()
       override;
-  blink::WebServiceWorkerProvider* CreateServiceWorkerProvider() override;
 
   void PostMessageToClient(const blink::WebString& uuid,
                            const blink::WebString& message,
@@ -206,6 +217,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   void Claim(std::unique_ptr<blink::WebServiceWorkerClientsClaimCallbacks>
                  callbacks) override;
   void RegisterForeignFetchScopes(
+      int install_event_id,
       const blink::WebVector<blink::WebURL>& sub_scopes,
       const blink::WebVector<blink::WebSecurityOrigin>& origins) override;
 
@@ -224,54 +236,57 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
       const ServiceWorkerVersionAttributes& attrs);
 
   // mojom::ServiceWorkerEventDispatcher
-  void DispatchActivateEvent(
-      const DispatchActivateEventCallback& callback) override;
+  void DispatchInstallEvent(
+      mojom::ServiceWorkerInstallEventMethodsAssociatedPtrInfo client,
+      DispatchInstallEventCallback callback) override;
+  void DispatchActivateEvent(DispatchActivateEventCallback callback) override;
   void DispatchBackgroundFetchAbortEvent(
       const std::string& tag,
-      const DispatchBackgroundFetchAbortEventCallback& callback) override;
+      DispatchBackgroundFetchAbortEventCallback callback) override;
   void DispatchBackgroundFetchClickEvent(
       const std::string& tag,
       mojom::BackgroundFetchState state,
-      const DispatchBackgroundFetchClickEventCallback& callback) override;
+      DispatchBackgroundFetchClickEventCallback callback) override;
   void DispatchBackgroundFetchFailEvent(
       const std::string& tag,
       const std::vector<BackgroundFetchSettledFetch>& fetches,
-      const DispatchBackgroundFetchFailEventCallback& callback) override;
+      DispatchBackgroundFetchFailEventCallback callback) override;
   void DispatchBackgroundFetchedEvent(
       const std::string& tag,
       const std::vector<BackgroundFetchSettledFetch>& fetches,
-      const DispatchBackgroundFetchedEventCallback& callback) override;
+      DispatchBackgroundFetchedEventCallback callback) override;
   void DispatchExtendableMessageEvent(
       mojom::ExtendableMessageEventPtr event,
-      const DispatchExtendableMessageEventCallback& callback) override;
-  void DispatchFetchEvent(int fetch_event_id,
-                          const ServiceWorkerFetchRequest& request,
-                          mojom::FetchEventPreloadHandlePtr preload_handle,
-                          const DispatchFetchEventCallback& callback) override;
+      DispatchExtendableMessageEventCallback callback) override;
+  void DispatchFetchEvent(
+      int fetch_event_id,
+      const ServiceWorkerFetchRequest& request,
+      mojom::FetchEventPreloadHandlePtr preload_handle,
+      mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
+      DispatchFetchEventCallback callback) override;
   void DispatchNotificationClickEvent(
       const std::string& notification_id,
       const PlatformNotificationData& notification_data,
       int action_index,
       const base::Optional<base::string16>& reply,
-      const DispatchNotificationClickEventCallback& callback) override;
+      DispatchNotificationClickEventCallback callback) override;
   void DispatchNotificationCloseEvent(
       const std::string& notification_id,
       const PlatformNotificationData& notification_data,
-      const DispatchNotificationCloseEventCallback& callback) override;
+      DispatchNotificationCloseEventCallback callback) override;
   void DispatchPushEvent(const PushEventPayload& payload,
-                         const DispatchPushEventCallback& callback) override;
+                         DispatchPushEventCallback callback) override;
   void DispatchSyncEvent(
       const std::string& tag,
       blink::mojom::BackgroundSyncEventLastChance last_chance,
-      const DispatchSyncEventCallback& callback) override;
+      DispatchSyncEventCallback callback) override;
   void DispatchPaymentRequestEvent(
       int payment_request_id,
       payments::mojom::PaymentAppRequestPtr app_request,
       payments::mojom::PaymentAppResponseCallbackPtr response_callback,
-      const DispatchPaymentRequestEventCallback& callback) override;
-  void Ping(const PingCallback& callback) override;
+      DispatchPaymentRequestEventCallback callback) override;
+  void Ping(PingCallback callback) override;
 
-  void OnInstallEvent(int request_id);
   void OnNotificationClickEvent(
       int request_id,
       const std::string& notification_id,
@@ -307,7 +322,11 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   // Called when the navigation preload request completed. Either
   // OnNavigationPreloadComplete() or OnNavigationPreloadError() must be called
   // to release the preload related resources.
-  void OnNavigationPreloadComplete(int fetch_event_id);
+  void OnNavigationPreloadComplete(int fetch_event_id,
+                                   base::TimeTicks completion_time,
+                                   int64_t encoded_data_length,
+                                   int64_t encoded_body_length,
+                                   int64_t decoded_body_length);
   // Called when an error occurred while receiving the response of the
   // navigation preload request.
   void OnNavigationPreloadError(
@@ -320,6 +339,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   const int64_t service_worker_version_id_;
   const GURL service_worker_scope_;
   const GURL script_url_;
+  int network_provider_id_ = kInvalidServiceWorkerProviderId;
   scoped_refptr<ThreadSafeSender> sender_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
   scoped_refptr<base::TaskRunner> worker_task_runner_;
@@ -331,6 +351,10 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
 
   // This is bound on the worker thread.
   mojom::ServiceWorkerEventDispatcherRequest pending_dispatcher_request_;
+
+  // This is bound on the main thread.
+  scoped_refptr<mojom::ThreadSafeEmbeddedWorkerInstanceHostAssociatedPtr>
+      instance_host_;
 
   // Renderer-side object corresponding to WebEmbeddedWorkerInstance.
   // This is valid from the ctor to workerContextDestroyed.

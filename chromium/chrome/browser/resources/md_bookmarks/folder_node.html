@@ -1,8 +1,8 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://bookmarks/actions.html">
 <link rel="import" href="chrome://bookmarks/icons.html">
 <link rel="import" href="chrome://bookmarks/shared_style.html">
@@ -52,26 +52,24 @@
       }
 
       iron-icon {
-        --iron-icon-height: 20px;
-        --iron-icon-width: 20px;
-        min-width: 20px;
+        flex-shrink: 0;
       }
 
       #arrow {
         color: var(--secondary-text-color);
-        height: 36px;
         margin: 0 8px;
-        min-width: 36px;
-        transform: rotate(-90deg);
-        transition: transform 150ms;
-        width: 36px;
       }
 
-      :host-context([dir='rtl']) #arrow {
+      #arrow iron-icon {
+        transform: rotate(-90deg);
+        transition: transform 150ms;
+      }
+
+      :host-context([dir='rtl']) #arrow iron-icon {
         transform: rotate(90deg);
       }
 
-      #arrow[is-open] {
+      #arrow iron-icon[is-open] {
         transform: initial;
       }
 
@@ -81,11 +79,15 @@
     </style>
 
     <div id="container" class="v-centered" on-tap="selectFolder_"
-        draggable="[[!isRootFolder_(depth)]]">
+        draggable="[[!isTopLevelFolder_(depth)]]"
+        tabindex$="[[getTabIndex_(isSelectedFolder_)]]"
+        hidden="[[isRootFolder_(depth)]]">
       <template is="dom-if" if="[[hasChildFolder_(item_.children)]]">
-        <paper-icon-button id="arrow" icon="cr:arrow-drop-down"
-            is-open$="[[!isClosed_]]" on-tap="toggleFolder_">
-        </paper-icon-button>
+        <button is="paper-icon-button-light" id="arrow"
+            on-tap="toggleFolder_" on-mousedown="preventDefault_" tabindex="-1">
+          <iron-icon icon="cr:arrow-drop-down" is-open$="[[!isClosed_]]">
+          </iron-icon>
+        </button>
       </template>
       <div id="folder-label" class="v-centered">
         <iron-icon icon="[[getFolderIcon_(isSelectedFolder_)]]"

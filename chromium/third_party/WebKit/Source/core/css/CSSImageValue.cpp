@@ -22,7 +22,7 @@
 
 #include "core/css/CSSMarkup.h"
 #include "core/dom/Document.h"
-#include "core/frame/Settings.h"
+#include "core/frame/LocalFrame.h"
 #include "core/loader/resource/ImageResourceContent.h"
 #include "core/style/StyleFetchedImage.h"
 #include "core/style/StyleInvalidImage.h"
@@ -68,9 +68,8 @@ StyleImage* CSSImageValue::CacheImage(const Document& document,
       params.SetCrossOriginAccessControl(document.GetSecurityOrigin(),
                                          cross_origin);
     }
-    if (document.GetSettings() &&
-        document.GetSettings()->GetFetchImagePlaceholders())
-      params.SetAllowImagePlaceholder();
+    if (document.GetFrame())
+      document.GetFrame()->MaybeAllowImagePlaceholder(params);
 
     if (ImageResourceContent* cached_image =
             ImageResourceContent::Fetch(params, document.Fetcher())) {
@@ -117,8 +116,10 @@ String CSSImageValue::CustomCSSText() const {
   return SerializeURI(relative_url_);
 }
 
-bool CSSImageValue::KnownToBeOpaque(const LayoutObject& layout_object) const {
-  return cached_image_ ? cached_image_->KnownToBeOpaque(layout_object) : false;
+bool CSSImageValue::KnownToBeOpaque(const Document& document,
+                                    const ComputedStyle& style) const {
+  return cached_image_ ? cached_image_->KnownToBeOpaque(document, style)
+                       : false;
 }
 
 DEFINE_TRACE_AFTER_DISPATCH(CSSImageValue) {

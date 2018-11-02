@@ -12,18 +12,24 @@
 #include "chrome/browser/android/vr_shell/vr_controller_model.h"
 #include "device/vr/android/gvr/gvr_gamepad_data_provider.h"
 #include "device/vr/vr_types.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
 
-using blink::WebGestureEvent;
-using blink::WebInputEvent;
+namespace blink {
+class WebGestureEvent;
+}
 
 namespace gvr {
 class ControllerState;
 }
 
 namespace vr_shell {
+
+class ElbowModel;
+
+// Angle (radians) the beam down from the controller axis, for wrist comfort.
+constexpr float kErgoAngleOffset = 0.26f;
+
+using GestureList = std::vector<std::unique_ptr<blink::WebGestureEvent>>;
 
 class VrController {
  public:
@@ -37,15 +43,12 @@ class VrController {
   // Must be called when the Activity gets OnPause().
   void OnPause();
 
-  // Must be called when the GL renderer gets OnSurfaceCreated().
-  void Initialize(gvr_context* gvr_context);
-
   device::GvrGamepadData GetGamepadData();
 
   // Must be called when the GL renderer gets OnDrawFrame().
-  void UpdateState();
+  void UpdateState(const gfx::Vector3dF& head_direction);
 
-  std::vector<std::unique_ptr<WebGestureEvent>> DetectGestures();
+  std::unique_ptr<GestureList> DetectGestures();
 
   bool IsTouching();
 
@@ -54,8 +57,9 @@ class VrController {
   float TouchPosY();
 
   vr::Quatf Orientation() const;
-
   void GetTransform(vr::Mat4f* out) const;
+  float GetOpacity() const;
+  gfx::Point3F GetPointerStart() const;
 
   VrControllerModel::State GetModelState() const;
 
@@ -96,18 +100,18 @@ class VrController {
     int64_t timestamp;
   };
 
-  void UpdateGestureFromTouchInfo(WebGestureEvent* gesture);
+  void UpdateGestureFromTouchInfo(blink::WebGestureEvent* gesture);
 
   bool GetButtonLongPressFromButtonInfo();
 
   // Handle the waiting state.
-  void HandleWaitingState(WebGestureEvent* gesture);
+  void HandleWaitingState(blink::WebGestureEvent* gesture);
 
   // Handle the detecting state.
-  void HandleDetectingState(WebGestureEvent* gesture);
+  void HandleDetectingState(blink::WebGestureEvent* gesture);
 
   // Handle the scrolling state.
-  void HandleScrollingState(WebGestureEvent* gesture);
+  void HandleScrollingState(blink::WebGestureEvent* gesture);
   void UpdateTouchInfo();
 
   // Returns true if the touch position is within the slop of the initial touch
@@ -135,12 +139,14 @@ class VrController {
   // The last controller state (updated once per frame).
   std::unique_ptr<gvr::ControllerState> controller_state_;
 
+  std::unique_ptr<gvr::GvrApi> gvr_api_;
+
   float last_qx_;
   bool pinch_started_;
   bool zoom_in_progress_ = false;
   bool touch_position_changed_ = false;
 
-  // Handedness from user prefs (currently only read once on initialization)
+  // Handedness from user prefs.
   gvr::ControllerHandedness handedness_;
 
   // Current touch info after the extrapolation.
@@ -169,6 +175,8 @@ class VrController {
 
   // Number of consecutively extrapolated touch points
   int extrapolated_touch_ = 0;
+
+  std::unique_ptr<ElbowModel> elbow_model_;
 
   DISALLOW_COPY_AND_ASSIGN(VrController);
 };

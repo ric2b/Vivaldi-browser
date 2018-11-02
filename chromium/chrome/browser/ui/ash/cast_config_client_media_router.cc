@@ -20,8 +20,8 @@
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
 #include "chrome/browser/media/router/media_sinks_observer.h"
-#include "chrome/browser/media/router/media_source_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/common/media_router/media_source_helper.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
@@ -155,7 +155,7 @@ CastConfigClientMediaRouter::CastConfigClientMediaRouter() : binding_(this) {
 
   // Register this object as the client interface implementation.
   ash::mojom::CastConfigClientAssociatedPtrInfo ptr_info;
-  binding_.Bind(&ptr_info);
+  binding_.Bind(mojo::MakeRequest(&ptr_info));
   cast_config_->SetClient(std::move(ptr_info));
 }
 

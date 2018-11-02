@@ -11,7 +11,7 @@ namespace blink {
 
 StyleRuleUsageTracker::RuleListByStyleSheet StyleRuleUsageTracker::TakeDelta() {
   RuleListByStyleSheet result;
-  result.Swap(used_rules_delta_);
+  result.swap(used_rules_delta_);
   return result;
 }
 
@@ -21,7 +21,7 @@ void StyleRuleUsageTracker::Track(const CSSStyleSheet* parent_sheet,
     return;
   if (!used_rules_.insert(std::make_pair(parent_sheet, rule)).is_new_entry)
     return;
-  auto it = used_rules_delta_.Find(parent_sheet);
+  auto it = used_rules_delta_.find(parent_sheet);
   if (it != used_rules_delta_.end()) {
     it->value.push_back(rule);
   } else {

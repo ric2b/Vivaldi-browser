@@ -5,7 +5,7 @@
 #include "bindings/core/v8/ToV8ForCore.h"
 
 #include <limits>
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/testing/GarbageCollectedScriptWrappable.h"
 #include "platform/heap/Heap.h"
@@ -36,7 +36,7 @@ void TestToV8(V8TestingScope* scope,
   if (String(expected) != actual_string) {
     ADD_FAILURE_AT(path, line_number)
         << "toV8 returns an incorrect value.\n  Actual: "
-        << actual_string.Utf8().Data() << "\nExpected: " << expected;
+        << actual_string.Utf8().data() << "\nExpected: " << expected;
     return;
   }
 }

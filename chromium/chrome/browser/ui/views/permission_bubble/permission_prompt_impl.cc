@@ -13,6 +13,8 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
@@ -117,9 +119,8 @@ void PermissionCombobox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 void PermissionCombobox::OnMenuButtonClicked(views::MenuButton* source,
                                              const gfx::Point& point,
                                              const ui::Event* event) {
-  menu_runner_.reset(new views::MenuRunner(
-      model_.get(),
-      views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::ASYNC));
+  menu_runner_.reset(
+      new views::MenuRunner(model_.get(), views::MenuRunner::HAS_MNEMONICS));
 
   gfx::Point p(point);
   p.Offset(-source->width(), 0);
@@ -157,7 +158,7 @@ class PermissionsBubbleDialogDelegateView
   const gfx::FontList& GetTitleFontList() const override;
   base::string16 GetWindowTitle() const override;
   void OnWidgetDestroying(views::Widget* widget) override;
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool Cancel() override;
   bool Accept() override;
@@ -263,6 +264,7 @@ PermissionsBubbleDialogDelegateView::PermissionsBubbleDialogDelegateView(
     persist_checkbox_->SetChecked(true);
     AddChildView(persist_checkbox_);
   }
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::PERMISSIONS);
 }
 
 PermissionsBubbleDialogDelegateView::~PermissionsBubbleDialogDelegateView() {
@@ -303,7 +305,7 @@ void PermissionsBubbleDialogDelegateView::OnWidgetDestroying(
   }
 }
 
-gfx::Size PermissionsBubbleDialogDelegateView::GetPreferredSize() const {
+gfx::Size PermissionsBubbleDialogDelegateView::CalculatePreferredSize() const {
   // TODO(estade): bubbles should default to this width.
   const int kWidth = 320 - GetInsets().width();
   return gfx::Size(kWidth, GetHeightForWidth(kWidth));
@@ -403,16 +405,15 @@ void PermissionPromptImpl::SetDelegate(Delegate* delegate) {
   delegate_ = delegate;
 }
 
-void PermissionPromptImpl::Show(const std::vector<PermissionRequest*>& requests,
-                                const std::vector<bool>& values) {
+void PermissionPromptImpl::Show() {
   DCHECK(browser_);
   DCHECK(browser_->window());
 
   if (bubble_delegate_)
     bubble_delegate_->CloseBubble();
 
-  bubble_delegate_ =
-      new PermissionsBubbleDialogDelegateView(this, requests, values);
+  bubble_delegate_ = new PermissionsBubbleDialogDelegateView(
+      this, delegate_->Requests(), delegate_->AcceptStates());
 
   // Set |parent_window| because some valid anchors can become hidden.
   bubble_delegate_->set_parent_window(
@@ -423,7 +424,15 @@ void PermissionPromptImpl::Show(const std::vector<PermissionRequest*>& requests,
   bubble_delegate_->set_anchor_view_insets(gfx::Insets(
       GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
 
-  views::BubbleDialogDelegateView::CreateBubble(bubble_delegate_)->Show();
+  views::Widget* widget =
+      views::BubbleDialogDelegateView::CreateBubble(bubble_delegate_);
+  // If a browser window (or popup) other than the bubble parent has focus,
+  // don't take focus.
+  if (browser_->window()->IsActive())
+    widget->Show();
+  else
+    widget->ShowInactive();
+
   bubble_delegate_->SizeToContents();
 
   bubble_delegate_->UpdateAnchor(GetAnchorView(),
@@ -446,15 +455,11 @@ void PermissionPromptImpl::Hide() {
   }
 }
 
-bool PermissionPromptImpl::IsVisible() {
-  return bubble_delegate_ != nullptr;
-}
-
 void PermissionPromptImpl::UpdateAnchorPosition() {
   DCHECK(browser_);
   DCHECK(browser_->window());
 
-  if (IsVisible()) {
+  if (bubble_delegate_) {
     bubble_delegate_->set_parent_window(
         platform_util::GetViewForWindow(browser_->window()->GetNativeWindow()));
     bubble_delegate_->UpdateAnchor(GetAnchorView(),

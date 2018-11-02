@@ -9,21 +9,6 @@
 #include <iomanip>  // NOLINT
 #include <ostream>  // NOLINT
 
-namespace {
-class StreamStateSaver : private std::ios {
-  WTF_MAKE_NONCOPYABLE(StreamStateSaver);
-
- public:
-  StreamStateSaver(std::ios& other) : std::ios(nullptr), m_other(other) {
-    copyfmt(other);
-  }
-  ~StreamStateSaver() { m_other.copyfmt(*this); }
-
- private:
-  std::ios& m_other;
-};
-}  // unnamed namespace
-
 namespace blink {
 
 void PrintTo(const PaintChunk& chunk, std::ostream* os) {
@@ -90,19 +75,19 @@ void PrintTo(const PaintChunkProperties& properties, std::ostream* os) {
 }
 
 void PrintTo(const ClipPaintPropertyNode& node, std::ostream* os) {
-  *os << "ClipPaintPropertyNode(" << node.ToString().Ascii().Data() << ")";
+  *os << "ClipPaintPropertyNode(" << node.ToString().Ascii().data() << ")";
 }
 
 void PrintTo(const TransformPaintPropertyNode& node, std::ostream* os) {
-  *os << "TransformPaintPropertyNode(" << node.ToString().Ascii().Data() << ")";
+  *os << "TransformPaintPropertyNode(" << node.ToString().Ascii().data() << ")";
 }
 
 void PrintTo(const EffectPaintPropertyNode& node, std::ostream* os) {
-  *os << "EffectPaintPropertyNode(" << node.ToString().Ascii().Data() << ")";
+  *os << "EffectPaintPropertyNode(" << node.ToString().Ascii().data() << ")";
 }
 
 void PrintTo(const ScrollPaintPropertyNode& node, std::ostream* os) {
-  *os << "ScrollPaintPropertyNode(" << node.ToString().Ascii().Data() << ")";
+  *os << "ScrollPaintPropertyNode(" << node.ToString().Ascii().data() << ")";
 }
 
 }  // namespace blink

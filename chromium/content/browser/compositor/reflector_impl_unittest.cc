@@ -6,6 +6,7 @@
 
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
@@ -14,7 +15,7 @@
 #include "cc/scheduler/delay_based_time_source.h"
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_web_graphics_context_3d.h"
-#include "components/display_compositor/compositor_overlay_candidate_validator.h"
+#include "components/viz/display_compositor/compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/browser/compositor/reflector_texture.h"
 #include "content/browser/compositor/test/no_transport_image_transport_factory.h"
@@ -24,7 +25,7 @@
 #include "ui/compositor/test/context_factories_for_test.h"
 
 #if defined(USE_OZONE)
-#include "components/display_compositor/compositor_overlay_candidate_validator_ozone.h"
+#include "components/viz/display_compositor/compositor_overlay_candidate_validator_ozone.h"
 #include "ui/ozone/public/overlay_candidates_ozone.h"
 #endif  // defined(USE_OZONE)
 
@@ -44,7 +45,7 @@ class FakeTaskRunner : public base::SingleThreadTaskRunner {
                        base::TimeDelta delay) override {
     return true;
   }
-  bool RunsTasksOnCurrentThread() const override { return true; }
+  bool RunsTasksInCurrentSequence() const override { return true; }
 
  protected:
   ~FakeTaskRunner() override {}
@@ -62,12 +63,11 @@ class TestOverlayCandidatesOzone : public ui::OverlayCandidatesOzone {
 };
 #endif  // defined(USE_OZONE)
 
-std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
+std::unique_ptr<viz::CompositorOverlayCandidateValidator>
 CreateTestValidatorOzone() {
 #if defined(USE_OZONE)
-  return std::unique_ptr<
-      display_compositor::CompositorOverlayCandidateValidator>(
-      new display_compositor::CompositorOverlayCandidateValidatorOzone(
+  return std::unique_ptr<viz::CompositorOverlayCandidateValidator>(
+      new viz::CompositorOverlayCandidateValidatorOzone(
           std::unique_ptr<ui::OverlayCandidatesOzone>(
               new TestOverlayCandidatesOzone()),
           ""));

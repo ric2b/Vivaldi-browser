@@ -26,7 +26,6 @@
 #ifndef Scrollbar_h
 #define Scrollbar_h
 
-#include "platform/FrameViewBase.h"
 #include "platform/Timer.h"
 #include "platform/graphics/paint/DisplayItem.h"
 #include "platform/heap/Handle.h"
@@ -36,23 +35,24 @@
 
 namespace blink {
 
+class CullRect;
 class GraphicsContext;
-class HostWindow;
 class IntRect;
+class PlatformChromeClient;
 class ScrollableArea;
 class ScrollbarTheme;
 class WebGestureEvent;
 class WebMouseEvent;
 
-class PLATFORM_EXPORT Scrollbar : public FrameViewBase,
+class PLATFORM_EXPORT Scrollbar : public GarbageCollectedFinalized<Scrollbar>,
                                   public ScrollbarThemeClient,
                                   public DisplayItemClient {
  public:
   static Scrollbar* Create(ScrollableArea* scrollable_area,
                            ScrollbarOrientation orientation,
                            ScrollbarControlSize size,
-                           HostWindow* host_window) {
-    return new Scrollbar(scrollable_area, orientation, size, host_window);
+                           PlatformChromeClient* chrome_client) {
+    return new Scrollbar(scrollable_area, orientation, size, chrome_client);
   }
 
   // Theme object ownership remains with the caller and it must outlive the
@@ -67,27 +67,21 @@ class PLATFORM_EXPORT Scrollbar : public FrameViewBase,
   ~Scrollbar() override;
 
   // ScrollbarThemeClient implementation.
-  int X() const override { return FrameViewBase::X(); }
-  int Y() const override { return FrameViewBase::Y(); }
-  int Width() const override { return FrameViewBase::Width(); }
-  int Height() const override { return FrameViewBase::Height(); }
-  IntSize Size() const override { return FrameViewBase::Size(); }
-  IntPoint Location() const override { return FrameViewBase::Location(); }
+  int X() const override { return frame_rect_.X(); }
+  int Y() const override { return frame_rect_.Y(); }
+  int Width() const override { return frame_rect_.Width(); }
+  int Height() const override { return frame_rect_.Height(); }
+  IntSize Size() const override { return frame_rect_.Size(); }
+  IntPoint Location() const override { return frame_rect_.Location(); }
 
-  FrameViewBase* Parent() const override { return FrameViewBase::Parent(); }
-  FrameViewBase* Root() const override { return FrameViewBase::Root(); }
-
-  void SetFrameRect(const IntRect&) override;
-  IntRect FrameRect() const override { return FrameViewBase::FrameRect(); }
+  void SetFrameRect(const IntRect&);
+  IntRect FrameRect() const override { return frame_rect_; }
 
   ScrollbarOverlayColorTheme GetScrollbarOverlayColorTheme() const override;
   void GetTickmarks(Vector<IntRect>&) const override;
   bool IsScrollableAreaActive() const override;
 
-  IntPoint ConvertFromRootFrame(
-      const IntPoint& point_in_root_frame) const override {
-    return FrameViewBase::ConvertFromRootFrame(point_in_root_frame);
-  }
+  IntPoint ConvertFromRootFrame(const IntPoint&) const override;
 
   bool IsCustomScrollbar() const override { return false; }
   ScrollbarOrientation Orientation() const override { return orientation_; }
@@ -118,7 +112,7 @@ class PLATFORM_EXPORT Scrollbar : public FrameViewBase,
   // Will trigger paint invalidation if required.
   void OffsetDidChange();
 
-  void DisconnectFromScrollableArea();
+  virtual void DisconnectFromScrollableArea();
   ScrollableArea* GetScrollableArea() const { return scrollable_area_; }
 
   int PressedPos() const { return pressed_pos_; }
@@ -129,7 +123,7 @@ class PLATFORM_EXPORT Scrollbar : public FrameViewBase,
   void SetProportion(int visible_size, int total_size);
   void SetPressedPos(int p) { pressed_pos_ = p; }
 
-  void Paint(GraphicsContext&, const CullRect&) const final;
+  void Paint(GraphicsContext&, const CullRect&) const;
 
   bool IsOverlayScrollbar() const override;
   bool ShouldParticipateInHitTesting();
@@ -156,11 +150,8 @@ class PLATFORM_EXPORT Scrollbar : public FrameViewBase,
 
   ScrollbarTheme& GetTheme() const { return theme_; }
 
-  IntRect ConvertToContainingFrameViewBase(const IntRect&) const override;
-  IntRect ConvertFromContainingFrameViewBase(const IntRect&) const override;
-
-  IntPoint ConvertToContainingFrameViewBase(const IntPoint&) const override;
-  IntPoint ConvertFromContainingFrameViewBase(const IntPoint&) const override;
+  IntRect ConvertToContainingFrameViewBase(const IntRect&) const;
+  IntPoint ConvertFromContainingFrameViewBase(const IntPoint&) const;
 
   void MoveThumb(int pos, bool dragging_document = false);
 
@@ -208,7 +199,7 @@ class PLATFORM_EXPORT Scrollbar : public FrameViewBase,
   Scrollbar(ScrollableArea*,
             ScrollbarOrientation,
             ScrollbarControlSize,
-            HostWindow* = 0,
+            PlatformChromeClient* = 0,
             ScrollbarTheme* = 0);
 
   void AutoscrollTimerFired(TimerBase*);
@@ -222,7 +213,7 @@ class PLATFORM_EXPORT Scrollbar : public FrameViewBase,
   ScrollbarOrientation orientation_;
   ScrollbarControlSize control_size_;
   ScrollbarTheme& theme_;
-  Member<HostWindow> host_window_;
+  Member<PlatformChromeClient> chrome_client_;
 
   int visible_size_;
   int total_size_;
@@ -243,8 +234,6 @@ class PLATFORM_EXPORT Scrollbar : public FrameViewBase,
   float elastic_overscroll_;
 
  private:
-  bool IsScrollbar() const override { return true; }
-
   void Invalidate() override { SetNeedsPaintInvalidation(kAllParts); }
   void InvalidateRect(const IntRect&) override {
     SetNeedsPaintInvalidation(kAllParts);
@@ -258,13 +247,8 @@ class PLATFORM_EXPORT Scrollbar : public FrameViewBase,
   bool track_needs_repaint_;
   bool thumb_needs_repaint_;
   LayoutRect visual_rect_;
+  IntRect frame_rect_;
 };
-
-DEFINE_TYPE_CASTS(Scrollbar,
-                  FrameViewBase,
-                  frameViewBase,
-                  frameViewBase->IsScrollbar(),
-                  frameViewBase.IsScrollbar());
 
 }  // namespace blink
 

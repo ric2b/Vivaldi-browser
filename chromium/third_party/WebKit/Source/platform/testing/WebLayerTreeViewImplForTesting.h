@@ -58,9 +58,12 @@ class WebLayerTreeViewImplForTesting
   void SetNeedsBeginFrame() override;
   void DidStopFlinging() override;
   void SetDeferCommits(bool) override;
+  // TODO(pdr): Refactor to use a struct like LayerTreeHost::ViewportLayers.
   void RegisterViewportLayers(
       const blink::WebLayer* overscroll_elasticity_layer,
       const blink::WebLayer* page_scale_layer_layer,
+      const blink::WebLayer* inner_viewport_container_layer,
+      const blink::WebLayer* outer_viewport_container_layer,
       const blink::WebLayer* inner_viewport_scroll_layer,
       const blink::WebLayer* outer_viewport_scroll_layer) override;
   void ClearViewportLayers() override;
@@ -78,6 +81,7 @@ class WebLayerTreeViewImplForTesting
   void DidBeginMainFrame() override {}
   void BeginMainFrame(const cc::BeginFrameArgs& args) override {}
   void BeginMainFrameNotExpectedSoon() override {}
+  void BeginMainFrameNotExpectedUntil(base::TimeTicks) override {}
   void UpdateLayerTreeHost() override;
   void ApplyViewportDeltas(const gfx::Vector2dF& inner_delta,
                            const gfx::Vector2dF& outer_delta,

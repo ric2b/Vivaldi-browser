@@ -79,7 +79,7 @@ class ASH_EXPORT CursorWindowController {
   gfx::Rect bounds_in_screen_;
 
   // The native_type of the cursor, see definitions in cursor.h
-  int cursor_type_;
+  ui::CursorType cursor_type_;
 
   // The last requested cursor visibility.
   bool visible_;
@@ -87,7 +87,6 @@ class ASH_EXPORT CursorWindowController {
   ui::CursorSetType cursor_set_;
   gfx::Point hot_point_;
 
-  bool enable_adjustable_large_cursor_;
   int large_cursor_size_in_dip_;
 
   // The display on which the cursor is drawn.

@@ -51,7 +51,11 @@ class HttpProtocolHandlerCore;
 namespace {
 
 // Size of the buffer used to read the net::URLRequest.
-const int kIOBufferSize = 4096;
+const int kIOBufferSize = 64 * 1024;
+
+// The maximum size of NSData that can be passed to the client 'didReceiveData'
+// callback. This value must always be greater or equal to |kIOBufferSize|.
+const int kClientMaxBufferSize = 4 * kIOBufferSize;
 
 // Global instance of the HTTPProtocolHandlerDelegate.
 net::HTTPProtocolHandlerDelegate* g_protocol_handler_delegate = nullptr;
@@ -514,27 +518,29 @@ void HttpProtocolHandlerCore::OnReadCompleted(URLRequest* request,
   if (net_request_ == nullptr)
     return;
 
-  base::scoped_nsobject<NSMutableData> data([[NSMutableData alloc] init]);
+  DCHECK_EQ(net_request_, request);
+  DCHECK_GE(kClientMaxBufferSize, kIOBufferSize);
 
   // Read all we can from the socket and put it into data.
   // TODO(droger): It may be possible to avoid some of the copies (using
   // WrappedIOBuffer for example).
-  NSUInteger data_length;
-  uint64_t total_byte_read = 0;
+  uint64_t total_bytes_read = 0;
   while (bytes_read > 0) {
-    total_byte_read += bytes_read;
-    data_length = [data length];  // Assumes that getting the length is fast.
-    [data increaseLengthBy:bytes_read];
-    memcpy(reinterpret_cast<char*>([data mutableBytes]) + data_length,
-           buffer_->data(), bytes_read);
-    bytes_read = request->Read(buffer_.get(), kIOBufferSize);
-  }
+    base::scoped_nsobject<NSMutableData> data(
+        [[NSMutableData alloc] initWithCapacity:bytes_read]);
+    // |bytes_read| should always be less or equal to |kClientMaxBufferSize|.
+    // This is ensured by the fact that the max read buffer size (i.e.
+    // |kIOBufferSize|) is always smaller or equal to |kClientMaxBufferSize|.
+    while (bytes_read > 0 &&
+           [data length] + bytes_read <= kClientMaxBufferSize) {
+      total_bytes_read += bytes_read;
+      NSUInteger data_length = [data length];
+      [data increaseLengthBy:bytes_read];
+      memcpy(reinterpret_cast<char*>([data mutableBytes]) + data_length,
+             buffer_->data(), bytes_read);
+      bytes_read = request->Read(buffer_.get(), kIOBufferSize);
+    }
 
-  if (tracker_)
-    tracker_->CaptureReceivedBytes(request, total_byte_read);
-
-  // Notify the client.
-  if (bytes_read == net::OK || bytes_read == net::ERR_IO_PENDING) {
     if ([data length] > 0) {
       // If the data is not encoded in UTF8, the NSString is nil.
       DVLOG(3) << "To client:" << std::endl
@@ -543,14 +549,17 @@ void HttpProtocolHandlerCore::OnReadCompleted(URLRequest* request,
                           encoding:NSUTF8StringEncoding]);
       [client_ didLoadData:data];
     }
-    if (bytes_read == 0) {
-      DCHECK_EQ(net_request_, request);
-      // There is nothing more to read.
-      StopNetRequest();
-      [client_ didFinishLoading];
-    }
-  } else {
-    // Request failed (not canceled).
+  }
+
+  if (tracker_)
+    tracker_->CaptureReceivedBytes(request, total_bytes_read);
+
+  if (bytes_read == net::OK) {
+    // If there is nothing more to read.
+    StopNetRequest();
+    [client_ didFinishLoading];
+  } else if (bytes_read != net::ERR_IO_PENDING) {
+    // If there was an error (not canceled).
     int error = bytes_read;
     StopRequestWithError(IOSErrorCode(error), error);
   }
@@ -962,80 +971,6 @@ void HttpProtocolHandlerCore::StripPostSpecificHeaders(
 - (void)stopLoading {
   [self cancelRequest];
   _protocolProxy.reset();
-}
-
-@end
-
-#pragma mark -
-#pragma mark PauseableHttpProtocolHandler
-
-// The HttpProtocolHandler is called by the iOS system to handle the
-// NSURLRequest. This HttpProtocolHandler conforms to the observed semantics of
-// NSURLProtocol when used with NSURLSession on iOS 8 - i.e., |-startLoading|
-// means "start or resume request" and |-stopLoading| means "pause request".
-// Since there is no way to actually pause a request in the network stack, this
-// is implemented using a subclass of CRNHTTPProtocolHandlerProxy that knows how
-// to defer callbacks.
-//
-// Note that this class conforms to somewhat complex threading rules:
-// 1) |initWithRequest:cachedResponse:client:| and |dealloc| can be called on
-//    any thread.
-// 2) |startLoading| and |stopLoading| are always called on the client thread.
-// 3) |stopLoading| is called before |dealloc| is called.
-//
-// The main wrinkle is that |dealloc|, which may be called on any thread, needs
-// to clean up a running network request. To do this, |dealloc| needs to run
-// |cancelRequest|, which needs to be run on the client thread. Since it is
-// guaranteed that |startLoading| is called before |dealloc| is called, the
-// |startLoading| method stores a pointer to the client thread, then |dealloc|
-// asks that client thread to perform the |cancelRequest| selector via
-// |scheduleCancelRequest|.
-//
-// Some of the above logic is implemented in the parent class
-// (CRNHTTPProtocolHandler) because it is convenient.
-@implementation CRNPauseableHTTPProtocolHandler {
-  BOOL _started;
-  dispatch_queue_t _queue;
-}
-
-#pragma mark NSURLProtocol methods
-
-- (void)dealloc {
-  [self scheduleCancelRequest];
-}
-
-#pragma mark NSURLProtocol overrides.
-
-- (void)startLoading {
-  if (_started) {
-    [[self getProtocolHandlerProxy] resume];
-    return;
-  }
-
-  _started = YES;
-  [super startLoading];
-}
-
-- (void)stopLoading {
-  [[self getProtocolHandlerProxy] pause];
-}
-
-// This method has unusual concurrency properties. It can be called on any
-// thread, but it must be called from |-dealloc|, which guarantees that no other
-// method of this object is running concurrently (since |-dealloc| is only
-// called when the last reference to the object drops).
-//
-// This method takes a reference to _core to ensure that _core lives long enough
-// to have the request cleanly cancelled.
-- (void)scheduleCancelRequest {
-  DeferredCancellation* cancellation =
-      [[DeferredCancellation alloc] initWithCore:[self getCore]];
-  NSArray* modes = @[ [[NSRunLoop currentRunLoop] currentMode] ];
-  [cancellation performSelector:@selector(cancel)
-                       onThread:[self getClientThread]
-                     withObject:nil
-                  waitUntilDone:NO
-                          modes:modes];
 }
 
 @end

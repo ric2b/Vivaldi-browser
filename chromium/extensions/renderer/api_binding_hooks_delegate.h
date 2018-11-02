@@ -5,10 +5,12 @@
 #ifndef EXTENSIONS_RENDERER_API_BINDING_HOOKS_DELEGATE_H_
 #define EXTENSIONS_RENDERER_API_BINDING_HOOKS_DELEGATE_H_
 
+#include "extensions/renderer/api_binding_hooks.h"
 #include "extensions/renderer/api_binding_types.h"
 #include "v8/include/v8.h"
 
 namespace extensions {
+class APITypeReferenceMap;
 
 // A per-API set of custom hooks to override the default behavior.
 class APIBindingHooksDelegate {
@@ -23,7 +25,19 @@ class APIBindingHooksDelegate {
                                  const std::string& event_name,
                                  v8::Local<v8::Value>* event_out);
 
-  // TODO(devlin): Add a virtual HandleRequest() method.
+  // Allows custom implementations to handle a given request.
+  virtual APIBindingHooks::RequestResult HandleRequest(
+      const std::string& method_name,
+      const APISignature* signature,
+      v8::Local<v8::Context> context,
+      std::vector<v8::Local<v8::Value>>* arguments,
+      const APITypeReferenceMap& refs);
+
+  // Allows custom implementations to add additional properties or types to an
+  // API object.
+  virtual void InitializeTemplate(v8::Isolate* isolate,
+                                  v8::Local<v8::ObjectTemplate> object_template,
+                                  const APITypeReferenceMap& type_refs) {}
 };
 
 }  // namespace extensions

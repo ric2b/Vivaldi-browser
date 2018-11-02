@@ -10,6 +10,7 @@
 #include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/common/frame_messages.h"
+#include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
@@ -47,6 +48,10 @@ class NavigationThrottleCallbackRunner : public NavigationThrottle {
   NavigationThrottle::ThrottleCheckResult WillProcessResponse() override {
     on_will_process_response_.Run();
     return NavigationThrottle::PROCEED;
+  }
+
+  const char* GetNameForLogging() override {
+    return "NavigationThrottleCallbackRunner";
   }
 
  private:
@@ -155,9 +160,7 @@ void NavigationSimulator::Start() {
   if (GetLastThrottleCheckResult() == NavigationThrottle::PROCEED) {
     CHECK_EQ(1, num_will_start_request_called_);
   } else {
-    // TODO(clamy): Add error handling code based on the
-    // NavigationThrottleCheckResult here and in other methods.
-    state_ = FAILED;
+    FailFromThrottleCheck(GetLastThrottleCheckResult());
   }
 }
 
@@ -168,8 +171,11 @@ void NavigationSimulator::Redirect(const GURL& new_url) {
       << "NavigationSimulator::Redirect cannot be called after the "
          "navigation has finished";
 
-  if (state_ == INITIALIZATION)
+  if (state_ == INITIALIZATION) {
     Start();
+    if (state_ == FAILED)
+      return;
+  }
 
   navigation_url_ = new_url;
 
@@ -213,7 +219,7 @@ void NavigationSimulator::Redirect(const GURL& new_url) {
     CHECK_EQ(previous_did_redirect_navigation_called + 1,
              num_did_redirect_navigation_called_);
   } else {
-    state_ = FAILED;
+    FailFromThrottleCheck(GetLastThrottleCheckResult());
   }
 }
 
@@ -225,8 +231,11 @@ void NavigationSimulator::Commit() {
       << "NavigationSimulator::Commit cannot be called after the "
          "navigation has finished";
 
-  if (state_ == INITIALIZATION)
+  if (state_ == INITIALIZATION) {
     Start();
+    if (state_ == FAILED)
+      return;
+  }
 
   PrepareCompleteCallbackOnHandle();
   if (IsBrowserSideNavigationEnabled() &&
@@ -243,9 +252,15 @@ void NavigationSimulator::Commit() {
   // Note that the handle's state can be CANCELING if a throttle cancelled it
   // synchronously in PrepareForCommit.
   if (handle_->state_for_testing() < NavigationHandleImpl::CANCELING) {
+    // Start the request_ids at 1000 to avoid collisions with request ids from
+    // network resources (it should be rare to compare these in unit tests).
+    static int request_id = 1000;
+    GlobalRequestID global_id(render_frame_host_->GetProcess()->GetID(),
+                              ++request_id);
+    DCHECK(!IsBrowserSideNavigationEnabled());
     handle_->WillProcessResponse(
         render_frame_host_, scoped_refptr<net::HttpResponseHeaders>(),
-        net::HttpResponseInfo::ConnectionInfo(), SSLStatus(), GlobalRequestID(),
+        net::HttpResponseInfo::ConnectionInfo(), SSLStatus(), global_id,
         false /* should_replace_current_entry */, false /* is_download */,
         false /* is_stream */, base::Closure(),
         base::Callback<void(NavigationThrottle::ThrottleCheckResult)>());
@@ -254,7 +269,7 @@ void NavigationSimulator::Commit() {
   WaitForThrottleChecksComplete();
 
   if (GetLastThrottleCheckResult() != NavigationThrottle::PROCEED) {
-    state_ = FAILED;
+    FailFromThrottleCheck(GetLastThrottleCheckResult());
     return;
   }
 
@@ -468,6 +483,11 @@ NavigationSimulator::GetLastThrottleCheckResult() {
   return last_throttle_check_result_.value();
 }
 
+NavigationHandle* NavigationSimulator::GetNavigationHandle() const {
+  CHECK_EQ(STARTED, state_);
+  return handle_;
+}
+
 void NavigationSimulator::DidStartNavigation(
     NavigationHandle* navigation_handle) {
   // Check if this navigation is the one we're simulating.
@@ -536,13 +556,18 @@ void NavigationSimulator::OnWillProcessResponse() {
 void NavigationSimulator::WaitForThrottleChecksComplete() {
   // If last_throttle_check_result_ is set, then throttle checks completed
   // synchronously.
-  if (last_throttle_check_result_)
-    return;
+  if (!last_throttle_check_result_) {
+    base::RunLoop run_loop;
+    throttle_checks_wait_closure_ = run_loop.QuitClosure();
+    run_loop.Run();
+    throttle_checks_wait_closure_.Reset();
+  }
 
-  base::RunLoop run_loop;
-  throttle_checks_wait_closure_ = run_loop.QuitClosure();
-  run_loop.Run();
-  throttle_checks_wait_closure_.Reset();
+  if (IsBrowserSideNavigationEnabled()) {
+    // Run message loop once since NavigationRequest::OnStartChecksComplete
+    // posted a task.
+    base::RunLoop().RunUntilIdle();
+  }
 }
 
 void NavigationSimulator::OnThrottleChecksComplete(
@@ -563,6 +588,49 @@ void NavigationSimulator::PrepareCompleteCallbackOnHandle() {
 RenderFrameHost* NavigationSimulator::GetFinalRenderFrameHost() {
   CHECK_EQ(state_, FINISHED);
   return render_frame_host_;
+}
+
+void NavigationSimulator::FailFromThrottleCheck(
+    NavigationThrottle::ThrottleCheckResult result) {
+  DCHECK_NE(result, NavigationThrottle::PROCEED);
+  state_ = FAILED;
+
+  // Special failure logic only needed for non-PlzNavigate case.
+  if (IsBrowserSideNavigationEnabled())
+    return;
+  int error_code = net::OK;
+  switch (result) {
+    case NavigationThrottle::PROCEED:
+    case NavigationThrottle::DEFER:
+      NOTREACHED();
+      break;
+    case NavigationThrottle::CANCEL:
+    case NavigationThrottle::CANCEL_AND_IGNORE:
+      error_code = net::ERR_ABORTED;
+      break;
+    case NavigationThrottle::BLOCK_REQUEST:
+    case NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE:
+      error_code = net::ERR_BLOCKED_BY_CLIENT;
+      break;
+    case NavigationThrottle::BLOCK_RESPONSE:
+      error_code = net::ERR_BLOCKED_BY_RESPONSE;
+      break;
+  };
+
+  FrameHostMsg_DidFailProvisionalLoadWithError_Params error_params;
+  error_params.error_code = error_code;
+  error_params.url = navigation_url_;
+  render_frame_host_->OnMessageReceived(
+      FrameHostMsg_DidFailProvisionalLoadWithError(
+          render_frame_host_->GetRoutingID(), error_params));
+  bool should_result_in_error_page = error_code != net::ERR_ABORTED;
+  if (!should_result_in_error_page) {
+    render_frame_host_->OnMessageReceived(
+        FrameHostMsg_DidStopLoading(render_frame_host_->GetRoutingID()));
+    CHECK_EQ(1, num_did_finish_navigation_called_);
+  } else {
+    CHECK_EQ(0, num_did_finish_navigation_called_);
+  }
 }
 
 }  // namespace content

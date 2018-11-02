@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "ash/public/interfaces/constants.mojom.h"
+#include "ash/public/interfaces/tray_action.mojom.h"
 #include "ash/shell.h"
 #include "ash/system/devicetype_utils.h"
 #include "ash/wm/lock_state_controller.h"
@@ -35,6 +36,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/input_method/input_method_util.h"
 #include "chrome/browser/chromeos/language_preferences.h"
+#include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
 #include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
 #include "chrome/browser/chromeos/login/hwid_checker.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
@@ -119,6 +121,11 @@ const int kMaxGaiaReloadForProxyAuthDialog = 3;
 // Type of the login screen UI that is currently presented to user.
 const char kSourceGaiaSignin[] = "gaia-signin";
 const char kSourceAccountPicker[] = "account-picker";
+
+// Constants for lock screen apps activity state values:
+const char kNoLockScreenApps[] = "LOCK_SCREEN_APPS_STATE.NONE";
+const char kBackgroundLockScreenApps[] = "LOCK_SCREEN_APPS_STATE.BACKGROUND";
+const char kForegroundLockScreenApps[] = "LOCK_SCREEN_APPS_STATE.FOREGROUND";
 
 static bool Contains(const std::vector<std::string>& container,
                      const std::string& value) {
@@ -304,6 +311,7 @@ SigninScreenHandler::SigninScreenHandler(
       gaia_screen_handler_(gaia_screen_handler),
       touch_view_binding_(this),
       histogram_helper_(new ErrorScreensHistogramHelper("Signin")),
+      lock_screen_apps_observer_(this),
       weak_factory_(this) {
   DCHECK(network_state_informer_.get());
   DCHECK(error_screen_);
@@ -340,6 +348,10 @@ SigninScreenHandler::SigninScreenHandler(
       ->BindInterface(ash::mojom::kServiceName, &touch_view_manager_ptr_);
   touch_view_manager_ptr_->AddObserver(
       touch_view_binding_.CreateInterfacePtrAndBind());
+  if (ScreenLocker::default_screen_locker() &&
+      lock_screen_apps::StateController::IsEnabled()) {
+    lock_screen_apps_observer_.Add(lock_screen_apps::StateController::Get());
+  }
 }
 
 SigninScreenHandler::~SigninScreenHandler() {
@@ -444,12 +456,13 @@ void SigninScreenHandler::DeclareLocalizedValues(
   builder->Add("restart", IDS_RESTART_BUTTON);
   builder->Add("shutDown", IDS_SHUTDOWN_BUTTON);
   builder->Add("addUser", IDS_ADD_USER_BUTTON);
-  builder->Add("browseAsGuest", IDS_GO_INCOGNITO_BUTTON);
+  builder->Add("browseAsGuest", IDS_BROWSE_AS_GUEST_BUTTON);
   builder->Add("moreOptions", IDS_MORE_OPTIONS_BUTTON);
   builder->Add("addSupervisedUser",
                IDS_CREATE_LEGACY_SUPERVISED_USER_MENU_LABEL);
   builder->Add("cancel", IDS_CANCEL);
   builder->Add("signOutUser", IDS_SCREEN_LOCK_SIGN_OUT);
+  builder->Add("unlockUser", IDS_SCREEN_LOCK_UNLOCK_USER_BUTTON);
   builder->Add("offlineLogin", IDS_OFFLINE_LOGIN_HTML);
   builder->Add("ownerUserPattern", IDS_LOGIN_POD_OWNER_USER);
   builder->Add("removeUser", IDS_LOGIN_POD_REMOVE_USER);
@@ -632,6 +645,8 @@ void SigninScreenHandler::RegisterMessages() {
   AddCallback("launchKioskApp", &SigninScreenHandler::HandleLaunchKioskApp);
   AddCallback("launchArcKioskApp",
               &SigninScreenHandler::HandleLaunchArcKioskApp);
+  AddCallback("setLockScreenAppsState",
+              &SigninScreenHandler::HandleSetLockScreenAppsState);
 }
 
 void SigninScreenHandler::Show(const LoginScreenContext& context) {
@@ -1034,8 +1049,6 @@ void SigninScreenHandler::OnUserRemoved(const AccountId& account_id,
 
 void SigninScreenHandler::OnUserImageChanged(const user_manager::User& user) {
   if (page_is_ready()) {
-    // TODO(jdufault): Remove DCHECK after resolving crbug.com/699798
-    DCHECK(is_js_initialized_and_ready());
     CallJSOrDefer("login.AccountPickerScreen.updateUserImage",
                   user.GetAccountId());
   }
@@ -1071,6 +1084,7 @@ void SigninScreenHandler::OnPreferencesChanged() {
     // has changed so that reloaded GAIA shows/hides the option to create a new
     // account.
     UpdateUIState(UI_STATE_ACCOUNT_PICKER, nullptr);
+    UpdateAddButtonStatus();
   }
 }
 
@@ -1156,6 +1170,26 @@ void SigninScreenHandler::SuspendDone(const base::TimeDelta& sleep_duration) {
 void SigninScreenHandler::OnTouchViewToggled(bool enabled) {
   touch_view_enabled_ = enabled;
   CallJSOrDefer("login.AccountPickerScreen.setTouchViewState", enabled);
+}
+
+void SigninScreenHandler::OnLockScreenNoteStateChanged(
+    ash::mojom::TrayActionState state) {
+  std::string lock_screen_apps_state;
+  switch (state) {
+    case ash::mojom::TrayActionState::kActive:
+      lock_screen_apps_state = kForegroundLockScreenApps;
+      break;
+    case ash::mojom::TrayActionState::kBackground:
+      lock_screen_apps_state = kBackgroundLockScreenApps;
+      break;
+    case ash::mojom::TrayActionState::kAvailable:
+    case ash::mojom::TrayActionState::kNotAvailable:
+    case ash::mojom::TrayActionState::kLaunching:
+      lock_screen_apps_state = kNoLockScreenApps;
+      break;
+  }
+  CallJSOrDefer("login.AccountPickerScreen.setLockScreenAppsState",
+                lock_screen_apps_state);
 }
 
 bool SigninScreenHandler::ShouldLoadGaia() const {
@@ -1308,8 +1342,6 @@ void SigninScreenHandler::HandleToggleKioskAutolaunchScreen() {
 
 void SigninScreenHandler::LoadUsers(const base::ListValue& users_list,
                                     bool showGuest) {
-  // TODO(jdufault): Remove DCHECK after resolving crbug.com/699798
-  DCHECK(is_js_initialized_and_ready());
   CallJSOrDefer("login.AccountPickerScreen.loadUsers", users_list,
                 delegate_->IsShowGuest());
 }
@@ -1339,6 +1371,11 @@ void SigninScreenHandler::HandleAccountPickerReady() {
 
   is_account_picker_showing_first_time_ = true;
 
+  if (ScreenLocker::default_screen_locker() &&
+      lock_screen_apps::StateController::IsEnabled()) {
+    OnLockScreenNoteStateChanged(
+        lock_screen_apps::StateController::Get()->GetLockScreenNoteState());
+  }
   if (delegate_)
     delegate_->OnSigninScreenReady();
 }
@@ -1346,7 +1383,7 @@ void SigninScreenHandler::HandleAccountPickerReady() {
 void SigninScreenHandler::HandleWallpaperReady() {
   if (ScreenLocker::default_screen_locker()) {
     ScreenLocker::default_screen_locker()
-        ->web_ui()
+        ->delegate()
         ->OnLockBackgroundDisplayed();
   }
 }
@@ -1542,6 +1579,17 @@ void SigninScreenHandler::HandleSendFeedbackAndResyncUserData() {
   login_feedback_->Request(description,
                            base::Bind(&SigninScreenHandler::OnFeedbackFinished,
                                       weak_factory_.GetWeakPtr()));
+}
+
+void SigninScreenHandler::HandleSetLockScreenAppsState(
+    const std::string& state) {
+  lock_screen_apps::StateController* state_controller =
+      lock_screen_apps::StateController::Get();
+
+  if (state == kBackgroundLockScreenApps)
+    state_controller->MoveToBackground();
+  else if (state == kForegroundLockScreenApps)
+    state_controller->MoveToForeground();
 }
 
 bool SigninScreenHandler::AllWhitelistedUsersPresent() {

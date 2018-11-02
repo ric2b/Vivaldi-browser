@@ -24,7 +24,6 @@
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
-#include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/pref_font_webkit_names.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/pref_names_util.h"
@@ -50,6 +49,10 @@
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "third_party/icu/source/common/unicode/uscript.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if !defined(OS_ANDROID)
+#include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
+#endif
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
 #include "chrome/browser/themes/theme_service.h"
@@ -85,7 +88,6 @@ const char* const kPrefsToObserve[] = {
   prefs::kWebKitForceEnableZoom,
   prefs::kWebKitPasswordEchoEnabled,
 #endif
-  prefs::kWebKitJavascriptCanOpenWindowsAutomatically,
   prefs::kWebKitJavascriptEnabled,
   prefs::kWebKitLoadsImagesAutomatically,
   prefs::kWebKitMinimumFontSize,
@@ -137,7 +139,6 @@ ALL_FONT_SCRIPTS(WEBKIT_WEBPREFS_FONTS_STANDARD)
     }
   }
 }
-#endif  // !defined(OS_ANDROID)
 
 // Registers |obs| to observe per-script font prefs under the path |map_name|.
 // On android, there's no exposed way to change these prefs, so we can save
@@ -155,6 +156,7 @@ void RegisterFontFamilyMapObserver(
     registrar->Add(base::StringPrintf("%s.%s", map_name, script), obs);
   }
 }
+#endif  // !defined(OS_ANDROID)
 
 #if defined(OS_WIN)
 // On Windows with antialising we want to use an alternate fixed font like
@@ -373,6 +375,7 @@ class PrefWatcher : public KeyedService {
       pref_change_registrar_.Add(pref_name, webkit_callback);
     }
 
+#if !defined(OS_ANDROID)
     RegisterFontFamilyMapObserver(&pref_change_registrar_,
                                   prefs::kWebKitStandardFontFamilyMap,
                                   webkit_callback);
@@ -394,6 +397,7 @@ class PrefWatcher : public KeyedService {
     RegisterFontFamilyMapObserver(&pref_change_registrar_,
                                   prefs::kWebKitPictographFontFamilyMap,
                                   webkit_callback);
+#endif  // !defined(OS_ANDROID)
   }
 
   static PrefWatcher* Get(Profile* profile);
@@ -471,6 +475,7 @@ PrefsTabHelper::PrefsTabHelper(WebContents* contents)
       weak_ptr_factory_(this) {
   PrefService* prefs = profile_->GetPrefs();
   if (prefs) {
+#if !defined(OS_ANDROID)
     // If the tab is in an incognito profile, we track changes in the default
     // zoom level of the parent profile instead.
     Profile* profile_to_track = profile_->GetOriginalProfile();
@@ -484,6 +489,7 @@ PrefsTabHelper::PrefsTabHelper(WebContents* contents)
       default_zoom_level_subscription_ =
           zoom_level_prefs->RegisterDefaultZoomLevelCallback(renderer_callback);
     }
+#endif  // !defined(OS_ANDROID)
 
     PrefWatcher::Get(profile_)->RegisterHelper(this);
   }
@@ -519,8 +525,6 @@ void PrefsTabHelper::RegisterProfilePrefs(
                                 pref_defaults.javascript_enabled);
   registry->RegisterBooleanPref(prefs::kWebKitWebSecurityEnabled,
                                 pref_defaults.web_security_enabled);
-  registry->RegisterBooleanPref(
-      prefs::kWebKitJavascriptCanOpenWindowsAutomatically, true);
   registry->RegisterBooleanPref(prefs::kWebKitLoadsImagesAutomatically,
                                 pref_defaults.loads_images_automatically);
   registry->RegisterBooleanPref(prefs::kWebKitPluginsEnabled,
@@ -674,8 +678,8 @@ void PrefsTabHelper::OnWebPrefChanged(const std::string& pref_name) {
   // give other observers (particularly the FontFamilyCache) a chance to react
   // to the pref change.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&PrefsTabHelper::NotifyWebkitPreferencesChanged,
-                            weak_ptr_factory_.GetWeakPtr(), pref_name));
+      FROM_HERE, base::BindOnce(&PrefsTabHelper::NotifyWebkitPreferencesChanged,
+                                weak_ptr_factory_.GetWeakPtr(), pref_name));
 }
 
 void PrefsTabHelper::NotifyWebkitPreferencesChanged(

@@ -33,6 +33,7 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/json/JSONValues.h"
+#include "platform/network/ParsedContentType.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashSet.h"
@@ -44,15 +45,9 @@
 
 namespace blink {
 
+class HTTPHeaderMap;
 class Suborigin;
 class ResourceResponse;
-
-typedef enum {
-  kContentDispositionNone,
-  kContentDispositionInline,
-  kContentDispositionAttachment,
-  kContentDispositionOther
-} ContentDispositionType;
 
 enum ContentTypeOptionsDisposition {
   kContentTypeOptionsNone,
@@ -88,7 +83,18 @@ struct CacheControlHeader {
         max_age(0.0) {}
 };
 
-PLATFORM_EXPORT ContentDispositionType GetContentDispositionType(const String&);
+struct ServerTimingHeader {
+  String metric;
+  double duration;
+  String description;
+
+  ServerTimingHeader(String metric, double duration, String description)
+      : metric(metric), duration(duration), description(description) {}
+};
+
+using ServerTimingHeaderVector = Vector<std::unique_ptr<ServerTimingHeader>>;
+
+PLATFORM_EXPORT bool IsContentDispositionAttachment(const String&);
 PLATFORM_EXPORT bool IsValidHTTPHeaderValue(const String&);
 PLATFORM_EXPORT bool IsValidHTTPFieldContentRFC7230(const String&);
 // Checks whether the given string conforms to the |token| ABNF production
@@ -144,6 +150,14 @@ ParseContentTypeOptionsHeader(const String& header);
 
 // Returns true and stores the position of the end of the headers to |*end|
 // if the headers part ends in |bytes[0..size]|. Returns false otherwise.
+PLATFORM_EXPORT bool ParseMultipartFormHeadersFromBody(
+    const char* bytes,
+    size_t,
+    HTTPHeaderMap* header_fields,
+    size_t* end);
+
+// Returns true and stores the position of the end of the headers to |*end|
+// if the headers part ends in |bytes[0..size]|. Returns false otherwise.
 PLATFORM_EXPORT bool ParseMultipartHeadersFromBody(const char* bytes,
                                                    size_t,
                                                    ResourceResponse*,
@@ -168,6 +182,11 @@ PLATFORM_EXPORT bool ParseContentRangeHeaderFor206(const String& content_range,
                                                    int64_t* first_byte_position,
                                                    int64_t* last_byte_position,
                                                    int64_t* instance_length);
+
+PLATFORM_EXPORT std::unique_ptr<ServerTimingHeaderVector>
+ParseServerTimingHeader(const String&);
+
+PLATFORM_EXPORT String CheckDoubleQuotedString(const String&);
 
 }  // namespace blink
 

@@ -7,7 +7,7 @@
 #include "base/logging.h"
 #include "net/cert/internal/cert_error_params.h"
 #include "net/cert/internal/cert_errors.h"
-#include "third_party/boringssl/src/include/openssl/obj.h"
+#include "third_party/boringssl/src/include/openssl/nid.h"
 
 namespace net {
 
@@ -66,6 +66,8 @@ bool SignaturePolicy::IsAcceptableSignatureAlgorithm(
   //    SHA384
   //    SHA512
   switch (algorithm.algorithm()) {
+    case SignatureAlgorithmId::Dsa:
+      return false;
     case SignatureAlgorithmId::Ecdsa:
     case SignatureAlgorithmId::RsaPkcs1:
       return IsAcceptableDigest(algorithm.digest());

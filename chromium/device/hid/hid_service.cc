@@ -36,23 +36,18 @@ void HidService::Observer::OnDeviceRemovedCleanup(
     scoped_refptr<HidDeviceInfo> device_info) {
 }
 
-std::unique_ptr<HidService> HidService::Create(
-    scoped_refptr<base::SingleThreadTaskRunner> file_task_runner) {
+// static
+constexpr base::TaskTraits HidService::kBlockingTaskTraits;
+
+std::unique_ptr<HidService> HidService::Create() {
 #if defined(OS_LINUX) && defined(USE_UDEV)
-  return base::WrapUnique(new HidServiceLinux(file_task_runner));
+  return base::WrapUnique(new HidServiceLinux());
 #elif defined(OS_MACOSX)
-  return base::WrapUnique(new HidServiceMac(file_task_runner));
+  return base::WrapUnique(new HidServiceMac());
 #elif defined(OS_WIN)
-  return base::WrapUnique(new HidServiceWin(file_task_runner));
+  return base::WrapUnique(new HidServiceWin());
 #else
   return nullptr;
-#endif
-}
-
-void HidService::Shutdown() {
-#if DCHECK_IS_ON()
-  DCHECK(!did_shutdown_);
-  did_shutdown_ = true;
 #endif
 }
 
@@ -93,9 +88,6 @@ HidService::HidService() = default;
 
 HidService::~HidService() {
   DCHECK(thread_checker_.CalledOnValidThread());
-#if DCHECK_IS_ON()
-  DCHECK(did_shutdown_);
-#endif
 }
 
 void HidService::AddDevice(scoped_refptr<HidDeviceInfo> device_info) {

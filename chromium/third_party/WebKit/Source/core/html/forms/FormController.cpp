@@ -257,7 +257,7 @@ void SavedFormState::AppendControlState(const AtomicString& name,
                                         const AtomicString& type,
                                         const FormControlState& state) {
   FormElementKey key(name.Impl(), type.Impl());
-  FormElementStateMap::iterator it = state_for_new_form_elements_.Find(key);
+  FormElementStateMap::iterator it = state_for_new_form_elements_.find(key);
   if (it != state_for_new_form_elements_.end()) {
     it->value.push_back(state);
   } else {
@@ -272,7 +272,7 @@ FormControlState SavedFormState::TakeControlState(const AtomicString& name,
                                                   const AtomicString& type) {
   if (state_for_new_form_elements_.IsEmpty())
     return FormControlState();
-  FormElementStateMap::iterator it = state_for_new_form_elements_.Find(
+  FormElementStateMap::iterator it = state_for_new_form_elements_.find(
       FormElementKey(name.Impl(), type.Impl()));
   if (it == state_for_new_form_elements_.end())
     return FormControlState();
@@ -371,7 +371,7 @@ const AtomicString& FormKeyGenerator::FormKey(
                         ("No owner"));
     return form_key_for_no_owner;
   }
-  FormToKeyMap::const_iterator it = form_to_key_map_.Find(form);
+  FormToKeyMap::const_iterator it = form_to_key_map_.find(form);
   if (it != form_to_key_map_.end())
     return it->value;
 
@@ -450,7 +450,7 @@ Vector<String> DocumentState::ToStateVector() {
   }
   bool has_only_signature = state_vector.size() == 1;
   if (has_only_signature)
-    state_vector.Clear();
+    state_vector.clear();
   return state_vector;
 }
 
@@ -485,7 +485,7 @@ FormControlState FormController::TakeStateForFormElement(
   if (!form_key_generator_)
     form_key_generator_ = FormKeyGenerator::Create();
   SavedFormStateMap::iterator it =
-      saved_form_state_map_.Find(form_key_generator_->FormKey(control));
+      saved_form_state_map_.find(form_key_generator_->FormKey(control));
   if (it == saved_form_state_map_.end())
     return FormControlState();
   FormControlState state =
@@ -498,7 +498,7 @@ FormControlState FormController::TakeStateForFormElement(
 void FormController::FormStatesFromStateVector(
     const Vector<String>& state_vector,
     SavedFormStateMap& map) {
-  map.Clear();
+  map.clear();
 
   size_t i = 0;
   if (state_vector.size() < 1 || state_vector[i++] != FormStateSignature())
@@ -515,7 +515,7 @@ void FormController::FormStatesFromStateVector(
     map.insert(form_key, std::move(state));
   }
   if (i != state_vector.size())
-    map.Clear();
+    map.clear();
 }
 
 void FormController::WillDeleteForm(HTMLFormElement* form) {

@@ -373,8 +373,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // Note that those functions have their origin at this box's CSS border box.
   // As such their location doesn't account for 'top'/'left'.
   LayoutRect BorderBoxRect() const { return LayoutRect(LayoutPoint(), Size()); }
-  LayoutRect PaddingBoxRect() const {
-    return LayoutRect(BorderLeft(), BorderTop(), ClientWidth(), ClientHeight());
+  DISABLE_CFI_PERF LayoutRect PaddingBoxRect() const {
+    return LayoutRect(ClientLeft(), ClientTop(), ClientWidth(), ClientHeight());
   }
   IntRect PixelSnappedBorderBoxRect() const {
     return IntRect(IntPoint(), frame_rect_.PixelSnappedSize());
@@ -497,7 +497,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void ClearLayoutOverflow();
   void ClearAllOverflows() { overflow_.reset(); }
 
-  void UpdateLayerTransformAfterLayout();
+  virtual void UpdateAfterLayout();
 
   DISABLE_CFI_PERF LayoutUnit ContentWidth() const {
     // We're dealing with LayoutUnit and saturated arithmetic here, so we need
@@ -560,9 +560,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   }
   DISABLE_CFI_PERF LayoutUnit ClientLogicalBottom() const {
     return BorderBefore() + ClientLogicalHeight();
-  }
-  DISABLE_CFI_PERF LayoutRect ClientBoxRect() const {
-    return LayoutRect(ClientLeft(), ClientTop(), ClientWidth(), ClientHeight());
   }
 
   int PixelSnappedClientWidth() const;
@@ -727,12 +724,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void SetOverrideContainingBlockContentLogicalHeight(LayoutUnit);
   void ClearContainingBlockOverrideSize();
   void ClearOverrideContainingBlockContentLogicalHeight();
-
-  LayoutUnit ExtraInlineOffset() const;
-  LayoutUnit ExtraBlockOffset() const;
-  void SetExtraInlineOffset(LayoutUnit inline_offest);
-  void SetExtraBlockOffset(LayoutUnit block_offest);
-  void ClearExtraInlineAndBlockOffests();
 
   LayoutSize OffsetFromContainer(const LayoutObject*) const override;
 
@@ -1021,6 +1012,14 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return Style()->IsHorizontalWritingMode() ? HorizontalScrollbarHeight()
                                               : VerticalScrollbarWidth();
   }
+
+  // Return the width of the vertical scrollbar, unless it's larger than the
+  // logical width of the content box, in which case we'll return that instead.
+  // Scrollbar handling is quite bad in such situations, and this method here
+  // is just to make sure that left-hand scrollbars don't mess up
+  // scrollWidth. For the full story, visit crbug.com/724255
+  LayoutUnit VerticalScrollbarWidthClampedToContentBox() const;
+
   virtual ScrollResult Scroll(ScrollGranularity, const FloatSize&);
   bool CanBeScrolledAndHasScrollableArea() const;
   virtual bool CanBeProgramaticallyScrolled() const;
@@ -1223,12 +1222,16 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return ToLayoutSize(PhysicalLocation());
   }
 
-  LayoutRect LogicalVisualOverflowRectForPropagation(
-      const ComputedStyle&) const;
-  LayoutRect VisualOverflowRectForPropagation(const ComputedStyle&) const;
-  LayoutRect LogicalLayoutOverflowRectForPropagation(
-      const ComputedStyle&) const;
-  LayoutRect LayoutOverflowRectForPropagation(const ComputedStyle&) const;
+  // Convert a local rect in this box's blocks direction into parent's blocks
+  // direction, for parent to accumulate layout or visual overflow.
+  LayoutRect RectForOverflowPropagation(const LayoutRect&) const;
+
+  LayoutRect LogicalVisualOverflowRectForPropagation() const;
+  LayoutRect VisualOverflowRectForPropagation() const {
+    return RectForOverflowPropagation(VisualOverflowRect());
+  }
+  LayoutRect LogicalLayoutOverflowRectForPropagation() const;
+  LayoutRect LayoutOverflowRectForPropagation() const;
 
   bool HasOverflowModel() const { return overflow_.get(); }
   bool HasSelfVisualOverflow() const {
@@ -1239,6 +1242,16 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return overflow_ && !BorderBoxRect().Contains(VisualOverflowRect());
   }
 
+  // Return true if re-laying out the containing block of this object means that
+  // we need to recalculate the preferred min/max logical widths of this object.
+  //
+  // Calculating min/max widths for an object should ideally only take itself
+  // and its children as input. However, some objects don't adhere strictly to
+  // this rule, and also take input from their containing block to figure out
+  // their min/max widths. This is the case for e.g. shrink-to-fit containers
+  // with percentage inline-axis padding. This isn't good practise, but that's
+  // how it is and how it's going to stay, unless we want to undertake a
+  // substantial maintenance task of the min/max preferred widths machinery.
   virtual bool NeedsPreferredWidthsRecalculation() const;
 
   // See README.md for an explanation of scroll origin.
@@ -1469,9 +1482,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void ComputeSelfHitTestRects(Vector<LayoutRect>&,
                                const LayoutPoint& layer_offset) const override;
 
-  PaintInvalidationReason InvalidatePaintIfNeeded(
+  PaintInvalidationReason DeprecatedInvalidatePaint(
       const PaintInvalidationState&) override;
-  PaintInvalidationReason InvalidatePaintIfNeeded(
+  PaintInvalidationReason InvalidatePaint(
       const PaintInvalidatorContext&) const override;
 
   bool ColumnFlexItemHasStretchAlignment() const;

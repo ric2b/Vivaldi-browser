@@ -41,7 +41,6 @@ enum LoadPhase {
 class GURL;
 
 namespace web {
-class NavigationItemImpl;
 class WebState;
 class WebStateImpl;
 }
@@ -96,8 +95,8 @@ class WebStateImpl;
 // Returns whether the top of the content is visible.
 @property(nonatomic, readonly) BOOL atTop;
 
-// YES if JavaScript dialogs, HTTP authentication dialogs and window.open
-// calls should be suppressed. Default is NO. When dialog is suppressed
+// YES if JavaScript dialogs and window open requests should be suppressed.
+// Default is NO. When dialog is suppressed
 // |WebStateObserver::DidSuppressDialog| will be called.
 @property(nonatomic, assign) BOOL shouldSuppressDialogs;
 
@@ -163,7 +162,7 @@ class WebStateImpl;
 - (void)loadCurrentURL;
 
 // Loads HTML in the page and presents it as if it was originating from an
-// application specific URL.
+// application specific URL. |HTML| must not be empty.
 - (void)loadHTML:(NSString*)HTML forAppSpecificURL:(const GURL&)URL;
 
 // Loads HTML in the page and presents it as if it was originating from the
@@ -262,11 +261,6 @@ class WebStateImpl;
 
 - (CRWJSInjectionReceiver*)jsInjectionReceiver;
 
-// Load the correct HTML page for |error| in a native controller, retrieved
-// from the native provider. Call |loadNativeViewWithSuccess:NO| to load the
-// native controller.
-- (void)loadErrorInNativeView:(NSError*)error;
-
 // Returns the native controller (if any) current mananging the content.
 - (id<CRWNativeContent>)nativeController;
 @end
@@ -275,9 +269,6 @@ class WebStateImpl;
 
 @interface CRWWebController (UsedOnlyForTesting)  // Testing or internal API.
 
-// YES if a user interaction has been registered at any time since the page has
-// loaded.
-@property(nonatomic, readwrite) BOOL userInteractionRegistered;
 // Returns whether the user is interacting with the page.
 @property(nonatomic, readonly) BOOL userIsInteracting;
 
@@ -285,26 +276,12 @@ class WebStateImpl;
 // |webViewContentView|.
 - (void)injectWebViewContentView:(CRWWebViewContentView*)webViewContentView;
 - (void)resetInjectedWebViewContentView;
+
 // Returns the number of observers registered for this CRWWebController.
 - (NSUInteger)observerCount;
-- (void)setURLOnStartLoading:(const GURL&)url;
-- (void)simulateLoadRequestWithURL:(const GURL&)URL;
-
-// Returns the header height.
-- (CGFloat)headerHeight;
 
 // Loads the HTML into the page at the given URL.
 - (void)loadHTML:(NSString*)HTML forURL:(const GURL&)URL;
-
-// Caches request POST data in the given session entry.  Exposed for testing.
-- (void)cachePOSTDataForRequest:(NSURLRequest*)request
-               inNavigationItem:(web::NavigationItemImpl*)item;
-
-// Acts on a single message from the JS object, parsed from JSON into a
-// DictionaryValue. Returns NO if the format for the message was invalid.
-- (BOOL)respondToMessage:(base::DictionaryValue*)crwMessage
-       userIsInteracting:(BOOL)userIsInteracting
-               originURL:(const GURL&)originURL;
 
 @end
 

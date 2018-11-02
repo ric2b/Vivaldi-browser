@@ -160,9 +160,8 @@ class ExtensionServiceInterface
       const extensions::Extension* extension) = 0;
 
   // Unload the specified extension.
-  virtual void UnloadExtension(
-      const std::string& extension_id,
-      extensions::UnloadedExtensionInfo::Reason reason) = 0;
+  virtual void UnloadExtension(const std::string& extension_id,
+                               extensions::UnloadedExtensionReason reason) = 0;
 
   // Remove the specified component extension.
   virtual void RemoveComponentExtension(const std::string& extension_id) = 0;
@@ -215,9 +214,8 @@ class ExtensionService
                        bool file_ownership_passed,
                        extensions::CrxInstaller** out_crx_installer) override;
   bool IsExtensionEnabled(const std::string& extension_id) const override;
-  void UnloadExtension(
-      const std::string& extension_id,
-      extensions::UnloadedExtensionInfo::Reason reason) override;
+  void UnloadExtension(const std::string& extension_id,
+                       extensions::UnloadedExtensionReason reason) override;
   void RemoveComponentExtension(const std::string& extension_id) override;
   void AddExtension(const extensions::Extension* extension) override;
   void AddComponentExtension(const extensions::Extension* extension) override;
@@ -344,10 +342,6 @@ class ExtensionService
   // view has been created.
   void DidCreateRenderViewForBackgroundPage(extensions::ExtensionHost* host);
 
-  // Changes sequenced task runner for crx installation tasks to |task_runner|.
-  void SetFileTaskRunnerForTesting(
-      const scoped_refptr<base::SequencedTaskRunner>& task_runner);
-
   // Record a histogram using the PermissionMessage enum values for each
   // permission in |e|.
   // NOTE: If this is ever called with high frequency, the implementation may
@@ -361,8 +355,9 @@ class ExtensionService
   void TerminateExtension(const std::string& extension_id);
 
   // Register self and content settings API with the specified map.
-  void RegisterContentSettings(
-      HostContentSettingsMap* host_content_settings_map);
+  static void RegisterContentSettings(
+      HostContentSettingsMap* host_content_settings_map,
+      Profile* profile);
 
   // Adds/Removes update observers.
   void AddUpdateObserver(extensions::UpdateObserver* observer);
@@ -527,9 +522,8 @@ class ExtensionService
       scoped_refptr<const extensions::Extension> extension);
 
   // Handles sending notification that |extension| was unloaded.
-  void NotifyExtensionUnloaded(
-      const extensions::Extension* extension,
-      extensions::UnloadedExtensionInfo::Reason reason);
+  void NotifyExtensionUnloaded(const extensions::Extension* extension,
+                               extensions::UnloadedExtensionReason reason);
 
   // Common helper to finish installing the given extension.
   void FinishInstallation(const extensions::Extension* extension);
@@ -709,7 +703,7 @@ class ExtensionService
   std::unique_ptr<extensions::ExternalInstallManager> external_install_manager_;
 
   // Sequenced task runner for extension related file operations.
-  scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
+  const scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 
   std::unique_ptr<extensions::ExtensionActionStorageManager>
       extension_action_storage_manager_;

@@ -14,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
@@ -40,8 +41,8 @@ class StubBufferHandle : public VideoCaptureBufferHandle {
       : mapped_size_(mapped_size), data_(data) {}
 
   size_t mapped_size() const override { return mapped_size_; }
-  uint8_t* data() override { return data_; }
-  const uint8_t* data() const override { return data_; }
+  uint8_t* data() const override { return data_; }
+  const uint8_t* const_data() const override { return data_; }
 
  private:
   const size_t mapped_size_;
@@ -199,8 +200,7 @@ class ImageCaptureClient : public base::RefCounted<ImageCaptureClient> {
 class FakeVideoCaptureDeviceBase : public ::testing::Test {
  protected:
   FakeVideoCaptureDeviceBase()
-      : loop_(new base::MessageLoop()),
-        descriptors_(new VideoCaptureDeviceDescriptors()),
+      : descriptors_(new VideoCaptureDeviceDescriptors()),
         client_(CreateClient()),
         image_capture_client_(new ImageCaptureClient()),
         video_capture_device_factory_(new FakeVideoCaptureDeviceFactory()) {}
@@ -224,7 +224,7 @@ class FakeVideoCaptureDeviceBase : public ::testing::Test {
 
   const VideoCaptureFormat& last_format() const { return last_format_; }
 
-  const std::unique_ptr<base::MessageLoop> loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<VideoCaptureDeviceDescriptors> descriptors_;
   std::unique_ptr<base::RunLoop> run_loop_;
   std::unique_ptr<MockClient> client_;

@@ -37,13 +37,11 @@
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/grid_layout.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
 
 #if defined(OS_WIN)
-#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/views/desktop_ios_promotion/desktop_ios_promotion_bubble_view.h"
-#include "components/browser_sync/profile_sync_service.h"
+#include "chrome/browser/ui/views/desktop_ios_promotion/desktop_ios_promotion_footnote_view.h"
 #endif
 
 using base::UserMetricsAction;
@@ -60,8 +58,8 @@ class UnsizedCombobox : public views::Combobox {
   explicit UnsizedCombobox(ui::ComboboxModel* model) : views::Combobox(model) {}
   ~UnsizedCombobox() override {}
 
-  gfx::Size GetPreferredSize() const override {
-    return gfx::Size(0, views::Combobox::GetPreferredSize().height());
+  gfx::Size CalculatePreferredSize() const override {
+    return gfx::Size(0, views::Combobox::CalculatePreferredSize().height());
   }
 
  private:
@@ -135,6 +133,7 @@ void BookmarkBubbleView::WindowClosing() {
   // destroyed asynchronously and the shown state will be checked before then.
   DCHECK_EQ(bookmark_bubble_, this);
   bookmark_bubble_ = NULL;
+  is_showing_ios_promotion_ = false;
 
   if (observer_)
     observer_->OnBookmarkBubbleHidden();
@@ -187,17 +186,22 @@ void BookmarkBubbleView::Init() {
   // buttons at the bottom.
   const int cs_id = 0;
   ColumnSet* cs = layout->AddColumnSet(cs_id);
-  cs->AddColumn(ChromeLayoutProvider::Get()->GetControlLabelGridAlignment(),
-                GridLayout::CENTER, 0, GridLayout::USE_PREF, 0, 0);
-  cs->AddPaddingColumn(0, views::kUnrelatedControlHorizontalSpacing);
+  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+
+  cs->AddColumn(provider->GetControlLabelGridAlignment(), GridLayout::CENTER, 0,
+                GridLayout::USE_PREF, 0, 0);
+  cs->AddPaddingColumn(
+      0, provider->GetDistanceMetric(DISTANCE_UNRELATED_CONTROL_HORIZONTAL));
 
   cs->AddColumn(GridLayout::FILL, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
-  cs->AddPaddingColumn(1, views::kUnrelatedControlLargeHorizontalSpacing);
+  cs->AddPaddingColumn(1, provider->GetDistanceMetric(
+                              DISTANCE_UNRELATED_CONTROL_HORIZONTAL_LARGE));
 
   cs->AddColumn(GridLayout::LEADING, GridLayout::TRAILING, 0,
                 GridLayout::USE_PREF, 0, 0);
-  cs->AddPaddingColumn(0, views::kRelatedButtonHSpacing);
+  cs->AddPaddingColumn(0, provider->GetDistanceMetric(
+                              views::DISTANCE_RELATED_BUTTON_HORIZONTAL));
   cs->AddColumn(GridLayout::LEADING, GridLayout::TRAILING, 0,
                 GridLayout::USE_PREF, 0, 0);
 
@@ -212,13 +216,15 @@ void BookmarkBubbleView::Init() {
 
   layout->AddView(title_tf_, 5, 1);
 
-  layout->AddPaddingRow(0, views::kUnrelatedControlHorizontalSpacing);
+  layout->AddPaddingRow(
+      0, provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS).top());
 
   layout->StartRow(0, cs_id);
   layout->AddView(combobox_label);
   layout->AddView(parent_combobox_, 5, 1);
 
-  layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
+  layout->AddPaddingRow(
+      0, provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL));
 
   layout->StartRow(0, cs_id);
   layout->SkipColumns(2);
@@ -269,14 +275,25 @@ views::View* BookmarkBubbleView::GetInitiallyFocusedView() {
 }
 
 views::View* BookmarkBubbleView::CreateFootnoteView() {
+#if defined(OS_WIN)
+  if (!is_showing_ios_promotion_ &&
+      desktop_ios_promotion::IsEligibleForIOSPromotion(
+          profile_,
+          desktop_ios_promotion::PromotionEntryPoint::BOOKMARKS_FOOTNOTE)) {
+    footnote_view_ = new DesktopIOSPromotionFootnoteView(profile_, this);
+    return footnote_view_;
+  }
+#endif
   if (!SyncPromoUI::ShouldShowSyncPromo(profile_))
     return nullptr;
 
   base::RecordAction(
       base::UserMetricsAction("Signin_Impression_FromBookmarkBubble"));
 
-  return new BubbleSyncPromoView(delegate_.get(), IDS_BOOKMARK_SYNC_PROMO_LINK,
-                                 IDS_BOOKMARK_SYNC_PROMO_MESSAGE);
+  footnote_view_ =
+      new BubbleSyncPromoView(delegate_.get(), IDS_BOOKMARK_SYNC_PROMO_LINK,
+                              IDS_BOOKMARK_SYNC_PROMO_MESSAGE);
+  return footnote_view_;
 }
 
 BookmarkBubbleView::BookmarkBubbleView(
@@ -301,9 +318,12 @@ BookmarkBubbleView::BookmarkBubbleView(
       title_tf_(nullptr),
       parent_combobox_(nullptr),
       ios_promo_view_(nullptr),
+      footnote_view_(nullptr),
       remove_bookmark_(false),
       apply_edits_(true),
-      is_showing_ios_promotion_(false) {}
+      is_showing_ios_promotion_(false) {
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::BOOKMARK);
+}
 
 base::string16 BookmarkBubbleView::GetTitle() {
   BookmarkModel* bookmark_model =
@@ -349,13 +369,11 @@ void BookmarkBubbleView::HandleButtonPressed(views::Button* sender) {
   } else {
     DCHECK_EQ(close_button_, sender);
 #if defined(OS_WIN)
-    PrefService* prefs = profile_->GetPrefs();
-    const browser_sync::ProfileSyncService* sync_service =
-        ProfileSyncServiceFactory::GetForProfile(profile_);
     if (desktop_ios_promotion::IsEligibleForIOSPromotion(
-            prefs, sync_service,
+            profile_,
             desktop_ios_promotion::PromotionEntryPoint::BOOKMARKS_BUBBLE)) {
-      ShowIOSPromotion();
+      ShowIOSPromotion(
+          desktop_ios_promotion::PromotionEntryPoint::BOOKMARKS_BUBBLE);
     } else {
       GetWidget()->Close();
     }
@@ -401,13 +419,22 @@ void BookmarkBubbleView::ApplyEdits() {
   }
 }
 
+void BookmarkBubbleView::OnIOSPromotionFootnoteLinkClicked() {
 #if defined(OS_WIN)
-void BookmarkBubbleView::ShowIOSPromotion() {
+  ShowIOSPromotion(
+      desktop_ios_promotion::PromotionEntryPoint::FOOTNOTE_FOLLOWUP_BUBBLE);
+#endif
+}
+
+#if defined(OS_WIN)
+void BookmarkBubbleView::ShowIOSPromotion(
+    desktop_ios_promotion::PromotionEntryPoint entry_point) {
   DCHECK(!is_showing_ios_promotion_);
   RemoveChildView(bookmark_details_view_.get());
+  delete footnote_view_;
+  footnote_view_ = nullptr;
   is_showing_ios_promotion_ = true;
-  ios_promo_view_ = new DesktopIOSPromotionBubbleView(
-      profile_, desktop_ios_promotion::PromotionEntryPoint::BOOKMARKS_BUBBLE);
+  ios_promo_view_ = new DesktopIOSPromotionBubbleView(profile_, entry_point);
   AddChildView(ios_promo_view_);
   GetWidget()->UpdateWindowIcon();
   GetWidget()->UpdateWindowTitle();

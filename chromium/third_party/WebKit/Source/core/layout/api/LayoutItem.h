@@ -161,7 +161,7 @@ class LayoutItem {
   }
 
   void SetShouldDoFullPaintInvalidation(
-      PaintInvalidationReason reason = kPaintInvalidationFull) {
+      PaintInvalidationReason reason = PaintInvalidationReason::kFull) {
     layout_object_->SetShouldDoFullPaintInvalidation(reason);
   }
 
@@ -201,8 +201,8 @@ class LayoutItem {
     return layout_object_->NeedsOverflowRecalcAfterStyleChange();
   }
 
-  void InvalidateTreeIfNeeded(const PaintInvalidationState& state) {
-    layout_object_->InvalidateTreeIfNeeded(state);
+  void DeprecatedInvalidateTree(const PaintInvalidationState& state) {
+    layout_object_->DeprecatedInvalidateTree(state);
   }
 
   CompositingState GetCompositingState() const {

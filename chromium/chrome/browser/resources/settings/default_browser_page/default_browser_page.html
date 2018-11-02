@@ -1,4 +1,5 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="default_browser_browser_proxy.html">
 <link rel="import" href="../icons.html">
@@ -14,12 +15,11 @@
           <div id="canBeDefaultBrowser">$i18n{defaultBrowser}</div>
           <div class="secondary">$i18n{defaultBrowserMakeDefault}</div>
         </div>
-        <div class="secondary-action">
-          <paper-button class="secondary-button"
-              on-tap="onSetDefaultBrowserTap_">
-            $i18n{defaultBrowserMakeDefaultButton}
-          </paper-button>
-        </div>
+        <div class="separator"></div>
+        <paper-button class="secondary-button"
+            on-tap="onSetDefaultBrowserTap_">
+          $i18n{defaultBrowserMakeDefaultButton}
+        </paper-button>
       </div>
     </template>
     <template is="dom-if" if="[[!maySetDefaultBrowser_]]">

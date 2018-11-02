@@ -776,8 +776,15 @@ void BookmarkChangeProcessor::UpdateBookmarkWithSyncData(
         node,
         base::Time::FromInternalValue(specifics.creation_time_us()));
   }
+  std::string thumbnail;
+  if (!node->GetMetaInfo("Thumbnail", &thumbnail))
+    thumbnail.clear();
   SetBookmarkFavicon(&sync_node, node, model, sync_client);
   model->SetNodeMetaInfoMap(node, *GetBookmarkMetaInfo(&sync_node));
+
+  //Preserve the thumbnail
+  if (!thumbnail.empty())
+    model->SetNodeMetaInfo(node, "Thumbnail", thumbnail);
 }
 
 // static
@@ -941,12 +948,12 @@ void BookmarkChangeProcessor::SetSyncNodeMetaInfo(
   if (meta_info_map) {
     for (BookmarkNode::MetaInfoMap::const_iterator it = meta_info_map->begin();
         it != meta_info_map->end(); ++it) {
-      sync_pb::MetaInfo* meta_info = specifics.add_meta_info();
       if (it->first == "Thumbnail") {
         // Never sync the Thumbnail key as it's not relevant in the receiving
         // end.
         continue;
       }
+      sync_pb::MetaInfo* meta_info = specifics.add_meta_info();
       meta_info->set_key(it->first);
       meta_info->set_value(it->second);
     }

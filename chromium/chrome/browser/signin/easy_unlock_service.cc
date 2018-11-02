@@ -119,7 +119,7 @@ class EasyUnlockService::BluetoothDetector
   }
 
   void Initialize() {
-    if (!device::BluetoothAdapterFactory::IsBluetoothAdapterAvailable())
+    if (!device::BluetoothAdapterFactory::IsBluetoothSupported())
       return;
 
     device::BluetoothAdapterFactory::GetAdapter(
@@ -420,6 +420,14 @@ bool EasyUnlockService::GetPersistedHardlockState(
 void EasyUnlockService::ShowInitialUserState() {
   if (!GetScreenlockStateHandler())
     return;
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          proximity_auth::switches::kEnableBluetoothLowEnergyDiscovery) &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          proximity_auth::switches::kEnableChromeOSLogin)) {
+    UpdateScreenlockState(ScreenlockState::PASSWORD_REQUIRED_FOR_LOGIN);
+    return;
+  }
 
   EasyUnlockScreenlockStateHandler::HardlockState state;
   bool has_persisted_state = GetPersistedHardlockState(&state);
@@ -731,6 +739,17 @@ void EasyUnlockService::InitializeOnAppManagerReady() {
 
 void EasyUnlockService::OnBluetoothAdapterPresentChanged() {
   UpdateAppState();
+
+  // On device boot, we can't show the initial user state until Bluetooth is
+  // detected to be present.
+  if (GetType() == TYPE_SIGNIN &&
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          proximity_auth::switches::kEnableBluetoothLowEnergyDiscovery) &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          proximity_auth::switches::kEnableChromeOSLogin)) {
+    ShowInitialUserState();
+    return;
+  }
 }
 
 void EasyUnlockService::SetHardlockStateForUser(
@@ -741,6 +760,17 @@ void EasyUnlockService::SetHardlockStateForUser(
   PrefService* local_state = GetLocalState();
   if (!local_state)
     return;
+
+  // Disallow setting the hardlock state if the password is currently being
+  // forced.
+  if (!screenlock_state_handler_ ||
+      screenlock_state_handler_->state() ==
+          proximity_auth::ScreenlockState::PASSWORD_REAUTH ||
+      screenlock_state_handler_->state() ==
+          proximity_auth::ScreenlockState::PASSWORD_REQUIRED_FOR_LOGIN) {
+    PA_LOG(INFO) << "Hardlock state can't be set when password is forced.";
+    return;
+  }
 
   DictionaryPrefUpdate update(local_state, prefs::kEasyUnlockHardlockState);
   update->SetIntegerWithoutPathExpansion(account_id.GetUserEmail(),
@@ -791,12 +821,14 @@ EasyUnlockAuthEvent EasyUnlockService::GetPasswordAuthEvent() const {
         return PASSWORD_ENTRY_PHONE_UNSUPPORTED;
       case ScreenlockState::RSSI_TOO_LOW:
         return PASSWORD_ENTRY_RSSI_TOO_LOW;
-      case ScreenlockState::TX_POWER_TOO_HIGH:
-        return PASSWORD_ENTRY_TX_POWER_TOO_HIGH;
-      case ScreenlockState::PHONE_LOCKED_AND_TX_POWER_TOO_HIGH:
-        return PASSWORD_ENTRY_PHONE_LOCKED_AND_TX_POWER_TOO_HIGH;
+      case ScreenlockState::PHONE_LOCKED_AND_RSSI_TOO_LOW:
+        return PASSWORD_ENTRY_PHONE_LOCKED_AND_RSSI_TOO_LOW;
       case ScreenlockState::AUTHENTICATED:
         return PASSWORD_ENTRY_WITH_AUTHENTICATED_PHONE;
+      case ScreenlockState::PASSWORD_REAUTH:
+        return PASSWORD_ENTRY_FORCED_REAUTH;
+      case ScreenlockState::PASSWORD_REQUIRED_FOR_LOGIN:
+        return PASSWORD_ENTRY_REQUIRED_FOR_LOGIN;
     }
   }
 

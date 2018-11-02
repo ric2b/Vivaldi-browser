@@ -68,6 +68,12 @@ class WebContentsImplBrowserTest : public ContentBrowserTest {
     ContentBrowserTest::SetUp();
   }
 
+  void SetUpOnMainThread() override {
+    // Setup the server to allow serving separate sites, so we can perform
+    // cross-process navigation.
+    host_resolver()->AddRule("*", "127.0.0.1");
+  }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(WebContentsImplBrowserTest);
 };
@@ -436,9 +442,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   net::HostPortPair foo_host_port;
   GURL cross_site_url;
 
-  // Setup the server to allow serving separate sites, so we can perform
-  // cross-process navigation.
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 
   foo_host_port = embedded_test_server()->host_port_pair();
@@ -594,7 +597,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, LoadProgressWithFrames) {
 // a DidStopLoading.  See http://crbug.com/429399.
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        LoadProgressAfterInterruptedNav) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Start at a real page.
@@ -801,7 +803,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                             "window.open('" + kViewSourceURL.spec() + "');"));
   Shell* new_shell = new_shell_observer.GetShell();
   WaitForLoadStop(new_shell->web_contents());
-  EXPECT_EQ("", new_shell->web_contents()->GetURL().spec());
+  EXPECT_TRUE(new_shell->web_contents()->GetURL().spec().empty());
   // No navigation should commit.
   EXPECT_FALSE(
       new_shell->web_contents()->GetController().GetLastCommittedEntry());
@@ -846,90 +848,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ViewSourceWebUI) {
                   ->GetController()
                   .GetLastCommittedEntry()
                   ->IsViewSourceMode());
-}
-
-namespace {
-const char kDataUrlWarningPattern[] =
-    "Upcoming versions will block content-initiated top frame navigations*";
-
-// This class listens for console messages other than the data: URL warning. It
-// fails the test if it sees a data: URL warning.
-class NoDataURLWarningConsoleObserverDelegate : public ConsoleObserverDelegate {
- public:
-  using ConsoleObserverDelegate::ConsoleObserverDelegate;
-  // WebContentsDelegate method:
-  bool DidAddMessageToConsole(WebContents* source,
-                              int32_t level,
-                              const base::string16& message,
-                              int32_t line_no,
-                              const base::string16& source_id) override {
-    std::string ascii_message = base::UTF16ToASCII(message);
-    EXPECT_FALSE(base::MatchPattern(ascii_message, kDataUrlWarningPattern));
-    return ConsoleObserverDelegate::DidAddMessageToConsole(
-        source, level, message, line_no, source_id);
-  }
-};
-
-}  // namespace
-
-// Test that a direct navigation to a data URL doesn't show a console warning.
-IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, DataURLDirectNavigation) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  const GURL kUrl(embedded_test_server()->GetURL("/simple_page.html"));
-
-  NoDataURLWarningConsoleObserverDelegate console_delegate(
-      shell()->web_contents(), "FINISH");
-  shell()->web_contents()->SetDelegate(&console_delegate);
-
-  NavigateToURL(
-      shell(),
-      GURL("data:text/html,<html><script>console.log('FINISH');</script>"));
-  console_delegate.Wait();
-  EXPECT_TRUE(shell()->web_contents()->GetURL().SchemeIs(url::kDataScheme));
-  EXPECT_FALSE(
-      base::MatchPattern(console_delegate.message(), kDataUrlWarningPattern));
-}
-
-// Test that window.open to a data URL shows a console warning.
-IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
-                       DataURLWindowOpen_ShouldWarn) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  const GURL kUrl(embedded_test_server()->GetURL("/simple_page.html"));
-  NavigateToURL(shell(), kUrl);
-
-  ShellAddedObserver new_shell_observer;
-  EXPECT_TRUE(ExecuteScript(shell()->web_contents(),
-                            "window.open('data:text/plain,test');"));
-  Shell* new_shell = new_shell_observer.GetShell();
-
-  ConsoleObserverDelegate console_delegate(
-      new_shell->web_contents(),
-      "Upcoming versions will block content-initiated top frame navigations*");
-  new_shell->web_contents()->SetDelegate(&console_delegate);
-  console_delegate.Wait();
-  EXPECT_TRUE(new_shell->web_contents()->GetURL().SchemeIs(url::kDataScheme));
-}
-
-// Test that a content initiated navigation to a data URL shows a console
-// warning.
-IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, DataURLRedirect_ShouldWarn) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  const GURL kUrl(embedded_test_server()->GetURL("/simple_page.html"));
-  NavigateToURL(shell(), kUrl);
-
-  ConsoleObserverDelegate console_delegate(
-      shell()->web_contents(),
-      "Upcoming versions will block content-initiated top frame navigations*");
-  shell()->web_contents()->SetDelegate(&console_delegate);
-  EXPECT_TRUE(ExecuteScript(shell()->web_contents(),
-                            "window.location.href = 'data:text/plain,test';"));
-  console_delegate.Wait();
-  EXPECT_TRUE(shell()
-                  ->web_contents()
-                  ->GetController()
-                  .GetLastCommittedEntry()
-                  ->GetURL()
-                  .SchemeIs(url::kDataScheme));
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, NewNamedWindow) {
@@ -1024,7 +942,8 @@ namespace {
 class TestJavaScriptDialogManager : public JavaScriptDialogManager,
                                     public WebContentsDelegate {
  public:
-  TestJavaScriptDialogManager() : message_loop_runner_(new MessageLoopRunner) {}
+  TestJavaScriptDialogManager()
+      : is_fullscreen_(false), message_loop_runner_(new MessageLoopRunner) {}
   ~TestJavaScriptDialogManager() override {}
 
   void Wait() {
@@ -1039,6 +958,20 @@ class TestJavaScriptDialogManager : public JavaScriptDialogManager,
   JavaScriptDialogManager* GetJavaScriptDialogManager(
       WebContents* source) override {
     return this;
+  }
+
+  void EnterFullscreenModeForTab(WebContents* web_contents,
+                                 const GURL& origin) override {
+    is_fullscreen_ = true;
+  }
+
+  void ExitFullscreenModeForTab(WebContents*) override {
+    is_fullscreen_ = false;
+  }
+
+  bool IsFullscreenForTabOrPending(
+      const WebContents* web_contents) const override {
+    return is_fullscreen_;
   }
 
   // JavaScriptDialogManager
@@ -1058,7 +991,10 @@ class TestJavaScriptDialogManager : public JavaScriptDialogManager,
 
   void RunBeforeUnloadDialog(WebContents* web_contents,
                              bool is_reload,
-                             const DialogClosedCallback& callback) override {}
+                             const DialogClosedCallback& callback) override {
+    callback.Run(true, base::string16());
+    message_loop_runner_->Quit();
+  }
 
   bool HandleJavaScriptDialog(WebContents* web_contents,
                               bool accept,
@@ -1071,6 +1007,8 @@ class TestJavaScriptDialogManager : public JavaScriptDialogManager,
 
  private:
   std::string last_message_;
+
+  bool is_fullscreen_;
 
   // The MessageLoopRunner used to spin the message loop.
   scoped_refptr<MessageLoopRunner> message_loop_runner_;
@@ -1086,7 +1024,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   TestJavaScriptDialogManager dialog_manager;
   wc->SetDelegate(&dialog_manager);
 
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 
   NavigateToURL(shell(),
@@ -1365,7 +1302,6 @@ class MouseLockDelegate : public WebContentsDelegate {
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        RenderWidgetDeletedWhileMouseLockPending) {
-  host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 
   std::unique_ptr<MouseLockDelegate> delegate(new MouseLockDelegate());
@@ -1477,6 +1413,58 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, UserAgentOverride) {
       base::Bind(&ResourceDispatcherHost::SetDelegate,
                  base::Unretained(ResourceDispatcherHostImpl::Get()),
                  old_delegate));
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       DialogsFromJavaScriptEndFullscreen) {
+  WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
+  TestJavaScriptDialogManager dialog_manager;
+  wc->SetDelegate(&dialog_manager);
+
+  GURL url("about:blank");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  // alert
+  wc->EnterFullscreenMode(url);
+  EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
+  std::string script = "alert('hi')";
+  EXPECT_TRUE(content::ExecuteScript(wc, script));
+  dialog_manager.Wait();
+  EXPECT_FALSE(wc->IsFullscreenForCurrentTab());
+
+  // confirm
+  wc->EnterFullscreenMode(url);
+  EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
+  script = "confirm('hi')";
+  EXPECT_TRUE(content::ExecuteScript(wc, script));
+  dialog_manager.Wait();
+  EXPECT_FALSE(wc->IsFullscreenForCurrentTab());
+
+  // prompt
+  wc->EnterFullscreenMode(url);
+  EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
+  script = "prompt('hi')";
+  EXPECT_TRUE(content::ExecuteScript(wc, script));
+  dialog_manager.Wait();
+  EXPECT_FALSE(wc->IsFullscreenForCurrentTab());
+
+  // beforeunload
+  wc->EnterFullscreenMode(url);
+  EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
+  // Disable the hang monitor (otherwise there will be a race between the
+  // beforeunload dialog and the beforeunload hang timer) and give the page a
+  // gesture to allow dialogs.
+  wc->GetMainFrame()->DisableBeforeUnloadHangMonitorForTesting();
+  wc->GetMainFrame()->ExecuteJavaScriptWithUserGestureForTests(
+      base::string16());
+  script = "window.onbeforeunload=function(e){ return 'x' };";
+  EXPECT_TRUE(content::ExecuteScript(wc, script));
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+  dialog_manager.Wait();
+  EXPECT_FALSE(wc->IsFullscreenForCurrentTab());
+
+  wc->SetDelegate(nullptr);
+  wc->SetJavaScriptDialogManagerForTesting(nullptr);
 }
 
 }  // namespace content

@@ -45,10 +45,10 @@ FEImage::FEImage(Filter* filter,
                  PassRefPtr<Image> image,
                  SVGPreserveAspectRatio* preserve_aspect_ratio)
     : FilterEffect(filter),
-      image_(image),
+      image_(std::move(image)),
       tree_scope_(nullptr),
       preserve_aspect_ratio_(preserve_aspect_ratio) {
-  FilterEffect::SetOperatingColorSpace(kColorSpaceDeviceRGB);
+  FilterEffect::SetOperatingInterpolationSpace(kInterpolationSpaceSRGB);
 }
 
 FEImage::FEImage(Filter* filter,
@@ -59,7 +59,7 @@ FEImage::FEImage(Filter* filter,
       tree_scope_(&tree_scope),
       href_(href),
       preserve_aspect_ratio_(preserve_aspect_ratio) {
-  FilterEffect::SetOperatingColorSpace(kColorSpaceDeviceRGB);
+  FilterEffect::SetOperatingInterpolationSpace(kInterpolationSpaceSRGB);
 }
 
 DEFINE_TRACE(FEImage) {
@@ -191,7 +191,7 @@ sk_sp<SkImageFilter> FEImage::CreateImageFilterForLayoutObject(
   builder.EndRecording(*canvas);
 
   return SkPictureImageFilter::Make(
-      ToSkPicture(paint_recorder.finishRecordingAsPicture()), dst_rect);
+      ToSkPicture(paint_recorder.finishRecordingAsPicture(), dst_rect));
 }
 
 sk_sp<SkImageFilter> FEImage::CreateImageFilter() {

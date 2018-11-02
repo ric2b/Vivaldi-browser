@@ -5,15 +5,15 @@
 #ifndef ScrollManager_h
 #define ScrollManager_h
 
+#include <deque>
 #include "core/CoreExport.h"
 #include "core/page/EventWithHitTestResults.h"
 #include "platform/geometry/LayoutSize.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Visitor.h"
 #include "platform/scroll/ScrollTypes.h"
+#include "platform/wtf/Allocator.h"
 #include "public/platform/WebInputEventResult.h"
-#include "wtf/Allocator.h"
-#include <deque>
 
 namespace blink {
 
@@ -111,8 +111,11 @@ class CORE_EXPORT ScrollManager
   void RecomputeScrollChain(const Node& start_node,
                             std::deque<int>& scroll_chain);
 
-  uint32_t ComputeNonCompositedMainThreadScrollingReasons();
-  void RecordNonCompositedMainThreadScrollingReasons(const WebGestureDevice);
+  // scroller_size is set only when scrolling non root scroller.
+  void ComputeScrollRelatedMetrics(
+      uint32_t* non_composited_main_thread_scrolling_reasons,
+      int* scroller_size);
+  void RecordScrollRelatedMetrics(const WebGestureDevice);
 
   // NOTE: If adding a new field to this class please ensure that it is
   // cleared in |ScrollManager::clear()|.

@@ -53,6 +53,8 @@ namespace {
 
 class TabCloser : public content::WebContentsUserData<TabCloser> {
  public:
+  ~TabCloser() override {}
+
   static void MaybeClose(WebContents* web_contents) {
     DCHECK(web_contents);
 
@@ -75,7 +77,6 @@ class TabCloser : public content::WebContentsUserData<TabCloser> {
         FROM_HERE,
         base::Bind(&TabCloser::CloseTabImpl, weak_ptr_factory_.GetWeakPtr()));
   }
-  ~TabCloser() override {}
 
   void CloseTabImpl() {
     // On Android, FindBrowserWithWebContents and TabStripModel don't exist.
@@ -118,10 +119,8 @@ void SupervisedUserInterstitial::Show(
   SupervisedUserInterstitial* interstitial = new SupervisedUserInterstitial(
       web_contents, url, reason, initial_page_load, callback);
 
-  // If Init() does not complete fully, immediately delete the interstitial.
-  if (!interstitial->Init())
-    delete interstitial;
-  // Otherwise |interstitial_page_| is responsible for deleting it.
+  // |interstitial_page_| is responsible for deleting the interstitial.
+  interstitial->Init();
 }
 
 SupervisedUserInterstitial::SupervisedUserInterstitial(
@@ -143,21 +142,15 @@ SupervisedUserInterstitial::~SupervisedUserInterstitial() {
   DCHECK(!web_contents_);
 }
 
-bool SupervisedUserInterstitial::Init() {
-  if (ShouldProceed()) {
-    // It can happen that the site was only allowed very recently and the URL
-    // filter on the IO thread had not been updated yet. Proceed with the
-    // request without showing the interstitial.
-    DispatchContinueRequest(true);
-    return false;
-  }
+void SupervisedUserInterstitial::Init() {
+  DCHECK(!ShouldProceed());
 
   InfoBarService* service = InfoBarService::FromWebContents(web_contents_);
   if (service) {
     // Remove all the infobars which are attached to |web_contents_| and for
     // which ShouldExpire() returns true.
     content::LoadCommittedDetails details;
-    // |details.is_in_page| is default false, and |details.is_main_frame| is
+    // |details.is_same_page| is default false, and |details.is_main_frame| is
     // default true. This results in is_navigation_to_different_page() returning
     // true.
     DCHECK(details.is_navigation_to_different_page());
@@ -185,8 +178,6 @@ bool SupervisedUserInterstitial::Init() {
   interstitial_page_ = content::InterstitialPage::Create(
       web_contents_, initial_page_load_, url_, this);
   interstitial_page_->Show();
-
-  return true;
 }
 
 // static
@@ -237,7 +228,6 @@ void SupervisedUserInterstitial::CommandReceived(const std::string& command) {
                               BACK,
                               HISTOGRAM_BOUNDING_VALUE);
 
-    DCHECK(web_contents_->GetController().GetTransientEntry());
     interstitial_page_->DontProceed();
     return;
   }
@@ -271,7 +261,8 @@ void SupervisedUserInterstitial::CommandReceived(const std::string& command) {
     ReportChildAccountFeedback(web_contents_, message, url_);
 #else
     chrome::ShowFeedbackPage(chrome::FindBrowserWithWebContents(web_contents_),
-                             message, std::string());
+                             chrome::kFeedbackSourceSupervisedUserInterstitial,
+                             message, std::string() /* category_tag */);
 #endif
     return;
   }
@@ -323,6 +314,11 @@ bool SupervisedUserInterstitial::ShouldProceed() {
 }
 
 void SupervisedUserInterstitial::MoveAwayFromCurrentPage() {
+  // No need to do anything if the WebContents is in the process of being
+  // destroyed anyway.
+  if (web_contents_->IsBeingDestroyed())
+    return;
+
   // If the interstitial was shown during a page load and there is no history
   // entry to go back to, attempt to close the tab.
   if (initial_page_load_) {
@@ -347,8 +343,7 @@ void SupervisedUserInterstitial::DispatchContinueRequest(
       SupervisedUserServiceFactory::GetForProfile(profile_);
   supervised_user_service->RemoveObserver(this);
 
-  if (!callback_.is_null())
-    callback_.Run(continue_request);
+  callback_.Run(continue_request);
 
   // After this, the WebContents may be destroyed. Make sure we don't try to use
   // it again.

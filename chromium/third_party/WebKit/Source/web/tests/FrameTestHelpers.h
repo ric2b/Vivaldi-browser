@@ -31,9 +31,15 @@
 #ifndef FrameTestHelpers_h
 #define FrameTestHelpers_h
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+#include <memory>
+#include <string>
+#include "core/exported/WebViewBase.h"
 #include "core/frame/Settings.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/scroll/ScrollbarTheme.h"
+#include "public/platform/Platform.h"
 #include "public/platform/WebMouseEvent.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURLRequest.h"
@@ -43,16 +49,11 @@
 #include "public/web/WebRemoteFrameClient.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebViewClient.h"
-#include "web/WebViewImpl.h"
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
-#include <memory>
-#include <string>
 
 namespace blink {
 
 class WebFrame;
-class WebLocalFrameImpl;
+class WebLocalFrameBase;
 class WebRemoteFrameImpl;
 class WebSettings;
 enum class WebCachePolicy;
@@ -90,7 +91,7 @@ WebMouseEvent CreateMouseEvent(WebInputEvent::Type,
 // Calls WebRemoteFrame::createLocalChild, but with some arguments prefilled
 // with default test values (i.e. with a default |client| or |properties| and/or
 // with a precalculated |uniqueName|).
-WebLocalFrameImpl* CreateLocalChild(
+WebLocalFrameBase* CreateLocalChild(
     WebRemoteFrame* parent,
     const WebString& name = WebString(),
     WebFrameClient* = nullptr,
@@ -207,7 +208,7 @@ class WebViewHelper {
   // Creates and initializes the WebView. Implicitly calls reset() first. If
   // a WebFrameClient or a WebViewClient are passed in, they must outlive the
   // WebViewHelper.
-  WebViewImpl* InitializeWithOpener(
+  WebViewBase* InitializeWithOpener(
       WebFrame* opener,
       bool enable_javascript = false,
       TestWebFrameClient* = nullptr,
@@ -216,7 +217,7 @@ class WebViewHelper {
       void (*update_settings_func)(WebSettings*) = nullptr);
 
   // Same as initializeWithOpener(), but always sets the opener to null.
-  WebViewImpl* Initialize(bool enable_javascript = false,
+  WebViewBase* Initialize(bool enable_javascript = false,
                           TestWebFrameClient* = nullptr,
                           TestWebViewClient* = nullptr,
                           TestWebWidgetClient* = nullptr,
@@ -224,7 +225,7 @@ class WebViewHelper {
 
   // Same as initialize() but also performs the initial load of the url. Only
   // returns once the load is complete.
-  WebViewImpl* InitializeAndLoad(
+  WebViewBase* InitializeAndLoad(
       const std::string& url,
       bool enable_javascript = false,
       TestWebFrameClient* = nullptr,
@@ -236,12 +237,14 @@ class WebViewHelper {
 
   void Reset();
 
-  WebViewImpl* WebView() const { return web_view_; }
+  WebViewBase* WebView() const { return web_view_; }
 
  private:
-  WebViewImpl* web_view_;
+  WebViewBase* web_view_;
   SettingOverrider* setting_overrider_;
   UseMockScrollbarSettings mock_scrollbar_settings_;
+  // Non-null if the WebViewHelper owns the TestWebViewClient.
+  std::unique_ptr<TestWebViewClient> owned_test_web_view_client_;
   TestWebViewClient* test_web_view_client_;
 };
 
@@ -252,12 +255,16 @@ class TestWebFrameClient : public WebFrameClient {
  public:
   TestWebFrameClient();
 
+  WebLocalFrame* Frame() const { return frame_; }
+  void SetFrame(WebLocalFrame* frame) { frame_ = frame; }
+
   void FrameDetached(WebLocalFrame*, DetachType) override;
   WebLocalFrame* CreateChildFrame(WebLocalFrame* parent,
                                   WebTreeScopeType,
                                   const WebString& name,
                                   const WebString& fallback_name,
                                   WebSandboxFlags,
+                                  const WebParsedFeaturePolicy&,
                                   const WebFrameOwnerProperties&) override;
   void DidStartLoading(bool) override;
   void DidStopLoading() override;
@@ -267,8 +274,16 @@ class TestWebFrameClient : public WebFrameClient {
   // Tests can override the virtual method below to mock the interface provider.
   virtual blink::InterfaceProvider* GetInterfaceProvider() { return nullptr; }
 
+  std::unique_ptr<blink::WebURLLoader> CreateURLLoader() override {
+    // TODO(yhirano): Stop using Platform::CreateURLLoader() here.
+    return Platform::Current()->CreateURLLoader();
+  }
+
  private:
   int loads_in_progress_ = 0;
+
+  // This is null from when the client is created until it is initialized.
+  WebLocalFrame* frame_;
 };
 
 // Minimal implementation of WebRemoteFrameClient needed for unit tests that

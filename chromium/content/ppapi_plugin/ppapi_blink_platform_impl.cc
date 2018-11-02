@@ -16,6 +16,7 @@
 #include "content/common/child_process_messages.h"
 #include "ppapi/proxy/plugin_globals.h"
 #include "ppapi/shared_impl/proxy_lock.h"
+#include "third_party/WebKit/public/platform/WebStorageNamespace.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 
 #if defined(OS_MACOSX)
@@ -205,7 +206,7 @@ blink::WebThemeEngine* PpapiBlinkPlatformImpl::ThemeEngine() {
   return NULL;
 }
 
-blink::WebURLLoader* PpapiBlinkPlatformImpl::CreateURLLoader() {
+std::unique_ptr<blink::WebURLLoader> PpapiBlinkPlatformImpl::CreateURLLoader() {
   NOTREACHED();
   return NULL;
 }
@@ -222,10 +223,10 @@ blink::WebData PpapiBlinkPlatformImpl::LoadResource(const char* name) {
   return blink::WebData();
 }
 
-blink::WebStorageNamespace*
+std::unique_ptr<blink::WebStorageNamespace>
 PpapiBlinkPlatformImpl::CreateLocalStorageNamespace() {
   NOTREACHED();
-  return 0;
+  return nullptr;
 }
 
 void PpapiBlinkPlatformImpl::dispatchStorageEvent(

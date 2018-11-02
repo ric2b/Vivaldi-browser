@@ -6,7 +6,7 @@ import common
 import time
 from common import TestDriver
 from common import IntegrationTest
-from common import NotAndroid
+from decorators import NotAndroid
 
 
 class Smoke(IntegrationTest):
@@ -21,7 +21,7 @@ class Smoke(IntegrationTest):
       t.LoadURL('http://check.googlezip.net/test.html')
       for response in t.GetHTTPResponses():
         self.assertNotHasChromeProxyViaHeader(response)
-  
+
   # Ensure Chrome uses DataSaver in normal mode.
   def testCheckPageWithNormalMode(self):
     with TestDriver() as t:
@@ -65,6 +65,33 @@ class Smoke(IntegrationTest):
         self.assertHasChromeProxyViaHeader(response)
         self.assertEqual(200, response.status)
 
+  # Verify unique page IDs are sent in the Chrome-Proxy header.
+  def testPageID(self):
+    with TestDriver() as t:
+      t.AddChromeArg('--enable-spdy-proxy-auth')
+      page_identifiers = []
+      page_loads = 5
+
+      for i in range (0, page_loads):
+        t.LoadURL('http://check.googlezip.net/test.html')
+        responses = t.GetHTTPResponses()
+        self.assertEqual(2, len(responses))
+        pid_in_page_count = 0
+        page_id = ''
+        for response in responses:
+          self.assertHasChromeProxyViaHeader(response)
+          self.assertEqual(200, response.status)
+          chrome_proxy_header = response.request_headers['chrome-proxy']
+          chrome_proxy_directives = chrome_proxy_header.split(',')
+          for directive in chrome_proxy_directives:
+            if 'pid=' in directive:
+              pid_in_page_count = pid_in_page_count+1
+              page_id = directive.split('=')[1]
+              self.assertNotEqual('', page_id)
+              self.assertNotIn(page_id, page_identifiers)
+        page_identifiers.append(page_id)
+        self.assertEqual(1, pid_in_page_count)
+
   # Ensure that block causes resources to load from the origin directly.
   def testCheckBlockIsWorking(self):
     with TestDriver() as t:
@@ -85,7 +112,7 @@ class Smoke(IntegrationTest):
       responses = t.GetHTTPResponses()
       self.assertNotEqual(0, len(responses))
       for response in responses:
-        self.assertHasChromeProxyViaHeader(response)        
+        self.assertHasChromeProxyViaHeader(response)
 
 if __name__ == '__main__':
   IntegrationTest.RunAllTests()

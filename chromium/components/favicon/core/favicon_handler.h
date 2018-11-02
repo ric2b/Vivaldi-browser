@@ -99,6 +99,10 @@ class FaviconHandler {
         const std::vector<gfx::Size>& original_bitmap_sizes)>
         ImageDownloadCallback;
 
+    typedef base::Callback<void(
+        const std::vector<favicon::FaviconURL>& favicons)>
+        ManifestDownloadCallback;
+
     // Starts the download for the given favicon. When finished, the callback
     // is called with the results. Returns the unique id of the download
     // request, which will also be passed to the callback. In case of error, 0
@@ -110,6 +114,10 @@ class FaviconHandler {
     virtual int DownloadImage(const GURL& url,
                               int max_image_size,
                               ImageDownloadCallback callback) = 0;
+
+    // Downloads a WebManifest and returns the favicons listed there.
+    virtual void DownloadManifest(const GURL& url,
+                                  ManifestDownloadCallback callback) = 0;
 
     // Returns whether the user is operating in an off-the-record context.
     virtual bool IsOffTheRecord() = 0;
@@ -137,10 +145,15 @@ class FaviconHandler {
   // Initiates loading the favicon for the specified url.
   void FetchFavicon(const GURL& url);
 
-  // Message Handler.  Must be public, because also called from
-  // PrerenderContents. Collects the |image_urls| list.
-  void OnUpdateFaviconURL(const GURL& page_url,
-                          const std::vector<favicon::FaviconURL>& candidates);
+  // Collects the candidate favicons as listed in the HTML head, as well as
+  // the WebManifest URL if available (or empty URL otherwise).
+  void OnUpdateCandidates(const GURL& page_url,
+                          const std::vector<favicon::FaviconURL>& candidates,
+                          const GURL& manifest_url);
+
+  // Returns the supported icon types, inferred from the handler type as passed
+  // in the constructor.
+  int icon_types() const { return icon_types_; }
 
   // For testing.
   const std::vector<GURL> GetIconURLs() const;
@@ -160,12 +173,6 @@ class FaviconHandler {
     static FaviconCandidate FromFaviconURL(
         const favicon::FaviconURL& favicon_url,
         const std::vector<int>& desired_pixel_sizes);
-
-    friend bool operator==(const FaviconCandidate& lhs,
-                           const FaviconCandidate& rhs) {
-      return lhs.icon_url == rhs.icon_url && lhs.icon_type == rhs.icon_type &&
-             lhs.score == rhs.score;
-    }
 
     // Compare function used for std::stable_sort to sort in descending order.
     static bool CompareScore(const FaviconCandidate& lhs,
@@ -187,6 +194,20 @@ class FaviconHandler {
   static int GetIconTypesFromHandlerType(
       FaviconDriverObserver::NotificationIconType handler_type);
 
+  // Called with the result of looking up cached icon data for the manifest's
+  // URL, which is used as icon URL.
+  void OnFaviconDataForManifestFromFaviconService(
+      const std::vector<favicon_base::FaviconRawBitmapResult>&
+          favicon_bitmap_results);
+
+  // Called when the dowloading of a manifest completes.
+  void OnDidDownloadManifest(const std::vector<FaviconURL>& candidates);
+
+  // Called when the actual list of favicon candidates to be processed is
+  // available, which can be either icon URLs listed in the HTML head instead
+  // or, if a Web Manifest was provided, the list of icons there.
+  void OnGotFinalIconURLCandidates(const std::vector<FaviconURL>& candidates);
+
   // Called when the history request for favicon data mapped to |url_| has
   // completed and the renderer has told us the icon URLs used by |url_|
   void OnGotInitialHistoryDataAndIconURLCandidates();
@@ -201,14 +222,21 @@ class FaviconHandler {
   // OnFaviconData() is called with the history data once it has been retrieved.
   void DownloadCurrentCandidateOrAskFaviconService();
 
+  // Requests the favicon for |icon_url| from the favicon service. Unless in
+  // incognito, it also updates the page URL (url_) to |icon_url| mappings.
+  void GetFaviconAndUpdateMappingsUnlessIncognito(
+      const GURL& icon_url,
+      favicon_base::IconType icon_type,
+      const favicon_base::FaviconResultsCallback& callback);
+
   // See description above class for details.
   void OnFaviconData(const std::vector<favicon_base::FaviconRawBitmapResult>&
                          favicon_bitmap_results);
 
   // Schedules a download for the specified entry. This adds the request to
-  // download_requests_.
-  void ScheduleDownload(const GURL& image_url,
-                        favicon_base::IconType icon_type);
+  // image_download_requests_.
+  void ScheduleImageDownload(const GURL& image_url,
+                             favicon_base::IconType icon_type);
 
   // Triggered when a download of an image has finished.
   void OnDidDownloadFavicon(
@@ -255,10 +283,15 @@ class FaviconHandler {
     return download_largest_icon_ ? 0 : gfx::kFaviconSize;
   }
 
-  // Used for FaviconService requests.
-  base::CancelableTaskTracker cancelable_task_tracker_;
+  // Used for the GetFaviconForPageURL() request looking up the page URL,
+  // triggered in FetchFavicon().
+  base::CancelableTaskTracker cancelable_task_tracker_for_page_url_;
 
-  FaviconDriverObserver::NotificationIconType handler_type_;
+  // Used for various FaviconService methods triggered while processing
+  // candidates.
+  base::CancelableTaskTracker cancelable_task_tracker_for_candidates_;
+
+  const FaviconDriverObserver::NotificationIconType handler_type_;
 
   // URL of the page we're requesting the favicon for.
   GURL url_;
@@ -278,15 +311,27 @@ class FaviconHandler {
   // |image_urls_| one by one.
   bool redownload_icons_;
 
+  // Requests to the renderer to download a manifest.
+  base::CancelableCallback<Delegate::ManifestDownloadCallback::RunType>
+      manifest_download_request_;
+
   // Requests to the renderer to download favicons.
   base::CancelableCallback<Delegate::ImageDownloadCallback::RunType>
-      download_request_;
+      image_download_request_;
 
   // The combination of the supported icon types.
   const int icon_types_;
 
   // Whether the largest icon should be downloaded.
   const bool download_largest_icon_;
+
+  // The manifest URL from the renderer (or empty URL if none).
+  GURL manifest_url_;
+
+  // Original list of candidates provided to OnUpdateCandidates(), stored to
+  // be able to fall back to, in case a manifest was provided and downloading it
+  // failed (or provided no icons).
+  std::vector<FaviconURL> non_manifest_original_candidates_;
 
   // The prioritized favicon candidates from the page back from the renderer.
   std::vector<FaviconCandidate> candidates_;
@@ -305,7 +350,7 @@ class FaviconHandler {
 
   // Captures the number of download requests that were initiated for the
   // current url_.
-  int num_download_requests_;
+  int num_image_download_requests_;
 
   // The index of the favicon URL in |image_urls_| which is currently being
   // requested from history or downloaded.

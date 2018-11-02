@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/time/tick_clock.h"
 #include "platform/scheduler/base/task_queue_manager.h"
 #include "platform/scheduler/base/task_queue_selector.h"
@@ -18,21 +19,12 @@ namespace scheduler {
 class SchedulerTqmDelegate;
 
 // Common scheduler functionality for default tasks.
-class BLINK_PLATFORM_EXPORT SchedulerHelper
-    : public TaskQueueManager::Observer {
+class PLATFORM_EXPORT SchedulerHelper : public TaskQueueManager::Observer {
  public:
-  // Category strings must have application lifetime (statics or
-  // literals). They may not include " chars.
-  SchedulerHelper(
+  explicit SchedulerHelper(
+      scoped_refptr<SchedulerTqmDelegate> task_queue_manager_delegate);
+  explicit SchedulerHelper(
       scoped_refptr<SchedulerTqmDelegate> task_queue_manager_delegate,
-      const char* tracing_category,
-      const char* disabled_by_default_tracing_category,
-      const char* disabled_by_default_verbose_tracing_category);
-  SchedulerHelper(
-      scoped_refptr<SchedulerTqmDelegate> task_queue_manager_delegate,
-      const char* tracing_category,
-      const char* disabled_by_default_tracing_category,
-      const char* disabled_by_default_verbose_tracing_category,
       TaskQueue::Spec default_task_queue_spec);
   ~SchedulerHelper() override;
 
@@ -45,13 +37,13 @@ class BLINK_PLATFORM_EXPORT SchedulerHelper
   void OnTriedToExecuteBlockedTask(const TaskQueue& queue,
                                    const base::PendingTask& task) override;
 
-  // Returns the default task runner.
-  scoped_refptr<TaskQueue> DefaultTaskRunner();
+  // Returns the default task queue.
+  scoped_refptr<TaskQueue> DefaultTaskQueue();
 
-  // Returns the control task runner.  Tasks posted to this runner are executed
+  // Returns the control task queue.  Tasks posted to this queue are executed
   // with the highest priority. Care must be taken to avoid starvation of other
   // task queues.
-  scoped_refptr<TaskQueue> ControlTaskRunner();
+  scoped_refptr<TaskQueue> ControlTaskQueue();
 
   // Adds or removes a task observer from the scheduler. The observer will be
   // notified before and after every executed task. These functions can only be
@@ -63,7 +55,7 @@ class BLINK_PLATFORM_EXPORT SchedulerHelper
   void RemoveTaskTimeObserver(TaskTimeObserver* task_time_observer);
 
   // Shuts down the scheduler by dropping any remaining pending work in the work
-  // queues. After this call any work posted to the task runners will be
+  // queues. After this call any work posted to the task queue will be
   // silently dropped.
   void Shutdown();
 
@@ -77,7 +69,7 @@ class BLINK_PLATFORM_EXPORT SchedulerHelper
   // Creates a new TaskQueue with the given |spec|.
   scoped_refptr<TaskQueue> NewTaskQueue(const TaskQueue::Spec& spec);
 
-  class BLINK_PLATFORM_EXPORT Observer {
+  class PLATFORM_EXPORT Observer {
    public:
     virtual ~Observer() {}
 
@@ -119,12 +111,10 @@ class BLINK_PLATFORM_EXPORT SchedulerHelper
   base::ThreadChecker thread_checker_;
   scoped_refptr<SchedulerTqmDelegate> task_queue_manager_delegate_;
   std::unique_ptr<TaskQueueManager> task_queue_manager_;
-  scoped_refptr<TaskQueue> control_task_runner_;
-  scoped_refptr<TaskQueue> default_task_runner_;
+  scoped_refptr<TaskQueue> control_task_queue_;
+  scoped_refptr<TaskQueue> default_task_queue_;
 
   Observer* observer_;  // NOT OWNED
-  const char* tracing_category_;
-  const char* disabled_by_default_tracing_category_;
 
   DISALLOW_COPY_AND_ASSIGN(SchedulerHelper);
 };

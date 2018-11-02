@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/message_loop/message_loop.h"
 #include "base/process/process.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -18,7 +19,6 @@
 #include "services/catalog/public/interfaces/catalog.mojom.h"
 #include "services/catalog/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/interfaces/service_manager.mojom.h"
@@ -280,7 +280,8 @@ class TaskViewerContents
 }  // namespace
 
 TaskViewer::TaskViewer() {
-  registry_.AddInterface<::mash::mojom::Launchable>(this);
+  registry_.AddInterface<::mash::mojom::Launchable>(
+      base::Bind(&TaskViewer::Create, base::Unretained(this)));
 }
 TaskViewer::~TaskViewer() {}
 
@@ -293,18 +294,16 @@ void TaskViewer::RemoveWindow(views::Widget* widget) {
 }
 
 void TaskViewer::OnStart() {
-  tracing_.Initialize(context()->connector(), context()->identity().name());
-
   aura_init_ = base::MakeUnique<views::AuraInit>(
       context()->connector(), context()->identity(), "views_mus_resources.pak",
       std::string(), nullptr, views::AuraInit::Mode::AURA_MUS);
 }
 
 void TaskViewer::OnBindInterface(
-    const service_manager::ServiceInfo& source_info,
+    const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(source_info.identity, interface_name,
+  registry_.BindInterface(source_info, interface_name,
                           std::move(interface_pipe));
 }
 
@@ -320,22 +319,20 @@ void TaskViewer::Launch(uint32_t what, mojom::LaunchMode how) {
   context()->connector()->BindInterface(service_manager::mojom::kServiceName,
                                         &service_manager);
 
-  service_manager::mojom::ServiceManagerListenerPtr listener;
-  service_manager::mojom::ServiceManagerListenerRequest request(&listener);
-  service_manager->AddListener(std::move(listener));
-
   catalog::mojom::CatalogPtr catalog;
   context()->connector()->BindInterface(catalog::mojom::kServiceName, &catalog);
 
+  service_manager::mojom::ServiceManagerListenerPtr listener;
   TaskViewerContents* task_viewer = new TaskViewerContents(
-      this, std::move(request), std::move(catalog));
+      this, mojo::MakeRequest(&listener), std::move(catalog));
   views::Widget* window = views::Widget::CreateWindowWithContextAndBounds(
       task_viewer, nullptr, gfx::Rect(10, 10, 500, 500));
   window->Show();
   windows_.push_back(window);
+  service_manager->AddListener(std::move(listener));
 }
 
-void TaskViewer::Create(const service_manager::Identity& remote_identity,
+void TaskViewer::Create(const service_manager::BindSourceInfo& source_info,
                         ::mash::mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }

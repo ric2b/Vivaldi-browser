@@ -53,7 +53,6 @@ Ad esempio, alcuni siti web potrebbero rispondere alla richiesta visualizzando a
 <translation id="1820259098641718022">Aggiunta all'elenco di lettura</translation>
 <translation id="1876721852596493031">Invia dati di utilizzo</translation>
 <translation id="1886928167269928266">Tutto</translation>
-<translation id="1894451531427596130">Controlla come funziona nelle <ph name="BEGIN_LINK" />Impostazioni<ph name="END_LINK" /></translation>
 <translation id="1911619930368729126">Carica su Google Drive</translation>
 <translation id="1941314575388338491">Tocca due volte per copiare.</translation>
 <translation id="1952728750904661634">Accedi con l'account gestito</translation>
@@ -97,6 +96,7 @@ Ad esempio, alcuni siti web potrebbero rispondere alla richiesta visualizzando a
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">Reimposta impostazioni traduzione</translation>
 <translation id="285960592395650245">Riprova a scaricare</translation>
+<translation id="2870560284913253234">Sito</translation>
 <translation id="2871695793448672541">Nascosta, password</translation>
 <translation id="2898963176829412617">Nuova cartella…</translation>
 <translation id="2903493209154104877">Indirizzi</translation>
@@ -109,7 +109,6 @@ Ad esempio, alcuni siti web potrebbero rispondere alla richiesta visualizzando a
 <translation id="2989805286512600854">Apri in un'altra scheda</translation>
 <translation id="3024255823539804759">Ultimo giorno</translation>
 <translation id="3037605927509011580">Uffa!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> non disponibile. Per accedere alla tua cronologia di navigazione, seleziona "<ph name="SHOW_HISTORY" />" dal menu Strumenti.</translation>
 <translation id="3112556859945124369">Segna come…</translation>
 <translation id="3151924044251363314">Soltanto chi conosce la tua passphrase può leggere i tuoi dati criptati. La passphrase non viene inviata a Google né memorizzata. Se dimentichi la passphrase o vuoi modificare questa impostazione, dovrai reimpostare la sincronizzazione. <ph name="BEGIN_LINK" />Ulteriori informazioni<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">Segna tutti come...</translation>
@@ -150,6 +149,7 @@ Per modificare il termine di ricerca, premi a lungo per selezionarlo. Per perfez
 <translation id="3638472932233958418">Precarica pagine web</translation>
 <translation id="3691593122358196899">Preferito aggiunto in: <ph name="FOLDER_TITLE" /></translation>
 <translation id="3738139272394829648">Tocca per cercare</translation>
+<translation id="3742082982782149146">L'URL del sito è stato copiato.</translation>
 <translation id="3771033907050503522">Schede di navigazione in incognito</translation>
 <translation id="3783017676699494206">Salva immagine</translation>
 <translation id="3789841737615482174">Installa</translation>
@@ -164,10 +164,12 @@ Per modificare il termine di ricerca, premi a lungo per selezionarlo. Per perfez
 <translation id="4038354071007134711">Impossibile aprire il file con le app sul dispositivo.</translation>
 <translation id="4049507953662678203">Controlla la connessione di rete e riprova.</translation>
 <translation id="411254640334432676">Download non riuscito.</translation>
+<translation id="4117350985506774529">Il nome utente è stato copiato.</translation>
 <translation id="4121993058175073134">Per inviare dati net-export, configura il tuo account email nell'app Impostazioni.</translation>
 <translation id="4124987746317609294">Intervallo di tempo</translation>
 <translation id="4172051516777682613">Mostra sempre</translation>
 <translation id="418156467088430727">Visualizza versione offline in una nuova scheda</translation>
+<translation id="4237682350741091554">Gestisci la funzione Sincronizzazione Chrome e la personalizzazione nelle <ph name="BEGIN_LINK" />Impostazioni<ph name="END_LINK" /></translation>
 <translation id="424315890655130736">Inserisci passphrase</translation>
 <translation id="4272631900155121838">Per eseguire la scansione di un codice QR, attiva la videocamera dalle impostazioni</translation>
 <translation id="4281844954008187215">Termini di servizio</translation>
@@ -175,6 +177,7 @@ Per modificare il termine di ricerca, premi a lungo per selezionarlo. Per perfez
 <translation id="4359125752503270327">Questa pagina verrà aperta con un'altra applicazione.</translation>
 <translation id="4378154925671717803">Telefono</translation>
 <translation id="441868831736628555">Informativa sulla privacy</translation>
+<translation id="4508750114462689118">Chiudi promo accesso</translation>
 <translation id="4526249700380860531">Controlla e gestisci le password salvate all'indirizzo <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Prova ad accedere nuovamente.</translation>
 <translation id="4620246317052452550">Pagine che hai letto</translation>
@@ -220,6 +223,7 @@ I tuoi dati vengono criptati con la tua passphrase di sincronizzazione. Inserisc
 
 La funzione Handoff deve anche essere attivata nella sezione Generali di Impostazioni e sui dispositivi deve essere in uso lo stesso account iCloud.</translation>
 <translation id="5556459405103347317">Ricarica</translation>
+<translation id="5619279135193775234">Posta</translation>
 <translation id="5626245204502895507">Il file non può essere scaricato in questo momento.</translation>
 <translation id="5659593005791499971">Email</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@ I tuoi dati sono stati criptati con la tua passphrase di sincronizzazione in dat
 <translation id="7136892417564438900">La videocamera non è disponibile</translation>
 <translation id="7159472599653637159">Richiedi sito per dispositivi mobili</translation>
 <translation id="7167621057293532233">Tipi di dati</translation>
+<translation id="7175593937868963913">Scrivi email</translation>
 <translation id="7189598951263744875">Condividi...</translation>
 <translation id="7203585745079012652">Pronuncia le risposte</translation>
 <translation id="722055596168483966">Personalizza i servizi Google</translation>
@@ -358,7 +363,6 @@ I tuoi dati sono stati criptati con la tua passphrase di sincronizzazione in dat
 <translation id="8205564605687841303">Annulla</translation>
 <translation id="8225985093977202398">Immagini e file memorizzati nella cache</translation>
 <translation id="8261506727792406068">Elimina</translation>
-<translation id="8272194309885535896">Scarica immagine</translation>
 <translation id="8272426682713568063">Carte di credito</translation>
 <translation id="8281781826761538115">Predefinita - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">Controlla il modo in cui Google utilizza la tua cronologia di navigazione per personalizzare la Ricerca, gli annunci e altri servizi Google.</translation>

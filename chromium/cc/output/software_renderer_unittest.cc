@@ -27,6 +27,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/utils/SkNWayCanvas.h"
 #include "ui/gfx/skia_util.h"
 
 namespace cc {
@@ -104,7 +105,7 @@ TEST_F(SoftwareRendererTest, SolidColorQuad) {
                            gfx::Transform());
   SharedQuadState* shared_quad_state =
       root_render_pass->CreateAndAppendSharedQuadState();
-  shared_quad_state->SetAll(gfx::Transform(), outer_size, outer_rect,
+  shared_quad_state->SetAll(gfx::Transform(), outer_rect, outer_rect,
                             outer_rect, false, 1.0, SkBlendMode::kSrcOver, 0);
   SolidColorDrawQuad* inner_quad =
       root_render_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -170,7 +171,7 @@ TEST_F(SoftwareRendererTest, TileQuad) {
                            gfx::Transform());
   SharedQuadState* shared_quad_state =
       root_render_pass->CreateAndAppendSharedQuadState();
-  shared_quad_state->SetAll(gfx::Transform(), outer_size, outer_rect,
+  shared_quad_state->SetAll(gfx::Transform(), outer_rect, outer_rect,
                             outer_rect, false, 1.0, SkBlendMode::kSrcOver, 0);
   TileDrawQuad* inner_quad =
       root_render_pass->CreateAndAppendDrawQuad<TileDrawQuad>();
@@ -230,7 +231,7 @@ TEST_F(SoftwareRendererTest, TileQuadVisibleRect) {
                            gfx::Transform());
   SharedQuadState* shared_quad_state =
       root_render_pass->CreateAndAppendSharedQuadState();
-  shared_quad_state->SetAll(gfx::Transform(), tile_size, tile_rect, tile_rect,
+  shared_quad_state->SetAll(gfx::Transform(), tile_rect, tile_rect, tile_rect,
                             false, 1.0, SkBlendMode::kSrcOver, 0);
   TileDrawQuad* quad =
       root_render_pass->CreateAndAppendDrawQuad<TileDrawQuad>();
@@ -378,26 +379,45 @@ TEST_F(SoftwareRendererTest, RenderPassVisibleRect) {
                              interior_visible_rect.bottom() - 1));
 }
 
+class ClipTrackingCanvas : public SkNWayCanvas {
+ public:
+  ClipTrackingCanvas(int width, int height) : SkNWayCanvas(width, height) {}
+  void onClipRect(const SkRect& rect,
+                  SkClipOp op,
+                  ClipEdgeStyle style) override {
+    last_clip_rect_ = rect;
+    SkNWayCanvas::onClipRect(rect, op, style);
+  }
+
+  SkRect last_clip_rect() const { return last_clip_rect_; }
+
+ private:
+  SkRect last_clip_rect_;
+};
+
 class PartialSwapSoftwareOutputDevice : public SoftwareOutputDevice {
  public:
   // SoftwareOutputDevice overrides.
   SkCanvas* BeginPaint(const gfx::Rect& damage_rect) override {
     damage_rect_at_start_ = damage_rect;
-    canvas_ = SoftwareOutputDevice::BeginPaint(damage_rect);
-    return canvas_;
+    canvas_.reset(new ClipTrackingCanvas(viewport_pixel_size_.width(),
+                                         viewport_pixel_size_.height()));
+    canvas_->addCanvas(SoftwareOutputDevice::BeginPaint(damage_rect));
+    return canvas_.get();
   }
+
   void EndPaint() override {
-    clip_rect_at_end_ = gfx::SkIRectToRect(canvas_->getDeviceClipBounds());
+    clip_rect_at_end_ = gfx::SkRectToRectF(canvas_->last_clip_rect());
     SoftwareOutputDevice::EndPaint();
   }
 
   gfx::Rect damage_rect_at_start() const { return damage_rect_at_start_; }
-  gfx::Rect clip_rect_at_end() const { return clip_rect_at_end_; }
+  gfx::RectF clip_rect_at_end() const { return clip_rect_at_end_; }
 
  private:
-  SkCanvas* canvas_ = nullptr;
+  std::unique_ptr<ClipTrackingCanvas> canvas_;
   gfx::Rect damage_rect_at_start_;
-  gfx::Rect clip_rect_at_end_;
+  gfx::RectF clip_rect_at_end_;
 };
 
 TEST_F(SoftwareRendererTest, PartialSwap) {
@@ -428,7 +448,7 @@ TEST_F(SoftwareRendererTest, PartialSwap) {
   // The damage rect should be reported to the SoftwareOutputDevice.
   EXPECT_EQ(gfx::Rect(2, 2, 3, 3), device->damage_rect_at_start());
   // The SkCanvas should be clipped to the damage rect.
-  EXPECT_EQ(gfx::Rect(2, 2, 3, 3), device->clip_rect_at_end());
+  EXPECT_EQ(gfx::RectF(2, 2, 3, 3), device->clip_rect_at_end());
 }
 
 }  // namespace

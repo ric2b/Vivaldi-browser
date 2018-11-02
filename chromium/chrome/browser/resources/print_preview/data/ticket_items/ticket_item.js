@@ -1,6 +1,10 @@
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/**
+ * @typedef {Object|number|boolean|string}
+ */
+print_preview.ValueType;
 
 cr.define('print_preview.ticket_items', function() {
   'use strict';
@@ -12,7 +16,7 @@ cr.define('print_preview.ticket_items', function() {
    * if other ticket item constraints are not met.
    * @param {?print_preview.AppState} appState Application state model to update
    *     when ticket items update.
-   * @param {?print_preview.AppState.Field} field Field of the app state to
+   * @param {?print_preview.AppStateField} field Field of the app state to
    *     update when ticket item is updated.
    * @param {?print_preview.DestinationStore} destinationStore Used listen for
    *     changes in the currently selected destination's capabilities. Since
@@ -36,7 +40,7 @@ cr.define('print_preview.ticket_items', function() {
 
     /**
      * Field of the app state to update when ticket item is updated.
-     * @type {?print_preview.AppState.Field}
+     * @type {?print_preview.AppStateField}
      * @private
      */
     this.field_ = field || null;
@@ -71,7 +75,7 @@ cr.define('print_preview.ticket_items', function() {
     this.tracker_ = new EventTracker();
 
     this.addEventHandlers_();
-  };
+  }
 
   /**
    * Event types dispatched by this class.
@@ -100,7 +104,7 @@ cr.define('print_preview.ticket_items', function() {
       throw Error('Abstract method not overridden');
     },
 
-    /** @return {!Object} The value of the ticket item. */
+    /** @return {print_preview.ValueType} The value of the ticket item. */
     getValue: function() {
       if (this.isCapabilityAvailable()) {
         if (this.value_ == null) {
@@ -143,7 +147,7 @@ cr.define('print_preview.ticket_items', function() {
       var sendUpdateEvent = !this.isValueEqual(value);
       // Don't lose requested value if capability is not available.
       this.updateValueInternal(value);
-      if (this.appState_) {
+      if (this.appState_ && (this.field_ != null)) {
         this.appState_.persistField(this.field_, value);
       }
       if (sendUpdateEvent)
@@ -153,6 +157,7 @@ cr.define('print_preview.ticket_items', function() {
     /**
      * @return {?} Default value of the ticket item if no value was set by
      *     the user.
+     * @abstract
      * @protected
      */
     getDefaultValueInternal: function() {
@@ -162,6 +167,7 @@ cr.define('print_preview.ticket_items', function() {
     /**
      * @return {?} Default value of the ticket item if the capability is
      *     not available.
+     * @abstract
      * @protected
      */
     getCapabilityNotAvailableValueInternal: function() {

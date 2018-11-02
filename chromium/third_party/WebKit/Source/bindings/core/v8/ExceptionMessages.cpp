@@ -122,16 +122,6 @@ String ExceptionMessages::ArgumentNullOrIncorrectType(
          " object.";
 }
 
-String ExceptionMessages::NotAnArrayTypeArgumentOrValue(int argument_index) {
-  String kind;
-  if (argument_index)  // method argument
-    kind = OrdinalNumber(argument_index) + " argument";
-  else  // value, e.g. attribute setter
-    kind = "value provided";
-  return "The " + kind +
-         " is neither an array, nor does it have indexed properties.";
-}
-
 String ExceptionMessages::NotASequenceTypeProperty(
     const String& property_name) {
   return "'" + property_name +
@@ -145,14 +135,14 @@ String ExceptionMessages::NotEnoughArguments(unsigned expected,
 }
 
 String ExceptionMessages::NotAFiniteNumber(double value, const char* name) {
-  ASSERT(!std::isfinite(value));
+  DCHECK(!std::isfinite(value));
   return String::Format("The %s is %s.", name,
                         std::isinf(value) ? "infinite" : "not a number");
 }
 
 String ExceptionMessages::NotAFiniteNumber(const Decimal& value,
                                            const char* name) {
-  ASSERT(!value.IsFinite());
+  DCHECK(!value.IsFinite());
   return String::Format("The %s is %s.", name,
                         value.IsInfinity() ? "infinite" : "not a number");
 }

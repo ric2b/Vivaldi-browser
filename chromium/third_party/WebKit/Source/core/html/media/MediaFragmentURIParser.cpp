@@ -99,11 +99,11 @@ void MediaFragmentURIParser::ParseFragments() {
     //    In accordance with RFC 3986, the name and value components must be
     //    parsed and separated before percent-encoded octets are decoded.
     size_t parameter_start = offset;
-    size_t parameter_end = fragment_string.Find('&', offset);
+    size_t parameter_end = fragment_string.find('&', offset);
     if (parameter_end == kNotFound)
       parameter_end = end;
 
-    size_t equal_offset = fragment_string.Find('=', offset);
+    size_t equal_offset = fragment_string.find('=', offset);
     if (equal_offset == kNotFound || equal_offset > parameter_end) {
       offset = parameter_end + 1;
       continue;
@@ -126,11 +126,11 @@ void MediaFragmentURIParser::ParseFragments() {
     //     remove the name-value pair from the list.
     bool valid_utf8 = true;
     if (!name.IsEmpty()) {
-      name = name.Utf8(kStrictUTF8Conversion).Data();
+      name = name.Utf8(kStrictUTF8Conversion).data();
       valid_utf8 = !name.IsEmpty();
     }
     if (valid_utf8 && !value.IsEmpty()) {
-      value = value.Utf8(kStrictUTF8Conversion).Data();
+      value = value.Utf8(kStrictUTF8Conversion).data();
       valid_utf8 = !value.IsEmpty();
     }
 
@@ -183,7 +183,7 @@ void MediaFragmentURIParser::ParseTimeFragment() {
       // previous occurrences (valid or invalid) SHOULD be ignored by the UA.
     }
   }
-  fragments_.Clear();
+  fragments_.clear();
 }
 
 bool MediaFragmentURIParser::ParseNPTFragment(const LChar* time_string,

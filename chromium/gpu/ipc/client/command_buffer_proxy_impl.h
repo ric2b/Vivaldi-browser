@@ -27,8 +27,8 @@
 #include "gpu/command_buffer/common/command_buffer_id.h"
 #include "gpu/command_buffer/common/command_buffer_shared.h"
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
+#include "gpu/command_buffer/common/scheduling_priority.h"
 #include "gpu/gpu_export.h"
-#include "gpu/ipc/common/gpu_stream_constants.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "ipc/ipc_listener.h"
 #include "ui/gfx/swap_result.h"
@@ -83,7 +83,7 @@ class GPU_EXPORT CommandBufferProxyImpl
       gpu::SurfaceHandle surface_handle,
       CommandBufferProxyImpl* share_group,
       int32_t stream_id,
-      gpu::GpuStreamPriority stream_priority,
+      gpu::SchedulingPriority stream_priority,
       const gpu::gles2::ContextCreationAttribHelper& attribs,
       const GURL& active_url,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
@@ -98,7 +98,9 @@ class GPU_EXPORT CommandBufferProxyImpl
   void Flush(int32_t put_offset) override;
   void OrderingBarrier(int32_t put_offset) override;
   State WaitForTokenInRange(int32_t start, int32_t end) override;
-  State WaitForGetOffsetInRange(int32_t start, int32_t end) override;
+  State WaitForGetOffsetInRange(uint32_t set_get_buffer_count,
+                                int32_t start,
+                                int32_t end) override;
   void SetGetBuffer(int32_t shm_id) override;
   scoped_refptr<gpu::Buffer> CreateTransferBuffer(size_t size,
                                                   int32_t* id) override;
@@ -117,7 +119,8 @@ class GPU_EXPORT CommandBufferProxyImpl
   void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
   gpu::CommandBufferId GetCommandBufferID() const override;
-  int32_t GetExtraCommandBufferData() const override;
+  int32_t GetStreamId() const override;
+  void FlushOrderingBarrierOnStream(int32_t stream_id) override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
   bool IsFenceSyncFlushed(uint64_t release) override;
@@ -127,6 +130,8 @@ class GPU_EXPORT CommandBufferProxyImpl
                        const base::Closure& callback) override;
   void WaitSyncTokenHint(const gpu::SyncToken& sync_token) override;
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override;
+  void AddLatencyInfo(
+      const std::vector<ui::LatencyInfo>& latency_info) override;
 
   void TakeFrontBuffer(const gpu::Mailbox& mailbox);
   void ReturnFrontBuffer(const gpu::Mailbox& mailbox,
@@ -140,7 +145,6 @@ class GPU_EXPORT CommandBufferProxyImpl
 
   void SetOnConsoleMessageCallback(const GpuConsoleMessageCallback& callback);
 
-  void AddLatencyInfo(const std::vector<ui::LatencyInfo>& latency_info);
   using SwapBuffersCompletionCallback = base::Callback<void(
       const std::vector<ui::LatencyInfo>& latency_info,
       gfx::SwapResult result,

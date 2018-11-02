@@ -23,8 +23,8 @@ using FakeVideoCaptureDeviceDescriptorTest = FakeDeviceDescriptorTest;
 // Tests that when requesting a second proxy for a device without closing the
 // first one, the service revokes access to the first one by closing the
 // connection.
-TEST_F(FakeVideoCaptureDeviceDescriptorTest,
-       DISABLED_AccessIsRevokedOnSecondAccess) {
+TEST_F(FakeVideoCaptureDeviceDescriptorTest, AccessIsRevokedOnSecondAccess) {
+  base::RunLoop wait_loop_1;
   mojom::DevicePtr device_proxy_1;
   bool device_access_1_revoked = false;
   MockCreateDeviceProxyCallback create_device_proxy_callback_1;
@@ -32,54 +32,61 @@ TEST_F(FakeVideoCaptureDeviceDescriptorTest,
               Run(mojom::DeviceAccessResultCode::SUCCESS))
       .Times(1);
   factory_->CreateDevice(
-      fake_device_descriptor_.device_id, mojo::MakeRequest(&device_proxy_1),
+      fake_device_info_.descriptor.device_id,
+      mojo::MakeRequest(&device_proxy_1),
       base::Bind(&MockCreateDeviceProxyCallback::Run,
                  base::Unretained(&create_device_proxy_callback_1)));
-  device_proxy_1.set_connection_error_handler(
-      base::Bind([](bool* access_revoked) { *access_revoked = true; },
-                 &device_access_1_revoked));
+  device_proxy_1.set_connection_error_handler(base::Bind(
+      [](bool* access_revoked, base::RunLoop* wait_loop_1) {
+        *access_revoked = true;
+        wait_loop_1->Quit();
+      },
+      &device_access_1_revoked, &wait_loop_1));
 
-  base::RunLoop wait_loop;
+  base::RunLoop wait_loop_2;
   mojom::DevicePtr device_proxy_2;
   bool device_access_2_revoked = false;
   MockCreateDeviceProxyCallback create_device_proxy_callback_2;
   EXPECT_CALL(create_device_proxy_callback_2,
               Run(mojom::DeviceAccessResultCode::SUCCESS))
       .Times(1)
-      .WillOnce(InvokeWithoutArgs([&wait_loop]() { wait_loop.Quit(); }));
+      .WillOnce(InvokeWithoutArgs([&wait_loop_2]() { wait_loop_2.Quit(); }));
   factory_->CreateDevice(
-      fake_device_descriptor_.device_id, mojo::MakeRequest(&device_proxy_2),
+      fake_device_info_.descriptor.device_id,
+      mojo::MakeRequest(&device_proxy_2),
       base::Bind(&MockCreateDeviceProxyCallback::Run,
                  base::Unretained(&create_device_proxy_callback_2)));
   device_proxy_2.set_connection_error_handler(
       base::Bind([](bool* access_revoked) { *access_revoked = true; },
                  &device_access_2_revoked));
-  wait_loop.Run();
+  wait_loop_1.Run();
+  wait_loop_2.Run();
   ASSERT_TRUE(device_access_1_revoked);
   ASSERT_FALSE(device_access_2_revoked);
 }
 
 // Tests that a second proxy requested for a device can be used successfully.
-TEST_F(FakeVideoCaptureDeviceDescriptorTest,
-       DISABLED_CanUseSecondRequestedProxy) {
+TEST_F(FakeVideoCaptureDeviceDescriptorTest, CanUseSecondRequestedProxy) {
   mojom::DevicePtr device_proxy_1;
   factory_->CreateDevice(
-      fake_device_descriptor_.device_id, mojo::MakeRequest(&device_proxy_1),
+      fake_device_info_.descriptor.device_id,
+      mojo::MakeRequest(&device_proxy_1),
       base::Bind([](mojom::DeviceAccessResultCode result_code) {}));
 
   base::RunLoop wait_loop;
   mojom::DevicePtr device_proxy_2;
   factory_->CreateDevice(
-      fake_device_descriptor_.device_id, mojo::MakeRequest(&device_proxy_2),
+      fake_device_info_.descriptor.device_id,
+      mojo::MakeRequest(&device_proxy_2),
       base::Bind(
           [](base::RunLoop* wait_loop,
              mojom::DeviceAccessResultCode result_code) { wait_loop->Quit(); },
           &wait_loop));
   wait_loop.Run();
 
-  CaptureSettings arbitrary_requested_settings;
-  arbitrary_requested_settings.format.frame_size.SetSize(640, 480);
-  arbitrary_requested_settings.format.frame_rate = 15;
+  media::VideoCaptureParams arbitrary_requested_settings;
+  arbitrary_requested_settings.requested_format.frame_size.SetSize(640, 480);
+  arbitrary_requested_settings.requested_format.frame_rate = 15;
   arbitrary_requested_settings.resolution_change_policy =
       media::RESOLUTION_POLICY_FIXED_RESOLUTION;
   arbitrary_requested_settings.power_line_frequency =
@@ -88,7 +95,8 @@ TEST_F(FakeVideoCaptureDeviceDescriptorTest,
   base::RunLoop wait_loop_2;
   mojom::ReceiverPtr receiver_proxy;
   MockReceiver receiver(mojo::MakeRequest(&receiver_proxy));
-  EXPECT_CALL(receiver, OnIncomingCapturedVideoFramePtr(_))
+  EXPECT_CALL(receiver, DoOnNewBufferHandle(_, _));
+  EXPECT_CALL(receiver, DoOnFrameReadyInBuffer(_, _, _, _))
       .WillRepeatedly(
           InvokeWithoutArgs([&wait_loop_2]() { wait_loop_2.Quit(); }));
 

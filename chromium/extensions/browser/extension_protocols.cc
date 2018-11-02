@@ -31,7 +31,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
@@ -182,8 +181,9 @@ class URLRequestExtensionJob : public net::URLRequestFileJob {
             request,
             network_delegate,
             base::FilePath(),
-            BrowserThread::GetBlockingPool()->GetTaskRunnerWithShutdownBehavior(
-                base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)),
+            base::CreateTaskRunnerWithTraits(
+                {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                 base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
         verify_job_(verify_job),
         seek_position_(0),
         bytes_read_(0),
@@ -203,10 +203,6 @@ class URLRequestExtensionJob : public net::URLRequestFileJob {
     *info = response_info_;
   }
 
-  // This always returns 200 because a URLRequestExtensionJob will only get
-  // created in MaybeCreateJob() if the file exists.
-  int GetResponseCode() const override { return 200; }
-
   void Start() override {
     request_timer_.reset(new base::ElapsedTimer());
     base::FilePath* read_file_path = new base::FilePath;
@@ -214,7 +210,7 @@ class URLRequestExtensionJob : public net::URLRequestFileJob {
 
     // Inherit task priority from the calling context.
     base::PostTaskWithTraitsAndReply(
-        FROM_HERE, base::TaskTraits().MayBlock(),
+        FROM_HERE, {base::MayBlock()},
         base::Bind(&ReadResourceFilePathAndLastModifiedTime, resource_,
                    directory_path_, base::Unretained(read_file_path),
                    base::Unretained(last_modified_time)),

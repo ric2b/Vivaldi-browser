@@ -64,8 +64,8 @@ class CrossPlatformAccessibilityBrowserTest : public ContentBrowserTest {
   }
 
   // ContentBrowserTest
-  void SetUpInProcessBrowserTestFixture() override;
-  void TearDownInProcessBrowserTestFixture() override;
+  void SetUpOnMainThread() override;
+  void TearDownOnMainThread() override;
 
  protected:
   std::string GetAttr(const ui::AXNode* node,
@@ -83,15 +83,14 @@ class CrossPlatformAccessibilityBrowserTest : public ContentBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(CrossPlatformAccessibilityBrowserTest);
 };
 
-void CrossPlatformAccessibilityBrowserTest::SetUpInProcessBrowserTestFixture() {
+void CrossPlatformAccessibilityBrowserTest::SetUpOnMainThread() {
 #if defined(OS_WIN)
   ui::win::CreateATLModuleIfNeeded();
   com_initializer_.reset(new base::win::ScopedCOMInitializer());
 #endif
 }
 
-void
-CrossPlatformAccessibilityBrowserTest::TearDownInProcessBrowserTestFixture() {
+void CrossPlatformAccessibilityBrowserTest::TearDownOnMainThread() {
 #if defined(OS_WIN)
   com_initializer_.reset();
 #endif
@@ -494,7 +493,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   const ui::AXNode* root = tree.root();
   ASSERT_EQ(1, root->child_count());
   const ui::AXNode* textbox = root->ChildAtIndex(0);
-  EXPECT_EQ(true, GetBoolAttr(textbox, ui::AX_ATTR_CAN_SET_VALUE));
+  EXPECT_TRUE(textbox->data().HasAction(ui::AX_ACTION_SET_VALUE));
 }
 
 }  // namespace content

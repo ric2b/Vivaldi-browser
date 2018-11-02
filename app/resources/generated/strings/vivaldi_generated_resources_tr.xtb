@@ -2,7 +2,11 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="tr">
 <translation id="1018656279737460067">İptal Edildi</translation>
+<translation id="1026822031284433028">Resim Yükle</translation>
+<translation id="1031362278801463162">Önizleme yükleniyor</translation>
+<translation id="1047431265488717055">Bağlantı Yazısını Kopyala</translation>
 <translation id="1049795001945932310">&amp;Dil ayarları</translation>
+<translation id="1054153489933238809">Orijinal Resmi Yeni Sekmede Aç</translation>
 <translation id="1056898198331236512">Uyarı</translation>
 <translation id="1084824384139382525">Bağlantı adr&amp;esini kopyala</translation>
 <translation id="114140604515785785">Uzantı kök dizini:</translation>
@@ -27,11 +31,11 @@
 <translation id="1546280085599573572">Bu uzantı, Ana Sayfa düğmesini tıkladığınızda gösterilecek sayfayı değiştirdi.</translation>
 <translation id="1580652505892042215">İçerik:</translation>
 <translation id="1588438908519853928">Normal</translation>
+<translation id="1588870296199743671">Bağlantıyı Şununla Aç...</translation>
 <translation id="159359590073980872">Resim Önbelleği</translation>
 <translation id="1601560923496285236">Uygula</translation>
 <translation id="1603914832182249871">(Gizli Mod)</translation>
 <translation id="1616206807336925449">Bu uzantı herhangi bir özel izin gerektirmiyor.</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Dosya Açıklayıcıları</translation>
 <translation id="1635033183663317347">Gözetmeniniz tarafından yüklendi.</translation>
 <translation id="1682548588986054654">Yeni Gizli Pencere</translation>
@@ -40,10 +44,10 @@
 <translation id="1723824996674794290">Ye&amp;ni pencere</translation>
 <translation id="1725149567830788547">Denetimleri Göster</translation>
 <translation id="1729533290416704613">Ayrıca, Çok Amaçlı Adres Çubuğu'ndan arama yaptığınızda gösterilecek sayfayı da denetler.</translation>
+<translation id="1731589410171062430">Toplam: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /> (<ph name="NUMBER_OF_PAGES" /> <ph name="PAGE_OR_PAGES_LABEL" />)</translation>
 <translation id="1744108098763830590">arka plan sayfası</translation>
 <translation id="176587472219019965">&amp;Yeni Pencere</translation>
 <translation id="1769104665586091481">Bağlantıyı Yeni Pencerede Aç</translation>
-<translation id="1789575671122666129">Pop-up'lar</translation>
 <translation id="1815083418640426271">Düz Metin olarak Yapıştır</translation>
 <translation id="1838288018605456492">Kurmak için tıklayın</translation>
 <translation id="1846308012215045257"><ph name="PLUGIN_NAME" /> eklentisini çalıştırmak için ctrl tuşuna basarak tıklayın</translation>
@@ -57,15 +61,15 @@
 <translation id="1989112275319619282">Göz At</translation>
 <translation id="1992397118740194946">Ayarlanmadı</translation>
 <translation id="2019718679933488176">&amp;Sesi Yeni Sekmede Aç</translation>
+<translation id="2050339315714019657">Dikey</translation>
 <translation id="2076269580855484719">Bu eklentiyi gizle</translation>
 <translation id="2087822576218954668">Yazdır: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Ç&amp;erçeveyi Yeniden Yükle</translation>
 <translation id="2129825002735785149">Eklentiyi güncelle</translation>
-<translation id="2147827593068025794">Arka Plan Senkronizasyonu</translation>
 <translation id="2148892889047469596">Sekmeyi yayınla</translation>
+<translation id="2150139952286079145">Arama hedefleri</translation>
 <translation id="215753907730220065">Tam Ekrandan Çık</translation>
 <translation id="2177950615300672361">Gizli Sekmesi: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">Algıla (varsayılan)</translation>
 <translation id="219008588003277019">Özgün İstemci modülü: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Düğmeyi gizle</translation>
 <translation id="2218515861914035131">Düz metin olarak yapıştır</translation>
@@ -87,11 +91,10 @@
 <translation id="2439110203301358333">Bilgisayarınızdaki başka bir program, Vivaldi'un çalışma şeklini değiştirebilecek bir uzantı ekledi.</translation>
 <translation id="2445081178310039857">Uzantı kök dizini gerekiyor.</translation>
 <translation id="2470702053775288986">Desteklenmeyen uzantılar devre dışı bırakıldı</translation>
-<translation id="2482878487686419369">Bildirimler</translation>
 <translation id="2498436043474441766">Yazıcı Ekle</translation>
 <translation id="2501797496290880632">Bir kısayol yazın</translation>
-<translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> eklentisini yükle</translation>
 <translation id="2550212893339833758">Değiştirilmiş bellek</translation>
+<translation id="2553440850688409052">Bu Eklentiyi Gizle</translation>
 <translation id="2662876636500006917">Chrome Web Mağazası</translation>
 <translation id="2678063897982469759">Tekrar etkinleştir</translation>
 <translation id="2680208403056680091">İnternet Bağlantınız Kontrol Ediliyor</translation>
@@ -103,6 +106,8 @@
 <translation id="2850541429955027218">Tema ekle</translation>
 <translation id="2861941300086904918">Yerel İstemci güvenlik yöneticisi</translation>
 <translation id="2868746137289129307">Bu uzantı, eski ve kurumsal politika tarafından devre dışı bırakıldı. Yeni bir sürüm kullanılabilir durumda olduğunda otomatik olarak etkin hale gelebilir.</translation>
+<translation id="2889064240420137087">Bağlantıyı şununla aç...</translation>
+<translation id="2914303854539667666">Şifre oluştur</translation>
 <translation id="2916745397441987255">Eklentilerde ara</translation>
 <translation id="2932883381142163287">Kötüye kullanım bildir</translation>
 <translation id="2941112035454246133">Düşük</translation>
@@ -114,6 +119,8 @@
 <translation id="3021678814754966447">&amp;Çerçeve Kaynağını Görüntüle</translation>
 <translation id="302620147503052030">Düğmeyi göster</translation>
 <translation id="3031601332414921114">Yazdırmaya devam et</translation>
+<translation id="3036546437875325427">Flash'ı Etkinleştir</translation>
+<translation id="3067198360141518313">Bu eklentiyi çalıştır</translation>
 <translation id="3080207940057008665">Bilgisayarınızdaki başka bir program, Vivaldi'un çalışma şeklini değiştirebilecek bir tema ekledi.</translation>
 <translation id="3084548735795614657">Kurulum için bırak</translation>
 <translation id="3122464029669770682">CPU</translation>
@@ -121,9 +128,9 @@
 <translation id="3129173833825111527">Sol kenar boşluğu</translation>
 <translation id="3149510190863420837">Chrome Uygulamaları</translation>
 <translation id="3222066309010235055">Ön oluşturucu: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="32279126412636473">Yeniden Yükle (⌘R)</translation>
 <translation id="3241680850019875542">Paketlenecek uzantının kök dizinini seçin. Bir uzantıyı güncellemek için tekrar kullanılacak özel anahtar dosyasını da seçin.</translation>
+<translation id="3269093882174072735">Resim yükle</translation>
 <translation id="3280237271814976245">Farklı k&amp;aydet...</translation>
 <translation id="3285322247471302225">Yeni &amp;Sekme</translation>
 <translation id="3288047731229977326">Geliştirici modunda çalışan uzantılar bilgisayarınıza zarar verebilir. Geliştirici değilseniz, geliştirici modundayken güvende olmak için bu uzantıların çalışmasını devre dışı bırakmanız gerekir.</translation>
@@ -137,7 +144,6 @@
 <translation id="3347086966102161372">Resim adresini k&amp;opyala</translation>
 <translation id="335985608243443814">Göz at...</translation>
 <translation id="3378572629723696641">Bu uzantı bozuk olabilir.</translation>
-<translation id="3427092606871434483">İzin ver (varsayılan)</translation>
 <translation id="3435896845095436175">Etkinleştir</translation>
 <translation id="345693547134384690">Resm&amp;i yeni sekmede aç</translation>
 <translation id="3467267818798281173">Google'dan öneri iste</translation>
@@ -155,7 +161,6 @@
 <translation id="3730639321086573427">Yerel Hedefler</translation>
 <translation id="3760460896538743390">Arka Plan Sayfasını İncele</translation>
 <translation id="3763401818161139108"><ph name="ORIGIN" /> adresinde her zaman çalış</translation>
-<translation id="3789841737615482174">Yükle</translation>
 <translation id="3798449238516105146">Sürüm</translation>
 <translation id="385051799172605136">Geri</translation>
 <translation id="3855441664322950881">Uzantıyı paketle</translation>
@@ -171,6 +176,7 @@
 <translation id="3978267865113951599">(Çöktü)</translation>
 <translation id="3979395879372752341">Yeni uzantı eklendi (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
+<translation id="4022426551683927403">Dizine Ekle</translation>
 <translation id="4087089424473531098">Şu uzantı oluşturuldu:
 
 <ph name="EXTENSION_FILE" /></translation>
@@ -180,9 +186,7 @@
 <translation id="4100839878934973028">Bilgisayarınızdaki başka bir program, Vivaldi'un çalışma şeklini değiştirebilecek bir uygulama ekledi.</translation>
 <translation id="411666854932687641">Özel Bellek</translation>
 <translation id="4130207949184424187">Bu uzantı, Çok Amaçlı Adres Çubuğu'nda arama yaptığınızda gösterilen sayfayı değiştirdi.</translation>
-<translation id="4130750466177569591">Kabul ediyorum</translation>
 <translation id="4131410914670010031">Siyah beyaz</translation>
-<translation id="4165986682804962316">Site ayarları</translation>
 <translation id="4176463684765177261">Devre dışı</translation>
 <translation id="4200983522494130825">Y&amp;eni sekme</translation>
 <translation id="420665587194630159">(Bu uzantı yönetiliyor ve kaldırılamaz veya devre dışı bırakılamaz.)</translation>
@@ -190,7 +194,7 @@
 <translation id="4240511609794012987">Paylaşılan bellek</translation>
 <translation id="4256316378292851214">Videoyu Farklı Kaydet...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K aktif)</translation>
-<translation id="4312866146174492540">Engelle (varsayılan)</translation>
+<translation id="4345587454538109430">Yapılandır...</translation>
 <translation id="4348766275249686434">Hataları topla</translation>
 <translation id="4384652540891215547">Uzantıyı etkinleştir</translation>
 <translation id="4394049700291259645">Devre dışı bırak</translation>
@@ -212,18 +216,19 @@
 <translation id="4628314759732363424">Değiştir...</translation>
 <translation id="4643612240819915418">Vide&amp;oyu Yeni Sekmede Aç</translation>
 <translation id="4677772697204437347">GPU belleği</translation>
+<translation id="4681930562518940301">Orijinal &amp;resmi yeni sekmede aç</translation>
 <translation id="4711638718396952945">Ayarları geri yükle</translation>
 <translation id="4726710629007580002">Bu eklentiyi yüklerken bazı uyarılar var:</translation>
 <translation id="4742746985488890273">Rafa Sabitle</translation>
 <translation id="4816492930507672669">Sayfaya sığdır</translation>
 <translation id="4839303808932127586">Video olarak kay&amp;det...</translation>
 <translation id="4850258771229959924">Geliştirici Araçlarında Görüntüle</translation>
-<translation id="4851858059374029925"><ph name="PLUGIN_NAME" /> yüklensin mi? Yalnızca güvendiğiniz eklentileri yükleyin.</translation>
 <translation id="488785315393301722">Ayrıntıları Göster</translation>
 <translation id="4911714727432509308">Hiçbir uzantıya klavye kısayolu atanmamış.</translation>
 <translation id="4912643508233590958">Boştan Kalkmalar</translation>
 <translation id="4927301649992043040">Uzantıyı Paketle</translation>
 <translation id="4927753642311223124">Burada bir şey yok, devam edin.</translation>
+<translation id="4988526792673242964">Sayfalar</translation>
 <translation id="49896407730300355">Saat yönünün &amp;tersine döndür</translation>
 <translation id="4989966318180235467">&amp;Arka plan sayfasını incele</translation>
 <translation id="5027562294707732951">Uzantı ekle</translation>
@@ -237,9 +242,11 @@
 <translation id="5233231016133573565">İşlem Kimliği</translation>
 <translation id="5233638681132016545">Yeni sekme</translation>
 <translation id="5233736638227740678">Ya&amp;pıştır</translation>
+<translation id="5271549068863921519">Şifreyi kaydet</translation>
 <translation id="52912272896845572">Özel anahtar dosyası geçersiz.</translation>
 <translation id="5301954838959518834">Evet, anladım</translation>
 <translation id="5311260548612583999">Özel anahtar dosyası (isteğe bağlı):</translation>
+<translation id="5317780077021120954">Kaydet</translation>
 <translation id="5329858601952122676">&amp;Sil</translation>
 <translation id="5334142896108694079">Betik Önbelleği</translation>
 <translation id="5355926466126177564">"<ph name="EXTENSION_NAME" />" uzantısı, Çok Amaçlı Adres Çubuğu'ndan arama yaptığınızda gösterilen sayfayı değiştirdi.</translation>
@@ -259,14 +266,15 @@
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Yeniden Yükle</translation>
 <translation id="5575473780076478375">Gizli Mod Uzantısı: <ph name="EXTENSION_NAME" /></translation>
+<translation id="5581700288664681403"><ph name="CLOUD_PRINT_NAME" /> yükleniyor</translation>
 <translation id="5623842676595125836">Kayıt</translation>
 <translation id="5627086634964711283">Ayrıca, Ana Sayfa düğmesini tıkladığınızda gösterilen sayfayı denetler.</translation>
 <translation id="5646376287012673985">Konum</translation>
 <translation id="5707185214361380026">Eklenti yüklemenin başarısız olduğu yer:</translation>
 <translation id="5715711091495208045">Eklenti Aracısı: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Üzgünüz, bu hatanın kodunu gösteremiyoruz.</translation>
+<translation id="5746169159649715125">PDF olarak kaydet</translation>
 <translation id="5764483294734785780">Sesi farklı kay&amp;det...</translation>
-<translation id="5778550464785688721">MIDI cihazları tam denetimi</translation>
 <translation id="5780973441651030252">Süreç önceliği</translation>
 <translation id="5804241973901381774">İzinler</translation>
 <translation id="5828633471261496623">Yazdırılıyor...</translation>
@@ -275,12 +283,12 @@
 <translation id="5849869942539715694">Uzantıyı paketle...</translation>
 <translation id="5910363049092958439">Resmi Farklı Kaydet...</translation>
 <translation id="59174027418879706">Etkin</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 çerez kullanımda}other{# çerez kullanımda}}</translation>
 <translation id="5956585768868398362">Bu beklediğiniz arama sayfası mı?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (en yüksek <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Ayrıca Ana Sayfa düğmesini tıkladığınızda veya Çok Amaçlı Adres Çubuğu'ndan arama yaptığınızda gösterilecek sayfayı da denetler.</translation>
 <translation id="6025215716629925253">Yığın İzleme</translation>
 <translation id="6040143037577758943">Kapat</translation>
+<translation id="6042308850641462728">Daha Fazla</translation>
 <translation id="6082651258230788217">Araç çubuğunda göster</translation>
 <translation id="6086814797483779854">Tıklandığında Çalıştır</translation>
 <translation id="6086846494333236931">Yöneticiniz tarafından yüklendi</translation>
@@ -297,9 +305,12 @@
 <translation id="6247802389331535091">Sistem: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6251870443722440887">GDI işleyicileri</translation>
 <translation id="6264365405983206840">Tümünü &amp;Seç</translation>
+<translation id="6268252012308737255"><ph name="APP" /> ile aç</translation>
 <translation id="6272643420381259437">Eklenti indirilirken bir hata (<ph name="ERROR" />) oluştu</translation>
 <translation id="6273677812470008672">Kalite</translation>
+<translation id="6295855836753816081">Kaydediliyor...</translation>
 <translation id="6308937455967653460">Bağlantıyı far&amp;klı kaydet...</translation>
+<translation id="6314335155547195432">Parola Oluştur</translation>
 <translation id="6348109281845364640">Yazıcı kurulamadı</translation>
 <translation id="6370021412472292592">Manifest yüklenmedi.</translation>
 <translation id="6398765197997659313">Tam ekrandan çık</translation>
@@ -328,8 +339,8 @@
 <translation id="6807889908376551050">Tümünü Göster...</translation>
 <translation id="6812841287760418429">Değişiklikleri koru</translation>
 <translation id="682123305478866682">Masaüstünü yayınla</translation>
+<translation id="6824564591481349393">&amp;E-posta Adresini Kopyala</translation>
 <translation id="6841186874966388268">Hatalar</translation>
-<translation id="6863910145616405334">Eklenti bulunamadı</translation>
 <translation id="6886871292305414135">Bağlan&amp;tıyı yeni sekmede aç</translation>
 <translation id="6900284862687837908">Arka Plan Uygulaması: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Dosya erişimini iptal et</translation>
@@ -338,12 +349,13 @@
 <translation id="6945221475159498467">Seç</translation>
 <translation id="6955446738988643816">Açılır Pencereyi İncele</translation>
 <translation id="6974053822202609517">Sağdan Sola</translation>
+<translation id="6982896539684144327"><ph name="VENDOR_NAME" /> yazıcısı algılandı</translation>
 <translation id="6985276906761169321">ID:</translation>
 <translation id="6991665348624301627">Bir hedef seç</translation>
 <translation id="7006634003215061422">Alt kenar boşluğu</translation>
 <translation id="7013485839273047434">Daha fazla uzantı edinin</translation>
+<translation id="7030031465713069059">Parolayı Kaydet</translation>
 <translation id="708060913198414444">Ses adresini k&amp;opyala</translation>
-<translation id="7105578512429498960">Bu içeriği görüntülemek için <ph name="PLUGIN_NAME" /> eklentisini yükleyin</translation>
 <translation id="7144878232160441200">Yeniden Dene</translation>
 <translation id="7175353351958621980">Yüklendiği yer:</translation>
 <translation id="7186088072322679094">Araç Çubuğunda Tut</translation>
@@ -361,6 +373,8 @@
 <translation id="7421925624202799674">Sayfa Kaynağını Görüntüle</translation>
 <translation id="7427348830195639090">Arka Plan Sayfası: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7438940380767210568">Yazıcı kuruluyor...</translation>
+<translation id="7473891865547856676">Teşekkürler</translation>
+<translation id="749028671485790643">Kişi <ph name="VALUE" /></translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7551643184018910560">Rafa sabitle</translation>
 <translation id="7554791636758816595">Yeni Sekme</translation>
@@ -379,9 +393,11 @@
 <translation id="7786889348652477777">Uygulamayı Yeniden Yükle</translation>
 <translation id="7791543448312431591">Ekle</translation>
 <translation id="7800518121066352902">Saat Yönünün Tersine Döndür</translation>
+<translation id="780301667611848630">Hayır, teşekkürler</translation>
 <translation id="7814458197256864873">Kopyala</translation>
 <translation id="7818135753970109980">Yeni tema eklendi (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">Video adresini k&amp;opyala</translation>
+<translation id="7831493768366098287">Google Print</translation>
 <translation id="7849264908733290972">Resm&amp;i Yeni Sekmede Aç</translation>
 <translation id="7857949311770343000">Bu, beklediğiniz yeni sekme sayfası mı?</translation>
 <translation id="786073089922909430">Hizmet: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -405,7 +421,7 @@ Anahtar Dosyası: <ph name="KEY_FILE" />
 Anahtar dosyanızı güvenli bir yerde saklayın. Uzantınızın yeni sürümlerini oluşturmak için bu dosyaya ihtiyacınız olacak.</translation>
 <translation id="8004582292198964060">Tarayıcı</translation>
 <translation id="8023801379949507775">Uzantıları şimdi güncelle</translation>
-<translation id="8037357227543935929">Sor (varsayılan)</translation>
+<translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">Resim olarak yazdır</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8137559199583651773">Eklentileri yönet</translation>
@@ -417,17 +433,18 @@ Anahtar dosyanızı güvenli bir yerde saklayın. Uzantınızın yeni sürümler
 <translation id="8338952601723052325">Geliştirici web sitesi</translation>
 <translation id="8351419472474436977">Bu uzantı proxy ayarlarınızın denetimini ele geçirdi. Bu, uzantının çevrimiçinde yaptıklarınızı değiştirebileceği, kesebileceği veya dinleyebileceği anlamına gelir. Bu değişikliğin neden olduğundan emin değilseniz muhtemelen bu değişikliği yapmayı istememişsinizdir.</translation>
 <translation id="8357224663288891423">Uzantılar ve Uygulamalar için Klavye Kısayolları</translation>
+<translation id="8382913212082956454">E-posta &amp;adresini kopyala</translation>
 <translation id="839736845446313156">Kaydol</translation>
 <translation id="8434480141477525001">NaCl Hata Ayıklama Bağlantı Noktası</translation>
 <translation id="8437331208797669910">Sayfa erişimi</translation>
 <translation id="8449008133205184768">Yapıştır ve Biçimi Eşle</translation>
 <translation id="8463955938112983119"><ph name="PLUGIN_NAME" /> devre dışı.</translation>
 <translation id="8465444703385715657"><ph name="PLUGIN_NAME" /> eklentisinin çalışması için izniniz gerekiyor</translation>
+<translation id="8496717697661868878">Bu Eklentiyi Çalıştır</translation>
 <translation id="8512476990829870887">İşlemi Sonlandır</translation>
 <translation id="8523493869875972733">Değişiklikleri Koru</translation>
 <translation id="8523849605371521713">Politika tarafından eklendi</translation>
 <translation id="8546306075665861288">Resim önbelleği</translation>
-<translation id="855705891482654011">Paketlenmemiş eklentileri yükle</translation>
 <translation id="8569682776816196752">Hiçbir hedef bulunamadı</translation>
 <translation id="8584280235376696778">Videoyu yeni sekmede &amp;aç</translation>
 <translation id="8605428685123651449">SQLite Belleği</translation>
@@ -436,14 +453,15 @@ Anahtar dosyanızı güvenli bir yerde saklayın. Uzantınızın yeni sürümler
 <translation id="862750493060684461">CSS önbelleği</translation>
 <translation id="8661290697478713397">Bağlantıyı &amp;Gizli Pencerede Aç</translation>
 <translation id="8664389313780386848">&amp;Sayfa kaynağını görüntüle</translation>
+<translation id="8714838604780058252">Arka plan grafikleri</translation>
 <translation id="8719653885894320876"><ph name="PLUGIN_NAME" /> indirilemedi</translation>
 <translation id="873545264931343897"><ph name="PLUGIN_NAME" /> eklentisinin güncellenmesi tamamlandığında etkinleştirmek için sayfayı yeniden yükleyin</translation>
-<translation id="8763204422633679667"><ph name="PLUGIN_NAME" /> eklentisinin yüklenmesi tamamlandığında etkinleştirmek için sayfayı yeniden yükleyin</translation>
 <translation id="8770406935328356739">Uzantı kök dizini</translation>
 <translation id="8774934320277480003">Üst kenar boşluğu</translation>
 <translation id="8795916974678578410">Yeni Pencere</translation>
 <translation id="8798099450830957504">Varsayılan</translation>
 <translation id="8808478386290700967">Web Mağazası</translation>
+<translation id="8823514049557262177">&amp;Bağlantı metnini kopyala</translation>
 <translation id="8845001906332463065">Yardım al</translation>
 <translation id="8859174528519900719">Alt çerçeve: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899285681604219177">Desteklenmeyen Eklentiler Devre Dışı Bırakıldı</translation>
@@ -459,12 +477,12 @@ Anahtar dosyanızı güvenli bir yerde saklayın. Uzantınızın yeni sürümler
 <translation id="9003647077635673607">Tüm web sitelerinde izin ver</translation>
 <translation id="9027459031423301635">Bağlan&amp;tıyı Yeni Sekmede Aç</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> eklentisi kurumsal politika tarafından engellendi</translation>
-<translation id="9145718805518496796">Eklentileri paketle...</translation>
 <translation id="9153341767479566106">Yüklemenin başarısız olduğu diğer eklentiler:</translation>
 <translation id="9170848237812810038">&amp;Geri al</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" eklendi</translation>
 <translation id="9219103736887031265">Resimler</translation>
 <translation id="93766956588638423">Uzantıyı onar</translation>
+<translation id="98515147261107953">Yatay</translation>
 <translation id="994289308992179865">&amp;Döngü</translation>
 <translation id="998747458861718449">İ&amp;ncele</translation>
 </translationbundle>

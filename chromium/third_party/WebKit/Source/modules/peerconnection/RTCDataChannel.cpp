@@ -369,13 +369,13 @@ void RTCDataChannel::ScheduleDispatchEvent(Event* event) {
 
 void RTCDataChannel::ScheduledEventTimerFired(TimerBase*) {
   HeapVector<Member<Event>> events;
-  events.Swap(scheduled_events_);
+  events.swap(scheduled_events_);
 
   HeapVector<Member<Event>>::iterator it = events.begin();
   for (; it != events.end(); ++it)
     DispatchEvent((*it).Release());
 
-  events.Clear();
+  events.clear();
 }
 
 DEFINE_TRACE(RTCDataChannel) {

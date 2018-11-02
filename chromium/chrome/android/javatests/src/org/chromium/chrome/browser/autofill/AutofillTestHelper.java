@@ -24,14 +24,14 @@ public class AutofillTestHelper {
 
     public AutofillTestHelper() {
         registerDataObserver();
-        setNormalizationTimeoutForTesting();
+        setRequestTimeoutForTesting();
     }
 
-    void setNormalizationTimeoutForTesting() {
+    void setRequestTimeoutForTesting() {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                PersonalDataManager.getInstance().setNormalizationTimeoutForTesting(1);
+                PersonalDataManager.getInstance().setRequestTimeoutForTesting(0);
             }
         });
     }

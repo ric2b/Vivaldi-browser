@@ -5,35 +5,56 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "components/payments/content/payment_app.mojom.h"
+#include "base/run_loop.h"
+#include "components/payments/mojom/payment_app.mojom.h"
 #include "content/browser/payments/payment_app_content_unittest_base.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
-using payments::mojom::PaymentAppManifestError;
-using payments::mojom::PaymentAppManifestPtr;
-
 namespace content {
 namespace {
+
+using ::payments::mojom::PaymentHandlerStatus;
+using ::payments::mojom::PaymentInstrument;
+using ::payments::mojom::PaymentInstrumentPtr;
 
 const char kServiceWorkerPattern[] = "https://example.com/a";
 const char kServiceWorkerScript[] = "https://example.com/a/script.js";
 
-void SetManifestCallback(bool* called,
-                         PaymentAppManifestError* out_error,
-                         PaymentAppManifestError error) {
-  *called = true;
-  *out_error = error;
+void DeletePaymentInstrumentCallback(PaymentHandlerStatus* out_status,
+                                     PaymentHandlerStatus status) {
+  *out_status = status;
 }
 
-void GetManifestCallback(bool* called,
-                         PaymentAppManifestPtr* out_manifest,
-                         PaymentAppManifestError* out_error,
-                         PaymentAppManifestPtr manifest,
-                         PaymentAppManifestError error) {
-  *called = true;
-  *out_manifest = std::move(manifest);
-  *out_error = error;
+void SetPaymentInstrumentCallback(PaymentHandlerStatus* out_status,
+                                  PaymentHandlerStatus status) {
+  *out_status = status;
+}
+
+void KeysOfPaymentInstrumentsCallback(std::vector<std::string>* out_keys,
+                                      PaymentHandlerStatus* out_status,
+                                      const std::vector<std::string>& keys,
+                                      PaymentHandlerStatus status) {
+  *out_keys = keys;
+  *out_status = status;
+}
+
+void HasPaymentInstrumentCallback(PaymentHandlerStatus* out_status,
+                                  PaymentHandlerStatus status) {
+  *out_status = status;
+}
+
+void GetPaymentInstrumentCallback(PaymentInstrumentPtr* out_instrument,
+                                  PaymentHandlerStatus* out_status,
+                                  PaymentInstrumentPtr instrument,
+                                  PaymentHandlerStatus status) {
+  *out_instrument = std::move(instrument);
+  *out_status = status;
+}
+
+void ClearPaymentInstrumentsCallback(PaymentHandlerStatus* out_status,
+                                     PaymentHandlerStatus status) {
+  *out_status = status;
 }
 
 }  // namespace
@@ -48,6 +69,52 @@ class PaymentManagerTest : public PaymentAppContentUnitTestBase {
 
   PaymentManager* payment_manager() const { return manager_; }
 
+  void DeletePaymentInstrument(const std::string& instrument_key,
+                               PaymentHandlerStatus* out_status) {
+    manager_->DeletePaymentInstrument(
+        instrument_key,
+        base::Bind(&DeletePaymentInstrumentCallback, out_status));
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void SetPaymentInstrument(const std::string& instrument_key,
+                            PaymentInstrumentPtr instrument,
+                            PaymentHandlerStatus* out_status) {
+    manager_->SetPaymentInstrument(
+        instrument_key, std::move(instrument),
+        base::Bind(&SetPaymentInstrumentCallback, out_status));
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void KeysOfPaymentInstruments(std::vector<std::string>* out_keys,
+                                PaymentHandlerStatus* out_status) {
+    manager_->KeysOfPaymentInstruments(
+        base::Bind(&KeysOfPaymentInstrumentsCallback, out_keys, out_status));
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void HasPaymentInstrument(const std::string& instrument_key,
+                            PaymentHandlerStatus* out_status) {
+    manager_->HasPaymentInstrument(
+        instrument_key, base::Bind(&HasPaymentInstrumentCallback, out_status));
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void GetPaymentInstrument(const std::string& instrument_key,
+                            PaymentInstrumentPtr* out_instrument,
+                            PaymentHandlerStatus* out_status) {
+    manager_->GetPaymentInstrument(
+        instrument_key,
+        base::Bind(&GetPaymentInstrumentCallback, out_instrument, out_status));
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void ClearPaymentInstruments(PaymentHandlerStatus* out_status) {
+    manager_->ClearPaymentInstruments(
+        base::Bind(&ClearPaymentInstrumentsCallback, out_status));
+    base::RunLoop().RunUntilIdle();
+  }
+
  private:
   // Owned by payment_app_context_.
   PaymentManager* manager_;
@@ -55,70 +122,140 @@ class PaymentManagerTest : public PaymentAppContentUnitTestBase {
   DISALLOW_COPY_AND_ASSIGN(PaymentManagerTest);
 };
 
-TEST_F(PaymentManagerTest, SetAndGetManifest) {
-  bool called = false;
-  PaymentAppManifestError error =
-      PaymentAppManifestError::MANIFEST_STORAGE_OPERATION_FAILED;
-  SetManifest(payment_manager(),
-              CreatePaymentAppManifestForTest(kServiceWorkerPattern),
-              base::Bind(&SetManifestCallback, &called, &error));
-  ASSERT_TRUE(called);
+TEST_F(PaymentManagerTest, SetAndGetPaymentInstrument) {
+  PaymentHandlerStatus write_status = PaymentHandlerStatus::NOT_FOUND;
+  PaymentInstrumentPtr write_details = PaymentInstrument::New();
+  write_details->name = "Visa ending ****4756",
+  write_details->enabled_methods.push_back("visa");
+  write_details->stringified_capabilities = "{}";
+  SetPaymentInstrument("test_key", std::move(write_details), &write_status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, write_status);
 
-  ASSERT_EQ(PaymentAppManifestError::NONE, error);
-
-  called = false;
-  PaymentAppManifestPtr read_manifest;
-  PaymentAppManifestError read_error =
-      PaymentAppManifestError::MANIFEST_STORAGE_OPERATION_FAILED;
-  GetManifest(payment_manager(), base::Bind(&GetManifestCallback, &called,
-                                            &read_manifest, &read_error));
-  ASSERT_TRUE(called);
-
-  ASSERT_EQ(payments::mojom::PaymentAppManifestError::NONE, read_error);
-  EXPECT_EQ("payment-app-icon", read_manifest->icon.value());
-  EXPECT_EQ(kServiceWorkerPattern, read_manifest->name);
-  ASSERT_EQ(1U, read_manifest->options.size());
-  EXPECT_EQ("payment-app-icon", read_manifest->options[0]->icon.value());
-  EXPECT_EQ("Visa ****", read_manifest->options[0]->name);
-  EXPECT_EQ("payment-app-id", read_manifest->options[0]->id);
-  ASSERT_EQ(1U, read_manifest->options[0]->enabled_methods.size());
-  EXPECT_EQ("visa", read_manifest->options[0]->enabled_methods[0]);
+  PaymentHandlerStatus read_status = PaymentHandlerStatus::NOT_FOUND;
+  PaymentInstrumentPtr read_details;
+  GetPaymentInstrument("test_key", &read_details, &read_status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, read_status);
+  EXPECT_EQ("Visa ending ****4756", read_details->name);
+  ASSERT_EQ(1U, read_details->enabled_methods.size());
+  EXPECT_EQ("visa", read_details->enabled_methods[0]);
+  EXPECT_EQ("{}", read_details->stringified_capabilities);
 }
 
-TEST_F(PaymentManagerTest, SetManifestWithoutAssociatedServiceWorker) {
-  bool called = false;
-  PaymentAppManifestError error = PaymentAppManifestError::NONE;
-  UnregisterServiceWorker(GURL(kServiceWorkerPattern));
-  SetManifest(payment_manager(),
-              CreatePaymentAppManifestForTest(kServiceWorkerPattern),
-              base::Bind(&SetManifestCallback, &called, &error));
-  ASSERT_TRUE(called);
-
-  EXPECT_EQ(PaymentAppManifestError::NO_ACTIVE_WORKER, error);
+TEST_F(PaymentManagerTest, GetUnstoredPaymentInstrument) {
+  PaymentHandlerStatus read_status = PaymentHandlerStatus::SUCCESS;
+  PaymentInstrumentPtr read_details;
+  GetPaymentInstrument("test_key", &read_details, &read_status);
+  ASSERT_EQ(PaymentHandlerStatus::NOT_FOUND, read_status);
 }
 
-TEST_F(PaymentManagerTest, GetManifestWithoutAssociatedServiceWorker) {
-  bool called = false;
-  PaymentAppManifestPtr read_manifest;
-  PaymentAppManifestError read_error = PaymentAppManifestError::NONE;
-  UnregisterServiceWorker(GURL(kServiceWorkerPattern));
-  GetManifest(payment_manager(), base::Bind(&GetManifestCallback, &called,
-                                            &read_manifest, &read_error));
-  ASSERT_TRUE(called);
+TEST_F(PaymentManagerTest, DeletePaymentInstrument) {
+  PaymentHandlerStatus write_status = PaymentHandlerStatus::NOT_FOUND;
+  PaymentInstrumentPtr write_details = PaymentInstrument::New();
+  write_details->name = "Visa ending ****4756",
+  write_details->enabled_methods.push_back("visa");
+  write_details->stringified_capabilities = "{}";
+  SetPaymentInstrument("test_key", std::move(write_details), &write_status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, write_status);
 
-  EXPECT_EQ(PaymentAppManifestError::NO_ACTIVE_WORKER, read_error);
+  PaymentHandlerStatus read_status = PaymentHandlerStatus::NOT_FOUND;
+  PaymentInstrumentPtr read_details;
+  GetPaymentInstrument("test_key", &read_details, &read_status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, read_status);
+
+  PaymentHandlerStatus delete_status = PaymentHandlerStatus::NOT_FOUND;
+  DeletePaymentInstrument("test_key", &delete_status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, delete_status);
+
+  read_status = PaymentHandlerStatus::NOT_FOUND;
+  GetPaymentInstrument("test_key", &read_details, &read_status);
+  ASSERT_EQ(PaymentHandlerStatus::NOT_FOUND, read_status);
 }
 
-TEST_F(PaymentManagerTest, GetManifestWithNoSavedManifest) {
-  bool called = false;
-  PaymentAppManifestPtr read_manifest;
-  PaymentAppManifestError read_error = PaymentAppManifestError::NONE;
-  GetManifest(payment_manager(), base::Bind(&GetManifestCallback, &called,
-                                            &read_manifest, &read_error));
-  ASSERT_TRUE(called);
+TEST_F(PaymentManagerTest, HasPaymentInstrument) {
+  PaymentHandlerStatus write_status = PaymentHandlerStatus::NOT_FOUND;
+  PaymentInstrumentPtr write_details = PaymentInstrument::New();
+  write_details->name = "Visa ending ****4756",
+  write_details->enabled_methods.push_back("visa");
+  write_details->stringified_capabilities = "{}";
+  SetPaymentInstrument("test_key", std::move(write_details), &write_status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, write_status);
 
-  EXPECT_EQ(PaymentAppManifestError::MANIFEST_STORAGE_OPERATION_FAILED,
-            read_error);
+  PaymentHandlerStatus has_status = PaymentHandlerStatus::NOT_FOUND;
+  HasPaymentInstrument("test_key", &has_status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, has_status);
+
+  HasPaymentInstrument("unstored_test_key", &has_status);
+  ASSERT_EQ(PaymentHandlerStatus::NOT_FOUND, has_status);
+}
+
+TEST_F(PaymentManagerTest, KeysOfPaymentInstruments) {
+  PaymentHandlerStatus keys_status = PaymentHandlerStatus::NOT_FOUND;
+  std::vector<std::string> keys;
+  KeysOfPaymentInstruments(&keys, &keys_status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, keys_status);
+  ASSERT_EQ(0U, keys.size());
+
+  {
+    PaymentHandlerStatus write_status = PaymentHandlerStatus::NOT_FOUND;
+    SetPaymentInstrument("test_key1", PaymentInstrument::New(), &write_status);
+    ASSERT_EQ(PaymentHandlerStatus::SUCCESS, write_status);
+  }
+  {
+    PaymentHandlerStatus write_status = PaymentHandlerStatus::NOT_FOUND;
+    SetPaymentInstrument("test_key3", PaymentInstrument::New(), &write_status);
+    ASSERT_EQ(PaymentHandlerStatus::SUCCESS, write_status);
+  }
+  {
+    PaymentHandlerStatus write_status = PaymentHandlerStatus::NOT_FOUND;
+    SetPaymentInstrument("test_key2", PaymentInstrument::New(), &write_status);
+    ASSERT_EQ(PaymentHandlerStatus::SUCCESS, write_status);
+  }
+
+  keys_status = PaymentHandlerStatus::NOT_FOUND;
+  KeysOfPaymentInstruments(&keys, &keys_status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, keys_status);
+  ASSERT_EQ(3U, keys.size());
+  ASSERT_EQ("test_key1", keys[0]);
+  ASSERT_EQ("test_key3", keys[1]);
+  ASSERT_EQ("test_key2", keys[2]);
+}
+
+TEST_F(PaymentManagerTest, ClearPaymentInstruments) {
+  PaymentHandlerStatus status = PaymentHandlerStatus::NOT_FOUND;
+  std::vector<std::string> keys;
+  KeysOfPaymentInstruments(&keys, &status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, status);
+  ASSERT_EQ(0U, keys.size());
+
+  {
+    PaymentHandlerStatus write_status = PaymentHandlerStatus::NOT_FOUND;
+    SetPaymentInstrument("test_key1", PaymentInstrument::New(), &write_status);
+    ASSERT_EQ(PaymentHandlerStatus::SUCCESS, write_status);
+  }
+  {
+    PaymentHandlerStatus write_status = PaymentHandlerStatus::NOT_FOUND;
+    SetPaymentInstrument("test_key3", PaymentInstrument::New(), &write_status);
+    ASSERT_EQ(PaymentHandlerStatus::SUCCESS, write_status);
+  }
+  {
+    PaymentHandlerStatus write_status = PaymentHandlerStatus::NOT_FOUND;
+    SetPaymentInstrument("test_key2", PaymentInstrument::New(), &write_status);
+    ASSERT_EQ(PaymentHandlerStatus::SUCCESS, write_status);
+  }
+
+  status = PaymentHandlerStatus::NOT_FOUND;
+  KeysOfPaymentInstruments(&keys, &status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, status);
+  ASSERT_EQ(3U, keys.size());
+
+  status = PaymentHandlerStatus::NOT_FOUND;
+  ClearPaymentInstruments(&status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, status);
+
+  status = PaymentHandlerStatus::NOT_FOUND;
+  KeysOfPaymentInstruments(&keys, &status);
+  ASSERT_EQ(PaymentHandlerStatus::SUCCESS, status);
+  ASSERT_EQ(0U, keys.size());
 }
 
 }  // namespace content

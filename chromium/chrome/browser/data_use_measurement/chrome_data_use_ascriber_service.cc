@@ -83,11 +83,11 @@ void ChromeDataUseAscriberService::RenderFrameCreated(
 
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&ChromeDataUseAscriber::RenderFrameCreated,
-                 base::Unretained(ascriber_),
-                 render_frame_host->GetProcess()->GetID(),
-                 render_frame_host->GetRoutingID(), main_render_process_id,
-                 main_render_frame_id));
+      base::BindOnce(&ChromeDataUseAscriber::RenderFrameCreated,
+                     base::Unretained(ascriber_),
+                     render_frame_host->GetProcess()->GetID(),
+                     render_frame_host->GetRoutingID(), main_render_process_id,
+                     main_render_frame_id));
 }
 
 void ChromeDataUseAscriberService::RenderFrameDeleted(
@@ -115,11 +115,11 @@ void ChromeDataUseAscriberService::RenderFrameDeleted(
 
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&ChromeDataUseAscriber::RenderFrameDeleted,
-                 base::Unretained(ascriber_),
-                 render_frame_host->GetProcess()->GetID(),
-                 render_frame_host->GetRoutingID(), main_render_process_id,
-                 main_render_frame_id));
+      base::BindOnce(&ChromeDataUseAscriber::RenderFrameDeleted,
+                     base::Unretained(ascriber_),
+                     render_frame_host->GetProcess()->GetID(),
+                     render_frame_host->GetRoutingID(), main_render_process_id,
+                     main_render_frame_id));
 }
 
 void ChromeDataUseAscriberService::DidStartNavigation(
@@ -133,11 +133,11 @@ void ChromeDataUseAscriberService::DidStartNavigation(
   content::WebContents* web_contents = navigation_handle->GetWebContents();
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&ChromeDataUseAscriber::DidStartMainFrameNavigation,
-                 base::Unretained(ascriber_), navigation_handle->GetURL(),
-                 web_contents->GetRenderProcessHost()->GetID(),
-                 web_contents->GetMainFrame()->GetRoutingID(),
-                 navigation_handle));
+      base::BindOnce(&ChromeDataUseAscriber::DidStartMainFrameNavigation,
+                     base::Unretained(ascriber_), navigation_handle->GetURL(),
+                     web_contents->GetRenderProcessHost()->GetID(),
+                     web_contents->GetMainFrame()->GetRoutingID(),
+                     navigation_handle));
 }
 
 void ChromeDataUseAscriberService::ReadyToCommitNavigation(
@@ -153,22 +153,18 @@ void ChromeDataUseAscriberService::ReadyToCommitNavigation(
   content::WebContents* web_contents = navigation_handle->GetWebContents();
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&ChromeDataUseAscriber::ReadyToCommitMainFrameNavigation,
-                 base::Unretained(ascriber_), navigation_handle->GetURL(),
-                 navigation_handle->GetGlobalRequestID(),
-                 web_contents->GetRenderProcessHost()->GetID(),
-                 web_contents->GetMainFrame()->GetRoutingID(),
-                 !navigation_handle->HasCommitted() ||
-                     navigation_handle->IsSameDocument(),
-                 navigation_handle));
+      base::BindOnce(&ChromeDataUseAscriber::ReadyToCommitMainFrameNavigation,
+                     base::Unretained(ascriber_),
+                     navigation_handle->GetGlobalRequestID(),
+                     web_contents->GetRenderProcessHost()->GetID(),
+                     web_contents->GetMainFrame()->GetRoutingID()));
 }
 
 void ChromeDataUseAscriberService::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (!navigation_handle->IsInMainFrame() ||
-      !navigation_handle->HasCommitted() || navigation_handle->IsSameDocument())
+  if (!navigation_handle->IsInMainFrame() || !navigation_handle->HasCommitted())
     return;
 
   if (!ascriber_)
@@ -177,11 +173,13 @@ void ChromeDataUseAscriberService::DidFinishNavigation(
   content::WebContents* web_contents = navigation_handle->GetWebContents();
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&ChromeDataUseAscriber::DidFinishNavigation,
-                 base::Unretained(ascriber_),
-                 web_contents->GetRenderProcessHost()->GetID(),
-                 web_contents->GetMainFrame()->GetRoutingID(),
-                 navigation_handle->GetPageTransition()));
+      base::BindOnce(&ChromeDataUseAscriber::DidFinishNavigation,
+                     base::Unretained(ascriber_),
+                     web_contents->GetRenderProcessHost()->GetID(),
+                     web_contents->GetMainFrame()->GetRoutingID(),
+                     navigation_handle->GetURL(),
+                     navigation_handle->IsSameDocument(),
+                     navigation_handle->GetPageTransition()));
 }
 
 void ChromeDataUseAscriberService::SetDataUseAscriber(
@@ -218,10 +216,10 @@ void ChromeDataUseAscriberService::WasShownOrHidden(
 
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&ChromeDataUseAscriber::WasShownOrHidden,
-                 base::Unretained(ascriber_),
-                 main_render_frame_host->GetProcess()->GetID(),
-                 main_render_frame_host->GetRoutingID(), visible));
+      base::BindOnce(&ChromeDataUseAscriber::WasShownOrHidden,
+                     base::Unretained(ascriber_),
+                     main_render_frame_host->GetProcess()->GetID(),
+                     main_render_frame_host->GetRoutingID(), visible));
 }
 
 void ChromeDataUseAscriberService::RenderFrameHostChanged(
@@ -233,10 +231,11 @@ void ChromeDataUseAscriberService::RenderFrameHostChanged(
   if (old_host) {
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&ChromeDataUseAscriber::RenderFrameHostChanged,
-                   base::Unretained(ascriber_), old_host->GetProcess()->GetID(),
-                   old_host->GetRoutingID(), new_host->GetProcess()->GetID(),
-                   new_host->GetRoutingID()));
+        base::BindOnce(
+            &ChromeDataUseAscriber::RenderFrameHostChanged,
+            base::Unretained(ascriber_), old_host->GetProcess()->GetID(),
+            old_host->GetRoutingID(), new_host->GetProcess()->GetID(),
+            new_host->GetRoutingID()));
   }
 }
 

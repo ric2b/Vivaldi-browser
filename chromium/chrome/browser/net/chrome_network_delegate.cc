@@ -114,7 +114,7 @@ void ReportInvalidReferrerSend(const GURL& target_url,
   if (!target_url.SchemeIsHTTPOrHTTPS())
     return;
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(&ReportInvalidReferrerSendOnUI));
+                          base::BindOnce(&ReportInvalidReferrerSendOnUI));
   base::debug::DumpWithoutCrashing();
   NOTREACHED();
 }
@@ -426,10 +426,9 @@ bool ChromeNetworkDelegate::OnCanGetCookies(
   if (info) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&TabSpecificContentSettings::CookiesRead,
-                   info->GetWebContentsGetterForRequest(),
-                   request.url(), request.first_party_for_cookies(),
-                   cookie_list, !allow));
+        base::BindOnce(&TabSpecificContentSettings::CookiesRead,
+                       info->GetWebContentsGetterForRequest(), request.url(),
+                       request.first_party_for_cookies(), cookie_list, !allow));
   }
 
   return allow;
@@ -449,10 +448,10 @@ bool ChromeNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
   if (info) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&TabSpecificContentSettings::CookieChanged,
-                   info->GetWebContentsGetterForRequest(),
-                   request.url(), request.first_party_for_cookies(),
-                   cookie_line, *options, !allow));
+        base::BindOnce(&TabSpecificContentSettings::CookieChanged,
+                       info->GetWebContentsGetterForRequest(), request.url(),
+                       request.first_party_for_cookies(), cookie_line, *options,
+                       !allow));
   }
 
   return allow;
@@ -461,12 +460,10 @@ bool ChromeNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
 bool ChromeNetworkDelegate::OnCanAccessFile(const net::URLRequest& request,
                                             const base::FilePath& path) const {
 #if defined(OS_CHROMEOS)
-  // If we're running Chrome for ChromeOS on Linux, we want to allow file
-  // access. This is checked here to make IsAccessAllowed() unit-testable.
-  if (!base::SysInfo::IsRunningOnChromeOS() ||
-      base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kTestType)) {
+  // browser_tests and interactive_ui_tests rely on the ability to open any
+  // files via file: scheme.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kTestType))
     return true;
-  }
 #endif
 
   return IsAccessAllowed(path, profile_path_);
@@ -557,6 +554,42 @@ bool ChromeNetworkDelegate::OnCancelURLRequestWithPolicyViolatingReferrerHeader(
     const GURL& referrer_url) const {
   ReportInvalidReferrerSend(target_url, referrer_url);
   return true;
+}
+
+bool ChromeNetworkDelegate::OnCanQueueReportingReport(
+    const url::Origin& origin) const {
+  if (!cookie_settings_)
+    return true;
+
+  return cookie_settings_->IsCookieAccessAllowed(origin.GetURL(),
+                                                 origin.GetURL());
+}
+
+bool ChromeNetworkDelegate::OnCanSendReportingReport(
+    const url::Origin& origin) const {
+  if (!cookie_settings_)
+    return true;
+
+  return cookie_settings_->IsCookieAccessAllowed(origin.GetURL(),
+                                                 origin.GetURL());
+}
+
+bool ChromeNetworkDelegate::OnCanSetReportingClient(
+    const url::Origin& origin,
+    const GURL& endpoint) const {
+  if (!cookie_settings_)
+    return true;
+
+  return cookie_settings_->IsCookieAccessAllowed(endpoint, origin.GetURL());
+}
+
+bool ChromeNetworkDelegate::OnCanUseReportingClient(
+    const url::Origin& origin,
+    const GURL& endpoint) const {
+  if (!cookie_settings_)
+    return true;
+
+  return cookie_settings_->IsCookieAccessAllowed(endpoint, origin.GetURL());
 }
 
 void ChromeNetworkDelegate::ReportDataUsageStats(net::URLRequest* request,

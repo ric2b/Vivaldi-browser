@@ -6,6 +6,7 @@
 #define NGLayoutAlgorithm_h
 
 #include "core/CoreExport.h"
+#include "core/layout/ng/ng_floats_utils.h"
 #include "core/layout/ng/ng_fragment_builder.h"
 #include "core/layout/ng/ng_min_max_content_size.h"
 #include "platform/wtf/Allocator.h"
@@ -44,7 +45,7 @@ class CORE_EXPORT NGLayoutAlgorithm {
   // this value from the overflow rect returned from Layout called with an
   // available width of 0 and LayoutUnit::max(), respectively.
   virtual Optional<MinMaxContentSize> ComputeMinMaxContentSize() const {
-    return WTF::kNullopt;
+    return WTF::nullopt;
   }
 
  protected:

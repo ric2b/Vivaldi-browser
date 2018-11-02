@@ -8,7 +8,6 @@
 #include "mojo/common/common_custom_types_struct_traits.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/ui/public/interfaces/cursor/cursor.mojom.h"
-#include "skia/public/interfaces/bitmap_array_struct_traits.h"
 #include "skia/public/interfaces/bitmap_skbitmap_struct_traits.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/cursor/cursor.h"
@@ -48,11 +47,12 @@ std::vector<SkBitmap> CreateTestCursorFrames(const gfx::Size& size,
 // Tests numeric cursor ids.
 TEST_F(CursorStructTraitsTest, TestBuiltIn) {
   for (int i = 0; i < 43; ++i) {
-    ui::CursorData input(i);
+    ui::CursorType type = static_cast<ui::CursorType>(i);
+    ui::CursorData input(type);
 
     ui::CursorData output;
     ASSERT_TRUE(EchoCursorData(input, &output));
-    EXPECT_TRUE(output.IsType(i));
+    EXPECT_TRUE(output.IsType(type));
   }
 }
 
@@ -68,7 +68,7 @@ TEST_F(CursorStructTraitsTest, TestBitmapCursor) {
   ui::CursorData output;
   ASSERT_TRUE(EchoCursorData(input, &output));
 
-  EXPECT_EQ(kCursorCustom, output.cursor_type());
+  EXPECT_EQ(CursorType::kCustom, output.cursor_type());
   EXPECT_EQ(kScale, output.scale_factor());
   EXPECT_EQ(kFrameDelay, output.frame_delay());
   EXPECT_EQ(kHotspot, output.hotspot_in_pixels());
@@ -89,18 +89,30 @@ TEST_F(CursorStructTraitsTest, TestBitmapCursor) {
     ASSERT_EQ(input.cursor_frames()[f].height(),
               output.cursor_frames()[f].height());
 
-    input.cursor_frames()[f].lockPixels();
-    output.cursor_frames()[f].lockPixels();
     for (int x = 0; x < input.cursor_frames()[f].width(); ++x) {
       for (int y = 0; y < input.cursor_frames()[f].height(); ++y) {
         EXPECT_EQ(input.cursor_frames()[f].getColor(x, y),
                   output.cursor_frames()[f].getColor(x, y));
       }
     }
-
-    output.cursor_frames()[f].unlockPixels();
-    input.cursor_frames()[f].unlockPixels();
   }
+}
+
+// Test that we deal with empty bitmaps. (When a cursor resource isn't loaded
+// in the renderer, the renderer will send a kCurstomCursor with an empty
+// bitmap.)
+TEST_F(CursorStructTraitsTest, TestEmptyCursor) {
+  const base::TimeDelta kFrameDelay = base::TimeDelta::FromMilliseconds(15);
+  const gfx::Point kHotspot = gfx::Point(5, 2);
+  const float kScale = 2.0f;
+
+  ui::CursorData input(kHotspot, {SkBitmap()}, kScale, kFrameDelay);
+
+  ui::CursorData output;
+  ASSERT_TRUE(EchoCursorData(input, &output));
+
+  ASSERT_EQ(1u, output.cursor_frames().size());
+  EXPECT_TRUE(output.cursor_frames().front().empty());
 }
 
 }  // namespace ui

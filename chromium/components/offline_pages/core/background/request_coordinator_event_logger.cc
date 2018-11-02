@@ -41,6 +41,8 @@ static std::string OfflinerRequestStatusToString(
       return "QUEUE_UPDATE_FAILED";
     case Offliner::BACKGROUND_SCHEDULER_CANCELED:
       return "BACKGROUND_SCHEDULER_CANCELED";
+    case Offliner::SAVED_ON_LAST_RETRY:
+      return "SAVED_ON_LAST_RETRY";
     default:
       NOTREACHED();
       return std::to_string(static_cast<int>(request_status));
@@ -66,7 +68,7 @@ static std::string BackgroundSavePageResultToString(
       return "RETRY_COUNT_EXCEEDED";
     case RequestNotifier::BackgroundSavePageResult::START_COUNT_EXCEEDED:
       return "START_COUNT_EXCEEDED";
-    case RequestNotifier::BackgroundSavePageResult::REMOVED:
+    case RequestNotifier::BackgroundSavePageResult::USER_CANCELED:
       return "REMOVED";
     default:
       NOTREACHED();
@@ -94,8 +96,9 @@ void RequestCoordinatorEventLogger::RecordOfflinerResult(
     const std::string& name_space,
     Offliner::RequestStatus new_status,
     int64_t request_id) {
+  std::string request_id_str = std::to_string(request_id);
   RecordActivity("Background save attempt for " + name_space + ":" +
-                 std::to_string(request_id) + " - " +
+                 request_id_str + " - " +
                  OfflinerRequestStatusToString(new_status));
 }
 
@@ -103,8 +106,9 @@ void RequestCoordinatorEventLogger::RecordDroppedSavePageRequest(
     const std::string& name_space,
     RequestNotifier::BackgroundSavePageResult result,
     int64_t request_id) {
+  std::string request_id_str = std::to_string(request_id);
   RecordActivity("Background save request removed " + name_space + ":" +
-                 std::to_string(request_id) + " - " +
+                 request_id_str + " - " +
                  BackgroundSavePageResultToString(result));
 }
 

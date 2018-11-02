@@ -19,6 +19,7 @@
 #include "base/scoped_observer.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
+#include "chrome/browser/predictors/loading_predictor_config.h"
 #include "chrome/browser/predictors/resource_prefetch_common.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor_tables.h"
 #include "chrome/browser/predictors/resource_prefetcher.h"
@@ -62,6 +63,10 @@ constexpr char kResourcePrefetchPredictorPrefetchMissesSize[] =
     "ResourcePrefetchPredictor.PrefetchMissesSizeKB";
 constexpr char kResourcePrefetchPredictorRedirectStatusHistogram[] =
     "ResourcePrefetchPredictor.RedirectStatus";
+
+const uint32_t kVersionedRemovedExperiment = 0x03ff25e3;
+const uint32_t kUnusedRemovedExperiment = 0xf7f77166;
+const uint32_t kNoStoreRemovedExperiment = 0xd90a199a;
 }  // namespace internal
 
 class TestObserver;
@@ -99,8 +104,7 @@ class ResourcePrefetcherManager;
 // recorded. Consider recording sub-frame responses independently or together
 // with main frame.
 class ResourcePrefetchPredictor
-    : public KeyedService,
-      public history::HistoryServiceObserver,
+    : public history::HistoryServiceObserver,
       public base::SupportsWeakPtr<ResourcePrefetchPredictor>,
       public precache::PrecacheManager::Delegate {
  public:
@@ -128,6 +132,8 @@ class ResourcePrefetchPredictor
     GURL request_url;  // URL after all redirects.
     content::ResourceType resource_type;
     net::RequestPriority priority;
+    base::TimeTicks response_time;
+    bool before_first_contentful_paint;
 
     // Only for responses.
     std::string mime_type;
@@ -154,6 +160,7 @@ class ResourcePrefetchPredictor
 
     GURL main_frame_url;
     GURL initial_url;
+    base::TimeTicks first_contentful_paint;
 
     // Stores all subresource requests within a single navigation, from initial
     // main frame request to navigation completion.
@@ -188,13 +195,14 @@ class ResourcePrefetchPredictor
     MAX
   };
 
-  ResourcePrefetchPredictor(const ResourcePrefetchPredictorConfig& config,
+  ResourcePrefetchPredictor(const LoadingPredictorConfig& config,
                             Profile* profile);
   ~ResourcePrefetchPredictor() override;
 
   // Starts initialization by posting a task to the DB thread to read the
   // predictor database.
   void StartInitialization();
+  void Shutdown();
 
   // Thread safe.
   static bool ShouldRecordRequest(net::URLRequest* request,
@@ -224,13 +232,10 @@ class ResourcePrefetchPredictor
   // Called when the main frame of a page completes loading.
   void RecordMainFrameLoadComplete(const NavigationID& navigation_id);
 
-  // Starts prefetching if it is enabled for |origin| and prefetching data
-  // exists for the |main_frame_url| either at the URL or at the host level.
-  void StartPrefetching(const GURL& main_frame_url, PrefetchOrigin origin);
-
-  // Stops prefetching that may be in progress corresponding to
-  // |main_frame_url|.
-  void StopPrefetching(const GURL& main_frame_url);
+  // Called after the main frame's first contentful paint.
+  void RecordFirstContentfulPaint(
+      const NavigationID& navigation_id,
+      const base::TimeTicks& first_contentful_paint);
 
   // Called when ResourcePrefetcher is finished, i.e. there is nothing pending
   // in flight.
@@ -255,6 +260,15 @@ class ResourcePrefetchPredictor
   void SetObserverForTesting(TestObserver* observer);
 
  private:
+  // Starts prefetching if it is enabled for |origin| and prefetching data
+  // exists for the |main_frame_url| either at the URL or at the host level.
+  void StartPrefetching(const GURL& main_frame_url, HintOrigin origin);
+
+  // Stops prefetching that may be in progress corresponding to
+  // |main_frame_url|.
+  void StopPrefetching(const GURL& main_frame_url);
+
+  friend class LoadingPredictor;
   friend class ::PredictorsHandler;
   friend class ResourcePrefetchPredictorTest;
   friend class ResourcePrefetchPredictorBrowserTest;
@@ -276,6 +290,8 @@ class ResourcePrefetchPredictor
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, ManifestHostInDB);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
                            ManifestHostNotInDBAndDBFull);
+  FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
+                           ManifestUnusedRemoved);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, OnMainFrameRequest);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, OnMainFrameRedirect);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
@@ -284,12 +300,15 @@ class ResourcePrefetchPredictor
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, HandledResourceTypes);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
                            PopulatePrefetcherRequest);
+  FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, PopulateFromManifest);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, GetRedirectEndpoint);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, GetPrefetchData);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
                            TestPrecisionRecallHistograms);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
                            TestPrefetchingDurationHistogram);
+  FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
+                           TestRecordFirstContentfulPaint);
 
   enum InitializationState {
     NOT_INITIALIZED = 0,
@@ -319,9 +338,6 @@ class ResourcePrefetchPredictor
   static bool IsNoStore(const net::URLRequest& request);
 
   static void SetAllowPortInUrlsForTesting(bool state);
-
-  // KeyedService methods override.
-  void Shutdown() override;
 
   // Functions called on different network events pertaining to the loading of
   // main frame resource or sub resources.
@@ -355,10 +371,16 @@ class ResourcePrefetchPredictor
 
   // Returns true iff the |data_map| contains PrefetchData that can be used
   // for a |main_frame_key| and fills |urls| with resources that need to be
-  // prefetched. |urls| pointer may be equal nullptr to get return value only.
+  // prefetched. |urls| may be nullptr to get the return value only.
   bool PopulatePrefetcherRequest(const std::string& main_frame_key,
                                  const PrefetchDataMap& data_map,
                                  std::vector<GURL>* urls) const;
+
+  // Returns true iff the manifest table contains PrecacheManifest that can be
+  // used for a |manifest_host| and fills |urls| with resources that need to be
+  // prefetched. |urls| may be nullptr to get the return value only.
+  bool PopulateFromManifest(const std::string& manifest_host,
+                            std::vector<GURL>* urls) const;
 
   // Callback for task to read predictor database. Takes ownership of
   // all arguments.
@@ -435,6 +457,13 @@ class ResourcePrefetchPredictor
   void OnHistoryServiceLoaded(
       history::HistoryService* history_service) override;
 
+  // Updates list of resources in the |data_map| for the |key| according to the
+  // |manifest|.
+  void UpdatePrefetchDataByManifest(const std::string& key,
+                                    PrefetchKeyType key_type,
+                                    PrefetchDataMap* data_map,
+                                    const precache::PrecacheManifest& manifest);
+
   // Used to connect to HistoryService or register for service loaded
   // notificatioan.
   void ConnectToHistoryService();
@@ -446,7 +475,7 @@ class ResourcePrefetchPredictor
 
   Profile* const profile_;
   TestObserver* observer_;
-  ResourcePrefetchPredictorConfig const config_;
+  const LoadingPredictorConfig config_;
   InitializationState initialization_state_;
   scoped_refptr<ResourcePrefetchPredictorTables> tables_;
   scoped_refptr<ResourcePrefetcherManager> prefetch_manager_;

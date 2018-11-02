@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/feature_list.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -197,14 +198,6 @@ void LabelFields(const FieldTypeMap& field_types,
   }
 }
 
-// Check whether |form_data| corresponds to a 2 field form with 1 text field and
-// 1 password field. Such form is likely sign-in form.
-bool IsSignInSubmission(const FormData& form_data) {
-  return form_data.fields.size() == 2 &&
-         form_data.fields[0].form_control_type == "text" &&
-         form_data.fields[1].form_control_type == "password";
-}
-
 }  // namespace
 
 PasswordFormManager::PasswordFormManager(
@@ -239,12 +232,13 @@ PasswordFormManager::PasswordFormManager(
       submit_result_(kSubmitResultNotSubmitted),
       form_type_(kFormTypeUnspecified),
       form_saver_(std::move(form_saver)),
-      owned_form_fetcher_(form_fetcher
-                              ? nullptr
-                              : base::MakeUnique<FormFetcherImpl>(
-                                    PasswordStore::FormDigest(observed_form),
-                                    client,
-                                    /* should_migrate_http_passwords */ true)),
+      owned_form_fetcher_(
+          form_fetcher ? nullptr
+                       : base::MakeUnique<FormFetcherImpl>(
+                             PasswordStore::FormDigest(observed_form),
+                             client,
+                             true /* should_migrate_http_passwords */,
+                             true /* should_query_suppressed_https_forms */)),
       form_fetcher_(form_fetcher ? form_fetcher : owned_form_fetcher_.get()),
       is_main_frame_secure_(client->IsMainFrameSecure()) {
   if (owned_form_fetcher_)
@@ -261,6 +255,7 @@ PasswordFormManager::~PasswordFormManager() {
 
   UMA_HISTOGRAM_ENUMERATION("PasswordManager.ActionsTakenV3", GetActionsTaken(),
                             kMaxNumActionsTaken);
+
   // Use the visible main frame URL at the time the PasswordFormManager
   // is created, in case a navigation has already started and the
   // visible URL has changed.
@@ -268,6 +263,9 @@ PasswordFormManager::~PasswordFormManager() {
     UMA_HISTOGRAM_ENUMERATION("PasswordManager.ActionsTakenOnNonSecureForm",
                               GetActionsTaken(), kMaxNumActionsTaken);
   }
+
+  RecordHistogramsOnSuppressedAccounts();
+
   if (submit_result_ == kSubmitResultNotSubmitted) {
     if (has_generated_password_)
       metrics_util::LogPasswordGenerationSubmissionEvent(
@@ -276,6 +274,7 @@ PasswordFormManager::~PasswordFormManager() {
       metrics_util::LogPasswordGenerationAvailableSubmissionEvent(
           metrics_util::PASSWORD_NOT_SUBMITTED);
   }
+
   if (form_type_ != kFormTypeUnspecified) {
     UMA_HISTOGRAM_ENUMERATION("PasswordManager.SubmittedFormType", form_type_,
                               kFormTypeMax);
@@ -290,6 +289,95 @@ int PasswordFormManager::GetActionsTaken() const {
   return user_action_ +
          kUserActionMax *
              (manager_action_ + kManagerActionMax * submit_result_);
+}
+
+int PasswordFormManager::GetHistogramSampleForSuppressedAccounts(
+    const std::vector<const autofill::PasswordForm*> suppressed_forms,
+    PasswordForm::Type manual_or_generated) const {
+  DCHECK(form_fetcher_->DidCompleteQueryingSuppressedForms());
+
+  SuppressedAccountExistence best_matching_account = kSuppressedAccountNone;
+  for (const autofill::PasswordForm* form : suppressed_forms) {
+    if (form->type != manual_or_generated)
+      continue;
+
+    SuppressedAccountExistence current_account;
+    if (pending_credentials_.password_value.empty())
+      current_account = kSuppressedAccountExists;
+    else if (form->username_value != pending_credentials_.username_value)
+      current_account = kSuppressedAccountExistsDifferentUsername;
+    else if (form->password_value != pending_credentials_.password_value)
+      current_account = kSuppressedAccountExistsSameUsername;
+    else
+      current_account = kSuppressedAccountExistsSameUsernameAndPassword;
+
+    best_matching_account = std::max(best_matching_account, current_account);
+  }
+
+  // Merge kManagerActionNone and kManagerActionBlacklisted_Obsolete. This
+  // lowers the number of histogram buckets used by 33%.
+  ManagerActionNew manager_action_new =
+      (manager_action_ == kManagerActionAutofilled)
+          ? kManagerActionNewAutofilled
+          : kManagerActionNewNone;
+
+  // Encoding: most significant digit is the |best_matching_account|.
+  int mixed_base_encoding = 0;
+  mixed_base_encoding += best_matching_account;
+  (mixed_base_encoding *= kSubmitResultMax) += submit_result_;
+  (mixed_base_encoding *= kManagerActionNewMax) += manager_action_new;
+  (mixed_base_encoding *= kUserActionMax) += user_action_;
+  DCHECK_LT(mixed_base_encoding, kMaxSuppressedAccountStats);
+  return mixed_base_encoding;
+}
+
+void PasswordFormManager::RecordHistogramsOnSuppressedAccounts() const {
+  UMA_HISTOGRAM_BOOLEAN("PasswordManager.QueryingSuppressedAccountsFinished",
+                        form_fetcher_->DidCompleteQueryingSuppressedForms());
+
+  if (!form_fetcher_->DidCompleteQueryingSuppressedForms())
+    return;
+
+  if (!observed_form_.origin.SchemeIsCryptographic()) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "PasswordManager.SuppressedAccount.Generated.HTTPSNotHTTP",
+        GetHistogramSampleForSuppressedAccounts(
+            form_fetcher_->GetSuppressedHTTPSForms(),
+            PasswordForm::TYPE_GENERATED),
+        kMaxSuppressedAccountStats);
+    UMA_HISTOGRAM_ENUMERATION(
+        "PasswordManager.SuppressedAccount.Manual.HTTPSNotHTTP",
+        GetHistogramSampleForSuppressedAccounts(
+            form_fetcher_->GetSuppressedHTTPSForms(),
+            PasswordForm::TYPE_MANUAL),
+        kMaxSuppressedAccountStats);
+  }
+
+  UMA_HISTOGRAM_ENUMERATION(
+      "PasswordManager.SuppressedAccount.Generated.PSLMatching",
+      GetHistogramSampleForSuppressedAccounts(
+          form_fetcher_->GetSuppressedPSLMatchingForms(),
+          PasswordForm::TYPE_GENERATED),
+      kMaxSuppressedAccountStats);
+  UMA_HISTOGRAM_ENUMERATION(
+      "PasswordManager.SuppressedAccount.Manual.PSLMatching",
+      GetHistogramSampleForSuppressedAccounts(
+          form_fetcher_->GetSuppressedPSLMatchingForms(),
+          PasswordForm::TYPE_MANUAL),
+      kMaxSuppressedAccountStats);
+
+  UMA_HISTOGRAM_ENUMERATION(
+      "PasswordManager.SuppressedAccount.Generated.SameOrganizationName",
+      GetHistogramSampleForSuppressedAccounts(
+          form_fetcher_->GetSuppressedSameOrganizationNameForms(),
+          PasswordForm::TYPE_GENERATED),
+      kMaxSuppressedAccountStats);
+  UMA_HISTOGRAM_ENUMERATION(
+      "PasswordManager.SuppressedAccount.Manual.SameOrganizationName",
+      GetHistogramSampleForSuppressedAccounts(
+          form_fetcher_->GetSuppressedSameOrganizationNameForms(),
+          PasswordForm::TYPE_MANUAL),
+      kMaxSuppressedAccountStats);
 }
 
 // static
@@ -419,6 +507,9 @@ void PasswordFormManager::Save() {
   DCHECK_EQ(FormFetcher::State::NOT_WAITING, form_fetcher_->GetState());
   DCHECK(!client_->IsIncognito());
 
+  metrics_util::LogPasswordAcceptedSaveUpdateSubmissionIndicatorEvent(
+      submitted_form_->submission_event);
+
   if ((user_action_ == kUserActionNone) &&
       DidPreferenceChange(best_matches_, pending_credentials_.username_value)) {
     SetUserAction(kUserActionChoose);
@@ -451,6 +542,8 @@ void PasswordFormManager::Save() {
 
 void PasswordFormManager::Update(
     const autofill::PasswordForm& credentials_to_update) {
+  metrics_util::LogPasswordAcceptedSaveUpdateSubmissionIndicatorEvent(
+      submitted_form_->submission_event);
   if (observed_form_.IsPossibleChangePasswordForm()) {
     FormStructure form_structure(credentials_to_update.form_data);
     UploadPasswordVote(observed_form_, autofill::NEW_PASSWORD,
@@ -623,19 +716,12 @@ void PasswordFormManager::ProcessFrameInternal(
 
   // Proceed to autofill.
   // Note that we provide the choices but don't actually prefill a value if:
-  // (1) we are in Incognito mode, (2) the ACTION paths don't match,
-  // (3) if it matched using public suffix domain matching, or
-  // (4) the form is change password form.
-  // However, 2 and 3 should not apply to Android-based credentials found
-  // via affiliation-based matching (we want to autofill them).
-  // TODO(engedy): Clean this up. See: https://crbug.com/476519.
-  bool wait_for_username =
-      client_->IsIncognito() ||
-      (!IsValidAndroidFacetURI(preferred_match_->signon_realm) &&
-       (observed_form_.action.GetWithEmptyPath() !=
-            preferred_match_->action.GetWithEmptyPath() ||
-        preferred_match_->is_public_suffix_match ||
-        observed_form_.IsPossibleChangePasswordForm()));
+  // (1) we are in Incognito mode, or
+  // (2) if it matched using public suffix domain matching, or
+  // (3) the form is change password form.
+  bool wait_for_username = client_->IsIncognito() ||
+                           preferred_match_->is_public_suffix_match ||
+                           observed_form_.IsPossibleChangePasswordForm();
   if (wait_for_username) {
     manager_action_ = kManagerActionNone;
   } else {
@@ -1298,8 +1384,16 @@ void PasswordFormManager::SendVotesOnSave() {
   if (observed_form_.IsPossibleChangePasswordFormWithoutUsername())
     return;
 
-  if (IsSignInSubmission(pending_credentials_.form_data)) {
-    SendSignInVote(pending_credentials_.form_data);
+  // Send votes for sign-in form.
+  autofill::FormData& form_data = pending_credentials_.form_data;
+  if (form_data.fields.size() == 2 &&
+      form_data.fields[0].form_control_type == "text" &&
+      form_data.fields[1].form_control_type == "password") {
+    // |form_data| is received from the renderer and does not contain field
+    // values. Fill username field value with username to allow AutofillManager
+    // to detect username autofill type.
+    form_data.fields[0].value = pending_credentials_.username_value;
+    SendSignInVote(form_data);
     return;
   }
 

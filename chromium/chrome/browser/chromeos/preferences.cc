@@ -136,6 +136,9 @@ void Preferences::RegisterProfilePrefs(
     hardware_keyboard_id = "xkb:us::eng";  // only for testing.
   }
 
+  // Register ash prefs.
+  ash::Shell::RegisterPrefs(registry);
+
   registry->RegisterBooleanPref(prefs::kPerformanceTracingEnabled, false);
 
   registry->RegisterBooleanPref(
@@ -306,6 +309,8 @@ void Preferences::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   // Don't sync the note-taking app; it may not be installed on other devices.
   registry->RegisterStringPref(prefs::kNoteTakingAppId, std::string());
+  registry->RegisterBooleanPref(prefs::kNoteTakingAppEnabledOnLockScreen,
+                                false);
 
   // We don't sync wake-on-wifi related prefs because they are device specific.
   registry->RegisterBooleanPref(prefs::kWakeOnWifiDarkConnect, true);

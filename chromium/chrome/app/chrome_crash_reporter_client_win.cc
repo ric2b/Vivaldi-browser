@@ -162,13 +162,6 @@ size_t RegisterCrashKeysHelper() {
       {"newframe_replicated_origin", kSmallSize},
       {"newframe_oopifs_possible", kSmallSize},
 
-      // Temporary for https://crbug.com/630103.
-      {"origin_mismatch_url", crash_keys::kLargeSize},
-      {"origin_mismatch_origin", crash_keys::kMediumSize},
-      {"origin_mismatch_transition", crash_keys::kSmallSize},
-      {"origin_mismatch_redirects", crash_keys::kSmallSize},
-      {"origin_mismatch_same_page", crash_keys::kSmallSize},
-
       // Temporary for https://crbug.com/612711.
       {"aci_wrong_sp_extension_id", kSmallSize},
 
@@ -188,6 +181,10 @@ size_t RegisterCrashKeysHelper() {
       {"engine_params", crash_keys::kMediumSize},
       {"engine1_params", crash_keys::kMediumSize},
       {"engine2_params", crash_keys::kMediumSize},
+
+      // Temporary for http://crbug.com/703649.
+      {"field_trial_shmem_create_error", crash_keys::kSmallSize},
+      {"field_trial_shmem_map_error", crash_keys::kSmallSize},
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering

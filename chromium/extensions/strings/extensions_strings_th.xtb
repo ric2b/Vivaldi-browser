@@ -13,6 +13,7 @@
 <translation id="2753617847762399167">เส้นทางที่ไม่ถูกต้อง (โดยชัดแจ้งหรือเกี่ยวข้องกับ '..'): '<ph name="IMAGE_PATH" />'</translation>
 <translation id="27822970480436970">ส่วนขยายนี้ไม่สามารถปรับเปลี่ยนคำขอเครือข่ายได้เนื่องจากการปรับเปลี่ยนมีความขัดแย้งกับส่วนขยายอื่น</translation>
 <translation id="2857834222104759979">ไฟล์มานิเฟสต์ไม่ถูกต้อง</translation>
+<translation id="2903070246402204397"><ph name="EXTENSION_NAME" /> (รหัสส่วนขยาย "<ph name="EXTENSION_ID" />") ถูกบล็อกโดยผู้ดูแลระบบ <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">ไม่สามารถติดตั้งแพ็กเกจ: "<ph name="ERROR_CODE" />"</translation>
 <translation id="3115238746683532089">ผลิตภัณฑ์ที่ไม่รู้จัก <ph name="PRODUCT_ID" /> จากผู้ขาย <ph name="VENDOR_ID" /> (หมายเลขซีเรียล <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3163201441334626963">ผลิตภัณฑ์ที่ไม่รู้จัก <ph name="PRODUCT_ID" /> จากผู้ขาย <ph name="VENDOR_ID" /></translation>
@@ -45,7 +46,6 @@
 <translation id="7003844668372540529">ผลิตภัณฑ์ที่ไม่รู้จัก <ph name="PRODUCT_ID" /> จาก <ph name="VENDOR_NAME" /></translation>
 <translation id="7217838517480956708">ผู้ดูแลระบบของเครื่องนี้ต้องการให้มีการติดตั้ง <ph name="EXTENSION_NAME" /> โดยไม่สามารถลบหรือแก้ไขได้</translation>
 <translation id="7581279002575751816">ปลั๊กอิน NPAPI ไม่ได้รับการสนับสนุน</translation>
-<translation id="7809034755304591547"><ph name="EXTENSION_NAME" /> (ID ส่วนขยาย "<ph name="EXTENSION_ID" />") ถูกบล็อกโดยผู้ดูแลระบบ</translation>
 <translation id="7972881773422714442">ตัวเลือก: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">กล้องหน้า</translation>
 <translation id="8047248493720652249">ส่วนขยายนี้ล้มเหลวในการตั้งชื่อการดาวน์โหลดว่า "<ph name="ATTEMPTED_FILENAME" />" เนื่องจากอีกส่วนขยายหนึ่ง (<ph name="EXTENSION_NAME" />) ได้กำหนดชื่อไฟล์ที่แตกต่างไว้ว่า "<ph name="ACTUAL_FILENAME" />"</translation>

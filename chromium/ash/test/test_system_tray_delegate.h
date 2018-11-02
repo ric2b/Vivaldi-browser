@@ -5,25 +5,18 @@
 #ifndef ASH_TEST_TEST_SYSTEM_TRAY_DELEGATE_H_
 #define ASH_TEST_TEST_SYSTEM_TRAY_DELEGATE_H_
 
-#include "ash/system/tray/default_system_tray_delegate.h"
 #include "ash/system/tray/ime_info.h"
+#include "ash/system/tray/system_tray_delegate.h"
 #include "base/macros.h"
 #include "base/time/time.h"
 
 namespace ash {
 namespace test {
 
-class TestSystemTrayDelegate : public DefaultSystemTrayDelegate {
+class TestSystemTrayDelegate : public SystemTrayDelegate {
  public:
   TestSystemTrayDelegate();
   ~TestSystemTrayDelegate() override;
-
-  // Changes the current login status in the test. This also invokes
-  // UpdateAfterLoginStatusChange(). Usually this is called in the test code to
-  // set up a login status. This will fit to most of the test cases, but this
-  // cannot be set during the initialization. To test the initialization,
-  // consider using SetInitialLoginStatus() instead.
-  void SetLoginStatus(LoginStatus login_status);
 
   // Updates the session length limit so that the limit will come from now in
   // |new_limit|.
@@ -38,36 +31,19 @@ class TestSystemTrayDelegate : public DefaultSystemTrayDelegate {
   // Sets the list of available IMEs.
   void SetAvailableIMEList(const IMEInfoList& list);
 
-  // Overridden from SystemTrayDelegate:
-  LoginStatus GetUserLoginStatus() const override;
-  bool IsUserSupervised() const override;
+  // SystemTrayDelegate:
   bool GetSessionStartTime(base::TimeTicks* session_start_time) override;
   bool GetSessionLengthLimit(base::TimeDelta* session_length_limit) override;
   void GetCurrentIME(IMEInfo* info) override;
   void GetAvailableIMEList(IMEInfoList* list) override;
 
  private:
-  LoginStatus login_status_;
   base::TimeDelta session_length_limit_;
-  bool session_length_limit_set_;
+  bool session_length_limit_set_ = false;
   IMEInfo current_ime_;
   IMEInfoList ime_list_;
 
   DISALLOW_COPY_AND_ASSIGN(TestSystemTrayDelegate);
-};
-
-// Changes the initial login status before TestSystemTrayDelegate is created.
-// Allows testing the case when chrome is restarted right after login (such as
-// when a flag is set).
-class ScopedInitialLoginStatus {
- public:
-  explicit ScopedInitialLoginStatus(LoginStatus status);
-  ~ScopedInitialLoginStatus();
-
- private:
-  LoginStatus old_status_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedInitialLoginStatus);
 };
 
 }  // namespace test

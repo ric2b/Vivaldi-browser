@@ -784,6 +784,12 @@ TEST_F(RequestCoordinatorTest, OfflinerDoneRequestFailedNoRetryFailure) {
   EXPECT_TRUE(observer().completed_called());
   EXPECT_EQ(RequestCoordinator::BackgroundSavePageResult::LOADING_FAILURE,
             observer().last_status());
+  // We should have a histogram entry for the effective network conditions
+  // when this failed request began.
+  histograms().ExpectBucketCount(
+      "OfflinePages.Background.EffectiveConnectionType.OffliningStartType."
+      "bookmark",
+      net::NetworkChangeNotifier::CONNECTION_UNKNOWN, 1);
 }
 
 TEST_F(RequestCoordinatorTest, OfflinerDoneRequestFailedNoNextFailure) {
@@ -842,7 +848,7 @@ TEST_F(RequestCoordinatorTest, OfflinerDoneForegroundCancel) {
   EXPECT_EQ(0L, last_requests().at(0)->completed_attempt_count());
 }
 
-TEST_F(RequestCoordinatorTest, OfflinerDonePrerenderingCancel) {
+TEST_F(RequestCoordinatorTest, OfflinerDoneOffliningCancel) {
   // Add a request to the queue, wait for callbacks to finish.
   offline_pages::SavePageRequest request(kRequestId1, kUrl1, kClientId1,
                                          base::Time::Now(), kUserRequested);
@@ -861,7 +867,7 @@ TEST_F(RequestCoordinatorTest, OfflinerDonePrerenderingCancel) {
 
   // Request still in the queue.
   EXPECT_EQ(1UL, last_requests().size());
-  // Verify prerendering cancel not counted as an attempt after all.
+  // Verify offlining cancel not counted as an attempt after all.
   const std::unique_ptr<SavePageRequest>& found_request =
       last_requests().front();
   EXPECT_EQ(0L, found_request->completed_attempt_count());
@@ -1099,7 +1105,7 @@ TEST_F(RequestCoordinatorTest, MarkRequestCompleted) {
   coordinator()->MarkRequestCompleted(request_id);
   PumpLoop();
 
-  // Our observer should have seen SUCCESS instead of REMOVED.
+  // Our observer should have seen SUCCESS instead of USER_CANCELED.
   EXPECT_EQ(RequestCoordinator::BackgroundSavePageResult::SUCCESS,
             observer().last_status());
   EXPECT_TRUE(observer().completed_called());
@@ -1301,13 +1307,7 @@ TEST_F(RequestCoordinatorTest, GetAllRequests) {
   EXPECT_EQ(kRequestId2, last_requests().at(1)->request_id());
 }
 
-#if defined(OS_IOS)
-// Flaky on IOS. http://crbug/663311
-#define MAYBE_PauseAndResumeObserver DISABLED_PauseAndResumeObserver
-#else
-#define MAYBE_PauseAndResumeObserver PauseAndResumeObserver
-#endif
-TEST_F(RequestCoordinatorTest, MAYBE_PauseAndResumeObserver) {
+TEST_F(RequestCoordinatorTest, PauseAndResumeObserver) {
   // Set low-end device status to actual status.
   SetIsLowEndDeviceForTest(base::SysInfo::IsLowEndDevice());
 
@@ -1359,7 +1359,7 @@ TEST_F(RequestCoordinatorTest, RemoveRequest) {
   PumpLoop();
 
   EXPECT_TRUE(observer().completed_called());
-  EXPECT_EQ(RequestCoordinator::BackgroundSavePageResult::REMOVED,
+  EXPECT_EQ(RequestCoordinator::BackgroundSavePageResult::USER_CANCELED,
             observer().last_status());
   EXPECT_EQ(1UL, last_remove_results().size());
   EXPECT_EQ(kRequestId1, std::get<0>(last_remove_results().at(0)));

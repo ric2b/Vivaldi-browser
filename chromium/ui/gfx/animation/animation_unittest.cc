@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/animation/animation_delegate.h"
@@ -10,14 +12,20 @@
 #include "ui/gfx/animation/test_animation_delegate.h"
 
 #if defined(OS_WIN)
+#include "base/test/scoped_task_environment.h"
 #include "base/win/windows_version.h"
 #endif
 
 namespace gfx {
 
 class AnimationTest: public testing::Test {
+ protected:
+  AnimationTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
+
  private:
-  base::MessageLoopForUI message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
 };
 
 namespace {

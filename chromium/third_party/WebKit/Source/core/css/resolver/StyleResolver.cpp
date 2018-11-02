@@ -205,7 +205,7 @@ void StyleResolver::AddToStyleSharingList(Element& element) {
 }
 
 StyleSharingList& StyleResolver::GetStyleSharingList() {
-  style_sharing_lists_.Resize(kStyleSharingMaxDepth);
+  style_sharing_lists_.resize(kStyleSharingMaxDepth);
 
   // We never put things at depth 0 into the list since that's only the <html>
   // element and it has no siblings or cousins to share with.
@@ -218,7 +218,7 @@ StyleSharingList& StyleResolver::GetStyleSharingList() {
 }
 
 void StyleResolver::ClearStyleSharingList() {
-  style_sharing_lists_.Resize(0);
+  style_sharing_lists_.resize(0);
 }
 
 static inline ScopedStyleResolver* ScopedResolverFor(const Element& element) {
@@ -566,8 +566,9 @@ PassRefPtr<ComputedStyle> StyleResolver::StyleForDocument(Document& document) {
   document_style->SetFontDescription(document_font_description);
   document_style->SetZIndex(0);
   document_style->SetIsStackingContext(true);
-  document_style->SetUserModify(document.InDesignMode() ? READ_WRITE
-                                                        : READ_ONLY);
+  document_style->SetUserModify(document.InDesignMode()
+                                    ? EUserModify::kReadWrite
+                                    : EUserModify::kReadOnly);
   // These are designed to match the user-agent stylesheet values for the
   // document element so that the common case doesn't need to create a new
   // ComputedStyle in Document::InheritHtmlAndBodyElementStyles.
@@ -695,8 +696,8 @@ PassRefPtr<ComputedStyle> StyleResolver::StyleForElement(
       RefPtr<ComputedStyle> style = ComputedStyle::Create();
       style->InheritFrom(*state.ParentStyle(),
                          IsAtShadowBoundary(element)
-                             ? ComputedStyleBase::kAtShadowBoundary
-                             : ComputedStyleBase::kNotAtShadowBoundary);
+                             ? ComputedStyle::kAtShadowBoundary
+                             : ComputedStyle::kNotAtShadowBoundary);
       state.SetStyle(std::move(style));
     } else {
       state.SetStyle(InitialStyleForElement());
@@ -828,8 +829,7 @@ PassRefPtr<AnimatableValue> StyleResolver::CreateAnimatableValueSnapshot(
         state.GetDocument().GetStyleEngine().FontSelector(),
         state.MutableStyleRef());
   }
-  return CSSAnimatableValueFactory::Create(PropertyHandle(property),
-                                           *state.Style());
+  return CSSAnimatableValueFactory::Create(property, *state.Style());
 }
 
 PseudoElement* StyleResolver::CreatePseudoElement(Element* parent,
@@ -1684,7 +1684,7 @@ StyleResolver::CacheSuccess StyleResolver::ApplyMatchedCache(
 
   unsigned cache_hash = match_result.IsCacheable()
                             ? ComputeMatchedPropertiesHash(
-                                  match_result.GetMatchedProperties().Data(),
+                                  match_result.GetMatchedProperties().data(),
                                   match_result.GetMatchedProperties().size())
                             : 0;
   bool is_inherited_cache_hit = false;
@@ -1708,7 +1708,7 @@ StyleResolver::CacheSuccess StyleResolver::ApplyMatchedCache(
             *cached_matched_properties->parent_computed_style) &&
         !IsAtShadowBoundary(element) &&
         (!state.DistributedToInsertionPoint() ||
-         state.Style()->UserModify() == READ_ONLY)) {
+         state.Style()->UserModify() == EUserModify::kReadOnly)) {
       INCREMENT_STYLE_STATS_COUNTER(GetDocument().GetStyleEngine(),
                                     matched_property_cache_inherited_hit, 1);
 
@@ -1956,7 +1956,11 @@ bool StyleResolver::HasAuthorBackground(const StyleResolverState& state) {
 bool StyleResolver::HasAuthorBorder(const StyleResolverState& state) {
   const CachedUAStyle* cached_ua_style = state.GetCachedUAStyle();
   return cached_ua_style &&
-         (cached_ua_style->border != state.Style()->Border());
+         (cached_ua_style->border_image != state.Style()->BorderImage() ||
+          !cached_ua_style->BorderColorEquals(*state.Style()) ||
+          !cached_ua_style->BorderWidthEquals(*state.Style()) ||
+          !cached_ua_style->BorderRadiiEquals(*state.Style()) ||
+          !cached_ua_style->BorderStyleEquals(*state.Style()));
 }
 
 void StyleResolver::ApplyCallbackSelectors(StyleResolverState& state) {

@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="de">
 <translation id="130631256467250065">Ihre Änderungen werden beim nächsten Neustart wirksam.</translation>
+<translation id="1838412507805038478">Chromium hat verifiziert, dass <ph name="ISSUER" /> das Zertifikat dieser Website ausgestellt hat.</translation>
 <translation id="275588974610408078">Absturzberichte sind in Chromium nicht verfügbar.</translation>
 <translation id="3064346599913645280">Dies ist eine sichere Chromium-Seite</translation>
 <translation id="3550966579244642892">Die Ersteinrichtung von Chromium OS wurde nicht abgeschlossen.</translation>
@@ -18,6 +19,6 @@
           und deaktivieren Sie "<ph name="NO_PREFETCH_DESCRIPTION" />".
           Falls das Problem nicht dadurch verursacht wurde, empfehlen wir,
           diese Option für eine verbesserte Leistung wieder zu aktivieren.</translation>
-<translation id="8187289872471304532">Gehen Sie zu "Anwendungen" &gt; "Systemeinstellungen" &gt; "Netzwerk" &gt; "Erweitert" &gt; "Proxys" und deaktivieren Sie alle ausgewählten Proxyserver.</translation>
+<translation id="8187289872471304532">Gehen Sie zu "Programme" &gt; "Systemeinstellungen" &gt; "Netzwerk" &gt; "Erweitert" &gt; "Proxys" und deaktivieren Sie alle ausgewählten Proxyserver.</translation>
 <translation id="8684913864886094367">Chromium wurde nicht richtig beendet.</translation>
 </translationbundle>

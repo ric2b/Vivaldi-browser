@@ -23,6 +23,7 @@
 #include "cc/surfaces/surface_sequence.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
+#include "content/browser/renderer_host/input/touch_selection_controller_client_manager.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/content_export.h"
 #include "content/common/input/input_event_ack_state.h"
@@ -41,6 +42,7 @@ class RenderWidgetHost;
 class RenderWidgetHostImpl;
 class RenderWidgetHostViewChildFrameTest;
 class RenderWidgetHostViewGuestSurfaceTest;
+class TouchSelectionControllerClientChildFrame;
 
 // RenderWidgetHostViewChildFrame implements the view for a RenderWidgetHost
 // associated with content being rendered in a separate process from
@@ -52,6 +54,7 @@ class RenderWidgetHostViewGuestSurfaceTest;
 // See comments in render_widget_host_view.h about this class and its members.
 class CONTENT_EXPORT RenderWidgetHostViewChildFrame
     : public RenderWidgetHostViewBase,
+      public TouchSelectionControllerClientManager::Observer,
       public NON_EXPORTED_BASE(cc::CompositorFrameSinkSupportClient) {
  public:
   static RenderWidgetHostViewChildFrame* Create(RenderWidgetHost* widget);
@@ -68,6 +71,10 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   // TODO(wjmaclean): We should consider making this available in other view
   // types, such as RenderWidgetHostViewAura.
   void RegisterFrameSwappedCallback(std::unique_ptr<base::Closure> callback);
+
+  // TouchSelectionControllerClientManager::Observer implementation.
+  void OnManagerWillDestroy(
+      TouchSelectionControllerClientManager* manager) override;
 
   // RenderWidgetHostView implementation.
   void InitAsChild(gfx::NativeView parent_view) override;
@@ -113,7 +120,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       override;
   void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
-  void OnBeginFrameDidNotSwap(const cc::BeginFrameAck& ack) override;
+  void OnDidNotProduceFrame(const cc::BeginFrameAck& ack) override;
   void OnSurfaceChanged(const cc::SurfaceInfo& surface_info) override;
   // Since the URL of content rendered by this class is not displayed in
   // the URL bar, this method does not need an implementation.
@@ -124,7 +131,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   bool LockMouse() override;
   void UnlockMouse() override;
   cc::FrameSinkId GetFrameSinkId() override;
-  void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event) override;
+  void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event,
+                            const ui::LatencyInfo& latency) override;
   void ProcessMouseEvent(const blink::WebMouseEvent& event,
                          const ui::LatencyInfo& latency) override;
   void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
@@ -144,6 +152,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   bool IsRenderWidgetHostViewChildFrame() override;
 
+  void WillSendScreenRects() override;
+
 #if defined(OS_MACOSX)
   // RenderWidgetHostView implementation.
   ui::AcceleratedWidgetMac* GetAcceleratedWidgetMac() const override;
@@ -157,6 +167,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   InputEventAckState FilterInputEvent(
       const blink::WebInputEvent& input_event) override;
+  void OnSetNeedsFlushInput() override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
 
@@ -189,6 +200,12 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void UpdateViewportIntersection(const gfx::Rect& viewport_intersection);
 
   bool has_frame() { return has_frame_; }
+
+  ui::TextInputType GetTextInputType() const;
+  bool GetSelectionRange(gfx::Range* range) const;
+  // This returns the origin of this views's bounding rect in the coordinates
+  // of the root RenderWidgetHostView.
+  gfx::Point GetViewOriginInRoot() const;
 
  protected:
   friend class RenderWidgetHostView;
@@ -250,6 +267,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   void CreateCompositorFrameSinkSupport();
   void ResetCompositorFrameSinkSupport();
+  void DetachFromTouchSelectionClientManagerIfNecessary();
 
   virtual bool HasEmbedderChanged();
 
@@ -267,6 +285,9 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   // The background color of the widget.
   SkColor background_color_;
+
+  std::unique_ptr<TouchSelectionControllerClientChildFrame>
+      selection_controller_client_;
 
   base::WeakPtrFactory<RenderWidgetHostViewChildFrame> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrame);

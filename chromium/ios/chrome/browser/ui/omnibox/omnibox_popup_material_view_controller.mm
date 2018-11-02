@@ -258,6 +258,9 @@ initWithPopupView:(OmniboxPopupViewIOS*)view
   // truncation by ellipse for the multi-line text sometimes shown in answers.
   row.detailTruncatingLabel.hidden = answerPresent;
   row.detailAnswerLabel.hidden = !answerPresent;
+  // URLs have have special layout requirements that need to be invoked here.
+  row.detailTruncatingLabel.displayAsURL =
+      !AutocompleteMatch::IsSearchType(match.type);
   // TODO(crbug.com/697647): The complexity of managing these two separate
   // labels could probably be encapusulated in the row class if we moved the
   // layout logic there.
@@ -285,7 +288,7 @@ initWithPopupView:(OmniboxPopupViewIOS*)view
   // suggestions. For all other search suggestions, |match.description| is the
   // name of the currently selected search engine, which for mobile we suppress.
   NSString* detailText = nil;
-  if (![self isSearchMatch:match.type])
+  if (!AutocompleteMatch::IsSearchType(match.type))
     detailText = base::SysUTF16ToNSString(match.contents);
   else if (match.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY)
     detailText = base::SysUTF16ToNSString(match.description);
@@ -304,7 +307,8 @@ initWithPopupView:(OmniboxPopupViewIOS*)view
       detailTextLabel.numberOfLines = 1;
   } else {
     const ACMatchClassifications* classifications =
-        ![self isSearchMatch:match.type] ? &match.contents_class : nil;
+        !AutocompleteMatch::IsSearchType(match.type) ? &match.contents_class
+                                                     : nil;
     // The suggestion detail color should match the main text color for entity
     // suggestions. For non-search suggestions (URLs), a highlight color is used
     // instead.
@@ -334,12 +338,13 @@ initWithPopupView:(OmniboxPopupViewIOS*)view
 
   // The text should be search term (|match.contents|) for searches, otherwise
   // page title (|match.description|).
-  base::string16 textString =
-      [self isSearchMatch:match.type] ? match.contents : match.description;
+  base::string16 textString = AutocompleteMatch::IsSearchType(match.type)
+                                  ? match.contents
+                                  : match.description;
   NSString* text = base::SysUTF16ToNSString(textString);
   const ACMatchClassifications* textClassifications =
-      [self isSearchMatch:match.type] ? &match.contents_class
-                                      : &match.description_class;
+      AutocompleteMatch::IsSearchType(match.type) ? &match.contents_class
+                                                  : &match.description_class;
 
   // If for some reason the title is empty, copy the detailText.
   if ([text length] == 0 && [detailText length] != 0) {
@@ -652,11 +657,18 @@ initWithPopupView:(OmniboxPopupViewIOS*)view
 #pragma mark UIScrollViewDelegate
 
 - (void)scrollViewDidScroll:(UIScrollView*)scrollView {
-  // Setting the top inset of the scrollView to |kTopAndBottomPadding| causes a
-  // one time scrollViewDidScroll to |-kTopAndBottomPadding|.  It's easier to
-  // just ignore this one scroll tick.
-  if (scrollView.contentOffset.y == 0 - kTopAndBottomPadding)
-    return;
+  // TODO(crbug.com/733650): Default to the dragging check once it's been tested
+  // on trunk.
+  if (base::ios::IsRunningOnIOS11OrLater()) {
+    if (!scrollView.dragging)
+      return;
+  } else {
+    // Setting the top inset of the scrollView to |kTopAndBottomPadding| causes
+    // a one time scrollViewDidScroll to |-kTopAndBottomPadding|.  It's easier
+    // to just ignore this one scroll tick.
+    if (scrollView.contentOffset.y == 0 - kTopAndBottomPadding)
+      return;
+  }
 
   _popupView->DidScroll();
   for (OmniboxPopupMaterialRow* row in _rows) {
@@ -667,15 +679,6 @@ initWithPopupView:(OmniboxPopupViewIOS*)view
 // Set text alignment for popup cells.
 - (void)setTextAlignment:(NSTextAlignment)alignment {
   _alignment = alignment;
-}
-
-- (BOOL)isSearchMatch:(const AutocompleteMatch::Type&)type {
-  return (type == AutocompleteMatchType::NAVSUGGEST ||
-          type == AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED ||
-          type == AutocompleteMatchType::SEARCH_HISTORY ||
-          type == AutocompleteMatchType::SEARCH_SUGGEST ||
-          type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY ||
-          type == AutocompleteMatchType::SEARCH_OTHER_ENGINE);
 }
 
 - (NSMutableAttributedString*)

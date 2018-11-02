@@ -8,7 +8,6 @@
 #include <utility>
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
 #include "bindings/core/v8/ScriptPromise.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -16,6 +15,7 @@
 #include "modules/EventTargetModules.h"
 #include "modules/serviceworkers/ServiceWorkerContainerClient.h"
 #include "modules/serviceworkers/ServiceWorkerError.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
 
@@ -66,12 +66,12 @@ void ServiceWorkerRegistration::SetActive(
 ServiceWorkerRegistration* ServiceWorkerRegistration::GetOrCreate(
     ExecutionContext* execution_context,
     std::unique_ptr<WebServiceWorkerRegistration::Handle> handle) {
-  ASSERT(handle);
+  DCHECK(handle);
 
   ServiceWorkerRegistration* existing_registration =
       static_cast<ServiceWorkerRegistration*>(handle->Registration()->Proxy());
   if (existing_registration) {
-    ASSERT(existing_registration->GetExecutionContext() == execution_context);
+    DCHECK_EQ(existing_registration->GetExecutionContext(), execution_context);
     return existing_registration;
   }
 
@@ -133,8 +133,8 @@ ServiceWorkerRegistration::ServiceWorkerRegistration(
     : ContextLifecycleObserver(execution_context),
       handle_(std::move(handle)),
       stopped_(false) {
-  ASSERT(handle_);
-  ASSERT(!handle_->Registration()->Proxy());
+  DCHECK(handle_);
+  DCHECK(!handle_->Registration()->Proxy());
 
   if (!execution_context)
     return;

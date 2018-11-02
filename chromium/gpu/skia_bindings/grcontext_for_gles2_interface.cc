@@ -24,7 +24,34 @@ namespace skia_bindings {
 GrContextForGLES2Interface::GrContextForGLES2Interface(
     gpu::gles2::GLES2Interface* gl,
     const gpu::Capabilities& capabilities) {
+  // Calculate limits to pass during initialization:
+  // The limit of the number of GPU resources we hold in the GrContext's
+  // GPU cache.
+  static const int kMaxGaneshResourceCacheCount = 16384;
+  // The limit of the bytes allocated toward GPU resources in the GrContext's
+  // GPU cache.
+  static const size_t kMaxLowEndGaneshResourceCacheBytes = 48 * 1024 * 1024;
+  static const size_t kMaxGaneshResourceCacheBytes = 96 * 1024 * 1024;
+  static const size_t kMaxHighEndGaneshResourceCacheBytes = 256 * 1024 * 1024;
+  // Limits for glyph cache textures.
+  static const size_t kMaxDefaultGlyphCacheTextureBytes = 2048 * 1024 * 4;
+  static const size_t kMaxLowEndGlyphCacheTextureBytes = 1024 * 512 * 4;
+  // High-end / low-end memory cutoffs.
+  static const int64_t kHighEndMemoryThreshold = (int64_t)4096 * 1024 * 1024;
+  static const int64_t kLowEndMemoryThreshold = (int64_t)512 * 1024 * 1024;
+
+  size_t max_ganesh_resource_cache_bytes = kMaxGaneshResourceCacheBytes;
+  int max_glyph_cache_texture_bytes = kMaxDefaultGlyphCacheTextureBytes;
+  if (base::SysInfo::AmountOfPhysicalMemory() <= kLowEndMemoryThreshold) {
+    max_ganesh_resource_cache_bytes = kMaxLowEndGaneshResourceCacheBytes;
+    max_glyph_cache_texture_bytes = kMaxLowEndGlyphCacheTextureBytes;
+  } else if (base::SysInfo::AmountOfPhysicalMemory() >=
+             kHighEndMemoryThreshold) {
+    max_ganesh_resource_cache_bytes = kMaxHighEndGaneshResourceCacheBytes;
+  }
+
   GrContextOptions options;
+  options.fGlyphCacheTextureMaximumBytes = max_glyph_cache_texture_bytes;
   options.fAvoidStencilBuffers = capabilities.avoid_stencil_buffers;
   sk_sp<GrGLInterface> interface(
       skia_bindings::CreateGLES2InterfaceBindings(gl));
@@ -33,25 +60,6 @@ GrContextForGLES2Interface::GrContextForGLES2Interface(
       // GrContext takes ownership of |interface|.
       reinterpret_cast<GrBackendContext>(interface.get()), options));
   if (gr_context_) {
-    // The limit of the number of GPU resources we hold in the GrContext's
-    // GPU cache.
-    static const int kMaxGaneshResourceCacheCount = 16384;
-    // The limit of the bytes allocated toward GPU resources in the GrContext's
-    // GPU cache.
-    static const size_t kMaxLowEndGaneshResourceCacheBytes = 48 * 1024 * 1024;
-    static const size_t kMaxGaneshResourceCacheBytes = 96 * 1024 * 1024;
-    static const size_t kMaxHighEndGaneshResourceCacheBytes = 256 * 1024 * 1024;
-    static const int64_t kHighEndMemoryThreshold = (int64_t)4096 * 1024 * 1024;
-    static const int64_t kLowEndMemoryThreshold = (int64_t)512 * 1024 * 1024;
-
-    size_t max_ganesh_resource_cache_bytes = kMaxGaneshResourceCacheBytes;
-    if (base::SysInfo::AmountOfPhysicalMemory() <= kLowEndMemoryThreshold) {
-      max_ganesh_resource_cache_bytes = kMaxLowEndGaneshResourceCacheBytes;
-    } else if (base::SysInfo::AmountOfPhysicalMemory() >=
-               kHighEndMemoryThreshold) {
-      max_ganesh_resource_cache_bytes = kMaxHighEndGaneshResourceCacheBytes;
-    }
-
     gr_context_->setResourceCacheLimits(kMaxGaneshResourceCacheCount,
                                         max_ganesh_resource_cache_bytes);
   }

@@ -218,6 +218,7 @@ interface TestObject {
     [Measure] attribute long measuredLongAttribute;
     [SameObject] readonly attribute TestInterface sameObjectAttribute;
     [SameObject, SaveSameObject] readonly attribute TestInterface saveSameObjectAttribute;
+    [SameObject, SaveSameObject] static readonly attribute TestInterface staticSaveSameObjectAttribute;
     [Unscopable] attribute long unscopableLongAttribute;
     [Unscopable, OriginTrialEnabled=FeatureName] attribute long unscopableOriginTrialEnabledLongAttribute;
     [Unscopable, RuntimeEnabled=FeatureName] attribute long unscopableRuntimeEnabledLongAttribute;
@@ -297,6 +298,8 @@ interface TestObject {
     void voidMethodFloat32ArrayArg(Float32Array float32ArrayArg);
     void voidMethodInt32ArrayArg(Int32Array int32ArrayArg);
     void voidMethodUint8ArrayArg(Uint8Array uint8ArrayArg);
+    void voidMethodAllowSharedArrayBufferViewArg([AllowShared] ArrayBufferView arrayBufferViewArg);
+    void voidMethodAllowSharedUint8ArrayArg([AllowShared] Uint8Array uint8ArrayArg);
     // Arrays
     long[] longArrayMethod();
     DOMString[] stringArrayMethod();

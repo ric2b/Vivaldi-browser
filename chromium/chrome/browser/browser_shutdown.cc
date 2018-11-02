@@ -49,20 +49,21 @@
 #include "chrome/browser/first_run/upgrade_util.h"
 #endif
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/boot_times_recorder.h"
+#include "chrome/browser/lifetime/termination_notification.h"
+#endif
+
 #if BUILDFLAG(ENABLE_BACKGROUND)
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
-#if BUILDFLAG(ENABLE_RLZ)
-#include "components/rlz/rlz_tracker.h"
-#endif
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/boot_times_recorder.h"
-#endif
-
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/service_process/service_process_control.h"
+#endif
+
+#if BUILDFLAG(ENABLE_RLZ)
+#include "components/rlz/rlz_tracker.h"
 #endif
 
 using base::Time;
@@ -276,7 +277,7 @@ void ShutdownPostThreadsStop(int shutdown_flags) {
   }
 
 #if defined(OS_CHROMEOS)
-  chrome::NotifyAndTerminate(false);
+  NotifyAndTerminate(false /* fast_path */);
 #endif
 }
 #endif  // !defined(OS_ANDROID)
@@ -297,25 +298,16 @@ void ReadLastShutdownFile(ShutdownType type,
     return;
 
   if (type == WINDOW_CLOSE) {
-    // TODO(manzagop): turn down recording in M57 (once trendlines overlap).
-    UMA_HISTOGRAM_TIMES("Shutdown.window_close.time",
-                        TimeDelta::FromMilliseconds(shutdown_ms));
     UMA_HISTOGRAM_MEDIUM_TIMES("Shutdown.window_close.time2",
                                TimeDelta::FromMilliseconds(shutdown_ms));
     UMA_HISTOGRAM_TIMES("Shutdown.window_close.time_per_process",
                         TimeDelta::FromMilliseconds(shutdown_ms / num_procs));
   } else if (type == BROWSER_EXIT) {
-    // TODO(manzagop): turn down recording in M57 (once trendlines overlap).
-    UMA_HISTOGRAM_TIMES("Shutdown.browser_exit.time",
-                        TimeDelta::FromMilliseconds(shutdown_ms));
     UMA_HISTOGRAM_MEDIUM_TIMES("Shutdown.browser_exit.time2",
                                TimeDelta::FromMilliseconds(shutdown_ms));
     UMA_HISTOGRAM_TIMES("Shutdown.browser_exit.time_per_process",
                         TimeDelta::FromMilliseconds(shutdown_ms / num_procs));
   } else if (type == END_SESSION) {
-    // TODO(manzagop): turn down recording in M57 (once trendlines overlap).
-    UMA_HISTOGRAM_TIMES("Shutdown.end_session.time",
-                        TimeDelta::FromMilliseconds(shutdown_ms));
     UMA_HISTOGRAM_MEDIUM_TIMES("Shutdown.end_session.time2",
                                TimeDelta::FromMilliseconds(shutdown_ms));
     UMA_HISTOGRAM_TIMES("Shutdown.end_session.time_per_process",
@@ -343,7 +335,7 @@ void ReadLastShutdownInfo() {
   // Read and delete the file on the file thread.
   BrowserThread::PostTask(
       BrowserThread::FILE, FROM_HERE,
-      base::Bind(&ReadLastShutdownFile, type, num_procs, num_procs_slow));
+      base::BindOnce(&ReadLastShutdownFile, type, num_procs, num_procs_slow));
 }
 
 void SetTryingToQuit(bool quitting) {

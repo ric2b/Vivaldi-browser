@@ -24,21 +24,26 @@ namespace {
 class ChildSharedBitmap : public cc::SharedBitmap {
  public:
   ChildSharedBitmap(
-      const scoped_refptr<cc::mojom::ThreadSafeSharedBitmapManagerAssociatedPtr>
+      const scoped_refptr<cc::mojom::ThreadSafeSharedBitmapManagerPtr>
           shared_bitmap_manager_ptr,
       base::SharedMemory* shared_memory,
-      const cc::SharedBitmapId& id)
-      : cc::SharedBitmap(static_cast<uint8_t*>(shared_memory->memory()), id),
+      const cc::SharedBitmapId& id,
+      uint32_t sequence_number)
+      : cc::SharedBitmap(static_cast<uint8_t*>(shared_memory->memory()),
+                         id,
+                         sequence_number),
         shared_bitmap_manager_ptr_(shared_bitmap_manager_ptr) {}
 
   ChildSharedBitmap(
-      const scoped_refptr<cc::mojom::ThreadSafeSharedBitmapManagerAssociatedPtr>
+      const scoped_refptr<cc::mojom::ThreadSafeSharedBitmapManagerPtr>
           shared_bitmap_manager_ptr,
       std::unique_ptr<base::SharedMemory> shared_memory_holder,
-      const cc::SharedBitmapId& id)
+      const cc::SharedBitmapId& id,
+      uint32_t sequence_number)
       : ChildSharedBitmap(shared_bitmap_manager_ptr,
                           shared_memory_holder.get(),
-                          id) {
+                          id,
+                          sequence_number) {
     shared_memory_holder_ = std::move(shared_memory_holder);
   }
 
@@ -47,7 +52,7 @@ class ChildSharedBitmap : public cc::SharedBitmap {
   }
 
  private:
-  scoped_refptr<cc::mojom::ThreadSafeSharedBitmapManagerAssociatedPtr>
+  scoped_refptr<cc::mojom::ThreadSafeSharedBitmapManagerPtr>
       shared_bitmap_manager_ptr_;
   std::unique_ptr<base::SharedMemory> shared_memory_holder_;
 };
@@ -99,7 +104,7 @@ std::unique_ptr<base::SharedMemory> AllocateSharedMemory(size_t buf_size) {
 }  // namespace
 
 ChildSharedBitmapManager::ChildSharedBitmapManager(
-    const scoped_refptr<cc::mojom::ThreadSafeSharedBitmapManagerAssociatedPtr>&
+    const scoped_refptr<cc::mojom::ThreadSafeSharedBitmapManagerPtr>&
         shared_bitmap_manager_ptr)
     : shared_bitmap_manager_ptr_(shared_bitmap_manager_ptr) {}
 
@@ -118,14 +123,14 @@ ChildSharedBitmapManager::AllocateSharedBitmap(const gfx::Size& size) {
   if (!memory || !memory->Map(memory_size))
     CollectMemoryUsageAndDie(size, memory_size);
 
-  NotifyAllocatedSharedBitmap(memory.get(), id);
+  uint32_t sequence_number = NotifyAllocatedSharedBitmap(memory.get(), id);
 
   // Close the associated FD to save resources, the previously mapped memory
   // remains available.
   memory->Close();
 
-  return base::MakeUnique<ChildSharedBitmap>(shared_bitmap_manager_ptr_,
-                                             std::move(memory), id);
+  return base::MakeUnique<ChildSharedBitmap>(
+      shared_bitmap_manager_ptr_, std::move(memory), id, sequence_number);
 }
 
 std::unique_ptr<cc::SharedBitmap>
@@ -138,28 +143,33 @@ ChildSharedBitmapManager::GetSharedBitmapFromId(const gfx::Size&,
 std::unique_ptr<cc::SharedBitmap>
 ChildSharedBitmapManager::GetBitmapForSharedMemory(base::SharedMemory* mem) {
   cc::SharedBitmapId id = cc::SharedBitmap::GenerateId();
-  NotifyAllocatedSharedBitmap(mem, cc::SharedBitmap::GenerateId());
-  return base::MakeUnique<ChildSharedBitmap>(shared_bitmap_manager_ptr_,
-                                             std::move(mem), id);
+  uint32_t sequence_number =
+      NotifyAllocatedSharedBitmap(mem, cc::SharedBitmap::GenerateId());
+  return base::MakeUnique<ChildSharedBitmap>(
+      shared_bitmap_manager_ptr_, std::move(mem), id, sequence_number);
 }
 
 // Notifies the browser process that a shared bitmap with the given ID was
 // allocated. Caller keeps ownership of |memory|.
-void ChildSharedBitmapManager::NotifyAllocatedSharedBitmap(
+uint32_t ChildSharedBitmapManager::NotifyAllocatedSharedBitmap(
     base::SharedMemory* memory,
     const cc::SharedBitmapId& id) {
   base::SharedMemoryHandle handle_to_send =
       base::SharedMemory::DuplicateHandle(memory->handle());
   if (!base::SharedMemory::IsHandleValid(handle_to_send)) {
     LOG(ERROR) << "Failed to duplicate shared memory handle for bitmap.";
-    return;
+    return 0;
   }
 
   mojo::ScopedSharedBufferHandle buffer_handle = mojo::WrapSharedMemoryHandle(
       handle_to_send, memory->mapped_size(), true /* read_only */);
 
-  (*shared_bitmap_manager_ptr_)
-      ->DidAllocateSharedBitmap(std::move(buffer_handle), id);
+  {
+    base::AutoLock lock(lock_);
+    (*shared_bitmap_manager_ptr_)
+        ->DidAllocateSharedBitmap(std::move(buffer_handle), id);
+    return ++last_sequence_number_;
+  }
 }
 
 }  // namespace ui

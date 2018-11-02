@@ -116,7 +116,7 @@ PrintJobWorker::PrintJobWorker(int render_process_id,
                                PrintJobWorkerOwner* owner)
     : owner_(owner), thread_("Printing_Worker"), weak_factory_(this) {
   // The object is created in the IO thread.
-  DCHECK(owner_->RunsTasksOnCurrentThread());
+  DCHECK(owner_->RunsTasksInCurrentSequence());
 
   printing_context_delegate_ = base::MakeUnique<PrintingContextDelegate>(
       render_process_id, render_frame_id);
@@ -127,7 +127,7 @@ PrintJobWorker::~PrintJobWorker() {
   // The object is normally deleted in the UI thread, but when the user
   // cancels printing or in the case of print preview, the worker is destroyed
   // on the I/O thread.
-  DCHECK(owner_->RunsTasksOnCurrentThread());
+  DCHECK(owner_->RunsTasksInCurrentSequence());
   Stop();
 }
 
@@ -142,7 +142,7 @@ void PrintJobWorker::GetSettings(bool ask_user_for_settings,
                                  MarginType margin_type,
                                  bool is_scripted,
                                  bool is_modifiable) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(page_number_, PageNumber::npos());
 
   // Recursive task processing is needed for the dialog in case it needs to be
@@ -159,33 +159,29 @@ void PrintJobWorker::GetSettings(bool ask_user_for_settings,
   if (ask_user_for_settings) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&HoldRefCallback, make_scoped_refptr(owner_),
-                   base::Bind(&PrintJobWorker::GetSettingsWithUI,
-                              base::Unretained(this),
-                              document_page_count,
-                              has_selection,
-                              is_scripted)));
+        base::BindOnce(&HoldRefCallback, make_scoped_refptr(owner_),
+                       base::Bind(&PrintJobWorker::GetSettingsWithUI,
+                                  base::Unretained(this), document_page_count,
+                                  has_selection, is_scripted)));
   } else {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&HoldRefCallback, make_scoped_refptr(owner_),
-                   base::Bind(&PrintJobWorker::UseDefaultSettings,
-                              base::Unretained(this))));
+        base::BindOnce(&HoldRefCallback, make_scoped_refptr(owner_),
+                       base::Bind(&PrintJobWorker::UseDefaultSettings,
+                                  base::Unretained(this))));
   }
 }
 
 void PrintJobWorker::SetSettings(
     std::unique_ptr<base::DictionaryValue> new_settings) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&HoldRefCallback,
-                 make_scoped_refptr(owner_),
-                 base::Bind(&PrintJobWorker::UpdatePrintSettings,
-                            base::Unretained(this),
-                            base::Passed(&new_settings))));
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(
+          &HoldRefCallback, make_scoped_refptr(owner_),
+          base::Bind(&PrintJobWorker::UpdatePrintSettings,
+                     base::Unretained(this), base::Passed(&new_settings))));
 }
 
 void PrintJobWorker::UpdatePrintSettings(
@@ -220,12 +216,13 @@ void PrintJobWorker::GetSettingsWithUI(
     bool is_scripted) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
+  PrintingContextDelegate* printing_context_delegate =
+      static_cast<PrintingContextDelegate*>(printing_context_delegate_.get());
+  content::WebContents* web_contents =
+      printing_context_delegate->GetWebContents();
+
 #if defined(OS_ANDROID)
   if (is_scripted) {
-    PrintingContextDelegate* printing_context_delegate =
-        static_cast<PrintingContextDelegate*>(printing_context_delegate_.get());
-    content::WebContents* web_contents =
-        printing_context_delegate->GetWebContents();
     TabAndroid* tab =
         web_contents ? TabAndroid::FromWebContents(web_contents) : nullptr;
 
@@ -236,6 +233,11 @@ void PrintJobWorker::GetSettingsWithUI(
       tab->SetPendingPrint();
   }
 #endif
+
+  // Running a dialog causes an exit to webpage-initiated fullscreen.
+  // http://crbug.com/728276
+  if (web_contents->IsFullscreenForCurrentTab())
+    web_contents->ExitFullscreen(true);
 
   // weak_factory_ creates pointers valid only on owner_ thread.
   printing_context_->AskUserForSettings(
@@ -251,7 +253,7 @@ void PrintJobWorker::UseDefaultSettings() {
 }
 
 void PrintJobWorker::StartPrinting(PrintedDocument* new_document) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(page_number_, PageNumber::npos());
   DCHECK_EQ(document_.get(), new_document);
   DCHECK(document_.get());
@@ -283,7 +285,7 @@ void PrintJobWorker::StartPrinting(PrintedDocument* new_document) {
 }
 
 void PrintJobWorker::OnDocumentChanged(PrintedDocument* new_document) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(page_number_, PageNumber::npos());
 
   if (page_number_ != PageNumber::npos())
@@ -297,7 +299,7 @@ void PrintJobWorker::OnNewPage() {
     return;
 
   // message_loop() could return NULL when the print job is cancelled.
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (page_number_ == PageNumber::npos()) {
     // Find first page to print.
@@ -320,7 +322,8 @@ void PrintJobWorker::OnNewPage() {
       // We need to wait for the page to be available.
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE,
-          base::Bind(&PrintJobWorker::OnNewPage, weak_factory_.GetWeakPtr()),
+          base::BindOnce(&PrintJobWorker::OnNewPage,
+                         weak_factory_.GetWeakPtr()),
           base::TimeDelta::FromMilliseconds(500));
       break;
     }
@@ -368,7 +371,7 @@ bool PrintJobWorker::Start() {
 }
 
 void PrintJobWorker::OnDocumentDone() {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(page_number_, PageNumber::npos());
   DCHECK(document_.get());
 
@@ -388,7 +391,7 @@ void PrintJobWorker::OnDocumentDone() {
 }
 
 void PrintJobWorker::SpoolPage(PrintedPage* page) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_NE(page_number_, PageNumber::npos());
 
   // Signal everyone that the page is about to be printed.
@@ -426,7 +429,7 @@ void PrintJobWorker::SpoolPage(PrintedPage* page) {
 }
 
 void PrintJobWorker::OnFailure() {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   // We may loose our last reference by broadcasting the FAILED event.
   scoped_refptr<PrintJobWorkerOwner> handle(owner_);

@@ -140,7 +140,7 @@ bool VerifyAlgorithmNameMappings(const AlgorithmNameMapping* begin,
     String str(it->algorithm_name, it->algorithm_name_length);
     if (!str.ContainsOnlyASCII())
       return false;
-    if (str.DeprecatedUpper() != str)
+    if (str.UpperASCII() != str)
       return false;
   }
 
@@ -180,7 +180,9 @@ bool LookupAlgorithmIdByName(const String& algorithm_name,
   const AlgorithmNameMapping* end =
       kAlgorithmNameMappings + WTF_ARRAY_LENGTH(kAlgorithmNameMappings);
 
-  ASSERT(VerifyAlgorithmNameMappings(begin, end));
+#if DCHECK_IS_ON()
+  DCHECK(VerifyAlgorithmNameMappings(begin, end));
+#endif
 
   const AlgorithmNameMapping* it;
   if (algorithm_name.Impl()->Is8Bit())
@@ -987,7 +989,7 @@ bool ParseAlgorithmParams(const Dictionary& raw,
       context.Add("Pbkdf2Params");
       return ParsePbkdf2Params(raw, params, context, error);
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return false;
 }
 

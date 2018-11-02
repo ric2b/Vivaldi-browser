@@ -5,6 +5,8 @@
 #include "core/frame/DOMWindow.h"
 
 #include <memory>
+
+#include "bindings/core/v8/WindowProxyManager.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/SecurityContext.h"
@@ -16,6 +18,7 @@
 #include "core/frame/Location.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/MixedContentChecker.h"
@@ -29,18 +32,20 @@
 
 namespace blink {
 
-DOMWindow::DOMWindow(Frame& frame) : frame_(frame), window_is_closing_(false) {}
+DOMWindow::DOMWindow(Frame& frame)
+    : frame_(frame),
+      window_proxy_manager_(frame.GetWindowProxyManager()),
+      location_(this, nullptr),
+      window_is_closing_(false) {}
 
 DOMWindow::~DOMWindow() {
   // The frame must be disconnected before finalization.
   DCHECK(!frame_);
 }
 
-v8::Local<v8::Object> DOMWindow::Wrap(v8::Isolate*,
+v8::Local<v8::Object> DOMWindow::Wrap(v8::Isolate* isolate,
                                       v8::Local<v8::Object> creation_context) {
-  LOG(FATAL) << "DOMWindow must never be wrapped with wrap method.  The "
-                "wrappers must be created at WindowProxy::createContext() and "
-                "setupWindowPrototypeChain().";
+  NOTREACHED();
   return v8::Local<v8::Object>();
 }
 
@@ -48,9 +53,7 @@ v8::Local<v8::Object> DOMWindow::AssociateWithWrapper(
     v8::Isolate*,
     const WrapperTypeInfo*,
     v8::Local<v8::Object> wrapper) {
-  LOG(FATAL) << "DOMWindow must never be wrapped with wrap method.  The "
-                "wrappers must be created at WindowProxy::createContext() and "
-                "setupWindowPrototypeChain().";
+  NOTREACHED();
   return v8::Local<v8::Object>();
 }
 
@@ -104,7 +107,7 @@ DOMWindow* DOMWindow::top() const {
   if (!GetFrame())
     return nullptr;
 
-  return GetFrame()->Tree().Top()->DomWindow();
+  return GetFrame()->Tree().Top().DomWindow();
 }
 
 DOMWindow* DOMWindow::AnonymousIndexedGetter(uint32_t index) const {
@@ -113,6 +116,18 @@ DOMWindow* DOMWindow::AnonymousIndexedGetter(uint32_t index) const {
 
   Frame* child = GetFrame()->Tree().ScopedChild(index);
   return child ? child->DomWindow() : nullptr;
+}
+
+bool DOMWindow::AnonymousIndexedSetter(uint32_t index,
+                                       const ScriptValue& value) {
+  // https://html.spec.whatwg.org/C/browsers.html#windowproxy-defineownproperty
+  //   step 2 - 1. If P is an array index property name, return false.
+  //
+  // As an alternative way to implement WindowProxy.[[DefineOwnProperty]] for
+  // array index property names, we always intercept and ignore the set
+  // operation for indexed properties, i.e. [[DefineOwnProperty]] for array
+  // index property names has always no effect.
+  return true;  // Intercept unconditionally but do nothing.
 }
 
 bool DOMWindow::IsCurrentlyDisplayedInFrame() const {
@@ -214,11 +229,18 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message,
                  source_document->Url())) {
     UseCounter::Count(GetFrame(), UseCounter::kPostMessageFromInsecureToSecure);
     if (MixedContentChecker::IsMixedContent(
-            GetFrame()->Tree().Top()->GetSecurityContext()->GetSecurityOrigin(),
+            GetFrame()->Tree().Top().GetSecurityContext()->GetSecurityOrigin(),
             source_document->Url())) {
       UseCounter::Count(GetFrame(),
                         UseCounter::kPostMessageFromInsecureToSecureToplevel);
     }
+  }
+
+  if (!source_document->GetContentSecurityPolicy()->AllowConnectToSource(
+          target_url, RedirectStatus::kNoRedirect,
+          SecurityViolationReportingPolicy::kSuppressReporting)) {
+    UseCounter::Count(
+        GetFrame(), UseCounter::kPostMessageOutgoingWouldBeBlockedByConnectSrc);
   }
 
   MessageEvent* event =
@@ -354,7 +376,7 @@ void DOMWindow::close(ExecutionContext* context) {
 
   Document* active_document = nullptr;
   if (context) {
-    ASSERT(IsMainThread());
+    DCHECK(IsMainThread());
     active_document = ToDocument(context);
     if (!active_document)
       return;
@@ -401,13 +423,13 @@ void DOMWindow::focus(ExecutionContext* context) {
   if (!page)
     return;
 
-  ASSERT(context);
+  DCHECK(context);
 
   bool allow_focus = context->IsWindowInteractionAllowed();
   if (allow_focus) {
     context->ConsumeWindowInteraction();
   } else {
-    ASSERT(IsMainThread());
+    DCHECK(IsMainThread());
     allow_focus = opener() && (opener() != this) &&
                   (ToDocument(context)->domWindow() == opener());
   }
@@ -428,9 +450,15 @@ InputDeviceCapabilitiesConstants* DOMWindow::GetInputDeviceCapabilities() {
 
 DEFINE_TRACE(DOMWindow) {
   visitor->Trace(frame_);
+  visitor->Trace(window_proxy_manager_);
   visitor->Trace(input_capabilities_);
   visitor->Trace(location_);
   EventTargetWithInlineData::Trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(DOMWindow) {
+  visitor->TraceWrappers(location_);
+  EventTargetWithInlineData::TraceWrappers(visitor);
 }
 
 }  // namespace blink

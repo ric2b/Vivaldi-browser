@@ -4,10 +4,10 @@
 
 #include "modules/credentialmanager/CredentialManagerClient.h"
 
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/page/Page.h"
+#include "platform/bindings/ScriptState.h"
 
 namespace blink {
 
@@ -63,22 +63,21 @@ void CredentialManagerClient::DispatchStore(
   client_->DispatchStore(credential, callbacks);
 }
 
-void CredentialManagerClient::DispatchRequireUserMediation(
+void CredentialManagerClient::DispatchPreventSilentAccess(
     WebCredentialManagerClient::NotificationCallbacks* callbacks) {
   if (!client_)
     return;
-  client_->DispatchRequireUserMediation(callbacks);
+  client_->DispatchPreventSilentAccess(callbacks);
 }
 
 void CredentialManagerClient::DispatchGet(
-    bool zero_click_only,
+    WebCredentialMediationRequirement mediation,
     bool include_passwords,
     const WebVector<WebURL>& federations,
     WebCredentialManagerClient::RequestCallbacks* callbacks) {
   if (!client_)
     return;
-  client_->DispatchGet(zero_click_only, include_passwords, federations,
-                       callbacks);
+  client_->DispatchGet(mediation, include_passwords, federations, callbacks);
 }
 
 }  // namespace blink

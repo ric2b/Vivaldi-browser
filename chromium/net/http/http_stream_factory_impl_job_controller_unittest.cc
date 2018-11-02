@@ -4,7 +4,8 @@
 
 #include "net/http/http_stream_factory_impl_job_controller.h"
 
-#include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "base/memory/ptr_util.h"
@@ -25,7 +26,7 @@
 #include "net/proxy/proxy_service.h"
 #include "net/quic/chromium/quic_stream_factory_peer.h"
 #include "net/socket/socket_test_util.h"
-#include "net/spdy/spdy_test_util_common.h"
+#include "net/spdy/chromium/spdy_test_util_common.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gmock_mutant.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -157,8 +158,7 @@ class HttpStreamFactoryImplJobControllerTest : public ::testing::Test {
 
   void Initialize(const HttpRequestInfo& request_info) {
     ASSERT_FALSE(test_proxy_delegate_);
-    std::unique_ptr<TestProxyDelegate> test_proxy_delegate(
-        new TestProxyDelegate());
+    auto test_proxy_delegate = base::MakeUnique<TestProxyDelegate>();
     test_proxy_delegate_ = test_proxy_delegate.get();
 
     test_proxy_delegate->set_alternative_proxy_server(
@@ -199,12 +199,12 @@ class HttpStreamFactoryImplJobControllerTest : public ::testing::Test {
   void VerifyBrokenAlternateProtocolMapping(const HttpRequestInfo& request_info,
                                             bool should_mark_broken) {
     const url::SchemeHostPort server(request_info.url);
-    const AlternativeServiceVector alternative_service_vector =
-        session_->http_server_properties()->GetAlternativeServices(server);
-    EXPECT_EQ(1u, alternative_service_vector.size());
+    const AlternativeServiceInfoVector alternative_service_info_vector =
+        session_->http_server_properties()->GetAlternativeServiceInfos(server);
+    EXPECT_EQ(1u, alternative_service_info_vector.size());
     EXPECT_EQ(should_mark_broken,
               session_->http_server_properties()->IsAlternativeServiceBroken(
-                  alternative_service_vector[0]));
+                  alternative_service_info_vector[0].alternative_service));
   }
 
   TestJobFactory job_factory_;
@@ -641,7 +641,6 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
   session_deps_.proxy_service.reset(
       new ProxyService(base::MakeUnique<ProxyConfigServiceFixed>(proxy_config),
                        base::WrapUnique(proxy_resolver_factory), nullptr));
-  session_deps_.quic_do_not_mark_as_broken_on_network_change = true;
 
   HttpRequestInfo request_info;
   request_info.method = "GET";
@@ -929,7 +928,6 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, DelayedTCP) {
 
   // Enable delayed TCP and set time delay for waiting job.
   QuicStreamFactory* quic_stream_factory = session_->quic_stream_factory();
-  test::QuicStreamFactoryPeer::SetDelayTcpRace(quic_stream_factory, true);
   quic_stream_factory->set_require_confirmation(false);
   ServerNetworkStats stats1;
   stats1.srtt = base::TimeDelta::FromMicroseconds(10);
@@ -998,7 +996,6 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, DelayedTCPWithLargeSrtt) {
 
   // Enable delayed TCP and set a extremely large time delay for waiting job.
   QuicStreamFactory* quic_stream_factory = session_->quic_stream_factory();
-  test::QuicStreamFactoryPeer::SetDelayTcpRace(quic_stream_factory, true);
   quic_stream_factory->set_require_confirmation(false);
   ServerNetworkStats stats1;
   stats1.srtt = base::TimeDelta::FromSeconds(100);
@@ -1056,7 +1053,6 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
 
   // Enable delayed TCP and set time delay for waiting job.
   QuicStreamFactory* quic_stream_factory = session_->quic_stream_factory();
-  test::QuicStreamFactoryPeer::SetDelayTcpRace(quic_stream_factory, true);
   quic_stream_factory->set_require_confirmation(false);
   ServerNetworkStats stats1;
   stats1.srtt = base::TimeDelta::FromMicroseconds(10);
@@ -1108,8 +1104,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
 // scheme is HTTPS.
 TEST_F(HttpStreamFactoryImplJobControllerTest, HttpsURL) {
   // Using hanging resolver will cause the alternative job to hang indefinitely.
-  HangingResolver* resolver = new HangingResolver();
-  session_deps_.host_resolver.reset(resolver);
+  session_deps_.host_resolver = base::MakeUnique<HangingResolver>();
 
   HttpRequestInfo request_info;
   request_info.method = "GET";
@@ -1134,8 +1129,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, HttpsURL) {
 // does not fetch the resource through a proxy.
 TEST_F(HttpStreamFactoryImplJobControllerTest, HttpURLWithNoProxy) {
   // Using hanging resolver will cause the alternative job to hang indefinitely.
-  HangingResolver* resolver = new HangingResolver();
-  session_deps_.host_resolver.reset(resolver);
+  session_deps_.host_resolver = base::MakeUnique<HangingResolver>();
 
   HttpRequestInfo request_info;
   request_info.method = "GET";
@@ -1181,7 +1175,6 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, DelayedTCPAlternativeProxy) {
 
   // Enable delayed TCP and set time delay for waiting job.
   QuicStreamFactory* quic_stream_factory = session_->quic_stream_factory();
-  test::QuicStreamFactoryPeer::SetDelayTcpRace(quic_stream_factory, true);
   quic_stream_factory->set_require_confirmation(false);
   ServerNetworkStats stats1;
   stats1.srtt = base::TimeDelta::FromMicroseconds(10);
@@ -1244,7 +1237,6 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, FailAlternativeProxy) {
 
   // Enable delayed TCP and set time delay for waiting job.
   QuicStreamFactory* quic_stream_factory = session_->quic_stream_factory();
-  test::QuicStreamFactoryPeer::SetDelayTcpRace(quic_stream_factory, true);
   quic_stream_factory->set_require_confirmation(false);
   ServerNetworkStats stats1;
   stats1.srtt = base::TimeDelta::FromMicroseconds(300 * 1000);

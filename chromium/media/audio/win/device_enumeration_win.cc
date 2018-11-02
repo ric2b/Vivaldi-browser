@@ -4,6 +4,7 @@
 
 #include <MMDeviceAPI.h>
 #include <mmsystem.h>
+#include <objbase.h>
 #include <Functiondiscoverykeys_devpkey.h>  // MMDeviceAPI.h must come first
 #include <stddef.h>
 
@@ -29,8 +30,9 @@ static bool GetDeviceNamesWinImpl(EDataFlow data_flow,
   // It is assumed that this method is called from a COM thread, i.e.,
   // CoInitializeEx() is not called here again to avoid STA/MTA conflicts.
   ScopedComPtr<IMMDeviceEnumerator> enumerator;
-  HRESULT hr = enumerator.CreateInstance(__uuidof(MMDeviceEnumerator), NULL,
-                                         CLSCTX_INPROC_SERVER);
+  HRESULT hr =
+      ::CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL,
+                         CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&enumerator));
   DCHECK_NE(CO_E_NOTINITIALIZED, hr);
   if (FAILED(hr)) {
     LOG(WARNING) << "Failed to create IMMDeviceEnumerator: " << std::hex << hr;
@@ -41,7 +43,7 @@ static bool GetDeviceNamesWinImpl(EDataFlow data_flow,
   // This method will succeed even if all devices are disabled.
   ScopedComPtr<IMMDeviceCollection> collection;
   hr = enumerator->EnumAudioEndpoints(data_flow, DEVICE_STATE_ACTIVE,
-                                      collection.Receive());
+                                      collection.GetAddressOf());
   if (FAILED(hr))
     return false;
 
@@ -59,7 +61,7 @@ static bool GetDeviceNamesWinImpl(EDataFlow data_flow,
     // Retrieve unique name of endpoint device.
     // Example: "{0.0.1.00000000}.{8db6020f-18e3-4f25-b6f5-7726c9122574}".
     ScopedComPtr<IMMDevice> audio_device;
-    hr = collection->Item(i, audio_device.Receive());
+    hr = collection->Item(i, audio_device.GetAddressOf());
     if (FAILED(hr))
       continue;
 
@@ -72,7 +74,7 @@ static bool GetDeviceNamesWinImpl(EDataFlow data_flow,
     // Retrieve user-friendly name of endpoint device.
     // Example: "Microphone (Realtek High Definition Audio)".
     ScopedComPtr<IPropertyStore> properties;
-    hr = audio_device->OpenPropertyStore(STGM_READ, properties.Receive());
+    hr = audio_device->OpenPropertyStore(STGM_READ, properties.GetAddressOf());
     if (SUCCEEDED(hr)) {
       base::win::ScopedPropVariant friendly_name;
       hr = properties->GetValue(PKEY_Device_FriendlyName,

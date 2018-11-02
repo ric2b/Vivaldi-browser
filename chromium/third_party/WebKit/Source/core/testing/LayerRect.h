@@ -31,11 +31,11 @@
 #ifndef LayerRect_h
 #define LayerRect_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/ClientRect.h"
 #include "core/dom/Node.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 

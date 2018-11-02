@@ -27,11 +27,8 @@
 
 #include <cmath>
 #include <limits>
-#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
@@ -46,6 +43,9 @@
 #include "platform/ContentDecryptionModuleResult.h"
 #include "platform/InstanceCounters.h"
 #include "platform/Timer.h"
+#include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8ThrowException.h"
 #include "platform/network/mime/ContentType.h"
 #include "platform/wtf/ASCIICType.h"
 #include "platform/wtf/PtrUtil.h"
@@ -813,37 +813,27 @@ ScriptPromise MediaKeySession::remove(ScriptState* script_state) {
   if (!is_callable_)
     return CreateRejectedPromiseNotCallable(script_state);
 
-  // 3. If the result of running the "Is persistent session type?" algorithm
-  //    on this object's session type is false, return a promise rejected
-  //    with a newly created TypeError.
-  if (!IsPersistentSessionType(session_type_)) {
-    return ScriptPromise::Reject(
-        script_state,
-        V8ThrowException::CreateTypeError(
-            script_state->GetIsolate(), "The session type is not persistent."));
-  }
-
-  // 4. Let promise be a new promise.
+  // 3. Let promise be a new promise.
   SimpleResultPromise* result = new SimpleResultPromise(script_state, this);
   ScriptPromise promise = result->Promise();
 
-  // 5. Run the following steps asynchronously (done in removeTask()).
+  // 4. Run the following steps asynchronously (done in removeTask()).
   pending_actions_.push_back(PendingAction::CreatePendingRemove(result));
   if (!action_timer_.IsActive())
     action_timer_.StartOneShot(0, BLINK_FROM_HERE);
 
-  // 6. Return promise.
+  // 5. Return promise.
   return promise;
 }
 
 void MediaKeySession::RemoveTask(ContentDecryptionModuleResult* result) {
-  // NOTE: Continue step 5 of MediaKeySession::remove().
+  // NOTE: Continue step 4 of MediaKeySession::remove().
   DVLOG(MEDIA_KEY_SESSION_LOG_LEVEL) << __func__ << "(" << this << ")";
 
-  // remove() in Chromium will execute steps 5.1 through 5.3.
+  // remove() in Chromium will execute steps 4.1 through 4.5.
   session_->Remove(result->Result());
 
-  // Last step (5.3.6 Resolve promise) will be done when |result| is resolved.
+  // Last step (4.5.6 Resolve promise) will be done when |result| is resolved.
 }
 
 void MediaKeySession::ActionTimerFired(TimerBase*) {
@@ -1029,11 +1019,11 @@ bool MediaKeySession::HasPendingActivity() const {
   // and we're not closed.
   DVLOG(MEDIA_KEY_SESSION_LOG_LEVEL)
       << __func__ << "(" << this << ")"
-      << (!pending_actions_.IsEmpty() ? " !m_pendingActions.isEmpty()" : "")
+      << (!pending_actions_.IsEmpty() ? " !pending_actions_.IsEmpty()" : "")
       << (async_event_queue_->HasPendingEvents()
-              ? " m_asyncEventQueue->hasPendingEvents()"
+              ? " async_event_queue_->HasPendingEvents()"
               : "")
-      << ((media_keys_ && !is_closed_) ? " m_mediaKeys && !m_isClosed" : "");
+      << ((media_keys_ && !is_closed_) ? " media_keys_ && !is_closed_" : "");
 
   return !pending_actions_.IsEmpty() ||
          async_event_queue_->HasPendingEvents() || (media_keys_ && !is_closed_);
@@ -1044,7 +1034,7 @@ void MediaKeySession::ContextDestroyed(ExecutionContext*) {
   session_.reset();
   is_closed_ = true;
   action_timer_.Stop();
-  pending_actions_.Clear();
+  pending_actions_.clear();
   async_event_queue_->Close();
 }
 

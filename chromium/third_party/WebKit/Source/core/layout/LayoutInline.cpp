@@ -37,7 +37,6 @@
 #include "core/paint/InlinePainter.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintLayer.h"
-#include "core/style/StyleInheritedData.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/Region.h"
 #include "platform/geometry/TransformState.h"
@@ -343,8 +342,18 @@ void LayoutInline::AddChildIgnoringContinuation(LayoutObject* new_child,
     // of this inline. We take all of the children after |beforeChild| and put
     // them in a clone of this object.
     RefPtr<ComputedStyle> new_style =
-        ComputedStyle::CreateAnonymousStyleWithDisplay(
-            ContainingBlock()->StyleRef(), EDisplay::kBlock);
+        ComputedStyle::CreateAnonymousStyleWithDisplay(StyleRef(),
+                                                       EDisplay::kBlock);
+    // The anon block we create here doesn't exist in the CSS spec, so
+    // we need to ensure that any blocks it contains inherit properly
+    // from its true parent. This means they must use the direction set by the
+    // anon block's containing block, so we need to prevent the anon block
+    // from inheriting direction from the inline. If there are any other
+    // inheritable properties that apply to block and inline elements
+    // but only affect the layout of children we will want to special-case
+    // them here too. Writing-mode would be one if it didn't create a
+    // formatting context of its own, removing the need for continuations.
+    new_style->SetDirection(ContainingBlock()->StyleRef().Direction());
 
     // If inside an inline affected by in-flow positioning the block needs to be
     // affected by it too. Giving the block a layer like this allows it to
@@ -1070,7 +1079,7 @@ LayoutRect LayoutInline::CulledInlineVisualOverflowBoundingBox() const {
       LayoutBox* curr_box = ToLayoutBox(curr);
       if (!curr_box->HasSelfPaintingLayer() && curr_box->InlineBoxWrapper()) {
         LayoutRect logical_rect =
-            curr_box->LogicalVisualOverflowRectForPropagation(StyleRef());
+            curr_box->LogicalVisualOverflowRectForPropagation();
         if (is_horizontal) {
           logical_rect.MoveBy(curr_box->Location());
           result.UniteIfNonZero(logical_rect);
@@ -1432,7 +1441,7 @@ void LayoutInline::ImageChanged(WrappedImagePtr, const IntRect*) {
     return;
 
   // FIXME: We can do better.
-  SetShouldDoFullPaintInvalidation();
+  SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kImage);
 }
 
 namespace {

@@ -1,45 +1,58 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/download/download_service_factory.h"
 
-#include "chrome/browser/download/download_service_impl.h"
-#include "chrome/browser/history/history_service_factory.h"
+#include "base/files/file_path.h"
+#include "base/memory/singleton.h"
+#include "base/sequenced_task_runner.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_constants.h"
+#include "components/download/public/download_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-
-// static
-DownloadService* DownloadServiceFactory::GetForBrowserContext(
-    content::BrowserContext* context) {
-  return static_cast<DownloadService*>(
-      GetInstance()->GetServiceForBrowserContext(context, true));
-}
+#include "content/public/browser/browser_context.h"
 
 // static
 DownloadServiceFactory* DownloadServiceFactory::GetInstance() {
   return base::Singleton<DownloadServiceFactory>::get();
 }
 
+// static
+download::DownloadService* DownloadServiceFactory::GetForBrowserContext(
+    content::BrowserContext* context) {
+  return static_cast<download::DownloadService*>(
+      GetInstance()->GetServiceForBrowserContext(context, true));
+}
+
 DownloadServiceFactory::DownloadServiceFactory()
     : BrowserContextKeyedServiceFactory(
-        "DownloadService",
-        BrowserContextDependencyManager::GetInstance()) {
-  DependsOn(HistoryServiceFactory::GetInstance());
-}
+          "download::DownloadService",
+          BrowserContextDependencyManager::GetInstance()) {}
 
-DownloadServiceFactory::~DownloadServiceFactory() {
-}
+DownloadServiceFactory::~DownloadServiceFactory() = default;
 
 KeyedService* DownloadServiceFactory::BuildServiceInstanceFor(
-    content::BrowserContext* profile) const {
-  DownloadService* service =
-      new DownloadServiceImpl(static_cast<Profile*>(profile));
+    content::BrowserContext* context) const {
+  Profile* profile = Profile::FromBrowserContext(context);
 
-  // No need for initialization; initialization can be done on first
-  // use of service.
+  scoped_refptr<base::SequencedTaskRunner> background_task_runner =
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND});
 
+  base::FilePath storage_dir;
+  if (!profile->IsOffTheRecord() && !profile->GetPath().empty()) {
+    storage_dir =
+        profile->GetPath().Append(chrome::kDownloadServiceStorageDirname);
+  }
+
+  download::DownloadService* service =
+      download::DownloadService::Create(storage_dir, background_task_runner);
+
+  // TODO(dtrainor): Register all clients here.
   return service;
 }
 

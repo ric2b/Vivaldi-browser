@@ -75,6 +75,15 @@ enum LatencyComponentType {
       INPUT_EVENT_LATENCY_TERMINATED_SWAP_FAILED_COMPONENT,
 };
 
+enum SourceEventType {
+  UNKNOWN,
+  WHEEL,
+  TOUCH,
+  KEY_PRESS,
+  OTHER,
+  SOURCE_EVENT_TYPE_LAST = OTHER,
+};
+
 struct LatencyComponentId {
   LatencyComponentType type;
   int64 id;
@@ -104,8 +113,8 @@ struct LatencyComponentPair {
 struct LatencyInfo {
   string trace_name;
   array<LatencyComponentPair> latency_components;
-  array<gfx.mojom.PointF> input_coordinates;
   int64 trace_id;
   bool coalesced;
   bool terminated;
+  SourceEventType source_event_type;
 };

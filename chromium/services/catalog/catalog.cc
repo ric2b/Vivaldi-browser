@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/base_paths.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
@@ -95,10 +96,13 @@ void LoadCatalogManifestIntoCache(const base::Value* root, EntryCache* cache) {
 
     DCHECK(!(is_embedded && !executable_path.empty()));
 
+    if (is_embedded)
+      executable_path = base::CommandLine::ForCurrentProcess()->GetProgram();
+
     auto entry = Entry::Deserialize(*manifest);
     if (entry) {
       if (!executable_path.empty())
-        entry->set_path(executable_path);
+        entry->set_path(std::move(executable_path));
       bool added = cache->AddRootEntry(std::move(entry));
       DCHECK(added);
     } else {
@@ -112,17 +116,18 @@ void LoadCatalogManifestIntoCache(const base::Value* root, EntryCache* cache) {
 class Catalog::ServiceImpl : public service_manager::Service {
  public:
   explicit ServiceImpl(Catalog* catalog) : catalog_(catalog) {
-    registry_.AddInterface<mojom::Catalog>(catalog_);
-    registry_.AddInterface<filesystem::mojom::Directory>(catalog_);
-    registry_.AddInterface<service_manager::mojom::Resolver>(catalog_);
+    registry_.AddInterface<mojom::Catalog>(
+        base::Bind(&Catalog::BindCatalogRequest, base::Unretained(catalog_)));
+    registry_.AddInterface<filesystem::mojom::Directory>(
+        base::Bind(&Catalog::BindDirectoryRequest, base::Unretained(catalog_)));
   }
   ~ServiceImpl() override {}
 
   // service_manager::Service:
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(source_info.identity, interface_name,
+    registry_.BindInterface(source_info, interface_name,
                             std::move(interface_pipe));
   }
 
@@ -137,7 +142,7 @@ Catalog::Catalog(std::unique_ptr<base::Value> static_manifest,
                  ManifestProvider* service_manifest_provider)
     : service_context_(new service_manager::ServiceContext(
           base::MakeUnique<ServiceImpl>(this),
-          service_manager::mojom::ServiceRequest(&service_))),
+          mojo::MakeRequest(&service_))),
       service_manifest_provider_(service_manifest_provider),
       weak_factory_(this) {
   if (static_manifest) {
@@ -174,20 +179,27 @@ void Catalog::LoadDefaultCatalogManifest(const base::FilePath& path) {
   catalog::Catalog::SetDefaultCatalogManifest(std::move(manifest_value));
 }
 
-void Catalog::Create(const service_manager::Identity& remote_identity,
-                     service_manager::mojom::ResolverRequest request) {
-  Instance* instance = GetInstanceForUserId(remote_identity.user_id());
-  instance->BindResolver(std::move(request));
+Instance* Catalog::GetInstanceForUserId(const std::string& user_id) {
+  auto it = instances_.find(user_id);
+  if (it != instances_.end())
+    return it->second.get();
+
+  auto result = instances_.insert(std::make_pair(
+      user_id,
+      base::MakeUnique<Instance>(&system_cache_, service_manifest_provider_)));
+  return result.first->second.get();
 }
 
-void Catalog::Create(const service_manager::Identity& remote_identity,
-                     mojom::CatalogRequest request) {
-  Instance* instance = GetInstanceForUserId(remote_identity.user_id());
+void Catalog::BindCatalogRequest(
+    const service_manager::BindSourceInfo& source_info,
+    mojom::CatalogRequest request) {
+  Instance* instance = GetInstanceForUserId(source_info.identity.user_id());
   instance->BindCatalog(std::move(request));
 }
 
-void Catalog::Create(const service_manager::Identity& remote_identity,
-                     filesystem::mojom::DirectoryRequest request) {
+void Catalog::BindDirectoryRequest(
+    const service_manager::BindSourceInfo& source_info,
+    filesystem::mojom::DirectoryRequest request) {
   if (!lock_table_)
     lock_table_ = new filesystem::LockTable;
 
@@ -198,17 +210,6 @@ void Catalog::Create(const service_manager::Identity& remote_identity,
           resources_path, scoped_refptr<filesystem::SharedTempDir>(),
           lock_table_),
       std::move(request));
-}
-
-Instance* Catalog::GetInstanceForUserId(const std::string& user_id) {
-  auto it = instances_.find(user_id);
-  if (it != instances_.end())
-    return it->second.get();
-
-  auto result = instances_.insert(std::make_pair(
-      user_id,
-      base::MakeUnique<Instance>(&system_cache_, service_manifest_provider_)));
-  return result.first->second.get();
 }
 
 }  // namespace catalog

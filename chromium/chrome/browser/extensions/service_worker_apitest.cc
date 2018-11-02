@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/gcm/fake_gcm_profile_service.h"
@@ -97,6 +98,11 @@ class ServiceWorkerTest : public ExtensionApiTest {
   ServiceWorkerTest() : current_channel_(version_info::Channel::STABLE) {}
 
   ~ServiceWorkerTest() override {}
+
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+    host_resolver()->AddRule("a.com", "127.0.0.1");
+  }
 
  protected:
   // Returns the ProcessManager for the test's profile.
@@ -283,6 +289,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, RegisterSucceeds) {
 }
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdateRefreshesServiceWorker) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::ScopedTempDir scoped_temp_dir;
   ASSERT_TRUE(scoped_temp_dir.CreateUniqueTempDir());
   base::FilePath pem_path = test_data_dir_.AppendASCII("service_worker")
@@ -323,6 +330,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdateRefreshesServiceWorker) {
 }
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdateWithoutSkipWaiting) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::ScopedTempDir scoped_temp_dir;
   ASSERT_TRUE(scoped_temp_dir.CreateUniqueTempDir());
   base::FilePath pem_path = test_data_dir_.AppendASCII("service_worker")
@@ -750,7 +758,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WebAccessibleResourcesIframeSrc) {
   // (non-localhost, non-https) URL for the web page. This page will create
   // iframes that load extension pages that must be controllable by service
   // worker.
-  host_resolver()->AddRule("a.com", "127.0.0.1");
   GURL page_url =
       embedded_test_server()->GetURL("a.com",
                                      "/extensions/api_test/service_worker/"

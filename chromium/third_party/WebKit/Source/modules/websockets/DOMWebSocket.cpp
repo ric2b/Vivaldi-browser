@@ -122,7 +122,7 @@ void DOMWebSocket::EventQueue::ContextDestroyed() {
 
   state_ = kStopped;
   resume_timer_.Stop();
-  events_.Clear();
+  events_.clear();
 }
 
 void DOMWebSocket::EventQueue::DispatchQueuedEvents() {
@@ -577,7 +577,7 @@ void DOMWebSocket::CloseInternal(int code,
       DCHECK_GT(utf8.length(), 0u);
       // reason might contain unpaired surrogates. Reconstruct it from
       // utf8.
-      cleansed_reason = String::FromUTF8(utf8.Data(), utf8.length());
+      cleansed_reason = String::FromUTF8(utf8.data(), utf8.length());
     }
   }
 
@@ -713,7 +713,7 @@ void DOMWebSocket::DidReceiveBinaryMessage(
     case kBinaryTypeBlob: {
       size_t size = binary_data->size();
       RefPtr<RawData> raw_data = RawData::Create();
-      binary_data->Swap(*raw_data->MutableData());
+      binary_data->swap(*raw_data->MutableData());
       std::unique_ptr<BlobData> blob_data = BlobData::Create();
       blob_data->AppendData(raw_data.Release(), 0, BlobDataItem::kToEndOfFile);
       Blob* blob =
@@ -727,7 +727,7 @@ void DOMWebSocket::DidReceiveBinaryMessage(
 
     case kBinaryTypeArrayBuffer:
       DOMArrayBuffer* array_buffer =
-          DOMArrayBuffer::Create(binary_data->Data(), binary_data->size());
+          DOMArrayBuffer::Create(binary_data->data(), binary_data->size());
       RecordReceiveTypeHistogram(kWebSocketReceiveTypeArrayBuffer);
       RecordReceiveMessageSizeHistogram(kWebSocketReceiveTypeArrayBuffer,
                                         binary_data->size());

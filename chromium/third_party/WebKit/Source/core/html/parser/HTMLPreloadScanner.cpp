@@ -146,6 +146,7 @@ class TokenPreloadScanner::StartTagScanner {
         link_is_import_(false),
         matched_(true),
         input_is_image_(false),
+        nomodule_attribute_value_(false),
         source_size_(0),
         source_size_set_(false),
         defer_(FetchParameters::kNoDefer),
@@ -218,7 +219,7 @@ class TokenPreloadScanner::StartTagScanner {
       if (IsLinkRelPreload()) {
         request_type = PreloadRequest::kRequestTypeLinkRelPreload;
         type = ResourceTypeForLinkPreload();
-        if (type == WTF::kNullopt)
+        if (type == WTF::nullopt)
           return nullptr;
       }
       if (!ShouldPreload(type)) {
@@ -235,12 +236,17 @@ class TokenPreloadScanner::StartTagScanner {
       source_size_set = picture_data.source_size_set;
       source_size = picture_data.source_size;
     }
+    ResourceFetcher::IsImageSet is_image_set =
+        (picture_data.picked || !srcset_image_candidate_.IsEmpty())
+            ? ResourceFetcher::kImageIsImageSet
+            : ResourceFetcher::kImageNotImageSet;
+
     if (source_size_set) {
       resource_width.width = source_size;
       resource_width.is_set = true;
     }
 
-    if (type == WTF::kNullopt)
+    if (type == WTF::nullopt)
       type = ResourceType();
 
     // The element's 'referrerpolicy' attribute (if present) takes precedence
@@ -251,7 +257,7 @@ class TokenPreloadScanner::StartTagScanner {
     auto request = PreloadRequest::CreateIfNeeded(
         InitiatorFor(tag_impl_), position, url_to_load_, predicted_base_url,
         type.value(), referrer_policy, PreloadRequest::kDocumentIsReferrer,
-        resource_width, client_hints_preferences, request_type);
+        is_image_set, resource_width, client_hints_preferences, request_type);
     if (!request)
       return nullptr;
 
@@ -294,6 +300,8 @@ class TokenPreloadScanner::StartTagScanner {
       type_attribute_value_ = attribute_value;
     else if (Match(attribute_name, languageAttr))
       language_attribute_value_ = attribute_value;
+    else if (Match(attribute_name, nomoduleAttr))
+      nomodule_attribute_value_ = true;
   }
 
   template <typename NameType>
@@ -526,11 +534,21 @@ class TokenPreloadScanner::StartTagScanner {
       return ShouldPreloadLink(type);
     if (Match(tag_impl_, inputTag) && !input_is_image_)
       return false;
-    if (Match(tag_impl_, scriptTag) &&
-        !ScriptLoader::IsValidScriptTypeAndLanguage(
-            type_attribute_value_, language_attribute_value_,
-            ScriptLoader::kAllowLegacyTypeInTypeAttribute)) {
-      return false;
+    if (Match(tag_impl_, scriptTag)) {
+      ScriptType script_type = ScriptType::kClassic;
+      if (!ScriptLoader::IsValidScriptTypeAndLanguage(
+              type_attribute_value_, language_attribute_value_,
+              ScriptLoader::kAllowLegacyTypeInTypeAttribute, script_type)) {
+        return false;
+      }
+      // TODO(kouhei): Enable preload for module scripts, with correct
+      // credentials mode.
+      if (type_attribute_value_ == "module")
+        return false;
+      if (ScriptLoader::BlockForNoModule(script_type,
+                                         nomodule_attribute_value_)) {
+        return false;
+      }
     }
     return true;
   }
@@ -560,6 +578,7 @@ class TokenPreloadScanner::StartTagScanner {
   String as_attribute_value_;
   String type_attribute_value_;
   String language_attribute_value_;
+  bool nomodule_attribute_value_;
   float source_size_;
   bool source_size_set_;
   FetchParameters::DeferOption defer_;
@@ -614,7 +633,7 @@ void TokenPreloadScanner::RewindTo(
   in_script_ = checkpoint.in_script;
 
   css_scanner_.Reset();
-  checkpoints_.Clear();
+  checkpoints_.clear();
 }
 
 void TokenPreloadScanner::Scan(const HTMLToken& token,
@@ -795,8 +814,10 @@ void TokenPreloadScanner::ScanCommon(const Token& token,
         in_script_ = false;
         return;
       }
-      if (Match(tag_impl, pictureTag))
+      if (Match(tag_impl, pictureTag)) {
         in_picture_ = false;
+        picture_data_.picked = false;
+      }
       return;
     }
     case HTMLToken::kStartTag: {

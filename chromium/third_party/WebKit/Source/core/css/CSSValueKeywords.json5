@@ -772,6 +772,7 @@
     "step-middle",
     "step-end",
     "steps",
+    "frames",
     "cubic-bezier",
 
     //
@@ -1099,8 +1100,10 @@
     "translateZ",
     "translate3d",
 
-    // motion path
+    // offset-path
     "path",
+    "ray",
+    "sides",
 
     "calc",
     "-webkit-calc",

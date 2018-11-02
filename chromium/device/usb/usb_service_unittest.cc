@@ -5,10 +5,10 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/test_io_thread.h"
 #include "device/base/features.h"
 #include "device/test/test_device_client.h"
@@ -24,35 +24,30 @@ namespace {
 
 class UsbServiceTest : public ::testing::Test {
  public:
-  void SetUp() override {
-    message_loop_.reset(new base::MessageLoopForUI);
-    io_thread_.reset(new base::TestIOThread(base::TestIOThread::kAutoStart));
-    device_client_.reset(new TestDeviceClient(io_thread_->task_runner()));
-  }
+  UsbServiceTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI),
+        io_thread_(base::TestIOThread::kAutoStart) {}
 
  protected:
-  std::unique_ptr<base::MessageLoop> message_loop_;
-  std::unique_ptr<base::TestIOThread> io_thread_;
-  std::unique_ptr<TestDeviceClient> device_client_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  base::TestIOThread io_thread_;
+  TestDeviceClient device_client_;
 };
 
 void OnGetDevices(const base::Closure& quit_closure,
                   const std::vector<scoped_refptr<UsbDevice>>& devices) {
-  quit_closure.Run();
-}
-
-void OnOpen(scoped_refptr<UsbDeviceHandle>* output,
-            const base::Closure& quit_closure,
-            scoped_refptr<UsbDeviceHandle> input) {
-  *output = input;
-  quit_closure.Run();
-}
-
-TEST_F(UsbServiceTest, GetDevices) {
   // Since there's no guarantee that any devices are connected at the moment
   // this test doesn't assume anything about the result but it at least verifies
   // that devices can be enumerated without the application crashing.
-  UsbService* service = device_client_->GetUsbService();
+  quit_closure.Run();
+}
+
+}  // namespace
+
+TEST_F(UsbServiceTest, GetDevices) {
+  // The USB service is not available on all platforms.
+  UsbService* service = DeviceClient::Get()->GetUsbService();
   if (service) {
     base::RunLoop loop;
     service->GetDevices(base::Bind(&OnGetDevices, loop.QuitClosure()));
@@ -64,7 +59,7 @@ TEST_F(UsbServiceTest, GetDevices) {
 TEST_F(UsbServiceTest, GetDevicesNewBackend) {
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeature(device::kNewUsbBackend);
-  UsbService* service = device_client_->GetUsbService();
+  UsbService* service = DeviceClient::Get()->GetUsbService();
   if (service) {
     base::RunLoop loop;
     service->GetDevices(base::Bind(&OnGetDevices, loop.QuitClosure()));
@@ -77,7 +72,7 @@ TEST_F(UsbServiceTest, ClaimGadget) {
   if (!UsbTestGadget::IsTestEnabled()) return;
 
   std::unique_ptr<UsbTestGadget> gadget =
-      UsbTestGadget::Claim(io_thread_->task_runner());
+      UsbTestGadget::Claim(io_thread_.task_runner());
   ASSERT_TRUE(gadget);
 
   scoped_refptr<UsbDevice> device = gadget->GetDevice();
@@ -90,32 +85,10 @@ TEST_F(UsbServiceTest, DisconnectAndReconnect) {
   if (!UsbTestGadget::IsTestEnabled()) return;
 
   std::unique_ptr<UsbTestGadget> gadget =
-      UsbTestGadget::Claim(io_thread_->task_runner());
+      UsbTestGadget::Claim(io_thread_.task_runner());
   ASSERT_TRUE(gadget);
   ASSERT_TRUE(gadget->Disconnect());
   ASSERT_TRUE(gadget->Reconnect());
 }
-
-TEST_F(UsbServiceTest, Shutdown) {
-  if (!UsbTestGadget::IsTestEnabled())
-    return;
-
-  std::unique_ptr<UsbTestGadget> gadget =
-      UsbTestGadget::Claim(io_thread_->task_runner());
-  ASSERT_TRUE(gadget);
-
-  base::RunLoop loop;
-  scoped_refptr<UsbDeviceHandle> device_handle;
-  gadget->GetDevice()->Open(
-      base::Bind(&OnOpen, &device_handle, loop.QuitClosure()));
-  loop.Run();
-  ASSERT_TRUE(device_handle);
-
-  // Shut down the USB service while the device handle is still open.
-  device_client_.reset();
-  EXPECT_FALSE(device_handle->GetDevice());
-}
-
-}  // namespace
 
 }  // namespace device

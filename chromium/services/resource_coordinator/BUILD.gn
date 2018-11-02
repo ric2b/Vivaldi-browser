@@ -2,20 +2,53 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# There should be only one memory instrumentaiton coordinator. It is currently
+# There should be only one resource coordinator. It is currently
 # in the browser process. So, only //content/browser should link to this target.
 # Others modules should only need the public targets.
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
+
 source_set("lib") {
   sources = [
-    "memory/coordinator/coordinator_impl.cc",
-    "memory/coordinator/coordinator_impl.h",
+    "coordination_unit/coordination_unit_factory.cc",
+    "coordination_unit/coordination_unit_factory.h",
+    "coordination_unit/coordination_unit_impl.cc",
+    "coordination_unit/coordination_unit_impl.h",
+    "coordination_unit/coordination_unit_provider_impl.cc",
+    "coordination_unit/coordination_unit_provider_impl.h",
+    "coordination_unit/process_coordination_unit_impl.cc",
+    "coordination_unit/process_coordination_unit_impl.h",
+    "memory_instrumentation/coordinator_impl.cc",
+    "memory_instrumentation/coordinator_impl.h",
+    "memory_instrumentation/process_map.cc",
+    "memory_instrumentation/process_map.h",
+    "resource_coordinator_service.cc",
+    "resource_coordinator_service.h",
   ]
 
   public_deps = [
     "//base",
     "//mojo/public/cpp/bindings",
-    "//services/resource_coordinator/public/cpp",
-    "//services/resource_coordinator/public/interfaces",
+    "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
+    "//services/service_manager/public/cpp/standalone_service:standalone_service",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "resource_coordinator"
+  source = "manifest.json"
+}
+
+service("resource_coordinator") {
+  sources = [
+    "service_main.cc",
+  ]
+
+  deps = [
+    ":lib",
+    "//mojo/public/cpp/system",
   ]
 }
 
@@ -23,16 +56,47 @@ source_set("tests") {
   testonly = true
 
   sources = [
-    "memory/coordinator/coordinator_impl_unittest.cc",
-    "public/cpp/memory/memory_dump_manager_delegate_impl_unittest.cc",
+    "coordination_unit/coordination_unit_impl_unittest.cc",
+    "coordination_unit/coordination_unit_impl_unittest_util.cc",
+    "coordination_unit/coordination_unit_impl_unittest_util.h",
+    "coordination_unit/process_coordination_unit_impl_unittest.cc",
+    "memory_instrumentation/coordinator_impl_unittest.cc",
+    "memory_instrumentation/process_map_unittest.cc",
+    "public/cpp/memory_instrumentation/client_process_impl_unittest.cc",
+    "public/cpp/tracing/chrome_trace_event_agent_unittest.cc",
+    "tracing/recorder_unittest.cc",
   ]
+
+  if (!is_android) {
+    sources += [ "resource_coordinator_service_unittest.cc" ]
+  }
 
   deps = [
     ":lib",
     "//base",
+    "//base/test:test_support",
     "//mojo/public/cpp/bindings",
-    "//services/resource_coordinator/public/cpp",
-    "//services/resource_coordinator/public/interfaces",
+    "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
+    "//services/resource_coordinator/tracing:lib",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/interfaces",
     "//testing/gtest",
   ]
+
+  data_deps = [
+    ":resource_coordinator",
+    ":lib",
+  ]
+}
+
+service_manifest("unittest_manifest") {
+  name = "resource_coordinator_unittests"
+  source = "unittest_manifest.json"
+}
+
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittest_manifest" ]
+  standalone_services = [ ":manifest" ]
 }

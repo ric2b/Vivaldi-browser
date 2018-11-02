@@ -15,7 +15,7 @@
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/NativeValueTraits.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
 
@@ -30,9 +30,9 @@ class CORE_EXPORT ByteStringOrNodeList final {
   bool isNull() const { return m_type == SpecificTypeNone; }
 
   bool isByteString() const { return m_type == SpecificTypeByteString; }
-  String getAsByteString() const;
-  void setByteString(String);
-  static ByteStringOrNodeList fromByteString(String);
+  const String& getAsByteString() const;
+  void setByteString(const String&);
+  static ByteStringOrNodeList fromByteString(const String&);
 
   bool isNodeList() const { return m_type == SpecificTypeNodeList; }
   NodeList* getAsNodeList() const;

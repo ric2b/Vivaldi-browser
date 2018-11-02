@@ -16,6 +16,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/timer/elapsed_timer.h"
 #include "chrome/browser/android/shortcut_helper.h"
@@ -113,8 +114,6 @@ std::unique_ptr<webapk::WebApk> BuildWebApkProtoInBackground(
     const SkBitmap& badge_icon,
     const std::map<std::string, std::string>& icon_url_to_murmur2_hash,
     bool is_manifest_stale) {
-  DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
-
   std::unique_ptr<webapk::WebApk> webapk(new webapk::WebApk);
   webapk->set_manifest_url(shortcut_info.manifest_url.spec());
   webapk->set_requester_application_package(
@@ -180,9 +179,9 @@ void OnWebApkProtoBuilt(
 
 // Returns task runner for running background tasks.
 scoped_refptr<base::TaskRunner> GetBackgroundTaskRunner() {
-  return content::BrowserThread::GetBlockingPool()
-      ->GetTaskRunnerWithShutdownBehavior(
-          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
+  return base::CreateTaskRunnerWithTraits(
+      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
 }  // anonymous namespace
@@ -270,11 +269,6 @@ bool WebApkInstaller::Register(JNIEnv* env) {
   return RegisterNativesImpl(env);
 }
 
-bool WebApkInstaller::CanInstallWebApks() {
-  return ChromeWebApkHost::GetGooglePlayInstallState() ==
-         GooglePlayInstallState::SUPPORTED;
-}
-
 void WebApkInstaller::InstallOrUpdateWebApk(const std::string& package_name,
                                             int version,
                                             const std::string& token) {
@@ -291,9 +285,10 @@ void WebApkInstaller::InstallOrUpdateWebApk(const std::string& package_name,
       base::android::ConvertUTF8ToJavaString(env, shortcut_info_.url.spec());
 
   if (task_type_ == WebApkInstaller::INSTALL) {
+    webapk::TrackRequestTokenDuration(install_duration_timer_->Elapsed());
     Java_WebApkInstaller_installWebApkAsync(env, java_ref_, java_webapk_package,
                                             version, java_title, java_token,
-                                            java_url);
+                                            java_url, shortcut_info_.source);
   } else {
     Java_WebApkInstaller_updateAsync(env, java_ref_, java_webapk_package,
                                      version, java_title, java_token, java_url);
@@ -399,8 +394,8 @@ void WebApkInstaller::OnURLFetchComplete(const net::URLFetcher* source) {
     return;
   }
 
-  GURL signed_download_url(response->signed_download_url());
-  if (task_type_ == UPDATE && signed_download_url.is_empty()) {
+  const std::string& token = response->token();
+  if (task_type_ == UPDATE && token.empty()) {
     // https://crbug.com/680131. The server sends an empty URL if the server
     // does not have a newer WebAPK to update to.
     relax_updates_ = response->relax_updates();
@@ -408,20 +403,15 @@ void WebApkInstaller::OnURLFetchComplete(const net::URLFetcher* source) {
     return;
   }
 
-  if (!signed_download_url.is_valid() || response->package_name().empty()) {
+  if (token.empty() || response->package_name().empty()) {
     LOG(WARNING) << "WebAPK server returned incomplete proto.";
-    OnResult(WebApkInstallResult::FAILURE);
-    return;
-  }
-
-  if (!CanInstallWebApks()) {
     OnResult(WebApkInstallResult::FAILURE);
     return;
   }
 
   int version = 1;
   base::StringToInt(response->version(), &version);
-  InstallOrUpdateWebApk(response->package_name(), version, response->token());
+  InstallOrUpdateWebApk(response->package_name(), version, token);
 }
 
 void WebApkInstaller::OnGotPrimaryIconMurmur2Hash(

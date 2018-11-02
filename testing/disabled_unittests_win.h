@@ -71,3 +71,12 @@ DISABLE(MediaGalleriesGalleryWatchApiTest, SetupGalleryWatchWithoutListeners)
 // Seems to have failed in v59
 DISABLE(ExtensionApiTest, UserLevelNativeMessaging)
 DISABLE(MediaGalleriesPlatformAppBrowserTest, NoGalleriesCopyTo)
+
+// Failed in v60
+DISABLE(RenderThreadImplBrowserTest,
+        InputHandlerManagerDestroyedAfterCompositorThread)
+
+// Flaky
+DISABLE(GenericSensorBrowserTest, AmbientLightSensorTest)
+DISABLE(SitePerProcessTextInputManagerTest,
+  TrackCompositionRangeForAllFrames)

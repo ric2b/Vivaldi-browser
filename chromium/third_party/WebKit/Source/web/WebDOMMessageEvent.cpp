@@ -30,7 +30,7 @@
 
 #include "public/web/WebDOMMessageEvent.h"
 
-#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/dom/Document.h"
 #include "core/dom/MessagePort.h"
 #include "core/events/MessageEvent.h"
@@ -39,7 +39,6 @@
 #include "public/web/WebDocument.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebSerializedScriptValue.h"
-#include "web/WebLocalFrameImpl.h"
 
 namespace blink {
 
@@ -52,7 +51,7 @@ WebDOMMessageEvent::WebDOMMessageEvent(
     : WebDOMMessageEvent(MessageEvent::Create()) {
   DOMWindow* window = nullptr;
   if (source_frame)
-    window = source_frame->ToImplBase()->GetFrame()->DomWindow();
+    window = WebFrame::ToCoreFrame(*source_frame)->DomWindow();
   MessagePortArray* ports = nullptr;
   if (!target_document.IsNull()) {
     Document* core_document = target_document;

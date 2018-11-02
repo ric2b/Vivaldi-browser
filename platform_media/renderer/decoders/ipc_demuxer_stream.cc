@@ -11,6 +11,7 @@
 #include "media/base/decoder_buffer.h"
 #include "media/base/media_util.h"
 #include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
+#include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 
 namespace media {
@@ -58,7 +59,8 @@ void IPCDemuxerStream::Read(const ReadCB& read_cb) {
   }
 
   if (!is_enabled_) {
-    DVLOG(1) << "Read from disabled stream, returning EOS";
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Read from disabled stream, returning EOS";
     base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     return;
   }
@@ -80,7 +82,8 @@ void IPCDemuxerStream::set_enabled(bool enabled, base::TimeDelta timestamp) {
 
   is_enabled_ = enabled;
   if (!is_enabled_ && !read_cb_.is_null()) {
-    DVLOG(1) << "Read from disabled stream, returning EOS";
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Read from disabled stream, returning EOS";
     base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     return;
   }
@@ -102,6 +105,10 @@ AudioDecoderConfig IPCDemuxerStream::audio_decoder_config() {
       ipc_media_pipeline_host_->audio_config();
   DCHECK(platform_audio_config.is_valid());
 
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " PlatformAudioConfig from IPCMediaPipelineHost : "
+          << Loggable(platform_audio_config);
+
   // This demuxer stream is different from "normal" demuxers in that it outputs
   // decoded data.  To fit into existing media pipeline we hard code some
   // information, which is normally read from the data stream.
@@ -111,6 +118,10 @@ AudioDecoderConfig IPCDemuxerStream::audio_decoder_config() {
       GuessChannelLayout(platform_audio_config.channel_count),
       platform_audio_config.samples_per_second, EmptyExtraData(), Unencrypted(),
       base::TimeDelta(), 0);
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Created AudioDecoderConfig with partially HARDCODED values :"
+          << Loggable(audio_config);
 
   return audio_config;
 }
@@ -123,6 +134,8 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
       ipc_media_pipeline_host_->video_config();
   DCHECK(platform_video_config.is_valid());
 
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Creating VideoDecoderConfig : kCodecH264 with HARDCODED values";
   // This demuxer stream is different from "normal" demuxers in that it outputs
   // decoded data.  To fit into existing media pipeline we hard code some
   // information, which is normally read from the data stream.
@@ -136,6 +149,11 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
           reinterpret_cast<const uint8_t*>(&platform_video_config.planes)
               + sizeof(platform_video_config.planes)),
       Unencrypted());
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " VideoCodecProfile : " << GetProfileName(video_config.profile())
+          << " VideoPixelFormat : " << VideoPixelFormatToString(video_config.format())
+          << " ColorSpace : " << video_config.color_space();
 
   return video_config;
 }

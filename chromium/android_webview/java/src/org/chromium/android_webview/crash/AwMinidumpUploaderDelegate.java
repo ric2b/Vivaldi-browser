@@ -14,6 +14,7 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.components.minidump_uploader.CrashFileManager;
 import org.chromium.components.minidump_uploader.MinidumpUploaderDelegate;
 import org.chromium.components.minidump_uploader.util.CrashReportingPermissionManager;
 import org.chromium.components.minidump_uploader.util.NetworkPermissionUtil;
@@ -37,7 +38,7 @@ public class AwMinidumpUploaderDelegate implements MinidumpUploaderDelegate {
 
     @Override
     public File getCrashParentDir() {
-        return CrashReceiverService.getOrCreateWebViewCrashDir();
+        return CrashReceiverService.getWebViewCrashDir();
     }
 
     @Override
@@ -76,14 +77,13 @@ public class AwMinidumpUploaderDelegate implements MinidumpUploaderDelegate {
 
     @Override
     public void prepareToUploadMinidumps(final Runnable startUploads) {
-        PlatformServiceBridge.getOrCreateInstance().queryMetricsSetting(
-                new ValueCallback<Boolean>() {
-                    public void onReceiveValue(Boolean enabled) {
-                        ThreadUtils.assertOnUiThread();
-                        mPermittedByUser = enabled;
-                        startUploads.run();
-                    }
-                });
+        PlatformServiceBridge.getInstance().queryMetricsSetting(new ValueCallback<Boolean>() {
+            public void onReceiveValue(Boolean enabled) {
+                ThreadUtils.assertOnUiThread();
+                mPermittedByUser = enabled;
+                startUploads.run();
+            }
+        });
     }
 
     @Override
@@ -91,4 +91,12 @@ public class AwMinidumpUploaderDelegate implements MinidumpUploaderDelegate {
 
     @Override
     public void recordUploadFailure(File minidump) {}
+
+    @Override
+    public void migrateMinidumpFilenamesIfNeeded(CrashFileManager crashFileManager) {
+        File[] minidumpFilesUsingOldNamingScheme = crashFileManager.getMinidumpsSansLogcat();
+        for (File minidump : minidumpFilesUsingOldNamingScheme) {
+            CrashFileManager.trySetReadyForUpload(minidump);
+        }
+    }
 }

@@ -116,6 +116,8 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
 
   FrameView* GetFrameView() const { return frame_view_; }
 
+  void UpdateAfterLayout() override;
+
   // See comments for the equivalent method on LayoutObject.
   bool MapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor,
                                       LayoutRect&,
@@ -139,9 +141,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
 
   void InvalidatePaintForViewAndCompositedLayers();
 
-  PaintInvalidationReason InvalidatePaintIfNeeded(
-      const PaintInvalidationState&) override;
-  PaintInvalidationReason InvalidatePaintIfNeeded(
+  PaintInvalidationReason InvalidatePaint(
       const PaintInvalidatorContext&) const override;
 
   void Paint(const PaintInfo&, const LayoutPoint&) const override;
@@ -149,9 +149,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
                                     const LayoutPoint&) const override;
 
   void ClearSelection();
-  bool HasPendingSelection() const;
   void CommitPendingSelection();
-  void SelectionStartEnd(int& start_pos, int& end_pos);
 
   void AbsoluteRects(Vector<IntRect>&,
                      const LayoutPoint& accumulated_offset) const override;
@@ -163,6 +161,9 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
       const LayoutPoint& location,
       OverlayScrollbarClipBehavior =
           kIgnorePlatformOverlayScrollbarSize) const override;
+
+  void CalculateScrollbarModes(ScrollbarMode& h_mode,
+                               ScrollbarMode& v_mode) const;
 
   LayoutState* GetLayoutState() const { return layout_state_; }
 

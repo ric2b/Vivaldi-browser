@@ -32,22 +32,16 @@ class DialogContents : public views::DialogDelegateView {
   DialogContents() {}
   ~DialogContents() override {}
 
-  void set_preferred_size(const gfx::Size& preferred_size) {
-    preferred_size_ = preferred_size;
-  }
-
   void set_modal_type(ui::ModalType modal_type) { modal_type_ = modal_type; }
 
   // DialogDelegateView:
   views::View* GetContentsView() override { return this; }
-  gfx::Size GetPreferredSize() const override { return preferred_size_; }
   gfx::Size GetMinimumSize() const override { return gfx::Size(); }
 
   // WidgetDelegate:
   ui::ModalType GetModalType() const override { return modal_type_; }
 
  private:
-  gfx::Size preferred_size_;
   ui::ModalType modal_type_ = ui::MODAL_TYPE_NONE;
 
   DISALLOW_COPY_AND_ASSIGN(DialogContents);
@@ -123,7 +117,7 @@ class ConstrainedWindowViewsTest : public views::ViewsTestBase {
     // contents.
     gfx::Size preferred_size = dialog()->GetRootView()->GetPreferredSize();
     preferred_size.Enlarge(500, 500);
-    contents()->set_preferred_size(preferred_size);
+    contents()->SetPreferredSize(preferred_size);
   }
 
   void TearDown() override {
@@ -161,7 +155,7 @@ TEST_F(ConstrainedWindowViewsTest, GrowModalDialogSize) {
   gfx::Size preferred_size = contents()->GetPreferredSize();
   expected_size.Enlarge(50, 50);
   preferred_size.Enlarge(50, 50);
-  contents()->set_preferred_size(preferred_size);
+  contents()->SetPreferredSize(preferred_size);
   UpdateWidgetModalDialogPosition(dialog(), dialog_host());
   EXPECT_EQ(expected_size.ToString(), GetDialogSize().ToString());
 }
@@ -174,7 +168,7 @@ TEST_F(ConstrainedWindowViewsTest, ShrinkModalDialogSize) {
   gfx::Size preferred_size = contents()->GetPreferredSize();
   expected_size.Enlarge(-50, -50);
   preferred_size.Enlarge(-50, -50);
-  contents()->set_preferred_size(preferred_size);
+  contents()->SetPreferredSize(preferred_size);
   UpdateWidgetModalDialogPosition(dialog(), dialog_host());
   EXPECT_EQ(expected_size.ToString(), GetDialogSize().ToString());
 }
@@ -236,7 +230,7 @@ TEST_F(ConstrainedWindowViewsTest, NullModalParent) {
 // screen.
 TEST_F(ConstrainedWindowViewsTest, ClampDialogToNearestDisplay) {
   // Make sure the dialog will fit fully on the display
-  contents()->set_preferred_size(gfx::Size(200, 100));
+  contents()->SetPreferredSize(gfx::Size(200, 100));
 
   // First, make sure the host and dialog are sized and positioned.
   UpdateWebContentsModalDialogPosition(dialog(), dialog_host());

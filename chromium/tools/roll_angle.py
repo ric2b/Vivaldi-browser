@@ -30,12 +30,6 @@ extra_cq_trybots = [
     "buildernames": ["android_optional_gpu_tests_rel"]
   }
 ]
-extra_fyi_trybots = [
-  {
-    "mastername": "master.tryserver.chromium.win",
-    "buildernames": ["win_clang_dbg"]
-  }
-]
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 SRC_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, os.pardir))
@@ -87,7 +81,6 @@ def _ParseDepsDict(deps_content):
   local_scope = {}
   var = GClientKeywords.VarImpl({}, local_scope)
   global_scope = {
-    'From': GClientKeywords.FromImpl,
     'Var': var.Lookup,
     'deps_os': {},
   }
@@ -311,16 +304,6 @@ class AutoRoller(object):
       # Kick off tryjobs.
       base_try_cmd = ['git', 'cl', 'try']
       self._RunCommand(base_try_cmd)
-
-      if extra_cq_trybots:
-        # Run additional tryjobs.
-        # TODO(kbr): this should not be necessary -- the
-        # CQ_INCLUDE_TRYBOTS directive above should handle it.
-        # http://crbug.com/585237
-        self._TriggerExtraTrybots(extra_cq_trybots)
-
-      if extra_fyi_trybots:
-        self._TriggerExtraTrybots(extra_fyi_trybots)
 
       # Mark the CL to be committed if requested
       if should_commit:

@@ -35,21 +35,27 @@ class MockMediaDevicesDispatcherHost
  public:
   MockMediaDevicesDispatcherHost() : binding_(this) {}
 
-  MOCK_METHOD5(EnumerateDevices,
-               void(bool request_audio_input,
-                    bool request_video_input,
-                    bool request_audio_output,
-                    const url::Origin& security_origin,
-                    const EnumerateDevicesCallback& callback));
-  MOCK_METHOD3(SubscribeDeviceChangeNotifications,
-               void(MediaDeviceType type,
-                    uint32_t subscription_id,
-                    const url::Origin& security_origin));
+  MOCK_METHOD2(SubscribeDeviceChangeNotifications,
+               void(MediaDeviceType type, uint32_t subscription_id));
   MOCK_METHOD2(UnsubscribeDeviceChangeNotifications,
                void(MediaDeviceType type, uint32_t subscription_id));
-  MOCK_METHOD2(GetVideoInputCapabilities,
-               void(const url::Origin& security_origin,
-                    const GetVideoInputCapabilitiesCallback& client_callback));
+
+  void EnumerateDevices(bool request_audio_input,
+                        bool request_video_input,
+                        bool request_audio_output,
+                        EnumerateDevicesCallback) override {
+    NOTREACHED();
+  }
+
+  void GetVideoInputCapabilities(
+      GetVideoInputCapabilitiesCallback client_callback) override {
+    NOTREACHED();
+  }
+
+  void GetAudioInputCapabilities(
+      GetAudioInputCapabilitiesCallback client_callback) override {
+    NOTREACHED();
+  }
 
   ::mojom::MediaDevicesDispatcherHostPtr CreateInterfacePtrAndBind() {
     return binding_.CreateInterfacePtrAndBind();
@@ -85,20 +91,17 @@ TEST_F(MediaDevicesEventDispatcherTest, SubscribeUnsubscribeSingleType) {
     MediaDeviceType type = static_cast<MediaDeviceType>(i);
     MediaDeviceInfoArray device_infos;
     MockMediaDevicesEventSubscriber subscriber1, subscriber2;
-    url::Origin security_origin(GURL("http://localhost"));
     EXPECT_CALL(media_devices_dispatcher_,
-                SubscribeDeviceChangeNotifications(type, _, security_origin))
+                SubscribeDeviceChangeNotifications(type, _))
         .Times(2);
     auto subscription_id1 =
         event_dispatcher_->SubscribeDeviceChangeNotifications(
-            type, security_origin,
-            base::Bind(&MockMediaDevicesEventSubscriber::EventDispatched,
-                       base::Unretained(&subscriber1)));
+            type, base::Bind(&MockMediaDevicesEventSubscriber::EventDispatched,
+                             base::Unretained(&subscriber1)));
     auto subscription_id2 =
         event_dispatcher_->SubscribeDeviceChangeNotifications(
-            type, security_origin,
-            base::Bind(&MockMediaDevicesEventSubscriber::EventDispatched,
-                       base::Unretained(&subscriber2)));
+            type, base::Bind(&MockMediaDevicesEventSubscriber::EventDispatched,
+                             base::Unretained(&subscriber2)));
 
     // Simulate a device change.
     EXPECT_CALL(subscriber1, EventDispatched(type, _));
@@ -130,27 +133,21 @@ TEST_F(MediaDevicesEventDispatcherTest, SubscribeUnsubscribeSingleType) {
 TEST_F(MediaDevicesEventDispatcherTest, SubscribeUnsubscribeAllTypes) {
   MediaDeviceInfoArray device_infos;
   MockMediaDevicesEventSubscriber subscriber1, subscriber2;
-  url::Origin security_origin(GURL("http://localhost"));
-  EXPECT_CALL(media_devices_dispatcher_,
-              SubscribeDeviceChangeNotifications(MEDIA_DEVICE_TYPE_AUDIO_INPUT,
-                                                 _, security_origin))
+  EXPECT_CALL(media_devices_dispatcher_, SubscribeDeviceChangeNotifications(
+                                             MEDIA_DEVICE_TYPE_AUDIO_INPUT, _))
       .Times(2);
-  EXPECT_CALL(media_devices_dispatcher_,
-              SubscribeDeviceChangeNotifications(MEDIA_DEVICE_TYPE_VIDEO_INPUT,
-                                                 _, security_origin))
+  EXPECT_CALL(media_devices_dispatcher_, SubscribeDeviceChangeNotifications(
+                                             MEDIA_DEVICE_TYPE_VIDEO_INPUT, _))
       .Times(2);
-  EXPECT_CALL(media_devices_dispatcher_,
-              SubscribeDeviceChangeNotifications(MEDIA_DEVICE_TYPE_AUDIO_OUTPUT,
-                                                 _, security_origin))
+  EXPECT_CALL(media_devices_dispatcher_, SubscribeDeviceChangeNotifications(
+                                             MEDIA_DEVICE_TYPE_AUDIO_OUTPUT, _))
       .Times(2);
   auto subscription_list_1 =
       event_dispatcher_->SubscribeDeviceChangeNotifications(
-          security_origin,
           base::Bind(&MockMediaDevicesEventSubscriber::EventDispatched,
                      base::Unretained(&subscriber1)));
   auto subscription_list_2 =
       event_dispatcher_->SubscribeDeviceChangeNotifications(
-          security_origin,
           base::Bind(&MockMediaDevicesEventSubscriber::EventDispatched,
                      base::Unretained(&subscriber2)));
 

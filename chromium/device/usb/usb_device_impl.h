@@ -19,7 +19,6 @@
 #include "build/build_config.h"
 #include "device/usb/usb_descriptors.h"
 #include "device/usb/usb_device.h"
-#include "device/usb/webusb_descriptors.h"
 
 struct libusb_device;
 struct libusb_device_descriptor;
@@ -55,10 +54,6 @@ class UsbDeviceImpl : public UsbDevice {
   void set_serial_number(const base::string16& value) {
     serial_number_ = value;
   }
-  void set_webusb_allowed_origins(
-      std::unique_ptr<WebUsbAllowedOrigins> allowed_origins) {
-    webusb_allowed_origins_ = std::move(allowed_origins);
-  }
   void set_webusb_landing_page(const GURL& url) { webusb_landing_page_ = url; }
 
   PlatformUsbDevice platform_device() const { return platform_device_; }
@@ -70,8 +65,7 @@ class UsbDeviceImpl : public UsbDevice {
   // Called by UsbServiceImpl only;
   UsbDeviceImpl(scoped_refptr<UsbContext> context,
                 PlatformUsbDevice platform_device,
-                const libusb_device_descriptor& descriptor,
-                scoped_refptr<base::SequencedTaskRunner> blocking_task_runner);
+                const libusb_device_descriptor& descriptor);
 
   ~UsbDeviceImpl() override;
 
@@ -84,9 +78,13 @@ class UsbDeviceImpl : public UsbDevice {
 
  private:
   void GetAllConfigurations();
-  void OpenOnBlockingThread(const OpenCallback& callback);
+  void OpenOnBlockingThread(
+      const OpenCallback& callback,
+      scoped_refptr<base::TaskRunner> task_runner,
+      scoped_refptr<base::SequencedTaskRunner> blocking_task_runner);
   void Opened(PlatformUsbDeviceHandle platform_handle,
-              const OpenCallback& callback);
+              const OpenCallback& callback,
+              scoped_refptr<base::SequencedTaskRunner> blocking_task_runner);
 
   base::ThreadChecker thread_checker_;
   PlatformUsbDevice platform_device_;
@@ -94,9 +92,6 @@ class UsbDeviceImpl : public UsbDevice {
 
   // Retain the context so that it will not be released before UsbDevice.
   scoped_refptr<UsbContext> context_;
-
-  scoped_refptr<base::SequencedTaskRunner> task_runner_;
-  scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(UsbDeviceImpl);
 };

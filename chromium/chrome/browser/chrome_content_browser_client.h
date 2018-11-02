@@ -153,7 +153,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                       int render_process_id,
                       int render_frame_id,
                       const net::CookieOptions& options) override;
-  bool AllowSaveLocalState(content::ResourceContext* context) override;
   void AllowWorkerFileSystem(
       const GURL& url,
       content::ResourceContext* context,
@@ -164,11 +163,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const base::string16& name,
       content::ResourceContext* context,
       const std::vector<std::pair<int, int>>& render_frames) override;
-#if BUILDFLAG(ENABLE_WEBRTC)
-  bool AllowWebRTCIdentityCache(const GURL& url,
-                                const GURL& first_party_url,
-                                content::ResourceContext* context) override;
-#endif  // BUILDFLAG(ENABLE_WEBRTC)
   AllowWebBluetoothResult AllowWebBluetooth(
       content::BrowserContext* browser_context,
       const url::Origin& requesting_origin,
@@ -197,12 +191,12 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void SelectClientCertificate(
       content::WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
+      net::CertificateList client_certs,
       std::unique_ptr<content::ClientCertificateDelegate> delegate) override;
   content::MediaObserver* GetMediaObserver() override;
   content::PlatformNotificationService* GetPlatformNotificationService()
       override;
-  bool CanCreateWindow(int opener_render_process_id,
-                       int opener_render_frame_id,
+  bool CanCreateWindow(content::RenderFrameHost* opener,
                        const GURL& opener_url,
                        const GURL& opener_top_level_frame_url,
                        const GURL& source_origin,
@@ -214,7 +208,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                        const blink::mojom::WindowFeatures& features,
                        bool user_gesture,
                        bool opener_suppressed,
-                       content::ResourceContext* context,
                        bool* no_javascript_access) override;
   void ResourceDispatcherHostCreated() override;
   content::SpeechRecognitionManagerDelegate*
@@ -223,7 +216,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void OverrideWebkitPrefs(content::RenderViewHost* rvh,
                            content::WebPreferences* prefs) override;
   void BrowserURLHandlerCreated(content::BrowserURLHandler* handler) override;
-  void ClearCache(content::RenderFrameHost* rfh) override;
   void ClearSiteData(content::BrowserContext* browser_context,
                      const url::Origin& origin,
                      bool remove_cookies,
@@ -284,15 +276,20 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 #endif
   void ExposeInterfacesToRenderer(
       service_manager::BinderRegistry* registry,
+      content::AssociatedInterfaceRegistry* associated_registry,
       content::RenderProcessHost* render_process_host) override;
   void ExposeInterfacesToMediaService(
-      service_manager::InterfaceRegistry* registry,
+      service_manager::BinderRegistry* registry,
       content::RenderFrameHost* render_frame_host) override;
-  void RegisterRenderFrameMojoInterfaces(
-      service_manager::InterfaceRegistry* registry,
+  void ExposeInterfacesToFrame(
+      service_manager::BinderRegistry* registry,
       content::RenderFrameHost* render_frame_host) override;
+  bool BindAssociatedInterfaceRequestFromFrame(
+      content::RenderFrameHost* render_frame_host,
+      const std::string& interface_name,
+      mojo::ScopedInterfaceEndpointHandle* handle) override;
   void BindInterfaceRequest(
-      const service_manager::ServiceInfo& source_info,
+      const service_manager::BindSourceInfo& source_info,
       const std::string& interface_name,
       mojo::ScopedMessagePipeHandle* interface_pipe) override;
   void RegisterInProcessServices(StaticServiceMap* services) override;
@@ -320,6 +317,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   std::unique_ptr<content::MemoryCoordinatorDelegate>
   GetMemoryCoordinatorDelegate() override;
   ::rappor::RapporService* GetRapporService() override;
+  ::ukm::UkmRecorder* GetUkmRecorder() override;
 
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
   void CreateMediaRemoter(content::RenderFrameHost* render_frame_host,

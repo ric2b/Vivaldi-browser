@@ -36,6 +36,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/origin_util.h"
+#include "extensions/common/constants.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
@@ -43,6 +44,7 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
+#include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
@@ -134,6 +136,20 @@ void PermissionContextBase::RequestPermission(
   // TODO(raymes): Pass in the RenderFrameHost of the request here.
   PermissionResult result = GetPermissionStatus(
       nullptr /* render_frame_host */, requesting_origin, embedding_origin);
+
+  // NOTE(andre@vivaldi.com) : Adding an event for "Using permission" here to
+  // show current state of page. This is done in the |LocationBar| in |Browser|
+  // |Window|. Done this way because of the difference between permission
+  // handling in webviews and regular tabbed webcontents.
+  // PermissionRequestManager::PermissionRequestManager owns
+  extensions::VivaldiPrivateTabObserver* private_tab =
+      extensions::VivaldiPrivateTabObserver::FromWebContents(web_contents);
+  if (private_tab) {
+    private_tab->OnPermissionAccessed(
+        content_settings_type_, embedding_origin.spec(),
+        result.content_setting);
+  }
+  // Vivaldi-block-end
 
   if (result.content_setting == CONTENT_SETTING_ALLOW ||
       result.content_setting == CONTENT_SETTING_BLOCK) {
@@ -232,10 +248,22 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
                             PermissionStatusSource::KILL_SWITCH);
   }
 
-  if (IsRestrictedToSecureOrigins() &&
-      !content::IsOriginSecure(requesting_origin)) {
-    return PermissionResult(CONTENT_SETTING_BLOCK,
-                            PermissionStatusSource::UNSPECIFIED);
+  if (IsRestrictedToSecureOrigins()) {
+    if (!content::IsOriginSecure(requesting_origin)) {
+      return PermissionResult(CONTENT_SETTING_BLOCK,
+                              PermissionStatusSource::UNSPECIFIED);
+    }
+
+    // TODO(raymes): We should check the entire chain of embedders here whenever
+    // possible as this corresponds to the requirements of the secure contexts
+    // spec and matches what is implemented in blink. Right now we just check
+    // the top level and requesting origins. Note: chrome-extension:// origins
+    // are currently exempt from checking the embedder chain. crbug.com/530507.
+    if (!requesting_origin.SchemeIs(extensions::kExtensionScheme) &&
+        !content::IsOriginSecure(embedding_origin)) {
+      return PermissionResult(CONTENT_SETTING_BLOCK,
+                              PermissionStatusSource::UNSPECIFIED);
+    }
   }
 
   ContentSetting content_setting = GetPermissionStatusInternal(
@@ -534,7 +562,5 @@ void PermissionContextBase::UpdateContentSetting(
 
 ContentSettingsType PermissionContextBase::content_settings_storage_type()
     const {
-  if (content_settings_type_ == CONTENT_SETTINGS_TYPE_PUSH_MESSAGING)
-    return CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
-  return content_settings_type_;
+  return PermissionUtil::GetContentSettingsStorageType(content_settings_type_);
 }

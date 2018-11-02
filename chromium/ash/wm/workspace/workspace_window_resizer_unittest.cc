@@ -7,13 +7,12 @@
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screen_util.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/phantom_window_controller.h"
@@ -82,25 +81,25 @@ class WorkspaceWindowResizerTest : public test::AshTestBase {
     EXPECT_EQ(800, root_bounds.width());
     Shell::Get()->SetDisplayWorkAreaInsets(root, gfx::Insets());
     window_.reset(new aura::Window(&delegate_));
-    window_->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+    window_->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window_->Init(ui::LAYER_NOT_DRAWN);
     ParentWindowInPrimaryRootWindow(window_.get());
     window_->set_id(1);
 
     window2_.reset(new aura::Window(&delegate2_));
-    window2_->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+    window2_->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window2_->Init(ui::LAYER_NOT_DRAWN);
     ParentWindowInPrimaryRootWindow(window2_.get());
     window2_->set_id(2);
 
     window3_.reset(new aura::Window(&delegate3_));
-    window3_->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+    window3_->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window3_->Init(ui::LAYER_NOT_DRAWN);
     ParentWindowInPrimaryRootWindow(window3_.get());
     window3_->set_id(3);
 
     window4_.reset(new aura::Window(&delegate4_));
-    window4_->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+    window4_->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window4_->Init(ui::LAYER_NOT_DRAWN);
     ParentWindowInPrimaryRootWindow(window4_.get());
     window4_->set_id(4);
@@ -137,8 +136,7 @@ class WorkspaceWindowResizerTest : public test::AshTestBase {
                                       const gfx::Point& point_in_parent,
                                       int window_component) {
     WindowResizer* resizer =
-        CreateWindowResizer(WmWindow::Get(window), point_in_parent,
-                            window_component,
+        CreateWindowResizer(window, point_in_parent, window_component,
                             aura::client::WINDOW_MOVE_SOURCE_MOUSE)
             .release();
     workspace_resizer_ = WorkspaceWindowResizer::GetInstanceForTest();
@@ -152,8 +150,7 @@ class WorkspaceWindowResizerTest : public test::AshTestBase {
       const std::vector<aura::Window*>& attached_windows) {
     wm::WindowState* window_state = wm::GetWindowState(window);
     window_state->CreateDragDetails(point_in_parent, window_component, source);
-    return WorkspaceWindowResizer::Create(
-        window_state, WmWindow::FromAuraWindows(attached_windows));
+    return WorkspaceWindowResizer::Create(window_state, attached_windows);
   }
 
   PhantomWindowController* snap_phantom_window_controller() const {
@@ -550,8 +547,7 @@ TEST_F(WorkspaceWindowResizerTest, Edge) {
 
   {
     gfx::Rect expected_bounds_in_parent(
-        wm::GetDefaultLeftSnappedWindowBoundsInParent(
-            WmWindow::Get(window_.get())));
+        wm::GetDefaultLeftSnappedWindowBoundsInParent(window_.get()));
 
     std::unique_ptr<WindowResizer> resizer(
         CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
@@ -568,8 +564,7 @@ TEST_F(WorkspaceWindowResizerTest, Edge) {
   // Try the same with the right side.
   {
     gfx::Rect expected_bounds_in_parent(
-        wm::GetDefaultRightSnappedWindowBoundsInParent(
-            WmWindow::Get(window_.get())));
+        wm::GetDefaultRightSnappedWindowBoundsInParent(window_.get()));
 
     std::unique_ptr<WindowResizer> resizer(
         CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
@@ -1025,19 +1020,11 @@ TEST_F(WorkspaceWindowResizerTest, SnapToEdge) {
   resizer->Drag(CalculateDragPoint(*resizer, distance_to_right + 33, 0), 0);
   EXPECT_EQ("513,112 320x160", window_->bounds().ToString());
 
-  int auto_hidden_shelf_height = GetShelfConstant(SHELF_INSETS_FOR_AUTO_HIDE);
-
   // And the bottom should snap too.
-  resizer->Drag(
-      CalculateDragPoint(*resizer, 0,
-                         distance_to_bottom - auto_hidden_shelf_height - 7),
-      0);
+  resizer->Drag(CalculateDragPoint(*resizer, 0, distance_to_bottom - 7), 0);
   EXPECT_EQ(gfx::Rect(96, 440, 320, 160).ToString(),
             window_->bounds().ToString());
-  resizer->Drag(
-      CalculateDragPoint(*resizer, 0,
-                         distance_to_bottom - auto_hidden_shelf_height + 15),
-      0);
+  resizer->Drag(CalculateDragPoint(*resizer, 0, distance_to_bottom + 15), 0);
   EXPECT_EQ(gfx::Rect(96, 440, 320, 160).ToString(),
             window_->bounds().ToString());
   resizer->Drag(CalculateDragPoint(*resizer, 0, distance_to_bottom - 2 + 32),
@@ -1054,16 +1041,14 @@ TEST_F(WorkspaceWindowResizerTest, SnapToEdge) {
   EXPECT_EQ("96,0 320x160", window_->bounds().ToString());
 
   // And bottom/left should snap too.
-  resizer->Drag(
-      CalculateDragPoint(*resizer, 7 - distance_to_left,
-                         distance_to_bottom - auto_hidden_shelf_height - 7),
-      0);
+  resizer->Drag(CalculateDragPoint(*resizer, 7 - distance_to_left,
+                                   distance_to_bottom - 7),
+                0);
   EXPECT_EQ(gfx::Rect(0, 440, 320, 160).ToString(),
             window_->bounds().ToString());
-  resizer->Drag(
-      CalculateDragPoint(*resizer, -15 - distance_to_left,
-                         distance_to_bottom - auto_hidden_shelf_height + 15),
-      0);
+  resizer->Drag(CalculateDragPoint(*resizer, -15 - distance_to_left,
+                                   distance_to_bottom + 15),
+                0);
   EXPECT_EQ(gfx::Rect(0, 440, 320, 160).ToString(),
             window_->bounds().ToString());
   // should move past snap points.

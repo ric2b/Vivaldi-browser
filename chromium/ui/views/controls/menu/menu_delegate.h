@@ -120,7 +120,7 @@ class VIEWS_EXPORT MenuDelegate {
   virtual void ExecuteCommand(int id, int mouse_event_flags);
 
   // Returns true if ExecuteCommand() should be invoked while leaving the
-  // menu open. Default implementation returns true.
+  // menu open. Default implementation returns false.
   virtual bool ShouldExecuteCommandWithoutClosingMenu(int id,
                                                       const ui::Event& e);
 
@@ -195,7 +195,7 @@ class VIEWS_EXPORT MenuDelegate {
 
   // Notification the menu has closed. This will not be called if MenuRunner is
   // deleted during calls to ExecuteCommand().
-  virtual void OnMenuClosed(MenuItemView* menu, MenuRunner::RunResult result) {}
+  virtual void OnMenuClosed(MenuItemView* menu) {}
 
   // If the user drags the mouse outside the bounds of the menu the delegate
   // is queried for a sibling menu to show. If this returns non-null the

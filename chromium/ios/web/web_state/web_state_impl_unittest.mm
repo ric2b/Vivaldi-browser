@@ -22,11 +22,11 @@
 #include "ios/web/public/test/web_test.h"
 #import "ios/web/public/web_state/context_menu_params.h"
 #include "ios/web/public/web_state/global_web_state_observer.h"
-#include "ios/web/public/web_state/navigation_context.h"
 #import "ios/web/public/web_state/web_state_delegate.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #import "ios/web/public/web_state/web_state_policy_decider.h"
 #include "ios/web/web_state/global_web_state_event_tracker.h"
+#import "ios/web/web_state/navigation_context_impl.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
@@ -346,14 +346,38 @@ TEST_F(WebStateImplTest, ObserverTest) {
   ASSERT_TRUE(observer->render_process_gone_info());
   EXPECT_EQ(web_state_.get(), observer->render_process_gone_info()->web_state);
 
-  // Test that ProvisionalNavigationStarted() is called.
-  ASSERT_FALSE(observer->start_provisional_navigation_info());
+  // Test that DidFinishNavigation() is called.
+  ASSERT_FALSE(observer->did_finish_navigation_info());
   const GURL url("http://test");
-  web_state_->OnProvisionalNavigationStarted(url);
-  ASSERT_TRUE(observer->start_provisional_navigation_info());
+  std::unique_ptr<web::NavigationContext> context =
+      NavigationContextImpl::CreateNavigationContext(
+          web_state_.get(), url,
+          ui::PageTransition::PAGE_TRANSITION_AUTO_BOOKMARK);
+  web_state_->OnNavigationFinished(context.get());
+  ASSERT_TRUE(observer->did_finish_navigation_info());
   EXPECT_EQ(web_state_.get(),
-            observer->start_provisional_navigation_info()->web_state);
-  EXPECT_EQ(url, observer->start_provisional_navigation_info()->url);
+            observer->did_finish_navigation_info()->web_state);
+  NavigationContext* actual_context =
+      observer->did_finish_navigation_info()->context.get();
+  EXPECT_EQ(context->GetUrl(), actual_context->GetUrl());
+  EXPECT_TRUE(PageTransitionTypeIncludingQualifiersIs(
+      context->GetPageTransition(), actual_context->GetPageTransition()));
+  EXPECT_FALSE(actual_context->IsSameDocument());
+  EXPECT_FALSE(actual_context->GetError());
+  EXPECT_FALSE(actual_context->GetResponseHeaders());
+
+  // Test that DidStartNavigation() is called.
+  ASSERT_FALSE(observer->did_start_navigation_info());
+  web_state_->OnNavigationStarted(context.get());
+  ASSERT_TRUE(observer->did_start_navigation_info());
+  EXPECT_EQ(web_state_.get(), observer->did_start_navigation_info()->web_state);
+  actual_context = observer->did_start_navigation_info()->context.get();
+  EXPECT_EQ(context->GetUrl(), actual_context->GetUrl());
+  EXPECT_TRUE(PageTransitionTypeIncludingQualifiersIs(
+      context->GetPageTransition(), actual_context->GetPageTransition()));
+  EXPECT_FALSE(actual_context->IsSameDocument());
+  EXPECT_FALSE(actual_context->GetError());
+  EXPECT_FALSE(actual_context->GetResponseHeaders());
 
   // Test that NavigationItemsPruned() is called.
   ASSERT_FALSE(observer->navigation_items_pruned_info());
@@ -393,36 +417,8 @@ TEST_F(WebStateImplTest, ObserverTest) {
   EXPECT_EQ(web_state_.get(), observer->load_page_info()->web_state);
   EXPECT_TRUE(observer->load_page_info()->success);
 
-  // Test that DidFinishNavigation() is called for same document navigations.
-  ASSERT_FALSE(observer->did_finish_navigation_info());
-  web_state_->OnSameDocumentNavigation(url);
-  ASSERT_TRUE(observer->did_finish_navigation_info());
-  EXPECT_EQ(web_state_.get(),
-            observer->did_finish_navigation_info()->web_state);
-  NavigationContext* context =
-      observer->did_finish_navigation_info()->context.get();
-  ASSERT_TRUE(context);
-  EXPECT_EQ(url, context->GetUrl());
-  EXPECT_TRUE(context->IsSameDocument());
-  EXPECT_FALSE(context->IsErrorPage());
-  EXPECT_FALSE(context->GetResponseHeaders());
-
-  // Reset the observer and test that DidFinishNavigation() is called
-  // for error navigations.
-  observer = base::MakeUnique<TestWebStateObserver>(web_state_.get());
-  ASSERT_FALSE(observer->did_finish_navigation_info());
-  web_state_->OnErrorPageNavigation(url);
-  ASSERT_TRUE(observer->did_finish_navigation_info());
-  EXPECT_EQ(web_state_.get(),
-            observer->did_finish_navigation_info()->web_state);
-  context = observer->did_finish_navigation_info()->context.get();
-  ASSERT_TRUE(context);
-  EXPECT_EQ(url, context->GetUrl());
-  EXPECT_FALSE(context->IsSameDocument());
-  EXPECT_TRUE(context->IsErrorPage());
-  EXPECT_FALSE(context->GetResponseHeaders());
-
   // Test that OnTitleChanged() is called.
+  observer = base::MakeUnique<TestWebStateObserver>(web_state_.get());
   ASSERT_FALSE(observer->title_was_set_info());
   web_state_->OnTitleChanged();
   ASSERT_TRUE(observer->title_was_set_info());

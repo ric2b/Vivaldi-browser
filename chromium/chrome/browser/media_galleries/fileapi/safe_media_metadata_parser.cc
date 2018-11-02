@@ -20,7 +20,8 @@ class SafeMediaMetadataParser::MediaDataSourceImpl
  public:
   MediaDataSourceImpl(SafeMediaMetadataParser* owner,
                       extensions::mojom::MediaDataSourcePtr* interface)
-      : binding_(this, interface), safe_media_metadata_parser_(owner) {
+      : binding_(this, mojo::MakeRequest(interface)),
+        safe_media_metadata_parser_(owner) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   }
 
@@ -29,8 +30,9 @@ class SafeMediaMetadataParser::MediaDataSourceImpl
  private:
   void ReadBlob(int64_t position,
                 int64_t length,
-                const ReadBlobCallback& callback) override {
-    safe_media_metadata_parser_->StartBlobRequest(callback, position, length);
+                ReadBlobCallback callback) override {
+    safe_media_metadata_parser_->StartBlobRequest(std::move(callback), position,
+                                                  length);
   }
 
   mojo::Binding<extensions::mojom::MediaDataSource> binding_;
@@ -58,7 +60,8 @@ void SafeMediaMetadataParser::Start(const DoneCallback& callback) {
 
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&SafeMediaMetadataParser::StartOnIOThread, this, callback));
+      base::BindOnce(&SafeMediaMetadataParser::StartOnIOThread, this,
+                     callback));
 }
 
 SafeMediaMetadataParser::~SafeMediaMetadataParser() = default;
@@ -99,8 +102,8 @@ void SafeMediaMetadataParser::ParseMediaMetadataFailed() {
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(callback_, false, base::Passed(&metadata_dictionary),
-                 base::Passed(&attached_images)));
+      base::BindOnce(callback_, false, base::Passed(&metadata_dictionary),
+                     base::Passed(&attached_images)));
 }
 
 void SafeMediaMetadataParser::ParseMediaMetadataDone(
@@ -119,24 +122,25 @@ void SafeMediaMetadataParser::ParseMediaMetadataDone(
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(callback_, parse_success, base::Passed(&metadata_dictionary),
-                 base::Passed(&attached_images_copy)));
+      base::BindOnce(callback_, parse_success,
+                     base::Passed(&metadata_dictionary),
+                     base::Passed(&attached_images_copy)));
 }
 
 void SafeMediaMetadataParser::StartBlobRequest(
-    const extensions::mojom::MediaDataSource::ReadBlobCallback& callback,
+    extensions::mojom::MediaDataSource::ReadBlobCallback callback,
     int64_t position,
     int64_t length) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&SafeMediaMetadataParser::StartBlobReaderOnUIThread, this,
-                 callback, position, length));
+      base::BindOnce(&SafeMediaMetadataParser::StartBlobReaderOnUIThread, this,
+                     std::move(callback), position, length));
 }
 
 void SafeMediaMetadataParser::StartBlobReaderOnUIThread(
-    const extensions::mojom::MediaDataSource::ReadBlobCallback& callback,
+    extensions::mojom::MediaDataSource::ReadBlobCallback callback,
     int64_t position,
     int64_t length) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -144,30 +148,30 @@ void SafeMediaMetadataParser::StartBlobReaderOnUIThread(
   BlobReader* reader = new BlobReader(  // BlobReader is self-deleting.
       profile_, blob_uuid_,
       base::Bind(&SafeMediaMetadataParser::BlobReaderDoneOnUIThread, this,
-                 callback));
+                 base::Passed(&callback)));
   reader->SetByteRange(position, length);
   reader->Start();
 }
 
 void SafeMediaMetadataParser::BlobReaderDoneOnUIThread(
-    const extensions::mojom::MediaDataSource::ReadBlobCallback& callback,
+    extensions::mojom::MediaDataSource::ReadBlobCallback callback,
     std::unique_ptr<std::string> data,
     int64_t /* blob_total_size */) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&SafeMediaMetadataParser::FinishBlobRequest, this, callback,
-                 base::Passed(std::move(data))));
+      base::BindOnce(&SafeMediaMetadataParser::FinishBlobRequest, this,
+                     std::move(callback), std::move(data)));
 }
 
 void SafeMediaMetadataParser::FinishBlobRequest(
-    const extensions::mojom::MediaDataSource::ReadBlobCallback& callback,
+    extensions::mojom::MediaDataSource::ReadBlobCallback callback,
     std::unique_ptr<std::string> data) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   if (utility_process_mojo_client_)
-    callback.Run(std::vector<uint8_t>(data->begin(), data->end()));
+    std::move(callback).Run(std::vector<uint8_t>(data->begin(), data->end()));
 }
 
 }  // namespace metadata

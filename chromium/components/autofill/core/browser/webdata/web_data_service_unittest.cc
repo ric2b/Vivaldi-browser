@@ -12,12 +12,14 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -92,7 +94,10 @@ class MockAutofillWebDataServiceObserver
 
 class WebDataServiceTest : public testing::Test {
  public:
-  WebDataServiceTest() : db_thread_("DBThread") {}
+  WebDataServiceTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI),
+        db_thread_("DBThread") {}
 
  protected:
   void SetUp() override {
@@ -134,7 +139,7 @@ class WebDataServiceTest : public testing::Test {
     done.Wait();
   }
 
-  base::MessageLoopForUI message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::Thread db_thread_;
   base::FilePath profile_dir_;
   scoped_refptr<AutofillWebDataService> wds_;

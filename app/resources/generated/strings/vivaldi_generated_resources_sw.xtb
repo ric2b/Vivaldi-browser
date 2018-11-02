@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">Kiendelezi hiki kimebadilisha ukurasa unaoonyeshwa unapobofya kitufe cha Mwanzo.</translation>
 <translation id="1588438908519853928">Ya kawaida</translation>
 <translation id="1616206807336925449">Kiendelezi hiki hakihitaji ruhusa maalum.</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1635033183663317347">Kiendelezi kilisakinishwa na mlezi wako.</translation>
 <translation id="1723824996674794290">&amp;Dirisha jipya</translation>
 <translation id="1729533290416704613">Pia inadhibiti ukurasa unaoonyeshwa unapotafuta kutoka Sanduku Kuu.</translation>
-<translation id="1789575671122666129">Ibukizi</translation>
 <translation id="1850508293116537636">Zungusha kisaa</translation>
 <translation id="1859234291848436338">Mwelekeo wa Maandishi</translation>
 <translation id="1901303067676059328">Chagua &amp;yote</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">Ficha programu-jalizi hii</translation>
 <translation id="2087822576218954668">Chapisha: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">Sasisha programu-jalizi</translation>
-<translation id="2147827593068025794">Usawazishaji wa Chini Chini</translation>
 <translation id="215753907730220065">Ondoka kwenye Skrini Kamili</translation>
 <translation id="2177950615300672361">Kichupo Fiche: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">Gundua (chaguo-msingi)</translation>
 <translation id="219008588003277019">Sehemu Asili ya Seva-teja: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Bandika kama matini makavu</translation>
 <translation id="2282146716419988068">Mchakato wa GPU</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">Programu nyingine kwenye kompyuta yako iliongeza kiendelezi ambacho kinaweza kubadilisha jinsi Vivaldi inavyofanya kazi.</translation>
 <translation id="2445081178310039857">Saraka la shina la kiendelezi linahitajika.</translation>
 <translation id="2470702053775288986">Viendelezi visivyotumika vimezimwa</translation>
-<translation id="2482878487686419369">Arifa</translation>
 <translation id="2501797496290880632">Charaza mkato</translation>
-<translation id="2509857212037838238">Sakinisha <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">Hifadhi iliyobadilishwa</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Washa tena</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">Mishikilio ya MTUMIAJI</translation>
 <translation id="3222066309010235055">Kionyeshi awali: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Maikrofoni</translation>
 <translation id="3241680850019875542">Chagua saraka msingi ya kiendelezi ya kuweka kwenye furushi. Kusasisha kiendelezi, chagua pia ufunguo wa kibinafsi wa kutumia tena.</translation>
 <translation id="3280237271814976245">Hifadhi k&amp;ama...</translation>
 <translation id="3288047731229977326">Viendelezi vinavyoendeshwa katika hali ya msanidi programu vinaweza vikadhuru kompyuta yako. Kama wewe si msanidi programu, unapaswa kuzima viendelezi hivi vinavyoendeshwa katika hali ya msanidi programu ili ukae salama.</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">Nakili anwani ya picha</translation>
 <translation id="335985608243443814">Vinjari...</translation>
 <translation id="3378572629723696641">Huenda kiendelezi hiki kimepata virusi.</translation>
-<translation id="3427092606871434483">Ruhusu (chaguo-msingi)</translation>
 <translation id="3435896845095436175">Washa</translation>
 <translation id="345693547134384690">Fungua p&amp;icha katika kichupo kipya</translation>
 <translation id="3467267818798281173">Uliza Google ikupe mapendekezo</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">Fungua kiungo katika dirisha fiche</translation>
 <translation id="3678156199662914018">Kiendelezi: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">Inapakia...</translation>
-<translation id="3789841737615482174">Sakinisha</translation>
 <translation id="3798449238516105146">Toleo</translation>
 <translation id="3866249974567520381">Maelezo</translation>
 <translation id="3905761538810670789">Karabati programu</translation>
@@ -101,13 +92,11 @@
 <translation id="4096508467498758490">Zima viendelezi vya hali ya msanidi programu</translation>
 <translation id="4100839878934973028">Programu nyingine kwenye kompyuta yako iliongeza programu ambayo inaweza kubadilisha jinsi Vivaldi inavyofanya kazi.</translation>
 <translation id="4130207949184424187">Kiendelezi hiki kimebadilisha ukurasa unaoonyeshwa unapotafuta kutoka Sanduku Kuu.</translation>
-<translation id="4165986682804962316">Mipangilio ya tovuti</translation>
 <translation id="4176463684765177261">Kimelemazwa</translation>
 <translation id="4200983522494130825">&amp;Kichupo kipya</translation>
 <translation id="420665587194630159">(Kiendelezi hiki kinadhibitiwa na hakiwezi kuondolewa au kulemazwa.)</translation>
 <translation id="4240511609794012987">Kumbukumbu inayoshirikiwa</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K live)</translation>
-<translation id="4312866146174492540">Zuia (chaguo-msingi)</translation>
 <translation id="4384652540891215547">Amilisha kiendelezi</translation>
 <translation id="4394049700291259645">Zima</translation>
 <translation id="4423482519432579560">Kukagua maendelezo</translation>
@@ -120,7 +109,6 @@
 <translation id="4677772697204437347">Hifadhi ya GPU</translation>
 <translation id="4711638718396952945">Rejesha mipangilio</translation>
 <translation id="4839303808932127586">Hifadhi video kama...</translation>
-<translation id="4851858059374029925">Ungependa kusakinisha <ph name="PLUGIN_NAME" />? Sakinisha programu-jalizi unazoziamini pekee.</translation>
 <translation id="488785315393301722">Onyesha Maelezo</translation>
 <translation id="4911714727432509308">Hakuna viendelezi vilivyo na njia mikato za kibodi.</translation>
 <translation id="4927301649992043040">Fungasha Kiendelezi</translation>
@@ -151,12 +139,10 @@
 <translation id="5646376287012673985">Mahali</translation>
 <translation id="5715711091495208045">Dalali wa Programu-jalizi: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">&amp;Hifadhi audio kama</translation>
-<translation id="5778550464785688721">Udhibiti kamili wa vifaa vya MIDI</translation>
 <translation id="5780973441651030252">Kipaumbele cha mchakato</translation>
 <translation id="5804241973901381774">Idhini</translation>
 <translation id="583281660410589416">Haijulikani</translation>
 <translation id="59174027418879706">Imewashwa</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 kinatumika}other{ # vinatumika}}</translation>
 <translation id="5956585768868398362">Je, huu ndio ukurasa wa utafutaji uliokuwa ukitarajia?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> kilele)</translation>
 <translation id="5965661248935608907">Pia inadhibiti ukurasa unaoonyeshwa unapobofya kitufe cha Mwanzo au unapotafuta kutoka Sanduku Kuu.</translation>
@@ -185,14 +171,12 @@
 <translation id="6787839852456839824">Mikato ya kibodi</translation>
 <translation id="6798954102094737107">Progoramu-jalizi: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Weka mabadiliko</translation>
-<translation id="6863910145616405334">Haijapata programu-jalizi</translation>
 <translation id="6886871292305414135">Fungua kiungo katika &amp;kichupo kipya</translation>
 <translation id="6900284862687837908">Programu ya Mandhari: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Batilisha ufikiaji wa faili</translation>
 <translation id="6974053822202609517">Kulia hadi Kushoto</translation>
 <translation id="7013485839273047434">Pata viendelezi zaidi</translation>
 <translation id="708060913198414444">Nakili anwani ya sauti</translation>
-<translation id="7105578512429498960">Sakinisha <ph name="PLUGIN_NAME" /> ili uonyeshe maudhui haya</translation>
 <translation id="7144878232160441200">Jaribu tena</translation>
 <translation id="7206693748120342859">Inapakua <ph name="PLUGIN_NAME" />...</translation>
 <translation id="7287143125007575591">Umenyimwa idhini ya kufikia.</translation>
@@ -224,7 +208,6 @@ Faili ya Funguo: <ph name="KEY_FILE" />
 
 Weka faili yako ya funguo mahali salama. Utaihitaji kuunda matoleo mapya ya kiendelezi chako.</translation>
 <translation id="8004582292198964060">Kivinjari</translation>
-<translation id="8037357227543935929">Uliza (chaguo-msingi)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">Kagua maendelezo ya sehemu zenye maandishi</translation>
 <translation id="8261378640211443080">Kiendelezi hiki hakijaorodheshwa katika <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> na huenda kiliongezwa pasipo ridhaa yako.</translation>
@@ -240,7 +223,6 @@ Weka faili yako ya funguo mahali salama. Utaihitaji kuunda matoleo mapya ya kien
 <translation id="8664389313780386848">&amp;Tazama asili ya ukurasa</translation>
 <translation id="8719653885894320876">Upakuaji wa <ph name="PLUGIN_NAME" /> haujafaulu</translation>
 <translation id="873545264931343897"><ph name="PLUGIN_NAME" /> ikikamilisha kusasisha, pakia upya ukurasa ili kuiwasha</translation>
-<translation id="8763204422633679667"><ph name="PLUGIN_NAME" /> ikimaliza kusakinisha, pakia upya ukurasa ili kuiwasha</translation>
 <translation id="8798099450830957504">Chaguo Msingi</translation>
 <translation id="8808478386290700967">Duka la Wavuti</translation>
 <translation id="8859174528519900719">Fremu ndogo: <ph name="SUBFRAME_SITE" /></translation>

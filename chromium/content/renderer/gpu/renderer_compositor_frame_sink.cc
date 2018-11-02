@@ -33,6 +33,8 @@ RendererCompositorFrameSink::RendererCompositorFrameSink(
     scoped_refptr<cc::ContextProvider> worker_context_provider,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     cc::SharedBitmapManager* shared_bitmap_manager,
+    cc::mojom::MojoCompositorFrameSinkPtrInfo sink_info,
+    cc::mojom::MojoCompositorFrameSinkClientRequest sink_client_request,
     scoped_refptr<FrameSwapMessageQueue> swap_frame_message_queue)
     : CompositorFrameSink(std::move(context_provider),
                           std::move(worker_context_provider),
@@ -48,18 +50,21 @@ RendererCompositorFrameSink::RendererCompositorFrameSink(
               ? nullptr
               : base::MakeUnique<cc::ExternalBeginFrameSource>(this)),
       routing_id_(routing_id),
+      sink_info_(std::move(sink_info)),
+      sink_client_request_(std::move(sink_client_request)),
       sink_client_binding_(this) {
   DCHECK(compositor_frame_sink_filter_);
   DCHECK(frame_swap_message_queue_);
   DCHECK(message_sender_);
   thread_checker_.DetachFromThread();
-  EstablishMojoConnection();
 }
 
 RendererCompositorFrameSink::RendererCompositorFrameSink(
     int32_t routing_id,
     std::unique_ptr<cc::SyntheticBeginFrameSource> synthetic_begin_frame_source,
     scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider,
+    cc::mojom::MojoCompositorFrameSinkPtrInfo sink_info,
+    cc::mojom::MojoCompositorFrameSinkClientRequest sink_client_request,
     scoped_refptr<FrameSwapMessageQueue> swap_frame_message_queue)
     : CompositorFrameSink(std::move(vulkan_context_provider)),
       compositor_frame_sink_filter_(
@@ -72,19 +77,16 @@ RendererCompositorFrameSink::RendererCompositorFrameSink(
               ? nullptr
               : base::MakeUnique<cc::ExternalBeginFrameSource>(this)),
       routing_id_(routing_id),
+      sink_info_(std::move(sink_info)),
+      sink_client_request_(std::move(sink_client_request)),
       sink_client_binding_(this) {
   DCHECK(compositor_frame_sink_filter_);
   DCHECK(frame_swap_message_queue_);
   DCHECK(message_sender_);
   thread_checker_.DetachFromThread();
-  EstablishMojoConnection();
 }
 
-RendererCompositorFrameSink::~RendererCompositorFrameSink() {
-  // TODO(crbug.com/702764): If not detached then IPC messages would crash
-  // after this class is destroyed.
-  CHECK(!bound_);
-}
+RendererCompositorFrameSink::~RendererCompositorFrameSink() = default;
 
 bool RendererCompositorFrameSink::BindToClient(
     cc::CompositorFrameSinkClient* client) {
@@ -92,7 +94,7 @@ bool RendererCompositorFrameSink::BindToClient(
   if (!cc::CompositorFrameSink::BindToClient(client))
     return false;
 
-  sink_.Bind(std::move(sink_ptr_info_));
+  sink_.Bind(std::move(sink_info_));
   sink_client_binding_.Bind(std::move(sink_client_request_));
 
   if (synthetic_begin_frame_source_)
@@ -106,8 +108,6 @@ bool RendererCompositorFrameSink::BindToClient(
                  compositor_frame_sink_proxy_);
   compositor_frame_sink_filter_->AddHandlerOnCompositorThread(
       routing_id_, compositor_frame_sink_filter_handler_);
-
-  bound_ = true;
   return true;
 }
 
@@ -124,17 +124,21 @@ void RendererCompositorFrameSink::DetachFromClient() {
   sink_.reset();
   sink_client_binding_.Close();
   cc::CompositorFrameSink::DetachFromClient();
-  bound_ = false;
 }
 
 void RendererCompositorFrameSink::SubmitCompositorFrame(
     cc::CompositorFrame frame) {
   // We should only submit CompositorFrames with valid BeginFrameAcks.
+  DCHECK(frame.metadata.begin_frame_ack.has_damage);
   DCHECK_LE(cc::BeginFrameArgs::kStartingFrameNumber,
             frame.metadata.begin_frame_ack.sequence_number);
-  if (ShouldAllocateNewLocalSurfaceId(frame))
+  auto new_surface_properties =
+      RenderWidgetSurfaceProperties::FromCompositorFrame(frame);
+  if (!local_surface_id_.is_valid() ||
+      new_surface_properties != current_surface_properties_) {
     local_surface_id_ = id_allocator_.GenerateId();
-  UpdateFrameData(frame);
+    current_surface_properties_ = new_surface_properties;
+  }
 
   {
     std::unique_ptr<FrameSwapMessageQueue::SendMessageScope>
@@ -157,6 +161,13 @@ void RendererCompositorFrameSink::SubmitCompositorFrame(
   }
 }
 
+void RendererCompositorFrameSink::DidNotProduceFrame(
+    const cc::BeginFrameAck& ack) {
+  DCHECK(!ack.has_damage);
+  DCHECK_LE(cc::BeginFrameArgs::kStartingFrameNumber, ack.sequence_number);
+  sink_->DidNotProduceFrame(ack);
+}
+
 void RendererCompositorFrameSink::OnMessageReceived(
     const IPC::Message& message) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -169,53 +180,6 @@ void RendererCompositorFrameSink::OnBeginFrameIPC(
     const cc::BeginFrameArgs& args) {
   if (external_begin_frame_source_)
     external_begin_frame_source_->OnBeginFrame(args);
-}
-
-bool RendererCompositorFrameSink::ShouldAllocateNewLocalSurfaceId(
-    const cc::CompositorFrame& frame) {
-  cc::RenderPass* root_pass = frame.render_pass_list.back().get();
-  gfx::Size frame_size = root_pass->output_rect.size();
-
-  // Once the proposal in crbug.com/689754 is implemented, the LocalSurfaceId
-  // allocation logic will be unified across all platforms.
-  return !local_surface_id_.is_valid() ||
-         current_frame_data_.device_scale_factor !=
-             frame.metadata.device_scale_factor ||
-#ifdef OS_ANDROID
-         current_frame_data_.top_controls_height !=
-             frame.metadata.top_controls_height ||
-         current_frame_data_.top_controls_shown_ratio !=
-             frame.metadata.top_controls_shown_ratio ||
-         current_frame_data_.bottom_controls_height !=
-             frame.metadata.bottom_controls_height ||
-         current_frame_data_.bottom_controls_shown_ratio !=
-             frame.metadata.bottom_controls_shown_ratio ||
-         current_frame_data_.viewport_selection != frame.metadata.selection ||
-         current_frame_data_.has_transparent_background !=
-             root_pass->has_transparent_background ||
-#endif
-         current_frame_data_.frame_size != frame_size;
-}
-
-void RendererCompositorFrameSink::UpdateFrameData(
-    const cc::CompositorFrame& frame) {
-  cc::RenderPass* root_pass = frame.render_pass_list.back().get();
-  gfx::Size frame_size = root_pass->output_rect.size();
-
-  current_frame_data_.frame_size = frame_size;
-  current_frame_data_.device_scale_factor = frame.metadata.device_scale_factor;
-#ifdef OS_ANDROID
-  current_frame_data_.top_controls_height = frame.metadata.top_controls_height;
-  current_frame_data_.top_controls_shown_ratio =
-      frame.metadata.top_controls_shown_ratio;
-  current_frame_data_.bottom_controls_height =
-      frame.metadata.bottom_controls_height;
-  current_frame_data_.bottom_controls_shown_ratio =
-      frame.metadata.bottom_controls_shown_ratio;
-  current_frame_data_.viewport_selection = frame.metadata.selection;
-  current_frame_data_.has_transparent_background =
-      root_pass->has_transparent_background;
-#endif
 }
 
 void RendererCompositorFrameSink::DidReceiveCompositorFrameAck(
@@ -236,25 +200,6 @@ void RendererCompositorFrameSink::ReclaimResources(
 
 void RendererCompositorFrameSink::OnNeedsBeginFrames(bool needs_begin_frames) {
   sink_->SetNeedsBeginFrame(needs_begin_frames);
-}
-
-void RendererCompositorFrameSink::OnDidFinishFrame(
-    const cc::BeginFrameAck& ack) {
-  DCHECK_LE(cc::BeginFrameArgs::kStartingFrameNumber, ack.sequence_number);
-  // If there was damage, ViewHostMsg_SwapCompositorFrame includes the ack.
-  if (!ack.has_damage)
-    sink_->BeginFrameDidNotSwap(ack);
-}
-
-void RendererCompositorFrameSink::EstablishMojoConnection() {
-  cc::mojom::MojoCompositorFrameSinkPtr sink;
-  cc::mojom::MojoCompositorFrameSinkRequest sink_request =
-      mojo::MakeRequest(&sink);
-  cc::mojom::MojoCompositorFrameSinkClientPtr sink_client;
-  sink_client_request_ = mojo::MakeRequest(&sink_client);
-  RenderThreadImpl::current()->GetFrameSinkProvider()->CreateForWidget(
-      routing_id_, std::move(sink_request), std::move(sink_client));
-  sink_ptr_info_ = sink.PassInterface();
 }
 
 }  // namespace content

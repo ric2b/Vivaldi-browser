@@ -38,6 +38,7 @@ class CC_EXPORT PictureLayerImpl
   ~PictureLayerImpl() override;
 
   Layer::LayerMaskType mask_type() const { return mask_type_; }
+  void SetLayerMaskType(Layer::LayerMaskType type);
 
   // LayerImpl overrides.
   const char* LayerTypeAsString() const override;
@@ -76,7 +77,8 @@ class CC_EXPORT PictureLayerImpl
 
   // Mask-related functions.
   void GetContentsResourceId(ResourceId* resource_id,
-                             gfx::Size* resource_size) const override;
+                             gfx::Size* resource_size,
+                             gfx::SizeF* resource_uv_size) const override;
 
   void SetNearestNeighbor(bool nearest_neighbor);
 
@@ -101,18 +103,20 @@ class CC_EXPORT PictureLayerImpl
     is_directly_composited_image_ = is_directly_composited_image;
   }
 
-  void InvalidateRegionForImages(const ImageIdFlatSet& images_to_invalidate);
+  void InvalidateRegionForImages(
+      const PaintImageIdFlatSet& images_to_invalidate);
 
  protected:
   PictureLayerImpl(LayerTreeImpl* tree_impl,
                    int id,
                    Layer::LayerMaskType mask_type);
-  PictureLayerTiling* AddTiling(float contents_scale);
+  PictureLayerTiling* AddTiling(const gfx::AxisTransform2d& contents_transform);
   void RemoveAllTilings();
   void AddTilingsForRasterScale();
   void AddLowResolutionTilingIfNeeded();
   bool ShouldAdjustRasterScale() const;
   void RecalculateRasterScales();
+  gfx::Vector2dF CalculateRasterTranslation(float raster_scale);
   void CleanUpTilingsOnActiveLayer(
       const std::vector<PictureLayerTiling*>& used_tilings);
   float MinimumContentsScale() const;
@@ -150,7 +154,7 @@ class CC_EXPORT PictureLayerImpl
 
   bool was_screen_space_transform_animating_;
   bool only_used_low_res_last_append_quads_;
-  const Layer::LayerMaskType mask_type_;
+  Layer::LayerMaskType mask_type_;
 
   bool nearest_neighbor_;
   bool use_transformed_rasterization_;

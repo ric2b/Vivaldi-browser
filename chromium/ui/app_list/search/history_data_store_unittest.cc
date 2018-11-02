@@ -2,18 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/app_list/search/history_data_store.h"
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/test/sequenced_worker_pool_owner.h"
+#include "base/test/scoped_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/app_list/search/dictionary_data_store.h"
 #include "ui/app_list/search/history_data.h"
-#include "ui/app_list/search/history_data_store.h"
 
 namespace app_list {
 namespace test {
@@ -41,7 +41,9 @@ std::string GetDataContent(const HistoryData::Data& data) {
 
 class HistoryDataStoreTest : public testing::Test {
  public:
-  HistoryDataStoreTest() : worker_pool_owner_(2, "AppLanucherTest") {}
+  HistoryDataStoreTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
 
   // testing::Test overrides:
   void SetUp() override {
@@ -55,7 +57,7 @@ class HistoryDataStoreTest : public testing::Test {
   void OpenStore(const std::string& file_name) {
     data_file_ = temp_dir_.GetPath().AppendASCII(file_name);
     store_ = new HistoryDataStore(scoped_refptr<DictionaryDataStore>(
-        new DictionaryDataStore(data_file_, worker_pool_owner_.pool().get())));
+        new DictionaryDataStore(data_file_)));
     Load();
   }
 
@@ -89,11 +91,10 @@ class HistoryDataStoreTest : public testing::Test {
       run_loop_->Quit();
   }
 
-  base::MessageLoopForUI message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::ScopedTempDir temp_dir_;
   base::FilePath data_file_;
   std::unique_ptr<base::RunLoop> run_loop_;
-  base::SequencedWorkerPoolOwner worker_pool_owner_;
 
   scoped_refptr<HistoryDataStore> store_;
   HistoryData::Associations associations_;

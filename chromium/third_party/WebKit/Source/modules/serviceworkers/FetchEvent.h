@@ -5,7 +5,8 @@
 #ifndef FetchEvent_h
 #define FetchEvent_h
 
-#include "bindings/core/v8/ActiveScriptWrappable.h"
+#include <memory>
+
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
 #include "core/dom/ContextLifecycleObserver.h"
@@ -15,7 +16,9 @@
 #include "modules/serviceworkers/ExtendableEvent.h"
 #include "modules/serviceworkers/FetchEventInit.h"
 #include "modules/serviceworkers/WaitUntilObserver.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/ResourceResponse.h"
 
 namespace blink {
 
@@ -27,6 +30,7 @@ class ScriptState;
 class WebDataConsumerHandle;
 struct WebServiceWorkerError;
 class WebURLResponse;
+class WorkerGlobalScope;
 
 // A fetch event is dispatched by the client to a service worker's script
 // context. FetchRespondWithObserver can be used to notify the client about the
@@ -66,6 +70,11 @@ class MODULES_EXPORT FetchEvent final
                                    std::unique_ptr<WebDataConsumerHandle>);
   void OnNavigationPreloadError(ScriptState*,
                                 std::unique_ptr<WebServiceWorkerError>);
+  void OnNavigationPreloadComplete(WorkerGlobalScope*,
+                                   double completion_time,
+                                   int64_t encoded_data_length,
+                                   int64_t encoded_body_length,
+                                   int64_t decoded_body_length);
 
   const AtomicString& InterfaceName() const override;
 
@@ -86,6 +95,7 @@ class MODULES_EXPORT FetchEvent final
   Member<FetchRespondWithObserver> observer_;
   Member<Request> request_;
   Member<PreloadResponseProperty> preload_response_property_;
+  std::unique_ptr<WebURLResponse> preload_response_;
   String client_id_;
   bool is_reload_;
 };

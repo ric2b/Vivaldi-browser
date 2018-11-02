@@ -9,10 +9,11 @@
 #include "base/bind.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/shared_memory_handle.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/sync_socket.h"
 #include "cc/base/math_util.h"
-#include "content/browser/audio_manager_thread.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/common/media/renderer_audio_output_stream_factory.mojom.h"
 #include "content/public/browser/browser_thread.h"
@@ -22,6 +23,7 @@
 #include "media/audio/audio_manager_base.h"
 #include "media/audio/audio_output_controller.h"
 #include "media/audio/audio_system_impl.h"
+#include "media/audio/audio_thread_impl.h"
 #include "media/audio/fake_audio_log_factory.h"
 #include "media/audio/simple_sources.h"
 #include "media/base/audio_parameters.h"
@@ -81,8 +83,8 @@ void SyncWith(scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   CHECK(!task_runner->BelongsToCurrentThread());
   base::WaitableEvent e = {base::WaitableEvent::ResetPolicy::MANUAL,
                            base::WaitableEvent::InitialState::NOT_SIGNALED};
-  task_runner->PostTask(FROM_HERE, base::Bind(&base::WaitableEvent::Signal,
-                                              base::Unretained(&e)));
+  task_runner->PostTask(FROM_HERE, base::BindOnce(&base::WaitableEvent::Signal,
+                                                  base::Unretained(&e)));
   e.Wait();
 }
 
@@ -103,21 +105,13 @@ void SyncWithAllThreads() {
 
 class MockAudioManager : public media::AudioManagerBase {
  public:
-  MockAudioManager(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
-      media::AudioLogFactory* audio_log_factory)
-      : media::AudioManagerBase(task_runner,
-                                worker_task_runner,
-                                audio_log_factory) {
+  MockAudioManager(std::unique_ptr<media::AudioThread> audio_thread,
+                   media::AudioLogFactory* audio_log_factory)
+      : media::AudioManagerBase(std::move(audio_thread), audio_log_factory) {
     ON_CALL(*this, HasAudioOutputDevices()).WillByDefault(Return(true));
   }
 
-  ~MockAudioManager() override { Shutdown(); }
-
-  MOCK_METHOD0(HasAudioOutputDevices, bool());
-  MOCK_METHOD0(HasAudioInputDevices, bool());
-  MOCK_METHOD0(GetName, const char*());
+  ~MockAudioManager() override = default;
 
   MOCK_METHOD2(MakeLinearOutputStream,
                media::AudioOutputStream*(const media::AudioParameters& params,
@@ -134,9 +128,16 @@ class MockAudioManager : public media::AudioManagerBase {
                media::AudioInputStream*(const media::AudioParameters& params,
                                         const std::string& device_id,
                                         const LogCallback& log_callback));
-  MOCK_METHOD2(GetPreferredOutputStreamParameters,
-               media::AudioParameters(const std::string& device_id,
-                                      const media::AudioParameters& params));
+
+ protected:
+  MOCK_METHOD0(HasAudioOutputDevices, bool());
+  MOCK_METHOD0(HasAudioInputDevices, bool());
+  MOCK_METHOD0(GetName, const char*());
+  media::AudioParameters GetPreferredOutputStreamParameters(
+      const std::string& device_id,
+      const media::AudioParameters& params) {
+    return GetTestAudioParameters();
+  }
 };
 
 class MockAudioOutputStream : public media::AudioOutputStream,
@@ -185,7 +186,7 @@ class MockAudioOutputStream : public media::AudioOutputStream,
       for (int frame = 0; frame < params.frames_per_buffer(); ++frame) {
         // Using EXPECT here causes massive log spam in case of a broken test,
         // and ASSERT causes it to hang, so we use CHECK.
-        CHECK(cc::MathUtil::IsNearlyTheSameForTesting(
+        CHECK(cc::MathUtil::IsFloatNearlyTheSame(
             expected_buffer->channel(0)[frame], dest->channel(0)[frame]))
             << "Got " << dest->channel(0)[frame] << ", expected "
             << expected_buffer->channel(0)[frame];
@@ -299,14 +300,16 @@ class RendererAudioOutputStreamFactoryIntegrationTest : public Test {
   RendererAudioOutputStreamFactoryIntegrationTest()
       : media_stream_manager_(),
         thread_bundle_(TestBrowserThreadBundle::Options::REAL_IO_THREAD),
-        audio_thread_(),
         log_factory_(),
-        audio_manager_(new MockAudioManager(audio_thread_.task_runner(),
-                                            audio_thread_.worker_task_runner(),
-                                            &log_factory_)),
+        audio_manager_(
+            new MockAudioManager(base::MakeUnique<media::AudioThreadImpl>(),
+                                 &log_factory_)),
         audio_system_(media::AudioSystemImpl::Create(audio_manager_.get())) {
     media_stream_manager_ =
         base::MakeUnique<MediaStreamManager>(audio_system_.get());
+  }
+  ~RendererAudioOutputStreamFactoryIntegrationTest() override {
+    audio_manager_->Shutdown();
   }
 
   void CreateAndBindFactory(AudioOutputStreamFactoryRequest request) {
@@ -318,23 +321,15 @@ class RendererAudioOutputStreamFactoryIntegrationTest : public Test {
 
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
   TestBrowserThreadBundle thread_bundle_;
-  AudioManagerThread audio_thread_;
   media::FakeAudioLogFactory log_factory_;
-  media::ScopedAudioManagerPtr audio_manager_;
+  std::unique_ptr<media::AudioManager> audio_manager_;
   std::unique_ptr<media::AudioSystem> audio_system_;
   std::unique_ptr<RendererAudioOutputStreamFactoryContextImpl,
                   BrowserThread::DeleteOnIOThread>
       factory_context_;
 };
 
-// Flaky on Win x64. https://crbug.com/709394
-#if defined(OS_WIN)
-#define MAYBE_StreamIntegrationTest DISABLED_StreamIntegrationTest
-#else
-#define MAYBE_StreamIntegrationTest StreamIntegrationTest
-#endif
-TEST_F(RendererAudioOutputStreamFactoryIntegrationTest,
-       MAYBE_StreamIntegrationTest) {
+TEST_F(RendererAudioOutputStreamFactoryIntegrationTest, StreamIntegrationTest) {
   // Sets up the factory on the IO thread and runs client code on the UI thread.
   // Send a sine wave from the client and makes sure it's received by the output
   // stream.
@@ -345,17 +340,13 @@ TEST_F(RendererAudioOutputStreamFactoryIntegrationTest,
   EXPECT_CALL(*static_cast<MockAudioManager*>(audio_manager_.get()),
               MakeLowLatencyOutputStream(_, "", _))
       .WillOnce(Return(stream));
-  EXPECT_CALL(*static_cast<MockAudioManager*>(audio_manager_.get()),
-              GetPreferredOutputStreamParameters(_, _))
-      .WillRepeatedly(Return(GetTestAudioParameters()));
 
   AudioOutputStreamFactoryPtr factory_ptr;
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&RendererAudioOutputStreamFactoryIntegrationTest::
-                     CreateAndBindFactory,
-                 base::Unretained(this),
-                 base::Passed(mojo::MakeRequest(&factory_ptr))));
+      base::BindOnce(&RendererAudioOutputStreamFactoryIntegrationTest::
+                         CreateAndBindFactory,
+                     base::Unretained(this), mojo::MakeRequest(&factory_ptr)));
 
   AudioOutputStreamProviderPtr provider_ptr;
   base::RunLoop loop;
@@ -364,9 +355,9 @@ TEST_F(RendererAudioOutputStreamFactoryIntegrationTest,
   std::string id;
   factory_ptr->RequestDeviceAuthorization(
       mojo::MakeRequest(&provider_ptr), kNoSessionId, "default",
-      base::Bind(&AuthCallback, base::Passed(loop.QuitWhenIdleClosure()),
-                 base::Unretained(&status), base::Unretained(&params),
-                 base::Unretained(&id)));
+      base::BindOnce(&AuthCallback, loop.QuitWhenIdleClosure(),
+                     base::Unretained(&status), base::Unretained(&params),
+                     base::Unretained(&id)));
   loop.Run();
   ASSERT_EQ(status, media::OUTPUT_DEVICE_STATUS_OK);
   ASSERT_EQ(GetTestAudioParameters().AsHumanReadableString(),

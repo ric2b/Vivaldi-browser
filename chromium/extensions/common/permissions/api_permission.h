@@ -245,6 +245,7 @@ class APIPermission {
     kNetworkingOnc,
     kVirtualKeyboard,
     kNetworkingCastPrivate,
+    kMediaPerceptionPrivate,
 
     // vivaldi permissions
 

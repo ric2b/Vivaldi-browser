@@ -170,15 +170,20 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_ACCESSIBLE_DESCRIPTION" desc="The accessible description of the status tray and the information on it.">
         Status tray, time <ph name="time">$1<ex>9:50</ex></ph>, <ph name="battery">$2<ex>Battery is full.</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_BRAILLE_DISPLAY_CONNECTED_BUBBLE" desc="The message shown on a bubble when a braille display is connected">
-Braille display connected.
+      <message name="IDS_ASH_STATUS_TRAY_BRAILLE_DISPLAY_CONNECTED" desc="The message shown on a notification when a braille display is connected">
+        Braille display connected.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_SETTINGS" desc="The accessible text for a settings button.">
         Settings
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_SPOKEN_FEEDBACK_ENABLED_BUBBLE" desc="The message shown on a bubble when spoken feedback is enabled">
-ChromeVox (spoken feedback) is enabled.
-Press Ctrl+Alt+Z to disable.
+      <message name="IDS_ASH_STATUS_TRAY_SPOKEN_FEEDBACK_ENABLED" desc="The message shown on a notification when spoken feedback is enabled">
+        Press Ctrl + Alt + Z to disable spoken feedback.
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_SPOKEN_FEEDBACK_ENABLED_TITLE" desc="The title message shown on a notification when spoken feedback is enabled">
+        ChromeVox enabled
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_SPOKEN_FEEDBACK_BRAILLE_ENABLED_TITLE" desc="The message shown on a notification when both the spoken feedback and braille are enabled">
+        Braille and ChromeVox are enabled
       </message>
       <message name="IDS_ASH_STATUS_TRAY_SIGN_OUT" desc="The label used for the button in the status tray to sign out of the system.">
         Sign out
@@ -213,7 +218,9 @@ Press Ctrl+Alt+Z to disable.
       <message name="IDS_ASH_STATUS_TRAY_MESSAGE_OUT_OF_USERS" desc="The error message when all the users are added into multi-profile session.">
         All available users have already been added to this session.
       </message>
-
+      <message name="IDS_ASH_STATUS_TRAY_NIGHT_LIGHT" desc="The label used for the button in the status tray to toggle the Night Light feature (which controls the color temperature of the screen) on or off.">
+        Night light
+      </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST" desc="The label used as the header in the cast popup.">
         Cast screen
       </message>
@@ -274,6 +281,10 @@ Press Ctrl+Alt+Z to disable.
 
       <message name="IDS_ASH_STATUS_TRAY_RESTART_AND_POWERWASH_TO_UPDATE" desc="The label used in the tray popup to notify that the user should restart and powerwash the device to get system updates.">
         Restart and powerwash to update
+      </message>
+
+      <message name="IDS_ASH_STATUS_TRAY_UPDATE_OVER_CELLULAR_AVAILABLE" desc="The label used in the tray popup to notify that update is available but current connection is cellular.">
+        Click to view update details
       </message>
 
       <message name="IDS_ASH_STATUS_TRAY_VOLUME" desc="The accessible text for the volume slider.">
@@ -368,8 +379,26 @@ Press Ctrl+Alt+Z to disable.
         Shut down
       </message>
 
+      <!-- Status tray enterprise management. -->
+      <message name="IDS_ASH_ENTERPRISE_DEVICE_MANAGED_BY" desc="Text for notifications showing that this device is enterpise managed. Used when the organization's domain name is available.">
+        This device is managed by <ph name="DOMAIN">$1<ex>acmecorp.com</ex></ph>.
+      </message>
+      <message name="IDS_ASH_ENTERPRISE_DEVICE_MANAGED" desc="Text for notifications showing that this device is enterprise managed. Used when the organization's domain name is not available (e.g. Active Directory).">
+        This device is enterprise managed
+      </message>
+
+      <!-- Status tray supervised users. -->
       <message name="IDS_ASH_STATUS_TRAY_SUPERVISED_LABEL" desc="Label shown instead of email for supervised users">
          Supervised user
+      </message>
+      <message name="IDS_ASH_USER_IS_SUPERVISED_BY_NOTICE" desc="Text for notifications showing that this user is supervised">
+        Usage and history of this user can be reviewed by the manager (<ph name="MANAGER_EMAIL">$1<ex>user@example.com</ex></ph>) on chrome.com.
+      </message>
+      <message name="IDS_ASH_CHILD_USER_IS_MANAGED_BY_ONE_PARENT_NOTICE" desc="Text for notifications showing that this child user is managed by parent's account.">
+        This is an account for kids managed by <ph name="MANAGER_EMAIL">$1<ex>user@example.com</ex></ph>
+      </message>
+      <message name="IDS_ASH_CHILD_USER_IS_MANAGED_BY_TWO_PARENTS_NOTICE" desc="Text for notifications showing that this child user is managed by two parents' accounts.">
+        This is an account for kids managed by <ph name="FIRST_PARENT_EMAIL">$1<ex>first@example.com</ex></ph> and <ph name="SECOND_PARENT_EMAIL">$2<ex>second@example.com</ex></ph>
       </message>
 
       <message name="IDS_ASH_STATUS_TRAY_PREVIOUS_MENU" desc="The accessible text for header entries for detailed versions of status tray items.">
@@ -393,6 +422,9 @@ Press Ctrl+Alt+Z to disable.
       </message>
       <message name="IDS_ASH_STYLUS_TOOLS_MAGNIFIER_MODE" desc="Title of the magnification mode in the stylus tools. Clicking this button opens up a magnifier. The magnifier remains active until the user turns it off by tapping the same button again.">
         Magnifying glass mode
+      </message>
+      <message name="IDS_ASH_STYLUS_TOOLS_METALAYER_MODE" desc="Title of the metalayer mode in the stylus tools. Clicking this button opens up the voice interaction overlay. The overlay remains active until the user completes the interaction.">
+        Metalayer mode
       </message>
       <message name="IDS_ASH_STYLUS_TOOLS_TITLE" desc="The title of the stylus tools dialog in the ash shelf.">
         Stylus tools
@@ -874,6 +906,9 @@ Press Search or Shift to cancel.
       <message name="IDS_ASH_STATUS_TRAY_ADD_CONNECTION" desc="Title for control to add a new network connection." >
         Add connection
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_MONITORED_WARNING" desc="The label used in the tray popup to warn users their network may be monitored." >
+        Network may be monitored
+      </message>
 
       <message name="IDS_ASH_VIRTUAL_KEYBOARD_TRAY_ACCESSIBLE_NAME" desc="The accessible text for virtual keyboard icon in status tray.">
         Show on-screen keyboard
@@ -1005,6 +1040,12 @@ Press Search or Shift to cancel.
                desc="Notification message to tell users that they just pressed the Search+Shift+H shortcut to toggle High Contrast Mode, and that pressing it again will toggle it off.">
         High Contrast Mode enabled. Press Search+Shift+H again to toggle it off.
       </message>
+
+      <!-- Tray scale strings -->
+      <message name="IDS_ASH_STATUS_TRAY_SCALE" desc="The label used in scale setting detailed page of ash tray popup.">
+        Display scale settings
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_SCALE_SLIDER" desc="The accessible text for the scale slider">Display scale</message>
     </messages>
   </release>
 </grit>

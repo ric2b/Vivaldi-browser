@@ -4,6 +4,9 @@
 
 #include <stddef.h>
 
+#include <map>
+#include <string>
+
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -29,6 +32,8 @@
 #include "net/http/http_auth_preferences.h"
 #include "net/http/http_auth_scheme.h"
 #include "net/http/http_network_session.h"
+#include "net/nqe/effective_connection_type.h"
+#include "net/nqe/network_quality_estimator.h"
 #include "net/quic/chromium/quic_stream_factory.h"
 #include "net/quic/core/quic_tag.h"
 #include "net/quic/core/quic_versions.h"
@@ -82,6 +87,12 @@ class IOThreadTestWithIOThreadObject : public testing::Test {
     EXPECT_EQ(expected, http_auth_preferences->NegotiateEnablePort());
   }
 
+  void CheckEffectiveConnectionType(net::EffectiveConnectionType expected) {
+    ASSERT_EQ(expected,
+              io_thread_->globals()
+                  ->network_quality_estimator->GetEffectiveConnectionType());
+  }
+
 #if defined(OS_ANDROID)
   void CheckAuthAndroidNegoitateAccountType(std::string expected) {
     auto* http_auth_preferences =
@@ -127,6 +138,9 @@ class IOThreadTestWithIOThreadObject : public testing::Test {
     chromeos::DBusThreadManager::Initialize();
     chromeos::NetworkHandler::Initialize();
 #endif
+  }
+
+  void CreateThreads() {
     // The IOThread constructor registers the IOThread object with as the
     // BrowserThreadDelegate for the io thread.
     io_thread_.reset(new IOThread(&pref_service_, &policy_service_, nullptr,
@@ -153,6 +167,7 @@ class IOThreadTestWithIOThreadObject : public testing::Test {
     chromeos::DBusThreadManager::Shutdown();
 #endif
   }
+
   TestingPrefServiceSimple* pref_service() { return &pref_service_; }
 
   void RunOnIOThreadBlocking(const base::Closure& task) {
@@ -185,6 +200,7 @@ TEST_F(IOThreadTestWithIOThreadObject, UpdateNegotiateDisableCnameLookup) {
   // the HttpAuthPreferences are correctly initialized and running on the
   // IO thread. The other preferences are tested by the HttpAuthPreferences
   // unit tests.
+  CreateThreads();
   pref_service()->SetBoolean(prefs::kDisableAuthNegotiateCnameLookup, false);
   RunOnIOThreadBlocking(
       base::Bind(&IOThreadTestWithIOThreadObject::CheckCnameLookup,
@@ -196,6 +212,7 @@ TEST_F(IOThreadTestWithIOThreadObject, UpdateNegotiateDisableCnameLookup) {
 }
 
 TEST_F(IOThreadTestWithIOThreadObject, UpdateEnableAuthNegotiatePort) {
+  CreateThreads();
   pref_service()->SetBoolean(prefs::kEnableAuthNegotiatePort, false);
   RunOnIOThreadBlocking(
       base::Bind(&IOThreadTestWithIOThreadObject::CheckNegotiateEnablePort,
@@ -207,6 +224,7 @@ TEST_F(IOThreadTestWithIOThreadObject, UpdateEnableAuthNegotiatePort) {
 }
 
 TEST_F(IOThreadTestWithIOThreadObject, UpdateServerWhitelist) {
+  CreateThreads();
   GURL url("http://test.example.com");
 
   pref_service()->SetString(prefs::kAuthServerWhitelist, "xxx");
@@ -221,6 +239,7 @@ TEST_F(IOThreadTestWithIOThreadObject, UpdateServerWhitelist) {
 }
 
 TEST_F(IOThreadTestWithIOThreadObject, UpdateDelegateWhitelist) {
+  CreateThreads();
   GURL url("http://test.example.com");
 
   pref_service()->SetString(prefs::kAuthNegotiateDelegateWhitelist, "");
@@ -237,6 +256,7 @@ TEST_F(IOThreadTestWithIOThreadObject, UpdateDelegateWhitelist) {
 #if defined(OS_ANDROID)
 // AuthAndroidNegotiateAccountType is only used on Android.
 TEST_F(IOThreadTestWithIOThreadObject, UpdateAuthAndroidNegotiateAccountType) {
+  CreateThreads();
   pref_service()->SetString(prefs::kAuthAndroidNegotiateAccountType, "acc1");
   RunOnIOThreadBlocking(base::Bind(
       &IOThreadTestWithIOThreadObject::CheckAuthAndroidNegoitateAccountType,
@@ -247,6 +267,63 @@ TEST_F(IOThreadTestWithIOThreadObject, UpdateAuthAndroidNegotiateAccountType) {
       base::Unretained(this), "acc2"));
 }
 #endif
+
+TEST_F(IOThreadTestWithIOThreadObject, ForceECTFromCommandLine) {
+  CreateThreads();
+  base::CommandLine::Init(0, nullptr);
+  ASSERT_TRUE(base::CommandLine::InitializedForCurrentProcess());
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      "--force-effective-connection-type", "Slow-2G");
+
+  RunOnIOThreadBlocking(base::Bind(
+      &IOThreadTestWithIOThreadObject::CheckEffectiveConnectionType,
+      base::Unretained(this), net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G));
+}
+
+TEST_F(IOThreadTestWithIOThreadObject, ForceECTUsingFieldTrial) {
+  base::CommandLine::Init(0, nullptr);
+  ASSERT_TRUE(base::CommandLine::InitializedForCurrentProcess());
+
+  variations::testing::ClearAllVariationParams();
+  std::map<std::string, std::string> variation_params;
+  variation_params["force_effective_connection_type"] = "2G";
+  ASSERT_TRUE(variations::AssociateVariationParams(
+      "NetworkQualityEstimator", "Enabled", variation_params));
+
+  base::FieldTrialList field_trial_list(nullptr);
+  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial("NetworkQualityEstimator",
+                                                     "Enabled"));
+
+  // Create threads after the field trial has been set.
+  CreateThreads();
+
+  RunOnIOThreadBlocking(
+      base::Bind(&IOThreadTestWithIOThreadObject::CheckEffectiveConnectionType,
+                 base::Unretained(this), net::EFFECTIVE_CONNECTION_TYPE_2G));
+}
+
+TEST_F(IOThreadTestWithIOThreadObject, ECTFromCommandLineOverridesFieldTrial) {
+  base::CommandLine::Init(0, nullptr);
+  ASSERT_TRUE(base::CommandLine::InitializedForCurrentProcess());
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      "--force-effective-connection-type", "Slow-2G");
+
+  variations::testing::ClearAllVariationParams();
+  std::map<std::string, std::string> variation_params;
+  variation_params["force_effective_connection_type"] = "2G";
+  ASSERT_TRUE(variations::AssociateVariationParams(
+      "NetworkQualityEstimator", "Enabled", variation_params));
+
+  base::FieldTrialList field_trial_list(nullptr);
+  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial("NetworkQualityEstimator",
+                                                     "Enabled"));
+
+  // Create threads after the field trial has been set.
+  CreateThreads();
+  RunOnIOThreadBlocking(base::Bind(
+      &IOThreadTestWithIOThreadObject::CheckEffectiveConnectionType,
+      base::Unretained(this), net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G));
+}
 
 class ConfigureParamsFromFieldTrialsAndCommandLineTest
     : public ::testing::Test {
@@ -271,11 +348,9 @@ TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest, Default) {
 
   EXPECT_TRUE(params_.enable_http2);
   EXPECT_FALSE(params_.enable_quic);
-  EXPECT_TRUE(params_.enable_quic_alternative_service_with_different_host);
   EXPECT_EQ(1350u, params_.quic_max_packet_length);
   EXPECT_EQ(net::QuicTagVector(), params_.quic_connection_options);
   EXPECT_TRUE(params_.origins_to_force_quic_on.empty());
-  EXPECT_TRUE(params_.quic_host_whitelist.empty());
   EXPECT_FALSE(params_.enable_user_alternate_protocol_ports);
   EXPECT_FALSE(params_.ignore_certificate_errors);
   EXPECT_EQ(0, params_.testing_fixed_http_port);
@@ -301,21 +376,14 @@ TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
   variations::testing::ClearAllVariationParams();
 
   std::map<std::string, std::string> field_trial_params;
-  field_trial_params["always_require_handshake_confirmation"] = "true";
-  field_trial_params["disable_delay_tcp_race"] = "true";
   variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
   base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
 
   command_line_.AppendSwitch("disable-quic");
-  command_line_.AppendSwitchASCII("quic-host-whitelist",
-                                  "www.example.org, www.example.com");
 
   ConfigureParamsFromFieldTrialsAndCommandLine();
 
   EXPECT_FALSE(params_.enable_quic);
-  EXPECT_FALSE(params_.quic_always_require_handshake_confirmation);
-  EXPECT_TRUE(params_.quic_delay_tcp_race);
-  EXPECT_TRUE(params_.quic_host_whitelist.empty());
 }
 
 TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
@@ -325,27 +393,6 @@ TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
   ConfigureParamsFromFieldTrialsAndCommandLine();
 
   EXPECT_TRUE(params_.enable_quic);
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       EnableAlternativeServicesFromCommandLineWithQuicDisabled) {
-  command_line_.AppendSwitch("enable-alternative-services");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_FALSE(params_.enable_quic);
-  EXPECT_TRUE(params_.enable_quic_alternative_service_with_different_host);
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       EnableAlternativeServicesFromCommandLineWithQuicEnabled) {
-  command_line_.AppendSwitch("enable-quic");
-  command_line_.AppendSwitch("enable-alternative-services");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_TRUE(params_.enable_quic);
-  EXPECT_TRUE(params_.enable_quic_alternative_service_with_different_host);
 }
 
 TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
@@ -403,21 +450,6 @@ TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
   EXPECT_EQ(1u, params_.origins_to_force_quic_on.size());
   EXPECT_TRUE(
       base::ContainsKey(params_.origins_to_force_quic_on, net::HostPortPair()));
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       QuicWhitelistFromCommandLinet) {
-  command_line_.AppendSwitch("enable-quic");
-  command_line_.AppendSwitchASCII("quic-host-whitelist",
-                                  "www.example.org, www.example.com");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_EQ(2u, params_.quic_host_whitelist.size());
-  EXPECT_TRUE(
-      base::ContainsKey(params_.quic_host_whitelist, "www.example.org"));
-  EXPECT_TRUE(
-      base::ContainsKey(params_.quic_host_whitelist, "www.example.com"));
 }
 
 TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,

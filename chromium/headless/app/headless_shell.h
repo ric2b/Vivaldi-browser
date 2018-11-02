@@ -32,7 +32,7 @@ class HeadlessShell : public HeadlessWebContents::Observer,
   HeadlessShell();
   ~HeadlessShell() override;
 
-  void OnStart(HeadlessBrowser* browser);
+  virtual void OnStart(HeadlessBrowser* browser);
 
   HeadlessDevToolsClient* devtools_client() const {
     return devtools_client_.get();
@@ -52,7 +52,7 @@ class HeadlessShell : public HeadlessWebContents::Observer,
   void OnNavigationRequested(
       const headless::page::NavigationRequestedParams& params) override;
 
-  void Shutdown();
+  virtual void Shutdown();
 
   void FetchTimeout();
 
@@ -86,7 +86,7 @@ class HeadlessShell : public HeadlessWebContents::Observer,
                     const base::FilePath file_name,
                     base::File::Error error_code);
   void OnFileWritten(const base::FilePath file_name,
-                     const int length,
+                     const size_t length,
                      base::File::Error error_code,
                      int write_result);
   void OnFileClosed(base::File::Error error_code);
@@ -96,10 +96,12 @@ class HeadlessShell : public HeadlessWebContents::Observer,
   GURL url_;
   HeadlessBrowser* browser_;  // Not owned.
   std::unique_ptr<HeadlessDevToolsClient> devtools_client_;
+#if !defined(CHROME_MULTIPLE_DLL_CHILD)
   HeadlessWebContents* web_contents_;
+  HeadlessBrowserContext* browser_context_;
+#endif
   bool processed_page_ready_;
   std::unique_ptr<base::FileProxy> file_proxy_;
-  HeadlessBrowserContext* browser_context_;
   std::unique_ptr<DeterministicDispatcher> deterministic_dispatcher_;
   base::WeakPtrFactory<HeadlessShell> weak_factory_;
 

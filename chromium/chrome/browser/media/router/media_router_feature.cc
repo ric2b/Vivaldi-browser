@@ -4,21 +4,29 @@
 
 #include "chrome/browser/media/router/media_router_feature.h"
 
+#include "base/feature_list.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/features/features.h"
 
-#if defined(ENABLE_MEDIA_ROUTER)
 #if defined(OS_ANDROID) || BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_prefs/user_prefs.h"
 #endif  // defined(OS_ANDROID) || BUILDFLAG(ENABLE_EXTENSIONS)
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 
 namespace media_router {
 
-#if defined(ENABLE_MEDIA_ROUTER)
+#if !defined(OS_ANDROID)
+// Controls if browser side DIAL device discovery is enabled.
+const base::Feature kEnableDialLocalDiscovery{
+    "EnableDialLocalDiscovery", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls if browser side Cast device discovery is enabled.
+const base::Feature kEnableCastDiscovery{"EnableCastDiscovery",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 #if defined(OS_ANDROID) || BUILDFLAG(ENABLE_EXTENSIONS)
 namespace {
 const PrefService::Preference* GetMediaRouterPref(
@@ -28,10 +36,8 @@ const PrefService::Preference* GetMediaRouterPref(
 }
 }  // namespace
 #endif  // defined(OS_ANDROID) || BUILDFLAG(ENABLE_EXTENSIONS)
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 
 bool MediaRouterEnabled(content::BrowserContext* context) {
-#if defined(ENABLE_MEDIA_ROUTER)
 #if defined(OS_ANDROID) || BUILDFLAG(ENABLE_EXTENSIONS)
   const PrefService::Preference* pref = GetMediaRouterPref(context);
   // Only use the pref value if it set from a mandatory policy.
@@ -44,9 +50,18 @@ bool MediaRouterEnabled(content::BrowserContext* context) {
 #else  // !(defined(OS_ANDROID) || BUILDFLAG(ENABLE_EXTENSIONS))
   return false;
 #endif  // defined(OS_ANDROID) || BUILDFLAG(ENABLE_EXTENSIONS)
-#else   // !defined(ENABLE_MEDIA_ROUTER)
-  return false;
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 }
+
+#if !defined(OS_ANDROID)
+// Returns true if browser side DIAL discovery is enabled.
+bool DialLocalDiscoveryEnabled() {
+  return base::FeatureList::IsEnabled(kEnableDialLocalDiscovery);
+}
+
+// Returns true if browser side Cast discovery is enabled.
+bool CastDiscoveryEnabled() {
+  return base::FeatureList::IsEnabled(kEnableCastDiscovery);
+}
+#endif
 
 }  // namespace media_router

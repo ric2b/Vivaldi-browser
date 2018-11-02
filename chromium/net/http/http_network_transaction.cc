@@ -4,7 +4,6 @@
 
 #include "net/http/http_network_transaction.h"
 
-#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -58,9 +57,9 @@
 #include "net/socket/next_proto.h"
 #include "net/socket/socks_client_socket_pool.h"
 #include "net/socket/transport_client_socket_pool.h"
-#include "net/spdy/spdy_http_stream.h"
-#include "net/spdy/spdy_session.h"
-#include "net/spdy/spdy_session_pool.h"
+#include "net/spdy/chromium/spdy_http_stream.h"
+#include "net/spdy/chromium/spdy_session.h"
+#include "net/spdy/chromium/spdy_session_pool.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "net/ssl/ssl_private_key.h"
@@ -69,22 +68,6 @@
 #include "url/url_canon.h"
 
 namespace net {
-
-namespace {
-
-std::unique_ptr<base::Value> NetLogSSLCipherFallbackCallback(
-    const GURL* url,
-    int net_error,
-    NetLogCaptureMode /* capture_mode */) {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->SetString("host_and_port", GetHostAndPort(*url));
-  dict->SetInteger("net_error", net_error);
-  return std::move(dict);
-}
-
-}  // namespace
-
-//-----------------------------------------------------------------------------
 
 HttpNetworkTransaction::HttpNetworkTransaction(RequestPriority priority,
                                                HttpNetworkSession* session)
@@ -577,7 +560,7 @@ void HttpNetworkTransaction::OnHttpsProxyTunnelResponse(
     const HttpResponseInfo& response_info,
     const SSLConfig& used_ssl_config,
     const ProxyInfo& used_proxy_info,
-    HttpStream* stream) {
+    std::unique_ptr<HttpStream> stream) {
   DCHECK_EQ(STATE_CREATE_STREAM_COMPLETE, next_state_);
 
   CopyConnectionAttemptsFromStreamRequest();
@@ -590,7 +573,7 @@ void HttpNetworkTransaction::OnHttpsProxyTunnelResponse(
     total_received_bytes_ += stream_->GetTotalReceivedBytes();
     total_sent_bytes_ += stream_->GetTotalSentBytes();
   }
-  stream_.reset(stream);
+  stream_ = std::move(stream);
   stream_request_.reset();  // we're done with the stream request
   OnIOComplete(ERR_HTTPS_PROXY_TUNNEL_RESPONSE);
 }
@@ -880,9 +863,6 @@ int HttpNetworkTransaction::DoCreateStreamComplete(int result) {
   // connection attempts in *that* function instead of here in that case.
   if (result != ERR_HTTPS_PROXY_TUNNEL_RESPONSE)
     CopyConnectionAttemptsFromStreamRequest();
-
-  if (request_->url.SchemeIsCryptographic())
-    RecordSSLFallbackMetrics(result);
 
   if (result == OK) {
     next_state_ = STATE_INIT_STREAM;
@@ -1257,7 +1237,8 @@ int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
   // On a 408 response from the server ("Request Timeout") on a stale socket,
   // retry the request.
   // Headers can be NULL because of http://crbug.com/384554.
-  if (response_.headers.get() && response_.headers->response_code() == 408 &&
+  if (response_.headers.get() &&
+      response_.headers->response_code() == HTTP_REQUEST_TIMEOUT &&
       stream_->IsConnectionReused()) {
     net_log_.AddEventWithNetErrorCode(
         NetLogEventType::HTTP_TRANSACTION_RESTART_AFTER_ERROR,
@@ -1300,8 +1281,16 @@ int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
     return OK;
   }
 
-  if (response_.headers->response_code() == 421) {
-    return HandleIOError(ERR_MISDIRECTED_REQUEST);
+  if (response_.headers->response_code() == 421 &&
+      (enable_ip_based_pooling_ || enable_alternative_services_)) {
+    // Retry the request with both IP based pooling and Alternative Services
+    // disabled.
+    enable_ip_based_pooling_ = false;
+    enable_alternative_services_ = false;
+    net_log_.AddEvent(
+        NetLogEventType::HTTP_TRANSACTION_RESTART_MISDIRECTED_REQUEST);
+    ResetConnectionAndRequestForResend();
+    return OK;
   }
 
   if (IsSecureRequest()) {
@@ -1503,22 +1492,6 @@ void HttpNetworkTransaction::HandleClientAuthError(int error) {
 int HttpNetworkTransaction::HandleSSLHandshakeError(int error) {
   DCHECK(request_);
   HandleClientAuthError(error);
-
-  // Accept deprecated cipher suites, but only on a fallback. This makes UMA
-  // reflect servers require a deprecated cipher rather than merely prefer
-  // it. This, however, has no security benefit until the ciphers are actually
-  // removed.
-  if (!server_ssl_config_.deprecated_cipher_suites_enabled &&
-      (error == ERR_SSL_VERSION_OR_CIPHER_MISMATCH ||
-       error == ERR_CONNECTION_CLOSED || error == ERR_CONNECTION_RESET)) {
-    net_log_.AddEvent(
-        NetLogEventType::SSL_CIPHER_FALLBACK,
-        base::Bind(&NetLogSSLCipherFallbackCallback, &request_->url, error));
-    server_ssl_config_.deprecated_cipher_suites_enabled = true;
-    ResetConnectionAndRequestForResend();
-    return OK;
-  }
-
   return error;
 }
 
@@ -1595,19 +1568,6 @@ int HttpNetworkTransaction::HandleIOError(int error) {
         error = OK;
       }
       break;
-    case ERR_MISDIRECTED_REQUEST:
-      // If this is the second try, just give up.
-      if (!enable_ip_based_pooling_ && !enable_alternative_services_)
-        return OK;
-      // Otherwise retry the request with both IP based pooling
-      // and Alternative Services disabled.
-      enable_ip_based_pooling_ = false;
-      enable_alternative_services_ = false;
-      net_log_.AddEventWithNetErrorCode(
-          NetLogEventType::HTTP_TRANSACTION_RESTART_AFTER_ERROR, error);
-      ResetConnectionAndRequestForResend();
-      error = OK;
-      break;
   }
   return error;
 }
@@ -1643,14 +1603,6 @@ void HttpNetworkTransaction::CacheNetErrorDetailsAndResetStream() {
   if (stream_)
     stream_->PopulateNetErrorDetails(&net_error_details_);
   stream_.reset();
-}
-
-void HttpNetworkTransaction::RecordSSLFallbackMetrics(int result) {
-  if (result != OK)
-    return;
-
-  UMA_HISTOGRAM_BOOLEAN("Net.ConnectionUsedSSLDeprecatedCipherFallback2",
-                        server_ssl_config_.deprecated_cipher_suites_enabled);
 }
 
 HttpResponseHeaders* HttpNetworkTransaction::GetResponseHeaders() const {

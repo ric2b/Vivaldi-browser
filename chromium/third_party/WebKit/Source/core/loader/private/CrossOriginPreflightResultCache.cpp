@@ -80,7 +80,7 @@ static bool ParseAccessControlAllowList(const String& string,
                                         HashSet<String, HashType>& set) {
   unsigned start = 0;
   size_t end;
-  while ((end = string.Find(',', start)) != kNotFound) {
+  while ((end = string.find(',', start)) != kNotFound) {
     if (start != end)
       AddToAccessControlAllowList(string, start, end - 1, set);
     start = end + 1;
@@ -94,7 +94,7 @@ static bool ParseAccessControlAllowList(const String& string,
 bool CrossOriginPreflightResultCacheItem::Parse(
     const ResourceResponse& response,
     String& error_description) {
-  methods_.Clear();
+  methods_.clear();
   if (!ParseAccessControlAllowList(
           response.HttpHeaderField(HTTPNames::Access_Control_Allow_Methods),
           methods_)) {
@@ -104,7 +104,7 @@ bool CrossOriginPreflightResultCacheItem::Parse(
     return false;
   }
 
-  headers_.Clear();
+  headers_.clear();
   if (!ParseAccessControlAllowList(
           response.HttpHeaderField(HTTPNames::Access_Control_Allow_Headers),
           headers_)) {
@@ -196,7 +196,7 @@ bool CrossOriginPreflightResultCache::CanSkipPreflight(
     const HTTPHeaderMap& request_headers) {
   DCHECK(IsMainThread());
   CrossOriginPreflightResultHashMap::iterator cache_it =
-      preflight_hash_map_.Find(std::make_pair(origin, url));
+      preflight_hash_map_.find(std::make_pair(origin, url));
   if (cache_it == preflight_hash_map_.end())
     return false;
 

@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">इस एक्सटेंशन ने यह बदल दिया है कि जब आप होम बटन क्लिक करते हैं तब कौन सा पेज दिखाया जाए.</translation>
 <translation id="1588438908519853928">सामान्य</translation>
 <translation id="1616206807336925449">इस एक्‍सटेंशन को किसी विशेष अनुमति की आवश्‍यकता नहीं है.</translation>
-<translation id="1620510694547887537">कैमरा</translation>
 <translation id="1635033183663317347">आपके संरक्षक द्वारा इंस्‍टॉल किया गया.</translation>
 <translation id="1723824996674794290">&amp;नई विंडो</translation>
 <translation id="1729533290416704613">इससे यह भी नियंत्रित होता है कि जब आप खोज वाली पट्टी से खोजते हैं तब कौन सा पेज दिखाया जाए.</translation>
-<translation id="1789575671122666129">पॉपअप</translation>
 <translation id="1850508293116537636">&amp;घड़ी की दिशा में घुमाएं</translation>
 <translation id="1859234291848436338">लिखने के निर्देश</translation>
 <translation id="1901303067676059328">&amp;सभी को चुनें</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">यह प्लग इन छुपाएं</translation>
 <translation id="2087822576218954668">प्रिंट: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">प्‍लग इन अपडेट करें</translation>
-<translation id="2147827593068025794">पृष्ठभूमि समन्वयन</translation>
 <translation id="215753907730220065">पूर्ण स्क्रीन से बाहर निकलें</translation>
 <translation id="2177950615300672361">गुप्त टैब: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">पता लगाएं (डिफ़ॉल्ट)</translation>
 <translation id="219008588003277019">नेटिव क्लाइंट मॉड्यूल: <ph name="NEXE_NAME" /></translation>
 <translation id="2282146716419988068">GPU प्रक्रिया</translation>
 <translation id="2301382460326681002">एक्‍सटेंशन मूल निर्देशिका अमान्य है.</translation>
@@ -47,9 +43,7 @@
 <translation id="2439110203301358333">आपके कंप्यूटर पर किसी अन्य प्रोग्राम ने एक्सटेंशन जोड़ा है, जो Vivaldi के काम करने के तरीके को बदल सकता है.</translation>
 <translation id="2445081178310039857">एक्‍सटेंशन मूल निर्देशिका आवश्यक है.</translation>
 <translation id="2470702053775288986">असमर्थित एक्‍सटेंशन अक्षम</translation>
-<translation id="2482878487686419369">अधिसूचनाएं</translation>
 <translation id="2501797496290880632">कोई शॉर्टकट लिखें</translation>
-<translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> इंस्‍टॉल करें</translation>
 <translation id="2550212893339833758">स्वैप की गई मेमोरी</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">फिर से-सक्षम करें</translation>
@@ -66,7 +60,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">उपयोगकर्ता हैंडल</translation>
 <translation id="3222066309010235055">प्रीरेंडर: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">माइक्रोफ़ोन</translation>
 <translation id="3241680850019875542">पैक के एक्सटेंशनकी मूल निर्देशिका को चुनें. किसी एक्स्टेंशन को अपडेट करने के लिए, पुन: उपयोग के लिए निजी कुंजी फ़ाइल का भी चुनें.</translation>
 <translation id="3280237271814976245">इस &amp;रूप में सहेजें...</translation>
 <translation id="3288047731229977326">डेवलपर मोड में चलने वाले एक्सटेंशन आपके कंप्यूटर को नुकसान पहुंचा सकते हैं. यदि आप कोई डेवलपर नहीं हैं, तो सुरक्षित रहने के लिए आपको डेवलपर मोड मे चलने वाले इन एक्सटेंशन को अक्षम करना चाहिए.</translation>
@@ -74,7 +67,6 @@
 <translation id="3347086966102161372">चित्र के पते को कॉ&amp;पी करें</translation>
 <translation id="335985608243443814">ब्राउज़ करें...</translation>
 <translation id="3378572629723696641">यह एक्‍सटेंशन दूषित हो सकता है.</translation>
-<translation id="3427092606871434483">अनुमति दें (डिफ़ॉल्ट)</translation>
 <translation id="3435896845095436175">सक्षम करें</translation>
 <translation id="345693547134384690">नए टैब में &amp;छवि खोलें</translation>
 <translation id="3467267818798281173">सुझावों के लिए गूगल से पूछें</translation>
@@ -82,7 +74,6 @@
 <translation id="3627588569887975815">&amp;गुप्त विंडो में लिंक खोलें</translation>
 <translation id="3678156199662914018">एक्‍सटेंशन: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">लोड हो रही हैं...</translation>
-<translation id="3789841737615482174">इंस्‍टॉल करें</translation>
 <translation id="3798449238516105146">वर्शन</translation>
 <translation id="3866249974567520381">वर्णन</translation>
 <translation id="3905761538810670789">ऐप को ठीक करें</translation>
@@ -102,13 +93,11 @@
 <translation id="4096508467498758490">डेवलपर मोड एक्सटेंशन अक्षम करें</translation>
 <translation id="4100839878934973028">आपके कंप्यूटर पर किसी अन्य प्रोग्राम ने ऐप्स  जोड़ा है, जो Vivaldi के काम करने के तरीके को बदल सकता है.</translation>
 <translation id="4130207949184424187">इस एक्सटेंशन ने यह बदल दिया है कि जब आप खोज वाली पट्टी से खोजते हैं तब कौन सा पृष्‍ठ दिखाया जाए.</translation>
-<translation id="4165986682804962316">साइट सेटिंग</translation>
 <translation id="4176463684765177261">अक्षम</translation>
 <translation id="4200983522494130825">नया &amp;टैब</translation>
 <translation id="420665587194630159">(यह एक्सटेंशन प्रबंधित है और निकाला या अक्षम नहीं किया जा सकता.)</translation>
 <translation id="4240511609794012987">साझा मेमोरी</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K लाइव)</translation>
-<translation id="4312866146174492540">अवरुद्ध करें (डिफ़ॉल्ट)</translation>
 <translation id="4384652540891215547">एक्सटेंशन सक्रिय करें</translation>
 <translation id="4394049700291259645">अक्षम करें</translation>
 <translation id="4423482519432579560">&amp;वर्तनीजांच</translation>
@@ -121,7 +110,6 @@
 <translation id="4677772697204437347">GPU मेमोरी</translation>
 <translation id="4711638718396952945">सेटिंग पुन: स्थापित करें</translation>
 <translation id="4839303808932127586">इस रूप में वीडियो स&amp;हेजें...</translation>
-<translation id="4851858059374029925"><ph name="PLUGIN_NAME" /> इंस्टॉल करें? केवल अपने विश्वसनीय प्लग इन इंस्टॉल करें.</translation>
 <translation id="488785315393301722">विवरण दिखाएं</translation>
 <translation id="4911714727432509308">किसी भी एक्सटेंशन को कीबोर्ड शॉर्टकट असाइन नहीं किए गए हैं.</translation>
 <translation id="4927301649992043040">एक्सटेंशन पैक करें</translation>
@@ -153,12 +141,10 @@
 <translation id="5646376287012673985">स्थान</translation>
 <translation id="5715711091495208045">प्‍लग इन ब्रोकर: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">इस रूप में ऑडियो स&amp;हेजें...</translation>
-<translation id="5778550464785688721">MIDI डिवाइस पूर्ण नियंत्रण</translation>
 <translation id="5780973441651030252">प्राथमिकता संसाधित करें</translation>
 <translation id="5804241973901381774">अनुमतियां</translation>
 <translation id="583281660410589416">अज्ञात</translation>
 <translation id="59174027418879706">सक्षम किया गया</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 उपयोग में है}one{# उपयोग में हैं}other{# उपयोग में हैं}}</translation>
 <translation id="5956585768868398362">क्या यह वही खोज पेज है जिसकी आप अपेक्षा कर रहे थे?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> उच्चतम)</translation>
 <translation id="5965661248935608907">इससे यह भी नियंत्रित होता है कि जब आप होम बटन क्लिक करते हैं या खोज वाली पट्टी से खोजते हैं तब कौन सा पृष्‍ठ दिखाया जाए.</translation>
@@ -187,14 +173,12 @@
 <translation id="6787839852456839824">कीबोर्ड शॉर्टकट</translation>
 <translation id="6798954102094737107">प्‍लग इन: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">बदलावों को बनाए रखें</translation>
-<translation id="6863910145616405334">प्लग इन नहीं मिला</translation>
 <translation id="6886871292305414135">नए &amp;टैब में लिंक खोलें</translation>
 <translation id="6900284862687837908">पृष्ठभूमि ऐप: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">फ़ाइल एक्सेस निरस्त करें</translation>
 <translation id="6974053822202609517">दाएं से बाएं</translation>
 <translation id="7013485839273047434">और अधिक एक्सटेंशन प्राप्त करें</translation>
 <translation id="708060913198414444">ऑडियो के पते को कॉ&amp;पी करें</translation>
-<translation id="7105578512429498960">यह सामग्री दिखाने के लिए <ph name="PLUGIN_NAME" /> इंस्टॉल करें</translation>
 <translation id="7144878232160441200">पुन: प्रयास करें</translation>
 <translation id="7206693748120342859"><ph name="PLUGIN_NAME" /> डाउनलोड हो रहा है...</translation>
 <translation id="7287143125007575591">ऐक्सेस अस्वीकार कर द‍ी गई.</translation>
@@ -227,7 +211,6 @@
 
 अपनी मुख्य फ़ाइल को किसी सुरक्षित स्थान पर रखें. आपको अपने एक्सटेंशन के नए वर्शन बनाने के लिए इसकी आवश्यकता होगी.</translation>
 <translation id="8004582292198964060">ब्राउज़र</translation>
-<translation id="8037357227543935929">पूछें (डिफ़ॉल्ट)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />k</translation>
 <translation id="8188120771410500975">&amp;लेख फ़ील्ड की वर्तनी जांचें</translation>
 <translation id="8261378640211443080">यह एक्सटेंशन <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> में सूचीबद्ध नहीं है और यह आपकी जानकारी के बिना जोड़ा गया हो सकता है.</translation>
@@ -243,7 +226,6 @@
 <translation id="8664389313780386848">पेज का स्रोत &amp;देखें</translation>
 <translation id="8719653885894320876"><ph name="PLUGIN_NAME" /> डाउनलोड विफल रहा</translation>
 <translation id="873545264931343897">जब <ph name="PLUGIN_NAME" /> अपडेट करना पूर्ण कर ले, तो उसे सक्रिय करने के लिए पेज को फिर से लोड करें</translation>
-<translation id="8763204422633679667">जब <ph name="PLUGIN_NAME" /> इंस्टॉल करना पूर्ण कर ले, तो उसे सक्रिय करने के लिए पेज को फिर से लोड करें</translation>
 <translation id="8798099450830957504">सामान्य</translation>
 <translation id="8808478386290700967">वेब स्टोर</translation>
 <translation id="8859174528519900719">सबफ़्रेम: <ph name="SUBFRAME_SITE" /></translation>

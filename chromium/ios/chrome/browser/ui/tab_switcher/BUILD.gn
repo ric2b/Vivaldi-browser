@@ -50,6 +50,7 @@ bundle_data("resources") {
 }
 
 source_set("tab_switcher") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "tab_model_snapshot.h",
     "tab_model_snapshot.mm",
@@ -108,6 +109,8 @@ source_set("tab_switcher") {
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/authentication:authentication_arc",
+    "//ios/chrome/browser/ui/authentication:authentication_ui",
     "//ios/chrome/browser/ui/colors",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/keyboard",
@@ -137,6 +140,7 @@ source_set("tab_switcher") {
 }
 
 source_set("utils") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "tab_switcher_utils.h",
     "tab_switcher_utils.mm",

@@ -198,10 +198,19 @@ class PrerenderManager : public content::NotificationObserver,
                                    bool is_main_resource,
                                    int redirect_count);
 
-  // Records the time to first contentful paint for loads that previously had a
-  // no state prefetch load.  Must not be called for prefetch loads themselves
-  // (which are never rendered anyway).  |is_no_store| must be true if the main
-  // resource has a "no-store" cache control HTTP header.
+  // Called to record the time to First Contentful Paint for all pages that were
+  // not prerendered.
+  //
+  // As part of recording, determines whether the load had previously matched
+  // the criteria for triggering a NoStatePrefetch. In the prerendering
+  // experimental group such triggering makes the page prerendered, while in the
+  // group doing only 'simple loads' it would have been a noop.
+  //
+  // Must not be called for prefetch loads themselves (which are never painted
+  // anyway). The |is_no_store| must be true iff the main resource has a
+  // "no-store" cache control HTTP header. The |was_hidden| tells whether the
+  // the page was hidden at least once between starting the load and registering
+  // the FCP.
   void RecordNoStateFirstContentfulPaint(const GURL& url,
                                          bool is_no_store,
                                          bool was_hidden,
@@ -276,7 +285,7 @@ class PrerenderManager : public content::NotificationObserver,
 
   // Returns a Value object containing the active pages being prerendered, and
   // a history of pages which were prerendered.
-  std::unique_ptr<base::DictionaryValue> GetAsValue() const;
+  std::unique_ptr<base::DictionaryValue> CopyAsValue() const;
 
   // Clears the data indicated by which bits of clear_flags are set.
   //

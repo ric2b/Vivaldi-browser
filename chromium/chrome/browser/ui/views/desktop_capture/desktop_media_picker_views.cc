@@ -6,6 +6,7 @@
 
 #include "base/callback.h"
 #include "chrome/browser/media/webrtc/desktop_media_list.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/desktop_capture/desktop_media_list_view.h"
@@ -23,12 +24,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
-#include "ui/views/background.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_client_view.h"
 #include "ui/wm/core/shadow_types.h"
@@ -64,18 +63,19 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
       description_label_(new views::Label()),
       audio_share_checkbox_(nullptr),
       pane_(new views::TabbedPane()) {
+  const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+
   SetLayoutManager(new views::BoxLayout(
-      views::BoxLayout::kVertical, views::kButtonHEdgeMarginNew,
-      ChromeLayoutProvider::Get()->GetDistanceMetric(
-          DISTANCE_PANEL_CONTENT_MARGIN),
-      views::kLabelToControlVerticalSpacing));
+      views::BoxLayout::kVertical,
+      provider->GetDistanceMetric(
+          views::DISTANCE_DIALOG_CONTENTS_HORIZONTAL_MARGIN),
+      provider->GetDistanceMetric(
+          views::DISTANCE_DIALOG_CONTENTS_VERTICAL_MARGIN),
+      provider->GetDistanceMetric(DISTANCE_RELATED_CONTROL_VERTICAL_SMALL)));
 
   description_label_->SetMultiLine(true);
   description_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   AddChildView(description_label_);
-
-  const SkColor bg_color = GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_DialogBackground);
 
   if (screen_list) {
     source_types_.push_back(DesktopMediaID::TYPE_SCREEN);
@@ -113,8 +113,6 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
         kGenericScreenStyle.item_size.height(),
         kGenericScreenStyle.item_size.height() * 2);
     screen_scroll_view->set_hide_horizontal_scrollbar(true);
-    screen_scroll_view->set_background(
-        views::Background::CreateSolidBackground(bg_color));
 
     pane_->AddTab(screen_title_text, screen_scroll_view);
     pane_->set_listener(this);
@@ -144,8 +142,6 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
     window_scroll_view->ClipHeightTo(kWindowStyle.item_size.height(),
                                      kWindowStyle.item_size.height() * 2);
     window_scroll_view->set_hide_horizontal_scrollbar(true);
-    window_scroll_view->set_background(
-        views::Background::CreateSolidBackground(bg_color));
 
     pane_->AddTab(window_title_text, window_scroll_view);
     pane_->set_listener(this);
@@ -175,8 +171,6 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
     tab_scroll_view->ClipHeightTo(kTabStyle.item_size.height(),
                                   kTabStyle.item_size.height() * 10);
     tab_scroll_view->set_hide_horizontal_scrollbar(true);
-    tab_scroll_view->set_background(
-        views::Background::CreateSolidBackground(bg_color));
 
     pane_->AddTab(tab_title_text, tab_scroll_view);
     pane_->set_listener(this);
@@ -217,6 +211,7 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
     widget = DialogDelegate::CreateDialogWidget(this, context, nullptr);
     widget->Show();
   }
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::DESKTOP_MEDIA_PICKER);
 
   // If the picker is not modal to the calling web contents then it is displayed
   // in its own top-level window, so in that case it needs to be filtered out of
@@ -274,7 +269,7 @@ void DesktopMediaPickerDialogView::DetachParent() {
   parent_ = nullptr;
 }
 
-gfx::Size DesktopMediaPickerDialogView::GetPreferredSize() const {
+gfx::Size DesktopMediaPickerDialogView::CalculatePreferredSize() const {
   static const size_t kDialogViewWidth = 600;
   return gfx::Size(kDialogViewWidth, GetHeightForWidth(kDialogViewWidth));
 }
@@ -446,7 +441,7 @@ void DesktopMediaPickerViews::NotifyDialogResult(DesktopMediaID source) {
   // Notify the |callback_| asynchronously because it may need to destroy
   // DesktopMediaPicker.
   content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                   base::Bind(callback_, source));
+                                   base::BindOnce(callback_, source));
   callback_.Reset();
 }
 

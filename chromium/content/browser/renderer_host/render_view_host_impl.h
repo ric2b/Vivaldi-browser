@@ -20,6 +20,7 @@
 #include "base/macros.h"
 #include "base/process/kill.h"
 #include "build/build_config.h"
+#include "content/browser/renderer_host/input/input_device_change_observer.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_owner_delegate.h"
 #include "content/browser/site_instance_impl.h"
@@ -116,7 +117,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   void SelectWordAroundCaret() override;
 
   // RenderProcessHostObserver implementation
-  void RenderProcessReady(RenderProcessHost* host) override;
   void RenderProcessExited(RenderProcessHost* host,
                            base::TerminationStatus status,
                            int exit_code) override;
@@ -222,6 +222,7 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   void RenderWidgetDidInit() override;
   void RenderWidgetWillSetIsLoading(bool is_loading) override;
   void RenderWidgetGotFocus() override;
+  void RenderWidgetLostFocus() override;
   void RenderWidgetDidForwardMouseEvent(
       const blink::WebMouseEvent& mouse_event) override;
   bool MayRenderWidgetForwardKeyboardEvent(
@@ -328,9 +329,10 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   // closed.
   std::unique_ptr<TimeoutMonitor> close_timeout_;
 
-  bool updating_web_preferences_;
+  // This monitors input changes so they can be reflected to the interaction MQ.
+  std::unique_ptr<InputDeviceChangeObserver> input_device_change_observer_;
 
-  bool render_view_ready_on_process_launch_;
+  bool updating_web_preferences_;
 
   base::WeakPtrFactory<RenderViewHostImpl> weak_factory_;
 

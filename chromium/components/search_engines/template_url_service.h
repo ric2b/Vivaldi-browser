@@ -167,15 +167,19 @@ class TemplateURLService : public WebDataServiceConsumer,
   // The caller should not try to delete the returned pointer; the data store
   // retains ownership of it.
   TemplateURL* GetTemplateURLForKeyword(const base::string16& keyword);
+  const TemplateURL* GetTemplateURLForKeyword(
+      const base::string16& keyword) const;
 
   // Returns that TemplateURL with the specified GUID, or NULL if not found.
   // The caller should not try to delete the returned pointer; the data store
   // retains ownership of it.
   TemplateURL* GetTemplateURLForGUID(const std::string& sync_guid);
+  const TemplateURL* GetTemplateURLForGUID(const std::string& sync_guid) const;
 
   // Returns the first TemplateURL found with a URL using the specified |host|,
   // or NULL if there are no such TemplateURLs
   TemplateURL* GetTemplateURLForHost(const std::string& host);
+  const TemplateURL* GetTemplateURLForHost(const std::string& host) const;
 
   // Adds |template_url| to this model.  Returns a raw pointer to |template_url|
   // if the addition succeeded, or null on failure.  (Many callers need still
@@ -188,11 +192,6 @@ class TemplateURLService : public WebDataServiceConsumer,
                                 const base::string16& short_name,
                                 const base::string16& keyword,
                                 const std::string& url);
-
-  // Adds a search engine with the specified info for extensions.
-  TemplateURL* AddExtensionControlledTURL(
-      std::unique_ptr<TemplateURL> template_url,
-      std::unique_ptr<TemplateURL::AssociatedExtensionInfo> info);
 
   // Removes the keyword from the model. This deletes the supplied TemplateURL.
   // This fails if the supplied template_url is the default search provider.
@@ -258,10 +257,9 @@ class TemplateURLService : public WebDataServiceConsumer,
   // Returns the default search provider. If the TemplateURLService hasn't been
   // loaded, the default search provider is pulled from preferences.
   //
-  // NOTE: At least in unittest mode, this may return NULL.
-  // TODO(blundell): See if all callers can be converted to take in const
-  // pointers and eliminate this version of the method.
-  TemplateURL* GetDefaultSearchProvider();
+  // NOTE: This may return null in certain circumstances such as:
+  //       1.) Unit test mode
+  //       2.) The default search engine is disabled by policy.
   const TemplateURL* GetDefaultSearchProvider() const;
 
   // Returns true if the |url| is a search results page from the default search
@@ -393,7 +391,7 @@ class TemplateURLService : public WebDataServiceConsumer,
       TemplateURLServiceClient* client,
       PrefService* prefs,
       const SearchTermsData& search_terms_data,
-      TemplateURL* existing_turl,
+      const TemplateURL* existing_turl,
       const syncer::SyncData& sync_data,
       syncer::SyncChangeList* change_list);
 

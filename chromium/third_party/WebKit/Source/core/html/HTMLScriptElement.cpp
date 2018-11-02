@@ -89,14 +89,6 @@ void HTMLScriptElement::ParseAttribute(
     LogUpdateAttributeIfIsolatedWorldAndInDocument("script", params);
   } else if (params.name == asyncAttr) {
     loader_->HandleAsyncAttribute();
-  } else if (params.name == nonceAttr) {
-    if (params.new_value == ContentSecurityPolicy::GetNonceReplacementString())
-      return;
-    setNonce(params.new_value);
-    if (RuntimeEnabledFeatures::hideNonceContentAttributeEnabled()) {
-      setAttribute(nonceAttr,
-                   ContentSecurityPolicy::GetNonceReplacementString());
-    }
   } else {
     HTMLElement::ParseAttribute(params);
   }
@@ -104,13 +96,15 @@ void HTMLScriptElement::ParseAttribute(
 
 Node::InsertionNotificationRequest HTMLScriptElement::InsertedInto(
     ContainerNode* insertion_point) {
+  ScriptType script_type = ScriptType::kClassic;
   if (insertion_point->isConnected() && HasSourceAttribute() &&
       !Loader()->IsScriptTypeSupported(
-          ScriptLoader::kDisallowLegacyTypeInTypeAttribute))
+          ScriptLoader::kDisallowLegacyTypeInTypeAttribute, script_type))
     UseCounter::Count(GetDocument(),
                       UseCounter::kScriptElementWithInvalidTypeHasSrc);
   HTMLElement::InsertedInto(insertion_point);
   LogAddElementIfIsolatedWorldAndInDocument("script", srcAttr);
+
   return kInsertionShouldCallDidNotifySubtreeInsertions;
 }
 
@@ -149,6 +143,10 @@ String HTMLScriptElement::TypeAttributeValue() const {
 
 String HTMLScriptElement::LanguageAttributeValue() const {
   return getAttribute(languageAttr).GetString();
+}
+
+bool HTMLScriptElement::NomoduleAttributeValue() const {
+  return FastHasAttribute(nomoduleAttr);
 }
 
 String HTMLScriptElement::ForAttributeValue() const {
@@ -195,8 +193,9 @@ bool HTMLScriptElement::HasChildren() const {
   return Node::hasChildren();
 }
 
-bool HTMLScriptElement::IsNonceableElement() const {
-  return ContentSecurityPolicy::IsNonceableElement(this);
+const AtomicString& HTMLScriptElement::GetNonceForElement() const {
+  return ContentSecurityPolicy::IsNonceableElement(this) ? nonce()
+                                                         : g_null_atom;
 }
 
 bool HTMLScriptElement::AllowInlineScriptForCSP(

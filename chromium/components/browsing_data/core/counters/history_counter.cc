@@ -55,6 +55,8 @@ void HistoryCounter::Count() {
   // Reset the state.
   cancelable_task_tracker_.TryCancelAll();
   web_history_request_.reset();
+  weak_ptr_factory_.InvalidateWeakPtrs();
+
   has_synced_visits_ = false;
 
   // Count the locally stored items.
@@ -100,7 +102,6 @@ void HistoryCounter::OnGetLocalHistoryCount(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!result.success) {
-    LOG(ERROR) << "Failed to count the local history.";
     return;
   }
 
@@ -149,16 +150,9 @@ void HistoryCounter::MergeResults() {
   if (!local_counting_finished_ || !web_counting_finished_)
     return;
 
-  ReportResult(
-      base::MakeUnique<HistoryResult>(this, local_result_, has_synced_visits_));
+  ReportResult(base::MakeUnique<HistoryResult>(
+      this, local_result_, history_sync_enabled_, has_synced_visits_));
 }
-
-HistoryCounter::HistoryResult::HistoryResult(const HistoryCounter* source,
-                                             ResultInt value,
-                                             bool has_synced_visits)
-    : FinishedResult(source, value), has_synced_visits_(has_synced_visits) {}
-
-HistoryCounter::HistoryResult::~HistoryResult() {}
 
 void HistoryCounter::OnStateChanged(syncer::SyncService* sync) {
   bool history_sync_enabled_new_state = !!web_history_service_callback_.Run();
@@ -170,5 +164,14 @@ void HistoryCounter::OnStateChanged(syncer::SyncService* sync) {
     Restart();
   }
 }
+
+HistoryCounter::HistoryResult::HistoryResult(const HistoryCounter* source,
+                                             ResultInt value,
+                                             bool is_sync_enabled,
+                                             bool has_synced_visits)
+    : SyncResult(source, value, is_sync_enabled),
+      has_synced_visits_(has_synced_visits) {}
+
+HistoryCounter::HistoryResult::~HistoryResult() {}
 
 }  // namespace browsing_data

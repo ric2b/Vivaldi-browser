@@ -6,15 +6,18 @@
 
 #include <memory>
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
-#include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMTypedArray.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/URLSearchParams.h"
 #include "core/fileapi/Blob.h"
+#include "core/html/FormData.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/FetchDataLoader.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8ThrowException.h"
+#include "platform/network/ParsedContentType.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefPtr.h"
 #include "public/platform/WebDataConsumerHandle.h"
@@ -72,6 +75,25 @@ class BodyArrayBufferConsumer final : public BodyConsumerBase {
   }
 };
 
+class BodyFormDataConsumer final : public BodyConsumerBase {
+  WTF_MAKE_NONCOPYABLE(BodyFormDataConsumer);
+
+ public:
+  explicit BodyFormDataConsumer(ScriptPromiseResolver* resolver)
+      : BodyConsumerBase(resolver) {}
+
+  void DidFetchDataLoadedFormData(FormData* formData) override {
+    Resolver()->Resolve(formData);
+  }
+
+  void DidFetchDataLoadedString(const String& string) override {
+    FormData* formData = FormData::Create();
+    for (const auto& pair : URLSearchParams::Create(string)->Params())
+      formData->append(pair.first, pair.second);
+    DidFetchDataLoadedFormData(formData);
+  }
+};
+
 class BodyTextConsumer final : public BodyConsumerBase {
   WTF_MAKE_NONCOPYABLE(BodyTextConsumer);
 
@@ -100,7 +122,7 @@ class BodyJsonConsumer final : public BodyConsumerBase {
     v8::Local<v8::String> input_string = V8String(isolate, string);
     v8::TryCatch trycatch(isolate);
     v8::Local<v8::Value> parsed;
-    if (V8Call(v8::JSON::Parse(isolate, input_string), parsed, trycatch))
+    if (v8::JSON::Parse(isolate, input_string).ToLocal(&parsed))
       Resolver()->Resolve(parsed);
     else
       Resolver()->Reject(trycatch.Exception());
@@ -158,6 +180,49 @@ ScriptPromise Body::blob(ScriptState* script_state) {
   return promise;
 }
 
+ScriptPromise Body::formData(ScriptState* script_state) {
+  ScriptPromise promise = RejectInvalidConsumption(script_state);
+  if (!promise.IsEmpty())
+    return promise;
+
+  // See above comment.
+  if (!ExecutionContext::From(script_state))
+    return ScriptPromise();
+
+  ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
+  const ParsedContentType parsedTypeWithParameters(ContentType());
+  const String parsedType = parsedTypeWithParameters.MimeType().LowerASCII();
+  promise = resolver->Promise();
+  if (parsedType == "multipart/form-data") {
+    const String boundary =
+        parsedTypeWithParameters.ParameterValueForName("boundary");
+    if (BodyBuffer() && !boundary.IsEmpty()) {
+      BodyBuffer()->StartLoading(
+          FetchDataLoader::CreateLoaderAsFormData(boundary),
+          new BodyFormDataConsumer(resolver));
+      return promise;
+    }
+  } else if (parsedType == "application/x-www-form-urlencoded") {
+    if (BodyBuffer()) {
+      BodyBuffer()->StartLoading(FetchDataLoader::CreateLoaderAsString(),
+                                 new BodyFormDataConsumer(resolver));
+    } else {
+      resolver->Resolve(FormData::Create());
+    }
+    return promise;
+  } else {
+    if (BodyBuffer()) {
+      BodyBuffer()->StartLoading(FetchDataLoader::CreateLoaderAsFailure(),
+                                 new BodyFormDataConsumer(resolver));
+      return promise;
+    }
+  }
+
+  resolver->Reject(V8ThrowException::CreateTypeError(script_state->GetIsolate(),
+                                                     "Invalid MIME type"));
+  return promise;
+}
+
 ScriptPromise Body::json(ScriptState* script_state) {
   ScriptPromise promise = RejectInvalidConsumption(script_state);
   if (!promise.IsEmpty())
@@ -203,7 +268,7 @@ ScriptValue Body::body(ScriptState* script_state) {
   if (!BodyBuffer())
     return ScriptValue::CreateNull(script_state);
   ScriptValue stream = BodyBuffer()->Stream();
-  ASSERT(stream.GetScriptState() == script_state);
+  DCHECK_EQ(stream.GetScriptState(), script_state);
   return stream;
 }
 

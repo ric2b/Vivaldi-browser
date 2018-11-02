@@ -9,6 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "cc/layers/layer.h"
 #include "cc/test/fake_layer_tree_host.h"
+#include "cc/test/layer_test_common.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -37,7 +38,7 @@ class TestLayerImpl : public LayerImpl {
 };
 
 #define EXPECT_COUNT(layer, target, contrib, itself)                      \
-  if (layer->GetRenderSurface()) {                                        \
+  if (GetRenderSurface(layer)) {                                          \
     EXPECT_EQ(target, target_surface_count_[layer->effect_tree_index()]); \
     EXPECT_EQ(contrib,                                                    \
               contributing_surface_count_[layer->effect_tree_index()]);   \
@@ -108,9 +109,9 @@ TEST_F(EffectTreeLayerListIteratorTest, TreeWithNoDrawnLayers) {
 
   host_impl_.active_tree()->SetRootLayerForTesting(std::move(root_layer));
 
-  LayerImplList render_surface_layer_list;
+  RenderSurfaceList render_surface_list;
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
-      root_ptr, root_ptr->bounds(), &render_surface_layer_list);
+      root_ptr, root_ptr->bounds(), &render_surface_list);
   LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 
   IterateFrontToBack();
@@ -137,17 +138,17 @@ TEST_F(EffectTreeLayerListIteratorTest, SimpleTree) {
 
   host_impl_.active_tree()->SetRootLayerForTesting(std::move(root_layer));
 
-  LayerImplList render_surface_layer_list;
+  RenderSurfaceList render_surface_list;
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
-      root_ptr, root_ptr->bounds(), &render_surface_layer_list);
+      root_ptr, root_ptr->bounds(), &render_surface_list);
   LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 
   IterateFrontToBack();
   EXPECT_COUNT(root_ptr, 5, -1, 4);
-  EXPECT_COUNT(first_ptr, -1, -1, 3);
-  EXPECT_COUNT(second_ptr, -1, -1, 2);
-  EXPECT_COUNT(third_ptr, -1, -1, 1);
-  EXPECT_COUNT(fourth_ptr, -1, -1, 0);
+  EXPECT_COUNT(first_ptr, 5, -1, 3);
+  EXPECT_COUNT(second_ptr, 5, -1, 2);
+  EXPECT_COUNT(third_ptr, 5, -1, 1);
+  EXPECT_COUNT(fourth_ptr, 5, -1, 0);
 }
 
 TEST_F(EffectTreeLayerListIteratorTest, ComplexTree) {
@@ -182,21 +183,21 @@ TEST_F(EffectTreeLayerListIteratorTest, ComplexTree) {
 
   host_impl_.active_tree()->SetRootLayerForTesting(std::move(root_layer));
 
-  LayerImplList render_surface_layer_list;
+  RenderSurfaceList render_surface_list;
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
-      root_ptr, root_ptr->bounds(), &render_surface_layer_list);
+      root_ptr, root_ptr->bounds(), &render_surface_list);
   LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 
   IterateFrontToBack();
   EXPECT_COUNT(root_ptr, 9, -1, 8);
-  EXPECT_COUNT(root1_ptr, -1, -1, 7);
-  EXPECT_COUNT(root2_ptr, -1, -1, 6);
-  EXPECT_COUNT(root21_ptr, -1, -1, 5);
-  EXPECT_COUNT(root22_ptr, -1, -1, 4);
-  EXPECT_COUNT(root221_ptr, -1, -1, 3);
-  EXPECT_COUNT(root23_ptr, -1, -1, 2);
-  EXPECT_COUNT(root231_ptr, -1, -1, 1);
-  EXPECT_COUNT(root3_ptr, -1, -1, 0);
+  EXPECT_COUNT(root1_ptr, 9, -1, 7);
+  EXPECT_COUNT(root2_ptr, 9, -1, 6);
+  EXPECT_COUNT(root21_ptr, 9, -1, 5);
+  EXPECT_COUNT(root22_ptr, 9, -1, 4);
+  EXPECT_COUNT(root221_ptr, 9, -1, 3);
+  EXPECT_COUNT(root23_ptr, 9, -1, 2);
+  EXPECT_COUNT(root231_ptr, 9, -1, 1);
+  EXPECT_COUNT(root3_ptr, 9, -1, 0);
 }
 
 TEST_F(EffectTreeLayerListIteratorTest, ComplexTreeMultiSurface) {
@@ -235,21 +236,21 @@ TEST_F(EffectTreeLayerListIteratorTest, ComplexTreeMultiSurface) {
 
   host_impl_.active_tree()->SetRootLayerForTesting(std::move(root_layer));
 
-  LayerImplList render_surface_layer_list;
+  RenderSurfaceList render_surface_list;
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
-      root_ptr, root_ptr->bounds(), &render_surface_layer_list);
+      root_ptr, root_ptr->bounds(), &render_surface_list);
   LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 
   IterateFrontToBack();
   EXPECT_COUNT(root_ptr, 14, -1, 13);
-  EXPECT_COUNT(root1_ptr, -1, -1, 12);
+  EXPECT_COUNT(root1_ptr, 14, -1, 12);
   EXPECT_COUNT(root2_ptr, 10, 11, -1);
-  EXPECT_COUNT(root21_ptr, -1, -1, 9);
+  EXPECT_COUNT(root21_ptr, 10, 11, 9);
   EXPECT_COUNT(root22_ptr, 7, 8, 6);
-  EXPECT_COUNT(root221_ptr, -1, -1, 5);
+  EXPECT_COUNT(root221_ptr, 7, 8, 5);
   EXPECT_COUNT(root23_ptr, 3, 4, 2);
-  EXPECT_COUNT(root231_ptr, -1, -1, 1);
-  EXPECT_COUNT(root3_ptr, -1, -1, 0);
+  EXPECT_COUNT(root231_ptr, 3, 4, 1);
+  EXPECT_COUNT(root3_ptr, 14, -1, 0);
 }
 
 }  // namespace

@@ -28,8 +28,8 @@
 
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Vector.h"
-#include "wtf/text/AtomicString.h"
+#include "platform/wtf/Vector.h"
+#include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
 
@@ -105,14 +105,14 @@ void EventSender<T>::DispatchPendingEvents() {
 
   timer_.Stop();
 
-  dispatching_list_.Swap(dispatch_soon_list_);
+  dispatching_list_.swap(dispatch_soon_list_);
   for (auto& sender_in_list : dispatching_list_) {
     if (T* sender = sender_in_list) {
       sender_in_list = nullptr;
       sender->DispatchPendingEvent(this);
     }
   }
-  dispatching_list_.Clear();
+  dispatching_list_.clear();
 }
 
 }  // namespace blink

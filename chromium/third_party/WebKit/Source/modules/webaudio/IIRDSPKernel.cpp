@@ -8,6 +8,12 @@
 
 namespace blink {
 
+IIRDSPKernel::IIRDSPKernel(IIRProcessor* processor)
+    : AudioDSPKernel(processor),
+      iir_(processor->Feedforward(), processor->Feedback()) {
+  tail_time_ = iir_.TailTime(processor->SampleRate());
+}
+
 void IIRDSPKernel::Process(const float* source,
                            float* destination,
                            size_t frames_to_process) {
@@ -34,21 +40,14 @@ void IIRDSPKernel::GetFrequencyResponse(int n_frequencies,
   // Convert from frequency in Hz to normalized frequency (0 -> 1),
   // with 1 equal to the Nyquist frequency.
   for (int k = 0; k < n_frequencies; ++k)
-    frequency[k] = clampTo<float>(frequency_hz[k] / nyquist);
+    frequency[k] = frequency_hz[k] / nyquist;
 
-  iir_.GetFrequencyResponse(n_frequencies, frequency.Data(), mag_response,
+  iir_.GetFrequencyResponse(n_frequencies, frequency.data(), mag_response,
                             phase_response);
 }
 
 double IIRDSPKernel::TailTime() const {
-  // TODO(rtoy): This is true mathematically (infinite impulse response), but
-  // perhaps it should be limited to a smaller value, possibly based on the
-  // actual filter coefficients.  To do that, we would probably need to find the
-  // pole, r, with largest magnitude and select some threshold, eps, such that
-  // |r|^n < eps for all n >= N.  N is then the tailTime for the filter.  If the
-  // the magnitude of r is greater than or equal to 1, the infinity is the right
-  // answer. (There is no constraint on the IIR filter that it be stable.)
-  return std::numeric_limits<double>::infinity();
+  return tail_time_;
 }
 
 double IIRDSPKernel::LatencyTime() const {

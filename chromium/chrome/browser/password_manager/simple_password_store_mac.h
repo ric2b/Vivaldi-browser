@@ -6,7 +6,10 @@
 #define CHROME_BROWSER_PASSWORD_MANAGER_SIMPLE_PASSWORD_STORE_MAC_H_
 
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "components/password_manager/core/browser/password_store_default.h"
+
+class PrefService;
 
 // The same as PasswordStoreDefault but running on the dedicated thread. The
 // owner is responsible for the thread lifetime.
@@ -32,7 +35,8 @@ class SimplePasswordStoreMac : public password_manager::PasswordStoreDefault {
   ~SimplePasswordStoreMac() override;
 
  private:
-  bool Init(const syncer::SyncableService::StartSyncFlare& flare) override;
+  bool Init(const syncer::SyncableService::StartSyncFlare& flare,
+            PrefService* prefs) override;
 
   DISALLOW_COPY_AND_ASSIGN(SimplePasswordStoreMac);
 };

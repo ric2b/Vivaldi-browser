@@ -19,8 +19,8 @@
 #include "base/numerics/safe_math.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "courgette/courgette.h"
 #include "courgette/disassembler_elf_32_arm.h"
+#include "courgette/label_manager.h"
 #include "courgette/streams.h"
 
 namespace courgette {
@@ -126,6 +126,56 @@ bool ReadVectorU8(V* items, SourceStream* buffer) {
   }
   return ok;
 }
+
+/******** InstructionStoreReceptor ********/
+
+// An InstructionReceptor that stores emitted instructions.
+class InstructionStoreReceptor : public InstructionReceptor {
+ public:
+  explicit InstructionStoreReceptor(ExecutableType exe_type,
+                                    EncodedProgram* encoded)
+      : exe_type_(exe_type), encoded_(encoded) {
+    CHECK(encoded_);
+  }
+
+  CheckBool EmitPeRelocs() override {
+    return encoded_->AddPeMakeRelocs(exe_type_);
+  }
+  CheckBool EmitElfRelocation() override {
+    return encoded_->AddElfMakeRelocs();
+  }
+  CheckBool EmitElfARMRelocation() override {
+    return encoded_->AddElfARMMakeRelocs();
+  }
+  CheckBool EmitOrigin(RVA rva) override { return encoded_->AddOrigin(rva); }
+  CheckBool EmitSingleByte(uint8_t byte) override {
+    return encoded_->AddCopy(1, &byte);
+  }
+  CheckBool EmitMultipleBytes(const uint8_t* bytes, size_t len) override {
+    return encoded_->AddCopy(len, bytes);
+  }
+  CheckBool EmitRel32(Label* label) override {
+    return encoded_->AddRel32(label->index_);
+  }
+  CheckBool EmitRel32ARM(uint16_t op,
+                         Label* label,
+                         const uint8_t* arm_op,
+                         uint16_t op_size) override {
+    return encoded_->AddRel32ARM(op, label->index_);
+  }
+  CheckBool EmitAbs32(Label* label) override {
+    return encoded_->AddAbs32(label->index_);
+  }
+  CheckBool EmitAbs64(Label* label) override {
+    return encoded_->AddAbs64(label->index_);
+  }
+
+ private:
+  ExecutableType exe_type_;
+  EncodedProgram* encoded_;
+
+  DISALLOW_COPY_AND_ASSIGN(InstructionStoreReceptor);
+};
 
 }  // namespace
 
@@ -370,107 +420,107 @@ bool VectorAt(const V& v, size_t index, T* output) {
 }
 
 CheckBool EncodedProgram::EvaluateRel32ARM(OP op,
-                                           size_t& ix_rel32_ix,
-                                           RVA& current_rva,
+                                           size_t* ix_rel32_ix,
+                                           RVA* current_rva,
                                            SinkStream* output) {
   switch (op & 0x0000F000) {
     case REL32ARM8: {
       uint32_t index;
-      if (!VectorAt(rel32_ix_, ix_rel32_ix, &index))
+      if (!VectorAt(rel32_ix_, *ix_rel32_ix, &index))
         return false;
-      ++ix_rel32_ix;
+      ++(*ix_rel32_ix);
       RVA rva;
       if (!VectorAt(rel32_rva_, index, &rva))
         return false;
       uint32_t decompressed_op;
       if (!DisassemblerElf32ARM::Decompress(
               ARM_OFF8, static_cast<uint16_t>(op),
-              static_cast<uint32_t>(rva - current_rva), &decompressed_op)) {
+              static_cast<uint32_t>(rva - *current_rva), &decompressed_op)) {
         return false;
       }
       uint16_t op16 = static_cast<uint16_t>(decompressed_op);
       if (!output->Write(&op16, 2))
         return false;
-      current_rva += 2;
+      *current_rva += 2;
       break;
     }
     case REL32ARM11: {
       uint32_t index;
-      if (!VectorAt(rel32_ix_, ix_rel32_ix, &index))
+      if (!VectorAt(rel32_ix_, *ix_rel32_ix, &index))
         return false;
-      ++ix_rel32_ix;
+      ++(*ix_rel32_ix);
       RVA rva;
       if (!VectorAt(rel32_rva_, index, &rva))
         return false;
       uint32_t decompressed_op;
       if (!DisassemblerElf32ARM::Decompress(ARM_OFF11, (uint16_t)op,
-                                            (uint32_t)(rva - current_rva),
+                                            (uint32_t)(rva - *current_rva),
                                             &decompressed_op)) {
         return false;
       }
       uint16_t op16 = static_cast<uint16_t>(decompressed_op);
       if (!output->Write(&op16, 2))
         return false;
-      current_rva += 2;
+      *current_rva += 2;
       break;
     }
     case REL32ARM24: {
       uint32_t index;
-      if (!VectorAt(rel32_ix_, ix_rel32_ix, &index))
+      if (!VectorAt(rel32_ix_, *ix_rel32_ix, &index))
         return false;
-      ++ix_rel32_ix;
+      ++(*ix_rel32_ix);
       RVA rva;
       if (!VectorAt(rel32_rva_, index, &rva))
         return false;
       uint32_t decompressed_op;
       if (!DisassemblerElf32ARM::Decompress(ARM_OFF24, (uint16_t)op,
-                                            (uint32_t)(rva - current_rva),
+                                            (uint32_t)(rva - *current_rva),
                                             &decompressed_op)) {
         return false;
       }
       if (!output->Write(&decompressed_op, 4))
         return false;
-      current_rva += 4;
+      *current_rva += 4;
       break;
     }
     case REL32ARM25: {
       uint32_t index;
-      if (!VectorAt(rel32_ix_, ix_rel32_ix, &index))
+      if (!VectorAt(rel32_ix_, *ix_rel32_ix, &index))
         return false;
-      ++ix_rel32_ix;
+      ++(*ix_rel32_ix);
       RVA rva;
       if (!VectorAt(rel32_rva_, index, &rva))
         return false;
       uint32_t decompressed_op;
       if (!DisassemblerElf32ARM::Decompress(ARM_OFF25, (uint16_t)op,
-                                            (uint32_t)(rva - current_rva),
+                                            (uint32_t)(rva - *current_rva),
                                             &decompressed_op)) {
         return false;
       }
       uint32_t words = (decompressed_op << 16) | (decompressed_op >> 16);
       if (!output->Write(&words, 4))
         return false;
-      current_rva += 4;
+      *current_rva += 4;
       break;
     }
     case REL32ARM21: {
       uint32_t index;
-      if (!VectorAt(rel32_ix_, ix_rel32_ix, &index))
+      if (!VectorAt(rel32_ix_, *ix_rel32_ix, &index))
         return false;
-      ++ix_rel32_ix;
+      ++(*ix_rel32_ix);
       RVA rva;
       if (!VectorAt(rel32_rva_, index, &rva))
         return false;
       uint32_t decompressed_op;
       if (!DisassemblerElf32ARM::Decompress(ARM_OFF21, (uint16_t)op,
-                                            (uint32_t)(rva - current_rva),
+                                            (uint32_t)(rva - *current_rva),
                                             &decompressed_op)) {
         return false;
       }
       uint32_t words = (decompressed_op << 16) | (decompressed_op >> 16);
       if (!output->Write(&words, 4))
         return false;
-      current_rva += 4;
+      *current_rva += 4;
       break;
     }
     default:
@@ -503,7 +553,7 @@ CheckBool EncodedProgram::AssembleTo(SinkStream* final_buffer) {
 
     switch (op) {
       default:
-        if (!EvaluateRel32ARM(op, ix_rel32_ix, current_rva, output))
+        if (!EvaluateRel32ARM(op, &ix_rel32_ix, &current_rva, output))
           return false;
         break;
 
@@ -673,9 +723,15 @@ CheckBool EncodedProgram::AssembleTo(SinkStream* final_buffer) {
   return true;
 }
 
+CheckBool EncodedProgram::GenerateInstructions(
+    ExecutableType exe_type,
+    const InstructionGenerator& gen) {
+  InstructionStoreReceptor store_receptor(exe_type, this);
+  return gen.Run(&store_receptor);
+}
+
 // RelocBlock has the layout of a block of relocations in the base relocation
 // table file format.
-//
 struct RelocBlockPOD {
   uint32_t page_rva;
   uint32_t block_size;

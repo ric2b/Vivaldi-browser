@@ -19,7 +19,7 @@ TEST_F(TextTest, SetDataToChangeFirstLetterTextNode) {
       "<style>pre::first-letter {color:red;}</style><pre "
       "id=sample>a<span>b</span></pre>");
 
-  Node* sample = GetDocument().GetElementById("sample");
+  Node* sample = GetDocument().getElementById("sample");
   Text* text = ToText(sample->firstChild());
   text->setData(" ");
   UpdateAllLifecyclePhases();
@@ -31,7 +31,7 @@ TEST_F(TextTest, RemoveFirstLetterPseudoElementWhenNoLetter) {
   SetBodyContent("<style>*::first-letter{font:icon;}</style><pre>AB\n</pre>");
 
   Element* pre = GetDocument().QuerySelector("pre");
-  Text* text = ToText(pre->FirstChild());
+  Text* text = ToText(pre->firstChild());
 
   Range* range = Range::Create(GetDocument(), text, 0, text, 2);
   range->deleteContents(ASSERT_NO_EXCEPTION);

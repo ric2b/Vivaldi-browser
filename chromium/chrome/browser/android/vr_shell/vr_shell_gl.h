@@ -15,6 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
+#include "chrome/browser/android/vr_shell/vr_controller.h"
 #include "chrome/browser/android/vr_shell/vr_controller_model.h"
 #include "device/vr/vr_service.mojom.h"
 #include "device/vr/vr_types.h"
@@ -29,6 +30,7 @@ class WebInputEvent;
 
 namespace gl {
 class GLContext;
+class GLFence;
 class GLSurface;
 class ScopedJavaSurface;
 class SurfaceTexture;
@@ -42,11 +44,13 @@ namespace vr_shell {
 
 class FPSMeter;
 class MailboxToSurfaceBridge;
+class SlidingAverage;
+class UiElement;
 class UiScene;
+class GlBrowserInterface;
 class VrController;
 class VrShell;
 class VrShellRenderer;
-struct UiElement;
 
 struct WebVrBounds {
   WebVrBounds(const gfx::RectF& left,
@@ -62,16 +66,11 @@ struct WebVrBounds {
 // It is not threadsafe and must only be used on the GL thread.
 class VrShellGl : public device::mojom::VRVSyncProvider {
  public:
-  enum class InputTarget {
-    NONE = 0,
-    CONTENT,
-  };
-
-  VrShellGl(const base::WeakPtr<VrShell>& weak_vr_shell,
-            scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
+  VrShellGl(GlBrowserInterface* browser,
             gvr_context* gvr_api,
             bool initially_web_vr,
             bool reprojected_rendering,
+            bool daydream_support,
             UiScene* scene);
   ~VrShellGl() override;
 
@@ -81,6 +80,10 @@ class VrShellGl : public device::mojom::VRVSyncProvider {
   void OnTriggerEvent();
   void OnPause();
   void OnResume();
+
+  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() {
+    return task_runner_;
+  }
 
   void SetWebVrMode(bool enabled);
   void CreateOrResizeWebVRSurface(const gfx::Size& size);
@@ -112,7 +115,12 @@ class VrShellGl : public device::mojom::VRVSyncProvider {
   void GvrInit(gvr_context* gvr_api);
   void InitializeRenderer();
   void DrawFrame(int16_t frame_index);
+  void DrawFrameSubmitWhenReady(int16_t frame_index,
+                                gvr_frame* frame_ptr,
+                                const vr::Mat4f& head_pose,
+                                std::unique_ptr<gl::GLFence> fence);
   void DrawWorldElements(const vr::Mat4f& head_pose);
+  void DrawOverlayElements(const vr::Mat4f& head_pose);
   void DrawHeadLockedElements();
   void DrawUiView(const vr::Mat4f& head_pose,
                   const std::vector<const UiElement*>& elements,
@@ -120,28 +128,56 @@ class VrShellGl : public device::mojom::VRVSyncProvider {
                   int viewport_offset,
                   bool draw_cursor);
   void DrawElements(const vr::Mat4f& view_proj_matrix,
-                    const std::vector<const UiElement*>& elements);
+                    const std::vector<const UiElement*>& elements,
+                    bool draw_cursor);
+  void DrawElement(const vr::Mat4f& view_proj_matrix, const UiElement& element);
   std::vector<const UiElement*> GetElementsInDrawOrder(
       const vr::Mat4f& view_matrix,
       const std::vector<const UiElement*>& elements);
-  void DrawCursor(const vr::Mat4f& render_matrix);
+  void DrawReticle(const vr::Mat4f& view_proj_matrix);
+  void DrawLaser(const vr::Mat4f& view_proj_matrix);
   void DrawController(const vr::Mat4f& view_proj_matrix);
   bool ShouldDrawWebVr();
   void DrawWebVr();
   bool WebVrPoseByteIsValid(int pose_index_byte);
 
-  void UpdateController();
-  void HandleControllerInput(const gfx::Vector3dF& forward_vector);
+  void UpdateController(const gfx::Vector3dF& head_direction);
+  void HandleWebVrCompatibilityClick();
+  void SendFlingCancel(GestureList& gesture_list);
+  void SendScrollEnd(GestureList& gesture_list);
+  bool SendScrollBegin(UiElement* target, GestureList& gesture_list);
+  void SendScrollUpdate(GestureList& gesture_list);
+  void SendHoverLeave(UiElement* target);
+  bool SendHoverEnter(UiElement* target,
+                      const gfx::PointF& target_point,
+                      const gfx::Point& local_point_pixels);
+  void SendHoverMove(const gfx::PointF& target_point,
+                     const gfx::Point& local_point_pixels);
+  void SendButtonDown(UiElement* target, const gfx::PointF& target_point);
+  bool SendButtonUp(UiElement* target, const gfx::PointF& target_point);
+  void SendTap(UiElement* target,
+               const gfx::PointF& target_point,
+               const gfx::Point& local_point_pixels);
+  void SendImmediateExitRequestIfNecessary();
+  void GetVisualTargetElement(const gfx::Vector3dF& controller_direction,
+                              gfx::Vector3dF& eye_to_target,
+                              gfx::Point3F& target_point,
+                              UiElement** target_element,
+                              gfx::PointF& target_local_point) const;
+  bool GetTargetLocalPoint(const gfx::Vector3dF& eye_to_target,
+                           const UiElement& element,
+                           float max_distance_to_plane,
+                           gfx::PointF& target_local_point,
+                           gfx::Point3F& target_point,
+                           float& distance_to_plane) const;
+  void HandleControllerInput(const gfx::Vector3dF& head_direction);
   void HandleControllerAppButtonActivity(
       const gfx::Vector3dF& controller_direction);
-  void SendEventsToTarget(InputTarget input_target, int pixel_x, int pixel_y);
-  void SendGesture(InputTarget input_target,
-                   std::unique_ptr<blink::WebInputEvent> event);
+  void SendGestureToContent(std::unique_ptr<blink::WebInputEvent> event);
   void CreateUiSurface();
-  void OnUIFrameAvailable();
   void OnContentFrameAvailable();
   void OnWebVRFrameAvailable();
-  bool GetPixelEncodedFrameIndex(uint16_t* frame_index);
+  int64_t GetPredictedFrameTimeNanos();
 
   void OnVSync();
 
@@ -187,14 +223,24 @@ class VrShellGl : public device::mojom::VRVSyncProvider {
 
   std::unique_ptr<VrShellRenderer> vr_shell_renderer_;
 
+  bool cardboard_ = false;
   bool touch_pending_ = false;
   vr::Quatf controller_quat_;
 
   gfx::Point3F target_point_;
-  const UiElement* target_element_ = nullptr;
-  InputTarget current_input_target_ = InputTarget::NONE;
-  InputTarget current_scroll_target_ = InputTarget::NONE;
-  InputTarget current_fling_target_ = InputTarget::NONE;
+
+  // TODO(mthiesse): We need to handle elements being removed, and update this
+  // state appropriately.
+  UiElement* reticle_render_target_ = nullptr;
+  UiElement* hover_target_ = nullptr;
+  // TODO(mthiesse): We shouldn't have a fling target. Elements should fling
+  // independently and we should only cancel flings on the relevant element
+  // when we do cancel flings.
+  UiElement* fling_target_ = nullptr;
+  UiElement* input_locked_element_ = nullptr;
+  bool in_scroll_ = false;
+  bool in_click_ = false;
+
   int content_tex_css_width_ = 0;
   int content_tex_css_height_ = 0;
   gfx::Size content_tex_physical_size_ = {0, 0};
@@ -204,6 +250,7 @@ class VrShellGl : public device::mojom::VRVSyncProvider {
   bool web_vr_mode_;
   bool ready_to_draw_ = false;
   bool surfaceless_rendering_;
+  bool daydream_support_;
 
   std::unique_ptr<VrController> controller_;
 
@@ -219,8 +266,7 @@ class VrShellGl : public device::mojom::VRVSyncProvider {
   mojo::Binding<device::mojom::VRVSyncProvider> binding_;
   device::mojom::VRSubmitFrameClientPtr submit_client_;
 
-  base::WeakPtr<VrShell> weak_vr_shell_;
-  scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
+  GlBrowserInterface* browser_;
 
   UiScene* scene_ = nullptr;
 
@@ -232,6 +278,11 @@ class VrShellGl : public device::mojom::VRVSyncProvider {
   gfx::Vector3dF controller_start_direction_;
 
   std::unique_ptr<FPSMeter> fps_meter_;
+
+  std::unique_ptr<SlidingAverage> webvr_js_time_;
+  std::unique_ptr<SlidingAverage> webvr_render_time_;
+
+  gfx::Point3F pointer_start_;
 
   base::WeakPtrFactory<VrShellGl> weak_ptr_factory_;
 

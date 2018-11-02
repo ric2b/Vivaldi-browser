@@ -5,12 +5,13 @@
 #include "ash/system/palette/palette_utils.h"
 
 #include "ash/ash_switches.h"
-#include "ash/shelf/wm_shelf.h"
-#include "ash/shell_port.h"
+#include "ash/palette_delegate.h"
+#include "ash/shelf/shelf.h"
+#include "ash/shell.h"
 #include "ash/system/palette/palette_tray.h"
 #include "ash/system/status_area_widget.h"
-#include "ash/wm_window.h"
 #include "base/command_line.h"
+#include "ui/display/display.h"
 #include "ui/events/devices/input_device_manager.h"
 #include "ui/events/devices/touchscreen_device.h"
 #include "ui/gfx/geometry/point.h"
@@ -22,7 +23,7 @@ bool HasStylusInput() {
   // Allow the user to force enable or disable by passing a switch. If both are
   // present, enabling takes precedence over disabling.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshForceEnablePalette)) {
+          switches::kAshForceEnableStylusTools)) {
     return true;
   }
 
@@ -43,10 +44,18 @@ bool IsPaletteEnabledOnEveryDisplay() {
       switches::kAshEnablePaletteOnAllDisplays);
 }
 
+bool ShouldShowPalette() {
+  return HasStylusInput() &&
+         (display::Display::HasInternalDisplay() ||
+          IsPaletteEnabledOnEveryDisplay()) &&
+         Shell::Get()->palette_delegate() &&
+         Shell::Get()->palette_delegate()->ShouldShowPalette();
+}
+
 bool PaletteContainsPointInScreen(const gfx::Point& point) {
-  for (WmWindow* window : ShellPort::Get()->GetAllRootWindows()) {
+  for (aura::Window* window : Shell::GetAllRootWindows()) {
     PaletteTray* palette_tray =
-        WmShelf::ForWindow(window)->GetStatusAreaWidget()->palette_tray();
+        Shelf::ForWindow(window)->GetStatusAreaWidget()->palette_tray();
     if (palette_tray && palette_tray->ContainsPointInScreen(point))
       return true;
   }

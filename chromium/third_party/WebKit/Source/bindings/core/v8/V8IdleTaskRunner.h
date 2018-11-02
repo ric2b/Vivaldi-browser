@@ -30,9 +30,9 @@
 #include "core/CoreExport.h"
 #include "gin/public/v8_idle_task_runner.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
 
@@ -59,7 +59,7 @@ class V8IdleTaskRunner : public gin::V8IdleTaskRunner {
   V8IdleTaskRunner(WebScheduler* scheduler) : scheduler_(scheduler) {}
   ~V8IdleTaskRunner() override {}
   void PostIdleTask(v8::IdleTask* task) override {
-    ASSERT(RuntimeEnabledFeatures::v8IdleTasksEnabled());
+    DCHECK(RuntimeEnabledFeatures::v8IdleTasksEnabled());
     scheduler_->PostIdleTask(BLINK_FROM_HERE, new V8IdleTaskAdapter(task));
   }
 

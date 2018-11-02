@@ -144,7 +144,7 @@ bool LayoutSVGInlineText::CharacterStartsNewTextChunk(int position) const {
     return true;
 
   const SVGCharacterDataMap::const_iterator it =
-      character_data_map_.Find(static_cast<unsigned>(position + 1));
+      character_data_map_.find(static_cast<unsigned>(position + 1));
   if (it == character_data_map_.end())
     return false;
 
@@ -333,7 +333,7 @@ void LayoutSVGInlineText::AddMetricsFromRun(
 
 void LayoutSVGInlineText::UpdateMetricsList(
     bool& last_character_was_white_space) {
-  metrics_.Clear();
+  metrics_.clear();
 
   if (!TextLength())
     return;

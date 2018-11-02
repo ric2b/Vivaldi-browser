@@ -18,6 +18,7 @@
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
+#include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
 #include "ui/display/screen.h"
@@ -33,6 +34,10 @@
 #include "ui/wm/core/native_cursor_manager.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/activation_client.h"
+
+#if defined(USE_OZONE)
+#include "ui/base/cursor/ozone/cursor_data_factory_ozone.h"
+#endif
 
 namespace views {
 
@@ -90,7 +95,7 @@ class ClientSideNonClientFrameView : public NonClientFrameView {
   void UpdateWindowTitle() override {}
   void SizeConstraintsChanged() override {}
 
-  gfx::Size GetPreferredSize() const override {
+  gfx::Size CalculatePreferredSize() const override {
     return widget_->non_client_view()
         ->GetWindowBoundsForClientBounds(
             gfx::Rect(widget_->client_view()->GetPreferredSize()))
@@ -130,8 +135,21 @@ class NativeCursorManagerMus : public wm::NativeCursorManager {
 
   void SetCursor(gfx::NativeCursor cursor,
                  wm::NativeCursorManagerDelegate* delegate) override {
-    aura::WindowPortMus::Get(window_)->SetPredefinedCursor(
-        ui::mojom::CursorType(cursor.native_type()));
+    ui::CursorData mojo_cursor;
+    if (cursor.platform()) {
+#if defined(USE_OZONE)
+      mojo_cursor =
+          ui::CursorDataFactoryOzone::GetCursorData(cursor.platform());
+#else
+      NOTIMPLEMENTED()
+          << "Can't pass native platform cursors on non-ozone platforms";
+      mojo_cursor = ui::CursorData(ui::CursorType::kPointer);
+#endif
+    } else {
+      mojo_cursor = ui::CursorData(cursor.native_type());
+    }
+
+    aura::WindowPortMus::Get(window_)->SetCursor(mojo_cursor);
     delegate->CommitCursor(cursor);
   }
 
@@ -142,8 +160,8 @@ class NativeCursorManagerMus : public wm::NativeCursorManager {
     if (visible) {
       SetCursor(delegate->GetCursor(), delegate);
     } else {
-      aura::WindowPortMus::Get(window_)->SetPredefinedCursor(
-          ui::mojom::CursorType::NONE);
+      aura::WindowPortMus::Get(window_)->SetCursor(
+          ui::CursorData(ui::CursorType::kNone));
     }
   }
 
@@ -184,13 +202,10 @@ void OnMoveLoopEnd(bool* out_success,
 }  // namespace
 
 DesktopWindowTreeHostMus::DesktopWindowTreeHostMus(
+    aura::WindowTreeHostMusInitParams init_params,
     internal::NativeWidgetDelegate* native_widget_delegate,
-    DesktopNativeWidgetAura* desktop_native_widget_aura,
-    const cc::FrameSinkId& frame_sink_id,
-    const std::map<std::string, std::vector<uint8_t>>* mus_properties)
-    : aura::WindowTreeHostMus(MusClient::Get()->window_tree_client(),
-                              frame_sink_id,
-                              mus_properties),
+    DesktopNativeWidgetAura* desktop_native_widget_aura)
+    : aura::WindowTreeHostMus(std::move(init_params)),
       native_widget_delegate_(native_widget_delegate),
       desktop_native_widget_aura_(desktop_native_widget_aura),
       close_widget_factory_(this) {
@@ -284,6 +299,8 @@ void DesktopWindowTreeHostMus::Init(aura::Window* content_window,
       params.type == Widget::InitParams::TYPE_PANEL;
   content_window->SetTransparent(transparent);
   window()->SetTransparent(transparent);
+
+  window()->SetProperty(aura::client::kShowStateKey, params.show_state);
 
   if (!params.bounds.IsEmpty())
     SetBoundsInDIP(params.bounds);

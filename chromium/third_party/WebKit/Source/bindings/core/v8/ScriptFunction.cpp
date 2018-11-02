@@ -4,7 +4,7 @@
 
 #include "bindings/core/v8/ScriptFunction.h"
 
-#include "bindings/core/v8/V8Binding.h"
+#include "platform/bindings/V8Binding.h"
 
 namespace blink {
 
@@ -24,7 +24,7 @@ v8::Local<v8::Function> ScriptFunction::BindToV8Function() {
 
 void ScriptFunction::CallCallback(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
-  ASSERT(args.Data()->IsExternal());
+  DCHECK(args.Data()->IsExternal());
   ScriptFunction* script_function = static_cast<ScriptFunction*>(
       v8::Local<v8::External>::Cast(args.Data())->Value());
   ScriptValue result = script_function->Call(

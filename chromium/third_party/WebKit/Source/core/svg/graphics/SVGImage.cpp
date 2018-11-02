@@ -30,6 +30,7 @@
 #include "core/animation/DocumentAnimations.h"
 #include "core/animation/DocumentTimeline.h"
 #include "core/dom/NodeTraversal.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -65,12 +66,39 @@
 
 namespace blink {
 
+// SVGImageLocalFrameClient is used to wait until SVG document's load event
+// in the case where there are subresources asynchronously loaded.
+//
+// Reference cycle: SVGImage -(Persistent)-> Page -(Member)-> Frame -(Member)->
+// FrameClient == SVGImageLocalFrameClient -(raw)-> SVGImage.
+class SVGImage::SVGImageLocalFrameClient : public EmptyLocalFrameClient {
+ public:
+  SVGImageLocalFrameClient(SVGImage* image) : image_(image) {}
+
+  void ClearImage() { image_ = nullptr; }
+
+ private:
+  void DispatchDidHandleOnloadEvents() override {
+    // The SVGImage was destructed before SVG load completion.
+    if (!image_)
+      return;
+
+    image_->LoadCompleted();
+  }
+
+  // Cleared manually by SVGImage's destructor when |image_| is destructed.
+  SVGImage* image_;
+};
+
 SVGImage::SVGImage(ImageObserver* observer)
     : Image(observer),
       paint_controller_(PaintController::Create()),
       has_pending_timeline_rewind_(false) {}
 
 SVGImage::~SVGImage() {
+  if (frame_client_)
+    frame_client_->ClearImage();
+
   if (page_) {
     // Store m_page in a local variable, clearing m_page, so that
     // SVGImageChromeClient knows we're destructed.
@@ -93,13 +121,24 @@ bool SVGImage::IsInSVGImage(const Node* node) {
   return page->GetChromeClient().IsSVGImageChromeClient();
 }
 
+void SVGImage::CheckLoaded() const {
+  CHECK(page_);
+
+  LocalFrame* frame = ToLocalFrame(page_->MainFrame());
+
+  // Failures of this assertion might result in wrong origin tainting checks,
+  // because CurrentFrameHasSingleSecurityOrigin() assumes all subresources of
+  // the SVG are loaded and thus ready for origin checks.
+  CHECK(frame->GetDocument()->LoadEventFinished());
+}
+
 bool SVGImage::CurrentFrameHasSingleSecurityOrigin() const {
   if (!page_)
     return true;
 
   LocalFrame* frame = ToLocalFrame(page_->MainFrame());
 
-  CHECK(frame->GetDocument()->LoadEventFinished());
+  CheckLoaded();
 
   SVGSVGElement* root_element =
       frame->GetDocument()->AccessSVGExtensions().rootElement();
@@ -316,9 +355,9 @@ void SVGImage::DrawPatternForContainer(GraphicsContext& context,
                                  phase.Y() + spaced_tile.Y());
 
   PaintFlags flags;
-  flags.setShader(MakePaintShaderRecord(record, SkShader::kRepeat_TileMode,
-                                        SkShader::kRepeat_TileMode,
-                                        &pattern_transform, nullptr));
+  flags.setShader(
+      MakePaintShaderRecord(record, spaced_tile, SkShader::kRepeat_TileMode,
+                            SkShader::kRepeat_TileMode, &pattern_transform));
   // If the shader could not be instantiated (e.g. non-invertible matrix),
   // draw transparent.
   // Note: we can't simply bail, because of arbitrary blend mode.
@@ -344,7 +383,7 @@ sk_sp<SkImage> SVGImage::ImageForCurrentFrameForContainer(
                    container_rect, container_rect, url);
 
   return SkImage::MakeFromPicture(
-      ToSkPicture(recorder.finishRecordingAsPicture()),
+      ToSkPicture(recorder.finishRecordingAsPicture(), container_rect),
       SkISize::Make(container_size.Width(), container_size.Height()), nullptr,
       nullptr, SkImage::BitDepth::kU8, SkColorSpace::MakeSRGB());
 }
@@ -358,16 +397,15 @@ static bool DrawNeedsLayer(const PaintFlags& flags) {
 bool SVGImage::ApplyShaderInternal(PaintFlags& flags,
                                    const SkMatrix& local_matrix,
                                    const KURL& url) {
-  const FloatSize size(ContainerSize());
+  const IntSize size(ContainerSize());
   if (size.IsEmpty())
     return false;
 
-  FloatRect float_bounds(FloatPoint(), size);
-  const SkRect bounds(float_bounds);
+  IntRect bounds(IntPoint(), size);
 
-  flags.setShader(SkShader::MakePictureShader(
-      PaintRecordForCurrentFrame(float_bounds, url), SkShader::kRepeat_TileMode,
-      SkShader::kRepeat_TileMode, &local_matrix, &bounds));
+  flags.setShader(MakePaintShaderRecord(
+      PaintRecordForCurrentFrame(bounds, url), bounds,
+      SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, &local_matrix));
 
   // Animation is normally refreshed in draw() impls, which we don't reach when
   // painting via shaders.
@@ -412,7 +450,7 @@ void SVGImage::Draw(
                should_respect_image_orientation, clamp_mode, KURL());
 }
 
-sk_sp<PaintRecord> SVGImage::PaintRecordForCurrentFrame(const FloatRect& bounds,
+sk_sp<PaintRecord> SVGImage::PaintRecordForCurrentFrame(const IntRect& bounds,
                                                         const KURL& url,
                                                         PaintCanvas* canvas) {
   DCHECK(page_);
@@ -430,12 +468,10 @@ sk_sp<PaintRecord> SVGImage::PaintRecordForCurrentFrame(const FloatRect& bounds,
   // avoid setting timers from the latter.
   FlushPendingTimelineRewind();
 
-  IntRect int_bounds(EnclosingIntRect(bounds));
-  PaintRecordBuilder builder(int_bounds, nullptr, nullptr,
-                             paint_controller_.get());
+  PaintRecordBuilder builder(bounds, nullptr, nullptr, paint_controller_.get());
 
   view->UpdateAllLifecyclePhasesExceptPaint();
-  view->Paint(builder.Context(), CullRect(int_bounds));
+  view->Paint(builder.Context(), CullRect(bounds));
   DCHECK(!view->NeedsLayout());
 
   if (canvas) {
@@ -473,7 +509,7 @@ void SVGImage::DrawInternal(PaintCanvas* canvas,
     canvas->save();
     canvas->clipRect(EnclosingIntRect(dst_rect));
     canvas->concat(AffineTransformToSkMatrix(transform));
-    PaintRecordForCurrentFrame(src_rect, url, canvas);
+    PaintRecordForCurrentFrame(EnclosingIntRect(src_rect), url, canvas);
     canvas->restore();
   }
 
@@ -541,6 +577,9 @@ bool SVGImage::MaybeAnimated() {
 }
 
 void SVGImage::ServiceAnimations(double monotonic_animation_start_time) {
+  if (!GetImageObserver())
+    return;
+
   // If none of our observers (sic!) are visible, or for some other reason
   // does not want us to keep running animations, stop them until further
   // notice (next paint.)
@@ -605,6 +644,38 @@ void SVGImage::UpdateUseCounters(const Document& document) const {
   }
 }
 
+void SVGImage::LoadCompleted() {
+  switch (load_state_) {
+    case kInDataChanged:
+      load_state_ = kLoadCompleted;
+      break;
+
+    case kWaitingForAsyncLoadCompletion:
+      load_state_ = kLoadCompleted;
+
+      // Because LoadCompleted() is called synchronously from
+      // Document::ImplicitClose(), we defer AsyncLoadCompleted() to avoid
+      // potential bugs and timing dependencies around ImplicitClose() and
+      // to make LoadEventFinished() true when AsyncLoadCompleted() is called.
+      TaskRunnerHelper::Get(TaskType::kUnspecedLoading,
+                            ToLocalFrame(page_->MainFrame()))
+          ->PostTask(BLINK_FROM_HERE,
+                     WTF::Bind(&SVGImage::NotifyAsyncLoadCompleted,
+                               RefPtr<SVGImage>(this)));
+      break;
+
+    case kDataChangedNotStarted:
+    case kLoadCompleted:
+      CHECK(false);
+      break;
+  }
+}
+
+void SVGImage::NotifyAsyncLoadCompleted() {
+  if (GetImageObserver())
+    GetImageObserver()->AsyncLoadCompleted(this);
+}
+
 Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
   TRACE_EVENT0("blink", "SVGImage::dataChanged");
 
@@ -612,60 +683,64 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
   if (!Data()->size())
     return kSizeAvailable;
 
-  if (all_data_received) {
-    // SVGImage will fire events (and the default C++ handlers run) but doesn't
-    // actually allow script to run so it's fine to call into it. We allow this
-    // since it means an SVG data url can synchronously load like other image
-    // types.
-    EventDispatchForbiddenScope::AllowUserAgentEvents allow_user_agent_events;
+  if (!all_data_received)
+    return page_ ? kSizeAvailable : kSizeUnavailable;
 
-    DEFINE_STATIC_LOCAL(LocalFrameClient, dummy_local_frame_client,
-                        (EmptyLocalFrameClient::Create()));
+  CHECK(!page_);
 
-    CHECK(!page_);
+  // SVGImage will fire events (and the default C++ handlers run) but doesn't
+  // actually allow script to run so it's fine to call into it. We allow this
+  // since it means an SVG data url can synchronously load like other image
+  // types.
+  EventDispatchForbiddenScope::AllowUserAgentEvents allow_user_agent_events;
 
-    Page::PageClients page_clients;
-    FillWithEmptyClients(page_clients);
-    chrome_client_ = SVGImageChromeClient::Create(this);
-    page_clients.chrome_client = chrome_client_.Get();
+  CHECK_EQ(load_state_, kDataChangedNotStarted);
+  load_state_ = kInDataChanged;
 
-    // FIXME: If this SVG ends up loading itself, we might leak the world.
-    // The Cache code does not know about ImageResources holding Frames and
-    // won't know to break the cycle.
-    // This will become an issue when SVGImage will be able to load other
-    // SVGImage objects, but we're safe now, because SVGImage can only be
-    // loaded by a top-level document.
-    Page* page;
-    {
-      TRACE_EVENT0("blink", "SVGImage::dataChanged::createPage");
-      page = Page::Create(page_clients);
-      page->GetSettings().SetScriptEnabled(false);
-      page->GetSettings().SetPluginsEnabled(false);
-      page->GetSettings().SetAcceleratedCompositingEnabled(false);
+  Page::PageClients page_clients;
+  FillWithEmptyClients(page_clients);
+  chrome_client_ = SVGImageChromeClient::Create(this);
+  page_clients.chrome_client = chrome_client_.Get();
 
-      // Because this page is detached, it can't get default font settings
-      // from the embedder. Copy over font settings so we have sensible
-      // defaults. These settings are fixed and will not update if changed.
-      if (!Page::OrdinaryPages().IsEmpty()) {
-        Settings& default_settings =
-            (*Page::OrdinaryPages().begin())->GetSettings();
-        page->GetSettings().GetGenericFontFamilySettings() =
-            default_settings.GetGenericFontFamilySettings();
-        page->GetSettings().SetMinimumFontSize(
-            default_settings.GetMinimumFontSize());
-        page->GetSettings().SetMinimumLogicalFontSize(
-            default_settings.GetMinimumLogicalFontSize());
-        page->GetSettings().SetDefaultFontSize(
-            default_settings.GetDefaultFontSize());
-        page->GetSettings().SetDefaultFixedFontSize(
-            default_settings.GetDefaultFixedFontSize());
-      }
+  // FIXME: If this SVG ends up loading itself, we might leak the world.
+  // The Cache code does not know about ImageResources holding Frames and
+  // won't know to break the cycle.
+  // This will become an issue when SVGImage will be able to load other
+  // SVGImage objects, but we're safe now, because SVGImage can only be
+  // loaded by a top-level document.
+  Page* page;
+  {
+    TRACE_EVENT0("blink", "SVGImage::dataChanged::createPage");
+    page = Page::Create(page_clients);
+    page->GetSettings().SetScriptEnabled(false);
+    page->GetSettings().SetPluginsEnabled(false);
+    page->GetSettings().SetAcceleratedCompositingEnabled(false);
+
+    // Because this page is detached, it can't get default font settings
+    // from the embedder. Copy over font settings so we have sensible
+    // defaults. These settings are fixed and will not update if changed.
+    if (!Page::OrdinaryPages().IsEmpty()) {
+      Settings& default_settings =
+          (*Page::OrdinaryPages().begin())->GetSettings();
+      page->GetSettings().GetGenericFontFamilySettings() =
+          default_settings.GetGenericFontFamilySettings();
+      page->GetSettings().SetMinimumFontSize(
+          default_settings.GetMinimumFontSize());
+      page->GetSettings().SetMinimumLogicalFontSize(
+          default_settings.GetMinimumLogicalFontSize());
+      page->GetSettings().SetDefaultFontSize(
+          default_settings.GetDefaultFontSize());
+      page->GetSettings().SetDefaultFixedFontSize(
+          default_settings.GetDefaultFixedFontSize());
+    }
     }
 
     LocalFrame* frame = nullptr;
     {
       TRACE_EVENT0("blink", "SVGImage::dataChanged::createFrame");
-      frame = LocalFrame::Create(&dummy_local_frame_client, *page, 0);
+      DCHECK(!frame_client_);
+      frame_client_ = new SVGImageLocalFrameClient(this);
+      frame = LocalFrame::Create(frame_client_, *page, 0);
       frame->SetView(FrameView::Create(*frame));
       frame->Init();
     }
@@ -684,16 +759,31 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
 
     TRACE_EVENT0("blink", "SVGImage::dataChanged::load");
     loader.Load(FrameLoadRequest(
-        0, BlankURL(),
+        0, ResourceRequest(BlankURL()),
         SubstituteData(Data(), AtomicString("image/svg+xml"),
                        AtomicString("UTF-8"), KURL(), kForceSynchronousLoad)));
 
     // Set the concrete object size before a container size is available.
     intrinsic_size_ = RoundedIntSize(ConcreteObjectSize(FloatSize(
         LayoutReplaced::kDefaultWidth, LayoutReplaced::kDefaultHeight)));
+
+    DCHECK(page_);
+    switch (load_state_) {
+      case kInDataChanged:
+        load_state_ = kWaitingForAsyncLoadCompletion;
+        return kSizeAvailableAndLoadingAsynchronously;
+
+      case kLoadCompleted:
+        return kSizeAvailable;
+
+      case kDataChangedNotStarted:
+      case kWaitingForAsyncLoadCompletion:
+        CHECK(false);
+        break;
   }
 
-  return page_ ? kSizeAvailable : kSizeUnavailable;
+  NOTREACHED();
+  return kSizeAvailable;
 }
 
 String SVGImage::FilenameExtension() const {

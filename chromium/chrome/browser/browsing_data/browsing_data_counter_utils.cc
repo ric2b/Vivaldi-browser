@@ -10,6 +10,7 @@
 #include "chrome/browser/browsing_data/cache_counter.h"
 #include "chrome/browser/browsing_data/media_licenses_counter.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -26,9 +27,6 @@
 #include "chrome/browser/browsing_data/hosted_apps_counter.h"
 #endif
 
-#if defined(OS_ANDROID)
-#include "chrome/browser/android/chrome_feature_list.h"
-#endif
 
 bool AreCountersEnabled() {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -46,13 +44,8 @@ bool AreCountersEnabled() {
 }
 
 bool IsSiteDataCounterEnabled() {
-#if defined(OS_ANDROID)
   // Only use the site data counter for the new CBD ui.
-  return base::FeatureList::IsEnabled(chrome::android::kTabsInCBD);
-#else
-  // Don't use the counter on other platforms that don't yet have the new ui.
-  return false;
-#endif
+  return base::FeatureList::IsEnabled(features::kTabsInCbd);
 }
 
 // A helper function to display the size of cache in units of MB or higher.
@@ -83,6 +76,7 @@ base::string16 GetChromeCounterTextFromResult(
         static_cast<const CacheCounter::CacheResult*>(result);
     int64_t cache_size_bytes = cache_result->cache_size();
     bool is_upper_limit = cache_result->is_upper_limit();
+    bool is_basic_tab = pref_name == browsing_data::prefs::kDeleteCacheBasic;
 
     // Three cases: Nonzero result for the entire cache, nonzero result for
     // a subset of cache (i.e. a finite time interval), and almost zero (< 1MB).
@@ -95,10 +89,12 @@ base::string16 GetChromeCounterTextFromResult(
                                           IDS_DEL_CACHE_COUNTER_UPPER_ESTIMATE,
                                           formatted_size);
     } else {
-      size_string =
-          l10n_util::GetStringUTF16(IDS_DEL_CACHE_COUNTER_ALMOST_EMPTY);
+      size_string = l10n_util::GetStringUTF16(
+          is_basic_tab ? IDS_DEL_CACHE_COUNTER_ALMOST_EMPTY_BASIC
+                       : IDS_DEL_CACHE_COUNTER_ALMOST_EMPTY);
     }
-    if (pref_name == browsing_data::prefs::kDeleteCacheBasic) {
+    if (is_basic_tab) {
+      // Wrap the size string inside a sentence.
       return l10n_util::GetStringFUTF16(IDS_DEL_CACHE_COUNTER_BASIC,
                                         size_string);
     }

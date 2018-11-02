@@ -16,10 +16,12 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/gpu_export.h"
@@ -37,6 +39,7 @@ namespace gpu {
 class GpuDriverBugWorkarounds;
 struct GpuPreferences;
 class PreemptionFlag;
+class Scheduler;
 class SyncPointManager;
 struct SyncToken;
 namespace gles2 {
@@ -64,6 +67,7 @@ class GPU_EXPORT GpuChannelManager {
                     GpuWatchdogThread* watchdog,
                     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+                    Scheduler* scheduler,
                     SyncPointManager* sync_point_manager,
                     GpuMemoryBufferFactory* gpu_memory_buffer_factory,
                     const GpuFeatureInfo& gpu_feature_info,
@@ -122,11 +126,9 @@ class GPU_EXPORT GpuChannelManager {
 
   gl::GLShareGroup* share_group() const { return share_group_.get(); }
 
-  gpu::GpuWatchdogThread* watchdog() { return watchdog_; }
-  SyncPointManager* sync_point_manager() { return sync_point_manager_; }
-  PreemptionFlag* preemption_flag() const { return preemption_flag_.get(); }
+  SyncPointManager* sync_point_manager() const { return sync_point_manager_; }
 
-private:
+ private:
   void InternalDestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id, int client_id);
   void InternalDestroyGpuMemoryBufferOnIO(gfx::GpuMemoryBufferId id,
                                           int client_id);
@@ -144,7 +146,7 @@ protected:
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 
-private:
+//private:
   const GpuPreferences gpu_preferences_;
   GpuDriverBugWorkarounds gpu_driver_bug_workarounds_;
 
@@ -153,9 +155,12 @@ private:
   GpuWatchdogThread* watchdog_;
 
   scoped_refptr<gl::GLShareGroup> share_group_;
-  scoped_refptr<gles2::MailboxManager> mailbox_manager_;
+
   scoped_refptr<PreemptionFlag> preemption_flag_;
+
+  scoped_refptr<gles2::MailboxManager> mailbox_manager_;
   GpuMemoryManager gpu_memory_manager_;
+  Scheduler* scheduler_;
   // SyncPointManager guaranteed to outlive running MessageLoop.
   SyncPointManager* sync_point_manager_;
   std::unique_ptr<gles2::ProgramCache> program_cache_;
@@ -165,6 +170,7 @@ private:
   scoped_refptr<gl::GLSurface> default_offscreen_surface_;
   GpuMemoryBufferFactory* const gpu_memory_buffer_factory_;
   GpuFeatureInfo gpu_feature_info_;
+  ServiceDiscardableManager discardable_manager_;
 #if defined(OS_ANDROID)
   // Last time we know the GPU was powered on. Global for tracking across all
   // transport surfaces.

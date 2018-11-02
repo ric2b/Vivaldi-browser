@@ -51,7 +51,7 @@ const char* KeyTypeToString(WebCryptoKeyType type) {
     case kWebCryptoKeyTypePrivate:
       return "private";
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return 0;
 }
 
@@ -82,7 +82,7 @@ const char* KeyUsageToString(WebCryptoKeyUsage usage) {
     if (kKeyUsageMappings[i].value == usage)
       return kKeyUsageMappings[i].name;
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return 0;
 }
 
@@ -110,7 +110,7 @@ class DictionaryBuilder : public WebCryptoKeyAlgorithmDictionary {
 
   virtual void SetAlgorithm(const char* property_name,
                             const WebCryptoAlgorithm& algorithm) {
-    ASSERT(algorithm.ParamsType() == kWebCryptoAlgorithmParamsTypeNone);
+    DCHECK_EQ(algorithm.ParamsType(), kWebCryptoAlgorithmParamsTypeNone);
 
     V8ObjectBuilder algorithm_value(builder_.GetScriptState());
     algorithm_value.AddString(

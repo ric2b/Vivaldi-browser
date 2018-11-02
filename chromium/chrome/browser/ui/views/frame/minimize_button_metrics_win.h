@@ -18,6 +18,9 @@ class MinimizeButtonMetrics {
   MinimizeButtonMetrics();
   ~MinimizeButtonMetrics();
 
+  // Returns the height of the native caption buttons in DIPs.
+  static int GetCaptionButtonHeightInDIPs();
+
   void Init(HWND hwnd);
 
   // Obtain the X offset of the native minimize button. Since Windows can lie
@@ -28,6 +31,9 @@ class MinimizeButtonMetrics {
   // Must be called when hwnd_ is activated to update the minimize button
   // position cache.
   void OnHWNDActivated();
+
+  // Must be called when WM_DPICHANGED message is received.
+  void OnDpiChanged();
 
  private:
   // Gets the value for GetMinimizeButtonOffsetX(), caching if found.
@@ -48,7 +54,7 @@ class MinimizeButtonMetrics {
   // Static cache of |cached_minimize_button_x_delta_|.
   static int last_cached_minimize_button_x_delta_;
 
-  // Static cache of offset value representing the different between
+  // Static cache of offset value representing the difference between
   // DWMWA_CAPTION_BUTTON_BOUNDS and WM_GETTITLEBARINFOEX
   static int button_bounds_position_offset_;
 

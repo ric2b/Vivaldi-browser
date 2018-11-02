@@ -1,0 +1,191 @@
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+[
+  {
+    "namespace": "calendar",
+    "description": "Use the <code>vivaldi.calendar</code> API to manipulate calendar events.",
+    "types": [
+      {
+        "id": "CalendarEvent",
+        "type": "object",
+        "description": "A calendar event.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minimum": 0,
+            "description": "The unique identifier for the event. IDs are unique within the current profile, and they remain valid even after the browser is restarted."
+          },
+          "calendarId": {
+            "type": "string",
+            "optional": true,
+            "description": "The calendar id of the event."
+          },
+          "title": {
+            "type": "string",
+            "optional": true,
+            "description": "Title of event."
+          },
+          "description": {
+            "type": "string",
+            "optional": true,
+            "description": "The event description."
+          },
+          "start": {
+            "type": "number",
+            "optional": true,
+            "description": "When this event starts, in milliseconds since the epoch."
+          },
+          "end": {
+            "type": "number",
+            "optional": true,
+            "description": "When this event ends, in milliseconds since the epoch."
+          },
+          "dateAdded": {
+            "type": "number",
+            "optional": true,
+            "description": "When this event was created, in milliseconds since the epoch."
+          }
+        }
+      },
+      {
+        "id": "CreateDetails",
+        "description": "Object passed to the create() function.",
+        "inline_doc": true,
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "optional": false
+          },
+          "description": {
+            "type": "string",
+            "optional": true
+          },
+          "start": {
+            "type": "number",
+            "optional": true,
+            "description": "When this event shoud starts, in milliseconds since the epoch."
+          },
+          "end": {
+            "type": "number",
+            "optional": true,
+            "description": "When this event should ends, in milliseconds since the epoch."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "getAll",
+        "type": "function",
+        "description": "Retrieves all events in calendar",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": {
+                  "$ref": "CalendarEvent"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "create",
+        "type": "function",
+        "description": "Creates a event in the specified calendar.",
+        "parameters": [
+          {
+            "$ref": "CreateDetails",
+            "name": "event"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "$ref": "CalendarEvent"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "delete",
+        "type": "function",
+        "description": "Deletes an event.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id"
+          }
+        ]
+      },
+      {
+        "name": "update",
+        "type": "function",
+        "description": "Updates the properties of an event. Specify only the properties that you want to change. Unspecified properties will be left unchanged.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id"
+          },
+          {
+            "type": "object",
+            "name": "changes",
+            "properties": {
+              "calendar_id": {
+                "description": "The updated calendar id of event",
+                "type": "string",
+                "optional": true
+              },
+              "title": {
+                "description": "The updated title of event",
+                "type": "string",
+                "optional": true
+              },
+              "description": {
+                "description": "The updated description of event",
+                "type": "string",
+                "optional": true
+              },
+              "start": {
+                "description": "When this event shoud starts, in milliseconds since the epoch",
+                "type": "number",
+                "optional": true
+              },
+              "end": {
+                "description": "Updated time when this event should end, in milliseconds since the epoch",
+                "type": "number",
+                "optional": true
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onCreated",
+        "type": "function",
+        "description": "Fired when a event is created.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id"
+          },
+          {
+            "$ref": "CalendarEvent",
+            "name": "event"
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -24,6 +24,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+enum EffectiveConnectionType {
+    "slow-2g",
+    "2g",
+    "3g",
+    "4g"
+};
+
 [
     DoNotCheckConstants,
 ] interface Internals {
@@ -107,7 +114,7 @@
     [RaisesException] DOMString markerDescriptionForNode(Node node, DOMString markerType, unsigned long index);
     [RaisesException] void addTextMatchMarker(Range range, DOMString matchStatus);
     [RaisesException] void addCompositionMarker(Range range, DOMString underlineColorValue, boolean thick, DOMString backgroundColorValue);
-    void setMarkersActive(Node node, unsigned long startOffset, unsigned long endOffset, boolean active);
+    void setTextMatchMarkersActive(Node node, unsigned long startOffset, unsigned long endOffset, boolean active);
     void setMarkedTextMatchesAreHighlighted(Document document, boolean highlight);
 
     [RaisesException] void setFrameViewPosition(Document document, long x, long y);
@@ -204,7 +211,6 @@
 
     unsigned long numberOfLiveNodes();
     unsigned long numberOfLiveDocuments();
-    DOMString dumpRefCountedInstanceCounts();
 
     DOMString counterValue(Element element);
     [RaisesException] long pageNumber(Element element, optional float pageWidth = 800, optional float pageHeight = 600);
@@ -271,6 +277,7 @@
     void forceReload(boolean endToEnd);
 
     DOMString getImageSourceURL(Element element);
+    [RaisesException] void forceImageReload(Element element);
 
     DOMString selectMenuListText(HTMLSelectElement select);
     boolean isSelectPopupVisible(Node node);
@@ -314,6 +321,7 @@
 
     // These functions are for testing NetInfo. You must call clearNetworkConnectionInfoOverride() at the end.
     [RaisesException] void setNetworkConnectionInfoOverride(boolean onLine, DOMString type, double downlinkMaxMbps);
+    [RaisesException] void setNetworkQualityInfoOverride(EffectiveConnectionType effective_type, unsigned long transport_rtt_msec, double downlink_throughput_mbps);
     void clearNetworkConnectionInfoOverride();
 
     // This function is for testing HitRegions on Canvas2D.
@@ -324,6 +332,7 @@
 
     DictionaryTest dictionaryTest();
     RecordTest recordTest();
+    SequenceTest sequenceTest();
     UnionTypesTest unionTypesTest();
     CallbackFunctionTest callbackFunctionTest();
     [RaisesException] void setScrollChain(ScrollState scrollState, sequence<Element> elements);

@@ -52,6 +52,7 @@
 #include "core/events/KeyboardEvent.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLDimension.h"
 #include "core/html/HTMLFormElement.h"
@@ -144,9 +145,8 @@ bool HTMLElement::ShouldSerializeEndTag() const {
       HasTagName(bgsoundTag) || HasTagName(brTag) || HasTagName(colTag) ||
       HasTagName(embedTag) || HasTagName(frameTag) || HasTagName(hrTag) ||
       HasTagName(imgTag) || HasTagName(inputTag) || HasTagName(keygenTag) ||
-      HasTagName(linkTag) || HasTagName(menuitemTag) || HasTagName(metaTag) ||
-      HasTagName(paramTag) || HasTagName(sourceTag) || HasTagName(trackTag) ||
-      HasTagName(wbrTag))
+      HasTagName(linkTag) || HasTagName(metaTag) || HasTagName(paramTag) ||
+      HasTagName(sourceTag) || HasTagName(trackTag) || HasTagName(wbrTag))
     return false;
   return true;
 }
@@ -195,14 +195,14 @@ void HTMLElement::MapLanguageAttributeToLocale(const AtomicString& value,
     else if (isHTMLBodyElement(*this))
       UseCounter::Count(GetDocument(), UseCounter::kLangAttributeOnBody);
     String html_language = value.GetString();
-    size_t first_separator = html_language.Find('-');
+    size_t first_separator = html_language.find('-');
     if (first_separator != kNotFound)
       html_language = html_language.Left(first_separator);
     String ui_language = DefaultLanguage();
-    first_separator = ui_language.Find('-');
+    first_separator = ui_language.find('-');
     if (first_separator != kNotFound)
       ui_language = ui_language.Left(first_separator);
-    first_separator = ui_language.Find('_');
+    first_separator = ui_language.find('_');
     if (first_separator != kNotFound)
       ui_language = ui_language.Left(first_separator);
     if (!DeprecatedEqualIgnoringCase(html_language, ui_language))
@@ -463,6 +463,8 @@ void HTMLElement::ParseAttribute(const AttributeModificationParams& params) {
     DirAttributeChanged(params.new_value);
   } else if (params.name == langAttr) {
     PseudoStateChanged(CSSSelector::kPseudoLang);
+  } else if (params.name == inertAttr) {
+    UseCounter::Count(GetDocument(), UseCounter::kInertAttribute);
   } else {
     const AtomicString& event_name = EventNameForAttributeName(params.name);
     if (!event_name.IsNull()) {
@@ -911,6 +913,24 @@ void HTMLElement::AdjustDirectionalityIfNeededAfterChildrenChanged(
   }
 }
 
+Node::InsertionNotificationRequest HTMLElement::InsertedInto(
+    ContainerNode* insertion_point) {
+  // Process the superclass first to ensure that `InActiveDocument()` is
+  // updated.
+  Element::InsertedInto(insertion_point);
+
+  if (hasAttribute(nonceAttr) && getAttribute(nonceAttr) != g_empty_atom) {
+    setNonce(getAttribute(nonceAttr));
+    if (RuntimeEnabledFeatures::hideNonceContentAttributeEnabled() &&
+        InActiveDocument() &&
+        GetDocument().GetContentSecurityPolicy()->HasHeaderDeliveredPolicy()) {
+      setAttribute(nonceAttr, g_empty_atom);
+    }
+  }
+
+  return kInsertionDone;
+}
+
 void HTMLElement::AddHTMLLengthToStyle(MutableStylePropertySet* style,
                                        CSSPropertyID property_id,
                                        const String& value,
@@ -1061,7 +1081,7 @@ HTMLMenuElement* HTMLElement::contextMenu() const {
   if (context_menu_id.IsNull())
     return nullptr;
 
-  Element* element = GetTreeScope().GetElementById(context_menu_id);
+  Element* element = GetTreeScope().getElementById(context_menu_id);
   // Not checking if the menu element is of type "popup".
   // Ignoring menu element type attribute is intentional according to the
   // standard.
@@ -1084,7 +1104,7 @@ void HTMLElement::setContextMenu(HTMLMenuElement* context_menu) {
   const AtomicString& context_menu_id(context_menu->FastGetAttribute(idAttr));
 
   if (!context_menu_id.IsNull() &&
-      context_menu == GetTreeScope().GetElementById(context_menu_id))
+      context_menu == GetTreeScope().getElementById(context_menu_id))
     setAttribute(contextmenuAttr, context_menu_id);
   else
     setAttribute(contextmenuAttr, "");
@@ -1142,6 +1162,7 @@ const AtomicString& HTMLElement::EventParameterName() {
 }
 
 int HTMLElement::offsetLeftForBinding() {
+  GetDocument().EnsurePaintLocationDataValidForNode(this);
   Element* offset_parent = unclosedOffsetParent();
   if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
     return AdjustLayoutUnitForAbsoluteZoom(
@@ -1152,6 +1173,7 @@ int HTMLElement::offsetLeftForBinding() {
 }
 
 int HTMLElement::offsetTopForBinding() {
+  GetDocument().EnsurePaintLocationDataValidForNode(this);
   Element* offset_parent = unclosedOffsetParent();
   if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
     return AdjustLayoutUnitForAbsoluteZoom(
@@ -1162,6 +1184,7 @@ int HTMLElement::offsetTopForBinding() {
 }
 
 int HTMLElement::offsetWidthForBinding() {
+  GetDocument().EnsurePaintLocationDataValidForNode(this);
   Element* offset_parent = unclosedOffsetParent();
   if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
     return AdjustLayoutUnitForAbsoluteZoom(
@@ -1174,6 +1197,7 @@ int HTMLElement::offsetWidthForBinding() {
 
 DISABLE_CFI_PERF
 int HTMLElement::offsetHeightForBinding() {
+  GetDocument().EnsurePaintLocationDataValidForNode(this);
   Element* offset_parent = unclosedOffsetParent();
   if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
     return AdjustLayoutUnitForAbsoluteZoom(
@@ -1202,6 +1226,6 @@ Element* HTMLElement::unclosedOffsetParent() {
 void dumpInnerHTML(blink::HTMLElement*);
 
 void dumpInnerHTML(blink::HTMLElement* element) {
-  printf("%s\n", element->innerHTML().Ascii().Data());
+  printf("%s\n", element->innerHTML().Ascii().data());
 }
 #endif

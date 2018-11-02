@@ -7,6 +7,7 @@
 
 #include "base/time/time.h"
 
+class PrefRegistrySimple;
 class PrefService;
 
 namespace chromeos {
@@ -21,17 +22,23 @@ class FingerprintStorage {
  public:
   static const int kMaximumUnlockAttempts = 5;
 
+  // Registers profile prefs.
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
+
   explicit FingerprintStorage(PrefService* pref_service);
   ~FingerprintStorage();
 
-  // Returns true if the user has fingerprint enrollments registered.
-  bool HasEnrollment() const;
+  // Returns true if the user has fingerprint record registered.
+  bool HasRecord() const;
 
   // Add a fingerprint unlock attempt count.
   void AddUnlockAttempt();
 
   // Reset the number of unlock attempts to 0.
   void ResetUnlockAttemptCount();
+
+  // Returns true if the user has exceeded fingerprint unlock attempts.
+  bool ExceededUnlockAttempts() const;
 
   int unlock_attempt_count() const { return unlock_attempt_count_; }
 
@@ -45,7 +52,6 @@ class FingerprintStorage {
   PrefService* pref_service_;
   // Number of fingerprint unlock attempt.
   int unlock_attempt_count_ = 0;
-  bool has_enrollments_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(FingerprintStorage);
 };

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/browser_watcher/stability_debugging_win.h"
+#include "components/browser_watcher/stability_debugging.h"
 
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
@@ -10,6 +10,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/process/process.h"
 #include "base/test/multiprocess_test.h"
+#include "components/browser_watcher/stability_paths.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
 
@@ -36,8 +37,9 @@ TEST_F(StabilityDebuggingWinMultiProcTest, GetStabilityFileForProcessTest) {
   EXPECT_EQ(stability_path, stability_path_two);
 
   // Ensure a different process has a different stability path.
+  base::SpawnChildResult spawn_result = SpawnChild("DummyProcess");
   base::FilePath stability_path_other;
-  ASSERT_TRUE(GetStabilityFileForProcess(SpawnChild("DummyProcess"), empty_path,
+  ASSERT_TRUE(GetStabilityFileForProcess(spawn_result.process, empty_path,
                                          &stability_path_other));
   EXPECT_NE(stability_path, stability_path_other);
 }
@@ -51,7 +53,7 @@ TEST(StabilityDebuggingWinTest,
 
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  base::FilePath user_data_dir = temp_dir.path();
+  base::FilePath user_data_dir = temp_dir.GetPath();
 
   // Create the stability directory.
   base::FilePath stability_dir = GetStabilityDir(user_data_dir);

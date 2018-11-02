@@ -21,6 +21,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 
 namespace content {
 
@@ -50,29 +51,31 @@ class PaymentAppContentUnitTestBase::PaymentAppForWorkerTestHelper
         last_sw_registration_id_(kInvalidServiceWorkerRegistrationId) {}
   ~PaymentAppForWorkerTestHelper() override {}
 
-  void OnStartWorker(
-      int embedded_worker_id,
-      int64_t service_worker_version_id,
-      const GURL& scope,
-      const GURL& script_url,
-      bool pause_after_download,
-      mojom::ServiceWorkerEventDispatcherRequest request) override {
+  void OnStartWorker(int embedded_worker_id,
+                     int64_t service_worker_version_id,
+                     const GURL& scope,
+                     const GURL& script_url,
+                     bool pause_after_download,
+                     mojom::ServiceWorkerEventDispatcherRequest request,
+                     mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo
+                         instance_host) override {
     ServiceWorkerVersion* version =
         context()->GetLiveVersion(service_worker_version_id);
     last_sw_registration_id_ = version->registration_id();
     last_sw_scope_ = scope;
     EmbeddedWorkerTestHelper::OnStartWorker(
         embedded_worker_id, service_worker_version_id, scope, script_url,
-        pause_after_download, std::move(request));
+        pause_after_download, std::move(request), std::move(instance_host));
   }
 
   void OnPaymentRequestEvent(
       payments::mojom::PaymentAppRequestPtr app_request,
       payments::mojom::PaymentAppResponseCallbackPtr response_callback,
-      const mojom::ServiceWorkerEventDispatcher::
-          DispatchPaymentRequestEventCallback& callback) override {
+      mojom::ServiceWorkerEventDispatcher::DispatchPaymentRequestEventCallback
+          callback) override {
     EmbeddedWorkerTestHelper::OnPaymentRequestEvent(
-        std::move(app_request), std::move(response_callback), callback);
+        std::move(app_request), std::move(response_callback),
+        std::move(callback));
   }
 
   int64_t last_sw_registration_id_;
@@ -130,7 +133,8 @@ PaymentManager* PaymentAppContentUnitTestBase::CreatePaymentManager(
   mojo::InterfaceRequest<payments::mojom::PaymentManager> request =
       mojo::MakeRequest(&manager);
   payment_managers_.push_back(std::move(manager));
-  payment_app_context()->CreatePaymentManager(std::move(request));
+  payment_app_context()->CreatePaymentManager(service_manager::BindSourceInfo(),
+                                              std::move(request));
   base::RunLoop().RunUntilIdle();
 
   // Find a last registered payment manager.
@@ -145,42 +149,6 @@ PaymentManager* PaymentAppContentUnitTestBase::CreatePaymentManager(
 
   NOTREACHED();
   return nullptr;
-}
-
-void PaymentAppContentUnitTestBase::SetManifest(
-    PaymentManager* manager,
-    payments::mojom::PaymentAppManifestPtr manifest,
-    const PaymentManager::SetManifestCallback& callback) {
-  ASSERT_NE(nullptr, manager);
-  manager->SetManifest(std::move(manifest), callback);
-  base::RunLoop().RunUntilIdle();
-}
-
-void PaymentAppContentUnitTestBase::GetManifest(
-    PaymentManager* manager,
-    const PaymentManager::GetManifestCallback& callback) {
-  ASSERT_NE(nullptr, manager);
-  manager->GetManifest(callback);
-  base::RunLoop().RunUntilIdle();
-}
-
-payments::mojom::PaymentAppManifestPtr
-PaymentAppContentUnitTestBase::CreatePaymentAppManifestForTest(
-    const std::string& name) {
-  payments::mojom::PaymentAppOptionPtr option =
-      payments::mojom::PaymentAppOption::New();
-  option->name = "Visa ****";
-  option->id = "payment-app-id";
-  option->icon = std::string("payment-app-icon");
-  option->enabled_methods.push_back("visa");
-
-  payments::mojom::PaymentAppManifestPtr manifest =
-      payments::mojom::PaymentAppManifest::New();
-  manifest->icon = std::string("payment-app-icon");
-  manifest->name = name;
-  manifest->options.push_back(std::move(option));
-
-  return manifest;
 }
 
 void PaymentAppContentUnitTestBase::UnregisterServiceWorker(

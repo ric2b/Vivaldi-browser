@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/message_loop/message_loop.h"
 #include "base/test/test_timeouts.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/common/content_switches.h"
@@ -66,15 +67,15 @@ class WakeLockTest : public ContentBrowserTest {
     return GetNestedFrameNode()->current_frame_host();
   }
 
-  device::mojom::WakeLockContext* GetWakeLockServiceContext() {
-    return GetWebContentsImpl()->GetWakeLockServiceContext();
+  device::mojom::WakeLockService* GetRendererWakeLock() {
+    return GetWebContentsImpl()->GetRendererWakeLock();
   }
 
   bool HasWakeLock() {
     bool has_wakelock = false;
     base::RunLoop run_loop;
 
-    GetWakeLockServiceContext()->HasWakeLockForTests(
+    GetRendererWakeLock()->HasWakeLockForTests(
         base::Bind(&OnHasWakeLock, &has_wakelock));
     run_loop.Run();
     return has_wakelock;

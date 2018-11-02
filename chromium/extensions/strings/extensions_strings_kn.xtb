@@ -13,6 +13,7 @@
 <translation id="2753617847762399167">ಕಾನೂನು ಬಾಹಿರ ಪಾಥ್ ('..' ರೊಂದಿಗೆ ಸಮಗ್ರ ಅಥವಾ ಸಂಬಂಧಿತ... ): '<ph name="IMAGE_PATH" />'</translation>
 <translation id="27822970480436970">ನೆಟ್‌ವರ್ಕ್ ವಿನಂತಿಯನ್ನು ಮಾರ್ಪಡಿಸಲು ಈ ವಿಸ್ತರಣೆಯು ವಿಫಲವಾಗಿದೆ ಏಕೆಂದರೆ ಮಾರ್ಪಡಿಸುವಿಕೆಯು ಮತ್ತೊಂದು ವಿಸ್ತರಣೆಯೊಂದಿಗೆ ಸಂಘರ್ಷಗೊಂಡಿದೆ.</translation>
 <translation id="2857834222104759979">ಮ್ಯಾನಿಫೆಸ್ಟ್ ಫೈಲ್ ಮಾನ್ಯತೆ ಪಡೆದಿಲ್ಲ.</translation>
+<translation id="2903070246402204397">ನಿರ್ವಾಹಕರಿಂದ <ph name="EXTENSION_NAME" /> (ವಿಸ್ತರಣೆ ಐಡಿ "<ph name="EXTENSION_ID" />") ಅನ್ನು ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">ಪ್ಯಾಕೇಜ್ ಅನ್ನು ಸ್ಥಾಪಿಸಲಾಗುವುದಿಲ್ಲ: '<ph name="ERROR_CODE" />'</translation>
 <translation id="3115238746683532089"><ph name="VENDOR_ID" /> ಮಾರಾಟಗಾರರಿಂದ <ph name="PRODUCT_ID" /> ಅಪರಿಚಿತ ಉತ್ಪನ್ನ (ಕ್ರಮ ಸಂಖ್ಯೆ <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3163201441334626963"><ph name="VENDOR_ID" /> ಮಾರಾಟಗಾರರಿಂದ <ph name="PRODUCT_ID" /> ಅಪರಿಚಿತ ಉತ್ಪನ್ನ</translation>
@@ -45,7 +46,6 @@
 <translation id="7003844668372540529"><ph name="VENDOR_NAME" /> ಅವರಿಂದ <ph name="PRODUCT_ID" /> ಅಪರಿಚಿತ ಉತ್ಪನ್ನ</translation>
 <translation id="7217838517480956708">ಈ ಯಂತ್ರದ ನಿರ್ವಾಹಕರಿಗೆ <ph name="EXTENSION_NAME" /> ಅನ್ನು ಸ್ಥಾಪಿಸುವ ಅಗತ್ಯವಿದೆ. ಇದನ್ನು ತೆಗೆದುಹಾಕಲು ಅಥವಾ ಮಾರ್ಪಡಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.</translation>
 <translation id="7581279002575751816">NPAPI ಪ್ಲಗಿನ್‌ಗಳು ಬೆಂಬಲಿಸುವುದಿಲ್ಲ.</translation>
-<translation id="7809034755304591547">ನಿರ್ವಾಹಕನಿಂದ <ph name="EXTENSION_NAME" /> (ವಿಸ್ತರಣೆ ID "<ph name="EXTENSION_ID" />") ಅನ್ನು ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ.</translation>
 <translation id="7972881773422714442">ಆಯ್ಕೆಗಳು: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">ಬಳಕೆದಾರರಿಗೆ ಮುಖಮಾಡಿದೆ</translation>
 <translation id="8047248493720652249">ಈ ವಿಸ್ತರಣೆಯು "<ph name="ATTEMPTED_FILENAME" />" ಅನ್ನು ಡೌನ್‌ಲೋಡ್‌ ಮಾಡುವುದನ್ನು ಹೆಸರಿಸಲು ವಿಫಲವಾಗಿದೆ ಏಕೆಂದರೆ ಮತ್ತೊಂದು ವಿಸ್ತರಣೆ (<ph name="EXTENSION_NAME" />) ಯು ವಿಭಿನ್ನ ಫೈಲ್‌ ಹೆಸರು "<ph name="ACTUAL_FILENAME" />" ಗೆ ನಿರ್ಧರಿಸಿದೆ.</translation>

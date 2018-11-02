@@ -7,14 +7,15 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/time/tick_clock.h"
-#include "public/platform/WebCommon.h"
+#include "platform/PlatformExport.h"
 
 namespace blink {
 namespace scheduler {
 
-class BLINK_PLATFORM_EXPORT TaskQueueManagerDelegate
+class PLATFORM_EXPORT TaskQueueManagerDelegate
     : public base::SingleThreadTaskRunner,
       public base::TickClock {
  public:
@@ -24,13 +25,12 @@ class BLINK_PLATFORM_EXPORT TaskQueueManagerDelegate
   // a nested task).
   virtual bool IsNested() const = 0;
 
-  // A NestingObserver is notified when a nested message loop begins. The
+  // A NestingObserver is notified when a nested run loop begins. The
   // observers are notified before the first task is processed.
-  virtual void AddNestingObserver(
-      base::MessageLoop::NestingObserver* observer) = 0;
+  virtual void AddNestingObserver(base::RunLoop::NestingObserver* observer) = 0;
 
   virtual void RemoveNestingObserver(
-      base::MessageLoop::NestingObserver* observer) = 0;
+      base::RunLoop::NestingObserver* observer) = 0;
 
  protected:
   ~TaskQueueManagerDelegate() override {}

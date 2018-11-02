@@ -28,11 +28,11 @@
 
 #include <stdint.h>
 
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/V8BindingMacros.h"
 #include "bindings/core/v8/V8CacheOptions.h"
 #include "core/CoreExport.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8BindingMacros.h"
 #include "platform/loader/fetch/AccessControlStatus.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/text/TextPosition.h"
@@ -82,7 +82,8 @@ class CORE_EXPORT V8ScriptRunner final {
   static v8::MaybeLocal<v8::Module> CompileModule(v8::Isolate*,
                                                   const String& source,
                                                   const String& file_name,
-                                                  AccessControlStatus);
+                                                  AccessControlStatus,
+                                                  const TextPosition&);
   static v8::MaybeLocal<v8::Value> RunCompiledScript(v8::Isolate*,
                                                      v8::Local<v8::Script>,
                                                      ExecutionContext*);
@@ -116,6 +117,11 @@ class CORE_EXPORT V8ScriptRunner final {
                                                   v8::Local<v8::Context>,
                                                   v8::Isolate*);
 
+  // Only to be used from ScriptModule::ReportException().
+  static void ReportExceptionForModule(v8::Isolate*,
+                                       v8::Local<v8::Value> exception,
+                                       const String& file_name);
+
   static uint32_t TagForParserCache(CachedMetadataHandler*);
   static uint32_t TagForCodeCache(CachedMetadataHandler*);
   static void SetCacheTimeStamp(CachedMetadataHandler*);
@@ -143,20 +149,10 @@ class CORE_EXPORT V8ScriptRunner final {
                              const v8::ScriptOrigin&);
 
  private:
-  static v8::MaybeLocal<v8::Value> CallExtraHelper(ScriptState* script_state,
+  static v8::MaybeLocal<v8::Value> CallExtraHelper(ScriptState*,
                                                    const char* name,
                                                    size_t num_args,
-                                                   v8::Local<v8::Value>* args) {
-    v8::Isolate* isolate = script_state->GetIsolate();
-    v8::Local<v8::Value> undefined = v8::Undefined(isolate);
-    v8::Local<v8::Value> function_value =
-        script_state->GetFromExtrasExports(name).V8Value();
-    if (function_value.IsEmpty())
-      return v8::MaybeLocal<v8::Value>();
-    v8::Local<v8::Function> function = function_value.As<v8::Function>();
-    return V8ScriptRunner::CallInternalFunction(function, undefined, num_args,
-                                                args, isolate);
-  }
+                                                   v8::Local<v8::Value>* args);
 };
 
 }  // namespace blink

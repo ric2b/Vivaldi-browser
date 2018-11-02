@@ -16,9 +16,11 @@
 #include "base/i18n/time_formatting.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial.h"
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -28,6 +30,7 @@
 #include "chrome/common/chrome_features.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/category_info.h"
+#include "components/ntp_snippets/category_rankers/category_ranker.h"
 #include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/pref_names.h"
 #include "components/ntp_snippets/remote/remote_suggestions_fetcher.h"
@@ -35,6 +38,7 @@
 #include "components/ntp_snippets/switches.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/prefs/pref_service.h"
+#include "components/variations/variations_associated_data.h"
 #include "content/public/browser/web_ui.h"
 
 using ntp_snippets::ContentSuggestion;
@@ -53,6 +57,7 @@ std::unique_ptr<base::DictionaryValue> PrepareSuggestion(
   auto entry = base::MakeUnique<base::DictionaryValue>();
   entry->SetString("idWithinCategory", suggestion.id().id_within_category());
   entry->SetString("url", suggestion.url().spec());
+  entry->SetString("urlWithFavicon", suggestion.url_with_favicon().spec());
   entry->SetString("title", suggestion.title());
   entry->SetString("snippetText", suggestion.snippet_text());
   entry->SetString("publishDate",
@@ -117,6 +122,31 @@ std::string GetCategoryStatusName(CategoryStatus status) {
       return "LOADING_ERROR";
   }
   return std::string();
+}
+
+std::set<variations::VariationID> SnippetsExperiments() {
+  std::set<variations::VariationID> result;
+  for (const base::Feature* const* feature = ntp_snippets::kAllFeatures;
+       *feature; ++feature) {
+    base::FieldTrial* trial = base::FeatureList::GetFieldTrial(**feature);
+    if (!trial) {
+      continue;
+    }
+    if (trial->GetGroupNameWithoutActivation().empty()) {
+      continue;
+    }
+    for (variations::IDCollectionKey key :
+         {variations::GOOGLE_WEB_PROPERTIES,
+          variations::GOOGLE_WEB_PROPERTIES_SIGNED_IN,
+          variations::GOOGLE_WEB_PROPERTIES_TRIGGER}) {
+      const variations::VariationID id = variations::GetGoogleVariationID(
+          key, trial->trial_name(), trial->group_name());
+      if (id != variations::EMPTY_ID) {
+        result.insert(id);
+      }
+    }
+  }
+  return result;
 }
 
 }  // namespace
@@ -346,6 +376,7 @@ void SnippetsInternalsMessageHandler::SendAllContent() {
                                        chrome::android::kPhysicalWebFeature));
 
   SendClassification();
+  SendRankerDebugData();
   SendLastRemoteSuggestionsBackgroundFetchTime();
 
   if (remote_suggestions_provider_) {
@@ -356,6 +387,13 @@ void SnippetsInternalsMessageHandler::SendAllContent() {
         "chrome.SnippetsInternals.receiveJson",
         base::Value(fetcher->last_json()));
   }
+
+  std::set<variations::VariationID> ids = SnippetsExperiments();
+  std::vector<std::string> string_ids;
+  for (auto id : ids) {
+    string_ids.push_back(base::IntToString(id));
+  }
+  SendString("experiment-ids", base::JoinString(string_ids, ", "));
 
   SendContentSuggestions();
 }
@@ -374,6 +412,24 @@ void SnippetsInternalsMessageHandler::SendClassification() {
       base::Value(
           content_suggestions_service_->user_classifier()->GetEstimatedAvgTime(
               UserClassifier::Metric::SUGGESTIONS_USED)));
+}
+
+void SnippetsInternalsMessageHandler::SendRankerDebugData() {
+  std::vector<ntp_snippets::CategoryRanker::DebugDataItem> data =
+      content_suggestions_service_->category_ranker()->GetDebugData();
+
+  std::unique_ptr<base::ListValue> items_list(new base::ListValue);
+  for (const auto& item : data) {
+    auto entry = base::MakeUnique<base::DictionaryValue>();
+    entry->SetString("label", item.label);
+    entry->SetString("content", item.content);
+    items_list->Append(std::move(entry));
+  }
+
+  base::DictionaryValue result;
+  result.Set("list", std::move(items_list));
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "chrome.SnippetsInternals.receiveRankerDebugData", result);
 }
 
 void SnippetsInternalsMessageHandler::

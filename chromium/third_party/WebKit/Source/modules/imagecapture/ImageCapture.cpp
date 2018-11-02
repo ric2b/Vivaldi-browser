@@ -116,7 +116,7 @@ bool ImageCapture::HasPendingActivity() const {
 
 void ImageCapture::ContextDestroyed(ExecutionContext*) {
   RemoveAllEventListeners();
-  service_requests_.Clear();
+  service_requests_.clear();
   DCHECK(!HasEventListeners());
 }
 
@@ -264,8 +264,7 @@ ScriptPromise ImageCapture::grabFrame(ScriptState* script_state) {
 
   // Create |m_frameGrabber| the first time.
   if (!frame_grabber_) {
-    frame_grabber_ =
-        WTF::WrapUnique(Platform::Current()->CreateImageCaptureFrameGrabber());
+    frame_grabber_ = Platform::Current()->CreateImageCaptureFrameGrabber();
   }
 
   if (!frame_grabber_) {
@@ -672,7 +671,7 @@ void ImageCapture::OnMojoTakePhoto(ScriptPromiseResolver* resolver,
     resolver->Reject(DOMException::Create(kUnknownError, "platform error"));
   } else {
     resolver->Resolve(
-        Blob::Create(blob->data.Data(), blob->data.size(), blob->mime_type));
+        Blob::Create(blob->data.data(), blob->data.size(), blob->mime_type));
   }
   service_requests_.erase(resolver);
 }
@@ -781,7 +780,7 @@ void ImageCapture::OnServiceConnectionError() {
   service_.reset();
   for (ScriptPromiseResolver* resolver : service_requests_)
     resolver->Reject(DOMException::Create(kNotFoundError, kNoServiceError));
-  service_requests_.Clear();
+  service_requests_.clear();
 }
 
 DEFINE_TRACE(ImageCapture) {

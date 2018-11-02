@@ -16,7 +16,7 @@
 
 namespace content {
 
-class DevToolsSession;
+class DevToolsAgentHostImpl;
 class RenderFrameHostImpl;
 
 namespace protocol {
@@ -30,7 +30,7 @@ class TargetHandler : public DevToolsDomainHandler,
   TargetHandler();
   ~TargetHandler() override;
 
-  static TargetHandler* FromSession(DevToolsSession* session);
+  static std::vector<TargetHandler*> ForAgentHost(DevToolsAgentHostImpl* host);
 
   void Wire(UberDispatcher* dispatcher) override;
   void SetRenderFrameHost(RenderFrameHostImpl* host) override;
@@ -94,6 +94,8 @@ class TargetHandler : public DevToolsDomainHandler,
   bool ShouldForceDevToolsAgentHostCreation() override;
   void DevToolsAgentHostCreated(DevToolsAgentHost* agent_host) override;
   void DevToolsAgentHostDestroyed(DevToolsAgentHost* agent_host) override;
+  void DevToolsAgentHostAttached(DevToolsAgentHost* agent_host) override;
+  void DevToolsAgentHostDetached(DevToolsAgentHost* agent_host) override;
 
   // DevToolsAgentHostClient implementation.
   void DispatchProtocolMessage(DevToolsAgentHost* agent_host,

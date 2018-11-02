@@ -105,6 +105,7 @@ struct SameSizeAsPaintLayer : DisplayItemClient {
     void* pointer;
     LayoutRect rect;
   } previous_paint_status;
+  uint64_t unique_id;
 };
 
 static_assert(sizeof(PaintLayer) == sizeof(SameSizeAsPaintLayer),
@@ -167,6 +168,8 @@ PaintLayer::PaintLayer(LayoutBoxModelObject& layout_object)
       static_inline_position_(0),
       static_block_position_(0),
       ancestor_overflow_layer_(nullptr) {
+  static PaintLayerId paint_layer_id_counter = 0;
+  unique_id_ = ++paint_layer_id_counter;
   UpdateStackingNode();
 
   is_self_painting_layer_ = ShouldBeSelfPaintingLayer();
@@ -429,8 +432,10 @@ void PaintLayer::UpdateTransform(const ComputedStyle* old_style,
 
   UpdateTransformationMatrix();
 
-  if (had3d_transform != Has3DTransform())
+  if (had3d_transform != Has3DTransform()) {
+    SetNeedsCompositingInputsUpdateInternal();
     MarkAncestorChainForDescendantDependentFlagsUpdate();
+  }
 
   if (FrameView* frame_view = GetLayoutObject().GetDocument().View())
     frame_view->SetNeedsUpdateGeometries();
@@ -786,17 +791,13 @@ void PaintLayer::Update3DTransformedDescendantStatus() {
 }
 
 void PaintLayer::UpdateLayerPosition() {
+  // LayoutBoxes will call UpdateSizeAndScrollingAfterLayout() from
+  // LayoutBox::UpdateAfterLayout, but LayoutInlines will still need to update
+  // their size.
+  if (GetLayoutObject().IsInline() && GetLayoutObject().IsLayoutInline())
+    UpdateSizeAndScrollingAfterLayout();
   LayoutPoint local_point;
-
-  bool did_resize = false;
-  if (GetLayoutObject().IsInline() && GetLayoutObject().IsLayoutInline()) {
-    LayoutInline& inline_flow = ToLayoutInline(GetLayoutObject());
-    IntRect line_box = EnclosingIntRect(inline_flow.LinesBoundingBox());
-    size_ = line_box.Size();
-  } else if (LayoutBox* box = GetLayoutBox()) {
-    IntSize new_size = PixelSnappedIntSize(box->Size(), box->Location());
-    did_resize = new_size != size_;
-    size_ = new_size;
+  if (LayoutBox* box = GetLayoutBox()) {
     local_point.MoveBy(box->PhysicalLocation());
   }
 
@@ -847,12 +848,33 @@ void PaintLayer::UpdateLayerPosition() {
 
   location_ = local_point;
 
-  if (scrollable_area_ && did_resize)
-    scrollable_area_->VisibleSizeChanged();
-
 #if DCHECK_IS_ON()
   needs_position_update_ = false;
 #endif
+}
+
+bool PaintLayer::UpdateSize() {
+  IntSize old_size = size_;
+  if (IsRootLayer() && RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
+    size_ = GetLayoutObject().GetDocument().View()->Size();
+  } else if (GetLayoutObject().IsInline() &&
+             GetLayoutObject().IsLayoutInline()) {
+    LayoutInline& inline_flow = ToLayoutInline(GetLayoutObject());
+    IntRect line_box = EnclosingIntRect(inline_flow.LinesBoundingBox());
+    size_ = line_box.Size();
+  } else if (LayoutBox* box = GetLayoutBox()) {
+    size_ = PixelSnappedIntSize(box->Size(), box->Location());
+  }
+  return old_size != size_;
+}
+
+void PaintLayer::UpdateSizeAndScrollingAfterLayout() {
+  bool did_resize = UpdateSize();
+  if (GetLayoutObject().HasOverflowClip()) {
+    scrollable_area_->UpdateAfterLayout();
+    if (did_resize)
+      scrollable_area_->VisibleSizeChanged();
+  }
 }
 
 TransformationMatrix PaintLayer::PerspectiveTransform() const {
@@ -1293,6 +1315,8 @@ void PaintLayer::AddChild(PaintLayer* child, PaintLayer* before_child) {
 }
 
 PaintLayer* PaintLayer::RemoveChild(PaintLayer* old_child) {
+  old_child->MarkCompositingContainerChainForNeedsRepaint();
+
   if (old_child->PreviousSibling())
     old_child->PreviousSibling()->SetNextSibling(old_child->NextSibling());
   if (old_child->NextSibling())
@@ -1336,8 +1360,6 @@ PaintLayer* PaintLayer::RemoveChild(PaintLayer* old_child) {
 
   if (old_child->EnclosingPaginationLayer())
     old_child->ClearPaginationRecursive();
-
-  SetNeedsRepaint();
 
   return old_child;
 }
@@ -1801,7 +1823,7 @@ Node* PaintLayer::EnclosingNode() const {
     if (Node* e = r->GetNode())
       return e;
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return 0;
 }
 
@@ -2762,8 +2784,12 @@ bool PaintLayer::PaintsWithTransform(
 }
 
 bool PaintLayer::SupportsSubsequenceCaching() const {
-  // SVG paints atomically.
-  if (GetLayoutObject().IsSVGRoot())
+  if (EnclosingPaginationLayer())
+    return false;
+
+  // SVG documents paint atomically.
+  if (GetLayoutObject().IsSVGRoot() &&
+      GetLayoutObject().GetDocument().IsSVGDocument())
     return true;
 
   // Create subsequence for only stacking contexts whose painting are atomic.
@@ -2881,8 +2907,12 @@ void PaintLayer::UpdateSelfPaintingLayer() {
   if (this->IsSelfPaintingLayer() == is_self_painting_layer)
     return;
 
+  // Invalidate the old subsequences which may no longer contain some
+  // descendants of this layer because of the self painting status change.
+  SetNeedsRepaint();
   is_self_painting_layer_ = is_self_painting_layer;
   self_painting_status_changed_ = true;
+  SetNeedsRepaint();
 
   if (PaintLayer* parent = this->Parent()) {
     parent->DirtyAncestorChainHasSelfPaintingLayerDescendantStatus();
@@ -3212,7 +3242,7 @@ void PaintLayer::ComputeSelfHitTestRects(LayerHitTestRects& rects) const {
 
       rects.Set(this, rect);
       if (const PaintLayer* parent_layer = Parent()) {
-        LayerHitTestRects::iterator iter = rects.Find(parent_layer);
+        LayerHitTestRects::iterator iter = rects.find(parent_layer);
         if (iter == rects.end()) {
           rects.insert(parent_layer, Vector<LayoutRect>())
               .stored_value->value.push_back(PhysicalBoundingBox(parent_layer));
@@ -3237,7 +3267,8 @@ void PaintLayer::SetNeedsRepaint() {
 
 void PaintLayer::SetNeedsRepaintInternal() {
   needs_repaint_ = true;
-  SetDisplayItemsUncached();  // Invalidate as a display item client.
+  // Invalidate as a display item client.
+  SetDisplayItemsUncached();
 }
 
 void PaintLayer::MarkCompositingContainerChainForNeedsRepaint() {
@@ -3312,7 +3343,7 @@ void showLayerTree(const blink::PaintLayer* layer) {
                                    blink::kLayoutAsTextDontUpdateLayout |
                                    blink::kLayoutAsTextShowLayoutState,
                                layer);
-    LOG(INFO) << output.Utf8().Data();
+    LOG(INFO) << output.Utf8().data();
   }
 }
 

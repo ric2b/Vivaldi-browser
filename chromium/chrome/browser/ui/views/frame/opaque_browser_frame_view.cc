@@ -202,7 +202,7 @@ int OpaqueBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
   // of Fitts' Law.
   if (layout_->IsTitleBarCondensed())
     sysmenu_rect.SetRect(0, 0, sysmenu_rect.right(), sysmenu_rect.bottom());
-  sysmenu_rect.set_x(GetMirroredXForRect(sysmenu_rect));
+  sysmenu_rect = GetMirroredRect(sysmenu_rect);
   if (sysmenu_rect.Contains(point))
     return (frame_component == HTCLIENT) ? HTCLIENT : HTSYSMENU;
 
@@ -295,11 +295,9 @@ void OpaqueBrowserFrameView::OnMenuButtonClicked(views::MenuButton* source,
 #if defined(OS_LINUX)
   views::MenuRunner menu_runner(frame()->GetSystemMenuModel(),
                                 views::MenuRunner::HAS_MNEMONICS);
-  ignore_result(menu_runner.RunMenuAt(browser_view()->GetWidget(),
-                                      window_icon_,
-                                      window_icon_->GetBoundsInScreen(),
-                                      views::MENU_ANCHOR_TOPLEFT,
-                                      ui::MENU_SOURCE_MOUSE));
+  menu_runner.RunMenuAt(browser_view()->GetWidget(), window_icon_,
+                        window_icon_->GetBoundsInScreen(),
+                        views::MENU_ANCHOR_TOPLEFT, ui::MENU_SOURCE_MOUSE);
 #endif
 }
 
@@ -576,8 +574,8 @@ void OpaqueBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) const {
   // Top stroke.
   gfx::Rect separator_rect(x, y, w, 0);
   gfx::ScopedCanvas scoped_canvas(canvas);
-  gfx::Rect tabstrip_bounds(GetBoundsForTabStrip(browser_view()->tabstrip()));
-  tabstrip_bounds.set_x(GetMirroredXForRect(tabstrip_bounds));
+  gfx::Rect tabstrip_bounds =
+      GetMirroredRect(GetBoundsForTabStrip(browser_view()->tabstrip()));
   canvas->sk_canvas()->clipRect(gfx::RectToSkRect(tabstrip_bounds),
                                 SkClipOp::kDifference);
   separator_rect.set_y(tabstrip_bounds.bottom());

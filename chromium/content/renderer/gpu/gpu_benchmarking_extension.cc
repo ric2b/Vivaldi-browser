@@ -63,9 +63,8 @@
 
 #if defined(OS_WIN) && !defined(NDEBUG)
 #include <XpsObjectModel.h>
+#include <objbase.h>
 #include "base/win/scoped_comptr.h"
-#include "skia/ext/skia_encode_image.h"
-#include "ui/gfx/codec/skia_image_encoder_adapter.h"
 #endif
 
 using blink::WebCanvas;
@@ -525,22 +524,19 @@ static void PrintDocumentTofile(v8::Isolate* isolate,
 // `--enable-gpu-benchmarking` for this to work.
 #if defined(OS_WIN) && !defined(NDEBUG)
 static sk_sp<SkDocument> MakeXPSDocument(SkWStream* s) {
-  // Hand Skia an image encoder, needed for XPS backend.
-  skia::SetImageEncoder(&gfx::EncodeSkiaImage);
-
   // I am not sure why this hasn't been initialized yet.
   (void)CoInitializeEx(nullptr,
                        COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
   // In non-sandboxed mode, we will need to create and hold on to the
   // factory before entering the sandbox.
   base::win::ScopedComPtr<IXpsOMObjectFactory> factory;
-  HRESULT hr = factory.CreateInstance(CLSID_XpsOMObjectFactory, nullptr,
-                                      CLSCTX_INPROC_SERVER);
+  HRESULT hr = ::CoCreateInstance(CLSID_XpsOMObjectFactory, nullptr,
+                                  CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
   if (FAILED(hr) || !factory) {
     LOG(ERROR) << "CoCreateInstance(CLSID_XpsOMObjectFactory, ...) failed:"
                << logging::SystemErrorCodeToString(hr);
   }
-  return SkDocument::MakeXPS(s, factory.get());
+  return SkDocument::MakeXPS(s, factory.Get());
 }
 #endif
 }  // namespace
@@ -974,11 +970,18 @@ bool GpuBenchmarking::Tap(gin::Arguments* args) {
     return false;
   }
 
-  std::unique_ptr<SyntheticTapGestureParams> gesture_params(
-      new SyntheticTapGestureParams);
-
   // Convert coordinates from CSS pixels to density independent pixels (DIPs).
   float page_scale_factor = context.web_view()->PageScaleFactor();
+  gfx::Rect rect = context.render_view_impl()->GetWidget()->ViewRect();
+  rect -= rect.OffsetFromOrigin();
+  if (!rect.Contains(position_x * page_scale_factor,
+                     position_y * page_scale_factor)) {
+    args->ThrowError();
+    return false;
+  }
+
+  std::unique_ptr<SyntheticTapGestureParams> gesture_params(
+      new SyntheticTapGestureParams);
 
   gesture_params->position.SetPoint(position_x * page_scale_factor,
                                     position_y * page_scale_factor);

@@ -29,7 +29,6 @@
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_device_filter.h"
 #include "device/usb/usb_ids.h"
-#include "device/usb/webusb_descriptors.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -76,7 +75,7 @@ base::string16 GetDeviceName(scoped_refptr<UsbDevice> device) {
 UsbChooserController::UsbChooserController(
     RenderFrameHost* render_frame_host,
     const std::vector<UsbDeviceFilter>& device_filters,
-    const device::usb::ChooserService::GetPermissionCallback& callback)
+    const device::mojom::UsbChooserService::GetPermissionCallback& callback)
     : ChooserController(render_frame_host,
                         IDS_USB_DEVICE_CHOOSER_PROMPT_ORIGIN,
                         IDS_USB_DEVICE_CHOOSER_PROMPT_EXTENSION_NAME),
@@ -97,7 +96,6 @@ UsbChooserController::UsbChooserController(
   RenderFrameHost* main_frame = web_contents->GetMainFrame();
   requesting_origin_ = render_frame_host->GetLastCommittedURL().GetOrigin();
   embedding_origin_ = main_frame->GetLastCommittedURL().GetOrigin();
-  is_embedded_frame_ = render_frame_host != main_frame;
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   chooser_context_ =
@@ -140,8 +138,7 @@ bool UsbChooserController::IsPaired(size_t index) const {
     return false;
 
   return WebUSBPermissionProvider::HasDevicePermission(
-      chooser_context_.get(), requesting_origin_, embedding_origin_,
-      is_embedded_frame_, device);
+      chooser_context_.get(), requesting_origin_, embedding_origin_, device);
 }
 
 void UsbChooserController::RefreshOptions() {}
@@ -160,10 +157,8 @@ void UsbChooserController::Select(const std::vector<size_t>& indices) {
         requesting_origin_, embedding_origin_, devices_[index].first->guid());
   }
 
-  device::usb::DeviceInfoPtr device_info_ptr =
-      device::usb::DeviceInfo::From(*devices_[index].first);
-  callback_.Run(std::move(device_info_ptr));
-  callback_.Reset();  // Reset |callback_| so that it is only run once.
+  callback_.Run(device::mojom::UsbDeviceInfo::From(*devices_[index].first));
+  callback_.Reset();  // |callback_| must only be run once.
 
   RecordWebUsbChooserClosure(
       devices_[index].first->serial_number().empty()
@@ -233,13 +228,6 @@ bool UsbChooserController::DisplayDevice(
 
   if (UsbBlocklist::Get().IsExcluded(device))
     return false;
-
-  // Embedded frames must have their origin in the list provided by the device.
-  if (is_embedded_frame_) {
-    return device::FindInWebUsbAllowedOrigins(device->webusb_allowed_origins(),
-                                              requesting_origin_, base::nullopt,
-                                              base::nullopt);
-  }
 
   return true;
 }

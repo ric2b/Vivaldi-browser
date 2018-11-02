@@ -3,11 +3,14 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/media/webrtc/media_stream_device_permission_context.h"
+#include "base/feature_list.h"
 #include "chrome/browser/media/webrtc/media_stream_device_permissions.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/common/constants.h"
 
@@ -22,14 +25,18 @@ MediaStreamDevicePermissionContext::MediaStreamDevicePermissionContext(
 
 MediaStreamDevicePermissionContext::~MediaStreamDevicePermissionContext() {}
 
-void MediaStreamDevicePermissionContext::RequestPermission(
+void MediaStreamDevicePermissionContext::DecidePermission(
     content::WebContents* web_contents,
     const PermissionRequestID& id,
-    const GURL& requesting_frame,
+    const GURL& requesting_origin,
+    const GURL& embedding_origin,
     bool user_gesture,
     const BrowserPermissionCallback& callback) {
-  NOTREACHED() << "RequestPermission is not implemented";
-  callback.Run(CONTENT_SETTING_BLOCK);
+  DCHECK(base::FeatureList::IsEnabled(
+      features::kUsePermissionManagerForMediaRequests));
+  PermissionContextBase::DecidePermission(web_contents, id, requesting_origin,
+                                          embedding_origin, user_gesture,
+                                          callback);
 }
 
 ContentSetting MediaStreamDevicePermissionContext::GetPermissionStatusInternal(
@@ -85,8 +92,6 @@ void MediaStreamDevicePermissionContext::CancelPermissionRequest(
 }
 
 bool MediaStreamDevicePermissionContext::IsRestrictedToSecureOrigins() const {
-  // Flash currently doesn't require secure origin to use mic/camera. If we
-  // return true here, it'll break the use case like http://tinychat.com.
-  // TODO(raymes): Change this to true after crbug.com/526324 is fixed.
-  return false;
+  return base::FeatureList::IsEnabled(
+      features::kRequireSecureOriginsForPepperMediaRequests);
 }

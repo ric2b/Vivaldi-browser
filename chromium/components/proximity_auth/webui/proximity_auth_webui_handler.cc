@@ -21,7 +21,6 @@
 #include "components/cryptauth/secure_context.h"
 #include "components/cryptauth/secure_message_delegate.h"
 #include "components/prefs/pref_service.h"
-#include "components/proximity_auth/ble/pref_names.h"
 #include "components/proximity_auth/bluetooth_connection_finder.h"
 #include "components/proximity_auth/logging/logging.h"
 #include "components/proximity_auth/messenger.h"
@@ -356,6 +355,7 @@ void ProximityAuthWebUIHandler::ToggleConnection(const base::ListValue* args) {
           enrollment_manager->GetUserPrivateKey(),
           proximity_auth_client_->CreateSecureMessageDelegate()));
       remote_device_loader_->Load(
+          true /* should_load_beacon_seeds */,
           base::Bind(&ProximityAuthWebUIHandler::OnRemoteDevicesLoaded,
                      weak_ptr_factory_.GetWeakPtr()));
       return;

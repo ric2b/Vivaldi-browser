@@ -74,7 +74,7 @@ class TestingPlatformSupport::TestingInterfaceProvider
     if (std::string(name) == mojom::blink::MimeRegistry::Name_) {
       mojo::MakeStrongBinding(
           WTF::MakeUnique<MockMimeRegistry>(),
-          mojo::MakeRequest<mojom::blink::MimeRegistry>(std::move(handle)));
+          mojom::blink::MimeRegistryRequest(std::move(handle)));
       return;
     }
   }
@@ -190,7 +190,7 @@ WebURLLoaderMockFactory* TestingPlatformSupport::GetURLLoaderMockFactory() {
   return old_platform_ ? old_platform_->GetURLLoaderMockFactory() : nullptr;
 }
 
-WebURLLoader* TestingPlatformSupport::CreateURLLoader() {
+std::unique_ptr<WebURLLoader> TestingPlatformSupport::CreateURLLoader() {
   return old_platform_ ? old_platform_->CreateURLLoader() : nullptr;
 }
 
@@ -297,7 +297,7 @@ void TestingPlatformSupportWithMockScheduler::SetAutoAdvanceNowToPendingTasks(
   mock_task_runner_->SetAutoAdvanceNowToPendingTasks(auto_advance);
 }
 
-scheduler::RendererScheduler*
+scheduler::RendererSchedulerImpl*
 TestingPlatformSupportWithMockScheduler::GetRendererScheduler() const {
   return scheduler_.get();
 }

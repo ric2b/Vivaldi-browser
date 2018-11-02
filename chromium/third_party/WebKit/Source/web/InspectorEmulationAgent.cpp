@@ -4,19 +4,19 @@
 
 #include "web/InspectorEmulationAgent.h"
 
+#include "core/exported/WebViewBase.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/inspector/protocol/DOM.h"
 #include "core/page/Page.h"
 #include "platform/geometry/DoubleRect.h"
 #include "platform/graphics/Color.h"
+#include "platform/scheduler/renderer/web_view_scheduler.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebThread.h"
-#include "public/platform/WebViewScheduler.h"
 #include "web/DevToolsEmulator.h"
-#include "web/WebLocalFrameImpl.h"
-#include "web/WebViewImpl.h"
 
 namespace blink {
 
@@ -36,20 +36,20 @@ static const char kDefaultBackgroundColorOverrideRGBA[] =
 }
 
 InspectorEmulationAgent* InspectorEmulationAgent::Create(
-    WebLocalFrameImpl* web_local_frame_impl,
+    WebLocalFrameBase* web_local_frame_impl,
     Client* client) {
   return new InspectorEmulationAgent(web_local_frame_impl, client);
 }
 
 InspectorEmulationAgent::InspectorEmulationAgent(
-    WebLocalFrameImpl* web_local_frame_impl,
+    WebLocalFrameBase* web_local_frame_impl,
     Client* client)
-    : web_local_frame_impl_(web_local_frame_impl), client_(client) {}
+    : web_local_frame_(web_local_frame_impl), client_(client) {}
 
 InspectorEmulationAgent::~InspectorEmulationAgent() {}
 
-WebViewImpl* InspectorEmulationAgent::GetWebViewImpl() {
-  return web_local_frame_impl_->ViewImpl();
+WebViewBase* InspectorEmulationAgent::GetWebViewBase() {
+  return web_local_frame_->ViewImpl();
 }
 
 void InspectorEmulationAgent::Restore() {
@@ -106,30 +106,30 @@ Response InspectorEmulationAgent::forceViewport(double x,
   state_->setDouble(EmulationAgentState::kForcedViewportY, y);
   state_->setDouble(EmulationAgentState::kForcedViewportScale, scale);
 
-  GetWebViewImpl()->GetDevToolsEmulator()->ForceViewport(WebFloatPoint(x, y),
+  GetWebViewBase()->GetDevToolsEmulator()->ForceViewport(WebFloatPoint(x, y),
                                                          scale);
   return Response::OK();
 }
 
 Response InspectorEmulationAgent::resetViewport() {
   state_->setBoolean(EmulationAgentState::kForcedViewportEnabled, false);
-  GetWebViewImpl()->GetDevToolsEmulator()->ResetViewport();
+  GetWebViewBase()->GetDevToolsEmulator()->ResetViewport();
   return Response::OK();
 }
 
 Response InspectorEmulationAgent::resetPageScaleFactor() {
-  GetWebViewImpl()->ResetScaleStateImmediately();
+  GetWebViewBase()->ResetScaleStateImmediately();
   return Response::OK();
 }
 
 Response InspectorEmulationAgent::setPageScaleFactor(double page_scale_factor) {
-  GetWebViewImpl()->SetPageScaleFactor(static_cast<float>(page_scale_factor));
+  GetWebViewBase()->SetPageScaleFactor(static_cast<float>(page_scale_factor));
   return Response::OK();
 }
 
 Response InspectorEmulationAgent::setScriptExecutionDisabled(bool value) {
   state_->setBoolean(EmulationAgentState::kScriptExecutionDisabled, value);
-  GetWebViewImpl()->GetDevToolsEmulator()->SetScriptExecutionDisabled(value);
+  GetWebViewBase()->GetDevToolsEmulator()->SetScriptExecutionDisabled(value);
   return Response::OK();
 }
 
@@ -137,14 +137,14 @@ Response InspectorEmulationAgent::setTouchEmulationEnabled(
     bool enabled,
     Maybe<String> configuration) {
   state_->setBoolean(EmulationAgentState::kTouchEventEmulationEnabled, enabled);
-  GetWebViewImpl()->GetDevToolsEmulator()->SetTouchEventEmulationEnabled(
+  GetWebViewBase()->GetDevToolsEmulator()->SetTouchEventEmulationEnabled(
       enabled);
   return Response::OK();
 }
 
 Response InspectorEmulationAgent::setEmulatedMedia(const String& media) {
   state_->setString(EmulationAgentState::kEmulatedMedia, media);
-  GetWebViewImpl()->GetPage()->GetSettings().SetMediaTypeOverride(media);
+  GetWebViewBase()->GetPage()->GetSettings().SetMediaTypeOverride(media);
   return Response::OK();
 }
 
@@ -156,34 +156,31 @@ Response InspectorEmulationAgent::setCPUThrottlingRate(double throttling_rate) {
 Response InspectorEmulationAgent::setVirtualTimePolicy(const String& policy,
                                                        Maybe<int> budget) {
   if (protocol::Emulation::VirtualTimePolicyEnum::Advance == policy) {
-    web_local_frame_impl_->View()->Scheduler()->SetVirtualTimePolicy(
+    web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
         WebViewScheduler::VirtualTimePolicy::ADVANCE);
   } else if (protocol::Emulation::VirtualTimePolicyEnum::Pause == policy) {
-    web_local_frame_impl_->View()->Scheduler()->SetVirtualTimePolicy(
+    web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
         WebViewScheduler::VirtualTimePolicy::PAUSE);
   } else if (protocol::Emulation::VirtualTimePolicyEnum::
                  PauseIfNetworkFetchesPending == policy) {
-    web_local_frame_impl_->View()->Scheduler()->SetVirtualTimePolicy(
+    web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
         WebViewScheduler::VirtualTimePolicy::DETERMINISTIC_LOADING);
   }
-  web_local_frame_impl_->View()->Scheduler()->EnableVirtualTime();
+  web_local_frame_->View()->Scheduler()->EnableVirtualTime();
 
   if (budget.isJust()) {
-    RefPtr<WebTaskRunner> task_runner =
-        Platform::Current()->CurrentThread()->GetWebTaskRunner();
-    long long delay_millis = static_cast<long long>(budget.fromJust());
-    virtual_time_budget_expired_task_handle_ =
-        task_runner->PostDelayedCancellableTask(
-            BLINK_FROM_HERE,
-            WTF::Bind(&InspectorEmulationAgent::VirtualTimeBudgetExpired,
-                      WrapWeakPersistent(this)),
-            delay_millis);
+    base::TimeDelta budget_amount =
+        base::TimeDelta::FromMilliseconds(budget.fromJust());
+    web_local_frame_->View()->Scheduler()->GrantVirtualTimeBudget(
+        budget_amount,
+        WTF::Bind(&InspectorEmulationAgent::VirtualTimeBudgetExpired,
+                  WrapWeakPersistent(this)));
   }
   return Response::OK();
 }
 
 void InspectorEmulationAgent::VirtualTimeBudgetExpired() {
-  web_local_frame_impl_->View()->Scheduler()->SetVirtualTimePolicy(
+  web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
       WebViewScheduler::VirtualTimePolicy::PAUSE);
   GetFrontend()->virtualTimeBudgetExpired();
 }
@@ -192,7 +189,7 @@ Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(
     Maybe<protocol::DOM::RGBA> color) {
   if (!color.isJust()) {
     // Clear the override and state.
-    GetWebViewImpl()->ClearBaseBackgroundColorOverride();
+    GetWebViewBase()->ClearBaseBackgroundColorOverride();
     state_->remove(EmulationAgentState::kDefaultBackgroundColorOverrideRGBA);
     return Response::OK();
   }
@@ -202,13 +199,13 @@ Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(
                    rgba->toValue());
   // Clamping of values is done by Color() constructor.
   int alpha = lroundf(255.0f * rgba->getA(1.0f));
-  GetWebViewImpl()->SetBaseBackgroundColorOverride(
+  GetWebViewBase()->SetBaseBackgroundColorOverride(
       Color(rgba->getR(), rgba->getG(), rgba->getB(), alpha).Rgb());
   return Response::OK();
 }
 
 DEFINE_TRACE(InspectorEmulationAgent) {
-  visitor->Trace(web_local_frame_impl_);
+  visitor->Trace(web_local_frame_);
   InspectorBaseAgent::Trace(visitor);
 }
 

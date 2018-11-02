@@ -14,6 +14,7 @@
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state_manager.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/sessions/session_ios.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
 #import "ios/chrome/browser/sessions/session_window_ios.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
@@ -22,6 +23,10 @@
 #import "ios/chrome/browser/ui/preload_controller.h"
 #import "ios/chrome/browser/web/chrome_web_client.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 // Subclass of PrerenderController so it isn't actually used. Using a mock for
 // this makes cleanup on shutdown simpler, by minimizing the number of profile
@@ -118,17 +123,18 @@ void PerfTestWithBVC::SetUp() {
   // Use the session to create a window which will contain the tab models.
   NSString* state_path = base::SysUTF8ToNSString(
       chrome_browser_state_->GetStatePath().AsUTF8Unsafe());
-  SessionWindowIOS* session_window = [[SessionServiceIOS sharedService]
-      loadSessionWindowFromDirectory:state_path];
+  SessionIOS* session =
+      [[SessionServiceIOS sharedService] loadSessionFromDirectory:state_path];
+  DCHECK_EQ(session.sessionWindows.count, 1u);
 
   // Tab models. The off-the-record (OTR) tab model is required for the stack
   // view controller, which is created in OpenStackView().
   tab_model_.reset([[TabModel alloc]
-      initWithSessionWindow:session_window
+      initWithSessionWindow:session.sessionWindows[0]
              sessionService:[SessionServiceIOS sharedService]
                browserState:chrome_browser_state_.get()]);
   otr_tab_model_.reset([[TabModel alloc]
-      initWithSessionWindow:session_window
+      initWithSessionWindow:session.sessionWindows[0]
              sessionService:[SessionServiceIOS sharedService]
                browserState:chrome_browser_state_
                                 ->GetOffTheRecordChromeBrowserState()]);

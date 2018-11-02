@@ -58,7 +58,7 @@ class TestCompositorFrameSink : public CompositorFrameSink,
       const RendererSettings& renderer_settings,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       bool synchronous_composite,
-      bool force_disable_reclaim_resources);
+      bool disable_display_vsync);
   ~TestCompositorFrameSink() override;
 
   // This client must be set before BindToClient() happens.
@@ -79,7 +79,7 @@ class TestCompositorFrameSink : public CompositorFrameSink,
   void DetachFromClient() override;
   void SetLocalSurfaceId(const LocalSurfaceId& local_surface_id) override;
   void SubmitCompositorFrame(CompositorFrame frame) override;
-  void ForceReclaimResources() override;
+  void DidNotProduceFrame(const BeginFrameAck& ack) override;
 
   // CompositorFrameSinkSupportClient implementation.
   void DidReceiveCompositorFrameAck(
@@ -98,11 +98,11 @@ class TestCompositorFrameSink : public CompositorFrameSink,
  private:
   // ExternalBeginFrameSource implementation.
   void OnNeedsBeginFrames(bool needs_begin_frames) override;
-  void OnDidFinishFrame(const BeginFrameAck& ack) override;
 
   void SendCompositorFrameAckToClient();
 
   const bool synchronous_composite_;
+  const bool disable_display_vsync_;
   const RendererSettings renderer_settings_;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
@@ -112,7 +112,9 @@ class TestCompositorFrameSink : public CompositorFrameSink,
   // CompositorFrameSink is owned/destroyed on the compositor thread.
   std::unique_ptr<SurfaceManager> surface_manager_;
   std::unique_ptr<LocalSurfaceIdAllocator> local_surface_id_allocator_;
-  LocalSurfaceId delegated_local_surface_id_;
+  LocalSurfaceId local_surface_id_;
+  gfx::Size display_size_;
+  float device_scale_factor_ = 0;
 
   // Uses surface_manager_.
   std::unique_ptr<CompositorFrameSinkSupport> support_;

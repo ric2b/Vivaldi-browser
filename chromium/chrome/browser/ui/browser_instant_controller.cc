@@ -39,6 +39,8 @@ namespace {
 // makes sure to only execute the reload if the WebContents still exists.
 class TabReloader : public content::WebContentsUserData<TabReloader> {
  public:
+  ~TabReloader() override {}
+
   static void Reload(content::WebContents* web_contents) {
     TabReloader::CreateForWebContents(web_contents);
   }
@@ -49,11 +51,10 @@ class TabReloader : public content::WebContentsUserData<TabReloader> {
   explicit TabReloader(content::WebContents* web_contents)
       : web_contents_(web_contents), weak_ptr_factory_(this) {
     content::BrowserThread::PostTask(
-        content::BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&TabReloader::ReloadImpl, weak_ptr_factory_.GetWeakPtr()));
+        content::BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&TabReloader::ReloadImpl,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
-  ~TabReloader() override {}
 
   void ReloadImpl() {
     web_contents_->GetController().Reload(content::ReloadType::NORMAL, false);
@@ -124,7 +125,7 @@ void BrowserInstantController::OpenInstant(WindowOpenDisposition disposition,
   if (prerenderer->CanCommitQuery(GetActiveWebContents(), search_terms)) {
     // Submit query to render the prefetched results. Browser will swap the
     // prerendered contents with the active tab contents.
-    prerenderer->Commit(search_terms, EmbeddedSearchRequestParams(url));
+    prerenderer->Commit(EmbeddedSearchRequestParams(url));
   } else {
     prerenderer->Cancel();
   }
@@ -149,23 +150,15 @@ void BrowserInstantController::TabDeactivated(content::WebContents* contents) {
     prerenderer->Cancel();
 }
 
-void BrowserInstantController::ModelChanged(
-    const SearchModel::State& old_state,
-    const SearchModel::State& new_state) {
-  if (old_state.mode != new_state.mode) {
-    const SearchMode& new_mode = new_state.mode;
+void BrowserInstantController::ModelChanged(const SearchMode& old_mode,
+                                            const SearchMode& new_mode) {
+  // Record some actions corresponding to the mode change. Note that to get
+  // the full story, it's necessary to look at other UMA actions as well,
+  // such as tab switches.
+  if (new_mode.is_ntp())
+    base::RecordAction(base::UserMetricsAction("InstantExtended.ShowNTP"));
 
-    // Record some actions corresponding to the mode change. Note that to get
-    // the full story, it's necessary to look at other UMA actions as well,
-    // such as tab switches.
-    if (new_mode.is_ntp())
-      base::RecordAction(base::UserMetricsAction("InstantExtended.ShowNTP"));
-
-    instant_.SearchModeChanged(old_state.mode, new_mode);
-  }
-
-  if (old_state.instant_support != new_state.instant_support)
-    instant_.InstantSupportChanged(new_state.instant_support);
+  instant_.SearchModeChanged(old_mode, new_mode);
 }
 
 void BrowserInstantController::DefaultSearchProviderChanged(

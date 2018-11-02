@@ -115,6 +115,7 @@ ANIMATED_PROPERTY(bool, VISIBILITY, Visibility, bool, visibility);
 ANIMATED_PROPERTY(float, BRIGHTNESS, Brightness, float, brightness);
 ANIMATED_PROPERTY(float, GRAYSCALE, Grayscale, float, grayscale);
 ANIMATED_PROPERTY(SkColor, COLOR, Color, SkColor, color);
+ANIMATED_PROPERTY(float, TEMPERATURE, Temperature, float, temperature);
 
 base::TimeDelta LayerAnimator::GetTransitionDuration() const {
   return transition_duration_;
@@ -165,7 +166,7 @@ void LayerAnimator::DetachLayerAndTimeline(Compositor* compositor) {
 
 void LayerAnimator::AttachLayerToAnimationPlayer(int layer_id) {
   // For ui, layer and element ids are equivalent.
-  cc::ElementId element_id(layer_id, 0);
+  cc::ElementId element_id(layer_id);
   if (!animation_player_->element_id())
     animation_player_->AttachElement(element_id);
   else

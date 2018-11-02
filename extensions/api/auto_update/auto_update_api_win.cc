@@ -50,11 +50,15 @@ bool AutoUpdateCheckForUpdatesFunction::RunAsync() {
 
 bool AutoUpdateIsUpdateNotifierEnabledFunction::RunAsync() {
   base::string16 command;
+  base::string16 notifier_path_string(
+      L"\"" + GetUpdateNotifierPath().value() + L"\"");
   bool result =
       base::win::ReadCommandFromAutoRun(
-          HKEY_CURRENT_USER, ::vivaldi::kUpdateNotifierAutorunName, &command) &&
-      base::FilePath::CompareEqualIgnoreCase(command,
-                                             GetUpdateNotifierPath().value());
+        HKEY_CURRENT_USER, ::vivaldi::kUpdateNotifierAutorunName, &command) &&
+        (base::FilePath::CompareEqualIgnoreCase(command,
+            notifier_path_string) ||
+         base::FilePath::CompareEqualIgnoreCase(command,
+            GetUpdateNotifierPath().value()));
   results_ =
       vivaldi::auto_update::IsUpdateNotifierEnabled::Results::Create(result);
   SendResponse(true);
@@ -62,9 +66,10 @@ bool AutoUpdateIsUpdateNotifierEnabledFunction::RunAsync() {
 }
 
 bool AutoUpdateEnableUpdateNotifierFunction::RunAsync() {
+  base::string16 command(L"\"" + GetUpdateNotifierPath().value() + L"\"");
   if (!base::win::AddCommandToAutoRun(HKEY_CURRENT_USER,
                                       ::vivaldi::kUpdateNotifierAutorunName,
-                                      GetUpdateNotifierPath().value())) {
+                                      command)) {
     SendResponse(false);
     return true;
   }

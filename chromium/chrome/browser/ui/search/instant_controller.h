@@ -14,12 +14,11 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "chrome/browser/ui/search/instant_tab.h"
+#include "chrome/browser/ui/search/search_model.h"
 #include "chrome/common/search/search_types.h"
 
 class BrowserInstantController;
-class GURL;
 class InstantService;
 
 namespace content {
@@ -29,7 +28,7 @@ class WebContents;
 // InstantController drives Chrome Instant, i.e., the browser implementation of
 // the Embedded Search API (see http://dev.chromium.org/embeddedsearch).
 //
-// In extended mode, InstantController maintains and coordinates an InstantTab.
+// InstantController maintains and coordinates an InstantTab.
 // An InstantTab instance points to the currently active tab, if it supports the
 // Embedded Search API. InstantTab is backed by a WebContents and it does not
 // own that WebContents.
@@ -49,10 +48,6 @@ class InstantController : public InstantTab::Delegate {
   // Instant search results page.
   void ActiveTabChanged();
 
-  // Used by BrowserInstantController to notify InstantController about the
-  // instant support change event for the active web contents.
-  void InstantSupportChanged(InstantSupportState instant_support);
-
   // Resets list of debug events.
   void ClearDebugEvents();
 
@@ -65,19 +60,6 @@ class InstantController : public InstantTab::Delegate {
   friend class InstantExtendedManualTest;
   friend class InstantTestBase;
 
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, ExtendedModeIsOn);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, MostVisited);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, ProcessIsolation);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, UnrelatedSiteInstance);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, OnDefaultSearchProviderChanged);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest,
-                           AcceptingURLSearchDoesNotNavigate);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, AcceptingJSSearchDoesNotRunJS);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest,
-                           ReloadSearchAfterBackReloadsCorrectQuery);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, KeyboardTogglesVoiceSearch);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, HomeButtonAffectsMargin);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, SearchReusesInstantTab);
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest,
                            SearchDoesntReuseInstantTabWithoutSupport);
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest,
@@ -88,8 +70,6 @@ class InstantController : public InstantTab::Delegate {
   // Overridden from InstantTab::Delegate:
   // TODO(shishir): We assume that the WebContent's current RenderViewHost is
   // the RenderViewHost being created which is not always true. Fix this.
-  void InstantSupportDetermined(const content::WebContents* contents,
-                                bool supports_instant) override;
   void InstantTabAboutToNavigateMainFrame(const content::WebContents* contents,
                                           const GURL& url) override;
 

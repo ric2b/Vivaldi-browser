@@ -45,15 +45,14 @@ class ExitWarningWidgetDelegateView : public views::WidgetDelegateView {
       : text_(l10n_util::GetStringUTF16(IDS_ASH_SIGN_OUT_WARNING_POPUP_TEXT)),
         accessible_name_(l10n_util::GetStringUTF16(
             IDS_ASH_SIGN_OUT_WARNING_POPUP_TEXT_ACCESSIBLE)),
-        text_width_(0),
-        width_(0),
-        height_(0) {
+        text_width_(0) {
     ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
     const gfx::FontList& font_list =
         rb.GetFontList(ui::ResourceBundle::LargeFont);
     text_width_ = gfx::GetStringWidth(text_, font_list);
-    width_ = text_width_ + kHorizontalMarginAroundText;
-    height_ = font_list.GetHeight() + kVerticalMarginAroundText;
+    SetPreferredSize(
+        gfx::Size(text_width_ + kHorizontalMarginAroundText,
+                  font_list.GetHeight() + kVerticalMarginAroundText));
     views::Label* label = new views::Label();
     label->SetText(text_);
     label->SetHorizontalAlignment(gfx::ALIGN_CENTER);
@@ -64,10 +63,6 @@ class ExitWarningWidgetDelegateView : public views::WidgetDelegateView {
     label->SetSubpixelRenderingEnabled(false);
     AddChildView(label);
     SetLayoutManager(new views::FillLayout);
-  }
-
-  gfx::Size GetPreferredSize() const override {
-    return gfx::Size(width_, height_);
   }
 
   void OnPaint(gfx::Canvas* canvas) override {
@@ -87,8 +82,6 @@ class ExitWarningWidgetDelegateView : public views::WidgetDelegateView {
   base::string16 text_;
   base::string16 accessible_name_;
   int text_width_;
-  int width_;
-  int height_;
 
   DISALLOW_COPY_AND_ASSIGN(ExitWarningWidgetDelegateView);
 };
@@ -144,9 +137,9 @@ void ExitWarningHandler::CancelTimer() {
 void ExitWarningHandler::Show() {
   if (widget_)
     return;
-  WmWindow* root_window = Shell::GetWmRootWindowForNewWindows();
+  aura::Window* root_window = Shell::GetRootWindowForNewWindows();
   ExitWarningWidgetDelegateView* delegate = new ExitWarningWidgetDelegateView;
-  gfx::Size rs = root_window->GetBounds().size();
+  gfx::Size rs = root_window->bounds().size();
   gfx::Size ps = delegate->GetPreferredSize();
   gfx::Rect bounds((rs.width() - ps.width()) / 2,
                    (rs.height() - ps.height()) / 3, ps.width(), ps.height());
@@ -161,8 +154,9 @@ void ExitWarningHandler::Show() {
   params.bounds = bounds;
   params.name = "ExitWarningWindow";
   widget_.reset(new views::Widget);
-  root_window->GetRootWindowController()->ConfigureWidgetInitParamsForContainer(
-      widget_.get(), kShellWindowId_SettingBubbleContainer, &params);
+  GetRootWindowController(root_window)
+      ->ConfigureWidgetInitParamsForContainer(
+          widget_.get(), kShellWindowId_SettingBubbleContainer, &params);
   widget_->Init(params);
   widget_->Show();
 

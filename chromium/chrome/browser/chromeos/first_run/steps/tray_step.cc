@@ -5,8 +5,8 @@
 #include "chrome/browser/chromeos/first_run/steps/tray_step.h"
 
 #include "ash/first_run/first_run_helper.h"
-#include "ash/shelf/wm_shelf.h"
-#include "ash/shell_port.h"
+#include "ash/shelf/shelf.h"
+#include "ash/shell.h"
 #include "base/i18n/rtl.h"
 #include "chrome/browser/chromeos/first_run/step_names.h"
 #include "chrome/browser/ui/webui/chromeos/first_run/first_run_actor.h"
@@ -29,8 +29,7 @@ void TrayStep::DoShow() {
   FirstRunActor::StepPosition position;
   position.SetTop(bounds.y());
   ash::ShelfAlignment alignment =
-      ash::WmShelf::ForWindow(ash::ShellPort::Get()->GetPrimaryRootWindow())
-          ->alignment();
+      ash::Shelf::ForWindow(ash::Shell::GetPrimaryRootWindow())->alignment();
   if ((!base::i18n::IsRTL() && alignment != ash::SHELF_ALIGNMENT_LEFT) ||
       alignment == ash::SHELF_ALIGNMENT_RIGHT)
     position.SetRight(GetOverlaySize().width() - bounds.x());

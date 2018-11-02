@@ -28,13 +28,16 @@ TEST(ValuesTest, TestNothrow) {
   static_assert(std::is_nothrow_constructible<Value, std::string&&>::value,
                 "IsNothrowMoveConstructibleFromString");
   static_assert(
-      std::is_nothrow_constructible<Value, std::vector<char>&&>::value,
+      std::is_nothrow_constructible<Value, Value::BlobStorage&&>::value,
       "IsNothrowMoveConstructibleFromBlob");
   static_assert(
       std::is_nothrow_constructible<Value, Value::ListStorage&&>::value,
       "IsNothrowMoveConstructibleFromList");
   static_assert(std::is_nothrow_move_assignable<Value>::value,
                 "IsNothrowMoveAssignable");
+  static_assert(
+      std::is_nothrow_constructible<ListValue, Value::ListStorage&&>::value,
+      "ListIsNothrowMoveConstructibleFromList");
 }
 
 // Group of tests for the value constructors.
@@ -103,9 +106,10 @@ TEST(ValuesTest, ConstructStringFromStringPiece) {
 }
 
 TEST(ValuesTest, ConstructBinary) {
-  Value value(std::vector<char>({0xF, 0x0, 0x0, 0xB, 0xA, 0x2}));
+  Value value(Value::BlobStorage({0xF, 0x0, 0x0, 0xB, 0xA, 0x2}));
   EXPECT_EQ(Value::Type::BINARY, value.type());
-  EXPECT_EQ(std::vector<char>({0xF, 0x0, 0x0, 0xB, 0xA, 0x2}), value.GetBlob());
+  EXPECT_EQ(Value::BlobStorage({0xF, 0x0, 0x0, 0xB, 0xA, 0x2}),
+            value.GetBlob());
 }
 
 TEST(ValuesTest, ConstructDict) {
@@ -116,6 +120,28 @@ TEST(ValuesTest, ConstructDict) {
 TEST(ValuesTest, ConstructList) {
   ListValue value;
   EXPECT_EQ(Value::Type::LIST, value.type());
+}
+
+TEST(ValuesTest, ConstructListFromStorage) {
+  Value::ListStorage storage;
+  storage.emplace_back("foo");
+
+  {
+    ListValue value(storage);
+    EXPECT_EQ(Value::Type::LIST, value.type());
+    EXPECT_EQ(1u, value.GetList().size());
+    EXPECT_EQ(Value::Type::STRING, value.GetList()[0].type());
+    EXPECT_EQ("foo", value.GetList()[0].GetString());
+  }
+
+  storage.back() = base::Value("bar");
+  {
+    ListValue value(std::move(storage));
+    EXPECT_EQ(Value::Type::LIST, value.type());
+    EXPECT_EQ(1u, value.GetList().size());
+    EXPECT_EQ(Value::Type::STRING, value.GetList()[0].type());
+    EXPECT_EQ("bar", value.GetList()[0].GetString());
+  }
 }
 
 // Group of tests for the copy constructors and copy-assigmnent. For equality
@@ -183,7 +209,7 @@ TEST(ValuesTest, CopyString) {
 }
 
 TEST(ValuesTest, CopyBinary) {
-  Value value(std::vector<char>({0xF, 0x0, 0x0, 0xB, 0xA, 0x2}));
+  Value value(Value::BlobStorage({0xF, 0x0, 0x0, 0xB, 0xA, 0x2}));
   Value copied_value(value);
   EXPECT_EQ(value.type(), copied_value.type());
   EXPECT_EQ(value.GetBlob(), copied_value.GetBlob());
@@ -203,6 +229,14 @@ TEST(ValuesTest, CopyDictionary) {
   value.SetInteger("Int", 123);
 
   DictionaryValue copied_value(value);
+  copied_value.GetInteger("Int", &copy);
+
+  EXPECT_EQ(value.type(), copied_value.type());
+  EXPECT_EQ(123, copy);
+
+  copied_value.Clear();
+  copied_value = value;
+
   copied_value.GetInteger("Int", &copy);
 
   EXPECT_EQ(value.type(), copied_value.type());
@@ -291,7 +325,7 @@ TEST(ValuesTest, MoveString) {
 }
 
 TEST(ValuesTest, MoveBinary) {
-  const std::vector<char> buffer = {0xF, 0x0, 0x0, 0xB, 0xA, 0x2};
+  const Value::BlobStorage buffer = {0xF, 0x0, 0x0, 0xB, 0xA, 0x2};
   Value value(buffer);
   Value moved_value(std::move(value));
   EXPECT_EQ(Value::Type::BINARY, moved_value.type());
@@ -433,31 +467,26 @@ TEST(ValuesTest, BinaryValue) {
   // Default constructor creates a BinaryValue with a buffer of size 0.
   auto binary = MakeUnique<Value>(Value::Type::BINARY);
   ASSERT_TRUE(binary.get());
-  ASSERT_EQ(0U, binary->GetSize());
+  ASSERT_TRUE(binary->GetBlob().empty());
 
   // Test the common case of a non-empty buffer
-  std::vector<char> buffer(15);
+  Value::BlobStorage buffer(15);
   char* original_buffer = buffer.data();
   binary.reset(new Value(std::move(buffer)));
   ASSERT_TRUE(binary.get());
-  ASSERT_TRUE(binary->GetBuffer());
-  ASSERT_EQ(original_buffer, binary->GetBuffer());
-  ASSERT_EQ(15U, binary->GetSize());
+  ASSERT_TRUE(binary->GetBlob().data());
+  ASSERT_EQ(original_buffer, binary->GetBlob().data());
+  ASSERT_EQ(15U, binary->GetBlob().size());
 
   char stack_buffer[42];
   memset(stack_buffer, '!', 42);
   binary = Value::CreateWithCopiedBuffer(stack_buffer, 42);
   ASSERT_TRUE(binary.get());
-  ASSERT_TRUE(binary->GetBuffer());
-  ASSERT_NE(stack_buffer, binary->GetBuffer());
-  ASSERT_EQ(42U, binary->GetSize());
-  ASSERT_EQ(0, memcmp(stack_buffer, binary->GetBuffer(), binary->GetSize()));
-
-  // Test overloaded GetAsBinary.
-  Value* narrow_value = binary.get();
-  const Value* narrow_binary = NULL;
-  ASSERT_TRUE(narrow_value->GetAsBinary(&narrow_binary));
-  EXPECT_EQ(binary.get(), narrow_binary);
+  ASSERT_TRUE(binary->GetBlob().data());
+  ASSERT_NE(stack_buffer, binary->GetBlob().data());
+  ASSERT_EQ(42U, binary->GetBlob().size());
+  ASSERT_EQ(0, memcmp(stack_buffer, binary->GetBlob().data(),
+                      binary->GetBlob().size()));
 }
 
 TEST(ValuesTest, StringValue) {
@@ -543,6 +572,113 @@ TEST(ValuesTest, DictionaryDeletion) {
   EXPECT_FALSE(dict.empty());
   dict.Clear();
   EXPECT_TRUE(dict.empty());
+}
+
+TEST(ValuesTest, DictionarySetReturnsPointer) {
+  {
+    DictionaryValue dict;
+    Value* blank_ptr = dict.Set("foo.bar", base::MakeUnique<base::Value>());
+    EXPECT_EQ(Value::Type::NONE, blank_ptr->type());
+  }
+
+  {
+    DictionaryValue dict;
+    Value* blank_ptr = dict.SetWithoutPathExpansion(
+        "foo.bar", base::MakeUnique<base::Value>());
+    EXPECT_EQ(Value::Type::NONE, blank_ptr->type());
+  }
+
+  {
+    DictionaryValue dict;
+    Value* bool_ptr = dict.SetBooleanWithoutPathExpansion("foo.bar", false);
+    EXPECT_EQ(Value::Type::BOOLEAN, bool_ptr->type());
+    EXPECT_FALSE(bool_ptr->GetBool());
+  }
+
+  {
+    DictionaryValue dict;
+    Value* int_ptr = dict.SetInteger("foo.bar", 42);
+    EXPECT_EQ(Value::Type::INTEGER, int_ptr->type());
+    EXPECT_EQ(42, int_ptr->GetInt());
+  }
+
+  {
+    DictionaryValue dict;
+    Value* int_ptr = dict.SetIntegerWithoutPathExpansion("foo.bar", 123);
+    EXPECT_EQ(Value::Type::INTEGER, int_ptr->type());
+    EXPECT_EQ(123, int_ptr->GetInt());
+  }
+
+  {
+    DictionaryValue dict;
+    Value* double_ptr = dict.SetDouble("foo.bar", 3.142);
+    EXPECT_EQ(Value::Type::DOUBLE, double_ptr->type());
+    EXPECT_EQ(3.142, double_ptr->GetDouble());
+  }
+
+  {
+    DictionaryValue dict;
+    Value* double_ptr = dict.SetDoubleWithoutPathExpansion("foo.bar", 2.718);
+    EXPECT_EQ(Value::Type::DOUBLE, double_ptr->type());
+    EXPECT_EQ(2.718, double_ptr->GetDouble());
+  }
+
+  {
+    DictionaryValue dict;
+    Value* string_ptr = dict.SetString("foo.bar", "foo");
+    EXPECT_EQ(Value::Type::STRING, string_ptr->type());
+    EXPECT_EQ("foo", string_ptr->GetString());
+  }
+
+  {
+    DictionaryValue dict;
+    Value* string_ptr = dict.SetStringWithoutPathExpansion("foo.bar", "bar");
+    EXPECT_EQ(Value::Type::STRING, string_ptr->type());
+    EXPECT_EQ("bar", string_ptr->GetString());
+  }
+
+  {
+    DictionaryValue dict;
+    Value* string16_ptr = dict.SetString("foo.bar", ASCIIToUTF16("baz"));
+    EXPECT_EQ(Value::Type::STRING, string16_ptr->type());
+    EXPECT_EQ("baz", string16_ptr->GetString());
+  }
+
+  {
+    DictionaryValue dict;
+    Value* string16_ptr =
+        dict.SetStringWithoutPathExpansion("foo.bar", ASCIIToUTF16("qux"));
+    EXPECT_EQ(Value::Type::STRING, string16_ptr->type());
+    EXPECT_EQ("qux", string16_ptr->GetString());
+  }
+
+  {
+    DictionaryValue dict;
+    DictionaryValue* dict_ptr = dict.SetDictionary(
+        "foo.bar", base::MakeUnique<base::DictionaryValue>());
+    EXPECT_EQ(Value::Type::DICTIONARY, dict_ptr->type());
+  }
+
+  {
+    DictionaryValue dict;
+    DictionaryValue* dict_ptr = dict.SetDictionaryWithoutPathExpansion(
+        "foo.bar", base::MakeUnique<base::DictionaryValue>());
+    EXPECT_EQ(Value::Type::DICTIONARY, dict_ptr->type());
+  }
+
+  {
+    DictionaryValue dict;
+    ListValue* list_ptr =
+        dict.SetList("foo.bar", base::MakeUnique<base::ListValue>());
+    EXPECT_EQ(Value::Type::LIST, list_ptr->type());
+  }
+
+  {
+    DictionaryValue dict;
+    ListValue* list_ptr = dict.SetListWithoutPathExpansion(
+        "foo.bar", base::MakeUnique<base::ListValue>());
+    EXPECT_EQ(Value::Type::LIST, list_ptr->type());
+  }
 }
 
 TEST(ValuesTest, DictionaryRemoval) {
@@ -660,7 +796,7 @@ TEST(ValuesTest, DeepCopy) {
   Value* original_string16 = scoped_string16.get();
   original_dict.Set("string16", std::move(scoped_string16));
 
-  std::vector<char> original_buffer(42, '!');
+  Value::BlobStorage original_buffer(42, '!');
   std::unique_ptr<Value> scoped_binary(new Value(std::move(original_buffer)));
   Value* original_binary = scoped_binary.get();
   original_dict.Set("binary", std::move(scoped_binary));
@@ -745,10 +881,8 @@ TEST(ValuesTest, DeepCopy) {
   ASSERT_TRUE(copy_binary);
   ASSERT_NE(copy_binary, original_binary);
   ASSERT_TRUE(copy_binary->IsType(Value::Type::BINARY));
-  ASSERT_NE(original_binary->GetBuffer(), copy_binary->GetBuffer());
-  ASSERT_EQ(original_binary->GetSize(), copy_binary->GetSize());
-  ASSERT_EQ(0, memcmp(original_binary->GetBuffer(), copy_binary->GetBuffer(),
-                      original_binary->GetSize()));
+  ASSERT_NE(original_binary->GetBlob().data(), copy_binary->GetBlob().data());
+  ASSERT_EQ(original_binary->GetBlob(), copy_binary->GetBlob());
 
   Value* copy_value = NULL;
   ASSERT_TRUE(copy_dict->Get("list", &copy_value));
@@ -904,8 +1038,8 @@ TEST(ValuesTest, Comparisons) {
   EXPECT_FALSE(string1 >= string2);
 
   // Test Binary Values.
-  Value binary1(std::vector<char>{0x01});
-  Value binary2(std::vector<char>{0x02});
+  Value binary1(Value::BlobStorage{0x01});
+  Value binary2(Value::BlobStorage{0x02});
   EXPECT_FALSE(binary1 == binary2);
   EXPECT_NE(binary1, binary2);
   EXPECT_LT(binary1, binary2);
@@ -993,7 +1127,7 @@ TEST(ValuesTest, DeepCopyCovariantReturnTypes) {
   Value* original_string16 = scoped_string16.get();
   original_dict.Set("string16", std::move(scoped_string16));
 
-  std::vector<char> original_buffer(42, '!');
+  Value::BlobStorage original_buffer(42, '!');
   std::unique_ptr<Value> scoped_binary(new Value(std::move(original_buffer)));
   Value* original_binary = scoped_binary.get();
   original_dict.Set("binary", std::move(scoped_binary));
@@ -1210,6 +1344,43 @@ TEST(ValuesTest, DictionaryIterator) {
     } else if (it.key() == "key2") {
       EXPECT_FALSE(seen2);
       EXPECT_EQ(value2, it.value());
+      seen2 = true;
+    } else {
+      ADD_FAILURE();
+    }
+  }
+  EXPECT_TRUE(seen1);
+  EXPECT_TRUE(seen2);
+}
+
+TEST(ValuesTest, StdDictionaryIterator) {
+  DictionaryValue dict;
+  for (auto it = dict.begin(); it != dict.end(); ++it) {
+    ADD_FAILURE();
+  }
+
+  Value value1("value1");
+  dict.Set("key1", MakeUnique<Value>(value1));
+  bool seen1 = false;
+  for (const auto& it : dict) {
+    EXPECT_FALSE(seen1);
+    EXPECT_EQ("key1", it.first);
+    EXPECT_EQ(value1, *it.second);
+    seen1 = true;
+  }
+  EXPECT_TRUE(seen1);
+
+  Value value2("value2");
+  dict.Set("key2", MakeUnique<Value>(value2));
+  bool seen2 = seen1 = false;
+  for (const auto& it : dict) {
+    if (it.first == "key1") {
+      EXPECT_FALSE(seen1);
+      EXPECT_EQ(value1, *it.second);
+      seen1 = true;
+    } else if (it.first == "key2") {
+      EXPECT_FALSE(seen2);
+      EXPECT_EQ(value2, *it.second);
       seen2 = true;
     } else {
       ADD_FAILURE();

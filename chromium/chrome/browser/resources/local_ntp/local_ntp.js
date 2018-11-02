@@ -3,6 +3,10 @@
 // found in the LICENSE file.
 
 
+// NOTE: If you modify this file, you also have to change its hash in
+// local_ntp.html and in LocalNtpSource::GetContentSecurityPolicyScriptSrc.
+
+
 /**
  * @fileoverview The local InstantExtended NTP.
  */
@@ -623,6 +627,17 @@ function init() {
 
     // Update the fakebox style to match the current key capturing state.
     setFakeboxFocus(searchboxApiHandle.isKeyCaptureEnabled);
+
+    // Inject the OneGoogleBar loader script. It'll create a global variable
+    // named "og" with the following fields:
+    //  .html - the main bar HTML.
+    //  .end_of_body_html - HTML to be inserted at the end of the body.
+    var ogScript = document.createElement('script');
+    ogScript.src = 'chrome-search://local-ntp/one-google.js';
+    document.body.appendChild(ogScript);
+    ogScript.onload = function() {
+      injectOneGoogleBar(og.html, og.end_of_body_html);
+    }
   } else {
     document.body.classList.add(CLASSES.NON_GOOGLE_PAGE);
   }
@@ -668,6 +683,45 @@ function init() {
 function listen() {
   document.addEventListener('DOMContentLoaded', init);
 }
+
+
+/**
+ * Injects the One Google Bar into the page. Called asynchronously, so that it
+ * doesn't block the main page load.
+ */
+function injectOneGoogleBar(barHtml, endOfBodyHtml) {
+  var inHeadStyle = document.createElement('link');
+  inHeadStyle.rel = "stylesheet";
+  inHeadStyle.href = 'chrome-search://local-ntp/one-google/in-head.css';
+  document.head.appendChild(inHeadStyle);
+
+  inHeadStyle.onload = function() {
+    var inHeadScript = document.createElement('script');
+    inHeadScript.src = 'chrome-search://local-ntp/one-google/in-head.js';
+    document.head.appendChild(inHeadScript);
+
+    inHeadScript.onload = function() {
+      var ogElem = $('one-google');
+      ogElem.innerHTML = barHtml;
+      ogElem.classList.remove('hidden');
+
+      var afterBarScript = document.createElement('script');
+      afterBarScript.src =
+          'chrome-search://local-ntp/one-google/after-bar.js';
+      ogElem.parentNode.insertBefore(afterBarScript, ogElem.nextSibling);
+
+      afterBarScript.onload = function() {
+        $('one-google-end-of-body').innerHTML = endOfBodyHtml;
+
+        var endOfBodyScript = document.createElement('script');
+        endOfBodyScript.src =
+            'chrome-search://local-ntp/one-google/end-of-body.js';
+        document.body.appendChild(endOfBodyScript);
+      }
+    }
+  }
+}
+
 
 return {
   init: init,  // Exposed for testing.

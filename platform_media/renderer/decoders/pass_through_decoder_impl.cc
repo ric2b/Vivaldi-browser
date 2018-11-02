@@ -12,6 +12,7 @@
 #include "media/base/audio_buffer.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/video_frame.h"
+#include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
@@ -39,7 +40,8 @@ scoped_refptr<VideoFrame> GetVideoFrameFromMemory(
 
   for (size_t i = 0; i < VideoFrame::NumPlanes(PIXEL_FORMAT_YV12); ++i) {
     if (planes[i].offset + planes[i].size > int(buffer->data_size())) {
-      DLOG(ERROR) << "Buffer doesn't match video format";
+      LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Buffer doesn't match video format";
       return nullptr;
     }
   }
@@ -85,13 +87,19 @@ void PassThroughDecoderImpl<StreamType>::Initialize(
     const DecoderConfig& config,
     const InitCB& init_cb,
     const OutputCB& output_cb) {
-  DVLOG(1) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(config.IsValidConfig());
 
   if (!IsValidConfig(config)) {
+    LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+              << " Media Config not accepted for codec : "
+              << GetCodecName(config.codec());
     task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
     return;
+  } else {
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Supported decoder config for codec : "
+            << Loggable(config);
   }
 
   config_ = config;
@@ -114,12 +122,18 @@ void PassThroughDecoderImpl<StreamType>::Decode(
     if (buffer->data_size() > 0)
       output = DecoderBufferToOutputBuffer(buffer);
     else
-      DVLOG(1) << "Detected " << DecoderTraits::ToString() << " decoding error";
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Detected " << DecoderTraits::ToString()
+                   << " decoding error";
 
-    if (output)
+    if (output) {
       task_runner_->PostTask(FROM_HERE, base::Bind(output_cb_, output));
-    else
+    } else {
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Detected " << DecoderTraits::ToString()
+                   << " DECODE_ERROR";
       status = media::DecodeStatus::DECODE_ERROR;
+    }
   }
 
   task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));
@@ -134,6 +148,20 @@ void PassThroughDecoderImpl<StreamType>::Reset(const base::Closure& closure) {
 template <>
 bool PassThroughDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
     const DecoderConfig& config) {
+
+  LOG_IF(WARNING, !(config.codec() == kCodecPCM))
+      << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+      << " Unsupported Audio codec : " << GetCodecName(config.codec());
+
+  if (config.codec() == kCodecPCM) {
+    LOG_IF(WARNING, !(ChannelLayoutToChannelCount(config.channel_layout()) > 0))
+        << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+        << " Channel count is zero for : " << GetCodecName(config.codec());
+    LOG_IF(WARNING, !(config.bytes_per_frame() > 0))
+        << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+        << " Bytes per frame is zero for : " << GetCodecName(config.codec());
+  }
+
   return config.codec() == kCodecPCM &&
          ChannelLayoutToChannelCount(config.channel_layout()) > 0 &&
          config.bytes_per_frame() > 0;
@@ -142,6 +170,31 @@ bool PassThroughDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
 template <>
 bool PassThroughDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
     const DecoderConfig& config) {
+
+  LOG_IF(WARNING, !(config.codec() == kCodecH264))
+      << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+      << " Unsupported Video codec : " << GetCodecName(config.codec());
+
+  if (config.codec() == kCodecH264) {
+    LOG_IF(WARNING, !(config.extra_data().size() == sizeof(PlatformVideoConfig().planes)))
+        << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+        << " Extra data has wrong size : " << config.extra_data().size()
+        << " Expected size : " << sizeof(PlatformVideoConfig().planes)
+        << Loggable(config);
+
+    LOG_IF(WARNING, !(config.profile() >= H264PROFILE_MIN))
+        << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+        << " Unsupported Video profile (too low) ? : "
+        << GetProfileName(config.profile())
+        << " Minimum is " << GetProfileName(H264PROFILE_MIN);
+
+    LOG_IF(WARNING, !(config.profile() <= H264PROFILE_MAX))
+        << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+        << " Unsupported Video profile (too high) ? : "
+        << GetProfileName(config.profile())
+        << " Maximum is " << GetProfileName(H264PROFILE_MAX);
+  }
+
   return config.codec() == kCodecH264 &&
          config.extra_data().size() == sizeof(PlatformVideoConfig().planes);
 }

@@ -32,11 +32,11 @@
 
 #include <utility>
 
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8DOMWrapper.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8GCForContextDispose.h"
 #include "core/frame/DOMWindow.h"
 #include "core/frame/Frame.h"
+#include "platform/bindings/V8DOMWrapper.h"
 #include "platform/wtf/Assertions.h"
 #include "v8/include/v8.h"
 
@@ -155,7 +155,7 @@ v8::Local<v8::Object> WindowProxy::AssociateWithWrapper(
     v8::Local<v8::Object> wrapper) {
   if (world_->DomDataStore().Set(isolate_, window, wrapper_type_info,
                                  wrapper)) {
-    wrapper_type_info->WrapperCreated();
+    WrapperTypeInfo::WrapperCreated();
     V8DOMWrapper::SetNativeInfo(isolate_, wrapper, wrapper_type_info, window);
     DCHECK(V8DOMWrapper::HasInternalFieldsSet(wrapper));
   }

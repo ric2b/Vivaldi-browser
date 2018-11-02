@@ -5,7 +5,9 @@
 #include "chrome/browser/extensions/api/feedback_private/feedback_private_api.h"
 
 #include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/lazy_instance.h"
 #include "base/macros.h"
@@ -39,7 +41,7 @@
 
 #if defined(OS_WIN)
 #include "base/feature_list.h"
-#include "chrome/browser/safe_browsing/srt_fetcher_win.h"
+#include "chrome/browser/safe_browsing/chrome_cleaner/reporter_runner_win.h"
 #endif
 
 using extensions::api::feedback_private::SystemInformation;
@@ -145,10 +147,10 @@ void FeedbackPrivateAPI::RequestFeedbackForFlow(
     std::unique_ptr<base::ListValue> args =
         feedback_private::OnFeedbackRequested::Create(info);
 
-    std::unique_ptr<Event> event(new Event(
+    auto event = base::MakeUnique<Event>(
         events::FEEDBACK_PRIVATE_ON_FEEDBACK_REQUESTED,
-        feedback_private::OnFeedbackRequested::kEventName, std::move(args)));
-    event->restrict_to_browser_context = browser_context_;
+        feedback_private::OnFeedbackRequested::kEventName, std::move(args),
+        browser_context_);
 
     EventRouter::Get(browser_context_)
         ->DispatchEventToExtension(extension_misc::kFeedbackExtensionId,
@@ -160,11 +162,17 @@ void FeedbackPrivateAPI::RequestFeedbackForFlow(
 base::Closure* FeedbackPrivateGetStringsFunction::test_callback_ = NULL;
 
 ExtensionFunction::ResponseAction FeedbackPrivateGetStringsFunction::Run() {
+  auto params = feedback_private::GetStrings::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
 
 #define SET_STRING(id, idr) \
   dict->SetString(id, l10n_util::GetStringUTF16(idr))
-  SET_STRING("page-title", IDS_FEEDBACK_REPORT_PAGE_TITLE);
+  SET_STRING("page-title",
+             params->flow == FeedbackFlow::FEEDBACK_FLOW_SADTABCRASH
+                 ? IDS_FEEDBACK_REPORT_PAGE_TITLE_SAD_TAB_FLOW
+                 : IDS_FEEDBACK_REPORT_PAGE_TITLE);
   SET_STRING("additionalInfo", IDS_FEEDBACK_ADDITIONAL_INFO_LABEL);
   SET_STRING("minimize-btn-label", IDS_FEEDBACK_MINIMIZE_BUTTON_LABEL);
   SET_STRING("close-btn-label", IDS_FEEDBACK_CLOSE_BUTTON_LABEL);
@@ -293,13 +301,14 @@ bool FeedbackPrivateSendFeedbackFunction::RunAsync() {
     feedback_data->set_screenshot_uuid(*feedback_info.screenshot_blob_uuid);
   }
 
-  std::unique_ptr<FeedbackData::SystemLogsMap> sys_logs(
-      new FeedbackData::SystemLogsMap);
-  SystemInformationList* sys_info = feedback_info.system_information.get();
+  auto sys_logs = base::MakeUnique<FeedbackData::SystemLogsMap>();
+  const SystemInformationList* sys_info =
+      feedback_info.system_information.get();
   if (sys_info) {
     for (const SystemInformation& info : *sys_info)
-      (*sys_logs)[info.key] = info.value;
+      sys_logs->emplace(info.key, info.value);
   }
+
   feedback_data->SetAndCompressSystemInfo(std::move(sys_logs));
 
   FeedbackService* service =
@@ -307,7 +316,7 @@ bool FeedbackPrivateSendFeedbackFunction::RunAsync() {
   DCHECK(service);
 
   if (feedback_info.send_histograms) {
-    std::unique_ptr<std::string> histograms(new std::string);
+    auto histograms = base::MakeUnique<std::string>();
     *histograms = base::StatisticsRecorder::ToJSON(std::string());
     if (!histograms->empty())
       feedback_data->SetAndCompressHistograms(std::move(histograms));

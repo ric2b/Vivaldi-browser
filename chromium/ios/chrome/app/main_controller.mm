@@ -23,6 +23,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/time/time.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -132,8 +133,8 @@
 #include "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_provider.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
-#import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
 #import "ios/third_party/material_roboto_font_loader_ios/src/src/MDCTypographyAdditions/MDFRobotoFontLoader+MDCTypographyAdditions.h"
+#import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
 #include "ios/web/net/request_tracker_factory_impl.h"
 #include "ios/web/net/request_tracker_impl.h"
 #include "ios/web/net/web_http_protocol_handler_delegate.h"
@@ -386,8 +387,10 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
 - (void)showSavePasswordsSettings;
 // Invokes the sign in flow with the specified authentication operation and
 // invokes |callback| when finished.
-- (void)showSignInWithOperation:(AuthenticationOperation)operation
-              signInAccessPoint:(signin_metrics::AccessPoint)signInAccessPoint
+- (void)showSigninWithOperation:(AuthenticationOperation)operation
+                       identity:(ChromeIdentity*)identity
+                    accessPoint:(signin_metrics::AccessPoint)accessPoint
+                    promoAction:(signin_metrics::PromoAction)promoAction
                        callback:(ShowSigninCommandCompletionCallback)callback;
 // Wraps a callback with one that first checks if sign-in was completed
 // successfully and the profile wasn't swapped before invoking.
@@ -953,6 +956,10 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
 }
 
 - (void)stopChromeMain {
+  [_spotlightManager shutdown];
+  _spotlightManager.reset();
+
+  _browserViewWrangler.reset();
   _chromeMain.reset();
 }
 
@@ -1161,8 +1168,9 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
 }
 
 - (void)startFreeMemoryMonitoring {
-  web::WebThread::PostBlockingPoolTask(
-      FROM_HERE, base::Bind(&ios_internal::AsynchronousFreeMemoryMonitor));
+  base::PostTaskWithTraits(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      base::BindOnce(&ios_internal::AsynchronousFreeMemoryMonitor));
 }
 
 - (void)scheduleLowPriorityStartupTasks {
@@ -1432,8 +1440,10 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
       if (command.operation == AUTHENTICATION_OPERATION_DISMISS) {
         [self dismissSigninInteractionController];
       } else {
-        [self showSignInWithOperation:command.operation
-                    signInAccessPoint:command.signInAccessPoint
+        [self showSigninWithOperation:command.operation
+                             identity:command.identity
+                          accessPoint:command.accessPoint
+                          promoAction:command.promoAction
                              callback:command.callback];
       }
       break;
@@ -2077,8 +2087,10 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
                  completion:nil];
 }
 
-- (void)showSignInWithOperation:(AuthenticationOperation)operation
-              signInAccessPoint:(signin_metrics::AccessPoint)signInAccessPoint
+- (void)showSigninWithOperation:(AuthenticationOperation)operation
+                       identity:(ChromeIdentity*)identity
+                    accessPoint:(signin_metrics::AccessPoint)accessPoint
+                    promoAction:(signin_metrics::PromoAction)promoAction
                        callback:(ShowSigninCommandCompletionCallback)callback {
   DCHECK_NE(AUTHENTICATION_OPERATION_DISMISS, operation);
 
@@ -2093,7 +2105,8 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
           initWithBrowserState:_mainBrowserState
       presentingViewController:[self topPresentedViewController]
          isPresentedOnSettings:areSettingsPresented
-             signInAccessPoint:signInAccessPoint]);
+                   accessPoint:accessPoint
+                   promoAction:promoAction]);
 
   signin_ui::CompletionCallback completion = ^(BOOL success) {
     _signinInteractionController.reset();
@@ -2114,7 +2127,7 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
     case AUTHENTICATION_OPERATION_SIGNIN:
       [_signinInteractionController
           signInWithViewController:self.mainViewController
-                          identity:nil
+                          identity:identity
                         completion:completion];
       break;
   }
@@ -2132,8 +2145,9 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
           initWithBrowserState:_mainBrowserState
       presentingViewController:[self topPresentedViewController]
          isPresentedOnSettings:areSettingsPresented
-             signInAccessPoint:signin_metrics::AccessPoint::
-                                   ACCESS_POINT_UNKNOWN]);
+                   accessPoint:signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN
+                   promoAction:signin_metrics::PromoAction::
+                                   PROMO_ACTION_NO_SIGNIN_PROMO]);
 
   [_signinInteractionController
       addAccountWithCompletion:^(BOOL success) {

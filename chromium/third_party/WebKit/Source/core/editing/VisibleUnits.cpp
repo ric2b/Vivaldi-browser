@@ -454,7 +454,7 @@ const Vector<InlineBox*>& CachedLogicallyOrderedLeafBoxes::CollectBoxes(
     const RootInlineBox* root) {
   if (root_inline_box_ != root) {
     root_inline_box_ = root;
-    leaf_boxes_.Clear();
+    leaf_boxes_.clear();
     root->CollectLeafBoxesInLogicalOrder(leaf_boxes_);
   }
   return leaf_boxes_;
@@ -574,7 +574,7 @@ static TextBreakIterator* WordBreakIteratorForMinOffsetBoundary(
       visible_position, text_box, previous_box_in_different_block, leaf_boxes);
 
   int len = 0;
-  string.Clear();
+  string.clear();
   if (previous_box) {
     previous_box_length = previous_box->Len();
     previous_box->GetLineLayoutItem().GetText().AppendTo(
@@ -585,7 +585,7 @@ static TextBreakIterator* WordBreakIteratorForMinOffsetBoundary(
                                                    text_box->Len());
   len += text_box->Len();
 
-  return WordBreakIterator(string.Data(), len);
+  return WordBreakIterator(string.data(), len);
 }
 
 static TextBreakIterator* WordBreakIteratorForMaxOffsetBoundary(
@@ -602,7 +602,7 @@ static TextBreakIterator* WordBreakIteratorForMaxOffsetBoundary(
       visible_position, text_box, next_box_in_different_block, leaf_boxes);
 
   int len = 0;
-  string.Clear();
+  string.clear();
   text_box->GetLineLayoutItem().GetText().AppendTo(string, text_box->Start(),
                                                    text_box->Len());
   len += text_box->Len();
@@ -612,7 +612,7 @@ static TextBreakIterator* WordBreakIteratorForMaxOffsetBoundary(
     len += next_box->Len();
   }
 
-  return WordBreakIterator(string.Data(), len);
+  return WordBreakIterator(string.data(), len);
 }
 
 static bool IsLogicalStartOfWord(TextBreakIterator* iter,
@@ -1815,7 +1815,7 @@ EphemeralRange ExpandRangeToSentenceBoundary(const EphemeralRange& range) {
 
 static bool NodeIsUserSelectAll(const Node* node) {
   return node && node->GetLayoutObject() &&
-         node->GetLayoutObject()->Style()->UserSelect() == SELECT_ALL;
+         node->GetLayoutObject()->Style()->UserSelect() == EUserSelect::kAll;
 }
 
 template <typename Strategy>
@@ -2141,6 +2141,33 @@ VisiblePosition NextParagraphPosition(const VisiblePosition& p, LayoutUnit x) {
     pos = n;
   } while (InSameParagraph(p, pos));
   return pos;
+}
+
+EphemeralRange ExpandToParagraphBoundary(const EphemeralRange& range) {
+  const VisiblePosition& start = CreateVisiblePosition(range.StartPosition());
+  DCHECK(start.IsNotNull()) << range.StartPosition();
+  const Position& paragraph_start = StartOfParagraph(start).DeepEquivalent();
+  DCHECK(paragraph_start.IsNotNull()) << range.StartPosition();
+
+  const VisiblePosition& end = CreateVisiblePosition(range.EndPosition());
+  DCHECK(end.IsNotNull()) << range.EndPosition();
+  const Position& paragraph_end = EndOfParagraph(end).DeepEquivalent();
+  DCHECK(paragraph_end.IsNotNull()) << range.EndPosition();
+
+  // TODO(xiaochengh): There are some cases (crbug.com/640112) where we get
+  // |paragraphStart > paragraphEnd|, which is the reason we cannot directly
+  // return |EphemeralRange(paragraphStart, paragraphEnd)|. This is not
+  // desired, though. We should do more investigation to ensure that why
+  // |paragraphStart <= paragraphEnd| is violated.
+  const Position& result_start =
+      paragraph_start.IsNotNull() && paragraph_start <= range.StartPosition()
+          ? paragraph_start
+          : range.StartPosition();
+  const Position& result_end =
+      paragraph_end.IsNotNull() && paragraph_end >= range.EndPosition()
+          ? paragraph_end
+          : range.EndPosition();
+  return EphemeralRange(result_start, result_end);
 }
 
 // ---------
@@ -4076,6 +4103,54 @@ Position SkipWhitespace(const Position& position) {
 
 PositionInFlatTree SkipWhitespace(const PositionInFlatTree& position) {
   return SkipWhitespaceAlgorithm(position);
+}
+
+template <typename Strategy>
+static Vector<FloatQuad> ComputeTextBounds(
+    const EphemeralRangeTemplate<Strategy>& range) {
+  const PositionTemplate<Strategy>& start_position = range.StartPosition();
+  const PositionTemplate<Strategy>& end_position = range.EndPosition();
+  Node* const start_container = start_position.ComputeContainerNode();
+  DCHECK(start_container);
+  Node* const end_container = end_position.ComputeContainerNode();
+  DCHECK(end_container);
+  DCHECK(!start_container->GetDocument().NeedsLayoutTreeUpdate());
+
+  Vector<FloatQuad> result;
+  for (const Node& node : range.Nodes()) {
+    LayoutObject* const layout_object = node.GetLayoutObject();
+    if (!layout_object || !layout_object->IsText())
+      continue;
+    const LayoutText* layout_text = ToLayoutText(layout_object);
+    unsigned start_offset =
+        node == start_container ? start_position.OffsetInContainerNode() : 0;
+    unsigned end_offset = node == end_container
+                              ? end_position.OffsetInContainerNode()
+                              : std::numeric_limits<unsigned>::max();
+    layout_text->AbsoluteQuadsForRange(result, start_offset, end_offset);
+  }
+  return result;
+}
+
+template <typename Strategy>
+static FloatRect ComputeTextRectTemplate(
+    const EphemeralRangeTemplate<Strategy>& range) {
+  FloatRect result;
+  for (auto rect : ComputeTextBounds<Strategy>(range))
+    result.Unite(rect.BoundingBox());
+  return result;
+}
+
+IntRect ComputeTextRect(const EphemeralRange& range) {
+  return EnclosingIntRect(ComputeTextRectTemplate(range));
+}
+
+IntRect ComputeTextRect(const EphemeralRangeInFlatTree& range) {
+  return EnclosingIntRect(ComputeTextRectTemplate(range));
+}
+
+FloatRect ComputeTextFloatRect(const EphemeralRange& range) {
+  return ComputeTextRectTemplate(range);
 }
 
 }  // namespace blink

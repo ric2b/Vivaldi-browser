@@ -32,7 +32,7 @@
 #include "ipc/ipc_logging.h"
 #include "ipc/message_filter.h"
 #include "mojo/edk/embedder/embedder.h"
-#include "services/resource_coordinator/public/interfaces/memory/constants.mojom.h"
+#include "services/resource_coordinator/public/interfaces/memory_instrumentation/constants.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 
 #if defined(OS_LINUX)
@@ -120,10 +120,11 @@ void ChildProcessHostImpl::ForceShutdown() {
 }
 
 std::string ChildProcessHostImpl::CreateChannelMojo(
-    mojo::edk::PendingProcessConnection* connection) {
+    mojo::edk::OutgoingBrokerClientInvitation* invitation) {
   DCHECK(channel_id_.empty());
+  channel_id_ = mojo::edk::GenerateRandomToken();
   channel_ =
-      IPC::ChannelMojo::Create(connection->CreateMessagePipe(&channel_id_),
+      IPC::ChannelMojo::Create(invitation->AttachMessagePipe(channel_id_),
                                IPC::Channel::MODE_SERVER, this);
   if (!channel_ || !InitChannel())
     return std::string();
@@ -156,7 +157,7 @@ bool ChildProcessHostImpl::InitChannel() {
   delegate_->OnChannelInitialized(channel_.get());
 
   // Make sure these messages get sent first.
-#if defined(IPC_MESSAGE_LOG_ENABLED)
+#if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   bool enabled = IPC::Logging::GetInstance()->Enabled();
   Send(new ChildProcessMsg_SetIPCLoggingEnabled(enabled));
 #endif
@@ -212,7 +213,7 @@ uint64_t ChildProcessHostImpl::ChildProcessUniqueIdToTracingProcessId(
 }
 
 bool ChildProcessHostImpl::OnMessageReceived(const IPC::Message& msg) {
-#ifdef IPC_MESSAGE_LOG_ENABLED
+#if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   IPC::Logging* logger = IPC::Logging::GetInstance();
   if (msg.type() == IPC_LOGGING_ID) {
     logger->OnReceivedLoggingMessage(msg);
@@ -243,7 +244,7 @@ bool ChildProcessHostImpl::OnMessageReceived(const IPC::Message& msg) {
       handled = delegate_->OnMessageReceived(msg);
   }
 
-#ifdef IPC_MESSAGE_LOG_ENABLED
+#if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   if (logger->Enabled())
     logger->OnPostDispatchMessage(msg);
 #endif

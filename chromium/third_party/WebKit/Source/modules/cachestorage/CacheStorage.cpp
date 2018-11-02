@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -15,6 +14,7 @@
 #include "modules/cachestorage/CacheStorageError.h"
 #include "modules/fetch/Request.h"
 #include "modules/fetch/Response.h"
+#include "platform/bindings/ScriptState.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheError.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
@@ -226,8 +226,8 @@ class CacheStorage::KeysCallbacks final
 
 CacheStorage* CacheStorage::Create(
     GlobalFetch::ScopedFetcher* fetcher,
-    WebServiceWorkerCacheStorage* web_cache_storage) {
-  return new CacheStorage(fetcher, WTF::WrapUnique(web_cache_storage));
+    std::unique_ptr<WebServiceWorkerCacheStorage> web_cache_storage) {
+  return new CacheStorage(fetcher, std::move(web_cache_storage));
 }
 
 ScriptPromise CacheStorage::open(ScriptState* script_state,
@@ -309,7 +309,7 @@ ScriptPromise CacheStorage::match(ScriptState* script_state,
                                   const RequestInfo& request,
                                   const CacheQueryOptions& options,
                                   ExceptionState& exception_state) {
-  ASSERT(!request.isNull());
+  DCHECK(!request.isNull());
   if (!CommonChecks(script_state, exception_state))
     return ScriptPromise();
 

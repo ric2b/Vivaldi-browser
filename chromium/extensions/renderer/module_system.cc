@@ -23,6 +23,7 @@
 #include "extensions/renderer/script_context_set.h"
 #include "extensions/renderer/source_map.h"
 #include "extensions/renderer/v8_helpers.h"
+#include "gin/converter.h"
 #include "gin/modules/module_registry.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 
@@ -60,20 +61,19 @@ void Fatal(ScriptContext* context, const std::string& message) {
 
   ExtensionsClient* client = ExtensionsClient::Get();
   if (client->ShouldSuppressFatalErrors()) {
-    console::AddMessage(context->GetRenderFrame(),
-                        content::CONSOLE_MESSAGE_LEVEL_ERROR, full_message);
+    console::AddMessage(context, content::CONSOLE_MESSAGE_LEVEL_ERROR,
+                        full_message);
     client->RecordDidSuppressFatalError();
   } else {
-    console::Fatal(context->GetRenderFrame(), full_message);
+    console::Fatal(context, full_message);
   }
 }
 
 void Warn(v8::Isolate* isolate, const std::string& message) {
   ScriptContext* script_context =
       ScriptContextSet::GetContextByV8Context(isolate->GetCurrentContext());
-  console::AddMessage(
-      script_context ? script_context->GetRenderFrame() : nullptr,
-      content::CONSOLE_MESSAGE_LEVEL_WARNING, message);
+  console::AddMessage(script_context, content::CONSOLE_MESSAGE_LEVEL_WARNING,
+                      message);
 }
 
 // Default exception handler which logs the exception.
@@ -447,6 +447,16 @@ void ModuleSystem::LazyFieldGetterInner(
   }
   std::string name = *v8::String::Utf8Value(v8_module_name);
 
+  // As part of instantiating a module, we delete the getter and replace it with
+  // the property directly. If we're trying to load the same module a second
+  // time, it means something went wrong. Bail out early rather than going
+  // through the initialization process again (since bindings may not expect to
+  // run multiple times).
+  if (!module_system->loaded_modules_.insert(name).second) {
+    Warn(isolate, "Previous API instantiation failed.");
+    return;
+  }
+
   // Switch to our v8 context because we need functions created while running
   // the require()d module to belong to our context, not the current one.
   v8::Context::Scope context_scope(context);
@@ -495,7 +505,17 @@ void ModuleSystem::LazyFieldGetterInner(
   if (val->IsObject()) {
     v8::Local<v8::Object> object = v8::Local<v8::Object>::Cast(val);
     auto maybe = object->Delete(context, property);
-    CHECK(IsTrue(maybe));
+    if (!maybe.IsJust()) {
+      // In theory, deletion should never result in throwing an error. But
+      // crazier things have happened.
+      NOTREACHED();
+      return;
+    }
+    if (!maybe.FromJust()) {
+      // Deletion can *fail* in certain cases, such as when the script does
+      // Object.freeze(chrome).
+      return;
+    }
     SetProperty(context, object, property, new_field);
   } else {
     NOTREACHED();
@@ -524,6 +544,9 @@ void ModuleSystem::SetLazyField(v8::Local<v8::Object> object,
   v8::HandleScope handle_scope(GetIsolate());
   v8::Local<v8::Object> parameters = v8::Object::New(GetIsolate());
   v8::Local<v8::Context> context = context_->v8_context();
+  // Since we reset the accessor here, we remove the record of having loaded the
+  // module.
+  loaded_modules_.erase(module_name);
   SetPrivateProperty(context, parameters, kModuleName,
               ToV8StringUnsafe(GetIsolate(), module_name.c_str()));
   SetPrivateProperty(context, parameters, kModuleField,
@@ -551,8 +574,22 @@ void ModuleSystem::OnNativeBindingCreated(
   DCHECK(!get_internal_api_.IsEmpty());
   v8::HandleScope scope(GetIsolate());
   if (source_map_->Contains(api_name)) {
+    // We need to load the custom bindings and store them in our modules.
+    // Storing them is important so that calls through CallModuleMethod() route
+    // to the proper objects, if they share the same name as an API.
+    v8::Local<v8::Value> modules;
+    if (!GetPrivate(context()->v8_context()->Global(), kModulesField,
+                    &modules) ||
+        !modules->IsObject()) {
+      NOTREACHED();
+      return;
+    }
+
     NativesEnabledScope enabled(this);
-    LoadModuleWithNativeAPIBridge(api_name, api_bridge_value);
+    v8::Local<v8::Value> exports =
+        LoadModuleWithNativeAPIBridge(api_name, api_bridge_value);
+    SetPrivateProperty(context()->v8_context(), modules.As<v8::Object>(),
+                       gin::StringToSymbol(GetIsolate(), api_name), exports);
   }
 }
 

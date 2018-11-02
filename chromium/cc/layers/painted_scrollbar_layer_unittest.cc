@@ -37,7 +37,7 @@ TEST(PaintedScrollbarLayerTest, NeedsPaint) {
 
   MockScrollbar* scrollbar = new MockScrollbar();
   scoped_refptr<PaintedScrollbarLayer> scrollbar_layer =
-      PaintedScrollbarLayer::Create(std::unique_ptr<Scrollbar>(scrollbar), 1);
+      PaintedScrollbarLayer::Create(std::unique_ptr<Scrollbar>(scrollbar));
 
   scrollbar_layer->SetIsDrawable(true);
   scrollbar_layer->SetBounds(gfx::Size(100, 100));
@@ -45,7 +45,6 @@ TEST(PaintedScrollbarLayerTest, NeedsPaint) {
   layer_tree_host->SetRootLayer(scrollbar_layer);
   EXPECT_EQ(scrollbar_layer->GetLayerTreeHostForTesting(),
             layer_tree_host.get());
-  scrollbar_layer->SavePaintProperties();
 
   // Request no paint, but expect them to be painted because they have not
   // yet been initialized.

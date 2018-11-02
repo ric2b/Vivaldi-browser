@@ -91,24 +91,12 @@ base::Optional<base::TimeDelta> GetInitialForegroundDuration(
   return time_on_page;
 }
 
-base::Optional<base::TimeDelta> OptionalMin(
-    const base::Optional<base::TimeDelta>& a,
-    const base::Optional<base::TimeDelta>& b) {
-  if (a && !b)
-    return a;
-  if (b && !a)
-    return b;
-  if (!a && !b)
-    return a;  // doesn't matter which
-  return base::Optional<base::TimeDelta>(std::min(a.value(), b.value()));
-}
-
 bool DidObserveLoadingBehaviorInAnyFrame(
     const page_load_metrics::PageLoadExtraInfo& info,
     blink::WebLoadingBehaviorFlag behavior) {
   const int all_frame_loading_behavior_flags =
       info.main_frame_metadata.behavior_flags |
-      info.child_frame_metadata.behavior_flags;
+      info.subframe_metadata.behavior_flags;
 
   return (all_frame_loading_behavior_flags & behavior) != 0;
 }

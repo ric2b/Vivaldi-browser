@@ -11,48 +11,42 @@
 
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
-#include "services/service_manager/public/cpp/lib/callback_binder.h"
-#include "services/service_manager/public/cpp/lib/interface_factory_binder.h"
+#include "services/service_manager/public/cpp/export.h"
+#include "services/service_manager/public/cpp/interface_binder.h"
 
 namespace service_manager {
 
-class Identity;
-class InterfaceBinder;
+struct BindSourceInfo;
 
-class BinderRegistry {
+class SERVICE_MANAGER_PUBLIC_CPP_EXPORT BinderRegistry {
  public:
-  using Binder = base::Callback<void(const std::string&,
-                                mojo::ScopedMessagePipeHandle)>;
+  using Binder = base::Callback<void(const BindSourceInfo&,
+                                     const std::string&,
+                                     mojo::ScopedMessagePipeHandle)>;
 
   BinderRegistry();
   ~BinderRegistry();
 
-  // Provide a factory to be called when a request to bind |Interface| is
-  // received by this registry.
-  template <typename Interface>
-  void AddInterface(InterfaceFactory<Interface>* factory) {
-    SetInterfaceBinder(
-        Interface::Name_,
-        base::MakeUnique<internal::InterfaceFactoryBinder<Interface>>(factory));
-  }
-
-  // Provide a callback to be run when a request to bind |Interface| is received
-  // by this registry.
   template <typename Interface>
   void AddInterface(
-      const base::Callback<void(mojo::InterfaceRequest<Interface>)>& callback,
+      const base::Callback<void(const BindSourceInfo&,
+                                mojo::InterfaceRequest<Interface>)>& callback,
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner =
           nullptr) {
     SetInterfaceBinder(
         Interface::Name_,
-        base::MakeUnique<internal::CallbackBinder<Interface>>(callback,
-                                                              task_runner));
+        base::MakeUnique<CallbackBinder<Interface>>(callback, task_runner));
   }
   void AddInterface(
       const std::string& interface_name,
       const base::Callback<void(mojo::ScopedMessagePipeHandle)>& callback,
+      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner = nullptr);
+
+  void AddInterface(
+      const std::string& interface_name,
+      const Binder& binder_callback,
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner = nullptr);
 
   // Removes the specified interface from the registry. This has no effect on
@@ -68,9 +62,11 @@ class BinderRegistry {
 
   // Completes binding the request for |interface_name| on |interface_pipe|, by
   // invoking the corresponding InterfaceBinder.
-  void BindInterface(const Identity& remote_identity,
+  void BindInterface(const BindSourceInfo& source_info,
                      const std::string& interface_name,
                      mojo::ScopedMessagePipeHandle interface_pipe);
+
+  base::WeakPtr<BinderRegistry> GetWeakPtr();
 
  private:
   using InterfaceNameToBinderMap =
@@ -81,6 +77,8 @@ class BinderRegistry {
                           std::unique_ptr<InterfaceBinder> binder);
 
   InterfaceNameToBinderMap binders_;
+
+  base::WeakPtrFactory<BinderRegistry> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BinderRegistry);
 };

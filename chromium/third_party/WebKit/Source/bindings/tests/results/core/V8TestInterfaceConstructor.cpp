@@ -16,14 +16,14 @@
 #include "bindings/core/v8/IDLTypes.h"
 #include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
-#include "bindings/core/v8/V8ObjectConstructor.h"
-#include "bindings/core/v8/V8PrivateProperty.h"
 #include "bindings/core/v8/V8TestDictionary.h"
 #include "bindings/core/v8/V8TestInterfaceEmpty.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/UseCounter.h"
+#include "platform/bindings/V8ObjectConstructor.h"
+#include "platform/bindings/V8PrivateProperty.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
 
@@ -42,7 +42,7 @@ const WrapperTypeInfo V8TestInterfaceConstructor::wrapperTypeInfo = { gin::kEmbe
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestInterfaceConstructor.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
-// bindings/core/v8/ScriptWrappable.h.
+// platform/bindings/ScriptWrappable.h.
 const WrapperTypeInfo& TestInterfaceConstructor::wrapper_type_info_ = V8TestInterfaceConstructor::wrapperTypeInfo;
 
 // not [ActiveScriptWrappable]
@@ -112,15 +112,15 @@ static void constructor2(const v8::FunctionCallbackInfo<v8::Value>& info) {
   if (exceptionState.HadException())
     return;
 
-  sequenceStringArg = ToImplArray<Vector<String>>(info[4], 5, info.GetIsolate(), exceptionState);
+  sequenceStringArg = NativeValueTraits<IDLSequence<IDLString>>::NativeValue(info.GetIsolate(), info[4], exceptionState);
   if (exceptionState.HadException())
     return;
 
-  sequenceDictionaryArg = ToImplArray<Vector<Dictionary>>(info[5], 6, info.GetIsolate(), exceptionState);
+  sequenceDictionaryArg = NativeValueTraits<IDLSequence<Dictionary>>::NativeValue(info.GetIsolate(), info[5], exceptionState);
   if (exceptionState.HadException())
     return;
 
-  sequenceLongOrTestDictionaryArg = ToImplArray<HeapVector<LongOrTestDictionary>>(info[6], 7, info.GetIsolate(), exceptionState);
+  sequenceLongOrTestDictionaryArg = NativeValueTraits<IDLSequence<LongOrTestDictionary>>::NativeValue(info.GetIsolate(), info[6], exceptionState);
   if (exceptionState.HadException())
     return;
 

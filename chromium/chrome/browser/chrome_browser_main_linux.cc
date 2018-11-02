@@ -8,6 +8,7 @@
 
 #include <string>
 
+#include "base/single_thread_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -50,9 +51,8 @@ void ChromeBrowserMainPartsLinux::PreProfileInit() {
   // g_browser_process.  This happens in PreCreateThreads.
   // base::GetLinuxDistro() will initialize its value if needed.
   base::PostTaskWithTraits(
-      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
-                     base::TaskPriority::BACKGROUND),
-      base::Bind(base::IgnoreResult(&base::GetLinuxDistro)));
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      base::BindOnce(base::IgnoreResult(&base::GetLinuxDistro)));
 #endif
 
   media::AudioManager::SetGlobalAppName(

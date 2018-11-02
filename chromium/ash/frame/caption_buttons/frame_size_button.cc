@@ -9,10 +9,11 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/phantom_window_controller.h"
-#include "ash/wm_window.h"
 #include "base/i18n/rtl.h"
+#include "ui/aura/window.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/coordinate_conversion.h"
 
 namespace ash {
 
@@ -210,15 +211,17 @@ void FrameSizeButton::UpdateSnapType(const ui::LocatedEvent& event) {
   }
 
   if (snap_type_ == SNAP_LEFT || snap_type_ == SNAP_RIGHT) {
-    WmWindow* window = WmWindow::Get(frame_->GetNativeWindow());
-    if (!phantom_window_controller_.get())
-      phantom_window_controller_.reset(new PhantomWindowController(window));
-    gfx::Rect phantom_bounds_in_parent =
+    aura::Window* window = frame_->GetNativeWindow();
+    if (!phantom_window_controller_.get()) {
+      phantom_window_controller_ =
+          base::MakeUnique<PhantomWindowController>(window);
+    }
+    gfx::Rect phantom_bounds_in_screen =
         (snap_type_ == SNAP_LEFT)
             ? wm::GetDefaultLeftSnappedWindowBoundsInParent(window)
             : wm::GetDefaultRightSnappedWindowBoundsInParent(window);
-    phantom_window_controller_->Show(
-        window->GetParent()->ConvertRectToScreen(phantom_bounds_in_parent));
+    ::wm::ConvertRectToScreen(window->parent(), &phantom_bounds_in_screen);
+    phantom_window_controller_->Show(phantom_bounds_in_screen);
   } else {
     phantom_window_controller_.reset();
   }
@@ -242,8 +245,8 @@ bool FrameSizeButton::CommitSnap(const ui::LocatedEvent& event) {
   UpdateSnapType(event);
 
   if (in_snap_mode_ && (snap_type_ == SNAP_LEFT || snap_type_ == SNAP_RIGHT)) {
-    WmWindow* window = WmWindow::Get(frame_->GetNativeWindow());
-    wm::WindowState* window_state = window->GetWindowState();
+    wm::WindowState* window_state =
+        wm::GetWindowState(frame_->GetNativeWindow());
     const wm::WMEvent snap_event(snap_type_ == SNAP_LEFT
                                      ? wm::WM_EVENT_SNAP_LEFT
                                      : wm::WM_EVENT_SNAP_RIGHT);

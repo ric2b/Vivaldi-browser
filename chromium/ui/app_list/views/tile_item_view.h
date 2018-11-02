@@ -53,6 +53,7 @@ class APP_LIST_EXPORT TileItemView : public views::CustomButton,
 
   // Overridden from views::View:
   void Layout() override;
+  const char* GetClassName() const override;
 
   // Overridden from ImageShadowAnimator::Delegate:
   void ImageShadowAnimationProgressed(ImageShadowAnimator* animator) override;
@@ -66,7 +67,7 @@ class APP_LIST_EXPORT TileItemView : public views::CustomButton,
   void UpdateBackgroundColor();
 
   // Overridden from views::View:
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
   bool GetTooltipText(const gfx::Point& p,
                       base::string16* tooltip) const override;
 

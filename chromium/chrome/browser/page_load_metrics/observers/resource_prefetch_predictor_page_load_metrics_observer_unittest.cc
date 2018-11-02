@@ -4,6 +4,8 @@
 
 #include "chrome/browser/page_load_metrics/observers/resource_prefetch_predictor_page_load_metrics_observer.h"
 
+#include <memory>
+
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
 #include "chrome/browser/predictors/resource_prefetch_common.h"
@@ -17,7 +19,7 @@ using predictors::ResourcePrefetchPredictor;
 class MockResourcePrefetchPredictor : public ResourcePrefetchPredictor {
  public:
   MockResourcePrefetchPredictor(
-      const predictors::ResourcePrefetchPredictorConfig& config,
+      const predictors::LoadingPredictorConfig& config,
       Profile* profile)
       : ResourcePrefetchPredictor(config, profile) {}
 
@@ -31,27 +33,30 @@ class ResourcePrefetchPredictorPageLoadMetricsObserverTest
  protected:
   void SetUp() override {
     page_load_metrics::PageLoadMetricsObserverTestHarness::SetUp();
-    predictors::ResourcePrefetchPredictorConfig config;
-    config.mode = predictors::ResourcePrefetchPredictorConfig::LEARNING;
+    predictors::LoadingPredictorConfig config;
+    config.mode = predictors::LoadingPredictorConfig::LEARNING;
     predictor_ =
         base::MakeUnique<testing::StrictMock<MockResourcePrefetchPredictor>>(
             config, profile());
+    page_load_metrics::InitPageLoadTimingForTest(&timing_);
     timing_.navigation_start = base::Time::FromDoubleT(1);
-    timing_.first_paint = base::TimeDelta::FromSeconds(2);
-    timing_.first_contentful_paint = base::TimeDelta::FromSeconds(3);
-    timing_.first_meaningful_paint = base::TimeDelta::FromSeconds(4);
+    timing_.paint_timing->first_paint = base::TimeDelta::FromSeconds(2);
+    timing_.paint_timing->first_contentful_paint =
+        base::TimeDelta::FromSeconds(3);
+    timing_.paint_timing->first_meaningful_paint =
+        base::TimeDelta::FromSeconds(4);
     PopulateRequiredTimingFields(&timing_);
   }
 
   void RegisterObservers(page_load_metrics::PageLoadTracker* tracker) override {
     tracker->AddObserver(
         base::MakeUnique<ResourcePrefetchPredictorPageLoadMetricsObserver>(
-            predictor_.get()));
+            predictor_.get(), web_contents()));
   }
 
   std::unique_ptr<testing::StrictMock<MockResourcePrefetchPredictor>>
       predictor_;
-  page_load_metrics::PageLoadTiming timing_;
+  page_load_metrics::mojom::PageLoadTiming timing_;
 };
 
 TEST_F(ResourcePrefetchPredictorPageLoadMetricsObserverTest,

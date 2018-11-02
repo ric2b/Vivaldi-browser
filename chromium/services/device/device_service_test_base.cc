@@ -12,7 +12,6 @@
 #include "services/device/device_service.h"
 #include "services/device/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/interfaces/service_factory.mojom.h"
 
@@ -24,23 +23,22 @@ const char kTestServiceName[] = "device_unittests";
 
 // The test service responsible to package Device Service.
 class ServiceTestClient : public service_manager::test::ServiceTestClient,
-                          public service_manager::mojom::ServiceFactory,
-                          public service_manager::InterfaceFactory<
-                              service_manager::mojom::ServiceFactory> {
+                          public service_manager::mojom::ServiceFactory {
  public:
   explicit ServiceTestClient(service_manager::test::ServiceTest* test)
       : service_manager::test::ServiceTestClient(test),
         io_thread_("DeviceServiceTestIOThread"),
         file_thread_("DeviceServiceTestFileThread") {
-    registry_.AddInterface<service_manager::mojom::ServiceFactory>(this);
+    registry_.AddInterface<service_manager::mojom::ServiceFactory>(
+        base::Bind(&ServiceTestClient::Create, base::Unretained(this)));
   }
   ~ServiceTestClient() override {}
 
  protected:
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(source_info.identity, interface_name,
+    registry_.BindInterface(source_info, interface_name,
                             std::move(interface_pipe));
   }
 
@@ -53,7 +51,7 @@ class ServiceTestClient : public service_manager::test::ServiceTestClient,
       device_service_context_.reset(new service_manager::ServiceContext(
           CreateDeviceService(file_thread_.task_runner(),
                               io_thread_.task_runner(),
-                              wake_lock_context_callback_),
+                              wake_lock_context_callback_, nullptr),
           std::move(request)));
 #else
       device_service_context_.reset(new service_manager::ServiceContext(
@@ -64,8 +62,8 @@ class ServiceTestClient : public service_manager::test::ServiceTestClient,
     }
   }
 
-  void Create(const service_manager::Identity& remote_identity,
-              service_manager::mojom::ServiceFactoryRequest request) override {
+  void Create(const service_manager::BindSourceInfo& source_info,
+              service_manager::mojom::ServiceFactoryRequest request) {
     service_factory_bindings_.AddBinding(this, std::move(request));
   }
 

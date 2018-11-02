@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/web_contents.h"
@@ -44,6 +44,10 @@ SecurityInterstitialControllerClient::interstitial_page() {
 
 void SecurityInterstitialControllerClient::GoBack() {
   interstitial_page_->DontProceed();
+}
+
+bool SecurityInterstitialControllerClient::CanGoBack() {
+  return web_contents_->GetController().CanGoBack();
 }
 
 void SecurityInterstitialControllerClient::GoBackAfterNavigationCommitted() {

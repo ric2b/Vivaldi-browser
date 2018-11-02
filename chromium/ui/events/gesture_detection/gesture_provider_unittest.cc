@@ -13,6 +13,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -64,7 +65,9 @@ gfx::RectF BoundsForSingleMockTouchAtLocation(float x, float y) {
 
 class GestureProviderTest : public testing::Test, public GestureProviderClient {
  public:
-  GestureProviderTest() {}
+  GestureProviderTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
   ~GestureProviderTest() override {}
 
   static MockMotionEvent ObtainMotionEvent(base::TimeTicks event_time,
@@ -425,7 +428,7 @@ class GestureProviderTest : public testing::Test, public GestureProviderClient {
   std::vector<GestureEventData> gestures_;
   std::unique_ptr<GestureProvider> gesture_provider_;
   std::unique_ptr<GestureEventData> active_scroll_begin_event_;
-  base::MessageLoopForUI message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
 };
 
 // Verify that a DOWN followed shortly by an UP will trigger a single tap.
@@ -1031,6 +1034,40 @@ TEST_F(GestureProviderTest, SlopRegionCheckOnTwoFingerScroll) {
   EXPECT_EQ(ET_GESTURE_SCROLL_UPDATE, GetReceivedGesture(3).type());
   EXPECT_EQ(ET_GESTURE_SCROLL_END, GetReceivedGesture(4).type());
   EXPECT_EQ(5U, GetReceivedGestureCount());
+}
+
+// This test simulates cases like (crbug.com/704426) in which some of the events
+// are missing from the event stream.
+TEST_F(GestureProviderTest, SlopRegionCheckOnMissingSecondaryPointerDownEvent) {
+  EnableTwoFingerTap(kMaxTwoFingerTapSeparation, base::TimeDelta());
+  const float scaled_touch_slop = GetTouchSlop();
+
+  base::TimeTicks event_time = base::TimeTicks::Now();
+
+  MockMotionEvent event =
+      ObtainMotionEvent(event_time, MotionEvent::ACTION_DOWN, 0, 0);
+  EXPECT_TRUE(gesture_provider_->OnTouchEvent(event));
+
+  // Don't send ACTION_POINTER_DOWN event to the gesture_provider.
+  // This is for simulating the cases that the ACTION_POINTER_DOWN event is
+  // missing from the event sequence.
+  event = ObtainMotionEvent(event_time, MotionEvent::ACTION_POINTER_DOWN, 0, 0,
+                            kMaxTwoFingerTapSeparation / 2, 0);
+
+  event.MovePoint(1, 0, 3 * scaled_touch_slop);
+  EXPECT_TRUE(gesture_provider_->OnTouchEvent(event));
+
+  event.ReleasePointAtIndex(0);
+  EXPECT_TRUE(gesture_provider_->OnTouchEvent(event));
+
+  event.ReleasePoint();
+  EXPECT_TRUE(gesture_provider_->OnTouchEvent(event));
+
+  // No scroll happens since the source pointer down event for the moved
+  // pointer is not found. No two finger tap happens since one of the pointers
+  // moved beyond its slop region.
+  EXPECT_EQ(ET_GESTURE_TAP_DOWN, GetReceivedGesture(0).type());
+  EXPECT_EQ(1U, GetReceivedGestureCount());
 }
 
 TEST_F(GestureProviderTest, NoSlopRegionCheckOnThreeFingerScroll) {

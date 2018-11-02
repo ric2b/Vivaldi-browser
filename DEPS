@@ -88,22 +88,9 @@ hooks = [
     'action': [
       'python',
       'vivaldi/chromium/build/util/lastchange.py',
-      '--git-hash-only',
       '-o',
       'vivaldi/chromium/build/util/LASTCHANGE'
        ],
-  },
-  {
-    # Update LASTCHANGE.blink.
-    'name': 'lastchange_blink',
-    'pattern': '.',
-    'action': [
-      'python',
-      'vivaldi/chromium/build/util/lastchange.py',
-      '--git-hash-only',
-      '-s', 'vivaldi/chromium/third_party/WebKit',
-      '-o', 'vivaldi/chromium/build/util/LASTCHANGE.blink'
-      ],
   },
   {
     # Update skia_commit_hash.h.
@@ -120,7 +107,6 @@ hooks = [
     'action': [
       'python',
       'vivaldi/chromium/build/util/lastchange.py',
-      '--git-hash-only',
       '-s', 'vivaldi/.',
       '--name-suffix', '_VIVALDI',
       '-o','vivaldi/chromium/build/util/LASTCHANGE.vivaldi'
@@ -224,7 +210,7 @@ hooks = [
     'action': ['python',
       'vivaldi/chromium/build/get_syzygy_binaries.py',
       '--output-dir', 'vivaldi/chromium/third_party/syzygy/binaries',
-      '--revision=b8aa6a6d09dadd385a1afed5e71c3bb3514a4c0f',
+      '--revision=dbb218b6d05ff1c17a4d86252b10880c2d8ebe08',
       '--overwrite',
       '--copy-dia-binaries',
     ],
@@ -258,6 +244,15 @@ hooks = [
                 '--no_auth',
                 '--bucket', 'chromium-nodejs',
                 '-s', 'vivaldi/chromium/third_party/node/node_modules.tar.gz.sha1',
+    ],
+  },
+
+  # Download Telemetry's binary dependencies
+  {
+    'name': 'fetch_telemetry_binary_dependencies',
+    'pattern': '.',
+    'action': [ 'python',
+                'vivaldi/chromium/third_party/catapult/telemetry/bin/fetch_telemetry_binary_dependencies',
     ],
   },
   {

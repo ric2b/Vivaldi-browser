@@ -4,13 +4,14 @@
 
 #include "modules/webaudio/BaseAudioContext.h"
 
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentUserGestureToken.h"
 #include "core/frame/FrameOwner.h"
 #include "core/frame/FrameTypes.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
+#include "core/html/media/AutoplayPolicy.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
@@ -18,6 +19,7 @@
 #include "platform/UserGestureIndicator.h"
 #include "platform/testing/HistogramTester.h"
 #include "platform/testing/TestingPlatformSupport.h"
+#include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebAudioDevice.h"
 #include "public/platform/WebAudioLatencyHint.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -66,14 +68,15 @@ class MockWebAudioDevice : public WebAudioDevice {
 
 class BaseAudioContextTestPlatform : public TestingPlatformSupport {
  public:
-  WebAudioDevice* CreateAudioDevice(unsigned number_of_input_channels,
-                                    unsigned number_of_channels,
-                                    const WebAudioLatencyHint& latency_hint,
-                                    WebAudioDevice::RenderCallback*,
-                                    const WebString& device_id,
-                                    const WebSecurityOrigin&) override {
-    return new MockWebAudioDevice(AudioHardwareSampleRate(),
-                                  AudioHardwareBufferSize());
+  std::unique_ptr<WebAudioDevice> CreateAudioDevice(
+      unsigned number_of_input_channels,
+      unsigned number_of_channels,
+      const WebAudioLatencyHint& latency_hint,
+      WebAudioDevice::RenderCallback*,
+      const WebString& device_id,
+      const WebSecurityOrigin&) override {
+    return WTF::MakeUnique<MockWebAudioDevice>(AudioHardwareSampleRate(),
+                                               AudioHardwareBufferSize());
   }
 
   double AudioHardwareSampleRate() override { return 44100; }
@@ -145,7 +148,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_NoRestriction) {
 TEST_F(BaseAudioContextTest, AutoplayMetrics_CreateNoGesture) {
   HistogramTester histogram_tester;
   CreateChildFrame();
-  ChildDocument().GetSettings()->SetMediaPlaybackRequiresUserGesture(true);
+  ChildDocument().GetSettings()->SetAutoplayPolicy(
+      AutoplayPolicy::Type::kUserGestureRequired);
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
@@ -159,7 +163,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_CreateNoGesture) {
 TEST_F(BaseAudioContextTest, AutoplayMetrics_CallResumeNoGesture) {
   HistogramTester histogram_tester;
   CreateChildFrame();
-  ChildDocument().GetSettings()->SetMediaPlaybackRequiresUserGesture(true);
+  ChildDocument().GetSettings()->SetAutoplayPolicy(
+      AutoplayPolicy::Type::kUserGestureRequired);
 
   ScriptState::Scope scope(GetScriptStateFrom(ChildDocument()));
 
@@ -177,7 +182,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_CallResumeNoGesture) {
 TEST_F(BaseAudioContextTest, AutoplayMetrics_CreateGesture) {
   HistogramTester histogram_tester;
   CreateChildFrame();
-  ChildDocument().GetSettings()->SetMediaPlaybackRequiresUserGesture(true);
+  ChildDocument().GetSettings()->SetAutoplayPolicy(
+      AutoplayPolicy::Type::kUserGestureRequired);
 
   UserGestureIndicator user_gesture_scope(DocumentUserGestureToken::Create(
       &ChildDocument(), UserGestureToken::kNewGesture));
@@ -194,7 +200,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_CreateGesture) {
 TEST_F(BaseAudioContextTest, AutoplayMetrics_CallResumeGesture) {
   HistogramTester histogram_tester;
   CreateChildFrame();
-  ChildDocument().GetSettings()->SetMediaPlaybackRequiresUserGesture(true);
+  ChildDocument().GetSettings()->SetAutoplayPolicy(
+      AutoplayPolicy::Type::kUserGestureRequired);
 
   ScriptState::Scope scope(GetScriptStateFrom(ChildDocument()));
 
@@ -216,7 +223,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_CallResumeGesture) {
 TEST_F(BaseAudioContextTest, AutoplayMetrics_NodeStartNoGesture) {
   HistogramTester histogram_tester;
   CreateChildFrame();
-  ChildDocument().GetSettings()->SetMediaPlaybackRequiresUserGesture(true);
+  ChildDocument().GetSettings()->SetAutoplayPolicy(
+      AutoplayPolicy::Type::kUserGestureRequired);
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
@@ -231,7 +239,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_NodeStartNoGesture) {
 TEST_F(BaseAudioContextTest, AutoplayMetrics_NodeStartGesture) {
   HistogramTester histogram_tester;
   CreateChildFrame();
-  ChildDocument().GetSettings()->SetMediaPlaybackRequiresUserGesture(true);
+  ChildDocument().GetSettings()->SetAutoplayPolicy(
+      AutoplayPolicy::Type::kUserGestureRequired);
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
@@ -249,7 +258,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_NodeStartGesture) {
 TEST_F(BaseAudioContextTest, AutoplayMetrics_NodeStartNoGestureThenSuccess) {
   HistogramTester histogram_tester;
   CreateChildFrame();
-  ChildDocument().GetSettings()->SetMediaPlaybackRequiresUserGesture(true);
+  ChildDocument().GetSettings()->SetAutoplayPolicy(
+      AutoplayPolicy::Type::kUserGestureRequired);
 
   ScriptState::Scope scope(GetScriptStateFrom(ChildDocument()));
 
@@ -271,7 +281,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_NodeStartNoGestureThenSuccess) {
 TEST_F(BaseAudioContextTest, AutoplayMetrics_NodeStartGestureThenSucces) {
   HistogramTester histogram_tester;
   CreateChildFrame();
-  ChildDocument().GetSettings()->SetMediaPlaybackRequiresUserGesture(true);
+  ChildDocument().GetSettings()->SetAutoplayPolicy(
+      AutoplayPolicy::Type::kUserGestureRequired);
 
   ScriptState::Scope scope(GetScriptStateFrom(ChildDocument()));
 

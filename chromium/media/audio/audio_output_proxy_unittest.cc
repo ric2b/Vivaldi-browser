@@ -20,6 +20,7 @@
 #include "media/audio/audio_output_resampler.h"
 #include "media/audio/fake_audio_log_factory.h"
 #include "media/audio/fake_audio_output_stream.h"
+#include "media/audio/test_audio_thread.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -40,6 +41,7 @@ using media::AudioOutputProxy;
 using media::AudioOutputStream;
 using media::AudioParameters;
 using media::FakeAudioOutputStream;
+using media::TestAudioThread;
 
 namespace {
 
@@ -98,14 +100,10 @@ class MockAudioOutputStream : public AudioOutputStream {
 class MockAudioManager : public AudioManagerBase {
  public:
   MockAudioManager()
-      : AudioManagerBase(base::ThreadTaskRunnerHandle::Get(),
-                         base::ThreadTaskRunnerHandle::Get(),
+      : AudioManagerBase(base::MakeUnique<TestAudioThread>(),
                          &fake_audio_log_factory_) {}
   ~MockAudioManager() override { Shutdown(); }
 
-  MOCK_METHOD0(HasAudioOutputDevices, bool());
-  MOCK_METHOD0(HasAudioInputDevices, bool());
-  MOCK_METHOD0(GetAudioInputDeviceModel, base::string16());
   MOCK_METHOD3(MakeAudioOutputStream,
                AudioOutputStream*(const AudioParameters& params,
                                   const std::string& device_id,
@@ -117,12 +115,9 @@ class MockAudioManager : public AudioManagerBase {
                AudioInputStream*(const AudioParameters& params,
                                  const std::string& device_id,
                                  const LogCallback& log_callback));
-  MOCK_METHOD0(ShowAudioInputSettings, void());
   MOCK_METHOD0(GetTaskRunner, scoped_refptr<base::SingleThreadTaskRunner>());
   MOCK_METHOD0(GetWorkerTaskRunner,
                scoped_refptr<base::SingleThreadTaskRunner>());
-  MOCK_METHOD1(GetAudioInputDeviceNames, void(
-      media::AudioDeviceNames* device_name));
   MOCK_METHOD0(GetName, const char*());
 
   MOCK_METHOD2(MakeLinearOutputStream,
@@ -140,6 +135,14 @@ class MockAudioManager : public AudioManagerBase {
                AudioInputStream*(const AudioParameters& params,
                                  const std::string& device_id,
                                  const LogCallback& log_callback));
+
+ protected:
+  MOCK_METHOD0(HasAudioOutputDevices, bool());
+  MOCK_METHOD0(HasAudioInputDevices, bool());
+  MOCK_METHOD0(GetAudioInputDeviceModel, base::string16());
+  MOCK_METHOD0(ShowAudioInputSettings, void());
+  MOCK_METHOD1(GetAudioInputDeviceNames,
+               void(media::AudioDeviceNames* device_name));
   MOCK_METHOD2(GetPreferredOutputStreamParameters, AudioParameters(
       const std::string& device_id, const AudioParameters& params));
 
@@ -156,7 +159,7 @@ class MockAudioSourceCallback : public AudioOutputStream::AudioSourceCallback {
     dest->Zero();
     return dest->frames();
   }
-  MOCK_METHOD1(OnError, void(AudioOutputStream* stream));
+  MOCK_METHOD0(OnError, void());
 };
 
 }  // namespace
@@ -411,8 +414,7 @@ class AudioOutputProxyTest : public testing::Test {
         .Times(2)
         .WillRepeatedly(Return(reinterpret_cast<AudioOutputStream*>(NULL)));
 
-    EXPECT_CALL(callback_, OnError(_))
-        .Times(2);
+    EXPECT_CALL(callback_, OnError()).Times(2);
 
     proxy->Start(&callback_);
 
@@ -445,7 +447,7 @@ class AudioOutputProxyTest : public testing::Test {
     AudioOutputProxy* proxy = dispatcher->CreateStreamProxy();
     EXPECT_TRUE(proxy->Open());
 
-    EXPECT_CALL(callback_, OnError(_)).Times(1);
+    EXPECT_CALL(callback_, OnError()).Times(1);
     dispatcher.reset();
     proxy->Start(&callback_);
     proxy->Stop();

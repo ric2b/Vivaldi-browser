@@ -53,7 +53,6 @@
 <translation id="1820259098641718022">வாசிப்புப் பட்டியலில் சேர்க்கப்பட்டது</translation>
 <translation id="1876721852596493031">பயன்பாடு தரவு அனுப்பு</translation>
 <translation id="1886928167269928266">தொடக்கத்திலிருந்து</translation>
-<translation id="1894451531427596130">இது எவ்வாறு வேலை செய்கிறது என்பதை <ph name="BEGIN_LINK" />அமைப்புகளில்<ph name="END_LINK" /> கட்டுப்படுத்தலாம்</translation>
 <translation id="1911619930368729126">Google இயக்ககத்தில் பதிவேற்றுக</translation>
 <translation id="1941314575388338491">நகலெடுக்க, இருமுறை தட்டவும்.</translation>
 <translation id="1952728750904661634">நிர்வகிக்கப்படும் கணக்கில் உள்நுழைக</translation>
@@ -97,6 +96,7 @@
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">மொழியாக்க அமைப்புகளை மீட்டமை</translation>
 <translation id="285960592395650245">மீண்டும் பதிவிறக்கு</translation>
+<translation id="2870560284913253234">தளம்</translation>
 <translation id="2871695793448672541">மறைக்கப்பட்டுள்ளது, கடவுச்சொல்</translation>
 <translation id="2898963176829412617">புதிய கோப்புறை…</translation>
 <translation id="2903493209154104877">முகவரிகள்</translation>
@@ -109,7 +109,6 @@
 <translation id="2989805286512600854">புதிய தாவலில் திற</translation>
 <translation id="3024255823539804759">நேற்று</translation>
 <translation id="3037605927509011580">அச்சச்சோ!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> கிடைக்கவில்லை. உங்கள் உலாவல் வரலாற்றை அணுக, கருவிகள் மெனுவில் இருந்து "<ph name="SHOW_HISTORY" />" என்பதைத் தேர்ந்தெடுக்கவும்.</translation>
 <translation id="3112556859945124369">குறி…</translation>
 <translation id="3151924044251363314">உங்கள் கடவுச்சொற்றொடரை அறிந்தவரால் மட்டுமே உங்கள் முறைமையாக்கப்பட்ட தரவைப் படிக்க முடியும். கடவுச்சொற்றொடரானது Googleக்கு அனுப்பப்படுவதில்லை அல்லது Google அதைச் சேமிப்பதில்லை. கடவுச்சொற்றொடரை மறந்துவிட்டால் அல்லது இந்த அமைப்பை மாற்ற விரும்பினால், நீங்கள் ஒத்திசைவை மீட்டமைக்க வேண்டும். <ph name="BEGIN_LINK" />மேலும் அறிக<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">அனைத்தையும் குறி…</translation>
@@ -150,6 +149,7 @@
 <translation id="3638472932233958418">வலைப்பக்கங்களை முன்னதாக ஏற்று</translation>
 <translation id="3691593122358196899"><ph name="FOLDER_TITLE" /> இல் புத்தகக்குறியைச் சேர்த்தது</translation>
 <translation id="3738139272394829648">தேடத் தொடவும்</translation>
+<translation id="3742082982782149146">தள URL நகலெடுக்கப்பட்டது.</translation>
 <translation id="3771033907050503522">மறைநிலைத் தாவல்கள்</translation>
 <translation id="3783017676699494206">படத்தைச் சேமி</translation>
 <translation id="3789841737615482174">நிறுவுக</translation>
@@ -164,10 +164,12 @@
 <translation id="4038354071007134711">கோப்பைத் திறக்கக்கூடிய பயன்பாடு சாதனத்தில் இல்லை.</translation>
 <translation id="4049507953662678203">இணைய இணைப்பு இருப்பதை உறுதிசெய்து, மீண்டும் முயலவும்.</translation>
 <translation id="411254640334432676">பதிவிறக்கம் தோல்வி.</translation>
+<translation id="4117350985506774529">பயனர்பெயர் நகலெடுக்கப்பட்டது.</translation>
 <translation id="4121993058175073134">மொத்த-ஏற்றுமதி தரவை அனுப்புவதற்கு, அமைப்புகளின் பயன்பாட்டில் உங்கள் மின்னஞ்சல் கணக்கை உள்ளமைக்கவும்.</translation>
 <translation id="4124987746317609294">நேர வரம்பு</translation>
 <translation id="4172051516777682613">எப்போதும் காட்டு</translation>
 <translation id="418156467088430727">புதிய தாவலில் ஆஃப்லைன் பதிப்பைக் காட்டு</translation>
+<translation id="4237682350741091554"><ph name="BEGIN_LINK" />அமைப்புகளில்<ph name="END_LINK" /> Chrome ஒத்திசைவையும் தனிப்பயனாக்கத்தையும் நிர்வகிக்கலாம்</translation>
 <translation id="424315890655130736">கடவுச்சொற்றொடரை உள்ளிடுக</translation>
 <translation id="4272631900155121838">QR குறியீட்டை ஸ்கேன் செய்ய, அமைப்புகளிலிருந்து கேமராவை இயக்கவும்</translation>
 <translation id="4281844954008187215">சேவை விதிமுறைகள்</translation>
@@ -175,6 +177,7 @@
 <translation id="4359125752503270327">இந்தப் பக்கம் மற்றொரு பயன்பாட்டில் திறக்கப்படும்.</translation>
 <translation id="4378154925671717803">தொலைபேசி</translation>
 <translation id="441868831736628555">தனியுரிமை அறிக்கை</translation>
+<translation id="4508750114462689118">உள்நுழைவு விளம்பரத்தை மூடு</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> இல் சேமித்த கடவுச்சொற்களைப் பார்க்கலாம் மற்றும் நிர்வகிக்கலாம்.</translation>
 <translation id="4536418791685807335">மீண்டும் உள்நுழைந்து முயலவும்.</translation>
 <translation id="4620246317052452550">நீங்கள் படித்த பக்கங்கள்</translation>
@@ -220,6 +223,7 @@
 
 அமைப்புகளின் பொது பிரிவிலும் ஹேண்ட்ஆஃப் இயக்கப்பட்டிருக்க வேண்டும் மற்றும் உங்கள் சாதனங்கள் ஒரே iCloud கணக்கைப் பயன்படுத்த வேண்டும்.</translation>
 <translation id="5556459405103347317">மீண்டும் ஏற்று</translation>
+<translation id="5619279135193775234">அஞ்சல்</translation>
 <translation id="5626245204502895507">இந்த நேரத்தில் கோப்பைப் பதிவிறக்க முடியாது.</translation>
 <translation id="5659593005791499971">மின்னஞ்சல்</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@
 <translation id="7136892417564438900">கேமரா இல்லை</translation>
 <translation id="7159472599653637159">மொபைல் தளத்தைக் கோரு</translation>
 <translation id="7167621057293532233">தரவு வகைகள்</translation>
+<translation id="7175593937868963913">மின்னஞ்சலை எழுது</translation>
 <translation id="7189598951263744875">பகிர்...</translation>
 <translation id="7203585745079012652">பதில்களை மீண்டும் படி</translation>
 <translation id="722055596168483966">Google சேவைகளைத் தனிப்பயனாக்கு</translation>
@@ -358,7 +363,6 @@
 <translation id="8205564605687841303">ரத்துசெய்</translation>
 <translation id="8225985093977202398">தற்காலிகமாகச் சேமிக்கப்பட்ட படங்களும் கோப்புகளும்</translation>
 <translation id="8261506727792406068">நீக்கு</translation>
-<translation id="8272194309885535896">படத்தைப் பதிவிறக்கு</translation>
 <translation id="8272426682713568063">கிரெடிட் கார்டுகள்</translation>
 <translation id="8281781826761538115">இயல்பு - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">தேடல், விளம்பரங்கள் மற்றும் பிற Google சேவைகளைத் தனிப்பயனாக்க, உங்கள் உலாவல் வரலாற்றை Google எவ்வாறு பயன்படுத்துகிறது என்பதைக் கட்டுப்படுத்துக</translation>

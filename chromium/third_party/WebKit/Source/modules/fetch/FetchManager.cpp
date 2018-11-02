@@ -7,8 +7,6 @@
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
@@ -31,6 +29,8 @@
 #include "modules/fetch/Response.h"
 #include "modules/fetch/ResponseInit.h"
 #include "platform/HTTPNames.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8ThrowException.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/loader/fetch/ResourceRequest.h"
@@ -193,9 +193,9 @@ class FetchManager::Loader final
     }
 
     void DidGetReadable() override {
-      ASSERT(reader_);
-      ASSERT(loader_);
-      ASSERT(response_);
+      DCHECK(reader_);
+      DCHECK(loader_);
+      DCHECK(response_);
 
       WebDataConsumerHandle::Result r = WebDataConsumerHandle::kOk;
       while (r == WebDataConsumerHandle::kOk) {
@@ -215,10 +215,10 @@ class FetchManager::Loader final
       finished_ = true;
       if (r == WebDataConsumerHandle::kDone) {
         if (SubresourceIntegrity::CheckSubresourceIntegrity(
-                integrity_metadata_, buffer_.Data(), buffer_.size(), url_,
+                integrity_metadata_, buffer_.data(), buffer_.size(), url_,
                 *loader_->GetExecutionContext(), error_message)) {
           updater_->Update(
-              new FormDataBytesConsumer(buffer_.Data(), buffer_.size()));
+              new FormDataBytesConsumer(buffer_.data(), buffer_.size()));
           loader_->resolver_->Resolve(response_);
           loader_->resolver_.Clear();
           // FetchManager::Loader::didFinishLoading() can
@@ -309,7 +309,7 @@ FetchManager::Loader::Loader(ExecutionContext* execution_context,
 }
 
 FetchManager::Loader::~Loader() {
-  ASSERT(!loader_);
+  DCHECK(!loader_);
 }
 
 DEFINE_TRACE(FetchManager::Loader) {
@@ -329,7 +329,7 @@ void FetchManager::Loader::DidReceiveResponse(
     unsigned long,
     const ResourceResponse& response,
     std::unique_ptr<WebDataConsumerHandle> handle) {
-  ASSERT(handle);
+  DCHECK(handle);
   // TODO(horo): This check could be false when we will use the response url
   // in service worker responses. (crbug.com/553535)
   DCHECK(response.Url() == url_list_.back());
@@ -382,7 +382,7 @@ void FetchManager::Loader::DidReceiveResponse(
     // origin.
     switch (request_->Mode()) {
       case WebURLRequest::kFetchRequestModeSameOrigin:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         break;
       case WebURLRequest::kFetchRequestModeNoCORS:
         tainting = FetchRequestData::kOpaqueTainting;
@@ -493,7 +493,7 @@ void FetchManager::Loader::DidReceiveResponse(
     resolver_->Resolve(r);
     resolver_.Clear();
   } else {
-    ASSERT(!integrity_verifier_);
+    DCHECK(!integrity_verifier_);
     integrity_verifier_ =
         new SRIVerifier(std::move(handle), sri_consumer, r, this,
                         request_->Integrity(), response.Url());
@@ -543,7 +543,7 @@ Document* FetchManager::Loader::GetDocument() const {
 }
 
 void FetchManager::Loader::LoadSucceeded() {
-  ASSERT(!failed_);
+  DCHECK(!failed_);
 
   finished_ = true;
 
@@ -700,7 +700,7 @@ void FetchManager::Loader::PerformNetworkError(const String& message) {
 
 void FetchManager::Loader::PerformHTTPFetch(bool cors_flag,
                                             bool cors_preflight_flag) {
-  ASSERT(SchemeRegistry::ShouldTreatURLSchemeAsSupportingFetchAPI(
+  DCHECK(SchemeRegistry::ShouldTreatURLSchemeAsSupportingFetchAPI(
              request_->Url().Protocol()) ||
          (request_->Url().ProtocolIs("blob") && !cors_flag &&
           !cors_preflight_flag));
@@ -716,11 +716,9 @@ void FetchManager::Loader::PerformHTTPFetch(bool cors_flag,
   request.SetHTTPMethod(request_->Method());
   request.SetFetchRequestMode(request_->Mode());
   request.SetFetchCredentialsMode(request_->Credentials());
-  const Vector<std::unique_ptr<FetchHeaderList::Header>>& list =
-      request_->HeaderList()->List();
-  for (size_t i = 0; i < list.size(); ++i) {
-    request.AddHTTPHeaderField(AtomicString(list[i]->first),
-                               AtomicString(list[i]->second));
+  for (const auto& header : request_->HeaderList()->List()) {
+    request.AddHTTPHeaderField(AtomicString(header.first),
+                               AtomicString(header.second));
   }
 
   if (request_->Method() != HTTPNames::GET &&
@@ -839,7 +837,7 @@ void FetchManager::Loader::PerformHTTPFetch(bool cors_flag,
 //   'same-origin' mode.
 // - We reject non-GET method.
 void FetchManager::Loader::PerformDataFetch() {
-  ASSERT(request_->Url().ProtocolIsData());
+  DCHECK(request_->Url().ProtocolIsData());
 
   ResourceRequest request(request_->Url());
   request.SetRequestContext(request_->Context());

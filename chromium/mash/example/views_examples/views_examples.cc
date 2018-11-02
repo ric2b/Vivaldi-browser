@@ -12,39 +12,34 @@
 #include "services/service_manager/public/c/main.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_runner.h"
-#include "services/tracing/public/cpp/provider.h"
 #include "ui/views/examples/example_base.h"
 #include "ui/views/examples/examples_window.h"
 #include "ui/views/mus/aura_init.h"
 
-class ViewsExamples
-    : public service_manager::Service,
-      public mash::mojom::Launchable,
-      public service_manager::InterfaceFactory<mash::mojom::Launchable> {
+class ViewsExamples : public service_manager::Service,
+                      public mash::mojom::Launchable {
  public:
   ViewsExamples() {
-    registry_.AddInterface<mash::mojom::Launchable>(this);
+    registry_.AddInterface<mash::mojom::Launchable>(
+        base::Bind(&ViewsExamples::Create, base::Unretained(this)));
   }
   ~ViewsExamples() override {}
 
  private:
   // service_manager::Service:
   void OnStart() override {
-    tracing_.Initialize(context()->connector(), context()->identity().name());
     aura_init_ = base::MakeUnique<views::AuraInit>(
         context()->connector(), context()->identity(),
         "views_mus_resources.pak", std::string(), nullptr,
         views::AuraInit::Mode::AURA_MUS);
   }
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(source_info.identity, interface_name,
+    registry_.BindInterface(source_info, interface_name,
                             std::move(interface_pipe));
   }
 
@@ -53,9 +48,8 @@ class ViewsExamples
     views::examples::ShowExamplesWindow(views::examples::QUIT_ON_CLOSE);
   }
 
-  // service_manager::InterfaceFactory<mash::mojom::Launchable>:
-  void Create(const service_manager::Identity& remote_identity,
-              mash::mojom::LaunchableRequest request) override {
+  void Create(const service_manager::BindSourceInfo& source_info,
+              mash::mojom::LaunchableRequest request) {
     bindings_.AddBinding(this, std::move(request));
   }
 
@@ -63,7 +57,6 @@ class ViewsExamples
 
   service_manager::BinderRegistry registry_;
 
-  tracing::Provider tracing_;
   std::unique_ptr<views::AuraInit> aura_init_;
 
   DISALLOW_COPY_AND_ASSIGN(ViewsExamples);

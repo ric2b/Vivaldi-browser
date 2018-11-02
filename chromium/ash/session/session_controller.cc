@@ -5,15 +5,18 @@
 #include "ash/session/session_controller.h"
 
 #include <algorithm>
+#include <utility>
 
-#include "ash/session/session_state_observer.h"
+#include "ash/session/session_observer.h"
 #include "ash/shell.h"
+#include "ash/system/power/power_event_observer.h"
 #include "ash/wm/lock_state_controller.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/signin/core/account_id/account_id.h"
+#include "components/user_manager/user_type.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 using session_manager::SessionState;
@@ -41,16 +44,17 @@ SessionState GetDefaultSessionState() {
 
 }  // namespace
 
-SessionController::SessionController() : state_(GetDefaultSessionState()) {}
+SessionController::SessionController()
+    : state_(GetDefaultSessionState()), weak_ptr_factory_(this) {}
 
-SessionController::~SessionController() {}
+SessionController::~SessionController() {
+  // Abort pending start lock request.
+  if (!start_lock_callback_.is_null())
+    std::move(start_lock_callback_).Run(false /* locked */);
+}
 
 void SessionController::BindRequest(mojom::SessionControllerRequest request) {
   bindings_.AddBinding(this, std::move(request));
-}
-
-int SessionController::GetMaximumNumberOfLoggedInUsers() const {
-  return session_manager::kMaxmiumNumberOfUserSessions;
 }
 
 int SessionController::NumberOfLoggedInUsers() const {
@@ -101,6 +105,23 @@ SessionState SessionController::GetSessionState() const {
   return state_;
 }
 
+bool SessionController::ShouldEnableSettings() const {
+  // Settings opens a web UI window, so it is not available at the lock screen.
+  if (!IsActiveUserSessionStarted() || IsScreenLocked() ||
+      IsInSecondaryLoginScreen()) {
+    return false;
+  }
+
+  return user_sessions_[0]->should_enable_settings;
+}
+
+bool SessionController::ShouldShowNotificationTray() const {
+  if (!IsActiveUserSessionStarted() || IsInSecondaryLoginScreen())
+    return false;
+
+  return user_sessions_[0]->should_show_notification_tray;
+}
+
 const std::vector<mojom::UserSessionPtr>& SessionController::GetUserSessions()
     const {
   return user_sessions_;
@@ -112,6 +133,32 @@ const mojom::UserSession* SessionController::GetUserSession(
     return nullptr;
 
   return user_sessions_[index].get();
+}
+
+bool SessionController::IsUserSupervised() const {
+  if (!IsActiveUserSessionStarted())
+    return false;
+
+  user_manager::UserType active_user_type = GetUserSession(0)->type;
+  return active_user_type == user_manager::USER_TYPE_SUPERVISED ||
+         active_user_type == user_manager::USER_TYPE_CHILD;
+}
+
+bool SessionController::IsUserChild() const {
+  if (!IsActiveUserSessionStarted())
+    return false;
+
+  user_manager::UserType active_user_type = GetUserSession(0)->type;
+  return active_user_type == user_manager::USER_TYPE_CHILD;
+}
+
+bool SessionController::IsKioskSession() const {
+  if (!IsActiveUserSessionStarted())
+    return false;
+
+  user_manager::UserType active_user_type = GetUserSession(0)->type;
+  return active_user_type == user_manager::USER_TYPE_KIOSK_APP ||
+         active_user_type == user_manager::USER_TYPE_ARC_KIOSK_APP;
 }
 
 void SessionController::LockScreen() {
@@ -129,13 +176,11 @@ void SessionController::CycleActiveUser(CycleUserDirection direction) {
     client_->CycleActiveUser(direction);
 }
 
-void SessionController::AddSessionStateObserver(
-    SessionStateObserver* observer) {
+void SessionController::AddObserver(SessionObserver* observer) {
   observers_.AddObserver(observer);
 }
 
-void SessionController::RemoveSessionStateObserver(
-    SessionStateObserver* observer) {
+void SessionController::RemoveObserver(SessionObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
@@ -163,7 +208,7 @@ void SessionController::UpdateUserSession(mojom::UserSessionPtr user_session) {
 
   *it = std::move(user_session);
   for (auto& observer : observers_)
-    observer.UserSessionUpdated((*it)->account_id);
+    observer.OnUserSessionUpdated((*it)->account_id);
 
   UpdateLoginStatus();
 }
@@ -194,19 +239,42 @@ void SessionController::SetUserSessionOrder(
     active_session_id_ = user_sessions_[0]->session_id;
 
     for (auto& observer : observers_)
-      observer.ActiveUserChanged(user_sessions_[0]->account_id);
+      observer.OnActiveUserSessionChanged(user_sessions_[0]->account_id);
 
     UpdateLoginStatus();
   }
 }
 
+void SessionController::StartLock(StartLockCallback callback) {
+  DCHECK(start_lock_callback_.is_null());
+  start_lock_callback_ = std::move(callback);
+
+  LockStateController* const lock_state_controller =
+      Shell::Get()->lock_state_controller();
+
+  lock_state_controller->SetLockScreenDisplayedCallback(
+      base::Bind(&SessionController::OnLockAnimationFinished,
+                 weak_ptr_factory_.GetWeakPtr()));
+  lock_state_controller->OnStartingLock();
+}
+
+void SessionController::NotifyChromeLockAnimationsComplete() {
+  Shell::Get()->power_event_observer()->OnLockAnimationsComplete();
+}
+
 void SessionController::RunUnlockAnimation(
-    const RunUnlockAnimationCallback& callback) {
+    RunUnlockAnimationCallback callback) {
   is_unlocking_ = true;
 
   // Shell could have no instance in tests.
   if (Shell::HasInstance())
-    Shell::Get()->lock_state_controller()->OnLockScreenHide(callback);
+    Shell::Get()->lock_state_controller()->OnLockScreenHide(
+        std::move(callback));
+}
+
+void SessionController::NotifyChromeTerminating() {
+  for (auto& observer : observers_)
+    observer.OnChromeTerminating();
 }
 
 void SessionController::ClearUserSessionsForTest() {
@@ -229,7 +297,7 @@ void SessionController::SetSessionState(SessionState state) {
   const bool was_locked = state_ == SessionState::LOCKED;
   state_ = state;
   for (auto& observer : observers_)
-    observer.SessionStateChanged(state_);
+    observer.OnSessionStateChanged(state_);
 
   UpdateLoginStatus();
 
@@ -239,7 +307,7 @@ void SessionController::SetSessionState(SessionState state) {
       is_unlocking_ = false;
 
     for (auto& observer : observers_)
-      observer.LockStateChanged(locked);
+      observer.OnLockStateChanged(locked);
   }
 }
 
@@ -249,7 +317,7 @@ void SessionController::AddUserSession(mojom::UserSessionPtr user_session) {
   user_sessions_.push_back(std::move(user_session));
 
   for (auto& observer : observers_)
-    observer.UserAddedToSession(account_id);
+    observer.OnUserSessionAdded(account_id);
 }
 
 LoginStatus SessionController::CalculateLoginStatus() const {
@@ -317,7 +385,12 @@ void SessionController::UpdateLoginStatus() {
 
   login_status_ = new_login_status;
   for (auto& observer : observers_)
-    observer.LoginStatusChanged(login_status_);
+    observer.OnLoginStatusChanged(login_status_);
+}
+
+void SessionController::OnLockAnimationFinished() {
+  if (!start_lock_callback_.is_null())
+    std::move(start_lock_callback_).Run(true /* locked */);
 }
 
 }  // namespace ash

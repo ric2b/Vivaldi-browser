@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="it">
+<translation id="1017280919048282932">&amp;Aggiungi al dizionario</translation>
 <translation id="1018656279737460067">Operazione annullata</translation>
-<translation id="1030173864176315846">Ho stampato con successo <ph name="PAGE_NUMBER" /> pagine con <ph name="PRINTER_NAME" /></translation>
+<translation id="1026822031284433028">Carica immagine</translation>
 <translation id="1031362278801463162">Caricamento anteprima in corso</translation>
+<translation id="1047431265488717055">Copia te&amp;sto del link</translation>
 <translation id="1049795001945932310">&amp;Impostazioni lingua</translation>
+<translation id="1054153489933238809">Apri &amp;immagine originale in una nuova scheda</translation>
 <translation id="1056898198331236512">Avviso</translation>
 <translation id="1084824384139382525">Copia indi&amp;rizzo link</translation>
 <translation id="114140604515785785">Directory principale estensione:</translation>
@@ -15,7 +18,6 @@
 <translation id="1181037720776840403">Rimuovi</translation>
 <translation id="1187722533808055681">Riattivazioni</translation>
 <translation id="119944043368869598">Cancella tutto</translation>
-<translation id="1218323606465324064">Sto stampando <ph name="PAGE_NUMBER" /> pagine su <ph name="PRINTER_NAME" /></translation>
 <translation id="1221825588892235038">Solo selezione</translation>
 <translation id="1244303850296295656">Errore delle estensioni</translation>
 <translation id="1278049586634282054">Ispeziona viste:</translation>
@@ -25,6 +27,7 @@
 <translation id="1317502925920562130">Questa è la pagina iniziale che ti aspettavi?</translation>
 <translation id="1368832886055348810">Da sinistra a destra</translation>
 <translation id="1430915738399379752">Stampa</translation>
+<translation id="1451375123200651445">Pagina web, singolo file</translation>
 <translation id="1465176863081977902">C&amp;opia l'indirizzo dell'audio</translation>
 <translation id="1476607407192946488">&amp;Impostazioni lingua</translation>
 <translation id="1507705801791187716">Impressionante, senza errori!</translation>
@@ -32,11 +35,11 @@
 <translation id="1546280085599573572">Questa estensione ha cambiato la pagina mostrata quando fai clic sul pulsante Pagina iniziale.</translation>
 <translation id="1580652505892042215">Contesto:</translation>
 <translation id="1588438908519853928">Normale</translation>
+<translation id="1588870296199743671">Apri link con...</translation>
 <translation id="159359590073980872">Cache immagini</translation>
 <translation id="1601560923496285236">Applica</translation>
 <translation id="1603914832182249871">(Incognito)</translation>
 <translation id="1616206807336925449">Questa estensione non richiede autorizzazioni speciali.</translation>
-<translation id="1620510694547887537">Webcam</translation>
 <translation id="1627276047960621195">Descrittori di file</translation>
 <translation id="1635033183663317347">Installata dal supervisore.</translation>
 <translation id="1681120471812444678">Configura per aggiungere stampanti…</translation>
@@ -50,7 +53,6 @@
 <translation id="1744108098763830590">Pagina in background</translation>
 <translation id="176587472219019965">&amp;Nuova finestra</translation>
 <translation id="1769104665586091481">Apri link in una nuova &amp;finestra</translation>
-<translation id="1789575671122666129">Popup</translation>
 <translation id="1815083418640426271">Incolla come testo semplice</translation>
 <translation id="1828901632669367785">Stampa utilizzando la finestra di dialogo di sistema...</translation>
 <translation id="1838288018605456492">Clicca per impostare</translation>
@@ -69,16 +71,14 @@
 <translation id="2076269580855484719">Nascondi questo plug-in</translation>
 <translation id="2087822576218954668">Stampa: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Ricarica &amp;frame</translation>
-<translation id="2115291620696624944">Errore nella stampa di <ph name="PAGE_NUMBER" /> pagine con <ph name="PRINTER_NAME" /></translation>
 <translation id="2129825002735785149">Aggiorna il plug-in</translation>
-<translation id="2147827593068025794">Sincronizzazione in background</translation>
+<translation id="2142328300403846845">Apri link come</translation>
 <translation id="2148892889047469596">Trasmetti scheda</translation>
 <translation id="2150139952286079145">Cerca destinazioni</translation>
 <translation id="215753907730220065">Esci da schermo intero</translation>
 <translation id="2177950615300672361">Scheda di navigazione in incognito: <ph name="TAB_NAME" /></translation>
 <translation id="218070003709087997">Specifica un numero per indicare la quantità di copie da stampare (da 1 a 999).</translation>
 <translation id="2181927652428971824">Stampa con Vivaldi Documenti e altre destinazioni nel cloud. <ph name="BEGIN_LINK" />Accedi<ph name="END_LINK" /> per stampare con Google Cloud Print.</translation>
-<translation id="2187317261103489799">Rileva (predefinita)</translation>
 <translation id="219008588003277019">Modulo Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Nascondi pulsante</translation>
 <translation id="2218515861914035131">Incolla come testo semplice</translation>
@@ -103,13 +103,12 @@
 <translation id="2439110203301358333">Un altro programma sul computer ha aggiunto un'estensione che potrebbe modificare il funzionamento di Vivaldi.</translation>
 <translation id="2445081178310039857">La directory principale dell'estensione è obbligatoria.</translation>
 <translation id="2470702053775288986">Estensioni non supportate disattivate</translation>
-<translation id="2482878487686419369">Notifiche</translation>
 <translation id="2498436043474441766">Aggiungi stampanti</translation>
 <translation id="2501797496290880632">Digita una scorciatoia</translation>
 <translation id="2509495747794740764">Il valore Scala deve essere un numero compreso tra 10 e 200.</translation>
-<translation id="2509857212037838238">Installa <ph name="PLUGIN_NAME" /></translation>
 <translation id="253557089021624350">Numero attività keep-alive</translation>
 <translation id="2550212893339833758">Memoria scambiata</translation>
+<translation id="2553440850688409052">Nascondi questo plug-in</translation>
 <translation id="2580924999637585241">Totale: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Riattiva</translation>
@@ -124,8 +123,10 @@
 <translation id="2850541429955027218">Aggiungi tema</translation>
 <translation id="2861941300086904918">Gestione sicurezza Native Client</translation>
 <translation id="2868746137289129307">Questa estensione è obsoleta e disattivata in base ai criteri aziendali. Potrebbe essere attivata automaticamente quando sarà disponibile una nuova versione.</translation>
+<translation id="2889064240420137087">Apri link con...</translation>
 <translation id="2890678560483811744">Riferimento pagina oltre i limiti</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> non riesce a comunicare con questa stampante. Assicurati che la stampante sia collegata e riprova.</translation>
+<translation id="2914303854539667666">Genera password</translation>
 <translation id="2916745397441987255">Cerca estensioni</translation>
 <translation id="2932883381142163287">Segnala abuso</translation>
 <translation id="2941112035454246133">Bassa</translation>
@@ -137,17 +138,21 @@
 <translation id="3021678814754966447">&amp;Visualizza sorgente frame</translation>
 <translation id="302620147503052030">Mostra pulsante</translation>
 <translation id="3031601332414921114">Riprendi stampa</translation>
+<translation id="3036546437875325427">Abilita Flash</translation>
+<translation id="3046910703532196514">Pagina web, completa</translation>
+<translation id="3067198360141518313">Esegui questo plug-in</translation>
 <translation id="3080207940057008665">Un altro programma sul computer ha aggiunto un tema che potrebbe modificare il funzionamento di Vivaldi.</translation>
 <translation id="3084548735795614657">Rilasciare il mouse per l'installazione</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">Handle UTENTE</translation>
 <translation id="3129173833825111527">Margine sinistro</translation>
+<translation id="3144647712221361880">Apri link come</translation>
 <translation id="3149510190863420837">Applicazioni di Chrome</translation>
 <translation id="3154429428035006212">Offline per più di un mese</translation>
 <translation id="3222066309010235055">Prerenderizza: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Microfono</translation>
 <translation id="32279126412636473">Ricarica (⌘R)</translation>
 <translation id="3241680850019875542">Seleziona la directory principale dell'estensione di cui creare il pacchetto. Per aggiornare un'estensione, seleziona anche il file delle chiave privata da riutilizzare.</translation>
+<translation id="3269093882174072735">Carica immagine</translation>
 <translation id="3280237271814976245">Salva co&amp;me...</translation>
 <translation id="3285322247471302225">Nuova &amp;scheda</translation>
 <translation id="3288047731229977326">Le estensioni in esecuzione in modalità sviluppatore potrebbero danneggiare il computer. Se non sei uno sviluppatore, dovresti disattivare queste estensioni per la tua sicurezza.</translation>
@@ -166,7 +171,6 @@
 <translation id="3360297538363969800">Errore di stampa. Controlla la stampante e riprova.</translation>
 <translation id="3378572629723696641">Questa estensione potrebbe essere stata danneggiata.</translation>
 <translation id="3396331542604645348">La stampante selezionata non è disponibile o non è installata correttamente. Controlla la stampante o prova a selezionarne un'altra.</translation>
-<translation id="3427092606871434483">Consenti (predefinita)</translation>
 <translation id="3435896845095436175">Abilita</translation>
 <translation id="3439970425423980614">Apertura del PDF nell'anteprima</translation>
 <translation id="345693547134384690">Apri &amp;immagine in un'altra scheda</translation>
@@ -174,10 +178,10 @@
 <translation id="3468745736289470383">Condividi lo schermo</translation>
 <translation id="3487007233252413104">funzione anonima</translation>
 <translation id="3505030558724226696">Revoca accesso ai dispositivi</translation>
-<translation id="3509527969829946096">Questa opzione abilita il supporto della Trasmissione Streaming con la codifica dei flussi video utilizzando la piattaforma hardware.</translation>
 <translation id="3511307672085573050">Copia indi&amp;rizzo link</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vuole condividere una stampante &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; con un gruppo gestito da te: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Se accetti, tutti i membri del gruppo potranno utilizzare la stampante.</translation>
 <translation id="3587482841069643663">Tutti</translation>
+<translation id="3618849550573277856">Controlla “<ph name="LOOKUP_STRING" />”</translation>
 <translation id="3627588569887975815">Apri link in finestra di navigazione in inco&amp;gnito</translation>
 <translation id="3640006360782160348">Annulla impostazione stampante</translation>
 <translation id="3678156199662914018">Estensione: <ph name="EXTENSION_NAME" /></translation>
@@ -188,7 +192,7 @@
 <translation id="3730639321086573427">Destinazioni locali</translation>
 <translation id="3760460896538743390">Ispeziona pagina in &amp;background</translation>
 <translation id="3763401818161139108">Esegui sempre <ph name="ORIGIN" /></translation>
-<translation id="3789841737615482174">Installa</translation>
+<translation id="3797900183766075808">Cerca "<ph name="SEARCH_TERMS" />" &amp;su <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3798449238516105146">Versione</translation>
 <translation id="385051799172605136">Indietro</translation>
 <translation id="3855441664322950881">Pacchetto estensione</translation>
@@ -202,12 +206,12 @@
 <translation id="3925842537050977900">Rimuovi dalla piattaforma</translation>
 <translation id="3927932062596804919">Non consentire</translation>
 <translation id="3936390757709632190">&amp;Apri audio in nuova scheda</translation>
-<translation id="3936999098172113189">In attesa di stampare <ph name="PAGE_NUMBER" /> pagine su <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Indietro</translation>
 <translation id="3948116654032448504">&amp;Cerca <ph name="SEARCH_ENGINE" /> per immagini</translation>
 <translation id="3978267865113951599">(Interrotto)</translation>
 <translation id="3979395879372752341">Nuova estensione aggiunta (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">-</translation>
+<translation id="4022426551683927403">&amp;Aggiungi al dizionario</translation>
 <translation id="407520071244661467">Scala</translation>
 <translation id="4087089424473531098">È stata creata l'estensione:
 
@@ -220,9 +224,7 @@
 <translation id="4100839878934973028">Un altro programma sul computer ha aggiunto un'applicazione che potrebbe modificare il funzionamento di Vivaldi.</translation>
 <translation id="411666854932687641">Memoria privata</translation>
 <translation id="4130207949184424187">Questa estensione ha cambiato la pagina mostrata quando esegui ricerche dalla omnibox.</translation>
-<translation id="4130750466177569591">Accetto</translation>
 <translation id="4131410914670010031">In bianco e nero</translation>
-<translation id="4165986682804962316">Impostazioni sito</translation>
 <translation id="4176463684765177261">Disabilitato</translation>
 <translation id="4200983522494130825">Nuova &amp;scheda</translation>
 <translation id="420665587194630159">(Questa estensione è gestita e non può essere rimossa o disattivata.)</translation>
@@ -230,11 +232,11 @@
 <translation id="4240511609794012987">Memoria condivisa</translation>
 <translation id="4256316378292851214">Sal&amp;va video come...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K effettivi)</translation>
-<translation id="4312866146174492540">Blocca (predefinita)</translation>
 <translation id="431291515148403474">L'aggiunta di stampanti a Google Cloud Print ti consente di stampare da
           qualsiasi luogo a qualsiasi luogo. Condividi le tue stampanti con chi vuoi e
           stampa da Vivaldi, dal telefono, dal tablet, dal PC o da qualsiasi altro
           dispositivo connesso a Internet.</translation>
+<translation id="4345587454538109430">Configura...</translation>
 <translation id="4348766275249686434">Raccogli errori</translation>
 <translation id="4363771538994847871">Nessuna destinazione trovata per la trasmissione. Hai bisogno di assistenza?</translation>
 <translation id="4384652540891215547">Attiva l'estensione</translation>
@@ -257,21 +259,21 @@
 <translation id="4628314759732363424">Modifica...</translation>
 <translation id="4643612240819915418">&amp;Apri video in nuova scheda</translation>
 <translation id="4677772697204437347">Memoria GPU</translation>
+<translation id="4681930562518940301">Apri &amp;immagine originale in una nuova scheda</translation>
 <translation id="4688541352655220763">Puoi utilizzare questa funzione per visualizzare i contenuti di Vivaldi sulla TV o su altri dispositivi.</translation>
 <translation id="4711638718396952945">Ripristina impostazioni</translation>
 <translation id="4726710629007580002">Ci sono messaggi di avviso quando si tenta di installare questa estensione:</translation>
 <translation id="4742746985488890273">Attacca alla piattaforma</translation>
+<translation id="479536056609751218">Pagina web, solo HTML</translation>
 <translation id="4816492930507672669">Adatta alla pagina</translation>
 <translation id="4839303808932127586">Sal&amp;va video come...</translation>
 <translation id="4850258771229959924">Vista in Strumenti di sviluppo</translation>
-<translation id="4851858059374029925">Installare <ph name="PLUGIN_NAME" />? Installa soltanto i plug-in che ritieni attendibili.</translation>
 <translation id="488785315393301722">Mostra dettagli</translation>
 <translation id="4911714727432509308">Non sono state assegnate scorciatoie da tastiera a nessuna estensione.</translation>
 <translation id="4912643508233590958">Attivazione dalla modalità di sospensione</translation>
 <translation id="4918086044614829423">Accetto</translation>
 <translation id="4927301649992043040">Pacchetta estensione</translation>
 <translation id="4927753642311223124">Niente da vedere qui, vai avanti.</translation>
-<translation id="4957028442764970964">Impostazione della stampante.</translation>
 <translation id="4988526792673242964">Pagine</translation>
 <translation id="49896407730300355">Ruota in senso anti&amp;orario</translation>
 <translation id="4989966318180235467">Ispeziona pagina in &amp;background</translation>
@@ -292,6 +294,7 @@
 <translation id="5233736638227740678">&amp;Incolla</translation>
 <translation id="5265562206369321422">Offline per più di una settimana</translation>
 <translation id="5269977353971873915">Stampa non riuscita</translation>
+<translation id="5271549068863921519">Salva password</translation>
 <translation id="52912272896845572">Il file della chiave privata non è valido.</translation>
 <translation id="5301954838959518834">OK</translation>
 <translation id="5311260548612583999">File chiave privata (facoltativo):</translation>
@@ -327,7 +330,6 @@
 <translation id="5746169159649715125">Salva come PDF</translation>
 <translation id="5759728514498647443">I documenti inviati alla stampante tramite <ph name="APP_NAME" /> possono essere letti da <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Sal&amp;va audio come...</translation>
-<translation id="5778550464785688721">Controllo completo di dispositivi MIDI</translation>
 <translation id="5780973441651030252">Priorità processo</translation>
 <translation id="5804241973901381774">Autorizzazioni</translation>
 <translation id="5828633471261496623">Stampa in corso...</translation>
@@ -337,13 +339,13 @@
 <translation id="5849869942539715694">Pacchetta estensione...</translation>
 <translation id="5910363049092958439">Sa&amp;lva immagine come...</translation>
 <translation id="59174027418879706">Attiva</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 in uso}other{# in uso}}</translation>
 <translation id="5956585768868398362">È la pagina di ricerca prevista?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (picco di <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Controlla anche la pagina visualizzata quando fai clic sul pulsante Pagina iniziale o quando esegui ricerche dalla Omnibox.</translation>
+<translation id="5979421442488174909">&amp;Traduci in <ph name="LANGUAGE" /></translation>
 <translation id="6025215716629925253">Analisi dello stack</translation>
 <translation id="6040143037577758943">Chiudi</translation>
-<translation id="6051028581720248124">Se stampi presso una sede FedEx Office, accetti i relativi <ph name="START_LINK" />termini e condizioni d'uso<ph name="END_LINK" />.</translation>
+<translation id="6042308850641462728">Di più</translation>
 <translation id="6082651258230788217">Visualizza nella barra degli strumenti</translation>
 <translation id="6086814797483779854">Esegui con un Clic</translation>
 <translation id="6086846494333236931">Installato dall'amministratore</translation>
@@ -363,10 +365,12 @@
 <translation id="6248988683584659830">Cerca nelle impostazioni</translation>
 <translation id="6251870443722440887">Handle GDI</translation>
 <translation id="6264365405983206840">Selezion&amp;a tutto</translation>
+<translation id="6268252012308737255">Apri con <ph name="APP" /></translation>
 <translation id="6272643420381259437">Si è verificato un errore (<ph name="ERROR" />) durante il download del plug-in</translation>
 <translation id="6273677812470008672">Qualità</translation>
 <translation id="6295855836753816081">Salvataggio in corso...</translation>
 <translation id="6308937455967653460">Salva lin&amp;k come...</translation>
+<translation id="6314335155547195432">Genera password</translation>
 <translation id="6326855256003666642">Numero attività Keep-alive</translation>
 <translation id="6348109281845364640">Errore nell'impostare la stampante</translation>
 <translation id="6370021412472292592">Impossibile caricare il manifesto.</translation>
@@ -396,9 +400,10 @@
 <translation id="6807889908376551050">Mostra tutte...</translation>
 <translation id="6812841287760418429">Mantieni le modifiche</translation>
 <translation id="682123305478866682">Trasmetti desktop</translation>
+<translation id="6824564591481349393">Copia indirizzo &amp;email</translation>
 <translation id="6841186874966388268">Errori</translation>
-<translation id="6863910145616405334">Plug-in non trovato</translation>
 <translation id="6886871292305414135">Apri link in un'altra &amp;scheda</translation>
+<translation id="6892812721183419409">Apri link come <ph name="USER" /> 1</translation>
 <translation id="6900284862687837908">App in background: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Revoca accesso a file</translation>
 <translation id="6916590542764765824">Gestisci estensioni</translation>
@@ -413,8 +418,8 @@
 <translation id="7005848115657603926">Intervallo di pagine non valido; utilizza <ph name="EXAMPLE_PAGE_RANGE" /></translation>
 <translation id="7006634003215061422">Margine inferiore</translation>
 <translation id="7013485839273047434">Ottieni altre estensioni</translation>
+<translation id="7030031465713069059">Salva password</translation>
 <translation id="708060913198414444">C&amp;opia l'indirizzo dell'audio</translation>
-<translation id="7105578512429498960">Installa <ph name="PLUGIN_NAME" /> per visualizzare questi contenuti</translation>
 <translation id="7144878232160441200">Riprova</translation>
 <translation id="7175353351958621980">Caricato da:</translation>
 <translation id="7186088072322679094">Tieni nella barra degli strumenti</translation>
@@ -434,6 +439,7 @@
 <translation id="7427348830195639090">Pagina di sfondo: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7438940380767210568">Imposta stampante...</translation>
 <translation id="7453008956351770337">Se selezioni questa stampante, autorizzi la seguente estensione ad accedere alla tua stampante:</translation>
+<translation id="7473891865547856676">No grazie</translation>
 <translation id="749028671485790643">Persona <ph name="VALUE" /></translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7551643184018910560">Attacca alla piattaforma</translation>
@@ -452,9 +458,11 @@
 <translation id="7710568461918838723">&amp;Trasmissione...</translation>
 <translation id="7760004034676677601">È la pagina iniziale prevista?</translation>
 <translation id="7771452384635174008">Layout</translation>
+<translation id="7782102568078991263">Nessun altro suggerimento da Google</translation>
 <translation id="7786889348652477777">&amp;Ricarica app</translation>
 <translation id="7791543448312431591">Aggiungi</translation>
 <translation id="7800518121066352902">Ruota in senso anti&amp;orario</translation>
+<translation id="780301667611848630">No grazie</translation>
 <translation id="7814458197256864873">&amp;Copia</translation>
 <translation id="7818135753970109980">Nuovo tema aggiunto (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">C&amp;opia l'indirizzo del video</translation>
@@ -483,7 +491,6 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8004582292198964060">Browser</translation>
 <translation id="8023801379949507775">Aggiorna estensioni adesso</translation>
 <translation id="8032244173881942855">Impossibile trasmettere la scheda.</translation>
-<translation id="8037357227543935929">Chiedi (predefinita)</translation>
 <translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">Stampa come immagine</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
@@ -497,17 +504,18 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8338952601723052325">Sito web dello sviluppatore</translation>
 <translation id="8351419472474436977">Questa estensione ha assunto il controllo delle tue impostazioni proxy, il che significa che può cambiare, interrompere o spiare tutto ciò che fai online. Se non sei sicuro del motivo per cui si sia verificato questo cambiamento, è probabile che sia indesiderato.</translation>
 <translation id="8357224663288891423">Scorciatoie da tastiera per estensioni e app</translation>
+<translation id="8382913212082956454">Copia indirizzo &amp;email</translation>
 <translation id="839736845446313156">Registrati</translation>
 <translation id="8434480141477525001">Porta di debug NaCl</translation>
 <translation id="8437331208797669910">Accesso alla pagina</translation>
 <translation id="8449008133205184768">Incolla e mantieni lo stile</translation>
 <translation id="8463955938112983119">Plug-in <ph name="PLUGIN_NAME" /> disabilitato.</translation>
 <translation id="8465444703385715657">Per poter eseguire <ph name="PLUGIN_NAME" /> è necessaria la tua autorizzazione</translation>
+<translation id="8496717697661868878">Esegui questo plug-in</translation>
 <translation id="8512476990829870887">Termina processo</translation>
 <translation id="8523493869875972733">Mantieni le modifiche</translation>
 <translation id="8523849605371521713">Aggiunto da norme</translation>
 <translation id="8546306075665861288">Cache immagini</translation>
-<translation id="855705891482654011">Carica estensioni spacchettate</translation>
 <translation id="8569682776816196752">Nessuna destinazione trovata</translation>
 <translation id="8584280235376696778">&amp;Apri video in nuova scheda</translation>
 <translation id="8605428685123651449">Memoria SQLite</translation>
@@ -522,7 +530,6 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8719653885894320876">Download di <ph name="PLUGIN_NAME" /> non riuscito</translation>
 <translation id="873545264931343897">Al termine dell'aggiornamento del plug-in <ph name="PLUGIN_NAME" />, ricarica la pagina per attivarlo</translation>
 <translation id="8757090071857742562">Impossibile trasmettere il desktop. Verifica di avere confermato la richiesta di avvio della condivisione dello schermo.</translation>
-<translation id="8763204422633679667">Al termine dell'installazione del plug-in <ph name="PLUGIN_NAME" />, ricarica la pagina per attivarlo</translation>
 <translation id="8770406935328356739">Cartella principale estensione</translation>
 <translation id="8774934320277480003">Margine superiore</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vuole condividere una stampante &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; con te.</translation>
@@ -531,11 +538,13 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8800004011501252845">Mostra destinazioni per</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8813811964357448561">foglio</translation>
+<translation id="8823514049557262177">Copia testo del lin&amp;k</translation>
 <translation id="8845001906332463065">Ottieni aiuto</translation>
 <translation id="8859174528519900719">Frame secondario: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899285681604219177">Estensioni non supportate disattivate</translation>
 <translation id="8899851313684471736">Apri link in un'altra &amp;finestra</translation>
 <translation id="8910146161325739742">Condividi lo schermo</translation>
+<translation id="8915370057835397490">Caricamento suggerimento</translation>
 <translation id="8916476537757519021">Frame secondario modalità di navigazione in incognito: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8926518602592448999">Disattiva estensioni in modalità sviluppatore</translation>
 <translation id="8938356204940892126">Mi arrendo</translation>
@@ -547,7 +556,7 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="9027459031423301635">Apri link in una nuova &amp;scheda</translation>
 <translation id="9056810968620647706">Nessuna corrispondenza trovata.</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> è bloccato dalle norme aziendali</translation>
-<translation id="9145718805518496796">Pacchetto estensioni...</translation>
+<translation id="9137916601698928395">Apri link come <ph name="USER" /></translation>
 <translation id="9153341767479566106">Altre estensioni che non possono essere caricate:</translation>
 <translation id="9170848237812810038">&amp;Annulla</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" aggiunta</translation>

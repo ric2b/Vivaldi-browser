@@ -9,6 +9,14 @@ source_set("web") {
   sources = [
     "dom_altering_lock.h",
     "dom_altering_lock.mm",
+    "mailto_handler.h",
+    "mailto_handler.mm",
+    "mailto_handler_gmail.h",
+    "mailto_handler_gmail.mm",
+    "mailto_handler_system_mail.h",
+    "mailto_handler_system_mail.mm",
+    "mailto_url_rewriter.h",
+    "mailto_url_rewriter.mm",
     "navigation_manager_util.h",
     "navigation_manager_util.mm",
     "network_activity_indicator_tab_helper.h",
@@ -22,13 +30,17 @@ source_set("web") {
     ":sad_tab_tab_helper_delegate",
     "//base",
     "//components/strings",
+    "//ios/chrome/app/strings:ios_strings_grit",
+    "//ios/chrome/browser",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/alert_coordinator:alert_coordinator",
+    "//ios/chrome/browser/ui/commands:commands",
     "//ios/chrome/browser/ui/sad_tab:sad_tab",
     "//ios/chrome/browser/ui/util:util",
     "//ios/web",
     "//ios/web:web_arc",
     "//ui/base",
+    "//url",
   ]
 }
 
@@ -43,6 +55,10 @@ source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
+    "mailto_handler_gmail_unittest.mm",
+    "mailto_handler_system_mail_unittest.mm",
+    "mailto_handler_unittest.mm",
+    "mailto_url_rewriter_unittest.mm",
     "navigation_manager_util_unittest.mm",
     "network_activity_indicator_tab_helper_unittest.mm",
     "repost_form_tab_helper_unittest.mm",
@@ -50,11 +66,13 @@ source_set("unit_tests") {
   ]
   deps = [
     ":sad_tab_tab_helper_delegate",
+    ":test_support",
     ":web",
     "//base:base",
     "//base/test:test_support",
     "//components/strings:components_strings_grit",
     "//ios/chrome/browser/ui:ui",
+    "//ios/chrome/browser/ui/sad_tab",
     "//ios/chrome/test:test_support",
     "//ios/web:test_support",
     "//ios/web:web_arc",
@@ -162,12 +180,22 @@ js_compile_bundle("chrome_bundle") {
   closure_entry_point = "__crWeb.chromeBundle"
   sources = [
     "resources/chrome_bundle.js",
-    "resources/payment_request.js",
     "resources/print.js",
+  ]
+
+  deps = [
+    ":payment_request",
+  ]
+}
+
+js_compile_unchecked("payment_request") {
+  sources = [
+    "resources/payment_request.js",
   ]
 }
 
 source_set("web_internal") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "auto_reload_bridge.h",
     "auto_reload_bridge.mm",
@@ -209,8 +237,8 @@ source_set("web_internal") {
     "//ios/chrome/browser/ssl",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui/commands",
-    "//ios/chrome/browser/ui/overscroll_actions",
     "//ios/chrome/browser/ui/static_content",
+    "//ios/chrome/browser/web",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/voice",
     "//ios/third_party/material_components_ios",
@@ -225,22 +253,27 @@ source_set("web_internal") {
 }
 
 source_set("test_support") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "chrome_web_test.h",
     "chrome_web_test.mm",
+    "fake_mailto_handler_helpers.h",
+    "fake_mailto_handler_helpers.mm",
   ]
   deps = [
     "//components/password_manager/core/browser:test_support",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/ui:ui_internal",
+    "//ios/chrome/browser/web",
     "//ios/web",
     "//ios/web:test_support",
   ]
 }
 
 source_set("unit_tests_internal") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "auto_reload_controller_unittest.mm",
@@ -256,6 +289,7 @@ source_set("unit_tests_internal") {
     "//base/test:test_support",
     "//components/content_settings/core/browser",
     "//components/infobars/core",
+    "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/content_settings:content_settings",
     "//ios/chrome/browser/find_in_page",
@@ -271,6 +305,7 @@ source_set("unit_tests_internal") {
 }
 
 source_set("eg_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "browsing_egtest.mm",
@@ -319,6 +354,7 @@ source_set("eg_tests") {
 }
 
 source_set("perf_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "early_page_script_perftest.mm",

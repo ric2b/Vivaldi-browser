@@ -26,6 +26,7 @@
 #include "services/ui/ws/window_server.h"
 #include "services/ui/ws/window_tree.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/events/event.h"
 
 namespace ui {
@@ -68,6 +69,9 @@ class WindowManagerStateTest : public testing::Test {
   WindowServer* window_server() {
     return window_event_targeting_helper_.window_server();
   }
+  ui::CursorType cursor_type() const {
+    return window_event_targeting_helper_.cursor_type();
+  }
 
   void EmbedAt(WindowTree* tree,
                const ClientWindowId& embed_window_id,
@@ -75,7 +79,7 @@ class WindowManagerStateTest : public testing::Test {
                WindowTree** embed_tree,
                TestWindowTreeClient** embed_client_proxy) {
     mojom::WindowTreeClientPtr embed_client;
-    mojom::WindowTreeClientRequest client_request(&embed_client);
+    auto client_request = mojo::MakeRequest(&embed_client);
     ASSERT_TRUE(
         tree->Embed(embed_window_id, std::move(embed_client), embed_flags));
     TestWindowTreeClient* client =
@@ -352,7 +356,8 @@ TEST_F(WindowManagerStateTest, ClientHandlesEvent) {
   EXPECT_EQ("InputEvent window=1,1 event_action=7",
             ChangesToDescription1(*tracker->changes())[0]);
 
-  window_manager_state()->OnEventAck(tree(), mojom::EventResult::HANDLED);
+  EXPECT_TRUE(WindowManagerStateTestApi(window_manager_state())
+                  .AckInFlightEvent(mojom::EventResult::HANDLED));
   EXPECT_FALSE(window_manager()->on_accelerator_called());
 }
 
@@ -370,7 +375,8 @@ TEST_F(WindowManagerStateTest, AcceleratorDeleted) {
             ChangesToDescription1(*tracker->changes())[0]);
 
   accelerator.reset();
-  window_manager_state()->OnEventAck(tree(), mojom::EventResult::UNHANDLED);
+  EXPECT_TRUE(WindowManagerStateTestApi(window_manager_state())
+                  .AckInFlightEvent(mojom::EventResult::UNHANDLED));
   EXPECT_FALSE(window_manager()->on_accelerator_called());
 }
 
@@ -638,8 +644,6 @@ TEST(WindowManagerStateShutdownTest, DestroyTreeBeforeDisplay) {
 
 TEST_F(WindowManagerStateTest, CursorResetOverNoTarget) {
   ASSERT_EQ(1u, window_server()->display_manager()->displays().size());
-  Display* display = *(window_server()->display_manager()->displays().begin());
-  DisplayTestApi display_test_api(display);
   const ClientWindowId child_window_id(11);
   window_tree()->NewWindow(child_window_id, ServerWindow::Properties());
   ServerWindow* child_window =
@@ -647,8 +651,8 @@ TEST_F(WindowManagerStateTest, CursorResetOverNoTarget) {
   window_tree()->AddWindow(FirstRootId(window_tree()), child_window_id);
   child_window->SetVisible(true);
   child_window->SetBounds(gfx::Rect(0, 0, 20, 20));
-  child_window->parent()->SetPredefinedCursor(ui::mojom::CursorType::COPY);
-  EXPECT_EQ(ui::mojom::CursorType::COPY, display_test_api.last_cursor());
+  child_window->parent()->SetCursor(ui::CursorData(ui::CursorType::kCopy));
+  EXPECT_EQ(ui::CursorType::kCopy, cursor_type());
   // Move the mouse outside the bounds of the child, so that the mouse is not
   // over any valid windows. Cursor should change to POINTER.
   ui::PointerEvent move(
@@ -658,7 +662,7 @@ TEST_F(WindowManagerStateTest, CursorResetOverNoTarget) {
   window_manager_state()->ProcessEvent(move, 0);
   // The event isn't over a valid target, which should trigger resetting the
   // cursor to POINTER.
-  EXPECT_EQ(ui::mojom::CursorType::POINTER, display_test_api.last_cursor());
+  EXPECT_EQ(ui::CursorType::kPointer, cursor_type());
 }
 
 }  // namespace test

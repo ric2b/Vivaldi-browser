@@ -64,10 +64,12 @@ Pentru informații privind confidențialitatea, accesați Politica de confidenț
 <translation id="225614027745146050">Bun venit</translation>
 <translation id="228809120910082333">Confirmați mai jos contul și codul PIN pentru a permite accesarea prin intermediul Chromoting.</translation>
 <translation id="2314101195544969792">Sesiunea <ph name="APPLICATION_NAME" /> este inactivă de ceva timp și în curând va fi deconectată.</translation>
+<translation id="2317666076142640974">Încearcă în avans noua <ph name="LINK_BEGIN" />aplicație web Desktop la distanță Chrome<ph name="LINK_END" />. Ne-ar face plăcere să primim feedbackul tău.</translation>
 <translation id="2353140552984634198">Puteți accesa acest computer în siguranță utilizând Chromoting.</translation>
 <translation id="2359808026110333948">Continuă</translation>
 <translation id="2366718077645204424">Gazda nu poate fi accesată. Acest lucru este cauzat, probabil, de configurația rețelei pe care o utilizați.</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  Ultima dată online <ph name="RELATIVE_TIMESTAMP" />.</translation>
+<translation id="2405928220797050937">Această aplicație nu mai este acceptată. Pentru a te asigura că beneficiezi de cele mai recente funcții și actualizări de securitate, folosește <ph name="LINK_BEGIN" />aplicația web Desktop la distanță Chrome<ph name="LINK_END" />.</translation>
 <translation id="2499160551253595098">Ajutați-ne să îmbunătățim Desktop la distanță Chrome, permițându-ne să colectăm statistici de utilizare și rapoarte de blocare.</translation>
 <translation id="2512228156274966424">NOTĂ: pentru a vă asigura că toate comenzile rapide de la tastatură sunt disponibile, puteți seta Desktop la distanță Chrome în modul „Deschideți ca fereastră”.</translation>
 <translation id="2540992418118313681">Dorești să permiți accesul la acest computer altui utilizator, pentru ca acesta să îl poată vedea și controla?</translation>
@@ -95,7 +97,6 @@ Pentru informații privind confidențialitatea, accesați Politica de confidenț
 <translation id="3194245623920924351">Desktop la distanță Chrome</translation>
 <translation id="3197730452537982411">Desktop la distanță</translation>
 <translation id="3258789396564295715">Puteți accesa acest computer în siguranță utilizând Desktop la distanță Chrome.</translation>
-<translation id="327263477022142889">Doriți să ne ajutați să îmbunătățim Desktop la distanță Chrome? <ph name="LINK_BEGIN" />Participați la sondaj.<ph name="LINK_END" /></translation>
 <translation id="3286521253923406898">Controler gazdă Chromoting</translation>
 <translation id="332624996707057614">Modificați numele computerului</translation>
 <translation id="3339299787263251426">Accesează computerul în siguranță prin internet</translation>
@@ -111,6 +112,7 @@ Pentru informații privind confidențialitatea, accesați Politica de confidenț
 <translation id="3649256019230929621">Minimizați fereastra</translation>
 <translation id="369442766917958684">Offline.</translation>
 <translation id="3695446226812920698">Află cum</translation>
+<translation id="3718805989288361841">A apărut o eroare la setările politicii pentru Desktop la distanță Chrome. Contactează administratorul de sistem pentru asistență.</translation>
 <translation id="3776024066357219166">Sesiunea Desktop la distanță Chrome s-a încheiat.</translation>
 <translation id="3785447812627779171">Gazdă
 Chromoting</translation>
@@ -137,7 +139,6 @@ Chromoting</translation>
 <translation id="4277463233460010382">Acest computer este configurat să permită conectarea unuia sau a mai multor clienți fără introducerea unui PIN.</translation>
 <translation id="4277736576214464567">Codul de acces este greșit. Încercați din nou.</translation>
 <translation id="4361728918881830843">Pentru a activa conexiunile la distanță pentru un alt computer, instalați Desktop la distanță Chrome pe acesta și dați clic pe „<ph name="BUTTON_NAME" />”.</translation>
-<translation id="4368630973089289038">Doriți să ne ajutați să îmbunătățim Chromoting? <ph name="LINK_BEGIN" />Participați la sondaj.<ph name="LINK_END" /></translation>
 <translation id="4394049700291259645">Dezactivează</translation>
 <translation id="4405930547258349619">Biblioteca nucleu</translation>
 <translation id="4430435636878359009">Dezactivați conexiunile la distanță la acest computer</translation>
@@ -232,6 +233,7 @@ la distanță Chrome</translation>
 <translation id="6930242544192836755">Durată</translation>
 <translation id="6939719207673461467">Afișați/Ascundeți tastatura.</translation>
 <translation id="6944854424004126054">Restabiliți fereastra</translation>
+<translation id="6948905685698011662">Desktop la distanță Chrome este acum pe web! Încearcă <ph name="LINK_BEGIN" />aplicația web gratuită<ph name="LINK_END" />.</translation>
 <translation id="6963936880795878952">Conexiunile cu computerul la distanță sunt blocate temporar, deoarece cineva a încercat să se conecteze la acesta folosind un cod PIN nevalid. Încearcă din nou mai târziu.</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Sigur doriți să dezactivați conexiunile la distanță la <ph name="HOSTNAME" />? Dacă vă răzgândiți, va trebui să accesați computerul respectiv pentru a reactiva conexiunile.</translation>
@@ -248,6 +250,7 @@ la distanță Chrome</translation>
 <translation id="7401733114166276557">Desktop la distanță Chrome</translation>
 <translation id="7434397035092923453">Acces interzis pentru clientul: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="7444276978508498879">Client conectat: <ph name="CLIENT_USERNAME" />.</translation>
+<translation id="7589941250119944644">Desktop la distanță Chrome se mută într-o locație nouă pe web. Încearcă <ph name="LINK_BEGIN" />aplicația web<ph name="LINK_END" /> – este rapidă și gratuită, cu aceleași funcții ca înainte.</translation>
 <translation id="7606912958770842224">Activați conexiunile la distanță</translation>
 <translation id="7649070708921625228">Ajutor</translation>
 <translation id="7658239707568436148">Anulează</translation>

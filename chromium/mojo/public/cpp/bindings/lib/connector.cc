@@ -14,8 +14,10 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_local.h"
+#include "base/trace_event/trace_event.h"
 #include "mojo/public/cpp/bindings/lib/may_auto_lock.h"
 #include "mojo/public/cpp/bindings/sync_handle_watcher.h"
 #include "mojo/public/cpp/system/wait.h"
@@ -25,11 +27,10 @@ namespace mojo {
 namespace {
 
 // The NestingObserver for each thread. Note that this is always a
-// Connector::MessageLoopNestingObserver; we use the base type here because that
+// Connector::RunLoopNestingObserver; we use the base type here because that
 // subclass is private to Connector.
-base::LazyInstance<
-    base::ThreadLocalPointer<base::MessageLoop::NestingObserver>>::Leaky
-    g_tls_nesting_observer = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<base::ThreadLocalPointer<base::RunLoop::NestingObserver>>::
+    Leaky g_tls_nesting_observer = LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
 
@@ -44,7 +45,7 @@ class Connector::ActiveDispatchTracker {
 
  private:
   const base::WeakPtr<Connector> connector_;
-  MessageLoopNestingObserver* const nesting_observer_;
+  RunLoopNestingObserver* const nesting_observer_;
   ActiveDispatchTracker* outer_tracker_ = nullptr;
   ActiveDispatchTracker* inner_tracker_ = nullptr;
 
@@ -52,41 +53,42 @@ class Connector::ActiveDispatchTracker {
 };
 
 // Watches the MessageLoop on the current thread. Notifies the current chain of
-// ActiveDispatchTrackers when a nested message loop is started.
-class Connector::MessageLoopNestingObserver
-    : public base::MessageLoop::NestingObserver,
+// ActiveDispatchTrackers when a nested run loop is started.
+class Connector::RunLoopNestingObserver
+    : public base::RunLoop::NestingObserver,
       public base::MessageLoop::DestructionObserver {
  public:
-  MessageLoopNestingObserver() {
-    base::MessageLoop::current()->AddNestingObserver(this);
+  RunLoopNestingObserver() {
+    base::RunLoop::AddNestingObserverOnCurrentThread(this);
     base::MessageLoop::current()->AddDestructionObserver(this);
   }
 
-  ~MessageLoopNestingObserver() override {}
+  ~RunLoopNestingObserver() override {}
 
-  // base::MessageLoop::NestingObserver:
-  void OnBeginNestedMessageLoop() override {
+  // base::RunLoop::NestingObserver:
+  void OnBeginNestedRunLoop() override {
     if (top_tracker_)
       top_tracker_->NotifyBeginNesting();
   }
 
   // base::MessageLoop::DestructionObserver:
   void WillDestroyCurrentMessageLoop() override {
-    base::MessageLoop::current()->RemoveNestingObserver(this);
+    base::RunLoop::RemoveNestingObserverOnCurrentThread(this);
     base::MessageLoop::current()->RemoveDestructionObserver(this);
     DCHECK_EQ(this, g_tls_nesting_observer.Get().Get());
     g_tls_nesting_observer.Get().Set(nullptr);
     delete this;
   }
 
-  static MessageLoopNestingObserver* GetForThread() {
+  static RunLoopNestingObserver* GetForThread() {
     if (!base::MessageLoop::current() ||
-        !base::MessageLoop::current()->nesting_allowed())
+        !base::RunLoop::IsNestingAllowedOnCurrentThread()) {
       return nullptr;
-    auto* observer = static_cast<MessageLoopNestingObserver*>(
+    }
+    auto* observer = static_cast<RunLoopNestingObserver*>(
         g_tls_nesting_observer.Get().Get());
     if (!observer) {
-      observer = new MessageLoopNestingObserver;
+      observer = new RunLoopNestingObserver;
       g_tls_nesting_observer.Get().Set(observer);
     }
     return observer;
@@ -97,7 +99,7 @@ class Connector::MessageLoopNestingObserver
 
   ActiveDispatchTracker* top_tracker_ = nullptr;
 
-  DISALLOW_COPY_AND_ASSIGN(MessageLoopNestingObserver);
+  DISALLOW_COPY_AND_ASSIGN(RunLoopNestingObserver);
 };
 
 Connector::ActiveDispatchTracker::ActiveDispatchTracker(
@@ -132,7 +134,7 @@ Connector::Connector(ScopedMessagePipeHandle message_pipe,
                      scoped_refptr<base::SingleThreadTaskRunner> runner)
     : message_pipe_(std::move(message_pipe)),
       task_runner_(std::move(runner)),
-      nesting_observer_(MessageLoopNestingObserver::GetForThread()),
+      nesting_observer_(RunLoopNestingObserver::GetForThread()),
       weak_factory_(this) {
   if (config == MULTI_THREADED_SEND)
     lock_.emplace();
@@ -301,9 +303,10 @@ bool Connector::SyncWatch(const bool* should_stop) {
 }
 
 void Connector::SetWatcherHeapProfilerTag(const char* tag) {
-  heap_profiler_tag_ = tag;
-  if (handle_watcher_) {
-    handle_watcher_->set_heap_profiler_tag(tag);
+  if (tag) {
+    heap_profiler_tag_ = tag;
+    if (handle_watcher_)
+      handle_watcher_->set_heap_profiler_tag(tag);
   }
 }
 
@@ -341,8 +344,7 @@ void Connector::WaitToReadMore() {
 
   handle_watcher_.reset(new SimpleWatcher(
       FROM_HERE, SimpleWatcher::ArmingPolicy::MANUAL, task_runner_));
-  if (heap_profiler_tag_)
-    handle_watcher_->set_heap_profiler_tag(heap_profiler_tag_);
+  handle_watcher_->set_heap_profiler_tag(heap_profiler_tag_);
   MojoResult rv = handle_watcher_->Watch(
       message_pipe_.get(), MOJO_HANDLE_SIGNAL_READABLE,
       base::Bind(&Connector::OnWatcherHandleReady, base::Unretained(this)));
@@ -383,6 +385,7 @@ bool Connector::ReadSingleMessage(MojoResult* read_result) {
       dispatch_tracker.emplace(weak_self);
     }
 
+    TRACE_EVENT0("mojom", heap_profiler_tag_);
     receiver_result =
         incoming_receiver_ && incoming_receiver_->Accept(&message);
 

@@ -36,7 +36,7 @@ class VisibleSelectionTest : public EditingTestBase {
   void SetSelection(VisibleSelectionTemplate<Strategy>& selection,
                     int base,
                     int extend) {
-    Node* node = GetDocument().body()->FirstChild();
+    Node* node = GetDocument().body()->firstChild();
     selection = CreateVisibleSelection(
         typename SelectionTemplate<Strategy>::Builder(selection.AsSelection())
             .Collapse(PositionTemplate<Strategy>(node, base))
@@ -104,11 +104,11 @@ TEST_F(VisibleSelectionTest, expandUsingGranularity) {
   SetBodyContent(body_content);
   ShadowRoot* shadow_root = SetShadowContent(shadow_content, "host");
 
-  Node* one = GetDocument().GetElementById("one")->FirstChild();
-  Node* two = GetDocument().GetElementById("two")->FirstChild();
-  Node* three = shadow_root->GetElementById("three")->FirstChild();
-  Node* four = shadow_root->GetElementById("four")->FirstChild();
-  Node* five = shadow_root->GetElementById("five")->FirstChild();
+  Node* one = GetDocument().getElementById("one")->firstChild();
+  Node* two = GetDocument().getElementById("two")->firstChild();
+  Node* three = shadow_root->getElementById("three")->firstChild();
+  Node* four = shadow_root->getElementById("four")->firstChild();
+  Node* five = shadow_root->getElementById("five")->firstChild();
 
   VisibleSelection selection;
   VisibleSelectionInFlatTree selection_in_flat_tree;
@@ -249,7 +249,7 @@ TEST_F(VisibleSelectionTest, SelectAllWithInputElement) {
   SetBodyContent("<input>123");
   Element* const html_element = GetDocument().documentElement();
   Element* const input = GetDocument().QuerySelector("input");
-  Node* const last_child = GetDocument().body()->LastChild();
+  Node* const last_child = GetDocument().body()->lastChild();
 
   const VisibleSelection& visible_selectin_in_dom_tree = CreateVisibleSelection(
       SelectionInDOMTree::Builder()
@@ -303,10 +303,10 @@ TEST_F(VisibleSelectionTest, ShadowCrossing) {
 
   EXPECT_EQ(Position(host, PositionAnchorType::kBeforeAnchor),
             selection.Start());
-  EXPECT_EQ(Position(one->FirstChild(), 0), selection.end());
-  EXPECT_EQ(PositionInFlatTree(one->FirstChild(), 0),
+  EXPECT_EQ(Position(one->firstChild(), 0), selection.end());
+  EXPECT_EQ(PositionInFlatTree(one->firstChild(), 0),
             selection_in_flat_tree.Start());
-  EXPECT_EQ(PositionInFlatTree(six->FirstChild(), 2),
+  EXPECT_EQ(PositionInFlatTree(six->firstChild(), 2),
             selection_in_flat_tree.end());
 }
 
@@ -336,11 +336,11 @@ TEST_F(VisibleSelectionTest, ShadowV0DistributedNodes) {
           .Extend(PositionInFlatTree::LastPositionInNode(two))
           .Build());
 
-  EXPECT_EQ(Position(one->FirstChild(), 0), selection.Start());
-  EXPECT_EQ(Position(two->FirstChild(), 2), selection.end());
-  EXPECT_EQ(PositionInFlatTree(five->FirstChild(), 0),
+  EXPECT_EQ(Position(one->firstChild(), 0), selection.Start());
+  EXPECT_EQ(Position(two->firstChild(), 2), selection.end());
+  EXPECT_EQ(PositionInFlatTree(five->firstChild(), 0),
             selection_in_flat_tree.Start());
-  EXPECT_EQ(PositionInFlatTree(five->FirstChild(), 2),
+  EXPECT_EQ(PositionInFlatTree(five->firstChild(), 2),
             selection_in_flat_tree.end());
 }
 
@@ -384,10 +384,10 @@ TEST_F(VisibleSelectionTest, ShadowNested) {
 
   EXPECT_EQ(Position(host, PositionAnchorType::kBeforeAnchor),
             selection.Start());
-  EXPECT_EQ(Position(one->FirstChild(), 0), selection.end());
-  EXPECT_EQ(PositionInFlatTree(eight->FirstChild(), 2),
+  EXPECT_EQ(Position(one->firstChild(), 0), selection.end());
+  EXPECT_EQ(PositionInFlatTree(eight->firstChild(), 2),
             selection_in_flat_tree.Start());
-  EXPECT_EQ(PositionInFlatTree(eight->FirstChild(), 2),
+  EXPECT_EQ(PositionInFlatTree(eight->firstChild(), 2),
             selection_in_flat_tree.end());
 }
 
@@ -519,23 +519,23 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
 TEST_F(VisibleSelectionTest, updateIfNeededWithShadowHost) {
   SetBodyContent("<div id=host></div><div id=sample>foo</div>");
   SetShadowContent("<content>", "host");
-  Element* sample = GetDocument().GetElementById("sample");
+  Element* sample = GetDocument().getElementById("sample");
 
   // Simulates saving selection in undo stack.
   VisibleSelection selection =
       CreateVisibleSelection(SelectionInDOMTree::Builder()
-                                 .Collapse(Position(sample->FirstChild(), 0))
+                                 .Collapse(Position(sample->firstChild(), 0))
                                  .Build());
-  EXPECT_EQ(Position(sample->FirstChild(), 0), selection.Start());
+  EXPECT_EQ(Position(sample->firstChild(), 0), selection.Start());
 
   // Simulates modifying DOM tree to invalidate distribution.
-  Element* host = GetDocument().GetElementById("host");
+  Element* host = GetDocument().getElementById("host");
   host->AppendChild(sample);
   GetDocument().UpdateStyleAndLayout();
 
   // Simulates to restore selection from undo stack.
   selection = CreateVisibleSelection(selection.AsSelection());
-  EXPECT_EQ(Position(sample->FirstChild(), 0), selection.Start());
+  EXPECT_EQ(Position(sample->firstChild(), 0), selection.Start());
 }
 
 }  // namespace blink

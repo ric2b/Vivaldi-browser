@@ -9,13 +9,18 @@ namespace features {
 
 // Enable GPU Rasterization by default. This can still be overridden by
 // --force-gpu-rasterization or --disable-gpu-rasterization.
-#if defined(OS_MACOSX)
-// DefaultEnableGpuRasterization has launched on Mac.
+#if defined(OS_MACOSX) || defined(OS_WIN)
+// DefaultEnableGpuRasterization has launched on Mac and Windows.
 const base::Feature kDefaultEnableGpuRasterization{
     "DefaultEnableGpuRasterization", base::FEATURE_ENABLED_BY_DEFAULT};
 #else
 const base::Feature kDefaultEnableGpuRasterization{
     "DefaultEnableGpuRasterization", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
+
+// Enables the GPU scheduler. This can still be overridden by
+// --enable-gpu-scheduler or --disable-gpu-scheduler.
+const base::Feature kGpuScheduler{"GpuScheduler",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features

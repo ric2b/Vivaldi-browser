@@ -18,6 +18,7 @@ VivaldiAPIPermissions::GetAllPermissions() const {
       // Register permissions for all extension types.
       {APIPermission::kAutoUpdate, "autoUpdate"},
       {APIPermission::kBookmarksPrivate, "bookmarksPrivate"},
+      {APIPermission::kCalendar, "calendar"},
       {APIPermission::kDevtoolsPrivate, "devtoolsPrivate"},
       {APIPermission::kEditCommand, "editcommand" },
       {APIPermission::kExtensionActionUtils, "extensionActionUtils"},

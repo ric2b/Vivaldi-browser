@@ -21,8 +21,8 @@
 #include "net/quic/core/quic_bandwidth.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/socket/next_proto.h"
-#include "net/spdy/spdy_framer.h"  // TODO(willchan): Reconsider this.
-#include "net/spdy/spdy_protocol.h"
+#include "net/spdy/core/spdy_framer.h"  // TODO(willchan): Reconsider this.
+#include "net/spdy/core/spdy_protocol.h"
 #include "url/scheme_host_port.h"
 
 namespace base {
@@ -240,7 +240,7 @@ class NET_EXPORT HttpServerProperties {
 
   // Return all alternative services for |origin|, including broken ones.
   // Returned alternative services never have empty hostnames.
-  virtual AlternativeServiceVector GetAlternativeServices(
+  virtual AlternativeServiceInfoVector GetAlternativeServiceInfos(
       const url::SchemeHostPort& origin) = 0;
 
   // Set a single alternative service for |origin|.  Previous alternative

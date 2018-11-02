@@ -5,6 +5,7 @@
 #include "net/http/http_stream_factory_impl_request.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -14,7 +15,7 @@
 #include "net/http/http_stream_factory_test_util.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_service.h"
-#include "net/spdy/spdy_test_util_common.h"
+#include "net/spdy/chromium/spdy_test_util_common.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using testing::_;

@@ -26,12 +26,10 @@ ChromeLayoutProvider::CreateLayoutProvider() {
 
 int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
   switch (metric) {
-    case DISTANCE_BUTTON_MAX_LINKABLE_WIDTH:
-      return 0;
     case DISTANCE_BUTTON_MINIMUM_WIDTH:
       return views::kMinimumButtonWidth;
-    case DISTANCE_DIALOG_BUTTON_MARGIN:
-      return views::kButtonHEdgeMarginNew;
+    case DISTANCE_CONTROL_LIST_VERTICAL:
+      return GetDistanceMetric(DISTANCE_UNRELATED_CONTROL_VERTICAL);
     case DISTANCE_DIALOG_BUTTON_TOP:
       return 0;
     case DISTANCE_RELATED_CONTROL_HORIZONTAL_SMALL:
@@ -42,8 +40,6 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return views::kItemLabelSpacing;
     case DISTANCE_SUBSECTION_HORIZONTAL_INDENT:
       return views::kCheckboxIndent;
-    case DISTANCE_PANEL_CONTENT_MARGIN:
-      return views::kPanelHorizMargin;
     case DISTANCE_UNRELATED_CONTROL_HORIZONTAL:
       return views::kUnrelatedControlHorizontalSpacing;
     case DISTANCE_UNRELATED_CONTROL_HORIZONTAL_LARGE:
@@ -80,8 +76,4 @@ bool ChromeLayoutProvider::ShouldShowWindowIcon() const {
 
 bool ChromeLayoutProvider::IsHarmonyMode() const {
   return false;
-}
-
-int ChromeLayoutProvider::GetDialogPreferredWidth(DialogWidth width) const {
-  return 0;
 }

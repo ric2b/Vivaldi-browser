@@ -13,7 +13,8 @@ class CommandLine;
 
 namespace mojo {
 namespace edk {
-class PendingProcessConnection;
+class IncomingBrokerClientInvitation;
+class OutgoingBrokerClientInvitation;
 }
 }
 
@@ -24,13 +25,14 @@ namespace service_manager {
 // |command_line|. The launched process may extract the corresponding
 // ServiceRequest by calling GetServiceRequestFromCommandLine().
 mojom::ServicePtr PassServiceRequestOnCommandLine(
-    mojo::edk::PendingProcessConnection* connection,
+    mojo::edk::OutgoingBrokerClientInvitation* invitation,
     base::CommandLine* command_line);
 
 // Extracts a ServiceRequest from the command line of the current process.
 // The parent of this process should have passed a request using
 // PassServiceRequestOnCommandLine().
-mojom::ServiceRequest GetServiceRequestFromCommandLine();
+mojom::ServiceRequest GetServiceRequestFromCommandLine(
+    mojo::edk::IncomingBrokerClientInvitation* invitation);
 
 // Returns true if the ServiceRequest came via the command line from a service
 // manager

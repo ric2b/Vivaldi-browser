@@ -53,6 +53,7 @@ class AshWindowTreeHost;
 class BootSplashScreen;
 enum class LoginStatus;
 class PanelLayoutManager;
+class Shelf;
 class ShelfLayoutManager;
 class StackingController;
 class StatusAreaWidget;
@@ -62,7 +63,6 @@ class SystemWallpaperController;
 class TouchHudDebug;
 class TouchHudProjection;
 class WallpaperWidgetController;
-class WmShelf;
 class WorkspaceController;
 
 namespace mus {
@@ -137,14 +137,12 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
 
   wm::WorkspaceWindowState GetWorkspaceWindowState();
 
-  WmShelf* wm_shelf() const { return wm_shelf_.get(); }
+  Shelf* shelf() const { return shelf_.get(); }
+  // TODO(jamescook): Eliminate in favor of shelf().
+  Shelf* GetShelf() const { return shelf_.get(); }
 
-  bool HasShelf();
-
-  WmShelf* GetShelf();
-
-  // Creates the shelf view for this root window and notifies observers.
-  void CreateShelfView();
+  // Initializes the shelf for this root window and notifies observers.
+  void InitializeShelf();
 
   // Get touch HUDs associated with this root window controller.
   TouchHudDebug* touch_hud_debug() const { return touch_hud_debug_; }
@@ -179,7 +177,7 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   // modal container is used if the screen is currently locked. Otherwise, the
   // default modal container is used.
   SystemModalContainerLayoutManager* GetSystemModalLayoutManager(
-      WmWindow* window);
+      aura::Window* window);
 
   AlwaysOnTopController* always_on_top_controller() {
     return always_on_top_controller_.get();
@@ -201,7 +199,7 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   //
   // NOTE: the returned window may not contain the location as resize handles
   // may extend outside the bounds of the window.
-  WmWindow* FindEventTarget(const gfx::Point& location_in_screen);
+  aura::Window* FindEventTarget(const gfx::Point& location_in_screen);
 
   // Gets the last location seen in a mouse event in this root window's
   // coordinates. This may return a point outside the root window's bounds.
@@ -243,7 +241,7 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   // Deletes associated objects and clears the state, but doesn't delete
   // the root window yet. This is used to delete a secondary displays'
   // root window safely when the display disconnect signal is received,
-  // which may come while we're in the nested message loop.
+  // which may come while we're in the nested run loop.
   void Shutdown();
 
   // Deletes all child windows and performs necessary cleanup.
@@ -280,7 +278,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
                        ui::MenuSourceType source_type);
 
   // Called when the login status changes after login (such as lock/unlock).
-  // TODO(oshima): Investigate if we can merge this and |OnLoginStateChanged|.
   void UpdateAfterLoginStatusChange(LoginStatus status);
 
  private:
@@ -323,7 +320,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   void OnMenuClosed();
 
   // Overridden from ShellObserver.
-  void OnLoginStateChanged(LoginStatus status) override;
   void OnTouchHudProjectionToggled(bool enabled) override;
 
   std::unique_ptr<AshWindowTreeHost> ash_host_;
@@ -352,7 +348,11 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   // The shelf controller for this root window. Exists for the entire lifetime
   // of the RootWindowController so that it is safe for observers to be added
   // to it during construction of the shelf widget and status tray.
-  std::unique_ptr<WmShelf> wm_shelf_;
+  std::unique_ptr<Shelf> shelf_;
+
+  // TODO(jamescook): Eliminate this. It is left over from legacy shelf code and
+  // doesn't mean anything in particular.
+  bool shelf_initialized_ = false;
 
   std::unique_ptr<SystemWallpaperController> system_wallpaper_;
 

@@ -137,10 +137,6 @@ const char kDisableFlash3d[]                = "disable-flash-3d";
 // Disable Stage3D inside of flapper.
 const char kDisableFlashStage3d[]           = "disable-flash-stage3d";
 
-// Disable user gesture requirement for media playback.
-const char kDisableGestureRequirementForMediaPlayback[] =
-    "disable-gesture-requirement-for-media-playback";
-
 // Disable user gesture requirement for presentation.
 const char kDisableGestureRequirementForPresentation[] =
     "disable-gesture-requirement-for-presentation";
@@ -177,9 +173,6 @@ const char kDisableLowResTiling[] = "disable-low-res-tiling";
 
 // Disable the GPU process sandbox.
 const char kDisableGpuSandbox[]             = "disable-gpu-sandbox";
-
-// Disable in-process stack traces.
-const char kDisableInProcessStackTraces[]   = "disable-in-process-stack-traces";
 
 // Suppresses hang monitor dialogs in renderer processes.  This may allow slow
 // unload handlers on a page to prevent the tab from closing, but the Task
@@ -283,6 +276,10 @@ const char kDisableSetuidSandbox[]          = "disable-setuid-sandbox";
 // Disable shared workers.
 const char kDisableSharedWorkers[]          = "disable-shared-workers";
 
+// Do not use runtime-detected high-end CPU optimizations in Skia.  This is
+// useful for forcing a baseline code path for e.g. layout tests.
+const char kDisableSkiaRuntimeOpts[]        = "disable-skia-runtime-opts";
+
 // Disable paint invalidation based on slimming paint.
 // See kEnableSlimmingPaintInvalidation.
 const char kDisableSlimmingPaintInvalidation[] =
@@ -370,11 +367,6 @@ const char kEnableColorCorrectRenderingDefaultMode[] =
 const char kEnableDisplayList2dCanvas[]     = "enable-display-list-2d-canvas";
 const char kForceDisplayList2dCanvas[]      = "force-display-list-2d-canvas";
 const char kDisableDisplayList2dCanvas[]    = "disable-display-list-2d-canvas";
-
-// Enables dynamic rendering pipeline switching to optimize the
-// performance of 2d canvas
-const char kEnableCanvas2dDynamicRenderingModeSwitching[] =
-    "enable-canvas-2d-dynamic-rendering-mode-switching";
 
 // Enable experimental canvas features, e.g. canvas 2D context attributes
 const char kEnableExperimentalCanvasFeatures[] =
@@ -747,6 +739,14 @@ const char kProcessPerTab[]                 = "process-per-tab";
 // renderer or plugin host.  If it's empty, it's the browser.
 const char kProcessType[]                   = "type";
 
+// Uses a specified proxy server, overrides system settings. This switch only
+// affects HTTP and HTTPS requests. ARC-apps use only HTTP proxy server with the
+// highest priority.
+// TODO(yzshen): Move this switch back to chrome/common/chrome_switches.{h,cc},
+// once the network service is able to access the corresponding setting via the
+// pref service.
+const char kProxyServer[] = "proxy-server";
+
 // Enables more web features over insecure connections. Designed to be used
 // for testing purposes only.
 const char kReduceSecurityForTesting[]      = "reduce-security-for-testing";
@@ -846,10 +846,6 @@ const char kTestingFixedHttpsPort[]         = "testing-fixed-https-port";
 // Type of the current test harness ("browser" or "ui").
 const char kTestType[]                      = "test-type";
 
-// Groups all out-of-process iframes to a different process from the process
-// of the top document. This is a performance isolation mode.
-const char kTopDocumentIsolation[] = "top-document-isolation";
-
 // Enable support for touch event feature detection.
 const char kTouchEventFeatureDetection[] = "touch-events";
 
@@ -920,9 +916,6 @@ const char kDisableWebRtcHWDecoding[]       = "disable-webrtc-hw-decoding";
 
 // Disables HW encode acceleration for WebRTC.
 const char kDisableWebRtcHWEncoding[] = "disable-webrtc-hw-encoding";
-
-// Disables HW VP8 encode acceleration for WebRTC.
-const char kDisableWebRtcHWVP8Encoding[]     = "disable-webrtc-hw-vp8-encoding";
 
 // Enables negotiation of GCM cipher suites from RFC 7714 for SRTP in WebRTC.
 // See https://tools.ietf.org/html/rfc7714 for further information.

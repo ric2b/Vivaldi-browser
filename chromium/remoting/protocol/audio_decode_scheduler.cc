@@ -25,13 +25,14 @@ AudioDecodeScheduler::AudioDecodeScheduler(
       weak_factory_(this) {}
 
 AudioDecodeScheduler::~AudioDecodeScheduler() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   audio_decode_task_runner_->DeleteSoon(FROM_HERE, decoder_.release());
 }
 
 void AudioDecodeScheduler::Initialize(const protocol::SessionConfig& config) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!decoder_);
-  decoder_.reset(AudioDecoder::CreateAudioDecoder(config).release());
+  decoder_ = AudioDecoder::CreateAudioDecoder(config);
 }
 
 void AudioDecodeScheduler::ProcessAudioPacket(

@@ -11,13 +11,12 @@
 #include <utility>
 
 #include "ash/ash_constants.h"
-#include "ash/ash_switches.h"
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/autoclick/mus/public/interfaces/autoclick.mojom.h"
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/root_window_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
@@ -683,9 +682,8 @@ void AccessibilityManager::HandleAccessibilityGesture(ui::AXGesture gesture) {
 
 void AccessibilityManager::SetTouchAccessibilityAnchorPoint(
     const gfx::Point& anchor_point) {
-  ash::RootWindowController* root_window_controller =
-      ash::RootWindowController::ForTargetRootWindow();
-  root_window_controller->SetTouchAccessibilityAnchorPoint(anchor_point);
+  for (auto* rwc : ash::RootWindowController::root_window_controllers())
+    rwc->SetTouchAccessibilityAnchorPoint(anchor_point);
 }
 
 bool AccessibilityManager::IsHighContrastEnabled() const {
@@ -1277,9 +1275,8 @@ void AccessibilityManager::ActiveUserChanged(
   SetProfile(ProfileManager::GetActiveUserProfile());
 }
 
-void AccessibilityManager::OnFullscreenStateChanged(
-    bool is_fullscreen,
-    ash::WmWindow* root_window) {
+void AccessibilityManager::OnFullscreenStateChanged(bool is_fullscreen,
+                                                    aura::Window* root_window) {
   if (chromevox_panel_)
     chromevox_panel_->UpdateWidgetBounds();
 }
@@ -1339,9 +1336,7 @@ void AccessibilityManager::UpdateChromeOSAccessibilityHistograms() {
         prefs->GetBoolean(prefs::kAccessibilityLargeCursorEnabled);
     UMA_HISTOGRAM_BOOLEAN("Accessibility.CrosLargeCursor",
                           large_cursor_enabled);
-    if (large_cursor_enabled &&
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            ash::switches::kAshAdjustableLargeCursor)) {
+    if (large_cursor_enabled) {
       UMA_HISTOGRAM_COUNTS_100(
           "Accessibility.CrosLargeCursorSize",
           prefs->GetInteger(prefs::kAccessibilityLargeCursorDipSize));
@@ -1438,7 +1433,7 @@ void AccessibilityManager::OnBrailleKeyEvent(const KeyEvent& event) {
 void AccessibilityManager::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const extensions::Extension* extension,
-    extensions::UnloadedExtensionInfo::Reason reason) {
+    extensions::UnloadedExtensionReason reason) {
   if (extension->id() == keyboard_listener_extension_id_) {
     keyboard_listener_extension_id_ = std::string();
     keyboard_listener_capture_ = false;
@@ -1474,9 +1469,9 @@ void AccessibilityManager::PostLoadChromeVox() {
   }
 
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableDefaultMediaSession)) {
+          switches::kEnableAudioFocus)) {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kEnableDefaultMediaSession);
+        switches::kEnableAudioFocus);
   }
 }
 
@@ -1515,18 +1510,9 @@ void AccessibilityManager::ReloadChromeVoxPanel() {
 }
 
 void AccessibilityManager::OnChromeVoxPanelClosing() {
-  aura::Window* root_window = chromevox_panel_->GetRootWindow();
-  chromevox_panel_widget_observer_.reset(nullptr);
+  chromevox_panel_->ResetPanelHeight();
+  chromevox_panel_widget_observer_.reset();
   chromevox_panel_ = nullptr;
-
-  ash::WmShelf* shelf =
-      ash::WmShelf::ForWindow(ash::WmWindow::Get(root_window));
-  if (!shelf->IsShelfInitialized())
-    return;
-
-  ash::ShelfLayoutManager* shelf_layout_manager = shelf->shelf_layout_manager();
-  if (shelf_layout_manager)
-    shelf_layout_manager->SetChromeVoxPanelHeight(0);
 }
 
 void AccessibilityManager::OnChromeVoxPanelDestroying() {

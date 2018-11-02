@@ -37,8 +37,7 @@ namespace WTF {
 PassRefPtr<CStringImpl> CStringImpl::CreateUninitialized(size_t length,
                                                          char*& data) {
   // TODO(esprehn): This doesn't account for the NUL.
-  RELEASE_ASSERT(length <
-                 (numeric_limits<unsigned>::max() - sizeof(CStringImpl)));
+  CHECK_LT(length, (numeric_limits<unsigned>::max() - sizeof(CStringImpl)));
 
   // The +1 is for the terminating NUL character.
   size_t size = sizeof(CStringImpl) + length + 1;
@@ -72,7 +71,7 @@ bool operator==(const CString& a, const CString& b) {
     return false;
   if (a.length() != b.length())
     return false;
-  return !memcmp(a.Data(), b.Data(), a.length());
+  return !memcmp(a.data(), b.data(), a.length());
 }
 
 bool operator==(const CString& a, const char* b) {
@@ -80,7 +79,7 @@ bool operator==(const CString& a, const char* b) {
     return false;
   if (!b)
     return true;
-  return !strcmp(a.Data(), b);
+  return !strcmp(a.data(), b);
 }
 
 std::ostream& operator<<(std::ostream& ostream, const CString& string) {
@@ -90,7 +89,7 @@ std::ostream& operator<<(std::ostream& ostream, const CString& string) {
   ostream << '"';
   for (size_t index = 0; index < string.length(); ++index) {
     // Print shorthands for select cases.
-    char character = string.Data()[index];
+    char character = string.data()[index];
     switch (character) {
       case '\t':
         ostream << "\\t";

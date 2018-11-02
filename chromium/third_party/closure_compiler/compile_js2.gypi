@@ -11,6 +11,7 @@
 
     'default_source_file': '<(_target_name).js',
     'source_files%': ['<(default_source_file)'],
+    'extra_inputs%': [],
 
     'includes': ['closure_args.gypi'],
   },
@@ -31,7 +32,7 @@
       #            is created (this probably suffices for many targets).
       # - out_file: a file where the compiled output is written to. The default
       #             is gen/closure/<path to |target_name|>/|target_name|.js.
-      # - script_args: additional arguments to pass to compile.py.
+      # - script_args: additional arguments to pass to compile2.py.
       # - closure_args: additional arguments to pass to the Closure compiler.
       # - disabled_closure_args: additional arguments dealing with the
       #                          strictness of compilation; Non-strict
@@ -54,6 +55,9 @@
         '<(CLOSURE_DIR)/include_js.gypi',
         '<(CLOSURE_DIR)/processor.py',
         '>@(_sources)',
+        # When converting to GN, write the paths to additional inputs in a GN
+        # depfile file instead.
+        '<@(extra_inputs)',
       ],
 
       'outputs': ['<(out_file)'],

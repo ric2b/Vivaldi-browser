@@ -79,6 +79,10 @@ OutputDeviceInfo AudioOutputStreamSink::GetOutputDeviceInfo() {
   return OutputDeviceInfo();
 }
 
+bool AudioOutputStreamSink::IsOptimizedForHardwareParameters() {
+  return true;
+}
+
 bool AudioOutputStreamSink::CurrentThreadIsRenderingThread() {
   NOTIMPLEMENTED();
   return false;
@@ -97,7 +101,7 @@ int AudioOutputStreamSink::OnMoreData(base::TimeDelta delay,
                                          prior_frames_skipped, dest);
 }
 
-void AudioOutputStreamSink::OnError(AudioOutputStream* stream) {
+void AudioOutputStreamSink::OnError() {
   // Note: Runs on the audio thread created by the OS.
   base::AutoLock al(callback_lock_);
   if (active_render_callback_)

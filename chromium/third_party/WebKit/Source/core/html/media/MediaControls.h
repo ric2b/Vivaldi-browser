@@ -12,9 +12,9 @@
 namespace blink {
 
 class Document;
+class HTMLDivElement;
 class HTMLMediaElement;
 class LayoutObject;
-class MediaControlPanelElement;
 class ShadowRoot;
 
 // MediaControls is an interface to abstract the HTMLMediaElement controls. The
@@ -35,8 +35,11 @@ class CORE_EXPORT MediaControls : public GarbageCollectedMixin {
 
   HTMLMediaElement& MediaElement() const;
 
-  virtual void Show() = 0;
+  // Enables showing of the controls - only shows if appropriate.
+  virtual void MaybeShow() = 0;
+  // Disables showing of the controls - immediately hides.
   virtual void Hide() = 0;
+
   virtual void Reset() = 0;
 
   // Notify the media controls that the controlsList attribute has changed.
@@ -46,16 +49,6 @@ class CORE_EXPORT MediaControls : public GarbageCollectedMixin {
   // HTMLTrackElement failed to load because there is no web exposed way to
   // be notified on the TextTrack object. See https://crbug.com/669977
   virtual void OnTrackElementFailedToLoad() = 0;
-
-  // TODO(mlamouri): the following methods will be able to become private when
-  // the controls have moved to modules/ and have access to RemotePlayback.
-  virtual void OnRemotePlaybackAvailabilityChanged() = 0;
-  virtual void OnRemotePlaybackConnecting() = 0;
-  virtual void OnRemotePlaybackDisconnected() = 0;
-
-  // TODO(mlamouri): this method is needed in order to notify the controls that
-  // the attribute have changed.
-  virtual void OnDisableRemotePlaybackAttributeChanged() = 0;
 
   // TODO(mlamouri): this method should be moved away from the interface to
   // become an implementation detail.
@@ -72,18 +65,8 @@ class CORE_EXPORT MediaControls : public GarbageCollectedMixin {
   // TODO: the following are required by other parts of the media controls
   // implementation and could be removed when the full implementation has moved
   // to modules.
-  virtual MediaControlPanelElement* PanelElement() = 0;
+  virtual HTMLDivElement* PanelElement() = 0;
   virtual Document& OwnerDocument() = 0;
-  virtual void BeginScrubbing() = 0;
-  virtual void EndScrubbing() = 0;
-  virtual void UpdateCurrentTimeDisplay() = 0;
-  virtual void ToggleTextTrackList() = 0;
-  virtual void ShowTextTrackAtIndex(unsigned) = 0;
-  virtual void DisableShowingTextTracks() = 0;
-  virtual void EnterFullscreen() = 0;
-  virtual void ExitFullscreen() = 0;
-  virtual void ToggleOverflowMenu() = 0;
-  virtual bool OverflowMenuVisible() = 0;
   virtual void OnMediaControlsEnabledChange() = 0;
 
   DECLARE_VIRTUAL_TRACE();

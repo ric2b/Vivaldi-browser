@@ -277,6 +277,9 @@
           Recently Closed
         </message>
       </if>
+      <message name="IDS_CHOOSE" desc="Label for a button to choose something, like a shipping address for a payment request. [CHAR-LIMIT=20]" formatter_data="android_java">
+        Choose
+      </message>
 
       <!-- Accessibility labels for generic items -->
       <message name="IDS_ACCNAME_BACK" desc="The accessible name for the back button.">
@@ -317,11 +320,6 @@
 
       <message name="IDS_SESSION_CRASHED_VIEW_STARTUP_PAGES_BUTTON" desc="Title of the button in the session crashed view to open the set of startup pages.">
         Open startup pages
-      </message>
-
-      <!-- Page Info UI -->
-      <message name="IDS_PAGE_INFO_NON_SECURE_TRANSPORT" desc="Text that is displayed in the header of the Website Settings popup if the website uses non-secure transport.">
-        Your connection to this site is not private.
       </message>
 
       <!-- Advanced Section Titles -->

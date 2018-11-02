@@ -24,8 +24,18 @@ Action.prototype.getTitle = function() {
 };
 
 /**
+ * @typedef {{
+ *  alertDialog: FilesAlertDialog,
+ *  errorDialog: ErrorDialog,
+ *  listContainer: ListContainer,
+ *  shareDialog: ShareDialog,
+ * }}
+ */
+var ActionModelUI;
+
+/**
  * @param {!Entry} entry
- * @param {!FileManagerUI} ui
+ * @param {!ActionModelUI} ui
  * @param {!VolumeManagerWrapper} volumeManager
  * @implements {Action}
  * @constructor
@@ -45,7 +55,7 @@ function DriveShareAction(entry, volumeManager, ui) {
   this.volumeManager_ = volumeManager;
 
   /**
-   * @private {!FileManagerUI}
+   * @private {!ActionModelUI}
    * @const
    */
   this.ui_ = ui;
@@ -53,7 +63,7 @@ function DriveShareAction(entry, volumeManager, ui) {
 
 /**
  * @param {!Array<!Entry>} entries
- * @param {!FileManagerUI} ui
+ * @param {!ActionModelUI} ui
  * @param {!VolumeManagerWrapper} volumeManager
  * @return {DriveShareAction}
  */
@@ -79,7 +89,8 @@ DriveShareAction.prototype.execute = function() {
  */
 DriveShareAction.prototype.canExecute = function() {
   return this.volumeManager_.getDriveConnectionState().type !==
-      VolumeManagerCommon.DriveConnectionType.OFFLINE;
+      VolumeManagerCommon.DriveConnectionType.OFFLINE &&
+      !util.isTeamDriveRoot(this.entry_);
 };
 
 /**
@@ -93,7 +104,7 @@ DriveShareAction.prototype.getTitle = function() {
  * @param {!Array<!Entry>} entries
  * @param {!MetadataModel} metadataModel
  * @param {!DriveSyncHandler} driveSyncHandler
- * @param {!FileManagerUI} ui
+ * @param {!ActionModelUI} ui
  * @param {boolean} value
  * @param {function()} onExecute
  * @implements {Action}
@@ -121,7 +132,7 @@ function DriveToggleOfflineAction(entries, metadataModel, driveSyncHandler, ui,
   this.driveSyncHandler_ = driveSyncHandler;
 
   /**
-   * @private {!FileManagerUI}
+   * @private {!ActionModelUI}
    * @const
    */
   this.ui_ = ui;
@@ -143,7 +154,7 @@ function DriveToggleOfflineAction(entries, metadataModel, driveSyncHandler, ui,
  * @param {!Array<!Entry>} entries
  * @param {!MetadataModel} metadataModel
  * @param {!DriveSyncHandler} driveSyncHandler
- * @param {!FileManagerUI} ui
+ * @param {!ActionModelUI} ui
  * @param {boolean} value
  * @param {function()} onExecute
  * @return {DriveToggleOfflineAction}
@@ -459,7 +470,7 @@ CustomAction.prototype.getTitle = function() {
  * @param {!MetadataModel} metadataModel
  * @param {!FolderShortcutsDataModel} shortcutsModel
  * @param {!DriveSyncHandler} driveSyncHandler
- * @param {!FileManagerUI} ui
+ * @param {!ActionModelUI} ui
  * @param {!Array<!Entry>} entries
  * @constructor
  * @extends {cr.EventTarget}
@@ -493,7 +504,7 @@ function ActionsModel(
   this.driveSyncHandler_ = driveSyncHandler;
 
   /**
-   * @private {!FileManagerUI}
+   * @private {!ActionModelUI}
    * @const
    */
   this.ui_ = ui;
@@ -547,14 +558,6 @@ ActionsModel.InternalActionId = {
   CREATE_FOLDER_SHORTCUT: 'create-folder-shortcut',
   REMOVE_FOLDER_SHORTCUT: 'remove-folder-shortcut'
 };
-
-/**
- * @const {!Array<string>}
- */
-ActionsModel.METADATA_PREFETCH_PROPERTY_NAMES = [
-  'hosted',
-  'pinned'
-];
 
 /**
  * @return {!Promise}

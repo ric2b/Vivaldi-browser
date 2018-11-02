@@ -4,7 +4,7 @@
 
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/PtrUtil.h"
@@ -54,13 +54,13 @@ class TestActivityLogger : public V8DOMActivityLogger {
     logged_activities_.push_back(activity_string);
   }
 
-  void Clear() { logged_activities_.Clear(); }
+  void clear() { logged_activities_.clear(); }
   bool VerifyActivities(const Vector<String>& expected) const {
     EXPECT_EQ(expected.size(), logged_activities_.size());
     for (size_t i = 0; i < std::min(expected.size(), logged_activities_.size());
          ++i) {
-      EXPECT_STREQ(expected[i].Utf8().Data(),
-                   logged_activities_[i].Utf8().Data());
+      EXPECT_STREQ(expected[i].Utf8().data(),
+                   logged_activities_[i].Utf8().data());
     }
     return logged_activities_ == expected;
   }

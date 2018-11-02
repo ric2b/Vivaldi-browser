@@ -4,18 +4,17 @@
 
 #include "ash/system/toast/toast_overlay.h"
 
+#include "ash/public/cpp/ash_typography.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
-#include "ash/shelf/wm_shelf.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/wm_window.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font_list.h"
 #include "ui/views/border.h"
@@ -34,10 +33,6 @@ namespace {
 // Offset of the overlay from the edge of the work area.
 const int kOffset = 5;
 
-// Font style used for modifier key labels.
-const ui::ResourceBundle::FontStyle kTextFontStyle =
-    ui::ResourceBundle::MediumFont;
-
 // Duration of slide animation when overlay is shown or hidden.
 const int kSlideAnimationDurationMs = 100;
 
@@ -54,7 +49,7 @@ const int kToastMinimumWidth = 288;
 // Returns the work area bounds for the root window where new windows are added
 // (including new toasts).
 gfx::Rect GetUserWorkAreaBounds() {
-  return WmShelf::ForWindow(Shell::GetWmRootWindowForNewWindows())
+  return Shelf::ForWindow(Shell::GetRootWindowForNewWindows())
       ->GetUserWorkAreaBounds();
 }
 
@@ -71,12 +66,9 @@ class ToastOverlayLabel : public views::Label {
   DISALLOW_COPY_AND_ASSIGN(ToastOverlayLabel);
 };
 
-ToastOverlayLabel::ToastOverlayLabel(const base::string16& label) {
-  ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
-
-  SetText(label);
+ToastOverlayLabel::ToastOverlayLabel(const base::string16& label)
+    : Label(label, CONTEXT_TOAST_OVERLAY) {
   SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  SetFontList(rb->GetFontList(kTextFontStyle));
   SetAutoColorReadabilityEnabled(false);
   SetMultiLine(true);
   SetEnabledColor(SK_ColorWHITE);
@@ -107,15 +99,12 @@ class ToastOverlayButton : public views::LabelButton {
 
 ToastOverlayButton::ToastOverlayButton(views::ButtonListener* listener,
                                        const base::string16& text)
-    : views::LabelButton(listener, text) {
+    : views::LabelButton(listener, text, CONTEXT_TOAST_OVERLAY) {
   SetInkDropMode(InkDropMode::ON);
   set_has_ink_drop_action_on_click(true);
   set_ink_drop_base_color(SK_ColorWHITE);
 
-  ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
-
   SetEnabledTextColors(kButtonTextColor);
-  SetFontList(rb->GetFontList(kTextFontStyle));
 
   // Treat the space below the baseline as a margin.
   int verticalSpacing = kToastVerticalSpacing -
@@ -226,8 +215,7 @@ ToastOverlay::ToastOverlay(Delegate* delegate,
   params.remove_standard_frame = true;
   params.bounds = CalculateOverlayBounds();
   // Show toasts above the app list and below the lock screen.
-  Shell::GetWmRootWindowForNewWindows()
-      ->GetRootWindowController()
+  GetRootWindowController(Shell::GetRootWindowForNewWindows())
       ->ConfigureWidgetInitParamsForContainer(
           overlay_widget_.get(), kShellWindowId_SystemModalContainer, &params);
   overlay_widget_->Init(params);
@@ -235,10 +223,11 @@ ToastOverlay::ToastOverlay(Delegate* delegate,
   overlay_widget_->SetContentsView(overlay_view_.get());
   overlay_widget_->SetBounds(CalculateOverlayBounds());
 
-  WmWindow* overlay_window = WmWindow::Get(overlay_widget_->GetNativeWindow());
-  overlay_window->SetVisibilityAnimationType(
-      ::wm::WINDOW_VISIBILITY_ANIMATION_TYPE_VERTICAL);
-  overlay_window->SetVisibilityAnimationDuration(
+  aura::Window* overlay_window = overlay_widget_->GetNativeWindow();
+  ::wm::SetWindowVisibilityAnimationType(
+      overlay_window, ::wm::WINDOW_VISIBILITY_ANIMATION_TYPE_VERTICAL);
+  ::wm::SetWindowVisibilityAnimationDuration(
+      overlay_window,
       base::TimeDelta::FromMilliseconds(kSlideAnimationDurationMs));
 }
 

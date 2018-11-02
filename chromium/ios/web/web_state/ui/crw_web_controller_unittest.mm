@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/ios/ios_util.h"
+#import "base/ios/weak_nsobject.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
@@ -37,6 +38,7 @@
 #import "ios/web/web_state/web_state_impl.h"
 #import "ios/web/web_state/wk_web_view_security_util.h"
 #import "net/base/mac/url_conversions.h"
+#include "net/cert/x509_util_ios_and_mac.h"
 #include "net/ssl/ssl_info.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
@@ -153,7 +155,10 @@ class CRWWebControllerTest : public web::WebTestWithWebController {
 
     [[result stub] backForwardList];
     [[[result stub] andReturn:[NSURL URLWithString:@(kTestURLString)]] URL];
-    [[result stub] setNavigationDelegate:OCMOCK_ANY];
+    [[result stub] setNavigationDelegate:[OCMArg checkWithBlock:^(id delegate) {
+                     navigation_delegate_.reset(delegate);
+                     return YES;
+                   }]];
     [[result stub] setUIDelegate:OCMOCK_ANY];
     [[result stub] setFrame:GetExpectedWebViewFrame()];
     [[result stub] addObserver:web_controller()
@@ -165,6 +170,7 @@ class CRWWebControllerTest : public web::WebTestWithWebController {
     return result;
   }
 
+  base::WeakNSProtocol<id<WKNavigationDelegate>> navigation_delegate_;
   base::scoped_nsobject<UIScrollView> scroll_view_;
   base::scoped_nsobject<id> mock_web_view_;
 };
@@ -184,22 +190,24 @@ TEST_F(CRWWebControllerTest, SslCertError) {
 
   scoped_refptr<net::X509Certificate> cert =
       net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
+  ASSERT_TRUE(cert);
+  base::ScopedCFTypeRef<CFMutableArrayRef> chain(
+      net::x509_util::CreateSecCertificateArrayForX509Certificate(cert.get()));
+  ASSERT_TRUE(chain);
 
-  NSArray* chain = @[ static_cast<id>(cert->os_cert_handle()) ];
   GURL url("https://chromium.test");
   NSError* error =
       [NSError errorWithDomain:NSURLErrorDomain
                           code:NSURLErrorServerCertificateHasUnknownRoot
                       userInfo:@{
-                        web::kNSErrorPeerCertificateChainKey : chain,
+                        web::kNSErrorPeerCertificateChainKey :
+                            static_cast<NSArray*>(chain.get()),
                         web::kNSErrorFailingURLKey : net::NSURLWithGURL(url),
                       }];
   base::scoped_nsobject<NSObject> navigation([[NSObject alloc] init]);
-  [static_cast<id<WKNavigationDelegate>>(web_controller())
-                            webView:mock_web_view_
+  [navigation_delegate_ webView:mock_web_view_
       didStartProvisionalNavigation:static_cast<WKNavigation*>(navigation)];
-  [static_cast<id<WKNavigationDelegate>>(web_controller())
-                           webView:mock_web_view_
+  [navigation_delegate_ webView:mock_web_view_
       didFailProvisionalNavigation:static_cast<WKNavigation*>(navigation)
                          withError:error];
 
@@ -361,23 +369,6 @@ TEST_F(DialogsSuppressionTest, AllowPrompt) {
   EXPECT_NSEQ(@"Yes?", dialog.message_text);
   EXPECT_NSEQ(@"No", dialog.default_prompt_text);
   ASSERT_FALSE(observer.did_suppress_dialog_info());
-}
-
-// Tests that geolocation dialog is suppressed.
-TEST_F(DialogsSuppressionTest, SuppressGeolocation) {
-  // The geolocation APIs require HTTPS on iOS 10, which can not be simulated
-  // even using |loadHTMLString:baseURL:| WKWebView API.
-  if (base::ios::IsRunningOnIOS10OrLater()) {
-    return;
-  }
-  web::TestWebStateObserver observer(web_state());
-  ASSERT_FALSE(observer.did_suppress_dialog_info());
-  ASSERT_TRUE(requested_dialogs().empty());
-
-  web_state()->SetShouldSuppressDialogs(true);
-  ExecuteJavaScript(@"navigator.geolocation.getCurrentPosition()");
-  ASSERT_TRUE(observer.did_suppress_dialog_info());
-  EXPECT_EQ(web_state(), observer.did_suppress_dialog_info()->web_state);
 }
 
 // Tests that window.open is suppressed.
@@ -630,11 +621,9 @@ TEST_F(CRWWebControllerJSExecutionTest, WindowIdMissmatch) {
   EXPECT_FALSE(ExecuteJavaScript(@"window.test2"));
 }
 
-TEST_F(CRWWebControllerTest, WebUrlWithTrustLevel) {
-  [web_controller() webStateImpl]->GetNavigationManagerImpl().AddPendingItem(
-      GURL("http://chromium.test"), web::Referrer(), ui::PAGE_TRANSITION_TYPED,
-      web::NavigationInitiationType::USER_INITIATED,
-      web::NavigationManager::UserAgentOverrideOption::INHERIT);
+// Tests |currentURLWithTrustLevel:| method.
+TEST_F(CRWWebControllerTest, CurrentUrlWithTrustLevel) {
+  AddPendingItem(GURL("http://chromium.test"), ui::PAGE_TRANSITION_TYPED);
 
   [[[mock_web_view_ stub] andReturnBool:NO] hasOnlySecureContent];
   [[[mock_web_view_ stub] andReturn:@""] title];
@@ -643,12 +632,10 @@ TEST_F(CRWWebControllerTest, WebUrlWithTrustLevel) {
   [[mock_web_view_ stub] evaluateJavaScript:OCMOCK_ANY
                           completionHandler:OCMOCK_ANY];
 
-  // Simulate registering load request to avoid failing page load simulation.
-  [web_controller() simulateLoadRequestWithURL:GURL(kTestURLString)];
   // Simulate a page load to trigger a URL update.
-  [static_cast<id<WKNavigationDelegate>>(web_controller())
-                  webView:mock_web_view_
-      didCommitNavigation:nil];
+  [navigation_delegate_ webView:mock_web_view_
+      didStartProvisionalNavigation:nil];
+  [navigation_delegate_ webView:mock_web_view_ didCommitNavigation:nil];
 
   web::URLVerificationTrustLevel trust_level = web::kNone;
   GURL url = [web_controller() currentURLWithTrustLevel:&trust_level];
@@ -868,6 +855,14 @@ TEST_F(CRWWebControllerTitleTest, TitleChange) {
   EXPECT_EQ("Title2", base::UTF16ToUTF8(web_state()->GetTitle()));
   EXPECT_GE(observer.title_change_count(), 2);
 };
+
+// Tests that fragment change navigations use title from the previous page.
+TEST_F(CRWWebControllerTitleTest, FragmentChangeNavigationsUsePreviousTitle) {
+  LoadHtml(@"<title>Title1</title>");
+  ASSERT_EQ("Title1", base::UTF16ToUTF8(web_state()->GetTitle()));
+  ExecuteJavaScript(@"window.location.hash = '#1'");
+  EXPECT_EQ("Title1", base::UTF16ToUTF8(web_state()->GetTitle()));
+}
 
 // Test fixture for JavaScript execution.
 class ScriptExecutionTest : public web::WebTestWithWebController {

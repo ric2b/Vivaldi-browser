@@ -20,6 +20,7 @@
 #include "base/sys_info.h"
 #include "base/test/multiprocess_test.h"
 #include "base/test/test_timeouts.h"
+#include "base/unguessable_token.h"
 #include "testing/multiprocess_func_list.h"
 
 namespace base {
@@ -55,7 +56,7 @@ bool GetProtections(void* address, size_t size, int* current, int* max) {
 
 // Creates a new SharedMemory with the given |size|, filled with 'a'.
 std::unique_ptr<SharedMemory> CreateSharedMemory(int size) {
-  SharedMemoryHandle shm(size);
+  SharedMemoryHandle shm(size, UnguessableToken::Create());
   if (!shm.IsValid()) {
     LOG(ERROR) << "Failed to make SharedMemoryHandle";
     return nullptr;
@@ -248,7 +249,7 @@ MULTIPROCESS_TEST_MAIN(MachBasedSharedMemoryClient) {
   mach_port_t memory_object = ReceiveMachPort(client_port.get());
   SharedMemoryHandle shm(memory_object,
                          SharedMemoryMacMultiProcessTest::s_memory_size,
-                         GetCurrentProcId());
+                         UnguessableToken::Create());
   SharedMemory shared_memory(shm, false);
   shared_memory.Map(SharedMemoryMacMultiProcessTest::s_memory_size);
   const char* start = static_cast<const char*>(shared_memory.memory());
@@ -262,7 +263,7 @@ MULTIPROCESS_TEST_MAIN(MachBasedSharedMemoryClient) {
 TEST_F(SharedMemoryMacMultiProcessTest, MachBasedSharedMemoryWithOffset) {
   SetUpChild("MachBasedSharedMemoryWithOffsetClient");
 
-  SharedMemoryHandle shm(s_memory_size);
+  SharedMemoryHandle shm(s_memory_size, UnguessableToken::Create());
   ASSERT_TRUE(shm.IsValid());
   SharedMemory shared_memory(shm, false);
   shared_memory.Map(s_memory_size);
@@ -288,7 +289,7 @@ MULTIPROCESS_TEST_MAIN(MachBasedSharedMemoryWithOffsetClient) {
   mach_port_t memory_object = ReceiveMachPort(client_port.get());
   SharedMemoryHandle shm(memory_object,
                          SharedMemoryMacMultiProcessTest::s_memory_size,
-                         GetCurrentProcId());
+                         UnguessableToken::Create());
   SharedMemory shared_memory(shm, false);
   size_t page_size = SysInfo::VMAllocationGranularity();
   shared_memory.MapAt(page_size, 2 * page_size);
@@ -308,7 +309,7 @@ TEST_F(SharedMemoryMacMultiProcessTest, MachDuplicateAndClose) {
   mach_msg_type_number_t active_name_count = GetActiveNameCount();
 
   // Making a new SharedMemoryHandle increments the name count.
-  SharedMemoryHandle shm(s_memory_size);
+  SharedMemoryHandle shm(s_memory_size, UnguessableToken::Create());
   ASSERT_TRUE(shm.IsValid());
   EXPECT_EQ(active_name_count + 1, GetActiveNameCount());
 
@@ -347,7 +348,7 @@ TEST_F(SharedMemoryMacMultiProcessTest, MachSharedMemoryTakesOwnership) {
   mach_msg_type_number_t active_name_count = GetActiveNameCount();
 
   // Making a new SharedMemoryHandle increments the name count.
-  SharedMemoryHandle shm(s_memory_size);
+  SharedMemoryHandle shm(s_memory_size, UnguessableToken::Create());
   ASSERT_TRUE(shm.IsValid());
   EXPECT_EQ(active_name_count + 1, GetActiveNameCount());
 
@@ -373,16 +374,15 @@ TEST_F(SharedMemoryMacMultiProcessTest, MachReadOnly) {
   ASSERT_DEATH(memset(shared_memory2.memory(), 'b', s_memory_size), "");
 }
 
-// Tests that the method ShareToProcess() works.
-TEST_F(SharedMemoryMacMultiProcessTest, MachShareToProcess) {
+// Tests that duplication of the underlying handle works.
+TEST_F(SharedMemoryMacMultiProcessTest, MachDuplicate) {
   mach_msg_type_number_t active_name_count = GetActiveNameCount();
 
   {
     std::unique_ptr<SharedMemory> shared_memory(
         CreateSharedMemory(s_memory_size));
 
-    SharedMemoryHandle shm2;
-    ASSERT_TRUE(shared_memory->ShareToProcess(GetCurrentProcId(), &shm2));
+    SharedMemoryHandle shm2 = shared_memory->handle().Duplicate();
     ASSERT_TRUE(shm2.IsValid());
     SharedMemory shared_memory2(shm2, true);
     shared_memory2.Map(s_memory_size);
@@ -394,9 +394,9 @@ TEST_F(SharedMemoryMacMultiProcessTest, MachShareToProcess) {
   EXPECT_EQ(active_name_count, GetActiveNameCount());
 }
 
-// Tests that the method ShareReadOnlyToProcess() creates a memory object that
+// Tests that the method GetReadOnlyHandle() creates a memory object that
 // is read only.
-TEST_F(SharedMemoryMacMultiProcessTest, MachShareToProcessReadonly) {
+TEST_F(SharedMemoryMacMultiProcessTest, MachReadonly) {
   std::unique_ptr<SharedMemory> shared_memory(
       CreateSharedMemory(s_memory_size));
 
@@ -409,9 +409,9 @@ TEST_F(SharedMemoryMacMultiProcessTest, MachShareToProcessReadonly) {
   ASSERT_EQ(VM_PROT_READ | VM_PROT_WRITE, max_prot);
 
   // Make a new memory object.
-  SharedMemoryHandle shm2;
-  ASSERT_TRUE(shared_memory->ShareReadOnlyToProcess(GetCurrentProcId(), &shm2));
+  SharedMemoryHandle shm2 = shared_memory->GetReadOnlyHandle();
   ASSERT_TRUE(shm2.IsValid());
+  EXPECT_EQ(shared_memory->handle().GetGUID(), shm2.GetGUID());
 
   // Mapping with |readonly| set to |false| should fail.
   SharedMemory shared_memory2(shm2, false);
@@ -435,17 +435,15 @@ TEST_F(SharedMemoryMacMultiProcessTest, MachShareToProcessReadonly) {
   ASSERT_DEATH(memset(shared_memory2.memory(), 'b', s_memory_size), "");
 }
 
-// Tests that the method ShareReadOnlyToProcess() doesn't leak.
-TEST_F(SharedMemoryMacMultiProcessTest, MachShareToProcessReadonlyLeak) {
+// Tests that the method GetReadOnlyHandle() doesn't leak.
+TEST_F(SharedMemoryMacMultiProcessTest, MachReadonlyLeak) {
   mach_msg_type_number_t active_name_count = GetActiveNameCount();
 
   {
     std::unique_ptr<SharedMemory> shared_memory(
         CreateSharedMemory(s_memory_size));
 
-    SharedMemoryHandle shm2;
-    ASSERT_TRUE(
-        shared_memory->ShareReadOnlyToProcess(GetCurrentProcId(), &shm2));
+    SharedMemoryHandle shm2 = shared_memory->GetReadOnlyHandle();
     ASSERT_TRUE(shm2.IsValid());
 
     // Intentionally map with |readonly| set to |false|.

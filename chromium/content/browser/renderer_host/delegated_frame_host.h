@@ -14,9 +14,9 @@
 #include "cc/output/copy_output_result.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/compositor_frame_sink_support_client.h"
+#include "components/viz/frame_sinks/frame_evictor.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/compositor/owned_mailbox.h"
-#include "content/browser/renderer_host/delegated_frame_evictor.h"
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
@@ -41,7 +41,7 @@ namespace media {
 class VideoFrame;
 }
 
-namespace display_compositor {
+namespace viz {
 class ReadbackYUVInterface;
 }
 
@@ -82,7 +82,7 @@ class CONTENT_EXPORT DelegatedFrameHost
     : public ui::CompositorObserver,
       public ui::CompositorVSyncManager::Observer,
       public ui::ContextFactoryObserver,
-      public DelegatedFrameEvictorClient,
+      public viz::FrameEvictorClient,
       public NON_EXPORTED_BASE(cc::CompositorFrameSinkSupportClient),
       public base::SupportsWeakPtr<DelegatedFrameHost> {
  public:
@@ -105,7 +105,7 @@ class CONTENT_EXPORT DelegatedFrameHost
   // ImageTransportFactoryObserver implementation.
   void OnLostResources() override;
 
-  // DelegatedFrameEvictorClient implementation.
+  // FrameEvictorClient implementation.
   void EvictDelegatedFrame() override;
 
   // cc::CompositorFrameSinkSupportClient implementation.
@@ -171,7 +171,7 @@ class CONTENT_EXPORT DelegatedFrameHost
                                          gfx::Point* transformed_point);
 
   void SetNeedsBeginFrames(bool needs_begin_frames);
-  void BeginFrameDidNotSwap(const cc::BeginFrameAck& ack);
+  void DidNotProduceFrame(const cc::BeginFrameAck& ack);
 
   // Exposed for tests.
   cc::SurfaceId SurfaceIdForTesting() const {
@@ -312,8 +312,7 @@ class CONTENT_EXPORT DelegatedFrameHost
       request_copy_of_output_callback_for_testing_;
 
   // YUV readback pipeline.
-  std::unique_ptr<display_compositor::ReadbackYUVInterface>
-      yuv_readback_pipeline_;
+  std::unique_ptr<viz::ReadbackYUVInterface> yuv_readback_pipeline_;
 
   bool needs_begin_frame_ = false;
   uint32_t latest_confirmed_begin_frame_source_id_ = 0;
@@ -324,7 +323,7 @@ class CONTENT_EXPORT DelegatedFrameHost
   cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
 
-  std::unique_ptr<DelegatedFrameEvictor> delegated_frame_evictor_;
+  std::unique_ptr<viz::FrameEvictor> frame_evictor_;
 };
 
 }  // namespace content

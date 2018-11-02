@@ -144,7 +144,7 @@ void SpellChecker::DidBeginEditing(Element* element) {
   if (!IsSpellCheckingEnabled())
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   // In the long term we should use idle time spell checker to prevent
   // synchronous layout caused by spell checking (see crbug.com/517298).
@@ -305,9 +305,8 @@ void SpellChecker::AdvanceToNextMisspelling(bool start_before_selection) {
                                             .Build());
     GetFrame().Selection().RevealSelection();
     GetSpellCheckerClient().UpdateSpellingUIWithMisspelledWord(misspelled_word);
-    GetFrame().GetDocument()->Markers().AddMarker(
-        misspelling_range.StartPosition(), misspelling_range.EndPosition(),
-        DocumentMarker::kSpelling);
+    GetFrame().GetDocument()->Markers().AddSpellingMarker(
+        misspelling_range.StartPosition(), misspelling_range.EndPosition());
   }
 }
 
@@ -326,7 +325,7 @@ void SpellChecker::MarkMisspellingsForMovingParagraphs(
   if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   // In the long term we should use idle time spell checker to prevent
   // synchronous layout caused by spell checking (see crbug.com/517298).
@@ -366,7 +365,7 @@ void SpellChecker::MarkMisspellingsAfterApplyingCommand(
   if (!IsSpellCheckingEnabledFor(cmd.EndingSelection()))
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   // In the long term we should use idle time spell checker to prevent
   // synchronous layout caused by spell checking (see crbug.com/517298).
@@ -539,6 +538,8 @@ static void AddMarker(Document* document,
                       int location,
                       int length,
                       const String& description) {
+  DCHECK(type == DocumentMarker::kSpelling || type == DocumentMarker::kGrammar)
+      << type;
   DCHECK_GT(length, 0);
   DCHECK_GE(location, 0);
   const EphemeralRange& range_to_mark =
@@ -547,8 +548,17 @@ static void AddMarker(Document* document,
     return;
   if (!SpellChecker::IsSpellCheckingEnabledAt(range_to_mark.EndPosition()))
     return;
-  document->Markers().AddMarker(range_to_mark.StartPosition(),
-                                range_to_mark.EndPosition(), type, description);
+
+  if (type == DocumentMarker::kSpelling) {
+    document->Markers().AddSpellingMarker(range_to_mark.StartPosition(),
+                                          range_to_mark.EndPosition(),
+                                          description);
+    return;
+  }
+
+  DCHECK_EQ(type, DocumentMarker::kGrammar);
+  document->Markers().AddGrammarMarker(
+      range_to_mark.StartPosition(), range_to_mark.EndPosition(), description);
 }
 
 void SpellChecker::MarkAndReplaceFor(
@@ -569,7 +579,7 @@ void SpellChecker::MarkAndReplaceFor(
     return;
   }
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -763,8 +773,8 @@ void SpellChecker::UpdateMarkersForWordsAffectedByEditing(
   // as well. So we need to get the continous range of of marker that contains
   // the word in question, and remove marker on that whole range.
   const EphemeralRange word_range(remove_marker_start, remove_marker_end);
-  document->Markers().RemoveMarkers(word_range,
-                                    DocumentMarker::MisspellingMarkers());
+  document->Markers().RemoveMarkersInRange(
+      word_range, DocumentMarker::MisspellingMarkers());
 }
 
 void SpellChecker::DidEndEditingOnTextField(Element* e) {
@@ -788,8 +798,10 @@ void SpellChecker::RemoveSpellingAndGrammarMarkers(const HTMLElement& element,
   DocumentMarker::MarkerTypes marker_types(DocumentMarker::kSpelling);
   marker_types.Add(DocumentMarker::kGrammar);
   for (Node& node : NodeTraversal::InclusiveDescendantsOf(element)) {
-    if (elements_type == ElementsType::kAll || !HasEditableStyle(node))
-      GetFrame().GetDocument()->Markers().RemoveMarkers(&node, marker_types);
+    if (elements_type == ElementsType::kAll || !HasEditableStyle(node)) {
+      GetFrame().GetDocument()->Markers().RemoveMarkersForNode(&node,
+                                                               marker_types);
+    }
   }
 }
 
@@ -800,17 +812,39 @@ void SpellChecker::ReplaceMisspelledRange(const String& text) {
                                    .ToNormalizedEphemeralRange();
   if (caret_range.IsNull())
     return;
-  DocumentMarkerVector markers =
-      GetFrame().GetDocument()->Markers().MarkersInRange(
-          caret_range, DocumentMarker::MisspellingMarkers());
-  if (markers.size() < 1 ||
-      markers[0]->StartOffset() >= markers[0]->EndOffset())
+
+  Node* const caret_start_container =
+      caret_range.StartPosition().ComputeContainerNode();
+  Node* const caret_end_container =
+      caret_range.EndPosition().ComputeContainerNode();
+
+  // We don't currently support the case where a misspelling spans multiple
+  // nodes
+  if (caret_start_container != caret_end_container)
     return;
+
+  const unsigned caret_start_offset =
+      caret_range.StartPosition().ComputeOffsetInContainerNode();
+  const unsigned caret_end_offset =
+      caret_range.EndPosition().ComputeOffsetInContainerNode();
+
+  const DocumentMarkerVector& markers_in_node =
+      GetFrame().GetDocument()->Markers().MarkersFor(
+          caret_start_container, DocumentMarker::MisspellingMarkers());
+
+  const auto marker_it =
+      std::find_if(markers_in_node.begin(), markers_in_node.end(),
+                   [=](const DocumentMarker* marker) {
+                     return marker->StartOffset() < caret_end_offset &&
+                            marker->EndOffset() > caret_start_offset;
+                   });
+  if (marker_it == markers_in_node.end())
+    return;
+
+  const DocumentMarker* found_marker = *marker_it;
   EphemeralRange marker_range = EphemeralRange(
-      Position(caret_range.StartPosition().ComputeContainerNode(),
-               markers[0]->StartOffset()),
-      Position(caret_range.EndPosition().ComputeContainerNode(),
-               markers[0]->EndOffset()));
+      Position(caret_start_container, found_marker->StartOffset()),
+      Position(caret_start_container, found_marker->EndOffset()));
   if (marker_range.IsNull())
     return;
 
@@ -834,7 +868,7 @@ void SpellChecker::ReplaceMisspelledRange(const String& text) {
   if (current_document != GetFrame().GetDocument())
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -852,7 +886,7 @@ static bool ShouldCheckOldSelection(const Position& old_selection_start) {
   if (IsPositionInTextArea(old_selection_start))
     return true;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   // In the long term we should use idle time spell checker to prevent
   // synchronous layout caused by spell checking (see crbug.com/517298).
@@ -877,9 +911,10 @@ void SpellChecker::RespondToChangedSelection(
   // When spell checking is off, existing markers disappear after the selection
   // changes.
   if (!IsSpellCheckingEnabled()) {
-    GetFrame().GetDocument()->Markers().RemoveMarkers(
+    GetFrame().GetDocument()->Markers().RemoveMarkersOfTypes(
         DocumentMarker::kSpelling);
-    GetFrame().GetDocument()->Markers().RemoveMarkers(DocumentMarker::kGrammar);
+    GetFrame().GetDocument()->Markers().RemoveMarkersOfTypes(
+        DocumentMarker::kGrammar);
     return;
   }
 
@@ -888,7 +923,7 @@ void SpellChecker::RespondToChangedSelection(
   if (!ShouldCheckOldSelection(old_selection_start))
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   // In the long term we should use idle time spell checker to prevent
   // synchronous layout caused by spell checking (see crbug.com/517298).
@@ -920,17 +955,15 @@ void SpellChecker::RespondToChangedContents() {
 }
 
 void SpellChecker::RemoveSpellingMarkers() {
-  GetFrame().GetDocument()->Markers().RemoveMarkers(
+  GetFrame().GetDocument()->Markers().RemoveMarkersOfTypes(
       DocumentMarker::MisspellingMarkers());
 }
 
 void SpellChecker::RemoveSpellingMarkersUnderWords(
     const Vector<String>& words) {
-  MarkerRemoverPredicate remover_predicate(words);
-
   DocumentMarkerController& marker_controller =
       GetFrame().GetDocument()->Markers();
-  marker_controller.RemoveMarkers(remover_predicate);
+  marker_controller.RemoveSpellingMarkersUnderWords(words);
   marker_controller.RepaintMarkers();
 }
 
@@ -938,9 +971,9 @@ void SpellChecker::SpellCheckAfterBlur() {
   if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
     return;
 
-  // TODO(yosin): We should hoist updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): Hoist updateStyleAndLayoutIgnorePendingStylesheets
   // to caller. See http://crbug.com/590369 for more details.
-  // TODO(xiaochengh): In the long term we should use idle time spell checker to
+  // In the long term we should use idle time spell checker to
   // prevent synchronous layout caused by spell checking (see crbug.com/517298).
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
   DocumentLifecycle::DisallowTransitionScope disallow_transition(
@@ -1032,7 +1065,7 @@ void SpellChecker::RemoveMarkers(const EphemeralRange& range,
   if (range.IsNull())
     return;
 
-  GetFrame().GetDocument()->Markers().RemoveMarkers(range, marker_types);
+  GetFrame().GetDocument()->Markers().RemoveMarkersInRange(range, marker_types);
 }
 
 // TODO(xiaochengh): This function is only used by unit tests. We should move it
@@ -1062,7 +1095,7 @@ Vector<TextCheckingResult> SpellChecker::FindMisspellings(const String& text) {
   text.AppendTo(characters);
   unsigned length = text.length();
 
-  TextBreakIterator* iterator = WordBreakIterator(characters.Data(), length);
+  TextBreakIterator* iterator = WordBreakIterator(characters.data(), length);
   if (!iterator)
     return Vector<TextCheckingResult>();
 
@@ -1076,7 +1109,7 @@ Vector<TextCheckingResult> SpellChecker::FindMisspellings(const String& text) {
     int misspelling_location = -1;
     int misspelling_length = 0;
     TextChecker().CheckSpellingOfString(
-        String(characters.Data() + word_start, word_length),
+        String(characters.data() + word_start, word_length),
         &misspelling_location, &misspelling_length);
     if (misspelling_length > 0) {
       DCHECK_GE(misspelling_location, 0);

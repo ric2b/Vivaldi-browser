@@ -29,6 +29,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/helper/vivaldi_app_helper.h"
 
@@ -232,7 +233,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     content::WebContents* source,
     const content::MediaStreamRequest& request,
     const content::MediaResponseCallback& callback) {
-#if defined(ENABLE_MEDIA_ROUTER)
+  // Vivaldi
   // If this is a TabCast request.
   if (request.video_type == content::MEDIA_TAB_VIDEO_CAPTURE ||
       request.audio_type == content::MEDIA_TAB_AUDIO_CAPTURE) {
@@ -264,8 +265,8 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
       return;
     }
   }
+  // End Vivaldi
 
-#endif  // ENABLE_MEDIA_ROUTER
   extensions::VivaldiAppHelper* helper =
       extensions::VivaldiAppHelper::FromWebContents(web_view_guest()->
         embedder_web_contents());
@@ -293,6 +294,22 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
           camera_setting != CONTENT_SETTING_BLOCK)
         break;
     }
+
+    extensions::VivaldiPrivateTabObserver* private_tab =
+        extensions::VivaldiPrivateTabObserver::FromWebContents(source);
+    if (private_tab) {
+      // Since webview uses a combined permission called "media" we block this
+      // if any of CAMERA or MICROPHONE is denied.
+      ContentSetting setting_access = (audio_setting == CONTENT_SETTING_BLOCK ||
+                                       camera_setting == CONTENT_SETTING_BLOCK)
+                                          ? CONTENT_SETTING_BLOCK
+                                          : CONTENT_SETTING_ALLOW;
+
+      private_tab->OnPermissionAccessed(
+          CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
+          request.security_origin.spec(), setting_access);
+    }
+
     // Only default (not requested), allow and block allowed.
     // Others are "always ask".
     if (audio_setting == CONTENT_SETTING_BLOCK ||

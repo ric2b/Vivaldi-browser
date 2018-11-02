@@ -10,6 +10,7 @@
 #include "chrome/installer/util/shell_util.h"
 
 #include <windows.h>
+#include <objbase.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 
@@ -758,6 +759,7 @@ bool ElevateAndRegisterChrome(BrowserDistribution* dist,
 
   if (base::PathExists(exe_path)) {
     base::CommandLine cmd(exe_path);
+    InstallUtil::AppendModeSwitch(&cmd);
     if (!is_per_user)
       cmd.AppendSwitch(installer::switches::kSystemLevel);
     cmd.AppendSwitchPath(installer::switches::kRegisterChromeBrowser,
@@ -805,10 +807,11 @@ bool LaunchDefaultAppsSettingsModernDialog(const wchar_t* protocol) {
       L"!microsoft.windows.immersivecontrolpanel";
 
   base::win::ScopedComPtr<IApplicationActivationManager> activator;
-  HRESULT hr = activator.CreateInstance(CLSID_ApplicationActivationManager);
+  HRESULT hr = ::CoCreateInstance(CLSID_ApplicationActivationManager, nullptr,
+                                  CLSCTX_ALL, IID_PPV_ARGS(&activator));
   if (SUCCEEDED(hr)) {
     DWORD pid = 0;
-    CoAllowSetForegroundWindow(activator.get(), nullptr);
+    CoAllowSetForegroundWindow(activator.Get(), nullptr);
     hr = activator->ActivateApplication(kControlPanelAppModelId,
                                         L"page=SettingsPageAppsDefaults",
                                         AO_NONE, &pid);
@@ -1095,8 +1098,9 @@ ShellUtil::DefaultState ProbeCurrentDefaultHandlers(
     const wchar_t* const* protocols,
     size_t num_protocols) {
   base::win::ScopedComPtr<IApplicationAssociationRegistration> registration;
-  HRESULT hr = registration.CreateInstance(
-      CLSID_ApplicationAssociationRegistration, NULL, CLSCTX_INPROC);
+  HRESULT hr =
+      ::CoCreateInstance(CLSID_ApplicationAssociationRegistration, NULL,
+                         CLSCTX_INPROC, IID_PPV_ARGS(&registration));
   if (FAILED(hr))
     return ShellUtil::UNKNOWN_DEFAULT;
 
@@ -1121,8 +1125,9 @@ ShellUtil::DefaultState ProbeAppIsDefaultHandlers(
     const wchar_t* const* protocols,
     size_t num_protocols) {
   base::win::ScopedComPtr<IApplicationAssociationRegistration> registration;
-  HRESULT hr = registration.CreateInstance(
-      CLSID_ApplicationAssociationRegistration, NULL, CLSCTX_INPROC);
+  HRESULT hr =
+      ::CoCreateInstance(CLSID_ApplicationAssociationRegistration, NULL,
+                         CLSCTX_INPROC, IID_PPV_ARGS(&registration));
   if (FAILED(hr))
     return ShellUtil::UNKNOWN_DEFAULT;
 
@@ -1929,8 +1934,8 @@ bool ShellUtil::MakeChromeDefault(BrowserDistribution* dist,
     // the IApplicationAssociationRegistration interface.
     VLOG(1) << "Registering Chrome as default browser on Vista.";
     base::win::ScopedComPtr<IApplicationAssociationRegistration> pAAR;
-    HRESULT hr = pAAR.CreateInstance(CLSID_ApplicationAssociationRegistration,
-        NULL, CLSCTX_INPROC);
+    HRESULT hr = ::CoCreateInstance(CLSID_ApplicationAssociationRegistration,
+                                    NULL, CLSCTX_INPROC, IID_PPV_ARGS(&pAAR));
     if (SUCCEEDED(hr)) {
       for (int i = 0; kBrowserProtocolAssociations[i] != NULL; i++) {
         hr = pAAR->SetAppAsDefault(app_name.c_str(),
@@ -2036,8 +2041,8 @@ bool ShellUtil::MakeChromeDefaultProtocolClient(
     VLOG(1) << "Registering Chrome as default handler for " << protocol
             << " on Vista.";
     base::win::ScopedComPtr<IApplicationAssociationRegistration> pAAR;
-    HRESULT hr = pAAR.CreateInstance(CLSID_ApplicationAssociationRegistration,
-      NULL, CLSCTX_INPROC);
+    HRESULT hr = ::CoCreateInstance(CLSID_ApplicationAssociationRegistration,
+                                    NULL, CLSCTX_INPROC, IID_PPV_ARGS(&pAAR));
     if (SUCCEEDED(hr)) {
       base::string16 app_name = GetApplicationName(chrome_exe);
       hr = pAAR->SetAppAsDefault(app_name.c_str(), protocol.c_str(),

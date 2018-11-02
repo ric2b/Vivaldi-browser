@@ -26,7 +26,6 @@
 <translation id="159359590073980872">Cache de imagem</translation>
 <translation id="1603914832182249871">(Modo Privado)</translation>
 <translation id="1616206807336925449">Esta extensão não requer autorizações especiais.</translation>
-<translation id="1620510694547887537">Câmara</translation>
 <translation id="1627276047960621195">Descritores de ficheiros</translation>
 <translation id="1635033183663317347">Instalada pelo supervisor.</translation>
 <translation id="1682548588986054654">Nova janela privada</translation>
@@ -37,7 +36,6 @@
 <translation id="1729533290416704613">Também controla a página apresentada quando pesquisa a partir da Caixa geral.</translation>
 <translation id="1744108098763830590">página de fundo</translation>
 <translation id="1769104665586091481">Abrir ligação numa nova &amp;janela</translation>
-<translation id="1789575671122666129">Pop-ups</translation>
 <translation id="1815083418640426271">Colar sem formatação</translation>
 <translation id="1846308012215045257">CTRL+Clique para executar <ph name="PLUGIN_NAME" /></translation>
 <translation id="1850508293116537636">Rodar para a &amp;direita</translation>
@@ -52,10 +50,8 @@
 <translation id="2087822576218954668">Imprimir: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Atualizar &amp;frame</translation>
 <translation id="2129825002735785149">Atualizar plug-in</translation>
-<translation id="2147827593068025794">Sincronização em segundo plano</translation>
 <translation id="215753907730220065">Sair do modo de ecrã inteiro</translation>
 <translation id="2177950615300672361">Separador de navegação anónima: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">Detetar (predefinição)</translation>
 <translation id="219008588003277019">Módulo Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Esconder botão</translation>
 <translation id="2218515861914035131">Colar como texto simples</translation>
@@ -73,9 +69,7 @@
 <translation id="2439110203301358333">Outro programa do computador adicionou uma extensão que pode alterar o funcionamento do Vivaldi.</translation>
 <translation id="2445081178310039857">É necessário o directório de raiz da extensão.</translation>
 <translation id="2470702053775288986">Extensões não suportadas desativadas</translation>
-<translation id="2482878487686419369">Notificações</translation>
 <translation id="2501797496290880632">Introduza um atalho</translation>
-<translation id="2509857212037838238">Instalar o <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">Memória trocada</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Reactivar</translation>
@@ -101,7 +95,6 @@
 <translation id="3124111068741548686">Identificadores de UTILIZADOR</translation>
 <translation id="3149510190863420837">Aplicações do Chrome</translation>
 <translation id="3222066309010235055">Pré-renderizar: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Microfone</translation>
 <translation id="32279126412636473">Recarregar (⌘R)</translation>
 <translation id="3241680850019875542">Selecione o directório raiz da extensão a comprimir. Para atualizar uma extensão, selecione também o ficheiro de chave privada a reutilizar.</translation>
 <translation id="3280237271814976245">Guard&amp;ar como...</translation>
@@ -116,7 +109,6 @@
 <translation id="3347086966102161372">C&amp;opiar endereço da imagem</translation>
 <translation id="335985608243443814">Procurar...</translation>
 <translation id="3378572629723696641">Esta extensão pode ter sido danificada.</translation>
-<translation id="3427092606871434483">Permitir (predefinição)</translation>
 <translation id="3435896845095436175">Ativar</translation>
 <translation id="345693547134384690">Abrir imagem num novo separador</translation>
 <translation id="3467267818798281173">Pedir sugestões ao Google</translation>
@@ -129,7 +121,6 @@
 <translation id="3727187387656390258">Inspecionar pop-up</translation>
 <translation id="3760460896538743390">Inspecionar página de &amp;fundo</translation>
 <translation id="3763401818161139108">Executar sempre em <ph name="ORIGIN" /></translation>
-<translation id="3789841737615482174">Instalar</translation>
 <translation id="3798449238516105146">Versão</translation>
 <translation id="3855441664322950881">Compactar extensão</translation>
 <translation id="3866249974567520381">Descrição</translation>
@@ -153,7 +144,6 @@
 <translation id="4100839878934973028">Outro programa do computador adicionou uma aplicação que pode alterar o funcionamento do Vivaldi.</translation>
 <translation id="411666854932687641">Memória privada</translation>
 <translation id="4130207949184424187">Esta extensão alterou a página apresentada quando pesquisa a partir da caixa geral.</translation>
-<translation id="4165986682804962316">Definições de sites</translation>
 <translation id="4176463684765177261">Desativado</translation>
 <translation id="4200983522494130825">Novo &amp;separador</translation>
 <translation id="420665587194630159">(Esta extensão é gerida e não pode ser removida ou desativada)</translation>
@@ -161,7 +151,6 @@
 <translation id="4240511609794012987">Memória partilhada</translation>
 <translation id="4256316378292851214">Guardar &amp;vídeo como...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K em directo)</translation>
-<translation id="4312866146174492540">Bloquear (predefinição)</translation>
 <translation id="4348766275249686434">Recolher erros</translation>
 <translation id="4384652540891215547">Ativar a extensão</translation>
 <translation id="4394049700291259645">Desactivar</translation>
@@ -183,7 +172,6 @@
 <translation id="4742746985488890273">Fixar</translation>
 <translation id="4839303808932127586">Guardar &amp;vídeo como...</translation>
 <translation id="4850258771229959924">Ver nas ferramentas de programador</translation>
-<translation id="4851858059374029925">Pretende instalar o <ph name="PLUGIN_NAME" />? Instale apenas plug-ins de confiança.</translation>
 <translation id="488785315393301722">Mostrar Detalhes</translation>
 <translation id="4911714727432509308">Não existem extensões com atalhos de teclado atribuídos.</translation>
 <translation id="4912643508233590958">Reativações após inatividade</translation>
@@ -228,14 +216,12 @@
 <translation id="5715711091495208045">Mediador de plug-ins: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Lamentamos, não somos capazes de lhe mostrar o código deste erro.</translation>
 <translation id="5764483294734785780">Gua&amp;rdar áudio como...</translation>
-<translation id="5778550464785688721">Controlo total de dispositivos MIDI</translation>
 <translation id="5780973441651030252">Prioridade do processo</translation>
 <translation id="5804241973901381774">Permissões</translation>
 <translation id="583281660410589416">Desconhecido</translation>
 <translation id="5849869942539715694">Compactar extensão...</translation>
 <translation id="5910363049092958439">Guardar &amp;imagem como...</translation>
 <translation id="59174027418879706">Ativada</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 em utilização}other{# em utilização}}</translation>
 <translation id="5956585768868398362">É esta a página de pesquisa de que estava à espera?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (pico de <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Também controla a página apresentada quando clica no botão Página Inicial ou pesquisa a partir da Caixa geral.</translation>
@@ -279,7 +265,6 @@
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Manter alterações</translation>
 <translation id="6841186874966388268">Erros</translation>
-<translation id="6863910145616405334">Plug-in não encontrado</translation>
 <translation id="6886871292305414135">Abrir link num novo &amp;separador</translation>
 <translation id="6900284862687837908">Aplicação em segundo plano: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Revogar acesso a ficheiros</translation>
@@ -289,7 +274,6 @@
 <translation id="6985276906761169321">ID:</translation>
 <translation id="7013485839273047434">Obter mais extensões</translation>
 <translation id="708060913198414444">C&amp;opiar endereço do áudio</translation>
-<translation id="7105578512429498960">Instale o <ph name="PLUGIN_NAME" /> para apresentar este conteúdo</translation>
 <translation id="7144878232160441200">Repetir</translation>
 <translation id="7175353351958621980">Carregada de:</translation>
 <translation id="7186088072322679094">Manter na barra de ferramentas</translation>
@@ -343,7 +327,6 @@ Ficheiro de chave: <ph name="KEY_FILE" />
 Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para criar novas versões da sua extensão.</translation>
 <translation id="8004582292198964060">Navegador</translation>
 <translation id="8023801379949507775">Atualizar extensões</translation>
-<translation id="8037357227543935929">Pedir (predefinição)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Gerir extensões</translation>
 <translation id="8188120771410500975">&amp;Verificar a ortografia dos campos de texto</translation>
@@ -361,7 +344,6 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8512476990829870887">Terminar processo</translation>
 <translation id="8523493869875972733">Manter alterações</translation>
 <translation id="8546306075665861288">Cache de imagem</translation>
-<translation id="855705891482654011">Carregar extensões descompactadas</translation>
 <translation id="8584280235376696778">&amp;Abrir vídeo num novo separador</translation>
 <translation id="8605428685123651449">Memória SQLite</translation>
 <translation id="8615618338313291042">Aplicação em navegação anónima: <ph name="APP_NAME" /></translation>
@@ -370,7 +352,6 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8664389313780386848">&amp;Ver fonte da página</translation>
 <translation id="8719653885894320876">A transferência do <ph name="PLUGIN_NAME" /> falhou</translation>
 <translation id="873545264931343897">Quando a atualização do <ph name="PLUGIN_NAME" /> estiver concluída, atualize a página para o ativar</translation>
-<translation id="8763204422633679667">Quando a instalação do <ph name="PLUGIN_NAME" /> estiver concluída, atualize a página para o ativar</translation>
 <translation id="8770406935328356739">Diretório da extensão</translation>
 <translation id="8795916974678578410">Nova janela</translation>
 <translation id="8798099450830957504">Predefinição</translation>
@@ -386,7 +367,6 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="9003647077635673607">Permitir em todos os sites</translation>
 <translation id="9027459031423301635">Abrir ligação num novo &amp;separador</translation>
 <translation id="9088234649737575428">O <ph name="PLUGIN_NAME" /> está bloqueado pela política da empresa</translation>
-<translation id="9145718805518496796">Compactar extensões...</translation>
 <translation id="9153341767479566106">Outras extensões cujo carregamento falhou:</translation>
 <translation id="9170848237812810038">An&amp;ular</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" adicionada</translation>

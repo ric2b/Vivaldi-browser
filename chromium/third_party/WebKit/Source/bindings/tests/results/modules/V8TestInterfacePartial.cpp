@@ -15,11 +15,9 @@
 #include "bindings/core/v8/IDLTypes.h"
 #include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/ScriptPromise.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8Document.h"
 #include "bindings/core/v8/V8Node.h"
-#include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8TestCallbackInterface.h"
 #include "bindings/core/v8/V8TestInterface.h"
 #include "bindings/tests/idls/modules/TestInterfacePartial3Implementation.h"
@@ -27,6 +25,8 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/origin_trials/OriginTrials.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
 
@@ -47,6 +47,8 @@ static void partial4LongAttributeAttributeSetter(v8::Local<v8::Value> v8Value, c
   ALLOW_UNUSED_LOCAL(isolate);
 
   v8::Local<v8::Object> holder = info.Holder();
+  ALLOW_UNUSED_LOCAL(holder);
+
   TestInterfaceImplementation* impl = V8TestInterface::toImpl(holder);
 
   ExceptionState exceptionState(isolate, ExceptionState::kSetterContext, "TestInterface", "partial4LongAttribute");
@@ -66,6 +68,9 @@ static void partial4StaticLongAttributeAttributeGetter(const v8::FunctionCallbac
 static void partial4StaticLongAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8::Isolate* isolate = info.GetIsolate();
   ALLOW_UNUSED_LOCAL(isolate);
+
+  v8::Local<v8::Object> holder = info.Holder();
+  ALLOW_UNUSED_LOCAL(holder);
 
   ExceptionState exceptionState(isolate, ExceptionState::kSetterContext, "TestInterface", "partial4StaticLongAttribute");
 
@@ -452,12 +457,12 @@ void V8TestInterfacePartial::installOriginTrialPartialFeature(v8::Isolate* isola
   v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTemplate);
   ALLOW_UNUSED_LOCAL(signature);
   static const V8DOMConfiguration::AccessorConfiguration accessorpartial4LongAttributeConfiguration[] = {
-    {"partial4LongAttribute", V8TestInterfacePartial::partial4LongAttributeAttributeGetterCallback, V8TestInterfacePartial::partial4LongAttributeAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds}
+    { "partial4LongAttribute", V8TestInterfacePartial::partial4LongAttributeAttributeGetterCallback, V8TestInterfacePartial::partial4LongAttributeAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
   };
   for (const auto& accessorConfig : accessorpartial4LongAttributeConfiguration)
     V8DOMConfiguration::InstallAccessor(isolate, world, instance, prototype, interface, signature, accessorConfig);
   static const V8DOMConfiguration::AccessorConfiguration accessorpartial4StaticLongAttributeConfiguration[] = {
-    {"partial4StaticLongAttribute", V8TestInterfacePartial::partial4StaticLongAttributeAttributeGetterCallback, V8TestInterfacePartial::partial4StaticLongAttributeAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnInterface, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds}
+    { "partial4StaticLongAttribute", V8TestInterfacePartial::partial4StaticLongAttributeAttributeGetterCallback, V8TestInterfacePartial::partial4StaticLongAttributeAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnInterface, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
   };
   for (const auto& accessorConfig : accessorpartial4StaticLongAttributeConfiguration)
     V8DOMConfiguration::InstallAccessor(isolate, world, instance, prototype, interface, signature, accessorConfig);

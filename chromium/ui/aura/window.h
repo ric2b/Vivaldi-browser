@@ -18,6 +18,7 @@
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "ui/aura/aura_export.h"
+#include "ui/aura/client/window_types.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/class_property.h"
 #include "ui/compositor/layer_animator.h"
@@ -27,10 +28,12 @@
 #include "ui/events/event_target.h"
 #include "ui/events/event_targeter.h"
 #include "ui/events/gestures/gesture_types.h"
-#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/wm/public/window_types.h"
+
+namespace cc {
+class CompositorFrameSink;
+}
 
 namespace display {
 class Display;
@@ -48,8 +51,9 @@ namespace aura {
 
 class LayoutManager;
 class WindowDelegate;
-class WindowPort;
 class WindowObserver;
+class WindowPort;
+class WindowPortForShutdown;
 class WindowTreeHost;
 
 // Defined in class_property.h (which we do not include)
@@ -81,10 +85,10 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   typedef std::vector<Window*> Windows;
 
   explicit Window(WindowDelegate* delegate,
-                  ui::wm::WindowType type = ui::wm::WINDOW_TYPE_UNKNOWN);
+                  client::WindowType type = client::WINDOW_TYPE_UNKNOWN);
   Window(WindowDelegate* delegate,
          std::unique_ptr<WindowPort> port,
-         ui::wm::WindowType type = ui::wm::WINDOW_TYPE_UNKNOWN);
+         client::WindowType type = client::WINDOW_TYPE_UNKNOWN);
   ~Window() override;
 
   // Initializes the window. This creates the window's layer.
@@ -98,8 +102,8 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // A type is used to identify a class of Windows and customize behavior such
   // as event handling and parenting.  This field should only be consumed by the
   // shell -- Aura itself shouldn't contain type-specific logic.
-  ui::wm::WindowType type() const { return type_; }
-  void SetType(ui::wm::WindowType type);
+  client::WindowType type() const { return type_; }
+  void SetType(client::WindowType type);
 
   int id() const { return id_; }
   void set_id(int id) { id_ = id; }
@@ -175,7 +179,7 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // LayoutManager may adjust the bounds.
   void SetBounds(const gfx::Rect& new_bounds);
 
-  // Changes the bounds of the window in the screen coordintates.
+  // Changes the bounds of the window in the screen coordinates.
   // If present, the window's parent's LayoutManager may adjust the bounds.
   void SetBoundsInScreen(const gfx::Rect& new_bounds_in_screen_coords,
                          const display::Display& dst_display);
@@ -239,16 +243,6 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
 
   void set_ignore_events(bool ignore_events) { ignore_events_ = ignore_events; }
   bool ignore_events() const { return ignore_events_; }
-
-  // Sets the window to grab hits for an area extending |insets| pixels inside
-  // its bounds (even if that inner region overlaps a child window). This can be
-  // used to create an invisible non-client area that overlaps the client area.
-  void set_hit_test_bounds_override_inner(const gfx::Insets& insets) {
-    hit_test_bounds_override_inner_ = insets;
-  }
-  gfx::Insets hit_test_bounds_override_inner() const {
-    return hit_test_bounds_override_inner_;
-  }
 
   // Returns true if the |point_in_root| in root window's coordinate falls
   // within this window's bounds. Returns false if the window is detached
@@ -315,6 +309,12 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // Returns true if there was state needing to be cleaned up.
   bool CleanupGestureState();
 
+  // Create a CompositorFrameSink for the aura::Window.
+  std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink();
+
+  // Get the current cc::SurfaceId.
+  cc::SurfaceId GetSurfaceId() const;
+
  protected:
   // Deletes (or removes if not owned by parent) all child windows. Intended for
   // use from the destructor.
@@ -330,6 +330,7 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   friend class LayoutManager;
   friend class PropertyConverter;
   friend class WindowPort;
+  friend class WindowPortForShutdown;
   friend class WindowTargeter;
   friend class test::WindowTestApi;
 
@@ -441,6 +442,9 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // pointer in |port_| so that it can still be accessed during destruction.
   // This is important as deleting the WindowPort may result in trying to lookup
   // the WindowPort associated with the Window.
+  //
+  // NOTE: this value is reset for windows that exist when WindowTreeClient
+  // is deleted.
   std::unique_ptr<WindowPort> port_owner_;
   WindowPort* port_;
 
@@ -452,7 +456,7 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
 
   WindowTreeHost* host_;
 
-  ui::wm::WindowType type_;
+  client::WindowType type_;
 
   // True if the Window is owned by its parent - i.e. it will be deleted by its
   // parent during its parents destruction. True is the default.
@@ -481,9 +485,6 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
 
   // Makes the window pass all events through to any windows behind it.
   bool ignore_events_;
-
-  // See set_hit_test_bounds_override_inner().
-  gfx::Insets hit_test_bounds_override_inner_;
 
   base::ObserverList<WindowObserver, true> observers_;
 

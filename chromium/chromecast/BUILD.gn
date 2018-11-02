@@ -4,7 +4,6 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
-import("//build/config/locales.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//chromecast/build/tests/cast_test.gni")
@@ -34,6 +33,7 @@ cast_test_group("cast_tests") {
     "//chromecast/base/component:cast_component_unittests",
     "//chromecast/crypto:cast_crypto_unittests",
     "//chromecast/media:cast_media_unittests",
+    "//chromecast/net:cast_net_unittests",
     "//chromecast/system/reboot:cast_reboot_unittests",
     "//content/test:content_unittests",
     "//crypto:crypto_unittests",
@@ -42,7 +42,7 @@ cast_test_group("cast_tests") {
     "//net:net_unittests",
     "//sandbox/linux:sandbox_linux_unittests",
     "//sql:sql_unittests",
-    "//storage/browser:storage_unittests",
+    "//storage:storage_unittests",
     "//third_party/cacheinvalidation:cacheinvalidation_unittests",
     "//ui/base:ui_base_unittests",
   ]
@@ -60,7 +60,11 @@ cast_test_group("cast_tests") {
   }
 
   if (!is_android && use_alsa) {
-    tests += [ "//chromecast/media/cma/backend/alsa:cast_alsa_cma_backend_unittests" ]
+    tests += [
+      "//chromecast/media/cma/backend/alsa:cast_alsa_cma_backend_unittests",
+      "//chromecast/media/cma/backend/alsa:libcast_governor_unittests",
+      "//chromecast/media/cma/backend/alsa:slew_volume_unittests",
+    ]
   }
 
   if (!is_android) {
@@ -308,6 +312,7 @@ if (is_android) {
     test_type = "junit"
     tests = [
       "//base:base_junit_tests",
+      "//chromecast/browser/android:cast_shell_junit_tests",
       "//content/public/android:content_junit_tests",
       "//net/android:net_junit_tests",
       "//testing/android/junit:junit_unit_tests",
@@ -322,6 +327,9 @@ if (is_android) {
     run_list_path = "$root_out_dir/junit/run_junit_test_list.txt"
     build_tests = true
     test_groups = [ ":cast_junit_tests" ]
+    if (chromecast_branding != "public") {
+      test_groups += [ "//chromecast/internal:internal_cast_junit_tests" ]
+    }
   }
 }
 
@@ -372,7 +380,7 @@ executable("cast_shell") {
   deps = [
     ":cast_shell_lib",
     ":chromecast_locales_pak",
-    "//build/config/sanitizers:deps",
+    "//build/config:exe_and_shlib_deps",
     "//chromecast/app",
     "//content/public/app:both",
   ]
@@ -417,11 +425,11 @@ repack("cast_shell_pak") {
 }
 
 # Intermediate targets that repack grit resources by locale. For each locale
-# in |locales_with_fake_bidi| (see //build/config/locales.gni), all resources
+# in |cast_locales| (see //chromecast/chromecast.gni), all resources
 # are packed into a single .pak file in an output directory. These targets
 # should not be depended on directly; depend on ":chromecast_locales_pak"
 # instead.
-foreach(locale, locales_with_fake_bidi) {
+foreach(locale, cast_locales) {
   repack("_cast_repack_${locale}") {
     visibility = [ ":chromecast_locales_pak" ]
     output = "$root_out_dir/chromecast_locales/${locale}.pak"
@@ -447,7 +455,7 @@ foreach(locale, locales_with_fake_bidi) {
 # A meta-target which repacks resources by locale.
 group("chromecast_locales_pak") {
   deps = []
-  foreach(locale, locales_with_fake_bidi) {
+  foreach(locale, cast_locales) {
     deps += [ ":_cast_repack_${locale}" ]
   }
 }

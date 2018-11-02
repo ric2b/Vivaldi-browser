@@ -89,6 +89,13 @@ fuzzer_test("pdf_jpx_fuzzer") {
   seed_corpus = "corpora/pdf_jpx"
 }
 
+fuzzer_test("pdf_font_fuzzer") {
+  sources = []
+  deps = [
+    "//third_party/pdfium/testing/libfuzzer:pdf_font_fuzzer",
+  ]
+}
+
 fuzzer_test("pdf_psengine_fuzzer") {
   sources = []
   deps = [
@@ -175,6 +182,13 @@ if (pdf_enable_xfa) {
       "//third_party/pdfium/testing/libfuzzer:pdf_xml_fuzzer",
     ]
     dict = "dicts/pdf_xml.dict"
+  }
+
+  fuzzer_test("pdf_cfx_barcode_fuzzer") {
+    sources = []
+    deps = [
+      "//third_party/pdfium/testing/libfuzzer:pdf_cfx_barcode_fuzzer",
+    ]
   }
 
   fuzzer_test("pdf_cfx_saxreader_fuzzer") {

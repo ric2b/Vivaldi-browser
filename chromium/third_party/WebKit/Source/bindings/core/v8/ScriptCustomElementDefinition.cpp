@@ -4,21 +4,21 @@
 
 #include "bindings/core/v8/ScriptCustomElementDefinition.h"
 
-#include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8BindingMacros.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8CustomElementRegistry.h"
 #include "bindings/core/v8/V8Element.h"
 #include "bindings/core/v8/V8ErrorHandler.h"
-#include "bindings/core/v8/V8PrivateProperty.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
-#include "bindings/core/v8/V8ThrowException.h"
+#include "bindings/core/v8/V8ThrowDOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/custom/CustomElement.h"
 #include "core/events/ErrorEvent.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/imports/HTMLImportsController.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8BindingMacros.h"
+#include "platform/bindings/V8PrivateProperty.h"
 #include "platform/wtf/Allocator.h"
 #include "v8.h"
 
@@ -259,7 +259,7 @@ bool ScriptCustomElementDefinition::RunConstructor(Element* element) {
     const String& message =
         "custom element constructors must call super() first and must "
         "not return a different object";
-    v8::Local<v8::Value> exception = V8ThrowException::CreateDOMException(
+    v8::Local<v8::Value> exception = V8ThrowDOMException::CreateDOMException(
         script_state_->GetIsolate(), kInvalidStateError, message);
     DispatchErrorEvent(isolate, exception, Constructor());
     return false;
@@ -274,9 +274,9 @@ Element* ScriptCustomElementDefinition::CallConstructor() {
   ExecutionContext* execution_context =
       ExecutionContext::From(script_state_.Get());
   v8::Local<v8::Value> result;
-  if (!V8Call(V8ScriptRunner::CallAsConstructor(isolate, Constructor(),
-                                                execution_context, 0, nullptr),
-              result)) {
+  if (!V8ScriptRunner::CallAsConstructor(isolate, Constructor(),
+                                         execution_context, 0, nullptr)
+           .ToLocal(&result)) {
     return nullptr;
   }
   return V8Element::toImplWithTypeCheck(isolate, result);

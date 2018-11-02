@@ -415,8 +415,9 @@ public class WebViewLayoutTest {
         File filePath = new File(absolutePath.substring(0, absolutePath.lastIndexOf("/")));
 
         if (!filePath.exists()) {
-            if (!filePath.mkdirs())
+            if (!filePath.mkdirs()) {
                 throw new IOException("failed to create directories: " + filePath);
+            }
         }
 
         FileOutputStream outputStream = new FileOutputStream(fileOut);

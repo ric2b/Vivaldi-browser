@@ -11,8 +11,7 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
-#include "base/threading/sequenced_worker_pool.h"
-#include "chrome/browser/android/offline_pages/background_loader_offliner.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/android/offline_pages/background_scheduler_bridge.h"
 #include "chrome/browser/android/offline_pages/downloads/offline_page_notification_bridge.h"
 #include "chrome/browser/android/offline_pages/evaluation/evaluation_test_scheduler.h"
@@ -21,6 +20,7 @@
 #include "chrome/browser/android/offline_pages/request_coordinator_factory.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service_factory.h"
+#include "chrome/browser/offline_pages/background_loader_offliner.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/common/chrome_constants.h"
@@ -36,7 +36,6 @@
 #include "components/offline_pages/core/offline_page_item.h"
 #include "components/offline_pages/core/offline_page_model.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/browser_thread.h"
 #include "jni/OfflinePageEvaluationBridge_jni.h"
 #include "jni/SavePageRequest_jni.h"
 
@@ -132,8 +131,7 @@ std::unique_ptr<KeyedService> GetTestingRequestCoordinator(
     std::unique_ptr<OfflinerPolicy> policy,
     std::unique_ptr<Offliner> offliner) {
   scoped_refptr<base::SequencedTaskRunner> background_task_runner =
-      content::BrowserThread::GetBlockingPool()->GetSequencedTaskRunner(
-          content::BrowserThread::GetBlockingPool()->GetSequenceToken());
+      base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()});
   Profile* profile = Profile::FromBrowserContext(context);
   base::FilePath queue_store_path =
       profile->GetPath().Append(chrome::kOfflinePageRequestQueueDirname);
@@ -176,7 +174,8 @@ std::unique_ptr<KeyedService> GetTestBackgroundLoaderRequestCoordinator(
   std::unique_ptr<OfflinerPolicy> policy(new OfflinerPolicy());
   std::unique_ptr<Offliner> offliner(new BackgroundLoaderOffliner(
       context, policy.get(),
-      OfflinePageModelFactory::GetForBrowserContext(context)));
+      OfflinePageModelFactory::GetForBrowserContext(context),
+      nullptr));  // no need to connect LoadTerminatorListener for harness.
   return GetTestingRequestCoordinator(context, std::move(policy),
                                       std::move(offliner));
 }

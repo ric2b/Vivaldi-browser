@@ -42,17 +42,16 @@
 #include "public/web/WebViewClient.h"
 #include "web/WebDevToolsAgentImpl.h"
 #include "web/WebFrameWidgetImpl.h"
-#include "web/WebLocalFrameImpl.h"
 
 namespace blink {
 
 std::unique_ptr<PageOverlay> PageOverlay::Create(
-    WebLocalFrameImpl* frame_impl,
+    WebLocalFrameBase* frame_impl,
     std::unique_ptr<PageOverlay::Delegate> delegate) {
   return WTF::WrapUnique(new PageOverlay(frame_impl, std::move(delegate)));
 }
 
-PageOverlay::PageOverlay(WebLocalFrameImpl* frame_impl,
+PageOverlay::PageOverlay(WebLocalFrameBase* frame_impl,
                          std::unique_ptr<PageOverlay::Delegate> delegate)
     : frame_impl_(frame_impl), delegate_(std::move(delegate)) {}
 

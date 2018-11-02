@@ -9,6 +9,7 @@
 #include "ash/shell.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -36,7 +37,7 @@ class FixedWidthLabel : public views::Label {
   explicit FixedWidthLabel(int width);
   ~FixedWidthLabel() override;
 
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
 
  private:
   int width_;
@@ -52,7 +53,7 @@ FixedWidthLabel::FixedWidthLabel(int width) : width_(width) {
 FixedWidthLabel::~FixedWidthLabel() {
 }
 
-gfx::Size FixedWidthLabel::GetPreferredSize() const {
+gfx::Size FixedWidthLabel::CalculatePreferredSize() const {
   return gfx::Size(width_, GetHeightForWidth(width_));
 }
 
@@ -79,6 +80,7 @@ IdleActionWarningDialogView::IdleActionWarningDialogView(
       base::TimeDelta::FromMilliseconds(kCountdownUpdateIntervalMs),
       this,
       &IdleActionWarningDialogView::UpdateLabel);
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::IDLE_ACTION_WARNING);
 }
 
 void IdleActionWarningDialogView::CloseDialog() {

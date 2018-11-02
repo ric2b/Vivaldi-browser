@@ -2,7 +2,6 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
 <translation id="1018656279737460067">Avbröts</translation>
-<translation id="1030173864176315846">Skrev ut <ph name="PAGE_NUMBER" /> sidor till <ph name="PRINTER_NAME" /></translation>
 <translation id="1031362278801463162">Läser in förhandsgranskning</translation>
 <translation id="1049795001945932310">&amp;Språkinställningar</translation>
 <translation id="1056898198331236512">Varning</translation>
@@ -15,7 +14,6 @@
 <translation id="1181037720776840403">Ta bort</translation>
 <translation id="1187722533808055681">Antal gånger som systemets vänteprocess har väckts</translation>
 <translation id="119944043368869598">Ta bort alla</translation>
-<translation id="1218323606465324064">Skriver ut <ph name="PAGE_NUMBER" /> sidor till <ph name="PRINTER_NAME" /></translation>
 <translation id="1221825588892235038">Endast markering</translation>
 <translation id="1244303850296295656">Fel i tillägg</translation>
 <translation id="1278049586634282054">Inspekterade vyer:</translation>
@@ -36,7 +34,6 @@
 <translation id="1601560923496285236">Verkställ</translation>
 <translation id="1603914832182249871">(Privat fönster)</translation>
 <translation id="1616206807336925449">Det här tillägget kräver inga särskilda behörigheter.</translation>
-<translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Filbeskrivningar</translation>
 <translation id="1635033183663317347">Har installerats av din vårdnadshavare.</translation>
 <translation id="1681120471812444678">Konfigurera nya skrivare …</translation>
@@ -50,7 +47,6 @@
 <translation id="1744108098763830590">bakgrundssida</translation>
 <translation id="176587472219019965">&amp;Nytt fönster</translation>
 <translation id="1769104665586091481">Öppna länk i nytt f&amp;önster</translation>
-<translation id="1789575671122666129">Popup-fönster</translation>
 <translation id="1815083418640426271">Klistra in som oformaterad text</translation>
 <translation id="1828901632669367785">Skriv ut via systemdialog...</translation>
 <translation id="1838288018605456492">Klicka för att ställa in</translation>
@@ -69,16 +65,13 @@
 <translation id="2076269580855484719">Dölj det här insticksprogrammet</translation>
 <translation id="2087822576218954668">Utskrift: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Hämta &amp;ram på nytt</translation>
-<translation id="2115291620696624944">Fel vid utskrift av <ph name="PAGE_NUMBER" /> sidor till <ph name="PRINTER_NAME" /></translation>
 <translation id="2129825002735785149">Uppdatera insticksprogrammet</translation>
-<translation id="2147827593068025794">Bakgrundssynkronisering</translation>
 <translation id="2148892889047469596">Casta fliken</translation>
 <translation id="2150139952286079145">Sök destinationer</translation>
 <translation id="215753907730220065">Avsluta helskärmsläge</translation>
 <translation id="2177950615300672361">Privat flik: <ph name="TAB_NAME" /></translation>
 <translation id="218070003709087997">Använd ett nummer som anger hur många kopior som ska skrivas ut (1 till 999).</translation>
 <translation id="2181927652428971824">Skriv ut till Vivaldi Dokument och andra platser i molnet. <ph name="BEGIN_LINK" />Logga in<ph name="END_LINK" /> om du vill skriva ut med hjälp av Google Cloud Print.</translation>
-<translation id="2187317261103489799">Identifiera (standard)</translation>
 <translation id="219008588003277019">Native Client-modul: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Dölj knapp</translation>
 <translation id="2218515861914035131">Klistra in som oformaterad text</translation>
@@ -103,11 +96,9 @@
 <translation id="2439110203301358333">Ett annat program i datorn har lagt till ett tillägg som kan ändra hur Vivaldi fungerar.</translation>
 <translation id="2445081178310039857">Tilläggets rotkatalog måste anges.</translation>
 <translation id="2470702053775288986">Tillägg som inte stöds har inaktiverats</translation>
-<translation id="2482878487686419369">Aviseringar</translation>
 <translation id="2498436043474441766">Lägg till skrivare</translation>
 <translation id="2501797496290880632">Ange en genväg</translation>
 <translation id="2509495747794740764">Förstoringsgraden måste vara ett tal mellan 10 och 200.</translation>
-<translation id="2509857212037838238">Installera <ph name="PLUGIN_NAME" /></translation>
 <translation id="253557089021624350">Antal "keepalive"</translation>
 <translation id="2550212893339833758">Växlingsminne</translation>
 <translation id="2580924999637585241">Totalt: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
@@ -145,7 +136,6 @@
 <translation id="3149510190863420837">Chrome-appar</translation>
 <translation id="3154429428035006212">Offline i mer än en månad</translation>
 <translation id="3222066309010235055">För-renderare <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">Mikrofon</translation>
 <translation id="32279126412636473">Hämta om (⌘R)</translation>
 <translation id="3241680850019875542">Välj rotkatalogen för tillägget som ska packas. Om du vill uppdatera ett tillägg väljer du också den privata nyckel som ska återanvändas.</translation>
 <translation id="3280237271814976245">Spara so&amp;m...</translation>
@@ -166,7 +156,6 @@
 <translation id="3360297538363969800">Utskriften misslyckades. Kontrollera skrivaren och försök igen.</translation>
 <translation id="3378572629723696641">Det här tillägget kan vara skadat.</translation>
 <translation id="3396331542604645348">Den valda skrivaren är inte tillgänglig eller har inte installerats korrekt. Kontrollera skrivaren eller välj en annan.</translation>
-<translation id="3427092606871434483">Tillåt (standard)</translation>
 <translation id="3435896845095436175">Aktivera</translation>
 <translation id="3439970425423980614">Öppna PDF i Förhandsvisning</translation>
 <translation id="345693547134384690">Öppna &amp;bild i ny flik</translation>
@@ -174,7 +163,6 @@
 <translation id="3468745736289470383">Dela skärmen</translation>
 <translation id="3487007233252413104">anonym funktion</translation>
 <translation id="3505030558724226696">Återkalla enhetsåtkomst</translation>
-<translation id="3509527969829946096">Med det här alternativet aktiveras stödet för att koda videoströmmar med plattformens maskinvara i Cast Streaming.</translation>
 <translation id="3511307672085573050">Kopiera länk&amp;adress</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vill dela skrivaren &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; med en grupp som du äger: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Om du godtar kan alla medlemmar i gruppen skriva ut till skrivaren.</translation>
 <translation id="3587482841069643663">Alla</translation>
@@ -188,7 +176,6 @@
 <translation id="3730639321086573427">Lokala destinationer</translation>
 <translation id="3760460896538743390">Inspektera &amp;bakgrundssida</translation>
 <translation id="3763401818161139108">Kör alltid på <ph name="ORIGIN" /></translation>
-<translation id="3789841737615482174">Installera</translation>
 <translation id="3798449238516105146">Version</translation>
 <translation id="385051799172605136">Bakåt</translation>
 <translation id="3855441664322950881">Packa tillägg</translation>
@@ -202,7 +189,6 @@
 <translation id="3925842537050977900">Frigör från hylla</translation>
 <translation id="3927932062596804919">Neka</translation>
 <translation id="3936390757709632190">&amp;Öppna ljud i ny flik</translation>
-<translation id="3936999098172113189">Väntar på att skriva ut <ph name="PAGE_NUMBER" /> sidor till <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Bakåt</translation>
 <translation id="3948116654032448504">&amp;Sök på <ph name="SEARCH_ENGINE" /> efter bild</translation>
 <translation id="3978267865113951599">(Kraschat)</translation>
@@ -220,9 +206,7 @@
 <translation id="4100839878934973028">Ett annat program i datorn har lagt till en app som kan ändra hur Vivaldi fungerar.</translation>
 <translation id="411666854932687641">Privat minne</translation>
 <translation id="4130207949184424187">Det här tillägget har ändrat vilken sida som visas när du söker i adressfältet.</translation>
-<translation id="4130750466177569591">Jag godkänner</translation>
 <translation id="4131410914670010031">Svartvitt</translation>
-<translation id="4165986682804962316">Platsinställningar</translation>
 <translation id="4176463684765177261">Inaktiverad</translation>
 <translation id="4200983522494130825">Ny &amp;flik</translation>
 <translation id="420665587194630159">(Tillägget administreras och kan inte avinstalleras eller inaktiveras.)</translation>
@@ -230,7 +214,6 @@
 <translation id="4240511609794012987">Delat minne</translation>
 <translation id="4256316378292851214">S&amp;para video som...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K aktiva)</translation>
-<translation id="4312866146174492540">Blockera (standard)</translation>
 <translation id="431291515148403474">Om du lägger till dina skrivare i Google Cloud Print kan du skriva ut
         var du än är och var skrivaren än är. Dela skrivare med vem du vill och
         skriv ut till dem från Vivaldi, mobilen, surfplattan, datorn eller
@@ -264,14 +247,12 @@
 <translation id="4816492930507672669">Anpassa till sida</translation>
 <translation id="4839303808932127586">S&amp;para video som...</translation>
 <translation id="4850258771229959924">Visa i Utvecklarverktyg</translation>
-<translation id="4851858059374029925">Vill du installera <ph name="PLUGIN_NAME" />? Installera bara insticksprogram som du litar på.</translation>
 <translation id="488785315393301722">Visa detaljer</translation>
 <translation id="4911714727432509308">Tilläggen har inte tilldelats några kortkommandon.</translation>
 <translation id="4912643508233590958">Aktiveringar efter vila</translation>
 <translation id="4918086044614829423">Godta</translation>
 <translation id="4927301649992043040">Packa tillägg</translation>
 <translation id="4927753642311223124">Inget att se här, cirkulera.</translation>
-<translation id="4957028442764970964">Skrivaren konfigureras.</translation>
 <translation id="4988526792673242964">Sidor</translation>
 <translation id="49896407730300355">Rotera m&amp;oturs</translation>
 <translation id="4989966318180235467">Kontrollera &amp;bakgrundssida</translation>
@@ -327,7 +308,6 @@
 <translation id="5746169159649715125">Spara som PDF</translation>
 <translation id="5759728514498647443">Dokument som du skickar till utskrift via <ph name="APP_NAME" /> kan läsas av <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">S&amp;para ljud som...</translation>
-<translation id="5778550464785688721">MIDI-enheter – fullständig kontroll</translation>
 <translation id="5780973441651030252">Prioriteringsprocess</translation>
 <translation id="5804241973901381774">Behörigheter</translation>
 <translation id="5828633471261496623">Skriver ut...</translation>
@@ -337,13 +317,11 @@
 <translation id="5849869942539715694">Packa tillägg...</translation>
 <translation id="5910363049092958439">S&amp;para bild som...</translation>
 <translation id="59174027418879706">Aktiverat</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 används}other{# används}}</translation>
 <translation id="5956585768868398362">Är det här den söksida du väntade dig?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> som mest)</translation>
 <translation id="5965661248935608907">Det styr också vilken sida som visas när du klickar på knappen Startsida eller söker i adressfältet.</translation>
 <translation id="6025215716629925253">Stackspår</translation>
 <translation id="6040143037577758943">Stäng</translation>
-<translation id="6051028581720248124">När du skriver ut till ett FedEx Office-kontor accepterar du deras <ph name="START_LINK" />användarvillkor<ph name="END_LINK" />.</translation>
 <translation id="6082651258230788217">Visa i verktygsrad</translation>
 <translation id="6086814797483779854">Kör vid klick</translation>
 <translation id="6086846494333236931">Installerad av din administratör</translation>
@@ -397,7 +375,6 @@
 <translation id="6812841287760418429">Behåll ändringarna</translation>
 <translation id="682123305478866682">Casta skrivbordet</translation>
 <translation id="6841186874966388268">Fel</translation>
-<translation id="6863910145616405334">Insticksprogrammet hittades inte</translation>
 <translation id="6886871292305414135">Öppna länk i ny &amp;flik</translation>
 <translation id="6900284862687837908">Bakgrundsapp: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Återkalla filåtkomst</translation>
@@ -414,7 +391,6 @@
 <translation id="7006634003215061422">Nedre marginal</translation>
 <translation id="7013485839273047434">Hämta fler tillägg</translation>
 <translation id="708060913198414444">K&amp;opiera ljudadress</translation>
-<translation id="7105578512429498960">Installera <ph name="PLUGIN_NAME" /> om du vill visa innehållet</translation>
 <translation id="7144878232160441200">Försök igen</translation>
 <translation id="7175353351958621980">Hämtad från:</translation>
 <translation id="7186088072322679094">Behåll i verktygsrad</translation>
@@ -483,7 +459,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8004582292198964060">Webbläsare</translation>
 <translation id="8023801379949507775">Uppdatera tillägg nu</translation>
 <translation id="8032244173881942855">Det gick inte att casta fliken.</translation>
-<translation id="8037357227543935929">Fråga (standard)</translation>
 <translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">Skriv ut som bild</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
@@ -507,7 +482,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8523493869875972733">Behåll ändringarna</translation>
 <translation id="8523849605371521713">Tillagd av policy</translation>
 <translation id="8546306075665861288">Cacheminne för bilder</translation>
-<translation id="855705891482654011">Läs in opackade tillägg</translation>
 <translation id="8569682776816196752">Det gick inte att hitta några destinationer</translation>
 <translation id="8584280235376696778">&amp;Öppna video i ny flik</translation>
 <translation id="8605428685123651449">SQLite-minne</translation>
@@ -522,7 +496,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8719653885894320876">Det gick inte att ladda ned <ph name="PLUGIN_NAME" /></translation>
 <translation id="873545264931343897">När <ph name="PLUGIN_NAME" /> har uppdaterats läser du in sidan igen för att aktivera det</translation>
 <translation id="8757090071857742562">Det gick inte att casta skrivbordet. Kontrollera att du har svarat på frågan om att dela skärmen.</translation>
-<translation id="8763204422633679667">När <ph name="PLUGIN_NAME" /> har installerats läser du in sidan igen för att aktivera det</translation>
 <translation id="8770406935328356739">Tilläggets rotkatalog</translation>
 <translation id="8774934320277480003">Övre marginal</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vill dela skrivaren &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; med dig.</translation>
@@ -547,7 +520,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="9027459031423301635">Öppna länk i ny &amp;flik</translation>
 <translation id="9056810968620647706">Inga träffar hittades.</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> har blockerats av en företagspolicy</translation>
-<translation id="9145718805518496796">Packa tillägg...</translation>
 <translation id="9153341767479566106">Andra tillägg som inte kunde läsas in:</translation>
 <translation id="9170848237812810038">&amp;Ångra</translation>
 <translation id="9215293857209265904"><ph name="EXTENSION_NAME" /> har lagts till</translation>

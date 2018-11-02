@@ -7,7 +7,9 @@
 #include "base/macros.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/pref_names.h"
@@ -24,7 +26,6 @@
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/link_listener.h"
 #include "ui/views/layout/grid_layout.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -68,7 +69,9 @@ InvertBubbleView::InvertBubbleView(Browser* browser, views::View* anchor_view)
       high_contrast_(NULL),
       dark_theme_(NULL),
       learn_more_(NULL),
-      close_(NULL) {}
+      close_(NULL) {
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::INVERT);
+}
 
 InvertBubbleView::~InvertBubbleView() {
 }
@@ -117,7 +120,8 @@ void InvertBubbleView::Init() {
   layout->StartRow(0, 0);
   layout->AddView(title, 4, 1);
   layout->StartRowWithPadding(0, 0, 0,
-                              views::kRelatedControlSmallVerticalSpacing);
+                              ChromeLayoutProvider::Get()->GetDistanceMetric(
+                                  DISTANCE_RELATED_CONTROL_VERTICAL_SMALL));
   layout->AddView(high_contrast_);
   layout->AddView(dark_theme_);
   layout->AddView(learn_more_);

@@ -6,7 +6,7 @@ import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
-import("//device/vr/features.gni")
+import("//device/vr/features/features.gni")
 import("//extensions/features/features.gni")
 import("//media/media_options.gni")
 import("//net/features.gni")
@@ -44,7 +44,7 @@ declare_args() {
 
   # Enables usage of the system-provided notification center.
   enable_native_notifications =
-      is_android || is_mac || (is_desktop_linux && use_glib && use_gio)
+      is_android || is_mac || (is_desktop_linux && use_dbus)
 
   enable_one_click_signin =
       is_win || is_mac || (is_linux && !is_chromeos && !is_chromecast)

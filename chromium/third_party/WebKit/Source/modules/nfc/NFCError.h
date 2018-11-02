@@ -5,8 +5,8 @@
 #ifndef NFCError_h
 #define NFCError_h
 
-#include "device/nfc/nfc.mojom-blink.h"
 #include "platform/wtf/Allocator.h"
+#include "services/device/public/interfaces/nfc.mojom-blink.h"
 
 namespace blink {
 
@@ -18,9 +18,9 @@ class NFCError {
 
  public:
   // Required by CallbackPromiseAdapter
-  using WebType = const device::nfc::mojom::blink::NFCErrorType&;
+  using WebType = const device::mojom::blink::NFCErrorType&;
   static DOMException* Take(ScriptPromiseResolver*,
-                            const device::nfc::mojom::blink::NFCErrorType&);
+                            const device::mojom::blink::NFCErrorType&);
 };
 
 }  // namespace blink

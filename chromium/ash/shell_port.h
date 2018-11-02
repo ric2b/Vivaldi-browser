@@ -15,14 +15,18 @@
 #include "ash/metrics/user_metrics_action.h"
 #include "ash/wm/lock_state_observer.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
+#include "ui/aura/client/window_types.h"
+#include "ui/base/cursor/cursor_data.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/layer_type.h"
 #include "ui/wm/public/activation_change_observer.h"
-#include "ui/wm/public/window_types.h"
 
 namespace display {
 class Display;
 class ManagedDisplayInfo;
+class NativeDisplayDelegate;
+class TouchTransformSetter;
 }
 
 namespace gfx {
@@ -37,6 +41,8 @@ enum class PointerWatcherEventTypes;
 
 namespace ash {
 class AcceleratorController;
+class AshWindowTreeHost;
+struct AshWindowTreeHostInitParams;
 class ImmersiveFullscreenController;
 class KeyEventWatcher;
 class KeyboardUI;
@@ -72,13 +78,10 @@ class ASH_EXPORT ShellPort {
 
   virtual Config GetAshConfig() const = 0;
 
-  // Convenience for GetPrimaryRootWindow()->GetRootWindowController().
-  RootWindowController* GetPrimaryRootWindowController();
-
-  virtual WmWindow* GetPrimaryRootWindow() = 0;
+  virtual aura::Window* GetPrimaryRootWindow() = 0;
 
   // Returns the root window for the specified display.
-  virtual WmWindow* GetRootWindowForDisplayId(int64_t display_id) = 0;
+  virtual aura::Window* GetRootWindowForDisplayId(int64_t display_id) = 0;
 
   // Retuns the display info associated with |display_id|.
   // TODO(mash): Remove when DisplayManager has been moved. crbug.com/622480
@@ -117,11 +120,18 @@ class ASH_EXPORT ShellPort {
 
   // Creates a modal background (a partially-opaque fullscreen window) on all
   // displays for |window|.
-  void CreateModalBackground(WmWindow* window);
+  void CreateModalBackground(aura::Window* window);
 
   // Called when a modal window is removed. It will activate another modal
   // window if any, or remove modal screens on all displays.
-  void OnModalWindowRemoved(WmWindow* removed);
+  void OnModalWindowRemoved(aura::Window* removed);
+
+  // The return value from this is supplied to AshTouchTransformController; see
+  // it and TouchTransformSetter for details.
+  // TODO(sky): remove once simplified disable management enabled everywhere;
+  // http://crbug.com/718860.
+  virtual std::unique_ptr<display::TouchTransformSetter>
+  CreateTouchTransformDelegate() = 0;
 
   // For testing only: set simulation that a modal window is open
   void SimulateModalWindowOpenForTesting(bool modal_window_open) {
@@ -131,6 +141,10 @@ class ASH_EXPORT ShellPort {
   // See aura::client::CursorClient for details on these.
   virtual void LockCursor() = 0;
   virtual void UnlockCursor() = 0;
+  virtual void ShowCursor() = 0;
+  virtual void HideCursor() = 0;
+  virtual void SetGlobalOverrideCursor(
+      base::Optional<ui::CursorData> cursor) = 0;
   virtual bool IsMouseEventsEnabled() = 0;
 
   virtual std::vector<WmWindow*> GetAllRootWindows() = 0;
@@ -204,6 +218,16 @@ class ASH_EXPORT ShellPort {
 
   virtual void CreatePointerWatcherAdapter() = 0;
 
+  // Creates an AshWindowTreeHost. A return value of null results in a platform
+  // specific AshWindowTreeHost being created.
+  virtual std::unique_ptr<AshWindowTreeHost> CreateAshWindowTreeHost(
+      const AshWindowTreeHostInitParams& init_params) = 0;
+
+  // Called after the containers of |root_window_controller| have been created.
+  // Allows ShellPort to install any additional state on the containers.
+  virtual void OnCreatedRootWindowContainers(
+      RootWindowController* root_window_controller) = 0;
+
  protected:
   ShellPort();
 
@@ -211,6 +235,8 @@ class ASH_EXPORT ShellPort {
   // the corresponding RootWindowController.
   virtual void CreatePrimaryHost() = 0;
   virtual void InitHosts(const ShellInitParams& init_params) = 0;
+  virtual std::unique_ptr<display::NativeDisplayDelegate>
+  CreateNativeDisplayDelegate() = 0;
 
   // Called during startup to create the AcceleratorController.
   virtual std::unique_ptr<AcceleratorController>

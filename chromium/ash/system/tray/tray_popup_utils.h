@@ -54,13 +54,25 @@ class TrayPopupUtils {
   // Creates a container view to be used by system menu sub-section header rows.
   // The caller takes over ownership of the created view.
   //
-  // The returned view consists of 2 regions: CENTER, and END having the same
-  // properties as when using |CreateMultiTargetRowView|. The START container is
-  // hidden.
-  // The END container has a fixed minimum width but can grow into the CENTER
-  // container if space is required and available. The CENTER container has a
-  // flexible width.
-  static TriView* CreateSubHeaderRowView();
+  // The returned view contains at least CENTER and END regions having the same
+  // properties as when using |CreateMultiTargetRowView|. |start_visible|
+  // determines whether the START region should be visible or not. If START is
+  // not visible, extra padding is added to the left of the contents.
+  //
+  // The START (if visible) and END containers have a fixed minimum width but
+  // can grow into the CENTER container if space is required and available. The
+  // CENTER container has a flexible width.
+  //
+  // TODO(mohsen): Merge this into TrayDetailsView::AddScrollListSubHeader()
+  // once network and VPN alse use TrayDetailsView::AddScrollListSubHeader().
+  static TriView* CreateSubHeaderRowView(bool start_visible);
+
+  // Creates a view containing only a label (corresponding to |message_id|),
+  // which is to be inserted as a non-targetable row within a system menu
+  // detailed view (e.g., the "Scanning for devices..." message that can appear
+  // at the top of the Bluetooth detailed view). The caller takes over ownership
+  // of the created view.
+  static views::View* CreateInfoLabelRowView(int message_id);
 
   // Creates a container view to be used by system menu rows that want to embed
   // a targetable area within one (or more) of the containers OR by any row
@@ -200,9 +212,9 @@ class TrayPopupUtils {
   static views::Separator* CreateListSubHeaderSeparator();
 
   // Returns true if it is possible to open WebUI settings in a browser window,
-  // i.e., the user is logged in, not on the lock screen, and not in a secondary
-  // account flow.
-  static bool CanOpenWebUISettings(LoginStatus status);
+  // i.e. the user is logged in, not on the lock screen, not adding a secondary
+  // user, and not in the supervised user creation flow.
+  static bool CanOpenWebUISettings();
 
   // Initializes a row in the system menu as checkable and update the check mark
   // status of this row.

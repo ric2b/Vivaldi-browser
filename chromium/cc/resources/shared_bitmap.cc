@@ -15,8 +15,9 @@
 
 namespace cc {
 
-SharedBitmap::SharedBitmap(uint8_t* pixels, const SharedBitmapId& id)
-    : pixels_(pixels), id_(id) {}
+SharedBitmap::SharedBitmap(uint8_t* pixels, const SharedBitmapId& id,
+                           uint32_t sequence_number)
+    : pixels_(pixels), id_(id), sequence_number_(sequence_number) {}
 
 SharedBitmap::~SharedBitmap() {
 }

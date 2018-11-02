@@ -112,13 +112,13 @@ enum RTCIceConnectionState {
     // spec, remove it or change it?): https://github.com/w3c/webrtc-stats/issues/116
     [CallWith=ScriptState] Promise<RTCStatsReport> getStats();
 
+    // https://w3c.github.io/webrtc-pc/#dom-rtcpeerconnection-getsenders
+    [RuntimeEnabled=RTCRtpSender] sequence<RTCRtpSender> getSenders();
     // https://w3c.github.io/webrtc-pc/#dom-rtcpeerconnection-getreceivers
     sequence<RTCRtpReceiver> getReceivers();
 
     // https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api
-    // TODO(guidou): The label argument should have [TreatNullAs=EmptyString]
-    // and be non-nullable.
-    [CallWith=ScriptState, RaisesException] RTCDataChannel createDataChannel(DOMString? label, optional Dictionary options);
+    [CallWith=ScriptState, RaisesException] RTCDataChannel createDataChannel(USVString label, optional RTCDataChannelInit dataChannelDict);
     attribute EventHandler ondatachannel;
 
     // Certificate management
@@ -128,7 +128,7 @@ enum RTCIceConnectionState {
     // Non-standard or removed from the spec:
     [Measure] sequence<MediaStream> getLocalStreams();
     [Measure] sequence<MediaStream> getRemoteStreams();
-    [Measure] MediaStream getStreamById(DOMString streamId);
+    [DeprecateAs=V8RTCPeerConnection_GetStreamById_Method] MediaStream getStreamById(DOMString streamId);
     [Measure, CallWith=ScriptState, RaisesException] void addStream(MediaStream? stream, optional Dictionary mediaConstraints);
     [Measure, RaisesException] void removeStream(MediaStream? stream);
     [Measure, RaisesException] RTCDTMFSender createDTMFSender(MediaStreamTrack track);

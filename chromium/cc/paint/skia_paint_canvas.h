@@ -28,25 +28,16 @@ class CC_PAINT_EXPORT SkiaPaintCanvas final : public PaintCanvas {
   explicit SkiaPaintCanvas(SkCanvas* canvas);
   explicit SkiaPaintCanvas(const SkBitmap& bitmap);
   explicit SkiaPaintCanvas(const SkBitmap& bitmap, const SkSurfaceProps& props);
-  explicit SkiaPaintCanvas(SkiaPaintCanvas&& other);
   ~SkiaPaintCanvas() override;
-
-  SkiaPaintCanvas& operator=(SkiaPaintCanvas&& other) = default;
 
   SkMetaData& getMetaData() override;
   SkImageInfo imageInfo() const override;
 
   void flush() override;
 
-  SkISize getBaseLayerSize() const override;
-  bool writePixels(const SkImageInfo& info,
-                   const void* pixels,
-                   size_t row_bytes,
-                   int x,
-                   int y) override;
   int save() override;
   int saveLayer(const SkRect* bounds, const PaintFlags* flags) override;
-  int saveLayerAlpha(const SkRect* bounds, U8CPU alpha) override;
+  int saveLayerAlpha(const SkRect* bounds, uint8_t alpha) override;
 
   void restore() override;
   int getSaveCount() const override;
@@ -97,11 +88,11 @@ class CC_PAINT_EXPORT SkiaPaintCanvas final : public PaintCanvas {
                      SkScalar ry,
                      const PaintFlags& flags) override;
   void drawPath(const SkPath& path, const PaintFlags& flags) override;
-  void drawImage(sk_sp<const SkImage> image,
+  void drawImage(const PaintImage& image,
                  SkScalar left,
                  SkScalar top,
                  const PaintFlags* flags) override;
-  void drawImageRect(sk_sp<const SkImage> image,
+  void drawImageRect(const PaintImage& image,
                      const SkRect& src,
                      const SkRect& dst,
                      const PaintFlags* flags,
@@ -134,15 +125,9 @@ class CC_PAINT_EXPORT SkiaPaintCanvas final : public PaintCanvas {
   bool isClipRect() const override;
   const SkMatrix& getTotalMatrix() const override;
 
-  void temporary_internal_describeTopLayer(SkMatrix* matrix,
-                                           SkIRect* clip_bounds) override;
-
-  bool ToPixmap(SkPixmap* output) override;
   void Annotate(AnnotationType type,
                 const SkRect& rect,
                 sk_sp<SkData> data) override;
-
-  void PlaybackPaintRecord(sk_sp<const PaintRecord> record) override;
 
   // Don't shadow non-virtual helper functions.
   using PaintCanvas::clipRect;

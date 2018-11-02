@@ -201,8 +201,8 @@ void FileSelectHelper::FileSelectedWithExtraInfo(
 
 #if defined(OS_MACOSX)
   base::PostTaskWithTraits(
-      FROM_HERE, base::TaskTraits().MayBlock().WithShutdownBehavior(
-                     base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::Bind(&FileSelectHelper::ProcessSelectedFilesMac, this, files));
 #else
   NotifyRenderFrameHostAndEnd(files);
@@ -229,8 +229,8 @@ void FileSelectHelper::MultiFilesSelectedWithExtraInfo(
   }
 #if defined(OS_MACOSX)
   base::PostTaskWithTraits(
-      FROM_HERE, base::TaskTraits().MayBlock().WithShutdownBehavior(
-                     base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::Bind(&FileSelectHelper::ProcessSelectedFilesMac, this, files));
 #else
   NotifyRenderFrameHostAndEnd(files);
@@ -339,9 +339,8 @@ void FileSelectHelper::NotifyRenderFrameHostAndEndAfterConversion(
 }
 
 void FileSelectHelper::DeleteTemporaryFiles() {
-  BrowserThread::PostTask(BrowserThread::FILE,
-                          FROM_HERE,
-                          base::Bind(&DeleteFiles, temporary_files_));
+  BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
+                          base::BindOnce(&DeleteFiles, temporary_files_));
   temporary_files_.clear();
 }
 
@@ -471,8 +470,8 @@ void FileSelectHelper::RunFileChooser(
 
   BrowserThread::PostTask(
       BrowserThread::FILE, FROM_HERE,
-      base::Bind(&FileSelectHelper::GetFileTypesOnFileThread, this,
-                 base::Passed(&params)));
+      base::BindOnce(&FileSelectHelper::GetFileTypesOnFileThread, this,
+                     base::Passed(&params)));
 
   // Because this class returns notifications to the RenderViewHost, it is
   // difficult for callers to know how long to keep a reference to this
@@ -491,8 +490,8 @@ void FileSelectHelper::GetFileTypesOnFileThread(
 
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&FileSelectHelper::GetSanitizedFilenameOnUIThread, this,
-                 base::Passed(&params)));
+      base::BindOnce(&FileSelectHelper::GetSanitizedFilenameOnUIThread, this,
+                     base::Passed(&params)));
 }
 
 void FileSelectHelper::GetSanitizedFilenameOnUIThread(

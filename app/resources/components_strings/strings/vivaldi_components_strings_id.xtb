@@ -52,6 +52,7 @@
 <translation id="4021036232240155012">DNS adalah layanan jaringan yang menerjemahkan nama situs web ke alamat Internet-nya.</translation>
 <translation id="4075732493274867456">Klien dan server tidak mendukung versi protokol SSL umum atau cipher suite.</translation>
 <translation id="4130226655945681476">Memeriksa kabel jaringan, modem, dan router</translation>
+<translation id="4165986682804962316">Pengaturan situs</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Memeriksa konfigurasi antivirus dan firewall<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Coba jalankan Pendiagnosa Jaringan<ph name="END_LINK" />.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> tidak menerima sertifikat masuk anda, atau sertifikat masuk mungkin tidak di berikan.</translation>
@@ -100,7 +101,6 @@
 <translation id="7716424297397655342">Situs ini tidak dapat di muat dari tembolok</translation>
 <translation id="7758069387465995638">Perangkat lunak antivirus atau firewall mungkin memblokir sambungan.</translation>
 <translation id="7951415247503192394">(32 bit)</translation>
-<translation id="8089520772729574115">kurang dari 1 MB</translation>
 <translation id="8134994873729925007"><ph name="HOST_NAME" />’s server <ph name="BEGIN_ABBR" />alamat DNS<ph name="END_ABBR" /> tidak dapat ditemukan.</translation>
 <translation id="8142868475871995937">Kunjungi &lt;strong&gt;vivaldi://policy&lt;/strong&gt; untuk melihat daftar URL yang masuk daftar hitam dan kebijakan lain yang di terapkan oleh admin sistem anda.</translation>
 <translation id="8149426793427495338">Komputer anda pergi untuk tidur.</translation>

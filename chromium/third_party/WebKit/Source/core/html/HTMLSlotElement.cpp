@@ -30,7 +30,6 @@
 
 #include "core/html/HTMLSlotElement.h"
 
-#include "bindings/core/v8/Microtask.h"
 #include "core/HTMLNames.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/StyleChangeReason.h"
@@ -42,6 +41,7 @@
 #include "core/frame/UseCounter.h"
 #include "core/html/AssignedNodesOptions.h"
 #include "core/probe/CoreProbes.h"
+#include "platform/bindings/Microtask.h"
 
 namespace blink {
 
@@ -140,13 +140,13 @@ void HTMLSlotElement::AppendDistributedNodesFrom(const HTMLSlotElement& other) {
 void HTMLSlotElement::ClearDistribution() {
   // TODO(hayato): Figure out when to call
   // lazyReattachDistributedNodesIfNeeded()
-  assigned_nodes_.Clear();
-  distributed_nodes_.Clear();
-  distributed_indices_.Clear();
+  assigned_nodes_.clear();
+  distributed_nodes_.clear();
+  distributed_indices_.clear();
 }
 
 void HTMLSlotElement::SaveAndClearDistribution() {
-  old_distributed_nodes_.Swap(distributed_nodes_);
+  old_distributed_nodes_.swap(distributed_nodes_);
   ClearDistribution();
 }
 
@@ -158,7 +158,7 @@ void HTMLSlotElement::DispatchSlotChangeEvent() {
 
 Node* HTMLSlotElement::DistributedNodeNextTo(const Node& node) const {
   DCHECK(SupportsDistribution());
-  const auto& it = distributed_indices_.Find(&node);
+  const auto& it = distributed_indices_.find(&node);
   if (it == distributed_indices_.end())
     return nullptr;
   size_t index = it->value;
@@ -169,7 +169,7 @@ Node* HTMLSlotElement::DistributedNodeNextTo(const Node& node) const {
 
 Node* HTMLSlotElement::DistributedNodePreviousTo(const Node& node) const {
   DCHECK(SupportsDistribution());
-  const auto& it = distributed_indices_.Find(&node);
+  const auto& it = distributed_indices_.find(&node);
   if (it == distributed_indices_.end())
     return nullptr;
   size_t index = it->value;
@@ -200,6 +200,18 @@ void HTMLSlotElement::DetachLayoutTree(const AttachContext& context) {
   HTMLElement::DetachLayoutTree(context);
 }
 
+void HTMLSlotElement::RebuildDistributedChildrenLayoutTrees() {
+  if (!SupportsDistribution())
+    return;
+  Text* next_text_sibling = nullptr;
+  // This loop traverses the nodes from right to left for the same reason as the
+  // one described in ContainerNode::RebuildChildrenLayoutTrees().
+  for (auto it = distributed_nodes_.rbegin(); it != distributed_nodes_.rend();
+       ++it) {
+    RebuildLayoutTreeForChild(*it, next_text_sibling);
+  }
+}
+
 void HTMLSlotElement::AttributeChanged(
     const AttributeModificationParams& params) {
   if (params.name == nameAttr) {
@@ -213,8 +225,9 @@ void HTMLSlotElement::AttributeChanged(
   HTMLElement::AttributeChanged(params);
 }
 
-static bool WasInShadowTreeBeforeInserted(HTMLSlotElement& slot,
-                                          ContainerNode& insertion_point) {
+static bool WasInDifferentShadowTreeBeforeInserted(
+    HTMLSlotElement& slot,
+    ContainerNode& insertion_point) {
   ShadowRoot* root1 = slot.ContainingShadowRoot();
   ShadowRoot* root2 = insertion_point.ContainingShadowRoot();
   if (root1 && root2 && root1 == root2)
@@ -232,7 +245,8 @@ Node::InsertionNotificationRequest HTMLSlotElement::InsertedInto(
     // Relevant DOM Standard: https://dom.spec.whatwg.org/#concept-node-insert
     // - 6.4:  Run assign slotables for a tree with node's tree and a set
     // containing each inclusive descendant of node that is a slot.
-    if (root->IsV1() && !WasInShadowTreeBeforeInserted(*this, *insertion_point))
+    if (root->IsV1() &&
+        !WasInDifferentShadowTreeBeforeInserted(*this, *insertion_point))
       root->DidAddSlot(*this);
   }
 
@@ -314,7 +328,7 @@ void HTMLSlotElement::LazyReattachDistributedNodesIfNeeded() {
       node->LazyReattachIfAttached();
     probe::didPerformSlotDistribution(this);
   }
-  old_distributed_nodes_.Clear();
+  old_distributed_nodes_.clear();
 }
 
 void HTMLSlotElement::DidSlotChange(SlotChangeType slot_change_type) {

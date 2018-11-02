@@ -4,6 +4,12 @@
   "interface_provider_specs": {
     "service_manager:connector": {
       "provides": {
+        "network_service": [
+          "content::mojom::NetworkService"
+        ],
+        "test": [
+          "content::mojom::NetworkServiceTest"
+        ],
         "url_loader": [
           "content::mojom::URLLoaderFactory"
         ]

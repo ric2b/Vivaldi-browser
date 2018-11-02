@@ -19,13 +19,13 @@
 #include "build/build_config.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/navigation_throttle.h"
+#include "content/public/common/associated_interface_registry.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/media_stream_request.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/service_info.h"
 #include "content/public/common/socket_permission_request.h"
 #include "content/public/common/window_container_type.mojom.h"
-#include "media/audio/audio_manager.h"
 #include "media/media_features.h"
 #include "media/mojo/interfaces/remoting.mojom.h"
 #include "net/base/mime_util.h"
@@ -61,14 +61,19 @@ class GpuChannelEstablishFactory;
 }
 
 namespace media {
+class AudioLogFactory;
+class AudioManager;
 class CdmFactory;
+}
+
+namespace mojo {
+class ScopedInterfaceEndpointHandle;
 }
 
 namespace service_manager {
 class BinderRegistry;
-class InterfaceRegistry;
 class Service;
-struct ServiceInfo;
+struct BindSourceInfo;
 }
 
 namespace net {
@@ -78,10 +83,16 @@ class SSLCertRequestInfo;
 class SSLInfo;
 class URLRequest;
 class URLRequestContext;
+class X509Certificate;
+typedef std::vector<scoped_refptr<X509Certificate>> CertificateList;
 }
 
 namespace rappor {
 class RapporService;
+}
+
+namespace ukm {
+class UkmRecorder;
 }
 
 namespace sandbox {
@@ -355,9 +366,6 @@ class CONTENT_EXPORT ContentBrowserClient {
                               int render_frame_id,
                               const net::CookieOptions& options);
 
-  // This is called on the IO thread.
-  virtual bool AllowSaveLocalState(ResourceContext* context);
-
   // Allow the embedder to control if access to file system by a shared worker
   // is allowed.
   // This is called on the IO thread.
@@ -375,15 +383,6 @@ class CONTENT_EXPORT ContentBrowserClient {
       const base::string16& name,
       ResourceContext* context,
       const std::vector<std::pair<int, int> >& render_frames);
-
-#if BUILDFLAG(ENABLE_WEBRTC)
-  // Allow the embedder to control if WebRTC identities are allowed to be cached
-  // and potentially reused for future requests (within the same origin).
-  // This is called on the IO thread.
-  virtual bool AllowWebRTCIdentityCache(const GURL& url,
-                                        const GURL& first_party_url,
-                                        ResourceContext* context);
-#endif  // BUILDFLAG(ENABLE_WEBRTC)
 
   // Allow the embedder to control whether we can use Web Bluetooth.
   // TODO(crbug.com/589228): Replace this with a use of the permission system.
@@ -478,7 +477,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       bool overridable,
       bool strict_enforcement,
       bool expired_previous_decision,
-      const base::Callback<void(CertificateRequestResultType)>& callback) {}
+      const base::Callback<void(CertificateRequestResultType)>& callback);
 
   // Selects a SSL client certificate and returns it to the |delegate|. Note:
   // |delegate| may be called synchronously or asynchronously.
@@ -487,6 +486,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void SelectClientCertificate(
       WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
+      net::CertificateList client_certs,
       std::unique_ptr<ClientCertificateDelegate> delegate);
 
   // Returns a class to get notifications about media event. The embedder can
@@ -501,10 +501,9 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns true if the given page is allowed to open a window of the given
   // type. If true is returned, |no_javascript_access| will indicate whether
   // the window that is created should be scriptable/in the same process.
-  // This is called on the IO thread.
+  // This is called on the UI thread.
   virtual bool CanCreateWindow(
-      int opener_render_process_id,
-      int opener_render_frame_id,
+      RenderFrameHost* opener,
       const GURL& opener_url,
       const GURL& opener_top_level_frame_url,
       const GURL& source_origin,
@@ -516,7 +515,6 @@ class CONTENT_EXPORT ContentBrowserClient {
       const blink::mojom::WindowFeatures& features,
       bool user_gesture,
       bool opener_suppressed,
-      ResourceContext* context,
       bool* no_javascript_access);
 
   // Notifies the embedder that the ResourceDispatcherHost has been created.
@@ -541,16 +539,11 @@ class CONTENT_EXPORT ContentBrowserClient {
   // optionally add their own handlers.
   virtual void BrowserURLHandlerCreated(BrowserURLHandler* handler) {}
 
-  // Clears browser cache.
-  virtual void ClearCache(RenderFrameHost* rfh) {}
-
-  // Clears browser cookies.
-  virtual void ClearCookies(RenderFrameHost* rfh) {}
-
   // Clears |browser_context|'s data stored for the given |origin|.
   // The datatypes to be removed are specified by |remove_cookies|,
   // |remove_storage|, and |remove_cache|. Note that cookies should be removed
   // for the entire eTLD+1 of |origin|. Must call |callback| when finished.
+  // TODO(crbug.com/668114): Depreacated. Use BrowsingDataRemover instead.
   virtual void ClearSiteData(content::BrowserContext* browser_context,
                              const url::Origin& origin,
                              bool remove_cookies,
@@ -661,26 +654,35 @@ class CONTENT_EXPORT ContentBrowserClient {
   // task runner is provided.
   virtual void ExposeInterfacesToRenderer(
       service_manager::BinderRegistry* registry,
+      AssociatedInterfaceRegistry* associated_registry,
       RenderProcessHost* render_process_host) {}
 
   // Called when RenderFrameHostImpl connects to the Media service. Expose
   // interfaces to the service using |registry|.
   virtual void ExposeInterfacesToMediaService(
-      service_manager::InterfaceRegistry* registry,
+      service_manager::BinderRegistry* registry,
       RenderFrameHost* render_frame_host) {}
 
   // Allows to register browser Mojo interfaces exposed through the
   // RenderFrameHost.
-  virtual void RegisterRenderFrameMojoInterfaces(
-      service_manager::InterfaceRegistry* registry,
+  virtual void ExposeInterfacesToFrame(
+      service_manager::BinderRegistry* registry,
       RenderFrameHost* render_frame_host) {}
+
+  // Content was unable to bind a request for this associated interface, so the
+  // embedder should try. Returns true if the |handle| was actually taken and
+  // bound; false otherwise.
+  virtual bool BindAssociatedInterfaceRequestFromFrame(
+      RenderFrameHost* render_frame_host,
+      const std::string& interface_name,
+      mojo::ScopedInterfaceEndpointHandle* handle);
 
   // (Currently called only from GPUProcessHost, move somewhere more central).
   // Called when a request to bind |interface_name| on |interface_pipe| is
   // received from |source_info.identity|. If the request is bound,
   // |interface_pipe| will become invalid (taken by the client).
   virtual void BindInterfaceRequest(
-      const service_manager::ServiceInfo& source_info,
+      const service_manager::BindSourceInfo& source_info,
       const std::string& interface_name,
       mojo::ScopedMessagePipeHandle* interface_pipe) {}
 
@@ -771,7 +773,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Allows the embedder to provide its own AudioManager implementation.
   // If this function returns nullptr, a default platform implementation
   // will be used.
-  virtual media::ScopedAudioManagerPtr CreateAudioManager(
+  virtual std::unique_ptr<media::AudioManager> CreateAudioManager(
       media::AudioLogFactory* audio_log_factory);
   // Creates and returns a factory used for creating CDM instances for playing
   // protected content.
@@ -813,6 +815,9 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Returns the RapporService from the browser process.
   virtual ::rappor::RapporService* GetRapporService();
+
+  // Returns the UkmRecorder from the browser process.
+  virtual ::ukm::UkmRecorder* GetUkmRecorder();
 
   // Provides parameters for initializing the global task scheduler. Default
   // params are used if this returns nullptr.

@@ -9,6 +9,7 @@
 #include "base/atomic_sequence_num.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/histogram_tester.h"
@@ -205,8 +206,7 @@ TEST_F(CertificateReportingServiceReporterOnIOThreadTest,
       net::URLRequestFailedJob::GetMockHttpsUrl(net::ERR_SSL_PROTOCOL_ERROR);
   certificate_reporting::ErrorReporter* certificate_error_reporter =
       new certificate_reporting::ErrorReporter(
-          url_request_context_getter()->GetURLRequestContext(), kFailureURL,
-          net::ReportSender::DO_NOT_SEND_COOKIES);
+          url_request_context_getter()->GetURLRequestContext(), kFailureURL);
 
   CertificateReportingService::BoundedReportList* list =
       new CertificateReportingService::BoundedReportList(2);
@@ -296,8 +296,7 @@ TEST_F(CertificateReportingServiceReporterOnIOThreadTest,
       net::URLRequestFailedJob::GetMockHttpsUrl(net::ERR_SSL_PROTOCOL_ERROR);
   certificate_reporting::ErrorReporter* certificate_error_reporter =
       new certificate_reporting::ErrorReporter(
-          url_request_context_getter()->GetURLRequestContext(), kFailureURL,
-          net::ReportSender::DO_NOT_SEND_COOKIES);
+          url_request_context_getter()->GetURLRequestContext(), kFailureURL);
 
   CertificateReportingService::BoundedReportList* list =
       new CertificateReportingService::BoundedReportList(2);
@@ -349,7 +348,7 @@ class CertificateReportingServiceTest : public ::testing::Test {
 
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &CertificateReportingServiceTest::SetUpURLRequestContextOnIOThread,
             base::Unretained(this)));
     WaitForIOThread();
@@ -378,10 +377,10 @@ class CertificateReportingServiceTest : public ::testing::Test {
 
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&CertificateReportingServiceTest::TearDownOnIOThread,
-                   base::Unretained(this)));
+        base::BindOnce(&CertificateReportingServiceTest::TearDownOnIOThread,
+                       base::Unretained(this)));
     content::BrowserThread::PostTask(content::BrowserThread::IO, FROM_HERE,
-                                     base::Bind(&ClearURLHandlers));
+                                     base::BindOnce(&ClearURLHandlers));
     WaitForIOThread();
 
     histogram_test_helper_.CheckHistogram();
@@ -410,15 +409,15 @@ class CertificateReportingServiceTest : public ::testing::Test {
   void AdvanceClock(base::TimeDelta delta) {
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&base::SimpleTestClock::Advance,
-                   base::Unretained(clock_.get()), delta));
+        base::BindOnce(&base::SimpleTestClock::Advance,
+                       base::Unretained(clock_.get()), delta));
   }
 
   void SetNow(base::Time now) {
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&base::SimpleTestClock::SetNow,
-                   base::Unretained(clock_.get()), now));
+        base::BindOnce(&base::SimpleTestClock::SetNow,
+                       base::Unretained(clock_.get()), now));
   }
 
   void SetExpectedFailedReportCountOnTearDown(unsigned int count) {

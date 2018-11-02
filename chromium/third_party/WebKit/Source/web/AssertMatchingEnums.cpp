@@ -31,7 +31,7 @@
 // Use this file to assert that various public API enum values continue
 // matching blink defined enum values.
 
-#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/IconURL.h"
 #include "core/editing/SelectionType.h"
@@ -40,6 +40,7 @@
 #if OS(MACOSX)
 #include "core/events/WheelEvent.h"
 #endif
+#include "core/dom/AXObject.h"
 #include "core/fileapi/FileError.h"
 #include "core/frame/Frame.h"
 #include "core/frame/FrameTypes.h"
@@ -50,13 +51,13 @@
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/forms/TextControlInnerElements.h"
+#include "core/html/media/AutoplayPolicy.h"
 #include "core/layout/compositing/CompositedSelectionBound.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/loader/NavigationPolicy.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
 #include "core/page/PageVisibilityState.h"
 #include "core/style/ComputedStyleConstants.h"
-#include "modules/accessibility/AXObject.h"
 #include "modules/indexeddb/IDBKey.h"
 #include "modules/indexeddb/IDBKeyPath.h"
 #include "modules/indexeddb/IDBMetadata.h"
@@ -134,7 +135,6 @@
 #include "public/web/WebSpeechRecognizerClient.h"
 #include "public/web/WebTextCheckingResult.h"
 #include "public/web/WebTextDecorationType.h"
-#include "public/web/WebTouchAction.h"
 #include "public/web/WebView.h"
 
 namespace blink {
@@ -227,7 +227,6 @@ STATIC_ASSERT_ENUM(kWebAXRoleDetails, kDetailsRole);
 STATIC_ASSERT_ENUM(kWebAXRoleDialog, kDialogRole);
 STATIC_ASSERT_ENUM(kWebAXRoleDirectory, kDirectoryRole);
 STATIC_ASSERT_ENUM(kWebAXRoleDisclosureTriangle, kDisclosureTriangleRole);
-STATIC_ASSERT_ENUM(kWebAXRoleDiv, kDivRole);
 STATIC_ASSERT_ENUM(kWebAXRoleDocument, kDocumentRole);
 STATIC_ASSERT_ENUM(kWebAXRoleEmbeddedObject, kEmbeddedObjectRole);
 STATIC_ASSERT_ENUM(kWebAXRoleFeed, kFeedRole);
@@ -235,6 +234,7 @@ STATIC_ASSERT_ENUM(kWebAXRoleFigcaption, kFigcaptionRole);
 STATIC_ASSERT_ENUM(kWebAXRoleFigure, kFigureRole);
 STATIC_ASSERT_ENUM(kWebAXRoleFooter, kFooterRole);
 STATIC_ASSERT_ENUM(kWebAXRoleForm, kFormRole);
+STATIC_ASSERT_ENUM(kWebAXRoleGenericContainer, kGenericContainerRole);
 STATIC_ASSERT_ENUM(kWebAXRoleGrid, kGridRole);
 STATIC_ASSERT_ENUM(kWebAXRoleGroup, kGroupRole);
 STATIC_ASSERT_ENUM(kWebAXRoleHeading, kHeadingRole);
@@ -343,16 +343,18 @@ STATIC_ASSERT_ENUM(kWebAXStateSelected, kAXSelectedState);
 STATIC_ASSERT_ENUM(kWebAXStateVertical, kAXVerticalState);
 STATIC_ASSERT_ENUM(kWebAXStateVisited, kAXVisitedState);
 
-STATIC_ASSERT_ENUM(WebAXSupportedAction::kNone, AXSupportedAction::kNone);
-STATIC_ASSERT_ENUM(WebAXSupportedAction::kActivate,
-                   AXSupportedAction::kActivate);
-STATIC_ASSERT_ENUM(WebAXSupportedAction::kCheck, AXSupportedAction::kCheck);
-STATIC_ASSERT_ENUM(WebAXSupportedAction::kClick, AXSupportedAction::kClick);
-STATIC_ASSERT_ENUM(WebAXSupportedAction::kJump, AXSupportedAction::kJump);
-STATIC_ASSERT_ENUM(WebAXSupportedAction::kOpen, AXSupportedAction::kOpen);
-STATIC_ASSERT_ENUM(WebAXSupportedAction::kPress, AXSupportedAction::kPress);
-STATIC_ASSERT_ENUM(WebAXSupportedAction::kSelect, AXSupportedAction::kSelect);
-STATIC_ASSERT_ENUM(WebAXSupportedAction::kUncheck, AXSupportedAction::kUncheck);
+STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kNone, AXDefaultActionVerb::kNone);
+STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kActivate,
+                   AXDefaultActionVerb::kActivate);
+STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kCheck, AXDefaultActionVerb::kCheck);
+STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kClick, AXDefaultActionVerb::kClick);
+STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kJump, AXDefaultActionVerb::kJump);
+STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kOpen, AXDefaultActionVerb::kOpen);
+STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kPress, AXDefaultActionVerb::kPress);
+STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kSelect,
+                   AXDefaultActionVerb::kSelect);
+STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kUncheck,
+                   AXDefaultActionVerb::kUncheck);
 
 STATIC_ASSERT_ENUM(kWebAXTextDirectionLR, kAccessibilityTextDirectionLTR);
 STATIC_ASSERT_ENUM(kWebAXTextDirectionRL, kAccessibilityTextDirectionRTL);
@@ -404,6 +406,8 @@ STATIC_ASSERT_ENUM(kWebAXTextStyleLineThrough, kTextStyleLineThrough);
 
 STATIC_ASSERT_ENUM(kWebAXNameFromUninitialized, kAXNameFromUninitialized);
 STATIC_ASSERT_ENUM(kWebAXNameFromAttribute, kAXNameFromAttribute);
+STATIC_ASSERT_ENUM(kWebAXNameFromAttributeExplicitlyEmpty,
+                   kAXNameFromAttributeExplicitlyEmpty);
 STATIC_ASSERT_ENUM(kWebAXNameFromCaption, kAXNameFromCaption);
 STATIC_ASSERT_ENUM(kWebAXNameFromContents, kAXNameFromContents);
 STATIC_ASSERT_ENUM(kWebAXNameFromPlaceholder, kAXNameFromPlaceholder);
@@ -795,19 +799,6 @@ STATIC_ASSERT_ENUM(kWebCustomHandlersRegistered,
 STATIC_ASSERT_ENUM(kWebCustomHandlersDeclined,
                    NavigatorContentUtilsClient::kCustomHandlersDeclined);
 
-STATIC_ASSERT_ENUM(kWebTouchActionNone, kTouchActionNone);
-STATIC_ASSERT_ENUM(kWebTouchActionPanLeft, kTouchActionPanLeft);
-STATIC_ASSERT_ENUM(kWebTouchActionPanRight, kTouchActionPanRight);
-STATIC_ASSERT_ENUM(kWebTouchActionPanX, kTouchActionPanX);
-STATIC_ASSERT_ENUM(kWebTouchActionPanUp, kTouchActionPanUp);
-STATIC_ASSERT_ENUM(kWebTouchActionPanDown, kTouchActionPanDown);
-STATIC_ASSERT_ENUM(kWebTouchActionPanY, kTouchActionPanY);
-STATIC_ASSERT_ENUM(kWebTouchActionPan, kTouchActionPan);
-STATIC_ASSERT_ENUM(kWebTouchActionPinchZoom, kTouchActionPinchZoom);
-STATIC_ASSERT_ENUM(kWebTouchActionManipulation, kTouchActionManipulation);
-STATIC_ASSERT_ENUM(kWebTouchActionDoubleTapZoom, kTouchActionDoubleTapZoom);
-STATIC_ASSERT_ENUM(kWebTouchActionAuto, kTouchActionAuto);
-
 STATIC_ASSERT_ENUM(WebSelection::kNoSelection, kNoSelection);
 STATIC_ASSERT_ENUM(WebSelection::kCaretSelection, kCaretSelection);
 STATIC_ASSERT_ENUM(WebSelection::kRangeSelection, kRangeSelection);
@@ -884,6 +875,14 @@ STATIC_ASSERT_ENUM(WebSettings::ProgressBarCompletion::kDOMContentLoaded,
 STATIC_ASSERT_ENUM(
     WebSettings::ProgressBarCompletion::kResourcesBeforeDCLAndSameOriginIFrames,
     ProgressBarCompletion::kResourcesBeforeDCLAndSameOriginIFrames);
+
+STATIC_ASSERT_ENUM(WebSettings::AutoplayPolicy::kNoUserGestureRequired,
+                   AutoplayPolicy::Type::kNoUserGestureRequired);
+STATIC_ASSERT_ENUM(WebSettings::AutoplayPolicy::kUserGestureRequired,
+                   AutoplayPolicy::Type::kUserGestureRequired);
+STATIC_ASSERT_ENUM(
+    WebSettings::AutoplayPolicy::kUserGestureRequiredForCrossOrigin,
+    AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin);
 
 // This ensures that the version number published in
 // WebSerializedScriptValueVersion.h matches the serializer's understanding.

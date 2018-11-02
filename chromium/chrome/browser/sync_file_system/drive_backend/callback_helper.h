@@ -78,7 +78,7 @@ struct RelayToTaskRunnerHelper<void(Args...)> {
   static void Run(CallbackHolder<void(Args...)>* holder, Args... args) {
     holder->task_runner()->PostTask(
         holder->from_here(),
-        base::Bind(holder->callback(), RebindForward(args)...));
+        base::BindOnce(holder->callback(), RebindForward(args)...));
   }
 };
 
@@ -89,7 +89,7 @@ base::Callback<T> RelayCallbackToTaskRunner(
     const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     const tracked_objects::Location& from_here,
     const base::Callback<T>& callback) {
-  DCHECK(task_runner->RunsTasksOnCurrentThread());
+  DCHECK(task_runner->RunsTasksInCurrentSequence());
 
   if (callback.is_null())
     return base::Callback<T>();

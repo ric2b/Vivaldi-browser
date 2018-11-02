@@ -444,3 +444,36 @@ void VivaldiBrowserWindow::ResetDockingState(int tab_id) {
 bool VivaldiBrowserWindow::IsToolbarShowing() const {
   return false;
 }
+
+void VivaldiBrowserWindow::OnActiveTabChanged(
+    content::WebContents *old_contents, content::WebContents *new_contents,
+    int index, int reason) {
+#if !defined(OS_MACOSX)
+
+  // Make sure we do a re-layout to keep all webviews in size-sync. Scenario; if
+  // the user switch tab in fullscreen mode, only
+  // BrowserPlugin::UpdateVisibility is called. We need to make sure
+  // BrowserPlugin::UpdateGeometry is called. Note this was not visible prior to
+  // the change we have in BrowserPlugin::UpdateGeometry where a lot of extra
+  // resizing on hidden WebViews was done, and we want to be lazy. See VB-29032.
+
+  content::WebContentsImpl *web_contents =
+      static_cast<content::WebContentsImpl *>(new_contents);
+  content::BrowserPluginGuest *guestplugin =
+      web_contents->GetBrowserPluginGuest();
+  extensions::AppWindow* app_window = GetAppWindow();
+  // Only do this in fullscreen as switching tabs in windowed mode will cause a
+  // relayout through RenderWidgetCompositor::UpdateLayerTreeHost() (This is due
+  // to painting optimization.)
+  bool is_fullscreen_without_chrome = app_window && app_window->IsFullscreen();
+  if (guestplugin && is_fullscreen_without_chrome) {
+    gfx::Rect guest_rect = guestplugin->guest_window_rect();
+    gfx::Rect bounds = app_window->GetClientBounds();
+    gfx::Size window_size = gfx::Size(bounds.width(), bounds.height());
+    if (window_size != gfx::Size(guest_rect.x() + guest_rect.width(),
+                                 guest_rect.y() + guest_rect.height())) {
+      guestplugin->SizeContents(window_size);
+    }
+  }
+#endif // !OS_MACOSX
+}

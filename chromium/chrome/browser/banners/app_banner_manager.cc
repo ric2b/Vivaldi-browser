@@ -219,8 +219,13 @@ void AppBannerManager::OnDidGetManifest(const InstallableData& data) {
 
   manifest_url_ = data.manifest_url;
   manifest_ = data.manifest;
-  app_title_ = (manifest_.name.is_null()) ? manifest_.short_name.string()
-                                          : manifest_.name.string();
+
+  // One of manifest_.name or manifest_.short_name must be non-null and
+  // non-empty if the error code was NO_ERROR_DETECTED.
+  if (manifest_.name.is_null() || manifest_.name.string().empty())
+    app_title_ = manifest_.short_name.string();
+  else
+    app_title_ = manifest_.name.string();
 
   PerformInstallableCheck();
 }
@@ -391,12 +396,16 @@ void AppBannerManager::DidFinishLoad(
 
   load_finished_ = true;
   validated_url_ = validated_url;
-  // Start the pipeline immediately if:
-  //  1. we have sufficient engagement, or
-  //  2. 0 engagement is required, or
-  //  3. the feature to start the installability check in load is enabled
+
+  // If the bypass flag is on, or if we require no engagement to trigger the
+  // banner, the rest of the banner pipeline should operate as if the engagement
+  // threshold has been met.
+  if (AppBannerSettingsHelper::HasSufficientEngagement(0))
+    has_sufficient_engagement_ = true;
+
+  // Start the pipeline immediately if we pass (or bypass) the engagement check,
+  // or if the feature to run the installability check on page load is enabled.
   if (has_sufficient_engagement_ ||
-      AppBannerSettingsHelper::HasSufficientEngagement(0) ||
       base::FeatureList::IsEnabled(
           features::kCheckInstallabilityForBannerOnLoad)) {
     RequestAppBanner(validated_url, false /* is_debug_mode */);

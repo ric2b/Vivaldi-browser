@@ -6,6 +6,7 @@
 #define SERVICES_UI_GPU_GPU_SERVICE_H_
 
 #include "base/callback.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/threading/non_thread_safe.h"
@@ -29,6 +30,7 @@
 namespace gpu {
 class GpuMemoryBufferFactory;
 class GpuWatchdogThread;
+class Scheduler;
 class SyncPointManager;
 }
 
@@ -60,6 +62,8 @@ class GpuService : public gpu::GpuChannelManagerDelegate,
                           gpu::SyncPointManager* sync_point_manager = nullptr,
                           base::WaitableEvent* shutdown_event = nullptr);
   void Bind(mojom::GpuServiceRequest request);
+
+  bool is_initialized() const { return !!gpu_host_; }
 
   media::MediaGpuChannelManager* media_gpu_channel_manager() {
     return media_gpu_channel_manager_.get();
@@ -180,6 +184,8 @@ class GpuService : public gpu::GpuChannelManagerDelegate,
   // external sources.
   std::unique_ptr<gpu::SyncPointManager> owned_sync_point_manager_;
   gpu::SyncPointManager* sync_point_manager_ = nullptr;
+
+  std::unique_ptr<gpu::Scheduler> scheduler_;
 
   // An event that will be signalled when we shutdown. On some platforms it
   // comes from external sources.

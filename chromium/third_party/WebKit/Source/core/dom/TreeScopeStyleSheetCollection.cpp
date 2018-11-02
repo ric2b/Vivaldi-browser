@@ -35,6 +35,7 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Element.h"
 #include "core/dom/StyleEngine.h"
+#include "core/dom/StyleSheetCandidate.h"
 #include "core/html/HTMLLinkElement.h"
 #include "core/html/HTMLStyleElement.h"
 
@@ -67,6 +68,33 @@ void TreeScopeStyleSheetCollection::ApplyActiveStyleSheetChanges(
       GetTreeScope(), ActiveAuthorStyleSheets(),
       new_collection.ActiveAuthorStyleSheets());
   new_collection.Swap(*this);
+}
+
+bool TreeScopeStyleSheetCollection::HasStyleSheets() const {
+  for (Node* node : style_sheet_candidate_nodes_) {
+    StyleSheetCandidate candidate(*node);
+    if (candidate.Sheet() || candidate.IsEnabledAndLoading())
+      return true;
+  }
+  return false;
+}
+
+void TreeScopeStyleSheetCollection::UpdateStyleSheetList() {
+  if (!sheet_list_dirty_)
+    return;
+
+  HeapVector<Member<StyleSheet>> new_list;
+  for (Node* node : style_sheet_candidate_nodes_) {
+    StyleSheetCandidate candidate(*node);
+    DCHECK(!candidate.IsXSL());
+    if (candidate.IsImport())
+      continue;
+    if (candidate.IsEnabledAndLoading())
+      continue;
+    if (StyleSheet* sheet = candidate.Sheet())
+      new_list.push_back(sheet);
+  }
+  SwapSheetsForSheetList(new_list);
 }
 
 DEFINE_TRACE(TreeScopeStyleSheetCollection) {

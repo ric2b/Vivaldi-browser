@@ -21,7 +21,6 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "chrome/browser/favicon/fallback_icon_service_factory.h"
 #include "chrome/browser/favicon/large_icon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
@@ -33,7 +32,6 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/browser_sync/profile_sync_service.h"
-#include "components/favicon/core/fallback_icon_service.h"
 #include "components/favicon/core/fallback_url_util.h"
 #include "components/favicon/core/large_icon_service.h"
 #include "components/query_parser/snippet.h"
@@ -62,9 +60,6 @@
 
 #include "app/vivaldi_apptools.h"
 #include "extensions/tools/vivaldi_tools.h"
-
-// Number of chars to truncate titles when making them "short".
-static const size_t kShortTitleLength = 300;
 
 using bookmarks::BookmarkModel;
 
@@ -136,8 +131,7 @@ void GetDeviceNameAndType(const browser_sync::ProfileSyncService* sync_service,
 
 // Formats |entry|'s URL and title and adds them to |result|.
 void SetHistoryEntryUrlAndTitle(BrowsingHistoryService::HistoryEntry* entry,
-                                base::DictionaryValue* result,
-                                bool limit_title_length) {
+                                base::DictionaryValue* result) {
   result->SetString("url", entry->url.spec());
 
   bool using_url_as_the_title = false;
@@ -158,9 +152,14 @@ void SetHistoryEntryUrlAndTitle(BrowsingHistoryService::HistoryEntry* entry,
       base::i18n::AdjustStringForLocaleDirection(&title_to_set);
   }
 
-  result->SetString("title",
-      limit_title_length ? title_to_set.substr(0, kShortTitleLength)
-                         : title_to_set);
+#if !defined(OS_ANDROID)
+  // Number of chars to truncate titles when making them "short".
+  static const size_t kShortTitleLength = 300;
+  if (title_to_set.size() > kShortTitleLength)
+    title_to_set.resize(kShortTitleLength);
+#endif
+
+  result->SetString("title", title_to_set);
 }
 
 // Converts |entry| to a DictionaryValue to be owned by the caller.
@@ -168,10 +167,9 @@ std::unique_ptr<base::DictionaryValue> HistoryEntryToValue(
     BrowsingHistoryService::HistoryEntry* entry,
     BookmarkModel* bookmark_model,
     SupervisedUserService* supervised_user_service,
-    const browser_sync::ProfileSyncService* sync_service,
-    bool limit_title_length) {
+    const browser_sync::ProfileSyncService* sync_service) {
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
-  SetHistoryEntryUrlAndTitle(entry, result.get(), limit_title_length);
+  SetHistoryEntryUrlAndTitle(entry, result.get());
 
   base::string16 domain = url_formatter::IDNToUnicode(entry->url.host());
   // When the domain is empty, use the scheme instead. This allows for a
@@ -197,7 +195,7 @@ std::unique_ptr<base::DictionaryValue> HistoryEntryToValue(
        it != entry->all_timestamps.end(); ++it) {
     timestamps->AppendDouble(base::Time::FromInternalValue(*it).ToJsTime());
   }
-  result->Set("allTimestamps", timestamps.release());
+  result->Set("allTimestamps", std::move(timestamps));
 
   // Always pass the short date since it is needed both in the search and in
   // the monthly view.
@@ -276,15 +274,11 @@ void BrowsingHistoryHandler::RegisterMessages() {
   Profile* profile = Profile::FromWebUI(web_ui());
 
 #if defined(OS_ANDROID)
-  favicon::FallbackIconService* fallback_icon_service =
-      FallbackIconServiceFactory::GetForBrowserContext(profile);
   favicon::LargeIconService* large_icon_service =
       LargeIconServiceFactory::GetForBrowserContext(profile);
-  content::URLDataSource::Add(
-      profile, new LargeIconSource(fallback_icon_service, large_icon_service));
+  content::URLDataSource::Add(profile, new LargeIconSource(large_icon_service));
 #else
-  content::URLDataSource::Add(
-      profile, new FaviconSource(profile, FaviconSource::ANY));
+  content::URLDataSource::Add(profile, new FaviconSource(profile));
 #endif
 
   web_ui()->RegisterMessageCallback("queryHistory",
@@ -496,17 +490,12 @@ void BrowsingHistoryHandler::OnQueryComplete(
   browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
 
-  bool is_md = false;
-#if !defined(OS_ANDROID)
-  is_md = base::FeatureList::IsEnabled(::features::kMaterialDesignHistory);
-#endif
-
   // Convert the result vector into a ListValue.
   base::ListValue results_value;
   for (std::vector<BrowsingHistoryService::HistoryEntry>::iterator it =
            results->begin(); it != results->end(); ++it) {
-    std::unique_ptr<base::Value> value(HistoryEntryToValue(&(*it),
-        bookmark_model, supervised_user_service, sync_service, is_md));
+    std::unique_ptr<base::Value> value(HistoryEntryToValue(
+        &(*it), bookmark_model, supervised_user_service, sync_service));
     results_value.Append(std::move(value));
   }
 

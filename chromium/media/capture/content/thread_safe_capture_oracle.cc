@@ -141,7 +141,7 @@ bool ThreadSafeCaptureOracle::ObserveEventAndDecideCapture(
   *storage = VideoFrame::WrapExternalSharedMemory(
       params_.requested_format.pixel_format, coded_size,
       gfx::Rect(visible_size), visible_size, output_buffer_access->data(),
-      output_buffer_access->mapped_size(), base::SharedMemory::NULLHandle(), 0u,
+      output_buffer_access->mapped_size(), base::SharedMemoryHandle(), 0u,
       base::TimeDelta());
   // If creating the VideoFrame wrapper failed, call DidCaptureFrame() with
   // !success to execute the required post-capture steps (tracing, notification
@@ -212,20 +212,20 @@ void ThreadSafeCaptureOracle::DidCaptureFrame(
     scoped_refptr<VideoFrame> frame,
     base::TimeTicks reference_time,
     bool success) {
-  TRACE_EVENT_ASYNC_END2("gpu.capture", "Capture", buffer.id, "success",
-                         success, "timestamp",
-                         reference_time.ToInternalValue());
-
   base::AutoLock guard(lock_);
 
-  if (!oracle_.CompleteCapture(frame_number, success, &reference_time))
+  const bool should_deliver_frame =
+      oracle_.CompleteCapture(frame_number, success, &reference_time);
+
+  // The following is used by
+  // chrome/browser/extension/api/cast_streaming/performance_test.cc, in
+  // addition to the usual runtime tracing.
+  TRACE_EVENT_ASYNC_END2("gpu.capture", "Capture", buffer.id, "success",
+                         should_deliver_frame, "timestamp",
+                         (reference_time - base::TimeTicks()).InMicroseconds());
+
+  if (!should_deliver_frame || !client_)
     return;
-
-  TRACE_EVENT_INSTANT0("gpu.capture", "CaptureSucceeded",
-                       TRACE_EVENT_SCOPE_THREAD);
-
-  if (!client_)
-    return;  // Capture is stopped.
 
   frame->metadata()->SetDouble(VideoFrameMetadata::FRAME_RATE,
                                params_.requested_format.frame_rate);

@@ -6,10 +6,11 @@
 
 #import <objc/runtime.h>
 
-#import "base/ios/weak_nsobject.h"
-#import "base/mac/scoped_block.h"
-#import "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 // The key under which LabelObservers are associated with their labels.
@@ -26,11 +27,11 @@ NSString* GetStringValue(id value) {
 
 @interface LabelObserver () {
   // The label being observed.
-  base::WeakNSObject<UILabel> _label;
+  __weak UILabel* _label;
   // Arrays used to store registered actions.
-  base::scoped_nsobject<NSMutableArray> _styleActions;
-  base::scoped_nsobject<NSMutableArray> _layoutActions;
-  base::scoped_nsobject<NSMutableArray> _textActions;
+  NSMutableArray* _styleActions;
+  NSMutableArray* _layoutActions;
+  NSMutableArray* _textActions;
 }
 
 // Whether or not observer actions are currently being executed.  This is used
@@ -38,8 +39,18 @@ NSString* GetStringValue(id value) {
 // property on |_label|.
 @property(nonatomic, assign, getter=isRespondingToKVO) BOOL respondingToKVO;
 
+// The number of times this observer has been asked to observe the label. When
+// reaching zero, the label stops being observed.
+@property(nonatomic, assign) NSInteger observingCount;
+
 // Initializes a LabelObserver that observes |label|.
 - (instancetype)initWithLabel:(UILabel*)label NS_DESIGNATED_INITIALIZER;
+
+// Adds |self| as observer for the |_label|.
+- (void)registerAsObserver;
+
+// Removes |self| as observer for the |_label|.
+- (void)removeObserver;
 
 // Performs all LabelObserverActions in |actions|.
 - (void)performActions:(NSArray*)actions;
@@ -62,6 +73,7 @@ static NSSet* textKeys;
 @implementation LabelObserver
 
 @synthesize respondingToKVO = _respondingToKVO;
+@synthesize observingCount = _observingCount;
 
 + (void)initialize {
   if (self == [LabelObserver class]) {
@@ -78,27 +90,15 @@ static NSSet* textKeys;
 - (instancetype)initWithLabel:(UILabel*)label {
   if ((self = [super init])) {
     DCHECK(label);
-    _label.reset(label);
-    for (NSSet* keySet in @[ styleKeys, layoutKeys, textKeys ]) {
-      for (NSString* key in keySet) {
-        [_label addObserver:self
-                 forKeyPath:key
-                    options:NSKeyValueObservingOptionNew
-                    context:nullptr];
-      }
-    }
+    _label = label;
     [self resetLabelAttributes];
   }
   return self;
 }
 
 - (void)dealloc {
-  for (NSSet* keySet in @[ styleKeys, layoutKeys, textKeys ]) {
-    for (NSString* key in keySet) {
-      [_label removeObserver:self forKeyPath:key];
-    }
-  }
-  [super dealloc];
+  objc_setAssociatedObject(_label, kLabelObserverKey, nil,
+                           OBJC_ASSOCIATION_ASSIGN);
 }
 
 #pragma mark - Public interface
@@ -110,37 +110,72 @@ static NSSet* textKeys;
   if (!observer) {
     observer = [[LabelObserver alloc] initWithLabel:label];
     objc_setAssociatedObject(label, kLabelObserverKey, observer,
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    [observer release];
+                             OBJC_ASSOCIATION_ASSIGN);
   }
   return observer;
+}
+
+- (void)startObserving {
+  if (self.observingCount == 0) {
+    [self registerAsObserver];
+  }
+  self.observingCount++;
+}
+
+- (void)stopObserving {
+  if (self.observingCount == 0)
+    return;
+
+  self.observingCount--;
+  if (self.observingCount == 0) {
+    [self removeObserver];
+  }
 }
 
 - (void)addStyleChangedAction:(LabelObserverAction)action {
   DCHECK(action);
   if (!_styleActions)
-    _styleActions.reset([[NSMutableArray alloc] init]);
-  base::mac::ScopedBlock<LabelObserverAction> actionCopy([action copy]);
+    _styleActions = [[NSMutableArray alloc] init];
+  LabelObserverAction actionCopy = [action copy];
   [_styleActions addObject:actionCopy];
 }
 
 - (void)addLayoutChangedAction:(LabelObserverAction)action {
   DCHECK(action);
   if (!_layoutActions)
-    _layoutActions.reset([[NSMutableArray alloc] init]);
-  base::mac::ScopedBlock<LabelObserverAction> actionCopy([action copy]);
+    _layoutActions = [[NSMutableArray alloc] init];
+  LabelObserverAction actionCopy = [action copy];
   [_layoutActions addObject:actionCopy];
 }
 
 - (void)addTextChangedAction:(LabelObserverAction)action {
   DCHECK(action);
   if (!_textActions)
-    _textActions.reset([[NSMutableArray alloc] init]);
-  base::mac::ScopedBlock<LabelObserverAction> actionCopy([action copy]);
+    _textActions = [[NSMutableArray alloc] init];
+  LabelObserverAction actionCopy = [action copy];
   [_textActions addObject:actionCopy];
 }
 
 #pragma mark -
+
+- (void)registerAsObserver {
+  for (NSSet* keySet in @[ styleKeys, layoutKeys, textKeys ]) {
+    for (NSString* key in keySet) {
+      [_label addObserver:self
+               forKeyPath:key
+                  options:NSKeyValueObservingOptionNew
+                  context:nullptr];
+    }
+  }
+}
+
+- (void)removeObserver {
+  for (NSSet* keySet in @[ styleKeys, layoutKeys, textKeys ]) {
+    for (NSString* key in keySet) {
+      [_label removeObserver:self forKeyPath:key];
+    }
+  };
+}
 
 - (void)performActions:(NSArray*)actions {
   for (LabelObserverAction action in actions)
@@ -154,8 +189,8 @@ static NSSet* textKeys;
       [NSMutableDictionary dictionaryWithCapacity:styleKeys.count];
   for (NSString* property in styleKeys)
     labelStyle[property] = [_label valueForKey:property];
-  base::scoped_nsobject<NSAttributedString> attributedText(
-      [[NSAttributedString alloc] initWithString:[_label text]]);
+  NSAttributedString* attributedText =
+      [[NSAttributedString alloc] initWithString:[_label text]];
   [_label setAttributedText:attributedText];
   for (NSString* property in styleKeys)
     [_label setValue:labelStyle[property] forKey:property];
@@ -168,7 +203,7 @@ static NSSet* textKeys;
   if (self.respondingToKVO)
     return;
   self.respondingToKVO = YES;
-  DCHECK_EQ(object, _label.get());
+  DCHECK_EQ(object, _label);
   if ([styleKeys containsObject:key]) {
     [self performActions:_styleActions];
   } else if ([layoutKeys containsObject:key]) {

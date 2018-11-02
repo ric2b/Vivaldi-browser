@@ -7,6 +7,7 @@
 #include "core/dom/ExecutionContextTask.h"
 #include "core/events/Event.h"
 #include "core/frame/DOMTimer.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 
 namespace blink {
 
@@ -37,12 +38,17 @@ void NullExecutionContext::SetIsSecureContext(bool is_secure_context) {
   is_secure_context_ = is_secure_context;
 }
 
-bool NullExecutionContext::IsSecureContext(
-    String& error_message,
-    const SecureContextCheck privilege_context_check) const {
+bool NullExecutionContext::IsSecureContext(String& error_message) const {
   if (!is_secure_context_)
     error_message = "A secure context is required";
   return is_secure_context_;
+}
+
+void NullExecutionContext::SetUpSecurityContext() {
+  ContentSecurityPolicy* policy = ContentSecurityPolicy::Create();
+  SecurityContext::SetSecurityOrigin(SecurityOrigin::Create(url_));
+  policy->BindToExecutionContext(this);
+  SecurityContext::SetContentSecurityPolicy(policy);
 }
 
 }  // namespace blink

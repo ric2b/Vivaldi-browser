@@ -20,7 +20,7 @@
 #include "ios/chrome/browser/suggestions/suggestions_service_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_observer_bridge.h"
-#include "ios/chrome/browser/ui/ntp/google_landing_controller.h"
+#include "ios/chrome/browser/ui/ntp/google_landing_mediator.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -39,7 +39,7 @@ class SpotlightSuggestionsBridge;
   std::unique_ptr<SpotlightTopSitesCallbackBridge> _topSitesCallbackBridge;
 
   // Bridge to register for sync changes.
-  std::unique_ptr<SyncObserverBridge> sync_observer_bridge_;
+  std::unique_ptr<SyncObserverBridge> _syncObserverBridge;
 
   // Bridge to register for suggestion changes.
   std::unique_ptr<SpotlightSuggestionsBridge> _suggestionsBridge;
@@ -93,7 +93,7 @@ class SpotlightTopSitesCallbackBridge
   explicit SpotlightTopSitesCallbackBridge(TopSitesSpotlightManager* owner)
       : owner_(owner) {}
 
-  SpotlightTopSitesCallbackBridge() {}
+  ~SpotlightTopSitesCallbackBridge() {}
 
   void OnMostVisitedURLsAvailable(const history::MostVisitedURLList& data) {
     [owner_ onMostVisitedURLsAvailable:data];
@@ -105,13 +105,15 @@ class SpotlightTopSitesCallbackBridge
 
 class SpotlightTopSitesBridge : public history::TopSitesObserver {
  public:
-  explicit SpotlightTopSitesBridge(TopSitesSpotlightManager* owner)
-      : owner_(owner) {
-    owner.topSites->AddObserver(this);
+  SpotlightTopSitesBridge(TopSitesSpotlightManager* owner,
+                          history::TopSites* top_sites)
+      : owner_(owner), top_sites_(top_sites) {
+    top_sites->AddObserver(this);
   };
 
   ~SpotlightTopSitesBridge() override {
-    owner_.topSites->RemoveObserver(this);
+    top_sites_->RemoveObserver(this);
+    top_sites_ = nullptr;
   };
 
   void TopSitesLoaded(history::TopSites* top_sites) override {}
@@ -123,6 +125,7 @@ class SpotlightTopSitesBridge : public history::TopSitesObserver {
 
  private:
   __weak TopSitesSpotlightManager* owner_;
+  history::TopSites* top_sites_;
 };
 
 class SpotlightSuggestionsBridge
@@ -131,7 +134,7 @@ class SpotlightSuggestionsBridge
   explicit SpotlightSuggestionsBridge(TopSitesSpotlightManager* owner)
       : owner_(owner) {}
 
-  SpotlightSuggestionsBridge() {}
+  ~SpotlightSuggestionsBridge() {}
 
   void OnSuggestionsProfileAvailable(
       const suggestions::SuggestionsProfile& suggestions_profile) {
@@ -169,8 +172,12 @@ initWithLargeIconService:(favicon::LargeIconService*)largeIconService
   self = [super initWithLargeIconService:largeIconService
                                   domain:spotlight::DOMAIN_TOPSITES];
   if (self) {
+    DCHECK(topSites);
+    DCHECK(bookmarkModel);
+    DCHECK(syncService);
+    DCHECK(suggestionsService);
     _topSites = topSites;
-    _topSitesBridge.reset(new SpotlightTopSitesBridge(self));
+    _topSitesBridge.reset(new SpotlightTopSitesBridge(self, _topSites.get()));
     _topSitesCallbackBridge.reset(new SpotlightTopSitesCallbackBridge(self));
     _bookmarkModel = bookmarkModel;
     _isReindexPending = false;
@@ -181,7 +188,7 @@ initWithLargeIconService:(favicon::LargeIconService*)largeIconService
       _suggestionsServiceResponseSubscription = _suggestionService->AddCallback(
           base::Bind(&SpotlightSuggestionsBridge::OnSuggestionsProfileAvailable,
                      _suggestionsBridge->AsWeakPtr()));
-      sync_observer_bridge_.reset(new SyncObserverBridge(self, syncService));
+      _syncObserverBridge.reset(new SyncObserverBridge(self, syncService));
     }
   }
   return self;
@@ -197,6 +204,9 @@ initWithLargeIconService:(favicon::LargeIconService*)largeIconService
 }
 
 - (void)addAllTopSitesSpotlightItems {
+  if (!_topSites)
+    return;
+
   if (_suggestionService) {
     [self addAllSuggestionsTopSitesItems];
   } else {
@@ -229,7 +239,7 @@ initWithLargeIconService:(favicon::LargeIconService*)largeIconService
 - (void)onMostVisitedURLsAvailable:
     (const history::MostVisitedURLList&)top_sites {
   NSUInteger sitesToIndex =
-      MIN(top_sites.size(), [GoogleLandingController maxSitesShown]);
+      MIN(top_sites.size(), [GoogleLandingMediator maxSitesShown]);
   for (size_t i = 0; i < sitesToIndex; i++) {
     const GURL& URL = top_sites[i].url;
 
@@ -247,8 +257,7 @@ initWithLargeIconService:(favicon::LargeIconService*)largeIconService
     (const suggestions::SuggestionsProfile&)suggestionsProfile {
   size_t size = suggestionsProfile.suggestions_size();
   if (size) {
-    NSUInteger sitesToIndex =
-        MIN(size, [GoogleLandingController maxSitesShown]);
+    NSUInteger sitesToIndex = MIN(size, [GoogleLandingMediator maxSitesShown]);
     for (size_t i = 0; i < sitesToIndex; i++) {
       const suggestions::ChromeSuggestion& suggestion =
           suggestionsProfile.suggestions(i);
@@ -282,6 +291,20 @@ initWithLargeIconService:(favicon::LargeIconService*)largeIconService
         [strongSelf updateAllTopSitesSpotlightItems];
         strongSelf->_isReindexPending = false;
       });
+}
+
+- (void)shutdown {
+  _topSitesBridge.reset();
+  _topSitesCallbackBridge.reset();
+  _syncObserverBridge.reset();
+  _suggestionsBridge.reset();
+
+  _topSites = nullptr;
+  _bookmarkModel = nullptr;
+  _syncService = nullptr;
+  _suggestionService = nullptr;
+
+  [super shutdown];
 }
 
 #pragma mark -

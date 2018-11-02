@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
@@ -29,7 +30,6 @@ class WebString;
 
 namespace media {
 class MediaLog;
-enum VideoRotation;
 }
 
 namespace cc_blink {
@@ -73,7 +73,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
       blink::WebFrame* frame,
       blink::WebMediaPlayerClient* client,
       media::WebMediaPlayerDelegate* delegate,
-      media::MediaLog* media_log,
+      std::unique_ptr<media::MediaLog> media_log,
       std::unique_ptr<MediaStreamRendererFactory> factory,
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_,
       scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
@@ -154,16 +154,19 @@ class CONTENT_EXPORT WebMediaPlayerMS
   void OnBecamePersistentVideo(bool value) override;
 
   bool CopyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface* gl,
+                                         unsigned target,
                                          unsigned int texture,
                                          unsigned internal_format,
                                          unsigned format,
                                          unsigned type,
+                                         int level,
                                          bool premultiply_alpha,
                                          bool flip_y) override;
 
   bool TexImageImpl(TexImageFunctionID functionID,
                     unsigned target,
                     gpu::gles2::GLES2Interface* gl,
+                    unsigned int texture,
                     int level,
                     int internalformat,
                     unsigned format,
@@ -233,7 +236,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
   bool paused_;
   media::VideoRotation video_rotation_;
 
-  scoped_refptr<media::MediaLog> media_log_;
+  std::unique_ptr<media::MediaLog> media_log_;
 
   std::unique_ptr<MediaStreamRendererFactory> renderer_factory_;
 

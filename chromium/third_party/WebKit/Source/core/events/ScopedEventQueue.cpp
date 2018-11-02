@@ -30,12 +30,12 @@
 
 #include "core/events/ScopedEventQueue.h"
 
+#include <memory>
 #include "core/events/Event.h"
 #include "core/events/EventDispatchMediator.h"
 #include "core/events/EventDispatcher.h"
 #include "core/events/EventTarget.h"
-#include "wtf/PtrUtil.h"
-#include <memory>
+#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -65,7 +65,7 @@ void ScopedEventQueue::EnqueueEventDispatchMediator(
 
 void ScopedEventQueue::DispatchAllEvents() {
   HeapVector<Member<EventDispatchMediator>> queued_event_dispatch_mediators;
-  queued_event_dispatch_mediators.Swap(queued_event_dispatch_mediators_);
+  queued_event_dispatch_mediators.swap(queued_event_dispatch_mediators_);
 
   for (auto& mediator : queued_event_dispatch_mediators)
     DispatchEvent(mediator.Release());

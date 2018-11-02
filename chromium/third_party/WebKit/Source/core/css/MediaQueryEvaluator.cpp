@@ -50,7 +50,7 @@
 #include "core/style/ComputedStyle.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/FloatRect.h"
-#include "platform/graphics/ColorSpace.h"
+#include "platform/graphics/ColorSpaceGamut.h"
 #include "platform/wtf/HashMap.h"
 #include "public/platform/PointerProperties.h"
 #include "public/platform/ShapeProperties.h"
@@ -152,12 +152,9 @@ bool MediaQueryEvaluator::Eval(
 
   // Iterate over queries, stop if any of them eval to true (OR semantics).
   bool result = false;
-  for (size_t i = 0; i < queries.size() && !result; ++i) {
-    // TODO(sof): CHECK() added for crbug.com/699269 diagnosis, remove sooner.
-    CHECK_EQ(queries.Data(), query_set.QueryVector().Data());
+  for (size_t i = 0; i < queries.size() && !result; ++i)
     result = Eval(*queries[i], viewport_dependent_media_query_results,
                   device_dependent_media_query_results);
-  }
 
   return result;
 }
@@ -192,10 +189,10 @@ static bool CompareAspectRatioValue(const MediaQueryExpValue& value,
                                     int width,
                                     int height,
                                     MediaFeaturePrefix op) {
-  if (value.is_ratio)
-    return CompareValue(width * static_cast<int>(value.denominator),
-                        height * static_cast<int>(value.numerator), op);
-
+  if (value.is_ratio) {
+    return CompareValue(static_cast<double>(width) * value.denominator,
+                        static_cast<double>(height) * value.numerator, op);
+  }
   return false;
 }
 
@@ -238,16 +235,13 @@ static bool ColorIndexMediaFeatureEval(const MediaQueryExpValue& value,
 static bool MonochromeMediaFeatureEval(const MediaQueryExpValue& value,
                                        MediaFeaturePrefix op,
                                        const MediaValues& media_values) {
-  if (!media_values.MonochromeBitsPerComponent()) {
-    if (value.IsValid()) {
-      float number;
-      return NumberValue(value, number) &&
-             CompareValue(0, static_cast<int>(number), op);
-    }
-    return false;
+  float number;
+  int bits_per_component = media_values.MonochromeBitsPerComponent();
+  if (value.IsValid()) {
+    return NumberValue(value, number) &&
+           CompareValue(bits_per_component, static_cast<int>(number), op);
   }
-
-  return ColorMediaFeatureEval(value, op, media_values);
+  return bits_per_component != 0;
 }
 
 static bool DisplayModeMediaFeatureEval(const MediaQueryExpValue& value,

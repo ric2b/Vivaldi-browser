@@ -13,12 +13,11 @@
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
-#include "ui/aura/window_observer.h"
+#include "ui/aura/client/window_types.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/layer_animation_element.h"
 #include "ui/wm/core/transient_window_observer.h"
 #include "ui/wm/core/window_animations.h"
-#include "ui/wm/public/window_types.h"
 
 namespace display {
 class Display;
@@ -36,17 +35,11 @@ class EventHandler;
 class Layer;
 }
 
-namespace views {
-class View;
-}
-
 namespace ash {
 
 class ImmersiveFullscreenController;
 class RootWindowController;
-class WmLayoutManager;
 class WmTransientWindowObserver;
-class WmWindowTestApi;
 enum class WmWindowProperty;
 
 namespace wm {
@@ -58,8 +51,7 @@ class WindowState;
 //
 // WmWindow is tied to the life of the underlying aura::Window. Use the
 // static Get() function to obtain a WmWindow from an aura::Window.
-class ASH_EXPORT WmWindow : public aura::WindowObserver,
-                            public ::wm::TransientWindowObserver {
+class ASH_EXPORT WmWindow : public ::wm::TransientWindowObserver {
  public:
   // See comments in SetBoundsInScreen().
   enum class BoundsInScreenBehavior {
@@ -111,7 +103,7 @@ class ASH_EXPORT WmWindow : public aura::WindowObserver,
   // See shell_window_ids.h for list of known ids.
   WmWindow* GetChildByShellWindowId(int id);
 
-  ui::wm::WindowType GetType() const;
+  aura::client::WindowType GetType() const;
   int GetAppType() const;
   void SetAppType(int app_type) const;
 
@@ -187,9 +179,6 @@ class ASH_EXPORT WmWindow : public aura::WindowObserver,
   // Moves this to the display where |event| occurred; returns true if moved.
   bool MoveToEventRoot(const ui::Event& event);
 
-  void SetLayoutManager(std::unique_ptr<WmLayoutManager> layout_manager);
-  WmLayoutManager* GetLayoutManager();
-
   // See wm::SetWindowVisibilityChangesAnimated() for details on what this
   // does.
   void SetVisibilityChangesAnimated();
@@ -208,10 +197,6 @@ class ASH_EXPORT WmWindow : public aura::WindowObserver,
   void SetBounds(const gfx::Rect& bounds);
   void SetBoundsWithTransitionDelay(const gfx::Rect& bounds,
                                     base::TimeDelta delta);
-  // Sets the bounds in such a way that LayoutManagers are circumvented.
-  void SetBoundsDirect(const gfx::Rect& bounds);
-  void SetBoundsDirectAnimated(const gfx::Rect& bounds);
-  void SetBoundsDirectCrossFade(const gfx::Rect& bounds);
 
   // Sets the bounds in two distinct ways. The exact behavior is dictated by
   // the value of BoundsInScreenBehavior set on the parent:
@@ -236,15 +221,7 @@ class ASH_EXPORT WmWindow : public aura::WindowObserver,
   void SetShowState(ui::WindowShowState show_state);
   ui::WindowShowState GetShowState() const;
 
-  void SetPreMinimizedShowState(ui::WindowShowState show_state);
-  ui::WindowShowState GetPreMinimizedShowState() const;
   void SetPreFullscreenShowState(ui::WindowShowState show_state);
-
-  // Sets the restore bounds and show state overrides. These values take
-  // precedence over the restore bounds and restore show state (if set).
-  // If |bounds_override| is empty the values are cleared.
-  void SetRestoreOverrides(const gfx::Rect& bounds_override,
-                           ui::WindowShowState window_state_override);
 
   // If |value| is true the window can not be moved to another root, regardless
   // of the bounds set on it.
@@ -291,11 +268,6 @@ class ASH_EXPORT WmWindow : public aura::WindowObserver,
 
   std::vector<WmWindow*> GetChildren();
 
-  // Shows/hides the resize shadow. |component| is the component to show the
-  // shadow for (one of the constants in ui/base/hit_test.h).
-  void ShowResizeShadow(int component);
-  void HideResizeShadow();
-
   // Installs a resize handler on the window that makes it easier to resize
   // the window. See ResizeHandleWindowTargeter for the specifics.
   void InstallResizeHandleWindowTargeter(
@@ -315,9 +287,6 @@ class ASH_EXPORT WmWindow : public aura::WindowObserver,
   // Makes the hit region for children slightly larger for easier resizing.
   void SetChildrenUseExtendedHitRegion();
 
-  // Returns a View that renders the contents of this window's layers.
-  std::unique_ptr<views::View> CreateViewWithRecreatedLayers();
-
   void AddTransientWindowObserver(WmTransientWindowObserver* observer);
   void RemoveTransientWindowObserver(WmTransientWindowObserver* observer);
 
@@ -332,14 +301,7 @@ class ASH_EXPORT WmWindow : public aura::WindowObserver,
   void RemoveLimitedPreTargetHandler(ui::EventHandler* handler);
 
  private:
-  friend class WmWindowTestApi;
-
   explicit WmWindow(aura::Window* window);
-
-  // aura::WindowObserver:
-  void OnWindowPropertyChanged(aura::Window* window,
-                               const void* key,
-                               intptr_t old) override;
 
   // ::wm::TransientWindowObserver overrides:
   void OnTransientChildAdded(aura::Window* window,
@@ -355,12 +317,6 @@ class ASH_EXPORT WmWindow : public aura::WindowObserver,
   // If true child windows should get a slightly larger hit region to make
   // resizing easier.
   bool children_use_extended_hit_region_ = false;
-
-  // Default value for |use_empty_minimum_size_for_testing_|.
-  static bool default_use_empty_minimum_size_for_testing_;
-
-  // If true the minimum size is 0x0, default is minimum size comes from widget.
-  bool use_empty_minimum_size_for_testing_;
 
   DISALLOW_COPY_AND_ASSIGN(WmWindow);
 };

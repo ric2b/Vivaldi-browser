@@ -121,8 +121,9 @@ class PrerenderManager::OnCloseWebContentsDeleter
     tab_->SetDelegate(this);
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&OnCloseWebContentsDeleter::ScheduleWebContentsForDeletion,
-                   AsWeakPtr(), true),
+        base::BindOnce(
+            &OnCloseWebContentsDeleter::ScheduleWebContentsForDeletion,
+            AsWeakPtr(), true),
         base::TimeDelta::FromSeconds(kDeleteWithExtremePrejudiceSeconds));
   }
 
@@ -768,11 +769,11 @@ bool PrerenderManager::DoesSubresourceURLHaveValidScheme(const GURL& url) {
   return DoesURLHaveValidScheme(url) || url == url::kAboutBlankURL;
 }
 
-std::unique_ptr<base::DictionaryValue> PrerenderManager::GetAsValue() const {
+std::unique_ptr<base::DictionaryValue> PrerenderManager::CopyAsValue() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   auto dict_value = base::MakeUnique<base::DictionaryValue>();
-  dict_value->Set("history", prerender_history_->GetEntriesAsValue());
+  dict_value->Set("history", prerender_history_->CopyEntriesAsValue());
   dict_value->Set("active", GetActivePrerendersAsValue());
   dict_value->SetBoolean("enabled",
       GetPredictionStatus() == NetworkPredictionStatus::ENABLED);
@@ -1081,8 +1082,8 @@ void PrerenderManager::PeriodicCleanup() {
 void PrerenderManager::PostCleanupTask() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&PrerenderManager::PeriodicCleanup,
-                            weak_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&PrerenderManager::PeriodicCleanup,
+                                weak_factory_.GetWeakPtr()));
 }
 
 base::TimeTicks PrerenderManager::GetExpiryTimeForNewPrerender(

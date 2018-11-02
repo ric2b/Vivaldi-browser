@@ -80,6 +80,9 @@ void GetCapabilitiesOnIOThread(
         callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
+// TODO(mcasas): Enable PhotoState collection in Windows when understood why it
+// prevents normal capture https://crbug.com/722038.
+#if !defined(OS_WIN)
   const int session_id =
       media_stream_manager->VideoDeviceIdToSessionId(source_id);
 
@@ -87,6 +90,7 @@ void GetCapabilitiesOnIOThread(
     return;
   media_stream_manager->video_capture_manager()->GetPhotoCapabilities(
       session_id, std::move(callback));
+#endif
 }
 
 void SetOptionsOnIOThread(
@@ -128,7 +132,9 @@ ImageCaptureImpl::ImageCaptureImpl() {}
 ImageCaptureImpl::~ImageCaptureImpl() {}
 
 // static
-void ImageCaptureImpl::Create(media::mojom::ImageCaptureRequest request) {
+void ImageCaptureImpl::Create(
+    const service_manager::BindSourceInfo& source_info,
+    media::mojom::ImageCaptureRequest request) {
   mojo::MakeStrongBinding(base::MakeUnique<ImageCaptureImpl>(),
                           std::move(request));
 }

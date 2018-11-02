@@ -7,17 +7,14 @@
 #include <algorithm>
 
 #include "ash/frame/custom_frame_view_ash.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/interfaces/window_pin_type.mojom.h"
-#include "ash/shelf/wm_shelf.h"
-#include "ash/shell_port.h"
 #include "ash/wm/drag_window_resizer.h"
 #include "ash/wm/window_resizer.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm_window.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -43,10 +40,6 @@
 #include "ui/wm/core/shadow_types.h"
 #include "ui/wm/core/window_animations.h"
 #include "ui/wm/core/window_util.h"
-
-#if defined(OS_CHROMEOS)
-#include "chromeos/audio/chromeos_sounds.h"
-#endif
 
 namespace exo {
 namespace {
@@ -109,17 +102,23 @@ class CustomWindowTargeter : public aura::WindowTargeter {
     if (component != HTNOWHERE && component != HTCLIENT)
       return true;
 
-    // If there is an underlay, test against it's bounds instead since it will
-    // be equal or larger than the surface's bounds.
+    // If there is an underlay, test against it first as it's bounds may be
+    // larger than the surface's bounds.
     aura::Window* shadow_underlay =
         static_cast<ShellSurface*>(
             widget_->widget_delegate()->GetContentsView())
             ->shadow_underlay();
     if (shadow_underlay) {
-      aura::Window::ConvertPointToTarget(window, shadow_underlay, &local_point);
-      return gfx::Rect(shadow_underlay->layer()->size()).Contains(local_point);
+      gfx::Point local_point_in_shadow_underlay = local_point;
+      aura::Window::ConvertPointToTarget(window, shadow_underlay,
+                                         &local_point_in_shadow_underlay);
+      if (gfx::Rect(shadow_underlay->layer()->size())
+              .Contains(local_point_in_shadow_underlay)) {
+        return true;
+      }
     }
 
+    // Otherwise, fallback to hit test on the surface.
     aura::Window::ConvertPointToTarget(window, surface->window(), &local_point);
     return surface->HitTestRect(gfx::Rect(local_point, gfx::Size(1, 1)));
   }
@@ -129,7 +128,8 @@ class CustomWindowTargeter : public aura::WindowTargeter {
     aura::Window* window = static_cast<aura::Window*>(root);
     Surface* surface = ShellSurface::GetMainSurface(window);
 
-    // Send events which are outside of the surface's bounds to the underlay.
+    // Send events which wouldn't be handled by the surface, to the shadow
+    // underlay.
     aura::Window* shadow_underlay =
         static_cast<ShellSurface*>(
             widget_->widget_delegate()->GetContentsView())
@@ -137,8 +137,12 @@ class CustomWindowTargeter : public aura::WindowTargeter {
     if (surface && event->IsLocatedEvent() && shadow_underlay) {
       gfx::Point local_point = event->AsLocatedEvent()->location();
       int component = widget_->non_client_view()->NonClientHitTest(local_point);
-      if (component == HTNOWHERE)
-        return shadow_underlay;
+      if (component == HTNOWHERE) {
+        aura::Window::ConvertPointToTarget(window, surface->window(),
+                                           &local_point);
+        if (!surface->HitTestRect(gfx::Rect(local_point, gfx::Size(1, 1))))
+          return shadow_underlay;
+      }
     }
     return aura::WindowTargeter::FindTargetForEvent(root, event);
   }
@@ -154,10 +158,7 @@ class CustomWindowTargeter : public aura::WindowTargeter {
 class CustomWindowResizer : public ash::WindowResizer {
  public:
   explicit CustomWindowResizer(ash::wm::WindowState* window_state)
-      : WindowResizer(window_state) {
-    ash::ShellPort::Get()->LockCursor();
-  }
-  ~CustomWindowResizer() override { ash::ShellPort::Get()->UnlockCursor(); }
+      : WindowResizer(window_state) {}
 
   // Overridden from ash::WindowResizer:
   void Drag(const gfx::Point& location, int event_flags) override {}
@@ -188,41 +189,6 @@ class ShellSurfaceWidget : public views::Widget {
   ShellSurface* const shell_surface_;
 
   DISALLOW_COPY_AND_ASSIGN(ShellSurfaceWidget);
-};
-
-class ShadowUnderlayEventHandler : public ui::EventHandler {
- public:
-  ShadowUnderlayEventHandler() {}
-  ~ShadowUnderlayEventHandler() override {}
-
-  // Overridden from ui::EventHandler:
-  void OnEvent(ui::Event* event) override {
-    // If the event is targeted at the underlay, it means the user has made an
-    // interaction that is outside the surface's bounds and we want to capture
-    // it (usually when in spoken feedback mode). Handle the event (to prevent
-    // behind-windows from receiving it) and play an earcon to notify the user.
-    if (event->IsLocatedEvent()) {
-#if defined(OS_CHROMEOS)
-      const ui::EventType kEarconEventTypes[] = {ui::ET_MOUSE_PRESSED,
-                                                 ui::ET_MOUSEWHEEL,
-                                                 ui::ET_TOUCH_PRESSED,
-                                                 ui::ET_POINTER_DOWN,
-                                                 ui::ET_POINTER_WHEEL_CHANGED,
-                                                 ui::ET_GESTURE_BEGIN,
-                                                 ui::ET_SCROLL,
-                                                 ui::ET_SCROLL_FLING_START};
-      bool is_earcon_event_type =
-          std::find(std::begin(kEarconEventTypes), std::end(kEarconEventTypes),
-                    event->type()) != std::end(kEarconEventTypes);
-      if (is_earcon_event_type)
-        WMHelper::GetInstance()->PlayEarcon(chromeos::SOUND_VOLUME_ADJUST);
-#endif
-      event->SetHandled();
-    }
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ShadowUnderlayEventHandler);
 };
 
 }  // namespace
@@ -373,7 +339,6 @@ ShellSurface::~ShellSurface() {
     surface_->SetSurfaceDelegate(nullptr);
     surface_->RemoveSurfaceObserver(this);
   }
-  WMHelper::GetInstance()->RemoveAccessibilityObserver(this);
 }
 
 void ShellSurface::AcknowledgeConfigure(uint32_t serial) {
@@ -501,6 +466,17 @@ void ShellSurface::SetSystemUiVisibility(bool autohide) {
   ash::wm::SetAutoHideShelf(widget_->GetNativeWindow(), autohide);
 }
 
+void ShellSurface::SetAlwaysOnTop(bool always_on_top) {
+  TRACE_EVENT1("exo", "ShellSurface::SetAlwaysOnTop", "always_on_top",
+               always_on_top);
+
+  if (!widget_)
+    CreateShellSurfaceWidget(ui::SHOW_STATE_NORMAL);
+
+  widget_->GetNativeWindow()->SetProperty(aura::client::kAlwaysOnTopKey,
+                                          always_on_top);
+}
+
 void ShellSurface::SetTitle(const base::string16& title) {
   TRACE_EVENT1("exo", "ShellSurface::SetTitle", "title",
                base::UTF16ToUTF8(title));
@@ -544,13 +520,14 @@ void ShellSurface::UpdateSystemModal() {
 void ShellSurface::SetApplicationId(aura::Window* window,
                                     const std::string& id) {
   TRACE_EVENT1("exo", "ShellSurface::SetApplicationId", "application_id", id);
-  window->SetProperty(aura::client::kAppIdKey, new std::string(id));
+  const ash::ShelfID shelf_id(id);
+  window->SetProperty(ash::kShelfIDKey, new std::string(shelf_id.Serialize()));
 }
 
 // static
 const std::string ShellSurface::GetApplicationId(aura::Window* window) {
-  std::string* string_ptr = window->GetProperty(aura::client::kAppIdKey);
-  return string_ptr ? *string_ptr : std::string();
+  return ash::ShelfID::Deserialize(window->GetProperty(ash::kShelfIDKey))
+      .app_id;
 }
 
 void ShellSurface::SetApplicationId(const std::string& application_id) {
@@ -904,7 +881,7 @@ void ShellSurface::GetWidgetHitTestMask(gfx::Path* mask) const {
 ////////////////////////////////////////////////////////////////////////////////
 // views::Views overrides:
 
-gfx::Size ShellSurface::GetPreferredSize() const {
+gfx::Size ShellSurface::CalculatePreferredSize() const {
   if (!geometry_.IsEmpty())
     return geometry_.size();
 
@@ -1027,13 +1004,6 @@ void ShellSurface::OnWindowActivated(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// WMHelper::AccessibilityObserver overrides:
-
-void ShellSurface::OnAccessibilityModeChanged() {
-  UpdateShadow();
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // WMHelper::DisplayConfigurationObserver overrides:
 
 void ShellSurface::OnDisplayConfigurationChanged() {
@@ -1137,6 +1107,50 @@ void ShellSurface::OnMouseEvent(ui::MouseEvent* event) {
   }
 }
 
+void ShellSurface::OnGestureEvent(ui::GestureEvent* event) {
+  if (!resizer_) {
+    views::View::OnGestureEvent(event);
+    return;
+  }
+
+  if (event->handled())
+    return;
+
+  // TODO(domlaskowski): Handle touch dragging/resizing for BoundsMode::SHELL.
+  // See crbug.com/738606.
+  switch (event->type()) {
+    case ui::ET_GESTURE_END: {
+      ScopedConfigure scoped_configure(this, false);
+      EndDrag(false /* revert */);
+      break;
+    }
+    case ui::ET_GESTURE_SCROLL_BEGIN:
+    case ui::ET_GESTURE_SCROLL_END:
+    case ui::ET_GESTURE_SCROLL_UPDATE:
+    case ui::ET_GESTURE_TAP:
+    case ui::ET_GESTURE_TAP_DOWN:
+    case ui::ET_GESTURE_TAP_CANCEL:
+    case ui::ET_GESTURE_TAP_UNCONFIRMED:
+    case ui::ET_GESTURE_DOUBLE_TAP:
+    case ui::ET_GESTURE_BEGIN:
+    case ui::ET_GESTURE_TWO_FINGER_TAP:
+    case ui::ET_GESTURE_PINCH_BEGIN:
+    case ui::ET_GESTURE_PINCH_END:
+    case ui::ET_GESTURE_PINCH_UPDATE:
+    case ui::ET_GESTURE_LONG_PRESS:
+    case ui::ET_GESTURE_LONG_TAP:
+    case ui::ET_GESTURE_SWIPE:
+    case ui::ET_GESTURE_SHOW_PRESS:
+    case ui::ET_SCROLL:
+    case ui::ET_SCROLL_FLING_START:
+    case ui::ET_SCROLL_FLING_CANCEL:
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ui::AcceleratorTarget overrides:
 
@@ -1167,7 +1181,8 @@ void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
   params.show_state = show_state;
   // Make shell surface a transient child if |parent_| has been set.
   params.parent =
-      parent_ ? parent_ : WMHelper::GetInstance()->GetContainer(container_);
+      parent_ ? parent_
+              : WMHelper::GetInstance()->GetPrimaryDisplayContainer(container_);
   params.bounds = gfx::Rect(origin_, gfx::Size());
   bool activatable = activatable_;
   // ShellSurfaces in system modal container are only activatable if input
@@ -1227,9 +1242,6 @@ void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
         ui::Accelerator(entry.keycode, entry.modifiers),
         ui::AcceleratorManager::kNormalPriority, this);
   }
-
-  // Receive accessibility changes to update shadow underlay.
-  WMHelper::GetInstance()->AddAccessibilityObserver(this);
 
   // Show widget next time Commit() is called.
   pending_show_widget_ = true;
@@ -1321,39 +1333,38 @@ void ShellSurface::AttemptToStartDrag(int component) {
 
     switch (component) {
       case HTCAPTION:
-        cursor_client->SetCursor(ui::kCursorPointer);
+        cursor_client->SetCursor(ui::CursorType::kPointer);
         break;
       case HTTOP:
-        cursor_client->SetCursor(ui::kCursorNorthResize);
+        cursor_client->SetCursor(ui::CursorType::kNorthResize);
         break;
       case HTTOPRIGHT:
-        cursor_client->SetCursor(ui::kCursorNorthEastResize);
+        cursor_client->SetCursor(ui::CursorType::kNorthEastResize);
         break;
       case HTRIGHT:
-        cursor_client->SetCursor(ui::kCursorEastResize);
+        cursor_client->SetCursor(ui::CursorType::kEastResize);
         break;
       case HTBOTTOMRIGHT:
-        cursor_client->SetCursor(ui::kCursorSouthEastResize);
+        cursor_client->SetCursor(ui::CursorType::kSouthEastResize);
         break;
       case HTBOTTOM:
-        cursor_client->SetCursor(ui::kCursorSouthResize);
+        cursor_client->SetCursor(ui::CursorType::kSouthResize);
         break;
       case HTBOTTOMLEFT:
-        cursor_client->SetCursor(ui::kCursorSouthWestResize);
+        cursor_client->SetCursor(ui::CursorType::kSouthWestResize);
         break;
       case HTLEFT:
-        cursor_client->SetCursor(ui::kCursorWestResize);
+        cursor_client->SetCursor(ui::CursorType::kWestResize);
         break;
       case HTTOPLEFT:
-        cursor_client->SetCursor(ui::kCursorNorthWestResize);
+        cursor_client->SetCursor(ui::CursorType::kNorthWestResize);
         break;
       default:
         NOTREACHED();
         break;
     }
 
-    resizer_ = ash::CreateWindowResizer(ash::WmWindow::Get(window),
-                                        GetMouseLocation(), component,
+    resizer_ = ash::CreateWindowResizer(window, GetMouseLocation(), component,
                                         aura::client::WINDOW_MOVE_SOURCE_MOUSE);
     if (!resizer_)
       return;
@@ -1521,9 +1532,7 @@ void ShellSurface::UpdateWidgetBounds() {
   const gfx::Rect widget_bounds = widget_->GetWindowBoundsInScreen();
   if (widget_bounds != new_widget_bounds) {
     if (bounds_mode_ != BoundsMode::CLIENT || !resizer_) {
-      // TODO(domlaskowski): Use screen coordinates once multi-display support
-      // lands in ARC. See crbug.com/718627.
-      widget_->GetNativeWindow()->SetBounds(new_widget_bounds);
+      widget_->SetBounds(new_widget_bounds);
       UpdateSurfaceBounds();
     } else {
       // TODO(domlaskowski): Synchronize window state transitions with the
@@ -1569,15 +1578,17 @@ void ShellSurface::UpdateShadow() {
 
   aura::Window* window = widget_->GetNativeWindow();
 
-  bool underlay_capture_events =
-      WMHelper::GetInstance()->IsSpokenFeedbackEnabled() && widget_->IsActive();
-  bool black_background_enabled =
-      ((widget_->IsFullscreen() || widget_->IsMaximized()) ||
-       underlay_capture_events) &&
-      ash::wm::GetWindowState(window)->allow_set_bounds_direct() &&
-      window->layer()->GetTargetTransform().IsIdentity();
+  // Enable the black backdrop layer behind the window if the window
+  // is in immersive fullscreen, maximized, yet the window can control
+  // the bounds of the window in fullscreen/maximize mode (thus the
+  // background can be visible).
+  bool enable_backdrop =
+      (widget_->IsFullscreen() || widget_->IsMaximized()) &&
+      ash::wm::GetWindowState(window)->allow_set_bounds_direct();
+  if (window->GetProperty(aura::client::kHasBackdrop) != enable_backdrop)
+    window->SetProperty(aura::client::kHasBackdrop, enable_backdrop);
 
-  if (!shadow_enabled_ && !black_background_enabled) {
+  if (!shadow_enabled_) {
     wm::SetShadowElevation(window, wm::ShadowElevation::NONE);
     if (shadow_underlay_)
       shadow_underlay_->Hide();
@@ -1626,9 +1637,6 @@ void ShellSurface::UpdateShadow() {
     if (!shadow_underlay_) {
       shadow_underlay_ = base::MakeUnique<aura::Window>(nullptr);
       shadow_underlay_->set_owned_by_parent(false);
-      shadow_underlay_event_handler_ =
-          base::MakeUnique<ShadowUnderlayEventHandler>();
-      shadow_underlay_->SetTargetHandler(shadow_underlay_event_handler_.get());
       DCHECK(!shadow_underlay_->owned_by_parent());
       // Ensure the background area inside the shadow is solid black.
       // Clients that provide translucent contents should not be using
@@ -1647,25 +1655,6 @@ void ShellSurface::UpdateShadow() {
     }
 
     float shadow_underlay_opacity = shadow_background_opacity_;
-
-    // Put the black background layer behind the window if
-    // 1) the window is in immersive fullscreen, maximized or is active with
-    //    spoken feedback enabled.
-    // 2) the window can control the bounds of the window in fullscreen (
-    //    thus the background can be visible).
-    // 3) the window has no transform (the transformed background may
-    //    not cover the entire background, e.g. overview mode).
-    if (black_background_enabled) {
-      if (shadow_underlay_in_surface_) {
-        shadow_underlay_bounds = gfx::Rect(surface_->window()->bounds().size());
-      } else {
-        gfx::Point origin;
-        origin -= window->bounds().origin().OffsetFromOrigin();
-        shadow_bounds.set_origin(origin);
-        shadow_bounds.set_size(window->parent()->bounds().size());
-      }
-      shadow_underlay_opacity = 1.0f;
-    }
 
     if (!shadow_underlay_in_surface_)
       shadow_underlay_bounds = shadow_bounds;

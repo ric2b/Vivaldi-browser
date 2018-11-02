@@ -8,34 +8,36 @@
 
 #include "base/command_line.h"
 #include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/pending_process_connection.h"
+#include "mojo/edk/embedder/incoming_broker_client_invitation.h"
+#include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
 #include "services/service_manager/runner/common/switches.h"
 
 namespace service_manager {
 
 mojom::ServicePtr PassServiceRequestOnCommandLine(
-    mojo::edk::PendingProcessConnection* connection,
+    mojo::edk::OutgoingBrokerClientInvitation* invitation,
     base::CommandLine* command_line) {
-  std::string token;
   mojom::ServicePtr client;
-  client.Bind(mojom::ServicePtrInfo(connection->CreateMessagePipe(&token), 0));
-  command_line->AppendSwitchASCII(switches::kPrimordialPipeToken, token);
+  std::string token = mojo::edk::GenerateRandomToken();
+  client.Bind(mojom::ServicePtrInfo(invitation->AttachMessagePipe(token), 0));
+  command_line->AppendSwitchASCII(switches::kServicePipeToken, token);
   return client;
 }
 
-mojom::ServiceRequest GetServiceRequestFromCommandLine() {
+mojom::ServiceRequest GetServiceRequestFromCommandLine(
+    mojo::edk::IncomingBrokerClientInvitation* invitation) {
   std::string token =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kPrimordialPipeToken);
+          switches::kServicePipeToken);
   mojom::ServiceRequest request;
   if (!token.empty())
-    request.Bind(mojo::edk::CreateChildMessagePipe(token));
+    request = mojom::ServiceRequest(invitation->ExtractMessagePipe(token));
   return request;
 }
 
 bool ServiceManagerIsRemote() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kPrimordialPipeToken);
+      switches::kServicePipeToken);
 }
 
 }  // namespace service_manager

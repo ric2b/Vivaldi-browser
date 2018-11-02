@@ -127,9 +127,6 @@ bool IsQuicEnabledForNonCoreProxies();
 
 const char* GetQuicFieldTrialName();
 
-// Returns true if zero RTT for QUIC is enabled.
-bool IsZeroRttQuicEnabled();
-
 // Returns true if Brotli should be added to the accept-encoding header.
 bool IsBrotliAcceptEncodingEnabled();
 
@@ -147,6 +144,13 @@ GURL GetConfigServiceURL();
 // Returns true if the Data Reduction Proxy is forced to be enabled from the
 // command line.
 bool ShouldForceEnableDataReductionProxy();
+
+// Whether the blacklist should be used for server Lo-Fi and server Lite Page
+// instead of the prefs-based rules.
+bool IsBlackListEnabledForServerPreviews();
+
+// The current LitePage experiment blacklist version.
+int LitePageVersion();
 
 // Retrieves the int stored in |param_name| from the field trial group
 // |group|. If the value is not present, cannot be parsed, or is less than

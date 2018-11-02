@@ -82,6 +82,7 @@ StyleRareNonInheritedData::StyleRareNonInheritedData()
       shape_outside_(ComputedStyle::InitialShapeOutside()),
       clip_path_(ComputedStyle::InitialClipPath()),
       mask_(kMaskFillLayer, true),
+      mask_box_image_(NinePieceImage::MaskDefaults()),
       page_size_(),
       shape_margin_(ComputedStyle::InitialShapeMargin()),
       text_decoration_color_(StyleColor::CurrentColor()),
@@ -129,9 +130,7 @@ StyleRareNonInheritedData::StyleRareNonInheritedData()
       resize_(ComputedStyle::InitialResize()),
       has_compositor_proxy_(false),
       has_author_background_(false),
-      has_author_border_(false) {
-  mask_box_image_.SetMaskDefaults();
-}
+      has_author_border_(false) {}
 
 StyleRareNonInheritedData::StyleRareNonInheritedData(
     const StyleRareNonInheritedData& o)
@@ -157,10 +156,8 @@ StyleRareNonInheritedData::StyleRareNonInheritedData(
       content_(o.content_ ? o.content_->Clone() : nullptr),
       counter_directives_(o.counter_directives_ ? Clone(*o.counter_directives_)
                                                 : nullptr),
-      animations_(o.animations_ ? CSSAnimationData::Create(*o.animations_)
-                                : nullptr),
-      transitions_(o.transitions_ ? CSSTransitionData::Create(*o.transitions_)
-                                  : nullptr),
+      animations_(o.animations_ ? o.animations_->Clone() : nullptr),
+      transitions_(o.transitions_ ? o.transitions_->Clone() : nullptr),
       box_shadow_(o.box_shadow_),
       box_reflect_(o.box_reflect_),
       shape_outside_(o.shape_outside_),
@@ -179,7 +176,7 @@ StyleRareNonInheritedData::StyleRareNonInheritedData(
       visited_link_border_right_color_(o.visited_link_border_right_color_),
       visited_link_border_top_color_(o.visited_link_border_top_color_),
       visited_link_border_bottom_color_(o.visited_link_border_bottom_color_),
-      variables_(o.variables_ ? o.variables_->Copy() : nullptr),
+      variables_(o.variables_ ? o.variables_->Clone() : nullptr),
       align_content_(o.align_content_),
       align_items_(o.align_items_),
       align_self_(o.align_self_),
@@ -294,15 +291,7 @@ bool StyleRareNonInheritedData::operator==(
 
 bool StyleRareNonInheritedData::ContentDataEquivalent(
     const StyleRareNonInheritedData& o) const {
-  ContentData* a = content_.Get();
-  ContentData* b = o.content_.Get();
-
-  while (a && b && *a == *b) {
-    a = a->Next();
-    b = b->Next();
-  }
-
-  return !a && !b;
+  return DataEquivalent(content_, o.content_);
 }
 
 bool StyleRareNonInheritedData::CounterDataEquivalent(
@@ -322,28 +311,12 @@ bool StyleRareNonInheritedData::ReflectionDataEquivalent(
 
 bool StyleRareNonInheritedData::AnimationDataEquivalent(
     const StyleRareNonInheritedData& o) const {
-  if (!animations_ && !o.animations_)
-    return true;
-  if (!animations_ || !o.animations_)
-    return false;
-  return animations_->AnimationsMatchForStyleRecalc(*o.animations_);
+  return DataEquivalent(animations_, o.animations_);
 }
 
 bool StyleRareNonInheritedData::TransitionDataEquivalent(
     const StyleRareNonInheritedData& o) const {
-  if (!transitions_ && !o.transitions_)
-    return true;
-  if (!transitions_ || !o.transitions_)
-    return false;
-  return transitions_->TransitionsMatchForStyleRecalc(*o.transitions_);
-}
-
-bool StyleRareNonInheritedData::HasFilters() const {
-  return filter_.Get() && !filter_->operations_.IsEmpty();
-}
-
-bool StyleRareNonInheritedData::HasBackdropFilters() const {
-  return backdrop_filter_.Get() && !backdrop_filter_->operations_.IsEmpty();
+  return DataEquivalent(transitions_, o.transitions_);
 }
 
 bool StyleRareNonInheritedData::ShapeOutsideDataEquivalent(

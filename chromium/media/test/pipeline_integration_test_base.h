@@ -29,7 +29,8 @@
 
 namespace media {
 
-class CdmContext;
+class FakeEncryptedMedia;
+class MockMediaSource;
 
 // Empty MD5 hash string.  Used to verify empty video tracks.
 extern const char kNullVideoHash[];
@@ -47,6 +48,15 @@ class DummyTickClock : public base::TickClock {
 
  private:
   base::TimeTicks now_;
+};
+
+class PipelineTestRendererFactory {
+ public:
+  virtual ~PipelineTestRendererFactory() {}
+  // Creates and returns a Renderer.
+  virtual std::unique_ptr<Renderer> CreateRenderer(
+      CreateVideoDecodersCB prepend_video_decoders_cb,
+      CreateAudioDecodersCB prepend_audio_decoders_cb) = 0;
 };
 
 // Integration tests for Pipeline. Real demuxers, real decoders, and
@@ -134,7 +144,12 @@ class PipelineIntegrationTestBase : public Pipeline::Client
     encrypted_media_init_data_cb_ = encrypted_media_init_data_cb;
   }
 
+  std::unique_ptr<Renderer> CreateRenderer(
+      CreateVideoDecodersCB prepend_video_decoders_cb,
+      CreateAudioDecodersCB prepend_audio_decoders_cb);
+
  protected:
+  MediaLog media_log_;
   base::MessageLoop message_loop_;
   base::MD5Context md5_context_;
   bool hashing_enabled_;
@@ -157,6 +172,7 @@ class PipelineIntegrationTestBase : public Pipeline::Client
   PipelineMetadata metadata_;
   scoped_refptr<VideoFrame> last_frame_;
   base::TimeDelta current_duration_;
+  std::unique_ptr<PipelineTestRendererFactory> renderer_factory_;
 
   PipelineStatus StartInternal(
       std::unique_ptr<DataSource> data_source,
@@ -174,6 +190,15 @@ class PipelineIntegrationTestBase : public Pipeline::Client
       CreateAudioDecodersCB prepend_audio_decoders_cb =
           CreateAudioDecodersCB());
 
+  PipelineStatus StartPipelineWithMediaSource(MockMediaSource* source);
+  PipelineStatus StartPipelineWithEncryptedMedia(
+      MockMediaSource* source,
+      FakeEncryptedMedia* encrypted_media);
+  PipelineStatus StartPipelineWithMediaSource(
+      MockMediaSource* source,
+      uint8_t test_type,
+      FakeEncryptedMedia* encrypted_media);
+
   void OnSeeked(base::TimeDelta seek_time, PipelineStatus status);
   void OnStatusCallback(PipelineStatus status);
   void DemuxerEncryptedMediaInitDataCB(EmeInitDataType type,
@@ -186,12 +211,6 @@ class PipelineIntegrationTestBase : public Pipeline::Client
   // Creates Demuxer and sets |demuxer_|.
   void CreateDemuxer(std::unique_ptr<DataSource> data_source);
 
-  // Creates and returns a Renderer.
-  virtual std::unique_ptr<Renderer> CreateRenderer(
-      CreateVideoDecodersCB prepend_video_decoders_cb = CreateVideoDecodersCB(),
-      CreateAudioDecodersCB prepend_audio_decoders_cb =
-          CreateAudioDecodersCB());
-
   void OnVideoFramePaint(const scoped_refptr<VideoFrame>& frame);
 
   void CheckDuration();
@@ -199,11 +218,13 @@ class PipelineIntegrationTestBase : public Pipeline::Client
   // Return the media start time from |demuxer_|.
   base::TimeDelta GetStartTime();
 
-  ScopedVector<VideoDecoder> CreateVideoDecodersForTest(
+  std::vector<std::unique_ptr<VideoDecoder>> CreateVideoDecodersForTest(
           const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+          MediaLog* media_log,
           CreateVideoDecodersCB prepend_video_decoders_cb);
-  ScopedVector<AudioDecoder> CreateAudioDecodersForTest(
+  std::vector<std::unique_ptr<AudioDecoder>> CreateAudioDecodersForTest(
           const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+          MediaLog* media_log,
           CreateAudioDecodersCB prepend_audio_decoders_cb);
 
   MOCK_METHOD1(DecryptorAttached, void(bool));
@@ -220,6 +241,9 @@ class PipelineIntegrationTestBase : public Pipeline::Client
   MOCK_METHOD1(OnVideoNaturalSizeChange, void(const gfx::Size&));
   MOCK_METHOD1(OnVideoOpacityChange, void(bool));
   MOCK_METHOD0(OnVideoAverageKeyframeDistanceUpdate, void());
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PipelineIntegrationTestBase);
 };
 
 }  // namespace media

@@ -1,62 +1,20 @@
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-import os
-
-from core import path_util
 from core import perf_benchmark
-from page_sets import google_pages
 
 from benchmarks import v8_helper
 
 from measurements import v8_detached_context_age_in_gc
-from measurements import v8_gc_times
 import page_sets
+
 from telemetry import benchmark
-from telemetry import story
 from telemetry.timeline import chrome_trace_category_filter
 from telemetry.timeline import chrome_trace_config
 from telemetry.web_perf import timeline_based_measurement
 
 
-def CreateV8TimelineBasedMeasurementOptions():
-  category_filter = chrome_trace_category_filter.ChromeTraceCategoryFilter()
-  category_filter.AddIncludedCategory('v8')
-  category_filter.AddIncludedCategory('blink.console')
-  category_filter.AddDisabledByDefault('disabled-by-default-v8.compile')
-  options = timeline_based_measurement.Options(category_filter)
-  options.SetTimelineBasedMetrics(['executionMetric'])
-  return options
-
-
-@benchmark.Disabled('win')        # crbug.com/416502
-@benchmark.Owner(emails=['hpayer@chromium.org', 'rmcilroy@chromium.org'])
-class V8Top25(perf_benchmark.PerfBenchmark):
-  """Measures V8 GC metrics on the while scrolling down the top 25 web pages.
-
-  http://www.chromium.org/developers/design-documents/rendering-benchmarks"""
-  test = v8_gc_times.V8GCTimes
-  page_set = page_sets.V8Top25SmoothPageSet
-
-  @classmethod
-  def Name(cls):
-    return 'v8.top_25_smooth'
-
-
-@benchmark.Enabled('android')
-@benchmark.Owner(emails=['hpayer@chromium.org', 'rmcilroy@chromium.org'])
-class V8KeyMobileSites(perf_benchmark.PerfBenchmark):
-  """Measures V8 GC metrics on the while scrolling down key mobile sites.
-
-  http://www.chromium.org/developers/design-documents/rendering-benchmarks"""
-  test = v8_gc_times.V8GCTimes
-  page_set = page_sets.KeyMobileSitesSmoothPageSet
-
-  @classmethod
-  def Name(cls):
-    return 'v8.key_mobile_sites_smooth'
-
-
+@benchmark.Owner(emails=['ulan@chromium.org'])
 class V8DetachedContextAgeInGC(perf_benchmark.PerfBenchmark):
   """Measures the number of GCs needed to collect a detached context.
 
@@ -127,61 +85,7 @@ class _InfiniteScrollBenchmark(perf_benchmark.PerfBenchmark):
     return True
 
 
-@benchmark.Owner(emails=['jochen@chromium.org'])
-class V8TodoMVC(perf_benchmark.PerfBenchmark):
-  """Measures V8 Execution metrics on the TodoMVC examples."""
-  page_set = page_sets.TodoMVCPageSet
-
-  def CreateTimelineBasedMeasurementOptions(self):
-    return CreateV8TimelineBasedMeasurementOptions()
-
-  @classmethod
-  def Name(cls):
-    return 'v8.todomvc'
-
-  @classmethod
-  def ShouldDisable(cls, possible_browser):
-    # This benchmark is flaky on Samsung Galaxy S5s.
-    # http://crbug.com/644826
-    return possible_browser.platform.GetDeviceTypeName() == 'SM-G900H'
-
-  @classmethod
-  def ShouldTearDownStateAfterEachStoryRun(cls):
-    return True
-
-@benchmark.Disabled('all')
-@benchmark.Owner(emails=['mvstaton@chromium.org'])
-class V8TodoMVCTurbo(V8TodoMVC):
-  """Measures V8 Execution metrics on the TodoMVC examples
-  using Ignition+TurboFan."""
-
-  page_set = page_sets.TodoMVCPageSet
-
-  def SetExtraBrowserOptions(self, options):
-    super(V8TodoMVCTurbo, self).SetExtraBrowserOptions(options)
-    v8_helper.EnableTurbo(options)
-
-  @classmethod
-  def Name(cls):
-    return 'v8.todomvc-turbo'
-
-
-@benchmark.Owner(emails=['hablich@chromium.org'])
-class V8TodoMVCClassic(V8TodoMVC):
-  """Measures V8 Execution metrics on the TodoMVC examples
-  using the Classic pipeline."""
-
-  page_set = page_sets.TodoMVCPageSet
-
-  def SetExtraBrowserOptions(self, options):
-    super(V8TodoMVCClassic, self).SetExtraBrowserOptions(options)
-    v8_helper.EnableClassic(options)
-
-  @classmethod
-  def Name(cls):
-    return 'v8.todomvc-classic'
-
-
+@benchmark.Disabled('android') # Android runs V8MobileInfiniteScroll.
 @benchmark.Owner(emails=['ulan@chromium.org'])
 class V8InfiniteScroll(_InfiniteScrollBenchmark):
   """Measures V8 GC metrics and memory usage while scrolling the top web pages.
@@ -194,6 +98,7 @@ class V8InfiniteScroll(_InfiniteScrollBenchmark):
     return 'v8.infinite_scroll_tbmv2'
 
 @benchmark.Disabled('all')
+@benchmark.Disabled('android') # Android runs V8MobileInfiniteScroll.
 @benchmark.Owner(emails=['mvstaton@chromium.org'])
 class V8InfiniteScrollTurbo(V8InfiniteScroll):
   """Measures V8 GC metrics using Ignition+TurboFan."""
@@ -207,6 +112,8 @@ class V8InfiniteScrollTurbo(V8InfiniteScroll):
     return 'v8.infinite_scroll-turbo_tbmv2'
 
 
+@benchmark.Disabled('linux')  # crbug.com/715716
+@benchmark.Disabled('android') # Android runs V8MobileInfiniteScroll.
 @benchmark.Owner(emails=['hablich@chromium.org'])
 class V8InfiniteScrollClassic(V8InfiniteScroll):
   """Measures V8 GC metrics using the Classic pipeline."""
@@ -264,45 +171,6 @@ class V8MobileInfiniteScrollClassic(V8MobileInfiniteScroll):
   @classmethod
   def Name(cls):
     return 'v8.mobile_infinite_scroll-classic_tbmv2'
-
-@benchmark.Owner(emails=['hablich@chromium.org'])
-class V8Adword(perf_benchmark.PerfBenchmark):
-  """Measures V8 Execution metrics on the Adword page."""
-
-  options = {'pageset_repeat': 3}
-
-  def CreateTimelineBasedMeasurementOptions(self):
-    return CreateV8TimelineBasedMeasurementOptions()
-
-  def CreateStorySet(self, options):
-    """Creates the instance of StorySet used to run the benchmark.
-
-    Can be overridden by subclasses.
-    """
-    story_set = story.StorySet(
-        archive_data_file=os.path.join(
-            path_util.GetPerfStorySetsDir(), 'data', 'v8_pages.json'),
-        cloud_storage_bucket=story.PARTNER_BUCKET)
-    story_set.AddStory(google_pages.AdwordCampaignDesktopPage(story_set))
-    return story_set
-
-  @classmethod
-  def Name(cls):
-    return 'v8.google'
-
-  @classmethod
-  def ShouldDisable(cls, possible_browser):
-    if cls.IsSvelte(possible_browser): # http://crbug.com/596556
-      return True
-    # http://crbug.com/623576
-    if (possible_browser.platform.GetDeviceTypeName() == 'Nexus 5' or
-        possible_browser.platform.GetDeviceTypeName() == 'Nexus 7'):
-      return True
-    return False
-
-  @classmethod
-  def ShouldTearDownStateAfterEachStoryRun(cls):
-    return True
 
 
 class _Top25RuntimeStats(perf_benchmark.PerfBenchmark):

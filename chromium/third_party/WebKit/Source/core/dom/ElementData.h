@@ -54,8 +54,7 @@ class ElementData : public GarbageCollectedFinalized<ElementData> {
 
   void ClearClass() const { class_names_.Clear(); }
   void SetClass(const AtomicString& class_name, bool should_fold_case) const {
-    class_names_.Set(should_fold_case ? class_name.LowerASCII() : class_name,
-                     SpaceSplitString::kShouldNotFoldCase);
+    class_names_.Set(should_fold_case ? class_name.LowerASCII() : class_name);
   }
   const SpaceSplitString& ClassNames() const { return class_names_; }
 
@@ -189,7 +188,7 @@ DEFINE_ELEMENT_DATA_TYPE_CASTS(UniqueElementData,
 
 inline const StylePropertySet* ElementData::PresentationAttributeStyle() const {
   if (!is_unique_)
-    return 0;
+    return nullptr;
   return ToUniqueElementData(this)->presentation_attribute_style_.Get();
 }
 
@@ -204,7 +203,7 @@ inline AttributeCollection ShareableElementData::Attributes() const {
 }
 
 inline AttributeCollection UniqueElementData::Attributes() const {
-  return AttributeCollection(attribute_vector_.Data(),
+  return AttributeCollection(attribute_vector_.data(),
                              attribute_vector_.size());
 }
 

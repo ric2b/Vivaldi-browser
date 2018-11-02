@@ -32,7 +32,8 @@ void InitializeRedirectStat(RedirectStat* redirect,
 
 void InitializePrecacheResource(precache::PrecacheResource* resource,
                                 const std::string& url,
-                                double weight_ratio);
+                                double weight_ratio,
+                                precache::PrecacheResource::Type type);
 
 void InitializeOriginStat(OriginStat* origin_stat,
                           const std::string& origin,
@@ -43,11 +44,15 @@ void InitializeOriginStat(OriginStat* origin_stat,
                           bool always_access_network,
                           bool accessed_network);
 
+void InitializeExperiment(precache::PrecacheManifest* manifest,
+                          uint32_t experiment_id,
+                          const std::vector<bool>& bitset);
+
 PrefetchData CreatePrefetchData(const std::string& primary_key,
                                 uint64_t last_visit_time = 0);
 RedirectData CreateRedirectData(const std::string& primary_key,
                                 uint64_t last_visit_time = 0);
-precache::PrecacheManifest CreateManifestData(uint64_t id = 0);
+precache::PrecacheManifest CreateManifestData(int64_t id = 0);
 OriginData CreateOriginData(const std::string& host,
                             uint64_t last_visit_time = 0);
 

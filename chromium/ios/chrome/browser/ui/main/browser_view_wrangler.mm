@@ -14,6 +14,7 @@
 #include "ios/chrome/browser/crash_report/crash_report_helper.h"
 #import "ios/chrome/browser/device_sharing/device_sharing_manager.h"
 #import "ios/chrome/browser/physical_web/start_physical_web_discovery.h"
+#import "ios/chrome/browser/sessions/session_ios.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
 #import "ios/chrome/browser/sessions/session_window_ios.h"
 #import "ios/chrome/browser/tabs/tab.h"
@@ -226,7 +227,7 @@
   Tab* currentTab = [self.currentBVC tabModel].currentTab;
   // Set the active URL if there's a current tab and the current BVC is not OTR.
   if (currentTab && self.currentBVC != self.otrBVC) {
-    activeURL = currentTab.url;
+    activeURL = currentTab.visibleURL;
   }
   [self.deviceSharingManager updateActiveURL:activeURL];
 }
@@ -300,8 +301,12 @@
     // Load existing saved tab model state.
     NSString* statePath =
         base::SysUTF8ToNSString(browserState->GetStatePath().AsUTF8Unsafe());
-    sessionWindow = [[SessionServiceIOS sharedService]
-        loadSessionWindowFromDirectory:statePath];
+    SessionIOS* session =
+        [[SessionServiceIOS sharedService] loadSessionFromDirectory:statePath];
+    if (session) {
+      DCHECK_EQ(session.sessionWindows.count, 1u);
+      sessionWindow = session.sessionWindows[0];
+    }
   }
 
   // Create tab model from saved session (nil is ok).

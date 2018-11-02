@@ -13,6 +13,7 @@
 <translation id="2753617847762399167">നിയമവിരുദ്ധമായ പാത്ത് (കേവലം അല്ലെങ്കിൽ '..' എന്നതുമായി ബന്ധപ്പെട്ടത്): '<ph name="IMAGE_PATH" />'</translation>
 <translation id="27822970480436970">ഈ വിപുലീകരണം ഒരു നെറ്റ്‌വർക്ക് അഭ്യർത്ഥന പരിഷ്‌കരിക്കുന്നതിൽ പരാജയപ്പെട്ടു കാരണം പരിഷ്‌കരണത്തിന് മറ്റൊരു വിപുലീകരണവുമായി പൊരുത്തക്കേടുണ്ട്.</translation>
 <translation id="2857834222104759979">മാനിഫെസ്റ്റ് ഫയല്‍ അസാധുവാണ്.</translation>
+<translation id="2903070246402204397"><ph name="EXTENSION_NAME" /> (വിപുലീകരണ ഐഡി "<ph name="EXTENSION_ID" />") അഡ്‌മിനിസ്‌ട്രേറ്റർ ബ്ലോക്കുചെയ്‌തു. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">പാക്കേജ് ഇന്‍സ്റ്റാള്‍ ചെയ്യാന്‍ കഴിഞ്ഞില്ല: '<ph name="ERROR_CODE" />'</translation>
 <translation id="3115238746683532089"><ph name="VENDOR_ID" /> വെൻഡറിൽ നിന്നുള്ള അജ്ഞാത ഉൽപ്പന്നം <ph name="PRODUCT_ID" /> (സീരിയൽ നമ്പർ <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3163201441334626963"><ph name="VENDOR_ID" /> വെൻഡറിൽ നിന്നുള്ള അജ്ഞാത ഉൽപ്പന്നം <ph name="PRODUCT_ID" /></translation>
@@ -45,7 +46,6 @@
 <translation id="7003844668372540529"><ph name="VENDOR_NAME" /> എന്നതിൽ നിന്നുള്ള അജ്ഞാത ഉൽപ്പന്നം <ph name="PRODUCT_ID" /></translation>
 <translation id="7217838517480956708">ഈ മെഷീനിന്റെ അഡ്‌മിനിസ്‌ട്രേറ്റർ ഇൻസ്റ്റാളുചെയ്യുന്നതിനായി <ph name="EXTENSION_NAME" /> ആവശ്യപ്പെടുന്നു. ഇത് നീക്കംചെയ്യാനോ പരിഷ്‌ക്കരിക്കാനോ കഴിയില്ല.</translation>
 <translation id="7581279002575751816">NPAPI പ്ലഗിനുകൾ പിന്തുണയ്‌ക്കുന്നില്ല.</translation>
-<translation id="7809034755304591547"><ph name="EXTENSION_NAME" /> (വിപുലീകരണ ID "<ph name="EXTENSION_ID" />") അഡ്‌മിനിസ്‌ട്രേറ്റർ തടഞ്ഞു.</translation>
 <translation id="7972881773422714442">ഓപ്‌ഷനുകൾ: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">മുൻവശത്തുള്ള ക്യാമറ</translation>
 <translation id="8047248493720652249">മറ്റൊരു വിപുലീകരണം (<ph name="EXTENSION_NAME" />) വ്യത്യസ്‌തമായ ഒരു ഫയൽനാമം "<ph name="ACTUAL_FILENAME" />" നിർണ്ണയിച്ചതിനാൽ ഈ വിപുലീകരണം ഡൗൺലോഡ് "<ph name="ATTEMPTED_FILENAME" />-ന് പേരുനൽകുന്നതിൽ പരാജയപ്പെട്ടു.</translation>

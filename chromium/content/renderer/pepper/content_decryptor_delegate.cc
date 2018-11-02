@@ -10,6 +10,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -35,6 +36,7 @@
 #include "ppapi/thunk/ppb_buffer_api.h"
 #include "ui/gfx/geometry/rect.h"
 
+using media::CdmMessageType;
 using media::CdmPromise;
 using media::CdmSessionType;
 using media::ContentDecryptionModule;
@@ -347,18 +349,18 @@ media::CdmKeyInformation::KeyStatus PpCdmKeyStatusToCdmKeyInformationKeyStatus(
   }
 }
 
-ContentDecryptionModule::MessageType PpCdmMessageTypeToMediaMessageType(
+CdmMessageType PpCdmMessageTypeToMediaMessageType(
     PP_CdmMessageType message_type) {
   switch (message_type) {
     case PP_CDMMESSAGETYPE_LICENSE_REQUEST:
-      return ContentDecryptionModule::LICENSE_REQUEST;
+      return CdmMessageType::LICENSE_REQUEST;
     case PP_CDMMESSAGETYPE_LICENSE_RENEWAL:
-      return ContentDecryptionModule::LICENSE_RENEWAL;
+      return CdmMessageType::LICENSE_RENEWAL;
     case PP_CDMMESSAGETYPE_LICENSE_RELEASE:
-      return ContentDecryptionModule::LICENSE_RELEASE;
+      return CdmMessageType::LICENSE_RELEASE;
     default:
       NOTREACHED();
-      return ContentDecryptionModule::LICENSE_REQUEST;
+      return CdmMessageType::LICENSE_REQUEST;
   }
 }
 
@@ -808,7 +810,7 @@ void ContentDecryptorDelegate::OnSessionKeysChange(
   keys_info.reserve(key_count);
   for (uint32_t i = 0; i < key_count; ++i) {
     const auto& info = key_information[i];
-    keys_info.push_back(new media::CdmKeyInformation(
+    keys_info.push_back(base::MakeUnique<media::CdmKeyInformation>(
         info.key_id, info.key_id_size,
         PpCdmKeyStatusToCdmKeyInformationKeyStatus(info.key_status),
         info.system_code));

@@ -77,14 +77,6 @@ Polymer({
     },
 
     /**
-     * True if the user already accepted the migration.
-     */
-    isMigrationAccepted: {
-      type: Boolean,
-      value: false
-    },
-
-    /**
      * Formatted string of the current available space size.
      */
     availableSpaceInString: {
@@ -209,7 +201,6 @@ Polymer({
    * @private
    */
   onUpgrade_: function() {
-    this.isMigrationAccepted = true;
     this.fire('upgrade');
   },
 
@@ -225,8 +216,16 @@ Polymer({
    * Handles tap on RESTART button.
    * @private
    */
-  onRestart_: function() {
-    this.fire('restart');
+  onRestartOnLowStorage_: function() {
+    this.fire('restart-on-low-storage');
+  },
+
+  /**
+   * Handles tap on RESTART button on the migration failure screen.
+   * @private
+   */
+  onRestartOnFailure_: function() {
+    this.fire('restart-on-failure');
   },
 
   /**

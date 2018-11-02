@@ -297,22 +297,22 @@ void NormalizeCharactersIntoNFCForm(const UChar* characters,
                                     Vector<UChar>& buffer) {
   DCHECK(length);
 
-  buffer.Resize(length);
+  buffer.resize(length);
 
   UErrorCode status = U_ZERO_ERROR;
   size_t buffer_size = unorm_normalize(characters, length, UNORM_NFC, 0,
-                                       buffer.Data(), length, &status);
+                                       buffer.data(), length, &status);
   DCHECK(status == U_ZERO_ERROR || status == U_STRING_NOT_TERMINATED_WARNING ||
          status == U_BUFFER_OVERFLOW_ERROR);
   DCHECK(buffer_size);
 
-  buffer.Resize(buffer_size);
+  buffer.resize(buffer_size);
 
   if (status == U_ZERO_ERROR || status == U_STRING_NOT_TERMINATED_WARNING)
     return;
 
   status = U_ZERO_ERROR;
-  unorm_normalize(characters, length, UNORM_NFC, 0, buffer.Data(), buffer_size,
+  unorm_normalize(characters, length, UNORM_NFC, 0, buffer.data(), buffer_size,
                   &status);
   DCHECK_EQ(status, U_STRING_NOT_TERMINATED_WARNING);
 }

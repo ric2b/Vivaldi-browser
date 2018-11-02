@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "base/sequenced_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/version.h"
@@ -185,11 +186,8 @@ bool ChromeConfigurator::EnabledCupSigning() const {
 scoped_refptr<base::SequencedTaskRunner>
 ChromeConfigurator::GetSequencedTaskRunner() const {
   return base::CreateSequencedTaskRunnerWithTraits(
-      base::TaskTraits()
-          .MayBlock()
-          .WithPriority(base::TaskPriority::BACKGROUND)
-          .WithShutdownBehavior(
-              base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN));
+      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
 }
 
 PrefService* ChromeConfigurator::GetPrefService() const {
@@ -214,7 +212,8 @@ MakeChromeComponentUpdaterConfigurator(
     const base::CommandLine* cmdline,
     net::URLRequestContextGetter* context_getter,
     PrefService* pref_service) {
-  return new ChromeConfigurator(cmdline, context_getter, pref_service);
+  return base::MakeRefCounted<ChromeConfigurator>(cmdline, context_getter,
+                                                  pref_service);
 }
 
 }  // namespace component_updater

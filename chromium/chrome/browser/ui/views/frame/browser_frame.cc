@@ -40,7 +40,7 @@
 #include "chrome/browser/ui/views/frame/browser_command_handler_linux.h"
 #endif
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
 #include "ui/views/widget/desktop_aura/x11_desktop_handler.h"
 #endif
 
@@ -250,8 +250,7 @@ void BrowserFrame::ShowContextMenuForView(views::View* source,
   if (hit_test == HTCAPTION || hit_test == HTNOWHERE) {
     menu_runner_.reset(new views::MenuRunner(
         GetSystemMenuModel(),
-        views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU |
-            views::MenuRunner::ASYNC,
+        views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU,
         base::Bind(&BrowserFrame::OnMenuClosed, base::Unretained(this))));
     menu_runner_->RunMenuAt(source->GetWidget(), nullptr,
                             gfx::Rect(p, gfx::Size(0, 0)),

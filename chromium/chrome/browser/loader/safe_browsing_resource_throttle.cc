@@ -73,16 +73,16 @@ void SafeBrowsingResourceThrottle::MaybeDestroyPrerenderContents(
   // Destroy the prefetch with FINAL_STATUS_SAFEBROSWING.
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&DestroyPrerenderContents,
-                 info->GetWebContentsGetterForRequest()));
+      base::BindOnce(&DestroyPrerenderContents,
+                     info->GetWebContentsGetterForRequest()));
 }
 
 void SafeBrowsingResourceThrottle::StartDisplayingBlockingPageHelper(
     security_interstitials::UnsafeResource resource) {
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&SafeBrowsingResourceThrottle::StartDisplayingBlockingPage,
-                 AsWeakPtr(), ui_manager(), resource));
+      base::BindOnce(&SafeBrowsingResourceThrottle::StartDisplayingBlockingPage,
+                     AsWeakPtr(), ui_manager(), resource));
 }
 
 // Static
@@ -92,7 +92,6 @@ void SafeBrowsingResourceThrottle::StartDisplayingBlockingPage(
     const security_interstitials::UnsafeResource& resource) {
   content::WebContents* web_contents = resource.web_contents_getter.Run();
   if (web_contents) {
-    BaseResourceThrottle::NotifySubresourceFilterOfBlockedResource(resource);
     prerender::PrerenderContents* prerender_contents =
         prerender::PrerenderContents::FromWebContents(web_contents);
     if (prerender_contents) {
@@ -106,5 +105,5 @@ void SafeBrowsingResourceThrottle::StartDisplayingBlockingPage(
   // Tab is gone or it's being prerendered.
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&SafeBrowsingResourceThrottle::Cancel, throttle));
+      base::BindOnce(&SafeBrowsingResourceThrottle::Cancel, throttle));
 }

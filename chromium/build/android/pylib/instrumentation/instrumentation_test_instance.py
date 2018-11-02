@@ -489,6 +489,8 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._driver_name = None
     self._initializeDriverAttributes()
 
+    self._render_results_dir = None
+    self._screenshot_dir = None
     self._timeout_scale = None
     self._initializeTestControlAttributes(args)
 
@@ -498,6 +500,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._store_tombstones = False
     self._initializeTombstonesAttributes(args)
 
+    self._gs_results_bucket = None
     self._should_save_logcat = None
     self._initializeLogAttributes(args)
 
@@ -653,13 +656,6 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     if args.regenerate_goldens:
       self._flags.append('--regenerate-goldens')
 
-    if args.test_arguments:
-      # --test-arguments is deprecated for gtests and is in the process of
-      # being removed.
-      raise Exception(
-          '--test-arguments is not supported for instrumentation '
-          'tests. Pass command-line flags directly instead.')
-
   def _initializeDriverAttributes(self):
     self._driver_apk = os.path.join(
         constants.GetOutDirectory(), constants.SDK_BUILD_APKS_DIR,
@@ -672,8 +668,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       self._driver_apk = None
 
   def _initializeTestControlAttributes(self, args):
+    self._render_results_dir = args.render_results_dir
     self._screenshot_dir = args.screenshot_dir
     self._timeout_scale = args.timeout_scale or 1
+    self._ui_screenshot_dir = args.ui_screenshot_dir
 
   def _initializeTestCoverageAttributes(self, args):
     self._coverage_directory = args.coverage_dir
@@ -682,10 +680,11 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._store_tombstones = args.store_tombstones
 
   def _initializeLogAttributes(self, args):
+    self._gs_results_bucket = args.gs_results_bucket
     self._should_save_logcat = bool(args.json_results_file)
 
   def _initializeEditPrefsAttributes(self, args):
-    if not hasattr(args, 'shared_prefs_file'):
+    if not hasattr(args, 'shared_prefs_file') or not args.shared_prefs_file:
       return
     if not isinstance(args.shared_prefs_file, str):
       logging.warning("Given non-string for a filepath")
@@ -747,12 +746,20 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     return self._flags
 
   @property
+  def gs_results_bucket(self):
+    return self._gs_results_bucket
+
+  @property
   def should_save_logcat(self):
     return self._should_save_logcat
 
   @property
   def package_info(self):
     return self._package_info
+
+  @property
+  def render_results_dir(self):
+    return self._render_results_dir
 
   @property
   def screenshot_dir(self):
@@ -801,6 +808,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   @property
   def total_external_shards(self):
     return self._total_external_shards
+
+  @property
+  def ui_screenshot_dir(self):
+    return self._ui_screenshot_dir
 
   #override
   def TestType(self):

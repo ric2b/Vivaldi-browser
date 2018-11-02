@@ -16,6 +16,9 @@ namespace net {
 class URLRequest;
 }
 
+using safe_browsing::ThreatMetadata;
+using safe_browsing::SBThreatType;
+
 namespace android_webview {
 
 class AwSafeBrowsingResourceThrottle
@@ -30,6 +33,12 @@ class AwSafeBrowsingResourceThrottle
           database_manager,
       scoped_refptr<AwSafeBrowsingUIManager> ui_manager);
 
+  static const void* kUserDataKey;
+
+  void OnCheckBrowseUrlResult(const GURL& url,
+                              SBThreatType threat_type,
+                              const ThreatMetadata& metadata) override;
+
  private:
   AwSafeBrowsingResourceThrottle(
       net::URLRequest* request,
@@ -41,6 +50,8 @@ class AwSafeBrowsingResourceThrottle
   ~AwSafeBrowsingResourceThrottle() override;
 
   void CancelResourceLoad() override;
+
+  net::URLRequest* request_;
 
   DISALLOW_COPY_AND_ASSIGN(AwSafeBrowsingResourceThrottle);
 };

@@ -786,6 +786,10 @@ bool NativeAppWindowCocoa::CanHaveAlphaEnabled() const {
   return false;
 }
 
+void NativeAppWindowCocoa::SetActivateOnPointer(bool activate_on_pointer) {
+  NOTIMPLEMENTED();
+}
+
 void NativeAppWindowCocoa::UpdateEventTargeterWithInset() {
   // Not needed on Mac.
 }

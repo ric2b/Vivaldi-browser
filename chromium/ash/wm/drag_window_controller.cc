@@ -37,9 +37,8 @@ class DragWindowController::DragWindowDetails : public aura::WindowDelegate {
  public:
   DragWindowDetails(const display::Display& display,
                     aura::Window* original_window)
-      : root_window_(ShellPort::Get()
-                         ->GetRootWindowForDisplayId(display.id())
-                         ->aura_window()) {}
+      : root_window_(
+            ShellPort::Get()->GetRootWindowForDisplayId(display.id())) {}
 
   ~DragWindowDetails() override {
     delete drag_window_;
@@ -86,7 +85,7 @@ class DragWindowController::DragWindowDetails : public aura::WindowDelegate {
     int parent_id = original_window->parent()->id();
     aura::Window* container = root_window_->GetChildById(parent_id);
 
-    drag_window_->SetType(ui::wm::WINDOW_TYPE_POPUP);
+    drag_window_->SetType(aura::client::WINDOW_TYPE_POPUP);
     drag_window_->SetTransparent(true);
     drag_window_->Init(ui::LAYER_TEXTURED);
     drag_window_->SetName("DragWindow");

@@ -4,6 +4,7 @@
 
 #include "chrome/utility/shell_handler_impl_win.h"
 
+#include <objbase.h>
 #include <shldisp.h>
 
 #include "base/files/file_enumerator.h"
@@ -88,7 +89,8 @@ bool IsPinnedToTaskbarHelper::ShortcutHasUnpinToTaskbarVerb(
 
   base::win::ScopedComPtr<IShellDispatch> shell_dispatch;
   HRESULT hresult =
-      shell_dispatch.CreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER);
+      ::CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER,
+                         IID_PPV_ARGS(&shell_dispatch));
   if (FAILED(hresult) || !shell_dispatch) {
     error_occured_ = true;
     return false;
@@ -97,7 +99,7 @@ bool IsPinnedToTaskbarHelper::ShortcutHasUnpinToTaskbarVerb(
   base::win::ScopedComPtr<Folder> folder;
   hresult = shell_dispatch->NameSpace(
       base::win::ScopedVariant(shortcut.DirName().value().c_str()),
-      folder.Receive());
+      folder.GetAddressOf());
   if (FAILED(hresult) || !folder) {
     error_occured_ = true;
     return false;
@@ -106,14 +108,14 @@ bool IsPinnedToTaskbarHelper::ShortcutHasUnpinToTaskbarVerb(
   base::win::ScopedComPtr<FolderItem> item;
   hresult = folder->ParseName(
       base::win::ScopedBstr(shortcut.BaseName().value().c_str()),
-      item.Receive());
+      item.GetAddressOf());
   if (FAILED(hresult) || !item) {
     error_occured_ = true;
     return false;
   }
 
   base::win::ScopedComPtr<FolderItemVerbs> verbs;
-  hresult = item->Verbs(verbs.Receive());
+  hresult = item->Verbs(verbs.GetAddressOf());
   if (FAILED(hresult) || !verbs) {
     error_occured_ = true;
     return false;
@@ -129,7 +131,8 @@ bool IsPinnedToTaskbarHelper::ShortcutHasUnpinToTaskbarVerb(
   long error_count = 0;
   for (long i = 0; i < verb_count; ++i) {
     base::win::ScopedComPtr<FolderItemVerb> verb;
-    hresult = verbs->Item(base::win::ScopedVariant(i, VT_I4), verb.Receive());
+    hresult =
+        verbs->Item(base::win::ScopedVariant(i, VT_I4), verb.GetAddressOf());
     if (FAILED(hresult) || !verb) {
       error_count++;
       continue;
@@ -214,7 +217,9 @@ ShellHandlerImpl::ShellHandlerImpl() = default;
 ShellHandlerImpl::~ShellHandlerImpl() = default;
 
 // static
-void ShellHandlerImpl::Create(chrome::mojom::ShellHandlerRequest request) {
+void ShellHandlerImpl::Create(
+    const service_manager::BindSourceInfo& source_info,
+    chrome::mojom::ShellHandlerRequest request) {
   mojo::MakeStrongBinding(base::MakeUnique<ShellHandlerImpl>(),
                           std::move(request));
 }

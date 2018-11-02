@@ -20,6 +20,7 @@
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/child/request_extra_data.h"
+#include "content/common/gpu_stream_constants.h"
 #include "content/common/renderer.mojom.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/screen_info.h"
@@ -45,7 +46,6 @@
 #include "gpu/ipc/service/image_transport_surface.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
-#include "third_party/WebKit/public/platform/WebGamepads.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
@@ -69,8 +69,6 @@
 
 using device::MotionData;
 using device::OrientationData;
-using blink::WebGamepad;
-using blink::WebGamepads;
 using blink::WebRect;
 using blink::WebSize;
 
@@ -266,14 +264,9 @@ void FetchManifest(blink::WebView* view, const GURL& url,
 }
 
 void SetMockGamepadProvider(std::unique_ptr<RendererGamepadProvider> provider) {
-  RenderThreadImpl::current()
-      ->blink_platform_impl()
+  RenderThreadImpl::current_blink_platform_impl()
       ->SetPlatformEventObserverForTesting(blink::kWebPlatformEventTypeGamepad,
                                            std::move(provider));
-}
-
-void SetMockDeviceLightData(const double data) {
-  RendererBlinkPlatformImpl::SetMockDeviceLightDataForTesting(data);
 }
 
 void SetMockDeviceMotionData(const MotionData& data) {
@@ -353,11 +346,12 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies,
             *base::CommandLine::ForCurrentProcess(), deps, 1.f, false,
             dummy_screen_info);
 
+    constexpr bool disable_display_vsync = false;
     auto compositor_frame_sink = base::MakeUnique<cc::TestCompositorFrameSink>(
         std::move(compositor_context_provider),
         std::move(worker_context_provider), nullptr /* shared_bitmap_manager */,
         gpu_memory_buffer_manager, settings.renderer_settings, task_runner,
-        synchronous_composite, false /* force_disable_reclaim_resources */);
+        synchronous_composite, disable_display_vsync);
     compositor_frame_sink->SetClient(this);
     compositor_frame_sinks_[routing_id] = compositor_frame_sink.get();
     return std::move(compositor_frame_sink);
@@ -397,8 +391,8 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies,
 
     auto context_provider =
         make_scoped_refptr(new ui::ContextProviderCommandBuffer(
-            gpu_channel_, gpu::GPU_STREAM_DEFAULT,
-            gpu::GpuStreamPriority::NORMAL, gpu::kNullSurfaceHandle,
+            gpu_channel_, kGpuStreamIdDefault, kGpuStreamPriorityDefault,
+            gpu::kNullSurfaceHandle,
             GURL("chrome://gpu/"
                  "LayoutTestDependenciesImpl::CreateOutputSurface"),
             automatic_flushes, support_locking, gpu::SharedMemoryLimits(),
@@ -503,6 +497,8 @@ gfx::ICCProfile GetTestingICCProfile(const std::string& name) {
     return gfx::ICCProfileForTestingColorSpin();
   } else if (name == "adobeRGB") {
     return gfx::ICCProfileForTestingAdobeRGB();
+  } else if (name == "reset") {
+    return gfx::ICCProfileForLayoutTests();
   }
   return gfx::ICCProfile();
 }

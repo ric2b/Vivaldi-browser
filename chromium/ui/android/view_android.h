@@ -133,11 +133,14 @@ class UI_ANDROID_EXPORT ViewAndroid {
   bool StartDragAndDrop(const base::android::JavaRef<jstring>& jtext,
                         const base::android::JavaRef<jobject>& jimage);
 
+  gfx::Size GetPhysicalBackingSize();
+  void OnPhysicalBackingSizeChanged(const gfx::Size& size);
   void OnBackgroundColorChanged(unsigned int color);
   void OnTopControlsChanged(float top_controls_offset,
                             float top_content_offset);
   void OnBottomControlsChanged(float bottom_controls_offset,
                                float bottom_content_offset);
+  int GetSystemWindowInsetBottom();
 
   ScopedAnchorView AcquireAnchorView();
   void SetAnchorRect(const base::android::JavaRef<jobject>& anchor,
@@ -177,11 +180,11 @@ class UI_ANDROID_EXPORT ViewAndroid {
 
   bool has_event_forwarder() const { return !!event_forwarder_; }
 
-  // Returns true if any node of the tree along the hierarchy (view's children
-  // and parents) already has |EventForwarder| attached to it.
-  static bool ViewTreeHasEventForwarder(ViewAndroid* view);
+  // Checks if there is any event forwarder in any node up to root.
+  static bool RootPathHasEventForwarder(ViewAndroid* view);
 
-  // Returns true if any children node (or self) has |EventForwarder|.
+  // Checks if there is any event forwarder in the node paths down to
+  // each leaf of subtree.
   static bool SubtreeHasEventForwarder(ViewAndroid* view);
 
   // Returns the Java delegate for this view. This is used to delegate work
@@ -199,6 +202,8 @@ class UI_ANDROID_EXPORT ViewAndroid {
   // Basic view layout information. Used to do hit testing deciding whether
   // the passed events should be processed by the view.
   LayoutParams layout_params_;
+
+  gfx::Size physical_size_;
 
   gfx::Vector2dF content_offset_;  // in CSS pixel.
   std::unique_ptr<EventForwarder> event_forwarder_;

@@ -9,11 +9,14 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task_scheduler/post_task.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/chrome_metrics_service_client.h"
 #include "chrome/browser/metrics/variations/chrome_variations_service_client.h"
 #include "chrome/browser/metrics/variations/ui_string_overrider_factory.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_otr_state.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/installer/util/google_update_settings.h"
@@ -62,19 +65,10 @@ const base::Feature kMetricsReportingFeature{"MetricsReporting",
 // Posts |GoogleUpdateSettings::StoreMetricsClientInfo| on blocking pool thread
 // because it needs access to IO and cannot work from UI thread.
 void PostStoreMetricsClientInfo(const metrics::ClientInfo& client_info) {
-  // The message loop processes messages after the blocking pool is initialized.
-  // Posting a task to the message loop to post a task to the blocking pool
-  // ensures that the blocking pool is ready to accept tasks at that time.
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::Bind(
-          [](const metrics::ClientInfo& client_info) {
-            content::BrowserThread::PostBlockingPoolTask(
-                FROM_HERE,
-                base::Bind(&GoogleUpdateSettings::StoreMetricsClientInfo,
-                           client_info));
-          },
-          client_info));
+  base::PostTaskWithTraits(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      base::BindOnce(&GoogleUpdateSettings::StoreMetricsClientInfo,
+                     client_info));
 }
 
 // Appends a group to the sampling controlling |trial|. The group will be
@@ -295,4 +289,22 @@ ChromeMetricsServicesManagerClient::GetMetricsStateManager() {
         base::Bind(&GoogleUpdateSettings::LoadMetricsClientInfo));
   }
   return metrics_state_manager_.get();
+}
+
+bool ChromeMetricsServicesManagerClient::IsMetricsReportingForceEnabled() {
+  return ChromeMetricsServiceClient::IsMetricsReportingForceEnabled();
+}
+
+bool ChromeMetricsServicesManagerClient::IsIncognitoSessionActive() {
+#if defined(OS_ANDROID)
+  // TODO(crbug/739971) On Android, we don't get notifications from TabModel
+  // when incognito tabs are opened, so this won't get re-evaluated reliably
+  // yet.  Assume there always an incognito tab open, which will keep UKM
+  // disabled.
+  return true;
+#else
+  // Depending directly on BrowserList, since that is the implementation
+  // that we get correct notifications for.
+  return BrowserList::IsIncognitoSessionActive();
+#endif
 }

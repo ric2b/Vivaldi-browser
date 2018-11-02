@@ -194,6 +194,10 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   // |bounds| are in root window coordinates.
   void SetExcludeBounds(const gfx::Rect& bounds);
 
+  // Updates |lift_activation_bounds_|. See |lift_activation_bounds_| for more
+  // information.
+  void SetLiftActivationBounds(const gfx::Rect& bounds);
+
  private:
   friend class TouchExplorationControllerTestApi;
 
@@ -296,7 +300,16 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
 
   void PlaySoundForTimer();
 
-  void SendSimulatedClick();
+  // Sends a simulated click, if an anchor point was set explicitly. Otherwise,
+  // sends a simulated tap at anchor point.
+  void SendSimulatedClickOrTap();
+
+  // Sends a simulated tap at anchor point.
+  void SendSimulatedTap();
+
+  // Sends a simulated tap, if the anchor point falls within lift activation
+  // bounds.
+  void MaybeSendSimulatedTapInLiftActivationBounds(const ui::TouchEvent& event);
 
   // Some constants used in touch_exploration_controller:
 
@@ -419,11 +432,16 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
     BOTTOM_RIGHT_CORNER = RIGHT_EDGE | BOTTOM_EDGE,
   };
 
-  // Given a point, if it is within the given bounds of an edge, returns the
-  // edge. If it is within the given bounds of two edges, returns an int with
+  // Return the bounds of the root window in actual device pixels, not DIP,
+  // in order to match the coordinate system of touch events. Note that this
+  // is not the same as screen coordinates, which span multiple displays.
+  gfx::Rect GetRootWindowBoundsInScreenUnits();
+
+  // Given a point, if it is within the given inset of an edge, returns the
+  // edge. If it is within the given inset of two edges, returns an int with
   // both bits that represent the respective edges turned on. Otherwise returns
   // SCREEN_CENTER.
-  int FindEdgesWithinBounds(gfx::Point point, float bounds);
+  int FindEdgesWithinInset(gfx::Point point, float inset);
 
   // Set the state and modifies any variables related to the state change.
   // (e.g. resetting the gesture provider).
@@ -513,6 +531,11 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   // but events need to be sent to TouchAccessibilityEnabler before being
   // rewritten when TouchExplorationController is running.
   TouchAccessibilityEnabler* touch_accessibility_enabler_;
+
+  // Any touch exploration that both starts and ends (touch pressed, and
+  // released) within this rectangle, triggers a simulated single finger tap at
+  // the anchor point on release.
+  gfx::Rect lift_activation_bounds_;
 
   DISALLOW_COPY_AND_ASSIGN(TouchExplorationController);
 };

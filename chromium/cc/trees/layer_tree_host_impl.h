@@ -16,6 +16,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "cc/base/synced_property.h"
 #include "cc/benchmarks/micro_benchmark_controller_impl.h"
@@ -86,7 +87,11 @@ enum class GpuRasterizationStatus {
   OFF_DEVICE,
   OFF_VIEWPORT,
   MSAA_CONTENT,
-  OFF_CONTENT
+};
+
+enum class ImplThreadPhase {
+  IDLE,
+  INSIDE_IMPL_FRAME,
 };
 
 // LayerTreeHost->Proxy callback interface.
@@ -223,11 +228,11 @@ class CC_EXPORT LayerTreeHostImpl
     ~FrameData();
     void AsValueInto(base::trace_event::TracedValue* value) const;
 
-    std::vector<SurfaceId> embedded_surfaces;
+    std::vector<SurfaceId> activation_dependencies;
     std::vector<gfx::Rect> occluding_screen_space_rects;
     std::vector<gfx::Rect> non_occluding_screen_space_rects;
     RenderPassList render_passes;
-    const LayerImplList* render_surface_layer_list;
+    const RenderSurfaceList* render_surface_list;
     LayerImplList will_draw_layers;
     bool has_no_damage;
     bool may_contain_video;
@@ -322,19 +327,13 @@ class CC_EXPORT LayerTreeHostImpl
 
   size_t SourceAnimationFrameNumberForTesting() const;
 
-  void RegisterScrollbarAnimationController(int scroll_layer_id);
-  void UnregisterScrollbarAnimationController(int scroll_layer_id);
-  ScrollbarAnimationController* ScrollbarAnimationControllerForId(
-      int scroll_layer_id) const;
+  void RegisterScrollbarAnimationController(ElementId scroll_element_id,
+                                            float initial_opacity);
+  void UnregisterScrollbarAnimationController(ElementId scroll_element_id);
+  ScrollbarAnimationController* ScrollbarAnimationControllerForElementId(
+      ElementId scroll_element_id) const;
 
   DrawMode GetDrawMode() const;
-
-  // Viewport size in draw space: this size is in physical pixels and is used
-  // for draw properties, tilings, quads and render passes.
-  gfx::Size DrawViewportSize() const;
-
-  // Viewport rect in view space used for tiling prioritization.
-  const gfx::Rect ViewportRectForTilePriority() const;
 
   // TileManagerClient implementation.
   void NotifyReadyToActivate() override;
@@ -355,7 +354,7 @@ class CC_EXPORT LayerTreeHostImpl
                                          base::TimeDelta delay) override;
   void SetNeedsAnimateForScrollbarAnimation() override;
   void SetNeedsRedrawForScrollbarAnimation() override;
-  ScrollbarSet ScrollbarsFor(int scroll_layer_id) const override;
+  ScrollbarSet ScrollbarsFor(ElementId scroll_element_id) const override;
   void DidChangeScrollbarVisibility() override;
 
   // VideoBeginFrameSource implementation.
@@ -416,6 +415,7 @@ class CC_EXPORT LayerTreeHostImpl
 
   virtual void WillBeginImplFrame(const BeginFrameArgs& args);
   virtual void DidFinishImplFrame();
+  void DidNotProduceFrame(const BeginFrameAck& ack);
   void DidModifyTilePriorities();
 
   LayerTreeImpl* active_tree() { return active_tree_.get(); }
@@ -538,9 +538,13 @@ class CC_EXPORT LayerTreeHostImpl
   void ScheduleMicroBenchmark(std::unique_ptr<MicroBenchmarkImpl> benchmark);
 
   CompositorFrameMetadata MakeCompositorFrameMetadata() const;
+
   // Viewport rectangle and clip in device space.  These rects are used to
   // prioritize raster and determine what is submitted in a CompositorFrame.
   gfx::Rect DeviceViewport() const;
+  // Viewport rect to be used for tiling prioritization instead of the
+  // DeviceViewport().
+  const gfx::Rect ViewportRectForTilePriority() const;
 
   // When a SwapPromiseMonitor is created on the impl thread, it calls
   // InsertSwapPromiseMonitor() to register itself with LayerTreeHostImpl.
@@ -665,9 +669,6 @@ class CC_EXPORT LayerTreeHostImpl
   bool AnimateScrollbars(base::TimeTicks monotonic_time);
   bool AnimateBrowserControls(base::TimeTicks monotonic_time);
 
-  void TrackDamageForAllSurfaces(
-      const LayerImplList& render_surface_layer_list);
-
   void UpdateTileManagerMemoryPolicy(const ManagedMemoryPolicy& policy);
 
   // This function should only be called from PrepareToDraw, as DidDrawAllLayers
@@ -677,14 +678,12 @@ class CC_EXPORT LayerTreeHostImpl
 
   void ClearCurrentlyScrollingNode();
 
-  LayerImpl* FindScrollLayerForDeviceViewportPoint(
+  ScrollNode* FindScrollNodeForDeviceViewportPoint(
       const gfx::PointF& device_viewport_point,
       InputHandler::ScrollInputType type,
       LayerImpl* layer_hit_by_point,
       bool* scroll_on_main_thread,
       uint32_t* main_thread_scrolling_reason) const;
-  float DeviceSpaceDistanceToLayer(const gfx::PointF& device_viewport_point,
-                                   LayerImpl* layer_impl);
   void StartScrollbarFadeRecursive(LayerImpl* layer);
   void SetManagedMemoryPolicy(const ManagedMemoryPolicy& policy);
 
@@ -713,6 +712,11 @@ class CC_EXPORT LayerTreeHostImpl
   void UpdateScrollSourceInfo(bool is_wheel_scroll);
 
   bool IsScrolledBy(LayerImpl* child, ScrollNode* ancestor);
+  void ShowScrollbarsForImplScroll(ElementId element_id);
+
+  // Copy any opacity values already in the active tree to the pending
+  // tree, because the active tree value always takes precedence for scrollbars.
+  void PushScrollbarOpacitiesFromActiveToPending();
 
   using UIResourceMap = std::unordered_map<UIResourceId, UIResourceData>;
   UIResourceMap ui_resource_map_;
@@ -763,8 +767,8 @@ class CC_EXPORT LayerTreeHostImpl
   bool did_lock_scrolling_layer_;
   bool wheel_scrolling_;
   bool scroll_affects_scroll_handler_;
-  int scroll_layer_id_mouse_currently_over_;
-  int scroll_layer_id_mouse_currently_captured_;
+  ElementId scroll_element_id_mouse_currently_over_;
+  ElementId scroll_element_id_mouse_currently_captured_;
 
   std::vector<std::unique_ptr<SwapPromise>>
       swap_promises_for_main_thread_scroll_update_;
@@ -824,9 +828,11 @@ class CC_EXPORT LayerTreeHostImpl
   std::unique_ptr<MutatorHost> mutator_host_;
   std::set<VideoFrameController*> video_frame_controllers_;
 
-  // Map from scroll layer ID to scrollbar animation controller.
+  // Map from scroll element ID to scrollbar animation controller.
   // There is one animation controller per pair of overlay scrollbars.
-  std::unordered_map<int, std::unique_ptr<ScrollbarAnimationController>>
+  std::unordered_map<ElementId,
+                     std::unique_ptr<ScrollbarAnimationController>,
+                     ElementIdHash>
       scrollbar_animation_controllers_;
 
   RenderingStatsInstrumentation* rendering_stats_instrumentation_;
@@ -871,6 +877,8 @@ class CC_EXPORT LayerTreeHostImpl
   bool has_scrolled_by_touch_;
 
   bool touchpad_and_wheel_scroll_latching_enabled_;
+
+  ImplThreadPhase impl_thread_phase_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeHostImpl);
 };

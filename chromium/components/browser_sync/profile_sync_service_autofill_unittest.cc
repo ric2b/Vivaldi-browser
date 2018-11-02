@@ -19,6 +19,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
@@ -90,7 +91,7 @@ using testing::_;
 using testing::DoAll;
 using testing::ElementsAre;
 using testing::Not;
-using testing::SetArgumentPointee;
+using testing::SetArgPointee;
 using testing::Return;
 
 namespace browser_sync {
@@ -842,7 +843,7 @@ TEST_F(ProfileSyncServiceAutofillTest, HasNativeEntriesEmptySync) {
   std::vector<AutofillEntry> entries;
   entries.push_back(MakeAutofillEntry("foo", "bar", 1));
   EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgumentPointee<0>(entries), Return(true)));
+      .WillOnce(DoAll(SetArgPointee<0>(entries), Return(true)));
   SetIdleChangeProcessorExpectations();
   CreateRootHelper create_root(this, AUTOFILL);
   EXPECT_CALL(personal_data_manager(), Refresh());
@@ -889,7 +890,7 @@ TEST_F(ProfileSyncServiceAutofillTest, HasNativeWithDuplicatesEmptySync) {
   entries.push_back(MakeAutofillEntry("dup", "", 2));
   entries.push_back(MakeAutofillEntry("dup", "", 3));
   EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgumentPointee<0>(entries), Return(true)));
+      .WillOnce(DoAll(SetArgPointee<0>(entries), Return(true)));
   SetIdleChangeProcessorExpectations();
   CreateRootHelper create_root(this, AUTOFILL);
   EXPECT_CALL(personal_data_manager(), Refresh());
@@ -909,7 +910,7 @@ TEST_F(ProfileSyncServiceAutofillTest, HasNativeHasSyncNoMerge) {
   native_entries.push_back(native_entry);
 
   EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgumentPointee<0>(native_entries), Return(true)));
+      .WillOnce(DoAll(SetArgPointee<0>(native_entries), Return(true)));
 
   std::vector<AutofillEntry> sync_entries;
   sync_entries.push_back(sync_entry);
@@ -951,7 +952,7 @@ TEST_F(ProfileSyncServiceAutofillTest, HasNativeHasSyncNoMerge_NullTerminated) {
   native_entries.push_back(native_entry1);
 
   EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgumentPointee<0>(native_entries), Return(true)));
+      .WillOnce(DoAll(SetArgPointee<0>(native_entries), Return(true)));
 
   std::vector<AutofillEntry> sync_entries;
   sync_entries.push_back(sync_entry0);
@@ -994,7 +995,7 @@ TEST_F(ProfileSyncServiceAutofillTest, HasNativeHasSyncMergeEntry) {
   std::vector<AutofillEntry> native_entries;
   native_entries.push_back(native_entry);
   EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgumentPointee<0>(native_entries), Return(true)));
+      .WillOnce(DoAll(SetArgPointee<0>(native_entries), Return(true)));
 
   std::vector<AutofillEntry> sync_entries;
   sync_entries.push_back(sync_entry);
@@ -1364,8 +1365,8 @@ TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeAddEntry) {
   AutofillEntry added_entry(MakeAutofillEntry("added", "entry", 1));
 
   EXPECT_CALL(autofill_table(), GetAutofillTimestamps(_, _, _, _))
-      .WillOnce(DoAll(SetArgumentPointee<2>(added_entry.date_created()),
-                      SetArgumentPointee<3>(added_entry.date_last_used()),
+      .WillOnce(DoAll(SetArgPointee<2>(added_entry.date_created()),
+                      SetArgPointee<3>(added_entry.date_last_used()),
                       Return(true)));
 
   AutofillChangeList changes;
@@ -1412,7 +1413,7 @@ TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeUpdateEntry) {
   original_entries.push_back(original_entry);
 
   EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgumentPointee<0>(original_entries), Return(true)));
+      .WillOnce(DoAll(SetArgPointee<0>(original_entries), Return(true)));
   EXPECT_CALL(personal_data_manager(), Refresh());
   CreateRootHelper create_root(this, AUTOFILL);
   StartSyncService(create_root.callback(), false, AUTOFILL);
@@ -1421,8 +1422,8 @@ TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeUpdateEntry) {
   AutofillEntry updated_entry(MakeAutofillEntry("my", "entry", 1, 2));
 
   EXPECT_CALL(autofill_table(), GetAutofillTimestamps(_, _, _, _))
-      .WillOnce(DoAll(SetArgumentPointee<2>(updated_entry.date_created()),
-                      SetArgumentPointee<3>(updated_entry.date_last_used()),
+      .WillOnce(DoAll(SetArgPointee<2>(updated_entry.date_created()),
+                      SetArgPointee<3>(updated_entry.date_last_used()),
                       Return(true)));
 
   AutofillChangeList changes;
@@ -1444,7 +1445,7 @@ TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeRemoveEntry) {
   original_entries.push_back(original_entry);
 
   EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgumentPointee<0>(original_entries), Return(true)));
+      .WillOnce(DoAll(SetArgPointee<0>(original_entries), Return(true)));
   EXPECT_CALL(personal_data_manager(), Refresh());
   CreateRootHelper create_root(this, AUTOFILL);
   StartSyncService(create_root.callback(), false, AUTOFILL);

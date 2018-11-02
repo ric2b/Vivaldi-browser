@@ -15,27 +15,24 @@
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_mask.h"
 #include "ui/views/animation/square_ink_drop_ripple.h"
-#include "ui/views/border.h"
 #include "ui/views/painter.h"
 
 namespace ash {
 
 SystemMenuButton::SystemMenuButton(views::ButtonListener* listener,
                                    TrayPopupInkDropStyle ink_drop_style,
-                                   gfx::ImageSkia normal_icon,
-                                   gfx::ImageSkia disabled_icon,
+                                   const gfx::ImageSkia& normal_icon,
+                                   const gfx::ImageSkia& disabled_icon,
                                    int accessible_name_id)
     : views::ImageButton(listener), ink_drop_style_(ink_drop_style) {
   DCHECK_EQ(normal_icon.width(), disabled_icon.width());
   DCHECK_EQ(normal_icon.height(), disabled_icon.height());
 
-  SetImage(views::Button::STATE_NORMAL, &normal_icon);
-  SetImage(views::Button::STATE_DISABLED, &disabled_icon);
+  SetImage(STATE_NORMAL, normal_icon);
+  SetImage(STATE_DISABLED, disabled_icon);
 
-  const int horizontal_padding = (kMenuButtonSize - normal_icon.width()) / 2;
-  const int vertical_padding = (kMenuButtonSize - normal_icon.height()) / 2;
-  SetBorder(views::CreateEmptyBorder(vertical_padding, horizontal_padding,
-                                     vertical_padding, horizontal_padding));
+  SetImageAlignment(ALIGN_CENTER, ALIGN_MIDDLE);
+  SetPreferredSize(gfx::Size(kMenuButtonSize, kMenuButtonSize));
 
   SetTooltipText(l10n_util::GetStringUTF16(accessible_name_id));
 
@@ -49,9 +46,18 @@ SystemMenuButton::SystemMenuButton(views::ButtonListener* listener,
                                    int accessible_name_id)
     : SystemMenuButton(listener,
                        ink_drop_style,
-                       gfx::CreateVectorIcon(icon, kMenuIconColor),
-                       gfx::CreateVectorIcon(icon, kMenuIconColorDisabled),
-                       accessible_name_id) {}
+                       gfx::ImageSkia(),
+                       gfx::ImageSkia(),
+                       accessible_name_id) {
+  SetVectorIcon(icon);
+}
+
+void SystemMenuButton::SetVectorIcon(const gfx::VectorIcon& icon) {
+  SetImage(views::Button::STATE_NORMAL,
+           gfx::CreateVectorIcon(icon, kMenuIconColor));
+  SetImage(views::Button::STATE_DISABLED,
+           gfx::CreateVectorIcon(icon, kMenuIconColorDisabled));
+}
 
 SystemMenuButton::~SystemMenuButton() {}
 

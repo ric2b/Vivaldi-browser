@@ -58,3 +58,7 @@ DISABLE(BrowserWindowTouchBarUnitTest, TouchBarItems)
 DISABLE(BrowserWindowTouchBarUnitTest, ReloadOrStopTouchBarItem)
 
 DISABLE(WebContentsImplBrowserTest, RenderWidgetDeletedWhileMouseLockPending)
+
+// Broke in v60
+DISABLE(InputMethodMacTest, MonitorCompositionRangeForActiveWidget)
+DISABLE(ExtensionApiTabTest, TabOpenerCraziness)

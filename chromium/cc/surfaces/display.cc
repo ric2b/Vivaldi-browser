@@ -71,7 +71,7 @@ Display::~Display() {
     for (const auto& id_entry : aggregator_->previous_contained_surfaces()) {
       Surface* surface = surface_manager_->GetSurfaceForId(id_entry.first);
       if (surface)
-        surface->RunDrawCallbacks();
+        surface->RunDrawCallback();
     }
   }
 }
@@ -194,9 +194,9 @@ void Display::InitializeRenderer() {
 
   if (output_surface_->context_provider()) {
     DCHECK(texture_mailbox_deleter_);
-    renderer_ = base::MakeUnique<GLRenderer>(
-        &settings_, output_surface_.get(), resource_provider_.get(),
-        texture_mailbox_deleter_.get(), settings_.highp_threshold_min);
+    renderer_ = base::MakeUnique<GLRenderer>(&settings_, output_surface_.get(),
+                                             resource_provider_.get(),
+                                             texture_mailbox_deleter_.get());
   } else if (output_surface_->vulkan_context_provider()) {
 #if defined(ENABLE_VULKAN)
     DCHECK(texture_mailbox_deleter_);
@@ -269,7 +269,7 @@ bool Display::DrawAndSwap() {
   for (const auto& id_entry : aggregator_->previous_contained_surfaces()) {
     Surface* surface = surface_manager_->GetSurfaceForId(id_entry.first);
     if (surface)
-      surface->RunDrawCallbacks();
+      surface->RunDrawCallback();
   }
 
   frame.metadata.latency_info.insert(frame.metadata.latency_info.end(),
@@ -283,19 +283,17 @@ bool Display::DrawAndSwap() {
 
   gfx::Size surface_size;
   bool have_damage = false;
-  if (!frame.render_pass_list.empty()) {
-    RenderPass& last_render_pass = *frame.render_pass_list.back();
-    if (last_render_pass.output_rect.size() != current_surface_size_ &&
-        last_render_pass.damage_rect == last_render_pass.output_rect &&
-        !current_surface_size_.IsEmpty()) {
-      // Resize the output rect to the current surface size so that we won't
-      // skip the draw and so that the GL swap won't stretch the output.
-      last_render_pass.output_rect.set_size(current_surface_size_);
-      last_render_pass.damage_rect = last_render_pass.output_rect;
-    }
-    surface_size = last_render_pass.output_rect.size();
-    have_damage = !last_render_pass.damage_rect.size().IsEmpty();
+  RenderPass& last_render_pass = *frame.render_pass_list.back();
+  if (last_render_pass.output_rect.size() != current_surface_size_ &&
+      last_render_pass.damage_rect == last_render_pass.output_rect &&
+      !current_surface_size_.IsEmpty()) {
+    // Resize the output rect to the current surface size so that we won't
+    // skip the draw and so that the GL swap won't stretch the output.
+    last_render_pass.output_rect.set_size(current_surface_size_);
+    last_render_pass.damage_rect = last_render_pass.output_rect;
   }
+  surface_size = last_render_pass.output_rect.size();
+  have_damage = !last_render_pass.damage_rect.size().IsEmpty();
 
   bool size_matches = surface_size == current_surface_size_;
   if (!size_matches)
@@ -413,6 +411,11 @@ void Display::OnSurfaceDamaged(const SurfaceId& surface_id, bool* changed) {
 }
 
 void Display::OnSurfaceCreated(const SurfaceInfo& surface_info) {}
+
+void Display::OnSurfaceDiscarded(const SurfaceId& surface_id) {
+  if (aggregator_)
+    aggregator_->ReleaseResources(surface_id);
+}
 
 const SurfaceId& Display::CurrentSurfaceId() {
   return current_surface_id_;

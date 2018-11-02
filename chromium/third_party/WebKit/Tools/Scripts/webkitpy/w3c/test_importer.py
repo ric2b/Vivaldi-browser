@@ -19,8 +19,8 @@ import argparse
 import logging
 
 from webkitpy.common.net.git_cl import GitCL
-from webkitpy.common.webkit_finder import WebKitFinder
 from webkitpy.common.net.buildbot import current_build_link
+from webkitpy.common.path_finder import PathFinder
 from webkitpy.layout_tests.models.test_expectations import TestExpectations, TestExpectationParser
 from webkitpy.layout_tests.port.base import Port
 from webkitpy.w3c.common import WPT_REPO_URL, WPT_DEST_NAME, exportable_commits_since
@@ -43,7 +43,7 @@ class TestImporter(object):
         self.host = host
         self.executive = host.executive
         self.fs = host.filesystem
-        self.finder = WebKitFinder(self.fs)
+        self.finder = PathFinder(self.fs)
         self.verbose = False
         self.git_cl = None
 
@@ -67,7 +67,7 @@ class TestImporter(object):
 
         # TODO(qyearsley): Simplify this to use LocalWPT.fetch when csswg-test
         # is merged into web-platform-tests (crbug.com/706118).
-        temp_repo_path = self.path_from_webkit_base(dest_dir_name)
+        temp_repo_path = self.finder.path_from_layout_tests(dest_dir_name)
         _log.info('Cloning repo: %s', repo_url)
         _log.info('Local path: %s', temp_repo_path)
         self.run(['git', 'clone', repo_url, temp_repo_path])
@@ -139,8 +139,9 @@ class TestImporter(object):
             _log.warning('Checkout has local commits; aborting. Use --allow-local-commits to allow this.')
             return False
 
-        if self.fs.exists(self.path_from_webkit_base(WPT_DEST_NAME)):
-            _log.warning('WebKit/%s exists; aborting.', WPT_DEST_NAME)
+        temp_repo_path = self.finder.path_from_layout_tests(WPT_DEST_NAME)
+        if self.fs.exists(temp_repo_path):
+            _log.warning('%s exists; aborting.', temp_repo_path)
             return False
 
         return True
@@ -162,7 +163,7 @@ class TestImporter(object):
 
     def clean_up_temp_repo(self, temp_repo_path):
         _log.info('Deleting temp repo directory %s.', temp_repo_path)
-        self.rmtree(temp_repo_path)
+        self.fs.rmtree(temp_repo_path)
 
     def _copy_resources(self):
         """Copies resources from wpt to LayoutTests/resources.
@@ -178,8 +179,8 @@ class TestImporter(object):
             ('testharness.js', 'resources'),
         ]
         for filename, wpt_subdir in resources_to_copy_from_wpt:
-            source = self.path_from_webkit_base('LayoutTests', 'external', WPT_DEST_NAME, wpt_subdir, filename)
-            destination = self.path_from_webkit_base('LayoutTests', 'resources', filename)
+            source = self.finder.path_from_layout_tests('external', WPT_DEST_NAME, wpt_subdir, filename)
+            destination = self.finder.path_from_layout_tests('resources', filename)
             self.copyfile(source, destination)
             self.run(['git', 'add', destination])
 
@@ -222,14 +223,14 @@ class TestImporter(object):
         _, show_ref_output = self.run(['git', 'show-ref', 'origin/master'], cwd=temp_repo_path)
         master_commitish = show_ref_output.split()[0]
 
-        dest_path = self.path_from_webkit_base('LayoutTests', 'external', dest_dir_name)
+        dest_path = self.finder.path_from_layout_tests('external', dest_dir_name)
         self._clear_out_dest_path(dest_path)
 
         _log.info('Importing the tests.')
         test_copier = TestCopier(self.host, temp_repo_path)
         test_copier.do_import()
 
-        self.run(['git', 'add', '--all', 'LayoutTests/external/%s' % dest_dir_name])
+        self.run(['git', 'add', '--all', 'external/%s' % dest_dir_name])
 
         self._delete_orphaned_baselines(dest_path)
 
@@ -248,7 +249,7 @@ class TestImporter(object):
             basename != 'OWNERS')
         files_to_delete = self.fs.files_under(dest_path, file_filter=should_remove)
         for subpath in files_to_delete:
-            self.remove('LayoutTests', 'external', subpath)
+            self.remove(self.finder.path_from_layout_tests('external', subpath))
 
     def _commit_changes(self, commit_message):
         _log.info('Committing changes.')
@@ -286,7 +287,7 @@ class TestImporter(object):
     def run(self, cmd, exit_on_failure=True, cwd=None, stdin=''):
         _log.debug('Running command: %s', ' '.join(cmd))
 
-        cwd = cwd or self.finder.webkit_base()
+        cwd = cwd or self.finder.path_from_layout_tests()
         proc = self.executive.popen(cmd, stdout=self.executive.PIPE, stderr=self.executive.PIPE, stdin=self.executive.PIPE, cwd=cwd)
         out, err = proc.communicate(stdin)
         if proc.returncode or self.verbose:
@@ -311,18 +312,9 @@ class TestImporter(object):
         _log.debug('cp %s %s', source, destination)
         self.fs.copyfile(source, destination)
 
-    def remove(self, *comps):
-        dest = self.path_from_webkit_base(*comps)
+    def remove(self, dest):
         _log.debug('rm %s', dest)
         self.fs.remove(dest)
-
-    def rmtree(self, *comps):
-        dest = self.path_from_webkit_base(*comps)
-        _log.debug('rm -fr %s', dest)
-        self.fs.rmtree(dest)
-
-    def path_from_webkit_base(self, *comps):
-        return self.finder.path_from_webkit_base(*comps)
 
     def do_auto_update(self):
         """Attempts to upload a CL, make any required adjustments, and commit.
@@ -361,13 +353,10 @@ class TestImporter(object):
         try_results = self.git_cl.wait_for_try_jobs(
             poll_delay_seconds=POLL_DELAY_SECONDS, timeout_seconds=TIMEOUT_SECONDS)
 
-        if not try_results:
-            _log.error('No try job results.')
-            self.git_cl.run(['set-close'])
-            return False
+        _log.info('Try results: %s', try_results)
 
-        # If the CQ passes, then the issue will be closed.
-        status = self.git_cl.run(['status' '--field', 'status']).strip()
+        # If the CQ passed, then the issue will be closed already.
+        status = self.git_cl.run(['status', '--field', 'status']).strip()
         _log.info('CL status: "%s"', status)
         if status not in ('lgtm', 'closed'):
             _log.error('CQ appears to have failed; aborting.')
@@ -417,6 +406,13 @@ class TestImporter(object):
         build_link = current_build_link(self.host)
         if build_link:
             description += 'Build: %s\n\n' % build_link
+
+        description += (
+            'Background: https://chromium.googlesource.com'
+            '/chromium/src/+/master/docs/testing/web_platform_tests.md\n\n'
+            'Note to sheriffs: If this CL causes a small number of new layout\n'
+            'test failures, it may be easier to add lines to TestExpectations\n'
+            'rather than reverting.\n')
 
         if directory_owners:
             description += self._format_directory_owners(directory_owners) + '\n\n'

@@ -34,10 +34,7 @@
 #include "bindings/core/v8/ScriptFunction.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/SerializedScriptValue.h"
-#include "bindings/core/v8/SerializedScriptValueFactory.h"
 #include "bindings/core/v8/V8IteratorResultValue.h"
-#include "bindings/core/v8/V8ThrowException.h"
 #include "core/HTMLNames.h"
 #include "core/SVGNames.h"
 #include "core/animation/DocumentTimeline.h"
@@ -124,6 +121,7 @@
 #include "core/testing/MockHyphenation.h"
 #include "core/testing/OriginTrialsTest.h"
 #include "core/testing/RecordTest.h"
+#include "core/testing/SequenceTest.h"
 #include "core/testing/TypeConversions.h"
 #include "core/testing/UnionTypesTest.h"
 #include "core/workers/WorkerThread.h"
@@ -133,6 +131,7 @@
 #include "platform/Language.h"
 #include "platform/LayoutLocale.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/bindings/V8ThrowException.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/GraphicsLayer.h"
@@ -146,17 +145,16 @@
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/weborigin/SchemeRegistry.h"
+#include "platform/wtf/Optional.h"
+#include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/dtoa.h"
+#include "platform/wtf/text/StringBuffer.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebConnectionType.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "public/platform/WebLayer.h"
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h"
 #include "v8/include/v8.h"
-#include "wtf/InstanceCounter.h"
-#include "wtf/Optional.h"
-#include "wtf/PtrUtil.h"
-#include "wtf/dtoa.h"
-#include "wtf/text/StringBuffer.h"
 
 namespace blink {
 
@@ -197,7 +195,7 @@ static WTF::Optional<DocumentMarker::MarkerType> MarkerTypeFrom(
     return DocumentMarker::kGrammar;
   if (DeprecatedEqualIgnoringCase(marker_type, "TextMatch"))
     return DocumentMarker::kTextMatch;
-  return WTF::kNullopt;
+  return WTF::nullopt;
 }
 
 static WTF::Optional<DocumentMarker::MarkerTypes> MarkerTypesFrom(
@@ -206,7 +204,7 @@ static WTF::Optional<DocumentMarker::MarkerTypes> MarkerTypesFrom(
     return DocumentMarker::AllMarkers();
   WTF::Optional<DocumentMarker::MarkerType> type = MarkerTypeFrom(marker_type);
   if (!type)
-    return WTF::kNullopt;
+    return WTF::nullopt;
   return DocumentMarker::MarkerTypes(type.value());
 }
 
@@ -261,7 +259,6 @@ void Internals::ResetToConsistentState(Page* page) {
           page->GetScrollingCoordinator())
     scrolling_coordinator->Reset();
 
-  page->DeprecatedLocalMainFrame()->View()->Clear();
   KeyboardEventManager::SetCurrentCapsLockState(
       OverrideCapsLockState::kDefault);
 }
@@ -434,7 +431,7 @@ int Internals::getResourcePriority(const String& url, Document* document) {
     return ResourceLoadPriority::kResourceLoadPriorityUnresolved;
 
   Resource* resource = document->Fetcher()->AllResources().at(
-      URLTestHelpers::ToKURL(url.Utf8().Data()));
+      URLTestHelpers::ToKURL(url.Utf8().data()));
 
   if (!resource)
     return ResourceLoadPriority::kResourceLoadPriorityUnresolved;
@@ -448,10 +445,10 @@ String Internals::getResourceHeader(const String& url,
   if (!document)
     return String();
   Resource* resource = document->Fetcher()->AllResources().at(
-      URLTestHelpers::ToKURL(url.Utf8().Data()));
+      URLTestHelpers::ToKURL(url.Utf8().data()));
   if (!resource)
     return String();
-  return resource->GetResourceRequest().HttpHeaderField(header.Utf8().Data());
+  return resource->GetResourceRequest().HttpHeaderField(header.Utf8().data());
 }
 
 bool Internals::isSharingStyle(Element* element1, Element* element2) const {
@@ -923,9 +920,23 @@ void Internals::setMarker(Document* document,
     return;
   }
 
+  if (type != DocumentMarker::kSpelling && type != DocumentMarker::kGrammar) {
+    exception_state.ThrowDOMException(kSyntaxError,
+                                      "internals.setMarker() currently only "
+                                      "supports spelling and grammar markers; "
+                                      "attempted to add marker of type '" +
+                                          marker_type + "'.");
+    return;
+  }
+
   document->UpdateStyleAndLayoutIgnorePendingStylesheets();
-  document->Markers().AddMarker(range->StartPosition(), range->EndPosition(),
-                                type.value());
+  if (type == DocumentMarker::kSpelling) {
+    document->Markers().AddSpellingMarker(range->StartPosition(),
+                                          range->EndPosition());
+  } else {
+    document->Markers().AddGrammarMarker(range->StartPosition(),
+                                         range->EndPosition());
+  }
 }
 
 unsigned Internals::markerCountForNode(Node* node,
@@ -1013,7 +1024,7 @@ static WTF::Optional<DocumentMarker::MatchStatus> MatchStatusFrom(
     return DocumentMarker::MatchStatus::kActive;
   if (EqualIgnoringASCIICase(match_status, "kInactive"))
     return DocumentMarker::MatchStatus::kInactive;
-  return WTF::kNullopt;
+  return WTF::nullopt;
 }
 
 void Internals::addTextMatchMarker(const Range* range,
@@ -1067,18 +1078,17 @@ void Internals::addCompositionMarker(const Range* range,
       ParseColor(background_color_value, background_color, exception_state,
                  "Invalid background color.")) {
     range->OwnerDocument().Markers().AddCompositionMarker(
-        range->StartPosition(), range->EndPosition(), underline_color, thick,
-        background_color);
+        EphemeralRange(range), underline_color, thick, background_color);
   }
 }
 
-void Internals::setMarkersActive(Node* node,
-                                 unsigned start_offset,
-                                 unsigned end_offset,
-                                 bool active) {
+void Internals::setTextMatchMarkersActive(Node* node,
+                                          unsigned start_offset,
+                                          unsigned end_offset,
+                                          bool active) {
   DCHECK(node);
-  node->GetDocument().Markers().SetMarkersActive(node, start_offset, end_offset,
-                                                 active);
+  node->GetDocument().Markers().SetTextMatchMarkersActive(node, start_offset,
+                                                          end_offset, active);
 }
 
 void Internals::setMarkedTextMatchesAreHighlighted(Document* document,
@@ -1982,10 +1992,6 @@ unsigned Internals::numberOfLiveDocuments() const {
   return InstanceCounters::CounterValue(InstanceCounters::kDocumentCounter);
 }
 
-String Internals::dumpRefCountedInstanceCounts() const {
-  return WTF::DumpRefCountedInstanceCounts();
-}
-
 bool Internals::hasGrammarMarker(Document* document,
                                  int from,
                                  int length,
@@ -2232,7 +2238,7 @@ String Internals::pageProperty(String property_name,
     return String();
   }
 
-  return PrintContext::PageProperty(GetFrame(), property_name.Utf8().Data(),
+  return PrintContext::PageProperty(GetFrame(), property_name.Utf8().data(),
                                     page_number);
 }
 
@@ -2263,7 +2269,7 @@ float Internals::pageScaleFactor(ExceptionState& exception_state) {
     return 0;
   }
   Page* page = document_->GetPage();
-  return page->GetVisualViewport().PageScale();
+  return page->GetVisualViewport().Scale();
 }
 
 void Internals::setPageScaleFactor(float scale_factor,
@@ -2386,6 +2392,10 @@ DictionaryTest* Internals::dictionaryTest() const {
 
 RecordTest* Internals::recordTest() const {
   return RecordTest::Create();
+}
+
+SequenceTest* Internals::sequenceTest() const {
+  return SequenceTest::create();
 }
 
 UnionTypesTest* Internals::unionTypesTest() const {
@@ -2671,13 +2681,12 @@ bool Internals::cursorUpdatePending() const {
 
 DOMArrayBuffer* Internals::serializeObject(
     PassRefPtr<SerializedScriptValue> value) const {
-  String string_value = value->ToWireString();
-  DOMArrayBuffer* buffer = DOMArrayBuffer::CreateUninitializedOrNull(
-      string_value.length(), sizeof(UChar));
-  if (buffer) {
-    string_value.CopyTo(static_cast<UChar*>(buffer->Data()), 0,
-                        string_value.length());
-  }
+  StringView view = value->GetWireData();
+  DCHECK(view.Is8Bit());
+  DOMArrayBuffer* buffer =
+      DOMArrayBuffer::CreateUninitializedOrNull(view.length(), sizeof(LChar));
+  if (buffer)
+    memcpy(buffer->Data(), view.Characters8(), view.length());
   return buffer;
 }
 
@@ -2694,7 +2703,7 @@ DOMArrayBuffer* Internals::serializeWithInlineWasm(ScriptValue value) const {
                                  "Internals", "serializeWithInlineWasm");
   v8::Local<v8::Value> v8_value = value.V8Value();
   SerializedScriptValue::SerializeOptions options;
-  options.write_wasm_to_stream = true;
+  options.wasm_policy = SerializedScriptValue::SerializeOptions::kSerialize;
   RefPtr<SerializedScriptValue> obj = SerializedScriptValue::Serialize(
       isolate, v8_value, options, exception_state);
   if (exception_state.HadException())
@@ -2784,6 +2793,16 @@ String Internals::getImageSourceURL(Element* element) {
   return element->ImageSourceURL();
 }
 
+void Internals::forceImageReload(Element* element,
+                                 ExceptionState& exception_state) {
+  if (!element || !isHTMLImageElement(*element)) {
+    exception_state.ThrowDOMException(
+        kInvalidAccessError, "The element should be HTMLImageElement.");
+  }
+
+  toHTMLImageElement(*element).ForceReload();
+}
+
 String Internals::selectMenuListText(HTMLSelectElement* select) {
   DCHECK(select);
   LayoutObject* layout_object = select->GetLayoutObject();
@@ -2841,8 +2860,7 @@ void Internals::resetTypeAheadSession(HTMLSelectElement* select) {
 
 bool Internals::loseSharedGraphicsContext3D() {
   std::unique_ptr<WebGraphicsContext3DProvider> shared_provider =
-      WTF::WrapUnique(Platform::Current()
-                          ->CreateSharedOffscreenGraphicsContext3DProvider());
+      Platform::Current()->CreateSharedOffscreenGraphicsContext3DProvider();
   if (!shared_provider)
     return false;
   gpu::gles2::GLES2Interface* shared_gl = shared_provider->ContextGL();
@@ -3070,7 +3088,35 @@ void Internals::setNetworkConnectionInfoOverride(
         ExceptionMessages::FailedToEnumerate("connection type", type));
     return;
   }
-  GetNetworkStateNotifier().SetOverride(on_line, webtype, downlink_max_mbps);
+  GetNetworkStateNotifier().SetNetworkConnectionInfoOverride(on_line, webtype,
+                                                             downlink_max_mbps);
+}
+
+void Internals::setNetworkQualityInfoOverride(const String& effective_type,
+                                              unsigned long transport_rtt_msec,
+                                              double downlink_throughput_mbps,
+                                              ExceptionState& exception_state) {
+  WebEffectiveConnectionType web_effective_type =
+      WebEffectiveConnectionType::kTypeUnknown;
+  if (effective_type == "offline") {
+    web_effective_type = WebEffectiveConnectionType::kTypeOffline;
+  } else if (effective_type == "slow-2g") {
+    web_effective_type = WebEffectiveConnectionType::kTypeSlow2G;
+  } else if (effective_type == "2g") {
+    web_effective_type = WebEffectiveConnectionType::kType2G;
+  } else if (effective_type == "3g") {
+    web_effective_type = WebEffectiveConnectionType::kType3G;
+  } else if (effective_type == "4g") {
+    web_effective_type = WebEffectiveConnectionType::kType4G;
+  } else if (effective_type != "unknown") {
+    exception_state.ThrowDOMException(
+        kNotFoundError, ExceptionMessages::FailedToEnumerate(
+                            "effective connection type", effective_type));
+    return;
+  }
+
+  GetNetworkStateNotifier().SetNetworkQualityInfoOverride(
+      web_effective_type, transport_rtt_msec, downlink_throughput_mbps);
 }
 
 void Internals::clearNetworkConnectionInfoOverride() {

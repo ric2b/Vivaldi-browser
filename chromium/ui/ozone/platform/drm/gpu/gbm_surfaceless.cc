@@ -9,7 +9,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/threading/worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/ozone/common/egl_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_vsync_provider.h"
@@ -37,14 +37,14 @@ GbmSurfaceless::GbmSurfaceless(GbmSurfaceFactory* surface_factory,
       widget_(widget),
       has_implicit_external_sync_(
           HasEGLExtension("EGL_ARM_implicit_external_sync")),
-      has_image_flush_external_(
-          HasEGLExtension("EGL_EXT_image_flush_external")),
       weak_factory_(this) {
   surface_factory_->RegisterSurface(window_->widget(), this);
   unsubmitted_frames_.push_back(base::MakeUnique<PendingFrame>());
 }
 
 void GbmSurfaceless::QueueOverlayPlane(const OverlayPlane& plane) {
+  if (plane.buffer->RequiresGlFinish())
+    is_on_external_drm_device_ = true;
   planes_.push_back(plane);
 }
 
@@ -105,6 +105,8 @@ void GbmSurfaceless::SwapBuffersAsync(const SwapCompletionCallback& callback) {
     return;
   }
 
+  // TODO(dcastagna): remove glFlush since eglImageFlushExternalEXT called on
+  // the image should be enough (crbug.com/720045).
   glFlush();
   unsubmitted_frames_.back()->Flush();
 
@@ -115,29 +117,38 @@ void GbmSurfaceless::SwapBuffersAsync(const SwapCompletionCallback& callback) {
   frame->callback = surface_swap_callback;
   unsubmitted_frames_.push_back(base::MakeUnique<PendingFrame>());
 
-  // TODO: the following should be replaced by a per surface flush as it gets
-  // implemented in GL drivers.
-  if (has_implicit_external_sync_ || has_image_flush_external_) {
-    EGLSyncKHR fence = InsertFence(has_implicit_external_sync_);
-    if (!fence) {
-      callback.Run(gfx::SwapResult::SWAP_FAILED);
-      return;
-    }
-
-    base::Closure fence_wait_task =
-        base::Bind(&WaitForFence, GetDisplay(), fence);
-
-    base::Closure fence_retired_callback =
-        base::Bind(&GbmSurfaceless::FenceRetired, weak_factory_.GetWeakPtr(),
-                   fence, frame);
-
-    base::WorkerPool::PostTaskAndReply(FROM_HERE, fence_wait_task,
-                                       fence_retired_callback, false);
-    return;  // Defer frame submission until fence signals.
+  // TODO(dcastagna): Remove the following workaround once we get explicit sync
+  // on Intel.
+  // We can not rely on implicit sync on external devices (crbug.com/692508).
+  // NOTE: When on external devices, |is_on_external_drm_device_| is set to true
+  // after the first plane is enqueued in QueueOverlayPlane, that is called from
+  // GbmSurfaceless::SubmitFrame.
+  // This means |is_on_external_drm_device_| could be incorrectly set to false
+  // the first time we're testing it.
+  if (rely_on_implicit_sync_ && !is_on_external_drm_device_) {
+    frame->ready = true;
+    SubmitFrame();
+    return;
   }
 
-  frame->ready = true;
-  SubmitFrame();
+  // TODO: the following should be replaced by a per surface flush as it gets
+  // implemented in GL drivers.
+  EGLSyncKHR fence = InsertFence(has_implicit_external_sync_);
+  if (!fence) {
+    callback.Run(gfx::SwapResult::SWAP_FAILED);
+    return;
+  }
+
+  base::Closure fence_wait_task =
+      base::Bind(&WaitForFence, GetDisplay(), fence);
+
+  base::Closure fence_retired_callback = base::Bind(
+      &GbmSurfaceless::FenceRetired, weak_factory_.GetWeakPtr(), fence, frame);
+
+  base::PostTaskWithTraitsAndReply(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      fence_wait_task, fence_retired_callback);
 }
 
 void GbmSurfaceless::PostSubBufferAsync(
@@ -170,6 +181,10 @@ EGLConfig GbmSurfaceless::GetConfig() {
     config_ = ChooseEGLConfig(GetDisplay(), config_attribs);
   }
   return config_;
+}
+
+void GbmSurfaceless::SetRelyOnImplicitSync() {
+  rely_on_implicit_sync_ = true;
 }
 
 GbmSurfaceless::~GbmSurfaceless() {
@@ -209,9 +224,6 @@ void GbmSurfaceless::SubmitFrame() {
       return;
     }
 
-    if (IsUniversalDisplayLinkDevice())
-      glFinish();
-
     window_->SchedulePageFlip(planes_, frame->callback);
     planes_.clear();
   }
@@ -241,10 +253,6 @@ void GbmSurfaceless::SwapCompleted(const SwapCompletionCallback& callback,
   }
 
   SubmitFrame();
-}
-
-bool GbmSurfaceless::IsUniversalDisplayLinkDevice() {
-  return planes_.empty() ? false : planes_[0].buffer->RequiresGlFinish();
 }
 
 }  // namespace ui

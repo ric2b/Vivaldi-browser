@@ -1,6 +1,9 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/cr_elements/cr_action_menu/cr_action_menu.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
-<link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/html/cr/ui/focus_without_ink.html">
 <link rel="import" href="chrome://resources/html/icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="../controls/extension_controlled_indicator.html">
@@ -28,6 +31,7 @@
         word-break: break-word;
       }
 
+      #keyword-column > div,
       .favicon-image + div {
         -webkit-margin-end: 8px;
       }
@@ -52,11 +56,11 @@
             style="background-image: [[getIconSet_(engine.iconURL)]]"></div>
         <div>[[engine.displayName]]</div>
       </div>
-      <div id="keyword-column">[[engine.keyword]]</div>
+      <div id="keyword-column"><div>[[engine.keyword]]</div></div>
       <div id="url-column" class="text-elide">[[engine.url]]</div>
       <paper-icon-button icon="cr:more-vert" on-tap="onDotsTap_"
           title="$i18n{moreActions}" focus-row-control
-          focus-type='cr-menu-button'>
+          focus-type="cr-menu-button">
       </paper-icon-button>
       <dialog is="cr-action-menu">
         <button class="dropdown-item" role="option" on-tap="onMakeDefaultTap_"

@@ -5,12 +5,14 @@
 #ifndef CSSStyleVariableReferenceValue_h
 #define CSSStyleVariableReferenceValue_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/css/cssom/CSSUnparsedValue.h"
+#include "platform/bindings/ScriptWrappable.h"
 
 namespace blink {
 
+// CSSStyleVariableReferenceValue represents a CSS var() value for CSS Typed OM.
+// The corresponding idl file is CSSVariableReferenceValue.idl.
 class CORE_EXPORT CSSStyleVariableReferenceValue final
     : public GarbageCollectedFinalized<CSSStyleVariableReferenceValue>,
       public ScriptWrappable {

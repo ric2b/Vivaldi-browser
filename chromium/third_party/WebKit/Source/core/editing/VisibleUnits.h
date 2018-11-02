@@ -281,6 +281,7 @@ CORE_EXPORT bool IsEndOfParagraph(
 bool InSameParagraph(const VisiblePosition&,
                      const VisiblePosition&,
                      EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
+EphemeralRange ExpandToParagraphBoundary(const EphemeralRange&);
 
 // blocks (true paragraphs; line break elements don't break blocks)
 VisiblePosition StartOfBlock(
@@ -340,6 +341,10 @@ CORE_EXPORT bool RendersInDifferentPosition(const Position&, const Position&);
 
 CORE_EXPORT Position SkipWhitespace(const Position&);
 CORE_EXPORT PositionInFlatTree SkipWhitespace(const PositionInFlatTree&);
+
+CORE_EXPORT IntRect ComputeTextRect(const EphemeralRange&);
+IntRect ComputeTextRect(const EphemeralRangeInFlatTree&);
+FloatRect ComputeTextFloatRect(const EphemeralRange&);
 
 }  // namespace blink
 

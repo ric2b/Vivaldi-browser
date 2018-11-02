@@ -13,7 +13,9 @@
 #include "ash/login_status.h"
 #include "ash/public/cpp/session_types.h"
 #include "ash/public/interfaces/session_controller.mojom.h"
+#include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 
@@ -21,7 +23,7 @@ class AccountId;
 
 namespace ash {
 
-class SessionStateObserver;
+class SessionObserver;
 
 // Implements mojom::SessionController to cache session related info such as
 // session state, meta data about user sessions to support synchronous
@@ -34,9 +36,6 @@ class ASH_EXPORT SessionController
 
   // Binds the mojom::SessionControllerRequest to this object.
   void BindRequest(mojom::SessionControllerRequest request);
-
-  // Returns the maximum possible number of logged in users.
-  int GetMaximumNumberOfLoggedInUsers() const;
 
   // Returns the number of signed in users. If 0 is returned, there is either
   // no session in progress or no active user.
@@ -69,6 +68,12 @@ class ASH_EXPORT SessionController
   // Convenience function that returns true if session state is LOGIN_SECONDARY.
   bool IsInSecondaryLoginScreen() const;
 
+  // Returns true if the settings icon should be enabled in the system tray.
+  bool ShouldEnableSettings() const;
+
+  // Returns true if the notification tray should appear.
+  bool ShouldShowNotificationTray() const;
+
   // Gets the ash session state.
   session_manager::SessionState GetSessionState() const;
 
@@ -78,6 +83,17 @@ class ASH_EXPORT SessionController
   // Convenience helper to gets the user session at a given index. Returns
   // nullptr if no user session is found for the index.
   const mojom::UserSession* GetUserSession(UserIndex index) const;
+
+  // Returns true if the current user is supervised: has legacy supervised
+  // account or kid account.
+  bool IsUserSupervised() const;
+
+  // Returns true if the current user is a child account.
+  bool IsUserChild() const;
+
+  // Returns true if the current user session is a kiosk session (either
+  // chrome app kiosk or ARC kiosk).
+  bool IsKioskSession() const;
 
   // Locks the screen. The locking happens asynchronously.
   void LockScreen();
@@ -90,8 +106,8 @@ class ASH_EXPORT SessionController
   // ordering as user sessions are created.
   void CycleActiveUser(CycleUserDirection direction);
 
-  void AddSessionStateObserver(SessionStateObserver* observer);
-  void RemoveSessionStateObserver(SessionStateObserver* observer);
+  void AddObserver(SessionObserver* observer);
+  void RemoveObserver(SessionObserver* observer);
 
   // Returns the ash notion of login status.
   // NOTE: Prefer GetSessionState() in new code because the concept of
@@ -104,7 +120,10 @@ class ASH_EXPORT SessionController
   void UpdateUserSession(mojom::UserSessionPtr user_session) override;
   void SetUserSessionOrder(
       const std::vector<uint32_t>& user_session_order) override;
-  void RunUnlockAnimation(const RunUnlockAnimationCallback& callback) override;
+  void StartLock(StartLockCallback callback) override;
+  void NotifyChromeLockAnimationsComplete() override;
+  void RunUnlockAnimation(RunUnlockAnimationCallback callback) override;
+  void NotifyChromeTerminating() override;
 
   // Test helpers.
   void ClearUserSessionsForTest();
@@ -123,6 +142,11 @@ class ASH_EXPORT SessionController
 
   // Update the |login_status_| and notify observers.
   void UpdateLoginStatus();
+
+  // Used as lock screen displayed callback of LockStateController and invoked
+  // when post lock animation finishes and ash is fully locked. It would then
+  // run |start_lock_callback_| to indicate ash is locked successfully.
+  void OnLockAnimationFinished();
 
   // Bindings for mojom::SessionController interface.
   mojo::BindingSet<mojom::SessionController> bindings_;
@@ -153,7 +177,12 @@ class ASH_EXPORT SessionController
   // animation starts and reset when session state is no longer LOCKED.
   bool is_unlocking_ = false;
 
-  base::ObserverList<ash::SessionStateObserver> observers_;
+  // Pending callback for the StartLock request.
+  base::OnceCallback<void(bool)> start_lock_callback_;
+
+  base::ObserverList<ash::SessionObserver> observers_;
+
+  base::WeakPtrFactory<SessionController> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SessionController);
 };

@@ -60,9 +60,8 @@ class HeadlessBrowserTest : public content::BrowserTestBase {
   ~HeadlessBrowserTest() override;
 
   // BrowserTestBase:
-  void RunTestOnMainThreadLoop() override;
-  void SetUpOnMainThread() override;
-  void TearDownOnMainThread() override;
+  void PreRunTestOnMainThread() override;
+  void PostRunTestOnMainThread() override;
 
   // Run an asynchronous test in a nested run loop. The caller should call
   // FinishAsynchronousTest() to notify that the test should finish.
@@ -121,8 +120,12 @@ class HeadlessAsyncDevTooledBrowserTest : public HeadlessBrowserTest,
   // the map returned is empty.
   virtual ProtocolHandlerMap GetProtocolHandlers();
 
-  // Whether or not we should request a TabSocket when creating |web_contents_|.
-  virtual bool GetCreateTabSocket();
+  // The TabSocket type to request when creating |web_contents_|.
+  virtual HeadlessWebContents::Builder::TabSocketType GetTabSocketType();
+
+  // Selects between creating the TabSocket only in an isolated world or the
+  // main world.
+  virtual bool GetCreateTabSocketOnlyForIsolatedWorld();
 
  protected:
   void RunTest();
@@ -130,6 +133,7 @@ class HeadlessAsyncDevTooledBrowserTest : public HeadlessBrowserTest,
   HeadlessBrowserContext* browser_context_;  // Not owned.
   HeadlessWebContents* web_contents_;
   std::unique_ptr<HeadlessDevToolsClient> devtools_client_;
+  std::unique_ptr<HeadlessDevToolsClient> browser_devtools_client_;
   bool render_process_exited_;
 };
 

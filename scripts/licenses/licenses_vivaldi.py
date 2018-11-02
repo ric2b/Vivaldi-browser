@@ -64,7 +64,7 @@ for m in re.findall(r"(.*node_modules/([^/]+))", maindeps):
       entry["licensetype"] = pjson[preferred]
   if "licensetype" in entry and entry["licensetype"] not in ["MIT", "BSD",
       "Apache 2.0", "Apache-2.0", "Apache License, Version 2.0", "Creative Commons Attribution 2.5 License", "MPL",
-      "BSD-3-Clause", "ISC", "MPL-2.0 OR Apache-2.0", "WTFPL", "Public Domain"]:
+      "BSD-2-Clause", "BSD-3-Clause", "ISC", "MPL-2.0 OR Apache-2.0", "WTFPL", "Public Domain", "CC0-1.0"]:
     print("ERROR: " + moduledir + " uses a license that hasn't been reviewed for Vivaldi: " + entry["licensetype"])
     exit(1)
 

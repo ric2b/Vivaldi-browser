@@ -57,6 +57,10 @@ SupervisedUserGoogleAuthNavigationThrottle::WillRedirectRequest() {
   return WillStartOrRedirectRequest();
 }
 
+const char* SupervisedUserGoogleAuthNavigationThrottle::GetNameForLogging() {
+  return "SupervisedUserGoogleAuthNavigationThrottle";
+}
+
 content::NavigationThrottle::ThrottleCheckResult
 SupervisedUserGoogleAuthNavigationThrottle::WillStartOrRedirectRequest() {
   const GURL& url = navigation_handle()->GetURL();
@@ -102,6 +106,7 @@ void SupervisedUserGoogleAuthNavigationThrottle::OnGoogleAuthStateChanged(
       break;
     }
     case content::NavigationThrottle::BLOCK_REQUEST:
+    case content::NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE:
     case content::NavigationThrottle::BLOCK_RESPONSE: {
       NOTREACHED();
     }

@@ -12,7 +12,7 @@
 #include "components/dom_distiller/content/renderer/distiller_page_notifier_service_impl.h"
 #include "content/public/renderer/render_frame.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "v8/include/v8.h"
 
 namespace dom_distiller {
@@ -60,7 +60,8 @@ void DistillerJsRenderFrameObserver::RegisterMojoInterface() {
 }
 
 void DistillerJsRenderFrameObserver::CreateDistillerPageNotifierService(
-    mojo::InterfaceRequest<mojom::DistillerPageNotifierService> request) {
+    const service_manager::BindSourceInfo& source_info,
+    mojom::DistillerPageNotifierServiceRequest request) {
   mojo::MakeStrongBinding(
       base::MakeUnique<DistillerPageNotifierServiceImpl>(this),
       std::move(request));

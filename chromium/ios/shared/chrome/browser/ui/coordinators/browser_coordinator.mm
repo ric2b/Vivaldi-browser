@@ -57,6 +57,12 @@
   }
 }
 
+- (void)dealloc {
+  for (BrowserCoordinator* child in self.children) {
+    [self removeChildCoordinator:child];
+  }
+}
+
 @end
 
 @implementation BrowserCoordinator (Internal)
@@ -67,14 +73,14 @@
   return [self.childCoordinators copy];
 }
 
-- (void)addChildCoordinator:(BrowserCoordinator*)coordinator {
+- (void)addChildCoordinator:(BrowserCoordinator*)childCoordinator {
   CHECK([self respondsToSelector:@selector(viewController)])
       << "BrowserCoordinator implementations must provide a viewController "
          "property.";
-  [self.childCoordinators addObject:coordinator];
-  coordinator.parentCoordinator = self;
-  coordinator.browser = self.browser;
-  [coordinator wasAddedToParentCoordinator:self];
+  [self.childCoordinators addObject:childCoordinator];
+  childCoordinator.parentCoordinator = self;
+  childCoordinator.browser = self.browser;
+  [childCoordinator wasAddedToParentCoordinator:self];
 }
 
 - (BrowserCoordinator*)overlayCoordinator {
@@ -122,19 +128,25 @@
          self.childCoordinators.count == 0;
 }
 
-- (void)removeChildCoordinator:(BrowserCoordinator*)coordinator {
-  if (![self.childCoordinators containsObject:coordinator])
+- (void)removeChildCoordinator:(BrowserCoordinator*)childCoordinator {
+  if (![self.childCoordinators containsObject:childCoordinator])
     return;
-  [self.childCoordinators removeObject:coordinator];
-  coordinator.parentCoordinator = nil;
-  [coordinator wasRemovedFromParentCoordinator];
+  // Remove the grand-children first.
+  for (BrowserCoordinator* grandChild in childCoordinator.children) {
+    [childCoordinator removeChildCoordinator:grandChild];
+  }
+  // Remove the child.
+  [childCoordinator willBeRemovedFromParentCoordinator];
+  [self.childCoordinators removeObject:childCoordinator];
+  childCoordinator.parentCoordinator = nil;
+  childCoordinator.browser = nil;
 }
 
 - (void)wasAddedToParentCoordinator:(BrowserCoordinator*)parentCoordinator {
   // Default implementation is a no-op.
 }
 
-- (void)wasRemovedFromParentCoordinator {
+- (void)willBeRemovedFromParentCoordinator {
   // Default implementation is a no-op.
 }
 

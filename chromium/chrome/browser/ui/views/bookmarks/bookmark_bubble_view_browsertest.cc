@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/signin/fake_signin_manager_builder.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -13,6 +14,10 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
+
+#if defined(OS_WIN)
+#include "chrome/browser/ui/desktop_ios_promotion/desktop_ios_promotion_util.h"
+#endif
 
 namespace {
 
@@ -70,7 +75,8 @@ class BookmarkBubbleViewBrowserTest : public DialogBrowserTest {
           browser_view->toolbar()->location_bar()->star_view(), gfx::Rect(),
           nullptr, nullptr, nullptr, profile_.get(), GURL(kTestBookmarkURL),
           true);
-      BookmarkBubbleView::bookmark_bubble()->ShowIOSPromotion();
+      BookmarkBubbleView::bookmark_bubble()->ShowIOSPromotion(
+          desktop_ios_promotion::PromotionEntryPoint::BOOKMARKS_BUBBLE);
 #endif
     }
   }
@@ -82,17 +88,20 @@ class BookmarkBubbleViewBrowserTest : public DialogBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(BookmarkBubbleViewBrowserTest,
                        InvokeDialog_bookmark_details) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   RunDialog();
 }
 
 IN_PROC_BROWSER_TEST_F(BookmarkBubbleViewBrowserTest,
                        InvokeDialog_bookmark_details_signed_in) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   RunDialog();
 }
 
 #if defined(OS_WIN)
 IN_PROC_BROWSER_TEST_F(BookmarkBubbleViewBrowserTest,
                        InvokeDialog_ios_promotion) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   RunDialog();
 }
 #endif

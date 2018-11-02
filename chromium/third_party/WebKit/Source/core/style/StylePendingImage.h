@@ -70,7 +70,7 @@ class StylePendingImage final : public StyleImage {
     return value_->IsImageSetValue() ? ToCSSImageSetValue(value_.Get()) : 0;
   }
 
-  LayoutSize ImageSize(const LayoutObject&,
+  LayoutSize ImageSize(const Document&,
                        float /*multiplier*/,
                        const LayoutSize& /*defaultObjectSize*/) const override {
     return LayoutSize();
@@ -80,12 +80,13 @@ class StylePendingImage final : public StyleImage {
   void AddClient(LayoutObject*) override {}
   void RemoveClient(LayoutObject*) override {}
   PassRefPtr<Image> GetImage(const LayoutObject&,
-                             const IntSize&,
-                             float) const override {
+                             const IntSize&) const override {
     NOTREACHED();
     return nullptr;
   }
-  bool KnownToBeOpaque(const LayoutObject&) const override { return false; }
+  bool KnownToBeOpaque(const Document&, const ComputedStyle&) const override {
+    return false;
+  }
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
     visitor->Trace(value_);

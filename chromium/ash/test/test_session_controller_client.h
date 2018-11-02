@@ -11,6 +11,7 @@
 
 #include "ash/public/interfaces/session_controller.mojom.h"
 #include "base/macros.h"
+#include "components/user_manager/user_type.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 class AccountId;
@@ -50,8 +51,12 @@ class TestSessionControllerClient : public ash::mojom::SessionControllerClient {
   void CreatePredefinedUserSessions(int count);
 
   // Adds a user session from a given display email. The display email will be
-  // canonicalized and used to construct an AccountId.
-  void AddUserSession(const std::string& display_email);
+  // canonicalized and used to construct an AccountId. |enable_settings| sets
+  // whether web UI settings are allowed.
+  void AddUserSession(
+      const std::string& display_email,
+      user_manager::UserType user_type = user_manager::USER_TYPE_REGULAR,
+      bool enable_settings = true);
 
   // Simulates screen unlocking. It is virtual so that test cases can override
   // it. The default implementation sets the session state of SessionController

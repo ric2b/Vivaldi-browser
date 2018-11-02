@@ -99,9 +99,10 @@ void LayoutMenuList::AdjustInnerStyle() {
 
   Length padding_start = Length(
       LayoutTheme::GetTheme().PopupInternalPaddingStart(StyleRef()), kFixed);
-  Length padding_end = Length(LayoutTheme::GetTheme().PopupInternalPaddingEnd(
-                                  GetFrameView()->GetHostWindow(), StyleRef()),
-                              kFixed);
+  Length padding_end =
+      Length(LayoutTheme::GetTheme().PopupInternalPaddingEnd(
+                 GetFrameView()->GetChromeClient(), StyleRef()),
+             kFixed);
   inner_style.SetPaddingLeft(StyleRef().Direction() == TextDirection::kLtr
                                  ? padding_start
                                  : padding_end);
@@ -306,9 +307,6 @@ void LayoutMenuList::DidUpdateActiveOption(HTMLOptionElement* option) {
   if (last_active_index_ == option_index)
     return;
   last_active_index_ = option_index;
-
-  if (option_index < 0)
-    return;
 
   // We skip sending accessiblity notifications for the very first option,
   // otherwise we get extra focus and select events that are undesired.

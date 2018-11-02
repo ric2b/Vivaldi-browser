@@ -16,6 +16,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/io_thread.h"
@@ -226,10 +227,11 @@ void NetInternalsTest::MessageHandler::AddCacheEntry(
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&AddCacheEntryOnIOThread,
-                 base::RetainedRef(browser()->profile()->GetRequestContext()),
-                 hostname, ip_literal, static_cast<int>(net_error),
-                 static_cast<int>(expire_days_from_now)));
+      base::BindOnce(
+          &AddCacheEntryOnIOThread,
+          base::RetainedRef(browser()->profile()->GetRequestContext()),
+          hostname, ip_literal, static_cast<int>(net_error),
+          static_cast<int>(expire_days_from_now)));
 }
 
 void NetInternalsTest::MessageHandler::ChangeNetwork(
@@ -289,6 +291,7 @@ void NetInternalsTest::MessageHandler::CloseIncognitoBrowser(
 
 void NetInternalsTest::MessageHandler::GetNetLogFileContents(
     const base::ListValue* list_value) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::ScopedTempDir temp_directory;
   ASSERT_TRUE(temp_directory.CreateUniqueTempDir());
   base::FilePath temp_file;
@@ -353,6 +356,11 @@ void NetInternalsTest::SetUpOnMainThread() {
   prerender::PrerenderManager* prerender_manager =
       prerender::PrerenderManagerFactory::GetForBrowserContext(profile);
   prerender_manager->mutable_config().max_bytes = 1000 * 1024 * 1024;
+
+  // Sample domain for SDCH-view test. Dictionaries for localhost/127.0.0.1
+  // are forbidden.
+  host_resolver()->AddRule("testdomain.com", "127.0.0.1");
+  host_resolver()->AddRule("sub.testdomain.com", "127.0.0.1");
 }
 
 content::WebUIMessageHandler* NetInternalsTest::GetMockMessageHandler() {
@@ -377,9 +385,5 @@ bool NetInternalsTest::StartTestServer() {
     return true;
   test_server_started_ = embedded_test_server()->Start();
 
-  // Sample domain for SDCH-view test. Dictionaries for localhost/127.0.0.1
-  // are forbidden.
-  host_resolver()->AddRule("testdomain.com", "127.0.0.1");
-  host_resolver()->AddRule("sub.testdomain.com", "127.0.0.1");
   return test_server_started_;
 }

@@ -8,11 +8,13 @@
 #include <memory>
 #include <string>
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/IDLTypes.h"
+#include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/ScriptFunction.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/modules/v8/V8Request.h"
 #include "bindings/modules/v8/V8Response.h"
 #include "core/dom/Document.h"
@@ -271,7 +273,7 @@ class CacheStorageTest : public ::testing::Test {
     return ToCoreString(
                on_reject.V8Value()->ToString(GetContext()).ToLocalChecked())
         .Ascii()
-        .Data();
+        .data();
   }
 
   ScriptValue GetResolveValue(ScriptPromise& promise) {
@@ -287,7 +289,7 @@ class CacheStorageTest : public ::testing::Test {
     return ToCoreString(
                on_resolve.V8Value()->ToString(GetContext()).ToLocalChecked())
         .Ascii()
-        .Data();
+        .data();
   }
 
  private:
@@ -320,7 +322,7 @@ class CacheStorageTest : public ::testing::Test {
     }
 
     ScriptValue Call(ScriptValue value) override {
-      ASSERT(!value.IsEmpty());
+      DCHECK(!value.IsEmpty());
       *value_ = value;
       return value;
     }
@@ -355,7 +357,7 @@ TEST_F(CacheStorageTest, Basics) {
   ErrorWebCacheForTests* test_cache;
   Cache* cache =
       CreateCache(fetcher, test_cache = new NotImplementedErrorCache());
-  ASSERT(cache);
+  DCHECK(cache);
 
   const String url = "http://www.cachetest.org/";
 
@@ -388,7 +390,7 @@ TEST_F(CacheStorageTest, BasicArguments) {
   ErrorWebCacheForTests* test_cache;
   Cache* cache =
       CreateCache(fetcher, test_cache = new NotImplementedErrorCache());
-  ASSERT(cache);
+  DCHECK(cache);
 
   const String url = "http://www.cache.arguments.test/";
   test_cache->SetExpectedUrl(&url);
@@ -403,7 +405,7 @@ TEST_F(CacheStorageTest, BasicArguments) {
   options.setCacheName(expected_query_params.cache_name);
 
   Request* request = NewRequestFromUrl(url);
-  ASSERT(request);
+  DCHECK(request);
   ScriptPromise match_result =
       cache->match(GetScriptState(), RequestToRequestInfo(request), options,
                    exception_state);
@@ -418,7 +420,7 @@ TEST_F(CacheStorageTest, BasicArguments) {
   EXPECT_EQ(kNotImplementedString, GetRejectString(string_match_result));
 
   request = NewRequestFromUrl(url);
-  ASSERT(request);
+  DCHECK(request);
   ScriptPromise match_all_result =
       cache->matchAll(GetScriptState(), RequestToRequestInfo(request), options,
                       exception_state);
@@ -438,7 +440,7 @@ TEST_F(CacheStorageTest, BasicArguments) {
   EXPECT_EQ(kNotImplementedString, GetRejectString(keys_result1));
 
   request = NewRequestFromUrl(url);
-  ASSERT(request);
+  DCHECK(request);
   ScriptPromise keys_result2 =
       cache->keys(GetScriptState(), RequestToRequestInfo(request), options,
                   exception_state);
@@ -462,7 +464,7 @@ TEST_F(CacheStorageTest, BatchOperationArguments) {
   ErrorWebCacheForTests* test_cache;
   Cache* cache =
       CreateCache(fetcher, test_cache = new NotImplementedErrorCache());
-  ASSERT(cache);
+  DCHECK(cache);
 
   WebServiceWorkerCache::QueryParams expected_query_params;
   expected_query_params.cache_name = "this is another cache name";
@@ -473,7 +475,7 @@ TEST_F(CacheStorageTest, BatchOperationArguments) {
 
   const String url = "http://batch.operations.test/";
   Request* request = NewRequestFromUrl(url);
-  ASSERT(request);
+  DCHECK(request);
 
   WebServiceWorkerResponse web_response;
   std::vector<KURL> url_list;
@@ -518,7 +520,7 @@ TEST_F(CacheStorageTest, BatchOperationArguments) {
   test_cache->SetExpectedBatchOperations(&expected_put_operations);
 
   request = NewRequestFromUrl(url);
-  ASSERT(request);
+  DCHECK(request);
   ScriptPromise put_result = cache->put(
       GetScriptState(), RequestToRequestInfo(request),
       response->clone(GetScriptState(), exception_state), exception_state);
@@ -611,14 +613,13 @@ TEST_F(CacheStorageTest, KeysResponseTest) {
   ScriptPromise result = cache->keys(GetScriptState(), exception_state);
   ScriptValue script_value = GetResolveValue(result);
 
-  Vector<v8::Local<v8::Value>> requests =
-      ToImplArray<Vector<v8::Local<v8::Value>>>(script_value.V8Value(), 0,
-                                                GetIsolate(), exception_state);
+  HeapVector<Member<Request>> requests =
+      NativeValueTraits<IDLSequence<Request>>::NativeValue(
+          GetIsolate(), script_value.V8Value(), exception_state);
   EXPECT_EQ(expected_urls.size(), requests.size());
   for (int i = 0, minsize = std::min(expected_urls.size(), requests.size());
        i < minsize; ++i) {
-    Request* request =
-        V8Request::toImplWithTypeCheck(GetIsolate(), requests[i]);
+    Request* request = requests[i];
     EXPECT_TRUE(request);
     if (request)
       EXPECT_EQ(expected_urls[i], request->url());
@@ -674,14 +675,13 @@ TEST_F(CacheStorageTest, MatchAllAndBatchResponseTest) {
                       options, exception_state);
   ScriptValue script_value = GetResolveValue(result);
 
-  Vector<v8::Local<v8::Value>> responses =
-      ToImplArray<Vector<v8::Local<v8::Value>>>(script_value.V8Value(), 0,
-                                                GetIsolate(), exception_state);
+  HeapVector<Member<Response>> responses =
+      NativeValueTraits<IDLSequence<Response>>::NativeValue(
+          GetIsolate(), script_value.V8Value(), exception_state);
   EXPECT_EQ(expected_urls.size(), responses.size());
   for (int i = 0, minsize = std::min(expected_urls.size(), responses.size());
        i < minsize; ++i) {
-    Response* response =
-        V8Response::toImplWithTypeCheck(GetIsolate(), responses[i]);
+    Response* response = responses[i];
     EXPECT_TRUE(response);
     if (response)
       EXPECT_EQ(expected_urls[i], response->url());

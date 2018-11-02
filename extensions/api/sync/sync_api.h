@@ -40,11 +40,11 @@ class SyncEventRouter : public ::vivaldi::VivaldiSyncManagerObserver {
 
   void OnAccessTokenRequested() override;
   void OnEncryptionPasswordRequested() override;
-  void OnSyncConfigured() override;
   void OnLoginDone() override;
   void OnSyncEngineInitFailed() override;
   void OnBeginSyncing() override;
   void OnEndSyncing() override;
+  void OnLogoutDone() override;
   void OnDeletingSyncManager() override;
 
  private:
@@ -140,6 +140,21 @@ class SyncIsFirstSetupFunction : public ChromeAsyncExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncIsFirstSetupFunction);
 };
 
+class SyncIsEncryptionPasswordSetUpFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.isEncryptionPasswordSetUp",
+                             SYNC_IS_ENCRYPTION_PASSWORD_SET_UP)
+  SyncIsEncryptionPasswordSetUpFunction() = default;
+
+ private:
+  ~SyncIsEncryptionPasswordSetUpFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncIsEncryptionPasswordSetUpFunction);
+};
+
 class SyncSetTypesFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.setTypes", SYNC_SET_TYPES)
@@ -166,6 +181,32 @@ class SyncGetTypesFunction : public ChromeAsyncExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncGetTypesFunction);
 };
 
+class SyncGetStatusFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.getStatus", SYNC_GET_STATUS)
+  SyncGetStatusFunction() = default;
+
+ private:
+  ~SyncGetStatusFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncGetStatusFunction);
+};
+
+class SyncSetupCompleteFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.setupComplete", SYNC_SETUP_COMPLETE)
+  SyncSetupCompleteFunction() = default;
+
+ private:
+  ~SyncSetupCompleteFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncSetupCompleteFunction);
+};
+
 class SyncLogoutFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.logout", SYNC_LOGOUT)
@@ -188,8 +229,6 @@ class SyncClearDataFunction : public ChromeAsyncExtensionFunction {
   ~SyncClearDataFunction() override = default;
   // ExtensionFunction:
   bool RunAsync() override;
-
-  void ReportClearDataDone();
 
   DISALLOW_COPY_AND_ASSIGN(SyncClearDataFunction);
 };

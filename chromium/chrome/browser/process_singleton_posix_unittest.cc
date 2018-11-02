@@ -27,12 +27,14 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/histogram_tester.h"
 #include "base/test/test_timeouts.h"
 #include "base/test/thread_test_helper.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
-#include "content/public/test/test_browser_thread.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/network_interfaces.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -68,19 +70,19 @@ class ProcessSingletonPosixTest : public testing::Test {
 
   ProcessSingletonPosixTest()
       : kill_callbacks_(0),
-        io_thread_(BrowserThread::IO),
+        test_browser_thread_bundle_(
+            content::TestBrowserThreadBundle::REAL_IO_THREAD),
         wait_event_(base::WaitableEvent::ResetPolicy::MANUAL,
                     base::WaitableEvent::InitialState::NOT_SIGNALED),
         signal_event_(base::WaitableEvent::ResetPolicy::MANUAL,
                       base::WaitableEvent::InitialState::NOT_SIGNALED),
-        process_singleton_on_thread_(NULL) {
-    io_thread_.StartIOThread();
-  }
+        process_singleton_on_thread_(NULL) {}
 
   void SetUp() override {
     testing::Test::SetUp();
 
     ProcessSingleton::DisablePromptForTesting();
+    ProcessSingleton::SkipIsChromeProcessCheckForTesting(false);
     // Put the lock in a temporary directory.  Doesn't need to be a
     // full profile to test this code.
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
@@ -105,15 +107,14 @@ class ProcessSingletonPosixTest : public testing::Test {
     if (process_singleton_on_thread_) {
       worker_thread_->task_runner()->PostTask(
           FROM_HERE,
-          base::Bind(&ProcessSingletonPosixTest::DestructProcessSingleton,
-                     base::Unretained(this)));
+          base::BindOnce(&ProcessSingletonPosixTest::DestructProcessSingleton,
+                         base::Unretained(this)));
 
       scoped_refptr<base::ThreadTestHelper> helper(
           new base::ThreadTestHelper(worker_thread_->task_runner().get()));
       ASSERT_TRUE(helper->Run());
     }
 
-    io_thread_.Stop();
     testing::Test::TearDown();
   }
 
@@ -124,8 +125,9 @@ class ProcessSingletonPosixTest : public testing::Test {
 
     worker_thread_->task_runner()->PostTask(
         FROM_HERE,
-        base::Bind(&ProcessSingletonPosixTest::CreateProcessSingletonInternal,
-                   base::Unretained(this)));
+        base::BindOnce(
+            &ProcessSingletonPosixTest::CreateProcessSingletonInternal,
+            base::Unretained(this)));
 
     scoped_refptr<base::ThreadTestHelper> helper(
         new base::ThreadTestHelper(worker_thread_->task_runner().get()));
@@ -214,8 +216,8 @@ class ProcessSingletonPosixTest : public testing::Test {
 
   void BlockWorkerThread() {
     worker_thread_->task_runner()->PostTask(
-        FROM_HERE, base::Bind(&ProcessSingletonPosixTest::BlockThread,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&ProcessSingletonPosixTest::BlockThread,
+                                  base::Unretained(this)));
   }
 
   void UnblockWorkerThread() {
@@ -257,8 +259,7 @@ class ProcessSingletonPosixTest : public testing::Test {
     kill_callbacks_++;
   }
 
-  base::MessageLoop message_loop_;
-  content::TestBrowserThread io_thread_;
+  content::TestBrowserThreadBundle test_browser_thread_bundle_;
   base::ScopedTempDir temp_dir_;
   base::WaitableEvent wait_event_;
   base::WaitableEvent signal_event_;
@@ -287,17 +288,22 @@ TEST_F(ProcessSingletonPosixTest, NotifyOtherProcessSuccess) {
 
 // Test failure case of NotifyOtherProcess().
 TEST_F(ProcessSingletonPosixTest, NotifyOtherProcessFailure) {
+  base::HistogramTester histogram_tester;
   CreateProcessSingletonOnThread();
 
   BlockWorkerThread();
   EXPECT_EQ(ProcessSingleton::PROCESS_NONE, NotifyOtherProcess(true));
   ASSERT_EQ(1, kill_callbacks_);
   UnblockWorkerThread();
+  histogram_tester.ExpectUniqueSample(
+      "Chrome.ProcessSingleton.RemoteHungProcessTerminateReason",
+      ProcessSingleton::SOCKET_READ_FAILED, 1u);
 }
 
 // Test that we don't kill ourselves by accident if a lockfile with the same pid
 // happens to exist.
 TEST_F(ProcessSingletonPosixTest, NotifyOtherProcessNoSuicide) {
+  base::HistogramTester histogram_tester;
   CreateProcessSingletonOnThread();
   // Replace lockfile with one containing our own pid.
   EXPECT_EQ(0, unlink(lock_path_.value().c_str()));
@@ -311,8 +317,14 @@ TEST_F(ProcessSingletonPosixTest, NotifyOtherProcessNoSuicide) {
   // Remove socket so that we will not be able to notify the existing browser.
   EXPECT_EQ(0, unlink(socket_path_.value().c_str()));
 
+  // Pretend we are browser process.
+  ProcessSingleton::SkipIsChromeProcessCheckForTesting(true);
+
   EXPECT_EQ(ProcessSingleton::PROCESS_NONE, NotifyOtherProcess(false));
   // If we've gotten to this point without killing ourself, the test succeeded.
+  histogram_tester.ExpectUniqueSample(
+      "Chrome.ProcessSingleton.RemoteProcessInteractionResult",
+      ProcessSingleton::SAME_BROWSER_INSTANCE, 1u);
 }
 
 // Test that we can still notify a process on the same host even after the
@@ -409,6 +421,7 @@ TEST_F(ProcessSingletonPosixTest, NotifyOtherProcessOrCreate_BadCookie) {
 }
 
 TEST_F(ProcessSingletonPosixTest, IgnoreSocketSymlinkWithTooLongTarget) {
+  base::HistogramTester histogram_tester;
   CreateProcessSingletonOnThread();
   // Change the symlink to one with a too-long target.
   char buf[PATH_MAX];
@@ -424,6 +437,12 @@ TEST_F(ProcessSingletonPosixTest, IgnoreSocketSymlinkWithTooLongTarget) {
   // A new ProcessSingleton should ignore the invalid socket path target.
   std::string url("about:blank");
   EXPECT_EQ(ProcessSingleton::PROCESS_NONE, NotifyOtherProcessOrCreate(url));
+
+  // Lock file contains PID of unit_tests process. It is non browser process so
+  // we treat lock file as orphaned.
+  histogram_tester.ExpectUniqueSample(
+      "Chrome.ProcessSingleton.RemoteProcessInteractionResult",
+      ProcessSingleton::ORPHANED_LOCK_FILE, 1u);
 }
 
 #if defined(OS_MACOSX)

@@ -22,9 +22,9 @@
 #ifndef NodeRareData_h
 #define NodeRareData_h
 
-#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/dom/MutationObserverRegistration.h"
 #include "core/dom/NodeListsNodeData.h"
+#include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/HashSet.h"
 
@@ -98,7 +98,7 @@ class NodeRareData : public GarbageCollectedFinalized<NodeRareData>,
   WTF_MAKE_NONCOPYABLE(NodeRareData);
 
  public:
-  static NodeRareData* Create(NodeLayoutData* node_layout_data) {
+  static NodeRareData* Create(NodeRenderingData* node_layout_data) {
     return new NodeRareData(node_layout_data);
   }
 
@@ -163,7 +163,7 @@ class NodeRareData : public GarbageCollectedFinalized<NodeRareData>,
   DECLARE_TRACE_WRAPPERS_AFTER_DISPATCH();
 
  protected:
-  explicit NodeRareData(NodeLayoutData* node_layout_data)
+  explicit NodeRareData(NodeRenderingData* node_layout_data)
       : NodeRareDataBase(node_layout_data),
         connected_frame_count_(0),
         element_flags_(0),

@@ -58,12 +58,11 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
 
   // WebFrameClient implementation.
   blink::WebPlugin* CreatePlugin(
-      blink::WebLocalFrame* frame,
       const blink::WebPluginParams& params) override {
-    blink::WebPlugin* plugin = test_client()->CreatePlugin(frame, params);
+    blink::WebPlugin* plugin = test_client()->CreatePlugin(params);
     if (plugin)
       return plugin;
-    return Base::CreatePlugin(frame, params);
+    return Base::CreatePlugin(params);
   }
 
   blink::WebScreenOrientationClient* GetWebScreenOrientationClient() override {
@@ -108,30 +107,27 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
   }
 
   void DidFailProvisionalLoad(
-      blink::WebLocalFrame* frame,
       const blink::WebURLError& error,
       blink::WebHistoryCommitType commit_type) override {
-    test_client()->DidFailProvisionalLoad(frame, error, commit_type);
+    test_client()->DidFailProvisionalLoad(error, commit_type);
     // If the test finished, don't notify the embedder of the failed load,
     // as we already destroyed the document loader.
-    if (!frame->ProvisionalDataSource())
+    if (!web_frame()->ProvisionalDataSource())
       return;
-    Base::DidFailProvisionalLoad(frame, error, commit_type);
+    Base::DidFailProvisionalLoad(error, commit_type);
   }
 
   void DidCommitProvisionalLoad(
-      blink::WebLocalFrame* frame,
       const blink::WebHistoryItem& item,
       blink::WebHistoryCommitType commit_type) override {
-    test_client()->DidCommitProvisionalLoad(frame, item, commit_type);
-    Base::DidCommitProvisionalLoad(frame, item, commit_type);
+    test_client()->DidCommitProvisionalLoad(item, commit_type);
+    Base::DidCommitProvisionalLoad(item, commit_type);
   }
 
-  void DidReceiveTitle(blink::WebLocalFrame* frame,
-                       const blink::WebString& title,
+  void DidReceiveTitle(const blink::WebString& title,
                        blink::WebTextDirection direction) override {
-    test_client()->DidReceiveTitle(frame, title, direction);
-    Base::DidReceiveTitle(frame, title, direction);
+    test_client()->DidReceiveTitle(title, direction);
+    Base::DidReceiveTitle(title, direction);
   }
 
   void DidChangeIcon(blink::WebIconURL::Type icon_type) override {
@@ -139,9 +135,9 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
     Base::DidChangeIcon(icon_type);
   }
 
-  void DidFinishDocumentLoad(blink::WebLocalFrame* frame) override {
-    test_client()->DidFinishDocumentLoad(frame);
-    Base::DidFinishDocumentLoad(frame);
+  void DidFinishDocumentLoad() override {
+    test_client()->DidFinishDocumentLoad();
+    Base::DidFinishDocumentLoad();
   }
 
   void DidHandleOnloadEvents() override {
@@ -155,18 +151,16 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
     Base::DidFailLoad(error, commit_type);
   }
 
-  void DidFinishLoad(blink::WebLocalFrame* frame) override {
-    Base::DidFinishLoad(frame);
-    test_client()->DidFinishLoad(frame);
+  void DidFinishLoad() override {
+    Base::DidFinishLoad();
+    test_client()->DidFinishLoad();
   }
 
-  void DidNavigateWithinPage(blink::WebLocalFrame* frame,
-                             const blink::WebHistoryItem& history_item,
+  void DidNavigateWithinPage(const blink::WebHistoryItem& history_item,
                              blink::WebHistoryCommitType commit_type,
                              bool content_initiated) override {
-    Base::DidNavigateWithinPage(frame, history_item, commit_type,
-                                content_initiated);
-    test_client()->DidNavigateWithinPage(frame, history_item, commit_type,
+    Base::DidNavigateWithinPage(history_item, commit_type, content_initiated);
+    test_client()->DidNavigateWithinPage(history_item, commit_type,
                                          content_initiated);
   }
 
@@ -236,10 +230,9 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
     Base::DidDispatchPingLoader(url);
   }
 
-  void WillSendRequest(blink::WebLocalFrame* frame,
-                       blink::WebURLRequest& request) override {
-    Base::WillSendRequest(frame, request);
-    test_client()->WillSendRequest(frame, request);
+  void WillSendRequest(blink::WebURLRequest& request) override {
+    Base::WillSendRequest(request);
+    test_client()->WillSendRequest(request);
   }
 
   void DidReceiveResponse(const blink::WebURLResponse& response) override {
@@ -286,9 +279,9 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
         sink_id, security_origin, web_callbacks);
   }
 
-  void DidClearWindowObject(blink::WebLocalFrame* frame) override {
-    test_client()->DidClearWindowObject(frame);
-    Base::DidClearWindowObject(frame);
+  void DidClearWindowObject() override {
+    test_client()->DidClearWindowObject();
+    Base::DidClearWindowObject();
   }
   bool RunFileChooser(const blink::WebFileChooserParams& params,
                       blink::WebFileChooserCompletion* completion) override {

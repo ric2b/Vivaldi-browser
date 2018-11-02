@@ -30,20 +30,19 @@ class WMHelperMus : public WMHelper,
   ~WMHelperMus() override;
 
   // Overridden from WMHelper:
-  const display::ManagedDisplayInfo GetDisplayInfo(
+  const display::ManagedDisplayInfo& GetDisplayInfo(
       int64_t display_id) const override;
-  aura::Window* GetContainer(int container_id) override;
+  aura::Window* GetPrimaryDisplayContainer(int container_id) override;
   aura::Window* GetActiveWindow() const override;
   aura::Window* GetFocusedWindow() const override;
   ui::CursorSetType GetCursorSet() const override;
+  const display::Display& GetCursorDisplay() const override;
   void AddPreTargetHandler(ui::EventHandler* handler) override;
   void PrependPreTargetHandler(ui::EventHandler* handler) override;
   void RemovePreTargetHandler(ui::EventHandler* handler) override;
   void AddPostTargetHandler(ui::EventHandler* handler) override;
   void RemovePostTargetHandler(ui::EventHandler* handler) override;
   bool IsMaximizeModeWindowManagerEnabled() const override;
-  bool IsSpokenFeedbackEnabled() const override;
-  void PlayEarcon(int sound_key) const override;
 
   // Overridden from aura::FocusSynchronizerObserver:
   void OnActiveFocusClientChanged(aura::client::FocusClient* focus_client,

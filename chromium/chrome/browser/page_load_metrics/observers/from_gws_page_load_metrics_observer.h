@@ -62,38 +62,40 @@ class FromGWSPageLoadMetricsLogger {
   }
 
   // Invoked when metrics for the given page are complete.
-  void OnComplete(const page_load_metrics::PageLoadTiming& timing,
+  void OnComplete(const page_load_metrics::mojom::PageLoadTiming& timing,
                   const page_load_metrics::PageLoadExtraInfo& extra_info);
   void OnFailedProvisionalLoad(
       const page_load_metrics::FailedProvisionalLoadInfo& failed_load_info,
       const page_load_metrics::PageLoadExtraInfo& extra_info);
 
   void OnDomContentLoadedEventStart(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info);
-  void OnLoadEventStart(const page_load_metrics::PageLoadTiming& timing,
+  void OnLoadEventStart(const page_load_metrics::mojom::PageLoadTiming& timing,
                         const page_load_metrics::PageLoadExtraInfo& extra_info);
-  void OnFirstPaint(const page_load_metrics::PageLoadTiming& timing,
-                    const page_load_metrics::PageLoadExtraInfo& extra_info);
-  void OnFirstTextPaint(const page_load_metrics::PageLoadTiming& timing,
-                        const page_load_metrics::PageLoadExtraInfo& extra_info);
-  void OnFirstImagePaint(
-      const page_load_metrics::PageLoadTiming& timing,
+  void OnFirstPaintInPage(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info);
-  void OnFirstContentfulPaint(
-      const page_load_metrics::PageLoadTiming& timing,
+  void OnFirstTextPaintInPage(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info);
-  void OnParseStart(const page_load_metrics::PageLoadTiming& timing,
+  void OnFirstImagePaintInPage(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info);
+  void OnFirstContentfulPaintInPage(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info);
+  void OnParseStart(const page_load_metrics::mojom::PageLoadTiming& timing,
                     const page_load_metrics::PageLoadExtraInfo& extra_info);
-  void OnParseStop(const page_load_metrics::PageLoadTiming& timing,
+  void OnParseStop(const page_load_metrics::mojom::PageLoadTiming& timing,
                    const page_load_metrics::PageLoadExtraInfo& extra_info);
   void OnUserInput(const blink::WebInputEvent& event);
   void FlushMetricsOnAppEnterBackground(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info);
 
   // The methods below are public only for testing.
-  static bool IsGoogleSearchHostname(base::StringPiece host);
+  static bool IsGoogleSearchHostname(const GURL& url);
   static bool IsGoogleSearchResultUrl(const GURL& url);
   static bool IsGoogleSearchRedirectorUrl(const GURL& url);
   bool ShouldLogFailedProvisionalLoadMetrics();
@@ -151,36 +153,36 @@ class FromGWSPageLoadMetricsObserver
   ObservePolicy OnCommit(content::NavigationHandle* navigation_handle) override;
 
   ObservePolicy FlushMetricsOnAppEnterBackground(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
 
   void OnDomContentLoadedEventStart(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
   void OnLoadEventStart(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
-  void OnFirstPaint(
-      const page_load_metrics::PageLoadTiming& timing,
+  void OnFirstPaintInPage(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
-  void OnFirstTextPaint(
-      const page_load_metrics::PageLoadTiming& timing,
+  void OnFirstTextPaintInPage(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
-  void OnFirstImagePaint(
-      const page_load_metrics::PageLoadTiming& timing,
+  void OnFirstImagePaintInPage(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
-  void OnFirstContentfulPaint(
-      const page_load_metrics::PageLoadTiming& timing,
+  void OnFirstContentfulPaintInPage(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
   void OnParseStart(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
   void OnParseStop(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
 
   void OnComplete(
-      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
   void OnFailedProvisionalLoad(
       const page_load_metrics::FailedProvisionalLoadInfo& failed_load_info,

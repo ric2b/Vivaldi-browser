@@ -6,6 +6,7 @@
 #define NGPhysicalFragment_h
 
 #include "core/CoreExport.h"
+#include "core/layout/ng/geometry/ng_box_strut.h"
 #include "core/layout/ng/geometry/ng_physical_offset.h"
 #include "core/layout/ng/geometry/ng_physical_size.h"
 #include "core/layout/ng/ng_break_token.h"
@@ -40,17 +41,19 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment> {
     // enough to store.
   };
 
+  // Which border edges should be painted. Due to fragmentation one or more may
+  // be skipped.
+  enum NGPaintBorderEdge {
+    kTopBorder = 1,
+    kRightBorder = 2,
+    kBottomBorder = 4,
+    kLeftBorder = 8
+  };
+
   NGFragmentType Type() const { return static_cast<NGFragmentType>(type_); }
   bool IsBox() const { return Type() == NGFragmentType::kFragmentBox; }
   bool IsText() const { return Type() == NGFragmentType::kFragmentText; }
   bool IsLineBox() const { return Type() == NGFragmentType::kFragmentLineBox; }
-
-  // Override RefCounted's deref() to ensure operator delete is called on the
-  // appropriate subclass type.
-  void Deref() const {
-    if (DerefBase())
-      Destroy();
-  }
 
   // The accessors in this class shouldn't be used by layout code directly,
   // instead should be accessed by the NGFragmentBase classes. These accessors
@@ -58,24 +61,23 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment> {
 
   // Returns the border-box size.
   NGPhysicalSize Size() const { return size_; }
-  LayoutUnit Width() const { return size_.width; }
-  LayoutUnit Height() const { return size_.height; }
+
+  // Bitmask for border edges, see NGPaintBorderEdge.
+  unsigned BorderEdges() const { return paint_border_edge_; }
+  NGPixelSnappedPhysicalBoxStrut BorderWidths() const;
 
   // Returns the offset relative to the parent fragment's content-box.
-  LayoutUnit LeftOffset() const {
-    DCHECK(is_placed_);
-    return offset_.left;
-  }
-
-  LayoutUnit TopOffset() const {
-    DCHECK(is_placed_);
-    return offset_.top;
-  }
-
   NGPhysicalOffset Offset() const {
     DCHECK(is_placed_);
     return offset_;
   }
+
+  NGBreakToken* BreakToken() const { return break_token_.Get(); }
+  const ComputedStyle& Style() const;
+
+  // GetLayoutObject should only be used when necessary for compatibility
+  // with LegacyLayout.
+  LayoutObject* GetLayoutObject() const { return layout_object_; }
 
   // Should only be used by the parent fragment's layout.
   void SetOffset(NGPhysicalOffset offset) {
@@ -84,17 +86,16 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment> {
     is_placed_ = true;
   }
 
-  NGBreakToken* BreakToken() const { return break_token_.Get(); }
-
-  const ComputedStyle& Style() const;
-
-  // GetLayoutObject should only be used when necessary for compatibility
-  // with LegacyLayout.
-  LayoutObject* GetLayoutObject() const { return layout_object_; }
-
   bool IsPlaced() const { return is_placed_; }
 
   String ToString() const;
+
+  // Override RefCounted's deref() to ensure operator delete is called on the
+  // appropriate subclass type.
+  void Deref() const {
+    if (DerefBase())
+      Destroy();
+  }
 
  protected:
   NGPhysicalFragment(LayoutObject* layout_object,
@@ -107,8 +108,9 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment> {
   NGPhysicalOffset offset_;
   RefPtr<NGBreakToken> break_token_;
 
-  unsigned type_ : 2;
+  unsigned type_ : 2;  // NGFragmentType
   unsigned is_placed_ : 1;
+  unsigned paint_border_edge_ : 4;  // NGPaintBorderEdge
 
  private:
   void Destroy() const;

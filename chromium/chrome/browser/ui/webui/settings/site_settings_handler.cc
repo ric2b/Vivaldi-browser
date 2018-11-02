@@ -440,8 +440,12 @@ void SiteSettingsHandler::HandleGetExceptionList(const base::ListValue* args) {
       map, content_type, extension_registry, web_ui(), /*incognito=*/false,
       /*filter=*/nullptr, exceptions.get());
 
-  if (profile_->HasOffTheRecordProfile()) {
-    Profile* incognito = profile_->GetOffTheRecordProfile();
+  Profile* incognito = profile_->HasOffTheRecordProfile()
+                           ? profile_->GetOffTheRecordProfile()
+                           : nullptr;
+  // On Chrome OS in Guest mode the incognito profile is the primary profile,
+  // so do not fetch an extra copy of the same exceptions.
+  if (incognito && incognito != profile_) {
     map = HostContentSettingsMapFactory::GetForProfile(incognito);
     extension_registry = extensions::ExtensionRegistry::Get(incognito);
     site_settings::GetExceptionsFromHostContentSettingsMap(
@@ -647,9 +651,7 @@ void SiteSettingsHandler::SendIncognitoStatus(
   bool incognito_enabled = profile_->HasOffTheRecordProfile() &&
       !(was_destroyed && profile == profile_->GetOffTheRecordProfile());
 
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value("onIncognitoStatusChanged"),
-                         base::Value(incognito_enabled));
+  FireWebUIListener("onIncognitoStatusChanged", base::Value(incognito_enabled));
 }
 
 void SiteSettingsHandler::HandleFetchZoomLevels(const base::ListValue* args) {
@@ -733,9 +735,7 @@ void SiteSettingsHandler::SendZoomLevels() {
     zoom_levels_exceptions.Append(std::move(exception));
   }
 
-  CallJavascriptFunction("cr.webUIListenerCallback",
-                         base::Value("onZoomLevelsChanged"),
-                         zoom_levels_exceptions);
+  FireWebUIListener("onZoomLevelsChanged", zoom_levels_exceptions);
 }
 
 void SiteSettingsHandler::HandleRemoveZoomLevel(const base::ListValue* args) {

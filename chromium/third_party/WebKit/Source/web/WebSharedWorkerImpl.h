@@ -38,6 +38,7 @@
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/wtf/RefPtr.h"
+#include "public/platform/Platform.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebContentSecurityPolicy.h"
 #include "public/web/WebDevToolsAgentClient.h"
@@ -47,10 +48,9 @@
 
 namespace blink {
 
-class ParentFrameTaskRunners;
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
-class WebLocalFrameImpl;
+class WebLocalFrameBase;
 class WebServiceWorkerNetworkProvider;
 class WebSharedWorkerClient;
 class WebString;
@@ -71,9 +71,10 @@ class WebSharedWorkerImpl final : public WebFrameClient,
   explicit WebSharedWorkerImpl(WebSharedWorkerClient*);
 
   // WebFrameClient methods to support resource loading thru the 'shadow page'.
-  WebApplicationCacheHost* CreateApplicationCacheHost(
+  std::unique_ptr<WebApplicationCacheHost> CreateApplicationCacheHost(
       WebApplicationCacheHostClient*) override;
-  void DidFinishDocumentLoad(WebLocalFrame*) override;
+  void FrameDetached(WebLocalFrame*, DetachType) override;
+  void DidFinishDocumentLoad() override;
 
   // WebDevToolsAgentClient overrides.
   void SendProtocolMessage(int session_id,
@@ -89,7 +90,8 @@ class WebSharedWorkerImpl final : public WebFrameClient,
                           const WebString& name,
                           const WebString& content_security_policy,
                           WebContentSecurityPolicyType,
-                          WebAddressSpace) override;
+                          WebAddressSpace,
+                          bool data_saver_enabled) override;
   void Connect(std::unique_ptr<WebMessagePortChannel>) override;
   void TerminateWorkerContext() override;
 
@@ -98,11 +100,16 @@ class WebSharedWorkerImpl final : public WebFrameClient,
   void ReattachDevTools(const WebString& host_id,
                         int sesion_id,
                         const WebString& saved_state) override;
-  void DetachDevTools() override;
+  void DetachDevTools(int session_id) override;
   void DispatchDevToolsMessage(int session_id,
                                int call_id,
                                const WebString& method,
                                const WebString& message) override;
+
+  std::unique_ptr<blink::WebURLLoader> CreateURLLoader() override {
+    // TODO(yhirano): Stop using Platform::CreateURLLoader() here.
+    return Platform::Current()->CreateURLLoader();
+  }
 
   // Callback methods for WebSharedWorkerReportingProxyImpl.
   void CountFeature(UseCounter::Feature);
@@ -119,7 +126,7 @@ class WebSharedWorkerImpl final : public WebFrameClient,
   void TerminateWorkerThread();
 
   // Creates the shadow loader used for worker network requests.
-  void InitializeLoader();
+  void InitializeLoader(bool data_saver_enabled);
 
   void LoadShadowPage();
   void DidReceiveScriptLoaderResponse();
@@ -128,12 +135,6 @@ class WebSharedWorkerImpl final : public WebFrameClient,
   void ConnectTaskOnWorkerThread(std::unique_ptr<WebMessagePortChannel>);
 
   // WorkerLoaderProxyProvider
-  // postTaskToLoader() must be called from a worker thread.
-  void PostTaskToLoader(const WebTraceLocation&,
-                        std::unique_ptr<WTF::CrossThreadClosure>) override;
-  void PostTaskToWorkerGlobalScope(
-      const WebTraceLocation&,
-      std::unique_ptr<WTF::CrossThreadClosure>) override;
   ThreadableLoadingContext* GetThreadableLoadingContext() override;
 
   // 'shadow page' - created to proxy loading requests from the worker.
@@ -141,15 +142,12 @@ class WebSharedWorkerImpl final : public WebFrameClient,
   Persistent<ExecutionContext> loading_document_;
   Persistent<ThreadableLoadingContext> loading_context_;
   WebView* web_view_;
-  Persistent<WebLocalFrameImpl> main_frame_;
+  Persistent<WebLocalFrameBase> main_frame_;
   bool asked_to_terminate_;
 
   std::unique_ptr<WebServiceWorkerNetworkProvider> network_provider_;
 
   Persistent<WorkerInspectorProxy> worker_inspector_proxy_;
-
-  // Owned by the main thread, but will be accessed by the worker.
-  CrossThreadPersistent<ParentFrameTaskRunners> parent_frame_task_runners_;
 
   Persistent<WebSharedWorkerReportingProxyImpl> reporting_proxy_;
   std::unique_ptr<WorkerThread> worker_thread_;

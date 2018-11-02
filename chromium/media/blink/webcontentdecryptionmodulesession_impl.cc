@@ -8,6 +8,7 @@
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -41,17 +42,18 @@ const char kGenerateRequestUMAName[] = "GenerateRequest";
 const char kLoadSessionUMAName[] = "LoadSession";
 const char kRemoveSessionUMAName[] = "RemoveSession";
 const char kUpdateSessionUMAName[] = "UpdateSession";
+const char kKeyStatusSystemCodeUMAName[] = "KeyStatusSystemCode";
 
 blink::WebContentDecryptionModuleSession::Client::MessageType
-convertMessageType(ContentDecryptionModule::MessageType message_type) {
+convertMessageType(CdmMessageType message_type) {
   switch (message_type) {
-    case ContentDecryptionModule::LICENSE_REQUEST:
+    case CdmMessageType::LICENSE_REQUEST:
       return blink::WebContentDecryptionModuleSession::Client::MessageType::
           kLicenseRequest;
-    case ContentDecryptionModule::LICENSE_RENEWAL:
+    case CdmMessageType::LICENSE_RENEWAL:
       return blink::WebContentDecryptionModuleSession::Client::MessageType::
           kLicenseRenewal;
-    case ContentDecryptionModule::LICENSE_RELEASE:
+    case CdmMessageType::LICENSE_RELEASE:
       return blink::WebContentDecryptionModuleSession::Client::MessageType::
           kLicenseRelease;
   }
@@ -252,6 +254,7 @@ WebContentDecryptionModuleSessionImpl::WebContentDecryptionModuleSessionImpl(
     : adapter_(adapter),
       has_close_been_called_(false),
       is_closed_(false),
+      is_persistent_session_(false),
       weak_ptr_factory_(this) {}
 
 WebContentDecryptionModuleSessionImpl::
@@ -357,8 +360,11 @@ void WebContentDecryptionModuleSessionImpl::InitializeNewSession(
   // 10.8 Let cdm be the CDM instance represented by this object's cdm
   //      instance value.
   // 10.9 Use the cdm to execute the following steps:
+  CdmSessionType cdm_session_type = convertSessionType(session_type);
+  is_persistent_session_ =
+      cdm_session_type != CdmSessionType::TEMPORARY_SESSION;
   adapter_->InitializeNewSession(
-      eme_init_data_type, sanitized_init_data, convertSessionType(session_type),
+      eme_init_data_type, sanitized_init_data, cdm_session_type,
       std::unique_ptr<NewSessionCdmPromise>(new NewSessionCdmResultPromise(
           result, adapter_->GetKeySystemUMAPrefix(), kGenerateRequestUMAName,
           base::Bind(
@@ -391,6 +397,7 @@ void WebContentDecryptionModuleSessionImpl::Load(
   // TODO(jrummell): Now that there are 2 types of persistent sessions, the
   // session type should be passed from blink. Type should also be passed in the
   // constructor (and removed from initializeNewSession()).
+  is_persistent_session_ = true;
   adapter_->LoadSession(
       CdmSessionType::PERSISTENT_LICENSE_SESSION, sanitized_session_id,
       std::unique_ptr<NewSessionCdmPromise>(new NewSessionCdmResultPromise(
@@ -459,6 +466,16 @@ void WebContentDecryptionModuleSessionImpl::Remove(
     blink::WebContentDecryptionModuleResult result) {
   DCHECK(!session_id_.empty());
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  // TODO(http://crbug.com/616166). Once all supported CDMs allow remove() on
+  // temporary sessions, remove this code.
+  if (!is_persistent_session_ && !IsClearKey(adapter_->GetKeySystem())) {
+    result.CompleteWithError(
+        blink::kWebContentDecryptionModuleExceptionTypeError, 0,
+        "remove() on temporary sessions is not supported by this key system.");
+    return;
+  }
+
   adapter_->RemoveSession(
       session_id_,
       std::unique_ptr<SimpleCdmPromise>(new CdmResultPromise<>(
@@ -466,7 +483,7 @@ void WebContentDecryptionModuleSessionImpl::Remove(
 }
 
 void WebContentDecryptionModuleSessionImpl::OnSessionMessage(
-    ContentDecryptionModule::MessageType message_type,
+    CdmMessageType message_type,
     const std::vector<uint8_t>& message) {
   DCHECK(client_) << "Client not set before message event";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -481,11 +498,17 @@ void WebContentDecryptionModuleSessionImpl::OnSessionKeysChange(
   blink::WebVector<blink::WebEncryptedMediaKeyInformation> keys(
       keys_info.size());
   for (size_t i = 0; i < keys_info.size(); ++i) {
-    auto* key_info = keys_info[i];
+    auto& key_info = keys_info[i];
     keys[i].SetId(blink::WebData(reinterpret_cast<char*>(&key_info->key_id[0]),
                                  key_info->key_id.size()));
     keys[i].SetStatus(convertStatus(key_info->status));
     keys[i].SetSystemCode(key_info->system_code);
+
+    // Sparse histogram macro does not cache the histogram, so it's safe to use
+    // macro with non-static histogram name here.
+    UMA_HISTOGRAM_SPARSE_SLOWLY(
+        adapter_->GetKeySystemUMAPrefix() + kKeyStatusSystemCodeUMAName,
+        key_info->system_code);
   }
 
   // Now send the event to blink.

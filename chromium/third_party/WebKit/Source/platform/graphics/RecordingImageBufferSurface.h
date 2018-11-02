@@ -16,39 +16,23 @@
 namespace blink {
 
 class ImageBuffer;
-class RecordingImageBufferSurfaceTest;
-
-class RecordingImageBufferFallbackSurfaceFactory {
-  USING_FAST_MALLOC(RecordingImageBufferFallbackSurfaceFactory);
-  WTF_MAKE_NONCOPYABLE(RecordingImageBufferFallbackSurfaceFactory);
-
- public:
-  virtual std::unique_ptr<ImageBufferSurface> CreateSurface(const IntSize&,
-                                                            OpacityMode,
-                                                            sk_sp<SkColorSpace>,
-                                                            SkColorType) = 0;
-  virtual ~RecordingImageBufferFallbackSurfaceFactory() {}
-
- protected:
-  RecordingImageBufferFallbackSurfaceFactory() {}
-};
+class UnacceleratedImageBufferSurface;
 
 class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
   WTF_MAKE_NONCOPYABLE(RecordingImageBufferSurface);
   USING_FAST_MALLOC(RecordingImageBufferSurface);
 
  public:
-  // If the fallbackFactory is null the buffer surface should only be used
-  // for one frame and should not be used for any operations which need a
-  // raster surface, (i.e. writePixels).
-  // Only #getRecord should be used to access the resulting frame.
-  RecordingImageBufferSurface(
-      const IntSize&,
-      std::unique_ptr<RecordingImageBufferFallbackSurfaceFactory>
-          fallback_factory = nullptr,
-      OpacityMode = kNonOpaque,
-      sk_sp<SkColorSpace> = nullptr,
-      SkColorType = kN32_SkColorType);
+  enum AllowFallback : bool { kDisallowFallback, kAllowFallback };
+
+  // If |AllowFallback| is kDisallowFallback the buffer surface should only be
+  // used for one frame and should not be used for any operations which need a
+  // raster surface, (i.e. WritePixels()).
+  // Only GetRecord() should be used to access the resulting frame.
+  RecordingImageBufferSurface(const IntSize&,
+                              AllowFallback,
+                              OpacityMode = kNonOpaque,
+                              const CanvasColorParams& = CanvasColorParams());
   ~RecordingImageBufferSurface() override;
 
   // Implementation of ImageBufferSurface interfaces
@@ -119,15 +103,15 @@ class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
   };
 
  private:
-  friend class RecordingImageBufferSurfaceTest;  // for unit testing
   void FallBackToRasterCanvas(FallbackReason);
   void InitializeCurrentFrame();
   bool FinalizeFrameInternal(FallbackReason*);
   int ApproximateOpCount();
 
+  const AllowFallback allow_fallback_;
   std::unique_ptr<PaintRecorder> current_frame_;
   sk_sp<PaintRecord> previous_frame_;
-  std::unique_ptr<ImageBufferSurface> fallback_surface_;
+  std::unique_ptr<UnacceleratedImageBufferSurface> fallback_surface_;
   ImageBuffer* image_buffer_;
   int initial_save_count_;
   int current_frame_pixel_count_;
@@ -136,7 +120,6 @@ class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
   bool did_record_draw_commands_in_current_frame_;
   bool current_frame_has_expensive_op_;
   bool previous_frame_has_expensive_op_;
-  std::unique_ptr<RecordingImageBufferFallbackSurfaceFactory> fallback_factory_;
 };
 
 }  // namespace blink

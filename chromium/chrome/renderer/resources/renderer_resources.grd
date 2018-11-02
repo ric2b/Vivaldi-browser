@@ -47,7 +47,6 @@
         <include name="IDR_DEVELOPER_PRIVATE_CUSTOM_BINDINGS_JS" file="extensions\developer_private_custom_bindings.js" type="BINDATA" />
         <include name="IDR_DOWNLOADS_CUSTOM_BINDINGS_JS" file="extensions\downloads_custom_bindings.js" type="BINDATA" />
         <include name="IDR_FEEDBACK_PRIVATE_CUSTOM_BINDINGS_JS" file="extensions\feedback_private_custom_bindings.js" type="BINDATA" />
-        <include name="IDR_FILE_ENTRY_BINDING_UTIL_JS" file="extensions\file_entry_binding_util.js" type="BINDATA" />
         <include name="IDR_FILE_SYSTEM_CUSTOM_BINDINGS_JS" file="extensions\file_system_custom_bindings.js" type="BINDATA" />
         <include name="IDR_GCM_CUSTOM_BINDINGS_JS" file="extensions\gcm_custom_bindings.js" type="BINDATA" />
         <include name="IDR_IDENTITY_CUSTOM_BINDINGS_JS" file="extensions\identity_custom_bindings.js" type="BINDATA" />
@@ -85,6 +84,15 @@
           <include name="IDR_PLATFORM_KEYS_UTILS_JS" file="extensions\platform_keys\utils.js" type="BINDATA" />
           <include name="IDR_TERMINAL_PRIVATE_CUSTOM_BINDINGS_JS" file="extensions\terminal_private_custom_bindings.js" type="BINDATA" />
         </if>
+        <!-- Media Router Mojo service and bindings. -->
+        <include name="IDR_MEDIA_CONTROLLER_MOJOM_JS" file="${mojom_root}\chrome\common\media_router\mojo\media_controller.mojom.js" use_base_dir="false" type="BINDATA" />
+        <include name="IDR_MEDIA_ROUTER_MOJOM_JS" file="${mojom_root}\chrome\common\media_router\mojo\media_router.mojom.js" use_base_dir="false" type="BINDATA" />
+        <include name="IDR_MEDIA_ROUTER_BINDINGS_JS" file="extensions\media_router_bindings.js" type="BINDATA" />
+        <include name="IDR_MEDIA_STATUS_MOJOM_JS" file="${mojom_root}\chrome\common\media_router\mojo\media_status.mojom.js" use_base_dir="false" type="BINDATA" />
+        <include name="IDR_MOJO_TIME_MOJOM_JS" file="${mojom_root}\mojo\common\time.mojom.js" use_base_dir="false" type="BINDATA" />
+        <include name="IDR_MOJO_IP_ADDRESS_MOJOM_JS" file="${mojom_root}\net\interfaces\ip_address.mojom.js" use_base_dir="false" type="BINDATA" />
+        <include name="IDR_ORIGIN_MOJOM_JS" file="${mojom_root}\url\mojo\origin.mojom.js" use_base_dir="false" type="BINDATA" />
+        <include name="IDR_MOJO_URL_MOJOM_JS" file="${mojom_root}\url\mojo\url.mojom.js" use_base_dir="false" type="BINDATA" />
       </if>
     </includes>
   </release>

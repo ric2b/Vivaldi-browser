@@ -13,7 +13,7 @@
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_spdy_stream.h"
 #include "net/quic/platform/api/quic_string_piece.h"
-#include "net/spdy/spdy_framer.h"
+#include "net/spdy/core/spdy_framer.h"
 
 namespace net {
 
@@ -25,10 +25,6 @@ class QuicSpdyClientStream : public QuicSpdyStream {
  public:
   QuicSpdyClientStream(QuicStreamId id, QuicClientSession* session);
   ~QuicSpdyClientStream() override;
-
-  // Override the base class to close the write side as soon as we get a
-  // response (if bidirectional streaming is not enabled).
-  void OnStreamFrame(const QuicStreamFrame& frame) override;
 
   // Override the base class to parse and store headers.
   void OnInitialHeadersComplete(bool fin,

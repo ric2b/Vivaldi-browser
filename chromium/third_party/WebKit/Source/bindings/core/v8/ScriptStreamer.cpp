@@ -7,9 +7,9 @@
 #include <memory>
 #include "bindings/core/v8/ScriptStreamerThread.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
+#include "core/dom/ClassicPendingScript.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
-#include "core/dom/PendingScript.h"
 #include "core/frame/Settings.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/loader/resource/ScriptResource.h"
@@ -18,10 +18,10 @@
 #include "platform/SharedBuffer.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/CachedMetadata.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/Deque.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/TextEncodingRegistry.h"
-#include "public/platform/WebScheduler.h"
 
 namespace blink {
 
@@ -140,7 +140,9 @@ class SourceStreamDataQueue {
 
  private:
   bool TryGetData(const uint8_t** data, size_t* length) {
-    ASSERT(mutex_.Locked());
+#if DCHECK_IS_ON()
+    DCHECK(mutex_.Locked());
+#endif
     if (!data_.IsEmpty()) {
       std::pair<const uint8_t*, size_t> next_data = data_.TakeFirst();
       *data = next_data.first;
@@ -175,13 +177,12 @@ class SourceStream : public v8::ScriptCompiler::ExternalSourceStream {
   WTF_MAKE_NONCOPYABLE(SourceStream);
 
  public:
-  explicit SourceStream(RefPtr<WebTaskRunner> loading_task_runner)
+  SourceStream()
       : v8::ScriptCompiler::ExternalSourceStream(),
         cancelled_(false),
         finished_(false),
         queue_lead_position_(0),
-        queue_tail_position_(0),
-        loading_task_runner_(std::move(loading_task_runner)) {}
+        queue_tail_position_(0) {}
 
   virtual ~SourceStream() override {}
 
@@ -319,13 +320,11 @@ class SourceStream : public v8::ScriptCompiler::ExternalSourceStream {
   SourceStreamDataQueue data_queue_;  // Thread safe.
   size_t queue_lead_position_;        // Only used by v8 thread.
   size_t queue_tail_position_;  // Used by both threads; guarded by m_mutex.
-
-  RefPtr<WebTaskRunner> loading_task_runner_;
 };
 
 size_t ScriptStreamer::small_script_threshold_ = 30 * 1024;
 
-void ScriptStreamer::StartStreaming(PendingScript* script,
+void ScriptStreamer::StartStreaming(ClassicPendingScript* script,
                                     Type script_type,
                                     Settings* settings,
                                     ScriptState* script_state,
@@ -465,7 +464,7 @@ void ScriptStreamer::NotifyAppendData(ScriptResource* resource) {
 
     DCHECK(!stream_);
     DCHECK(!source_);
-    stream_ = new SourceStream(loading_task_runner_.Get());
+    stream_ = new SourceStream;
     // m_source takes ownership of m_stream.
     source_ = WTF::WrapUnique(
         new v8::ScriptCompiler::StreamedSource(stream_, encoding_));
@@ -515,7 +514,7 @@ void ScriptStreamer::NotifyFinished(Resource* resource) {
 }
 
 ScriptStreamer::ScriptStreamer(
-    PendingScript* script,
+    ClassicPendingScript* script,
     Type script_type,
     ScriptState* script_state,
     v8::ScriptCompiler::CompileOptions compile_options,
@@ -579,7 +578,7 @@ void ScriptStreamer::NotifyFinishedToClient() {
 }
 
 bool ScriptStreamer::StartStreamingInternal(
-    PendingScript* script,
+    ClassicPendingScript* script,
     Type script_type,
     Settings* settings,
     ScriptState* script_state,
@@ -598,7 +597,7 @@ bool ScriptStreamer::StartStreamingInternal(
   if (resource->IsCacheValidator()) {
     RecordNotStreamingReasonHistogram(script_type, kReload);
     // This happens e.g., during reloads. We're actually not going to load
-    // the current Resource of the PendingScript but switch to another
+    // the current Resource of the ClassicPendingScript but switch to another
     // Resource -> don't stream.
     return false;
   }
@@ -613,8 +612,8 @@ bool ScriptStreamer::StartStreamingInternal(
   if (settings->GetV8CacheOptions() == kV8CacheOptionsParse)
     compile_option = v8::ScriptCompiler::kProduceParserCache;
 
-  // The Resource might go out of scope if the script is no longer
-  // needed. This makes PendingScript notify the ScriptStreamer when it is
+  // The Resource might go out of scope if the script is no longer needed.
+  // This makes ClassicPendingScript notify the ScriptStreamer when it is
   // destroyed.
   script->SetStreamer(ScriptStreamer::Create(script, script_type, script_state,
                                              compile_option,

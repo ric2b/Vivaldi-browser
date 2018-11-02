@@ -57,6 +57,9 @@ git cl patch <CL number or URL>
     hide some of the tools used for working on Chromium behind an abstraction
     layer
 
+### Design Docs
+*   See [design/README.md](design/README.md)
+
 ### Integrated Development Environment (IDE) Set Up Guides
 *   [Android Studio](android_studio.md) - Android Studio for Android builds
 *   [Eclipse for Android](eclipse.md) - Eclipse for Android
@@ -94,6 +97,10 @@ git cl patch <CL number or URL>
 *   [Code Reviews](code_reviews.md) - Code review requirements and guidelines
 *   [Closure Compilation](closure_compilation.md) - The _Closure_ JavaScript
     compiler
+*   [Threading and Tasks in Chrome](threading_and_tasks.md) - How to run tasks
+    and handle thread safety in Chrome.
+*   [Subtle Threading Bugs and Patterns to Avoid Them](subtle_threading_bugs.md) -
+    Threading pitfalls to avoid.
 *   [Callback<> and Bind()](callback.md) - All about Callbacks, Closures, and
     Bind().
 *   [Views Platform Styling](ui/views/platform_style.md) - How views are styled

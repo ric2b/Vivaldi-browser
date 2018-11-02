@@ -11,7 +11,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/browser_thread.h"
 
 namespace app_list {
 namespace {
@@ -33,8 +32,7 @@ WebserviceCache::WebserviceCache(content::BrowserContext* context)
   const char kStoreDataFileName[] = "Webservice Search Cache";
   const base::FilePath data_file =
       context->GetPath().AppendASCII(kStoreDataFileName);
-  data_store_ = new DictionaryDataStore(
-      data_file, content::BrowserThread::GetBlockingPool());
+  data_store_ = new DictionaryDataStore(data_file);
   data_store_->Load(base::Bind(&WebserviceCache::OnCacheLoaded, AsWeakPtr()));
 }
 
@@ -128,15 +126,15 @@ bool WebserviceCache::PayloadFromDict(const base::DictionaryValue* dict,
   return true;
 }
 
-base::DictionaryValue* WebserviceCache::DictFromPayload(
+std::unique_ptr<base::DictionaryValue> WebserviceCache::DictFromPayload(
     const Payload& payload) {
-  base::DictionaryValue* dict = new base::DictionaryValue();
+  auto dict = base::MakeUnique<base::DictionaryValue>();
   dict->SetString(kKeyResultTime, base::Int64ToString(
       payload.time.ToInternalValue()));
   // The payload will still keep ownership of it's result dict, hence put a
   // a copy of the result dictionary here. This dictionary will be owned by
   // data_store_->cached_dict().
-  dict->Set(kKeyResult, payload.result->DeepCopy());
+  dict->Set(kKeyResult, base::MakeUnique<base::Value>(*payload.result));
 
   return dict;
 }

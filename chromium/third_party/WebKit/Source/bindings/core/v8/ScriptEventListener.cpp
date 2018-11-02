@@ -32,16 +32,16 @@
 
 #include "bindings/core/v8/ScheduledAction.h"
 #include "bindings/core/v8/ScriptController.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8AbstractEventListener.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/WindowProxy.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentParser.h"
 #include "core/dom/QualifiedName.h"
 #include "core/events/EventListener.h"
 #include "core/frame/LocalFrame.h"
+#include "platform/bindings/ScriptState.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -51,7 +51,7 @@ V8LazyEventListener* CreateAttributeEventListener(
     const QualifiedName& name,
     const AtomicString& value,
     const AtomicString& event_parameter_name) {
-  ASSERT(node);
+  DCHECK(node);
   if (value.IsNull())
     return nullptr;
 

@@ -8,16 +8,18 @@
 #import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_article_item.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_reading_list_item.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestion.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_cell.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_updater.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
-#include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
+}
 
 @interface ContentSuggestionsViewController ()
 
@@ -82,21 +84,23 @@
       }];
 }
 
-- (void)addSuggestions:(NSArray<ContentSuggestion*>*)suggestions {
+- (void)addSuggestions:(NSArray<CSCollectionViewItem*>*)suggestions
+         toSectionInfo:(ContentSuggestionsSectionInformation*)sectionInfo {
   if (suggestions.count == 0) {
     return;
   }
 
   [self.collectionView performBatchUpdates:^{
-    NSIndexSet* addedSections =
-        [self.collectionUpdater addSectionsForSuggestionsToModel:suggestions];
+    NSIndexSet* addedSections = [self.collectionUpdater
+        addSectionsForSectionInfoToModel:@[ sectionInfo ]];
     [self.collectionView insertSections:addedSections];
   }
                                 completion:nil];
 
   [self.collectionView performBatchUpdates:^{
     NSArray<NSIndexPath*>* addedItems =
-        [self.collectionUpdater addSuggestionsToModel:suggestions];
+        [self.collectionUpdater addSuggestionsToModel:suggestions
+                                      withSectionInfo:sectionInfo];
     [self.collectionView insertItemsAtIndexPaths:addedItems];
   }
                                 completion:nil];
@@ -120,6 +124,12 @@
   [self.collectionView addGestureRecognizer:longPressRecognizer];
 }
 
+- (void)viewWillTransitionToSize:(CGSize)size
+       withTransitionCoordinator:
+           (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [self.collectionUpdater updateMostVisitedForSize:size];
+}
+
 #pragma mark - UICollectionViewDelegate
 
 - (void)collectionView:(UICollectionView*)collectionView
@@ -130,10 +140,8 @@
       [self.collectionViewModel itemAtIndexPath:indexPath];
   switch ([self.collectionUpdater contentSuggestionTypeForItem:item]) {
     case ContentSuggestionTypeReadingList:
-      [self openReadingListItem:item];
-      break;
     case ContentSuggestionTypeArticle:
-      [self openArticle:item];
+      [self.suggestionCommandHandler openPageForItem:item];
       break;
     case ContentSuggestionTypeMostVisited:
       // TODO(crbug.com/707754): Open the most visited site.
@@ -141,6 +149,44 @@
     case ContentSuggestionTypeEmpty:
       break;
   }
+}
+
+#pragma mark - UICollectionViewDelegateFlowLayout
+
+- (CGSize)collectionView:(UICollectionView*)collectionView
+                    layout:(UICollectionViewLayout*)collectionViewLayout
+    sizeForItemAtIndexPath:(NSIndexPath*)indexPath {
+  if ([self.collectionUpdater isMostVisitedSection:indexPath.section]) {
+    return [ContentSuggestionsMostVisitedCell defaultSize];
+  }
+  return [super collectionView:collectionView
+                        layout:collectionViewLayout
+        sizeForItemAtIndexPath:indexPath];
+}
+
+- (UIEdgeInsets)collectionView:(UICollectionView*)collectionView
+                        layout:(UICollectionViewLayout*)collectionViewLayout
+        insetForSectionAtIndex:(NSInteger)section {
+  if ([self.collectionUpdater isMostVisitedSection:section]) {
+    CGFloat margin = content_suggestions::centeredTilesMarginForWidth(
+        collectionView.frame.size.width);
+    return UIEdgeInsetsMake(0, margin, 0, margin);
+  }
+  return [super collectionView:collectionView
+                        layout:collectionViewLayout
+        insetForSectionAtIndex:section];
+}
+
+- (CGFloat)collectionView:(UICollectionView*)collectionView
+                                 layout:(UICollectionViewLayout*)
+                                            collectionViewLayout
+    minimumLineSpacingForSectionAtIndex:(NSInteger)section {
+  if ([self.collectionUpdater isMostVisitedSection:section]) {
+    return content_suggestions::spacingBetweenTiles();
+  }
+  return [super collectionView:collectionView
+                                   layout:collectionViewLayout
+      minimumLineSpacingForSectionAtIndex:section];
 }
 
 #pragma mark - MDCCollectionViewStylingDelegate
@@ -156,11 +202,8 @@
 
 - (BOOL)collectionView:(nonnull UICollectionView*)collectionView
     shouldHideItemBackgroundAtIndexPath:(nonnull NSIndexPath*)indexPath {
-  if ([self.collectionUpdater
-          shouldUseCustomStyleForSection:indexPath.section]) {
-    return YES;
-  }
-  return NO;
+  return
+      [self.collectionUpdater shouldUseCustomStyleForSection:indexPath.section];
 }
 
 - (BOOL)collectionView:(UICollectionView*)collectionView
@@ -183,22 +226,6 @@
 }
 
 #pragma mark - Private
-
-// Opens the Reading List entry associated with |item|. |item| must be a
-// ContentSuggestionsReadingListItem.
-- (void)openReadingListItem:(CollectionViewItem*)item {
-  ContentSuggestionsReadingListItem* readingListItem =
-      base::mac::ObjCCastStrict<ContentSuggestionsReadingListItem>(item);
-  [self.suggestionCommandHandler openURL:readingListItem.url];
-}
-
-// Opens the article associated with |item|. |item| must be a
-// ContentSuggestionsArticleItem.
-- (void)openArticle:(CollectionViewItem*)item {
-  ContentSuggestionsArticleItem* article =
-      base::mac::ObjCCastStrict<ContentSuggestionsArticleItem>(item);
-  [self.suggestionCommandHandler openURL:article.articleURL];
-}
 
 - (void)handleLongPress:(UILongPressGestureRecognizer*)gestureRecognizer {
   if (self.editor.editing ||
@@ -224,11 +251,8 @@
     return;
   }
 
-  ContentSuggestionsArticleItem* articleItem =
-      base::mac::ObjCCastStrict<ContentSuggestionsArticleItem>(touchedItem);
-
   [self.suggestionCommandHandler
-      displayContextMenuForArticle:articleItem
+      displayContextMenuForArticle:touchedItem
                            atPoint:touchLocation
                        atIndexPath:touchedItemIndexPath];
 }

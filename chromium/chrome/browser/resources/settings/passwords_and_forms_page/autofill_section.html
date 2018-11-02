@@ -1,8 +1,11 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/cr_elements/cr_action_menu/cr_action_menu.html">
 <link rel="import" href="chrome://resources/html/action_link.html">
 <link rel="import" href="chrome://resources/html/action_link_css.html">
+<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/html/cr/ui/focus_without_ink.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
-<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="../i18n_setup.html">
 <link rel="import" href="../settings_shared_css.html">
@@ -157,12 +160,12 @@
             <div class="expiration-column">
               <div id="creditCardExpiration"
                   class="expiration-date">[[expiration_(item)]]</div>
-              <template is="dom-if" if="[[item.metadata.isLocal]]">
+              <template is="dom-if" if="[[showDots_(item.metadata)]]">
                 <paper-icon-button id="creditCardMenu" icon="cr:more-vert"
                     on-tap="onCreditCardMenuTap_" title="$i18n{moreActions}">
                 </paper-icon-button>
               </template>
-              <template is="dom-if" if="[[!item.metadata.isLocal]]">
+              <template is="dom-if" if="[[!showDots_(item.metadata)]]">
                 <button is="paper-icon-button-light" class="icon-external"
                     on-tap="onRemoteEditCreditCardTap_" actionable></button>
               </template>
@@ -179,6 +182,7 @@
       <button id="menuEditCreditCard" class="dropdown-item"
           on-tap="onMenuEditCreditCardTap_">$i18n{edit}</button>
       <button id="menuRemoveCreditCard" class="dropdown-item"
+          hidden$="[[!activeCreditCard.metadata.isLocal]]"
           on-tap="onMenuRemoveCreditCardTap_">$i18n{removeCreditCard}</button>
       <button id="menuClearCreditCard" class="dropdown-item"
           on-tap="onMenuClearCreditCardTap_"

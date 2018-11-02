@@ -70,7 +70,7 @@ cr.define('bookmarks.actions', function() {
    * @param {string} id
    * @param {string} parentId
    * @param {number} index
-   * @param {NodeList} nodes
+   * @param {NodeMap} nodes
    * @return {!Action}
    */
   function removeBookmark(id, parentId, index, nodes) {
@@ -85,7 +85,7 @@ cr.define('bookmarks.actions', function() {
   }
 
   /**
-   * @param {NodeList} nodeMap
+   * @param {NodeMap} nodeMap
    * @return {!Action}
    */
   function refreshNodes(nodeMap) {
@@ -93,14 +93,19 @@ cr.define('bookmarks.actions', function() {
       name: 'refresh-nodes',
       nodes: nodeMap,
     };
-  };
+  }
 
   /**
    * @param {string} id
-   * @return {!Action}
+   * @param {NodeMap} nodes Current node state. Can be ommitted in tests.
+   * @return {?Action}
    */
-  function selectFolder(id) {
-    assert(id != '0', 'Cannot select root folder');
+  function selectFolder(id, nodes) {
+    if (nodes && (id == ROOT_NODE_ID || !nodes[id] || nodes[id].url)) {
+      console.warn('Tried to select invalid folder: ' + id);
+      return null;
+    }
+
     return {
       name: 'select-folder',
       id: id,
@@ -136,24 +141,36 @@ cr.define('bookmarks.actions', function() {
 
   /**
    * @param {string} id
-   * @param {boolean} add
-   * @param {boolean} range
    * @param {BookmarksPageState} state
+   * @param {{
+   *     clear: boolean,
+   *     range: boolean,
+   *     toggle: boolean}} config Options for how the selection should change:
+   *   - clear: If true, clears the previous selection before adding this one
+   *   - range: If true, selects all items from the anchor to this item
+   *   - toggle: If true, toggles the selection state of the item. Cannot be
+   *     used with clear or range.
    * @return {!Action}
    */
-  function selectItem(id, add, range, state) {
+  function selectItem(id, state, config) {
+    assert(!config.toggle || !config.range);
+    assert(!config.toggle || !config.clear);
+
     var anchor = state.selection.anchor;
     var toSelect = [];
+    var newAnchor = id;
 
-    // TODO(tsergeant): Make it possible to deselect items by ctrl-clicking them
-    // again.
-    if (range && anchor) {
+    if (config.range && anchor) {
       var displayedList = bookmarks.util.getDisplayedList(state);
       var selectedIndex = displayedList.indexOf(id);
       assert(selectedIndex != -1);
       var anchorIndex = displayedList.indexOf(anchor);
       if (anchorIndex == -1)
         anchorIndex = selectedIndex;
+
+      // When performing a range selection, don't change the anchor from what
+      // was used in this selection.
+      newAnchor = displayedList[anchorIndex];
 
       var startIndex = Math.min(anchorIndex, selectedIndex);
       var endIndex = Math.max(anchorIndex, selectedIndex);
@@ -166,9 +183,36 @@ cr.define('bookmarks.actions', function() {
 
     return {
       name: 'select-items',
-      add: add,
-      anchor: id,
+      clear: config.clear,
+      toggle: config.toggle,
+      anchor: newAnchor,
       items: toSelect,
+    };
+  }
+
+  /**
+   * @param {Array<string>} ids
+   * @param {BookmarksPageState} state
+   * @return {!Action}
+   */
+  function selectAll(ids, state) {
+    return {
+      name: 'select-items',
+      clear: true,
+      toggle: false,
+      anchor: state.selection.anchor,
+      items: ids,
+    };
+  }
+
+  /**
+   * @param {string} id
+   * @return {!Action}
+   */
+  function updateAnchor(id) {
+    return {
+      name: 'update-anchor',
+      anchor: id,
     };
   }
 
@@ -207,9 +251,11 @@ cr.define('bookmarks.actions', function() {
     refreshNodes: refreshNodes,
     removeBookmark: removeBookmark,
     reorderChildren: reorderChildren,
+    selectAll: selectAll,
     selectFolder: selectFolder,
     selectItem: selectItem,
     setSearchResults: setSearchResults,
     setSearchTerm: setSearchTerm,
+    updateAnchor: updateAnchor,
   };
 });

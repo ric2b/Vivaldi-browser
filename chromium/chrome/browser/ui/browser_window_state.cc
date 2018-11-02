@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -56,12 +58,13 @@ class WindowPlacementPrefUpdate : public DictionaryPrefUpdate {
 
   base::DictionaryValue* Get() override {
     base::DictionaryValue* all_apps_dict = DictionaryPrefUpdate::Get();
-    base::DictionaryValue* this_app_dict = NULL;
-    if (!all_apps_dict->GetDictionary(window_name_, &this_app_dict)) {
-      this_app_dict = new base::DictionaryValue;
-      all_apps_dict->Set(window_name_, this_app_dict);
+    base::DictionaryValue* this_app_dict_weak = NULL;
+    if (!all_apps_dict->GetDictionary(window_name_, &this_app_dict_weak)) {
+      auto this_app_dict = base::MakeUnique<base::DictionaryValue>();
+      this_app_dict_weak = this_app_dict.get();
+      all_apps_dict->Set(window_name_, std::move(this_app_dict));
     }
-    return this_app_dict;
+    return this_app_dict_weak;
   }
 
  private:
@@ -158,20 +161,38 @@ void GetSavedWindowBoundsAndShowState(const Browser* browser,
   const base::CommandLine& parsed_command_line =
       *base::CommandLine::ForCurrentProcess();
 
-  if (parsed_command_line.HasSwitch(switches::kWindowSize)) {
-    std::string str =
-        parsed_command_line.GetSwitchValueASCII(switches::kWindowSize);
+  internal::UpdateWindowBoundsAndShowStateFromCommandLine(parsed_command_line,
+                                                          bounds, show_state);
+}
+
+namespace internal {
+
+void UpdateWindowBoundsAndShowStateFromCommandLine(
+    const base::CommandLine& command_line,
+    gfx::Rect* bounds,
+    ui::WindowShowState* show_state) {
+  // Allow command-line flags to override the window size and position. If
+  // either of these is specified then set the show state to NORMAL so that
+  // they are immediately respected.
+  if (command_line.HasSwitch(switches::kWindowSize)) {
+    std::string str = command_line.GetSwitchValueASCII(switches::kWindowSize);
     int width, height;
-    if (ParseCommaSeparatedIntegers(str, &width, &height))
+    if (ParseCommaSeparatedIntegers(str, &width, &height)) {
       bounds->set_size(gfx::Size(width, height));
+      *show_state = ui::SHOW_STATE_NORMAL;
+    }
   }
-  if (parsed_command_line.HasSwitch(switches::kWindowPosition)) {
+  if (command_line.HasSwitch(switches::kWindowPosition)) {
     std::string str =
-        parsed_command_line.GetSwitchValueASCII(switches::kWindowPosition);
+        command_line.GetSwitchValueASCII(switches::kWindowPosition);
     int x, y;
-    if (ParseCommaSeparatedIntegers(str, &x, &y))
+    if (ParseCommaSeparatedIntegers(str, &x, &y)) {
       bounds->set_origin(gfx::Point(x, y));
+      *show_state = ui::SHOW_STATE_NORMAL;
+    }
   }
 }
+
+}  // namespace internal
 
 }  // namespace chrome

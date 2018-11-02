@@ -31,6 +31,7 @@
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8AbstractEventListener.h"
+#include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/ContextLifecycleNotifier.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/SuspendableObject.h"
@@ -39,7 +40,9 @@
 #include "core/frame/DOMTimerCoordinator.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ConsoleMessageStorage.h"
+#include "core/inspector/WorkerInspectorController.h"
 #include "core/inspector/WorkerThreadDebugger.h"
+#include "core/loader/WorkerFetchContext.h"
 #include "core/loader/WorkerThreadableLoader.h"
 #include "core/probe/CoreProbes.h"
 #include "core/workers/WorkerClients.h"
@@ -51,14 +54,15 @@
 #include "core/workers/WorkerThread.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/InstanceCounters.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/RefPtr.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/WebURLRequest.h"
 
 namespace blink {
@@ -71,7 +75,7 @@ void RemoveURLFromMemoryCacheInternal(const KURL& url) {
 }  // namespace
 
 WorkerGlobalScope::~WorkerGlobalScope() {
-  DCHECK(!script_controller_);
+  DCHECK(!ScriptController());
   InstanceCounters::DecrementCounter(
       InstanceCounters::kWorkerGlobalScopeCounter);
 }
@@ -93,32 +97,29 @@ void WorkerGlobalScope::Dispose() {
   // is destroyed.
   closing_ = true;
   HeapHashSet<Member<V8AbstractEventListener>> listeners;
-  listeners.Swap(event_listeners_);
+  listeners.swap(event_listeners_);
   while (!listeners.IsEmpty()) {
     for (const auto& listener : listeners)
       listener->ClearListenerObject();
-    listeners.Clear();
+    listeners.clear();
     // Pick up any additions made while iterating.
-    listeners.Swap(event_listeners_);
+    listeners.swap(event_listeners_);
   }
   RemoveAllEventListeners();
 
-  script_controller_->Dispose();
-  script_controller_.Clear();
   event_queue_->Close();
-  thread_ = nullptr;
+  WorkerOrWorkletGlobalScope::Dispose();
 }
 
-void WorkerGlobalScope::CountFeature(UseCounter::Feature feature) {
+void WorkerGlobalScope::ReportFeature(UseCounter::Feature feature) {
   DCHECK(IsContextThread());
   DCHECK(thread_);
   thread_->GetWorkerReportingProxy().CountFeature(feature);
 }
 
-void WorkerGlobalScope::CountDeprecation(UseCounter::Feature feature) {
+void WorkerGlobalScope::ReportDeprecation(UseCounter::Feature feature) {
   DCHECK(IsContextThread());
   DCHECK(thread_);
-  AddDeprecationMessage(feature);
   thread_->GetWorkerReportingProxy().CountDeprecation(feature);
 }
 
@@ -141,7 +142,7 @@ void WorkerGlobalScope::RegisterEventListener(
 
 void WorkerGlobalScope::DeregisterEventListener(
     V8AbstractEventListener* event_listener) {
-  auto it = event_listeners_.Find(event_listener);
+  auto it = event_listeners_.find(event_listener);
   CHECK(it != event_listeners_.end() || closing_);
   event_listeners_.erase(it);
 }
@@ -222,11 +223,11 @@ void WorkerGlobalScope::importScripts(const Vector<String>& urls,
         script_loader->CachedMetadata()
             ? script_loader->CachedMetadata()->size()
             : 0);
-    script_controller_->Evaluate(ScriptSourceCode(script_loader->SourceText(),
+    ScriptController()->Evaluate(ScriptSourceCode(script_loader->SourceText(),
                                                   script_loader->ResponseURL()),
                                  &error_event, handler, v8_cache_options_);
     if (error_event) {
-      script_controller_->RethrowExceptionFromImportedScript(error_event,
+      ScriptController()->RethrowExceptionFromImportedScript(error_event,
                                                              exception_state);
       return;
     }
@@ -256,16 +257,8 @@ bool WorkerGlobalScope::HasPendingActivity() const {
   return timers_.HasInstalledTimeout();
 }
 
-bool WorkerGlobalScope::IsJSExecutionForbidden() const {
-  return script_controller_->IsExecutionForbidden();
-}
-
 bool WorkerGlobalScope::IsContextThread() const {
   return GetThread()->IsCurrentThread();
-}
-
-void WorkerGlobalScope::DisableEval(const String& error_message) {
-  script_controller_->DisableEval(error_message);
 }
 
 void WorkerGlobalScope::AddConsoleMessage(ConsoleMessage* console_message) {
@@ -281,9 +274,14 @@ WorkerEventQueue* WorkerGlobalScope::GetEventQueue() const {
   return event_queue_.Get();
 }
 
-bool WorkerGlobalScope::IsSecureContext(
-    String& error_message,
-    const SecureContextCheck privilege_context_check) const {
+CoreProbeSink* WorkerGlobalScope::GetProbeSink() {
+  if (WorkerInspectorController* controller =
+          GetThread()->GetWorkerInspectorController())
+    return controller->GetProbeSink();
+  return nullptr;
+}
+
+bool WorkerGlobalScope::IsSecureContext(String& error_message) const {
   // Until there are APIs that are available in workers and that
   // require a privileged context test that checks ancestors, just do
   // a simple check here. Once we have a need for a real
@@ -300,6 +298,14 @@ ExecutionContext* WorkerGlobalScope::GetExecutionContext() const {
   return const_cast<WorkerGlobalScope*>(this);
 }
 
+WorkerFetchContext* WorkerGlobalScope::GetFetchContext() {
+  DCHECK(RuntimeEnabledFeatures::offMainThreadFetchEnabled());
+  if (fetch_context_)
+    return fetch_context_;
+  fetch_context_ = WorkerFetchContext::Create(*this);
+  return fetch_context_;
+}
+
 WorkerGlobalScope::WorkerGlobalScope(
     const KURL& url,
     const String& user_agent,
@@ -308,19 +314,15 @@ WorkerGlobalScope::WorkerGlobalScope(
     std::unique_ptr<SecurityOrigin::PrivilegeData>
         starter_origin_privilage_data,
     WorkerClients* worker_clients)
-    : url_(url),
+    : WorkerOrWorkletGlobalScope(thread->GetIsolate()),
+      url_(url),
       user_agent_(user_agent),
       v8_cache_options_(kV8CacheOptionsDefault),
-      script_controller_(
-          WorkerOrWorkletScriptController::Create(this, thread->GetIsolate())),
       thread_(thread),
-      closing_(false),
       event_queue_(WorkerEventQueue::Create(this)),
       worker_clients_(worker_clients),
-      timers_(
-          Platform::Current()->CurrentThread()->Scheduler()->TimerTaskRunner()),
-      time_origin_(time_origin),
-      last_pending_error_event_id_(0) {
+      timers_(TaskRunnerHelper::Get(TaskType::kTimer, this)),
+      time_origin_(time_origin) {
   InstanceCounters::IncrementCounter(
       InstanceCounters::kWorkerGlobalScopeCounter);
   SetSecurityOrigin(SecurityOrigin::Create(url));
@@ -371,14 +373,14 @@ KURL WorkerGlobalScope::VirtualCompleteURL(const String& url) const {
 DEFINE_TRACE(WorkerGlobalScope) {
   visitor->Trace(location_);
   visitor->Trace(navigator_);
-  visitor->Trace(script_controller_);
   visitor->Trace(event_queue_);
   visitor->Trace(timers_);
   visitor->Trace(event_listeners_);
   visitor->Trace(pending_error_events_);
-  ExecutionContext::Trace(visitor);
+  visitor->Trace(fetch_context_);
   EventTargetWithInlineData::Trace(visitor);
   SecurityContext::Trace(visitor);
+  WorkerOrWorkletGlobalScope::Trace(visitor);
   Supplementable<WorkerGlobalScope>::Trace(visitor);
 }
 

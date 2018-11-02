@@ -33,6 +33,7 @@
 #include "components/certificate_transparency/pref_names.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
+#include "components/network_time/network_time_pref_names.h"
 #include "components/ntp_snippets/pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/policy/core/browser/autofill_policy_handler.h"
@@ -53,7 +54,7 @@
 #include "components/ssl_config/ssl_config_prefs.h"
 #include "components/sync/base/pref_names.h"
 #include "components/sync/driver/sync_policy_handler.h"
-#include "components/translate/core/common/translate_pref_names.h"
+#include "components/translate/core/browser/translate_pref_names.h"
 #include "components/variations/pref_names.h"
 #include "extensions/features/features.h"
 #include "media/media_features.h"
@@ -77,6 +78,7 @@
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/download/download_dir_policy_handler.h"
+#include "chrome/browser/policy/local_sync_policy_handler.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -431,7 +433,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kNTPContentSuggestionsEnabled,
     ntp_snippets::prefs::kEnableSnippets,
     base::Value::Type::BOOLEAN },
-#if defined(ENABLE_MEDIA_ROUTER)
   { key::kEnableMediaRouter,
     prefs::kEnableMediaRouter,
     base::Value::Type::BOOLEAN },
@@ -440,7 +441,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     prefs::kShowCastIconInToolbar,
     base::Value::Type::BOOLEAN },
 #endif  // !defined(OS_ANDROID)
-#endif  // defined(ENABLE_MEDIA_ROUTER)
 #if BUILDFLAG(ENABLE_WEBRTC)
   { key::kWebRtcUdpPortRange,
     prefs::kWebRTCUDPPortRange,
@@ -550,6 +550,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::Type::BOOLEAN },
   { key::kEasyUnlockAllowed,
     prefs::kEasyUnlockAllowed,
+    base::Value::Type::BOOLEAN },
+  { key::kInstantTetheringAllowed,
+    prefs::kInstantTetheringAllowed,
     base::Value::Type::BOOLEAN },
   { key::kCaptivePortalAuthenticationIgnoresProxy,
     prefs::kCaptivePortalAuthenticationIgnoresProxy,
@@ -667,9 +670,10 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kRoamingProfileSupportEnabled,
     syncer::prefs::kEnableLocalSyncBackend,
     base::Value::Type::BOOLEAN },
-  { key::kRoamingProfileLocation,
-    syncer::prefs::kLocalSyncBackendDir,
-    base::Value::Type::STRING },
+
+  { key::kNetworkTimeQueriesEnabled,
+    network_time::prefs::kNetworkTimeQueriesEnabled,
+    base::Value::Type::BOOLEAN },
 };
 // clang-format on
 
@@ -916,6 +920,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
 
 #if !defined(OS_ANDROID)
   handlers->AddHandler(base::WrapUnique(new DownloadDirPolicyHandler));
+  handlers->AddHandler(base::MakeUnique<LocalSyncPolicyHandler>());
 
   handlers->AddHandler(base::MakeUnique<SimpleSchemaValidatingPolicyHandler>(
       key::kRegisteredProtocolHandlers,

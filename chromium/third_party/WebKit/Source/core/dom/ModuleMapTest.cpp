@@ -131,16 +131,16 @@ void ModuleMapTestModulator::FetchNewSingleModule(
 
 void ModuleMapTestModulator::ResolveFetches() {
   for (const auto& test_request : test_requests_) {
-    ModuleScript* module_script = ModuleScript::Create(
-        ScriptModule(), test_request->url, test_request->nonce, kParserInserted,
-        WebURLRequest::kFetchCredentialsModeOmit);
+    ModuleScript* module_script = ModuleScript::CreateForTest(
+        this, ScriptModule(), test_request->url, test_request->nonce,
+        kParserInserted, WebURLRequest::kFetchCredentialsModeOmit);
     TaskRunner()->PostTask(
         BLINK_FROM_HERE,
         WTF::Bind(&ModuleScriptLoaderClient::NotifyNewSingleModuleFinished,
                   WrapPersistent(test_request->client.Get()),
                   WrapPersistent(module_script)));
   }
-  test_requests_.Clear();
+  test_requests_.clear();
 }
 
 class ModuleMapTest : public testing::Test {

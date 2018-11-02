@@ -70,7 +70,25 @@
       Open all bookmarks in &amp;new window
     </message>
     <message name="IDS_BOOKMARK_BAR_OPEN_ALL_INCOGNITO" desc="Menu description for opening all urls in a bookmark folder in an incognito window">
-      Open all bookmarks in &amp;incognito window
+        Open all bookmarks in &amp;incognito window
+    </message>
+    <message name="IDS_BOOKMARK_BAR_OPEN_ALL_COUNT" desc="Menu title for opening all urls in a bookmark folder">
+        {COUNT, plural,
+          =0 {&amp;Open all}
+          =1 {&amp;Open bookmark}
+          other {&amp;Open all (#)}}
+    </message>
+    <message name="IDS_BOOKMARK_BAR_OPEN_ALL_COUNT_NEW_WINDOW" desc="Menu title for opening all urls in a bookmark folder in a new window">
+        {COUNT, plural,
+          =0 {Open all in &amp;new window}
+          =1 {Open in &amp;new window}
+          other {Open all (#) in &amp;new window}}
+    </message>
+    <message name="IDS_BOOKMARK_BAR_OPEN_ALL_COUNT_INCOGNITO" desc="Menu description for opening all urls in a bookmark folder in an incognito window">
+        {COUNT, plural,
+          =0 {Open all in &amp;incognito window}
+          =1 {Open in &amp;incognito window}
+          other {Open all (#) in &amp;incognito window}}
     </message>
     <message name="IDS_BOOKMARK_BAR_OPEN_IN_NEW_TAB" desc="Menu description for loading bookmark in a new tab">
       &amp;Open in new tab
@@ -104,13 +122,31 @@
   </if>
   <if expr="use_titlecase">
     <message name="IDS_BOOKMARK_BAR_OPEN_ALL" desc="In Title Case: Menu title for opening all urls in a bookmark folder">
-      &amp;Open All Bookmarks
+        &amp;Open All Bookmarks
     </message>
     <message name="IDS_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW" desc="In Title Case: Menu title for opening all urls in a bookmark folder in a new window">
-      Open All Bookmarks in &amp;New Window
+        Open All Bookmarks in &amp;New Window
     </message>
     <message name="IDS_BOOKMARK_BAR_OPEN_ALL_INCOGNITO" desc="In Title Case: Menu description for opening all urls in a bookmark folder in an incognito window">
-      Open All Bookmarks in &amp;Incognito Window
+        Open All Bookmarks in &amp;Incognito Window
+    </message>
+    <message name="IDS_BOOKMARK_BAR_OPEN_ALL_COUNT" desc="In Title Case: Menu title for opening all urls in a bookmark folder">
+        {COUNT, plural,
+          =0 {&amp;Open All}
+          =1 {&amp;Open Bookmark}
+          other {&amp;Open All (#)}}
+    </message>
+    <message name="IDS_BOOKMARK_BAR_OPEN_ALL_COUNT_NEW_WINDOW" desc="In Title Case: Menu title for opening all urls in a bookmark folder in a new window">
+        {COUNT, plural,
+          =0 {Open All in &amp;New Window}
+          =1 {Open in &amp;New Window}
+          other {Open All (#) in &amp;New Window}}
+    </message>
+    <message name="IDS_BOOKMARK_BAR_OPEN_ALL_COUNT_INCOGNITO" desc="In Title Case: Menu description for opening all urls in a bookmark folder in an incognito window">
+        {COUNT, plural,
+          =0 {Open All in &amp;Incognito Window}
+          =1 {Open in &amp;Incognito Window}
+          other {Open All (#) in &amp;Incognito Window}}
     </message>
     <message name="IDS_BOOKMARK_BAR_OPEN_IN_NEW_TAB" desc="In Title Case: Menu description for loading bookmark in a new tab">
       &amp;Open in New Tab
@@ -207,6 +243,9 @@
     </message>
     <message name="IDS_BOOKMARK_BUBBLE_DESKTOP_TO_IOS_PROMO_TITLE_V3" desc="Title for Chrome iOS promotion appearing in the bookmark bubble after a bookmark is saved.">
       Share this bookmark with your iPhone
+    </message>
+    <message name="IDS_BOOKMARK_FOOTNOTE_DESKTOP_TO_IOS_PROMO_MESSAGE" desc="Text of the Chrome iOS promotion displayed at the bottom of the bookmark bubble.">
+      To get your bookmarks on your mobile device, <ph name="GET_IOS_APP_LINK">$1<ex>get the application on your iPhone</ex></ph>.
     </message>
   </if>
   <!-- End of Desktop to iOS Promo strings. -->
@@ -373,6 +412,9 @@
   </message>
   <message name="IDS_MD_BOOKMARK_MANAGER_NO_SEARCH_RESULTS" desc="Text on the bookmarks list that indicates that no bookmarks or folders match the search.">
     No search results found
+  </message>
+  <message name="IDS_MD_BOOKMARK_MANAGER_ITEMS_SELECTED" desc="Label displayed in bookmark manager toolbar telling the user how many items they have selected.">
+    <ph name="NUMBER_OF_ITEMS_SELECTED">$1</ph> selected
   </message>
   <message name="IDS_MD_BOOKMARK_MANAGER_TITLE" desc="Title of the bookmark manager window.">
     Bookmarks

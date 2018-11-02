@@ -24,13 +24,12 @@
 #ifndef HTMLImageElement_h
 #define HTMLImageElement_h
 
-#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/html/FormAssociated.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLImageLoader.h"
-#include "core/html/canvas/CanvasImageElementSource.h"
-#include "core/imagebitmap/ImageBitmapSource.h"
+#include "core/html/canvas/ImageElementBase.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceResponse.h"
@@ -40,12 +39,10 @@ namespace blink {
 class HTMLFormElement;
 class ImageCandidate;
 class ShadowRoot;
-class ImageBitmapOptions;
 
 class CORE_EXPORT HTMLImageElement final
     : public HTMLElement,
-      public CanvasImageElementSource,
-      public ImageBitmapSource,
+      public ImageElementBase,
       public ActiveScriptWrappable<HTMLImageElement>,
       public FormAssociated {
   DEFINE_WRAPPERTYPEINFO();
@@ -86,8 +83,8 @@ class CORE_EXPORT HTMLImageElement final
   ImageResource* CachedImageResourceForImageDocument() const {
     return GetImageLoader().ImageResourceForImageDocument();
   }
-  void SetImageResource(ImageResourceContent* i) {
-    GetImageLoader().SetImage(i);
+  void SetImageForTest(ImageResourceContent* content) {
+    GetImageLoader().SetImageForTest(content);
   }
 
   void SetLoadingImageDocument() { GetImageLoader().SetLoadingImageDocument(); }
@@ -132,14 +129,6 @@ class CORE_EXPORT HTMLImageElement final
   float SourceSize(Element&);
 
   void ForceReload() const;
-
-  // ImageBitmapSource implementation
-  IntSize BitmapSourceSize() const override;
-  ScriptPromise CreateImageBitmap(ScriptState*,
-                                  EventTarget&,
-                                  Optional<IntRect> crop_rect,
-                                  const ImageBitmapOptions&,
-                                  ExceptionState&) override;
 
   FormAssociated* ToFormAssociatedOrNull() override { return this; };
   void AssociateWith(HTMLFormElement*) override;

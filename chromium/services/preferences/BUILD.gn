@@ -19,6 +19,7 @@ source_set("preferences") {
   deps = [
     "//components/prefs",
     "//services/preferences/public/cpp",
+    "//services/preferences/public/cpp/lib",
     "//services/preferences/public/interfaces",
     "//services/preferences/tracked",
     "//services/service_manager/public/cpp",
@@ -30,6 +31,8 @@ source_set("preferences") {
     "persistent_pref_store_impl.h",
     "pref_store_manager_impl.cc",
     "pref_store_manager_impl.h",
+    "scoped_pref_connection_builder.cc",
+    "scoped_pref_connection_builder.h",
   ]
 }
 

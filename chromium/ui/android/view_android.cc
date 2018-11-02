@@ -104,8 +104,10 @@ float ViewAndroid::GetDipScale() {
 
 ScopedJavaLocalRef<jobject> ViewAndroid::GetEventForwarder() {
   if (!event_forwarder_) {
-    DCHECK(!ViewTreeHasEventForwarder(this))
-        << "Root of the ViewAndroid can have at most one handler.";
+    DCHECK(!RootPathHasEventForwarder(parent_))
+        << "The view tree path already has an event forwarder.";
+    DCHECK(!SubtreeHasEventForwarder(this))
+        << "The view tree path already has an event forwarder.";
     event_forwarder_.reset(new EventForwarder(this));
   }
   return event_forwarder_->GetJavaObject();
@@ -115,31 +117,38 @@ void ViewAndroid::AddChild(ViewAndroid* child) {
   DCHECK(child);
   DCHECK(std::find(children_.begin(), children_.end(), child) ==
          children_.end());
-  DCHECK(!SubtreeHasEventForwarder(child) || !ViewTreeHasEventForwarder(this))
-      << "Only one event handler is allowed.";
+  DCHECK(!RootPathHasEventForwarder(this) || !SubtreeHasEventForwarder(child))
+      << "Some view tree path will have more than one event forwarder "
+         "if the child is added.";
 
   // The new child goes to the top, which is the end of the list.
   children_.push_back(child);
   if (child->parent_)
     child->RemoveFromParent();
   child->parent_ = this;
+
+  // Empty physical backing size need not propagating down since it can
+  // accidentally overwrite the valid ones in the children.
+  if (!physical_size_.IsEmpty())
+    child->OnPhysicalBackingSizeChanged(physical_size_);
 }
 
 // static
-bool ViewAndroid::ViewTreeHasEventForwarder(ViewAndroid* view) {
-  ViewAndroid* v = view;
-  do {
-    if (v->has_event_forwarder())
+bool ViewAndroid::RootPathHasEventForwarder(ViewAndroid* view) {
+  while (view) {
+    if (view->has_event_forwarder())
       return true;
-    v = v->parent_;
-  } while (v);
-  return SubtreeHasEventForwarder(view);
+    view = view->parent_;
+  }
+
+  return false;
 }
 
 // static
 bool ViewAndroid::SubtreeHasEventForwarder(ViewAndroid* view) {
   if (view->has_event_forwarder())
     return true;
+
   for (auto* child : view->children_) {
     if (SubtreeHasEventForwarder(child))
       return true;
@@ -269,6 +278,28 @@ void ViewAndroid::OnBottomControlsChanged(float bottom_controls_offset,
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_ViewAndroidDelegate_onBottomControlsChanged(
       env, delegate, bottom_controls_offset, bottom_content_offset);
+}
+
+int ViewAndroid::GetSystemWindowInsetBottom() {
+  ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
+  if (delegate.is_null())
+    return 0;
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_ViewAndroidDelegate_getSystemWindowInsetBottom(env, delegate);
+}
+
+void ViewAndroid::OnPhysicalBackingSizeChanged(const gfx::Size& size) {
+  if (physical_size_ == size)
+    return;
+  physical_size_ = size;
+  client_->OnPhysicalBackingSizeChanged();
+
+  for (auto* child : children_)
+    child->OnPhysicalBackingSizeChanged(size);
+}
+
+gfx::Size ViewAndroid::GetPhysicalBackingSize() {
+  return physical_size_;
 }
 
 bool ViewAndroid::OnTouchEvent(const MotionEventAndroid& event,

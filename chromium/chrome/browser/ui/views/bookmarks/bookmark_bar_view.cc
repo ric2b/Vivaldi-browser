@@ -68,7 +68,6 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/base/dragdrop/drag_utils.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
@@ -91,6 +90,7 @@
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
+#include "ui/views/animation/ink_drop_mask.h"
 #include "ui/views/button_drag_utils.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/label_button_border.h"
@@ -121,6 +121,9 @@ static const int kNewTabHorizontalPadding = 2;
 
 // Maximum size of buttons on the bookmark bar.
 static const int kMaxButtonWidth = 150;
+
+// Corner radius for masking the ink drop effects on buttons.
+static const int kInkDropCornerRadius = 2;
 
 // Number of pixels the attached bookmark bar overlaps with the toolbar.
 static const int kToolbarAttachedBookmarkBarOverlap = 3;
@@ -241,6 +244,11 @@ class BookmarkButtonBase : public views::LabelButton {
         0));
     return base::MakeUnique<views::InkDropHighlight>(
         bounds.size(), 0, bounds.CenterPoint(), GetInkDropBaseColor());
+  }
+
+  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override {
+    return base::MakeUnique<views::RoundRectInkDropMask>(size(), kInkDropInsets,
+                                                         kInkDropCornerRadius);
   }
 
   SkColor GetInkDropBaseColor() const override {
@@ -366,6 +374,11 @@ class BookmarkMenuButtonBase : public views::MenuButton {
         0));
     return base::MakeUnique<views::InkDropHighlight>(
         bounds.size(), 0, bounds.CenterPoint(), GetInkDropBaseColor());
+  }
+
+  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override {
+    return base::MakeUnique<views::RoundRectInkDropMask>(size(), kInkDropInsets,
+                                                         kInkDropCornerRadius);
   }
 
   SkColor GetInkDropBaseColor() const override {
@@ -546,7 +559,7 @@ class BookmarkBarView::ButtonSeparatorView : public views::View {
                          ThemeProperties::COLOR_TOOLBAR_VERTICAL_SEPARATOR));
   }
 
-  gfx::Size GetPreferredSize() const override {
+  gfx::Size CalculatePreferredSize() const override {
     // We get the full height of the bookmark bar, so that the height returned
     // here doesn't matter.
     return gfx::Size(kSeparatorWidth, 1);
@@ -815,7 +828,7 @@ int BookmarkBarView::GetPreferredHeight() const {
   return height;
 }
 
-gfx::Size BookmarkBarView::GetPreferredSize() const {
+gfx::Size BookmarkBarView::CalculatePreferredSize() const {
   gfx::Size prefsize;
   int preferred_height = GetPreferredHeight();
   if (IsDetached()) {
@@ -1066,11 +1079,8 @@ void BookmarkBarView::PaintChildren(const ui::PaintContext& context) {
 
     // Since the drop indicator is painted directly onto the canvas, we must
     // make sure it is painted in the right location if the locale is RTL.
-    gfx::Rect indicator_bounds(x - kDropIndicatorWidth / 2,
-                               y,
-                               kDropIndicatorWidth,
-                               h);
-    indicator_bounds.set_x(GetMirroredXForRect(indicator_bounds));
+    gfx::Rect indicator_bounds = GetMirroredRect(
+        gfx::Rect(x - kDropIndicatorWidth / 2, y, kDropIndicatorWidth, h));
 
     ui::PaintRecorder recorder(context, size());
     // TODO(sky/glen): make me pretty!
@@ -1892,8 +1902,9 @@ void BookmarkBarView::StartShowFolderDropMenuTimer(const BookmarkNode* node) {
   }
   show_folder_method_factory_.InvalidateWeakPtrs();
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&BookmarkBarView::ShowDropFolderForNode,
-                            show_folder_method_factory_.GetWeakPtr(), node),
+      FROM_HERE,
+      base::BindOnce(&BookmarkBarView::ShowDropFolderForNode,
+                     show_folder_method_factory_.GetWeakPtr(), node),
       base::TimeDelta::FromMilliseconds(views::GetMenuShowDelay()));
 }
 

@@ -4,7 +4,6 @@
 
 #include "content/browser/memory/memory_monitor_android.h"
 
-#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/memory/ptr_util.h"
 #include "content/browser/memory/memory_coordinator_impl.h"
@@ -18,8 +17,7 @@ const size_t kMBShift = 20;
 
 void RegisterComponentCallbacks() {
   Java_MemoryMonitorAndroid_registerComponentCallbacks(
-      base::android::AttachCurrentThread(),
-      base::android::GetApplicationContext());
+      base::android::AttachCurrentThread());
 }
 
 }
@@ -40,9 +38,7 @@ class MemoryMonitorAndroidDelegateImpl : public MemoryMonitorAndroid::Delegate {
 void MemoryMonitorAndroidDelegateImpl::GetMemoryInfo(MemoryInfo* out) {
   DCHECK(out);
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_MemoryMonitorAndroid_getMemoryInfo(
-      env, base::android::GetApplicationContext(),
-      reinterpret_cast<intptr_t>(out));
+  Java_MemoryMonitorAndroid_getMemoryInfo(env, reinterpret_cast<intptr_t>(out));
 }
 
 // Called by JNI to populate ActivityManager.MemoryInfo.
@@ -65,7 +61,6 @@ static void GetMemoryInfoCallback(
 
 // The maximum level of onTrimMemory (TRIM_MEMORY_COMPLETE).
 const int kTrimMemoryLevelMax = 80;
-const int kTrimMemoryRunningLow = 10;
 const int kTrimMemoryRunningCritical = 15;
 
 // Called by JNI.
@@ -74,14 +69,14 @@ static void OnTrimMemory(JNIEnv* env,
                          jint level) {
   DCHECK(level >= 0 && level <= kTrimMemoryLevelMax);
   auto* coordinator = MemoryCoordinatorImpl::GetInstance();
+  DCHECK(coordinator);
 
-  if (level >= kTrimMemoryRunningCritical) {
-    coordinator->ForceSetMemoryCondition(MemoryCondition::CRITICAL,
-                                         base::TimeDelta::FromMinutes(1));
-  } else if (level >= kTrimMemoryRunningLow) {
-    coordinator->ForceSetMemoryCondition(MemoryCondition::WARNING,
-                                         base::TimeDelta::FromMinutes(1));
-  }
+  MemoryCondition condition = MemoryCondition::WARNING;
+  if (level >= kTrimMemoryRunningCritical ||
+      coordinator->GetMemoryCondition() == MemoryCondition::CRITICAL)
+    condition = MemoryCondition::CRITICAL;
+  coordinator->ForceSetMemoryCondition(condition,
+                                       base::TimeDelta::FromMinutes(1));
 }
 
 // static

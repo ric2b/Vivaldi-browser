@@ -80,7 +80,7 @@ class WorkerTaskRunner : public base::SequencedTaskRunner {
     return true;
   }
 
-  bool RunsTasksOnCurrentThread() const override { return false; }
+  bool RunsTasksInCurrentSequence() const override { return false; }
 
  protected:
   ~WorkerTaskRunner() override {
@@ -129,6 +129,9 @@ class TestableCache : public ImageDecodeCache {
   void SetShouldAggressivelyFreeResources(
       bool aggressively_free_resources) override {}
   void ClearCache() override {}
+  size_t GetMaximumMemoryLimitBytes() const override {
+    return 256 * 1024 * 1024;
+  }
 
   int number_of_refs() const { return number_of_refs_; }
   void SetTaskToUse(scoped_refptr<TileTask> task) { task_to_use_ = task; }

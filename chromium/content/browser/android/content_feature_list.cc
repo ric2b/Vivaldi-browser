@@ -7,6 +7,7 @@
 #include "base/android/jni_string.h"
 #include "base/feature_list.h"
 #include "base/macros.h"
+#include "content/public/common/content_features.h"
 #include "jni/ContentFeatureList_jni.h"
 
 using base::android::ConvertJavaStringToUTF8;

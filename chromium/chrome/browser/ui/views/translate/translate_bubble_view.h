@@ -87,12 +87,13 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // views::WidgetDelegate methods.
+  View* GetInitiallyFocusedView() override;
   bool ShouldShowCloseButton() const override;
   void WindowClosing() override;
 
   // views::View methods.
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
 
   // views::ComboboxListener methods.
   void OnPerformAction(views::Combobox* combobox) override;

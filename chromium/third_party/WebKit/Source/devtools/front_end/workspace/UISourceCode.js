@@ -94,6 +94,13 @@ Workspace.UISourceCode = class extends Common.Object {
   /**
    * @return {string}
    */
+  mimeType() {
+    return this._project.mimeType(this);
+  }
+
+  /**
+   * @return {string}
+   */
   url() {
     return this._url;
   }
@@ -667,10 +674,11 @@ Workspace.UILocation = class {
   }
 
   /**
+   * @param {boolean=} skipTrim
    * @return {string}
    */
-  linkText() {
-    var linkText = this.uiSourceCode.displayName();
+  linkText(skipTrim) {
+    var linkText = this.uiSourceCode.displayName(skipTrim);
     if (typeof this.lineNumber === 'number')
       linkText += ':' + (this.lineNumber + 1);
     return linkText;

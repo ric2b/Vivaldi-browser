@@ -10,8 +10,9 @@
 namespace blink {
 
 PointerEvent::PointerEvent(const AtomicString& type,
-                           const PointerEventInit& initializer)
-    : MouseEvent(type, initializer),
+                           const PointerEventInit& initializer,
+                           TimeTicks platform_time_stamp)
+    : MouseEvent(type, initializer, platform_time_stamp),
       pointer_id_(0),
       width_(0),
       height_(0),
@@ -20,7 +21,8 @@ PointerEvent::PointerEvent(const AtomicString& type,
       tilt_y_(0),
       tangential_pressure_(0),
       twist_(0),
-      is_primary_(false) {
+      is_primary_(false),
+      coalesced_events_targets_dirty_(false) {
   if (initializer.hasPointerId())
     pointer_id_ = initializer.pointerId();
   if (initializer.hasWidth())
@@ -59,7 +61,17 @@ EventDispatchMediator* PointerEvent::CreateMediator() {
   return PointerEventDispatchMediator::Create(this);
 }
 
-HeapVector<Member<PointerEvent>> PointerEvent::getCoalescedEvents() const {
+void PointerEvent::ReceivedTarget() {
+  coalesced_events_targets_dirty_ = true;
+  MouseEvent::ReceivedTarget();
+}
+
+HeapVector<Member<PointerEvent>> PointerEvent::getCoalescedEvents() {
+  if (coalesced_events_targets_dirty_) {
+    for (auto coalesced_event : coalesced_events_)
+      coalesced_event->SetTarget(target());
+    coalesced_events_targets_dirty_ = false;
+  }
   return coalesced_events_;
 }
 

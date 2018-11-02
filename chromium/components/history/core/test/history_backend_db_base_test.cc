@@ -6,6 +6,7 @@
 
 #include "base/files/file_path.h"
 #include "base/location.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -62,9 +63,10 @@ class BackendDelegate : public HistoryBackend::Delegate {
 };
 
 HistoryBackendDBBaseTest::HistoryBackendDBBaseTest()
-    : db_(nullptr),
-      last_profile_error_ (sql::INIT_OK) {
-}
+    : scoped_task_environment_(
+          base::test::ScopedTaskEnvironment::MainThreadType::UI),
+      db_(nullptr),
+      last_profile_error_(sql::INIT_OK) {}
 
 HistoryBackendDBBaseTest::~HistoryBackendDBBaseTest() {
 }

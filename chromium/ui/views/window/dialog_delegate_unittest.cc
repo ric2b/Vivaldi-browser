@@ -59,13 +59,16 @@ class TestDialog : public DialogDelegateView {
     return closeable_;
   }
 
-  gfx::Size GetPreferredSize() const override { return gfx::Size(200, 200); }
+  gfx::Size CalculatePreferredSize() const override {
+    return gfx::Size(200, 200);
+  }
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
     return should_handle_escape_;
   }
   base::string16 GetWindowTitle() const override { return title_; }
   View* GetInitiallyFocusedView() override { return input_; }
   bool ShouldUseCustomFrame() const override { return true; }
+  int GetDialogButtons() const override { return dialog_buttons_; }
 
   void CheckAndResetStates(bool canceled,
                            bool accepted,
@@ -90,6 +93,9 @@ class TestDialog : public DialogDelegateView {
   void set_should_handle_escape(bool should_handle_escape) {
     should_handle_escape_ = should_handle_escape;
   }
+  void set_dialog_buttons(int dialog_buttons) {
+    dialog_buttons_ = dialog_buttons;
+  }
 
   views::Textfield* input() { return input_; }
 
@@ -103,6 +109,7 @@ class TestDialog : public DialogDelegateView {
   base::string16 title_;
   bool show_close_button_ = true;
   bool should_handle_escape_ = false;
+  int dialog_buttons_ = ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL;
 
   DISALLOW_COPY_AND_ASSIGN(TestDialog);
 };
@@ -284,6 +291,19 @@ TEST_F(DialogTest, HitTest_WithTitle) {
   }
 }
 
+TEST_F(DialogTest, HitTest_CloseButton) {
+  const NonClientView* view = dialog()->GetWidget()->non_client_view();
+  dialog()->set_show_close_button(true);
+  BubbleFrameView* frame = static_cast<BubbleFrameView*>(view->frame_view());
+  frame->ResetWindowControls();
+
+  const gfx::Rect close_button_bounds =
+      frame->GetCloseButtonForTest()->bounds();
+  EXPECT_EQ(HTCLOSE,
+            frame->NonClientHitTest(gfx::Point(close_button_bounds.x() + 4,
+                                               close_button_bounds.y() + 4)));
+}
+
 TEST_F(DialogTest, BoundsAccommodateTitle) {
   TestDialog* dialog2(new TestDialog());
   dialog2->set_title(base::ASCIIToUTF16("Title"));
@@ -380,6 +400,13 @@ TEST_F(DialogTest, UnfocusableInitialFocus) {
   EXPECT_TRUE(textfield->HasFocus());
   EXPECT_EQ(textfield, dialog->GetFocusManager()->GetFocusedView());
   dialog_widget->CloseNow();
+}
+
+TEST_F(DialogTest, DontSnapWithoutButtons) {
+  TestDialog dialog;
+  EXPECT_TRUE(dialog.ShouldSnapFrameWidth());
+  dialog.set_dialog_buttons(ui::DIALOG_BUTTON_NONE);
+  EXPECT_FALSE(dialog.ShouldSnapFrameWidth());
 }
 
 }  // namespace views

@@ -33,12 +33,14 @@
 #define WebPluginContainerImpl_h
 
 #include "core/dom/ContextLifecycleObserver.h"
-#include "core/plugins/PluginView.h"
-#include "platform/FrameViewBase.h"
+#include "core/exported/WebPluginContainerBase.h"
+#include "platform/heap/Handle.h"
 #include "platform/wtf/Compiler.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/WebCoalescedInputEvent.h"
+#include "public/platform/WebTouchEvent.h"
 #include "public/web/WebPluginContainer.h"
 #include "web/WebExport.h"
 
@@ -58,20 +60,21 @@ class WheelEvent;
 struct WebPrintParams;
 struct WebPrintPresetOptions;
 
-class WEB_EXPORT WebPluginContainerImpl final
-    : public PluginView,
-      NON_EXPORTED_BASE(public WebPluginContainer),
-      public ContextClient {
-  USING_GARBAGE_COLLECTED_MIXIN(WebPluginContainerImpl);
-  USING_PRE_FINALIZER(WebPluginContainerImpl, Dispose);
+class WEB_EXPORT WebPluginContainerImpl final : public WebPluginContainerBase {
+  USING_PRE_FINALIZER(WebPluginContainerImpl, PreFinalize);
 
  public:
   static WebPluginContainerImpl* Create(HTMLPlugInElement* element,
                                         WebPlugin* web_plugin) {
     return new WebPluginContainerImpl(element, web_plugin);
   }
+  ~WebPluginContainerImpl() override;
 
   // PluginView methods
+  void Attach() override;
+  void Detach() override;
+  bool IsAttached() const override { return is_attached_; }
+  void SetParentVisible(bool) override;
   WebLayer* PlatformLayer() const override;
   v8::Local<v8::Object> ScriptableObject(v8::Isolate*) override;
   bool SupportsKeyboardFocus() const override;
@@ -79,21 +82,24 @@ class WEB_EXPORT WebPluginContainerImpl final
   bool CanProcessDrag() const override;
   bool WantsWheelEvents() override;
   void UpdateAllLifecyclePhases() override;
-  void InvalidatePaintIfNeeded() override { IssuePaintInvalidations(); }
-
-  // FrameViewBase methods
-  void SetFrameRect(const IntRect&) override;
-  void Paint(GraphicsContext&, const CullRect&) const override;
-  void InvalidateRect(const IntRect&) override;
+  void InvalidatePaint() override { IssuePaintInvalidations(); }
+  void InvalidateRect(const IntRect&);
   void SetFocused(bool, WebFocusType) override;
-  void Show() override;
-  void Hide() override;
   void HandleEvent(Event*) override;
   void FrameRectsChanged() override;
-  void SetParentVisible(bool) override;
   void GeometryMayHaveChanged() override;
   bool IsPluginContainer() const override { return true; }
+  bool IsErrorplaceholder() override;
   void EventListenersRemoved() override;
+
+  // FrameOrPlugin methods
+  void SetFrameRect(const IntRect& frame_rect) override {
+    frame_rect_ = frame_rect;
+  }
+  const IntRect& FrameRect() const override { return frame_rect_; }
+  void Paint(GraphicsContext&, const CullRect&) const override;
+  void Show() override;
+  void Hide() override;
 
   // WebPluginContainer methods
   WebElement GetElement() override;
@@ -137,39 +143,50 @@ class WEB_EXPORT WebPluginContainerImpl final
   // (which means it controls the layout, number of pages etc).
   // Whether the plugin supports its own paginated print. The other print
   // interface methods are called only if this method returns true.
-  bool SupportsPaginatedPrint() const;
+  bool SupportsPaginatedPrint() const override;
   // If the plugin content should not be scaled to the printable area of
   // the page, then this method should return true.
-  bool IsPrintScalingDisabled() const;
+  bool IsPrintScalingDisabled() const override;
   // Returns true on success and sets the out parameter to the print preset
   // options for the document.
-  bool GetPrintPresetOptionsFromDocument(WebPrintPresetOptions*) const;
+  bool GetPrintPresetOptionsFromDocument(WebPrintPresetOptions*) const override;
   // Sets up printing at the specified WebPrintParams. Returns the number of
   // pages to be printed at these settings.
-  int PrintBegin(const WebPrintParams&) const;
+  int PrintBegin(const WebPrintParams&) const override;
   // Prints the page specified by pageNumber (0-based index) into the supplied
   // canvas.
-  void PrintPage(int page_number, GraphicsContext&, const IntRect& paint_rect);
+  void PrintPage(int page_number,
+                 GraphicsContext&,
+                 const IntRect& paint_rect) override;
   // Ends the print operation.
-  void PrintEnd();
+  void PrintEnd() override;
 
   // Copy the selected text.
   void Copy();
 
   // Pass the edit command to the plugin.
-  bool ExecuteEditCommand(const WebString& name);
-  bool ExecuteEditCommand(const WebString& name, const WebString& value);
+  bool ExecuteEditCommand(const WebString& name) override;
+  bool ExecuteEditCommand(const WebString& name,
+                          const WebString& value) override;
 
   // Resource load events for the plugin's source data:
   void DidReceiveResponse(const ResourceResponse&) override;
   void DidReceiveData(const char* data, int data_length) override;
-  void DidFinishLoading();
-  void DidFailLoading(const ResourceError&);
+  void DidFinishLoading() override;
+  void DidFailLoading(const ResourceError&) override;
+
+  WebPluginContainerBase* GetWebPluginContainerBase() const override {
+    return const_cast<WebPluginContainerImpl*>(this);
+  }
 
   DECLARE_VIRTUAL_TRACE();
+  // USING_PRE_FINALIZER does not allow for virtual dispatch from the finalizer
+  // method. Here we call Dispose() which does the correct virtual dispatch.
+  void PreFinalize() { Dispose(); }
   void Dispose() override;
 
  private:
+  FrameView* ParentFrameView() const;
   // Sets |windowRect| to the content rect of the plugin in screen space.
   // Sets |clippedAbsoluteRect| to the visible rect for the plugin, clipped to
   // the visible screen of the root frame, in local space of the plugin.
@@ -182,7 +199,10 @@ class WEB_EXPORT WebPluginContainerImpl final
       IntRect& unclipped_int_local_rect) const;
 
   WebPluginContainerImpl(HTMLPlugInElement*, WebPlugin*);
-  ~WebPluginContainerImpl() override;
+
+  WebTouchEvent TransformTouchEvent(const WebInputEvent&);
+  WebCoalescedInputEvent TransformCoalescedTouchEvent(
+      const WebCoalescedInputEvent&);
 
   void HandleMouseEvent(MouseEvent*);
   void HandleDragEvent(MouseEvent*);
@@ -199,31 +219,28 @@ class WEB_EXPORT WebPluginContainerImpl final
 
   void CalculateGeometry(IntRect& window_rect,
                          IntRect& clip_rect,
-                         IntRect& unobscured_rect,
-                         Vector<IntRect>& cut_out_rects);
-  void WindowCutOutRects(const IntRect& frame_rect,
-                         Vector<IntRect>& cut_out_rects);
+                         IntRect& unobscured_rect) override;
 
   friend class WebPluginContainerTest;
 
+  bool is_attached_;
   Member<HTMLPlugInElement> element_;
   WebPlugin* web_plugin_;
-
   WebLayer* web_layer_;
-
+  IntRect frame_rect_;
   IntRect pending_invalidation_rect_;
-
   TouchEventRequestType touch_event_request_type_;
   bool wants_wheel_events_;
-
+  bool self_visible_;
+  bool parent_visible_;
   bool is_disposed_;
 };
 
 DEFINE_TYPE_CASTS(WebPluginContainerImpl,
-                  FrameViewBase,
-                  frameViewBase,
-                  frameViewBase->IsPluginContainer(),
-                  frameViewBase.IsPluginContainer());
+                  PluginView,
+                  plugin,
+                  plugin->IsPluginContainer(),
+                  plugin.IsPluginContainer());
 // Unlike FrameViewBase, we need not worry about object type for container.
 // WebPluginContainerImpl is the only subclass of WebPluginContainer.
 DEFINE_TYPE_CASTS(WebPluginContainerImpl,

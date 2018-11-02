@@ -46,7 +46,7 @@
 namespace media {
 
 DefaultRendererFactory::DefaultRendererFactory(
-    const scoped_refptr<MediaLog>& media_log,
+    MediaLog* media_log,
     DecoderFactory* decoder_factory,
     const GetGpuFactoriesCB& get_gpu_factories_cb)
     : media_log_(media_log),
@@ -56,26 +56,30 @@ DefaultRendererFactory::DefaultRendererFactory(
 DefaultRendererFactory::~DefaultRendererFactory() {
 }
 
-ScopedVector<AudioDecoder> DefaultRendererFactory::CreateAudioDecoders(
+std::vector<std::unique_ptr<AudioDecoder>>
+DefaultRendererFactory::CreateAudioDecoders(
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
     bool use_platform_media_pipeline) {
   // Create our audio decoders and renderer.
-  ScopedVector<AudioDecoder> audio_decoders;
+  std::vector<std::unique_ptr<AudioDecoder>> audio_decoders;
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   if (use_platform_media_pipeline) {
-    audio_decoders.push_back(new PassThroughAudioDecoder(media_task_runner));
+    audio_decoders.push_back(
+        base::MakeUnique<PassThroughAudioDecoder>(media_task_runner));
   } else {
 #if defined(OS_MACOSX)
-    audio_decoders.push_back(new ATAudioDecoder(media_task_runner));
+    audio_decoders.push_back(
+        base::MakeUnique<ATAudioDecoder>(media_task_runner));
 #elif defined(OS_WIN)
-    audio_decoders.push_back(new WMFAudioDecoder(media_task_runner));
+    audio_decoders.push_back(
+        base::MakeUnique<WMFAudioDecoder>(media_task_runner));
 #endif
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
 #if !defined(MEDIA_DISABLE_FFMPEG)
   audio_decoders.push_back(
-      new FFmpegAudioDecoder(media_task_runner, media_log_));
+      base::MakeUnique<FFmpegAudioDecoder>(media_task_runner, media_log_));
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -90,13 +94,14 @@ ScopedVector<AudioDecoder> DefaultRendererFactory::CreateAudioDecoders(
   return audio_decoders;
 }
 
-ScopedVector<VideoDecoder> DefaultRendererFactory::CreateVideoDecoders(
+std::vector<std::unique_ptr<VideoDecoder>>
+DefaultRendererFactory::CreateVideoDecoders(
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-    const RequestSurfaceCB& request_surface_cb,
+    const RequestOverlayInfoCB& request_overlay_info_cb,
     GpuVideoAcceleratorFactories* gpu_factories,
     bool use_platform_media_pipeline) {
   // Create our video decoders and renderer.
-  ScopedVector<VideoDecoder> video_decoders;
+  std::vector<std::unique_ptr<VideoDecoder>> video_decoders;
 
   // Prefer an external decoder since one will only exist if it is hardware
   // accelerated.
@@ -109,7 +114,8 @@ ScopedVector<VideoDecoder> DefaultRendererFactory::CreateVideoDecoders(
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   if (use_platform_media_pipeline) {
-    video_decoders.push_back(new PassThroughVideoDecoder(media_task_runner));
+    video_decoders.push_back(
+        base::MakeUnique<PassThroughVideoDecoder>(media_task_runner));
   } else {
 #endif
 
@@ -121,17 +127,17 @@ ScopedVector<VideoDecoder> DefaultRendererFactory::CreateVideoDecoders(
       decoder_factory_->CreateVideoDecoders(media_task_runner, gpu_factories,
                                             &video_decoders);
     }
-    if (gpu_factories) {
-      video_decoders.push_back(
-        new GpuVideoDecoder(gpu_factories, request_surface_cb, media_log_));
-    }
+    if (gpu_factories)
+      video_decoders.push_back(base::MakeUnique<GpuVideoDecoder>(
+          gpu_factories, request_overlay_info_cb, media_log_));
+
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   }
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #if defined(OS_WIN)
-    video_decoders.push_back(new WMFVideoDecoder(media_task_runner));
+    video_decoders.push_back(base::MakeUnique<WMFVideoDecoder>(media_task_runner));
 #elif defined(OS_MACOSX)
     if (!gpu_factories)
       pipeline_stats::ReportNoGpuProcessForDecoder();
@@ -139,11 +145,11 @@ ScopedVector<VideoDecoder> DefaultRendererFactory::CreateVideoDecoders(
 #endif
 
 #if !defined(MEDIA_DISABLE_LIBVPX)
-  video_decoders.push_back(new VpxVideoDecoder());
+  video_decoders.push_back(base::MakeUnique<VpxVideoDecoder>());
 #endif
 
 #if !defined(MEDIA_DISABLE_FFMPEG) && !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
-  video_decoders.push_back(new FFmpegVideoDecoder(media_log_));
+  video_decoders.push_back(base::MakeUnique<FFmpegVideoDecoder>(media_log_));
 #endif
 
   return video_decoders;
@@ -154,7 +160,7 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
     const scoped_refptr<base::TaskRunner>& worker_task_runner,
     AudioRendererSink* audio_renderer_sink,
     VideoRendererSink* video_renderer_sink,
-    const RequestSurfaceCB& request_surface_cb,
+    const RequestOverlayInfoCB& request_overlay_info_cb,
     bool use_platform_media_pipeline) {
   DCHECK(audio_renderer_sink);
 
@@ -183,8 +189,8 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
       // RendererFactory is owned by WMPI and gets called after WMPI destructor
       // finishes.
       base::Bind(&DefaultRendererFactory::CreateVideoDecoders,
-                 base::Unretained(this), media_task_runner, request_surface_cb,
-                 gpu_factories, use_platform_media_pipeline),
+                 base::Unretained(this), media_task_runner,
+                 request_overlay_info_cb, gpu_factories, use_platform_media_pipeline),
       true, gpu_factories, media_log_));
 
   return base::MakeUnique<RendererImpl>(

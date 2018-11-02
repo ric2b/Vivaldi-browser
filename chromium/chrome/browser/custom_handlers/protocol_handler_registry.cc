@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/ref_counted.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile_io_data.h"
@@ -247,19 +248,13 @@ bool ProtocolHandlerRegistry::Delegate::IsExternalHandlerRegistered(
   return ProfileIOData::IsHandledProtocol(protocol);
 }
 
-scoped_refptr<shell_integration::DefaultProtocolClientWorker>
-ProtocolHandlerRegistry::Delegate::CreateShellWorker(
-    const shell_integration::DefaultWebClientWorkerCallback& callback,
-    const std::string& protocol) {
-  return new shell_integration::DefaultProtocolClientWorker(callback, protocol);
-}
-
 void ProtocolHandlerRegistry::Delegate::RegisterWithOSAsDefaultClient(
     const std::string& protocol, ProtocolHandlerRegistry* registry) {
   // The worker pointer is reference counted. While it is running, the
-  // message loops of the FILE and UI thread will hold references to it
-  // and it will be automatically freed once all its tasks have finished.
-  CreateShellWorker(registry->GetDefaultWebClientCallback(protocol), protocol)
+  // sequence it runs on will hold references it will be automatically freed
+  // once all its tasks have finished.
+  base::MakeRefCounted<shell_integration::DefaultProtocolClientWorker>(
+      registry->GetDefaultWebClientCallback(protocol), protocol)
       ->StartSetAsDefault();
 }
 
@@ -355,10 +350,9 @@ void ProtocolHandlerRegistry::ClearDefault(const std::string& scheme) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   default_handlers_.erase(scheme);
-  BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&IOThreadDelegate::ClearDefault, io_thread_delegate_, scheme));
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::BindOnce(&IOThreadDelegate::ClearDefault,
+                                         io_thread_delegate_, scheme));
   Save();
   NotifyChanged();
 }
@@ -415,13 +409,7 @@ void ProtocolHandlerRegistry::InitProtocolSettings() {
     for (ProtocolHandlerMap::const_iterator p = default_handlers_.begin();
          p != default_handlers_.end(); ++p) {
       ProtocolHandler handler = p->second;
-      // The worker pointer is reference counted. While it is running the
-      // message loops of the FILE and UI thread will hold references to it
-      // and it will be automatically freed once all its tasks have finished.
-      delegate_
-          ->CreateShellWorker(GetDefaultWebClientCallback(handler.protocol()),
-                              handler.protocol())
-          ->StartSetAsDefault();
+      delegate_->RegisterWithOSAsDefaultClient(handler.protocol(), this);
     }
   }
 }
@@ -588,8 +576,8 @@ void ProtocolHandlerRegistry::RemoveHandler(
     } else {
       BrowserThread::PostTask(
           BrowserThread::IO, FROM_HERE,
-          base::Bind(&IOThreadDelegate::ClearDefault, io_thread_delegate_,
-                     q->second.protocol()));
+          base::BindOnce(&IOThreadDelegate::ClearDefault, io_thread_delegate_,
+                         q->second.protocol()));
 
       default_handlers_.erase(q);
     }
@@ -623,9 +611,8 @@ void ProtocolHandlerRegistry::Enable() {
   }
   enabled_ = true;
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&IOThreadDelegate::Enable, io_thread_delegate_));
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&IOThreadDelegate::Enable, io_thread_delegate_));
 
   ProtocolHandlerMap::const_iterator p;
   for (p = default_handlers_.begin(); p != default_handlers_.end(); ++p) {
@@ -642,9 +629,8 @@ void ProtocolHandlerRegistry::Disable() {
   }
   enabled_ = false;
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&IOThreadDelegate::Disable, io_thread_delegate_));
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&IOThreadDelegate::Disable, io_thread_delegate_));
 
   ProtocolHandlerMap::const_iterator p;
   for (p = default_handlers_.begin(); p != default_handlers_.end(); ++p) {
@@ -725,10 +711,9 @@ void ProtocolHandlerRegistry::SetDefault(const ProtocolHandler& handler) {
   default_handlers_.erase(handler.protocol());
   default_handlers_.insert(std::make_pair(handler.protocol(), handler));
   PromoteHandler(handler);
-  BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&IOThreadDelegate::SetDefault, io_thread_delegate_, handler));
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::BindOnce(&IOThreadDelegate::SetDefault,
+                                         io_thread_delegate_, handler));
 }
 
 void ProtocolHandlerRegistry::InsertHandler(const ProtocolHandler& handler) {

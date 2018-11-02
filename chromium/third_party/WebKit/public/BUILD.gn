@@ -18,6 +18,8 @@ group("blink") {
     ":blink_headers",
   ]
   deps = [
+    "//third_party/WebKit/Source/core",
+    "//third_party/WebKit/Source/modules",
     "//third_party/WebKit/Source/platform",
     "//third_party/WebKit/Source/web",
   ]
@@ -26,6 +28,7 @@ group("blink") {
 group("test_support") {
   testonly = true
   public_deps = [
+    ":test_headers",
     "//third_party/WebKit/Source/platform:test_support",
     "//third_party/WebKit/Source/web:test_support",
   ]
@@ -85,6 +88,20 @@ if (is_android) {
   }
 }
 
+source_set("test_headers") {
+  testonly = true
+  sources = [
+    "platform/scheduler/test/fake_renderer_scheduler.h",
+    "platform/scheduler/test/mock_renderer_scheduler.h",
+    "platform/scheduler/test/renderer_scheduler_test_support.h",
+  ]
+  deps = [
+    "//base:base",
+    "//cc:cc",
+    "//testing/gmock:gmock",
+  ]
+}
+
 # Depend on this target to use public blink API headers for things like enums
 # and public structures without actually linking against any Blink libraries.
 source_set("blink_headers") {
@@ -99,7 +116,6 @@ source_set("blink_headers") {
     "platform/URLConversion.h",
     "platform/UserMetricsAction.h",
     "platform/WebAddressSpace.h",
-    "platform/WebApiKeyValidator.h",
     "platform/WebApplicationCacheHost.h",
     "platform/WebApplicationCacheHostClient.h",
     "platform/WebAudioBus.h",
@@ -142,6 +158,7 @@ source_set("blink_headers") {
     "platform/WebCredential.h",
     "platform/WebCredentialManagerClient.h",
     "platform/WebCredentialManagerError.h",
+    "platform/WebCredentialMediationRequirement.h",
     "platform/WebCrypto.h",
     "platform/WebCryptoAlgorithm.h",
     "platform/WebCryptoAlgorithmParams.h",
@@ -152,7 +169,6 @@ source_set("blink_headers") {
     "platform/WebData.h",
     "platform/WebDataConsumerHandle.h",
     "platform/WebDatabaseObserver.h",
-    "platform/WebDeviceLightListener.h",
     "platform/WebDisplayItemList.h",
     "platform/WebDisplayMode.h",
     "platform/WebDistillability.h",
@@ -168,7 +184,6 @@ source_set("blink_headers") {
     "platform/WebEncryptedMediaRequest.h",
     "platform/WebEncryptedMediaTypes.h",
     "platform/WebEventListenerProperties.h",
-    "platform/WebExternalBitmap.h",
     "platform/WebExternalTextureLayer.h",
     "platform/WebFallbackThemeEngine.h",
     "platform/WebFeaturePolicy.h",
@@ -182,7 +197,6 @@ source_set("blink_headers") {
     "platform/WebFileUtilities.h",
     "platform/WebFileWriter.h",
     "platform/WebFileWriterClient.h",
-    "platform/WebFlingAnimator.h",
     "platform/WebFloatPoint.h",
     "platform/WebFloatPoint3D.h",
     "platform/WebFloatRect.h",
@@ -190,9 +204,7 @@ source_set("blink_headers") {
     "platform/WebFocusType.h",
     "platform/WebFont.h",
     "platform/WebFontDescription.h",
-    "platform/WebGamepad.h",
     "platform/WebGamepadListener.h",
-    "platform/WebGamepads.h",
     "platform/WebGestureCurve.h",
     "platform/WebGestureCurveTarget.h",
     "platform/WebGestureDevice.h",
@@ -212,6 +224,7 @@ source_set("blink_headers") {
     "platform/WebInputEvent.h",
     "platform/WebInputEventResult.h",
     "platform/WebInsecureRequestPolicy.h",
+    "platform/WebIsolatedWorldIds.h",
     "platform/WebKeyboardEvent.h",
     "platform/WebLayer.h",
     "platform/WebLayerPositionConstraint.h",
@@ -237,7 +250,6 @@ source_set("blink_headers") {
     "platform/WebMediaStreamCenterClient.h",
     "platform/WebMediaStreamSource.h",
     "platform/WebMediaStreamTrack.h",
-    "platform/WebMediaStreamTrackSourcesRequest.h",
     "platform/WebMemoryCoordinator.h",
     "platform/WebMemoryPressureLevel.h",
     "platform/WebMemoryState.h",
@@ -262,7 +274,6 @@ source_set("blink_headers") {
     "platform/WebPrerender.h",
     "platform/WebPrerenderingSupport.h",
     "platform/WebPrescientNetworking.h",
-    "platform/WebPrivateOwnPtr.h",
     "platform/WebPrivatePtr.h",
     "platform/WebPublicSuffixList.h",
     "platform/WebRTCAnswerOptions.h",
@@ -283,6 +294,7 @@ source_set("blink_headers") {
     "platform/WebRTCPeerConnectionHandlerClient.h",
     "platform/WebRTCRtpContributingSource.h",
     "platform/WebRTCRtpReceiver.h",
+    "platform/WebRTCRtpSender.h",
     "platform/WebRTCSessionDescription.h",
     "platform/WebRTCSessionDescriptionRequest.h",
     "platform/WebRTCStats.h",
@@ -292,7 +304,7 @@ source_set("blink_headers") {
     "platform/WebRect.h",
     "platform/WebReferrerPolicy.h",
     "platform/WebRenderingStats.h",
-    "platform/WebScheduler.h",
+    "platform/WebRuntimeFeatures.h",
     "platform/WebScreenInfo.h",
     "platform/WebScrollbar.h",
     "platform/WebScrollbarBehavior.h",
@@ -326,7 +338,7 @@ source_set("blink_headers") {
     "platform/WebThread.h",
     "platform/WebThreadSafeData.h",
     "platform/WebTimeRange.h",
-    "platform/WebTopControlsState.h",
+    "platform/WebTouchAction.h",
     "platform/WebTouchEvent.h",
     "platform/WebTouchPoint.h",
     "platform/WebTraceLocation.h",
@@ -341,9 +353,8 @@ source_set("blink_headers") {
     "platform/WebURLRequest.h",
     "platform/WebURLResponse.h",
     "platform/WebVector.h",
-    "platform/WebViewScheduler.h",
     "platform/WebViewportStyle.h",
-    "platform/callback/WebClosure.h",
+    "platform/WebWorkerFetchContext.h",
     "platform/linux/WebFallbackFont.h",
     "platform/linux/WebFontRenderStyle.h",
     "platform/linux/WebSandboxSupport.h",
@@ -370,7 +381,6 @@ source_set("blink_headers") {
     "platform/modules/media_capabilities/WebAudioConfiguration.h",
     "platform/modules/media_capabilities/WebMediaCapabilitiesClient.h",
     "platform/modules/media_capabilities/WebMediaConfiguration.h",
-    "platform/modules/media_capabilities/WebMediaDecodingAbility.h",
     "platform/modules/media_capabilities/WebVideoConfiguration.h",
     "platform/modules/notifications/WebNotificationAction.h",
     "platform/modules/notifications/WebNotificationConstants.h",
@@ -431,27 +441,14 @@ source_set("blink_headers") {
     "platform/modules/serviceworker/WebServiceWorkerResponseType.h",
     "platform/modules/serviceworker/WebServiceWorkerSkipWaitingCallbacks.h",
     "platform/modules/serviceworker/WebServiceWorkerState.h",
-    "platform/modules/vr/WebVR.h",
+    "platform/modules/serviceworker/WebServiceWorkerStreamHandle.h",
     "platform/modules/webmidi/WebMIDIAccessor.h",
     "platform/modules/webmidi/WebMIDIAccessorClient.h",
-    "platform/modules/websockets/WebSocketHandle.h",
-    "platform/modules/websockets/WebSocketHandleClient.h",
-    "platform/modules/websockets/WebSocketHandshakeRequestInfo.h",
-    "platform/modules/websockets/WebSocketHandshakeResponseInfo.h",
-    "platform/scheduler/base/task_queue.h",
-    "platform/scheduler/base/task_time_observer.h",
     "platform/scheduler/child/child_scheduler.h",
-    "platform/scheduler/child/compositor_worker_scheduler.h",
     "platform/scheduler/child/single_thread_idle_task_runner.h",
     "platform/scheduler/child/webthread_base.h",
-    "platform/scheduler/child/webthread_impl_for_worker_scheduler.h",
-    "platform/scheduler/child/worker_scheduler.h",
     "platform/scheduler/renderer/render_widget_scheduling_state.h",
     "platform/scheduler/renderer/renderer_scheduler.h",
-    "platform/scheduler/test/fake_renderer_scheduler.h",
-    "platform/scheduler/test/mock_renderer_scheduler.h",
-    "platform/scheduler/test/renderer_scheduler_test_support.h",
-    "platform/scheduler/utility/webthread_impl_for_utility_thread.h",
     "web/WebAXEnums.h",
     "web/WebAXObject.h",
     "web/WebActiveWheelFlingParameters.h",
@@ -470,7 +467,6 @@ source_set("blink_headers") {
     "web/WebColorSuggestion.h",
     "web/WebCompositionUnderline.h",
     "web/WebConsoleMessage.h",
-    "web/WebContentSecurityPolicy.h",
     "web/WebContextMenuData.h",
     "web/WebCryptoNormalize.h",
     "web/WebCustomElement.h",
@@ -563,7 +559,6 @@ source_set("blink_headers") {
     "web/WebRemoteFrame.h",
     "web/WebRemoteFrameClient.h",
     "web/WebRenderTheme.h",
-    "web/WebRuntimeFeatures.h",
     "web/WebSandboxFlags.h",
     "web/WebScopedUserGesture.h",
     "web/WebScopedWindowFocusAllowedIndicator.h",
@@ -584,7 +579,6 @@ source_set("blink_headers") {
     "web/WebSharedWorkerCreationContextType.h",
     "web/WebSharedWorkerCreationErrors.h",
     "web/WebSharedWorkerRepositoryClient.h",
-    "web/WebSourceLocation.h",
     "web/WebSpeechGrammar.h",
     "web/WebSpeechRecognitionHandle.h",
     "web/WebSpeechRecognitionParams.h",
@@ -601,7 +595,6 @@ source_set("blink_headers") {
     "web/WebTextDecorationType.h",
     "web/WebTextDirection.h",
     "web/WebTextInputType.h",
-    "web/WebTouchAction.h",
     "web/WebTreeScopeType.h",
     "web/WebUserGestureIndicator.h",
     "web/WebUserGestureToken.h",
@@ -617,10 +610,22 @@ source_set("blink_headers") {
     "web/mac/WebScrollbarTheme.h",
     "web/mac/WebSubstringUtil.h",
     "web/mac/WebSubstringUtil.h",
+    "web/modules/password_manager/WebFormElementObserver.h",
+    "web/modules/password_manager/WebFormElementObserverCallback.h",
     "web/modules/serviceworker/WebServiceWorkerContextClient.h",
     "web/modules/serviceworker/WebServiceWorkerContextProxy.h",
     "web/win/WebFontRendering.h",
   ]
+
+  if (is_android) {
+    # Android uses some Linux sources, put those back.
+    set_sources_assignment_filter([])
+    sources += [
+      "platform/linux/WebFontRenderStyle.h",
+      "web/linux/WebFontRendering.h",
+    ]
+    set_sources_assignment_filter(sources_assignment_filter)
+  }
 
   public_configs = [
     ":blink_headers_config",
@@ -636,6 +641,15 @@ source_set("blink_headers") {
 
   deps = [
     ":generate_mojo_bindings",
+    "//base:base",
+    "//cc:cc",
+    "//cc/paint:paint",
+    "//cc/surfaces:surface_id",
+    "//device/screen_orientation/public/interfaces:interfaces_shared_cpp_sources",
+    "//media/midi:mojo_shared_cpp_sources",
+    "//mojo/public/cpp/bindings:bindings",
+    "//mojo/public/cpp/system:system",
+    "//v8:v8_headers",
   ]
 }
 
@@ -664,14 +678,8 @@ grit("resources") {
     "grit/blink_resources.h",
     "blink_resources.pak",
   ]
-  if (use_concatenated_impulse_responses) {
-    grit_flags = [
-      "-D",
-      "use_concatenated_impulse_responses",
-    ]
-  }
   html_min_css = "$blink_core_output_dir/html.css"
-  grit_flags += [
+  grit_flags = [
     "-E",
     "html_min_css=" + rebase_path(html_min_css),
   ]
@@ -706,7 +714,7 @@ mojom("mojo_bindings") {
     "platform/modules/budget_service/budget_service.mojom",
     "platform/modules/fetch/fetch_api_request.mojom",
     "platform/modules/hyphenation/hyphenation.mojom",
-    "platform/modules/mediasession/media_session.mojom",
+    "platform/modules/keyboard_lock/keyboard_lock.mojom",
     "platform/modules/notifications/notification.mojom",
     "platform/modules/notifications/notification_service.mojom",
     "platform/modules/permissions/permission.mojom",
@@ -714,6 +722,7 @@ mojom("mojo_bindings") {
     "platform/modules/presentation/presentation.mojom",
     "platform/modules/sensitive_input_visibility/sensitive_input_visibility_service.mojom",
     "platform/modules/serviceworker/service_worker_event_status.mojom",
+    "platform/modules/serviceworker/service_worker_stream_handle.mojom",
     "platform/modules/websockets/websocket.mojom",
     "platform/referrer.mojom",
     "platform/site_engagement.mojom",
@@ -729,6 +738,8 @@ mojom("mojo_bindings") {
     "//url/mojo:url_mojom_origin",
   ]
 
+  component_output_prefix = "blink_mojo_bindings"
+
   # The chromium variant must be linked with content and use the same export
   # settings in component build because of the WebBluetoothDeviceId typemap
   # inside content.
@@ -741,6 +752,9 @@ mojom("mojo_bindings") {
   export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
   export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
   export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
+
+  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
+  use_once_callback = false
 }
 
 mojom("android_mojo_bindings") {
@@ -751,12 +765,17 @@ mojom("android_mojo_bindings") {
     "platform/modules/installation/installation.mojom",
     "platform/modules/installedapp/installed_app_provider.mojom",
     "platform/modules/installedapp/related_application.mojom",
+    "platform/modules/mediasession/media_session.mojom",
     "platform/modules/webshare/webshare.mojom",
   ]
   public_deps = [
-    "//components/payments/content:mojom",
+    "//components/payments/mojom",
+    "//mojo/common:common_custom_types",
+    "//ui/gfx/geometry/mojo",
     "//url/mojo:url_mojom_gurl",
   ]
+
+  component_output_prefix = "blink_android_mojo_bindings"
 
   # See comment above.
   export_class_attribute = "CONTENT_EXPORT"
@@ -765,6 +784,9 @@ mojom("android_mojo_bindings") {
   export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
   export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
   export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
+
+  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
+  use_once_callback = false
 }
 
 # The offscreen_canvas_mojo_bindings is separated from the rest of mojom files
@@ -780,6 +802,8 @@ mojom("offscreen_canvas_mojo_bindings") {
     "//cc/ipc:interfaces",
   ]
 
+  component_output_prefix = "blink_offscreen_canvas_mojo_bindings"
+
   # See comment above
   export_class_attribute = "CONTENT_EXPORT"
   export_define = "CONTENT_IMPLEMENTATION=1"
@@ -787,7 +811,6 @@ mojom("offscreen_canvas_mojo_bindings") {
   export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
   export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
   export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
-  use_once_callback = true
 }
 
 group("generate_mojo_bindings") {
@@ -807,6 +830,8 @@ source_set("shared_typemap_traits") {
     "web/ConsoleMessageStructTraits.h",
   ]
   deps = [
+    ":blink_headers",
     ":mojo_bindings_shared__generator",
+    "//mojo/public/cpp/bindings:struct_traits",
   ]
 }

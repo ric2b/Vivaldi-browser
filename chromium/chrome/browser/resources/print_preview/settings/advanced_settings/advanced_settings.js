@@ -37,7 +37,7 @@ cr.define('print_preview', function() {
 
     /** @private {!Array<!print_preview.AdvancedSettingsItem>} */
     this.items_ = [];
-  };
+  }
 
   /**
    * CSS classes used by the component.
@@ -80,7 +80,7 @@ cr.define('print_preview', function() {
           this.onApplySettings_.bind(this));
 
       this.tracker.add(
-          this.searchBox_,
+          assert(this.searchBox_),
           print_preview.SearchBox.EventType.SEARCH,
           this.onSearch_.bind(this));
     },
@@ -131,7 +131,7 @@ cr.define('print_preview', function() {
 
     /**
      * Filters displayed settings with the given query.
-     * @param {?string} query Query to filter settings by.
+     * @param {?RegExp} query Query to filter settings by.
      * @private
      */
     filterLists_: function(query) {
@@ -145,7 +145,8 @@ cr.define('print_preview', function() {
           lastVisibleItemWithBubble = item;
       });
       setIsVisible(
-          this.getChildElement('.no-settings-match-hint'), !atLeastOneMatch);
+          this.getChildElement('.no-settings-match-hint'),
+          !atLeastOneMatch);
       setIsVisible(
           this.getChildElement('.' + AdvancedSettings.Classes_.EXTRA_PADDING),
           !!lastVisibleItemWithBubble);
@@ -171,8 +172,8 @@ cr.define('print_preview', function() {
       }.bind(this));
       this.items_ = [];
 
-      var extraPadding =
-          this.getChildElement('.' + AdvancedSettings.Classes_.EXTRA_PADDING);
+      var extraPadding = this.element_.querySelector(
+          '.' + AdvancedSettings.Classes_.EXTRA_PADDING);
       if (extraPadding)
         extraPadding.parentNode.removeChild(extraPadding);
 
@@ -187,16 +188,17 @@ cr.define('print_preview', function() {
 
       vendorCapabilities.forEach(function(capability) {
         var item = new print_preview.AdvancedSettingsItem(
-            this.eventTarget_, this.printTicketStore_, capability);
+            this.printTicketStore_, capability);
         this.addChild(item);
         item.render(settingsEl);
         this.items_.push(item);
       }.bind(this));
 
+      var searchBoxArea = this.getChildElement('.search-box-area');
       if (this.items_.length <= 1) {
-        setIsVisible(this.getChildElement('.search-box-area'), false);
+        setIsVisible(searchBoxArea, false);
       } else {
-        setIsVisible(this.getChildElement('.search-box-area'), true);
+        setIsVisible(searchBoxArea, true);
         this.searchBox_.focus();
       }
 

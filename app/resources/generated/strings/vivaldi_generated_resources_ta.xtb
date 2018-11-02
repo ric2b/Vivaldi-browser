@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">முகப்புப் பொத்தானைக் கிளிக் செய்யும் போது காண்பிக்கப்படும் பக்கத்தை இந்த நீட்டிப்பு மாற்றியுள்ளது.</translation>
 <translation id="1588438908519853928">இயல்பு</translation>
 <translation id="1616206807336925449">இந்த நீட்டிப்பிற்குச் சிறப்பு அனுமதிகள் தேவையில்லை.</translation>
-<translation id="1620510694547887537">கேமரா</translation>
 <translation id="1635033183663317347">பாதுகாப்பாளர் நிறுவியது.</translation>
 <translation id="1723824996674794290">&amp;புதிய சாளரம்</translation>
 <translation id="1729533290416704613">சர்வபுலத்திலிருந்து தேடலை மேற்கொள்ளும்போது காண்பிக்கப்படும் பக்கத்தையும் இது கட்டுப்படுத்துகிறது.</translation>
-<translation id="1789575671122666129">பாப் அப்கள்</translation>
 <translation id="1850508293116537636">&amp;வலஞ்சுழியாகச் சுற்று</translation>
 <translation id="1859234291848436338">எழுதும் திசை</translation>
 <translation id="1901303067676059328">அ&amp;னைத்தையும் தேர்ந்தெடு</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">செருகுநிரலை மறை</translation>
 <translation id="2087822576218954668">அச்சிடு: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">செருகுநிரலைப் புதுப்பி</translation>
-<translation id="2147827593068025794">பின்புல ஒத்திசைவு</translation>
 <translation id="215753907730220065">முழுத்திரையிலிருந்து வெளியேறு</translation>
 <translation id="2177950615300672361">மறைநிலைத் தாவல்: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">கண்டறி (இயல்பு)</translation>
 <translation id="219008588003277019">இயல்பான கிளையண்ட் தொகுதிக்கூறு: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">எளிய உரையாக ஒட்டு</translation>
 <translation id="2282146716419988068">GPU செயல்முறை</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">உங்கள் கணினியில் உள்ள மற்றொரு நிரலானது, Vivaldi வேலைசெய்யும் வழியை மாற்றும் நீட்டிப்பைச் சேர்த்துள்ளது.</translation>
 <translation id="2445081178310039857">நீட்டிப்பு மூல கோப்பகம் தேவை.</translation>
 <translation id="2470702053775288986">ஆதரிக்கப்படாத நீட்டிப்புகள் முடக்கப்பட்டன</translation>
-<translation id="2482878487686419369">அறிவிப்புகள்</translation>
 <translation id="2501797496290880632">குறுக்குவழியைத் தட்டச்சு செய்க</translation>
-<translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> ஐ நிறுவவும்</translation>
 <translation id="2550212893339833758">ஸ்வாப்டு மெமரி</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">மீண்டும் இயக்கு</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">USER ஹேண்டில்ஸ்</translation>
 <translation id="3222066309010235055">முன்செயலாக்கம்: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">மைக்ரோஃபோன்</translation>
 <translation id="3241680850019875542">தொகுக்க வேண்டிய நீட்டிப்பின் மூல இருப்பிடத்தைத் தேர்ந்தெடு. ஒரு நீட்டிப்பைப் புதுப்பிக்க, மீண்டும் பயன்படுத்துவதற்கு தனிப்பட்ட விசைக் கோப்பையும் தேர்ந்தெடு.</translation>
 <translation id="3280237271814976245">&amp;இவ்வாறு சேமி...</translation>
 <translation id="3288047731229977326">டெவெலப்பர் பயன்முறையில் இயங்கிக்கொண்டிருக்கும் நீட்டிப்புகள் உங்கள் கணினிக்குத் தீங்கு விளைவிக்கலாம். நீங்கள் டெவெலப்பர் இல்லையென்றால், பாதுகாப்பாக இருப்பதற்கு டெவெலப்பர் பயன்முறையில் இயங்கிக்கொண்டிருக்கும் இந்த நீட்டிப்புகளை முடக்க வேண்டும்.</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">பட முகவரியை ந&amp;கலெடு</translation>
 <translation id="335985608243443814">உலாவு...</translation>
 <translation id="3378572629723696641">இந்த நீட்டிப்பு சேதமடைந்திருக்கலாம்.</translation>
-<translation id="3427092606871434483">அனுமதி (இயல்பு)</translation>
 <translation id="3435896845095436175">இயக்கு</translation>
 <translation id="345693547134384690">&amp;படத்தை புதிய தாவலில் திற</translation>
 <translation id="3467267818798281173">பரிந்துரைகளுக்கு Google ஐக் கேட்கவும்</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">மறை&amp;நிலை சாளரத்தில் இணைப்பைத்திற</translation>
 <translation id="3678156199662914018">நீட்டிப்பு: <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">ஏற்றுகிறது…</translation>
-<translation id="3789841737615482174">நிறுவுக</translation>
 <translation id="3798449238516105146">பதிப்பு</translation>
 <translation id="3866249974567520381">விவரம்</translation>
 <translation id="3905761538810670789">பயன்பாட்டை பழுதுநீக்கு</translation>
@@ -103,13 +94,11 @@
 <translation id="4096508467498758490">டெவெலப்பர் பயன்முறை நீட்டிப்புகளை முடக்கவும்</translation>
 <translation id="4100839878934973028">உங்கள் கணினியில் உள்ள மற்றொரு நிரலானது, Vivaldi வேலைசெய்யும் வழியை மாற்றும் பயன்பாட்டைச் சேர்த்துள்ளது.</translation>
 <translation id="4130207949184424187">சர்வபுலத்திலிருந்து தேடும் போது காண்பிக்கப்படும் பக்கத்தை இந்த நீட்டிப்பு மாற்றியுள்ளது.</translation>
-<translation id="4165986682804962316">தள அமைப்புகள்</translation>
 <translation id="4176463684765177261">முடக்கப்பட்டது</translation>
 <translation id="4200983522494130825">புதிய &amp;தாவல்</translation>
 <translation id="420665587194630159">(இந்த நீட்டிப்பு நிர்வகிக்கப்பட்டது, மேலும் இதனை அகற்றவோ அல்லது முடக்கவோ முடியாது)</translation>
 <translation id="4240511609794012987">பகிரப்பட்ட நினைவகம்</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K பயன்பாட்டில்)</translation>
-<translation id="4312866146174492540">தடு (இயல்பு)</translation>
 <translation id="4384652540891215547">நீட்டிப்பைச் செயல்படுத்து</translation>
 <translation id="4394049700291259645">முடக்கு</translation>
 <translation id="4423482519432579560">&amp;பிழைதிருத்தம்</translation>
@@ -122,7 +111,6 @@
 <translation id="4677772697204437347">GPU நினைவகம்</translation>
 <translation id="4711638718396952945">அமைப்புகளை மீட்டெடு</translation>
 <translation id="4839303808932127586">வீடியோவை இவ்வாறு சே&amp;மி...</translation>
-<translation id="4851858059374029925"><ph name="PLUGIN_NAME" />ஐ நிறுவவா? நீங்கள் நம்பும் செருகுநிரல்களை மட்டும் நிறுவவும்.</translation>
 <translation id="488785315393301722">விவரங்களைக் காண்பி</translation>
 <translation id="4911714727432509308">ஒதுக்கப்பட்ட விசைப்பலகை குறுக்குவழிகள் எந்த நீட்டிப்புகளிலும் இல்லை.</translation>
 <translation id="4927301649992043040">நீட்டிப்பு தொகுப்பாக்கம்</translation>
@@ -153,12 +141,10 @@
 <translation id="5646376287012673985">இருப்பிடம்</translation>
 <translation id="5715711091495208045">செருகுநிரல் புரோக்கர்: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">ஆடியோவை இவ்வாறு சே&amp;மி...</translation>
-<translation id="5778550464785688721">MIDI சாதனங்கள் முழுக்கட்டுப்பாடு</translation>
 <translation id="5780973441651030252">செயல்படுத்தல் முன்னுரிமை</translation>
 <translation id="5804241973901381774">அனுமதிகள்</translation>
 <translation id="583281660410589416">தெரியாதது</translation>
 <translation id="59174027418879706">செயலாக்கப்பட்டது</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{ஒரு குக்கீ பயன்படுத்தப்படுகிறது}other{# குக்கீகள் பயன்படுத்தப்படுகின்றன}}</translation>
 <translation id="5956585768868398362">இந்தத் தேடல் பக்கம் நீங்கள் எதிர்பார்த்தது போன்று உள்ளதா?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> உச்சம்)</translation>
 <translation id="5965661248935608907">முகப்புப் பொத்தானைக் கிளிக் செய்யும்போது அல்லது சர்வபுலத்திலிருந்து தேடலை மேற்கொள்ளும்போது காண்பிக்கப்படும் பக்கத்தையும் இது கட்டுப்படுத்துகிறது.</translation>
@@ -187,14 +173,12 @@
 <translation id="6787839852456839824">விசைப்பலகைக் குறுக்குவழிகள்</translation>
 <translation id="6798954102094737107">செருகுநிரல்: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">மாற்றங்களை வைத்திரு</translation>
-<translation id="6863910145616405334">செருகுநிரல் இல்லை</translation>
 <translation id="6886871292305414135">இணைப்பை புதிய &amp;தாவலில் திற</translation>
 <translation id="6900284862687837908">பின்னணிப் பயன்பாடு: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">கோப்பின் அணுகலை அகற்றுதல்</translation>
 <translation id="6974053822202609517">வலமிருந்து இடம்</translation>
 <translation id="7013485839273047434">மேலும் நீட்டிப்புகளைப் பெறுக</translation>
 <translation id="708060913198414444">ஆடியோ முகவரியை ந&amp;கலெடு</translation>
-<translation id="7105578512429498960">இந்த உள்ளடக்கத்தைக் காட்ட, <ph name="PLUGIN_NAME" />ஐ நிறுவவும்</translation>
 <translation id="7144878232160441200">மீண்டும் முயலவும்</translation>
 <translation id="7206693748120342859"><ph name="PLUGIN_NAME" /> ஐப் பதிவிறக்குகிறது...</translation>
 <translation id="7287143125007575591">அணுகல் மறுக்கப்பட்டது.</translation>
@@ -226,7 +210,6 @@
 
 உங்கள் முக்கிய கோப்பை பாதுகாப்பான இடத்தில் வையுங்கள். உங்கள் நீட்டிப்பின் புதிய பதிப்புகளை நீங்கள் உருவாக்க வேண்டி ஏற்படும்.</translation>
 <translation id="8004582292198964060">உலாவி</translation>
-<translation id="8037357227543935929">கேள் (இயல்பு)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">&amp;உரைப் புலங்களில் எழுத்துப்பிழை உள்ளதா எனச் சரிபார்</translation>
 <translation id="8261378640211443080">இந்த நீட்டிப்பு <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> இல் பட்டியலிடப்படவில்லை, மேலும் அது உங்களுக்குத் தெரியாமல் சேர்க்கப்பட்டிருக்கலாம்.</translation>
@@ -242,7 +225,6 @@
 <translation id="8664389313780386848">&amp;பக்கத்தின் ஆதாரத்தைக் காட்டு</translation>
 <translation id="8719653885894320876"><ph name="PLUGIN_NAME" />ஐப் பதிவிறக்க முடியவில்லை</translation>
 <translation id="873545264931343897"><ph name="PLUGIN_NAME" /> புதுப்பிக்கப்பட்டதும், அதைச் செயல்படுத்த பக்கத்தை மீண்டும் ஏற்றவும்</translation>
-<translation id="8763204422633679667"><ph name="PLUGIN_NAME" /> நிறுவப்பட்டதும், அதைச் செயல்படுத்த பக்கத்தை மீண்டும் ஏற்றவும்</translation>
 <translation id="8798099450830957504">இயல்புநிலை</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8859174528519900719">துணைச்சட்டகம்: <ph name="SUBFRAME_SITE" /></translation>

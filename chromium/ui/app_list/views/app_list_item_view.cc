@@ -14,7 +14,6 @@
 #include "ui/app_list/app_list_item.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/views/apps_grid_view.h"
-#include "ui/base/dragdrop/drag_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
@@ -290,8 +289,8 @@ void AppListItemView::ShowContextMenuForView(views::View* source,
 
   if (!apps_grid_view_->IsSelectedView(this))
     apps_grid_view_->ClearAnySelectedView();
-  context_menu_runner_.reset(new views::MenuRunner(
-      menu_model, views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::ASYNC));
+  context_menu_runner_.reset(
+      new views::MenuRunner(menu_model, views::MenuRunner::HAS_MNEMONICS));
   context_menu_runner_->RunMenuAt(GetWidget(), NULL,
                                   gfx::Rect(point, gfx::Size()),
                                   views::MENU_ANCHOR_TOPLEFT, source_type);

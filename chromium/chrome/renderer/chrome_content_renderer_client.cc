@@ -22,6 +22,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/common/channel_info.h"
+#include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/common/chrome_paths.h"
@@ -97,6 +98,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/features/features.h"
 #include "ipc/ipc_sync_channel.h"
+#include "media/base/media_switches.h"
 #include "media/media_features.h"
 #include "net/base/net_errors.h"
 #include "ppapi/c/private/ppb_pdf.h"
@@ -152,7 +154,6 @@
 #endif
 
 #if BUILDFLAG(ENABLE_PRINTING)
-#include "chrome/common/chrome_content_client.h"
 #include "chrome/renderer/printing/chrome_print_web_view_helper_delegate.h"
 #include "components/printing/renderer/print_web_view_helper.h"
 #include "printing/print_settings.h"
@@ -164,14 +165,18 @@
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
 #include "components/spellcheck/renderer/spellcheck.h"
-#include "components/spellcheck/renderer/spellcheck_panel.h"
 #include "components/spellcheck/renderer/spellcheck_provider.h"
-#endif
+
+#if BUILDFLAG(HAS_SPELLCHECK_PANEL)
+#include "components/spellcheck/renderer/spellcheck_panel.h"
+#endif  // BUILDFLAG(HAS_SPELLCHECK_PANEL)
+#endif  // BUILDFLAG(ENABLE_SPELLCHECK)
 
 #if BUILDFLAG(ENABLE_WEBRTC)
 #include "chrome/renderer/media/webrtc_logging_message_filter.h"
 #endif
 
+#include "renderer/vivaldi_render_frame_observer.h"
 #include "renderer/vivaldi_render_view_observer.h"
 
 using autofill::AutofillAgent;
@@ -583,6 +588,8 @@ void ChromeContentRendererClient::RenderFrameCreated(
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   new SpellCheckProvider(render_frame, spellcheck_.get());
 #endif
+
+  new vivaldi::VivaldiRenderFrameObserver(render_frame);
 }
 
 void ChromeContentRendererClient::RenderViewCreated(
@@ -598,8 +605,11 @@ void ChromeContentRendererClient::RenderViewCreated(
   if (SpellCheckProvider* provider =
           SpellCheckProvider::Get(render_view->GetMainRenderFrame()))
     provider->EnableSpellcheck(spellcheck_->IsSpellcheckEnabled());
+
+#if BUILDFLAG(HAS_SPELLCHECK_PANEL)
   new SpellCheckPanel(render_view);
-#endif
+#endif  // BUILDFLAG(HAS_SPELLCHECK_PANEL)
+#endif  // BUILDFLAG(ENABLE_SPELLCHECK)
   new prerender::PrerendererClient(render_view);
 
   new ChromeRenderViewObserver(render_view, web_cache_impl_.get());
@@ -621,7 +631,6 @@ SkBitmap* ChromeContentRendererClient::GetSadWebViewBitmap() {
 
 bool ChromeContentRendererClient::OverrideCreatePlugin(
     content::RenderFrame* render_frame,
-    WebLocalFrame* frame,
     const WebPluginParams& params,
     WebPlugin** plugin) {
   std::string orig_mime_type = params.mime_type.Utf8();
@@ -636,13 +645,15 @@ bool ChromeContentRendererClient::OverrideCreatePlugin(
 #if BUILDFLAG(ENABLE_PLUGINS)
   ChromeViewHostMsg_GetPluginInfo_Output output;
   render_frame->Send(new ChromeViewHostMsg_GetPluginInfo(
-      render_frame->GetRoutingID(), url, frame->Top()->GetSecurityOrigin(),
-      orig_mime_type, &output));
-  *plugin = CreatePlugin(render_frame, frame, params, output);
+      render_frame->GetRoutingID(), url,
+      render_frame->GetWebFrame()->Top()->GetSecurityOrigin(), orig_mime_type,
+      &output));
+  *plugin = CreatePlugin(render_frame, params, output);
 #else  // !BUILDFLAG(ENABLE_PLUGINS)
   PluginUMAReporter::GetInstance()->ReportPluginMissing(orig_mime_type, url);
-  *plugin = NonLoadablePluginPlaceholder::CreateNotSupportedPlugin(
-                render_frame, frame, params)->plugin();
+  auto* placeholder = NonLoadablePluginPlaceholder::CreateNotSupportedPlugin(
+      render_frame, params);
+  *plugin = placeholder->plugin();
 
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
   return true;
@@ -651,8 +662,9 @@ bool ChromeContentRendererClient::OverrideCreatePlugin(
 WebPlugin* ChromeContentRendererClient::CreatePluginReplacement(
     content::RenderFrame* render_frame,
     const base::FilePath& plugin_path) {
-  return NonLoadablePluginPlaceholder::CreateErrorPlugin(render_frame,
-                                                         plugin_path)->plugin();
+  auto* placeholder = NonLoadablePluginPlaceholder::CreateErrorPlugin(
+      render_frame, plugin_path);
+  return placeholder->plugin();
 }
 
 void ChromeContentRendererClient::DeferMediaLoad(
@@ -669,7 +681,7 @@ void ChromeContentRendererClient::DeferMediaLoad(
   // TODO(dalecurtis): Include an idle check too.  http://crbug.com/509135
   if ((render_frame->IsHidden() && !has_played_media_before &&
        !base::CommandLine::ForCurrentProcess()->HasSwitch(
-           switches::kDisableGestureRequirementForMediaPlayback)) ||
+           switches::kIgnoreAutoplayRestrictionsForTests)) ||
       prerender::PrerenderHelper::IsPrerendering(render_frame)) {
     new MediaLoadDeferrer(render_frame, closure);
     return;
@@ -679,9 +691,9 @@ void ChromeContentRendererClient::DeferMediaLoad(
 }
 
 #if BUILDFLAG(ENABLE_PLUGINS)
+// static
 WebPlugin* ChromeContentRendererClient::CreatePlugin(
     content::RenderFrame* render_frame,
-    WebLocalFrame* frame,
     const WebPluginParams& original_params,
     const ChromeViewHostMsg_GetPluginInfo_Output& output) {
   const WebPluginInfo& info = output.plugin;
@@ -700,15 +712,15 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
       orig_mime_type == content::kBrowserPluginMimeType) {
     PluginUMAReporter::GetInstance()->ReportPluginMissing(orig_mime_type, url);
     placeholder = ChromePluginPlaceholder::CreateLoadableMissingPlugin(
-        render_frame, frame, original_params);
+        render_frame, original_params);
   } else {
     // TODO(bauerb): This should be in content/.
     WebPluginParams params(original_params);
-    for (size_t i = 0; i < info.mime_types.size(); ++i) {
-      if (info.mime_types[i].mime_type == actual_mime_type) {
-        AppendParams(info.mime_types[i].additional_param_names,
-                     info.mime_types[i].additional_param_values,
-                     &params.attribute_names, &params.attribute_values);
+    for (const auto& mime_type : info.mime_types) {
+      if (mime_type.mime_type == actual_mime_type) {
+        AppendParams(mime_type.additional_param_names,
+                     mime_type.additional_param_values, &params.attribute_names,
+                     &params.attribute_values);
         break;
       }
     }
@@ -734,13 +746,14 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
       status = ChromeViewHostMsg_GetPluginInfo_Status::kAllowed;
     }
 
-    auto create_blocked_plugin = [&render_frame, &frame, &params, &info,
-                                  &identifier, &group_name](
-        int template_id, const base::string16& message) {
+    auto create_blocked_plugin = [&render_frame, &params, &info, &identifier,
+                                  &group_name](int template_id,
+                                               const base::string16& message) {
       return ChromePluginPlaceholder::CreateBlockedPlugin(
-          render_frame, frame, params, info, identifier, group_name,
-          template_id, message, PowerSaverInfo());
+          render_frame, params, info, identifier, group_name, template_id,
+          message, PowerSaverInfo());
     };
+    WebLocalFrame* frame = render_frame->GetWebFrame();
     switch (status) {
       case ChromeViewHostMsg_GetPluginInfo_Status::kNotFound: {
         NOTREACHED();
@@ -808,6 +821,21 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         }
 #endif  // !defined(DISABLE_NACL) && BUILDFLAG(ENABLE_EXTENSIONS)
 
+        // Report PDF load metrics. Since the PDF plugin is comprised of an
+        // extension that loads a second plugin, avoid double counting by
+        // ignoring the creation of the second plugin.
+        if (info.name == ASCIIToUTF16(ChromeContentClient::kPDFPluginName) &&
+            GURL(frame->GetDocument().Url()).host_piece() !=
+                extension_misc::kPdfExtensionId) {
+          bool is_main_frame_plugin_document =
+              render_frame->IsMainFrame() &&
+              render_frame->GetWebFrame()->GetDocument().IsPluginDocument();
+          PluginUMAReporter::ReportPDFLoadStatus(
+              is_main_frame_plugin_document
+                  ? PluginUMAReporter::LOADED_FULL_PAGE_PDF_WITH_PDFIUM
+                  : PluginUMAReporter::LOADED_EMBEDDED_PDF_WITH_PDFIUM);
+        }
+
         // Delay loading plugins if prerendering.
         // TODO(mmenke):  In the case of prerendering, feed into
         //                ChromeContentRendererClient::CreatePlugin instead, to
@@ -825,7 +853,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
             !power_saver_info.poster_attribute.empty() ||
             power_saver_info.power_saver_enabled) {
           placeholder = ChromePluginPlaceholder::CreateBlockedPlugin(
-              render_frame, frame, params, info, identifier, group_name,
+              render_frame, params, info, identifier, group_name,
               power_saver_info.poster_attribute.empty()
                   ? IDR_BLOCKED_PLUGIN_HTML
                   : IDR_PLUGIN_POSTER_HTML,
@@ -843,11 +871,17 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         }
 
         // Same-origin and whitelisted-origin plugins skip the placeholder.
-        return render_frame->CreatePlugin(frame, info, params, nullptr);
+        return render_frame->CreatePlugin(info, params, nullptr);
       }
       case ChromeViewHostMsg_GetPluginInfo_Status::kDisabled: {
         PluginUMAReporter::GetInstance()->ReportPluginDisabled(orig_mime_type,
                                                                url);
+        if (info.name == ASCIIToUTF16(ChromeContentClient::kPDFPluginName)) {
+          PluginUMAReporter::ReportPDFLoadStatus(
+              PluginUMAReporter::
+                  SHOWED_DISABLED_PLUGIN_PLACEHOLDER_FOR_EMBEDDED_PDF);
+        }
+
         placeholder = create_blocked_plugin(
             IDR_DISABLED_PLUGIN_HTML,
             l10n_util::GetStringFUTF16(IDS_PLUGIN_DISABLED, group_name));
@@ -1187,10 +1221,6 @@ bool ChromeContentRendererClient::WillSendRequest(
     SearchBox::ImageSourceType type = SearchBox::NONE;
     if (gurl.host_piece() == chrome::kChromeUIFaviconHost)
       type = SearchBox::FAVICON;
-    else if (gurl.host_piece() == chrome::kChromeUILargeIconHost)
-      type = SearchBox::LARGE_ICON;
-    else if (gurl.host_piece() == chrome::kChromeUIFallbackIconHost)
-      type = SearchBox::FALLBACK_ICON;
     else if (gurl.host_piece() == chrome::kChromeUIThumbnailHost)
       type = SearchBox::THUMB;
 
@@ -1264,10 +1294,10 @@ bool ChromeContentRendererClient::IsExtensionOrSharedModuleWhitelisted(
 }
 #endif
 
-blink::WebSpeechSynthesizer*
+std::unique_ptr<blink::WebSpeechSynthesizer>
 ChromeContentRendererClient::OverrideSpeechSynthesizer(
     blink::WebSpeechSynthesizerClient* client) {
-  return new TtsDispatcher(client);
+  return base::MakeUnique<TtsDispatcher>(client);
 }
 
 bool ChromeContentRendererClient::AllowPepperMediaStreamAPI(
@@ -1313,8 +1343,7 @@ bool ChromeContentRendererClient::ShouldGatherSiteIsolationStats() const {
   // too; we would need to check the extension's manifest to know which sites
   // it's allowed to access.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  return !command_line->HasSwitch(extensions::switches::kExtensionProcess);
+  return !IsStandaloneExtensionProcess();
 #else
   return true;
 #endif

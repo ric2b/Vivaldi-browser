@@ -17,6 +17,9 @@ struct CONTENT_EXPORT ResourceRequestCompletionStatus {
   ResourceRequestCompletionStatus();
   ResourceRequestCompletionStatus(
       const ResourceRequestCompletionStatus& status);
+  explicit ResourceRequestCompletionStatus(int64_t length);
+  // Sets error_code to net::OK, completition_time to base::TimeTicks::Now(),
+  // and encoded_data_length = encoded_body_length = |length|;
   ~ResourceRequestCompletionStatus();
 
   // The error code.
@@ -36,6 +39,9 @@ struct CONTENT_EXPORT ResourceRequestCompletionStatus {
 
   // The length of the response body before removing any content encodings.
   int64_t encoded_body_length = 0;
+
+  // The length of the response body after decoding.
+  int64_t decoded_body_length = 0;
 };
 
 }  // namespace content

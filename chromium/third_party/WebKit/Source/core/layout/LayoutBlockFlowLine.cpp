@@ -626,7 +626,7 @@ static inline void SetLogicalWidthForTextRun(
     if (last_end_offset != run->stop_) {
       // If we don't have enough cached data, we'll measure the run again.
       can_use_cached_word_measurements = false;
-      fallback_fonts.Clear();
+      fallback_fonts.clear();
     }
   }
 
@@ -754,7 +754,7 @@ void LayoutBlockFlow::UpdateLogicalWidthForAlignment(
       break;
   }
   if (ShouldPlaceBlockDirectionScrollbarOnLogicalLeft())
-    logical_left += VerticalScrollbarWidth();
+    logical_left += VerticalScrollbarWidthClampedToContentBox();
 }
 
 static void UpdateLogicalInlinePositions(LayoutBlockFlow* block,
@@ -1060,7 +1060,7 @@ void LayoutBlockFlow::AppendFloatsToLastLine(
   FloatingObjectSetIterator end = floating_object_set.end();
   if (layout_state.LastFloat()) {
     FloatingObjectSetIterator last_float_iterator =
-        floating_object_set.Find(layout_state.LastFloat());
+        floating_object_set.find(layout_state.LastFloat());
     DCHECK(last_float_iterator != end);
     ++last_float_iterator;
     it = last_float_iterator;
@@ -2499,8 +2499,8 @@ void LayoutBlockFlow::CheckLinesForTextOverflow() {
           curr->MoveInInlineDirection(
               logical_left - (available_logical_width - total_logical_width));
       } else {
-        TryPlacingEllipsisOnAtomicInlines(curr, block_right_edge,
-                                          block_left_edge, width,
+        TryPlacingEllipsisOnAtomicInlines(curr, LogicalRightOffsetForContent(),
+                                          LogicalLeftOffsetForContent(), width,
                                           selected_ellipsis_str);
       }
     }
@@ -2526,8 +2526,11 @@ void LayoutBlockFlow::TryPlacingEllipsisOnAtomicInlines(
   for (InlineBox* box = ltr ? root->FirstChild() : root->LastChild(); box;
        box = ltr ? box->NextOnLine() : box->PrevOnLine()) {
     if (!box->GetLineLayoutItem().IsAtomicInlineLevel() ||
-        !box->GetLineLayoutItem().IsLayoutBlockFlow())
+        !box->GetLineLayoutItem().IsLayoutBlockFlow()) {
+      if (box->GetLineLayoutItem().IsText())
+        logical_left_offset += box->LogicalWidth();
       continue;
+    }
 
     RootInlineBox* first_root_box =
         LineLayoutBlockFlow(box->GetLineLayoutItem()).FirstRootBox();
@@ -2569,7 +2572,7 @@ void LayoutBlockFlow::TryPlacingEllipsisOnAtomicInlines(
           logical_left_offset += max_root_box_width - curr->LogicalWidth();
         curr->PlaceEllipsis(selected_ellipsis_str, ltr, block_left_edge,
                             block_right_edge, ellipsis_width,
-                            LayoutUnit(logical_left_offset.Ceil()), found_box);
+                            logical_left_offset, found_box);
         placed_ellipsis = true;
       }
     }

@@ -29,14 +29,14 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromise.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
-#include "wtf/text/WTFString.h"
+#include "platform/wtf/Forward.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -71,6 +71,7 @@ class OriginTrialsTest;
 class Page;
 class Range;
 class RecordTest;
+class SequenceTest;
 class SerializedScriptValue;
 class ShadowRoot;
 class TypeConversions;
@@ -192,10 +193,10 @@ class Internals final : public GarbageCollected<Internals>,
                             bool thick,
                             const String& background_color_value,
                             ExceptionState&);
-  void setMarkersActive(Node*,
-                        unsigned start_offset,
-                        unsigned end_offset,
-                        bool);
+  void setTextMatchMarkersActive(Node*,
+                                 unsigned start_offset,
+                                 unsigned end_offset,
+                                 bool);
   void setMarkedTextMatchesAreHighlighted(Document*, bool);
 
   void setFrameViewPosition(Document*, long x, long y, ExceptionState&);
@@ -332,7 +333,6 @@ class Internals final : public GarbageCollected<Internals>,
 
   unsigned numberOfLiveNodes() const;
   unsigned numberOfLiveDocuments() const;
-  String dumpRefCountedInstanceCounts() const;
   LocalDOMWindow* OpenDummyInspectorFrontend(const String& url);
   void CloseDummyInspectorFrontend();
 
@@ -384,6 +384,7 @@ class Internals final : public GarbageCollected<Internals>,
 
   TypeConversions* typeConversions() const;
   RecordTest* recordTest() const;
+  SequenceTest* sequenceTest() const;
   DictionaryTest* dictionaryTest() const;
   UnionTypesTest* unionTypesTest() const;
   OriginTrialsTest* originTrialsTest() const;
@@ -420,6 +421,7 @@ class Internals final : public GarbageCollected<Internals>,
   void forceReload(bool bypass_cache);
 
   String getImageSourceURL(Element*);
+  void forceImageReload(Element*, ExceptionState&);
 
   String selectMenuListText(HTMLSelectElement*);
   bool isSelectPopupVisible(Node*);
@@ -476,6 +478,10 @@ class Internals final : public GarbageCollected<Internals>,
                                         const String&,
                                         double downlink_max_mbps,
                                         ExceptionState&);
+  void setNetworkQualityInfoOverride(const String&,
+                                     unsigned long transport_rtt_msec,
+                                     double downlink_throughput_mbps,
+                                     ExceptionState&);
   void clearNetworkConnectionInfoOverride();
 
   unsigned countHitRegions(CanvasRenderingContext*);

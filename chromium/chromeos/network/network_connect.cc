@@ -20,6 +20,7 @@
 #include "chromeos/network/network_profile_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
+#include "chromeos/network/tether_constants.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace chromeos {
@@ -65,7 +66,6 @@ class NetworkConnectImpl : public NetworkConnect {
                                      bool shared) override;
   void CreateConfiguration(base::DictionaryValue* shill_properties,
                            bool shared) override;
-  void SetTetherDelegate(TetherDelegate* tether_delegate) override;
 
  private:
   void ActivateCellular(const std::string& network_id);
@@ -105,14 +105,13 @@ class NetworkConnectImpl : public NetworkConnect {
       std::unique_ptr<base::DictionaryValue> properties_to_set);
 
   Delegate* delegate_;
-  TetherDelegate* tether_delegate_;
   base::WeakPtrFactory<NetworkConnectImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkConnectImpl);
 };
 
 NetworkConnectImpl::NetworkConnectImpl(Delegate* delegate)
-    : delegate_(delegate), tether_delegate_(nullptr), weak_factory_(this) {}
+    : delegate_(delegate), weak_factory_(this) {}
 
 NetworkConnectImpl::~NetworkConnectImpl() {}
 
@@ -245,20 +244,10 @@ void NetworkConnectImpl::CallConnectToNetwork(const std::string& network_id,
     return;
   }
 
-  if (NetworkTypePattern::Tether().MatchesType(network->type())) {
-    if (tether_delegate_) {
-      tether_delegate_->ConnectToNetwork(network_id);
-    } else {
-      NET_LOG_ERROR(
-          "Connection to Tether requested but no TetherDelegate exists.",
-          network_id);
-    }
-    return;
-  }
-
   NetworkHandler::Get()->network_connection_handler()->ConnectToNetwork(
-      network->path(), base::Bind(&NetworkConnectImpl::OnConnectSucceeded,
-                                  weak_factory_.GetWeakPtr(), network_id),
+      network->path(),
+      base::Bind(&NetworkConnectImpl::OnConnectSucceeded,
+                 weak_factory_.GetWeakPtr(), network_id),
       base::Bind(&NetworkConnectImpl::OnConnectFailed,
                  weak_factory_.GetWeakPtr(), network_id),
       check_error_state);
@@ -399,6 +388,10 @@ void NetworkConnectImpl::ConnectToNetworkId(const std::string& network_id) {
       return;
     } else if (network->RequiresActivation()) {
       ActivateCellular(network_id);
+      return;
+    } else if (network->type() == kTypeTether &&
+               !network->tether_has_connected_to_host()) {
+      delegate_->ShowNetworkConfigure(network_id);
       return;
     }
   }
@@ -565,10 +558,6 @@ void NetworkConnectImpl::CreateConfiguration(base::DictionaryValue* properties,
                                              bool shared) {
   NET_LOG_USER("CreateConfiguration", "");
   CallCreateConfiguration(properties, shared, false /* connect_on_configure */);
-}
-
-void NetworkConnectImpl::SetTetherDelegate(TetherDelegate* tether_delegate) {
-  tether_delegate_ = tether_delegate;
 }
 
 }  // namespace

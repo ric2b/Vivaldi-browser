@@ -50,12 +50,11 @@
 #include "platform/graphics/CompositingReasons.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/PictureSnapshot.h"
-#include "platform/image-encoders/PNGImageEncoder.h"
 #include "platform/transforms/TransformationMatrix.h"
+#include "platform/wtf/text/Base64.h"
+#include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebLayer.h"
-#include "wtf/text/Base64.h"
-#include "wtf/text/StringBuilder.h"
 
 namespace blink {
 
@@ -198,7 +197,7 @@ Response InspectorLayerTreeAgent::enable() {
 
 Response InspectorLayerTreeAgent::disable() {
   instrumenting_agents_->removeInspectorLayerTreeAgent(this);
-  snapshot_by_id_.Clear();
+  snapshot_by_id_.clear();
   return Response::OK();
 }
 
@@ -355,7 +354,7 @@ Response InspectorLayerTreeAgent::compositingReasons(
     reasons_bitmask &= ~kCompositingReasonStringMap[i].reason;
 #endif
   }
-  ASSERT(!reasons_bitmask);
+  DCHECK(!reasons_bitmask);
   return Response::OK();
 }
 
@@ -378,8 +377,8 @@ Response InspectorLayerTreeAgent::makeSnapshot(const String& layer_id,
   GraphicsContext context(layer->GetPaintController());
   context.BeginRecording(interest_rect);
   layer->GetPaintController().GetPaintArtifact().Replay(interest_rect, context);
-  RefPtr<PictureSnapshot> snapshot =
-      AdoptRef(new PictureSnapshot(ToSkPicture(context.EndRecording())));
+  RefPtr<PictureSnapshot> snapshot = AdoptRef(
+      new PictureSnapshot(ToSkPicture(context.EndRecording(), interest_rect)));
 
   *snapshot_id = String::Number(++last_snapshot_id_);
   bool new_entry = snapshot_by_id_.insert(*snapshot_id, snapshot).is_new_entry;
@@ -414,7 +413,7 @@ Response InspectorLayerTreeAgent::loadSnapshot(
 }
 
 Response InspectorLayerTreeAgent::releaseSnapshot(const String& snapshot_id) {
-  SnapshotById::iterator it = snapshot_by_id_.Find(snapshot_id);
+  SnapshotById::iterator it = snapshot_by_id_.find(snapshot_id);
   if (it == snapshot_by_id_.end())
     return Response::Error("Snapshot not found");
   snapshot_by_id_.erase(it);
@@ -424,7 +423,7 @@ Response InspectorLayerTreeAgent::releaseSnapshot(const String& snapshot_id) {
 Response InspectorLayerTreeAgent::GetSnapshotById(
     const String& snapshot_id,
     const PictureSnapshot*& result) {
-  SnapshotById::iterator it = snapshot_by_id_.Find(snapshot_id);
+  SnapshotById::iterator it = snapshot_by_id_.find(snapshot_id);
   if (it == snapshot_by_id_.end())
     return Response::Error("Snapshot not found");
   result = it->value.Get();

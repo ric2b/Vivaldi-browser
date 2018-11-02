@@ -34,6 +34,8 @@
 #include "core/editing/VisiblePosition.h"
 #include "core/frame/ContentSettingsClient.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/WebFrameWidgetBase.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/heap/SelfKeepAlive.h"
 #include "platform/wtf/Compiler.h"
@@ -43,8 +45,6 @@
 #include "web/LocalFrameClientImpl.h"
 #include "web/UserMediaClientImpl.h"
 #include "web/WebExport.h"
-#include "web/WebFrameImplBase.h"
-#include "web/WebFrameWidgetBase.h"
 #include "web/WebInputMethodControllerImpl.h"
 
 #include <memory>
@@ -70,10 +70,9 @@ class WebInputMethodControllerImpl;
 class WebNode;
 class WebPerformance;
 class WebPlugin;
-class WebPluginContainerImpl;
 class WebScriptExecutionCallback;
 class WebView;
-class WebViewImpl;
+class WebViewBase;
 enum class WebFrameLoadType;
 struct FrameLoadRequest;
 struct WebContentSecurityPolicyViolation;
@@ -84,8 +83,7 @@ class WebVector;
 
 // Implementation of WebFrame, note that this is a reference counted object.
 class WEB_EXPORT WebLocalFrameImpl final
-    : public WebFrameImplBase,
-      NON_EXPORTED_BASE(public WebLocalFrame) {
+    : NON_EXPORTED_BASE(public WebLocalFrameBase) {
  public:
   // WebFrame methods:
   // TODO(dcheng): Fix sorting here; a number of method have been moved to
@@ -185,6 +183,8 @@ class WEB_EXPORT WebLocalFrameImpl final
   bool IsSpellCheckingEnabled() const override;
   void ReplaceMisspelledRange(const WebString&) override;
   void RemoveSpellingMarkers() override;
+  void RemoveSpellingMarkersUnderWords(
+      const WebVector<WebString>& words) override;
   void SetContentSettingsClient(WebContentSettingsClient*) override;
   bool HasSelection() const override;
   WebRange SelectionRange() const override;
@@ -237,8 +237,6 @@ class WEB_EXPORT WebLocalFrameImpl final
   WebRect SelectionBoundsRect() const override;
 
   WebString LayerTreeAsText(bool show_debug_info = false) const override;
-
-  WebFrameImplBase* ToImplBase() override { return this; }
 
   // WebLocalFrame methods:
   void SetAutofillClient(WebAutofillClient*) override;
@@ -314,20 +312,19 @@ class WEB_EXPORT WebLocalFrameImpl final
   base::SingleThreadTaskRunner* TimerTaskRunner() override;
   base::SingleThreadTaskRunner* LoadingTaskRunner() override;
   base::SingleThreadTaskRunner* UnthrottledTaskRunner() override;
-  WebInputMethodControllerImpl* GetInputMethodController() const override;
+  WebInputMethodControllerImpl* GetInputMethodController() override;
 
   void ExtractSmartClipData(WebRect rect_in_viewport,
                             WebString& clip_text,
                             WebString& clip_html) override;
 
-  // WebFrameImplBase methods:
   void InitializeCoreFrame(Page&,
                            FrameOwner*,
                            const AtomicString& name) override;
   LocalFrame* GetFrame() const override { return frame_.Get(); }
 
-  void WillBeDetached();
-  void WillDetachParent();
+  void WillBeDetached() override;
+  void WillDetachParent() override;
 
   static WebLocalFrameImpl* Create(WebTreeScopeType,
                                    WebFrameClient*,
@@ -343,34 +340,23 @@ class WEB_EXPORT WebLocalFrameImpl final
 
   LocalFrame* CreateChildFrame(const FrameLoadRequest&,
                                const AtomicString& name,
-                               HTMLFrameOwnerElement*);
+                               HTMLFrameOwnerElement*) override;
 
   void DidChangeContentsSize(const IntSize&);
 
-  void CreateFrameView();
+  void CreateFrameView() override;
 
   static WebLocalFrameImpl* FromFrame(LocalFrame*);
   static WebLocalFrameImpl* FromFrame(LocalFrame&);
   static WebLocalFrameImpl* FromFrameOwnerElement(Element*);
 
-  // If the frame hosts a PluginDocument, this method returns the
-  // WebPluginContainerImpl that hosts the plugin.
-  static WebPluginContainerImpl* PluginContainerFromFrame(LocalFrame*);
+  WebViewBase* ViewImpl() const override;
 
-  // If the frame hosts a PluginDocument, this method returns the
-  // WebPluginContainerImpl that hosts the plugin. If the provided node is a
-  // plugin, then it runs its WebPluginContainerImpl. Otherwise, uses the
-  // currently focused element (if any).
-  static WebPluginContainerImpl* CurrentPluginContainer(LocalFrame*,
-                                                        Node* = nullptr);
-
-  WebViewImpl* ViewImpl() const;
-
-  FrameView* GetFrameView() const {
+  FrameView* GetFrameView() const override {
     return GetFrame() ? GetFrame()->View() : 0;
   }
 
-  WebDevToolsAgentImpl* DevToolsAgentImpl() const {
+  WebDevToolsAgentImpl* DevToolsAgentImpl() const override {
     return dev_tools_agent_.Get();
   }
 
@@ -387,57 +373,64 @@ class WEB_EXPORT WebLocalFrameImpl final
   // allows us to navigate by pressing Enter after closing the Find box.
   void SetFindEndstateFocusAndSelection();
 
-  void DidFail(const ResourceError&, bool was_provisional, HistoryCommitType);
-  void DidFinish();
+  void DidFail(const ResourceError&,
+               bool was_provisional,
+               HistoryCommitType) override;
+  void DidFinish() override;
 
   // Sets whether the WebLocalFrameImpl allows its document to be scrolled.
   // If the parameter is true, allow the document to be scrolled.
   // Otherwise, disallow scrolling.
   void SetCanHaveScrollbars(bool) override;
 
-  WebFrameClient* Client() const { return client_; }
-  void SetClient(WebFrameClient* client) { client_ = client; }
+  WebFrameClient* Client() const override { return client_; }
+  void SetClient(WebFrameClient* client) override { client_ = client; }
 
-  ContentSettingsClient& GetContentSettingsClient() {
+  ContentSettingsClient& GetContentSettingsClient() override {
     return content_settings_client_;
-  }
+  };
 
-  SharedWorkerRepositoryClientImpl* SharedWorkerRepositoryClient() const {
+  SharedWorkerRepositoryClientImpl* SharedWorkerRepositoryClient()
+      const override {
     return shared_worker_repository_client_.get();
   }
 
-  void SetInputEventsTransformForEmulation(const IntSize&, float);
+  void SetInputEventsTransformForEmulation(const IntSize&, float) override;
 
   static void SelectWordAroundPosition(LocalFrame*, VisiblePosition);
 
-  TextCheckerClient& GetTextCheckerClient() const;
-  WebTextCheckClient* TextCheckClient() const { return text_check_client_; }
+  TextCheckerClient& GetTextCheckerClient() const override;
+  WebTextCheckClient* TextCheckClient() const override {
+    return text_check_client_;
+  }
 
-  TextFinder* GetTextFinder() const;
+  TextFinder* GetTextFinder() const override;
   // Returns the text finder object if it already exists.
   // Otherwise creates it and then returns.
-  TextFinder& EnsureTextFinder();
+  TextFinder& EnsureTextFinder() override;
 
   // Returns a hit-tested VisiblePosition for the given point
   VisiblePosition VisiblePositionForViewportPoint(const WebPoint&);
 
-  void SetFrameWidget(WebFrameWidgetBase*);
+  void SetFrameWidget(WebFrameWidgetBase*) override;
 
   // DevTools front-end bindings.
-  void SetDevToolsFrontend(WebDevToolsFrontendImpl* frontend) {
+  void SetDevToolsFrontend(WebDevToolsFrontendImpl* frontend) override {
     web_dev_tools_frontend_ = frontend;
   }
-  WebDevToolsFrontendImpl* DevToolsFrontend() {
+  WebDevToolsFrontendImpl* DevToolsFrontend() override {
     return web_dev_tools_frontend_;
   }
 
   WebNode ContextMenuNode() const { return context_menu_node_.Get(); }
-  void SetContextMenuNode(Node* node) { context_menu_node_ = node; }
-  void ClearContextMenuNode() { context_menu_node_.Clear(); }
+  void SetContextMenuNode(Node* node) override { context_menu_node_ = node; }
+  void ClearContextMenuNode() override { context_menu_node_.Clear(); }
+
+  std::unique_ptr<WebURLLoader> CreateURLLoader() override;
 
   bool snapshotPage(SkBitmap&, bool, float, float) override;
 
-  DECLARE_TRACE();
+  DECLARE_VIRTUAL_TRACE();
 
  private:
   friend class LocalFrameClientImpl;
@@ -459,7 +452,7 @@ class WEB_EXPORT WebLocalFrameImpl final
   WebRemoteFrame* ToWebRemoteFrame() override;
 
   // Sets the local core frame and registers destruction observers.
-  void SetCoreFrame(LocalFrame*);
+  void SetCoreFrame(LocalFrame*) override;
 
   void LoadJavaScriptURL(const KURL&);
 
@@ -511,7 +504,7 @@ class WEB_EXPORT WebLocalFrameImpl final
 
   Member<Node> context_menu_node_;
 
-  std::unique_ptr<WebInputMethodControllerImpl> input_method_controller_;
+  WebInputMethodControllerImpl input_method_controller_;
 
   // Stores the TextCheckerClient to bridge SpellChecker and WebTextCheckClient.
   Member<TextCheckerClientImpl> text_checker_client_;

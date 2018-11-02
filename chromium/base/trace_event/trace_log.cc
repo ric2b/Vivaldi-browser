@@ -398,7 +398,7 @@ bool TraceLog::OnMemoryDump(const MemoryDumpArgs& args,
   // TODO(ssid): Use MemoryDumpArgs to create light dumps when requested
   // (crbug.com/499731).
   TraceEventMemoryOverhead overhead;
-  overhead.Add("TraceLog", sizeof(*this));
+  overhead.Add(TraceEventMemoryOverhead::kOther, sizeof(*this));
   {
     AutoLock lock(lock_);
     if (logged_events_)
@@ -971,11 +971,8 @@ void TraceLog::FinishFlush(int generation, bool discard_events) {
   if (use_worker_thread_) {
     base::PostTaskWithTraits(
         FROM_HERE,
-        base::TaskTraits()
-            .MayBlock()
-            .WithPriority(base::TaskPriority::BACKGROUND)
-            .WithShutdownBehavior(
-                base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
+        {MayBlock(), TaskPriority::BACKGROUND,
+         TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
         BindOnce(&TraceLog::ConvertTraceEventsToTraceFormat,
                  Passed(&previous_logged_events), flush_output_callback,
                  argument_filter_predicate));
@@ -1229,8 +1226,7 @@ TraceEventHandle TraceLog::AddTraceEventWithThreadIdAndTimestamp(
 
       AutoLock thread_info_lock(thread_info_lock_);
 
-      hash_map<int, std::string>::iterator existing_name =
-          thread_names_.find(thread_id);
+      auto existing_name = thread_names_.find(thread_id);
       if (existing_name == thread_names_.end()) {
         // This is a new thread id, and a new name.
         thread_names_[thread_id] = new_name;
@@ -1504,7 +1500,8 @@ void TraceLog::AddMetadataEventsWhileLocked() {
                             process_name_);
   }
 
-#if !defined(OS_NACL) && !defined(OS_IOS)
+// See https://crbug.com/726484 for Fuchsia.
+#if !defined(OS_NACL) && !defined(OS_IOS) && !defined(OS_FUCHSIA)
   Time process_creation_time = CurrentProcessInfo::CreationTime();
   if (!process_creation_time.is_null()) {
     TimeDelta process_uptime = Time::Now() - process_creation_time;
@@ -1512,7 +1509,7 @@ void TraceLog::AddMetadataEventsWhileLocked() {
                             current_thread_id, "process_uptime_seconds",
                             "uptime", process_uptime.InSeconds());
   }
-#endif  // !defined(OS_NACL) && !defined(OS_IOS)
+#endif  // !defined(OS_NACL) && !defined(OS_IOS) && !defined(OS_FUCHSIA)
 
   if (!process_labels_.empty()) {
     std::vector<base::StringPiece> labels;
@@ -1679,7 +1676,8 @@ void TraceLog::UpdateETWCategoryGroupEnabledFlags() {
 
 void ConvertableToTraceFormat::EstimateTraceMemoryOverhead(
     TraceEventMemoryOverhead* overhead) {
-  overhead->Add("ConvertableToTraceFormat(Unknown)", sizeof(*this));
+  overhead->Add(TraceEventMemoryOverhead::kConvertableToTraceFormat,
+                sizeof(*this));
 }
 
 void TraceLog::AddAsyncEnabledStateObserver(

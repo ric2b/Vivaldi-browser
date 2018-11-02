@@ -22,6 +22,8 @@ static_library("core") {
     "favicon_url.h",
     "favicon_util.cc",
     "favicon_util.h",
+    "features.cc",
+    "features.h",
     "large_icon_service.cc",
     "large_icon_service.h",
   ]
@@ -69,6 +71,7 @@ source_set("unit_tests") {
     "//components/history/core/browser:browser",
     "//components/history/core/test:test",
     "//components/image_fetcher/core",
+    "//components/variations:test_support",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",

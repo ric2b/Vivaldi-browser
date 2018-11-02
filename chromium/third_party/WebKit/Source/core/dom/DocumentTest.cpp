@@ -40,6 +40,8 @@
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLLinkElement.h"
+#include "core/loader/DocumentLoader.h"
+#include "core/loader/appcache/ApplicationCacheHost.h"
 #include "core/page/Page.h"
 #include "core/page/ValidationMessageClient.h"
 #include "core/testing/DummyPageHolder.h"
@@ -47,6 +49,7 @@
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/WebApplicationCacheHost.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -285,6 +288,24 @@ class MockValidationMessageClient
   // DEFINE_INLINE_VIRTUAL_TRACE() { ValidationMessageClient::trace(visitor); }
 };
 
+class MockWebApplicationCacheHost
+    : NON_EXPORTED_BASE(public blink::WebApplicationCacheHost) {
+ public:
+  MockWebApplicationCacheHost() {}
+  ~MockWebApplicationCacheHost() override {}
+
+  void SelectCacheWithoutManifest() override {
+    without_manifest_was_called_ = true;
+  }
+  bool SelectCacheWithManifest(const blink::WebURL& manifestURL) override {
+    with_manifest_was_called_ = true;
+    return true;
+  }
+
+  bool with_manifest_was_called_ = false;
+  bool without_manifest_was_called_ = false;
+};
+
 }  // anonymous namespace
 
 // This tests that we properly resize and re-layout pages for printing in the
@@ -458,7 +479,7 @@ TEST_F(DocumentTest, StyleVersion) {
       "</style>"
       "<div id='x'><span class='c'></span></div>");
 
-  Element* element = GetDocument().GetElementById("x");
+  Element* element = GetDocument().getElementById("x");
   EXPECT_TRUE(element);
 
   uint64_t previous_style_version = GetDocument().StyleVersion();
@@ -706,10 +727,10 @@ TEST_F(DocumentTest, ValidationMessageCleanup) {
   MockValidationMessageClient* mock_client = new MockValidationMessageClient();
   GetDocument().GetSettings()->SetScriptEnabled(true);
   GetPage().SetValidationMessageClient(mock_client);
-  // implicitOpen()-implicitClose() makes Document.loadEventFinished()
+  // ImplicitOpen()-CancelParsing() makes Document.loadEventFinished()
   // true. It's necessary to kick unload process.
   GetDocument().ImplicitOpen(kForceSynchronousParsing);
-  GetDocument().ImplicitClose();
+  GetDocument().CancelParsing();
   GetDocument().AppendChild(GetDocument().createElement("html"));
   SetHtmlInnerHTML("<body><input required></body>");
   Element* script = GetDocument().createElement("script");
@@ -718,7 +739,7 @@ TEST_F(DocumentTest, ValidationMessageCleanup) {
       "document.querySelector('input').reportValidity(); };");
   GetDocument().body()->AppendChild(script);
   HTMLInputElement* input =
-      toHTMLInputElement(GetDocument().body()->FirstChild());
+      toHTMLInputElement(GetDocument().body()->firstChild());
   DVLOG(0) << GetDocument().body()->outerHTML();
 
   // Sanity check.
@@ -734,6 +755,91 @@ TEST_F(DocumentTest, ValidationMessageCleanup) {
   EXPECT_FALSE(mock_client->show_validation_message_was_called);
 
   GetPage().SetValidationMessageClient(original_client);
+}
+
+TEST_F(DocumentTest, SandboxDisablesAppCache) {
+  RefPtr<SecurityOrigin> origin =
+      SecurityOrigin::CreateFromString("https://test.com");
+  GetDocument().SetSecurityOrigin(origin);
+  SandboxFlags mask = kSandboxOrigin;
+  GetDocument().EnforceSandboxFlags(mask);
+  GetDocument().SetURL(KURL(KURL(), "https://test.com/foobar/document"));
+
+  ApplicationCacheHost* appcache_host =
+      GetDocument().Loader()->GetApplicationCacheHost();
+  appcache_host->host_ = WTF::MakeUnique<MockWebApplicationCacheHost>();
+  appcache_host->SelectCacheWithManifest(
+      KURL(KURL(), "https://test.com/foobar/manifest"));
+  MockWebApplicationCacheHost* mock_web_host =
+      static_cast<MockWebApplicationCacheHost*>(appcache_host->host_.get());
+  EXPECT_FALSE(mock_web_host->with_manifest_was_called_);
+  EXPECT_TRUE(mock_web_host->without_manifest_was_called_);
+}
+
+TEST_F(DocumentTest, SuboriginDisablesAppCache) {
+  RuntimeEnabledFeatures::setSuboriginsEnabled(true);
+  RefPtr<SecurityOrigin> origin =
+      SecurityOrigin::CreateFromString("https://test.com");
+  Suborigin suborigin;
+  suborigin.SetName("foobar");
+  origin->AddSuborigin(suborigin);
+  GetDocument().SetSecurityOrigin(origin);
+  GetDocument().SetURL(KURL(KURL(), "https://test.com/foobar/document"));
+
+  ApplicationCacheHost* appcache_host =
+      GetDocument().Loader()->GetApplicationCacheHost();
+  appcache_host->host_ = WTF::MakeUnique<MockWebApplicationCacheHost>();
+  appcache_host->SelectCacheWithManifest(
+      KURL(KURL(), "https://test.com/foobar/manifest"));
+  MockWebApplicationCacheHost* mock_web_host =
+      static_cast<MockWebApplicationCacheHost*>(appcache_host->host_.get());
+  EXPECT_FALSE(mock_web_host->with_manifest_was_called_);
+  EXPECT_TRUE(mock_web_host->without_manifest_was_called_);
+}
+
+// Verifies that calling EnsurePaintLocationDataValidForNode cleans compositor
+// inputs only when necessary. We generally want to avoid cleaning the inputs,
+// as it is more expensive than just doing layout.
+TEST_F(DocumentTest,
+       EnsurePaintLocationDataValidForNodeCompositingInputsOnlyWhenNecessary) {
+  GetDocument().body()->setInnerHTML(
+      "<div id='ancestor'>"
+      "  <div id='sticky' style='position:sticky;'>"
+      "    <div id='stickyChild'></div>"
+      "  </div>"
+      "  <div id='nonSticky'></div>"
+      "</div>");
+  EXPECT_EQ(DocumentLifecycle::kStyleClean,
+            GetDocument().Lifecycle().GetState());
+
+  // Asking for any element that is not affected by a sticky element should only
+  // advance the lifecycle to layout clean.
+  GetDocument().EnsurePaintLocationDataValidForNode(
+      GetDocument().getElementById("ancestor"));
+  EXPECT_EQ(DocumentLifecycle::kLayoutClean,
+            GetDocument().Lifecycle().GetState());
+
+  GetDocument().EnsurePaintLocationDataValidForNode(
+      GetDocument().getElementById("nonSticky"));
+  EXPECT_EQ(DocumentLifecycle::kLayoutClean,
+            GetDocument().Lifecycle().GetState());
+
+  // However, asking for either the sticky element or it's descendents should
+  // clean compositing inputs as well.
+  GetDocument().EnsurePaintLocationDataValidForNode(
+      GetDocument().getElementById("sticky"));
+  EXPECT_EQ(DocumentLifecycle::kCompositingInputsClean,
+            GetDocument().Lifecycle().GetState());
+
+  // Dirty layout.
+  GetDocument().body()->setAttribute("style", "background: red;");
+  EXPECT_EQ(DocumentLifecycle::kVisualUpdatePending,
+            GetDocument().Lifecycle().GetState());
+
+  GetDocument().EnsurePaintLocationDataValidForNode(
+      GetDocument().getElementById("stickyChild"));
+  EXPECT_EQ(DocumentLifecycle::kCompositingInputsClean,
+            GetDocument().Lifecycle().GetState());
 }
 
 }  // namespace blink

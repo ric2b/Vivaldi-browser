@@ -27,12 +27,12 @@
 #include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/policy/test/local_policy_test_server.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/common/chrome_constants.cc"
+#include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -58,7 +58,6 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
-#include "extensions/test/extension_test_notification_observer.h"
 #include "extensions/test/result_catcher.h"
 #include "net/http/http_status_code.h"
 #include "net/url_request/test_url_fetcher_factory.h"
@@ -350,7 +349,6 @@ class SigninExtensionsDeviceCloudPolicyBrowserTestBase
 
  private:
   void SetFakeDevicePolicy() {
-    device_policy()->policy_data().set_username(PolicyBuilder::kFakeUsername);
     device_policy()->policy_data().set_public_key_version(
         kFakePolicyPublicKeyVersion);
     device_policy()->Build();
@@ -360,7 +358,6 @@ class SigninExtensionsDeviceCloudPolicyBrowserTestBase
   static void MakeTestComponentPolicyBuilder(ComponentPolicyBuilder* builder) {
     builder->policy_data().set_policy_type(
         dm_protocol::kChromeSigninExtensionPolicyType);
-    builder->policy_data().set_username(PolicyBuilder::kFakeUsername);
     builder->policy_data().set_settings_entity_id(kTestExtensionId);
     builder->policy_data().set_public_key_version(kFakePolicyPublicKeyVersion);
     builder->payload().set_download_url(kFakePolicyUrl);
@@ -385,16 +382,10 @@ class SigninExtensionsDeviceCloudPolicyBrowserTest
   SigninExtensionsDeviceCloudPolicyBrowserTest()
       : fetcher_factory_(&fetcher_impl_factory_) {}
 
-  const extensions::Extension* InstallAndLoadTestExtension() const {
-    Profile* signin_profile = GetSigninProfile();
-    ExtensionService* service =
-        extensions::ExtensionSystem::Get(signin_profile)->extension_service();
-    scoped_refptr<extensions::UnpackedInstaller> installer(
-        extensions::UnpackedInstaller::Create(service));
-    extensions::ExtensionTestNotificationObserver observer(signin_profile);
-    installer->Load(GetTestExtensionSourcePath());
-    observer.WaitForExtensionLoad();
-    return GetTestExtension();
+  scoped_refptr<const extensions::Extension> InstallAndLoadTestExtension()
+      const {
+    extensions::ChromeTestExtensionLoader loader(GetSigninProfile());
+    return loader.LoadExtension(GetTestExtensionSourcePath());
   }
 
  private:
@@ -462,7 +453,8 @@ class SigninExtensionsDeviceCloudPolicyBrowserTest
 
 IN_PROC_BROWSER_TEST_F(SigninExtensionsDeviceCloudPolicyBrowserTest,
                        InstallAndRunInWindow) {
-  const extensions::Extension* extension = InstallAndLoadTestExtension();
+  scoped_refptr<const extensions::Extension> extension =
+      InstallAndLoadTestExtension();
   ASSERT_TRUE(extension);
   Browser* browser = CreateBrowser(GetSigninProfile());
   extensions::ResultCatcher result_catcher;

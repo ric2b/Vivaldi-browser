@@ -95,8 +95,10 @@ void FloatRoundedRect::Radii::Shrink(float top_width,
                                      float bottom_width,
                                      float left_width,
                                      float right_width) {
-  ASSERT(top_width >= 0 && bottom_width >= 0 && left_width >= 0 &&
-         right_width >= 0);
+  DCHECK_GE(top_width, 0);
+  DCHECK_GE(bottom_width, 0);
+  DCHECK_GE(left_width, 0);
+  DCHECK_GE(right_width, 0);
 
   top_left_.SetWidth(std::max<float>(0, top_left_.Width() - left_width));
   top_left_.SetHeight(std::max<float>(0, top_left_.Height() - top_width));
@@ -118,8 +120,10 @@ void FloatRoundedRect::Radii::Expand(float top_width,
                                      float bottom_width,
                                      float left_width,
                                      float right_width) {
-  ASSERT(top_width >= 0 && bottom_width >= 0 && left_width >= 0 &&
-         right_width >= 0);
+  DCHECK_GE(top_width, 0);
+  DCHECK_GE(bottom_width, 0);
+  DCHECK_GE(left_width, 0);
+  DCHECK_GE(right_width, 0);
   if (top_left_.Width() > 0 && top_left_.Height() > 0) {
     top_left_.SetWidth(top_left_.Width() + left_width);
     top_left_.SetHeight(top_left_.Height() + top_width);
@@ -139,7 +143,7 @@ void FloatRoundedRect::Radii::Expand(float top_width,
 }
 
 static inline float CornerRectIntercept(float y, const FloatRect& corner_rect) {
-  ASSERT(corner_rect.Height() > 0);
+  DCHECK_GT(corner_rect.Height(), 0);
   return corner_rect.Width() *
          sqrt(1 - (y * y) / (corner_rect.Height() * corner_rect.Height()));
 }
@@ -324,7 +328,7 @@ float CalcBorderRadiiConstraintScaleFor(const FloatRect& rect,
   if (radii_sum > rect.Height())
     factor = std::min(rect.Height() / radii_sum, factor);
 
-  ASSERT(factor <= 1);
+  DCHECK_LE(factor, 1);
   return factor;
 }
 
@@ -371,15 +375,15 @@ void FloatRoundedRect::AdjustRadii() {
 
 String FloatRoundedRect::Radii::ToString() const {
   return String::Format("tl:%s; tr:%s; bl:%s; br:%s",
-                        TopLeft().ToString().Ascii().Data(),
-                        TopRight().ToString().Ascii().Data(),
-                        BottomLeft().ToString().Ascii().Data(),
-                        BottomRight().ToString().Ascii().Data());
+                        TopLeft().ToString().Ascii().data(),
+                        TopRight().ToString().Ascii().data(),
+                        BottomLeft().ToString().Ascii().data(),
+                        BottomRight().ToString().Ascii().data());
 }
 
 String FloatRoundedRect::ToString() const {
-  return String::Format("%s radii:(%s)", Rect().ToString().Ascii().Data(),
-                        GetRadii().ToString().Ascii().Data());
+  return String::Format("%s radii:(%s)", Rect().ToString().Ascii().data(),
+                        GetRadii().ToString().Ascii().data());
 }
 
 }  // namespace blink

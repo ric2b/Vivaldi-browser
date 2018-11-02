@@ -184,7 +184,6 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
                                         bool allow_destination_subdomains);
   void RemoveSpellCheckResolvedCallback();
   void RemoveWebPageOverlay();
-  void ResetDeviceLight();
   void ResetTestHelperControllers();
   void ResolveBeforeInstallPromptPromise(const std::string& platform);
   void RunIdleTasks(v8::Local<v8::Function> callback);
@@ -223,7 +222,6 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
                                       v8::Local<v8::Value> origin);
   void SetJavaScriptCanAccessClipboard(bool can_access);
   void SetMIDIAccessorResult(bool result);
-  void SetMockDeviceLight(double value);
   void SetMockDeviceMotion(gin::Arguments* args);
   void SetMockDeviceOrientation(gin::Arguments* args);
   void SetMockScreenOrientation(const std::string& orientation);
@@ -506,7 +504,6 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::RemoveSpellCheckResolvedCallback)
       .SetMethod("removeWebPageOverlay",
                  &TestRunnerBindings::RemoveWebPageOverlay)
-      .SetMethod("resetDeviceLight", &TestRunnerBindings::ResetDeviceLight)
       .SetMethod("resetTestHelperControllers",
                  &TestRunnerBindings::ResetTestHelperControllers)
       .SetMethod("resolveBeforeInstallPromptPromise",
@@ -569,7 +566,6 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::SetMIDIAccessorResult)
       .SetMethod("setMainFrameIsFirstResponder",
                  &TestRunnerBindings::NotImplemented)
-      .SetMethod("setMockDeviceLight", &TestRunnerBindings::SetMockDeviceLight)
       .SetMethod("setMockDeviceMotion",
                  &TestRunnerBindings::SetMockDeviceMotion)
       .SetMethod("setMockDeviceOrientation",
@@ -917,17 +913,6 @@ bool TestRunnerBindings::DisableAutoResizeMode(int new_width, int new_height) {
   if (runner_)
     return runner_->DisableAutoResizeMode(new_width, new_height);
   return false;
-}
-
-void TestRunnerBindings::SetMockDeviceLight(double value) {
-  if (!runner_)
-    return;
-  runner_->SetMockDeviceLight(value);
-}
-
-void TestRunnerBindings::ResetDeviceLight() {
-  if (runner_)
-    runner_->ResetDeviceLight();
 }
 
 void TestRunnerBindings::SetMockDeviceMotion(gin::Arguments* args) {
@@ -1699,7 +1684,6 @@ void TestRunner::Reset() {
     delegate_->DeleteAllCookies();
     delegate_->SetBluetoothManualChooser(false);
     delegate_->ResetPermissions();
-    ResetDeviceLight();
   }
 
   dump_as_audio_ = false;
@@ -1800,10 +1784,7 @@ void TestRunner::DumpPixelsAsync(
       // Return a blank image so that the test fails.
       SkBitmap bitmap;
       bitmap.allocN32Pixels(1, 1);
-      {
-        SkAutoLockPixels lock(bitmap);
-        bitmap.eraseColor(0);
-      }
+      bitmap.eraseColor(0);
       callback.Run(bitmap);
       return;
     }
@@ -2218,14 +2199,6 @@ bool TestRunner::DisableAutoResizeMode(int new_width, int new_height) {
   return true;
 }
 
-void TestRunner::SetMockDeviceLight(double value) {
-  delegate_->SetDeviceLightData(value);
-}
-
-void TestRunner::ResetDeviceLight() {
-  delegate_->SetDeviceLightData(-1);
-}
-
 void TestRunner::SetMockDeviceMotion(bool has_acceleration_x,
                                      double acceleration_x,
                                      bool has_acceleration_y,
@@ -2363,9 +2336,7 @@ void TestRunner::DidCloseChooser() {
 }
 
 void TestRunner::SetPopupBlockingEnabled(bool block_popups) {
-  delegate_->Preferences()->java_script_can_open_windows_automatically =
-      !block_popups;
-  delegate_->ApplyPreferences();
+  delegate_->SetPopupBlockingEnabled(block_popups);
 }
 
 void TestRunner::SetJavaScriptCanAccessClipboard(bool can_access) {

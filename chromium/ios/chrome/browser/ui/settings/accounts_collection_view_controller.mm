@@ -481,8 +481,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
           initWithBrowserState:_browserState
       presentingViewController:self.navigationController
          isPresentedOnSettings:YES
-             signInAccessPoint:signin_metrics::AccessPoint::
-                                   ACCESS_POINT_SETTINGS];
+                   accessPoint:signin_metrics::AccessPoint::
+                                   ACCESS_POINT_SETTINGS
+                   promoAction:signin_metrics::PromoAction::
+                                   PROMO_ACTION_NO_SIGNIN_PROMO];
 
   // |_authenticationOperationInProgress| is reset when the signin interaction
   // controller is dismissed.
@@ -645,10 +647,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
   CollectionViewAccountItem* item =
       base::mac::ObjCCastStrict<CollectionViewAccountItem>(
           [_identityMap objectForKey:identity.gaiaID]);
+  if (!item) {
+    return;
+  }
   [self updateAccountItem:item withIdentity:identity];
-  NSIndexPath* indexPath =
-      [self.collectionViewModel indexPathForItem:item
-                         inSectionWithIdentifier:SectionIdentifierAccounts];
+  NSIndexPath* indexPath = [self.collectionViewModel indexPathForItem:item];
   [self.collectionView reloadItemsAtIndexPaths:@[ indexPath ]];
 }
 

@@ -7,12 +7,11 @@
 
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/protocol/Emulation.h"
-#include "platform/WebTaskRunner.h"
 
 namespace blink {
 
-class WebLocalFrameImpl;
-class WebViewImpl;
+class WebLocalFrameBase;
+class WebViewBase;
 
 namespace protocol {
 namespace DOM {
@@ -32,7 +31,7 @@ class InspectorEmulationAgent final
     virtual void SetCPUThrottlingRate(double rate) {}
   };
 
-  static InspectorEmulationAgent* Create(WebLocalFrameImpl*, Client*);
+  static InspectorEmulationAgent* Create(WebLocalFrameBase*, Client*);
   ~InspectorEmulationAgent() override;
 
   // protocol::Dispatcher::EmulationCommandHandler implementation.
@@ -59,13 +58,12 @@ class InspectorEmulationAgent final
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  InspectorEmulationAgent(WebLocalFrameImpl*, Client*);
-  WebViewImpl* GetWebViewImpl();
+  InspectorEmulationAgent(WebLocalFrameBase*, Client*);
+  WebViewBase* GetWebViewBase();
   void VirtualTimeBudgetExpired();
 
-  Member<WebLocalFrameImpl> web_local_frame_impl_;
+  Member<WebLocalFrameBase> web_local_frame_;
   Client* client_;
-  TaskHandle virtual_time_budget_expired_task_handle_;
 };
 
 }  // namespace blink

@@ -35,6 +35,7 @@
 #include "platform/animation/CompositorFloatAnimationCurve.h"
 #include "platform/animation/CompositorTargetProperty.h"
 #include "platform/graphics/CompositorElementId.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "platform/testing/FakeGraphicsLayer.h"
 #include "platform/testing/FakeGraphicsLayerClient.h"
@@ -47,7 +48,6 @@
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebLayer.h"
 #include "public/platform/WebLayerTreeView.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -69,7 +69,8 @@ class GraphicsLayerTest : public testing::Test {
     layer_tree_view_->SetRootLayer(*clip_layer_->PlatformLayer());
     layer_tree_view_->RegisterViewportLayers(
         scroll_elasticity_layer_->PlatformLayer(), clip_layer_->PlatformLayer(),
-        graphics_layer_->PlatformLayer(), 0);
+        clip_layer_->PlatformLayer(), nullptr, graphics_layer_->PlatformLayer(),
+        nullptr);
     layer_tree_view_->SetViewportSize(WebSize(1, 1));
   }
 
@@ -127,7 +128,7 @@ TEST_F(GraphicsLayerTest, updateLayerShouldFlattenTransformWithAnimations) {
   host.AddTimeline(*compositor_timeline);
   compositor_timeline->PlayerAttached(player);
 
-  platform_layer_->SetElementId(CompositorElementId(platform_layer_->Id(), 0));
+  platform_layer_->SetElementId(CompositorElementId(platform_layer_->Id()));
 
   player.CompositorPlayer()->AttachElement(platform_layer_->GetElementId());
   ASSERT_TRUE(player.CompositorPlayer()->IsElementAttached());

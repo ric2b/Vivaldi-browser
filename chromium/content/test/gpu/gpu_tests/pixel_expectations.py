@@ -42,6 +42,8 @@ class PixelExpectations(GpuTestExpectations):
     # TODO(kbr): flakily timing out on this configuration.
     self.Flaky('*', ['linux', 'intel', 'debug'], bug=648369)
 
+    self.Flaky('Pixel_Video_MP4', ['android', 'nvidia'], bug=716564)
+
     # Flaky for unknown reasons only on macOS. Not planning to investigate
     # further.
     self.Flaky('Pixel_ScissorTestWithPreserveDrawingBuffer', ['mac'],
@@ -50,8 +52,27 @@ class PixelExpectations(GpuTestExpectations):
     self.Flaky('Pixel_OffscreenCanvas2DResizeOnWorker',
         ['win10', ('intel', 0x1912)], bug=690663)
 
-    # TODO(jbauman): Re-enable when references images created.
-    self.Fail('Pixel_DirectComposition_Video_*', ['win'], bug=704389)
-
     # TODO(zakerinasab): check / generate reference images.
     self.Fail('Pixel_Canvas2DUntagged', bug=713632)
+
+    # TODO(jbauman): Fix this.
+    self.Fail('Pixel_DirectComposition_Video_MP4', ['win', 'intel'], bug=704389)
+
+    # Failures on Haswell GPUs on macOS after upgrade to 10.12.4.
+    self.Fail('Pixel_OffscreenCanvas2DResizeOnWorker',
+              ['mac', ('intel', 0x0a2e)], bug=718183)
+    self.Fail('Pixel_OffscreenCanvasAccelerated2D',
+              ['mac', ('intel', 0x0a2e)], bug=718183)
+    self.Fail('Pixel_OffscreenCanvasAccelerated2DWorker',
+              ['mac', ('intel', 0x0a2e)], bug=718183)
+    self.Fail('Pixel_WebGLGreenTriangle_NonChromiumImage_NoAA_NoAlpha',
+              ['mac', ('intel', 0x0a2e)], bug=718183)
+
+    self.Flaky('Pixel_OffscreenCanvasTransferBeforeStyleResize',
+              ['mac', 'linux', 'win', 'android'], bug=720188)
+    self.Flaky('Pixel_OffscreenCanvasTransferAfterStyleResize',
+              ['mac', 'linux', 'win', 'android'], bug=719144)
+
+    # TODO(junov): update reference images
+    self.Fail('Pixel_CSSFilterEffects', ['mac'], bug=721727)
+    self.Fail('Pixel_CSSFilterEffects_NoOverlays', ['mac'], bug=721727)

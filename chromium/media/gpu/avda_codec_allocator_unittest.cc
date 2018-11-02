@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/single_thread_task_runner.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -40,7 +41,7 @@ void WaitUntilRestarted(base::WaitableEvent* about_to_wait_event,
 void SignalImmediately(base::WaitableEvent* event) {
   event->Signal();
 }
-}
+}  // namespace
 
 class MockClient : public AVDACodecAllocatorClient {
  public:
@@ -96,7 +97,6 @@ class AVDACodecAllocatorTest : public testing::Test {
   }
 
  protected:
-
   // Start / stop the threads for |avda| on the right thread.
   bool StartThread(AVDACodecAllocatorClient* avda) {
     return PostAndWait(FROM_HERE, base::Bind(
@@ -133,10 +133,12 @@ class AVDACodecAllocatorTest : public testing::Test {
             allocator_, task_type));
   }
 
-  base::Optional<TaskType> TaskTypeForAllocation() {
-    return PostAndWait(FROM_HERE,
-                       base::Bind(&AVDACodecAllocator::TaskTypeForAllocation,
-                                  base::Unretained(allocator_)));
+  base::Optional<TaskType> TaskTypeForAllocation(
+      bool software_codec_forbidden) {
+    return PostAndWait(
+        FROM_HERE,
+        base::Bind(&AVDACodecAllocator::TaskTypeForAllocation,
+                   base::Unretained(allocator_), software_codec_forbidden));
   }
 
   scoped_refptr<base::SingleThreadTaskRunner> TaskRunnerFor(
@@ -201,7 +203,7 @@ TEST_F(AVDACodecAllocatorTest, ThreadsStopAfterAllClientsStop) {
 
 TEST_F(AVDACodecAllocatorTest, TestHangThread) {
   StartThread(avda1_);
-  ASSERT_EQ(AUTO_CODEC, TaskTypeForAllocation().value());
+  ASSERT_EQ(AUTO_CODEC, TaskTypeForAllocation(false));
 
   // Hang the AUTO_CODEC thread.
   base::WaitableEvent about_to_wait_event(
@@ -218,7 +220,7 @@ TEST_F(AVDACodecAllocatorTest, TestHangThread) {
 
   // Verify that we've failed over after a long time has passed.
   tick_clock_.Advance(base::TimeDelta::FromSeconds(1));
-  ASSERT_EQ(SW_CODEC, TaskTypeForAllocation().value());
+  ASSERT_EQ(SW_CODEC, TaskTypeForAllocation(false));
 
   // Un-hang the thread and wait for it to let another task run.  This will
   // notify |allocator_| that the thread is no longer hung.
@@ -232,7 +234,7 @@ TEST_F(AVDACodecAllocatorTest, TestHangThread) {
   done_waiting_event.Wait();
 
   // Verify that we've un-failed over.
-  ASSERT_EQ(AUTO_CODEC, TaskTypeForAllocation().value());
+  ASSERT_EQ(AUTO_CODEC, TaskTypeForAllocation(false));
 }
 
 }  // namespace media

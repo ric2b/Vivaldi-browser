@@ -182,24 +182,71 @@ chrome.test.runTests(function() {
       let gestureDetector = new GestureDetector(stubElement);
       let pinchListener = new PinchListener(gestureDetector);
 
-      // Ensure that the touchstart listener is not passive, otherwise the
+      // Ensure that the touchmove listener is not passive, otherwise the
       // call to preventDefault will be ignored. Since listeners could default
       // to being passive, we must set the value explicitly
       // (see crbug.com/675730).
-      for (let l of stubElement.listeners.get('touchstart')) {
+      for (let l of stubElement.listeners.get('touchmove')) {
         let options = stubElement.listenerOptions.get(l);
         chrome.test.assertTrue(!!options &&
                                typeof(options.passive) == 'boolean');
         chrome.test.assertFalse(options.passive);
       }
 
+      // We should not preventDefault the touchstart for 2 fingers, since this
+      // could just be a 2 finger tap.
       let pinchStartEvent = new MockTouchEvent('touchstart', [
         {clientX: 0, clientY: 0},
         {clientX: 0, clientY: 2}
       ]);
       stubElement.sendEvent(pinchStartEvent);
       chrome.test.assertEq('pinchstart', pinchListener.lastEvent.type);
-      chrome.test.assertTrue(pinchStartEvent.defaultPrevented);
+      chrome.test.assertFalse(pinchStartEvent.defaultPrevented);
+
+      let pinchUpdateEvent = new MockTouchEvent('touchmove', [
+        {clientX: 0, clientY: 0},
+        {clientX: 0, clientY: 4}
+      ]);
+      stubElement.sendEvent(pinchUpdateEvent);
+      chrome.test.assertEq('pinchupdate', pinchListener.lastEvent.type);
+      chrome.test.assertTrue(pinchUpdateEvent.defaultPrevented);
+
+      chrome.test.succeed();
+    },
+
+    function testWasTwoFingerTouch() {
+      let stubElement = new StubElement();
+      let gestureDetector = new GestureDetector(stubElement);
+
+
+      chrome.test.assertFalse(gestureDetector.wasTwoFingerTouch(),
+          "Should not have two finger touch before first touch event.");
+
+      stubElement.sendEvent(new MockTouchEvent('touchstart', [
+        {clientX: 0, clientY: 0}
+      ]));
+      chrome.test.assertFalse(gestureDetector.wasTwoFingerTouch(),
+          "Should not have a two finger touch with one touch.");
+
+      stubElement.sendEvent(new MockTouchEvent('touchstart', [
+        {clientX: 0, clientY: 0},
+        {clientX: 2, clientY: 2}
+      ]));
+      chrome.test.assertTrue(gestureDetector.wasTwoFingerTouch(),
+          "Should have a two finger touch.");
+
+      // Make sure we keep |wasTwoFingerTouch| true after the end event.
+      stubElement.sendEvent(new MockTouchEvent('touchend', []));
+      chrome.test.assertTrue(gestureDetector.wasTwoFingerTouch(),
+          "Should maintain two finger touch after touchend.");
+
+      stubElement.sendEvent(new MockTouchEvent('touchstart', [
+        {clientX: 0, clientY: 0},
+        {clientX: 2, clientY: 2},
+        {clientX: 4, clientY: 4}
+      ]));
+      chrome.test.assertFalse(gestureDetector.wasTwoFingerTouch(),
+          "Should not have two finger touch with 3 touches.");
 
       chrome.test.succeed();
     }

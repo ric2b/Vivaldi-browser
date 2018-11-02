@@ -173,12 +173,11 @@ struct UnionTraits<common::mojom::ValueDataView, base::Value> {
   }
 
   static mojo::ConstCArray<uint8_t> binary_value(const base::Value& value) {
-    const base::Value* binary_value = nullptr;
-    if (!value.GetAsBinary(&binary_value))
+    if (!value.is_blob())
       NOTREACHED();
     return mojo::ConstCArray<uint8_t>(
-        binary_value->GetSize(),
-        reinterpret_cast<const uint8_t*>(binary_value->GetBuffer()));
+        value.GetBlob().size(),
+        reinterpret_cast<const uint8_t*>(value.GetBlob().data()));
   }
 
   static const base::ListValue& list_value(const base::Value& value) {
@@ -250,6 +249,12 @@ struct UnionTraits<common::mojom::ValueDataView, std::unique_ptr<base::Value>> {
 
   static bool Read(common::mojom::ValueDataView data,
                    std::unique_ptr<base::Value>* value);
+};
+
+template <>
+struct CloneTraits<std::unique_ptr<base::Value>, false> {
+  static std::unique_ptr<base::Value> Clone(
+      const std::unique_ptr<base::Value>& input);
 };
 
 }  // namespace mojo

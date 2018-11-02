@@ -34,7 +34,7 @@ config("config") {
   }
 
   if (is_chromecast) {
-    defines += [ "BLINK_MEDIA_LOG=VLOG(2)" ]
+    defines += [ "BLINK_MEDIA_LOG=LOG(INFO)" ]
   }
 }
 
@@ -51,7 +51,7 @@ config("core_include_dirs") {
 import("//build/config/pch.gni")
 
 config("blink_core_pch") {
-  if (enable_precompiled_headers) {
+  if (enable_precompiled_headers && (!defined(is_vivaldi) || !is_vivaldi || !is_win)) {
     if (is_win) {
       # This is a string rather than a file GN knows about. It has to match
       # exactly what's in the /FI flag below, and what might appear in the
@@ -94,7 +94,7 @@ source_set("generated") {
     "//third_party/WebKit/Source/bindings/modules:bindings_modules_generated",
     "//third_party/WebKit/Source/bindings/modules/v8:bindings_modules_generated",
     "//third_party/WebKit/Source/platform:make_platform_generated",
-    "//third_party/WebKit/Source/wtf",
+    "//third_party/WebKit/Source/platform/wtf",
     "//url",
     "//v8",
   ]
@@ -106,7 +106,7 @@ source_set("prerequisites") {
     "//skia",
     "//third_party/WebKit/Source/core/inspector:generated",
     "//third_party/WebKit/Source/core/probe:generated",
-    "//third_party/WebKit/Source/wtf",
+    "//third_party/WebKit/Source/platform/wtf",
     "//third_party/angle:translator",
     "//third_party/iccjpeg",
     "//third_party/icu",
@@ -166,7 +166,7 @@ component("core") {
     ":core_generated",
     "//skia",
     "//third_party/WebKit/Source/platform",
-    "//third_party/WebKit/Source/wtf",
+    "//third_party/WebKit/Source/platform/wtf",
     "//url",
     "//v8",
   ]
@@ -177,6 +177,7 @@ component("core") {
     "//third_party/WebKit/Source/core/dom",
     "//third_party/WebKit/Source/core/editing",
     "//third_party/WebKit/Source/core/events",
+    "//third_party/WebKit/Source/core/exported",
     "//third_party/WebKit/Source/core/fileapi",
     "//third_party/WebKit/Source/core/frame",
     "//third_party/WebKit/Source/core/geometry",
@@ -271,6 +272,8 @@ source_set("testing") {
     "testing/OriginTrialsTestPartial.h",
     "testing/RecordTest.cpp",
     "testing/RecordTest.h",
+    "testing/SequenceTest.cpp",
+    "testing/SequenceTest.h",
     "testing/TypeConversions.h",
     "testing/UnionTypesTest.cpp",
     "testing/UnionTypesTest.h",
@@ -407,20 +410,23 @@ action("generated_testing_idls_internal_runtime_flags") {
 
 css_properties("make_core_generated_computed_style_base") {
   script = "../build/scripts/make_computed_style_base.py"
+  in_files = [
+    "css/ComputedStyleExtraFields.json5",
+    "css/ComputedStyleDiffFunctions.json5",
+  ]
   other_inputs = [
     "../build/scripts/templates/fields/field.tmpl",
+    "../build/scripts/templates/fields/group.tmpl",
     "../build/scripts/templates/fields/base.tmpl",
     "../build/scripts/templates/fields/keyword.tmpl",
     "../build/scripts/templates/fields/primitive.tmpl",
     "../build/scripts/templates/fields/monotonic_flag.tmpl",
     "../build/scripts/templates/fields/storage_only.tmpl",
     "../build/scripts/templates/fields/external.tmpl",
-    "../build/scripts/templates/ComputedStyleBase.cpp.tmpl",
     "../build/scripts/templates/ComputedStyleBase.h.tmpl",
     "../build/scripts/templates/ComputedStyleBaseConstants.h.tmpl",
   ]
   outputs = [
-    "$blink_core_output_dir/ComputedStyleBase.cpp",
     "$blink_core_output_dir/ComputedStyleBase.h",
     "$blink_core_output_dir/ComputedStyleBaseConstants.h",
   ]
@@ -471,10 +477,12 @@ css_properties("make_core_generated_css_property_apis") {
     "$blink_core_output_dir/css/properties/CSSPropertyAPICounterIncrement.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPICounterReset.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPICursor.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPID.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFilter.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFlexBasis.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFlexGrowOrShrink.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontFamily.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIFontFeatureSettings.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontSize.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontSizeAdjust.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontVariantCaps.h",
@@ -497,6 +505,7 @@ css_properties("make_core_generated_css_property_apis") {
     "$blink_core_output_dir/css/properties/CSSPropertyAPIMarker.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIOffsetAnchor.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIOffsetDistance.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIOffsetPath.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIOffsetPosition.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIOffsetRotate.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIOpacity.h",
@@ -514,7 +523,6 @@ css_properties("make_core_generated_css_property_apis") {
     "$blink_core_output_dir/css/properties/CSSPropertyAPIRotate.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIScale.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIScrollSnapCoordinate.h",
-    "$blink_core_output_dir/css/properties/CSSPropertyAPIShadow.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIShapeImageThreshold.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIShapeMargin.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIShapeOutside.h",
@@ -531,6 +539,7 @@ css_properties("make_core_generated_css_property_apis") {
     "$blink_core_output_dir/css/properties/CSSPropertyAPITextSizeAdjust.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITextUnderlinePosition.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITouchAction.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPITransform.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITransformOrigin.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITranslate.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIVerticalAlign.h",
@@ -1067,7 +1076,7 @@ target(core_link_small_target_type, "core_generated") {
     "//third_party/WebKit/Source/bindings/modules:bindings_modules_generated",
     "//third_party/WebKit/Source/bindings/modules/v8:bindings_modules_generated",
     "//third_party/WebKit/Source/platform:make_platform_generated",
-    "//third_party/WebKit/Source/wtf",
+    "//third_party/WebKit/Source/platform/wtf",
     "//url",
     "//v8",
   ]
@@ -1134,7 +1143,7 @@ source_set("unit_tests") {
     "animation/TimingInputTest.cpp",
     "clipboard/DataObjectTest.cpp",
     "css/ActiveStyleSheetsTest.cpp",
-    "css/AffectedByFocusTest.cpp",
+    "css/AffectedByPseudoTest.cpp",
     "css/CSSCalculationValueTest.cpp",
     "css/CSSFontFaceSourceTest.cpp",
     "css/CSSPageRuleTest.cpp",
@@ -1185,6 +1194,7 @@ source_set("unit_tests") {
     "dom/ExecutionContextTaskTest.cpp",
     "dom/IdleDeadlineTest.cpp",
     "dom/LayoutTreeBuilderTraversalTest.cpp",
+    "dom/MockScriptElementBase.h",
     "dom/ModulatorTest.cpp",
     "dom/ModuleMapTest.cpp",
     "dom/MutationObserverTest.cpp",
@@ -1194,7 +1204,9 @@ source_set("unit_tests") {
     "dom/ScriptModuleResolverImplTest.cpp",
     "dom/ScriptRunnerTest.cpp",
     "dom/ScriptedAnimationControllerTest.cpp",
+    "dom/ScriptedIdleTaskControllerTest.cpp",
     "dom/SelectorQueryTest.cpp",
+    "dom/SpaceSplitStringTest.cpp",
     "dom/StaticRangeTest.cpp",
     "dom/StyleElementTest.cpp",
     "dom/StyleEngineTest.cpp",
@@ -1286,6 +1298,7 @@ source_set("unit_tests") {
     "html/track/vtt/VTTScannerTest.cpp",
     "input/EventHandlerTest.cpp",
     "inspector/ProtocolParserTest.cpp",
+    "layout/CollapsedBorderValueTest.cpp",
     "layout/ImageQualityControllerTest.cpp",
     "layout/LayoutBlockTest.cpp",
     "layout/LayoutBoxModelObjectTest.cpp",
@@ -1314,14 +1327,15 @@ source_set("unit_tests") {
     "layout/api/SelectionStateTest.cpp",
     "layout/compositing/CompositedLayerMappingTest.cpp",
     "layout/compositing/CompositingReasonFinderTest.cpp",
+    "layout/compositing/PaintLayerCompositorTest.cpp",
     "layout/line/InlineBoxTest.cpp",
     "layout/line/InlineTextBoxTest.cpp",
     "layout/ng/geometry/ng_box_strut_test.cc",
     "layout/ng/geometry/ng_logical_offset_test.cc",
     "layout/ng/geometry/ng_physical_rect_test.cc",
+    "layout/ng/inline/ng_inline_items_builder_test.cc",
     "layout/ng/inline/ng_inline_layout_algorithm_test.cc",
     "layout/ng/inline/ng_inline_node_test.cc",
-    "layout/ng/inline/ng_layout_inline_items_builder_test.cc",
     "layout/ng/ng_absolute_utils_test.cc",
     "layout/ng/ng_base_layout_algorithm_test.cc",
     "layout/ng/ng_base_layout_algorithm_test.h",
@@ -1338,6 +1352,7 @@ source_set("unit_tests") {
     "layout/shapes/BoxShapeTest.cpp",
     "layout/svg/LayoutSVGForeignObjectTest.cpp",
     "layout/svg/LayoutSVGRootTest.cpp",
+    "loader/BaseFetchContextTest.cpp",
     "loader/DocumentLoadTimingTest.cpp",
     "loader/FrameFetchContextTest.cpp",
     "loader/LinkLoaderTest.cpp",
@@ -1347,6 +1362,7 @@ source_set("unit_tests") {
     "loader/TextResourceDecoderBuilderTest.cpp",
     "loader/ThreadableLoaderTest.cpp",
     "loader/modulescript/ModuleScriptLoaderTest.cpp",
+    "loader/modulescript/ModuleTreeLinkerTest.cpp",
     "loader/resource/CSSStyleSheetResourceTest.cpp",
     "loader/resource/FontResourceTest.cpp",
     "loader/resource/ImageResourceTest.cpp",
@@ -1373,7 +1389,6 @@ source_set("unit_tests") {
     "paint/ObjectPaintInvalidatorTest.cpp",
     "paint/PaintControllerPaintTest.cpp",
     "paint/PaintControllerPaintTest.h",
-    "paint/PaintInfoTest.cpp",
     "paint/PaintInvalidationTest.cpp",
     "paint/PaintLayerClipperTest.cpp",
     "paint/PaintLayerPainterTest.cpp",

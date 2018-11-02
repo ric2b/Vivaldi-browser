@@ -48,7 +48,6 @@ service("leveldb") {
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
     "//services/service_manager/public/cpp",
-    "//services/tracing/public/cpp",
   ]
 }
 
@@ -73,8 +72,8 @@ service_test("leveldb_service_unittests") {
     "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
+    "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp:service_test_support",
-    "//services/service_manager/public/cpp:sources",
     "//third_party/leveldatabase",
   ]
 

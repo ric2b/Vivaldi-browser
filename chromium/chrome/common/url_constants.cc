@@ -61,7 +61,7 @@ const char kChromeUIGCMInternalsURL[] = "chrome://gcm-internals/";
 const char kChromeUIHelpFrameURL[] = "chrome://help-frame/";
 const char kChromeUIHelpURL[] = "chrome://help/";
 const char kChromeUIHistoryURL[] = "chrome://history/";
-const char kChromeUIHistoryFrameURL[] = "chrome://history-frame/";
+const char kDeprecatedChromeUIHistoryFrameURL[] = "chrome://history-frame/";
 const char kChromeUIIdentityInternalsURL[] = "chrome://identity-internals/";
 const char kChromeUIInspectURL[] = "chrome://inspect/";
 const char kChromeUIInstantURL[] = "chrome://instant/";
@@ -154,11 +154,9 @@ const char kChromeUITabModalConfirmDialogURL[] =
 const char kChromeUIWebRtcLogsURL[] = "chrome://webrtc-logs/";
 #endif
 
-#if defined(ENABLE_MEDIA_ROUTER)
 const char kChromeUIMediaRouterURL[] = "chrome://media-router/";
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
 const char kChromeUICastURL[] = "chrome://cast/";
-#endif
 #endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
@@ -212,7 +210,7 @@ const char kChromeUIHangUIHost[] = "uithreadhang";
 const char kChromeUIHelpFrameHost[] = "help-frame";
 const char kChromeUIHelpHost[] = "help";
 const char kChromeUIHistoryHost[] = "history";
-const char kChromeUIHistoryFrameHost[] = "history-frame";
+const char kDeprecatedChromeUIHistoryFrameHost[] = "history-frame";
 const char kChromeUIIdentityInternalsHost[] = "identity-internals";
 const char kChromeUIInspectHost[] = "inspect";
 const char kChromeUIInstantHost[] = "instant";
@@ -264,7 +262,6 @@ const char kChromeUIThemeHost[] = "theme";
 const char kChromeUIThumbnailHost[] = "thumb";
 const char kChromeUIThumbnailHost2[] = "thumb2";
 const char kChromeUIThumbnailListHost[] = "thumbnails";
-const char kChromeUITouchIconHost[] = "touch-icon";
 const char kChromeUITranslateInternalsHost[] = "translate-internals";
 const char kChromeUIUberFrameHost[] = "uber-frame";
 const char kChromeUIUberHost[] = "chrome";
@@ -348,11 +345,9 @@ const char kChromeUITabModalConfirmDialogHost[] = "tab-modal-confirm-dialog";
 const char kChromeUIWebRtcLogsHost[] = "webrtc-logs";
 #endif
 
-#if defined(ENABLE_MEDIA_ROUTER)
 const char kChromeUIMediaRouterHost[] = "media-router";
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
 const char kChromeUICastHost[] = "cast";
-#endif
 #endif
 
 // Settings sub pages.
@@ -383,6 +378,7 @@ const char kBluetoothSubPage[] = "bluetoothDevices";
 const char kDateTimeSubPage[] = "dateTime";
 const char kDeprecatedOptionsSearchSubPage[] = "search";
 const char kDisplaySubPage[] = "display";
+const char kHelpSubPage[] = "help";
 const char kInternetSubPage[] = "internet";
 const char kNetworkDetailSubPage[] = "networkDetail";
 const char kPowerSubPage[] = "power";
@@ -425,36 +421,39 @@ const char kExtensionControlledSettingLearnMoreURL[] =
 
 const char kChromeHelpViaKeyboardURL[] =
 #if defined(OS_CHROMEOS)
-#if defined(OFFICIAL_BUILD)
+#if defined(GOOGLE_CHROME_BUILD)
     "chrome-extension://honijodknafkokifofgiaalefdiedpko/main.html";
 #else
     "https://support.google.com/chromebook/?p=help&ctx=keyboard";
-#endif  // defined(OFFICIAL_BUILD
+#endif  // defined(GOOGLE_CHROME_BUILD
 #else
     "https://support.google.com/chrome/?p=help&ctx=keyboard";
 #endif  // defined(OS_CHROMEOS)
 
 const char kChromeHelpViaMenuURL[] =
 #if defined(OS_CHROMEOS)
-#if defined(OFFICIAL_BUILD)
+#if defined(GOOGLE_CHROME_BUILD)
     "chrome-extension://honijodknafkokifofgiaalefdiedpko/main.html";
 #else
     "https://support.google.com/chromebook/?p=help&ctx=menu";
-#endif  // defined(OFFICIAL_BUILD
+#endif  // defined(GOOGLE_CHROME_BUILD
 #else
     "https://support.google.com/chrome/?p=help&ctx=menu";
 #endif  // defined(OS_CHROMEOS)
 
 const char kChromeHelpViaWebUIURL[] =
 #if defined(OS_CHROMEOS)
-#if defined(OFFICIAL_BUILD)
+#if defined(GOOGLE_CHROME_BUILD)
     "chrome-extension://honijodknafkokifofgiaalefdiedpko/main.html";
 #else
     "https://support.google.com/chromebook/?p=help&ctx=settings";
-#endif  // defined(OFFICIAL_BUILD
+#endif  // defined(GOOGLE_CHROME_BUILD
 #else
     "https://support.google.com/chrome/?p=help&ctx=settings";
 #endif  // defined(OS_CHROMEOS)
+
+const char kChromeBetaForumURL[] =
+    "https://support.google.com/chrome/?p=beta_forum";
 
 #if defined(OS_CHROMEOS)
 const char kChromeAccessibilityHelpURL[] =
@@ -828,7 +827,7 @@ const char kChooserBluetoothOverviewURL[] =
 
 const char kBluetoothAdapterOffHelpURL[] =
 #if defined(OS_CHROMEOS)
-    "chrome://settings/search#Bluetooth";
+    "chrome://settings/?search=bluetooth";
 #else
     "https://support.google.com/chrome?p=bluetooth";
 #endif

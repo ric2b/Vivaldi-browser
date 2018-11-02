@@ -23,7 +23,7 @@ namespace {
 
 // Returns the most recently active window from the |window_list| or nullptr
 // if the list is empty.
-WmWindow* GetActiveWindow(const MruWindowTracker::WindowList& window_list) {
+aura::Window* GetActiveWindow(const WindowCycleList::WindowList& window_list) {
   return window_list.empty() ? nullptr : window_list[0];
 }
 
@@ -55,7 +55,7 @@ void WindowCycleController::HandleCycleWindow(Direction direction) {
 }
 
 void WindowCycleController::StartCycling() {
-  MruWindowTracker::WindowList window_list =
+  WindowCycleList::WindowList window_list =
       Shell::Get()->mru_window_tracker()->BuildMruWindowList();
   // Exclude windows:
   // - non user positionable windows, such as extension popups.
@@ -66,11 +66,11 @@ void WindowCycleController::StartCycling() {
   //   don't manually remove it, the window cycling UI won't crash or misbehave,
   //   but there will be a flicker as the target window changes. Also exclude
   //   unselectable windows such as extension popups.
-  auto window_is_ineligible = [](WmWindow* window) {
-    wm::WindowState* state = window->GetWindowState();
+  auto window_is_ineligible = [](aura::Window* window) {
+    wm::WindowState* state = wm::GetWindowState(window);
     return !state->IsUserPositionable() || state->is_dragged() ||
            window->GetRootWindow()
-               ->GetChildByShellWindowId(kShellWindowId_AppListContainer)
+               ->GetChildById(kShellWindowId_AppListContainer)
                ->Contains(window);
   };
   window_list.erase(std::remove_if(window_list.begin(), window_list.end(),
@@ -109,7 +109,7 @@ void WindowCycleController::StopCycling() {
                            window_cycle_list_->current_index() + 1);
   window_cycle_list_.reset();
 
-  WmWindow* active_window_after_window_cycle =
+  aura::Window* active_window_after_window_cycle =
       GetActiveWindow(Shell::Get()->mru_window_tracker()->BuildMruWindowList());
 
   // Remove our key event filter.

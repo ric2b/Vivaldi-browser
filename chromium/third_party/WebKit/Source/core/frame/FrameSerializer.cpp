@@ -206,7 +206,7 @@ void SerializerMarkupAccumulator::AppendAttribute(StringBuilder& out,
         AppendRewrittenAttribute(out, element, attribute.GetName().ToString(),
                                  new_link_for_the_element);
       } else {
-        ASSERT(is_src_doc_attribute);
+        DCHECK(is_src_doc_attribute);
         // Emit src instead of srcdoc attribute for frame elements - we want the
         // serialized subframe to use html contents from the link provided by
         // Delegate::rewriteLink rather than html contents from srcdoc
@@ -271,7 +271,7 @@ FrameSerializer::FrameSerializer(Deque<SerializedResource>& resources,
 
 void FrameSerializer::SerializeFrame(const LocalFrame& frame) {
   TRACE_EVENT0("page-serialization", "FrameSerializer::serializeFrame");
-  ASSERT(frame.GetDocument());
+  DCHECK(frame.GetDocument());
   Document& document = *frame.GetDocument();
   KURL url = document.Url();
 
@@ -296,11 +296,11 @@ void FrameSerializer::SerializeFrame(const LocalFrame& frame) {
         document.Encoding().Encode(text, WTF::kEntitiesForUnencodables);
     resources_->push_back(SerializedResource(
         url, document.SuggestedMIMEType(),
-        SharedBuffer::Create(frame_html.Data(), frame_html.length())));
+        SharedBuffer::Create(frame_html.data(), frame_html.length())));
   }
 
   for (Node* node : serialized_nodes) {
-    ASSERT(node);
+    DCHECK(node);
     if (!node->IsElementNode())
       continue;
 
@@ -356,7 +356,7 @@ void FrameSerializer::SerializeCSSStyleSheet(CSSStyleSheet& style_sheet,
   }
 
   TRACE_EVENT2("page-serialization", "FrameSerializer::serializeCSSStyleSheet",
-               "type", "CSS", "url", url.ElidedString().Utf8().Data());
+               "type", "CSS", "url", url.ElidedString().Utf8().data());
   // Only report UMA metric if this is not a reentrant CSS serialization call.
   double css_start_time = 0;
   if (!is_serializing_css_) {
@@ -383,13 +383,13 @@ void FrameSerializer::SerializeCSSStyleSheet(CSSStyleSheet& style_sheet,
     }
 
     WTF::TextEncoding text_encoding(style_sheet.Contents()->Charset());
-    ASSERT(text_encoding.IsValid());
+    DCHECK(text_encoding.IsValid());
     String text_string = css_text.ToString();
     CString text = text_encoding.Encode(
         text_string, WTF::kCSSEncodedEntitiesForUnencodables);
     resources_->push_back(
         SerializedResource(url, String("text/css"),
-                           SharedBuffer::Create(text.Data(), text.length())));
+                           SharedBuffer::Create(text.data(), text.length())));
     resource_urls_.insert(url);
   }
 
@@ -410,7 +410,7 @@ void FrameSerializer::SerializeCSSStyleSheet(CSSStyleSheet& style_sheet,
 }
 
 void FrameSerializer::SerializeCSSRule(CSSRule* rule) {
-  ASSERT(rule->parentStyleSheet()->OwnerDocument());
+  DCHECK(rule->parentStyleSheet()->OwnerDocument());
   Document& document = *rule->parentStyleSheet()->OwnerDocument();
 
   switch (rule->type()) {
@@ -422,7 +422,7 @@ void FrameSerializer::SerializeCSSRule(CSSRule* rule) {
     case CSSRule::kImportRule: {
       CSSImportRule* import_rule = ToCSSImportRule(rule);
       KURL sheet_base_url = rule->parentStyleSheet()->BaseURL();
-      ASSERT(sheet_base_url.IsValid());
+      DCHECK(sheet_base_url.IsValid());
       KURL import_url = KURL(sheet_base_url, import_rule->href());
       if (import_rule->styleSheet())
         SerializeCSSStyleSheet(*import_rule->styleSheet(), import_url);
@@ -483,7 +483,7 @@ void FrameSerializer::AddImageToResources(ImageResourceContent* image,
     return;
 
   TRACE_EVENT2("page-serialization", "FrameSerializer::addImageToResources",
-               "type", "image", "url", url.ElidedString().Utf8().Data());
+               "type", "image", "url", url.ElidedString().Utf8().data());
   double image_start_time = MonotonicallyIncreasingTime();
 
   RefPtr<const SharedBuffer> data = image->GetImage()->Data();
@@ -569,7 +569,7 @@ String FrameSerializer::MarkOfTheWebDeclaration(const KURL& url) {
   StringBuilder builder;
   bool emits_minus = false;
   CString orignal_url = url.GetString().Ascii();
-  for (const char* string = orignal_url.Data(); *string; ++string) {
+  for (const char* string = orignal_url.data(); *string; ++string) {
     const char ch = *string;
     if (ch == '-' && emits_minus) {
       builder.Append("%2D");
@@ -582,7 +582,7 @@ String FrameSerializer::MarkOfTheWebDeclaration(const KURL& url) {
   CString escaped_url = builder.ToString().Ascii();
   return String::Format("saved from url=(%04d)%s",
                         static_cast<int>(escaped_url.length()),
-                        escaped_url.Data());
+                        escaped_url.data());
 }
 
 }  // namespace blink

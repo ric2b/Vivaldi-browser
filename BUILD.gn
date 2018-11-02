@@ -86,7 +86,7 @@ group("All") {
       ]
     }
     if (!is_component_build) {
-      deps += [ "//chrome/installer/linux:linux_packages_all" ]
+      deps += [ "//chrome/installer/linux", ":linux_packages_all" ]
     }
     if (enable_ipc_fuzzer) {
       deps += [ "//tools/ipc_fuzzer:ipc_fuzzer_all" ]
@@ -129,4 +129,10 @@ copy("standalone") {
   outputs = [
     "$root_build_dir/stp.viv",
   ]
+}
+
+if (is_linux && !is_component_build) {
+  group("linux_packages_all") {
+    deps = [ "//chrome/installer/linux" ]
+  }
 }

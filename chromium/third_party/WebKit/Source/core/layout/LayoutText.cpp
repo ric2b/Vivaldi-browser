@@ -43,6 +43,7 @@
 #include "core/layout/line/InlineTextBox.h"
 #include "platform/fonts/CharacterRange.h"
 #include "platform/geometry/FloatQuad.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/text/BidiResolver.h"
 #include "platform/text/Character.h"
 #include "platform/text/Hyphenation.h"
@@ -51,7 +52,6 @@
 #include "platform/wtf/text/StringBuffer.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 
 namespace blink {
@@ -208,7 +208,8 @@ void LayoutText::StyleDidChange(StyleDifference diff,
   const ComputedStyle& new_style = StyleRef();
   ETextTransform old_transform =
       old_style ? old_style->TextTransform() : ETextTransform::kNone;
-  ETextSecurity old_security = old_style ? old_style->TextSecurity() : TSNONE;
+  ETextSecurity old_security =
+      old_style ? old_style->TextSecurity() : ETextSecurity::kNone;
   if (old_transform != new_style.TextTransform() ||
       old_security != new_style.TextSecurity())
     TransformText();
@@ -249,8 +250,6 @@ void LayoutText::WillBeDestroyed() {
 }
 
 void LayoutText::ExtractTextBox(InlineTextBox* box) {
-  CheckConsistency();
-
   last_text_box_ = box->PrevTextBox();
   if (box == first_text_box_)
     first_text_box_ = nullptr;
@@ -259,13 +258,9 @@ void LayoutText::ExtractTextBox(InlineTextBox* box) {
   box->SetPreviousTextBox(nullptr);
   for (InlineTextBox* curr = box; curr; curr = curr->NextTextBox())
     curr->SetExtracted();
-
-  CheckConsistency();
 }
 
 void LayoutText::AttachTextBox(InlineTextBox* box) {
-  CheckConsistency();
-
   if (last_text_box_) {
     last_text_box_->SetNextTextBox(box);
     box->SetPreviousTextBox(last_text_box_);
@@ -278,13 +273,9 @@ void LayoutText::AttachTextBox(InlineTextBox* box) {
     last = curr;
   }
   last_text_box_ = last;
-
-  CheckConsistency();
 }
 
 void LayoutText::RemoveTextBox(InlineTextBox* box) {
-  CheckConsistency();
-
   if (box == first_text_box_)
     first_text_box_ = box->NextTextBox();
   if (box == last_text_box_)
@@ -293,8 +284,6 @@ void LayoutText::RemoveTextBox(InlineTextBox* box) {
     box->NextTextBox()->SetPreviousTextBox(box->PrevTextBox());
   if (box->PrevTextBox())
     box->PrevTextBox()->SetNextTextBox(box->NextTextBox());
-
-  CheckConsistency();
 }
 
 void LayoutText::DeleteTextBoxes() {
@@ -343,86 +332,22 @@ void LayoutText::AbsoluteRects(Vector<IntRect>& rects,
 
 static FloatRect LocalQuadForTextBox(InlineTextBox* box,
                                      unsigned start,
-                                     unsigned end,
-                                     bool use_selection_height) {
+                                     unsigned end) {
   unsigned real_end = std::min(box->end() + 1, end);
   LayoutRect r = box->LocalSelectionRect(start, real_end);
   if (r.Height()) {
-    if (!use_selection_height) {
-      // Change the height and y position (or width and x for vertical text)
-      // because selectionRect uses selection-specific values.
-      if (box->IsHorizontal()) {
-        r.SetHeight(box->Height());
-        r.SetY(box->Y());
-      } else {
-        r.SetWidth(box->Width());
-        r.SetX(box->X());
-      }
+    // Change the height and y position (or width and x for vertical text)
+    // because selectionRect uses selection-specific values.
+    if (box->IsHorizontal()) {
+      r.SetHeight(box->Height());
+      r.SetY(box->Y());
+    } else {
+      r.SetWidth(box->Width());
+      r.SetX(box->X());
     }
     return FloatRect(r);
   }
   return FloatRect();
-}
-
-void LayoutText::AbsoluteRectsForRange(Vector<IntRect>& rects,
-                                       unsigned start,
-                                       unsigned end,
-                                       bool use_selection_height) {
-  // Work around signed/unsigned issues. This function takes unsigneds, and is
-  // often passed UINT_MAX to mean "all the way to the end". InlineTextBox
-  // coordinates are unsigneds, so changing this function to take ints causes
-  // various internal mismatches. But selectionRect takes ints, and passing
-  // UINT_MAX to it causes trouble. Ideally we'd change selectionRect to take
-  // unsigneds, but that would cause many ripple effects, so for now we'll just
-  // clamp our unsigned parameters to INT_MAX.
-  DCHECK(end == UINT_MAX || end <= INT_MAX);
-  DCHECK_LE(start, static_cast<unsigned>(INT_MAX));
-  start = std::min(start, static_cast<unsigned>(INT_MAX));
-  end = std::min(end, static_cast<unsigned>(INT_MAX));
-
-  // This function is always called in sequence that this check should work.
-  bool has_checked_box_in_range = !rects.IsEmpty();
-
-  for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox()) {
-    // Note: box->end() returns the index of the last character, not the index
-    // past it
-    if (start <= box->Start() && box->end() < end) {
-      FloatRect r(box->FrameRect());
-      if (use_selection_height) {
-        LayoutRect selection_rect = box->LocalSelectionRect(start, end);
-        if (box->IsHorizontal()) {
-          r.SetHeight(selection_rect.Height().ToFloat());
-          r.SetY(selection_rect.Y().ToFloat());
-        } else {
-          r.SetWidth(selection_rect.Width().ToFloat());
-          r.SetX(selection_rect.X().ToFloat());
-        }
-      }
-      if (!has_checked_box_in_range) {
-        has_checked_box_in_range = true;
-        rects.Clear();
-      }
-      rects.push_back(LocalToAbsoluteQuad(r).EnclosingBoundingBox());
-    } else if ((box->Start() <= start && start <= box->end()) ||
-               (box->Start() < end && end <= box->end())) {
-      FloatRect rect =
-          LocalQuadForTextBox(box, start, end, use_selection_height);
-      if (!rect.IsZero()) {
-        if (!has_checked_box_in_range) {
-          has_checked_box_in_range = true;
-          rects.Clear();
-        }
-        rects.push_back(LocalToAbsoluteQuad(rect).EnclosingBoundingBox());
-      }
-    } else if (!has_checked_box_in_range) {
-      // FIXME: This code is wrong. It's converting local to absolute twice.
-      // http://webkit.org/b/65722
-      FloatRect rect =
-          LocalQuadForTextBox(box, start, end, use_selection_height);
-      if (!rect.IsZero())
-        rects.push_back(LocalToAbsoluteQuad(rect).EnclosingBoundingBox());
-    }
-  }
 }
 
 static IntRect EllipsisRectForBox(InlineTextBox* box,
@@ -485,8 +410,7 @@ void LayoutText::AbsoluteQuads(Vector<FloatQuad>& quads,
 
 void LayoutText::AbsoluteQuadsForRange(Vector<FloatQuad>& quads,
                                        unsigned start,
-                                       unsigned end,
-                                       bool use_selection_height) {
+                                       unsigned end) const {
   // Work around signed/unsigned issues. This function takes unsigneds, and is
   // often passed UINT_MAX to mean "all the way to the end". InlineTextBox
   // coordinates are unsigneds, so changing this function to take ints causes
@@ -517,37 +441,25 @@ void LayoutText::AbsoluteQuadsForRange(Vector<FloatQuad>& quads,
     // past it
     if (start <= box->Start() && box->end() < end) {
       LayoutRect r(box->FrameRect());
-      if (use_selection_height) {
-        LayoutRect selection_rect = box->LocalSelectionRect(start, end);
-        if (box->IsHorizontal()) {
-          r.SetHeight(selection_rect.Height());
-          r.SetY(selection_rect.Y());
-        } else {
-          r.SetWidth(selection_rect.Width());
-          r.SetX(selection_rect.X());
-        }
-      }
       if (!has_checked_box_in_range) {
         has_checked_box_in_range = true;
-        quads.Clear();
+        quads.clear();
       }
       quads.push_back(LocalToAbsoluteQuad(FloatRect(r)));
     } else if ((box->Start() <= start && start <= box->end()) ||
                (box->Start() < end && end <= box->end())) {
-      FloatRect rect =
-          LocalQuadForTextBox(box, start, end, use_selection_height);
+      FloatRect rect = LocalQuadForTextBox(box, start, end);
       if (!rect.IsZero()) {
         if (!has_checked_box_in_range) {
           has_checked_box_in_range = true;
-          quads.Clear();
+          quads.clear();
         }
         quads.push_back(LocalToAbsoluteQuad(rect));
       }
     } else if (!has_checked_box_in_range) {
       // consider when the offset of range is area of leading or trailing
       // whitespace
-      FloatRect rect =
-          LocalQuadForTextBox(box, start, end, use_selection_height);
+      FloatRect rect = LocalQuadForTextBox(box, start, end);
       if (!rect.IsZero())
         quads.push_back(LocalToAbsoluteQuad(rect).EnclosingBoundingBox());
     }
@@ -1053,13 +965,13 @@ static float MinWordFragmentWidthForBreakAll(
     EWordBreak break_all_or_break_word) {
   DCHECK_GT(length, 0);
   LazyLineBreakIterator break_iterator(layout_text->GetText(),
-                                       LocaleForLineBreakIterator(style));
+                                       style.LocaleForLineBreakIterator());
   int next_breakable = -1;
   float min = std::numeric_limits<float>::max();
   int end = start + length;
   for (int i = start; i < end;) {
     int fragment_length;
-    if (break_all_or_break_word == EWordBreak::kBreakAllWordBreak) {
+    if (break_all_or_break_word == EWordBreak::kBreakAll) {
       break_iterator.IsBreakable(i + 1, next_breakable,
                                  LineBreakType::kBreakAll);
       fragment_length = (next_breakable > i ? next_breakable : length) - i;
@@ -1123,30 +1035,6 @@ static float MaxWordFragmentWidth(LayoutText* layout_text,
   return max_fragment_width + layout_text->HyphenWidth(font, text_direction);
 }
 
-AtomicString LocaleForLineBreakIterator(const ComputedStyle& style) {
-  LineBreakIteratorMode mode = LineBreakIteratorMode::kDefault;
-  switch (style.GetLineBreak()) {
-    default:
-      NOTREACHED();
-    // Fall through.
-    case kLineBreakAuto:
-    case kLineBreakAfterWhiteSpace:
-      return style.Locale();
-    case kLineBreakNormal:
-      mode = LineBreakIteratorMode::kNormal;
-      break;
-    case kLineBreakStrict:
-      mode = LineBreakIteratorMode::kStrict;
-      break;
-    case kLineBreakLoose:
-      mode = LineBreakIteratorMode::kLoose;
-      break;
-  }
-  if (const LayoutLocale* locale = style.GetFontDescription().Locale())
-    return locale->LocaleWithBreakKeyword(mode);
-  return style.Locale();
-}
-
 void LayoutText::ComputePreferredLogicalWidths(
     float lead_width,
     HashSet<const SimpleFontData*>& fallback_fonts,
@@ -1176,7 +1064,7 @@ void LayoutText::ComputePreferredLogicalWidths(
   float word_spacing = style_to_use.WordSpacing();
   int len = TextLength();
   LazyLineBreakIterator break_iterator(
-      text_, LocaleForLineBreakIterator(style_to_use));
+      text_, style_to_use.LocaleForLineBreakIterator());
   bool needs_word_spacing = false;
   bool ignoring_spaces = false;
   bool is_space = false;
@@ -1186,20 +1074,20 @@ void LayoutText::ComputePreferredLogicalWidths(
   int last_word_boundary = 0;
   float cached_word_trailing_space_width[2] = {0, 0};  // LTR, RTL
 
-  EWordBreak break_all_or_break_word = EWordBreak::kNormalWordBreak;
+  EWordBreak break_all_or_break_word = EWordBreak::kNormal;
   LineBreakType line_break_type = LineBreakType::kNormal;
   if (style_to_use.AutoWrap()) {
-    if (style_to_use.WordBreak() == kBreakAllWordBreak ||
-        style_to_use.WordBreak() == kBreakWordBreak) {
+    if (style_to_use.WordBreak() == EWordBreak::kBreakAll ||
+        style_to_use.WordBreak() == EWordBreak::kBreakWord) {
       break_all_or_break_word = style_to_use.WordBreak();
-    } else if (style_to_use.WordBreak() == kKeepAllWordBreak) {
+    } else if (style_to_use.WordBreak() == EWordBreak::kKeepAll) {
       line_break_type = LineBreakType::kKeepAll;
     }
   }
 
   Hyphenation* hyphenation =
       style_to_use.AutoWrap() ? style_to_use.GetHyphenation() : nullptr;
-  bool disable_soft_hyphen = style_to_use.GetHyphens() == kHyphensNone;
+  bool disable_soft_hyphen = style_to_use.GetHyphens() == Hyphens::kNone;
   float max_word_width = 0;
   if (!hyphenation)
     max_word_width = std::numeric_limits<float>::infinity();
@@ -1371,7 +1259,7 @@ void LayoutText::ComputePreferredLogicalWidths(
         }
       }
 
-      if (break_all_or_break_word != EWordBreak::kNormalWordBreak) {
+      if (break_all_or_break_word != EWordBreak::kNormal) {
         // Because sum of character widths may not be equal to the word width,
         // we need to measure twice; once with normal break for max width,
         // another with break-all for min width.
@@ -1559,7 +1447,7 @@ void LayoutText::SetSelectionState(SelectionState state) {
     if (state == SelectionStart || state == SelectionEnd ||
         state == SelectionBoth) {
       int start_pos, end_pos;
-      SelectionStartEnd(start_pos, end_pos);
+      std::tie(start_pos, end_pos) = SelectionStartEnd();
       if (GetSelectionState() == SelectionStart) {
         end_pos = TextLength();
 
@@ -1738,15 +1626,15 @@ void LayoutText::SetTextInternal(PassRefPtr<StringImpl> text) {
     // We use the same characters here as for list markers.
     // See the listMarkerText function in LayoutListMarker.cpp.
     switch (Style()->TextSecurity()) {
-      case TSNONE:
+      case ETextSecurity::kNone:
         break;
-      case TSCIRCLE:
+      case ETextSecurity::kCircle:
         SecureText(kWhiteBulletCharacter);
         break;
-      case TSDISC:
+      case ETextSecurity::kDisc:
         SecureText(kBulletCharacter);
         break;
-      case TSSQUARE:
+      case ETextSecurity::kSquare:
         SecureText(kBlackSquareCharacter);
     }
   }
@@ -1772,7 +1660,7 @@ void LayoutText::SecureText(UChar mask) {
 
   text_.Fill(mask);
   if (last_typed_character_offset_to_reveal >= 0) {
-    text_.Replace(last_typed_character_offset_to_reveal, 1,
+    text_.replace(last_typed_character_offset_to_reveal, 1,
                   String(&revealed_text, 1));
     // m_text may be updated later before timer fires. We invalidate the
     // lastTypedCharacterOffset to avoid inconsistency.
@@ -1783,8 +1671,7 @@ void LayoutText::SecureText(UChar mask) {
 void LayoutText::SetText(PassRefPtr<StringImpl> text, bool force) {
   DCHECK(text);
 
-  bool equal = Equal(text_.Impl(), text.Get());
-  if (equal && !force)
+  if (!force && Equal(text_.Impl(), text.Get()))
     return;
 
   SetTextInternal(std::move(text));
@@ -1797,14 +1684,8 @@ void LayoutText::SetText(PassRefPtr<StringImpl> text, bool force) {
         LayoutInvalidationReason::kTextChanged);
   known_to_have_no_overflow_and_no_fallback_fonts_ = false;
 
-  // Don't bother updating the AX tree if there's no change. Otherwise, when
-  // typing in password fields, we would announce each "dot" twice: once when a
-  // character is typed, and second when that character is hidden.
-  if (!equal) {
-    AXObjectCache* cache = GetDocument().ExistingAXObjectCache();
-    if (cache)
-      cache->TextChanged(this);
-  }
+  if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
+    cache->TextChanged(this);
 
   TextAutosizer* text_autosizer = GetDocument().GetTextAutosizer();
   if (text_autosizer)
@@ -2032,7 +1913,7 @@ LayoutRect LayoutText::LocalSelectionRect() const {
     start_pos = 0;
     end_pos = TextLength();
   } else {
-    SelectionStartEnd(start_pos, end_pos);
+    std::tie(start_pos, end_pos) = SelectionStartEnd();
     if (GetSelectionState() == SelectionStart)
       end_pos = TextLength();
     else if (GetSelectionState() == SelectionEnd)
@@ -2079,23 +1960,6 @@ unsigned LayoutText::ResolvedTextLength() const {
     len += box->Len();
   return len;
 }
-
-#if DCHECK_IS_ON()
-
-void LayoutText::CheckConsistency() const {
-#ifdef CHECK_CONSISTENCY
-  const InlineTextBox* prev = nullptr;
-  for (const InlineTextBox* child = m_firstTextBox; child;
-       child = child->nextTextBox()) {
-    DCHECK(child->getLineLayoutItem().isEqual(this));
-    DCHECK_EQ(child->prevTextBox(), prev);
-    prev = child;
-  }
-  DCHECK_EQ(prev, m_lastTextBox);
-#endif
-}
-
-#endif
 
 void LayoutText::MomentarilyRevealLastTypedCharacter(
     unsigned last_typed_character_offset) {

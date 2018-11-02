@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -67,8 +68,14 @@ void CreateVirtualViewportLayers(Layer* root_layer,
 
   inner_viewport_scroll_layer->SetIsContainerForFixedPositionLayers(true);
   outer_scroll_layer->SetIsContainerForFixedPositionLayers(true);
-  host->RegisterViewportLayers(overscroll_elasticity_layer, page_scale_layer,
-                               inner_viewport_scroll_layer, outer_scroll_layer);
+  LayerTreeHost::ViewportLayers viewport_layers;
+  viewport_layers.overscroll_elasticity = overscroll_elasticity_layer;
+  viewport_layers.page_scale = page_scale_layer;
+  viewport_layers.inner_viewport_container = inner_viewport_container_layer;
+  viewport_layers.outer_viewport_container = outer_viewport_container_layer;
+  viewport_layers.inner_viewport_scroll = inner_viewport_scroll_layer;
+  viewport_layers.outer_viewport_scroll = outer_scroll_layer;
+  host->RegisterViewportLayers(viewport_layers);
 }
 
 void CreateVirtualViewportLayers(Layer* root_layer,
@@ -186,6 +193,7 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
     if (block_notify_ready_to_activate_for_testing_) {
       notify_ready_to_activate_was_blocked_ = true;
     } else {
+      test_hooks_->WillNotifyReadyToActivateOnThread(this);
       LayerTreeHostImpl::NotifyReadyToActivate();
       test_hooks_->NotifyReadyToActivateOnThread(this);
     }
@@ -279,6 +287,12 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
     test_hooks_->DidRequestImplSideInvalidation(this);
   }
 
+  void DidReceiveCompositorFrameAck() override {
+    test_hooks_->WillReceiveCompositorFrameAckOnThread(this);
+    LayerTreeHostImpl::DidReceiveCompositorFrameAck();
+    test_hooks_->DidReceiveCompositorFrameAckOnThread(this);
+  }
+
   AnimationHost* animation_host() const {
     return static_cast<AnimationHost*>(mutator_host());
   }
@@ -357,6 +371,7 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
   void BeginMainFrameNotExpectedSoon() override {
     test_hooks_->BeginMainFrameNotExpectedSoon();
   }
+  void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override {}
 
   bool IsForSubframe() override { return false; }
 
@@ -853,17 +868,15 @@ std::unique_ptr<TestCompositorFrameSink>
 LayerTreeTest::CreateCompositorFrameSink(
     scoped_refptr<ContextProvider> compositor_context_provider,
     scoped_refptr<ContextProvider> worker_context_provider) {
+  constexpr bool disable_display_vsync = false;
   bool synchronous_composite =
       !HasImplThread() &&
       !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
-  // Disable reclaim resources by default to act like the Display lives
-  // out-of-process.
-  bool force_disable_reclaim_resources = true;
   return base::MakeUnique<TestCompositorFrameSink>(
       compositor_context_provider, std::move(worker_context_provider),
       shared_bitmap_manager(), gpu_memory_buffer_manager(),
       layer_tree_host()->GetSettings().renderer_settings, impl_task_runner_,
-      synchronous_composite, force_disable_reclaim_resources);
+      synchronous_composite, disable_display_vsync);
 }
 
 std::unique_ptr<OutputSurface>

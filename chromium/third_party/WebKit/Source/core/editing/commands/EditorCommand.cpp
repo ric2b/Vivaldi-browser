@@ -408,10 +408,9 @@ static bool ExpandSelectionToGranularity(LocalFrame& frame,
     return false;
   if (new_range.IsCollapsed())
     return false;
-  TextAffinity affinity = frame.Selection().GetSelectionInDOMTree().Affinity();
-  frame.Selection().SetSelectedRange(new_range, affinity,
-                                     SelectionDirectionalMode::kNonDirectional,
-                                     FrameSelection::kCloseTyping);
+  frame.Selection().SetSelection(
+      SelectionInDOMTree::Builder().SetBaseAndExtent(new_range).Build(),
+      FrameSelection::kCloseTyping);
   return true;
 }
 
@@ -648,7 +647,7 @@ static bool CanWriteClipboard(LocalFrame& frame, EditorCommandSource source) {
   Settings* settings = frame.GetSettings();
   bool default_value =
       (settings && settings->GetJavaScriptCanAccessClipboard()) ||
-      UserGestureIndicator::UtilizeUserGesture();
+      UserGestureIndicator::ProcessingUserGesture();
   return frame.GetEditor().Client().CanCopyCut(&frame, default_value);
 }
 
@@ -811,13 +810,12 @@ static bool ExecuteDeleteToMark(LocalFrame& frame,
   const EphemeralRange mark =
       frame.GetEditor().Mark().ToNormalizedEphemeralRange();
   if (mark.IsNotNull()) {
-    bool selected = frame.Selection().SetSelectedRange(
-        UnionEphemeralRanges(mark, frame.GetEditor().SelectedRange()),
-        TextAffinity::kDownstream, SelectionDirectionalMode::kNonDirectional,
+    frame.Selection().SetSelection(
+        SelectionInDOMTree::Builder()
+            .SetBaseAndExtent(
+                UnionEphemeralRanges(mark, frame.GetEditor().SelectedRange()))
+            .Build(),
         FrameSelection::kCloseTyping);
-    DCHECK(selected);
-    if (!selected)
-      return false;
   }
   frame.GetEditor().PerformDelete();
   frame.GetEditor().SetMark(
@@ -1750,9 +1748,12 @@ static bool ExecuteScrollToEndOfDocument(LocalFrame& frame,
 
 static bool ExecuteSelectAll(LocalFrame& frame,
                              Event*,
-                             EditorCommandSource,
+                             EditorCommandSource source,
                              const String&) {
-  frame.Selection().SelectAll();
+  const EUserTriggered user_triggered = source == kCommandFromMenuOrKeyBinding
+                                            ? kUserTriggered
+                                            : kNotUserTriggered;
+  frame.Selection().SelectAll(user_triggered);
   return true;
 }
 
@@ -1786,9 +1787,11 @@ static bool ExecuteSelectToMark(LocalFrame& frame,
   EphemeralRange selection = frame.GetEditor().SelectedRange();
   if (mark.IsNull() || selection.IsNull())
     return false;
-  frame.Selection().SetSelectedRange(
-      UnionEphemeralRanges(mark, selection), TextAffinity::kDownstream,
-      SelectionDirectionalMode::kNonDirectional, FrameSelection::kCloseTyping);
+  frame.Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(UnionEphemeralRanges(mark, selection))
+          .Build(),
+      FrameSelection::kCloseTyping);
   return true;
 }
 
@@ -2004,8 +2007,12 @@ static bool Enabled(LocalFrame&, Event*, EditorCommandSource) {
 
 static bool EnabledVisibleSelection(LocalFrame& frame,
                                     Event* event,
-                                    EditorCommandSource) {
+                                    EditorCommandSource source) {
   frame.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
+
+  if (source == kCommandFromMenuOrKeyBinding &&
+      !frame.Selection().SelectionHasFocus())
+    return false;
 
   // The term "visible" here includes a caret in editable text or a range in any
   // text.
@@ -2017,8 +2024,12 @@ static bool EnabledVisibleSelection(LocalFrame& frame,
 
 static bool EnabledVisibleSelectionAndMark(LocalFrame& frame,
                                            Event* event,
-                                           EditorCommandSource) {
+                                           EditorCommandSource source) {
   frame.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
+
+  if (source == kCommandFromMenuOrKeyBinding &&
+      !frame.Selection().SelectionHasFocus())
+    return false;
 
   const VisibleSelection& selection =
       frame.GetEditor().SelectionForCommand(event);
@@ -2029,9 +2040,12 @@ static bool EnabledVisibleSelectionAndMark(LocalFrame& frame,
 
 static bool EnableCaretInEditableText(LocalFrame& frame,
                                       Event* event,
-                                      EditorCommandSource) {
+                                      EditorCommandSource source) {
   frame.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
+  if (source == kCommandFromMenuOrKeyBinding &&
+      !frame.Selection().SelectionHasFocus())
+    return false;
   const VisibleSelection& selection =
       frame.GetEditor().SelectionForCommand(event);
   return selection.IsCaret() && selection.IsContentEditable();
@@ -2051,8 +2065,11 @@ static bool EnabledCut(LocalFrame& frame, Event*, EditorCommandSource source) {
 
 static bool EnabledInEditableText(LocalFrame& frame,
                                   Event* event,
-                                  EditorCommandSource) {
+                                  EditorCommandSource source) {
   frame.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
+  if (source == kCommandFromMenuOrKeyBinding &&
+      !frame.Selection().SelectionHasFocus())
+    return false;
   return frame.GetEditor().SelectionForCommand(event).RootEditableElement();
 }
 
@@ -2061,7 +2078,8 @@ static bool EnabledDelete(LocalFrame& frame,
                           EditorCommandSource source) {
   switch (source) {
     case kCommandFromMenuOrKeyBinding:
-      return frame.GetEditor().CanDelete();
+      return frame.Selection().SelectionHasFocus() &&
+             frame.GetEditor().CanDelete();
     case kCommandFromDOM:
       // "Delete" from DOM is like delete/backspace keypress, affects selected
       // range if non-empty, otherwise removes a character
@@ -2073,8 +2091,11 @@ static bool EnabledDelete(LocalFrame& frame,
 
 static bool EnabledInRichlyEditableText(LocalFrame& frame,
                                         Event*,
-                                        EditorCommandSource) {
+                                        EditorCommandSource source) {
   frame.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
+  if (source == kCommandFromMenuOrKeyBinding &&
+      !frame.Selection().SelectionHasFocus())
+    return false;
   return !frame.Selection()
               .ComputeVisibleSelectionInDOMTreeDeprecated()
               .IsNone() &&
@@ -2096,8 +2117,11 @@ static bool EnabledPaste(LocalFrame& frame,
 
 static bool EnabledRangeInEditableText(LocalFrame& frame,
                                        Event*,
-                                       EditorCommandSource) {
+                                       EditorCommandSource source) {
   frame.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
+  if (source == kCommandFromMenuOrKeyBinding &&
+      !frame.Selection().SelectionHasFocus())
+    return false;
   return frame.Selection()
              .ComputeVisibleSelectionInDOMTreeDeprecated()
              .IsRange() &&
@@ -2108,8 +2132,11 @@ static bool EnabledRangeInEditableText(LocalFrame& frame,
 
 static bool EnabledRangeInRichlyEditableText(LocalFrame& frame,
                                              Event*,
-                                             EditorCommandSource) {
+                                             EditorCommandSource source) {
   frame.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
+  if (source == kCommandFromMenuOrKeyBinding &&
+      !frame.Selection().SelectionHasFocus())
+    return false;
   return frame.Selection()
              .ComputeVisibleSelectionInDOMTreeDeprecated()
              .IsRange() &&
@@ -2126,13 +2153,32 @@ static bool EnabledUndo(LocalFrame& frame, Event*, EditorCommandSource) {
   return frame.GetEditor().CanUndo();
 }
 
-static bool EnabledSelectAll(LocalFrame& frame, Event*, EditorCommandSource) {
+static bool EnabledUnselect(LocalFrame& frame,
+                            Event* event,
+                            EditorCommandSource) {
+  frame.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
+
+  // The term "visible" here includes a caret in editable text or a range in any
+  // text.
+  const VisibleSelection& selection =
+      frame.GetEditor().SelectionForCommand(event);
+  return (selection.IsCaret() && selection.IsContentEditable()) ||
+         selection.IsRange();
+}
+
+static bool EnabledSelectAll(LocalFrame& frame,
+                             Event*,
+                             EditorCommandSource source) {
   // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   frame.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
   const VisibleSelection& selection =
       frame.Selection().ComputeVisibleSelectionInDOMTree();
   if (selection.IsNone())
+    return true;
+  // Hidden selection appears as no selection to users, in which case user-
+  // triggered SelectAll should be enabled and act as if there is no selection.
+  if (source == kCommandFromMenuOrKeyBinding && frame.Selection().IsHidden())
     return true;
   if (Node* root = HighestEditableRoot(selection.Start())) {
     if (!root->hasChildren())
@@ -2755,7 +2801,7 @@ static const EditorInternalCommand* InternalCommand(
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, kDoNotAllowExecutionWhenDisabled},
       {WebEditingCommandType::kUnselect, ExecuteUnselect, Supported,
-       EnabledVisibleSelection, StateNone, ValueStateOrNull, kNotTextInsertion,
+       EnabledUnselect, StateNone, ValueStateOrNull, kNotTextInsertion,
        kDoNotAllowExecutionWhenDisabled},
       {WebEditingCommandType::kUseCSS, ExecuteUseCSS, Supported, Enabled,
        StateNone, ValueStateOrNull, kNotTextInsertion,
@@ -2812,7 +2858,7 @@ bool Editor::ExecuteCommand(const String& command_name) {
   if (command_name == "DeleteForward")
     return CreateCommand(AtomicString("ForwardDelete")).Execute();
   if (command_name == "AdvanceToNextMisspelling") {
-    // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets
+    // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
     // needs to be audited. see http://crbug.com/590369 for more details.
     GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -2822,7 +2868,7 @@ bool Editor::ExecuteCommand(const String& command_name) {
     return true;
   }
   if (command_name == "ToggleSpellPanel") {
-    // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets
+    // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
     // needs to be audited.
     // see http://crbug.com/590369 for more details.
     GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
@@ -2845,7 +2891,7 @@ bool Editor::ExecuteCommand(const String& command_name, const String& value) {
         kScrollDownIgnoringWritingMode, kScrollByDocument);
 
   if (command_name == "showGuessPanel") {
-    // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets
+    // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
     // needs to be audited. see http://crbug.com/590369 for more details.
     GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 

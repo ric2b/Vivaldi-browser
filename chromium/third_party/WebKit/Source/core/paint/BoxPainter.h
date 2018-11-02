@@ -6,7 +6,7 @@
 #define BoxPainter_h
 
 #include "core/layout/BackgroundBleedAvoidance.h"
-#include "core/style/ShadowData.h"
+#include "core/paint/BoxPainterBase.h"
 #include "platform/geometry/LayoutSize.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/wtf/Allocator.h"
@@ -15,21 +15,19 @@
 namespace blink {
 
 class ComputedStyle;
-class Document;
 class FillLayer;
-class FloatRoundedRect;
 class GraphicsContext;
 class Image;
 class InlineFlowBox;
 class LayoutPoint;
 class LayoutRect;
-class LayoutBoxModelObject;
 class NinePieceImage;
 struct PaintInfo;
 class LayoutBox;
 class LayoutObject;
+class LayoutBoxModelObject;
 
-class BoxPainter {
+class BoxPainter : public BoxPainterBase {
   STACK_ALLOCATED();
 
  public:
@@ -40,15 +38,6 @@ class BoxPainter {
   void PaintBoxDecorationBackground(const PaintInfo&, const LayoutPoint&);
   void PaintMask(const PaintInfo&, const LayoutPoint&);
   void PaintClippingMask(const PaintInfo&, const LayoutPoint&);
-
-  typedef Vector<const FillLayer*, 8> FillLayerOcclusionOutputList;
-  // Returns true if the result fill layers have non-associative blending or
-  // compositing mode.  (i.e. The rendering will be different without creating
-  // isolation group by context.saveLayer().) Note that the output list will be
-  // in top-bottom order.
-  bool CalculateFillLayerOcclusionCulling(
-      FillLayerOcclusionOutputList& reversed_paint_list,
-      const FillLayer&);
 
   // Returns true if the fill layer will certainly occlude anything painted
   // behind it.
@@ -92,29 +81,6 @@ class BoxPainter {
                           BackgroundBleedAvoidance = kBackgroundBleedNone,
                           bool include_logical_left_edge = true,
                           bool include_logical_right_edge = true);
-  static void PaintNormalBoxShadow(const PaintInfo&,
-                                   const LayoutRect&,
-                                   const ComputedStyle&,
-                                   bool include_logical_left_edge = true,
-                                   bool include_logical_right_edge = true);
-  // The input rect should be the border rect. The outer bounds of the shadow
-  // will be inset by border widths.
-  static void PaintInsetBoxShadow(const PaintInfo&,
-                                  const LayoutRect&,
-                                  const ComputedStyle&,
-                                  bool include_logical_left_edge = true,
-                                  bool include_logical_right_edge = true);
-  // This form is used by callers requiring special computation of the outer
-  // bounds of the shadow. For example, TableCellPainter insets the bounds by
-  // half widths of collapsed borders instead of the default whole widths.
-  static void PaintInsetBoxShadowInBounds(
-      const PaintInfo&,
-      const FloatRoundedRect& bounds,
-      const ComputedStyle&,
-      bool include_logical_left_edge = true,
-      bool include_logical_right_edge = true);
-  static bool ShouldForceWhiteBackgroundForPrintEconomy(const ComputedStyle&,
-                                                        const Document&);
 
   LayoutRect BoundsForDrawingRecorder(const PaintInfo&,
                                       const LayoutPoint& adjusted_paint_offset);

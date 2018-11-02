@@ -85,6 +85,9 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_DRIVE_MY_DRIVE_LABEL" desc="A label for the 'My Drive' collection of Google Drive.">
     My Drive
   </message>
+  <message name="IDS_FILE_BROWSER_DRIVE_TEAM_DRIVES_LABEL" desc="A label for the 'Team Drives' collection of Google Drive.">
+    Team Drives
+  </message>
   <message name="IDS_FILE_BROWSER_DRIVE_SHARED_WITH_ME_COLLECTION_LABEL" desc="A label for the 'shared with me' collection of Google Drive.">
     Shared with me
   </message>
@@ -2071,15 +2074,6 @@ Press any key to continue exploring.
   <message name="IDS_CREATE_SUPERVISED_USER_CREATION_CREATION_TIMEOUT_MESSAGE" desc="Text shown at the place of progess indicator if creation takes too long and should be cancelled.">
     This is taking much longer than usual. You can keep waiting, or cancel and try again later.
   </message>
-  <message name="IDS_USER_IS_SUPERVISED_BY_NOTICE" desc="Text for notifications showing that this user is supervised">
-    Usage and history of this user can be reviewed by the manager (<ph name="MANAGER_EMAIL">$1<ex>user@example.com</ex></ph>) on chrome.com.
-  </message>
-  <message name="IDS_CHILD_USER_IS_MANAGED_BY_ONE_PARENT_NOTICE" desc="Text for notifications showing that this child user is managed by parent's account.">
-    This is an account for kids managed by <ph name="MANAGER_EMAIL">$1<ex>user@example.com</ex></ph>
-  </message>
-  <message name="IDS_CHILD_USER_IS_MANAGED_BY_TWO_PARENTS_NOTICE" desc="Text for notifications showing that this child user is managed by two parents' accounts.">
-    This is an account for kids managed by <ph name="FIRST_PARENT_EMAIL">$1<ex>first@example.com</ex></ph> and <ph name="SECOND_PARENT_EMAIL">$2<ex>second@example.com</ex></ph>
-  </message>
   <message name="IDS_SUPERVISED_USER_EXPIRED_TOKEN_WARNING" desc="Warning text that is shown on login screen trying to sign in as a supervised user that has expired token">
     This supervised user may have been deleted or disabled by the manager. Please contact the manager if you would like to continue signing in as this user.
   </message>
@@ -2722,13 +2716,13 @@ Press any key to continue exploring.
     Highlight the object with keyboard focus when it changes
   </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_TITLE" desc="In the settings tab, the text next to the checkbox to enable an option to hold a key and click to speak any on-screen text out loud.">
-    Select-to-speak
+    Enable select-to-speak
   </message>
-  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DESCRIPTION" desc="In the settings tab, the description of an option to hold a key and click to speak any on-screen text out loud.">
-    Hold down Search and click or drag to speak anything
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DESCRIPTION" desc="In the settings tab, the description of an option to hold a key and click or drag a box with the mouse to speak any on-screen text out loud.">
+    Press and hold Search, then click or drag to select content to be read aloud
   </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_OPTIONS_LABEL" desc="In the settings tab, the label for the button that opens the Options page for the Select-to-Speak feature.">
-    Select-to-speak options
+    Open select-to-speak settings
   </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SWITCH_ACCESS_DESCRIPTION" desc="In the settings tab, the text next to the checkbox to enable switch access (for users with limited motor control).">
     Switch access (control the computer with just one or two switches)
@@ -3915,6 +3909,9 @@ Press any key to continue exploring.
   <message name="IDS_NETWORK_TYPE_ETHERNET" desc="The ethernet network type.">
     Ethernet
   </message>
+  <message name="IDS_NETWORK_TYPE_TETHER" desc="The tether network type.">
+    Tether
+  </message>
   <message name="IDS_NETWORK_TYPE_WIFI" desc="The wifi network type.">
     Wi-Fi
   </message>
@@ -4823,14 +4820,14 @@ Battery full
   <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_HIGH_CONTRAST_MODE" desc="The text in the keyboard overlay to explain the shortcut (Toggle high contrast mode).">
     Toggle High Contrast Mode
   </message>
-  <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_PROJECTION_TOUCH_HUD" desc="The text in the keyboard overlay to explain the shortcut.">
-    Projection touch HUD
+  <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_PROJECTION_TOUCH_HUD" desc="The text in the keyboard overlay to explain the shortcut to show the points where a user interfaces with the touch screen. This would be useful for someone doing a presentation where they need the audience to see the points on the screen that are touched.">
+    Show touch points
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_SPEECH_INPUT" desc="The text in the keyboard overlay to explain the shortcut (start or stop speech input).">
     Speech input
   </message>
-  <message name="IDS_KEYBOARD_OVERLAY_TOUCH_HUD_MODE_CHANGE" desc="The text in the keyboard overlay to explain the shortcut (touch hub mode change).">
-    Touch HUD mode change
+  <message name="IDS_KEYBOARD_OVERLAY_TOUCH_HUD_MODE_CHANGE" desc="The text in the keyboard overlay to explain the shortcut to change the mode of the debug touch HUD. 'HUD' stands for 'heads-up display'. 'Touch' refers to the touch interface.">
+    Change touch HUD mode
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_UNDO" desc="The text in the keyboard overlay to explain the shortcut.">
     Undo
@@ -5592,12 +5589,6 @@ Battery full
   <message name="IDS_LOGIN_API_KEYS_NOTICE" desc="Notice displayed on the login screen in case if API keys are missing.">
     You will not be able to add users because Google API keys are missing. See <ph name="DETAILS_URL">$1<ex>http://www.example.com</ex></ph> for details.
   </message>
-  <message name="IDS_DEVICE_OWNED_BY_NOTICE" desc="Text for notifications showing that this is managed device.">
-    This device is managed by <ph name="DOMAIN">$1<ex>acmecorp.com</ex></ph>.
-  </message>
-  <message name="IDS_DEVICE_ENTERPRISE_MANAGED_NOTICE" desc="Text for notifications showing that this device is enterprise managed.">
-    This device is enterprise managed
-  </message>
   <message name="IDS_LOGIN_PUBLIC_ACCOUNT_INFO_FORMAT" desc="Template for text shown in the public account user pod, informing the user that this is a public, managed account.">
     Managed by <ph name="DOMAIN">$1<ex>yourdomain.com</ex></ph>
   </message>
@@ -5670,7 +5661,7 @@ Battery full
     <ph name="PROGRESS_PERCENT">$1<ex>90</ex></ph>% done
   </message>
   <message name="IDS_ENCRYPTION_MIGRATION_BATTERY_WARNING_LABEL" desc="Label to tell the user that the battery level is too low to start the migration.">
-    Battery too low for update (<ph name="PROGRESS_PERCENT">$1<ex>10</ex></ph>%)
+    Battery too low for update (<ph name="BATTERY_PERCENT">$1<ex>10</ex></ph>%)
   </message>
   <message name="IDS_ENCRYPTION_MIGRATION_ASK_CHARGE_MESSAGE" desc="Label to ask the user to charge the device.">
     Please plug your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> into a power source.
@@ -5793,6 +5784,9 @@ Battery full
   <message name="IDS_UPGRADE_NETWORK_LIST_CELLULAR_DISALLOWED" desc="Status label: for updates you need to connect to an Ethernet or Wi-Fi">
     To check for updates, please use Ethernet or Wi-Fi.
   </message>
+  <message name="IDS_UPGRADE_NETWORK_LIST_CELLULAR_ALLOWED_NOT_AUTOMATIC" desc="Status label: for automatic updates you need to connect to an Ethernet or Wi-Fi">
+    Automatic updates only happen over Ethernet or Wi-Fi.
+  </message>
 
   <!-- EOL Notification Strings -->
   <message name="IDS_ABOUT_PAGE_EOL_EOL" desc="The message in the about page to inform the user that software updates for this device are no longer available.">
@@ -5830,7 +5824,7 @@ Battery full
 
   <!-- Platform verification UI -->
   <message name="IDS_PLATFORM_VERIFICATION_DIALOG_HEADLINE" desc="The label to describe what the dialog wants to confirm.">
-    <ph name="DOMAIN">$1<ex>example.com</ex></ph> wants your device's identity to be verified, by Google, to determine eligibility for enhanced playback of protected media. <ph name="LEARN_MORE">$2<ex>Learn more</ex></ph>.
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> wants your device's identity to be verified, by Google, to determine eligibility for enhanced playback of protected content. <ph name="LEARN_MORE">$2<ex>Learn more</ex></ph>.
   </message>
 
   <!-- Multi-profiles mode -->
@@ -5945,7 +5939,7 @@ All users must sign out to continue.
 
   <!-- 3G data Notifications -->
   <message name="IDS_3G_NOTIFICATION_MESSAGE" desc="Text of the 3G data notification telling that 3G data is enabled.">
-    Google Chrome will use cellular data if you're not connected to another network.
+    Google Chrome will use mobile data if you're not connected to another network.
   </message>
   <message name="IDS_3G_DATASAVER_TITLE" desc="Title of the 3G data notification prompting user to install Data Saver.">
     You are using mobile data
@@ -6509,6 +6503,9 @@ All users must sign out to continue.
   <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_CANCEL" desc="Cancel button of the opt-in dialog for Android apps.">
     Cancel
   </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_NEXT" desc="Next button of the opt-in dialog for Android apps.">
+    Next
+  </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_RETRY" desc="Retry button of the opt-in dialog for Android apps.">
     Try again
   </message>
@@ -6571,6 +6568,9 @@ All users must sign out to continue.
   <message name="IDS_ARC_OPT_IN_PRIVACY_POLICY_LINK" desc="Text of the Link to Goolge Privacy Policy in opt-in dialog">
     Google privacy policy
   </message>
+  <message name="IDS_ARC_OPT_IN_AD_AUTH_NOTIFICATION" desc="Text displayed in opt-in dialog to inform an Active Directory user that they may have to enter their credentials in a browser window">
+    To enable your account to access the Google Play Store, you will need to authenticate with your Identity Provider. Please click Next to proceed.
+  </message>
   <message name="IDS_ARC_OPT_OUT_TAB_TITLE" desc="Tab title when viewing opt-out setting dialog for android apps.">
     Settings - Remove Android apps
   </message>
@@ -6622,6 +6622,12 @@ All users must sign out to continue.
   </message>
   <message name="IDS_ARC_CRITICALLY_LOW_DISK_NOTIFICATION_MESSAGE" desc="Notification text warning users that they are critically low on disk space and Android apps can not be launched.">
     Free up disk space to launch Android apps.
+  </message>
+  <message name="IDS_ARC_MANAGED_PROVISION_NOTIFICATION_TITLE" desc="Title of the notification shown to user during ARC provision when the ARC opt-in flow happens silently due to enterprise policies">
+    Google Play Store (beta)
+  </message>
+  <message name="IDS_ARC_MANAGED_PROVISION_NOTIFICATION_MESSAGE" desc="Notification shown to user during ARC provision when the ARC opt-in flow happens silently due to enterprise policies.">
+    Installing the Google Play Store on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>. This could take a few minutes.
   </message>
   <message name="IDS_ARC_OOBE_TERMS_HEADING" desc="Heading of the Arc Terms OOBE dialog.">
     Google Play Terms of Service
@@ -6682,14 +6688,20 @@ All users must sign out to continue.
   </message>
 
   <!-- Print Job Notification -->
-  <message name="IDS_PRINT_JOB_PRINTING_NOTIFICATION_MESSAGE" desc="Message of the printing-in-progress notification.">
-    Now printing <ph name="PAGE_NUMBER">$1<ex>5</ex></ph> pages to <ph name="PRINTER_NAME">$2<ex>printer</ex></ph>
+  <message name="IDS_PRINT_JOB_PRINTING_NOTIFICATION_TITLE" desc="Title of the printing-in-progress notification.">
+    Now printing <ph name="DOCUMENT_NAME">$1<ex>document.pdf</ex></ph>
   </message>
-  <message name="IDS_PRINT_JOB_DONE_NOTIFICATION_MESSAGE" desc="Message of the successful printing notitification.">
-    Successfully printed <ph name="PAGE_NUMBER">$1<ex>5</ex></ph> pages to <ph name="PRINTER_NAME">$2<ex>printer</ex></ph>
+  <message name="IDS_PRINT_JOB_DONE_NOTIFICATION_TITLE" desc="Title of the successful printing notification.">
+    Successfully printed <ph name="DOCUMENT_NAME">$1<ex>document.pdf</ex></ph>
   </message>
-  <message name="IDS_PRINT_JOB_ERROR_NOTIFICATION_MESSAGE" desc="Message of the error printing notification.">
-    Error printing <ph name="PAGE_NUMBER">$1<ex>5</ex></ph> pages to <ph name="PRINTER_NAME">$2<ex>printer</ex></ph>
+  <message name="IDS_PRINT_JOB_ERROR_NOTIFICATION_TITLE" desc="Title of the error printing notification.">
+    Error printing <ph name="DOCUMENT_NAME">$1<ex>document.pdf</ex></ph>
+  </message>
+  <message name="IDS_PRINT_JOB_NOTIFICATION_MESSAGE" desc="Message of the print job notification.">
+    <ph name="PAGE_NUMBER">$1<ex>5</ex></ph> pages to <ph name="PRINTER_NAME">$2<ex>printer</ex></ph>
+  </message>
+  <message name="IDS_PRINT_JOB_NOTIFICATION_SINGLE_PAGE_MESSAGE" desc="Message of the print job notification for a single page.">
+    1 page to <ph name="PRINTER_NAME">$2<ex>printer</ex></ph>
   </message>
   <message name="IDS_PRINT_JOB_NOTIFICATION_CANCEL_BUTTON" desc="Text on the button for the user to cancel the current print job.">
     Cancel printing

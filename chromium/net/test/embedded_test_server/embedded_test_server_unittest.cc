@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -444,7 +445,8 @@ std::unique_ptr<HttpResponse> HandleInfiniteRequest(
     const HttpRequest& request) {
   return base::WrapUnique(new InfiniteResponse);
 }
-}
+
+}  // anonymous namespace
 
 // Tests the case the connection is closed while the server is sending a
 // response.  May non-deterministically end up at one of three paths
@@ -458,8 +460,9 @@ TEST_P(EmbeddedTestServerTest, CloseDuringWrite) {
       &HandlePrefixedRequest, "/infinite", base::Bind(&HandleInfiniteRequest)));
   ASSERT_TRUE(server_->Start());
 
-  std::unique_ptr<URLRequest> request = context.CreateRequest(
-      server_->GetURL("/infinite"), DEFAULT_PRIORITY, &cancel_delegate);
+  std::unique_ptr<URLRequest> request =
+      context.CreateRequest(server_->GetURL("/infinite"), DEFAULT_PRIORITY,
+                            &cancel_delegate, TRAFFIC_ANNOTATION_FOR_TESTS);
   request->Start();
   cancel_delegate.WaitUntilDone();
 }

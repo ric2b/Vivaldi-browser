@@ -5,25 +5,27 @@
 #include <stddef.h>
 
 #include "cc/scheduler/begin_frame_source.h"
-#include "cc/surfaces/surface_factory_client.h"
+#include "cc/surfaces/frame_sink_manager_client.h"
 #include "cc/surfaces/surface_manager.h"
+#include "cc/test/begin_frame_source_test.h"
+#include "cc/test/fake_external_begin_frame_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace cc {
 
-class FakeSurfaceFactoryClient : public SurfaceFactoryClient {
+class FakeFrameSinkManagerClient : public FrameSinkManagerClient {
  public:
-  explicit FakeSurfaceFactoryClient(const FrameSinkId& frame_sink_id)
+  explicit FakeFrameSinkManagerClient(const FrameSinkId& frame_sink_id)
       : source_(nullptr), manager_(nullptr), frame_sink_id_(frame_sink_id) {}
 
-  FakeSurfaceFactoryClient(const FrameSinkId& frame_sink_id,
-                           SurfaceManager* manager)
+  FakeFrameSinkManagerClient(const FrameSinkId& frame_sink_id,
+                             SurfaceManager* manager)
       : source_(nullptr), manager_(nullptr), frame_sink_id_(frame_sink_id) {
     DCHECK(manager);
     Register(manager);
   }
 
-  ~FakeSurfaceFactoryClient() override {
+  ~FakeFrameSinkManagerClient() override {
     if (manager_) {
       Unregister();
     }
@@ -36,21 +38,20 @@ class FakeSurfaceFactoryClient : public SurfaceFactoryClient {
   void Register(SurfaceManager* manager) {
     EXPECT_EQ(nullptr, manager_);
     manager_ = manager;
-    manager_->RegisterSurfaceFactoryClient(frame_sink_id_, this);
+    manager_->RegisterFrameSinkManagerClient(frame_sink_id_, this);
   }
 
   void Unregister() {
     EXPECT_NE(manager_, nullptr);
-    manager_->UnregisterSurfaceFactoryClient(frame_sink_id_);
+    manager_->UnregisterFrameSinkManagerClient(frame_sink_id_);
     manager_ = nullptr;
   }
 
-  // SurfaceFactoryClient implementation.
-  void ReturnResources(const ReturnedResourceArray& resources) override {}
+  // FrameSinkManagerClient implementation.
   void SetBeginFrameSource(BeginFrameSource* begin_frame_source) override {
     DCHECK(!source_ || !begin_frame_source);
     source_ = begin_frame_source;
-  };
+  }
 
  private:
   BeginFrameSource* source_;
@@ -80,8 +81,8 @@ class SurfaceManagerTest : public testing::Test {
 };
 
 TEST_F(SurfaceManagerTest, SingleClients) {
-  FakeSurfaceFactoryClient client(FrameSinkId(1, 1));
-  FakeSurfaceFactoryClient other_client(FrameSinkId(2, 2));
+  FakeFrameSinkManagerClient client(FrameSinkId(1, 1));
+  FakeFrameSinkManagerClient other_client(FrameSinkId(2, 2));
   StubBeginFrameSource source;
 
   EXPECT_EQ(nullptr, client.source());
@@ -114,17 +115,76 @@ TEST_F(SurfaceManagerTest, SingleClients) {
   EXPECT_EQ(nullptr, client.source());
 }
 
+// This test verifies that a PrimaryBeginFrameSource will receive BeginFrames
+// from the first BeginFrameSource registered. If that BeginFrameSource goes
+// away then it will receive BeginFrames from the second BeginFrameSource.
+TEST_F(SurfaceManagerTest, PrimaryBeginFrameSource) {
+  // This PrimaryBeginFrameSource should track the first BeginFrameSource
+  // registered with the SurfaceManager.
+  testing::NiceMock<MockBeginFrameObserver> obs;
+  BeginFrameSource* begin_frame_source = manager_.GetPrimaryBeginFrameSource();
+  begin_frame_source->AddObserver(&obs);
+
+  FakeFrameSinkManagerClient root1(FrameSinkId(1, 1), &manager_);
+  std::unique_ptr<FakeExternalBeginFrameSource> external_source1 =
+      base::MakeUnique<FakeExternalBeginFrameSource>(60.f, false);
+  manager_.RegisterBeginFrameSource(external_source1.get(),
+                                    root1.frame_sink_id());
+
+  FakeFrameSinkManagerClient root2(FrameSinkId(2, 2), &manager_);
+  std::unique_ptr<FakeExternalBeginFrameSource> external_source2 =
+      base::MakeUnique<FakeExternalBeginFrameSource>(60.f, false);
+  manager_.RegisterBeginFrameSource(external_source2.get(),
+                                    root2.frame_sink_id());
+
+  BeginFrameArgs args =
+      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 0, 1);
+
+  // Ticking |external_source2| does not propagate to |begin_frame_source|.
+  {
+    EXPECT_CALL(obs, OnBeginFrame(args)).Times(0);
+    external_source2->TestOnBeginFrame(args);
+    testing::Mock::VerifyAndClearExpectations(&obs);
+  }
+
+  // Ticking |external_source1| does propagate to |begin_frame_source| and
+  // |obs|.
+  {
+    EXPECT_CALL(obs, OnBeginFrame(testing::_)).Times(1);
+    external_source1->TestOnBeginFrame(args);
+    testing::Mock::VerifyAndClearExpectations(&obs);
+  }
+
+  // Getting rid of |external_source1| means those BeginFrames will not
+  // propagate. Instead, |external_source2|'s BeginFrames will propagate
+  // to |begin_frame_source|.
+  {
+    manager_.UnregisterBeginFrameSource(external_source1.get());
+    EXPECT_CALL(obs, OnBeginFrame(testing::_)).Times(0);
+    external_source1->TestOnBeginFrame(args);
+    testing::Mock::VerifyAndClearExpectations(&obs);
+
+    EXPECT_CALL(obs, OnBeginFrame(testing::_)).Times(1);
+    external_source2->TestOnBeginFrame(args);
+    testing::Mock::VerifyAndClearExpectations(&obs);
+  }
+
+  // Tear down
+  manager_.UnregisterBeginFrameSource(external_source2.get());
+  begin_frame_source->RemoveObserver(&obs);
+}
+
 TEST_F(SurfaceManagerTest, MultipleDisplays) {
   StubBeginFrameSource root1_source;
   StubBeginFrameSource root2_source;
 
   // root1 -> A -> B
   // root2 -> C
-  FakeSurfaceFactoryClient root1(FrameSinkId(1, 1), &manager_);
-  FakeSurfaceFactoryClient root2(FrameSinkId(2, 2), &manager_);
-  FakeSurfaceFactoryClient client_a(FrameSinkId(3, 3), &manager_);
-  FakeSurfaceFactoryClient client_b(FrameSinkId(4, 4), &manager_);
-  FakeSurfaceFactoryClient client_c(FrameSinkId(5, 5), &manager_);
+  FakeFrameSinkManagerClient root1(FrameSinkId(1, 1), &manager_);
+  FakeFrameSinkManagerClient root2(FrameSinkId(2, 2), &manager_);
+  FakeFrameSinkManagerClient client_a(FrameSinkId(3, 3), &manager_);
+  FakeFrameSinkManagerClient client_b(FrameSinkId(4, 4), &manager_);
+  FakeFrameSinkManagerClient client_c(FrameSinkId(5, 5), &manager_);
 
   manager_.RegisterBeginFrameSource(&root1_source, root1.frame_sink_id());
   manager_.RegisterBeginFrameSource(&root2_source, root2.frame_sink_id());
@@ -183,7 +243,7 @@ TEST_F(SurfaceManagerTest, MultipleDisplays) {
 
 // This test verifies that a BeginFrameSource path to the root from a
 // FrameSinkId is preserved even if that FrameSinkId has no children
-// and does not have a corresponding SurfaceFactoryClient.
+// and does not have a corresponding FrameSinkManagerClient.
 TEST_F(SurfaceManagerTest, ParentWithoutClientRetained) {
   StubBeginFrameSource root_source;
 
@@ -192,15 +252,15 @@ TEST_F(SurfaceManagerTest, ParentWithoutClientRetained) {
   constexpr FrameSinkId kFrameSinkIdB(3, 3);
   constexpr FrameSinkId kFrameSinkIdC(4, 4);
 
-  FakeSurfaceFactoryClient root(kFrameSinkIdRoot, &manager_);
-  FakeSurfaceFactoryClient client_b(kFrameSinkIdB, &manager_);
-  FakeSurfaceFactoryClient client_c(kFrameSinkIdC, &manager_);
+  FakeFrameSinkManagerClient root(kFrameSinkIdRoot, &manager_);
+  FakeFrameSinkManagerClient client_b(kFrameSinkIdB, &manager_);
+  FakeFrameSinkManagerClient client_c(kFrameSinkIdC, &manager_);
 
   manager_.RegisterBeginFrameSource(&root_source, root.frame_sink_id());
   EXPECT_EQ(&root_source, root.source());
 
   // Set up initial hierarchy: root -> A -> B.
-  // Note that A does not have a SurfaceFactoryClient.
+  // Note that A does not have a FrameSinkManagerClient.
   manager_.RegisterFrameSinkHierarchy(kFrameSinkIdRoot, kFrameSinkIdA);
   manager_.RegisterFrameSinkHierarchy(kFrameSinkIdA, kFrameSinkIdB);
   // The root's BeginFrameSource should propagate to B.
@@ -231,12 +291,12 @@ TEST_F(SurfaceManagerTest,
   constexpr FrameSinkId kFrameSinkIdB(3, 3);
   constexpr FrameSinkId kFrameSinkIdC(4, 4);
 
-  FakeSurfaceFactoryClient root(kFrameSinkIdRoot, &manager_);
-  FakeSurfaceFactoryClient client_b(kFrameSinkIdB, &manager_);
-  FakeSurfaceFactoryClient client_c(kFrameSinkIdC, &manager_);
+  FakeFrameSinkManagerClient root(kFrameSinkIdRoot, &manager_);
+  FakeFrameSinkManagerClient client_b(kFrameSinkIdB, &manager_);
+  FakeFrameSinkManagerClient client_c(kFrameSinkIdC, &manager_);
 
   // Set up initial hierarchy: root -> A -> B.
-  // Note that A does not have a SurfaceFactoryClient.
+  // Note that A does not have a FrameSinkManagerClient.
   manager_.RegisterFrameSinkHierarchy(kFrameSinkIdRoot, kFrameSinkIdA);
   manager_.RegisterFrameSinkHierarchy(kFrameSinkIdA, kFrameSinkIdB);
   // The root does not yet have a BeginFrameSource so client B should not have
@@ -259,7 +319,7 @@ TEST_F(SurfaceManagerTest,
 }
 
 // In practice, registering and unregistering both parent/child relationships
-// and SurfaceFactoryClients can happen in any ordering with respect to
+// and FrameSinkManagerClients can happen in any ordering with respect to
 // each other.  These following tests verify that all the data structures
 // are properly set up and cleaned up under the four permutations of orderings
 // of this nesting.
@@ -364,9 +424,9 @@ class SurfaceManagerOrderingTest : public SurfaceManagerTest {
 
   StubBeginFrameSource source_;
   // A -> B -> C hierarchy, with A always having the BFS.
-  FakeSurfaceFactoryClient client_a_;
-  FakeSurfaceFactoryClient client_b_;
-  FakeSurfaceFactoryClient client_c_;
+  FakeFrameSinkManagerClient client_a_;
+  FakeFrameSinkManagerClient client_b_;
+  FakeFrameSinkManagerClient client_c_;
 
   bool hierarchy_registered_;
   bool clients_registered_;

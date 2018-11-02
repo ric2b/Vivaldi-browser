@@ -46,7 +46,7 @@ OmniboxSuggestionUsedMetricsObserver::~OmniboxSuggestionUsedMetricsObserver() {}
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 OmniboxSuggestionUsedMetricsObserver::OnHidden(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   return STOP_OBSERVING;
 }
@@ -60,10 +60,10 @@ OmniboxSuggestionUsedMetricsObserver::OnCommit(
              : STOP_OBSERVING;
 }
 
-void OmniboxSuggestionUsedMetricsObserver::OnFirstContentfulPaint(
-    const page_load_metrics::PageLoadTiming& timing,
+void OmniboxSuggestionUsedMetricsObserver::OnFirstContentfulPaintInPage(
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
-  base::TimeDelta fcp = timing.first_contentful_paint.value();
+  base::TimeDelta fcp = timing.paint_timing->first_contentful_paint.value();
 
   if (info.started_in_foreground) {
     if (ui::PageTransitionCoreTypeIs(transition_type_,
@@ -95,10 +95,11 @@ void OmniboxSuggestionUsedMetricsObserver::OnFirstContentfulPaint(
   }
 }
 
-void OmniboxSuggestionUsedMetricsObserver::OnFirstMeaningfulPaint(
-    const page_load_metrics::PageLoadTiming& timing,
-    const page_load_metrics::PageLoadExtraInfo& info) {
-  base::TimeDelta fmp = timing.first_meaningful_paint.value();
+void OmniboxSuggestionUsedMetricsObserver::
+    OnFirstMeaningfulPaintInMainFrameDocument(
+        const page_load_metrics::mojom::PageLoadTiming& timing,
+        const page_load_metrics::PageLoadExtraInfo& info) {
+  base::TimeDelta fmp = timing.paint_timing->first_meaningful_paint.value();
 
   if (info.started_in_foreground) {
     if (ui::PageTransitionCoreTypeIs(transition_type_,

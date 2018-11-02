@@ -8,6 +8,7 @@
 #include "core/HTMLNames.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/frame/VisualViewport.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/layout/LayoutMenuList.h"
 #include "core/page/Page.h"
@@ -21,7 +22,6 @@
 #include "public/web/WebPopupMenuInfo.h"
 #include "public/web/WebSettings.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
 
 namespace blink {
@@ -123,11 +123,11 @@ class ExternalPopupMenuTest : public ::testing::Test {
     WebView()->UpdateAllLifecyclePhases();
   }
 
-  WebViewImpl* WebView() const { return helper_.WebView(); }
+  WebViewBase* WebView() const { return helper_.WebView(); }
   const ExternalPopupMenuWebFrameClient& Client() const {
     return web_frame_client_;
   }
-  WebLocalFrameImpl* MainFrame() const {
+  WebLocalFrameBase* MainFrame() const {
     return helper_.WebView()->MainFrameImpl();
   }
 
@@ -146,7 +146,7 @@ TEST_F(ExternalPopupMenuTest, PopupAccountsForVisualViewportTransform) {
   WebView()->UpdateAllLifecyclePhases();
 
   HTMLSelectElement* select = toHTMLSelectElement(
-      MainFrame()->GetFrame()->GetDocument()->GetElementById("select"));
+      MainFrame()->GetFrame()->GetDocument()->getElementById("select"));
   LayoutMenuList* menu_list = ToLayoutMenuList(select->GetLayoutObject());
   ASSERT_TRUE(menu_list);
 
@@ -175,7 +175,7 @@ TEST_F(ExternalPopupMenuTest, DidAcceptIndex) {
   LoadFrame("select.html");
 
   HTMLSelectElement* select = toHTMLSelectElement(
-      MainFrame()->GetFrame()->GetDocument()->GetElementById("select"));
+      MainFrame()->GetFrame()->GetDocument()->getElementById("select"));
   LayoutMenuList* menu_list = ToLayoutMenuList(select->GetLayoutObject());
   ASSERT_TRUE(menu_list);
 
@@ -186,7 +186,7 @@ TEST_F(ExternalPopupMenuTest, DidAcceptIndex) {
       static_cast<ExternalPopupMenu*>(select->Popup());
   client->DidAcceptIndex(2);
   EXPECT_FALSE(select->PopupIsVisible());
-  ASSERT_STREQ("2", menu_list->GetText().Utf8().Data());
+  ASSERT_STREQ("2", menu_list->GetText().Utf8().data());
   EXPECT_EQ(2, select->selectedIndex());
 }
 
@@ -195,7 +195,7 @@ TEST_F(ExternalPopupMenuTest, DidAcceptIndices) {
   LoadFrame("select.html");
 
   HTMLSelectElement* select = toHTMLSelectElement(
-      MainFrame()->GetFrame()->GetDocument()->GetElementById("select"));
+      MainFrame()->GetFrame()->GetDocument()->getElementById("select"));
   LayoutMenuList* menu_list = ToLayoutMenuList(select->GetLayoutObject());
   ASSERT_TRUE(menu_list);
 
@@ -208,7 +208,7 @@ TEST_F(ExternalPopupMenuTest, DidAcceptIndices) {
   WebVector<int> indices_vector(indices, 1);
   client->DidAcceptIndices(indices_vector);
   EXPECT_FALSE(select->PopupIsVisible());
-  EXPECT_STREQ("2", menu_list->GetText().Utf8().Data());
+  EXPECT_STREQ("2", menu_list->GetText().Utf8().data());
   EXPECT_EQ(2, select->selectedIndex());
 }
 
@@ -217,7 +217,7 @@ TEST_F(ExternalPopupMenuTest, DidAcceptIndicesClearSelect) {
   LoadFrame("select.html");
 
   HTMLSelectElement* select = toHTMLSelectElement(
-      MainFrame()->GetFrame()->GetDocument()->GetElementById("select"));
+      MainFrame()->GetFrame()->GetDocument()->getElementById("select"));
   LayoutMenuList* menu_list = ToLayoutMenuList(select->GetLayoutObject());
   ASSERT_TRUE(menu_list);
 

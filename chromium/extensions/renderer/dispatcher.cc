@@ -101,6 +101,7 @@
 #include "extensions/renderer/worker_thread_dispatcher.h"
 #include "gin/converter.h"
 #include "mojo/public/js/constants.h"
+#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebCustomElement.h"
@@ -108,7 +109,6 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/web/WebScopedUserGesture.h"
 #include "third_party/WebKit/public/web/WebScriptController.h"
 #include "third_party/WebKit/public/web/WebSecurityPolicy.h"
@@ -292,8 +292,10 @@ Dispatcher::Dispatcher(DispatcherDelegate* delegate)
       *(base::CommandLine::ForCurrentProcess());
 
   if (FeatureSwitch::native_crx_bindings()->IsEnabled()) {
-    bindings_system_ = base::MakeUnique<NativeExtensionBindingsSystem>(
+    auto system = base::MakeUnique<NativeExtensionBindingsSystem>(
         base::Bind(&SendRequestIPC), base::Bind(&SendEventListenersIPC));
+    delegate_->InitializeBindingsSystem(this, system->api_system());
+    bindings_system_ = std::move(system);
   } else {
     bindings_system_ = base::MakeUnique<JsExtensionBindingsSystem>(
         &source_map_, base::MakeUnique<RequestSender>());
@@ -721,114 +723,102 @@ void Dispatcher::InvokeModuleSystemMethod(content::RenderFrame* render_frame,
 std::vector<std::pair<const char*, int>> Dispatcher::GetJsResources() {
   // Libraries.
   std::vector<std::pair<const char*, int>> resources = {
-    {"appView", IDR_APP_VIEW_JS},
-    {"entryIdManager", IDR_ENTRY_ID_MANAGER},
-    {kEventBindings, IDR_EVENT_BINDINGS_JS},
-    {"extensionOptions", IDR_EXTENSION_OPTIONS_JS},
-    {"extensionOptionsAttributes", IDR_EXTENSION_OPTIONS_ATTRIBUTES_JS},
-    {"extensionOptionsConstants", IDR_EXTENSION_OPTIONS_CONSTANTS_JS},
-    {"extensionOptionsEvents", IDR_EXTENSION_OPTIONS_EVENTS_JS},
-    {"extensionView", IDR_EXTENSION_VIEW_JS},
-    {"extensionViewApiMethods", IDR_EXTENSION_VIEW_API_METHODS_JS},
-    {"extensionViewAttributes", IDR_EXTENSION_VIEW_ATTRIBUTES_JS},
-    {"extensionViewConstants", IDR_EXTENSION_VIEW_CONSTANTS_JS},
-    {"extensionViewEvents", IDR_EXTENSION_VIEW_EVENTS_JS},
-    {"extensionViewInternal", IDR_EXTENSION_VIEW_INTERNAL_CUSTOM_BINDINGS_JS},
-    {"guestView", IDR_GUEST_VIEW_JS},
-    {"guestViewAttributes", IDR_GUEST_VIEW_ATTRIBUTES_JS},
-    {"guestViewContainer", IDR_GUEST_VIEW_CONTAINER_JS},
-    {"guestViewDeny", IDR_GUEST_VIEW_DENY_JS},
-    {"guestViewEvents", IDR_GUEST_VIEW_EVENTS_JS},
-    {"imageUtil", IDR_IMAGE_UTIL_JS},
-    {"json_schema", IDR_JSON_SCHEMA_JS},
-    {"lastError", IDR_LAST_ERROR_JS},
-    {"messaging", IDR_MESSAGING_JS},
-    {"messaging_utils", IDR_MESSAGING_UTILS_JS},
-    {kSchemaUtils, IDR_SCHEMA_UTILS_JS},
-    {"sendRequest", IDR_SEND_REQUEST_JS},
-    {"setIcon", IDR_SET_ICON_JS},
-    {"test", IDR_TEST_CUSTOM_BINDINGS_JS},
-    {"test_environment_specific_bindings",
-     IDR_BROWSER_TEST_ENVIRONMENT_SPECIFIC_BINDINGS_JS},
-    {"uncaught_exception_handler", IDR_UNCAUGHT_EXCEPTION_HANDLER_JS},
-    {"utils", IDR_UTILS_JS},
-    {"webRequest", IDR_WEB_REQUEST_CUSTOM_BINDINGS_JS},
-    {"webRequestEvent", IDR_WEB_REQUEST_EVENT_JS},
-    {"webRequestInternal", IDR_WEB_REQUEST_INTERNAL_CUSTOM_BINDINGS_JS},
-    // Note: webView not webview so that this doesn't interfere with the
-    // chrome.webview API bindings.
-    {"webView", IDR_WEB_VIEW_JS},
-    {"webViewActionRequests", IDR_WEB_VIEW_ACTION_REQUESTS_JS},
-    {"webViewApiMethods", IDR_WEB_VIEW_API_METHODS_JS},
-    {"webViewAttributes", IDR_WEB_VIEW_ATTRIBUTES_JS},
-    {"webViewConstants", IDR_WEB_VIEW_CONSTANTS_JS},
-    {"webViewEvents", IDR_WEB_VIEW_EVENTS_JS},
-    {"webViewInternal", IDR_WEB_VIEW_INTERNAL_CUSTOM_BINDINGS_JS},
+      {"appView", IDR_APP_VIEW_JS},
+      {"entryIdManager", IDR_ENTRY_ID_MANAGER},
+      {kEventBindings, IDR_EVENT_BINDINGS_JS},
+      {"extensionOptions", IDR_EXTENSION_OPTIONS_JS},
+      {"extensionOptionsAttributes", IDR_EXTENSION_OPTIONS_ATTRIBUTES_JS},
+      {"extensionOptionsConstants", IDR_EXTENSION_OPTIONS_CONSTANTS_JS},
+      {"extensionOptionsEvents", IDR_EXTENSION_OPTIONS_EVENTS_JS},
+      {"extensionView", IDR_EXTENSION_VIEW_JS},
+      {"extensionViewApiMethods", IDR_EXTENSION_VIEW_API_METHODS_JS},
+      {"extensionViewAttributes", IDR_EXTENSION_VIEW_ATTRIBUTES_JS},
+      {"extensionViewConstants", IDR_EXTENSION_VIEW_CONSTANTS_JS},
+      {"extensionViewEvents", IDR_EXTENSION_VIEW_EVENTS_JS},
+      {"extensionViewInternal", IDR_EXTENSION_VIEW_INTERNAL_CUSTOM_BINDINGS_JS},
+      {"fileEntryBindingUtil", IDR_FILE_ENTRY_BINDING_UTIL_JS},
+      {"guestView", IDR_GUEST_VIEW_JS},
+      {"guestViewAttributes", IDR_GUEST_VIEW_ATTRIBUTES_JS},
+      {"guestViewContainer", IDR_GUEST_VIEW_CONTAINER_JS},
+      {"guestViewDeny", IDR_GUEST_VIEW_DENY_JS},
+      {"guestViewEvents", IDR_GUEST_VIEW_EVENTS_JS},
+      {"imageUtil", IDR_IMAGE_UTIL_JS},
+      {"json_schema", IDR_JSON_SCHEMA_JS},
+      {"lastError", IDR_LAST_ERROR_JS},
+      {"messaging", IDR_MESSAGING_JS},
+      {"messaging_utils", IDR_MESSAGING_UTILS_JS},
+      {kSchemaUtils, IDR_SCHEMA_UTILS_JS},
+      {"sendRequest", IDR_SEND_REQUEST_JS},
+      {"setIcon", IDR_SET_ICON_JS},
+      {"test", IDR_TEST_CUSTOM_BINDINGS_JS},
+      {"test_environment_specific_bindings",
+       IDR_BROWSER_TEST_ENVIRONMENT_SPECIFIC_BINDINGS_JS},
+      {"uncaught_exception_handler", IDR_UNCAUGHT_EXCEPTION_HANDLER_JS},
+      {"utils", IDR_UTILS_JS},
+      {"webRequest", IDR_WEB_REQUEST_CUSTOM_BINDINGS_JS},
+      {"webRequestEvent", IDR_WEB_REQUEST_EVENT_JS},
+      {"webRequestInternal", IDR_WEB_REQUEST_INTERNAL_CUSTOM_BINDINGS_JS},
+      // Note: webView not webview so that this doesn't interfere with the
+      // chrome.webview API bindings.
+      {"webView", IDR_WEB_VIEW_JS},
+      {"webViewActionRequests", IDR_WEB_VIEW_ACTION_REQUESTS_JS},
+      {"webViewApiMethods", IDR_WEB_VIEW_API_METHODS_JS},
+      {"webViewAttributes", IDR_WEB_VIEW_ATTRIBUTES_JS},
+      {"webViewConstants", IDR_WEB_VIEW_CONSTANTS_JS},
+      {"webViewEvents", IDR_WEB_VIEW_EVENTS_JS},
+      {"webViewInternal", IDR_WEB_VIEW_INTERNAL_CUSTOM_BINDINGS_JS},
 
-    {mojo::kAssociatedBindingsModuleName, IDR_MOJO_ASSOCIATED_BINDINGS_JS},
-    {mojo::kBindingsModuleName, IDR_MOJO_BINDINGS_JS},
-    {mojo::kBufferModuleName, IDR_MOJO_BUFFER_JS},
-    {mojo::kCodecModuleName, IDR_MOJO_CODEC_JS},
-    {mojo::kConnectorModuleName, IDR_MOJO_CONNECTOR_JS},
-    {mojo::kControlMessageHandlerModuleName,
-     IDR_MOJO_CONTROL_MESSAGE_HANDLER_JS},
-    {mojo::kControlMessageProxyModuleName, IDR_MOJO_CONTROL_MESSAGE_PROXY_JS},
-    {mojo::kInterfaceControlMessagesMojom,
-     IDR_MOJO_INTERFACE_CONTROL_MESSAGES_MOJOM_JS},
-    {mojo::kInterfaceEndpointClientModuleName,
-     IDR_MOJO_INTERFACE_ENDPOINT_CLIENT_JS},
-    {mojo::kInterfaceEndpointHandleModuleName,
-     IDR_MOJO_INTERFACE_ENDPOINT_HANDLE_JS},
-    {mojo::kInterfaceTypesModuleName, IDR_MOJO_INTERFACE_TYPES_JS},
-    {mojo::kPipeControlMessageHandlerModuleName,
-     IDR_MOJO_PIPE_CONTROL_MESSAGE_HANDLER_JS},
-    {mojo::kPipeControlMessageProxyModuleName,
-     IDR_MOJO_PIPE_CONTROL_MESSAGE_PROXY_JS},
-    {mojo::kPipeControlMessagesMojom, IDR_MOJO_PIPE_CONTROL_MESSAGES_MOJOM_JS},
-    {mojo::kRouterModuleName, IDR_MOJO_ROUTER_JS},
-    {mojo::kUnicodeModuleName, IDR_MOJO_UNICODE_JS},
-    {mojo::kValidatorModuleName, IDR_MOJO_VALIDATOR_JS},
-    {"async_waiter", IDR_ASYNC_WAITER_JS},
-    {"keep_alive", IDR_KEEP_ALIVE_JS},
-    {"extensions/common/mojo/keep_alive.mojom", IDR_KEEP_ALIVE_MOJOM_JS},
+      {mojo::kAssociatedBindingsModuleName, IDR_MOJO_ASSOCIATED_BINDINGS_JS},
+      {mojo::kBindingsModuleName, IDR_MOJO_BINDINGS_JS},
+      {mojo::kBufferModuleName, IDR_MOJO_BUFFER_JS},
+      {mojo::kCodecModuleName, IDR_MOJO_CODEC_JS},
+      {mojo::kConnectorModuleName, IDR_MOJO_CONNECTOR_JS},
+      {mojo::kControlMessageHandlerModuleName,
+       IDR_MOJO_CONTROL_MESSAGE_HANDLER_JS},
+      {mojo::kControlMessageProxyModuleName, IDR_MOJO_CONTROL_MESSAGE_PROXY_JS},
+      {mojo::kInterfaceControlMessagesMojom,
+       IDR_MOJO_INTERFACE_CONTROL_MESSAGES_MOJOM_JS},
+      {mojo::kInterfaceEndpointClientModuleName,
+       IDR_MOJO_INTERFACE_ENDPOINT_CLIENT_JS},
+      {mojo::kInterfaceEndpointHandleModuleName,
+       IDR_MOJO_INTERFACE_ENDPOINT_HANDLE_JS},
+      {mojo::kInterfaceTypesModuleName, IDR_MOJO_INTERFACE_TYPES_JS},
+      {mojo::kPipeControlMessageHandlerModuleName,
+       IDR_MOJO_PIPE_CONTROL_MESSAGE_HANDLER_JS},
+      {mojo::kPipeControlMessageProxyModuleName,
+       IDR_MOJO_PIPE_CONTROL_MESSAGE_PROXY_JS},
+      {mojo::kPipeControlMessagesMojom,
+       IDR_MOJO_PIPE_CONTROL_MESSAGES_MOJOM_JS},
+      {mojo::kRouterModuleName, IDR_MOJO_ROUTER_JS},
+      {mojo::kUnicodeModuleName, IDR_MOJO_UNICODE_JS},
+      {mojo::kValidatorModuleName, IDR_MOJO_VALIDATOR_JS},
+      {"async_waiter", IDR_ASYNC_WAITER_JS},
+      {"keep_alive", IDR_KEEP_ALIVE_JS},
+      {"extensions/common/mojo/keep_alive.mojom", IDR_KEEP_ALIVE_MOJOM_JS},
 
-    // Custom bindings.
-    {"app.runtime", IDR_APP_RUNTIME_CUSTOM_BINDINGS_JS},
-    {"app.window", IDR_APP_WINDOW_CUSTOM_BINDINGS_JS},
-    {"declarativeWebRequest", IDR_DECLARATIVE_WEBREQUEST_CUSTOM_BINDINGS_JS},
-    {"displaySource", IDR_DISPLAY_SOURCE_CUSTOM_BINDINGS_JS},
-    {"contextMenus", IDR_CONTEXT_MENUS_CUSTOM_BINDINGS_JS},
-    {"contextMenusHandlers", IDR_CONTEXT_MENUS_HANDLERS_JS},
-    {"extension", IDR_EXTENSION_CUSTOM_BINDINGS_JS},
-    {"i18n", IDR_I18N_CUSTOM_BINDINGS_JS},
-    {"mimeHandlerPrivate", IDR_MIME_HANDLER_PRIVATE_CUSTOM_BINDINGS_JS},
-    {"extensions/common/api/mime_handler.mojom", IDR_MIME_HANDLER_MOJOM_JS},
-    {"mojoPrivate", IDR_MOJO_PRIVATE_CUSTOM_BINDINGS_JS},
-    {"permissions", IDR_PERMISSIONS_CUSTOM_BINDINGS_JS},
-    {"printerProvider", IDR_PRINTER_PROVIDER_CUSTOM_BINDINGS_JS},
-    {"runtime", IDR_RUNTIME_CUSTOM_BINDINGS_JS},
-    {"webViewRequest", IDR_WEB_VIEW_REQUEST_CUSTOM_BINDINGS_JS},
-    {"binding", IDR_BINDING_JS},
+      // Custom bindings.
+      {"app.runtime", IDR_APP_RUNTIME_CUSTOM_BINDINGS_JS},
+      {"app.window", IDR_APP_WINDOW_CUSTOM_BINDINGS_JS},
+      {"declarativeWebRequest", IDR_DECLARATIVE_WEBREQUEST_CUSTOM_BINDINGS_JS},
+      {"displaySource", IDR_DISPLAY_SOURCE_CUSTOM_BINDINGS_JS},
+      {"contextMenus", IDR_CONTEXT_MENUS_CUSTOM_BINDINGS_JS},
+      {"contextMenusHandlers", IDR_CONTEXT_MENUS_HANDLERS_JS},
+      {"extension", IDR_EXTENSION_CUSTOM_BINDINGS_JS},
+      {"i18n", IDR_I18N_CUSTOM_BINDINGS_JS},
+      {"mimeHandlerPrivate", IDR_MIME_HANDLER_PRIVATE_CUSTOM_BINDINGS_JS},
+      {"extensions/common/api/mime_handler.mojom", IDR_MIME_HANDLER_MOJOM_JS},
+      {"mojoPrivate", IDR_MOJO_PRIVATE_CUSTOM_BINDINGS_JS},
+      {"permissions", IDR_PERMISSIONS_CUSTOM_BINDINGS_JS},
+      {"printerProvider", IDR_PRINTER_PROVIDER_CUSTOM_BINDINGS_JS},
+      {"runtime", IDR_RUNTIME_CUSTOM_BINDINGS_JS},
+      {"webViewRequest", IDR_WEB_VIEW_REQUEST_CUSTOM_BINDINGS_JS},
+      {"binding", IDR_BINDING_JS},
 
-    // Custom types sources.
-    {"StorageArea", IDR_STORAGE_AREA_JS},
+      // Custom types sources.
+      {"StorageArea", IDR_STORAGE_AREA_JS},
 
-    // Platform app sources that are not API-specific..
-    {"platformApp", IDR_PLATFORM_APP_JS},
-
-#if defined(ENABLE_MEDIA_ROUTER)
-    {"chrome/browser/media/router/mojo/media_controller.mojom",
-     IDR_MEDIA_CONTROLLER_MOJOM_JS},
-    {"chrome/browser/media/router/mojo/media_router.mojom",
-     IDR_MEDIA_ROUTER_MOJOM_JS},
-    {"chrome/browser/media/router/mojo/media_status.mojom",
-     IDR_MEDIA_STATUS_MOJOM_JS},
-    {"media_router_bindings", IDR_MEDIA_ROUTER_BINDINGS_JS},
-    {"mojo/common/time.mojom", IDR_MOJO_TIME_MOJOM_JS},
-    {"net/interfaces/ip_address.mojom", IDR_MOJO_IP_ADDRESS_MOJOM_JS},
-    {"url/mojo/origin.mojom", IDR_ORIGIN_MOJOM_JS},
-    {"url/mojo/url.mojom", IDR_MOJO_URL_MOJOM_JS},
-#endif  // defined(ENABLE_MEDIA_ROUTER)
+      // Platform app sources that are not API-specific..
+      {"platformApp", IDR_PLATFORM_APP_JS},
   };
 
   if (base::FeatureList::IsEnabled(::features::kGuestViewCrossProcessFrames)) {
@@ -952,6 +942,8 @@ bool Dispatcher::OnControlMessageReceived(const IPC::Message& message) {
   IPC_MESSAGE_HANDLER(ExtensionMsg_TransferBlobs, OnTransferBlobs)
   IPC_MESSAGE_HANDLER(ExtensionMsg_Unloaded, OnUnloaded)
   IPC_MESSAGE_HANDLER(ExtensionMsg_UpdatePermissions, OnUpdatePermissions)
+  IPC_MESSAGE_HANDLER(ExtensionMsg_UpdateDefaultPolicyHostRestrictions,
+                      OnUpdateDefaultPolicyHostRestrictions)
   IPC_MESSAGE_HANDLER(ExtensionMsg_UpdateTabSpecificPermissions,
                       OnUpdateTabSpecificPermissions)
   IPC_MESSAGE_HANDLER(ExtensionMsg_ClearTabSpecificPermissions,
@@ -1075,7 +1067,6 @@ void Dispatcher::OnLoaded(
       extension_load_errors_[param.id] = error;
       continue;
     }
-
     RendererExtensionRegistry* extension_registry =
         RendererExtensionRegistry::Get();
     // TODO(kalman): This test is deliberately not a CHECK (though I wish it
@@ -1092,12 +1083,18 @@ void Dispatcher::OnLoaded(
       // consider making this a release CHECK.
       NOTREACHED();
     }
+    if (param.uses_default_policy_blocked_allowed_hosts) {
+      extension->permissions_data()->SetUsesDefaultHostRestrictions();
+    } else {
+      extension->permissions_data()->SetPolicyHostRestrictions(
+          param.policy_blocked_hosts, param.policy_allowed_hosts);
+    }
   }
 
   // Update the available bindings for all contexts. These may have changed if
   // an externally_connectable extension was loaded that can connect to an
   // open webpage.
-  UpdateBindings("");
+  UpdateBindings(std::string());
 }
 
 void Dispatcher::OnMessageInvoke(const std::string& extension_id,
@@ -1224,6 +1221,13 @@ void Dispatcher::OnUnloaded(const std::string& id) {
   // extension's URL just won't match anything anymore.
 }
 
+void Dispatcher::OnUpdateDefaultPolicyHostRestrictions(
+    const ExtensionMsg_UpdateDefaultPolicyHostRestrictions_Params& params) {
+  PermissionsData::SetDefaultPolicyHostRestrictions(
+      params.default_policy_blocked_hosts, params.default_policy_allowed_hosts);
+  UpdateBindings(std::string());
+}
+
 void Dispatcher::OnUpdatePermissions(
     const ExtensionMsg_UpdatePermissions_Params& params) {
   const Extension* extension =
@@ -1243,6 +1247,12 @@ void Dispatcher::OnUpdatePermissions(
 
   extension->permissions_data()->SetPermissions(std::move(active),
                                                 std::move(withheld));
+  if (params.uses_default_policy_host_restrictions) {
+    extension->permissions_data()->SetUsesDefaultHostRestrictions();
+  } else {
+    extension->permissions_data()->SetPolicyHostRestrictions(
+        params.policy_blocked_hosts, params.policy_allowed_hosts);
+  }
   UpdateBindings(extension->id());
 }
 

@@ -22,7 +22,7 @@
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_hittest.h"
 #include "cc/surfaces/surface_manager.h"
-#include "components/display_compositor/gl_helper.h"
+#include "components/viz/display_compositor/gl_helper.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/compositor_resize_lock.h"
@@ -50,7 +50,7 @@ DelegatedFrameHost::DelegatedFrameHost(const cc::FrameSinkId& frame_sink_id,
       skipped_frames_(false),
       background_color_(SK_ColorRED),
       current_scale_factor_(1.f),
-      delegated_frame_evictor_(new DelegatedFrameEvictor(this)) {
+      frame_evictor_(new viz::FrameEvictor(this)) {
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   factory->GetContextFactory()->AddObserver(this);
   factory->GetContextFactoryPrivate()->GetSurfaceManager()->RegisterFrameSinkId(
@@ -59,7 +59,7 @@ DelegatedFrameHost::DelegatedFrameHost(const cc::FrameSinkId& frame_sink_id,
 }
 
 void DelegatedFrameHost::WasShown(const ui::LatencyInfo& latency_info) {
-  delegated_frame_evictor_->SetVisible(true);
+  frame_evictor_->SetVisible(true);
 
   if (!has_frame_ && !released_front_lock_.get()) {
     if (compositor_)
@@ -72,11 +72,11 @@ void DelegatedFrameHost::WasShown(const ui::LatencyInfo& latency_info) {
 }
 
 bool DelegatedFrameHost::HasSavedFrame() {
-  return delegated_frame_evictor_->HasFrame();
+  return frame_evictor_->HasFrame();
 }
 
 void DelegatedFrameHost::WasHidden() {
-  delegated_frame_evictor_->SetVisible(false);
+  frame_evictor_->SetVisible(false);
   released_front_lock_ = NULL;
 }
 
@@ -219,7 +219,7 @@ void DelegatedFrameHost::SetNeedsBeginFrames(bool needs_begin_frames) {
   support_->SetNeedsBeginFrame(needs_begin_frames);
 }
 
-void DelegatedFrameHost::BeginFrameDidNotSwap(const cc::BeginFrameAck& ack) {
+void DelegatedFrameHost::DidNotProduceFrame(const cc::BeginFrameAck& ack) {
   DidFinishFrame(ack);
 
   cc::BeginFrameAck modified_ack = ack;
@@ -232,7 +232,7 @@ void DelegatedFrameHost::BeginFrameDidNotSwap(const cc::BeginFrameAck& ack) {
         latest_confirmed_begin_frame_sequence_number_;
   }
 
-  support_->BeginFrameDidNotSwap(modified_ack);
+  support_->DidNotProduceFrame(modified_ack);
 }
 
 bool DelegatedFrameHost::ShouldSkipFrame(const gfx::Size& size_in_dip) {
@@ -348,7 +348,7 @@ void DelegatedFrameHost::AttemptFrameSubscriberCapture(
   if (!idle_frame_subscriber_textures_.empty()) {
     subscriber_texture = idle_frame_subscriber_textures_.back();
     idle_frame_subscriber_textures_.pop_back();
-  } else if (display_compositor::GLHelper* helper =
+  } else if (viz::GLHelper* helper =
                  ImageTransportFactory::GetInstance()->GetGLHelper()) {
     subscriber_texture = new OwnedMailbox(helper);
   }
@@ -421,7 +421,7 @@ void DelegatedFrameHost::SubmitCompositorFrame(
     renderer_compositor_frame_sink_->DidReceiveCompositorFrameAck(resources);
 
     skipped_frames_ = true;
-    BeginFrameDidNotSwap(ack);
+    DidNotProduceFrame(ack);
     return;
   }
 
@@ -456,7 +456,9 @@ void DelegatedFrameHost::SubmitCompositorFrame(
                                        skipped_latency_info_list_.end());
     skipped_latency_info_list_.clear();
 
-    support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+    bool result =
+        support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+    DCHECK(result);
 
     if (local_surface_id != local_surface_id_ || !has_frame_) {
       // manager must outlive compositors using it.
@@ -485,8 +487,7 @@ void DelegatedFrameHost::SubmitCompositorFrame(
   }
 
   if (has_frame_) {
-    delegated_frame_evictor_->SwappedFrame(
-        client_->DelegatedFrameHostIsVisible());
+    frame_evictor_->SwappedFrame(client_->DelegatedFrameHostIsVisible());
   }
   // Note: the frame may have been evicted immediately.
 
@@ -509,11 +510,7 @@ void DelegatedFrameHost::ReclaimResources(
 
 void DelegatedFrameHost::WillDrawSurface(const cc::LocalSurfaceId& id,
                                          const gfx::Rect& damage_rect) {
-  // Frame subscribers are only interested in changes to the target surface, so
-  // do not attempt capture if |damage_rect| is empty.  This prevents the draws
-  // of parent surfaces from triggering extra frame captures, which can affect
-  // smoothness.
-  if (id != local_surface_id_ || damage_rect.IsEmpty())
+  if (id != local_surface_id_)
     return;
   AttemptFrameSubscriberCapture(damage_rect);
 }
@@ -526,10 +523,10 @@ void DelegatedFrameHost::EvictDelegatedFrame() {
   if (!has_frame_)
     return;
   client_->DelegatedFrameHostGetLayer()->SetShowSolidColorContent();
-  support_->EvictFrame();
+  support_->EvictCurrentSurface();
   has_frame_ = false;
   resize_lock_.reset();
-  delegated_frame_evictor_->DiscardedFrame();
+  frame_evictor_->DiscardedFrame();
   UpdateGutters();
 }
 
@@ -561,7 +558,7 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceFinishedForVideo(
 
   gpu::SyncToken sync_token;
   if (result) {
-    display_compositor::GLHelper* gl_helper =
+    viz::GLHelper* gl_helper =
         ImageTransportFactory::GetInstance()->GetGLHelper();
     gl_helper->GenerateSyncToken(&sync_token);
   }
@@ -623,20 +620,17 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
       scaled_bitmap = *bitmap.get();
     }
 
-    {
-      SkAutoLockPixels scaled_bitmap_locker(scaled_bitmap);
+    media::CopyRGBToVideoFrame(
+        reinterpret_cast<uint8_t*>(scaled_bitmap.getPixels()),
+        scaled_bitmap.rowBytes(), region_in_frame, video_frame.get());
 
-      media::CopyRGBToVideoFrame(
-          reinterpret_cast<uint8_t*>(scaled_bitmap.getPixels()),
-          scaled_bitmap.rowBytes(), region_in_frame, video_frame.get());
-    }
     ignore_result(scoped_callback_runner.Release());
     callback.Run(region_in_frame, true);
     return;
   }
 
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  display_compositor::GLHelper* gl_helper = factory->GetGLHelper();
+  viz::GLHelper* gl_helper = factory->GetGLHelper();
   if (!gl_helper)
     return;
   if (subscriber_texture.get() && !subscriber_texture->texture_id())
@@ -649,7 +643,7 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
 
   gfx::Rect result_rect(result->size());
 
-  display_compositor::ReadbackYUVInterface* yuv_readback_pipeline =
+  viz::ReadbackYUVInterface* yuv_readback_pipeline =
       dfh->yuv_readback_pipeline_.get();
   if (yuv_readback_pipeline == NULL ||
       yuv_readback_pipeline->scaler()->SrcSize() != result_rect.size() ||
@@ -663,11 +657,11 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
     // When up-scaling, always use "best" because the quality improvement is
     // huge with insignificant performance penalty.  Note that this strategy
     // differs from single-frame snapshot capture.
-    display_compositor::GLHelper::ScalerQuality quality =
+    viz::GLHelper::ScalerQuality quality =
         ((result_rect.size().width() < region_in_frame.size().width()) &&
          (result_rect.size().height() < region_in_frame.size().height()))
-            ? display_compositor::GLHelper::SCALER_QUALITY_BEST
-            : display_compositor::GLHelper::SCALER_QUALITY_FAST;
+            ? viz::GLHelper::SCALER_QUALITY_BEST
+            : viz::GLHelper::SCALER_QUALITY_FAST;
 
     DVLOG(1) << "Re-creating YUV readback pipeline for source rect "
              << result_rect.ToString() << " and destination size "
@@ -815,7 +809,7 @@ void DelegatedFrameHost::ResetCompositor() {
 
 void DelegatedFrameHost::LockResources() {
   DCHECK(local_surface_id_.is_valid());
-  delegated_frame_evictor_->LockFrame();
+  frame_evictor_->LockFrame();
 }
 
 void DelegatedFrameHost::RequestCopyOfOutput(
@@ -835,7 +829,7 @@ void DelegatedFrameHost::RequestCopyOfOutput(
 
 void DelegatedFrameHost::UnlockResources() {
   DCHECK(local_surface_id_.is_valid());
-  delegated_frame_evictor_->UnlockFrame();
+  frame_evictor_->UnlockFrame();
 }
 
 void DelegatedFrameHost::CreateCompositorFrameSinkSupport() {

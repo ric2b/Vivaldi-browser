@@ -496,12 +496,13 @@ void RegisterChromeOnMachine(const installer::InstallerState& installer_state,
        (!base::win::ReadCommandFromAutoRun(
             HKEY_CURRENT_USER, vivaldi::kUpdateNotifierAutorunName, &command) ||
         command.empty()))) {
+    command = installer_state.target_path()
+        .Append(installer::kVivaldiUpdateNotifierExe)
+        .value();
+    command = L"\"" + command + L"\"";
     base::win::AddCommandToAutoRun(
-        HKEY_CURRENT_USER, vivaldi::kUpdateNotifierAutorunName,
-        installer_state.target_path()
-            .Append(installer::kVivaldiUpdateNotifierExe)
-            .value());
-  }
+        HKEY_CURRENT_USER, vivaldi::kUpdateNotifierAutorunName, command);
+   }
 }
 
 InstallStatus InstallOrUpdateProduct(
@@ -746,8 +747,7 @@ void HandleOsUpgradeForBrowser(const installer::InstallerState& installer_state,
   } else {
     UpdateActiveSetupVersionWorkItem active_setup_work_item(
         install_static::GetActiveSetupPath(),
-        UpdateActiveSetupVersionWorkItem::
-            UPDATE_AND_BUMP_OS_UPGRADES_COMPONENT);
+        UpdateActiveSetupVersionWorkItem::UPDATE_AND_BUMP_SELECTIVE_TRIGGER);
     if (active_setup_work_item.Do())
       VLOG(1) << "Bumped Active Setup Version on-os-upgrade.";
     else

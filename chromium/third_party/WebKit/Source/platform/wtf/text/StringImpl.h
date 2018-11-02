@@ -69,55 +69,6 @@ typedef bool (*CharacterMatchFunctionPtr)(UChar);
 typedef bool (*IsWhiteSpaceFunctionPtr)(UChar);
 typedef HashMap<unsigned, StringImpl*, AlreadyHashed> StaticStringsTable;
 
-// Define STRING_STATS to turn on run time statistics of string sizes and memory
-// usage
-#undef STRING_STATS
-
-#ifdef STRING_STATS
-struct StringStats {
-  inline void add8BitString(unsigned length) {
-    ++m_totalNumberStrings;
-    ++m_number8BitStrings;
-    m_total8BitData += length;
-  }
-
-  inline void add16BitString(unsigned length) {
-    ++m_totalNumberStrings;
-    ++m_number16BitStrings;
-    m_total16BitData += length;
-  }
-
-  void removeString(StringImpl*);
-  void printStats();
-
-  static const unsigned s_printStringStatsFrequency = 5000;
-  static unsigned s_stringRemovesTillPrintStats;
-
-  unsigned m_totalNumberStrings;
-  unsigned m_number8BitStrings;
-  unsigned m_number16BitStrings;
-  unsigned long long m_total8BitData;
-  unsigned long long m_total16BitData;
-};
-
-void addStringForStats(StringImpl*);
-void removeStringForStats(StringImpl*);
-
-#define STRING_STATS_ADD_8BIT_STRING(length)       \
-  StringImpl::stringStats().add8BitString(length); \
-  addStringForStats(this)
-#define STRING_STATS_ADD_16BIT_STRING(length)       \
-  StringImpl::stringStats().add16BitString(length); \
-  addStringForStats(this)
-#define STRING_STATS_REMOVE_STRING(string)        \
-  StringImpl::stringStats().removeString(string); \
-  removeStringForStats(this)
-#else
-#define STRING_STATS_ADD_8BIT_STRING(length) ((void)0)
-#define STRING_STATS_ADD_16BIT_STRING(length) ((void)0)
-#define STRING_STATS_REMOVE_STRING(string) ((void)0)
-#endif
-
 // You can find documentation about this class in this doc:
 // https://docs.google.com/document/d/1kOCUlJdh2WJMJGDf-WoEQhmnjKLaOYRbiHz5TiGJl14/edit?usp=sharing
 class WTF_EXPORT StringImpl {
@@ -147,7 +98,6 @@ class WTF_EXPORT StringImpl {
     // existingHash() with impunity. The empty string is special because it
     // is never entered into AtomicString's HashKey, but still needs to
     // compare correctly.
-    STRING_STATS_ADD_8BIT_STRING(m_length);
     GetHash();
   }
 
@@ -161,7 +111,6 @@ class WTF_EXPORT StringImpl {
         is_atomic_(false),
         is8_bit_(false),
         is_static_(true) {
-    STRING_STATS_ADD_16BIT_STRING(m_length);
     GetHash();
   }
 
@@ -177,7 +126,6 @@ class WTF_EXPORT StringImpl {
         is8_bit_(true),
         is_static_(false) {
     DCHECK(length_);
-    STRING_STATS_ADD_8BIT_STRING(m_length);
   }
 
   StringImpl(unsigned length)
@@ -190,7 +138,6 @@ class WTF_EXPORT StringImpl {
         is8_bit_(false),
         is_static_(false) {
     DCHECK(length_);
-    STRING_STATS_ADD_16BIT_STRING(m_length);
   }
 
   enum StaticStringTag { kStaticString };
@@ -229,7 +176,7 @@ class WTF_EXPORT StringImpl {
   template <size_t inlineCapacity>
   static PassRefPtr<StringImpl> Create8BitIfPossible(
       const Vector<UChar, inlineCapacity>& vector) {
-    return Create8BitIfPossible(vector.Data(), vector.size());
+    return Create8BitIfPossible(vector.data(), vector.size());
   }
 
   ALWAYS_INLINE static PassRefPtr<StringImpl> Create(const char* s,
@@ -480,17 +427,14 @@ class WTF_EXPORT StringImpl {
   operator NSString*();
 #endif
 
-#ifdef STRING_STATS
-  ALWAYS_INLINE static StringStats& stringStats() { return m_stringStats; }
-#endif
   static const UChar kLatin1CaseFoldTable[256];
 
  private:
   template <typename CharType>
   static size_t AllocationSize(unsigned length) {
-    RELEASE_ASSERT(
-        length <= ((std::numeric_limits<unsigned>::max() - sizeof(StringImpl)) /
-                   sizeof(CharType)));
+    CHECK_LE(length,
+             ((std::numeric_limits<unsigned>::max() - sizeof(StringImpl)) /
+              sizeof(CharType)));
     return sizeof(StringImpl) + length * sizeof(CharType);
   }
 
@@ -513,10 +457,6 @@ class WTF_EXPORT StringImpl {
 
 #if DCHECK_IS_ON()
   std::string AsciiForDebugging() const;
-#endif
-
-#ifdef STRING_STATS
-  static StringStats m_stringStats;
 #endif
 
   static unsigned highest_static_string_length_;
@@ -758,7 +698,7 @@ inline unsigned LengthOfNullTerminatedString(const UChar* string) {
   size_t length = 0;
   while (string[length] != UChar(0))
     ++length;
-  RELEASE_ASSERT(length <= std::numeric_limits<unsigned>::max());
+  CHECK_LE(length, std::numeric_limits<unsigned>::max());
   return static_cast<unsigned>(length);
 }
 
@@ -770,8 +710,8 @@ bool EqualIgnoringNullity(const Vector<UChar, inlineCapacity>& a,
   if (a.size() != b->length())
     return false;
   if (b->Is8Bit())
-    return Equal(a.Data(), b->Characters8(), b->length());
-  return Equal(a.Data(), b->Characters16(), b->length());
+    return Equal(a.data(), b->Characters8(), b->length());
+  return Equal(a.data(), b->Characters16(), b->length());
 }
 
 template <typename CharacterType1, typename CharacterType2>

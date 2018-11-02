@@ -78,7 +78,8 @@ void AddInt64ToListPref(size_t index,
                         int64_t length,
                         base::ListValue* list_update) {
   int64_t value = GetInt64PrefValue(*list_update, index) + length;
-  list_update->Set(index, new base::Value(base::Int64ToString(value)));
+  list_update->Set(index,
+                   base::MakeUnique<base::Value>(base::Int64ToString(value)));
 }
 
 // DailyContentLengthUpdate maintains a data saving pref. The pref is a list
@@ -470,6 +471,8 @@ void DataReductionProxyCompressionStats::RecordData(
   IncreaseInt64Pref(data_reduction_proxy::prefs::kHttpOriginalContentLength,
                     original_size);
 
+  // TODO(rajendrant): Remove RecordDataUsage once data use ascriber based per
+  // domain data usage recording is enabled.
   RecordDataUsage(data_use_host, data_used, original_size, base::Time::Now());
   RecordRequestSizePrefs(data_used, original_size, data_saver_enabled,
                          request_type, mime_type, base::Time::Now());
@@ -1189,7 +1192,7 @@ void DataReductionProxyCompressionStats::RecordDataUsage(
     const std::string& data_usage_host,
     int64_t data_used,
     int64_t original_size,
-    const base::Time& time) {
+    const base::Time time) {
   if (current_data_usage_load_status_ != LOADED)
     return;
 

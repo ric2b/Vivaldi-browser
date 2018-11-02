@@ -39,6 +39,9 @@ void ReadStream::Initialize(ReadStreamListener * listener) {
 }
 
 void ReadStream::Stop() {
+  LOG_IF(WARNING, current_read_.Incomplete())
+      << " PROPMEDIA(GPU) : " << __FUNCTION__
+      << " Stopping while in an Incomplete Read";
   stream_.Stop();
 }
 
@@ -65,7 +68,13 @@ int64_t ReadStream::CurrentPosition() {
 }
 
 void ReadStream::SetCurrentPosition(int64_t position) {
-  stream_.SetCurrentPosition(position);
+  LOG_IF(WARNING, current_read_.Incomplete())
+      << " PROPMEDIA(GPU) : " << __FUNCTION__
+      << " Setting position while in an Incomplete Read";
+  if(current_read_.Incomplete())
+    stream_.SetNextPosition(position);
+  else
+    stream_.SetCurrentPosition(position);
 }
 
 bool ReadStream::IsEndOfStream() {
@@ -77,6 +86,11 @@ bool ReadStream::IsEndOfStream() {
 }
 
 int ReadStream::SyncRead(uint8_t* buff, size_t len) {
+
+  LOG_IF(WARNING, current_read_.Incomplete())
+      << " PROPMEDIA(GPU) : " << __FUNCTION__
+      << " Synchronous Read while in an Incomplete Read";
+
   base::WaitableEvent read_done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                                 base::WaitableEvent::InitialState::NOT_SIGNALED);
   int bytes_read = 0;
@@ -109,16 +123,23 @@ void ReadStream::FinishRead()
 {
   size_t total_num_bytes = current_read_.Total();
   current_read_.Reset();
+  stream_.UpdateCurrentPosition();
   listener_->OnReadData(total_num_bytes);
 }
 
 void ReadStream::OnReadData(int bytes_read) {
 
   if(stream_.HasStopped()) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Received on stopped stream bytes " << bytes_read;
     return;
   }
 
   if(!stream_.ReceivedBytes(bytes_read)) {
+    LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << " No bytes received, assuming end of stream. "
+              << " Finishing Incomplete Read, bytes still missing : "
+              << current_read_.RemainingBytes();
     FinishRead();
     return;
   }
@@ -127,7 +148,21 @@ void ReadStream::OnReadData(int bytes_read) {
 
   if (current_read_.Incomplete()) {
     DCHECK(current_read_.RemainingBytes() > 0);
-    Read();
+    bool is_streaming = IsStreaming();
+    bool halfway_done = (current_read_.Total() >= current_read_.RemainingBytes());
+    if (!is_streaming || halfway_done) {
+      LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                << " Is streaming " << is_streaming
+                << " Halfway done " << halfway_done
+                << " Reading more on Incomplete Read, bytes missing : "
+                << current_read_.RemainingBytes();
+      Read();
+    } else {
+      LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                << " Finishing Incomplete Read, bytes still missing : "
+                << current_read_.RemainingBytes();
+      FinishRead();
+    }
   } else {
     DCHECK(current_read_.RemainingBytes() == 0);
     FinishRead();

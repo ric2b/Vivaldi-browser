@@ -97,6 +97,8 @@ component("base") {
     "cocoa/constrained_window/constrained_window_animation.mm",
     "cocoa/controls/blue_label_button.h",
     "cocoa/controls/blue_label_button.mm",
+    "cocoa/controls/button_utils.h",
+    "cocoa/controls/button_utils.mm",
     "cocoa/controls/hover_image_menu_button.h",
     "cocoa/controls/hover_image_menu_button.mm",
     "cocoa/controls/hover_image_menu_button_cell.h",
@@ -105,6 +107,8 @@ component("base") {
     "cocoa/controls/hyperlink_button_cell.mm",
     "cocoa/controls/hyperlink_text_view.h",
     "cocoa/controls/hyperlink_text_view.mm",
+    "cocoa/controls/textfield_utils.h",
+    "cocoa/controls/textfield_utils.mm",
     "cocoa/defaults_utils.h",
     "cocoa/defaults_utils.mm",
     "cocoa/find_pasteboard.h",
@@ -138,6 +142,7 @@ component("base") {
     "cocoa/tool_tip_base_view.h",
     "cocoa/tool_tip_base_view.mm",
     "cocoa/touch_bar_forward_declarations.h",
+    "cocoa/touch_bar_forward_declarations.mm",
     "cocoa/tracking_area.h",
     "cocoa/tracking_area.mm",
     "cocoa/underlay_opengl_hosting_window.h",
@@ -165,7 +170,6 @@ component("base") {
     "dragdrop/drag_drop_types_win.cc",
     "dragdrop/drag_source_win.cc",
     "dragdrop/drag_source_win.h",
-    "dragdrop/drag_utils_win.cc",
     "dragdrop/drop_target_event.cc",
     "dragdrop/drop_target_event.h",
     "dragdrop/drop_target_win.cc",
@@ -251,6 +255,7 @@ component("base") {
     "theme_provider.cc",
     "theme_provider.h",
     "touch/touch_device.h",
+    "touch/touch_device_util.cc",
     "touch/touch_editing_controller.cc",
     "touch/touch_editing_controller.h",
     "ui_base_export.h",
@@ -339,8 +344,6 @@ component("base") {
       "default_theme_provider.h",
       "dragdrop/cocoa_dnd_util.h",
       "dragdrop/cocoa_dnd_util.mm",
-      "dragdrop/drag_utils.cc",
-      "dragdrop/drag_utils.h",
       "dragdrop/file_info.cc",
       "dragdrop/file_info.h",
       "idle/idle.cc",
@@ -359,6 +362,7 @@ component("base") {
     sources += [ "touch/touch_device_win.cc" ]
   } else if (is_android) {
     sources += [ "touch/touch_device_android.cc" ]
+    sources -= [ "touch/touch_device_util.cc" ]
   } else if (is_ios) {
     sources += [ "touch/touch_device_ios.cc" ]
   } else if (is_linux) {
@@ -366,6 +370,7 @@ component("base") {
   } else {
     # Empty implementation for all other cases.
     sources += [ "touch/touch_device.cc" ]
+    sources -= [ "touch/touch_device_util.cc" ]
   }
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
@@ -488,15 +493,6 @@ component("base") {
     ]
   }
 
-  if (is_linux) {
-    if (!toolkit_views && !use_aura) {
-      sources -= [
-        "dragdrop/drag_utils.cc",
-        "dragdrop/drag_utils.h",
-      ]
-    }
-  }
-
   if (is_chromeos) {
     deps += [ "//chromeos" ]
     sources -= [ "idle/idle_linux.cc" ]
@@ -571,6 +567,8 @@ component("base") {
       "cursor/cursor_ozone.cc",
       "cursor/ozone/bitmap_cursor_factory_ozone.cc",
       "cursor/ozone/bitmap_cursor_factory_ozone.h",
+      "cursor/ozone/cursor_data_factory_ozone.cc",
+      "cursor/ozone/cursor_data_factory_ozone.h",
     ]
 
     deps += [
@@ -606,8 +604,6 @@ component("base") {
       "cursor/image_cursors.cc",
       "cursor/image_cursors.h",
       "default_theme_provider.cc",
-      "dragdrop/drag_utils.cc",
-      "dragdrop/drag_utils.h",
       "idle/idle.cc",
       "idle/idle.h",
       "idle/idle_android.cc",
@@ -806,6 +802,7 @@ test("ui_base_unittests") {
     set_sources_assignment_filter(sources_assignment_filter)
   } else {  # !is_ios
     sources += [
+      "accelerators/accelerator_history_unittest.cc",
       "accelerators/accelerator_manager_unittest.cc",
       "accelerators/accelerator_unittest.cc",
       "accelerators/menu_label_accelerator_util_linux_unittest.cc",
@@ -1005,5 +1002,17 @@ if (is_mac && !is_vivaldi) {
     ]
     info_plist = "test/framework-Info.plist"
     output_name = "ui_unittests Framework"
+  }
+}
+
+if (is_win) {
+  # This source set is used by both //chrome/browser and
+  # //chrome/installer/setup.  It must have minimal dependencies for the latter
+  # (e.g., no skia).
+  source_set("fullscreen_win") {
+    sources = [
+      "fullscreen_win.cc",
+      "fullscreen_win.h",
+    ]
   }
 }

@@ -1,76 +1,98 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef MEDIA_MIDI_MIDI_MANAGER_WIN_H_
 #define MEDIA_MIDI_MIDI_MANAGER_WIN_H_
 
-#include <stdint.h>
-
 #include <memory>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/threading/thread.h"
-#include "base/time/time.h"
+#include "base/memory/ref_counted.h"
+#include "base/system_monitor/system_monitor.h"
 #include "media/midi/midi_manager.h"
-#include "media/midi/midi_service.mojom.h"
+
+namespace base {
+class SingleThreadTaskRunner;
+class TimeDelta;
+}  // namespace base
 
 namespace midi {
 
-class MidiService;
-
-class MidiServiceWinDelegate {
+// New backend for legacy Windows that support dynamic instantiation.
+class MidiManagerWin final
+    : public MidiManager,
+      public base::SystemMonitor::DevicesChangedObserver {
  public:
-  virtual ~MidiServiceWinDelegate() {}
-  virtual void OnCompleteInitialization(mojom::Result result) = 0;
-  virtual void OnAddInputPort(MidiPortInfo info) = 0;
-  virtual void OnAddOutputPort(MidiPortInfo info) = 0;
-  virtual void OnSetInputPortState(uint32_t port_index,
-                                   mojom::PortState state) = 0;
-  virtual void OnSetOutputPortState(uint32_t port_index,
-                                    mojom::PortState state) = 0;
-  virtual void OnReceiveMidiData(uint32_t port_index,
-                                 const std::vector<uint8_t>& data,
-                                 base::TimeTicks time) = 0;
-};
+  class PortManager;
 
-class MidiServiceWin {
- public:
-  virtual ~MidiServiceWin() {}
-  // This method may return before the initialization is completed.
-  virtual void InitializeAsync(MidiServiceWinDelegate* delegate) = 0;
-  // This method may return before the specified data is actually sent.
-  virtual void SendMidiDataAsync(uint32_t port_number,
-                                 const std::vector<uint8_t>& data,
-                                 base::TimeTicks time) = 0;
-};
-
-class MidiManagerWin final : public MidiManager, public MidiServiceWinDelegate {
- public:
   explicit MidiManagerWin(MidiService* service);
   ~MidiManagerWin() override;
 
+  // Returns PortManager that implements interfaces to help implementation.
+  // This hides Windows specific structures, i.e. HMIDIIN in the header.
+  PortManager* port_manager() { return port_manager_.get(); }
+
   // MidiManager overrides:
-  void StartInitialization() final;
-  void Finalize() final;
+  void StartInitialization() override;
+  void Finalize() override;
   void DispatchSendMidiData(MidiManagerClient* client,
                             uint32_t port_index,
                             const std::vector<uint8_t>& data,
-                            double timestamp) final;
+                            double timestamp) override;
 
-  // MidiServiceWinDelegate overrides:
-  void OnCompleteInitialization(mojom::Result result) final;
-  void OnAddInputPort(MidiPortInfo info) final;
-  void OnAddOutputPort(MidiPortInfo info) final;
-  void OnSetInputPortState(uint32_t port_index, mojom::PortState state) final;
-  void OnSetOutputPortState(uint32_t port_index, mojom::PortState state) final;
-  void OnReceiveMidiData(uint32_t port_index,
-                         const std::vector<uint8_t>& data,
-                         base::TimeTicks time) final;
+  // base::SystemMonitor::DevicesChangedObserver overrides:
+  void OnDevicesChanged(base::SystemMonitor::DeviceType device_type) override;
 
  private:
-  std::unique_ptr<MidiServiceWin> midi_service_;
+  class InPort;
+  class OutPort;
+
+  // Handles MIDI inport event posted from a thread system provides.
+  void ReceiveMidiData(uint32_t index,
+                       const std::vector<uint8_t>& data,
+                       base::TimeTicks time);
+
+  // Posts a task to TaskRunner, and ensures that the instance keeps alive while
+  // the task is running.
+  void PostTask(const base::Closure&);
+  void PostDelayedTask(const base::Closure&, base::TimeDelta delay);
+
+  // Posts a reply task to the I/O thread that hosts MidiManager instance, runs
+  // it safely, and ensures that the instance keeps alive while the task is
+  // running.
+  void PostReplyTask(const base::Closure&);
+
+  // Initializes instance asynchronously on TaskRunner.
+  void InitializeOnTaskRunner();
+
+  // Updates device lists on TaskRunner.
+  // Returns true if device lists were changed.
+  void UpdateDeviceListOnTaskRunner();
+
+  // Reflect active port list to a device list.
+  template <typename T>
+  void ReflectActiveDeviceList(MidiManagerWin* manager,
+                               std::vector<T>* known_ports,
+                               std::vector<T>* active_ports);
+
+  // Sends MIDI data on TaskRunner.
+  void SendOnTaskRunner(MidiManagerClient* client,
+                        uint32_t port_index,
+                        const std::vector<uint8_t>& data);
+
+  // Holds an unique instance ID.
+  const int instance_id_;
+
+  // Keeps a TaskRunner for the I/O thread.
+  scoped_refptr<base::SingleThreadTaskRunner> thread_runner_;
+
+  // Manages platform dependent implementation for port managegent. Should be
+  // accessed with the task lock.
+  std::unique_ptr<PortManager> port_manager_;
+
   DISALLOW_COPY_AND_ASSIGN(MidiManagerWin);
 };
 

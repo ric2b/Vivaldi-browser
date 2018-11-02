@@ -10,11 +10,12 @@
 #include <string>
 
 #include "base/macros.h"
-#include "public/platform/scheduler/base/task_queue.h"
-#include "public/platform/WebCommon.h"
-#include "public/platform/WebScheduler.h"
-#include "public/platform/WebViewScheduler.h"
+#include "platform/PlatformExport.h"
+#include "platform/scheduler/base/task_queue.h"
+#include "platform/scheduler/child/web_scheduler.h"
+#include "platform/scheduler/child/web_task_runner_impl.h"
 #include "platform/scheduler/renderer/task_queue_throttler.h"
+#include "platform/scheduler/renderer/web_view_scheduler.h"
 
 namespace base {
 namespace trace_event {
@@ -30,7 +31,7 @@ class RendererSchedulerImpl;
 class CPUTimeBudgetPool;
 class WebFrameSchedulerImpl;
 
-class BLINK_PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
+class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
  public:
   WebViewSchedulerImpl(
       WebScheduler::InterventionReporter* intervention_reporter,
@@ -48,6 +49,9 @@ class BLINK_PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   void DisableVirtualTimeForTesting() override;
   bool VirtualTimeAllowedToAdvance() const override;
   void SetVirtualTimePolicy(VirtualTimePolicy virtual_time_policy) override;
+  void GrantVirtualTimeBudget(
+      base::TimeDelta budget,
+      std::unique_ptr<WTF::Closure> budget_exhausted_callback) override;
   void AudioStateChanged(bool is_audio_playing) override;
   bool HasActiveConnectionForTest() const override;
 
@@ -101,6 +105,8 @@ class BLINK_PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   WebScheduler::InterventionReporter* intervention_reporter_;  // Not owned.
   RendererSchedulerImpl* renderer_scheduler_;
   VirtualTimePolicy virtual_time_policy_;
+  RefPtr<WebTaskRunnerImpl> virtual_time_control_task_queue_;
+  TaskHandle virtual_time_budget_expired_task_handle_;
   int background_parser_count_;
   bool page_visible_;
   bool should_throttle_frames_;

@@ -24,13 +24,13 @@ android_library("client_java") {
 }
 
 java_cpp_template("runtime_library_version_java") {
-  package_name = "org/chromium/webapk/lib/client"
+  package_path = "org/chromium/webapk/lib/client"
   sources = [
     "src/org/chromium/webapk/lib/client/WebApkVersion.template",
   ]
   defines = [
     "CURRENT_RUNTIME_DEX_VERSION_VALUE=$runtime_library_version",
-    "CURRENT_SHELL_APK_VERSION_VALUE=$shell_apk_version",
+    "CURRENT_SHELL_APK_VERSION_VALUE=$expected_shell_apk_version",
   ]
 }
 

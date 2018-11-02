@@ -29,7 +29,7 @@ class MEDIA_EXPORT FFmpegVideoDecoder : public VideoDecoder {
  public:
   static bool IsCodecSupported(VideoCodec codec);
 
-  explicit FFmpegVideoDecoder(scoped_refptr<MediaLog> media_log);
+  explicit FFmpegVideoDecoder(MediaLog* media_log);
   ~FFmpegVideoDecoder() override;
 
   // Allow decoding of individual NALU. Entire frames are required by default.
@@ -68,14 +68,14 @@ class MEDIA_EXPORT FFmpegVideoDecoder : public VideoDecoder {
 
   // Handles (re-)initializing the decoder with a (new) config.
   // Returns true if initialization was successful.
-  bool ConfigureDecoder(bool low_delay);
+  bool ConfigureDecoder(const VideoDecoderConfig& config, bool low_delay);
 
   // Releases resources associated with |codec_context_| and |av_frame_|
   // and resets them to NULL.
   void ReleaseFFmpegResources();
 
   base::ThreadChecker thread_checker_;
-  scoped_refptr<MediaLog> media_log_;
+  MediaLog* media_log_;
 
   DecoderState state_;
 

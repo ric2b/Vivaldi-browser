@@ -44,7 +44,8 @@ FakeBiodClient::~FakeBiodClient() {}
 
 void FakeBiodClient::SendEnrollScanDone(const std::string& fingerprint,
                                         biod::ScanResult type_result,
-                                        bool is_complete) {
+                                        bool is_complete,
+                                        int percent_complete) {
   // Enroll scan signals do nothing if an enroll session is not happening.
   if (current_session_ != FingerprintSession::ENROLL)
     return;
@@ -62,7 +63,8 @@ void FakeBiodClient::SendEnrollScanDone(const std::string& fingerprint,
   }
 
   for (auto& observer : observers_)
-    observer.BiodEnrollScanDoneReceived(type_result, is_complete);
+    observer.BiodEnrollScanDoneReceived(type_result, is_complete,
+                                        percent_complete);
 }
 
 void FakeBiodClient::SendAuthScanDone(const std::string& fingerprint,
@@ -82,7 +84,7 @@ void FakeBiodClient::SendAuthScanDone(const std::string& fingerprint,
                   record->fake_fingerprint.end(),
                   fingerprint) != record->fake_fingerprint.end()) {
       const std::string& user_id = record->user_id;
-      matches[user_id].push_back(record->label);
+      matches[user_id].push_back(entry.first);
     }
   }
 
@@ -168,14 +170,14 @@ void FakeBiodClient::StartAuthSession(const ObjectPathCallback& callback) {
 void FakeBiodClient::RequestType(const BiometricTypeCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(callback, biod::BiometricType::BIOMETRIC_TYPE_FINGERPRINT));
+      base::Bind(callback,
+                 static_cast<uint32_t>(
+                     biod::BiometricType::BIOMETRIC_TYPE_FINGERPRINT)));
 }
 
 void FakeBiodClient::CancelEnrollSession(
-    const dbus::ObjectPath& enroll_session_path,
     const VoidDBusMethodCallback& callback) {
   DCHECK_EQ(current_session_, FingerprintSession::ENROLL);
-  DCHECK_EQ(enroll_session_path.value(), kEnrollSessionObjectPath);
 
   // Clean up the in progress enrollment.
   current_record_.reset();
@@ -186,10 +188,8 @@ void FakeBiodClient::CancelEnrollSession(
       FROM_HERE, base::Bind(callback, DBUS_METHOD_CALL_SUCCESS));
 }
 
-void FakeBiodClient::EndAuthSession(const dbus::ObjectPath& auth_session_path,
-                                    const VoidDBusMethodCallback& callback) {
+void FakeBiodClient::EndAuthSession(const VoidDBusMethodCallback& callback) {
   DCHECK_EQ(current_session_, FingerprintSession::AUTH);
-  DCHECK_EQ(auth_session_path.value(), kAuthSessionObjectPath);
 
   current_session_ = FingerprintSession::NONE;
   base::ThreadTaskRunnerHandle::Get()->PostTask(

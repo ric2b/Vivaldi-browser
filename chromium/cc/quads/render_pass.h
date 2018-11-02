@@ -7,7 +7,6 @@
 
 #include <stddef.h>
 
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -152,10 +151,6 @@ class CC_EXPORT RenderPass {
 };
 
 using RenderPassList = std::vector<std::unique_ptr<RenderPass>>;
-
-// List of pairs of render pass id and filter, sorted by render pass id so that
-// it can be searched using std::lower_bound.
-using RenderPassFilterList = std::vector<std::pair<int, FilterOperations*>>;
 
 }  // namespace cc
 

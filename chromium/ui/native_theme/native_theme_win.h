@@ -59,36 +59,6 @@ class NATIVE_THEME_EXPORT NativeThemeWin : public NativeTheme,
   // for a theme change.
   static void CloseHandles();
 
-  HRESULT GetThemeColor(ThemeName theme,
-                        int part_id,
-                        int state_id,
-                        int prop_id,
-                        SkColor* color) const;
-
-  // Get the theme color if theming is enabled.  If theming is unsupported
-  // for this part, use Win32's GetSysColor to find the color specified
-  // by default_sys_color.
-  SkColor GetThemeColorWithDefault(ThemeName theme,
-                                   int part_id,
-                                   int state_id,
-                                   int prop_id,
-                                   int default_sys_color) const;
-
-  // Get the thickness of the border associated with the specified theme,
-  // defaulting to GetSystemMetrics edge size if themes are disabled.
-  // In Classic Windows, borders are typically 2px; on XP+, they are 1px.
-  gfx::Size GetThemeBorderSize(ThemeName theme) const;
-
-  // Disables all theming for top-level windows in the entire process, from
-  // when this method is called until the process exits.  All the other
-  // methods in this class will continue to work, but their output will ignore
-  // the user's theme. This is meant for use when running tests that require
-  // consistent visual results.
-  void DisableTheming() const;
-
-  // Returns true if classic theme is in use.
-  bool IsClassicTheme(ThemeName name) const;
-
   HRESULT PaintTextField(HDC hdc,
                          int part_id,
                          int state_id,
@@ -132,7 +102,8 @@ class NATIVE_THEME_EXPORT NativeThemeWin : public NativeTheme,
   void UpdateSystemColors();
 
   // Painting functions that paint to PaintCanvas.
-  void PaintMenuSeparator(cc::PaintCanvas* canvas, const gfx::Rect& rect) const;
+  void PaintMenuSeparator(cc::PaintCanvas* canvas,
+                          const MenuSeparatorExtraParams& params) const;
   void PaintMenuGutter(cc::PaintCanvas* canvas, const gfx::Rect& rect) const;
   void PaintMenuBackground(cc::PaintCanvas* canvas,
                            const gfx::Rect& rect) const;
@@ -169,10 +140,6 @@ class NATIVE_THEME_EXPORT NativeThemeWin : public NativeTheme,
                       int state_id,
                       RECT* rect) const;
 
-  HRESULT PaintMenuSeparator(HDC hdc, const gfx::Rect& rect) const;
-
-  HRESULT PaintMenuGutter(HDC hdc, const gfx::Rect& rect) const;
-
   // |arrow_direction| determines whether the arrow is pointing to the left or
   // to the right. In RTL locales, sub-menus open from right to left and
   // therefore the menu arrow should point to the left and not to the right.
@@ -180,8 +147,6 @@ class NATIVE_THEME_EXPORT NativeThemeWin : public NativeTheme,
                          State state,
                          const gfx::Rect& rect,
                          const MenuArrowExtraParams& extra) const;
-
-  HRESULT PaintMenuBackground(HDC hdc, const gfx::Rect& rect) const;
 
   HRESULT PaintMenuCheck(HDC hdc,
                          State state,
@@ -191,11 +156,6 @@ class NATIVE_THEME_EXPORT NativeThemeWin : public NativeTheme,
   HRESULT PaintMenuCheckBackground(HDC hdc,
                                    State state,
                                    const gfx::Rect& rect) const;
-
-  HRESULT PaintMenuItemBackground(HDC hdc,
-                                  State state,
-                                  const gfx::Rect& rect,
-                                  const MenuItemExtraParams& extra) const;
 
   HRESULT PaintPushButton(HDC hdc,
                           Part part,
@@ -291,12 +251,6 @@ class NATIVE_THEME_EXPORT NativeThemeWin : public NativeTheme,
   static int GetWindowsPart(Part part, State state, const ExtraParams& extra);
   static int GetWindowsState(Part part, State state, const ExtraParams& extra);
 
-  HRESULT GetThemeInt(ThemeName theme,
-                      int part_id,
-                      int state_id,
-                      int prop_id,
-                      int *result) const;
-
   HRESULT PaintFrameControl(HDC hdc,
                             const gfx::Rect& rect,
                             UINT type,
@@ -357,8 +311,6 @@ class NATIVE_THEME_EXPORT NativeThemeWin : public NativeTheme,
   GetThemePartSizePtr get_theme_part_size_;
   OpenThemeDataPtr open_theme_;
   CloseThemeDataPtr close_theme_;
-  SetThemeAppPropertiesPtr set_theme_properties_;
-  GetThemeIntPtr get_theme_int_;
 
   // Handle to uxtheme.dll.
   HMODULE theme_dll_;

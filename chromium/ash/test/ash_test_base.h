@@ -10,13 +10,14 @@
 #include <memory>
 #include <string>
 
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/aura/client/window_types.h"
 #include "ui/display/display.h"
-#include "ui/wm/public/window_types.h"
 
 namespace aura {
 class Window;
@@ -48,9 +49,8 @@ class WidgetDelegate;
 }
 
 namespace ash {
-class AshTestImplAura;
+class Shelf;
 class SystemTray;
-class WmShelf;
 
 namespace test {
 
@@ -69,8 +69,8 @@ class AshTestBase : public testing::Test {
   void SetUp() override;
   void TearDown() override;
 
-  // Returns the WmShelf for the primary display.
-  static WmShelf* GetPrimaryShelf();
+  // Returns the Shelf for the primary display.
+  static Shelf* GetPrimaryShelf();
 
   // Returns the system tray on the primary display.
   static SystemTray* GetPrimarySystemTray();
@@ -91,6 +91,24 @@ class AshTestBase : public testing::Test {
       int container_id,
       const gfx::Rect& bounds);
 
+  // Creates a visible window in the appropriate container. If
+  // |bounds_in_screen| is empty the window is added to the primary root
+  // window, otherwise the window is added to the display matching
+  // |bounds_in_screen|. |shell_window_id| is the shell window id to give to
+  // the new window.
+  // TODO(sky): convert existing CreateTestWindow() functions into this one.
+  std::unique_ptr<aura::Window> CreateTestWindow(
+      const gfx::Rect& bounds_in_screen = gfx::Rect(),
+      aura::client::WindowType type = aura::client::WINDOW_TYPE_NORMAL,
+      int shell_window_id = kShellWindowId_Invalid);
+
+  // Creates a visible top-level window. For Config::CLASSIC and Config::MUS
+  // this creates a Window with a delegate. For Config::MASH this creates a
+  // window as if the client requested a top-level window.
+  std::unique_ptr<aura::Window> CreateToplevelTestWindow(
+      const gfx::Rect& bounds_in_screen = gfx::Rect(),
+      int shell_window_id = kShellWindowId_Invalid);
+
   // Versions of the functions in aura::test:: that go through our shell
   // StackingController instead of taking a parent.
   aura::Window* CreateTestWindowInShellWithId(int id);
@@ -98,13 +116,21 @@ class AshTestBase : public testing::Test {
   aura::Window* CreateTestWindowInShell(SkColor color,
                                         int id,
                                         const gfx::Rect& bounds);
+
+  // Creates a visible window parented to |parent| with the specified bounds and
+  // id.
+  std::unique_ptr<aura::Window> CreateChildWindow(
+      aura::Window* parent,
+      const gfx::Rect& bounds = gfx::Rect(),
+      int shell_window_id = kShellWindowId_Invalid);
+
   aura::Window* CreateTestWindowInShellWithDelegate(
       aura::WindowDelegate* delegate,
       int id,
       const gfx::Rect& bounds);
   aura::Window* CreateTestWindowInShellWithDelegateAndType(
       aura::WindowDelegate* delegate,
-      ui::wm::WindowType type,
+      aura::client::WindowType type,
       int id,
       const gfx::Rect& bounds);
 
@@ -169,11 +195,10 @@ class AshTestBase : public testing::Test {
   // Swap the primary display with the secondary.
   void SwapPrimaryDisplay();
 
+  display::Display GetPrimaryDisplay();
   display::Display GetSecondaryDisplay();
 
  private:
-  friend class ash::AshTestImplAura;
-
   bool setup_called_;
   bool teardown_called_;
   // |SetUp()| doesn't activate session if this is set to false.

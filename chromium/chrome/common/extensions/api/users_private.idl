@@ -11,11 +11,17 @@ namespace usersPrivate {
     // Email for the user.
     DOMString email;
 
+    // Display email for the user.
+    DOMString displayEmail;
+
     // Display name for the user.
     DOMString name;
 
     // Whether this user is the device owner.
     boolean isOwner;
+
+    // Whether this user is supervised.
+    boolean isSupervised;
   };
 
   callback UsersCallback = void (User[] users);

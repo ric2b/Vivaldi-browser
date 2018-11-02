@@ -12,7 +12,6 @@
 # method = interface.AddMethod('Tat', 0)
 # method.AddParameter('baz', 0, mojom.INT32)
 
-
 # We use our own version of __repr__ when displaying the AST, as the
 # AST currently doesn't capture which nodes are reference (e.g. to
 # types) and which nodes are definitions. This allows us to e.g. print
@@ -82,11 +81,13 @@ class Kind(object):
 
   Attributes:
     spec: A string uniquely identifying the type. May be None.
-    parent_kind: The enclosing type. For example, a struct defined
+    module: {Module} The defining module. Set to None for built-in types.
+    parent_kind: The enclosing type. For example, an enum defined
         inside an interface has that interface as its parent. May be None.
   """
-  def __init__(self, spec=None):
+  def __init__(self, spec=None, module=None):
     self.spec = spec
+    self.module = module
     self.parent_kind = None
 
   def Repr(self, as_ref=True):
@@ -106,10 +107,9 @@ class ReferenceKind(Kind):
   Attributes:
     is_nullable: True if the type is nullable.
   """
-
-  def __init__(self, spec=None, is_nullable=False):
+  def __init__(self, spec=None, is_nullable=False, module=None):
     assert spec is None or is_nullable == spec.startswith('?')
-    Kind.__init__(self, spec)
+    Kind.__init__(self, spec, module)
     self.is_nullable = is_nullable
     self.shared_definition = {}
 
@@ -138,6 +138,8 @@ class ReferenceKind(Kind):
     if self.spec is not None:
       nullable_kind.spec = '?' + self.spec
     nullable_kind.is_nullable = True
+    nullable_kind.parent_kind = self.parent_kind
+    nullable_kind.module = self.module
 
     return nullable_kind
 
@@ -222,17 +224,15 @@ ATTRIBUTE_SYNC = 'Sync'
 
 
 class NamedValue(object):
-  def __init__(self, module, parent_kind, name):
+  def __init__(self, module, parent_kind, mojom_name):
     self.module = module
-    self.namespace = module.namespace
     self.parent_kind = parent_kind
-    self.name = name
-    self.imported_from = None
+    self.mojom_name = mojom_name
 
   def GetSpec(self):
-    return (self.namespace + '.' +
-        (self.parent_kind and (self.parent_kind.name + '.') or "") +
-        self.name)
+    return (self.module.mojom_namespace + '.' +
+        (self.parent_kind and (self.parent_kind.mojom_name + '.') or "") +
+        self.mojom_name)
 
 
 class BuiltinValue(object):
@@ -242,35 +242,47 @@ class BuiltinValue(object):
 
 class ConstantValue(NamedValue):
   def __init__(self, module, parent_kind, constant):
-    NamedValue.__init__(self, module, parent_kind, constant.name)
+    NamedValue.__init__(self, module, parent_kind, constant.mojom_name)
     self.constant = constant
+
+  @property
+  def name(self):
+    return self.constant.name
 
 
 class EnumValue(NamedValue):
   def __init__(self, module, enum, field):
-    NamedValue.__init__(self, module, enum.parent_kind, field.name)
+    NamedValue.__init__(self, module, enum.parent_kind, field.mojom_name)
+    self.field = field
     self.enum = enum
 
   def GetSpec(self):
-    return (self.namespace + '.' +
-        (self.parent_kind and (self.parent_kind.name + '.') or "") +
-        self.enum.name + '.' + self.name)
+    return (self.module.mojom_namespace + '.' +
+        (self.parent_kind and (self.parent_kind.mojom_name + '.') or "") +
+        self.enum.mojom_name + '.' + self.mojom_name)
+
+  @property
+  def name(self):
+    return self.field.name
 
 
 class Constant(object):
-  def __init__(self, name=None, kind=None, value=None, parent_kind=None):
-    self.name = name
+  def __init__(self, mojom_name=None, kind=None, value=None, parent_kind=None):
+    self.mojom_name = mojom_name
     self.kind = kind
     self.value = value
     self.parent_kind = parent_kind
 
+  def Stylize(self, stylizer):
+    self.name = stylizer.StylizeConstant(self.mojom_name)
+
 
 class Field(object):
-  def __init__(self, name=None, kind=None, ordinal=None, default=None,
+  def __init__(self, mojom_name=None, kind=None, ordinal=None, default=None,
                attributes=None):
     if self.__class__.__name__ == 'Field':
       raise Exception()
-    self.name = name
+    self.mojom_name = mojom_name
     self.kind = kind
     self.ordinal = ordinal
     self.default = default
@@ -279,7 +291,10 @@ class Field(object):
   def Repr(self, as_ref=True):
     # Fields are only referenced by objects which define them and thus
     # they are always displayed as non-references.
-    return GenericRepr(self, {'name': False, 'kind': True})
+    return GenericRepr(self, {'mojom_name': False, 'kind': True})
+
+  def Stylize(self, stylizer):
+    self.name = stylizer.StylizeField(self.mojom_name)
 
   @property
   def min_version(self):
@@ -297,80 +312,86 @@ class Struct(ReferenceKind):
   """A struct with typed fields.
 
   Attributes:
-    name: {str} The name of the struct type.
+    mojom_name: {str} The name of the struct type as defined in mojom.
+    name: {str} The stylized name.
     native_only: {bool} Does the struct have a body (i.e. any fields) or is it
         purely a native struct.
-    module: {Module} The defining module.
-    imported_from: {dict} Information about where this union was
-        imported from.
     fields: {List[StructField]} The members of the struct.
+    enums: {List[Enum]} The enums defined in the struct scope.
+    constants: {List[Constant]} The constants defined in the struct scope.
     attributes: {dict} Additional information about the struct, such as
         if it's a native struct.
   """
 
+  ReferenceKind.AddSharedProperty('mojom_name')
   ReferenceKind.AddSharedProperty('name')
   ReferenceKind.AddSharedProperty('native_only')
-  ReferenceKind.AddSharedProperty('module')
-  ReferenceKind.AddSharedProperty('imported_from')
   ReferenceKind.AddSharedProperty('fields')
+  ReferenceKind.AddSharedProperty('enums')
+  ReferenceKind.AddSharedProperty('constants')
   ReferenceKind.AddSharedProperty('attributes')
 
-  def __init__(self, name=None, module=None, attributes=None):
-    if name is not None:
-      spec = 'x:' + name
+  def __init__(self, mojom_name=None, module=None, attributes=None):
+    if mojom_name is not None:
+      spec = 'x:' + mojom_name
     else:
       spec = None
-    ReferenceKind.__init__(self, spec)
-    self.name = name
+    ReferenceKind.__init__(self, spec, False, module)
+    self.mojom_name = mojom_name
     self.native_only = False
-    self.module = module
-    self.imported_from = None
     self.fields = []
+    self.enums = []
+    self.constants = []
     self.attributes = attributes
 
   def Repr(self, as_ref=True):
     if as_ref:
-      return '<%s name=%r imported_from=%s>' % (
-          self.__class__.__name__, self.name,
-          Repr(self.imported_from, as_ref=True))
+      return '<%s mojom_name=%r module=%s>' % (
+          self.__class__.__name__, self.mojom_name,
+          Repr(self.module, as_ref=True))
     else:
-      return GenericRepr(self, {'name': False, 'fields': False,
-                                'imported_from': True})
+      return GenericRepr(self,
+          {'mojom_name': False, 'fields': False, 'module': True})
 
-  def AddField(self, name, kind, ordinal=None, default=None, attributes=None):
-    field = StructField(name, kind, ordinal, default, attributes)
+  def AddField(self, mojom_name, kind, ordinal=None, default=None,
+               attributes=None):
+    field = StructField(mojom_name, kind, ordinal, default, attributes)
     self.fields.append(field)
     return field
+
+  def Stylize(self, stylizer):
+    self.name = stylizer.StylizeStruct(self.mojom_name)
+    for field in self.fields:
+      field.Stylize(stylizer)
+    for enum in self.enums:
+      enum.Stylize(stylizer)
+    for constant in self.constants:
+      constant.Stylize(stylizer)
 
 
 class Union(ReferenceKind):
   """A union of several kinds.
 
   Attributes:
-    name: {str} The name of the union type.
-    module: {Module} The defining module.
-    imported_from: {dict} Information about where this union was
-        imported from.
+    mojom_name: {str} The name of the union type as defined in mojom.
+    name: {str} The stylized name.
     fields: {List[UnionField]} The members of the union.
     attributes: {dict} Additional information about the union, such as
         which Java class name to use to represent it in the generated
         bindings.
   """
+  ReferenceKind.AddSharedProperty('mojom_name')
   ReferenceKind.AddSharedProperty('name')
-  ReferenceKind.AddSharedProperty('module')
-  ReferenceKind.AddSharedProperty('imported_from')
   ReferenceKind.AddSharedProperty('fields')
   ReferenceKind.AddSharedProperty('attributes')
 
-  def __init__(self, name=None, module=None, attributes=None):
-    if name is not None:
-      spec = 'x:' + name
+  def __init__(self, mojom_name=None, module=None, attributes=None):
+    if mojom_name is not None:
+      spec = 'x:' + mojom_name
     else:
       spec = None
-    ReferenceKind.__init__(self, spec)
-    self.name = name
-    self.module = module
-    self.imported_from = None
+    ReferenceKind.__init__(self, spec, False, module)
+    self.mojom_name = mojom_name
     self.fields = []
     self.attributes = attributes
 
@@ -382,10 +403,15 @@ class Union(ReferenceKind):
     else:
       return GenericRepr(self, {'fields': True, 'is_nullable': False})
 
-  def AddField(self, name, kind, ordinal=None, attributes=None):
-    field = UnionField(name, kind, ordinal, None, attributes)
+  def AddField(self, mojom_name, kind, ordinal=None, attributes=None):
+    field = UnionField(mojom_name, kind, ordinal, None, attributes)
     self.fields.append(field)
     return field
+
+  def Stylize(self, stylizer):
+    self.name = stylizer.StylizeUnion(self.mojom_name)
+    for field in self.fields:
+      field.Stylize(stylizer)
 
 
 class Array(ReferenceKind):
@@ -491,17 +517,20 @@ class AssociatedInterfaceRequest(ReferenceKind):
 
 
 class Parameter(object):
-  def __init__(self, name=None, kind=None, ordinal=None, default=None,
+  def __init__(self, mojom_name=None, kind=None, ordinal=None, default=None,
                attributes=None):
-    self.name = name
+    self.mojom_name = mojom_name
     self.ordinal = ordinal
     self.kind = kind
     self.default = default
     self.attributes = attributes
 
   def Repr(self, as_ref=True):
-    return '<%s name=%r kind=%s>' % (self.__class__.__name__, self.name,
-                                     self.kind.Repr(as_ref=True))
+    return '<%s mojom_name=%r kind=%s>' % (
+        self.__class__.__name__, self.mojom_name, self.kind.Repr(as_ref=True))
+
+  def Stylize(self, stylizer):
+    self.name = stylizer.StylizeParameter(self.mojom_name)
 
   @property
   def min_version(self):
@@ -510,34 +539,49 @@ class Parameter(object):
 
 
 class Method(object):
-  def __init__(self, interface, name, ordinal=None, attributes=None):
+  def __init__(self, interface, mojom_name, ordinal=None, attributes=None):
     self.interface = interface
-    self.name = name
+    self.mojom_name = mojom_name
     self.ordinal = ordinal
     self.parameters = []
+    self.param_struct = None
     self.response_parameters = None
+    self.response_param_struct = None
     self.attributes = attributes
 
   def Repr(self, as_ref=True):
     if as_ref:
-      return '<%s name=%r>' % (self.__class__.__name__, self.name)
+      return '<%s mojom_name=%r>' % (self.__class__.__name__, self.mojom_name)
     else:
-      return GenericRepr(self, {'name': False, 'parameters': True,
+      return GenericRepr(self, {'mojom_name': False, 'parameters': True,
                                 'response_parameters': True})
 
-  def AddParameter(self, name, kind, ordinal=None, default=None,
+  def AddParameter(self, mojom_name, kind, ordinal=None, default=None,
                    attributes=None):
-    parameter = Parameter(name, kind, ordinal, default, attributes)
+    parameter = Parameter(mojom_name, kind, ordinal, default, attributes)
     self.parameters.append(parameter)
     return parameter
 
-  def AddResponseParameter(self, name, kind, ordinal=None, default=None,
+  def AddResponseParameter(self, mojom_name, kind, ordinal=None, default=None,
                            attributes=None):
     if self.response_parameters == None:
       self.response_parameters = []
-    parameter = Parameter(name, kind, ordinal, default, attributes)
+    parameter = Parameter(mojom_name, kind, ordinal, default, attributes)
     self.response_parameters.append(parameter)
     return parameter
+
+  def Stylize(self, stylizer):
+    self.name = stylizer.StylizeMethod(self.mojom_name)
+    for param in self.parameters:
+      param.Stylize(stylizer)
+    if self.response_parameters is not None:
+      for param in self.response_parameters:
+        param.Stylize(stylizer)
+
+    if self.param_struct:
+      self.param_struct.Stylize(stylizer)
+    if self.response_param_struct:
+      self.response_param_struct.Stylize(stylizer)
 
   @property
   def min_version(self):
@@ -551,40 +595,45 @@ class Method(object):
 
 
 class Interface(ReferenceKind):
-  ReferenceKind.AddSharedProperty('module')
+  ReferenceKind.AddSharedProperty('mojom_name')
   ReferenceKind.AddSharedProperty('name')
-  ReferenceKind.AddSharedProperty('imported_from')
   ReferenceKind.AddSharedProperty('methods')
+  ReferenceKind.AddSharedProperty('enums')
+  ReferenceKind.AddSharedProperty('constants')
   ReferenceKind.AddSharedProperty('attributes')
 
-  def __init__(self, name=None, module=None, attributes=None):
-    if name is not None:
-      spec = 'x:' + name
+  def __init__(self, mojom_name=None, module=None, attributes=None):
+    if mojom_name is not None:
+      spec = 'x:' + mojom_name
     else:
       spec = None
-    ReferenceKind.__init__(self, spec)
-    self.module = module
-    self.name = name
-    self.imported_from = None
+    ReferenceKind.__init__(self, spec, False, module)
+    self.mojom_name = mojom_name
     self.methods = []
+    self.enums = []
+    self.constants = []
     self.attributes = attributes
 
   def Repr(self, as_ref=True):
     if as_ref:
-      return '<%s name=%r>' % (self.__class__.__name__, self.name)
+      return '<%s mojom_name=%r>' % (self.__class__.__name__, self.mojom_name)
     else:
-      return GenericRepr(self, {'name': False, 'attributes': False,
+      return GenericRepr(self, {'mojom_name': False, 'attributes': False,
                                 'methods': False})
 
-  def AddMethod(self, name, ordinal=None, attributes=None):
-    method = Method(self, name, ordinal, attributes)
+  def AddMethod(self, mojom_name, ordinal=None, attributes=None):
+    method = Method(self, mojom_name, ordinal, attributes)
     self.methods.append(method)
     return method
 
-  # TODO(451323): Remove when the language backends no longer rely on this.
-  @property
-  def client(self):
-    return None
+  def Stylize(self, stylizer):
+    self.name = stylizer.StylizeInterface(self.mojom_name)
+    for method in self.methods:
+      method.Stylize(stylizer)
+    for enum in self.enums:
+      enum.Stylize(stylizer)
+    for constant in self.constants:
+      constant.Stylize(stylizer)
 
 
 class AssociatedInterface(ReferenceKind):
@@ -603,12 +652,15 @@ class AssociatedInterface(ReferenceKind):
 
 
 class EnumField(object):
-  def __init__(self, name=None, value=None, attributes=None,
+  def __init__(self, mojom_name=None, value=None, attributes=None,
                numeric_value=None):
-    self.name = name
+    self.mojom_name = mojom_name
     self.value = value
     self.attributes = attributes
     self.numeric_value = numeric_value
+
+  def Stylize(self, stylizer):
+    self.name = stylizer.StylizeEnumField(self.mojom_name)
 
   @property
   def min_version(self):
@@ -617,24 +669,27 @@ class EnumField(object):
 
 
 class Enum(Kind):
-  def __init__(self, name=None, module=None, attributes=None):
-    self.module = module
-    self.name = name
+  def __init__(self, mojom_name=None, module=None, attributes=None):
+    self.mojom_name = mojom_name
     self.native_only = False
-    self.imported_from = None
-    if name is not None:
-      spec = 'x:' + name
+    if mojom_name is not None:
+      spec = 'x:' + mojom_name
     else:
       spec = None
-    Kind.__init__(self, spec)
+    Kind.__init__(self, spec, module)
     self.fields = []
     self.attributes = attributes
 
   def Repr(self, as_ref=True):
     if as_ref:
-      return '<%s name=%r>' % (self.__class__.__name__, self.name)
+      return '<%s mojom_name=%r>' % (self.__class__.__name__, self.mojom_name)
     else:
-      return GenericRepr(self, {'name': False, 'fields': False})
+      return GenericRepr(self, {'mojom_name': False, 'fields': False})
+
+  def Stylize(self, stylizer):
+    self.name = stylizer.StylizeEnum(self.mojom_name)
+    for field in self.fields:
+      field.Stylize(stylizer)
 
   @property
   def extensible(self):
@@ -643,15 +698,18 @@ class Enum(Kind):
 
 
 class Module(object):
-  def __init__(self, name=None, namespace=None, attributes=None):
-    self.name = name
-    self.path = name
-    self.namespace = namespace
+  def __init__(self, path=None, mojom_namespace=None,
+               attributes=None):
+    self.path = path
+    self.mojom_namespace = mojom_namespace
     self.structs = []
     self.unions = []
     self.interfaces = []
+    self.enums = []
+    self.constants = []
     self.kinds = {}
     self.attributes = attributes
+    self.imports = []
 
   def __repr__(self):
     # Gives us a decent __repr__ for modules.
@@ -659,27 +717,43 @@ class Module(object):
 
   def Repr(self, as_ref=True):
     if as_ref:
-      return '<%s name=%r namespace=%r>' % (
-          self.__class__.__name__, self.name, self.namespace)
+      return '<%s path=%r mojom_namespace=%r>' % (
+          self.__class__.__name__, self.path, self.mojom_namespace)
     else:
-      return GenericRepr(self, {'name': False, 'namespace': False,
+      return GenericRepr(self, {'path': False, 'mojom_namespace': False,
                                 'attributes': False, 'structs': False,
                                 'interfaces': False, 'unions': False})
 
-  def AddInterface(self, name, attributes=None):
-    interface = Interface(name, self, attributes)
+  def AddInterface(self, mojom_name, attributes=None):
+    interface = Interface(mojom_name, self, attributes)
     self.interfaces.append(interface)
     return interface
 
-  def AddStruct(self, name, attributes=None):
-    struct = Struct(name, self, attributes)
+  def AddStruct(self, mojom_name, attributes=None):
+    struct = Struct(mojom_name, self, attributes)
     self.structs.append(struct)
     return struct
 
-  def AddUnion(self, name, attributes=None):
-    union = Union(name, self, attributes)
+  def AddUnion(self, mojom_name, attributes=None):
+    union = Union(mojom_name, self, attributes)
     self.unions.append(union)
     return union
+
+  def Stylize(self, stylizer):
+    self.namespace = stylizer.StylizeModule(self.mojom_namespace)
+    for struct in self.structs:
+      struct.Stylize(stylizer)
+    for union in self.unions:
+      union.Stylize(stylizer)
+    for interface in self.interfaces:
+      interface.Stylize(stylizer)
+    for enum in self.enums:
+      enum.Stylize(stylizer)
+    for constant in self.constants:
+      constant.Stylize(stylizer)
+
+    for imported_module in self.imports:
+      imported_module.Stylize(stylizer)
 
 
 def IsBoolKind(kind):
@@ -817,7 +891,17 @@ def HasCallbacks(interface):
 # Finds out whether an interface passes associated interfaces and associated
 # interface requests.
 def PassesAssociatedKinds(interface):
-  def _ContainsAssociatedKinds(kind, visited_kinds):
+  visited_kinds = set()
+  for method in interface.methods:
+    if MethodPassesAssociatedKinds(method, visited_kinds):
+      return True
+  return False
+
+
+# Finds out whether a method passes associated interfaces and associated
+# interface requests.
+def MethodPassesAssociatedKinds(method, visited_kinds=None):
+  def _ContainsAssociatedKinds(kind):
     if kind in visited_kinds:
       # No need to examine the kind again.
       return False
@@ -825,26 +909,27 @@ def PassesAssociatedKinds(interface):
     if IsAssociatedKind(kind):
       return True
     if IsArrayKind(kind):
-      return _ContainsAssociatedKinds(kind.kind, visited_kinds)
+      return _ContainsAssociatedKinds(kind.kind)
     if IsStructKind(kind) or IsUnionKind(kind):
       for field in kind.fields:
-        if _ContainsAssociatedKinds(field.kind, visited_kinds):
+        if _ContainsAssociatedKinds(field.kind):
           return True
     if IsMapKind(kind):
       # No need to examine the key kind, only primitive kinds and non-nullable
       # string are allowed to be key kinds.
-      return _ContainsAssociatedKinds(kind.value_kind, visited_kinds)
+      return _ContainsAssociatedKinds(kind.value_kind)
     return False
 
-  visited_kinds = set()
-  for method in interface.methods:
-    for param in method.parameters:
-      if _ContainsAssociatedKinds(param.kind, visited_kinds):
+  if visited_kinds is None:
+    visited_kinds = set()
+
+  for param in method.parameters:
+    if _ContainsAssociatedKinds(param.kind):
+      return True
+  if method.response_parameters != None:
+    for param in method.response_parameters:
+      if _ContainsAssociatedKinds(param.kind):
         return True
-    if method.response_parameters != None:
-      for param in method.response_parameters:
-        if _ContainsAssociatedKinds(param.kind, visited_kinds):
-          return True
   return False
 
 

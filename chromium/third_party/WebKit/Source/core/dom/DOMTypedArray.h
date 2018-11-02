@@ -5,10 +5,10 @@
 #ifndef DOMTypedArray_h
 #define DOMTypedArray_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/DOMSharedArrayBuffer.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/typed_arrays/Float32Array.h"
 #include "platform/wtf/typed_arrays/Float64Array.h"
 #include "platform/wtf/typed_arrays/Int16Array.h"
@@ -68,6 +68,7 @@ class CORE_TEMPLATE_CLASS_EXPORT DOMTypedArray final
   }
 
   ValueType* Data() const { return View()->Data(); }
+  ValueType* DataMaybeShared() const { return View()->DataMaybeShared(); }
   unsigned length() const { return View()->length(); }
   // Invoked by the indexed getter. Does not perform range checks; caller
   // is responsible for doing so and returning undefined as necessary.
@@ -78,10 +79,10 @@ class CORE_TEMPLATE_CLASS_EXPORT DOMTypedArray final
 
  private:
   explicit DOMTypedArray(PassRefPtr<WTFTypedArray> buffer_view)
-      : DOMArrayBufferView(buffer_view) {}
+      : DOMArrayBufferView(std::move(buffer_view)) {}
   DOMTypedArray(PassRefPtr<WTFTypedArray> buffer_view,
                 DOMArrayBufferBase* dom_array_buffer)
-      : DOMArrayBufferView(buffer_view, dom_array_buffer) {}
+      : DOMArrayBufferView(std::move(buffer_view), dom_array_buffer) {}
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT

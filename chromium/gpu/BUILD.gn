@@ -217,6 +217,7 @@ test("gl_tests") {
 test("gpu_unittests") {
   sources = [
     "command_buffer/client/buffer_tracker_unittest.cc",
+    "command_buffer/client/client_discardable_manager_unittest.cc",
     "command_buffer/client/client_test_helper.cc",
     "command_buffer/client/client_test_helper.h",
     "command_buffer/client/cmd_buffer_helper_test.cc",
@@ -230,8 +231,6 @@ test("gpu_unittests") {
     "command_buffer/client/vertex_array_object_manager_unittest.cc",
     "command_buffer/common/activity_flags_unittest.cc",
     "command_buffer/common/bitfield_helpers_test.cc",
-    "command_buffer/common/command_buffer_mock.cc",
-    "command_buffer/common/command_buffer_mock.h",
     "command_buffer/common/command_buffer_shared_test.cc",
     "command_buffer/common/debug_marker_manager_unittest.cc",
     "command_buffer/common/discardable_handle_unittest.cc",
@@ -242,9 +241,7 @@ test("gpu_unittests") {
     "command_buffer/common/id_type_unittest.cc",
     "command_buffer/common/unittest_main.cc",
     "command_buffer/service/buffer_manager_unittest.cc",
-    "command_buffer/service/cmd_parser_test.cc",
     "command_buffer/service/command_buffer_service_unittest.cc",
-    "command_buffer/service/command_executor_unittest.cc",
     "command_buffer/service/common_decoder_unittest.cc",
     "command_buffer/service/context_group_unittest.cc",
     "command_buffer/service/context_state_unittest.cc",
@@ -289,6 +286,8 @@ test("gpu_unittests") {
     "command_buffer/service/program_manager_unittest.cc",
     "command_buffer/service/query_manager_unittest.cc",
     "command_buffer/service/renderbuffer_manager_unittest.cc",
+    "command_buffer/service/scheduler_unittest.cc",
+    "command_buffer/service/service_discardable_manager_unittest.cc",
     "command_buffer/service/shader_manager_unittest.cc",
     "command_buffer/service/shader_translator_cache_unittest.cc",
     "command_buffer/service/shader_translator_unittest.cc",
@@ -361,6 +360,7 @@ test("gpu_unittests") {
     "//ui/gl",
     "//ui/gl:gl_unittest_utils",
     "//ui/gl:test_support",
+    "//ui/latency:test_support",
   ]
 
   if (is_android) {

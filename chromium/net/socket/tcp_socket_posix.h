@@ -16,6 +16,7 @@
 #include "net/base/completion_callback.h"
 #include "net/base/net_export.h"
 #include "net/log/net_log_with_source.h"
+#include "net/socket/socket_descriptor.h"
 #include "net/socket/socket_performance_watcher.h"
 
 namespace base {
@@ -41,41 +42,72 @@ class NET_EXPORT TCPSocketPosix {
       const NetLogSource& source);
   virtual ~TCPSocketPosix();
 
+  // Opens the socket.
+  // Returns a net error code.
   int Open(AddressFamily family);
-  // Takes ownership of |socket_fd|.
-  int AdoptConnectedSocket(int socket_fd, const IPEndPoint& peer_address);
 
+  // Takes ownership of |socket|, which is known to already be connected to the
+  // given peer address. However, peer address may be the empty address, for
+  // compatibility. The given peer address will be returned by GetPeerAddress.
+  int AdoptConnectedSocket(SocketDescriptor socket,
+                           const IPEndPoint& peer_address);
+  // Takes ownership of |socket|, which may or may not be open, bound, or
+  // listening. The caller must determine the state of the socket based on its
+  // provenance and act accordingly. The socket may have connections waiting
+  // to be accepted, but must not be actually connected.
+  int AdoptUnconnectedSocket(SocketDescriptor socket);
+
+  // Binds this socket to |address|. This is generally only used on a server.
+  // Should be called after Open(). Returns a net error code.
   int Bind(const IPEndPoint& address);
 
+  // Put this socket on listen state with the given |backlog|.
+  // Returns a net error code.
   int Listen(int backlog);
+
+  // Accepts incoming connection.
+  // Returns a net error code.
   int Accept(std::unique_ptr<TCPSocketPosix>* socket,
              IPEndPoint* address,
              const CompletionCallback& callback);
 
+  // Connects this socket to the given |address|.
+  // Should be called after Open().
+  // Returns a net error code.
   int Connect(const IPEndPoint& address, const CompletionCallback& callback);
   bool IsConnected() const;
   bool IsConnectedAndIdle() const;
 
+  // IO:
   // Multiple outstanding requests are not supported.
   // Full duplex mode (reading and writing at the same time) is supported.
+
+  // Reads from the socket.
+  // Returns a net error code.
   int Read(IOBuffer* buf, int buf_len, const CompletionCallback& callback);
   int ReadIfReady(IOBuffer* buf,
                   int buf_len,
                   const CompletionCallback& callback);
+
+  // Writes to the socket.
+  // Returns a net error code.
   int Write(IOBuffer* buf, int buf_len, const CompletionCallback& callback);
 
+  // Copies the local tcp address into |address| and returns a net error code.
   int GetLocalAddress(IPEndPoint* address) const;
+
+  // Copies the remote tcp code into |address| and returns a net error code.
   int GetPeerAddress(IPEndPoint* address) const;
 
   // Sets various socket options.
   // The commonly used options for server listening sockets:
-  // - SetAddressReuse(true).
+  // - AllowAddressReuse().
   int SetDefaultOptionsForServer();
   // The commonly used options for client sockets and accepted sockets:
   // - SetNoDelay(true);
   // - SetKeepAlive(true, 45).
   void SetDefaultOptionsForClient();
-  int SetAddressReuse(bool allow);
+  int AllowAddressReuse();
   int SetReceiveBufferSize(int32_t size);
   int SetSendBufferSize(int32_t size);
   bool SetKeepAlive(bool enable, int delay);
@@ -86,6 +118,7 @@ class NET_EXPORT TCPSocketPosix {
   bool GetEstimatedRoundTripTime(base::TimeDelta* out_rtt) const
       WARN_UNUSED_RESULT;
 
+  // Closes the socket.
   void Close();
 
   void EnableTCPFastOpenIfSupported();
@@ -111,6 +144,11 @@ class NET_EXPORT TCPSocketPosix {
   void EndLoggingMultipleConnectAttempts(int net_error);
 
   const NetLogWithSource& net_log() const { return net_log_; }
+
+  // Return the underlying SocketDescriptor and clean up this object, which may
+  // no longer be used. This method should be used only for testing. No read,
+  // write, or accept operations should be pending.
+  SocketDescriptor ReleaseSocketDescriptorForTesting();
 
  private:
   // States that using a socket with TCP FastOpen can lead to.

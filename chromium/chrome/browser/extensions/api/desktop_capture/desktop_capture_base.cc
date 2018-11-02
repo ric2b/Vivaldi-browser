@@ -20,6 +20,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/grit/chromium_strings.h"
+#include "content/public/browser/desktop_capture.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -150,8 +151,7 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
 #endif
       if (!screen_list) {
         webrtc::DesktopCaptureOptions options =
-            webrtc::DesktopCaptureOptions::CreateDefault();
-        options.set_disable_effects(false);
+            content::CreateDesktopCaptureOptions();
         std::unique_ptr<webrtc::DesktopCapturer> screen_capturer(
             webrtc::DesktopCapturer::CreateScreenCapturer(options));
 
@@ -168,8 +168,7 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
 #endif
       if (!window_list) {
         webrtc::DesktopCaptureOptions options =
-            webrtc::DesktopCaptureOptions::CreateDefault();
-        options.set_disable_effects(false);
+            content::CreateDesktopCaptureOptions();
         std::unique_ptr<webrtc::DesktopCapturer> window_capturer(
             webrtc::DesktopCapturer::CreateWindowCapturer(options));
 

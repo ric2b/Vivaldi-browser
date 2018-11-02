@@ -317,23 +317,27 @@ void HTMLVideoElement::PaintCurrentFrame(PaintCanvas* canvas,
 
 bool HTMLVideoElement::CopyVideoTextureToPlatformTexture(
     gpu::gles2::GLES2Interface* gl,
+    GLenum target,
     GLuint texture,
     GLenum internal_format,
     GLenum format,
     GLenum type,
+    GLint level,
     bool premultiply_alpha,
     bool flip_y) {
   if (!GetWebMediaPlayer())
     return false;
 
   return GetWebMediaPlayer()->CopyVideoTextureToPlatformTexture(
-      gl, texture, internal_format, format, type, premultiply_alpha, flip_y);
+      gl, target, texture, internal_format, format, type, level,
+      premultiply_alpha, flip_y);
 }
 
 bool HTMLVideoElement::TexImageImpl(
     WebMediaPlayer::TexImageFunctionID function_id,
     GLenum target,
     gpu::gles2::GLES2Interface* gl,
+    GLuint texture,
     GLint level,
     GLint internalformat,
     GLenum format,
@@ -346,8 +350,8 @@ bool HTMLVideoElement::TexImageImpl(
   if (!GetWebMediaPlayer())
     return false;
   return GetWebMediaPlayer()->TexImageImpl(
-      function_id, target, gl, level, internalformat, format, type, xoffset,
-      yoffset, zoffset, flip_y, premultiply_alpha);
+      function_id, target, gl, texture, level, internalformat, format, type,
+      xoffset, yoffset, zoffset, flip_y, premultiply_alpha);
 }
 
 bool HTMLVideoElement::HasAvailableVideoFrame() const {
@@ -417,7 +421,7 @@ PassRefPtr<Image> HTMLVideoElement::GetSourceImageForCanvas(
     SourceImageStatus* status,
     AccelerationHint,
     SnapshotReason,
-    const FloatSize&) const {
+    const FloatSize&) {
   if (!HasAvailableVideoFrame()) {
     *status = kInvalidSourceImageStatus;
     return nullptr;
@@ -497,7 +501,7 @@ void HTMLVideoElement::MediaRemotingStarted() {
   if (!remoting_interstitial_) {
     remoting_interstitial_ = new MediaRemotingInterstitial(*this);
     ShadowRoot& shadow_root = EnsureUserAgentShadowRoot();
-    shadow_root.InsertBefore(remoting_interstitial_, shadow_root.FirstChild());
+    shadow_root.InsertBefore(remoting_interstitial_, shadow_root.firstChild());
     HTMLMediaElement::AssertShadowRootChildren(shadow_root);
   }
   remoting_interstitial_->Show();

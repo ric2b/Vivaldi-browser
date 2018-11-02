@@ -33,8 +33,9 @@ Components.DOMPresentationUtils = {};
 /**
  * @param {!SDK.DOMNode} node
  * @param {!Element} parentElement
+ * @param {string=} tooltipContent
  */
-Components.DOMPresentationUtils.decorateNodeLabel = function(node, parentElement) {
+Components.DOMPresentationUtils.decorateNodeLabel = function(node, parentElement, tooltipContent) {
   var originalNode = node;
   var isPseudo = node.nodeType() === Node.ELEMENT_NODE && node.pseudoType();
   if (isPseudo && node.parentNode)
@@ -81,7 +82,7 @@ Components.DOMPresentationUtils.decorateNodeLabel = function(node, parentElement
     pseudoElement.createTextChild(pseudoText);
     title += pseudoText;
   }
-  parentElement.title = title;
+  parentElement.title = tooltipContent || title;
 };
 
 /**
@@ -100,9 +101,10 @@ Components.DOMPresentationUtils.createSpansForNodeTitle = function(container, no
 /**
  * @param {?SDK.DOMNode} node
  * @param {string=} idref
+ * @param {string=} tooltipContent
  * @return {!Node}
  */
-Components.DOMPresentationUtils.linkifyNodeReference = function(node, idref) {
+Components.DOMPresentationUtils.linkifyNodeReference = function(node, idref, tooltipContent) {
   if (!node)
     return createTextNode(Common.UIString('<node>'));
 
@@ -113,11 +115,11 @@ Components.DOMPresentationUtils.linkifyNodeReference = function(node, idref) {
   if (idref)
     link.createChild('span', 'node-label-id').createTextChild('#' + idref);
   else
-    Components.DOMPresentationUtils.decorateNodeLabel(node, link);
+    Components.DOMPresentationUtils.decorateNodeLabel(node, link, tooltipContent);
 
   link.addEventListener('click', Common.Revealer.reveal.bind(Common.Revealer, node, undefined), false);
   link.addEventListener('mouseover', node.highlight.bind(node, undefined, undefined), false);
-  link.addEventListener('mouseleave', SDK.DOMModel.hideDOMNodeHighlight.bind(SDK.DOMModel), false);
+  link.addEventListener('mouseleave', () => SDK.OverlayModel.hideDOMNodeHighlight(), false);
 
   return root;
 };
@@ -415,7 +417,8 @@ Components.DOMPresentationUtils._cssPathStep = function(node, optimized, isTarge
    * @return {boolean}
    */
   function isCSSIdentifier(value) {
-    return /^-?[a-zA-Z_][a-zA-Z0-9_-]*$/.test(value);
+    // Double hyphen prefixes are not allowed by specification, but many sites use it.
+    return /^-{0,2}[a-zA-Z_][a-zA-Z0-9_-]*$/.test(value);
   }
 
   var prefixedOwnClassNamesArray = prefixedElementClassNames(node);

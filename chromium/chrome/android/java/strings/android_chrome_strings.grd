@@ -152,9 +152,6 @@ CHAR-LIMIT guidelines:
       <message name="IDS_RESET" desc="Label for a button to reset information you are editing to a default.">
         Reset
       </message>
-      <message name="IDS_CHOOSE" desc="Label for a button to choose something, like a shipping address for a payment request. [CHAR-LIMIT=20]">
-        Choose
-      </message>
       <message name="IDS_TITLE" desc="Text indicating the title of a button or a textfield. Ued in multiple contexts. [CHAR-LIMIT=32]">
         Title
       </message>
@@ -211,6 +208,12 @@ CHAR-LIMIT guidelines:
       </message>
       <message name="IDS_SEARCH" desc="The label for a search button.">
         Search
+      </message>
+      <message name="IDS_SHOW_INFO" desc="The label for a info button to show info.">
+        Show Info
+      </message>
+      <message name="IDS_HIDE_INFO" desc="The label for a info button to hide info.">
+        Hide Info
       </message>
       <message name="IDS_COPY_LINK" desc="The label for a menu item to copy a link. [CHAR-LIMIT=30]">
         Copy link
@@ -273,6 +276,9 @@ CHAR-LIMIT guidelines:
       <message name="IDS_SIGN_IN_TO_CHROME_SUMMARY" desc="Summary for the button to sign in to Chrome, explaining benefits of signing in.">
         Sign in to get your bookmarks, history, passwords, and other settings on all your devices
       </message>
+      <message name="IDS_SIGN_IN_TO_CHROME_DISABLED_SUMMARY" desc="A descriptive line of text that appears under the 'Sign in to Chrome' option, in Chrome Settings on Android. The text explains why 'Sign in to Chrome' is disabled. 'Administrator' refers to the IT administrator of the company/organization that owns the user’s device.">
+          Disabled by the administrator of this device
+      </message>
       <message name="IDS_SIGN_IN_GOOGLE_ACTIVITY_CONTROLS" desc="Title of Google activity controls preference in signed in accounts settings screen">
         Google Activity Controls
       </message>
@@ -298,6 +304,12 @@ CHAR-LIMIT guidelines:
       </message>
       <message name="IDS_SEARCH_ENGINE_RECENTLY_VISITED" desc="Header for the list of recently visited search engines.">
         Recently visited
+      </message>
+      <message name="IDS_SEARCH_ENGINE_DIALOG_TITLE" desc="Title shown in the dialog to change search engines">
+        Choose your search engine
+      </message>
+      <message name="IDS_SEARCH_ENGINE_DIALOG_FOOTER" desc="Title shown in the dialog to change search engines">
+        You can change this later in Settings
       </message>
 
       <!-- Autofill and Payments preferences -->
@@ -582,13 +594,13 @@ Your Google account may have other forms of browsing history like searches and a
         Signs you out of most sites. You won't be signed out of you Google Account.
       </message>
       <message name="IDS_CLEAR_BROWSING_HISTORY_SUMMARY" desc="A text for the basic tab explaining browsing history.">
-        Clears history and address bar suggestions.
+        Clears history and autocompletions in the address bar.
       </message>
       <message name="IDS_CLEAR_BROWSING_HISTORY_SUMMARY_SIGNED_IN" desc="A text explaining other forms of activity for signed in users.">
-        Clears history and address bar suggestions. View other activity from your Google Account at <ph name="BEGIN_LINK">&lt;link&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/link&gt;</ph>.
+        Clears history and autocompletions in the address bar. Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;link&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
       <message name="IDS_CLEAR_BROWSING_HISTORY_SUMMARY_SYNCED" desc="A text for the basic tab explaining browsing history for users with history sync.">
-        Clears history from all signed-in devices. View other activity from your Google Account at <ph name="BEGIN_LINK">&lt;link&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/link&gt;</ph>.
+        Clears history from all signed-in devices. Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;link&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
       <message name="IDS_CLEAR_PASSWORDS_TITLE" desc="Title for Clear Passwords in Clear Browsing Data preference">
         Saved passwords
@@ -661,6 +673,9 @@ Your Google account may have other forms of browsing history like searches and a
       </message>
       <message name="IDS_ANDROID_HISTORY_OTHER_FORMS_OF_HISTORY" desc="The notification at the top of the history page indicating that deleting Chrome browsing history will not delete other forms of history stored at Google My Activity.">
         Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;link&gt;</ph>history.google.com<ph name="END_LINK">&lt;/link&gt;</ph>.
+      </message>
+      <message name="IDS_ANDROID_HISTORY_OTHER_FORMS_OF_HISTORY_NEW" desc="The notification at the top of the history page indicating that deleting Chrome browsing history will not delete other forms of history stored at Google My Activity.">
+        Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;link&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
       <message name="IDS_ANDROID_HISTORY_BLOCKED_SITE" desc="The text displayed in the history page indicating that a visit to a web site was blocked due to an administrator policy.">
         Blocked site
@@ -735,7 +750,7 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_POPUP_PERMISSION_TITLE" desc="Title of the permission to display pop-up windows [CHAR-LIMIT=32]">
         Pop-ups
       </message>
-      <message name="IDS_SUBRESOURCE_FILTER_PERMISSION_TITLE" desc="Title for the subresource filter permission [CHAR-LIMIT=32]">
+      <message name="IDS_SUBRESOURCE_FILTER_PERMISSION_TITLE" desc="Title for the subresource filter permission [CHAR-LIMIT=32]" translateable="false">
          Subresource Filter
       </message>
       <message name="IDS_PUSH_NOTIFICATIONS_PERMISSION_TITLE" desc="Title for the permission for showing push notifications [CHAR-LIMIT=32]">
@@ -975,6 +990,11 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_WEBSITE_SETTINGS_USB_NO_DEVICES" desc="Empty list text for a list of USB devices that sites have been granted access to.">
         No USB devices here
+      </message>
+
+      <!-- IPH Strings -->
+      <message name="IDS_IPH_DATA_SAVER_PREVIEW_TEXT" desc="In-product help for when a data saver preview page and infobar are shown.">
+          Chrome is using less data to show you this page
       </message>
 
       <!-- Data Saver -->
@@ -1420,6 +1440,11 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_BLUETOOTH_DEVICE_CONNECTED" desc="Content description for the connected icon next to connected Bluetooth devices.">
         Connected Device
       </message>
+      <message name="IDS_SIGNAL_STRENGTH_LEVEL_N_BARS" desc="Text to be shown next to devices indicating their received signal strength. [ICU Syntax]">
+        {N_BARS, plural,
+          =1 {Signal Strength Level: # bar}
+          other {Signal Strength Level: # bars}}
+      </message>
 
       <!-- Hint of sync error solution strings -->
       <message name="IDS_SYNC_ERROR_CARD_TITLE" desc="Title of the Sync Error Card. [CHAR-LIMIT=32]">
@@ -1563,9 +1588,35 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_TRANSLATE_NEVER_TRANSLATE_SITE" desc="Text to display on the never translate site (like www.google.com) button. [CHAR-LIMIT=64]">
         Never translate this site
       </message>
-      <message name="IDS_TRANSLATE_NEVER_TRANSLATE_LANGUAGE" meaning="Android" desc="Text to display on the never translate language button. [CHAR-LIMIT=64]">
+      <message name="IDS_TRANSLATE_NEVER_TRANSLATE_LANGUAGE" desc="Text that appears on a button. Chrome asks the user if they want to translate a page from the source language into another, target language that the user may have shown interest in before. User can click the 'Never Translate' button to indicate that they never want Chrome to translate pages in this language. Imperative. [CHAR-LIMIT=64]">
         Never translate <ph name="LANGUAGE">%1$s<ex>French</ex></ph>
       </message>
+
+      <message name="IDS_TRANSLATE_OPTION_ALWAYS_TRANSLATE" desc="Option in the Chrome menu. User can click the 'Always Translate' option to indicate that they want Chrome to translate pages in this language automatically. Imperative.">
+        Always translate pages in <ph name="SOURCE_LANGUAGE">%1$s<ex>French</ex></ph>
+      </message>
+      <message name="IDS_TRANSLATE_OPTION_NEVER_TRANSLATE" desc="Option in the Chrome menu. User can click the 'Never Translate' option to indicate that they never want Chrome to translate pages in this language. The variable SOURCE_LANGUAGE could be any of 50+ languages supported by Google Translate, like French, Spanish, German, Italian, Japanese, Korean, etc. Imperative.">
+        Never translate pages in <ph name="SOURCE_LANGUAGE">%1$s<ex>French</ex></ph>
+      </message>
+      <message name="IDS_TRANSLATE_OPTION_MORE_LANGUAGE" desc="Option in the Chrome menu. Lets the user open a dialog to choose other target languages for translation, from a list of available languages. [CHAR-LIMIT=64]">
+        More languages
+      </message>
+      <message name="IDS_TRANSLATE_OPTION_NOT_SOURCE_LANGUAGE" desc="Option in the Chrome menu. Sometimes a web page's source language is not correctly identified by Google Translate, and this menu option lets the user open a submenu to select another language as the source language to translate. Phrased as a question as if to query the user, 'Is this page not in [source language identified]? If so, click here.' [CHAR-LIMIT=64]">
+        Page is not in <ph name="LANGUAGE">%1$s<ex>French</ex></ph>?
+      </message>
+      <message name="IDS_TRANSLATE_SNACKBAR_ALWAYS_TRANSLATE" desc="After the user selects 'Always translate pages in [LANGUAGE]', this text confirms the user's choice and lets them know that pages in [LANGUAGE] will be translated to their chosen target language automatically. Imperative. [CHAR-LIMIT=64]">
+        Pages in <ph name="SOURCE_LANGUAGE">%1$s<ex>French</ex></ph> will be translated to <ph name="TARGET_LANGUAGE">%2$s<ex>English</ex></ph> from now on
+      </message>
+      <message name="IDS_TRANSLATE_SNACKBAR_LANGUAGE_NEVER" desc="After the user selects 'Never translate pages in [LANGUAGE]', this text confirms the user's choice and lets them know that pages in [LANGUAGE] will not be translated to their chosen target language automatically. Imperative[CHAR-LIMIT=64]">
+        Pages in <ph name="LANGUAGE">%1$s<ex>French</ex></ph> will not be translated
+      </message>
+      <message name="IDS_TRANSLATE_SNACKBAR_SITE_NEVER" desc="Text to be displayed in translate snackbar that lets the user know this site will not be translated. [CHAR-LIMIT=64]">
+        This site will not be translated
+      </message>
+      <message name="IDS_TRANSLATE_SNACKBAR_CANCEL" desc="A text label on the translate snackbar widget to cancel the this selection. [CHAR-LIMIT=16]">
+        Cancel
+      </message>
+
       <message name="IDS_MENU_PRINT" desc="Menu item for printing the current page. [CHAR-LIMIT=27]">
         Print…
       </message>
@@ -1596,16 +1647,16 @@ To obtain new licenses, connect to the internet and play your downloaded content
 
       <!-- Runtime permission strings -->
       <message name="IDS_INFOBAR_MISSING_CAMERA_PERMISSION_TEXT" desc="Text shown in an infobar when a website has requested access to the camera capabilities, but Chrome is missing the Android camera permission.">
-        Chrome needs camera access to share it with this site.
+        Chrome needs permission to access your camera for this site.
       </message>
       <message name="IDS_INFOBAR_MISSING_MICROPHONE_PERMISSION_TEXT" desc="Text shown in an infobar when a website has requested access to the microphone capabilities, but Chrome is missing the Android microphone permission.">
-        Chrome needs microphone access to share it with this site.
+        Chrome needs permission to access your microphone for this site.
+      </message>
+      <message name="IDS_INFOBAR_MISSING_MICROPHONE_CAMERA_PERMISSIONS_TEXT" desc="Text shown in an infobar when a website has requested access to the microphone and camera capabilities, but Chrome is missing the Android microphone and camera permissions.">
+        Chrome needs permission to access your camera and microphone for this site.
       </message>
       <message name="IDS_INFOBAR_MISSING_LOCATION_PERMISSION_TEXT" desc="Text shown in an infobar when a website has requested access to the location capabilities, but Chrome is missing the Android location permission.">
-        Chrome needs location access to share it with this site.
-      </message>
-      <message name="IDS_INFOBAR_MISSING_MULTIPLE_PERMISSIONS_TEXT" desc="Text shown in an infobar when a website has requested access to the multiple restricted capabilities (e.g. location, camera, microphone), but Chrome is missing the corresponding Android permissions.">
-        Chrome needs permissions access to share them with this site.
+        Chrome needs access to your location to share your location with this site.
       </message>
       <message name="IDS_MISSING_STORAGE_PERMISSION_DOWNLOAD_EDUCATION_TEXT" desc="Text shown educating the user that Chrome is missing the Android storage permission, which is required to download files.">
         Chrome needs storage access to download files.
@@ -1677,6 +1728,23 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <!-- Swipe refresh -->
       <message name="IDS_ACCESSIBILITY_SWIPE_REFRESH" desc="Content description for the swipe refresh action.">
         Refreshing page
+      </message>
+
+      <!-- Browser Action strings -->
+      <message name="IDS_BROWSER_ACTIONS_OPEN_IN_BACKGROUND" desc="Browser Actions menu item to open the selected link in a Chrome tab in the background. [CHAR-LIMIT=30]">
+        Open in new Chrome tab
+      </message>
+      <message name="IDS_BROWSER_ACTIONS_OPEN_IN_INCOGNITO_TAB" desc="Browser Actions menu item to open the selected link in a Chrome incognito tab. [CHAR-LIMIT=30]">
+        Open in incognito tab
+      </message>
+      <message name="IDS_BROWSER_ACTIONS_SAVE_LINK_AS" desc="Browser Actions menu item to download the page of the selected link. [CHAR-LIMIT=30]">
+        Download page
+      </message>
+      <message name="IDS_BROWSER_ACTIONS_COPY_ADDRESS" desc="Browser Actions menu item to copy the url address of the selected link. [CHAR-LIMIT=30]">
+        Copy link
+      </message>
+      <message name="IDS_BROWSER_ACTIONS_SHARE" desc="Browser Actions menu item to share the url address of the selected link. [CHAR-LIMIT=30]">
+        Share...
       </message>
 
       <!-- App banner strings -->
@@ -1894,6 +1962,12 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_FILE_SIZE_DOWNLOADED_MB" desc="Notification message showing how many MBs have been downloaded.">
         Downloaded <ph name="MBS">%1$.1f<ex>10.1</ex></ph> MB
       </message>
+      <message name="IDS_ONE_FILE_LEFT" desc="Message showing 1 file left">
+        1 file left
+      </message>
+      <message name="IDS_FILES_LEFT" desc="Message showing how many files are left.">
+        <ph name="FILES">%1$d<ex>10</ex></ph> files left
+      </message>
       <message name="IDS_FILE_SIZE_DOWNLOADED_GB" desc="Notification message showing how many GBs have been downloaded.">
         Downloaded <ph name="GBS">%1$.1f<ex>10.1</ex></ph> GB
       </message>
@@ -1982,7 +2056,7 @@ To obtain new licenses, connect to the internet and play your downloaded content
         <ph name="gigabytes">%1$3.2f<ex>0.3</ex></ph> GB downloaded
       </message>
       <message name="IDS_DOWNLOAD_MANAGER_UI_ALL_DOWNLOADS" desc="Indicates that clicking on this button shows all of your downloads.">
-        All downloads
+        All
       </message>
       <message name="IDS_DOWNLOAD_MANAGER_UI_PAGES" desc="Indicates that clicking on this button shows only offline pages.">
         Pages
@@ -2114,10 +2188,10 @@ To obtain new licenses, connect to the internet and play your downloaded content
         Hi, <ph name="FULL_NAME">%1$s<ex>John Smith</ex></ph>
       </message>
       <message name="IDS_SIGNIN_SIGNED_IN_SETTINGS_DESCRIPTION_CHILD_ACCOUNT" desc="Label of the section containing the link to go to the settings page, when signing in to a child account.">
-        You and your parents can control how this works in <ph name="BEGIN_LINK1">&lt;LINK1&gt;</ph>Settings<ph name="END_LINK1">&lt;/LINK1&gt;</ph>
+        You and your parents can manage Chrome Sync and personalization in <ph name="BEGIN_LINK1">&lt;LINK1&gt;</ph>Settings<ph name="END_LINK1">&lt;/LINK1&gt;</ph>
       </message>
       <message name="IDS_SIGNIN_SIGNED_IN_SETTINGS_DESCRIPTION" desc="Label of the section containing the link to go to the settings page.">
-        Control how this works in <ph name="BEGIN_LINK1">&lt;LINK1&gt;</ph>Settings<ph name="END_LINK1">&lt;/LINK1&gt;</ph>
+        Manage Chrome Sync and personalization in <ph name="BEGIN_LINK1">&lt;LINK1&gt;</ph>Settings<ph name="END_LINK1">&lt;/LINK1&gt;</ph>
       </message>
       <message name="IDS_SIGNIN_GMS_UPDATING" desc="Message notifying user that Google Play Services is still updating.">
         Waiting for Google Play Services to finish updating
@@ -2259,6 +2333,9 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_BUTTON_NEW_TAB" desc="Button name for opening a new tab.">
         New tab
       </message>
+      <message name="IDS_BUTTON_NEW_INCOGNITO_TAB" desc="Tooltip for the button to open a new incognito browser tab.">
+        New incognito tab
+      </message>
 
       <!-- Main menu items -->
       <message name="IDS_MENU_UPDATE" desc="Menu item for updating chrome. [CHAR-LIMIT=24]">
@@ -2272,6 +2349,21 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_MENU_MOVE_TO_OTHER_WINDOW" desc="Menu item for moving the current tab into the other window. [CHAR-LIMIT=27]">
         Move to other window
+      </message>
+      <message name="IDS_MENU_FORWARD" desc="Tooltip for the button to advance to the next web page. Verb. [CHAR-LIMIT=27]">
+        Forward
+      </message>
+      <message name="IDS_MENU_BOOKMARK" desc="Tooltip for the button to save the web page to 'Bookmarks' section. Verb. [CHAR-LIMIT=27]">
+        Bookmark
+      </message>
+      <message name="IDS_MENU_DOWNLOAD" desc="Tooltip for the button to download the current web page. [CHAR-LIMIT=27]">
+        Download
+      </message>
+      <message name="IDS_MENU_PAGE_INFO" desc="Tooltip on Android for the button to view information about the current web page. Info is short for information.  [CHAR-LIMIT=27]">
+        Page info
+      </message>
+      <message name="IDS_MENU_REFRESH" desc="Tooltip on Android for the button to refresh the current web page. [CHAR-LIMIT=27]">
+        Refresh
       </message>
       <message name="IDS_MENU_NEW_TAB" desc="Menu item for opening a new tab. [CHAR-LIMIT=27]">
         New tab
@@ -2334,9 +2426,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_BOOKMARK_PAGE_FAILED" desc="Message shown when the user tries to add a bookmark but the browser fails to save it.">
         Failed to add bookmark.
-      </message>
-      <message name="IDS_BOOKMARK_DRAWER_FOLDERS" desc="Title for the list of folders in the drawer view. [CHAR-LIMIT=32]">
-        Folders
       </message>
       <message name="IDS_BOOKMARK_PARENT_FOLDER" desc="Header text for title of parent folder of the bookmark [CHAR-LIMIT=32]">
         Parent folder
@@ -2455,9 +2544,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_READER_MODE_MAXIMIZED_TITLE" desc="Message shown on the reader mode button bar when it is opened to show reader mode. Reader mode extracts content and removes clutter from a web page and puts the result in a panel making it easier to read.">
         Mobile-friendly view
       </message>
-      <message name="IDS_FRE_LABEL" desc="First Run Experience Strings">
-        First Run Experience
-      </message>
       <message name="IDS_CONTENT_PROVIDER_SEARCH_DESCRIPTION" desc="Description for Chrome's entry in QSB's list of search suggestion providers [CHAR-LIMIT=32]">
         Bookmarks and web history
       </message>
@@ -2507,6 +2593,9 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_ACCESSIBILITY_TOOLBAR_BTN_HOME" desc="Content description for the home button.">
         Home
+      </message>
+      <message name="IDS_ACCESSIBILITY_TOOLBAR_BTN_EXPAND" desc="Content description for the Chrome Home sheet expand button.">
+        Expand
       </message>
       <message name="IDS_ACCESSIBILITY_BTN_REFRESH" desc="Content description for the refresh page button.">
         Refresh page
@@ -2578,15 +2667,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
         selected
       </message>
 
-      <message name="IDS_VIDEO_CALL_NOTIFICATION_TEXT_2" desc="Text to be shown as a notification when a WebRTC video call is in progress.">
-        Accessing video input
-      </message>
-      <message name="IDS_AUDIO_CALL_NOTIFICATION_TEXT_2" desc="Text to be shown as a notification when a WebRTC audio call is in progress">
-        Accessing audio input
-      </message>
-      <message name="IDS_VIDEO_AUDIO_CALL_NOTIFICATION_TEXT_2" desc="Text to be shown as a notification when a WebRTC video and audio call is in progress">
-        Accessing audio and video input
-      </message>
       <message name="IDS_MEDIA_NOTIFICATION_LINK_TEXT" desc="Url of the current tab. The notification will display this text for the user to identify the tab to return to.">
         Touch to return to <ph name="URL_OF_THE_CURRENT_TAB">%1$s<ex>https://apprtc.appspot.com</ex></ph>
       </message>
@@ -2790,6 +2870,11 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
         <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>
       </message>
 
+      <!-- Photo Picker strings -->
+      <message name="IDS_DECODER_DESCRIPTION" desc="The title for the image decoder utility service.">
+        Image decoder
+      </message>
+
       <!-- Migration strings -->
       <message name="IDS_TAB_SWITCHER_CALLOUT_BODY" desc="Indicates that clicking the tab switcher button gives you quick access to your tabs.">
         Tap this button for quick access to your tabs.
@@ -2902,6 +2987,14 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
         Webpage shortcuts
       </message>
 
+       <!-- Chrome VR feedback infobar -->
+      <message name="IDS_VR_SHELL_FEEDBACK_INFOBAR_DESCRIPTION" desc="Description for infobar prompting the user for feedback on their VR browsing experience.">
+        Help improve the VR experience in Chrome
+      </message>
+      <message name="IDS_VR_SHELL_FEEDBACK_INFOBAR_FEEDBACK_BUTTON" desc="Brief button text asking the user to provide feedback in the VR feedback infobar.">
+        Provide feedback
+      </message>
+
       <!-- VR services check infobar -->
       <message name="IDS_VR_SERVICES_CHECK_INFOBAR_INSTALL_TEXT" desc="Text to be displayed in the VR Services check infobar. When a WebVR page is loaded if the VR services that are needed to display WebVR don't exist an infobar will be shown to the user prompting them to install VR services.">
         To view virtual reality content, install Google VR Services
@@ -2927,6 +3020,20 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
         VIDEO
       </message>
 
+      <!-- In-Product Help strings -->
+      <message name="IDS_IPH_DOWNLOAD_PAGE_FOR_OFFLINE_USAGE_TEXT" desc="The in-product-help message after a successful navigation prompting user to download the pages to view offline.">
+        Download pages to use them offline
+      </message>
+      <message name="IDS_IPH_DOWNLOAD_PAGE_FOR_OFFLINE_USAGE_ACCESSIBILITY_TEXT" desc="The in-product-help accessibility text after a successful navigation prompting user to download the pages to view offline.">
+        Download pages from the More options button to use them offline
+      </message>
+      <message name="IDS_IPH_DOWNLOAD_HOME_TEXT" desc="The in-product-help message to open download home after a restart.">
+        Find your files and pages in Downloads
+      </message>
+      <message name="IDS_IPH_DOWNLOAD_HOME_ACCESSIBILITY_TEXT" desc="The in-product-help accessibility text to open download home after a restart.">
+        Find your files and pages in Downloads from the More Options button
+      </message>
+
       <!-- Search Widget strings -->
       <message name="IDS_SEARCH_WIDGET_DEFAULT" desc="Default text for the search widget">
         Search
@@ -2938,6 +3045,41 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
       <!-- Launcher Shortcuts -->
       <message name="IDS_DISABLED_INCOGNITO_LAUNCHER_SHORTCUT_MESSAGE" desc="Text for a toast displayed prompting the user to remove the disabled 'New incognito tab' app shortcut and recreate it.">
         Remove and recreate this shortcut
+      </message>
+
+      <!-- Chrome Home -->
+      <message name="IDS_BOTTOM_SHEET_HELP_BUBBLE_MESSAGE" desc="Text displayed in a help bubble above the bottom navigation sheet prompting users to pull the sheet up to see their bookmarks and other content.">
+        Pull up to see bookmarks and more
+      </message>
+      <message name="IDS_BOTTOM_SHEET_ACCESSIBILITY_HELP_BUBBLE_MESSAGE" desc="Text displayed in a help bubble above the bottom navigation sheet prompting users to pull the sheet up to see their bookmarks and other content when accessibility is enabled.">
+        Pull up on the address bar to see bookmarks, downloads, and history
+      </message>
+      <message name="IDS_BOTTOM_SHEET_ACCESSIBILITY_TOOLBAR" desc="Accessibilty string read when the bottom toolbar, containing the adddress bar and some buttons, is focused. Informs users that they can pull up on the address bar to see their bookmarks and other content.">
+        Address bar. Pull up to see bookmarks, downloads, and history.
+      </message>
+      <message name="IDS_BOTTOM_SHEET_EXPAND_BUTTON_HELP_BUBBLE_MESSAGE" desc="Text displayed in a help bubble above the toolbar expand button prompting users to tap the button to see their bookmarks and other content.">
+        Tap to see bookmarks and more
+      </message>
+      <message name="IDS_BOTTOM_SHEET_ACCESSIBILITY_EXPAND_BUTTON_HELP_BUBBLE_MESSAGE" desc="Text displayed in a help bubble above the toolbar expand button prompting users to tap the button to see their bookmarks and other content when accessibility is enabled.">
+        Tap to see bookmarks, downloads, and history
+      </message>
+      <message name="IDS_BOTTOM_SHEET_OPENED" desc="Accessibility string read when the bottom navigation panel is opened.">
+        Navigation panel opened
+      </message>
+      <message name="IDS_BOTTOM_SHEET_CLOSED" desc="Accessibility string read when the bottom navigation panel is closed.">
+        Navigation panel closed
+      </message>
+      <message name="IDS_BOTTOM_SHEET_BOOKMARKS_TAB" desc="Accessibility string read when the bookmarks tab is selected.">
+        Bookmarks tab selected
+      </message>
+      <message name="IDS_BOTTOM_SHEET_DOWNLOADS_TAB" desc="Accessibility string read when the downloads tab is selected.">
+        Downloads tab selected
+      </message>
+      <message name="IDS_BOTTOM_SHEET_HISTORY_TAB" desc="Accessibility string read when the history tab is selected.">
+        History tab selected
+      </message>
+      <message name="IDS_BOTTOM_SHEET_HOME_TAB" desc="Accessibility string read when the home tab is selected.">
+        Home tab selected
       </message>
     </messages>
   </release>

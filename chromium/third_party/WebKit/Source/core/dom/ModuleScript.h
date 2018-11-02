@@ -7,13 +7,15 @@
 
 #include "bindings/core/v8/ScriptModule.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/ScriptWrappable.h"
-#include "bindings/core/v8/TraceWrapperV8Reference.h"
 #include "core/CoreExport.h"
+#include "core/dom/Modulator.h"
 #include "core/dom/Script.h"
+#include "platform/bindings/ScriptWrappable.h"
+#include "platform/bindings/TraceWrapperV8Reference.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/weborigin/KURL.h"
+#include "platform/wtf/text/TextPosition.h"
 #include "public/platform/WebURLRequest.h"
 
 namespace blink {
@@ -29,27 +31,45 @@ enum class ModuleInstantiationState {
 // https://html.spec.whatwg.org/multipage/webappapis.html#module-script
 class CORE_EXPORT ModuleScript final : public Script, public TraceWrapperBase {
  public:
+  // https://html.spec.whatwg.org/#creating-a-module-script
   static ModuleScript* Create(
-      ScriptModule record,
+      const String& source_text,
+      Modulator*,
       const KURL& base_url,
       const String& nonce,
-      ParserDisposition parser_state,
-      WebURLRequest::FetchCredentialsMode credentials_mode) {
-    return new ModuleScript(record, base_url, nonce, parser_state,
-                            credentials_mode);
-  }
+      ParserDisposition,
+      WebURLRequest::FetchCredentialsMode,
+      AccessControlStatus,
+      const TextPosition& start_position = TextPosition::MinimumPosition());
+
+  // Mostly corresponds to Create() but accepts ScriptModule as the argument
+  // and allows null ScriptModule.
+  static ModuleScript* CreateForTest(Modulator*,
+                                     ScriptModule,
+                                     const KURL& base_url,
+                                     const String& nonce,
+                                     ParserDisposition,
+                                     WebURLRequest::FetchCredentialsMode);
+
   ~ModuleScript() override = default;
 
-  ScriptModule& Record() { return record_; }
-  void ClearRecord() { record_ = ScriptModule(); }
+  ScriptModule Record() const;
   const KURL& BaseURL() const { return base_url_; }
 
   ModuleInstantiationState InstantiationState() const {
     return instantiation_state_;
   }
 
+  // Implements Step 7.1 of:
+  // https://html.spec.whatwg.org/multipage/webappapis.html#internal-module-script-graph-fetching-procedure
+  void SetInstantiationErrorAndClearRecord(ScriptValue error);
+  // Implements Step 7.2 of:
+  // https://html.spec.whatwg.org/multipage/webappapis.html#internal-module-script-graph-fetching-procedure
   void SetInstantiationSuccess();
-  void SetInstantiationError(v8::Isolate*, v8::Local<v8::Value> error);
+
+  v8::Local<v8::Value> CreateInstantiationError(v8::Isolate* isolate) const {
+    return instantiation_error_.NewLocal(isolate);
+  }
 
   ParserDisposition ParserState() const { return parser_state_; }
   WebURLRequest::FetchCredentialsMode CredentialsMode() const {
@@ -61,17 +81,21 @@ class CORE_EXPORT ModuleScript final : public Script, public TraceWrapperBase {
   DECLARE_TRACE_WRAPPERS();
 
  private:
-  ModuleScript(ScriptModule record,
+  ModuleScript(Modulator* settings_object,
+               ScriptModule record,
                const KURL& base_url,
                const String& nonce,
                ParserDisposition parser_state,
-               WebURLRequest::FetchCredentialsMode credentials_mode)
-      : record_(record),
-        base_url_(base_url),
-        instantiation_error_(this),
-        nonce_(nonce),
-        parser_state_(parser_state),
-        credentials_mode_(credentials_mode) {}
+               WebURLRequest::FetchCredentialsMode credentials_mode,
+               const String& source_text);
+
+  static ModuleScript* CreateInternal(const String& source_text,
+                                      Modulator*,
+                                      ScriptModule,
+                                      const KURL& base_url,
+                                      const String& nonce,
+                                      ParserDisposition,
+                                      WebURLRequest::FetchCredentialsMode);
 
   ScriptType GetScriptType() const override { return ScriptType::kModule; }
   bool IsEmpty() const override;
@@ -80,13 +104,20 @@ class CORE_EXPORT ModuleScript final : public Script, public TraceWrapperBase {
   void RunScript(LocalFrame*, const SecurityOrigin*) const override;
   String InlineSourceTextForCSP() const override;
 
-  // Note: A "module script"'s "setttings object" is ommitted, as we currently
-  // always have access to the corresponding Modulator when operating on a
-  // ModuleScript instance.
+  friend class ModulatorImpl;
+  friend class ModuleTreeLinkerTestModulator;
+  // Access this func only via ModulatorImpl::GetInstantiationError(),
+  // or via Modulator mocks for unit tests.
+  v8::Local<v8::Value> CreateInstantiationErrorInternal(
+      v8::Isolate* isolate) const {
+    return instantiation_error_.NewLocal(isolate);
+  }
+
   // https://html.spec.whatwg.org/multipage/webappapis.html#settings-object
+  Member<Modulator> settings_object_;
 
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-module-script-module-record
-  ScriptModule record_;
+  TraceWrapperV8Reference<v8::Module> record_;
 
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-module-script-base-url
   const KURL base_url_;
@@ -113,6 +144,9 @@ class CORE_EXPORT ModuleScript final : public Script, public TraceWrapperBase {
 
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-module-script-credentials-mode
   const WebURLRequest::FetchCredentialsMode credentials_mode_;
+
+  // For CSP check.
+  const String source_text_;
 };
 
 }  // namespace blink

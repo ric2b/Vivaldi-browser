@@ -31,6 +31,7 @@
 #ifndef WebFrameWidgetImpl_h
 #define WebFrameWidgetImpl_h
 
+#include "core/frame/WebFrameWidgetBase.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/heap/SelfKeepAlive.h"
 #include "platform/scroll/ScrollTypes.h"
@@ -40,18 +41,16 @@
 #include "public/platform/WebPoint.h"
 #include "public/platform/WebSize.h"
 #include "public/web/WebInputMethodController.h"
+#include "web/CompositorMutatorImpl.h"
 #include "web/PageWidgetDelegate.h"
-#include "web/WebFrameWidgetBase.h"
 #include "web/WebInputMethodControllerImpl.h"
 #include "web/WebLocalFrameImpl.h"
-#include "web/WebViewImpl.h"
 
 namespace blink {
 
 class CompositorAnimationHost;
 class Frame;
 class Element;
-class InspectorOverlay;
 class LocalFrame;
 class PaintLayerCompositor;
 class UserGestureToken;
@@ -184,15 +183,11 @@ class WebFrameWidgetImpl final
   WebInputEventResult HandleKeyEvent(const WebKeyboardEvent&) override;
   WebInputEventResult HandleCharEvent(const WebKeyboardEvent&) override;
 
-  InspectorOverlay* GetInspectorOverlay();
-
   // This method returns the focused frame belonging to this WebWidget, that
   // is, a focused frame with the same local root as the one corresponding
   // to this widget. It will return nullptr if no frame is focused or, the
   // focused frame has a different local root.
   LocalFrame* FocusedLocalFrameInWidget() const;
-
-  WebPlugin* FocusedPluginIfInputMethodSupported(LocalFrame*) const;
 
   LocalFrame* FocusedLocalFrameAvailableForIme() const;
 

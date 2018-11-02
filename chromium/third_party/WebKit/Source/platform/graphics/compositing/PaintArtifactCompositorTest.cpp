@@ -96,6 +96,10 @@ class PaintArtifactCompositorTestWithPropertyTrees
     return *web_layer_tree_view_->GetLayerTreeHost()->property_trees();
   }
 
+  const cc::LayerTreeHost& GetLayerTreeHost() {
+    return *web_layer_tree_view_->GetLayerTreeHost();
+  }
+
   int ElementIdToEffectNodeIndex(CompositorElementId element_id) {
     return web_layer_tree_view_->GetLayerTreeHost()
         ->property_trees()
@@ -141,6 +145,30 @@ class PaintArtifactCompositorTestWithPropertyTrees
     return paint_artifact_compositor_->GetExtraDataForTesting()
         ->content_layers[index]
         .get();
+  }
+
+  void AddSimpleRectChunk(TestPaintArtifact& artifact) {
+    artifact
+        .Chunk(TransformPaintPropertyNode::Root(),
+               ClipPaintPropertyNode::Root(), EffectPaintPropertyNode::Root())
+        .RectDrawing(FloatRect(100, 100, 200, 100), Color::kBlack);
+  }
+
+  void CreateSimpleArtifactWithOpacity(TestPaintArtifact& artifact,
+                                       float opacity,
+                                       bool include_preceding_chunk,
+                                       bool include_subsequent_chunk) {
+    if (include_preceding_chunk)
+      AddSimpleRectChunk(artifact);
+    RefPtr<EffectPaintPropertyNode> effect =
+        CreateOpacityOnlyEffect(EffectPaintPropertyNode::Root(), opacity);
+    artifact
+        .Chunk(TransformPaintPropertyNode::Root(),
+               ClipPaintPropertyNode::Root(), effect)
+        .RectDrawing(FloatRect(0, 0, 100, 100), Color::kBlack);
+    if (include_subsequent_chunk)
+      AddSimpleRectChunk(artifact);
+    Update(artifact.Build());
   }
 
  private:
@@ -690,8 +718,7 @@ class FakeScrollClient : public WebLayerScrollClient {
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneScrollNode) {
   FakeScrollClient scroll_client;
 
-  CompositorElementId expected_compositor_element_id =
-      CompositorElementId(2, 0);
+  CompositorElementId expected_compositor_element_id = CompositorElementId(2);
   RefPtr<TransformPaintPropertyNode> scroll_translation =
       TransformPaintPropertyNode::CreateScrollTranslation(
           TransformPaintPropertyNode::Root(),
@@ -747,6 +774,9 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneScrollNode) {
   EXPECT_EQ(transform_node_index, transform_node.id);
 
   EXPECT_EQ(0u, scroll_client.did_scroll_count);
+  // TODO(pdr): The PaintArtifactCompositor should set the scroll clip layer id
+  // so the Layer is scrollable. This call should be removed.
+  layer->SetScrollClipLayerId(layer->id());
   layer->SetScrollOffsetFromImplSide(gfx::ScrollOffset(1, 2));
   EXPECT_EQ(1u, scroll_client.did_scroll_count);
   EXPECT_EQ(gfx::ScrollOffset(1, 2), scroll_client.last_scroll_offset);
@@ -799,8 +829,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedScrollNodes) {
   RefPtr<EffectPaintPropertyNode> effect =
       CreateOpacityOnlyEffect(EffectPaintPropertyNode::Root(), 0.5);
 
-  CompositorElementId expected_compositor_element_id_a =
-      CompositorElementId(2, 0);
+  CompositorElementId expected_compositor_element_id_a = CompositorElementId(2);
   RefPtr<TransformPaintPropertyNode> scroll_translation_a =
       TransformPaintPropertyNode::CreateScrollTranslation(
           TransformPaintPropertyNode::Root(),
@@ -811,8 +840,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedScrollNodes) {
           MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects,
           nullptr);
 
-  CompositorElementId expected_compositor_element_id_b =
-      CompositorElementId(3, 0);
+  CompositorElementId expected_compositor_element_id_b = CompositorElementId(3);
   RefPtr<TransformPaintPropertyNode> scroll_translation_b =
       TransformPaintPropertyNode::CreateScrollTranslation(
           scroll_translation_a, TransformationMatrix().Translate(37, 41),
@@ -1620,7 +1648,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
 }
 
 PassRefPtr<EffectPaintPropertyNode> CreateSampleEffectNodeWithElementId() {
-  CompositorElementId expected_compositor_element_id(2, 0);
+  CompositorElementId expected_compositor_element_id(2);
   float opacity = 2.0 / 255.0;
   return EffectPaintPropertyNode::Create(
       EffectPaintPropertyNode::Root(), TransformPaintPropertyNode::Root(),
@@ -1631,7 +1659,7 @@ PassRefPtr<EffectPaintPropertyNode> CreateSampleEffectNodeWithElementId() {
 
 PassRefPtr<TransformPaintPropertyNode>
 CreateSampleTransformNodeWithElementId() {
-  CompositorElementId expected_compositor_element_id(3, 0);
+  CompositorElementId expected_compositor_element_id(3);
   return TransformPaintPropertyNode::Create(
       TransformPaintPropertyNode::Root(), TransformationMatrix().Rotate(90),
       FloatPoint3D(100, 100, 0), false, 0, kCompositingReason3DTransform,
@@ -2073,6 +2101,200 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
       composited_element_ids.Contains(transform->GetCompositorElementId()));
   EXPECT_TRUE(
       composited_element_ids.Contains(effect->GetCompositorElementId()));
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SkipChunkWithOpacityZero) {
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0, false, false);
+    ASSERT_EQ(0u, ContentLayerCount());
+  }
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0, true, false);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0, true, true);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0, false, true);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SkipChunkWithTinyOpacity) {
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0.0003f, false, false);
+    ASSERT_EQ(0u, ContentLayerCount());
+  }
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0.0003f, true, false);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0.0003f, true, true);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0.0003f, false, true);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
+       DontSkipChunkWithMinimumOpacity) {
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0.0004f, false, false);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0.0004f, true, false);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0.0004f, true, true);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0.0004f, false, true);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
+       DontSkipChunkWithAboveMinimumOpacity) {
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0.3f, false, false);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0.3f, true, false);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0.3f, true, true);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+  {
+    TestPaintArtifact artifact;
+    CreateSimpleArtifactWithOpacity(artifact, 0.3f, false, true);
+    ASSERT_EQ(1u, ContentLayerCount());
+  }
+}
+
+PassRefPtr<EffectPaintPropertyNode> CreateEffectWithOpacityAndReason(
+    float opacity,
+    CompositingReasons reason,
+    RefPtr<EffectPaintPropertyNode> parent = nullptr) {
+  return EffectPaintPropertyNode::Create(
+      parent ? parent : EffectPaintPropertyNode::Root(),
+      TransformPaintPropertyNode::Root(), ClipPaintPropertyNode::Root(),
+      kColorFilterNone, CompositorFilterOperations(), opacity,
+      SkBlendMode::kSrcOver, reason);
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
+       DontSkipChunkWithTinyOpacityAndDirectCompositingReason) {
+  RefPtr<EffectPaintPropertyNode> effect =
+      CreateEffectWithOpacityAndReason(0.0001f, kCompositingReasonCanvas);
+  TestPaintArtifact artifact;
+  artifact
+      .Chunk(TransformPaintPropertyNode::Root(), ClipPaintPropertyNode::Root(),
+             effect)
+      .RectDrawing(FloatRect(0, 0, 100, 100), Color::kBlack);
+  Update(artifact.Build());
+  ASSERT_EQ(1u, ContentLayerCount());
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
+       SkipChunkWithTinyOpacityAndVisibleChildEffectNode) {
+  RefPtr<EffectPaintPropertyNode> tinyEffect =
+      CreateEffectWithOpacityAndReason(0.0001f, kCompositingReasonNone);
+  RefPtr<EffectPaintPropertyNode> visibleEffect =
+      CreateEffectWithOpacityAndReason(0.5f, kCompositingReasonNone,
+                                       tinyEffect);
+  TestPaintArtifact artifact;
+  artifact
+      .Chunk(TransformPaintPropertyNode::Root(), ClipPaintPropertyNode::Root(),
+             visibleEffect)
+      .RectDrawing(FloatRect(0, 0, 100, 100), Color::kBlack);
+  Update(artifact.Build());
+  ASSERT_EQ(0u, ContentLayerCount());
+}
+
+TEST_F(
+    PaintArtifactCompositorTestWithPropertyTrees,
+    DontSkipChunkWithTinyOpacityAndVisibleChildEffectNodeWithCompositingParent) {
+  RefPtr<EffectPaintPropertyNode> tinyEffect =
+      CreateEffectWithOpacityAndReason(0.0001f, kCompositingReasonCanvas);
+  RefPtr<EffectPaintPropertyNode> visibleEffect =
+      CreateEffectWithOpacityAndReason(0.5f, kCompositingReasonNone,
+                                       tinyEffect);
+  TestPaintArtifact artifact;
+  artifact
+      .Chunk(TransformPaintPropertyNode::Root(), ClipPaintPropertyNode::Root(),
+             visibleEffect)
+      .RectDrawing(FloatRect(0, 0, 100, 100), Color::kBlack);
+  Update(artifact.Build());
+  ASSERT_EQ(1u, ContentLayerCount());
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
+       SkipChunkWithTinyOpacityAndVisibleChildEffectNodeWithCompositingChild) {
+  RefPtr<EffectPaintPropertyNode> tinyEffect =
+      CreateEffectWithOpacityAndReason(0.0001f, kCompositingReasonNone);
+  RefPtr<EffectPaintPropertyNode> visibleEffect =
+      CreateEffectWithOpacityAndReason(0.5f, kCompositingReasonCanvas,
+                                       tinyEffect);
+  TestPaintArtifact artifact;
+  artifact
+      .Chunk(TransformPaintPropertyNode::Root(), ClipPaintPropertyNode::Root(),
+             visibleEffect)
+      .RectDrawing(FloatRect(0, 0, 100, 100), Color::kBlack);
+  Update(artifact.Build());
+  ASSERT_EQ(0u, ContentLayerCount());
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
+       UpdateManagesLayerElementIds) {
+  RefPtr<TransformPaintPropertyNode> transform =
+      CreateSampleTransformNodeWithElementId();
+  CompositorElementId element_id = transform->GetCompositorElementId();
+
+  {
+    TestPaintArtifact artifact;
+    artifact
+        .Chunk(transform, ClipPaintPropertyNode::Root(),
+               EffectPaintPropertyNode::Root())
+        .RectDrawing(FloatRect(0, 0, 100, 100), Color::kBlack);
+
+    Update(artifact.Build());
+    ASSERT_EQ(1u, ContentLayerCount());
+    ASSERT_TRUE(GetLayerTreeHost().LayerByElementId(element_id));
+  }
+
+  {
+    TestPaintArtifact artifact;
+    ASSERT_TRUE(GetLayerTreeHost().LayerByElementId(element_id));
+    Update(artifact.Build());
+    ASSERT_EQ(0u, ContentLayerCount());
+    ASSERT_FALSE(GetLayerTreeHost().LayerByElementId(element_id));
+  }
 }
 
 }  // namespace blink

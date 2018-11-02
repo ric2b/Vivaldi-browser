@@ -67,8 +67,9 @@ void LayoutTextControl::StyleDidChange(StyleDifference diff,
 
 static inline void UpdateUserModifyProperty(TextControlElement& node,
                                             ComputedStyle& style) {
-  style.SetUserModify(node.IsDisabledOrReadOnly() ? READ_ONLY
-                                                  : READ_WRITE_PLAINTEXT_ONLY);
+  style.SetUserModify(node.IsDisabledOrReadOnly()
+                          ? EUserModify::kReadOnly
+                          : EUserModify::kReadWritePlaintextOnly);
 }
 
 void LayoutTextControl::AdjustInnerEditorStyle(
@@ -131,7 +132,7 @@ void LayoutTextControl::ComputeLogicalHeight(
     if (Style()->OverflowInlineDirection() == EOverflow::kScroll ||
         (Style()->OverflowInlineDirection() == EOverflow::kAuto &&
          inner_editor->GetLayoutObject()->Style()->OverflowWrap() ==
-             kNormalOverflowWrap))
+             EOverflowWrap::kNormal))
       logical_height += ScrollbarThickness();
 
     // FIXME: The logical height of the inner text box should have been added

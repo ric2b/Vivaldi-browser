@@ -41,7 +41,7 @@ std::string StyledMarkupSerializerTest::Serialize(
       GetDocument().body(), PositionAnchorType::kBeforeChildren);
   PositionTemplate<Strategy> end = PositionTemplate<Strategy>(
       GetDocument().body(), PositionAnchorType::kAfterChildren);
-  return CreateMarkup(start, end, should_annotate).Utf8().Data();
+  return CreateMarkup(start, end, should_annotate).Utf8().data();
 }
 
 template <typename Strategy>
@@ -49,7 +49,7 @@ std::string StyledMarkupSerializerTest::SerializePart(
     const PositionTemplate<Strategy>& start,
     const PositionTemplate<Strategy>& end,
     EAnnotateForInterchange should_annotate) {
-  return CreateMarkup(start, end, should_annotate).Utf8().Data();
+  return CreateMarkup(start, end, should_annotate).Utf8().data();
 }
 
 TEST_F(StyledMarkupSerializerTest, TextOnly) {
@@ -223,8 +223,8 @@ TEST_F(StyledMarkupSerializerTest, ShadowTreeStyle) {
       "<p id='host' style='color: red'><span style='font-weight: bold;'><span "
       "id='one'>11</span></span></p>\n";
   SetBodyContent(body_content);
-  Element* one = GetDocument().GetElementById("one");
-  Text* text = ToText(one->FirstChild());
+  Element* one = GetDocument().getElementById("one");
+  Text* text = ToText(one->firstChild());
   Position start_dom(text, 0);
   Position end_dom(text, 2);
   const std::string& serialized_dom = SerializePart<EditingStrategy>(
@@ -236,8 +236,8 @@ TEST_F(StyledMarkupSerializerTest, ShadowTreeStyle) {
       "<span style='font-weight: bold'><content select=#one></content></span>";
   SetBodyContent(body_content);
   SetShadowContent(shadow_content, "host");
-  one = GetDocument().GetElementById("one");
-  text = ToText(one->FirstChild());
+  one = GetDocument().getElementById("one");
+  text = ToText(one->firstChild());
   PositionInFlatTree start_ict(text, 0);
   PositionInFlatTree end_ict(text, 2);
   const std::string& serialized_ict = SerializePart<EditingInFlatTreeStrategy>(
@@ -251,10 +251,10 @@ TEST_F(StyledMarkupSerializerTest, AcrossShadow) {
       "<p id='host1'>[<span id='one'>11</span>]</p><p id='host2'>[<span "
       "id='two'>22</span>]</p>";
   SetBodyContent(body_content);
-  Element* one = GetDocument().GetElementById("one");
-  Element* two = GetDocument().GetElementById("two");
-  Position start_dom(ToText(one->FirstChild()), 0);
-  Position end_dom(ToText(two->FirstChild()), 2);
+  Element* one = GetDocument().getElementById("one");
+  Element* two = GetDocument().getElementById("two");
+  Position start_dom(ToText(one->firstChild()), 0);
+  Position end_dom(ToText(two->firstChild()), 2);
   const std::string& serialized_dom = SerializePart<EditingStrategy>(
       start_dom, end_dom, kAnnotateForInterchange);
 
@@ -266,10 +266,10 @@ TEST_F(StyledMarkupSerializerTest, AcrossShadow) {
   SetBodyContent(body_content);
   SetShadowContent(shadow_content1, "host1");
   SetShadowContent(shadow_content2, "host2");
-  one = GetDocument().GetElementById("one");
-  two = GetDocument().GetElementById("two");
-  PositionInFlatTree start_ict(ToText(one->FirstChild()), 0);
-  PositionInFlatTree end_ict(ToText(two->FirstChild()), 2);
+  one = GetDocument().getElementById("one");
+  two = GetDocument().getElementById("two");
+  PositionInFlatTree start_ict(ToText(one->firstChild()), 0);
+  PositionInFlatTree end_ict(ToText(two->firstChild()), 2);
   const std::string& serialized_ict = SerializePart<EditingInFlatTreeStrategy>(
       start_ict, end_ict, kAnnotateForInterchange);
 
@@ -281,8 +281,8 @@ TEST_F(StyledMarkupSerializerTest, AcrossInvisibleElements) {
       "<span id='span1' style='display: none'>11</span><span id='span2' "
       "style='display: none'>22</span>";
   SetBodyContent(body_content);
-  Element* span1 = GetDocument().GetElementById("span1");
-  Element* span2 = GetDocument().GetElementById("span2");
+  Element* span1 = GetDocument().getElementById("span1");
+  Element* span2 = GetDocument().getElementById("span2");
   Position start_dom = Position::FirstPositionInNode(span1);
   Position end_dom = Position::LastPositionInNode(span2);
   EXPECT_EQ("", SerializePart<EditingStrategy>(start_dom, end_dom));

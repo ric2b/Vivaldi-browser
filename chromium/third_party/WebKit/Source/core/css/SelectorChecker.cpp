@@ -66,8 +66,10 @@ namespace blink {
 using namespace HTMLNames;
 
 static bool IsFrameFocused(const Element& element) {
-  return element.GetDocument().GetFrame() &&
-         element.GetDocument().GetFrame()->Selection().IsFocusedAndActive();
+  return element.GetDocument().GetFrame() && element.GetDocument()
+                                                 .GetFrame()
+                                                 ->Selection()
+                                                 .FrameIsFocusedAndActive();
 }
 
 static bool MatchesSpatialNavigationFocusPseudoClass(const Element& element) {
@@ -260,6 +262,17 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForSubSelector(
       dynamic_pseudo != kPseudoIdNone &&
       (scrollbar_ || dynamic_pseudo == kPseudoIdScrollbarCorner ||
        dynamic_pseudo == kPseudoIdResizer);
+
+  // Only match pseudo classes following scrollbar pseudo elements while
+  // actually computing style for scrollbar pseudo elements. This is to
+  // avoid incorrectly setting affected-by flags on actual elements for
+  // cases like: div::-webkit-scrollbar-thumb:hover { }
+  if (context.in_rightmost_compound && dynamic_pseudo != kPseudoIdNone &&
+      dynamic_pseudo != kPseudoIdSelection &&
+      !next_context.has_scrollbar_pseudo) {
+    return kSelectorFailsCompletely;
+  }
+
   next_context.has_selection_pseudo = dynamic_pseudo == kPseudoIdSelection;
   next_context.is_sub_selector = true;
   return MatchSelector(next_context, result);
@@ -311,6 +324,15 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
                                      relation != CSSSelector::kChild)))
     next_context.visited_match_type = kVisitedMatchDisabled;
 
+  // The ParentElement() method will walk up to the host element for :host() and
+  // :host-context() rules in the same scope as the element we are matching.
+  // For kSharingRules, we don't know which scope the rules came from, so we are
+  // using nullptr as scope. This is a workaround to make ParentElement() walk
+  // up to the host when matching :host rules by assuming the scope of the :host
+  // rule is the same as the element we are matching rules for.
+  if (mode_ == kSharingRules && next_context.selector->IsHostPseudoClass())
+    next_context.scope = next_context.element->ContainingShadowRoot();
+
   next_context.in_rightmost_compound = false;
   next_context.is_sub_selector = false;
   next_context.previous_element = context.element;
@@ -332,7 +354,8 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
         return MatchForPseudoShadow(
             next_context, context.element->ContainingShadowRoot(), result);
 
-      for (next_context.element = ParentElement(context); next_context.element;
+      for (next_context.element = ParentElement(next_context);
+           next_context.element;
            next_context.element = ParentElement(next_context)) {
         MatchStatus match = MatchSelector(next_context, result);
         if (match == kSelectorMatches || match == kSelectorFailsCompletely)
@@ -349,7 +372,7 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
         return MatchForPseudoShadow(next_context, context.element->parentNode(),
                                     result);
 
-      next_context.element = ParentElement(context);
+      next_context.element = ParentElement(next_context);
       if (!next_context.element)
         return kSelectorFailsCompletely;
       return MatchSelector(next_context, result);
@@ -746,7 +769,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       return CheckPseudoNot(context, result);
     case CSSSelector::kPseudoEmpty: {
       bool result = true;
-      for (Node* n = element.FirstChild(); n; n = n->nextSibling()) {
+      for (Node* n = element.firstChild(); n; n = n->nextSibling()) {
         if (n->IsElementNode()) {
           result = false;
           break;

@@ -62,7 +62,7 @@ void GenericFontFamilySettings::SetGenericFontFamilyMap(
     ScriptFontFamilyMap& font_map,
     const AtomicString& family,
     UScriptCode script) {
-  ScriptFontFamilyMap::iterator it = font_map.Find(static_cast<int>(script));
+  ScriptFontFamilyMap::iterator it = font_map.find(static_cast<int>(script));
   if (family.IsEmpty()) {
     if (it == font_map.end())
       return;
@@ -78,7 +78,7 @@ const AtomicString& GenericFontFamilySettings::GenericFontFamilyForScript(
     const ScriptFontFamilyMap& font_map,
     UScriptCode script) const {
   ScriptFontFamilyMap::iterator it =
-      const_cast<ScriptFontFamilyMap&>(font_map).Find(static_cast<int>(script));
+      const_cast<ScriptFontFamilyMap&>(font_map).find(static_cast<int>(script));
   if (it != font_map.end()) {
     // Replace with the first available font if it starts with ",".
     if (!it->value.IsEmpty() && it->value[0] == ',')
@@ -180,13 +180,13 @@ bool GenericFontFamilySettings::UpdatePictograph(const AtomicString& family,
 }
 
 void GenericFontFamilySettings::Reset() {
-  standard_font_family_map_.Clear();
-  serif_font_family_map_.Clear();
-  fixed_font_family_map_.Clear();
-  sans_serif_font_family_map_.Clear();
-  cursive_font_family_map_.Clear();
-  fantasy_font_family_map_.Clear();
-  pictograph_font_family_map_.Clear();
+  standard_font_family_map_.clear();
+  serif_font_family_map_.clear();
+  fixed_font_family_map_.clear();
+  sans_serif_font_family_map_.clear();
+  cursive_font_family_map_.clear();
+  fantasy_font_family_map_.clear();
+  pictograph_font_family_map_.clear();
 }
 
 }  // namespace blink

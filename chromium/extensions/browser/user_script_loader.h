@@ -42,8 +42,8 @@ namespace extensions {
 class UserScriptLoader : public content::NotificationObserver {
  public:
   using LoadScriptsCallback =
-      base::Callback<void(std::unique_ptr<UserScriptList>,
-                          std::unique_ptr<base::SharedMemory>)>;
+      base::OnceCallback<void(std::unique_ptr<UserScriptList>,
+                              std::unique_ptr<base::SharedMemory>)>;
   class Observer {
    public:
     virtual void OnScriptsLoaded(UserScriptLoader* loader) = 0;
@@ -95,7 +95,8 @@ class UserScriptLoader : public content::NotificationObserver {
   void RemoveObserver(Observer* observer);
 
  protected:
-  // Allows the derived classes have different ways to load user scripts.
+  // Allows the derived classes to have different ways to load user scripts.
+  // This may not be synchronous with the calls to Add/Remove/Clear scripts.
   virtual void LoadScripts(std::unique_ptr<UserScriptList> user_scripts,
                            const std::set<HostID>& changed_hosts,
                            const std::set<int>& added_script_ids,

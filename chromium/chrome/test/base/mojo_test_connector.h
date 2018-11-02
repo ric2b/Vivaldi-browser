@@ -42,25 +42,52 @@ class MojoTestConnector {
   // browser_tests.
   static const char kMashApp[];
 
-  explicit MojoTestConnector(std::unique_ptr<base::Value> catalog_contents);
+  // Enumeration of the possible chrome-ash configurations supported by this
+  // test.
+  enum class Config {
+    // Aura is backed by mus, but chrome and ash are still in the same process.
+    MUS,
+
+    // Aura is backed by mus and chrome and ash are in separate processes. In
+    // this mode chrome code can only use ash code in ash/public/cpp.
+    MASH,
+  };
+
+  MojoTestConnector(std::unique_ptr<base::Value> catalog_contents,
+                    Config config);
   ~MojoTestConnector();
 
+  service_manager::BackgroundServiceManager* background_service_manager() {
+    return background_service_manager_.get();
+  }
+
+  // Initializes the Mojo environment, and IPC thread.
+  void Init();
+
   // Initializes the background thread the ServiceManager runs on.
-  service_manager::mojom::ServiceRequest Init();
+  service_manager::mojom::ServiceRequest InitBackgroundServiceManager();
 
   std::unique_ptr<content::TestState> PrepareForTest(
       base::CommandLine* command_line,
-      base::TestLauncher::LaunchOptions* test_launch_options);
+      base::TestLauncher::LaunchOptions* test_launch_options,
+      base::OnceClosure on_process_launched);
+
+  void StartService(const std::string& service_name);
 
  private:
   class ServiceProcessLauncherDelegateImpl;
 
+  const Config config_;
+
   std::unique_ptr<ServiceProcessLauncherDelegateImpl>
       service_process_launcher_delegate_;
-  service_manager::BackgroundServiceManager background_service_manager_;
+  std::unique_ptr<service_manager::BackgroundServiceManager>
+      background_service_manager_;
 
   std::unique_ptr<base::Thread> ipc_thread_;
   std::unique_ptr<mojo::edk::ScopedIPCSupport> ipc_support_;
+
+  std::unique_ptr<base::Value> catalog_contents_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoTestConnector);
 };

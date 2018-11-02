@@ -93,6 +93,7 @@ class ICCProfile;
 
 namespace content {
 
+class IdleUserDetector;
 class RendererDateTimePicker;
 class RenderViewImplTest;
 class RenderViewObserver;
@@ -275,7 +276,7 @@ class CONTENT_EXPORT RenderViewImpl
   blink::WebScreenInfo GetScreenInfo() override;
   void SetToolTipText(const blink::WebString&,
                       blink::WebTextDirection hint) override;
-  void SetTouchAction(blink::WebTouchAction touchAction) override;
+  void SetTouchAction(cc::TouchAction touchAction) override;
   void ShowUnhandledTapUIIfNeeded(const blink::WebPoint& tappedPosition,
                                   const blink::WebNode& tappedNode,
                                   bool pageChanged) override;
@@ -351,7 +352,7 @@ class CONTENT_EXPORT RenderViewImpl
   int GetRoutingID() const override;
   gfx::Size GetSize() const override;
   float GetDeviceScaleFactor() const override;
-  WebPreferences& GetWebkitPreferences() override;
+  const WebPreferences& GetWebkitPreferences() override;
   void SetWebkitPreferences(const WebPreferences& preferences) override;
   blink::WebView* GetWebView() override;
   blink::WebFrameWidget* GetWebFrameWidget() override;
@@ -381,6 +382,11 @@ class CONTENT_EXPORT RenderViewImpl
     return weak_ptr_factory_.GetWeakPtr();
   }
 
+  InputEventAckState HandleInputEvent(
+      const blink::WebCoalescedInputEvent& input_event,
+      const ui::LatencyInfo& latency_info,
+      InputEventDispatchType dispatch_type) override;
+
  protected:
   // RenderWidget overrides:
   blink::WebWidget* GetWebWidget() const override;
@@ -389,7 +395,6 @@ class CONTENT_EXPORT RenderViewImpl
   void OnResize(const ResizeParams& params) override;
   void OnSetFocus(bool enable) override;
   GURL GetURLForGraphicsContext3D() override;
-  void OnOrientationChange() override;
   void DidCommitCompositorFrame() override;
   void DidCompletePageScaleAnimation() override;
   void OnDeviceScaleFactorChanged() override;
@@ -562,6 +567,7 @@ class CONTENT_EXPORT RenderViewImpl
   void OnSetZoomLevel(PageMsg_SetZoomLevel_Command command, double zoom_level);
   void OnPageWasHidden();
   void OnPageWasShown();
+  void OnUpdateScreenInfo(const ScreenInfo& screen_info);
 
   void ApplyVivaldiSpecificPreferences();
 
@@ -813,6 +819,8 @@ class CONTENT_EXPORT RenderViewImpl
 
   typedef std::map<cc::SharedBitmapId, cc::SharedBitmap*> BitmapMap;
   BitmapMap disambiguation_bitmaps_;
+
+  std::unique_ptr<IdleUserDetector> idle_user_detector_;
 
   // ---------------------------------------------------------------------------
   // ADDING NEW DATA? Please see if it fits appropriately in one of the above

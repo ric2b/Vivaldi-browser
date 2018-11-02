@@ -155,7 +155,7 @@ static PositionInFlatTree AdjustPositionRespectUserSelectAll(
 
 // Updating the selection is considered side-effect of the event and so it
 // doesn't impact the handled state.
-bool SelectionController::HandleMousePressEventSingleClick(
+bool SelectionController::HandleSingleClick(
     const MouseEventWithHitTestResults& event) {
   TRACE_EVENT0("blink",
                "SelectionController::handleMousePressEventSingleClick");
@@ -348,14 +348,16 @@ void SelectionController::UpdateSelectionForMouseDrag(
   if (!target)
     return;
 
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   frame_->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   const PositionWithAffinity& raw_target_position =
-      PositionRespectingEditingBoundary(
-          Selection().ComputeVisibleSelectionInDOMTreeDeprecated().Start(),
-          hit_test_result.LocalPoint(), target);
+      Selection().SelectionHasFocus()
+          ? PositionRespectingEditingBoundary(
+                Selection().ComputeVisibleSelectionInDOMTree().Start(),
+                hit_test_result.LocalPoint(), target)
+          : PositionWithAffinity();
   VisiblePositionInFlatTree target_position = CreateVisiblePosition(
       FromPositionInDOMTree<EditingInFlatTreeStrategy>(raw_target_position));
   // Don't modify the selection if we're not on a node.
@@ -519,14 +521,14 @@ void SelectionController::SelectClosestMisspellingFromHitTestResult(
   if (pos.IsNotNull()) {
     const PositionInFlatTree& marker_position =
         pos.DeepEquivalent().ParentAnchoredEquivalent();
-    DocumentMarkerVector markers =
-        inner_node->GetDocument().Markers().MarkersInRange(
-            EphemeralRange(ToPositionInDOMTree(marker_position)),
+    const DocumentMarker* const marker =
+        inner_node->GetDocument().Markers().MarkerAtPosition(
+            ToPositionInDOMTree(marker_position),
             DocumentMarker::MisspellingMarkers());
-    if (markers.size() == 1) {
+    if (marker) {
       Node* container_node = marker_position.ComputeContainerNode();
-      const PositionInFlatTree start(container_node, markers[0]->StartOffset());
-      const PositionInFlatTree end(container_node, markers[0]->EndOffset());
+      const PositionInFlatTree start(container_node, marker->StartOffset());
+      const PositionInFlatTree end(container_node, marker->EndOffset());
       new_selection = CreateVisibleSelection(
           SelectionInFlatTree::Builder().Collapse(start).Extend(end).Build());
     }
@@ -659,7 +661,7 @@ void SelectionController::SetNonDirectionalSelectionIfNeeded(
     TextGranularity granularity,
     EndPointsAdjustmentMode endpoints_adjustment_mode,
     HandleVisibility handle_visibility) {
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -739,7 +741,7 @@ void SelectionController::SetCaretAtHitTestResult(
       kCharacterGranularity, HandleVisibility::kVisible);
 }
 
-bool SelectionController::HandleMousePressEventDoubleClick(
+bool SelectionController::HandleDoubleClick(
     const MouseEventWithHitTestResults& event) {
   TRACE_EVENT0("blink",
                "SelectionController::handleMousePressEventDoubleClick");
@@ -748,7 +750,7 @@ bool SelectionController::HandleMousePressEventDoubleClick(
     return false;
 
   if (!mouse_down_allows_multi_click_)
-    return HandleMousePressEventSingleClick(event);
+    return HandleSingleClick(event);
 
   if (event.Event().button != WebPointerProperties::Button::kLeft)
     return false;
@@ -766,7 +768,7 @@ bool SelectionController::HandleMousePressEventDoubleClick(
   return true;
 }
 
-bool SelectionController::HandleMousePressEventTripleClick(
+bool SelectionController::HandleTripleClick(
     const MouseEventWithHitTestResults& event) {
   TRACE_EVENT0("blink",
                "SelectionController::handleMousePressEventTripleClick");
@@ -777,7 +779,7 @@ bool SelectionController::HandleMousePressEventTripleClick(
   }
 
   if (!mouse_down_allows_multi_click_)
-    return HandleMousePressEventSingleClick(event);
+    return HandleSingleClick(event);
 
   if (event.Event().button != WebPointerProperties::Button::kLeft)
     return false;
@@ -809,8 +811,10 @@ bool SelectionController::HandleMousePressEventTripleClick(
                         : HandleVisibility::kNotVisible);
 }
 
-void SelectionController::HandleMousePressEvent(
+bool SelectionController::HandleMousePressEvent(
     const MouseEventWithHitTestResults& event) {
+  TRACE_EVENT0("blink", "SelectionController::handleMousePressEvent");
+
   // If we got the event back, that must mean it wasn't prevented,
   // so it's allowed to start a drag or selection if it wasn't in a scrollbar.
   mouse_down_may_start_select_ =
@@ -820,16 +824,21 @@ void SelectionController::HandleMousePressEvent(
   if (!Selection().IsAvailable()) {
     // "gesture-tap-frame-removed.html" reaches here.
     mouse_down_allows_multi_click_ = !event.Event().FromTouch();
-    return;
+  } else {
+    // Avoid double-tap touch gesture confusion by restricting multi-click side
+    // effects, e.g., word selection, to editable regions.
+    mouse_down_allows_multi_click_ =
+        !event.Event().FromTouch() ||
+        Selection()
+            .ComputeVisibleSelectionInDOMTreeDeprecated()
+            .HasEditableStyle();
   }
 
-  // Avoid double-tap touch gesture confusion by restricting multi-click side
-  // effects, e.g., word selection, to editable regions.
-  mouse_down_allows_multi_click_ =
-      !event.Event().FromTouch() ||
-      Selection()
-          .ComputeVisibleSelectionInDOMTreeDeprecated()
-          .HasEditableStyle();
+  if (event.Event().click_count >= 3)
+    return HandleTripleClick(event);
+  if (event.Event().click_count == 2)
+    return HandleDoubleClick(event);
+  return HandleSingleClick(event);
 }
 
 void SelectionController::HandleMouseDraggedEvent(
@@ -838,6 +847,8 @@ void SelectionController::HandleMouseDraggedEvent(
     const LayoutPoint& drag_start_pos,
     Node* mouse_press_node,
     const IntPoint& last_known_mouse_position) {
+  TRACE_EVENT0("blink", "SelectionController::handleMouseDraggedEvent");
+
   if (!Selection().IsAvailable())
     return;
   if (selection_state_ != SelectionState::kExtendedSelection) {
@@ -875,6 +886,8 @@ void SelectionController::UpdateSelectionForMouseDrag(
 bool SelectionController::HandleMouseReleaseEvent(
     const MouseEventWithHitTestResults& event,
     const LayoutPoint& drag_start_pos) {
+  TRACE_EVENT0("blink", "SelectionController::handleMouseReleaseEvent");
+
   if (!Selection().IsAvailable())
     return false;
 
@@ -889,7 +902,7 @@ bool SelectionController::HandleMouseReleaseEvent(
       drag_start_pos == FlooredIntPoint(event.Event().PositionInRootFrame()) &&
       Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsRange() &&
       event.Event().button != WebPointerProperties::Button::kRight) {
-    // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+    // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
     // needs to be audited.  See http://crbug.com/590369 for more details.
     frame_->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -910,7 +923,7 @@ bool SelectionController::HandleMouseReleaseEvent(
     handled = true;
   }
 
-  Selection().NotifyLayoutObjectOfSelectionChange(kUserTriggered);
+  Selection().NotifyTextControlOfSelectionChange(kUserTriggered);
 
   Selection().SelectFrameElementInParentIfFullySelected();
 
@@ -958,8 +971,9 @@ bool SelectionController::HandlePasteGlobalSelection(
 }
 
 bool SelectionController::HandleGestureLongPress(
-    const WebGestureEvent& gesture_event,
     const HitTestResult& hit_test_result) {
+  TRACE_EVENT0("blink", "SelectionController::handleGestureLongPress");
+
   if (!Selection().IsAvailable())
     return false;
   if (hit_test_result.IsLiveLink())
@@ -986,11 +1000,15 @@ bool SelectionController::HandleGestureLongPress(
 
 void SelectionController::HandleGestureTwoFingerTap(
     const GestureEventWithHitTestResults& targeted_event) {
+  TRACE_EVENT0("blink", "SelectionController::handleGestureTwoFingerTap");
+
   SetCaretAtHitTestResult(targeted_event.GetHitTestResult());
 }
 
 void SelectionController::HandleGestureLongTap(
     const GestureEventWithHitTestResults& targeted_event) {
+  TRACE_EVENT0("blink", "SelectionController::handleGestureLongTap");
+
   SetCaretAtHitTestResult(targeted_event.GetHitTestResult());
 }
 
@@ -1002,13 +1020,10 @@ static bool HitTestResultIsMisspelled(const HitTestResult& result) {
       inner_node->GetLayoutObject()->PositionForPoint(result.LocalPoint()));
   if (pos.IsNull())
     return false;
-  return inner_node->GetDocument()
-             .Markers()
-             .MarkersInRange(
-                 EphemeralRange(
-                     pos.DeepEquivalent().ParentAnchoredEquivalent()),
-                 DocumentMarker::MisspellingMarkers())
-             .size() > 0;
+  const Position& marker_position =
+      pos.DeepEquivalent().ParentAnchoredEquivalent();
+  return inner_node->GetDocument().Markers().MarkerAtPosition(
+      marker_position, DocumentMarker::MisspellingMarkers());
 }
 
 void SelectionController::SendContextMenuEvent(
@@ -1043,7 +1058,7 @@ void SelectionController::SendContextMenuEvent(
 
 void SelectionController::PassMousePressEventToSubframe(
     const MouseEventWithHitTestResults& mev) {
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   frame_->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 

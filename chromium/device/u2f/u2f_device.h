@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "u2f_apdu_response.h"
+#include "u2f_return_code.h"
 
 namespace device {
 
@@ -23,15 +24,9 @@ class U2fDevice {
     U2F_V2,
     UNKNOWN,
   };
-  enum class ReturnCode : uint8_t {
-    SUCCESS,
-    FAILURE,
-    INVALID_PARAMS,
-    CONDITIONS_NOT_SATISFIED,
-  };
 
   using MessageCallback =
-      base::Callback<void(ReturnCode, std::vector<uint8_t>)>;
+      base::Callback<void(U2fReturnCode, const std::vector<uint8_t>&)>;
   using VersionCallback =
       base::Callback<void(bool success, ProtocolVersion version)>;
   using DeviceCallback =
@@ -39,7 +34,7 @@ class U2fDevice {
                           std::unique_ptr<U2fApduResponse> response)>;
   using WinkCallback = base::Callback<void()>;
 
-  ~U2fDevice();
+  virtual ~U2fDevice();
 
   // Raw messages parameters are defined by the specification at
   // https://fidoalliance.org/specs/fido-u2f-v1.0-nfc-bt-amendment-20150514/fido-u2f-raw-message-formats.html
@@ -65,6 +60,7 @@ class U2fDevice {
   // the device communication transaction.
   virtual void DeviceTransact(std::unique_ptr<U2fApduCommand> command,
                               const DeviceCallback& callback) = 0;
+  virtual base::WeakPtr<U2fDevice> GetWeakPtr() = 0;
 
   uint32_t channel_id_;
   uint8_t capabilities_;
@@ -86,8 +82,6 @@ class U2fDevice {
   void OnWink(const WinkCallback& callback,
               bool success,
               std::unique_ptr<U2fApduResponse> response);
-
-  base::WeakPtrFactory<U2fDevice> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(U2fDevice);
 };

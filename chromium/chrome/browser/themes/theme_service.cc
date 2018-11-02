@@ -59,7 +59,6 @@
 using base::UserMetricsAction;
 using content::BrowserThread;
 using extensions::Extension;
-using extensions::UnloadedExtensionInfo;
 using ui::ResourceBundle;
 
 
@@ -195,9 +194,9 @@ class ThemeService::ThemeObserver
   void OnExtensionUnloaded(
       content::BrowserContext* browser_context,
       const extensions::Extension* extension,
-      extensions::UnloadedExtensionInfo::Reason reason) override {
-    if (reason != extensions::UnloadedExtensionInfo::REASON_UPDATE &&
-        reason != extensions::UnloadedExtensionInfo::REASON_LOCK_ALL &&
+      extensions::UnloadedExtensionReason reason) override {
+    if (reason != extensions::UnloadedExtensionReason::UPDATE &&
+        reason != extensions::UnloadedExtensionReason::LOCK_ALL &&
         extension->is_theme() &&
         extension->id() == theme_service_->GetThemeID()) {
       theme_service_->UseDefaultTheme();
@@ -547,7 +546,7 @@ void ThemeService::ClearAllThemeData() {
   // There should be no more infobars. This may not be the case because of
   // http://crbug.com/62154
   // RemoveUnusedThemes is called on a task because ClearAllThemeData() may
-  // be called as a result of NOTIFICATION_EXTENSION_UNLOADED_DEPRECATED.
+  // be called as a result of OnExtensionUnloaded().
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&ThemeService::RemoveUnusedThemes,
                             weak_ptr_factory_.GetWeakPtr(), true));

@@ -115,7 +115,7 @@ static bool IsIndependentDescendant(const LayoutBlock* layout_object) {
                                   layout_object->IsHorizontalWritingMode()) ||
          layout_object->Style()->IsDisplayReplacedType() ||
          layout_object->IsTextArea() ||
-         layout_object->Style()->UserModify() != READ_ONLY;
+         layout_object->Style()->UserModify() != EUserModify::kReadOnly;
 }
 
 static bool BlockIsRowOfLinks(const LayoutBlock* block) {
@@ -286,7 +286,7 @@ void TextAutosizer::Destroy(LayoutBlock* block) {
     // Clear the cluster stack and the supercluster map to avoid stale pointers.
     // Speculative fix for http://crbug.com/369485.
     first_block_to_begin_layout_ = nullptr;
-    cluster_stack_.Clear();
+    cluster_stack_.clear();
   }
 }
 
@@ -386,10 +386,10 @@ void TextAutosizer::EndLayout(LayoutBlock* block) {
 
   if (block == first_block_to_begin_layout_) {
     first_block_to_begin_layout_ = nullptr;
-    cluster_stack_.Clear();
-    styles_retained_during_layout_.Clear();
+    cluster_stack_.clear();
+    styles_retained_during_layout_.clear();
 #if DCHECK_IS_ON()
-    blocks_that_have_begun_layout_.Clear();
+    blocks_that_have_begun_layout_.clear();
 #endif
     // Tables can create two layout scopes for the same block so the isEmpty
     // check below is needed to guard against endLayout being called twice.
@@ -562,11 +562,11 @@ void TextAutosizer::UpdatePageInfo() {
 
     // FIXME: With out-of-process iframes, the top frame can be remote and
     // doesn't have sizing information. Just return if this is the case.
-    Frame* frame = document_->GetFrame()->Tree().Top();
-    if (frame->IsRemoteFrame())
+    Frame& frame = document_->GetFrame()->Tree().Top();
+    if (frame.IsRemoteFrame())
       return;
 
-    LocalFrame* main_frame = ToLocalFrame(frame);
+    LocalFrame& main_frame = ToLocalFrame(frame);
     IntSize frame_size =
         document_->GetSettings()->TextAutosizingWindowSizeOverride();
     if (frame_size.IsEmpty())
@@ -575,7 +575,7 @@ void TextAutosizer::UpdatePageInfo() {
     page_info_.frame_width_ =
         horizontal_writing_mode ? frame_size.Width() : frame_size.Height();
 
-    IntSize layout_size = main_frame->View()->GetLayoutSize();
+    IntSize layout_size = main_frame.View()->GetLayoutSize();
     page_info_.layout_width_ =
         horizontal_writing_mode ? layout_size.Width() : layout_size.Height();
 
@@ -586,7 +586,7 @@ void TextAutosizer::UpdatePageInfo() {
 
     // If the page has a meta viewport or @viewport, don't apply the device
     // scale adjustment.
-    if (!main_frame->GetDocument()
+    if (!main_frame.GetDocument()
              ->GetViewportDescription()
              .IsSpecifiedByAuthor()) {
       page_info_.device_scale_adjustment_ =
@@ -707,8 +707,8 @@ bool TextAutosizer::ClusterHasEnoughTextToAutosize(
 
   // TextAreas and user-modifiable areas get a free pass to autosize regardless
   // of text content.
-  if (root->IsTextArea() ||
-      (root->Style() && root->Style()->UserModify() != READ_ONLY)) {
+  if (root->IsTextArea() || (root->Style() && root->Style()->UserModify() !=
+                                                  EUserModify::kReadOnly)) {
     cluster->has_enough_text_to_autosize_ = kHasEnoughText;
     return true;
   }
@@ -1243,7 +1243,7 @@ bool TextAutosizer::FingerprintMapper::Remove(LayoutObject* layout_object) {
     return false;
 
   ReverseFingerprintMap::iterator blocks_iter =
-      blocks_for_fingerprint_.Find(fingerprint);
+      blocks_for_fingerprint_.find(fingerprint);
   if (blocks_iter == blocks_for_fingerprint_.end())
     return false;
 
@@ -1253,7 +1253,7 @@ bool TextAutosizer::FingerprintMapper::Remove(LayoutObject* layout_object) {
     blocks_for_fingerprint_.erase(blocks_iter);
 
     SuperclusterMap::iterator supercluster_iter =
-        superclusters_.Find(fingerprint);
+        superclusters_.find(fingerprint);
 
     if (supercluster_iter != superclusters_.end()) {
       Supercluster* supercluster = supercluster_iter->value.get();
@@ -1386,7 +1386,7 @@ void TextAutosizer::CheckSuperclusterConsistency() {
       supercluster->multiplier_ = old_multipiler;
     }
   }
-  potentially_inconsistent_superclusters.Clear();
+  potentially_inconsistent_superclusters.clear();
 }
 
 DEFINE_TRACE(TextAutosizer) {

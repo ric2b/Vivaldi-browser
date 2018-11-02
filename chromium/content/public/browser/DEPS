@@ -1,6 +1,7 @@
 include_rules = [
-  "+components/payments/content/payment_app.mojom.h",
+  "+components/payments/mojom/payment_app.mojom.h",
   "+device/screen_orientation/public/interfaces",
+  "+device/wake_lock/public/interfaces",
 ]
 
 specific_include_rules = {
@@ -11,5 +12,11 @@ specific_include_rules = {
     # TODO: content/browser/loader is being separated out of content, and this
     # file will be moved elsewhere. See http://crbug.com/598073.
     "!content/browser/loader/resource_dispatcher_host_impl.h",
+  ],
+
+  "desktop_capture\.h": [
+    # desktop_capture.h creates a DesktopCaptureOptions to share between
+    # content/browser and chrome/browser.
+    "+third_party/webrtc/modules/desktop_capture/desktop_capture_options.h",
   ],
 }

@@ -10,7 +10,6 @@
 #include "ash/test/test_session_controller_client.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/memory/ptr_util.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
@@ -115,7 +114,7 @@ class LockScreenAshFocusRulesTest : public AshTestBase {
     aura::Window* container = Shell::GetContainer(root_window, container_id);
     aura::Window* window = new aura::Window(nullptr);
     window->set_id(0);
-    window->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+    window->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window->Init(ui::LAYER_TEXTURED);
     window->Show();
 

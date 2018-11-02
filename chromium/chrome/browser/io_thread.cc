@@ -20,13 +20,14 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -39,6 +40,7 @@
 #include "chrome/browser/net/dns_probe_service.h"
 #include "chrome/browser/net/proxy_service_factory.h"
 #include "chrome/browser/net/sth_distributor_provider.h"
+#include "chrome/browser/ssl/ignore_errors_cert_verifier.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_switches.h"
@@ -61,6 +63,7 @@
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
+#include "content/public/browser/network_quality_observer_factory.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
@@ -90,7 +93,7 @@
 #include "net/http/http_server_properties_impl.h"
 #include "net/net_features.h"
 #include "net/nqe/external_estimate_provider.h"
-#include "net/nqe/network_quality_estimator.h"
+#include "net/nqe/network_quality_estimator_params.h"
 #include "net/proxy/proxy_config_service.h"
 #include "net/proxy/proxy_script_fetcher_impl.h"
 #include "net/proxy/proxy_service.h"
@@ -130,6 +133,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/net/cert_verify_proc_chromeos.h"
+#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chromeos/network/host_resolver_impl_chromeos.h"
 #endif
 
@@ -264,24 +268,21 @@ int GetSwitchValueAsInt(const base::CommandLine& command_line,
 void UpdateMetricsUsagePrefsOnUIThread(const std::string& service_name,
                                        int message_size,
                                        bool is_cellular) {
-  BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind([](const std::string& service_name,
-                    int message_size,
-                    bool is_cellular) {
-                   // Some unit tests use IOThread but do not initialize
-                   // MetricsService. In that case it's fine to skip the update.
-                   auto* metrics_service = g_browser_process->metrics_service();
-                   if (metrics_service) {
-                     metrics_service->UpdateMetricsUsagePrefs(service_name,
-                                                              message_size,
-                                                              is_cellular);
-                   }
-                 },
-                 service_name,
-                 message_size,
-                 is_cellular));
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::BindOnce(
+                              [](const std::string& service_name,
+                                 int message_size, bool is_cellular) {
+                                // Some unit tests use IOThread but do not
+                                // initialize MetricsService. In that case it's
+                                // fine to skip the update.
+                                auto* metrics_service =
+                                    g_browser_process->metrics_service();
+                                if (metrics_service) {
+                                  metrics_service->UpdateMetricsUsagePrefs(
+                                      service_name, message_size, is_cellular);
+                                }
+                              },
+                              service_name, message_size, is_cellular));
 }
 
 }  // namespace
@@ -389,6 +390,11 @@ IOThread::IOThread(
 #if defined(OS_POSIX) && !defined(OS_ANDROID)
   gssapi_library_name_ = local_state->GetString(prefs::kGSSAPILibraryName);
 #endif
+#if defined(OS_CHROMEOS)
+  policy::BrowserPolicyConnectorChromeOS* connector =
+      g_browser_process->platform_part()->browser_policy_connector_chromeos();
+  allow_gssapi_library_load_ = connector->IsActiveDirectoryManaged();
+#endif
   pref_proxy_config_tracker_.reset(
       ProxyServiceFactory::CreatePrefProxyConfigTrackerOfLocalState(
           local_state));
@@ -475,10 +481,9 @@ net_log::ChromeNetLog* IOThread::net_log() {
 void IOThread::ChangedToOnTheRecord() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&IOThread::ChangedToOnTheRecordOnIOThread,
-                 base::Unretained(this)));
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&IOThread::ChangedToOnTheRecordOnIOThread,
+                     base::Unretained(this)));
 }
 
 net::URLRequestContextGetter* IOThread::system_url_request_context_getter() {
@@ -564,6 +569,19 @@ void IOThread::Init() {
   variations::GetVariationParams(kNetworkQualityEstimatorFieldTrialName,
                                  &network_quality_estimator_params);
 
+  if (command_line.HasSwitch(switches::kForceEffectiveConnectionType)) {
+    const std::string force_ect_value =
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+            switches::kForceEffectiveConnectionType);
+
+    if (!force_ect_value.empty()) {
+      // If the effective connection type is forced using command line switch,
+      // it overrides the one set by field trial.
+      network_quality_estimator_params[net::kForceEffectiveConnectionType] =
+          force_ect_value;
+    }
+  }
+
   std::unique_ptr<net::ExternalEstimateProvider> external_estimate_provider;
 #if defined(OS_ANDROID)
   external_estimate_provider.reset(
@@ -573,6 +591,8 @@ void IOThread::Init() {
   globals_->network_quality_estimator.reset(new net::NetworkQualityEstimator(
       std::move(external_estimate_provider), network_quality_estimator_params,
       net_log_));
+  globals_->network_quality_observer = content::CreateNetworkQualityObserver(
+      globals_->network_quality_estimator.get());
 
   UpdateDnsClientEnabled();
 #if defined(OS_CHROMEOS)
@@ -581,7 +601,11 @@ void IOThread::Init() {
       base::MakeUnique<net::MultiThreadedCertVerifier>(
           new chromeos::CertVerifyProcChromeOS()));
 #else
-  globals_->cert_verifier = net::CertVerifier::CreateDefault();
+  globals_->cert_verifier = IgnoreErrorsCertVerifier::MaybeWrapCertVerifier(
+      command_line, net::CertVerifier::CreateDefault());
+  UMA_HISTOGRAM_BOOLEAN(
+      "Net.Certificate.IgnoreCertificateErrorsSPKIListPresent",
+      command_line.HasSwitch(switches::kIgnoreCertificateErrorsSPKIList));
 #endif
 
   globals_->transport_security_state.reset(new net::TransportSecurityState());
@@ -675,10 +699,9 @@ void IOThread::Init() {
   // get it onto the message loop while the IOThread object still
   // exists.  However, the message might not be processed on the UI
   // thread until after IOThread is gone, so use a weak pointer.
-  BrowserThread::PostTask(BrowserThread::UI,
-                          FROM_HERE,
-                          base::Bind(&IOThread::InitSystemRequestContext,
-                                     weak_factory_.GetWeakPtr()));
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::BindOnce(&IOThread::InitSystemRequestContext,
+                                         weak_factory_.GetWeakPtr()));
 
 #if defined(OS_ANDROID) && defined(ARCH_CPU_ARMEL)
   // Record how common CPUs with broken NEON units are. See
@@ -780,6 +803,10 @@ void IOThread::CreateDefaultAuthHandlerFactory() {
       ,
       gssapi_library_name_
 #endif
+#if defined(OS_CHROMEOS)
+      ,
+      allow_gssapi_library_load_
+#endif
       ));
   UpdateServerWhitelist();
   UpdateDelegateWhitelist();
@@ -845,10 +872,9 @@ void IOThread::InitSystemRequestContext() {
   // Safe to post an unretained this pointer, since IOThread is
   // guaranteed to outlive the IO BrowserThread.
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&IOThread::InitSystemRequestContextOnIOThread,
-                 base::Unretained(this)));
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&IOThread::InitSystemRequestContextOnIOThread,
+                     base::Unretained(this)));
 }
 
 void IOThread::InitSystemRequestContextOnIOThread() {
@@ -894,35 +920,34 @@ net::URLRequestContext* IOThread::ConstructSystemRequestContext(
     const net::HttpNetworkSession::Params& params,
     net::NetLog* net_log) {
   net::URLRequestContext* context = new SystemURLRequestContext;
+
+  context->set_network_quality_estimator(
+      globals->network_quality_estimator.get());
+  context->set_enable_brotli(globals->enable_brotli);
+  context->set_name("system");
+
+  context->set_http_user_agent_settings(
+      globals->http_user_agent_settings.get());
+  context->set_network_delegate(globals->system_network_delegate.get());
   context->set_net_log(net_log);
   context->set_host_resolver(globals->host_resolver.get());
-  context->set_cert_verifier(globals->cert_verifier.get());
-  context->set_transport_security_state(
-      globals->transport_security_state.get());
-  context->set_cert_transparency_verifier(
-      globals->cert_transparency_verifier.get());
-  context->set_ct_policy_enforcer(globals->ct_policy_enforcer.get());
+  context->set_proxy_service(globals->system_proxy_service.get());
   context->set_ssl_config_service(globals->ssl_config_service.get());
   context->set_http_auth_handler_factory(
       globals->http_auth_handler_factory.get());
-  context->set_proxy_service(globals->system_proxy_service.get());
-
-  globals->system_url_request_job_factory.reset(
-      new net::URLRequestJobFactoryImpl());
-  context->set_job_factory(globals->system_url_request_job_factory.get());
 
   context->set_cookie_store(globals->system_cookie_store.get());
   context->set_channel_id_service(
       globals->system_channel_id_service.get());
-  context->set_network_delegate(globals->system_network_delegate.get());
-  context->set_http_user_agent_settings(
-      globals->http_user_agent_settings.get());
-  context->set_network_quality_estimator(
-      globals->network_quality_estimator.get());
+  context->set_transport_security_state(
+      globals->transport_security_state.get());
 
   context->set_http_server_properties(globals->http_server_properties.get());
 
-  context->set_enable_brotli(globals->enable_brotli);
+  context->set_cert_verifier(globals->cert_verifier.get());
+  context->set_cert_transparency_verifier(
+      globals->cert_transparency_verifier.get());
+  context->set_ct_policy_enforcer(globals->ct_policy_enforcer.get());
 
   net::HttpNetworkSession::Params system_params(params);
   net::URLRequestContextBuilder::SetHttpNetworkSessionComponents(
@@ -932,9 +957,13 @@ net::URLRequestContext* IOThread::ConstructSystemRequestContext(
       new net::HttpNetworkSession(system_params));
   globals->system_http_transaction_factory.reset(
       new net::HttpNetworkLayer(globals->system_http_network_session.get()));
-  context->set_name("system");
+
   context->set_http_transaction_factory(
       globals->system_http_transaction_factory.get());
+
+  globals->system_url_request_job_factory.reset(
+      new net::URLRequestJobFactoryImpl());
+  context->set_job_factory(globals->system_url_request_job_factory.get());
 
   return context;
 }
@@ -974,16 +1003,6 @@ void IOThread::ConfigureParamsFromFieldTrialsAndCommandLine(
           net::ParseQuicConnectionOptions(
               command_line.GetSwitchValueASCII(
                   switches::kQuicConnectionOptions));
-    }
-
-    if (command_line.HasSwitch(switches::kQuicHostWhitelist)) {
-      std::string whitelist =
-          command_line.GetSwitchValueASCII(switches::kQuicHostWhitelist);
-      params->quic_host_whitelist.clear();
-      for (const std::string& host : base::SplitString(
-               whitelist, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
-        params->quic_host_whitelist.insert(host);
-      }
     }
 
     if (command_line.HasSwitch(switches::kQuicMaxPacketLength)) {
@@ -1096,9 +1115,9 @@ net::URLRequestContext* IOThread::ConstructProxyScriptFetcherContext(
   job_factory->SetProtocolHandler(
       url::kFileScheme,
       base::MakeUnique<net::FileProtocolHandler>(
-          content::BrowserThread::GetBlockingPool()
-              ->GetTaskRunnerWithShutdownBehavior(
-                  base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)));
+          base::CreateTaskRunnerWithTraits(
+              {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+               base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})));
 #if !BUILDFLAG(DISABLE_FTP_SUPPORT)
   job_factory->SetProtocolHandler(
       url::kFtpScheme,

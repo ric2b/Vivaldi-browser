@@ -63,18 +63,6 @@ IntPoint WebScrollbarThemeClientImpl::Location() const {
   return scrollbar_.Location();
 }
 
-FrameViewBase* WebScrollbarThemeClientImpl::Parent() const {
-  // Unused by Chromium scrollbar themes.
-  NOTREACHED();
-  return 0;
-}
-
-FrameViewBase* WebScrollbarThemeClientImpl::Root() const {
-  // Unused by Chromium scrollbar themes.
-  NOTREACHED();
-  return 0;
-}
-
 void WebScrollbarThemeClientImpl::SetFrameRect(const IntRect&) {
   // Unused by Chromium scrollbar themes.
   NOTREACHED();
@@ -104,7 +92,7 @@ void WebScrollbarThemeClientImpl::GetTickmarks(
     Vector<IntRect>& tickmarks) const {
   WebVector<WebRect> web_tickmarks;
   scrollbar_.GetTickmarks(web_tickmarks);
-  tickmarks.Resize(web_tickmarks.size());
+  tickmarks.resize(web_tickmarks.size());
   for (size_t i = 0; i < web_tickmarks.size(); ++i)
     tickmarks[i] = web_tickmarks[i];
 }

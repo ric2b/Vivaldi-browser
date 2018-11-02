@@ -13,10 +13,11 @@
 #include "net/quic/core/crypto/quic_crypto_server_config.h"
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_crypto_stream.h"
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_str_cat.h"
+#include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/fake_proof_source.h"
 #include "net/quic/test_tools/quic_buffered_packet_store_peer.h"
@@ -68,7 +69,7 @@ class TestQuicSpdyServerSession : public QuicServerSessionBase {
                               nullptr,
                               crypto_config,
                               compressed_certs_cache),
-        crypto_stream_(QuicServerSessionBase::GetCryptoStream()) {}
+        crypto_stream_(QuicServerSessionBase::GetMutableCryptoStream()) {}
 
   ~TestQuicSpdyServerSession() override { delete connection(); };
 
@@ -79,6 +80,7 @@ class TestQuicSpdyServerSession : public QuicServerSessionBase {
   MOCK_METHOD1(CreateIncomingDynamicStream, QuicSpdyStream*(QuicStreamId id));
   MOCK_METHOD1(CreateOutgoingDynamicStream,
                QuicSpdyStream*(SpdyPriority priority));
+  MOCK_METHOD1(CreateStream, std::unique_ptr<QuicStream>(QuicStreamId id));
 
   QuicCryptoServerStreamBase* CreateQuicCryptoServerStream(
       const QuicCryptoServerConfig* crypto_config,
@@ -93,7 +95,11 @@ class TestQuicSpdyServerSession : public QuicServerSessionBase {
     crypto_stream_ = crypto_stream;
   }
 
-  QuicCryptoServerStreamBase* GetCryptoStream() override {
+  QuicCryptoServerStreamBase* GetMutableCryptoStream() override {
+    return crypto_stream_;
+  }
+
+  const QuicCryptoServerStreamBase* GetCryptoStream() const override {
     return crypto_stream_;
   }
 
@@ -162,7 +168,7 @@ class MockServerConnection : public MockQuicConnection {
   QuicDispatcher* dispatcher_;
 };
 
-class QuicDispatcherTest : public ::testing::Test {
+class QuicDispatcherTest : public QuicTest {
  public:
   QuicDispatcherTest()
       : QuicDispatcherTest(crypto_test_utils::ProofSourceForTesting()) {}
@@ -249,8 +255,9 @@ class QuicDispatcherTest : public ::testing::Test {
                      QuicPacketNumber packet_number) {
     QuicVersionVector versions(SupportedVersions(version));
     std::unique_ptr<QuicEncryptedPacket> packet(ConstructEncryptedPacket(
-        connection_id, has_version_flag, false, packet_number, data,
-        connection_id_length, packet_number_length, &versions));
+        GetPeerInMemoryConnectionId(connection_id), has_version_flag, false,
+        packet_number, data, connection_id_length, packet_number_length,
+        &versions));
     std::unique_ptr<QuicReceivedPacket> received_packet(
         ConstructReceivedPacket(*packet, helper_.GetClock()->Now()));
 
@@ -315,7 +322,6 @@ class QuicDispatcherTest : public ::testing::Test {
         .as_string();
   }
 
-  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   EpollServer eps_;
   QuicEpollConnectionHelper helper_;
   MockQuicConnectionHelper mock_helper_;
@@ -423,7 +429,6 @@ TEST_F(QuicDispatcherTest, TimeWaitListManager) {
   packet.public_header.connection_id = connection_id;
   packet.public_header.reset_flag = true;
   packet.public_header.version_flag = false;
-  packet.rejected_packet_number = 19191;
   packet.nonce_proof = 132232;
   std::unique_ptr<QuicEncryptedPacket> encrypted(
       QuicFramer::BuildPublicResetPacket(packet));
@@ -445,8 +450,7 @@ TEST_F(QuicDispatcherTest, TimeWaitListManager) {
 
   // Dispatcher forwards subsequent packets for this connection_id to the time
   // wait list manager.
-  EXPECT_CALL(*time_wait_list_manager_,
-              ProcessPacket(_, _, connection_id, _, _))
+  EXPECT_CALL(*time_wait_list_manager_, ProcessPacket(_, _, connection_id))
       .Times(1);
   EXPECT_CALL(*time_wait_list_manager_, AddConnectionIdToTimeWait(_, _, _, _))
       .Times(0);
@@ -461,8 +465,7 @@ TEST_F(QuicDispatcherTest, NoVersionPacketToTimeWaitListManager) {
   // Dispatcher forwards all packets for this connection_id to the time wait
   // list manager.
   EXPECT_CALL(*dispatcher_, CreateQuicSession(_, _)).Times(0);
-  EXPECT_CALL(*time_wait_list_manager_,
-              ProcessPacket(_, _, connection_id, _, _))
+  EXPECT_CALL(*time_wait_list_manager_, ProcessPacket(_, _, connection_id))
       .Times(1);
   EXPECT_CALL(*time_wait_list_manager_, AddConnectionIdToTimeWait(_, _, _, _))
       .Times(1);
@@ -477,7 +480,7 @@ TEST_F(QuicDispatcherTest, ProcessPacketWithZeroPort) {
 
   // dispatcher_ should drop this packet.
   EXPECT_CALL(*dispatcher_, CreateQuicSession(1, client_address)).Times(0);
-  EXPECT_CALL(*time_wait_list_manager_, ProcessPacket(_, _, _, _, _)).Times(0);
+  EXPECT_CALL(*time_wait_list_manager_, ProcessPacket(_, _, _)).Times(0);
   EXPECT_CALL(*time_wait_list_manager_, AddConnectionIdToTimeWait(_, _, _, _))
       .Times(0);
   ProcessPacket(client_address, 1, true, SerializeCHLO());
@@ -514,8 +517,7 @@ TEST_F(QuicDispatcherTest, TooBigSeqNoPacketToTimeWaitListManager) {
   // Dispatcher forwards this packet for this connection_id to the time wait
   // list manager.
   EXPECT_CALL(*dispatcher_, CreateQuicSession(_, _)).Times(0);
-  EXPECT_CALL(*time_wait_list_manager_,
-              ProcessPacket(_, _, connection_id, _, _))
+  EXPECT_CALL(*time_wait_list_manager_, ProcessPacket(_, _, connection_id))
       .Times(1);
   EXPECT_CALL(*time_wait_list_manager_, AddConnectionIdToTimeWait(_, _, _, _))
       .Times(1);
@@ -527,12 +529,11 @@ TEST_F(QuicDispatcherTest, TooBigSeqNoPacketToTimeWaitListManager) {
 }
 
 TEST_F(QuicDispatcherTest, SupportedVersionsChangeInFlight) {
-  static_assert(arraysize(kSupportedQuicVersions) == 5u,
+  static_assert(arraysize(kSupportedQuicVersions) == 6u,
                 "Supported versions out of sync");
-  FLAGS_quic_reloadable_flag_quic_disable_version_34 = false;
-  FLAGS_quic_reloadable_flag_quic_enable_version_36_v3 = true;
-  FLAGS_quic_reloadable_flag_quic_enable_version_37 = true;
-  FLAGS_quic_enable_version_38 = true;
+  FLAGS_quic_reloadable_flag_quic_enable_version_38 = true;
+  FLAGS_quic_reloadable_flag_quic_enable_version_39 = true;
+  SetQuicFlag(&FLAGS_quic_enable_version_40, true);
   QuicSocketAddress client_address(QuicIpAddress::Loopback4(), 1);
   server_address_ = QuicSocketAddress(QuicIpAddress::Any4(), 5);
   QuicConnectionId connection_id = 1;
@@ -570,17 +571,17 @@ TEST_F(QuicDispatcherTest, SupportedVersionsChangeInFlight) {
   ProcessPacket(client_address, connection_id, true, QuicVersionMax(),
                 SerializeCHLO(), PACKET_8BYTE_CONNECTION_ID,
                 PACKET_6BYTE_PACKET_NUMBER, 1);
-  // Turn off version 36.
-  FLAGS_quic_reloadable_flag_quic_enable_version_36_v3 = false;
+  // Turn off version 40.
+  SetQuicFlag(&FLAGS_quic_enable_version_40, false);
   ++connection_id;
   EXPECT_CALL(*dispatcher_, CreateQuicSession(connection_id, client_address))
       .Times(0);
-  ProcessPacket(client_address, connection_id, true, QUIC_VERSION_36,
+  ProcessPacket(client_address, connection_id, true, QUIC_VERSION_40,
                 SerializeCHLO(), PACKET_8BYTE_CONNECTION_ID,
                 PACKET_6BYTE_PACKET_NUMBER, 1);
 
-  // Turn on version 36.
-  FLAGS_quic_reloadable_flag_quic_enable_version_36_v3 = true;
+  // Turn on version 40.
+  SetQuicFlag(&FLAGS_quic_enable_version_40, true);
   ++connection_id;
   EXPECT_CALL(*dispatcher_, CreateQuicSession(connection_id, client_address))
       .WillOnce(testing::Return(CreateSession(
@@ -592,21 +593,21 @@ TEST_F(QuicDispatcherTest, SupportedVersionsChangeInFlight) {
       .WillOnce(testing::WithArgs<2>(
           Invoke(CreateFunctor(&QuicDispatcherTest::ValidatePacket,
                                base::Unretained(this), connection_id))));
-  ProcessPacket(client_address, connection_id, true, QUIC_VERSION_35,
+  ProcessPacket(client_address, connection_id, true, QUIC_VERSION_40,
                 SerializeCHLO(), PACKET_8BYTE_CONNECTION_ID,
                 PACKET_6BYTE_PACKET_NUMBER, 1);
 
-  // Turn off version 34.
-  FLAGS_quic_reloadable_flag_quic_disable_version_34 = true;
+  // Turn off version 39.
+  FLAGS_quic_reloadable_flag_quic_enable_version_39 = false;
   ++connection_id;
   EXPECT_CALL(*dispatcher_, CreateQuicSession(connection_id, client_address))
       .Times(0);
-  ProcessPacket(client_address, connection_id, true, QUIC_VERSION_34,
+  ProcessPacket(client_address, connection_id, true, QUIC_VERSION_39,
                 SerializeCHLO(), PACKET_8BYTE_CONNECTION_ID,
                 PACKET_6BYTE_PACKET_NUMBER, 1);
 
-  // Turn on version 34.
-  FLAGS_quic_reloadable_flag_quic_disable_version_34 = false;
+  // Turn on version 39.
+  FLAGS_quic_reloadable_flag_quic_enable_version_39 = true;
   ++connection_id;
   EXPECT_CALL(*dispatcher_, CreateQuicSession(connection_id, client_address))
       .WillOnce(testing::Return(CreateSession(
@@ -618,7 +619,7 @@ TEST_F(QuicDispatcherTest, SupportedVersionsChangeInFlight) {
       .WillOnce(testing::WithArgs<2>(
           Invoke(CreateFunctor(&QuicDispatcherTest::ValidatePacket,
                                base::Unretained(this), connection_id))));
-  ProcessPacket(client_address, connection_id, true, QUIC_VERSION_34,
+  ProcessPacket(client_address, connection_id, true, QUIC_VERSION_39,
                 SerializeCHLO(), PACKET_8BYTE_CONNECTION_ID,
                 PACKET_6BYTE_PACKET_NUMBER, 1);
 }
@@ -775,8 +776,7 @@ TEST_P(QuicDispatcherStatelessRejectTest, ParameterizedBasicTest) {
             time_wait_list_manager_->IsConnectionIdInTimeWait(connection_id));
   if (ExpectStatelessReject()) {
     // The second packet will be processed on the time-wait list.
-    EXPECT_CALL(*time_wait_list_manager_,
-                ProcessPacket(_, _, connection_id, _, _))
+    EXPECT_CALL(*time_wait_list_manager_, ProcessPacket(_, _, connection_id))
         .Times(1);
   } else {
     // The second packet will trigger a packet-validation
@@ -887,8 +887,7 @@ TEST_F(QuicDispatcherTestStrayPacketConnectionId,
   QuicConnectionId connection_id = 1;
   // Dispatcher drops this packet.
   EXPECT_CALL(*dispatcher_, CreateQuicSession(_, _)).Times(0);
-  EXPECT_CALL(*time_wait_list_manager_,
-              ProcessPacket(_, _, connection_id, _, _))
+  EXPECT_CALL(*time_wait_list_manager_, ProcessPacket(_, _, connection_id))
       .Times(0);
   EXPECT_CALL(*time_wait_list_manager_, AddConnectionIdToTimeWait(_, _, _, _))
       .Times(0);
@@ -1373,7 +1372,7 @@ TEST_P(BufferedPacketStoreTest, ReceiveCHLOAfterExpiration) {
   // New arrived CHLO will be dropped because this connection is in time wait
   // list.
   ASSERT_TRUE(time_wait_list_manager_->IsConnectionIdInTimeWait(conn_id));
-  EXPECT_CALL(*time_wait_list_manager_, ProcessPacket(_, _, conn_id, _, _));
+  EXPECT_CALL(*time_wait_list_manager_, ProcessPacket(_, _, conn_id));
   ProcessPacket(client_address, conn_id, true, SerializeFullCHLO());
 }
 
@@ -1731,13 +1730,13 @@ TEST_F(AsyncGetProofTest, BasicReject) {
     EXPECT_CALL(*time_wait_list_manager_,
                 AddConnectionIdToTimeWait(conn_id, _, true, _));
     EXPECT_CALL(*time_wait_list_manager_,
-                ProcessPacket(_, client_addr_, conn_id, _, _));
+                ProcessPacket(_, client_addr_, conn_id));
 
     EXPECT_CALL(check, Call(2));
     EXPECT_CALL(*dispatcher_, CreateQuicSession(conn_id, client_addr_))
         .Times(0);
     EXPECT_CALL(*time_wait_list_manager_,
-                ProcessPacket(_, client_addr_, conn_id, _, _));
+                ProcessPacket(_, client_addr_, conn_id));
   }
 
   // Send a CHLO that the StatelessRejector will reject.
@@ -1853,11 +1852,11 @@ TEST_F(AsyncGetProofTest, MultipleReject) {
     EXPECT_CALL(*time_wait_list_manager_,
                 AddConnectionIdToTimeWait(conn_id_2, _, true, _));
     EXPECT_CALL(*time_wait_list_manager_,
-                ProcessPacket(_, client_addr_, conn_id_2, _, _));
+                ProcessPacket(_, client_addr_, conn_id_2));
 
     EXPECT_CALL(check, Call(2));
     EXPECT_CALL(*time_wait_list_manager_,
-                ProcessPacket(_, client_addr_, conn_id_2, _, _));
+                ProcessPacket(_, client_addr_, conn_id_2));
 
     EXPECT_CALL(check, Call(3));
     EXPECT_CALL(*dispatcher_,
@@ -1867,7 +1866,7 @@ TEST_F(AsyncGetProofTest, MultipleReject) {
     EXPECT_CALL(*time_wait_list_manager_,
                 AddConnectionIdToTimeWait(conn_id_1, _, true, _));
     EXPECT_CALL(*time_wait_list_manager_,
-                ProcessPacket(_, client_addr_, conn_id_1, _, _));
+                ProcessPacket(_, client_addr_, conn_id_1));
   }
 
   // Send a CHLO that the StatelessRejector will reject.
@@ -1926,7 +1925,7 @@ TEST_F(AsyncGetProofTest, MultipleIdenticalReject) {
     EXPECT_CALL(*time_wait_list_manager_,
                 AddConnectionIdToTimeWait(conn_id_1, _, true, _));
     EXPECT_CALL(*time_wait_list_manager_,
-                ProcessPacket(_, client_addr_, conn_id_1, _, _));
+                ProcessPacket(_, client_addr_, conn_id_1));
   }
 
   // Send a CHLO that the StatelessRejector will reject.
@@ -1966,7 +1965,7 @@ TEST_F(AsyncGetProofTest, BufferTimeout) {
 
     EXPECT_CALL(check, Call(2));
     EXPECT_CALL(*time_wait_list_manager_,
-                ProcessPacket(_, client_addr_, conn_id, _, _));
+                ProcessPacket(_, client_addr_, conn_id));
     EXPECT_CALL(*dispatcher_, CreateQuicSession(conn_id, client_addr_))
         .Times(0);
   }

@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/android/apk_assets.h"
-#include "base/android/context_utils.h"
 #include "base/android/jni_array.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
@@ -34,6 +33,7 @@ namespace {
 
 // Stops a child process based on the handle returned from StartChildProcess.
 void StopChildProcess(base::ProcessHandle handle) {
+  DCHECK_CURRENTLY_ON(BrowserThread::PROCESS_LAUNCHER);
   JNIEnv* env = AttachCurrentThread();
   DCHECK(env);
   Java_ChildProcessLauncherHelper_stop(env, static_cast<jint>(handle));
@@ -131,10 +131,8 @@ ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
   }
 
   constexpr int param_key = 0;  // TODO(boliu): Use this.
-  java_peer_.Reset(Java_ChildProcessLauncherHelper_create(
-      env, reinterpret_cast<intptr_t>(this),
-      base::android::GetApplicationContext(), param_key, j_argv,
-      child_process_id(), j_file_infos));
+  java_peer_.Reset(Java_ChildProcessLauncherHelper_createAndStart(
+      env, reinterpret_cast<intptr_t>(this), param_key, j_argv, j_file_infos));
   AddRef();  // Balanced by OnChildProcessStarted.
 
   return Process();
@@ -159,7 +157,8 @@ base::TerminationStatus ChildProcessLauncherHelper::GetTerminationStatus(
 // static
 bool ChildProcessLauncherHelper::TerminateProcess(
     const base::Process& process, int exit_code, bool wait) {
-  StopChildProcess(process.Handle());
+  BrowserThread::PostTask(BrowserThread::PROCESS_LAUNCHER, FROM_HERE,
+                          base::Bind(&StopChildProcess, process.Handle()));
   return true;
 }
 
@@ -172,13 +171,14 @@ void ChildProcessLauncherHelper::ForceNormalProcessTerminationSync(
   StopChildProcess(process.process.Handle());
 }
 
-void ChildProcessLauncherHelper::SetProcessBackgroundedOnLauncherThread(
+void ChildProcessLauncherHelper::SetProcessPriorityOnLauncherThread(
     base::Process process,
-    bool background) {
+    bool background,
+    bool boost_for_pending_views) {
   JNIEnv* env = AttachCurrentThread();
   DCHECK(env);
   return Java_ChildProcessLauncherHelper_setInForeground(
-      env, java_peer_, process.Handle(), !background);
+      env, java_peer_, process.Handle(), !background, boost_for_pending_views);
 }
 
 // static
@@ -199,14 +199,14 @@ base::File OpenFileToShare(const base::FilePath& path,
   return base::File(base::android::OpenApkAsset(path.value(), region));
 }
 
-// Called from ChildProcessLauncher.java when the ChildProcess was
-// started.
+// Called from ChildProcessLauncher.java when the ChildProcess was started.
 // |handle| is the processID of the child process as originated in Java, 0 if
 // the ChildProcess could not be created.
 void ChildProcessLauncherHelper::OnChildProcessStarted(
     JNIEnv*,
     const base::android::JavaParamRef<jobject>& obj,
     jint handle) {
+  DCHECK_CURRENTLY_ON(BrowserThread::PROCESS_LAUNCHER);
   scoped_refptr<ChildProcessLauncherHelper> ref(this);
   Release();  // Balances with LaunchProcessOnLauncherThread.
 
@@ -214,28 +214,9 @@ void ChildProcessLauncherHelper::OnChildProcessStarted(
                           ? LAUNCH_RESULT_FAILURE
                           : LAUNCH_RESULT_SUCCESS;
 
-  // TODO(jcivelli): Remove this by defining better what happens on what thread
-  // in the corresponding Java code.
   ChildProcessLauncherHelper::Process process;
   process.process = base::Process(handle);
-  if (BrowserThread::CurrentlyOn(BrowserThread::PROCESS_LAUNCHER)) {
-    PostLaunchOnLauncherThread(std::move(process), launch_result,
-                               false);  // post_launch_on_client_thread_called
-    return;
-  }
-
-  bool on_client_thread = BrowserThread::CurrentlyOn(
-      static_cast<BrowserThread::ID>(client_thread_id()));
-  BrowserThread::PostTask(
-      BrowserThread::PROCESS_LAUNCHER, FROM_HERE,
-      base::Bind(&ChildProcessLauncherHelper::PostLaunchOnLauncherThread, this,
-                 base::Passed(std::move(process)), launch_result,
-                 on_client_thread));
-  if (on_client_thread) {
-    ChildProcessLauncherHelper::Process process;
-    process.process = base::Process(handle);
-    PostLaunchOnClientThread(std::move(process), launch_result);
-  }
+  PostLaunchOnLauncherThread(std::move(process), launch_result);
 }
 
 // static

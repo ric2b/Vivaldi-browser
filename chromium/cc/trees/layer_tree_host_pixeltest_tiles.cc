@@ -113,7 +113,7 @@ class BlueYellowClient : public ContentLayerClient {
 
     PaintRecorder recorder;
     PaintCanvas* canvas =
-        recorder.beginRecording(gfx::RectToSkRect(gfx::Rect(size_)));
+        recorder.beginRecording(gfx::RectToSkRect(PaintableRegion()));
     gfx::Rect top(0, 0, size_.width(), size_.height() / 2);
     gfx::Rect bottom(0, size_.height() / 2, size_.width(), size_.height() / 2);
 
@@ -129,7 +129,8 @@ class BlueYellowClient : public ContentLayerClient {
     canvas->drawRect(gfx::RectToSkRect(yellow_rect), flags);
 
     display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-        PaintableRegion(), recorder.finishRecordingAsPicture());
+        PaintableRegion(), recorder.finishRecordingAsPicture(),
+        gfx::RectToSkRect(PaintableRegion()));
     display_list->Finalize();
     return display_list;
   }
@@ -157,11 +158,17 @@ class LayerTreeHostTilesTestPartialInvalidation
   void DidCommitAndDrawFrame() override {
     switch (layer_tree_host()->SourceFrameNumber()) {
       case 1:
-        // We have done one frame, so the layer's content has been rastered.
-        // Now we change the picture behind it to record something completely
-        // different, but we give a smaller invalidation rect. The layer should
-        // only re-raster the stuff in the rect. If it doesn't do partial raster
-        // it would re-raster the whole thing instead.
+        // We have done one frame, but the resource may not be available for
+        // partial raster yet. Force a second frame.
+        picture_layer_->SetNeedsDisplayRect(gfx::Rect(50, 50, 100, 100));
+        break;
+      case 2:
+        // We have done two frames, so the layer's content has been rastered
+        // twice and the first frame's resource is available for partial
+        // raster. Now we change the picture behind it to record something
+        // completely different, but we give a smaller invalidation rect. The
+        // layer should only re-raster the stuff in the rect. If it doesn't do
+        // partial raster it would re-raster the whole thing instead.
         client_.set_blue_top(false);
         Finish();
         picture_layer_->SetNeedsDisplayRect(gfx::Rect(50, 50, 100, 100));
@@ -203,30 +210,15 @@ TEST_F(LayerTreeHostTilesTestPartialInvalidation,
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_flipped.png")));
 }
 
-// crbug.com/707711
-#if defined(OS_LINUX)
-#define MAYBE_PartialRaster_MultiThread_OneCopy \
-  DISABLED_PartialRaster_MultiThread_OneCopy
-#else
-#define MAYBE_PartialRaster_MultiThread_OneCopy \
-  PartialRaster_MultiThread_OneCopy
-#endif
 TEST_F(LayerTreeHostTilesTestPartialInvalidation,
-       MAYBE_PartialRaster_MultiThread_OneCopy) {
+       PartialRaster_MultiThread_OneCopy) {
   RunRasterPixelTest(
       true, PARTIAL_ONE_COPY, picture_layer_,
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_partial_flipped.png")));
 }
 
-// crbug.com/707711
-#if defined(OS_LINUX)
-#define MAYBE_FullRaster_MultiThread_OneCopy \
-  DISABLED_FullRaster_MultiThread_OneCopy
-#else
-#define MAYBE_FullRaster_MultiThread_OneCopy FullRaster_MultiThread_OneCopy
-#endif
 TEST_F(LayerTreeHostTilesTestPartialInvalidation,
-       MAYBE_FullRaster_MultiThread_OneCopy) {
+       FullRaster_MultiThread_OneCopy) {
   RunRasterPixelTest(
       true, FULL_ONE_COPY, picture_layer_,
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_flipped.png")));

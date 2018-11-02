@@ -473,7 +473,7 @@ error::Error DoTexImage2D(GLenum target,
                           GLint border,
                           GLenum format,
                           GLenum type,
-                          GLsizei imagesize,
+                          GLsizei image_size,
                           const void* pixels);
 error::Error DoTexImage3D(GLenum target,
                           GLint level,
@@ -484,7 +484,7 @@ error::Error DoTexImage3D(GLenum target,
                           GLint border,
                           GLenum format,
                           GLenum type,
-                          GLsizei imagesize,
+                          GLsizei image_size,
                           const void* pixels);
 error::Error DoTexParameterf(GLenum target, GLenum pname, GLfloat param);
 error::Error DoTexParameterfv(GLenum target,
@@ -508,7 +508,7 @@ error::Error DoTexSubImage2D(GLenum target,
                              GLsizei height,
                              GLenum format,
                              GLenum type,
-                             GLsizei imagesize,
+                             GLsizei image_size,
                              const void* pixels);
 error::Error DoTexSubImage3D(GLenum target,
                              GLint level,
@@ -520,7 +520,7 @@ error::Error DoTexSubImage3D(GLenum target,
                              GLsizei depth,
                              GLenum format,
                              GLenum type,
-                             GLsizei imagesize,
+                             GLsizei image_size,
                              const void* pixels);
 error::Error DoTransformFeedbackVaryings(GLuint program,
                                          GLsizei count,
@@ -796,6 +796,9 @@ error::Error DoBindUniformLocationCHROMIUM(GLuint program,
                                            GLint location,
                                            const char* name);
 error::Error DoBindTexImage2DCHROMIUM(GLenum target, GLint imageId);
+error::Error DoBindTexImage2DWithInternalformatCHROMIUM(GLenum target,
+                                                        GLenum internalformat,
+                                                        GLint imageId);
 error::Error DoReleaseTexImage2DCHROMIUM(GLenum target, GLint imageId);
 error::Error DoTraceBeginCHROMIUM(const char* category_name,
                                   const char* trace_name);
@@ -840,11 +843,13 @@ error::Error DoScheduleDCLayerSharedStateCHROMIUM(GLfloat opacity,
                                                   const GLfloat* clip_rect,
                                                   GLint z_order,
                                                   const GLfloat* transform);
-error::Error DoScheduleDCLayerCHROMIUM(GLuint contents_texture_id,
-                                       const GLfloat* contents_rect,
-                                       GLuint background_color,
-                                       GLuint edge_aa_mask,
-                                       const GLfloat* bounds_rect);
+error::Error DoScheduleDCLayerCHROMIUM(
+    GLsizei num_textures,
+    const volatile GLuint* contents_texture_ids,
+    const GLfloat* contents_rect,
+    GLuint background_color,
+    GLuint edge_aa_mask,
+    const GLfloat* bounds_rect);
 error::Error DoCommitOverlayPlanesCHROMIUM();
 error::Error DoSwapInterval(GLint interval);
 error::Error DoFlushDriverCachesCHROMIUM();

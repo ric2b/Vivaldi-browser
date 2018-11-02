@@ -23,7 +23,7 @@
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
-#include "components/component_updater/component_updater_service.h"
+#include "components/update_client/crx_update_item.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
@@ -104,9 +104,8 @@ void ComponentsDOMHandler::RegisterMessages() {
 
 void ComponentsDOMHandler::HandleRequestComponentsData(
     const base::ListValue* args) {
-  base::ListValue* list = ComponentsUI::LoadComponents();
   base::DictionaryValue result;
-  result.Set("components", list);
+  result.Set("components", ComponentsUI::LoadComponents());
   web_ui()->CallJavascriptFunctionUnsafe("returnComponentsData", result);
 }
 
@@ -164,14 +163,14 @@ void ComponentsUI::OnDemandUpdate(const std::string& component_id) {
 }
 
 // static
-base::ListValue* ComponentsUI::LoadComponents() {
+std::unique_ptr<base::ListValue> ComponentsUI::LoadComponents() {
   component_updater::ComponentUpdateService* cus =
       g_browser_process->component_updater();
   std::vector<std::string> component_ids;
   component_ids = cus->GetComponentIDs();
 
   // Construct DictionaryValues to return to UI.
-  base::ListValue* component_list = new base::ListValue();
+  auto component_list = base::MakeUnique<base::ListValue>();
   for (size_t j = 0; j < component_ids.size(); ++j) {
     update_client::CrxUpdateItem item;
     if (cus->GetComponentDetails(component_ids[j], &item)) {
@@ -216,33 +215,33 @@ base::string16 ComponentsUI::ComponentEventToString(Events event) {
 }
 
 base::string16 ComponentsUI::ServiceStatusToString(
-    update_client::CrxUpdateItem::State state) {
+    update_client::ComponentState state) {
   // TODO(sorin): handle kDownloaded. For now, just handle it as kUpdating.
   switch (state) {
-    case update_client::CrxUpdateItem::State::kNew:
+    case update_client::ComponentState::kNew:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_NEW);
-    case update_client::CrxUpdateItem::State::kChecking:
+    case update_client::ComponentState::kChecking:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_CHECKING);
-    case update_client::CrxUpdateItem::State::kCanUpdate:
+    case update_client::ComponentState::kCanUpdate:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_UPDATE);
-    case update_client::CrxUpdateItem::State::kDownloadingDiff:
+    case update_client::ComponentState::kDownloadingDiff:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_DNL_DIFF);
-    case update_client::CrxUpdateItem::State::kDownloading:
+    case update_client::ComponentState::kDownloading:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_DNL);
-    case update_client::CrxUpdateItem::State::kUpdatingDiff:
+    case update_client::ComponentState::kUpdatingDiff:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_UPDT_DIFF);
-    case update_client::CrxUpdateItem::State::kUpdating:
+    case update_client::ComponentState::kUpdating:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_UPDATING);
-    case update_client::CrxUpdateItem::State::kDownloaded:
+    case update_client::ComponentState::kDownloaded:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_DOWNLOADED);
-    case update_client::CrxUpdateItem::State::kUpdated:
+    case update_client::ComponentState::kUpdated:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_UPDATED);
-    case update_client::CrxUpdateItem::State::kUpToDate:
+    case update_client::ComponentState::kUpToDate:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_UPTODATE);
-    case update_client::CrxUpdateItem::State::kNoUpdate:
+    case update_client::ComponentState::kUpdateError:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_NOUPDATE);
-    case update_client::CrxUpdateItem::State::kUninstalled:  // Fall through.
-    case update_client::CrxUpdateItem::State::kLastStatus:
+    case update_client::ComponentState::kUninstalled:  // Fall through.
+    case update_client::ComponentState::kLastStatus:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_UNKNOWN);
   }
   return l10n_util::GetStringUTF16(IDS_COMPONENTS_UNKNOWN);

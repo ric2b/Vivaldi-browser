@@ -14,7 +14,6 @@
 #include "base/threading/platform_thread.h"
 #include "services/service_manager/public/c/main.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_runner.h"
@@ -25,6 +24,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/background.h"
+#include "ui/views/border.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/md_text_button.h"
@@ -92,7 +92,9 @@ class WindowDelegateView : public views::WidgetDelegateView {
   base::string16 GetWindowTitle() const override {
     return base::ASCIIToUTF16("Window");
   }
-  gfx::Size GetPreferredSize() const override { return gfx::Size(300, 300); }
+  gfx::Size CalculatePreferredSize() const override {
+    return gfx::Size(300, 300);
+  }
 
  private:
   const uint32_t traits_;
@@ -123,7 +125,9 @@ class ModalWindow : public views::WidgetDelegateView,
   void OnPaint(gfx::Canvas* canvas) override {
     canvas->FillRect(GetLocalBounds(), color_);
   }
-  gfx::Size GetPreferredSize() const override { return gfx::Size(200, 200); }
+  gfx::Size CalculatePreferredSize() const override {
+    return gfx::Size(200, 200);
+  }
   void Layout() override {
     gfx::Size open_ps = open_button_->GetPreferredSize();
     gfx::Rect local_bounds = GetLocalBounds();
@@ -187,7 +191,9 @@ class NonModalTransient : public views::WidgetDelegateView {
   void OnPaint(gfx::Canvas* canvas) override {
     canvas->FillRect(GetLocalBounds(), color_);
   }
-  gfx::Size GetPreferredSize() const override { return gfx::Size(250, 250); }
+  gfx::Size CalculatePreferredSize() const override {
+    return gfx::Size(250, 250);
+  }
 
   // Overridden from views::WidgetDelegate:
   bool CanResize() const override { return true; }
@@ -268,8 +274,8 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
         jank_button_(
             MdTextButton::Create(this, base::ASCIIToUTF16("Jank for (s):"))),
         jank_duration_field_(new views::Textfield) {
+    SetBorder(views::CreateEmptyBorder(gfx::Insets(5)));
     views::GridLayout* layout = new views::GridLayout(this);
-    layout->SetInsets(5, 5, 5, 5);
     SetLayoutManager(layout);
     views::ColumnSet* column_set = layout->AddColumnSet(0);
     column_set->AddColumn(views::GridLayout::LEADING,
@@ -404,8 +410,7 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
                          MenuItemView::NORMAL);
     // MenuRunner takes ownership of root.
     menu_runner_.reset(new MenuRunner(
-        root, MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU |
-                  views::MenuRunner::ASYNC));
+        root, MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU));
     menu_runner_->RunMenuAt(GetWidget(), NULL, gfx::Rect(point, gfx::Size()),
                             views::MENU_ANCHOR_TOPLEFT, source_type);
   }
@@ -434,7 +439,8 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
 }  // namespace
 
 WindowTypeLauncher::WindowTypeLauncher() {
-  registry_.AddInterface<mash::mojom::Launchable>(this);
+  registry_.AddInterface<mash::mojom::Launchable>(
+      base::Bind(&WindowTypeLauncher::Create, base::Unretained(this)));
 }
 WindowTypeLauncher::~WindowTypeLauncher() {}
 
@@ -453,10 +459,10 @@ void WindowTypeLauncher::OnStart() {
 }
 
 void WindowTypeLauncher::OnBindInterface(
-    const service_manager::ServiceInfo& source_info,
+    const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(source_info.identity, interface_name,
+  registry_.BindInterface(source_info, interface_name,
                           std::move(interface_pipe));
 }
 
@@ -476,7 +482,7 @@ void WindowTypeLauncher::Launch(uint32_t what, mash::mojom::LaunchMode how) {
 }
 
 void WindowTypeLauncher::Create(
-    const service_manager::Identity& remote_identity,
+    const service_manager::BindSourceInfo& source_info,
     mash::mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }

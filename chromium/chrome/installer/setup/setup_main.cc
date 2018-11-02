@@ -655,10 +655,13 @@ installer::InstallStatus UninstallProducts(
   if (!system_level_cmd.GetProgram().empty())
     base::LaunchProcess(system_level_cmd, base::LaunchOptions());
 
-  // Tell Google Update that an uninstall has taken place.
-  // Ignore the return value: success or failure of Google Update
-  // has no bearing on the success or failure of Chrome's uninstallation.
-  google_update::UninstallGoogleUpdate(installer_state.system_install());
+  // Tell Google Update that an uninstall has taken place if this install did
+  // not originate from the MSI. Google Update has its own logic relating to
+  // MSI-driven uninstalls that conflicts with this. Ignore the return value:
+  // success or failure of Google Update has no bearing on the success or
+  // failure of Chrome's uninstallation.
+  if (!installer_state.is_msi())
+    google_update::UninstallGoogleUpdate(installer_state.system_install());
 
   return install_status;
 }
@@ -1322,6 +1325,27 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
         RemoveChromeLegacyRegistryKeys(chrome.distribution(), chrome_exe);
       }
       }
+      // For Vivaldi, if this is a standalone install, write the stp.viv file
+      // to the same location as the executable.
+      if (installer_state.is_standalone() &&
+          (install_status == FIRST_INSTALL_SUCCESS ||
+          install_status == INSTALL_REPAIRED ||
+          install_status == NEW_VERSION_UPDATED ||
+          install_status == IN_USE_UPDATED)) {
+        std::string content_str("// Vivaldi Standalone");
+        base::FilePath stp_viv_path =
+            installer_state.target_path().
+                Append(installer::kStandaloneProfileHelper);
+        int size = static_cast<int>(content_str.size());
+        if (base::WriteFile(stp_viv_path,
+                            content_str.c_str(),
+                            size) == size) {
+          VLOG(1) << "Successfully wrote: " << stp_viv_path.value();
+        } else {
+          PLOG(ERROR) << "Error writing: " << stp_viv_path.value();
+          return installer::INSTALL_FAILED;
+        }
+      }
       // For Vivaldi, if this is a patch install, we will try to patch
       // setup.exe as well.
       if (patch_install &&
@@ -1382,6 +1406,9 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
         // We need to use the custom ShellExecuteFromExplorer to avoid
         // launching vivaldi.exe with elevated privileges.
         // The setup.exe process could be elevated.
+        VLOG(1) << "Launching: " << vivaldi_path.value()
+            << ", is_standalone() = " << installer_state.is_standalone()
+            << ", install_status = " << static_cast<int>(install_status);
         vivaldi::ShellExecuteFromExplorer(vivaldi_path,
                                           new_features_url,
                                           base::FilePath(),
@@ -1638,6 +1665,25 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
           .Append(installer::kChromeExe));
 
   if (is_vivaldi && !is_uninstall) {
+    std::vector<base::FilePath::StringType> components;
+    vivaldi_exe_path.GetComponents(&components);
+
+    wchar_t path_sz[MAX_PATH];
+    DWORD res = ::QueryDosDevice(components[0].c_str(),
+                                 (LPWSTR)path_sz, MAX_PATH - 1);
+
+    std::wstring target_path_str(path_sz);
+    if (res && (target_path_str.find(L"\\??\\", 0, 4) != std::wstring::npos)) {
+      // this is a virtual drive
+      VLOG(1) << "Virtual drive: " << target_path_str;
+      target_path_str.erase(0, 4);
+      base::FilePath target_path = base::FilePath(target_path_str);
+      for (size_t i = 2; i < components.size(); ++i) {
+        target_path = target_path.Append(components[i]);
+      }
+      vivaldi_exe_path = target_path;
+    }
+
     std::vector<base::win::ScopedHandle> vivaldi_processes(
         installer::GetRunningProcessesForPath(vivaldi_exe_path));
     if (!vivaldi_processes.empty()) {
@@ -1866,28 +1912,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     // to pass through, since this is only returned on uninstall which is
     // never invoked directly by Google Update.
     return_code = InstallUtil::GetInstallReturnCode(install_status);
-  }
-
-  if (return_code == 0 &&
-      install_type == installer::VivaldiInstallDialog::INSTALL_STANDALONE) {
-    std::string dummy_str("// Vivaldi Standalone");
-    int size = (int)dummy_str.size();
-
-    vivaldi_target_path =
-      vivaldi_target_path.Append(installer::kInstallBinaryDir);
-    vivaldi_target_path =
-      vivaldi_target_path.Append(installer::kStandaloneProfileHelper);
-
-    if (base::WriteFile(
-      vivaldi_target_path, dummy_str.c_str(), size) == size) {
-      VLOG(1) << "Successfully wrote " <<
-        installer::kStandaloneProfileHelper << " to " <<
-        vivaldi_target_path.value();
-    } else {
-      PLOG(ERROR) << "Error writing " << installer::kStandaloneProfileHelper <<
-        " to " << vivaldi_target_path.value();
-      return installer::INSTALL_FAILED;
-    }
   }
 
   VLOG(1) << "Installation complete, returning: " << return_code;

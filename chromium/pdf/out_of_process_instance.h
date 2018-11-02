@@ -68,9 +68,8 @@ class OutOfProcessInstance : public pp::Instance,
   // pp::Printing_Dev implementation.
   uint32_t QuerySupportedPrintOutputFormats() override;
   int32_t PrintBegin(const PP_PrintSettings_Dev& print_settings) override;
-  pp::Resource PrintPages(
-      const PP_PrintPageNumberRange_Dev* page_ranges,
-      uint32_t page_range_count) override;
+  pp::Resource PrintPages(const PP_PrintPageNumberRange_Dev* page_ranges,
+                          uint32_t page_range_count) override;
   void PrintEnd() override;
   bool IsPrintScalingDisabled() override;
 
@@ -85,6 +84,7 @@ class OutOfProcessInstance : public pp::Instance,
 
   // Called when the timer is fired.
   void OnClientTimerFired(int32_t id);
+  void OnClientTouchTimerFired(int32_t id);
 
   // Called to print without re-entrancy issues.
   void OnPrint(int32_t);
@@ -121,6 +121,7 @@ class OutOfProcessInstance : public pp::Instance,
   std::string ShowFileSelectionDialog() override;
   pp::URLLoader CreateURLLoader() override;
   void ScheduleCallback(int id, int delay_in_ms) override;
+  void ScheduleTouchTimerCallback(int id, int delay_in_ms) override;
   void SearchString(const base::char16* string,
                     const base::char16* term,
                     bool case_sensitive,
@@ -164,10 +165,7 @@ class OutOfProcessInstance : public pp::Instance,
   // Draws a rectangle with the specified dimensions and color in our buffer.
   void FillRect(const pp::Rect& rect, uint32_t color);
 
-  void LoadUrl(const std::string& url);
-  void LoadPreviewUrl(const std::string& url);
-  void LoadUrlInternal(const std::string& url, pp::URLLoader* loader,
-                       void (OutOfProcessInstance::* method)(int32_t));
+  void LoadUrl(const std::string& url, bool is_print_preview);
 
   // Creates a URL loader and allows it to access all urls, i.e. not just the
   // frame's origin.
@@ -204,9 +202,9 @@ class OutOfProcessInstance : public pp::Instance,
   // Process the preview page data information. |src_url| specifies the preview
   // page data location. The |src_url| is in the format:
   // chrome://print/id/page_number/print.pdf
-  // |dst_page_index| specifies the blank page index that needs to be replaced
+  // |dest_page_index| specifies the blank page index that needs to be replaced
   // with the new page data.
-  void ProcessPreviewPageInfo(const std::string& src_url, int dst_page_index);
+  void ProcessPreviewPageInfo(const std::string& src_url, int dest_page_index);
   // Load the next available preview page into the blank page.
   void LoadAvailablePreviewPage();
 
@@ -217,13 +215,10 @@ class OutOfProcessInstance : public pp::Instance,
   pp::ImageData image_data_;
   // Used when the plugin is embedded in a page and we have to create the loader
   // ourself.
-  pp::CompletionCallbackFactory<OutOfProcessInstance> loader_factory_;
   pp::URLLoader embed_loader_;
   pp::URLLoader embed_preview_loader_;
 
   PP_CursorType_Dev cursor_;  // The current cursor.
-
-  pp::CompletionCallbackFactory<OutOfProcessInstance> timer_factory_;
 
   // Size, in pixels, of plugin rectangle.
   pp::Size plugin_size_;
@@ -235,6 +230,8 @@ class OutOfProcessInstance : public pp::Instance,
   // Size of entire document in pixels (i.e. if each page is 800 pixels high and
   // there are 10 pages, the height will be 8000).
   pp::Size document_size_;
+  // The scroll offset in CSS pixels.
+  pp::Point scroll_offset_;
 
   // Enumeration of pinch states.
   // This should match PinchPhase enum in
@@ -270,9 +267,7 @@ class OutOfProcessInstance : public pp::Instance,
   std::vector<BackgroundPart> background_parts_;
 
   struct PrintSettings {
-    PrintSettings() {
-      Clear();
-    }
+    PrintSettings() { Clear(); }
     void Clear() {
       is_printing = false;
       print_pages_called_ = false;
@@ -303,11 +298,9 @@ class OutOfProcessInstance : public pp::Instance,
   std::string url_;
 
   // Used for submitting forms.
-  pp::CompletionCallbackFactory<OutOfProcessInstance> form_factory_;
   pp::URLLoader form_loader_;
 
-  // Used for printing without re-entrancy issues.
-  pp::CompletionCallbackFactory<OutOfProcessInstance> print_callback_factory_;
+  pp::CompletionCallbackFactory<OutOfProcessInstance> callback_factory_;
 
   // The callback for receiving the password from the page.
   std::unique_ptr<pp::CompletionCallbackWithOutput<pp::Var>> password_callback_;

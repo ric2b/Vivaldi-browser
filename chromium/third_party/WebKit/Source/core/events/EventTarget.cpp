@@ -50,10 +50,10 @@
 #include "core/probe/CoreProbes.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/Histogram.h"
-#include "wtf/PtrUtil.h"
-#include "wtf/StdLibExtras.h"
-#include "wtf/Threading.h"
-#include "wtf/Vector.h"
+#include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/StdLibExtras.h"
+#include "platform/wtf/Threading.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 namespace {
@@ -121,7 +121,7 @@ void ReportBlockedEvent(ExecutionContext* context,
       "being busy. "
       "Consider marking event handler as 'passive' to make the page more "
       "responsive.",
-      event->type().GetString().Utf8().Data(), lround(delayed_seconds * 1000));
+      event->type().GetString().Utf8().data(), lround(delayed_seconds * 1000));
 
   PerformanceMonitor::ReportGenericViolation(
       context, PerformanceMonitor::kBlockedEvent, message_text, delayed_seconds,
@@ -245,7 +245,7 @@ void EventTarget::SetDefaultAddEventListenerOptions(
         "Added non-passive event listener to a scroll-blocking '%s' event. "
         "Consider marking event handler as 'passive' to make the page more "
         "responsive.",
-        event_type.GetString().Utf8().Data());
+        event_type.GetString().Utf8().data());
 
     PerformanceMonitor::ReportGenericViolation(
         GetExecutionContext(), PerformanceMonitor::kDiscouragedAPIUse,
@@ -297,7 +297,7 @@ bool EventTarget::AddEventListenerInternal(
     argv.push_back(ToNode() ? ToNode()->nodeName() : InterfaceName());
     argv.push_back(event_type);
     activity_logger->LogEvent("blinkAddEventListener", argv.size(),
-                              argv.Data());
+                              argv.data());
   }
 
   RegisteredEventListener registered_listener;
@@ -335,6 +335,16 @@ void EventTarget::AddedEventListener(
     if (LocalDOMWindow* executing_window = this->ExecutingWindow()) {
       UseCounter::Count(executing_window->document(),
                         UseCounter::kSlotChangeEventAddListener);
+    }
+  } else if (EventUtil::IsDOMMutationEventType(event_type)) {
+    if (ExecutionContext* context = GetExecutionContext()) {
+      String message_text = String::Format(
+          "Added synchronous DOM mutation listener to a '%s' event. "
+          "Consider using MutationObserver to make the page more responsive.",
+          event_type.GetString().Utf8().data());
+      PerformanceMonitor::ReportGenericViolation(
+          context, PerformanceMonitor::kDiscouragedAPIUse, message_text, 0,
+          nullptr);
     }
   }
 }

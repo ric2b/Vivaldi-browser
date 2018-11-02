@@ -5,12 +5,13 @@
 #ifndef DetectedFace_h
 #define DetectedFace_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/ModulesExport.h"
+#include "platform/bindings/ScriptWrappable.h"
 
 namespace blink {
 
 class DOMRect;
+class Landmark;
 
 class MODULES_EXPORT DetectedFace final : public GarbageCollected<DetectedFace>,
                                           public ScriptWrappable {
@@ -19,14 +20,19 @@ class MODULES_EXPORT DetectedFace final : public GarbageCollected<DetectedFace>,
  public:
   static DetectedFace* Create();
   static DetectedFace* Create(DOMRect*);
+  static DetectedFace* Create(DOMRect*, const HeapVector<Landmark>&);
 
   DOMRect* boundingBox() const;
+  const HeapVector<Landmark>& landmarks() const;
+
   DECLARE_TRACE();
 
  private:
   explicit DetectedFace(DOMRect*);
+  DetectedFace(DOMRect*, const HeapVector<Landmark>&);
 
-  Member<DOMRect> bounding_box_;
+  const Member<DOMRect> bounding_box_;
+  const HeapVector<Landmark> landmarks_;
 };
 
 }  // namespace blink

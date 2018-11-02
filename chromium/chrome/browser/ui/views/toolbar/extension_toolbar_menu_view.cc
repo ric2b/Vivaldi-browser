@@ -35,6 +35,9 @@ ExtensionToolbarMenuView::ExtensionToolbarMenuView(
       max_height_(0),
       toolbar_actions_bar_observer_(this),
       weak_factory_(this) {
+  // Use a transparent background so that the menu's background shows through.
+  // None of the children use layers, so this should be ok.
+  SetBackgroundColor(SK_ColorTRANSPARENT);
   BrowserActionsContainer* main =
       BrowserView::GetBrowserViewForBrowser(browser_)
           ->toolbar()->browser_actions();
@@ -56,10 +59,10 @@ ExtensionToolbarMenuView::ExtensionToolbarMenuView(
 ExtensionToolbarMenuView::~ExtensionToolbarMenuView() {
 }
 
-gfx::Size ExtensionToolbarMenuView::GetPreferredSize() const {
-  gfx::Size s = views::ScrollView::GetPreferredSize();
-  // views::ScrollView::GetPreferredSize() includes the contents' size, but
-  // not the scrollbar width. Add it in if necessary.
+gfx::Size ExtensionToolbarMenuView::CalculatePreferredSize() const {
+  gfx::Size s = views::ScrollView::CalculatePreferredSize();
+  // views::ScrollView::CalculatePreferredSize() includes the contents' size,
+  // but not the scrollbar width. Add it in if necessary.
   if (container_->GetPreferredSize().height() > max_height_)
     s.Enlarge(GetScrollBarLayoutWidth(), 0);
   return s;
@@ -101,8 +104,9 @@ void ExtensionToolbarMenuView::OnToolbarActionDragDone() {
   if (app_menu_->for_drop() ||
       container_->toolbar_actions_bar()->GetIconCount() == 0) {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, base::Bind(&ExtensionToolbarMenuView::CloseAppMenu,
-                              weak_factory_.GetWeakPtr()),
+        FROM_HERE,
+        base::BindOnce(&ExtensionToolbarMenuView::CloseAppMenu,
+                       weak_factory_.GetWeakPtr()),
         base::TimeDelta::FromMilliseconds(g_close_menu_delay));
   }
 }

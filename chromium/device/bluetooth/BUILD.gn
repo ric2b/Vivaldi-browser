@@ -41,6 +41,23 @@ source_set("mojo") {
   ]
 }
 
+source_set("fake_bluetooth") {
+  sources = [
+    "test/fake_bluetooth.cc",
+    "test/fake_bluetooth.h",
+    "test/fake_central.cc",
+    "test/fake_central.h",
+    "test/fake_peripheral.cc",
+    "test/fake_peripheral.h",
+  ]
+
+  deps = [
+    ":bluetooth",
+    "//device/bluetooth/public/interfaces:fake_bluetooth_interfaces",
+    "//mojo/public/cpp/bindings",
+  ]
+}
+
 component("bluetooth") {
   sources = [
     "android/bluetooth_jni_registrar.cc",

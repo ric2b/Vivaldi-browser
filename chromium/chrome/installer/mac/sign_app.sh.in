@@ -24,22 +24,25 @@ export -n SHELLOPTS
 ME="$(basename "${0}")"
 readonly ME
 
-if [[ ${#} -ne 3 ]]; then
-  echo "usage: ${ME} app_path codesign_keychain codesign_id" >& 2
+if [[ ${#} -ne 3 && ${#} -ne 4 ]]; then
+  echo "usage: ${ME} app_path codesign_keychain codesign_id \
+[--development]" >& 2
   exit 1
 fi
 
 app_path="${1}"
 codesign_keychain="${2}"
 codesign_id="${3}"
+is_development=
 
-# Hack since GYP seems to remove duplicate arguments in actions
-if [ "$codesign_keychain" == "--same--" ]; then
-  codesign_keychain="${codesign_id}"
+if [[ ${#} == 4 && "${4}" == "--development" ]]; then
+  is_development=1
 fi
 
-# Use custom resource rules for the browser application.
 script_dir="$(dirname "${0}")"
+source "${script_dir}/variables.sh"
+
+# Use custom resource rules for the browser application.
 browser_app_rules="${script_dir}/app_resource_rules.plist"
 
 versioned_dir="${app_path}/Contents/Versions/@VERSION@"
@@ -53,7 +56,7 @@ app_mode_loader_app="${framework}/Resources/app_mode_loader.app"
 app_mode_loader="${app_mode_loader_app}/Contents/MacOS/app_mode_loader"
 sparkle_framework="${browser_app}/Contents/Frameworks/Sparkle.framework"
 
-requirement_string="\
+requirement="\
 designated => \
 (identifier \"com.vivaldi.Vivaldi\" or \
 identifier \"com.vivaldi.Vivaldi.beta\" or \
@@ -61,27 +64,35 @@ identifier \"com.vivaldi.Vivaldi.dev\" or \
 identifier \"com.vivaldi.Vivaldi.canary\") \
 "
 
-enforcement_flags="restrict"
-
-codesign --sign "${codesign_id}" --keychain "${codesign_keychain}" \
-    "${browser_app}" \
-    --options "${enforcement_flags}" \
-    -r="${requirement_string}"
-    #--resource-rules "${browser_app_rules}"
+codesign_cmd=(
+  codesign --sign "${codesign_id}" --keychain "${codesign_keychain}"
+  "${browser_app}"
+  --options "${enforcement_flags_app}"
+  # --resource-rules "${browser_app_rules}"
+)
+if [[ -z "${is_development}" ]]; then
+  codesign_cmd+=( -r="${requirement}" )
+fi
+"${codesign_cmd[@]}"
 
 # Show the signature.
 codesign --display --verbose=5 -r- "${browser_app}"
 
 # Verify everything. Check the framework and helper apps to make sure that the
-# signatures are present and weren't altered by the signing process. Don't use
-# --deep on the framework because Keystone's signature is in a transitional
-# state (b/18474911). Use --no-strict on the app because it uses custom resource
-# rules.
+# signatures are present and weren't altered by the signing process. Use
+# --ignore-resources on the app mode loader because its signature only covers
+# the main executable, not its containing .app bundle. Use --no-strict to
+# verify items that use custom resource rules:
+#  - The outermost brrowser .app
+#  - The inner .framework, which has a nested component that uses them.
 codesign --verify --verbose=6 --deep --no-strict "${browser_app}"
 codesign --verify --verbose=6 --deep "${crashpad_handler}"
 #codesign --verify --verbose=6 --ignore-resources "${app_mode_loader}"
 codesign --verify --verbose=6 --deep "${notification_service}"
-codesign --verify --verbose=6 --deep "${framework}"
+# Check the framework twice: once deep with no-strict, and once shallow with
+# strict verification.
+codesign --verify --verbose=6 --deep --no-strict "${framework}"
+codesign --verify --verbose=6 "${framework}" #--strict 
 codesign --verify --verbose=6 --deep "${helper_app}"
 codesign --verify --verbose=6 --deep "${sparkle_framework}"
 
@@ -89,14 +100,15 @@ codesign --verify --verbose=6 --deep "${sparkle_framework}"
 # validation. This is unreliable on 10.11 where syspolicyd caches assessments
 # and becomes confused when a bundle's CFExecutableName changes
 # (https://openradar.appspot.com/23614087), so verify a copy at a unique path.
-#temp_dir="$(mktemp -d -t "$(basename "${0}")")"
+#if [[ -z "${is_development}" ]]; then
+#  temp_dir="$(mktemp -d -t "$(basename "${0}")")"
 #
-#cleanup() {
-#  set +e
-#  rm -rf "${temp_dir}"
-#}
-#trap cleanup EXIT
-#
-#temp_browser_app="${temp_dir}/$(basename "${browser_app}")"
-#rsync -a "${browser_app}/" "${temp_browser_app}"
-#spctl --assess -vv "${temp_browser_app}"
+#  cleanup() {
+#    set +e
+#    rm -rf "${temp_dir}"
+#  }
+#  trap cleanup EXIT
+#  temp_browser_app="${temp_dir}/$(basename "${browser_app}")"
+#  rsync -a "${browser_app}/" "${temp_browser_app}"
+#  spctl --assess -vv "${temp_browser_app}"
+#fi

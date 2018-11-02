@@ -50,6 +50,7 @@
 #include "platform/exported/WebScrollbarThemeGeometryNative.h"
 #include "platform/geometry/Region.h"
 #include "platform/geometry/TransformState.h"
+#include "platform/graphics/CompositorElementId.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #if OS(MACOSX)
@@ -337,6 +338,11 @@ void ScrollingCoordinator::RemoveWebScrollbarLayer(
     GraphicsLayer::UnregisterContentsLayer(scrollbar_layer->Layer());
 }
 
+static uint64_t NextScrollbarId() {
+  static ScrollbarId next_scrollbar_id = 0;
+  return ++next_scrollbar_id;
+}
+
 static std::unique_ptr<WebScrollbarLayer> CreateScrollbarLayer(
     Scrollbar& scrollbar,
     float device_scale_factor) {
@@ -350,10 +356,14 @@ static std::unique_ptr<WebScrollbarLayer> CreateScrollbarLayer(
     scrollbar_layer =
         Platform::Current()->CompositorSupport()->CreateOverlayScrollbarLayer(
             WebScrollbarImpl::Create(&scrollbar), painter, std::move(geometry));
+    scrollbar_layer->SetElementId(CompositorElementIdFromScrollbarId(
+        NextScrollbarId(), CompositorElementIdNamespace::kScrollbar));
   } else {
     scrollbar_layer =
         Platform::Current()->CompositorSupport()->CreateScrollbarLayer(
             WebScrollbarImpl::Create(&scrollbar), painter, std::move(geometry));
+    scrollbar_layer->SetElementId(CompositorElementIdFromScrollbarId(
+        NextScrollbarId(), CompositorElementIdNamespace::kScrollbar));
   }
   GraphicsLayer::RegisterContentsLayer(scrollbar_layer->Layer());
   return scrollbar_layer;
@@ -372,6 +382,8 @@ ScrollingCoordinator::CreateSolidColorScrollbarLayer(
       Platform::Current()->CompositorSupport()->CreateSolidColorScrollbarLayer(
           web_orientation, thumb_thickness, track_start,
           is_left_side_vertical_scrollbar);
+  scrollbar_layer->SetElementId(CompositorElementIdFromScrollbarId(
+      NextScrollbarId(), CompositorElementIdNamespace::kScrollbar));
   GraphicsLayer::RegisterContentsLayer(scrollbar_layer->Layer());
   return scrollbar_layer;
 }
@@ -559,7 +571,7 @@ using LayerFrameMap =
     HeapHashMap<const PaintLayer*, HeapVector<Member<const LocalFrame>>>;
 static void MakeLayerChildFrameMap(const LocalFrame* current_frame,
                                    LayerFrameMap* map) {
-  map->Clear();
+  map->clear();
   const FrameTree& tree = current_frame->Tree();
   for (const Frame* child = tree.FirstChild(); child;
        child = child->Tree().NextSibling()) {
@@ -569,7 +581,7 @@ static void MakeLayerChildFrameMap(const LocalFrame* current_frame,
     if (owner_layout_item.IsNull())
       continue;
     const PaintLayer* containing_layer = owner_layout_item.EnclosingLayer();
-    LayerFrameMap::iterator iter = map->Find(containing_layer);
+    LayerFrameMap::iterator iter = map->find(containing_layer);
     if (iter == map->end())
       map->insert(containing_layer, HeapVector<Member<const LocalFrame>>())
           .stored_value->value.push_back(ToLocalFrame(child));
@@ -590,7 +602,7 @@ static void ProjectRectsToGraphicsLayerSpaceRecursive(
       cur_layer->GetLayoutObject().GetFrameView()->ShouldThrottleRendering())
     return;
   // Project any rects for the current layer
-  LayerHitTestRects::const_iterator layer_iter = layer_rects.Find(cur_layer);
+  LayerHitTestRects::const_iterator layer_iter = layer_rects.find(cur_layer);
   if (layer_iter != layer_rects.end()) {
     // Find the enclosing composited layer when it's in another document (for
     // non-composited iframes).
@@ -604,7 +616,7 @@ static void ProjectRectsToGraphicsLayerSpaceRecursive(
         composited_layer->GraphicsLayerBacking(&cur_layer->GetLayoutObject());
 
     GraphicsLayerHitTestRects::iterator gl_iter =
-        graphics_rects.Find(graphics_layer);
+        graphics_rects.find(graphics_layer);
     Vector<LayoutRect>* gl_rects;
     if (gl_iter == graphics_rects.end())
       gl_rects = &graphics_rects.insert(graphics_layer, Vector<LayoutRect>())
@@ -647,7 +659,7 @@ static void ProjectRectsToGraphicsLayerSpaceRecursive(
 
   // If this layer has any frames of interest as a child of it, walk those (with
   // an updated frame map).
-  LayerFrameMap::iterator map_iter = layer_child_frame_map.Find(cur_layer);
+  LayerFrameMap::iterator map_iter = layer_child_frame_map.find(cur_layer);
   if (map_iter != layer_child_frame_map.end()) {
     for (size_t i = 0; i < map_iter->value.size(); i++) {
       const LocalFrame* child_frame = map_iter->value[i];
@@ -732,9 +744,9 @@ void ScrollingCoordinator::Reset() {
   for (const auto& scrollbar : vertical_scrollbars_)
     GraphicsLayer::UnregisterContentsLayer(scrollbar.value->Layer());
 
-  horizontal_scrollbars_.Clear();
-  vertical_scrollbars_.Clear();
-  layers_with_touch_rects_.Clear();
+  horizontal_scrollbars_.clear();
+  vertical_scrollbars_.clear();
+  layers_with_touch_rects_.clear();
   was_frame_scrollable_ = false;
 
   last_main_thread_scrolling_reasons_ = 0;
@@ -770,7 +782,7 @@ void ScrollingCoordinator::SetTouchEventTargetRects(
                                   Vector<LayoutRect>());
   }
 
-  layers_with_touch_rects_.Clear();
+  layers_with_touch_rects_.clear();
   for (const auto& layer_rect : layer_rects) {
     if (!layer_rect.value.IsEmpty()) {
       const PaintLayer* composited_layer =
@@ -786,10 +798,13 @@ void ScrollingCoordinator::SetTouchEventTargetRects(
 
   for (const auto& layer_rect : graphics_layer_rects) {
     const GraphicsLayer* graphics_layer = layer_rect.key;
-    WebVector<WebRect> web_rects(layer_rect.value.size());
-    for (size_t i = 0; i < layer_rect.value.size(); ++i)
-      web_rects[i] = EnclosingIntRect(layer_rect.value[i]);
-    graphics_layer->PlatformLayer()->SetTouchEventHandlerRegion(web_rects);
+    WebVector<WebTouchInfo> touch(layer_rect.value.size());
+    for (size_t i = 0; i < layer_rect.value.size(); ++i) {
+      touch[i].rect = EnclosingIntRect(layer_rect.value[i]);
+      // TODO(xidachen): route the real value here
+      touch[i].touch_action = TouchAction::kTouchActionNone;
+    }
+    graphics_layer->PlatformLayer()->SetTouchEventHandlerRegion(touch);
   }
 }
 
@@ -1005,12 +1020,10 @@ Region ScrollingCoordinator::ComputeShouldHandleScrollGestureOnMainThreadRegion(
     }
   }
 
-  if (const FrameView::PluginsSet* plugins = frame_view->Plugins()) {
-    for (const Member<PluginView>& plugin : *plugins) {
-      if (plugin->WantsWheelEvents()) {
-        IntRect box = frame_view->ConvertToRootFrame(plugin->FrameRect());
-        should_handle_scroll_gesture_on_main_thread_region.Unite(box);
-      }
+  for (const auto& plugin : frame_view->Plugins()) {
+    if (plugin->WantsWheelEvents()) {
+      IntRect box = frame_view->ConvertToRootFrame(plugin->FrameRect());
+      should_handle_scroll_gesture_on_main_thread_region.Unite(box);
     }
   }
 

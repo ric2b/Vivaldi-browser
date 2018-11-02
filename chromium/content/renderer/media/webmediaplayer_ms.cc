@@ -144,7 +144,7 @@ WebMediaPlayerMS::WebMediaPlayerMS(
     blink::WebFrame* frame,
     blink::WebMediaPlayerClient* client,
     media::WebMediaPlayerDelegate* delegate,
-    media::MediaLog* media_log,
+    std::unique_ptr<media::MediaLog> media_log,
     std::unique_ptr<MediaStreamRendererFactory> factory,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
@@ -162,7 +162,7 @@ WebMediaPlayerMS::WebMediaPlayerMS(
       delegate_id_(0),
       paused_(true),
       video_rotation_(media::VIDEO_ROTATION_0),
-      media_log_(media_log),
+      media_log_(std::move(media_log)),
       renderer_factory_(std::move(factory)),
       io_task_runner_(io_task_runner),
       compositor_task_runner_(compositor_task_runner),
@@ -226,7 +226,7 @@ void WebMediaPlayerMS::Load(LoadType load_type,
       GetWebMediaStreamFromWebMediaPlayerSource(source);
 
   compositor_ = new WebMediaPlayerMSCompositor(
-      compositor_task_runner_, web_stream, AsWeakPtr(), media_log_);
+      compositor_task_runner_, io_task_runner_, web_stream, AsWeakPtr());
 
   SetNetworkState(WebMediaPlayer::kNetworkStateLoading);
   SetReadyState(WebMediaPlayer::kReadyStateHaveNothing);
@@ -249,7 +249,7 @@ void WebMediaPlayerMS::Load(LoadType load_type,
     // Report UMA and RAPPOR metrics.
     GURL url = source.IsURL() ? GURL(source.GetAsURL()) : GURL();
     media::ReportMetrics(load_type, url, frame_->GetSecurityOrigin(),
-                         media_log_);
+                         media_log_.get());
 
     audio_renderer_ = renderer_factory_->GetAudioRenderer(
         web_stream, frame->GetRoutingID(), initial_audio_output_device_id_,
@@ -577,10 +577,12 @@ void WebMediaPlayerMS::OnBecamePersistentVideo(bool value) {
 
 bool WebMediaPlayerMS::CopyVideoTextureToPlatformTexture(
     gpu::gles2::GLES2Interface* gl,
+    unsigned target,
     unsigned int texture,
     unsigned internal_format,
     unsigned format,
     unsigned type,
+    int level,
     bool premultiply_alpha,
     bool flip_y) {
   TRACE_EVENT0("media", "WebMediaPlayerMS:copyVideoTextureToPlatformTexture");
@@ -601,13 +603,14 @@ bool WebMediaPlayerMS::CopyVideoTextureToPlatformTexture(
   context_3d = media::Context3D(provider->ContextGL(), provider->GrContext());
   DCHECK(context_3d.gl);
   return video_renderer_.CopyVideoFrameTexturesToGLTexture(
-      context_3d, gl, video_frame.get(), texture, internal_format, format, type,
-      premultiply_alpha, flip_y);
+      context_3d, gl, video_frame.get(), target, texture, internal_format,
+      format, type, level, premultiply_alpha, flip_y);
 }
 
 bool WebMediaPlayerMS::TexImageImpl(TexImageFunctionID functionID,
                                     unsigned target,
                                     gpu::gles2::GLES2Interface* gl,
+                                    unsigned int texture,
                                     int level,
                                     int internalformat,
                                     unsigned format,
@@ -629,9 +632,14 @@ bool WebMediaPlayerMS::TexImageImpl(TexImageFunctionID functionID,
   }
 
   if (functionID == kTexImage2D) {
+    auto* provider =
+        RenderThreadImpl::current()->SharedMainThreadContextProvider().get();
+    // GPU Process crashed.
+    if (!provider)
+      return false;
     return media::SkCanvasVideoRenderer::TexImage2D(
-        target, gl, video_frame.get(), level, internalformat, format, type,
-        flip_y, premultiply_alpha);
+        target, texture, gl, provider->ContextCapabilities(), video_frame.get(),
+        level, internalformat, format, type, flip_y, premultiply_alpha);
   } else if (functionID == kTexSubImage2D) {
     return media::SkCanvasVideoRenderer::TexSubImage2D(
         target, gl, video_frame.get(), level, format, type, xoffset, yoffset,

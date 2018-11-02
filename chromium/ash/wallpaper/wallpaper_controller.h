@@ -9,10 +9,9 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/interfaces/wallpaper.mojom.h"
-#include "ash/session/session_state_observer.h"
+#include "ash/session/session_observer.h"
 #include "ash/shell_observer.h"
 #include "ash/wm_display_observer.h"
-#include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
@@ -20,6 +19,7 @@
 #include "components/wallpaper/wallpaper_layout.h"
 #include "components/wallpaper/wallpaper_resizer_observer.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "ui/compositor/compositor_lock.h"
 #include "ui/gfx/color_analysis.h"
 #include "ui/gfx/image/image_skia.h"
 
@@ -36,14 +36,21 @@ namespace ash {
 
 class WallpaperControllerObserver;
 
-// Controls the desktop background wallpaper.
+// Controls the desktop background wallpaper:
+//   - Sets a wallpaper image and layout;
+//   - Handles display change (add/remove display, configuration change etc);
+//   - Calculates prominent color for shelf;
+//   - Move wallpaper to locked container(s) when session state is not ACTIVE to
+//     hide the user desktop and move it to unlocked container when session
+//     state is ACTIVE;
 class ASH_EXPORT WallpaperController
     : public NON_EXPORTED_BASE(mojom::WallpaperController),
       public WmDisplayObserver,
       public ShellObserver,
       public wallpaper::WallpaperResizerObserver,
       public wallpaper::WallpaperColorCalculatorObserver,
-      public SessionStateObserver {
+      public SessionObserver,
+      public NON_EXPORTED_BASE(ui::CompositorLockClient) {
  public:
   enum WallpaperMode { WALLPAPER_NONE, WALLPAPER_IMAGE };
 
@@ -83,22 +90,14 @@ class ASH_EXPORT WallpaperController
   // crashes. An example test is SystemGestureEventFilterTest.ThreeFingerSwipe.
   void CreateEmptyWallpaper();
 
-  // Move all wallpaper widgets to the locked container.
-  // Returns true if the wallpaper moved.
-  bool MoveToLockedContainer();
-
-  // Move all wallpaper widgets to unlocked container.
-  // Returns true if the wallpaper moved.
-  bool MoveToUnlockedContainer();
-
   // WmDisplayObserver:
   void OnDisplayConfigurationChanged() override;
 
   // ShellObserver:
-  void OnRootWindowAdded(WmWindow* root_window) override;
+  void OnRootWindowAdded(aura::Window* root_window) override;
 
-  // SessionStateObserver:
-  void SessionStateChanged(session_manager::SessionState state) override;
+  // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
 
   // Returns the maximum size of all displays combined in native
   // resolutions.  Note that this isn't the bounds of the display who
@@ -132,10 +131,13 @@ class ASH_EXPORT WallpaperController
   void OnColorCalculationComplete() override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(WallpaperControllerTest, BasicReparenting);
+  FRIEND_TEST_ALL_PREFIXES(WallpaperControllerTest,
+                           WallpaperMovementDuringUnlock);
   friend class WallpaperControllerTest;
 
   // Creates a WallpaperWidgetController for |root_window|.
-  void InstallDesktopController(WmWindow* root_window);
+  void InstallDesktopController(aura::Window* root_window);
 
   // Creates a WallpaperWidgetController for all root windows.
   void InstallDesktopControllerForAllWindows();
@@ -165,6 +167,20 @@ class ASH_EXPORT WallpaperController
   // system state (e.g. wallpaper image, SessionState, etc.).
   bool ShouldCalculateColors() const;
 
+  // Move all wallpaper widgets to the locked container.
+  // Returns true if the wallpaper moved.
+  bool MoveToLockedContainer();
+
+  // Move all wallpaper widgets to unlocked container.
+  // Returns true if the wallpaper moved.
+  bool MoveToUnlockedContainer();
+
+  // When wallpaper resizes, we can check which displays will be affected. For
+  // simplicity, we only lock the compositor for the internal display.
+  void GetInternalDisplayCompositorLock();
+  // CompositorLockClient:
+  void CompositorLockTimedOut() override;
+
   bool locked_;
 
   WallpaperMode wallpaper_mode_;
@@ -193,6 +209,10 @@ class ASH_EXPORT WallpaperController
   int wallpaper_reload_delay_;
 
   scoped_refptr<base::TaskRunner> task_runner_;
+
+  ScopedSessionObserver scoped_session_observer_;
+
+  std::unique_ptr<ui::CompositorLock> compositor_lock_;
 
   DISALLOW_COPY_AND_ASSIGN(WallpaperController);
 };

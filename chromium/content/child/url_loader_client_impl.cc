@@ -29,7 +29,7 @@ URLLoaderClientImpl::~URLLoaderClientImpl() {
 }
 
 void URLLoaderClientImpl::Bind(mojom::URLLoaderClientPtr* client_ptr) {
-  binding_.Bind(client_ptr, task_runner_);
+  binding_.Bind(mojo::MakeRequest(client_ptr), task_runner_);
 }
 
 void URLLoaderClientImpl::SetDefersLoading() {
@@ -110,6 +110,7 @@ void URLLoaderClientImpl::FlushDeferredMessages() {
 
 void URLLoaderClientImpl::OnReceiveResponse(
     const ResourceResponseHead& response_head,
+    const base::Optional<net::SSLInfo>& ssl_info,
     mojom::DownloadedTempFilePtr downloaded_file) {
   has_received_response_ = true;
   downloaded_file_ = std::move(downloaded_file);
@@ -201,9 +202,10 @@ void URLLoaderClientImpl::StoreAndDispatch(const IPC::Message& message) {
   }
 }
 
-void URLLoaderClientImpl::OnUploadProgress(int64_t current_position,
-                                           int64_t total_size,
-                                           const base::Closure& ack_callback) {
+void URLLoaderClientImpl::OnUploadProgress(
+    int64_t current_position,
+    int64_t total_size,
+    OnUploadProgressCallback ack_callback) {
   if (NeedsStoringMessage()) {
     StoreAndDispatch(
         ResourceMsg_UploadProgress(request_id_, current_position, total_size));
@@ -211,7 +213,7 @@ void URLLoaderClientImpl::OnUploadProgress(int64_t current_position,
     resource_dispatcher_->OnUploadProgress(request_id_, current_position,
                                            total_size);
   }
-  ack_callback.Run();
+  std::move(ack_callback).Run();
 }
 
 }  // namespace content

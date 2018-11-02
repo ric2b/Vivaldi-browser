@@ -15,8 +15,9 @@
 #include "content/common/content_switches_internal.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "media/base/media_switches.h"
 #include "services/device/public/cpp/device_features.h"
-#include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
+#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/native_theme/native_theme_features.h"
 
@@ -49,10 +50,6 @@ static void SetRuntimeFeatureDefaultsForPlatform() {
   WebRuntimeFeatures::EnableMediaControlsOverlayPlayButton(true);
 #else  // defined(OS_ANDROID)
   WebRuntimeFeatures::EnableNavigatorContentUtils(true);
-  if (base::FeatureList::IsEnabled(
-          features::kCrossOriginMediaPlaybackRequiresUserGesture)) {
-    WebRuntimeFeatures::EnableAutoplayMutedVideos(true);
-  }
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID) || defined(USE_AURA)
@@ -111,11 +108,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (!base::FeatureList::IsEnabled(features::kNotificationContentImage))
     WebRuntimeFeatures::EnableNotificationContentImage(false);
 
-  // For the time being, wasm serialization is separately controlled
-  // by this flag. WebAssembly APIs and compilation is now enabled
-  // unconditionally in V8.
-  if (base::FeatureList::IsEnabled(features::kWebAssembly))
-    WebRuntimeFeatures::EnableWebAssemblySerialization(true);
+  WebRuntimeFeatures::EnableWebAssemblyStreaming(
+      base::FeatureList::IsEnabled(features::kWebAssemblyStreaming));
 
   WebRuntimeFeatures::EnableSharedArrayBuffer(
       base::FeatureList::IsEnabled(features::kSharedArrayBuffer));
@@ -143,10 +137,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   if (command_line.HasSwitch(switches::kForceDisplayList2dCanvas))
     WebRuntimeFeatures::ForceDisplayList2dCanvas(true);
-
-  if (command_line.HasSwitch(
-      switches::kEnableCanvas2dDynamicRenderingModeSwitching))
-    WebRuntimeFeatures::EnableCanvas2dDynamicRenderingModeSwitching(true);
 
   if (command_line.HasSwitch(switches::kEnableWebGLDraftExtensions))
     WebRuntimeFeatures::EnableWebGLDraftExtensions(true);
@@ -199,9 +189,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
       enableExperimentalWebPlatformFeatures) {
     WebRuntimeFeatures::EnableNetworkInformation(true);
   }
-
-  if (!base::FeatureList::IsEnabled(features::kCredentialManagementAPI))
-    WebRuntimeFeatures::EnableCredentialManagerAPI(false);
 
   if (command_line.HasSwitch(switches::kReducedReferrerGranularity))
     WebRuntimeFeatures::EnableReducedReferrerGranularity(true);
@@ -331,19 +318,19 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
           features::kSendBeaconThrowForBlobWithNonSimpleType))
     WebRuntimeFeatures::EnableSendBeaconThrowForBlobWithNonSimpleType(true);
 
-  WebRuntimeFeatures::EnableAccessibilityObjectModel(
-      base::FeatureList::IsEnabled(features::kAccessibilityObjectModel));
-
 #if defined(OS_ANDROID)
   if (command_line.HasSwitch(switches::kDisableMediaSessionAPI))
     WebRuntimeFeatures::EnableMediaSession(false);
+#endif
 
   WebRuntimeFeatures::EnablePaymentRequest(
       base::FeatureList::IsEnabled(features::kWebPayments));
-#endif
 
   WebRuntimeFeatures::EnableServiceWorkerNavigationPreload(
       base::FeatureList::IsEnabled(features::kServiceWorkerNavigationPreload));
+
+  WebRuntimeFeatures::EnableOffMainThreadFetch(
+      base::FeatureList::IsEnabled(features::kOffMainThreadFetch));
 
   if (base::FeatureList::IsEnabled(features::kGamepadExtensions))
     WebRuntimeFeatures::EnableGamepadExtensions(true);
@@ -359,18 +346,30 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kGenericSensor))
     WebRuntimeFeatures::EnableGenericSensor(true);
 
-  // Enable features which VrShell depends on.
-  if (base::FeatureList::IsEnabled(features::kVrShell)) {
-    WebRuntimeFeatures::EnableGamepadExtensions(true);
-    WebRuntimeFeatures::EnableWebVR(true);
-  }
-
   if (base::FeatureList::IsEnabled(features::kLoadingWithMojo))
     WebRuntimeFeatures::EnableLoadingWithMojo(true);
 
   if (!base::FeatureList::IsEnabled(features::kBlockCredentialedSubresources)) {
     WebRuntimeFeatures::EnableFeatureFromString("BlockCredentialedSubresources",
                                                 false);
+  }
+
+  WebRuntimeFeatures::EnableFeatureFromString(
+      "AllowContentInitiatedDataUrlNavigations",
+      base::FeatureList::IsEnabled(
+          features::kAllowContentInitiatedDataUrlNavigations));
+
+#if defined(OS_ANDROID)
+  if (base::FeatureList::IsEnabled(features::kWebNfc))
+    WebRuntimeFeatures::EnableWebNfc(true);
+#endif
+
+  if (base::FeatureList::IsEnabled(features::kIdleTimeSpellChecking))
+    WebRuntimeFeatures::EnableFeatureFromString("IdleTimeSpellChecking", true);
+
+  if (media::GetEffectiveAutoplayPolicy(command_line) !=
+      switches::autoplay::kNoUserGestureRequiredPolicy) {
+    WebRuntimeFeatures::EnableAutoplayMutedVideos(true);
   }
 
   WebRuntimeFeatures::EnableLocationHardReload(

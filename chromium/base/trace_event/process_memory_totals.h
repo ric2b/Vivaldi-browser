@@ -32,6 +32,36 @@ class BASE_EXPORT ProcessMemoryTotals {
   uint64_t resident_set_bytes() const { return resident_set_bytes_; }
   void set_resident_set_bytes(uint64_t value) { resident_set_bytes_ = value; }
 
+  // Platform-specific data that will be used to compute the
+  // PrivateMemoryFootprint.
+  //
+  // Keep this in sync with PlatformPrivateFootprint in
+  // services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom
+  struct PlatformPrivateFootprint {
+    // macOS 10.12+
+    uint64_t phys_footprint_bytes = 0;
+
+    // macOS [all versions]
+    uint64_t internal_bytes = 0;
+    uint64_t compressed_bytes = 0;
+
+    // Linux, Android, ChromeOS
+    uint64_t rss_anon_bytes = 0;
+    uint64_t vm_swap_bytes = 0;
+
+    // On Windows,
+    uint64_t private_bytes = 0;
+
+    // On iOS,
+    //   TBD: https://crbug.com/714961
+  };
+  const PlatformPrivateFootprint& GetPlatformPrivateFootprint() const {
+    return platform_private_footprint_;
+  }
+  void SetPlatformPrivateFootprint(const PlatformPrivateFootprint& footprint) {
+    platform_private_footprint_ = footprint;
+  }
+
   uint64_t peak_resident_set_bytes() const { return peak_resident_set_bytes_; }
   void set_peak_resident_set_bytes(uint64_t value) {
     peak_resident_set_bytes_ = value;
@@ -50,6 +80,10 @@ class BASE_EXPORT ProcessMemoryTotals {
   uint64_t resident_set_bytes_;
   uint64_t peak_resident_set_bytes_;
   bool is_peak_rss_resetable_;
+
+  // Not emitted in the trace as this is intended to be an intermediary in
+  // computation of private memory footprint.
+  PlatformPrivateFootprint platform_private_footprint_;
 
   // Extra metrics for OS-specific statistics.
   std::map<const char*, uint64_t> extra_fields_;

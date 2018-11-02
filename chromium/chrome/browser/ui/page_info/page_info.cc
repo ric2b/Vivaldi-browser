@@ -45,8 +45,6 @@
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/chromium_strings.h"
-#include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -79,6 +77,8 @@
 #include "chrome/browser/ui/page_info/page_info_infobar_delegate.h"
 #endif
 
+#include "extensions/api/tabs/tabs_private_api.h"
+
 using base::ASCIIToUTF16;
 using base::UTF8ToUTF16;
 using base::UTF16ToUTF8;
@@ -94,8 +94,8 @@ enum SSLCertificateDecisionsDidRevoke {
 };
 
 // The list of content settings types to display on the Page Info UI. THE
-// ORDER OF THESE ITEMS IS IMPORTANT. To propose changing it, email
-// security-dev@chromium.org.
+// ORDER OF THESE ITEMS IS IMPORTANT and comes from https://crbug.com/610358. To
+// propose changing it, email security-dev@chromium.org.
 ContentSettingsType kPermissionType[] = {
     CONTENT_SETTINGS_TYPE_GEOLOCATION,
     CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
@@ -107,16 +107,18 @@ ContentSettingsType kPermissionType[] = {
     CONTENT_SETTINGS_TYPE_IMAGES,
 #endif
     CONTENT_SETTINGS_TYPE_POPUPS,
+    CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER,
     CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC,
     CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
     CONTENT_SETTINGS_TYPE_AUTOPLAY,
     CONTENT_SETTINGS_TYPE_MIDI_SYSEX,
-    CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER,
 };
 
 // Determines whether to show permission |type| in the Page Info UI. Only
 // applies to permissions listed in |kPermissionType|.
-bool ShouldShowPermission(ContentSettingsType type) {
+bool ShouldShowPermission(ContentSettingsType type,
+                          const GURL& site_url,
+                          HostContentSettingsMap* content_settings) {
 #if !defined(OS_ANDROID)
   // Autoplay is Android-only at the moment.
   if (type == CONTENT_SETTINGS_TYPE_AUTOPLAY)
@@ -124,8 +126,16 @@ bool ShouldShowPermission(ContentSettingsType type) {
 #endif
 
   if (type == CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER) {
-    return base::FeatureList::IsEnabled(
-        subresource_filter::kSafeBrowsingSubresourceFilterExperimentalUI);
+    if (!base::FeatureList::IsEnabled(
+            subresource_filter::kSafeBrowsingSubresourceFilterExperimentalUI)) {
+      return false;
+    }
+
+    // The setting for subresource filtering should not show up if the site is
+    // not activated, both on android and desktop platforms.
+    return content_settings->GetWebsiteSetting(
+               site_url, GURL(), CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER_DATA,
+               std::string(), nullptr) != nullptr;
   }
 
   return true;
@@ -209,17 +219,17 @@ void GetSiteIdentityByMaliciousContentStatus(
       break;
     case security_state::MALICIOUS_CONTENT_STATUS_MALWARE:
       *status = PageInfo::SITE_IDENTITY_STATUS_MALWARE;
-      *details = l10n_util::GetStringUTF16(IDS_PAGEINFO_MALWARE_DETAILS);
+      *details = l10n_util::GetStringUTF16(IDS_PAGE_INFO_MALWARE_DETAILS);
       break;
     case security_state::MALICIOUS_CONTENT_STATUS_SOCIAL_ENGINEERING:
       *status = PageInfo::SITE_IDENTITY_STATUS_SOCIAL_ENGINEERING;
       *details =
-          l10n_util::GetStringUTF16(IDS_PAGEINFO_SOCIAL_ENGINEERING_DETAILS);
+          l10n_util::GetStringUTF16(IDS_PAGE_INFO_SOCIAL_ENGINEERING_DETAILS);
       break;
     case security_state::MALICIOUS_CONTENT_STATUS_UNWANTED_SOFTWARE:
       *status = PageInfo::SITE_IDENTITY_STATUS_UNWANTED_SOFTWARE;
       *details =
-          l10n_util::GetStringUTF16(IDS_PAGEINFO_UNWANTED_SOFTWARE_DETAILS);
+          l10n_util::GetStringUTF16(IDS_PAGE_INFO_UNWANTED_SOFTWARE_DETAILS);
       break;
   }
 }
@@ -356,6 +366,14 @@ void PageInfo::OnSitePermissionChanged(ContentSettingsType type,
 
   // Refresh the UI to reflect the new setting.
   PresentSitePermissions();
+
+  // NOTE(andre@vivaldi.com) : Since we use the pageinfo bubble in our ui we
+  // fire an event that tells us that sitesettings has changed from here.
+  extensions::VivaldiPrivateTabObserver* private_tab =
+      extensions::VivaldiPrivateTabObserver::FromWebContents(web_contents());
+  if (private_tab) {
+    private_tab->OnSitePermissionChanged(type, setting);
+  }
 }
 
 void PageInfo::OnSiteChosenObjectDeleted(const ChooserUIInfo& ui_info,
@@ -499,13 +517,13 @@ void PageInfo::Init(const GURL& url,
         base::string16 locality;
         if (!certificate_->subject().state_or_province_name.empty()) {
           locality = l10n_util::GetStringFUTF16(
-              IDS_PAGEINFO_ADDRESS,
+              IDS_PAGE_INFO_ADDRESS,
               UTF8ToUTF16(certificate_->subject().locality_name),
               UTF8ToUTF16(certificate_->subject().state_or_province_name),
               UTF8ToUTF16(certificate_->subject().country_name));
         } else {
           locality = l10n_util::GetStringFUTF16(
-              IDS_PAGEINFO_PARTIAL_ADDRESS,
+              IDS_PAGE_INFO_PARTIAL_ADDRESS,
               UTF8ToUTF16(certificate_->subject().locality_name),
               UTF8ToUTF16(certificate_->subject().country_name));
         }
@@ -667,8 +685,10 @@ void PageInfo::PresentSitePermissions() {
   for (size_t i = 0; i < arraysize(kPermissionType); ++i) {
     permission_info.type = kPermissionType[i];
 
-    if (!ShouldShowPermission(permission_info.type))
+    if (!ShouldShowPermission(permission_info.type, site_url_,
+                              content_settings_)) {
       continue;
+    }
 
     content_settings::SettingInfo info;
     std::unique_ptr<base::Value> value = content_settings_->GetWebsiteSetting(

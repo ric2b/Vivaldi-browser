@@ -36,8 +36,8 @@
 
 #if INSIDE_BLINK
 #include "platform/heap/Handle.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/TypeTraits.h"
+#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/TypeTraits.h"
 #endif
 
 namespace WTF {
@@ -97,7 +97,7 @@ class PtrStorageImpl<T,
  public:
   typedef PassRefPtr<T> BlinkPtrType;
 
-  void Assign(const BlinkPtrType& val) {
+  void Assign(BlinkPtrType&& val) {
     static_assert(
         crossThreadDestruction == kWebPrivatePtrDestructionSameThread ||
             WTF::IsSubclassOfTemplate<T, WTF::ThreadSafeRefCounted>::value,
@@ -285,8 +285,8 @@ class WebPrivatePtr {
 
 #if INSIDE_BLINK
   template <typename U>
-  WebPrivatePtr(const U& ptr) : storage_(0) {
-    Storage().Assign(ptr);
+  WebPrivatePtr(U&& ptr) : storage_(0) {
+    Storage().Assign(std::forward<U>(ptr));
   }
 
   void Reset() { Storage().Release(); }
@@ -297,20 +297,20 @@ class WebPrivatePtr {
   }
 
   template <typename U>
-  WebPrivatePtr& operator=(const U& ptr) {
-    Storage().Assign(ptr);
+  WebPrivatePtr& operator=(U&& ptr) {
+    Storage().Assign(std::forward<U>(ptr));
     return *this;
   }
 
   T* Get() const { return Storage().Get(); }
 
   T& operator*() const {
-    ASSERT(storage_);
+    DCHECK(storage_);
     return *Get();
   }
 
   T* operator->() const {
-    ASSERT(storage_);
+    DCHECK(storage_);
     return Get();
   }
 #endif

@@ -8,17 +8,17 @@
 
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/ScriptStreamerThread.h"
-#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
+#include "core/dom/ClassicPendingScript.h"
 #include "core/dom/ClassicScript.h"
-#include "core/dom/Element.h"
-#include "core/dom/PendingScript.h"
+#include "core/dom/MockScriptElementBase.h"
 #include "core/frame/Settings.h"
 #include "platform/heap/Handle.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebScheduler.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "v8/include/v8.h"
 
@@ -35,10 +35,16 @@ class ScriptStreamingTest : public ::testing::Test {
                                  ->LoadingTaskRunner()),
         settings_(Settings::Create()),
         resource_request_("http://www.streaming-test.com/"),
-        resource_(ScriptResource::Create(resource_request_, "UTF-8")),
-        pending_script_(PendingScript::CreateForTesting(resource_.Get())) {
+        resource_(ScriptResource::Create(resource_request_, "UTF-8")) {
     resource_->SetStatus(ResourceStatus::kPending);
-    pending_script_ = PendingScript::CreateForTesting(resource_.Get());
+
+    MockScriptElementBase* element = MockScriptElementBase::Create();
+    // Basically we are not interested in ScriptElementBase* calls, just making
+    // the method(s) to return default values.
+    EXPECT_CALL(*element, IntegrityAttributeValue())
+        .WillRepeatedly(::testing::Return(String()));
+
+    pending_script_ = ClassicPendingScript::Create(element, resource_.Get());
     ScriptStreamer::SetSmallScriptThresholdForTesting(0);
   }
 
@@ -47,7 +53,9 @@ class ScriptStreamingTest : public ::testing::Test {
       pending_script_->Dispose();
   }
 
-  PendingScript* GetPendingScript() const { return pending_script_.Get(); }
+  ClassicPendingScript* GetPendingScript() const {
+    return pending_script_.Get();
+  }
 
  protected:
   void AppendData(const char* data) {
@@ -90,7 +98,7 @@ class ScriptStreamingTest : public ::testing::Test {
   // ScriptResource::appendData.
   ResourceRequest resource_request_;
   Persistent<ScriptResource> resource_;
-  Persistent<PendingScript> pending_script_;
+  Persistent<ClassicPendingScript> pending_script_;
 };
 
 class TestPendingScriptClient
@@ -407,6 +415,23 @@ TEST_F(ScriptStreamingTest, EncodingFromBOM) {
                                             kV8CacheOptionsDefault)
                   .ToLocal(&script));
   EXPECT_FALSE(try_catch.HasCaught());
+}
+
+// A test for crbug.com/711703. Should not crash.
+TEST_F(ScriptStreamingTest, GarbageCollectDuringStreaming) {
+  V8TestingScope scope;
+  ScriptStreamer::StartStreaming(
+      GetPendingScript(), ScriptStreamer::kParsingBlocking, settings_.get(),
+      scope.GetScriptState(), loading_task_runner_);
+
+  TestPendingScriptClient* client = new TestPendingScriptClient;
+  GetPendingScript()->WatchForLoad(client);
+  EXPECT_FALSE(client->Finished());
+
+  pending_script_ = nullptr;
+  ThreadState::Current()->CollectGarbage(BlinkGC::kNoHeapPointersOnStack,
+                                         BlinkGC::kGCWithSweep,
+                                         BlinkGC::kForcedGC);
 }
 
 }  // namespace

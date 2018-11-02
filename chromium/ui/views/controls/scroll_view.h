@@ -10,6 +10,7 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/scrollbar/scroll_bar.h"
 
 namespace gfx {
@@ -59,10 +60,15 @@ class VIEWS_EXPORT ScrollView : public View, public ScrollBarController {
   // Sets the header, deleting the previous header.
   void SetHeader(View* header);
 
-  // Sets the background color. The default is white when scrolling with layers,
-  // otherwise transparent. An opaque color when scrolling with layers ensures
-  // fonts can be drawn with subpixel antialiasing.
+  // The background color can be configured in two distinct ways:
+  // . By way of SetBackgroundThemeColorId(). This is the default and when
+  //   called the background color comes from the theme (and changes if the
+  //   theme changes).
+  // . By way of setting an explicit color, i.e. SetBackgroundColor(). Use
+  //   SK_ColorTRANSPARENT if you don't want any color, but be warned this
+  //   produces awful results when layers are used with subpixel rendering.
   void SetBackgroundColor(SkColor color);
+  void SetBackgroundThemeColorId(ui::NativeTheme::ColorId color_id);
 
   // Returns the visible region of the content View.
   gfx::Rect GetVisibleRect() const;
@@ -96,7 +102,7 @@ class VIEWS_EXPORT ScrollView : public View, public ScrollBarController {
   void SetHasFocusIndicator(bool has_focus_indicator);
 
   // View overrides:
-  gfx::Size GetPreferredSize() const override;
+  gfx::Size CalculatePreferredSize() const override;
   int GetHeightForWidth(int width) const override;
   void Layout() override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
@@ -112,14 +118,26 @@ class VIEWS_EXPORT ScrollView : public View, public ScrollBarController {
                          bool is_page,
                          bool is_positive) override;
 
-  // TODO(djacobo): Remove this method when http://crbug.com/656198  is closed.
-  // Force |contents_viewport_| to enable a Layer().
-  void EnableViewPortLayer();
-
  private:
   friend class test::ScrollViewTestApi;
 
   class Viewport;
+
+  union BackgroundColorData {
+    SkColor color;
+    ui::NativeTheme::ColorId color_id;
+  };
+
+  // Forces |contents_viewport_| to have a Layer (assuming it doesn't already).
+  void EnableViewPortLayer();
+
+  // Returns true if this or the viewport has a layer.
+  bool DoesViewportOrScrollViewHaveLayer() const;
+
+  // Updates or destroys the viewport layer as necessary. If any descendants
+  // of the viewport have a layer, then the viewport needs to have a layer,
+  // otherwise it doesn't.
+  void UpdateViewportLayerForClipping();
 
   // Used internally by SetHeader() and SetContents() to reset the view.  Sets
   // |member| to |new_view|. If |new_view| is non-null it is added to |parent|.
@@ -162,6 +180,9 @@ class VIEWS_EXPORT ScrollView : public View, public ScrollBarController {
   void AddBorder();
   void UpdateBorder();
 
+  void UpdateBackground();
+  SkColor GetBackgroundColor() const;
+
   // The current contents and its viewport. |contents_| is contained in
   // |contents_viewport_|.
   View* contents_;
@@ -186,9 +207,10 @@ class VIEWS_EXPORT ScrollView : public View, public ScrollBarController {
   int min_height_;
   int max_height_;
 
-  // The background color given to the viewport (for overscroll), and to the
-  // contents when scrolling with layers.
-  SkColor background_color_;
+  // See description of SetBackgroundColor() for details.
+  BackgroundColorData background_color_data_ = {
+      ui::NativeTheme::kColorId_DialogBackground};
+  bool use_color_id_ = true;
 
   // If true, never show the horizontal scrollbar (even if the contents is wider
   // than the viewport).
@@ -203,6 +225,9 @@ class VIEWS_EXPORT ScrollView : public View, public ScrollBarController {
 
   // Focus ring, if one is installed.
   View* focus_ring_ = nullptr;
+
+  // Set to true if the scroll with layers feature is enabled.
+  const bool scroll_with_layers_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(ScrollView);
 };

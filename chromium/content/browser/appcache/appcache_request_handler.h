@@ -25,6 +25,8 @@ class URLRequest;
 }  // namespace net
 
 namespace content {
+class AppCacheJob;
+class AppCacheRequest;
 class AppCacheRequestHandlerTest;
 class AppCacheURLRequestJob;
 
@@ -42,15 +44,11 @@ class CONTENT_EXPORT AppCacheRequestHandler
   ~AppCacheRequestHandler() override;
 
   // These are called on each request intercept opportunity.
-  AppCacheURLRequestJob* MaybeLoadResource(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate);
-  AppCacheURLRequestJob* MaybeLoadFallbackForRedirect(
-      net::URLRequest* request,
+  AppCacheJob* MaybeLoadResource(net::NetworkDelegate* network_delegate);
+  AppCacheJob* MaybeLoadFallbackForRedirect(
       net::NetworkDelegate* network_delegate,
       const GURL& location);
-  AppCacheURLRequestJob* MaybeLoadFallbackForResponse(
-      net::URLRequest* request,
+  AppCacheJob* MaybeLoadFallbackForResponse(
       net::NetworkDelegate* network_delegate);
 
   void GetExtraResponseInfo(int64_t* cache_id, GURL* manifest_url);
@@ -75,8 +73,10 @@ class CONTENT_EXPORT AppCacheRequestHandler
   friend class AppCacheHost;
 
   // Callers should use AppCacheHost::CreateRequestHandler.
-  AppCacheRequestHandler(AppCacheHost* host, ResourceType resource_type,
-                         bool should_reset_appcache);
+  AppCacheRequestHandler(AppCacheHost* host,
+                         ResourceType resource_type,
+                         bool should_reset_appcache,
+                         std::unique_ptr<AppCacheRequest> request);
 
   // AppCacheHost::Observer override
   void OnDestructionImminent(AppCacheHost* host) override;
@@ -98,10 +98,9 @@ class CONTENT_EXPORT AppCacheRequestHandler
   // restarting, so can correctly continue to handle the request.
   void OnPrepareToRestart();
 
-  // Helper method to create an AppCacheURLRequestJob and populate job_.
+  // Helper method to create an AppCacheJob and populate job_.
   // Caller takes ownership of returned value.
-  std::unique_ptr<AppCacheURLRequestJob> CreateJob(
-      net::URLRequest* request,
+  std::unique_ptr<AppCacheJob> CreateJob(
       net::NetworkDelegate* network_delegate);
 
   // Helper to retrieve a pointer to the storage object.
@@ -114,8 +113,7 @@ class CONTENT_EXPORT AppCacheRequestHandler
   // Main-resource loading -------------------------------------
   // Frame and SharedWorker main resources are handled here.
 
-  std::unique_ptr<AppCacheURLRequestJob> MaybeLoadMainResource(
-      net::URLRequest* request,
+  std::unique_ptr<AppCacheJob> MaybeLoadMainResource(
       net::NetworkDelegate* network_delegate);
 
   // AppCacheStorage::Delegate methods
@@ -130,8 +128,7 @@ class CONTENT_EXPORT AppCacheRequestHandler
   // Sub-resource loading -------------------------------------
   // Dedicated worker and all manner of sub-resources are handled here.
 
-  std::unique_ptr<AppCacheURLRequestJob> MaybeLoadSubResource(
-      net::URLRequest* request,
+  std::unique_ptr<AppCacheJob> MaybeLoadSubResource(
       net::NetworkDelegate* network_delegate);
   void ContinueMaybeLoadSubResource();
 
@@ -180,7 +177,7 @@ class CONTENT_EXPORT AppCacheRequestHandler
   // 1) Before request has started a job.
   // 2) Request is not being handled by appcache.
   // 3) Request has been cancelled, and the job killed.
-  base::WeakPtr<AppCacheURLRequestJob> job_;
+  base::WeakPtr<AppCacheJob> job_;
 
   // During a cross site navigation, we transfer ownership the AppcacheHost
   // from the old processes structures over to the new structures.
@@ -195,6 +192,8 @@ class CONTENT_EXPORT AppCacheRequestHandler
 
   // Backptr to the central service object.
   AppCacheServiceImpl* service_;
+
+  std::unique_ptr<AppCacheRequest> request_;
 
   friend class content::AppCacheRequestHandlerTest;
   DISALLOW_COPY_AND_ASSIGN(AppCacheRequestHandler);

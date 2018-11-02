@@ -101,6 +101,8 @@ std::string GetNetworkTypeString() {
 
 std::string GetClockString() {
   switch (base::TimeTicks::GetClock()) {
+    case base::TimeTicks::Clock::FUCHSIA_MX_CLOCK_MONOTONIC:
+      return "FUCHSIA_MX_CLOCK_MONOTONIC";
     case base::TimeTicks::Clock::LINUX_CLOCK_MONOTONIC:
       return "LINUX_CLOCK_MONOTONIC";
     case base::TimeTicks::Clock::IOS_CF_ABSOLUTE_TIME_MINUS_KERN_BOOTTIME:
@@ -598,10 +600,11 @@ void TracingControllerImpl::OnEndAgentTracingAcked(
       // The Windows kernel events are kept into a JSON format stored as string
       // and must not be escaped.
       trace_data_sink_->AddAgentTrace(events_label, events_str_ptr->data());
-    } else if (agent_name != kArcTracingAgentName) {
-      // ARC trace data is obtained via systrace. Ignore the empty data.
-      // Quote other trace data as JSON strings and merge them into
-      // |trace_data_sink_|.
+    } else if (agent_name == kArcTracingAgentName) {
+      // The ARC events are kept into a JSON format stored as string
+      // and must not be escaped.
+      trace_data_sink_->AddTraceChunk(events_str_ptr->data());
+    } else {
       trace_data_sink_->AddAgentTrace(
           events_label, base::GetQuotedJSONString(events_str_ptr->data()));
     }
@@ -837,9 +840,23 @@ TracingControllerImpl::GenerateTracingMetadataDict() const {
   metadata_dict->SetString("user-agent", GetContentClient()->GetUserAgent());
 
   // OS
+#if defined(OS_CHROMEOS)
+  metadata_dict->SetString("os-name", "CrOS");
+  int32_t major_version;
+  int32_t minor_version;
+  int32_t bugfix_version;
+  // OperatingSystemVersion only has a POSIX implementation which returns the
+  // wrong versions for CrOS.
+  base::SysInfo::OperatingSystemVersionNumbers(&major_version, &minor_version,
+                                               &bugfix_version);
+  metadata_dict->SetString(
+      "os-version", base::StringPrintf("%d.%d.%d", major_version, minor_version,
+                                       bugfix_version));
+#else
   metadata_dict->SetString("os-name", base::SysInfo::OperatingSystemName());
   metadata_dict->SetString("os-version",
                            base::SysInfo::OperatingSystemVersion());
+#endif
   metadata_dict->SetString("os-arch",
                            base::SysInfo::OperatingSystemArchitecture());
 

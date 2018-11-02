@@ -17,6 +17,7 @@
 #include "cc/surfaces/local_surface_id_allocator.h"
 #include "cc/surfaces/surface_manager.h"
 #include "cc/test/begin_frame_args_test.h"
+#include "cc/test/compositor_frame_helpers.h"
 #include "cc/test/fake_compositor_frame_sink_client.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/ordered_simple_task_runner.h"
@@ -108,7 +109,7 @@ class DirectCompositorFrameSinkTest : public testing::Test {
     std::unique_ptr<RenderPass> render_pass(RenderPass::Create());
     render_pass->SetNew(1, display_rect_, damage_rect, gfx::Transform());
 
-    CompositorFrame frame;
+    CompositorFrame frame = test::MakeEmptyCompositorFrame();
     frame.metadata.begin_frame_ack = BeginFrameAck(0, 1, 1, true);
     frame.render_pass_list.push_back(std::move(render_pass));
 
@@ -171,19 +172,6 @@ TEST_F(DirectCompositorFrameSinkTest, SuspendedDoesNotTriggerSwapBuffers) {
   EXPECT_EQ(2u, display_output_surface_->num_sent_frames());
 }
 
-TEST_F(DirectCompositorFrameSinkTest,
-       LockingResourcesDoesNotIndirectlyCauseDamage) {
-  compositor_frame_sink_->ForceReclaimResources();
-  EXPECT_EQ(1u, display_output_surface_->num_sent_frames());
-  task_runner_->RunPendingTasks();
-  EXPECT_EQ(1u, display_output_surface_->num_sent_frames());
-
-  SwapBuffersWithDamage(gfx::Rect());
-  EXPECT_EQ(1u, display_output_surface_->num_sent_frames());
-  task_runner_->RunUntilIdle();
-  EXPECT_EQ(1u, display_output_surface_->num_sent_frames());
-}
-
 class TestBeginFrameObserver : public BeginFrameObserverBase {
  public:
   const BeginFrameAck& ack() const { return ack_; }
@@ -215,6 +203,7 @@ TEST_F(DirectCompositorFrameSinkTest, AcknowledgesBeginFramesWithoutDamage) {
             observer.ack().sequence_number);
   compositor_frame_sink_client_.begin_frame_source()->DidFinishFrame(
       &observer, observer.ack());
+  compositor_frame_sink_->DidNotProduceFrame(observer.ack());
   compositor_frame_sink_client_.begin_frame_source()->RemoveObserver(&observer);
 
   // Verify that the frame sink acknowledged the last BeginFrame.

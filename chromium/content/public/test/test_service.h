@@ -11,7 +11,6 @@
 #include "content/public/test/test_service.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
 
 namespace content {
@@ -20,31 +19,27 @@ extern const char kTestServiceUrl[];
 
 // Simple Service which provides a mojom::TestService impl. The service
 // terminates itself after its TestService fulfills a single DoSomething call.
-class TestService
-    : public service_manager::Service,
-      public service_manager::InterfaceFactory<mojom::TestService>,
-      public mojom::TestService {
+class TestService : public service_manager::Service, public mojom::TestService {
  public:
   TestService();
   ~TestService() override;
 
  private:
   // service_manager::Service:
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
 
-  // service_manager::InterfaceFactory<mojom::TestService>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::TestServiceRequest request) override;
+  void Create(const service_manager::BindSourceInfo& source_info,
+              mojom::TestServiceRequest request);
 
   // TestService:
-  void DoSomething(const DoSomethingCallback& callback) override;
-  void DoTerminateProcess(const DoTerminateProcessCallback& callback) override;
-  void CreateFolder(const CreateFolderCallback& callback) override;
-  void GetRequestorName(const GetRequestorNameCallback& callback) override;
+  void DoSomething(DoSomethingCallback callback) override;
+  void DoTerminateProcess(DoTerminateProcessCallback callback) override;
+  void CreateFolder(CreateFolderCallback callback) override;
+  void GetRequestorName(GetRequestorNameCallback callback) override;
   void CreateSharedBuffer(const std::string& message,
-                          const CreateSharedBufferCallback& callback) override;
+                          CreateSharedBufferCallback callback) override;
 
   service_manager::BinderRegistry registry_;
   mojo::Binding<mojom::TestService> service_binding_;

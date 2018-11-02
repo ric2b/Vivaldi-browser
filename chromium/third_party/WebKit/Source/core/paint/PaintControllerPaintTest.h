@@ -117,10 +117,10 @@ class TestDisplayItem final : public DisplayItem {
   TestDisplayItem(const DisplayItemClient& client, Type type)
       : DisplayItem(client, type, sizeof(*this)) {}
 
-  void Replay(GraphicsContext&) const final { ASSERT_NOT_REACHED(); }
+  void Replay(GraphicsContext&) const final { NOTREACHED(); }
   void AppendToWebDisplayItemList(const IntRect&,
                                   WebDisplayItemList*) const final {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
   }
 };
 
@@ -129,7 +129,7 @@ class TestDisplayItem final : public DisplayItem {
   String trace = String::Format("%d: ", (int)i) +            \
                  "Expected: " + (expected).AsDebugString() + \
                  " Actual: " + (actual).AsDebugString();     \
-  SCOPED_TRACE(trace.Utf8().Data());
+  SCOPED_TRACE(trace.Utf8().data());
 #else
 #define TRACE_DISPLAY_ITEMS(i, expected, actual)
 #endif

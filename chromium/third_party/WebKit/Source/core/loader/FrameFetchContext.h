@@ -33,11 +33,12 @@
 
 #include "core/CoreExport.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/loader/BaseFetchContext.h"
 #include "platform/heap/Handle.h"
-#include "platform/loader/fetch/FetchContext.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceRequest.h"
+#include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/wtf/Forward.h"
 
 namespace blink {
@@ -51,7 +52,7 @@ class LocalFrameClient;
 class ResourceError;
 class ResourceResponse;
 
-class CORE_EXPORT FrameFetchContext final : public FetchContext {
+class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
  public:
   static ResourceFetcher* CreateFetcherFromDocumentLoader(
       DocumentLoader* loader) {
@@ -61,21 +62,16 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
     return ResourceFetcher::Create(new FrameFetchContext(nullptr, document));
   }
 
-  static void ProvideDocumentToContext(FetchContext& context,
-                                       Document* document) {
-    DCHECK(document);
-    CHECK(context.IsLiveContext());
-    static_cast<FrameFetchContext&>(context).document_ = document;
-  }
+  static void ProvideDocumentToContext(FetchContext&, Document*);
 
-  ~FrameFetchContext();
+  ~FrameFetchContext() override;
 
-  bool IsLiveContext() { return true; }
+  bool IsFrameFetchContext() { return true; }
 
   void AddAdditionalRequestHeaders(ResourceRequest&,
                                    FetchResourceType) override;
   WebCachePolicy ResourceRequestCachePolicy(
-      ResourceRequest&,
+      const ResourceRequest&,
       Resource::Type,
       FetchParameters::DeferOption) const override;
   void DispatchDidChangeResourcePriority(unsigned long identifier,
@@ -122,19 +118,6 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
 
   void AddResourceTiming(const ResourceTimingInfo&) override;
   bool AllowImage(bool images_enabled, const KURL&) const override;
-  ResourceRequestBlockedReason CanRequest(
-      Resource::Type,
-      const ResourceRequest&,
-      const KURL&,
-      const ResourceLoaderOptions&,
-      SecurityViolationReportingPolicy,
-      FetchParameters::OriginRestriction) const override;
-  ResourceRequestBlockedReason AllowResponse(
-      Resource::Type,
-      const ResourceRequest&,
-      const KURL&,
-      const ResourceLoaderOptions&) const override;
-
   bool IsControlledByServiceWorker() const override;
   int64_t ServiceWorkerID() const override;
 
@@ -146,11 +129,13 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
   void SendImagePing(const KURL&) override;
   void AddConsoleMessage(const String&,
                          LogMessageType = kLogErrorMessage) const override;
-  SecurityOrigin* GetSecurityOrigin() const override;
 
-  void PopulateResourceRequest(Resource::Type,
+  void PopulateResourceRequest(const KURL&,
+                               Resource::Type,
                                const ClientHintsPreferences&,
                                const FetchParameters::ResourceWidth&,
+                               const ResourceLoaderOptions&,
+                               SecurityViolationReportingPolicy,
                                ResourceRequest&) override;
   void SetFirstPartyCookieAndRequestorOrigin(ResourceRequest&) override;
 
@@ -162,10 +147,9 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
 
   MHTMLArchive* Archive() const override;
 
-  ResourceLoadPriority ModifyPriorityForExperiments(
-      ResourceLoadPriority) override;
-
   RefPtr<WebTaskRunner> LoadingTaskRunner() const override;
+
+  std::unique_ptr<WebURLLoader> CreateURLLoader() override;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -178,29 +162,29 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
   // relevant document loader or frame in either cases without null-checks.
   // TODO(kinuko): Remove constness, these return non-const members.
   DocumentLoader* MasterDocumentLoader() const;
+  Document* GetDocument() const;
   LocalFrame* GetFrame() const;
   LocalFrameClient* GetLocalFrameClient() const;
-
-  ContentSettingsClient* GetContentSettingsClient() const;
-
   LocalFrame* FrameOfImportsController() const;
 
-  void PrintAccessDeniedMessage(const KURL&) const;
-  ResourceRequestBlockedReason CanRequestInternal(
-      Resource::Type,
+  // BaseFetchContext overrides:
+  ContentSettingsClient* GetContentSettingsClient() const override;
+  Settings* GetSettings() const override;
+  SubresourceFilter* GetSubresourceFilter() const override;
+  SecurityContext* GetParentSecurityContext() const override;
+  bool ShouldBlockRequestByInspector(const ResourceRequest&) const override;
+  void DispatchDidBlockRequest(const ResourceRequest&,
+                               const FetchInitiatorInfo&,
+                               ResourceRequestBlockedReason) const override;
+  bool ShouldBypassMainWorldCSP() const override;
+  bool IsSVGImageChromeClient() const override;
+  void CountUsage(UseCounter::Feature) const override;
+  void CountDeprecation(UseCounter::Feature) const override;
+  bool ShouldBlockFetchByMixedContentCheck(
       const ResourceRequest&,
       const KURL&,
-      const ResourceLoaderOptions&,
-      SecurityViolationReportingPolicy,
-      FetchParameters::OriginRestriction,
-      ResourceRequest::RedirectStatus) const;
+      SecurityViolationReportingPolicy) const override;
 
-  void AddCSPHeaderIfNecessary(Resource::Type, ResourceRequest&);
-
-  // FIXME: Oilpan: Ideally this should just be a traced Member but that will
-  // currently leak because ComputedStyle and its data are not on the heap.
-  // See crbug.com/383860 for details.
-  WeakMember<Document> document_;
   Member<DocumentLoader> document_loader_;
 };
 

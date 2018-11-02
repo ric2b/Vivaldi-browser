@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <tuple>
+#include <utility>
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -25,7 +26,6 @@
 #include "content/public/test/test_service.mojom.h"
 #include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 // IPC messages for testing ---------------------------------------------------
@@ -38,8 +38,6 @@
 IPC_MESSAGE_CONTROL0(TestMsg_Message)
 IPC_MESSAGE_ROUTED1(TestMsg_MessageFromWorker, int)
 
-IPC_MESSAGE_CONTROL1(TestMsg_TestEvent, int)
-IPC_MESSAGE_CONTROL2(TestMsg_TestEvent_Multiple, int, int)
 IPC_MESSAGE_ROUTED2(TestMsg_TestEventResult, int, std::string)
 
 // ---------------------------------------------------------------------------
@@ -50,26 +48,8 @@ namespace {
 
 class MessageReceiver : public EmbeddedWorkerTestHelper {
  public:
-  MessageReceiver()
-      : EmbeddedWorkerTestHelper(base::FilePath()),
-        current_embedded_worker_id_(0) {}
+  MessageReceiver() : EmbeddedWorkerTestHelper(base::FilePath()) {}
   ~MessageReceiver() override {}
-
-  bool OnMessageToWorker(int thread_id,
-                         int embedded_worker_id,
-                         const IPC::Message& message) override {
-    if (EmbeddedWorkerTestHelper::OnMessageToWorker(
-            thread_id, embedded_worker_id, message)) {
-      return true;
-    }
-    current_embedded_worker_id_ = embedded_worker_id;
-    bool handled = true;
-    IPC_BEGIN_MESSAGE_MAP(MessageReceiver, message)
-      IPC_MESSAGE_HANDLER(TestMsg_Message, OnMessage)
-      IPC_MESSAGE_UNHANDLED(handled = false)
-    IPC_END_MESSAGE_MAP()
-    return handled;
-  }
 
   void SimulateSendValueToBrowser(int embedded_worker_id, int value) {
     SimulateSend(new TestMsg_MessageFromWorker(embedded_worker_id, value));
@@ -87,7 +67,6 @@ class MessageReceiver : public EmbeddedWorkerTestHelper {
     // Do nothing.
   }
 
-  int current_embedded_worker_id_;
   DISALLOW_COPY_AND_ASSIGN(MessageReceiver);
 };
 
@@ -153,24 +132,22 @@ class TestServiceImpl : public mojom::TestService {
                             std::move(request));
   }
 
-  void DoSomething(const DoSomethingCallback& callback) override {
-    callback.Run();
+  void DoSomething(DoSomethingCallback callback) override {
+    std::move(callback).Run();
   }
 
-  void DoTerminateProcess(const DoTerminateProcessCallback& callback) override {
+  void DoTerminateProcess(DoTerminateProcessCallback callback) override {
     NOTREACHED();
   }
 
-  void CreateFolder(const CreateFolderCallback& callback) override {
-    NOTREACHED();
-  }
+  void CreateFolder(CreateFolderCallback callback) override { NOTREACHED(); }
 
-  void GetRequestorName(const GetRequestorNameCallback& callback) override {
-    callback.Run("");
+  void GetRequestorName(GetRequestorNameCallback callback) override {
+    std::move(callback).Run("");
   }
 
   void CreateSharedBuffer(const std::string& message,
-                          const CreateSharedBufferCallback& callback) override {
+                          CreateSharedBufferCallback callback) override {
     NOTREACHED();
   }
 
@@ -292,15 +269,19 @@ class MessageReceiverDisallowStart : public MessageReceiver {
 
   enum class StartMode { STALL, FAIL, SUCCEED };
 
-  void OnStartWorker(
-      int embedded_worker_id,
-      int64_t service_worker_version_id,
-      const GURL& scope,
-      const GURL& script_url,
-      bool pause_after_download,
-      mojom::ServiceWorkerEventDispatcherRequest request) override {
+  void OnStartWorker(int embedded_worker_id,
+                     int64_t service_worker_version_id,
+                     const GURL& scope,
+                     const GURL& script_url,
+                     bool pause_after_download,
+                     mojom::ServiceWorkerEventDispatcherRequest request,
+                     mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo
+                         instance_host) override {
     switch (mode_) {
       case StartMode::STALL:
+        // Prepare for OnStopWorker().
+        instance_host_ptr_map_[embedded_worker_id].Bind(
+            std::move(instance_host));
         break;  // Do nothing.
       case StartMode::FAIL:
         ASSERT_EQ(current_mock_instance_index_ + 1,
@@ -311,10 +292,19 @@ class MessageReceiverDisallowStart : public MessageReceiver {
       case StartMode::SUCCEED:
         MessageReceiver::OnStartWorker(
             embedded_worker_id, service_worker_version_id, scope, script_url,
-            pause_after_download, std::move(request));
+            pause_after_download, std::move(request), std::move(instance_host));
         break;
     }
     current_mock_instance_index_++;
+  }
+
+  void OnStopWorker(int embedded_worker_id) override {
+    if (instance_host_ptr_map_[embedded_worker_id]) {
+      instance_host_ptr_map_[embedded_worker_id]->OnStopped();
+      base::RunLoop().RunUntilIdle();
+      return;
+    }
+    EmbeddedWorkerTestHelper::OnStopWorker(embedded_worker_id);
   }
 
   void set_start_mode(StartMode mode) { mode_ = mode; }
@@ -322,6 +312,11 @@ class MessageReceiverDisallowStart : public MessageReceiver {
  private:
   uint32_t current_mock_instance_index_ = 0;
   StartMode mode_ = StartMode::STALL;
+
+  std::map<
+      int /* embedded_worker_id */,
+      mojom::EmbeddedWorkerInstanceHostAssociatedPtr /* instance_host_ptr */>
+      instance_host_ptr_map_;
   DISALLOW_COPY_AND_ASSIGN(MessageReceiverDisallowStart);
 };
 
@@ -350,18 +345,12 @@ class NoOpStopWorkerEmbeddedWorkerInstanceClient
       base::WeakPtr<EmbeddedWorkerTestHelper> helper)
       : EmbeddedWorkerTestHelper::MockEmbeddedWorkerInstanceClient(helper) {}
   ~NoOpStopWorkerEmbeddedWorkerInstanceClient() override {
-    // Stop callback should be called once.
-    if (pending_stop_callback_)
-      pending_stop_callback_.Run();
   }
 
  protected:
-  void StopWorker(const StopWorkerCallback& callback) override {
-    pending_stop_callback_ = std::move(callback);
+  void StopWorker() override {
     // Do nothing.
   }
-
-  StopWorkerCallback pending_stop_callback_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(NoOpStopWorkerEmbeddedWorkerInstanceClient);
@@ -375,9 +364,7 @@ class MessageReceiverDisallowStop : public MessageReceiver {
   }
   ~MessageReceiverDisallowStop() override {}
 
-  void OnStopWorker(
-      const mojom::EmbeddedWorkerInstanceClient::StopWorkerCallback& callback)
-      override {
+  void OnStopWorker(int embedded_worker_id) override {
     // Do nothing.
   }
 
@@ -824,34 +811,34 @@ class MessageReceiverControlEvents : public MessageReceiver {
 
   void OnExtendableMessageEvent(
       mojom::ExtendableMessageEventPtr event,
-      const mojom::ServiceWorkerEventDispatcher::
-          DispatchExtendableMessageEventCallback& callback) override {
+      mojom::ServiceWorkerEventDispatcher::
+          DispatchExtendableMessageEventCallback callback) override {
     EXPECT_FALSE(extendable_message_event_callback_);
-    extendable_message_event_callback_ = callback;
+    extendable_message_event_callback_ = std::move(callback);
   }
 
-  void OnStopWorker(
-      const mojom::EmbeddedWorkerInstanceClient::StopWorkerCallback& callback)
-      override {
+  void OnStopWorker(int embedded_worker_id) override {
     EXPECT_FALSE(stop_worker_callback_);
-    stop_worker_callback_ = callback;
+    stop_worker_callback_ =
+        base::Bind(&MessageReceiverControlEvents::SimulateWorkerStopped,
+                   base::Unretained(this), embedded_worker_id);
   }
 
-  const mojom::ServiceWorkerEventDispatcher::
-      DispatchExtendableMessageEventCallback&
-      extendable_message_event_callback() {
-    return extendable_message_event_callback_;
+  bool has_extendable_message_event_callback() {
+    return !extendable_message_event_callback_.is_null();
   }
 
-  const mojom::EmbeddedWorkerInstanceClient::StopWorkerCallback&
-  stop_worker_callback() {
-    return stop_worker_callback_;
+  mojom::ServiceWorkerEventDispatcher::DispatchExtendableMessageEventCallback
+  TakeExtendableMessageEventCallback() {
+    return std::move(extendable_message_event_callback_);
   }
+
+  const base::Closure& stop_worker_callback() { return stop_worker_callback_; }
 
  private:
   mojom::ServiceWorkerEventDispatcher::DispatchExtendableMessageEventCallback
       extendable_message_event_callback_;
-  mojom::EmbeddedWorkerInstanceClient::StopWorkerCallback stop_worker_callback_;
+  base::Closure stop_worker_callback_;
 };
 
 class ServiceWorkerRequestTimeoutTest : public ServiceWorkerVersionTest {
@@ -862,15 +849,18 @@ class ServiceWorkerRequestTimeoutTest : public ServiceWorkerVersionTest {
     return base::MakeUnique<MessageReceiverControlEvents>();
   }
 
-  const mojom::ServiceWorkerEventDispatcher::
-      DispatchExtendableMessageEventCallback&
-      extendable_message_event_callback() {
+  bool has_extendable_message_event_callback() {
     return static_cast<MessageReceiverControlEvents*>(helper_.get())
-        ->extendable_message_event_callback();
+        ->has_extendable_message_event_callback();
   }
 
-  const mojom::EmbeddedWorkerInstanceClient::StopWorkerCallback&
-  stop_worker_callback() {
+  mojom::ServiceWorkerEventDispatcher::DispatchExtendableMessageEventCallback
+  TakeExtendableMessageEventCallback() {
+    return static_cast<MessageReceiverControlEvents*>(helper_.get())
+        ->TakeExtendableMessageEventCallback();
+  }
+
+  const base::Closure& stop_worker_callback() {
     return static_cast<MessageReceiverControlEvents*>(helper_.get())
         ->stop_worker_callback();
   }
@@ -894,14 +884,14 @@ TEST_F(ServiceWorkerRequestTimeoutTest, RequestTimeout) {
                              CreateReceiverOnCurrentThread(&error_status));
 
   // Dispatch a dummy event whose response will be received by SWVersion.
-  EXPECT_FALSE(extendable_message_event_callback());
+  EXPECT_FALSE(has_extendable_message_event_callback());
   version_->event_dispatcher()->DispatchExtendableMessageEvent(
       mojom::ExtendableMessageEvent::New(),
       version_->CreateSimpleEventCallback(request_id));
 
   base::RunLoop().RunUntilIdle();
   // The renderer should have received an ExtendableMessageEvent request.
-  EXPECT_TRUE(extendable_message_event_callback());
+  EXPECT_TRUE(has_extendable_message_event_callback());
 
   // Callback has not completed yet.
   EXPECT_EQ(SERVICE_WORKER_ERROR_NETWORK, error_status);
@@ -924,8 +914,8 @@ TEST_F(ServiceWorkerRequestTimeoutTest, RequestTimeout) {
 
   // Simulate the renderer aborting the pending event.
   // This should not crash: https://crbug.com/676984.
-  extendable_message_event_callback().Run(SERVICE_WORKER_ERROR_ABORT,
-                                          base::Time::Now());
+  TakeExtendableMessageEventCallback().Run(SERVICE_WORKER_ERROR_ABORT,
+                                           base::Time::Now());
   base::RunLoop().RunUntilIdle();
 
   // Simulate the renderer stopping the worker.
@@ -1250,15 +1240,15 @@ TEST_F(ServiceWorkerVersionTest, RegisterForeignFetchScopes) {
 
   // Invalid subscope, should kill worker (but in tests will only increase bad
   // message count).
-  version_->OnRegisterForeignFetchScopes(std::vector<GURL>(1, GURL()),
-                                         valid_origin_list);
+  version_->RegisterForeignFetchScopes(std::vector<GURL>(1, GURL()),
+                                       valid_origin_list);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, helper_->mock_render_process_host()->bad_msg_count());
   EXPECT_EQ(0u, version_->foreign_fetch_scopes_.size());
   EXPECT_EQ(0u, version_->foreign_fetch_origins_.size());
 
   // Subscope outside the scope of the worker.
-  version_->OnRegisterForeignFetchScopes(
+  version_->RegisterForeignFetchScopes(
       std::vector<GURL>(1, GURL("http://www.example.com/wrong")),
       valid_origin_list);
   base::RunLoop().RunUntilIdle();
@@ -1267,7 +1257,7 @@ TEST_F(ServiceWorkerVersionTest, RegisterForeignFetchScopes) {
   EXPECT_EQ(0u, version_->foreign_fetch_origins_.size());
 
   // Subscope on wrong origin.
-  version_->OnRegisterForeignFetchScopes(
+  version_->RegisterForeignFetchScopes(
       std::vector<GURL>(1, GURL("http://example.com/test/")),
       valid_origin_list);
   base::RunLoop().RunUntilIdle();
@@ -1276,7 +1266,7 @@ TEST_F(ServiceWorkerVersionTest, RegisterForeignFetchScopes) {
   EXPECT_EQ(0u, version_->foreign_fetch_origins_.size());
 
   // Invalid origin.
-  version_->OnRegisterForeignFetchScopes(
+  version_->RegisterForeignFetchScopes(
       valid_scopes, std::vector<url::Origin>(1, url::Origin()));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(4, helper_->mock_render_process_host()->bad_msg_count());
@@ -1284,8 +1274,8 @@ TEST_F(ServiceWorkerVersionTest, RegisterForeignFetchScopes) {
   EXPECT_EQ(0u, version_->foreign_fetch_origins_.size());
 
   // Valid subscope, no origins.
-  version_->OnRegisterForeignFetchScopes(std::vector<GURL>(1, valid_scope_1),
-                                         all_origins);
+  version_->RegisterForeignFetchScopes(std::vector<GURL>(1, valid_scope_1),
+                                       all_origins);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(4, helper_->mock_render_process_host()->bad_msg_count());
   EXPECT_EQ(1u, version_->foreign_fetch_scopes_.size());
@@ -1293,7 +1283,7 @@ TEST_F(ServiceWorkerVersionTest, RegisterForeignFetchScopes) {
   EXPECT_EQ(0u, version_->foreign_fetch_origins_.size());
 
   // Valid subscope, explicit origins.
-  version_->OnRegisterForeignFetchScopes(valid_scopes, valid_origin_list);
+  version_->RegisterForeignFetchScopes(valid_scopes, valid_origin_list);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(4, helper_->mock_render_process_host()->bad_msg_count());
   EXPECT_EQ(2u, version_->foreign_fetch_scopes_.size());
@@ -1335,7 +1325,7 @@ TEST_F(ServiceWorkerVersionTest, RendererCrashDuringEvent) {
                                        base::Time::Now()));
 }
 
-TEST_F(ServiceWorkerVersionTest, DispatchEvent) {
+TEST_F(ServiceWorkerVersionTest, RegisterRequestCallback) {
   ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_NETWORK;  // dummy value
 
   // Activate and start worker.
@@ -1356,13 +1346,6 @@ TEST_F(ServiceWorkerVersionTest, DispatchEvent) {
   version_->RegisterRequestCallback<TestMsg_TestEventResult>(
       request_id, base::Bind(&ReceiveTestEventResult, &received_request_id,
                              &received_data, runner->QuitClosure()));
-  version_->DispatchEvent({request_id}, TestMsg_TestEvent(request_id));
-
-  // Verify event got dispatched to worker.
-  base::RunLoop().RunUntilIdle();
-  ASSERT_EQ(1u, helper_->inner_ipc_sink()->message_count());
-  const IPC::Message* msg = helper_->inner_ipc_sink()->GetMessageAt(0);
-  EXPECT_EQ(TestMsg_TestEvent::ID, msg->type());
 
   // Simulate sending reply to event.
   std::string reply("foobar");
@@ -1461,154 +1444,6 @@ TEST_F(ServiceWorkerFailToStartTest, RestartStalledWorker) {
   EXPECT_EQ(SERVICE_WORKER_OK, status1);
   EXPECT_EQ(SERVICE_WORKER_OK, status2);
   EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status());
-}
-
-TEST_F(ServiceWorkerVersionTest, DispatchConcurrentEvent) {
-  ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_NETWORK;  // dummy value
-
-  // Activate and start worker.
-  version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
-  version_->StartWorker(ServiceWorkerMetrics::EventType::SYNC,
-                        CreateReceiverOnCurrentThread(&status));
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(SERVICE_WORKER_OK, status);
-  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status());
-
-  // Start first request and dispatch test event.
-  scoped_refptr<MessageLoopRunner> runner1(new MessageLoopRunner);
-  ServiceWorkerStatusCode status1 = SERVICE_WORKER_OK;  // dummy value
-  int request_id1 = version_->StartRequest(
-      ServiceWorkerMetrics::EventType::SYNC,
-      CreateReceiverOnCurrentThread(&status1, runner1->QuitClosure()));
-  int received_request_id1 = 0;
-  std::string received_data1;
-  version_->RegisterRequestCallback<TestMsg_TestEventResult>(
-      request_id1, base::Bind(&ReceiveTestEventResult, &received_request_id1,
-                              &received_data1, runner1->QuitClosure()));
-  version_->DispatchEvent({request_id1}, TestMsg_TestEvent(request_id1));
-
-  // Start second request and dispatch test event.
-  scoped_refptr<MessageLoopRunner> runner2(new MessageLoopRunner);
-  ServiceWorkerStatusCode status2 = SERVICE_WORKER_OK;  // dummy value
-  int request_id2 = version_->StartRequest(
-      ServiceWorkerMetrics::EventType::SYNC,
-      CreateReceiverOnCurrentThread(&status2, runner2->QuitClosure()));
-  int received_request_id2 = 0;
-  std::string received_data2;
-  version_->RegisterRequestCallback<TestMsg_TestEventResult>(
-      request_id2, base::Bind(&ReceiveTestEventResult, &received_request_id2,
-                              &received_data2, runner2->QuitClosure()));
-  version_->DispatchEvent({request_id2}, TestMsg_TestEvent(request_id2));
-
-  // Make sure events got dispatched in same order.
-  base::RunLoop().RunUntilIdle();
-  ASSERT_EQ(2u, helper_->inner_ipc_sink()->message_count());
-  const IPC::Message* msg = helper_->inner_ipc_sink()->GetMessageAt(0);
-  ASSERT_EQ(TestMsg_TestEvent::ID, msg->type());
-  TestMsg_TestEvent::Param params;
-  TestMsg_TestEvent::Read(msg, &params);
-  EXPECT_EQ(request_id1, std::get<0>(params));
-  msg = helper_->inner_ipc_sink()->GetMessageAt(1);
-  ASSERT_EQ(TestMsg_TestEvent::ID, msg->type());
-  TestMsg_TestEvent::Read(msg, &params);
-  EXPECT_EQ(request_id2, std::get<0>(params));
-
-  // Reply to second event.
-  std::string reply2("foobar");
-  helper_->SimulateSendEventResult(
-      version_->embedded_worker()->embedded_worker_id(), request_id2, reply2);
-  runner2->Run();
-
-  // Verify correct message callback got called with correct reply.
-  EXPECT_EQ(0, received_request_id1);
-  EXPECT_EQ(request_id2, received_request_id2);
-  EXPECT_EQ(reply2, received_data2);
-  EXPECT_EQ(SERVICE_WORKER_OK, status2);
-  EXPECT_TRUE(version_->FinishRequest(request_id2, true /* was_handled */,
-                                      base::Time::Now()));
-
-  // Reply to first event.
-  std::string reply1("hello world");
-  helper_->SimulateSendEventResult(
-      version_->embedded_worker()->embedded_worker_id(), request_id1, reply1);
-  runner1->Run();
-
-  // Verify correct response was received.
-  EXPECT_EQ(request_id1, received_request_id1);
-  EXPECT_EQ(request_id2, received_request_id2);
-  EXPECT_EQ(reply1, received_data1);
-  EXPECT_EQ(SERVICE_WORKER_OK, status1);
-  EXPECT_TRUE(version_->FinishRequest(request_id1, true /* was_handled */,
-                                      base::Time::Now()));
-}
-
-TEST_F(ServiceWorkerVersionTest, DispatchEvent_MultipleResponse) {
-  ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_MAX_VALUE;
-
-  // Activate and start worker.
-  version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
-  version_->StartWorker(ServiceWorkerMetrics::EventType::UNKNOWN,
-                        CreateReceiverOnCurrentThread(&status));
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(SERVICE_WORKER_OK, status);
-  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status());
-
-  // Start request and dispatch test event.
-  scoped_refptr<MessageLoopRunner> runner(new MessageLoopRunner);
-  int request_id1 = version_->StartRequest(
-      ServiceWorkerMetrics::EventType::FETCH_MAIN_FRAME,
-      CreateReceiverOnCurrentThread(&status, runner->QuitClosure()));
-  int request_id2 = version_->StartRequest(
-      ServiceWorkerMetrics::EventType::FETCH_WAITUNTIL,
-      CreateReceiverOnCurrentThread(&status, runner->QuitClosure()));
-  int received_request_id1 = 0;
-  int received_request_id2 = 0;
-  std::string received_data1;
-  std::string received_data2;
-  version_->RegisterRequestCallback<TestMsg_TestEventResult>(
-      request_id1, base::Bind(&ReceiveTestEventResult, &received_request_id1,
-                              &received_data1, runner->QuitClosure()));
-  version_->RegisterRequestCallback<TestMsg_TestEventResult>(
-      request_id2, base::Bind(&ReceiveTestEventResult, &received_request_id2,
-                              &received_data2, runner->QuitClosure()));
-  version_->DispatchEvent({request_id1, request_id2},
-                          TestMsg_TestEvent_Multiple(request_id1, request_id2));
-
-  // Verify event got dispatched to worker.
-  base::RunLoop().RunUntilIdle();
-  ASSERT_EQ(1u, helper_->inner_ipc_sink()->message_count());
-  const IPC::Message* msg = helper_->inner_ipc_sink()->GetMessageAt(0);
-  EXPECT_EQ(TestMsg_TestEvent_Multiple::ID, msg->type());
-
-  // Simulate sending reply to event.
-  std::string reply1("foobar1");
-  std::string reply2("foobar2");
-  helper_->SimulateSendEventResult(
-      version_->embedded_worker()->embedded_worker_id(), request_id1, reply1);
-  runner->Run();
-
-  // Verify message callback got called with correct reply.
-  EXPECT_EQ(request_id1, received_request_id1);
-  EXPECT_EQ(reply1, received_data1);
-  EXPECT_NE(request_id2, received_request_id2);
-  EXPECT_NE(reply2, received_data2);
-
-  // Simulate sending reply to event.
-  helper_->SimulateSendEventResult(
-      version_->embedded_worker()->embedded_worker_id(), request_id2, reply2);
-  runner->Run();
-
-  // Verify message callback got called with correct reply.
-  EXPECT_EQ(request_id2, received_request_id2);
-  EXPECT_EQ(reply2, received_data2);
-
-  // Should not have timed out, so error callback should not have been
-  // called and FinishRequest should return true.
-  EXPECT_EQ(SERVICE_WORKER_OK, status);
-  EXPECT_TRUE(version_->FinishRequest(request_id1, true /* was_handled */,
-                                      base::Time::Now()));
-  EXPECT_TRUE(version_->FinishRequest(request_id2, true /* was_handled */,
-                                      base::Time::Now()));
 }
 
 }  // namespace content

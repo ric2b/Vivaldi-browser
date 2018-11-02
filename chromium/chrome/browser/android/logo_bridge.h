@@ -26,11 +26,6 @@ namespace gfx {
 class Image;
 }  // namespace gfx
 
-namespace image_fetcher {
-class ImageFetcher;
-struct RequestMetadata;
-}  // namespace image_fetcher
-
 // The C++ counterpart to LogoBridge.java. Enables Java code to access the
 // default search provider's logo.
 class LogoBridge : public doodle::DoodleService::Observer {
@@ -38,8 +33,13 @@ class LogoBridge : public doodle::DoodleService::Observer {
   explicit LogoBridge(jobject j_profile);
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
+  // TODO(treib): Double-check the observer contract (esp. for LogoTracker).
   // Gets the current non-animated logo (downloading it if necessary) and passes
   // it to the observer.
+  // The observer's |onLogoAvailable| is guaranteed to be called at least once:
+  // a) A cached doodle is available.
+  // b) A new doodle is available.
+  // c) Not having a doodle was revalidated.
   void GetCurrentLogo(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -60,27 +60,24 @@ class LogoBridge : public doodle::DoodleService::Observer {
   virtual ~LogoBridge();
 
   // doodle::DoodleService::Observer implementation.
+  void OnDoodleConfigRevalidated(bool from_cache) override;
   void OnDoodleConfigUpdated(
       const base::Optional<doodle::DoodleConfig>& maybe_doodle_config) override;
 
-  void DoodleConfigReceived(
-      const base::Optional<doodle::DoodleConfig>& maybe_doodle_config,
-      bool from_cache);
-
+  void NotifyNoLogoAvailable(bool from_cache);
+  void FetchDoodleImage(const doodle::DoodleConfig& doodle_config,
+                        bool from_cache);
   void DoodleImageFetched(bool config_from_cache,
                           const GURL& on_click_url,
                           const std::string& alt_text,
                           const GURL& animated_image_url,
-                          const std::string& image_fetch_id,
-                          const gfx::Image& image,
-                          const image_fetcher::RequestMetadata& metadata);
+                          const gfx::Image& image);
 
   // Only valid if UseNewDoodleApi is disabled.
   LogoService* logo_service_;
 
   // Only valid if UseNewDoodleApi is enabled.
   doodle::DoodleService* doodle_service_;
-  std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher_;
   base::android::ScopedJavaGlobalRef<jobject> j_logo_observer_;
   ScopedObserver<doodle::DoodleService, doodle::DoodleService::Observer>
       doodle_observer_;

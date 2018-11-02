@@ -11,10 +11,13 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
+#include "content/browser/resource_context_impl.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/public/browser/blob_handle.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -80,7 +83,8 @@ ChromeBlobStorageContext* ChromeBlobStorageContext::GetFor(
         new ChromeBlobStorageContext();
     context->SetUserData(
         kBlobStorageContextKeyName,
-        new UserDataAdapter<ChromeBlobStorageContext>(blob.get()));
+        base::MakeUnique<UserDataAdapter<ChromeBlobStorageContext>>(
+            blob.get()));
 
     // Check first to avoid memory leak in unittests.
     bool io_thread_valid = BrowserThread::IsMessageLoopValid(BrowserThread::IO);
@@ -98,9 +102,9 @@ ChromeBlobStorageContext* ChromeBlobStorageContext::GetFor(
     // If we're not incognito mode, schedule all of our file tasks to enable
     // disk on the storage context.
     if (!context->IsOffTheRecord() && io_thread_valid) {
-      file_task_runner =
-          BrowserThread::GetBlockingPool()->GetTaskRunnerWithShutdownBehavior(
-              base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
+      file_task_runner = base::CreateTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
       // Removes our old blob directories if they exist.
       BrowserThread::PostAfterStartupTask(
           FROM_HERE, file_task_runner,
@@ -184,6 +188,35 @@ void ChromeBlobStorageContext::DeleteOnCorrectThread() const {
     return;
   }
   delete this;
+}
+
+storage::BlobStorageContext* GetBlobStorageContext(
+    ChromeBlobStorageContext* blob_storage_context) {
+  if (!blob_storage_context)
+    return NULL;
+  return blob_storage_context->context();
+}
+
+void AttachRequestBodyBlobDataHandles(ResourceRequestBodyImpl* body,
+                                      ResourceContext* resource_context) {
+  storage::BlobStorageContext* blob_context = GetBlobStorageContext(
+      GetChromeBlobStorageContextForResourceContext(resource_context));
+
+  DCHECK(blob_context);
+  for (size_t i = 0; i < body->elements()->size(); ++i) {
+    const ResourceRequestBodyImpl::Element& element = (*body->elements())[i];
+    if (element.type() != ResourceRequestBodyImpl::Element::TYPE_BLOB)
+      continue;
+    std::unique_ptr<storage::BlobDataHandle> handle =
+        blob_context->GetBlobDataFromUUID(element.blob_uuid());
+    DCHECK(handle);
+    if (!handle)
+      continue;
+    // Ensure the blob and any attached shareable files survive until
+    // upload completion. The |body| takes ownership of |handle|.
+    const void* key = handle.get();
+    body->SetUserData(key, std::move(handle));
+  }
 }
 
 }  // namespace content

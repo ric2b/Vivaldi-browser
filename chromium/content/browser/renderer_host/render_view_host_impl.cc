@@ -37,7 +37,6 @@
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
-#include "content/browser/host_zoom_map_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/renderer_host/input/timeout_monitor.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -91,6 +90,7 @@
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/switches.h"
 #include "ui/native_theme/native_theme_features.h"
 #include "url/url_constants.h"
 
@@ -98,6 +98,10 @@
 #include "ui/display/win/screen_win.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/platform_font_win.h"
+#endif
+
+#if !defined(OS_ANDROID)
+#include "content/browser/host_zoom_map_impl.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -211,7 +215,6 @@ RenderViewHostImpl::RenderViewHostImpl(
       sudden_termination_allowed_(false),
       render_view_termination_status_(base::TERMINATION_STATUS_STILL_RUNNING),
       updating_web_preferences_(false),
-      render_view_ready_on_process_launch_(false),
       weak_factory_(this) {
   DCHECK(instance_.get());
   CHECK(delegate_);  // http://crbug.com/82827
@@ -236,6 +239,8 @@ RenderViewHostImpl::RenderViewHostImpl(
 
   close_timeout_.reset(new TimeoutMonitor(base::Bind(
       &RenderViewHostImpl::ClosePageTimeout, weak_factory_.GetWeakPtr())));
+
+  input_device_change_observer_.reset(new InputDeviceChangeObserver(this));
 }
 
 RenderViewHostImpl::~RenderViewHostImpl() {
@@ -246,7 +251,6 @@ RenderViewHostImpl::~RenderViewHostImpl() {
                    base::Unretained(ResourceDispatcherHostImpl::Get()),
                    GetProcess()->GetID(), GetRoutingID()));
   }
-
   delegate_->RenderViewDeleted(this);
   GetProcess()->RemoveObserver(this);
 }
@@ -312,22 +316,33 @@ bool RenderViewHostImpl::CreateRenderView(
   params->swapped_out = !is_active_;
   params->replicated_frame_state = replicated_frame_state;
   params->proxy_routing_id = proxy_route_id;
-  params->hidden = GetWidget()->is_hidden();
+  params->hidden = is_active_ ? GetWidget()->is_hidden()
+                              : GetWidget()->delegate()->IsHidden();
   params->never_visible = delegate_->IsNeverVisible();
   params->window_was_created_with_opener = window_was_created_with_opener;
   params->enable_auto_resize = GetWidget()->auto_resize_enabled();
   params->min_size = GetWidget()->min_size_for_auto_resize();
   params->max_size = GetWidget()->max_size_for_auto_resize();
   params->page_zoom_level = delegate_->GetPendingPageZoomLevel();
-  params->image_decode_color_space = gfx::ICCProfile::FromBestMonitor();
 
+  bool force_srgb_image_decode_color_space = false;
   // Pretend that HDR displays are sRGB so that we do not have inconsistent
   // coloring.
   // TODO(ccameron): Disable this once color correct rasterization is functional
   // https://crbug.com/701942
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableHDR)) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableHDR))
+    force_srgb_image_decode_color_space = true;
+  // When color correct rendering is enabled, the image_decode_color_space
+  // parameter should not be used (and all users of it should be using sRGB).
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableColorCorrectRendering)) {
+    force_srgb_image_decode_color_space = true;
+  }
+  if (force_srgb_image_decode_color_space) {
     gfx::ColorSpace::CreateSRGB().GetICCProfile(
         &params->image_decode_color_space);
+  } else {
+    params->image_decode_color_space = gfx::ICCProfile::FromBestMonitor();
   }
 
   GetWidget()->GetResizeParams(&params->initial_size);
@@ -439,20 +454,21 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
       command_line.HasSwitch(switches::kHistoryEntryRequiresUserGesture);
 
 #if defined(OS_ANDROID)
-  // On Android, user gestures are normally required, unless that requirement
-  // is disabled with a command-line switch or the equivalent field trial is
-  // is set to "Enabled".
-  prefs.user_gesture_required_for_media_playback = !command_line.HasSwitch(
-      switches::kDisableGestureRequirementForMediaPlayback);
-
   prefs.progress_bar_completion = GetProgressBarCompletionPolicy();
 
   prefs.use_solid_color_scrollbars = true;
-#else  // defined(OS_ANDROID)
-  prefs.cross_origin_media_playback_requires_user_gesture =
-      base::FeatureList::GetInstance()->IsEnabled(
-          features::kCrossOriginMediaPlaybackRequiresUserGesture);
 #endif  // defined(OS_ANDROID)
+
+  std::string autoplay_policy = media::GetEffectiveAutoplayPolicy(command_line);
+  if (autoplay_policy == switches::autoplay::kNoUserGestureRequiredPolicy) {
+    prefs.autoplay_policy = AutoplayPolicy::kNoUserGestureRequired;
+  } else if (autoplay_policy ==
+             switches::autoplay::kUserGestureRequiredPolicy) {
+    prefs.autoplay_policy = AutoplayPolicy::kUserGestureRequired;
+  } else if (autoplay_policy ==
+             switches::autoplay::kUserGestureRequiredForCrossOriginPolicy) {
+    prefs.autoplay_policy = AutoplayPolicy::kUserGestureRequiredForCrossOrigin;
+  }
 
   const std::string touch_enabled_switch =
       command_line.HasSwitch(switches::kTouchEventFeatureDetection)
@@ -476,6 +492,9 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
 #if defined(OS_ANDROID)
   prefs.video_fullscreen_orientation_lock_enabled =
       base::FeatureList::IsEnabled(media::kVideoFullscreenOrientationLock) &&
+      ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
+  prefs.video_rotate_to_fullscreen_enabled =
+      base::FeatureList::IsEnabled(media::kVideoRotateToFullscreen) &&
       ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
 #endif
 
@@ -509,7 +528,7 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
       command_line.HasSwitch(switches::kMainFrameResizesAreOrientationChanges);
 
   prefs.color_correct_rendering_enabled =
-      command_line.HasSwitch(cc::switches::kEnableColorCorrectRendering);
+      command_line.HasSwitch(switches::kEnableColorCorrectRendering);
 
   prefs.color_correct_rendering_default_mode_enabled =
       command_line.HasSwitch(
@@ -611,13 +630,6 @@ void RenderViewHostImpl::ClosePageIgnoringUnloadEvents() {
   delegate_->Close(this);
 }
 
-void RenderViewHostImpl::RenderProcessReady(RenderProcessHost* host) {
-  if (render_view_ready_on_process_launch_) {
-    render_view_ready_on_process_launch_ = false;
-    RenderViewReady();
-  }
-}
-
 void RenderViewHostImpl::RenderProcessExited(RenderProcessHost* host,
                                              base::TerminationStatus status,
                                              int exit_code) {
@@ -667,6 +679,12 @@ void RenderViewHostImpl::RenderWidgetGotFocus() {
   RenderViewHostDelegateView* view = delegate_->GetDelegateView();
   if (view)
     view->GotFocus();
+}
+
+void RenderViewHostImpl::RenderWidgetLostFocus() {
+  RenderViewHostDelegateView* view = delegate_->GetDelegateView();
+  if (view)
+    view->LostFocus();
 }
 
 void RenderViewHostImpl::SetInitialFocus(bool reverse) {
@@ -826,11 +844,13 @@ void RenderViewHostImpl::OnDocumentAvailableInMainFrame(
   if (!uses_temporary_zoom_level)
     return;
 
+#if !defined(OS_ANDROID)
   HostZoomMapImpl* host_zoom_map =
       static_cast<HostZoomMapImpl*>(HostZoomMap::Get(GetSiteInstance()));
   host_zoom_map->SetTemporaryZoomLevel(GetProcess()->GetID(),
                                        GetRoutingID(),
                                        host_zoom_map->GetDefaultZoomLevel());
+#endif  // !defined(OS_ANDROID)
 }
 
 void RenderViewHostImpl::OnDidContentsPreferredSizeChange(
@@ -919,6 +939,10 @@ void RenderViewHostImpl::DisableAutoResize(const gfx::Size& new_size) {
   Send(new ViewMsg_DisableAutoResize(GetRoutingID(), new_size));
   if (!new_size.IsEmpty())
     GetWidget()->GetView()->SetSize(new_size);
+  // This clears the cached value in the WebContents, so that OOPIFs will
+  // stop using it.
+  if (GetWidget()->delegate())
+    GetWidget()->delegate()->ResetAutoResizeSize();
 }
 
 void RenderViewHostImpl::LoadImageAt(int x, int y) {
@@ -944,18 +968,12 @@ void RenderViewHostImpl::SelectWordAroundCaret() {
 }
 
 void RenderViewHostImpl::PostRenderViewReady() {
-  if (GetProcess()->IsReady()) {
-    BrowserThread::PostTask(
-        BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&RenderViewHostImpl::RenderViewReady,
-                   weak_factory_.GetWeakPtr()));
-  } else {
-    render_view_ready_on_process_launch_ = true;
-  }
+  GetProcess()->PostTaskWhenProcessIsReady(base::Bind(
+      &RenderViewHostImpl::RenderViewReady, weak_factory_.GetWeakPtr()));
 }
 
 void RenderViewHostImpl::RenderViewReady() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   delegate_->RenderViewReady(this);
 }
 

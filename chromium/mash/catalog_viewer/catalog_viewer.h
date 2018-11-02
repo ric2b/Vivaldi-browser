@@ -13,9 +13,7 @@
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
-#include "services/tracing/public/cpp/provider.h"
 
 namespace views {
 class AuraInit;
@@ -25,10 +23,8 @@ class Widget;
 namespace mash {
 namespace catalog_viewer {
 
-class CatalogViewer
-    : public service_manager::Service,
-      public mojom::Launchable,
-      public service_manager::InterfaceFactory<mojom::Launchable> {
+class CatalogViewer : public service_manager::Service,
+                      public mojom::Launchable {
  public:
   CatalogViewer();
   ~CatalogViewer() override;
@@ -38,23 +34,21 @@ class CatalogViewer
  private:
   // service_manager::Service:
   void OnStart() override;
-  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
 
   // mojom::Launchable:
   void Launch(uint32_t what, mojom::LaunchMode how) override;
 
-  // service_manager::InterfaceFactory<mojom::Launchable>:
-  void Create(const service_manager::Identity& remote_identity,
-              mojom::LaunchableRequest request) override;
+  void Create(const service_manager::BindSourceInfo& source_info,
+              mojom::LaunchableRequest request);
 
   mojo::BindingSet<mojom::Launchable> bindings_;
   std::vector<views::Widget*> windows_;
 
   service_manager::BinderRegistry registry_;
 
-  tracing::Provider tracing_;
   std::unique_ptr<views::AuraInit> aura_init_;
 
   DISALLOW_COPY_AND_ASSIGN(CatalogViewer);

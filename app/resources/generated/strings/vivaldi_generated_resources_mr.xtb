@@ -17,11 +17,9 @@
 <translation id="1546280085599573572">आपण होम बटण क्लिक करता तेव्हा कोणते पृष्ठ दर्शविले जाते हे या विस्ताराने बदलले आहे.</translation>
 <translation id="1588438908519853928">सामान्य</translation>
 <translation id="1616206807336925449">या विस्तारास कोणत्याही विशिष्ट परवानग्यांची आवश्यकता नाही.</translation>
-<translation id="1620510694547887537">कॅमेरा</translation>
 <translation id="1635033183663317347">आपल्‍या पालकाद्वारे स्थापित केले.</translation>
 <translation id="1723824996674794290">&amp;नवीन विंडो</translation>
 <translation id="1729533290416704613">आपण विविधोपयोगी क्षेत्रातून शोध घेता तेव्हा कोणते पृष्ठ दर्शविले जाते हे देखील हे नियंत्रित करते.</translation>
-<translation id="1789575671122666129">पॉपअप</translation>
 <translation id="1850508293116537636">&amp;घड्याळाच्या दिशेने फिरवा</translation>
 <translation id="1859234291848436338">लिहिण्याची दिशा</translation>
 <translation id="1901303067676059328">&amp;सर्व निवडा</translation>
@@ -30,10 +28,8 @@
 <translation id="2076269580855484719">हे प्लगिन लपवा</translation>
 <translation id="2087822576218954668">मुद्रण: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">प्लगिन अद्यतनित करा</translation>
-<translation id="2147827593068025794">पार्श्वभूमी संकालन</translation>
 <translation id="215753907730220065">पूर्ण स्क्रीनमधून निर्गमन करा</translation>
 <translation id="2177950615300672361">गुप्त टॅब: <ph name="TAB_NAME" /></translation>
-<translation id="2187317261103489799">शोधा (डीफॉल्ट)</translation>
 <translation id="219008588003277019">नेटिव्ह क्लायंट मॉड्यूल: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">साधा मजकूर म्हणून पेस्ट करा</translation>
 <translation id="2282146716419988068">GPU प्रक्रिया</translation>
@@ -48,9 +44,7 @@
 <translation id="2439110203301358333">आपल्या संगणकावरील दुसऱ्या प्रोग्रामने Vivaldi च्या कार्य करण्याचा मार्ग बदलू शकणारा विस्तार जोडला.</translation>
 <translation id="2445081178310039857">विस्तार मूळ निर्देशिका आवश्यक आहे.</translation>
 <translation id="2470702053775288986">असमर्थित विस्तार अक्षम</translation>
-<translation id="2482878487686419369">सूचना</translation>
 <translation id="2501797496290880632">शॉर्टकट टाइप करा</translation>
-<translation id="2509857212037838238">स्‍थापित करा <ph name="PLUGIN_NAME" /></translation>
 <translation id="2550212893339833758">स्वॅप केलेली मेमरी</translation>
 <translation id="2662876636500006917">Vivaldi वेब बाजार</translation>
 <translation id="2678063897982469759">पुन्हा-सक्षम करा</translation>
@@ -67,7 +61,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">वापरकर्ता हँडल</translation>
 <translation id="3222066309010235055">पूर्वप्रस्तुती: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3227137524299004712">मायक्रोफोन</translation>
 <translation id="3241680850019875542">पॅक करण्यासाठी विस्ताराची मूळ निर्देशिका निवडा. एक विस्तार अद्यतनित करण्याकरिता, पुनर्वापरासाठी खाजगी की फाइल देखील निवडा.</translation>
 <translation id="3280237271814976245">&amp;म्हणून जतन करा...</translation>
 <translation id="3288047731229977326">विकासक मोडमध्‍ये चालणारे विस्‍तार आपल्‍या संगणकास हानी पोहचवू शकतात. आपण विकासक नसल्‍यास, सुरक्षित राहाण्‍यासाठी विकासक मोडमध्‍ये चालणारे हे विस्‍तार आपण अक्षम करावे.</translation>
@@ -75,7 +68,6 @@
 <translation id="3347086966102161372">प्रतिमा पत्ता कॉपी करा</translation>
 <translation id="335985608243443814">ब्राउझ करा...</translation>
 <translation id="3378572629723696641">हा विस्तार दूषित झालेला असू शकतो.</translation>
-<translation id="3427092606871434483">अनुमती द्या (डीफॉल्ट)</translation>
 <translation id="3435896845095436175">सक्षम करा</translation>
 <translation id="345693547134384690">नवीन विंडोमध्ये &amp;प्रतिमा उघडा</translation>
 <translation id="3467267818798281173">Google ला सूचनांसाठी विचारा</translation>
@@ -83,7 +75,6 @@
 <translation id="3627588569887975815">गु&amp;प्त विंडोमध्ये दुवा उघडा</translation>
 <translation id="3678156199662914018">विस्तारः <ph name="EXTENSION_NAME" /></translation>
 <translation id="370665806235115550">लोड करीत आहे...</translation>
-<translation id="3789841737615482174">स्थापना करा</translation>
 <translation id="3798449238516105146">आवृत्ती</translation>
 <translation id="3866249974567520381">वर्णन</translation>
 <translation id="3905761538810670789">अ‍ॅप दुरुस्त करा</translation>
@@ -101,13 +92,11 @@
 <translation id="4096508467498758490">विकासक मोड विस्तार अक्षम करा</translation>
 <translation id="4100839878934973028">आपल्या संगणकावरील दुसऱ्या प्रोग्रामने Vivaldi च्या कार्य करण्याचा मार्ग बदलू शकणारा अ‍ॅप जोडला.</translation>
 <translation id="4130207949184424187">आपण विविधोपयोगी क्षेत्रातून शोध घेता तेव्हा कोणते पृष्ठ दर्शविले जाते ते या विस्ताराने बदलले आहे.</translation>
-<translation id="4165986682804962316">साइट सेटिंग्ज</translation>
 <translation id="4176463684765177261">अक्षम</translation>
 <translation id="4200983522494130825">नवीन &amp;टॅब</translation>
 <translation id="420665587194630159">(हा विस्तार व्यवस्थापित केलेला आहे आणि काढला जाणे किंवा अक्षम करणे शक्य नाही.)</translation>
 <translation id="4240511609794012987">शेअर केलेली मेमरी</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K लाइव्ह)</translation>
-<translation id="4312866146174492540">अवरोधित करा (डीफॉल्ट)</translation>
 <translation id="4384652540891215547">विस्तार सक्रिय करा</translation>
 <translation id="4394049700291259645">अक्षम करा</translation>
 <translation id="4423482519432579560">&amp;शब्दलेखन तपासणी</translation>
@@ -120,7 +109,6 @@
 <translation id="4677772697204437347">GPU मेमरी</translation>
 <translation id="4711638718396952945">सेटिंग्ज पुनर्संचयित करा</translation>
 <translation id="4839303808932127586">म्हणून व्हिडिओ ज&amp;तन करा...</translation>
-<translation id="4851858059374029925"><ph name="PLUGIN_NAME" /> स्थापित करायचे? केवळ आपला विश्वास असलेले प्लगिन स्थापित करा.</translation>
 <translation id="488785315393301722">तपशील दर्शवा</translation>
 <translation id="4911714727432509308">कोणत्याही विस्तारांनी कीबोर्ड शॉर्टकट नियुक्त केले नाहीत.</translation>
 <translation id="4927301649992043040">पॅक विस्तार</translation>
@@ -151,12 +139,10 @@
 <translation id="5646376287012673985">स्थान</translation>
 <translation id="5715711091495208045">प्लगिन ब्रोकर: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">म्हणून ऑडिओ ज&amp;तन करा...</translation>
-<translation id="5778550464785688721">MIDI डिव्हाइसेस पूर्ण नियंत्रण</translation>
 <translation id="5780973441651030252">प्रक्रिया प्राधान्य</translation>
 <translation id="5804241973901381774">परवानग्या</translation>
 <translation id="583281660410589416">अज्ञात</translation>
 <translation id="59174027418879706">सक्षम केलेले</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 वापरात आहे}one{# वापरात आहे}other{# वापरात आहेत}}</translation>
 <translation id="5956585768868398362">आपण अपेक्षा करत होता हे तेच शोध पृष्ठ आहे?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> सर्वोच्च)</translation>
 <translation id="5965661248935608907">आपण होम बटण क्लिक करता किंवा विविधोपयोगी क्षेत्रातून शोध घेता तेव्हा कोणते पृष्ठ दर्शविले जाते हे देखील हे नियंत्रित करते.</translation>
@@ -185,14 +171,12 @@
 <translation id="6787839852456839824">कीबोर्ड शॉर्टकट</translation>
 <translation id="6798954102094737107">प्लगिन: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">बदल ठेवा</translation>
-<translation id="6863910145616405334">प्लगिन सापडले नाही</translation>
 <translation id="6886871292305414135">नवीन &amp;टॅबमध्ये दुवा उघडा</translation>
 <translation id="6900284862687837908">पार्श्वभूमी अॅप: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">फाईल प्रवेश मागे घ्या</translation>
 <translation id="6974053822202609517">उजवीकडून डावीकडे</translation>
 <translation id="7013485839273047434">अधिक विस्तार मिळवा</translation>
 <translation id="708060913198414444">ऑडिओ पत्ता कॉपी करा</translation>
-<translation id="7105578512429498960">ही सामग्री प्रदर्शित करण्यासाठी <ph name="PLUGIN_NAME" /> स्थापित करा</translation>
 <translation id="7144878232160441200">पुन्हा प्रयत्न करा</translation>
 <translation id="7206693748120342859"><ph name="PLUGIN_NAME" /> डाउनलोड करीत आहे...</translation>
 <translation id="7287143125007575591">प्रवेश नाकारला.</translation>
@@ -224,7 +208,6 @@
 
 आपली की फाइल  एका सुरक्षित ठिकाणी ठेवा. आपल्या विस्ताराच्या नवीन आवृत्या तयार करण्यासाठी आपल्‍याला त्याची आवश्यकता असेल.</translation>
 <translation id="8004582292198964060">ब्राउझर</translation>
-<translation id="8037357227543935929">विचारा (डीफॉल्ट)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">&amp;मजकूर फील्डचे शब्दलेखन तपासा</translation>
 <translation id="8261378640211443080"><ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> मध्ये हा विस्तार सूचीबद्ध केला नाही आणि कदाचित आपल्या माहिती शिवाय जोडला गेला आहे.</translation>
@@ -240,7 +223,6 @@
 <translation id="8664389313780386848">पृष्ठ स्त्रोत &amp;पहा</translation>
 <translation id="8719653885894320876"><ph name="PLUGIN_NAME" /> डाउनलोड करणे अयशस्वी झाले</translation>
 <translation id="873545264931343897"><ph name="PLUGIN_NAME" /> अद्यतन समाप्त झाल्यावर, ते सक्रिय करण्यासाठी पृष्‍ठ रीलोड करा</translation>
-<translation id="8763204422633679667"><ph name="PLUGIN_NAME" /> स्थापित झाल्यानंतर, ते सक्रिय करण्‍यासाठी पृष्‍ठ रीलोड करा</translation>
 <translation id="8798099450830957504">डीफॉल्ट</translation>
 <translation id="8808478386290700967">वेब स्टोअर</translation>
 <translation id="8859174528519900719">सबफ्रेम: <ph name="SUBFRAME_SITE" /></translation>

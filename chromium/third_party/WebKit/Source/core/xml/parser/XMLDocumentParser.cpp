@@ -315,7 +315,7 @@ void XMLDocumentParser::ClearCurrentNodeStack() {
   leaf_text_node_ = nullptr;
 
   if (current_node_stack_.size()) {  // Aborted parsing.
-    current_node_stack_.Clear();
+    current_node_stack_.clear();
   }
 }
 
@@ -366,8 +366,8 @@ bool XMLDocumentParser::UpdateLeafTextNode() {
     return true;
 
   leaf_text_node_->appendData(
-      ToString(buffered_text_.Data(), buffered_text_.size()));
-  buffered_text_.Clear();
+      ToString(buffered_text_.data(), buffered_text_.size()));
+  buffered_text_.clear();
   leaf_text_node_ = nullptr;
 
   // Mutation event handlers executed by appendData() might detach this parser.
@@ -452,6 +452,7 @@ void XMLDocumentParser::NotifyFinished(Resource* unused_resource) {
   ScriptLoader* script_loader =
       ScriptElementBase::FromElementIfPossible(e)->Loader();
   DCHECK(script_loader);
+  CHECK_EQ(script_loader->GetScriptType(), ScriptType::kClassic);
 
   if (error_occurred) {
     script_loader->DispatchErrorEvent();
@@ -726,7 +727,7 @@ PassRefPtr<XMLParserContext> XMLParserContext::CreateMemoryParser(
 
   // appendFragmentSource() checks that the length doesn't overflow an int.
   xmlParserCtxtPtr parser =
-      xmlCreateMemoryParserCtxt(chunk.Data(), chunk.length());
+      xmlCreateMemoryParserCtxt(chunk.data(), chunk.length());
 
   if (!parser)
     return nullptr;
@@ -947,7 +948,7 @@ static inline void HandleElementAttributes(
         attr_uri = ToAtomicString(attributes[i].uri);
       } else {
         const HashMap<AtomicString, AtomicString>::const_iterator it =
-            initial_prefix_to_namespace_map.Find(attr_prefix);
+            initial_prefix_to_namespace_map.find(attr_prefix);
         if (it != initial_prefix_to_namespace_map.end())
           attr_uri = it->value;
         else
@@ -1112,9 +1113,16 @@ void XMLDocumentParser::EndElementNs() {
   DCHECK(!pending_script_);
   requesting_script_ = true;
 
-  if (script_loader->PrepareScript(
-          script_start_position_,
-          ScriptLoader::kAllowLegacyTypeInTypeAttribute)) {
+  bool success = script_loader->PrepareScript(
+      script_start_position_, ScriptLoader::kAllowLegacyTypeInTypeAttribute);
+
+  if (script_loader->GetScriptType() != ScriptType::kClassic) {
+    // XMLDocumentParser does not support a module script, and thus ignores it.
+    success = false;
+    VLOG(0) << "Module scripts in XML documents are not supported.";
+  }
+
+  if (success) {
     // FIXME: Script execution should be shared between
     // the libxml2 and Qt XMLDocumentParser implementations.
 
@@ -1534,7 +1542,7 @@ void XMLDocumentParser::InitializeParserContext(const CString& chunk) {
   if (parsing_fragment_) {
     context_ = XMLParserContext::CreateMemoryParser(&sax, this, chunk);
   } else {
-    DCHECK(!chunk.Data());
+    DCHECK(!chunk.data());
     context_ = XMLParserContext::CreateStringParser(&sax, this);
   }
 }
@@ -1576,7 +1584,7 @@ xmlDocPtr XmlDocPtrForString(Document* document,
   // document results in good error messages.
   XMLDocumentParserScope scope(document, ErrorFunc, 0);
   XMLParserInput input(source);
-  return xmlReadMemory(input.Data(), input.size(), url.Latin1().Data(),
+  return xmlReadMemory(input.Data(), input.size(), url.Latin1().data(),
                        input.Encoding(), XSLT_PARSE_OPTIONS);
 }
 
@@ -1660,7 +1668,7 @@ bool XMLDocumentParser::AppendFragmentSource(const String& chunk) {
     // an error or a null byte. If we hit this DCHECK, we've found a test
     // case which demonstrates the need for this code.
     DCHECK(saw_error_ ||
-           (bytes_processed >= 0 && !chunk_as_utf8.Data()[bytes_processed]));
+           (bytes_processed >= 0 && !chunk_as_utf8.data()[bytes_processed]));
     return false;
   }
 

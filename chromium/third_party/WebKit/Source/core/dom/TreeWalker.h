@@ -25,9 +25,9 @@
 #ifndef TreeWalker_h
 #define TreeWalker_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/NodeFilter.h"
 #include "core/dom/NodeIteratorBase.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -43,7 +43,7 @@ class TreeWalker final : public GarbageCollected<TreeWalker>,
  public:
   static TreeWalker* Create(Node* root_node,
                             unsigned what_to_show,
-                            NodeFilter* filter) {
+                            V8NodeFilterCondition* filter) {
     return new TreeWalker(root_node, what_to_show, filter);
   }
 
@@ -63,7 +63,7 @@ class TreeWalker final : public GarbageCollected<TreeWalker>,
   DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
  private:
-  TreeWalker(Node*, unsigned what_to_show, NodeFilter*);
+  TreeWalker(Node*, unsigned what_to_show, V8NodeFilterCondition*);
 
   Node* SetCurrent(Node*);
 

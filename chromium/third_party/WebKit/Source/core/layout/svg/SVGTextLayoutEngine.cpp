@@ -206,11 +206,16 @@ void SVGTextLayoutEngine::BeginTextPathLayout(SVGInlineFlowBox* flow_box) {
     return;
 
   float total_length = text_path_chunk_layout_builder.TotalLength();
-  if (length_adjust == kSVGLengthAdjustSpacing)
-    text_path_spacing_ = (desired_text_length - total_length) /
-                         text_path_chunk_layout_builder.TotalCharacters();
-  else
+  if (length_adjust == kSVGLengthAdjustSpacing) {
+    text_path_spacing_ = 0;
+    if (text_path_chunk_layout_builder.TotalCharacters() > 1) {
+      text_path_spacing_ = desired_text_length - total_length;
+      text_path_spacing_ /=
+          text_path_chunk_layout_builder.TotalCharacters() - 1;
+    }
+  } else {
     text_path_scaling_ = desired_text_length / total_length;
+  }
 }
 
 void SVGTextLayoutEngine::EndTextPathLayout() {
@@ -293,7 +298,7 @@ void SVGTextLayoutEngine::FinishLayout() {
   SVGTextChunkBuilder chunk_layout_builder;
   chunk_layout_builder.ProcessTextChunks(line_layout_boxes_);
 
-  line_layout_boxes_.Clear();
+  line_layout_boxes_.clear();
 }
 
 const LayoutSVGInlineText* SVGTextLayoutEngine::NextLogicalTextNode() {

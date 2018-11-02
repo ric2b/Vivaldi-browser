@@ -12,17 +12,16 @@
 #include "ash/accessibility_delegate.h"
 #include "ash/accessibility_types.h"
 #include "ash/focus_cycler.h"
-#include "ash/ime_control_delegate.h"
+#include "ash/ime/ime_switch_type.h"
 #include "ash/media_controller.h"
 #include "ash/multi_profile_uma.h"
 #include "ash/new_window_controller.h"
-#include "ash/palette_delegate.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
 #include "ash/rotator/window_rotation.h"
 #include "ash/session/session_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
-#include "ash/shelf/wm_shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/shell_port.h"
@@ -51,8 +50,10 @@
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
+#include "ui/app_list/presenter/app_list.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
@@ -69,6 +70,7 @@ namespace ash {
 namespace {
 
 using base::UserMetricsAction;
+using chromeos::input_method::InputMethodManager;
 using message_center::Notification;
 
 // Identifier for the high contrast toggle accelerator notification.
@@ -172,6 +174,11 @@ void RecordUmaHistogram(const char* histogram_name,
   histogram->Add(sample);
 }
 
+void RecordImeSwitchByAccelerator() {
+  UMA_HISTOGRAM_ENUMERATION("InputMethod.ImeSwitch",
+                            ImeSwitchType::kAccelerator, ImeSwitchType::kCount);
+}
+
 void HandleCycleBackwardMRU(const ui::Accelerator& accelerator) {
   if (accelerator.key_code() == ui::VKEY_TAB)
     base::RecordAction(base::UserMetricsAction("Accel_PrevWindow_Tab"));
@@ -205,19 +212,19 @@ void HandleRotatePaneFocus(FocusCycler::Direction direction) {
 
 void HandleFocusShelf() {
   base::RecordAction(UserMetricsAction("Accel_Focus_Shelf"));
-  // TODO(jamescook): Should this be GetWmRootWindowForNewWindows()?
-  WmShelf* shelf = WmShelf::ForWindow(ShellPort::Get()->GetPrimaryRootWindow());
+  // TODO(jamescook): Should this be GetRootWindowForNewWindows()?
+  Shelf* shelf = Shelf::ForWindow(Shell::GetPrimaryRootWindow());
   Shell::Get()->focus_cycler()->FocusWidget(shelf->shelf_widget());
 }
 
 void HandleLaunchAppN(int n) {
   base::RecordAction(UserMetricsAction("Accel_Launch_App"));
-  WmShelf::LaunchShelfItem(n);
+  Shelf::LaunchShelfItem(n);
 }
 
 void HandleLaunchLastApp() {
   base::RecordAction(UserMetricsAction("Accel_Launch_Last_App"));
-  WmShelf::LaunchShelfItem(-1);
+  Shelf::LaunchShelfItem(-1);
 }
 
 void HandleMediaNextTrack() {
@@ -252,8 +259,15 @@ void HandleNewWindow() {
   Shell::Get()->new_window_controller()->NewWindow(false /* is_incognito */);
 }
 
-bool CanHandleNextIme(ImeControlDelegate* ime_control_delegate) {
-  return ime_control_delegate && ime_control_delegate->CanCycleIme();
+bool CanCycleInputMethod() {
+  InputMethodManager* manager = InputMethodManager::Get();
+  DCHECK(manager);
+  if (!manager->GetActiveIMEState()) {
+    LOG(WARNING) << "Cannot cycle through input methods as they are not "
+                    "initialized yet.";
+    return false;
+  }
+  return manager->GetActiveIMEState()->CanCycleInputMethod();
 }
 
 bool CanHandleCycleMru(const ui::Accelerator& accelerator) {
@@ -268,9 +282,10 @@ bool CanHandleCycleMru(const ui::Accelerator& accelerator) {
   return !(keyboard_controller && keyboard_controller->keyboard_visible());
 }
 
-void HandleNextIme(ImeControlDelegate* ime_control_delegate) {
+void HandleNextIme() {
   base::RecordAction(UserMetricsAction("Accel_Next_Ime"));
-  ime_control_delegate->HandleNextIme();
+  RecordImeSwitchByAccelerator();
+  InputMethodManager::Get()->GetActiveIMEState()->SwitchToNextInputMethod();
 }
 
 void HandleOpenFeedbackPage() {
@@ -278,15 +293,14 @@ void HandleOpenFeedbackPage() {
   Shell::Get()->new_window_controller()->OpenFeedbackPage();
 }
 
-bool CanHandlePreviousIme(ImeControlDelegate* ime_control_delegate) {
-  return ime_control_delegate && ime_control_delegate->CanCycleIme();
-}
-
-void HandlePreviousIme(ImeControlDelegate* ime_control_delegate,
-                       const ui::Accelerator& accelerator) {
+void HandlePreviousIme(const ui::Accelerator& accelerator) {
   base::RecordAction(UserMetricsAction("Accel_Previous_Ime"));
-  if (accelerator.key_state() == ui::Accelerator::KeyState::PRESSED)
-    ime_control_delegate->HandlePreviousIme();
+  if (accelerator.key_state() == ui::Accelerator::KeyState::PRESSED) {
+    RecordImeSwitchByAccelerator();
+    InputMethodManager::Get()
+        ->GetActiveIMEState()
+        ->SwitchToPreviousInputMethod();
+  }
   // Else: consume the Ctrl+Space ET_KEY_RELEASED event but do not do anything.
 }
 
@@ -318,18 +332,18 @@ void HandleShowKeyboardOverlay() {
 }
 
 bool CanHandleShowMessageCenterBubble() {
-  WmWindow* target_root = Shell::GetWmRootWindowForNewWindows();
+  aura::Window* target_root = Shell::GetRootWindowForNewWindows();
   StatusAreaWidget* status_area_widget =
-      WmShelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
+      Shelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
   return status_area_widget &&
          status_area_widget->web_notification_tray()->visible();
 }
 
 void HandleShowMessageCenterBubble() {
   base::RecordAction(UserMetricsAction("Accel_Show_Message_Center_Bubble"));
-  WmWindow* target_root = Shell::GetWmRootWindowForNewWindows();
+  aura::Window* target_root = Shell::GetRootWindowForNewWindows();
   StatusAreaWidget* status_area_widget =
-      WmShelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
+      Shelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
   if (status_area_widget) {
     WebNotificationTray* notification_tray =
         status_area_widget->web_notification_tray();
@@ -340,8 +354,8 @@ void HandleShowMessageCenterBubble() {
 
 void HandleShowSystemTrayBubble() {
   base::RecordAction(UserMetricsAction("Accel_Show_System_Tray_Bubble"));
-  WmWindow* target_root = Shell::GetWmRootWindowForNewWindows();
-  SystemTray* tray = target_root->GetRootWindowController()->GetSystemTray();
+  aura::Window* target_root = Shell::GetRootWindowForNewWindows();
+  SystemTray* tray = GetRootWindowController(target_root)->GetSystemTray();
   if (!tray->HasSystemBubble()) {
     tray->ShowDefaultView(BUBBLE_CREATE_NEW);
     tray->ActivateBubble();
@@ -353,16 +367,22 @@ void HandleShowTaskManager() {
   Shell::Get()->new_window_controller()->ShowTaskManager();
 }
 
-bool CanHandleSwitchIme(ImeControlDelegate* ime_control_delegate,
-                        const ui::Accelerator& accelerator) {
-  return ime_control_delegate &&
-         ime_control_delegate->CanSwitchIme(accelerator);
+bool CanHandleSwitchIme(const ui::Accelerator& accelerator) {
+  InputMethodManager* manager = InputMethodManager::Get();
+  DCHECK(manager);
+  if (!manager->GetActiveIMEState()) {
+    LOG(WARNING) << "Cannot switch input methods as they are not "
+                    "initialized yet.";
+    return false;
+  }
+  return manager->GetActiveIMEState()->CanSwitchInputMethod(accelerator);
 }
 
-void HandleSwitchIme(ImeControlDelegate* ime_control_delegate,
-                     const ui::Accelerator& accelerator) {
+void HandleSwitchIme(const ui::Accelerator& accelerator) {
   base::RecordAction(UserMetricsAction("Accel_Switch_Ime"));
-  ime_control_delegate->HandleSwitchIme(accelerator);
+  RecordImeSwitchByAccelerator();
+  InputMethodManager::Get()->GetActiveIMEState()->SwitchInputMethod(
+      accelerator);
 }
 
 bool CanHandleToggleAppList(const ui::Accelerator& accelerator,
@@ -439,15 +459,14 @@ bool CanHandlePositionCenter() {
 
 void HandlePositionCenter() {
   base::RecordAction(UserMetricsAction("Accel_Window_Position_Center"));
-  wm::CenterWindow(WmWindow::Get(wm::GetActiveWindow()));
+  wm::CenterWindow(wm::GetActiveWindow());
 }
 
 void HandleShowImeMenuBubble() {
   base::RecordAction(UserMetricsAction("Accel_Show_Ime_Menu_Bubble"));
 
   StatusAreaWidget* status_area_widget =
-      WmShelf::ForWindow(ShellPort::Get()->GetPrimaryRootWindow())
-          ->GetStatusAreaWidget();
+      Shelf::ForWindow(Shell::GetPrimaryRootWindow())->GetStatusAreaWidget();
   if (status_area_widget) {
     ImeMenuTray* ime_menu_tray = status_area_widget->ime_menu_tray();
     if (ime_menu_tray && ime_menu_tray->visible() &&
@@ -508,19 +527,30 @@ void HandleLock() {
 
 void HandleShowStylusTools() {
   base::RecordAction(UserMetricsAction("Accel_Show_Stylus_Tools"));
-
-  RootWindowController* root_window_controller =
-      Shell::GetWmRootWindowForNewWindows()->GetRootWindowController();
-  StatusAreaWidget* status_area_widget =
-      root_window_controller->GetShelf()->GetStatusAreaWidget();
-  // Tests (clusterfuzz) can trigger this before the status area is ready.
-  if (status_area_widget)
-    status_area_widget->palette_tray()->ShowPalette();
+  GetRootWindowController(Shell::GetRootWindowForNewWindows())
+      ->GetShelf()
+      ->GetStatusAreaWidget()
+      ->palette_tray()
+      ->ShowPalette();
 }
 
 bool CanHandleShowStylusTools() {
-  return Shell::Get()->palette_delegate() &&
-         Shell::Get()->palette_delegate()->ShouldShowPalette();
+  return palette_utils::ShouldShowPalette();
+}
+
+bool CanHandleStartVoiceInteraction() {
+  return chromeos::switches::IsVoiceInteractionEnabled();
+}
+
+void HandleStartVoiceInteraction(const ui::Accelerator& accelerator) {
+  if (accelerator.IsCmdDown() && accelerator.key_code() == ui::VKEY_SPACE) {
+    base::RecordAction(
+        base::UserMetricsAction("VoiceInteraction.Started.Search_Space"));
+  } else if (accelerator.IsCmdDown() && accelerator.key_code() == ui::VKEY_A) {
+    base::RecordAction(
+        base::UserMetricsAction("VoiceInteraction.Started.Search_A"));
+  }
+  Shell::Get()->app_list()->StartVoiceInteractionSession();
 }
 
 void HandleSuspend() {
@@ -741,11 +771,6 @@ AcceleratorController::GetCurrentAcceleratorRestriction() {
   return GetAcceleratorProcessingRestriction(-1);
 }
 
-void AcceleratorController::SetImeControlDelegate(
-    std::unique_ptr<ImeControlDelegate> ime_control_delegate) {
-  ime_control_delegate_ = std::move(ime_control_delegate);
-}
-
 bool AcceleratorController::ShouldCloseMenuAndRepostAccelerator(
     const ui::Accelerator& accelerator) const {
   auto itr = accelerators_.find(accelerator);
@@ -918,15 +943,17 @@ bool AcceleratorController::CanPerformAction(
     case NEW_INCOGNITO_WINDOW:
       return CanHandleNewIncognitoWindow();
     case NEXT_IME:
-      return CanHandleNextIme(ime_control_delegate_.get());
+      return CanCycleInputMethod();
     case PREVIOUS_IME:
-      return CanHandlePreviousIme(ime_control_delegate_.get());
+      return CanCycleInputMethod();
     case SHOW_MESSAGE_CENTER_BUBBLE:
       return CanHandleShowMessageCenterBubble();
     case SHOW_STYLUS_TOOLS:
       return CanHandleShowStylusTools();
+    case START_VOICE_INTERACTION:
+      return CanHandleStartVoiceInteraction();
     case SWITCH_IME:
-      return CanHandleSwitchIme(ime_control_delegate_.get(), accelerator);
+      return CanHandleSwitchIme(accelerator);
     case SWITCH_TO_PREVIOUS_USER:
     case SWITCH_TO_NEXT_USER:
       return CanHandleCycleUser();
@@ -1117,7 +1144,7 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       HandleNewWindow();
       break;
     case NEXT_IME:
-      HandleNextIme(ime_control_delegate_.get());
+      HandleNextIme();
       break;
     case OPEN_CROSH:
       HandleCrosh();
@@ -1132,7 +1159,7 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       HandleGetHelp();
       break;
     case PREVIOUS_IME:
-      HandlePreviousIme(ime_control_delegate_.get(), accelerator);
+      HandlePreviousIme(accelerator);
       break;
     case PRINT_UI_HIERARCHIES:
       debug::PrintUIHierarchies();
@@ -1161,11 +1188,14 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case SHOW_TASK_MANAGER:
       HandleShowTaskManager();
       break;
+    case START_VOICE_INTERACTION:
+      HandleStartVoiceInteraction(accelerator);
+      break;
     case SUSPEND:
       HandleSuspend();
       break;
     case SWITCH_IME:
-      HandleSwitchIme(ime_control_delegate_.get(), accelerator);
+      HandleSwitchIme(accelerator);
       break;
     case SWITCH_TO_NEXT_USER:
       HandleCycleUser(CycleUserDirection::NEXT);

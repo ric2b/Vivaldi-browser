@@ -53,7 +53,6 @@ Per exemple, pot ser que, per respondre a aquesta sol·licitud, alguns llocs web
 <translation id="1820259098641718022">S'ha afegit a la llista de lectura</translation>
 <translation id="1876721852596493031">Envia les dades d'ús</translation>
 <translation id="1886928167269928266">Des de l'inici</translation>
-<translation id="1894451531427596130">Controleu-ne el funcionament a <ph name="BEGIN_LINK" />Configuració<ph name="END_LINK" /></translation>
 <translation id="1911619930368729126">Penja a Google Drive</translation>
 <translation id="1941314575388338491">Feu doble toc per copiar-ho.</translation>
 <translation id="1952728750904661634">Inicieu la sessió amb un compte gestionat</translation>
@@ -97,6 +96,7 @@ Per exemple, pot ser que, per respondre a aquesta sol·licitud, alguns llocs web
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">Restableix config. traducció</translation>
 <translation id="285960592395650245">Torna a baixar</translation>
+<translation id="2870560284913253234">Lloc</translation>
 <translation id="2871695793448672541">Contrasenya amagada</translation>
 <translation id="2898963176829412617">Carpeta nova…</translation>
 <translation id="2903493209154104877">Adreces</translation>
@@ -109,7 +109,6 @@ Per exemple, pot ser que, per respondre a aquesta sol·licitud, alguns llocs web
 <translation id="2989805286512600854">Obre en una pestanya nova</translation>
 <translation id="3024255823539804759">Ahir</translation>
 <translation id="3037605927509011580">Oh, no!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> no està disponible. Per accedir al vostre historial de navegació, seleccioneu <ph name="SHOW_HISTORY" /> al menú d'eines.</translation>
 <translation id="3112556859945124369">Marca com a…</translation>
 <translation id="3151924044251363314">Només els usuaris que sàpiguen la vostra frase de contrasenya poden llegir les dades que encripteu. La frase de contrasenya no s'envia a Google, i Google tampoc no l'emmagatzema. Si l'oblideu o voleu canviar aquesta configuració, heu de restablir la sincronització. <ph name="BEGIN_LINK" />Més informació<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">Marca-ho tot com a…</translation>
@@ -150,6 +149,7 @@ Per ajustar el terme de la cerca, manteniu-lo premut per seleccionar-lo. Per def
 <translation id="3638472932233958418">Càrrega prèvia de pàgines web</translation>
 <translation id="3691593122358196899">Adreça d'interès afegida a <ph name="FOLDER_TITLE" /></translation>
 <translation id="3738139272394829648">Toca per cercar</translation>
+<translation id="3742082982782149146">S'ha copiat l'URL del lloc web.</translation>
 <translation id="3771033907050503522">Pestanyes d'incògnit</translation>
 <translation id="3783017676699494206">Desa la imatge</translation>
 <translation id="3789841737615482174">Instal·la</translation>
@@ -164,10 +164,12 @@ Per ajustar el terme de la cerca, manteniu-lo premut per seleccionar-lo. Per def
 <translation id="4038354071007134711">Cap aplicació del dispos. no pot obrir el fitxer.</translation>
 <translation id="4049507953662678203">Assegureu-vos que teniu una connexió de xarxa i torneu-ho a provar.</translation>
 <translation id="411254640334432676">S'ha produït un error durant la baixada.</translation>
+<translation id="4117350985506774529">S'ha copiat el teu nom d'usuari.</translation>
 <translation id="4121993058175073134">Definiu el vostre compte de correu electrònic a l'aplicació Configuració per enviar dades d'exportació de xarxa.</translation>
 <translation id="4124987746317609294">Interval de temps</translation>
 <translation id="4172051516777682613">Mostra sempre</translation>
 <translation id="418156467088430727">Mostra versió sense connexió en una pestanya nova</translation>
+<translation id="4237682350741091554">Gestiona Sincronització de Chrome i la personalització a <ph name="BEGIN_LINK" />Configuració<ph name="END_LINK" /></translation>
 <translation id="424315890655130736">Introduïu la frase de contrasenya</translation>
 <translation id="4272631900155121838">Per poder escanejar un codi QR, activa la càmera a la configuració</translation>
 <translation id="4281844954008187215">Termes i condicions</translation>
@@ -175,6 +177,7 @@ Per ajustar el terme de la cerca, manteniu-lo premut per seleccionar-lo. Per def
 <translation id="4359125752503270327">Aquesta pàgina s'obrirà en una altra aplicació.</translation>
 <translation id="4378154925671717803">Telèfon</translation>
 <translation id="441868831736628555">Avís de privadesa</translation>
+<translation id="4508750114462689118">Tanca la promoció d'inici de sessió</translation>
 <translation id="4526249700380860531">Consulta i gestiona les contrasenyes desades a <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Torna a iniciar la sessió.</translation>
 <translation id="4620246317052452550">Pàgines que has llegit</translation>
@@ -220,6 +223,7 @@ Les vostres dades estan encriptades amb la vostra frase de contrasenya de sincro
 
 Handoff també ha d'estar activat a la secció General de Configuració, i els vostres dispositius han de fer servir el mateix compte d'iCloud.</translation>
 <translation id="5556459405103347317">Torna a carregar</translation>
+<translation id="5619279135193775234">Correu</translation>
 <translation id="5626245204502895507">No s'ha pogut baixar el fitxer en aquest moment.</translation>
 <translation id="5659593005791499971">Correu electrònic</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@ Les vostres dades es van encriptar el dia <ph name="TIME" /> amb la vostra frase
 <translation id="7136892417564438900">La càmera no està disponible</translation>
 <translation id="7159472599653637159">Sol·licita lloc per a mòbils</translation>
 <translation id="7167621057293532233">Tipus de dades</translation>
+<translation id="7175593937868963913">Redacta un correu electrònic</translation>
 <translation id="7189598951263744875">Comparteix...</translation>
 <translation id="7203585745079012652">Pronuncia les respostes</translation>
 <translation id="722055596168483966">Personalitzeu els serveis de Google</translation>
@@ -318,7 +323,7 @@ Les vostres dades es van encriptar el dia <ph name="TIME" /> amb la vostra frase
 <translation id="7400418766976504921">URL</translation>
 <translation id="7419187830569376338">Cerca aquesta imatge a <ph name="SEARCH_ENGINE" /></translation>
 <translation id="7425346204213733349">Els canvis fets a les adreces d'interès, l'historial, les contrasenyes i altres opcions de configuració es deixaran de sincronitzar amb el vostre compte de Google. No obstant això, les dades actuals hi continuaran emmagatzemades.</translation>
-<translation id="744343212394640790">No sóc <ph name="EMAIL" /></translation>
+<translation id="744343212394640790">No soc <ph name="EMAIL" /></translation>
 <translation id="7454057999980797137">Província</translation>
 <translation id="7456847797759667638">Obre la ubicació...</translation>
 <translation id="7464701184726199289">S'esborraran les dades sincronitzades de tots els dispositius. La configuració desada del lloc no se suprimirà i és possible que reflecteixi els vostres hàbits de navegació. <ph name="BEGIN_LINK" />Més informació<ph name="END_LINK" /></translation>
@@ -358,7 +363,6 @@ Les vostres dades es van encriptar el dia <ph name="TIME" /> amb la vostra frase
 <translation id="8205564605687841303">Cancel·la</translation>
 <translation id="8225985093977202398">Fitxers i imatges a memòria cau</translation>
 <translation id="8261506727792406068">Suprimeix</translation>
-<translation id="8272194309885535896">Baixa la imatge</translation>
 <translation id="8272426682713568063">Targetes de crèdit</translation>
 <translation id="8281781826761538115">Idioma predeterminat: <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">Controleu com utilitza Google el vostre historial de navegació per personalitzar la Cerca, els anuncis i altres serveis de Google</translation>

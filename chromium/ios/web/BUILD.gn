@@ -16,6 +16,10 @@ group("all_tests") {
 }
 
 source_set("web_arc") {
+  public_deps = [
+    "//net",
+  ]
+
   deps = [
     ":core",
     ":js_resources",
@@ -29,7 +33,6 @@ source_set("web_arc") {
     "//ios/third_party/blink:html_tokenizer",
     "//mojo/public/cpp/system",
     "//mojo/public/js",
-    "//net",
     "//services/service_manager/public/cpp",
     "//ui/base",
     "//ui/gfx",
@@ -63,6 +66,8 @@ source_set("web_arc") {
     "navigation/navigation_manager_delegate.h",
     "navigation/navigation_manager_impl.h",
     "navigation/navigation_manager_impl.mm",
+    "navigation/navigation_manager_util.h",
+    "navigation/navigation_manager_util.mm",
     "navigation/nscoder_util.h",
     "navigation/nscoder_util.mm",
     "navigation/serializable_user_data_manager_impl.h",
@@ -139,10 +144,8 @@ source_set("web_arc") {
     "public/web_client.mm",
     "public/web_kit_constants.h",
     "public/web_state/context_menu_params.h",
-    "public/web_state/credential.h",
     "public/web_state/crw_web_controller_observer.h",
     "public/web_state/global_web_state_observer.h",
-    "public/web_state/js/credential_util.h",
     "public/web_state/js/crw_js_injection_evaluator.h",
     "public/web_state/js/crw_js_injection_manager.h",
     "public/web_state/js/crw_js_injection_receiver.h",
@@ -163,6 +166,8 @@ source_set("web_arc") {
     "public/web_state/web_state.h",
     "public/web_state/web_state_delegate.h",
     "public/web_state/web_state_delegate_bridge.h",
+    "public/web_state/web_state_interface_provider.cc",
+    "public/web_state/web_state_interface_provider.h",
     "public/web_state/web_state_observer.h",
     "public/web_state/web_state_observer_bridge.h",
     "public/web_state/web_state_policy_decider.h",
@@ -183,7 +188,6 @@ source_set("web_arc") {
     "web_state/context_menu_params.mm",
     "web_state/context_menu_params_utils.h",
     "web_state/context_menu_params_utils.mm",
-    "web_state/credential.cc",
     "web_state/crw_pass_kit_downloader.h",
     "web_state/crw_pass_kit_downloader.mm",
     "web_state/error_translation_util.h",
@@ -191,7 +195,6 @@ source_set("web_arc") {
     "web_state/global_web_state_event_tracker.h",
     "web_state/global_web_state_event_tracker.mm",
     "web_state/global_web_state_observer.cc",
-    "web_state/js/credential_util.mm",
     "web_state/js/crw_js_injection_manager.mm",
     "web_state/js/crw_js_injection_receiver.mm",
     "web_state/js/crw_js_plugin_placeholder_manager.h",
@@ -537,6 +540,7 @@ test("ios_web_unittests_arc") {
   ]
 
   sources = [
+    "navigation/navigation_manager_util_unittest.mm",
     "public/crw_session_certificate_policy_cache_storage_unittest.mm",
     "web_state/session_certificate_policy_cache_impl_unittest.mm",
     "web_state/session_certificate_policy_cache_storage_builder_unittest.mm",
@@ -608,7 +612,6 @@ test("ios_web_unittests") {
     "web_state/error_translation_util_unittest.mm",
     "web_state/js/common_js_unittest.mm",
     "web_state/js/context_menu_js_unittest.mm",
-    "web_state/js/credential_util_unittest.mm",
     "web_state/js/crw_js_injection_manager_unittest.mm",
     "web_state/js/crw_js_post_request_loader_unittest.mm",
     "web_state/js/crw_js_window_id_manager_unittest.mm",
@@ -663,6 +666,7 @@ test("ios_web_inttests") {
     "navigation/window_location_inttest.mm",
     "public/test/http_server_inttest.mm",
     "test/run_all_unittests.cc",
+    "web_state/favicon_callbacks_inttest.mm",
     "web_state/http_auth_inttest.mm",
     "web_state/navigation_callbacks_inttest.mm",
     "webui/web_ui_mojo_inttest.mm",
@@ -694,7 +698,6 @@ js_compile_bundle("web_bundle") {
     "web_state/js/resources/common.js",
     "web_state/js/resources/console.js",
     "web_state/js/resources/context_menu.js",
-    "web_state/js/resources/dialog_overrides.js",
     "web_state/js/resources/error.js",
     "web_state/js/resources/form.js",
     "web_state/js/resources/legacy.js",

@@ -36,8 +36,9 @@ std::string FragmentFromIdentifier(PanelIdentifier panel);
 
 }  // namespace NewTabPage
 
+@class BookmarkHomeTabletNTPController;
 @protocol CRWSwipeRecognizerProvider;
-@class GoogleLandingController;
+@class GoogleLandingViewController;
 @protocol NewTabPagePanelProtocol;
 @protocol OmniboxFocuser;
 @class TabModel;
@@ -75,8 +76,8 @@ std::string FragmentFromIdentifier(PanelIdentifier panel);
                               UIGestureRecognizerDelegate,
                               UIScrollViewDelegate> {
  @private
-  base::scoped_nsprotocol<id<NewTabPagePanelProtocol>> bookmarkController_;
-  base::scoped_nsobject<GoogleLandingController> googleLandingController_;
+  base::scoped_nsobject<BookmarkHomeTabletNTPController> bookmarkController_;
+  base::scoped_nsobject<GoogleLandingViewController> googleLandingController_;
   base::scoped_nsprotocol<id<NewTabPagePanelProtocol>> incognitoController_;
   // The currently visible controller, one of the above.
   id<NewTabPagePanelProtocol> currentController_;  // weak
@@ -90,13 +91,15 @@ std::string FragmentFromIdentifier(PanelIdentifier panel);
 // Dominant color cache is passed to bookmark controller only, to optimize
 // favicon processing.
 - (id)initWithUrl:(const GURL&)url
-                loader:(id<UrlLoader>)loader
-               focuser:(id<OmniboxFocuser>)focuser
-           ntpObserver:(id<NewTabPageControllerObserver>)ntpObserver
-          browserState:(ios::ChromeBrowserState*)browserState
-            colorCache:(NSMutableDictionary*)colorCache
-    webToolbarDelegate:(id<WebToolbarDelegate>)webToolbarDelegate
-              tabModel:(TabModel*)tabModel;
+                  loader:(id<UrlLoader>)loader
+                 focuser:(id<OmniboxFocuser>)focuser
+             ntpObserver:(id<NewTabPageControllerObserver>)ntpObserver
+            browserState:(ios::ChromeBrowserState*)browserState
+              colorCache:(NSMutableDictionary*)colorCache
+      webToolbarDelegate:(id<WebToolbarDelegate>)webToolbarDelegate
+                tabModel:(TabModel*)tabModel
+    parentViewController:(UIViewController*)parentViewController
+              dispatcher:(id)dispatcher;
 
 // Select a panel based on the given |panelType|.
 - (void)selectPanel:(NewTabPage::PanelIdentifier)panelType;

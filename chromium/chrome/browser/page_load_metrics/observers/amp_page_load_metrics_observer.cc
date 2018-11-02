@@ -17,34 +17,63 @@
 
 namespace {
 
+using AMPViewType = AMPPageLoadMetricsObserver::AMPViewType;
+
+const char kHistogramPrefix[] = "PageLoad.Clients.AMP.";
+
 const char kHistogramAMPDOMContentLoadedEventFired[] =
-    "PageLoad.Clients.AMPCache2.DocumentTiming."
-    "NavigationToDOMContentLoadedEventFired";
+    "DocumentTiming.NavigationToDOMContentLoadedEventFired";
 const char kHistogramAMPFirstLayout[] =
-    "PageLoad.Clients.AMPCache2.DocumentTiming.NavigationToFirstLayout";
+    "DocumentTiming.NavigationToFirstLayout";
 const char kHistogramAMPLoadEventFired[] =
-    "PageLoad.Clients.AMPCache2.DocumentTiming.NavigationToLoadEventFired";
+    "DocumentTiming.NavigationToLoadEventFired";
 const char kHistogramAMPFirstContentfulPaint[] =
-    "PageLoad.Clients.AMPCache2.PaintTiming."
-    "NavigationToFirstContentfulPaint";
-const char kHistogramAMPParseStart[] =
-    "PageLoad.Clients.AMPCache2.ParseTiming.NavigationToParseStart";
+    "PaintTiming.NavigationToFirstContentfulPaint";
+const char kHistogramAMPParseStart[] = "ParseTiming.NavigationToParseStart";
+const char kHistogramAMPParseStartRedirect[] =
+    "ParseTiming.NavigationToParseStart.RedirectToNonAmpPage";
 
 // Host pattern for AMP Cache URLs.
 // See https://developers.google.com/amp/cache/overview#amp-cache-url-format
 // for a definition of the format of AMP Cache URLs.
-const char kAmpCacheHost[] = "cdn.ampproject.org";
+const char kAmpCacheHostSuffix[] = "cdn.ampproject.org";
 
-// Pattern for the path of Google AMP Viewer URLs.
-const char kGoogleAmpViewerPathPattern[] = "/amp/";
+#define RECORD_HISTOGRAM_FOR_TYPE(name, amp_view_type, value)                 \
+  do {                                                                        \
+    PAGE_LOAD_HISTOGRAM(std::string(kHistogramPrefix).append(name), value);   \
+    switch (amp_view_type) {                                                  \
+      case AMPViewType::AMP_CACHE:                                            \
+        PAGE_LOAD_HISTOGRAM(                                                  \
+            std::string(kHistogramPrefix).append("AmpCache.").append(name),   \
+            value);                                                           \
+        break;                                                                \
+      case AMPViewType::GOOGLE_SEARCH_AMP_VIEWER:                             \
+        PAGE_LOAD_HISTOGRAM(std::string(kHistogramPrefix)                     \
+                                .append("GoogleSearch.")                      \
+                                .append(name),                                \
+                            value);                                           \
+        break;                                                                \
+      case AMPViewType::GOOGLE_NEWS_AMP_VIEWER:                               \
+        PAGE_LOAD_HISTOGRAM(                                                  \
+            std::string(kHistogramPrefix).append("GoogleNews.").append(name), \
+            value);                                                           \
+        break;                                                                \
+      case AMPViewType::NONE:                                                 \
+        NOTREACHED();                                                         \
+      case AMPViewType::AMP_VIEW_TYPE_LAST:                                   \
+        break;                                                                \
+    }                                                                         \
+  } while (false)
 
-bool IsAMPCacheURL(const GURL& url) {
-  return url.host() == kAmpCacheHost ||
-         (google_util::IsGoogleDomainUrl(
-              url, google_util::DISALLOW_SUBDOMAIN,
-              google_util::DISALLOW_NON_STANDARD_PORTS) &&
-          base::StartsWith(url.path(), kGoogleAmpViewerPathPattern,
-                           base::CompareCase::SENSITIVE));
+GURL GetCanonicalizedSameDocumentUrl(const GURL& url) {
+  if (!url.has_ref())
+    return url;
+
+  // We're only interested in same document navigations where the full URL
+  // changes, so we ignore the 'ref' or '#fragment' portion of the URL.
+  GURL::Replacements replacements;
+  replacements.ClearRef();
+  return url.ReplaceComponents(replacements);
 }
 
 }  // namespace
@@ -56,59 +85,144 @@ AMPPageLoadMetricsObserver::~AMPPageLoadMetricsObserver() {}
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 AMPPageLoadMetricsObserver::OnCommit(
     content::NavigationHandle* navigation_handle) {
-  return IsAMPCacheURL(navigation_handle->GetURL()) ? CONTINUE_OBSERVING
-                                                    : STOP_OBSERVING;
+  current_url_ = navigation_handle->GetURL();
+  view_type_ = GetAMPViewType(current_url_);
+  return CONTINUE_OBSERVING;
+}
+
+void AMPPageLoadMetricsObserver::OnCommitSameDocumentNavigation(
+    content::NavigationHandle* navigation_handle) {
+  const GURL url = GetCanonicalizedSameDocumentUrl(navigation_handle->GetURL());
+
+  // Ignore same document navigations where the URL doesn't change.
+  if (url == current_url_)
+    return;
+  current_url_ = url;
+
+  AMPViewType same_document_view_type = GetAMPViewType(url);
+  if (same_document_view_type == AMPViewType::NONE)
+    return;
+
+  // Though we're not currently able to track page load metrics such as FCP for
+  // same-document navigations, we can count how often they happen, to better
+  // understand the relative frequency of same-document vs new-document AMP
+  // navigations.
+  UMA_HISTOGRAM_ENUMERATION(
+      std::string(kHistogramPrefix).append("SameDocumentView"),
+      same_document_view_type, AMPViewType::AMP_VIEW_TYPE_LAST);
 }
 
 void AMPPageLoadMetricsObserver::OnDomContentLoadedEventStart(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
+  if (view_type_ == AMPViewType::NONE)
+    return;
+
   if (!WasStartedInForegroundOptionalEventInForeground(
-          timing.dom_content_loaded_event_start, info)) {
+          timing.document_timing->dom_content_loaded_event_start, info)) {
     return;
   }
-  PAGE_LOAD_HISTOGRAM(kHistogramAMPDOMContentLoadedEventFired,
-                      timing.dom_content_loaded_event_start.value());
+  RECORD_HISTOGRAM_FOR_TYPE(
+      kHistogramAMPDOMContentLoadedEventFired, view_type_,
+      timing.document_timing->dom_content_loaded_event_start.value());
 }
 
 void AMPPageLoadMetricsObserver::OnLoadEventStart(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
-  if (!WasStartedInForegroundOptionalEventInForeground(timing.load_event_start,
-                                                       info)) {
+  if (view_type_ == AMPViewType::NONE)
+    return;
+
+  if (!WasStartedInForegroundOptionalEventInForeground(
+          timing.document_timing->load_event_start, info)) {
     return;
   }
-  PAGE_LOAD_HISTOGRAM(kHistogramAMPLoadEventFired,
-                      timing.load_event_start.value());
+  RECORD_HISTOGRAM_FOR_TYPE(kHistogramAMPLoadEventFired, view_type_,
+                            timing.document_timing->load_event_start.value());
 }
 
 void AMPPageLoadMetricsObserver::OnFirstLayout(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
-  if (!WasStartedInForegroundOptionalEventInForeground(timing.first_layout,
-                                                       info)) {
+  if (view_type_ == AMPViewType::NONE)
+    return;
+
+  if (!WasStartedInForegroundOptionalEventInForeground(
+          timing.document_timing->first_layout, info)) {
     return;
   }
-  PAGE_LOAD_HISTOGRAM(kHistogramAMPFirstLayout, timing.first_layout.value());
+  RECORD_HISTOGRAM_FOR_TYPE(kHistogramAMPFirstLayout, view_type_,
+                            timing.document_timing->first_layout.value());
 }
 
-void AMPPageLoadMetricsObserver::OnFirstContentfulPaint(
-    const page_load_metrics::PageLoadTiming& timing,
+void AMPPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
+  if (view_type_ == AMPViewType::NONE)
+    return;
+
   if (!WasStartedInForegroundOptionalEventInForeground(
-          timing.first_contentful_paint, info)) {
+          timing.paint_timing->first_contentful_paint, info)) {
     return;
   }
-  PAGE_LOAD_HISTOGRAM(kHistogramAMPFirstContentfulPaint,
-                      timing.first_contentful_paint.value());
+  RECORD_HISTOGRAM_FOR_TYPE(
+      kHistogramAMPFirstContentfulPaint, view_type_,
+      timing.paint_timing->first_contentful_paint.value());
 }
 
 void AMPPageLoadMetricsObserver::OnParseStart(
-    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
-  if (!WasStartedInForegroundOptionalEventInForeground(timing.parse_start,
-                                                       info)) {
+  if (!WasStartedInForegroundOptionalEventInForeground(
+          timing.parse_timing->parse_start, info)) {
     return;
   }
-  PAGE_LOAD_HISTOGRAM(kHistogramAMPParseStart, timing.parse_start.value());
+
+  if (view_type_ == AMPViewType::NONE) {
+    // If we ended up on a non-AMP document, but the initial URL matched an AMP
+    // document, record the time it took to get to this point. We encounter this
+    // case in the Google News AMP viewer, for example: when a user loads a news
+    // AMP URL in a non-same-document navigation context, the user is presented
+    // with a redirect prompt which they must click through to continue to the
+    // canoncial document on the non-AMP origin.
+    AMPViewType initial_view_type = GetAMPViewType(info.start_url);
+    if (initial_view_type != AMPViewType::NONE) {
+      RECORD_HISTOGRAM_FOR_TYPE(kHistogramAMPParseStartRedirect,
+                                initial_view_type,
+                                timing.parse_timing->parse_start.value());
+    }
+    return;
+  }
+
+  RECORD_HISTOGRAM_FOR_TYPE(kHistogramAMPParseStart, view_type_,
+                            timing.parse_timing->parse_start.value());
+}
+
+// static
+AMPPageLoadMetricsObserver::AMPViewType
+AMPPageLoadMetricsObserver::GetAMPViewType(const GURL& url) {
+  const char kAmpViewerUrlPrefix[] = "/amp/";
+
+  if (base::EndsWith(url.host(), kAmpCacheHostSuffix,
+                     base::CompareCase::INSENSITIVE_ASCII)) {
+    return AMPViewType::AMP_CACHE;
+  }
+
+  base::Optional<std::string> google_hostname_prefix =
+      page_load_metrics::GetGoogleHostnamePrefix(url);
+  if (!google_hostname_prefix.has_value())
+    return AMPViewType::NONE;
+
+  if (google_hostname_prefix.value() == "www" &&
+      base::StartsWith(url.path_piece(), kAmpViewerUrlPrefix,
+                       base::CompareCase::SENSITIVE) &&
+      url.path_piece().length() > strlen(kAmpViewerUrlPrefix)) {
+    return AMPViewType::GOOGLE_SEARCH_AMP_VIEWER;
+  }
+
+  if (google_hostname_prefix.value() == "news" &&
+      url.path_piece() == "/news/amp" && !url.query_piece().empty()) {
+    return AMPViewType::GOOGLE_NEWS_AMP_VIEWER;
+  }
+  return AMPViewType::NONE;
 }

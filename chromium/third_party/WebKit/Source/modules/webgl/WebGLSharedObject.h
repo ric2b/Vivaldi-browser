@@ -26,8 +26,8 @@
 #ifndef WebGLSharedObject_h
 #define WebGLSharedObject_h
 
-#include "bindings/core/v8/TraceWrapperMember.h"
 #include "modules/webgl/WebGLObject.h"
+#include "platform/bindings/TraceWrapperMember.h"
 
 namespace blink {
 
@@ -48,7 +48,6 @@ class WebGLSharedObject : public WebGLObject {
   virtual bool IsShader() const { return false; }
   virtual bool IsSync() const { return false; }
   virtual bool IsTexture() const { return false; }
-  virtual bool IsTransformFeedback() const { return false; }
 
   bool Validate(const WebGLContextGroup* context_group,
                 const WebGLRenderingContextBase*) const final;

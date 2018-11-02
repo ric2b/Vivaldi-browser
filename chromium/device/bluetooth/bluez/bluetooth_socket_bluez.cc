@@ -23,7 +23,6 @@
 #include "base/task_runner_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/threading/worker_pool.h"
 #include "dbus/bus.h"
 #include "dbus/object_path.h"
 #include "device/bluetooth/bluetooth_adapter.h"
@@ -61,7 +60,7 @@ namespace bluez {
 scoped_refptr<BluetoothSocketBlueZ> BluetoothSocketBlueZ::CreateBluetoothSocket(
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
     scoped_refptr<BluetoothSocketThread> socket_thread) {
-  DCHECK(ui_task_runner->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner->RunsTasksInCurrentSequence());
 
   return make_scoped_refptr(
       new BluetoothSocketBlueZ(ui_task_runner, socket_thread));
@@ -96,7 +95,7 @@ void BluetoothSocketBlueZ::Connect(
     SecurityLevel security_level,
     const base::Closure& success_callback,
     const ErrorCompletionCallback& error_callback) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(!profile_);
 
   if (!uuid.IsValid()) {
@@ -123,7 +122,7 @@ void BluetoothSocketBlueZ::Listen(
     const BluetoothAdapter::ServiceOptions& service_options,
     const base::Closure& success_callback,
     const ErrorCompletionCallback& error_callback) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(!profile_);
 
   if (!uuid.IsValid()) {
@@ -157,7 +156,7 @@ void BluetoothSocketBlueZ::Listen(
 }
 
 void BluetoothSocketBlueZ::Close() {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
 
   if (profile_)
     UnregisterProfile();
@@ -179,7 +178,7 @@ void BluetoothSocketBlueZ::Close() {
 }
 
 void BluetoothSocketBlueZ::Disconnect(const base::Closure& callback) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
 
   if (profile_)
     UnregisterProfile();
@@ -195,7 +194,7 @@ void BluetoothSocketBlueZ::Disconnect(const base::Closure& callback) {
 void BluetoothSocketBlueZ::Accept(
     const AcceptCompletionCallback& success_callback,
     const ErrorCompletionCallback& error_callback) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
 
   if (!device_path_.value().empty()) {
     error_callback.Run(kSocketNotListening);
@@ -221,7 +220,7 @@ void BluetoothSocketBlueZ::RegisterProfile(
     BluetoothAdapterBlueZ* adapter,
     const base::Closure& success_callback,
     const ErrorCompletionCallback& error_callback) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(!profile_);
   DCHECK(adapter);
 
@@ -249,7 +248,7 @@ void BluetoothSocketBlueZ::OnRegisterProfile(
     const base::Closure& success_callback,
     const ErrorCompletionCallback& error_callback,
     BluetoothAdapterProfileBlueZ* profile) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(!profile_);
 
   profile_ = profile;
@@ -274,7 +273,7 @@ void BluetoothSocketBlueZ::OnRegisterProfile(
 void BluetoothSocketBlueZ::OnRegisterProfileError(
     const ErrorCompletionCallback& error_callback,
     const std::string& error_message) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
 
   LOG(WARNING) << uuid_.canonical_value()
                << ": Failed to register profile: " << error_message;
@@ -283,7 +282,7 @@ void BluetoothSocketBlueZ::OnRegisterProfileError(
 
 void BluetoothSocketBlueZ::OnConnectProfile(
     const base::Closure& success_callback) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(profile_);
 
   VLOG(1) << profile_->object_path().value() << ": Profile connected.";
@@ -295,7 +294,7 @@ void BluetoothSocketBlueZ::OnConnectProfileError(
     const ErrorCompletionCallback& error_callback,
     const std::string& error_name,
     const std::string& error_message) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(profile_);
 
   LOG(WARNING) << profile_->object_path().value()
@@ -307,7 +306,7 @@ void BluetoothSocketBlueZ::OnConnectProfileError(
 
 void BluetoothSocketBlueZ::AdapterPresentChanged(BluetoothAdapter* adapter,
                                                  bool present) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
 
   if (!present) {
     // Adapter removed, we can't use the profile anymore.
@@ -328,7 +327,7 @@ void BluetoothSocketBlueZ::AdapterPresentChanged(BluetoothAdapter* adapter,
 
 void BluetoothSocketBlueZ::OnInternalRegisterProfile(
     BluetoothAdapterProfileBlueZ* profile) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(!profile_);
 
   profile_ = profile;
@@ -338,13 +337,13 @@ void BluetoothSocketBlueZ::OnInternalRegisterProfile(
 
 void BluetoothSocketBlueZ::OnInternalRegisterProfileError(
     const std::string& error_message) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
 
   LOG(WARNING) << "Failed to re-register profile: " << error_message;
 }
 
 void BluetoothSocketBlueZ::Released() {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(profile_);
 
   VLOG(1) << profile_->object_path().value() << ": Release";
@@ -355,7 +354,7 @@ void BluetoothSocketBlueZ::NewConnection(
     base::ScopedFD fd,
     const bluez::BluetoothProfileServiceProvider::Delegate::Options& options,
     const ConfirmationCallback& callback) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
 
   VLOG(1) << uuid_.canonical_value()
           << ": New connection from device: " << device_path.value();
@@ -385,7 +384,7 @@ void BluetoothSocketBlueZ::NewConnection(
 void BluetoothSocketBlueZ::RequestDisconnection(
     const dbus::ObjectPath& device_path,
     const ConfirmationCallback& callback) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(profile_);
 
   VLOG(1) << profile_->object_path().value() << ": Request disconnection";
@@ -393,7 +392,7 @@ void BluetoothSocketBlueZ::RequestDisconnection(
 }
 
 void BluetoothSocketBlueZ::Cancel() {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(profile_);
 
   VLOG(1) << profile_->object_path().value() << ": Cancel";
@@ -412,7 +411,7 @@ void BluetoothSocketBlueZ::Cancel() {
 }
 
 void BluetoothSocketBlueZ::AcceptConnectionRequest() {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(accept_request_.get());
   DCHECK(connection_request_queue_.size() >= 1);
   DCHECK(profile_);
@@ -450,7 +449,7 @@ void BluetoothSocketBlueZ::DoNewConnection(
     base::ScopedFD fd,
     const bluez::BluetoothProfileServiceProvider::Delegate::Options& options,
     const ConfirmationCallback& callback) {
-  DCHECK(socket_thread()->task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(socket_thread()->task_runner()->RunsTasksInCurrentSequence());
   base::ThreadRestrictions::AssertIOAllowed();
 
   if (!fd.is_valid()) {
@@ -485,7 +484,7 @@ void BluetoothSocketBlueZ::OnNewConnection(
     scoped_refptr<BluetoothSocket> socket,
     const ConfirmationCallback& callback,
     Status status) {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(accept_request_.get());
   DCHECK(connection_request_queue_.size() >= 1);
 
@@ -508,7 +507,7 @@ void BluetoothSocketBlueZ::OnNewConnection(
 }
 
 void BluetoothSocketBlueZ::DoCloseListening() {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
 
   if (accept_request_) {
     accept_request_->error_callback.Run(
@@ -524,7 +523,7 @@ void BluetoothSocketBlueZ::DoCloseListening() {
 }
 
 void BluetoothSocketBlueZ::UnregisterProfile() {
-  DCHECK(ui_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(profile_);
 
   VLOG(1) << profile_->object_path().value() << ": Release profile";

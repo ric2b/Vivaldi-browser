@@ -53,7 +53,6 @@ Jotkin verkkosivustot esimerkiksi vastaavat pyyntöön näyttämällä sinulle m
 <translation id="1820259098641718022">Lisättiin lukulistalle</translation>
 <translation id="1876721852596493031">Lähetä käyttötietoja</translation>
 <translation id="1886928167269928266">Alusta asti</translation>
-<translation id="1894451531427596130">Hallinnoi tämän toimintaa <ph name="BEGIN_LINK" />Asetuksissa<ph name="END_LINK" />.</translation>
 <translation id="1911619930368729126">Lähetä Google Driveen</translation>
 <translation id="1941314575388338491">Kopioi kaksoisnapauttamalla.</translation>
 <translation id="1952728750904661634">Kirjaudu sisään hallinnoidulla tilillä</translation>
@@ -97,6 +96,7 @@ Jotkin verkkosivustot esimerkiksi vastaavat pyyntöön näyttämällä sinulle m
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
 <translation id="2843803966603263712">Nollaa käännösasetukset</translation>
 <translation id="285960592395650245">Yritä latausta uudelleen</translation>
+<translation id="2870560284913253234">Sivusto</translation>
 <translation id="2871695793448672541">Piilotettu salasana</translation>
 <translation id="2898963176829412617">Uusi kansio…</translation>
 <translation id="2903493209154104877">Osoitteet</translation>
@@ -109,7 +109,6 @@ Jotkin verkkosivustot esimerkiksi vastaavat pyyntöön näyttämällä sinulle m
 <translation id="2989805286512600854">Avaa uudessa välilehdessä</translation>
 <translation id="3024255823539804759">Viimeisen päivän ajalta</translation>
 <translation id="3037605927509011580">Voi räkä!</translation>
-<translation id="3050311348724540835"><ph name="HISTORY_URL" /> ei ole saatavilla. Tarkastele selaushistoriaa valitsemalla työkaluvalikosta <ph name="SHOW_HISTORY" />.</translation>
 <translation id="3112556859945124369">Merkitse…</translation>
 <translation id="3151924044251363314">Salattuja tietojasi voi lukea vain tunnuslauseesi avulla. Tunnuslausetta ei lähetetä Googlelle eikä Google tallenna sitä. Jos unohdat tunnuslauseesi tai haluat muokata tätä asetusta, synkronointi täytyy nollata. <ph name="BEGIN_LINK" />Lisätietoja<ph name="END_LINK" /></translation>
 <translation id="3157684681743766797">Merkitse kaikki…</translation>
@@ -150,6 +149,7 @@ Muokkaa hakutermiä valitsemalla se pitkällä painalluksella. Tarkenna hakua li
 <translation id="3638472932233958418">Esilataa verkkosivut</translation>
 <translation id="3691593122358196899">Lisätty kirjanmerkiksi kansioon <ph name="FOLDER_TITLE" /></translation>
 <translation id="3738139272394829648">Koskettamalla hakeminen</translation>
+<translation id="3742082982782149146">Sivuston URL-osoite kopioitu</translation>
 <translation id="3771033907050503522">Incognito</translation>
 <translation id="3783017676699494206">Tallenna kuva</translation>
 <translation id="3789841737615482174">Asenna</translation>
@@ -164,10 +164,12 @@ Muokkaa hakutermiä valitsemalla se pitkällä painalluksella. Tarkenna hakua li
 <translation id="4038354071007134711">Mikään laitteen sovellus ei voi avata tiedostoa.</translation>
 <translation id="4049507953662678203">Varmista, että käytössäsi on verkkoyhteys, ja yritä uudelleen.</translation>
 <translation id="411254640334432676">Lataus epäonnistui.</translation>
+<translation id="4117350985506774529">Käyttäjätunnus kopioitu</translation>
 <translation id="4121993058175073134">Tee sähköp.tilin määritykset asetuksissa lähettääksesi nettovientitiet.</translation>
 <translation id="4124987746317609294">Aikaväli</translation>
 <translation id="4172051516777682613">Näytä aina</translation>
 <translation id="418156467088430727">Näytä offline-versio uudella välilehdellä</translation>
+<translation id="4237682350741091554">Hallinnoi Chromen synkronointia ja räätälöintiä <ph name="BEGIN_LINK" />asetuksissa<ph name="END_LINK" />.</translation>
 <translation id="424315890655130736">Anna tunnuslause</translation>
 <translation id="4272631900155121838">Jos haluat skannata QR-koodin, ota kamera käyttöön asetuksissa.</translation>
 <translation id="4281844954008187215">Käyttöehdot</translation>
@@ -175,6 +177,7 @@ Muokkaa hakutermiä valitsemalla se pitkällä painalluksella. Tarkenna hakua li
 <translation id="4359125752503270327">Tämä sivu avataan toisessa sovelluksessa.</translation>
 <translation id="4378154925671717803">Puhelin</translation>
 <translation id="441868831736628555">Tietosuojailmoitus</translation>
+<translation id="4508750114462689118">Sulje kirjautumismainos</translation>
 <translation id="4526249700380860531">Tarkastele ja hallinnoi tallennettuja salasanoja osoitteessa <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Yritä kirjautua sisään uudelleen.</translation>
 <translation id="4620246317052452550">Lukemasi sivut</translation>
@@ -220,6 +223,7 @@ Tietosi salataan synkronoinnin tunnuslauseesi avulla. Aloita synkronointi antama
 
 Handoff täytyy ottaa käyttöön myös Asetusten Yleiset-osiossa. Lisäksi molempien laitteiden on käytettävä samaa iCloud-tiliä.</translation>
 <translation id="5556459405103347317">Lataa uudelleen</translation>
+<translation id="5619279135193775234">Mail</translation>
 <translation id="5626245204502895507">Tiedostoa ei voi ladata tällä hetkellä.</translation>
 <translation id="5659593005791499971">Sähköposti</translation>
 <translation id="5669528293118408608">www</translation>
@@ -310,6 +314,7 @@ Tietosi salattiin tunnuslauseesi avulla <ph name="TIME" />. Aloita synkronointi 
 <translation id="7136892417564438900">Kamera ei ole käytettävissä</translation>
 <translation id="7159472599653637159">Mobiiliversioon</translation>
 <translation id="7167621057293532233">Tietotyypit</translation>
+<translation id="7175593937868963913">Kirjoita sähköposti</translation>
 <translation id="7189598951263744875">Jaa...</translation>
 <translation id="7203585745079012652">Puhu vastaukset</translation>
 <translation id="722055596168483966">Muokkaa Google-palveluita</translation>
@@ -358,7 +363,6 @@ Tietosi salattiin tunnuslauseesi avulla <ph name="TIME" />. Aloita synkronointi 
 <translation id="8205564605687841303">Peruuta</translation>
 <translation id="8225985093977202398">Välimuistissa olevat kuvat ja tiedostot</translation>
 <translation id="8261506727792406068">Poista</translation>
-<translation id="8272194309885535896">Lataa kuva</translation>
 <translation id="8272426682713568063">Luottokortit</translation>
 <translation id="8281781826761538115">Oletus – <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8381750437846184350">Hallinnoi tapaa, jolla Google käyttää selaushistoriaasi haun, mainosten ja muiden Googlen palveluiden muokkaamiseen.</translation>

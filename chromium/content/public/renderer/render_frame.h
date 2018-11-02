@@ -38,7 +38,7 @@ class Size;
 }
 
 namespace service_manager {
-class InterfaceRegistry;
+class BinderRegistry;
 class InterfaceProvider;
 }
 
@@ -102,6 +102,11 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // Visit all live RenderFrames.
   static void ForEach(RenderFrameVisitor* visitor);
 
+  // Returns the routing ID for |web_frame|, whether it is a WebLocalFrame in
+  // this process or a WebRemoteFrame placeholder for a frame in a different
+  // process.
+  static int GetRoutingIdForWebFrame(blink::WebFrame* web_frame);
+
   // Returns the RenderView associated with this frame.
   virtual RenderView* GetRenderView() = 0;
 
@@ -115,7 +120,7 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   virtual blink::WebLocalFrame* GetWebFrame() = 0;
 
   // Gets WebKit related preferences associated with this frame.
-  virtual WebPreferences& GetWebkitPreferences() = 0;
+  virtual const WebPreferences& GetWebkitPreferences() = 0;
 
   // Shows a context menu with the given information. The given client will
   // be called with the result.
@@ -135,10 +140,9 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // menu is closed.
   virtual void CancelContextMenu(int request_id) = 0;
 
-  // Create a new NPAPI/Pepper plugin depending on |info|. Returns NULL if no
-  // plugin was found. |throttler| may be empty.
+  // Create a new Pepper plugin depending on |info|. Returns NULL if no plugin
+  // was found. |throttler| may be empty.
   virtual blink::WebPlugin* CreatePlugin(
-      blink::WebFrame* frame,
       const WebPluginInfo& info,
       const blink::WebPluginParams& params,
       std::unique_ptr<PluginInstanceThrottler> throttler) = 0;
@@ -156,9 +160,9 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // Return true if this frame is hidden.
   virtual bool IsHidden() = 0;
 
-  // Returns the InterfaceRegistry that this process uses to expose interfaces
+  // Returns the BinderRegistry that this process uses to expose interfaces
   // to the application running in this frame.
-  virtual service_manager::InterfaceRegistry* GetInterfaceRegistry() = 0;
+  virtual service_manager::BinderRegistry* GetInterfaceRegistry() = 0;
 
   // Returns the InterfaceProvider that this process can use to bind
   // interfaces exposed to it by the application running in this frame.
@@ -237,6 +241,8 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // Adds |message| to the DevTools console.
   virtual void AddMessageToConsole(ConsoleMessageLevel level,
                                    const std::string& message) = 0;
+  // Forcefully detaches all connected DevTools clients.
+  virtual void DetachDevToolsForTest() = 0;
 
   // Returns the PreviewsState of this frame, a bitmask of potentially several
   // Previews optimizations.

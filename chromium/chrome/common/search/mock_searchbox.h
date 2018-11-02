@@ -15,15 +15,13 @@ class MockSearchBox : public chrome::mojom::SearchBox {
 
   MOCK_METHOD1(SetPageSequenceNumber, void(int));
   MOCK_METHOD2(ChromeIdentityCheckResult, void(const base::string16&, bool));
-  MOCK_METHOD0(DetermineIfPageSupportsInstant, void());
   MOCK_METHOD2(FocusChanged, void(OmniboxFocusState, OmniboxFocusChangeReason));
   MOCK_METHOD1(HistorySyncCheckResult, void(bool));
   MOCK_METHOD1(MostVisitedChanged,
                void(const std::vector<InstantMostVisitedItem>&));
   MOCK_METHOD1(SetInputInProgress, void(bool));
   MOCK_METHOD1(SetSuggestionToPrefetch, void(const InstantSuggestion&));
-  MOCK_METHOD2(Submit,
-               void(const base::string16&, const EmbeddedSearchRequestParams&));
+  MOCK_METHOD1(Submit, void(const EmbeddedSearchRequestParams&));
   MOCK_METHOD1(ThemeChanged, void(const ThemeBackgroundInfo&));
 };
 

@@ -11,6 +11,7 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -22,6 +23,8 @@ class AppleKeychain;
 namespace password_manager {
 class LoginDatabase;
 }
+
+class PrefService;
 
 // TODO(vasilii): Deprecate this class. The class should be used by
 // PasswordStoreProxyMac wrapper.
@@ -77,7 +80,8 @@ class PasswordStoreMac : public password_manager::PasswordStore {
   ~PasswordStoreMac() override;
 
  private:
-  bool Init(const syncer::SyncableService::StartSyncFlare& flare) override;
+  bool Init(const syncer::SyncableService::StartSyncFlare& flare,
+            PrefService* prefs) override;
   void ReportMetricsImpl(const std::string& sync_username,
                          bool custom_passphrase_sync_enabled) override;
   password_manager::PasswordStoreChangeList AddLoginImpl(
@@ -104,6 +108,8 @@ class PasswordStoreMac : public password_manager::PasswordStore {
       base::Time delete_end) override;
   std::vector<std::unique_ptr<autofill::PasswordForm>> FillMatchingLogins(
       const FormDigest& form) override;
+  std::vector<std::unique_ptr<autofill::PasswordForm>>
+  FillLoginsForSameOrganizationName(const std::string& signon_realm) override;
   bool FillAutofillableLogins(
       std::vector<std::unique_ptr<autofill::PasswordForm>>* forms) override;
   bool FillBlacklistLogins(

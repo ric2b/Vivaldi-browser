@@ -134,13 +134,13 @@ void AppLoadService::Observe(int type,
 void AppLoadService::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
-    extensions::UnloadedExtensionInfo::Reason reason) {
+    extensions::UnloadedExtensionReason reason) {
   if (!extension->is_platform_app())
     return;
 #if defined(VIVALDI_BUILD)
   if (vivaldi::IsVivaldiApp(extension->id())) {
     static int attempts = 5;  // avoid endless restart loop
-    if (reason == extensions::UnloadedExtensionInfo::REASON_TERMINATE &&
+    if (reason == extensions::UnloadedExtensionReason::TERMINATE &&
         attempts > 0) {
       attempts--;
 
@@ -168,8 +168,8 @@ void AppLoadService::OnExtensionUnloaded(
 
 bool AppLoadService::WasUnloadedForReload(
     const extensions::ExtensionId& extension_id,
-    const extensions::UnloadedExtensionInfo::Reason reason) {
-  if (reason == extensions::UnloadedExtensionInfo::REASON_DISABLE) {
+    const extensions::UnloadedExtensionReason reason) {
+  if (reason == extensions::UnloadedExtensionReason::DISABLE) {
     ExtensionPrefs* prefs = ExtensionPrefs::Get(context_);
     return (prefs->GetDisableReasons(extension_id) &
             Extension::DISABLE_RELOAD) != 0;

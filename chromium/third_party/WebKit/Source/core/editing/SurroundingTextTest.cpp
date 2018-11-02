@@ -4,15 +4,16 @@
 
 #include "core/editing/SurroundingText.h"
 
+#include <memory>
 #include "core/dom/Document.h"
 #include "core/dom/Range.h"
 #include "core/dom/Text.h"
 #include "core/editing/Position.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/html/HTMLElement.h"
+#include "core/html/TextControlElement.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 namespace blink {
 
@@ -39,11 +40,11 @@ void SurroundingTextTest::SetHTML(const String& content) {
 }
 
 VisibleSelection SurroundingTextTest::Select(int start, int end) {
-  Element* element = GetDocument().GetElementById("selection");
+  Element* element = GetDocument().getElementById("selection");
   return CreateVisibleSelection(
       SelectionInDOMTree::Builder()
-          .Collapse(Position(ToText(element->FirstChild()), start))
-          .Extend(Position(ToText(element->FirstChild()), end))
+          .Collapse(Position(ToText(element->firstChild()), start))
+          .Extend(Position(ToText(element->firstChild()), end))
           .Build());
 }
 
@@ -79,14 +80,12 @@ TEST_F(SurroundingTextTest, BasicCaretSelection) {
   }
 
   {
-    // FIXME: if the selection is at the end of the text, SurroundingText
-    // will return nothing.
     VisibleSelection selection = Select(7);
     SurroundingText surrounding_text(selection.Start(), 42);
 
-    EXPECT_EQ(0u, surrounding_text.Content().length());
-    EXPECT_EQ(0u, surrounding_text.StartOffsetInContent());
-    EXPECT_EQ(0u, surrounding_text.EndOffsetInContent());
+    EXPECT_EQ("foo bar", surrounding_text.Content().SimplifyWhiteSpace());
+    EXPECT_EQ(8u, surrounding_text.StartOffsetInContent());
+    EXPECT_EQ(8u, surrounding_text.EndOffsetInContent());
   }
 
   {
@@ -161,6 +160,17 @@ TEST_F(SurroundingTextTest, BasicRangeSelection) {
               surrounding_text.Content().SimplifyWhiteSpace());
     EXPECT_EQ(7u, surrounding_text.StartOffsetInContent());
     EXPECT_EQ(12u, surrounding_text.EndOffsetInContent());
+  }
+
+  {
+    // Last word.
+    VisibleSelection selection = Select(22, 26);
+    SurroundingText surrounding_text(
+        *CreateRange(FirstEphemeralRangeOf(selection)), 8);
+
+    EXPECT_EQ("sit amet", surrounding_text.Content());
+    EXPECT_EQ(4u, surrounding_text.StartOffsetInContent());
+    EXPECT_EQ(8u, surrounding_text.EndOffsetInContent());
   }
 }
 
@@ -274,6 +284,26 @@ TEST_F(SurroundingTextTest, TreeRangeSelection) {
     EXPECT_EQ(20u, surrounding_text.StartOffsetInContent());
     EXPECT_EQ(27u, surrounding_text.EndOffsetInContent());
   }
+}
+
+TEST_F(SurroundingTextTest, TextAreaSelection) {
+  SetHTML(
+      String("<p>First paragraph</p>"
+             "<textarea id='selection'>abc def ghi</textarea>"
+             "<p>Second paragraph</p>"));
+
+  TextControlElement* text_ctrl =
+      (TextControlElement*)GetDocument().getElementById("selection");
+
+  text_ctrl->SetSelectionRange(4, 7);
+  VisibleSelection selection = CreateVisibleSelection(text_ctrl->Selection());
+
+  SurroundingText surrounding_text(
+      *CreateRange(FirstEphemeralRangeOf(selection)), 20);
+
+  EXPECT_EQ("abc def ghi", surrounding_text.Content().SimplifyWhiteSpace());
+  EXPECT_EQ(4u, surrounding_text.StartOffsetInContent());
+  EXPECT_EQ(7u, surrounding_text.EndOffsetInContent());
 }
 
 }  // namespace blink

@@ -30,6 +30,8 @@ Timeline.TimelineFlameChartView = class extends UI.VBox {
 
     var mainViewGroupExpansionSetting = Common.settings.createSetting('timelineFlamechartMainViewGroupExpansion', {});
     this._mainDataProvider = new Timeline.TimelineFlameChartDataProvider(filters);
+    this._mainDataProvider.addEventListener(
+        Timeline.TimelineFlameChartDataProvider.Events.DataChanged, () => this._mainFlameChart.scheduleUpdate());
     this._mainFlameChart = new PerfUI.FlameChart(this._mainDataProvider, this, mainViewGroupExpansionSetting);
     this._mainFlameChart.alwaysShowVerticalScroll();
     this._mainFlameChart.enableRuler(false);
@@ -77,6 +79,36 @@ Timeline.TimelineFlameChartView = class extends UI.VBox {
     this._nextExtensionIndex = 0;
 
     this._boundRefresh = this._refresh.bind(this);
+
+    this._mainDataProvider.setEventColorMapping(Timeline.TimelineUIUtils.eventColor);
+    if (!Runtime.experiments.isEnabled('timelineColorByProduct'))
+      return;
+    this._groupBySetting =
+        Common.settings.createSetting('timelineTreeGroupBy', Timeline.AggregatedTimelineTreeView.GroupBy.None);
+    this._groupBySetting.addChangeListener(this._updateColorMapper, this);
+    this._updateColorMapper();
+    ProductRegistry.instance().then(registry => this._productRegistry = registry);
+  }
+
+  _updateColorMapper() {
+    /** @type {!Map<string, string>} */
+    this._urlToColorCache = new Map();
+    if (!this._model)
+      return;
+    var colorByProduct = Runtime.experiments.isEnabled('timelineColorByProduct') &&
+        this._groupBySetting.get() === Timeline.AggregatedTimelineTreeView.GroupBy.Product;
+    this._mainDataProvider.setEventColorMapping(
+        colorByProduct ? this._colorByProductForEvent.bind(this) : Timeline.TimelineUIUtils.eventColor);
+    this._mainFlameChart.update();
+  }
+
+  /**
+   * @param {!SDK.TracingModel.Event} event
+   * @return {string}
+   */
+  _colorByProductForEvent(event) {
+    return Timeline.TimelineUIUtils.eventColorByProduct(
+        this._productRegistry, this._model.timelineModel(), this._urlToColorCache, event);
   }
 
   /**
@@ -120,6 +152,7 @@ Timeline.TimelineFlameChartView = class extends UI.VBox {
     this._networkDataProvider.setModel(this._model);
     this._countersView.setModel(this._model);
     this._detailsView.setModel(this._model);
+    this._updateColorMapper();
 
     this._nextExtensionIndex = 0;
     this._appendExtensionData();
@@ -154,7 +187,7 @@ Timeline.TimelineFlameChartView = class extends UI.VBox {
    * @param {!Common.Event} commonEvent
    */
   _onEntryHighlighted(commonEvent) {
-    SDK.DOMModel.hideDOMNodeHighlight();
+    SDK.OverlayModel.hideDOMNodeHighlight();
     var entryIndex = /** @type {number} */ (commonEvent.data);
     var event = this._mainDataProvider.eventByIndex(entryIndex);
     if (!event)
@@ -445,16 +478,6 @@ Timeline.FlameChartStyle = {
 };
 
 /**
- * @enum {symbol}
- */
-Timeline.TimelineFlameChartEntryType = {
-  Frame: Symbol('Frame'),
-  Event: Symbol('Event'),
-  InteractionRecord: Symbol('InteractionRecord'),
-  ExtensionEvent: Symbol('ExtensionEvent')
-};
-
-/**
  * @implements {PerfUI.FlameChartMarker}
  * @unrestricted
  */
@@ -530,4 +553,10 @@ Timeline.TimelineFlameChartMarker = class {
     }
     context.restore();
   }
+};
+
+/** @enum {string} */
+Timeline.TimelineFlameChartView._ColorBy = {
+  URL: 'URL',
+  Product: 'Product'
 };

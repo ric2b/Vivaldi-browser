@@ -39,6 +39,7 @@
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
+#include "media/base/media_switches.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/base/ui_base_switches.h"
@@ -56,12 +57,6 @@
 #include "base/vivaldi_switches.h"
 
 namespace content {
-
-#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
-namespace {
-ZygoteHandle g_utility_zygote;
-}  // namespace
-#endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
 
 // NOTE: changes to this class need to be reviewed by the security team.
 class UtilitySandboxedProcessLauncherDelegate
@@ -109,7 +104,7 @@ class UtilitySandboxedProcessLauncherDelegate
 #elif defined(OS_POSIX)
 
 #if !defined(OS_MACOSX) && !defined(OS_ANDROID)
-  ZygoteHandle* GetZygote() override {
+  ZygoteHandle GetZygote() override {
     if (no_sandbox_ || !exposed_dir_.empty())
       return nullptr;
     return GetGenericZygote();
@@ -240,14 +235,6 @@ void UtilityProcessHostImpl::SetName(const base::string16& name) {
   name_ = name;
 }
 
-#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
-// static
-void UtilityProcessHostImpl::EarlyZygoteLaunch() {
-  DCHECK(!g_utility_zygote);
-  g_utility_zygote = CreateZygote();
-}
-#endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
-
 bool UtilityProcessHostImpl::StartProcess() {
   if (started_)
     return true;
@@ -266,6 +253,7 @@ bool UtilityProcessHostImpl::StartProcess() {
     in_process_thread_.reset(
         g_utility_main_thread_factory(InProcessChildThreadParams(
             BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+            process_->GetInProcessBrokerClientInvitation(),
             process_->child_connection()->service_token())));
     in_process_thread_->Start();
   } else {
@@ -327,11 +315,19 @@ bool UtilityProcessHostImpl::StartProcess() {
     // Browser command-line switches to propagate to the utility process.
     static const char* const kSwitchNames[] = {
       switches::kEnableNetworkService,
+      switches::kHostResolverRules,
+      switches::kIgnoreCertificateErrors,
+      switches::kLogNetLog,
       switches::kNoSandbox,
       switches::kProfilerTiming,
+      switches::kProxyServer,
+      switches::kTestingFixedHttpPort,
+      switches::kTestingFixedHttpsPort,
 #if defined(OS_MACOSX)
       switches::kEnableSandboxLogging,
 #endif
+      switches::kUseFakeDeviceForMediaStream,
+      switches::kUseFileForFakeVideoCapture,
     };
     cmd_line->CopySwitchesFrom(browser_command_line, kSwitchNames,
                                arraysize(kSwitchNames));

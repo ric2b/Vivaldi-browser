@@ -35,13 +35,18 @@ TypeConverter<blink::WebPaymentAppRequest,
     Convert(const payments::mojom::PaymentAppRequestPtr& input) {
   blink::WebPaymentAppRequest output;
 
-  output.origin = blink::WebString::FromUTF8(input->origin.spec());
+  output.top_level_origin =
+      blink::WebString::FromUTF8(input->top_level_origin.spec());
+  output.payment_request_origin =
+      blink::WebString::FromUTF8(input->payment_request_origin.spec());
+  output.payment_request_id =
+      blink::WebString::FromUTF8(input->payment_request_id);
 
   output.method_data =
-      blink::WebVector<blink::WebPaymentMethodData>(input->methodData.size());
-  for (size_t i = 0; i < input->methodData.size(); i++) {
+      blink::WebVector<blink::WebPaymentMethodData>(input->method_data.size());
+  for (size_t i = 0; i < input->method_data.size(); i++) {
     output.method_data[i] = mojo::ConvertTo<blink::WebPaymentMethodData>(
-        std::move(input->methodData[i]));
+        std::move(input->method_data[i]));
   }
 
   output.total = mojo::ConvertTo<blink::WebPaymentItem>(input->total);
@@ -53,7 +58,7 @@ TypeConverter<blink::WebPaymentAppRequest,
         mojo::ConvertTo<blink::WebPaymentDetailsModifier>(input->modifiers[i]);
   }
 
-  output.option_id = blink::WebString::FromUTF8(input->optionId);
+  output.instrument_key = blink::WebString::FromUTF8(input->instrument_key);
 
   return output;
 }

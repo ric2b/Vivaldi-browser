@@ -14,10 +14,10 @@
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "ui/app_list/app_list_constants.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_folder_item.h"
 #include "ui/app_list/app_list_item.h"
 #include "ui/app_list/app_list_model.h"
-#include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/pagination_model.h"
 #include "ui/app_list/search_box_model.h"
@@ -48,7 +48,11 @@ AppListMainView::AppListMainView(AppListViewDelegate* delegate)
       model_(delegate->GetModel()),
       search_box_view_(nullptr),
       contents_view_(nullptr) {
-  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0));
+  SetLayoutManager(
+      features::IsAnswerCardEnabled()
+          ? static_cast<views::LayoutManager*>(new views::FillLayout)
+          : static_cast<views::LayoutManager*>(
+                new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0)));
   model_->AddObserver(this);
 }
 
@@ -83,7 +87,8 @@ void AppListMainView::AddContentsViews() {
   contents_view_->layer()->SetFillsBoundsOpaquely(false);
   contents_view_->layer()->SetMasksToBounds(true);
 
-  delegate_->StartSearch();
+  // Clear the old query and start search.
+  search_box_view_->ClearSearch();
 }
 
 void AppListMainView::ShowAppListWhenReady() {
@@ -155,6 +160,10 @@ void AppListMainView::UpdateCustomLauncherPageVisibility() {
     // Hide the view immediately otherwise.
     custom_page->SetVisible(false);
   }
+}
+
+const char* AppListMainView::GetClassName() const {
+  return "AppListMainView";
 }
 
 void AppListMainView::OnCustomLauncherPageEnabledStateChanged(bool enabled) {

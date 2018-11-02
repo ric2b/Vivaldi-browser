@@ -33,8 +33,9 @@
 #include "core/loader/NavigationPolicy.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/Cursor.h"
-#include "platform/HostWindow.h"
+#include "platform/PlatformChromeClient.h"
 #include "platform/PopupMenu.h"
+#include "platform/graphics/TouchAction.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/wtf/Forward.h"
@@ -71,22 +72,28 @@ class KeyboardEvent;
 class LocalFrame;
 class Node;
 class Page;
+class PagePopup;
+class PagePopupClient;
 class PopupOpeningObserver;
+class RemoteFrame;
 class WebDragData;
 class WebFrameScheduler;
 class WebImage;
 class WebLayer;
 class WebLayerTreeView;
+class WebLocalFrameBase;
+class WebRemoteFrameBase;
 
 struct CompositedSelection;
 struct DateTimeChooserParameters;
 struct FrameLoadRequest;
 struct ViewportDescription;
+struct WebCursorInfo;
 struct WebPoint;
 struct WebScreenInfo;
 struct WindowFeatures;
 
-class CORE_EXPORT ChromeClient : public HostWindow {
+class CORE_EXPORT ChromeClient : public PlatformChromeClient {
  public:
   virtual void ChromeDestroyed() = 0;
 
@@ -181,19 +188,22 @@ class CORE_EXPORT ChromeClient : public HostWindow {
 
   virtual void* WebView() const = 0;
 
-  // Methods used by HostWindow.
+  // Methods used by PlatformChromeClient.
   virtual WebScreenInfo GetScreenInfo() const = 0;
   virtual void SetCursor(const Cursor&, LocalFrame* local_root) = 0;
-  // End methods used by HostWindow.
+  // End methods used by PlatformChromeClient.
 
+  virtual void SetCursorOverridden(bool) = 0;
   virtual Cursor LastSetCursorForTesting() const = 0;
   Node* LastSetTooltipNodeForTesting() const {
     return last_mouse_over_node_.Get();
   }
 
+  virtual void SetCursorForPlugin(const WebCursorInfo&, LocalFrame*) = 0;
+
   // Returns a custom visible content rect if a viewport override is active.
   virtual WTF::Optional<IntRect> VisibleContentRectForPainting() const {
-    return WTF::kNullopt;
+    return WTF::nullopt;
   }
 
   virtual void DispatchViewportPropertiesDidChange(
@@ -205,6 +215,7 @@ class CORE_EXPORT ChromeClient : public HostWindow {
     return scale;
   }
   virtual void MainFrameScrollOffsetChanged() const {}
+  virtual void ResizeAfterLayout(LocalFrame*) const {}
   virtual void LayoutUpdated(LocalFrame*) const {}
 
   void MouseDidMoveOverElement(LocalFrame&, const HitTestResult&);
@@ -276,6 +287,8 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   // Checks if there is an opened popup, called by LayoutMenuList::showPopup().
   virtual bool HasOpenedPopup() const = 0;
   virtual PopupMenu* OpenPopupMenu(LocalFrame&, HTMLSelectElement&) = 0;
+  virtual PagePopup* OpenPagePopup(PagePopupClient*) = 0;
+  virtual void ClosePagePopup(PagePopup*) = 0;
   virtual DOMWindow* PagePopupWindowForTesting() const = 0;
 
   virtual void PostAccessibilityNotification(AXObject*,
@@ -286,7 +299,8 @@ class CORE_EXPORT ChromeClient : public HostWindow {
     kAlertDialog = 0,
     kConfirmDialog = 1,
     kPromptDialog = 2,
-    kHTMLDialog = 3
+    kHTMLDialog = 3,
+    kPrintDialog = 4
   };
   virtual bool ShouldOpenModalDialogDuringPageDismissal(
       LocalFrame&,
@@ -314,8 +328,6 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual void AjaxSucceeded(LocalFrame*) {}
 
   // Input method editor related functions.
-  virtual void ResetInputMethod() {}
-  virtual void DidUpdateTextOfFocusedElementByNonUserInput(LocalFrame&) {}
   virtual void ShowVirtualKeyboardOnElementFocus(LocalFrame&) {}
 
   virtual void RegisterViewportLayers() const {}
@@ -328,6 +340,7 @@ class CORE_EXPORT ChromeClient : public HostWindow {
 
   virtual void RegisterPopupOpeningObserver(PopupOpeningObserver*) = 0;
   virtual void UnregisterPopupOpeningObserver(PopupOpeningObserver*) = 0;
+  virtual void NotifyPopupOpeningObservers() const = 0;
 
   virtual CompositorWorkerProxyClient* CreateCompositorWorkerProxyClient(
       LocalFrame*) = 0;
@@ -352,6 +365,14 @@ class CORE_EXPORT ChromeClient : public HostWindow {
 
   virtual WebLayerTreeView* GetWebLayerTreeView(LocalFrame*) { return nullptr; }
 
+  virtual WebLocalFrameBase* GetWebLocalFrameBase(LocalFrame*) {
+    return nullptr;
+  }
+
+  virtual WebRemoteFrameBase* GetWebRemoteFrameBase(RemoteFrame&) {
+    return nullptr;
+  }
+
   DECLARE_TRACE();
 
  protected:
@@ -370,7 +391,7 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual void PrintDelegate(LocalFrame*) = 0;
 
  private:
-  bool CanOpenModalIfDuringPageDismissal(Frame* main_frame,
+  bool CanOpenModalIfDuringPageDismissal(Frame& main_frame,
                                          DialogType,
                                          const String& message);
   void SetToolTip(LocalFrame&, const HitTestResult&);

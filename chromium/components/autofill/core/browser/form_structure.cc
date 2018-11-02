@@ -38,7 +38,7 @@
 #include "components/autofill/core/common/signatures_util.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/rappor_service_impl.h"
-#include "components/ukm/ukm_service.h"
+#include "components/ukm/public/ukm_recorder.h"
 
 namespace autofill {
 namespace {
@@ -46,10 +46,6 @@ namespace {
 const char kClientVersion[] = "6.1.1715.1442/en (GGLL)";
 const char kBillingMode[] = "billing";
 const char kShippingMode[] = "shipping";
-
-// A form is considered to have a high prediction mismatch rate if the number of
-// mismatches exceeds this threshold.
-const int kNumberOfMismatchesThreshold = 3;
 
 // Only removing common name prefixes if we have a minimum number of fields and
 // a minimum prefix length. These values are chosen to avoid cases such as two
@@ -295,6 +291,19 @@ bool IsCreditCardExpirationType(ServerFieldType type) {
          type == CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR;
 }
 
+// Returns true iff all form fields autofill types are in |contained_types|.
+bool AllTypesCaptured(const FormStructure& form,
+                      const ServerFieldTypeSet& contained_types) {
+  for (const auto& field : form) {
+    for (const auto& type : field->possible_types()) {
+      if (type != UNKNOWN_TYPE && type != EMPTY_TYPE &&
+          !contained_types.count(type))
+        return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 FormStructure::FormStructure(const FormData& form)
@@ -340,7 +349,7 @@ FormStructure::FormStructure(const FormData& form)
 
 FormStructure::~FormStructure() {}
 
-void FormStructure::DetermineHeuristicTypes(ukm::UkmService* ukm_service) {
+void FormStructure::DetermineHeuristicTypes(ukm::UkmRecorder* ukm_recorder) {
   const auto determine_heuristic_types_start_time = base::TimeTicks::Now();
 
   // First, try to detect field types based on each field's |autocomplete|
@@ -365,24 +374,26 @@ void FormStructure::DetermineHeuristicTypes(ukm::UkmService* ukm_service) {
   UpdateAutofillCount();
   IdentifySections(has_author_specified_sections_);
 
-  std::vector<AutofillMetrics::DeveloperEngagementMetric> metrics;
+  int developer_engagement_metrics = 0;
   if (IsAutofillable()) {
     AutofillMetrics::DeveloperEngagementMetric metric =
         has_author_specified_types_
             ? AutofillMetrics::FILLABLE_FORM_PARSED_WITH_TYPE_HINTS
             : AutofillMetrics::FILLABLE_FORM_PARSED_WITHOUT_TYPE_HINTS;
-    metrics.push_back(metric);
+    developer_engagement_metrics |= 1 << metric;
     AutofillMetrics::LogDeveloperEngagementMetric(metric);
   }
 
   if (has_author_specified_upi_vpa_hint_) {
     AutofillMetrics::LogDeveloperEngagementMetric(
         AutofillMetrics::FORM_CONTAINS_UPI_VPA_HINT);
-    metrics.push_back(AutofillMetrics::FORM_CONTAINS_UPI_VPA_HINT);
+    developer_engagement_metrics |=
+        1 << AutofillMetrics::FORM_CONTAINS_UPI_VPA_HINT;
   }
 
-  AutofillMetrics::LogDeveloperEngagementUkm(ukm_service, source_url(),
-                                             metrics);
+  if (developer_engagement_metrics)
+    AutofillMetrics::LogDeveloperEngagementUkm(ukm_recorder, source_url(),
+                                               developer_engagement_metrics);
 
   AutofillMetrics::LogDetermineHeuristicTypesTiming(
       base::TimeTicks::Now() - determine_heuristic_types_start_time);
@@ -395,15 +406,7 @@ bool FormStructure::EncodeUploadRequest(
     bool observed_submission,
     AutofillUploadContents* upload) const {
   DCHECK(ShouldBeCrowdsourced());
-
-  // Verify that |available_field_types| agrees with the possible field types we
-  // are uploading.
-  for (const auto& field : *this) {
-    for (const auto& type : field->possible_types()) {
-      DCHECK(type == UNKNOWN_TYPE || type == EMPTY_TYPE ||
-             available_field_types.count(type));
-    }
-  }
+  DCHECK(AllTypesCaptured(*this, available_field_types));
 
   upload->set_submission(observed_submission);
   upload->set_client_version(kClientVersion);
@@ -694,8 +697,6 @@ void FormStructure::LogQualityMetrics(
     bool did_show_suggestions,
     bool observed_submission) const {
   size_t num_detected_field_types = 0;
-  size_t num_server_mismatches = 0;
-  size_t num_heuristic_mismatches = 0;
   size_t num_edited_autofilled_fields = 0;
   bool did_autofill_all_possible_fields = true;
   bool did_autofill_some_possible_fields = false;
@@ -734,93 +735,21 @@ void FormStructure::LogQualityMetrics(
     const ServerFieldTypeSet& field_types = field->possible_types();
     DCHECK(!field_types.empty());
 
-    // If the field data is empty, or unrecognized, log whether or not autofill
-    // predicted that it would be populated with an autofillable data type.
-    bool has_empty_data = field_types.count(EMPTY_TYPE) != 0;
-    bool has_unrecognized_data = field_types.count(UNKNOWN_TYPE) != 0;
-    if (has_empty_data || has_unrecognized_data) {
-      AutofillMetrics::FieldTypeQualityMetric match_empty_or_unknown =
-          has_empty_data ? AutofillMetrics::TYPE_MATCH_EMPTY
-                         : AutofillMetrics::TYPE_MATCH_UNKNOWN;
-      AutofillMetrics::FieldTypeQualityMetric mismatch_empty_or_unknown =
-          has_empty_data ? AutofillMetrics::TYPE_MISMATCH_EMPTY
-                         : AutofillMetrics::TYPE_MISMATCH_UNKNOWN;
-      ServerFieldType field_type = has_empty_data ? EMPTY_TYPE : UNKNOWN_TYPE;
-      AutofillMetrics::LogHeuristicTypePrediction(
-          (heuristic_type == UNKNOWN_TYPE ? match_empty_or_unknown
-                                          : mismatch_empty_or_unknown),
-          field_type, metric_type);
-      AutofillMetrics::LogServerTypePrediction(
-          (server_type == NO_SERVER_DATA ? match_empty_or_unknown
-                                         : mismatch_empty_or_unknown),
-          field_type, metric_type);
-      AutofillMetrics::LogOverallTypePrediction(
-          (predicted_type == UNKNOWN_TYPE ? match_empty_or_unknown
-                                          : mismatch_empty_or_unknown),
-          field_type, metric_type);
+    AutofillMetrics::LogHeuristicPredictionQualityMetrics(
+        field_types, heuristic_type, metric_type);
+    AutofillMetrics::LogServerPredictionQualityMetrics(field_types, server_type,
+                                                       metric_type);
+    AutofillMetrics::LogOverallPredictionQualityMetrics(
+        field_types, predicted_type, metric_type);
+
+    if (field_types.count(EMPTY_TYPE) || field_types.count(UNKNOWN_TYPE))
       continue;
-    }
 
     ++num_detected_field_types;
     if (field->is_autofilled)
       did_autofill_some_possible_fields = true;
     else
       did_autofill_all_possible_fields = false;
-
-    // Collapse field types that Chrome treats as identical, e.g. home and
-    // billing address fields.
-    ServerFieldTypeSet collapsed_field_types;
-    for (const auto& it : field_types) {
-      // Since we currently only support US phone numbers, the (city code + main
-      // digits) number is almost always identical to the whole phone number.
-      // TODO(isherman): Improve this logic once we add support for
-      // international numbers.
-      if (it == PHONE_HOME_CITY_AND_NUMBER)
-        collapsed_field_types.insert(PHONE_HOME_WHOLE_NUMBER);
-      else
-        collapsed_field_types.insert(AutofillType(it).GetStorableType());
-    }
-
-    // Capture the field's type, if it is unambiguous.
-    ServerFieldType field_type = UNKNOWN_TYPE;
-    if (collapsed_field_types.size() == 1)
-      field_type = *collapsed_field_types.begin();
-
-    // Log heuristic, server, and overall type quality metrics.
-    if (heuristic_type == UNKNOWN_TYPE) {
-      AutofillMetrics::LogHeuristicTypePrediction(AutofillMetrics::TYPE_UNKNOWN,
-                                                  field_type, metric_type);
-    } else if (field_types.count(heuristic_type)) {
-      AutofillMetrics::LogHeuristicTypePrediction(AutofillMetrics::TYPE_MATCH,
-                                                  field_type, metric_type);
-    } else {
-      ++num_heuristic_mismatches;
-      AutofillMetrics::LogHeuristicTypePrediction(
-          AutofillMetrics::TYPE_MISMATCH, field_type, metric_type);
-    }
-
-    if (server_type == NO_SERVER_DATA) {
-      AutofillMetrics::LogServerTypePrediction(AutofillMetrics::TYPE_UNKNOWN,
-                                               field_type, metric_type);
-    } else if (field_types.count(server_type)) {
-      AutofillMetrics::LogServerTypePrediction(AutofillMetrics::TYPE_MATCH,
-                                               field_type, metric_type);
-    } else {
-      ++num_server_mismatches;
-      AutofillMetrics::LogServerTypePrediction(AutofillMetrics::TYPE_MISMATCH,
-                                               field_type, metric_type);
-    }
-
-    if (predicted_type == UNKNOWN_TYPE) {
-      AutofillMetrics::LogOverallTypePrediction(AutofillMetrics::TYPE_UNKNOWN,
-                                                field_type, metric_type);
-    } else if (field_types.count(predicted_type)) {
-      AutofillMetrics::LogOverallTypePrediction(AutofillMetrics::TYPE_MATCH,
-                                                field_type, metric_type);
-    } else {
-      AutofillMetrics::LogOverallTypePrediction(AutofillMetrics::TYPE_MISMATCH,
-                                                field_type, metric_type);
-    }
   }
 
   AutofillMetrics::LogNumberOfEditedAutofilledFields(
@@ -843,18 +772,6 @@ void FormStructure::LogQualityMetrics(
       } else {
         state =
             AutofillMetrics::FILLABLE_FORM_AUTOFILLED_NONE_DID_SHOW_SUGGESTIONS;
-      }
-
-      // Log some RAPPOR metrics for problematic cases.
-      if (num_server_mismatches >= kNumberOfMismatchesThreshold) {
-        rappor::SampleDomainAndRegistryFromGURL(
-            rappor_service, "Autofill.HighNumberOfServerMismatches",
-            source_url_);
-      }
-      if (num_heuristic_mismatches >= kNumberOfMismatchesThreshold) {
-        rappor::SampleDomainAndRegistryFromGURL(
-            rappor_service, "Autofill.HighNumberOfHeuristicMismatches",
-            source_url_);
       }
 
       // Unlike the other times, the |submission_time| should always be
@@ -897,38 +814,20 @@ void FormStructure::LogQualityMetrics(
 }
 
 void FormStructure::LogQualityMetricsBasedOnAutocomplete() const {
+  const AutofillMetrics::QualityMetricType metric_type =
+      AutofillMetrics::TYPE_AUTOCOMPLETE_BASED;
   for (const auto& field : fields_) {
     if (field->html_type() != HTML_TYPE_UNSPECIFIED &&
         field->html_type() != HTML_TYPE_UNRECOGNIZED) {
       // The type inferred by the autocomplete attribute.
-      AutofillType type(field->html_type(), field->html_mode());
-      ServerFieldType actual_field_type = type.GetStorableType();
+      ServerFieldTypeSet actual_field_type_set{
+          AutofillType(field->html_type(), field->html_mode())
+              .GetStorableType()};
 
-      const AutofillMetrics::QualityMetricType metric_type =
-          AutofillMetrics::TYPE_AUTOCOMPLETE_BASED;
-      // Log the quality of our heuristics predictions.
-      if (field->heuristic_type() == UNKNOWN_TYPE) {
-        AutofillMetrics::LogHeuristicTypePrediction(
-            AutofillMetrics::TYPE_UNKNOWN, actual_field_type, metric_type);
-      } else if (field->heuristic_type() == actual_field_type) {
-        AutofillMetrics::LogHeuristicTypePrediction(
-            AutofillMetrics::TYPE_MATCH, actual_field_type, metric_type);
-      } else {
-        AutofillMetrics::LogHeuristicTypePrediction(
-            AutofillMetrics::TYPE_MISMATCH, actual_field_type, metric_type);
-      }
-
-      // Log the quality of our server predictions.
-      if (field->server_type() == NO_SERVER_DATA) {
-        AutofillMetrics::LogServerTypePrediction(
-            AutofillMetrics::TYPE_UNKNOWN, actual_field_type, metric_type);
-      } else if (field->server_type() == actual_field_type) {
-        AutofillMetrics::LogServerTypePrediction(
-            AutofillMetrics::TYPE_MATCH, actual_field_type, metric_type);
-      } else {
-        AutofillMetrics::LogServerTypePrediction(
-            AutofillMetrics::TYPE_MISMATCH, actual_field_type, metric_type);
-      }
+      AutofillMetrics::LogHeuristicPredictionQualityMetrics(
+          actual_field_type_set, field->heuristic_type(), metric_type);
+      AutofillMetrics::LogServerPredictionQualityMetrics(
+          actual_field_type_set, field->server_type(), metric_type);
     }
   }
 }

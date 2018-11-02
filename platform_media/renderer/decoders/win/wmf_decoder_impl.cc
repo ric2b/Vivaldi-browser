@@ -23,6 +23,7 @@
 #include "media/base/data_buffer.h"
 #include "media/base/decoder_buffer.h"
 #include "platform_media/common/pipeline_stats.h"
+#include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_mime_util.h"
 #include "media/base/win/mf_initializer.h"
 #include "platform_media/common/win/mf_util.h"
@@ -98,13 +99,18 @@ template <DemuxerStream::Type StreamType>
 void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
                                             const InitCB& init_cb,
                                             const OutputCB& output_cb) {
-  DVLOG(1) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   if (!IsValidConfig(config)) {
-    DVLOG(1) << "Unsupported decoder config";
+    LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+              << " Media Config not accepted for codec : "
+              << GetCodecName(config.codec());
     init_cb.Run(false);
     return;
+  } else {
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Supported decoder config for codec : "
+            << Loggable(config);
   }
 
   InitializeMediaFoundation();
@@ -113,6 +119,9 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
 
   decoder_ = CreateWMFDecoder(config_);
   if (!decoder_ || !ConfigureDecoder()) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Creating/Configuring failed for codec : "
+                 << GetCodecName(config.codec());
     ReportInitResult<StreamType>(false);
     init_cb.Run(false);
     return;
@@ -132,15 +141,20 @@ void WMFDecoderImpl<StreamType>::Decode(
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   if (buffer->end_of_stream()) {
-    DVLOG(5) << __FUNCTION__ << "(EOS)";
+    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " (EOS)";
     const bool drained_ok = Drain();
+    LOG_IF(WARNING, !drained_ok)
+        << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+        << " Drain did not succeed - returning DECODE_ERROR";
     task_runner_->PostTask(
         FROM_HERE,
         base::Bind(decode_cb,
                    drained_ok ? media::DecodeStatus::OK : media::DecodeStatus::DECODE_ERROR));
     return;
   }
-  DVLOG(5) << __FUNCTION__ << "(" << buffer->timestamp() << ")";
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " (" << buffer->timestamp() << ")";
 
   const HRESULT hr = ProcessInput(buffer);
   DCHECK_NE(MF_E_NOTACCEPTING, hr)
@@ -150,12 +164,16 @@ void WMFDecoderImpl<StreamType>::Decode(
                                             ? media::DecodeStatus::OK
                                             : media::DecodeStatus::DECODE_ERROR;
 
+  LOG_IF(WARNING, (status == media::DecodeStatus::DECODE_ERROR))
+      << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+      << " processing buffer failed, returning DECODE_ERROR";
+
   task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));
 }
 
 template <DemuxerStream::Type StreamType>
 void WMFDecoderImpl<StreamType>::Reset(const base::Closure& closure) {
-  DVLOG(1) << __FUNCTION__;
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   // Transform needs to be reset, skip this and seeking may fail.
@@ -171,20 +189,50 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
     const DecoderConfig& config) {
   if (config.codec() == kCodecMP3 &&
       !TURN_ON_MSE_VIVALDI) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Unsupported Audio codec : " << GetCodecName(config.codec());
     return false;
   }
 
-  if (config.codec() != kCodecMP3 && config.codec() != kCodecAAC)
+  if (config.codec() != kCodecMP3 && config.codec() != kCodecAAC) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Unsupported Audio codec : " << GetCodecName(config.codec());
     return false;
+  }
 
-  return IsPlatformAudioDecoderAvailable(config.codec());
+  bool isAvailable = IsPlatformAudioDecoderAvailable(config.codec());
+
+  LOG_IF(WARNING, !isAvailable)
+      << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+      << " Audio Platform Decoder (" << GetCodecName(config.codec())
+      << ") : Unavailable";
+
+  return isAvailable;
 }
 
 template <>
 bool WMFDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
     const DecoderConfig& config) {
-  if (!IsPlatformVideoDecoderAvailable())
+
+  if (!IsPlatformVideoDecoderAvailable()) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Video Platform Decoder : Unavailable";
     return false;
+  }
+
+  LOG_IF(WARNING, !(config.codec() == kCodecH264))
+      << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+      << " Unsupported Video codec : " << GetCodecName(config.codec());
+
+  if (config.codec() == kCodecH264) {
+    LOG_IF(WARNING, !(config.profile() >= H264PROFILE_MIN))
+        << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+        << " Unsupported Video profile (too low) : " << config.profile();
+
+    LOG_IF(WARNING, !(config.profile() <= H264PROFILE_MAX))
+        << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+        << " Unsupported Video profile (too high) : " << config.profile();
+  }
 
   return config.codec() == kCodecH264 && config.profile() >= H264PROFILE_MIN &&
          config.profile() <= H264PROFILE_MAX;
@@ -237,23 +285,26 @@ WMFDecoderImpl<StreamType>::CreateWMFDecoder(const DecoderConfig& config) {
       reinterpret_cast<decltype(DllGetClassObject)*>(GetFunctionFromLibrary(
           "DllGetClassObject", GetModuleName(config).c_str()));
   if (!get_class_object) {
-    DVLOG(1) << "Error while retrieving class object getter function.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while retrieving class object getter function.";
     return decoder;
   }
 
   base::win::ScopedComPtr<IClassFactory> factory;
   HRESULT hr =
       get_class_object(GetMediaObjectGUID(config), __uuidof(IClassFactory),
-                       reinterpret_cast<void**>(factory.Receive()));
+                       reinterpret_cast<void**>(factory.GetAddressOf()));
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while getting class object.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while getting class object.";
     return decoder;
   }
 
   hr = factory->CreateInstance(nullptr, __uuidof(IMFTransform),
-                               reinterpret_cast<void**>(decoder.Receive()));
+                               reinterpret_cast<void**>(decoder.GetAddressOf()));
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while creating decoder instance.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while creating decoder instance.";
     return base::win::ScopedComPtr<IMFTransform>();
   }
 
@@ -274,7 +325,8 @@ bool WMFDecoderImpl<StreamType>::ConfigureDecoder() {
   // It requires both input and output to be set.
   HRESULT hr = decoder_->GetInputStreamInfo(0, &input_stream_info_);
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while getting input stream info.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while getting input stream info.";
     return false;
   }
 
@@ -284,22 +336,25 @@ bool WMFDecoderImpl<StreamType>::ConfigureDecoder() {
 template <>
 bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
   base::win::ScopedComPtr<IMFMediaType> media_type;
-  HRESULT hr = MFCreateMediaType(media_type.Receive());
+  HRESULT hr = MFCreateMediaType(media_type.GetAddressOf());
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while creating media type.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while creating media type.";
     return false;
   }
 
   hr = media_type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while setting media major type.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting media major type.";
     return false;
   }
 
   hr = media_type->SetGUID(MF_MT_SUBTYPE,
                            AudioCodecToAudioSubtypeGUID(config_.codec()));
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while setting media subtype.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting media subtype.";
     return false;
   }
 
@@ -307,21 +362,24 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
       MF_MT_AUDIO_NUM_CHANNELS,
       ChannelLayoutToChannelCount(config_.channel_layout()));
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while setting channel number.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting channel number.";
     return false;
   }
 
   hr = media_type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND,
                              config_.input_samples_per_second());
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while setting samples per second.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting samples per second.";
     return false;
   }
 
   if (config_.codec() == kCodecAAC) {
     hr = media_type->SetUINT32(MF_MT_AAC_PAYLOAD_TYPE, 0x1);
     if (FAILED(hr)) {
-      DVLOG(1) << "Error while setting AAC payload type.";
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Error while setting AAC payload type.";
       return false;
     }
 
@@ -335,14 +393,16 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
     hr = media_type->SetBlob(MF_MT_USER_DATA, mt_user_data,
                              sizeof(mt_user_data));
     if (FAILED(hr)) {
-      DVLOG(1) << "Error while setting AAC AudioSpecificConfig().";
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Error while setting AAC AudioSpecificConfig().";
       return false;
     }
   }
 
-  hr = decoder_->SetInputType(0, media_type.get(), 0);  // No flags.
+  hr = decoder_->SetInputType(0, media_type.Get(), 0);  // No flags.
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while setting input type.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting input type.";
     return false;
   }
 
@@ -352,42 +412,48 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
 template <>
 bool WMFDecoderImpl<DemuxerStream::VIDEO>::SetInputMediaType() {
   base::win::ScopedComPtr<IMFMediaType> media_type;
-  HRESULT hr = MFCreateMediaType(media_type.Receive());
+  HRESULT hr = MFCreateMediaType(media_type.GetAddressOf());
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while creating media type.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while creating media type.";
     return false;
   }
 
   hr = media_type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while setting media major type.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting media major type.";
     return false;
   }
 
   hr = media_type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while setting media subtype.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting media subtype.";
     return false;
   }
 
   hr = media_type->SetUINT32(MF_MT_INTERLACE_MODE,
                              MFVideoInterlace_MixedInterlaceOrProgressive);
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while setting interlace mode.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting interlace mode.";
     return false;
   }
 
-  hr = MFSetAttributeSize(media_type.get(), MF_MT_FRAME_SIZE,
+  hr = MFSetAttributeSize(media_type.Get(), MF_MT_FRAME_SIZE,
                           config_.coded_size().width(),
                           config_.coded_size().height());
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while setting frame size.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting frame size.";
     return false;
   }
 
-  hr = decoder_->SetInputType(0, media_type.get(), 0);  // No flags.
+  hr = decoder_->SetInputType(0, media_type.Get(), 0);  // No flags.
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while setting input type.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting input type.";
     return false;
   }
 
@@ -396,22 +462,23 @@ bool WMFDecoderImpl<DemuxerStream::VIDEO>::SetInputMediaType() {
 
 template <DemuxerStream::Type StreamType>
 bool WMFDecoderImpl<StreamType>::SetOutputMediaType() {
-  DVLOG(1) << __FUNCTION__;
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 
   base::win::ScopedComPtr<IMFMediaType> out_media_type;
 
   HRESULT hr = S_OK;
   for (uint32_t i = 0; SUCCEEDED(
-           decoder_->GetOutputAvailableType(0, i, out_media_type.Receive()));
+           decoder_->GetOutputAvailableType(0, i, out_media_type.GetAddressOf()));
        ++i) {
     GUID out_subtype = {0};
     hr = out_media_type->GetGUID(MF_MT_SUBTYPE, &out_subtype);
     if (FAILED(hr)) {
-      DVLOG(1) << "Error while getting available output types.";
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Error while getting available output types.";
       return false;
     }
 
-    hr = SetOutputMediaTypeInternal(out_subtype, out_media_type.get());
+    hr = SetOutputMediaTypeInternal(out_subtype, out_media_type.Get());
     if (hr == S_OK) {
       break;
     } else if (hr != S_FALSE) {
@@ -424,7 +491,8 @@ bool WMFDecoderImpl<StreamType>::SetOutputMediaType() {
   MFT_OUTPUT_STREAM_INFO output_stream_info = {0};
   hr = decoder_->GetOutputStreamInfo(0, &output_stream_info);
   if (FAILED(hr)) {
-    DVLOG(1) << "Error while getting stream info.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while getting stream info.";
     return false;
   }
 
@@ -438,7 +506,8 @@ bool WMFDecoderImpl<StreamType>::SetOutputMediaType() {
         CreateSample(CalculateOutputBufferSize(output_stream_info),
                      CalculateBufferAlignment(output_stream_info.cbAlignment));
     if (!output_sample_) {
-      DVLOG(1) << "Couldn't create sample";
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Couldn't create sample";
       return false;
     }
   }
@@ -453,14 +522,16 @@ HRESULT WMFDecoderImpl<DemuxerStream::AUDIO>::SetOutputMediaTypeInternal(
   if (subtype == MFAudioFormat_PCM) {
     HRESULT hr = decoder_->SetOutputType(0, media_type, 0);  // No flags.
     if (FAILED(hr)) {
-      DVLOG(1) << "Error while setting output type.";
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Error while setting output type.";
       return hr;
     }
 
     hr = media_type->GetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE,
                                &output_sample_size_);
     if (FAILED(hr)) {
-      DVLOG(1) << "Error while getting sample size.";
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Error while getting sample size.";
       return hr;
     }
     // We will need size in Bytes.
@@ -477,7 +548,8 @@ HRESULT WMFDecoderImpl<DemuxerStream::VIDEO>::SetOutputMediaTypeInternal(
   if (subtype == MFVideoFormat_YV12) {
     HRESULT hr = decoder_->SetOutputType(0, media_type, 0);  // No flags.
     if (FAILED(hr)) {
-      DVLOG(1) << "Error while setting output type.";
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Error while setting output type.";
       return hr;
     }
     return S_OK;
@@ -527,17 +599,18 @@ bool WMFDecoderImpl<DemuxerStream::VIDEO>::InitializeDecoderFunctions() {
 template <DemuxerStream::Type StreamType>
 HRESULT WMFDecoderImpl<StreamType>::ProcessInput(
     const scoped_refptr<DecoderBuffer>& input) {
-  DVLOG(5) << __FUNCTION__;
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
   DCHECK(input.get());
 
   const base::win::ScopedComPtr<IMFSample> sample =
       PrepareInputSample(input.get());
   if (!sample) {
-    DVLOG(1) << "Failed to create input sample.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Failed to create input sample.";
     return MF_E_UNEXPECTED;
   }
 
-  const HRESULT hr = decoder_->ProcessInput(0, sample.get(), 0);
+  const HRESULT hr = decoder_->ProcessInput(0, sample.Get(), 0);
 
   if (SUCCEEDED(hr))
     RecordInput(input);
@@ -565,20 +638,27 @@ void WMFDecoderImpl<DemuxerStream::VIDEO>::RecordInput(
 
 template <DemuxerStream::Type StreamType>
 HRESULT WMFDecoderImpl<StreamType>::ProcessOutput() {
-  DVLOG(5) << __FUNCTION__;
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 
   // Make the whole buffer available for use by |decoder_| again after it was
   // filled with data by the previous call to ProcessOutput().
   IMFMediaBuffer* buffer = nullptr;
   HRESULT hr = output_sample_->ConvertToContiguousBuffer(&buffer);
-  if (FAILED(hr))
+  if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while converting buffer.";
     return hr;
+  }
+
   hr = buffer->SetCurrentLength(0);
-  if (FAILED(hr))
+  if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting buffer length.";
     return hr;
+  }
 
   MFT_OUTPUT_DATA_BUFFER output_data_buffer = {0};
-  output_data_buffer.pSample = output_sample_.get();
+  output_data_buffer.pSample = output_sample_.Get();
 
   DWORD process_output_status = 0;
   hr = decoder_->ProcessOutput(0, 1, &output_data_buffer,
@@ -609,11 +689,13 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessOutput() {
       break;
     }
     case MF_E_TRANSFORM_NEED_MORE_INPUT:
-      DVLOG(5) << "NEED_MORE_INPUT";
+      VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+              << " NEED_MORE_INPUT";
       // Need to wait for more input data to produce output.
       break;
     case MF_E_TRANSFORM_STREAM_CHANGE:
-      DVLOG(5) << "STREAM_CHANGE";
+      VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+              << " STREAM_CHANGE";
       // For some reason we need to set up output media type again.
       if (!SetOutputMediaType())
         return MF_E_UNEXPECTED;
@@ -659,6 +741,8 @@ bool WMFDecoderImpl<StreamType>::ProcessOutputLoop() {
       if (hr == MF_E_TRANSFORM_STREAM_CHANGE)
         continue;
 
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " ProcessOutput failed with an error.";
       return false;
     }
   }
@@ -677,33 +761,50 @@ WMFDecoderImpl<StreamType>::PrepareInputSample(
   base::win::ScopedComPtr<IMFSample> sample =
       CreateSample(input->data_size(),
                    CalculateBufferAlignment(input_stream_info_.cbAlignment));
-  if (!sample)
+  if (!sample) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while creating sample.";
     return base::win::ScopedComPtr<IMFSample>();
+  }
 
   IMFMediaBuffer* buffer = nullptr;
   HRESULT hr = sample->GetBufferByIndex(0, &buffer);
-  if (FAILED(hr))
+  if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while getting buffer.";
     return base::win::ScopedComPtr<IMFSample>();
+  }
 
   uint8_t* buff_ptr = nullptr;
   hr = buffer->Lock(&buff_ptr, nullptr, nullptr);
-  if (FAILED(hr))
+  if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while locking buffer.";
     return base::win::ScopedComPtr<IMFSample>();
+  }
 
   memcpy(buff_ptr, input->data(), input->data_size());
 
   hr = buffer->Unlock();
-  if (FAILED(hr))
+  if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while unlocking buffer.";
     return base::win::ScopedComPtr<IMFSample>();
+  }
 
   hr = buffer->SetCurrentLength(input->data_size());
-  if (FAILED(hr))
+  if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting buffer length.";
     return base::win::ScopedComPtr<IMFSample>();
-
+  }
   // IMFSample's timestamp is expressed in hundreds of nanoseconds.
   hr = sample->SetSampleTime(input->timestamp().InMicroseconds() * 10);
-  if (FAILED(hr))
+  if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while setting sample timestamp.";
     return base::win::ScopedComPtr<IMFSample>();
+  }
 
   return sample;
 }
@@ -714,8 +815,10 @@ WMFDecoderImpl<StreamType>::CreateOutputBuffer(
     const MFT_OUTPUT_DATA_BUFFER& output_data_buffer) {
   base::win::ScopedComPtr<IMFMediaBuffer> media_buffer;
   HRESULT hr = output_data_buffer.pSample->ConvertToContiguousBuffer(
-      media_buffer.Receive());
+      media_buffer.GetAddressOf());
   if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while converting buffer.";
     return nullptr;
   }
 
@@ -723,13 +826,18 @@ WMFDecoderImpl<StreamType>::CreateOutputBuffer(
   DWORD data_size = 0;
   hr = media_buffer->Lock(&data, nullptr, &data_size);
   if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while locking buffer.";
     return nullptr;
   }
 
   LONGLONG sample_time = 0;
   hr = output_data_buffer.pSample->GetSampleTime(&sample_time);
-  if (FAILED(hr))
+  if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while getting sample time.";
     return nullptr;
+  }
   // The sample time in IMFSample is expressed in hundreds of nanoseconds.
   const base::TimeDelta timestamp =
       base::TimeDelta::FromMicroseconds(sample_time / 10);
@@ -773,7 +881,8 @@ WMFDecoderImpl<DemuxerStream::VIDEO>::CreateOutputBufferInternal(
                                     config_.coded_size().width(), &stride);
   stride = ((stride + 15) & ~15);  // Stride has to be divisible by 16.
   if (FAILED(hr)) {
-    DVLOG(1) << "Failed to obtain stride.";
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Failed to obtain stride.";
     return nullptr;
   }
 
@@ -796,19 +905,28 @@ base::win::ScopedComPtr<IMFSample> WMFDecoderImpl<StreamType>::CreateSample(
     DWORD buffer_size,
     int buffer_alignment) const {
   base::win::ScopedComPtr<IMFSample> sample;
-  HRESULT hr = MFCreateSample(sample.Receive());
-  if (FAILED(hr))
+  HRESULT hr = MFCreateSample(sample.GetAddressOf());
+  if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while creating sample.";
     return base::win::ScopedComPtr<IMFSample>();
+  }
 
   base::win::ScopedComPtr<IMFMediaBuffer> buffer;
   hr = MFCreateAlignedMemoryBuffer(buffer_size, buffer_alignment,
-                                   buffer.Receive());
-  if (FAILED(hr))
+                                   buffer.GetAddressOf());
+  if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while creating buffer.";
     return base::win::ScopedComPtr<IMFSample>();
+  }
 
-  hr = sample->AddBuffer(buffer.get());
-  if (FAILED(hr))
+  hr = sample->AddBuffer(buffer.Get());
+  if (FAILED(hr)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Error while adding buffer.";
     return base::win::ScopedComPtr<IMFSample>();
+  }
 
   return sample;
 }

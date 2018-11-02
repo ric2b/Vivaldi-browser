@@ -33,6 +33,7 @@
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_request_info.h"
+#include "content/public/browser/stream_handle.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
@@ -53,6 +54,7 @@ class HttpRequestHeaders;
 }
 
 namespace storage {
+class FileSystemContext;
 class ShareableFileReference;
 }
 
@@ -133,10 +135,6 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   void MarkAsTransferredNavigation(
       const GlobalRequestID& id,
       const base::Closure& on_transfer_complete_callback);
-
-  // Cancels a request previously marked as being transferred, for use when a
-  // navigation was cancelled.
-  void CancelTransferringNavigation(const GlobalRequestID& id);
 
   // Resumes the request without transferring it to a new process.
   void ResumeDeferredNavigation(const GlobalRequestID& id);
@@ -262,6 +260,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   void BeginNavigationRequest(
       ResourceContext* resource_context,
       net::URLRequestContext* request_context,
+      storage::FileSystemContext* upload_file_system_context,
       const NavigationRequestInfo& info,
       std::unique_ptr<NavigationUIData> navigation_ui_data,
       NavigationURLLoaderImplCore* loader,
@@ -598,9 +597,19 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       mojom::URLLoaderAssociatedRequest mojo_request,
       mojom::URLLoaderClientPtr url_loader_client);
 
+  // Creates either MojoAsyncResourceHandler or AsyncResourceHandler.
+  std::unique_ptr<ResourceHandler> CreateBaseResourceHandler(
+      net::URLRequest* request,
+      mojom::URLLoaderAssociatedRequest mojo_request,
+      mojom::URLLoaderClientPtr url_loader_client,
+      ResourceType resource_type);
+
   // Wraps |handler| in the standard resource handlers for normal resource
   // loading and navigation requests. This adds MimeTypeResourceHandler and
   // ResourceThrottles.
+  // PlzNavigate: |navigation_loader_core| and |stream_handle| are used to
+  // properly initialized the NavigationResourceHandler placed in navigation
+  // requests. They should be non-null in that case.
   std::unique_ptr<ResourceHandler> AddStandardHandlers(
       net::URLRequest* request,
       ResourceType resource_type,
@@ -610,7 +619,9 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       AppCacheService* appcache_service,
       int child_id,
       int route_id,
-      std::unique_ptr<ResourceHandler> handler);
+      std::unique_ptr<ResourceHandler> handler,
+      NavigationURLLoaderImplCore* navigation_loader_core,
+      std::unique_ptr<StreamHandle> stream_handle);
 
   void OnCancelRequest(ResourceRequesterInfo* requester_info, int request_id);
   void OnReleaseDownloadedFile(ResourceRequesterInfo* requester_info,
@@ -745,6 +756,12 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   //   (max_outstanding_requests_cost_per_process_ /
   //       kAvgBytesPerOutstandingRequest)
   int max_outstanding_requests_cost_per_process_;
+
+  // Largest number of outstanding requests seen so far across all processes.
+  int largest_outstanding_request_count_seen_;
+
+  // Largest number of outstanding requests seen so far in any single process.
+  int largest_outstanding_request_per_process_count_seen_;
 
   // Time of the last user gesture. Stored so that we can add a load
   // flag to requests occurring soon after a gesture to indicate they

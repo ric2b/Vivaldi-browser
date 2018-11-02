@@ -7,6 +7,7 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service_context.h"
@@ -79,8 +80,11 @@ class AutoclickUI : public views::WidgetDelegateView,
 
 AutoclickApplication::AutoclickApplication()
     : launchable_binding_(this), autoclick_binding_(this) {
-  registry_.AddInterface<mash::mojom::Launchable>(this);
-  registry_.AddInterface<mojom::AutoclickController>(this);
+  registry_.AddInterface<mash::mojom::Launchable>(base::Bind(
+      &AutoclickApplication::BindLaunchableRequest, base::Unretained(this)));
+  registry_.AddInterface<mojom::AutoclickController>(
+      base::Bind(&AutoclickApplication::BindAutoclickControllerRequest,
+                 base::Unretained(this)));
 }
 
 AutoclickApplication::~AutoclickApplication() {}
@@ -94,10 +98,10 @@ void AutoclickApplication::OnStart() {
 }
 
 void AutoclickApplication::OnBindInterface(
-    const service_manager::ServiceInfo& remote_info,
+    const service_manager::BindSourceInfo& remote_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(remote_info.identity, interface_name,
+  registry_.BindInterface(remote_info, interface_name,
                           std::move(interface_pipe));
 }
 
@@ -114,7 +118,7 @@ void AutoclickApplication::Launch(uint32_t what, mash::mojom::LaunchMode how) {
 
     params.mus_properties[ui::mojom::WindowManager::kContainerId_InitProperty] =
         mojo::ConvertTo<std::vector<uint8_t>>(
-            ash::kShellWindowId_OverlayContainer);
+            static_cast<int32_t>(ash::kShellWindowId_OverlayContainer));
     params.show_state = ui::SHOW_STATE_FULLSCREEN;
     widget_->Init(params);
   } else {
@@ -128,15 +132,15 @@ void AutoclickApplication::SetAutoclickDelay(uint32_t delay_in_milliseconds) {
       base::TimeDelta::FromMilliseconds(delay_in_milliseconds));
 }
 
-void AutoclickApplication::Create(
-    const service_manager::Identity& remote_identity,
+void AutoclickApplication::BindLaunchableRequest(
+    const service_manager::BindSourceInfo& source_info,
     mash::mojom::LaunchableRequest request) {
   launchable_binding_.Close();
   launchable_binding_.Bind(std::move(request));
 }
 
-void AutoclickApplication::Create(
-    const service_manager::Identity& remote_identity,
+void AutoclickApplication::BindAutoclickControllerRequest(
+    const service_manager::BindSourceInfo& source_info,
     mojom::AutoclickControllerRequest request) {
   autoclick_binding_.Close();
   autoclick_binding_.Bind(std::move(request));

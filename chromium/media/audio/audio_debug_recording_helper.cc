@@ -15,12 +15,10 @@ namespace media {
 AudioDebugRecordingHelper::AudioDebugRecordingHelper(
     const AudioParameters& params,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
     base::OnceClosure on_destruction_closure)
     : params_(params),
       recording_enabled_(0),
       task_runner_(std::move(task_runner)),
-      file_task_runner_(std::move(file_task_runner)),
       on_destruction_closure_(std::move(on_destruction_closure)),
       weak_factory_(this) {}
 
@@ -35,7 +33,7 @@ void AudioDebugRecordingHelper::EnableDebugRecording(
   DCHECK(!debug_writer_);
   DCHECK(!file_name.empty());
 
-  debug_writer_ = CreateAudioDebugFileWriter(params_, file_task_runner_);
+  debug_writer_ = CreateAudioDebugFileWriter(params_);
   debug_writer_->Start(
       file_name.AddExtension(debug_writer_->GetFileNameExtension()));
 
@@ -66,9 +64,14 @@ void AudioDebugRecordingHelper::OnData(const AudioBus* source) {
   if (!recording_enabled)
     return;
 
-  // TODO(grunell) Don't create a new AudioBus each time. Maybe a pool of
-  // AudioBuses. See also comment in
-  // AudioInputController::AudioCallback::PerformOptionalDebugRecording.
+  // TODO(tommi): This is costly. AudioBus heap allocs and we create a new one
+  // for every callback. We could instead have a pool of bus objects that get
+  // returned to us somehow.
+  // We should also avoid calling PostTask here since the implementation of the
+  // debug writer will basically do a PostTask straight away anyway. Might
+  // require some modifications to AudioDebugFileWriter though since there are
+  // some threading concerns there and AudioDebugFileWriter's lifetime
+  // guarantees need to be longer than that of associated active audio streams.
   std::unique_ptr<AudioBus> audio_bus_copy =
       AudioBus::Create(source->channels(), source->frames());
   source->CopyTo(audio_bus_copy.get());
@@ -88,9 +91,8 @@ void AudioDebugRecordingHelper::DoWrite(std::unique_ptr<media::AudioBus> data) {
 
 std::unique_ptr<AudioDebugFileWriter>
 AudioDebugRecordingHelper::CreateAudioDebugFileWriter(
-    const AudioParameters& params,
-    scoped_refptr<base::SingleThreadTaskRunner> file_task_runner) {
-  return base::MakeUnique<AudioDebugFileWriter>(params, file_task_runner);
+    const AudioParameters& params) {
+  return base::MakeUnique<AudioDebugFileWriter>(params);
 }
 
 }  // namespace media

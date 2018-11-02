@@ -57,10 +57,6 @@
 
 namespace content {
 
-#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
-ZygoteHandle g_ppapi_zygote;
-#endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
-
 // NOTE: changes to this class need to be reviewed by the security team.
 class PpapiPluginSandboxedProcessLauncherDelegate
     : public content::SandboxedProcessLauncherDelegate {
@@ -114,7 +110,7 @@ class PpapiPluginSandboxedProcessLauncherDelegate
   }
 
 #elif defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
-  ZygoteHandle* GetZygote() override {
+  ZygoteHandle GetZygote() override {
     const base::CommandLine& browser_command_line =
         *base::CommandLine::ForCurrentProcess();
     base::CommandLine::StringType plugin_launcher = browser_command_line
@@ -206,14 +202,6 @@ PpapiPluginProcessHost* PpapiPluginProcessHost::CreateBrokerHost(
   NOTREACHED();  // Init is not expected to fail.
   return NULL;
 }
-
-#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
-// static
-void PpapiPluginProcessHost::EarlyZygoteLaunch() {
-  DCHECK(!g_ppapi_zygote);
-  g_ppapi_zygote = CreateZygote();
-}
-#endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
 
 // static
 void PpapiPluginProcessHost::DidCreateOutOfProcessInstance(

@@ -6,7 +6,9 @@
       "provides": {
         "gpu": [
           "content::mojom::FieldTrialRecorder",
-          "media::mojom::AndroidOverlayProvider",
+          "media::mojom::AndroidOverlayProvider"
+        ],
+        "memory_instrumentation": [
           "memory_instrumentation::mojom::Coordinator"
         ],
         "plugin": [
@@ -24,6 +26,7 @@
           "blink::mojom::OffscreenCanvasProvider",
           "blink::mojom::PermissionService",
           "blink::mojom::WebSocket",
+	  "cc::mojom::SharedBitmapManager",
           "content::mojom::FieldTrialRecorder",
           "content::mojom::MemoryCoordinatorHandle",
           "content::mojom::PushMessaging",
@@ -32,11 +35,12 @@
           "content::mojom::StoragePartitionService",
           "content::mojom::URLLoaderFactory",
           "content::mojom::VideoCaptureHost",
+          "content::mojom::WorkerURLLoaderFactoryProvider",
           "device::mojom::GamepadMonitor",
           "discardable_memory::mojom::DiscardableSharedMemoryManager",
           "media::mojom::ImageCapture",
           "memory_coordinator::mojom::MemoryCoordinatorHandle",
-          "memory_instrumentation::mojom::Coordinator",
+          "metrics::mojom::SingleSampleMetricsProvider",
           "payments::mojom::PaymentManager",
           "shape_detection::mojom::BarcodeDetection",
           "shape_detection::mojom::FaceDetectionProvider",
@@ -47,33 +51,42 @@
           "service_manager::mojom::ServiceFactory"
         ],
         "utility": [
+          "discardable_memory::mojom::DiscardableSharedMemoryManager",
           "memory_instrumentation::mojom::Coordinator"
         ]
       },
       "requires": {
         "*": [ "app" ],
         // In classic ash, the browser supplies ash interfaces to itself.
-        "content_browser": [ "ash" ],
+        "content_browser": [ "ash", "memory_instrumentation" ],
         "content_gpu": [ "browser" ],
         "content_plugin": [ "browser" ],
         "content_renderer": [ "browser" ],
         "content_utility": [ "browser" ],
         "data_decoder": [ "image_decoder" ],
-        "device": [ "device:wake_lock" ],
+        "device": [ "device:nfc", "device:wake_lock" ],
         "file": [ "file:filesystem", "file:leveldb" ],
         "media": [ "media:media" ],
-        "network": [ "url_loader" ],
+        "network": [
+          "network_service",
+          "test",
+          "url_loader"
+        ],
         "ui": [ "display_output_protection" ],
         "service_manager": [
           "service_manager:client_process",
           "service_manager:instance_name",
+          "service_manager:service_manager",
           "service_manager:user_id"
         ],
         "shape_detection": [
           "barcode_detection",
           "face_detection",
           "text_detection"
-        ]
+
+        ],
+        "resource_coordinator": [ "coordination_unit" ],
+        "video_capture": [ "capture" ]
       }
     },
     "navigation:frame": {
@@ -84,6 +97,7 @@
           // impossible this week. Remove once sky/ken fix this.
           "autofill::mojom::AutofillDriver",
           "autofill::mojom::PasswordManagerDriver",
+          "blink::mojom::KeyboardLockService",
           "blink::mojom::MediaSessionService",
           "blink::mojom::PermissionService",
           "blink::mojom::PresentationService",
@@ -94,8 +108,8 @@
           "content::mojom::BrowserTarget",
           "device::mojom::VRService",
           "device::mojom::GeolocationService",
+          "device::mojom::NFC",
           "device::mojom::WakeLockService",
-          "device::nfc::mojom::NFC",
           "device::usb::DeviceManager",
           "discardable_memory::mojom::DiscardableSharedMemoryManager",
           "media::mojom::InterfaceFactory",

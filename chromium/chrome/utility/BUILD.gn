@@ -175,11 +175,18 @@ static_library("utility") {
     ]
   }
 
+  if (enable_basic_printing || enable_print_preview) {
+    deps += [
+      "//components/printing/service/public/cpp:factory",
+      "//components/printing/service/public/interfaces",
+    ]
+  }
+
   if (is_mac && safe_browsing_mode == 1) {
     deps += [ "//chrome/utility/safe_browsing/mac" ]
   }
 
-  if (enable_media_router && !is_android) {
+  if (!is_android) {
     sources += [
       "media_router/dial_device_description_parser_impl.cc",
       "media_router/dial_device_description_parser_impl.h",

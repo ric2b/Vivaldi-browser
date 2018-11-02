@@ -1,10 +1,12 @@
 include_rules = [
+    "+base/callback.h",
     "+base/callback_forward.h",
     "+base/location.h",
     "+base/logging.h",
     "+base/metrics",
     "+base/optional.h",
     "+base/strings",
+    "+base/time",
     "+base/trace_event",
     "-bindings",
     "+cc",

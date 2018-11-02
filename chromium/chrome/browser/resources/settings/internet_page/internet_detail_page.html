@@ -1,3 +1,5 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/cr_elements/cr_expand_button/cr_expand_button.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/cr_elements/network/cr_network_icon.html">
@@ -6,9 +8,8 @@
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_network_behavior.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_network_indicator.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
-<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-collapse/iron-collapse.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
@@ -22,16 +23,13 @@
 <link rel="import" href="network_property_list.html">
 <link rel="import" href="network_proxy.html">
 <link rel="import" href="network_siminfo.html">
+<link rel="import" href="tether_connection_dialog.html">
 
 <dom-module id="settings-internet-detail-page">
   <template>
-    <style include="internet-shared">
+    <style include="internet-shared iron-flex">
       :host {
         padding-bottom: 40px;
-      }
-
-      cr-network-icon {
-        -webkit-padding-end: 8px;
       }
 
       iron-collapse {
@@ -42,10 +40,13 @@
         -webkit-margin-end: 10px;
       }
 
-      paper-toggle-button,
+      paper-toggle-button {
+        -webkit-margin-start: var(--settings-control-label-spacing);
+      }
+
       cr-policy-network-indicator,
       cr-policy-indicator {
-        -webkit-margin-start: var(--settings-control-spacing);
+        -webkit-margin-start: var(--settings-controlled-by-spacing);
       }
 
       .indented {
@@ -60,16 +61,6 @@
         border-top: none;
       }
 
-      #buttonDiv paper-button {
-        margin: 10px 0;
-      }
-
-      #networkState {
-        -webkit-padding-start: 8px;
-        font-size: 107.69%;  /* 14px / 13px */
-        font-weight: 500;
-      }
-
       #networkState[connected] {
         color: var(--google-green-500);
       }
@@ -79,7 +70,7 @@
       <div class="start layout horizontal center">
         <cr-network-icon network-state="[[networkProperties]]">
         </cr-network-icon>
-        <div id="networkState"
+        <div id="networkState" class="title"
             connected$="[[isConnectedState_(networkProperties)]]">
           [[getStateText_(networkProperties)]]
         </div>
@@ -91,7 +82,7 @@
           </cr-policy-indicator>
         </template>
       </div>
-      <div id="buttonDiv" class="layout horizontal center">
+      <div id="buttonDiv" class="button-container">
         <template is="dom-if" if="[[!isSecondaryUser_]]">
           <paper-button class="secondary-button" on-tap="onForgetTap_"
               hidden$="[[!showForget_(networkProperties)]]">
@@ -147,7 +138,7 @@
       <!-- Top level properties -->
       <div class="layout vertical">
         <!-- Prefer this network. -->
-        <template is="dom-if" if="[[showPreferNetwork_(networkProperties))]]">
+        <template is="dom-if" if="[[showPreferNetwork_(networkProperties)]]">
           <div class="settings-box">
             <div id="preferNetworkToggleLabel"class="start">
               $i18n{networkPrefer}
@@ -179,8 +170,7 @@
           </div>
         </template>
         <!-- Data roaming (Cellular only). -->
-        <template is="dom-if"
-            if="[[isType_(NetworkType_.CELLULAR, networkProperties)]]">
+        <template is="dom-if" if="[[isCellular_(networkProperties)]]">
           <div class="settings-box">
             <settings-toggle-button id="allowDataRoaming" class="start"
                 pref="{{prefs.cros.signed.data_roaming_enabled}}"
@@ -210,7 +200,9 @@
           <div class="settings-box single-column stretch">
             <network-property-list
                 fields="[[getInfoFields_(networkProperties)]]"
-                property-dict="[[networkProperties]]">
+                edit-field-types="[[getInfoEditFieldTypes_(networkProperties)]]"
+                property-dict="[[networkProperties]]"
+                on-property-change="onNetworkPropertyChange_">
             </network-property-list>
           </div>
         </template>
@@ -259,8 +251,7 @@
         <iron-collapse opened="[[networkExpanded_]]">
           <div class="layout vertical indented">
             <!-- APN -->
-            <template is="dom-if"
-                if="[[isType_(NetworkType_.CELLULAR, networkProperties)]]">
+            <template is="dom-if" if="[[isCellular_(networkProperties)]]">
               <network-apnlist editable on-apn-change="onNetworkPropertyChange_"
                   network-properties="[[networkProperties]]">
               </network-apnlist>
@@ -289,13 +280,21 @@
         </div>
 
         <iron-collapse opened="[[proxyExpanded_]]">
-          <network-proxy editable prefs="{{prefs}}"
-              on-proxy-change="onProxyChange_"
-              network-properties="[[networkProperties]]">
-          </network-proxy>
+          <div class="layout vertical indented">
+            <network-proxy editable prefs="{{prefs}}"
+                on-proxy-change="onProxyChange_"
+                network-properties="[[networkProperties]]">
+            </network-proxy>
+          </div>
         </iron-collapse>
       </template>
     </template>
+
+    <tether-connection-dialog id="tetherDialog"
+        network-properties="[[networkProperties]]"
+        on-tether-connect="onTetherConnect_"
+        on-close="onTetherDialogClose_">
+    </tether-connection-dialog>
   </template>
   <script src="internet_detail_page.js"></script>
 </dom-module>

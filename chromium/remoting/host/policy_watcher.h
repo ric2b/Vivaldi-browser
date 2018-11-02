@@ -59,6 +59,13 @@ class PolicyWatcher : public policy::PolicyService::Observer,
       const PolicyUpdatedCallback& policy_updated_callback,
       const PolicyErrorCallback& policy_error_callback);
 
+  // Return the current policies. If the policies have not yet been read, or if
+  // an error occurred, the returned dictionary will be empty.
+  std::unique_ptr<base::DictionaryValue> GetCurrentPolicies();
+
+  // Return the default policies.
+  static std::unique_ptr<base::DictionaryValue> GetDefaultPolicies();
+
   // Specify a |policy_service| to borrow (on Chrome OS, from the browser
   // process) or specify nullptr to internally construct and use a new
   // PolicyService (on other OS-es). PolicyWatcher must be used on the thread on
@@ -92,11 +99,17 @@ class PolicyWatcher : public policy::PolicyService::Observer,
   // Gets Chromoting schema stored inside |owned_schema_registry_|.
   const policy::Schema* GetPolicySchema() const;
 
-  // Simplifying wrapper around Schema::Normalize.
+  // Normalizes policies using Schema::Normalize and converts deprecated
+  // policies.
+  //
   // - Returns false if |dict| is invalid (i.e. contains mistyped policy
   // values).
   // - Returns true if |dict| was valid or got normalized.
   bool NormalizePolicies(base::DictionaryValue* dict);
+
+  // Converts each deprecated policy to its replacement if and only if the
+  // replacement policy is not set, and removes deprecated policied from dict.
+  void HandleDeprecatedPolicies(base::DictionaryValue* dict);
 
   // Stores |new_policies| into |old_policies_|.  Returns dictionary with items
   // from |new_policies| that are different from the old |old_policies_|.

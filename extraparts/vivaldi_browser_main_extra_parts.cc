@@ -6,13 +6,15 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/command_line.h"
+#include "calendar/calendar_model_loaded_observer.h"
+#include "calendar/calendar_service_factory.h"
 #include "chrome/browser/net/url_info.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/prefs/pref_service.h"
 #include "components/security_state/core/switches.h"
-#include "components/translate/core/common/translate_switches.h"
+#include "components/translate/core/browser/translate_pref_names.h"
 #include "content/public/common/content_switches.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
@@ -22,6 +24,7 @@
 
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
+#include "extensions/api/calendar/calendar_api.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/history/history_private_api.h"
 #include "extensions/api/import_data/import_data_api.h"
@@ -49,8 +52,8 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
     vivaldi::CommandLineAppendSwitchNoDup(command_line,
                                           switches::kAlwaysAuthorizePlugins);
 
-    vivaldi::CommandLineAppendSwitchNoDup(
-        command_line, translate::switches::kDisableTranslate);
+    //vivaldi::CommandLineAppendSwitchNoDup(
+    //    command_line, translate::switches::kDisableTranslate);
 
     // NOTE(arnar): Can be removed once ResizeObserver is stable.
     // https://www.chromestatus.com/feature/5705346022637568
@@ -66,7 +69,6 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
       command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
                                       "ResizeObserver");
     }
-
   }
 
 #if defined(OS_MACOSX)
@@ -82,6 +84,7 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
 
 void VivaldiBrowserMainExtraParts::
     EnsureBrowserContextKeyedServiceFactoriesBuilt() {
+  extensions::CalendarAPI::GetFactoryInstance();
   extensions::VivaldiBookmarksAPI::GetFactoryInstance();
   extensions::DevtoolsConnectorAPI::GetFactoryInstance();
   extensions::ExtensionActionUtilFactory::GetInstance();
@@ -109,14 +112,22 @@ void VivaldiBrowserMainExtraParts::PreProfileInit() {
 
 void VivaldiBrowserMainExtraParts::PostProfileInit() {
   Profile* profile = ProfileManager::GetActiveUserProfile();
+
   vivaldi::Notes_Model* notes_model =
       vivaldi::NotesModelFactory::GetForProfile(profile);
   notes_model->AddObserver(new vivaldi::NotesModelLoadedObserver(profile));
 
+  calendar::CalendarService* calendar_service =
+      calendar::CalendarServiceFactory::GetForProfile(profile);
+  calendar_service->AddObserver(new calendar::CalendarModelLoadedObserver());
+
   if (!vivaldi::IsVivaldiRunning())
     return;
 
-  if (profile->GetPrefs()->GetBoolean(vivaldiprefs::kSmoothScrollingEnabled) ==
+  PrefService* pref_service = profile->GetPrefs();
+  pref_service->SetBoolean(prefs::kEnableTranslate, false);
+
+  if (pref_service->GetBoolean(vivaldiprefs::kSmoothScrollingEnabled) ==
       false) {
     vivaldi::CommandLineAppendSwitchNoDup(
         base::CommandLine::ForCurrentProcess(),

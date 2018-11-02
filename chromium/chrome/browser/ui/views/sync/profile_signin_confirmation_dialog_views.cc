@@ -10,6 +10,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -48,7 +49,10 @@ ProfileSigninConfirmationDialogViews::ProfileSigninConfirmationDialogViews(
     : browser_(browser),
       username_(username),
       delegate_(std::move(delegate)),
-      prompt_for_new_profile_(true) {}
+      prompt_for_new_profile_(true) {
+  chrome::RecordDialogCreation(
+      chrome::DialogIdentifier::PROFILE_SIGNIN_CONFIRMATION);
+}
 
 ProfileSigninConfirmationDialogViews::~ProfileSigninConfirmationDialogViews() {}
 
@@ -194,12 +198,14 @@ void ProfileSigninConfirmationDialogViews::ViewHierarchyChanged(
       views::StyledLabel::RangeStyleInfo::CreateForLink());
 
   // Layout the components.
-  const gfx::Insets panel_insets =
-      views::LayoutProvider::Get()->GetInsetsMetric(views::INSETS_PANEL);
-  // The prompt bar needs to go to the edge of the dialog, so ignore insets for
-  // the outer layout.
+  const gfx::Insets content_insets =
+      views::LayoutProvider::Get()->GetInsetsMetric(
+          views::INSETS_DIALOG_CONTENTS);
+  // The prompt bar needs to go to the edge of the dialog, so remove horizontal
+  // insets.
+  SetBorder(views::CreateEmptyBorder(content_insets.top(), 0,
+                                     content_insets.bottom(), 0));
   views::GridLayout* dialog_layout = new views::GridLayout(this);
-  dialog_layout->SetInsets(panel_insets.top(), 0, panel_insets.bottom(), 0);
   SetLayoutManager(dialog_layout);
 
   // Use GridLayout inside the prompt bar because StyledLabel requires it.
@@ -220,15 +226,15 @@ void ProfileSigninConfirmationDialogViews::ViewHierarchyChanged(
       views::GridLayout::FILL, views::GridLayout::FILL, 0, 0);
 
   // Use a new column set for the explanation label so we can add padding.
-  dialog_layout->AddPaddingRow(0.0, panel_insets.top());
+  dialog_layout->AddPaddingRow(0.0, content_insets.top());
   constexpr int kExplanationColumnSetId = 1;
   views::ColumnSet* explanation_columns =
       dialog_layout->AddColumnSet(kExplanationColumnSetId);
-  explanation_columns->AddPaddingColumn(0.0, panel_insets.left());
+  explanation_columns->AddPaddingColumn(0.0, content_insets.left());
   explanation_columns->AddColumn(
       views::GridLayout::FILL, views::GridLayout::FILL, 100,
       views::GridLayout::USE_PREF, 0, 0);
-  explanation_columns->AddPaddingColumn(0.0, panel_insets.right());
+  explanation_columns->AddPaddingColumn(0.0, content_insets.right());
   dialog_layout->StartRow(0, kExplanationColumnSetId);
   const int kPreferredWidth = 440;
   dialog_layout->AddView(explanation_label, 1, 1, views::GridLayout::FILL,

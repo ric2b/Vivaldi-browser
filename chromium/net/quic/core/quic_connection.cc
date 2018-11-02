@@ -24,12 +24,12 @@
 #include "net/quic/core/proto/cached_network_parameters.pb.h"
 #include "net/quic/core/quic_bandwidth.h"
 #include "net/quic/core/quic_config.h"
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_packet_generator.h"
 #include "net/quic/core/quic_pending_retransmission.h"
 #include "net/quic/core/quic_utils.h"
 #include "net/quic/platform/api/quic_bug_tracker.h"
 #include "net/quic/platform/api/quic_flag_utils.h"
+#include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_map_util.h"
 #include "net/quic/platform/api/quic_str_cat.h"
@@ -49,7 +49,11 @@ namespace {
 const QuicPacketNumber kMaxPacketGap = 5000;
 
 // Maximum number of acks received before sending an ack in response.
+// TODO(fayang): Remove this constant when deprecating QUIC_VERSION_38.
 const QuicPacketCount kMaxPacketsReceivedBeforeAckSend = 20;
+
+// Maximum number of consecutive sent nonretransmittable packets.
+const QuicPacketCount kMaxConsecutiveNonRetransmittablePackets = 19;
 
 // Maximum number of retransmittable packets received before sending an ack.
 const QuicPacketCount kDefaultRetransmittablePacketsBeforeAck = 2;
@@ -203,6 +207,7 @@ QuicConnection::QuicConnection(QuicConnectionId connection_id,
       idle_timeout_connection_close_behavior_(
           ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET),
       close_connection_after_five_rtos_(false),
+      close_connection_after_three_rtos_(false),
       received_packet_manager_(&stats_),
       ack_queued_(false),
       num_retransmittable_packets_received_since_last_ack_sent_(0),
@@ -240,6 +245,7 @@ QuicConnection::QuicConnection(QuicConnectionId connection_id,
       debug_visitor_(nullptr),
       packet_generator_(connection_id_,
                         &framer_,
+                        random_generator_,
                         helper->GetBufferAllocator(),
                         this),
       idle_network_timeout_(QuicTime::Delta::Infinite()),
@@ -260,7 +266,8 @@ QuicConnection::QuicConnection(QuicConnectionId connection_id,
       goaway_sent_(false),
       goaway_received_(false),
       write_error_occured_(false),
-      no_stop_waiting_frames_(false) {
+      no_stop_waiting_frames_(false),
+      consecutive_num_packets_with_no_retransmittable_frames_(0) {
   QUIC_DLOG(INFO) << ENDPOINT
                   << "Created connection with connection_id: " << connection_id;
   framer_.set_visitor(this);
@@ -345,7 +352,13 @@ void QuicConnection::SetFromConfig(const QuicConfig& config) {
   if (config.HasClientSentConnectionOption(k5RTO, perspective_)) {
     close_connection_after_five_rtos_ = true;
   }
+  if (FLAGS_quic_reloadable_flag_quic_enable_3rtos &&
+      config.HasClientSentConnectionOption(k3RTO, perspective_)) {
+    QUIC_FLAG_COUNT(quic_reloadable_flag_quic_enable_3rtos);
+    close_connection_after_three_rtos_ = true;
+  }
   if (packet_generator_.latched_flag_no_stop_waiting_frames() &&
+      version() > QUIC_VERSION_37 &&
       config.HasClientSentConnectionOption(kNSTP, perspective_)) {
     QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_no_stop_waiting_frames, 2, 2);
     no_stop_waiting_frames_ = true;
@@ -931,8 +944,9 @@ void QuicConnection::MaybeQueueAck(bool was_missing) {
   ++num_packets_received_since_last_ack_sent_;
   // Always send an ack every 20 packets in order to allow the peer to discard
   // information from the SentPacketManager and provide an RTT measurement.
-  if (num_packets_received_since_last_ack_sent_ >=
-      kMaxPacketsReceivedBeforeAckSend) {
+  if (version() <= QUIC_VERSION_38 &&
+      num_packets_received_since_last_ack_sent_ >=
+          kMaxPacketsReceivedBeforeAckSend) {
     ack_queued_ = true;
   }
 
@@ -1056,9 +1070,9 @@ QuicConsumedData QuicConnection::SendStreamData(
     QuicStreamId id,
     QuicIOVector iov,
     QuicStreamOffset offset,
-    bool fin,
+    StreamSendingState state,
     QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
-  if (!fin && iov.total_length == 0) {
+  if (state == NO_FIN && iov.total_length == 0) {
     QUIC_BUG << "Attempt to send empty stream frame";
     return QuicConsumedData(0, false);
   }
@@ -1073,12 +1087,12 @@ QuicConsumedData QuicConnection::SendStreamData(
   // The optimized path may be used for data only packets which fit into a
   // standard buffer and don't need padding.
   if (id != kCryptoStreamId && !packet_generator_.HasQueuedFrames() &&
-      iov.total_length > kMaxPacketSize) {
+      iov.total_length > kMaxPacketSize && state != FIN_AND_PADDING) {
     // Use the fast path to send full data packets.
-    return packet_generator_.ConsumeDataFastPath(id, iov, offset, fin,
-                                                 std::move(ack_listener));
+    return packet_generator_.ConsumeDataFastPath(
+        id, iov, offset, state != NO_FIN, std::move(ack_listener));
   }
-  return packet_generator_.ConsumeData(id, iov, offset, fin,
+  return packet_generator_.ConsumeData(id, iov, offset, state,
                                        std::move(ack_listener));
 }
 
@@ -1115,6 +1129,8 @@ void QuicConnection::SendRstStream(QuicStreamId id,
     ClearSerializedPacket(&(*packet_iterator));
     packet_iterator = queued_packets_.erase(packet_iterator);
   }
+  // TODO(ianswett): Consider checking for 3 RTOs when the last stream is
+  // cancelled as well.
 }
 
 void QuicConnection::SendWindowUpdate(QuicStreamId id,
@@ -1293,17 +1309,6 @@ bool QuicConnection::ProcessValidatedPacket(const QuicPacketHeader& header) {
     QUIC_DLOG(INFO) << ENDPOINT << "Packet " << header.packet_number
                     << " out of bounds.  Discarding";
     CloseConnection(QUIC_INVALID_PACKET_HEADER, "Packet number out of bounds.",
-                    ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
-    return false;
-  }
-
-  // Multipath is not enabled, but a packet with multipath flag on is
-  // received.
-  if (header.public_header.multipath_flag) {
-    const string error_details =
-        "Received a packet with multipath flag but multipath is not enabled.";
-    QUIC_BUG << error_details;
-    CloseConnection(QUIC_BAD_MULTIPATH_FLAG, error_details,
                     ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
     return false;
   }
@@ -1658,6 +1663,17 @@ void QuicConnection::OnSerializedPacket(SerializedPacket* serialized_packet) {
         ConnectionCloseSource::FROM_SELF);
     return;
   }
+
+  if (version() > QUIC_VERSION_38) {
+    if (serialized_packet->retransmittable_frames.empty() &&
+        serialized_packet->original_packet_number == 0) {
+      // Increment consecutive_num_packets_with_no_retransmittable_frames_ if
+      // this packet is a new transmission with no retransmittable frames.
+      ++consecutive_num_packets_with_no_retransmittable_frames_;
+    } else {
+      consecutive_num_packets_with_no_retransmittable_frames_ = 0;
+    }
+  }
   SendOrQueuePacket(serialized_packet);
 }
 
@@ -1747,11 +1763,34 @@ void QuicConnection::SendAck() {
   num_packets_received_since_last_ack_sent_ = 0;
 
   packet_generator_.SetShouldSendAck(!no_stop_waiting_frames_);
+  if (consecutive_num_packets_with_no_retransmittable_frames_ <
+      kMaxConsecutiveNonRetransmittablePackets) {
+    return;
+  }
+  consecutive_num_packets_with_no_retransmittable_frames_ = 0;
+  if (packet_generator_.HasRetransmittableFrames()) {
+    // There is pending retransmittable frames.
+    return;
+  }
+
+  visitor_->OnAckNeedsRetransmittableFrame();
+  if (!packet_generator_.HasRetransmittableFrames()) {
+    // Visitor did not add a retransmittable frame, add a ping frame.
+    packet_generator_.AddControlFrame(QuicFrame(QuicPingFrame()));
+  }
 }
 
 void QuicConnection::OnRetransmissionTimeout() {
   DCHECK(sent_packet_manager_.HasUnackedPackets());
 
+  if (close_connection_after_three_rtos_ &&
+      sent_packet_manager_.GetConsecutiveRtoCount() >= 2 &&
+      !visitor_->HasOpenDynamicStreams()) {
+    // Close on the 3rd consecutive RTO, so after 2 previous RTOs have occurred.
+    CloseConnection(QUIC_TOO_MANY_RTOS, "3 consecutive retransmission timeouts",
+                    ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
+    return;
+  }
   if (close_connection_after_five_rtos_ &&
       sent_packet_manager_.GetConsecutiveRtoCount() >= 4) {
     // Close on the 5th consecutive RTO, so after 4 previous RTOs have occurred.

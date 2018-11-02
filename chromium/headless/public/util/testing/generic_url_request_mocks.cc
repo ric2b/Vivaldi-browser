@@ -4,8 +4,11 @@
 
 #include "headless/public/util/testing/generic_url_request_mocks.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "net/http/http_response_headers.h"
 
 namespace net {
 class URLRequestJob;
@@ -29,7 +32,7 @@ void MockGenericURLRequestJobDelegate::OnPendingRequest(
 }
 
 void MockGenericURLRequestJobDelegate::SetPolicy(Policy policy) {
-  policy_ = policy;
+  policy_ = std::move(policy);
 }
 
 void MockGenericURLRequestJobDelegate::ApplyPolicy(
@@ -48,7 +51,6 @@ void MockGenericURLRequestJobDelegate::OnResourceLoadFailed(
 void MockGenericURLRequestJobDelegate::OnResourceLoadComplete(
     const Request* request,
     const GURL& final_url,
-    int http_response_code,
     scoped_refptr<net::HttpResponseHeaders> response_headers,
     const char* body,
     size_t body_size) {}

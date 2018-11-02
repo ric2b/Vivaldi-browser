@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -16,13 +17,13 @@
 #include "components/cryptauth/device_to_device_authenticator.h"
 #include "components/cryptauth/secure_context.h"
 #include "components/cryptauth/secure_message_delegate.h"
-#include "components/proximity_auth/ble/bluetooth_low_energy_connection.h"
-#include "components/proximity_auth/ble/bluetooth_low_energy_connection_finder.h"
 #include "components/proximity_auth/bluetooth_connection.h"
 #include "components/proximity_auth/bluetooth_connection_finder.h"
+#include "components/proximity_auth/bluetooth_low_energy_connection_finder.h"
 #include "components/proximity_auth/logging/logging.h"
 #include "components/proximity_auth/messenger_impl.h"
 #include "components/proximity_auth/proximity_auth_client.h"
+#include "components/proximity_auth/switches.h"
 
 namespace proximity_auth {
 
@@ -31,9 +32,6 @@ namespace {
 // The UUID of the Smart Lock classic Bluetooth service.
 const char kClassicBluetoothServiceUUID[] =
     "704EE561-3782-405A-A14B-2D47A2DDCDDF";
-
-// The UUID of the Bluetooth Low Energy service.
-const char kBLESmartLockServiceUUID[] = "b3b7e28e-a000-3e17-bd86-6e97b9e28c11";
 
 // The time to wait, in seconds, after authentication fails, before retrying
 // another connection.
@@ -64,6 +62,14 @@ cryptauth::RemoteDevice RemoteDeviceLifeCycleImpl::GetRemoteDevice() const {
   return remote_device_;
 }
 
+cryptauth::Connection* RemoteDeviceLifeCycleImpl::GetConnection() const {
+  if (connection_)
+    return connection_.get();
+  if (messenger_)
+    return messenger_->GetConnection();
+  return nullptr;
+}
+
 RemoteDeviceLifeCycle::State RemoteDeviceLifeCycleImpl::GetState() const {
   return state_;
 }
@@ -82,11 +88,10 @@ void RemoteDeviceLifeCycleImpl::RemoveObserver(Observer* observer) {
 
 std::unique_ptr<cryptauth::ConnectionFinder>
 RemoteDeviceLifeCycleImpl::CreateConnectionFinder() {
-  if (remote_device_.bluetooth_address.empty()) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          proximity_auth::switches::kEnableBluetoothLowEnergyDiscovery)) {
     return base::MakeUnique<BluetoothLowEnergyConnectionFinder>(
-        remote_device_, kBLESmartLockServiceUUID,
-        BluetoothLowEnergyConnectionFinder::FinderStrategy::FIND_PAIRED_DEVICE,
-        nullptr, bluetooth_throttler_, 3);
+        remote_device_, bluetooth_throttler_);
   } else {
     return base::MakeUnique<BluetoothConnectionFinder>(
         remote_device_, device::BluetoothUUID(kClassicBluetoothServiceUUID),
@@ -113,6 +118,13 @@ void RemoteDeviceLifeCycleImpl::TransitionToState(
 
 void RemoteDeviceLifeCycleImpl::FindConnection() {
   connection_finder_ = CreateConnectionFinder();
+  if (!connection_finder_) {
+    // TODO(tengs): We need to introduce a failed state if the RemoteDevice data
+    // is invalid.
+    TransitionToState(RemoteDeviceLifeCycleImpl::State::FINDING_CONNECTION);
+    return;
+  }
+
   connection_finder_->Find(
       base::Bind(&RemoteDeviceLifeCycleImpl::OnConnectionFound,
                  weak_ptr_factory_.GetWeakPtr()));

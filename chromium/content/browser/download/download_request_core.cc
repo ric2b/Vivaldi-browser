@@ -24,6 +24,7 @@
 #include "content/browser/download/download_request_handle.h"
 #include "content/browser/download/download_stats.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
+#include "content/browser/service_manager/service_manager_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_interrupt_reasons.h"
 #include "content/public/browser/download_item.h"
@@ -31,7 +32,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/web_contents.h"
-#include "device/power_save_blocker/power_save_blocker.h"
+#include "device/wake_lock/public/interfaces/wake_lock_provider.mojom.h"
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
@@ -41,6 +42,8 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/url_request/url_request_context.h"
+#include "services/device/public/interfaces/constants.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace content {
 
@@ -62,6 +65,7 @@ class DownloadRequestData : public base::SupportsUserData::Data {
     return std::move(save_info_);
   }
   uint32_t download_id() const { return download_id_; }
+  std::string guid() const { return guid_; }
   bool is_transient() const { return transient_; }
   const DownloadUrlParameters::OnStartedCallback& callback() const {
     return on_started_callback_;
@@ -72,6 +76,7 @@ class DownloadRequestData : public base::SupportsUserData::Data {
 
   std::unique_ptr<DownloadSaveInfo> save_info_;
   uint32_t download_id_ = DownloadItem::kInvalidId;
+  std::string guid_;
   bool transient_ = false;
   DownloadUrlParameters::OnStartedCallback on_started_callback_;
 };
@@ -83,13 +88,14 @@ const int DownloadRequestData::kKey = 0;
 void DownloadRequestData::Attach(net::URLRequest* request,
                                  DownloadUrlParameters* parameters,
                                  uint32_t download_id) {
-  DownloadRequestData* request_data = new DownloadRequestData;
+  auto request_data = base::MakeUnique<DownloadRequestData>();
   request_data->save_info_.reset(
       new DownloadSaveInfo(parameters->GetSaveInfo()));
   request_data->download_id_ = download_id;
+  request_data->guid_ = parameters->guid();
   request_data->transient_ = parameters->is_transient();
   request_data->on_started_callback_ = parameters->callback();
-  request->SetUserData(&kKey, request_data);
+  request->SetUserData(&kKey, std::move(request_data));
 }
 
 // static
@@ -180,7 +186,8 @@ std::unique_ptr<net::URLRequest> DownloadRequestCore::CreateRequestOnIOThread(
 }
 
 DownloadRequestCore::DownloadRequestCore(net::URLRequest* request,
-                                         Delegate* delegate)
+                                         Delegate* delegate,
+                                         bool is_parallel_request)
     : delegate_(delegate),
       request_(request),
       download_id_(DownloadItem::kInvalidId),
@@ -193,16 +200,31 @@ DownloadRequestCore::DownloadRequestCore(net::URLRequest* request,
       abort_reason_(DOWNLOAD_INTERRUPT_REASON_NONE) {
   DCHECK(request_);
   DCHECK(delegate_);
-  RecordDownloadCount(UNTHROTTLED_COUNT);
-  power_save_blocker_.reset(new device::PowerSaveBlocker(
-      device::PowerSaveBlocker::kPowerSaveBlockPreventAppSuspension,
-      device::PowerSaveBlocker::kReasonOther, "Download in progress",
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)));
+  if (!is_parallel_request)
+    RecordDownloadCount(UNTHROTTLED_COUNT);
+
+  // Request Wake Lock.
+  service_manager::Connector* connector =
+      ServiceManagerContext::GetConnectorForIOThread();
+  // |connector| might be nullptr in some testing contexts, in which the
+  // service manager connection isn't initialized.
+  if (connector) {
+    device::mojom::WakeLockProviderPtr wake_lock_provider;
+    connector->BindInterface(device::mojom::kServiceName,
+                             mojo::MakeRequest(&wake_lock_provider));
+    wake_lock_provider->GetWakeLockWithoutContext(
+        device::mojom::WakeLockType::PreventAppSuspension,
+        device::mojom::WakeLockReason::ReasonOther, "Download in progress",
+        mojo::MakeRequest(&wake_lock_));
+
+    wake_lock_->RequestWakeLock();
+  }
+
   DownloadRequestData* request_data = DownloadRequestData::Get(request_);
   if (request_data) {
     save_info_ = request_data->TakeSaveInfo();
     download_id_ = request_data->download_id();
+    guid_ = request_data->guid();
     transient_ = request_data->is_transient();
     on_started_callback_ = request_data->callback();
     DownloadRequestData::Detach(request_);
@@ -228,11 +250,13 @@ DownloadRequestCore::CreateDownloadCreateInfo(DownloadInterruptReason result) {
 
   if (result == DOWNLOAD_INTERRUPT_REASON_NONE)
     create_info->remote_address = request()->GetSocketAddress().host();
+  create_info->method = request()->method();
   create_info->connection_info = request()->response_info().connection_info;
   create_info->url_chain = request()->url_chain();
   create_info->referrer_url = GURL(request()->referrer());
   create_info->result = result;
   create_info->download_id = download_id_;
+  create_info->guid = guid_;
   create_info->transient = transient_;
   create_info->response_headers = request()->response_headers();
   create_info->offset = create_info->save_info->offset;
@@ -329,14 +353,18 @@ bool DownloadRequestCore::OnResponseStarted(
         headers->HasHeaderValue("Accept-Ranges", "bytes");
   }
 
-  // Blink verifies that the requester of this download is allowed to set a
-  // suggested name for the security origin of the download URL. However, this
-  // assumption doesn't hold if there were cross origin redirects. Therefore,
-  // clear the suggested_name for such requests.
-  if (create_info->url_chain.size() > 1 &&
-      create_info->url_chain.front().GetOrigin() !=
-          create_info->url_chain.back().GetOrigin())
+  // GURL::GetOrigin() doesn't support getting the inner origin of a blob URL.
+  // However, requesting a cross origin blob URL would have resulted in a
+  // network error, so we'll just ignore them here. Furthermore, we consider
+  // data: and about: schemes as same origin regardless of the initiator.
+  if (request()->initiator().has_value() &&
+      !create_info->url_chain.back().SchemeIsBlob() &&
+      !create_info->url_chain.back().SchemeIs(url::kAboutScheme) &&
+      !create_info->url_chain.back().SchemeIs(url::kDataScheme) &&
+      request()->initiator()->GetURL() !=
+          create_info->url_chain.back().GetOrigin()) {
     create_info->save_info->suggested_name.clear();
+  }
 
   RecordDownloadContentDisposition(create_info->content_disposition);
   RecordDownloadSourcePageTransitionType(create_info->transition_type);
@@ -413,7 +441,13 @@ void DownloadRequestCore::OnResponseCompleted(
             << " status.error() = " << status.error()
             << " response_code = " << response_code;
 
-  DownloadInterruptReason reason = HandleRequestStatus(status);
+  bool has_strong_validators = false;
+  if (request()->response_headers()) {
+    has_strong_validators =
+        request()->response_headers()->HasStrongValidators();
+  }
+  DownloadInterruptReason reason = HandleRequestStatus(
+      status, has_strong_validators);
 
   if (status.error() == net::ERR_ABORTED) {
     // ERR_ABORTED == something outside of the network
@@ -437,12 +471,9 @@ void DownloadRequestCore::OnResponseCompleted(
   }
 
   std::string accept_ranges;
-  bool has_strong_validators = false;
   if (request()->response_headers()) {
     request()->response_headers()->EnumerateHeader(nullptr, "Accept-Ranges",
                                                    &accept_ranges);
-    has_strong_validators =
-        request()->response_headers()->HasStrongValidators();
   }
   RecordAcceptsRanges(accept_ranges, bytes_read_, has_strong_validators);
   RecordNetworkBlockage(base::TimeTicks::Now() - download_start_time_,
@@ -515,7 +546,7 @@ std::string DownloadRequestCore::DebugString() const {
 
 // static
 DownloadInterruptReason DownloadRequestCore::HandleRequestStatus(
-    const net::URLRequestStatus& status) {
+    const net::URLRequestStatus& status, bool has_strong_validators) {
   net::Error error_code = net::OK;
   if (!status.is_success()) {
     error_code = static_cast<net::Error>(status.error());  // Normal case.
@@ -524,12 +555,23 @@ DownloadInterruptReason DownloadRequestCore::HandleRequestStatus(
       error_code = net::ERR_FAILED;
   }
 
-  // ERR_CONTENT_LENGTH_MISMATCH is allowed since a number of servers in the
-  // wild close the connection too early by mistake. Other browsers - IE9,
-  // Firefox 11.0, and Safari 5.1.4 - treat downloads as complete in both cases,
-  // so we follow their lead.
-  if (error_code == net::ERR_CONTENT_LENGTH_MISMATCH)
+  // ERR_CONTENT_LENGTH_MISMATCH can be caused by 1 of the following reasons:
+  // 1. Server or proxy closes the connection too early.
+  // 2. The content-length header is wrong.
+  // If the download has strong validators, we can interrupt the download
+  // and let it resume automatically. Otherwise, resuming the download will
+  // cause it to restart and the download may never complete if the error was
+  // caused by reason 2. As a result, downloads without strong validators are
+  // treated as completed here.
+  // TODO(qinmin): check the metrics from downloads with strong validators,
+  // and decide whether we should interrupt downloads without strong validators
+  // rather than complete them.
+  if (error_code == net::ERR_CONTENT_LENGTH_MISMATCH &&
+      !has_strong_validators) {
     error_code = net::OK;
+    RecordDownloadCount(COMPLETED_WITH_CONTENT_LENGTH_MISMATCH_COUNT);
+  }
+
   DownloadInterruptReason reason = ConvertNetErrorToInterruptReason(
       error_code, DOWNLOAD_INTERRUPT_FROM_NETWORK);
 

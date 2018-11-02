@@ -31,14 +31,15 @@
 #ifndef WebContextMenuData_h
 #define WebContextMenuData_h
 
-#include "../platform/WebPoint.h"
-#include "../platform/WebReferrerPolicy.h"
-#include "../platform/WebString.h"
-#include "../platform/WebURL.h"
-#include "../platform/WebURLResponse.h"
-#include "../platform/WebVector.h"
+#include "public/platform/WebPoint.h"
+#include "public/platform/WebReferrerPolicy.h"
+#include "public/platform/WebString.h"
+#include "public/platform/WebURL.h"
+#include "public/platform/WebURLResponse.h"
+#include "public/platform/WebVector.h"
 #include "WebHistoryItem.h"
 #include "WebMenuItemInfo.h"
+#include "public/platform/WebRect.h"
 
 #define WEBCONTEXT_MEDIATYPEFILE_DEFINED
 
@@ -180,6 +181,7 @@ struct WebContextMenuData {
     kCanDelete = 0x20,
     kCanSelectAll = 0x40,
     kCanTranslate = 0x80,
+    kCanEditRichly = 0x100,
   };
 
   // Which edit operations are available in the context.
@@ -191,9 +193,12 @@ struct WebContextMenuData {
   // Custom context menu items provided by the WebCore internals.
   WebVector<WebMenuItemInfo> custom_items;
 
+  // Selection in viewport coordinates.
+  WebRect selection_rect;
+
   WebContextMenuData()
       : media_type(kMediaTypeNone),
-        has_image_contents(true),
+        has_image_contents(false),
         media_flags(kMediaNone),
         is_spell_checking_enabled(false),
         is_editable(false),

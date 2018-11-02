@@ -11,7 +11,10 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observer.h"
+#include "components/subresource_filter/content/browser/subresource_filter_observer.h"
 #include "components/subresource_filter/content/browser/verified_ruleset_dealer.h"
+#include "components/subresource_filter/core/common/activation_decision.h"
 #include "components/subresource_filter/core/common/activation_state.h"
 #include "content/public/browser/web_contents_observer.h"
 
@@ -30,6 +33,9 @@ namespace subresource_filter {
 class AsyncDocumentSubresourceFilter;
 class ActivationStateComputingNavigationThrottle;
 class SubframeNavigationFilteringThrottle;
+class SubresourceFilterObserverManager;
+class PageLoadStatistics;
+struct DocumentLoadStatistics;
 
 // The ContentSubresourceFilterThrottleManager manages NavigationThrottles in
 // order to calculate frame activation states and subframe navigation filtering,
@@ -41,7 +47,8 @@ class SubframeNavigationFilteringThrottle;
 // will be notified of the first disallowed subresource load for a top level
 // navgation, and has veto power for frame activation.
 class ContentSubresourceFilterThrottleManager
-    : public content::WebContentsObserver {
+    : public content::WebContentsObserver,
+      public SubresourceFilterObserver {
  public:
   // It is expected that the Delegate outlives |this|, and manages the lifetime
   // of this class.
@@ -50,15 +57,6 @@ class ContentSubresourceFilterThrottleManager
     // The embedder may be interested in displaying UI to the user when the
     // first load is disallowed for a given page load.
     virtual void OnFirstSubresourceLoadDisallowed() {}
-
-    // Let the delegate have the last word when it comes to activation. It might
-    // have a specific whitelist.
-    virtual bool ShouldSuppressActivation(
-        content::NavigationHandle* navigation_handle);
-
-    // Temporary method to help the delegate compute the activation decision.
-    virtual void WillProcessResponse(
-        content::NavigationHandle* navigation_handle) {}
   };
 
   ContentSubresourceFilterThrottleManager(
@@ -66,17 +64,6 @@ class ContentSubresourceFilterThrottleManager
       VerifiedRulesetDealer::Handle* dealer_handle,
       content::WebContents* web_contents);
   ~ContentSubresourceFilterThrottleManager() override;
-
-  // Sets the desired page-level |activation_state| for the currently ongoing
-  // page load, identified by its main-frame |navigation_handle|. To be called
-  // by the embedder at the latest in the WillProcessResponse stage from a
-  // NavigationThrottle that was registered before the throttles created by this
-  // manager in MaybeAppendNavigationThrottles(). If this method is not called
-  // for a main-frame navigation, the default behavior is no activation for that
-  // page load.
-  void NotifyPageActivationComputed(
-      content::NavigationHandle* navigation_handle,
-      const ActivationState& activation_state);
 
   // This method inspects |navigation_handle| and attaches navigation throttles
   // appropriately, based on the current state of frame activation.
@@ -91,6 +78,10 @@ class ContentSubresourceFilterThrottleManager
       content::NavigationHandle* navigation_handle,
       std::vector<std::unique_ptr<content::NavigationThrottle>>* throttles);
 
+  // Returns whether or not the current WebContents is allowed to create a new
+  // window.
+  bool ShouldDisallowNewWindow();
+
   VerifiedRuleset::Handle* ruleset_handle_for_testing() {
     return ruleset_handle_.get();
   }
@@ -102,8 +93,17 @@ class ContentSubresourceFilterThrottleManager
       content::NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
+  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
+                     const GURL& validated_url) override;
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* render_frame_host) override;
+
+  // SubresourceFilterObserver:
+  void OnSubresourceFilterGoingAway() override;
+  void OnPageActivationComputed(
+      content::NavigationHandle* navigation_handle,
+      ActivationDecision activation_decision,
+      const ActivationState& activation_state) override;
 
  private:
   std::unique_ptr<SubframeNavigationFilteringThrottle>
@@ -120,12 +120,12 @@ class ContentSubresourceFilterThrottleManager
 
   // Calls OnFirstSubresourceLoadDisallowed on the Delegate at most once per
   // committed, non-same-page navigation in the main frame.
-  // TODO(csharrison): Ensure IPCs from the renderer go through this path when
-  // they disallow subresource loads.
   void MaybeCallFirstDisallowedLoad();
 
   VerifiedRuleset::Handle* EnsureRulesetHandle();
   void DestroyRulesetHandleIfNoLongerUsed();
+
+  void OnDocumentLoadStatistics(const DocumentLoadStatistics& statistics);
 
   // For each RenderFrameHost where the last committed load has subresource
   // filtering activated, owns the corresponding AsyncDocumentSubresourceFilter.
@@ -140,10 +140,15 @@ class ContentSubresourceFilterThrottleManager
                      ActivationStateComputingNavigationThrottle*>
       ongoing_activation_throttles_;
 
+  ScopedObserver<SubresourceFilterObserverManager, SubresourceFilterObserver>
+      scoped_observer_;
+
   // Lazily instantiated in EnsureRulesetHandle when the first page level
   // activation is triggered. Will go away when there are no more activated
   // RenderFrameHosts (i.e. activated_frame_hosts_ is empty).
   std::unique_ptr<VerifiedRuleset::Handle> ruleset_handle_;
+
+  std::unique_ptr<PageLoadStatistics> statistics_;
 
   // True if the current committed main frame load in this WebContents has
   // notified the delegate that a subresource was disallowed. The callback

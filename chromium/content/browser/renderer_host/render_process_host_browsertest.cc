@@ -12,17 +12,16 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_service.mojom.h"
 #include "content/shell/browser/shell.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/media_switches.h"
 #include "media/base/test_data_util.h"
+#include "media/mojo/features.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -49,8 +48,7 @@ class RenderProcessHostTest : public ContentBrowserTest,
   RenderProcessHostTest() : process_exits_(0), host_destructions_(0) {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(
-        switches::kDisableGestureRequirementForMediaPlayback);
+    command_line->AppendSwitch(switches::kIgnoreAutoplayRestrictionsForTests);
   }
 
  protected:
@@ -269,7 +267,7 @@ class MediaStopObserver : public WebContentsObserver {
 // Note: This test can't run when the Mojo Renderer is used since it does not
 // create audio streams through the normal audio pathways; at present this is
 // only used by Chromecast.
-#if defined(ENABLE_MOJO_RENDERER)
+#if BUILDFLAG(ENABLE_MOJO_RENDERER)
 #define KillProcessZerosAudioStreams DISABLED_KillProcessZerosAudioStreams
 #endif
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KillProcessZerosAudioStreams) {

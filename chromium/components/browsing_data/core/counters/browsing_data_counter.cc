@@ -139,7 +139,9 @@ void BrowsingDataCounter::TransitionToReadyToReportResult() {
 // BrowsingDataCounter::Result -------------------------------------------------
 
 BrowsingDataCounter::Result::Result(const BrowsingDataCounter* source)
-    : source_(source) {}
+    : source_(source) {
+  DCHECK(source);
+}
 
 BrowsingDataCounter::Result::~Result() {}
 
@@ -164,5 +166,14 @@ BrowsingDataCounter::ResultInt BrowsingDataCounter::FinishedResult::Value()
     const {
   return value_;
 }
+
+// BrowsingDataCounter::SyncResult -----------------------------------------
+
+BrowsingDataCounter::SyncResult::SyncResult(const BrowsingDataCounter* source,
+                                            ResultInt value,
+                                            bool sync_enabled)
+    : FinishedResult(source, value), sync_enabled_(sync_enabled) {}
+
+BrowsingDataCounter::SyncResult::~SyncResult() {}
 
 }  // namespace browsing_data

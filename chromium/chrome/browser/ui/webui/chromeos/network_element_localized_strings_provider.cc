@@ -18,10 +18,10 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source) {
   } localized_strings[] = {
       {"OncTypeCellular", IDS_NETWORK_TYPE_CELLULAR},
       {"OncTypeEthernet", IDS_NETWORK_TYPE_ETHERNET},
+      {"OncTypeTether", IDS_NETWORK_TYPE_TETHER},
       {"OncTypeVPN", IDS_NETWORK_TYPE_VPN},
       {"OncTypeWiFi", IDS_NETWORK_TYPE_WIFI},
       {"OncTypeWiMAX", IDS_NETWORK_TYPE_WIMAX},
-      {"networkDisabled", IDS_SETTINGS_DEVICE_OFF},
       {"networkListItemConnected", IDS_STATUSBAR_NETWORK_DEVICE_CONNECTED},
       {"networkListItemConnecting", IDS_STATUSBAR_NETWORK_DEVICE_CONNECTING},
       {"networkListItemConnectingTo", IDS_NETWORK_LIST_CONNECTING_TO},

@@ -15,10 +15,12 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/usb/usb_device_handle.h"
@@ -153,13 +155,10 @@ void SaveStringsAndRunContinuation(
 
 void OnReadBosDescriptor(scoped_refptr<UsbDeviceHandle> device_handle,
                          const base::Closure& barrier,
-                         std::unique_ptr<WebUsbAllowedOrigins> allowed_origins,
                          const GURL& landing_page) {
   scoped_refptr<UsbDeviceImpl> device =
       static_cast<UsbDeviceImpl*>(device_handle->GetDevice().get());
 
-  if (allowed_origins)
-    device->set_webusb_allowed_origins(std::move(allowed_origins));
   if (landing_page.is_valid())
     device->set_webusb_landing_page(landing_page);
 
@@ -216,15 +215,14 @@ void OnDeviceOpenedReadDescriptors(
 
 }  // namespace
 
-UsbServiceImpl::UsbServiceImpl(
-    scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_in)
-    : UsbService(std::move(blocking_task_runner_in)),
+UsbServiceImpl::UsbServiceImpl()
+    : UsbService(nullptr),
 #if defined(OS_WIN)
       device_observer_(this),
 #endif
       weak_factory_(this) {
-  blocking_task_runner()->PostTask(
-      FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, kBlockingTaskTraits,
       base::Bind(&InitializeUsbContextOnBlockingThread, task_runner(),
                  base::Bind(&UsbServiceImpl::OnUsbContext,
                             weak_factory_.GetWeakPtr())));
@@ -324,11 +322,11 @@ void UsbServiceImpl::RefreshDevices() {
     pending_path_enumerations_.pop();
   }
 
-  blocking_task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(&GetDeviceListOnBlockingThread, device_path, context_,
-                 task_runner(), base::Bind(&UsbServiceImpl::OnDeviceList,
-                                           weak_factory_.GetWeakPtr())));
+  base::PostTaskWithTraits(FROM_HERE, kBlockingTaskTraits,
+                           base::Bind(&GetDeviceListOnBlockingThread,
+                                      device_path, context_, task_runner(),
+                                      base::Bind(&UsbServiceImpl::OnDeviceList,
+                                                 weak_factory_.GetWeakPtr())));
 }
 
 void UsbServiceImpl::OnDeviceList(libusb_device** platform_devices,
@@ -437,8 +435,8 @@ void UsbServiceImpl::EnumerateDevice(PlatformUsbDevice platform_device,
       return;
     }
 
-    scoped_refptr<UsbDeviceImpl> device(new UsbDeviceImpl(
-        context_, platform_device, descriptor, blocking_task_runner()));
+    scoped_refptr<UsbDeviceImpl> device(
+        new UsbDeviceImpl(context_, platform_device, descriptor));
     base::Closure add_device =
         base::Bind(&UsbServiceImpl::AddDevice, weak_factory_.GetWeakPtr(),
                    refresh_complete, device);

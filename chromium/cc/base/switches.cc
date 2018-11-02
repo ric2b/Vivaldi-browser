@@ -43,10 +43,6 @@ const char kSlowDownRasterScaleFactor[] = "slow-down-raster-scale-factor";
 // Compress tile textures for GPUs supporting it.
 const char kEnableTileCompression[] = "enable-tile-compression";
 
-// Convert rasterization and compositing inputs to the output color space
-// before operating on them.
-const char kEnableColorCorrectRendering[] = "enable-color-correct-rendering";
-
 // Enables the GPU benchmarking extension
 const char kEnableGpuBenchmarking[] = "enable-gpu-benchmarking";
 
@@ -58,7 +54,7 @@ const char kEnableSurfaceSynchronization[] = "enable-surface-synchronization";
 // Renders a border around compositor layers to help debug and study
 // layer compositing.
 const char kShowCompositedLayerBorders[] = "show-composited-layer-borders";
-const char kUIShowCompositedLayerBorders[] = "ui-show-layer-borders";
+const char kUIShowCompositedLayerBorders[] = "ui-show-composited-layer-borders";
 const char kCompositedRenderPassBorders[] = "renderpass";
 const char kCompositedSurfaceBorders[] = "surface";
 const char kCompositedLayerBorders[] = "layer";
@@ -116,6 +112,11 @@ const char kCCLayerTreeTestLongTimeout[] = "cc-layer-tree-test-long-timeout";
 
 // Makes pixel tests write their output instead of read it.
 const char kCCRebaselinePixeltests[] = "cc-rebaseline-pixeltests";
+
+// Disable re-use of non-exact resources to fulfill ResourcePool requests.
+// Intended only for use in layout or pixel tests to reduce noise.
+const char kDisallowNonExactResourceReuse[] =
+    "disallow-non-exact-resource-reuse";
 
 }  // namespace switches
 }  // namespace cc

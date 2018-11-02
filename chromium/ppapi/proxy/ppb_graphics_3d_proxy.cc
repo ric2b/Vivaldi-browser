@@ -96,8 +96,10 @@ gpu::CommandBuffer::State Graphics3D::WaitForTokenInRange(int32_t start,
   return GetErrorState();
 }
 
-gpu::CommandBuffer::State Graphics3D::WaitForGetOffsetInRange(int32_t start,
-                                                              int32_t end) {
+gpu::CommandBuffer::State Graphics3D::WaitForGetOffsetInRange(
+    uint32_t set_get_buffer_count,
+    int32_t start,
+    int32_t end) {
   return GetErrorState();
 }
 
@@ -272,7 +274,7 @@ void PPB_Graphics3D_Proxy::OnMsgCreate(
   if (!enter.succeeded())
     return;
 
-  base::SharedMemoryHandle handle = base::SharedMemory::NULLHandle();
+  base::SharedMemoryHandle handle;
   result->SetHostResource(
       instance, enter.functions()->CreateGraphics3DRaw(
                     instance, share_context.host_resource(), attrib_helper,
@@ -307,6 +309,7 @@ void PPB_Graphics3D_Proxy::OnMsgWaitForTokenInRange(
 
 void PPB_Graphics3D_Proxy::OnMsgWaitForGetOffsetInRange(
     const HostResource& context,
+    uint32_t set_get_buffer_count,
     int32_t start,
     int32_t end,
     gpu::CommandBuffer::State* state,
@@ -316,7 +319,8 @@ void PPB_Graphics3D_Proxy::OnMsgWaitForGetOffsetInRange(
     *success = false;
     return;
   }
-  *state = enter.object()->WaitForGetOffsetInRange(start, end);
+  *state =
+      enter.object()->WaitForGetOffsetInRange(set_get_buffer_count, start, end);
   *success = true;
 }
 

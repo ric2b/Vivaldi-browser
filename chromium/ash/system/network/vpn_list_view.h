@@ -8,9 +8,8 @@
 #include <map>
 #include <string>
 
-#include "ash/system/network/network_list_view_base.h"
+#include "ash/system/network/network_state_list_detailed_view.h"
 #include "ash/system/network/vpn_list.h"
-#include "ash/system/tray/view_click_listener.h"
 #include "base/macros.h"
 #include "chromeos/network/network_state_handler.h"
 
@@ -18,15 +17,12 @@ namespace chromeos {
 class NetworkState;
 }
 
-namespace ash {
-class NetworkListDelegate;
-}
-
 namespace views {
 class View;
 }
 
 namespace ash {
+namespace tray {
 
 // A list of VPN providers and networks that shows VPN providers and networks in
 // a hierarchical layout, allowing the user to see at a glance which provider a
@@ -41,22 +37,18 @@ namespace ash {
 // attempt. Clicking on the currently connected or connecting network shows its
 // configuration dialog. Clicking on a provider shows the provider's "add
 // network" dialog.
-class VPNListView : public NetworkListViewBase,
-                    public VpnList::Observer,
-                    public ViewClickListener {
+class VPNListView : public NetworkStateListDetailedView,
+                    public VpnList::Observer {
  public:
-  explicit VPNListView(NetworkListDelegate* delegate);
+  VPNListView(SystemTrayItem* owner, LoginStatus login);
   ~VPNListView() override;
 
-  // NetworkListViewBase:
-  void Update() override;
+  // NetworkStateListDetailedView:
+  void UpdateNetworkList() override;
   bool IsNetworkEntry(views::View* view, std::string* guid) const override;
 
   // VpnList::Observer:
   void OnVPNProvidersChanged() override;
-
-  // ViewClickListener:
-  void OnViewClicked(views::View* sender) override;
 
  private:
   // Adds a network to the list.
@@ -72,8 +64,6 @@ class VPNListView : public NetworkListViewBase,
   void AddProvidersAndNetworks(
       const chromeos::NetworkStateHandler::NetworkStateList& networks);
 
-  NetworkListDelegate* const delegate_;
-
   // A mapping from each VPN provider's list entry to the provider.
   std::map<const views::View* const, VPNProvider> provider_view_map_;
 
@@ -87,6 +77,7 @@ class VPNListView : public NetworkListViewBase,
   DISALLOW_COPY_AND_ASSIGN(VPNListView);
 };
 
+}  // namespace tray
 }  // namespace ash
 
 #endif  // ASH_SYSTEM_NETWORK_VPN_LIST_VIEW_H_

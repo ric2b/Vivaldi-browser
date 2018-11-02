@@ -6,11 +6,13 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/page_load_metrics/metrics_web_contents_observer.h"
 #if defined(OS_ANDROID)
 #include "chrome/browser/page_load_metrics/observers/android_page_load_metrics_observer.h"
 #endif  // OS_ANDROID
 #include "chrome/browser/page_load_metrics/observers/aborts_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/ads_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/amp_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/core_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/css_scanning_page_load_metrics_observer.h"
@@ -20,6 +22,7 @@
 #include "chrome/browser/page_load_metrics/observers/from_gws_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/google_captcha_observer.h"
 #include "chrome/browser/page_load_metrics/observers/https_engagement_metrics/https_engagement_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/lofi_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/media_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/no_state_prefetch_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/omnibox_suggestion_used_page_load_metrics_observer.h"
@@ -53,6 +56,7 @@ class PageLoadMetricsEmbedder
   // page_load_metrics::PageLoadMetricsEmbedderInterface:
   bool IsNewTabPageUrl(const GURL& url) override;
   void RegisterObservers(page_load_metrics::PageLoadTracker* tracker) override;
+  std::unique_ptr<base::Timer> CreateTimer() override;
 
  private:
   bool IsPrerendering() const;
@@ -77,6 +81,8 @@ void PageLoadMetricsEmbedder::RegisterObservers(
     tracker->AddObserver(
         base::MakeUnique<
             data_reduction_proxy::DataReductionProxyMetricsObserver>());
+    tracker->AddObserver(
+        base::MakeUnique<data_reduction_proxy::LoFiPageLoadMetricsObserver>());
     tracker->AddObserver(base::MakeUnique<FromGWSPageLoadMetricsObserver>());
     tracker->AddObserver(
         base::MakeUnique<google_captcha_observer::GoogleCaptchaObserver>());
@@ -94,6 +100,10 @@ void PageLoadMetricsEmbedder::RegisterObservers(
     tracker->AddObserver(base::MakeUnique<CssScanningMetricsObserver>());
     tracker->AddObserver(base::MakeUnique<ProtocolPageLoadMetricsObserver>());
     tracker->AddObserver(base::MakeUnique<TabRestorePageLoadMetricsObserver>());
+    std::unique_ptr<AdsPageLoadMetricsObserver> ads_observer =
+        AdsPageLoadMetricsObserver::CreateIfNeeded();
+    if (ads_observer)
+      tracker->AddObserver(std::move(ads_observer));
 
     std::unique_ptr<page_load_metrics::PageLoadMetricsObserver> ukm_observer =
         UkmPageLoadMetricsObserver::CreateIfNeeded(web_contents_);
@@ -134,6 +144,10 @@ bool PageLoadMetricsEmbedder::IsPrerendering() const {
          nullptr;
 }
 
+std::unique_ptr<base::Timer> PageLoadMetricsEmbedder::CreateTimer() {
+  return base::MakeUnique<base::OneShotTimer>();
+}
+
 bool PageLoadMetricsEmbedder::IsNewTabPageUrl(const GURL& url) {
   Profile* profile =
       Profile::FromBrowserContext(web_contents_->GetBrowserContext());
@@ -145,9 +159,11 @@ bool PageLoadMetricsEmbedder::IsNewTabPageUrl(const GURL& url) {
 }  // namespace
 
 void InitializePageLoadMetricsForWebContents(
-    content::WebContents* web_contents) {
+    content::WebContents* web_contents,
+    const base::Optional<content::WebContents::CreateParams>& create_params) {
   page_load_metrics::MetricsWebContentsObserver::CreateForWebContents(
-      web_contents, base::MakeUnique<PageLoadMetricsEmbedder>(web_contents));
+      web_contents, create_params,
+      base::MakeUnique<PageLoadMetricsEmbedder>(web_contents));
 }
 
 }  // namespace chrome

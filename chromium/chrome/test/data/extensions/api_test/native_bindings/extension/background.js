@@ -143,11 +143,13 @@ var tests = [
     chrome.test.assertTrue(!!chrome.storage.managed, 'managed');
     chrome.test.assertFalse(!!chrome.storage.managed.QUOTA_BYTES,
                             'managed quota bytes');
-    chrome.storage.local.set({foo: 'bar'}, () => {
-      chrome.storage.local.get('foo', (results) => {
+    chrome.storage.local.set({foo: 'bar', nullkey: null}, () => {
+      chrome.storage.local.get(['foo', 'nullkey'], (results) => {
         chrome.test.assertTrue(!!results, 'no results');
         chrome.test.assertTrue(!!results.foo, 'no foo');
         chrome.test.assertEq('bar', results.foo);
+        chrome.test.assertTrue('nullkey' in results);
+        chrome.test.assertEq(null, results.nullkey);
         chrome.test.succeed();
       });
     });
@@ -192,7 +194,7 @@ var tests = [
       cookiePolicy.get({}, (details) => {
         chrome.test.assertTrue(!!details, 'get details');
         chrome.test.assertTrue(details.value, 'details value true');
-        cookiePolicy.set({value: false}, () => {
+        cookiePolicy.set({value: false, scope: 'regular'}, () => {
           cookiePolicy.get({}, (details) => {
             chrome.test.assertTrue(!!details, 'get details');
             chrome.test.assertFalse(details.value, 'details value false');
@@ -253,6 +255,74 @@ var tests = [
     chrome.tabs.create({url: url2});
 
     Promise.all([unfiltered, filtered]).then(() => { chrome.test.succeed(); });
+  },
+  function testContentSettings() {
+    chrome.test.assertTrue(!!chrome.contentSettings);
+    chrome.test.assertTrue(!!chrome.contentSettings.javascript);
+    var jsPolicy = chrome.contentSettings.javascript;
+    chrome.test.assertTrue(!!jsPolicy.get);
+    chrome.test.assertTrue(!!jsPolicy.set);
+    chrome.test.assertTrue(!!jsPolicy.clear);
+    chrome.test.assertTrue(!!jsPolicy.getResourceIdentifiers);
+
+    // Like ChromeSettings above, the JSON spec for ContentSettings claims it
+    // allows any type for <val> in ChromeSetting.set({value: <val>}), but this
+    // is just a hack in our schema generation because we curry in the different
+    // types of restrictions. Trying to pass in the wrong type for value should
+    // fail (synchronously).
+    var caught = false;
+    var url = 'http://example.com/path';
+    var pattern = 'http://example.com/*';
+    try {
+      jsPolicy.set({primaryPattern: pattern, value: 'invalid'});
+    } catch (e) {
+      caught = true;
+    }
+    chrome.test.assertTrue(caught);
+
+    var normalSettingTest = new Promise(function(resolve, reject) {
+      jsPolicy.get({primaryUrl: url}, (details) => {
+        chrome.test.assertTrue(!!details);
+        chrome.test.assertEq('allow', details.setting);
+        jsPolicy.set({primaryPattern: pattern, setting: 'block'}, () => {
+          jsPolicy.get({primaryUrl: url}, (details) => {
+            chrome.test.assertTrue(!!details);
+            chrome.test.assertEq('block', details.setting);
+            resolve();
+          });
+        });
+      });
+    });
+
+    // The fullscreen setting is deprecated.
+    var fullscreen = chrome.contentSettings.fullscreen;
+    caught = false;
+    try {
+      // Trying to set the fullscreen setting to anything but 'allow' should
+      // fail.
+      fullscreen.set({primaryPattern: pattern, setting: 'block'});
+    } catch (e) {
+      caught = true;
+    }
+    chrome.test.assertTrue(caught);
+
+    var deprecatedSettingTest = new Promise(function(resolve, reject) {
+      fullscreen.get({primaryUrl: url}, (details) => {
+        chrome.test.assertTrue(!!details);
+        chrome.test.assertEq('allow', details.setting);
+        fullscreen.set({primaryPattern: pattern, setting: 'allow'}, () => {
+          fullscreen.get({primaryUrl: url}, (details) => {
+            chrome.test.assertTrue(!!details);
+            chrome.test.assertEq('allow', details.setting);
+            resolve();
+          });
+        });
+      });
+    });
+
+    Promise.all([normalSettingTest, deprecatedSettingTest]).then(() => {
+      chrome.test.succeed();
+    });
   },
 ];
 

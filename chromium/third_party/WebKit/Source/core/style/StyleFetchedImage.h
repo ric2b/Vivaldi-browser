@@ -52,7 +52,7 @@ class StyleFetchedImage final : public StyleImage,
   bool CanRender() const override;
   bool IsLoaded() const override;
   bool ErrorOccurred() const override;
-  LayoutSize ImageSize(const LayoutObject&,
+  LayoutSize ImageSize(const Document&,
                        float multiplier,
                        const LayoutSize& default_object_size) const override;
   bool ImageHasRelativeSize() const override;
@@ -62,9 +62,8 @@ class StyleFetchedImage final : public StyleImage,
   void ImageNotifyFinished(ImageResourceContent*) override;
   String DebugName() const override { return "StyleFetchedImage"; }
   PassRefPtr<Image> GetImage(const LayoutObject&,
-                             const IntSize&,
-                             float zoom) const override;
-  bool KnownToBeOpaque(const LayoutObject&) const override;
+                             const IntSize&) const override;
+  bool KnownToBeOpaque(const Document&, const ComputedStyle&) const override;
   ImageResourceContent* CachedImage() const override;
 
   DECLARE_VIRTUAL_TRACE();

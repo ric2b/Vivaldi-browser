@@ -31,12 +31,12 @@ class CSSPaintValue : public CSSImageGeneratorValue {
 
   String GetName() const;
 
-  PassRefPtr<Image> GetImage(const LayoutObject&, const IntSize&, float zoom);
+  PassRefPtr<Image> GetImage(const LayoutObject&, const IntSize&);
   bool IsFixedSize() const { return false; }
-  IntSize FixedSize(const LayoutObject&) { return IntSize(); }
+  IntSize FixedSize(const Document&) { return IntSize(); }
 
   bool IsPending() const { return true; }
-  bool KnownToBeOpaque(const LayoutObject&) const;
+  bool KnownToBeOpaque(const Document&, const ComputedStyle&) const;
 
   void LoadSubimages(const Document&) {}
 

@@ -107,9 +107,6 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerClient {
   // Returns whether the media element is in an autoplay muted state.
   virtual bool IsAutoplayingMuted() = 0;
 
-  // Warning: This method will destruct the caller.
-  virtual void RequestReload(const WebURL& new_url) = 0;
-
   // Returns if there's a selected video track.
   virtual bool HasSelectedVideoTrack() = 0;
 
@@ -119,6 +116,10 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerClient {
   // Informs that media starts/stops being rendered and played back remotely.
   virtual void MediaRemotingStarted() {}
   virtual void MediaRemotingStopped() {}
+
+  // Returns whether the media element has native controls. It does not mean
+  // that the controls are currently visible.
+  virtual bool HasNativeControls() = 0;
 
  protected:
   ~WebMediaPlayerClient() {}

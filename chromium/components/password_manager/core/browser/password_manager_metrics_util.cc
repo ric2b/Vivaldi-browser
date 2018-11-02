@@ -132,14 +132,18 @@ void LogAccountChooserUsability(AccountChooserUsabilityMetric usability,
 }
 
 void LogCredentialManagerGetResult(CredentialManagerGetResult result,
-                                   CredentialManagerGetMediation status) {
-  switch (status) {
-    case CREDENTIAL_MANAGER_GET_UNMEDIATED:
-      UMA_HISTOGRAM_ENUMERATION("PasswordManager.GetUnmediated", result,
+                                   CredentialMediationRequirement mediation) {
+  switch (mediation) {
+    case CredentialMediationRequirement::kSilent:
+      UMA_HISTOGRAM_ENUMERATION("PasswordManager.MediationSilent", result,
                                 CREDENTIAL_MANAGER_GET_COUNT);
       break;
-    case CREDENTIAL_MANAGER_GET_MEDIATED:
-      UMA_HISTOGRAM_ENUMERATION("PasswordManager.GetMediated", result,
+    case CredentialMediationRequirement::kOptional:
+      UMA_HISTOGRAM_ENUMERATION("PasswordManager.MediationOptional", result,
+                                CREDENTIAL_MANAGER_GET_COUNT);
+      break;
+    case CredentialMediationRequirement::kRequired:
+      UMA_HISTOGRAM_ENUMERATION("PasswordManager.MediationRequired", result,
                                 CREDENTIAL_MANAGER_GET_COUNT);
       break;
   }
@@ -172,6 +176,27 @@ void LogShowedFormNotSecureWarningOnCurrentNavigation() {
   // shown per million page loads.
   UMA_HISTOGRAM_BOOLEAN(
       "PasswordManager.ShowedFormNotSecureWarningOnCurrentNavigation", true);
+}
+
+void LogPasswordSuccessfulSubmissionIndicatorEvent(
+    autofill::PasswordForm::SubmissionIndicatorEvent event) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "PasswordManager.SuccessfulSubmissionIndicatorEvent", event,
+      autofill::PasswordForm::SubmissionIndicatorEvent::
+          SUBMISSION_INDICATOR_EVENT_COUNT);
+}
+
+void LogPasswordAcceptedSaveUpdateSubmissionIndicatorEvent(
+    autofill::PasswordForm::SubmissionIndicatorEvent event) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "PasswordManager.AcceptedSaveUpdateSubmissionIndicatorEvent", event,
+      autofill::PasswordForm::SubmissionIndicatorEvent::
+          SUBMISSION_INDICATOR_EVENT_COUNT);
+}
+
+void LogSubmittedFormFrame(SubmittedFormFrame frame) {
+  UMA_HISTOGRAM_ENUMERATION("PasswordManager.SubmittedFormFrame", frame,
+                            SubmittedFormFrame::SUBMITTED_FORM_FRAME_COUNT);
 }
 
 }  // namespace metrics_util

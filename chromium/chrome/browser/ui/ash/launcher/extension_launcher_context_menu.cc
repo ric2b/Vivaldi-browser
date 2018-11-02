@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/ash/launcher/extension_launcher_context_menu.h"
 
-#include "ash/shell.h"
 #include "base/bind.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -12,7 +11,7 @@
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/launcher/browser_shortcut_launcher_item_controller.h"
-#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_impl.h"
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -30,10 +29,10 @@ bool MenuItemHasLauncherContext(const extensions::MenuItem* item) {
 }  // namespace
 
 ExtensionLauncherContextMenu::ExtensionLauncherContextMenu(
-    ChromeLauncherControllerImpl* controller,
+    ChromeLauncherController* controller,
     const ash::ShelfItem* item,
-    ash::WmShelf* wm_shelf)
-    : LauncherContextMenu(controller, item, wm_shelf) {
+    ash::Shelf* shelf)
+    : LauncherContextMenu(controller, item, shelf) {
   Init();
 }
 
@@ -83,7 +82,7 @@ void ExtensionLauncherContextMenu::Init() {
       AddItemWithStringId(MENU_NEW_INCOGNITO_WINDOW,
                           IDS_APP_LIST_NEW_INCOGNITO_WINDOW);
     }
-    if (!BrowserShortcutLauncherItemController(ash::Shell::Get()->shelf_model())
+    if (!BrowserShortcutLauncherItemController(controller()->shelf_model())
              .IsListOfActiveBrowserEmpty()) {
       AddItem(MENU_CLOSE,
               l10n_util::GetStringUTF16(IDS_LAUNCHER_CONTEXT_MENU_CLOSE));
@@ -95,8 +94,7 @@ void ExtensionLauncherContextMenu::Init() {
   }
   AddSeparator(ui::NORMAL_SEPARATOR);
   if (item().type == ash::TYPE_PINNED_APP || item().type == ash::TYPE_APP) {
-    const extensions::MenuItem::ExtensionKey app_key(
-        controller()->GetAppIDForShelfID(item().id));
+    const extensions::MenuItem::ExtensionKey app_key(item().id.app_id);
     if (!app_key.empty()) {
       int index = 0;
       extension_items_->AppendExtensionItems(app_key, base::string16(), &index,
@@ -212,8 +210,8 @@ void ExtensionLauncherContextMenu::ExecuteCommand(int command_id,
 }
 
 extensions::LaunchType ExtensionLauncherContextMenu::GetLaunchType() const {
-  const extensions::Extension* extension = GetExtensionForAppID(
-      item().app_launch_id.app_id(), controller()->profile());
+  const extensions::Extension* extension =
+      GetExtensionForAppID(item().id.app_id, controller()->profile());
 
   // An extension can be unloaded/updated/unavailable at any time.
   if (!extension)
@@ -224,6 +222,5 @@ extensions::LaunchType ExtensionLauncherContextMenu::GetLaunchType() const {
 }
 
 void ExtensionLauncherContextMenu::SetLaunchType(extensions::LaunchType type) {
-  extensions::SetLaunchType(controller()->profile(),
-                            item().app_launch_id.app_id(), type);
+  extensions::SetLaunchType(controller()->profile(), item().id.app_id, type);
 }

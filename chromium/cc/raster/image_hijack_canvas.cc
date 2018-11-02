@@ -22,13 +22,15 @@ SkIRect RoundOutRect(const SkRect& rect) {
 class ScopedDecodedImageLock {
  public:
   ScopedDecodedImageLock(ImageDecodeCache* image_decode_cache,
-                         sk_sp<const SkImage> image,
+                         sk_sp<SkImage> image,
                          const SkRect& src_rect,
                          const SkMatrix& matrix,
                          const SkPaint* paint,
                          const gfx::ColorSpace& target_color_space)
       : image_decode_cache_(image_decode_cache),
-        draw_image_(std::move(image),
+        // TODO(khushalsagar): Using the wrong id should not be necessary once
+        // the hijack canvas is eliminated.
+        draw_image_(PaintImage(PaintImage::kUnknownStableId, std::move(image)),
                     RoundOutRect(src_rect),
                     paint ? paint->getFilterQuality() : kNone_SkFilterQuality,
                     matrix,
@@ -133,7 +135,7 @@ const SkImage* GetImageInPaint(const SkPaint& paint) {
 ImageHijackCanvas::ImageHijackCanvas(int width,
                                      int height,
                                      ImageDecodeCache* image_decode_cache,
-                                     const ImageIdFlatSet* images_to_skip,
+                                     const SkImageIdFlatSet* images_to_skip,
                                      const gfx::ColorSpace& target_color_space)
     : SkNWayCanvas(width, height),
       image_decode_cache_(image_decode_cache),
@@ -156,6 +158,11 @@ void ImageHijackCanvas::onDrawImage(const SkImage* image,
                                     const SkPaint* paint) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "ImageHijackCanvas::onDrawImage");
+  SkRect rect = SkRect::MakeXYWH(x, y, SkIntToScalar(image->width()),
+                                 SkIntToScalar(image->height()));
+  if (QuickRejectDraw(rect, paint))
+    return;
+
   if (!image->isLazyGenerated()) {
     DCHECK(!ShouldSkipImage(image));
     SkNWayCanvas::onDrawImage(image, x, y, paint);
@@ -168,7 +175,7 @@ void ImageHijackCanvas::onDrawImage(const SkImage* image,
   SkMatrix ctm = getTotalMatrix();
 
   ScopedDecodedImageLock scoped_lock(
-      image_decode_cache_, sk_ref_sp(image),
+      image_decode_cache_, sk_ref_sp(const_cast<SkImage*>(image)),
       SkRect::MakeIWH(image->width(), image->height()), ctm, paint,
       target_color_space_);
   const DecodedDrawImage& decoded_image = scoped_lock.decoded_image();
@@ -197,6 +204,9 @@ void ImageHijackCanvas::onDrawImageRect(const SkImage* image,
                                         SrcRectConstraint constraint) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "ImageHijackCanvas::onDrawImageRect");
+  if (QuickRejectDraw(dst, paint))
+    return;
+
   if (!image->isLazyGenerated()) {
     DCHECK(!ShouldSkipImage(image));
     SkNWayCanvas::onDrawImageRect(image, src, dst, paint, constraint);
@@ -215,7 +225,8 @@ void ImageHijackCanvas::onDrawImageRect(const SkImage* image,
   matrix.setRectToRect(*src, dst, SkMatrix::kFill_ScaleToFit);
   matrix.postConcat(getTotalMatrix());
 
-  ScopedDecodedImageLock scoped_lock(image_decode_cache_, sk_ref_sp(image),
+  ScopedDecodedImageLock scoped_lock(image_decode_cache_,
+                                     sk_ref_sp(const_cast<SkImage*>(image)),
                                      *src, matrix, paint, target_color_space_);
   const DecodedDrawImage& decoded_image = scoped_lock.decoded_image();
   if (!decoded_image.image())
@@ -240,6 +251,9 @@ void ImageHijackCanvas::onDrawImageRect(const SkImage* image,
 void ImageHijackCanvas::onDrawRect(const SkRect& r, const SkPaint& paint) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "ImageHijackCanvas::onDrawRect");
+  if (QuickRejectDraw(r, &paint))
+    return;
+
   if (ShouldSkipImageInPaint(paint))
     return;
 
@@ -255,6 +269,9 @@ void ImageHijackCanvas::onDrawRect(const SkRect& r, const SkPaint& paint) {
 void ImageHijackCanvas::onDrawPath(const SkPath& path, const SkPaint& paint) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "ImageHijackCanvas::onDrawPath");
+  if (QuickRejectDraw(path.getBounds(), &paint))
+    return;
+
   if (ShouldSkipImageInPaint(paint))
     return;
 
@@ -270,6 +287,9 @@ void ImageHijackCanvas::onDrawPath(const SkPath& path, const SkPaint& paint) {
 void ImageHijackCanvas::onDrawOval(const SkRect& r, const SkPaint& paint) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "ImageHijackCanvas::onDrawOval");
+  if (QuickRejectDraw(r, &paint))
+    return;
+
   if (ShouldSkipImageInPaint(paint))
     return;
 
@@ -289,6 +309,9 @@ void ImageHijackCanvas::onDrawArc(const SkRect& r,
                                   const SkPaint& paint) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "ImageHijackCanvas::onDrawArc");
+  if (QuickRejectDraw(r, &paint))
+    return;
+
   if (ShouldSkipImageInPaint(paint))
     return;
 
@@ -305,6 +328,9 @@ void ImageHijackCanvas::onDrawArc(const SkRect& r,
 void ImageHijackCanvas::onDrawRRect(const SkRRect& rr, const SkPaint& paint) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "ImageHijackCanvas::onDrawRRect");
+  if (QuickRejectDraw(rr.rect(), &paint))
+    return;
+
   if (ShouldSkipImageInPaint(paint))
     return;
 
@@ -337,6 +363,18 @@ bool ImageHijackCanvas::ShouldSkipImage(const SkImage* image) const {
 bool ImageHijackCanvas::ShouldSkipImageInPaint(const SkPaint& paint) const {
   const SkImage* image = GetImageInPaint(paint);
   return image ? ShouldSkipImage(image) : false;
+}
+
+bool ImageHijackCanvas::QuickRejectDraw(const SkRect& rect,
+                                        const SkPaint* paint) const {
+  if (nullptr == paint || paint->canComputeFastBounds()) {
+    SkRect tmp = rect;
+    if (paint)
+      paint->computeFastBounds(tmp, &tmp);
+    return quickReject(tmp);
+  }
+
+  return false;
 }
 
 }  // namespace cc

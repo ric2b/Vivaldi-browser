@@ -72,7 +72,7 @@ LabelableElement* HTMLLabelElement::control() const {
   if (!IsInTreeScope())
     return nullptr;
 
-  if (Element* element = GetTreeScope().GetElementById(control_id)) {
+  if (Element* element = GetTreeScope().getElementById(control_id)) {
     if (IsLabelableElement(*element) &&
         ToLabelableElement(*element).SupportLabels()) {
       if (!element->IsFormControlElement())
@@ -173,7 +173,8 @@ void HTMLLabelElement::DefaultEventHandler(Event* evt) {
                 .IsRange() &&
             !frame->GetEventHandler()
                  .GetSelectionController()
-                 .MouseDownWasSingleClickInSelection())
+                 .MouseDownWasSingleClickInSelection() &&
+            evt->target()->ToNode()->CanStartSelection())
           is_label_text_selected = true;
         // If selection is there and is single click i.e. text is
         // selected by dragging over label text, then return.

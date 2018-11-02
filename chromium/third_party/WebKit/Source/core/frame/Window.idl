@@ -63,9 +63,15 @@
     [Replaceable, CrossOrigin] readonly attribute Window? parent;
     [CheckSecurity=ReturnValue, Custom=Getter] readonly attribute Element? frameElement;
     // FIXME: open() should have 4 optional arguments with defaults.
-    [Custom] Window? open(DOMString url, DOMString target, optional DOMString features);
-    // FIXME: These getters should not have [NotEnumerable].
+    [Custom, RaisesException] Window? open(DOMString url, DOMString target, optional DOMString features);
+
+    // indexed properties
+    // https://html.spec.whatwg.org/C/browsers.html#windowproxy-getownproperty
     [NotEnumerable, CrossOrigin] getter Window (unsigned long index);
+    // https://html.spec.whatwg.org/C/browsers.html#windowproxy-defineownproperty
+    setter void (unsigned long index, any value);
+
+    // named properties
     [Custom, NotEnumerable, CrossOrigin] getter object (DOMString name);
 
     // the user agent
@@ -132,7 +138,7 @@
 
     // Visual Viewport API
     // https://github.com/WICG/ViewportAPI
-    [RuntimeEnabled=VisualViewportAPI, Replaceable, SameObject] readonly attribute VisualViewport? visualViewport;
+    [RuntimeEnabled=VisualViewportAPI, Replaceable, SameObject] readonly attribute VisualViewport? view;
 
     // client
     [Replaceable] readonly attribute long screenX;

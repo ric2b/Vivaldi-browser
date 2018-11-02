@@ -411,6 +411,7 @@ if (is_win || is_mac || (is_linux && !is_chromeos)) {
       "//base",
       "//build/win:default_exe_manifest",
       "//media",
+      "//media/audio:test_support",
       "//net",
       "//ui/gfx/geometry",
     ]
@@ -479,7 +480,7 @@ if (is_win || is_mac || (is_linux && !is_chromeos)) {
     deps = [
       ":test_support",
       "//base",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//media",
     ]
@@ -493,7 +494,7 @@ if (is_win || is_mac || (is_linux && !is_chromeos)) {
     deps = [
       ":test_support",
       "//base",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//media",
     ]
@@ -507,7 +508,7 @@ if (is_win || is_mac || (is_linux && !is_chromeos)) {
     deps = [
       ":test_support",
       "//base",
-      "//build/config/sanitizers:deps",
+      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//net",
     ]

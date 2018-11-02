@@ -12,7 +12,9 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/bubble/bubble_border.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/test/test_layout_provider.h"
 #include "ui/views/test/test_views.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
@@ -133,6 +135,19 @@ TEST_F(BubbleFrameViewTest, GetBoundsForClientView) {
   gfx::Insets insets = frame.bubble_border()->GetInsets();
   EXPECT_EQ(insets.left() + margin_x, frame.GetBoundsForClientView().x());
   EXPECT_EQ(insets.top() + margin_y, frame.GetBoundsForClientView().y());
+}
+
+TEST_F(BubbleFrameViewTest, RemoveFootnoteView) {
+  TestBubbleFrameView frame(this);
+  EXPECT_EQ(nullptr, frame.footnote_container_);
+  View* footnote_dummy_view = new StaticSizedView(gfx::Size(200, 200));
+  frame.SetFootnoteView(footnote_dummy_view);
+  EXPECT_EQ(footnote_dummy_view->parent(), frame.footnote_container_);
+  View* container_view = footnote_dummy_view->parent();
+  delete footnote_dummy_view;
+  footnote_dummy_view = nullptr;
+  EXPECT_FALSE(container_view->visible());
+  EXPECT_EQ(nullptr, frame.footnote_container_);
 }
 
 TEST_F(BubbleFrameViewTest, GetBoundsForClientViewWithClose) {
@@ -486,6 +501,83 @@ TEST_F(BubbleFrameViewTest, GetMaximumSize) {
                           kPreferredClientHeight + kExpectedAdditionalHeight);
   EXPECT_EQ(expected_size, maximum_rect.size());
 #endif
+}
+
+namespace {
+
+class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
+ public:
+  TestBubbleDialogDelegateView()
+      : BubbleDialogDelegateView(nullptr, BubbleBorder::NONE) {
+    set_shadow(BubbleBorder::NO_ASSETS);
+    SetAnchorRect(gfx::Rect());
+  }
+  ~TestBubbleDialogDelegateView() override {}
+
+  using BubbleDialogDelegateView::SetAnchorView;
+
+  void set_override_snap(bool value) { override_snap_ = value; }
+
+  // BubbleDialogDelegateView:
+  void DeleteDelegate() override {
+    // This delegate is owned by the test case itself, so it should not delete
+    // itself here.
+  }
+  int GetDialogButtons() const override { return ui::DIALOG_BUTTON_OK; }
+  bool ShouldSnapFrameWidth() const override {
+    return override_snap_.value_or(
+        BubbleDialogDelegateView::ShouldSnapFrameWidth());
+  }
+  gfx::Size CalculatePreferredSize() const override {
+    return gfx::Size(200, 200);
+  }
+
+ private:
+  base::Optional<bool> override_snap_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestBubbleDialogDelegateView);
+};
+
+}  // namespace
+
+// This test ensures that if the installed LayoutProvider snaps dialog widths,
+// BubbleFrameView correctly sizes itself to that width.
+TEST_F(BubbleFrameViewTest, WidthSnaps) {
+  test::TestLayoutProvider provider;
+  TestBubbleDialogDelegateView delegate;
+
+  Widget anchor;
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  anchor.Init(params);
+  anchor.Show();
+
+  delegate.SetAnchorView(anchor.GetContentsView());
+  delegate.set_margins(gfx::Insets());
+
+  Widget* w0 = BubbleDialogDelegateView::CreateBubble(&delegate);
+  w0->Show();
+  EXPECT_EQ(delegate.GetPreferredSize().width(),
+            w0->GetWindowBoundsInScreen().width());
+  w0->CloseNow();
+
+  constexpr int kTestWidth = 300;
+  provider.SetSnappedDialogWidth(kTestWidth);
+
+  // The Widget's snapped width should exactly match the width returned by the
+  // LayoutProvider.
+  Widget* w1 = BubbleDialogDelegateView::CreateBubble(&delegate);
+  w1->Show();
+  EXPECT_EQ(kTestWidth, w1->GetWindowBoundsInScreen().width());
+  w1->CloseNow();
+
+  // If the DialogDelegate asks not to snap, it should not snap.
+  delegate.set_override_snap(false);
+  Widget* w2 = BubbleDialogDelegateView::CreateBubble(&delegate);
+  w2->Show();
+  EXPECT_EQ(delegate.GetPreferredSize().width(),
+            w2->GetWindowBoundsInScreen().width());
+  w2->CloseNow();
 }
 
 }  // namespace views

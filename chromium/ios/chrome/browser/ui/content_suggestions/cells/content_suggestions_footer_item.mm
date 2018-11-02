@@ -74,12 +74,13 @@ const CGFloat kMinimalCellHeight = 44;
     [_button.heightAnchor
         constraintGreaterThanOrEqualToConstant:kMinimalCellHeight]
         .active = YES;
-    AddSameSizeConstraint(self.contentView, _button);
+    AddSameConstraints(self.contentView, _button);
   }
   return self;
 }
 
 - (void)prepareForReuse {
+  [super prepareForReuse];
   [self.button removeTarget:nil
                      action:NULL
            forControlEvents:UIControlEventAllEvents];

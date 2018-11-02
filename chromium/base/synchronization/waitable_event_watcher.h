@@ -7,13 +7,14 @@
 
 #include "base/base_export.h"
 #include "base/macros.h"
-#include "base/sequence_checker.h"
 #include "build/build_config.h"
 
 #if defined(OS_WIN)
 #include "base/win/object_watcher.h"
+#include "base/win/scoped_handle.h"
 #else
 #include "base/callback.h"
+#include "base/sequence_checker.h"
 #include "base/synchronization/waitable_event.h"
 #endif
 
@@ -35,7 +36,7 @@ class WaitableEvent;
 //    public:
 //     void DoStuffWhenSignaled(WaitableEvent *waitable_event) {
 //       watcher_.StartWatching(waitable_event,
-//           base::Bind(&MyClass::OnWaitableEventSignaled, this);
+//           base::BindOnce(&MyClass::OnWaitableEventSignaled, this);
 //     }
 //    private:
 //     void OnWaitableEventSignaled(WaitableEvent* waitable_event) {
@@ -56,7 +57,8 @@ class WaitableEvent;
 // missing a signal.
 //
 // NOTE: you /are/ allowed to delete the WaitableEvent while still waiting on
-// it with a Watcher. It will act as if the event was never signaled.
+// it with a Watcher. But pay attention: if the event was signaled and deleted
+// right after, the callback may be called with deleted WaitableEvent pointer.
 
 class BASE_EXPORT WaitableEventWatcher
 #if defined(OS_WIN)
@@ -64,7 +66,7 @@ class BASE_EXPORT WaitableEventWatcher
 #endif
 {
  public:
-  typedef Callback<void(WaitableEvent*)> EventCallback;
+  using EventCallback = OnceCallback<void(WaitableEvent*)>;
   WaitableEventWatcher();
 
 #if defined(OS_WIN)
@@ -75,7 +77,7 @@ class BASE_EXPORT WaitableEventWatcher
 
   // When |event| is signaled, |callback| is called on the sequence that called
   // StartWatching().
-  bool StartWatching(WaitableEvent* event, const EventCallback& callback);
+  bool StartWatching(WaitableEvent* event, EventCallback callback);
 
   // Cancel the current watch. Must be called from the same sequence which
   // started the watch.
@@ -90,7 +92,13 @@ class BASE_EXPORT WaitableEventWatcher
 #if defined(OS_WIN)
   void OnObjectSignaled(HANDLE h) override;
 
+  // Duplicated handle of the event passed to StartWatching().
+  win::ScopedHandle duplicated_event_handle_;
+
+  // A watcher for |duplicated_event_handle_|. The handle MUST outlive
+  // |watcher_|.
   win::ObjectWatcher watcher_;
+
   EventCallback callback_;
   WaitableEvent* event_ = nullptr;
 #else
